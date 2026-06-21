@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>FPS Heaps</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: linear-gradient(to bottom, #1a2a4a 0%, #2e5e8e 25%, #5b9ec9 55%, #a8cfe0 75%, #d4e8f0 90%, #e8c99a 100%); overflow: hidden; }
+    canvas { display: block; width: 100vw; height: 100vh; }
+    #crosshair {
+      position: fixed; top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      width: 4px; height: 4px;
+      background: white;
+      border-radius: 50%;
+      pointer-events: none;
+      box-shadow: 0 0 3px rgba(0,0,0,0.8);
+    }
+  </style>
+</head>
+<body>
+  <canvas id="webgl" style="width:100vw;height:100vh;display:block;"></canvas>
+  <div id="crosshair"></div>
+  <script>
+    // Force antialias on the WebGL context before Heaps grabs the canvas
+    var canvas = document.getElementById("webgl");
+    canvas.getContext("webgl2", { antialias: true, alpha: true });
+  </script>
+  <script src="game.js"></script>
+</body>
+</html>

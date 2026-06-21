@@ -1,0 +1,63 @@
+type EventHandler<T = any> = (data: T) => void;
+
+export class EventSystem {
+  private events = new Map<string, Set<EventHandler>>();
+
+  on<T = any>(event: string, handler: EventHandler<T>): void {
+    if (!this.events.has(event)) {
+      this.events.set(event, new Set());
+    }
+    this.events.get(event)!.add(handler);
+  }
+
+  off<T = any>(event: string, handler: EventHandler<T>): void {
+    const handlers = this.events.get(event);
+    if (handlers) {
+      handlers.delete(handler);
+      if (handlers.size === 0) {
+        this.events.delete(event);
+      }
+    }
+  }
+
+  emit<T = any>(event: string, data?: T): void {
+    const handlers = this.events.get(event);
+    if (handlers) {
+      handlers.forEach(handler => {
+        try {
+          handler(data);
+        } catch (error) {
+          console.error(`Error in event handler for "${event}":`, error);
+        }
+      });
+    }
+  }
+
+  clear(): void {
+    this.events.clear();
+  }
+
+  once<T = any>(event: string, handler: EventHandler<T>): void {
+    const onceHandler = (data: T) => {
+      handler(data);
+      this.off(event, onceHandler);
+    };
+    this.on(event, onceHandler);
+  }
+}
+
+// Global event system instance
+export const globalEvents = new EventSystem();
+
+// Game event types
+export interface GameEvents {
+  'player:move': { position: BABYLON.Vector3; rotation: BABYLON.Vector3 };
+  'player:shoot': { origin: BABYLON.Vector3; direction: BABYLON.Vector3 };
+  'enemy:spawn': { position: BABYLON.Vector3 };
+  'enemy:destroy': { position: BABYLON.Vector3 };
+  'explosion': { position: BABYLON.Vector3; radius: number };
+  'damage': { target: string; amount: number; source: string };
+  'game:pause': {};
+  'game:resume': {};
+  'game:restart': {};
+}

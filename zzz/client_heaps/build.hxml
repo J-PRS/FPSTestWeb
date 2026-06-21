@@ -1,0 +1,6 @@
+-lib heaps
+-cp src
+-main Main
+-js bin/game.js
+-D js-unflatten
+-D resourcesPath=assets
