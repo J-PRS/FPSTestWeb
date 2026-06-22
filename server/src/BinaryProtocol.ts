@@ -8,14 +8,17 @@ export enum MessageType {
   JOIN = 0,
   INPUT = 1,
   POSITION = 2,
-  SHOT = 3,
-  PLAYER_JOINED = 4,
-  PLAYER_LEFT = 5,
-  PLAYER_UPDATE = 6,
-  GAME_STATE = 7,
-  HIT = 8,
-  KILL = 9,
-  PLAYER_RESPAWN = 10
+  POSITION_DELTA = 3, // Delta-compressed position update
+  SHOT = 4,
+  PLAYER_JOINED = 5,
+  PLAYER_LEFT = 6,
+  PLAYER_UPDATE = 7,
+  GAME_STATE = 8,
+  HIT = 9,
+  KILL = 10,
+  PLAYER_RESPAWN = 11,
+  STATE_RECONCILIATION = 12,
+  HIT_CONFIRMATION = 13 // Server confirms/rejects client hit
 }
 
 // Binary encoder
@@ -38,6 +41,11 @@ export class BinaryEncoder {
   writeUint8(value: number): void {
     this.ensureCapacity(1);
     this.buffer[this.offset++] = value;
+  }
+
+  writeInt8(value: number): void {
+    this.ensureCapacity(1);
+    this.buffer[this.offset++] = value & 0xff;
   }
 
   writeUint16(value: number): void {
@@ -69,7 +77,7 @@ export class BinaryEncoder {
   }
 
   writeString(value: string): void {
-    const bytes = Buffer.from(value, 'utf8');
+    const bytes = new TextEncoder().encode(value);
     this.writeUint16(bytes.length);
     this.ensureCapacity(bytes.length);
     this.buffer.set(bytes, this.offset);
@@ -113,6 +121,13 @@ export class BinaryDecoder {
     return value;
   }
 
+  readInt16(): number {
+    if (this.offset + 2 > this.buffer.length) throw new Error('Buffer overflow');
+    const value = this.buffer[this.offset] | (this.buffer[this.offset + 1] << 8);
+    this.offset += 2;
+    return value > 32767 ? value - 65536 : value; // Convert to signed
+  }
+
   readUint32(): number {
     if (this.offset + 4 > this.buffer.length) throw new Error('Buffer overflow');
     const value = this.buffer[this.offset] |
@@ -144,7 +159,7 @@ export class BinaryDecoder {
     if (this.offset + length > this.buffer.length) throw new Error('Buffer overflow');
     const bytes = this.buffer.slice(this.offset, this.offset + length);
     this.offset += length;
-    return Buffer.from(bytes).toString('utf8');
+    return new TextDecoder().decode(bytes);
   }
 
   readBytes(): Uint8Array {
@@ -307,5 +322,63 @@ export function decodeShot(data: Uint8Array): any {
     type: 'shot',
     playerId,
     data: { targetId, timestamp, position, velocity, projectileId }
+  };
+}
+
+// Encode state reconciliation message (server sends authoritative state to client)
+export function encodeStateReconciliation(
+  playerId: string,
+  lastProcessedSequence: number,
+  position: { x: number; y: number; z: number },
+  rotation: { yaw: number; pitch: number },
+  velocity: { x: number; y: number; z: number }
+): Uint8Array {
+  const encoder = new BinaryEncoder();
+  encoder.writeUint8(MessageType.STATE_RECONCILIATION);
+  encoder.writeString(playerId);
+  encoder.writeUint32(lastProcessedSequence);
+  encoder.writeFloat32(position.x);
+  encoder.writeFloat32(position.y);
+  encoder.writeFloat32(position.z);
+  encoder.writeFloat32(rotation.yaw);
+  encoder.writeFloat32(rotation.pitch);
+  encoder.writeFloat32(velocity.x);
+  encoder.writeFloat32(velocity.y);
+  encoder.writeFloat32(velocity.z);
+  return encoder.getResult();
+}
+
+// Encode hit confirmation message (server confirms/rejects client hit)
+export function encodeHitConfirmation(
+  shooterId: string,
+  targetId: string,
+  confirmed: boolean,
+  damage: number,
+  timestamp: number
+): Uint8Array {
+  const encoder = new BinaryEncoder();
+  encoder.writeUint8(MessageType.HIT_CONFIRMATION);
+  encoder.writeString(shooterId);
+  encoder.writeString(targetId);
+  encoder.writeUint8(confirmed ? 1 : 0);
+  encoder.writeFloat32(damage);
+  encoder.writeUint64(timestamp);
+  return encoder.getResult();
+}
+
+// Decode hit confirmation message
+export function decodeHitConfirmation(data: Uint8Array): any {
+  const decoder = new BinaryDecoder(data);
+  decoder.readUint8(); // Skip message type
+
+  const shooterId = decoder.readString();
+  const targetId = decoder.readString();
+  const confirmed = decoder.readUint8() === 1;
+  const damage = decoder.readFloat32();
+  const timestamp = decoder.readUint64();
+
+  return {
+    type: 'hitConfirmation',
+    data: { shooterId, targetId, confirmed, damage, timestamp }
   };
 }

@@ -2,7 +2,7 @@
  * Main server entry point - modular architecture
  */
 
-import { WebSocketServer, WebSocket } from 'ws';
+import uWS from 'uwebsockets.js';
 import { PlayerManager } from './PlayerManager.js';
 import { ProjectileManager } from './ProjectileManager.js';
 import { MessageHandler } from './MessageHandler.js';
@@ -16,7 +16,7 @@ class Server {
   private projectileManager: ProjectileManager;
   private messageHandler: MessageHandler;
   private gameLoop: GameLoop;
-  private wss: WebSocketServer;
+  private app: any;
 
   constructor() {
     this.playerManager = new PlayerManager();
@@ -32,38 +32,44 @@ class Server {
       this.projectileManager,
       this.broadcastToAll.bind(this)
     );
-    this.wss = new WebSocketServer({ port: PORT });
   }
 
   start(): void {
     console.log(`[Server] Starting on port ${PORT} with ${TICK_RATE}Hz tick rate`);
 
-    this.wss.on('connection', (ws: WebSocket) => {
-      this.handleConnection(ws);
+    this.app = uWS.App({
+      key_file_name: '',
+      cert_file_name: '',
+    }).ws('/*', {
+      compression: 0,
+      maxPayloadLength: 16 * 1024 * 1024,
+      idleTimeout: 60,
+      open: (ws: any) => {
+        this.handleConnection(ws);
+      },
+      message: (ws: any, message: ArrayBuffer, isBinary: boolean) => {
+        this.handleMessage(ws, Buffer.from(message));
+      },
+      close: (ws: any, code: number, message: ArrayBuffer) => {
+        this.handleClose(ws);
+      },
+    }).listen(PORT, (token: any) => {
+      if (token) {
+        console.log(`[Server] Listening on port ${PORT}`);
+        this.gameLoop.start();
+      } else {
+        console.error('[Server] Failed to listen on port', PORT);
+      }
     });
-
-    this.gameLoop.start();
   }
 
-  private handleConnection(ws: WebSocket): void {
+  private handleConnection(ws: any): void {
     const wsToPlayerId = this.playerManager.getWsToPlayerId();
     wsToPlayerId.set(ws, ''); // empty string means not yet identified
     console.log('[Server] New WebSocket connection, waiting for join message');
-
-    ws.on('message', (data: Buffer) => {
-      this.handleMessage(ws, data);
-    });
-
-    ws.on('close', () => {
-      this.handleClose(ws);
-    });
-
-    ws.on('error', (error: Error) => {
-      this.handleError(ws, error);
-    });
   }
 
-  private handleMessage(ws: WebSocket, data: Buffer): void {
+  private handleMessage(ws: any, data: Buffer): void {
     const wsToPlayerId = this.playerManager.getWsToPlayerId();
     const playerId = wsToPlayerId.get(ws);
 
@@ -93,7 +99,7 @@ class Server {
     }
   }
 
-  private handleJoin(ws: WebSocket, playerId: string): void {
+  private handleJoin(ws: any, playerId: string): void {
     console.log(`[Server] Join message from: ${playerId}`);
 
     const wsToPlayerId = this.playerManager.getWsToPlayerId();
@@ -187,7 +193,7 @@ class Server {
     }
   }
 
-  private handleClose(ws: WebSocket): void {
+  private handleClose(ws: any): void {
     const wsToPlayerId = this.playerManager.getWsToPlayerId();
     const playerId = wsToPlayerId.get(ws);
     wsToPlayerId.delete(ws);
@@ -198,7 +204,7 @@ class Server {
     }
   }
 
-  private handleError(ws: WebSocket, error: Error): void {
+  private handleError(ws: any, error: Error): void {
     const wsToPlayerId = this.playerManager.getWsToPlayerId();
     const playerId = wsToPlayerId.get(ws) || 'unknown';
     console.error(`[Server] WebSocket error for ${playerId}:`, error);
@@ -207,7 +213,7 @@ class Server {
   private broadcastToAll(message: any, excludePlayerId?: string): void {
     const data = JSON.stringify(message);
     for (const [playerId, player] of this.playerManager.getPlayers()) {
-      if (playerId !== excludePlayerId && !player.disconnected && player.ws.readyState === WebSocket.OPEN) {
+      if (playerId !== excludePlayerId && !player.disconnected) {
         player.ws.send(data);
       }
     }

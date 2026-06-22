@@ -1,9 +1,9 @@
 import { INetworkAdapter, PlayerState, InputState } from './INetworkAdapter';
-import { encodePosition, encodeInput, encodeShot } from './BinaryProtocol';
+import { encodePosition, encodePositionDelta, encodeInput, encodeShot, decodeStateReconciliation } from './BinaryProtocol';
 
 /**
  * Network manager with dependency injection
- * Handles all multiplayer networking logic
+ * Handles all multiplayer networking logic with client-side prediction
  */
 export class NetworkManager {
   private adapter: INetworkAdapter;
@@ -23,6 +23,7 @@ export class NetworkManager {
   public onPlayerLeft: ((playerId: string) => void) | null = null;
   public onPlayerUpdate: ((playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }, timestamp: number) => void) | null = null;
   public onGameState: ((players: PlayerState[], localPlayerState: any) => void) | null = null;
+  public onStateReconciliation: ((state: { position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }, velocity: { x: number; y: number; z: number }, lastProcessedSequence: number }) => void) | null = null;
   private lastPositionSendTime: number = 0;
   private readonly POSITION_SEND_INTERVAL = 67; // 15Hz = 67ms
   private lastSentPosition: { x: number; y: number; z: number } | null = null;
@@ -40,6 +41,11 @@ export class NetworkManager {
   private readonly PING_HISTORY_SIZE = 20;
   private packetsSent: number = 0;
   private packetsReceived: number = 0;
+
+  // Client-side prediction
+  private inputSequence: number = 0;
+  private inputHistory: Map<number, { input: any; timestamp: number }> = new Map();
+  private readonly INPUT_HISTORY_SIZE = 64; // Store last 64 inputs for reconciliation
 
   constructor(adapter: INetworkAdapter) {
     this.adapter = adapter;
@@ -67,11 +73,39 @@ export class NetworkManager {
   }
 
   /**
-   * Send player input to server (binary)
+   * Send player input to server (binary) with sequence number for prediction
    */
   sendInput(input: InputState): void {
-    // Send to server using binary protocol
-    const binary = encodeInput(this.localPlayerId, 0, Date.now());
+    const sequence = this.inputSequence++;
+    const timestamp = Date.now();
+    
+    // Store input for reconciliation
+    this.inputHistory.set(sequence, { input, timestamp });
+    
+    // Keep history size bounded
+    if (this.inputHistory.size > this.INPUT_HISTORY_SIZE) {
+      const oldestKey = this.inputHistory.keys().next().value;
+      if (oldestKey !== undefined) {
+        this.inputHistory.delete(oldestKey);
+      }
+    }
+    
+    // Convert boolean input to numeric values for protocol
+    const forwardNum = input.forward ? 1 : 0;
+    const rightNum = input.right ? 1 : 0;
+    
+    // Send to server using binary protocol with input data
+    const binary = encodeInput(
+      this.localPlayerId, 
+      sequence, 
+      timestamp,
+      { 
+        forward: forwardNum, 
+        right: rightNum, 
+        jump: input.jump, 
+        ski: false // ski not in InputState, will add later if needed
+      }
+    );
     this.adapter.sendBinary(binary);
   }
 
@@ -99,11 +133,26 @@ export class NetworkManager {
     }
     
     this.lastPositionSendTime = now;
+    
+    // Use delta compression if we have a previous position
+    if (this.lastSentPosition && this.lastSentRotation) {
+      const binary = encodePositionDelta(
+        this.localPlayerId,
+        position,
+        rotation,
+        this.lastSentPosition,
+        this.lastSentRotation,
+        now
+      );
+      this.adapter.sendBinary(binary);
+    } else {
+      // First position update, send full position
+      const binary = encodePosition(this.localPlayerId, position, rotation, now);
+      this.adapter.sendBinary(binary);
+    }
+    
     this.lastSentPosition = { ...position };
     this.lastSentRotation = { ...rotation };
-
-    const binary = encodePosition(this.localPlayerId, position, rotation, now);
-    this.adapter.sendBinary(binary);
   }
 
   /**
@@ -333,6 +382,9 @@ export class NetworkManager {
       case 'jetpack':
         this.handleJetpack(data);
         break;
+      case 'stateReconciliation':
+        this.handleStateReconciliation(data);
+        break;
       default:
         console.warn('[NetworkManager] Unknown message type:', data.type);
     }
@@ -495,6 +547,36 @@ export class NetworkManager {
     // Trigger projectile destroyed callback if registered
     if (this.onProjectileDestroyed) {
       this.onProjectileDestroyed(projectileId);
+    }
+  }
+
+  private handleStateReconciliation(data: any): void {
+    const { playerId, data: reconciliationData } = data;
+    
+    // Only process for local player
+    if (playerId !== this.localPlayerId) {
+      return;
+    }
+    
+    const { lastProcessedSequence, position, rotation, velocity } = reconciliationData;
+    
+    console.log('[NetworkManager] State reconciliation received, lastProcessedSequence:', lastProcessedSequence);
+    
+    // Remove inputs that have been processed by server
+    for (const [seq, _] of this.inputHistory) {
+      if (seq <= lastProcessedSequence) {
+        this.inputHistory.delete(seq);
+      }
+    }
+    
+    // Trigger reconciliation callback to update client state
+    if (this.onStateReconciliation) {
+      this.onStateReconciliation({
+        position,
+        rotation,
+        velocity,
+        lastProcessedSequence
+      });
     }
   }
 }

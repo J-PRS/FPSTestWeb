@@ -4,14 +4,19 @@
 
 import { PlayerManager } from './PlayerManager.js';
 import { ProjectileManager } from './ProjectileManager.js';
-import { decodePosition, decodeInput, decodeShot, MessageType } from './BinaryProtocol.js';
+import { decodePosition, decodeInput, decodeShot, encodeStateReconciliation, MessageType } from './BinaryProtocol.js';
+import { PositionValidator } from './PositionValidator.js';
 
 export class MessageHandler {
+  private positionValidator: PositionValidator;
+
   constructor(
     private playerManager: PlayerManager,
     private projectileManager: ProjectileManager,
     private broadcastCallback: (message: any, excludePlayerId?: string) => void
-  ) {}
+  ) {
+    this.positionValidator = new PositionValidator();
+  }
 
   handleMessage(playerId: string, message: any): void {
     const player = this.playerManager.getPlayer(playerId);
@@ -90,9 +95,30 @@ export class MessageHandler {
   }
 
   private handleInput(playerId: string, data: any): void {
-    // TODO: Process input and update position
-    // This will be implemented with proper physics
-    console.log(`[MessageHandler] Input from ${playerId}:`, data);
+    const player = this.playerManager.getPlayer(playerId);
+    if (!player) return;
+
+    const { sequenceNumber, timestamp } = data;
+
+    // Update last processed sequence
+    this.playerManager.updateLastProcessedSequence(playerId, sequenceNumber);
+
+    // Send state reconciliation back to client with authoritative state
+    // This allows client to reconcile its prediction with server state
+    const reconciliation = encodeStateReconciliation(
+      playerId,
+      sequenceNumber,
+      player.position,
+      player.rotation,
+      player.velocity
+    );
+
+    // Send directly to the player (not broadcast)
+    if (player.ws.readyState === 1) { // WebSocket.OPEN
+      player.ws.send(reconciliation);
+    }
+
+    console.log(`[MessageHandler] Input from ${playerId}, sequence: ${sequenceNumber}, sent reconciliation`);
   }
 
   private handlePosition(playerId: string, data: any): void {
@@ -109,8 +135,42 @@ export class MessageHandler {
       player.velocity.z = (data.position.z - player.position.z) / dt;
     }
 
-    // Update player position
-    player.position = data.position;
+    // Add snapshot to position validator history BEFORE validation
+    this.positionValidator.addSnapshot(
+      playerId,
+      now,
+      player.position,
+      player.velocity
+    );
+
+    // Validate position with latency-aware thresholds
+    // Estimate ping from last update time
+    const estimatedPing = Math.min(dt * 1000, 500); // Cap at 500ms
+    const validation = this.positionValidator.validatePosition(
+      playerId,
+      data.position,
+      now,
+      estimatedPing
+    );
+
+    // Determine final position based on validation
+    let finalPosition = data.position;
+    if (validation.action === 'snap') {
+      console.log(`[PositionValidator] Snapping ${playerId} to expected position. Discrepancy: ${validation.discrepancy.toFixed(2)}m`);
+      finalPosition = validation.expectedPosition;
+    } else if (validation.action === 'nudge') {
+      console.log(`[PositionValidator] Nudging ${playerId} toward expected position. Discrepancy: ${validation.discrepancy.toFixed(2)}m`);
+      // Gentle nudge - blend 50% toward expected position
+      finalPosition = {
+        x: (data.position.x + validation.expectedPosition.x) / 2,
+        y: (data.position.y + validation.expectedPosition.y) / 2,
+        z: (data.position.z + validation.expectedPosition.z) / 2
+      };
+    }
+    // accept: use client position as-is
+
+    // Update player position with validated position
+    player.position = finalPosition;
     player.rotation = data.rotation;
     player.lastUpdateTime = now;
 

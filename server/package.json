@@ -7,11 +7,10 @@
     "dev": "node --loader ts-node/esm --watch src/Server.ts"
   },
   "dependencies": {
-    "ws": "^8.18.0"
+    "uwebsockets.js": "uNetworking/uWebSockets.js#v20.68.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
-    "@types/ws": "^8.5.0",
     "ts-node": "^10.9.0",
     "typescript": "^6.0.0"
   }

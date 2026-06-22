@@ -33,7 +33,8 @@ type WorkerEvent =
   | { type: 'projectileCreated'; projectileId: string; ownerId: string; position: { x: number; y: number; z: number }; velocity: { x: number; y: number; z: number } }
   | { type: 'projectileUpdate'; projectileId: string; position: { x: number; y: number; z: number } }
   | { type: 'projectileDestroyed'; projectileId: string }
-  | { type: 'stateRestore'; state: any };
+  | { type: 'stateRestore'; state: any }
+  | { type: 'stateReconciliation'; playerId: string; data: { position: { x: number; y: number; z: number }; rotation: { yaw: number; pitch: number }; velocity: { x: number; y: number; z: number }; lastProcessedSequence: number } };
 
 let networkManager: NetworkManager | null = null;
 
@@ -77,6 +78,9 @@ function setupCallbacks(nm: NetworkManager) {
   };
   nm.onGameState = (players, localPlayerState) => {
     postMessage({ type: 'gameState', players, localPlayerState });
+  };
+  nm.onStateReconciliation = (state) => {
+    postMessage({ type: 'stateReconciliation', playerId: networkManager?.getLocalPlayerId() || '', data: state });
   };
 }
 

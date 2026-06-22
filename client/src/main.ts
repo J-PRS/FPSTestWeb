@@ -37,6 +37,7 @@ class WorkerNetworkManager {
   public onPlayerLeft: ((playerId: string) => void) | null = null;
   public onPlayerUpdate: ((playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }, timestamp: number) => void) | null = null;
   public onGameState: ((players: any[], localPlayerState: any) => void) | null = null;
+  public onStateReconciliation: ((state: { position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }, velocity: { x: number; y: number; z: number }, lastProcessedSequence: number }) => void) | null = null;
 
   constructor(playerId: string) {
     this.localPlayerId = playerId;
@@ -128,6 +129,9 @@ class WorkerNetworkManager {
           break;
         case 'stateRestore':
           if (this.onStateRestore) this.onStateRestore(data.state);
+          break;
+        case 'stateReconciliation':
+          if (this.onStateReconciliation) this.onStateReconciliation(data.data);
           break;
         case 'ping':
           this.ping = data.value;
@@ -778,6 +782,19 @@ async function init(): Promise<void> {
       remotePlayer = new RemotePlayer(scene, playerId, position, terrain);
       remotePlayers.set(playerId, remotePlayer);
     }
+  };
+
+  // Register state reconciliation handler for client-side prediction
+  networkManager.onStateReconciliation = (state: { position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }, velocity: { x: number; y: number; z: number }, lastProcessedSequence: number }) => {
+    console.log(`[Main] State reconciliation: pos(${state.position.x.toFixed(1)},${state.position.y.toFixed(1)},${state.position.z.toFixed(1)}) seq=${state.lastProcessedSequence}`);
+    
+    // Reconcile client state with server authoritative state
+    // For now, we'll snap to server position. In a full implementation,
+    // we would replay unprocessed inputs from the reconciliation point
+    player.pos.set(state.position.x, state.position.y, state.position.z);
+    player.vel.set(state.velocity.x, state.velocity.y, state.velocity.z);
+    player.yaw = state.rotation.yaw;
+    player.pitch = state.rotation.pitch;
   };
 
   // Server-authoritative projectile handlers
