@@ -45,6 +45,18 @@ export class PlayerManager {
     this.wsToPlayerId.set(ws, playerId);
   }
 
+  updateLastProcessedSequence(playerId: string, sequence: number): void {
+    const player = this.players.get(playerId);
+    if (player) {
+      player.lastProcessedSequence = sequence;
+    }
+  }
+
+  getLastProcessedSequence(playerId: string): number {
+    const player = this.players.get(playerId);
+    return player ? player.lastProcessedSequence : 0;
+  }
+
   restorePlayer(playerId: string, ws: WebSocket): void {
     const player = this.players.get(playerId);
     if (player) {
