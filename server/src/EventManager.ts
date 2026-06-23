@@ -109,6 +109,7 @@ export class EventManager {
   private sequenceNumbers: Map<string, number> = new Map();
   private pendingEvents: Map<string, Map<number, Event>> = new Map();
   private maxWindowSize: number = 32;
+  private onEventCallback: ((connectionId: string, event: Event) => void) | null = null;
 
   /**
    * Add an event to the outgoing queue for a specific connection
@@ -182,20 +183,28 @@ export class EventManager {
       const type = stream.readInt(8);
       const seq = stream.readInt(16);
       const guaranteed = stream.readBool();
-      
+
       const event = this.createEvent(type);
       if (!event) continue;
-      
+
       event.unpack(stream);
       event.guaranteed = guaranteed;
-      
+
       if (guaranteed) {
         // Process guaranteed events immediately on server
         event.process(connectionId);
+        // Call callback for event processing
+        if (this.onEventCallback) {
+          this.onEventCallback(connectionId, event);
+        }
         this.sendAck(connectionId, seq);
       } else {
         // Process non-guaranteed events immediately
         event.process(connectionId);
+        // Call callback for event processing
+        if (this.onEventCallback) {
+          this.onEventCallback(connectionId, event);
+        }
       }
     }
   }
@@ -303,6 +312,13 @@ export class EventManager {
     this.outgoingQueue.delete(connectionId);
     this.sequenceNumbers.delete(connectionId);
     this.pendingEvents.delete(connectionId);
+  }
+
+  /**
+   * Set callback for event processing
+   */
+  onEvent(callback: ((connectionId: string, event: Event) => void) | null): void {
+    this.onEventCallback = callback;
   }
 
   /**

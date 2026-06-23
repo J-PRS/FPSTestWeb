@@ -86,12 +86,15 @@ class Server {
         }
 
         if (event.type === 1) {
-          // PositionEvent
+          // PositionEvent - convert to position message
           this.messageHandler.handleMessage(playerId, {
             type: 'position',
             data: {
-              position: event.position,
-              rotation: event.rotation
+              x: event.position.x,
+              y: event.position.y,
+              z: event.position.z,
+              yaw: event.rotation.yaw,
+              pitch: event.rotation.pitch
             }
           });
         } else if (event.type === 2) {
@@ -117,13 +120,17 @@ class Server {
         this.messageHandler.handleMessage(playerId, {
           type: 'input',
           data: {
-            forward: move.input.forward,
-            right: move.input.right,
-            jump: move.input.jump,
-            ski: move.input.ski,
-            yaw: move.rotation.yaw,
-            pitch: move.rotation.pitch,
-            sequenceNumber: move.sequenceNumber
+            input: {
+              forward: move.input.forward,
+              right: move.input.right,
+              jump: move.input.jump === 1,
+              ski: move.input.ski === 1
+            },
+            rotation: {
+              yaw: move.rotation.yaw,
+              pitch: move.rotation.pitch
+            },
+            sequenceNumber: move.sequence
           }
         });
       });

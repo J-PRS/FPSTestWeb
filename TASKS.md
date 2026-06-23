@@ -3,61 +3,72 @@
 ## Current State
 - **Project:** Browser-based multiplayer FPS (Tribes-inspired)
 - **Architecture:** Client-server with WebSocket networking
-- **Client:** Three.js rendering, worker-based networking
-- **Server:** Node.js with uWebSockets, 15Hz tick rate
-- **Networking:** Binary protocol with delta compression, lag compensation
+- **Client:** Three.js rendering, Tribes2-style networking with bit-packing
+- **Server:** Node.js with uWebSockets, Tribes2Networking integration
+- **Networking:** Tribes2 event system (PositionEvent, ShotEvent), bit-packed streams
 - **Security:** Position validation (three-tier: accept/nudge/snap)
-- **Recent Changes:** None documented
+- **Recent Changes:** Completed Tribes2 networking integration (Phase 50)
 
 ## Technical Context
 - **Dependencies:**
   - Client: Three.js 0.184.0, ws 8.21.0, Vite 8.0.16
   - Server: uWebSockets.js v20.68.0, TypeScript 6.0.0
 - **Key Components:**
-  - NetworkManager (client) - Worker-based networking proxy
-  - MessageHandler (server) - Processes incoming messages
+  - Tribes2Adapter (client) - Tribes2 networking adapter
+  - StreamManager (client/server) - Coordinates MoveManager, EventManager, GhostManager
+  - EventManager (client/server) - Event queuing, packing, guaranteed delivery
+  - GhostManager (client/server) - State synchronization
+  - MoveManager (client/server) - Input/movement handling
+  - MessageHandler (server) - JSON message processing
+  - Tribes2Networking (server) - Per-connection Tribes2 networking
   - PlayerManager (server) - Player state management
   - PositionValidator (server) - Anti-cheat position validation
-  - BinaryProtocol - Efficient binary encoding/decoding
 - **Integration Points:**
   - Client ↔ Server via WebSocket (port 8080)
-  - Worker ↔ Main thread via postMessage
-  - Remote player interpolation in game loop
+  - JSON join handshake → Tribes2 binary packets
+  - Tribes2 events converted to MessageHandler format
+- **Deprecated:**
+  - BinaryProtocol.ts (replaced by Tribes2 event system)
+  - server_old.ts (legacy reference)
 
 ## Development Guidelines
 - **Coding Standards:** TypeScript with implicit any (strict mode not enabled)
-- **Required Updates:** 
+- **Required Updates:**
   - Update changelog.txt after each task
   - Update architecture.txt for structural changes
   - Maintain TASKS.md for context
 - **Testing Requirements:** No unit tests currently (add as priority)
-- **Security Considerations:** 
+- **Security Considerations:**
   - Server must be authoritative for movement
   - Rate limit critical messages
   - Validate all client inputs
 
 ## Current Task
-- **Objective:** Fix critical multiplayer security vulnerabilities
+- **Objective:** Complete Tribes2-style networking integration
 - **Requirements:**
-  1. Implement server-authoritative input processing
-  2. Fix client-side prediction with input replay
-  3. Add rate limiting on critical messages
-  4. Complete binary protocol (decodePositionDelta)
+  1. Wire Tribes2Networking managers to MessageHandler for event/move processing
+  2. Remove deprecated network adapters (WSAdapter, UWSAdapter)
+  3. Test end-to-end Tribes2 networking with client and server
+  4. Update documentation (TASKS.md, changelog.txt)
 - **Dependencies:** None (can start immediately)
 - **Success Criteria:**
-  - Server processes inputs to update position authoritatively
-  - Client reconciles state by replaying unprocessed inputs
-  - Rate limiting prevents message spam
-  - Binary protocol fully functional
+  - Tribes2Networking EventManager and MoveManager properly wired to callbacks
+  - NetworkAdapterFactory simplified to only support Tribes2 backend
+  - End-to-end testing confirms binary protocol works correctly
+  - Documentation updated with integration progress
 
 ## Next Tasks
-
-### Phase 1: Critical Security Fixes (High Priority)
-1. **Implement server-authoritative input processing**
-   - Dependencies: None
-   - Complexity: High
-   - Location: `server/src/MessageHandler.ts:102-127`
-   - Description: Add server-side physics simulation that processes input sequence numbers to update player position authoritatively
+- **Priority: High**
+  - Test Tribes2 networking with actual gameplay
+  - Verify MoveManager input handling
+  - Test GhostManager state synchronization
+- **Priority: Medium**
+  - Remove deprecated files (server_old.ts, BinaryProtocol.ts if unused)
+  - Add unit tests for EventManager
+  - Update architecture.txt with Tribes2 components
+- **Priority: Low**
+  - Performance benchmark Tribes2 vs old protocol
+  - Add more event types (jump, jetpack, etc.)
 
 2. **Improve client-side prediction reconciliation**
    - Dependencies: Task 1

@@ -164,5 +164,5 @@ export const TERRAIN_WORLD_SCALE = 1500.0; // Terrain world scale
 export const TERRAIN_HEIGHTMAP_DIVISOR = 255.0; // Heightmap value divisor
 
 // Networking backend configuration
-// Options: 'ws' (WebSocket), 'uws' (µWebSockets), 'tribes2' (Tribes2-style with bit-packing for LAN-like gameplay)
-export const NETWORK_BACKEND: 'ws' | 'uws' | 'tribes2' = 'tribes2';
+// Option: 'tribes2' (Tribes2-style with bit-packing for LAN-like gameplay)
+export const NETWORK_BACKEND: 'tribes2' = 'tribes2';
