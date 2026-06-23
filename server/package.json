@@ -13,6 +13,7 @@
     "uwebsockets.js": "uNetworking/uWebSockets.js#v20.68.0"
   },
   "devDependencies": {
+    "@types/msgpack-lite": "^0.1.2",
     "@types/node": "^22.0.0",
     "ts-node": "^10.9.0",
     "typescript": "^6.0.0",

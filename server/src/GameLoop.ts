@@ -119,6 +119,19 @@ export class GameLoop {
     // Simulate projectiles
     const destroyedProjectiles = this.projectileManager.updateAll(dt, GRAVITY, PROJECTILE_LIFETIME);
     
+    // Broadcast player positions (for remote player synchronization)
+    for (const [playerId, player] of this.playerManager.getPlayers()) {
+      if (!player.disconnected) {
+        this.broadcastCallback({
+          type: 'position',
+          playerId,
+          position: player.position,
+          rotation: player.rotation,
+          velocity: player.velocity
+        }, playerId); // Exclude the player themselves from their own position broadcast
+      }
+    }
+    
     // Broadcast projectile updates
     for (const [projectileId, projectile] of this.projectileManager.getProjectiles()) {
       this.broadcastCallback({

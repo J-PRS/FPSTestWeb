@@ -1,4 +1,4 @@
-import { WSAdapter } from './WSAdapter';
+import { NetworkAdapterFactory } from './NetworkAdapterFactory';
 import { NetworkManager } from './NetworkManager';
 import { ChildLogger } from '../Logger.js';
 
@@ -92,12 +92,12 @@ self.onmessage = (e: MessageEvent<WorkerCommand>) => {
 
   switch (data.type) {
     case 'connect': {
-      const adapter = new WSAdapter();
+      const adapter = NetworkAdapterFactory.createAdapter('tribes2');
       networkManager = new NetworkManager(adapter);
       networkManager.setPlayerId(data.playerId);
-      
+
       setupCallbacks(networkManager);
-      
+
       networkManager.connect(data.url).then(() => {
         postMessage({ type: 'connected' });
       }).catch((err) => {

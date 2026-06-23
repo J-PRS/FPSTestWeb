@@ -134,6 +134,23 @@ class Server {
           }
         });
       });
+
+      // Set control object provider for client-side prediction
+      this.tribes2Networking.setControlObjectProvider((connectionId: string) => {
+        const playerId = this.playerManager.getPlayerIdByConnectionId(connectionId);
+        if (!playerId) {
+          return null;
+        }
+        const player = this.playerManager.getPlayer(playerId);
+        if (!player) {
+          return null;
+        }
+        return {
+          position: player.position,
+          rotation: player.rotation,
+          velocity: player.velocity
+        };
+      });
     } catch (error) {
       Logger.error(`Server initialization error: ${error instanceof Error ? error.message : String(error)}`);
       throw error;
@@ -277,6 +294,9 @@ class Server {
     this.tribes2Networking.initializeConnection(playerId, (connId: string, data: Uint8Array) => {
       ws.send(Buffer.from(data));
     });
+
+    // Mark join handshake as complete to allow binary packet transmission
+    this.tribes2Networking.markJoinHandshakeComplete(playerId);
 
     const wsToPlayerId = this.playerManager.getWsToPlayerId();
     const existingPlayer = this.playerManager.getPlayer(playerId);

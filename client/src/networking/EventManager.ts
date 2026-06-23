@@ -123,6 +123,169 @@ export class ShotEvent implements Event {
   }
 }
 
+export class JumpEvent implements Event {
+  type = 3;
+  guaranteed = false;
+  playerId: string;
+  timestamp: number;
+  onJump?: (playerId: string) => void;
+
+  constructor(
+    playerId: string,
+    timestamp: number,
+    onJump?: (playerId: string) => void
+  ) {
+    this.playerId = playerId;
+    this.timestamp = timestamp;
+    this.onJump = onJump;
+  }
+
+  pack(stream: BitStream): void {
+    stream.writeString(this.playerId);
+    const relativeTimestamp = this.timestamp - (Date.now() - 60000);
+    stream.writeInt(relativeTimestamp, 32);
+  }
+
+  unpack(stream: BitStream): void {
+    this.playerId = stream.readString();
+    const relativeTimestamp = stream.readInt(32);
+    this.timestamp = relativeTimestamp + (Date.now() - 60000);
+  }
+
+  process(): void {
+    if (this.onJump) {
+      this.onJump(this.playerId);
+    }
+  }
+}
+
+export class JetpackEvent implements Event {
+  type = 4;
+  guaranteed = false;
+  playerId: string;
+  active: boolean;
+  timestamp: number;
+  onJetpack?: (playerId: string, active: boolean) => void;
+
+  constructor(
+    playerId: string,
+    active: boolean,
+    timestamp: number,
+    onJetpack?: (playerId: string, active: boolean) => void
+  ) {
+    this.playerId = playerId;
+    this.active = active;
+    this.timestamp = timestamp;
+    this.onJetpack = onJetpack;
+  }
+
+  pack(stream: BitStream): void {
+    stream.writeString(this.playerId);
+    stream.writeBool(this.active);
+    const relativeTimestamp = this.timestamp - (Date.now() - 60000);
+    stream.writeInt(relativeTimestamp, 32);
+  }
+
+  unpack(stream: BitStream): void {
+    this.playerId = stream.readString();
+    this.active = stream.readBool();
+    const relativeTimestamp = stream.readInt(32);
+    this.timestamp = relativeTimestamp + (Date.now() - 60000);
+  }
+
+  process(): void {
+    if (this.onJetpack) {
+      this.onJetpack(this.playerId, this.active);
+    }
+  }
+}
+
+export class SkiEvent implements Event {
+  type = 5;
+  guaranteed = false;
+  playerId: string;
+  active: boolean;
+  timestamp: number;
+  onSki?: (playerId: string, active: boolean) => void;
+
+  constructor(
+    playerId: string,
+    active: boolean,
+    timestamp: number,
+    onSki?: (playerId: string, active: boolean) => void
+  ) {
+    this.playerId = playerId;
+    this.active = active;
+    this.timestamp = timestamp;
+    this.onSki = onSki;
+  }
+
+  pack(stream: BitStream): void {
+    stream.writeString(this.playerId);
+    stream.writeBool(this.active);
+    const relativeTimestamp = this.timestamp - (Date.now() - 60000);
+    stream.writeInt(relativeTimestamp, 32);
+  }
+
+  unpack(stream: BitStream): void {
+    this.playerId = stream.readString();
+    this.active = stream.readBool();
+    const relativeTimestamp = stream.readInt(32);
+    this.timestamp = relativeTimestamp + (Date.now() - 60000);
+  }
+
+  process(): void {
+    if (this.onSki) {
+      this.onSki(this.playerId, this.active);
+    }
+  }
+}
+
+export class DeathEvent implements Event {
+  type = 6;
+  guaranteed = true;
+  playerId: string;
+  killerId: string | null;
+  timestamp: number;
+  onDeath?: (playerId: string, killerId: string | null) => void;
+
+  constructor(
+    playerId: string,
+    killerId: string | null,
+    timestamp: number,
+    onDeath?: (playerId: string, killerId: string | null) => void
+  ) {
+    this.playerId = playerId;
+    this.killerId = killerId;
+    this.timestamp = timestamp;
+    this.onDeath = onDeath;
+  }
+
+  pack(stream: BitStream): void {
+    stream.writeString(this.playerId);
+    stream.writeBool(this.killerId !== null);
+    if (this.killerId !== null) {
+      stream.writeString(this.killerId);
+    }
+    const relativeTimestamp = this.timestamp - (Date.now() - 60000);
+    stream.writeInt(relativeTimestamp, 32);
+  }
+
+  unpack(stream: BitStream): void {
+    this.playerId = stream.readString();
+    const hasKiller = stream.readBool();
+    this.killerId = hasKiller ? stream.readString() : null;
+    const relativeTimestamp = stream.readInt(32);
+    this.timestamp = relativeTimestamp + (Date.now() - 60000);
+  }
+
+  process(): void {
+    if (this.onDeath) {
+      this.onDeath(this.playerId, this.killerId);
+    }
+  }
+}
+
 export class EventManager {
   private outgoingQueue: Event[] = [];
   private sequenceNumber: number = 0;
@@ -130,6 +293,7 @@ export class EventManager {
   private orderedQueue: Event[] = [];
   private maxWindowSize: number = 32;
   private startTime: number = Date.now();
+  private onAckCallback: ((seq: number) => void) | null = null;
 
   /**
    * Add an event to the outgoing queue
@@ -247,9 +411,17 @@ export class EventManager {
    * Send ACK for a guaranteed event
    */
   private sendAck(seq: number): void {
-    // This would be sent through the connection
-    // Implementation depends on the connection layer
-    console.log(`Sending ACK for sequence ${seq}`);
+    // ACK is sent through the connection layer via StreamManager
+    if (this.onAckCallback) {
+      this.onAckCallback(seq);
+    }
+  }
+
+  /**
+   * Set callback for ACK transmission
+   */
+  setAckCallback(callback: ((seq: number) => void) | null): void {
+    this.onAckCallback = callback;
   }
 
   /**
@@ -285,6 +457,14 @@ export class EventManager {
         return new PositionEvent('', { x: 0, y: 0, z: 0 }, { yaw: 0, pitch: 0 }, 0);
       case 2:
         return new ShotEvent('', null, 0);
+      case 3:
+        return new JumpEvent('', 0);
+      case 4:
+        return new JetpackEvent('', false, 0);
+      case 5:
+        return new SkiEvent('', false, 0);
+      case 6:
+        return new DeathEvent('', null, 0);
       default:
         logger.warn(`Unknown event type: ${type}`);
         return null;

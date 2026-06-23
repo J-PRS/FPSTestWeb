@@ -217,7 +217,7 @@ export class MessageHandler {
     const reconciliation = JSON.stringify({
       type: 'stateReconciliation',
       playerId,
-      sequenceNumber,
+      lastProcessedSequence: sequenceNumber,
       position: player.position,
       rotation: player.rotation,
       velocity: player.velocity

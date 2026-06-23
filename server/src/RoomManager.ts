@@ -90,8 +90,8 @@ export class RoomManager {
 
     this.playerToRoom.delete(playerId);
 
-    // Delete room if empty
-    if (room && room.players.size === 0) {
+    // Delete room if empty, but keep default room
+    if (room && room.players.size === 0 && roomId !== 'default') {
       this.rooms.delete(roomId);
     }
 

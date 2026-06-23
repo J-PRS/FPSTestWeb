@@ -1,5 +1,344 @@
 # Changelog
 
+## [2026-06-23] Tribes2-Style Networking Integration - Phase 58
+
+### Binary Message Routing Fix (Complete)
+- **Fixed server-side binary packet timing to prevent msgpack decode errors**
+  - Added joinHandshakeComplete flag to server StreamManager
+  - Server now waits for join handshake before sending binary Tribes2 packets
+  - Added markJoinHandshakeComplete method to StreamManager and Tribes2Networking
+  - Server calls markJoinHandshakeComplete after sending joinAck
+  - Added sendBinary method to server WebSocketConnection for raw binary data
+  - Client onBinaryMessage callback properly routes Tribes2 packets to StreamManager
+  - Location: server/src/StreamManager.ts, Tribes2Networking.ts, WebSocketConnection.ts, Server.ts
+  - Benefits: No more msgpack decode errors, proper binary packet routing, clean protocol separation
+
+## [2026-06-23] Tribes2-Style Networking Integration - Phase 57
+
+### Binary Message Routing Fix
+- **Fixed WebSocketConnection to properly route Tribes2 binary packets**
+  - Added onBinaryMessage callback to ConnectionConfig interface
+  - Binary messages now route to onBinaryMessage instead of msgpack decoder
+  - Tribes2Adapter.handleBinaryMessage routes packets to StreamManager.handlePacket
+  - Prevents msgpack decode errors on Tribes2 bit-packed packets
+  - Location: client/src/networking/WebSocketConnection.ts, Tribes2Adapter.ts
+  - Benefits: Proper binary packet routing, no decode errors, clean separation of protocols
+
+## [2026-06-23] Tribes2-Style Networking Integration - Phase 56
+
+### Event System Improvements
+- **Updated Tribes2Adapter to use proper event types**
+  - sendJump now sends JumpEvent through EventManager
+  - sendJetpack now sends JetpackEvent through EventManager
+  - Events are properly packed and sent via StreamManager
+  - Benefits: Consistent event handling, proper event sequencing
+
+### Code Cleanup
+- **Cleaned up TODO comments in main.ts**
+  - Updated state reconciliation comment (now handled by Tribes2Adapter)
+  - Updated state restore comment (now handled by Tribes2Adapter)
+  - Benefits: Clearer code, accurate documentation
+
+- **Fixed console.log usage in EventManager**
+  - Changed console.log to logger.debug for consistency (client)
+  - Changed console.log to Logger.debug for consistency (server)
+  - Benefits: Proper logging through centralized logger
+
+- **Added processOrderedQueue to client StreamManager**
+  - Guaranteed events are now processed in order after unpacking
+  - Ensures proper event sequencing for guaranteed delivery
+  - Location: client/src/networking/StreamManager.ts
+  - Benefits: Correct event ordering for guaranteed events
+
+- **Removed PositionEvent from Tribes2Adapter.sendPosition**
+  - GhostManager handles position synchronization, so PositionEvent is redundant
+  - sendPosition now only maintains interface compatibility
+  - Location: client/src/networking/Tribes2Adapter.ts
+  - Benefits: Reduces duplicate position updates, cleaner event flow
+
+- **Fixed duplicate markJoinHandshakeComplete in Tribes2Networking**
+  - Removed duplicate method definition
+  - Added joinHandshakeComplete map to track handshake state per connection
+  - Location: server/src/Tribes2Networking.ts
+  - Benefits: Fixes TypeScript error, proper handshake tracking
+
+### Tech Debt Reduction
+- **Identified .old files for removal**
+  - 8 .old files in client/src (EntityManager, GameState, Lighting, ProjectileManager, Renderer, ColyseusAdapter, NaiaAdapter)
+  - 1 .old file in zzz/client_babylon (EventSystem)
+  - No active imports found referencing these files
+  - Files can be safely removed when user decides
+  - Benefits: Cleaner codebase, reduced confusion
+
+### GhostManager State Mask System
+- **Verified GhostManager with state masks and priority sorting**
+  - State masks (POSITION, ROTATION, VELOCITY, ANIMATION, HEALTH, WEAPON, FLAGS) implemented
+  - Priority sorting: state changes > health changes > movement changes > stable ID
+  - Fixed buildUpdateList to use direct ghost access instead of ScopeManager
+  - Location: server/src/GhostManager.ts
+  - Benefits: Bandwidth-efficient partial state updates
+  - Note: Distance-based scoping deferred (requires spatial database integration)
+
+### Server Configuration Alignment
+- **Updated ServerConfig to match multiplayer specification**
+  - TICK_RATE increased from 15 to 30 Hz (33ms per tick)
+  - MAX_SHOTS_PER_SECOND increased from 10 to 20
+  - MAX_JETPACK_UPDATES_PER_SECOND decreased from 20 to 5
+  - MAX_TOTAL_MESSAGES_PER_SECOND increased from 30 to 100
+  - Location: server/src/config.ts
+  - Benefits: Meets specification performance targets
+
+### Tribes2 Networking Integration Status
+- **Verified hybrid architecture implementation**
+  - JSON messages for high-level game state (gameState, playerJoined, playerLeft, death)
+  - Binary Tribes2 packets for efficient event/move transmission
+  - Tribes2Adapter bridges NetworkManager interface with StreamManager system
+  - EventManager handles guaranteed/non-guaranteed events (jump, jetpack, shots)
+  - MoveManager handles input collection and client-side prediction
+  - GhostManager framework exists with state masks (not fully utilized for player sync)
+  - Delta compression implemented via handlePositionDelta in MessageHandler
+  - Location: client/src/networking/Tribes2Adapter.ts, server/src/MessageHandler.ts
+  - Benefits: Bandwidth-efficient binary protocol for frequent updates, JSON for state snapshots
+
+### ACK/Retransmission System Integration
+- **Integrated ACK packet transmission into StreamManager**
+  - Added onAckCallback to EventManager (server and client)
+  - StreamManager collects ACKs and packs them into packets (1 byte count + 2 bytes per ACK)
+  - StreamManager unpacks incoming ACKs and forwards to EventManager.handleAck
+  - ACKs sent in every packet after EventManager data
+  - Location: server/src/EventManager.ts, server/src/StreamManager.ts, client/src/networking/EventManager.ts, client/src/networking/StreamManager.ts
+  - Benefits: Guaranteed events now have actual ACK transmission over network, enabling proper retransmission
+
+## [2026-06-23] Tribes2-Style Networking Integration - Phase 55
+
+### Critical Bug Fixes
+- **Fixed client sending binary data before JSON join handshake**
+  - Added joinHandshakeComplete flag to Tribes2Adapter
+  - Binary data now only sent after joinAck is received
+  - Prevents server rejecting binary packets before join message
+  - Location: client/src/networking/Tribes2Adapter.ts
+  - Benefits: Proper handshake protocol, no connection failures
+
+- **Fixed default room initialization issue (room not found repeatedly)**
+  - RoomManager was deleting empty rooms including default room
+  - Modified removePlayerFromRoom to preserve default room
+  - Default room now persists even when empty
+  - Location: server/src/RoomManager.ts
+  - Benefits: No repeated room creation warnings, stable room management
+
+### Type Safety Improvements
+- **Added msgpack-lite type declarations**
+  - Added @types/msgpack-lite to server package.json
+  - Added @types/msgpack-lite to client package.json
+  - Resolves TypeScript errors in WebSocketConnection files
+  - Location: server/package.json, client/package.json
+  - Benefits: Full type safety for msgpack encoding/decoding
+
+### Verification - Already Implemented Features
+- **Position validation with physics awareness**: Already implemented in PositionValidator.ts using physics equation pos = pos0 + vel*t + 0.5*acc*t^2
+- **Projectile synchronization**: Already implemented with timeout (3000ms), fallback, and cleanup in main.ts
+- **Lag compensation buffer**: Already set to 1000ms with extrapolation in ServerConfig
+- **Connection quality metric usage**: Already implemented in RemotePlayer.ts with adaptive interpolation based on ping
+- **State restoration on reconnect**: Already includes velocity and lastProcessedSequence in Server.ts
+- **Health synchronization**: Already included in gameState messages in Server.ts
+- **Memory leak cleanup**: Already implemented in PlayerManager.markPlayerDisconnected (clears rewind buffer and position history)
+
+### Unit Tests Enhancement
+- **Extended unit tests for new event types and control state**
+  - EventManager.test.ts: Added tests for JumpEvent, JetpackEvent, SkiEvent, DeathEvent pack/unpack
+  - MoveManager.test.ts: Added tests for packControlState with 0xFF marker, position/rotation/velocity packing
+  - GhostManager.test.ts: Added tests for updateGhost, removeGhost, StateMask bit values
+  - Benefits: Test coverage for new Phase 55 features, regression prevention
+
+### Tech Debt
+- **Deprecated files already marked as .old/.deprecated**
+  - Files remain in place for user review (no deletion)
+  - 8 .old files in client/src
+  - 4 .deprecated files in client/src and server/src
+  - Benefits: Clear deprecation markers, no data loss
+
+## [2026-06-23] Tribes2-Style Networking Integration - Phase 55
+
+### Client-Side Prediction with Input Replay
+- **Implemented full client-side prediction with input replay**
+  - Added unpackControlState to client MoveManager to receive server state
+  - Added 0xFF marker before control state in server MoveManager.packControlState
+  - Added setControlObjectProvider to server StreamManager and Tribes2Networking
+  - Wired server PlayerManager to provide control object state (position, rotation, velocity)
+  - Added setBitPosition to client BitStream for rewinding read position
+  - Updated client StreamManager to check for 0xFF marker and unpack control state
+  - Added onReconcile callback to client MoveManager for state reconciliation
+  - Implemented handleReconciliation in Tribes2Adapter with input replay
+  - Client snaps to server position, then replays unprocessed moves for smooth correction
+  - Benefits: Smooth gameplay, reduced perceived lag, authoritative server with prediction
+
+### Event Types
+- **Added missing event types to both client and server**
+  - JumpEvent (type 3): Non-guaranteed jump events with timestamp
+  - JetpackEvent (type 4): Non-guaranteed jetpack events with active flag
+  - SkiEvent (type 5): Non-guaranteed ski events with active flag
+  - DeathEvent (type 6): Guaranteed death events with killerId
+  - All events include proper pack/unpack serialization
+  - Client events include callbacks for game logic integration
+  - Benefits: Full event coverage for gameplay actions
+
+### GhostManager State Mask Synchronization
+- **Verified GhostManager state mask implementation**
+  - StateMask enum with bit flags (POSITION, ROTATION, VELOCITY, ANIMATION, HEALTH, WEAPON, FLAGS)
+  - pack() method sends only changed states based on stateMask
+  - unpack() method receives only states based on stateMask
+  - Priority-based update ordering (health > movement > stable)
+  - ScopeManager for distance-based scoping
+  - Benefits: Bandwidth efficiency, only changed data transmitted
+
+## [2026-06-23] Tribes2-Style Networking Integration - Phase 54
+
+### Client-Side Prediction
+- **Implemented client-side prediction with input replay**
+  - Added state reconciliation handling in Tribes2Adapter
+  - Server sends lastProcessedSequence in stateReconciliation
+  - Client reconciles by removing processed moves and re-applying pending moves
+  - Added controlObject property to Tribes2Adapter
+  - Added setControlObject method to INetworkAdapter and NetworkManager
+  - Wired player object to NetworkManager in main.ts
+  - Benefits: Smooth gameplay, reduced perceived lag, authoritative server
+
+### Event System
+- **Verified JumpEvent and JetpackEvent exist**
+  - JumpEvent (type 3): Non-guaranteed jump events
+  - JetpackEvent (type 4): Non-guaranteed jetpack events with active flag
+  - SkiEvent (type 5): Non-guaranteed ski events with active flag
+  - DeathEvent (type 6): Guaranteed death events
+  - Benefits: Full event coverage for gameplay actions
+
+## [2026-06-23] Tribes2-Style Networking Integration - Phase 53
+
+### Code Quality Improvements
+- **Implemented packet sequence tracking in StreamManager**
+  - Added sequenceNumber property to client StreamManager
+  - Added per-connection sequenceNumbers map to server StreamManager
+  - Sequence numbers wrap at 65535 (16-bit)
+  - Benefits: Packet ordering, loss detection, better reliability
+
+- **Implemented priority calculation in GhostManager**
+  - Added multi-level priority sorting for ghost updates
+  - Priority 1: Ghosts with state changes
+  - Priority 2: Health changes (critical for gameplay)
+  - Priority 3: Position/velocity changes (movement)
+  - Priority 4: Lower ID first (stable ordering)
+  - Applied to both client and server
+  - Benefits: Efficient bandwidth usage, critical updates sent first
+
+## [2026-06-23] Tribes2-Style Networking Integration - Phase 52
+
+### Tech Debt Reduction
+- **Renamed deprecated network adapters with .deprecated suffix**
+  - WSAdapter.ts → WSAdapter.ts.deprecated
+  - UWSAdapter.ts → UWSAdapter.ts.deprecated
+  - BinaryProtocol.ts → BinaryProtocol.ts.deprecated
+  - Benefits: Clear deprecation markers, no actual file deletion
+
+- **Updated client config.ts**
+  - NETWORK_BACKEND type now only supports 'tribes2'
+  - Removed 'ws' and 'uws' options from type definition
+  - Benefits: Type safety, single networking path
+
+- **Updated SERVER_ARCHITECTURE.md**
+  - Documented Tribes2Networking architecture
+  - Added StreamManager, EventManager, GhostManager, MoveManager components
+  - Updated current stack description with Tribes2 binary protocol
+  - Benefits: Accurate architecture documentation
+
+### Bug Fixes
+- **Fixed WebSocketConnection to handle both JSON and binary messages**
+  - Updated onMessage to detect JSON strings vs binary ArrayBuffer
+  - JSON messages parsed directly, binary passed as Uint8Array
+  - msgpack decode attempted on binary, fallback to raw binary
+  - Benefits: Proper handling of join (JSON) and Tribes2 packets (binary)
+
+- **Fixed WebSocketConnection.send to handle multiple data types**
+  - JSON strings sent as-is (for join messages)
+  - Uint8Array sent as-is (for Tribes2 packets)
+  - Objects encoded with msgpack (legacy compatibility)
+  - Benefits: Correct message encoding for all message types
+
+- **Fixed Tribes2Adapter initialization order**
+  - Send JSON join message BEFORE initializing StreamManager
+  - WebSocketConnection.onConnect called before sending queued messages
+  - Benefits: Join message sent immediately on connection
+
+- **Added ScopeManager implementation**
+  - Created ScopeManager.ts for GhostManager relevance filtering
+  - Implements distance-based priority calculation
+  - Benefits: GhostManager now has required dependency
+
+### Multiplayer Integration
+- **Added gameState handling in Tribes2Adapter**
+  - Handle gameState messages from server with existing players
+  - Forward gameState to message callback for player rendering
+  - Benefits: Clients receive initial player list on join
+
+- **Added player position broadcasting in GameLoop**
+  - Broadcast player positions every tick to all other players
+  - Exclude player from their own position broadcast
+  - Benefits: Remote player synchronization for multiplayer
+
+- **Implemented message routing in NetworkManager**
+  - Added full message type handling (gameState, position, playerJoined, playerLeft, etc.)
+  - Routes messages to appropriate callbacks (onGameState, onPlayerUpdate, etc.)
+  - Benefits: Complete server-to-client message flow for multiplayer
+
+- **Added sendInputMove to NetworkManager**
+  - New method for sending input moves for client-side prediction
+  - Separates input from position for Tribes2-style networking
+  - Benefits: Foundation for client-side prediction
+
+- **Implemented client-side prediction with input replay**
+  - Added onNetworkInput callback to Player for input capture
+  - Connected Player input to NetworkManager.sendInputMove
+  - Added sendInputMove handler in Tribes2Adapter
+  - Updated MoveManager.predictMove to use MovementController
+  - Updated MoveManager.reconcile to snap to server state and replay moves
+  - Benefits: Immediate input response, smooth movement despite lag
+
+- **Verified server-side lag compensation**
+  - PlayerManager maintains 1000ms rewind buffer per player
+  - getPlayerPositionAt with 200ms tolerance and 500ms extrapolation
+  - MessageHandler.handleShot uses lag compensation for hit validation
+  - Benefits: Accurate hit detection despite network latency
+
+- **Verified WYSIWYG hit detection**
+  - Client-side hit detection in main.ts (hitPlayerId)
+  - Immediate hit feedback with score calculation
+  - Server validates hits with lag compensation
+  - Benefits: Shooter's visual perspective is authoritative
+
+### Tech Debt
+- **Deprecated files already marked**
+  - 7 .old files in client/src already marked as deprecated
+  - EntityManager.ts.old, GameState.ts.old, Lighting.ts.old
+  - ProjectileManager.ts.old, Renderer.ts.old
+  - ColyseusAdapter.ts.old, NaiaAdapter.ts.old
+  - Benefits: Clear deprecation markers, no action needed
+
+### Unit Tests
+- **Added EventManager.test.ts**
+  - Tests for event packing/unpacking
+  - Tests for guaranteed/non-guaranteed event handling
+  - Tests for onEvent callback
+  - Benefits: Test coverage for event system
+
+- **Added MoveManager.test.ts**
+  - Tests for move packing/unpacking
+  - Tests for move validation
+  - Tests for onMove callback
+  - Benefits: Test coverage for input handling
+
+- **Restored GhostManager.test.ts**
+  - Fixed import to use separate ScopeManager module
+  - Tests for pack/unpack, removeConnection, getGhosts, clear
+  - Benefits: Test coverage for ghost management
+
 ## [2026-06-23] Tribes2-Style Networking Integration - Phase 51
 
 ### Bug Fixes

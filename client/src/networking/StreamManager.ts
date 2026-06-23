@@ -26,6 +26,8 @@ export class StreamManager {
   private packetTimer: number | null = null;
   private onSendPacket: (data: Uint8Array) => void;
   private startTime: number = Date.now(); // For relative timestamps
+  private sequenceNumber: number = 0; // Packet sequence tracking
+  private pendingAcks: number[] = []; // ACKs to send
 
   constructor(
     eventManager: EventManager,
@@ -40,6 +42,11 @@ export class StreamManager {
     this.config = config;
     this.onSendPacket = onSendPacket;
     this.packetInterval = 1000 / config.packetsPerSecond;
+
+    // Wire up ACK callback from EventManager
+    this.eventManager.setAckCallback((seq: number) => {
+      this.collectAck(seq);
+    });
   }
 
   /**
@@ -53,6 +60,15 @@ export class StreamManager {
     this.packetTimer = setInterval(() => {
       this.sendPacket();
     }, this.packetInterval);
+  }
+
+  /**
+   * Collect ACK for transmission
+   */
+  private collectAck(seq: number): void {
+    if (!this.pendingAcks.includes(seq)) {
+      this.pendingAcks.push(seq);
+    }
   }
 
   /**
@@ -80,7 +96,10 @@ export class StreamManager {
     
     // 2. Event Manager (guaranteed events)
     this.eventManager.pack(stream, this.config.maxPacketSize);
-    
+
+    // 2.5. ACKs (acknowledgments for guaranteed events)
+    this.packAcks(stream);
+
     // 3. Ghost Manager (state updates)
     this.ghostManager.pack(stream, this.config.maxPacketSize);
     
@@ -99,13 +118,45 @@ export class StreamManager {
   private packHeader(stream: BitStream): void {
     // Message type (1 byte)
     stream.writeInt(1, 8); // Game data packet
-    
+
     // Timestamp (4 bytes) - relative to start time to fit in 32 bits
     const relativeTime = Date.now() - this.startTime;
     stream.writeInt(relativeTime, 32);
-    
-    // Sequence number (2 bytes)
-    stream.writeInt(0, 16); // TODO: Track packet sequence
+
+    // Sequence number (2 bytes) - wraps at 65535
+    stream.writeInt(this.sequenceNumber, 16);
+    this.sequenceNumber = (this.sequenceNumber + 1) % 65536;
+  }
+
+  /**
+   * Pack ACKs
+   */
+  private packAcks(stream: BitStream): void {
+    if (this.pendingAcks.length === 0) return;
+
+    // Pack ACK count (1 byte)
+    stream.writeInt(Math.min(this.pendingAcks.length, 255), 8);
+
+    // Pack ACK sequence numbers (2 bytes each)
+    for (let i = 0; i < Math.min(this.pendingAcks.length, 255); i++) {
+      stream.writeInt(this.pendingAcks[i], 16);
+    }
+
+    // Clear sent ACKs
+    this.pendingAcks = [];
+  }
+
+  /**
+   * Unpack ACKs
+   */
+  private unpackAcks(stream: BitStream): void {
+    if (!stream.hasData()) return;
+
+    const ackCount = stream.readInt(8);
+    for (let i = 0; i < ackCount; i++) {
+      const seq = stream.readInt(16);
+      this.eventManager.handleAck(seq);
+    }
   }
 
   /**
@@ -131,12 +182,29 @@ export class StreamManager {
   private handleGameDataPacket(stream: BitStream): void {
     // Unpack in the same order as packing
     
-    // 1. Move Manager
+    // 1. Move Manager (moves + control state)
     this.moveManager.unpack(stream);
+    
+    // Check if there's control state data (server sends this after moves)
+    if (stream.hasData()) {
+      // Control state is sent as a separate block after moves
+      // Check if next byte indicates control state (marker)
+      const marker = stream.readInt(8);
+      if (marker === 0xFF) {
+        this.moveManager.unpackControlState(stream);
+      } else {
+        // Not a control state marker, rewind and continue
+        stream.setBitPosition(stream.getBitPosition() - 8);
+      }
+    }
     
     // 2. Event Manager
     this.eventManager.unpack(stream);
-    
+    this.eventManager.processOrderedQueue(); // Process guaranteed events in order
+
+    // 2.5. ACKs (acknowledgments for guaranteed events)
+    this.unpackAcks(stream);
+
     // 3. Ghost Manager
     this.ghostManager.unpack(stream);
   }
