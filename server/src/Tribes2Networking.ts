@@ -32,6 +32,19 @@ export class Tribes2Networking {
     const moveManager = new MoveManager();
     const eventManager = new EventManager();
 
+    // Wire callbacks for event and move processing
+    eventManager.onEvent((connId: string, event: Event) => {
+      if (this.onEventCallback) {
+        this.onEventCallback(connId, event);
+      }
+    });
+
+    moveManager.onMove((connId: string, move: any) => {
+      if (this.onMoveCallback) {
+        this.onMoveCallback(connId, move);
+      }
+    });
+
     const streamManager = new StreamManager(
       eventManager,
       ghostManager,

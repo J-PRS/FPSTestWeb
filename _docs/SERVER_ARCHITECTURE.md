@@ -225,6 +225,42 @@ class WorldManager {
 - Routes messages to appropriate handlers
 - Implements rate limiting and anti-cheat
 
+**Tribes2Networking**:
+- Per-connection Tribes2-style networking management
+- Coordinates StreamManager, EventManager, GhostManager, MoveManager
+- Handles binary packet routing
+- Converts Tribes2 events to MessageHandler format
+
+**StreamManager**:
+- Coordinates all Tribes2 networking managers
+- Packs bit-packed packets with priority ordering
+- Manages packet transmission rate (30 packets/sec, 1400 bytes max)
+- Handles connection lifecycle
+
+**EventManager**:
+- Event queuing and guaranteed delivery
+- Event packing/unpacking with BitStream
+- Sliding window ACK for guaranteed events
+- Factory for event instantiation (PositionEvent, ShotEvent)
+
+**GhostManager**:
+- State synchronization for remote entities
+- Delta compression for bandwidth efficiency
+- Scope-based updates (only send relevant entities)
+- Interpolation smoothing
+
+**MoveManager**:
+- Input/movement handling
+- Client-side prediction support
+- Server-authoritative movement validation
+- Input sequence tracking
+
+**MessageHandler**:
+- JSON message processing (join, joinAck, etc.)
+- Converts Tribes2 events to game logic
+- Handles state reconciliation
+- Rate limiting for critical messages
+
 **Game State Manager**:
 - Maintains authoritative game state
 - Handles player positions, rotations, health
@@ -252,19 +288,51 @@ class WorldManager {
 ### Component Communication
 
 ```
-Client ↔ WebSocket Server ↔ Game State Manager
-                              ↓
-                         Physics Engine
-                              ↓
-                         Database
+Client ↔ WebSocket Server ↔ Tribes2Networking ↔ StreamManager
+                                        ↓
+                                   EventManager
+                                   GhostManager
+                                   MoveManager
+                                        ↓
+                                   MessageHandler
+                                        ↓
+                                   Game State Manager
+                                        ↓
+                                   Physics Engine
+                                        ↓
+                                   Database
 ```
 
 **Message Flow**:
-1. Client sends input to WebSocket Server
-2. WebSocket Server validates and forwards to Game State Manager
-3. Game State Manager updates state via Physics Engine
-4. Game State Manager broadcasts updates to all clients
-5. Database stores persistent data asynchronously
+1. Client sends JSON join message to WebSocket Server
+2. Server responds with joinAck
+3. Client starts Tribes2 StreamManager
+4. Client sends Tribes2 binary packets (bit-packed events)
+5. Tribes2Networking routes to StreamManager
+6. StreamManager unpacks events via EventManager factory
+7. Events converted to MessageHandler format
+8. MessageHandler updates Game State Manager
+9. Game State Manager broadcasts updates via Tribes2Networking
+10. Database stores persistent data asynchronously
+
+### Tribes2 Event System
+
+**Event Types**:
+- PositionEvent (type 1): Player position/rotation updates (non-guaranteed)
+- ShotEvent (type 2): Shot events with target tracking (guaranteed)
+
+**Event Properties**:
+- `type`: Event type identifier
+- `guaranteed`: Whether delivery is guaranteed
+- `pack()`: Serialize to BitStream
+- `unpack()`: Deserialize from BitStream
+- `process()`: Handle event on receiver
+
+**Bit-Packing Benefits**:
+- 50-70% bandwidth reduction vs JSON
+- 32-bit integer support with relative timestamps
+- State masks for delta compression
+- Fixed-size fields for predictable packet sizes
 
 ## Performance Optimization
 

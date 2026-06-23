@@ -28,6 +28,7 @@ export class MoveManager {
   private moves: Map<string, Move[]> = new Map(); // connectionId -> moves
   private lastProcessedSequences: Map<string, number> = new Map();
   private maxWindowSize: number = 32;
+  private onMoveCallback: ((connectionId: string, move: Move) => void) | null = null;
 
   /**
    * Add a move for a connection
@@ -64,7 +65,9 @@ export class MoveManager {
     
     for (const move of recentMoves) {
       stream.writeInt(move.sequence, 16);
-      stream.writeInt(move.timestamp, 32);
+      // Use relative timestamp to fit in 32 bits
+      const relativeTimestamp = move.timestamp - (Date.now() - 60000);
+      stream.writeInt(relativeTimestamp, 32);
       
       // Pack input
       stream.writeSignedInt(move.input.forward, 8);
@@ -84,32 +87,38 @@ export class MoveManager {
   unpack(connectionId: string, stream: BitStream): Move[] {
     const count = stream.readInt(8);
     const moves: Move[] = [];
-    
+
     for (let i = 0; i < count; i++) {
       const seq = stream.readInt(16);
-      const timestamp = stream.readInt(32);
-      
+      const relativeTimestamp = stream.readInt(32);
+      const timestamp = relativeTimestamp + (Date.now() - 60000);
+
       // Read input
       const forward = stream.readSignedInt(8);
       const right = stream.readSignedInt(8);
       const jump = stream.readInt(1);
       const ski = stream.readInt(1);
-      
+
       // Read rotation
       const yaw = stream.readFloatRanged(-Math.PI, Math.PI, 16);
       const pitch = stream.readFloatRanged(-Math.PI / 2, Math.PI / 2, 16);
-      
+
       const move: Move = {
         sequence: seq,
         timestamp,
         input: { forward, right, jump, ski },
         rotation: { yaw, pitch }
       };
-      
+
       moves.push(move);
       this.addMove(connectionId, move);
+
+      // Call callback for move processing
+      if (this.onMoveCallback) {
+        this.onMoveCallback(connectionId, move);
+      }
     }
-    
+
     return moves;
   }
 
@@ -225,6 +234,13 @@ export class MoveManager {
   removeConnection(connectionId: string): void {
     this.moves.delete(connectionId);
     this.lastProcessedSequences.delete(connectionId);
+  }
+
+  /**
+   * Set callback for move processing
+   */
+  onMove(callback: ((connectionId: string, move: Move) => void) | null): void {
+    this.onMoveCallback = callback;
   }
 
   /**

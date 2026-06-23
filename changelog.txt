@@ -1,5 +1,26 @@
 # Changelog
 
+## [2026-06-23] Tribes2-Style Networking Integration - Phase 51
+
+### Bug Fixes
+- **Fixed MoveManager timestamp overflow**
+  - Applied relative timestamp fix to MoveManager pack/unpack
+  - Updated both client and server MoveManager implementations
+  - Benefits: Moves fit in 32-bit range, no overflow errors
+
+### Tech Debt Reduction
+- **Renamed server_old.ts to server_old.ts.deprecated**
+  - Marked as deprecated to prevent accidental use
+  - Preserved for reference if needed
+  - Benefits: Clearer codebase, prevents confusion
+
+### Documentation Updates
+- **Updated SERVER_ARCHITECTURE.md with Tribes2 components**
+  - Added Tribes2Networking, StreamManager, EventManager, GhostManager, MoveManager
+  - Updated component communication diagram
+  - Added Tribes2 event system documentation
+  - Benefits: Accurate architecture documentation
+
 ## [2026-06-23] Tribes2-Style Networking Integration - Phase 50
 
 ### Tech Debt Reduction
@@ -8,6 +29,7 @@
   - Replaced encodeStateReconciliation with JSON format
   - MessageHandler now only handles JSON messages
   - Binary messages are routed to Tribes2Networking
+  - Marked BinaryProtocol.ts as deprecated (only used in server_old.ts)
   - Benefits: Cleaner separation of concerns, reduced dependencies
 
 ## [2026-06-23] Tribes2-Style Networking Integration - Phase 49

@@ -71,7 +71,9 @@ export class MoveManager {
     
     for (const move of recentMoves) {
       stream.writeInt(move.sequence, 16);
-      stream.writeInt(move.timestamp, 32);
+      // Use relative timestamp to fit in 32 bits
+      const relativeTimestamp = move.timestamp - (Date.now() - 60000);
+      stream.writeInt(relativeTimestamp, 32);
       
       // Pack input
       stream.writeSignedInt(move.input.forward, 8);
