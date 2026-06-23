@@ -1,0 +1,11 @@
+[package]
+name = "fps_server"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+naia-server = { version = "0.25", features = ["transport_udp"] }
+shared_protocol = { path = "../shared_protocol" }
+tokio = { version = "1.0", features = ["full"] }
+log = "0.4"
+env_logger = "0.10"

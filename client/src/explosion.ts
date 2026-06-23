@@ -1,7 +1,5 @@
 import * as THREE from 'three';
-
-const SHOCK_LIFE = 0.25;
-const FLASH_LIFE = 0.09;
+import { SHOCK_LIFE, FLASH_LIFE } from './config.js';
 
 interface EP {
   mesh: THREE.Mesh;

@@ -1,0 +1,131 @@
+/**
+ * Game state management
+ * Centralizes all game state variables and provides access methods
+ */
+
+import * as THREE from 'three';
+import { Player } from './Player.js';
+import { Ball } from './balls.js';
+import { Rocket } from './rocket.js';
+import { Disc } from './disc.js';
+import { BallDebris } from './debris.js';
+import { Explosion } from './explosion.js';
+import { Implosion } from './implosion.js';
+import { RemotePlayer } from './RemotePlayer.js';
+import { PlayerDebris } from './PlayerDebris.js';
+import { HUD } from './hud.js';
+import { WorkerNetworkManager } from './WorkerNetworkManager.js';
+import { Terrain } from './terrain.js';
+import { EffectsManager } from './effects.js';
+
+export interface ExplosionInfo {
+  position: THREE.Vector3;
+  force: number;
+  timestamp: number;
+  shooterId: string;
+}
+
+export interface InputHistoryEntry {
+  sequenceNumber: number;
+  input: {
+    forward: number;
+    right: number;
+    jump: number;
+    ski: number;
+  };
+  timestamp: number;
+}
+
+export class GameState {
+  // Core game objects
+  terrain: Terrain | null = null;
+  player: Player | null = null;
+  hud: HUD | null = null;
+  networkManager: WorkerNetworkManager | null = null;
+  effects: EffectsManager | null = null;
+
+  // Entity collections
+  remotePlayers: Map<string, RemotePlayer> = new Map();
+  balls: Ball[] = [];
+  rockets: Rocket[] = [];
+  discs: Disc[] = [];
+  debrisList: BallDebris[] = [];
+  playerDebrisList: PlayerDebris[] = [];
+  explosions: Explosion[] = [];
+  implosions: Implosion[] = [];
+
+  // Projectile tracking
+  pendingLocalRockets: Rocket[] = [];
+  localRocketById: Map<string, Rocket> = new Map();
+  pendingRocketTimestamps: Map<Rocket, number> = new Map();
+
+  // Game state tracking
+  recentExplosions: ExplosionInfo[] = [];
+  inputHistory: InputHistoryEntry[] = [];
+  ballTimer: number = 0;
+
+  // UI state
+  isTabHidden: boolean = false;
+
+  // Score display element
+  scoreDiv: HTMLDivElement;
+
+  constructor() {
+    this.scoreDiv = document.createElement('div');
+    this.scoreDiv.style.cssText = `
+      position:absolute; top:calc(50% - 60px); left:50%; transform:translate(-50%,-100%);
+      font-family:sans-serif; font-size:1rem; color:#fff;
+      text-shadow:1px 1px 3px #000;
+      pointer-events:none; text-align:center; white-space:pre; line-height:1.5;
+      opacity:0; transition:opacity 300ms ease;
+    `;
+    document.body.appendChild(this.scoreDiv);
+  }
+
+  showFragMessage(msg: string, duration: number = 3000, fade: number = 300): void {
+    this.scoreDiv.textContent = msg;
+    this.scoreDiv.style.transition = 'none';
+    this.scoreDiv.style.opacity = '1';
+    clearTimeout((this.scoreDiv as any)._t);
+    (this.scoreDiv as any)._t = setTimeout(() => {
+      this.scoreDiv.style.transition = `opacity ${fade}ms ease`;
+      this.scoreDiv.style.opacity = '0';
+    }, duration);
+  }
+
+  addExplosion(explosion: Explosion): void {
+    this.explosions.push(explosion);
+  }
+
+  addImplosion(implosion: Implosion): void {
+    this.implosions.push(implosion);
+  }
+
+  addRemotePlayer(playerId: string, remotePlayer: RemotePlayer): void {
+    this.remotePlayers.set(playerId, remotePlayer);
+  }
+
+  removeRemotePlayer(playerId: string): void {
+    this.remotePlayers.delete(playerId);
+  }
+
+  getRemotePlayer(playerId: string): RemotePlayer | undefined {
+    return this.remotePlayers.get(playerId);
+  }
+
+  cleanup(): void {
+    this.remotePlayers.clear();
+    this.balls = [];
+    this.rockets = [];
+    this.discs = [];
+    this.debrisList = [];
+    this.playerDebrisList = [];
+    this.explosions = [];
+    this.implosions = [];
+    this.pendingLocalRockets = [];
+    this.localRocketById.clear();
+    this.pendingRocketTimestamps.clear();
+    this.recentExplosions = [];
+    this.inputHistory = [];
+  }
+}

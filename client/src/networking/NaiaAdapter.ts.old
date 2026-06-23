@@ -1,0 +1,121 @@
+import { INetworkAdapter } from './INetworkAdapter';
+import { ChildLogger } from '../Logger.js';
+
+const logger = new ChildLogger('NaiaAdapter');
+
+/**
+ * Naia-based networking adapter
+ * Implements INetworkAdapter using the Naia SDK
+ * 
+ * Note: This is a stub implementation. The actual Naia JavaScript client
+ * would need to be installed via npm and imported here.
+ * 
+ * The Naia server uses UDP transport, so the client would need to use
+ * WebRTC or a WebSocket proxy to communicate with it.
+ */
+export class NaiaAdapter implements INetworkAdapter {
+  private client: any = null; // Would be naia_client::Client
+  private messageCallback: ((data: any) => void) | null = null;
+  private binaryMessageCallback: ((data: Uint8Array) => void) | null = null;
+  private connectCallback: (() => void) | null = null;
+  private disconnectCallback: (() => void) | null = null;
+  private errorCallback: ((error: Error) => void) | null = null;
+  private connected: boolean = false;
+  private sessionId: string = '';
+
+  async connect(url: string): Promise<void> {
+    try {
+      // TODO: Implement actual Naia client connection
+      // This would look something like:
+      // this.client = new Client(url);
+      // await this.client.connect();
+      // this.sessionId = this.client.sessionId;
+      
+      logger.info(`Naia adapter connecting to ${url}`);
+      
+      // Simulate connection for now
+      this.connected = true;
+      this.sessionId = 'naia-session-' + Math.random().toString(36).substr(2, 9);
+      
+      logger.info(`Connected via Naia: session ${this.sessionId}`);
+      this.connectCallback?.();
+    } catch (error) {
+      logger.error('Naia connection error', error);
+      this.errorCallback?.(error as Error);
+      throw error;
+    }
+  }
+
+  disconnect(): void {
+    // TODO: Implement actual Naia disconnect
+    // if (this.client) {
+    //   this.client.disconnect();
+    //   this.client = null;
+    // }
+    
+    this.connected = false;
+    this.disconnectCallback?.();
+  }
+
+  send(data: any): void {
+    if (!this.connected) {
+      logger.warn('Cannot send: Naia adapter not connected');
+      return;
+    }
+    
+    // TODO: Implement actual Naia message sending
+    // this.client.send(data);
+    
+    logger.debug(`Naia send: ${JSON.stringify(data)}`);
+  }
+
+  sendBinary(data: Uint8Array): void {
+    if (!this.connected) {
+      logger.warn('Cannot send binary: Naia adapter not connected');
+      return;
+    }
+    
+    // TODO: Implement actual Naia binary message sending
+    // this.client.sendBinary(data);
+    
+    logger.debug(`Naia send binary: ${data.length} bytes`);
+  }
+
+  onMessage(callback: (data: any) => void): void {
+    this.messageCallback = callback;
+  }
+
+  onBinaryMessage(callback: (data: Uint8Array) => void): void {
+    this.binaryMessageCallback = callback;
+  }
+
+  onConnect(callback: () => void): void {
+    this.connectCallback = callback;
+  }
+
+  onDisconnect(callback: () => void): void {
+    this.disconnectCallback = callback;
+  }
+
+  onError(callback: (error: Error) => void): void {
+    this.errorCallback = callback;
+  }
+
+  isConnected(): boolean {
+    return this.connected;
+  }
+
+  /**
+   * Get the session ID (player ID)
+   */
+  getSessionId(): string {
+    return this.sessionId;
+  }
+
+  /**
+   * Get the Naia client instance (for advanced usage)
+   */
+  getClient(): any {
+    return this.client;
+  }
+}

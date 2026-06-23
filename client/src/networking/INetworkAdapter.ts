@@ -20,6 +20,7 @@ export interface PlayerState {
   position: { x: number; y: number; z: number };
   rotation: { yaw: number; pitch: number };
   timestamp: number;
+  isDead?: boolean;
 }
 
 export interface InputState {

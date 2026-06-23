@@ -1,7 +1,13 @@
 /**
  * Binary Protocol for efficient network communication
  * Reduces bandwidth by 50-70% compared to JSON
+ *
+ * DEPRECATED: This protocol is being replaced by Tribes2 networking system.
+ * Only used in server_old.ts for reference. New code should use Tribes2Networking.
  */
+
+import { ServerConfig } from './config.js';
+import type { PositionMessage, PositionDeltaMessage, InputMessage, ShotMessage, StateReconciliationMessage, HitConfirmationMessage } from './MessageTypes.js';
 
 // Message types (1 byte)
 export enum MessageType {
@@ -112,6 +118,12 @@ export class BinaryDecoder {
   readUint8(): number {
     if (this.offset >= this.buffer.length) throw new Error('Buffer overflow');
     return this.buffer[this.offset++];
+  }
+
+  readInt8(): number {
+    if (this.offset >= this.buffer.length) throw new Error('Buffer overflow');
+    const value = this.buffer[this.offset++];
+    return value > 127 ? value - 256 : value; // Convert to signed
   }
 
   readUint16(): number {
@@ -250,7 +262,7 @@ export function encodeShot(
   return encoder.getResult();
 }
 
-export function decodePosition(data: Uint8Array): any {
+export function decodePosition(data: Uint8Array): PositionMessage {
   const decoder = new BinaryDecoder(data);
   const type = decoder.readUint8();
   if (type !== MessageType.POSITION) throw new Error('Invalid message type');
@@ -273,7 +285,7 @@ export function decodePosition(data: Uint8Array): any {
   };
 }
 
-export function decodePositionDelta(data: Uint8Array): any {
+export function decodePositionDelta(data: Uint8Array): PositionDeltaMessage {
   const decoder = new BinaryDecoder(data);
   const type = decoder.readUint8();
   if (type !== MessageType.POSITION_DELTA) throw new Error('Invalid message type');
@@ -285,9 +297,9 @@ export function decodePositionDelta(data: Uint8Array): any {
   const deltaY = decoder.readInt16() / 100;
   const deltaZ = decoder.readInt16() / 100;
 
-  // Read rotation deltas (int16, scaled by 1000)
-  const deltaYaw = decoder.readInt16() / 1000;
-  const deltaPitch = decoder.readInt16() / 1000;
+  // Read rotation deltas (int16, scaled by ROTATION_SCALE)
+  const deltaYaw = decoder.readInt16() / ServerConfig.ROTATION_SCALE;
+  const deltaPitch = decoder.readInt16() / ServerConfig.ROTATION_SCALE;
 
   const timestamp = decoder.readUint32();
 
@@ -302,7 +314,7 @@ export function decodePositionDelta(data: Uint8Array): any {
   };
 }
 
-export function decodeInput(data: Uint8Array): any {
+export function decodeInput(data: Uint8Array): InputMessage {
   const decoder = new BinaryDecoder(data);
   const type = decoder.readUint8();
   if (type !== MessageType.INPUT) throw new Error('Invalid message type');
@@ -310,27 +322,31 @@ export function decodeInput(data: Uint8Array): any {
   return {
     type: 'input',
     playerId: decoder.readString(),
-    data: {
-      sequenceNumber: decoder.readUint32(),
-      timestamp: decoder.readUint32()
+    sequenceNumber: decoder.readUint32(),
+    timestamp: decoder.readUint32(),
+    input: {
+      forward: decoder.readInt8(),
+      right: decoder.readInt8(),
+      jump: decoder.readUint8(),
+      ski: decoder.readUint8()
     }
   };
 }
 
-export function decodeShot(data: Uint8Array): any {
+export function decodeShot(data: Uint8Array): ShotMessage {
   const decoder = new BinaryDecoder(data);
   const type = decoder.readUint8();
   if (type !== MessageType.SHOT) throw new Error('Invalid message type');
-  
+
   const playerId = decoder.readString();
   const hasTarget = decoder.readUint8() === 1;
   const targetId = hasTarget ? decoder.readString() : null;
   const timestamp = decoder.readUint32();
-  
+
   const hasPositionVelocity = decoder.readUint8() === 1;
   let position = undefined;
   let velocity = undefined;
-  
+
   if (hasPositionVelocity) {
     position = {
       x: decoder.readFloat32(),
@@ -343,10 +359,10 @@ export function decodeShot(data: Uint8Array): any {
       z: decoder.readFloat32()
     };
   }
-  
+
   const hasProjectileId = decoder.readUint8() === 1;
   const projectileId = hasProjectileId ? decoder.readString() : null;
-  
+
   return {
     type: 'shot',
     playerId,
@@ -396,7 +412,7 @@ export function encodeHitConfirmation(
 }
 
 // Decode hit confirmation message
-export function decodeHitConfirmation(data: Uint8Array): any {
+export function decodeHitConfirmation(data: Uint8Array): HitConfirmationMessage {
   const decoder = new BinaryDecoder(data);
   decoder.readUint8(); // Skip message type
 

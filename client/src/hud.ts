@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 import { Player } from './Player.js';
 
 export class HUD {
@@ -14,6 +15,7 @@ export class HUD {
   private crosshair: HTMLDivElement;
   private hitMarker: HTMLDivElement;
   private hitTimer = 0;
+  private playerIndicators: Map<string, HTMLDivElement> = new Map();
 
   constructor() {
     const style = document.createElement('style');
@@ -82,6 +84,25 @@ export class HUD {
         background: linear-gradient(90deg, #f44, #f88);
         border-radius: 3px;
         transition: width 0.1s;
+      }
+      .player-indicator {
+        position: absolute;
+        width: 12px;
+        height: 12px;
+        background: #f44;
+        border: 2px solid #fff;
+        border-radius: 50%;
+        pointer-events: none;
+        transform: translate(-50%, -50%);
+        box-shadow: 0 0 8px rgba(255, 68, 68, 0.8);
+        transition: opacity 0.1s;
+      }
+      .player-indicator.offscreen {
+        background: #ff0;
+        border-color: #f00;
+      }
+      .player-indicator.hidden {
+        opacity: 0;
       }
     `;
     document.head.appendChild(style);
@@ -173,5 +194,99 @@ export class HUD {
       this.hitTimer -= dt;
       if (this.hitTimer <= 0) this.hitMarker.classList.remove('visible');
     }
+  }
+
+  updatePlayerIndicator(playerId: string, position: { x: number; y: number; z: number }, camera: any, isDead: boolean = false): void {
+    let indicator = this.playerIndicators.get(playerId);
+    if (!indicator) {
+      indicator = document.createElement('div');
+      indicator.className = 'player-indicator';
+      this.el.appendChild(indicator);
+      this.playerIndicators.set(playerId, indicator);
+    }
+
+    if (isDead) {
+      indicator.classList.add('hidden');
+      return;
+    } else {
+      indicator.classList.remove('hidden');
+    }
+
+    // Get camera position and direction
+    const cameraPos = new THREE.Vector3();
+    camera.getWorldPosition(cameraPos);
+    const cameraDir = new THREE.Vector3();
+    camera.getWorldDirection(cameraDir);
+
+    // Calculate vector from camera to target
+    const targetPos = new THREE.Vector3(position.x, position.y, position.z);
+    const toTarget = new THREE.Vector3().subVectors(targetPos, cameraPos);
+
+    // Check if target is behind camera (angle > 90 degrees)
+    const behind = toTarget.angleTo(cameraDir) > Math.PI / 2;
+
+    // Project 3D position to 2D screen space
+    const vector = targetPos.clone();
+    vector.project(camera);
+
+    let x = (vector.x * 0.5 + 0.5) * window.innerWidth;
+    let y = (-(vector.y * 0.5) + 0.5) * window.innerHeight;
+
+    // If behind camera, invert coordinates
+    if (behind) {
+      x = window.innerWidth - x;
+      y = window.innerHeight - y;
+    }
+
+    // Check if player is on screen
+    const onScreen = !behind && x >= 0 && x <= window.innerWidth && y >= 0 && y <= window.innerHeight;
+
+    indicator.classList.remove('hidden');
+
+    if (onScreen) {
+      // Player is visible on screen - show indicator at actual position
+      indicator.classList.remove('offscreen');
+      indicator.style.left = `${x}px`;
+      indicator.style.top = `${y}px`;
+    } else {
+      // Player is off-screen - show indicator at screen edge
+      indicator.classList.add('offscreen');
+
+      // Calculate direction from center of screen to player
+      const centerX = window.innerWidth / 2;
+      const centerY = window.innerHeight / 2;
+      const dx = x - centerX;
+      const dy = y - centerY;
+      const angle = Math.atan2(dy, dx);
+
+      // Clamp to screen edge using proper edge calculation
+      const margin = 40;
+      const halfWidth = window.innerWidth / 2 - margin;
+      const halfHeight = window.innerHeight / 2 - margin;
+
+      // Calculate distance to each edge
+      const distWidth = halfWidth / Math.abs(Math.cos(angle));
+      const distHeight = halfHeight / Math.abs(Math.sin(angle));
+      const dist = Math.min(distWidth, distHeight);
+
+      const clampedX = centerX + Math.cos(angle) * dist;
+      const clampedY = centerY + Math.sin(angle) * dist;
+
+      indicator.style.left = `${clampedX}px`;
+      indicator.style.top = `${clampedY}px`;
+    }
+  }
+
+  removePlayerIndicator(playerId: string): void {
+    const indicator = this.playerIndicators.get(playerId);
+    if (indicator) {
+      indicator.remove();
+      this.playerIndicators.delete(playerId);
+    }
+  }
+
+  clearPlayerIndicators(): void {
+    this.playerIndicators.forEach(indicator => indicator.remove());
+    this.playerIndicators.clear();
   }
 }

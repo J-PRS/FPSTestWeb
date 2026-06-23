@@ -1,0 +1,263 @@
+import { Client, Room } from '@colyseus/sdk';
+import { INetworkAdapter } from './INetworkAdapter';
+import { ChildLogger } from '../Logger.js';
+
+const logger = new ChildLogger('ColyseusAdapter');
+
+/**
+ * Colyseus-based networking adapter
+ * Implements INetworkAdapter using the Colyseus SDK
+ */
+export class ColyseusAdapter implements INetworkAdapter {
+  private client: Client | null = null;
+  private room: Room | null = null;
+  private messageCallback: ((data: any) => void) | null = null;
+  private binaryMessageCallback: ((data: Uint8Array) => void) | null = null;
+  private connectCallback: (() => void) | null = null;
+  private disconnectCallback: (() => void) | null = null;
+  private errorCallback: ((error: Error) => void) | null = null;
+  private connected: boolean = false;
+  private stateChangeCallback: ((state: any) => void) | null = null;
+  private listenersSetup: boolean = false;
+  private reconnectAttempts: number = 0;
+  private maxReconnectAttempts: number = 5;
+  private reconnectDelay: number = 2000;
+  private roomId: string = 'fps_room';
+  private serverUrl: string = '';
+  private sendRateLimit: number = 20; // messages per second
+  private sendQueue: number[] = [];
+  private lastSendTime: number = 0;
+
+  async connect(url: string, roomName: string = 'fps_room'): Promise<void> {
+    try {
+      this.roomId = roomName;
+      this.serverUrl = url;
+      this.client = new Client(url);
+      
+      logger.info(`Connecting to Colyseus at ${url}, room: ${roomName}`);
+      
+      this.room = await this.client.joinOrCreate(roomName, {
+        // Client options can be passed here
+      });
+      
+      this.connected = true;
+      this.reconnectAttempts = 0;
+
+      logger.info(`Connected to room: ${this.room.roomId}, session: ${this.room.sessionId}`);
+
+      // Setup room event listeners
+      this.setupRoomListeners();
+
+      // Setup state listeners
+      this.setupStateListeners();
+
+      this.connectCallback?.();
+    } catch (error) {
+      logger.error('Connection error', error);
+      this.errorCallback?.(error instanceof Error ? error : new Error(String(error)));
+      
+      // Attempt reconnection
+      if (this.reconnectAttempts < this.maxReconnectAttempts) {
+        this.reconnectAttempts++;
+        logger.info(`Reconnection attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts} in ${this.reconnectDelay}ms`);
+        setTimeout(() => this.connect(url, roomName), this.reconnectDelay);
+      } else {
+        logger.error('Max reconnection attempts reached');
+        throw error;
+      }
+    }
+  }
+
+  private setupRoomListeners(): void {
+    if (!this.room) return;
+
+    // Handle disconnection
+    this.room.onLeave(() => {
+      logger.info('Left room');
+      this.connected = false;
+      this.disconnectCallback?.();
+    });
+
+    // Handle errors
+    this.room.onError((error) => {
+      logger.error('Room error', error);
+      this.errorCallback?.(new Error(String(error)));
+    });
+
+    // Setup message listeners
+    this.room.onMessage('shot', (message) => {
+      if (this.messageCallback) {
+        this.messageCallback({
+          type: 'playerHit',
+          shooterId: message.shooterId,
+          targetId: message.targetId
+        });
+      }
+    });
+
+    this.room.onMessage('playerInput', (message) => {
+      if (this.messageCallback) {
+        this.messageCallback({
+          type: 'playerInput',
+          ...message
+        });
+      }
+    });
+
+    this.room.onMessage('*', (message) => {
+      if (this.messageCallback) {
+        this.messageCallback(message);
+      }
+    });
+
+    // Handle binary messages
+    this.room.onMessage('binary', (data: Uint8Array) => {
+      if (this.binaryMessageCallback) {
+        this.binaryMessageCallback(data);
+      }
+    });
+  }
+
+  private setupStateListeners(): void {
+    if (!this.room || this.listenersSetup) return;
+
+    // Wait for state to be available
+    if (!this.room.state) {
+      logger.debug('State not available yet, waiting...');
+      this.room.onStateChange.once(() => {
+        this.setupStateListeners();
+      });
+      return;
+    }
+
+    this.listenersSetup = true;
+
+    // Listen for state changes
+    this.room.onStateChange((state) => {
+      if (this.stateChangeCallback) {
+        this.stateChangeCallback(state);
+      }
+    });
+
+    logger.debug('State listeners setup complete');
+  }
+
+  /**
+   * Register a callback for state changes (Colyseus-specific)
+   */
+  onStateChange(callback: (state: any) => void): void {
+    this.stateChangeCallback = callback;
+  }
+
+  disconnect(): void {
+    if (this.room) {
+      this.room.leave();
+      this.room = null;
+    }
+    if (this.client) {
+      this.client = null;
+    }
+    this.connected = false;
+    this.listenersSetup = false;
+    this.disconnectCallback?.();
+  }
+
+  send(data: any): void {
+    if (!this.room || !this.connected) {
+      logger.warn('Cannot send: not connected to room');
+      return;
+    }
+
+    // Rate limiting
+    const now = Date.now();
+    this.sendQueue = this.sendQueue.filter(time => now - time < 1000);
+    
+    if (this.sendQueue.length >= this.sendRateLimit) {
+      logger.warn('Send rate limit exceeded, dropping message');
+      return;
+    }
+
+    this.sendQueue.push(now);
+    this.room.send(data.type || 'message', data);
+  }
+
+  sendBinary(data: Uint8Array): void {
+    if (!this.room || !this.connected) {
+      logger.warn('Cannot send binary: not connected to room');
+      return;
+    }
+
+    // Rate limiting
+    const now = Date.now();
+    this.sendQueue = this.sendQueue.filter(time => now - time < 1000);
+    
+    if (this.sendQueue.length >= this.sendRateLimit) {
+      logger.warn('Send rate limit exceeded, dropping binary message');
+      return;
+    }
+
+    this.sendQueue.push(now);
+    this.room.send('binary', data);
+  }
+
+  onMessage(callback: (data: any) => void): void {
+    this.messageCallback = callback;
+  }
+
+  onBinaryMessage(callback: (data: Uint8Array) => void): void {
+    this.binaryMessageCallback = callback;
+  }
+
+  onConnect(callback: () => void): void {
+    this.connectCallback = callback;
+  }
+
+  onDisconnect(callback: () => void): void {
+    this.disconnectCallback = callback;
+  }
+
+  onError(callback: (error: Error) => void): void {
+    this.errorCallback = callback;
+  }
+
+  isConnected(): boolean {
+    return this.connected && this.room !== null;
+  }
+
+  /**
+   * Get the Colyseus room instance (for advanced usage)
+   */
+  getRoom(): Room | null {
+    return this.room;
+  }
+
+  /**
+   * Get the Colyseus client instance (for advanced usage)
+   */
+  getClient(): Client | null {
+    return this.client;
+  }
+
+  /**
+   * Get the session ID (player ID)
+   */
+  getSessionId(): string {
+    return this.room?.sessionId || '';
+  }
+
+  /**
+   * Get the current room state
+   */
+  getState(): any {
+    return this.room?.state;
+  }
+
+  /**
+   * Join a specific room
+   */
+  async joinRoom(roomName: string): Promise<void> {
+    if (this.serverUrl) {
+      await this.connect(this.serverUrl, roomName);
+    }
+  }
+}

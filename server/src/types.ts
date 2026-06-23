@@ -21,6 +21,7 @@ export interface PositionSnapshot {
   timestamp: number;
   position: { x: number; y: number; z: number };
   rotation: { yaw: number; pitch: number };
+  velocity: { x: number; y: number; z: number };
 }
 
 export interface Projectile {

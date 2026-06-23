@@ -1,7 +1,9 @@
 import { WSAdapter } from './WSAdapter';
 import { NetworkManager } from './NetworkManager';
+import { ChildLogger } from '../Logger.js';
 
-console.log('[NetworkingWorker] Worker script loaded');
+const logger = new ChildLogger('NetworkingWorker');
+logger.debug('Worker script loaded');
 
 // Worker message types
 type WorkerCommand = 
@@ -21,7 +23,7 @@ type WorkerEvent =
   | { type: 'connected' }
   | { type: 'disconnected' }
   | { type: 'error'; error: string }
-  | { type: 'playerJoined'; playerId: string }
+  | { type: 'playerJoined'; playerId: string; position: { x: number; y: number; z: number }; rotation: { yaw: number; pitch: number } }
   | { type: 'playerLeft'; playerId: string }
   | { type: 'playerUpdate'; playerId: string; position: { x: number; y: number; z: number }; rotation: { yaw: number; pitch: number }; timestamp: number }
   | { type: 'gameState'; players: any[]; localPlayerState: any }
@@ -67,8 +69,8 @@ function setupCallbacks(nm: NetworkManager) {
   nm.onProjectileDestroyed = (projectileId) => {
     postMessage({ type: 'projectileDestroyed', projectileId });
   };
-  nm.onPlayerJoined = (playerId) => {
-    postMessage({ type: 'playerJoined', playerId });
+  nm.onPlayerJoined = (playerId, position, rotation) => {
+    postMessage({ type: 'playerJoined', playerId, position, rotation });
   };
   nm.onPlayerLeft = (playerId) => {
     postMessage({ type: 'playerLeft', playerId });
@@ -125,7 +127,7 @@ self.onmessage = (e: MessageEvent<WorkerCommand>) => {
     
     case 'sendShot':
       if (networkManager) {
-        console.log('[NetworkingWorker] sendShot:', data.targetId, data.position, data.velocity, data.timestamp, data.projectileId);
+        logger.debug(`sendShot: ${data.targetId} ${JSON.stringify(data.position)} ${JSON.stringify(data.velocity)} ${data.timestamp} ${data.projectileId}`);
         networkManager.sendShot(data.targetId, data.position, data.velocity, data.timestamp, data.projectileId);
       }
       break;

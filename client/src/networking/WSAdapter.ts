@@ -1,4 +1,7 @@
 import { INetworkAdapter } from './INetworkAdapter';
+import { ChildLogger } from '../Logger.js';
+
+const logger = new ChildLogger('WSAdapter');
 
 /**
  * WebSocket-based networking adapter
@@ -12,7 +15,7 @@ export class WSAdapter implements INetworkAdapter {
   private disconnectCallback: (() => void) | null = null;
   private errorCallback: ((error: Error) => void) | null = null;
   private reconnectCallback: (() => void) | null = null;
-  
+
   private url: string = '';
   private reconnectTimer: number | null = null;
   private reconnectAttempts: number = 0;
@@ -20,6 +23,8 @@ export class WSAdapter implements INetworkAdapter {
   private baseReconnectDelay: number = 1000; // 1 second
   private maxReconnectDelay: number = 30000; // 30 seconds
   private shouldReconnect: boolean = true;
+  private lastWarningTime: number = 0;
+  private readonly WARNING_COOLDOWN_MS = 1000; // Only log warnings once per second
 
   async connect(url: string): Promise<void> {
     this.url = url;
@@ -36,7 +41,7 @@ export class WSAdapter implements INetworkAdapter {
         this.ws.binaryType = 'arraybuffer';
 
         this.ws.onopen = () => {
-          console.log('[WSAdapter] Connected to server');
+          logger.info('Connected to server');
           this.reconnectAttempts = 0; // Reset on successful connect
           this.connectCallback?.();
           resolve();
@@ -55,14 +60,14 @@ export class WSAdapter implements INetworkAdapter {
                 const data = JSON.parse(event.data);
                 this.messageCallback(data);
               } catch (e) {
-                console.error('[WSAdapter] Failed to parse message:', e);
+                logger.error('Failed to parse message', e);
               }
             }
           }
         };
 
         this.ws.onclose = () => {
-          console.log('[WSAdapter] Disconnected from server');
+          logger.info('Disconnected from server');
           this.disconnectCallback?.();
           
           // Auto-reconnect if enabled
@@ -72,7 +77,7 @@ export class WSAdapter implements INetworkAdapter {
         };
 
         this.ws.onerror = (error) => {
-          console.error('[WSAdapter] WebSocket error:', error);
+          logger.error('WebSocket error', error);
           this.errorCallback?.(new Error('WebSocket error'));
           reject(error);
         };
@@ -94,12 +99,12 @@ export class WSAdapter implements INetworkAdapter {
     );
 
     this.reconnectAttempts++;
-    console.log(`[WSAdapter] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
+      logger.debug(`Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
 
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       this.doConnect().catch((error) => {
-        console.error('[WSAdapter] Reconnect failed:', error);
+        logger.error('Reconnect failed', error);
       });
     }, delay) as unknown as number;
   }
@@ -123,10 +128,14 @@ export class WSAdapter implements INetworkAdapter {
       try {
         this.ws.send(JSON.stringify(data));
       } catch (error) {
-        console.error('[WSAdapter] Failed to send message:', error);
+        logger.error('Failed to send message', error);
       }
     } else {
-      console.warn('[WSAdapter] Cannot send: WebSocket not connected');
+      const now = Date.now();
+      if (now - this.lastWarningTime >= this.WARNING_COOLDOWN_MS) {
+        logger.warn('Cannot send: WebSocket not connected');
+        this.lastWarningTime = now;
+      }
     }
   }
 
@@ -135,10 +144,14 @@ export class WSAdapter implements INetworkAdapter {
       try {
         this.ws.send(data);
       } catch (error) {
-        console.error('[WSAdapter] Failed to send binary message:', error);
+        logger.error('Failed to send binary message', error);
       }
     } else {
-      console.warn('[WSAdapter] Cannot send binary: WebSocket not connected');
+      const now = Date.now();
+      if (now - this.lastWarningTime >= this.WARNING_COOLDOWN_MS) {
+        logger.warn('Cannot send binary: WebSocket not connected');
+        this.lastWarningTime = now;
+      }
     }
   }
 

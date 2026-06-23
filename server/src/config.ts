@@ -1,0 +1,50 @@
+/**
+ * Server configuration constants
+ * Centralized configuration for easy tuning
+ */
+
+export const ServerConfig = {
+  // Network settings
+  PORT: 8080,
+  TICK_RATE: 15, // Hz (67ms per tick)
+  
+  // Lag compensation
+  REWIND_BUFFER_MS: 1000, // History buffer size in milliseconds
+  POSITION_TOLERANCE_MS: 200, // Max acceptable position difference in milliseconds
+  EXTRAPOLATION_MAX_MS: 500, // Max extrapolation time in milliseconds
+  
+  // Position validation
+  POSITION_HISTORY_SIZE: 1000, // Keep ~1 second of history at 20Hz
+  SOFT_THRESHOLD_BASE: 0.5, // Base soft threshold in meters (horizontal)
+  HARD_THRESHOLD_BASE: 2.0, // Base hard threshold in meters (horizontal)
+  SOFT_THRESHOLD_VERTICAL: 2.0, // Base soft threshold for vertical movement
+  HARD_THRESHOLD_VERTICAL: 5.0, // Base hard threshold for vertical movement
+  MAX_PING_MS: 500, // Max ping for threshold scaling
+  
+  // Rate limiting
+  MAX_SHOTS_PER_SECOND: 10,
+  MAX_JUMPS_PER_SECOND: 10,
+  MAX_JETPACK_UPDATES_PER_SECOND: 20,
+  MAX_TOTAL_MESSAGES_PER_SECOND: 30,
+  RATE_LIMIT_WARNING_COOLDOWN_MS: 1000, // Only log rate limit warnings once per second
+  
+  // Physics
+  GRAVITY: -20.0, // m/s²
+  PROJECTILE_SPEED: 120.0, // units/sec
+  PROJECTILE_LIFETIME: 3000, // milliseconds
+  
+  // Player cleanup
+  DISCONNECT_CLEANUP_DELAY_MS: 5000, // Delay before fully removing disconnected player
+  DISCONNECT_BROADCAST_DELAY_MS: 10000, // Delay before broadcasting player left
+  DISCONNECT_TIMEOUT_MS: 300000, // 5 minutes timeout for disconnected players
+
+  // Game mechanics
+  RESPAWN_DELAY_MS: 2000, // Delay before player respawns
+  ESTIMATED_PING_CAP_MS: 500, // Cap for estimated ping calculations
+  EXTRAPOLATION_TIMEOUT_MS: 200, // ms - start extrapolating after this delay
+  MILLISECONDS_PER_SECOND: 1000, // Time conversion constant
+  ROTATION_SCALE: 1000, // Scale factor for encoding rotation deltas (int16)
+
+  // Logging
+  LOG_LEVEL: process.env.LOG_LEVEL ? parseInt(process.env.LOG_LEVEL) : 2, // INFO level
+} as const;

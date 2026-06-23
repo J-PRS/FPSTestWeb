@@ -1,0 +1,86 @@
+/**
+ * Renderer setup and management
+ * Handles Three.js WebGL renderer configuration, pixel scaling, and resize handling
+ */
+
+import * as THREE from 'three';
+import {
+  PIXEL_SCALE,
+  RENDERER_PIXEL_RATIO,
+  FOG_COLOR,
+  FOG_DENSITY,
+  CAMERA_FOV,
+  CAMERA_NEAR,
+  CAMERA_FAR,
+  TONE_MAPPING_EXPOSURE
+} from './config.js';
+
+export class Renderer {
+  private renderer: THREE.WebGLRenderer;
+  private camera: THREE.PerspectiveCamera;
+  private pixelated: boolean = true;
+
+  constructor() {
+    this.renderer = new THREE.WebGLRenderer({ antialias: false });
+    this.renderer.setPixelRatio(RENDERER_PIXEL_RATIO);
+    this.renderer.setSize(
+      Math.floor(window.innerWidth / PIXEL_SCALE),
+      Math.floor(window.innerHeight / PIXEL_SCALE)
+    );
+    this.renderer.domElement.style.width = '100%';
+    this.renderer.domElement.style.height = '100%';
+    this.renderer.domElement.style.imageRendering = 'pixelated'; // Nearest-neighbor scaling
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = TONE_MAPPING_EXPOSURE;
+    this.renderer.setClearColor(FOG_COLOR);
+    document.body.appendChild(this.renderer.domElement);
+
+    this.camera = new THREE.PerspectiveCamera(CAMERA_FOV, window.innerWidth / window.innerHeight, CAMERA_NEAR, CAMERA_FAR);
+
+    this.setupResizeHandler();
+  }
+
+  private setupResizeHandler(): void {
+    window.addEventListener('resize', () => {
+      this.updateSize();
+      this.camera.aspect = window.innerWidth / window.innerHeight;
+      this.camera.updateProjectionMatrix();
+    });
+  }
+
+  updateSize(): void {
+    if (this.pixelated) {
+      this.renderer.setSize(
+        Math.floor(window.innerWidth / PIXEL_SCALE),
+        Math.floor(window.innerHeight / PIXEL_SCALE)
+      );
+      this.renderer.domElement.style.imageRendering = 'pixelated';
+    } else {
+      this.renderer.setSize(window.innerWidth, window.innerHeight);
+      this.renderer.domElement.style.imageRendering = 'auto';
+    }
+  }
+
+  setPixelated(enabled: boolean): void {
+    this.pixelated = enabled;
+    this.updateSize();
+  }
+
+  getCamera(): THREE.PerspectiveCamera {
+    return this.camera;
+  }
+
+  getRenderer(): THREE.WebGLRenderer {
+    return this.renderer;
+  }
+
+  render(scene: THREE.Scene): void {
+    this.renderer.render(scene, this.camera);
+  }
+
+  dispose(): void {
+    this.renderer.dispose();
+  }
+}
