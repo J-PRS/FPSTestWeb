@@ -1,0 +1,933 @@
+# Changelog
+
+## [2026-06-23] Tribes2-Style Networking Integration - Phase 50
+
+### Tech Debt Reduction
+- **Removed BinaryProtocol dependency from MessageHandler**
+  - Removed unused handleBinaryMessage method
+  - Replaced encodeStateReconciliation with JSON format
+  - MessageHandler now only handles JSON messages
+  - Binary messages are routed to Tribes2Networking
+  - Benefits: Cleaner separation of concerns, reduced dependencies
+
+## [2026-06-23] Tribes2-Style Networking Integration - Phase 49
+
+### Protocol Improvements
+- **Implemented proper join handshake protocol**
+  - Server sends joinAck message immediately after processing join
+  - Client waits for joinAck before starting StreamManager
+  - Eliminates timing-based hacks, uses explicit acknowledgment
+  - Benefits: Reliable connection handshake, no race conditions
+
+## [2026-06-23] Tribes2-Style Networking Integration - Phase 48
+
+### Bug Fixes
+- **Fixed event timestamp overflow**
+  - Date.now() timestamps exceed 32-bit max value (4294967295)
+  - Changed to relative timestamps: timestamp - (Date.now() - 60000)
+  - Assumes ~1 minute window for event validity
+  - Applied to PositionEvent and ShotEvent on client and server
+  - Benefits: Timestamps fit in 32 bits, no overflow errors
+
+## [2026-06-23] Tribes2-Style Networking Integration - Phase 47
+
+### Bug Fixes
+- **Fixed server initialization order**
+  - MessageHandler was undefined when Tribes2Networking callbacks were wired
+  - Moved callback wiring after MessageHandler initialization
+  - Benefits: Server starts without crashing
+
+## [2026-06-23] Tribes2-Style Networking Integration - Phase 46
+
+### Bug Fixes
+- **Fixed BitStream 32-bit integer overflow error**
+  - JavaScript bit shift limitation: (1 << 32) = 0
+  - Fixed by using 0xFFFFFFFF directly for 32-bit max value
+  - Applied to both client and server BitStream implementations
+  - Benefits: No more runtime errors when writing timestamps
+
+- **Fixed server JSON/binary message parsing**
+  - Server was trying to parse binary packets as JSON
+  - Added first-byte check (0x7B = '{' for JSON)
+  - Routes JSON messages to MessageHandler, binary to Tribes2Networking
+  - Benefits: Clean separation of message protocols
+
+- **Fixed client join message protocol**
+  - Client was sending binary packets before JSON join
+  - Now sends JSON join message first, then starts StreamManager
+  - Benefits: Proper connection handshake sequence
+
+### Event System Implementation
+- **Added concrete event types to EventManager**
+  - PositionEvent: Player position/rotation updates (non-guaranteed)
+  - ShotEvent: Shot events with target tracking (guaranteed)
+  - Implemented on both client and server
+  - Factory method for event instantiation by type
+  - Benefits: Type-safe event handling with proper serialization
+
+- **Updated Tribes2Adapter to use EventManager events**
+  - Removed duplicate event class definitions
+  - Imports PositionEvent and ShotEvent from EventManager
+  - Added callbacks for position and shot events from server
+  - Benefits: Single source of truth for event types
+
+- **Updated server Tribes2Networking to use EventManager events**
+  - Removed duplicate event class definitions
+  - Imports PositionEvent and ShotEvent from EventManager
+  - Benefits: Consistent event types across client/server
+
+- **Implemented StreamManager event unpacking with factory**
+  - EventManager.createEvent() instantiates events by type
+  - Handles PositionEvent (type 1) and ShotEvent (type 2)
+  - Logs warnings for unknown event types
+  - Benefits: Extensible event system
+
+### Server Integration
+- **Wired Tribes2Networking to MessageHandler**
+  - Added onEvent() callback for event forwarding
+  - Added onMove() callback for move forwarding
+  - Server constructor wires callbacks with TODOs for format conversion
+  - Benefits: Path for Tribes2 events to reach game logic
+
+### Specification Updates
+- **Added WYSIWYG hit detection to multiplayer spec**
+  - FR-11: Shooter's visual perspective is authoritative
+  - FR-12: Shooter advantage principle
+  - FR-13: Accept false positives over false negatives
+  - Benefits: Clear design philosophy for hit detection
+
+## [2026-06-23] Tribes2-Style Networking Integration - Phase 45
+
+### LAN-Like Gameplay Implementation
+- **Implemented instant shooting with client-side projectile spawning**
+  - Rockets spawn immediately on client when fired (no network delay)
+  - Server validates and confirms/overrides if needed (anti-cheat)
+  - Updated onFire() in main.ts to spawn rocket locally before sending to server
+  - Benefits: Shooting feels instant, like playing on LAN
+
+- **Implemented instant hit confirmation with client-side hit detection**
+  - Client detects hits locally and shows immediate feedback (hit marker, score)
+  - Server validates hits with authoritative confirmation
+  - Updated rocket hit detection to provide instant visual feedback
+  - Benefits: Hits register immediately, no waiting for server round-trip
+
+- **Verified client-side movement prediction for instant movement**
+  - MovementController updates position immediately on input
+  - Player position updates locally before server confirmation
+  - Added documentation comment highlighting instant movement
+  - Benefits: Movement feels responsive, no input lag
+
+### Tribes2 Networking Backend Integration
+- **Created Tribes2Adapter using new StreamManager system**
+  - Implements INetworkAdapter interface for compatibility
+  - Integrates BitStream, EventManager, GhostManager, MoveManager, StreamManager
+  - Supports bit-packing, state masks, guaranteed/non-guaranteed events
+  - WebSocketConnection wrapper with msgpack encoding and reconnection
+  - Benefits: Modern Tribes2-style networking with bandwidth efficiency
+
+- **Updated NetworkAdapterFactory to support Tribes2 backend**
+  - Added 'tribes2' to NetworkBackend type
+  - Removed deprecated 'colyseus' and 'naia' backends
+  - Updated getSupportedBackends() to return ['ws', 'uws', 'tribes2']
+  - Benefits: Cleaner backend options, Tribes2 is recommended for LAN-like gameplay
+
+- **Integrated Tribes2Networking on server**
+  - Created Tribes2Networking class to manage per-connection StreamManagers
+  - Integrated with Server.ts to initialize on player join
+  - Routes binary messages to Tribes2Networking for packet handling
+  - Cleans up connections on player disconnect
+  - Benefits: Server-side Tribes2 networking for efficient state synchronization
+
+- **Renamed deprecated adapters with .old extension**
+  - Renamed ColyseusAdapter.ts to ColyseusAdapter.ts.old
+  - Renamed NaiaAdapter.ts to NaiaAdapter.ts.old
+  - Removed imports from NetworkAdapterFactory
+  - Benefits: Clean codebase, deprecated code preserved for reference
+
+- **Updated client configuration to use Tribes2 backend**
+  - Changed NETWORK_BACKEND from 'colyseus' to 'tribes2' in config.ts
+  - Updated server URL logic in main.ts (ws://localhost:8080 for Tribes2)
+  - Removed Colyseus-specific state change callback
+  - Benefits: Client now uses Tribes2 networking by default
+
+### Technical Debt Reduction
+- **Unified networking architecture**
+  - Tribes2Adapter bridges existing NetworkManager interface with new StreamManager
+  - Removed dependency on Colyseus SDK (simpler deployment)
+  - Single networking path (Tribes2) instead of multiple backends
+  - Benefits: Reduced complexity, easier maintenance, consistent behavior
+
+## [2026-06-23] PowerShell Consistency - Phase 44
+
+### Run Script PowerShell Consistency
+- **Updated run_all.bat to use PowerShell for both server and client**
+  - Removed admin flag from server startup
+  - Both server and client now run in regular PowerShell windows
+  - Benefits: Consistent terminal experience
+
+### Automatic Rough State Comparison on Player Death
+- **Added automatic state comparison when player dies**
+  - Server automatically requests rough states from all clients on player death
+  - Compares client states with server state
+  - Logs mismatches in position, health, and death status
+  - Benefits: Automatically detect desync when players die
+
+### Simple Rough State Comparison
+- **Implemented fast rough state comparison for debugging**
+  - Server can request rough states from all clients
+  - Client sends simple position/health data (minimal bandwidth)
+  - Server compares positions within 10 units, health within 10
+  - Logs matches and mismatches for each player
+  - Client console: requestRoughState() to trigger comparison
+  - Server: server.requestRoughStates() to trigger from all clients
+  - Benefits: Quick check if players are in same universe without precision
+
+### Server Snapshot Request and Comparison
+- **Added ability to request server snapshot from client**
+  - Client can call requestServerSnapshot() to request server state
+  - Server sends snapshot back to requesting client
+  - Client automatically compares server snapshot with latest client snapshot
+  - Logs differences in player positions, health, and projectiles
+  - Benefits: Easy to detect desync between server and client states
+
+### State Snapshot for Desync Debugging
+- **Implemented state snapshot system for comparing server and client states**
+  - Server: Call server.takeSnapshot() to save snapshot to server/snapshots/
+  - Client: Call takeClientSnapshot() in browser console to capture state
+  - Client: Call exportClientSnapshots() to download all buffered snapshots
+  - Computes deterministic hash of game state (players, projectiles)
+  - Comparison function identifies specific differences between snapshots
+  - Benefits: Can now debug desync issues by comparing state snapshots
+
+### Server and Client File Logging
+- **Implemented automatic logging to files**
+  - Server: Logs to server/logs/server-YYYY-MM-DD.log
+  - Client: In-memory buffer with exportClientLogs() function to download logs
+  - Server logs auto-create on startup and close on shutdown
+  - Client logs keep last 1000 entries in memory
+  - Benefits: Can now read logs directly from files without manual copy-paste
+
+### Hit Processing Position Fallback
+- **Fixed shots being skipped due to missing position data**
+  - Added fallback to use shooter's current position when shot data doesn't include position
+  - Updated damage calculation to use shooterPos instead of position
+  - Prevents "Invalid shooter position" warnings when using binary protocol
+  - Benefits: Hits now register correctly even when position data is not sent
+
+### Server Initialization Crash Fix
+- **Fixed server crash during initialization**
+  - Removed logger from SimpleTerrain to avoid circular dependency issues
+  - Added error handling to Server constructor
+  - Added error handling to MessageHandler constructor
+  - Benefits: Server now starts reliably
+
+### Error Handling Crash Fix
+- **Fixed server crash in error handling**
+  - Changed error logging to safely convert error objects to strings
+  - Used error instanceof Error check before accessing error.message
+  - Prevents uncaught exceptions when logging errors
+  - Benefits: Server stability maintained with proper error handling
+
+### Network Message Error Handling
+- **Added try-catch blocks to message handlers**
+  - Added error handling to handleMessage() for JSON messages
+  - Added error handling to handleBinaryMessage() for binary protocol messages
+  - Logs errors with player ID for debugging
+  - Prevents server crashes from malformed or unexpected messages
+  - Benefits: Improved server stability and error visibility
+
+### Game-Related Libraries Research
+- **Researched libraries for potential integration**
+  - Physics Engines: Rapier (popular, good TypeScript support), Cannon.js (type issues), Oimo (two versions)
+  - Networking: Rhubarb (WebWorker-based, binary), Colyseus (complete framework), Puppeteer (Three.js-specific), Rivalis (lightweight binary), ByteSocket (uWS adapter)
+  - Recommendations for current project:
+    - Rapier: Could enhance physics if custom movement needs improvement
+    - ByteSocket: Has uWebSockets.js adapter, could add rooms/auth/heartbeat to current setup
+    - Puppeteer: Could simplify interpolation/prediction, but current implementation is solid
+  - Note: Current custom implementation is well-architected; libraries optional for future enhancement
+
+### HandleShot Position Validation Fix
+- **Fixed undefined position error in handleShot**
+  - Added validation for shooter position before damage calculation
+  - Prevents TypeError when position is undefined in shot data
+  - Location: MessageHandler.ts line 463
+  - Benefits: Prevents server crash on malformed shot messages
+
+### Server-Side Hit Validation
+- **Added server-side collision validation for hits**
+  - Server now checks if projectile is actually close to target before accepting hit
+  - Rejects hits where projectile distance > 10m from target
+  - Prevents clients from reporting fake hits on distant players
+  - Location: MessageHandler.ts line 469-485
+  - Benefits: Prevents hit hacking, ensures hits are actually possible
+
+### Main.ts Refactoring - Partial Extraction
+- **Created modular structure for main.ts refactoring**
+  - Created Renderer.ts - encapsulates WebGL renderer, camera, and resize handling
+  - Created Lighting.ts - encapsulates atmospheric sky, volumetric clouds, and scene lighting
+  - Created GameState.ts - centralizes all game state variables and collections
+  - Created ProjectileManager.ts - handles rockets, discs, and projectile lifecycle
+  - Created EntityManager.ts - manages balls, debris, explosions, and other entities
+  - Note: Full integration into main.ts deferred due to API complexity - requires careful testing
+  - Benefits: Modular structure established for future integration, improved code organization
+
+### Tech Debt Completion Summary
+- **Completed all high and medium priority tech debt tasks**
+  - High Priority Security: Server-authoritative input processing, client-side prediction reconciliation, rate limiting, binary protocol
+  - Medium Priority Robustness: Projectile synchronization, memory leak cleanup, logging system, position validation physics
+  - Code Quality: Magic number consolidation, connection quality metrics, performance monitoring, unit testing infrastructure
+  - Note: Refactoring monolithic main.ts (948 lines) deferred due to high complexity - requires careful architectural planning
+  - Benefits: Critical security and robustness improvements completed, code quality significantly enhanced
+
+### Position Validation Physics Enhancement
+- **Enhanced position validation with acceleration-aware extrapolation**
+  - Added acceleration field to PositionHistoryEntry interface
+  - Updated getExpectedPosition() to use physics equation: pos = pos0 + vel*t + 0.5*acc*t^2
+  - Default acceleration set to gravity (-9.8 m/s²) for natural movement
+  - Updated addSnapshot() calls in MessageHandler to include acceleration
+  - Updated unit tests to include acceleration parameter
+  - Benefits: More accurate position prediction accounting for gravity, jetpack, and skiing
+
+### Logging System Verification
+- **Verified client-side logging system implementation**
+  - Logger.ts already implements structured logging with debug, info, warn, error levels
+  - ChildLogger provides module-specific logging contexts
+  - Matches server Logger.ts implementation for consistency
+  - Supports environment variable LOG_LEVEL configuration
+  - Benefits: Consistent logging across client and server
+
+### Tech Debt Verification
+- **Verified existing implementations for multiple tasks**
+  - Server-authoritative input processing: Already implemented in MessageHandler.handleInput() using MovementController
+  - Binary protocol decodePositionDelta: Already implemented in BinaryProtocol.ts
+  - Rate limiting: Already implemented in RateLimiter with canShoot(), canJump(), canJetpack(), canSendMessage()
+  - Projectile synchronization: Already implemented with timeout handling and cleanup
+  - Memory leak cleanup: Already implemented in PlayerManager, MessageHandler, and Server.handleClose()
+  - Benefits: Confirmed critical security and robustness features are in place
+
+### Client-Side Prediction Reconciliation
+- **Implemented proper input replay for state reconciliation**
+  - Updated state reconciliation handler to use Player's MovementController for input replay
+  - Unprocessed inputs are now properly simulated through the movement controller
+  - This provides smooth prediction correction instead of snapping to server position
+  - Logs each replayed input with sequence number and resulting position
+  - Benefits: Smoother client-side movement with server-authoritative state
+
+## [2026-06-23] Code Quality Improvements - Phase 26
+
+### Rate Limiting Enhancement
+- **Added total message rate limit check**
+  - Added canSendMessage() check to MessageHandler.handleMessage()
+  - Prevents players from exceeding total message rate limit
+  - Logs warning when rate limit is exceeded (with cooldown to prevent log spam)
+  - RateLimiter already had canShoot(), canJump(), canJetpack() implemented
+  - Benefits: Complete protection against message spam attacks
+
+## [2026-06-23] Code Quality Improvements - Phase 25
+
+### Unit Testing Infrastructure
+- **Added unit testing framework and initial tests**
+  - Added Vitest to server/package.json as dev dependency
+  - Added test scripts (test, test:run) to package.json
+  - Created vitest.config.ts for test configuration
+  - Created PositionValidator.test.ts with tests for position validation logic
+  - Created PerformanceMonitor.test.ts with tests for performance monitoring
+  - Tests cover: position validation (accept with/without history), snapshot management, bandwidth tracking, tick duration recording, memory tracking
+  - Note: Run `npm install` in server directory to install Vitest and resolve lint errors
+  - Benefits: Automated testing for critical server components, regression prevention
+
+## [2026-06-23] Code Quality Improvements - Phase 24
+
+### Server Performance Monitoring
+- **Implemented performance monitoring system**
+  - Created PerformanceMonitor.ts module for tracking CPU, memory, bandwidth, and tick metrics
+  - Added getPlayerCount() and getMessageQueueSize() methods to PlayerManager
+  - Updated GameLoop to accept optional PerformanceMonitor and record tick durations
+  - Updated MessageHandler to accept optional PerformanceMonitor
+  - Updated Server.ts to integrate performance monitoring
+  - Added bandwidth tracking to broadcastToAll function
+  - Performance metrics logged every 5 seconds (CPU%, Memory usage, Bandwidth, Player count, Queue size, Tick rate)
+  - Benefits: Real-time visibility into server performance and resource usage
+
+## [2026-06-23] Code Quality Improvements - Phase 23
+
+### TypeScript Strict Mode Verification
+- **Verified TypeScript strict mode is enabled**
+  - Confirmed client/tsconfig.json has "strict": true
+  - Confirmed server/tsconfig.json has "strict": true
+  - No changes needed - strict mode already active
+  - Benefits: Type safety already enforced across codebase
+
+## [2026-06-23] Code Quality Improvements - Phase 22
+
+### Connection Quality Metric Usage
+- **Implemented ping-based adaptive interpolation in RemotePlayer**
+  - Added REMOTE_PLAYER_BASE_LERP_FACTOR, REMOTE_PLAYER_MAX_LERP_FACTOR to config.ts
+  - Added REMOTE_PLAYER_DISTANCE_MULTIPLIER, REMOTE_PLAYER_ROTATION_MULTIPLIER to config.ts
+  - Added REMOTE_PLAYER_PING_MULTIPLIER, REMOTE_PLAYER_MAX_PING_BONUS to config.ts
+  - Updated RemotePlayer.update() to accept ping parameter
+  - Modified RemotePlayer.tick() to use ping for interpolation adjustments
+  - Higher ping now triggers more aggressive interpolation to compensate for lag
+  - Updated main.ts to pass networkManager.getPing() to remote player updates
+  - Benefits: Smoother remote player movement for high-latency connections
+
+## [2026-06-23] Code Quality Improvements - Phase 21
+
+### Magic Number Consolidation
+- **Consolidated renderer, camera, fog, and lighting constants**
+  - Added PIXEL_SCALE, RENDERER_PIXEL_RATIO to config.ts
+  - Added CAMERA_FOV, CAMERA_NEAR, CAMERA_FAR to config.ts
+  - Added FOG_COLOR, FOG_DENSITY to config.ts
+  - Added TONE_MAPPING_EXPOSURE to config.ts
+  - Updated main.ts to use imported constants
+  - Benefits: Centralized rendering configuration
+
+- **Consolidated atmospheric sky and volumetric cloud constants**
+  - Added SKY_TURBIDITY, SKY_RAYLEIGH, SKY_MIE_COEFFICIENT, SKY_MIE_DIRECTIONAL_G, SKY_SUN_INTENSITY to config.ts
+  - Added CLOUD_COUNT, CLOUD_DENSITY, CLOUD_WIND_SPEED, CLOUD_MIN_HEIGHT, CLOUD_MAX_HEIGHT, CLOUD_SPREAD_RADIUS to config.ts
+  - Added CLOUD_DEFAULT_COUNT, CLOUD_DEFAULT_WIND_SPEED, CLOUD_DEFAULT_DENSITY to config.ts
+  - Added CLOUD_SPHERES_PER_CLOUD, CLOUD_DEFAULT_MIN_HEIGHT, CLOUD_DEFAULT_MAX_HEIGHT, CLOUD_DEFAULT_SPREAD_RADIUS to config.ts
+  - Added CLOUD_WIND_OFFSET_RANGE, CLOUD_POSITION_RANGE_XZ, CLOUD_POSITION_RANGE_Y, CLOUD_SCALE_MIN, CLOUD_SCALE_RANGE to config.ts
+  - Updated main.ts and volumetricClouds.ts to use imported constants
+  - Benefits: Centralized cloud configuration
+
+- **Consolidated lighting constants**
+  - Added AMBIENT_COLOR, AMBIENT_INTENSITY, SUN_COLOR, SUN_INTENSITY to config.ts
+  - Added SHADOW_MAP_SIZE, SHADOW_CAMERA_NEAR, SHADOW_CAMERA_FAR, SHADOW_CAMERA_SIZE to config.ts
+  - Added HEMI_SKY_COLOR, HEMI_GROUND_COLOR, HEMI_INTENSITY to config.ts
+  - Updated main.ts to use imported constants
+  - Benefits: Centralized lighting configuration
+
+- **Consolidated UI constants**
+  - Added FRAG_MESSAGE_TOP_OFFSET, FRAG_MESSAGE_TEXT_SHADOW_X, FRAG_MESSAGE_TEXT_SHADOW_Y, FRAG_MESSAGE_TEXT_SHADOW_BLUR to config.ts
+  - Added FRAG_MESSAGE_LINE_HEIGHT to config.ts
+  - Updated main.ts to use imported constants
+  - Benefits: Centralized UI configuration
+
+- **Consolidated explosion physics constants**
+  - Added EXPLOSION_FALLOFF_MULTIPLIER_ROCKET, EXPLOSION_FALLOFF_MULTIPLIER_DISC, EXPLOSION_COLLISION_MULTIPLIER to config.ts
+  - Added KNOCKBACK_MULTIPLIER, PULL_MULTIPLIER to config.ts
+  - Updated main.ts to use imported constants
+  - Benefits: Centralized physics configuration
+
+- **Consolidated accuracy constants**
+  - Added ACCURACY_MAX, ACCURACY_NORMALIZATION to config.ts
+  - Updated main.ts to use imported constants
+  - Benefits: Centralized scoring configuration
+
+- **Consolidated game loop constants**
+  - Added MAX_DELTA_TIME, REMOTE_PLAYER_FIXED_DT, GAME_LOOP_FIXED_DT, DEBUG_LOG_SAMPLE_RATE to config.ts
+  - Updated main.ts to use imported constants
+  - Benefits: Centralized timing configuration
+
+- **Consolidated player constants**
+  - Added MAX_HEALTH, PLAYER_ID_LENGTH, BUTTON_TIMEOUT to config.ts
+  - Updated main.ts to use imported constants
+  - Benefits: Centralized player configuration
+
+- **Consolidated input/prediction constants**
+  - Added MAX_INPUT_HISTORY to config.ts
+  - Updated main.ts to use imported constant
+  - Benefits: Centralized prediction configuration
+
+- **Consolidated terrain constants**
+  - Added TERRAIN_SIZE, TERRAIN_SUBDIV, TERRAIN_HEIGHT_SCALE, TERRAIN_WORLD_SCALE, TERRAIN_HEIGHTMAP_DIVISOR to config.ts
+  - Updated terrain.ts to use imported constants
+  - Benefits: Centralized terrain configuration
+
+- **Fixed balls.ts import**
+  - Changed BASE_RADIUS to BALL_BASE_RADIUS in balls.ts
+  - Added BALL_BASE_RADIUS to config.ts
+  - Benefits: Consistent naming convention
+
+## [2026-06-23] Code Quality Improvements - Phase 20
+
+### Duplicate Constant Consolidation
+- **Consolidated terrain constants**
+  - Added TERRAIN_SIZE, TERRAIN_SUBDIV, TERRAIN_HEIGHT_SCALE, TERRAIN_WORLD_SCALE, TERRAIN_HEIGHTMAP_DIVISOR to config.ts
+  - Updated terrain.ts to use centralized constants
+  - Benefits: Single source of truth for terrain configuration
+
+## [2026-06-23] Code Quality Improvements - Phase 19
+
+### Duplicate Constant Consolidation
+- **Consolidated effect lifetime constants**
+  - Added IMPLOSION_LIFE, SHOCK_LIFE, FLASH_LIFE to config.ts
+  - Removed duplicate constants from implosion.ts and explosion.ts
+  - Updated effect files to use centralized constants
+  - Benefits: Single source of truth for effect timing
+
+## [2026-06-23] Code Quality Improvements - Phase 18
+
+### Duplicate Constant Consolidation
+- **Consolidated BALL_BASE_RADIUS constant**
+  - Added BALL_BASE_RADIUS to config.ts
+  - Removed duplicate constant from balls.ts
+  - Updated ball radius calculations to use centralized constant
+  - Benefits: Single source of truth for ball radius
+
+## [2026-06-23] Code Quality Improvements - Phase 17
+
+### Duplicate Constant Consolidation
+- **Consolidated ball teleport constants**
+  - Added BALL_MAX_DIST, BALL_TELE_MIN, BALL_TELE_MAX, BALL_TELE_HEIGHT to config.ts
+  - Removed duplicate constants from balls.ts
+  - Updated ball teleport logic to use centralized constants
+  - Benefits: Single source of truth for ball teleport behavior
+
+## [2026-06-23] Code Quality Improvements - Phase 16
+
+### Duplicate Constant Consolidation
+- **Consolidated BALL_SPAWN_INTERVAL constant**
+  - Added BALL_SPAWN_INTERVAL to config.ts
+  - Removed duplicate constant from main.ts
+  - Benefits: Single source of truth for ball spawn timing
+
+## [2026-06-23] Code Quality Improvements - Phase 15
+
+### Duplicate Constant Consolidation
+- **Consolidated Player jetpack and weapon constants**
+  - Added JET_FORCE_UP, JET_FORCE_DIR, MAX_ENERGY, JET_DRAIN, JET_CHARGE to config.ts
+  - Added FIRE_RATE, DISC_RATE to config.ts
+  - Removed duplicate constants from Player.ts
+  - Benefits: Single source of truth for player abilities
+
+- **Consolidated projectile constants**
+  - Added ROCKET_RADIUS, ROCKET_FORCE, HIT_MIN, HIT_MAX, HIT_GROW to config.ts
+  - Added DISC_SPEED, DISC_RADIUS, DISC_FORCE, DISC_HITBOX to config.ts
+  - Removed duplicate constants from rocket.ts and disc.ts
+  - Benefits: Centralized projectile configuration
+
+## [2026-06-23] Code Quality Improvements - Phase 14
+
+### Magic Number Elimination
+- **Consolidated time conversion magic numbers to ServerConfig**
+  - Added MILLISECONDS_PER_SECOND to ServerConfig
+  - Added ROTATION_SCALE to ServerConfig
+  - Updated RateLimiter.ts to use MILLISECONDS_PER_SECOND
+  - Updated GameLoop.ts to use MILLISECONDS_PER_SECOND
+  - Updated PositionValidator.ts to use MILLISECONDS_PER_SECOND
+  - Updated PlayerManager.ts to use MILLISECONDS_PER_SECOND
+  - Updated MessageHandler.ts to use MILLISECONDS_PER_SECOND
+  - Updated BinaryProtocol.ts to use ROTATION_SCALE
+  - Benefits: Centralized time conversion constants, easier tuning
+
+## [2026-06-23] Code Quality Improvements - Phase 13
+
+### Magic Number Elimination
+- **Consolidated GameLoop magic numbers to ServerConfig**
+  - Added DISCONNECT_BROADCAST_DELAY_MS to ServerConfig
+  - Added DISCONNECT_TIMEOUT_MS to ServerConfig
+  - Added EXTRAPOLATION_TIMEOUT_MS to ServerConfig
+  - Updated GameLoop.ts to use ServerConfig constants
+  - Benefits: Centralized configuration, easier tuning
+
+## [2026-06-23] Code Quality Improvements - Phase 12
+
+### Duplicate Constant Consolidation
+- **Consolidated debris physics constants**
+  - Added BASE_SPEED, EXTRA_SPEED, LIFE_BASE, LIFE_RAND to config.ts
+  - Removed duplicate constants from PlayerDebris.ts and debris.ts
+  - Updated imports to use centralized constants
+  - Benefits: Single source of truth for debris physics parameters
+
+## [2026-06-23] Code Quality Improvements - Phase 11
+
+### Duplicate Constant Consolidation
+- **Consolidated HIT_MAX constant**
+  - Added HIT_MAX to config.ts
+  - Updated main.ts to use imported constant instead of magic number
+  - Benefits: Single source of truth for maximum hitbox radius
+
+## [2026-06-23] Code Quality Improvements - Phase 10
+
+### Duplicate Constant Consolidation
+- **Consolidated SHRINK_DUR and GREY_DUR constants**
+  - Added SHRINK_DUR and GREY_DUR to config.ts
+  - Removed duplicate constants from PlayerDebris.ts and debris.ts
+  - Updated imports to use centralized constants
+  - Benefits: Single source of truth for debris animation timing
+
+## [2026-06-23] Code Quality Improvements - Phase 9
+
+### Duplicate Constant Consolidation
+- **Consolidated ROCKET_SPEED constant**
+  - Added ROCKET_SPEED to config.ts
+  - Removed duplicate constant from rocket.ts
+  - Updated main.ts to use imported constant
+  - Benefits: Single source of truth for rocket velocity
+
+## [2026-06-23] Code Quality Improvements - Phase 8
+
+### Duplicate Constant Consolidation
+- **Consolidated PLAYER_HEIGHT constant**
+  - Added PLAYER_HEIGHT to config.ts
+  - Removed duplicate constants from rocket.ts and disc.ts
+  - Updated imports to use centralized constant
+  - Benefits: Single source of truth for player height in collision detection
+
+## [2026-06-23] Code Quality Improvements - Phase 7
+
+### Duplicate Constant Consolidation
+- **Consolidated BOUNCE_Y and FRICTION_XZ constants**
+  - Added BOUNCE_Y and FRICTION_XZ to config.ts
+  - Removed duplicate constants from RemotePlayer.ts, PlayerDebris.ts, debris.ts
+  - Updated imports to use centralized constants
+  - Benefits: Single source of truth for physics constants
+
+- **Consolidated PLAYER_RADIUS constant**
+  - Added PLAYER_RADIUS to config.ts
+  - Removed duplicate constants from rocket.ts and disc.ts
+  - Updated imports to use centralized constant
+  - Benefits: Easier to tune player collision radius across all hit detection
+
+## [2026-06-23] Code Quality Improvements - Phase 6
+
+### Duplicate Constant Removal
+- **Replaced duplicate GRAVITY constant in RemotePlayer.ts**
+  - Removed local GRAVITY = -20.0 constant
+  - Added import of GRAVITY from config.ts
+  - Benefits: Single source of truth for physics constants
+
+## [2026-06-23] Code Quality Improvements - Phase 5
+
+### Magic Number Elimination
+- **Replaced WebSocket readyState magic number with constant**
+  - Added WS_READY_STATE constants (CONNECTING, OPEN, CLOSING, CLOSED)
+  - Updated MessageHandler to use WS_READY_STATE_OPEN instead of magic number 1
+  - Benefits: Better code readability, self-documenting code
+
+- **Replaced magic numbers with config constants**
+  - Added RESPAWN_DELAY_MS to ServerConfig (2000ms)
+  - Added ESTIMATED_PING_CAP_MS to ServerConfig (500ms)
+  - Updated MessageHandler to use ServerConfig constants
+  - Benefits: Centralized configuration, easier tuning
+
+## [2026-06-23] Security Improvements - Phase 4
+
+### Input Validation
+- **Added playerId validation to prevent injection attacks**
+  - Created `isValidPlayerId()` function in Server.ts and MessageHandler.ts
+  - Validates playerId format: alphanumeric, underscore, hyphen only
+  - Length limits: 1-50 characters
+  - Rejects invalid playerIds and closes connection
+  - Benefits: Prevents injection attacks through malicious playerIds
+
+- **Added numeric validation to prevent NaN/Infinity attacks**
+  - Created `isValidNumber()` and `isValidVector()` functions in MessageHandler.ts
+  - Validates position data in handlePosition
+  - Validates positionDelta data in handlePositionDelta
+  - Validates shot position/velocity data in handleShot
+  - Rejects invalid numeric data with warning logs
+  - Benefits: Prevents NaN/Infinity attacks that could crash server calculations
+
+### Type Safety Fixes
+- **Fixed InputMessage type usage in MessageHandler**
+  - Updated handleInput to use InputMessage type instead of any
+  - Fixed binary message handler to pass full InputMessage object
+  - Added InputMessage type import
+  - Benefits: Better type safety, catches errors at compile time
+
+## [2026-06-23] Tech Debt Resolution - Phase 3
+
+### Client-Side Logging System
+- **Implemented centralized logging for client**
+  - Created `client/src/Logger.ts` - Mirrors server logging with log levels and ChildLogger
+  - Environment variable support via Vite's `import.meta.env`
+  - Replaced ~70 console.log/warn/error statements across 8 client files:
+    - main.ts, NetworkManager.ts, WSAdapter.ts, WorkerNetworkManager.ts
+    - PlayerModel.ts, rocket.ts, disc.ts, networking.worker.ts
+  - Benefits: Consistent debugging, configurable log levels, production-ready
+
+### TypeScript Type Safety Improvements
+- **WebSocket type interfaces**
+  - Created `server/src/WebSocketTypes.ts` with basic WebSocket interfaces
+  - Added type imports to Server.ts (kept App as `any` due to uWS.js complexity)
+- **Message type interfaces**
+  - Created `server/src/MessageTypes.ts` with typed interfaces for all message types
+  - Updated BinaryProtocol decoder functions to return typed values:
+    - decodePosition, decodePositionDelta, decodeInput, decodeShot, decodeHitConfirmation
+  - Added readInt8 method to server BinaryDecoder for signed input values
+  - Benefits: Better type safety, IDE autocomplete, reduced runtime errors
+
+### Server Terrain Improvements
+- **Implemented heightmap loading in SimpleTerrain**
+  - Added procedural heightmap generation matching client terrain structure
+  - Implemented bilinear interpolation for smooth height sampling
+  - Added normal calculation from heightmap gradients
+  - Configured to match client constants (HM_WORLD_SCALE=1500, HSCALE=125)
+  - Added logging with ChildLogger
+  - Benefits: Server terrain now matches client for better position validation
+
+### Client-Side Prediction Improvements
+- **Implemented input replay for smooth reconciliation**
+  - Added input history tracking (max 100 entries) in main.ts
+  - Implemented replay logic in state reconciliation handler
+  - Cleans up old inputs after server confirmation
+  - Benefits: Smoother prediction correction instead of snapping
+
+### Network Event Handling
+- **Added shot visualization callback**
+  - Added `onShot` callback to NetworkManager
+  - Triggered in handleShot for shot event visualization
+  - Benefits: Foundation for shot visual feedback
+
+### Code Quality Cleanup
+- **Replaced remaining console statements**
+  - Updated GameLoop.ts to use ChildLogger (3 statements)
+  - Updated NetworkManager.ts handleError to use logger
+- **Removed unused imports**
+  - Cleaned up SimpleTerrain.ts (removed unused fs/readline imports)
+- **Added missing binary decoder method**
+  - Added readInt8 to server BinaryDecoder for signed input values
+
+### Documentation
+- **Tech debt report completed**
+  - All 7 TODO comments addressed
+  - All console logging replaced
+  - Type safety improved across codebase
+
+## [2026-06-23] Code Quality & Physics Improvements - Phase 2
+
+### Logging System
+- **Implemented structured logging system**
+  - Created `server/src/Logger.ts` - Structured logging with log levels (DEBUG, INFO, WARN, ERROR)
+  - Added ChildLogger for module-specific logging contexts
+  - Configurable log level via environment variable (LOG_LEVEL)
+  - Replaced all scattered console.log statements in Server.ts and MessageHandler.ts
+  - Benefits: Easier debugging, production-ready logging, reduced noise
+
+### Position Validation Improvements
+- **Physics-aware position validation**
+  - Updated `server/src/PositionValidator.ts` with velocity-based extrapolation
+  - Changed from simple linear interpolation to physics prediction: pos = pos0 + vel * dt
+  - Implemented separate horizontal and vertical thresholds
+  - Horizontal thresholds: 0.5-1.0m (soft), 2.0-3.0m (hard) - stricter for ground movement
+  - Vertical thresholds: 2.0-3.0m (soft), 5.0-7.0m (hard) - lenient for jetpack/skiing
+  - Benefits: Reduces false positives for legitimate movement (jetpack, skiing, jumping)
+
+### Projectile Synchronization Fixes
+- **Fixed projectile synchronization memory leak**
+  - Added pending rocket timestamp tracking in `client/src/main.ts`
+  - Implemented 3-second timeout for server responses
+  - Clean up stale pending rockets in update loop
+  - Clean up timestamps when rockets are linked to server IDs
+  - Defensive cleanup in projectile destroyed handler
+  - Benefits: Prevents memory accumulation from unlinked rockets
+
+### Code Refactoring
+- **Extracted WorkerNetworkManager from monolithic main.ts**
+  - Created `client/src/WorkerNetworkManager.ts` - Modular networking proxy class
+  - Removed 200+ lines from main.ts (reduced from ~977 to ~770 lines)
+  - Improved code organization and maintainability
+  - Benefits: Easier to test, easier to understand, better separation of concerns
+
+### State Restoration Improvements
+- **Fixed incomplete state restoration on reconnect**
+  - Updated `server/src/Server.ts` to include velocity and lastProcessedSequence in gameState
+  - Updated `client/src/main.ts` to restore velocity on reconnection
+  - Added logging for last processed sequence (full input history restoration pending network manager changes)
+  - Benefits: Smoother reconnection experience, better prediction reconciliation
+
+### Lag Compensation Improvements
+- **Enhanced lag compensation for high-latency scenarios**
+  - Updated `server/src/PlayerManager.ts` - increased rewind buffer from 500ms to 1000ms
+  - Increased position tolerance from 100ms to 200ms
+  - Added velocity-based extrapolation for positions outside buffer (up to 500ms)
+  - Updated `server/src/types.ts` - added velocity to PositionSnapshot interface
+  - Updated `server/src/MessageHandler.ts` - pass velocity to storePlayerPosition
+  - Benefits: Better hit detection for high-latency players, reduced false negatives
+
+### Remote Player Interpolation Improvements
+- **Improved remote player interpolation with adaptive factors**
+  - Updated `client/src/RemotePlayer.ts` - implemented adaptive lerp based on distance to target
+  - Base factor of 10.0, adjusted up to 2x faster when far from target
+  - Rotation interpolated with slightly faster factor for responsiveness
+  - Added velocity estimation from recent movement for potential extrapolation
+  - Benefits: Smoother remote player movement, better responsiveness, reduced jitter
+
+### Memory Leak Fixes
+- **Fixed memory leaks on player disconnect**
+  - Updated `server/src/PlayerManager.ts` - clear rewind buffer and position history on disconnect
+  - Updated `server/src/PositionValidator.ts` - added clearHistory method
+  - Updated `server/src/ProjectileManager.ts` - added removeProjectilesByOwner method
+  - Updated `server/src/Server.ts` - clean up projectiles from disconnected players
+  - Updated dependency injection - PlayerManager now receives PositionValidator instance
+  - Benefits: Prevents memory accumulation from disconnected players, better long-term stability
+
+### Health/Death Synchronization Improvements
+- **Added velocity to player state broadcasts**
+  - Updated `server/src/Server.ts` - include velocity in all gameState messages
+  - Benefits: Clients receive complete player state for better interpolation
+
+### Configuration Centralization
+- **Extracted hardcoded constants to config file**
+  - Created `server/src/config.ts` - centralized configuration for easy tuning
+  - Updated `server/src/Server.ts` - use ServerConfig for PORT, TICK_RATE, LOG_LEVEL
+  - Updated `server/src/PositionValidator.ts` - use ServerConfig for thresholds and history size
+  - Updated `server/src/PlayerManager.ts` - use ServerConfig for rewind buffer and tolerance
+  - Updated `server/src/RateLimiter.ts` - use ServerConfig for rate limits
+  - Updated `server/src/MovementController.ts` - use ServerConfig for GRAVITY
+  - Updated `server/src/GameLoop.ts` - use ServerConfig for GRAVITY and PROJECTILE_LIFETIME
+  - Benefits: Easier configuration tuning, single source of truth for constants
+
+### Rate Limit Log Spam Fix
+- **Fixed excessive rate limit warning logs**
+  - Updated `server/src/RateLimiter.ts` - added warning cooldown mechanism
+  - Added `shouldLogWarning` method with 1-second cooldown per player
+  - Updated `server/src/MessageHandler.ts` - check cooldown before logging rate limit warnings
+  - Benefits: Reduced log spam, easier to spot actual issues in logs
+
+### Lag Compensation Crash Fix
+- **Fixed crash in handleShot when lag compensation returns null**
+  - Updated `server/src/MessageHandler.ts` - added validation for targetPos before use
+  - Added check for undefined position after lag compensation fallback
+  - Benefits: Prevents server crash when target player position is unavailable
+
+### Client-Side Log Spam Fix
+- **Fixed excessive "Cannot send" warnings when WebSocket disconnected**
+  - Updated `client/src/networking/WSAdapter.ts` - added warning cooldown mechanism
+  - Added `lastWarningTime` and `WARNING_COOLDOWN_MS` to limit warnings to once per second
+  - Updated `send` and `sendBinary` methods to check cooldown before logging
+  - Benefits: Reduced console spam during disconnection, easier to debug actual issues
+
+### Page Refresh Position Restore Fix
+- **Fixed position reset on page refresh (F5)**
+  - Updated `client/src/main.ts` - added `onGameState` handler to restore local player state
+  - Server already sends `localPlayerState` in gameState message with position, rotation, velocity, health, and death state
+  - Client now properly restores player state from gameState on initial connection and reconnection
+  - Also restores health and death state, showing/hiding HUD appropriately
+  - Benefits: Players no longer lose their position when refreshing the page
+
+### Rate Limit Warning Details Enhancement
+- **Improved rate limit warning messages with detailed information**
+  - Updated `server/src/RateLimiter.ts` - added `getRateInfo` method to return actual rate, limit, and exceeded by amount
+  - Updated `server/src/MessageHandler.ts` - modified `handleShot`, `handleJump`, and `handleJetpack` to use detailed rate info
+  - Warnings now show actual rate, limit, and how much the limit was exceeded (e.g., "25.0/s (limit: 20/s, exceeded by: 5.0/s)")
+  - Benefits: More actionable debugging information for rate limit violations
+
+### Vite WebSocket Proxy Stability Fix
+- **Fixed Vite WebSocket proxy for cloudflared tunneling with conditional HMR configuration**
+  - Updated `client/vite.config.js` - configured HMR to conditionally use WSS/443 only when VITE_HMR_URL is set
+  - Set host to '0.0.0.0' and enabled CORS for cloudflared compatibility
+  - Increased proxy timeout to 30 seconds, added proxyTimeout
+  - Added proxy event logging (error, proxyReq, proxyReqWs) for debugging
+  - Benefits: HMR works both locally (WS) and through cloudflared tunnel (WSS), no connection errors
+
+### Client Log Spam Reduction
+- **Removed spammy debug logs from jump and jetpack handlers**
+  - Updated `client/src/main.ts` - removed debug logs from `onPlayerJump` and `onPlayerJetpack` handlers
+  - These handlers were logging every single jump/jetpack event, causing console spam
+  - Effects (jump dust, jetpack particles) still spawn correctly
+  - Benefits: Cleaner console output, easier to debug actual issues
+
+### Run Script Admin Consistency Fix
+- **Fixed run_all.bat to consistently run server as admin**
+  - Updated Windows Terminal tab mode to use PowerShell with `-Verb RunAs` for server
+  - Previously only ran as admin in fallback mode (separate windows)
+  - Client runs normally (no admin required)
+  - Benefits: Consistent server admin privileges across both launch modes
+
+### Run Script PowerShell Migration
+- **Created native PowerShell script run_all.ps1**
+  - Created `run_all.ps1` to replace problematic batch file
+  - Server runs as admin using `-Verb RunAs`
+  - Client runs normally (no admin required)
+  - Uses `-NoExit` to keep PowerShell windows open
+  - Benefits: No quote escaping issues, clean PowerShell syntax, easier to maintain
+
+### Invisible Player Fix
+- **Fixed missing onPlayerJoined handler and position data**
+  - Added `onPlayerJoined` callback registration in main.ts with position/rotation parameters
+  - Updated server `playerJoined` message to include position and rotation data
+  - Updated NetworkManager to extract and pass position/rotation from playerJoined
+  - Updated WorkerNetworkManager to pass through position/rotation
+  - Updated networking.worker to pass through position/rotation
+  - Benefits: New players now spawn at correct position instead of origin (0,0,0)
+
+### Player Direction Indicators
+- **Added HUD overlay indicators for off-screen players**
+  - Added `playerIndicators` map to HUD class to track indicator DOM elements
+  - Added CSS styles for `.player-indicator` (red circle with white border, glow effect)
+  - Added `.player-indicator.offscreen` style (yellow with red border for off-screen players)
+  - Added `updatePlayerIndicator()` method that projects 3D position to 2D screen space
+  - Indicator shows at actual position when on-screen, clamps to screen edge when off-screen
+  - Added `removePlayerIndicator()` and `clearPlayerIndicators()` for cleanup
+  - Updated main loop to call `hud.updatePlayerIndicator()` for each remote player
+  - Updated disconnect/death cleanup to remove indicators
+  - Added `isDead` field to PlayerState interface
+  - Updated server `playerJoined` message to include `isDead` field
+  - Updated NetworkManager to store `isDead` in player state
+  - Fixed behind-camera detection using `angleTo()` method (standard Three.js approach)
+  - Fixed coordinate inversion when target is behind camera
+  - Fixed edge clamping calculation using proper trigonometry
+  - Benefits: Can always see direction to other players, even through walls or when off-screen
+
+### Spawn Height Fix
+- **Reverted to fixed spawn height (server terrain doesn't match client)**
+  - Server's procedural terrain (sine waves) doesn't match client's Vortex terrain
+  - Reverted to fixed y=150 spawn height (above max terrain HSCALE=125)
+  - Removed terrain height calculation from GameLoop respawn logic
+  - Removed terrain height calculation from Server new player initialization
+  - Benefits: Players spawn at safe height above terrain regardless of terrain mismatch
+
+### Debug Logging Enhancement
+- **Added periodic console logging for remote player positions**
+  - Added periodic log in main loop that prints all remote player positions every ~2 seconds
+  - Logs player ID and (x, y, z) coordinates for each remote player
+  - Helps debug invisible player issues by showing where client thinks players are
+  - Benefits: Easier debugging of multiplayer synchronization issues
+
+### Collider Gizmo Visibility Fix
+- **Made green collider gizmo always render on top**
+  - Added `depthTest: false` to collider gizmo material in PlayerModel.ts
+  - Added `renderOrder: 999` to ensure gizmo renders last (on top of everything)
+  - Benefits: Green collider gizmo now always visible even when player is behind terrain or other objects
+
+### HMR Configuration Improvement
+- **Improved Vite HMR configuration for auto-reload**
+  - Added `overlay: true` to show error overlay for HMR issues
+  - Enabled `watch.usePolling: true` for reliable HMR in WSL2/Docker environments
+  - Benefits: Changes should auto-reload without Ctrl+F5 (requires Vite dev server restart)
+
+## [2026-06-23] Critical Security Fixes - Phase 1
+
+### Security Improvements
+- **Implemented server-authoritative input processing**
+  - Created `server/src/MovementController.ts` - Server-side physics simulation matching client movement logic
+  - Created `server/src/SimpleTerrain.ts` - Terrain interface for server-side collision detection
+  - Updated `server/src/MessageHandler.ts` - Process inputs through MovementController for authoritative position updates
+  - Server now processes input sequence numbers to update player position authoritatively
+  - Prevents speed hacking, teleportation, and flight hacks
+
+- **Added rate limiting on critical messages**
+  - Created `server/src/RateLimiter.ts` - Per-player rate limiting system
+  - Rate limits: 10 shots/sec, 10 jumps/sec, 20 jetpack updates/sec, 30 total messages/sec
+  - Integrated into MessageHandler for shot, jump, and jetpack handlers
+  - Prevents message spam attacks and DoS via message flooding
+
+- **Completed binary protocol**
+  - Added missing `readInt16()` method to BinaryDecoder
+  - Implemented `decodePositionDelta()` function for delta-compressed position updates
+  - Server can now decode delta-compressed position updates from clients
+
+### Client-Side Prediction
+- **Improved state reconciliation**
+  - Updated client-side reconciliation handler with clear documentation
+  - Added TODO for future input replay implementation
+  - Current behavior: snap to server position (functional but can be improved with input replay)
+
+### Code Quality
+- **Added cleanup on player disconnect**
+  - Movement controllers cleaned up when players disconnect
+  - Rate limiter state cleaned up when players disconnect
+  - Position validator history cleared on disconnect
+  - Prevents memory leaks
+
+### Documentation
+- Created `_reports/multiplayer-system-review.md` - Comprehensive review of 20 issues
+- Created `TASKS.md` - Development context and task tracking
+- Documented Phase 1 fixes and remaining Phase 2-4 tasks
+
+## Previous Changes
+- No prior changelog entries (this is the first entry)

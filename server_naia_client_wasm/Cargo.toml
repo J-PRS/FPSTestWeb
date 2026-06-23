@@ -1,0 +1,16 @@
+[package]
+name = "client_wasm"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+client_app = { path = "../client_app", features = ["wbindgen"] }
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+js-sys = "0.3"
+web-sys = { version = "0.3", features = ["console", "Window", "Location"] }
+log = "0.4"
+wasm-logger = "0.2"

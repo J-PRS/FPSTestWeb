@@ -1,18 +1,12 @@
 import * as THREE from 'three';
 import { Terrain } from './terrain.js';
-import { GRAVITY } from './config.js';
+import { GRAVITY, BALL_MAX_DIST, BALL_TELE_MIN, BALL_TELE_MAX, BALL_TELE_HEIGHT, BALL_BASE_RADIUS } from './config.js';
 
 const BALL_GRAVITY   = GRAVITY;
 const BOUNCE         = 1.0;
-const MAX_DIST       = 300.0;
-const TELE_MIN       = 60.0;
-const TELE_MAX       = 120.0;
-const TELE_HEIGHT    = 25.0;
 const TRAIL_COUNT    = 14;
 const TRAIL_LIFE     = 1.2;
 const TRAIL_INTERVAL = 0.04;
-
-const BASE_RADIUS = 1.2;
 
 const BALL_COLORS = [
   new THREE.Color(1.0, 0.25, 0.25),
@@ -61,7 +55,7 @@ export class Ball {
       this.scale = 1.0; this.health = 1;
       this.color = BALL_COLORS[Math.floor(Math.random() * BALL_COLORS.length)].clone();
     }
-    this.radius = BASE_RADIUS * this.scale;
+    this.radius = BALL_BASE_RADIUS * this.scale;
 
     const rx = (Math.random() - 0.5) * 400;
     const rz = (Math.random() - 0.5) * 400;
@@ -72,7 +66,7 @@ export class Ball {
     const spd = Math.random() * 20;
     this.vel = new THREE.Vector3(Math.cos(ang) * spd, -2, Math.sin(ang) * spd);
 
-    const geo = new THREE.IcosahedronGeometry(BASE_RADIUS, 0);
+    const geo = new THREE.IcosahedronGeometry(BALL_BASE_RADIUS, 0);
     this.mat = new THREE.MeshLambertMaterial({ color: this.color });
     this.mesh = new THREE.Mesh(geo, this.mat);
     this.mesh.scale.setScalar(this.scale);
@@ -125,12 +119,12 @@ export class Ball {
 
       const dx = this.pos.x - playerPos.x;
       const dz = this.pos.z - playerPos.z;
-      if (dx * dx + dz * dz > MAX_DIST * MAX_DIST) {
+      if (dx * dx + dz * dz > BALL_MAX_DIST * BALL_MAX_DIST) {
         const ang = Math.random() * Math.PI * 2;
-        const dist = TELE_MIN + Math.random() * (TELE_MAX - TELE_MIN);
+        const dist = BALL_TELE_MIN + Math.random() * (BALL_TELE_MAX - BALL_TELE_MIN);
         this.pos.x = playerPos.x + Math.cos(ang) * dist;
         this.pos.z = playerPos.z + Math.sin(ang) * dist;
-        this.pos.y = terrain.getHeight(this.pos.x, this.pos.z) + TELE_HEIGHT;
+        this.pos.y = terrain.getHeight(this.pos.x, this.pos.z) + BALL_TELE_HEIGHT;
         this.vel.set(
           (Math.random() - 0.5) * 10,
           5.0,

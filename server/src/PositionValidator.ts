@@ -4,6 +4,8 @@
  * with latency-aware thresholds
  */
 
+import { ServerConfig } from './config.js';
+
 export interface ValidationResult {
   valid: boolean;
   action: 'accept' | 'nudge' | 'snap';
@@ -15,14 +17,17 @@ export interface PositionHistoryEntry {
   timestamp: number;
   position: { x: number; y: number; z: number };
   velocity: { x: number; y: number; z: number };
+  acceleration: { x: number; y: number; z: number };
 }
 
 export class PositionValidator {
   private positionHistory: Map<string, PositionHistoryEntry[]> = new Map();
-  private readonly HISTORY_SIZE = 1000; // Keep ~1 second of history at 20Hz
-  private readonly SOFT_THRESHOLD_BASE = 0.5; // Base soft threshold in meters
-  private readonly HARD_THRESHOLD_BASE = 2.0; // Base hard threshold in meters
-  private readonly MAX_PING_MS = 500; // Max ping for threshold scaling
+  private readonly HISTORY_SIZE = ServerConfig.POSITION_HISTORY_SIZE;
+  private readonly SOFT_THRESHOLD_BASE = ServerConfig.SOFT_THRESHOLD_BASE;
+  private readonly HARD_THRESHOLD_BASE = ServerConfig.HARD_THRESHOLD_BASE;
+  private readonly SOFT_THRESHOLD_VERTICAL = ServerConfig.SOFT_THRESHOLD_VERTICAL;
+  private readonly HARD_THRESHOLD_VERTICAL = ServerConfig.HARD_THRESHOLD_VERTICAL;
+  private readonly MAX_PING_MS = ServerConfig.MAX_PING_MS;
 
   /**
    * Add a position snapshot to history
@@ -31,10 +36,11 @@ export class PositionValidator {
     playerId: string,
     timestamp: number,
     position: { x: number; y: number; z: number },
-    velocity: { x: number; y: number; z: number }
+    velocity: { x: number; y: number; z: number },
+    acceleration: { x: number; y: number; z: number } = { x: 0, y: ServerConfig.GRAVITY, z: 0 }
   ): void {
     const history = this.positionHistory.get(playerId) || [];
-    history.push({ timestamp, position: { ...position }, velocity: { ...velocity } });
+    history.push({ timestamp, position: { ...position }, velocity: { ...velocity }, acceleration: { ...acceleration } });
 
     // Trim history
     if (history.length > this.HISTORY_SIZE) {
@@ -45,44 +51,49 @@ export class PositionValidator {
   }
 
   /**
-   * Get expected position at a given timestamp by interpolating history
+   * Get expected position at a given timestamp using physics-aware extrapolation
+   * Uses physics equation: pos = pos0 + vel*t + 0.5*acc*t^2
+   * Accounts for gravity, jetpack, and skiing acceleration
    */
   getExpectedPosition(playerId: string, timestamp: number): { x: number; y: number; z: number } | null {
     const history = this.positionHistory.get(playerId);
     if (!history || history.length === 0) return null;
 
-    // Find snapshots before and after the timestamp
-    let before = null;
-    let after = null;
-
+    // Find the most recent snapshot before the timestamp
+    let closestBefore = null;
     for (const entry of history) {
       if (entry.timestamp <= timestamp) {
-        before = entry;
+        closestBefore = entry;
       } else {
-        after = entry;
         break;
       }
     }
 
-    // If we only have before or after, return that
-    if (!before && after) return { ...after.position };
-    if (before && !after) return { ...before.position };
-    if (!before && !after) return null;
+    if (!closestBefore) {
+      // No snapshot before timestamp, use the oldest available
+      return { ...history[0].position };
+    }
 
-    // Interpolate between before and after
-    const totalDuration = after!.timestamp - before!.timestamp;
-    if (totalDuration === 0) return { ...before!.position };
+    // Calculate time delta
+    const dt = (timestamp - closestBefore.timestamp) / ServerConfig.MILLISECONDS_PER_SECOND; // Convert to seconds
 
-    const progress = (timestamp - before!.timestamp) / totalDuration;
-    return {
-      x: before!.position.x + (after!.position.x - before!.position.x) * progress,
-      y: before!.position.y + (after!.position.y - before!.position.y) * progress,
-      z: before!.position.z + (after!.position.z - before!.position.z) * progress
+    // If delta is very small, return the position as-is
+    if (dt < 0.001) return { ...closestBefore.position };
+
+    // Extrapolate using physics equation: pos = pos0 + vel*t + 0.5*acc*t^2
+    // This accounts for gravity, jetpack thrust, and skiing acceleration
+    const expectedPosition = {
+      x: closestBefore.position.x + closestBefore.velocity.x * dt + 0.5 * closestBefore.acceleration.x * dt * dt,
+      y: closestBefore.position.y + closestBefore.velocity.y * dt + 0.5 * closestBefore.acceleration.y * dt * dt,
+      z: closestBefore.position.z + closestBefore.velocity.z * dt + 0.5 * closestBefore.acceleration.z * dt * dt
     };
+
+    return expectedPosition;
   }
 
   /**
-   * Validate client position with latency-aware thresholds
+   * Validate client position with physics-aware, latency-aware thresholds
+   * Separate horizontal and vertical thresholds to account for jetpack/skiing
    */
   validatePosition(
     playerId: string,
@@ -102,41 +113,50 @@ export class PositionValidator {
       };
     }
 
-    // Calculate discrepancy (Euclidean distance)
+    // Calculate horizontal and vertical discrepancies separately
     const dx = clientPosition.x - expectedPosition.x;
     const dy = clientPosition.y - expectedPosition.y;
     const dz = clientPosition.z - expectedPosition.z;
-    const discrepancy = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    
+    const horizontalDiscrepancy = Math.sqrt(dx * dx + dz * dz);
+    const verticalDiscrepancy = Math.abs(dy);
+    const totalDiscrepancy = Math.sqrt(dx * dx + dy * dy + dz * dz);
 
     // Latency-aware thresholds
     // Higher ping = more tolerance (up to MAX_PING_MS)
     const pingFactor = Math.min(playerPing / this.MAX_PING_MS, 1.0);
-    const softThreshold = this.SOFT_THRESHOLD_BASE + (pingFactor * 0.5); // 0.5 to 1.0
-    const hardThreshold = this.HARD_THRESHOLD_BASE + (pingFactor * 1.0); // 2.0 to 3.0
+    
+    // Horizontal thresholds (stricter - ground movement is predictable)
+    const horizontalSoftThreshold = this.SOFT_THRESHOLD_BASE + (pingFactor * 0.5); // 0.5 to 1.0
+    const horizontalHardThreshold = this.HARD_THRESHOLD_BASE + (pingFactor * 1.0); // 2.0 to 3.0
+    
+    // Vertical thresholds (more lenient - jetpack/skiing cause rapid vertical changes)
+    const verticalSoftThreshold = 2.0 + (pingFactor * 1.0); // 2.0 to 3.0
+    const verticalHardThreshold = 5.0 + (pingFactor * 2.0); // 5.0 to 7.0
 
-    // Three-tier validation
-    if (discrepancy < softThreshold) {
-      return {
-        valid: true,
-        action: 'accept',
-        discrepancy,
-        expectedPosition
-      };
-    } else if (discrepancy < hardThreshold) {
-      return {
-        valid: true,
-        action: 'nudge',
-        discrepancy,
-        expectedPosition
-      };
-    } else {
-      return {
-        valid: false,
-        action: 'snap',
-        discrepancy,
-        expectedPosition
-      };
+    // Determine action based on both horizontal and vertical discrepancies
+    let action: 'accept' | 'nudge' | 'snap' = 'accept';
+    
+    // Check horizontal first (stricter)
+    if (horizontalDiscrepancy > horizontalHardThreshold) {
+      action = 'snap';
+    } else if (horizontalDiscrepancy > horizontalSoftThreshold) {
+      action = 'nudge';
     }
+    
+    // Check vertical (more lenient, but can override to snap if extreme)
+    if (verticalDiscrepancy > verticalHardThreshold) {
+      action = 'snap';
+    } else if (verticalDiscrepancy > verticalSoftThreshold && action !== 'snap') {
+      action = 'nudge';
+    }
+
+    return {
+      valid: action !== 'snap',
+      action,
+      discrepancy: totalDiscrepancy,
+      expectedPosition
+    };
   }
 
   /**

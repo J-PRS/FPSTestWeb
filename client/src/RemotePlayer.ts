@@ -1,6 +1,12 @@
 import * as THREE from 'three';
 import { PlayerModel, AnimationState } from './PlayerModel.js';
 import { Terrain } from './terrain.js';
+import {
+  GRAVITY, BOUNCE_Y, FRICTION_XZ,
+  REMOTE_PLAYER_BASE_LERP_FACTOR, REMOTE_PLAYER_MAX_LERP_FACTOR,
+  REMOTE_PLAYER_DISTANCE_MULTIPLIER, REMOTE_PLAYER_ROTATION_MULTIPLIER,
+  REMOTE_PLAYER_PING_MULTIPLIER, REMOTE_PLAYER_MAX_PING_BONUS
+} from './config.js';
 
 /**
  * Remote player representation with animated 3D model
@@ -26,6 +32,7 @@ export class RemotePlayer {
   private scale: number = 1.0;
   private targetPosition: THREE.Vector3;
   private targetRotation: { yaw: number; pitch: number };
+  private ping: number = 0; // Connection ping in milliseconds
 
   constructor(scene: THREE.Scene, playerId: string, startPos: { x: number; y: number; z: number }, terrain?: Terrain) {
     this.scene = scene;
@@ -62,16 +69,15 @@ export class RemotePlayer {
     });
   }
 
-  update(targetPosition: { x: number; y: number; z: number }, targetRotation: { yaw: number; pitch: number }, dt: number): void {
+  update(targetPosition: { x: number; y: number; z: number }, targetRotation: { yaw: number; pitch: number }, dt: number, ping: number = 0): void {
+    // Update ping for interpolation adjustments
+    this.ping = ping;
     // Store target position/rotation for interpolation
     this.targetPosition.set(targetPosition.x, targetPosition.y, targetPosition.z);
     this.targetRotation = { yaw: targetRotation.yaw, pitch: targetRotation.pitch };
 
     // Handle death physics (ragdoll-like rigidbody)
     if (this.isDead) {
-      const GRAVITY = -20.0;
-      const BOUNCE_Y = 0.35;
-      const FRICTION_XZ = 0.80;
 
       // Apply gravity
       this.velocity.y += GRAVITY * dt;
@@ -129,16 +135,38 @@ export class RemotePlayer {
   // Called every frame for smooth interpolation
   tick(dt: number): void {
     if (!this.isDead) {
-      // Simple lerp interpolation for smooth movement
-      const lerpFactor = 10.0 * dt;
+      // Calculate distance to target for adaptive interpolation
+      const distanceToTarget = this.position.distanceTo(this.targetPosition);
+      
+      // Adaptive lerp factor: faster when far, slower when close
+      // Base factor adjusted by distance and ping
+      // Higher ping = more aggressive interpolation to compensate for lag
+      const pingBonus = Math.min(REMOTE_PLAYER_MAX_PING_BONUS, this.ping * REMOTE_PLAYER_PING_MULTIPLIER);
+      const adaptiveFactor = Math.min(
+        REMOTE_PLAYER_MAX_LERP_FACTOR,
+        REMOTE_PLAYER_BASE_LERP_FACTOR + distanceToTarget * REMOTE_PLAYER_DISTANCE_MULTIPLIER + pingBonus
+      );
+      const lerpFactor = adaptiveFactor * dt;
+      
+      // Interpolate position
       this.position.x += (this.targetPosition.x - this.position.x) * lerpFactor;
       this.position.y += (this.targetPosition.y - this.position.y) * lerpFactor;
       this.position.z += (this.targetPosition.z - this.position.z) * lerpFactor;
-      this.rotation.yaw += (this.targetRotation.yaw - this.rotation.yaw) * lerpFactor;
-      this.rotation.pitch += (this.targetRotation.pitch - this.rotation.pitch) * lerpFactor;
+      
+      // Interpolate rotation with slightly faster factor for responsiveness
+      const rotationFactor = Math.min(REMOTE_PLAYER_MAX_LERP_FACTOR * REMOTE_PLAYER_ROTATION_MULTIPLIER, adaptiveFactor * REMOTE_PLAYER_ROTATION_MULTIPLIER) * dt;
+      this.rotation.yaw += (this.targetRotation.yaw - this.rotation.yaw) * rotationFactor;
+      this.rotation.pitch += (this.targetRotation.pitch - this.rotation.pitch) * rotationFactor;
 
       // Roll is not networked, only used for death physics
       this.rotation.roll = 0;
+      
+      // Update velocity for extrapolation (estimate from recent movement)
+      if (dt > 0) {
+        this.velocity.x = (this.position.x - this.previousPosition.x) / dt;
+        this.velocity.y = (this.position.y - this.previousPosition.y) / dt;
+        this.velocity.z = (this.position.z - this.previousPosition.z) / dt;
+      }
     }
 
     // Update model if loaded

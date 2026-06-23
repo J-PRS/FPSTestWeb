@@ -1,7 +1,10 @@
 import * as THREE from 'three';
 import { Terrain } from './terrain.js';
 import type { Ball } from './balls.js';
-import { GRAVITY } from './config.js';
+import { GRAVITY, PLAYER_RADIUS, PLAYER_HEIGHT, ROCKET_SPEED, ROCKET_RADIUS, ROCKET_FORCE, HIT_MIN, HIT_MAX, HIT_GROW } from './config.js';
+import { ChildLogger } from './Logger.js';
+
+const logger = new ChildLogger('Rocket');
 
 interface TrailParticle {
   mesh: THREE.Mesh;
@@ -11,13 +14,6 @@ interface TrailParticle {
   maxLife: number;
   baseSize: number;
 }
-
-const ROCKET_SPEED    = 120.0;
-const ROCKET_RADIUS   = 6.0;   // explosion radius
-const ROCKET_FORCE    = 28.0;  // knockback
-const HIT_MIN         = 0.3;   // hitbox starts tiny
-const HIT_MAX         = 8.0;   // grows to this
-const HIT_GROW        = 2.0;   // seconds to reach full size
 
 const TRAIL_INTERVAL = 0.015; // seconds between particle emission
 const TRAIL_EMISSION = 6;     // particles per emission
@@ -152,8 +148,6 @@ export class Rocket {
 
   // True continuous sphere sweep vs player capsule
   private sweepPlayer(playerPos: THREE.Vector3): boolean {
-    const PLAYER_RADIUS = 0.8;
-    const PLAYER_HEIGHT = 2.0;
     const halfHeight = PLAYER_HEIGHT / 2;
 
     // Rocket path vector
@@ -217,13 +211,13 @@ export class Rocket {
       // Core hit (direct hit)
       if (hDist <= PLAYER_RADIUS + HIT_MIN) {
         this.directHit = true;
-        console.log(`[Rocket] Core hit at dist ${hDist.toFixed(2)}, playerPos: ${playerPos.x.toFixed(1)},${playerPos.y.toFixed(1)},${playerPos.z.toFixed(1)}`);
+        logger.debug(`Core hit at dist ${hDist.toFixed(2)}, playerPos: ${playerPos.x.toFixed(1)},${playerPos.y.toFixed(1)},${playerPos.z.toFixed(1)}`);
         return true;
       }
 
       // Wake hit (expanding hitbox)
       this.directHit = false;
-      console.log(`[Rocket] Wake hit at dist ${hDist.toFixed(2)}, threshold ${(PLAYER_RADIUS + this.hitRadius).toFixed(2)}`);
+      logger.debug(`Wake hit at dist ${hDist.toFixed(2)}, threshold ${(PLAYER_RADIUS + this.hitRadius).toFixed(2)}`);
       return true;
     }
 
@@ -266,7 +260,8 @@ export class Rocket {
           if (ball.dead) continue;
           if (this.sweepBall(ball)) {
             this.hitBall     = ball;
-            this.hitAccuracy = this.minHitDist;
+            // Calculate surface-to-surface distance (center distance minus ball radius)
+            this.hitAccuracy = Math.max(0, this.minHitDist - ball.radius);
             this.hitAge      = this.age;
             this.hitDistance = this.pos.distanceTo(this.shotOrigin);
             this.explode();
@@ -280,6 +275,8 @@ export class Rocket {
         for (const [playerId, playerPos] of remotePlayers) {
           if (this.sweepPlayer(playerPos)) {
             this.hitPlayerId = playerId;
+            // Calculate surface-to-surface distance (center distance minus player radius)
+            this.hitAccuracy = Math.max(0, this.minHitDist - 0.8); // PLAYER_RADIUS = 0.8
             this.hitAge = this.age;
             this.hitDistance = this.pos.distanceTo(this.shotOrigin);
             this.explode();

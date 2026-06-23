@@ -4,20 +4,31 @@
 
 import { PlayerManager } from './PlayerManager.js';
 import { ProjectileManager } from './ProjectileManager.js';
+import { ServerConfig } from './config.js';
+import { ChildLogger } from './Logger.js';
+import { SimpleTerrain } from './SimpleTerrain.js';
+import { PerformanceMonitor } from './PerformanceMonitor.js';
+
+const logger = new ChildLogger('GameLoop');
 
 export class GameLoop {
   private intervalId: NodeJS.Timeout | null = null;
   private tickRate: number;
   private tickInterval: number;
+  private terrain: SimpleTerrain;
+  private performanceMonitor?: PerformanceMonitor;
 
   constructor(
     private playerManager: PlayerManager,
     private projectileManager: ProjectileManager,
     private broadcastCallback: (message: any, excludePlayerId?: string) => void,
-    tickRate: number = 15
+    tickRate: number = 15,
+    performanceMonitor?: PerformanceMonitor
   ) {
     this.tickRate = tickRate;
-    this.tickInterval = 1000 / tickRate;
+    this.tickInterval = ServerConfig.MILLISECONDS_PER_SECOND / tickRate;
+    this.terrain = new SimpleTerrain();
+    this.performanceMonitor = performanceMonitor;
   }
 
   start(): void {
@@ -37,26 +48,27 @@ export class GameLoop {
 
   private tick(): void {
     const now = Date.now();
-    const dt = this.tickInterval / 1000; // seconds
-    const GRAVITY = -20.0;
-    const EXTRAPOLATION_TIMEOUT = 200; // ms - start extrapolating after this delay
-    const PROJECTILE_LIFETIME = 5000; // 5 seconds
-    const DISCONNECT_BROADCAST_DELAY = 10 * 1000; // 10 seconds
-    const DISCONNECT_TIMEOUT = 5 * 60 * 1000; // 5 minutes
+    const startTime = now;
+    const dt = this.tickInterval / ServerConfig.MILLISECONDS_PER_SECOND; // seconds
+    const GRAVITY = ServerConfig.GRAVITY;
+    const EXTRAPOLATION_TIMEOUT = ServerConfig.EXTRAPOLATION_TIMEOUT_MS;
+    const PROJECTILE_LIFETIME = ServerConfig.PROJECTILE_LIFETIME;
+    const DISCONNECT_BROADCAST_DELAY = ServerConfig.DISCONNECT_BROADCAST_DELAY_MS;
+    const DISCONNECT_TIMEOUT = ServerConfig.DISCONNECT_TIMEOUT_MS;
 
-    // Spawn points (random selection on respawn)
+    // Spawn points (fixed height above max terrain - server terrain doesn't match client)
     const spawnPoints = [
-      { x: 0, y: 50, z: 0 },
-      { x: 50, y: 50, z: 0 },
-      { x: -50, y: 50, z: 0 },
-      { x: 0, y: 50, z: 50 },
-      { x: 0, y: 50, z: -50 }
+      { x: 0, y: 150, z: 0 },
+      { x: 50, y: 150, z: 0 },
+      { x: -50, y: 150, z: 0 },
+      { x: 0, y: 150, z: 50 },
+      { x: 0, y: 150, z: -50 }
     ];
 
     // Check for respawns and extrapolate positions
     for (const [playerId, player] of this.playerManager.getPlayers()) {
       if (player.isDead && player.respawnTime && now >= player.respawnTime) {
-        console.log(`[GameLoop] Respawning player ${playerId}, isDead: ${player.isDead}, respawnTime: ${player.respawnTime}, now: ${now}`);
+        logger.debug(`Respawning player ${playerId}, isDead: ${player.isDead}, respawnTime: ${player.respawnTime}, now: ${now}`);
         // Respawn player
         player.isDead = false;
         player.health = 100;
@@ -72,9 +84,8 @@ export class GameLoop {
           for (const [otherPlayerId, otherPlayer] of this.playerManager.getPlayers()) {
             if (otherPlayerId !== playerId && !otherPlayer.isDead) {
               const dx = spawnPoint.x - otherPlayer.position.x;
-              const dy = spawnPoint.y - otherPlayer.position.y;
               const dz = spawnPoint.z - otherPlayer.position.z;
-              const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+              const distance = Math.sqrt(dx * dx + dz * dz);
               minDistanceToAnyPlayer = Math.min(minDistanceToAnyPlayer, distance);
             }
           }
@@ -85,14 +96,15 @@ export class GameLoop {
           }
         }
 
-        player.position = { ...bestSpawnPoint };
+        // Use fixed spawn height (server terrain doesn't match client)
+        player.position = { x: bestSpawnPoint.x, y: bestSpawnPoint.y, z: bestSpawnPoint.z };
         player.rotation = { yaw: 0, pitch: 0 };
         player.velocity = { x: 0, y: 0, z: 0 };
 
         // Re-initialize rewind buffer
         this.playerManager.getRewindBuffer().set(playerId, []);
 
-        console.log(`[GameLoop] Player ${playerId} respawned at`, player.position);
+        logger.debug(`Player ${playerId} respawned at`, player.position);
 
         // Broadcast respawn to all players
         this.broadcastCallback({
@@ -138,10 +150,16 @@ export class GameLoop {
         
         // Cleanup players disconnected for too long
         if ((now - player.disconnectTime) > DISCONNECT_TIMEOUT) {
-          console.log(`[GameLoop] Cleaning up disconnected player ${playerId}`);
+          logger.debug(`Cleaning up disconnected player ${playerId}`);
           this.playerManager.removePlayer(playerId);
         }
       }
+    }
+
+    // Record tick duration for performance monitoring
+    if (this.performanceMonitor) {
+      const tickDuration = Date.now() - startTime;
+      this.performanceMonitor.recordTickDuration(tickDuration);
     }
   }
 }

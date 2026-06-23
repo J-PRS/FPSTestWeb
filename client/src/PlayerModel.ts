@@ -1,5 +1,8 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { ChildLogger } from './Logger.js';
+
+const logger = new ChildLogger('PlayerModel');
 
 export type AnimationState = 'idle' | 'walk' | 'run' | 'jump' | 'death';
 
@@ -28,7 +31,7 @@ export class PlayerModel {
           // Log model bounding box for hitbox calibration
           const box = new THREE.Box3().setFromObject(this.model);
           const size = box.getSize(new THREE.Vector3());
-          console.log('[PlayerModel] Model bounding box:', size);
+          logger.debug('Model bounding box:', size);
           
           // Enable shadow casting
           this.model.traverse((child) => {
@@ -57,7 +60,7 @@ export class PlayerModel {
             this.animations.set(clip.name, action);
           });
           
-          console.log('[PlayerModel] Loaded animations:', Array.from(this.animations.keys()));
+          logger.debug('Loaded animations:', Array.from(this.animations.keys()));
           
           // Start with idle
           this.playAnimation('Idle');
@@ -71,19 +74,21 @@ export class PlayerModel {
             color: 0x00ff00,
             wireframe: true,
             transparent: true,
-            opacity: 0.3
+            opacity: 0.3,
+            depthTest: false // Always render on top
           });
           this.colliderGizmo = new THREE.Mesh(colliderGeo, colliderMat);
           this.colliderGizmo.position.y = 1.25; // Center at height 1.25 (half of 2.5)
+          this.colliderGizmo.renderOrder = 999; // Render last (on top)
           this.scene.add(this.colliderGizmo);
 
           resolve();
         },
         (xhr) => {
-          console.log(`[PlayerModel] Loading: ${(xhr.loaded / xhr.total * 100).toFixed(0)}%`);
+          logger.debug(`Loading: ${(xhr.loaded / xhr.total * 100).toFixed(0)}%`);
         },
         (error) => {
-          console.error('[PlayerModel] Failed to load:', error);
+          logger.error('Failed to load', error);
           reject(error);
         }
       );
@@ -93,7 +98,7 @@ export class PlayerModel {
   playAnimation(name: string): void {
     const action = this.animations.get(name);
     if (!action) {
-      console.warn(`[PlayerModel] Animation not found: ${name}`);
+      logger.warn(`Animation not found: ${name}`);
       return;
     }
 
