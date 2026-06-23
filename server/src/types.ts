@@ -2,10 +2,8 @@
  * Type definitions for the game server
  */
 
-import { WebSocket } from 'ws';
-
 export interface PlayerState {
-  ws: WebSocket;
+  ws: any;
   position: { x: number; y: number; z: number };
   rotation: { yaw: number; pitch: number };
   velocity: { x: number; y: number; z: number };
