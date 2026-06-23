@@ -305,6 +305,16 @@ export class BitStream {
   }
 
   /**
+   * Set the current bit position (for rewinding)
+   */
+  setBitPosition(position: number): void {
+    if (position < 0 || position > this.byteLength * 8) {
+      throw new Error(`Invalid bit position: ${position}`);
+    }
+    this.bitPosition = position;
+  }
+
+  /**
    * Get the current byte length (rounded up)
    */
   getByteLength(): number {

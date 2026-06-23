@@ -47,6 +47,7 @@ export class Player {
   onDisc: ((e: FireEvent) => void) | null = null;
   onNetworkJump: ((pos: { x: number; y: number; z: number }) => void) | null = null;
   onNetworkJetpack: ((pos: { x: number; y: number; z: number }) => void) | null = null;
+  onNetworkInput: ((input: { forward: number; right: number; jump: number; ski: number }, rotation: { yaw: number; pitch: number }) => void) | null = null;
 
   constructor(terrain: Terrain, camera: THREE.PerspectiveCamera, scene: THREE.Scene) {
     this.terrain = terrain;
@@ -166,6 +167,14 @@ export class Player {
     });
     this.movement.setInput({ forward, right, jumpPressed, jumpHeld, skiHeld });
     this.movement.update(dt);
+
+    // Send input to network for client-side prediction
+    if (this.onNetworkInput) {
+      this.onNetworkInput(
+        { forward, right, jump: jumpPressed ? 1 : 0, ski: skiHeld ? 1 : 0 },
+        { yaw: this.yaw, pitch: this.pitch }
+      );
+    }
 
     // INSTANT MOVEMENT: Client-side prediction updates position immediately
     // Sync state from movement controller (local prediction)

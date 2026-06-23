@@ -10,6 +10,7 @@ import msgpack from 'msgpack-lite';
 
 export interface ServerConnectionConfig {
   onMessage?: (data: any) => void;
+  onBinaryMessage?: (data: Uint8Array) => void;
   onClose?: () => void;
   onError?: (error: Error) => void;
 }
@@ -48,18 +49,63 @@ export class WebSocketConnection {
   }
 
   /**
+   * Send raw binary data without msgpack encoding (for Tribes2 packets)
+   */
+  sendBinary(data: Uint8Array): boolean {
+    if (!this.isConnected) {
+      return false;
+    }
+
+    try {
+      this.ws.send(data);
+      return true;
+    } catch (error) {
+      console.error('Error sending binary message:', error);
+      if (this.config.onError) {
+        this.config.onError(error as Error);
+      }
+      return false;
+    }
+  }
+
+  /**
    * Handle incoming message
+   * Detects JSON strings vs binary data (msgpack or Tribes2 bit-packed)
    */
   handleMessage(data: ArrayBuffer): void {
     try {
-      // Decode msgpack message
-      const decoded = msgpack.decode(new Uint8Array(data));
-      
-      if (this.config.onMessage) {
-        this.config.onMessage(decoded);
+      const uint8Array = new Uint8Array(data);
+
+      // Try to detect if this is a JSON string (UTF-8)
+      // Check for common JSON starting characters
+      const firstByte = uint8Array[0];
+      const isLikelyJSON = firstByte === 0x7B || // '{'
+                           firstByte === 0x5B || // '['
+                           firstByte === 0x22 || // '"'
+                           firstByte === 0x7D || // '}'
+                           firstByte === 0x5D;  // ']'
+
+      if (isLikelyJSON) {
+        // Try to decode as UTF-8 string and parse as JSON
+        const text = new TextDecoder().decode(uint8Array);
+        const parsed = JSON.parse(text);
+        if (this.config.onMessage) {
+          this.config.onMessage(parsed);
+        }
+      } else {
+        // Binary data - route to onBinaryMessage callback
+        if (this.config.onBinaryMessage) {
+          this.config.onBinaryMessage(uint8Array);
+        } else {
+          // Fallback: try msgpack decode
+          const decoded = msgpack.decode(uint8Array);
+          if (this.config.onMessage) {
+            this.config.onMessage(decoded);
+          }
+        }
       }
     } catch (error) {
-      console.error('Error decoding message:', error);
+      console.error('Error handling message:', error);
       if (this.config.onError) {
         this.config.onError(error as Error);
       }

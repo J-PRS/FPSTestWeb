@@ -6,7 +6,7 @@
 export const ServerConfig = {
   // Network settings
   PORT: 8080,
-  TICK_RATE: 15, // Hz (67ms per tick)
+  TICK_RATE: 30, // Hz (33ms per tick) - per specification
   
   // Lag compensation
   REWIND_BUFFER_MS: 1000, // History buffer size in milliseconds
@@ -22,10 +22,10 @@ export const ServerConfig = {
   MAX_PING_MS: 500, // Max ping for threshold scaling
   
   // Rate limiting
-  MAX_SHOTS_PER_SECOND: 10,
-  MAX_JUMPS_PER_SECOND: 10,
-  MAX_JETPACK_UPDATES_PER_SECOND: 20,
-  MAX_TOTAL_MESSAGES_PER_SECOND: 30,
+  MAX_SHOTS_PER_SECOND: 20, // Per specification
+  MAX_JUMPS_PER_SECOND: 10, // Per specification
+  MAX_JETPACK_UPDATES_PER_SECOND: 5, // Per specification
+  MAX_TOTAL_MESSAGES_PER_SECOND: 100, // Per specification
   RATE_LIMIT_WARNING_COOLDOWN_MS: 1000, // Only log rate limit warnings once per second
   
   // Physics

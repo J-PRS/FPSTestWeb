@@ -161,12 +161,27 @@ export class GhostManager {
    */
   private buildUpdateList(): Ghost[] {
     const inScope = this.scopeManager.getInScopeGhosts();
-    
+
     // Sort by priority (status changes first, then by interest)
     return inScope.sort((a, b) => {
+      // Priority 1: Ghosts with state changes
       if (a.stateMask !== 0 && b.stateMask === 0) return -1;
       if (a.stateMask === 0 && b.stateMask !== 0) return 1;
-      return 0; // TODO: Add priority calculation
+
+      // Priority 2: Health changes (critical for gameplay)
+      const aHealthChanged = (a.stateMask & StateMask.HEALTH) !== 0;
+      const bHealthChanged = (b.stateMask & StateMask.HEALTH) !== 0;
+      if (aHealthChanged && !bHealthChanged) return -1;
+      if (!aHealthChanged && bHealthChanged) return 1;
+
+      // Priority 3: Position/velocity changes (movement)
+      const aMovementChanged = (a.stateMask & (StateMask.POSITION | StateMask.VELOCITY)) !== 0;
+      const bMovementChanged = (b.stateMask & (StateMask.POSITION | StateMask.VELOCITY)) !== 0;
+      if (aMovementChanged && !bMovementChanged) return -1;
+      if (!aMovementChanged && bMovementChanged) return 1;
+
+      // Priority 4: Lower ID first (stable ordering)
+      return a.id - b.id;
     });
   }
 

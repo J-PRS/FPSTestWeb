@@ -213,13 +213,28 @@ export class GhostManager {
     const connectionGhosts = this.ghosts.get(connectionId);
     if (!connectionGhosts) return [];
 
-    const inScope = this.scopeManager.getInScopeGhosts(connectionId);
+    const allGhosts = Array.from(connectionGhosts.values());
     
     // Sort by priority (status changes first, then by interest)
-    return inScope.sort((a, b) => {
+    return allGhosts.sort((a, b) => {
+      // Priority 1: Ghosts with state changes
       if (a.stateMask !== 0 && b.stateMask === 0) return -1;
       if (a.stateMask === 0 && b.stateMask !== 0) return 1;
-      return 0; // TODO: Add priority calculation
+
+      // Priority 2: Health changes (critical for gameplay)
+      const aHealthChanged = (a.stateMask & StateMask.HEALTH) !== 0;
+      const bHealthChanged = (b.stateMask & StateMask.HEALTH) !== 0;
+      if (aHealthChanged && !bHealthChanged) return -1;
+      if (!aHealthChanged && bHealthChanged) return 1;
+
+      // Priority 3: Position/velocity changes (movement)
+      const aMovementChanged = (a.stateMask & (StateMask.POSITION | StateMask.VELOCITY)) !== 0;
+      const bMovementChanged = (b.stateMask & (StateMask.POSITION | StateMask.VELOCITY)) !== 0;
+      if (aMovementChanged && !bMovementChanged) return -1;
+      if (!aMovementChanged && bMovementChanged) return 1;
+
+      // Priority 4: Lower ID first (stable ordering)
+      return a.id - b.id;
     });
   }
 
@@ -272,10 +287,10 @@ export class ScopeManager {
 
   /**
    * Get ghosts in scope for a connection
+   * Note: This method is not currently used - buildUpdateList uses direct ghost access
+   * TODO: Implement spatial database for efficient distance-based filtering
    */
   getInScopeGhosts(connectionId: string): Ghost[] {
-    // For now, return all ghosts for the connection
-    // In production, this would query a spatial database
     return [];
   }
 

@@ -43,6 +43,16 @@ export class NetworkManager {
     this.localPlayerId = playerId;
   }
 
+  /**
+   * Set the control object for client-side prediction
+   * This object should have applyMove and state properties
+   */
+  setControlObject(controlObject: any): void {
+    if (this.adapter && 'setControlObject' in this.adapter) {
+      (this.adapter as any).setControlObject(controlObject);
+    }
+  }
+
   async connect(url: string): Promise<void> {
     if (!this.adapter) {
       throw new Error('Network adapter not set');
@@ -100,8 +110,90 @@ export class NetworkManager {
 
   private handleMessage(data: any): void {
     // Handle messages from the adapter
-    // This will be implemented based on the protocol used by the specific backend
     logger.debug(`Received message: ${JSON.stringify(data)}`);
+
+    switch (data.type) {
+      case 'gameState':
+        if (this.onGameState) {
+          this.onGameState(data.players || [], data.localPlayerState);
+        }
+        break;
+
+      case 'position':
+        if (this.onPlayerUpdate) {
+          this.onPlayerUpdate(data.playerId, data.position, data.rotation, Date.now());
+        }
+        break;
+
+      case 'playerJoined':
+        if (this.onPlayerJoined) {
+          this.onPlayerJoined(data.playerId, data.position, data.rotation);
+        }
+        break;
+
+      case 'playerLeft':
+        if (this.onPlayerLeft) {
+          this.onPlayerLeft(data.playerId);
+        }
+        break;
+
+      case 'playerRespawn':
+        if (this.onPlayerRespawn) {
+          this.onPlayerRespawn(data.playerId, data.position, data.rotation);
+        }
+        break;
+
+      case 'playerHit':
+        if (this.onPlayerHit) {
+          this.onPlayerHit(data.shooterId, data.targetId, data.damage);
+        }
+        break;
+
+      case 'playerKill':
+        if (this.onPlayerKill) {
+          this.onPlayerKill(data.shooterId, data.targetId);
+        }
+        break;
+
+      case 'shot':
+        if (this.onShot) {
+          this.onShot(data.playerId, data.targetId);
+        }
+        break;
+
+      case 'jump':
+        if (this.onPlayerJump) {
+          this.onPlayerJump(data.playerId, data.position);
+        }
+        break;
+
+      case 'jetpack':
+        if (this.onPlayerJetpack) {
+          this.onPlayerJetpack(data.playerId, data.position);
+        }
+        break;
+
+      case 'projectileCreated':
+        if (this.onProjectileCreated) {
+          this.onProjectileCreated(data.projectileId, data.ownerId, data.position, data.velocity);
+        }
+        break;
+
+      case 'projectileUpdate':
+        if (this.onProjectileUpdate) {
+          this.onProjectileUpdate(data.projectileId, data.position);
+        }
+        break;
+
+      case 'projectileDestroyed':
+        if (this.onProjectileDestroyed) {
+          this.onProjectileDestroyed(data.projectileId);
+        }
+        break;
+
+      default:
+        logger.warn(`Unknown message type: ${data.type}`);
+    }
   }
 
   private handleBinaryMessage(data: Uint8Array): void {
@@ -112,6 +204,7 @@ export class NetworkManager {
 
   /**
    * Send player position to server with rate limiting
+   * For Tribes2 backend, this sends input moves for client-side prediction
    */
   sendPosition(position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }): void {
     if (!this.adapter || !this.adapter.isConnected()) return;
@@ -123,21 +216,10 @@ export class NetworkManager {
       return;
     }
     
-    // Delta compression: skip if values haven't changed significantly
-    const valuesChanged = !this.lastSentPosition || !this.lastSentRotation ||
-      Math.abs(position.x - this.lastSentPosition.x) > 0.001 ||
-      Math.abs(position.y - this.lastSentPosition.y) > 0.001 ||
-      Math.abs(position.z - this.lastSentPosition.z) > 0.001 ||
-      Math.abs(rotation.yaw - this.lastSentRotation.yaw) > 0.001 ||
-      Math.abs(rotation.pitch - this.lastSentRotation.pitch) > 0.001;
-    
-    if (!valuesChanged) {
-      return;
-    }
-    
     this.lastPositionSendTime = now;
     
-    // Send movement message to server via adapter
+    // For Tribes2 backend, send input moves instead of position
+    // The adapter will handle the conversion
     this.adapter.send({
       type: 'move',
       x: position.x,
@@ -149,6 +231,19 @@ export class NetworkManager {
     
     this.lastSentPosition = { ...position };
     this.lastSentRotation = { ...rotation };
+  }
+
+  /**
+   * Send input move for client-side prediction
+   */
+  sendInputMove(input: { forward: number; right: number; jump: number; ski: number }, rotation: { yaw: number; pitch: number }): void {
+    if (!this.adapter || !this.adapter.isConnected()) return;
+    
+    this.adapter.send({
+      type: 'inputMove',
+      input,
+      rotation
+    });
   }
 
   /**

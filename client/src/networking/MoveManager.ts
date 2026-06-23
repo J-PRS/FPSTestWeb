@@ -31,6 +31,7 @@ export class MoveManager {
   private moveHistory: Move[] = []; // For client prediction
   private maxHistorySize: number = 128;
   private moveInterval: number = 32; // 32ms (31.25 Hz)
+  private onReconcileCallback: ((serverState: any, lastProcessedSequence: number) => void) | null = null;
 
   /**
    * Collect a move from input
@@ -120,13 +121,60 @@ export class MoveManager {
   }
 
   /**
+   * Unpack server control state from a packet stream
+   * This is the authoritative state from the server for client-side prediction
+   */
+  unpackControlState(stream: BitStream): void {
+    // Read position
+    const position = {
+      x: stream.readFloat32(),
+      y: stream.readFloat32(),
+      z: stream.readFloat32()
+    };
+
+    // Read rotation
+    const rotation = {
+      yaw: stream.readFloatRanged(-Math.PI, Math.PI, 16),
+      pitch: stream.readFloatRanged(-Math.PI / 2, Math.PI / 2, 16)
+    };
+
+    // Read velocity
+    const velocity = {
+      x: stream.readFloat32(),
+      y: stream.readFloat32(),
+      z: stream.readFloat32()
+    };
+
+    // Read last processed sequence
+    const lastProcessedSeq = stream.readInt(16);
+
+    // Update last processed sequence
+    this.lastProcessedSequence = lastProcessedSeq;
+
+    // Call reconciliation callback if set
+    if (this.onReconcileCallback) {
+      this.onReconcileCallback(
+        { position, rotation, velocity },
+        lastProcessedSeq
+      );
+    }
+  }
+
+  /**
    * Apply move locally for client-side prediction
    */
   predictMove(move: Move, controlObject: any): void {
     // Apply move to control object for immediate response
-    // This is a placeholder - actual implementation depends on game logic
-    if (controlObject && controlObject.applyMove) {
-      controlObject.applyMove(move);
+    if (controlObject && controlObject.movement) {
+      // Convert move input to MovementController format
+      controlObject.movement.setInput({
+        forward: move.input.forward / 127, // Convert -127..127 to -1..1
+        right: move.input.right / 127,
+        jumpPressed: move.input.jump === 1,
+        jumpHeld: move.input.jump === 1,
+        skiHeld: move.input.ski === 1
+      });
+      controlObject.movement.update(0.033); // Simulate one frame (~30Hz)
     }
   }
 
@@ -137,13 +185,24 @@ export class MoveManager {
   reconcile(serverLastSequence: number, serverState: any, controlObject: any): void {
     // Remove moves that server has processed
     this.moveHistory = this.moveHistory.filter(m => m.sequence > serverLastSequence);
-    
+
     // If server state differs significantly, snap to server
-    if (controlObject && controlObject.state && serverState) {
-      const distance = this.calculateDistance(controlObject.state, serverState);
+    if (controlObject && controlObject.pos && serverState.position) {
+      const distance = this.calculateDistance(
+        { position: { x: controlObject.pos.x, y: controlObject.pos.y, z: controlObject.pos.z } },
+        serverState
+      );
       if (distance > 1.0) { // Threshold for snapping
-        controlObject.state = { ...serverState };
-        
+        // Snap to server state
+        controlObject.pos.set(serverState.position.x, serverState.position.y, serverState.position.z);
+        if (serverState.velocity) {
+          controlObject.vel.set(serverState.velocity.x, serverState.velocity.y, serverState.velocity.z);
+        }
+        if (serverState.rotation) {
+          controlObject.yaw = serverState.rotation.yaw;
+          controlObject.pitch = serverState.rotation.pitch;
+        }
+
         // Re-apply all pending moves
         for (const move of this.moveHistory) {
           this.predictMove(move, controlObject);
@@ -208,5 +267,12 @@ export class MoveManager {
    */
   getPendingCount(): number {
     return this.moves.length;
+  }
+
+  /**
+   * Set callback for server state reconciliation
+   */
+  onReconcile(callback: ((serverState: any, lastProcessedSequence: number) => void) | null): void {
+    this.onReconcileCallback = callback;
   }
 }

@@ -104,12 +104,141 @@ export class ShotEvent implements Event {
   }
 }
 
+export class JumpEvent implements Event {
+  type = 3;
+  guaranteed = false;
+  playerId: string;
+  timestamp: number;
+
+  constructor(playerId: string, timestamp: number) {
+    this.playerId = playerId;
+    this.timestamp = timestamp;
+  }
+
+  pack(stream: BitStream): void {
+    stream.writeString(this.playerId);
+    const relativeTimestamp = this.timestamp - (Date.now() - 60000);
+    stream.writeInt(relativeTimestamp, 32);
+  }
+
+  unpack(stream: BitStream): void {
+    this.playerId = stream.readString();
+    const relativeTimestamp = stream.readInt(32);
+    this.timestamp = relativeTimestamp + (Date.now() - 60000);
+  }
+
+  process(connectionId: string): void {
+    Logger.debug(`Jump event from ${this.playerId}`);
+  }
+}
+
+export class JetpackEvent implements Event {
+  type = 4;
+  guaranteed = false;
+  playerId: string;
+  active: boolean;
+  timestamp: number;
+
+  constructor(playerId: string, active: boolean, timestamp: number) {
+    this.playerId = playerId;
+    this.active = active;
+    this.timestamp = timestamp;
+  }
+
+  pack(stream: BitStream): void {
+    stream.writeString(this.playerId);
+    stream.writeBool(this.active);
+    const relativeTimestamp = this.timestamp - (Date.now() - 60000);
+    stream.writeInt(relativeTimestamp, 32);
+  }
+
+  unpack(stream: BitStream): void {
+    this.playerId = stream.readString();
+    this.active = stream.readBool();
+    const relativeTimestamp = stream.readInt(32);
+    this.timestamp = relativeTimestamp + (Date.now() - 60000);
+  }
+
+  process(connectionId: string): void {
+    Logger.debug(`Jetpack event from ${this.playerId}: ${this.active}`);
+  }
+}
+
+export class SkiEvent implements Event {
+  type = 5;
+  guaranteed = false;
+  playerId: string;
+  active: boolean;
+  timestamp: number;
+
+  constructor(playerId: string, active: boolean, timestamp: number) {
+    this.playerId = playerId;
+    this.active = active;
+    this.timestamp = timestamp;
+  }
+
+  pack(stream: BitStream): void {
+    stream.writeString(this.playerId);
+    stream.writeBool(this.active);
+    const relativeTimestamp = this.timestamp - (Date.now() - 60000);
+    stream.writeInt(relativeTimestamp, 32);
+  }
+
+  unpack(stream: BitStream): void {
+    this.playerId = stream.readString();
+    this.active = stream.readBool();
+    const relativeTimestamp = stream.readInt(32);
+    this.timestamp = relativeTimestamp + (Date.now() - 60000);
+  }
+
+  process(connectionId: string): void {
+    Logger.debug(`Ski event from ${this.playerId}: ${this.active}`);
+  }
+}
+
+export class DeathEvent implements Event {
+  type = 6;
+  guaranteed = true;
+  playerId: string;
+  killerId: string | null;
+  timestamp: number;
+
+  constructor(playerId: string, killerId: string | null, timestamp: number) {
+    this.playerId = playerId;
+    this.killerId = killerId;
+    this.timestamp = timestamp;
+  }
+
+  pack(stream: BitStream): void {
+    stream.writeString(this.playerId);
+    stream.writeBool(this.killerId !== null);
+    if (this.killerId !== null) {
+      stream.writeString(this.killerId);
+    }
+    const relativeTimestamp = this.timestamp - (Date.now() - 60000);
+    stream.writeInt(relativeTimestamp, 32);
+  }
+
+  unpack(stream: BitStream): void {
+    this.playerId = stream.readString();
+    const hasKiller = stream.readBool();
+    this.killerId = hasKiller ? stream.readString() : null;
+    const relativeTimestamp = stream.readInt(32);
+    this.timestamp = relativeTimestamp + (Date.now() - 60000);
+  }
+
+  process(connectionId: string): void {
+    Logger.debug(`Death event: ${this.playerId} killed by ${this.killerId}`);
+  }
+}
+
 export class EventManager {
   private outgoingQueue: Map<string, Event[]> = new Map();
   private sequenceNumbers: Map<string, number> = new Map();
   private pendingEvents: Map<string, Map<number, Event>> = new Map();
   private maxWindowSize: number = 32;
   private onEventCallback: ((connectionId: string, event: Event) => void) | null = null;
+  private onAckCallback: ((connectionId: string, seq: number) => void) | null = null;
 
   /**
    * Add an event to the outgoing queue for a specific connection
@@ -240,9 +369,18 @@ export class EventManager {
    * Send ACK for a guaranteed event
    */
   private sendAck(connectionId: string, seq: number): void {
-    // This would be sent through the connection
-    // Implementation depends on the connection layer
-    console.log(`Sending ACK for connection ${connectionId} sequence ${seq}`);
+    // ACK is sent through the connection layer via StreamManager
+    // StreamManager will collect ACKs and send them in packets
+    if (this.onAckCallback) {
+      this.onAckCallback(connectionId, seq);
+    }
+  }
+
+  /**
+   * Set callback for ACK transmission
+   */
+  setAckCallback(callback: ((connectionId: string, seq: number) => void) | null): void {
+    this.onAckCallback = callback;
   }
 
   /**
@@ -276,6 +414,14 @@ export class EventManager {
         return new PositionEvent('', { x: 0, y: 0, z: 0 }, { yaw: 0, pitch: 0 }, 0);
       case 2:
         return new ShotEvent('', null, 0);
+      case 3:
+        return new JumpEvent('', 0);
+      case 4:
+        return new JetpackEvent('', false, 0);
+      case 5:
+        return new SkiEvent('', false, 0);
+      case 6:
+        return new DeathEvent('', null, 0);
       default:
         Logger.warn(`Unknown event type: ${type}`);
         return null;

@@ -18,6 +18,8 @@ export class Tribes2Networking {
   private scopeManagers: Map<string, ScopeManager> = new Map();
   private onEventCallback: ((connectionId: string, event: any) => void) | null = null;
   private onMoveCallback: ((connectionId: string, move: any) => void) | null = null;
+  private getControlObjectCallback: ((connectionId: string) => any) | null = null;
+  private joinHandshakeComplete: Map<string, boolean> = new Map();
 
   constructor() {
     // Empty constructor
@@ -57,6 +59,11 @@ export class Tribes2Networking {
       onSend
     );
 
+    // Set control object provider for client-side prediction
+    if (this.getControlObjectCallback) {
+      streamManager.setControlObjectProvider(this.getControlObjectCallback);
+    }
+
     this.scopeManagers.set(connectionId, scopeManager);
     this.ghostManagers.set(connectionId, ghostManager);
     this.moveManagers.set(connectionId, moveManager);
@@ -75,6 +82,18 @@ export class Tribes2Networking {
     if (streamManager) {
       streamManager.handlePacket(connectionId, data);
     }
+  }
+
+  /**
+   * Mark join handshake as complete for a connection
+   * Allows binary packet transmission to begin
+   */
+  markJoinHandshakeComplete(connectionId: string): void {
+    const streamManager = this.streamManagers.get(connectionId);
+    if (streamManager) {
+      streamManager.markJoinHandshakeComplete(connectionId);
+    }
+    this.joinHandshakeComplete.set(connectionId, true);
   }
 
   /**
@@ -111,6 +130,17 @@ export class Tribes2Networking {
    */
   onMove(callback: (connectionId: string, move: any) => void): void {
     this.onMoveCallback = callback;
+  }
+
+  /**
+   * Set callback to get control object for a connection (for client-side prediction)
+   */
+  setControlObjectProvider(callback: ((connectionId: string) => any) | null): void {
+    this.getControlObjectCallback = callback;
+    // Update all existing stream managers
+    for (const [connectionId, streamManager] of this.streamManagers) {
+      streamManager.setControlObjectProvider(callback);
+    }
   }
 
   /**

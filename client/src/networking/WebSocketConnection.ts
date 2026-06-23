@@ -15,6 +15,7 @@ export interface ConnectionConfig {
   onDisconnect?: () => void;
   onError?: (error: Error) => void;
   onMessage?: (data: any) => void;
+  onBinaryMessage?: (data: Uint8Array) => void;
 }
 
 export class WebSocketConnection {
@@ -51,14 +52,15 @@ export class WebSocketConnection {
         this.isConnected = true;
         this.reconnectAttempts = 0;
         
-        // Send queued messages
+        // Call onConnect FIRST - let the application send its initial messages
+        if (this.config.onConnect) {
+          this.config.onConnect();
+        }
+        
+        // Then send any queued messages
         while (this.messageQueue.length > 0) {
           const msg = this.messageQueue.shift();
           this.send(msg);
-        }
-        
-        if (this.config.onConnect) {
-          this.config.onConnect();
         }
       };
 
@@ -90,14 +92,53 @@ export class WebSocketConnection {
 
       this.ws.onmessage = (event) => {
         try {
-          // Decode msgpack message
-          const data = msgpack.decode(new Uint8Array(event.data));
-          
-          if (this.config.onMessage) {
-            this.config.onMessage(data);
+          // Check if message is JSON or binary
+          const data = event.data;
+
+          if (typeof data === 'string') {
+            // JSON message (join, joinAck, etc.)
+            try {
+              const jsonData = JSON.parse(data);
+              if (this.config.onMessage) {
+                this.config.onMessage(jsonData);
+              }
+            } catch (error) {
+              console.error('Error parsing JSON message:', error);
+              if (this.config.onError) {
+                this.config.onError(error as Error);
+              }
+            }
+          } else if (data instanceof ArrayBuffer) {
+            // Binary message - route to onBinaryMessage if available
+            console.log('Received binary message, onBinaryMessage:', !!this.config.onBinaryMessage);
+            if (this.config.onBinaryMessage) {
+              try {
+                this.config.onBinaryMessage(new Uint8Array(data));
+              } catch (error) {
+                console.error('Error in onBinaryMessage:', error);
+                if (this.config.onError) {
+                  this.config.onError(error as Error);
+                }
+              }
+            } else {
+              // Fallback: try msgpack, then pass raw binary
+              console.warn('No onBinaryMessage callback, trying msgpack decode');
+              try {
+                const decoded = msgpack.decode(new Uint8Array(data));
+                if (this.config.onMessage) {
+                  this.config.onMessage(decoded);
+                }
+              } catch (msgpackError) {
+                // If msgpack fails, pass raw binary data
+                console.warn('msgpack decode failed, passing raw binary:', msgpackError);
+                if (this.config.onMessage) {
+                  this.config.onMessage(new Uint8Array(data));
+                }
+              }
+            }
           }
         } catch (error) {
-          console.error('Error decoding message:', error);
+          console.error('Error processing message:', error);
           if (this.config.onError) {
             this.config.onError(error as Error);
           }
@@ -131,7 +172,7 @@ export class WebSocketConnection {
   }
 
   /**
-   * Send data using msgpack encoding
+   * Send data - handles JSON strings, objects (msgpack), and binary data
    */
   send(data: any): boolean {
     if (!this.isConnected || !this.ws) {
@@ -141,9 +182,17 @@ export class WebSocketConnection {
     }
 
     try {
-      // Encode data using msgpack
-      const encoded = msgpack.encode(data);
-      this.ws.send(encoded);
+      if (typeof data === 'string') {
+        // Send JSON string as-is (for join messages)
+        this.ws.send(data);
+      } else if (data instanceof Uint8Array) {
+        // Send binary data as-is (for Tribes2 packets)
+        this.ws.send(data);
+      } else {
+        // Encode objects using msgpack
+        const encoded = msgpack.encode(data);
+        this.ws.send(encoded);
+      }
       return true;
     } catch (error) {
       console.error('Error sending message:', error);

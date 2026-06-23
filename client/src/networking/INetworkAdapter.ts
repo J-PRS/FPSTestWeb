@@ -13,6 +13,7 @@ export interface INetworkAdapter {
   onDisconnect(callback: () => void): void;
   onError(callback: (error: Error) => void): void;
   isConnected(): boolean;
+  setControlObject?(controlObject: any): void; // For client-side prediction
 }
 
 export interface PlayerState {

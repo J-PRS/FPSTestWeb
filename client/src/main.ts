@@ -583,16 +583,20 @@ async function init(): Promise<void> {
   player.onJump = (pos) => effects.spawnJumpDust(pos);
   player.onJetpack = (pos) => effects.spawnJetpack(pos);
   player.onSki = (pos, vel) => effects.spawnSkiDust(pos, vel);
-  player.onNetworkJump = (pos) => networkManager.sendJump(pos);
-  player.onNetworkJetpack = (pos) => networkManager.sendJetpack(pos);
-  hud = new HUD();
-
-  // Load player model
-  await player.loadModel();
 
   // Initialize networking with selected backend
   const adapter = NetworkAdapterFactory.createAdapter(NETWORK_BACKEND);
   networkManager = new NetworkManager(adapter);
+
+  // Set control object for client-side prediction
+  networkManager.setControlObject(player);
+  player.onNetworkJump = (pos) => networkManager.sendJump(pos);
+  player.onNetworkJetpack = (pos) => networkManager.sendJetpack(pos);
+  player.onNetworkInput = (input, rotation) => networkManager.sendInputMove(input, rotation);
+  hud = new HUD();
+
+  // Load player model
+  await player.loadModel();
   
   // Register player hit handler (non-lethal hits)
   networkManager.onPlayerHit = (shooterId: string, targetId: string, damage: number) => {
@@ -676,7 +680,7 @@ async function init(): Promise<void> {
   };
 
   // Register state reconciliation handler for client-side prediction
-  // TODO: Not supported in basic Colyseus setup - will add later
+  // Now handled by Tribes2Adapter directly
   // networkManager.onStateReconciliation = (state: { position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }, velocity: { x: number; y: number; z: number }, lastProcessedSequence: number }) => {
   //   logger.debug(`State reconciliation: pos(${state.position.x.toFixed(1)},${state.position.y.toFixed(1)},${state.position.z.toFixed(1)}) seq=${state.lastProcessedSequence}`);
   // 
@@ -842,7 +846,7 @@ async function init(): Promise<void> {
   };
 
   // Register state restore handler (for reconnection via stateReconciliation)
-  // TODO: Not supported in basic Colyseus setup - will add later
+  // Now handled by Tribes2Adapter directly
   // networkManager.onStateRestore = (state) => {
   //   logger.debug(`Restoring player state: ${JSON.stringify(state)}`);
   // 

@@ -181,6 +181,9 @@ export class MoveManager {
   packControlState(connectionId: string, stream: BitStream, controlObject: any): void {
     if (!controlObject) return;
 
+    // Write marker byte (0xFF) to indicate control state follows
+    stream.writeInt(0xFF, 8);
+
     // Pack position
     if (controlObject.position) {
       stream.writeFloat32(controlObject.position.x);
