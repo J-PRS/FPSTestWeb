@@ -4,7 +4,7 @@
 
 import { PlayerManager } from './PlayerManager.js';
 import { ProjectileManager } from './ProjectileManager.js';
-import { decodePosition, decodeInput, decodeShot, encodeStateReconciliation, MessageType } from './BinaryProtocol.js';
+import { decodePosition, decodePositionDelta, decodeInput, decodeShot, encodeStateReconciliation, MessageType } from './BinaryProtocol.js';
 import { PositionValidator } from './PositionValidator.js';
 
 export class MessageHandler {
@@ -82,6 +82,11 @@ export class MessageHandler {
       case MessageType.POSITION: {
         const positionData = decodePosition(data);
         this.handlePosition(playerId, positionData.data);
+        break;
+      }
+      case MessageType.POSITION_DELTA: {
+        const positionData = decodePositionDelta(data);
+        this.handlePositionDelta(playerId, positionData.data);
         break;
       }
       case MessageType.SHOT: {
@@ -180,6 +185,86 @@ export class MessageHandler {
     // Broadcast to other players
     if (Math.random() < 0.05) { // 5% of updates log for debugging
       console.log(`[MessageHandler] Broadcasting position update for ${playerId}:`, player.position);
+    }
+    this.broadcastCallback({
+      type: 'playerUpdate',
+      playerId,
+      position: player.position,
+      rotation: player.rotation,
+      sequenceNumber: player.lastProcessedSequence,
+      timestamp: Date.now()
+    }, playerId);
+  }
+
+  private handlePositionDelta(playerId: string, data: any): void {
+    const player = this.playerManager.getPlayer(playerId);
+    if (!player) return;
+
+    const now = Date.now();
+    const dt = (now - player.lastUpdateTime) / 1000; // seconds
+
+    // Apply position delta
+    const newPosition = {
+      x: player.position.x + data.positionDelta.x,
+      y: player.position.y + data.positionDelta.y,
+      z: player.position.z + data.positionDelta.z
+    };
+
+    // Apply rotation delta
+    const newRotation = {
+      yaw: player.rotation.yaw + data.rotationDelta.yaw,
+      pitch: player.rotation.pitch + data.rotationDelta.pitch
+    };
+
+    // Calculate velocity from position change
+    if (dt > 0 && dt < 1.0) { // Ignore very large gaps (reconnection)
+      player.velocity.x = (newPosition.x - player.position.x) / dt;
+      player.velocity.y = (newPosition.y - player.position.y) / dt;
+      player.velocity.z = (newPosition.z - player.position.z) / dt;
+    }
+
+    // Add snapshot to position validator history BEFORE validation
+    this.positionValidator.addSnapshot(
+      playerId,
+      now,
+      player.position,
+      player.velocity
+    );
+
+    // Validate position with latency-aware thresholds
+    const estimatedPing = Math.min(dt * 1000, 500); // Cap at 500ms
+    const validation = this.positionValidator.validatePosition(
+      playerId,
+      newPosition,
+      now,
+      estimatedPing
+    );
+
+    // Determine final position based on validation
+    let finalPosition = newPosition;
+    if (validation.action === 'snap') {
+      console.log(`[PositionValidator] Snapping ${playerId} to expected position. Discrepancy: ${validation.discrepancy.toFixed(2)}m`);
+      finalPosition = validation.expectedPosition;
+    } else if (validation.action === 'nudge') {
+      console.log(`[PositionValidator] Nudging ${playerId} toward expected position. Discrepancy: ${validation.discrepancy.toFixed(2)}m`);
+      finalPosition = {
+        x: (newPosition.x + validation.expectedPosition.x) / 2,
+        y: (newPosition.y + validation.expectedPosition.y) / 2,
+        z: (newPosition.z + validation.expectedPosition.z) / 2
+      };
+    }
+
+    // Update player position with validated position
+    player.position = finalPosition;
+    player.rotation = newRotation;
+    player.lastUpdateTime = now;
+
+    // Store in rewind buffer for lag compensation
+    this.playerManager.storePlayerPosition(playerId, player.position, player.rotation);
+
+    // Broadcast to other players
+    if (Math.random() < 0.05) { // 5% of updates log for debugging
+      console.log(`[MessageHandler] Broadcasting position delta update for ${playerId}:`, player.position);
     }
     this.broadcastCallback({
       type: 'playerUpdate',

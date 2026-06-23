@@ -2,13 +2,12 @@
  * Player state management
  */
 
-import { WebSocket } from 'ws';
 import { PlayerState, PositionSnapshot } from './types.js';
 
 export class PlayerManager {
   private players: Map<string, PlayerState> = new Map();
   private rewindBuffer: Map<string, PositionSnapshot[]> = new Map();
-  private wsToPlayerId: Map<WebSocket, string> = new Map();
+  private wsToPlayerId: Map<any, string> = new Map();
 
   getPlayers(): Map<string, PlayerState> {
     return this.players;
@@ -18,7 +17,7 @@ export class PlayerManager {
     return this.rewindBuffer;
   }
 
-  getWsToPlayerId(): Map<WebSocket, string> {
+  getWsToPlayerId(): Map<any, string> {
     return this.wsToPlayerId;
   }
 
@@ -26,7 +25,7 @@ export class PlayerManager {
     return this.players.get(playerId);
   }
 
-  addPlayer(playerId: string, ws: WebSocket, position: { x: number; y: number; z: number }): void {
+  addPlayer(playerId: string, ws: any, position: { x: number; y: number; z: number }): void {
     this.players.set(playerId, {
       ws,
       position,
@@ -57,7 +56,7 @@ export class PlayerManager {
     return player ? player.lastProcessedSequence : 0;
   }
 
-  restorePlayer(playerId: string, ws: WebSocket): void {
+  restorePlayer(playerId: string, ws: any): void {
     const player = this.players.get(playerId);
     if (player) {
       player.ws = ws;

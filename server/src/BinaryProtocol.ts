@@ -254,7 +254,7 @@ export function decodePosition(data: Uint8Array): any {
   const decoder = new BinaryDecoder(data);
   const type = decoder.readUint8();
   if (type !== MessageType.POSITION) throw new Error('Invalid message type');
-  
+
   return {
     type: 'position',
     playerId: decoder.readString(),
@@ -269,6 +269,35 @@ export function decodePosition(data: Uint8Array): any {
         pitch: decoder.readFloat32()
       },
       timestamp: decoder.readUint32()
+    }
+  };
+}
+
+export function decodePositionDelta(data: Uint8Array): any {
+  const decoder = new BinaryDecoder(data);
+  const type = decoder.readUint8();
+  if (type !== MessageType.POSITION_DELTA) throw new Error('Invalid message type');
+
+  const playerId = decoder.readString();
+
+  // Read position deltas (int16, scaled by 100)
+  const deltaX = decoder.readInt16() / 100;
+  const deltaY = decoder.readInt16() / 100;
+  const deltaZ = decoder.readInt16() / 100;
+
+  // Read rotation deltas (int16, scaled by 1000)
+  const deltaYaw = decoder.readInt16() / 1000;
+  const deltaPitch = decoder.readInt16() / 1000;
+
+  const timestamp = decoder.readUint32();
+
+  return {
+    type: 'positionDelta',
+    playerId,
+    data: {
+      positionDelta: { x: deltaX, y: deltaY, z: deltaZ },
+      rotationDelta: { yaw: deltaYaw, pitch: deltaPitch },
+      timestamp
     }
   };
 }
@@ -296,7 +325,7 @@ export function decodeShot(data: Uint8Array): any {
   const playerId = decoder.readString();
   const hasTarget = decoder.readUint8() === 1;
   const targetId = hasTarget ? decoder.readString() : null;
-  const timestamp = decoder.readFloat64();
+  const timestamp = decoder.readUint32();
   
   const hasPositionVelocity = decoder.readUint8() === 1;
   let position = undefined;
@@ -362,7 +391,7 @@ export function encodeHitConfirmation(
   encoder.writeString(targetId);
   encoder.writeUint8(confirmed ? 1 : 0);
   encoder.writeFloat32(damage);
-  encoder.writeUint64(timestamp);
+  encoder.writeUint32(timestamp);
   return encoder.getResult();
 }
 
@@ -375,7 +404,7 @@ export function decodeHitConfirmation(data: Uint8Array): any {
   const targetId = decoder.readString();
   const confirmed = decoder.readUint8() === 1;
   const damage = decoder.readFloat32();
-  const timestamp = decoder.readUint64();
+  const timestamp = decoder.readUint32();
 
   return {
     type: 'hitConfirmation',

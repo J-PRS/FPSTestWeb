@@ -62,9 +62,30 @@ export class GameLoop {
         player.health = 100;
         player.respawnTime = null;
 
-        // Random spawn point
-        const spawnPoint = spawnPoints[Math.floor(Math.random() * spawnPoints.length)];
-        player.position = { ...spawnPoint };
+        // Choose spawn point furthest from alive players
+        let bestSpawnPoint = spawnPoints[0];
+        let maxMinDistance = -1;
+
+        for (const spawnPoint of spawnPoints) {
+          let minDistanceToAnyPlayer = Infinity;
+
+          for (const [otherPlayerId, otherPlayer] of this.playerManager.getPlayers()) {
+            if (otherPlayerId !== playerId && !otherPlayer.isDead) {
+              const dx = spawnPoint.x - otherPlayer.position.x;
+              const dy = spawnPoint.y - otherPlayer.position.y;
+              const dz = spawnPoint.z - otherPlayer.position.z;
+              const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+              minDistanceToAnyPlayer = Math.min(minDistanceToAnyPlayer, distance);
+            }
+          }
+
+          if (minDistanceToAnyPlayer > maxMinDistance) {
+            maxMinDistance = minDistanceToAnyPlayer;
+            bestSpawnPoint = spawnPoint;
+          }
+        }
+
+        player.position = { ...bestSpawnPoint };
         player.rotation = { yaw: 0, pitch: 0 };
         player.velocity = { x: 0, y: 0, z: 0 };
 

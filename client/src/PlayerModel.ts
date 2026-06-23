@@ -64,9 +64,9 @@ export class PlayerModel {
           
           this.scene.add(this.model);
 
-          // Create collider gizmo (wireframe cylinder for hitbox visualization)
-          // Hitbox: radius 0.8, height 2.0
-          const colliderGeo = new THREE.CylinderGeometry(0.8, 0.8, 2.0, 16);
+          // Create collider gizmo (wireframe capsule for hitbox visualization)
+          // Hitbox: radius 0.8, total height 2.5 (0.9 cylinder + 0.8 hemisphere + 0.8 hemisphere)
+          const colliderGeo = new THREE.CapsuleGeometry(0.8, 0.9, 4, 16);
           const colliderMat = new THREE.MeshBasicMaterial({
             color: 0x00ff00,
             wireframe: true,
@@ -74,7 +74,7 @@ export class PlayerModel {
             opacity: 0.3
           });
           this.colliderGizmo = new THREE.Mesh(colliderGeo, colliderMat);
-          this.colliderGizmo.position.y = 1.0; // Center at height 1.0 (half of 2.0)
+          this.colliderGizmo.position.y = 1.25; // Center at height 1.25 (half of 2.5)
           this.scene.add(this.colliderGizmo);
 
           resolve();
@@ -158,7 +158,7 @@ export class PlayerModel {
       this.model.position.set(x, y, z);
     }
     if (this.colliderGizmo) {
-      this.colliderGizmo.position.set(x, y + 1.0, z);
+      this.colliderGizmo.position.set(x, y + 1.25, z);
     }
   }
 

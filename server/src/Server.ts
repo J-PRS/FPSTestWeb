@@ -8,7 +8,7 @@ import { ProjectileManager } from './ProjectileManager.js';
 import { MessageHandler } from './MessageHandler.js';
 import { GameLoop } from './GameLoop.js';
 
-const PORT = 8095;
+const PORT = 8080;
 const TICK_RATE = 15; // 15Hz = 67ms per tick
 
 class Server {

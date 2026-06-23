@@ -6,7 +6,7 @@ export default defineConfig({
     allowedHosts: ['.trycloudflare.com'],
     proxy: {
       '/server': {
-        target: 'ws://localhost:8095',
+        target: 'ws://localhost:8080',
         ws: true,
         changeOrigin: true,
       },
