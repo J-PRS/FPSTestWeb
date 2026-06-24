@@ -236,7 +236,7 @@ export class AtmosphericSky {
     return this.timeOfDay > 0.25 && this.timeOfDay < 0.75;
   }
 
-  update(dt: number): void {
+  update(_dt: number): void {
     // Optional: auto-advance time
   }
 

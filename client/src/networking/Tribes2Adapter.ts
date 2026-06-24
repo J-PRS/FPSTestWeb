@@ -7,9 +7,14 @@ import { INetworkAdapter } from './INetworkAdapter.js';
 import { ChildLogger } from '../Logger.js';
 import { WebSocketConnection } from './WebSocketConnection.js';
 import { StreamManager } from './StreamManager.js';
-import { EventManager, Event, PositionEvent, ShotEvent, JumpEvent, JetpackEvent } from './EventManager.js';
+import { EventManager, ShotEvent, JumpEvent, JetpackEvent } from './EventManager.js';
 import { GhostManager, ScopeManager } from './GhostManager.js';
 import { MoveManager } from './MoveManager.js';
+import {
+  TRIBES2_MAX_PACKET_SIZE,
+  TRIBES2_PACKETS_PER_SECOND,
+  TRIBES2_MAX_BYTES_PER_SECOND
+} from '../config.js';
 
 const logger = new ChildLogger('Tribes2Adapter');
 
@@ -62,9 +67,9 @@ export class Tribes2Adapter implements INetworkAdapter {
               this.ghostManager,
               this.moveManager,
               {
-                maxPacketSize: 1400,
-                packetsPerSecond: 30,
-                maxBytesPerSecond: 42000
+                maxPacketSize: TRIBES2_MAX_PACKET_SIZE,
+                packetsPerSecond: TRIBES2_PACKETS_PER_SECOND,
+                maxBytesPerSecond: TRIBES2_MAX_BYTES_PER_SECOND
               },
               (data: Uint8Array) => {
                 // Only send binary data if join handshake is complete
@@ -143,7 +148,7 @@ export class Tribes2Adapter implements INetworkAdapter {
     }
   }
 
-  private sendPosition(data: any): void {
+  private sendPosition(_data: any): void {
     // Position updates are sent via MoveManager as part of input
     // The actual position is sent with the move for client-side prediction
     // GhostManager handles position synchronization, so we don't need to send PositionEvent

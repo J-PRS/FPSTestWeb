@@ -1,12 +1,13 @@
 /**
  * WebSocket Connection Wrapper with msgpack encoding (Server)
  * Based on Krunker.io's approach using msgpack for efficient binary communication
- * 
+ *
  * Provides a clean API for WebSocket communication with automatic msgpack encoding/decoding
  * Designed for uWebSockets.js integration
  */
 
 import msgpack from 'msgpack-lite';
+import { Logger } from './Logger.js';
 
 export interface ServerConnectionConfig {
   onMessage?: (data: any) => void;
@@ -40,7 +41,7 @@ export class WebSocketConnection {
       this.ws.send(encoded);
       return true;
     } catch (error) {
-      console.error('Error sending message:', error);
+      Logger.error('Error sending message:', error);
       if (this.config.onError) {
         this.config.onError(error as Error);
       }
@@ -60,7 +61,7 @@ export class WebSocketConnection {
       this.ws.send(data);
       return true;
     } catch (error) {
-      console.error('Error sending binary message:', error);
+      Logger.error('Error sending binary message:', error);
       if (this.config.onError) {
         this.config.onError(error as Error);
       }
@@ -105,7 +106,7 @@ export class WebSocketConnection {
         }
       }
     } catch (error) {
-      console.error('Error handling message:', error);
+      Logger.error('Error handling message:', error);
       if (this.config.onError) {
         this.config.onError(error as Error);
       }

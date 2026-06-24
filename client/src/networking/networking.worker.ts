@@ -19,24 +19,6 @@ type WorkerCommand =
   | { type: 'getPacketLoss' }
   | { type: 'getJitter' };
 
-type WorkerEvent = 
-  | { type: 'connected' }
-  | { type: 'disconnected' }
-  | { type: 'error'; error: string }
-  | { type: 'playerJoined'; playerId: string; position: { x: number; y: number; z: number }; rotation: { yaw: number; pitch: number } }
-  | { type: 'playerLeft'; playerId: string }
-  | { type: 'playerUpdate'; playerId: string; position: { x: number; y: number; z: number }; rotation: { yaw: number; pitch: number }; timestamp: number }
-  | { type: 'gameState'; players: any[]; localPlayerState: any }
-  | { type: 'hit'; shooterId: string; targetId: string; damage: number }
-  | { type: 'kill'; shooterId: string; targetId: string }
-  | { type: 'playerRespawn'; playerId: string; position: { x: number; y: number; z: number }; rotation: { yaw: number; pitch: number } }
-  | { type: 'jump'; playerId: string; position: { x: number; y: number; z: number } }
-  | { type: 'jetpack'; playerId: string; position: { x: number; y: number; z: number } }
-  | { type: 'projectileCreated'; projectileId: string; ownerId: string; position: { x: number; y: number; z: number }; velocity: { x: number; y: number; z: number } }
-  | { type: 'projectileUpdate'; projectileId: string; position: { x: number; y: number; z: number } }
-  | { type: 'projectileDestroyed'; projectileId: string }
-  | { type: 'stateRestore'; state: any }
-  | { type: 'stateReconciliation'; playerId: string; data: { position: { x: number; y: number; z: number }; rotation: { yaw: number; pitch: number }; velocity: { x: number; y: number; z: number }; lastProcessedSequence: number } };
 
 let networkManager: NetworkManager | null = null;
 

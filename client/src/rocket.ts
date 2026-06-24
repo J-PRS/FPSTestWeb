@@ -19,7 +19,6 @@ const TRAIL_INTERVAL = 0.015; // seconds between particle emission
 const TRAIL_EMISSION = 6;     // particles per emission
 const TRAIL_LIFE_MIN = 1.2;
 const TRAIL_LIFE_MAX = 1.8;
-const TRAIL_SPEED    = 15;    // backward drift speed
 const TRAIL_SPREAD   = 0.25;  // lateral spawn spread
 const TRAIL_GEO = new THREE.SphereGeometry(1, 4, 4);
 

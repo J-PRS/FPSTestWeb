@@ -28,28 +28,15 @@ import {
   SHADOW_MAP_SIZE, SHADOW_CAMERA_NEAR, SHADOW_CAMERA_FAR, SHADOW_CAMERA_SIZE,
   HEMI_SKY_COLOR, HEMI_GROUND_COLOR, HEMI_INTENSITY,
   PENDING_ROCKET_TIMEOUT, FRAG_MESSAGE_DURATION, FRAG_MESSAGE_FADE,
-  MAX_INPUT_HISTORY, TONE_MAPPING_EXPOSURE,
-  FRAG_MESSAGE_TOP_OFFSET, FRAG_MESSAGE_TEXT_SHADOW_X, FRAG_MESSAGE_TEXT_SHADOW_Y, FRAG_MESSAGE_TEXT_SHADOW_BLUR, FRAG_MESSAGE_LINE_HEIGHT,
+  TONE_MAPPING_EXPOSURE,
   EXPLOSION_FALLOFF_MULTIPLIER_ROCKET, EXPLOSION_FALLOFF_MULTIPLIER_DISC, EXPLOSION_COLLISION_MULTIPLIER, KNOCKBACK_MULTIPLIER, PULL_MULTIPLIER,
   ACCURACY_MAX, ACCURACY_NORMALIZATION,
-  MAX_DELTA_TIME, REMOTE_PLAYER_FIXED_DT, GAME_LOOP_FIXED_DT, DEBUG_LOG_SAMPLE_RATE,
-  MAX_HEALTH, PLAYER_ID_LENGTH, BUTTON_TIMEOUT, NETWORK_BACKEND
+  MAX_DELTA_TIME, REMOTE_PLAYER_FIXED_DT, DEBUG_LOG_SAMPLE_RATE,
+  BUTTON_TIMEOUT, NETWORK_BACKEND
 } from './config.js';
 
 const logger = new ChildLogger('Main');
 
-// Input history for client-side prediction replay
-interface InputHistoryEntry {
-  sequenceNumber: number;
-  input: {
-    forward: number;
-    right: number;
-    jump: number;
-    ski: number;
-  };
-  timestamp: number;
-}
-const inputHistory: InputHistoryEntry[] = [];
 
 // ---- Renderer ----
 let pixelated = true;
@@ -665,7 +652,7 @@ async function init(): Promise<void> {
   };
 
   // Register player update handler for remote players
-  networkManager.onPlayerUpdate = (playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }, timestamp: number) => {
+  networkManager.onPlayerUpdate = (playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }, _timestamp: number) => {
     let remotePlayer = remotePlayers.get(playerId);
     if (remotePlayer) {
       remotePlayer.update(position, rotation, REMOTE_PLAYER_FIXED_DT, networkManager.getPing()); // Store target position for interpolation
@@ -808,7 +795,7 @@ async function init(): Promise<void> {
   };
   
   // Register playerJoined handler (for new players joining after initial connection)
-  networkManager.onPlayerJoined = (playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }) => {
+  networkManager.onPlayerJoined = (playerId: string, position: { x: number; y: number; z: number }, _rotation: { yaw: number; pitch: number }) => {
     logger.info(`Player joined: ${playerId} at ${JSON.stringify(position)}`);
     // RemotePlayer will be created in the main loop when networkManager.getPlayers() includes this player
   };
@@ -995,7 +982,7 @@ if (typeof window !== 'undefined') {
     StateSnapshot.exportSnapshots();
   };
   
-  console.log('Client snapshot functions available: takeClientSnapshot(), requestServerSnapshot(), exportClientSnapshots()');
+  logger.info('Client snapshot functions available: takeClientSnapshot(), requestServerSnapshot(), exportClientSnapshots()');
   
   // Add global function to request rough state comparison
   (window as any).requestRoughState = () => {

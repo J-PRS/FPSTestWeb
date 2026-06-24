@@ -8,15 +8,14 @@ import { PlayerManager } from './PlayerManager.js';
 import { ProjectileManager } from './ProjectileManager.js';
 import { MessageHandler } from './MessageHandler.js';
 import { GameLoop } from './GameLoop.js';
-import { Logger, LogLevel } from './Logger.js';
+import { Logger } from './Logger.js';
 import { PositionValidator } from './PositionValidator.js';
 import { ServerConfig } from './config.js';
-import { SimpleTerrain } from './SimpleTerrain.js';
 import { PerformanceMonitor } from './PerformanceMonitor.js';
 import { RoomManager } from './RoomManager.js';
 import { Tribes2Networking } from './Tribes2Networking.js';
 // import { StateSnapshot } from './StateSnapshot.js'; // Temporarily disabled due to crash
-import type { WebSocket, WebSocketBehavior, App } from './WebSocketTypes.js';
+// import type { WebSocket, WebSocketBehavior, App } from './WebSocketTypes.js';
 
 /**
  * Validate playerId format to prevent injection attacks
@@ -177,10 +176,10 @@ class Server {
       open: (ws: any) => {
         this.handleConnection(ws);
       },
-      message: (ws: any, message: ArrayBuffer, isBinary: boolean) => {
+      message: (ws: any, message: ArrayBuffer, _isBinary: boolean) => {
         this.handleMessage(ws, Buffer.from(message));
       },
-      close: (ws: any, code: number, message: ArrayBuffer) => {
+      close: (ws: any, _code: number, _message: ArrayBuffer) => {
         this.handleClose(ws);
       },
     }).listen(ServerConfig.PORT, (token: any) => {
@@ -298,7 +297,6 @@ class Server {
     // Mark join handshake as complete to allow binary packet transmission
     this.tribes2Networking.markJoinHandshakeComplete(playerId);
 
-    const wsToPlayerId = this.playerManager.getWsToPlayerId();
     const existingPlayer = this.playerManager.getPlayer(playerId);
     const room = this.roomManager.getRoom(roomId);
 

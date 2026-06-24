@@ -308,7 +308,6 @@ export class EventManager {
    */
   pack(stream: BitStream, maxBytes: number): number {
     let packedCount = 0;
-    const initialBitPosition = stream.getBitPosition();
 
     while (this.outgoingQueue.length > 0 && stream.hasSpace(16)) {
       const event = this.outgoingQueue.shift();
@@ -429,7 +428,6 @@ export class EventManager {
    */
   private addToOrderedQueue(seq: number, event: Event): void {
     // Find correct position to maintain order
-    let inserted = false;
     for (let i = 0; i < this.orderedQueue.length; i++) {
       // We need to track sequence numbers in the queue
       // For simplicity, just append for now

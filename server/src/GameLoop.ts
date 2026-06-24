@@ -51,7 +51,6 @@ export class GameLoop {
     const startTime = now;
     const dt = this.tickInterval / ServerConfig.MILLISECONDS_PER_SECOND; // seconds
     const GRAVITY = ServerConfig.GRAVITY;
-    const EXTRAPOLATION_TIMEOUT = ServerConfig.EXTRAPOLATION_TIMEOUT_MS;
     const PROJECTILE_LIFETIME = ServerConfig.PROJECTILE_LIFETIME;
     const DISCONNECT_BROADCAST_DELAY = ServerConfig.DISCONNECT_BROADCAST_DELAY_MS;
     const DISCONNECT_TIMEOUT = ServerConfig.DISCONNECT_TIMEOUT_MS;

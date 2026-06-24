@@ -1,11 +1,15 @@
 /**
  * WebSocket Connection Wrapper with msgpack encoding
  * Based on Krunker.io's approach using msgpack for efficient binary communication
- * 
+ *
  * Provides a clean API for WebSocket communication with automatic msgpack encoding/decoding
  */
 
-import msgpack from 'msgpack-lite';
+import * as msgpack from 'msgpack-lite';
+import { ChildLogger } from '../Logger.js';
+import { TRIBES2_RECONNECT_INTERVAL } from '../config.js';
+
+const logger = new ChildLogger('WebSocketConnection');
 
 export interface ConnectionConfig {
   url: string;
@@ -22,13 +26,13 @@ export class WebSocketConnection {
   private ws: WebSocket | null = null;
   private config: ConnectionConfig;
   private reconnectAttempts: number = 0;
-  private reconnectTimer: NodeJS.Timeout | null = null;
+  private reconnectTimer: number | null = null;
   private isConnected: boolean = false;
   private messageQueue: any[] = [];
 
   constructor(config: ConnectionConfig) {
     this.config = {
-      reconnectInterval: 3000,
+      reconnectInterval: TRIBES2_RECONNECT_INTERVAL,
       maxReconnectAttempts: 5,
       ...config
     };
@@ -39,7 +43,7 @@ export class WebSocketConnection {
    */
   connect(url?: string): void {
     if (this.ws && (this.ws.readyState === WebSocket.CONNECTING || this.ws.readyState === WebSocket.OPEN)) {
-      console.warn('WebSocket already connected or connecting');
+      logger.warn('WebSocket already connected or connecting');
       return;
     }
 
@@ -48,7 +52,7 @@ export class WebSocketConnection {
       this.ws.binaryType = 'arraybuffer';
 
       this.ws.onopen = () => {
-        console.log('WebSocket connected');
+        logger.info('WebSocket connected');
         this.isConnected = true;
         this.reconnectAttempts = 0;
         
@@ -65,7 +69,7 @@ export class WebSocketConnection {
       };
 
       this.ws.onclose = (event) => {
-        console.log('WebSocket disconnected', event.code, event.reason);
+        logger.info(`WebSocket disconnected: ${event.code} - ${event.reason}`);
         this.isConnected = false;
         
         if (this.config.onDisconnect) {
@@ -75,7 +79,7 @@ export class WebSocketConnection {
         // Attempt reconnection
         if (this.reconnectAttempts < (this.config.maxReconnectAttempts || 5)) {
           this.reconnectAttempts++;
-          console.log(`Reconnection attempt ${this.reconnectAttempts} in ${this.config.reconnectInterval}ms`);
+          logger.info(`Reconnection attempt ${this.reconnectAttempts} in ${this.config.reconnectInterval}ms`);
           
           this.reconnectTimer = setTimeout(() => {
             this.connect();
@@ -84,7 +88,7 @@ export class WebSocketConnection {
       };
 
       this.ws.onerror = (error) => {
-        console.error('WebSocket error:', error);
+        logger.error('WebSocket error:', error);
         if (this.config.onError) {
           this.config.onError(new Error('WebSocket connection error'));
         }
@@ -103,26 +107,26 @@ export class WebSocketConnection {
                 this.config.onMessage(jsonData);
               }
             } catch (error) {
-              console.error('Error parsing JSON message:', error);
+              logger.error('Error parsing JSON message:', error);
               if (this.config.onError) {
                 this.config.onError(error as Error);
               }
             }
           } else if (data instanceof ArrayBuffer) {
             // Binary message - route to onBinaryMessage if available
-            console.log('Received binary message, onBinaryMessage:', !!this.config.onBinaryMessage);
+            logger.debug('Received binary message, onBinaryMessage:', !!this.config.onBinaryMessage);
             if (this.config.onBinaryMessage) {
               try {
                 this.config.onBinaryMessage(new Uint8Array(data));
               } catch (error) {
-                console.error('Error in onBinaryMessage:', error);
+                logger.error('Error in onBinaryMessage:', error);
                 if (this.config.onError) {
                   this.config.onError(error as Error);
                 }
               }
             } else {
               // Fallback: try msgpack, then pass raw binary
-              console.warn('No onBinaryMessage callback, trying msgpack decode');
+              logger.warn('No onBinaryMessage callback, trying msgpack decode');
               try {
                 const decoded = msgpack.decode(new Uint8Array(data));
                 if (this.config.onMessage) {
@@ -130,7 +134,7 @@ export class WebSocketConnection {
                 }
               } catch (msgpackError) {
                 // If msgpack fails, pass raw binary data
-                console.warn('msgpack decode failed, passing raw binary:', msgpackError);
+                logger.warn('msgpack decode failed, passing raw binary:', msgpackError);
                 if (this.config.onMessage) {
                   this.config.onMessage(new Uint8Array(data));
                 }
@@ -138,7 +142,7 @@ export class WebSocketConnection {
             }
           }
         } catch (error) {
-          console.error('Error processing message:', error);
+          logger.error('Error processing message:', error);
           if (this.config.onError) {
             this.config.onError(error as Error);
           }
@@ -146,7 +150,7 @@ export class WebSocketConnection {
       };
 
     } catch (error) {
-      console.error('Failed to create WebSocket:', error);
+      logger.error('Failed to create WebSocket:', error);
       if (this.config.onError) {
         this.config.onError(error as Error);
       }

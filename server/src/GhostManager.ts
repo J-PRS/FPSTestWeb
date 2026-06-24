@@ -72,7 +72,6 @@ export class GhostManager {
       // Check if we have space for at least ghost ID + state mask
       if (!stream.hasSpace(24)) break;
 
-      const initialByteLength = stream.getByteLength();
       
       // Pack ghost ID
       stream.writeInt(ghost.id, 16);
@@ -246,20 +245,20 @@ export class GhostManager {
     return {
       id,
       stateMask: 0,
-      packPosition: (stream: BitStream) => {},
-      packRotation: (stream: BitStream) => {},
-      packVelocity: (stream: BitStream) => {},
-      packAnimation: (stream: BitStream) => {},
-      packHealth: (stream: BitStream) => {},
-      packWeapon: (stream: BitStream) => {},
-      packFlags: (stream: BitStream) => {},
-      unpackPosition: (stream: BitStream) => {},
-      unpackRotation: (stream: BitStream) => {},
-      unpackVelocity: (stream: BitStream) => {},
-      unpackAnimation: (stream: BitStream) => {},
-      unpackHealth: (stream: BitStream) => {},
-      unpackWeapon: (stream: BitStream) => {},
-      unpackFlags: (stream: BitStream) => {},
+      packPosition: (_stream: BitStream) => {},
+      packRotation: (_stream: BitStream) => {},
+      packVelocity: (_stream: BitStream) => {},
+      packAnimation: (_stream: BitStream) => {},
+      packHealth: (_stream: BitStream) => {},
+      packWeapon: (_stream: BitStream) => {},
+      packFlags: (_stream: BitStream) => {},
+      unpackPosition: (_stream: BitStream) => {},
+      unpackRotation: (_stream: BitStream) => {},
+      unpackVelocity: (_stream: BitStream) => {},
+      unpackAnimation: (_stream: BitStream) => {},
+      unpackHealth: (_stream: BitStream) => {},
+      unpackWeapon: (_stream: BitStream) => {},
+      unpackFlags: (_stream: BitStream) => {},
     };
   }
 
@@ -290,7 +289,7 @@ export class ScopeManager {
    * Note: This method is not currently used - buildUpdateList uses direct ghost access
    * TODO: Implement spatial database for efficient distance-based filtering
    */
-  getInScopeGhosts(connectionId: string): Ghost[] {
+  getInScopeGhosts(_connectionId: string): Ghost[] {
     return [];
   }
 

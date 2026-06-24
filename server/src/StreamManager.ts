@@ -7,8 +7,8 @@
  */
 
 import { BitStream } from './BitStream.js';
-import { EventManager, Event } from './EventManager.js';
-import { GhostManager, ScopeManager } from './GhostManager.js';
+import { EventManager } from './EventManager.js';
+import { GhostManager } from './GhostManager.js';
 import { MoveManager } from './MoveManager.js';
 
 export interface StreamConfig {
@@ -109,7 +109,7 @@ export class StreamManager {
   /**
    * Send a packet for a specific connection
    */
-  private sendPacket(connectionId: string): void {
+  sendPacket(connectionId: string): void {
     // Don't send binary packets until join handshake is complete
     if (!this.joinHandshakeComplete.get(connectionId)) {
       return;
@@ -207,8 +207,8 @@ export class StreamManager {
     
     // Unpack header
     const messageType = stream.readInt(8);
-    const timestamp = stream.readInt(32);
-    const sequence = stream.readInt(16);
+    stream.readInt(32); // timestamp - unused
+    stream.readInt(16); // sequence - unused
     
     if (messageType === 1) {
       // Game data packet
