@@ -49,6 +49,7 @@ export class WebSocketConnection {
 
     try {
       this.ws = new WebSocket(url || this.config.url);
+      // Explicitly set binaryType to handle binary frames correctly
       this.ws.binaryType = 'arraybuffer';
 
       this.ws.onopen = () => {
@@ -100,6 +101,22 @@ export class WebSocketConnection {
           const data = event.data;
 
           if (typeof data === 'string') {
+            // Check if it's actually binary data received as string (starts with non-JSON character)
+            if (data.charCodeAt(0) < 32 || data.charCodeAt(0) > 126) {
+              // Binary data received as string - convert to Uint8Array and route to binary handler
+              logger.warn('Binary data received as string, converting to Uint8Array');
+              const uint8Array = new Uint8Array(data.length);
+              for (let i = 0; i < data.length; i++) {
+                uint8Array[i] = data.charCodeAt(i);
+              }
+              if (this.config.onBinaryMessage) {
+                this.config.onBinaryMessage(uint8Array);
+              } else {
+                logger.warn('No onBinaryMessage callback for binary data received as string');
+              }
+              return;
+            }
+
             // JSON message (join, joinAck, etc.)
             try {
               const jsonData = JSON.parse(data);

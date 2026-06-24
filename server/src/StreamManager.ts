@@ -1,7 +1,7 @@
 /**
  * Stream Manager - Coordinates all stream managers (Server)
  * Based on Tribes 2 networking model
- * 
+ *
  * Allocates packets and coordinates Event, Ghost, and Move managers
  * Manages bandwidth and packet transmission per connection
  */
@@ -10,6 +10,7 @@ import { BitStream } from './BitStream.js';
 import { EventManager } from './EventManager.js';
 import { GhostManager } from './GhostManager.js';
 import { MoveManager } from './MoveManager.js';
+import { Logger } from './Logger.js';
 
 export interface StreamConfig {
   maxPacketSize: number;
@@ -192,7 +193,21 @@ export class StreamManager {
   private unpackAcks(connectionId: string, stream: BitStream): void {
     if (!stream.hasData()) return;
 
+    // Check if we have enough data for ACK count (8 bits)
+    if (!stream.hasSpace(8)) {
+      Logger.warn(`Insufficient data for ACK count in packet from ${connectionId}`);
+      return;
+    }
+
     const ackCount = stream.readInt(8);
+
+    // Check if we have enough data for all ACKs (each ACK is 16 bits)
+    const acksBitsNeeded = ackCount * 16;
+    if (!stream.hasSpace(acksBitsNeeded)) {
+      Logger.warn(`Insufficient data for ${ackCount} ACKs in packet from ${connectionId}, need ${acksBitsNeeded} bits`);
+      return;
+    }
+
     for (let i = 0; i < ackCount; i++) {
       const seq = stream.readInt(16);
       this.eventManager.handleAck(connectionId, seq);
@@ -203,16 +218,28 @@ export class StreamManager {
    * Handle incoming packet for a connection
    */
   handlePacket(connectionId: string, data: Uint8Array): void {
-    const stream = BitStream.fromBuffer(data);
-    
-    // Unpack header
-    const messageType = stream.readInt(8);
-    stream.readInt(32); // timestamp - unused
-    stream.readInt(16); // sequence - unused
-    
-    if (messageType === 1) {
-      // Game data packet
-      this.handleGameDataPacket(connectionId, stream);
+    try {
+      const stream = BitStream.fromBuffer(data);
+
+      // Check if we have enough data for header (8 + 32 + 16 = 56 bits = 7 bytes)
+      if (!stream.hasSpace(56)) {
+        Logger.warn(`Insufficient data for packet header from ${connectionId}, packet size: ${data.length} bytes`);
+        return;
+      }
+
+      // Unpack header
+      const messageType = stream.readInt(8);
+      stream.readInt(32); // timestamp - unused
+      stream.readInt(16); // sequence - unused
+
+      if (messageType === 1) {
+        // Game data packet
+        this.handleGameDataPacket(connectionId, stream);
+      }
+    } catch (error) {
+      // Catch any BitStream overflow or other parsing errors
+      Logger.error(`Failed to handle packet from ${connectionId}: ${error}`);
+      // Don't crash the server, just log and continue
     }
   }
 
@@ -221,18 +248,34 @@ export class StreamManager {
    */
   private handleGameDataPacket(connectionId: string, stream: BitStream): void {
     // Unpack in the same order as packing
-    
+
     // 1. Move Manager
-    this.moveManager.unpack(connectionId, stream);
-    
+    try {
+      this.moveManager.unpack(connectionId, stream);
+    } catch (error) {
+      Logger.warn(`Failed to unpack moves from ${connectionId}: ${error}`);
+    }
+
     // 2. Event Manager
-    this.eventManager.unpack(connectionId, stream);
-    
+    try {
+      this.eventManager.unpack(connectionId, stream);
+    } catch (error) {
+      Logger.warn(`Failed to unpack events from ${connectionId}: ${error}`);
+    }
+
     // 2.5. ACKs (acknowledgments for guaranteed events)
-    this.unpackAcks(connectionId, stream);
-    
+    try {
+      this.unpackAcks(connectionId, stream);
+    } catch (error) {
+      Logger.warn(`Failed to unpack ACKs from ${connectionId}: ${error}`);
+    }
+
     // 3. Ghost Manager
-    this.ghostManager.unpack(connectionId, stream);
+    try {
+      this.ghostManager.unpack(connectionId, stream);
+    } catch (error) {
+      Logger.warn(`Failed to unpack ghosts from ${connectionId}: ${error}`);
+    }
   }
 
   /**
