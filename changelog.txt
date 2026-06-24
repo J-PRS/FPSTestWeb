@@ -1,5 +1,17 @@
 # Changelog
 
+## [2026-06-23] Tribes2-Style Networking Integration - Phase 64
+
+### Code Cleanliness - MessageHandler Refactoring
+- **Refactored MessageHandler for improved code cleanliness and maintainability**
+  - Extracted validateAndApplyPosition method to reduce duplication between handlePosition and handlePositionDelta
+  - Extracted processHit method from handleShot to improve readability
+  - Extracted validateProjectileDistance method for projectile collision validation
+  - Extracted calculateDamage method for damage calculation logic
+  - Extracted handlePlayerDeath method for death handling logic
+  - Location: server/src/MessageHandler.ts
+  - Benefits: Reduced code duplication, improved readability, better separation of concerns, easier testing
+
 ## [2026-06-23] Tribes2-Style Networking Integration - Phase 63
 
 ### Unit Test Improvements - BitStream Tests
