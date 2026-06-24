@@ -3,3 +3,8 @@ node_modules/
 dist/
 build/
 *.log
+
+# Rust
+target/
+**/*.rs.bk
+.cargo/config

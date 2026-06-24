@@ -1,16 +1,7 @@
 import * as THREE from 'three';
 import { Terrain } from './terrain.js';
-import { GRAVITY } from './config.js';
-
-const BOUNCE_Y        = 0.35;
-const FRICTION_XZ     = 0.80;
+import { GRAVITY, BOUNCE_Y, FRICTION_XZ, SHRINK_DUR, GREY_DUR, BASE_SPEED, EXTRA_SPEED, LIFE_BASE, LIFE_RAND } from './config.js';
 const BASE_CHUNK_COUNT = 20; // More chunks for players
-const BASE_SPEED      = 9.0;
-const EXTRA_SPEED     = 14.0;
-const LIFE_BASE       = 6.0;
-const LIFE_RAND       = 2.0;
-const SHRINK_DUR      = 0.5;
-const GREY_DUR        = 1.0;
 const TRAIL_INTERVAL  = 0.03;
 const TRAIL_LIFE      = 0.8;
 const TRAIL_GEO       = new THREE.SphereGeometry(1, 4, 4);

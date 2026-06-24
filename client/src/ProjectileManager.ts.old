@@ -1,0 +1,131 @@
+/**
+ * Projectile management
+ * Handles rockets, discs, and their lifecycle
+ */
+
+import * as THREE from 'three';
+import { Rocket } from './rocket.js';
+import { Disc } from './disc.js';
+import { Terrain } from './terrain.js';
+import { Ball } from './balls.js';
+import { Explosion } from './explosion.js';
+import { Implosion } from './implosion.js';
+import { GameState, ExplosionInfo } from './GameState.js';
+import { PENDING_ROCKET_TIMEOUT } from './config.js';
+
+export class ProjectileManager {
+  private gameState: GameState;
+  private terrain: Terrain;
+
+  constructor(gameState: GameState, terrain: Terrain) {
+    this.gameState = gameState;
+    this.terrain = terrain;
+  }
+
+  createRocket(origin: THREE.Vector3, dir: THREE.Vector3, playerVel: THREE.Vector3, scene: THREE.Scene): Rocket {
+    const r = new Rocket(scene, origin, dir, playerVel);
+    this.gameState.rockets.push(r);
+    this.gameState.pendingLocalRockets.push(r);
+    this.gameState.pendingRocketTimestamps.set(r, Date.now());
+    return r;
+  }
+
+  createDisc(origin: THREE.Vector3, dir: THREE.Vector3, playerVel: THREE.Vector3, scene: THREE.Scene): Disc {
+    const d = new Disc(scene, origin, dir, playerVel);
+    this.gameState.discs.push(d);
+    return d;
+  }
+
+  updateRockets(dt: number, scene: THREE.Scene, balls: Ball[]): void {
+    // Clean up stale pending rockets (no server response within timeout)
+    const now = Date.now();
+    for (let i = this.gameState.pendingLocalRockets.length - 1; i >= 0; i--) {
+      const r = this.gameState.pendingLocalRockets[i];
+      const timestamp = this.gameState.pendingRocketTimestamps.get(r) || 0;
+      if (now - timestamp > PENDING_ROCKET_TIMEOUT) {
+        this.gameState.pendingLocalRockets.splice(i, 1);
+        this.gameState.pendingRocketTimestamps.delete(r);
+      }
+    }
+
+    for (let i = this.gameState.rockets.length - 1; i >= 0; i--) {
+      const r = this.gameState.rockets[i];
+      
+      // Get remote player positions for collision (skip dead players)
+      const remotePlayerPositions = new Map<string, THREE.Vector3>();
+      this.gameState.remotePlayers.forEach((rp, playerId) => {
+        if ((rp as any).isDead) return;
+        remotePlayerPositions.set(playerId, rp.position);
+      });
+      
+      r.update(dt, this.terrain, balls, remotePlayerPositions);
+
+      if (r.exploded && !r.explosionProcessed) {
+        r.explosionProcessed = true;
+        this.gameState.addExplosion(new Explosion(scene, r.pos));
+      }
+
+      // Remove exploded rockets after a delay
+      if (r.exploded && r.explosionProcessed) {
+        this.gameState.rockets.splice(i, 1);
+        // Also remove from pending queue if still there
+        const pendingIndex = this.gameState.pendingLocalRockets.indexOf(r);
+        if (pendingIndex !== -1) {
+          this.gameState.pendingLocalRockets.splice(pendingIndex, 1);
+          this.gameState.pendingRocketTimestamps.delete(r);
+        }
+      }
+    }
+  }
+
+  updateDiscs(dt: number, scene: THREE.Scene, balls: Ball[]): void {
+    for (let i = this.gameState.discs.length - 1; i >= 0; i--) {
+      const d = this.gameState.discs[i];
+      
+      const remotePlayerPositions = new Map<string, THREE.Vector3>();
+      this.gameState.remotePlayers.forEach((rp, playerId) => {
+        if ((rp as any).isDead) return;
+        remotePlayerPositions.set(playerId, rp.position);
+      });
+      
+      d.update(dt, this.terrain, balls, remotePlayerPositions);
+
+      if (d.exploded && !d.explosionProcessed) {
+        d.explosionProcessed = true;
+        this.gameState.addImplosion(new Implosion(scene, d.pos));
+      }
+
+      // Remove exploded discs after a delay
+      if (d.exploded && d.explosionProcessed) {
+        this.gameState.discs.splice(i, 1);
+      }
+    }
+  }
+
+  linkLocalRocket(projectileId: string, localRocket: Rocket): void {
+    localRocket.serverProjectileId = projectileId;
+    this.gameState.localRocketById.set(projectileId, localRocket);
+    this.gameState.pendingRocketTimestamps.delete(localRocket);
+  }
+
+  explodeProjectile(projectileId: string): void {
+    const localRocket = this.gameState.localRocketById.get(projectileId);
+    if (localRocket) {
+      localRocket.explode();
+      this.gameState.localRocketById.delete(projectileId);
+      const pendingIndex = this.gameState.pendingLocalRockets.indexOf(localRocket);
+      if (pendingIndex !== -1) {
+        this.gameState.pendingLocalRockets.splice(pendingIndex, 1);
+        this.gameState.pendingRocketTimestamps.delete(localRocket);
+      }
+    }
+  }
+
+  cleanup(): void {
+    this.gameState.rockets = [];
+    this.gameState.discs = [];
+    this.gameState.pendingLocalRockets = [];
+    this.gameState.localRocketById.clear();
+    this.gameState.pendingRocketTimestamps.clear();
+  }
+}

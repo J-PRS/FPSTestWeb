@@ -1,8 +1,5 @@
 import * as THREE from 'three';
 
-const SHOCK_LIFE = 0.25;
-const FLASH_LIFE = 0.09;
-
 interface EP {
   mesh: THREE.Mesh;
   mat: THREE.MeshBasicMaterial;

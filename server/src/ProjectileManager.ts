@@ -39,6 +39,17 @@ export class ProjectileManager {
     }
   }
 
+  removeProjectilesByOwner(ownerId: string): string[] {
+    const removed: string[] = [];
+    for (const [id, projectile] of this.projectiles) {
+      if (projectile.ownerId === ownerId) {
+        removed.push(id);
+        this.projectiles.delete(id);
+      }
+    }
+    return removed;
+  }
+
   updateAll(dt: number, gravity: number, lifetime: number): string[] {
     const now = Date.now();
     const destroyed: string[] = [];

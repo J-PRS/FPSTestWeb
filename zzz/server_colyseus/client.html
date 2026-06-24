@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Colyseus FPS Test</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+            background: #1a1a1a;
+            color: #fff;
+        }
+        #game-container {
+            width: 800px;
+            height: 600px;
+            background: #2a2a2a;
+            position: relative;
+            border: 2px solid #444;
+        }
+        .player {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+        }
+        .player.local {
+            background: #00ff00;
+            border: 2px solid #fff;
+        }
+        .player.remote {
+            background: #ff0000;
+        }
+        #info {
+            margin-top: 20px;
+            padding: 10px;
+            background: #333;
+            border-radius: 5px;
+        }
+        #controls {
+            margin-top: 20px;
+        }
+        button {
+            padding: 10px 20px;
+            margin-right: 10px;
+            background: #444;
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #555;
+        }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+    <h1>Colyseus FPS Test</h1>
+    
+    <div id="game-container"></div>
+    
+    <div id="info">
+        <p>Status: <span id="status">Disconnected</span></p>
+        <p>Session ID: <span id="session-id">-</span></p>
+        <p>Players: <span id="player-count">0</span></p>
+    </div>
+    
+    <div id="controls">
+        <button id="connect-btn" onclick="connect()">Connect</button>
+        <button id="disconnect-btn" onclick="disconnect()" disabled>Disconnect</button>
+    </div>
+    
+    <div id="controls" style="margin-top: 10px;">
+        <p>Use WASD to move, mouse to look</p>
+    </div>
+
+    <script type="module">
+        import { Client } from 'https://cdn.jsdelivr.net/npm/colyseus.js@0.17.0/dist/colyseus.js';
+
+        let client;
+        let room;
+        let localPlayerElement = null;
+        const playerElements = new Map();
+
+        const container = document.getElementById('game-container');
+        const statusEl = document.getElementById('status');
+        const sessionIdEl = document.getElementById('session-id');
+        const playerCountEl = document.getElementById('player-count');
+        const connectBtn = document.getElementById('connect-btn');
+        const disconnectBtn = document.getElementById('disconnect-btn');
+
+        let localX = 400;
+        let localY = 300;
+        let keys = { w: false, a: false, s: false, d: false };
+
+        window.connect = async function() {
+            try {
+                statusEl.textContent = 'Connecting...';
+                client = new Client('http://localhost:2567');
+                room = await client.joinOrCreate('my_room');
+                
+                statusEl.textContent = 'Connected';
+                sessionIdEl.textContent = room.sessionId;
+                connectBtn.disabled = true;
+                disconnectBtn.disabled = false;
+
+                // Listen for state changes
+                room.state.players.onAdd((player, sessionId) => {
+                    console.log('Player added:', sessionId);
+                    updatePlayerCount();
+                    
+                    const el = document.createElement('div');
+                    el.className = sessionId === room.sessionId ? 'player local' : 'player remote';
+                    el.style.left = player.x + 'px';
+                    el.style.top = player.y + 'px';
+                    container.appendChild(el);
+                    playerElements.set(sessionId, el);
+                    
+                    if (sessionId === room.sessionId) {
+                        localPlayerElement = el;
+                        localX = player.x;
+                        localY = player.y;
+                    }
+                });
+
+                room.state.players.onRemove((player, sessionId) => {
+                    console.log('Player removed:', sessionId);
+                    updatePlayerCount();
+                    
+                    const el = playerElements.get(sessionId);
+                    if (el) {
+                        container.removeChild(el);
+                        playerElements.delete(sessionId);
+                    }
+                    
+                    if (sessionId === room.sessionId) {
+                        localPlayerElement = null;
+                    }
+                });
+
+                room.state.players.onChange((player, sessionId) => {
+                    const el = playerElements.get(sessionId);
+                    if (el && sessionId !== room.sessionId) {
+                        el.style.left = player.x + 'px';
+                        el.style.top = player.y + 'px';
+                    }
+                });
+
+                // Start game loop
+                requestAnimationFrame(gameLoop);
+
+            } catch (error) {
+                console.error('Connection error:', error);
+                statusEl.textContent = 'Error: ' + error.message;
+            }
+        };
+
+        window.disconnect = function() {
+            if (room) {
+                room.leave();
+                room = null;
+            }
+            if (client) {
+                client = null;
+            }
+            
+            // Clear all players
+            playerElements.forEach((el) => container.removeChild(el));
+            playerElements.clear();
+            localPlayerElement = null;
+            
+            statusEl.textContent = 'Disconnected';
+            sessionIdEl.textContent = '-';
+            connectBtn.disabled = false;
+            disconnectBtn.disabled = true;
+            updatePlayerCount();
+        };
+
+        function updatePlayerCount() {
+            playerCountEl.textContent = room ? room.state.players.size : 0;
+        }
+
+        function gameLoop() {
+            if (!room || !localPlayerElement) {
+                requestAnimationFrame(gameLoop);
+                return;
+            }
+
+            // Handle movement
+            const speed = 5;
+            if (keys.w) localY -= speed;
+            if (keys.s) localY += speed;
+            if (keys.a) localX -= speed;
+            if (keys.d) localX += speed;
+
+            // Clamp to container
+            localX = Math.max(10, Math.min(790, localX));
+            localY = Math.max(10, Math.min(590, localY));
+
+            // Update local player visual
+            localPlayerElement.style.left = localX + 'px';
+            localPlayerElement.style.top = localY + 'px';
+
+            // Send to server
+            room.send('move', {
+                x: localX,
+                y: localY,
+                z: 0,
+                yaw: 0,
+                pitch: 0
+            });
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Keyboard input
+        document.addEventListener('keydown', (e) => {
+            const key = e.key.toLowerCase();
+            if (keys.hasOwnProperty(key)) {
+                keys[key] = true;
+            }
+        });
+
+        document.addEventListener('keyup', (e) => {
+            const key = e.key.toLowerCase();
+            if (keys.hasOwnProperty(key)) {
+                keys[key] = false;
+            }
+        });
+    </script>
+</body>
+</html>

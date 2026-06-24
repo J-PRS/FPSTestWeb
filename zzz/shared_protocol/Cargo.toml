@@ -1,0 +1,7 @@
+[package]
+name = "shared_protocol"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+naia-shared = "0.25"

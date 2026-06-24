@@ -1,10 +1,13 @@
 import * as THREE from 'three';
+import {
+  TERRAIN_SIZE, TERRAIN_SUBDIV, TERRAIN_HEIGHT_SCALE, TERRAIN_WORLD_SCALE, TERRAIN_HEIGHTMAP_DIVISOR
+} from './config.js';
 
-const SIZE = 500.0;
-const SUBDIV = 100;
+const SIZE = TERRAIN_SIZE;
+const SUBDIV = TERRAIN_SUBDIV;
 const STEP = SIZE / SUBDIV;
-const HSCALE = 125.0;
-const HM_WORLD_SCALE = 1500.0;
+const HSCALE = TERRAIN_HEIGHT_SCALE;
+const HM_WORLD_SCALE = TERRAIN_WORLD_SCALE;
 
 let hmData: Uint8ClampedArray | null = null;
 let hmSize = 0;
@@ -29,7 +32,7 @@ export async function loadHeightmap(url: string): Promise<void> {
 
 function hmSample(x: number, z: number): number {
   const idx = (z * hmSize + x) * 4;
-  return hmData![idx] / 255.0; // R channel 0..1
+  return hmData![idx] / TERRAIN_HEIGHTMAP_DIVISOR; // R channel 0..1
 }
 
 function sampleHeightmap(wx: number, wz: number): number {

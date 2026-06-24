@@ -1,0 +1,106 @@
+/**
+ * Lighting setup and management
+ * Handles ambient, directional, and hemisphere lights with Tribes 2 aesthetic
+ */
+
+import * as THREE from 'three';
+import { AtmosphericSky } from './atmosphericSky.js';
+import { VolumetricClouds } from './volumetricClouds.js';
+import {
+  AMBIENT_COLOR,
+  AMBIENT_INTENSITY,
+  SUN_COLOR,
+  SUN_INTENSITY,
+  SHADOW_MAP_SIZE,
+  SHADOW_CAMERA_NEAR,
+  SHADOW_CAMERA_FAR,
+  SHADOW_CAMERA_SIZE,
+  HEMI_SKY_COLOR,
+  HEMI_GROUND_COLOR,
+  HEMI_INTENSITY,
+  SKY_TURBIDITY,
+  SKY_RAYLEIGH,
+  SKY_MIE_COEFFICIENT,
+  SKY_MIE_DIRECTIONAL_G,
+  SKY_SUN_INTENSITY,
+  CLOUD_COUNT,
+  CLOUD_DENSITY,
+  CLOUD_WIND_SPEED,
+  CLOUD_MIN_HEIGHT,
+  CLOUD_MAX_HEIGHT,
+  CLOUD_SPREAD_RADIUS
+} from './config.js';
+
+export class Lighting {
+  private ambient: THREE.AmbientLight;
+  private sun: THREE.DirectionalLight;
+  private hemi: THREE.HemisphereLight;
+  private atmosphericSky: AtmosphericSky;
+  private volumetricClouds: VolumetricClouds;
+
+  constructor(scene: THREE.Scene) {
+    // Atmospheric Sky
+    this.atmosphericSky = new AtmosphericSky(scene, {
+      turbidity: SKY_TURBIDITY,
+      rayleigh: SKY_RAYLEIGH,
+      mieCoefficient: SKY_MIE_COEFFICIENT,
+      mieDirectionalG: SKY_MIE_DIRECTIONAL_G,
+      sunIntensity: SKY_SUN_INTENSITY,
+    });
+
+    // Volumetric Clouds
+    this.volumetricClouds = new VolumetricClouds(scene, {
+      count: CLOUD_COUNT,
+      cloudColor: new THREE.Color(0xffffff),
+      cloudDensity: CLOUD_DENSITY,
+      windSpeed: CLOUD_WIND_SPEED,
+      windDirection: new THREE.Vector3(1, 0, 0.1),
+      minHeight: CLOUD_MIN_HEIGHT,
+      maxHeight: CLOUD_MAX_HEIGHT,
+      spreadRadius: CLOUD_SPREAD_RADIUS,
+    });
+
+    // Ambient light (warm brown fill)
+    this.ambient = new THREE.AmbientLight(AMBIENT_COLOR, AMBIENT_INTENSITY);
+    scene.add(this.ambient);
+
+    // Directional light (bright warm sun)
+    this.sun = new THREE.DirectionalLight(SUN_COLOR, SUN_INTENSITY);
+    this.sun.castShadow = true;
+    this.sun.shadow.mapSize.set(SHADOW_MAP_SIZE, SHADOW_MAP_SIZE);
+    this.sun.shadow.camera.near = SHADOW_CAMERA_NEAR;
+    this.sun.shadow.camera.far = SHADOW_CAMERA_FAR;
+    this.sun.shadow.camera.left = -SHADOW_CAMERA_SIZE;
+    this.sun.shadow.camera.right = SHADOW_CAMERA_SIZE;
+    this.sun.shadow.camera.top = SHADOW_CAMERA_SIZE;
+    this.sun.shadow.camera.bottom = -SHADOW_CAMERA_SIZE;
+    scene.add(this.sun);
+
+    // Sync sun position with atmospheric sky
+    this.sun.position.copy(this.atmosphericSky.getSunPosition());
+    this.volumetricClouds.setSunDirection(this.atmosphericSky.getSunDirection());
+
+    // Hemisphere light (blue sky top, warm earth bounce)
+    this.hemi = new THREE.HemisphereLight(HEMI_SKY_COLOR, HEMI_GROUND_COLOR, HEMI_INTENSITY);
+    scene.add(this.hemi);
+  }
+
+  update(dt: number): void {
+    this.volumetricClouds.update(dt);
+  }
+
+  getSunPosition(): THREE.Vector3 {
+    return this.sun.position.clone();
+  }
+
+  getSunDirection(): THREE.Vector3 {
+    return this.atmosphericSky.getSunDirection();
+  }
+
+  dispose(): void {
+    this.ambient.dispose();
+    this.sun.dispose();
+    this.hemi.dispose();
+    this.volumetricClouds.dispose();
+  }
+}

@@ -1,0 +1,118 @@
+/**
+ * Entity management
+ * Handles balls, debris, explosions, and other game entities
+ */
+
+import * as THREE from 'three';
+import { Ball } from './balls.js';
+import { BallDebris } from './debris.js';
+import { Explosion } from './explosion.js';
+import { Implosion } from './implosion.js';
+import { PlayerDebris } from './PlayerDebris.js';
+import { GameState } from './GameState.js';
+import { BALL_SPAWN_INTERVAL, BALL_MAX } from './config.js';
+
+export class EntityManager {
+  private gameState: GameState;
+
+  constructor(gameState: GameState) {
+    this.gameState = gameState;
+  }
+
+  updateBalls(dt: number, scene: THREE.Scene): void {
+    this.gameState.ballTimer += dt;
+    if (this.gameState.ballTimer >= BALL_SPAWN_INTERVAL && this.gameState.balls.length < BALL_MAX) {
+      this.gameState.ballTimer = 0;
+      const b = new Ball(scene);
+      this.gameState.balls.push(b);
+    }
+
+    for (let i = this.gameState.balls.length - 1; i >= 0; i--) {
+      const b = this.gameState.balls[i];
+      b.update(dt);
+      if (b.shouldRemove) {
+        this.gameState.balls.splice(i, 1);
+      }
+    }
+  }
+
+  updateDebris(dt: number): void {
+    for (let i = this.gameState.debrisList.length - 1; i >= 0; i--) {
+      const d = this.gameState.debrisList[i];
+      d.update(dt);
+      if (d.shouldRemove) {
+        this.gameState.debrisList.splice(i, 1);
+      }
+    }
+  }
+
+  updatePlayerDebris(dt: number): void {
+    for (let i = this.gameState.playerDebrisList.length - 1; i >= 0; i--) {
+      const d = this.gameState.playerDebrisList[i];
+      d.update(dt);
+      if (d.shouldRemove) {
+        this.gameState.playerDebrisList.splice(i, 1);
+      }
+    }
+  }
+
+  updateExplosions(dt: number, scene: THREE.Scene): void {
+    for (let i = this.gameState.explosions.length - 1; i >= 0; i--) {
+      const e = this.gameState.explosions[i];
+      e.update(dt);
+      if (e.shouldRemove) {
+        this.gameState.explosions.splice(i, 1);
+      }
+    }
+  }
+
+  updateImplosions(dt: number, scene: THREE.Scene): void {
+    for (let i = this.gameState.implosions.length - 1; i >= 0; i--) {
+      const e = this.gameState.implosions[i];
+      e.update(dt);
+      if (e.shouldRemove) {
+        this.gameState.implosions.splice(i, 1);
+      }
+    }
+  }
+
+  processExplosion(pos: THREE.Vector3, radius: number, force: number, shooterId?: string): void {
+    const exp = new Explosion(this.gameState.effects?.scene || new THREE.Scene(), pos);
+    this.gameState.addExplosion(exp);
+
+    // Track explosion for death impulse calculation
+    this.gameState.recentExplosions.push({
+      position: pos.clone(),
+      force,
+      timestamp: Date.now(),
+      shooterId: shooterId || ''
+    });
+
+    // Clean up old explosion info (older than 5 seconds)
+    const now = Date.now();
+    this.gameState.recentExplosions = this.gameState.recentExplosions.filter(e => now - e.timestamp < 5000);
+  }
+
+  spawnBallDebris(pos: THREE.Vector3, count: number, scene: THREE.Scene): void {
+    for (let i = 0; i < count; i++) {
+      const d = new BallDebris(scene, pos);
+      this.gameState.debrisList.push(d);
+    }
+  }
+
+  spawnPlayerDebris(pos: THREE.Vector3, count: number, scene: THREE.Scene): void {
+    for (let i = 0; i < count; i++) {
+      const d = new PlayerDebris(scene, pos);
+      this.gameState.playerDebrisList.push(d);
+    }
+  }
+
+  cleanup(): void {
+    this.gameState.balls = [];
+    this.gameState.debrisList = [];
+    this.gameState.playerDebrisList = [];
+    this.gameState.explosions = [];
+    this.gameState.implosions = [];
+    this.gameState.recentExplosions = [];
+  }
+}
