@@ -10,7 +10,6 @@ const TRAIL_INTERVAL = 0.02;
 const TRAIL_EMISSION = 3;
 const TRAIL_LIFE_MIN = 0.8;
 const TRAIL_LIFE_MAX = 1.2;
-const TRAIL_SPEED = 10;
 const TRAIL_SPREAD = 0.2;
 const TRAIL_GEO = new THREE.SphereGeometry(1, 4, 4);
 
@@ -156,9 +155,7 @@ export class Disc {
     const closestZ = this.prevPos.z + dz * tClamped;
 
     // Vector from closest point to player
-    const vx = closestX - playerPos.x;
     const vy = closestY - playerPos.y;
-    const vz = closestZ - playerPos.z;
 
     // Clamp Y to capsule height
     const clampedY = Math.max(-halfHeight, Math.min(halfHeight, vy));

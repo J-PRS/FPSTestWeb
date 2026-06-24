@@ -14,17 +14,6 @@ import { PerformanceMonitor } from './PerformanceMonitor.js';
 import type { InputMessage } from './MessageTypes.js';
 
 /**
- * Validate playerId format to prevent injection attacks
- * PlayerId should be alphanumeric with reasonable length
- */
-function isValidPlayerId(playerId: string): boolean {
-  if (!playerId || typeof playerId !== 'string') return false;
-  if (playerId.length < 1 || playerId.length > 50) return false;
-  // Allow alphanumeric, underscore, hyphen
-  return /^[a-zA-Z0-9_-]+$/.test(playerId);
-}
-
-/**
  * Validate numeric value to prevent NaN/Infinity attacks
  */
 function isValidNumber(value: number): boolean {
@@ -39,10 +28,7 @@ function isValidVector(vec: { x: number; y: number; z: number }): boolean {
 }
 
 // WebSocket ready states
-const WS_READY_STATE_CONNECTING = 0;
 const WS_READY_STATE_OPEN = 1;
-const WS_READY_STATE_CLOSING = 2;
-const WS_READY_STATE_CLOSED = 3;
 
 export class MessageHandler {
   private positionValidator: PositionValidator;
@@ -59,14 +45,14 @@ export class MessageHandler {
     positionValidator: PositionValidator,
     performanceMonitor?: PerformanceMonitor
   ) {
+    this.logger = new ChildLogger('MessageHandler');
     try {
-      this.logger = new ChildLogger('MessageHandler');
       this.positionValidator = positionValidator;
       this.terrain = new SimpleTerrain();
       this.rateLimiter = new RateLimiter();
       this.performanceMonitor = performanceMonitor;
     } catch (error) {
-      console.error(`MessageHandler initialization error: ${error instanceof Error ? error.message : String(error)}`);
+      this.logger.error(`MessageHandler initialization error: ${error instanceof Error ? error.message : String(error)}`);
       throw error;
     }
   }
@@ -160,7 +146,7 @@ export class MessageHandler {
     const player = this.playerManager.getPlayer(playerId);
     if (!player) return;
 
-    const { sequenceNumber, timestamp, input } = data;
+    const { sequenceNumber, input } = data;
 
     // Get or create movement controller for this player
     let movementController = this.movementControllers.get(playerId);
@@ -408,7 +394,7 @@ export class MessageHandler {
       return;
     }
 
-    const { targetId, timestamp, position, velocity, projectileId, directHit } = data;
+    const { targetId, timestamp, position, velocity, projectileId } = data;
 
     // Validate position/velocity data to prevent NaN/Infinity attacks
     if (position && !isValidVector(position)) {
@@ -472,6 +458,8 @@ export class MessageHandler {
         }
 
         // Server-side collision validation: check if projectile is actually close to target
+        // Shooter advantage: Accept false positives over false negatives
+        // Only reject clearly impossible hits (projectile on opposite side of map)
         if (projectileId) {
           const projectile = this.projectileManager.getProjectile(projectileId);
           if (projectile) {
@@ -479,9 +467,10 @@ export class MessageHandler {
             const dy = projectile.position.y - targetPos.y;
             const dz = projectile.position.z - targetPos.z;
             const projectileDistance = Math.sqrt(dx*dx + dy*dy + dz*dz);
-            
-            // Reject hits where projectile is too far from target (growing projectile max radius ~5m)
-            const MAX_HIT_DISTANCE = 10.0; // Allow some margin for network latency
+
+            // Reject only clearly impossible hits (very large distance)
+            // Increased threshold to implement shooter advantage - trust client's visual perspective
+            const MAX_HIT_DISTANCE = 50.0; // Very permissive to avoid false negatives
             if (projectileDistance > MAX_HIT_DISTANCE) {
               this.logger.warn(`Rejected hit from ${playerId} on ${targetId}: projectile too far (${projectileDistance.toFixed(1)}m > ${MAX_HIT_DISTANCE}m)`);
               return;
@@ -717,7 +706,7 @@ export class MessageHandler {
   }
 
   private handleCreateRoom(playerId: string, message: any): void {
-    const { roomId, name, maxPlayers, gameMode } = message;
+    const { roomId } = message;
     
     if (!roomId || typeof roomId !== 'string') {
       this.logger.warn(`Invalid roomId from ${playerId}`);

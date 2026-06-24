@@ -209,7 +209,6 @@ export class MovementController {
       this.state.vel.y = -MOVEMENT_CONFIG.terminalVelocity;
     }
 
-    const anyGrounded = this.state.onGround || this.groundedBufferedByTime || this.groundedBufferedByDistance;
     const inputDir = this.getInputDirection();
 
     // Ground movement
@@ -271,7 +270,7 @@ export class MovementController {
     );
   }
 
-  private vectorShiftLateral(initialVector: { x: number; y: number; z: number }, shiftVector: { x: number; y: number; z: number }, preserveY: boolean): { x: number; y: number; z: number } {
+  private vectorShiftLateral(initialVector: { x: number; y: number; z: number }, shiftVector: { x: number; y: number; z: number }, _preserveY: boolean): { x: number; y: number; z: number } {
     const startingY = initialVector.y;
     const initialXZ = { x: initialVector.x, y: 0, z: initialVector.z };
     

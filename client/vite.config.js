@@ -47,7 +47,7 @@ export default defineConfig({
           proxy.on('proxyReq', (proxyReq, req, _res) => {
             console.log('[Vite Proxy] Proxying WebSocket request:', req.url);
           });
-          proxy.on('proxyReqWs', (proxyReq, req, socket, options, head) => {
+          proxy.on('proxyReqWs', (proxyReq, req, _socket, _options, _head) => {
             console.log('[Vite Proxy] Proxying WebSocket upgrade:', req.url);
           });
         },

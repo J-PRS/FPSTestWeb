@@ -19,7 +19,7 @@ export class SimpleTerrain {
    * For now, we'll use a simple procedural heightmap that matches the client's Vortex terrain
    * Full implementation would use sharp or pngjs to load actual PNG files
    */
-  async loadHeightmap(path: string): Promise<void> {
+  async loadHeightmap(_path: string): Promise<void> {
     // For now, generate a procedural heightmap that approximates the Vortex terrain
     // This is a placeholder - full implementation would load the actual PNG file
     this.heightmap = this.generateProceduralHeightmap();

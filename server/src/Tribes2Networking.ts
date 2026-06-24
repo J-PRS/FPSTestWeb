@@ -7,8 +7,8 @@ import { StreamManager } from './StreamManager.js';
 import { EventManager, Event, PositionEvent, ShotEvent } from './EventManager.js';
 import { GhostManager, ScopeManager } from './GhostManager.js';
 import { MoveManager } from './MoveManager.js';
-import { BitStream } from './BitStream.js';
 import { Logger } from './Logger.js';
+import { ServerConfig } from './config.js';
 
 export class Tribes2Networking {
   private streamManagers: Map<string, StreamManager> = new Map();
@@ -52,9 +52,9 @@ export class Tribes2Networking {
       ghostManager,
       moveManager,
       {
-        maxPacketSize: 1400,
-        packetsPerSecond: 30,
-        maxBytesPerSecond: 42000
+        maxPacketSize: ServerConfig.TRIBES2_MAX_PACKET_SIZE,
+        packetsPerSecond: ServerConfig.TRIBES2_PACKETS_PER_SECOND,
+        maxBytesPerSecond: ServerConfig.TRIBES2_MAX_BYTES_PER_SECOND
       },
       onSend
     );
@@ -138,7 +138,7 @@ export class Tribes2Networking {
   setControlObjectProvider(callback: ((connectionId: string) => any) | null): void {
     this.getControlObjectCallback = callback;
     // Update all existing stream managers
-    for (const [connectionId, streamManager] of this.streamManagers) {
+    for (const [, streamManager] of this.streamManagers) {
       streamManager.setControlObjectProvider(callback);
     }
   }

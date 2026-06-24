@@ -4,7 +4,6 @@
  */
 
 import { ChildLogger } from './Logger.js';
-import { StateSnapshot } from './StateSnapshot.js';
 
 const logger = new ChildLogger('WorkerNetworkManager');
 

@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { EventManager, PositionEvent, ShotEvent, JumpEvent, JetpackEvent, SkiEvent, DeathEvent } from './EventManager.js';
+import { EventManager, PositionEvent, JumpEvent, JetpackEvent, SkiEvent, DeathEvent } from './EventManager.js';
 import { BitStream } from './BitStream.js';
 
 describe('EventManager', () => {
@@ -114,7 +114,7 @@ describe('EventManager', () => {
   describe('onEvent callback', () => {
     it('should call callback when event is processed', () => {
       let callbackCalled = false;
-      eventManager.onEvent((connId: string, event: any) => {
+      eventManager.onEvent((connId: string, _event: any) => {
         callbackCalled = true;
         expect(connId).toBe('conn1');
       });

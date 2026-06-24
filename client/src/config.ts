@@ -165,4 +165,11 @@ export const TERRAIN_HEIGHTMAP_DIVISOR = 255.0; // Heightmap value divisor
 
 // Networking backend configuration
 // Option: 'tribes2' (Tribes2-style with bit-packing for LAN-like gameplay)
-export const NETWORK_BACKEND: 'tribes2' = 'tribes2';
+export const NETWORK_BACKEND = 'tribes2' as const;
+
+// Tribes2 networking constants (per multiplayer specification)
+export const TRIBES2_MAX_PACKET_SIZE = 1400; // MTU-safe packet size
+export const TRIBES2_PACKETS_PER_SECOND = 30; // Packets per second (tick rate)
+export const TRIBES2_MAX_BYTES_PER_SECOND = 42000; // Bandwidth limit per player
+export const TRIBES2_RECONNECT_INTERVAL = 3000; // WebSocket reconnection interval (ms)
+

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { Terrain } from './terrain.js';
-import { GRAVITY, JET_FORCE_UP, JET_FORCE_DIR, MAX_ENERGY, JET_DRAIN, JET_CHARGE, FIRE_RATE, DISC_RATE } from './config.js';
-import { MovementController, MovementState, MovementInput, MOVEMENT_CONFIG } from './movement.js';
+import { JET_FORCE_UP, JET_FORCE_DIR, MAX_ENERGY, JET_DRAIN, JET_CHARGE, FIRE_RATE, DISC_RATE } from './config.js';
+import { MovementController, MovementState } from './movement.js';
 import { PlayerModel, AnimationState } from './PlayerModel.js';
 
 export interface FireEvent {

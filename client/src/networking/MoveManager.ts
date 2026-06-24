@@ -108,7 +108,7 @@ export class MoveManager {
       const yaw = stream.readFloatRanged(-Math.PI, Math.PI, 16);
       const pitch = stream.readFloatRanged(-Math.PI / 2, Math.PI / 2, 16);
       
-      const move: Move = {
+      const _move: Move = {
         sequence: seq,
         timestamp,
         input: { forward, right, jump, ski },

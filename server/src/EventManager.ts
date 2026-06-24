@@ -60,7 +60,7 @@ export class PositionEvent implements Event {
     this.timestamp = relativeTimestamp + (Date.now() - 60000);
   }
 
-  process(connectionId: string): void {
+  process(_connectionId: string): void {
     // Server-side processing - forward to MessageHandler
     Logger.debug(`Position event from ${this.playerId}`);
   }
@@ -98,7 +98,7 @@ export class ShotEvent implements Event {
     this.timestamp = relativeTimestamp + (Date.now() - 60000);
   }
 
-  process(connectionId: string): void {
+  process(_connectionId: string): void {
     // Server-side processing - forward to MessageHandler
     Logger.debug(`Shot event from ${this.playerId} at ${this.targetId}`);
   }
@@ -127,7 +127,7 @@ export class JumpEvent implements Event {
     this.timestamp = relativeTimestamp + (Date.now() - 60000);
   }
 
-  process(connectionId: string): void {
+  process(_connectionId: string): void {
     Logger.debug(`Jump event from ${this.playerId}`);
   }
 }
@@ -159,7 +159,7 @@ export class JetpackEvent implements Event {
     this.timestamp = relativeTimestamp + (Date.now() - 60000);
   }
 
-  process(connectionId: string): void {
+  process(_connectionId: string): void {
     Logger.debug(`Jetpack event from ${this.playerId}: ${this.active}`);
   }
 }
@@ -191,7 +191,7 @@ export class SkiEvent implements Event {
     this.timestamp = relativeTimestamp + (Date.now() - 60000);
   }
 
-  process(connectionId: string): void {
+  process(_connectionId: string): void {
     Logger.debug(`Ski event from ${this.playerId}: ${this.active}`);
   }
 }
@@ -227,7 +227,7 @@ export class DeathEvent implements Event {
     this.timestamp = relativeTimestamp + (Date.now() - 60000);
   }
 
-  process(connectionId: string): void {
+  process(_connectionId: string): void {
     Logger.debug(`Death event: ${this.playerId} killed by ${this.killerId}`);
   }
 }

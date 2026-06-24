@@ -1,6 +1,5 @@
 import { INetworkAdapter } from './INetworkAdapter.js';
 import { ChildLogger } from '../Logger.js';
-import { Tribes2Adapter } from './Tribes2Adapter.js';
 
 const logger = new ChildLogger('NetworkManager');
 

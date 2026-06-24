@@ -2,7 +2,7 @@
  * Unit tests for PerformanceMonitor
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { PerformanceMonitor } from './PerformanceMonitor.js';
 
 describe('PerformanceMonitor', () => {

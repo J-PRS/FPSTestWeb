@@ -157,7 +157,7 @@ export class MoveManager {
    * Validate a move
    * Returns true if move is valid
    */
-  private validateMove(move: Move, controlObject: any): boolean {
+  private validateMove(move: Move, _controlObject: any): boolean {
     // Basic validation
     if (move.input.forward < -127 || move.input.forward > 127) return false;
     if (move.input.right < -127 || move.input.right > 127) return false;

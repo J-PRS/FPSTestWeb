@@ -47,4 +47,9 @@ export const ServerConfig = {
 
   // Logging
   LOG_LEVEL: process.env.LOG_LEVEL ? parseInt(process.env.LOG_LEVEL) : 2, // INFO level
+
+  // Tribes2 networking constants (per multiplayer specification)
+  TRIBES2_MAX_PACKET_SIZE: 1400, // MTU-safe packet size
+  TRIBES2_PACKETS_PER_SECOND: 30, // Packets per second (tick rate)
+  TRIBES2_MAX_BYTES_PER_SECOND: 42000, // Bandwidth limit per player
 } as const;

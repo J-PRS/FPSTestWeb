@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { IMPLOSION_LIFE } from './config.js';
 
 interface IP {
   mesh: THREE.Mesh;

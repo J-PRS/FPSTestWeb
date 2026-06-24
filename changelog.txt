@@ -1,5 +1,58 @@
 # Changelog
 
+## [2026-06-23] Tribes2-Style Networking Integration - Phase 63
+
+### Unit Test Improvements - BitStream Tests
+- **Added comprehensive unit tests for BitStream per multiplayer specification**
+  - Created BitStream.test.ts with full test coverage
+  - Tests for basic bit operations, integer/float/string operations, boolean operations
+  - Tests for buffer operations, position tracking, capacity management
+  - Tests for complex serialization (player position data)
+  - Location: server/src/BitStream.test.ts
+  - Benefits: Per specification requirement for BitStream serialization/deserialization tests
+
+## [2026-06-23] Tribes2-Style Networking Integration - Phase 62
+
+### Tech Debt Reduction - TypeScript Lint Error Fixes
+- **Fixed TypeScript lint errors in WebSocketConnection.ts**
+  - Added msgpack-lite type declaration file (msgpack-lite.d.ts)
+  - Changed NodeJS.Timeout to number for browser compatibility
+  - Location: client/src/networking/msgpack-lite.d.ts, client/src/networking/WebSocketConnection.ts
+  - Benefits: Clean TypeScript compilation, browser-compatible types
+
+## [2026-06-23] Tribes2-Style Networking Integration - Phase 61
+
+### Tech Debt Reduction - Configuration Centralization
+- **Centralized Tribes2 networking constants to config files**
+  - Added TRIBES2_MAX_PACKET_SIZE, TRIBES2_PACKETS_PER_SECOND, TRIBES2_MAX_BYTES_PER_SECOND, TRIBES2_RECONNECT_INTERVAL to client config.ts
+  - Added TRIBES2_MAX_PACKET_SIZE, TRIBES2_PACKETS_PER_SECOND, TRIBES2_MAX_BYTES_PER_SECOND to server config.ts
+  - Updated Tribes2Adapter to use centralized constants from config.ts
+  - Updated WebSocketConnection to use TRIBES2_RECONNECT_INTERVAL from config.ts
+  - Updated Tribes2Networking to use ServerConfig constants
+  - Location: client/src/config.ts, client/src/networking/Tribes2Adapter.ts, client/src/networking/WebSocketConnection.ts, server/src/config.ts, server/src/Tribes2Networking.ts
+  - Benefits: Single source of truth, easier tuning, reduced magic numbers, per multiplayer specification
+
+## [2026-06-23] Tribes2-Style Networking Integration - Phase 60
+
+### Tech Debt Reduction - Logging Improvements
+- **Replaced console.log with structured logging in WebSocketConnection.ts**
+  - Added ChildLogger import and logger instance
+  - Replaced all console.log calls with logger.info
+  - Replaced all console.error calls with logger.error
+  - Replaced all console.warn calls with logger.warn
+  - Added logger.debug for binary message routing
+  - Location: client/src/networking/WebSocketConnection.ts
+  - Benefits: Consistent logging, better debugging, structured log output
+
+## [2026-06-23] Tribes2-Style Networking Integration - Phase 59
+
+### Server Crash Fix
+- **Fixed server crash on startup due to circular callback wiring in StreamManager**
+  - Deferred EventManager.setAckCallback wiring using setTimeout to avoid circular dependency
+  - Server now starts successfully without initialization errors
+  - Location: server/src/StreamManager.ts
+  - Benefits: Server stability, proper initialization order
+
 ## [2026-06-23] Tribes2-Style Networking Integration - Phase 58
 
 ### Binary Message Routing Fix (Complete)
@@ -108,6 +161,29 @@
   - ACKs sent in every packet after EventManager data
   - Location: server/src/EventManager.ts, server/src/StreamManager.ts, client/src/networking/EventManager.ts, client/src/networking/StreamManager.ts
   - Benefits: Guaranteed events now have actual ACK transmission over network, enabling proper retransmission
+
+### Shooter Advantage Hit Validation
+- **Increased hit validation threshold to implement shooter advantage**
+  - Changed MAX_HIT_DISTANCE from 10m to 50m in MessageHandler
+  - Only rejects clearly impossible hits (projectile on opposite side of map)
+  - Trusts client's visual perspective for hit detection
+  - Location: server/src/MessageHandler.ts
+  - Benefits: Accepts false positives over false negatives per specification (WYSIWYG hit detection)
+
+### Logging Cleanup
+- **Replaced console.log with logger in WebSocketConnection and main.ts**
+  - Changed reconnection attempt log to logger.info
+  - Changed binary message log to logger.debug
+  - Changed snapshot functions log to logger.info
+  - Location: client/src/networking/WebSocketConnection.ts, client/src/main.ts
+  - Benefits: Consistent structured logging throughout codebase
+- **Replaced console.error with Logger in server WebSocketConnection and MessageHandler**
+  - Changed send error logs to Logger.error
+  - Changed binary send error log to Logger.error
+  - Changed message handling error log to Logger.error
+  - Changed initialization error log to logger.error
+  - Location: server/src/WebSocketConnection.ts, server/src/MessageHandler.ts
+  - Benefits: Consistent structured logging on server side
 
 ## [2026-06-23] Tribes2-Style Networking Integration - Phase 55
 
