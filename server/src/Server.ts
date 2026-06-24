@@ -267,8 +267,12 @@ class Server {
         Logger.error('Failed to parse JSON message', e);
       }
     } else {
-      // Binary message - route to Tribes2Networking
-      this.tribes2Networking.handlePacket(playerId, new Uint8Array(data));
+      // Binary message - only handle if Tribes2Networking is initialized for this connection
+      if (this.tribes2Networking.isConnectionInitialized(playerId)) {
+        this.tribes2Networking.handlePacket(playerId, new Uint8Array(data));
+      } else {
+        Logger.warn(`Ignoring binary packet from ${playerId} - connection not initialized yet`);
+      }
     }
   }
 
@@ -291,7 +295,7 @@ class Server {
 
     // Initialize Tribes2 networking for this connection
     this.tribes2Networking.initializeConnection(playerId, (connId: string, data: Uint8Array) => {
-      ws.send(Buffer.from(data));
+      ws.send(Buffer.from(data), true); // true = isBinary
     });
 
     // Mark join handshake as complete to allow binary packet transmission

@@ -309,31 +309,50 @@ export class EventManager {
    */
   unpack(connectionId: string, stream: BitStream): void {
     while (stream.hasData()) {
+      // Check if we have enough data for event header (type: 8 bits, seq: 16 bits, guaranteed: 1 bit = 25 bits)
+      if (!stream.hasSpace(25)) {
+        Logger.warn(`Insufficient data for event header in packet from ${connectionId}`);
+        break;
+      }
+
       const type = stream.readInt(8);
       const seq = stream.readInt(16);
       const guaranteed = stream.readBool();
 
       const event = this.createEvent(type);
-      if (!event) continue;
+      if (!event) {
+        Logger.warn(`Unknown event type ${type} from ${connectionId}, skipping remaining data`);
+        break;
+      }
 
-      event.unpack(stream);
-      event.guaranteed = guaranteed;
+      // Save current position to rollback if unpack fails
+      const savedPosition = stream.getBitPosition();
 
-      if (guaranteed) {
-        // Process guaranteed events immediately on server
-        event.process(connectionId);
-        // Call callback for event processing
-        if (this.onEventCallback) {
-          this.onEventCallback(connectionId, event);
+      try {
+        event.unpack(stream);
+        event.guaranteed = guaranteed;
+
+        if (guaranteed) {
+          // Process guaranteed events immediately on server
+          event.process(connectionId);
+          // Call callback for event processing
+          if (this.onEventCallback) {
+            this.onEventCallback(connectionId, event);
+          }
+          this.sendAck(connectionId, seq);
+        } else {
+          // Process non-guaranteed events immediately
+          event.process(connectionId);
+          // Call callback for event processing
+          if (this.onEventCallback) {
+            this.onEventCallback(connectionId, event);
+          }
         }
-        this.sendAck(connectionId, seq);
-      } else {
-        // Process non-guaranteed events immediately
-        event.process(connectionId);
-        // Call callback for event processing
-        if (this.onEventCallback) {
-          this.onEventCallback(connectionId, event);
-        }
+      } catch (error) {
+        // Rollback on unpack error and skip this packet
+        Logger.warn(`Failed to unpack event type ${type} from ${connectionId}: ${error}`);
+        stream.setBitPosition(savedPosition);
+        break;
       }
     }
   }

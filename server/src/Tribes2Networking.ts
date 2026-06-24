@@ -85,6 +85,13 @@ export class Tribes2Networking {
   }
 
   /**
+   * Check if a connection has been initialized
+   */
+  isConnectionInitialized(connectionId: string): boolean {
+    return this.streamManagers.has(connectionId);
+  }
+
+  /**
    * Mark join handshake as complete for a connection
    * Allows binary packet transmission to begin
    */
