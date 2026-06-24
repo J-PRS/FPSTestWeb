@@ -237,40 +237,8 @@ export class MessageHandler {
       player.velocity.z = (data.position.z - player.position.z) / dt;
     }
 
-    // Add snapshot to position validator history BEFORE validation
-    this.positionValidator.addSnapshot(
-      playerId,
-      now,
-      player.position,
-      player.velocity,
-      { x: 0, y: ServerConfig.GRAVITY, z: 0 } // Default to gravity acceleration
-    );
-
-    // Validate position with latency-aware thresholds
-    // Estimate ping from last update time
-    const estimatedPing = Math.min(dt * 1000, ServerConfig.ESTIMATED_PING_CAP_MS);
-    const validation = this.positionValidator.validatePosition(
-      playerId,
-      data.position,
-      now,
-      estimatedPing
-    );
-
-    // Determine final position based on validation
-    let finalPosition = data.position;
-    if (validation.action === 'snap') {
-      this.logger.debug(`Snapping ${playerId} to expected position. Discrepancy: ${validation.discrepancy.toFixed(2)}m`);
-      finalPosition = validation.expectedPosition;
-    } else if (validation.action === 'nudge') {
-      this.logger.debug(`Nudging ${playerId} toward expected position. Discrepancy: ${validation.discrepancy.toFixed(2)}m`);
-      // Gentle nudge - blend 50% toward expected position
-      finalPosition = {
-        x: (data.position.x + validation.expectedPosition.x) / 2,
-        y: (data.position.y + validation.expectedPosition.y) / 2,
-        z: (data.position.z + validation.expectedPosition.z) / 2
-      };
-    }
-    // accept: use client position as-is
+    // Validate and apply position
+    const finalPosition = this.validateAndApplyPosition(playerId, player, data.position, now, dt);
 
     // Update player position with validated position
     player.position = finalPosition;
@@ -325,37 +293,8 @@ export class MessageHandler {
       player.velocity.z = (newPosition.z - player.position.z) / dt;
     }
 
-    // Add snapshot to position validator history BEFORE validation
-    this.positionValidator.addSnapshot(
-      playerId,
-      now,
-      player.position,
-      player.velocity,
-      { x: 0, y: ServerConfig.GRAVITY, z: 0 } // Default to gravity acceleration
-    );
-
-    // Validate position with latency-aware thresholds
-    const estimatedPing = Math.min(dt * 1000, ServerConfig.ESTIMATED_PING_CAP_MS);
-    const validation = this.positionValidator.validatePosition(
-      playerId,
-      newPosition,
-      now,
-      estimatedPing
-    );
-
-    // Determine final position based on validation
-    let finalPosition = newPosition;
-    if (validation.action === 'snap') {
-      this.logger.debug(`Snapping ${playerId} to expected position. Discrepancy: ${validation.discrepancy.toFixed(2)}m`);
-      finalPosition = validation.expectedPosition;
-    } else if (validation.action === 'nudge') {
-      this.logger.debug(`Nudging ${playerId} toward expected position. Discrepancy: ${validation.discrepancy.toFixed(2)}m`);
-      finalPosition = {
-        x: (newPosition.x + validation.expectedPosition.x) / 2,
-        y: (newPosition.y + validation.expectedPosition.y) / 2,
-        z: (newPosition.z + validation.expectedPosition.z) / 2
-      };
-    }
+    // Validate and apply position using shared method
+    const finalPosition = this.validateAndApplyPosition(playerId, player, newPosition, now, dt);
 
     // Update player position with validated position
     player.position = finalPosition;
@@ -421,121 +360,7 @@ export class MessageHandler {
     }
 
     if (targetId) {
-      this.logger.debug(`Processing hit on ${targetId} at timestamp ${timestamp}`);
-      // Process hit with lag compensation
-      const targetPosition = this.playerManager.getPlayerPositionAt(targetId, timestamp);
-
-      if (!targetPosition) {
-        this.logger.warn(`No position found for ${targetId} at timestamp ${timestamp} - lag compensation failed, using current position`);
-      }
-
-      // Use current position if lag compensation fails
-      const usePosition = targetPosition || this.playerManager.getPlayer(targetId)?.position;
-
-      if (usePosition) {
-        const targetPlayer = this.playerManager.getPlayer(targetId);
-        if (!targetPlayer || targetPlayer.isDead) {
-          this.logger.debug(`Target ${targetId} not found or dead`);
-          return;
-        }
-
-        // Extract position (handle both direct position and player state)
-        const targetPos = 'position' in usePosition ? usePosition.position : usePosition;
-
-        // Validate targetPos before using
-        if (!targetPos || typeof targetPos.x !== 'number') {
-          this.logger.warn(`Invalid target position for ${targetId}, skipping hit processing`);
-          return;
-        }
-
-        // Use shooter's current position if shot data doesn't include position
-        const shooterPos = position || player.position;
-
-        // Validate shooter position before using
-        if (!shooterPos || typeof shooterPos.x !== 'number') {
-          this.logger.warn(`Invalid shooter position for ${playerId}, skipping hit processing`);
-          return;
-        }
-
-        // Server-side collision validation: check if projectile is actually close to target
-        // Shooter advantage: Accept false positives over false negatives
-        // Only reject clearly impossible hits (projectile on opposite side of map)
-        if (projectileId) {
-          const projectile = this.projectileManager.getProjectile(projectileId);
-          if (projectile) {
-            const dx = projectile.position.x - targetPos.x;
-            const dy = projectile.position.y - targetPos.y;
-            const dz = projectile.position.z - targetPos.z;
-            const projectileDistance = Math.sqrt(dx*dx + dy*dy + dz*dz);
-
-            // Reject only clearly impossible hits (very large distance)
-            // Increased threshold to implement shooter advantage - trust client's visual perspective
-            const MAX_HIT_DISTANCE = 50.0; // Very permissive to avoid false negatives
-            if (projectileDistance > MAX_HIT_DISTANCE) {
-              this.logger.warn(`Rejected hit from ${playerId} on ${targetId}: projectile too far (${projectileDistance.toFixed(1)}m > ${MAX_HIT_DISTANCE}m)`);
-              return;
-            }
-          }
-        }
-
-        // Calculate damage based on distance (closer = more damage)
-        const dx = targetPos.x - shooterPos.x;
-        const dy = targetPos.y - shooterPos.y;
-        const dz = targetPos.z - shooterPos.z;
-        const distance = Math.sqrt(dx*dx + dy*dy + dz*dz);
-
-        // Reverse falloff - more damage at range (reward long-range skill shots)
-        // Bonus damage only applies after 1 second of projectile lifetime
-        const projectileAge = (Date.now() - timestamp) / ServerConfig.MILLISECONDS_PER_SECOND; // in seconds
-        const damage = projectileAge >= 1.0 
-          ? Math.min(200, 100 + distance * 2) 
-          : 100;
-        targetPlayer.health -= damage;
-
-        this.logger.info(`Shot from ${playerId} HIT ${targetId} for ${damage} damage. Health: ${targetPlayer.health}, isDead: ${targetPlayer.isDead}`);
-        
-        // Destroy the projectile that caused the hit
-        if (projectileId) {
-          this.projectileManager.removeProjectile(projectileId);
-          this.broadcastCallback({
-            type: 'projectileDestroyed',
-            projectileId
-          });
-          this.logger.debug(`Destroyed projectile ${projectileId} on hit`);
-        }
-        
-        // Check if player died
-        if (targetPlayer.health <= 0) {
-          targetPlayer.health = 0;
-          targetPlayer.isDead = true;
-          targetPlayer.respawnTime = Date.now() + ServerConfig.RESPAWN_DELAY_MS;
-          
-          // Clear rewind buffer for dead player (save memory)
-          this.playerManager.getRewindBuffer().delete(targetId);
-          
-          this.logger.info(`Player ${targetId} killed by ${playerId}, respawning in 2s`);
-          
-          // Trigger rough state comparison on player death
-          this.requestRoughStates();
-          
-          // Broadcast kill to all players
-          this.broadcastCallback({
-            type: 'kill',
-            shooterId: playerId,
-            targetId,
-            timestamp
-          });
-        } else {
-          // Broadcast hit (non-lethal)
-          this.broadcastCallback({
-            type: 'hit',
-            shooterId: playerId,
-            targetId,
-            damage,
-            timestamp
-          });
-        }
-      }
+      this.processHit(playerId, targetId, timestamp, position, velocity, projectileId, player);
     } else {
       // Shot without target (miss)
       this.broadcastCallback({
@@ -545,6 +370,176 @@ export class MessageHandler {
         timestamp
       });
     }
+  }
+
+  /**
+   * Process hit on target with lag compensation and validation
+   * Extracted for code cleanliness
+   */
+  private processHit(
+    shooterId: string,
+    targetId: string,
+    timestamp: number,
+    position: { x: number; y: number; z: number } | undefined,
+    velocity: { x: number; y: number; z: number } | undefined,
+    projectileId: string | undefined,
+    shooter: any
+  ): void {
+    this.logger.debug(`Processing hit on ${targetId} at timestamp ${timestamp}`);
+    
+    // Process hit with lag compensation
+    const targetPosition = this.playerManager.getPlayerPositionAt(targetId, timestamp);
+
+    if (!targetPosition) {
+      this.logger.warn(`No position found for ${targetId} at timestamp ${timestamp} - lag compensation failed, using current position`);
+    }
+
+    // Use current position if lag compensation fails
+    const usePosition = targetPosition || this.playerManager.getPlayer(targetId)?.position;
+
+    if (!usePosition) {
+      this.logger.debug(`No position available for ${targetId}`);
+      return;
+    }
+
+    const targetPlayer = this.playerManager.getPlayer(targetId);
+    if (!targetPlayer || targetPlayer.isDead) {
+      this.logger.debug(`Target ${targetId} not found or dead`);
+      return;
+    }
+
+    // Extract position (handle both direct position and player state)
+    const targetPos = 'position' in usePosition ? usePosition.position : usePosition;
+
+    // Validate targetPos before using
+    if (!targetPos || typeof targetPos.x !== 'number') {
+      this.logger.warn(`Invalid target position for ${targetId}, skipping hit processing`);
+      return;
+    }
+
+    // Use shooter's current position if shot data doesn't include position
+    const shooterPos = position || shooter.position;
+
+    // Validate shooter position before using
+    if (!shooterPos || typeof shooterPos.x !== 'number') {
+      this.logger.warn(`Invalid shooter position for ${shooterId}, skipping hit processing`);
+      return;
+    }
+
+    // Server-side collision validation: check if projectile is actually close to target
+    if (!this.validateProjectileDistance(shooterId, targetId, projectileId, targetPos)) {
+      return;
+    }
+
+    // Calculate and apply damage
+    const damage = this.calculateDamage(shooterPos, targetPos, timestamp);
+    targetPlayer.health -= damage;
+
+    this.logger.info(`Shot from ${shooterId} HIT ${targetId} for ${damage} damage. Health: ${targetPlayer.health}, isDead: ${targetPlayer.isDead}`);
+    
+    // Destroy the projectile that caused the hit
+    if (projectileId) {
+      this.projectileManager.removeProjectile(projectileId);
+      this.broadcastCallback({
+        type: 'projectileDestroyed',
+        projectileId
+      });
+      this.logger.debug(`Destroyed projectile ${projectileId} on hit`);
+    }
+    
+    // Handle death or hit broadcast
+    if (targetPlayer.health <= 0) {
+      this.handlePlayerDeath(shooterId, targetId, timestamp);
+    } else {
+      this.broadcastCallback({
+        type: 'hit',
+        shooterId,
+        targetId,
+        damage,
+        timestamp
+      });
+    }
+  }
+
+  /**
+   * Validate projectile distance to target (shooter advantage)
+   * Extracted for code cleanliness
+   */
+  private validateProjectileDistance(
+    shooterId: string,
+    targetId: string,
+    projectileId: string | undefined,
+    targetPos: { x: number; y: number; z: number }
+  ): boolean {
+    if (!projectileId) return true;
+
+    const projectile = this.projectileManager.getProjectile(projectileId);
+    if (!projectile) return true;
+
+    const dx = projectile.position.x - targetPos.x;
+    const dy = projectile.position.y - targetPos.y;
+    const dz = projectile.position.z - targetPos.z;
+    const projectileDistance = Math.sqrt(dx*dx + dy*dy + dz*dz);
+
+    // Reject only clearly impossible hits (very large distance)
+    // Increased threshold to implement shooter advantage - trust client's visual perspective
+    const MAX_HIT_DISTANCE = 50.0;
+    if (projectileDistance > MAX_HIT_DISTANCE) {
+      this.logger.warn(`Rejected hit from ${shooterId} on ${targetId}: projectile too far (${projectileDistance.toFixed(1)}m > ${MAX_HIT_DISTANCE}m)`);
+      return false;
+    }
+    return true;
+  }
+
+  /**
+   * Calculate damage based on distance and projectile age
+   * Extracted for code cleanliness
+   */
+  private calculateDamage(
+    shooterPos: { x: number; y: number; z: number },
+    targetPos: { x: number; y: number; z: number },
+    timestamp: number
+  ): number {
+    const dx = targetPos.x - shooterPos.x;
+    const dy = targetPos.y - shooterPos.y;
+    const dz = targetPos.z - shooterPos.z;
+    const distance = Math.sqrt(dx*dx + dy*dy + dz*dz);
+
+    // Reverse falloff - more damage at range (reward long-range skill shots)
+    // Bonus damage only applies after 1 second of projectile lifetime
+    const projectileAge = (Date.now() - timestamp) / ServerConfig.MILLISECONDS_PER_SECOND;
+    return projectileAge >= 1.0 
+      ? Math.min(200, 100 + distance * 2) 
+      : 100;
+  }
+
+  /**
+   * Handle player death
+   * Extracted for code cleanliness
+   */
+  private handlePlayerDeath(shooterId: string, targetId: string, timestamp: number): void {
+    const targetPlayer = this.playerManager.getPlayer(targetId);
+    if (!targetPlayer) return;
+
+    targetPlayer.health = 0;
+    targetPlayer.isDead = true;
+    targetPlayer.respawnTime = Date.now() + ServerConfig.RESPAWN_DELAY_MS;
+    
+    // Clear rewind buffer for dead player (save memory)
+    this.playerManager.getRewindBuffer().delete(targetId);
+    
+    this.logger.info(`Player ${targetId} killed by ${shooterId}, respawning in 2s`);
+    
+    // Trigger rough state comparison on player death
+    this.requestRoughStates();
+    
+    // Broadcast kill to all players
+    this.broadcastCallback({
+      type: 'kill',
+      shooterId,
+      targetId,
+      timestamp
+    });
   }
 
   private handleJump(playerId: string, position: { x: number; y: number; z: number }): void {
@@ -655,6 +650,53 @@ export class MessageHandler {
     }
     
     this.logger.info(`Client ${playerId} comparison: ${matchCount} matches, ${mismatchCount} mismatches`);
+  }
+
+  /**
+   * Validate and apply position with latency-aware thresholds
+   * Extracted for code cleanliness and reusability
+   */
+  private validateAndApplyPosition(
+    playerId: string,
+    player: any,
+    newPosition: { x: number; y: number; z: number },
+    now: number,
+    dt: number
+  ): { x: number; y: number; z: number } {
+    // Add snapshot to position validator history BEFORE validation
+    this.positionValidator.addSnapshot(
+      playerId,
+      now,
+      player.position,
+      player.velocity,
+      { x: 0, y: ServerConfig.GRAVITY, z: 0 } // Default to gravity acceleration
+    );
+
+    // Validate position with latency-aware thresholds
+    // Estimate ping from last update time
+    const estimatedPing = Math.min(dt * 1000, ServerConfig.ESTIMATED_PING_CAP_MS);
+    const validation = this.positionValidator.validatePosition(
+      playerId,
+      newPosition,
+      now,
+      estimatedPing
+    );
+
+    // Determine final position based on validation
+    if (validation.action === 'snap') {
+      this.logger.debug(`Snapping ${playerId} to expected position. Discrepancy: ${validation.discrepancy.toFixed(2)}m`);
+      return validation.expectedPosition;
+    } else if (validation.action === 'nudge') {
+      this.logger.debug(`Nudging ${playerId} toward expected position. Discrepancy: ${validation.discrepancy.toFixed(2)}m`);
+      // Gentle nudge - blend 50% toward expected position
+      return {
+        x: (newPosition.x + validation.expectedPosition.x) / 2,
+        y: (newPosition.y + validation.expectedPosition.y) / 2,
+        z: (newPosition.z + validation.expectedPosition.z) / 2
+      };
+    }
+    // accept: use client position as-is
+    return newPosition;
   }
 
   /**
