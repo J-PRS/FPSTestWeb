@@ -132,6 +132,14 @@ export class BinaryDecoder {
     return value;
   }
 
+  readInt16(): number {
+    if (this.offset + 2 > this.buffer.length) throw new Error('Buffer overflow');
+    const value = this.buffer[this.offset] | (this.buffer[this.offset + 1] << 8);
+    this.offset += 2;
+    // Convert to signed 16-bit integer
+    return value > 32767 ? value - 65536 : value;
+  }
+
   readUint32(): number {
     if (this.offset + 4 > this.buffer.length) throw new Error('Buffer overflow');
     const value = this.buffer[this.offset] |
@@ -353,6 +361,35 @@ export function decodeShot(data: Uint8Array): any {
     type: 'shot',
     playerId,
     data: { targetId, timestamp }
+  };
+}
+
+export function decodePositionDelta(data: Uint8Array): any {
+  const decoder = new BinaryDecoder(data);
+  const type = decoder.readUint8();
+  if (type !== MessageType.POSITION_DELTA) throw new Error('Invalid message type');
+  
+  const playerId = decoder.readString();
+  
+  // Decode position deltas (scaled by 100)
+  const deltaX = decoder.readInt16() / 100;
+  const deltaY = decoder.readInt16() / 100;
+  const deltaZ = decoder.readInt16() / 100;
+  
+  // Decode rotation deltas (scaled by 1000)
+  const deltaYaw = decoder.readInt16() / 1000;
+  const deltaPitch = decoder.readInt16() / 1000;
+  
+  const timestamp = decoder.readUint32();
+  
+  return {
+    type: 'positionDelta',
+    playerId,
+    data: {
+      positionDelta: { x: deltaX, y: deltaY, z: deltaZ },
+      rotationDelta: { yaw: deltaYaw, pitch: deltaPitch },
+      timestamp
+    }
   };
 }
 

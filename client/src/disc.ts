@@ -1,17 +1,15 @@
 import * as THREE from 'three';
 import { Terrain } from './terrain.js';
 import type { Ball } from './balls.js';
+import { PLAYER_RADIUS, PLAYER_HEIGHT, DISC_SPEED, DISC_RADIUS, DISC_FORCE, DISC_HITBOX } from './config.js';
+import { ChildLogger } from './Logger.js';
 
-const DISC_SPEED = 80.0;
-const DISC_RADIUS = 5.0;   // explosion radius
-const DISC_FORCE = 25.0;   // pull force (reverse knockback)
-const DISC_HITBOX = 0.5;   // fixed hitbox size
+const logger = new ChildLogger('Disc');
 
 const TRAIL_INTERVAL = 0.02;
 const TRAIL_EMISSION = 3;
 const TRAIL_LIFE_MIN = 0.8;
 const TRAIL_LIFE_MAX = 1.2;
-const TRAIL_SPEED = 10;
 const TRAIL_SPREAD = 0.2;
 const TRAIL_GEO = new THREE.SphereGeometry(1, 4, 4);
 
@@ -109,7 +107,8 @@ export class Disc {
       const d = Math.sqrt(ex*ex + ey*ey + ez*ez);
       if (d < minDist) minDist = d;
       if (d <= thresh) {
-        this.hitAccuracy = minDist;
+        // Calculate surface-to-surface distance (center distance minus ball radius)
+        this.hitAccuracy = Math.max(0, minDist - ball.radius);
         this.hitAge = this.age;
         this.hitDistance = this.pos.distanceTo(this.shotOrigin);
         return true;
@@ -120,8 +119,6 @@ export class Disc {
 
   // Simple sphere sweep vs player capsule
   private sweepPlayer(playerPos: THREE.Vector3): boolean {
-    const PLAYER_RADIUS = 0.8;
-    const PLAYER_HEIGHT = 2.0;
     const halfHeight = PLAYER_HEIGHT / 2;
 
     // Disc path vector
@@ -158,9 +155,7 @@ export class Disc {
     const closestZ = this.prevPos.z + dz * tClamped;
 
     // Vector from closest point to player
-    const vx = closestX - playerPos.x;
     const vy = closestY - playerPos.y;
-    const vz = closestZ - playerPos.z;
 
     // Clamp Y to capsule height
     const clampedY = Math.max(-halfHeight, Math.min(halfHeight, vy));
@@ -175,7 +170,7 @@ export class Disc {
 
     if (totalDist <= PLAYER_RADIUS + DISC_HITBOX) {
       this.minHitDist = hDist;
-      console.log(`[Disc] Hit at dist ${hDist.toFixed(2)}, threshold ${(PLAYER_RADIUS + DISC_HITBOX).toFixed(2)}`);
+      logger.debug(`Hit at dist ${hDist.toFixed(2)}, threshold ${(PLAYER_RADIUS + DISC_HITBOX).toFixed(2)}`);
       return true;
     }
 
@@ -212,6 +207,8 @@ export class Disc {
         for (const [playerId, playerPos] of remotePlayers) {
           if (this.sweepPlayer(playerPos)) {
             this.hitPlayerId = playerId;
+            // Calculate surface-to-surface distance (center distance minus player radius)
+            this.hitAccuracy = Math.max(0, this.minHitDist - 0.8); // PLAYER_RADIUS = 0.8
             this.hitAge = this.age;
             this.hitDistance = this.pos.distanceTo(this.shotOrigin);
             this.explode();

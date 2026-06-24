@@ -1,7 +1,5 @@
 import * as THREE from 'three';
 
-const IMPLOSION_LIFE = 0.35;
-
 interface IP {
   mesh: THREE.Mesh;
   mat: THREE.MeshBasicMaterial;

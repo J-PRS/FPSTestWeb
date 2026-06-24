@@ -1,7 +1,9 @@
-import { WSAdapter } from './WSAdapter';
+import { NetworkAdapterFactory } from './NetworkAdapterFactory';
 import { NetworkManager } from './NetworkManager';
+import { ChildLogger } from '../Logger.js';
 
-console.log('[NetworkingWorker] Worker script loaded');
+const logger = new ChildLogger('NetworkingWorker');
+logger.debug('Worker script loaded');
 
 // Worker message types
 type WorkerCommand = 
@@ -17,24 +19,6 @@ type WorkerCommand =
   | { type: 'getPacketLoss' }
   | { type: 'getJitter' };
 
-type WorkerEvent = 
-  | { type: 'connected' }
-  | { type: 'disconnected' }
-  | { type: 'error'; error: string }
-  | { type: 'playerJoined'; playerId: string }
-  | { type: 'playerLeft'; playerId: string }
-  | { type: 'playerUpdate'; playerId: string; position: { x: number; y: number; z: number }; rotation: { yaw: number; pitch: number }; timestamp: number }
-  | { type: 'gameState'; players: any[]; localPlayerState: any }
-  | { type: 'hit'; shooterId: string; targetId: string; damage: number }
-  | { type: 'kill'; shooterId: string; targetId: string }
-  | { type: 'playerRespawn'; playerId: string; position: { x: number; y: number; z: number }; rotation: { yaw: number; pitch: number } }
-  | { type: 'jump'; playerId: string; position: { x: number; y: number; z: number } }
-  | { type: 'jetpack'; playerId: string; position: { x: number; y: number; z: number } }
-  | { type: 'projectileCreated'; projectileId: string; ownerId: string; position: { x: number; y: number; z: number }; velocity: { x: number; y: number; z: number } }
-  | { type: 'projectileUpdate'; projectileId: string; position: { x: number; y: number; z: number } }
-  | { type: 'projectileDestroyed'; projectileId: string }
-  | { type: 'stateRestore'; state: any }
-  | { type: 'stateReconciliation'; playerId: string; data: { position: { x: number; y: number; z: number }; rotation: { yaw: number; pitch: number }; velocity: { x: number; y: number; z: number }; lastProcessedSequence: number } };
 
 let networkManager: NetworkManager | null = null;
 
@@ -67,8 +51,8 @@ function setupCallbacks(nm: NetworkManager) {
   nm.onProjectileDestroyed = (projectileId) => {
     postMessage({ type: 'projectileDestroyed', projectileId });
   };
-  nm.onPlayerJoined = (playerId) => {
-    postMessage({ type: 'playerJoined', playerId });
+  nm.onPlayerJoined = (playerId, position, rotation) => {
+    postMessage({ type: 'playerJoined', playerId, position, rotation });
   };
   nm.onPlayerLeft = (playerId) => {
     postMessage({ type: 'playerLeft', playerId });
@@ -90,12 +74,12 @@ self.onmessage = (e: MessageEvent<WorkerCommand>) => {
 
   switch (data.type) {
     case 'connect': {
-      const adapter = new WSAdapter();
+      const adapter = NetworkAdapterFactory.createAdapter('tribes2');
       networkManager = new NetworkManager(adapter);
       networkManager.setPlayerId(data.playerId);
-      
+
       setupCallbacks(networkManager);
-      
+
       networkManager.connect(data.url).then(() => {
         postMessage({ type: 'connected' });
       }).catch((err) => {
@@ -125,7 +109,7 @@ self.onmessage = (e: MessageEvent<WorkerCommand>) => {
     
     case 'sendShot':
       if (networkManager) {
-        console.log('[NetworkingWorker] sendShot:', data.targetId, data.position, data.velocity, data.timestamp, data.projectileId);
+        logger.debug(`sendShot: ${data.targetId} ${JSON.stringify(data.position)} ${JSON.stringify(data.velocity)} ${data.timestamp} ${data.projectileId}`);
         networkManager.sendShot(data.targetId, data.position, data.velocity, data.timestamp, data.projectileId);
       }
       break;

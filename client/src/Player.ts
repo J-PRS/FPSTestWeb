@@ -1,16 +1,8 @@
 import * as THREE from 'three';
 import { Terrain } from './terrain.js';
-import { GRAVITY } from './config.js';
-import { MovementController, MovementState, MovementInput, MOVEMENT_CONFIG } from './movement.js';
+import { JET_FORCE_UP, JET_FORCE_DIR, MAX_ENERGY, JET_DRAIN, JET_CHARGE, FIRE_RATE, DISC_RATE } from './config.js';
+import { MovementController, MovementState } from './movement.js';
 import { PlayerModel, AnimationState } from './PlayerModel.js';
-
-const JET_FORCE_UP  = 35.0;  // Increased from 22.0 for stronger takeoff
-const JET_FORCE_DIR = 10.0;  // Reduced lateral control
-const MAX_ENERGY    = 60.0;
-const JET_DRAIN     = 12.0;
-const JET_CHARGE    = 8.0;
-const FIRE_RATE     = 0.8;
-const DISC_RATE     = 1.0;
 
 export interface FireEvent {
   origin: THREE.Vector3;
@@ -34,7 +26,7 @@ export class Player {
 
   private terrain: Terrain;
   private camera: THREE.PerspectiveCamera;
-  private movement: MovementController;
+  public movement: MovementController; // Public for client-side prediction reconciliation
   private model: PlayerModel | null = null;
   private jumpAnimTimer = 0.0;
   private wasOnGround = false;
@@ -55,6 +47,7 @@ export class Player {
   onDisc: ((e: FireEvent) => void) | null = null;
   onNetworkJump: ((pos: { x: number; y: number; z: number }) => void) | null = null;
   onNetworkJetpack: ((pos: { x: number; y: number; z: number }) => void) | null = null;
+  onNetworkInput: ((input: { forward: number; right: number; jump: number; ski: number }, rotation: { yaw: number; pitch: number }) => void) | null = null;
 
   constructor(terrain: Terrain, camera: THREE.PerspectiveCamera, scene: THREE.Scene) {
     this.terrain = terrain;
@@ -175,7 +168,16 @@ export class Player {
     this.movement.setInput({ forward, right, jumpPressed, jumpHeld, skiHeld });
     this.movement.update(dt);
 
-    // Sync state from movement controller
+    // Send input to network for client-side prediction
+    if (this.onNetworkInput) {
+      this.onNetworkInput(
+        { forward, right, jump: jumpPressed ? 1 : 0, ski: skiHeld ? 1 : 0 },
+        { yaw: this.yaw, pitch: this.pitch }
+      );
+    }
+
+    // INSTANT MOVEMENT: Client-side prediction updates position immediately
+    // Sync state from movement controller (local prediction)
     const moveState = this.movement.getState();
     this.pos.copy(moveState.pos);
     this.vel.copy(moveState.vel);
