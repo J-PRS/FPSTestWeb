@@ -19,6 +19,12 @@ export class Logger {
   private static logFile: fs.WriteStream | null = null;
   private static logDir: string = path.join(process.cwd(), 'logs');
 
+  // Rate limiting for repeated messages
+  private static lastMessage: string = '';
+  private static lastMessageCount: number = 0;
+  private static lastMessageTime: number = 0;
+  private static rateLimitWindow: number = 1000; // 1 second window
+
   /**
    * Initialize file logging
    */
@@ -102,6 +108,45 @@ export class Logger {
     const prefix = this.context ? `[${this.context}]` : '';
     const fullMessage = `${timestamp} ${prefix} [${level}] ${message}`;
 
+    const now = Date.now();
+
+    // Check if this is a repeated message within the rate limit window
+    if (message === this.lastMessage && now - this.lastMessageTime < this.rateLimitWindow) {
+      this.lastMessageCount++;
+      this.lastMessageTime = now;
+
+      // Print aggregated message every 10 repeats or when window expires
+      if (this.lastMessageCount % 10 === 0) {
+        const aggregatedMessage = `${timestamp} ${prefix} [${level}] ${message} [x${this.lastMessageCount}]`;
+        if (context !== undefined) {
+          console.log(aggregatedMessage, context);
+        } else {
+          console.log(aggregatedMessage);
+        }
+        if (this.logFile) {
+          const logLine = context !== undefined
+            ? `${aggregatedMessage} ${JSON.stringify(context)}\n`
+            : `${aggregatedMessage}\n`;
+          this.logFile.write(logLine);
+        }
+      }
+      return;
+    }
+
+    // If message changed or window expired, flush any pending count
+    if (this.lastMessageCount > 1) {
+      const flushMessage = `${timestamp} ${prefix} [${level}] ${this.lastMessage} [x${this.lastMessageCount}]`;
+      console.log(flushMessage);
+      if (this.logFile) {
+        this.logFile.write(`${flushMessage}\n`);
+      }
+    }
+
+    // Reset tracking and print new message
+    this.lastMessage = message;
+    this.lastMessageCount = 1;
+    this.lastMessageTime = now;
+
     if (context !== undefined) {
       console.log(fullMessage, context);
     } else {
@@ -110,7 +155,7 @@ export class Logger {
 
     // Write to file if initialized
     if (this.logFile) {
-      const logLine = context !== undefined 
+      const logLine = context !== undefined
         ? `${fullMessage} ${JSON.stringify(context)}\n`
         : `${fullMessage}\n`;
       this.logFile.write(logLine);

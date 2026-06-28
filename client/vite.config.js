@@ -19,7 +19,7 @@ export default defineConfig({
     },
   },
   server: {
-    port: 5174,
+    port: 5300,
     host: '0.0.0.0',
     allowedHosts: ['.trycloudflare.com'],
     cors: true,
@@ -27,7 +27,7 @@ export default defineConfig({
       // Conditionally use WSS/443 only when accessing through cloudflared tunnel
       protocol: process.env.VITE_HMR_URL ? "wss" : "ws",
       host: process.env.VITE_HMR_URL ?? "localhost",
-      clientPort: process.env.VITE_HMR_URL ? 443 : 5174,
+      clientPort: process.env.VITE_HMR_URL ? 443 : 5300,
       overlay: true, // Show error overlay
     },
     watch: {

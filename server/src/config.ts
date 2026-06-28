@@ -3,16 +3,30 @@
  * Centralized configuration for easy tuning
  */
 
+/**
+ * Network mode determines how the server handles game state
+ */
+export enum NetworkMode {
+  /** Server validates all moves, simulates game state, sends authoritative positions */
+  SERVER_AUTHORITATIVE = 'server_authoritative',
+  /** Server only forwards packets between clients (relay mode) */
+  CLIENT_RELAY = 'client_relay',
+  /** Hybrid: clients simulate, server validates asynchronously (future) */
+  HYBRID_VALIDATION = 'hybrid_validation'
+}
+
 export const ServerConfig = {
   // Network settings
   PORT: 8080,
   TICK_RATE: 30, // Hz (33ms per tick) - per specification
-  
+  NETWORK_MODE: NetworkMode.SERVER_AUTHORITATIVE, // Server validates moves, simulates game state
+  DISABLE_VALIDATION: true, // Disable position validation for testing core networking
+
   // Lag compensation
   REWIND_BUFFER_MS: 1000, // History buffer size in milliseconds
   POSITION_TOLERANCE_MS: 200, // Max acceptable position difference in milliseconds
   EXTRAPOLATION_MAX_MS: 500, // Max extrapolation time in milliseconds
-  
+
   // Position validation
   POSITION_HISTORY_SIZE: 1000, // Keep ~1 second of history at 20Hz
   SOFT_THRESHOLD_BASE: 0.5, // Base soft threshold in meters (horizontal)

@@ -29,7 +29,7 @@ export const DISC_RATE = 1.0; // Disc fire rate (seconds)
 export const ROCKET_SPEED = 120.0; // Rocket velocity
 export const ROCKET_RADIUS = 6.0; // Rocket explosion radius
 export const ROCKET_FORCE = 28.0; // Rocket knockback force
-export const HIT_MIN = 0.3; // Minimum hitbox radius
+export const HIT_MIN = 0.3; // Minimum hitbox radius (core for direct hits)
 export const HIT_MAX = 8.0; // Maximum hitbox radius
 export const HIT_GROW = 2.0; // Seconds to reach full hitbox size
 
@@ -59,15 +59,15 @@ export const CAMERA_NEAR = 0.1; // Near clipping plane
 export const CAMERA_FAR = 6000; // Far clipping plane
 
 // Fog constants
-export const FOG_COLOR = 0x88bbdd; // Fog and clear color
+export const FOG_COLOR = 0x7aaadd; // Fog and clear color (slightly less blue)
 export const FOG_DENSITY = 0.006; // Exponential fog density
 
 // Atmospheric sky constants
 export const SKY_TURBIDITY = 10.0;
-export const SKY_RAYLEIGH = 3.0;
-export const SKY_MIE_COEFFICIENT = 0.005;
+export const SKY_RAYLEIGH = 1.5; // Reduced to reduce bright spot
+export const SKY_MIE_COEFFICIENT = 0.0; // Disabled to remove white glare
 export const SKY_MIE_DIRECTIONAL_G = 0.7;
-export const SKY_SUN_INTENSITY = 22.0;
+export const SKY_SUN_INTENSITY = 1.0; // Minimal to remove white circle
 
 // Volumetric cloud constants
 export const CLOUD_COUNT = 30; // Number of cloud clusters
@@ -164,8 +164,8 @@ export const TERRAIN_WORLD_SCALE = 1500.0; // Terrain world scale
 export const TERRAIN_HEIGHTMAP_DIVISOR = 255.0; // Heightmap value divisor
 
 // Networking backend configuration
-// Option: 'tribes2' (Tribes2-style with bit-packing for LAN-like gameplay)
-export const NETWORK_BACKEND = 'tribes2' as const;
+// Options: 'tribes2' (Tribes2-style with bit-packing for LAN-like gameplay), 'fastapi' (Simple JSON-based WebSocket)
+export const NETWORK_BACKEND = 'fastapi' as const;
 
 // Tribes2 networking constants (per multiplayer specification)
 export const TRIBES2_MAX_PACKET_SIZE = 1400; // MTU-safe packet size

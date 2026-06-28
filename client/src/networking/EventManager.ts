@@ -309,15 +309,20 @@ export class EventManager {
   pack(stream: BitStream, maxBytes: number): number {
     let packedCount = 0;
 
+    // Reserve space for event count (will write it later)
+    const countBitPosition = stream.getBitPosition();
+    const bitPosBefore = stream.getBitPosition();
+    stream.writeInt(0, 8); // Placeholder
+
     while (this.outgoingQueue.length > 0 && stream.hasSpace(16)) {
       const event = this.outgoingQueue.shift();
       if (!event) break;
-      
+
       // Check if adding this event would exceed size limit
       const tempStream = new BitStream(64);
       this.packEventHeader(tempStream, event);
       event.pack(tempStream);
-      
+
       const eventSize = tempStream.getByteLength();
       if (stream.getByteLength() + eventSize > maxBytes) {
         // Put event back if it doesn't fit
@@ -327,23 +332,34 @@ export class EventManager {
 
       // Pack event type
       stream.writeInt(event.type, 8);
-      
+
       // Pack sequence number
       stream.writeInt(this.sequenceNumber, 16);
-      
+
       // Pack guaranteed flag
       stream.writeBool(event.guaranteed);
-      
+
       // Pack event data
       event.pack(stream);
-      
+
       // Track guaranteed events
       if (event.guaranteed) {
         this.pendingEvents.set(this.sequenceNumber, event);
       }
-      
+
       this.sequenceNumber++;
       packedCount++;
+    }
+
+    // Write the actual event count at the reserved position
+    const currentBitPosition = stream.getBitPosition();
+    stream.setBitPosition(countBitPosition);
+    stream.writeInt(packedCount, 8);
+    stream.setBitPosition(currentBitPosition);
+
+    // Log for debugging
+    if (Math.random() < 0.01) { // 1% chance to log
+      console.log(`[EventManager] Packed ${packedCount} events, bit pos ${bitPosBefore} -> ${stream.getBitPosition()}`);
     }
 
     return packedCount;
@@ -353,17 +369,37 @@ export class EventManager {
    * Unpack events from a packet stream
    */
   unpack(stream: BitStream): void {
-    while (stream.hasData()) {
+    // Read event count first
+    if (!stream.hasSpace(8)) {
+      console.warn('[EventManager] Insufficient data for event count');
+      return;
+    }
+
+    const eventCount = stream.readInt(8);
+
+    for (let i = 0; i < eventCount; i++) {
+      // Check if we have enough data for event header (8 + 16 + 1 = 25 bits)
+      if (!stream.hasSpace(25)) {
+        console.warn('[EventManager] Insufficient data for event header');
+        return;
+      }
+
       const type = stream.readInt(8);
       const seq = stream.readInt(16);
       const guaranteed = stream.readBool();
-      
+
       const event = this.createEvent(type);
       if (!event) continue;
-      
-      event.unpack(stream);
+
+      try {
+        event.unpack(stream);
+      } catch (error) {
+        console.warn(`[EventManager] Failed to unpack event type ${type}:`, error);
+        continue;
+      }
+
       event.guaranteed = guaranteed;
-      
+
       if (guaranteed) {
         // Add to ordered queue for guaranteed processing
         this.addToOrderedQueue(seq, event);

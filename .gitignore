@@ -8,3 +8,4 @@ build/
 target/
 **/*.rs.bk
 .cargo/config
+__pycache__

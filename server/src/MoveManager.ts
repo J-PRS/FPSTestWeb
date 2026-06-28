@@ -8,6 +8,7 @@
  */
 
 import { BitStream } from './BitStream.js';
+import { Logger } from './Logger.js';
 
 export interface Move {
   sequence: number;
@@ -65,19 +66,24 @@ export class MoveManager {
     
     for (const move of recentMoves) {
       stream.writeInt(move.sequence, 16);
-      // Use relative timestamp to fit in 32 bits
-      const relativeTimestamp = move.timestamp - (Date.now() - 60000);
+      // Use relative timestamp from 60 seconds ago, ensure it's positive
+      const timeOffset = Date.now() - 60000;
+      const relativeTimestamp = Math.max(0, move.timestamp - timeOffset);
       stream.writeInt(relativeTimestamp, 32);
       
-      // Pack input
-      stream.writeSignedInt(move.input.forward, 8);
-      stream.writeSignedInt(move.input.right, 8);
+      // Pack input - round and clamp to valid 8-bit signed range (-127 to 127)
+      const clampedForward = Math.max(-127, Math.min(127, Math.round(move.input.forward)));
+      const clampedRight = Math.max(-127, Math.min(127, Math.round(move.input.right)));
+      stream.writeSignedInt(clampedForward, 8);
+      stream.writeSignedInt(clampedRight, 8);
       stream.writeInt(move.input.jump, 1);
       stream.writeInt(move.input.ski, 1);
       
-      // Pack rotation (normalized to 0-1 range)
-      stream.writeFloatRanged(move.rotation.yaw, -Math.PI, Math.PI, 16);
-      stream.writeFloatRanged(move.rotation.pitch, -Math.PI / 2, Math.PI / 2, 16);
+      // Pack rotation (clamp to valid ranges before packing)
+      const clampedYaw = Math.max(-Math.PI, Math.min(Math.PI, move.rotation.yaw));
+      const clampedPitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, move.rotation.pitch));
+      stream.writeFloatRanged(clampedYaw, -Math.PI, Math.PI, 16);
+      stream.writeFloatRanged(clampedPitch, -Math.PI / 2, Math.PI / 2, 16);
     }
   }
 
@@ -85,6 +91,7 @@ export class MoveManager {
    * Unpack moves from a packet stream
    */
   unpack(connectionId: string, stream: BitStream): Move[] {
+    const bitPosBefore = stream.getBitPosition();
     const count = stream.readInt(8);
     const moves: Move[] = [];
 
@@ -117,6 +124,15 @@ export class MoveManager {
       if (this.onMoveCallback) {
         this.onMoveCallback(connectionId, move);
       }
+    }
+
+    // Always log to debug the bit position
+    const bitPosAfter = stream.getBitPosition();
+    const expectedBitPos = bitPosBefore + 8 + (count * 98);
+    if (bitPosAfter !== expectedBitPos) {
+      Logger.error(`[MoveManager] CRITICAL: Bit pos mismatch! Expected ${expectedBitPos}, got ${bitPosAfter}, count=${count}, before=${bitPosBefore}`);
+    } else {
+      Logger.debug(`[MoveManager] OK: Unpacked ${count} moves, bit pos ${bitPosBefore} -> ${bitPosAfter}`);
     }
 
     return moves;

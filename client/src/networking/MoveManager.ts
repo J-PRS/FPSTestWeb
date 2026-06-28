@@ -67,24 +67,35 @@ export class MoveManager {
   pack(stream: BitStream): void {
     // Send last 3 moves
     const recentMoves = this.moves.slice(-3);
-    
+
+    const bitPosBefore = stream.getBitPosition();
     stream.writeInt(recentMoves.length, 8); // Number of moves
-    
+
     for (const move of recentMoves) {
       stream.writeInt(move.sequence, 16);
-      // Use relative timestamp to fit in 32 bits
-      const relativeTimestamp = move.timestamp - (Date.now() - 60000);
+      // Use relative timestamp to fit in 32 bits, clamp to non-negative
+      const timeOffset = Date.now() - 60000;
+      const relativeTimestamp = Math.max(0, move.timestamp - timeOffset);
       stream.writeInt(relativeTimestamp, 32);
-      
-      // Pack input
-      stream.writeSignedInt(move.input.forward, 8);
-      stream.writeSignedInt(move.input.right, 8);
+
+      // Pack input - round and clamp to valid 8-bit signed range (-127 to 127)
+      const clampedForward = Math.max(-127, Math.min(127, Math.round(move.input.forward)));
+      const clampedRight = Math.max(-127, Math.min(127, Math.round(move.input.right)));
+      stream.writeSignedInt(clampedForward, 8);
+      stream.writeSignedInt(clampedRight, 8);
       stream.writeInt(move.input.jump, 1);
       stream.writeInt(move.input.ski, 1);
-      
-      // Pack rotation (normalized to 0-1 range)
-      stream.writeFloatRanged(move.rotation.yaw, -Math.PI, Math.PI, 16);
-      stream.writeFloatRanged(move.rotation.pitch, -Math.PI / 2, Math.PI / 2, 16);
+
+      // Pack rotation (clamp to valid ranges before packing)
+      const clampedYaw = Math.max(-Math.PI, Math.min(Math.PI, move.rotation.yaw));
+      const clampedPitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, move.rotation.pitch));
+      stream.writeFloatRanged(clampedYaw, -Math.PI, Math.PI, 16);
+      stream.writeFloatRanged(clampedPitch, -Math.PI / 2, Math.PI / 2, 16);
+    }
+
+    // Log for debugging
+    if (Math.random() < 0.01) { // 1% chance to log
+      console.log(`[MoveManager] Packed ${recentMoves.length} moves, bit pos ${bitPosBefore} -> ${stream.getBitPosition()}`);
     }
   }
 

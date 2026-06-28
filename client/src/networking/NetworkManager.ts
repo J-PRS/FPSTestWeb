@@ -11,6 +11,7 @@ export class NetworkManager {
   private adapter: INetworkAdapter | null = null;
   private localPlayerId: string;
   private connected: boolean = false;
+  private players: Map<string, any> = new Map();
   public onPlayerHit: ((shooterId: string, targetId: string, damage: number) => void) | null = null;
   public onPlayerKill: ((shooterId: string, targetId: string) => void) | null = null;
   public onPlayerRespawn: ((playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }) => void) | null = null;
@@ -31,6 +32,7 @@ export class NetworkManager {
   private lastSentPosition: { x: number; y: number; z: number } | null = null;
   private lastSentRotation: { yaw: number; pitch: number } | null = null;
   private ping: number = 0;
+  private hasLoggedConnectionError: boolean = false;
 
   constructor(adapter: INetworkAdapter) {
     this.adapter = adapter;
@@ -60,15 +62,18 @@ export class NetworkManager {
     try {
       await this.adapter.connect(url);
       this.connected = true;
-      
+
       // Try to get session ID from adapter if available
       if ('getSessionId' in this.adapter) {
         this.localPlayerId = (this.adapter as any).getSessionId();
+      } else if ('getPlayerId' in this.adapter) {
+        this.localPlayerId = (this.adapter as any).getPlayerId();
       } else {
         this.localPlayerId = 'unknown';
       }
 
       logger.info(`Connected via adapter: ${this.localPlayerId}`);
+      this.hasLoggedConnectionError = false;
     } catch (error) {
       logger.error('Connection error', error);
       throw error;
@@ -95,6 +100,7 @@ export class NetworkManager {
 
     this.adapter.onConnect(() => {
       logger.info('Adapter connected');
+      this.hasLoggedConnectionError = false;
     });
 
     this.adapter.onDisconnect(() => {
@@ -103,7 +109,10 @@ export class NetworkManager {
     });
 
     this.adapter.onError((error) => {
-      logger.error('Adapter error', error);
+      if (!this.hasLoggedConnectionError) {
+        logger.error('Adapter error', error);
+        this.hasLoggedConnectionError = true;
+      }
     });
   }
 
@@ -113,30 +122,78 @@ export class NetworkManager {
 
     switch (data.type) {
       case 'gameState':
+        // Store players from gameState
+        if (data.players && Array.isArray(data.players)) {
+          data.players.forEach((player: any) => {
+            this.players.set(player.id, player);
+          });
+        }
         if (this.onGameState) {
           this.onGameState(data.players || [], data.localPlayerState);
         }
         break;
 
       case 'position':
+        // Update player in storage
+        if (data.playerId && data.position) {
+          const existing = this.players.get(data.playerId) || {};
+          this.players.set(data.playerId, {
+            ...existing,
+            id: data.playerId,
+            internalId: data.internalId || existing.internalId,
+            position: data.position,
+            rotation: data.rotation || { yaw: 0, pitch: 0 },
+            velocity: data.velocity || { x: 0, y: 0, z: 0 },
+            isDead: data.isDead || false
+          });
+        }
         if (this.onPlayerUpdate) {
           this.onPlayerUpdate(data.playerId, data.position, data.rotation, Date.now());
         }
         break;
 
       case 'playerJoined':
+        // Add player to storage
+        if (data.playerId) {
+          this.players.set(data.playerId, {
+            id: data.playerId,
+            internalId: data.internalId,
+            position: data.position || { x: 0, y: 500, z: 0 },
+            rotation: data.rotation || { yaw: 0, pitch: 0 },
+            velocity: { x: 0, y: 0, z: 0 },
+            health: 100,
+            isDead: false
+          });
+        }
         if (this.onPlayerJoined) {
           this.onPlayerJoined(data.playerId, data.position, data.rotation);
         }
         break;
 
       case 'playerLeft':
+        // Remove player from storage
+        if (data.playerId) {
+          this.players.delete(data.playerId);
+        }
         if (this.onPlayerLeft) {
           this.onPlayerLeft(data.playerId);
         }
         break;
 
       case 'playerRespawn':
+        // Update player in storage
+        if (data.playerId && data.position) {
+          const existing = this.players.get(data.playerId) || {};
+          this.players.set(data.playerId, {
+            ...existing,
+            id: data.playerId,
+            position: data.position,
+            rotation: data.rotation || { yaw: 0, pitch: 0 },
+            velocity: { x: 0, y: 0, z: 0 },
+            health: 100,
+            isDead: false
+          });
+        }
         if (this.onPlayerRespawn) {
           this.onPlayerRespawn(data.playerId, data.position, data.rotation);
         }
@@ -203,31 +260,28 @@ export class NetworkManager {
 
   /**
    * Send player position to server with rate limiting
-   * For Tribes2 backend, this sends input moves for client-side prediction
+   * Compatible with both Tribes2 and FastAPI backends
    */
   sendPosition(position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }): void {
     if (!this.adapter || !this.adapter.isConnected()) return;
-    
+
     const now = Date.now();
-    
+
     // Rate limiting
     if (now - this.lastPositionSendTime < this.POSITION_SEND_INTERVAL) {
       return;
     }
-    
+
     this.lastPositionSendTime = now;
-    
-    // For Tribes2 backend, send input moves instead of position
-    // The adapter will handle the conversion
+
+    // Send position update (compatible with both Tribes2 and FastAPI)
     this.adapter.send({
-      type: 'move',
-      x: position.x,
-      y: position.y,
-      z: position.z,
-      yaw: rotation.yaw,
-      pitch: rotation.pitch
+      type: 'position',
+      position,
+      rotation,
+      velocity: { x: 0, y: 0, z: 0 }
     });
-    
+
     this.lastSentPosition = { ...position };
     this.lastSentRotation = { ...rotation };
   }
@@ -237,12 +291,19 @@ export class NetworkManager {
    */
   sendInputMove(input: { forward: number; right: number; jump: number; ski: number }, rotation: { yaw: number; pitch: number }): void {
     if (!this.adapter || !this.adapter.isConnected()) return;
-    
+
     this.adapter.send({
       type: 'inputMove',
       input,
       rotation
     });
+  }
+
+  /**
+   * Get all players (for rendering remote players)
+   */
+  getPlayers(): Map<string, any> {
+    return this.players;
   }
 
   /**
@@ -309,14 +370,7 @@ export class NetworkManager {
     });
   }
 
-  /**
-   * Get all players (not applicable with Colyseus state sync)
-   */
-  getPlayers(): Map<string, any> {
-    // Colyseus manages state automatically
-    return new Map();
-  }
-
+  
   /**
    * Get local player ID
    */

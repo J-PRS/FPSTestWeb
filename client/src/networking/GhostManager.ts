@@ -64,16 +64,20 @@ export class GhostManager {
     const updateList = this.buildUpdateList();
     let packedCount = 0;
 
+    // Reserve space for ghost count (will write it later)
+    const countPosition = stream.getByteLength();
+    stream.writeInt(0, 8); // Placeholder
+
     for (const ghost of updateList) {
       // Check if we have space for at least ghost ID + state mask
       if (!stream.hasSpace(24)) break;
 
       // Pack ghost ID
       stream.writeInt(ghost.id, 16);
-      
+
       // Pack state mask
       stream.writeInt(ghost.stateMask, 8);
-      
+
       // Pack only the states that changed
       if (ghost.stateMask & StateMask.POSITION) {
         ghost.packPosition(stream);
@@ -96,7 +100,7 @@ export class GhostManager {
       if (ghost.stateMask & StateMask.FLAGS) {
         ghost.packFlags(stream);
       }
-      
+
       // Check if we exceeded size limit
       if (stream.getByteLength() > maxBytes) {
         // Roll back this ghost
@@ -104,11 +108,17 @@ export class GhostManager {
         stream.reset(); // Reset twice to clear buffer
         break;
       }
-      
+
       // Clear state mask after packing
       ghost.stateMask = 0;
       packedCount++;
     }
+
+    // Write the actual ghost count at the reserved position
+    const currentBitPosition = stream.getBitPosition();
+    stream.setBitPosition(countPosition * 8);
+    stream.writeInt(packedCount, 8);
+    stream.setBitPosition(currentBitPosition);
 
     return packedCount;
   }
@@ -117,18 +127,32 @@ export class GhostManager {
    * Unpack ghosts from a packet stream
    */
   unpack(stream: BitStream): void {
-    while (stream.hasData()) {
+    // Read ghost count first
+    if (!stream.hasSpace(8)) {
+      console.warn('[GhostManager] Insufficient data for ghost count');
+      return;
+    }
+
+    const ghostCount = stream.readInt(8);
+
+    for (let i = 0; i < ghostCount; i++) {
+      // Check if we have enough data for ghost header (16 + 8 = 24 bits)
+      if (!stream.hasSpace(24)) {
+        console.warn('[GhostManager] Insufficient data for ghost header');
+        return;
+      }
+
       const id = stream.readInt(16);
       const stateMask = stream.readInt(8);
-      
+
       let ghost = this.ghosts.get(id);
-      
+
       if (!ghost) {
         // Create new ghost
         ghost = this.createGhost(id);
         this.ghosts.set(id, ghost);
       }
-      
+
       // Unpack only the states that were sent
       if (stateMask & StateMask.POSITION) {
         ghost.unpackPosition(stream);
@@ -187,25 +211,104 @@ export class GhostManager {
    * Create a new ghost (should be overridden with actual ghost type)
    */
   private createGhost(id: number): Ghost {
-    // Default implementation - should be overridden
-    return {
+    const ghost: Ghost = {
       id,
       stateMask: 0,
-      packPosition: (_stream: BitStream) => {},
-      packRotation: (_stream: BitStream) => {},
-      packVelocity: (_stream: BitStream) => {},
-      packAnimation: (_stream: BitStream) => {},
-      packHealth: (_stream: BitStream) => {},
-      packWeapon: (_stream: BitStream) => {},
-      packFlags: (_stream: BitStream) => {},
-      unpackPosition: (_stream: BitStream) => {},
-      unpackRotation: (_stream: BitStream) => {},
-      unpackVelocity: (_stream: BitStream) => {},
-      unpackAnimation: (_stream: BitStream) => {},
-      unpackHealth: (_stream: BitStream) => {},
-      unpackWeapon: (_stream: BitStream) => {},
-      unpackFlags: (_stream: BitStream) => {},
+      position: { x: 0, y: 0, z: 0 },
+      rotation: { yaw: 0, pitch: 0 },
+      velocity: { x: 0, y: 0, z: 0 },
+      animation: 'idle',
+      health: 100,
+      weapon: 0,
+      flags: 0,
+
+      packPosition: (stream: BitStream) => {
+        if (ghost.position) {
+          stream.writeFloat32(ghost.position.x);
+          stream.writeFloat32(ghost.position.y);
+          stream.writeFloat32(ghost.position.z);
+        }
+      },
+
+      packRotation: (stream: BitStream) => {
+        if (ghost.rotation) {
+          stream.writeFloatRanged(ghost.rotation.yaw, -Math.PI, Math.PI, 16);
+          stream.writeFloatRanged(ghost.rotation.pitch, -Math.PI / 2, Math.PI / 2, 16);
+        }
+      },
+
+      packVelocity: (stream: BitStream) => {
+        if (ghost.velocity) {
+          stream.writeFloat32(ghost.velocity.x);
+          stream.writeFloat32(ghost.velocity.y);
+          stream.writeFloat32(ghost.velocity.z);
+        }
+      },
+
+      packAnimation: (stream: BitStream) => {
+        if (ghost.animation) {
+          stream.writeString(ghost.animation);
+        }
+      },
+
+      packHealth: (stream: BitStream) => {
+        if (ghost.health !== undefined) {
+          stream.writeInt(ghost.health, 8);
+        }
+      },
+
+      packWeapon: (stream: BitStream) => {
+        if (ghost.weapon !== undefined) {
+          stream.writeInt(ghost.weapon, 8);
+        }
+      },
+
+      packFlags: (stream: BitStream) => {
+        if (ghost.flags !== undefined) {
+          stream.writeInt(ghost.flags, 8);
+        }
+      },
+
+      unpackPosition: (stream: BitStream) => {
+        ghost.position = {
+          x: stream.readFloat32(),
+          y: stream.readFloat32(),
+          z: stream.readFloat32()
+        };
+      },
+
+      unpackRotation: (stream: BitStream) => {
+        ghost.rotation = {
+          yaw: stream.readFloatRanged(-Math.PI, Math.PI, 16),
+          pitch: stream.readFloatRanged(-Math.PI / 2, Math.PI / 2, 16)
+        };
+      },
+
+      unpackVelocity: (stream: BitStream) => {
+        ghost.velocity = {
+          x: stream.readFloat32(),
+          y: stream.readFloat32(),
+          z: stream.readFloat32()
+        };
+      },
+
+      unpackAnimation: (stream: BitStream) => {
+        ghost.animation = stream.readString();
+      },
+
+      unpackHealth: (stream: BitStream) => {
+        ghost.health = stream.readInt(8);
+      },
+
+      unpackWeapon: (stream: BitStream) => {
+        ghost.weapon = stream.readInt(8);
+      },
+
+      unpackFlags: (stream: BitStream) => {
+        ghost.flags = stream.readInt(8);
+      },
     };
+    return ghost;
   }
 
   /**

@@ -17,6 +17,7 @@ export class GameLoop {
   private tickInterval: number;
   private terrain: SimpleTerrain;
   private performanceMonitor?: PerformanceMonitor;
+  private ghostUpdateCallback?: (playerId: string, position: any, rotation: any, velocity: any) => void;
 
   constructor(
     private playerManager: PlayerManager,
@@ -29,6 +30,10 @@ export class GameLoop {
     this.tickInterval = ServerConfig.MILLISECONDS_PER_SECOND / tickRate;
     this.terrain = new SimpleTerrain();
     this.performanceMonitor = performanceMonitor;
+  }
+
+  setGhostUpdateCallback(callback: (playerId: string, position: any, rotation: any, velocity: any) => void): void {
+    this.ghostUpdateCallback = callback;
   }
 
   start(): void {
@@ -57,11 +62,11 @@ export class GameLoop {
 
     // Spawn points (fixed height above max terrain - server terrain doesn't match client)
     const spawnPoints = [
-      { x: 0, y: 150, z: 0 },
-      { x: 50, y: 150, z: 0 },
-      { x: -50, y: 150, z: 0 },
-      { x: 0, y: 150, z: 50 },
-      { x: 0, y: 150, z: -50 }
+      { x: 0, y: 500, z: 0 },
+      { x: 50, y: 500, z: 0 },
+      { x: -50, y: 500, z: 0 },
+      { x: 0, y: 500, z: 50 },
+      { x: 0, y: 500, z: -50 }
     ];
 
     // Check for respawns and extrapolate positions
@@ -128,6 +133,11 @@ export class GameLoop {
           rotation: player.rotation,
           velocity: player.velocity
         }, playerId); // Exclude the player themselves from their own position broadcast
+
+        // Update ghost for Tribes2 networking
+        if (this.ghostUpdateCallback) {
+          this.ghostUpdateCallback(playerId, player.position, player.rotation, player.velocity);
+        }
       }
     }
     

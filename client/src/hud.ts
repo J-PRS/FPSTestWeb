@@ -16,6 +16,7 @@ export class HUD {
   private hitMarker: HTMLDivElement;
   private hitTimer = 0;
   private playerIndicators: Map<string, HTMLDivElement> = new Map();
+  private playerList: HTMLDivElement;
 
   constructor() {
     const style = document.createElement('style');
@@ -98,11 +99,27 @@ export class HUD {
         transition: opacity 0.1s;
       }
       .player-indicator.offscreen {
-        background: #ff0;
+        background: transparent;
         border-color: #f00;
       }
       .player-indicator.hidden {
         opacity: 0;
+      }
+      #player-list {
+        position: absolute; top: 14px; left: 20px;
+        font-size: 0.75rem; color: #ccc; line-height: 1.7;
+        text-align: left;
+      }
+      #player-list .player-id {
+        display: block;
+        margin-bottom: 2px;
+      }
+      #player-list .player-id.local {
+        color: #0f0;
+        font-weight: bold;
+      }
+      #player-list .player-id.remote {
+        color: #ccc;
       }
     `;
     document.head.appendChild(style);
@@ -110,9 +127,7 @@ export class HUD {
     this.el = document.createElement('div');
     this.el.id = 'hud';
     this.el.innerHTML = `
-      <div id="hud-tl">
-        WASD=move &nbsp; SPACE=jump/ski &nbsp; RMB=jetpack &nbsp; LMB=fire &nbsp; R=reload
-      </div>
+      <div id="player-list"></div>
       <div id="hud-tr">
         Speed: <span id="spd">0</span> &nbsp; <span id="state-lbl">GROUND</span> &nbsp; Ping: <span id="ping">0</span>ms &nbsp; Loss: <span id="loss">0</span>% &nbsp; Jitter: <span id="jitter">0</span>ms
       </div>
@@ -154,6 +169,7 @@ export class HUD {
     this.loss     = this.el.querySelector('#loss')!;
     this.jitter   = this.el.querySelector('#jitter')!;
     this.crosshair = this.el.querySelector('#crosshair')!;
+    this.playerList = this.el.querySelector('#player-list')!;
     this.hitMarker = this.el.querySelector('#hit-marker')!;
   }
 
@@ -203,6 +219,7 @@ export class HUD {
       indicator.className = 'player-indicator';
       this.el.appendChild(indicator);
       this.playerIndicators.set(playerId, indicator);
+      console.log(`[HUD] INDICATOR CREATED for playerId=${playerId} (total indicators: ${this.playerIndicators.size})`);
     }
 
     if (isDead) {
@@ -219,7 +236,8 @@ export class HUD {
     camera.getWorldDirection(cameraDir);
 
     // Calculate vector from camera to target
-    const targetPos = new THREE.Vector3(position.x, position.y, position.z);
+    // Position is at feet, but we want to point to the player center (feet + 1.0)
+    const targetPos = new THREE.Vector3(position.x, position.y + 1.0, position.z);
     const toTarget = new THREE.Vector3().subVectors(targetPos, cameraPos);
 
     // Check if target is behind camera (angle > 90 degrees)
@@ -282,11 +300,24 @@ export class HUD {
     if (indicator) {
       indicator.remove();
       this.playerIndicators.delete(playerId);
+      console.log(`[HUD] INDICATOR REMOVED for playerId=${playerId} (total indicators: ${this.playerIndicators.size})`);
+    } else {
+      console.log(`[HUD] INDICATOR NOT FOUND for removal, playerId=${playerId}`);
     }
   }
 
   clearPlayerIndicators(): void {
     this.playerIndicators.forEach(indicator => indicator.remove());
     this.playerIndicators.clear();
+  }
+
+  updatePlayerList(playerIds: string[], localPlayerId: string): void {
+    this.playerList.innerHTML = '';
+    playerIds.forEach(playerId => {
+      const div = document.createElement('div');
+      div.className = playerId === localPlayerId ? 'player-id local' : 'player-id remote';
+      div.textContent = playerId;
+      this.playerList.appendChild(div);
+    });
   }
 }

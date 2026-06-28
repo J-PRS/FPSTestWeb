@@ -46,10 +46,12 @@ export class PlayerModel {
           // At scale 0.5: x: 1.6, y: 2.4, z: 1.6
           // Hitbox: radius 0.8 (width 1.6), height 2.0
           // Scale factor 0.5 matches width, but model is taller (2.4 vs 2.0)
-          // Offset Y by -0.2 to align feet with collider bottom
+          // Model origin is at center, so we need to offset position by half height
           this.model.scale.setScalar(0.5);
           this.model.rotation.y = Math.PI; // Face forward
-          this.model.position.y = -0.2; // Offset to align feet with ground
+          // Offset model so its feet are at the position (model origin is at center)
+          // Model height at scale 0.5 is 2.4, so half is 1.2
+          this.model.position.y = 1.2;
           
           // Set up animation mixer
           this.mixer = new THREE.AnimationMixer(this.model);
@@ -66,10 +68,16 @@ export class PlayerModel {
           this.playAnimation('Idle');
           
           this.scene.add(this.model);
+          console.log(`[PlayerModel] MODEL ADDED to scene (scene children: ${this.scene.children.length})`);
 
           // Create collider gizmo (wireframe capsule for hitbox visualization)
-          // Hitbox: radius 0.8, total height 2.5 (0.9 cylinder + 0.8 hemisphere + 0.8 hemisphere)
-          const colliderGeo = new THREE.CapsuleGeometry(0.8, 0.9, 4, 16);
+          // Match actual collision volume from config.ts: PLAYER_RADIUS=0.8, PLAYER_HEIGHT=2.0
+          // CapsuleGeometry(radius, height, radialSegments, heightSegments)
+          // Height parameter is the cylinder height only (not including hemispheres)
+          // Total height = cylinder height + 2 * radius
+          // For total height 2.0 with radius 0.8: cylinder height = 2.0 - 2*0.8 = 0.4
+          // Model is scaled by 0.5, so we need to divide geometry by scale to get correct world size
+          const colliderGeo = new THREE.CapsuleGeometry(0.8 / 0.5, 0.4 / 0.5, 4, 16);
           const colliderMat = new THREE.MeshBasicMaterial({
             color: 0x00ff00,
             wireframe: true,
@@ -78,9 +86,15 @@ export class PlayerModel {
             depthTest: false // Always render on top
           });
           this.colliderGizmo = new THREE.Mesh(colliderGeo, colliderMat);
-          this.colliderGizmo.position.y = 1.25; // Center at height 1.25 (half of 2.5)
+          // Model is at feet + 1.2, but collider center should be at feet + 1.0 (half player height)
+          // So collider should be at y = -0.2 in world space relative to model center
+          // Since model is scaled by 0.5, local position is multiplied by scale
+          // To get -0.2 world offset: local = -0.2 / 0.5 = -0.4
+          this.colliderGizmo.position.y = -0.4;
           this.colliderGizmo.renderOrder = 999; // Render last (on top)
-          this.scene.add(this.colliderGizmo);
+          this.colliderGizmo.visible = true; // Ensure it's visible
+          this.model.add(this.colliderGizmo); // Add as child of model so it moves with it
+          console.log(`[PlayerModel] COLLIDER GIZMO ADDED to model (scene children: ${this.scene.children.length})`);
 
           resolve();
         },
@@ -160,11 +174,11 @@ export class PlayerModel {
 
   setPosition(x: number, y: number, z: number): void {
     if (this.model) {
-      this.model.position.set(x, y, z);
+      // Position represents feet, model origin is at center
+      // Model height at scale 0.5 is 2.4, so offset by half (1.2)
+      this.model.position.set(x, y + 1.2, z);
     }
-    if (this.colliderGizmo) {
-      this.colliderGizmo.position.set(x, y + 1.25, z);
-    }
+    // Collider gizmo is now a child of the model, so it moves with it automatically
   }
 
   setRotation(yaw: number, pitch: number, roll: number = 0): void {
@@ -187,6 +201,19 @@ export class PlayerModel {
     }
   }
 
+  removeColliderGizmo(): void {
+    if (this.colliderGizmo && this.model) {
+      this.model.remove(this.colliderGizmo);
+      console.log(`[PlayerModel] COLLIDER GIZMO REMOVED from model`);
+    }
+  }
+
+  addColliderGizmo(): void {
+    if (this.colliderGizmo && this.model && !this.model.children.includes(this.colliderGizmo)) {
+      this.model.add(this.colliderGizmo);
+    }
+  }
+
   setScale(scale: number): void {
     if (this.model) {
       this.model.scale.setScalar(0.5 * scale); // Base scale is 0.5
@@ -194,8 +221,10 @@ export class PlayerModel {
   }
 
   dispose(): void {
+    console.log(`[PlayerModel] DISPOSE called`);
     if (this.model) {
       this.scene.remove(this.model);
+      console.log(`[PlayerModel] MODEL REMOVED from scene`);
       this.mixer?.stopAllAction();
       this.animations.clear();
       this.model = null;
@@ -203,7 +232,8 @@ export class PlayerModel {
       this.currentAction = null;
     }
     if (this.colliderGizmo) {
-      this.scene.remove(this.colliderGizmo);
+      // Collider gizmo is a child of the model, so it's already removed when model is removed
+      // Just dispose of resources
       this.colliderGizmo.geometry.dispose();
       (this.colliderGizmo.material as THREE.Material).dispose();
       this.colliderGizmo = null;
