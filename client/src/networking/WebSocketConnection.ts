@@ -29,11 +29,13 @@ export class WebSocketConnection {
   private reconnectTimer: number | null = null;
   private isConnected: boolean = false;
   private messageQueue: any[] = [];
+  private readonly MAX_QUEUE_SIZE = 100;
+  private hasLoggedConnectionError: boolean = false;
 
   constructor(config: ConnectionConfig) {
     this.config = {
       reconnectInterval: TRIBES2_RECONNECT_INTERVAL,
-      maxReconnectAttempts: 5,
+      maxReconnectAttempts: Infinity, // Unlimited reconnection attempts
       ...config
     };
   }
@@ -56,6 +58,7 @@ export class WebSocketConnection {
         logger.info('WebSocket connected');
         this.isConnected = true;
         this.reconnectAttempts = 0;
+        this.hasLoggedConnectionError = false;
         
         // Call onConnect FIRST - let the application send its initial messages
         if (this.config.onConnect) {
@@ -89,7 +92,10 @@ export class WebSocketConnection {
       };
 
       this.ws.onerror = (error) => {
-        logger.error('WebSocket error:', error);
+        if (!this.hasLoggedConnectionError) {
+          logger.error('WebSocket error:', error);
+          this.hasLoggedConnectionError = true;
+        }
         if (this.config.onError) {
           this.config.onError(new Error('WebSocket connection error'));
         }
@@ -197,8 +203,10 @@ export class WebSocketConnection {
    */
   send(data: any): boolean {
     if (!this.isConnected || !this.ws) {
-      console.warn('WebSocket not connected, queuing message');
-      this.messageQueue.push(data);
+      // Limit queue size to prevent memory issues
+      if (this.messageQueue.length < this.MAX_QUEUE_SIZE) {
+        this.messageQueue.push(data);
+      }
       return false;
     }
 

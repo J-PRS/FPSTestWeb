@@ -173,14 +173,14 @@ export class StreamManager {
    */
   private packAcks(connectionId: string, stream: BitStream): void {
     const acks = this.pendingAcks.get(connectionId);
-    if (!acks || acks.length === 0) return;
+    const ackCount = acks ? Math.min(acks.length, 255) : 0;
 
-    // Pack ACK count (1 byte)
-    stream.writeInt(Math.min(acks.length, 255), 8);
+    // Always pack ACK count (1 byte) even if 0
+    stream.writeInt(ackCount, 8);
 
     // Pack ACK sequence numbers (2 bytes each)
-    for (let i = 0; i < Math.min(acks.length, 255); i++) {
-      stream.writeInt(acks[i], 16);
+    for (let i = 0; i < ackCount; i++) {
+      stream.writeInt(acks![i], 16);
     }
 
     // Clear sent ACKs
@@ -223,14 +223,16 @@ export class StreamManager {
 
       // Check if we have enough data for header (8 + 32 + 16 = 56 bits = 7 bytes)
       if (!stream.hasSpace(56)) {
-        Logger.warn(`Insufficient data for packet header from ${connectionId}, packet size: ${data.length} bytes`);
+        Logger.warn(`[StreamManager] Insufficient data for packet header from ${connectionId}, size: ${data.length} bytes`);
         return;
       }
 
       // Unpack header
       const messageType = stream.readInt(8);
-      stream.readInt(32); // timestamp - unused
-      stream.readInt(16); // sequence - unused
+      const timestamp = stream.readInt(32);
+      const sequence = stream.readInt(16);
+
+      const bitPosAfterHeader = stream.getBitPosition();
 
       if (messageType === 1) {
         // Game data packet
@@ -247,20 +249,47 @@ export class StreamManager {
    * Handle game data packet for a connection
    */
   private handleGameDataPacket(connectionId: string, stream: BitStream): void {
-    // Unpack in the same order as packing
+    // Read section sizes (4 sections, 16 bits each = 64 bits = 8 bytes)
+    if (!stream.hasSpace(64)) {
+      Logger.warn(`[StreamManager] Insufficient data for section sizes from ${connectionId}`);
+      return;
+    }
+
+    const moveSizeBits = stream.readInt(16);
+    const eventSizeBits = stream.readInt(16);
+    const ackSizeBits = stream.readInt(16);
+    const ghostSizeBits = stream.readInt(16);
+
+    const bitPosBeforeMoves = stream.getBitPosition();
 
     // 1. Move Manager
     try {
       this.moveManager.unpack(connectionId, stream);
     } catch (error) {
-      Logger.warn(`Failed to unpack moves from ${connectionId}: ${error}`);
+      Logger.warn(`[StreamManager] Failed to unpack moves from ${connectionId}: ${error}`);
     }
+
+    const bitPosAfterMoves = stream.getBitPosition();
+    const actualMoveSizeBits = bitPosAfterMoves - bitPosBeforeMoves;
+
+    if (actualMoveSizeBits !== moveSizeBits) {
+      Logger.error(`[StreamManager] MoveManager size mismatch! Expected ${moveSizeBits} bits, got ${actualMoveSizeBits} bits`);
+    }
+
+    const bitPosBeforeEvents = stream.getBitPosition();
 
     // 2. Event Manager
     try {
       this.eventManager.unpack(connectionId, stream);
     } catch (error) {
-      Logger.warn(`Failed to unpack events from ${connectionId}: ${error}`);
+      Logger.warn(`[StreamManager] Failed to unpack events from ${connectionId}: ${error}`);
+    }
+
+    const bitPosAfterEvents = stream.getBitPosition();
+    const actualEventSizeBits = bitPosAfterEvents - bitPosBeforeEvents;
+
+    if (actualEventSizeBits !== eventSizeBits) {
+      Logger.error(`[StreamManager] EventManager size mismatch! Expected ${eventSizeBits} bits, got ${actualEventSizeBits} bits`);
     }
 
     // 2.5. ACKs (acknowledgments for guaranteed events)

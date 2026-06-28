@@ -5,12 +5,12 @@ function Get-PortProcess {
     $result = netstat -ano | Select-String ":$Port\s"
     if ($result) {
         $parts = $result.Line -split '\s+'
-        $pid = $parts[-1]
-        $process = Get-Process -Id $pid -ErrorAction SilentlyContinue
+        $processId = $parts[-1]
+        $process = Get-Process -Id $processId -ErrorAction SilentlyContinue
         if ($process) {
             return @{
                 Port = $Port
-                PID = $pid
+                PID = $processId
                 ProcessName = $process.ProcessName
                 Path = $process.Path
                 State = ($result.Line -split '\s+')[-2]
@@ -24,8 +24,8 @@ function Get-PortProcess {
 Write-Host "Starting server and client..."
 
 # Check ports before starting
-$ports = @(5174, 5175)
-Write-Host "Checking ports 5174 and 5175..."
+$ports = @(5300)
+Write-Host "Checking port 5300..."
 foreach ($port in $ports) {
     $portInfo = Get-PortProcess -Port $port
     if ($portInfo) {
@@ -39,23 +39,18 @@ foreach ($port in $ports) {
     }
 }
 
-# Start server as admin
+# Start server as admin in popup window
 $serverArgs = @(
     '-NoExit',
     '-Command',
-    'cd C:\TEMP\_WEB\FPSWebTest\server; npm run dev'
+    'cd C:\TEMP\_WEB\FPSWebTest\server; npm run dev; $Host.UI.RawUI.WindowTitle = "FPS Server"'
 )
 Start-Process powershell -ArgumentList $serverArgs -Verb RunAs
 
 # Wait a moment for server to start
 Start-Sleep -Seconds 2
 
-# Start client (no admin needed)
-$clientArgs = @(
-    '-NoExit',
-    '-Command',
-    'cd C:\TEMP\_WEB\FPSWebTest\client; npm run dev'
-)
-Start-Process powershell -ArgumentList $clientArgs
-
-Write-Host "Both processes started."
+# Start client in current CLI window
+Write-Host "Starting client in this window..."
+Set-Location C:\TEMP\_WEB\FPSWebTest\client
+npm run dev

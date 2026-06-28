@@ -20,7 +20,7 @@ const TRAIL_EMISSION = 6;     // particles per emission
 const TRAIL_LIFE_MIN = 1.2;
 const TRAIL_LIFE_MAX = 1.8;
 const TRAIL_SPREAD   = 0.25;  // lateral spawn spread
-const TRAIL_GEO = new THREE.SphereGeometry(1, 4, 4);
+const TRAIL_GEO = new THREE.SphereGeometry(1, 8, 6);
 
 // Gradient colors: orange → red → brown → smoke
 const TRAIL_COLORS = [
@@ -31,6 +31,30 @@ const TRAIL_COLORS = [
   new THREE.Color(0.35, 0.35, 0.4), // smoke grey
 ];
 
+/**
+ * Wake Hit Distance Tracking Logic:
+ *
+ * Rockets have two hit detection zones:
+ * 1. Core (direct hit): Rocket center passes through target's actual radius
+ * 2. Wake (proxy hit): Rocket center passes through expanding wake radius (grows from 0.3 to 8.0 over 2 seconds)
+ *
+ * Problem: If wake radius grazes target from front, it could trigger before core hit registers,
+ *          causing direct hits to be missed.
+ *
+ * Solution: Track minimum distance to each target. Only trigger wake hit when distance starts
+ *           increasing (projectile has passed the target). This allows core hits to register
+ *           first if the rocket continues approaching.
+ *
+ * Example:
+ * - Frame 1: Wake enters zone, distance=5.0, minDist=5.0 (approaching, no trigger)
+ * - Frame 2: Distance=3.0, minDist=3.0 (still approaching, no trigger)
+ * - Frame 3: Core hit at distance=1.2 (direct hit triggers, rocket explodes)
+ *
+ * Without core hit:
+ * - Frame 1: Wake enters zone, distance=5.0, minDist=5.0 (approaching, no trigger)
+ * - Frame 2: Distance=3.0, minDist=3.0 (still approaching, no trigger)
+ * - Frame 3: Distance=4.0, minDist=3.0 (increasing! wake hit triggers)
+ */
 export class Rocket {
   pos: THREE.Vector3;
   vel: THREE.Vector3;
@@ -48,6 +72,10 @@ export class Rocket {
   minHitDist   = 0.0;  // minimum distance during sweep (for accurate accuracy)
   readonly explosionRadius = ROCKET_RADIUS;
   readonly knockbackForce = ROCKET_FORCE;
+
+  // Wake hit tracking: only trigger when distance increases (projectile passed target)
+  private wakeBallDistances = new Map<Ball, number>(); // ball -> min distance seen
+  private wakePlayerDistances = new Map<string, number>(); // playerId -> min distance seen
 
   get hitRadius(): number {
     const t = Math.min(this.age / HIT_GROW, 1.0);
@@ -119,9 +147,11 @@ export class Rocket {
     const dz = this.pos.z - this.prevPos.z;
     const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
     const steps = Math.max(1, Math.ceil(dist / STEP));
-    const coreThresh  = ball.radius + HIT_MIN; // small fixed core
+    const coreThresh  = ball.radius; // direct hit = rocket center inside ball
     const wakeThresh  = ball.radius + this.hitRadius; // expanding wake
     let minDist = Infinity;
+    let inWake = false;
+
     for (let i = 0; i <= steps; i++) {
       const t = i / steps;
       const sx = this.prevPos.x + dx * t;
@@ -131,22 +161,36 @@ export class Rocket {
       const d2 = ex*ex + ey*ey + ez*ez;
       const d = Math.sqrt(d2);
       if (d < minDist) minDist = d;
+
+      // Direct hit - immediate
       if (d2 <= coreThresh * coreThresh) {
         this.minHitDist = minDist;
         this.directHit = true;
         return true;
       }
+
+      // Wake hit - track distance, only trigger when increasing
       if (d2 <= wakeThresh * wakeThresh) {
-        this.minHitDist = minDist;
-        this.directHit = false;
-        return true;
+        inWake = true;
+        const prevMin = this.wakeBallDistances.get(ball) ?? Infinity;
+        if (d < prevMin) {
+          // Getting closer, update min distance
+          this.wakeBallDistances.set(ball, d);
+        } else if (d > prevMin) {
+          // Distance increasing - projectile passed target, trigger wake hit
+          this.minHitDist = minDist;
+          this.directHit = false;
+          return true;
+        }
       }
     }
+
+    // In wake but distance never increased (still approaching) - don't trigger yet
     return false;
   }
 
   // True continuous sphere sweep vs player capsule
-  private sweepPlayer(playerPos: THREE.Vector3): boolean {
+  private sweepPlayer(playerPos: THREE.Vector3, playerId: string): boolean {
     const halfHeight = PLAYER_HEIGHT / 2;
 
     // Rocket path vector
@@ -165,7 +209,7 @@ export class Rocket {
 
       if (inHeightRange && hDist <= PLAYER_RADIUS + this.hitRadius) {
         this.minHitDist = hDist;
-        this.directHit = hDist <= PLAYER_RADIUS + HIT_MIN;
+        this.directHit = hDist <= PLAYER_RADIUS; // direct hit = rocket center touches player
         return true;
       }
       return false;
@@ -207,17 +251,25 @@ export class Rocket {
     if (totalDist <= PLAYER_RADIUS + this.hitRadius) {
       this.minHitDist = hDist;
 
-      // Core hit (direct hit)
-      if (hDist <= PLAYER_RADIUS + HIT_MIN) {
+      // Core hit (direct hit) - immediate
+      if (hDist <= PLAYER_RADIUS) {
         this.directHit = true;
         logger.debug(`Core hit at dist ${hDist.toFixed(2)}, playerPos: ${playerPos.x.toFixed(1)},${playerPos.y.toFixed(1)},${playerPos.z.toFixed(1)}`);
         return true;
       }
 
-      // Wake hit (expanding hitbox)
-      this.directHit = false;
-      logger.debug(`Wake hit at dist ${hDist.toFixed(2)}, threshold ${(PLAYER_RADIUS + this.hitRadius).toFixed(2)}`);
-      return true;
+      // Wake hit - track distance, only trigger when increasing
+      const prevMin = this.wakePlayerDistances.get(playerId) ?? Infinity;
+      if (hDist < prevMin) {
+        // Getting closer, update min distance
+        this.wakePlayerDistances.set(playerId, hDist);
+        return false; // Don't trigger yet
+      } else if (hDist > prevMin) {
+        // Distance increasing - projectile passed target, trigger wake hit
+        this.directHit = false;
+        logger.debug(`Wake hit at dist ${hDist.toFixed(2)}, threshold ${(PLAYER_RADIUS + this.hitRadius).toFixed(2)}`);
+        return true;
+      }
     }
 
     return false;
@@ -272,7 +324,7 @@ export class Rocket {
       // Check collision with remote players
       if (remotePlayers) {
         for (const [playerId, playerPos] of remotePlayers) {
-          if (this.sweepPlayer(playerPos)) {
+          if (this.sweepPlayer(playerPos, playerId)) {
             this.hitPlayerId = playerId;
             // Calculate surface-to-surface distance (center distance minus player radius)
             this.hitAccuracy = Math.max(0, this.minHitDist - 0.8); // PLAYER_RADIUS = 0.8
@@ -316,9 +368,10 @@ export class Rocket {
       ? this.vel.clone().normalize()
       : new THREE.Vector3(0, 1, 0);
 
-    let right = new THREE.Vector3().crossVectors(dir, new THREE.Vector3(0, 1, 0));
-    if (right.lengthSq() < 0.01) right = new THREE.Vector3().crossVectors(dir, new THREE.Vector3(1, 0, 0));
-    right.normalize();
+    // Robust orthogonal basis calculation for consistent particle spread
+    // Pick an arbitrary axis that's not parallel to direction
+    const arbitrary = Math.abs(dir.y) < 0.9 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0);
+    let right = new THREE.Vector3().crossVectors(dir, arbitrary).normalize();
     const up = new THREE.Vector3().crossVectors(right, dir).normalize();
 
     for (let i = 0; i < TRAIL_EMISSION; i++) {

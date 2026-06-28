@@ -33,6 +33,7 @@ export class Tribes2Adapter implements INetworkAdapter {
   private localPlayerId: string = '';
   private controlObject: any = null; // For client-side prediction
   private joinHandshakeComplete: boolean = false; // Track join handshake state
+  private players: Map<string, any> = new Map();
 
   constructor() {
     this.scopeManager = new ScopeManager();
@@ -57,7 +58,8 @@ export class Tribes2Adapter implements INetworkAdapter {
             // Send JSON join message FIRST - before initializing StreamManager
             const joinMessage = JSON.stringify({
               type: 'join',
-              playerId: this.localPlayerId || 'player_' + Math.random().toString(36).substr(2, 9)
+              playerId: this.localPlayerId || 'player_' + Math.random().toString(36).substr(2, 9),
+              position: this.controlObject ? { x: this.controlObject.pos.x, y: this.controlObject.pos.y, z: this.controlObject.pos.z } : { x: 0, y: 0, z: 0 }
             });
             this.wsConnection?.send(joinMessage);
             
@@ -78,7 +80,21 @@ export class Tribes2Adapter implements INetworkAdapter {
                 }
               }
             );
-            
+
+            // Set up ghost update callback to sync to players Map
+            this.streamManager.onGhostsUpdate = (ghosts: any[]) => {
+              console.log(`[Tribes2Adapter] Ghost update: ${ghosts.length} ghosts`);
+              ghosts.forEach(ghost => {
+                console.log(`[Tribes2Adapter] Syncing ghost ${ghost.id} at (${ghost.position.x.toFixed(1)}, ${ghost.position.y.toFixed(1)}, ${ghost.position.z.toFixed(1)})`);
+                this.players.set(ghost.id.toString(), {
+                  position: ghost.position,
+                  rotation: ghost.rotation,
+                  velocity: ghost.velocity,
+                  isDead: false // Will be updated from other events
+                });
+              });
+            };
+
             // Don't start StreamManager yet - wait for join acknowledgment
             this.connectCallback?.();
             resolve();
@@ -318,6 +334,10 @@ export class Tribes2Adapter implements INetworkAdapter {
     this.controlObject = controlObject;
   }
 
+  getPlayers(): Map<string, any> {
+    return this.players;
+  }
+
   /**
    * Handle server state reconciliation for client-side prediction
    */
@@ -328,8 +348,8 @@ export class Tribes2Adapter implements INetworkAdapter {
 
     logger.debug(`State reconciliation: pos(${serverState.position.x.toFixed(1)},${serverState.position.y.toFixed(1)},${serverState.position.z.toFixed(1)}) seq=${lastProcessedSequence}`);
 
-    // Snap to server position first
-    this.controlObject.pos.set(serverState.position.x, serverState.position.y, serverState.position.z);
+    // Snap to server position, but ignore Y (server has no terrain data)
+    this.controlObject.pos.set(serverState.position.x, this.controlObject.pos.y, serverState.position.z);
     this.controlObject.vel.set(serverState.velocity.x, serverState.velocity.y, serverState.velocity.z);
     this.controlObject.yaw = serverState.rotation.yaw;
     this.controlObject.pitch = serverState.rotation.pitch;

@@ -37,23 +37,56 @@ import {
 
 const logger = new ChildLogger('Main');
 
+// ---- Load Time Profiling ----
+const loadTimes: { [key: string]: number } = {};
+const loadStart = performance.now();
+loadTimes['scriptStart'] = loadStart;
+
+function markTime(name: string): void {
+  loadTimes[name] = performance.now();
+  const elapsed = (loadTimes[name] - loadStart).toFixed(2);
+  console.log(`[PROFILE] ${name}: ${elapsed}ms`);
+}
+
+function printLoadSummary(): void {
+  console.log('=== LOAD TIME SUMMARY ===');
+  let prev = loadStart;
+  for (const [name, time] of Object.entries(loadTimes)) {
+    const elapsed = (time - loadStart).toFixed(2);
+    const delta = (time - prev).toFixed(2);
+    console.log(`${name}: +${delta}ms (total: ${elapsed}ms)`);
+    prev = time;
+  }
+  const total = (performance.now() - loadStart).toFixed(2);
+  console.log(`=== TOTAL: ${total}ms ===`);
+}
+
 
 // ---- Renderer ----
-let pixelated = true;
+let pixelated = localStorage.getItem('fps-pixelated') === 'false' ? false : true;
 const renderer = new THREE.WebGLRenderer({ antialias: false });
 renderer.setPixelRatio(RENDERER_PIXEL_RATIO);
-renderer.setSize(
-  Math.floor(window.innerWidth / PIXEL_SCALE),
-  Math.floor(window.innerHeight / PIXEL_SCALE)
-);
+if (pixelated) {
+  renderer.setSize(
+    Math.floor(window.innerWidth / PIXEL_SCALE),
+    Math.floor(window.innerHeight / PIXEL_SCALE)
+  );
+  renderer.domElement.style.imageRendering = 'pixelated';
+} else {
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.domElement.style.imageRendering = 'auto';
+}
 renderer.domElement.style.width = '100%';
 renderer.domElement.style.height = '100%';
-renderer.domElement.style.imageRendering = 'pixelated'; // Nearest-neighbor scaling
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = TONE_MAPPING_EXPOSURE;
 document.body.appendChild(renderer.domElement);
+
+// Initialize button text from localStorage
+const pixelToggleBtn = document.getElementById('pixel-toggle')! as HTMLButtonElement;
+pixelToggleBtn.textContent = pixelated ? 'PIXELATED: ON' : 'PIXELATED: OFF';
 
 function updateRendererSize(): void {
   if (pixelated) {
@@ -203,8 +236,8 @@ function onDisc(e: { origin: THREE.Vector3; dir: THREE.Vector3; playerVel: THREE
 }
 
 // ---- Explosion processing ----
-function processExplosion(pos: THREE.Vector3, radius: number, force: number, shooterId?: string): void {
-  const exp = new Explosion(scene, pos);
+function processExplosion(pos: THREE.Vector3, radius: number, force: number, shooterId?: string, directHit: boolean = false): void {
+  const exp = new Explosion(scene, pos, directHit);
   explosions.push(exp);
 
   // Record explosion for death impulse calculation
@@ -298,7 +331,7 @@ function updateRockets(dt: number): void {
         networkManager.sendProjectileDestroy(r.serverProjectileId);
       }
       
-      processExplosion(r.pos, r.explosionRadius, r.knockbackForce);
+      processExplosion(r.pos, r.explosionRadius, r.knockbackForce, undefined, r.directHit);
 
       if (r.hitBall) {
         const ball = r.hitBall;
@@ -439,11 +472,13 @@ function loop(time: number): void {
   lastTime = time;
 
   // Update player physics even when tab is hidden (to keep position changing)
+  // Reverted to main-thread physics until terrain can be properly implemented in worker
   player.update(dt);
   terrain.update(player.pos.x, player.pos.z);
 
   // Send position to server if connected (even when tab is hidden)
-  if (networkManager && networkManager.isConnected()) {
+  // Don't send position updates while dead to prevent state drift
+  if (networkManager && networkManager.isConnected() && !player.isDead) {
     networkManager.sendPosition(
       { x: player.pos.x, y: player.pos.y, z: player.pos.z },
       { yaw: player.yaw, pitch: player.pitch }
@@ -453,12 +488,21 @@ function loop(time: number): void {
     const players = networkManager.getPlayers();
     const previousRemoteCount = remotePlayers.size;
 
+    // Update player list UI
+    const localPlayerId = networkManager.getLocalPlayerId();
+    const playerIds = Array.from(players.keys());
+    // Put local player first
+    const sortedPlayerIds = [localPlayerId, ...playerIds.filter(id => id !== localPlayerId)];
+    hud.updatePlayerList(sortedPlayerIds, localPlayerId);
+
     // Log remote player positions periodically (every 2 seconds)
-    if (Math.random() < 0.03) { // ~3% chance per frame at 60fps = ~2 seconds
+    const shouldLog = Math.random() < 0.03; // ~3% chance per frame at 60fps = ~2 seconds
+    if (shouldLog) {
       const remotePositions: string[] = [];
       players.forEach((playerState, playerId) => {
         if (playerId !== networkManager.getLocalPlayerId()) {
-          remotePositions.push(`${playerId}: (${playerState.position.x.toFixed(1)}, ${playerState.position.y.toFixed(1)}, ${playerState.position.z.toFixed(1)})`);
+          const internalId = playerState.internalId || 'unknown';
+          remotePositions.push(`${playerId}[${internalId}]: (${playerState.position.x.toFixed(1)}, ${playerState.position.y.toFixed(1)}, ${playerState.position.z.toFixed(1)})`);
         }
       });
       if (remotePositions.length > 0) {
@@ -474,9 +518,9 @@ function loop(time: number): void {
 
       let remotePlayer = remotePlayers.get(playerId);
       if (!remotePlayer) {
-        logger.debug(`Creating new RemotePlayer for ${playerId} at ${JSON.stringify(playerState.position)}`);
         remotePlayer = new RemotePlayer(scene, playerId, playerState.position, terrain);
         remotePlayers.set(playerId, remotePlayer);
+        console.log(`[RemotePlayer] CREATED instanceId=${remotePlayer.instanceId} for playerId=${playerId} (total map size: ${remotePlayers.size})`);
       }
       // RemotePlayer.update is called via onPlayerUpdate callback to store target position
       // Call tick() every frame for smooth interpolation
@@ -485,23 +529,41 @@ function loop(time: number): void {
         (remotePlayer as any).model.update(dt);
       }
 
-      // Update HUD indicator for this player
-      hud.updatePlayerIndicator(playerId, playerState.position, camera, playerState.isDead);
+      // Check if player has stopped sending updates (dead reckoning)
+      const timeSinceUpdate = Date.now() - (remotePlayer as any).lastUpdateTime;
+      if (timeSinceUpdate > 1000) { // 1 second timeout
+        if (!(remotePlayer as any).isSimulating) {
+          (remotePlayer as any).isSimulating = true;
+          console.log(`[RemotePlayer] STARTING dead reckoning for playerId=${playerId} (no updates for ${timeSinceUpdate}ms)`);
+        }
+        // Simulate physics (gravity + retained velocity)
+        (remotePlayer as any).simulatePhysics(dt);
+      }
+
+      // Update HUD indicator for this player (skip if dead)
+      if (!playerState.isDead) {
+        hud.updatePlayerIndicator(playerId, playerState.position, camera, false);
+      } else {
+        // Explicitly remove indicator if player is dead
+        hud.removePlayerIndicator(playerId);
+      }
     });
 
     if (remotePlayers.size !== previousRemoteCount) {
-      logger.debug(`Remote players in scene: ${remotePlayers.size}`);
+      logger.debug(`Remote players in scene: ${remotePlayers.size} | Scene children: ${scene.children.length}`);
     }
     
     // Remove disconnected players
     for (const [playerId, remotePlayer] of remotePlayers) {
       if (!players.has(playerId)) {
+        console.log(`[RemotePlayer] REMOVED (player left) instanceId=${remotePlayer.instanceId} for playerId=${playerId}`);
         remotePlayer.dispose();
         remotePlayers.delete(playerId);
         hud.removePlayerIndicator(playerId);
       }
       // Remove dead players that have shrunk to 0
       if ((remotePlayer as any).scale === 0) {
+        console.log(`[RemotePlayer] REMOVED (scale=0) instanceId=${remotePlayer.instanceId} for playerId=${playerId}`);
         remotePlayer.dispose();
         remotePlayers.delete(playerId);
         hud.removePlayerIndicator(playerId);
@@ -559,21 +621,32 @@ function loop(time: number): void {
 
 // ---- Boot ----
 async function init(): Promise<void> {
+  markTime('initStart');
   await loadHeightmap('/assets/heightmaps/Vortex_Smooth2_2048.png');
+  markTime('heightmapLoaded');
 
   terrain = new Terrain(scene, sun.position.clone().normalize());
+  markTime('terrainCreated');
+
   effects = new EffectsManager(scene);
   effects.setTerrain(terrain);
+  markTime('effectsCreated');
+
   player = new Player(terrain, camera, scene);
   player.onFire = onFire;
   player.onDisc = onDisc;
   player.onJump = (pos) => effects.spawnJumpDust(pos);
   player.onJetpack = (pos) => effects.spawnJetpack(pos);
   player.onSki = (pos, vel) => effects.spawnSkiDust(pos, vel);
+  markTime('playerCreated');
 
   // Initialize networking with selected backend
   const adapter = NetworkAdapterFactory.createAdapter(NETWORK_BACKEND);
   networkManager = new NetworkManager(adapter);
+  markTime('networkInit');
+
+  // Track players being created to prevent race condition duplicates
+  const playersBeingCreated: Set<string> = new Set();
 
   // Set control object for client-side prediction
   networkManager.setControlObject(player);
@@ -581,9 +654,11 @@ async function init(): Promise<void> {
   player.onNetworkJetpack = (pos) => networkManager.sendJetpack(pos);
   player.onNetworkInput = (input, rotation) => networkManager.sendInputMove(input, rotation);
   hud = new HUD();
+  markTime('hudCreated');
 
   // Load player model
   await player.loadModel();
+  markTime('playerModelLoaded');
   
   // Register player hit handler (non-lethal hits)
   networkManager.onPlayerHit = (shooterId: string, targetId: string, damage: number) => {
@@ -601,6 +676,7 @@ async function init(): Promise<void> {
   networkManager.onPlayerKill = (shooterId: string, targetId: string) => {
     // Check if local player was killed
     if (targetId === networkManager.getLocalPlayerId()) {
+      console.log(`💀 YOU WERE KILLED by ${shooterId}`);
       logger.info(`Local player killed by ${shooterId}`);
       player.isDead = true;
       hud.hide();
@@ -610,6 +686,12 @@ async function init(): Promise<void> {
     // Show frag message if local player got the kill
     if (shooterId === networkManager.getLocalPlayerId()) {
       showFragMessage(`FRAGGED PLAYER!`);
+    }
+
+    // Mark player as dead in NetworkManager immediately so main loop knows
+    const playerData = networkManager.getPlayers().get(targetId);
+    if (playerData) {
+      playerData.isDead = true;
     }
 
     const remotePlayer = remotePlayers.get(targetId);
@@ -628,12 +710,15 @@ async function init(): Promise<void> {
       // Play death animation (ragdoll physics with explosion impulse)
       remotePlayer.playDeath(explosionPos, explosionForce);
 
-      // Spawn player debris
-      const debris = new PlayerDebris(scene, terrain, remotePlayer.position.x, remotePlayer.position.y, remotePlayer.position.z);
+      // Spawn player debris at player center (position is feet, so add half height)
+      const debris = new PlayerDebris(scene, terrain, remotePlayer.position.x, remotePlayer.position.y + 1.0, remotePlayer.position.z);
       playerDebrisList.push(debris);
 
       // Hide the model immediately
       remotePlayer.hide();
+
+      // Remove HUD indicator on kill
+      hud.removePlayerIndicator(targetId);
 
       logger.info(`Player ${targetId} killed by ${shooterId}`);
     }
@@ -660,9 +745,17 @@ async function init(): Promise<void> {
         logger.debug(`onPlayerUpdate: ${playerId} at ${position.x.toFixed(1)},${position.y.toFixed(1)},${position.z.toFixed(1)}`);
       }
     } else {
+      // Check if we're already creating this player (prevent race condition duplicates)
+      if (playersBeingCreated.has(playerId)) {
+        logger.debug(`onPlayerUpdate called for player ${playerId} already being created, skipping`);
+        return;
+      }
+      playersBeingCreated.add(playerId);
       logger.debug(`onPlayerUpdate called for unknown player: ${playerId}, creating...`);
       remotePlayer = new RemotePlayer(scene, playerId, position, terrain);
       remotePlayers.set(playerId, remotePlayer);
+      console.log(`[RemotePlayer] CREATED (onPlayerUpdate) instanceId=${remotePlayer.instanceId} for playerId=${playerId} (total map size: ${remotePlayers.size})`);
+      playersBeingCreated.delete(playerId);
     }
   };
 
@@ -770,6 +863,7 @@ async function init(): Promise<void> {
   networkManager.onPlayerRespawn = (playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }) => {
     // Check if local player respawned
     if (playerId === networkManager.getLocalPlayerId()) {
+      console.log(`✨ YOU RESPAWNED at ${JSON.stringify(position)}`);
       logger.info(`Local player respawned at ${JSON.stringify(position)}`);
       player.isDead = false;
       player.health = 100;
@@ -781,22 +875,31 @@ async function init(): Promise<void> {
       return;
     }
 
-    // Dispose old remote player if exists
-    const oldPlayer = remotePlayers.get(playerId);
-    if (oldPlayer) {
-      oldPlayer.dispose();
+    // Reset existing remote player on respawn
+    const remotePlayer = remotePlayers.get(playerId);
+    if (remotePlayer) {
+      const playerData = networkManager.getPlayers().get(playerId);
+      const internalId = playerData?.internalId || 'unknown';
+      remotePlayer.respawn(position);
+      logger.info(`Player ${playerId} (internalId: ${internalId}) respawned at ${JSON.stringify(position)}`);
+    } else {
+      // Create new remote player if they don't exist (shouldn't happen but safety check)
+      const newRemotePlayer = new RemotePlayer(scene, playerId, position, terrain);
+      remotePlayers.set(playerId, newRemotePlayer);
+      console.log(`[RemotePlayer] CREATED (onPlayerRespawn) instanceId=${newRemotePlayer.instanceId} for playerId=${playerId}`);
     }
 
-    // Create new remote player at respawn position
-    const remotePlayer = new RemotePlayer(scene, playerId, position);
-    remotePlayers.set(playerId, remotePlayer);
-    remotePlayer.show(); // Ensure model is visible on respawn
-      logger.info(`Player ${playerId} respawned at ${JSON.stringify(position)}`);
+    // Re-add HUD indicator on respawn (it was removed on kill)
+    // The updatePlayerIndicator in the main loop will recreate it automatically
   };
   
   // Register playerJoined handler (for new players joining after initial connection)
-  networkManager.onPlayerJoined = (playerId: string, position: { x: number; y: number; z: number }, _rotation: { yaw: number; pitch: number }) => {
-    logger.info(`Player joined: ${playerId} at ${JSON.stringify(position)}`);
+  networkManager.onPlayerJoined = (playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }) => {
+    const playerData = networkManager.getPlayers().get(playerId);
+    const internalId = playerData?.internalId || 'unknown';
+    const terrainHeight = terrain.getHeight(position.x, position.z);
+    const aboveTerrain = position.y >= terrainHeight;
+    logger.info(`Player joined: ${playerId} (internalId: ${internalId}) at ${JSON.stringify(position)} | Terrain height: ${terrainHeight.toFixed(1)} | ${aboveTerrain ? '✓ Above/at terrain' : '✗ BELOW TERRAIN'}`);
     // RemotePlayer will be created in the main loop when networkManager.getPlayers() includes this player
   };
 
@@ -858,18 +961,22 @@ async function init(): Promise<void> {
   //   // If alive, they continue from their last position
   //   logger.debug(`Player state restored - pos(${state.position.x.toFixed(1)},${state.position.y.toFixed(1)},${state.position.z.toFixed(1)}) vel(${state.velocity?.x.toFixed(1) || 0},${state.velocity?.y.toFixed(1) || 0},${state.velocity?.z.toFixed(1) || 0})`);
   // };
-  
-  // Connect to server
-  const serverUrl = NETWORK_BACKEND === 'tribes2' ? 'ws://localhost:8080' : 'http://localhost:2567';
-  try {
-    await networkManager.connect(serverUrl);
+
+  // Connect to server (non-blocking for offline mode)
+  const serverUrl = 'ws://localhost:8000/ws';
+  markTime('networkConnectStart');
+  networkManager.connect(serverUrl).then(() => {
+    markTime('networkConnected');
     logger.info(`Connected to server at ${serverUrl} using ${NETWORK_BACKEND} backend`);
-  } catch (error) {
+  }).catch((error) => {
     logger.error('Failed to connect to server', error);
-  }
+  });
 
   // Initial balls
   for (let i = 0; i < 8; i++) spawnBall();
+  markTime('initComplete');
+
+  printLoadSummary();
 
   // Track jet button for continuous particles
   document.addEventListener('mousedown', (e) => { if (e.button === 2) (document as any)._jetActive = true; });
@@ -887,6 +994,7 @@ async function init(): Promise<void> {
 // ---- Overlay / pointer-lock helpers ----
 const overlay = document.getElementById('overlay')!;
 let gameStarted = false;
+let unlockByEscape = false; // Track if unlock was caused by ESC key
 
 function requestLock(): void {
   renderer.domElement.requestPointerLock();
@@ -896,30 +1004,36 @@ document.addEventListener('pointerlockchange', () => {
   logger.debug(`Pointer lock changed: locked=${document.pointerLockElement === renderer.domElement}`);
   if (document.pointerLockElement === renderer.domElement) {
     overlay.style.display = 'none';
+    unlockByEscape = false;
+  } else if (unlockByEscape) {
+    // Only show overlay if unlock was caused by ESC key
+    setTimeout(() => {
+      overlay.style.display = 'flex';
+    }, BUTTON_TIMEOUT);
+    unlockByEscape = false;
   }
-  // Don't auto-show overlay - let keydown handler control it
+  // Don't show overlay on other unlocks (alt-tab, etc.)
 });
 
 document.addEventListener('keydown', (e) => {
   if (e.code === 'Escape' && gameStarted) {
     if (document.pointerLockElement === renderer.domElement) {
-      // Pointer is locked, release it and show overlay
+      // Pointer is locked, release it and mark as ESC unlock
+      unlockByEscape = true;
       document.exitPointerLock();
-      setTimeout(() => {
-        overlay.style.display = 'flex';
-      }, BUTTON_TIMEOUT);
-    } else if (overlay.style.display === 'flex') {
-      // Overlay is visible, hide it and re-lock
+    } else if (overlay.style.display === 'flex' && document.pointerLockElement !== renderer.domElement) {
+      // Overlay is visible and pointer is unlocked, hide it and re-lock
       overlay.style.display = 'none';
       logger.debug('Requesting pointer lock...');
       requestLock();
-    } else {
-      // Overlay is hidden, show it
+    } else if (document.pointerLockElement !== renderer.domElement) {
+      // Pointer is unlocked but overlay not visible, show overlay
       overlay.style.display = 'flex';
     }
   }
   if (e.code === 'F4') {
     pixelated = !pixelated;
+    localStorage.setItem('fps-pixelated', pixelated.toString());
     updateRendererSize();
     pixelToggleBtn.textContent = pixelated ? 'PIXELATED: ON' : 'PIXELATED: OFF';
   }
@@ -927,13 +1041,12 @@ document.addEventListener('keydown', (e) => {
 
 // Clicking overlay or canvas re-locks.
 document.getElementById('start-btn')!.addEventListener('click', requestLock);
-const pixelToggleBtn = document.getElementById('pixel-toggle')! as HTMLButtonElement;
 pixelToggleBtn.addEventListener('click', () => {
   pixelated = !pixelated;
+  localStorage.setItem('fps-pixelated', pixelated.toString());
   updateRendererSize();
   pixelToggleBtn.textContent = pixelated ? 'PIXELATED: ON' : 'PIXELATED: OFF';
 });
-pixelToggleBtn.textContent = 'PIXELATED: ON';
 renderer.domElement.addEventListener('click', () => {
   if (document.pointerLockElement !== renderer.domElement) requestLock();
 });

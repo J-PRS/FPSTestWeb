@@ -119,12 +119,13 @@ export class BitStream {
     if (bits < 0 || bits > 32) {
       throw new Error(`Invalid bit count: ${bits}`);
     }
-    
-    const maxValue = (1 << (bits - 1)) - 1;
-    const minValue = -(1 << (bits - 1));
-    
+
+    // Use Math.pow to avoid JavaScript's 32-bit bitwise overflow
+    const maxValue = Math.pow(2, bits - 1) - 1;
+    const minValue = -Math.pow(2, bits - 1);
+
     if (value < minValue || value > maxValue) {
-      throw new Error(`Value ${value} out of range for ${bits} signed bits (min: ${minValue}, max: ${maxValue})`);
+      throw new Error("Value " + value + " out of range for " + bits + " signed bits (min: " + minValue + ", max: " + maxValue + ")");
     }
     
     // Convert to unsigned representation

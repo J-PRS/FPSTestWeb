@@ -672,28 +672,30 @@ export class MessageHandler {
       { x: 0, y: ServerConfig.GRAVITY, z: 0 } // Default to gravity acceleration
     );
 
-    // Validate position with latency-aware thresholds
-    // Estimate ping from last update time
-    const estimatedPing = Math.min(dt * 1000, ServerConfig.ESTIMATED_PING_CAP_MS);
-    const validation = this.positionValidator.validatePosition(
-      playerId,
-      newPosition,
-      now,
-      estimatedPing
-    );
+    // Validate position with latency-aware thresholds (skip if disabled)
+    if (!ServerConfig.DISABLE_VALIDATION) {
+      // Estimate ping from last update time
+      const estimatedPing = Math.min(dt * 1000, ServerConfig.ESTIMATED_PING_CAP_MS);
+      const validation = this.positionValidator.validatePosition(
+        playerId,
+        newPosition,
+        now,
+        estimatedPing
+      );
 
-    // Determine final position based on validation
-    if (validation.action === 'snap') {
-      this.logger.debug(`Snapping ${playerId} to expected position. Discrepancy: ${validation.discrepancy.toFixed(2)}m`);
-      return validation.expectedPosition;
-    } else if (validation.action === 'nudge') {
-      this.logger.debug(`Nudging ${playerId} toward expected position. Discrepancy: ${validation.discrepancy.toFixed(2)}m`);
-      // Gentle nudge - blend 50% toward expected position
-      return {
-        x: (newPosition.x + validation.expectedPosition.x) / 2,
-        y: (newPosition.y + validation.expectedPosition.y) / 2,
-        z: (newPosition.z + validation.expectedPosition.z) / 2
-      };
+      // Determine final position based on validation
+      if (validation.action === 'snap') {
+        this.logger.debug(`Snapping ${playerId} to expected position. Discrepancy: ${validation.discrepancy.toFixed(2)}m`);
+        return validation.expectedPosition;
+      } else if (validation.action === 'nudge') {
+        this.logger.debug(`Nudging ${playerId} toward expected position. Discrepancy: ${validation.discrepancy.toFixed(2)}m`);
+        // Gentle nudge - blend 50% toward expected position
+        return {
+          x: (newPosition.x + validation.expectedPosition.x) / 2,
+          y: (newPosition.y + validation.expectedPosition.y) / 2,
+          z: (newPosition.z + validation.expectedPosition.z) / 2
+        };
+      }
     }
     // accept: use client position as-is
     return newPosition;

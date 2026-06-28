@@ -145,15 +145,13 @@ const atmosphereFragmentShader = /* glsl */`
 
   void main() {
     vec3 direction = normalize(vWorldPosition);
-    vec3 eyePosition = vec3(0.0, planetRadius + 1e3, 0.0);
     
-    vec3 color = atmosphere(direction, eyePosition, sunPosition, sunIntensity);
+    // Simple gradient blue sky - no atmospheric scattering
+    vec3 skyColorBottom = vec3(0.4, 0.6, 0.9);
+    vec3 skyColorTop = vec3(0.05, 0.15, 0.4);
     
-    // Apply exposure
-    color = 1.0 - exp(-1.0 * color);
-    
-    // Clamp to prevent any artifacts
-    color = clamp(color, 0.0, 1.0);
+    float height = direction.y;
+    vec3 color = mix(skyColorBottom, skyColorTop, clamp(height, 0.0, 1.0));
     
     gl_FragColor = vec4(color, 1.0);
   }

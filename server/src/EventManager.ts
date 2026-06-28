@@ -257,17 +257,25 @@ export class EventManager {
   pack(connectionId: string, stream: BitStream, maxBytes: number): number {
     let packedCount = 0;
     const queue = this.outgoingQueue.get(connectionId);
-    if (!queue) return 0;
+    if (!queue) {
+      // Write event count (0)
+      stream.writeInt(0, 8);
+      return 0;
+    }
+
+    // Reserve space for event count (will write it later)
+    const countPosition = stream.getByteLength();
+    stream.writeInt(0, 8); // Placeholder
 
     while (queue.length > 0 && stream.hasSpace(16)) {
       const event = queue.shift();
       if (!event) break;
-      
+
       // Check if adding this event would exceed size limit
       const tempStream = new BitStream(64);
       this.packEventHeader(tempStream, event);
       event.pack(tempStream);
-      
+
       const eventSize = tempStream.getByteLength();
       if (stream.getByteLength() + eventSize > maxBytes) {
         // Put event back if it doesn't fit
@@ -277,19 +285,19 @@ export class EventManager {
 
       // Get sequence number for this connection
       const seq = this.getSequenceNumber(connectionId);
-      
+
       // Pack event type
       stream.writeInt(event.type, 8);
-      
+
       // Pack sequence number
       stream.writeInt(seq, 16);
-      
+
       // Pack guaranteed flag
       stream.writeBool(event.guaranteed);
-      
+
       // Pack event data
       event.pack(stream);
-      
+
       // Track guaranteed events
       if (event.guaranteed) {
         if (!this.pendingEvents.has(connectionId)) {
@@ -297,9 +305,15 @@ export class EventManager {
         }
         this.pendingEvents.get(connectionId)!.set(seq, event);
       }
-      
+
       packedCount++;
     }
+
+    // Write the actual event count at the reserved position
+    const currentBitPosition = stream.getBitPosition();
+    stream.setBitPosition(countPosition * 8);
+    stream.writeInt(packedCount, 8);
+    stream.setBitPosition(currentBitPosition);
 
     return packedCount;
   }
@@ -308,11 +322,21 @@ export class EventManager {
    * Unpack events from a packet stream
    */
   unpack(connectionId: string, stream: BitStream): void {
-    while (stream.hasData()) {
+    // Read event count first
+    const bitPosBefore = stream.getBitPosition();
+    if (!stream.hasSpace(8)) {
+      Logger.warn(`[EventManager] Insufficient data for event count from ${connectionId}, bit pos: ${bitPosBefore}`);
+      return;
+    }
+
+    const eventCount = stream.readInt(8);
+
+    for (let i = 0; i < eventCount; i++) {
+      const bitPosBeforeEvent = stream.getBitPosition();
       // Check if we have enough data for event header (type: 8 bits, seq: 16 bits, guaranteed: 1 bit = 25 bits)
       if (!stream.hasSpace(25)) {
-        Logger.warn(`Insufficient data for event header in packet from ${connectionId}`);
-        break;
+        Logger.warn(`[EventManager] Insufficient data for event header from ${connectionId}, bit pos: ${bitPosBeforeEvent}, eventCount=${eventCount}`);
+        return;
       }
 
       const type = stream.readInt(8);
@@ -321,7 +345,7 @@ export class EventManager {
 
       const event = this.createEvent(type);
       if (!event) {
-        Logger.warn(`Unknown event type ${type} from ${connectionId}, skipping remaining data`);
+        Logger.warn(`[EventManager] Unknown event type ${type} from ${connectionId}, bit pos: ${bitPosBeforeEvent}, after MoveManager: ${bitPosBefore}`);
         break;
       }
 

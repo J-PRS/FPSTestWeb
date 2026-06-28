@@ -23,6 +23,7 @@ export class StreamManager {
   private moveManager: MoveManager;
   private config: StreamConfig;
   private packetInterval: number;
+  public onGhostsUpdate: ((ghosts: any[]) => void) | null = null;
   private packetTimer: number | null = null;
   private onSendPacket: (data: Uint8Array) => void;
   private startTime: number = Date.now(); // For relative timestamps
@@ -86,26 +87,62 @@ export class StreamManager {
    */
   private sendPacket(): void {
     const stream = new BitStream(this.config.maxPacketSize);
-    
+
     // Pack message header
     this.packHeader(stream);
-    
+
+    // Reserve space for section sizes (will write after packing)
+    const sectionSizesPos = stream.getBitPosition();
+    stream.writeInt(0, 16); // MoveManager size (bytes)
+    stream.writeInt(0, 16); // EventManager size (bytes)
+    stream.writeInt(0, 16); // ACK size (bytes)
+    stream.writeInt(0, 16); // GhostManager size (bytes)
+
+    const bitPosBeforeMoves = stream.getBitPosition();
+
     // Pack managers in priority order
     // 1. Move Manager (highest priority - input)
     this.moveManager.pack(stream);
-    
+
+    const bitPosAfterMoves = stream.getBitPosition();
+
     // 2. Event Manager (guaranteed events)
     this.eventManager.pack(stream, this.config.maxPacketSize);
+
+    const bitPosAfterEvents = stream.getBitPosition();
 
     // 2.5. ACKs (acknowledgments for guaranteed events)
     this.packAcks(stream);
 
+    const bitPosAfterAcks = stream.getBitPosition();
+
     // 3. Ghost Manager (state updates)
     this.ghostManager.pack(stream, this.config.maxPacketSize);
-    
+
+    // Write section sizes (in bits)
+    const currentBitPos = stream.getBitPosition();
+    stream.setBitPosition(sectionSizesPos);
+
+    const moveSizeBits = bitPosAfterMoves - bitPosBeforeMoves;
+    const eventSizeBits = bitPosAfterEvents - bitPosAfterMoves;
+    const ackSizeBits = bitPosAfterAcks - bitPosAfterEvents;
+    const ghostSizeBits = currentBitPos - bitPosAfterAcks;
+
+    stream.writeInt(moveSizeBits, 16);
+    stream.writeInt(eventSizeBits, 16);
+    stream.writeInt(ackSizeBits, 16);
+    stream.writeInt(ghostSizeBits, 16);
+
+    stream.setBitPosition(currentBitPos);
+
+    // Log for debugging
+    if (Math.random() < 0.01) { // 1% chance to log
+      console.log(`[StreamManager] Section sizes (bits): moves=${moveSizeBits}, events=${eventSizeBits}, acks=${ackSizeBits}, ghosts=${ghostSizeBits}`);
+    }
+
     // Get the packet data
     const data = stream.getData();
-    
+
     // Send the packet
     if (data.length > 0) {
       this.onSendPacket(data);
@@ -132,13 +169,13 @@ export class StreamManager {
    * Pack ACKs
    */
   private packAcks(stream: BitStream): void {
-    if (this.pendingAcks.length === 0) return;
+    const ackCount = Math.min(this.pendingAcks.length, 255);
 
-    // Pack ACK count (1 byte)
-    stream.writeInt(Math.min(this.pendingAcks.length, 255), 8);
+    // Always pack ACK count (1 byte) even if 0
+    stream.writeInt(ackCount, 8);
 
     // Pack ACK sequence numbers (2 bytes each)
-    for (let i = 0; i < Math.min(this.pendingAcks.length, 255); i++) {
+    for (let i = 0; i < ackCount; i++) {
       stream.writeInt(this.pendingAcks[i], 16);
     }
 
@@ -152,7 +189,21 @@ export class StreamManager {
   private unpackAcks(stream: BitStream): void {
     if (!stream.hasData()) return;
 
+    // Check if we have enough data for ACK count (8 bits)
+    if (!stream.hasSpace(8)) {
+      console.warn('[StreamManager] Insufficient data for ACK count');
+      return;
+    }
+
     const ackCount = stream.readInt(8);
+
+    // Check if we have enough data for all ACKs (each ACK is 16 bits)
+    const acksBitsNeeded = ackCount * 16;
+    if (!stream.hasSpace(acksBitsNeeded)) {
+      console.warn(`[StreamManager] Insufficient data for ${ackCount} ACKs, need ${acksBitsNeeded} bits`);
+      return;
+    }
+
     for (let i = 0; i < ackCount; i++) {
       const seq = stream.readInt(16);
       this.eventManager.handleAck(seq);
@@ -163,16 +214,26 @@ export class StreamManager {
    * Handle incoming packet
    */
   handlePacket(data: Uint8Array): void {
-    const stream = BitStream.fromBuffer(data);
-    
-    // Unpack header
-    const messageType = stream.readInt(8);
-    stream.readInt(32); // timestamp - unused
-    stream.readInt(16); // sequence - unused
-    
-    if (messageType === 1) {
-      // Game data packet
-      this.handleGameDataPacket(stream);
+    try {
+      const stream = BitStream.fromBuffer(data);
+
+      // Check if we have enough data for header (8 + 32 + 16 = 56 bits = 7 bytes)
+      if (!stream.hasSpace(56)) {
+        console.warn(`[StreamManager] Insufficient data for packet header, packet size: ${data.length} bytes`);
+        return;
+      }
+
+      // Unpack header
+      const messageType = stream.readInt(8);
+      stream.readInt(32); // timestamp - unused
+      stream.readInt(16); // sequence - unused
+
+      if (messageType === 1) {
+        // Game data packet
+        this.handleGameDataPacket(stream);
+      }
+    } catch (error) {
+      console.error('[StreamManager] Failed to handle packet:', error);
     }
   }
 
@@ -181,32 +242,48 @@ export class StreamManager {
    */
   private handleGameDataPacket(stream: BitStream): void {
     // Unpack in the same order as packing
-    
+
     // 1. Move Manager (moves + control state)
-    this.moveManager.unpack(stream);
-    
+    try {
+      this.moveManager.unpack(stream);
+    } catch (error) {
+      console.warn('[StreamManager] Failed to unpack moves:', error);
+    }
+
     // Check if there's control state data (server sends this after moves)
-    if (stream.hasData()) {
-      // Control state is sent as a separate block after moves
-      // Check if next byte indicates control state (marker)
-      const marker = stream.readInt(8);
-      if (marker === 0xFF) {
+    // Only unpack if we have enough data for control state (position + rotation = 3 floats = 96 bits)
+    if (stream.hasData() && stream.hasSpace(96)) {
+      try {
         this.moveManager.unpackControlState(stream);
-      } else {
-        // Not a control state marker, rewind and continue
-        stream.setBitPosition(stream.getBitPosition() - 8);
+      } catch (error) {
+        console.warn('[StreamManager] Failed to unpack control state:', error);
       }
     }
-    
+
     // 2. Event Manager
-    this.eventManager.unpack(stream);
-    this.eventManager.processOrderedQueue(); // Process guaranteed events in order
+    try {
+      this.eventManager.unpack(stream);
+      this.eventManager.processOrderedQueue(); // Process guaranteed events in order
+    } catch (error) {
+      console.warn('[StreamManager] Failed to unpack events:', error);
+    }
 
     // 2.5. ACKs (acknowledgments for guaranteed events)
-    this.unpackAcks(stream);
+    try {
+      this.unpackAcks(stream);
+    } catch (error) {
+      console.warn('[StreamManager] Failed to unpack ACKs:', error);
+    }
 
     // 3. Ghost Manager
-    this.ghostManager.unpack(stream);
+    try {
+      this.ghostManager.unpack(stream);
+      // Sync ghosts to players Map for getPlayers()
+      const ghosts = this.ghostManager.getAllGhosts();
+      this.onGhostsUpdate?.(ghosts);
+    } catch (error) {
+      console.warn('[StreamManager] Failed to unpack ghosts:', error);
+    }
   }
 
   /**

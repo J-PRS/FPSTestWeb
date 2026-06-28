@@ -10,10 +10,13 @@ import { MessageHandler } from './MessageHandler.js';
 import { GameLoop } from './GameLoop.js';
 import { Logger } from './Logger.js';
 import { PositionValidator } from './PositionValidator.js';
-import { ServerConfig } from './config.js';
+import { ServerConfig, NetworkMode } from './config.js';
 import { PerformanceMonitor } from './PerformanceMonitor.js';
 import { RoomManager } from './RoomManager.js';
 import { Tribes2Networking } from './Tribes2Networking.js';
+import { NetworkModeHandler } from './NetworkModeHandler.js';
+import { RelayModeHandler } from './RelayModeHandler.js';
+import { ServerAuthoritativeHandler } from './ServerAuthoritativeHandler.js';
 // import { StateSnapshot } from './StateSnapshot.js'; // Temporarily disabled due to crash
 // import type { WebSocket, WebSocketBehavior, App } from './WebSocketTypes.js';
 
@@ -46,7 +49,7 @@ class Server {
   private positionValidator: PositionValidator;
   private performanceMonitor: PerformanceMonitor;
   private roomManager: RoomManager;
-  private tribes2Networking: Tribes2Networking;
+  private networkModeHandler: NetworkModeHandler;
 
   constructor() {
     try {
@@ -55,7 +58,14 @@ class Server {
       this.projectileManager = new ProjectileManager();
       this.performanceMonitor = new PerformanceMonitor();
       this.roomManager = new RoomManager();
-      this.tribes2Networking = new Tribes2Networking();
+
+      // Initialize network mode handler based on config
+      if ((ServerConfig.NETWORK_MODE as string) === 'client_relay') {
+        this.networkModeHandler = new RelayModeHandler();
+      } else {
+        // Default to server-authoritative mode - callbacks will be wired after MessageHandler is initialized
+        this.networkModeHandler = new ServerAuthoritativeHandler();
+      }
       
       // Create default room
       this.roomManager.createRoom('default', 'Default Lobby', 16, 'deathmatch');
@@ -67,6 +77,18 @@ class Server {
         ServerConfig.TICK_RATE,
         this.performanceMonitor
       );
+
+      // Wire ghost update callback to Tribes2Networking
+      if (this.networkModeHandler instanceof ServerAuthoritativeHandler) {
+        this.gameLoop.setGhostUpdateCallback((playerId: string, position: any, rotation: any, velocity: any) => {
+          // Update ghost for all other connections (not the player themselves)
+          for (const [otherPlayerId, player] of this.playerManager.getPlayers()) {
+            if (otherPlayerId !== playerId && !player.disconnected) {
+              (this.networkModeHandler as ServerAuthoritativeHandler).sendPosition(otherPlayerId, playerId, position, rotation);
+            }
+          }
+        });
+      }
       this.messageHandler = new MessageHandler(
         this.playerManager,
         this.projectileManager,
@@ -74,82 +96,78 @@ class Server {
         this.positionValidator,
         this.performanceMonitor
       );
-      
-      // Wire Tribes2Networking callbacks to MessageHandler (after MessageHandler is initialized)
-      this.tribes2Networking.onEvent((connectionId: string, event: any) => {
-        // Convert Tribes2 events to MessageHandler format
-        const playerId = this.playerManager.getPlayerIdByConnectionId(connectionId);
-        if (!playerId) {
-          Logger.warn(`No playerId found for connection ${connectionId}`);
-          return;
-        }
 
-        if (event.type === 1) {
-          // PositionEvent - convert to position message
-          this.messageHandler.handleMessage(playerId, {
-            type: 'position',
-            data: {
-              x: event.position.x,
-              y: event.position.y,
-              z: event.position.z,
-              yaw: event.rotation.yaw,
-              pitch: event.rotation.pitch
-            }
-          });
-        } else if (event.type === 2) {
-          // ShotEvent
-          this.messageHandler.handleMessage(playerId, {
-            type: 'shot',
-            data: {
-              targetId: event.targetId,
-              timestamp: event.timestamp
-            }
-          });
-        }
-      });
-      
-      this.tribes2Networking.onMove((connectionId: string, move: any) => {
-        // Convert Tribes2 moves to MessageHandler format
-        const playerId = this.playerManager.getPlayerIdByConnectionId(connectionId);
-        if (!playerId) {
-          Logger.warn(`No playerId found for connection ${connectionId}`);
-          return;
-        }
+      // Wire network mode handler callbacks to MessageHandler (after MessageHandler is initialized)
+      if (this.networkModeHandler instanceof ServerAuthoritativeHandler) {
+        this.networkModeHandler.onEvent((connectionId: string, event: any) => {
+          // Convert Tribes2 events to MessageHandler format
+          // connectionId is already the playerId in Tribes2Networking
+          const playerId = connectionId;
 
-        this.messageHandler.handleMessage(playerId, {
-          type: 'input',
-          data: {
-            input: {
-              forward: move.input.forward,
-              right: move.input.right,
-              jump: move.input.jump === 1,
-              ski: move.input.ski === 1
-            },
-            rotation: {
-              yaw: move.rotation.yaw,
-              pitch: move.rotation.pitch
-            },
-            sequenceNumber: move.sequence
+          if (event.type === 1) {
+            // PositionEvent - convert to position message
+            this.messageHandler.handleMessage(playerId, {
+              type: 'position',
+              data: {
+                x: event.position.x,
+                y: event.position.y,
+                z: event.position.z,
+                yaw: event.rotation.yaw,
+                pitch: event.rotation.pitch
+              }
+            });
+          } else if (event.type === 2) {
+            // ShotEvent
+            this.messageHandler.handleMessage(playerId, {
+              type: 'shot',
+              data: {
+                targetId: event.targetId,
+                timestamp: event.timestamp
+              }
+            });
           }
         });
-      });
 
-      // Set control object provider for client-side prediction
-      this.tribes2Networking.setControlObjectProvider((connectionId: string) => {
-        const playerId = this.playerManager.getPlayerIdByConnectionId(connectionId);
-        if (!playerId) {
-          return null;
-        }
-        const player = this.playerManager.getPlayer(playerId);
-        if (!player) {
-          return null;
-        }
-        return {
-          position: player.position,
-          rotation: player.rotation,
-          velocity: player.velocity
-        };
-      });
+        this.networkModeHandler.onMove((connectionId: string, move: any) => {
+          // Convert Tribes2 moves to MessageHandler format
+          // connectionId is already the playerId in Tribes2Networking
+          const playerId = connectionId;
+
+          this.messageHandler.handleMessage(playerId, {
+            type: 'input',
+            data: {
+              input: {
+                forward: move.input.forward,
+                right: move.input.right,
+                jump: move.input.jump === 1,
+                ski: move.input.ski === 1
+              },
+              rotation: {
+                yaw: move.rotation.yaw,
+                pitch: move.rotation.pitch
+              },
+              sequenceNumber: move.sequence
+            }
+          });
+        });
+
+        // Set control object provider for client-side prediction
+        this.networkModeHandler.setControlObjectProvider((connectionId: string) => {
+          const playerId = this.playerManager.getPlayerIdByConnectionId(connectionId);
+          if (!playerId) {
+            return null;
+          }
+          const player = this.playerManager.getPlayer(playerId);
+          if (!player) {
+            return null;
+          }
+          return {
+            position: player.position,
+            rotation: player.rotation,
+            velocity: player.velocity
+          };
+        });
+      }
     } catch (error) {
       Logger.error(`Server initialization error: ${error instanceof Error ? error.message : String(error)}`);
       throw error;
@@ -244,7 +262,7 @@ class Server {
         try {
           const message = JSON.parse(data.toString());
           if (message.type === 'join') {
-            this.handleJoin(ws, message.playerId);
+            this.handleJoin(ws, message, message.roomId || 'default');
           } else {
             Logger.warn('First message must be join');
           }
@@ -267,16 +285,18 @@ class Server {
         Logger.error('Failed to parse JSON message', e);
       }
     } else {
-      // Binary message - only handle if Tribes2Networking is initialized for this connection
-      if (this.tribes2Networking.isConnectionInitialized(playerId)) {
-        this.tribes2Networking.handlePacket(playerId, new Uint8Array(data));
+      // Binary message - only handle if network mode handler is initialized for this connection
+      if (this.networkModeHandler.isConnectionInitialized(playerId)) {
+        this.networkModeHandler.handlePacket(playerId, new Uint8Array(data));
       } else {
         Logger.warn(`Ignoring binary packet from ${playerId} - connection not initialized yet`);
       }
     }
   }
 
-  private handleJoin(ws: any, playerId: string, roomId: string = 'default'): void {
+  private handleJoin(ws: any, message: any, roomId: string = 'default'): void {
+    const playerId = message.playerId;
+
     // Validate playerId to prevent injection attacks
     if (!isValidPlayerId(playerId)) {
       Logger.warn(`Invalid playerId format rejected: ${playerId}`);
@@ -284,7 +304,7 @@ class Server {
       return;
     }
 
-    Logger.info(`Join message from: ${playerId} to room: ${roomId}`);
+    Logger.info(`PLAYER CONNECTED: ${playerId} to room: ${roomId}`);
 
     // Send join acknowledgment before initializing Tribes2 networking
     ws.send(JSON.stringify({
@@ -294,12 +314,12 @@ class Server {
     }));
 
     // Initialize Tribes2 networking for this connection
-    this.tribes2Networking.initializeConnection(playerId, (connId: string, data: Uint8Array) => {
+    this.networkModeHandler.initializeConnection(playerId, (connId: string, data: Uint8Array) => {
       ws.send(Buffer.from(data), true); // true = isBinary
     });
 
     // Mark join handshake as complete to allow binary packet transmission
-    this.tribes2Networking.markJoinHandshakeComplete(playerId);
+    this.networkModeHandler.markJoinHandshakeComplete(playerId);
 
     const existingPlayer = this.playerManager.getPlayer(playerId);
     const room = this.roomManager.getRoom(roomId);
@@ -379,8 +399,9 @@ class Server {
       Logger.info(`Sent gameState to re-joining player ${playerId} in room ${roomId} with ${otherPlayers.length} other players`);
       return;
     } else {
-      // New player - initialize state at fixed height (server terrain doesn't match client)
-      this.playerManager.addPlayer(playerId, ws, { x: 0, y: 150, z: 0 });
+      // New player - use client-sent position (has terrain data)
+      const spawnPosition = message.position || { x: 0, y: 0, z: 0 };
+      this.playerManager.addPlayer(playerId, ws, spawnPosition);
       const newPlayer = this.playerManager.getPlayer(playerId);
       
       if (newPlayer) {
@@ -425,11 +446,11 @@ class Server {
     wsToPlayerId.delete(ws);
 
     if (playerId && playerId !== '') {
-      Logger.info(`WebSocket closed for ${playerId}`);
+      Logger.info(`PLAYER DISCONNECTED: ${playerId}`);
       this.playerManager.markPlayerDisconnected(playerId);
       this.messageHandler.cleanupPlayer(playerId);
       this.roomManager.removePlayerFromRoom(playerId);
-      this.tribes2Networking.removeConnection(playerId);
+      this.networkModeHandler.removeConnection(playerId);
       // Clean up projectiles from disconnected player to prevent memory leaks
       const removedProjectiles = this.projectileManager.removeProjectilesByOwner(playerId);
       if (removedProjectiles.length > 0) {

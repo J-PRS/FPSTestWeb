@@ -126,6 +126,28 @@ export class Player {
     return new THREE.Vector2(-Math.cos(this.yaw), Math.sin(this.yaw));
   }
 
+  getInputState(): { forward: number; right: number; jumpPressed: boolean; jumpHeld: boolean; skiHeld: boolean; firePressed: boolean; jetHeld: boolean; discHeld: boolean } {
+    let forward = 0, right = 0;
+    if (this.keys['KeyW'] || this.keys['ArrowUp'])    forward += 1;
+    if (this.keys['KeyS'] || this.keys['ArrowDown'])  forward -= 1;
+    if (this.keys['KeyA'] || this.keys['ArrowLeft'])  right -= 1;
+    if (this.keys['KeyD'] || this.keys['ArrowRight']) right += 1;
+
+    const mlen = Math.sqrt(forward * forward + right * right);
+    if (mlen > 0) { forward /= mlen; right /= mlen; }
+
+    return {
+      forward,
+      right,
+      jumpPressed: this.jumpHeld,
+      jumpHeld: this.jumpHeld,
+      skiHeld: this.keys['Space'] || false,
+      firePressed: this.firePending,
+      jetHeld: this.jetPending,
+      discHeld: this.discHeld
+    };
+  }
+
   update(dt: number): void {
     if (this.isDead) return;
 

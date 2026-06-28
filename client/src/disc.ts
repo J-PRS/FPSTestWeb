@@ -11,7 +11,7 @@ const TRAIL_EMISSION = 3;
 const TRAIL_LIFE_MIN = 0.8;
 const TRAIL_LIFE_MAX = 1.2;
 const TRAIL_SPREAD = 0.2;
-const TRAIL_GEO = new THREE.SphereGeometry(1, 4, 4);
+const TRAIL_GEO = new THREE.SphereGeometry(1, 8, 6);
 
 // Blue/cyan gradient for disc trail
 const TRAIL_COLORS = [
@@ -247,9 +247,10 @@ export class Disc {
       ? this.vel.clone().normalize()
       : new THREE.Vector3(0, 1, 0);
 
-    let right = new THREE.Vector3().crossVectors(dir, new THREE.Vector3(0, 1, 0));
-    if (right.lengthSq() < 0.01) right = new THREE.Vector3().crossVectors(dir, new THREE.Vector3(1, 0, 0));
-    right.normalize();
+    // Robust orthogonal basis calculation for consistent particle spread
+    // Pick an arbitrary axis that's not parallel to direction
+    const arbitrary = Math.abs(dir.y) < 0.9 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0);
+    let right = new THREE.Vector3().crossVectors(dir, arbitrary).normalize();
     const up = new THREE.Vector3().crossVectors(right, dir).normalize();
 
     for (let i = 0; i < TRAIL_EMISSION; i++) {
