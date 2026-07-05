@@ -5,7 +5,8 @@ import {
   GRAVITY, BOUNCE_Y, FRICTION_XZ,
   REMOTE_PLAYER_BASE_LERP_FACTOR, REMOTE_PLAYER_MAX_LERP_FACTOR,
   REMOTE_PLAYER_DISTANCE_MULTIPLIER, REMOTE_PLAYER_ROTATION_MULTIPLIER,
-  REMOTE_PLAYER_PING_MULTIPLIER, REMOTE_PLAYER_MAX_PING_BONUS
+  REMOTE_PLAYER_PING_MULTIPLIER, REMOTE_PLAYER_MAX_PING_BONUS,
+  PLAYER_HEIGHT
 } from './config.js';
 
 /**
@@ -19,9 +20,9 @@ export class RemotePlayer {
   rotation: { yaw: number; pitch: number; roll: number };
   playerId: string;
   readonly instanceId: number;
-  private model: PlayerModel;
+  private _model: PlayerModel;
   private previousPosition: THREE.Vector3;
-  private loaded: boolean = false;
+  private _loaded: boolean = false;
   private isDead: boolean = false;
   private gizmo: THREE.Mesh | null = null;
   private scene: THREE.Scene;
@@ -37,9 +38,21 @@ export class RemotePlayer {
   private targetPosition: THREE.Vector3;
   private targetRotation: { yaw: number; pitch: number };
   private ping: number = 0; // Connection ping in milliseconds
-  private lastUpdateTime: number = 0; // Timestamp of last position update
-  private isSimulating: boolean = false; // True if we're simulating physics (dead reckoning)
+  private _lastUpdateTime: number = 0; // Timestamp of last position update
+  private _isSimulating: boolean = false; // True if we're simulating physics (dead reckoning)
   private simulatedVelocity: THREE.Vector3 = new THREE.Vector3(); // Velocity during simulation
+  private predictionTimer: number = 0; // Seconds of forced local prediction (bridges server round-trip)
+  private serverVelocity: THREE.Vector3 = new THREE.Vector3(); // Velocity reported by server
+  private lastServerUpdateMs: number = 0; // Timestamp of last server update (ms)
+  private reconcileBlend: number = 0; // Blends from predicted to server position (0 = done)
+  private gizmoMismatchLogTimer: number = 0; // Throttle for gizmo mismatch warnings
+  private lastServerPosition: THREE.Vector3 = new THREE.Vector3(); // Last raw server position (for velocity estimation)
+
+  // Public getters for main.ts access (removes need for (as any) casts)
+  get lastUpdateTime(): number { return this._lastUpdateTime; }
+  get isSimulating(): boolean { return this._isSimulating; }
+  get loaded(): boolean { return this._loaded; }
+  get model(): PlayerModel { return this._model; }
 
   constructor(scene: THREE.Scene, playerId: string, startPos: { x: number; y: number; z: number }, terrain?: Terrain) {
     this.instanceId = ++_remotePlayerInstanceCounter;
@@ -52,7 +65,9 @@ export class RemotePlayer {
     this.terrain = terrain || null;
     this.targetPosition = this.position.clone();
     this.targetRotation = { yaw: 0, pitch: 0 };
-    this.lastUpdateTime = Date.now(); // Initialize to current time to prevent immediate dead reckoning
+    this._lastUpdateTime = Date.now(); // Initialize to current time to prevent immediate dead reckoning
+    this.lastServerUpdateMs = this.lastUpdateTime;
+    this.lastServerPosition.copy(this.position);
 
     // Create visual gizmo (ring above head)
     const ringGeometry = new THREE.RingGeometry(0.3, 0.4, 32);
@@ -65,32 +80,37 @@ export class RemotePlayer {
     this.gizmo = new THREE.Mesh(ringGeometry, ringMaterial);
     this.gizmo.rotation.x = -Math.PI / 2; // Lay flat
     // Position at head level (PLAYER_HEIGHT = 2.0)
-    this.gizmo.position.set(startPos.x, startPos.y + 2.0, startPos.z);
+    this.gizmo.position.set(startPos.x, startPos.y + PLAYER_HEIGHT, startPos.z);
     scene.add(this.gizmo);
     console.log(`[RemotePlayer] GIZMO ADDED for playerId=${playerId} instanceId=${this.instanceId}`);
 
     // Initialize player model
-    this.model = new PlayerModel(scene);
+    this._model = new PlayerModel(scene);
     this.model.load().then(() => {
-      this.loaded = true;
+      this._loaded = true;
       this.model.setPosition(this.position.x, this.position.y, this.position.z);
-      this.model.setRotation(this.rotation.yaw, this.rotation.pitch);
-      // Show collider gizmo for remote players
-      this.model.setColliderVisible(true);
-      console.log(`[RemotePlayer] MODEL LOADED for playerId=${playerId} instanceId=${this.instanceId}`);
+      this._model.setRotation(this.rotation.yaw, this.rotation.pitch);
+      // Show collider gizmo for remote players (unless already dead)
+      if (!this.isDead) {
+        this._model.setColliderVisible(true);
+      }
+      console.log(`[RemotePlayer] MODEL LOADED for playerId=${playerId} instanceId=${this.instanceId} isDead=${this.isDead}`);
     });
   }
 
-  update(targetPosition: { x: number; y: number; z: number }, targetRotation: { yaw: number; pitch: number }, dt: number, ping: number = 0): void {
+  update(targetPosition: { x: number; y: number; z: number }, targetRotation: { yaw: number; pitch: number }, dt: number, ping: number = 0, serverVelocity?: { x: number; y: number; z: number }): void {
     // Update last update timestamp
-    this.lastUpdateTime = Date.now();
+    const prevUpdateMs = this.lastServerUpdateMs;
+    this._lastUpdateTime = Date.now();
+    this.lastServerUpdateMs = this._lastUpdateTime;
 
-    // If we were simulating and now got an update, stop simulating and reconcile
-    if (this.isSimulating) {
-      this.isSimulating = false;
-      // Snap to server position (could use interpolation for smoother transition)
-      this.position.set(targetPosition.x, targetPosition.y, targetPosition.z);
-      console.log(`[RemotePlayer] RESUMED updates for playerId=${this.playerId}, reconciling position`);
+    // If we were simulating and now got an update, stop simulating and start blending
+    // But keep predicting if we're within the prediction window (server hasn't caught up yet)
+    if (this._isSimulating && this.predictionTimer <= 0) {
+      this._isSimulating = false;
+      // Don't hard-snap — blend to server position over ~100ms to avoid visual jump
+      this.reconcileBlend = 0.1;
+      console.log(`[RemotePlayer] RESUMED updates for playerId=${this.playerId}, blending to server position`);
     }
 
     // Update ping for interpolation adjustments
@@ -99,14 +119,25 @@ export class RemotePlayer {
     this.targetPosition.set(targetPosition.x, targetPosition.y, targetPosition.z);
     this.targetRotation = { yaw: targetRotation.yaw, pitch: targetRotation.pitch };
 
-    // Estimate velocity from position change (for dead reckoning)
-    const timeSinceLastUpdate = dt;
-    if (timeSinceLastUpdate > 0) {
-      this.simulatedVelocity.set(
-        (targetPosition.x - this.position.x) / timeSinceLastUpdate,
-        (targetPosition.y - this.position.y) / timeSinceLastUpdate,
-        (targetPosition.z - this.position.z) / timeSinceLastUpdate
-      );
+    // Store server-reported velocity for extrapolation
+    if (serverVelocity) {
+      this.serverVelocity.set(serverVelocity.x, serverVelocity.y, serverVelocity.z);
+    }
+
+    // Estimate velocity from consecutive server positions (not extrapolated position)
+    // Skip during prediction window — server hasn't reflected the knockback yet
+    if (this.predictionTimer <= 0) {
+      if (this.lastServerPosition.lengthSq() > 0) {
+        const serverDt = (this.lastUpdateTime - prevUpdateMs) / 1000;
+        if (serverDt > 0) {
+          this.simulatedVelocity.set(
+            (targetPosition.x - this.lastServerPosition.x) / serverDt,
+            (targetPosition.y - this.lastServerPosition.y) / serverDt,
+            (targetPosition.z - this.lastServerPosition.z) / serverDt
+          );
+        }
+      }
+      this.lastServerPosition.set(targetPosition.x, targetPosition.y, targetPosition.z);
     }
 
     // Handle death physics (ragdoll-like rigidbody)
@@ -168,25 +199,50 @@ export class RemotePlayer {
   // Called every frame for smooth interpolation
   tick(dt: number): void {
     if (!this.isDead) {
+      // Dead reckoning trigger: if no updates for 300ms, start simulating
+      const timeSinceUpdate = Date.now() - this._lastUpdateTime;
+      if (timeSinceUpdate > 300 && !this._isSimulating) {
+        this._isSimulating = true;
+        console.log(`[RemotePlayer] STARTING dead reckoning for playerId=${this.playerId} (no updates for ${timeSinceUpdate}ms)`);
+      }
+
       // Skip interpolation if we're simulating physics (dead reckoning)
-      if (!this.isSimulating) {
-        // Calculate distance to target for adaptive interpolation
-        const distanceToTarget = this.position.distanceTo(this.targetPosition);
-
-        // Adaptive lerp factor: faster when far, slower when close
-        // Base factor adjusted by distance and ping
-        // Higher ping = more aggressive interpolation to compensate for lag
-        const pingBonus = Math.min(REMOTE_PLAYER_MAX_PING_BONUS, this.ping * REMOTE_PLAYER_PING_MULTIPLIER);
-        const adaptiveFactor = Math.min(
-          REMOTE_PLAYER_MAX_LERP_FACTOR,
-          REMOTE_PLAYER_BASE_LERP_FACTOR + distanceToTarget * REMOTE_PLAYER_DISTANCE_MULTIPLIER + pingBonus
+      if (!this._isSimulating) {
+        // Extrapolation: predict where the player is now based on server velocity
+        // serverPosition + serverVelocity * timeSinceUpdate = current actual position
+        // Cap at 200ms to prevent runaway prediction during packet loss
+        const timeSinceUpdate = Math.min(0.2, (Date.now() - this.lastServerUpdateMs) / 1000);
+        const extrapolatedTarget = new THREE.Vector3(
+          this.targetPosition.x + this.serverVelocity.x * timeSinceUpdate,
+          this.targetPosition.y + this.serverVelocity.y * timeSinceUpdate,
+          this.targetPosition.z + this.serverVelocity.z * timeSinceUpdate
         );
-        const lerpFactor = adaptiveFactor * dt;
 
-        // Interpolate position
-        this.position.x += (this.targetPosition.x - this.position.x) * lerpFactor;
-        this.position.y += (this.targetPosition.y - this.position.y) * lerpFactor;
-        this.position.z += (this.targetPosition.z - this.position.z) * lerpFactor;
+        // Reconciliation blend: when recovering from simulation, blend aggressively
+        // toward the server position to correct any drift smoothly
+        if (this.reconcileBlend > 0) {
+          this.reconcileBlend -= dt;
+          if (this.reconcileBlend <= 0) {
+            this.reconcileBlend = 0;
+          }
+          // Blend factor: start at 1.0 (full snap) and decay over the blend window
+          const blendStrength = Math.min(1, dt / Math.max(0.001, this.reconcileBlend + dt));
+          this.position.lerp(extrapolatedTarget, blendStrength);
+        } else {
+          // Normal adaptive interpolation
+          const distanceToTarget = this.position.distanceTo(extrapolatedTarget);
+          const pingBonus = Math.min(REMOTE_PLAYER_MAX_PING_BONUS, this.ping * REMOTE_PLAYER_PING_MULTIPLIER);
+          const adaptiveFactor = Math.min(
+            REMOTE_PLAYER_MAX_LERP_FACTOR,
+            REMOTE_PLAYER_BASE_LERP_FACTOR + distanceToTarget * REMOTE_PLAYER_DISTANCE_MULTIPLIER + pingBonus
+          );
+          const lerpFactor = Math.min(1, adaptiveFactor * dt);
+
+          // Interpolate toward extrapolated position
+          this.position.x += (extrapolatedTarget.x - this.position.x) * lerpFactor;
+          this.position.y += (extrapolatedTarget.y - this.position.y) * lerpFactor;
+          this.position.z += (extrapolatedTarget.z - this.position.z) * lerpFactor;
+        }
 
         // Log position every 2 seconds
         this.logTimer += dt;
@@ -197,7 +253,7 @@ export class RemotePlayer {
         }
 
         // Interpolate rotation with slightly faster factor for responsiveness
-        const rotationFactor = Math.min(REMOTE_PLAYER_MAX_LERP_FACTOR * REMOTE_PLAYER_ROTATION_MULTIPLIER, adaptiveFactor * REMOTE_PLAYER_ROTATION_MULTIPLIER) * dt;
+        const rotationFactor = Math.min(1, REMOTE_PLAYER_MAX_LERP_FACTOR * REMOTE_PLAYER_ROTATION_MULTIPLIER * dt);
         this.rotation.yaw += (this.targetRotation.yaw - this.rotation.yaw) * rotationFactor;
         this.rotation.pitch += (this.targetRotation.pitch - this.rotation.pitch) * rotationFactor;
 
@@ -211,17 +267,26 @@ export class RemotePlayer {
           this.velocity.z = (this.position.z - this.previousPosition.z) / dt;
         }
       }
-      // When simulating, position is updated by simulatePhysics() called from main loop
+      // When simulating, run physics locally for prediction
+      if (this._isSimulating) {
+        if (this.predictionTimer > 0) {
+          this.predictionTimer -= dt;
+          if (this.predictionTimer <= 0) {
+            this.predictionTimer = 0;
+          }
+        }
+        this.simulatePhysics(dt);
+      }
     }
 
     // Update model if loaded
-    if (this.loaded) {
-      this.model.setPosition(this.position.x, this.position.y, this.position.z);
-      this.model.setRotation(this.rotation.yaw, this.rotation.pitch, this.rotation.roll);
+    if (this._loaded) {
+      this._model.setPosition(this.position.x, this.position.y, this.position.z);
+      this._model.setRotation(this.rotation.yaw, this.rotation.pitch, this.rotation.roll);
 
       // Apply scale (for death shrink effect)
       if (this.isDead && this.scale !== 1.0) {
-        this.model.setScale(this.scale);
+        this._model.setScale(this.scale);
       }
 
       if (this.isDead) {
@@ -232,7 +297,7 @@ export class RemotePlayer {
         let animState: AnimationState = 'idle';
         
         // Hysteresis to prevent flickering (same logic as local player)
-        const currentAnim = this.model['currentState'] as AnimationState;
+        const currentAnim = this._model['currentState'] as AnimationState;
         
         if (currentAnim === 'run') {
           if (speed < 6.0) {
@@ -256,44 +321,18 @@ export class RemotePlayer {
           }
         }
         
-        this.model.setAnimationState(animState);
+        this._model.setAnimationState(animState);
         this.previousPosition.copy(this.position);
       }
-      this.model.update(dt);
+      this._model.update(dt);
     }
 
     // Update gizmo position (only if alive)
     if (this.gizmo) {
       if (!this.isDead) {
-        this.gizmo.position.set(this.position.x, this.position.y + 2.0, this.position.z);
+        this.gizmo.position.set(this.position.x, this.position.y + PLAYER_HEIGHT, this.position.z);
         (this.gizmo.material as THREE.MeshBasicMaterial).color.setHex(0x00ff00);
         this.gizmo.visible = true;
-
-        // Check positional alignment with model and collider
-        if (this.loaded && this.model['model']) {
-          const modelPos = this.model['model'].position;
-          const expectedModelY = this.position.y + 1.2; // Model should be at feet + 1.2
-          const modelYMismatch = Math.abs(modelPos.y - expectedModelY);
-
-          if (modelYMismatch > 0.1) {
-            console.warn(`[RemotePlayer] POSITION MISMATCH for ${this.playerId}: Model Y=${modelPos.y.toFixed(2)}, expected=${expectedModelY.toFixed(2)} (diff=${modelYMismatch.toFixed(2)})`);
-          }
-
-          // Check collider gizmo position (it's a child of the model)
-          const colliderGizmo = this.model['colliderGizmo'];
-          if (colliderGizmo) {
-            const colliderWorldPos = new THREE.Vector3();
-            colliderGizmo.getWorldPosition(colliderWorldPos);
-            // Collider is at y=-0.2 in model space, model is at feet + 1.2
-            // So collider should be at feet + 1.2 - 0.2 = feet + 1.0 (half player height)
-            const expectedColliderY = this.position.y + 1.0;
-            const colliderYMismatch = Math.abs(colliderWorldPos.y - expectedColliderY);
-
-            if (colliderYMismatch > 0.1) {
-              console.warn(`[RemotePlayer] COLLIDER MISMATCH for ${this.playerId}: Collider Y=${colliderWorldPos.y.toFixed(2)}, expected=${expectedColliderY.toFixed(2)} (diff=${colliderYMismatch.toFixed(2)})`);
-            }
-          }
-        }
       } else {
         this.gizmo.visible = false;
       }
@@ -367,7 +406,10 @@ export class RemotePlayer {
 
   show(): void {
     this.model.setVisible(true);
-    this.model.addColliderGizmo();
+    // Only add collider if model is loaded (colliderGizmo exists)
+    if (this.loaded) {
+      this.model.addColliderGizmo();
+    }
     if (this.gizmo) {
       // Re-add gizmo to scene if it was removed
       if (!this.scene.children.includes(this.gizmo)) {
@@ -383,7 +425,9 @@ export class RemotePlayer {
     if (this.isDead) return; // Don't simulate if already dead (death physics handles it)
 
     // Apply gravity
-    this.simulatedVelocity.y -= GRAVITY * dt;
+    this.simulatedVelocity.y += GRAVITY * dt;
+
+    // No air friction — matches game physics (local player has no air drag)
 
     // Apply velocity
     this.position.x += this.simulatedVelocity.x * dt;
@@ -411,14 +455,47 @@ export class RemotePlayer {
     this.previousPosition.copy(this.position);
     this.targetPosition.copy(this.position);
     this.velocity.set(0, 0, 0);
+    this.simulatedVelocity.set(0, 0, 0);
+    this.serverVelocity.set(0, 0, 0);
     this.angularVelocity.set(0, 0, 0);
     this.isOnGround = true;
+    this._isSimulating = false;
+    this.predictionTimer = 0;
+    this.reconcileBlend = 0;
+    this.lastServerPosition.copy(this.position);
+    this.lastServerUpdateMs = Date.now();
+    this._lastUpdateTime = Date.now();
     this.show();
+  }
+
+  applyKnockback(from: THREE.Vector3, force: number): void {
+    if (this.isDead) return;
+    const dir = new THREE.Vector3().subVectors(this.position, from).normalize();
+    this.simulatedVelocity.addScaledVector(dir, force);
+    this.simulatedVelocity.y += force * 0.5;
+    // Local prediction — bridge until server position updates reflect the knockback
+    this._isSimulating = true;
+    this.predictionTimer = 0.3; // 300ms covers typical round-trip
+    this._lastUpdateTime = Date.now();
+  }
+
+  applyPull(to: THREE.Vector3, force: number): void {
+    if (this.isDead) return;
+    const dir = new THREE.Vector3().subVectors(to, this.position).normalize();
+    this.simulatedVelocity.addScaledVector(dir, force);
+    this.simulatedVelocity.y += force * 0.3;
+    this._isSimulating = true;
+    this.predictionTimer = 0.3;
+    this._lastUpdateTime = Date.now();
+  }
+
+  startDeadReckoning(): void {
+    this._isSimulating = true;
   }
 
   dispose(): void {
     console.log(`[RemotePlayer] DISPOSE called for playerId=${this.playerId} instanceId=${this.instanceId}`);
-    this.model.dispose();
+    this._model.dispose();
     if (this.gizmo) {
       this.scene.remove(this.gizmo);
       this.gizmo.geometry.dispose();

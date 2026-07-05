@@ -1,4 +1,9 @@
 import * as THREE from 'three';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { AtmosphericSky } from './atmosphericSky.js';
 import { VolumetricClouds } from './volumetricClouds.js';
 import { loadHeightmap, Terrain } from './terrain.js';
@@ -8,17 +13,19 @@ import { Rocket } from './rocket.js';
 import { Disc } from './disc.js';
 import { EffectsManager } from './effects.js';
 import { HUD } from './hud.js';
+import { HealthBarSystem } from './HealthBarSystem.js';
 import { BallDebris } from './debris.js';
 import { Explosion } from './explosion.js';
 import { Implosion } from './implosion.js';
 import { RemotePlayer } from './RemotePlayer.js';
+import { DamageNumberManager } from './damageNumbers.js';
 import { PlayerDebris } from './PlayerDebris.js';
 import { NetworkManager } from './networking/NetworkManager.js';
 import { NetworkAdapterFactory } from './networking/NetworkAdapterFactory.js';
 import { ChildLogger } from './Logger.js';
 import { StateSnapshot } from './StateSnapshot.js';
 import {
-  ROCKET_SPEED, HIT_MAX, BALL_SPAWN_INTERVAL, BALL_MAX,
+  ROCKET_SPEED, ROCKET_AOE_DAMAGE, ROCKET_AOE_RADIUS, HIT_MAX, BALL_SPAWN_INTERVAL, BALL_MAX,
   PIXEL_SCALE, RENDERER_PIXEL_RATIO,
   CAMERA_FOV, CAMERA_NEAR, CAMERA_FAR,
   FOG_COLOR, FOG_DENSITY,
@@ -80,13 +87,17 @@ renderer.domElement.style.width = '100%';
 renderer.domElement.style.height = '100%';
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFShadowMap;
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMapping = THREE.ACESFilmicToneMapping; // applied by OutputPass at end of post chain
 renderer.toneMappingExposure = TONE_MAPPING_EXPOSURE;
 document.body.appendChild(renderer.domElement);
 
 // Initialize button text from localStorage
 const pixelToggleBtn = document.getElementById('pixel-toggle')! as HTMLButtonElement;
 pixelToggleBtn.textContent = pixelated ? 'PIXELATED: ON' : 'PIXELATED: OFF';
+
+let postproEnabled = localStorage.getItem('fps-postpro') === 'false' ? false : true;
+const postproToggleBtn = document.getElementById('bloom-toggle')! as HTMLButtonElement;
+postproToggleBtn.textContent = postproEnabled ? 'POST-PROCESSING: ON' : 'POST-PROCESSING: OFF';
 
 function updateRendererSize(): void {
   if (pixelated) {
@@ -105,6 +116,13 @@ window.addEventListener('resize', () => {
   updateRendererSize();
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
+  const w = pixelated
+    ? Math.floor(window.innerWidth / PIXEL_SCALE)
+    : window.innerWidth;
+  const h = pixelated
+    ? Math.floor(window.innerHeight / PIXEL_SCALE)
+    : window.innerHeight;
+  composer.setSize(w, h);
 });
 
 // ---- Camera ----
@@ -114,6 +132,52 @@ const camera = new THREE.PerspectiveCamera(CAMERA_FOV, window.innerWidth / windo
 const scene = new THREE.Scene();
 scene.fog = new THREE.FogExp2(FOG_COLOR, FOG_DENSITY); // exponential like Tribes 2 - warm haze
 renderer.setClearColor(FOG_COLOR);
+
+// ---- Post-processing (Bloom) ----
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloomPass = new UnrealBloomPass(
+  new THREE.Vector2(
+    pixelated ? Math.floor(window.innerWidth / PIXEL_SCALE) : window.innerWidth,
+    pixelated ? Math.floor(window.innerHeight / PIXEL_SCALE) : window.innerHeight
+  ),
+  0.6,  // strength
+  0.4,  // radius
+  1     // threshold (linear HDR — only emissive/additive elements exceed this)
+);
+composer.addPass(bloomPass);
+
+// Contrast pass — pushes midtones darker, increases contrast
+const contrastPass = new ShaderPass({
+  uniforms: {
+    tDiffuse: { value: null },
+    contrast: { value: 1.15 },  // >1 = more contrast
+    brightness: { value: -0.02 } // slightly darker
+  },
+  vertexShader: `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: `
+    uniform sampler2D tDiffuse;
+    uniform float contrast;
+    uniform float brightness;
+    varying vec2 vUv;
+    void main() {
+      vec4 color = texture2D(tDiffuse, vUv);
+      color.rgb = (color.rgb - 0.5) * contrast + 0.5 + brightness;
+      gl_FragColor = color;
+    }
+  `
+});
+composer.addPass(contrastPass);
+
+composer.addPass(new OutputPass()); // ACES tone mapping + sRGB conversion after bloom
+bloomPass.enabled = postproEnabled;
+contrastPass.enabled = postproEnabled;
 
 // ---- Atmospheric Sky & Volumetric Clouds ----
 const atmosphericSky = new AtmosphericSky(scene, {
@@ -148,6 +212,8 @@ sun.shadow.camera.left = -SHADOW_CAMERA_SIZE;
 sun.shadow.camera.right = SHADOW_CAMERA_SIZE;
 sun.shadow.camera.top = SHADOW_CAMERA_SIZE;
 sun.shadow.camera.bottom = -SHADOW_CAMERA_SIZE;
+sun.shadow.bias = -0.0001;
+sun.shadow.normalBias = 0.02;
 scene.add(sun);
 
 // Sync sun position with atmospheric sky
@@ -161,9 +227,14 @@ scene.add(hemi);
 let terrain: Terrain;
 let player: Player;
 let hud: HUD;
+let healthBarSystem: HealthBarSystem;
+let damageNumberManager: DamageNumberManager;
 let networkManager: NetworkManager;
 const remotePlayers: Map<string, RemotePlayer> = new Map();
+const playersBeingCreated: Set<string> = new Set();
+let lastRemotePosLog = '';
 const balls: Ball[] = [];
+let lastSentPos = { x: 0, y: 0, z: 0 };
 const rockets: Rocket[] = [];
 const discs: Disc[] = [];
 const debrisList: BallDebris[] = [];
@@ -236,8 +307,8 @@ function onDisc(e: { origin: THREE.Vector3; dir: THREE.Vector3; playerVel: THREE
 }
 
 // ---- Explosion processing ----
-function processExplosion(pos: THREE.Vector3, radius: number, force: number, shooterId?: string, directHit: boolean = false): void {
-  const exp = new Explosion(scene, pos, directHit);
+function processExplosion(pos: THREE.Vector3, radius: number, force: number, shooterId?: string, directHit: boolean = false, directHitTargetId?: string | null, age: number = 0): void {
+  const exp = new Explosion(scene, pos, directHit, age);
   explosions.push(exp);
 
   // Record explosion for death impulse calculation
@@ -269,11 +340,33 @@ function processExplosion(pos: THREE.Vector3, radius: number, force: number, sho
       ball.applyKnockback(pos, force * KNOCKBACK_MULTIPLIER);
     }
   }
+
+  // AOE damage + knockback to remote players
+  // Send to server for authoritative damage, apply knockback locally for visual feedback
+  if (networkManager && networkManager.isConnected()) {
+    networkManager.sendAOEShot(
+      { x: pos.x, y: pos.y, z: pos.z },
+      directHitTargetId ?? null
+    );
+  }
+  for (const [playerId, rp] of remotePlayers) {
+    if (playerId === directHitTargetId) continue; // Direct hit already handled
+    if ((rp as any).isDead) continue;
+    const d = rp.position.distanceTo(pos);
+    // Knockback uses full explosion radius
+    if (d < radius * EXPLOSION_FALLOFF_MULTIPLIER_ROCKET) {
+      const falloff = 1 - d / (radius * EXPLOSION_FALLOFF_MULTIPLIER_ROCKET);
+      rp.applyKnockback(pos, force * falloff);
+      // Instant hit marker + damage prediction for AOE splash hit (client prediction)
+      hud.showHitMarker();
+      healthBarSystem.predictDamage(playerId, Math.round(ROCKET_AOE_DAMAGE * falloff));
+    }
+  }
 }
 
 // ---- Disc explosion processing (pull instead of push) ----
-function processDiscExplosion(pos: THREE.Vector3, radius: number, force: number): void {
-  const imp = new Implosion(scene, pos);
+function processDiscExplosion(pos: THREE.Vector3, radius: number, force: number, directHitTargetId?: string | null, age: number = 0): void {
+  const imp = new Implosion(scene, pos, age);
   implosions.push(imp);
 
   // Pull player toward explosion
@@ -289,6 +382,27 @@ function processDiscExplosion(pos: THREE.Vector3, radius: number, force: number)
     const db = ball.pos.distanceTo(pos);
     if (db < radius * EXPLOSION_COLLISION_MULTIPLIER + ball.radius) {
       ball.applyPull(pos, force * PULL_MULTIPLIER);
+    }
+  }
+
+  // AOE damage + pull to remote players
+  // Send to server for authoritative damage, apply pull locally for visual feedback
+  if (networkManager && networkManager.isConnected()) {
+    networkManager.sendDiscAOEShot(
+      { x: pos.x, y: pos.y, z: pos.z },
+      directHitTargetId ?? null
+    );
+  }
+  for (const [playerId, rp] of remotePlayers) {
+    if (playerId === directHitTargetId) continue;
+    if ((rp as any).isDead) continue;
+    const d = rp.position.distanceTo(pos);
+    if (d < radius * EXPLOSION_FALLOFF_MULTIPLIER_DISC) {
+      const falloff = 1 - d / (radius * EXPLOSION_FALLOFF_MULTIPLIER_DISC);
+      rp.applyPull(pos, force * falloff);
+      // Instant hit marker + damage prediction for disc AOE splash hit (client prediction)
+      hud.showHitMarker();
+      healthBarSystem.predictDamage(playerId, Math.round(ROCKET_AOE_DAMAGE * falloff));
     }
   }
 }
@@ -331,11 +445,17 @@ function updateRockets(dt: number): void {
         networkManager.sendProjectileDestroy(r.serverProjectileId);
       }
       
-      processExplosion(r.pos, r.explosionRadius, r.knockbackForce, undefined, r.directHit);
+      processExplosion(r.pos, r.explosionRadius, r.knockbackForce, undefined, r.directHit, r.hitPlayerId, r.age);
 
       if (r.hitBall) {
         const ball = r.hitBall;
         const destroyed = ball.takeDamage();
+        // Spawn damage number
+        damageNumberManager.spawn(ball.pos, 1, r.directHit ? '#ffd700' : '#ffffff', camera);
+        // Spawn healthbar only if not destroyed (killing blow doesn't need healthbar)
+        if (!destroyed) {
+          healthBarSystem.spawnBall(ball, 1, ball.health);
+        }
         // Accuracy: 1-10 scale, direct core hits = 10, wake hits = 1-9 based on distance
         const accRaw = r.hitAccuracy;
         let acc = 1 + Math.max(0, 9 - (accRaw / HIT_MAX * 9));
@@ -353,7 +473,13 @@ function updateRockets(dt: number): void {
       }
 
       if (r.hitPlayerId) {
+        // Get player position for damage number
+        const targetPlayer = remotePlayers.get(r.hitPlayerId);
+        const hitPos = targetPlayer ? targetPlayer.position : player.pos;
+        damageNumberManager.spawn(hitPos, 50, r.directHit ? '#ffd700' : '#ffffff', camera);
         // INSTANT HIT CONFIRMATION: Client-side hit detection provides immediate feedback
+        // Predict damage on health bar immediately (don't wait for server)
+        healthBarSystem.predictDamage(r.hitPlayerId, 50); // Direct hit = 50 damage
         // Calculate score for player hit (same formula as ball)
         const accRaw = r.hitAccuracy;
         let acc = 1 + Math.max(0, 9 - (accRaw / HIT_MAX * 9));
@@ -397,10 +523,15 @@ function updateDiscs(dt: number): void {
 
     if (d.exploded && !d.explosionProcessed) {
       d.explosionProcessed = true;
-      processDiscExplosion(d.pos, d.explosionRadius, d.pullForce);
+      processDiscExplosion(d.pos, d.explosionRadius, d.pullForce, d.hitPlayerId, d.age);
       if (d.hitBall) {
         const ball = d.hitBall;
         const destroyed = ball.takeDamage();
+        damageNumberManager.spawn(ball.pos, 1, '#00ffff', camera);
+        // Spawn healthbar only if not destroyed (killing blow doesn't need healthbar)
+        if (!destroyed) {
+          healthBarSystem.spawnBall(ball, 1, ball.health);
+        }
         if (destroyed) {
           debrisList.push(new BallDebris(scene, terrain, ball.pos.x, ball.pos.y, ball.pos.z, ball.color, ball.scale));
           player.kills++;
@@ -417,8 +548,14 @@ function updateDiscs(dt: number): void {
       }
 
       if (d.hitPlayerId && networkManager) {
+        // Get player position for damage number
+        const targetPlayer = remotePlayers.get(d.hitPlayerId);
+        const hitPos = targetPlayer ? targetPlayer.position : player.pos;
+        damageNumberManager.spawn(hitPos, 50, '#00ffff', camera);
         // Send hit event to server
         networkManager.sendShot(d.hitPlayerId, { x: d.pos.x, y: d.pos.y, z: d.pos.z }, { x: d.vel.x, y: d.vel.y, z: d.vel.z }, Date.now(), null);
+        // Predict damage on health bar immediately (disc direct hit = 50 damage)
+        healthBarSystem.predictDamage(d.hitPlayerId, 50);
         logger.debug(`Disc hit player ${d.hitPlayerId}`);
         
         // Calculate score for player hit
@@ -479,9 +616,11 @@ function loop(time: number): void {
   // Send position to server if connected (even when tab is hidden)
   // Don't send position updates while dead to prevent state drift
   if (networkManager && networkManager.isConnected() && !player.isDead) {
+    lastSentPos = { x: player.pos.x, y: player.pos.y, z: player.pos.z };
     networkManager.sendPosition(
       { x: player.pos.x, y: player.pos.y, z: player.pos.z },
-      { yaw: player.yaw, pitch: player.pitch }
+      { yaw: player.yaw, pitch: player.pitch },
+      { x: player.vel.x, y: player.vel.y, z: player.vel.z }
     );
     
     // Update remote players (only create from gameState, updates come via onPlayerUpdate)
@@ -495,18 +634,19 @@ function loop(time: number): void {
     const sortedPlayerIds = [localPlayerId, ...playerIds.filter(id => id !== localPlayerId)];
     hud.updatePlayerList(sortedPlayerIds, localPlayerId);
 
-    // Log remote player positions periodically (every 2 seconds)
-    const shouldLog = Math.random() < 0.03; // ~3% chance per frame at 60fps = ~2 seconds
-    if (shouldLog) {
-      const remotePositions: string[] = [];
-      players.forEach((playerState, playerId) => {
-        if (playerId !== networkManager.getLocalPlayerId()) {
-          const internalId = playerState.internalId || 'unknown';
-          remotePositions.push(`${playerId}[${internalId}]: (${playerState.position.x.toFixed(1)}, ${playerState.position.y.toFixed(1)}, ${playerState.position.z.toFixed(1)})`);
-        }
-      });
-      if (remotePositions.length > 0) {
-        logger.info(`Remote players: ${remotePositions.join(' | ')}`);
+    // Log remote player positions only when they change
+    const remotePositions: string[] = [];
+    players.forEach((playerState, playerId) => {
+      if (playerId !== networkManager.getLocalPlayerId()) {
+        const internalId = playerState.internalId || 'unknown';
+        remotePositions.push(`${playerId}[${internalId}]: (${playerState.position.x.toFixed(1)}, ${playerState.position.y.toFixed(1)}, ${playerState.position.z.toFixed(1)})`);
+      }
+    });
+    if (remotePositions.length > 0) {
+      const posSummary = remotePositions.join(' | ');
+      if (posSummary !== lastRemotePosLog) {
+        logger.info(`Remote players: ${posSummary}`);
+        lastRemotePosLog = posSummary;
       }
     }
 
@@ -517,32 +657,25 @@ function loop(time: number): void {
       }
 
       let remotePlayer = remotePlayers.get(playerId);
-      if (!remotePlayer) {
+      if (!remotePlayer && !playersBeingCreated.has(playerId) && !playerState.isDead) {
+        playersBeingCreated.add(playerId);
         remotePlayer = new RemotePlayer(scene, playerId, playerState.position, terrain);
         remotePlayers.set(playerId, remotePlayer);
+        playersBeingCreated.delete(playerId);
         console.log(`[RemotePlayer] CREATED instanceId=${remotePlayer.instanceId} for playerId=${playerId} (total map size: ${remotePlayers.size})`);
       }
+      if (!remotePlayer) return; // Skip if being created by onPlayerUpdate or failed
       // RemotePlayer.update is called via onPlayerUpdate callback to store target position
-      // Call tick() every frame for smooth interpolation
+      // Call tick() every frame for smooth interpolation (includes dead reckoning trigger)
       remotePlayer.tick(dt);
-      if ((remotePlayer as any).model && (remotePlayer as any).loaded) {
-        (remotePlayer as any).model.update(dt);
-      }
-
-      // Check if player has stopped sending updates (dead reckoning)
-      const timeSinceUpdate = Date.now() - (remotePlayer as any).lastUpdateTime;
-      if (timeSinceUpdate > 1000) { // 1 second timeout
-        if (!(remotePlayer as any).isSimulating) {
-          (remotePlayer as any).isSimulating = true;
-          console.log(`[RemotePlayer] STARTING dead reckoning for playerId=${playerId} (no updates for ${timeSinceUpdate}ms)`);
-        }
-        // Simulate physics (gravity + retained velocity)
-        (remotePlayer as any).simulatePhysics(dt);
+      if (remotePlayer.model && remotePlayer.loaded) {
+        remotePlayer.model.update(dt);
       }
 
       // Update HUD indicator for this player (skip if dead)
+      // Use RemotePlayer's extrapolated position for LAN-feel responsiveness
       if (!playerState.isDead) {
-        hud.updatePlayerIndicator(playerId, playerState.position, camera, false);
+        hud.updatePlayerIndicator(playerId, remotePlayer.position, camera, false);
       } else {
         // Explicitly remove indicator if player is dead
         hud.removePlayerIndicator(playerId);
@@ -560,6 +693,7 @@ function loop(time: number): void {
         remotePlayer.dispose();
         remotePlayers.delete(playerId);
         hud.removePlayerIndicator(playerId);
+        healthBarSystem.removeBar(playerId);
       }
       // Remove dead players that have shrunk to 0
       if ((remotePlayer as any).scale === 0) {
@@ -567,6 +701,7 @@ function loop(time: number): void {
         remotePlayer.dispose();
         remotePlayers.delete(playerId);
         hud.removePlayerIndicator(playerId);
+        healthBarSystem.removeBar(playerId);
       }
     }
   }
@@ -597,6 +732,8 @@ function loop(time: number): void {
     if (implosions[i].dead) { implosions[i].dispose(); implosions.splice(i, 1); }
   }
   hud.update(dt, player, networkManager.getPing(), networkManager.getPacketLoss(), networkManager.getJitter());
+  healthBarSystem.update(dt, networkManager.getPlayers(), remotePlayers as any, balls);
+  damageNumberManager.update(dt);
 
   // Jetpack particles
   if (!player.onGround && (document as any)._jetActive) {
@@ -611,12 +748,18 @@ function loop(time: number): void {
   sun.position.copy(atmosphericSky.getSunPosition());
   volumetricClouds.setSunDirection(atmosphericSky.getSunDirection());
 
-  // Shadow camera follows player
-  sun.shadow.camera.position.copy(sun.position).add(player.pos);
-  sun.target.position.copy(player.pos);
-  sun.target.updateMatrixWorld();
+  // Shadow camera follows player (positioned above looking down)
+  sun.shadow.camera.position.set(player.pos.x, player.pos.y + 500, player.pos.z);
+  sun.shadow.camera.lookAt(player.pos);
 
-  renderer.render(scene, camera);
+  if (postproEnabled) {
+    composer.render();
+  } else {
+    renderer.render(scene, camera);
+  }
+
+  // Render damage numbers after post-processing (bypass bloom/contrast for visibility)
+  damageNumberManager.update(dt);
 }
 
 // ---- Boot ----
@@ -645,15 +788,14 @@ async function init(): Promise<void> {
   networkManager = new NetworkManager(adapter);
   markTime('networkInit');
 
-  // Track players being created to prevent race condition duplicates
-  const playersBeingCreated: Set<string> = new Set();
-
   // Set control object for client-side prediction
   networkManager.setControlObject(player);
   player.onNetworkJump = (pos) => networkManager.sendJump(pos);
   player.onNetworkJetpack = (pos) => networkManager.sendJetpack(pos);
   player.onNetworkInput = (input, rotation) => networkManager.sendInputMove(input, rotation);
   hud = new HUD();
+  healthBarSystem = new HealthBarSystem(camera);
+  damageNumberManager = new DamageNumberManager(scene);
   markTime('hudCreated');
 
   // Load player model
@@ -661,15 +803,27 @@ async function init(): Promise<void> {
   markTime('playerModelLoaded');
   
   // Register player hit handler (non-lethal hits)
-  networkManager.onPlayerHit = (shooterId: string, targetId: string, damage: number) => {
+  networkManager.onPlayerHit = (shooterId: string, targetId: string, damage: number, health: number) => {
     // Check if local player was hit
     if (targetId === networkManager.getLocalPlayerId()) {
-      logger.info(`Local player hit for ${damage} damage by ${shooterId}`);
+      player.health = health;
+      logger.info(`Local player hit for ${damage} damage by ${shooterId} (health: ${health})`);
       return;
     }
 
     // Non-lethal hits don't trigger death animation
-      logger.info(`Remote player ${targetId} hit for ${damage} damage by ${shooterId}`);
+      logger.info(`Remote player ${targetId} hit for ${damage} damage by ${shooterId} (health: ${health})`);
+      healthBarSystem.spawn(targetId, damage, health);
+  };
+
+  // Register knockback handler — server tells us to apply knockback/pull to our local player
+  networkManager.onKnockback = (position: { x: number; y: number; z: number }, force: number, pull?: boolean) => {
+    const from = new THREE.Vector3(position.x, position.y, position.z);
+    if (pull) {
+      player.applyPull(from, force);
+    } else {
+      player.applyKnockback(from, force);
+    }
   };
 
   // Register player kill handler (lethal kills)
@@ -679,6 +833,7 @@ async function init(): Promise<void> {
       console.log(`💀 YOU WERE KILLED by ${shooterId}`);
       logger.info(`Local player killed by ${shooterId}`);
       player.isDead = true;
+      player.health = 0;
       hud.hide();
       return;
     }
@@ -692,6 +847,7 @@ async function init(): Promise<void> {
     const playerData = networkManager.getPlayers().get(targetId);
     if (playerData) {
       playerData.isDead = true;
+      playerData.health = 0;
     }
 
     const remotePlayer = remotePlayers.get(targetId);
@@ -719,6 +875,7 @@ async function init(): Promise<void> {
 
       // Remove HUD indicator on kill
       hud.removePlayerIndicator(targetId);
+      healthBarSystem.removeBar(targetId);
 
       logger.info(`Player ${targetId} killed by ${shooterId}`);
     }
@@ -737,10 +894,12 @@ async function init(): Promise<void> {
   };
 
   // Register player update handler for remote players
-  networkManager.onPlayerUpdate = (playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }, _timestamp: number) => {
+  networkManager.onPlayerUpdate = (playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }, _timestamp: number, velocity?: { x: number; y: number; z: number }) => {
+    // Safety: never process local player as a remote player
+    if (playerId === networkManager.getLocalPlayerId()) return;
     let remotePlayer = remotePlayers.get(playerId);
     if (remotePlayer) {
-      remotePlayer.update(position, rotation, REMOTE_PLAYER_FIXED_DT, networkManager.getPing()); // Store target position for interpolation
+      remotePlayer.update(position, rotation, REMOTE_PLAYER_FIXED_DT, networkManager.getPing(), velocity);
       if (Math.random() < DEBUG_LOG_SAMPLE_RATE) { // 5% of updates log for debugging
         logger.debug(`onPlayerUpdate: ${playerId} at ${position.x.toFixed(1)},${position.y.toFixed(1)},${position.z.toFixed(1)}`);
       }
@@ -750,6 +909,9 @@ async function init(): Promise<void> {
         logger.debug(`onPlayerUpdate called for player ${playerId} already being created, skipping`);
         return;
       }
+      // Don't create RemotePlayer for dead players — wait for respawn event
+      const playerData = networkManager.getPlayers().get(playerId);
+      if (playerData?.isDead) return;
       playersBeingCreated.add(playerId);
       logger.debug(`onPlayerUpdate called for unknown player: ${playerId}, creating...`);
       remotePlayer = new RemotePlayer(scene, playerId, position, terrain);
@@ -758,52 +920,6 @@ async function init(): Promise<void> {
       playersBeingCreated.delete(playerId);
     }
   };
-
-  // Register state reconciliation handler for client-side prediction
-  // Now handled by Tribes2Adapter directly
-  // networkManager.onStateReconciliation = (state: { position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }, velocity: { x: number; y: number; z: number }, lastProcessedSequence: number }) => {
-  //   logger.debug(`State reconciliation: pos(${state.position.x.toFixed(1)},${state.position.y.toFixed(1)},${state.position.z.toFixed(1)}) seq=${state.lastProcessedSequence}`);
-  // 
-  //   // Reconcile client state with server authoritative state
-  //   // Snap to server position first
-  //   player.pos.set(state.position.x, state.position.y, state.position.z);
-  //   player.vel.set(state.velocity.x, state.velocity.y, state.velocity.z);
-  //   player.yaw = state.rotation.yaw;
-  //   player.pitch = state.rotation.pitch;
-  // 
-  //   // Replay unprocessed inputs from lastProcessedSequence to current
-  //   // This smooths out the prediction correction instead of snapping
-  //   const unprocessedInputs = inputHistory.filter(entry => entry.sequenceNumber > state.lastProcessedSequence);
-  //   if (unprocessedInputs.length > 0) {
-  //     logger.debug(`Replaying ${unprocessedInputs.length} unprocessed inputs for smooth reconciliation`);
-  //     // Replay inputs at 15Hz tick rate (67ms per tick)
-  //     const dt = GAME_LOOP_FIXED_DT;
-  //     for (const entry of unprocessedInputs) {
-  //       // Apply input to player movement controller for proper replay
-  //       const movementInput = {
-  //         forward: entry.input.forward,
-  //         right: entry.input.right,
-  //         jump: entry.input.jump,
-  //         ski: entry.input.ski
-  //       };
-  //       player.movement.setInput(movementInput);
-  //       player.movement.update(dt);
-  //       logger.debug(`Replaying input seq=${entry.sequenceNumber} pos=${player.pos.x.toFixed(1)},${player.pos.y.toFixed(1)},${player.pos.z.toFixed(1)}`);
-  //     }
-  //   }
-  // 
-  //   // Clean up old inputs from history
-  //   const cutoffSequence = state.lastProcessedSequence;
-  //   const oldCount = inputHistory.length;
-  //   for (let i = inputHistory.length - 1; i >= 0; i--) {
-  //     if (inputHistory[i].sequenceNumber <= cutoffSequence) {
-  //       inputHistory.splice(i, 1);
-  //     }
-  //   }
-  //   if (oldCount !== inputHistory.length) {
-  //     logger.debug(`Cleaned up ${oldCount - inputHistory.length} old inputs from history`);
-  //   }
-  // };
 
   // Server-authoritative projectile handlers
   const remoteProjectiles = new Map<string, Rocket>();
@@ -828,13 +944,6 @@ async function init(): Promise<void> {
     rocket.isRemote = true;
     rockets.push(rocket);
     remoteProjectiles.set(projectileId, rocket);
-  };
-
-  networkManager.onProjectileUpdate = (projectileId: string, position: { x: number; y: number; z: number }) => {
-    const rocket = remoteProjectiles.get(projectileId);
-    if (rocket) {
-      rocket.pos.set(position.x, position.y, position.z);
-    }
   };
 
   networkManager.onProjectileDestroyed = (projectileId: string) => {
@@ -869,6 +978,7 @@ async function init(): Promise<void> {
       player.health = 100;
       player.vel.set(0, 0, 0);
       player.pos.set(position.x, position.y, position.z);
+      lastSentPos = { x: position.x, y: position.y, z: position.z };
       player.yaw = rotation.yaw;
       player.pitch = rotation.pitch;
       hud.show();
@@ -895,6 +1005,8 @@ async function init(): Promise<void> {
   
   // Register playerJoined handler (for new players joining after initial connection)
   networkManager.onPlayerJoined = (playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }) => {
+    // Safety: server excludes self from playerJoined broadcast, but guard anyway
+    if (playerId === networkManager.getLocalPlayerId()) return;
     const playerData = networkManager.getPlayers().get(playerId);
     const internalId = playerData?.internalId || 'unknown';
     const terrainHeight = terrain.getHeight(position.x, position.z);
@@ -912,6 +1024,7 @@ async function init(): Promise<void> {
 
       // Restore position and rotation
       player.pos.set(localPlayerState.position.x, localPlayerState.position.y, localPlayerState.position.z);
+      lastSentPos = { x: localPlayerState.position.x, y: localPlayerState.position.y, z: localPlayerState.position.z };
       player.yaw = localPlayerState.rotation.yaw;
       player.pitch = localPlayerState.rotation.pitch;
 
@@ -934,33 +1047,6 @@ async function init(): Promise<void> {
       logger.debug(`Player state restored from gameState - pos(${localPlayerState.position.x.toFixed(1)},${localPlayerState.position.y.toFixed(1)},${localPlayerState.position.z.toFixed(1)}) vel(${localPlayerState.velocity?.x.toFixed(1) || 0},${localPlayerState.velocity?.y.toFixed(1) || 0},${localPlayerState.velocity?.z.toFixed(1) || 0}) health:${localPlayerState.health} dead:${localPlayerState.isDead}`);
     }
   };
-
-  // Register state restore handler (for reconnection via stateReconciliation)
-  // Now handled by Tribes2Adapter directly
-  // networkManager.onStateRestore = (state) => {
-  //   logger.debug(`Restoring player state: ${JSON.stringify(state)}`);
-  // 
-  //   // Restore position and rotation
-  //   player.pos.set(state.position.x, state.position.y, state.position.z);
-  //   player.yaw = state.rotation.yaw;
-  //   player.pitch = state.rotation.pitch;
-  // 
-  //   // Restore velocity if available
-  //   if (state.velocity) {
-  //     player.vel.set(state.velocity.x, state.velocity.y, state.velocity.z);
-  //   }
-  // 
-  //   // Restore last processed sequence if available (for input reconciliation)
-  //   if (state.lastProcessedSequence !== undefined) {
-  //     // Note: This would need to be passed to the network manager's input history
-  //     // For now, we'll log it - full implementation would require network manager changes
-  //     logger.debug(`Last processed sequence: ${state.lastProcessedSequence}`);
-  //   }
-  // 
-  //   // If player was dead, they'll respawn normally via server logic
-  //   // If alive, they continue from their last position
-  //   logger.debug(`Player state restored - pos(${state.position.x.toFixed(1)},${state.position.y.toFixed(1)},${state.position.z.toFixed(1)}) vel(${state.velocity?.x.toFixed(1) || 0},${state.velocity?.y.toFixed(1) || 0},${state.velocity?.z.toFixed(1) || 0})`);
-  // };
 
   // Connect to server (non-blocking for offline mode)
   const serverUrl = 'ws://localhost:8000/ws';
@@ -1005,14 +1091,10 @@ document.addEventListener('pointerlockchange', () => {
   if (document.pointerLockElement === renderer.domElement) {
     overlay.style.display = 'none';
     unlockByEscape = false;
-  } else if (unlockByEscape) {
-    // Only show overlay if unlock was caused by ESC key
-    setTimeout(() => {
-      overlay.style.display = 'flex';
-    }, BUTTON_TIMEOUT);
-    unlockByEscape = false;
+  } else if (gameStarted && unlockByEscape) {
+    // Only show overlay when unlocked by pressing ESC, not alt-tab
+    overlay.style.display = 'flex';
   }
-  // Don't show overlay on other unlocks (alt-tab, etc.)
 });
 
 document.addEventListener('keydown', (e) => {
@@ -1045,19 +1127,174 @@ pixelToggleBtn.addEventListener('click', () => {
   pixelated = !pixelated;
   localStorage.setItem('fps-pixelated', pixelated.toString());
   updateRendererSize();
+  const w = pixelated
+    ? Math.floor(window.innerWidth / PIXEL_SCALE)
+    : window.innerWidth;
+  const h = pixelated
+    ? Math.floor(window.innerHeight / PIXEL_SCALE)
+    : window.innerHeight;
+  composer.setSize(w, h);
   pixelToggleBtn.textContent = pixelated ? 'PIXELATED: ON' : 'PIXELATED: OFF';
+});
+postproToggleBtn.addEventListener('click', () => {
+  postproEnabled = !postproEnabled;
+  localStorage.setItem('fps-postpro', postproEnabled.toString());
+  bloomPass.enabled = postproEnabled;
+  contrastPass.enabled = postproEnabled;
+  postproToggleBtn.textContent = postproEnabled ? 'POST-PROCESSING: ON' : 'POST-PROCESSING: OFF';
 });
 renderer.domElement.addEventListener('click', () => {
   if (document.pointerLockElement !== renderer.domElement) requestLock();
 });
 
+// Hoisted for use in both init() and window-scope debug functions
+let pendingServerSnapshot: ((players: any[], timestamp: number) => void) | null = null;
+
 // Auto-start: init immediately, overlay stays hidden until ESC is pressed
 init().then(() => {
   gameStarted = true;
+
+  // Register snapshot handler after network manager is created
+  if (networkManager) {
+    networkManager.onSnapshot = (players: any[], timestamp: number) => {
+      if (pendingServerSnapshot) {
+        pendingServerSnapshot(players, timestamp);
+        pendingServerSnapshot = null;
+      }
+    };
+
+    // Auto state hash comparison
+    let hashCheckCount = 0;
+    let hashMismatchCount = 0;
+    let lastSnapshotRequest = 0;
+    const SNAPSHOT_COOLDOWN_MS = 5000; // Don't request snapshots more often than every 5s
+    const POSITION_TOLERANCE = 50.0; // Warn if position delta exceeds this (higher for async snapshot comparison)
+
+    networkManager.onStateHash = (serverHash: string, tick: number, playerCount: number, _timestamp: number) => {
+      hashCheckCount++;
+
+      // Build the same hash the server computes
+      const allPlayers: Map<string, { x: number; y: number; z: number; health: number; isDead: boolean }> = new Map();
+
+      // Local player - use last position sent to server, not current physics position
+      // The server only knows what we've sent, so using player.pos would always be ahead
+      allPlayers.set(networkManager.getLocalPlayerId(), {
+        x: lastSentPos.x,
+        y: lastSentPos.y,
+        z: lastSentPos.z,
+        health: player.health,
+        isDead: player.isDead,
+      });
+
+      // Remote players - use NetworkManager stored positions (raw server data) for hash
+      // Include ALL known players from NetworkManager, not just those with RemotePlayer instances
+      // (players may be known but not yet rendered if model is still loading)
+      for (const [id, playerData] of networkManager.getPlayers()) {
+        if (id === networkManager.getLocalPlayerId()) continue; // Skip local player
+        const rp = remotePlayers.get(id);
+        const storedPos = playerData?.position;
+        allPlayers.set(id, {
+          x: storedPos?.x ?? rp?.position.x ?? 0,
+          y: storedPos?.y ?? rp?.position.y ?? 0,
+          z: storedPos?.z ?? rp?.position.z ?? 0,
+          health: playerData?.health ?? 100,
+          isDead: playerData?.isDead ?? (rp as any)?.isDead ?? false,
+        });
+      }
+
+      // Compute hash using same djb2 algorithm as server
+      const sortedIds = Array.from(allPlayers.keys()).sort();
+      const playerData = sortedIds.map(id => {
+        const p = allPlayers.get(id)!;
+        return `${id}:${Math.round(p.x)},${Math.round(p.y)},${Math.round(p.z)}:${p.health}:${p.isDead ? 1 : 0}`;
+      }).join('|');
+
+      let localHash = 5381;
+      for (let i = 0; i < playerData.length; i++) {
+        localHash = ((localHash << 5) + localHash) + playerData.charCodeAt(i);
+      }
+      const localHashStr = (localHash >>> 0).toString(16);
+
+      const match = localHashStr === serverHash;
+
+      if (match) {
+        logger.debug(`[StateHash] OK tick=${tick} hash=${serverHash} players=${playerCount}`);
+      } else {
+        hashMismatchCount++;
+        logger.debug(`[StateHash] MISMATCH tick=${tick} server=${serverHash} client=${localHashStr} input=${playerData}`);
+        const now = Date.now();
+
+        // Only do detailed snapshot comparison if enough time has passed
+        if (now - lastSnapshotRequest < SNAPSHOT_COOLDOWN_MS) {
+          logger.debug(`[StateHash] MISMATCH tick=${tick} (cooldown, skipping detailed check)`);
+          return;
+        }
+        lastSnapshotRequest = now;
+
+        // Request full snapshot from server for detailed comparison
+        const clientPlayers = new Map(allPlayers);
+        networkManager.sendSnapshotRequest();
+
+        pendingServerSnapshot = (serverPlayers: any[], _ts: number) => {
+          const serverMap = new Map<string, any>();
+          for (const p of serverPlayers) {
+            serverMap.set(p.id, p);
+          }
+
+          const significantDiffs: string[] = [];
+          const allIds = new Set([...serverMap.keys(), ...clientPlayers.keys()]);
+
+          for (const id of allIds) {
+            const cp = clientPlayers.get(id);
+            const sp = serverMap.get(id);
+
+            if (!cp && sp) {
+              significantDiffs.push(`Player ${id} on server but not client`);
+              continue;
+            }
+            if (cp && !sp) {
+              significantDiffs.push(`Player ${id} on client but not server`);
+              continue;
+            }
+            if (!cp || !sp) continue;
+
+            const dx = Math.abs(cp.x - sp.position.x);
+            const dy = Math.abs(cp.y - sp.position.y);
+            const dz = Math.abs(cp.z - sp.position.z);
+            const maxDelta = Math.max(dx, dy, dz);
+
+            if (maxDelta > POSITION_TOLERANCE) {
+              significantDiffs.push(
+                `Player ${id} position delta=(${dx.toFixed(1)},${dy.toFixed(1)},${dz.toFixed(1)})`
+              );
+            }
+
+            if (Math.abs(cp.health - sp.health) > 0) {
+              significantDiffs.push(`Player ${id} health: client=${cp.health} server=${sp.health}`);
+            }
+            if (cp.isDead !== sp.isDead) {
+              significantDiffs.push(`Player ${id} isDead: client=${cp.isDead} server=${sp.isDead}`);
+            }
+          }
+
+          if (significantDiffs.length > 0) {
+            logger.warn(`[StateHash] DESYNC DETECTED tick=${tick} hash=${serverHash} vs ${localHashStr} | ${significantDiffs.join('; ')}`, {
+              checks: hashCheckCount,
+              mismatches: hashMismatchCount,
+              matchRate: `${((1 - hashMismatchCount / hashCheckCount) * 100).toFixed(1)}%`,
+            });
+          } else {
+            logger.info(`[StateHash] Hash mismatch tick=${tick} but positions within tolerance (network lag)`);
+          }
+        };
+      }
+    };
+  }
 });
 
 // Expose snapshot functions globally for debugging
 if (typeof window !== 'undefined') {
+
   (window as any).takeClientSnapshot = () => {
     const playerMap = new Map();
     playerMap.set('local', {
@@ -1071,8 +1308,8 @@ if (typeof window !== 'undefined') {
     for (const [id, rp] of remotePlayers) {
       playerMap.set(id, {
         position: { x: rp.position.x, y: rp.position.y, z: rp.position.z },
-        velocity: { x: 0, y: 0, z: 0 }, // RemotePlayer velocity is private, use 0 for now
-        health: 100, // RemotePlayer doesn't track health, use default
+        velocity: { x: 0, y: 0, z: 0 },
+        health: 100,
         isDead: (rp as any).isDead || false,
         rotation: { yaw: rp.rotation.yaw, pitch: rp.rotation.pitch }
       });
@@ -1081,27 +1318,97 @@ if (typeof window !== 'undefined') {
     const snapshot = StateSnapshot.create(playerMap, [...rockets, ...discs], 'client');
     StateSnapshot.save(snapshot);
     logger.info('Client snapshot taken');
-    return snapshot.hash;
+    return snapshot;
   };
   
   (window as any).requestServerSnapshot = () => {
-    if (networkManager) {
-      // networkManager.send({ type: 'snapshot' });
-      logger.info('Requested server snapshot (not supported in basic Colyseus)');
+    if (networkManager && networkManager.isConnected()) {
+      networkManager.sendSnapshotRequest();
+      logger.info('Requested server snapshot');
+    } else {
+      logger.warn('Not connected - cannot request server snapshot');
     }
   };
   
   (window as any).exportClientSnapshots = () => {
     StateSnapshot.exportSnapshots();
   };
-  
-  logger.info('Client snapshot functions available: takeClientSnapshot(), requestServerSnapshot(), exportClientSnapshots()');
-  
-  // Add global function to request rough state comparison
-  (window as any).requestRoughState = () => {
-    if (networkManager) {
-      // networkManager.send({ type: 'roughStateRequest' });
-      logger.info('Requested rough state comparison (not supported in basic Colyseus)');
+
+  (window as any).compareState = () => {
+    if (!networkManager || !networkManager.isConnected()) {
+      logger.warn('Not connected');
+      return;
     }
+
+    const clientSnapshot = (window as any).takeClientSnapshot();
+    logger.info('Client snapshot hash:', clientSnapshot.hash);
+
+    pendingServerSnapshot = (serverPlayers: any[], _timestamp: number) => {
+      const serverPlayerMap = new Map<string, any>();
+      for (const p of serverPlayers) {
+        serverPlayerMap.set(p.id, {
+          id: p.id,
+          position: p.position,
+          velocity: p.velocity,
+          health: p.health,
+          isDead: p.isDead,
+          rotation: p.rotation,
+        });
+      }
+
+      const serverSnapshot = StateSnapshot.create(serverPlayerMap, [], 'server');
+      StateSnapshot.save(serverSnapshot);
+
+      const result = StateSnapshot.compare(clientSnapshot, serverSnapshot);
+
+      logger.info('=== STATE COMPARISON ===');
+      logger.info(`Hash match: ${result.hashMatch}`);
+      logger.info(`Client hash: ${clientSnapshot.hash}`);
+      logger.info(`Server hash: ${serverSnapshot.hash}`);
+
+      if (result.playerDifferences.length > 0) {
+        logger.warn(`Player differences (${result.playerDifferences.length}):`);
+        for (const diff of result.playerDifferences) {
+          logger.warn(`  ${diff}`);
+        }
+      } else {
+        logger.info('No player differences found');
+      }
+
+      if (result.projectileDifferences.length > 0) {
+        logger.warn(`Projectile differences (${result.projectileDifferences.length}):`);
+        for (const diff of result.projectileDifferences) {
+          logger.warn(`  ${diff}`);
+        }
+      } else {
+        logger.info('No projectile differences found');
+      }
+
+      // Log per-player detail table
+      logger.info('=== PLAYER DETAIL ===');
+      const allIds = new Set([...serverPlayerMap.keys(), ...clientSnapshot.players.keys()]);
+      for (const id of allIds) {
+        const cp = clientSnapshot.players.get(id);
+        const sp = serverPlayerMap.get(id);
+        if (!cp || !sp) {
+          logger.info(`  ${id}: ${cp ? 'client only' : 'server only'}`);
+          continue;
+        }
+        const dx = (cp.position.x - sp.position.x).toFixed(2);
+        const dy = (cp.position.y - sp.position.y).toFixed(2);
+        const dz = (cp.position.z - sp.position.z).toFixed(2);
+        const healthMatch = cp.health === sp.health ? 'OK' : `client=${cp.health} server=${sp.health}`;
+        const deadMatch = cp.isDead === sp.isDead ? 'OK' : `client=${cp.isDead} server=${sp.isDead}`;
+        const posMatch = (dx === '0.00' && dy === '0.00' && dz === '0.00') ? 'OK' : `delta=(${dx},${dy},${dz})`;
+        logger.info(`  ${id}: pos=${posMatch} health=${healthMatch} dead=${deadMatch}`);
+      }
+
+      return result;
+    };
+
+    networkManager.sendSnapshotRequest();
+    logger.info('CompareState: requested server snapshot, waiting for response...');
   };
+  
+  logger.info('Client snapshot functions available: takeClientSnapshot(), requestServerSnapshot(), compareState(), exportClientSnapshots()');
 }

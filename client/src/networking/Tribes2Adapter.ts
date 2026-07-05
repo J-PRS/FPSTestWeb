@@ -56,9 +56,17 @@ export class Tribes2Adapter implements INetworkAdapter {
             logger.info('Tribes2Adapter connected');
             
             // Send JSON join message FIRST - before initializing StreamManager
+            const storedId = sessionStorage.getItem('fps-player-id');
+            if (storedId && !this.localPlayerId) {
+              this.localPlayerId = storedId;
+            }
+            if (!this.localPlayerId) {
+              this.localPlayerId = 'player_' + Math.random().toString(36).substr(2, 9);
+              sessionStorage.setItem('fps-player-id', this.localPlayerId);
+            }
             const joinMessage = JSON.stringify({
               type: 'join',
-              playerId: this.localPlayerId || 'player_' + Math.random().toString(36).substr(2, 9),
+              playerId: this.localPlayerId,
               position: this.controlObject ? { x: this.controlObject.pos.x, y: this.controlObject.pos.y, z: this.controlObject.pos.z } : { x: 0, y: 0, z: 0 }
             });
             this.wsConnection?.send(joinMessage);

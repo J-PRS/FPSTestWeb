@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { Terrain } from './terrain.js';
 import type { Ball } from './balls.js';
-import { GRAVITY, PLAYER_RADIUS, PLAYER_HEIGHT, ROCKET_SPEED, ROCKET_RADIUS, ROCKET_FORCE, HIT_MIN, HIT_MAX, HIT_GROW } from './config.js';
+import { GRAVITY, PLAYER_RADIUS, PLAYER_HEIGHT, CAPSULE_HALF_HEIGHT, CAPSULE_CENTER_Y, ROCKET_SPEED, ROCKET_RADIUS, ROCKET_BODY_RADIUS, ROCKET_FORCE, HIT_MIN, HIT_MAX, HIT_GROW } from './config.js';
 import { ChildLogger } from './Logger.js';
 
 const logger = new ChildLogger('Rocket');
@@ -15,11 +15,13 @@ interface TrailParticle {
   baseSize: number;
 }
 
-const TRAIL_INTERVAL = 0.015; // seconds between particle emission
-const TRAIL_EMISSION = 6;     // particles per emission
+const TRAIL_PARTICLES_PER_UNIT = 2; // particle density along travel path
 const TRAIL_LIFE_MIN = 1.2;
 const TRAIL_LIFE_MAX = 1.8;
 const TRAIL_SPREAD   = 0.25;  // lateral spawn spread
+const TRAIL_RAMP_IN  = 0.1;   // seconds for emitter to reach full size
+const MESH_RAMP_IN   = 0.2;   // seconds for mesh to reach full size
+const MESH_START_SCALE = 0.2; // starting scale for rocket mesh
 const TRAIL_GEO = new THREE.SphereGeometry(1, 8, 6);
 
 // Gradient colors: orange → red → brown → smoke
@@ -91,8 +93,8 @@ export class Rocket {
   private shotOrigin: THREE.Vector3;
 
   // Particle trail
-  private trailTimer = 0;
   private particles: TrailParticle[] = [];
+  private trailAccum = 0; // fractional carry-over for even particle spacing
   private projectileRemoved = false;
   private disposed = false;
   public explosionProcessed = false;
@@ -105,7 +107,7 @@ export class Rocket {
     // 50% player velocity inheritance (Tribes Ascend style)
     this.vel = dir.clone().normalize().multiplyScalar(ROCKET_SPEED).addScaledVector(playerVel, 0.5);
 
-    const geo = new THREE.CylinderGeometry(0.08, 0.18, 0.7, 6);
+    const geo = new THREE.CylinderGeometry(0.08, ROCKET_BODY_RADIUS, 0.7, 6);
     geo.rotateX(Math.PI / 2);
     this.mat = new THREE.MeshBasicMaterial({ color: 0xffdd44 });
     this.mesh = new THREE.Mesh(geo, this.mat);
@@ -147,10 +149,9 @@ export class Rocket {
     const dz = this.pos.z - this.prevPos.z;
     const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
     const steps = Math.max(1, Math.ceil(dist / STEP));
-    const coreThresh  = ball.radius; // direct hit = rocket center inside ball
+    const coreThresh  = ball.radius + ROCKET_BODY_RADIUS; // direct hit = rocket body overlaps ball body
     const wakeThresh  = ball.radius + this.hitRadius; // expanding wake
     let minDist = Infinity;
-    let inWake = false;
 
     for (let i = 0; i <= steps; i++) {
       const t = i / steps;
@@ -171,7 +172,6 @@ export class Rocket {
 
       // Wake hit - track distance, only trigger when increasing
       if (d2 <= wakeThresh * wakeThresh) {
-        inWake = true;
         const prevMin = this.wakeBallDistances.get(ball) ?? Infinity;
         if (d < prevMin) {
           // Getting closer, update min distance
@@ -190,8 +190,9 @@ export class Rocket {
   }
 
   // True continuous sphere sweep vs player capsule
+  // playerPos is the FEET position; capsule center is at feet + CAPSULE_CENTER_Y
   private sweepPlayer(playerPos: THREE.Vector3, playerId: string): boolean {
-    const halfHeight = PLAYER_HEIGHT / 2;
+    const centerY = playerPos.y + CAPSULE_CENTER_Y;
 
     // Rocket path vector
     const dx = this.pos.x - this.prevPos.x;
@@ -200,16 +201,19 @@ export class Rocket {
     const pathLenSq = dx*dx + dy*dy + dz*dz;
 
     if (pathLenSq === 0) {
-      // No movement, check static distance
+      // No movement, check static distance to capsule center line
       const hx = this.pos.x - playerPos.x;
       const hz = this.pos.z - playerPos.z;
       const hDist = Math.sqrt(hx*hx + hz*hz);
-      const vy = this.pos.y - playerPos.y;
-      const inHeightRange = vy >= -halfHeight && vy <= halfHeight;
+      const vy = this.pos.y - centerY;
+      const clampedY = Math.max(-CAPSULE_HALF_HEIGHT, Math.min(CAPSULE_HALF_HEIGHT, vy));
+      const yDelta = vy - clampedY;
+      const totalDist = Math.sqrt(hx*hx + yDelta*yDelta + hz*hz);
 
-      if (inHeightRange && hDist <= PLAYER_RADIUS + this.hitRadius) {
-        this.minHitDist = hDist;
-        this.directHit = hDist <= PLAYER_RADIUS; // direct hit = rocket center touches player
+      const directThresh = PLAYER_RADIUS + ROCKET_BODY_RADIUS; // player radius + rocket body radius
+      if (totalDist <= PLAYER_RADIUS + this.hitRadius) {
+        this.minHitDist = totalDist;
+        this.directHit = totalDist <= directThresh; // direct hit = rocket body overlaps player body
         return true;
       }
       return false;
@@ -220,9 +224,9 @@ export class Rocket {
     // 2. Clamp to capsule height to handle hemispherical ends
     // 3. Check distance at that point
 
-    // Project player onto rocket path
+    // Project player center onto rocket path
     const px = playerPos.x - this.prevPos.x;
-    const py = playerPos.y - this.prevPos.y;
+    const py = centerY - this.prevPos.y;
     const pz = playerPos.z - this.prevPos.z;
     const t = (px*dx + py*dy + pz*dz) / pathLenSq;
     const tClamped = Math.max(0, Math.min(1, t));
@@ -232,42 +236,49 @@ export class Rocket {
     const closestY = this.prevPos.y + dy * tClamped;
     const closestZ = this.prevPos.z + dz * tClamped;
 
-    // Vector from closest point to player
+    // Vector from closest point to capsule center
     const vx = closestX - playerPos.x;
-    const vy = closestY - playerPos.y;
+    const vy = closestY - centerY;
     const vz = closestZ - playerPos.z;
 
-    // Clamp Y to capsule height (this handles the hemispherical ends)
-    const clampedY = Math.max(-halfHeight, Math.min(halfHeight, vy));
+    // Distance to capsule center line segment:
+    // Clamp Y to cylinder half-height, then measure from clamped point to actual point
+    const clampedY = Math.max(-CAPSULE_HALF_HEIGHT, Math.min(CAPSULE_HALF_HEIGHT, vy));
+    const yDelta = vy - clampedY; // 0 when inside cylinder, grows when above/below
 
-    // Horizontal distance after Y clamping
-    const hx = vx;
-    const hz = vz;
-    const hDist = Math.sqrt(hx*hx + hz*hz);
+    // Horizontal distance
+    const hDist = Math.sqrt(vx*vx + vz*vz);
 
-    // Total distance (accounting for Y clamping)
-    const totalDist = Math.sqrt(hx*hx + clampedY*clampedY + hz*hz);
+    // Total distance from closest point on rocket path to closest point on capsule center line
+    const totalDist = Math.sqrt(vx*vx + yDelta*yDelta + vz*vz);
 
+    const directThresh = PLAYER_RADIUS + ROCKET_BODY_RADIUS; // player radius + rocket body radius
     if (totalDist <= PLAYER_RADIUS + this.hitRadius) {
-      this.minHitDist = hDist;
+      this.minHitDist = totalDist;
 
-      // Core hit (direct hit) - immediate
-      if (hDist <= PLAYER_RADIUS) {
+      // Direct hit — rocket body overlaps player body (not just proximity)
+      if (totalDist <= directThresh) {
         this.directHit = true;
-        logger.debug(`Core hit at dist ${hDist.toFixed(2)}, playerPos: ${playerPos.x.toFixed(1)},${playerPos.y.toFixed(1)},${playerPos.z.toFixed(1)}`);
+        const dist = this.pos.distanceTo(playerPos);
+        console.log(
+          `[Rocket] DIRECT HIT on ${playerId}\n` +
+          `  Projectile pos: (${this.pos.x.toFixed(2)}, ${this.pos.y.toFixed(2)}, ${this.pos.z.toFixed(2)})\n` +
+          `  Player pos:     (${playerPos.x.toFixed(2)}, ${playerPos.y.toFixed(2)}, ${playerPos.z.toFixed(2)})\n` +
+          `  Distance: ${dist.toFixed(2)} | hDist: ${hDist.toFixed(2)} | totalDist: ${totalDist.toFixed(2)}`
+        );
         return true;
       }
 
       // Wake hit - track distance, only trigger when increasing
       const prevMin = this.wakePlayerDistances.get(playerId) ?? Infinity;
-      if (hDist < prevMin) {
+      if (totalDist < prevMin) {
         // Getting closer, update min distance
-        this.wakePlayerDistances.set(playerId, hDist);
+        this.wakePlayerDistances.set(playerId, totalDist);
         return false; // Don't trigger yet
-      } else if (hDist > prevMin) {
+      } else if (totalDist > prevMin) {
         // Distance increasing - projectile passed target, trigger wake hit
         this.directHit = false;
-        logger.debug(`Wake hit at dist ${hDist.toFixed(2)}, threshold ${(PLAYER_RADIUS + this.hitRadius).toFixed(2)}`);
+        logger.debug(`Wake hit at dist ${totalDist.toFixed(2)}, threshold ${(PLAYER_RADIUS + this.hitRadius).toFixed(2)}`);
         return true;
       }
     }
@@ -286,17 +297,8 @@ export class Rocket {
 
       // Remote (server-authoritative) rockets skip all collision — server decides lifetime
       if (this.isRemote) {
-        this.mesh.position.copy(this.pos);
-        this.glowMesh.position.copy(this.pos);
-        this.glowMesh.scale.setScalar(this.hitRadius);
-        if (this.vel.lengthSq() > 0.01) {
-          this.mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), this.vel.clone().normalize());
-        }
-        this.trailTimer += dt;
-        while (this.trailTimer >= TRAIL_INTERVAL) {
-          this.trailTimer -= TRAIL_INTERVAL;
-          this.emitTrail();
-        }
+        this.updateMesh();
+        this.emitTrailSegment();
         this.updateTrail(dt);
         return;
       }
@@ -327,7 +329,7 @@ export class Rocket {
           if (this.sweepPlayer(playerPos, playerId)) {
             this.hitPlayerId = playerId;
             // Calculate surface-to-surface distance (center distance minus player radius)
-            this.hitAccuracy = Math.max(0, this.minHitDist - 0.8); // PLAYER_RADIUS = 0.8
+            this.hitAccuracy = Math.max(0, this.minHitDist - PLAYER_RADIUS);
             this.hitAge = this.age;
             this.hitDistance = this.pos.distanceTo(this.shotOrigin);
             this.explode();
@@ -336,22 +338,8 @@ export class Rocket {
         }
       }
 
-      this.mesh.position.copy(this.pos);
-      this.glowMesh.position.copy(this.pos);
-      this.glowMesh.scale.setScalar(this.hitRadius);
-
-      // Align mesh to velocity
-      const velDir = this.vel.clone().normalize();
-      if (this.vel.lengthSq() > 0.01) {
-        this.mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), velDir);
-      }
-
-      // Emit particle trail
-      this.trailTimer += dt;
-      while (this.trailTimer >= TRAIL_INTERVAL) {
-        this.trailTimer -= TRAIL_INTERVAL;
-        this.emitTrail();
-      }
+      this.updateMesh();
+      this.emitTrailSegment();
     }
 
     if (this.exploded && !this.projectileRemoved) this.removeProjectileMesh();
@@ -363,35 +351,58 @@ export class Rocket {
     }
   }
 
-  private emitTrail(): void {
+  private updateMesh(): void {
+    this.mesh.position.copy(this.pos);
+    this.glowMesh.position.copy(this.pos);
+    this.glowMesh.scale.setScalar(this.hitRadius);
+    const meshRamp = MESH_START_SCALE + (1.0 - MESH_START_SCALE) * Math.min(this.age / MESH_RAMP_IN, 1.0);
+    this.mesh.scale.setScalar(meshRamp);
+    if (this.vel.lengthSq() > 0.01) {
+      this.mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), this.vel.clone().normalize());
+    }
+  }
+
+  private emitTrailSegment(): void {
+    const trailDist = this.pos.distanceTo(this.prevPos);
+    if (trailDist < 1e-6) return;
+    const spacing = 1 / TRAIL_PARTICLES_PER_UNIT;
+    this.trailAccum += trailDist;
+    while (this.trailAccum >= spacing) {
+      this.trailAccum -= spacing;
+      const t = 1 - this.trailAccum / trailDist;
+      const spawnPos = this.prevPos.clone().lerp(this.pos, Math.max(0, Math.min(1, t)));
+      this.emitTrail(spawnPos);
+    }
+  }
+
+  private emitTrail(spawnPos: THREE.Vector3): void {
     const dir = this.vel.lengthSq() > 0.0001
       ? this.vel.clone().normalize()
       : new THREE.Vector3(0, 1, 0);
 
     // Robust orthogonal basis calculation for consistent particle spread
-    // Pick an arbitrary axis that's not parallel to direction
     const arbitrary = Math.abs(dir.y) < 0.9 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0);
-    let right = new THREE.Vector3().crossVectors(dir, arbitrary).normalize();
+    const right = new THREE.Vector3().crossVectors(dir, arbitrary).normalize();
     const up = new THREE.Vector3().crossVectors(right, dir).normalize();
 
-    for (let i = 0; i < TRAIL_EMISSION; i++) {
-      const u = (Math.random() - 0.5) * TRAIL_SPREAD;
-      const v = (Math.random() - 0.5) * TRAIL_SPREAD;
-      const w = (Math.random() - 0.5) * 0.2;
-      const offset = new THREE.Vector3()
-        .addScaledVector(right, u)
-        .addScaledVector(up, v)
-        .addScaledVector(dir, w);
-      const pos = this.pos.clone().addScaledVector(dir, -0.5).add(offset);
+    const emitterRamp = Math.min(this.age / TRAIL_RAMP_IN, 1.0);
 
-      // Particles stay in place with minimal drift
-      const drift = new THREE.Vector3((Math.random() - 0.5) * 0.2, (Math.random() - 0.5) * 0.2, (Math.random() - 0.5) * 0.2);
-      const vel = drift;
+    const u = (Math.random() - 0.5) * TRAIL_SPREAD * emitterRamp;
+    const v = (Math.random() - 0.5) * TRAIL_SPREAD * emitterRamp;
+    const w = (Math.random() - 0.5) * 0.2 * emitterRamp;
+    const offset = new THREE.Vector3()
+      .addScaledVector(right, u)
+      .addScaledVector(up, v)
+      .addScaledVector(dir, w);
+    const pos = spawnPos.clone().add(offset);
 
-      const life = TRAIL_LIFE_MIN + Math.random() * (TRAIL_LIFE_MAX - TRAIL_LIFE_MIN);
-      const size = 0.08 + Math.random() * 0.25; // more size variation
-      this.particles.push(this.spawnTrailParticle(pos, vel, life, size));
-    }
+    // Particles stay in place with minimal drift
+    const drift = new THREE.Vector3((Math.random() - 0.5) * 0.2, (Math.random() - 0.5) * 0.2, (Math.random() - 0.5) * 0.2);
+    const vel = drift;
+
+    const life = TRAIL_LIFE_MIN + Math.random() * (TRAIL_LIFE_MAX - TRAIL_LIFE_MIN);
+    const size = (0.08 + Math.random() * 0.25) * emitterRamp;
+    this.particles.push(this.spawnTrailParticle(pos, vel, life, size));
   }
 
   private spawnTrailParticle(pos: THREE.Vector3, vel: THREE.Vector3, life: number, size: number): TrailParticle {

@@ -42,12 +42,14 @@ export class Explosion {
   private ox: number; private oy: number; private oz: number;
 
 
-  constructor(scene: THREE.Scene, pos: THREE.Vector3, directHit: boolean = false) {
+  constructor(scene: THREE.Scene, pos: THREE.Vector3, directHit: boolean = false, age: number = 0) {
     this.scene = scene;
     this.ox = pos.x; this.oy = pos.y; this.oz = pos.z;
 
-    // Multipliers for direct hit enhancement
-    const mult = directHit ? 1.8 : 1.0;
+    // Scale factor based on projectile flight time: 50% at 0s, 100% at 1s (linear, clamped)
+    const timeScale = directHit ? Math.min(0.5 + age * 0.5, 1.0) : 1.0;
+    // Multipliers for direct hit enhancement (base 1.8, scaled by time)
+    const mult = directHit ? 1.8 * timeScale : 1.0;
 
     // Layer 1: Flash — white-yellow, very short
     for (let i = 0; i < Math.floor(20 * mult); i++) {
@@ -105,23 +107,34 @@ export class Explosion {
 
     // Layer 6: Direct hit bonus — extra bright white core particles
     if (directHit) {
-      for (let i = 0; i < 40; i++) {
+      for (let i = 0; i < Math.floor(60 * timeScale); i++) {
         const ang = Math.random() * Math.PI * 2;
         const elv = (Math.random() - 0.5) * Math.PI;
         const spd = 20 + Math.random() * 50;
         this.spawn(pos,
           spd*Math.cos(elv)*Math.sin(ang), spd*Math.sin(elv)+10, spd*Math.cos(elv)*Math.cos(ang),
           0.6 + Math.random()*0.4, 0.5 + Math.random()*0.3, -25,
-          1, 1, 0.95,  1, 0.8, 0.4, true);
+          0.6, 0.8, 1.0,  0.2, 0.4, 0.8, true);
       }
 
-      // Layer 7: Shockwave sphere - expanding 3D sphere for direct hits
+      // Layer 7: Blue energy burst — identifies direct hits by color
+      for (let i = 0; i < Math.floor(70 * timeScale); i++) {
+        const ang = Math.random() * Math.PI * 2;
+        const elv = (Math.random() - 0.5) * Math.PI;
+        const spd = 12 + Math.random() * 35;
+        this.spawn(pos,
+          spd*Math.cos(elv)*Math.sin(ang), spd*Math.sin(elv)+8, spd*Math.cos(elv)*Math.cos(ang),
+          0.5 + Math.random()*0.4, 0.3 + Math.random()*0.25, -10,
+          0.0, 0.3, 1.0,  0.0, 0.0, 0.4, true);
+      }
+
+      // Layer 8: Shockwave sphere — white expanding 3D sphere
       const sphereGeo = new THREE.SphereGeometry(0.3, 16, 16);
       const sphereMat = new THREE.MeshBasicMaterial({
         color: 0xffffff,
         transparent: true,
         opacity: 0.6,
-        side: THREE.BackSide, // Render inside for hollow effect
+        side: THREE.BackSide,
         blending: THREE.AdditiveBlending,
         depthWrite: false
       });
@@ -133,11 +146,32 @@ export class Explosion {
         mat: sphereMat,
         life: 0.5,
         elapsed: 0,
-        maxRadius: 10.0
+        maxRadius: 10.0 * timeScale
       });
 
-      // Layer 8: Sparks with trails - falling with gravity
-      for (let i = 0; i < 25; i++) {
+      // Layer 9: Blue shockwave — second expanding sphere, blue
+      const blueGeo = new THREE.SphereGeometry(0.3, 16, 16);
+      const blueMat = new THREE.MeshBasicMaterial({
+        color: 0x00ccff,
+        transparent: true,
+        opacity: 0.7,
+        side: THREE.BackSide,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+      });
+      const blueMesh = new THREE.Mesh(blueGeo, blueMat);
+      blueMesh.position.copy(pos);
+      this.scene.add(blueMesh);
+      this.shockwaves.push({
+        mesh: blueMesh,
+        mat: blueMat,
+        life: 0.4,
+        elapsed: 0,
+        maxRadius: 12.0 * timeScale
+      });
+
+      // Layer 10: Sparks with trails — mix of orange and blue
+      for (let i = 0; i < Math.floor(35 * timeScale); i++) {
         const ang = Math.random() * Math.PI * 2;
         const elv = (Math.random() - 0.5) * Math.PI * 0.8;
         const spd = 15 + Math.random() * 30;
@@ -146,9 +180,12 @@ export class Explosion {
           spd * Math.sin(elv) + 5,
           spd * Math.cos(elv) * Math.cos(ang)
         );
+        const isBlue = Math.random() < 0.4;
         const lineGeometry = new THREE.BufferGeometry();
         const lineMaterial = new THREE.LineBasicMaterial({
-          color: new THREE.Color(1.0, 0.8 + Math.random() * 0.2, 0.3 + Math.random() * 0.3),
+          color: isBlue
+            ? new THREE.Color(0.1, 0.4, 1.0)
+            : new THREE.Color(1.0, 0.8 + Math.random() * 0.2, 0.3 + Math.random() * 0.3),
           transparent: true,
           opacity: 0.8,
           blending: THREE.AdditiveBlending

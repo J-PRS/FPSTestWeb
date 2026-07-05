@@ -20,12 +20,15 @@ export class Implosion {
   private elapsed = 0;
   private ox: number; private oy: number; private oz: number;
 
-  constructor(scene: THREE.Scene, pos: THREE.Vector3) {
+  constructor(scene: THREE.Scene, pos: THREE.Vector3, age: number = 0) {
     this.scene = scene;
     this.ox = pos.x; this.oy = pos.y; this.oz = pos.z;
 
+    // Scale factor based on projectile flight time: 50% at 0s, 100% at 1s (linear, clamped)
+    const timeScale = Math.min(0.5 + age * 0.5, 1.0);
+
     // Layer 1: Outer ring - cyan, fast inward
-    for (let i = 0; i < 40; i++) {
+    for (let i = 0; i < Math.floor(40 * timeScale); i++) {
       const ang = Math.random() * Math.PI * 2;
       const elv = (Math.random() - 0.5) * Math.PI;
       const dist = 4 + Math.random() * 3;
@@ -36,7 +39,7 @@ export class Implosion {
     }
 
     // Layer 2: Inner ring - blue, medium inward
-    for (let i = 0; i < 30; i++) {
+    for (let i = 0; i < Math.floor(30 * timeScale); i++) {
       const ang = Math.random() * Math.PI * 2;
       const elv = (Math.random() - 0.5) * Math.PI;
       const dist = 2.5 + Math.random() * 2;
@@ -47,7 +50,7 @@ export class Implosion {
     }
 
     // Layer 3: Core flash - white, very fast inward
-    for (let i = 0; i < 15; i++) {
+    for (let i = 0; i < Math.floor(15 * timeScale); i++) {
       const ang = Math.random() * Math.PI * 2;
       const elv = (Math.random() - 0.5) * Math.PI;
       const dist = 1.5 + Math.random() * 1;
@@ -58,7 +61,7 @@ export class Implosion {
     }
 
     // Layer 4: Debris - solid chunks, inward
-    for (let i = 0; i < 20; i++) {
+    for (let i = 0; i < Math.floor(20 * timeScale); i++) {
       const ang = Math.random() * Math.PI * 2;
       const elv = (Math.random() - 0.5) * Math.PI;
       const dist = 3 + Math.random() * 2.5;

@@ -21,8 +21,15 @@ export class FastAPIAdapter implements INetworkAdapter {
   private hasLoggedConnectionError: boolean = false;
 
   constructor() {
-    // Initialize playerId
-    this.localPlayerId = `player_${Math.random().toString(36).substr(2, 9)}`;
+    // Try to reuse player ID from sessionStorage (survives F5 refresh)
+    const stored = sessionStorage.getItem('fps-player-id');
+    if (stored) {
+      this.localPlayerId = stored;
+      Logger.info(`Reusing player ID from sessionStorage: ${this.localPlayerId}`);
+    } else {
+      this.localPlayerId = `player_${Math.random().toString(36).substr(2, 9)}`;
+      sessionStorage.setItem('fps-player-id', this.localPlayerId);
+    }
   }
 
   getPlayerId(): string {
@@ -96,7 +103,7 @@ export class FastAPIAdapter implements INetworkAdapter {
   }
 
   isConnected(): boolean {
-    return this.wsConnection !== null;
+    return this.wsConnection !== null && this.wsConnection.connected();
   }
 
   disconnect(): void {

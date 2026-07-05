@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { ChildLogger } from './Logger.js';
+import { PLAYER_RADIUS, PLAYER_HEIGHT, CAPSULE_CYLINDER_HEIGHT, CAPSULE_CENTER_Y } from './config.js';
 
 const logger = new ChildLogger('PlayerModel');
 
@@ -31,7 +32,9 @@ export class PlayerModel {
           // Log model bounding box for hitbox calibration
           const box = new THREE.Box3().setFromObject(this.model);
           const size = box.getSize(new THREE.Vector3());
-          logger.debug('Model bounding box:', size);
+          const min = box.min;
+          const max = box.max;
+          logger.debug(`Model bounding box: size=(${size.x.toFixed(2)},${size.y.toFixed(2)},${size.z.toFixed(2)}) min=(${min.x.toFixed(2)},${min.y.toFixed(2)},${min.z.toFixed(2)}) max=(${max.x.toFixed(2)},${max.y.toFixed(2)},${max.z.toFixed(2)})`);
           
           // Enable shadow casting
           this.model.traverse((child) => {
@@ -46,12 +49,10 @@ export class PlayerModel {
           // At scale 0.5: x: 1.6, y: 2.4, z: 1.6
           // Hitbox: radius 0.8 (width 1.6), height 2.0
           // Scale factor 0.5 matches width, but model is taller (2.4 vs 2.0)
-          // Model origin is at center, so we need to offset position by half height
+          // RobotExpressive.glb origin is at feet (y=0), not center
           this.model.scale.setScalar(0.5);
           this.model.rotation.y = Math.PI; // Face forward
-          // Offset model so its feet are at the position (model origin is at center)
-          // Model height at scale 0.5 is 2.4, so half is 1.2
-          this.model.position.y = 1.2;
+          // No Y offset needed — model origin is already at feet
           
           // Set up animation mixer
           this.mixer = new THREE.AnimationMixer(this.model);
@@ -71,13 +72,10 @@ export class PlayerModel {
           console.log(`[PlayerModel] MODEL ADDED to scene (scene children: ${this.scene.children.length})`);
 
           // Create collider gizmo (wireframe capsule for hitbox visualization)
-          // Match actual collision volume from config.ts: PLAYER_RADIUS=0.8, PLAYER_HEIGHT=2.0
-          // CapsuleGeometry(radius, height, radialSegments, heightSegments)
-          // Height parameter is the cylinder height only (not including hemispheres)
-          // Total height = cylinder height + 2 * radius
-          // For total height 2.0 with radius 0.8: cylinder height = 2.0 - 2*0.8 = 0.4
-          // Model is scaled by 0.5, so we need to divide geometry by scale to get correct world size
-          const colliderGeo = new THREE.CapsuleGeometry(0.8 / 0.5, 0.4 / 0.5, 4, 16);
+          // Uses same constants as collision detection — single source of truth in config.ts
+          // CapsuleGeometry(radius, cylinderHeight, ...) — cylinderHeight excludes hemispheres
+          // Model is scaled by 0.5, so divide by scale to get correct world size
+          const colliderGeo = new THREE.CapsuleGeometry(PLAYER_RADIUS / 0.5, CAPSULE_CYLINDER_HEIGHT / 0.5, 4, 16);
           const colliderMat = new THREE.MeshBasicMaterial({
             color: 0x00ff00,
             wireframe: true,
@@ -86,11 +84,10 @@ export class PlayerModel {
             depthTest: false // Always render on top
           });
           this.colliderGizmo = new THREE.Mesh(colliderGeo, colliderMat);
-          // Model is at feet + 1.2, but collider center should be at feet + 1.0 (half player height)
-          // So collider should be at y = -0.2 in world space relative to model center
-          // Since model is scaled by 0.5, local position is multiplied by scale
-          // To get -0.2 world offset: local = -0.2 / 0.5 = -0.4
-          this.colliderGizmo.position.y = -0.4;
+          // Capsule center is at feet + CAPSULE_CENTER_Y (half PLAYER_HEIGHT)
+          // Model origin is at feet, model is scaled by 0.5
+          // So local y = CAPSULE_CENTER_Y / 0.5
+          this.colliderGizmo.position.y = CAPSULE_CENTER_Y / 0.5;
           this.colliderGizmo.renderOrder = 999; // Render last (on top)
           this.colliderGizmo.visible = true; // Ensure it's visible
           this.model.add(this.colliderGizmo); // Add as child of model so it moves with it
@@ -174,18 +171,18 @@ export class PlayerModel {
 
   setPosition(x: number, y: number, z: number): void {
     if (this.model) {
-      // Position represents feet, model origin is at center
-      // Model height at scale 0.5 is 2.4, so offset by half (1.2)
-      this.model.position.set(x, y + 1.2, z);
+      // Position represents feet, model origin is at feet (y=0)
+      this.model.position.set(x, y, z);
     }
-    // Collider gizmo is now a child of the model, so it moves with it automatically
+    // Collider gizmo is a child of the model, so it moves with it automatically
   }
 
   setRotation(yaw: number, pitch: number, roll: number = 0): void {
     if (this.model) {
       this.model.rotation.y = yaw;
-      this.model.rotation.x = pitch;
       this.model.rotation.z = roll;
+      // Don't apply pitch to body — it's an aiming angle, not body orientation.
+      // Applying it shifts child objects (collider gizmo) away from the actual collision position.
     }
   }
 
@@ -203,6 +200,7 @@ export class PlayerModel {
 
   removeColliderGizmo(): void {
     if (this.colliderGizmo && this.model) {
+      this.colliderGizmo.visible = false;
       this.model.remove(this.colliderGizmo);
       console.log(`[PlayerModel] COLLIDER GIZMO REMOVED from model`);
     }
@@ -211,6 +209,8 @@ export class PlayerModel {
   addColliderGizmo(): void {
     if (this.colliderGizmo && this.model && !this.model.children.includes(this.colliderGizmo)) {
       this.model.add(this.colliderGizmo);
+      this.colliderGizmo.visible = true;
+      console.log(`[PlayerModel] COLLIDER GIZMO RE-ADDED to model`);
     }
   }
 
