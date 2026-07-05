@@ -3,6 +3,16 @@ import { ChildLogger } from '../Logger.js';
 
 const logger = new ChildLogger('NetworkManager');
 
+export interface RemotePlayerState {
+  id: string;
+  internalId: string;
+  position: { x: number; y: number; z: number };
+  rotation: { yaw: number; pitch: number };
+  velocity: { x: number; y: number; z: number };
+  isDead: boolean;
+  health: number;
+}
+
 /**
  * Network manager using dependency injection
  * Supports swapping between different networking backends (ws, Colyseus, Naia)
@@ -11,26 +21,24 @@ export class NetworkManager {
   private adapter: INetworkAdapter | null = null;
   private localPlayerId: string;
   private connected: boolean = false;
-  private players: Map<string, any> = new Map();
-  public onPlayerHit: ((shooterId: string, targetId: string, damage: number) => void) | null = null;
+  /** REMOTE players only — local player is never stored here */
+  private players: Map<string, RemotePlayerState> = new Map();
+  public onPlayerHit: ((shooterId: string, targetId: string, damage: number, health: number) => void) | null = null;
   public onPlayerKill: ((shooterId: string, targetId: string) => void) | null = null;
   public onPlayerRespawn: ((playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }) => void) | null = null;
-  public onStateRestore: ((state: { position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }, health: number, isDead: boolean }) => void) | null = null;
   public onPlayerJump: ((playerId: string, position: { x: number; y: number; z: number }) => void) | null = null;
   public onPlayerJetpack: ((playerId: string, position: { x: number; y: number; z: number }) => void) | null = null;
   public onProjectileCreated: ((projectileId: string, ownerId: string, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }) => void) | null = null;
-  public onProjectileUpdate: ((projectileId: string, position: { x: number; y: number; z: number }) => void) | null = null;
   public onProjectileDestroyed: ((projectileId: string) => void) | null = null;
   public onPlayerJoined: ((playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }) => void) | null = null;
   public onPlayerLeft: ((playerId: string) => void) | null = null;
-  public onShot: ((playerId: string, targetId: string | null) => void) | null = null;
-  public onPlayerUpdate: ((playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }, timestamp: number) => void) | null = null;
+  public onKnockback: ((position: { x: number; y: number; z: number }, force: number, pull?: boolean) => void) | null = null;
+  public onPlayerUpdate: ((playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }, timestamp: number, velocity?: { x: number; y: number; z: number }) => void) | null = null;
   public onGameState: ((players: any[], localPlayerState: any) => void) | null = null;
-  public onStateReconciliation: ((state: { position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }, velocity: { x: number; y: number; z: number }, lastProcessedSequence: number }) => void) | null = null;
+  public onSnapshot: ((players: any[], timestamp: number) => void) | null = null;
+  public onStateHash: ((hash: string, tick: number, playerCount: number, timestamp: number) => void) | null = null;
   private lastPositionSendTime: number = 0;
-  private readonly POSITION_SEND_INTERVAL = 67; // 15Hz = 67ms
-  private lastSentPosition: { x: number; y: number; z: number } | null = null;
-  private lastSentRotation: { yaw: number; pitch: number } | null = null;
+  private readonly POSITION_SEND_INTERVAL = 50; // 20Hz — extrapolation covers the gap
   private ping: number = 0;
   private hasLoggedConnectionError: boolean = false;
 
@@ -117,44 +125,50 @@ export class NetworkManager {
   }
 
   private handleMessage(data: any): void {
-    // Handle messages from the adapter
-    logger.debug(`Received message: ${JSON.stringify(data)}`);
-
+    // Avoid JSON.stringify on every message — tickUpdate arrives at 20Hz
     switch (data.type) {
       case 'gameState':
-        // Store players from gameState
+        // Store REMOTE players only (local player state comes via localPlayerState)
         if (data.players && Array.isArray(data.players)) {
-          data.players.forEach((player: any) => {
+          for (const player of data.players) {
+            if (player.id === this.localPlayerId) continue;
             this.players.set(player.id, player);
-          });
+          }
         }
         if (this.onGameState) {
           this.onGameState(data.players || [], data.localPlayerState);
         }
         break;
 
-      case 'position':
-        // Update player in storage
-        if (data.playerId && data.position) {
-          const existing = this.players.get(data.playerId) || {};
-          this.players.set(data.playerId, {
-            ...existing,
-            id: data.playerId,
-            internalId: data.internalId || existing.internalId,
-            position: data.position,
-            rotation: data.rotation || { yaw: 0, pitch: 0 },
-            velocity: data.velocity || { x: 0, y: 0, z: 0 },
-            isDead: data.isDead || false
-          });
-        }
-        if (this.onPlayerUpdate) {
-          this.onPlayerUpdate(data.playerId, data.position, data.rotation, Date.now());
+      case 'tickUpdate':
+        // Batched player updates from server (delta compressed)
+        if (data.updates && Array.isArray(data.updates)) {
+          const now = Date.now();
+          for (const u of data.updates) {
+            // Defense-in-depth: server already excludes self from tickUpdate,
+            // but skip local player here too in case of any server-side regression
+            if (u.playerId === this.localPlayerId) continue;
+            const existing = this.players.get(u.playerId);
+            this.players.set(u.playerId, {
+              ...existing,
+              id: u.playerId,
+              internalId: u.internalId || existing?.internalId || '',
+              position: u.position,
+              rotation: u.rotation || { yaw: 0, pitch: 0 },
+              velocity: u.velocity || { x: 0, y: 0, z: 0 },
+              isDead: u.isDead || false,
+              health: u.health !== undefined ? u.health : (existing?.health ?? 100),
+            });
+            if (this.onPlayerUpdate) {
+              this.onPlayerUpdate(u.playerId, u.position, u.rotation, now, u.velocity);
+            }
+          }
         }
         break;
 
       case 'playerJoined':
-        // Add player to storage
-        if (data.playerId) {
+        // Add REMOTE player to storage (server excludes self, but guard anyway)
+        if (data.playerId && data.playerId !== this.localPlayerId) {
           this.players.set(data.playerId, {
             id: data.playerId,
             internalId: data.internalId,
@@ -181,12 +195,13 @@ export class NetworkManager {
         break;
 
       case 'playerRespawn':
-        // Update player in storage
-        if (data.playerId && data.position) {
-          const existing = this.players.get(data.playerId) || {};
+        // Update REMOTE player in storage (local player respawn handled by callback)
+        if (data.playerId && data.position && data.playerId !== this.localPlayerId) {
+          const existing = this.players.get(data.playerId);
           this.players.set(data.playerId, {
             ...existing,
             id: data.playerId,
+            internalId: existing?.internalId || '',
             position: data.position,
             rotation: data.rotation || { yaw: 0, pitch: 0 },
             velocity: { x: 0, y: 0, z: 0 },
@@ -200,20 +215,48 @@ export class NetworkManager {
         break;
 
       case 'playerHit':
+        // Update REMOTE player health in storage (local player health handled by callback)
+        if (data.targetId && data.targetId !== this.localPlayerId) {
+          const existing = this.players.get(data.targetId);
+          this.players.set(data.targetId, {
+            ...existing,
+            id: data.targetId,
+            internalId: existing?.internalId || '',
+            position: existing?.position || { x: 0, y: 0, z: 0 },
+            rotation: existing?.rotation || { yaw: 0, pitch: 0 },
+            velocity: existing?.velocity || { x: 0, y: 0, z: 0 },
+            isDead: existing?.isDead || false,
+            health: data.health !== undefined ? data.health : (existing?.health ?? 100),
+          });
+        }
         if (this.onPlayerHit) {
-          this.onPlayerHit(data.shooterId, data.targetId, data.damage);
+          this.onPlayerHit(data.shooterId, data.targetId, data.damage, data.health);
         }
         break;
 
       case 'playerKill':
+        // Update REMOTE player state (local player death handled by callback)
+        if (data.targetId && data.targetId !== this.localPlayerId) {
+          const existing = this.players.get(data.targetId);
+          this.players.set(data.targetId, {
+            ...existing,
+            id: data.targetId,
+            internalId: existing?.internalId || '',
+            position: existing?.position || { x: 0, y: 0, z: 0 },
+            rotation: existing?.rotation || { yaw: 0, pitch: 0 },
+            velocity: existing?.velocity || { x: 0, y: 0, z: 0 },
+            isDead: true,
+            health: 0,
+          });
+        }
         if (this.onPlayerKill) {
           this.onPlayerKill(data.shooterId, data.targetId);
         }
         break;
 
-      case 'shot':
-        if (this.onShot) {
-          this.onShot(data.playerId, data.targetId);
+      case 'knockback':
+        if (this.onKnockback) {
+          this.onKnockback(data.position, data.force, data.pull);
         }
         break;
 
@@ -235,15 +278,21 @@ export class NetworkManager {
         }
         break;
 
-      case 'projectileUpdate':
-        if (this.onProjectileUpdate) {
-          this.onProjectileUpdate(data.projectileId, data.position);
-        }
-        break;
-
       case 'projectileDestroyed':
         if (this.onProjectileDestroyed) {
           this.onProjectileDestroyed(data.projectileId);
+        }
+        break;
+
+      case 'snapshot':
+        if (this.onSnapshot) {
+          this.onSnapshot(data.players || [], data.timestamp || Date.now());
+        }
+        break;
+
+      case 'stateHash':
+        if (this.onStateHash) {
+          this.onStateHash(data.hash, data.tick, data.playerCount, data.timestamp);
         }
         break;
 
@@ -262,7 +311,7 @@ export class NetworkManager {
    * Send player position to server with rate limiting
    * Compatible with both Tribes2 and FastAPI backends
    */
-  sendPosition(position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }): void {
+  sendPosition(position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }, velocity: { x: number; y: number; z: number }): void {
     if (!this.adapter || !this.adapter.isConnected()) return;
 
     const now = Date.now();
@@ -274,16 +323,13 @@ export class NetworkManager {
 
     this.lastPositionSendTime = now;
 
-    // Send position update (compatible with both Tribes2 and FastAPI)
+    // Send position update with real velocity
     this.adapter.send({
       type: 'position',
       position,
       rotation,
-      velocity: { x: 0, y: 0, z: 0 }
+      velocity
     });
-
-    this.lastSentPosition = { ...position };
-    this.lastSentRotation = { ...rotation };
   }
 
   /**
@@ -300,7 +346,7 @@ export class NetworkManager {
   }
 
   /**
-   * Get all players (for rendering remote players)
+   * Get all REMOTE players (local player is never included)
    */
   getPlayers(): Map<string, any> {
     return this.players;
@@ -319,6 +365,26 @@ export class NetworkManager {
       velocity,
       timestamp,
       projectileId
+    });
+  }
+
+  sendAOEShot(position: { x: number; y: number; z: number }, excludeTargetId?: string | null): void {
+    if (!this.adapter || !this.adapter.isConnected()) return;
+
+    this.adapter.send({
+      type: 'aoeShot',
+      position,
+      excludeTargetId: excludeTargetId ?? null,
+    });
+  }
+
+  sendDiscAOEShot(position: { x: number; y: number; z: number }, excludeTargetId?: string | null): void {
+    if (!this.adapter || !this.adapter.isConnected()) return;
+
+    this.adapter.send({
+      type: 'discAOEShot',
+      position,
+      excludeTargetId: excludeTargetId ?? null,
     });
   }
 
@@ -359,15 +425,12 @@ export class NetworkManager {
   }
 
   /**
-   * Send input
+   * Request a full state snapshot from the server
    */
-  sendInput(input: any): void {
+  sendSnapshotRequest(): void {
     if (!this.adapter || !this.adapter.isConnected()) return;
     
-    this.adapter.send({
-      type: 'input',
-      input
-    });
+    this.adapter.send({ type: 'snapshotRequest' });
   }
 
   

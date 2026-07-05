@@ -12,6 +12,7 @@ export class HUD {
   private ping: HTMLSpanElement;
   private loss: HTMLSpanElement;
   private jitter: HTMLSpanElement;
+  private fps: HTMLSpanElement;
   private crosshair: HTMLDivElement;
   private hitMarker: HTMLDivElement;
   private hitTimer = 0;
@@ -98,6 +99,10 @@ export class HUD {
         box-shadow: 0 0 8px rgba(255, 68, 68, 0.8);
         transition: opacity 0.1s;
       }
+      .player-indicator-offscreen {
+        width: 12px !important;
+        height: 12px !important;
+      }
       .player-indicator.offscreen {
         background: transparent;
         border-color: #f00;
@@ -129,7 +134,7 @@ export class HUD {
     this.el.innerHTML = `
       <div id="player-list"></div>
       <div id="hud-tr">
-        Speed: <span id="spd">0</span> &nbsp; <span id="state-lbl">GROUND</span> &nbsp; Ping: <span id="ping">0</span>ms &nbsp; Loss: <span id="loss">0</span>% &nbsp; Jitter: <span id="jitter">0</span>ms
+        FPS: <span id="fps">0</span> &nbsp; Speed: <span id="spd">0</span> &nbsp; <span id="state-lbl">GROUND</span> &nbsp; Ping: <span id="ping">0</span>ms &nbsp; Loss: <span id="loss">0</span>% &nbsp; Jitter: <span id="jitter">0</span>ms
       </div>
       <div id="hud-bl">
         <div class="row">
@@ -168,6 +173,7 @@ export class HUD {
     this.ping     = this.el.querySelector('#ping')!;
     this.loss     = this.el.querySelector('#loss')!;
     this.jitter   = this.el.querySelector('#jitter')!;
+    this.fps      = this.el.querySelector('#fps')!;
     this.crosshair = this.el.querySelector('#crosshair')!;
     this.playerList = this.el.querySelector('#player-list')!;
     this.hitMarker = this.el.querySelector('#hit-marker')!;
@@ -185,6 +191,10 @@ export class HUD {
   show(): void {
     this.el.style.display = 'block';
   }
+
+  private fpsAccum = 0;
+  private fpsFrames = 0;
+  private fpsValue = 0;
 
   update(dt: number, player: Player, ping: number = 0, packetLoss: number = 0, jitter: number = 0): void {
     this.health.textContent = String(player.health);
@@ -205,6 +215,15 @@ export class HUD {
     this.ping.textContent   = String(Math.round(ping));
     this.loss.textContent   = String(Math.round(packetLoss));
     this.jitter.textContent = String(Math.round(jitter));
+
+    this.fpsAccum += dt;
+    this.fpsFrames++;
+    if (this.fpsAccum >= 0.5) {
+      this.fpsValue = Math.round(this.fpsFrames / this.fpsAccum);
+      this.fpsAccum = 0;
+      this.fpsFrames = 0;
+    }
+    this.fps.textContent = String(this.fpsValue);
 
     if (this.hitTimer > 0) {
       this.hitTimer -= dt;
@@ -264,6 +283,15 @@ export class HUD {
     if (onScreen) {
       // Player is visible on screen - show indicator at actual position
       indicator.classList.remove('offscreen');
+      // Scale dot by inverse square root of distance (gentler than 1/d)
+      const distance = cameraPos.distanceTo(targetPos);
+      const REF_DIST = 50;
+      const MIN_SIZE = 6;
+      const MAX_SIZE = 12;
+      const scale = REF_DIST / Math.sqrt(Math.max(distance, 1));
+      const size = Math.max(MIN_SIZE, Math.min(MAX_SIZE, 12 * scale));
+      indicator.style.width = `${size}px`;
+      indicator.style.height = `${size}px`;
       indicator.style.left = `${x}px`;
       indicator.style.top = `${y}px`;
     } else {
@@ -302,7 +330,7 @@ export class HUD {
       this.playerIndicators.delete(playerId);
       console.log(`[HUD] INDICATOR REMOVED for playerId=${playerId} (total indicators: ${this.playerIndicators.size})`);
     } else {
-      console.log(`[HUD] INDICATOR NOT FOUND for removal, playerId=${playerId}`);
+      // Indicator already removed - this is called every frame for dead players
     }
   }
 

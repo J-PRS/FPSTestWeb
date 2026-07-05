@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { Terrain } from './terrain.js';
 import type { Ball } from './balls.js';
-import { PLAYER_RADIUS, PLAYER_HEIGHT, DISC_SPEED, DISC_RADIUS, DISC_FORCE, DISC_HITBOX } from './config.js';
+import { PLAYER_RADIUS, PLAYER_HEIGHT, CAPSULE_HALF_HEIGHT, CAPSULE_CENTER_Y, DISC_SPEED, DISC_RADIUS, DISC_FORCE, DISC_HITBOX, DISC_HIT_MIN, DISC_HIT_MAX, DISC_HIT_GROW } from './config.js';
 import { ChildLogger } from './Logger.js';
 
 const logger = new ChildLogger('Disc');
@@ -42,9 +42,19 @@ export class Disc {
   hitAccuracy = 0.0;
   hitAge = 0.0;
   hitDistance = 0.0;
+  directHit = false; // true = hit with core hitbox, false = expanding wake hitbox
   readonly explosionRadius = DISC_RADIUS;
   readonly pullForce = DISC_FORCE; // reverse knockback
   public explosionProcessed = false;
+
+  // Wake hit tracking: only trigger when distance increases (projectile passed target)
+  private wakeBallDistances = new Map<Ball, number>(); // ball -> min distance seen
+  private wakePlayerDistances = new Map<string, number>(); // playerId -> min distance seen
+
+  get hitRadius(): number {
+    const t = Math.min(this.age / DISC_HIT_GROW, 1.0);
+    return DISC_HIT_MIN + (DISC_HIT_MAX - DISC_HIT_MIN) * t;
+  }
 
   private scene: THREE.Scene;
   private mesh: THREE.Mesh;
@@ -96,30 +106,50 @@ export class Disc {
     const dz = this.pos.z - this.prevPos.z;
     const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
     const steps = Math.max(1, Math.ceil(dist / STEP));
-    const thresh = ball.radius + DISC_HITBOX;
+    const coreThresh = ball.radius + DISC_HITBOX; // direct hit = disc body overlaps ball body
+    const wakeThresh = ball.radius + this.hitRadius; // expanding wake
     let minDist = Infinity;
+
     for (let i = 0; i <= steps; i++) {
       const t = i / steps;
       const sx = this.prevPos.x + dx * t;
       const sy = this.prevPos.y + dy * t;
       const sz = this.prevPos.z + dz * t;
       const ex = sx - ball.pos.x, ey = sy - ball.pos.y, ez = sz - ball.pos.z;
-      const d = Math.sqrt(ex*ex + ey*ey + ez*ez);
+      const d2 = ex*ex + ey*ey + ez*ez;
+      const d = Math.sqrt(d2);
       if (d < minDist) minDist = d;
-      if (d <= thresh) {
-        // Calculate surface-to-surface distance (center distance minus ball radius)
-        this.hitAccuracy = Math.max(0, minDist - ball.radius);
-        this.hitAge = this.age;
-        this.hitDistance = this.pos.distanceTo(this.shotOrigin);
+
+      // Direct hit - immediate
+      if (d2 <= coreThresh * coreThresh) {
+        this.minHitDist = minDist;
+        this.directHit = true;
         return true;
       }
+
+      // Wake hit - track distance, only trigger when increasing
+      if (d2 <= wakeThresh * wakeThresh) {
+        const prevMin = this.wakeBallDistances.get(ball) ?? Infinity;
+        if (d < prevMin) {
+          // Getting closer, update min distance
+          this.wakeBallDistances.set(ball, d);
+        } else if (d > prevMin) {
+          // Distance increasing - projectile passed target, trigger wake hit
+          this.minHitDist = minDist;
+          this.directHit = false;
+          return true;
+        }
+      }
     }
+
+    // In wake but distance never increased (still approaching) - don't trigger yet
     return false;
   }
 
-  // Simple sphere sweep vs player capsule
-  private sweepPlayer(playerPos: THREE.Vector3): boolean {
-    const halfHeight = PLAYER_HEIGHT / 2;
+  // True continuous sphere sweep vs player capsule
+  // playerPos is the FEET position; capsule center is at feet + CAPSULE_CENTER_Y
+  private sweepPlayer(playerPos: THREE.Vector3, playerId: string): boolean {
+    const centerY = playerPos.y + CAPSULE_CENTER_Y;
 
     // Disc path vector
     const dx = this.pos.x - this.prevPos.x;
@@ -128,23 +158,32 @@ export class Disc {
     const pathLenSq = dx*dx + dy*dy + dz*dz;
 
     if (pathLenSq === 0) {
-      // No movement, check static distance
+      // No movement, check static distance to capsule center line
       const hx = this.pos.x - playerPos.x;
       const hz = this.pos.z - playerPos.z;
       const hDist = Math.sqrt(hx*hx + hz*hz);
-      const vy = this.pos.y - playerPos.y;
-      const inHeightRange = vy >= -halfHeight && vy <= halfHeight;
+      const vy = this.pos.y - centerY;
+      const clampedY = Math.max(-CAPSULE_HALF_HEIGHT, Math.min(CAPSULE_HALF_HEIGHT, vy));
+      const yDelta = vy - clampedY;
+      const totalDist = Math.sqrt(hx*hx + yDelta*yDelta + hz*hz);
 
-      if (inHeightRange && hDist <= PLAYER_RADIUS + DISC_HITBOX) {
-        this.minHitDist = hDist;
+      const directThresh = PLAYER_RADIUS + DISC_HITBOX; // player radius + disc body radius
+      if (totalDist <= PLAYER_RADIUS + this.hitRadius) {
+        this.minHitDist = totalDist;
+        this.directHit = totalDist <= directThresh; // direct hit = disc body overlaps player body
         return true;
       }
       return false;
     }
 
-    // Project player onto disc path
+    // Proper sphere-capsule sweep:
+    // 1. Find closest point on disc segment to capsule center line
+    // 2. Clamp to capsule height to handle hemispherical ends
+    // 3. Check distance at that point
+
+    // Project player center onto disc path
     const px = playerPos.x - this.prevPos.x;
-    const py = playerPos.y - this.prevPos.y;
+    const py = centerY - this.prevPos.y;
     const pz = playerPos.z - this.prevPos.z;
     const t = (px*dx + py*dy + pz*dz) / pathLenSq;
     const tClamped = Math.max(0, Math.min(1, t));
@@ -154,24 +193,44 @@ export class Disc {
     const closestY = this.prevPos.y + dy * tClamped;
     const closestZ = this.prevPos.z + dz * tClamped;
 
-    // Vector from closest point to player
-    const vy = closestY - playerPos.y;
+    // Vector from closest point to capsule center
+    const vx = closestX - playerPos.x;
+    const vy = closestY - centerY;
+    const vz = closestZ - playerPos.z;
 
-    // Clamp Y to capsule height
-    const clampedY = Math.max(-halfHeight, Math.min(halfHeight, vy));
+    // Distance to capsule center line segment:
+    // Clamp Y to cylinder half-height, then measure from clamped point to actual point
+    const clampedY = Math.max(-CAPSULE_HALF_HEIGHT, Math.min(CAPSULE_HALF_HEIGHT, vy));
+    const yDelta = vy - clampedY; // 0 when inside cylinder, grows when above/below
 
     // Horizontal distance
-    const hx = closestX - playerPos.x;
-    const hz = closestZ - playerPos.z;
-    const hDist = Math.sqrt(hx*hx + hz*hz);
+    const hDist = Math.sqrt(vx*vx + vz*vz);
 
-    // Total distance
-    const totalDist = Math.sqrt(hx*hx + clampedY*clampedY + hz*hz);
+    // Total distance from closest point on disc path to closest point on capsule center line
+    const totalDist = Math.sqrt(vx*vx + yDelta*yDelta + vz*vz);
 
-    if (totalDist <= PLAYER_RADIUS + DISC_HITBOX) {
-      this.minHitDist = hDist;
-      logger.debug(`Hit at dist ${hDist.toFixed(2)}, threshold ${(PLAYER_RADIUS + DISC_HITBOX).toFixed(2)}`);
-      return true;
+    const directThresh = PLAYER_RADIUS + DISC_HITBOX; // player radius + disc body radius
+    if (totalDist <= PLAYER_RADIUS + this.hitRadius) {
+      this.minHitDist = totalDist;
+
+      // Direct hit — disc body overlaps player body (not just proximity)
+      if (totalDist <= directThresh) {
+        this.directHit = true;
+        return true;
+      }
+
+      // Wake hit - track distance, only trigger when increasing
+      const prevMin = this.wakePlayerDistances.get(playerId) ?? Infinity;
+      if (totalDist < prevMin) {
+        // Getting closer, update min distance
+        this.wakePlayerDistances.set(playerId, totalDist);
+        return false; // Don't trigger yet
+      } else if (totalDist > prevMin) {
+        // Distance increasing - projectile passed target, trigger wake hit
+        this.directHit = false;
+        logger.debug(`Wake hit at dist ${totalDist.toFixed(2)}, threshold ${(PLAYER_RADIUS + this.hitRadius).toFixed(2)}`);
+        return true;
+      }
     }
 
     return false;
@@ -205,7 +264,7 @@ export class Disc {
       // Check collision with remote players
       if (remotePlayers) {
         for (const [playerId, playerPos] of remotePlayers) {
-          if (this.sweepPlayer(playerPos)) {
+          if (this.sweepPlayer(playerPos, playerId)) {
             this.hitPlayerId = playerId;
             // Calculate surface-to-surface distance (center distance minus player radius)
             this.hitAccuracy = Math.max(0, this.minHitDist - 0.8); // PLAYER_RADIUS = 0.8

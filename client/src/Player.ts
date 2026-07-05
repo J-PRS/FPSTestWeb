@@ -38,6 +38,7 @@ export class Player {
   private jetPending = false;
   private jumpHeld = false;
   private discHeld = false;
+  private _lastJetpackSend = 0;
 
   // Events
   onFire: ((e: FireEvent) => void) | null = null;
@@ -229,8 +230,10 @@ export class Player {
       this.vel.z += mz * JET_FORCE_DIR * dt;
       this.energy -= JET_DRAIN * dt;
       if (this.onJetpack) this.onJetpack(this.pos.clone());
-      // Send jetpack event to network
-      if (this.onNetworkJetpack) {
+      // Send jetpack event to network (throttled to ~20/s)
+      const now = performance.now();
+      if (this.onNetworkJetpack && now - this._lastJetpackSend > 50) {
+        this._lastJetpackSend = now;
         this.onNetworkJetpack({ x: this.pos.x, y: this.pos.y, z: this.pos.z });
       }
       // Force off ground if jetting

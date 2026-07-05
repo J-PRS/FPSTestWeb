@@ -11,8 +11,12 @@ export const LIFE_BASE = 6.0; // Base debris lifetime
 export const LIFE_RAND = 2.0; // Random debris lifetime variation
 
 // Player physics constants
-export const PLAYER_RADIUS = 0.8; // Player collision radius
-export const PLAYER_HEIGHT = 2.0; // Player height
+export const PLAYER_RADIUS = 0.8; // Player collision radius (capsule radius)
+export const PLAYER_HEIGHT = 2.0; // Player total height (capsule total height including caps)
+// Derived capsule dimensions — single source of truth for gizmo AND collision
+export const CAPSULE_CYLINDER_HEIGHT = PLAYER_HEIGHT - 2 * PLAYER_RADIUS; // cylinder part only (0.4)
+export const CAPSULE_HALF_HEIGHT = CAPSULE_CYLINDER_HEIGHT / 2; // half cylinder height for Y clamping (0.2)
+export const CAPSULE_CENTER_Y = PLAYER_HEIGHT / 2; // capsule center above feet (1.0)
 
 // Player jetpack constants
 export const JET_FORCE_UP = 35.0; // Vertical jetpack force
@@ -27,9 +31,12 @@ export const DISC_RATE = 1.0; // Disc fire rate (seconds)
 
 // Projectile constants
 export const ROCKET_SPEED = 120.0; // Rocket velocity
-export const ROCKET_RADIUS = 6.0; // Rocket explosion radius
+export const ROCKET_RADIUS = 6.0; // Rocket explosion radius (visual + knockback)
+export const ROCKET_BODY_RADIUS = 0.18; // Rocket visual body radius (for direct hit detection)
 export const ROCKET_FORCE = 28.0; // Rocket knockback force
-export const HIT_MIN = 0.3; // Minimum hitbox radius (core for direct hits)
+export const ROCKET_AOE_DAMAGE = 15; // Splash damage at explosion center
+export const ROCKET_AOE_RADIUS = 6.0; // Splash damage radius (matches visual explosion)
+export const HIT_MIN = 0.0; // Minimum hitbox radius (core for direct hits)
 export const HIT_MAX = 8.0; // Maximum hitbox radius
 export const HIT_GROW = 2.0; // Seconds to reach full hitbox size
 
@@ -37,7 +44,10 @@ export const HIT_GROW = 2.0; // Seconds to reach full hitbox size
 export const DISC_SPEED = 80.0; // Disc velocity
 export const DISC_RADIUS = 5.0; // Disc explosion radius
 export const DISC_FORCE = 25.0; // Disc pull force
-export const DISC_HITBOX = 0.5; // Disc hitbox size
+export const DISC_HITBOX = 0.5; // Disc core hitbox size (direct hit)
+export const DISC_HIT_MIN = 0.3; // Minimum wake hitbox radius
+export const DISC_HIT_MAX = 8.0; // Maximum wake hitbox radius
+export const DISC_HIT_GROW = 2.0; // Seconds to reach full wake hitbox size
 
 // Game constants
 export const BALL_SPAWN_INTERVAL = 2.5; // Seconds between ball spawns
@@ -97,7 +107,7 @@ export const SUN_INTENSITY = 3.2; // Sun light intensity
 export const SHADOW_MAP_SIZE = 2048; // Shadow map resolution
 export const SHADOW_CAMERA_NEAR = 1; // Shadow camera near plane
 export const SHADOW_CAMERA_FAR = 2000; // Shadow camera far plane
-export const SHADOW_CAMERA_SIZE = 600; // Shadow camera frustum size
+export const SHADOW_CAMERA_SIZE = 1200; // Shadow camera frustum size (covers 400 unit ball spawn radius)
 export const HEMI_SKY_COLOR = 0x5599cc; // Hemisphere sky color
 export const HEMI_GROUND_COLOR = 0x664422; // Hemisphere ground color
 export const HEMI_INTENSITY = 0.5; // Hemisphere light intensity
@@ -112,7 +122,7 @@ export const BALL_BASE_RADIUS = 1.2; // Base ball radius
 export const MAX_INPUT_HISTORY = 100; // Maximum input history entries for replay
 
 // Renderer constants
-export const TONE_MAPPING_EXPOSURE = 1.0; // Tone mapping exposure
+export const TONE_MAPPING_EXPOSURE = 0.4; // Tone mapping exposure (lower = darker)
 
 // UI constants
 export const FRAG_MESSAGE_TOP_OFFSET = 60; // Pixels from center for frag message
