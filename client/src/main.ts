@@ -24,6 +24,8 @@ import { NetworkManager } from './networking/NetworkManager.js';
 import { NetworkAdapterFactory } from './networking/NetworkAdapterFactory.js';
 import { ChildLogger } from './Logger.js';
 import { StateSnapshot } from './StateSnapshot.js';
+import { DemoManager } from './demo/index.js';
+import { InputFlags, JetpackFlags, ProjectileEventType } from './demo/types.js';
 import {
   ROCKET_SPEED, ROCKET_AOE_DAMAGE, ROCKET_AOE_RADIUS, HIT_MAX, BALL_SPAWN_INTERVAL, BALL_MAX,
   PIXEL_SCALE, RENDERER_PIXEL_RATIO,
@@ -43,6 +45,9 @@ import {
 } from './config.js';
 
 const logger = new ChildLogger('Main');
+
+// ---- Demo system ----
+let demoManager: DemoManager | null = null;
 
 // ---- Load Time Profiling ----
 const loadTimes: { [key: string]: number } = {};
@@ -243,6 +248,10 @@ const explosions: Explosion[] = [];
 const implosions: Implosion[] = [];
 let effects: EffectsManager;
 
+// ---- Playback projectile reconstruction ----
+const playbackRockets: Rocket[] = [];
+const playbackRocketById = new Map<number, Rocket>();
+
 // Track recent explosions for death impulse calculation
 interface ExplosionInfo {
   position: THREE.Vector3;
@@ -282,14 +291,25 @@ const localRocketById = new Map<string, Rocket>(); // server projectileId -> loc
 const pendingRocketTimestamps: Map<Rocket, number> = new Map(); // track when rockets were created
 
 function onFire(e: { origin: THREE.Vector3; dir: THREE.Vector3; playerVel: THREE.Vector3 }): void {
-  // Disable input when tab is hidden to prevent firing while alt-tabbed
+  // Disable input when tab is hidden or during demo playback
   if (isTabHidden) return;
+  if (demoManager?.isPlaying) return;
 
   // INSTANT SHOOTING: Spawn rocket locally immediately for LAN-like feel
   const r = new Rocket(scene, e.origin, e.dir, e.playerVel);
   rockets.push(r);
   pendingLocalRockets.push(r);
   pendingRocketTimestamps.set(r, Date.now());
+
+  // Record projectile fired event for demo
+  if (demoManager?.isRecording) {
+    const velocity = e.dir.clone().normalize().multiplyScalar(ROCKET_SPEED).addScaledVector(e.playerVel, 0.5);
+    r.demoProjectileId = demoManager.recordProjectileFired(
+      { x: e.origin.x, y: e.origin.y, z: e.origin.z },
+      { x: velocity.x, y: velocity.y, z: velocity.z },
+      0 // weaponType: rocket
+    );
+  }
 
   // Send shot to server with projectile position/velocity for tracking
   // Server will validate and confirm/override if needed
@@ -302,6 +322,7 @@ function onFire(e: { origin: THREE.Vector3; dir: THREE.Vector3; playerVel: THREE
 }
 
 function onDisc(e: { origin: THREE.Vector3; dir: THREE.Vector3; playerVel: THREE.Vector3 }): void {
+  if (demoManager?.isPlaying) return;
   const d = new Disc(scene, e.origin, e.dir, e.playerVel);
   discs.push(d);
 }
@@ -447,6 +468,17 @@ function updateRockets(dt: number): void {
       
       processExplosion(r.pos, r.explosionRadius, r.knockbackForce, undefined, r.directHit, r.hitPlayerId, r.age);
 
+      // Record projectile hit for demo (any hit: terrain, ball, or player)
+      if (demoManager?.isRecording && r.demoProjectileId) {
+        const targetId = r.hitBall ? balls.indexOf(r.hitBall) : (r.hitPlayerId ? 0xFFFF : 0);
+        demoManager.recordProjectileHit(r.demoProjectileId, { x: r.pos.x, y: r.pos.y, z: r.pos.z }, targetId);
+      }
+
+      // Auto-clip: if projectile lifetime > 1s, save a demo clip
+      if (demoManager?.isRecording && r.age > 1.0) {
+        demoManager.autoClipOnHit(r.age);
+      }
+
       if (r.hitBall) {
         const ball = r.hitBall;
         const destroyed = ball.takeDamage();
@@ -470,6 +502,16 @@ function updateRockets(dt: number): void {
         }
         showFragMessage(`${acc.toFixed(1)} · ${Math.round(dist)} · ${air.toFixed(2)}s\n${score}`);
         hud.showHitMarker();
+
+        // Record target hit/destroyed for demo
+        if (demoManager?.isRecording) {
+          const ballIdx = balls.indexOf(ball);
+          if (destroyed) {
+            demoManager.recordTargetDestroyed(ballIdx, { x: ball.pos.x, y: ball.pos.y, z: ball.pos.z });
+          } else {
+            demoManager.recordTargetHit(ballIdx, { x: ball.pos.x, y: ball.pos.y, z: ball.pos.z }, ball.health);
+          }
+        }
       }
 
       if (r.hitPlayerId) {
@@ -501,6 +543,9 @@ function updateRockets(dt: number): void {
     }
 
     if (r.dead) {
+      if (demoManager?.isRecording && r.demoProjectileId) {
+        demoManager.recordProjectileDestroyed(r.demoProjectileId, { x: r.pos.x, y: r.pos.y, z: r.pos.z });
+      }
       r.dispose();
       rockets.splice(i, 1);
     }
@@ -579,7 +624,12 @@ function updateDiscs(dt: number): void {
 // ---- Ball spawning ----
 function spawnBall(): void {
   if (balls.filter(b => !b.dead).length >= BALL_MAX) return;
-  balls.push(new Ball(scene, terrain, pickVariant()));
+  const ball = new Ball(scene, terrain, pickVariant());
+  balls.push(ball);
+  if (demoManager?.isRecording) {
+    const idx = balls.length - 1;
+    demoManager.recordTargetSpawned(idx, { x: ball.pos.x, y: ball.pos.y, z: ball.pos.z }, { x: ball.vel.x, y: ball.vel.y, z: ball.vel.z }, 0);
+  }
 }
 
 function updateBalls(dt: number): void {
@@ -614,8 +664,8 @@ function loop(time: number): void {
   terrain.update(player.pos.x, player.pos.z);
 
   // Send position to server if connected (even when tab is hidden)
-  // Don't send position updates while dead to prevent state drift
-  if (networkManager && networkManager.isConnected() && !player.isDead) {
+  // Don't send position updates while dead or during demo playback
+  if (networkManager && networkManager.isConnected() && !player.isDead && !demoManager?.isPlaying) {
     lastSentPos = { x: player.pos.x, y: player.pos.y, z: player.pos.z };
     networkManager.sendPosition(
       { x: player.pos.x, y: player.pos.y, z: player.pos.z },
@@ -711,9 +761,30 @@ function loop(time: number): void {
     (terrain as any).material.uniforms.fogColor.value = scene.fog.color;
     (terrain as any).material.uniforms.fogDensity.value = scene.fog.density;
   }
+  // Update demo system (zero-overhead when idle)
+  if (demoManager) demoManager.update(dt);
+
   updateBalls(dt);
   updateRockets(dt);
   updateDiscs(dt);
+
+  // Update playback rockets (deterministic reconstruction from events)
+  for (let i = playbackRockets.length - 1; i >= 0; i--) {
+    const r = playbackRockets[i];
+    r.update(dt, terrain);
+    if (r.dead) {
+      r.dispose();
+      playbackRockets.splice(i, 1);
+      // Remove from map if present
+      for (const [id, rocket] of playbackRocketById) {
+        if (rocket === r) {
+          playbackRocketById.delete(id);
+          break;
+        }
+      }
+    }
+  }
+
   effects.update(dt);
   for (let i = debrisList.length - 1; i >= 0; i--) {
     debrisList[i].update(dt);
@@ -793,6 +864,134 @@ async function init(): Promise<void> {
   player.onNetworkJump = (pos) => networkManager.sendJump(pos);
   player.onNetworkJetpack = (pos) => networkManager.sendJetpack(pos);
   player.onNetworkInput = (input, rotation) => networkManager.sendInputMove(input, rotation);
+
+  // Initialize demo system with player/input data providers
+  demoManager = new DemoManager();
+  demoManager.setServerUrl('http://localhost:8000');
+  demoManager.setDataProviders(
+    {
+      get posX() { return player.pos.x; },
+      get posY() { return player.pos.y; },
+      get posZ() { return player.pos.z; },
+      get velX() { return player.vel.x; },
+      get velY() { return player.vel.y; },
+      get velZ() { return player.vel.z; },
+      get yaw() { return player.yaw; },
+      get pitch() { return player.pitch; },
+    },
+    {
+      get inputFlags() {
+        const input = player.getInputState();
+        let flags = 0;
+        if (input.forward > 0) flags |= InputFlags.Forward;
+        if (input.forward < 0) flags |= InputFlags.Backward;
+        if (input.right < 0) flags |= InputFlags.Left;
+        if (input.right > 0) flags |= InputFlags.Right;
+        if (input.jumpHeld) flags |= InputFlags.Jump;
+        if (input.skiHeld) flags |= InputFlags.Ski;
+        if (input.firePressed) flags |= InputFlags.Fire;
+        if (input.discHeld) flags |= InputFlags.Disc;
+        return flags;
+      },
+      get mouseDeltaX() { return 0; },
+      get mouseDeltaY() { return 0; },
+      get jetpackFlags() {
+        return player.getInputState().jetHeld ? JetpackFlags.Active : JetpackFlags.None;
+      },
+      get jetpackFuel() { return player.energy; },
+    }
+  );
+
+  // Wire cool shots panel
+  const coolShotsList = document.getElementById('cool-shots-list')!;
+  const renderCoolShots = (shots: any[]) => {
+    coolShotsList.innerHTML = '';
+    if (shots.length === 0) {
+      coolShotsList.innerHTML = '<div class="cool-shot-item empty">No cool shots yet</div>';
+      return;
+    }
+    shots.forEach((shot, i) => {
+      const item = document.createElement('div');
+      item.className = 'cool-shot-item';
+      const timeStr = new Date(shot.timestamp).toLocaleTimeString().slice(0, 5);
+      item.innerHTML = `<span class="rank">${i + 1}</span><span class="lifetime">${shot.projectileLifetime.toFixed(2)}s</span><span class="time">${timeStr}</span>`;
+      item.onclick = () => {
+        demoManager?.playCoolShot(i);
+        overlay.style.display = 'none';
+        requestLock();
+      };
+      coolShotsList.appendChild(item);
+    });
+  };
+  demoManager.onCoolShotsChanged = renderCoolShots;
+
+  // ---- Playback projectile reconstruction ----
+  // Handle projectile events from demo playback: spawn rockets on Fired, explode on Destroyed
+  demoManager.onPlaybackEvent = (events: { projectiles: any[], targets: any[] }) => {
+    for (const ev of events.projectiles) {
+      if (ev.eventType === ProjectileEventType.Fired) {
+        // Reconstruct rocket from recorded position + velocity
+        const origin = new THREE.Vector3(ev.posX, ev.posY, ev.posZ);
+        const velocity = new THREE.Vector3(ev.velX, ev.velY, ev.velZ);
+        const r = new Rocket(scene, origin, new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 0, 0));
+        r.isRemote = true;
+        r.vel.copy(velocity);
+        playbackRockets.push(r);
+        playbackRocketById.set(ev.projectileId, r);
+      } else if (ev.eventType === ProjectileEventType.Bounce) {
+        // Update rocket velocity to match recorded bounce
+        const r = playbackRocketById.get(ev.projectileId);
+        if (r && !r.exploded) {
+          r.pos.set(ev.posX, ev.posY, ev.posZ);
+          r.vel.set(ev.velX, ev.velY, ev.velZ);
+        }
+      } else if (ev.eventType === ProjectileEventType.Destroyed || ev.eventType === ProjectileEventType.Hit) {
+        // Force explode the rocket at the recorded position
+        const r = playbackRocketById.get(ev.projectileId);
+        if (r && !r.exploded) {
+          r.pos.set(ev.posX, ev.posY, ev.posZ);
+          r.explode();
+          // Spawn explosion effect at the recorded position, using rocket age for visual scale
+          explosions.push(new Explosion(scene, r.pos, false, r.age));
+        }
+      }
+    }
+  };
+
+  // Apply playback state to the local player (camera follows replay)
+  demoManager.onPlaybackState = (state) => {
+    if (demoManager?.isPlaying) {
+      player.pos.set(state.posX, state.posY, state.posZ);
+      player.vel.set(state.velX, state.velY, state.velZ);
+      player.yaw = state.yaw;
+      player.pitch = state.pitch;
+    }
+  };
+
+  // Cleanup playback rockets when playback ends, show menu for replay
+  demoManager.onPlaybackEnd = () => {
+    for (const r of playbackRockets) {
+      r.dispose();
+    }
+    playbackRockets.length = 0;
+    playbackRocketById.clear();
+    // Show overlay menu so user can replay or pick another clip
+    if (document.pointerLockElement === renderer.domElement) {
+      document.exitPointerLock();
+    }
+    overlay.style.display = 'flex';
+    demoManager?.fetchCoolShotsFromServer();
+  };
+
+  // Clear playback rockets on seek so they don't get orphaned
+  demoManager.onPlaybackSeek = () => {
+    for (const r of playbackRockets) {
+      r.dispose();
+    }
+    playbackRockets.length = 0;
+    playbackRocketById.clear();
+  };
+
   hud = new HUD();
   healthBarSystem = new HealthBarSystem(camera);
   damageNumberManager = new DamageNumberManager(scene);
@@ -1060,6 +1259,9 @@ async function init(): Promise<void> {
 
   // Initial balls
   for (let i = 0; i < 8; i++) spawnBall();
+
+  // Auto-start demo recording so cool shots are captured seamlessly
+  demoManager?.startRecording();
   markTime('initComplete');
 
   printLoadSummary();
@@ -1094,6 +1296,8 @@ document.addEventListener('pointerlockchange', () => {
   } else if (gameStarted && unlockByEscape) {
     // Only show overlay when unlocked by pressing ESC, not alt-tab
     overlay.style.display = 'flex';
+    // Fetch cool shots from server when overlay opens
+    demoManager?.fetchCoolShotsFromServer();
   }
 });
 
@@ -1118,6 +1322,14 @@ document.addEventListener('keydown', (e) => {
     localStorage.setItem('fps-pixelated', pixelated.toString());
     updateRendererSize();
     pixelToggleBtn.textContent = pixelated ? 'PIXELATED: ON' : 'PIXELATED: OFF';
+  }
+  if (e.code === 'F6') {
+    if (demoManager) demoManager.toggleUI();
+  }
+  // Space = play/pause during demo playback (also works when paused)
+  if (e.code === 'Space' && demoManager?.isLoadedForPlayback) {
+    e.preventDefault();
+    demoManager.togglePlayPause();
   }
 });
 
