@@ -67,6 +67,7 @@ export class Rocket {
   hitBall: Ball | null = null;
   hitPlayerId: string | null = null;
   serverProjectileId: string | null = null; // remote player hit
+  demoProjectileId: number = 0; // demo recording tracking ID
   hitAccuracy  = 0.0;  // actual center-to-center dist at moment of hit
   hitAge       = 0.0;  // rocket age at hit (airtime)
   hitDistance  = 0.0;  // travel distance from shot origin

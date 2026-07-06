@@ -39,10 +39,48 @@
       text-transform: uppercase;
     }
     #overlay button:hover { background: #fff; }
+    #cool-shots-panel {
+      position: absolute; top: 0; left: 0; bottom: 0;
+      width: 320px;
+      background: rgba(0,15,30,0.92);
+      border-right: 1px solid #0ff;
+      padding: 24px 20px;
+      overflow-y: auto;
+      color: #8cf;
+      font-size: 0.82rem;
+    }
+    #cool-shots-panel h2 {
+      font-size: 1.1rem; color: #fff; letter-spacing: 0.1em;
+      margin-bottom: 4px; border-bottom: 1px solid #0ff; padding-bottom: 8px;
+    }
+    #cool-shots-panel .sub { font-size: 0.7rem; color: #08f; margin-bottom: 16px; letter-spacing: 0.08em; }
+    #cool-shots-list { display: flex; flex-direction: column; gap: 6px; }
+    .cool-shot-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 12px;
+      background: rgba(0,40,60,0.6);
+      border: 1px solid #055;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .cool-shot-item:hover { background: rgba(0,80,120,0.8); border-color: #0ff; }
+    .cool-shot-item .rank { font-size: 1.1rem; font-weight: bold; color: #0ff; min-width: 24px; }
+    .cool-shot-item .lifetime { font-size: 1.0rem; font-weight: bold; color: #fff; }
+    .cool-shot-item .time { font-size: 0.7rem; color: #679; margin-left: auto; }
+    .cool-shot-item.empty { color: #456; cursor: default; text-align: center; justify-content: center; }
+    .cool-shot-item.empty:hover { background: rgba(0,40,60,0.6); border-color: #055; }
   </style>
 </head>
 <body>
   <div id="overlay">
+    <div id="cool-shots-panel">
+      <h2>COOL SHOTS</h2>
+      <div class="sub">Top 10 by air time</div>
+      <div id="cool-shots-list">
+        <div class="cool-shot-item empty">No cool shots yet</div>
+      </div>
+    </div>
     <div id="overlay-inner">
       <h1>VORTEX FPS</h1>
       <div class="sub">Three.js &bull; Tribes/Quake Style</div>
