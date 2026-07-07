@@ -25,9 +25,10 @@ import { NetworkAdapterFactory } from './networking/NetworkAdapterFactory.js';
 import { ChildLogger } from './Logger.js';
 import { StateSnapshot } from './StateSnapshot.js';
 import { DemoManager } from './demo/index.js';
-import { InputFlags, JetpackFlags, ProjectileEventType } from './demo/types.js';
+import { InputFlags, JetpackFlags, ProjectileEventType, TargetEventType } from './demo/types.js';
 import {
   ROCKET_SPEED, ROCKET_AOE_DAMAGE, ROCKET_AOE_RADIUS, HIT_MAX, BALL_SPAWN_INTERVAL, BALL_MAX,
+  DISC_SPEED,
   PIXEL_SCALE, RENDERER_PIXEL_RATIO,
   CAMERA_FOV, CAMERA_NEAR, CAMERA_FAR,
   FOG_COLOR, FOG_DENSITY,
@@ -251,6 +252,8 @@ let effects: EffectsManager;
 // ---- Playback projectile reconstruction ----
 const playbackRockets: Rocket[] = [];
 const playbackRocketById = new Map<number, Rocket>();
+const playbackBallById = new Map<number, Ball>();
+let playbackFrozenWarnCounter = 0;
 
 // Track recent explosions for death impulse calculation
 interface ExplosionInfo {
@@ -262,6 +265,7 @@ interface ExplosionInfo {
 const recentExplosions: ExplosionInfo[] = [];
 
 let ballTimer = 0;
+let ballSnapshotTimer = 0;
 
 // ---- Score display ----
 const scoreDiv = document.createElement('div');
@@ -325,6 +329,16 @@ function onDisc(e: { origin: THREE.Vector3; dir: THREE.Vector3; playerVel: THREE
   if (demoManager?.isPlaying) return;
   const d = new Disc(scene, e.origin, e.dir, e.playerVel);
   discs.push(d);
+
+  // Record projectile fired event for demo
+  if (demoManager?.isRecording) {
+    const velocity = e.dir.clone().normalize().multiplyScalar(DISC_SPEED).addScaledVector(e.playerVel, 0.5);
+    d.demoProjectileId = demoManager.recordProjectileFired(
+      { x: e.origin.x, y: e.origin.y, z: e.origin.z },
+      { x: velocity.x, y: velocity.y, z: velocity.z },
+      1 // weaponType: disc
+    );
+  }
 }
 
 // ---- Explosion processing ----
@@ -470,13 +484,18 @@ function updateRockets(dt: number): void {
 
       // Record projectile hit for demo (any hit: terrain, ball, or player)
       if (demoManager?.isRecording && r.demoProjectileId) {
-        const targetId = r.hitBall ? balls.indexOf(r.hitBall) : (r.hitPlayerId ? 0xFFFF : 0);
+        const targetId = r.hitBall ? r.hitBall.id : (r.hitPlayerId ? 0xFFFF : 0);
         demoManager.recordProjectileHit(r.demoProjectileId, { x: r.pos.x, y: r.pos.y, z: r.pos.z }, targetId);
       }
 
-      // Auto-clip: if projectile lifetime > 1s, save a demo clip
-      if (demoManager?.isRecording && r.age > 1.0) {
-        demoManager.autoClipOnHit(r.age);
+      // Log ALL target hits (ball or player), not terrain
+      if (r.hitBall || r.hitPlayerId) {
+        logger.info(`[CoolShot] Rocket hit ${r.hitBall ? 'ball' : 'player'} airtime=${r.hitAge.toFixed(3)}s dist=${r.hitDistance.toFixed(1)} direct=${r.directHit}`);
+      }
+
+      // Auto-clip: only for actual target hits (ball or player)
+      if (demoManager?.isRecording && (r.hitBall || r.hitPlayerId) && r.hitAge > 0.2) {
+        demoManager.autoClipOnHit(r.hitAge, 0.2);
       }
 
       if (r.hitBall) {
@@ -495,7 +514,7 @@ function updateRockets(dt: number): void {
         const dist  = r.hitDistance;
         const air   = r.hitAge;
         const score = Math.round(acc * dist * air);
-        logger.debug(`direct=${r.directHit} accRaw=${accRaw.toFixed(2)} acc=${acc.toFixed(1)} dist=${dist.toFixed(1)} air=${air.toFixed(2)}s score=${score}`);
+        logger.info(`[Hit] Ball direct=${r.directHit} accRaw=${accRaw.toFixed(2)} acc=${acc.toFixed(1)} dist=${dist.toFixed(1)} air=${air.toFixed(2)}s score=${score}`);
         if (destroyed) {
           debrisList.push(new BallDebris(scene, terrain, ball.pos.x, ball.pos.y, ball.pos.z, ball.color, ball.scale));
           player.kills++;
@@ -505,11 +524,10 @@ function updateRockets(dt: number): void {
 
         // Record target hit/destroyed for demo
         if (demoManager?.isRecording) {
-          const ballIdx = balls.indexOf(ball);
           if (destroyed) {
-            demoManager.recordTargetDestroyed(ballIdx, { x: ball.pos.x, y: ball.pos.y, z: ball.pos.z });
+            demoManager.recordTargetDestroyed(ball.id, { x: ball.pos.x, y: ball.pos.y, z: ball.pos.z });
           } else {
-            demoManager.recordTargetHit(ballIdx, { x: ball.pos.x, y: ball.pos.y, z: ball.pos.z }, ball.health);
+            demoManager.recordTargetHit(ball.id, { x: ball.pos.x, y: ball.pos.y, z: ball.pos.z }, { x: ball.vel.x, y: ball.vel.y, z: ball.vel.z }, ball.health);
           }
         }
       }
@@ -529,7 +547,7 @@ function updateRockets(dt: number): void {
         const dist  = r.hitDistance;
         const air   = r.hitAge;
         const score = Math.round(acc * dist * air);
-        logger.debug(`direct=${r.directHit} accRaw=${accRaw.toFixed(2)} acc=${acc.toFixed(1)} dist=${dist.toFixed(1)} air=${air.toFixed(2)}s score=${score}`);
+        logger.info(`[Hit] Player direct=${r.directHit} accRaw=${accRaw.toFixed(2)} acc=${acc.toFixed(1)} dist=${dist.toFixed(1)} air=${air.toFixed(2)}s score=${score}`);
         showFragMessage(`${acc.toFixed(1)} · ${Math.round(dist)} · ${air.toFixed(2)}s\n${score}`);
         hud.showHitMarker();
       }
@@ -538,7 +556,7 @@ function updateRockets(dt: number): void {
         // Send hit event to server for validation and authoritative confirmation
         // Server may override if client prediction was wrong (anti-cheat)
         networkManager.sendShot(r.hitPlayerId, { x: r.pos.x, y: r.pos.y, z: r.pos.z }, { x: r.vel.x, y: r.vel.y, z: r.vel.z }, Date.now(), r.serverProjectileId);
-        logger.debug(`Hit player ${r.hitPlayerId} with projectile ${r.serverProjectileId}, direct=${r.directHit}`);
+        logger.info(`[Shot] Sent to server: player=${r.hitPlayerId} proj=${r.serverProjectileId} direct=${r.directHit} air=${r.hitAge.toFixed(2)}s`);
       }
     }
 
@@ -569,6 +587,23 @@ function updateDiscs(dt: number): void {
     if (d.exploded && !d.explosionProcessed) {
       d.explosionProcessed = true;
       processDiscExplosion(d.pos, d.explosionRadius, d.pullForce, d.hitPlayerId, d.age);
+
+      // Record projectile hit for demo
+      if (demoManager?.isRecording && d.demoProjectileId) {
+        const targetId = d.hitBall ? d.hitBall.id : (d.hitPlayerId ? 0xFFFF : 0);
+        demoManager.recordProjectileHit(d.demoProjectileId, { x: d.pos.x, y: d.pos.y, z: d.pos.z }, targetId);
+      }
+
+      // Log ALL target hits (ball or player), not terrain
+      if (d.hitBall || d.hitPlayerId) {
+        logger.info(`[CoolShot] Disc hit ${d.hitBall ? 'ball' : 'player'} airtime=${d.hitAge.toFixed(3)}s dist=${d.hitDistance.toFixed(1)} direct=${d.directHit}`);
+      }
+
+      // Auto-clip: only for actual target hits (ball or player)
+      if (demoManager?.isRecording && (d.hitBall || d.hitPlayerId) && d.hitAge > 0.2) {
+        demoManager.autoClipOnHit(d.hitAge, 0.2);
+      }
+
       if (d.hitBall) {
         const ball = d.hitBall;
         const destroyed = ball.takeDamage();
@@ -587,8 +622,16 @@ function updateDiscs(dt: number): void {
           const dist = d.hitDistance;
           const air = d.hitAge;
           const score = Math.round(acc * dist * air);
-          logger.debug(`accRaw=${accRaw.toFixed(2)} acc=${acc.toFixed(1)} dist=${dist.toFixed(1)} air=${air.toFixed(2)}s score=${score}`);
+          logger.info(`[Hit] Ball direct=${d.directHit} accRaw=${accRaw.toFixed(2)} acc=${acc.toFixed(1)} dist=${dist.toFixed(1)} air=${air.toFixed(2)}s score=${score}`);
           showFragMessage(`${acc.toFixed(1)} · ${Math.round(dist)} · ${air.toFixed(2)}s\n${score}`);
+        }
+        // Record target hit/destroyed for demo
+        if (demoManager?.isRecording) {
+          if (destroyed) {
+            demoManager.recordTargetDestroyed(ball.id, { x: ball.pos.x, y: ball.pos.y, z: ball.pos.z });
+          } else {
+            demoManager.recordTargetHit(ball.id, { x: ball.pos.x, y: ball.pos.y, z: ball.pos.z }, { x: ball.vel.x, y: ball.vel.y, z: ball.vel.z }, ball.health);
+          }
         }
       }
 
@@ -601,7 +644,7 @@ function updateDiscs(dt: number): void {
         networkManager.sendShot(d.hitPlayerId, { x: d.pos.x, y: d.pos.y, z: d.pos.z }, { x: d.vel.x, y: d.vel.y, z: d.vel.z }, Date.now(), null);
         // Predict damage on health bar immediately (disc direct hit = 50 damage)
         healthBarSystem.predictDamage(d.hitPlayerId, 50);
-        logger.debug(`Disc hit player ${d.hitPlayerId}`);
+        logger.info(`[Shot] Disc sent to server: player=${d.hitPlayerId} direct=${d.directHit} air=${d.hitAge.toFixed(2)}s`);
         
         // Calculate score for player hit
         const accRaw = d.hitAccuracy;
@@ -609,7 +652,7 @@ function updateDiscs(dt: number): void {
         const dist = d.hitDistance;
         const air = d.hitAge;
         const score = Math.round(acc * dist * air);
-        logger.debug(`accRaw=${accRaw.toFixed(2)} acc=${acc.toFixed(1)} dist=${dist.toFixed(1)} air=${air.toFixed(2)}s score=${score}`);
+        logger.info(`[Hit] Player direct=${d.directHit} accRaw=${accRaw.toFixed(2)} acc=${acc.toFixed(1)} dist=${dist.toFixed(1)} air=${air.toFixed(2)}s score=${score}`);
         showFragMessage(`${acc.toFixed(1)} · ${Math.round(dist)} · ${air.toFixed(2)}s\n${score}`);
       }
     }
@@ -623,16 +666,51 @@ function updateDiscs(dt: number): void {
 
 // ---- Ball spawning ----
 function spawnBall(): void {
+  if (demoManager?.isPlaying) return; // skip normal spawning during demo playback
   if (balls.filter(b => !b.dead).length >= BALL_MAX) return;
   const ball = new Ball(scene, terrain, pickVariant());
   balls.push(ball);
   if (demoManager?.isRecording) {
-    const idx = balls.length - 1;
-    demoManager.recordTargetSpawned(idx, { x: ball.pos.x, y: ball.pos.y, z: ball.pos.z }, { x: ball.vel.x, y: ball.vel.y, z: ball.vel.z }, 0);
+    demoManager.recordTargetSpawned(ball.id, { x: ball.pos.x, y: ball.pos.y, z: ball.pos.z }, { x: ball.vel.x, y: ball.vel.y, z: ball.vel.z }, ball.variant);
+    // Keyframe callbacks for demo accuracy
+    ball.onBounce = (pos, vel) => {
+      demoManager!.recordTargetBounce(ball.id, { x: pos.x, y: pos.y, z: pos.z }, { x: vel.x, y: vel.y, z: vel.z });
+    };
+    ball.onPeak = (pos, vel) => {
+      demoManager!.recordTargetPeak(ball.id, { x: pos.x, y: pos.y, z: pos.z }, { x: vel.x, y: vel.y, z: vel.z });
+    };
   }
 }
 
 function updateBalls(dt: number): void {
+  if (demoManager?.isPlaying) {
+    // During playback: only update playback balls, skip live game balls and spawning
+    const playbackBallSet = new Set(playbackBallById.values());
+    let frozenCount = 0;
+    for (let i = balls.length - 1; i >= 0; i--) {
+      const b = balls[i];
+      if (playbackBallSet.has(b)) {
+        b.update(dt, terrain, player.pos);
+        // Detect frozen balls (near-zero velocity, not dead, not on ground resting)
+        if (!b.dead && b.vel.lengthSq() < 0.01) {
+          frozenCount++;
+        }
+      }
+      if ((b as any).disposed) {
+        balls.splice(i, 1);
+      }
+    }
+    if (frozenCount > 0) {
+      playbackFrozenWarnCounter++;
+      if (playbackFrozenWarnCounter <= 5 || playbackFrozenWarnCounter % 60 === 0) {
+        console.warn(`[DemoPlayback] ${frozenCount} ball(s) frozen midair (vel~0). Total playback balls: ${playbackBallSet.size}`);
+      }
+    } else {
+      playbackFrozenWarnCounter = 0;
+    }
+    return;
+  }
+
   ballTimer += dt;
   if (ballTimer >= BALL_SPAWN_INTERVAL) {
     ballTimer = 0;
@@ -645,6 +723,20 @@ function updateBalls(dt: number): void {
     // Only remove ball when trails have fully faded out
     if ((b as any).disposed) {
       balls.splice(i, 1);
+    }
+  }
+
+  // Periodic ball position snapshot for demo recording (every 0.5s)
+  // This ensures clip snapshots for pre-existing balls are never stale
+  if (demoManager?.isRecording) {
+    ballSnapshotTimer += dt;
+    if (ballSnapshotTimer >= 0.5) {
+      ballSnapshotTimer = 0;
+      for (const b of balls) {
+        if (!b.dead) {
+          demoManager.recordTargetPeak(b.id, { x: b.pos.x, y: b.pos.y, z: b.pos.z }, { x: b.vel.x, y: b.vel.y, z: b.vel.z });
+        }
+      }
     }
   }
 }
@@ -763,10 +855,16 @@ function loop(time: number): void {
   }
   // Update demo system (zero-overhead when idle)
   if (demoManager) demoManager.update(dt);
+  const wasFrozen = player.inputFrozen;
+  const shouldFreeze = demoManager?.isPlaying ?? false;
+  if (shouldFreeze && !wasFrozen) player.freezeInput();
+  else if (!shouldFreeze && wasFrozen) player.unfreezeInput();
 
   updateBalls(dt);
-  updateRockets(dt);
-  updateDiscs(dt);
+  if (!demoManager?.isPlaying) {
+    updateRockets(dt);
+    updateDiscs(dt);
+  }
 
   // Update playback rockets (deterministic reconstruction from events)
   for (let i = playbackRockets.length - 1; i >= 0; i--) {
@@ -945,7 +1043,7 @@ async function init(): Promise<void> {
           r.pos.set(ev.posX, ev.posY, ev.posZ);
           r.vel.set(ev.velX, ev.velY, ev.velZ);
         }
-      } else if (ev.eventType === ProjectileEventType.Destroyed || ev.eventType === ProjectileEventType.Hit) {
+      } else if (ev.eventType === ProjectileEventType.Hit) {
         // Force explode the rocket at the recorded position
         const r = playbackRocketById.get(ev.projectileId);
         if (r && !r.exploded) {
@@ -953,12 +1051,66 @@ async function init(): Promise<void> {
           r.explode();
           // Spawn explosion effect at the recorded position, using rocket age for visual scale
           explosions.push(new Explosion(scene, r.pos, false, r.age));
+          // Debug: compare projectile hit position with ball position
+          if (ev.targetId && ev.targetId !== 0xFFFF) {
+            const ball = playbackBallById.get(ev.targetId);
+            if (ball) {
+              const dist = r.pos.distanceTo(ball.pos);
+              console.log(`[DemoPlayback] Projectile Hit: projPos=(${ev.posX.toFixed(1)},${ev.posY.toFixed(1)},${ev.posZ.toFixed(1)}) ballPos=(${ball.pos.x.toFixed(1)},${ball.pos.y.toFixed(1)},${ball.pos.z.toFixed(1)}) dist=${dist.toFixed(1)}m`);
+            } else {
+              console.log(`[DemoPlayback] Projectile Hit: projPos=(${ev.posX.toFixed(1)},${ev.posY.toFixed(1)},${ev.posZ.toFixed(1)}) ball ${ev.targetId} not found`);
+            }
+          }
+        }
+      } else if (ev.eventType === ProjectileEventType.Destroyed) {
+        // Remove rocket without explosion (e.g. timeout)
+        const r = playbackRocketById.get(ev.projectileId);
+        if (r && !r.exploded) {
+          r.pos.set(ev.posX, ev.posY, ev.posZ);
+          r.explode();
+        }
+      }
+    }
+
+    // Handle target events from demo playback: spawn/move/destroy balls
+    for (const ev of events.targets) {
+      if (ev.eventType === TargetEventType.Spawned) {
+        const ball = new Ball(scene, terrain, ev.targetType as 0 | 1 | 2);
+        ball.pos.set(ev.posX, ev.posY, ev.posZ);
+        ball.vel.set(ev.velX, ev.velY, ev.velZ);
+        playbackBallById.set(ev.targetId, ball);
+        balls.push(ball);
+      } else if (ev.eventType === TargetEventType.Bounce) {
+        // Snap ball to recorded bounce keyframe to prevent physics drift
+        const ball = playbackBallById.get(ev.targetId);
+        if (ball && !ball.dead) {
+          ball.pos.set(ev.posX, ev.posY, ev.posZ);
+          ball.vel.set(ev.velX, ev.velY, ev.velZ);
+        }
+      } else if (ev.eventType === TargetEventType.StateChanged) {
+        // Peak keyframe — snap position and velocity to correct trajectory
+        const ball = playbackBallById.get(ev.targetId);
+        if (ball && !ball.dead) {
+          ball.pos.set(ev.posX, ev.posY, ev.posZ);
+          ball.vel.set(ev.velX, ev.velY, ev.velZ);
+        }
+      } else if (ev.eventType === TargetEventType.Hit) {
+        const ball = playbackBallById.get(ev.targetId);
+        if (ball && !ball.dead) {
+          // Snap ball to recorded hit position to ensure explosion aligns
+          ball.pos.set(ev.posX, ev.posY, ev.posZ);
+          ball.vel.set(ev.velX, ev.velY, ev.velZ);
+          ball.takeDamage();
+        }
+      } else if (ev.eventType === TargetEventType.Destroyed) {
+        const ball = playbackBallById.get(ev.targetId);
+        if (ball && !ball.dead) {
+          ball.dead = true;
+          debrisList.push(new BallDebris(scene, terrain, ball.pos.x, ball.pos.y, ball.pos.z, ball.color, ball.scale));
         }
       }
     }
   };
-
-  // Apply playback state to the local player (camera follows replay)
   demoManager.onPlaybackState = (state) => {
     if (demoManager?.isPlaying) {
       player.pos.set(state.posX, state.posY, state.posZ);
@@ -975,12 +1127,52 @@ async function init(): Promise<void> {
     }
     playbackRockets.length = 0;
     playbackRocketById.clear();
+    for (const ball of playbackBallById.values()) {
+      ball.dispose();
+      const idx = balls.indexOf(ball);
+      if (idx >= 0) balls.splice(idx, 1);
+    }
+    playbackBallById.clear();
     // Show overlay menu so user can replay or pick another clip
     if (document.pointerLockElement === renderer.domElement) {
       document.exitPointerLock();
     }
     overlay.style.display = 'flex';
     demoManager?.fetchCoolShotsFromServer();
+    // Resume recording for new cool shots
+    demoManager?.startRecording();
+  };
+
+  // Clear live game objects when playback starts so they don't hang frozen in the scene
+  demoManager.onPlaybackStart = () => {
+    // Dispose all non-playback balls (live game balls)
+    const playbackBallSet = new Set(playbackBallById.values());
+    for (let i = balls.length - 1; i >= 0; i--) {
+      const b = balls[i];
+      if (!playbackBallSet.has(b)) {
+        b.dispose();
+        balls.splice(i, 1);
+      }
+    }
+    // Clear live rockets
+    for (const r of rockets) {
+      r.dispose();
+    }
+    rockets.length = 0;
+    // Clear live discs
+    for (const d of discs) {
+      d.dispose();
+    }
+    discs.length = 0;
+    // Clear explosions, implosions, debris
+    for (const e of explosions) e.dispose();
+    explosions.length = 0;
+    for (const e of implosions) e.dispose();
+    implosions.length = 0;
+    for (const d of debrisList) d.dispose();
+    debrisList.length = 0;
+    for (const d of playerDebrisList) d.dispose();
+    playerDebrisList.length = 0;
   };
 
   // Clear playback rockets on seek so they don't get orphaned
@@ -990,6 +1182,12 @@ async function init(): Promise<void> {
     }
     playbackRockets.length = 0;
     playbackRocketById.clear();
+    for (const ball of playbackBallById.values()) {
+      ball.dispose();
+      const idx = balls.indexOf(ball);
+      if (idx >= 0) balls.splice(idx, 1);
+    }
+    playbackBallById.clear();
   };
 
   hud = new HUD();
@@ -1296,17 +1494,32 @@ document.addEventListener('pointerlockchange', () => {
   } else if (gameStarted && unlockByEscape) {
     // Only show overlay when unlocked by pressing ESC, not alt-tab
     overlay.style.display = 'flex';
-    // Fetch cool shots from server when overlay opens
+    // Render local cool shots immediately, then fetch from server
+    demoManager?.onCoolShotsChanged?.(demoManager.getCoolShots());
     demoManager?.fetchCoolShotsFromServer();
   }
 });
 
 document.addEventListener('keydown', (e) => {
+  // During demo playback, only allow ESC to stop the demo
+  if (demoManager?.isPlaying && e.code !== 'Escape' && e.code !== 'F6') {
+    return;
+  }
   if (e.code === 'Escape' && gameStarted) {
+    // If demo is playing, stop it entirely
+    if (demoManager?.isPlaying) {
+      demoManager.stopPlayback();
+      return;
+    }
     if (document.pointerLockElement === renderer.domElement) {
       // Pointer is locked, release it and mark as ESC unlock
       unlockByEscape = true;
       document.exitPointerLock();
+      // Show overlay immediately (browser may have already fired pointerlockchange)
+      overlay.style.display = 'flex';
+      // Render local cool shots immediately, then fetch from server
+      demoManager?.onCoolShotsChanged?.(demoManager.getCoolShots());
+      demoManager?.fetchCoolShotsFromServer();
     } else if (overlay.style.display === 'flex' && document.pointerLockElement !== renderer.domElement) {
       // Overlay is visible and pointer is unlocked, hide it and re-lock
       overlay.style.display = 'none';
@@ -1326,15 +1539,18 @@ document.addEventListener('keydown', (e) => {
   if (e.code === 'F6') {
     if (demoManager) demoManager.toggleUI();
   }
-  // Space = play/pause during demo playback (also works when paused)
-  if (e.code === 'Space' && demoManager?.isLoadedForPlayback) {
+  // Space = play/pause only when demo UI is visible
+  if (e.code === 'Space' && demoManager?.isLoadedForPlayback && demoManager?.isUIVisible) {
     e.preventDefault();
     demoManager.togglePlayPause();
   }
 });
 
-// Clicking overlay or canvas re-locks.
-document.getElementById('start-btn')!.addEventListener('click', requestLock);
+// Clicking overlay or canvas re-locks (but not during demo playback).
+document.getElementById('start-btn')!.addEventListener('click', () => {
+  if (demoManager?.isPlaying) { demoManager.stopPlayback(); return; }
+  requestLock();
+});
 pixelToggleBtn.addEventListener('click', () => {
   pixelated = !pixelated;
   localStorage.setItem('fps-pixelated', pixelated.toString());
@@ -1356,6 +1572,7 @@ postproToggleBtn.addEventListener('click', () => {
   postproToggleBtn.textContent = postproEnabled ? 'POST-PROCESSING: ON' : 'POST-PROCESSING: OFF';
 });
 renderer.domElement.addEventListener('click', () => {
+  if (demoManager?.isPlaying) return; // ignore during playback
   if (document.pointerLockElement !== renderer.domElement) requestLock();
 });
 
@@ -1365,6 +1582,9 @@ let pendingServerSnapshot: ((players: any[], timestamp: number) => void) | null 
 // Auto-start: init immediately, overlay stays hidden until ESC is pressed
 init().then(() => {
   gameStarted = true;
+
+  // Fetch cool shots from server so they're shown in the initial overlay
+  demoManager?.fetchCoolShotsFromServer();
 
   // Register snapshot handler after network manager is created
   if (networkManager) {
