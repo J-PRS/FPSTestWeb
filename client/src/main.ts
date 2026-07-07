@@ -254,6 +254,8 @@ const playbackRockets: Rocket[] = [];
 const playbackRocketById = new Map<number, Rocket>();
 const playbackBallById = new Map<number, Ball>();
 let playbackFrozenWarnCounter = 0;
+let seekReconstructing = false;
+const playbackRocketOrigin = new Map<number, THREE.Vector3>();
 
 // Track recent explosions for death impulse calculation
 interface ExplosionInfo {
@@ -682,6 +684,22 @@ function spawnBall(): void {
   }
 }
 
+// Snapshot existing alive balls into the demo recording — needed when recording
+// starts after balls are already in the scene (they have no Spawned event yet).
+function snapshotExistingBallsForRecording(): void {
+  if (!demoManager?.isRecording) return;
+  for (const ball of balls) {
+    if (ball.dead) continue;
+    demoManager.recordTargetSpawned(ball.id, { x: ball.pos.x, y: ball.pos.y, z: ball.pos.z }, { x: ball.vel.x, y: ball.vel.y, z: ball.vel.z }, ball.variant);
+    ball.onBounce = (pos, vel) => {
+      demoManager!.recordTargetBounce(ball.id, { x: pos.x, y: pos.y, z: pos.z }, { x: vel.x, y: vel.y, z: vel.z });
+    };
+    ball.onPeak = (pos, vel) => {
+      demoManager!.recordTargetPeak(ball.id, { x: pos.x, y: pos.y, z: pos.z }, { x: vel.x, y: vel.y, z: vel.z });
+    };
+  }
+}
+
 function updateBalls(dt: number): void {
   if (demoManager?.isPlaying) {
     // During playback: only update playback balls, skip live game balls and spawning
@@ -860,45 +878,50 @@ function loop(time: number): void {
   if (shouldFreeze && !wasFrozen) player.freezeInput();
   else if (!shouldFreeze && wasFrozen) player.unfreezeInput();
 
-  updateBalls(dt);
+  const demoPaused = demoManager?.isPaused ?? false;
+  if (!demoPaused) updateBalls(dt);
   if (!demoManager?.isPlaying) {
     updateRockets(dt);
     updateDiscs(dt);
   }
 
   // Update playback rockets (deterministic reconstruction from events)
-  for (let i = playbackRockets.length - 1; i >= 0; i--) {
-    const r = playbackRockets[i];
-    r.update(dt, terrain);
-    if (r.dead) {
-      r.dispose();
-      playbackRockets.splice(i, 1);
-      // Remove from map if present
-      for (const [id, rocket] of playbackRocketById) {
-        if (rocket === r) {
-          playbackRocketById.delete(id);
-          break;
+  if (!demoPaused) {
+    for (let i = playbackRockets.length - 1; i >= 0; i--) {
+      const r = playbackRockets[i];
+      r.update(dt, terrain);
+      if (r.dead) {
+        r.dispose();
+        playbackRockets.splice(i, 1);
+        // Remove from map if present
+        for (const [id, rocket] of playbackRocketById) {
+          if (rocket === r) {
+            playbackRocketById.delete(id);
+            break;
+          }
         }
       }
     }
   }
 
-  effects.update(dt);
-  for (let i = debrisList.length - 1; i >= 0; i--) {
-    debrisList[i].update(dt);
-    if (debrisList[i].dead) { debrisList[i].dispose(); debrisList.splice(i, 1); }
-  }
-  for (let i = playerDebrisList.length - 1; i >= 0; i--) {
-    playerDebrisList[i].update(dt);
-    if (playerDebrisList[i].dead) { playerDebrisList[i].dispose(); playerDebrisList.splice(i, 1); }
-  }
-  for (let i = explosions.length - 1; i >= 0; i--) {
-    explosions[i].update(dt);
-    if (explosions[i].dead) { explosions[i].dispose(); explosions.splice(i, 1); }
-  }
-  for (let i = implosions.length - 1; i >= 0; i--) {
-    implosions[i].update(dt);
-    if (implosions[i].dead) { implosions[i].dispose(); implosions.splice(i, 1); }
+  if (!demoPaused) {
+    effects.update(dt);
+    for (let i = debrisList.length - 1; i >= 0; i--) {
+      debrisList[i].update(dt);
+      if (debrisList[i].dead) { debrisList[i].dispose(); debrisList.splice(i, 1); }
+    }
+    for (let i = playerDebrisList.length - 1; i >= 0; i--) {
+      playerDebrisList[i].update(dt);
+      if (playerDebrisList[i].dead) { playerDebrisList[i].dispose(); playerDebrisList.splice(i, 1); }
+    }
+    for (let i = explosions.length - 1; i >= 0; i--) {
+      explosions[i].update(dt);
+      if (explosions[i].dead) { explosions[i].dispose(); explosions.splice(i, 1); }
+    }
+    for (let i = implosions.length - 1; i >= 0; i--) {
+      implosions[i].update(dt);
+      if (implosions[i].dead) { implosions[i].dispose(); implosions.splice(i, 1); }
+    }
   }
   hud.update(dt, player, networkManager.getPing(), networkManager.getPacketLoss(), networkManager.getJitter());
   healthBarSystem.update(dt, networkManager.getPlayers(), remotePlayers as any, balls);
@@ -1001,31 +1024,194 @@ async function init(): Promise<void> {
   );
 
   // Wire cool shots panel
-  const coolShotsList = document.getElementById('cool-shots-list')!;
+  const coolShotsTop = document.getElementById('cool-shots-top')!;
+  const coolShotsRecent = document.getElementById('cool-shots-recent')!;
+  let lastCoolShots: any[] = [];
+  const timeAgo = (ts: number): string => {
+    const secs = Math.floor((Date.now() - ts) / 1000);
+    if (secs < 60) return `${secs}s ago`;
+    const mins = Math.floor(secs / 60);
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    const days = Math.floor(hrs / 24);
+    return `${days}d ago`;
+  };
+  const renderShotItem = (container: HTMLElement, shot: any, rank: number) => {
+    const item = document.createElement('div');
+    const isRecent = Date.now() - shot.timestamp < 60000;
+    item.className = isRecent ? 'cool-shot-item recent' : 'cool-shot-item';
+    item.innerHTML = `<span class="rank">${rank}</span><span class="lifetime">${shot.projectileLifetime.toFixed(2)}s</span><span class="time-ago">${timeAgo(shot.timestamp)}</span>`;
+    item.onclick = () => {
+      demoManager?.playCoolShotById(shot.id);
+      overlay.style.display = 'none';
+      requestLock();
+    };
+    container.appendChild(item);
+  };
   const renderCoolShots = (shots: any[]) => {
-    coolShotsList.innerHTML = '';
+    lastCoolShots = shots;
+    coolShotsTop.innerHTML = '';
+    coolShotsRecent.innerHTML = '';
     if (shots.length === 0) {
-      coolShotsList.innerHTML = '<div class="cool-shot-item empty">No cool shots yet</div>';
+      coolShotsTop.innerHTML = '<div class="cool-shot-item empty">No cool shots yet</div>';
+      coolShotsRecent.innerHTML = '<div class="cool-shot-item empty">No recent shots</div>';
       return;
     }
-    shots.forEach((shot, i) => {
-      const item = document.createElement('div');
-      item.className = 'cool-shot-item';
-      const timeStr = new Date(shot.timestamp).toLocaleTimeString().slice(0, 5);
-      item.innerHTML = `<span class="rank">${i + 1}</span><span class="lifetime">${shot.projectileLifetime.toFixed(2)}s</span><span class="time">${timeStr}</span>`;
-      item.onclick = () => {
-        demoManager?.playCoolShot(i);
-        overlay.style.display = 'none';
-        requestLock();
-      };
-      coolShotsList.appendChild(item);
-    });
+    // Top 10 by lifetime (already sorted descending by lifetime)
+    const top10 = shots.slice(0, 10);
+    top10.forEach((shot, i) => renderShotItem(coolShotsTop, shot, i + 1));
+
+    // Recent 10 by timestamp (most recent first)
+    const recent10 = [...shots].sort((a, b) => b.timestamp - a.timestamp).slice(0, 10);
+    recent10.forEach((shot, i) => renderShotItem(coolShotsRecent, shot, i + 1));
   };
   demoManager.onCoolShotsChanged = renderCoolShots;
+  // Refresh "time ago" labels every second
+  setInterval(() => { if (lastCoolShots.length > 0) renderCoolShots(lastCoolShots); }, 1000);
 
   // ---- Playback projectile reconstruction ----
   // Handle projectile events from demo playback: spawn rockets on Fired, explode on Destroyed
   demoManager.onPlaybackEvent = (events: { projectiles: any[], targets: any[] }) => {
+    if (seekReconstructing) {
+      // Seek reconstruction: re-create all in-flight objects at their state as of the seek time.
+      // Skip objects that died before the seek time. Fast-forward in-flight objects to seek time.
+      // Suppress all effects (explosions, debris, damage numbers).
+      const seekTime = demoManager!.currentTime;
+
+      // Pre-scan: find projectile IDs with terminal events (Hit/Destroyed) — these are dead at seek time
+      const deadProjectileIds = new Set<number>();
+      for (const ev of events.projectiles) {
+        if (ev.eventType === ProjectileEventType.Hit || ev.eventType === ProjectileEventType.Destroyed) {
+          deadProjectileIds.add(ev.projectileId);
+        }
+      }
+
+      // Pre-scan: find ball IDs with Destroyed events — these are dead at seek time
+      const deadBallIds = new Set<number>();
+      for (const ev of events.targets) {
+        if (ev.eventType === TargetEventType.Destroyed) {
+          deadBallIds.add(ev.targetId);
+        }
+      }
+
+      const FF_DT = 1 / 60;
+
+      // Process projectile events in order, skipping dead ones and fast-forwarding in-flight ones
+      for (const ev of events.projectiles) {
+        if (deadProjectileIds.has(ev.projectileId)) {
+          // For Hit events on dead projectiles, spawn explosion fast-forwarded to seek time
+          if (ev.eventType === ProjectileEventType.Hit) {
+            const hitPos = new THREE.Vector3(ev.posX, ev.posY, ev.posZ);
+            const exp = new Explosion(scene, hitPos, false, 0);
+            explosions.push(exp);
+            // Fast-forward explosion visual to seek time
+            const ffTime = seekTime - ev.timestamp;
+            if (ffTime > 0) {
+              const FF_EXP = 1 / 60;
+              let rem = ffTime;
+              while (rem > 0 && !exp.dead) {
+                const step = Math.min(FF_EXP, rem);
+                exp.update(step);
+                rem -= step;
+              }
+            }
+          }
+          continue;
+        }
+
+        if (ev.eventType === ProjectileEventType.Fired) {
+          const origin = new THREE.Vector3(ev.posX, ev.posY, ev.posZ);
+          const velocity = new THREE.Vector3(ev.velX, ev.velY, ev.velZ);
+          const r = new Rocket(scene, origin, new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 0, 0));
+          r.isRemote = true;
+          r.vel.copy(velocity);
+          playbackRockets.push(r);
+          playbackRocketById.set(ev.projectileId, r);
+          // Fast-forward from fired time to seek time
+          const ffTime = seekTime - ev.timestamp;
+          let remaining = ffTime;
+          while (remaining > 0 && !r.dead && !r.exploded) {
+            const step = Math.min(FF_DT, remaining);
+            r.update(step, terrain);
+            remaining -= step;
+          }
+        } else if (ev.eventType === ProjectileEventType.Bounce) {
+          const r = playbackRocketById.get(ev.projectileId);
+          if (r && !r.exploded) {
+            r.pos.set(ev.posX, ev.posY, ev.posZ);
+            r.vel.set(ev.velX, ev.velY, ev.velZ);
+            // Fast-forward from bounce time to seek time
+            const ffTime = seekTime - ev.timestamp;
+            let remaining = ffTime;
+            while (remaining > 0 && !r.dead && !r.exploded) {
+              const step = Math.min(FF_DT, remaining);
+              r.update(step, terrain);
+              remaining -= step;
+            }
+          }
+        }
+      }
+
+      // Process target events in order, skipping dead ones and fast-forwarding in-flight ones
+      for (const ev of events.targets) {
+        if (deadBallIds.has(ev.targetId)) {
+          // For Destroyed events on dead balls, spawn debris fast-forwarded to seek time
+          if (ev.eventType === TargetEventType.Destroyed) {
+            const debris = new BallDebris(scene, terrain, ev.posX, ev.posY, ev.posZ, new THREE.Color(0xffffff), 1);
+            debrisList.push(debris);
+            // Fast-forward debris to seek time
+            const ffTime = seekTime - ev.timestamp;
+            if (ffTime > 0) {
+              let rem = ffTime;
+              while (rem > 0 && !debris.dead) {
+                const step = Math.min(FF_DT, rem);
+                debris.update(step);
+                rem -= step;
+              }
+            }
+          }
+          continue;
+        }
+
+        if (ev.eventType === TargetEventType.Spawned) {
+          const ball = new Ball(scene, terrain, ev.targetType as 0 | 1 | 2);
+          ball.pos.set(ev.posX, ev.posY, ev.posZ);
+          ball.vel.set(ev.velX, ev.velY, ev.velZ);
+          playbackBallById.set(ev.targetId, ball);
+          balls.push(ball);
+          // Sync mesh position immediately (Ball constructor doesn't copy pos to mesh.position)
+          ball.update(0, terrain, player.pos);
+          // Fast-forward from spawn time to seek time
+          const ffTime = seekTime - ev.timestamp;
+          let remaining = ffTime;
+          while (remaining > 0 && !ball.dead) {
+            const step = Math.min(FF_DT, remaining);
+            ball.update(step, terrain, player.pos);
+            remaining -= step;
+          }
+        } else if (ev.eventType === TargetEventType.Bounce || ev.eventType === TargetEventType.StateChanged) {
+          const ball = playbackBallById.get(ev.targetId);
+          if (ball && !ball.dead) {
+            ball.pos.set(ev.posX, ev.posY, ev.posZ);
+            ball.vel.set(ev.velX, ev.velY, ev.velZ);
+            // Fast-forward from this keyframe to seek time
+            const ffTime = seekTime - ev.timestamp;
+            let remaining = ffTime;
+            while (remaining > 0 && !ball.dead) {
+              const step = Math.min(FF_DT, remaining);
+              ball.update(step, terrain, player.pos);
+              remaining -= step;
+            }
+          }
+        }
+      }
+
+      seekReconstructing = false;
+      return;
+    }
+
+    // Normal playback event processing (forward playback, not seeking)
     for (const ev of events.projectiles) {
       if (ev.eventType === ProjectileEventType.Fired) {
         // Reconstruct rocket from recorded position + velocity
@@ -1036,6 +1222,7 @@ async function init(): Promise<void> {
         r.vel.copy(velocity);
         playbackRockets.push(r);
         playbackRocketById.set(ev.projectileId, r);
+        playbackRocketOrigin.set(ev.projectileId, origin.clone());
       } else if (ev.eventType === ProjectileEventType.Bounce) {
         // Update rocket velocity to match recorded bounce
         const r = playbackRocketById.get(ev.projectileId);
@@ -1051,12 +1238,24 @@ async function init(): Promise<void> {
           r.explode();
           // Spawn explosion effect at the recorded position, using rocket age for visual scale
           explosions.push(new Explosion(scene, r.pos, false, r.age));
+          // Compute frag message from playback data
+          const origin = playbackRocketOrigin.get(ev.projectileId);
+          if (origin) {
+            const dist = r.pos.distanceTo(origin);
+            const air = r.age;
+            // Approximate accuracy: use hitRadius at impact age as proxy
+            const accRaw = r.hitRadius;
+            let acc = 1 + Math.max(0, 9 - (accRaw / HIT_MAX * 9));
+            const score = Math.round(acc * dist * air);
+            showFragMessage(`${acc.toFixed(1)} · ${Math.round(dist)} · ${air.toFixed(2)}s\n${score}`);
+            hud.showHitMarker();
+          }
           // Debug: compare projectile hit position with ball position
           if (ev.targetId && ev.targetId !== 0xFFFF) {
             const ball = playbackBallById.get(ev.targetId);
             if (ball) {
-              const dist = r.pos.distanceTo(ball.pos);
-              console.log(`[DemoPlayback] Projectile Hit: projPos=(${ev.posX.toFixed(1)},${ev.posY.toFixed(1)},${ev.posZ.toFixed(1)}) ballPos=(${ball.pos.x.toFixed(1)},${ball.pos.y.toFixed(1)},${ball.pos.z.toFixed(1)}) dist=${dist.toFixed(1)}m`);
+              const distBall = r.pos.distanceTo(ball.pos);
+              console.log(`[DemoPlayback] Projectile Hit: projPos=(${ev.posX.toFixed(1)},${ev.posY.toFixed(1)},${ev.posZ.toFixed(1)}) ballPos=(${ball.pos.x.toFixed(1)},${ball.pos.y.toFixed(1)},${ball.pos.z.toFixed(1)}) dist=${distBall.toFixed(1)}m`);
             } else {
               console.log(`[DemoPlayback] Projectile Hit: projPos=(${ev.posX.toFixed(1)},${ev.posY.toFixed(1)},${ev.posZ.toFixed(1)}) ball ${ev.targetId} not found`);
             }
@@ -1080,6 +1279,8 @@ async function init(): Promise<void> {
         ball.vel.set(ev.velX, ev.velY, ev.velZ);
         playbackBallById.set(ev.targetId, ball);
         balls.push(ball);
+        // Sync mesh position immediately (Ball constructor doesn't copy pos to mesh.position)
+        ball.update(0, terrain, player.pos);
       } else if (ev.eventType === TargetEventType.Bounce) {
         // Snap ball to recorded bounce keyframe to prevent physics drift
         const ball = playbackBallById.get(ev.targetId);
@@ -1101,6 +1302,7 @@ async function init(): Promise<void> {
           ball.pos.set(ev.posX, ev.posY, ev.posZ);
           ball.vel.set(ev.velX, ev.velY, ev.velZ);
           ball.takeDamage();
+          damageNumberManager.spawn(ball.pos, 1, '#ffffff', camera);
         }
       } else if (ev.eventType === TargetEventType.Destroyed) {
         const ball = playbackBallById.get(ev.targetId);
@@ -1120,27 +1322,20 @@ async function init(): Promise<void> {
     }
   };
 
-  // Cleanup playback rockets when playback ends, show menu for replay
+  // Cleanup playback rockets when playback ends (demo pauses at end)
   demoManager.onPlaybackEnd = () => {
     for (const r of playbackRockets) {
       r.dispose();
     }
     playbackRockets.length = 0;
     playbackRocketById.clear();
+    playbackRocketOrigin.clear();
     for (const ball of playbackBallById.values()) {
       ball.dispose();
       const idx = balls.indexOf(ball);
       if (idx >= 0) balls.splice(idx, 1);
     }
     playbackBallById.clear();
-    // Show overlay menu so user can replay or pick another clip
-    if (document.pointerLockElement === renderer.domElement) {
-      document.exitPointerLock();
-    }
-    overlay.style.display = 'flex';
-    demoManager?.fetchCoolShotsFromServer();
-    // Resume recording for new cool shots
-    demoManager?.startRecording();
   };
 
   // Clear live game objects when playback starts so they don't hang frozen in the scene
@@ -1177,17 +1372,26 @@ async function init(): Promise<void> {
 
   // Clear playback rockets on seek so they don't get orphaned
   demoManager.onPlaybackSeek = () => {
+    seekReconstructing = true;
     for (const r of playbackRockets) {
       r.dispose();
     }
     playbackRockets.length = 0;
     playbackRocketById.clear();
+    playbackRocketOrigin.clear();
     for (const ball of playbackBallById.values()) {
       ball.dispose();
       const idx = balls.indexOf(ball);
       if (idx >= 0) balls.splice(idx, 1);
     }
     playbackBallById.clear();
+    // Clear debris, explosions, implosions so they can be reconstructed from events
+    for (const d of debrisList) { d.dispose(); }
+    debrisList.length = 0;
+    for (const e of explosions) { e.dispose(); }
+    explosions.length = 0;
+    for (const i of implosions) { i.dispose(); }
+    implosions.length = 0;
   };
 
   hud = new HUD();
@@ -1460,6 +1664,7 @@ async function init(): Promise<void> {
 
   // Auto-start demo recording so cool shots are captured seamlessly
   demoManager?.startRecording();
+  snapshotExistingBallsForRecording();
   markTime('initComplete');
 
   printLoadSummary();
@@ -1501,9 +1706,33 @@ document.addEventListener('pointerlockchange', () => {
 });
 
 document.addEventListener('keydown', (e) => {
-  // During demo playback, only allow ESC to stop the demo
-  if (demoManager?.isPlaying && e.code !== 'Escape' && e.code !== 'F6') {
+  // During demo playback, only allow ESC, F6, and arrow keys
+  if (demoManager?.isPlaying && e.code !== 'Escape' && e.code !== 'F6' &&
+      e.code !== 'ArrowUp' && e.code !== 'ArrowDown' && e.code !== 'ArrowLeft' && e.code !== 'ArrowRight') {
     return;
+  }
+  // Demo playback shortcuts
+  if (demoManager?.isPlaying) {
+    if (e.code === 'ArrowUp') {
+      e.preventDefault();
+      demoManager.togglePlayPause();
+      return;
+    }
+    if (e.code === 'ArrowDown') {
+      e.preventDefault();
+      demoManager.restart();
+      return;
+    }
+    if (e.code === 'ArrowLeft') {
+      e.preventDefault();
+      demoManager.seekBy(-2);
+      return;
+    }
+    if (e.code === 'ArrowRight') {
+      e.preventDefault();
+      demoManager.seekBy(2);
+      return;
+    }
   }
   if (e.code === 'Escape' && gameStarted) {
     // If demo is playing, stop it entirely
