@@ -1195,6 +1195,8 @@ async function init(): Promise<void> {
           if (ball && !ball.dead) {
             ball.pos.set(ev.posX, ev.posY, ev.posZ);
             ball.vel.set(ev.velX, ev.velY, ev.velZ);
+            // Sync mesh position after keyframe update
+            ball.update(0, terrain, player.pos);
             // Fast-forward from this keyframe to seek time
             const ffTime = seekTime - ev.timestamp;
             let remaining = ffTime;
@@ -1287,6 +1289,7 @@ async function init(): Promise<void> {
         if (ball && !ball.dead) {
           ball.pos.set(ev.posX, ev.posY, ev.posZ);
           ball.vel.set(ev.velX, ev.velY, ev.velZ);
+          ball.update(0, terrain, player.pos);
         }
       } else if (ev.eventType === TargetEventType.StateChanged) {
         // Peak keyframe — snap position and velocity to correct trajectory
@@ -1294,6 +1297,7 @@ async function init(): Promise<void> {
         if (ball && !ball.dead) {
           ball.pos.set(ev.posX, ev.posY, ev.posZ);
           ball.vel.set(ev.velX, ev.velY, ev.velZ);
+          ball.update(0, terrain, player.pos);
         }
       } else if (ev.eventType === TargetEventType.Hit) {
         const ball = playbackBallById.get(ev.targetId);
@@ -1302,6 +1306,7 @@ async function init(): Promise<void> {
           ball.pos.set(ev.posX, ev.posY, ev.posZ);
           ball.vel.set(ev.velX, ev.velY, ev.velZ);
           ball.takeDamage();
+          ball.update(0, terrain, player.pos);
           damageNumberManager.spawn(ball.pos, 1, '#ffffff', camera);
         }
       } else if (ev.eventType === TargetEventType.Destroyed) {
@@ -1322,8 +1327,14 @@ async function init(): Promise<void> {
     }
   };
 
-  // Cleanup playback rockets when playback ends (demo pauses at end)
+  // Demo playback ends — just pause, keep objects visible (frozen)
   demoManager.onPlaybackEnd = () => {
+    // No cleanup — objects stay visible as if user pressed pause.
+    // Cleanup happens when user explicitly stops playback via ESC.
+  };
+
+  // User explicitly stops playback (ESC, UI stop button) — full cleanup
+  demoManager.onPlaybackStop = () => {
     for (const r of playbackRockets) {
       r.dispose();
     }
@@ -1336,6 +1347,23 @@ async function init(): Promise<void> {
       if (idx >= 0) balls.splice(idx, 1);
     }
     playbackBallById.clear();
+    for (const d of debrisList) { d.dispose(); }
+    debrisList.length = 0;
+    for (const e of explosions) { e.dispose(); }
+    explosions.length = 0;
+    for (const i of implosions) { i.dispose(); }
+    implosions.length = 0;
+    for (const d of playerDebrisList) { d.dispose(); }
+    playerDebrisList.length = 0;
+    // Show overlay menu so user can replay or pick another clip
+    if (document.pointerLockElement === renderer.domElement) {
+      document.exitPointerLock();
+    }
+    overlay.style.display = 'flex';
+    demoManager?.fetchCoolShotsFromServer();
+    // Resume recording for new cool shots
+    demoManager?.startRecording();
+    snapshotExistingBallsForRecording();
   };
 
   // Clear live game objects when playback starts so they don't hang frozen in the scene
@@ -1392,6 +1420,8 @@ async function init(): Promise<void> {
     explosions.length = 0;
     for (const i of implosions) { i.dispose(); }
     implosions.length = 0;
+    for (const d of playerDebrisList) { d.dispose(); }
+    playerDebrisList.length = 0;
   };
 
   hud = new HUD();

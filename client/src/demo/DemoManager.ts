@@ -46,6 +46,7 @@ export class DemoManager {
   onPlaybackState?: (state: PlaybackState) => void;
   onPlaybackEvent?: (events: { projectiles: ProjectileEvent[], targets: TargetEvent[] }) => void;
   onPlaybackEnd?: () => void;
+  onPlaybackStop?: () => void;
   onPlaybackSeek?: () => void;
   onPlaybackStart?: () => void;
 
@@ -107,7 +108,7 @@ export class DemoManager {
         this.ui.setPlaying(false);
         this.ui.hide();
         this.uiVisible = false;
-        this.onPlaybackEnd?.();
+        this.onPlaybackStop?.();
       },
       onSave: () => {
         this.saveDemo();
@@ -183,7 +184,7 @@ export class DemoManager {
     this.player.stop();
     this.mode = 'idle';
     this.ui.setPlaying(false);
-    this.onPlaybackEnd?.();
+    this.onPlaybackStop?.();
   }
 
   // Toggle play/pause (used by keyboard shortcut)
