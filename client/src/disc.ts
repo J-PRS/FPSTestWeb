@@ -43,6 +43,7 @@ export class Disc {
   hitAge = 0.0;
   hitDistance = 0.0;
   directHit = false; // true = hit with core hitbox, false = expanding wake hitbox
+  demoProjectileId: number = 0; // demo recording tracking ID
   readonly explosionRadius = DISC_RADIUS;
   readonly pullForce = DISC_FORCE; // reverse knockback
   public explosionProcessed = false;

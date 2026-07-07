@@ -28,6 +28,10 @@ export const CONFIG = {
   maxPayloadLength: 1024 * 1024,
   hashBroadcastIntervalMs: 2000,
 
+  // Minimum projectile airtime (seconds) for a demo to be listed as a "cool shot".
+  // Set to 0.2s during testing phase so clips are easy to trigger. Raise to ~2.0s for production.
+  minDemoLifetime: 0.2,
+
   rateLimits: {
     position: { maxCount: 25, windowMs: 1000 },
     shot: { maxCount: 10, windowMs: 1000 },

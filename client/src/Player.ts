@@ -23,6 +23,22 @@ export class Player {
   health = 100;
   kills = 0;
   isDead = false;
+  inputFrozen = false; // when true, keyboard/mouse input is ignored (demo playback)
+
+  freezeInput(): void {
+    this.inputFrozen = true;
+    // Clear all tracked input so nothing leaks from before playback
+    this.keys = {};
+    this.mouseHeld = false;
+    this.firePending = false;
+    this.jetPending = false;
+    this.jumpHeld = false;
+    this.discHeld = false;
+  }
+
+  unfreezeInput(): void {
+    this.inputFrozen = false;
+  }
 
   private terrain: Terrain;
   private camera: THREE.PerspectiveCamera;
@@ -85,6 +101,7 @@ export class Player {
 
   private bindInput(): void {
     document.addEventListener('keydown', (e) => {
+      if (this.inputFrozen) return;
       this.keys[e.code] = true;
       if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
         this.jumpHeld = true;
@@ -94,6 +111,7 @@ export class Player {
       }
     });
     document.addEventListener('keyup', (e) => {
+      if (this.inputFrozen) return;
       this.keys[e.code] = false;
       if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
         this.jumpHeld = false;
@@ -103,16 +121,18 @@ export class Player {
       }
     });
     document.addEventListener('mousedown', (e) => {
+      if (this.inputFrozen) return;
       if (e.button === 0) { this.firePending = true; this.mouseHeld = true; }
       if (e.button === 2) { this.jetPending = true; }
     });
     document.addEventListener('mouseup', (e) => {
+      if (this.inputFrozen) return;
       if (e.button === 0) this.mouseHeld = false;
       if (e.button === 2) { this.jetPending = false; }
     });
     document.addEventListener('contextmenu', (e) => e.preventDefault());
     document.addEventListener('mousemove', (e) => {
-      if (document.pointerLockElement) {
+      if (document.pointerLockElement && !this.inputFrozen) {
         this.yaw   -= e.movementX * 0.002;
         this.pitch += e.movementY * 0.002;
         this.pitch = Math.max(-Math.PI / 2 + 0.01, Math.min(Math.PI / 2 - 0.01, this.pitch));
@@ -151,6 +171,15 @@ export class Player {
 
   update(dt: number): void {
     if (this.isDead) return;
+
+    // Always update camera to current pos/yaw/pitch (needed for demo playback)
+    this.camera.position.copy(this.pos);
+    const tx = this.pos.x + Math.cos(this.pitch) * Math.sin(this.yaw);
+    const ty = this.pos.y + Math.sin(this.pitch);
+    const tz = this.pos.z + Math.cos(this.pitch) * Math.cos(this.yaw);
+    this.camera.lookAt(tx, ty, tz);
+
+    if (this.inputFrozen) return;
 
     this.fireTimer = Math.max(0, this.fireTimer - dt);
     this.discTimer = Math.max(0, this.discTimer - dt);
@@ -270,13 +299,6 @@ export class Player {
         this.onDisc({ origin: this.pos.clone(), dir, playerVel: this.vel.clone() });
       }
     }
-
-    // Update camera
-    this.camera.position.copy(this.pos);
-    const tx = this.pos.x + Math.cos(this.pitch) * Math.sin(this.yaw);
-    const ty = this.pos.y + Math.sin(this.pitch);
-    const tz = this.pos.z + Math.cos(this.pitch) * Math.cos(this.yaw);
-    this.camera.lookAt(tx, ty, tz);
 
     // Update player model animation based on movement
     if (this.model) {

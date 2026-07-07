@@ -15,6 +15,8 @@ export interface DemoUICallbacks {
 export class DemoUI {
   private container: HTMLDivElement;
   private timeline: HTMLInputElement;
+  private timelineWrap: HTMLDivElement;
+  private markerOverlay: HTMLDivElement;
   private timeLabel: HTMLSpanElement;
   private playBtn: HTMLButtonElement;
   private stopBtn: HTMLButtonElement;
@@ -22,7 +24,6 @@ export class DemoUI {
   private loopBtn: HTMLButtonElement;
   private saveBtn: HTMLButtonElement;
   private loadInput: HTMLInputElement;
-  private recordBtn: HTMLButtonElement;
   private statusLabel: HTMLSpanElement;
 
   private callbacks: DemoUICallbacks | null = null;
@@ -40,13 +41,6 @@ export class DemoUI {
       box-shadow: 0 4px 12px rgba(0,0,0,0.5);
     `;
 
-    // Record button
-    this.recordBtn = document.createElement('button');
-    this.recordBtn.textContent = 'REC';
-    this.recordBtn.style.cssText = this.btnStyle('#cc3333');
-    this.recordBtn.title = 'Toggle recording';
-    this.recordBtn.onclick = () => this.callbacks?.onRecordToggle();
-
     // Play/Pause button
     this.playBtn = document.createElement('button');
     this.playBtn.textContent = '▶';
@@ -61,18 +55,30 @@ export class DemoUI {
     this.stopBtn.title = 'Stop';
     this.stopBtn.onclick = () => this.callbacks?.onStop();
 
-    // Timeline slider
+    // Timeline slider — wrapped in a relative container for marker overlay
     this.timeline = document.createElement('input');
     this.timeline.type = 'range';
     this.timeline.min = '0';
     this.timeline.max = '100';
     this.timeline.value = '0';
     this.timeline.step = '0.01';
-    this.timeline.style.cssText = 'width: 200px; cursor: pointer;';
+    this.timeline.style.cssText = 'width: 200px; cursor: pointer; margin: 0;';
     this.timeline.oninput = () => {
       const time = parseFloat(this.timeline.value);
       this.callbacks?.onSeek(time);
     };
+
+    // Marker overlay — sits on top of the slider, pointer-events disabled
+    this.markerOverlay = document.createElement('div');
+    this.markerOverlay.style.cssText = `
+      position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+      pointer-events: none; overflow: hidden;
+    `;
+
+    this.timelineWrap = document.createElement('div');
+    this.timelineWrap.style.cssText = 'position: relative; width: 200px; height: 20px; display: flex; align-items: center;';
+    this.timelineWrap.appendChild(this.timeline);
+    this.timelineWrap.appendChild(this.markerOverlay);
 
     // Time label
     this.timeLabel = document.createElement('span');
@@ -132,10 +138,9 @@ export class DemoUI {
     this.statusLabel.style.cssText = 'min-width: 60px; color: #aaa;';
 
     // Assemble
-    this.container.appendChild(this.recordBtn);
     this.container.appendChild(this.playBtn);
     this.container.appendChild(this.stopBtn);
-    this.container.appendChild(this.timeline);
+    this.container.appendChild(this.timelineWrap);
     this.container.appendChild(this.timeLabel);
     this.container.appendChild(this.speedSelect);
     this.container.appendChild(this.loopBtn);
@@ -165,6 +170,10 @@ export class DemoUI {
     this.container.style.display = 'none';
   }
 
+  destroy(): void {
+    this.container.remove();
+  }
+
   get isVisible(): boolean { return this.visible; }
 
   setPlaying(playing: boolean): void {
@@ -172,8 +181,7 @@ export class DemoUI {
   }
 
   setRecording(recording: boolean): void {
-    this.recordBtn.style.background = recording ? '#ff3333' : '#cc3333';
-    this.recordBtn.style.color = recording ? '#fff' : '#aaa';
+    // No-op: REC button removed from UI
   }
 
   setTime(current: number, duration: number): void {
@@ -198,5 +206,27 @@ export class DemoUI {
 
   setSpeed(speed: number): void {
     this.speedSelect.value = String(speed);
+  }
+
+  setHitMarkers(hitTimes: number[], duration: number): void {
+    this.clearHitMarkers();
+    if (duration <= 0 || hitTimes.length === 0) return;
+    for (const t of hitTimes) {
+      const pct = Math.max(0, Math.min(1, t / duration)) * 100;
+      const marker = document.createElement('div');
+      marker.style.cssText = `
+        position: absolute; top: 0; bottom: 0;
+        left: ${pct}%; width: 2px; margin-left: -1px;
+        background: #ff4444; pointer-events: none;
+        box-shadow: 0 0 3px rgba(255,68,68,0.8);
+      `;
+      this.markerOverlay.appendChild(marker);
+    }
+  }
+
+  clearHitMarkers(): void {
+    while (this.markerOverlay.firstChild) {
+      this.markerOverlay.removeChild(this.markerOverlay.firstChild);
+    }
   }
 }

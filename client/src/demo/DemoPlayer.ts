@@ -1,8 +1,7 @@
 // Demo playback engine - replays recorded frames with interpolation.
 // Supports play, pause, seek, speed control, and rewind.
 
-import type { DemoFrame, ProjectileEvent, TargetEvent } from './types.js';
-import type { DemoFileData } from './DemoRecorder.js';
+import type { DemoFrame, ProjectileEvent, TargetEvent, DemoFile } from './types.js';
 
 export interface PlaybackState {
   posX: number; posY: number; posZ: number;
@@ -21,7 +20,7 @@ export interface PlaybackCallbacks {
 }
 
 export class DemoPlayer {
-  private demoData: DemoFileData | null = null;
+  private demoData: DemoFile | null = null;
   private currentTime = 0;
   private playing = false;
   private playbackSpeed = 1.0;
@@ -39,7 +38,7 @@ export class DemoPlayer {
   get currentTimeValue(): number { return this.currentTime; }
   get speed(): number { return this.playbackSpeed; }
 
-  load(data: DemoFileData): void {
+  load(data: DemoFile): void {
     this.demoData = data;
     this.currentTime = 0;
     this.frameIndex = 0;
@@ -151,6 +150,12 @@ export class DemoPlayer {
     if (this.callbacks.onTimeUpdate) {
       this.callbacks.onTimeUpdate(this.currentTime, this.duration);
     }
+
+    // Update event indices for next frame
+    if (this.demoData) {
+      this.lastProjectileEventIndex = this.findEventIndex(this.demoData.projectileEvents, this.currentTime);
+      this.lastTargetEventIndex = this.findEventIndex(this.demoData.targetEvents, this.currentTime);
+    }
   }
 
   private findFrameIndex(time: number): number {
@@ -185,15 +190,10 @@ export class DemoPlayer {
 
   private collectNewEvents<T extends { timestamp: number }>(events: T[], lastIndex: number): T[] {
     if (!this.demoData) return [];
-    // When playing forward, collect events between lastIndex and current position
     if (this.playbackSpeed > 0) {
       const newIndex = this.findEventIndex(events, this.currentTime);
-      const result = events.slice(lastIndex, newIndex);
-      // Update the last index - but we need to track this properly
-      // Actually we need to store the new index. Let me handle this differently.
-      return result;
+      return events.slice(lastIndex, newIndex);
     }
-    // When rewinding, no new events to emit
     return [];
   }
 
@@ -248,16 +248,4 @@ export class DemoPlayer {
     };
   }
 
-  // Update event indices after a successful update tick
-  postUpdate(): void {
-    if (!this.demoData) return;
-    if (this.playbackSpeed > 0) {
-      this.lastProjectileEventIndex = this.findEventIndex(this.demoData.projectileEvents, this.currentTime);
-      this.lastTargetEventIndex = this.findEventIndex(this.demoData.targetEvents, this.currentTime);
-    } else {
-      // Rewinding: reset to current time
-      this.lastProjectileEventIndex = this.findEventIndex(this.demoData.projectileEvents, this.currentTime);
-      this.lastTargetEventIndex = this.findEventIndex(this.demoData.targetEvents, this.currentTime);
-    }
-  }
 }

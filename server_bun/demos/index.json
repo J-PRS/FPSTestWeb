@@ -1,0 +1,79 @@
+[
+  {
+    "filename": "clip_2026-07-06T19-39-26_2.3s.demo",
+    "projectileLifetime": 2.27,
+    "timestamp": 1783366766897,
+    "description": "Cool shot (2.27s air, 12.3s clip)",
+    "fileSize": 26680
+  },
+  {
+    "filename": "clip_2026-07-06T19-59-16_1.5s.demo",
+    "projectileLifetime": 1.5,
+    "timestamp": 1783367956641,
+    "description": "Cool shot (1.50s air, 11.5s clip)",
+    "fileSize": 50001
+  },
+  {
+    "filename": "clip_2026-07-06T19-58-53_1.4s.demo",
+    "projectileLifetime": 1.35,
+    "timestamp": 1783367933608,
+    "description": "Cool shot (1.35s air, 11.4s clip)",
+    "fileSize": 37157
+  },
+  {
+    "filename": "clip_2026-07-06T19-59-24_1.1s.demo",
+    "projectileLifetime": 1.05,
+    "timestamp": 1783367964928,
+    "description": "Cool shot (1.05s air, 11.0s clip)",
+    "fileSize": 51628
+  },
+  {
+    "filename": "clip_2026-07-06T19-58-48_0.6s.demo",
+    "projectileLifetime": 0.58,
+    "timestamp": 1783367928593,
+    "description": "Cool shot (0.58s air, 10.6s clip)",
+    "fileSize": 32491
+  },
+  {
+    "filename": "clip_2026-07-06T19-59-01_0.5s.demo",
+    "projectileLifetime": 0.52,
+    "timestamp": 1783367941624,
+    "description": "Cool shot (0.52s air, 10.5s clip)",
+    "fileSize": 37784
+  },
+  {
+    "filename": "clip_2026-07-06T19-59-02_0.4s.demo",
+    "projectileLifetime": 0.37,
+    "timestamp": 1783367942523,
+    "description": "Cool shot (0.37s air, 10.4s clip)",
+    "fileSize": 38043
+  },
+  {
+    "filename": "clip_2026-07-06T19-59-03_0.3s.demo",
+    "projectileLifetime": 0.35,
+    "timestamp": 1783367943341,
+    "description": "Cool shot (0.35s air, 10.4s clip)",
+    "fileSize": 37308
+  },
+  {
+    "filename": "clip_2026-07-06T19-58-58_0.3s.demo",
+    "projectileLifetime": 0.33,
+    "timestamp": 1783367938239,
+    "description": "Cool shot (0.33s air, 10.3s clip)",
+    "fileSize": 35818
+  },
+  {
+    "filename": "clip_2026-07-06T19-59-27_0.3s.demo",
+    "projectileLifetime": 0.33,
+    "timestamp": 1783367967474,
+    "description": "Cool shot (0.33s air, 10.3s clip)",
+    "fileSize": 48531
+  },
+  {
+    "filename": "clip_2026-07-06T19-59-20_0.3s.demo",
+    "projectileLifetime": 0.28,
+    "timestamp": 1783367960621,
+    "description": "Cool shot (0.28s air, 10.3s clip)",
+    "fileSize": 45971
+  }
+]

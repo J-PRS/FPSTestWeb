@@ -2,13 +2,13 @@
 // Single entry point for the game to interact with the demo system.
 
 import { DemoRecorder } from './DemoRecorder.js';
-import type { DemoFileData } from './DemoRecorder.js';
 import { DemoSerializer } from './DemoSerializer.js';
 import { DemoPlayer } from './DemoPlayer.js';
 import type { PlaybackState } from './DemoPlayer.js';
 import { DemoUI } from './DemoUI.js';
 import type { IPlayerDataProvider, IInputProvider, Vec3 } from './interfaces.js';
-import { InputFlags, JetpackFlags } from './types.js';
+import { ProjectileEventType } from './types.js';
+import type { ProjectileEvent, TargetEvent, DemoFile } from './types.js';
 
 export interface CoolShotEntry {
   id: string;
@@ -16,7 +16,7 @@ export interface CoolShotEntry {
   projectileLifetime: number;
   timestamp: number;
   description: string;
-  clipData?: DemoFileData; // only set for locally-generated clips
+  clipData?: DemoFile; // only set for locally-generated clips
 }
 
 export class DemoManager {
@@ -27,7 +27,7 @@ export class DemoManager {
   private playerData: IPlayerDataProvider | null = null;
   private inputData: IInputProvider | null = null;
 
-  private mode: 'idle' | 'recording' | 'playing' = 'idle';
+  private mode: 'idle' | 'recording' | 'playing' | 'paused' = 'idle';
   private uiVisible = false;
 
   // Stored cool shots, sorted by lifetime descending
@@ -36,15 +36,18 @@ export class DemoManager {
 
   // Server URL for demo upload/list/download
   private serverUrl: string = '';
+  private uploadFailureCount = 0;
+  private static MAX_UPLOAD_WARNINGS = 3;
 
   // Callback when cool shots list changes
   onCoolShotsChanged?: (shots: CoolShotEntry[]) => void;
 
   // Callbacks for the game to render replay state
   onPlaybackState?: (state: PlaybackState) => void;
-  onPlaybackEvent?: (events: { projectiles: any[], targets: any[] }) => void;
+  onPlaybackEvent?: (events: { projectiles: ProjectileEvent[], targets: TargetEvent[] }) => void;
   onPlaybackEnd?: () => void;
   onPlaybackSeek?: () => void;
+  onPlaybackStart?: () => void;
 
   constructor() {
     this.recorder = new DemoRecorder();
@@ -80,9 +83,9 @@ export class DemoManager {
       onPlayPause: () => {
         if (this.mode === 'playing') {
           this.player.pause();
-          this.mode = 'idle';
+          this.mode = 'paused';
           this.ui.setPlaying(false);
-        } else if (this.player.isLoaded) {
+        } else if (this.mode === 'paused' || this.player.isLoaded) {
           this.player.play();
           this.mode = 'playing';
           this.ui.setPlaying(true);
@@ -102,6 +105,8 @@ export class DemoManager {
         this.player.stop();
         this.mode = 'idle';
         this.ui.setPlaying(false);
+        this.ui.hide();
+        this.uiVisible = false;
         this.onPlaybackEnd?.();
       },
       onSave: () => {
@@ -140,7 +145,7 @@ export class DemoManager {
   get isUIVisible(): boolean { return this.uiVisible; }
 
   get isRecording(): boolean { return this.mode === 'recording'; }
-  get isPlaying(): boolean { return this.mode === 'playing'; }
+  get isPlaying(): boolean { return this.mode === 'playing' || this.mode === 'paused'; }
   get isLoadedForPlayback(): boolean { return this.mode !== 'recording' && this.player.isLoaded; }
 
   // Recording control
@@ -149,14 +154,20 @@ export class DemoManager {
       console.warn('[Demo] Cannot start recording: data providers not set');
       return;
     }
-    if (this.mode === 'playing') {
+    if (this.mode === 'playing' || this.mode === 'paused') {
       this.player.stop();
       this.mode = 'idle';
+    }
+    // Clear pending clips from previous recording (buffer is gone)
+    if (this.pendingClips.length > 0) {
+      console.log(`[Demo] Clearing ${this.pendingClips.length} pending clip(s) from previous recording`);
+      this.pendingClips = [];
     }
     this.recorder.start(this.playerData, this.inputData);
     this.mode = 'recording';
     this.ui.setRecording(true);
     this.ui.setStatus('REC');
+    console.log('[Demo] Recording started — cool shots will be auto-clipped');
   }
 
   stopRecording(): void {
@@ -177,9 +188,9 @@ export class DemoManager {
   togglePlayPause(): void {
     if (this.mode === 'playing') {
       this.player.pause();
-      this.mode = 'idle';
+      this.mode = 'paused';
       this.ui.setPlaying(false);
-    } else if (this.player.isLoaded) {
+    } else if (this.mode === 'paused' || this.player.isLoaded) {
       this.player.play();
       this.mode = 'playing';
       this.ui.setPlaying(true);
@@ -199,7 +210,8 @@ export class DemoManager {
   // Auto-clip: called when a projectile hits something.
   // If projectileLifetime > minLifetime, schedules a clip extraction
   // bufferAfter seconds after the hit so post-hit footage is captured.
-  autoClipOnHit(projectileLifetime: number, minLifetime: number = 0.1, bufferBefore: number = 5.0, bufferAfter: number = 5.0): void {
+  // minLifetime is 0.2s during testing phase so clips are easy to trigger. Raise to ~2.0s for production.
+  autoClipOnHit(projectileLifetime: number, minLifetime: number = 0.2, bufferBefore: number = 5.0, bufferAfter: number = 5.0): void {
     if (this.mode !== 'recording') return;
     if (projectileLifetime < minLifetime) return;
 
@@ -219,6 +231,7 @@ export class DemoManager {
       projectileLifetime,
       description: desc,
     });
+    console.log(`[CoolShot] Clip scheduled: ${desc} — extracting in ${bufferAfter}s...`);
   }
 
   private pendingClips: { extractAt: number; clipStart: number; clipEnd: number; projectileLifetime: number; description: string }[] = [];
@@ -279,6 +292,8 @@ export class DemoManager {
       this.ui.show();
       this.uiVisible = true;
       this.ui.setTime(0, entry.clipData.header.duration);
+      this.updateHitMarkers(entry.clipData);
+      this.onPlaybackStart?.();
       console.log(`[Demo] Playing cool shot: ${entry.description}`);
     } else if (entry.filename) {
       // Download from server then play
@@ -286,7 +301,7 @@ export class DemoManager {
     }
   }
 
-  private downloadDemoFile(data: DemoFileData, filename: string): void {
+  private downloadDemoFile(data: DemoFile, filename: string): void {
     const blob = DemoSerializer.toBlob(data);
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -308,7 +323,7 @@ export class DemoManager {
   }
 
   // Upload clip binary to server
-  private async uploadClipToServer(clipData: DemoFileData, projectileLifetime: number): Promise<void> {
+  private async uploadClipToServer(clipData: DemoFile, projectileLifetime: number): Promise<void> {
     if (!this.serverUrl) {
       console.warn('[Demo] No server URL set, skipping upload');
       return;
@@ -325,9 +340,20 @@ export class DemoManager {
         return;
       }
       const result = await resp.json();
-      console.log(`[Demo] Clip uploaded to server: ${result.filename}`);
+      this.uploadFailureCount = 0;
+      if (result.rejected) {
+        console.log(`[Demo] Clip rejected by server: ${result.reason}`);
+      } else {
+        console.log(`[Demo] Clip uploaded to server: ${result.filename}`);
+      }
     } catch (e) {
-      console.warn('[Demo] Failed to upload clip:', e);
+      this.uploadFailureCount++;
+      if (this.uploadFailureCount <= DemoManager.MAX_UPLOAD_WARNINGS) {
+        console.warn(`[Demo] Failed to upload clip (${this.uploadFailureCount}):`, e);
+        if (this.uploadFailureCount === DemoManager.MAX_UPLOAD_WARNINGS) {
+          console.warn('[Demo] Suppressing further upload failure warnings. Check server CORS/network.');
+        }
+      }
     }
   }
 
@@ -336,7 +362,10 @@ export class DemoManager {
     if (!this.serverUrl) return;
     try {
       const resp = await fetch(`${this.serverUrl}/demos`);
-      if (!resp.ok) return;
+      if (!resp.ok) {
+        console.warn(`[Demo] Failed to fetch cool shots: HTTP ${resp.status}`);
+        return;
+      }
       const data = await resp.json();
       const serverDemos: CoolShotEntry[] = (data.demos || []).map((d: any) => ({
         id: d.filename,
@@ -345,6 +374,7 @@ export class DemoManager {
         timestamp: d.timestamp,
         description: d.description,
       }));
+      console.log(`[Demo] Fetched ${serverDemos.length} demos from server`);
 
       // Merge: server demos that aren't already in local list (by filename)
       const localFilenames = new Set(this.coolShots.map(s => s.filename));
@@ -356,6 +386,8 @@ export class DemoManager {
       this.coolShots.sort((a, b) => b.projectileLifetime - a.projectileLifetime);
       this.coolShots = this.coolShots.slice(0, DemoManager.MAX_COOL_SHOTS);
       this.onCoolShotsChanged?.(this.coolShots);
+
+      console.log(`[CoolShots] ${this.coolShots.length} entries (top: ${this.coolShots[0]?.projectileLifetime.toFixed(2) ?? 'none'}s)`);
     } catch (e) {
       console.warn('[Demo] Failed to fetch cool shots from server:', e);
     }
@@ -384,7 +416,9 @@ export class DemoManager {
       this.ui.show();
       this.uiVisible = true;
       this.ui.setTime(0, data.header.duration);
+      this.updateHitMarkers(data);
       this.ui.setStatus('');
+      this.onPlaybackStart?.();
       console.log(`[Demo] Playing cool shot from server: ${filename}`);
     } catch (e) {
       console.warn('[Demo] Failed to play from server:', e);
@@ -401,6 +435,7 @@ export class DemoManager {
       this.mode = 'idle';
       this.ui.setPlaying(false);
       this.ui.setTime(0, data.header.duration);
+      this.updateHitMarkers(data);
       this.ui.setStatus(`Loaded: ${data.frames.length} frames, ${data.header.duration.toFixed(1)}s`);
     } catch (e) {
       console.error('[Demo] Failed to load demo:', e);
@@ -415,6 +450,32 @@ export class DemoManager {
     this.mode = 'idle';
     this.ui.setPlaying(false);
     this.ui.setTime(0, data.header.duration);
+    this.updateHitMarkers(data);
+  }
+
+  private updateHitMarkers(data: DemoFile): void {
+    // Find the hit with the longest airtime (Hit timestamp - Fired timestamp for same projectileId)
+    const firedTimes = new Map<number, number>();
+    for (const e of data.projectileEvents) {
+      if (e.eventType === ProjectileEventType.Fired) {
+        firedTimes.set(e.projectileId, e.timestamp);
+      }
+    }
+
+    let bestHitTime: number | null = null;
+    let bestAirtime = -1;
+    for (const e of data.projectileEvents) {
+      if (e.eventType !== ProjectileEventType.Hit) continue;
+      const firedAt = firedTimes.get(e.projectileId);
+      if (firedAt === undefined) continue;
+      const airtime = e.timestamp - firedAt;
+      if (airtime > bestAirtime) {
+        bestAirtime = airtime;
+        bestHitTime = e.timestamp;
+      }
+    }
+
+    this.ui.setHitMarkers(bestHitTime !== null ? [bestHitTime] : [], data.header.duration);
   }
 
   // Called every game frame
@@ -424,7 +485,9 @@ export class DemoManager {
       this.processPendingClips();
     } else if (this.mode === 'playing') {
       this.player.update(dt);
-      this.player.postUpdate();
+      // onTimeUpdate callback handles ui.setTime during playback
+    } else if (this.mode === 'paused') {
+      // Keep UI in sync (e.g. after seek while paused)
       this.ui.setTime(this.player.currentTimeValue, this.player.duration);
     }
   }
@@ -450,18 +513,20 @@ export class DemoManager {
     this.recorder.recordTargetSpawned(targetId, position, velocity, targetType);
   }
 
-  recordTargetHit(targetId: number, position: Vec3, health: number): void {
-    this.recorder.recordTargetHit(targetId, position, health);
+  recordTargetBounce(targetId: number, position: Vec3, velocity: Vec3): void {
+    this.recorder.recordTargetBounce(targetId, position, velocity);
+  }
+
+  recordTargetPeak(targetId: number, position: Vec3, velocity: Vec3): void {
+    this.recorder.recordTargetPeak(targetId, position, velocity);
+  }
+
+  recordTargetHit(targetId: number, position: Vec3, velocity: Vec3, health: number): void {
+    this.recorder.recordTargetHit(targetId, position, velocity, health);
   }
 
   recordTargetDestroyed(targetId: number, position: Vec3): void {
     this.recorder.recordTargetDestroyed(targetId, position);
-  }
-
-  // Mouse delta accumulation for recording
-  recordMouseDelta(dx: number, dy: number): void {
-    // The recorder accumulates this internally if recording
-    // We expose it via the input provider pattern instead
   }
 
   // Toggle UI with keyboard shortcut
@@ -474,5 +539,6 @@ export class DemoManager {
   dispose(): void {
     this.player.unload();
     this.hideUI();
+    this.ui.destroy();
   }
 }

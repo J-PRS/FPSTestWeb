@@ -2,9 +2,10 @@
 // Saves uploaded demo clips to the demos/ directory and maintains a JSON index.
 
 import { join } from 'node:path';
-import { readFile, writeFile, mkdir, unlink } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, unlink, readdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { logger } from './logger.ts';
+import { CONFIG } from './config.ts';
 
 export interface DemoMeta {
   filename: string;
@@ -24,7 +25,41 @@ export class DemoStorage {
   constructor(demosDir: string) {
     this.demosDir = demosDir;
     this.ensureDir();
-    this.loadIndex();
+    this.loadIndex().then(() => this.reconcileIndex());
+  }
+
+  private async reconcileIndex(): Promise<void> {
+    try {
+      const files = await readdir(this.demosDir);
+      const demoFiles = files.filter(f => f.endsWith('.demo'));
+      const known = new Set(this.index.map(m => m.filename));
+      let added = 0;
+      for (const filename of demoFiles) {
+        if (known.has(filename)) continue;
+        try {
+          const data = await readFile(join(this.demosDir, filename));
+          const header = this.parseDemoHeader(data.buffer);
+          if (header.projectileLifetime < CONFIG.minDemoLifetime) continue;
+          this.index.push({
+            filename,
+            projectileLifetime: header.projectileLifetime,
+            timestamp: Date.now(),
+            description: header.description,
+            fileSize: data.byteLength,
+          });
+          added++;
+        } catch (e: any) {
+          logger.warn(`Failed to parse orphaned demo ${filename}`, { error: e?.message ?? String(e) });
+        }
+      }
+      if (added > 0) {
+        this.index.sort((a, b) => b.projectileLifetime - a.projectileLifetime);
+        await this.saveIndex();
+        logger.info(`Reconciled ${added} orphaned demo(s) into index`);
+      }
+    } catch (e: any) {
+      logger.warn('Failed to reconcile demo directory', { error: e?.message ?? String(e) });
+    }
   }
 
   private async ensureDir(): Promise<void> {
@@ -94,6 +129,19 @@ export class DemoStorage {
 
   async saveDemo(data: ArrayBuffer): Promise<{ filename: string; projectileLifetime: number; description: string }> {
     const header = this.parseDemoHeader(data);
+
+    // Reject demos below the cool-shot lifetime threshold
+    if (header.projectileLifetime < CONFIG.minDemoLifetime) {
+      logger.info('Demo rejected — below minimum lifetime', {
+        lifetime: header.projectileLifetime.toFixed(2),
+        threshold: CONFIG.minDemoLifetime,
+        duration: header.duration.toFixed(1),
+        desc: header.description,
+        size: data.byteLength,
+      });
+      return { filename: '', projectileLifetime: header.projectileLifetime, description: header.description };
+    }
+
     const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
     const filename = `clip_${ts}_${header.projectileLifetime.toFixed(1)}s.demo`;
 
@@ -121,14 +169,23 @@ export class DemoStorage {
     }
 
     await this.saveIndex();
-    logger.info('Demo saved', { filename, lifetime: header.projectileLifetime, size: data.byteLength });
+    logger.info('Demo saved', { filename, lifetime: header.projectileLifetime.toFixed(2), duration: header.duration.toFixed(1), size: data.byteLength, totalDemos: this.index.length });
 
     return { filename, projectileLifetime: header.projectileLifetime, description: header.description };
   }
 
   listDemos(): DemoMeta[] {
-    // Return top 10 by lifetime
-    return this.index.slice(0, 10);
+    // Filter out stale entries whose files were deleted
+    const valid = this.index.filter(m => existsSync(join(this.demosDir, m.filename)));
+    if (valid.length !== this.index.length) {
+      const removed = this.index.length - valid.length;
+      logger.info(`Cleaning ${removed} stale demo entries from index`);
+      this.index = valid;
+      this.saveIndex();
+    }
+    // Only list demos that meet the minimum lifetime threshold for "cool shots"
+    const cool = this.index.filter(m => m.projectileLifetime >= CONFIG.minDemoLifetime);
+    return cool.slice(0, 10);
   }
 
   async loadDemo(filename: string): Promise<ArrayBuffer | null> {

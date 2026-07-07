@@ -6,8 +6,8 @@ import {
   DemoFrame, ProjectileEvent, TargetEvent,
   ProjectileEventType, TargetEventType,
   DEMO_MAGIC, DEMO_FORMAT_VERSION,
+  type DemoFile,
 } from './types.js';
-import type { DemoFileData } from './DemoRecorder.js';
 
 // CRC32 lookup table
 const crcTable = (() => {
@@ -58,7 +58,7 @@ const TARGET_EVENT_SIZE = 49;
 
 export class DemoSerializer {
 
-  static serialize(data: DemoFileData): ArrayBuffer {
+  static serialize(data: DemoFile): ArrayBuffer {
     // Calculate total size
     const headerSize = 1 + 4 + 2 + 0 + 8 + 4 + 4 + 4 + 4 + 4 + 2 + 0 + 12 + 8 + 12; // fixed + 2 strings
     const gameVersionBytes = new TextEncoder().encode(data.header.gameVersion);
@@ -165,7 +165,7 @@ export class DemoSerializer {
     return buffer;
   }
 
-  static deserialize(buffer: ArrayBuffer): DemoFileData {
+  static deserialize(buffer: ArrayBuffer): DemoFile {
     const view = new DataView(buffer);
     let offset = 0;
 
@@ -207,6 +207,7 @@ export class DemoSerializer {
 
     // Read frames
     const frameCount = view.getUint32(offset, true); offset += 4;
+    if (frameCount > 720000) throw new Error(`Invalid frame count: ${frameCount} (max 720000)`);
     const frames: DemoFrame[] = new Array(frameCount);
     for (let i = 0; i < frameCount; i++) {
       frames[i] = {
@@ -231,6 +232,7 @@ export class DemoSerializer {
 
     // Read projectile events
     const projCount = view.getUint32(offset, true); offset += 4;
+    if (projCount > 100000) throw new Error(`Invalid projectile event count: ${projCount} (max 100000)`);
     const projectileEvents: ProjectileEvent[] = new Array(projCount);
     for (let i = 0; i < projCount; i++) {
       projectileEvents[i] = {
@@ -258,6 +260,7 @@ export class DemoSerializer {
 
     // Read target events
     const targetCount = view.getUint32(offset, true); offset += 4;
+    if (targetCount > 100000) throw new Error(`Invalid target event count: ${targetCount} (max 100000)`);
     const targetEvents: TargetEvent[] = new Array(targetCount);
     for (let i = 0; i < targetCount; i++) {
       targetEvents[i] = {
@@ -294,7 +297,7 @@ export class DemoSerializer {
   }
 
   // Serialize to Blob for file download
-  static toBlob(data: DemoFileData): Blob {
+  static toBlob(data: DemoFile): Blob {
     const buffer = this.serialize(data);
     return new Blob([buffer], { type: 'application/octet-stream' });
   }

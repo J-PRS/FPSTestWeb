@@ -25,6 +25,10 @@ interface TrailDot {
 }
 
 export class Ball {
+  private static nextId = 1;
+  readonly id: number;
+  readonly variant: 0 | 1 | 2;
+
   pos: THREE.Vector3;
   vel: THREE.Vector3;
   dead = false;
@@ -42,8 +46,17 @@ export class Ball {
   private meshRemoved = false;
   private disposed = false;
 
+  // Callbacks for demo keyframe recording
+  onBounce?: (pos: THREE.Vector3, vel: THREE.Vector3) => void;
+  onPeak?: (pos: THREE.Vector3, vel: THREE.Vector3) => void;
+  private prevVelY = 0;
+
   constructor(scene: THREE.Scene, terrain: Terrain, variant: 0 | 1 | 2 = 0) {
     this.scene = scene;
+    this.id = Ball.nextId;
+    Ball.nextId = (Ball.nextId + 1) % 65536;
+    if (Ball.nextId === 0) Ball.nextId = 1;
+    this.variant = variant;
 
     if (variant === 2) {
       this.scale = 3.0; this.health = 3;
@@ -107,8 +120,14 @@ export class Ball {
       return;
     }
 
+    this.prevVelY = this.vel.y;
     this.vel.y += BALL_GRAVITY * dt;
     this.pos.addScaledVector(this.vel, dt);
+
+    // Peak detection: vel.y crossed from positive to negative (apex of arc)
+    if (this.prevVelY > 0 && this.vel.y <= 0 && this.onPeak) {
+      this.onPeak(this.pos.clone(), this.vel.clone());
+    }
 
     const gy = terrain.getHeight(this.pos.x, this.pos.z);
     if (this.pos.y - this.radius <= gy) {
@@ -116,6 +135,11 @@ export class Ball {
       const n = terrain.getNormal(this.pos.x, this.pos.z);
       const dot = this.vel.dot(n);
       this.vel.addScaledVector(n, -2.0 * dot * BOUNCE);
+
+      // Record bounce keyframe (after velocity reflection)
+      if (this.onBounce) {
+        this.onBounce(this.pos.clone(), this.vel.clone());
+      }
 
       const dx = this.pos.x - playerPos.x;
       const dz = this.pos.z - playerPos.z;
@@ -130,6 +154,10 @@ export class Ball {
           5.0,
           (Math.random() - 0.5) * 10
         );
+        // Record teleport as a bounce keyframe too (position + velocity reset)
+        if (this.onBounce) {
+          this.onBounce(this.pos.clone(), this.vel.clone());
+        }
       }
     }
 

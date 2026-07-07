@@ -6,6 +6,7 @@ import {
   DemoFrame, ProjectileEvent, TargetEvent,
   ProjectileEventType, TargetEventType,
   createFrame, createHeader, DEMO_FORMAT_VERSION,
+  type DemoFile,
 } from './types.js';
 import type { IPlayerDataProvider, IInputProvider, Vec3 } from './interfaces.js';
 
@@ -33,12 +34,6 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
   // Event rate limiting
   private eventCountThisSecond = 0;
   private lastEventResetTime = 0;
-
-  // Track last mouse position for delta calculation
-  private lastMouseX = 0;
-  private lastMouseY = 0;
-  private mouseDeltaX = 0;
-  private mouseDeltaY = 0;
 
   constructor(bufferSeconds: number = DEFAULT_BUFFER_SECONDS, tickRate: number = DEFAULT_TICK_RATE) {
     const capacity = Math.ceil(bufferSeconds * tickRate);
@@ -97,18 +92,7 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
     frame.jetpackFuel = i.jetpackFuel;
 
     this.frameBuffer.add(frame);
-    this.frameNumber++;
-
-    // Reset mouse delta after capture
-    this.mouseDeltaX = 0;
-    this.mouseDeltaY = 0;
-  }
-
-  // Accumulate mouse delta between ticks
-  addMouseDelta(dx: number, dy: number): void {
-    if (!this.recording) return;
-    this.mouseDeltaX += dx;
-    this.mouseDeltaY += dy;
+    this.frameNumber = (this.frameNumber + 1) % 65536;
   }
 
   private checkEventRate(): boolean {
@@ -125,7 +109,8 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
   // IProjectileEventRecorder
   recordFired(position: Vec3, velocity: Vec3, weaponType: number): number {
     if (!this.recording || !this.checkEventRate()) return 0;
-    const id = this.nextProjectileId++;
+    const id = this.nextProjectileId;
+    this.nextProjectileId = (this.nextProjectileId % 65535) + 1;
     this.projectileEvents.push({
       eventType: ProjectileEventType.Fired,
       timestamp: this.elapsedTime,
@@ -208,13 +193,26 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
     });
   }
 
-  recordTargetHit(targetId: number, position: Vec3, health: number): void {
+  recordTargetPeak(targetId: number, position: Vec3, velocity: Vec3): void {
+    if (!this.recording || !this.checkEventRate()) return;
+    this.targetEvents.push({
+      eventType: TargetEventType.StateChanged,
+      timestamp: this.elapsedTime,
+      posX: position.x, posY: position.y, posZ: position.z,
+      velX: velocity.x, velY: velocity.y, velZ: velocity.z,
+      targetId, targetType: 0, health: 0,
+      hasPeakPosition: true,
+      peakPosX: position.x, peakPosY: position.y, peakPosZ: position.z,
+    });
+  }
+
+  recordTargetHit(targetId: number, position: Vec3, velocity: Vec3, health: number): void {
     if (!this.recording || !this.checkEventRate()) return;
     this.targetEvents.push({
       eventType: TargetEventType.Hit,
       timestamp: this.elapsedTime,
       posX: position.x, posY: position.y, posZ: position.z,
-      velX: 0, velY: 0, velZ: 0,
+      velX: velocity.x, velY: velocity.y, velZ: velocity.z,
       targetId, targetType: 0, health,
       hasPeakPosition: false,
       peakPosX: 0, peakPosY: 0, peakPosZ: 0,
@@ -235,7 +233,7 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
   }
 
   // Extract all recorded data into a DemoFile
-  buildDemoFile(description: string = ''): DemoFileData {
+  buildDemoFile(description: string = ''): DemoFile {
     const frames = this.frameBuffer.extractAll();
     const first = frames.length > 0 ? frames[0] : null;
 
@@ -268,7 +266,7 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
 
   // Extract a clip: frames and events within [startTime, endTime].
   // Times are relative to recording start (elapsedTime).
-  extractClip(startTime: number, endTime: number, description: string): DemoFileData | null {
+  extractClip(startTime: number, endTime: number, description: string): DemoFile | null {
     if (this.frameBuffer.IsEmpty) return null;
 
     // Clamp to available range
@@ -293,13 +291,50 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
     }
     if (frames.length === 0) return null;
 
-    // Collect events in range
+    // Collect events in range, plus snapshot events for balls alive before clip start
     const projEvents = this.projectileEvents.filter(
       e => e.timestamp >= clipStart && e.timestamp <= clipEnd
     );
-    const tgtEvents = this.targetEvents.filter(
-      e => e.timestamp >= clipStart && e.timestamp <= clipEnd
-    );
+
+    // Build snapshot of balls alive at clipStart:
+    // For each targetId, find the most recent event before clipStart.
+    // If it was Spawned/Bounce/StateChanged (not Destroyed), inject a Spawned at clipStart.
+    const aliveBalls = new Map<number, TargetEvent>();
+    for (const e of this.targetEvents) {
+      if (e.timestamp >= clipStart) break;
+      if (e.eventType === TargetEventType.Destroyed) {
+        aliveBalls.delete(e.targetId);
+      } else if (e.eventType === TargetEventType.Spawned) {
+        aliveBalls.set(e.targetId, e);
+      } else {
+        // Bounce or StateChanged — update position/velocity for this ball
+        const existing = aliveBalls.get(e.targetId);
+        if (existing) {
+          aliveBalls.set(e.targetId, {
+            ...existing,
+            posX: e.posX, posY: e.posY, posZ: e.posZ,
+            velX: e.velX, velY: e.velY, velZ: e.velZ,
+          });
+        }
+      }
+    }
+
+    // Create synthetic Spawned events at clipStart for alive balls
+    const snapshotEvents: TargetEvent[] = [];
+    for (const [, e] of aliveBalls) {
+      snapshotEvents.push({
+        ...e,
+        eventType: TargetEventType.Spawned,
+        timestamp: clipStart,
+      });
+    }
+
+    const tgtEvents = [
+      ...snapshotEvents,
+      ...this.targetEvents.filter(
+        e => e.timestamp >= clipStart && e.timestamp <= clipEnd
+      ),
+    ];
 
     // Renormalize timestamps to clip start
     const first = frames[0];
@@ -344,27 +379,8 @@ export interface IProjectileEventRecorder {
 export interface ITargetEventRecorder {
   recordTargetSpawned(targetId: number, position: Vec3, velocity: Vec3, targetType: number): void;
   recordTargetBounce(targetId: number, position: Vec3, velocity: Vec3): void;
-  recordTargetHit(targetId: number, position: Vec3, health: number): void;
+  recordTargetPeak(targetId: number, position: Vec3, velocity: Vec3): void;
+  recordTargetHit(targetId: number, position: Vec3, velocity: Vec3, health: number): void;
   recordTargetDestroyed(targetId: number, position: Vec3): void;
 }
 
-export interface DemoFileData {
-  header: {
-    magic: number;
-    formatVersion: number;
-    gameVersion: string;
-    timestamp: number;
-    duration: number;
-    totalFrames: number;
-    projectileEventCount: number;
-    targetEventCount: number;
-    checksum: number;
-    description: string;
-    startPosX: number; startPosY: number; startPosZ: number;
-    startYaw: number; startPitch: number;
-    startVelX: number; startVelY: number; startVelZ: number;
-  };
-  frames: DemoFrame[];
-  projectileEvents: ProjectileEvent[];
-  targetEvents: TargetEvent[];
-}
