@@ -361,10 +361,8 @@ def print_detailed(filepath):
 
 def print_table(demos):
     """Print a summary table for multiple demos."""
-    print(f"\n{'=' * 110}")
-    print(f"{'File':<52} {'Size':>8} {'Desc':>6} {'Real':>6} {'Match':>6} {'Dist':>7} {'Spd':>5} {'Dur':>6} {'Frames':>7}")
-    print(f"{'─' * 110}")
-
+    headers = ["File", "Size", "KB/s", "AirT", "Real", "ST", "Dist", "Spd", "Dur", "Fra"]
+    rows = []
     total_size = 0
     lifetimes = []
     real_airtimes = []
@@ -377,9 +375,8 @@ def print_table(demos):
             lifetime = parse_lifetime_from_desc(h["description"]) or 0
             lifetimes.append(lifetime)
             total_size += demo["file_size"]
-            name = os.path.basename(filepath)
+            name = os.path.basename(filepath).replace(".demo", "")
 
-            # Find real airtime from events
             verifications = compute_airtime_verification(demo)
             hits = [v for v in verifications if v["hit_type"] == "Hit"]
             real_air = max((v["airtime_ts"] for v in hits), default=0)
@@ -387,19 +384,55 @@ def print_table(demos):
             best_hit = max(hits, key=lambda v: v["airtime_ts"], default=None)
             dist = best_hit["distance"] if best_hit else 0
             spd = best_hit["speed"] if best_hit else 0
-            match = "OK" if abs(lifetime - real_air) < 0.5 else "*** DIFF"
+            match = "OK" if abs(lifetime - real_air) < 0.5 else "ER"
             if abs(lifetime - real_air) >= 0.5:
                 mismatches += 1
 
-            print(f"{name:<52} {demo['file_size']:>8,} {lifetime:>6.2f} {real_air:>6.2f} {match:>6} {dist:>7.1f} {spd:>5.0f} {h['duration']:>6.2f} {len(demo['frames']):>7}")
+            kbps = (demo['file_size'] / h['duration']) / 1024 if h['duration'] > 0 else 0
+            rows.append([
+                name,
+                f"{demo['file_size'] / 1024:.2f}",
+                f"{kbps:.2f}",
+                f"{lifetime:.2f}",
+                f"{real_air:.2f}",
+                match,
+                f"{dist:.1f}",
+                f"{spd:.0f}",
+                f"{h['duration']:.2f}",
+                str(len(demo['frames'])),
+            ])
         except Exception as e:
-            print(f"{os.path.basename(filepath):<52} ERROR: {e}")
+            rows.append([os.path.basename(filepath).replace(".demo", ""), f"ERROR: {e}"] + [""] * 8)
 
-    print(f"{'─' * 110}")
-    print(f"{'TOTAL':<52} {total_size:>8,}")
+    # Compute dynamic column widths: max(header_len, max_value_len) + 1 space
+    col_widths = []
+    for i, hdr in enumerate(headers):
+        w = len(hdr)
+        for row in rows:
+            w = max(w, len(row[i]) if i < len(row) else 0)
+        col_widths.append(w + 2)
+
+    total_width = sum(col_widths)
+
+    def fmt_row(values):
+        parts = []
+        for i, v in enumerate(values):
+            if i == 0:
+                parts.append(f"{v:<{col_widths[i]}}")
+            else:
+                parts.append(f"{v:>{col_widths[i]}}")
+        return "".join(parts)
+
+    print(f"\n{'=' * total_width}")
+    print(fmt_row(headers))
+    print(f"{'─' * total_width}")
+    for row in rows:
+        print(fmt_row(row))
+    print(f"{'─' * total_width}")
+    print(fmt_row(["TOTAL", f"{total_size / 1024:.2f}"] + [""] * 8))
     if lifetimes:
         print(f"  Demos: {len(demos)}  |  Best desc air: {max(lifetimes):.2f}s  |  Best real air: {max(real_airtimes):.2f}s  |  Mismatches: {mismatches}")
-    print(f"{'=' * 110}")
+    print(f"{'=' * total_width}")
 
 
 def main():
