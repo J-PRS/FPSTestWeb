@@ -245,7 +245,7 @@ export class DemoManager {
 
       // Time to extract
       this.pendingClips.splice(i, 1);
-      const clipData = this.recorder.extractClip(pending.clipStart, pending.clipEnd, pending.description);
+      const clipData = this.recorder.extractClip(pending.clipStart, pending.clipEnd, pending.description, pending.projectileLifetime);
       if (!clipData) {
         console.warn('[Demo] Auto-clip: not enough buffer for this clip');
         continue;

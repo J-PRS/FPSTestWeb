@@ -99,7 +99,7 @@ export class DemoStorage {
     const magic = view.getUint8(offset++);
     if (magic !== 0x44) throw new Error('Invalid demo magic');
 
-    offset += 4; // skip formatVersion
+    const formatVersion = view.getInt32(offset, true); offset += 4;
 
     // Read gameVersion string
     const gvLen = view.getUint16(offset, true); offset += 2;
@@ -116,12 +116,21 @@ export class DemoStorage {
     const descLen = view.getUint16(offset, true); offset += 2;
     const descBytes = new Uint8Array(buf, offset, descLen);
     const description = new TextDecoder().decode(descBytes);
+    offset += descLen;
 
-    // The projectile lifetime is encoded in the description: "Cool shot (X.XXs air, ...)"
+    // Skip start position/rotation/velocity (8 * float32 = 32 bytes)
+    offset += 32;
+
+    // projectileLifetime is a binary float32 field in format v2+
     let projectileLifetime = 0;
-    const match = description.match(/([\d.]+)s air/);
-    if (match && match[1]) {
-      projectileLifetime = parseFloat(match[1]);
+    if (formatVersion >= 2) {
+      projectileLifetime = view.getFloat32(offset, true);
+    } else {
+      // v1 fallback: parse from description string
+      const match = description.match(/([\d.]+)s air/);
+      if (match && match[1]) {
+        projectileLifetime = parseFloat(match[1]);
+      }
     }
 
     return { projectileLifetime, description, duration };
