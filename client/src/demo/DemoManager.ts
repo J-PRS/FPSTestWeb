@@ -32,7 +32,7 @@ export class DemoManager {
 
   // Stored cool shots, sorted by lifetime descending
   private coolShots: CoolShotEntry[] = [];
-  private static MAX_COOL_SHOTS = 10;
+  private static MAX_COOL_SHOTS = 20;
 
   // Server URL for demo upload/list/download
   private serverUrl: string = '';
@@ -46,6 +46,7 @@ export class DemoManager {
   onPlaybackState?: (state: PlaybackState) => void;
   onPlaybackEvent?: (events: { projectiles: ProjectileEvent[], targets: TargetEvent[] }) => void;
   onPlaybackEnd?: () => void;
+  onPlaybackStop?: () => void;
   onPlaybackSeek?: () => void;
   onPlaybackStart?: () => void;
 
@@ -65,7 +66,7 @@ export class DemoManager {
         this.onPlaybackEvent?.(events);
       },
       onPlaybackEnd: () => {
-        this.mode = 'idle';
+        this.mode = 'paused';
         this.ui.setPlaying(false);
         this.onPlaybackEnd?.();
       },
@@ -107,7 +108,7 @@ export class DemoManager {
         this.ui.setPlaying(false);
         this.ui.hide();
         this.uiVisible = false;
-        this.onPlaybackEnd?.();
+        this.onPlaybackStop?.();
       },
       onSave: () => {
         this.saveDemo();
@@ -146,7 +147,9 @@ export class DemoManager {
 
   get isRecording(): boolean { return this.mode === 'recording'; }
   get isPlaying(): boolean { return this.mode === 'playing' || this.mode === 'paused'; }
+  get isPaused(): boolean { return this.mode === 'paused'; }
   get isLoadedForPlayback(): boolean { return this.mode !== 'recording' && this.player.isLoaded; }
+  get currentTime(): number { return this.player.currentTimeValue; }
 
   // Recording control
   startRecording(): void {
@@ -181,7 +184,7 @@ export class DemoManager {
     this.player.stop();
     this.mode = 'idle';
     this.ui.setPlaying(false);
-    this.onPlaybackEnd?.();
+    this.onPlaybackStop?.();
   }
 
   // Toggle play/pause (used by keyboard shortcut)
@@ -197,6 +200,18 @@ export class DemoManager {
     }
   }
 
+  // Seek by a relative offset (seconds)
+  seekBy(delta: number): void {
+    if (this.mode !== 'playing' && this.mode !== 'paused') return;
+    this.player.seek(this.player.currentTimeValue + delta);
+  }
+
+  // Restart demo from the beginning
+  restart(): void {
+    if (this.mode !== 'playing' && this.mode !== 'paused') return;
+    this.player.seek(0);
+  }
+
   // Save current recording to file
   saveDemo(): void {
     if (this.recorder.frameCount === 0) {
@@ -210,6 +225,8 @@ export class DemoManager {
   // Auto-clip: called when a projectile hits something.
   // If projectileLifetime > minLifetime, schedules a clip extraction
   // bufferAfter seconds after the hit so post-hit footage is captured.
+  // If a new cool shot happens during an existing pending clip's wait period,
+  // the clips are merged into one longer clip (chain combo).
   // minLifetime is 0.2s during testing phase so clips are easy to trigger. Raise to ~2.0s for production.
   autoClipOnHit(projectileLifetime: number, minLifetime: number = 0.2, bufferBefore: number = 5.0, bufferAfter: number = 5.0): void {
     if (this.mode !== 'recording') return;
@@ -217,6 +234,22 @@ export class DemoManager {
 
     const hitTime = this.recorder.duration;
     const shotTime = hitTime - projectileLifetime;
+
+    // Check if there's a pending clip whose wait period hasn't elapsed yet — merge into it
+    for (const pending of this.pendingClips) {
+      if (hitTime < pending.extractAt) {
+        // Extend the clip end and push extraction time back
+        pending.clipEnd = hitTime + bufferAfter;
+        pending.extractAt = hitTime + bufferAfter;
+        pending.chainCount = (pending.chainCount ?? 1) + 1;
+        pending.bestLifetime = Math.max(pending.bestLifetime ?? pending.projectileLifetime, projectileLifetime);
+        const totalDur = pending.clipEnd - pending.clipStart;
+        pending.description = `Combo x${pending.chainCount} (best ${pending.bestLifetime.toFixed(2)}s air, ${totalDur.toFixed(1)}s clip)`;
+        console.log(`[CoolShot] Chain x${pending.chainCount}! Extending clip to ${totalDur.toFixed(1)}s — extracting in ${bufferAfter}s...`);
+        return;
+      }
+    }
+
     const clipStart = shotTime - bufferBefore;
     const clipEnd = hitTime + bufferAfter;
 
@@ -230,11 +263,13 @@ export class DemoManager {
       clipEnd,
       projectileLifetime,
       description: desc,
+      chainCount: 1,
+      bestLifetime: projectileLifetime,
     });
     console.log(`[CoolShot] Clip scheduled: ${desc} — extracting in ${bufferAfter}s...`);
   }
 
-  private pendingClips: { extractAt: number; clipStart: number; clipEnd: number; projectileLifetime: number; description: string }[] = [];
+  private pendingClips: { extractAt: number; clipStart: number; clipEnd: number; projectileLifetime: number; description: string; chainCount: number; bestLifetime: number }[] = [];
 
   private processPendingClips(): void {
     if (this.pendingClips.length === 0) return;
@@ -251,26 +286,27 @@ export class DemoManager {
         continue;
       }
 
-      const filename = `clip_${this.timestampStr()}_${pending.projectileLifetime.toFixed(1)}s.demo`;
-      this.uploadClipToServer(clipData, pending.projectileLifetime);
+      const filename = `clip_${this.timestampStr()}_${pending.bestLifetime.toFixed(1)}s.demo`;
+      this.uploadClipToServer(clipData, pending.bestLifetime);
 
       const entry: CoolShotEntry = {
-        id: `clip_${Date.now()}_${pending.projectileLifetime.toFixed(1)}`,
+        id: `clip_${Date.now()}_${pending.bestLifetime.toFixed(1)}`,
         filename,
-        projectileLifetime: pending.projectileLifetime,
+        projectileLifetime: pending.bestLifetime,
         timestamp: Date.now(),
         description: pending.description,
         clipData,
       };
       this.coolShots.push(entry);
       this.coolShots.sort((a, b) => b.projectileLifetime - a.projectileLifetime);
-      if (this.coolShots.length > DemoManager.MAX_COOL_SHOTS) {
-        this.coolShots = this.coolShots.slice(0, DemoManager.MAX_COOL_SHOTS);
-      }
+      // Keep top 10 by lifetime + recent 10 by timestamp (may overlap)
+      const topIds = new Set(this.coolShots.slice(0, 10).map(s => s.id));
+      const recentIds = new Set([...this.coolShots].sort((a, b) => b.timestamp - a.timestamp).slice(0, 10).map(s => s.id));
+      this.coolShots = this.coolShots.filter(s => topIds.has(s.id) || recentIds.has(s.id));
       this.onCoolShotsChanged?.(this.coolShots);
 
-      console.log(`[Demo] Auto-saved cool hit clip: ${filename} (proj lifetime ${pending.projectileLifetime.toFixed(2)}s)`);
-      this.ui.setStatus(`Clip saved! ${pending.projectileLifetime.toFixed(1)}s air`);
+      console.log(`[Demo] Auto-saved clip: ${filename} (best lifetime ${pending.bestLifetime.toFixed(2)}s, chain x${pending.chainCount})`);
+      this.ui.setStatus(`Clip saved! ${pending.bestLifetime.toFixed(1)}s air${pending.chainCount > 1 ? ` x${pending.chainCount}` : ''}`);
     }
   }
 
@@ -299,6 +335,12 @@ export class DemoManager {
       // Download from server then play
       this.playFromServer(entry.filename);
     }
+  }
+
+  // Play a cool shot clip by its entry ID
+  playCoolShotById(id: string): void {
+    const index = this.coolShots.findIndex(s => s.id === id);
+    if (index >= 0) this.playCoolShot(index);
   }
 
   private downloadDemoFile(data: DemoFile, filename: string): void {
@@ -384,7 +426,10 @@ export class DemoManager {
         }
       }
       this.coolShots.sort((a, b) => b.projectileLifetime - a.projectileLifetime);
-      this.coolShots = this.coolShots.slice(0, DemoManager.MAX_COOL_SHOTS);
+      // Keep top 10 by lifetime + recent 10 by timestamp (may overlap)
+      const topIds = new Set(this.coolShots.slice(0, 10).map(s => s.id));
+      const recentIds = new Set([...this.coolShots].sort((a, b) => b.timestamp - a.timestamp).slice(0, 10).map(s => s.id));
+      this.coolShots = this.coolShots.filter(s => topIds.has(s.id) || recentIds.has(s.id));
       this.onCoolShotsChanged?.(this.coolShots);
 
       console.log(`[CoolShots] ${this.coolShots.length} entries (top: ${this.coolShots[0]?.projectileLifetime.toFixed(2) ?? 'none'}s)`);

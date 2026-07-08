@@ -44,20 +44,20 @@
       width: 320px;
       background: rgba(0,15,30,0.92);
       border-right: 1px solid #0ff;
-      padding: 24px 20px;
+      padding: 16px 16px;
       overflow-y: auto;
       color: #8cf;
       font-size: 0.82rem;
     }
     #cool-shots-panel h2 {
       font-size: 1.1rem; color: #fff; letter-spacing: 0.1em;
-      margin-bottom: 4px; border-bottom: 1px solid #0ff; padding-bottom: 8px;
+      margin-bottom: 4px; border-bottom: 1px solid #0ff; padding-bottom: 6px;
     }
     #cool-shots-panel .sub { font-size: 0.7rem; color: #08f; margin-bottom: 16px; letter-spacing: 0.08em; }
-    #cool-shots-list { display: flex; flex-direction: column; gap: 6px; }
+    #cool-shots-top, #cool-shots-recent { display: flex; flex-direction: column; gap: 3px; }
     .cool-shot-item {
-      display: flex; align-items: center; gap: 10px;
-      padding: 10px 12px;
+      display: flex; align-items: center; gap: 8px;
+      padding: 4px 10px;
       background: rgba(0,40,60,0.6);
       border: 1px solid #055;
       border-radius: 4px;
@@ -65,20 +65,28 @@
       transition: background 0.15s, border-color 0.15s;
     }
     .cool-shot-item:hover { background: rgba(0,80,120,0.8); border-color: #0ff; }
-    .cool-shot-item .rank { font-size: 1.1rem; font-weight: bold; color: #0ff; min-width: 24px; }
-    .cool-shot-item .lifetime { font-size: 1.0rem; font-weight: bold; color: #fff; }
-    .cool-shot-item .time { font-size: 0.7rem; color: #679; margin-left: auto; }
+    .cool-shot-item.recent { background: rgba(0,60,20,0.7); border-color: #2a2; }
+    .cool-shot-item.recent:hover { background: rgba(0,100,30,0.8); border-color: #4f4; }
+    .cool-shot-item .rank { font-size: 0.85rem; font-weight: bold; color: #0ff; min-width: 18px; }
+    .cool-shot-item .lifetime { font-size: 0.8rem; font-weight: bold; color: #fff; }
+    .cool-shot-item .time-ago { font-size: 0.6rem; color: #8ac; margin-left: auto; }
     .cool-shot-item.empty { color: #456; cursor: default; text-align: center; justify-content: center; }
     .cool-shot-item.empty:hover { background: rgba(0,40,60,0.6); border-color: #055; }
+    .section-label { font-size: 0.65rem; color: #08f; letter-spacing: 0.1em; margin-bottom: 4px; margin-top: 12px; padding-bottom: 3px; border-bottom: 1px solid #033; }
+    .section-label:first-of-type { margin-top: 0; }
   </style>
 </head>
 <body>
   <div id="overlay">
     <div id="cool-shots-panel">
       <h2>COOL SHOTS</h2>
-      <div class="sub">Top 10 by air time</div>
-      <div id="cool-shots-list">
+      <div class="section-label">TOP 10</div>
+      <div id="cool-shots-top">
         <div class="cool-shot-item empty">No cool shots yet</div>
+      </div>
+      <div class="section-label" style="margin-top: 20px;">RECENT 10</div>
+      <div id="cool-shots-recent">
+        <div class="cool-shot-item empty">No recent shots</div>
       </div>
     </div>
     <div id="overlay-inner">

@@ -194,7 +194,7 @@ export class DemoStorage {
     }
     // Only list demos that meet the minimum lifetime threshold for "cool shots"
     const cool = this.index.filter(m => m.projectileLifetime >= CONFIG.minDemoLifetime);
-    return cool.slice(0, 10);
+    return cool;
   }
 
   async loadDemo(filename: string): Promise<ArrayBuffer | null> {

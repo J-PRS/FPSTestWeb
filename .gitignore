@@ -9,3 +9,5 @@ target/
 **/*.rs.bk
 .cargo/config
 __pycache__
+
+*.demo
