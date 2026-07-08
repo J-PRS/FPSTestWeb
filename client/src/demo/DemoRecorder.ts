@@ -5,7 +5,7 @@ import { CircularBuffer } from './CircularBuffer.js';
 import {
   DemoFrame, ProjectileEvent, TargetEvent,
   ProjectileEventType, TargetEventType,
-  createFrame, createHeader, DEMO_FORMAT_VERSION,
+  createFrame, DEMO_MAGIC, DEMO_FORMAT_VERSION,
   type DemoFile,
 } from './types.js';
 import type { IPlayerDataProvider, IInputProvider, Vec3 } from './interfaces.js';
@@ -13,7 +13,6 @@ import type { IPlayerDataProvider, IInputProvider, Vec3 } from './interfaces.js'
 const DEFAULT_BUFFER_SECONDS = 30;
 const DEFAULT_TICK_RATE = 60; // frames per second
 const MAX_EVENTS_PER_SEC = 1000;
-const MAX_TOTAL_EVENTS = 10000;
 
 export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecorder {
   private frameBuffer: CircularBuffer<DemoFrame>;
@@ -26,6 +25,7 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
   private elapsedTime = 0;
   private lastTickTime = 0;
   private tickInterval: number;
+  private bufferSeconds: number;
   private nextProjectileId = 1;
 
   private playerData: IPlayerDataProvider | null = null;
@@ -36,6 +36,7 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
   private lastEventResetTime = 0;
 
   constructor(bufferSeconds: number = DEFAULT_BUFFER_SECONDS, tickRate: number = DEFAULT_TICK_RATE) {
+    this.bufferSeconds = bufferSeconds;
     const capacity = Math.ceil(bufferSeconds * tickRate);
     this.frameBuffer = new CircularBuffer<DemoFrame>(capacity);
     this.tickInterval = 1.0 / tickRate;
@@ -93,6 +94,15 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
 
     this.frameBuffer.add(frame);
     this.frameNumber = (this.frameNumber + 1) % 65536;
+
+    // Prune events older than the frame buffer window — they can never be used in a clip
+    const cutoff = this.elapsedTime - this.bufferSeconds;
+    while (this.projectileEvents.length > 0 && this.projectileEvents[0].timestamp < cutoff) {
+      this.projectileEvents.shift();
+    }
+    while (this.targetEvents.length > 0 && this.targetEvents[0].timestamp < cutoff) {
+      this.targetEvents.shift();
+    }
   }
 
   private checkEventRate(): boolean {
@@ -101,7 +111,6 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
       this.lastEventResetTime = this.elapsedTime;
     }
     if (this.eventCountThisSecond >= MAX_EVENTS_PER_SEC) return false;
-    if (this.projectileEvents.length + this.targetEvents.length >= MAX_TOTAL_EVENTS) return false;
     this.eventCountThisSecond++;
     return true;
   }
@@ -239,7 +248,7 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
 
     return {
       header: {
-        magic: 0x44,
+        magic: DEMO_MAGIC,
         formatVersion: DEMO_FORMAT_VERSION,
         gameVersion: '1.0.0',
         timestamp: Date.now(),
@@ -257,6 +266,7 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
         startVelX: first?.velX ?? 0,
         startVelY: first?.velY ?? 0,
         startVelZ: first?.velZ ?? 0,
+        projectileLifetime: 0,
       },
       frames,
       projectileEvents: this.projectileEvents,
@@ -266,7 +276,7 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
 
   // Extract a clip: frames and events within [startTime, endTime].
   // Times are relative to recording start (elapsedTime).
-  extractClip(startTime: number, endTime: number, description: string): DemoFile | null {
+  extractClip(startTime: number, endTime: number, description: string, projectileLifetime: number = 0): DemoFile | null {
     if (this.frameBuffer.IsEmpty) return null;
 
     // Clamp to available range
@@ -348,7 +358,7 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
 
     return {
       header: {
-        magic: 0x44,
+        magic: DEMO_MAGIC,
         formatVersion: DEMO_FORMAT_VERSION,
         gameVersion: '1.0.0',
         timestamp: Date.now(),
@@ -361,6 +371,7 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
         startPosX: first.posX, startPosY: first.posY, startPosZ: first.posZ,
         startYaw: first.yaw, startPitch: first.pitch,
         startVelX: first.velX, startVelY: first.velY, startVelZ: first.velZ,
+        projectileLifetime,
       },
       frames: normFrames,
       projectileEvents: normProj,

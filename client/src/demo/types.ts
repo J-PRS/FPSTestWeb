@@ -1,7 +1,7 @@
 // Demo system data types - binary-efficient structures for recording/replay
 
 export const DEMO_MAGIC = 0x44; // 'D'
-export const DEMO_FORMAT_VERSION = 1;
+export const DEMO_FORMAT_VERSION = 2;
 
 // Input flag bitmasks
 export const InputFlags = {
@@ -90,6 +90,7 @@ export interface DemoHeader {
   startPosX: number; startPosY: number; startPosZ: number;
   startYaw: number; startPitch: number;
   startVelX: number; startVelY: number; startVelZ: number;
+  projectileLifetime: number;   // float32 — airtime of the cool shot (0 for full recordings)
 }
 
 export interface DemoFile {
@@ -135,5 +136,6 @@ export function createHeader(): DemoHeader {
     startPosX: 0, startPosY: 0, startPosZ: 0,
     startYaw: 0, startPitch: 0,
     startVelX: 0, startVelY: 0, startVelZ: 0,
+    projectileLifetime: 0,
   };
 }

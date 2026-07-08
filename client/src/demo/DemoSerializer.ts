@@ -60,7 +60,7 @@ export class DemoSerializer {
 
   static serialize(data: DemoFile): ArrayBuffer {
     // Calculate total size
-    const headerSize = 1 + 4 + 2 + 0 + 8 + 4 + 4 + 4 + 4 + 4 + 2 + 0 + 12 + 8 + 12; // fixed + 2 strings
+    const headerSize = 1 + 4 + 2 + 0 + 8 + 4 + 4 + 4 + 4 + 4 + 2 + 0 + 12 + 8 + 12 + 4; // fixed + 2 strings + projectileLifetime
     const gameVersionBytes = new TextEncoder().encode(data.header.gameVersion);
     const descBytes = new TextEncoder().encode(data.header.description);
     const totalHeaderSize = headerSize + gameVersionBytes.length + descBytes.length;
@@ -92,6 +92,7 @@ export class DemoSerializer {
     view.setFloat32(offset, data.header.startVelX, true); offset += 4;
     view.setFloat32(offset, data.header.startVelY, true); offset += 4;
     view.setFloat32(offset, data.header.startVelZ, true); offset += 4;
+    view.setFloat32(offset, data.header.projectileLifetime, true); offset += 4;
 
     // Frames
     view.setUint32(offset, data.frames.length, true); offset += 4;
@@ -197,6 +198,12 @@ export class DemoSerializer {
     const startVelY = view.getFloat32(offset, true); offset += 4;
     const startVelZ = view.getFloat32(offset, true); offset += 4;
 
+    // projectileLifetime added in format v2; absent in v1
+    let projectileLifetime = 0;
+    if (formatVersion >= 2) {
+      projectileLifetime = view.getFloat32(offset, true); offset += 4;
+    }
+
     // Verify checksum
     const checksumOffset = 1 + 4 + 2 + new TextEncoder().encode(gameVersion).length + 8 + 4 + 4 + 4 + 4;
     const dataAfterChecksum = new Uint8Array(buffer, checksumOffset + 4);
@@ -288,7 +295,7 @@ export class DemoSerializer {
         magic, formatVersion, gameVersion, timestamp, duration,
         totalFrames, projectileEventCount, targetEventCount, checksum, description,
         startPosX, startPosY, startPosZ, startYaw, startPitch,
-        startVelX, startVelY, startVelZ,
+        startVelX, startVelY, startVelZ, projectileLifetime,
       },
       frames,
       projectileEvents,
