@@ -301,10 +301,46 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
     }
     if (frames.length === 0) return null;
 
-    // Collect events in range, plus snapshot events for balls alive before clip start
-    const projEvents = this.projectileEvents.filter(
-      e => e.timestamp >= clipStart && e.timestamp <= clipEnd
-    );
+    // Collect events in range, plus snapshot events for balls/projectiles alive before clip start
+    // Build snapshot of projectiles in-flight at clipStart:
+    // For each projectileId, find the most recent event before clipStart.
+    // If it was Fired or Bounce (not Hit/Destroyed), inject a synthetic Fired at clipStart.
+    const aliveProjectiles = new Map<number, ProjectileEvent>();
+    for (const e of this.projectileEvents) {
+      if (e.timestamp >= clipStart) break;
+      if (e.eventType === ProjectileEventType.Hit || e.eventType === ProjectileEventType.Destroyed) {
+        aliveProjectiles.delete(e.projectileId);
+      } else if (e.eventType === ProjectileEventType.Fired) {
+        aliveProjectiles.set(e.projectileId, e);
+      } else {
+        // Bounce — update position/velocity
+        const existing = aliveProjectiles.get(e.projectileId);
+        if (existing) {
+          aliveProjectiles.set(e.projectileId, {
+            ...existing,
+            posX: e.posX, posY: e.posY, posZ: e.posZ,
+            velX: e.velX, velY: e.velY, velZ: e.velZ,
+          });
+        }
+      }
+    }
+
+    // Create synthetic Fired events at clipStart for in-flight projectiles
+    const snapshotProjEvents: ProjectileEvent[] = [];
+    for (const [, e] of aliveProjectiles) {
+      snapshotProjEvents.push({
+        ...e,
+        eventType: ProjectileEventType.Fired,
+        timestamp: clipStart,
+      });
+    }
+
+    const projEvents = [
+      ...snapshotProjEvents,
+      ...this.projectileEvents.filter(
+        e => e.timestamp >= clipStart && e.timestamp <= clipEnd
+      ),
+    ];
 
     // Build snapshot of balls alive at clipStart:
     // For each targetId, find the most recent event before clipStart.

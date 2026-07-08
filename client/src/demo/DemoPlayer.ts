@@ -85,11 +85,29 @@ export class DemoPlayer {
     if (!this.demoData) return;
     this.currentTime = Math.max(0, Math.min(time, this.duration));
     this.frameIndex = this.findFrameIndex(this.currentTime);
-    // Reset event pointers to the seek position
-    this.lastProjectileEventIndex = this.findEventIndex(this.demoData.projectileEvents, this.currentTime);
-    this.lastTargetEventIndex = this.findEventIndex(this.demoData.targetEvents, this.currentTime);
+    // Reset event pointers to 0 so all events from the beginning get re-emitted.
+    // This allows the playback to reconstruct all in-flight projectiles and balls
+    // that existed at the seek time.
+    this.lastProjectileEventIndex = 0;
+    this.lastTargetEventIndex = 0;
     // Notify callback so spawned projectiles can be cleaned up
     this.callbacks.onSeek?.();
+    // Emit frame state and all events up to seek time directly, so reconstruction
+    // works even when paused (update() returns early when not playing)
+    const state = this.getInterpolatedState();
+    const projEventCount = this.findEventIndex(this.demoData.projectileEvents, this.currentTime);
+    const targetEventCount = this.findEventIndex(this.demoData.targetEvents, this.currentTime);
+    const newProjEvents = this.demoData.projectileEvents.slice(0, projEventCount);
+    const newTargetEvents = this.demoData.targetEvents.slice(0, targetEventCount);
+    if (this.callbacks.onFrameUpdate) {
+      this.callbacks.onFrameUpdate(state, { projectiles: newProjEvents, targets: newTargetEvents });
+    }
+    if (this.callbacks.onTimeUpdate) {
+      this.callbacks.onTimeUpdate(this.currentTime, this.duration);
+    }
+    // Update event indices to current time for continued playback
+    this.lastProjectileEventIndex = projEventCount;
+    this.lastTargetEventIndex = targetEventCount;
   }
 
   setSpeed(speed: number): void {
