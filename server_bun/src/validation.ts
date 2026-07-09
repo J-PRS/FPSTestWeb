@@ -115,6 +115,19 @@ export function validateMessage(raw: unknown): ValidationResult<ClientMessage> {
       };
     }
 
+    case 'grenadeAOEShot': {
+      const pos = validateVec3(obj.position);
+      if (!pos.success) return { success: false, error: `position: ${pos.error}` };
+      const excludeTargetId = obj.excludeTargetId;
+      if (excludeTargetId !== null && excludeTargetId !== undefined && typeof excludeTargetId !== 'string') {
+        return { success: false, error: 'excludeTargetId must be string or null' };
+      }
+      return {
+        success: true,
+        data: { type: 'grenadeAOEShot', position: pos.data, excludeTargetId: (excludeTargetId as string | null) ?? null },
+      };
+    }
+
     case 'jump':
     case 'jetpack': {
       const pos = validateVec3(obj.position);

@@ -1,7 +1,9 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { ChildLogger } from './Logger.js';
-import { PLAYER_RADIUS, PLAYER_HEIGHT, CAPSULE_CYLINDER_HEIGHT, CAPSULE_CENTER_Y } from './config.js';
+
+import { PLAYER_RADIUS, PLAYER_HEIGHT, CAPSULE_CYLINDER_HEIGHT, CAPSULE_CENTER_Y } from '../core/config.js';
+
+import { ChildLogger } from '../core/Logger.js';
 
 const logger = new ChildLogger('PlayerModel');
 

@@ -1,6 +1,9 @@
 import * as THREE from 'three';
-import { Terrain } from './terrain.js';
-import { JET_FORCE_UP, JET_FORCE_DIR, MAX_ENERGY, JET_DRAIN, JET_CHARGE, FIRE_RATE, DISC_RATE } from './config.js';
+
+import { JET_FORCE_UP, JET_FORCE_DIR, MAX_ENERGY, JET_DRAIN, JET_CHARGE, FIRE_RATE, DISC_RATE, GRENADE_RATE } from '../core/config.js';
+
+import { Terrain } from '../world/terrain.js';
+
 import { MovementController, MovementState } from './movement.js';
 import { PlayerModel, AnimationState } from './PlayerModel.js';
 
@@ -20,6 +23,7 @@ export class Player {
   energy = MAX_ENERGY;
   fireTimer = 0.0;
   discTimer = 0.0;
+  grenadeTimer = 0.0;
   health = 100;
   kills = 0;
   isDead = false;
@@ -34,6 +38,7 @@ export class Player {
     this.jetPending = false;
     this.jumpHeld = false;
     this.discHeld = false;
+    this.grenadeHeld = false;
   }
 
   unfreezeInput(): void {
@@ -55,6 +60,7 @@ export class Player {
   private jetPending = false;
   private jumpHeld = false;
   private discHeld = false;
+  private grenadeHeld = false;
   private _lastJetpackSend = 0;
 
   // Events
@@ -63,6 +69,7 @@ export class Player {
   onJetpack: ((pos: THREE.Vector3) => void) | null = null;
   onSki: ((pos: THREE.Vector3, vel: THREE.Vector3) => void) | null = null;
   onDisc: ((e: FireEvent) => void) | null = null;
+  onGrenade: ((e: FireEvent) => void) | null = null;
   onNetworkJump: ((pos: { x: number; y: number; z: number }) => void) | null = null;
   onNetworkJetpack: ((pos: { x: number; y: number; z: number }) => void) | null = null;
   onNetworkInput: ((input: { forward: number; right: number; jump: number; ski: number }, rotation: { yaw: number; pitch: number }) => void) | null = null;
@@ -143,6 +150,9 @@ export class Player {
       if (e.code === 'KeyC') {
         this.discHeld = true;
       }
+      if (e.code === 'KeyF') {
+        this.grenadeHeld = true;
+      }
     });
     document.addEventListener('keyup', (e) => {
       if (this.inputFrozen) return;
@@ -152,6 +162,9 @@ export class Player {
       }
       if (e.code === 'KeyC') {
         this.discHeld = false;
+      }
+      if (e.code === 'KeyF') {
+        this.grenadeHeld = false;
       }
     });
     document.addEventListener('mousedown', (e) => {
@@ -182,7 +195,7 @@ export class Player {
     return new THREE.Vector2(-Math.cos(this.yaw), Math.sin(this.yaw));
   }
 
-  getInputState(): { forward: number; right: number; jumpPressed: boolean; jumpHeld: boolean; skiHeld: boolean; firePressed: boolean; jetHeld: boolean; discHeld: boolean } {
+  getInputState(): { forward: number; right: number; jumpPressed: boolean; jumpHeld: boolean; skiHeld: boolean; firePressed: boolean; jetHeld: boolean; discHeld: boolean; grenadeHeld: boolean } {
     let forward = 0, right = 0;
     if (this.keys['KeyW'] || this.keys['ArrowUp'])    forward += 1;
     if (this.keys['KeyS'] || this.keys['ArrowDown'])  forward -= 1;
@@ -200,7 +213,8 @@ export class Player {
       skiHeld: this.keys['Space'] || false,
       firePressed: this.firePending,
       jetHeld: this.jetPending,
-      discHeld: this.discHeld
+      discHeld: this.discHeld,
+      grenadeHeld: this.grenadeHeld
     };
   }
 
@@ -218,6 +232,7 @@ export class Player {
 
     this.fireTimer = Math.max(0, this.fireTimer - dt);
     this.discTimer = Math.max(0, this.discTimer - dt);
+    this.grenadeTimer = Math.max(0, this.grenadeTimer - dt);
 
     // Calculate movement input
     const fwd = this.getForwardXZ();
@@ -253,6 +268,48 @@ export class Player {
       onGround: this.onGround,
     });
     this.movement.setInput({ forward, right, jumpPressed, jumpHeld, skiHeld });
+
+    // Fire (before physics update so projectile spawns from correct camera position)
+    if ((this.firePending || this.mouseHeld) && this.fireTimer <= 0) {
+      this.firePending = false;
+      this.fireTimer = FIRE_RATE;
+      if (this.onFire) {
+        const dir = new THREE.Vector3(
+          Math.cos(this.pitch) * Math.sin(this.yaw),
+          Math.sin(this.pitch),
+          Math.cos(this.pitch) * Math.cos(this.yaw)
+        ).normalize();
+        this.onFire({ origin: this.pos.clone(), dir, playerVel: this.vel.clone() });
+      }
+    }
+    this.firePending = false;
+
+    // Disc (C key) - hold to fire (before physics update)
+    if (this.discHeld && this.discTimer <= 0) {
+      this.discTimer = DISC_RATE;
+      if (this.onDisc) {
+        const dir = new THREE.Vector3(
+          Math.cos(this.pitch) * Math.sin(this.yaw),
+          Math.sin(this.pitch),
+          Math.cos(this.pitch) * Math.cos(this.yaw)
+        ).normalize();
+        this.onDisc({ origin: this.pos.clone(), dir, playerVel: this.vel.clone() });
+      }
+    }
+
+    // Grenade (F key) - hold to fire (before physics update)
+    if (this.grenadeHeld && this.grenadeTimer <= 0) {
+      this.grenadeTimer = GRENADE_RATE;
+      if (this.onGrenade) {
+        const dir = new THREE.Vector3(
+          Math.cos(this.pitch) * Math.sin(this.yaw),
+          Math.sin(this.pitch),
+          Math.cos(this.pitch) * Math.cos(this.yaw)
+        ).normalize();
+        this.onGrenade({ origin: this.pos.clone(), dir, playerVel: this.vel.clone() });
+      }
+    }
+
     this.movement.update(dt);
 
     // Send input to network for client-side prediction
@@ -312,34 +369,6 @@ export class Player {
 
     // Energy recharge
     this.energy = Math.min(MAX_ENERGY, this.energy + JET_CHARGE * dt);
-
-    // Fire
-    if ((this.firePending || this.mouseHeld) && this.fireTimer <= 0) {
-      this.firePending = false;
-      this.fireTimer = FIRE_RATE;
-      if (this.onFire) {
-        const dir = new THREE.Vector3(
-          Math.cos(this.pitch) * Math.sin(this.yaw),
-          Math.sin(this.pitch),
-          Math.cos(this.pitch) * Math.cos(this.yaw)
-        ).normalize();
-        this.onFire({ origin: this.pos.clone(), dir, playerVel: this.vel.clone() });
-      }
-    }
-    this.firePending = false;
-
-    // Disc (C key) - hold to fire
-    if (this.discHeld && this.discTimer <= 0) {
-      this.discTimer = DISC_RATE;
-      if (this.onDisc) {
-        const dir = new THREE.Vector3(
-          Math.cos(this.pitch) * Math.sin(this.yaw),
-          Math.sin(this.pitch),
-          Math.cos(this.pitch) * Math.cos(this.yaw)
-        ).normalize();
-        this.onDisc({ origin: this.pos.clone(), dir, playerVel: this.vel.clone() });
-      }
-    }
 
     // Update shadow blob position (follows player on ground)
     if (this.shadowBlob) {

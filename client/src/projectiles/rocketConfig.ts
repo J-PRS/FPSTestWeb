@@ -1,9 +1,11 @@
 import * as THREE from 'three';
+
 import {
   GRAVITY, ROCKET_SPEED, ROCKET_RADIUS, ROCKET_BODY_RADIUS, ROCKET_FORCE,
   ROCKET_AOE_DAMAGE, ROCKET_AOE_RADIUS, HIT_MIN, HIT_MAX, HIT_GROW,
   EXPLOSION_FALLOFF_MULTIPLIER_ROCKET, KNOCKBACK_MULTIPLIER,
-} from '../config.js';
+} from '../core/config.js';
+
 import type { ProjectileConfig } from './types.js';
 
 export const ROCKET_CONFIG: ProjectileConfig = {
@@ -49,8 +51,9 @@ export const ROCKET_CONFIG: ProjectileConfig = {
   glowShell: true,
   glowColor: 0xff4400,
   glowOpacity: 0.18,
+  glowScale: 0.8,
   meshRampIn: true,
-  meshRampInDuration: 0.2,
+  meshRampInDuration: 0.05,
   meshStartScale: 0.2,
   terrainOffset: HIT_MIN,
   needsServerTracking: true,

@@ -7,7 +7,7 @@
 - **Server:** Node.js with uWebSockets, Tribes2Networking integration
 - **Networking:** Tribes2 event system (PositionEvent, ShotEvent, JumpEvent, JetpackEvent, SkiEvent, DeathEvent), bit-packed streams
 - **Security:** Position validation (three-tier: accept/nudge/snap)
-- **Recent Changes:** Completed Tribes2 networking integration (Phase 64)
+- **Recent Changes:** Implemented grenade weapon (F key) with gravity-affected arc, auto-explode; improved disc trail with frisbee-style flat geometry and glow; added projectile system enhancements (maxLifetime, trailMeshType, glowScale)
 
 ## Technical Context
 - **Dependencies:**
@@ -44,20 +44,19 @@
   - Validate all client inputs
 
 ## Current Task
-- **Objective:** Phase 64 complete - refactored MessageHandler for improved code cleanliness
-- **Status:** Tribes2 networking fully integrated, code quality improved
-- **Integration Points Verified:**
-  - Client main.ts: setControlObject, sendInputMove, sendJump, sendJetpack, sendShot all wired
-  - Server Server.ts: setControlObjectProvider provides player state for client-side prediction
-  - Binary message routing: Server waits for join handshake, client routes binary packets to StreamManager
-  - Client-side prediction: MoveManager reconciliation with input replay implemented
-  - Event system: JumpEvent, JetpackEvent, SkiEvent, DeathEvent fully implemented
-  - GhostManager: State mask synchronization with priority-based updates
-- **Completed in Phase 64:**
-  - Refactored MessageHandler for improved code cleanliness and maintainability
-  - Extracted validateAndApplyPosition method to reduce duplication
-  - Extracted processHit, validateProjectileDistance, calculateDamage, handlePlayerDeath methods
-  - Benefits: Reduced code duplication, improved readability, better separation of concerns
+- **Objective:** Grenade weapon implementation and disc trail improvements
+- **Status:** Complete
+- **Completed:**
+  - Implemented gravity-affected grenade weapon (F key) with speed 40, max lifetime 2s auto-explode
+  - Added larger AOE radius (10) and knockback force (45) for grenade
+  - Added maxLifetime, trailMeshType, and glowScale properties to ProjectileConfig
+  - Improved disc trail with glow, flat disc geometry oriented sideways (frisbee-style)
+  - Applied rocket-style mesh ramp-in to disc for unobstructive first-person view
+  - Scaled explosion visuals by projectile radius (grenade explosions appear larger)
+  - Added server-side grenadeAOEShot message handling and validation
+  - Added sendGrenadeAOEShot to NetworkManager
+  - Updated overlay controls to mention disc (C) and grenade (F) keys
+  - Files modified: client/src/config.ts, client/src/projectiles/grenadeConfig.ts, client/src/projectiles/discConfig.ts, client/src/projectiles/types.ts, client/src/projectiles/Projectile.ts, client/src/Player.ts, client/src/main.ts, client/src/explosion.ts, client/src/networking/NetworkManager.ts, client/index.html, server_bun/src/config.ts, server_bun/src/types.ts, server_bun/src/validation.ts, server_bun/src/MessageHandler.ts
 - **Completed in Phase 63:**
   - Added comprehensive unit tests for BitStream per multiplayer specification
   - Created BitStream.test.ts with full test coverage

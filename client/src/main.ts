@@ -1,32 +1,5 @@
 import * as THREE from 'three';
-import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
-import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
-import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
-import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
-import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
-import { AtmosphericSky } from './atmosphericSky.js';
-import { VolumetricClouds } from './volumetricClouds.js';
-import { loadHeightmap, Terrain } from './terrain.js';
-import { Player } from './Player.js';
-import { Ball, pickVariant } from './balls.js';
-import { Projectile } from './projectiles/Projectile.js';
-import { ROCKET_CONFIG, DISC_CONFIG, getProjectileConfig, computeAccuracy } from './projectiles/index.js';
-import type { ProjectileConfig } from './projectiles/types.js';
-import { EffectsManager } from './effects.js';
-import { HUD } from './hud.js';
-import { HealthBarSystem } from './HealthBarSystem.js';
-import { BallDebris } from './debris.js';
-import { Explosion } from './explosion.js';
-import { Implosion } from './implosion.js';
-import { RemotePlayer } from './RemotePlayer.js';
-import { DamageNumberManager } from './damageNumbers.js';
-import { PlayerDebris } from './PlayerDebris.js';
-import { NetworkManager } from './networking/NetworkManager.js';
-import { NetworkAdapterFactory } from './networking/NetworkAdapterFactory.js';
-import { ChildLogger } from './Logger.js';
-import { StateSnapshot } from './StateSnapshot.js';
-import { DemoManager } from './demo/index.js';
-import { InputFlags, JetpackFlags, ProjectileEventType, TargetEventType } from './demo/types.js';
+
 import {
   ROCKET_SPEED, ROCKET_AOE_DAMAGE, ROCKET_AOE_RADIUS, HIT_MAX, BALL_SPAWN_INTERVAL, BALL_MAX,
   DISC_SPEED,
@@ -43,8 +16,45 @@ import {
   EXPLOSION_FALLOFF_MULTIPLIER_ROCKET, EXPLOSION_FALLOFF_MULTIPLIER_DISC, EXPLOSION_COLLISION_MULTIPLIER, KNOCKBACK_MULTIPLIER, PULL_MULTIPLIER,
   ACCURACY_MAX, ACCURACY_NORMALIZATION,
   MAX_DELTA_TIME, REMOTE_PLAYER_FIXED_DT, DEBUG_LOG_SAMPLE_RATE,
-  BUTTON_TIMEOUT, NETWORK_BACKEND
-} from './config.js';
+  BUTTON_TIMEOUT, NETWORK_BACKEND, ROCKET_RADIUS
+} from './core/config.js';
+
+import { ChildLogger } from './core/Logger.js';
+import { StateSnapshot } from './core/StateSnapshot.js';
+import { createRenderer } from './core/renderer.js';
+
+import { DemoManager } from './demo/index.js';
+import { InputFlags, JetpackFlags, ProjectileEventType, TargetEventType } from './demo/types.js';
+
+import { Ball, pickVariant } from './entities/balls.js';
+import { Player } from './entities/Player.js';
+import { PlayerDebris } from './entities/PlayerDebris.js';
+import { RemotePlayer } from './entities/RemotePlayer.js';
+
+import { BallDebris } from './effects/debris.js';
+import { DamageNumberManager } from './effects/damageNumbers.js';
+import { EffectsManager } from './effects/effects.js';
+import { Explosion } from './effects/explosion.js';
+import { Implosion } from './effects/implosion.js';
+
+import { NetworkAdapterFactory } from './networking/NetworkAdapterFactory.js';
+import { NetworkManager } from './networking/NetworkManager.js';
+
+import { ROCKET_CONFIG, DISC_CONFIG, GRENADE_CONFIG, getProjectileConfig, computeAccuracy } from './projectiles/index.js';
+import { Projectile } from './projectiles/Projectile.js';
+import type { ProjectileConfig } from './projectiles/types.js';
+
+import { CoolShotsPanel } from './ui/CoolShotsPanel.js';
+import { FragMessages } from './ui/FragMessages.js';
+import { HealthBarSystem } from './ui/HealthBarSystem.js';
+import { HUD } from './ui/hud.js';
+
+import { ExplosionTracker } from './utils/ExplosionTracker.js';
+import { setupInputTracking } from './utils/InputTracking.js';
+import { LoadProfiler } from './utils/profiling.js';
+
+import { createScene } from './world/scene.js';
+import { loadHeightmap, Terrain } from './world/terrain.js';
 
 const logger = new ChildLogger('Main');
 
@@ -52,186 +62,20 @@ const logger = new ChildLogger('Main');
 let demoManager: DemoManager | null = null;
 
 // ---- Load Time Profiling ----
-const loadTimes: { [key: string]: number } = {};
-const loadStart = performance.now();
-loadTimes['scriptStart'] = loadStart;
+const profiler = new LoadProfiler();
 
-function markTime(name: string): void {
-  loadTimes[name] = performance.now();
-  const elapsed = (loadTimes[name] - loadStart).toFixed(2);
-  console.log(`[PROFILE] ${name}: ${elapsed}ms`);
-}
-
-function printLoadSummary(): void {
-  console.log('=== LOAD TIME SUMMARY ===');
-  let prev = loadStart;
-  for (const [name, time] of Object.entries(loadTimes)) {
-    const elapsed = (time - loadStart).toFixed(2);
-    const delta = (time - prev).toFixed(2);
-    console.log(`${name}: +${delta}ms (total: ${elapsed}ms)`);
-    prev = time;
-  }
-  const total = (performance.now() - loadStart).toFixed(2);
-  console.log(`=== TOTAL: ${total}ms ===`);
-}
-
-
-// ---- Renderer ----
-let pixelated = localStorage.getItem('fps-pixelated') === 'false' ? false : true;
-const renderer = new THREE.WebGLRenderer({ antialias: false });
-renderer.setPixelRatio(RENDERER_PIXEL_RATIO);
-if (pixelated) {
-  renderer.setSize(
-    Math.floor(window.innerWidth / PIXEL_SCALE),
-    Math.floor(window.innerHeight / PIXEL_SCALE)
-  );
-  renderer.domElement.style.imageRendering = 'pixelated';
-} else {
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.domElement.style.imageRendering = 'auto';
-}
-renderer.domElement.style.width = '100%';
-renderer.domElement.style.height = '100%';
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFShadowMap;
-renderer.toneMapping = THREE.ACESFilmicToneMapping; // applied by OutputPass at end of post chain
-renderer.toneMappingExposure = TONE_MAPPING_EXPOSURE;
-document.body.appendChild(renderer.domElement);
-
-// Initialize button text from localStorage
-const pixelToggleBtn = document.getElementById('pixel-toggle')! as HTMLButtonElement;
-pixelToggleBtn.textContent = pixelated ? 'PIXELATED: ON' : 'PIXELATED: OFF';
-
-let postproEnabled = localStorage.getItem('fps-postpro') === 'false' ? false : true;
-const postproToggleBtn = document.getElementById('bloom-toggle')! as HTMLButtonElement;
-postproToggleBtn.textContent = postproEnabled ? 'POST-PROCESSING: ON' : 'POST-PROCESSING: OFF';
-
-function updateRendererSize(): void {
-  if (pixelated) {
-    renderer.setSize(
-      Math.floor(window.innerWidth / PIXEL_SCALE),
-      Math.floor(window.innerHeight / PIXEL_SCALE)
-    );
-    renderer.domElement.style.imageRendering = 'pixelated';
-  } else {
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.domElement.style.imageRendering = 'auto';
-  }
-}
-
-window.addEventListener('resize', () => {
-  updateRendererSize();
-  camera.aspect = window.innerWidth / window.innerHeight;
-  camera.updateProjectionMatrix();
-  const w = pixelated
-    ? Math.floor(window.innerWidth / PIXEL_SCALE)
-    : window.innerWidth;
-  const h = pixelated
-    ? Math.floor(window.innerHeight / PIXEL_SCALE)
-    : window.innerHeight;
-  composer.setSize(w, h);
-});
 
 // ---- Camera ----
 const camera = new THREE.PerspectiveCamera(CAMERA_FOV, window.innerWidth / window.innerHeight, CAMERA_NEAR, CAMERA_FAR);
 
 // ---- Scene ----
-const scene = new THREE.Scene();
-scene.fog = new THREE.FogExp2(FOG_COLOR, FOG_DENSITY); // exponential like Tribes 2 - warm haze
+const sceneSetup = createScene();
+const { scene, atmosphericSky, volumetricClouds, sun } = sceneSetup;
+
+// ---- Renderer ----
+const rendererSetup = createRenderer(camera, scene);
+const { renderer, composer, bloomPass, contrastPass, fxaaPass } = rendererSetup;
 renderer.setClearColor(FOG_COLOR);
-
-// ---- Post-processing (Bloom) ----
-const composer = new EffectComposer(renderer);
-composer.addPass(new RenderPass(scene, camera));
-const bloomPass = new UnrealBloomPass(
-  new THREE.Vector2(
-    pixelated ? Math.floor(window.innerWidth / PIXEL_SCALE) : window.innerWidth,
-    pixelated ? Math.floor(window.innerHeight / PIXEL_SCALE) : window.innerHeight
-  ),
-  0.6,  // strength
-  0.4,  // radius
-  1     // threshold (linear HDR — only emissive/additive elements exceed this)
-);
-composer.addPass(bloomPass);
-
-// Contrast pass — pushes midtones darker, increases contrast
-const contrastPass = new ShaderPass({
-  uniforms: {
-    tDiffuse: { value: null },
-    contrast: { value: 1.15 },  // >1 = more contrast
-    brightness: { value: -0.02 } // slightly darker
-  },
-  vertexShader: `
-    varying vec2 vUv;
-    void main() {
-      vUv = uv;
-      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-    }
-  `,
-  fragmentShader: `
-    uniform sampler2D tDiffuse;
-    uniform float contrast;
-    uniform float brightness;
-    varying vec2 vUv;
-    void main() {
-      vec4 color = texture2D(tDiffuse, vUv);
-      color.rgb = (color.rgb - 0.5) * contrast + 0.5 + brightness;
-      gl_FragColor = color;
-    }
-  `
-});
-composer.addPass(contrastPass);
-
-composer.addPass(new OutputPass()); // ACES tone mapping + sRGB conversion after bloom
-bloomPass.enabled = postproEnabled;
-contrastPass.enabled = postproEnabled;
-
-// ---- Atmospheric Sky & Volumetric Clouds ----
-const atmosphericSky = new AtmosphericSky(scene, {
-  turbidity: SKY_TURBIDITY,
-  rayleigh: SKY_RAYLEIGH,
-  mieCoefficient: SKY_MIE_COEFFICIENT,
-  mieDirectionalG: SKY_MIE_DIRECTIONAL_G,
-  sunIntensity: SKY_SUN_INTENSITY,
-});
-
-const volumetricClouds = new VolumetricClouds(scene, {
-  count: CLOUD_COUNT, // Fewer cloud clusters, each with multiple spheres
-  cloudColor: new THREE.Color(0xffffff),
-  cloudDensity: CLOUD_DENSITY, // Lower density for softer, more transparent clouds
-  windSpeed: CLOUD_WIND_SPEED, // Slower, more realistic wind
-  windDirection: new THREE.Vector3(1, 0, 0.1), // Keep as-is for now - this is a direction vector, not a scalar
-  minHeight: CLOUD_MIN_HEIGHT,
-  maxHeight: CLOUD_MAX_HEIGHT,
-  spreadRadius: CLOUD_SPREAD_RADIUS,
-});
-
-// ---- Lighting (Tribes 2 aesthetic: bright overhead sun, warm fill) ----
-const ambient = new THREE.AmbientLight(AMBIENT_COLOR, AMBIENT_INTENSITY);  // warm brown fill
-scene.add(ambient);
-
-const sun = new THREE.DirectionalLight(SUN_COLOR, SUN_INTENSITY);  // bright warm sun
-sun.castShadow = true;
-sun.shadow.mapSize.set(SHADOW_MAP_SIZE, SHADOW_MAP_SIZE);
-sun.shadow.camera.near = SHADOW_CAMERA_NEAR;
-sun.shadow.camera.far = SHADOW_CAMERA_FAR;
-sun.shadow.camera.left = -SHADOW_CAMERA_SIZE;
-sun.shadow.camera.right = SHADOW_CAMERA_SIZE;
-sun.shadow.camera.top = SHADOW_CAMERA_SIZE;
-sun.shadow.camera.bottom = -SHADOW_CAMERA_SIZE;
-sun.shadow.bias = -0.0001;
-sun.shadow.normalBias = 0.02;
-scene.add(sun);
-scene.add(sun.target);
-
-// Sync sun position with atmospheric sky
-sun.position.copy(atmosphericSky.getSunPosition());
-sun.target.position.set(0, 0, 0); // Point shadow camera at origin
-sun.target.updateMatrixWorld();
-volumetricClouds.setSunDirection(atmosphericSky.getSunDirection());
-
-const hemi = new THREE.HemisphereLight(HEMI_SKY_COLOR, HEMI_GROUND_COLOR, HEMI_INTENSITY);  // blue sky top, warm earth bounce
-scene.add(hemi);
 
 // ---- Game state ----
 let terrain: Terrain;
@@ -261,38 +105,17 @@ let seekReconstructing = false;
 const playbackProjectileOrigin = new Map<number, THREE.Vector3>();
 
 // Track recent explosions for death impulse calculation
-interface ExplosionInfo {
-  position: THREE.Vector3;
-  force: number;
-  timestamp: number;
-  shooterId: string;
-}
-const recentExplosions: ExplosionInfo[] = [];
-
 let ballTimer = 0;
 let ballSnapshotTimer = 0;
 
-// ---- Score display ----
-const scoreDiv = document.createElement('div');
-scoreDiv.style.cssText = `
-  position:absolute; top:calc(50% - 60px); left:50%; transform:translate(-50%,-100%);
-  font-family:sans-serif; font-size:1rem; color:#fff;
-  text-shadow:1px 1px 3px #000;
-  pointer-events:none; text-align:center; white-space:pre; line-height:1.5;
-  opacity:0; transition:opacity ${FRAG_MESSAGE_FADE}ms ease;
-`;
-document.body.appendChild(scoreDiv);
+// ---- Input tracking ----
+const inputTracking = setupInputTracking(logger);
 
-function showFragMessage(msg: string): void {
-  scoreDiv.textContent = msg;
-  scoreDiv.style.transition = 'none';
-  scoreDiv.style.opacity = '1';
-  clearTimeout((scoreDiv as any)._t);
-  (scoreDiv as any)._t = setTimeout(() => {
-    scoreDiv.style.transition = `opacity ${FRAG_MESSAGE_FADE}ms ease`;
-    scoreDiv.style.opacity = '0';
-  }, FRAG_MESSAGE_DURATION);
-}
+// ---- Explosion tracking ----
+const explosionTracker = new ExplosionTracker();
+
+// ---- Score display ----
+const fragMessages = new FragMessages();
 
 // ---- Projectile fire handler ----
 const pendingLocalProjectiles: Projectile[] = []; // queue: projectiles waiting for server projectileId
@@ -300,7 +123,7 @@ const localProjectileById = new Map<string, Projectile>(); // server projectileI
 const pendingProjectileTimestamps: Map<Projectile, number> = new Map(); // track when projectiles were created
 
 function spawnProjectile(config: ProjectileConfig, e: { origin: THREE.Vector3; dir: THREE.Vector3; playerVel: THREE.Vector3 }): void {
-  if (isTabHidden) return;
+  if (inputTracking.isTabHidden()) return;
   if (demoManager?.isPlaying) return;
 
   // INSTANT SHOOTING: Spawn projectile locally immediately for LAN-like feel
@@ -342,6 +165,10 @@ function onDisc(e: { origin: THREE.Vector3; dir: THREE.Vector3; playerVel: THREE
   spawnProjectile(DISC_CONFIG, e);
 }
 
+function onGrenade(e: { origin: THREE.Vector3; dir: THREE.Vector3; playerVel: THREE.Vector3 }): void {
+  spawnProjectile(GRENADE_CONFIG, e);
+}
+
 // ---- Projectile explosion processing (push or pull based on config) ----
 function processProjectileExplosion(
   pos: THREE.Vector3,
@@ -356,27 +183,18 @@ function processProjectileExplosion(
   directHit: boolean = false,
   directHitTargetId?: string | null,
   age: number = 0,
-  sendAOE?: (pos: any, targetId: string | null) => void
+  sendAOE?: (pos: any, targetId: string | null) => void,
+  explosionType: 'rocket' | 'grenade' = 'rocket'
 ): void {
   if (forceMode === 'push') {
-    explosions.push(new Explosion(scene, pos, directHit, age));
+    const explosionScale = Math.max(0.5, radius / ROCKET_RADIUS);
+    explosions.push(new Explosion(scene, pos, directHit, age, explosionScale, explosionType));
   } else {
     implosions.push(new Implosion(scene, pos, age));
   }
 
   // Record explosion for death impulse calculation
-  recentExplosions.push({
-    position: pos.clone(),
-    force,
-    timestamp: Date.now(),
-    shooterId: shooterId || networkManager.getLocalPlayerId()
-  });
-
-  // Keep only last 2 seconds of explosions
-  const cutoff = Date.now() - FRAG_MESSAGE_DURATION;
-  while (recentExplosions.length > 0 && recentExplosions[0].timestamp < cutoff) {
-    recentExplosions.shift();
-  }
+  explosionTracker.addExplosion(pos, force, shooterId || networkManager.getLocalPlayerId());
 
   const applyToLocal = forceMode === 'push'
     ? (p: THREE.Vector3, f: number) => player.applyKnockback(p, f)
@@ -475,7 +293,10 @@ function updateProjectiles(dt: number): void {
         p.age,
         p.config.name === 'rocket'
           ? (pos, targetId) => networkManager.sendAOEShot(pos, targetId)
-          : (pos, targetId) => networkManager.sendDiscAOEShot(pos, targetId)
+          : p.config.name === 'grenade'
+            ? (pos, targetId) => networkManager.sendGrenadeAOEShot(pos, targetId)
+            : (pos, targetId) => networkManager.sendDiscAOEShot(pos, targetId),
+        p.config.name === 'grenade' ? 'grenade' : 'rocket'
       );
 
       // Record projectile hit for demo (any hit: terrain, ball, or player)
@@ -510,14 +331,14 @@ function updateProjectiles(dt: number): void {
           debrisList.push(new BallDebris(scene, terrain, ball.pos.x, ball.pos.y, ball.pos.z, ball.color, ball.scale));
           player.kills++;
         }
-        showFragMessage(`${acc.toFixed(1)} · ${Math.round(dist)} · ${air.toFixed(2)}s\n${score}`);
+        fragMessages.show(`${acc.toFixed(1)} · ${Math.round(dist)} · ${air.toFixed(2)}s\n${score}`);
         hud.showHitMarker();
 
         if (demoManager?.isRecording) {
           if (destroyed) {
-            demoManager.recordTargetDestroyed(ball.id, { x: ball.pos.x, y: ball.pos.y, z: ball.pos.z });
+            demoManager.recordTargetDestroyed(ball.id, { x: ball.pos.x, y: ball.pos.y, z: ball.pos.z }, ball.variant, ball.health);
           } else {
-            demoManager.recordTargetHit(ball.id, { x: ball.pos.x, y: ball.pos.y, z: ball.pos.z }, { x: ball.vel.x, y: ball.vel.y, z: ball.vel.z }, ball.health);
+            demoManager.recordTargetHit(ball.id, { x: ball.pos.x, y: ball.pos.y, z: ball.pos.z }, { x: ball.vel.x, y: ball.vel.y, z: ball.vel.z }, ball.variant, ball.health);
           }
         }
       }
@@ -532,7 +353,7 @@ function updateProjectiles(dt: number): void {
         const air = p.hitAge;
         const score = Math.round(acc * dist * air);
         logger.info(`[Hit] Player direct=${p.directHit} accRaw=${p.hitAccuracy.toFixed(2)} acc=${acc.toFixed(1)} dist=${dist.toFixed(1)} air=${air.toFixed(2)}s score=${score}`);
-        showFragMessage(`${acc.toFixed(1)} · ${Math.round(dist)} · ${air.toFixed(2)}s\n${score}`);
+        fragMessages.show(`${acc.toFixed(1)} · ${Math.round(dist)} · ${air.toFixed(2)}s\n${score}`);
         hud.showHitMarker();
       }
 
@@ -562,10 +383,10 @@ function spawnBall(): void {
     demoManager.recordTargetSpawned(ball.id, { x: ball.pos.x, y: ball.pos.y, z: ball.pos.z }, { x: ball.vel.x, y: ball.vel.y, z: ball.vel.z }, ball.variant);
     // Keyframe callbacks for demo accuracy
     ball.onBounce = (pos, vel) => {
-      demoManager!.recordTargetBounce(ball.id, { x: pos.x, y: pos.y, z: pos.z }, { x: vel.x, y: vel.y, z: vel.z });
+      demoManager!.recordTargetBounce(ball.id, { x: pos.x, y: pos.y, z: pos.z }, { x: vel.x, y: vel.y, z: vel.z }, ball.variant);
     };
     ball.onPeak = (pos, vel) => {
-      demoManager!.recordTargetPeak(ball.id, { x: pos.x, y: pos.y, z: pos.z }, { x: vel.x, y: vel.y, z: vel.z });
+      demoManager!.recordTargetPeak(ball.id, { x: pos.x, y: pos.y, z: pos.z }, { x: vel.x, y: vel.y, z: vel.z }, ball.variant);
     };
   }
 }
@@ -578,10 +399,10 @@ function snapshotExistingBallsForRecording(): void {
     if (ball.dead) continue;
     demoManager.recordTargetSpawned(ball.id, { x: ball.pos.x, y: ball.pos.y, z: ball.pos.z }, { x: ball.vel.x, y: ball.vel.y, z: ball.vel.z }, ball.variant);
     ball.onBounce = (pos, vel) => {
-      demoManager!.recordTargetBounce(ball.id, { x: pos.x, y: pos.y, z: pos.z }, { x: vel.x, y: vel.y, z: vel.z });
+      demoManager!.recordTargetBounce(ball.id, { x: pos.x, y: pos.y, z: pos.z }, { x: vel.x, y: vel.y, z: vel.z }, ball.variant);
     };
     ball.onPeak = (pos, vel) => {
-      demoManager!.recordTargetPeak(ball.id, { x: pos.x, y: pos.y, z: pos.z }, { x: vel.x, y: vel.y, z: vel.z });
+      demoManager!.recordTargetPeak(ball.id, { x: pos.x, y: pos.y, z: pos.z }, { x: vel.x, y: vel.y, z: vel.z }, ball.variant);
     };
   }
 }
@@ -638,7 +459,7 @@ function updateBalls(dt: number): void {
       ballSnapshotTimer = 0;
       for (const b of balls) {
         if (!b.dead) {
-          demoManager.recordTargetPeak(b.id, { x: b.pos.x, y: b.pos.y, z: b.pos.z }, { x: b.vel.x, y: b.vel.y, z: b.vel.z });
+          demoManager.recordTargetPeak(b.id, { x: b.pos.x, y: b.pos.y, z: b.pos.z }, { x: b.vel.x, y: b.vel.y, z: b.vel.z }, b.variant);
         }
       }
     }
@@ -647,7 +468,6 @@ function updateBalls(dt: number): void {
 
 // ---- Game loop ----
 let lastTime = 0;
-let isTabHidden = false;
 
 function loop(time: number): void {
   requestAnimationFrame(loop);
@@ -813,19 +633,14 @@ function loop(time: number): void {
   damageNumberManager.update(dt);
 
   // Jetpack particles
-  if (!player.onGround && (document as any)._jetActive) {
+  if (!player.onGround && inputTracking.isJetActive()) {
     effects.spawnJetpack(player.pos.clone());
   }
 
   // Update atmospheric effects
-  volumetricClouds.update(dt);
-  atmosphericSky.update(dt);
+  sceneSetup.update(dt);
 
-  // Sync sun position with atmospheric sky (for dynamic day/night)
-  sun.position.copy(atmosphericSky.getSunPosition());
-  volumetricClouds.setSunDirection(atmosphericSky.getSunDirection());
-
-  if (postproEnabled) {
+  if (rendererSetup.isPostProcessingEnabled()) {
     composer.render();
   } else {
     renderer.render(scene, camera);
@@ -837,29 +652,30 @@ function loop(time: number): void {
 
 // ---- Boot ----
 async function init(): Promise<void> {
-  markTime('initStart');
+  profiler.markTime('initStart');
   await loadHeightmap('/assets/heightmaps/Vortex_Smooth2_2048.png');
-  markTime('heightmapLoaded');
+  profiler.markTime('heightmapLoaded');
 
   terrain = new Terrain(scene, sun.position.clone().normalize());
-  markTime('terrainCreated');
+  profiler.markTime('terrainCreated');
 
   effects = new EffectsManager(scene);
   effects.setTerrain(terrain);
-  markTime('effectsCreated');
+  profiler.markTime('effectsCreated');
 
   player = new Player(terrain, camera, scene);
   player.onFire = onFire;
   player.onDisc = onDisc;
+  player.onGrenade = onGrenade;
   player.onJump = (pos) => effects.spawnJumpDust(pos);
   player.onJetpack = (pos) => effects.spawnJetpack(pos);
   player.onSki = (pos, vel) => effects.spawnSkiDust(pos, vel);
-  markTime('playerCreated');
+  profiler.markTime('playerCreated');
 
   // Initialize networking with selected backend
   const adapter = NetworkAdapterFactory.createAdapter(NETWORK_BACKEND);
   networkManager = new NetworkManager(adapter);
-  markTime('networkInit');
+  profiler.markTime('networkInit');
 
   // Set control object for client-side prediction
   networkManager.setControlObject(player);
@@ -905,51 +721,11 @@ async function init(): Promise<void> {
   );
 
   // Wire cool shots panel
-  const coolShotsTop = document.getElementById('cool-shots-top')!;
-  const coolShotsRecent = document.getElementById('cool-shots-recent')!;
-  let lastCoolShots: any[] = [];
-  const timeAgo = (ts: number): string => {
-    const secs = Math.floor((Date.now() - ts) / 1000);
-    if (secs < 60) return `${secs}s ago`;
-    const mins = Math.floor(secs / 60);
-    if (mins < 60) return `${mins}m ago`;
-    const hrs = Math.floor(mins / 60);
-    if (hrs < 24) return `${hrs}h ago`;
-    const days = Math.floor(hrs / 24);
-    return `${days}d ago`;
-  };
-  const renderShotItem = (container: HTMLElement, shot: any, rank: number) => {
-    const item = document.createElement('div');
-    const isRecent = Date.now() - shot.timestamp < 60000;
-    item.className = isRecent ? 'cool-shot-item recent' : 'cool-shot-item';
-    item.innerHTML = `<span class="rank">${rank}</span><span class="lifetime">${shot.projectileLifetime.toFixed(2)}s</span><span class="time-ago">${timeAgo(shot.timestamp)}</span>`;
-    item.onclick = () => {
-      demoManager?.playCoolShotById(shot.id);
-      overlay.style.display = 'none';
-      requestLock();
-    };
-    container.appendChild(item);
-  };
-  const renderCoolShots = (shots: any[]) => {
-    lastCoolShots = shots;
-    coolShotsTop.innerHTML = '';
-    coolShotsRecent.innerHTML = '';
-    if (shots.length === 0) {
-      coolShotsTop.innerHTML = '<div class="cool-shot-item empty">No cool shots yet</div>';
-      coolShotsRecent.innerHTML = '<div class="cool-shot-item empty">No recent shots</div>';
-      return;
-    }
-    // Top 10 by lifetime (already sorted descending by lifetime)
-    const top10 = shots.slice(0, 10);
-    top10.forEach((shot, i) => renderShotItem(coolShotsTop, shot, i + 1));
-
-    // Recent 10 by timestamp (most recent first)
-    const recent10 = [...shots].sort((a, b) => b.timestamp - a.timestamp).slice(0, 10);
-    recent10.forEach((shot, i) => renderShotItem(coolShotsRecent, shot, i + 1));
-  };
-  demoManager.onCoolShotsChanged = renderCoolShots;
-  // Refresh "time ago" labels every second
-  setInterval(() => { if (lastCoolShots.length > 0) renderCoolShots(lastCoolShots); }, 1000);
+  new CoolShotsPanel({
+    demoManager,
+    overlay,
+    requestLock,
+  });
 
   // ---- Playback projectile reconstruction ----
   // Handle projectile events from demo playback: spawn projectiles on Fired, explode on Destroyed
@@ -984,7 +760,8 @@ async function init(): Promise<void> {
           // For Hit events on dead projectiles, spawn explosion fast-forwarded to seek time
           if (ev.eventType === ProjectileEventType.Hit) {
             const hitPos = new THREE.Vector3(ev.posX, ev.posY, ev.posZ);
-            const exp = new Explosion(scene, hitPos, false, 0);
+            const weaponType = ev.weaponType === 2 ? 'grenade' : 'rocket'; // weaponType 2 = grenade
+            const exp = new Explosion(scene, hitPos, false, 0, 1.0, weaponType);
             explosions.push(exp);
             // Fast-forward explosion visual to seek time
             const ffTime = seekTime - ev.timestamp;
@@ -1121,7 +898,8 @@ async function init(): Promise<void> {
           r.explode();
           // Spawn correct effect (explosion for push, implosion for pull)
           if (r.config.forceMode === 'push') {
-            explosions.push(new Explosion(scene, r.pos, false, r.age));
+            const explosionType = r.config.name === 'grenade' ? 'grenade' : 'rocket';
+            explosions.push(new Explosion(scene, r.pos, false, r.age, 1.0, explosionType));
           } else {
             implosions.push(new Implosion(scene, r.pos, r.age));
           }
@@ -1133,7 +911,7 @@ async function init(): Promise<void> {
             // Approximate accuracy: use hitRadius at impact age as proxy
             const acc = computeAccuracy(r.hitRadius, false);
             const score = Math.round(acc * dist * air);
-            showFragMessage(`${acc.toFixed(1)} · ${Math.round(dist)} · ${air.toFixed(2)}s\n${score}`);
+            fragMessages.show(`${acc.toFixed(1)} · ${Math.round(dist)} · ${air.toFixed(2)}s\n${score}`);
             hud.showHitMarker();
           }
           // Debug: compare projectile hit position with ball position
@@ -1311,11 +1089,11 @@ async function init(): Promise<void> {
   hud = new HUD();
   healthBarSystem = new HealthBarSystem(camera);
   damageNumberManager = new DamageNumberManager(scene);
-  markTime('hudCreated');
+  profiler.markTime('hudCreated');
 
   // Load player model
   await player.loadModel();
-  markTime('playerModelLoaded');
+  profiler.markTime('playerModelLoaded');
   
   // Register player hit handler (non-lethal hits)
   networkManager.onPlayerHit = (shooterId: string, targetId: string, damage: number, health: number) => {
@@ -1355,7 +1133,7 @@ async function init(): Promise<void> {
 
     // Show frag message if local player got the kill
     if (shooterId === networkManager.getLocalPlayerId()) {
-      showFragMessage(`FRAGGED PLAYER!`);
+      fragMessages.show(`FRAGGED PLAYER!`);
     }
 
     // Mark player as dead in NetworkManager immediately so main loop knows
@@ -1370,7 +1148,7 @@ async function init(): Promise<void> {
       // Find matching explosion from this shooter
       let explosionPos: THREE.Vector3 | undefined;
       let explosionForce: number | undefined;
-      for (const exp of recentExplosions) {
+      for (const exp of explosionTracker.getRecentExplosions()) {
         if (exp.shooterId === shooterId) {
           explosionPos = exp.position;
           explosionForce = exp.force;
@@ -1564,9 +1342,9 @@ async function init(): Promise<void> {
 
   // Connect to server (non-blocking for offline mode)
   const serverUrl = 'ws://localhost:8000/ws';
-  markTime('networkConnectStart');
+  profiler.markTime('networkConnectStart');
   networkManager.connect(serverUrl).then(() => {
-    markTime('networkConnected');
+    profiler.markTime('networkConnected');
     logger.info(`Connected to server at ${serverUrl} using ${NETWORK_BACKEND} backend`);
   }).catch((error) => {
     logger.error('Failed to connect to server', error);
@@ -1578,19 +1356,9 @@ async function init(): Promise<void> {
   // Auto-start demo recording so cool shots are captured seamlessly
   demoManager?.startRecording();
   snapshotExistingBallsForRecording();
-  markTime('initComplete');
+  profiler.markTime('initComplete');
 
-  printLoadSummary();
-
-  // Track jet button for continuous particles
-  document.addEventListener('mousedown', (e) => { if (e.button === 2) (document as any)._jetActive = true; });
-  document.addEventListener('mouseup', (e) => { if (e.button === 2) (document as any)._jetActive = false; });
-
-  // Detect tab visibility changes to keep sending position when alt-tabbed
-  document.addEventListener('visibilitychange', () => {
-    isTabHidden = document.hidden;
-    logger.debug(`Tab visibility changed: ${isTabHidden ? 'hidden' : 'visible'}`);
-  });
+  profiler.printSummary();
 
   requestAnimationFrame(loop);
 }
@@ -1598,7 +1366,7 @@ async function init(): Promise<void> {
 // ---- Overlay / pointer-lock helpers ----
 const overlay = document.getElementById('overlay')!;
 let gameStarted = false;
-let unlockByEscape = false; // Track if unlock was caused by ESC key
+let unlockByEscape = false;
 
 function requestLock(): void {
   renderer.domElement.requestPointerLock();
@@ -1610,21 +1378,17 @@ document.addEventListener('pointerlockchange', () => {
     overlay.style.display = 'none';
     unlockByEscape = false;
   } else if (gameStarted && unlockByEscape) {
-    // Only show overlay when unlocked by pressing ESC, not alt-tab
     overlay.style.display = 'flex';
-    // Render local cool shots immediately, then fetch from server
     demoManager?.onCoolShotsChanged?.(demoManager.getCoolShots());
     demoManager?.fetchCoolShotsFromServer();
   }
 });
 
 document.addEventListener('keydown', (e) => {
-  // During demo playback, only allow ESC, F6, and arrow keys
   if (demoManager?.isPlaying && e.code !== 'Escape' && e.code !== 'F6' &&
       e.code !== 'ArrowUp' && e.code !== 'ArrowDown' && e.code !== 'ArrowLeft' && e.code !== 'ArrowRight') {
     return;
   }
-  // Demo playback shortcuts
   if (demoManager?.isPlaying) {
     if (e.code === 'ArrowUp') {
       e.preventDefault();
@@ -1648,40 +1412,31 @@ document.addEventListener('keydown', (e) => {
     }
   }
   if (e.code === 'Escape' && gameStarted) {
-    // If demo is playing, stop it entirely
     if (demoManager?.isPlaying) {
       demoManager.stopPlayback();
       return;
     }
     if (document.pointerLockElement === renderer.domElement) {
-      // Pointer is locked, release it and mark as ESC unlock
       unlockByEscape = true;
       document.exitPointerLock();
-      // Show overlay immediately (browser may have already fired pointerlockchange)
       overlay.style.display = 'flex';
-      // Render local cool shots immediately, then fetch from server
       demoManager?.onCoolShotsChanged?.(demoManager.getCoolShots());
       demoManager?.fetchCoolShotsFromServer();
     } else if (overlay.style.display === 'flex' && document.pointerLockElement !== renderer.domElement) {
-      // Overlay is visible and pointer is unlocked, hide it and re-lock
       overlay.style.display = 'none';
       logger.debug('Requesting pointer lock...');
       requestLock();
     } else if (document.pointerLockElement !== renderer.domElement) {
-      // Pointer is unlocked but overlay not visible, show overlay
       overlay.style.display = 'flex';
     }
   }
   if (e.code === 'F4') {
-    pixelated = !pixelated;
-    localStorage.setItem('fps-pixelated', pixelated.toString());
-    updateRendererSize();
-    pixelToggleBtn.textContent = pixelated ? 'PIXELATED: ON' : 'PIXELATED: OFF';
+    const pixelToggleBtn = document.getElementById('pixel-toggle')! as HTMLButtonElement;
+    pixelToggleBtn.click();
   }
   if (e.code === 'F6') {
     if (demoManager) demoManager.toggleUI();
   }
-  // Space = play/pause during demo playback (like Up arrow)
   if (e.code === 'Space' && demoManager?.isLoadedForPlayback) {
     e.preventDefault();
     demoManager.togglePlayPause();
@@ -1689,33 +1444,12 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
-// Clicking overlay or canvas re-locks (but not during demo playback).
 document.getElementById('start-btn')!.addEventListener('click', () => {
   if (demoManager?.isPlaying) { demoManager.stopPlayback(); return; }
   requestLock();
 });
-pixelToggleBtn.addEventListener('click', () => {
-  pixelated = !pixelated;
-  localStorage.setItem('fps-pixelated', pixelated.toString());
-  updateRendererSize();
-  const w = pixelated
-    ? Math.floor(window.innerWidth / PIXEL_SCALE)
-    : window.innerWidth;
-  const h = pixelated
-    ? Math.floor(window.innerHeight / PIXEL_SCALE)
-    : window.innerHeight;
-  composer.setSize(w, h);
-  pixelToggleBtn.textContent = pixelated ? 'PIXELATED: ON' : 'PIXELATED: OFF';
-});
-postproToggleBtn.addEventListener('click', () => {
-  postproEnabled = !postproEnabled;
-  localStorage.setItem('fps-postpro', postproEnabled.toString());
-  bloomPass.enabled = postproEnabled;
-  contrastPass.enabled = postproEnabled;
-  postproToggleBtn.textContent = postproEnabled ? 'POST-PROCESSING: ON' : 'POST-PROCESSING: OFF';
-});
 renderer.domElement.addEventListener('click', () => {
-  if (demoManager?.isPlaying) return; // ignore during playback
+  if (demoManager?.isPlaying) return;
   if (document.pointerLockElement !== renderer.domElement) requestLock();
 });
 

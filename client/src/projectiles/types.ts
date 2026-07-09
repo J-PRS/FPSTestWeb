@@ -37,11 +37,14 @@ export interface ProjectileConfig {
   glowShell: boolean;
   glowColor: number;
   glowOpacity: number;
+  glowScale?: number; // override glow mesh size; defaults to hitRadius if not set
   meshRampIn: boolean;
   meshRampInDuration: number;
   meshStartScale: number;
   terrainOffset: number;
   needsServerTracking: boolean;
+  maxLifetime?: number; // 0 or undefined = no auto-explode; >0 auto-explodes after age reaches this (seconds)
+  trailMeshType?: 'sphere' | 'ring' | 'disc'; // trail particle geometry; defaults to sphere
 }
 
 export function getProjectileConfig(configs: ProjectileConfig[], weaponType: number): ProjectileConfig | undefined {

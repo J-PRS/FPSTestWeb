@@ -1,11 +1,12 @@
 import * as THREE from 'three';
+
 import {
   CLOUD_COUNT, CLOUD_WIND_SPEED, CLOUD_DENSITY,
   CLOUD_SPHERES_PER_CLOUD, CLOUD_DEFAULT_MIN_HEIGHT, CLOUD_DEFAULT_MAX_HEIGHT,
   CLOUD_DEFAULT_SPREAD_RADIUS, CLOUD_WIND_OFFSET_RANGE,
   CLOUD_POSITION_RANGE_XZ, CLOUD_POSITION_RANGE_Y,
   CLOUD_SCALE_MIN, CLOUD_SCALE_RANGE
-} from './config.js';
+} from '../core/config.js';
 
 // Cloud shader for soft volumetric appearance
 const cloudVertexShader = /* glsl */`

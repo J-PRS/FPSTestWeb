@@ -5,9 +5,10 @@
 
 import { INetworkAdapter } from './INetworkAdapter.js';
 import { WebSocketConnection } from './WebSocketConnection.js';
-import Logger from '../Logger.js';
 
-const logger = new Logger('FastAPIAdapter');
+import { ChildLogger } from '../core/Logger.js';
+
+const logger = new ChildLogger('FastAPIAdapter');
 
 export class FastAPIAdapter implements INetworkAdapter {
   private wsConnection: WebSocketConnection | null = null;
@@ -25,7 +26,7 @@ export class FastAPIAdapter implements INetworkAdapter {
     const stored = sessionStorage.getItem('fps-player-id');
     if (stored) {
       this.localPlayerId = stored;
-      Logger.info(`Reusing player ID from sessionStorage: ${this.localPlayerId}`);
+      logger.info(`Reusing player ID from sessionStorage: ${this.localPlayerId}`);
     } else {
       this.localPlayerId = `player_${Math.random().toString(36).substr(2, 9)}`;
       sessionStorage.setItem('fps-player-id', this.localPlayerId);
@@ -42,7 +43,7 @@ export class FastAPIAdapter implements INetworkAdapter {
         this.wsConnection = new WebSocketConnection({
           url,
           onConnect: async () => {
-            Logger.info('FastAPIAdapter connected');
+            logger.info('FastAPIAdapter connected');
             this.hasLoggedConnectionError = false;
             
             // Send playerId to server
@@ -56,12 +57,12 @@ export class FastAPIAdapter implements INetworkAdapter {
             resolve();
           },
           onDisconnect: () => {
-            Logger.info('FastAPIAdapter disconnected');
+            logger.info('FastAPIAdapter disconnected');
             this.disconnectCallback?.();
           },
           onError: (error: Error) => {
             if (!this.hasLoggedConnectionError) {
-              Logger.error('FastAPIAdapter error', error);
+              logger.error('FastAPIAdapter error', error);
               this.hasLoggedConnectionError = true;
             }
             this.errorCallback?.(error);
@@ -121,7 +122,7 @@ export class FastAPIAdapter implements INetworkAdapter {
 
   sendBinary(data: Uint8Array): void {
     // FastAPI server uses JSON, ignore binary
-    Logger.warn('sendBinary called on FastAPI adapter (JSON-only)');
+    logger.warn('sendBinary called on FastAPI adapter (JSON-only)');
   }
 
   private handleMessage(data: any): void {

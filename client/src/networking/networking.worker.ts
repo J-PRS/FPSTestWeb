@@ -1,6 +1,6 @@
 import { NetworkAdapterFactory } from './NetworkAdapterFactory';
 import { NetworkManager } from './NetworkManager';
-import { ChildLogger } from '../Logger.js';
+import { ChildLogger } from '../core/Logger.js';
 
 const logger = new ChildLogger('NetworkingWorker');
 logger.debug('Worker script loaded');

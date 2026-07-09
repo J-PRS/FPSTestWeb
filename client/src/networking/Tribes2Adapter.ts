@@ -4,17 +4,19 @@
  */
 
 import { INetworkAdapter } from './INetworkAdapter.js';
-import { ChildLogger } from '../Logger.js';
 import { WebSocketConnection } from './WebSocketConnection.js';
 import { StreamManager } from './StreamManager.js';
 import { EventManager, ShotEvent, JumpEvent, JetpackEvent } from './EventManager.js';
 import { GhostManager, ScopeManager } from './GhostManager.js';
 import { MoveManager } from './MoveManager.js';
+
 import {
   TRIBES2_MAX_PACKET_SIZE,
   TRIBES2_PACKETS_PER_SECOND,
   TRIBES2_MAX_BYTES_PER_SECOND
-} from '../config.js';
+} from '../core/config.js';
+
+import { ChildLogger } from '../core/Logger.js';
 
 const logger = new ChildLogger('Tribes2Adapter');
 

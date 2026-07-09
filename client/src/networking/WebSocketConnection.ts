@@ -6,8 +6,8 @@
  */
 
 import * as msgpack from 'msgpack-lite';
-import { ChildLogger } from '../Logger.js';
-import { TRIBES2_RECONNECT_INTERVAL } from '../config.js';
+import { ChildLogger } from '../core/Logger.js';
+import { TRIBES2_RECONNECT_INTERVAL } from '../core/config.js';
 
 const logger = new ChildLogger('WebSocketConnection');
 

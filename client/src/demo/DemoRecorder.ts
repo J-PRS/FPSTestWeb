@@ -203,53 +203,53 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
     });
   }
 
-  recordTargetBounce(targetId: number, position: Vec3, velocity: Vec3): void {
+  recordTargetBounce(targetId: number, position: Vec3, velocity: Vec3, targetType: number): void {
     if (!this.recording || !this.checkEventRate()) return;
     this.targetEvents.push({
       eventType: TargetEventType.Bounce,
       timestamp: this.elapsedTime,
       posX: position.x, posY: position.y, posZ: position.z,
       velX: velocity.x, velY: velocity.y, velZ: velocity.z,
-      targetId, targetType: 0, health: 0,
+      targetId, targetType, health: 0,
       hasPeakPosition: false,
       peakPosX: 0, peakPosY: 0, peakPosZ: 0,
     });
   }
 
-  recordTargetPeak(targetId: number, position: Vec3, velocity: Vec3): void {
+  recordTargetPeak(targetId: number, position: Vec3, velocity: Vec3, targetType: number): void {
     if (!this.recording || !this.checkEventRate()) return;
     this.targetEvents.push({
       eventType: TargetEventType.StateChanged,
       timestamp: this.elapsedTime,
       posX: position.x, posY: position.y, posZ: position.z,
       velX: velocity.x, velY: velocity.y, velZ: velocity.z,
-      targetId, targetType: 0, health: 0,
+      targetId, targetType, health: 0,
       hasPeakPosition: true,
       peakPosX: position.x, peakPosY: position.y, peakPosZ: position.z,
     });
   }
 
-  recordTargetHit(targetId: number, position: Vec3, velocity: Vec3, health: number): void {
+  recordTargetHit(targetId: number, position: Vec3, velocity: Vec3, targetType: number, health: number): void {
     if (!this.recording || !this.checkEventRate()) return;
     this.targetEvents.push({
       eventType: TargetEventType.Hit,
       timestamp: this.elapsedTime,
       posX: position.x, posY: position.y, posZ: position.z,
       velX: velocity.x, velY: velocity.y, velZ: velocity.z,
-      targetId, targetType: 0, health,
+      targetId, targetType, health,
       hasPeakPosition: false,
       peakPosX: 0, peakPosY: 0, peakPosZ: 0,
     });
   }
 
-  recordTargetDestroyed(targetId: number, position: Vec3): void {
+  recordTargetDestroyed(targetId: number, position: Vec3, targetType: number, health: number = 0): void {
     if (!this.recording || !this.checkEventRate()) return;
     this.targetEvents.push({
       eventType: TargetEventType.Destroyed,
       timestamp: this.elapsedTime,
       posX: position.x, posY: position.y, posZ: position.z,
       velX: 0, velY: 0, velZ: 0,
-      targetId, targetType: 0, health: 0,
+      targetId, targetType, health,
       hasPeakPosition: false,
       peakPosX: 0, peakPosY: 0, peakPosZ: 0,
     });
@@ -358,23 +358,26 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
 
     // Build snapshot of balls alive at clipStart:
     // For each targetId, find the most recent event before clipStart.
-    // If it was Spawned/Bounce/StateChanged (not Destroyed), inject a Spawned at clipStart.
+    // If it was Spawned/Bounce/StateChanged/Hit (not Destroyed), inject a Spawned at clipStart.
+    // If the Spawned event was pruned, Bounce/StateChanged/Hit events still carry the
+    // targetType and position/velocity, so we can create a snapshot from them.
     const aliveBalls = new Map<number, TargetEvent>();
     for (const e of this.targetEvents) {
       if (e.timestamp >= clipStart) break;
       if (e.eventType === TargetEventType.Destroyed) {
         aliveBalls.delete(e.targetId);
-      } else if (e.eventType === TargetEventType.Spawned) {
-        aliveBalls.set(e.targetId, e);
       } else {
-        // Bounce or StateChanged — update position/velocity for this ball
+        // Spawned/Bounce/StateChanged/Hit — update or create alive entry
         const existing = aliveBalls.get(e.targetId);
         if (existing) {
+          // Preserve targetType if event doesn't have it (legacy 0)
+          const targetType = e.targetType !== 0 ? e.targetType : existing.targetType;
           aliveBalls.set(e.targetId, {
-            ...existing,
-            posX: e.posX, posY: e.posY, posZ: e.posZ,
-            velX: e.velX, velY: e.velY, velZ: e.velZ,
+            ...e,
+            targetType,
           });
+        } else {
+          aliveBalls.set(e.targetId, e);
         }
       }
     }
@@ -389,11 +392,39 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
       });
     }
 
+    // Target events that fall inside the clip window
+    const actualTgtEvents = this.targetEvents.filter(
+      e => e.timestamp >= clipStart && e.timestamp <= clipEnd
+    );
+
+    // For any targetId that appears inside the clip but has no Spawned event and
+    // no alive snapshot, create a synthetic Spawned at clipStart from its first event.
+    // This covers Spawned events that were pruned before extractClip ran.
+    const firstEventByTargetId = new Map<number, TargetEvent>();
+    const hasSpawnedInClip = new Set<number>();
+    for (const e of actualTgtEvents) {
+      if (!firstEventByTargetId.has(e.targetId)) {
+        firstEventByTargetId.set(e.targetId, e);
+      }
+      if (e.eventType === TargetEventType.Spawned) {
+        hasSpawnedInClip.add(e.targetId);
+      }
+    }
+    const additionalSpawned: TargetEvent[] = [];
+    for (const [targetId, first] of firstEventByTargetId) {
+      if (aliveBalls.has(targetId)) continue;
+      if (hasSpawnedInClip.has(targetId)) continue;
+      additionalSpawned.push({
+        ...first,
+        eventType: TargetEventType.Spawned,
+        timestamp: clipStart,
+      });
+    }
+
     const tgtEvents = [
       ...snapshotEvents,
-      ...this.targetEvents.filter(
-        e => e.timestamp >= clipStart && e.timestamp <= clipEnd
-      ),
+      ...additionalSpawned,
+      ...actualTgtEvents,
     ];
 
     // Renormalize timestamps to clip start
@@ -439,9 +470,9 @@ export interface IProjectileEventRecorder {
 
 export interface ITargetEventRecorder {
   recordTargetSpawned(targetId: number, position: Vec3, velocity: Vec3, targetType: number): void;
-  recordTargetBounce(targetId: number, position: Vec3, velocity: Vec3): void;
-  recordTargetPeak(targetId: number, position: Vec3, velocity: Vec3): void;
-  recordTargetHit(targetId: number, position: Vec3, velocity: Vec3, health: number): void;
-  recordTargetDestroyed(targetId: number, position: Vec3): void;
+  recordTargetBounce(targetId: number, position: Vec3, velocity: Vec3, targetType: number): void;
+  recordTargetPeak(targetId: number, position: Vec3, velocity: Vec3, targetType: number): void;
+  recordTargetHit(targetId: number, position: Vec3, velocity: Vec3, targetType: number, health: number): void;
+  recordTargetDestroyed(targetId: number, position: Vec3, targetType: number, health?: number): void;
 }
 

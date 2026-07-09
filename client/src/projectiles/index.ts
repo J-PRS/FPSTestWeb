@@ -1,13 +1,17 @@
 export type { ProjectileConfig } from './types.js';
 export { ROCKET_CONFIG } from './rocketConfig.js';
 export { DISC_CONFIG } from './discConfig.js';
+export { GRENADE_CONFIG } from './grenadeConfig.js';
 
 import { ROCKET_CONFIG } from './rocketConfig.js';
 import { DISC_CONFIG } from './discConfig.js';
-import { ACCURACY_MAX, ACCURACY_NORMALIZATION } from '../config.js';
+import { GRENADE_CONFIG } from './grenadeConfig.js';
+
+import { ACCURACY_MAX, ACCURACY_NORMALIZATION } from '../core/config.js';
+
 import type { ProjectileConfig } from './types.js';
 
-export const WEAPON_CONFIGS: ProjectileConfig[] = [ROCKET_CONFIG, DISC_CONFIG];
+export const WEAPON_CONFIGS: ProjectileConfig[] = [ROCKET_CONFIG, DISC_CONFIG, GRENADE_CONFIG];
 
 export function getProjectileConfig(weaponType: number): ProjectileConfig | undefined {
   return WEAPON_CONFIGS.find((c) => c.weaponType === weaponType);

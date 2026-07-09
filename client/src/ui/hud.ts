@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { Player } from './Player.js';
+
+import { Player } from '../entities/Player.js';
 
 export class HUD {
   private el: HTMLDivElement;

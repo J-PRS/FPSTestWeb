@@ -1,9 +1,11 @@
 import * as THREE from 'three';
+
 import {
   DISC_SPEED, DISC_RADIUS, DISC_FORCE, DISC_HITBOX, DISC_HIT_MIN, DISC_HIT_MAX,
   DISC_HIT_GROW, EXPLOSION_FALLOFF_MULTIPLIER_DISC, EXPLOSION_COLLISION_MULTIPLIER,
   PULL_MULTIPLIER, ROCKET_AOE_DAMAGE,
-} from '../config.js';
+} from '../core/config.js';
+
 import type { ProjectileConfig } from './types.js';
 
 export const DISC_CONFIG: ProjectileConfig = {
@@ -26,31 +28,34 @@ export const DISC_CONFIG: ProjectileConfig = {
   aoeRadius: DISC_RADIUS,
   damageColor: '#00ffff',
   trailColors: [
-    new THREE.Color(0.0, 0.8, 1.0),
-    new THREE.Color(0.0, 0.5, 0.9),
-    new THREE.Color(0.0, 0.3, 0.7),
-    new THREE.Color(0.2, 0.2, 0.5),
+    new THREE.Color(0.0, 0.5, 1.0),
+    new THREE.Color(0.0, 0.3, 0.8),
+    new THREE.Color(0.0, 0.2, 0.6),
+    new THREE.Color(0.0, 0.1, 0.4),
+    new THREE.Color(0.0, 0.05, 0.2),
   ],
   trailParticlesPerUnit: 2,
   trailLifeMin: 0.8,
   trailLifeMax: 1.2,
-  trailSpread: 0.2,
+  trailSpread: 0.05,
   trailForwardSpread: 0,
   trailParticleGravity: 0,
   trailOpacity: 0.5,
-  trailBaseSize: 0.06,
-  trailSizeRange: 0.15,
+  trailBaseSize: 0.1,
+  trailSizeRange: 0.2,
   trailScaleMin: 0.5,
   trailScaleMax: 1.5,
   trailRampIn: 0,
   meshColor: 0x00ffff,
   meshType: 'disc',
-  glowShell: false,
-  glowColor: 0xff4400,
-  glowOpacity: 0.18,
-  meshRampIn: false,
-  meshRampInDuration: 0,
-  meshStartScale: 1.0,
+  glowShell: true,
+  glowColor: 0x00ffff,
+  glowOpacity: 0.22,
+  glowScale: 0.8,
+  meshRampIn: true,
+  meshRampInDuration: 0.15,
+  meshStartScale: 0.25,
   terrainOffset: 0.2,
   needsServerTracking: false,
+  trailMeshType: 'ring',
 };

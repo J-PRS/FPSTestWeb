@@ -84,6 +84,9 @@ export class MessageHandler {
       case 'discAOEShot':
         this.handleDiscAOEShot(playerId, msg);
         break;
+      case 'grenadeAOEShot':
+        this.handleGrenadeAOEShot(playerId, msg);
+        break;
       case 'jump':
         this.handleJump(playerId, msg);
         break;
@@ -197,21 +200,26 @@ export class MessageHandler {
   }
 
   private handleAOEShot(playerId: string, msg: Extract<ClientMessage, { type: 'aoeShot' }>): void {
-    this.processAOE(playerId, msg.position, msg.excludeTargetId, false);
+    this.processAOE(playerId, msg.position, msg.excludeTargetId, 'rocket');
   }
 
   private handleDiscAOEShot(playerId: string, msg: Extract<ClientMessage, { type: 'discAOEShot' }>): void {
-    this.processAOE(playerId, msg.position, msg.excludeTargetId, true);
+    this.processAOE(playerId, msg.position, msg.excludeTargetId, 'disc');
   }
 
-  private processAOE(playerId: string, position: Vec3, excludeTargetId: string | null | undefined, pull: boolean): void {
+  private handleGrenadeAOEShot(playerId: string, msg: Extract<ClientMessage, { type: 'grenadeAOEShot' }>): void {
+    this.processAOE(playerId, msg.position, msg.excludeTargetId, 'grenade');
+  }
+
+  private processAOE(playerId: string, position: Vec3, excludeTargetId: string | null | undefined, mode: 'rocket' | 'disc' | 'grenade'): void {
     const player = this.playerManager.getPlayer(playerId);
     if (!player || player.isDead) return;
 
-    const radius = pull ? CONFIG.discAoeRadius : CONFIG.aoeRadius;
-    const baseDamage = pull ? CONFIG.discAoeDamage : CONFIG.aoeDamage;
-    const impulseForce = pull ? CONFIG.discPullForce : CONFIG.knockbackForce;
-    const logLabel = pull ? 'disc AOE' : 'AOE';
+    const pull = mode === 'disc';
+    const radius = pull ? CONFIG.discAoeRadius : (mode === 'grenade' ? CONFIG.grenadeAoeRadius : CONFIG.aoeRadius);
+    const baseDamage = pull ? CONFIG.discAoeDamage : (mode === 'grenade' ? CONFIG.grenadeAoeDamage : CONFIG.aoeDamage);
+    const impulseForce = pull ? CONFIG.discPullForce : (mode === 'grenade' ? CONFIG.grenadeKnockbackForce : CONFIG.knockbackForce);
+    const logLabel = pull ? 'disc AOE' : (mode === 'grenade' ? 'grenade AOE' : 'AOE');
 
     for (const [targetId, target] of this.playerManager.getAllPlayers()) {
       if (targetId === playerId) continue; // Don't damage self

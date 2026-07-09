@@ -3,7 +3,7 @@
  * Handles network communication in a web worker to keep the main thread responsive
  */
 
-import { ChildLogger } from './Logger.js';
+import { ChildLogger } from '../core/Logger.js';
 
 const logger = new ChildLogger('WorkerNetworkManager');
 

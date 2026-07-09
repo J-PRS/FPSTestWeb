@@ -12,6 +12,9 @@ export const CONFIG = {
   discAoeDamage: 10,
   discAoeRadius: 5.0,
   discPullForce: 25.0,
+  grenadeAoeDamage: 20,
+  grenadeAoeRadius: 10.0,
+  grenadeKnockbackForce: 45.0,
 
   spawnPoints: [
     { x: 0, y: 60, z: 0 },
