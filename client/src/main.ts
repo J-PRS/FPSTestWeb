@@ -9,8 +9,9 @@ import { VolumetricClouds } from './volumetricClouds.js';
 import { loadHeightmap, Terrain } from './terrain.js';
 import { Player } from './Player.js';
 import { Ball, pickVariant } from './balls.js';
-import { Rocket } from './rocket.js';
-import { Disc } from './disc.js';
+import { Projectile } from './projectiles/Projectile.js';
+import { ROCKET_CONFIG, DISC_CONFIG, getProjectileConfig, computeAccuracy } from './projectiles/index.js';
+import type { ProjectileConfig } from './projectiles/types.js';
 import { EffectsManager } from './effects.js';
 import { HUD } from './hud.js';
 import { HealthBarSystem } from './HealthBarSystem.js';
@@ -221,9 +222,12 @@ sun.shadow.camera.bottom = -SHADOW_CAMERA_SIZE;
 sun.shadow.bias = -0.0001;
 sun.shadow.normalBias = 0.02;
 scene.add(sun);
+scene.add(sun.target);
 
 // Sync sun position with atmospheric sky
 sun.position.copy(atmosphericSky.getSunPosition());
+sun.target.position.set(0, 0, 0); // Point shadow camera at origin
+sun.target.updateMatrixWorld();
 volumetricClouds.setSunDirection(atmosphericSky.getSunDirection());
 
 const hemi = new THREE.HemisphereLight(HEMI_SKY_COLOR, HEMI_GROUND_COLOR, HEMI_INTENSITY);  // blue sky top, warm earth bounce
@@ -241,8 +245,7 @@ const playersBeingCreated: Set<string> = new Set();
 let lastRemotePosLog = '';
 const balls: Ball[] = [];
 let lastSentPos = { x: 0, y: 0, z: 0 };
-const rockets: Rocket[] = [];
-const discs: Disc[] = [];
+const projectiles: Projectile[] = [];
 const debrisList: BallDebris[] = [];
 const playerDebrisList: PlayerDebris[] = [];
 const explosions: Explosion[] = [];
@@ -250,12 +253,12 @@ const implosions: Implosion[] = [];
 let effects: EffectsManager;
 
 // ---- Playback projectile reconstruction ----
-const playbackRockets: Rocket[] = [];
-const playbackRocketById = new Map<number, Rocket>();
+const playbackProjectiles: Projectile[] = [];
+const playbackProjectileById = new Map<number, Projectile>();
 const playbackBallById = new Map<number, Ball>();
 let playbackFrozenWarnCounter = 0;
 let seekReconstructing = false;
-const playbackRocketOrigin = new Map<number, THREE.Vector3>();
+const playbackProjectileOrigin = new Map<number, THREE.Vector3>();
 
 // Track recent explosions for death impulse calculation
 interface ExplosionInfo {
@@ -291,62 +294,75 @@ function showFragMessage(msg: string): void {
   }, FRAG_MESSAGE_DURATION);
 }
 
-// ---- Rocket fire handler ----
-const pendingLocalRockets: Rocket[] = []; // queue: rockets waiting for server projectileId
-const localRocketById = new Map<string, Rocket>(); // server projectileId -> local Rocket
-const pendingRocketTimestamps: Map<Rocket, number> = new Map(); // track when rockets were created
+// ---- Projectile fire handler ----
+const pendingLocalProjectiles: Projectile[] = []; // queue: projectiles waiting for server projectileId
+const localProjectileById = new Map<string, Projectile>(); // server projectileId -> local Projectile
+const pendingProjectileTimestamps: Map<Projectile, number> = new Map(); // track when projectiles were created
 
-function onFire(e: { origin: THREE.Vector3; dir: THREE.Vector3; playerVel: THREE.Vector3 }): void {
-  // Disable input when tab is hidden or during demo playback
+function spawnProjectile(config: ProjectileConfig, e: { origin: THREE.Vector3; dir: THREE.Vector3; playerVel: THREE.Vector3 }): void {
   if (isTabHidden) return;
   if (demoManager?.isPlaying) return;
 
-  // INSTANT SHOOTING: Spawn rocket locally immediately for LAN-like feel
-  const r = new Rocket(scene, e.origin, e.dir, e.playerVel);
-  rockets.push(r);
-  pendingLocalRockets.push(r);
-  pendingRocketTimestamps.set(r, Date.now());
+  // INSTANT SHOOTING: Spawn projectile locally immediately for LAN-like feel
+  const p = new Projectile(scene, e.origin, e.dir, e.playerVel, config);
+  projectiles.push(p);
+
+  if (config.needsServerTracking) {
+    pendingLocalProjectiles.push(p);
+    pendingProjectileTimestamps.set(p, Date.now());
+  }
 
   // Record projectile fired event for demo
   if (demoManager?.isRecording) {
-    const velocity = e.dir.clone().normalize().multiplyScalar(ROCKET_SPEED).addScaledVector(e.playerVel, 0.5);
-    r.demoProjectileId = demoManager.recordProjectileFired(
+    const velocity = e.dir.clone().normalize().multiplyScalar(config.speed).addScaledVector(e.playerVel, 0.5);
+    p.demoProjectileId = demoManager.recordProjectileFired(
       { x: e.origin.x, y: e.origin.y, z: e.origin.z },
       { x: velocity.x, y: velocity.y, z: velocity.z },
-      0 // weaponType: rocket
+      config.weaponType
     );
   }
 
   // Send shot to server with projectile position/velocity for tracking
   // Server will validate and confirm/override if needed
-  const velocity = e.dir.clone().multiplyScalar(ROCKET_SPEED);
-  networkManager.sendShot(
-    null, // no target yet
-    { x: e.origin.x, y: e.origin.y, z: e.origin.z },
-    { x: velocity.x, y: velocity.y, z: velocity.z }
-  );
-}
-
-function onDisc(e: { origin: THREE.Vector3; dir: THREE.Vector3; playerVel: THREE.Vector3 }): void {
-  if (demoManager?.isPlaying) return;
-  const d = new Disc(scene, e.origin, e.dir, e.playerVel);
-  discs.push(d);
-
-  // Record projectile fired event for demo
-  if (demoManager?.isRecording) {
-    const velocity = e.dir.clone().normalize().multiplyScalar(DISC_SPEED).addScaledVector(e.playerVel, 0.5);
-    d.demoProjectileId = demoManager.recordProjectileFired(
+  if (config.name === 'rocket') {
+    const velocity = e.dir.clone().normalize().multiplyScalar(config.speed);
+    networkManager.sendShot(
+      null, // no target yet
       { x: e.origin.x, y: e.origin.y, z: e.origin.z },
-      { x: velocity.x, y: velocity.y, z: velocity.z },
-      1 // weaponType: disc
+      { x: velocity.x, y: velocity.y, z: velocity.z }
     );
   }
 }
 
-// ---- Explosion processing ----
-function processExplosion(pos: THREE.Vector3, radius: number, force: number, shooterId?: string, directHit: boolean = false, directHitTargetId?: string | null, age: number = 0): void {
-  const exp = new Explosion(scene, pos, directHit, age);
-  explosions.push(exp);
+function onFire(e: { origin: THREE.Vector3; dir: THREE.Vector3; playerVel: THREE.Vector3 }): void {
+  spawnProjectile(ROCKET_CONFIG, e);
+}
+
+function onDisc(e: { origin: THREE.Vector3; dir: THREE.Vector3; playerVel: THREE.Vector3 }): void {
+  spawnProjectile(DISC_CONFIG, e);
+}
+
+// ---- Projectile explosion processing (push or pull based on config) ----
+function processProjectileExplosion(
+  pos: THREE.Vector3,
+  radius: number,
+  force: number,
+  forceMode: 'push' | 'pull',
+  aoeDamage: number,
+  falloffMultiplier: number,
+  collisionMultiplier: number,
+  forceMultiplier: number,
+  shooterId?: string,
+  directHit: boolean = false,
+  directHitTargetId?: string | null,
+  age: number = 0,
+  sendAOE?: (pos: any, targetId: string | null) => void
+): void {
+  if (forceMode === 'push') {
+    explosions.push(new Explosion(scene, pos, directHit, age));
+  } else {
+    implosions.push(new Implosion(scene, pos, age));
+  }
 
   // Record explosion for death impulse calculation
   recentExplosions.push({
@@ -362,272 +378,141 @@ function processExplosion(pos: THREE.Vector3, radius: number, force: number, sho
     recentExplosions.shift();
   }
 
-  // Knock back player
+  const applyToLocal = forceMode === 'push'
+    ? (p: THREE.Vector3, f: number) => player.applyKnockback(p, f)
+    : (p: THREE.Vector3, f: number) => player.applyPull(p, f);
+
+  // Apply to local player
   const dpx = player.pos.distanceTo(pos);
-  if (dpx < radius * EXPLOSION_FALLOFF_MULTIPLIER_ROCKET) {
-    const falloff = 1 - dpx / (radius * EXPLOSION_FALLOFF_MULTIPLIER_ROCKET);
-    player.applyKnockback(pos, force * falloff);
+  if (dpx < radius * falloffMultiplier) {
+    const falloff = 1 - dpx / (radius * falloffMultiplier);
+    applyToLocal(pos, force * falloff);
   }
 
-  // Damage + knockback balls
+  // Apply to balls
+  const applyToBall = forceMode === 'push'
+    ? (b: Ball, f: number) => b.applyKnockback(pos, f)
+    : (b: Ball, f: number) => b.applyPull(pos, f);
   for (const ball of balls) {
     if (ball.dead) continue;
     const db = ball.pos.distanceTo(pos);
-    if (db < radius + ball.radius) {
-      ball.applyKnockback(pos, force * KNOCKBACK_MULTIPLIER);
+    const threshold = forceMode === 'push'
+      ? radius + ball.radius
+      : radius * collisionMultiplier + ball.radius;
+    if (db < threshold) {
+      applyToBall(ball, force * forceMultiplier);
     }
   }
 
-  // AOE damage + knockback to remote players
-  // Send to server for authoritative damage, apply knockback locally for visual feedback
-  if (networkManager && networkManager.isConnected()) {
-    networkManager.sendAOEShot(
+  // AOE damage to remote players
+  if (networkManager && networkManager.isConnected() && sendAOE) {
+    sendAOE(
       { x: pos.x, y: pos.y, z: pos.z },
       directHitTargetId ?? null
     );
   }
-  for (const [playerId, rp] of remotePlayers) {
-    if (playerId === directHitTargetId) continue; // Direct hit already handled
-    if ((rp as any).isDead) continue;
-    const d = rp.position.distanceTo(pos);
-    // Knockback uses full explosion radius
-    if (d < radius * EXPLOSION_FALLOFF_MULTIPLIER_ROCKET) {
-      const falloff = 1 - d / (radius * EXPLOSION_FALLOFF_MULTIPLIER_ROCKET);
-      rp.applyKnockback(pos, force * falloff);
-      // Instant hit marker + damage prediction for AOE splash hit (client prediction)
-      hud.showHitMarker();
-      healthBarSystem.predictDamage(playerId, Math.round(ROCKET_AOE_DAMAGE * falloff));
-    }
-  }
-}
 
-// ---- Disc explosion processing (pull instead of push) ----
-function processDiscExplosion(pos: THREE.Vector3, radius: number, force: number, directHitTargetId?: string | null, age: number = 0): void {
-  const imp = new Implosion(scene, pos, age);
-  implosions.push(imp);
-
-  // Pull player toward explosion
-  const dpx = player.pos.distanceTo(pos);
-  if (dpx < radius * EXPLOSION_FALLOFF_MULTIPLIER_DISC) {
-    const falloff = 1 - dpx / (radius * EXPLOSION_FALLOFF_MULTIPLIER_DISC);
-    player.applyPull(pos, force * falloff);
-  }
-
-  // Pull balls toward explosion
-  for (const ball of balls) {
-    if (ball.dead) continue;
-    const db = ball.pos.distanceTo(pos);
-    if (db < radius * EXPLOSION_COLLISION_MULTIPLIER + ball.radius) {
-      ball.applyPull(pos, force * PULL_MULTIPLIER);
-    }
-  }
-
-  // AOE damage + pull to remote players
-  // Send to server for authoritative damage, apply pull locally for visual feedback
-  if (networkManager && networkManager.isConnected()) {
-    networkManager.sendDiscAOEShot(
-      { x: pos.x, y: pos.y, z: pos.z },
-      directHitTargetId ?? null
-    );
-  }
+  const applyToRemote = forceMode === 'push'
+    ? (rp: RemotePlayer, f: number) => rp.applyKnockback(pos, f)
+    : (rp: RemotePlayer, f: number) => rp.applyPull(pos, f);
   for (const [playerId, rp] of remotePlayers) {
     if (playerId === directHitTargetId) continue;
     if ((rp as any).isDead) continue;
     const d = rp.position.distanceTo(pos);
-    if (d < radius * EXPLOSION_FALLOFF_MULTIPLIER_DISC) {
-      const falloff = 1 - d / (radius * EXPLOSION_FALLOFF_MULTIPLIER_DISC);
-      rp.applyPull(pos, force * falloff);
-      // Instant hit marker + damage prediction for disc AOE splash hit (client prediction)
+    if (d < radius * falloffMultiplier) {
+      const falloff = 1 - d / (radius * falloffMultiplier);
+      applyToRemote(rp, force * falloff);
       hud.showHitMarker();
-      healthBarSystem.predictDamage(playerId, Math.round(ROCKET_AOE_DAMAGE * falloff));
+      healthBarSystem.predictDamage(playerId, Math.round(aoeDamage * falloff));
     }
   }
 }
 
-// ---- Update rockets ----
-function updateRockets(dt: number): void {
-  // Clean up stale pending rockets (no server response within timeout)
+// ---- Update projectiles ----
+function updateProjectiles(dt: number): void {
+  // Clean up stale pending projectiles (no server response within timeout)
   const now = Date.now();
-  for (let i = pendingLocalRockets.length - 1; i >= 0; i--) {
-    const r = pendingLocalRockets[i];
-    const timestamp = pendingRocketTimestamps.get(r) || 0;
+  for (let i = pendingLocalProjectiles.length - 1; i >= 0; i--) {
+    const p = pendingLocalProjectiles[i];
+    const timestamp = pendingProjectileTimestamps.get(p) || 0;
     if (now - timestamp > PENDING_ROCKET_TIMEOUT) {
-      // Server didn't respond within timeout, remove from pending queue
-      // Rocket will continue to exist in rockets array and update normally
-      pendingLocalRockets.splice(i, 1);
-      pendingRocketTimestamps.delete(r);
+      pendingLocalProjectiles.splice(i, 1);
+      pendingProjectileTimestamps.delete(p);
     }
   }
 
-  for (let i = rockets.length - 1; i >= 0; i--) {
-    const r = rockets[i];
-    
-    // Get remote player positions for collision (skip dead players)
-    const remotePlayerPositions = new Map<string, THREE.Vector3>();
-    remotePlayers.forEach((rp, playerId) => {
-      // Skip dead players for collision detection
-      if ((rp as any).isDead) return;
-      remotePlayerPositions.set(playerId, rp.position);
-    });
-    
-    r.update(dt, terrain, balls, remotePlayerPositions);
-
-    if (r.exploded && !r.explosionProcessed) {
-      r.explosionProcessed = true;
-      // Don't remove remote rockets immediately - let trails fade out
-      // They will be removed when r.dead becomes true (particles gone)
-      
-      // Notify server to destroy this projectile (for any hit: terrain, ball, or player)
-      if (r.serverProjectileId) {
-        networkManager.sendProjectileDestroy(r.serverProjectileId);
-      }
-      
-      processExplosion(r.pos, r.explosionRadius, r.knockbackForce, undefined, r.directHit, r.hitPlayerId, r.age);
-
-      // Record projectile hit for demo (any hit: terrain, ball, or player)
-      if (demoManager?.isRecording && r.demoProjectileId) {
-        const targetId = r.hitBall ? r.hitBall.id : (r.hitPlayerId ? 0xFFFF : 0);
-        demoManager.recordProjectileHit(r.demoProjectileId, { x: r.pos.x, y: r.pos.y, z: r.pos.z }, targetId);
-      }
-
-      // Log ALL target hits (ball or player), not terrain
-      if (r.hitBall || r.hitPlayerId) {
-        logger.info(`[CoolShot] Rocket hit ${r.hitBall ? 'ball' : 'player'} airtime=${r.hitAge.toFixed(3)}s dist=${r.hitDistance.toFixed(1)} direct=${r.directHit}`);
-      }
-
-      // Auto-clip: only for actual target hits (ball or player)
-      if (demoManager?.isRecording && (r.hitBall || r.hitPlayerId) && r.hitAge > 0.2) {
-        demoManager.autoClipOnHit(r.hitAge, 0.2);
-      }
-
-      if (r.hitBall) {
-        const ball = r.hitBall;
-        const destroyed = ball.takeDamage();
-        // Spawn damage number
-        damageNumberManager.spawn(ball.pos, 1, r.directHit ? '#ffd700' : '#ffffff', camera);
-        // Spawn healthbar only if not destroyed (killing blow doesn't need healthbar)
-        if (!destroyed) {
-          healthBarSystem.spawnBall(ball, 1, ball.health);
-        }
-        // Accuracy: 1-10 scale, direct core hits = 10, wake hits = 1-9 based on distance
-        const accRaw = r.hitAccuracy;
-        let acc = 1 + Math.max(0, 9 - (accRaw / HIT_MAX * 9));
-        if (r.directHit) acc = 10; // direct core hit = max accuracy
-        const dist  = r.hitDistance;
-        const air   = r.hitAge;
-        const score = Math.round(acc * dist * air);
-        logger.info(`[Hit] Ball direct=${r.directHit} accRaw=${accRaw.toFixed(2)} acc=${acc.toFixed(1)} dist=${dist.toFixed(1)} air=${air.toFixed(2)}s score=${score}`);
-        if (destroyed) {
-          debrisList.push(new BallDebris(scene, terrain, ball.pos.x, ball.pos.y, ball.pos.z, ball.color, ball.scale));
-          player.kills++;
-        }
-        showFragMessage(`${acc.toFixed(1)} · ${Math.round(dist)} · ${air.toFixed(2)}s\n${score}`);
-        hud.showHitMarker();
-
-        // Record target hit/destroyed for demo
-        if (demoManager?.isRecording) {
-          if (destroyed) {
-            demoManager.recordTargetDestroyed(ball.id, { x: ball.pos.x, y: ball.pos.y, z: ball.pos.z });
-          } else {
-            demoManager.recordTargetHit(ball.id, { x: ball.pos.x, y: ball.pos.y, z: ball.pos.z }, { x: ball.vel.x, y: ball.vel.y, z: ball.vel.z }, ball.health);
-          }
-        }
-      }
-
-      if (r.hitPlayerId) {
-        // Get player position for damage number
-        const targetPlayer = remotePlayers.get(r.hitPlayerId);
-        const hitPos = targetPlayer ? targetPlayer.position : player.pos;
-        damageNumberManager.spawn(hitPos, 50, r.directHit ? '#ffd700' : '#ffffff', camera);
-        // INSTANT HIT CONFIRMATION: Client-side hit detection provides immediate feedback
-        // Predict damage on health bar immediately (don't wait for server)
-        healthBarSystem.predictDamage(r.hitPlayerId, 50); // Direct hit = 50 damage
-        // Calculate score for player hit (same formula as ball)
-        const accRaw = r.hitAccuracy;
-        let acc = 1 + Math.max(0, 9 - (accRaw / HIT_MAX * 9));
-        if (r.directHit) acc = 10; // direct core hit = max accuracy
-        const dist  = r.hitDistance;
-        const air   = r.hitAge;
-        const score = Math.round(acc * dist * air);
-        logger.info(`[Hit] Player direct=${r.directHit} accRaw=${accRaw.toFixed(2)} acc=${acc.toFixed(1)} dist=${dist.toFixed(1)} air=${air.toFixed(2)}s score=${score}`);
-        showFragMessage(`${acc.toFixed(1)} · ${Math.round(dist)} · ${air.toFixed(2)}s\n${score}`);
-        hud.showHitMarker();
-      }
-      
-      if (r.hitPlayerId && networkManager) {
-        // Send hit event to server for validation and authoritative confirmation
-        // Server may override if client prediction was wrong (anti-cheat)
-        networkManager.sendShot(r.hitPlayerId, { x: r.pos.x, y: r.pos.y, z: r.pos.z }, { x: r.vel.x, y: r.vel.y, z: r.vel.z }, Date.now(), r.serverProjectileId);
-        logger.info(`[Shot] Sent to server: player=${r.hitPlayerId} proj=${r.serverProjectileId} direct=${r.directHit} air=${r.hitAge.toFixed(2)}s`);
-      }
-    }
-
-    if (r.dead) {
-      if (demoManager?.isRecording && r.demoProjectileId) {
-        demoManager.recordProjectileDestroyed(r.demoProjectileId, { x: r.pos.x, y: r.pos.y, z: r.pos.z });
-      }
-      r.dispose();
-      rockets.splice(i, 1);
-    }
-  }
-}
-
-// ---- Update discs ----
-function updateDiscs(dt: number): void {
   // Get remote player positions for collision (skip dead players)
   const remotePlayerPositions = new Map<string, THREE.Vector3>();
   remotePlayers.forEach((rp, playerId) => {
-    // Skip dead players for collision detection
     if ((rp as any).isDead) return;
     remotePlayerPositions.set(playerId, rp.position);
   });
 
-  for (let i = discs.length - 1; i >= 0; i--) {
-    const d = discs[i];
-    d.update(dt, terrain, balls, remotePlayerPositions);
+  for (let i = projectiles.length - 1; i >= 0; i--) {
+    const p = projectiles[i];
+    p.update(dt, terrain, balls, remotePlayerPositions);
 
-    if (d.exploded && !d.explosionProcessed) {
-      d.explosionProcessed = true;
-      processDiscExplosion(d.pos, d.explosionRadius, d.pullForce, d.hitPlayerId, d.age);
+    if (p.exploded && !p.explosionProcessed) {
+      p.explosionProcessed = true;
 
-      // Record projectile hit for demo
-      if (demoManager?.isRecording && d.demoProjectileId) {
-        const targetId = d.hitBall ? d.hitBall.id : (d.hitPlayerId ? 0xFFFF : 0);
-        demoManager.recordProjectileHit(d.demoProjectileId, { x: d.pos.x, y: d.pos.y, z: d.pos.z }, targetId);
+      // Notify server to destroy tracked projectile
+      if (p.serverProjectileId) {
+        networkManager.sendProjectileDestroy(p.serverProjectileId);
       }
 
-      // Log ALL target hits (ball or player), not terrain
-      if (d.hitBall || d.hitPlayerId) {
-        logger.info(`[CoolShot] Disc hit ${d.hitBall ? 'ball' : 'player'} airtime=${d.hitAge.toFixed(3)}s dist=${d.hitDistance.toFixed(1)} direct=${d.directHit}`);
+      processProjectileExplosion(
+        p.pos,
+        p.explosionRadius,
+        p.force,
+        p.forceMode,
+        p.config.aoeDamage,
+        p.config.falloffMultiplier,
+        p.config.collisionMultiplier,
+        p.config.forceMultiplier,
+        undefined,
+        p.directHit,
+        p.hitPlayerId,
+        p.age,
+        p.config.name === 'rocket'
+          ? (pos, targetId) => networkManager.sendAOEShot(pos, targetId)
+          : (pos, targetId) => networkManager.sendDiscAOEShot(pos, targetId)
+      );
+
+      // Record projectile hit for demo (any hit: terrain, ball, or player)
+      if (demoManager?.isRecording && p.demoProjectileId) {
+        const targetId = p.hitBall ? p.hitBall.id : (p.hitPlayerId ? 0xFFFF : 0);
+        demoManager.recordProjectileHit(p.demoProjectileId, { x: p.pos.x, y: p.pos.y, z: p.pos.z }, targetId);
       }
 
-      // Auto-clip: only for actual target hits (ball or player)
-      if (demoManager?.isRecording && (d.hitBall || d.hitPlayerId) && d.hitAge > 0.2) {
-        demoManager.autoClipOnHit(d.hitAge, 0.2);
+      // Log target hits
+      if (p.hitBall || p.hitPlayerId) {
+        logger.info(`[CoolShot] ${p.config.displayName} hit ${p.hitBall ? 'ball' : 'player'} airtime=${p.hitAge.toFixed(3)}s dist=${p.hitDistance.toFixed(1)} direct=${p.directHit}`);
       }
 
-      if (d.hitBall) {
-        const ball = d.hitBall;
+      // Auto-clip for target hits
+      if (demoManager?.isRecording && (p.hitBall || p.hitPlayerId) && p.hitAge > 0.2) {
+        demoManager.autoClipOnHit(p.hitAge, 0.2);
+      }
+
+      if (p.hitBall) {
+        const ball = p.hitBall;
         const destroyed = ball.takeDamage();
-        damageNumberManager.spawn(ball.pos, 1, '#00ffff', camera);
-        // Spawn healthbar only if not destroyed (killing blow doesn't need healthbar)
+        damageNumberManager.spawn(ball.pos, 1, p.config.damageColor, camera);
         if (!destroyed) {
           healthBarSystem.spawnBall(ball, 1, ball.health);
         }
+        const acc = computeAccuracy(p.hitAccuracy, p.directHit);
+        const dist = p.hitDistance;
+        const air = p.hitAge;
+        const score = Math.round(acc * dist * air);
+        logger.info(`[Hit] Ball direct=${p.directHit} accRaw=${p.hitAccuracy.toFixed(2)} acc=${acc.toFixed(1)} dist=${dist.toFixed(1)} air=${air.toFixed(2)}s score=${score}`);
         if (destroyed) {
           debrisList.push(new BallDebris(scene, terrain, ball.pos.x, ball.pos.y, ball.pos.z, ball.color, ball.scale));
           player.kills++;
-          
-          // Calculate score for ball hit
-          const accRaw = d.hitAccuracy;
-          let acc = 1 + (ACCURACY_MAX - 1) * (1 - accRaw / ACCURACY_NORMALIZATION); // 1-10 scale
-          const dist = d.hitDistance;
-          const air = d.hitAge;
-          const score = Math.round(acc * dist * air);
-          logger.info(`[Hit] Ball direct=${d.directHit} accRaw=${accRaw.toFixed(2)} acc=${acc.toFixed(1)} dist=${dist.toFixed(1)} air=${air.toFixed(2)}s score=${score}`);
-          showFragMessage(`${acc.toFixed(1)} · ${Math.round(dist)} · ${air.toFixed(2)}s\n${score}`);
         }
-        // Record target hit/destroyed for demo
+        showFragMessage(`${acc.toFixed(1)} · ${Math.round(dist)} · ${air.toFixed(2)}s\n${score}`);
+        hud.showHitMarker();
+
         if (demoManager?.isRecording) {
           if (destroyed) {
             demoManager.recordTargetDestroyed(ball.id, { x: ball.pos.x, y: ball.pos.y, z: ball.pos.z });
@@ -637,31 +522,32 @@ function updateDiscs(dt: number): void {
         }
       }
 
-      if (d.hitPlayerId && networkManager) {
-        // Get player position for damage number
-        const targetPlayer = remotePlayers.get(d.hitPlayerId);
+      if (p.hitPlayerId) {
+        const targetPlayer = remotePlayers.get(p.hitPlayerId);
         const hitPos = targetPlayer ? targetPlayer.position : player.pos;
-        damageNumberManager.spawn(hitPos, 50, '#00ffff', camera);
-        // Send hit event to server
-        networkManager.sendShot(d.hitPlayerId, { x: d.pos.x, y: d.pos.y, z: d.pos.z }, { x: d.vel.x, y: d.vel.y, z: d.vel.z }, Date.now(), null);
-        // Predict damage on health bar immediately (disc direct hit = 50 damage)
-        healthBarSystem.predictDamage(d.hitPlayerId, 50);
-        logger.info(`[Shot] Disc sent to server: player=${d.hitPlayerId} direct=${d.directHit} air=${d.hitAge.toFixed(2)}s`);
-        
-        // Calculate score for player hit
-        const accRaw = d.hitAccuracy;
-        let acc = 1 + (ACCURACY_MAX - 1) * (1 - accRaw / ACCURACY_NORMALIZATION); // 1-10 scale
-        const dist = d.hitDistance;
-        const air = d.hitAge;
+        damageNumberManager.spawn(hitPos, 50, p.config.damageColor, camera);
+        healthBarSystem.predictDamage(p.hitPlayerId, 50);
+        const acc = computeAccuracy(p.hitAccuracy, p.directHit);
+        const dist = p.hitDistance;
+        const air = p.hitAge;
         const score = Math.round(acc * dist * air);
-        logger.info(`[Hit] Player direct=${d.directHit} accRaw=${accRaw.toFixed(2)} acc=${acc.toFixed(1)} dist=${dist.toFixed(1)} air=${air.toFixed(2)}s score=${score}`);
+        logger.info(`[Hit] Player direct=${p.directHit} accRaw=${p.hitAccuracy.toFixed(2)} acc=${acc.toFixed(1)} dist=${dist.toFixed(1)} air=${air.toFixed(2)}s score=${score}`);
         showFragMessage(`${acc.toFixed(1)} · ${Math.round(dist)} · ${air.toFixed(2)}s\n${score}`);
+        hud.showHitMarker();
+      }
+
+      if (p.hitPlayerId && networkManager) {
+        networkManager.sendShot(p.hitPlayerId, { x: p.pos.x, y: p.pos.y, z: p.pos.z }, { x: p.vel.x, y: p.vel.y, z: p.vel.z }, Date.now(), p.serverProjectileId);
+        logger.info(`[Shot] Sent to server: player=${p.hitPlayerId} proj=${p.serverProjectileId} direct=${p.directHit} air=${p.hitAge.toFixed(2)}s`);
       }
     }
 
-    if (d.dead) {
-      d.dispose();
-      discs.splice(i, 1);
+    if (p.dead) {
+      if (demoManager?.isRecording && p.demoProjectileId) {
+        demoManager.recordProjectileDestroyed(p.demoProjectileId, { x: p.pos.x, y: p.pos.y, z: p.pos.z });
+      }
+      p.dispose();
+      projectiles.splice(i, 1);
     }
   }
 }
@@ -881,22 +767,21 @@ function loop(time: number): void {
   const demoPaused = demoManager?.isPaused ?? false;
   if (!demoPaused) updateBalls(dt);
   if (!demoManager?.isPlaying) {
-    updateRockets(dt);
-    updateDiscs(dt);
+    updateProjectiles(dt);
   }
 
-  // Update playback rockets (deterministic reconstruction from events)
+  // Update playback projectiles (deterministic reconstruction from events)
   if (!demoPaused) {
-    for (let i = playbackRockets.length - 1; i >= 0; i--) {
-      const r = playbackRockets[i];
+    for (let i = playbackProjectiles.length - 1; i >= 0; i--) {
+      const r = playbackProjectiles[i];
       r.update(dt, terrain);
       if (r.dead) {
         r.dispose();
-        playbackRockets.splice(i, 1);
+        playbackProjectiles.splice(i, 1);
         // Remove from map if present
-        for (const [id, rocket] of playbackRocketById) {
-          if (rocket === r) {
-            playbackRocketById.delete(id);
+        for (const [id, proj] of playbackProjectileById) {
+          if (proj === r) {
+            playbackProjectileById.delete(id);
             break;
           }
         }
@@ -939,10 +824,6 @@ function loop(time: number): void {
   // Sync sun position with atmospheric sky (for dynamic day/night)
   sun.position.copy(atmosphericSky.getSunPosition());
   volumetricClouds.setSunDirection(atmosphericSky.getSunDirection());
-
-  // Shadow camera follows player (positioned above looking down)
-  sun.shadow.camera.position.set(player.pos.x, player.pos.y + 500, player.pos.z);
-  sun.shadow.camera.lookAt(player.pos);
 
   if (postproEnabled) {
     composer.render();
@@ -1071,7 +952,7 @@ async function init(): Promise<void> {
   setInterval(() => { if (lastCoolShots.length > 0) renderCoolShots(lastCoolShots); }, 1000);
 
   // ---- Playback projectile reconstruction ----
-  // Handle projectile events from demo playback: spawn rockets on Fired, explode on Destroyed
+  // Handle projectile events from demo playback: spawn projectiles on Fired, explode on Destroyed
   demoManager.onPlaybackEvent = (events: { projectiles: any[], targets: any[] }) => {
     if (seekReconstructing) {
       // Seek reconstruction: re-create all in-flight objects at their state as of the seek time.
@@ -1123,11 +1004,11 @@ async function init(): Promise<void> {
         if (ev.eventType === ProjectileEventType.Fired) {
           const origin = new THREE.Vector3(ev.posX, ev.posY, ev.posZ);
           const velocity = new THREE.Vector3(ev.velX, ev.velY, ev.velZ);
-          const r = new Rocket(scene, origin, new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 0, 0));
+          const r = new Projectile(scene, origin, new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 0, 0), getProjectileConfig(ev.weaponType) ?? ROCKET_CONFIG);
           r.isRemote = true;
           r.vel.copy(velocity);
-          playbackRockets.push(r);
-          playbackRocketById.set(ev.projectileId, r);
+          playbackProjectiles.push(r);
+          playbackProjectileById.set(ev.projectileId, r);
           // Fast-forward from fired time to seek time
           const ffTime = seekTime - ev.timestamp;
           let remaining = ffTime;
@@ -1137,7 +1018,7 @@ async function init(): Promise<void> {
             remaining -= step;
           }
         } else if (ev.eventType === ProjectileEventType.Bounce) {
-          const r = playbackRocketById.get(ev.projectileId);
+          const r = playbackProjectileById.get(ev.projectileId);
           if (r && !r.exploded) {
             r.pos.set(ev.posX, ev.posY, ev.posZ);
             r.vel.set(ev.velX, ev.velY, ev.velZ);
@@ -1216,38 +1097,41 @@ async function init(): Promise<void> {
     // Normal playback event processing (forward playback, not seeking)
     for (const ev of events.projectiles) {
       if (ev.eventType === ProjectileEventType.Fired) {
-        // Reconstruct rocket from recorded position + velocity
+        // Reconstruct projectile from recorded position + velocity, using weaponType
         const origin = new THREE.Vector3(ev.posX, ev.posY, ev.posZ);
         const velocity = new THREE.Vector3(ev.velX, ev.velY, ev.velZ);
-        const r = new Rocket(scene, origin, new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 0, 0));
+        const r = new Projectile(scene, origin, new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 0, 0), getProjectileConfig(ev.weaponType) ?? ROCKET_CONFIG);
         r.isRemote = true;
         r.vel.copy(velocity);
-        playbackRockets.push(r);
-        playbackRocketById.set(ev.projectileId, r);
-        playbackRocketOrigin.set(ev.projectileId, origin.clone());
+        playbackProjectiles.push(r);
+        playbackProjectileById.set(ev.projectileId, r);
+        playbackProjectileOrigin.set(ev.projectileId, origin.clone());
       } else if (ev.eventType === ProjectileEventType.Bounce) {
-        // Update rocket velocity to match recorded bounce
-        const r = playbackRocketById.get(ev.projectileId);
+        // Update projectile velocity to match recorded bounce
+        const r = playbackProjectileById.get(ev.projectileId);
         if (r && !r.exploded) {
           r.pos.set(ev.posX, ev.posY, ev.posZ);
           r.vel.set(ev.velX, ev.velY, ev.velZ);
         }
       } else if (ev.eventType === ProjectileEventType.Hit) {
-        // Force explode the rocket at the recorded position
-        const r = playbackRocketById.get(ev.projectileId);
+        // Force explode the projectile at the recorded position
+        const r = playbackProjectileById.get(ev.projectileId);
         if (r && !r.exploded) {
           r.pos.set(ev.posX, ev.posY, ev.posZ);
           r.explode();
-          // Spawn explosion effect at the recorded position, using rocket age for visual scale
-          explosions.push(new Explosion(scene, r.pos, false, r.age));
+          // Spawn correct effect (explosion for push, implosion for pull)
+          if (r.config.forceMode === 'push') {
+            explosions.push(new Explosion(scene, r.pos, false, r.age));
+          } else {
+            implosions.push(new Implosion(scene, r.pos, r.age));
+          }
           // Compute frag message from playback data
-          const origin = playbackRocketOrigin.get(ev.projectileId);
+          const origin = playbackProjectileOrigin.get(ev.projectileId);
           if (origin) {
             const dist = r.pos.distanceTo(origin);
             const air = r.age;
             // Approximate accuracy: use hitRadius at impact age as proxy
-            const accRaw = r.hitRadius;
-            let acc = 1 + Math.max(0, 9 - (accRaw / HIT_MAX * 9));
+            const acc = computeAccuracy(r.hitRadius, false);
             const score = Math.round(acc * dist * air);
             showFragMessage(`${acc.toFixed(1)} · ${Math.round(dist)} · ${air.toFixed(2)}s\n${score}`);
             hud.showHitMarker();
@@ -1264,8 +1148,8 @@ async function init(): Promise<void> {
           }
         }
       } else if (ev.eventType === ProjectileEventType.Destroyed) {
-        // Remove rocket without explosion (e.g. timeout)
-        const r = playbackRocketById.get(ev.projectileId);
+        // Remove projectile without explosion (e.g. timeout)
+        const r = playbackProjectileById.get(ev.projectileId);
         if (r && !r.exploded) {
           r.pos.set(ev.posX, ev.posY, ev.posZ);
           r.explode();
@@ -1335,12 +1219,12 @@ async function init(): Promise<void> {
 
   // User explicitly stops playback (ESC, UI stop button) — full cleanup
   demoManager.onPlaybackStop = () => {
-    for (const r of playbackRockets) {
+    for (const r of playbackProjectiles) {
       r.dispose();
     }
-    playbackRockets.length = 0;
-    playbackRocketById.clear();
-    playbackRocketOrigin.clear();
+    playbackProjectiles.length = 0;
+    playbackProjectileById.clear();
+    playbackProjectileOrigin.clear();
     for (const ball of playbackBallById.values()) {
       ball.dispose();
       const idx = balls.indexOf(ball);
@@ -1377,16 +1261,16 @@ async function init(): Promise<void> {
         balls.splice(i, 1);
       }
     }
-    // Clear live rockets
-    for (const r of rockets) {
+    // Clear live projectiles
+    for (const r of projectiles) {
       r.dispose();
     }
-    rockets.length = 0;
-    // Clear live discs
-    for (const d of discs) {
+    projectiles.length = 0;
+    // Clear live projectiles
+    for (const d of projectiles) {
       d.dispose();
     }
-    discs.length = 0;
+    projectiles.length = 0;
     // Clear explosions, implosions, debris
     for (const e of explosions) e.dispose();
     explosions.length = 0;
@@ -1398,15 +1282,15 @@ async function init(): Promise<void> {
     playerDebrisList.length = 0;
   };
 
-  // Clear playback rockets on seek so they don't get orphaned
+  // Clear playback projectiles on seek so they don't get orphaned
   demoManager.onPlaybackSeek = () => {
     seekReconstructing = true;
-    for (const r of playbackRockets) {
+    for (const r of playbackProjectiles) {
       r.dispose();
     }
-    playbackRockets.length = 0;
-    playbackRocketById.clear();
-    playbackRocketOrigin.clear();
+    playbackProjectiles.length = 0;
+    playbackProjectileById.clear();
+    playbackProjectileOrigin.clear();
     for (const ball of playbackBallById.values()) {
       ball.dispose();
       const idx = balls.indexOf(ball);
@@ -1553,16 +1437,16 @@ async function init(): Promise<void> {
   };
 
   // Server-authoritative projectile handlers
-  const remoteProjectiles = new Map<string, Rocket>();
+  const remoteProjectiles = new Map<string, Projectile>();
 
   networkManager.onProjectileCreated = (projectileId: string, ownerId: string, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }) => {
-    // For own projectiles: link the pending local rocket to this server ID
+    // For own projectiles: link the pending local projectile to this server ID
     if (ownerId === networkManager.getLocalPlayerId()) {
-      const localRocket = pendingLocalRockets.shift();
-      if (localRocket) {
-        localRocket.serverProjectileId = projectileId;
-        localRocketById.set(projectileId, localRocket);
-        pendingRocketTimestamps.delete(localRocket); // Clean up timestamp
+      const localProjectile = pendingLocalProjectiles.shift();
+      if (localProjectile) {
+        localProjectile.serverProjectileId = projectileId;
+        localProjectileById.set(projectileId, localProjectile);
+        pendingProjectileTimestamps.delete(localProjectile); // Clean up timestamp
       }
       return;
     }
@@ -1570,31 +1454,30 @@ async function init(): Promise<void> {
     const vel = new THREE.Vector3(velocity.x, velocity.y, velocity.z);
     const origin = new THREE.Vector3(position.x, position.y, position.z);
     const dir = vel.clone().normalize();
-    const rocket = new Rocket(scene, origin, dir, new THREE.Vector3(0, 0, 0));
-    rocket.vel.copy(vel); // override with exact server velocity
-    rocket.isRemote = true;
-    rockets.push(rocket);
-    remoteProjectiles.set(projectileId, rocket);
+    const remoteProjectile = new Projectile(scene, origin, dir, new THREE.Vector3(0, 0, 0), ROCKET_CONFIG);
+    remoteProjectile.vel.copy(vel); // override with exact server velocity
+    remoteProjectile.isRemote = true;
+    projectiles.push(remoteProjectile);
+    remoteProjectiles.set(projectileId, remoteProjectile);
   };
 
   networkManager.onProjectileDestroyed = (projectileId: string) => {
-    // Kill remote rocket (explode so trail particles fade out naturally)
-    const remoteRocket = remoteProjectiles.get(projectileId);
-    if (remoteRocket) {
-      remoteRocket.explode();
+    // Kill remote projectile (explode so trail particles fade out naturally)
+    const remoteProjectile = remoteProjectiles.get(projectileId);
+    if (remoteProjectile) {
+      remoteProjectile.explode();
       // Don't delete from remoteProjectiles - let it fade out naturally
-      // The rocket will be removed from rockets array when r.dead becomes true
     }
-    // Kill local rocket if server says it's gone - explode to let trails fade
-    const localRocket = localRocketById.get(projectileId);
-    if (localRocket) {
-      localRocket.explode();
-      localRocketById.delete(projectileId);
+    // Kill local projectile if server says it's gone - explode to let trails fade
+    const localProjectile = localProjectileById.get(projectileId);
+    if (localProjectile) {
+      localProjectile.explode();
+      localProjectileById.delete(projectileId);
       // Also remove from pending queue if it's still there (shouldn't happen but defensive)
-      const pendingIndex = pendingLocalRockets.indexOf(localRocket);
+      const pendingIndex = pendingLocalProjectiles.indexOf(localProjectile);
       if (pendingIndex !== -1) {
-        pendingLocalRockets.splice(pendingIndex, 1);
-        pendingRocketTimestamps.delete(localRocket);
+        pendingLocalProjectiles.splice(pendingIndex, 1);
+        pendingProjectileTimestamps.delete(localProjectile);
       }
     }
   };
@@ -1798,10 +1681,11 @@ document.addEventListener('keydown', (e) => {
   if (e.code === 'F6') {
     if (demoManager) demoManager.toggleUI();
   }
-  // Space = play/pause only when demo UI is visible
-  if (e.code === 'Space' && demoManager?.isLoadedForPlayback && demoManager?.isUIVisible) {
+  // Space = play/pause during demo playback (like Up arrow)
+  if (e.code === 'Space' && demoManager?.isLoadedForPlayback) {
     e.preventDefault();
     demoManager.togglePlayPause();
+    return;
   }
 });
 
@@ -2006,7 +1890,7 @@ if (typeof window !== 'undefined') {
       });
     }
     
-    const snapshot = StateSnapshot.create(playerMap, [...rockets, ...discs], 'client');
+    const snapshot = StateSnapshot.create(playerMap, [...projectiles], 'client');
     StateSnapshot.save(snapshot);
     logger.info('Client snapshot taken');
     return snapshot;

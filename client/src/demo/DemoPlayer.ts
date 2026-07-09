@@ -131,6 +131,8 @@ export class DemoPlayer {
         this.frameIndex = 0;
         this.lastProjectileEventIndex = 0;
         this.lastTargetEventIndex = 0;
+        // Clean up objects from previous iteration before replaying
+        this.callbacks.onSeek?.();
       } else {
         this.currentTime = this.duration;
         this.playing = false;

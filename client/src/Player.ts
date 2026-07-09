@@ -46,6 +46,7 @@ export class Player {
   private model: PlayerModel | null = null;
   private jumpAnimTimer = 0.0;
   private wasOnGround = false;
+  private shadowBlob: THREE.Mesh | null = null;
 
   // Input state
   private keys: Record<string, boolean> = {};
@@ -86,6 +87,39 @@ export class Player {
     // Initialize player model
     this.model = new PlayerModel(scene);
 
+    // Create simple shadow blob for first-person view with soft edges
+    const shadowGeo = new THREE.CircleGeometry(0.8, 32);
+    const shadowMat = new THREE.ShaderMaterial({
+      uniforms: {
+        color: { value: new THREE.Color(0x000000) },
+        opacity: { value: 0.4 }
+      },
+      vertexShader: `
+        varying vec2 vUv;
+        void main() {
+          vUv = uv;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform vec3 color;
+        uniform float opacity;
+        varying vec2 vUv;
+        void main() {
+          float dist = distance(vUv, vec2(0.5));
+          float alpha = smoothstep(0.5, 0.2, dist) * opacity;
+          gl_FragColor = vec4(color, alpha);
+        }
+      `,
+      transparent: true,
+      depthWrite: false,
+      depthTest: false
+    });
+    this.shadowBlob = new THREE.Mesh(shadowGeo, shadowMat);
+    this.shadowBlob.rotation.x = -Math.PI / 2; // Lay flat on ground
+    this.shadowBlob.renderOrder = 999; // Render after terrain
+    scene.add(this.shadowBlob);
+
     this.bindInput();
   }
 
@@ -122,6 +156,7 @@ export class Player {
     });
     document.addEventListener('mousedown', (e) => {
       if (this.inputFrozen) return;
+      if (!document.pointerLockElement) return; // ignore clicks that lock the cursor
       if (e.button === 0) { this.firePending = true; this.mouseHeld = true; }
       if (e.button === 2) { this.jetPending = true; }
     });
@@ -243,6 +278,12 @@ export class Player {
     // Trigger jump animation when leaving ground
     if (this.wasOnGround && !this.onGround) {
       this.jumpAnimTimer = 0.8; // Play jump animation for 0.8 seconds
+
+      // Spawn jump dust particles if jump was pressed
+      if (jumpHeld && this.onJump) {
+        this.onJump(this.pos.clone());
+      }
+
       // Send jump event to network
       if (this.onNetworkJump) {
         this.onNetworkJump({ x: this.pos.x, y: this.pos.y, z: this.pos.z });
@@ -298,6 +339,22 @@ export class Player {
         ).normalize();
         this.onDisc({ origin: this.pos.clone(), dir, playerVel: this.vel.clone() });
       }
+    }
+
+    // Update shadow blob position (follows player on ground)
+    if (this.shadowBlob) {
+      this.shadowBlob.position.x = this.pos.x;
+      this.shadowBlob.position.z = this.pos.z;
+      this.shadowBlob.position.y = this.terrain.getHeight(this.pos.x, this.pos.z) + 0.05; // Slightly above ground to prevent z-fighting
+      // Fade shadow smoothly when in air
+      const airHeight = this.pos.y - this.terrain.getHeight(this.pos.x, this.pos.z);
+      const maxFadeHeight = 8.0;
+      const fadeStart = 2.0;
+      let opacity = 0.4;
+      if (airHeight > fadeStart) {
+        opacity = Math.max(0, 0.4 * (1 - (airHeight - fadeStart) / (maxFadeHeight - fadeStart)));
+      }
+      (this.shadowBlob.material as THREE.ShaderMaterial).uniforms.opacity.value = opacity;
     }
 
     // Update player model animation based on movement

@@ -97,11 +97,25 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
 
     // Prune events older than the frame buffer window — they can never be used in a clip
     const cutoff = this.elapsedTime - this.bufferSeconds;
-    while (this.projectileEvents.length > 0 && this.projectileEvents[0].timestamp < cutoff) {
-      this.projectileEvents.shift();
+    // Find first index with timestamp >= cutoff, then splice in one batch
+    if (this.projectileEvents.length > 0 && this.projectileEvents[0].timestamp < cutoff) {
+      // Binary search for first event >= cutoff
+      let lo = 0, hi = this.projectileEvents.length;
+      while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        if (this.projectileEvents[mid].timestamp < cutoff) lo = mid + 1;
+        else hi = mid;
+      }
+      this.projectileEvents.splice(0, lo);
     }
-    while (this.targetEvents.length > 0 && this.targetEvents[0].timestamp < cutoff) {
-      this.targetEvents.shift();
+    if (this.targetEvents.length > 0 && this.targetEvents[0].timestamp < cutoff) {
+      let lo = 0, hi = this.targetEvents.length;
+      while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        if (this.targetEvents[mid].timestamp < cutoff) lo = mid + 1;
+        else hi = mid;
+      }
+      this.targetEvents.splice(0, lo);
     }
   }
 
@@ -269,8 +283,8 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
         projectileLifetime: 0,
       },
       frames,
-      projectileEvents: this.projectileEvents,
-      targetEvents: this.targetEvents,
+      projectileEvents: [...this.projectileEvents],
+      targetEvents: [...this.targetEvents],
     };
   }
 

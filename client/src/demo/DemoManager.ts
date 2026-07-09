@@ -280,7 +280,7 @@ export class DemoManager {
 
       // Time to extract
       this.pendingClips.splice(i, 1);
-      const clipData = this.recorder.extractClip(pending.clipStart, pending.clipEnd, pending.description, pending.projectileLifetime);
+      const clipData = this.recorder.extractClip(pending.clipStart, pending.clipEnd, pending.description, pending.bestLifetime);
       if (!clipData) {
         console.warn('[Demo] Auto-clip: not enough buffer for this clip');
         continue;
@@ -508,6 +508,7 @@ export class DemoManager {
     }
 
     let bestHitTime: number | null = null;
+    let bestFiredTime: number | null = null;
     let bestAirtime = -1;
     for (const e of data.projectileEvents) {
       if (e.eventType !== ProjectileEventType.Hit) continue;
@@ -517,10 +518,15 @@ export class DemoManager {
       if (airtime > bestAirtime) {
         bestAirtime = airtime;
         bestHitTime = e.timestamp;
+        bestFiredTime = firedAt;
       }
     }
 
-    this.ui.setHitMarkers(bestHitTime !== null ? [bestHitTime] : [], data.header.duration);
+    this.ui.setMarkers(
+      bestHitTime !== null ? [bestHitTime] : [],
+      bestFiredTime !== null ? [bestFiredTime] : [],
+      data.header.duration
+    );
   }
 
   // Called every game frame
