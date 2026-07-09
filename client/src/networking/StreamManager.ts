@@ -24,7 +24,7 @@ export class StreamManager {
   private config: StreamConfig;
   private packetInterval: number;
   public onGhostsUpdate: ((ghosts: any[]) => void) | null = null;
-  private packetTimer: number | null = null;
+  private packetTimer: ReturnType<typeof setInterval> | null = null;
   private onSendPacket: (data: Uint8Array) => void;
   private startTime: number = Date.now(); // For relative timestamps
   private sequenceNumber: number = 0; // Packet sequence tracking

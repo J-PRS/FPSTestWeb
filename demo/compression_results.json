@@ -1,0 +1,410 @@
+{
+  "biggest_file": "c:\\TEMP\\_WEB\\FPSWebTest\\server_bun\\demos\\clip_2026-07-09T18-01-09_1.1s.demo",
+  "biggest_size": 159458,
+  "biggest_results": [
+    {
+      "name": "zlib_level_1",
+      "compress_time": 0.002486999990651384,
+      "decompress_time": 0.0005183999892324209,
+      "compressed_size": 93250,
+      "compression_ratio": 0.5847934879403981,
+      "space_saving": 0.4152065120596019
+    },
+    {
+      "name": "zlib_level_3",
+      "compress_time": 0.0025796999980229884,
+      "decompress_time": 0.0005650999955832958,
+      "compressed_size": 92846,
+      "compression_ratio": 0.5822599054296429,
+      "space_saving": 0.4177400945703571
+    },
+    {
+      "name": "zlib_level_6",
+      "compress_time": 0.0033562000025995076,
+      "decompress_time": 0.0005437000072561204,
+      "compressed_size": 91536,
+      "compression_ratio": 0.5740445760012041,
+      "space_saving": 0.42595542399879593
+    },
+    {
+      "name": "zlib_level_9",
+      "compress_time": 0.007031400018604472,
+      "decompress_time": 0.000532899983227253,
+      "compressed_size": 91421,
+      "compression_ratio": 0.5733233829597763,
+      "space_saving": 0.42667661704022375
+    },
+    {
+      "name": "gzip_level_1",
+      "compress_time": 0.0027012000209651887,
+      "decompress_time": 0.0005972000071778893,
+      "compressed_size": 93262,
+      "compression_ratio": 0.5848687428664602,
+      "space_saving": 0.4151312571335398
+    },
+    {
+      "name": "gzip_level_3",
+      "compress_time": 0.0028150000143796206,
+      "decompress_time": 0.000613799988059327,
+      "compressed_size": 92858,
+      "compression_ratio": 0.582335160355705,
+      "space_saving": 0.417664839644295
+    },
+    {
+      "name": "gzip_level_6",
+      "compress_time": 0.0032796000014059246,
+      "decompress_time": 0.0005446999857667834,
+      "compressed_size": 91548,
+      "compression_ratio": 0.5741198309272662,
+      "space_saving": 0.42588016907273385
+    },
+    {
+      "name": "gzip_level_9",
+      "compress_time": 0.00709540001116693,
+      "decompress_time": 0.000617499987129122,
+      "compressed_size": 91433,
+      "compression_ratio": 0.5733986378858382,
+      "space_saving": 0.4266013621141618
+    },
+    {
+      "name": "lzma_level_0",
+      "compress_time": 0.006260399997700006,
+      "decompress_time": 0.003282599995145574,
+      "compressed_size": 80396,
+      "compression_ratio": 0.5041829196402815,
+      "space_saving": 0.4958170803597185
+    },
+    {
+      "name": "lzma_level_3",
+      "compress_time": 0.010580799978924915,
+      "decompress_time": 0.0031903000199235976,
+      "compressed_size": 79932,
+      "compression_ratio": 0.5012730624992161,
+      "space_saving": 0.4987269375007839
+    },
+    {
+      "name": "lzma_level_6",
+      "compress_time": 0.024287300009746104,
+      "decompress_time": 0.0031980999920051545,
+      "compressed_size": 75012,
+      "compression_ratio": 0.4704185428137817,
+      "space_saving": 0.5295814571862183
+    },
+    {
+      "name": "lzma_level_9",
+      "compress_time": 0.034435999987181276,
+      "decompress_time": 0.0034248000010848045,
+      "compressed_size": 75012,
+      "compression_ratio": 0.4704185428137817,
+      "space_saving": 0.5295814571862183
+    },
+    {
+      "name": "bz2_level_1",
+      "compress_time": 0.007779800012940541,
+      "decompress_time": 0.004267299984348938,
+      "compressed_size": 102516,
+      "compression_ratio": 0.6429028333479663,
+      "space_saving": 0.3570971666520337
+    },
+    {
+      "name": "bz2_level_3",
+      "compress_time": 0.008371699979761615,
+      "decompress_time": 0.004307499999413267,
+      "compressed_size": 103027,
+      "compression_ratio": 0.6461074389494412,
+      "space_saving": 0.3538925610505588
+    },
+    {
+      "name": "bz2_level_6",
+      "compress_time": 0.008414799987804145,
+      "decompress_time": 0.004349099996034056,
+      "compressed_size": 103027,
+      "compression_ratio": 0.6461074389494412,
+      "space_saving": 0.3538925610505588
+    },
+    {
+      "name": "bz2_level_9",
+      "compress_time": 0.007702100003371015,
+      "decompress_time": 0.004289400007110089,
+      "compressed_size": 103027,
+      "compression_ratio": 0.6461074389494412,
+      "space_saving": 0.3538925610505588
+    },
+    {
+      "name": "brotli_level_0",
+      "compress_time": 0.0004628000024240464,
+      "decompress_time": 0.0006071999960113317,
+      "compressed_size": 99954,
+      "compression_ratio": 0.6268359066337217,
+      "space_saving": 0.3731640933662783
+    },
+    {
+      "name": "brotli_level_3",
+      "compress_time": 0.001204700005473569,
+      "decompress_time": 0.0006860000139568001,
+      "compressed_size": 88780,
+      "compression_ratio": 0.55676102798229,
+      "space_saving": 0.44323897201771
+    },
+    {
+      "name": "brotli_level_6",
+      "compress_time": 0.0037068999954499304,
+      "decompress_time": 0.0006449999928008765,
+      "compressed_size": 83447,
+      "compression_ratio": 0.5233164845915539,
+      "space_saving": 0.4766835154084461
+    },
+    {
+      "name": "brotli_level_11",
+      "compress_time": 0.2946200000005774,
+      "decompress_time": 0.0008866999996826053,
+      "compressed_size": 80663,
+      "compression_ratio": 0.5058573417451617,
+      "space_saving": 0.4941426582548383
+    },
+    {
+      "name": "zstd_level_1",
+      "compress_time": 0.0004726000188384205,
+      "decompress_time": 0.00019370001973584294,
+      "compressed_size": 97366,
+      "compression_ratio": 0.6106059275796761,
+      "space_saving": 0.38939407242032387
+    },
+    {
+      "name": "zstd_level_3",
+      "compress_time": 0.0007165000133682042,
+      "decompress_time": 0.00019230000907555223,
+      "compressed_size": 89900,
+      "compression_ratio": 0.5637848210814133,
+      "space_saving": 0.43621517891858674
+    },
+    {
+      "name": "zstd_level_6",
+      "compress_time": 0.0024489999923389405,
+      "decompress_time": 0.00019419999443925917,
+      "compressed_size": 90112,
+      "compression_ratio": 0.5651143247751759,
+      "space_saving": 0.43488567522482413
+    },
+    {
+      "name": "zstd_level_10",
+      "compress_time": 0.0028931999986525625,
+      "decompress_time": 0.00014479999663308263,
+      "compressed_size": 89163,
+      "compression_ratio": 0.5591629143724366,
+      "space_saving": 0.4408370856275634
+    },
+    {
+      "name": "zstd_level_19",
+      "compress_time": 0.02493119999417104,
+      "decompress_time": 0.0001928999845404178,
+      "compressed_size": 84911,
+      "compression_ratio": 0.5324975855711221,
+      "space_saving": 0.46750241442887785
+    }
+  ],
+  "median_file": "c:\\TEMP\\_WEB\\FPSWebTest\\server_bun\\demos\\clip_2026-07-07T17-05-21_0.9s.demo",
+  "median_size": 46091,
+  "median_results": [
+    {
+      "name": "zlib_level_1",
+      "compress_time": 0.0006340999971143901,
+      "decompress_time": 0.0001432000135537237,
+      "compressed_size": 28375,
+      "compression_ratio": 0.6156299494478314,
+      "space_saving": 0.38437005055216855
+    },
+    {
+      "name": "zlib_level_3",
+      "compress_time": 0.0006280999805312604,
+      "decompress_time": 0.00014960000407882035,
+      "compressed_size": 28212,
+      "compression_ratio": 0.6120934672712677,
+      "space_saving": 0.3879065327287323
+    },
+    {
+      "name": "zlib_level_6",
+      "compress_time": 0.000816700019640848,
+      "decompress_time": 0.00013479997869580984,
+      "compressed_size": 27863,
+      "compression_ratio": 0.6045214900956802,
+      "space_saving": 0.39547850990431976
+    },
+    {
+      "name": "zlib_level_9",
+      "compress_time": 0.001502800005255267,
+      "decompress_time": 0.00015390000771731138,
+      "compressed_size": 27848,
+      "compression_ratio": 0.6041960469505977,
+      "space_saving": 0.3958039530494023
+    },
+    {
+      "name": "gzip_level_1",
+      "compress_time": 0.0006384999724105,
+      "decompress_time": 0.00015820001135580242,
+      "compressed_size": 28387,
+      "compression_ratio": 0.6158903039638975,
+      "space_saving": 0.38410969603610245
+    },
+    {
+      "name": "gzip_level_3",
+      "compress_time": 0.0006532999977935106,
+      "decompress_time": 0.00014399999054148793,
+      "compressed_size": 28224,
+      "compression_ratio": 0.6123538217873338,
+      "space_saving": 0.3876461782126662
+    },
+    {
+      "name": "gzip_level_6",
+      "compress_time": 0.0008204999903682619,
+      "decompress_time": 0.0001576000067871064,
+      "compressed_size": 27875,
+      "compression_ratio": 0.6047818446117463,
+      "space_saving": 0.39521815538825367
+    },
+    {
+      "name": "gzip_level_9",
+      "compress_time": 0.001488000008976087,
+      "decompress_time": 0.00014289998216554523,
+      "compressed_size": 27860,
+      "compression_ratio": 0.6044564014666638,
+      "space_saving": 0.3955435985333362
+    },
+    {
+      "name": "lzma_level_0",
+      "compress_time": 0.0024535999982617795,
+      "decompress_time": 0.0012965000059921294,
+      "compressed_size": 25096,
+      "compression_ratio": 0.5444880779327852,
+      "space_saving": 0.4555119220672148
+    },
+    {
+      "name": "lzma_level_3",
+      "compress_time": 0.006212000007508323,
+      "decompress_time": 0.001059500005794689,
+      "compressed_size": 25068,
+      "compression_ratio": 0.5438805840619644,
+      "space_saving": 0.4561194159380356
+    },
+    {
+      "name": "lzma_level_6",
+      "compress_time": 0.011077800008933991,
+      "decompress_time": 0.0010697999969124794,
+      "compressed_size": 23872,
+      "compression_ratio": 0.5179319172940487,
+      "space_saving": 0.48206808270595125
+    },
+    {
+      "name": "lzma_level_9",
+      "compress_time": 0.020895399997243658,
+      "decompress_time": 0.0010114999895449728,
+      "compressed_size": 23872,
+      "compression_ratio": 0.5179319172940487,
+      "space_saving": 0.48206808270595125
+    },
+    {
+      "name": "bz2_level_1",
+      "compress_time": 0.0025414999981876463,
+      "decompress_time": 0.0015087999927345663,
+      "compressed_size": 31375,
+      "compression_ratio": 0.6807185784643422,
+      "space_saving": 0.31928142153565775
+    },
+    {
+      "name": "bz2_level_3",
+      "compress_time": 0.002642900013597682,
+      "decompress_time": 0.0013522999943234026,
+      "compressed_size": 31375,
+      "compression_ratio": 0.6807185784643422,
+      "space_saving": 0.31928142153565775
+    },
+    {
+      "name": "bz2_level_6",
+      "compress_time": 0.002598599996417761,
+      "decompress_time": 0.0013409000239335,
+      "compressed_size": 31375,
+      "compression_ratio": 0.6807185784643422,
+      "space_saving": 0.31928142153565775
+    },
+    {
+      "name": "bz2_level_9",
+      "compress_time": 0.002619200007757172,
+      "decompress_time": 0.0013231000048108399,
+      "compressed_size": 31375,
+      "compression_ratio": 0.6807185784643422,
+      "space_saving": 0.31928142153565775
+    },
+    {
+      "name": "brotli_level_0",
+      "compress_time": 0.0001404999929945916,
+      "decompress_time": 0.00020020001102238894,
+      "compressed_size": 30605,
+      "compression_ratio": 0.6640124970167711,
+      "space_saving": 0.3359875029832289
+    },
+    {
+      "name": "brotli_level_3",
+      "compress_time": 0.0004518000059761107,
+      "decompress_time": 0.0001880000054370612,
+      "compressed_size": 27108,
+      "compression_ratio": 0.5881408517931918,
+      "space_saving": 0.41185914820680825
+    },
+    {
+      "name": "brotli_level_6",
+      "compress_time": 0.0014885000127833337,
+      "decompress_time": 0.0001978000218514353,
+      "compressed_size": 25841,
+      "compression_ratio": 0.560651754138552,
+      "space_saving": 0.43934824586144805
+    },
+    {
+      "name": "brotli_level_11",
+      "compress_time": 0.05563610000535846,
+      "decompress_time": 0.0002649000089149922,
+      "compressed_size": 25349,
+      "compression_ratio": 0.5499772189798442,
+      "space_saving": 0.4500227810201558
+    },
+    {
+      "name": "zstd_level_1",
+      "compress_time": 0.0001364000199828297,
+      "decompress_time": 5.639999289996922e-05,
+      "compressed_size": 29660,
+      "compression_ratio": 0.6435095788765702,
+      "space_saving": 0.35649042112342977
+    },
+    {
+      "name": "zstd_level_3",
+      "compress_time": 0.00024739999207668006,
+      "decompress_time": 4.880002234131098e-05,
+      "compressed_size": 27736,
+      "compression_ratio": 0.6017660714673146,
+      "space_saving": 0.39823392853268536
+    },
+    {
+      "name": "zstd_level_6",
+      "compress_time": 0.00047110000741668046,
+      "decompress_time": 5.289999535307288e-05,
+      "compressed_size": 27456,
+      "compression_ratio": 0.595691132759107,
+      "space_saving": 0.404308867240893
+    },
+    {
+      "name": "zstd_level_10",
+      "compress_time": 0.0006652000010944903,
+      "decompress_time": 5.910001345910132e-05,
+      "compressed_size": 27378,
+      "compression_ratio": 0.5939988284046777,
+      "space_saving": 0.40600117159532234
+    },
+    {
+      "name": "zstd_level_19",
+      "compress_time": 0.004489000013563782,
+      "decompress_time": 6.560000474564731e-05,
+      "compressed_size": 26382,
+      "compression_ratio": 0.5723894035711962,
+      "space_saving": 0.42761059642880384
+    }
+  ]
+}

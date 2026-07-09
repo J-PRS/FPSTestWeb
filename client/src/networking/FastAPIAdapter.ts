@@ -120,7 +120,7 @@ export class FastAPIAdapter implements INetworkAdapter {
     }
   }
 
-  sendBinary(data: Uint8Array): void {
+  sendBinary(_data: Uint8Array): void {
     // FastAPI server uses JSON, ignore binary
     logger.warn('sendBinary called on FastAPI adapter (JSON-only)');
   }

@@ -1,0 +1,62 @@
+
+C:\TEMP\_WEB\FPSWebTest\client\src\core\StateSnapshot.ts
+  148:10  warning  Refactor this function to reduce its Cognitive Complexity from 17 to the 15 allowed  sonarjs/cognitive-complexity
+
+C:\TEMP\_WEB\FPSWebTest\client\src\demo\DemoPlayer.ts
+  122:3  warning  Refactor this function to reduce its Cognitive Complexity from 18 to the 15 allowed  sonarjs/cognitive-complexity
+
+C:\TEMP\_WEB\FPSWebTest\client\src\demo\DemoRecorder.ts
+   72:3  warning  Refactor this function to reduce its Cognitive Complexity from 18 to the 15 allowed  sonarjs/cognitive-complexity
+  293:3  warning  Refactor this function to reduce its Cognitive Complexity from 47 to the 15 allowed  sonarjs/cognitive-complexity
+
+C:\TEMP\_WEB\FPSWebTest\client\src\effects\debris.ts
+  109:3  warning  Refactor this function to reduce its Cognitive Complexity from 26 to the 15 allowed  sonarjs/cognitive-complexity
+
+C:\TEMP\_WEB\FPSWebTest\client\src\effects\explosion.ts
+   45:3  warning  Refactor this function to reduce its Cognitive Complexity from 45 to the 15 allowed  sonarjs/cognitive-complexity
+  237:3  warning  Refactor this function to reduce its Cognitive Complexity from 23 to the 15 allowed  sonarjs/cognitive-complexity
+
+C:\TEMP\_WEB\FPSWebTest\client\src\effects\implosion.ts
+  194:3  warning  Refactor this function to reduce its Cognitive Complexity from 21 to the 15 allowed  sonarjs/cognitive-complexity
+
+C:\TEMP\_WEB\FPSWebTest\client\src\entities\Player.ts
+  221:3  warning  Refactor this function to reduce its Cognitive Complexity from 85 to the 15 allowed  sonarjs/cognitive-complexity
+
+C:\TEMP\_WEB\FPSWebTest\client\src\entities\PlayerDebris.ts
+  109:3  warning  Refactor this function to reduce its Cognitive Complexity from 26 to the 15 allowed  sonarjs/cognitive-complexity
+
+C:\TEMP\_WEB\FPSWebTest\client\src\entities\RemotePlayer.ts
+   98:3  warning  Refactor this function to reduce its Cognitive Complexity from 33 to the 15 allowed  sonarjs/cognitive-complexity
+  197:3  warning  Refactor this function to reduce its Cognitive Complexity from 75 to the 15 allowed  sonarjs/cognitive-complexity
+
+C:\TEMP\_WEB\FPSWebTest\client\src\entities\balls.ts
+  128:3  warning  Refactor this function to reduce its Cognitive Complexity from 48 to the 15 allowed  sonarjs/cognitive-complexity
+
+C:\TEMP\_WEB\FPSWebTest\client\src\main.ts
+   162:10  warning  Refactor this function to reduce its Cognitive Complexity from 74 to the 15 allowed   sonarjs/cognitive-complexity
+   238:10  warning  Refactor this function to reduce its Cognitive Complexity from 135 to the 15 allowed  sonarjs/cognitive-complexity
+   398:10  warning  Refactor this function to reduce its Cognitive Complexity from 34 to the 15 allowed   sonarjs/cognitive-complexity
+   460:10  warning  Refactor this function to reduce its Cognitive Complexity from 65 to the 15 allowed   sonarjs/cognitive-complexity
+   721:82  warning  Refactor this function to reduce its Cognitive Complexity from 174 to the 15 allowed  sonarjs/cognitive-complexity
+  1400:42  warning  Refactor this function to reduce its Cognitive Complexity from 26 to the 15 allowed   sonarjs/cognitive-complexity
+  1560:69  warning  Refactor this function to reduce its Cognitive Complexity from 18 to the 15 allowed   sonarjs/cognitive-complexity
+  1668:72  warning  Refactor this function to reduce its Cognitive Complexity from 22 to the 15 allowed   sonarjs/cognitive-complexity
+
+C:\TEMP\_WEB\FPSWebTest\client\src\networking\GhostManager.ts
+   63:3  warning  Refactor this function to reduce its Cognitive Complexity from 19 to the 15 allowed  sonarjs/cognitive-complexity
+  129:3  warning  Refactor this function to reduce its Cognitive Complexity from 20 to the 15 allowed  sonarjs/cognitive-complexity
+
+C:\TEMP\_WEB\FPSWebTest\client\src\networking\NetworkManager.ts
+  128:11  warning  Refactor this function to reduce its Cognitive Complexity from 72 to the 15 allowed  sonarjs/cognitive-complexity
+
+C:\TEMP\_WEB\FPSWebTest\client\src\networking\WebSocketConnection.ts
+  104:35  warning  Refactor this function to reduce its Cognitive Complexity from 41 to the 15 allowed  sonarjs/cognitive-complexity
+
+C:\TEMP\_WEB\FPSWebTest\client\src\projectiles\Projectile.ts
+  302:3  warning  Refactor this function to reduce its Cognitive Complexity from 35 to the 15 allowed  sonarjs/cognitive-complexity
+
+C:\TEMP\_WEB\FPSWebTest\client\src\ui\HealthBarSystem.ts
+  167:3  warning  Refactor this function to reduce its Cognitive Complexity from 46 to the 15 allowed  sonarjs/cognitive-complexity
+
+✖ 27 problems (0 errors, 27 warnings)
+

@@ -343,6 +343,45 @@ export class DemoManager {
     if (index >= 0) this.playCoolShot(index);
   }
 
+  // Download a cool shot clip by its entry ID
+  async downloadCoolShotById(id: string): Promise<void> {
+    const entry = this.coolShots.find(s => s.id === id);
+    if (!entry) {
+      console.warn('[Demo] Cool shot not found:', id);
+      return;
+    }
+
+    if (entry.clipData) {
+      // Download from local memory
+      const filename = `clip_${entry.projectileLifetime.toFixed(1)}s_${this.timestampStr()}.demo`;
+      this.downloadDemoFile(entry.clipData, filename);
+      console.log(`[Demo] Downloaded cool shot: ${entry.description}`);
+    } else if (entry.filename) {
+      // Download from server
+      if (!this.serverUrl) {
+        console.warn('[Demo] No server URL set');
+        return;
+      }
+      try {
+        this.ui.setStatus('Downloading clip...');
+        const resp = await fetch(`${this.serverUrl}/demos/${entry.filename}`);
+        if (!resp.ok) {
+          console.warn('[Demo] Failed to download clip:', resp.status);
+          this.ui.setStatus('Download failed');
+          return;
+        }
+        const buffer = await resp.arrayBuffer();
+        const data = DemoSerializer.deserialize(buffer);
+        this.downloadDemoFile(data, entry.filename);
+        this.ui.setStatus('Downloaded!');
+        console.log(`[Demo] Downloaded cool shot from server: ${entry.filename}`);
+      } catch (e) {
+        console.warn('[Demo] Failed to download from server:', e);
+        this.ui.setStatus('Download failed');
+      }
+    }
+  }
+
   private downloadDemoFile(data: DemoFile, filename: string): void {
     const blob = DemoSerializer.toBlob(data);
     const url = URL.createObjectURL(blob);
@@ -365,7 +404,7 @@ export class DemoManager {
   }
 
   // Upload clip binary to server
-  private async uploadClipToServer(clipData: DemoFile, projectileLifetime: number): Promise<void> {
+  private async uploadClipToServer(clipData: DemoFile, _projectileLifetime: number): Promise<void> {
     if (!this.serverUrl) {
       console.warn('[Demo] No server URL set, skipping upload');
       return;

@@ -370,11 +370,13 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
         // Spawned/Bounce/StateChanged/Hit — update or create alive entry
         const existing = aliveBalls.get(e.targetId);
         if (existing) {
-          // Preserve targetType if event doesn't have it (legacy 0)
+          // Preserve targetType and health if the new event doesn't carry them (legacy 0)
           const targetType = e.targetType !== 0 ? e.targetType : existing.targetType;
+          const health = e.health !== 0 ? e.health : existing.health;
           aliveBalls.set(e.targetId, {
             ...e,
             targetType,
+            health,
           });
         } else {
           aliveBalls.set(e.targetId, e);

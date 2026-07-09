@@ -4,7 +4,6 @@
 
 import {
   DemoFrame, ProjectileEvent, TargetEvent,
-  ProjectileEventType, TargetEventType,
   DEMO_MAGIC, DEMO_FORMAT_VERSION,
   type DemoFile,
 } from './types.js';
@@ -215,7 +214,7 @@ export class DemoSerializer {
     // Read frames
     const frameCount = view.getUint32(offset, true); offset += 4;
     if (frameCount > 720000) throw new Error(`Invalid frame count: ${frameCount} (max 720000)`);
-    const frames: DemoFrame[] = new Array(frameCount);
+    const frames: DemoFrame[] = Array.from({ length: frameCount });
     for (let i = 0; i < frameCount; i++) {
       frames[i] = {
         frameNumber: view.getUint16(offset, true),
@@ -240,7 +239,7 @@ export class DemoSerializer {
     // Read projectile events
     const projCount = view.getUint32(offset, true); offset += 4;
     if (projCount > 100000) throw new Error(`Invalid projectile event count: ${projCount} (max 100000)`);
-    const projectileEvents: ProjectileEvent[] = new Array(projCount);
+    const projectileEvents: ProjectileEvent[] = Array.from({ length: projCount });
     for (let i = 0; i < projCount; i++) {
       projectileEvents[i] = {
         eventType: view.getUint8(offset),
@@ -268,7 +267,7 @@ export class DemoSerializer {
     // Read target events
     const targetCount = view.getUint32(offset, true); offset += 4;
     if (targetCount > 100000) throw new Error(`Invalid target event count: ${targetCount} (max 100000)`);
-    const targetEvents: TargetEvent[] = new Array(targetCount);
+    const targetEvents: TargetEvent[] = Array.from({ length: targetCount });
     for (let i = 0; i < targetCount; i++) {
       targetEvents[i] = {
         eventType: view.getUint8(offset),

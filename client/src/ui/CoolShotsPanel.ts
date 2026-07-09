@@ -56,6 +56,10 @@ export class CoolShotsPanel {
       this.overlay.style.display = 'none';
       this.requestLock();
     };
+    item.oncontextmenu = (e) => {
+      e.preventDefault();
+      this.demoManager.downloadCoolShotById(shot.id);
+    };
     container.appendChild(item);
   }
 

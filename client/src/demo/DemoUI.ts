@@ -180,7 +180,7 @@ export class DemoUI {
     this.playBtn.textContent = playing ? '⏸' : '▶';
   }
 
-  setRecording(recording: boolean): void {
+  setRecording(_recording: boolean): void {
     // No-op: REC button removed from UI
   }
 

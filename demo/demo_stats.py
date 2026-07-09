@@ -385,9 +385,20 @@ def print_table(demos):
 
             verifications = compute_airtime_verification(demo)
             hits = [v for v in verifications if v["hit_type"] == "Hit"]
-            real_air = max((v["airtime_ts"] for v in hits), default=0)
+            
+            # Find the hit that best matches the description lifetime (within 0.1s tolerance)
+            matching_hits = [v for v in hits if abs(v["airtime_ts"] - lifetime) < 0.1]
+            
+            if matching_hits:
+                # Use the matching hit
+                best_hit = max(matching_hits, key=lambda v: v["airtime_ts"])
+                real_air = best_hit["airtime_ts"]
+            else:
+                # Fall back to longest airtime if no close match
+                real_air = max((v["airtime_ts"] for v in hits), default=0)
+                best_hit = max(hits, key=lambda v: v["airtime_ts"], default=None)
+            
             real_airtimes.append(real_air)
-            best_hit = max(hits, key=lambda v: v["airtime_ts"], default=None)
             dist = best_hit["distance"] if best_hit else 0
             spd = best_hit["speed"] if best_hit else 0
             match = "OK" if abs(lifetime - real_air) < 0.5 else "ER"

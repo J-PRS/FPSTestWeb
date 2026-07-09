@@ -1,7 +1,7 @@
 // Demo playback engine - replays recorded frames with interpolation.
 // Supports play, pause, seek, speed control, and rewind.
 
-import type { DemoFrame, ProjectileEvent, TargetEvent, DemoFile } from './types.js';
+import type { ProjectileEvent, TargetEvent, DemoFile } from './types.js';
 
 export interface PlaybackState {
   posX: number; posY: number; posZ: number;

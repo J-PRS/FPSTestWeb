@@ -26,7 +26,7 @@ export class WebSocketConnection {
   private ws: WebSocket | null = null;
   private config: ConnectionConfig;
   private reconnectAttempts: number = 0;
-  private reconnectTimer: number | null = null;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private isConnected: boolean = false;
   private messageQueue: any[] = [];
   private readonly MAX_QUEUE_SIZE = 100;
@@ -216,11 +216,11 @@ export class WebSocketConnection {
         this.ws.send(data);
       } else if (data instanceof Uint8Array) {
         // Send binary data as-is (for Tribes2 packets)
-        this.ws.send(data);
+        this.ws.send(data as any);
       } else {
         // Encode objects using msgpack
         const encoded = msgpack.encode(data);
-        this.ws.send(encoded);
+        this.ws.send(encoded as any);
       }
       return true;
     } catch (error) {
