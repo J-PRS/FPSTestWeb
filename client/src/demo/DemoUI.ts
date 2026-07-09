@@ -208,23 +208,30 @@ export class DemoUI {
     this.speedSelect.value = String(speed);
   }
 
-  setHitMarkers(hitTimes: number[], duration: number): void {
-    this.clearHitMarkers();
-    if (duration <= 0 || hitTimes.length === 0) return;
+  setMarkers(hitTimes: number[], firedTimes: number[], duration: number): void {
+    this.clearMarkers();
+    if (duration <= 0) return;
     for (const t of hitTimes) {
-      const pct = Math.max(0, Math.min(1, t / duration)) * 100;
-      const marker = document.createElement('div');
-      marker.style.cssText = `
-        position: absolute; top: 0; bottom: 0;
-        left: ${pct}%; width: 2px; margin-left: -1px;
-        background: #ff4444; pointer-events: none;
-        box-shadow: 0 0 3px rgba(255,68,68,0.8);
-      `;
-      this.markerOverlay.appendChild(marker);
+      this.markerOverlay.appendChild(this.createMarker(t, duration, '#ff4444', 'rgba(255,68,68,0.8)'));
+    }
+    for (const t of firedTimes) {
+      this.markerOverlay.appendChild(this.createMarker(t, duration, '#4488ff', 'rgba(68,136,255,0.8)'));
     }
   }
 
-  clearHitMarkers(): void {
+  private createMarker(t: number, duration: number, color: string, shadow: string): HTMLElement {
+    const pct = Math.max(0, Math.min(1, t / duration)) * 100;
+    const marker = document.createElement('div');
+    marker.style.cssText = `
+      position: absolute; top: 0; bottom: 0;
+      left: ${pct}%; width: 2px; margin-left: -1px;
+      background: ${color}; pointer-events: none;
+      box-shadow: 0 0 3px ${shadow};
+    `;
+    return marker;
+  }
+
+  clearMarkers(): void {
     while (this.markerOverlay.firstChild) {
       this.markerOverlay.removeChild(this.markerOverlay.firstChild);
     }

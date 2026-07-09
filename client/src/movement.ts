@@ -16,7 +16,7 @@ export const MOVEMENT_CONFIG = {
   terminalVelocity: 100.0,
 
   // Jump
-  jumpSpeed: 10.0,
+  jumpSpeed: 7.0,
   groundedTimeBuffer: 0.25,
   autoHop: true,
 
@@ -128,13 +128,14 @@ export class MovementController {
     }
 
     this.groundedBufferedByDistance = this.checkIfGrounded();
-    this.groundedBufferedByTime = this.groundedTimer <= MOVEMENT_CONFIG.groundedTimeBuffer;
+    // Disable time buffer - only use distance-based detection
+    this.groundedBufferedByTime = false;
   }
 
-  private checkIfGrounded(threshold: number = 0.5, offset: number = 1.8): boolean {
+  private checkIfGrounded(threshold: number = 0.2, offset: number = 1.8): boolean {
     const groundY = this.terrain.getHeight(this.state.pos.x, this.state.pos.z) + offset;
     const distance = this.state.pos.y - groundY;
-    
+
     if (!this.input.skiHeld) {
       return distance < threshold;
     } else {
@@ -187,14 +188,6 @@ export class MovementController {
   }
 
   private applyMovement(dt: number): void {
-    // Gravity
-    this.state.vel.y += GRAVITY * dt;
-
-    // Terminal velocity
-    if (this.state.vel.y < -MOVEMENT_CONFIG.terminalVelocity) {
-      this.state.vel.y = -MOVEMENT_CONFIG.terminalVelocity;
-    }
-
     const inputDir = this.getInputDirection();
 
     // Ground movement
@@ -211,6 +204,15 @@ export class MovementController {
       this.applyAirMovement(dt, inputDir);
     }
 
+    // Gravity (only in air)
+    if (!this.state.onGround) {
+      this.state.vel.y += GRAVITY * dt;
+      // Terminal velocity
+      if (this.state.vel.y < -MOVEMENT_CONFIG.terminalVelocity) {
+        this.state.vel.y = -MOVEMENT_CONFIG.terminalVelocity;
+      }
+    }
+
     // Integrate position
     this.state.pos.add(this.state.vel.clone().multiplyScalar(dt));
 
@@ -219,8 +221,26 @@ export class MovementController {
   }
 
   private applyGroundMovement(dt: number, inputDir: THREE.Vector3): void {
+    // Only apply ground movement when actually grounded
+    if (!this.state.onGround) {
+      return;
+    }
+
+    const normal = this.terrain.getNormal(this.state.pos.x, this.state.pos.z);
+
+    // Project input direction onto terrain slope
+    let slopeInputDir = inputDir;
     if (inputDir.length() > 0) {
-      this.state.vel.add(inputDir.multiplyScalar(MOVEMENT_CONFIG.groundAccelerate * dt));
+      // Project input onto slope surface (remove component along normal)
+      const inputDotNormal = inputDir.dot(normal);
+      slopeInputDir = inputDir.clone().add(normal.clone().multiplyScalar(-inputDotNormal));
+      if (slopeInputDir.length() > 0.01) {
+        slopeInputDir.normalize();
+      }
+    }
+
+    if (slopeInputDir.length() > 0) {
+      this.state.vel.add(slopeInputDir.multiplyScalar(MOVEMENT_CONFIG.groundAccelerate * dt));
     } else {
       // Friction when no input
       const speed = this.state.vel.length();
@@ -230,6 +250,12 @@ export class MovementController {
       } else {
         this.state.vel.set(0, 0, 0);
       }
+    }
+
+    // Redirect velocity along terrain slope
+    const velDotNormal = this.state.vel.dot(normal);
+    if (velDotNormal < 0) {
+      this.state.vel.add(normal.clone().multiplyScalar(-velDotNormal));
     }
 
     // Hard speed cap
@@ -332,9 +358,11 @@ export class MovementController {
 
   private handleTerrainCollision(): void {
     const groundY = this.terrain.getHeight(this.state.pos.x, this.state.pos.z) + 1.8; // PLAYER_HEIGHT
+    const distanceToGround = this.state.pos.y - groundY;
 
-    if (this.state.pos.y <= groundY) {
-      const anyGrounded = this.state.onGround || this.groundedBufferedByTime || this.groundedBufferedByDistance;
+    // Only snap if actually penetrating ground (below surface)
+    if (distanceToGround < 0) {
+      const anyGrounded = this.state.onGround || this.groundedBufferedByDistance;
       const normal = this.terrain.getNormal(this.state.pos.x, this.state.pos.z);
 
       // Always update lastJumpableNormal while grounded (like Unity's OnCollisionStay)
@@ -346,12 +374,9 @@ export class MovementController {
         this.state.vel.add(normal.clone().multiplyScalar(-dot * 0.98));
       } else {
         // Normal ground collision - redirect velocity along surface, preserve horizontal momentum
-        if (this.state.vel.y < 0) {
-          // Project velocity onto the surface plane
-          const velDotNormal = this.state.vel.dot(normal);
-          if (velDotNormal < 0) {
-            this.state.vel.add(normal.clone().multiplyScalar(-velDotNormal));
-          }
+        const velDotNormal = this.state.vel.dot(normal);
+        if (velDotNormal < 0) {
+          this.state.vel.add(normal.clone().multiplyScalar(-velDotNormal));
         }
       }
 
@@ -359,10 +384,13 @@ export class MovementController {
       this.state.onGround = true;
       this.allowNextJump = true;
       this.groundedTimer = 0;
+    } else if (distanceToGround < 0.2) {
+      // Very close to ground - considered grounded but don't snap position
+      this.state.onGround = true;
+      this.allowNextJump = true;
     } else {
-      // Use buffered state for onGround to prevent flickering
-      const anyGrounded = this.groundedBufferedByTime || this.groundedBufferedByDistance;
-      this.state.onGround = anyGrounded;
+      // In air - not grounded
+      this.state.onGround = false;
     }
   }
 
