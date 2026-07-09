@@ -11,7 +11,7 @@ export class CircularBuffer<T> {
   constructor(capacity: number) {
     if (capacity <= 0) throw new Error('Capacity must be > 0');
     this.capacity = capacity;
-    this.buffer = new Array(capacity);
+    this.buffer = Array.from({ length: capacity });
   }
 
   get Capacity(): number { return this.capacity; }
@@ -64,7 +64,7 @@ export class CircularBuffer<T> {
     if (length <= 0 || startIndex + length > this.count) {
       throw new Error(`Invalid length ${length} for range starting at ${startIndex}`);
     }
-    const result = new Array<T>(length);
+    const result = Array.from<T>({ length });
     for (let i = 0; i < length; i++) {
       result[i] = this.get(startIndex + i);
     }

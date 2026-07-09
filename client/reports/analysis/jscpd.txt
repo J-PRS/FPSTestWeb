@@ -1,0 +1,177 @@
+Clone found (typescript):
+ - [1m[32msrc\ui\HealthBarSystem.ts[39m[22m [111:5 - 122:5] (11 lines, 100 tokens)
+   [1m[32msrc\ui\HealthBarSystem.ts[39m[22m [74:9 - 85:3]
+
+Clone found (typescript):
+ - [1m[32msrc\ui\HealthBarSystem.ts[39m[22m [148:7 - 159:5] (11 lines, 118 tokens)
+   [1m[32msrc\ui\HealthBarSystem.ts[39m[22m [73:7 - 84:7]
+
+Clone found (typescript):
+ - [1m[32msrc\ui\HealthBarSystem.ts[39m[22m [261:5 - 291:6] (30 lines, 364 tokens)
+   [1m[32msrc\ui\HealthBarSystem.ts[39m[22m [190:9 - 220:86]
+
+Clone found (typescript):
+ - [1m[32msrc\ui\HealthBarSystem.ts[39m[22m [294:2 - 320:2] (26 lines, 303 tokens)
+   [1m[32msrc\ui\HealthBarSystem.ts[39m[22m [225:9 - 252:26]
+
+Clone found (typescript):
+ - [1m[32msrc\projectiles\Projectile.ts[39m[22m [145:2 - 152:3] (7 lines, 82 tokens)
+   [1m[32msrc\projectiles\Projectile.ts[39m[22m [137:3 - 142:5]
+
+Clone found (typescript):
+ - [1m[32msrc\projectiles\Projectile.ts[39m[22m [182:5 - 187:6] (5 lines, 128 tokens)
+   [1m[32msrc\projectiles\Projectile.ts[39m[22m [164:5 - 169:4]
+
+Clone found (typescript):
+ - [1m[32msrc\projectiles\Projectile.ts[39m[22m [190:9 - 197:6] (7 lines, 110 tokens)
+   [1m[32msrc\projectiles\Projectile.ts[39m[22m [168:2 - 174:3]
+
+Clone found (typescript):
+ - [1m[32msrc\networking\NetworkManager.ts[39m[22m [240:9 - 249:5] (9 lines, 189 tokens)
+   [1m[32msrc\networking\NetworkManager.ts[39m[22m [220:9 - 229:9]
+
+Clone found (typescript):
+ - [1m[32msrc\networking\FastAPIAdapter.ts[39m[22m [14:5 - 21:8] (7 lines, 150 tokens)
+   [1m[32msrc\networking\Tribes2Adapter.ts[39m[22m [29:13 - 36:14]
+
+Clone found (typescript):
+ - [1m[32msrc\networking\FastAPIAdapter.ts[39m[22m [68:13 - 86:10] (18 lines, 124 tokens)
+   [1m[32msrc\networking\Tribes2Adapter.ts[39m[22m [120:13 - 138:11]
+
+Clone found (typescript):
+ - [1m[32msrc\networking\FastAPIAdapter.ts[39m[22m [84:3 - 107:4] (23 lines, 197 tokens)
+   [1m[32msrc\networking\Tribes2Adapter.ts[39m[22m [313:3 - 336:2]
+
+Clone found (typescript):
+ - [1m[32msrc\networking\EventManager.ts[39m[22m [220:6 - 238:6] (18 lines, 185 tokens)
+   [1m[32msrc\networking\EventManager.ts[39m[22m [179:10 - 197:10]
+
+Clone found (typescript):
+ - [1m[32msrc\entities\RemotePlayer.ts[39m[22m [388:5 - 395:2] (7 lines, 83 tokens)
+   [1m[32msrc\entities\RemotePlayer.ts[39m[22m [371:4 - 377:5]
+
+Clone found (typescript):
+ - [1m[32msrc\entities\Player.ts[39m[22m [241:5 - 247:19] (6 lines, 130 tokens)
+   [1m[32msrc\entities\Player.ts[39m[22m [199:5 - 205:6]
+
+Clone found (typescript):
+ - [1m[32msrc\entities\Player.ts[39m[22m [290:7 - 296:7] (6 lines, 83 tokens)
+   [1m[32msrc\entities\Player.ts[39m[22m [276:7 - 282:7]
+
+Clone found (typescript):
+ - [1m[32msrc\entities\Player.ts[39m[22m [303:10 - 309:10] (6 lines, 83 tokens)
+   [1m[32msrc\entities\Player.ts[39m[22m [276:7 - 282:7]
+
+Clone found (typescript):
+ - [1m[32msrc\entities\Player.ts[39m[22m [477:2 - 482:2] (5 lines, 70 tokens)
+   [1m[32msrc\entities\Player.ts[39m[22m [277:2 - 282:5]
+
+Clone found (typescript):
+ - [1m[32msrc\entities\balls.ts[39m[22m [99:2 - 124:5] (25 lines, 87 tokens)
+   [1m[32msrc\entities\Player.ts[39m[22m [102:2 - 126:22]
+
+Clone found (typescript):
+ - [1m[32msrc\entities\balls.ts[39m[22m [279:5 - 295:2] (16 lines, 189 tokens)
+   [1m[32msrc\entities\balls.ts[39m[22m [141:7 - 158:43]
+
+Clone found (typescript):
+ - [1m[32msrc\entities\balls.ts[39m[22m [323:2 - 332:4] (9 lines, 95 tokens)
+   [1m[32msrc\entities\balls.ts[39m[22m [131:2 - 140:5]
+
+Clone found (typescript):
+ - [1m[32msrc\effects\explosion.ts[39m[22m [3:2 - 13:2] (10 lines, 111 tokens)
+   [1m[32msrc\effects\implosion.ts[39m[22m [3:2 - 13:10]
+
+Clone found (typescript):
+ - [1m[32msrc\effects\explosion.ts[39m[22m [234:2 - 254:2] (20 lines, 189 tokens)
+   [1m[32msrc\effects\implosion.ts[39m[22m [191:2 - 212:15]
+
+Clone found (typescript):
+ - [1m[32msrc\effects\explosion.ts[39m[22m [261:7 - 266:5] (5 lines, 111 tokens)
+   [1m[32msrc\effects\implosion.ts[39m[22m [222:7 - 227:4]
+
+Clone found (typescript):
+ - [1m[32msrc\effects\explosion.ts[39m[22m [267:5 - 282:33] (15 lines, 162 tokens)
+   [1m[32msrc\effects\implosion.ts[39m[22m [246:5 - 262:3]
+
+Clone found (typescript):
+ - [1m[32msrc\effects\explosion.ts[39m[22m [322:2 - 341:4] (19 lines, 169 tokens)
+   [1m[32msrc\effects\implosion.ts[39m[22m [287:2 - 306:3]
+
+Clone found (typescript):
+ - [1m[32msrc\effects\effects.ts[39m[22m [161:5 - 171:2] (10 lines, 136 tokens)
+   [1m[32msrc\projectiles\Projectile.ts[39m[22m [469:5 - 479:6]
+
+Clone found (typescript):
+ - [1m[32msrc\effects\debris.ts[39m[22m [9:1 - 36:11] (27 lines, 236 tokens)
+   [1m[32msrc\entities\PlayerDebris.ts[39m[22m [9:1 - 36:13]
+
+Clone found (typescript):
+ - [1m[32msrc\effects\debris.ts[39m[22m [36:2 - 45:2] (9 lines, 92 tokens)
+   [1m[32msrc\entities\PlayerDebris.ts[39m[22m [36:2 - 45:2]
+
+Clone found (typescript):
+ - [1m[32msrc\effects\debris.ts[39m[22m [50:2 - 75:4] (25 lines, 458 tokens)
+   [1m[32msrc\entities\PlayerDebris.ts[39m[22m [50:17 - 75:4]
+
+Clone found (typescript):
+ - [1m[32msrc\effects\debris.ts[39m[22m [77:6 - 216:28] (139 lines, 1746 tokens)
+   [1m[32msrc\entities\PlayerDebris.ts[39m[22m [77:4 - 216:4]
+
+Clone found (typescript):
+ - [1m[32msrc\demo\DemoSerializer.ts[39m[22m [141:13 - 150:9] (9 lines, 206 tokens)
+   [1m[32msrc\demo\DemoSerializer.ts[39m[22m [118:17 - 127:13]
+
+Clone found (typescript):
+ - [1m[32msrc\demo\DemoSerializer.ts[39m[22m [152:2 - 159:71] (7 lines, 109 tokens)
+   [1m[32msrc\demo\DemoSerializer.ts[39m[22m [132:2 - 139:17]
+
+Clone found (typescript):
+ - [1m[32msrc\demo\DemoSerializer.ts[39m[22m [272:13 - 281:9] (9 lines, 163 tokens)
+   [1m[32msrc\demo\DemoSerializer.ts[39m[22m [244:17 - 253:13]
+
+Clone found (typescript):
+ - [1m[32msrc\demo\DemoRecorder.ts[39m[22m [181:10 - 187:2] (6 lines, 92 tokens)
+   [1m[32msrc\demo\DemoRecorder.ts[39m[22m [167:4 - 173:2]
+
+Clone found (typescript):
+ - [1m[32msrc\demo\DemoRecorder.ts[39m[22m [209:7 - 219:17] (10 lines, 120 tokens)
+   [1m[32msrc\demo\DemoRecorder.ts[39m[22m [196:8 - 206:19]
+
+Clone found (typescript):
+ - [1m[32msrc\demo\DemoRecorder.ts[39m[22m [222:13 - 227:5] (5 lines, 83 tokens)
+   [1m[32msrc\demo\DemoRecorder.ts[39m[22m [196:8 - 201:6]
+
+Clone found (typescript):
+ - [1m[32msrc\demo\DemoRecorder.ts[39m[22m [466:2 - 473:21] (7 lines, 116 tokens)
+   [1m[32msrc\demo\interfaces.ts[39m[22m [19:2 - 26:19]
+
+Clone found (typescript):
+ - [1m[32msrc\demo\DemoPlayer.ts[39m[22m [164:21 - 174:39] (10 lines, 94 tokens)
+   [1m[32msrc\demo\DemoPlayer.ts[39m[22m [101:17 - 108:63]
+
+Clone found (typescript):
+ - [1m[32msrc\demo\DemoManager.ts[39m[22m [191:2 - 203:39] (12 lines, 126 tokens)
+   [1m[32msrc\demo\DemoManager.ts[39m[22m [84:2 - 94:2]
+
+Clone found (typescript):
+ - [1m[32msrc\demo\DemoManager.ts[39m[22m [467:7 - 474:14] (7 lines, 192 tokens)
+   [1m[32msrc\demo\DemoManager.ts[39m[22m [301:7 - 308:26]
+
+Clone found (typescript):
+ - [1m[32msrc\demo\DemoManager.ts[39m[22m [532:5 - 538:2] (6 lines, 80 tokens)
+   [1m[32msrc\demo\DemoManager.ts[39m[22m [517:7 - 523:5]
+
+Clone found (typescript):
+ - [1m[32msrc\core\renderer.ts[39m[22m [163:23 - 172:2] (9 lines, 96 tokens)
+   [1m[32msrc\core\renderer.ts[39m[22m [127:19 - 136:9]
+
+[90m┌────────────[39m[90m┬────────────────[39m[90m┬─────────────[39m[90m┬──────────────[39m[90m┬──────────────[39m[90m┬──────────────────[39m[90m┬───────────────────┐[39m
+[90m│[39m[31m Format     [39m[90m│[39m[31m Files analyzed [39m[90m│[39m[31m Total lines [39m[90m│[39m[31m Total tokens [39m[90m│[39m[31m Clones found [39m[90m│[39m[31m Duplicated lines [39m[90m│[39m[31m Duplicated tokens [39m[90m│[39m
+[90m├────────────[39m[90m┼────────────────[39m[90m┼─────────────[39m[90m┼──────────────[39m[90m┼──────────────[39m[90m┼──────────────────[39m[90m┼───────────────────┤[39m
+[90m│[39m typescript [90m│[39m 53             [90m│[39m 12480       [90m│[39m 125339       [90m│[39m 42           [90m│[39m 628 (5.03%)      [90m│[39m 7757 (6.19%)      [90m│[39m
+[90m├────────────[39m[90m┼────────────────[39m[90m┼─────────────[39m[90m┼──────────────[39m[90m┼──────────────[39m[90m┼──────────────────[39m[90m┼───────────────────┤[39m
+[90m│[39m [1mTotal:[22m     [90m│[39m 53             [90m│[39m 12480       [90m│[39m 125339       [90m│[39m 42           [90m│[39m 628 (5.03%)      [90m│[39m 7757 (6.19%)      [90m│[39m
+[90m└────────────[39m[90m┴────────────────[39m[90m┴─────────────[39m[90m┴──────────────[39m[90m┴──────────────[39m[90m┴──────────────────[39m[90m┴───────────────────┘[39m
+[90mFound 42 clones.[39m
+[3m[90mDetection time:[39m[23m: 1.196s

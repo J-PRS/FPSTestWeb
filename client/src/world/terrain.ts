@@ -304,8 +304,10 @@ const terrainFrag = /* glsl */`
       vec3 lit = ambientColor + sunColor * shadow + vec3(rim);
       col *= lit;
       float fogDist = length(vWorldPos - vCameraPos);
-      float fogFactor = 1.0 - exp(-fogDensity * fogDist);
-      col = mix(col, fogColor, fogFactor);
+      // Height fog: denser at ground, thinner up high (old-school technique)
+      float heightFog = exp(-max(vWorldPos.y - vCameraPos.y, 0.0) * 0.003);
+      float fogFactor = (1.0 - exp(-fogDensity * fogDist)) * heightFog;
+      col = mix(col, fogColor, clamp(fogFactor, 0.0, 1.0));
       gl_FragColor = vec4(col, 1.0);
       return;
     }
@@ -347,10 +349,11 @@ const terrainFrag = /* glsl */`
     vec3 lit = ambientColor + sunColor * shadow + vec3(rim);
     col *= lit;
 
-    // --- exponential fog ---
+    // --- height fog (denser at ground, thinner up high) ---
     float dist = length(vWorldPos - vCameraPos);
-    float fogFactor = 1.0 - exp(-fogDensity * dist);
-    col = mix(col, fogColor, fogFactor);
+    float heightFog = exp(-max(vWorldPos.y - vCameraPos.y, 0.0) * 0.003);
+    float fogFactor = (1.0 - exp(-fogDensity * dist)) * heightFog;
+    col = mix(col, fogColor, clamp(fogFactor, 0.0, 1.0));
 
     gl_FragColor = vec4(col, 1.0);
   }
@@ -372,11 +375,11 @@ export class Terrain {
       uniforms: {
         sunDir:        { value: sunDir.clone().normalize() },
         sunColor:      { value: new THREE.Color(1.0, 0.94, 0.8) },
-        ambientColor:  { value: new THREE.Color(0.18, 0.22, 0.28) },
+        ambientColor:  { value: new THREE.Color(0.38, 0.45, 0.55) },
         hscale:        { value: HSCALE },
         terrainPreset: { value: 1 }, // 0=mixed, 1=desert
-        fogColor:      { value: new THREE.Color(0x88bbdd) },
-        fogDensity:    { value: 0.006 },
+        fogColor:      { value: new THREE.Color(0xbbd0e8) },
+        fogDensity:    { value: 0.030 },
       },
     });
 

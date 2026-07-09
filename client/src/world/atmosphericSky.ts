@@ -146,13 +146,22 @@ const atmosphereFragmentShader = /* glsl */`
   void main() {
     vec3 direction = normalize(vWorldPosition);
     
-    // Simple gradient blue sky - no atmospheric scattering
-    vec3 skyColorBottom = vec3(0.4, 0.6, 0.9);
-    vec3 skyColorTop = vec3(0.05, 0.15, 0.4);
-    
-    float height = direction.y;
-    vec3 color = mix(skyColorBottom, skyColorTop, clamp(height, 0.0, 1.0));
-    
+    // Horizon haze color — light, washed-out blue. Must match FOG_COLOR in config (0xbbd0e8)
+    vec3 hazeColor   = vec3(0.733, 0.816, 0.910);
+    // Mid sky color
+    vec3 skyColorMid = vec3(0.18, 0.38, 0.72);
+    // Zenith sky color
+    vec3 skyColorTop = vec3(0.04, 0.12, 0.38);
+
+    float h = direction.y; // -1..+1
+
+    // Wide soft haze band — stay very close to hazeColor near horizon
+    vec3 aboveColor = mix(hazeColor, skyColorMid, pow(clamp(h, 0.0, 1.0), 0.20));
+    aboveColor      = mix(aboveColor, skyColorTop, pow(clamp(h, 0.0, 1.0), 0.9));
+
+    // Below horizon: pure hazeColor (matches fog color exactly)
+    vec3 color = mix(hazeColor, aboveColor, smoothstep(-0.12, 0.18, h));
+
     gl_FragColor = vec4(color, 1.0);
   }
 `;
@@ -172,7 +181,7 @@ export class AtmosphericSky {
   private timeOfDay: number = 0.5; // 0-1, 0.5 = noon
 
   constructor(scene: THREE.Scene, params: AtmosphericSkyParams = {}) {
-    const geometry = new THREE.SphereGeometry(4000, 32, 16);
+    const geometry = new THREE.SphereGeometry(4000, 64, 32);
     
     this.sunPosition = new THREE.Vector3(0, 1, 0);
     
@@ -232,6 +241,10 @@ export class AtmosphericSky {
 
   isDay(): boolean {
     return this.timeOfDay > 0.25 && this.timeOfDay < 0.75;
+  }
+
+  followCamera(cameraPosition: THREE.Vector3): void {
+    this.mesh.position.copy(cameraPosition);
   }
 
   update(_dt: number): void {

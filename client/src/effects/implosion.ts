@@ -172,7 +172,6 @@ export class Implosion {
     if (spiral) {
       const spiralSpeed = speed * 0.8;
       const tanX = Math.cos(elv) * Math.cos(ang);
-      const tanY = 0;
       const tanZ = -Math.cos(elv) * Math.sin(ang);
       vx += tanX * spiralSpeed;
       vz += tanZ * spiralSpeed;

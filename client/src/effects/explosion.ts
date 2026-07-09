@@ -222,6 +222,7 @@ export class Explosion {
       transparent: true,
       opacity: additive ? 0.85 : 1.0,
       depthWrite: !additive,
+      blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending,
     });
     const mesh = new THREE.Mesh(geo, mat);
     mesh.position.set(

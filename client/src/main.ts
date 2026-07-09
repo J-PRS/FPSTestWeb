@@ -1,22 +1,11 @@
 import * as THREE from 'three';
 
 import {
-  ROCKET_SPEED, ROCKET_AOE_DAMAGE, ROCKET_AOE_RADIUS, HIT_MAX, BALL_SPAWN_INTERVAL, BALL_MAX,
-  DISC_SPEED,
-  PIXEL_SCALE, RENDERER_PIXEL_RATIO,
+  BALL_SPAWN_INTERVAL, BALL_MAX,
   CAMERA_FOV, CAMERA_NEAR, CAMERA_FAR,
-  FOG_COLOR, FOG_DENSITY,
-  SKY_TURBIDITY, SKY_RAYLEIGH, SKY_MIE_COEFFICIENT, SKY_MIE_DIRECTIONAL_G, SKY_SUN_INTENSITY,
-  CLOUD_COUNT, CLOUD_DENSITY, CLOUD_WIND_SPEED, CLOUD_MIN_HEIGHT, CLOUD_MAX_HEIGHT, CLOUD_SPREAD_RADIUS,
-  AMBIENT_COLOR, AMBIENT_INTENSITY, SUN_COLOR, SUN_INTENSITY,
-  SHADOW_MAP_SIZE, SHADOW_CAMERA_NEAR, SHADOW_CAMERA_FAR, SHADOW_CAMERA_SIZE,
-  HEMI_SKY_COLOR, HEMI_GROUND_COLOR, HEMI_INTENSITY,
-  PENDING_ROCKET_TIMEOUT, FRAG_MESSAGE_DURATION, FRAG_MESSAGE_FADE,
-  TONE_MAPPING_EXPOSURE,
-  EXPLOSION_FALLOFF_MULTIPLIER_ROCKET, EXPLOSION_FALLOFF_MULTIPLIER_DISC, EXPLOSION_COLLISION_MULTIPLIER, KNOCKBACK_MULTIPLIER, PULL_MULTIPLIER,
-  ACCURACY_MAX, ACCURACY_NORMALIZATION,
+  FOG_COLOR,
   MAX_DELTA_TIME, REMOTE_PLAYER_FIXED_DT, DEBUG_LOG_SAMPLE_RATE,
-  BUTTON_TIMEOUT, NETWORK_BACKEND, ROCKET_RADIUS
+  NETWORK_BACKEND, PENDING_ROCKET_TIMEOUT
 } from './core/config.js';
 
 import { ChildLogger } from './core/Logger.js';
@@ -70,11 +59,11 @@ const camera = new THREE.PerspectiveCamera(CAMERA_FOV, window.innerWidth / windo
 
 // ---- Scene ----
 const sceneSetup = createScene();
-const { scene, atmosphericSky, volumetricClouds, sun } = sceneSetup;
+const { scene, sun } = sceneSetup;
 
 // ---- Renderer ----
 const rendererSetup = createRenderer(camera, scene);
-const { renderer, composer, bloomPass, contrastPass, fxaaPass } = rendererSetup;
+const { renderer, composer } = rendererSetup;
 renderer.setClearColor(FOG_COLOR);
 
 // ---- Game state ----
@@ -184,11 +173,10 @@ function processProjectileExplosion(
   directHitTargetId?: string | null,
   age: number = 0,
   sendAOE?: (pos: any, targetId: string | null) => void,
-  explosionType: 'rocket' | 'grenade' = 'rocket'
+  _explosionType: 'rocket' | 'grenade' = 'rocket'
 ): void {
   if (forceMode === 'push') {
-    const explosionScale = Math.max(0.5, radius / ROCKET_RADIUS);
-    explosions.push(new Explosion(scene, pos, directHit, age, explosionScale, explosionType));
+    explosions.push(new Explosion(scene, pos, directHit, age));
   } else {
     implosions.push(new Implosion(scene, pos, age));
   }
@@ -639,6 +627,7 @@ function loop(time: number): void {
 
   // Update atmospheric effects
   sceneSetup.update(dt);
+  sceneSetup.atmosphericSky.followCamera(camera.position);
 
   if (rendererSetup.isPostProcessingEnabled()) {
     composer.render();
@@ -754,14 +743,74 @@ async function init(): Promise<void> {
 
       const FF_DT = 1 / 60;
 
+      // Process target events first so balls exist before projectile hits reference them
+      for (const ev of events.targets) {
+        if (deadBallIds.has(ev.targetId)) {
+          // For Destroyed events on dead balls, spawn debris fast-forwarded to seek time
+          if (ev.eventType === TargetEventType.Destroyed) {
+            const debris = new BallDebris(scene, terrain, ev.posX, ev.posY, ev.posZ, new THREE.Color(0xffffff), 1);
+            debrisList.push(debris);
+            // Fast-forward debris to seek time
+            const ffTime = seekTime - ev.timestamp;
+            if (ffTime > 0) {
+              let rem = ffTime;
+              while (rem > 0 && !debris.dead) {
+                const step = Math.min(FF_DT, rem);
+                debris.update(step);
+                rem -= step;
+              }
+            }
+          }
+          continue;
+        }
+
+        if (ev.eventType === TargetEventType.Spawned) {
+          const ball = new Ball(scene, terrain, ev.targetType as 0 | 1 | 2);
+          ball.pos.set(ev.posX, ev.posY, ev.posZ);
+          ball.vel.set(ev.velX, ev.velY, ev.velZ);
+          playbackBallById.set(ev.targetId, ball);
+          balls.push(ball);
+          // Sync mesh position immediately (Ball constructor doesn't copy pos to mesh.position)
+          ball.update(0, terrain, player.pos);
+          // Fast-forward from spawn time to seek time
+          const ffTime = seekTime - ev.timestamp;
+          let remaining = ffTime;
+          while (remaining > 0 && !ball.dead) {
+            const step = Math.min(FF_DT, remaining);
+            ball.update(step, terrain, player.pos);
+            remaining -= step;
+          }
+        } else if (ev.eventType === TargetEventType.Bounce || ev.eventType === TargetEventType.StateChanged || ev.eventType === TargetEventType.Hit) {
+          const ball = playbackBallById.get(ev.targetId);
+          if (ball && !ball.dead) {
+            ball.pos.set(ev.posX, ev.posY, ev.posZ);
+            ball.vel.set(ev.velX, ev.velY, ev.velZ);
+            // Sync recorded health for hit keyframes
+            if (ev.eventType === TargetEventType.Hit) {
+              ball.health = ev.health;
+              if (ball.health <= 0) ball.dead = true;
+            }
+            // Sync mesh position after keyframe update
+            ball.update(0, terrain, player.pos);
+            // Fast-forward from this keyframe to seek time
+            const ffTime = seekTime - ev.timestamp;
+            let remaining = ffTime;
+            while (remaining > 0 && !ball.dead) {
+              const step = Math.min(FF_DT, remaining);
+              ball.update(step, terrain, player.pos);
+              remaining -= step;
+            }
+          }
+        }
+      }
+
       // Process projectile events in order, skipping dead ones and fast-forwarding in-flight ones
       for (const ev of events.projectiles) {
         if (deadProjectileIds.has(ev.projectileId)) {
           // For Hit events on dead projectiles, spawn explosion fast-forwarded to seek time
           if (ev.eventType === ProjectileEventType.Hit) {
             const hitPos = new THREE.Vector3(ev.posX, ev.posY, ev.posZ);
-            const weaponType = ev.weaponType === 2 ? 'grenade' : 'rocket'; // weaponType 2 = grenade
-            const exp = new Explosion(scene, hitPos, false, 0, 1.0, weaponType);
+            const exp = new Explosion(scene, hitPos, false, 0);
             explosions.push(exp);
             // Fast-forward explosion visual to seek time
             const ffTime = seekTime - ev.timestamp;
@@ -811,136 +860,21 @@ async function init(): Promise<void> {
         }
       }
 
-      // Process target events in order, skipping dead ones and fast-forwarding in-flight ones
-      for (const ev of events.targets) {
-        if (deadBallIds.has(ev.targetId)) {
-          // For Destroyed events on dead balls, spawn debris fast-forwarded to seek time
-          if (ev.eventType === TargetEventType.Destroyed) {
-            const debris = new BallDebris(scene, terrain, ev.posX, ev.posY, ev.posZ, new THREE.Color(0xffffff), 1);
-            debrisList.push(debris);
-            // Fast-forward debris to seek time
-            const ffTime = seekTime - ev.timestamp;
-            if (ffTime > 0) {
-              let rem = ffTime;
-              while (rem > 0 && !debris.dead) {
-                const step = Math.min(FF_DT, rem);
-                debris.update(step);
-                rem -= step;
-              }
-            }
-          }
-          continue;
-        }
-
-        if (ev.eventType === TargetEventType.Spawned) {
-          const ball = new Ball(scene, terrain, ev.targetType as 0 | 1 | 2);
-          ball.pos.set(ev.posX, ev.posY, ev.posZ);
-          ball.vel.set(ev.velX, ev.velY, ev.velZ);
-          playbackBallById.set(ev.targetId, ball);
-          balls.push(ball);
-          // Sync mesh position immediately (Ball constructor doesn't copy pos to mesh.position)
-          ball.update(0, terrain, player.pos);
-          // Fast-forward from spawn time to seek time
-          const ffTime = seekTime - ev.timestamp;
-          let remaining = ffTime;
-          while (remaining > 0 && !ball.dead) {
-            const step = Math.min(FF_DT, remaining);
-            ball.update(step, terrain, player.pos);
-            remaining -= step;
-          }
-        } else if (ev.eventType === TargetEventType.Bounce || ev.eventType === TargetEventType.StateChanged) {
-          const ball = playbackBallById.get(ev.targetId);
-          if (ball && !ball.dead) {
-            ball.pos.set(ev.posX, ev.posY, ev.posZ);
-            ball.vel.set(ev.velX, ev.velY, ev.velZ);
-            // Sync mesh position after keyframe update
-            ball.update(0, terrain, player.pos);
-            // Fast-forward from this keyframe to seek time
-            const ffTime = seekTime - ev.timestamp;
-            let remaining = ffTime;
-            while (remaining > 0 && !ball.dead) {
-              const step = Math.min(FF_DT, remaining);
-              ball.update(step, terrain, player.pos);
-              remaining -= step;
-            }
-          }
-        }
-      }
-
       seekReconstructing = false;
       return;
     }
 
     // Normal playback event processing (forward playback, not seeking)
-    for (const ev of events.projectiles) {
-      if (ev.eventType === ProjectileEventType.Fired) {
-        // Reconstruct projectile from recorded position + velocity, using weaponType
-        const origin = new THREE.Vector3(ev.posX, ev.posY, ev.posZ);
-        const velocity = new THREE.Vector3(ev.velX, ev.velY, ev.velZ);
-        const r = new Projectile(scene, origin, new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 0, 0), getProjectileConfig(ev.weaponType) ?? ROCKET_CONFIG);
-        r.isRemote = true;
-        r.vel.copy(velocity);
-        playbackProjectiles.push(r);
-        playbackProjectileById.set(ev.projectileId, r);
-        playbackProjectileOrigin.set(ev.projectileId, origin.clone());
-      } else if (ev.eventType === ProjectileEventType.Bounce) {
-        // Update projectile velocity to match recorded bounce
-        const r = playbackProjectileById.get(ev.projectileId);
-        if (r && !r.exploded) {
-          r.pos.set(ev.posX, ev.posY, ev.posZ);
-          r.vel.set(ev.velX, ev.velY, ev.velZ);
-        }
-      } else if (ev.eventType === ProjectileEventType.Hit) {
-        // Force explode the projectile at the recorded position
-        const r = playbackProjectileById.get(ev.projectileId);
-        if (r && !r.exploded) {
-          r.pos.set(ev.posX, ev.posY, ev.posZ);
-          r.explode();
-          // Spawn correct effect (explosion for push, implosion for pull)
-          if (r.config.forceMode === 'push') {
-            const explosionType = r.config.name === 'grenade' ? 'grenade' : 'rocket';
-            explosions.push(new Explosion(scene, r.pos, false, r.age, 1.0, explosionType));
-          } else {
-            implosions.push(new Implosion(scene, r.pos, r.age));
-          }
-          // Compute frag message from playback data
-          const origin = playbackProjectileOrigin.get(ev.projectileId);
-          if (origin) {
-            const dist = r.pos.distanceTo(origin);
-            const air = r.age;
-            // Approximate accuracy: use hitRadius at impact age as proxy
-            const acc = computeAccuracy(r.hitRadius, false);
-            const score = Math.round(acc * dist * air);
-            fragMessages.show(`${acc.toFixed(1)} · ${Math.round(dist)} · ${air.toFixed(2)}s\n${score}`);
-            hud.showHitMarker();
-          }
-          // Debug: compare projectile hit position with ball position
-          if (ev.targetId && ev.targetId !== 0xFFFF) {
-            const ball = playbackBallById.get(ev.targetId);
-            if (ball) {
-              const distBall = r.pos.distanceTo(ball.pos);
-              console.log(`[DemoPlayback] Projectile Hit: projPos=(${ev.posX.toFixed(1)},${ev.posY.toFixed(1)},${ev.posZ.toFixed(1)}) ballPos=(${ball.pos.x.toFixed(1)},${ball.pos.y.toFixed(1)},${ball.pos.z.toFixed(1)}) dist=${distBall.toFixed(1)}m`);
-            } else {
-              console.log(`[DemoPlayback] Projectile Hit: projPos=(${ev.posX.toFixed(1)},${ev.posY.toFixed(1)},${ev.posZ.toFixed(1)}) ball ${ev.targetId} not found`);
-            }
-          }
-        }
-      } else if (ev.eventType === ProjectileEventType.Destroyed) {
-        // Remove projectile without explosion (e.g. timeout)
-        const r = playbackProjectileById.get(ev.projectileId);
-        if (r && !r.exploded) {
-          r.pos.set(ev.posX, ev.posY, ev.posZ);
-          r.explode();
-        }
-      }
-    }
-
-    // Handle target events from demo playback: spawn/move/destroy balls
+    // Handle target events first so balls are spawned/updated before projectile hits reference them
     for (const ev of events.targets) {
       if (ev.eventType === TargetEventType.Spawned) {
         const ball = new Ball(scene, terrain, ev.targetType as 0 | 1 | 2);
         ball.pos.set(ev.posX, ev.posY, ev.posZ);
         ball.vel.set(ev.velX, ev.velY, ev.velZ);
+        // Apply recorded health when available (e.g. synthetic Spawned from a Hit/Bounce snapshot)
+        if (ev.health > 0) {
+          ball.health = ev.health;
+        }
         playbackBallById.set(ev.targetId, ball);
         balls.push(ball);
         // Sync mesh position immediately (Ball constructor doesn't copy pos to mesh.position)
@@ -967,7 +901,10 @@ async function init(): Promise<void> {
           // Snap ball to recorded hit position to ensure explosion aligns
           ball.pos.set(ev.posX, ev.posY, ev.posZ);
           ball.vel.set(ev.velX, ev.velY, ev.velZ);
+          // Flash the ball and then sync to the recorded post-hit health
           ball.takeDamage();
+          ball.health = ev.health;
+          ball.dead = ball.health <= 0;
           ball.update(0, terrain, player.pos);
           damageNumberManager.spawn(ball.pos, 1, '#ffffff', camera);
         }
@@ -976,6 +913,82 @@ async function init(): Promise<void> {
         if (ball && !ball.dead) {
           ball.dead = true;
           debrisList.push(new BallDebris(scene, terrain, ball.pos.x, ball.pos.y, ball.pos.z, ball.color, ball.scale));
+        }
+      }
+    }
+
+    // Process projectile events from demo playback
+    for (const ev of events.projectiles) {
+      if (ev.eventType === ProjectileEventType.Fired) {
+        // Reconstruct projectile from recorded position + velocity, using weaponType
+        const origin = new THREE.Vector3(ev.posX, ev.posY, ev.posZ);
+        const velocity = new THREE.Vector3(ev.velX, ev.velY, ev.velZ);
+        const r = new Projectile(scene, origin, new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 0, 0), getProjectileConfig(ev.weaponType) ?? ROCKET_CONFIG);
+        r.isRemote = true;
+        r.vel.copy(velocity);
+        playbackProjectiles.push(r);
+        playbackProjectileById.set(ev.projectileId, r);
+        playbackProjectileOrigin.set(ev.projectileId, origin.clone());
+      } else if (ev.eventType === ProjectileEventType.Bounce) {
+        // Update projectile velocity to match recorded bounce
+        const r = playbackProjectileById.get(ev.projectileId);
+        if (r && !r.exploded) {
+          r.pos.set(ev.posX, ev.posY, ev.posZ);
+          r.vel.set(ev.velX, ev.velY, ev.velZ);
+        }
+      } else if (ev.eventType === ProjectileEventType.Hit) {
+        // Force explode the projectile at the recorded position
+        const r = playbackProjectileById.get(ev.projectileId);
+        if (r && !r.exploded) {
+          r.pos.set(ev.posX, ev.posY, ev.posZ);
+          r.explode();
+
+          // Compute accuracy using the recorded target position when available
+          const ball = ev.targetId && ev.targetId !== 0xFFFF ? playbackBallById.get(ev.targetId) : undefined;
+          let directHit = false;
+          let accRaw = 0;
+          if (ball) {
+            const distToBall = r.pos.distanceTo(ball.pos);
+            directHit = distToBall <= ball.radius + r.config.bodyRadius;
+            accRaw = Math.max(0, distToBall - ball.radius);
+          } else if (ev.targetId === 0xFFFF) {
+            // Player hit: no specific target in playback, use fallback max accuracy
+            directHit = false;
+            accRaw = 0;
+          }
+          const acc = computeAccuracy(accRaw, directHit);
+
+          // Spawn correct effect (explosion for push, implosion for pull)
+          if (r.config.forceMode === 'push') {
+            explosions.push(new Explosion(scene, r.pos, directHit, r.age));
+          } else {
+            implosions.push(new Implosion(scene, r.pos, r.age));
+          }
+
+          // Compute frag message from playback data (skip terrain hits)
+          const origin = playbackProjectileOrigin.get(ev.projectileId);
+          if (origin && ev.targetId !== 0) {
+            const dist = r.pos.distanceTo(origin);
+            const air = r.age;
+            const score = Math.round(acc * dist * air);
+            fragMessages.show(`${acc.toFixed(1)} · ${Math.round(dist)} · ${air.toFixed(2)}s\n${score}`);
+            hud.showHitMarker();
+          }
+
+          // Debug: compare projectile hit position with ball position
+          if (ball) {
+            const distBall = r.pos.distanceTo(ball.pos);
+            console.log(`[DemoPlayback] Projectile Hit: projPos=(${ev.posX.toFixed(1)},${ev.posY.toFixed(1)},${ev.posZ.toFixed(1)}) ballPos=(${ball.pos.x.toFixed(1)},${ball.pos.y.toFixed(1)},${ball.pos.z.toFixed(1)}) dist=${distBall.toFixed(1)}m`);
+          } else if (ev.targetId && ev.targetId !== 0xFFFF && ev.targetId !== 0) {
+            console.log(`[DemoPlayback] Projectile Hit: projPos=(${ev.posX.toFixed(1)},${ev.posY.toFixed(1)},${ev.posZ.toFixed(1)}) ball ${ev.targetId} not found`);
+          }
+        }
+      } else if (ev.eventType === ProjectileEventType.Destroyed) {
+        // Remove projectile without explosion (e.g. timeout)
+        const r = playbackProjectileById.get(ev.projectileId);
+        if (r && !r.exploded) {
+          r.pos.set(ev.posX, ev.posY, ev.posZ);
+          r.explode();
         }
       }
     }
@@ -1296,7 +1309,7 @@ async function init(): Promise<void> {
   };
   
   // Register playerJoined handler (for new players joining after initial connection)
-  networkManager.onPlayerJoined = (playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }) => {
+  networkManager.onPlayerJoined = (playerId: string, position: { x: number; y: number; z: number }, _rotation: { yaw: number; pitch: number }) => {
     // Safety: server excludes self from playerJoined broadcast, but guard anyway
     if (playerId === networkManager.getLocalPlayerId()) return;
     const playerData = networkManager.getPlayers().get(playerId);

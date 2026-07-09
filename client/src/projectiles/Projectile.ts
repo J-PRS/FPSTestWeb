@@ -59,9 +59,10 @@ const TRAIL_DISC_GEO = new THREE.CircleGeometry(1, 24);
  * marks itself `exploded`, and the visual effect is handled elsewhere.
  *
  * Known issues / TODOs (see _reports/projectile-implementation-review.md):
- *  - `sweepPlayer` is missing the `passedCenter` wake-hit guard used by `sweepBall`.
- *  - `sweepBall` sets `passedCenter` *after* the wake check, which can miss
- *    final-step wake hits.
+ *  - `sweepPlayer` now uses `passedCenter` for wake hits; `sweepBall` computes it
+ *    before the wake check. Verify edge cases with fast-moving targets.
+ *  - Consider adding `minHitDist`/`directHit` to recorded projectile Hit events for
+ *    more accurate playback frag messages.
  *  - `hitDistance` and `hitAge` are computed from the end-of-frame position,
  *    not the actual impact point, so fast projectiles can report wrong values.
  *  - `sweepTerrain` samples the projectile center and uses a fixed step of 0.5,
@@ -186,7 +187,7 @@ export class Projectile {
     const coreThresh = ball.radius + this.config.bodyRadius; // direct hit = body overlaps target
     const wakeThresh = ball.radius + this.hitRadius; // expanding wake
     let minDist = Infinity;
-    let passedCenter = false; // Track if we've passed the ball's center
+    let prevD2 = Infinity;
 
     for (let i = 0; i <= steps; i++) {
       const t = i / steps;
@@ -197,6 +198,9 @@ export class Projectile {
       const d2 = ex * ex + ey * ey + ez * ez;
       const d = Math.sqrt(d2);
       if (d < minDist) minDist = d;
+
+      // Passed center when distance increases from the previous step
+      const passedCenter = i > 0 && d2 > prevD2;
 
       // Direct hit - immediate
       if (d2 <= coreThresh * coreThresh) {
@@ -218,22 +222,7 @@ export class Projectile {
         }
       }
 
-      // Check if we've passed the center (dot product of velocity and direction to ball)
-      if (i > 0) {
-        const prevT = (i - 1) / steps;
-        const prevSx = this.prevPos.x + dx * prevT;
-        const prevSy = this.prevPos.y + dy * prevT;
-        const prevSz = this.prevPos.z + dz * prevT;
-        const prevEx = prevSx - ball.pos.x;
-        const prevEy = prevSy - ball.pos.y;
-        const prevEz = prevSz - ball.pos.z;
-        const prevD2 = prevEx * prevEx + prevEy * prevEy + prevEz * prevEz;
-
-        // If distance is increasing, we've passed the closest point
-        if (d2 > prevD2) {
-          passedCenter = true;
-        }
-      }
+      prevD2 = d2;
     }
 
     return false;
@@ -294,11 +283,13 @@ export class Projectile {
         return true;
       }
 
+      // Only consider wake hit if we've passed the closest point on the path
+      const passedCenter = pathLenSq === 0 || t <= 1.0;
       const prevMin = this.wakePlayerDistances.get(playerId) ?? Infinity;
       if (totalDist < prevMin) {
         this.wakePlayerDistances.set(playerId, totalDist);
         return false;
-      } else if (totalDist > prevMin) {
+      } else if (totalDist > prevMin && passedCenter) {
         this.directHit = false;
         logger.debug(`Wake hit at dist ${totalDist.toFixed(2)}, threshold ${(PLAYER_RADIUS + this.hitRadius).toFixed(2)}`);
         return true;

@@ -1,0 +1,11 @@
+{
+  "project": ["src/**/*.ts"],
+  "ignore": [
+    "node_modules/**",
+    "dist/**",
+    "reports/**"
+  ],
+  "ignoreDependencies": [
+    "msgpack-lite"
+  ]
+}
