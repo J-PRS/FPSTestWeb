@@ -1,6 +1,8 @@
 import * as THREE from 'three';
-import { MAX_HEALTH, PLAYER_HEIGHT, BALL_BASE_RADIUS } from './config.js';
-import { Ball } from './balls.js';
+
+import { MAX_HEALTH, PLAYER_HEIGHT, BALL_BASE_RADIUS } from '../core/config.js';
+
+import { Ball } from '../entities/balls.js';
 
 interface HealthBar {
   playerId?: string;

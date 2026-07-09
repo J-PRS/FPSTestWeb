@@ -1,13 +1,10 @@
 import * as THREE from 'three';
+
+import { GRAVITY, BOUNCE_Y, FRICTION_XZ, REMOTE_PLAYER_BASE_LERP_FACTOR, REMOTE_PLAYER_MAX_LERP_FACTOR, REMOTE_PLAYER_DISTANCE_MULTIPLIER, REMOTE_PLAYER_ROTATION_MULTIPLIER, REMOTE_PLAYER_PING_MULTIPLIER, REMOTE_PLAYER_MAX_PING_BONUS, PLAYER_HEIGHT } from '../core/config.js';
+
+import { Terrain } from '../world/terrain.js';
+
 import { PlayerModel, AnimationState } from './PlayerModel.js';
-import { Terrain } from './terrain.js';
-import {
-  GRAVITY, BOUNCE_Y, FRICTION_XZ,
-  REMOTE_PLAYER_BASE_LERP_FACTOR, REMOTE_PLAYER_MAX_LERP_FACTOR,
-  REMOTE_PLAYER_DISTANCE_MULTIPLIER, REMOTE_PLAYER_ROTATION_MULTIPLIER,
-  REMOTE_PLAYER_PING_MULTIPLIER, REMOTE_PLAYER_MAX_PING_BONUS,
-  PLAYER_HEIGHT
-} from './config.js';
 
 /**
  * Remote player representation with animated 3D model

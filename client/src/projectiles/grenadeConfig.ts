@@ -1,0 +1,62 @@
+import * as THREE from 'three';
+
+import {
+  GRAVITY, GRENADE_SPEED, GRENADE_RADIUS, GRENADE_BODY_RADIUS, GRENADE_FORCE,
+  GRENADE_AOE_DAMAGE, GRENADE_AOE_RADIUS, HIT_MIN, HIT_MAX, HIT_GROW,
+  EXPLOSION_FALLOFF_MULTIPLIER_ROCKET, KNOCKBACK_MULTIPLIER, GRENADE_MAX_LIFETIME,
+} from '../core/config.js';
+
+import type { ProjectileConfig } from './types.js';
+
+export const GRENADE_CONFIG: ProjectileConfig = {
+  name: 'grenade',
+  displayName: 'Grenade',
+  weaponType: 2,
+  speed: GRENADE_SPEED,
+  gravity: GRAVITY,
+  explosionRadius: GRENADE_RADIUS,
+  force: GRENADE_FORCE,
+  forceMode: 'push',
+  bodyRadius: GRENADE_BODY_RADIUS,
+  hitMin: HIT_MIN,
+  hitMax: HIT_MAX,
+  hitGrow: HIT_GROW,
+  falloffMultiplier: EXPLOSION_FALLOFF_MULTIPLIER_ROCKET,
+  collisionMultiplier: 1.0, // ball radius + explosion radius
+  forceMultiplier: KNOCKBACK_MULTIPLIER,
+  aoeDamage: GRENADE_AOE_DAMAGE,
+  aoeRadius: GRENADE_AOE_RADIUS,
+  damageColor: '#ff6600',
+  trailColors: [
+    new THREE.Color(1.0, 0.9, 0.5),
+    new THREE.Color(1.0, 0.6, 0.1),
+    new THREE.Color(0.8, 0.3, 0.05),
+    new THREE.Color(0.4, 0.2, 0.15),
+    new THREE.Color(0.25, 0.25, 0.28),
+  ],
+  trailParticlesPerUnit: 1,
+  trailLifeMin: 1.0,
+  trailLifeMax: 1.5,
+  trailSpread: 0.25,
+  trailForwardSpread: 0.1,
+  trailParticleGravity: 0.0,
+  trailOpacity: 0.4,
+  trailBaseSize: 0.1,
+  trailSizeRange: 0.3,
+  trailScaleMin: 0.6,
+  trailScaleMax: 2.0,
+  trailRampIn: 0.1,
+  meshColor: 0xff8800,
+  meshType: 'rocket',
+  glowShell: true,
+  glowColor: 0xff4400,
+  glowOpacity: 0.25,
+  glowScale: 0.8,
+  meshRampIn: true,
+  meshRampInDuration: 0.05,
+  meshStartScale: 0.2,
+  terrainOffset: HIT_MIN,
+  needsServerTracking: false,
+  maxLifetime: GRENADE_MAX_LIFETIME,
+  trailMeshType: 'sphere',
+};

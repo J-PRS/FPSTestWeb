@@ -80,6 +80,11 @@ def parse_header(data):
     (start_vy,) = struct.unpack_from("<f", data, offset); offset += 4
     (start_vz,) = struct.unpack_from("<f", data, offset); offset += 4
 
+    # projectileLifetime added in format v2
+    projectile_lifetime = 0.0
+    if format_version >= 2:
+        (projectile_lifetime,) = struct.unpack_from("<f", data, offset); offset += 4
+
     return {
         "magic": magic,
         "format_version": format_version,
@@ -95,6 +100,7 @@ def parse_header(data):
         "start_yaw": start_yaw,
         "start_pitch": start_pitch,
         "start_vel": (start_vx, start_vy, start_vz),
+        "projectile_lifetime": projectile_lifetime,
         "_offset": offset,
     }
 

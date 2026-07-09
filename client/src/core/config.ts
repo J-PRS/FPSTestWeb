@@ -28,6 +28,7 @@ export const JET_CHARGE = 8.0; // Energy recharge per second
 // Weapon constants
 export const FIRE_RATE = 0.8; // Rocket fire rate (seconds)
 export const DISC_RATE = 1.0; // Disc fire rate (seconds)
+export const GRENADE_RATE = 1.2; // Grenade fire rate (seconds)
 
 // Projectile constants
 export const ROCKET_SPEED = 120.0; // Rocket velocity
@@ -48,6 +49,15 @@ export const DISC_HITBOX = 0.5; // Disc core hitbox size (direct hit)
 export const DISC_HIT_MIN = 0.3; // Minimum wake hitbox radius
 export const DISC_HIT_MAX = 8.0; // Maximum wake hitbox radius
 export const DISC_HIT_GROW = 2.0; // Seconds to reach full wake hitbox size
+
+// Grenade constants
+export const GRENADE_SPEED = 40.0; // Grenade velocity
+export const GRENADE_RADIUS = 10.0; // Grenade explosion radius
+export const GRENADE_BODY_RADIUS = 0.25; // Grenade visual body radius
+export const GRENADE_FORCE = 45.0; // Grenade knockback force
+export const GRENADE_AOE_DAMAGE = 20; // Grenade splash damage
+export const GRENADE_AOE_RADIUS = 10.0; // Grenade splash radius
+export const GRENADE_MAX_LIFETIME = 2.0; // Grenade fuse before auto-explode (seconds)
 
 // Game constants
 export const BALL_SPAWN_INTERVAL = 2.5; // Seconds between ball spawns

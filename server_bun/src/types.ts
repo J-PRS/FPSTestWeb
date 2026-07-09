@@ -33,6 +33,7 @@ export type ClientMessage =
   | { type: 'shot'; targetId: string | null; position?: Vec3; velocity?: Vec3; timestamp?: number; projectileId?: string | null }
   | { type: 'aoeShot'; position: Vec3; excludeTargetId?: string | null }
   | { type: 'discAOEShot'; position: Vec3; excludeTargetId?: string | null }
+  | { type: 'grenadeAOEShot'; position: Vec3; excludeTargetId?: string | null }
   | { type: 'jump'; position: Vec3 }
   | { type: 'jetpack'; position: Vec3 }
   | { type: 'inputMove'; input: { forward: number; right: number; jump: number; ski: number }; rotation: Rotation }

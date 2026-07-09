@@ -1,7 +1,8 @@
+import { ChildLogger } from '../core/Logger.js';
+
+import { FastAPIAdapter } from './FastAPIAdapter.js';
 import { INetworkAdapter } from './INetworkAdapter.js';
 import { Tribes2Adapter } from './Tribes2Adapter.js';
-import { FastAPIAdapter } from './FastAPIAdapter.js';
-import { ChildLogger } from '../Logger.js';
 
 const logger = new ChildLogger('NetworkAdapterFactory');
 

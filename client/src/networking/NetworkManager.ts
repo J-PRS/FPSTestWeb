@@ -1,5 +1,6 @@
+import { ChildLogger } from '../core/Logger.js';
+
 import { INetworkAdapter } from './INetworkAdapter.js';
-import { ChildLogger } from '../Logger.js';
 
 const logger = new ChildLogger('NetworkManager');
 
@@ -383,6 +384,16 @@ export class NetworkManager {
 
     this.adapter.send({
       type: 'discAOEShot',
+      position,
+      excludeTargetId: excludeTargetId ?? null,
+    });
+  }
+
+  sendGrenadeAOEShot(position: { x: number; y: number; z: number }, excludeTargetId?: string | null): void {
+    if (!this.adapter || !this.adapter.isConnected()) return;
+
+    this.adapter.send({
+      type: 'grenadeAOEShot',
       position,
       excludeTargetId: excludeTargetId ?? null,
     });

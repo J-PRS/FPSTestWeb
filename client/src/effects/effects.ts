@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { GRAVITY } from './config.js';
+
+import { GRAVITY } from '../core/config.js';
 
 interface Particle {
   mesh: THREE.Mesh;

@@ -7,7 +7,7 @@
  */
 
 import { BitStream } from './BitStream.js';
-import { ChildLogger } from '../Logger.js';
+import { ChildLogger } from '../core/Logger.js';
 
 const logger = new ChildLogger('EventManager');
 

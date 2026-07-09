@@ -564,20 +564,20 @@ export class DemoManager {
     this.recorder.recordTargetSpawned(targetId, position, velocity, targetType);
   }
 
-  recordTargetBounce(targetId: number, position: Vec3, velocity: Vec3): void {
-    this.recorder.recordTargetBounce(targetId, position, velocity);
+  recordTargetBounce(targetId: number, position: Vec3, velocity: Vec3, targetType: number): void {
+    this.recorder.recordTargetBounce(targetId, position, velocity, targetType);
   }
 
-  recordTargetPeak(targetId: number, position: Vec3, velocity: Vec3): void {
-    this.recorder.recordTargetPeak(targetId, position, velocity);
+  recordTargetPeak(targetId: number, position: Vec3, velocity: Vec3, targetType: number): void {
+    this.recorder.recordTargetPeak(targetId, position, velocity, targetType);
   }
 
-  recordTargetHit(targetId: number, position: Vec3, velocity: Vec3, health: number): void {
-    this.recorder.recordTargetHit(targetId, position, velocity, health);
+  recordTargetHit(targetId: number, position: Vec3, velocity: Vec3, targetType: number, health: number): void {
+    this.recorder.recordTargetHit(targetId, position, velocity, targetType, health);
   }
 
-  recordTargetDestroyed(targetId: number, position: Vec3): void {
-    this.recorder.recordTargetDestroyed(targetId, position);
+  recordTargetDestroyed(targetId: number, position: Vec3, targetType: number, health?: number): void {
+    this.recorder.recordTargetDestroyed(targetId, position, targetType, health);
   }
 
   // Toggle UI with keyboard shortcut

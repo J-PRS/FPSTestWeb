@@ -1,5 +1,84 @@
 # Changelog
 
+## [2026-07-09] Grenade Weapon and Disc Trail Improvements
+
+### New Weapon - Grenade (F Key)
+- **Implemented gravity-affected grenade weapon bound to F key**
+  - Added GRENADE_CONFIG with speed 40, gravity, max lifetime 2s (auto-explode)
+  - Larger AOE radius (10) and knockback force (45) than rocket
+  - Added grenade constants to client config.ts (GRENADE_SPEED, GRENADE_RADIUS, GRENADE_FORCE, GRENADE_AOE_DAMAGE, GRENADE_MAX_LIFETIME)
+  - Added KeyF input handling and timer to Player.ts
+  - Wired onGrenade callback in main.ts to spawn grenades
+  - Location: client/src/config.ts, client/src/projectiles/grenadeConfig.ts, client/src/Player.ts, client/src/main.ts
+  - Benefits: New weapon for tactical play, grenade arcs with gravity
+
+### Projectile System Enhancements
+- **Added maxLifetime auto-explode support to Projectile class**
+  - Added maxLifetime property to ProjectileConfig (optional, 0 or undefined = no auto-explode)
+  - Grenades auto-explode after 2 seconds
+  - Location: client/src/projectiles/types.ts, client/src/projectiles/Projectile.ts
+  - Benefits: Timed explosions for grenades
+
+- **Added trail mesh type support for varied trail geometries**
+  - Added trailMeshType property to ProjectileConfig ('sphere' | 'ring' | 'disc')
+  - Implemented ring and disc geometry for trail particles
+  - Disc trail uses flat disc geometry oriented sideways for frisbee effect
+  - Location: client/src/projectiles/types.ts, client/src/projectiles/Projectile.ts
+  - Benefits: More diverse visual effects for different weapons
+
+- **Added glowScale property for independent glow sizing**
+  - Added glowScale optional property to ProjectileConfig
+  - Defaults to hitRadius if not set
+  - Location: client/src/projectiles/types.ts, client/src/projectiles/Projectile.ts
+  - Benefits: Fine-tuned glow effects per weapon
+
+### Disc Trail Improvements (Tribes Ascend++ Style)
+- **Enhanced disc trail with glow and ring-style geometry**
+  - Enabled glowShell on disc with cyan glow color
+  - Changed trailMeshType to 'disc' (flat circle geometry)
+  - Oriented disc trail sideways (perpendicular to velocity) for frisbee effect
+  - Increased trail particle count and adjusted colors for brighter look
+  - Added mesh ramp-in (start scale 0.25, duration 0.15s) for unobstructive first-person view
+  - Location: client/src/projectiles/discConfig.ts, client/src/projectiles/Projectile.ts
+  - Benefits: Better visual feedback, Tribes-style disc trail
+
+### Grenade Visual Scaling
+- **Scaled explosion visuals by projectile radius**
+  - Added optional scale parameter to Explosion constructor
+  - processProjectileExplosion computes scale based on radius / ROCKET_RADIUS
+  - Grenade explosions now appear larger (scale ~1.67) to match larger AOE
+  - Location: client/src/explosion.ts, client/src/main.ts
+  - Benefits: Visual explosion size matches gameplay AOE
+
+### Server-Side Grenade AOE Support
+- **Added grenadeAOEShot message handling to server_bun**
+  - Added grenade AOE config values (grenadeAoeDamage, grenadeAoeRadius, grenadeKnockbackForce)
+  - Added grenadeAOEShot to ClientMessage type in server_bun/types.ts
+  - Added validation for grenadeAOEShot in server_bun/validation.ts
+  - Generalized processAOE in MessageHandler to support rocket/disc/grenade modes
+  - Location: server_bun/src/config.ts, server_bun/src/types.ts, server_bun/src/validation.ts, server_bun/src/MessageHandler.ts
+  - Benefits: Server validates and applies grenade AOE damage/knockback
+
+### Network Integration
+- **Added sendGrenadeAOEShot to NetworkManager**
+  - New method sends grenadeAOEShot message to server
+  - processProjectileExplosion routes AOE based on weapon name (rocket/disc/grenade)
+  - Location: client/src/networking/NetworkManager.ts, client/src/main.ts
+  - Benefits: Grenade AOE properly communicated to server
+
+### UI Updates
+- **Updated overlay controls to mention disc (C) and grenade (F) keys**
+  - Added C — Fire disc (spin) and F — Fire grenade (arc, auto-explodes) to controls
+  - Location: client/index.html
+  - Benefits: Players know about all weapon bindings
+
+### Mesh Ramp-In Consistency
+- **Applied rocket-style mesh ramp-in to disc and grenade**
+  - Disc now starts small (scale 0.25) and ramps up over 0.15s
+  - Grenade already had ramp-in (0.2s, start scale 0.2)
+  - Location: client/src/projectiles/discConfig.ts
+  - Benefits: Unobstructive first-person view for all weapons
+
 ## [2026-06-23] Tribes2-Style Networking Integration - Phase 64
 
 ### Code Cleanliness - MessageHandler Refactoring

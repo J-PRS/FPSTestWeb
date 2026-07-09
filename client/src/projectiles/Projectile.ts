@@ -1,8 +1,12 @@
 import * as THREE from 'three';
-import { Terrain } from '../terrain.js';
-import type { Ball } from '../balls.js';
-import { PLAYER_RADIUS, CAPSULE_HALF_HEIGHT, CAPSULE_CENTER_Y } from '../config.js';
-import { ChildLogger } from '../Logger.js';
+
+import { PLAYER_RADIUS, CAPSULE_HALF_HEIGHT, CAPSULE_CENTER_Y } from '../core/config.js';
+
+import { ChildLogger } from '../core/Logger.js';
+
+import type { Ball } from '../entities/balls.js';
+
+import { Terrain } from '../world/terrain.js';
 import type { ProjectileConfig } from './types.js';
 
 const logger = new ChildLogger('Projectile');
@@ -17,17 +21,57 @@ interface TrailParticle {
 }
 
 const TRAIL_GEO = new THREE.SphereGeometry(1, 8, 6);
+const TRAIL_RING_GEO = new THREE.RingGeometry(0.5, 1.0, 24);
+const TRAIL_DISC_GEO = new THREE.CircleGeometry(1, 24);
 
 /**
- * Wake Hit Distance Tracking Logic:
+ * Projectile: client-authoritative hitscan-like projectile with swept collision.
  *
- * Projectiles have two hit detection zones:
- * 1. Core (direct hit): center passes through target's actual radius
- * 2. Wake (proxy hit): center passes through expanding wake radius
+ * Per-frame movement advances the projectile by `vel * dt`. After each move, a
+ * swept check is performed against terrain, balls, and remote players. The
+ * sweep steps from the previous position to the new position to avoid tunneling
+ * through fast-moving targets.
  *
- * Track minimum distance to each target. Only trigger wake hit when distance
- * starts increasing (projectile has passed the target). This allows core hits
- * to register first if the projectile continues approaching.
+ * Hit detection uses two concentric thresholds:
+ *  1. Core (direct hit): distance <= target radius + projectile body radius.
+ *     This is the "real" collision and always takes precedence over a wake
+ *     hit when encountered within the same sweep.
+ *  2. Wake (proxy hit): distance <= target radius + expanding hit radius.
+ *     The hit radius grows over the projectile's lifetime (see `hitRadius`),
+ *     giving a wider, forgiving hitbox for near misses.
+ *
+ * Wake hit logic:
+ *  - The projectile stores the minimum distance it has ever seen to each target
+ *    in `wakeBallDistances` / `wakePlayerDistances`. These maps persist across
+ *    frames for the life of the projectile.
+ *  - A wake hit is meant to trigger when the projectile has passed the target
+ *    and is moving away (distance increasing from the recorded minimum).
+ *  - However, because the minimum is stored across frames, a moving target can
+ *    leave a stale minimum. If the projectile re-approaches the target while
+ *    still outside the core, the old check `d > prevMin` would fire a wake
+ *    hit prematurely, before the projectile could reach the core.
+ *  - To prevent this, `passedCenter` is recomputed each sweep. It is set when
+ *    the current step is farther than the immediately previous step, meaning
+ *    the projectile has passed the closest point of this sweep. Wake hits are
+ *    only allowed once `d > prevMin` AND `passedCenter` is true.
+ *
+ * On impact, the projectile records `hitBall`, `directHit`, `hitAccuracy`, etc.,
+ * marks itself `exploded`, and the visual effect is handled elsewhere.
+ *
+ * Known issues / TODOs (see _reports/projectile-implementation-review.md):
+ *  - `sweepPlayer` is missing the `passedCenter` wake-hit guard used by `sweepBall`.
+ *  - `sweepBall` sets `passedCenter` *after* the wake check, which can miss
+ *    final-step wake hits.
+ *  - `hitDistance` and `hitAge` are computed from the end-of-frame position,
+ *    not the actual impact point, so fast projectiles can report wrong values.
+ *  - `sweepTerrain` samples the projectile center and uses a fixed step of 0.5,
+ *    which may tunnel through terrain for small `terrainOffset` values.
+ *  - Trail particles are currently one Mesh + one Material per particle, which
+ *    is allocation- and draw-call-heavy under heavy fire.
+ *  - `hitRadius` scales from `hitMin` to `hitMax` over `hitGrow` seconds (can be 0 at spawn).
+ *  - `dispose()` does not set `this.dead`, so a disposed projectile can keep
+ *    updating.
+ *  - `explosionProcessed` is declared but unused.
  */
 export class Projectile {
   pos: THREE.Vector3;
@@ -54,8 +98,10 @@ export class Projectile {
   private wakePlayerDistances = new Map<string, number>(); // playerId -> min distance seen
 
   get hitRadius(): number {
-    const t = Math.min(this.age / this.config.hitGrow, 1.0);
-    return this.config.hitMin + (this.config.hitMax - this.config.hitMin) * t;
+    const delay = 0.1;
+    if (this.age < delay) return 0;
+    const t = Math.min((this.age - delay) / this.config.hitGrow, 1.0);
+    return this.config.hitMax * t;
   }
 
   get explosionRadius(): number { return this.config.explosionRadius; }
@@ -100,14 +146,14 @@ export class Projectile {
       this.mesh = new THREE.Mesh(geo, this.mat);
       this.mesh.position.copy(this.pos);
       scene.add(this.mesh);
+    }
 
-      if (config.glowShell) {
-        const glowGeo = new THREE.SphereGeometry(1.0, 6, 6);
-        this.glowMat = new THREE.MeshBasicMaterial({ color: config.glowColor, transparent: true, opacity: config.glowOpacity, depthWrite: false });
-        this.glowMesh = new THREE.Mesh(glowGeo, this.glowMat);
-        this.glowMesh.position.copy(this.pos);
-        scene.add(this.glowMesh);
-      }
+    if (config.glowShell) {
+      const glowGeo = new THREE.SphereGeometry(1.0, 12, 12);
+      this.glowMat = new THREE.MeshBasicMaterial({ color: config.glowColor, transparent: true, opacity: config.glowOpacity, depthWrite: false });
+      this.glowMesh = new THREE.Mesh(glowGeo, this.glowMat);
+      this.glowMesh.position.copy(this.pos);
+      scene.add(this.glowMesh);
     }
   }
 
@@ -271,6 +317,12 @@ export class Projectile {
       this.vel.y += this.config.gravity * dt;
       this.pos.addScaledVector(this.vel, dt);
 
+      // Fuse: auto-explode if max lifetime is reached
+      if (this.config.maxLifetime && this.age >= this.config.maxLifetime) {
+        this.explode();
+        return;
+      }
+
       // Remote (server-authoritative/demo) projectiles skip all collision
       if (this.isRemote) {
         this.updateMesh();
@@ -327,7 +379,9 @@ export class Projectile {
     this.mesh.position.copy(this.pos);
     if (this.glowMesh) {
       this.glowMesh.position.copy(this.pos);
-      this.glowMesh.scale.setScalar(this.hitRadius);
+      // Glow scales with hitRadius (wake hitbox) so they always match
+      const glowMultiplier = this.config.glowScale ?? 1.0;
+      this.glowMesh.scale.setScalar(this.hitRadius * glowMultiplier);
     }
 
     const scale = this.config.meshRampIn
@@ -384,20 +438,38 @@ export class Projectile {
 
     const life = this.config.trailLifeMin + Math.random() * (this.config.trailLifeMax - this.config.trailLifeMin);
     const size = (this.config.trailBaseSize + Math.random() * this.config.trailSizeRange) * emitterRamp;
-    this.particles.push(this.spawnTrailParticle(pos, vel, life, size));
+    this.particles.push(this.spawnTrailParticle(pos, vel, life, size, dir));
   }
 
-  private spawnTrailParticle(pos: THREE.Vector3, vel: THREE.Vector3, life: number, size: number): TrailParticle {
+  private spawnTrailParticle(pos: THREE.Vector3, vel: THREE.Vector3, life: number, size: number, dir: THREE.Vector3): TrailParticle {
     const mat = new THREE.MeshBasicMaterial({
       color: this.config.trailColors[0],
       transparent: true,
       opacity: this.config.trailOpacity,
       depthWrite: false,
       blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
     });
-    const mesh = new THREE.Mesh(TRAIL_GEO, mat);
+    const meshType = this.config.trailMeshType ?? 'sphere';
+    let geo: THREE.BufferGeometry;
+    if (meshType === 'ring') {
+      geo = TRAIL_RING_GEO;
+    } else if (meshType === 'disc') {
+      geo = TRAIL_DISC_GEO;
+    } else {
+      geo = TRAIL_GEO;
+    }
+    const mesh = new THREE.Mesh(geo, mat);
     mesh.position.copy(pos);
     mesh.scale.setScalar(size);
+    if (meshType === 'ring') {
+      mesh.lookAt(pos.clone().add(dir));
+    } else if (meshType === 'disc') {
+      // For frisbee-style trail: orient disc sideways (perpendicular to velocity)
+      // so it looks like a spinning disc trail
+      mesh.lookAt(pos.clone().add(dir));
+      mesh.rotateX(Math.PI / 2);
+    }
     this.scene.add(mesh);
     return { mesh, mat, vel, life, maxLife: life, baseSize: size };
   }

@@ -18,6 +18,11 @@
   "devDependencies": {
     "@types/msgpack-lite": "^0.1.2",
     "@types/three": "^0.184.1",
+    "@typescript-eslint/eslint-plugin": "^8.63.0",
+    "@typescript-eslint/parser": "^8.63.0",
+    "eslint": "^9.39.4",
+    "eslint-plugin-import": "^2.32.0",
+    "knip": "^6.25.0",
     "typescript": "^6.0.3",
     "vite": "^8.0.16"
   }

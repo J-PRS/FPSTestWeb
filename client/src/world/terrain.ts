@@ -1,7 +1,8 @@
 import * as THREE from 'three';
+
 import {
   TERRAIN_SIZE, TERRAIN_SUBDIV, TERRAIN_HEIGHT_SCALE, TERRAIN_WORLD_SCALE, TERRAIN_HEIGHTMAP_DIVISOR
-} from './config.js';
+} from '../core/config.js';
 
 const SIZE = TERRAIN_SIZE;
 const SUBDIV = TERRAIN_SUBDIV;

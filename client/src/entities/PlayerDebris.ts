@@ -1,9 +1,11 @@
 import * as THREE from 'three';
-import { Terrain } from './terrain.js';
-import { GRAVITY, BOUNCE_Y, FRICTION_XZ, SHRINK_DUR, GREY_DUR, BASE_SPEED, EXTRA_SPEED, LIFE_BASE, LIFE_RAND } from './config.js';
-const BASE_CHUNK_COUNT = 14;
-const TRAIL_INTERVAL  = 0.03; // seconds between trail emission
-const TRAIL_LIFE      = 0.8;  // trail particle lifetime
+
+import { GRAVITY, BOUNCE_Y, FRICTION_XZ, SHRINK_DUR, GREY_DUR, BASE_SPEED, EXTRA_SPEED, LIFE_BASE, LIFE_RAND } from '../core/config.js';
+
+import { Terrain } from '../world/terrain.js';
+const BASE_CHUNK_COUNT = 20; // More chunks for players
+const TRAIL_INTERVAL  = 0.03;
+const TRAIL_LIFE      = 0.8;
 const TRAIL_GEO       = new THREE.SphereGeometry(1, 4, 4);
 
 interface TrailParticle {
@@ -31,7 +33,7 @@ interface Shard {
   trails: TrailParticle[];
 }
 
-export class BallDebris {
+export class PlayerDebris {
   dead = false;
   private shards: Shard[] = [];
   private scene: THREE.Scene;
@@ -40,12 +42,12 @@ export class BallDebris {
   constructor(
     scene: THREE.Scene, terrain: Terrain,
     px: number, py: number, pz: number,
-    color: THREE.Color, scale: number = 1.0
+    color: THREE.Color = new THREE.Color(0x4444ff) // Default player blue
   ) {
     this.scene   = scene;
     this.terrain = terrain;
 
-    const count = Math.floor(BASE_CHUNK_COUNT * scale);
+    const count = BASE_CHUNK_COUNT;
 
     for (let i = 0; i < count; i++) {
       const sw = 0.25 + Math.random() * 0.55;
@@ -70,9 +72,9 @@ export class BallDebris {
       const mat = new THREE.MeshLambertMaterial({ color: new THREE.Color(cr, cg, cb) });
       const mesh = new THREE.Mesh(geo, mat);
 
-      const ox = (Math.random() - 0.5) * 0.6 * scale;
-      const oy = (Math.random() - 0.5) * 0.6 * scale;
-      const oz = (Math.random() - 0.5) * 0.6 * scale;
+      const ox = (Math.random() - 0.5) * 0.8; // Larger spread for players
+      const oy = (Math.random() - 0.5) * 1.0; // Taller spread for players
+      const oz = (Math.random() - 0.5) * 0.8;
       mesh.position.set(px + ox, py + oy, pz + oz);
       mesh.castShadow = false;
       scene.add(mesh);
@@ -211,7 +213,6 @@ export class BallDebris {
         s.mesh.geometry.dispose();
         s.mat.dispose();
       }
-      // Clean up trail particles
       for (const p of s.trails) {
         this.scene.remove(p.mesh);
         p.mat.dispose();
