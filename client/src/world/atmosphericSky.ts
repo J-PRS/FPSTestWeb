@@ -146,8 +146,8 @@ const atmosphereFragmentShader = /* glsl */`
   void main() {
     vec3 direction = normalize(vWorldPosition);
     
-    // Horizon haze color — light, washed-out blue. Must match FOG_COLOR in config (0xbbd0e8)
-    vec3 hazeColor   = vec3(0.733, 0.816, 0.910);
+    // Horizon haze color — must be EXACT match to FOG_COLOR 0xbbd0e8 = rgb(187,208,232)
+    vec3 hazeColor   = vec3(0.7333, 0.8157, 0.9098);
     // Mid sky color
     vec3 skyColorMid = vec3(0.18, 0.38, 0.72);
     // Zenith sky color
