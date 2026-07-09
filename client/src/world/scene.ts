@@ -43,6 +43,7 @@ export interface SceneSetup {
 export function createScene(): SceneSetup {
   const scene = new THREE.Scene();
   scene.fog = new THREE.FogExp2(FOG_COLOR, FOG_DENSITY);
+  scene.background = new THREE.Color(FOG_COLOR);
 
   // Atmospheric Sky
   const atmosphericSky = new AtmosphericSky(scene, {

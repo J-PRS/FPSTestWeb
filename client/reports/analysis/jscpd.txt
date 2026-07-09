@@ -1,20 +1,4 @@
 Clone found (typescript):
- - [1m[32msrc\ui\HealthBarSystem.ts[39m[22m [111:5 - 122:5] (11 lines, 100 tokens)
-   [1m[32msrc\ui\HealthBarSystem.ts[39m[22m [74:9 - 85:3]
-
-Clone found (typescript):
- - [1m[32msrc\ui\HealthBarSystem.ts[39m[22m [148:7 - 159:5] (11 lines, 118 tokens)
-   [1m[32msrc\ui\HealthBarSystem.ts[39m[22m [73:7 - 84:7]
-
-Clone found (typescript):
- - [1m[32msrc\ui\HealthBarSystem.ts[39m[22m [261:5 - 291:6] (30 lines, 364 tokens)
-   [1m[32msrc\ui\HealthBarSystem.ts[39m[22m [190:9 - 220:86]
-
-Clone found (typescript):
- - [1m[32msrc\ui\HealthBarSystem.ts[39m[22m [294:2 - 320:2] (26 lines, 303 tokens)
-   [1m[32msrc\ui\HealthBarSystem.ts[39m[22m [225:9 - 252:26]
-
-Clone found (typescript):
  - [1m[32msrc\projectiles\Projectile.ts[39m[22m [145:2 - 152:3] (7 lines, 82 tokens)
    [1m[32msrc\projectiles\Projectile.ts[39m[22m [137:3 - 142:5]
 
@@ -169,9 +153,9 @@ Clone found (typescript):
 [90m┌────────────[39m[90m┬────────────────[39m[90m┬─────────────[39m[90m┬──────────────[39m[90m┬──────────────[39m[90m┬──────────────────[39m[90m┬───────────────────┐[39m
 [90m│[39m[31m Format     [39m[90m│[39m[31m Files analyzed [39m[90m│[39m[31m Total lines [39m[90m│[39m[31m Total tokens [39m[90m│[39m[31m Clones found [39m[90m│[39m[31m Duplicated lines [39m[90m│[39m[31m Duplicated tokens [39m[90m│[39m
 [90m├────────────[39m[90m┼────────────────[39m[90m┼─────────────[39m[90m┼──────────────[39m[90m┼──────────────[39m[90m┼──────────────────[39m[90m┼───────────────────┤[39m
-[90m│[39m typescript [90m│[39m 53             [90m│[39m 12480       [90m│[39m 125339       [90m│[39m 42           [90m│[39m 628 (5.03%)      [90m│[39m 7757 (6.19%)      [90m│[39m
+[90m│[39m typescript [90m│[39m 53             [90m│[39m 12421       [90m│[39m 124634       [90m│[39m 38           [90m│[39m 550 (4.43%)      [90m│[39m 6872 (5.51%)      [90m│[39m
 [90m├────────────[39m[90m┼────────────────[39m[90m┼─────────────[39m[90m┼──────────────[39m[90m┼──────────────[39m[90m┼──────────────────[39m[90m┼───────────────────┤[39m
-[90m│[39m [1mTotal:[22m     [90m│[39m 53             [90m│[39m 12480       [90m│[39m 125339       [90m│[39m 42           [90m│[39m 628 (5.03%)      [90m│[39m 7757 (6.19%)      [90m│[39m
+[90m│[39m [1mTotal:[22m     [90m│[39m 53             [90m│[39m 12421       [90m│[39m 124634       [90m│[39m 38           [90m│[39m 550 (4.43%)      [90m│[39m 6872 (5.51%)      [90m│[39m
 [90m└────────────[39m[90m┴────────────────[39m[90m┴─────────────[39m[90m┴──────────────[39m[90m┴──────────────[39m[90m┴──────────────────[39m[90m┴───────────────────┘[39m
-[90mFound 42 clones.[39m
-[3m[90mDetection time:[39m[23m: 1.196s
+[90mFound 38 clones.[39m
+[3m[90mDetection time:[39m[23m: 1.130s

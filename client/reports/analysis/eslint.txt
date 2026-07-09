@@ -55,8 +55,5 @@ C:\TEMP\_WEB\FPSWebTest\client\src\networking\WebSocketConnection.ts
 C:\TEMP\_WEB\FPSWebTest\client\src\projectiles\Projectile.ts
   302:3  warning  Refactor this function to reduce its Cognitive Complexity from 35 to the 15 allowed  sonarjs/cognitive-complexity
 
-C:\TEMP\_WEB\FPSWebTest\client\src\ui\HealthBarSystem.ts
-  167:3  warning  Refactor this function to reduce its Cognitive Complexity from 46 to the 15 allowed  sonarjs/cognitive-complexity
-
-✖ 27 problems (0 errors, 27 warnings)
+✖ 26 problems (0 errors, 26 warnings)
 
