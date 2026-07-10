@@ -2,34 +2,39 @@
 
 ## Current State
 - **Project:** Browser-based multiplayer FPS (Tribes-inspired)
-- **Architecture:** Client-server with WebSocket networking
-- **Client:** Three.js rendering, Tribes2-style networking with bit-packing
-- **Server:** Node.js with uWebSockets, Tribes2Networking integration
-- **Networking:** Tribes2 event system (PositionEvent, ShotEvent, JumpEvent, JetpackEvent, SkiEvent, DeathEvent), bit-packed streams
-- **Security:** Position validation (three-tier: accept/nudge/snap)
-- **Recent Changes:** Implemented grenade weapon (F key) with gravity-affected arc, auto-explode; improved disc trail with frisbee-style flat geometry and glow; added projectile system enhancements (maxLifetime, trailMeshType, glowScale)
+- **Architecture:** Client (Three.js) + Bun WebSocket server
+- **Client:** Three.js rendering, custom atmospheric sky, terrain with height fog, demo recording/playback, cool shots panel
+- **Server:** `server_bun/` — Bun runtime, WebSockets, FastAPI-style HTTP routes for demo upload/download
+- **Networking:** Binary bit-packed messages (position, shot, jump, jetpack, ski, death), JSON join handshake
+- **Security:** Server validates damage/positions with lightweight checks (distance, rate, sanity); client-driven feel prioritized
+- **Recent Changes:**
+  - Additive blending on explosion particles (grenades/rockets no longer look dark)
+  - Right-click download on cool shot demo tiles in ESC menu
+  - Horizon/sky blending overhaul: sky sphere follows camera, 64x32 segments, height fog in terrain shader, hard fog cutoff at 200 units, unified fog color `0xbbd0e8` across scene.fog / scene.background / sky shader / terrain shader
+  - `scene.background` set to fog color (Three.js requirement for seamless horizon)
 
 ## Technical Context
 - **Dependencies:**
-  - Client: Three.js 0.184.0, ws 8.21.0, Vite 8.0.16
-  - Server: uWebSockets.js v20.68.0, TypeScript 6.0.0
+  - Client: Three.js 0.184.0, Vite 8.x, TypeScript
+  - Server: Bun runtime, no npm deps except `@types/bun`
 - **Key Components:**
-  - Tribes2Adapter (client) - Tribes2 networking adapter
-  - StreamManager (client/server) - Coordinates MoveManager, EventManager, GhostManager
-  - EventManager (client/server) - Event queuing, packing, guaranteed delivery
-  - GhostManager (client/server) - State synchronization
-  - MoveManager (client/server) - Input/movement handling
-  - MessageHandler (server) - JSON message processing
-  - Tribes2Networking (server) - Per-connection Tribes2 networking
-  - PlayerManager (server) - Player state management
-  - PositionValidator (server) - Anti-cheat position validation
+  - `client/src/world/atmosphericSky.ts` — custom sky sphere shader, follows camera each frame
+  - `client/src/world/terrain.ts` — chunked terrain with custom GLSL shader (height fog, hard cutoff)
+  - `client/src/world/scene.ts` — scene setup, fog, lighting
+  - `client/src/core/config.ts` — all constants (FOG_COLOR, FOG_DENSITY, camera, sky, clouds)
+  - `client/src/demo/DemoManager.ts` — demo record/playback, upload/download, cool shots
+  - `client/src/ui/CoolShotsPanel.ts` — ESC menu cool shots tiles (click=play, right-click=download)
+  - `client/src/effects/explosion.ts` — particle explosions with additive blending
+  - `server_bun/src/server.ts` — Bun.serve entry point, HTTP + WebSocket
+  - `server_bun/src/GameServer.ts` — game logic, player management
+  - `server_bun/src/DemoStorage.ts` — server-side demo file storage
 - **Integration Points:**
-  - Client ↔ Server via WebSocket (port 8080)
-  - JSON join handshake → Tribes2 binary packets
-  - Tribes2 events converted to MessageHandler format
-- **Deprecated:**
-  - BinaryProtocol.ts (replaced by Tribes2 event system)
-  - server_old.ts (legacy reference)
+  - Client ↔ Server via WebSocket (port 8080 default)
+  - JSON join handshake, then binary bit-packed game messages
+  - Demo files: local memory OR server upload via HTTP POST /demos
+- **Deprecated/Archive:**
+  - `server/` — old Node.js server (deprecated)
+  - `_zzz/` — old client prototypes (Babylon, Heaps, PlayCanvas)
 
 ## Development Guidelines
 - **Coding Standards:** TypeScript with implicit any (strict mode not enabled)
@@ -44,175 +49,27 @@
   - Validate all client inputs
 
 ## Current Task
-- **Objective:** Grenade weapon implementation and disc trail improvements
-- **Status:** Complete
-- **Completed:**
-  - Implemented gravity-affected grenade weapon (F key) with speed 40, max lifetime 2s auto-explode
-  - Added larger AOE radius (10) and knockback force (45) for grenade
-  - Added maxLifetime, trailMeshType, and glowScale properties to ProjectileConfig
-  - Improved disc trail with glow, flat disc geometry oriented sideways (frisbee-style)
-  - Applied rocket-style mesh ramp-in to disc for unobstructive first-person view
-  - Scaled explosion visuals by projectile radius (grenade explosions appear larger)
-  - Added server-side grenadeAOEShot message handling and validation
-  - Added sendGrenadeAOEShot to NetworkManager
-  - Updated overlay controls to mention disc (C) and grenade (F) keys
-  - Files modified: client/src/config.ts, client/src/projectiles/grenadeConfig.ts, client/src/projectiles/discConfig.ts, client/src/projectiles/types.ts, client/src/projectiles/Projectile.ts, client/src/Player.ts, client/src/main.ts, client/src/explosion.ts, client/src/networking/NetworkManager.ts, client/index.html, server_bun/src/config.ts, server_bun/src/types.ts, server_bun/src/validation.ts, server_bun/src/MessageHandler.ts
-- **Completed in Phase 63:**
-  - Added comprehensive unit tests for BitStream per multiplayer specification
-  - Created BitStream.test.ts with full test coverage
-  - Tests for basic bit operations, integer/float/string operations, boolean operations
-  - Tests for buffer operations, position tracking, capacity management
-  - Tests for complex serialization (player position data)
-- **Completed in Phase 62:**
-  - Fixed TypeScript lint errors in WebSocketConnection.ts
-  - Added msgpack-lite type declaration file (msgpack-lite.d.ts)
-  - Changed NodeJS.Timeout to number for browser compatibility
-- **Completed in Phase 61:**
-  - Centralized Tribes2 networking constants to config files
-  - Added TRIBES2_MAX_PACKET_SIZE, TRIBES2_PACKETS_PER_SECOND, TRIBES2_MAX_BYTES_PER_SECOND, TRIBES2_RECONNECT_INTERVAL to client config.ts
-  - Added TRIBES2_MAX_PACKET_SIZE, TRIBES2_PACKETS_PER_SECOND, TRIBES2_MAX_BYTES_PER_SECOND to server config.ts
-  - Updated Tribes2Adapter to use centralized constants from config.ts
-  - Updated WebSocketConnection to use TRIBES2_RECONNECT_INTERVAL from config.ts
-  - Updated Tribes2Networking to use ServerConfig constants
-- **Completed in Phase 60:**
-  - Replaced console.log with structured logging in WebSocketConnection.ts
-  - Added ChildLogger import and logger instance
-  - Replaced all console.log calls with logger.info
-  - Replaced all console.error calls with logger.error
-  - Replaced all console.warn calls with logger.warn
-  - Added logger.debug for binary message routing
-- **Completed in Phase 59:**
-  - Fixed server crash on startup due to circular callback wiring in StreamManager
-  - Deferred EventManager.setAckCallback wiring using setTimeout to avoid circular dependency
-  - Server now starts successfully without initialization errors
-- **Completed in Phase 58:**
-  - Added joinHandshakeComplete flag to server StreamManager
-  - Server now waits for join handshake before sending binary Tribes2 packets
-  - Added markJoinHandshakeComplete method to StreamManager and Tribes2Networking
-  - Server calls markJoinHandshakeComplete after sending joinAck
-  - Added sendBinary method to server WebSocketConnection for raw binary data
-  - Client onBinaryMessage callback properly routes Tribes2 packets to StreamManager
-- **Completed in Phase 57:**
-  - Fixed WebSocketConnection to properly route Tribes2 binary packets
-  - Added onBinaryMessage callback to ConnectionConfig interface
-  - Binary messages now route to onBinaryMessage instead of msgpack decoder
-  - Tribes2Adapter.handleBinaryMessage routes packets to StreamManager.handlePacket
-- **Completed in Phase 56:**
-  - Fixed client sending binary data before JSON join handshake (joinHandshakeComplete flag)
-  - Fixed default room initialization issue (preserve default room when empty)
-  - Added msgpack-lite type declarations (server and client package.json)
-  - Fixed GhostManager buildUpdateList to use direct ghost access
-  - Updated ServerConfig to match multiplayer specification (tick rate 30, rate limits)
-  - Integrated ACK transmission into StreamManager (server and client)
-  - Increased hit validation threshold to implement shooter advantage (10m → 50m)
-  - Replaced console.log/console.error with logger in WebSocketConnection (client and server) and MessageHandler
-  - Verified hybrid Tribes2 architecture (JSON for state, binary for events/moves)
-  - Verified delta compression via handlePositionDelta
-  - Verified position validation with physics awareness (PositionValidator.ts)
-  - Verified projectile synchronization with timeout/fallback/cleanup (main.ts)
-  - Verified lag compensation buffer at 1000ms with extrapolation (ServerConfig)
-  - Verified connection quality metric usage for adaptive interpolation (RemotePlayer.ts)
-  - Verified state restoration on reconnect with velocity (Server.ts)
-  - Verified health synchronization in gameState messages (Server.ts)
-  - Verified memory leak cleanup on disconnect (PlayerManager)
-  - Verified unit tests for EventManager and MoveManager (test files exist)
+- **Objective:** Horizon/sky fog blending — seamless Tribes 2-style haze
+- **Status:** In progress — colors unified, hard cutoff at 200 units implemented, still refining visual match
+- **What's done so far:**
+  - Sky sphere follows camera each frame (no edge visible)
+  - Sphere segments increased to 64x32 (no polygon edges at horizon)
+  - Sky fragment shader: wide haze band at `h=0`, `hazeColor = vec3(0.7333, 0.8157, 0.9098)` = `0xbbd0e8`
+  - Terrain shader: height fog + hard cutoff at 200 units forcing 100% fogColor
+  - Terrain `fogColor = 0xbbd0e8`, `fogDensity = 0.030`
+  - `scene.fog = FogExp2(0xbbd0e8, 0.030)`, `scene.background = 0xbbd0e8`
+  - `renderer.setClearColor(0xbbd0e8)`
+  - `ambientColor` raised to `(0.38, 0.45, 0.55)` to reduce dark tint on distant terrain
+- **Remaining issue:** Subtle visible seam — terrain still slightly darker than sky at horizon
+- **Ideal next step:** Post-processing depth-based fog pass (one ShaderPass reads depth buffer, applies sky-gradient fog to whole frame — eliminates all color sync issues)
 
-## Completed Tasks (Phase 64)
-- **Code cleanliness**: Refactored MessageHandler for improved maintainability
-- **Phase 63**: Added comprehensive BitStream unit tests per specification
-- **Phase 62**: Fixed TypeScript lint errors in WebSocketConnection.ts
-- **Phase 61**: Centralized Tribes2 networking constants to config files
-- **Phase 60**: Replaced console.log with structured logging in WebSocketConnection.ts
-- **Phase 59**: Fixed server crash on startup due to circular callback wiring in StreamManager
-- **Phase 58**: Added onBinaryMessage callback to WebSocketConnection, Tribes2Adapter routes binary packets to StreamManager
-- **Phase 57**: Added onBinaryMessage callback to WebSocketConnection, Tribes2Adapter routes binary packets to StreamManager
-- **Phase 56**: Fixed join handshake, room initialization, type safety, GhostManager, ServerConfig, verified existing implementations
-- **Phase 55**: Client-side prediction with input replay, event types, GhostManager state mask
+## Recently Completed
+- **Explosion rendering:** Additive blending on particles so overlapping layers glow instead of darken
+- **Demo download:** Right-click on cool shot tiles in ESC menu downloads the `.demo` file (local or from server)
+- **Horizon blending:** Sky sphere camera follow, segment increase, height fog, hard cutoff, unified colors
+- **Fog research report:** `_reports/fog-sky-blending-research.md` documents root causes, Three.js forum findings, techniques used, and ideal future solution
 
-## Next Tasks (Deferred - Low Priority)
-- **Priority: Low** (deferred - can be done in future cleanup)
-  - Refactor monolithic main.ts (split into Game.ts, Renderer.ts, etc.)
-  - Implement proper logging system (Logger class)
-  - Centralize configuration constants
-  - Remove deprecated files (.deprecated, .old) - user's decision when to remove
-
-### Phase 2: High Priority UX Improvements
-5. **Refactor monolithic main.ts**
-   - Dependencies: None
-   - Complexity: High
-   - Location: `client/src/main.ts` (953 lines)
-   - Description: Split into Game.ts, Renderer.ts, NetworkGame.ts, ProjectileManager.ts, EntityManager.ts
-
-6. **Implement proper logging system**
-   - Dependencies: None
-   - Complexity: Medium
-   - Location: Throughout codebase
-   - Description: Replace console.log with structured Logger class (debug, info, warn, error)
-
-7. **Improve position validation with physics awareness**
-   - Dependencies: Task 1
-   - Complexity: High
-   - Location: `server/src/PositionValidator.ts:50-82`
-   - Description: Use physics equations (pos = pos0 + vel*t + 0.5*acc*t^2) accounting for gravity, jetpack, skiing
-
-8. **Fix projectile synchronization**
-   - Dependencies: None
-   - Complexity: Medium
-   - Location: `client/src/main.ts:338-349, 803-820`
-   - Description: Add timeout for pending rockets, fallback to client-side projectile, cleanup stale pending rockets
-
-### Phase 3: Medium Priority Robustness
-9. **Increase lag compensation buffer**
-   - Dependencies: None
-   - Complexity: Low
-   - Location: `server/src/PlayerManager.ts:96-100`
-   - Description: Increase buffer to 1000ms, implement extrapolation, adaptive tolerance based on ping
-
-10. **Add connection quality metric usage**
-    - Dependencies: None
-    - Complexity: Medium
-    - Location: `client/src/RemotePlayer.ts:130-142`
-    - Description: Use ping to adjust interpolation factor, position send rate, lag compensation window
-
-11. **Fix state restoration on reconnect**
-    - Dependencies: None
-    - Complexity: Low
-    - Location: `server/src/Server.ts:124-133`
-    - Description: Include velocity, lastProcessedSequence, input history in restoration message
-
-12. **Add health synchronization**
-    - Dependencies: None
-    - Complexity: Low
-    - Location: `server/src/MessageHandler.ts`
-    - Description: Add health updates to playerUpdate messages or separate health sync
-
-13. **Fix memory leaks**
-    - Dependencies: None
-    - Complexity: Medium
-    - Location: `server/src/PlayerManager.ts`, `server/src/PositionValidator.ts`
-    - Description: Clear position history, rewind buffer on disconnect
-
-### Phase 4: Low Priority Maintainability
-14. **Centralize configuration constants**
-    - Dependencies: None
-    - Complexity: Low
-    - Location: Throughout codebase
-    - Description: Create config.ts with NETWORK_CONFIG and PHYSICS_CONFIG
-
-15. **Add unit tests**
-    - Dependencies: None
-    - Complexity: High
-    - Location: New test files
-    - Description: Add tests for binary protocol, position validation, lag compensation, rate limiting
-
-16. **Add performance monitoring**
-    - Dependencies: None
-    - Complexity: Medium
-    - Location: New monitoring module
-    - Description: Add metrics for server CPU, memory, bandwidth, message queue sizes
-
-17. **Enable TypeScript strict mode**
-    - Dependencies: None
-    - Complexity: Medium
-    - Location: tsconfig.json
-    - Description: Enable strict mode and fix resulting type errors
+## Next Tasks
+- **Post-processing fog pass** (medium complexity) — depth buffer → reconstruct position → apply sky-gradient fog per pixel. Eliminates all color sync issues permanently. See `_reports/fog-sky-blending-research.md` for details.
+- **Refactor `main.ts`** (low priority) — currently large monolithic file; split into Game.ts, Renderer.ts, etc.
+- **Remove deprecated files** — `server/` old Node.js server, `.deprecated`/`.old` files in `server/src/` — user's call when to remove
