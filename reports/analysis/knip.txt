@@ -1,3 +1,0 @@
-Need to install the following packages:
-knip@6.25.0
-Ok to proceed? (y) 
