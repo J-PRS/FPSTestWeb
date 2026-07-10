@@ -304,10 +304,12 @@ const terrainFrag = /* glsl */`
       vec3 lit = ambientColor + sunColor * shadow + vec3(rim);
       col *= lit;
       float fogDist = length(vWorldPos - vCameraPos);
-      // Height fog: denser at ground, thinner up high (old-school technique)
       float heightFog = exp(-max(vWorldPos.y - vCameraPos.y, 0.0) * 0.003);
       float fogFactor = (1.0 - exp(-fogDensity * fogDist)) * heightFog;
-      col = mix(col, fogColor, clamp(fogFactor, 0.0, 1.0));
+      fogFactor = clamp(fogFactor, 0.0, 1.0);
+      // Hard cutoff: beyond 200 units force full fog color
+      if (fogDist > 200.0) fogFactor = 1.0;
+      col = mix(col, fogColor, fogFactor);
       gl_FragColor = vec4(col, 1.0);
       return;
     }
@@ -349,11 +351,14 @@ const terrainFrag = /* glsl */`
     vec3 lit = ambientColor + sunColor * shadow + vec3(rim);
     col *= lit;
 
-    // --- height fog (denser at ground, thinner up high) ---
+    // --- height fog with hard cutoff ---
     float dist = length(vWorldPos - vCameraPos);
     float heightFog = exp(-max(vWorldPos.y - vCameraPos.y, 0.0) * 0.003);
     float fogFactor = (1.0 - exp(-fogDensity * dist)) * heightFog;
-    col = mix(col, fogColor, clamp(fogFactor, 0.0, 1.0));
+    fogFactor = clamp(fogFactor, 0.0, 1.0);
+    // Hard cutoff: beyond 200 units force full fog color
+    if (dist > 200.0) fogFactor = 1.0;
+    col = mix(col, fogColor, fogFactor);
 
     gl_FragColor = vec4(col, 1.0);
   }
