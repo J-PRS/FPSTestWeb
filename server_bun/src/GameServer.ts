@@ -129,14 +129,10 @@ export class GameServer {
 
     const playerId = playerIdResult.data;
 
-    if (this.playerManager.getPlayerCount() >= CONFIG.maxPlayers) {
-      ws.close(1013, 'Server full');
-      return;
-    }
-
+    // Check for reconnect within grace period BEFORE max-players check.
+    // A reconnecting player already has a slot — they should bypass the full-server check.
     const existingPlayer = this.playerManager.getPlayer(playerId);
     if (existingPlayer) {
-      // Check if this is a reconnect within grace period
       const disconnected = this.disconnectedPlayers.get(playerId);
       if (disconnected) {
         // Cancel grace period removal, reconnect with existing state
@@ -153,6 +149,11 @@ export class GameServer {
 
       logger.warn('Duplicate playerId rejected', { playerId });
       ws.close(1008, 'Player ID already connected');
+      return;
+    }
+
+    if (this.playerManager.getPlayerCount() >= CONFIG.maxPlayers) {
+      ws.close(1013, 'Server full');
       return;
     }
 

@@ -96,7 +96,8 @@ const terrainFrag = /* glsl */`
   uniform float hscale;
   uniform int terrainPreset; // 0=mixed, 1=desert
   uniform vec3 fogColor;
-  uniform float fogDensity;
+  uniform float fogStart;
+  uniform float fogEnd;
 
   // --- hash + value noise with analytic derivatives ---
   float hash(vec2 p) {
@@ -305,11 +306,8 @@ const terrainFrag = /* glsl */`
       col *= lit;
       float fogDist = length(vWorldPos - vCameraPos);
       float heightFog = exp(-max(vWorldPos.y - vCameraPos.y, 0.0) * 0.003);
-      float fogFactor = (1.0 - exp(-fogDensity * fogDist)) * heightFog;
-      fogFactor = clamp(fogFactor, 0.0, 1.0);
-      // Hard cutoff: beyond 200 units force full fog color
-      if (fogDist > 200.0) fogFactor = 1.0;
-      col = mix(col, fogColor, fogFactor);
+      float fogFactor = smoothstep(fogStart, fogEnd, fogDist) * heightFog;
+      col = mix(col, fogColor, clamp(fogFactor, 0.0, 1.0));
       gl_FragColor = vec4(col, 1.0);
       return;
     }
@@ -350,16 +348,10 @@ const terrainFrag = /* glsl */`
     float rim = pow(1.0 - max(dot(vNormal, vec3(0,1,0)), 0.0), 2.5) * 0.15;
     vec3 lit = ambientColor + sunColor * shadow + vec3(rim);
     col *= lit;
-
-    // --- height fog with hard cutoff ---
     float dist = length(vWorldPos - vCameraPos);
     float heightFog = exp(-max(vWorldPos.y - vCameraPos.y, 0.0) * 0.003);
-    float fogFactor = (1.0 - exp(-fogDensity * dist)) * heightFog;
-    fogFactor = clamp(fogFactor, 0.0, 1.0);
-    // Hard cutoff: beyond 200 units force full fog color
-    if (dist > 200.0) fogFactor = 1.0;
-    col = mix(col, fogColor, fogFactor);
-
+    float fogFactor = smoothstep(fogStart, fogEnd, dist) * heightFog;
+    col = mix(col, fogColor, clamp(fogFactor, 0.0, 1.0));
     gl_FragColor = vec4(col, 1.0);
   }
 `;
@@ -384,7 +376,8 @@ export class Terrain {
         hscale:        { value: HSCALE },
         terrainPreset: { value: 1 }, // 0=mixed, 1=desert
         fogColor:      { value: new THREE.Color(0xbbd0e8) },
-        fogDensity:    { value: 0.030 },
+        fogStart:      { value: 80.0 },
+        fogEnd:        { value: 400.0 },
       },
     });
 

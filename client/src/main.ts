@@ -561,9 +561,10 @@ function loop(time: number): void {
   }
   
   // Sync fog uniforms to terrain shader
-  if (scene.fog instanceof THREE.FogExp2) {
-    (terrain as any).material.uniforms.fogColor.value = scene.fog.color;
-    (terrain as any).material.uniforms.fogDensity.value = scene.fog.density;
+  if (scene.fog instanceof THREE.Fog) {
+    (terrain as any).material.uniforms.fogColor.value.copy(scene.fog.color);
+    (terrain as any).material.uniforms.fogStart.value = scene.fog.near;
+    (terrain as any).material.uniforms.fogEnd.value = scene.fog.far;
   }
   // Update demo system (zero-overhead when idle)
   if (demoManager) demoManager.update(dt);

@@ -91,7 +91,7 @@ const server = Bun.serve<WebSocketData>({
 
     // Demo list: GET /demos
     if (url.pathname === '/demos' && req.method === 'GET') {
-      const list = demoStorage.listDemos();
+      const list = await demoStorage.listDemos();
       logger.info('Demo list requested', { count: list.length, top: list[0]?.projectileLifetime.toFixed(2) ?? 'none' });
       return corsResponse(JSON.stringify({ demos: list }), {
         headers: { 'Content-Type': 'application/json' },

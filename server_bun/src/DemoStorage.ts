@@ -38,7 +38,8 @@ export class DemoStorage {
         if (known.has(filename)) continue;
         try {
           const data = await readFile(join(this.demosDir, filename));
-          const header = this.parseDemoHeader(data.buffer);
+          const ab = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
+          const header = this.parseDemoHeader(ab);
           if (header.projectileLifetime < CONFIG.minDemoLifetime) continue;
           this.index.push({
             filename,
@@ -183,14 +184,14 @@ export class DemoStorage {
     return { filename, projectileLifetime: header.projectileLifetime, description: header.description };
   }
 
-  listDemos(): DemoMeta[] {
+  async listDemos(): Promise<DemoMeta[]> {
     // Filter out stale entries whose files were deleted
     const valid = this.index.filter(m => existsSync(join(this.demosDir, m.filename)));
     if (valid.length !== this.index.length) {
       const removed = this.index.length - valid.length;
       logger.info(`Cleaning ${removed} stale demo entries from index`);
       this.index = valid;
-      this.saveIndex();
+      await this.saveIndex();
     }
     // Only list demos that meet the minimum lifetime threshold for "cool shots"
     const cool = this.index.filter(m => m.projectileLifetime >= CONFIG.minDemoLifetime);
@@ -210,6 +211,7 @@ export class DemoStorage {
       return null;
     }
     const data = await readFile(filePath);
-    return data.buffer as ArrayBuffer;
+    // Buffer.buffer may be a larger pool — slice to exact file bytes
+    return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
   }
 }

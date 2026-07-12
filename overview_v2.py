@@ -667,9 +667,11 @@ def main():
 
     results = scan_dir(project_dir)
 
-    # Check _docs files for date prefix suggestions
+    # Check _docs and _reports files for date prefix suggestions
     docs_dir = Path('_docs')
-    date_suggestions = check_docs_date_prefixes(docs_dir)
+    reports_dir = Path('_reports')
+    date_suggestions_docs = check_docs_date_prefixes(docs_dir)
+    date_suggestions_reports = check_docs_date_prefixes(reports_dir)
 
     # Calculate maximum path length for dynamic column width
     max_path_len = max((len(f['path']) for f in results), default=4)
@@ -777,39 +779,43 @@ def main():
     end_time = time.time()
     print(f'Duration: {end_time - start_time:.2f}s')
 
-    # Print date prefix suggestions for _docs files
-    if date_suggestions:
-        print()
-        print('=' * 80)
-        print('Date Prefix Suggestions for _docs/')
-        print('=' * 80)
-        print()
-        print('Files starting with a letter should be prefixed with YYYY-MM-DD_')
-        print('Using oldest of creation/modification date')
-        print()
-        for suggestion in sorted(date_suggestions, key=lambda x: x['oldest_date']):
-            print(
-                f'  {suggestion["original"]} → {suggestion["suggested"]} (based on {suggestion["date"]})'
-            )
-
-        print()
-        response = input('Rename these files? (Y/N): ')
-        if response.upper() == 'Y':
-            renamed_count = 0
+    # Print date prefix suggestions for _docs and _reports files
+    for dir_path, date_suggestions, label in [
+        (docs_dir, date_suggestions_docs, '_docs/'),
+        (reports_dir, date_suggestions_reports, '_reports/'),
+    ]:
+        if date_suggestions:
+            print()
+            print('=' * 80)
+            print(f'Date Prefix Suggestions for {label}')
+            print('=' * 80)
+            print()
+            print('Files starting with a letter should be prefixed with YYYY-MM-DD_')
+            print('Using oldest of creation/modification date')
+            print()
             for suggestion in sorted(date_suggestions, key=lambda x: x['oldest_date']):
-                original_path = docs_dir / suggestion['original']
-                new_path = docs_dir / suggestion['suggested']
-                try:
-                    original_path.rename(new_path)
-                    print(
-                        f'  Renamed: {suggestion["original"]} → {suggestion["suggested"]}'
-                    )
-                    renamed_count += 1
-                except Exception as e:
-                    print(f'  Error renaming {suggestion["original"]}: {e}')
-            print(f'  Renamed {renamed_count} files')
-        else:
-            print('  Skipped renaming')
+                print(
+                    f'  {suggestion["original"]} → {suggestion["suggested"]} (based on {suggestion["date"]})'
+                )
+
+            print()
+            response = input(f'Rename these files in {label}? (Y/N): ')
+            if response.upper() == 'Y':
+                renamed_count = 0
+                for suggestion in sorted(date_suggestions, key=lambda x: x['oldest_date']):
+                    original_path = dir_path / suggestion['original']
+                    new_path = dir_path / suggestion['suggested']
+                    try:
+                        original_path.rename(new_path)
+                        print(
+                            f'  Renamed: {suggestion["original"]} → {suggestion["suggested"]}'
+                        )
+                        renamed_count += 1
+                    except Exception as e:
+                        print(f'  Error renaming {suggestion["original"]}: {e}')
+                print(f'  Renamed {renamed_count} files')
+            else:
+                print('  Skipped renaming')
 
 
 if __name__ == '__main__':

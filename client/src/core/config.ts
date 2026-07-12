@@ -80,7 +80,8 @@ export const CAMERA_FAR = 6000; // Far clipping plane
 
 // Fog constants
 export const FOG_COLOR = 0xbbd0e8; // Fog and clear color (matches sky haze horizon)
-export const FOG_DENSITY = 0.030; // Exponential fog density
+export const FOG_START = 80.0; // Linear fog start distance
+export const FOG_END = 400.0; // Linear fog end distance
 
 // Atmospheric sky constants
 export const SKY_TURBIDITY = 10.0;
