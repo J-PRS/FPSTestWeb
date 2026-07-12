@@ -36,14 +36,16 @@ export const CONFIG = {
   minDemoLifetime: 0.2,
 
   rateLimits: {
-    position: { maxCount: 25, windowMs: 1000 },
+    position: { maxCount: 30, windowMs: 1000 },
     shot: { maxCount: 10, windowMs: 1000 },
     aoeShot: { maxCount: 10, windowMs: 1000 },
     discAOEShot: { maxCount: 10, windowMs: 1000 },
+    grenadeAOEShot: { maxCount: 10, windowMs: 1000 },
     jump: { maxCount: 10, windowMs: 1000 },
     jetpack: { maxCount: 60, windowMs: 1000 },
     inputMove: { maxCount: 120, windowMs: 1000 },
     input: { maxCount: 120, windowMs: 1000 },
+    projectileDestroy: { maxCount: 30, windowMs: 1000 },
     default: { maxCount: 120, windowMs: 1000 },
   } as const,
 

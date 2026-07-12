@@ -2,7 +2,8 @@ import * as THREE from 'three';
 
 import {
   FOG_COLOR,
-  FOG_DENSITY,
+  FOG_START,
+  FOG_END,
   SKY_TURBIDITY,
   SKY_RAYLEIGH,
   SKY_MIE_COEFFICIENT,
@@ -42,7 +43,7 @@ export interface SceneSetup {
 
 export function createScene(): SceneSetup {
   const scene = new THREE.Scene();
-  scene.fog = new THREE.FogExp2(FOG_COLOR, FOG_DENSITY);
+  scene.fog = new THREE.Fog(FOG_COLOR, FOG_START, FOG_END);
   scene.background = new THREE.Color(FOG_COLOR);
 
   // Atmospheric Sky

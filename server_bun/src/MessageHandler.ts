@@ -215,6 +215,16 @@ export class MessageHandler {
     const player = this.playerManager.getPlayer(playerId);
     if (!player || player.isDead) return;
 
+    // Cheat prevention: AOE position must be within 200m of shooter
+    const dx = player.position.x - position.x;
+    const dy = player.position.y - position.y;
+    const dz = player.position.z - position.z;
+    const distSq = dx * dx + dy * dy + dz * dz;
+    if (distSq > 40000) { // 200m squared
+      logger.warn(`AOE rejected: ${playerId} too far from explosion (${Math.sqrt(distSq).toFixed(0)}m)`);
+      return;
+    }
+
     const pull = mode === 'disc';
     const radius = pull ? CONFIG.discAoeRadius : (mode === 'grenade' ? CONFIG.grenadeAoeRadius : CONFIG.aoeRadius);
     const baseDamage = pull ? CONFIG.discAoeDamage : (mode === 'grenade' ? CONFIG.grenadeAoeDamage : CONFIG.aoeDamage);
@@ -287,6 +297,8 @@ export class MessageHandler {
   }
 
   private handleJump(playerId: string, msg: Extract<ClientMessage, { type: 'jump' }>): void {
+    const player = this.playerManager.getPlayer(playerId);
+    if (!player || player.isDead) return;
     this.broadcast({
       type: 'jump',
       playerId,
@@ -295,6 +307,8 @@ export class MessageHandler {
   }
 
   private handleJetpack(playerId: string, msg: Extract<ClientMessage, { type: 'jetpack' }>): void {
+    const player = this.playerManager.getPlayer(playerId);
+    if (!player || player.isDead) return;
     this.broadcast({
       type: 'jetpack',
       playerId,
