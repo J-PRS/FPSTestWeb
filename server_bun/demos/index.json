@@ -329,6 +329,13 @@
     "fileSize": 44567
   },
   {
+    "filename": "clip_2026-07-13T17-15-32_1.6s.demo",
+    "projectileLifetime": 1.583299994468689,
+    "timestamp": 1783962932959,
+    "description": "Combo x2 (best 1.58s air, 12.3s clip)",
+    "fileSize": 48877
+  },
+  {
     "filename": "clip_2026-07-07T17-02-59_1.6s.demo",
     "projectileLifetime": 1.58,
     "timestamp": 1783443779427,
@@ -691,12 +698,5 @@
     "timestamp": 1783620069960,
     "description": "Combo x10 (best 1.15s air, 33.6s clip)",
     "fileSize": 159458
-  },
-  {
-    "filename": "clip_2026-07-09T20-35-46_1.1s.demo",
-    "projectileLifetime": 1.149999976158142,
-    "timestamp": 1783629346174,
-    "description": "Cool shot (1.15s air, 11.1s clip)",
-    "fileSize": 51826
   }
 ]

@@ -305,8 +305,7 @@ const terrainFrag = /* glsl */`
       vec3 lit = ambientColor + sunColor * shadow + vec3(rim);
       col *= lit;
       float fogDist = length(vWorldPos - vCameraPos);
-      float heightFog = exp(-max(vWorldPos.y - vCameraPos.y, 0.0) * 0.003);
-      float fogFactor = smoothstep(fogStart, fogEnd, fogDist) * heightFog;
+      float fogFactor = smoothstep(fogStart, fogEnd, fogDist);
       col = mix(col, fogColor, clamp(fogFactor, 0.0, 1.0));
       gl_FragColor = vec4(col, 1.0);
       return;
@@ -349,8 +348,7 @@ const terrainFrag = /* glsl */`
     vec3 lit = ambientColor + sunColor * shadow + vec3(rim);
     col *= lit;
     float dist = length(vWorldPos - vCameraPos);
-    float heightFog = exp(-max(vWorldPos.y - vCameraPos.y, 0.0) * 0.003);
-    float fogFactor = smoothstep(fogStart, fogEnd, dist) * heightFog;
+    float fogFactor = smoothstep(fogStart, fogEnd, dist);
     col = mix(col, fogColor, clamp(fogFactor, 0.0, 1.0));
     gl_FragColor = vec4(col, 1.0);
   }

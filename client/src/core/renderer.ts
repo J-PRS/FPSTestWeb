@@ -4,7 +4,6 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
-import { FXAAPass } from 'three/examples/jsm/postprocessing/FXAAPass.js';
 import {
   PIXEL_SCALE,
   TONE_MAPPING_EXPOSURE,
@@ -15,7 +14,6 @@ export interface RendererSetup {
   composer: EffectComposer;
   bloomPass: UnrealBloomPass;
   contrastPass: ShaderPass;
-  fxaaPass: FXAAPass;
   isPostProcessingEnabled: () => boolean;
   updateRendererSize: () => void;
   setPixelated: (pixelated: boolean) => void;
@@ -72,7 +70,13 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
   const postproToggleBtn = document.getElementById('bloom-toggle')! as HTMLButtonElement;
   postproToggleBtn.textContent = postproEnabled ? 'POST-PROCESSING: ON' : 'POST-PROCESSING: OFF';
 
-  const composer = new EffectComposer(renderer);
+  const size = pixelated
+    ? new THREE.Vector2(Math.floor(window.innerWidth / PIXEL_SCALE), Math.floor(window.innerHeight / PIXEL_SCALE))
+    : new THREE.Vector2(window.innerWidth, window.innerHeight);
+  const renderTarget = new THREE.WebGLRenderTarget(size.x, size.y, {
+    samples: 4,
+  });
+  const composer = new EffectComposer(renderer, renderTarget);
   composer.addPass(new RenderPass(scene, camera));
   const bloomPass = new UnrealBloomPass(
     new THREE.Vector2(
@@ -114,10 +118,6 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
 
   composer.addPass(new OutputPass());
 
-  const fxaaPass = new FXAAPass();
-  fxaaPass.enabled = !pixelated;
-  composer.addPass(fxaaPass);
-
   bloomPass.enabled = postproEnabled;
   contrastPass.enabled = postproEnabled;
 
@@ -133,7 +133,6 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
       : window.innerHeight;
     composer.setPixelRatio(renderer.getPixelRatio());
     composer.setSize(w, h);
-    fxaaPass.enabled = !pixelated;
     pixelToggleBtn.textContent = pixelated ? 'PIXELATED: ON' : 'PIXELATED: OFF';
   }
 
@@ -185,7 +184,6 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
     composer,
     bloomPass,
     contrastPass,
-    fxaaPass,
     isPostProcessingEnabled: () => postproEnabled,
     updateRendererSize,
     setPixelated,
