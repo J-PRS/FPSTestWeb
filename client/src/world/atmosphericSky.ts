@@ -155,12 +155,13 @@ const atmosphereFragmentShader = /* glsl */`
 
     float h = direction.y; // -1..+1
 
-    // Wide soft haze band — stay very close to hazeColor near horizon
+    // Sky gradient above horizon — starts from hazeColor, blends to mid then zenith
     vec3 aboveColor = mix(hazeColor, skyColorMid, pow(clamp(h, 0.0, 1.0), 0.20));
     aboveColor      = mix(aboveColor, skyColorTop, pow(clamp(h, 0.0, 1.0), 0.9));
 
-    // Below horizon: pure hazeColor (matches fog color exactly)
-    vec3 color = mix(hazeColor, aboveColor, smoothstep(-0.12, 0.18, h));
+    // Wide haze-to-sky transition — fog color bleeds far up into the sky
+    // mimicking distance fog on the sky dome (like Unity GlobalFog)
+    vec3 color = mix(hazeColor, aboveColor, smoothstep(-0.15, 0.45, h));
 
     gl_FragColor = vec4(color, 1.0);
   }
