@@ -52,6 +52,7 @@ export class Player {
   private jumpAnimTimer = 0.0;
   private wasOnGround = false;
   private shadowBlob: THREE.Mesh | null = null;
+  private groundGizmo: THREE.Mesh | null = null;
 
   // Input state
   private keys: Record<string, boolean> = {};
@@ -126,6 +127,13 @@ export class Player {
     this.shadowBlob.rotation.x = -Math.PI / 2; // Lay flat on ground
     this.shadowBlob.renderOrder = 999; // Render after terrain
     scene.add(this.shadowBlob);
+
+    // Ground check gizmo — small green wireframe sphere at feet position
+    const gizmoGeo = new THREE.SphereGeometry(0.12, 8, 6);
+    const gizmoMat = new THREE.MeshBasicMaterial({ color: 0x00ff00, wireframe: true, depthTest: false, depthWrite: false });
+    this.groundGizmo = new THREE.Mesh(gizmoGeo, gizmoMat);
+    this.groundGizmo.renderOrder = 1000;
+    scene.add(this.groundGizmo);
 
     this.bindInput();
   }
@@ -221,14 +229,18 @@ export class Player {
   update(dt: number): void {
     if (this.isDead) return;
 
-    // Always update camera to current pos/yaw/pitch (needed for demo playback)
-    this.camera.position.copy(this.pos);
-    const tx = this.pos.x + Math.cos(this.pitch) * Math.sin(this.yaw);
-    const ty = this.pos.y + Math.sin(this.pitch);
-    const tz = this.pos.z + Math.cos(this.pitch) * Math.cos(this.yaw);
-    this.camera.lookAt(tx, ty, tz);
-
-    if (this.inputFrozen) return;
+    if (this.inputFrozen) {
+      // Still update camera for demo playback
+      this.camera.position.copy(this.pos);
+      const tx = this.pos.x + Math.cos(this.pitch) * Math.sin(this.yaw);
+      const ty = this.pos.y + Math.sin(this.pitch);
+      const tz = this.pos.z + Math.cos(this.pitch) * Math.cos(this.yaw);
+      this.camera.lookAt(tx, ty, tz);
+      if (this.groundGizmo) {
+        this.groundGizmo.position.set(this.pos.x, this.pos.y - 1.8, this.pos.z);
+      }
+      return;
+    }
 
     this.fireTimer = Math.max(0, this.fireTimer - dt);
     this.discTimer = Math.max(0, this.discTimer - dt);
@@ -269,7 +281,52 @@ export class Player {
     });
     this.movement.setInput({ forward, right, jumpPressed, jumpHeld, skiHeld });
 
-    // Fire (before physics update so projectile spawns from correct camera position)
+    // Run physics
+    this.movement.update(dt);
+
+    // Send input to network for client-side prediction
+    if (this.onNetworkInput) {
+      this.onNetworkInput(
+        { forward, right, jump: jumpPressed ? 1 : 0, ski: skiHeld ? 1 : 0 },
+        { yaw: this.yaw, pitch: this.pitch }
+      );
+    }
+
+    // Sync state from movement controller (local prediction)
+    const moveState = this.movement.getState();
+    this.pos.copy(moveState.pos);
+    this.vel.copy(moveState.vel);
+    this.onGround = moveState.onGround;
+
+    // Jetpack (separate from movement controller, applied after physics sync)
+    const isJetting = this.jetPending && this.energy > 0;
+    if (isJetting) {
+      this.vel.y += JET_FORCE_UP * dt;
+      this.vel.x += mx * JET_FORCE_DIR * dt;
+      this.vel.z += mz * JET_FORCE_DIR * dt;
+      this.energy -= JET_DRAIN * dt;
+      // Force off ground if jetting
+      this.onGround = false;
+    }
+
+    // Energy recharge
+    this.energy = Math.min(MAX_ENERGY, this.energy + JET_CHARGE * dt);
+
+    // ---- All visual/event spawns below use the final post-physics position ----
+
+    // Update camera to final position
+    this.camera.position.copy(this.pos);
+    const tx = this.pos.x + Math.cos(this.pitch) * Math.sin(this.yaw);
+    const ty = this.pos.y + Math.sin(this.pitch);
+    const tz = this.pos.z + Math.cos(this.pitch) * Math.cos(this.yaw);
+    this.camera.lookAt(tx, ty, tz);
+
+    // Update ground check gizmo (at player feet = pos - PLAYER_HEIGHT)
+    if (this.groundGizmo) {
+      this.groundGizmo.position.set(this.pos.x, this.pos.y - 1.8, this.pos.z);
+    }
+
+    // Fire projectiles (from final position, matches camera)
     if ((this.firePending || this.mouseHeld) && this.fireTimer <= 0) {
       this.firePending = false;
       this.fireTimer = FIRE_RATE;
@@ -284,7 +341,7 @@ export class Player {
     }
     this.firePending = false;
 
-    // Disc (C key) - hold to fire (before physics update)
+    // Disc (C key) - hold to fire
     if (this.discHeld && this.discTimer <= 0) {
       this.discTimer = DISC_RATE;
       if (this.onDisc) {
@@ -297,7 +354,7 @@ export class Player {
       }
     }
 
-    // Grenade (F key) - hold to fire (before physics update)
+    // Grenade (F key) - hold to fire
     if (this.grenadeHeld && this.grenadeTimer <= 0) {
       this.grenadeTimer = GRENADE_RATE;
       if (this.onGrenade) {
@@ -310,22 +367,16 @@ export class Player {
       }
     }
 
-    this.movement.update(dt);
-
-    // Send input to network for client-side prediction
-    if (this.onNetworkInput) {
-      this.onNetworkInput(
-        { forward, right, jump: jumpPressed ? 1 : 0, ski: skiHeld ? 1 : 0 },
-        { yaw: this.yaw, pitch: this.pitch }
-      );
+    // Jetpack trail particles
+    if (isJetting && this.onJetpack) {
+      this.onJetpack(this.pos.clone());
+      // Send jetpack event to network (throttled to ~20/s)
+      const now = performance.now();
+      if (this.onNetworkJetpack && now - this._lastJetpackSend > 50) {
+        this._lastJetpackSend = now;
+        this.onNetworkJetpack({ x: this.pos.x, y: this.pos.y, z: this.pos.z });
+      }
     }
-
-    // INSTANT MOVEMENT: Client-side prediction updates position immediately
-    // Sync state from movement controller (local prediction)
-    const moveState = this.movement.getState();
-    this.pos.copy(moveState.pos);
-    this.vel.copy(moveState.vel);
-    this.onGround = moveState.onGround;
 
     // Ski dust particles (when space is held, on ground, and moving)
     if (skiHeld && this.onGround && this.vel.lengthSq() > 10) {
@@ -347,28 +398,6 @@ export class Player {
       }
     }
     this.wasOnGround = this.onGround;
-
-    // Jetpack (separate from movement controller)
-    // Allow jetting even if just jumped (don't require !onGround)
-    const isJetting = this.jetPending && this.energy > 0;
-    if (isJetting) {
-      this.vel.y += JET_FORCE_UP * dt;
-      this.vel.x += mx * JET_FORCE_DIR * dt;
-      this.vel.z += mz * JET_FORCE_DIR * dt;
-      this.energy -= JET_DRAIN * dt;
-      if (this.onJetpack) this.onJetpack(this.pos.clone());
-      // Send jetpack event to network (throttled to ~20/s)
-      const now = performance.now();
-      if (this.onNetworkJetpack && now - this._lastJetpackSend > 50) {
-        this._lastJetpackSend = now;
-        this.onNetworkJetpack({ x: this.pos.x, y: this.pos.y, z: this.pos.z });
-      }
-      // Force off ground if jetting
-      this.onGround = false;
-    }
-
-    // Energy recharge
-    this.energy = Math.min(MAX_ENERGY, this.energy + JET_CHARGE * dt);
 
     // Update shadow blob position (follows player on ground)
     if (this.shadowBlob) {

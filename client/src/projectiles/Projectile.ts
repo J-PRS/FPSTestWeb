@@ -80,6 +80,7 @@ export class Projectile {
   dead = false;
   exploded = false;
   age = 0.0;
+  spawnedThisFrame = true; // skip first update so projectile renders at spawn pos before moving
   isRemote = false; // true for server-authoritative/demo projectiles
   hitBall: Ball | null = null;
   hitPlayerId: string | null = null;
@@ -301,6 +302,13 @@ export class Projectile {
 
   update(dt: number, terrain: Terrain, balls?: Ball[], remotePlayers?: Map<string, THREE.Vector3>): void {
     if (this.dead) return;
+
+    // First frame: just render at spawn position, don't apply physics yet
+    if (this.spawnedThisFrame) {
+      this.spawnedThisFrame = false;
+      this.updateMesh();
+      return;
+    }
 
     if (!this.exploded) {
       this.prevPos.copy(this.pos);
