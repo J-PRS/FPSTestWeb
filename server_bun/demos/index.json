@@ -28,6 +28,13 @@
     "fileSize": 63132
   },
   {
+    "filename": "clip_2026-07-14T20-03-41_3.4s.demo",
+    "projectileLifetime": 3.3833000659942627,
+    "timestamp": 1784059421432,
+    "description": "Cool shot (3.38s air, 13.4s clip)",
+    "fileSize": 61351
+  },
+  {
     "filename": "clip_2026-07-09T20-21-45_3.2s.demo",
     "projectileLifetime": 3.200000047683716,
     "timestamp": 1783628505981,
@@ -77,11 +84,32 @@
     "fileSize": 41521
   },
   {
+    "filename": "clip_2026-07-14T20-04-00_2.4s.demo",
+    "projectileLifetime": 2.433300018310547,
+    "timestamp": 1784059440016,
+    "description": "Cool shot (2.43s air, 12.4s clip)",
+    "fileSize": 56319
+  },
+  {
+    "filename": "clip_2026-07-14T20-02-56_2.4s.demo",
+    "projectileLifetime": 2.433199882507324,
+    "timestamp": 1784059376816,
+    "description": "Cool shot (2.43s air, 12.4s clip)",
+    "fileSize": 57648
+  },
+  {
     "filename": "clip_2026-07-07T19-51-07_2.4s.demo",
     "projectileLifetime": 2.42,
     "timestamp": 1783453867837,
     "description": "Cool shot (2.42s air, 12.4s clip)",
     "fileSize": 39776
+  },
+  {
+    "filename": "clip_2026-07-14T19-49-08_2.4s.demo",
+    "projectileLifetime": 2.399899959564209,
+    "timestamp": 1784058548193,
+    "description": "Cool shot (2.40s air, 12.4s clip)",
+    "fileSize": 50418
   },
   {
     "filename": "clip_2026-07-09T20-23-14_2.3s.demo",
@@ -194,6 +222,13 @@
     "timestamp": 1783625638456,
     "description": "Cool shot (2.02s air, 12.0s clip)",
     "fileSize": 57879
+  },
+  {
+    "filename": "clip_2026-07-14T20-02-43_2.0s.demo",
+    "projectileLifetime": 2.0165998935699463,
+    "timestamp": 1784059363179,
+    "description": "Cool shot (2.02s air, 12.0s clip)",
+    "fileSize": 51735
   },
   {
     "filename": "clip_2026-07-09T20-23-47_2.0s.demo",
@@ -322,6 +357,13 @@
     "fileSize": 69106
   },
   {
+    "filename": "clip_2026-07-14T20-32-52_1.6s.demo",
+    "projectileLifetime": 1.6332999467849731,
+    "timestamp": 1784061172992,
+    "description": "Cool shot (1.63s air, 11.6s clip)",
+    "fileSize": 52640
+  },
+  {
     "filename": "clip_2026-07-12T03-18-08_1.6s.demo",
     "projectileLifetime": 1.6332000494003296,
     "timestamp": 1783826288089,
@@ -376,6 +418,13 @@
     "timestamp": 1783452934016,
     "description": "Cool shot (1.55s air, 11.6s clip)",
     "fileSize": 33969
+  },
+  {
+    "filename": "clip_2026-07-14T19-49-32_1.5s.demo",
+    "projectileLifetime": 1.5499999523162842,
+    "timestamp": 1784058572241,
+    "description": "Cool shot (1.55s air, 11.5s clip)",
+    "fileSize": 52023
   },
   {
     "filename": "clip_2026-07-07T19-57-39_1.5s.demo",
@@ -546,6 +595,13 @@
     "fileSize": 62746
   },
   {
+    "filename": "clip_2026-07-14T19-54-18_1.3s.demo",
+    "projectileLifetime": 1.333299994468689,
+    "timestamp": 1784058858374,
+    "description": "Cool shot (1.33s air, 11.3s clip)",
+    "fileSize": 52648
+  },
+  {
     "filename": "clip_2026-07-12T03-17-06_1.3s.demo",
     "projectileLifetime": 1.31659996509552,
     "timestamp": 1783826226239,
@@ -586,6 +642,13 @@
     "timestamp": 1783454249701,
     "description": "Cool shot (1.27s air, 11.3s clip)",
     "fileSize": 36099
+  },
+  {
+    "filename": "clip_2026-07-13T19-52-03_1.3s.demo",
+    "projectileLifetime": 1.2666000127792358,
+    "timestamp": 1783972323987,
+    "description": "Cool shot (1.27s air, 11.3s clip)",
+    "fileSize": 53319
   },
   {
     "filename": "clip_2026-07-09T20-23-01_1.3s.demo",
@@ -635,68 +698,5 @@
     "timestamp": 1783620566382,
     "description": "Combo x2 (best 1.22s air, 15.2s clip)",
     "fileSize": 75641
-  },
-  {
-    "filename": "clip_2026-07-12T05-29-02_1.2s.demo",
-    "projectileLifetime": 1.2167999744415283,
-    "timestamp": 1783834142404,
-    "description": "Combo x2 (best 1.22s air, 12.7s clip)",
-    "fileSize": 57523
-  },
-  {
-    "filename": "clip_2026-07-08T15-39-26_1.2s.demo",
-    "projectileLifetime": 1.2000999450683594,
-    "timestamp": 1783525166606,
-    "description": "Combo x3 (best 1.20s air, 15.5s clip)",
-    "fileSize": 69901
-  },
-  {
-    "filename": "clip_2026-07-07T19-53-17_1.2s.demo",
-    "projectileLifetime": 1.2,
-    "timestamp": 1783453997087,
-    "description": "Cool shot (1.20s air, 11.2s clip)",
-    "fileSize": 38509
-  },
-  {
-    "filename": "clip_2026-07-10T15-09-49_1.2s.demo",
-    "projectileLifetime": 1.1833000183105469,
-    "timestamp": 1783696189719,
-    "description": "Combo x3 (best 1.18s air, 15.9s clip)",
-    "fileSize": 52715
-  },
-  {
-    "filename": "clip_2026-07-07T19-47-31_1.2s.demo",
-    "projectileLifetime": 1.18,
-    "timestamp": 1783453651507,
-    "description": "Cool shot (1.18s air, 11.2s clip)",
-    "fileSize": 44073
-  },
-  {
-    "filename": "clip_2026-07-07T20-36-26_1.2s.demo",
-    "projectileLifetime": 1.18,
-    "timestamp": 1783456586810,
-    "description": "Combo x3 (best 1.18s air, 15.3s clip)",
-    "fileSize": 40359
-  },
-  {
-    "filename": "clip_2026-07-07T20-03-14_1.2s.demo",
-    "projectileLifetime": 1.17,
-    "timestamp": 1783454594531,
-    "description": "Cool shot (1.17s air, 11.2s clip)",
-    "fileSize": 36203
-  },
-  {
-    "filename": "clip_2026-07-09T21-28-02_1.2s.demo",
-    "projectileLifetime": 1.1500999927520752,
-    "timestamp": 1783632482598,
-    "description": "Combo x2 (best 1.15s air, 13.8s clip)",
-    "fileSize": 51955
-  },
-  {
-    "filename": "clip_2026-07-09T18-01-09_1.1s.demo",
-    "projectileLifetime": 1.149999976158142,
-    "timestamp": 1783620069960,
-    "description": "Combo x10 (best 1.15s air, 33.6s clip)",
-    "fileSize": 159458
   }
 ]

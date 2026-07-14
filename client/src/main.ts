@@ -833,6 +833,7 @@ async function init(): Promise<void> {
           const velocity = new THREE.Vector3(ev.velX, ev.velY, ev.velZ);
           const r = new Projectile(scene, origin, new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 0, 0), getProjectileConfig(ev.weaponType) ?? ROCKET_CONFIG);
           r.isRemote = true;
+          r.spawnedThisFrame = false;
           r.vel.copy(velocity);
           playbackProjectiles.push(r);
           playbackProjectileById.set(ev.projectileId, r);
@@ -926,6 +927,7 @@ async function init(): Promise<void> {
         const velocity = new THREE.Vector3(ev.velX, ev.velY, ev.velZ);
         const r = new Projectile(scene, origin, new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 0, 0), getProjectileConfig(ev.weaponType) ?? ROCKET_CONFIG);
         r.isRemote = true;
+        r.spawnedThisFrame = false;
         r.vel.copy(velocity);
         playbackProjectiles.push(r);
         playbackProjectileById.set(ev.projectileId, r);
@@ -1249,6 +1251,7 @@ async function init(): Promise<void> {
     const remoteProjectile = new Projectile(scene, origin, dir, new THREE.Vector3(0, 0, 0), ROCKET_CONFIG);
     remoteProjectile.vel.copy(vel); // override with exact server velocity
     remoteProjectile.isRemote = true;
+    remoteProjectile.spawnedThisFrame = false; // remote projectiles don't need first-frame skip
     projectiles.push(remoteProjectile);
     remoteProjectiles.set(projectileId, remoteProjectile);
   };
