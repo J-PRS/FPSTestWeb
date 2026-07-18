@@ -25,7 +25,7 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
   let pixelated = localStorage.getItem('fps-pixelated') === 'false' ? false : true;
   let postproEnabled = localStorage.getItem('fps-postpro') === 'false' ? false : true;
 
-  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  const renderer = new THREE.WebGLRenderer({ antialias: false });
 
   function getPixelRatio(): number {
     return pixelated ? 1 : Math.min(window.devicePixelRatio, 2);
@@ -39,11 +39,14 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
       ? Math.floor(window.innerHeight / PIXEL_SCALE)
       : window.innerHeight;
 
+    renderer.setPixelRatio(getPixelRatio());
     renderer.setSize(width, height);
     renderer.domElement.style.imageRendering = pixelated ? 'pixelated' : 'auto';
-    renderer.setPixelRatio(getPixelRatio());
+    renderer.domElement.style.width = '100%';
+    renderer.domElement.style.height = '100%';
   }
 
+  renderer.setPixelRatio(getPixelRatio());
   if (pixelated) {
     renderer.setSize(
       Math.floor(window.innerWidth / PIXEL_SCALE),
@@ -54,7 +57,6 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.domElement.style.imageRendering = 'auto';
   }
-  renderer.setPixelRatio(getPixelRatio());
   renderer.domElement.style.width = '100%';
   renderer.domElement.style.height = '100%';
   renderer.shadowMap.enabled = true;
@@ -74,7 +76,7 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
     ? new THREE.Vector2(Math.floor(window.innerWidth / PIXEL_SCALE), Math.floor(window.innerHeight / PIXEL_SCALE))
     : new THREE.Vector2(window.innerWidth, window.innerHeight);
   const renderTarget = new THREE.WebGLRenderTarget(size.x, size.y, {
-    samples: 4,
+    samples: 0,
   });
   const composer = new EffectComposer(renderer, renderTarget);
   composer.addPass(new RenderPass(scene, camera));
