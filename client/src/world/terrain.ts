@@ -1,14 +1,14 @@
 import * as THREE from 'three';
 
 import {
-  TERRAIN_SIZE, TERRAIN_SUBDIV, TERRAIN_HEIGHT_SCALE, TERRAIN_WORLD_SCALE, TERRAIN_HEIGHTMAP_DIVISOR
+  TERRAIN_HEIGHT_SCALE, TERRAIN_WORLD_SCALE, TERRAIN_HEIGHTMAP_DIVISOR
 } from '../core/config.js';
 
-const SIZE = TERRAIN_SIZE;
-const SUBDIV = TERRAIN_SUBDIV;
-const STEP = SIZE / SUBDIV;
 const HSCALE = TERRAIN_HEIGHT_SCALE;
 const HM_WORLD_SCALE = TERRAIN_WORLD_SCALE;
+
+// Step size for CPU-side normal calculation (matches finest clipmap spacing)
+const CPU_STEP = 5.0;
 
 let hmData: Uint8ClampedArray | null = null;
 let hmSize = 0;
@@ -21,6 +21,10 @@ export async function loadHeightmap(url: string): Promise<void> {
       canvas.width = img.width;
       canvas.height = img.height;
       hmSize = img.width;
+      if (img.width !== img.height) {
+        reject(new Error(`Heightmap must be square, got ${img.width}x${img.height}`));
+        return;
+      }
       const ctx = canvas.getContext('2d')!;
       ctx.drawImage(img, 0, 0);
       hmData = ctx.getImageData(0, 0, img.width, img.height).data; // RGBA
@@ -58,30 +62,154 @@ export function sampleHeight(wx: number, wz: number): number {
   return 0;
 }
 
+const _normalTmp = new THREE.Vector3();
+
 export function sampleNormal(wx: number, wz: number): THREE.Vector3 {
-  const e = STEP * 0.5;
+  const e = CPU_STEP * 0.5;
   const hL = sampleHeight(wx - e, wz);
   const hR = sampleHeight(wx + e, wz);
   const hD = sampleHeight(wx, wz - e);
   const hU = sampleHeight(wx, wz + e);
-  return new THREE.Vector3(hL - hR, 2.0 * e, hD - hU).normalize();
+  return _normalTmp.set(hL - hR, 2.0 * e, hD - hU).normalize();
 }
 
-interface TileEntry {
+interface ClipmapLevel {
   mesh: THREE.Mesh;
-  tileX: number;
-  tileZ: number;
+  material: THREE.ShaderMaterial;
+  spacing: number;
+  innerHalfSize: number;
+  gridOrigin: THREE.Vector2;
+  innerGridOrigin: THREE.Vector2;
+}
+
+const CLIPMAP_LEVELS = [
+  { spacing: 5,  divisions: 80, innerHalfSize: 0   },
+  { spacing: 10, divisions: 80, innerHalfSize: 200 },
+  { spacing: 20, divisions: 80, innerHalfSize: 400 },
+  { spacing: 40, divisions: 80, innerHalfSize: 800 },
+];
+
+function createFlatGridGeometry(divisions: number, borderCells = 1): THREE.BufferGeometry {
+  const total = divisions + 2 * borderCells;
+  const n = total + 1;
+  const positions = new Float32Array(n * n * 3);
+  const indices = new Uint16Array(total * total * 6);
+
+  for (let iz = 0; iz < n; iz++) {
+    for (let ix = 0; ix < n; ix++) {
+      const vi = iz * n + ix;
+      // Interior [-0.5, 0.5] plus border overhang on each side
+      positions[vi * 3 + 0] = (ix - borderCells) / divisions - 0.5;
+      positions[vi * 3 + 1] = 0;
+      positions[vi * 3 + 2] = (iz - borderCells) / divisions - 0.5;
+    }
+  }
+
+  for (let iz = 0; iz < total; iz++) {
+    for (let ix = 0; ix < total; ix++) {
+      const i = iz * n + ix;
+      const ti = (iz * total + ix) * 6;
+      indices[ti]     = i;
+      indices[ti + 1] = i + n;
+      indices[ti + 2] = i + 1;
+      indices[ti + 3] = i + 1;
+      indices[ti + 4] = i + n;
+      indices[ti + 5] = i + n + 1;
+    }
+  }
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geo.setIndex(new THREE.BufferAttribute(indices, 1));
+  return geo;
 }
 
 const terrainVert = /* glsl */`
+  uniform sampler2D heightMap;
+  uniform float hmWorldScale;
+  uniform float hScale;
+  uniform vec2 gridOrigin;
+  uniform float levelScale;
+  uniform float gridSpacing;
+  uniform float innerHalfSize;
+  uniform float innerSpacing;
+  uniform vec2 innerGridOrigin;
+
   varying vec3 vNormal;
   varying vec3 vWorldPos;
   varying vec3 vCameraPos;
+
+  float sampleHeightGPU(vec2 worldXZ) {
+    vec2 uv = fract(worldXZ / hmWorldScale);
+    return texture2D(heightMap, uv).r * hScale;
+  }
+
+  // Bilinear interpolation of the next-finer level's grid heights
+  // The inner level's grid corner is at innerGridOrigin - innerHalfSize
+  // (innerGridOrigin is the grid CENTER, not the corner)
+  float sampleInnerHeight(vec2 worldXZ) {
+    if (innerHalfSize <= 0.0) return sampleHeightGPU(worldXZ);
+    vec2 corner = innerGridOrigin - innerHalfSize;
+    vec2 local = worldXZ - corner;
+    vec2 cell = floor(local / innerSpacing);
+    vec2 f = fract(local / innerSpacing);
+    vec2 p00 = corner + cell * innerSpacing;
+    float h00 = sampleHeightGPU(p00);
+    float h10 = sampleHeightGPU(p00 + vec2(innerSpacing, 0.0));
+    float h01 = sampleHeightGPU(p00 + vec2(0.0, innerSpacing));
+    float h11 = sampleHeightGPU(p00 + vec2(innerSpacing, innerSpacing));
+    return mix(mix(h00, h10, f.x), mix(h01, h11, f.x), f.y);
+  }
+
+  // Morph heights near the inner boundary to match the finer level,
+  // using circular distance for rounder, less noticeable transitions
+  float getMorphHeight(vec2 worldXZ) {
+    float outerH = sampleHeightGPU(worldXZ);
+    if (innerHalfSize <= 0.0) return outerH;
+    vec2 d = worldXZ - innerGridOrigin;
+    float dist = length(d);
+    // Wider morphing band for smoother transitions
+    float morphStart = innerHalfSize - innerSpacing * 2.0;
+    float morphEnd = innerHalfSize + innerSpacing * 4.0;
+    if (dist <= morphStart) return sampleInnerHeight(worldXZ);
+    if (dist >= morphEnd) return outerH;
+    float blend = smoothstep(morphStart, morphEnd, dist);
+    float innerH = sampleInnerHeight(worldXZ);
+    return mix(innerH, outerH, blend);
+  }
+
   void main() {
-    vNormal   = normalize(mat3(transpose(inverse(modelMatrix))) * normal);
-    vWorldPos = (modelMatrix * vec4(position, 1.0)).xyz;
+    vec2 worldXZ = gridOrigin + position.xz * levelScale;
+
+    float eps = gridSpacing * 0.5;
+    float h = getMorphHeight(worldXZ);
+
+    // For normals, use raw GPU height if far from morph boundary (saves 4× sampleInnerHeight)
+    vec2 d = worldXZ - innerGridOrigin;
+    float dist = length(d);
+    float morphStart = innerHalfSize - innerSpacing * 2.0;
+    float morphEnd = innerHalfSize + innerSpacing * 4.0;
+    bool nearBoundary = innerHalfSize > 0.0 && dist > morphStart - eps && dist < morphEnd + eps;
+
+    float hL, hR, hD, hU;
+    if (nearBoundary) {
+      hL = getMorphHeight(worldXZ - vec2(eps, 0.0));
+      hR = getMorphHeight(worldXZ + vec2(eps, 0.0));
+      hD = getMorphHeight(worldXZ - vec2(0.0, eps));
+      hU = getMorphHeight(worldXZ + vec2(0.0, eps));
+    } else {
+      hL = sampleHeightGPU(worldXZ - vec2(eps, 0.0));
+      hR = sampleHeightGPU(worldXZ + vec2(eps, 0.0));
+      hD = sampleHeightGPU(worldXZ - vec2(0.0, eps));
+      hU = sampleHeightGPU(worldXZ + vec2(0.0, eps));
+    }
+    vNormal = normalize(vec3(hL - hR, 2.0 * eps, hD - hU));
+
+    vec3 worldPos = vec3(worldXZ.x, h, worldXZ.y);
+    vWorldPos = worldPos;
     vCameraPos = cameraPosition;
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+
+    gl_Position = projectionMatrix * viewMatrix * vec4(worldPos, 1.0);
   }
 `;
 
@@ -98,6 +226,8 @@ const terrainFrag = /* glsl */`
   uniform vec3 fogColor;
   uniform float fogStart;
   uniform float fogEnd;
+  uniform float innerHalfSize;
+  uniform vec2 innerGridOrigin;
 
   // --- hash + value noise with analytic derivatives ---
   float hash(vec2 p) {
@@ -209,7 +339,6 @@ const terrainFrag = /* glsl */`
     for(int i=0;i<5;i++){
       vec3 n = erosionNoise(p * 4.0, dir);
       e += a * n.x;
-      dir = normalize(dir + vec2(0.0, 0.0) * 1.5);
       a *= 0.5;
       p *= 2.0;
     }
@@ -217,6 +346,10 @@ const terrainFrag = /* glsl */`
   }
 
   void main() {
+    if (innerHalfSize > 0.0) {
+      vec2 _d = vWorldPos.xz - innerGridOrigin;
+      if (length(_d) < innerHalfSize) discard;
+    }
     float slope  = 1.0 - clamp(vNormal.y, 0.0, 1.0);
     float height = clamp(vWorldPos.y / hscale, 0.0, 1.0);
 
@@ -225,72 +358,22 @@ const terrainFrag = /* glsl */`
     vec2 uvMed = vWorldPos.xz * 0.14;
     vec2 uvFin = vWorldPos.xz * 0.72;
 
-    // domain-warp the base FBM
-    vec2 warp = vec2(fbm(uv + vec2(0.0, 0.0)), fbm(uv + vec2(5.2, 1.3)));
-    float macro  = fbm(uv  + 0.8 * warp);       // large features
-    float medium = fbm(uvMed + vec2(3.1, 7.4));  // medium clumping
-    float micro  = noise(uvFin) * 0.5 + noise(uvFin*2.8+1.7)*0.5; // fine surface
-    float cell   = worley(uvMed * 1.4);          // rocky cell pattern
-    float cell2  = worley2(uvMed * 2.1);         // second rock detail layer
-
-    // triplanar rock detail (prevents stretching on cliffs)
-    float triRock = triplanarNoise(vWorldPos, 0.22);
-    float triDetail = triplanarNoise(vWorldPos, 0.85);
-
-    // stochastic patches (random grass tufts, rock outcrops)
-    float grassPatch = stochastic(vWorldPos, 0.18, 0.35);
-    float rockPatch  = stochastic(vWorldPos, 0.12, 0.25);
-
-    // directional erosion (drainage patterns)
-    vec2 slopeDir = normalize(vec2(vNormal.x, vNormal.z) + vec2(0.001));
-    float drainage = terrainErosion(uvMed, slopeDir);
-
-    // composite detail
-    float detail = macro*0.40 + medium*0.30 + micro*0.15 + triDetail*0.10 + drainage*0.05;
-
-    // --- rich saturated palette ---
-    // sand: pale gold in lowest areas
-    vec3 cSand  = vec3(0.68, 0.58, 0.32)
-                + micro  * vec3(0.08, 0.06, 0.02);
-    // grass: vibrant green with variation
-    vec3 cGrass = vec3(0.18, 0.52, 0.06)
-                + medium * vec3(0.08, 0.12, 0.02)
-                + micro  * vec3(0.05, 0.07, 0.01)
-                + grassPatch * vec3(0.04, 0.08, 0.0);
-    // dry/golden grass in mid elevations
-    vec3 cDry   = vec3(0.62, 0.50, 0.16)
-                + macro  * vec3(0.12, 0.10, 0.04);
-    // dirt: warm reddish-brown
-    vec3 cDirt  = vec3(0.52, 0.30, 0.12)
-                + medium * vec3(0.10, 0.06, 0.02)
-                + cell   * vec3(0.06, 0.04, 0.01);
-    // rock: grey with cell-noise cracks and triplanar detail
-    vec3 cRock  = vec3(0.36, 0.32, 0.26)
-                + cell   * vec3(0.14, 0.12, 0.10)
-                + cell2  * vec3(0.08, 0.07, 0.06)
-                + triRock * vec3(0.06, 0.05, 0.04)
-                + rockPatch * vec3(0.08, 0.07, 0.05);
-    // moss/lichen on rocks in damp areas
-    vec3 cMoss  = vec3(0.28, 0.42, 0.14)
-                + cell2 * vec3(0.06, 0.08, 0.02);
-    // dark rock on very steep slopes
-    vec3 cCliff = vec3(0.22, 0.20, 0.16)
-                + cell   * vec3(0.10, 0.09, 0.07)
-                + triRock * vec3(0.08, 0.07, 0.05);
-    // wet patches in valleys (darker, slightly blueish)
-    vec3 cWet   = vec3(0.38, 0.40, 0.34);
-
     // --- desert preset (sand + dirt + rock only) ---
     if(terrainPreset == 1) {
-      // More yellow sand for flats
-      vec3 cDesertSand = vec3(0.78, 0.66, 0.28)
-                      + micro * vec3(0.10, 0.08, 0.02);
-      // Darker rocks for slopes
-      vec3 cDesertRock = vec3(0.28, 0.24, 0.18)
-                      + cell * vec3(0.12, 0.10, 0.08)
-                      + triRock * vec3(0.08, 0.07, 0.05);
-      vec3 cDesertCliff = vec3(0.18, 0.16, 0.12)
-                      + cell * vec3(0.10, 0.09, 0.07);
+      // Desert only needs: micro, cell, triRock, macro, medium, triDetail
+      float micro  = noise(uvFin) * 0.5 + noise(uvFin*2.8+1.7)*0.5;
+      float cell   = worley(uvMed * 1.4);
+      float triRock = triplanarNoise(vWorldPos, 0.22);
+      float triDetail = triplanarNoise(vWorldPos, 0.85);
+      vec2 warp = vec2(fbm(uv), fbm(uv + vec2(5.2, 1.3)));
+      float macro  = fbm(uv + 0.8 * warp);
+      float medium = fbm(uvMed + vec2(3.1, 7.4));
+      float detail = macro*0.40 + medium*0.30 + micro*0.15 + triDetail*0.10;
+
+      vec3 cDesertSand = vec3(0.78, 0.66, 0.28) + micro * vec3(0.10, 0.08, 0.02);
+      vec3 cDesertRock = vec3(0.28, 0.24, 0.18) + cell * vec3(0.12, 0.10, 0.08) + triRock * vec3(0.08, 0.07, 0.05);
+      vec3 cDesertCliff = vec3(0.18, 0.16, 0.12) + cell * vec3(0.10, 0.09, 0.07);
+      vec3 cDirt = vec3(0.52, 0.30, 0.12) + medium * vec3(0.10, 0.06, 0.02) + cell * vec3(0.06, 0.04, 0.01);
 
       vec3 col = cDesertSand;
       col = mix(col, cDirt, smoothstep(0.05, 0.25, height));
@@ -306,10 +389,41 @@ const terrainFrag = /* glsl */`
       col *= lit;
       float fogDist = length(vWorldPos - vCameraPos);
       float fogFactor = smoothstep(fogStart, fogEnd, fogDist);
-      col = mix(col, fogColor, clamp(fogFactor, 0.0, 1.0));
+      float heightFog = smoothstep(fogStart * 0.6, fogEnd * 0.7, fogDist) * smoothstep(0.3, 0.8, height);
+      fogFactor = clamp(fogFactor + heightFog, 0.0, 1.0);
+      col = mix(col, fogColor, fogFactor);
       gl_FragColor = vec4(col, 1.0);
       return;
     }
+
+    // --- mixed preset: full noise suite ---
+    vec2 warp = vec2(fbm(uv), fbm(uv + vec2(5.2, 1.3)));
+    float macro  = fbm(uv  + 0.8 * warp);
+    float medium = fbm(uvMed + vec2(3.1, 7.4));
+    float micro  = noise(uvFin) * 0.5 + noise(uvFin*2.8+1.7)*0.5;
+    float cell   = worley(uvMed * 1.4);
+    float cell2  = worley2(uvMed * 2.1);
+
+    float triRock = triplanarNoise(vWorldPos, 0.22);
+    float triDetail = triplanarNoise(vWorldPos, 0.85);
+
+    float grassPatch = stochastic(vWorldPos, 0.18, 0.35);
+    float rockPatch  = stochastic(vWorldPos, 0.12, 0.25);
+
+    vec2 slopeDir = normalize(vec2(vNormal.x, vNormal.z) + vec2(0.001));
+    float drainage = terrainErosion(uvMed, slopeDir);
+
+    float detail = macro*0.40 + medium*0.30 + micro*0.15 + triDetail*0.10 + drainage*0.05;
+
+    // --- rich saturated palette ---
+    vec3 cSand  = vec3(0.68, 0.58, 0.32) + micro * vec3(0.08, 0.06, 0.02);
+    vec3 cGrass = vec3(0.18, 0.52, 0.06) + medium * vec3(0.08, 0.12, 0.02) + micro * vec3(0.05, 0.07, 0.01) + grassPatch * vec3(0.04, 0.08, 0.0);
+    vec3 cDry   = vec3(0.62, 0.50, 0.16) + macro * vec3(0.12, 0.10, 0.04);
+    vec3 cDirt  = vec3(0.52, 0.30, 0.12) + medium * vec3(0.10, 0.06, 0.02) + cell * vec3(0.06, 0.04, 0.01);
+    vec3 cRock  = vec3(0.36, 0.32, 0.26) + cell * vec3(0.14, 0.12, 0.10) + cell2 * vec3(0.08, 0.07, 0.06) + triRock * vec3(0.06, 0.05, 0.04) + rockPatch * vec3(0.08, 0.07, 0.05);
+    vec3 cMoss  = vec3(0.28, 0.42, 0.14) + cell2 * vec3(0.06, 0.08, 0.02);
+    vec3 cCliff = vec3(0.22, 0.20, 0.16) + cell * vec3(0.10, 0.09, 0.07) + triRock * vec3(0.08, 0.07, 0.05);
+    vec3 cWet   = vec3(0.38, 0.40, 0.34);
 
     // --- height blend (mixed preset) ---
     vec3 col = cSand;
@@ -349,120 +463,124 @@ const terrainFrag = /* glsl */`
     col *= lit;
     float dist = length(vWorldPos - vCameraPos);
     float fogFactor = smoothstep(fogStart, fogEnd, dist);
-    col = mix(col, fogColor, clamp(fogFactor, 0.0, 1.0));
+    // Height-augmented fog: tall terrain at distance gets extra fog
+    float heightFog = smoothstep(fogStart * 0.6, fogEnd * 0.7, dist)
+                     * smoothstep(0.3, 0.8, height);
+    fogFactor = clamp(fogFactor + heightFog, 0.0, 1.0);
+    col = mix(col, fogColor, fogFactor);
     gl_FragColor = vec4(col, 1.0);
   }
 `;
 
 export class Terrain {
   private scene: THREE.Scene;
-  private tiles: TileEntry[] = [];
-  private material: THREE.ShaderMaterial;
-  private centerTX = 0;
-  private centerTZ = 0;
+  private levels: ClipmapLevel[] = [];
+  private heightTexture: THREE.DataTexture;
+  private gridGeo: THREE.BufferGeometry;
 
   constructor(scene: THREE.Scene, sunDir: THREE.Vector3) {
     this.scene = scene;
 
-    this.material = new THREE.ShaderMaterial({
-      vertexShader: terrainVert,
-      fragmentShader: terrainFrag,
-      uniforms: {
-        sunDir:        { value: sunDir.clone().normalize() },
-        sunColor:      { value: new THREE.Color(1.0, 0.94, 0.8) },
-        ambientColor:  { value: new THREE.Color(0.38, 0.45, 0.55) },
-        hscale:        { value: HSCALE },
-        terrainPreset: { value: 1 }, // 0=mixed, 1=desert
-        fogColor:      { value: new THREE.Color(0xbbd0e8) },
-        fogStart:      { value: 80.0 },
-        fogEnd:        { value: 400.0 },
-      },
-    });
-
-    for (let tz = -1; tz <= 1; tz++) {
-      for (let tx = -1; tx <= 1; tx++) {
-        this.tiles.push(this.buildTile(tx, tz));
-      }
-    }
-  }
-
-  private buildTile(tileX: number, tileZ: number): TileEntry {
-    const n = SUBDIV + 1;
-    const positions = new Float32Array(n * n * 3);
-    const normals = new Float32Array(n * n * 3);
-    const uvs = new Float32Array(n * n * 2);
-
-    const cornerX = tileX * SUBDIV - Math.floor(SUBDIV / 2);
-    const cornerZ = tileZ * SUBDIV - Math.floor(SUBDIV / 2);
-
-    for (let iz = 0; iz < n; iz++) {
-      for (let ix = 0; ix < n; ix++) {
-        const wx = (cornerX + ix) * STEP;
-        const wz = (cornerZ + iz) * STEP;
-        const wy = sampleHeight(wx, wz);
-        const vi = (iz * n + ix);
-        positions[vi * 3 + 0] = wx;
-        positions[vi * 3 + 1] = wy;
-        positions[vi * 3 + 2] = wz;
-        uvs[vi * 2 + 0] = (ix / SUBDIV) * 8;
-        uvs[vi * 2 + 1] = (iz / SUBDIV) * 8;
-      }
+    if (!hmData || hmSize === 0) {
+      throw new Error('Terrain constructor called before loadHeightmap() completed');
     }
 
-    // Compute smooth normals via finite differences
-    for (let iz = 0; iz < n; iz++) {
-      for (let ix = 0; ix < n; ix++) {
-        const wx = (cornerX + ix) * STEP;
-        const wz = (cornerZ + iz) * STEP;
-        const norm = sampleNormal(wx, wz);
-        const vi = iz * n + ix;
-        normals[vi * 3 + 0] = norm.x;
-        normals[vi * 3 + 1] = norm.y;
-        normals[vi * 3 + 2] = norm.z;
-      }
+    // Upload heightmap as a GPU texture for vertex shader displacement
+    this.heightTexture = new THREE.DataTexture(
+      hmData, hmSize, hmSize, THREE.RGBAFormat, THREE.UnsignedByteType
+    );
+    this.heightTexture.wrapS = THREE.RepeatWrapping;
+    this.heightTexture.wrapT = THREE.RepeatWrapping;
+    this.heightTexture.magFilter = THREE.LinearFilter;
+    this.heightTexture.minFilter = THREE.LinearFilter;
+    this.heightTexture.needsUpdate = true;
+
+    // Shared flat grid geometry (normalised [-0.5, 0.5] plus one-cell overlap border)
+    const divisions = CLIPMAP_LEVELS[0].divisions;
+    this.gridGeo = createFlatGridGeometry(divisions, 1);
+    const gridGeo = this.gridGeo;
+
+    for (let i = 0; i < CLIPMAP_LEVELS.length; i++) {
+      const cfg = CLIPMAP_LEVELS[i];
+      const levelScale = cfg.spacing * cfg.divisions;
+
+      const material = new THREE.ShaderMaterial({
+        vertexShader: terrainVert,
+        fragmentShader: terrainFrag,
+        polygonOffset: i > 0,
+        polygonOffsetFactor: -1,
+        polygonOffsetUnits: -1,
+        uniforms: {
+          heightMap:       { value: this.heightTexture },
+          hmWorldScale:    { value: HM_WORLD_SCALE },
+          hScale:          { value: HSCALE },
+          gridOrigin:      { value: new THREE.Vector2(0, 0) },
+          levelScale:      { value: levelScale },
+          gridSpacing:     { value: cfg.spacing },
+          innerHalfSize:   { value: cfg.innerHalfSize },
+          innerSpacing:    { value: i > 0 ? CLIPMAP_LEVELS[i - 1].spacing : 0.0 },
+          innerGridOrigin: { value: new THREE.Vector2(0, 0) },
+          sunDir:          { value: sunDir.clone().normalize() },
+          sunColor:        { value: new THREE.Color(1.0, 0.94, 0.8) },
+          ambientColor:    { value: new THREE.Color(0.38, 0.45, 0.55) },
+          hscale:          { value: HSCALE },
+          terrainPreset:   { value: 1 },
+          fogColor:        { value: new THREE.Color(0xbbd0e8) },
+          fogStart:        { value: 80.0 },
+          fogEnd:          { value: 400.0 },
+        },
+      });
+
+      const mesh = new THREE.Mesh(gridGeo, material);
+      mesh.receiveShadow = true;
+      mesh.frustumCulled = false; // world-space extent is set via uniforms, not mesh transform
+      scene.add(mesh);
+
+      this.levels.push({
+        mesh,
+        material,
+        spacing: cfg.spacing,
+        innerHalfSize: cfg.innerHalfSize,
+        gridOrigin: new THREE.Vector2(0, 0),
+        innerGridOrigin: new THREE.Vector2(0, 0),
+      });
     }
-
-    const indices: number[] = [];
-    for (let iz = 0; iz < SUBDIV; iz++) {
-      for (let ix = 0; ix < SUBDIV; ix++) {
-        const i = iz * n + ix;
-        indices.push(i, i + n, i + 1);
-        indices.push(i + 1, i + n, i + n + 1);
-      }
-    }
-
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    geo.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
-    geo.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
-    geo.setIndex(indices);
-
-    const mesh = new THREE.Mesh(geo, this.material);
-    mesh.receiveShadow = true;
-    this.scene.add(mesh);
-    return { mesh, tileX, tileZ };
   }
 
   update(px: number, pz: number): void {
-    const ptx = Math.round(px / SIZE);
-    const ptz = Math.round(pz / SIZE);
-    if (ptx === this.centerTX && ptz === this.centerTZ) return;
+    for (let i = 0; i < this.levels.length; i++) {
+      const level = this.levels[i];
+      // Snap grid origin to this level's spacing to prevent vertex swimming
+      const ox = Math.round(px / level.spacing) * level.spacing;
+      const oz = Math.round(pz / level.spacing) * level.spacing;
+      level.gridOrigin.set(ox, oz);
+      level.material.uniforms.gridOrigin.value.set(ox, oz);
 
-    this.centerTX = ptx;
-    this.centerTZ = ptz;
-
-    // Remove old tiles
-    for (const t of this.tiles) {
-      this.scene.remove(t.mesh);
-      t.mesh.geometry.dispose();
-    }
-    this.tiles = [];
-
-    for (let tz = -1; tz <= 1; tz++) {
-      for (let tx = -1; tx <= 1; tx++) {
-        this.tiles.push(this.buildTile(this.centerTX + tx, this.centerTZ + tz));
+      // Outer levels use the inner level's snapped origin for discard boundary
+      if (i > 0) {
+        const inner = this.levels[i - 1];
+        level.innerGridOrigin.copy(inner.gridOrigin);
+        level.material.uniforms.innerGridOrigin.value.copy(inner.gridOrigin);
       }
     }
+  }
+
+  updateFog(color: THREE.Color, start: number, end: number): void {
+    for (const level of this.levels) {
+      level.material.uniforms.fogColor.value.copy(color);
+      level.material.uniforms.fogStart.value = start;
+      level.material.uniforms.fogEnd.value = end;
+    }
+  }
+
+  dispose(): void {
+    for (const level of this.levels) {
+      this.scene.remove(level.mesh);
+      level.material.dispose();
+    }
+    this.levels = [];
+    this.gridGeo.dispose();
+    this.heightTexture.dispose();
   }
 
   getHeight(wx: number, wz: number): number {
