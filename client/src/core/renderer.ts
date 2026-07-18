@@ -85,17 +85,17 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
       pixelated ? Math.floor(window.innerWidth / PIXEL_SCALE) : window.innerWidth,
       pixelated ? Math.floor(window.innerHeight / PIXEL_SCALE) : window.innerHeight
     ),
-    0.6,
-    0.4,
-    1
+    0.35,
+    0.3,
+    0.85
   );
   composer.addPass(bloomPass);
 
   const contrastPass = new ShaderPass({
     uniforms: {
       tDiffuse: { value: null },
-      contrast: { value: 1.15 },
-      brightness: { value: -0.02 }
+      contrast: { value: 1.06 },
+      brightness: { value: 0.0 }
     },
     vertexShader: `
       varying vec2 vUv;
