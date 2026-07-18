@@ -1384,7 +1384,12 @@ let gameStarted = false;
 let unlockByEscape = false;
 
 function requestLock(): void {
-  renderer.domElement.requestPointerLock();
+  const p = renderer.domElement.requestPointerLock();
+  if (p && typeof (p as Promise<void>).catch === 'function') {
+    (p as Promise<void>).catch(() => {
+      logger.info('Pointer lock on cooldown — browser requires a brief delay after exiting lock. Click again to re-enter.');
+    });
+  }
 }
 
 document.addEventListener('pointerlockchange', () => {
