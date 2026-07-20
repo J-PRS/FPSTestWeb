@@ -228,19 +228,19 @@ export class DemoManager {
   // If a new cool shot happens during an existing pending clip's wait period,
   // the clips are merged into one longer clip (chain combo).
   // minLifetime is 0.2s during testing phase so clips are easy to trigger. Raise to ~2.0s for production.
-  autoClipOnHit(projectileLifetime: number, minLifetime: number = 0.2, bufferBefore: number = 5.0, bufferAfter: number = 5.0): void {
+  autoClipOnHit(projectileLifetime: number, minLifetime: number = 0.2, bufferBefore: number = 5.0, bufferAfter: number = 5.0, hitTime?: number): void {
     if (this.mode !== 'recording') return;
     if (projectileLifetime < minLifetime) return;
 
-    const hitTime = this.recorder.duration;
-    const shotTime = hitTime - projectileLifetime;
+    const actualHitTime = hitTime ?? this.recorder.duration;
+    const shotTime = actualHitTime - projectileLifetime;
 
     // Check if there's a pending clip whose wait period hasn't elapsed yet — merge into it
     for (const pending of this.pendingClips) {
-      if (hitTime < pending.extractAt) {
+      if (actualHitTime < pending.extractAt) {
         // Extend the clip end and push extraction time back
-        pending.clipEnd = hitTime + bufferAfter;
-        pending.extractAt = hitTime + bufferAfter;
+        pending.clipEnd = actualHitTime + bufferAfter;
+        pending.extractAt = actualHitTime + bufferAfter;
         pending.chainCount = (pending.chainCount ?? 1) + 1;
         pending.bestLifetime = Math.max(pending.bestLifetime ?? pending.projectileLifetime, projectileLifetime);
         const totalDur = pending.clipEnd - pending.clipStart;
@@ -251,14 +251,14 @@ export class DemoManager {
     }
 
     const clipStart = shotTime - bufferBefore;
-    const clipEnd = hitTime + bufferAfter;
+    const clipEnd = actualHitTime + bufferAfter;
 
     const totalClipDuration = projectileLifetime + bufferBefore + bufferAfter;
     const desc = `Cool shot (${projectileLifetime.toFixed(2)}s air, ${totalClipDuration.toFixed(1)}s clip)`;
 
     // Defer extraction until bufferAfter seconds have elapsed so post-hit footage is in the buffer
     this.pendingClips.push({
-      extractAt: hitTime + bufferAfter,
+      extractAt: actualHitTime + bufferAfter,
       clipStart,
       clipEnd,
       projectileLifetime,
@@ -287,7 +287,6 @@ export class DemoManager {
       }
 
       const filename = `clip_${this.timestampStr()}_${pending.bestLifetime.toFixed(1)}s.demo`;
-      this.uploadClipToServer(clipData, pending.bestLifetime);
 
       const entry: CoolShotEntry = {
         id: `clip_${Date.now()}_${pending.bestLifetime.toFixed(1)}`,
@@ -297,6 +296,13 @@ export class DemoManager {
         description: pending.description,
         clipData,
       };
+      // Upload to server; on success, free the local clipData to save memory
+      this.uploadClipToServer(clipData, pending.bestLifetime).then((uploaded) => {
+        if (uploaded) {
+          entry.clipData = undefined;
+          this.onCoolShotsChanged?.(this.coolShots);
+        }
+      });
       this.coolShots.push(entry);
       this.coolShots.sort((a, b) => b.projectileLifetime - a.projectileLifetime);
       // Keep top 10 by lifetime + recent 10 by timestamp (may overlap)
@@ -404,10 +410,10 @@ export class DemoManager {
   }
 
   // Upload clip binary to server
-  private async uploadClipToServer(clipData: DemoFile, _projectileLifetime: number): Promise<void> {
+  private async uploadClipToServer(clipData: DemoFile, _projectileLifetime: number): Promise<boolean> {
     if (!this.serverUrl) {
       console.warn('[Demo] No server URL set, skipping upload');
-      return;
+      return false;
     }
     try {
       const buffer = DemoSerializer.serialize(clipData);
@@ -418,14 +424,16 @@ export class DemoManager {
       });
       if (!resp.ok) {
         console.warn('[Demo] Server upload failed:', resp.status);
-        return;
+        return false;
       }
       const result = await resp.json();
       this.uploadFailureCount = 0;
       if (result.rejected) {
         console.log(`[Demo] Clip rejected by server: ${result.reason}`);
+        return false;
       } else {
         console.log(`[Demo] Clip uploaded to server: ${result.filename}`);
+        return true;
       }
     } catch (e) {
       this.uploadFailureCount++;
@@ -435,6 +443,7 @@ export class DemoManager {
           console.warn('[Demo] Suppressing further upload failure warnings. Check server CORS/network.');
         }
       }
+      return false;
     }
   }
 
@@ -538,7 +547,8 @@ export class DemoManager {
   }
 
   private updateHitMarkers(data: DemoFile): void {
-    // Find the hit with the longest airtime (Hit timestamp - Fired timestamp for same projectileId)
+    // Collect all fired and hit timestamps, paired by projectileId.
+    // Shows every shot/hit on the seekbar, not just the best one.
     const firedTimes = new Map<number, number>();
     for (const e of data.projectileEvents) {
       if (e.eventType === ProjectileEventType.Fired) {
@@ -546,26 +556,17 @@ export class DemoManager {
       }
     }
 
-    let bestHitTime: number | null = null;
-    let bestFiredTime: number | null = null;
-    let bestAirtime = -1;
+    const hitTimes: number[] = [];
+    const shotTimes: number[] = [];
     for (const e of data.projectileEvents) {
       if (e.eventType !== ProjectileEventType.Hit) continue;
       const firedAt = firedTimes.get(e.projectileId);
       if (firedAt === undefined) continue;
-      const airtime = e.timestamp - firedAt;
-      if (airtime > bestAirtime) {
-        bestAirtime = airtime;
-        bestHitTime = e.timestamp;
-        bestFiredTime = firedAt;
-      }
+      hitTimes.push(e.timestamp);
+      shotTimes.push(firedAt);
     }
 
-    this.ui.setMarkers(
-      bestHitTime !== null ? [bestHitTime] : [],
-      bestFiredTime !== null ? [bestFiredTime] : [],
-      data.header.duration
-    );
+    this.ui.setMarkers(hitTimes, shotTimes, data.header.duration);
   }
 
   // Called every game frame

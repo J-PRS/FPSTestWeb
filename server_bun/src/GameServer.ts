@@ -270,7 +270,11 @@ export class GameServer {
         for (const [recipientId] of players) {
           const filtered = updates.filter(u => u.playerId !== recipientId);
           if (filtered.length > 0) {
-            this.connectionManager.sendToPlayer(recipientId, { type: 'tickUpdate', updates: filtered });
+            this.connectionManager.sendToPlayer(recipientId, {
+              type: 'tickUpdate',
+              updates: filtered,
+              ackSeq: this.playerManager.getLastSeq(recipientId),
+            });
           }
         }
       }

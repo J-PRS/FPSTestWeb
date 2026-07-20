@@ -168,9 +168,12 @@ const terrainVert = /* glsl */`
     if (innerHalfSize <= 0.0) return outerH;
     vec2 d = worldXZ - innerGridOrigin;
     float dist = length(d);
-    // Wider morphing band for smoother transitions
-    float morphStart = innerHalfSize - innerSpacing * 2.0;
-    float morphEnd = innerHalfSize + innerSpacing * 4.0;
+    // 100% inner-height region extends BEYOND the discard boundary by 3 inner spacings.
+    // This ensures all vertices of triangles spanning the discard boundary are at full inner
+    // height, so the per-fragment interpolated height at the boundary exactly matches the
+    // inner level. Without this, per-vertex morphing creates a height step at the seam.
+    float morphStart = innerHalfSize + innerSpacing * 3.0;
+    float morphEnd = innerHalfSize + innerSpacing * 9.0;
     if (dist <= morphStart) return sampleInnerHeight(worldXZ);
     if (dist >= morphEnd) return outerH;
     float blend = smoothstep(morphStart, morphEnd, dist);
@@ -187,8 +190,8 @@ const terrainVert = /* glsl */`
     // For normals, use raw GPU height if far from morph boundary (saves 4× sampleInnerHeight)
     vec2 d = worldXZ - innerGridOrigin;
     float dist = length(d);
-    float morphStart = innerHalfSize - innerSpacing * 2.0;
-    float morphEnd = innerHalfSize + innerSpacing * 4.0;
+    float morphStart = innerHalfSize + innerSpacing * 3.0;
+    float morphEnd = innerHalfSize + innerSpacing * 9.0;
     bool nearBoundary = innerHalfSize > 0.0 && dist > morphStart - eps && dist < morphEnd + eps;
 
     float hL, hR, hD, hU;

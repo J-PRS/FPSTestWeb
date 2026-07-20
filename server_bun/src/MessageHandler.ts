@@ -99,6 +99,9 @@ export class MessageHandler {
       case 'inputMove':
       case 'input':
         break;
+      case 'ping':
+        this.sendToPlayer(playerId, { type: 'pong', timestamp: msg.timestamp });
+        break;
       case 'snapshotRequest':
         this.handleSnapshotRequest(playerId);
         break;
@@ -127,11 +130,21 @@ export class MessageHandler {
       // At 20Hz updates, that's 10m per update — very generous
       if (speed > 200) {
         logger.warn(`Position rejected: ${playerId} moved ${dist.toFixed(1)}m in ${dt.toFixed(3)}s (${speed.toFixed(0)} m/s)`);
+        const validState = this.playerManager.getLastValidState(playerId);
+        if (validState) {
+          this.sendToPlayer(playerId, {
+            type: 'correction',
+            seq: validState.seq,
+            position: validState.position,
+            velocity: validState.velocity,
+            rotation: validState.rotation,
+          });
+        }
         return;
       }
     }
 
-    this.playerManager.updatePosition(playerId, msg.position, msg.rotation, msg.velocity);
+    this.playerManager.updatePosition(playerId, msg.position, msg.rotation, msg.velocity, msg.seq);
     // Don't broadcast immediately — batched in tickUpdate
   }
 

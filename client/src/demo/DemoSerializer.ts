@@ -4,6 +4,7 @@
 
 import {
   DemoFrame, ProjectileEvent, TargetEvent,
+  ProjectileEventType, TargetEventType,
   DEMO_MAGIC, DEMO_FORMAT_VERSION,
   type DemoFile,
 } from './types.js';
@@ -41,11 +42,24 @@ function writeString(view: DataView, offset: number, str: string): number {
 }
 
 function readString(view: DataView, offset: number): [string, number] {
+  if (offset + 2 > view.byteLength) {
+    throw new Error('Demo file truncated: cannot read string length');
+  }
   const len = view.getUint16(offset, true);
   offset += 2;
+  if (offset + len > view.byteLength) {
+    throw new Error(`Demo file truncated: string needs ${len} bytes but only ${view.byteLength - offset} remain`);
+  }
   const bytes = new Uint8Array(view.buffer, view.byteOffset + offset, len);
   const str = new TextDecoder().decode(bytes);
   return [str, offset + len];
+}
+
+// Check that enough bytes remain for a read of `size` bytes at `offset`.
+function ensureBytes(view: DataView, offset: number, size: number, what: string): void {
+  if (offset + size > view.byteLength) {
+    throw new Error(`Demo file truncated: cannot read ${what} at offset ${offset} (need ${size} bytes, have ${view.byteLength - offset})`);
+  }
 }
 
 // Frame size: 2 + 4 + 12 + 12 + 8 + 1 + 2 + 2 + 1 + 4 = 48 bytes
@@ -169,6 +183,9 @@ export class DemoSerializer {
     const view = new DataView(buffer);
     let offset = 0;
 
+    // Validate minimum size for header start
+    ensureBytes(view, offset, 1 + 4, 'magic + formatVersion');
+
     // Validate magic
     const magic = view.getUint8(offset++);
     if (magic !== DEMO_MAGIC) {
@@ -212,8 +229,10 @@ export class DemoSerializer {
     }
 
     // Read frames
+    ensureBytes(view, offset, 4, 'frame count');
     const frameCount = view.getUint32(offset, true); offset += 4;
     if (frameCount > 720000) throw new Error(`Invalid frame count: ${frameCount} (max 720000)`);
+    ensureBytes(view, offset, frameCount * FRAME_SIZE, 'frame array');
     const frames: DemoFrame[] = Array.from({ length: frameCount });
     for (let i = 0; i < frameCount; i++) {
       frames[i] = {
@@ -237,12 +256,18 @@ export class DemoSerializer {
     }
 
     // Read projectile events
+    ensureBytes(view, offset, 4, 'projectile event count');
     const projCount = view.getUint32(offset, true); offset += 4;
     if (projCount > 100000) throw new Error(`Invalid projectile event count: ${projCount} (max 100000)`);
+    ensureBytes(view, offset, projCount * PROJECTILE_EVENT_SIZE, 'projectile event array');
     const projectileEvents: ProjectileEvent[] = Array.from({ length: projCount });
     for (let i = 0; i < projCount; i++) {
+      const eventTypeVal = view.getUint8(offset);
+      if (eventTypeVal > 3) {
+        throw new Error(`Invalid projectile event type ${eventTypeVal} at event ${i} (max 3)`);
+      }
       projectileEvents[i] = {
-        eventType: view.getUint8(offset),
+        eventType: eventTypeVal as ProjectileEventType,
         timestamp: view.getFloat32(offset + 1, true),
         posX: view.getFloat32(offset + 5, true),
         posY: view.getFloat32(offset + 9, true),
@@ -265,12 +290,18 @@ export class DemoSerializer {
     }
 
     // Read target events
+    ensureBytes(view, offset, 4, 'target event count');
     const targetCount = view.getUint32(offset, true); offset += 4;
     if (targetCount > 100000) throw new Error(`Invalid target event count: ${targetCount} (max 100000)`);
+    ensureBytes(view, offset, targetCount * TARGET_EVENT_SIZE, 'target event array');
     const targetEvents: TargetEvent[] = Array.from({ length: targetCount });
     for (let i = 0; i < targetCount; i++) {
+      const eventTypeVal = view.getUint8(offset);
+      if (eventTypeVal > 4) {
+        throw new Error(`Invalid target event type ${eventTypeVal} at event ${i} (max 4)`);
+      }
       targetEvents[i] = {
-        eventType: view.getUint8(offset),
+        eventType: eventTypeVal as TargetEventType,
         timestamp: view.getFloat32(offset + 1, true),
         posX: view.getFloat32(offset + 5, true),
         posY: view.getFloat32(offset + 9, true),
