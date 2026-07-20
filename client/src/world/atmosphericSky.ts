@@ -13,14 +13,15 @@ const atmosphereVertexShader = /* glsl */`
 
 const atmosphereFragmentShader = /* glsl */`
   varying float vHeight;
+  uniform vec3 fogColor;   // linear-space horizon color (matches terrain fog exactly)
+  uniform vec3 zenithColor; // linear-space zenith color
 
   void main() {
-    // Simple vertical gradient: horizon haze -> blue zenith
-    vec3 horizonColor = vec3(0.7333, 0.8157, 0.9098); // matches FOG_COLOR 0xbbd0e8
-    vec3 zenithColor  = vec3(0.18, 0.38, 0.72);
-
-    float t = smoothstep(-0.1, 0.6, vHeight);
-    vec3 color = mix(horizonColor, zenithColor, t);
+    // Flat horizon band: sky is exactly fogColor for vHeight < 0.02,
+    // so fully-fogged terrain is invisible against the sky at the horizon.
+    // Transition to zenith starts at 0.02 and ends at 0.45.
+    float t = smoothstep(0.02, 0.45, vHeight);
+    vec3 color = mix(fogColor, zenithColor, t);
 
     gl_FragColor = vec4(color, 1.0);
   }
@@ -32,6 +33,8 @@ export interface AtmosphericSkyParams {
   mieCoefficient?: number;
   mieDirectionalG?: number;
   sunIntensity?: number;
+  fogColor?: THREE.Color;
+  zenithColor?: THREE.Color;
 }
 
 export class AtmosphericSky {
@@ -55,6 +58,8 @@ export class AtmosphericSky {
         mieCoefficient: { value: params.mieCoefficient ?? 0.005 },
         mieDirectionalG: { value: params.mieDirectionalG ?? 0.7 },
         turbidity: { value: params.turbidity ?? 10.0 },
+        fogColor: { value: params.fogColor ?? new THREE.Color(0xbbd0e8) },
+        zenithColor: { value: params.zenithColor ?? new THREE.Color(0x2e6cb8) },
       },
       side: THREE.BackSide,
       depthWrite: false,

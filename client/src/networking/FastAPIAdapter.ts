@@ -18,7 +18,6 @@ export class FastAPIAdapter implements INetworkAdapter {
   private disconnectCallback: (() => void) | null = null;
   private errorCallback: ((error: Error) => void) | null = null;
   private localPlayerId: string = '';
-  private players: Map<string, any> = new Map();
   private hasLoggedConnectionError: boolean = false;
 
   constructor() {
@@ -46,9 +45,10 @@ export class FastAPIAdapter implements INetworkAdapter {
             logger.info('FastAPIAdapter connected');
             this.hasLoggedConnectionError = false;
             
-            // Send playerId to server
+            // Send join handshake to server
             if (this.wsConnection) {
               await this.wsConnection.send(JSON.stringify({
+                type: 'join',
                 playerId: this.localPlayerId
               }));
             }
@@ -135,27 +135,5 @@ export class FastAPIAdapter implements INetworkAdapter {
     if (this.binaryMessageCallback) {
       this.binaryMessageCallback(data);
     }
-  }
-
-  // Player management for remote players
-  getPlayers(): Map<string, any> {
-    return this.players;
-  }
-
-  updateLocalPlayer(position: any, rotation: any, velocity: any): void {
-    // Send position update to server
-    this.send({
-      type: 'position',
-      position,
-      rotation,
-      velocity
-    });
-  }
-
-  sendShot(targetId: string | null): void {
-    this.send({
-      type: 'shot',
-      targetId
-    });
   }
 }

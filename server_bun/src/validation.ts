@@ -64,7 +64,8 @@ export function validateMessage(raw: unknown): ValidationResult<ClientMessage> {
       if (!rot.success) return { success: false, error: `rotation: ${rot.error}` };
       const vel = validateVec3(obj.velocity);
       if (!vel.success) return { success: false, error: `velocity: ${vel.error}` };
-      return { success: true, data: { type: 'position', position: pos.data, rotation: rot.data, velocity: vel.data } };
+      const seq = isFiniteNumber(obj.seq) ? obj.seq : undefined;
+      return { success: true, data: { type: 'position', position: pos.data, rotation: rot.data, velocity: vel.data, seq } };
     }
 
     case 'shot': {
@@ -169,6 +170,13 @@ export function validateMessage(raw: unknown): ValidationResult<ClientMessage> {
 
     case 'snapshotRequest': {
       return { success: true, data: { type: 'snapshotRequest' } };
+    }
+
+    case 'ping': {
+      if (!isFiniteNumber(obj.timestamp)) {
+        return { success: false, error: 'ping timestamp must be a finite number' };
+      }
+      return { success: true, data: { type: 'ping', timestamp: obj.timestamp } };
     }
 
     default:

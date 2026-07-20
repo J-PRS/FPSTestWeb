@@ -641,7 +641,7 @@ function loop(time: number): void {
 // ---- Boot ----
 async function init(): Promise<void> {
   profiler.markTime('initStart');
-  await loadHeightmap('/assets/heightmaps/Vortex_Smooth2_2048.png');
+  await loadHeightmap('/assets/heightmaps/test_vertex.png');
   profiler.markTime('heightmapLoaded');
 
   terrain = new Terrain(scene, sun.position.clone().normalize());
@@ -1131,6 +1131,21 @@ async function init(): Promise<void> {
     } else {
       player.applyKnockback(from, force);
     }
+  };
+
+  // Server correction — snap local player to last valid server state
+  networkManager.onCorrection = (seq: number, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }) => {
+    player.pos.set(position.x, position.y, position.z);
+    player.vel.set(velocity.x, velocity.y, velocity.z);
+    player.yaw = rotation.yaw;
+    player.pitch = rotation.pitch;
+    player.movement.setState({
+      pos: player.pos,
+      vel: player.vel,
+      yaw: player.yaw,
+      pitch: player.pitch,
+      onGround: player.onGround,
+    });
   };
 
   // Register player kill handler (lethal kills)

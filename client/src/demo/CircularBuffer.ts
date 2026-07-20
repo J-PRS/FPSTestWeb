@@ -82,13 +82,22 @@ export class CircularBuffer<T> {
     return result;
   }
 
-  // Find index of oldest item newer than given timestamp
+  // Find index of oldest item newer than given timestamp.
+  // Uses binary search since buffer items are timestamp-ordered.
   findIndexAfterTimestamp(timestamp: number, selector: (item: T) => number): number {
-    for (let i = 0; i < this.count; i++) {
-      if (selector(this.getUnsafe(i)) > timestamp) {
-        return i;
+    if (this.count === 0) return -1;
+    // Check if newest is still <= timestamp (nothing qualifies)
+    if (selector(this.getUnsafe(this.count - 1)) <= timestamp) return -1;
+
+    let lo = 0, hi = this.count - 1;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (selector(this.getUnsafe(mid)) <= timestamp) {
+        lo = mid + 1;
+      } else {
+        hi = mid;
       }
     }
-    return -1;
+    return lo;
   }
 }

@@ -25,6 +25,10 @@ export class PlayerManager {
       deaths: 0,
       lastSeen: Date.now(),
       pendingRespawn: false,
+      lastSeq: 0,
+      lastValidPosition: { ...spawn },
+      lastValidVelocity: { x: 0, y: 0, z: 0 },
+      lastValidRotation: { yaw: 0, pitch: 0 },
     };
 
     this.players.set(playerId, player);
@@ -73,14 +77,36 @@ export class PlayerManager {
     };
   }
 
-  updatePosition(playerId: string, position: Vec3, rotation: Rotation, velocity: Vec3): void {
+  updatePosition(playerId: string, position: Vec3, rotation: Rotation, velocity: Vec3, seq?: number): void {
     const player = this.players.get(playerId);
     if (player) {
       player.position = { ...position };
       player.rotation = { ...rotation };
       player.velocity = { ...velocity };
       player.lastSeen = Date.now();
+      if (seq !== undefined && seq > player.lastSeq) {
+        player.lastSeq = seq;
+        player.lastValidPosition = { ...position };
+        player.lastValidVelocity = { ...velocity };
+        player.lastValidRotation = { ...rotation };
+      }
     }
+  }
+
+  getLastSeq(playerId: string): number {
+    const player = this.players.get(playerId);
+    return player?.lastSeq ?? 0;
+  }
+
+  getLastValidState(playerId: string): { position: Vec3; velocity: Vec3; rotation: Rotation; seq: number } | null {
+    const player = this.players.get(playerId);
+    if (!player) return null;
+    return {
+      position: { ...player.lastValidPosition },
+      velocity: { ...player.lastValidVelocity },
+      rotation: { ...player.lastValidRotation },
+      seq: player.lastSeq,
+    };
   }
 
   applyDamage(targetId: string, damage: number): { killed: boolean; newHealth: number } {

@@ -25,6 +25,7 @@ export class DemoUI {
   private saveBtn: HTMLButtonElement;
   private loadInput: HTMLInputElement;
   private statusLabel: HTMLSpanElement;
+  private lastTimelineDuration = -1;
 
   private callbacks: DemoUICallbacks | null = null;
   private visible = false;
@@ -55,23 +56,53 @@ export class DemoUI {
     this.stopBtn.title = 'Stop';
     this.stopBtn.onclick = () => this.callbacks?.onStop();
 
-    // Timeline slider — wrapped in a relative container for marker overlay
+    // Timeline slider — wrapped in a relative container for marker overlay.
+    // The native range thumb has a half-thumb inset on each side, so the marker
+    // overlay must be inset to match (see THUMB_WIDTH / markerOverlay below).
+    const THUMB_WIDTH = 14; // px — must match the thumb size in the injected CSS
     this.timeline = document.createElement('input');
     this.timeline.type = 'range';
     this.timeline.min = '0';
     this.timeline.max = '100';
     this.timeline.value = '0';
     this.timeline.step = '0.01';
-    this.timeline.style.cssText = 'width: 200px; cursor: pointer; margin: 0;';
+    this.timeline.style.cssText = `
+      width: 200px; cursor: pointer; margin: 0;
+      -webkit-appearance: none; appearance: none;
+      height: 6px; background: #333; border-radius: 3px; outline: none;
+    `;
     this.timeline.oninput = () => {
       const time = parseFloat(this.timeline.value);
       this.callbacks?.onSeek(time);
     };
 
-    // Marker overlay — sits on top of the slider, pointer-events disabled
+    // Inject thumb styling (pseudo-elements can't be set via inline styles)
+    if (!document.getElementById('demo-ui-slider-style')) {
+      const style = document.createElement('style');
+      style.id = 'demo-ui-slider-style';
+      style.textContent = `
+        #demo-ui input[type=range]::-webkit-slider-thumb {
+          -webkit-appearance: none; appearance: none;
+          width: ${THUMB_WIDTH}px; height: ${THUMB_WIDTH}px;
+          border-radius: 50%; background: #4488ff; cursor: pointer;
+          border: 1px solid #2a5a9a;
+        }
+        #demo-ui input[type=range]::-moz-range-thumb {
+          width: ${THUMB_WIDTH}px; height: ${THUMB_WIDTH}px;
+          border-radius: 50%; background: #4488ff; cursor: pointer;
+          border: 1px solid #2a5a9a;
+        }
+      `;
+      document.head.appendChild(style);
+    }
+
+    // Marker overlay — inset by half the thumb width on each side so that
+    // left: pct% aligns with the thumb's center position at the same value.
     this.markerOverlay = document.createElement('div');
+    const halfThumb = THUMB_WIDTH / 2;
     this.markerOverlay.style.cssText = `
-      position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+      position: absolute; top: 0; bottom: 0;
+      left: ${halfThumb}px; right: ${halfThumb}px;
       pointer-events: none; overflow: hidden;
     `;
 
@@ -185,7 +216,10 @@ export class DemoUI {
   }
 
   setTime(current: number, duration: number): void {
-    this.timeline.max = String(duration);
+    if (duration !== this.lastTimelineDuration) {
+      this.timeline.max = String(duration);
+      this.lastTimelineDuration = duration;
+    }
     this.timeline.value = String(current);
     this.timeLabel.textContent = `${current.toFixed(1)} / ${duration.toFixed(1)}s`;
   }

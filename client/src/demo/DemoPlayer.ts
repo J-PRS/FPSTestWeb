@@ -83,6 +83,8 @@ export class DemoPlayer {
 
   seek(time: number): void {
     if (!this.demoData) return;
+    // Guard against NaN/Infinity (e.g. from corrupted slider events)
+    if (!Number.isFinite(time)) time = 0;
     this.currentTime = Math.max(0, Math.min(time, this.duration));
     this.frameIndex = this.findFrameIndex(this.currentTime);
     // Reset event pointers to 0 so all events from the beginning get re-emitted.
@@ -122,6 +124,8 @@ export class DemoPlayer {
   update(dt: number): void {
     if (!this.playing || !this.demoData) return;
 
+    // Guard against NaN/Infinity dt (e.g. from tab visibility quirks)
+    if (!Number.isFinite(dt) || dt < 0) dt = 0;
     this.currentTime += dt * this.playbackSpeed;
 
     // Handle end of playback

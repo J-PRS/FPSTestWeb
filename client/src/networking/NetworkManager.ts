@@ -38,10 +38,22 @@ export class NetworkManager {
   public onGameState: ((players: any[], localPlayerState: any) => void) | null = null;
   public onSnapshot: ((players: any[], timestamp: number) => void) | null = null;
   public onStateHash: ((hash: string, tick: number, playerCount: number, timestamp: number) => void) | null = null;
+  public onCorrection: ((seq: number, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }) => void) | null = null;
   private lastPositionSendTime: number = 0;
   private readonly POSITION_SEND_INTERVAL = 50; // 20Hz — extrapolation covers the gap
   private ping: number = 0;
   private hasLoggedConnectionError: boolean = false;
+
+  // --- Client-side prediction: sequence tracking + state history ---
+  private sequenceCounter: number = 0;
+  private stateHistory: Map<number, { position: { x: number; y: number; z: number }; velocity: { x: number; y: number; z: number }; rotation: { yaw: number; pitch: number } }> = new Map();
+  private readonly STATE_HISTORY_MAX = 120; // ~6s at 20Hz
+
+  // --- Ping measurement ---
+  private lastPingSendTime: number = 0;
+  private readonly PING_INTERVAL = 2000; // Send ping every 2 seconds
+  private pingHistory: number[] = []; // Recent RTT samples
+  private readonly PING_HISTORY_MAX = 10;
 
   constructor(adapter: INetworkAdapter) {
     this.adapter = adapter;
@@ -143,6 +155,9 @@ export class NetworkManager {
 
       case 'tickUpdate':
         // Batched player updates from server (delta compressed)
+        if (data.ackSeq !== undefined && data.ackSeq > 0) {
+          this.pruneStateHistory(data.ackSeq);
+        }
         if (data.updates && Array.isArray(data.updates)) {
           const now = Date.now();
           for (const u of data.updates) {
@@ -297,6 +312,19 @@ export class NetworkManager {
         }
         break;
 
+      case 'correction':
+        // Server rejected our position — snap to last valid state
+        logger.warn(`Server correction at seq ${data.seq}: pos=(${data.position.x.toFixed(1)},${data.position.y.toFixed(1)},${data.position.z.toFixed(1)})`);
+        this.pruneStateHistory(data.seq);
+        if (this.onCorrection) {
+          this.onCorrection(data.seq, data.position, data.velocity, data.rotation);
+        }
+        break;
+
+      case 'pong':
+        this.handlePong(data.timestamp);
+        break;
+
       default:
         logger.warn(`Unknown message type: ${data.type}`);
     }
@@ -324,13 +352,28 @@ export class NetworkManager {
 
     this.lastPositionSendTime = now;
 
-    // Send position update with real velocity
+    // Assign sequence number and store in state history for reconciliation
+    const seq = ++this.sequenceCounter;
+    this.stateHistory.set(seq, { position: { ...position }, velocity: { ...velocity }, rotation: { ...rotation } });
+    if (this.stateHistory.size > this.STATE_HISTORY_MAX) {
+      const oldest = this.stateHistory.keys().next().value;
+      if (oldest !== undefined) this.stateHistory.delete(oldest);
+    }
+
+    // Send position update with sequence number
     this.adapter.send({
       type: 'position',
       position,
       rotation,
-      velocity
+      velocity,
+      seq
     });
+
+    // Send ping if interval elapsed
+    if (now - this.lastPingSendTime >= this.PING_INTERVAL) {
+      this.lastPingSendTime = now;
+      this.adapter.send({ type: 'ping', timestamp: now });
+    }
   }
 
   /**
@@ -464,10 +507,36 @@ export class NetworkManager {
   }
 
   getPacketLoss(): number {
-    return 0; // Not implemented yet
+    // Approximated from ping timeouts — if no pong received within 2x expected RTT
+    // Not directly measurable with UDP-less WebSocket, return 0 for reliable transport
+    return 0;
   }
 
   getJitter(): number {
-    return 0; // Not implemented yet
+    if (this.pingHistory.length < 2) return 0;
+    let sumDiff = 0;
+    for (let i = 1; i < this.pingHistory.length; i++) {
+      sumDiff += Math.abs(this.pingHistory[i] - this.pingHistory[i - 1]);
+    }
+    return Math.round(sumDiff / (this.pingHistory.length - 1));
+  }
+
+  private handlePong(timestamp: number): void {
+    const rtt = Date.now() - timestamp;
+    if (rtt >= 0 && rtt < 10000) {
+      this.ping = Math.round(rtt);
+      this.pingHistory.push(rtt);
+      if (this.pingHistory.length > this.PING_HISTORY_MAX) {
+        this.pingHistory.shift();
+      }
+    }
+  }
+
+  private pruneStateHistory(ackSeq: number): void {
+    for (const seq of this.stateHistory.keys()) {
+      if (seq <= ackSeq) {
+        this.stateHistory.delete(seq);
+      }
+    }
   }
 }

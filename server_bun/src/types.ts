@@ -26,10 +26,15 @@ export interface PlayerState {
   deaths: number;
   lastSeen: number;
   pendingRespawn: boolean;
+  lastSeq: number;
+  lastValidPosition: Vec3;
+  lastValidVelocity: Vec3;
+  lastValidRotation: Rotation;
 }
 
 export type ClientMessage =
-  | { type: 'position'; position: Vec3; rotation: Rotation; velocity: Vec3 }
+  | { type: 'position'; position: Vec3; rotation: Rotation; velocity: Vec3; seq?: number }
+  | { type: 'ping'; timestamp: number }
   | { type: 'shot'; targetId: string | null; position?: Vec3; velocity?: Vec3; timestamp?: number; projectileId?: string | null }
   | { type: 'aoeShot'; position: Vec3; excludeTargetId?: string | null }
   | { type: 'discAOEShot'; position: Vec3; excludeTargetId?: string | null }
@@ -55,7 +60,9 @@ export type ServerMessage =
   | { type: 'projectileDestroyed'; projectileId: string }
   | { type: 'snapshot'; players: SnapshotPlayer[]; timestamp: number }
   | { type: 'stateHash'; hash: string; tick: number; playerCount: number; timestamp: number }
-  | { type: 'tickUpdate'; updates: Array<{ playerId: string; internalId: string; position: Vec3; rotation: Rotation; velocity: Vec3; health: number; isDead: boolean }> };
+  | { type: 'tickUpdate'; updates: Array<{ playerId: string; internalId: string; position: Vec3; rotation: Rotation; velocity: Vec3; health: number; isDead: boolean }>; ackSeq?: number }
+  | { type: 'correction'; seq: number; position: Vec3; velocity: Vec3; rotation: Rotation }
+  | { type: 'pong'; timestamp: number };
 
 export interface GameStatePlayer {
   id: string;
