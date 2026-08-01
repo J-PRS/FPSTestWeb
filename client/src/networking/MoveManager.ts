@@ -97,6 +97,11 @@ export class MoveManager {
     if (Math.random() < 0.01) { // 1% chance to log
       console.log(`[MoveManager] Packed ${recentMoves.length} moves, bit pos ${bitPosBefore} -> ${stream.getBitPosition()}`);
     }
+
+    // Drain packed moves — keep only the last 3 so they can be re-sent for
+    // reliability on the next packet. Without this, this.moves grows unboundedly
+    // for the entire session (clearMoves() exists but is never called).
+    this.moves = this.moves.slice(-3);
   }
 
   /**

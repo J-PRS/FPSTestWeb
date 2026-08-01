@@ -69,6 +69,21 @@ const PROJECTILE_EVENT_SIZE = 59;
 // Target event size: 1 + 4 + 12 + 12 + 2 + 1 + 4 + 1 + 12 = 49 bytes
 const TARGET_EVENT_SIZE = 49;
 
+// ---------------------------------------------------------------------------
+// Backwards-compatibility strategy
+// ---------------------------------------------------------------------------
+// DEMO_FORMAT_VERSION is the current format. deserialize() accepts any file
+// with 1 <= formatVersion <= DEMO_FORMAT_VERSION. Each version bump that adds
+// header fields must be gated with `if (formatVersion >= N)` so older files
+// parse correctly. Frame and event structures are fixed-size and have never
+// changed between versions — if a future version changes them, add per-version
+// size constants and a version-gated read path.
+//
+// Version history:
+//   v1: original format (no projectileLifetime in header)
+//   v2: added projectileLifetime (float32) at end of header
+// ---------------------------------------------------------------------------
+
 export class DemoSerializer {
 
   static serialize(data: DemoFile): ArrayBuffer {
@@ -193,8 +208,8 @@ export class DemoSerializer {
     }
 
     const formatVersion = view.getInt32(offset, true); offset += 4;
-    if (formatVersion > DEMO_FORMAT_VERSION) {
-      throw new Error(`Unsupported demo format version ${formatVersion} (max ${DEMO_FORMAT_VERSION})`);
+    if (formatVersion < 1 || formatVersion > DEMO_FORMAT_VERSION) {
+      throw new Error(`Unsupported demo format version ${formatVersion} (supported 1..${DEMO_FORMAT_VERSION})`);
     }
 
     const [gameVersion, off1] = readString(view, offset); offset = off1;
@@ -318,6 +333,18 @@ export class DemoSerializer {
         peakPosZ: view.getFloat32(offset + 45, true),
       };
       offset += TARGET_EVENT_SIZE;
+    }
+
+    // Validate header counts against actual array lengths (catches silent corruption
+    // where the header count prefixes disagree with the per-array count prefixes).
+    if (totalFrames !== frames.length) {
+      throw new Error(`Demo file header totalFrames (${totalFrames}) != actual frame count (${frames.length})`);
+    }
+    if (projectileEventCount !== projectileEvents.length) {
+      throw new Error(`Demo file header projectileEventCount (${projectileEventCount}) != actual (${projectileEvents.length})`);
+    }
+    if (targetEventCount !== targetEvents.length) {
+      throw new Error(`Demo file header targetEventCount (${targetEventCount}) != actual (${targetEvents.length})`);
     }
 
     return {

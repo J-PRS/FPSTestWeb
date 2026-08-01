@@ -1,0 +1,68 @@
+﻿
+C:\TEMP\_WEB\FPSWebTest\client\src\core\StateSnapshot.ts
+  148:10  warning  Refactor this function to reduce its Cognitive Complexity from 17 to the 15 allowed  sonarjs/cognitive-complexity
+
+C:\TEMP\_WEB\FPSWebTest\client\src\demo\DemoPlayer.ts
+  124:3  warning  Refactor this function to reduce its Cognitive Complexity from 24 to the 15 allowed  sonarjs/cognitive-complexity
+
+C:\TEMP\_WEB\FPSWebTest\client\src\demo\DemoRecorder.ts
+   72:3  warning  Refactor this function to reduce its Cognitive Complexity from 18 to the 15 allowed  sonarjs/cognitive-complexity
+  293:3  warning  Refactor this function to reduce its Cognitive Complexity from 47 to the 15 allowed  sonarjs/cognitive-complexity
+
+C:\TEMP\_WEB\FPSWebTest\client\src\demo\DemoSerializer.ts
+  197:10  warning  Refactor this function to reduce its Cognitive Complexity from 17 to the 15 allowed  sonarjs/cognitive-complexity
+
+C:\TEMP\_WEB\FPSWebTest\client\src\effects\debris.ts
+  109:3  warning  Refactor this function to reduce its Cognitive Complexity from 26 to the 15 allowed  sonarjs/cognitive-complexity
+
+C:\TEMP\_WEB\FPSWebTest\client\src\effects\explosion.ts
+   45:3  warning  Refactor this function to reduce its Cognitive Complexity from 45 to the 15 allowed  sonarjs/cognitive-complexity
+  237:3  warning  Refactor this function to reduce its Cognitive Complexity from 23 to the 15 allowed  sonarjs/cognitive-complexity
+
+C:\TEMP\_WEB\FPSWebTest\client\src\effects\implosion.ts
+  168:9  error    'vy' is never reassigned. Use 'const' instead                                        prefer-const
+  194:3  warning  Refactor this function to reduce its Cognitive Complexity from 21 to the 15 allowed  sonarjs/cognitive-complexity
+
+C:\TEMP\_WEB\FPSWebTest\client\src\entities\Player.ts
+  242:3  warning  Refactor this function to reduce its Cognitive Complexity from 88 to the 15 allowed  sonarjs/cognitive-complexity
+  487:9  error    'dir' is never reassigned. Use 'const' instead                                       prefer-const
+  501:9  error    'dir' is never reassigned. Use 'const' instead                                       prefer-const
+
+C:\TEMP\_WEB\FPSWebTest\client\src\entities\PlayerDebris.ts
+  109:3  warning  Refactor this function to reduce its Cognitive Complexity from 26 to the 15 allowed  sonarjs/cognitive-complexity
+
+C:\TEMP\_WEB\FPSWebTest\client\src\entities\RemotePlayer.ts
+  145:3  warning  Refactor this function to reduce its Cognitive Complexity from 92 to the 15 allowed  sonarjs/cognitive-complexity
+
+C:\TEMP\_WEB\FPSWebTest\client\src\entities\balls.ts
+  128:3  warning  Refactor this function to reduce its Cognitive Complexity from 56 to the 15 allowed  sonarjs/cognitive-complexity
+
+C:\TEMP\_WEB\FPSWebTest\client\src\entities\movement.ts
+  179:9  error  'jump' is never reassigned. Use 'const' instead  prefer-const
+
+C:\TEMP\_WEB\FPSWebTest\client\src\main.ts
+   163:10   warning  Refactor this function to reduce its Cognitive Complexity from 74 to the 15 allowed   sonarjs/cognitive-complexity
+   239:10   warning  Refactor this function to reduce its Cognitive Complexity from 135 to the 15 allowed  sonarjs/cognitive-complexity
+   399:10   warning  Refactor this function to reduce its Cognitive Complexity from 34 to the 15 allowed   sonarjs/cognitive-complexity
+   461:10   warning  Refactor this function to reduce its Cognitive Complexity from 65 to the 15 allowed   sonarjs/cognitive-complexity
+   721:102  warning  Refactor this function to reduce its Cognitive Complexity from 176 to the 15 allowed  sonarjs/cognitive-complexity
+  1459:42   warning  Refactor this function to reduce its Cognitive Complexity from 26 to the 15 allowed   sonarjs/cognitive-complexity
+  1619:69   warning  Refactor this function to reduce its Cognitive Complexity from 18 to the 15 allowed   sonarjs/cognitive-complexity
+  1727:72   warning  Refactor this function to reduce its Cognitive Complexity from 22 to the 15 allowed   sonarjs/cognitive-complexity
+
+C:\TEMP\_WEB\FPSWebTest\client\src\networking\GhostManager.ts
+   63:3  warning  Refactor this function to reduce its Cognitive Complexity from 19 to the 15 allowed  sonarjs/cognitive-complexity
+  134:3  warning  Refactor this function to reduce its Cognitive Complexity from 20 to the 15 allowed  sonarjs/cognitive-complexity
+
+C:\TEMP\_WEB\FPSWebTest\client\src\networking\NetworkManager.ts
+  140:11  warning  Refactor this function to reduce its Cognitive Complexity from 77 to the 15 allowed  sonarjs/cognitive-complexity
+
+C:\TEMP\_WEB\FPSWebTest\client\src\networking\WebSocketConnection.ts
+  104:35  warning  Refactor this function to reduce its Cognitive Complexity from 41 to the 15 allowed  sonarjs/cognitive-complexity
+
+C:\TEMP\_WEB\FPSWebTest\client\src\projectiles\Projectile.ts
+  303:3  warning  Refactor this function to reduce its Cognitive Complexity from 36 to the 15 allowed  sonarjs/cognitive-complexity
+
+Ô£û 30 problems (4 errors, 26 warnings)
+  4 errors and 0 warnings potentially fixable with the `--fix` option.
+

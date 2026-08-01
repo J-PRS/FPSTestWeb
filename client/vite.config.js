@@ -26,7 +26,7 @@ export default defineConfig({
     hmr: {
       // Conditionally use WSS/443 only when accessing through cloudflared tunnel
       protocol: process.env.VITE_HMR_URL ? "wss" : "ws",
-      host: process.env.VITE_HMR_URL ?? "localhost",
+      host: process.env.VITE_HMR_URL, // undefined = auto-detect from page URL (works for LAN access)
       clientPort: process.env.VITE_HMR_URL ? 443 : 5300,
       overlay: true, // Show error overlay
     },

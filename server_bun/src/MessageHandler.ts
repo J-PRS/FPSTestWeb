@@ -120,7 +120,7 @@ export class MessageHandler {
     const now = Date.now();
     const prevPos = player.position;
     const dt = (now - player.lastSeen) / 1000;
-    if (dt > 0 && prevPos) {
+    if (dt > 0 && prevPos && player.hasReceivedPosition) {
       const dx = msg.position.x - prevPos.x;
       const dy = msg.position.y - prevPos.y;
       const dz = msg.position.z - prevPos.z;
@@ -145,6 +145,7 @@ export class MessageHandler {
     }
 
     this.playerManager.updatePosition(playerId, msg.position, msg.rotation, msg.velocity, msg.seq);
+    player.hasReceivedPosition = true;
     // Don't broadcast immediately — batched in tickUpdate
   }
 
@@ -162,17 +163,20 @@ export class MessageHandler {
       }
 
       const target = this.playerManager.getPlayer(targetId);
-      if (target) {
-        // Cheap cheat prevention: distance sanity check
-        // Reject if shooter claims hit on a target > 200m away (max rocket range + margin)
-        const dx = player.position.x - target.position.x;
-        const dy = player.position.y - target.position.y;
-        const dz = player.position.z - target.position.z;
-        const distSq = dx * dx + dy * dy + dz * dz;
-        if (distSq > 40000) { // 200m squared
-          logger.warn(`Shot rejected: ${playerId} too far from target ${targetId} (${Math.sqrt(distSq).toFixed(0)}m)`);
-          return;
-        }
+      if (!target) {
+        logger.warn(`Shot rejected: ${playerId} targeted unknown player ${targetId}`);
+        return;
+      }
+
+      // Cheap cheat prevention: distance sanity check
+      // Reject if shooter claims hit on a target > 200m away (max rocket range + margin)
+      const dx = player.position.x - target.position.x;
+      const dy = player.position.y - target.position.y;
+      const dz = player.position.z - target.position.z;
+      const distSq = dx * dx + dy * dy + dz * dz;
+      if (distSq > 40000) { // 200m squared
+        logger.warn(`Shot rejected: ${playerId} too far from target ${targetId} (${Math.sqrt(distSq).toFixed(0)}m)`);
+        return;
       }
 
       const result = this.playerManager.applyDamage(targetId, CONFIG.shotDamage);

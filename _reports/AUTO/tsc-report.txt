@@ -1,0 +1,88 @@
+﻿=== CLIENT (client/tsconfig.json) ===
+exit=0
+
+=== SERVER (server_bun/tsconfig.json) ===
+../client/src/demo/CircularBuffer.ts(36,5): error TS2322: Type 'T | undefined' is not assignable to type 'T'.
+  'T' could be instantiated with an arbitrary type which could be unrelated to 'T | undefined'.
+../client/src/demo/CircularBuffer.ts(41,5): error TS2322: Type 'T | undefined' is not assignable to type 'T'.
+  'T' could be instantiated with an arbitrary type which could be unrelated to 'T | undefined'.
+../client/src/demo/CircularBuffer.ts(46,5): error TS2322: Type 'T | undefined' is not assignable to type 'T'.
+  'T' could be instantiated with an arbitrary type which could be unrelated to 'T | undefined'.
+../client/src/demo/CircularBuffer.ts(51,5): error TS2322: Type 'T | undefined' is not assignable to type 'T'.
+  'T' could be instantiated with an arbitrary type which could be unrelated to 'T | undefined'.
+../client/src/demo/DemoPlayer.ts(244,11): error TS2532: Object is possibly 'undefined'.
+../client/src/demo/DemoPlayer.ts(258,11): error TS2532: Object is possibly 'undefined'.
+../client/src/demo/DemoPlayer.ts(294,21): error TS18048: 'f1' is possibly 'undefined'.
+../client/src/demo/DemoPlayer.ts(294,36): error TS18048: 'f0' is possibly 'undefined'.
+../client/src/demo/DemoPlayer.ts(296,33): error TS18048: 'f0' is possibly 'undefined'.
+../client/src/demo/DemoPlayer.ts(313,18): error TS18048: 'f0' is possibly 'undefined'.
+../client/src/demo/DemoPlayer.ts(313,27): error TS18048: 'f1' is possibly 'undefined'.
+../client/src/demo/DemoPlayer.ts(314,18): error TS18048: 'f0' is possibly 'undefined'.
+../client/src/demo/DemoPlayer.ts(314,27): error TS18048: 'f1' is possibly 'undefined'.
+../client/src/demo/DemoPlayer.ts(315,18): error TS18048: 'f0' is possibly 'undefined'.
+../client/src/demo/DemoPlayer.ts(315,27): error TS18048: 'f1' is possibly 'undefined'.
+../client/src/demo/DemoPlayer.ts(316,18): error TS18048: 'f0' is possibly 'undefined'.
+../client/src/demo/DemoPlayer.ts(316,27): error TS18048: 'f1' is possibly 'undefined'.
+../client/src/demo/DemoPlayer.ts(317,18): error TS18048: 'f0' is possibly 'undefined'.
+../client/src/demo/DemoPlayer.ts(317,27): error TS18048: 'f1' is possibly 'undefined'.
+../client/src/demo/DemoPlayer.ts(318,18): error TS18048: 'f0' is possibly 'undefined'.
+../client/src/demo/DemoPlayer.ts(318,27): error TS18048: 'f1' is possibly 'undefined'.
+../client/src/demo/DemoPlayer.ts(319,22): error TS18048: 'f0' is possibly 'undefined'.
+../client/src/demo/DemoPlayer.ts(319,30): error TS18048: 'f1' is possibly 'undefined'.
+../client/src/demo/DemoPlayer.ts(320,19): error TS18048: 'f0' is possibly 'undefined'.
+../client/src/demo/DemoPlayer.ts(320,29): error TS18048: 'f1' is possibly 'undefined'.
+../client/src/demo/DemoPlayer.ts(321,29): error TS18048: 'f0' is possibly 'undefined'.
+../client/src/demo/DemoPlayer.ts(321,45): error TS18048: 'f1' is possibly 'undefined'.
+../client/src/demo/DemoPlayer.ts(322,31): error TS18048: 'f0' is possibly 'undefined'.
+../client/src/demo/DemoPlayer.ts(322,49): error TS18048: 'f1' is possibly 'undefined'.
+../client/src/demo/DemoPlayer.ts(323,25): error TS18048: 'f0' is possibly 'undefined'.
+../client/src/demo/DemoPlayer.ts(323,41): error TS18048: 'f1' is possibly 'undefined'.
+../client/src/demo/DemoSerializer.ts(28,11): error TS2532: Object is possibly 'undefined'.
+../client/src/demo/DemoSerializer.ts(28,27): error TS2532: Object is possibly 'undefined'.
+../client/src/demo/DemoSerializer.ts(39,29): error TS2345: Argument of type 'number | undefined' is not assignable to parameter of type 'number'.
+  Type 'undefined' is not assignable to type 'number'.
+tests/demo-serializer.test.ts(16,3): error TS2532: Object is possibly 'undefined'.
+tests/demo-serializer.test.ts(16,26): error TS2532: Object is possibly 'undefined'.
+tests/demo-serializer.test.ts(16,49): error TS2532: Object is possibly 'undefined'.
+tests/demo-serializer.test.ts(17,3): error TS2532: Object is possibly 'undefined'.
+tests/demo-serializer.test.ts(17,25): error TS2532: Object is possibly 'undefined'.
+tests/demo-serializer.test.ts(17,47): error TS2532: Object is possibly 'undefined'.
+tests/demo-serializer.test.ts(18,3): error TS2532: Object is possibly 'undefined'.
+tests/demo-serializer.test.ts(18,25): error TS2532: Object is possibly 'undefined'.
+tests/demo-serializer.test.ts(19,3): error TS2532: Object is possibly 'undefined'.
+tests/demo-serializer.test.ts(20,3): error TS2532: Object is possibly 'undefined'.
+tests/demo-serializer.test.ts(21,3): error TS2532: Object is possibly 'undefined'.
+tests/demo-serializer.test.ts(22,3): error TS2532: Object is possibly 'undefined'.
+tests/demo-serializer.test.ts(23,3): error TS2532: Object is possibly 'undefined'.
+tests/demo-serializer.test.ts(25,3): error TS2532: Object is possibly 'undefined'.
+tests/demo-serializer.test.ts(25,26): error TS2532: Object is possibly 'undefined'.
+tests/demo-serializer.test.ts(25,49): error TS2532: Object is possibly 'undefined'.
+tests/demo-serializer.test.ts(101,12): error TS2532: Object is possibly 'undefined'.
+tests/demo-serializer.test.ts(102,12): error TS2532: Object is possibly 'undefined'.
+tests/demo-serializer.test.ts(103,12): error TS2532: Object is possibly 'undefined'.
+tests/demo-serializer.test.ts(104,12): error TS2532: Object is possibly 'undefined'.
+tests/demo-serializer.test.ts(105,12): error TS2532: Object is possibly 'undefined'.
+tests/demo-serializer.test.ts(106,12): error TS2532: Object is possibly 'undefined'.
+tests/demo-serializer.test.ts(107,12): error TS2532: Object is possibly 'undefined'.
+tests/demo-serializer.test.ts(108,12): error TS2532: Object is possibly 'undefined'.
+tests/demo-serializer.test.ts(109,12): error TS2532: Object is possibly 'undefined'.
+tests/demo-serializer.test.ts(110,12): error TS2532: Object is possibly 'undefined'.
+tests/demo-serializer.test.ts(111,12): error TS2532: Object is possibly 'undefined'.
+tests/demo-serializer.test.ts(112,12): error TS2532: Object is possibly 'undefined'.
+tests/demo-serializer.test.ts(113,12): error TS2532: Object is possibly 'undefined'.
+tests/demo-serializer.test.ts(114,12): error TS2532: Object is possibly 'undefined'.
+tests/demo-serializer.test.ts(118,12): error TS2532: Object is possibly 'undefined'.
+tests/demo-serializer.test.ts(119,12): error TS2532: Object is possibly 'undefined'.
+tests/demo-serializer.test.ts(120,12): error TS2532: Object is possibly 'undefined'.
+tests/demo-serializer.test.ts(121,12): error TS2532: Object is possibly 'undefined'.
+tests/demo-serializer.test.ts(122,12): error TS2532: Object is possibly 'undefined'.
+tests/demo-serializer.test.ts(123,12): error TS2532: Object is possibly 'undefined'.
+tests/demo-serializer.test.ts(124,12): error TS2532: Object is possibly 'undefined'.
+tests/demo-serializer.test.ts(125,12): error TS2532: Object is possibly 'undefined'.
+tests/demo-serializer.test.ts(126,12): error TS2532: Object is possibly 'undefined'.
+tests/demo-serializer.test.ts(130,12): error TS2532: Object is possibly 'undefined'.
+tests/demo-serializer.test.ts(131,12): error TS2532: Object is possibly 'undefined'.
+tests/demo-serializer.test.ts(132,12): error TS2532: Object is possibly 'undefined'.
+tests/demo-serializer.test.ts(133,12): error TS2532: Object is possibly 'undefined'.
+tests/demo-serializer.test.ts(134,12): error TS2532: Object is possibly 'undefined'.
+exit=2

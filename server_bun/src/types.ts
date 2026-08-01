@@ -30,6 +30,7 @@ export interface PlayerState {
   lastValidPosition: Vec3;
   lastValidVelocity: Vec3;
   lastValidRotation: Rotation;
+  hasReceivedPosition: boolean;
 }
 
 export type ClientMessage =

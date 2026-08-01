@@ -1,0 +1,6 @@
+﻿ESLint (full):            exit=1  lines=68  -> C:\TEMP\_WEB\FPSWebTest\_reports\AUTO\eslint-report.txt
+ESLint (cognitive):      lines=42  -> C:\TEMP\_WEB\FPSWebTest\_reports\AUTO\eslint-cognitive-complexity.txt
+TypeScript:              clientErrors=0 serverErrors=78  -> C:\TEMP\_WEB\FPSWebTest\_reports\AUTO\tsc-report.txt
+Knip:                    exit=0  lines=88  -> C:\TEMP\_WEB\FPSWebTest\_reports\AUTO\knip-report.txt
+
+Completed in 8.5s

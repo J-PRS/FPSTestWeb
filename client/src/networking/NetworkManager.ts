@@ -141,7 +141,10 @@ export class NetworkManager {
     // Avoid JSON.stringify on every message — tickUpdate arrives at 20Hz
     switch (data.type) {
       case 'gameState':
-        // Store REMOTE players only (local player state comes via localPlayerState)
+        // gameState is the authoritative roster on (re)connect — clear stale entries
+        // for players who left during our disconnect, then add the current set.
+        // (Local player is never stored here; state comes via localPlayerState.)
+        this.players.clear();
         if (data.players && Array.isArray(data.players)) {
           for (const player of data.players) {
             if (player.id === this.localPlayerId) continue;

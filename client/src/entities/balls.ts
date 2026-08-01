@@ -177,59 +177,66 @@ export class Ball {
       const n = terrain.getNormal(this.pos.x, this.pos.z);
       const dot = this.vel.dot(n);
 
-      // Calculate total mechanical energy at bounce: KE + PE
-      // KE = 0.5 * v^2, PE = g * (global height above reference)
-      // Use fixed reference (y=0) to account for terrain height changes
-      const velBeforeReflection = this.vel.clone();
-      const totalEnergy = 0.5 * velBeforeReflection.lengthSq() + Math.abs(BALL_GRAVITY) * this.pos.y;
+      // Only treat as a bounce when the ball is moving INTO the surface (dot < 0).
+      // This prevents a spurious re-bounce when update() is called with dt=0 right
+      // after a playback keyframe snap: the ball sits exactly on the ground with
+      // upward velocity, and without this guard the reflection would flip it back
+      // downward, causing a one-frame dip/stutter (and a possible stray teleport).
+      if (dot < 0) {
+        // Calculate total mechanical energy at bounce: KE + PE
+        // KE = 0.5 * v^2, PE = g * (global height above reference)
+        // Use fixed reference (y=0) to account for terrain height changes
+        const velBeforeReflection = this.vel.clone();
+        const totalEnergy = 0.5 * velBeforeReflection.lengthSq() + Math.abs(BALL_GRAVITY) * this.pos.y;
 
-      this.vel.addScaledVector(n, -2.0 * dot * BOUNCE);
+        this.vel.addScaledVector(n, -2.0 * dot * BOUNCE);
 
-      // Check if reflection itself preserves energy (should be 100% with BOUNCE=1.0)
-      const velAfterMag = this.vel.length();
-      const velBeforeMag = velBeforeReflection.length();
-      const reflectionEnergyRatio = velAfterMag / velBeforeMag;
-      if (Math.abs(reflectionEnergyRatio - 1.0) > 0.01) {
-        console.warn(`[Ball ${this.id}] Reflection lost energy: ${(reflectionEnergyRatio * 100).toFixed(1)}% (should be 100%)`);
-      }
-
-      // Compare total mechanical energy to previous bounce
-      if (this.lastBounceEnergy > 0) {
-        const energyRatio = totalEnergy / this.lastBounceEnergy;
-        if (energyRatio < 0.95) {
-          console.warn(`[Ball ${this.id}] Total energy LOSS: ${(energyRatio * 100).toFixed(1)}% (KE: ${(0.5 * velBeforeMag * velBeforeMag).toFixed(1)}, PE: ${(Math.abs(BALL_GRAVITY) * this.pos.y).toFixed(1)})`);
-        } else if (energyRatio > 1.05) {
-          console.warn(`[Ball ${this.id}] Total energy GAIN: ${(energyRatio * 100).toFixed(1)}% (KE: ${(0.5 * velBeforeMag * velBeforeMag).toFixed(1)}, PE: ${(Math.abs(BALL_GRAVITY) * this.pos.y).toFixed(1)})`);
+        // Check if reflection itself preserves energy (should be 100% with BOUNCE=1.0)
+        const velAfterMag = this.vel.length();
+        const velBeforeMag = velBeforeReflection.length();
+        const reflectionEnergyRatio = velAfterMag / velBeforeMag;
+        if (Math.abs(reflectionEnergyRatio - 1.0) > 0.01) {
+          console.warn(`[Ball ${this.id}] Reflection lost energy: ${(reflectionEnergyRatio * 100).toFixed(1)}% (should be 100%)`);
         }
-      }
-      this.lastBounceEnergy = totalEnergy;
 
-      // Record bounce keyframe (after velocity reflection)
-      if (this.onBounce) {
-        this.onBounce(this.pos.clone(), this.vel.clone());
-      }
+        // Compare total mechanical energy to previous bounce
+        if (this.lastBounceEnergy > 0) {
+          const energyRatio = totalEnergy / this.lastBounceEnergy;
+          if (energyRatio < 0.95) {
+            console.warn(`[Ball ${this.id}] Total energy LOSS: ${(energyRatio * 100).toFixed(1)}% (KE: ${(0.5 * velBeforeMag * velBeforeMag).toFixed(1)}, PE: ${(Math.abs(BALL_GRAVITY) * this.pos.y).toFixed(1)})`);
+          } else if (energyRatio > 1.05) {
+            console.warn(`[Ball ${this.id}] Total energy GAIN: ${(energyRatio * 100).toFixed(1)}% (KE: ${(0.5 * velBeforeMag * velBeforeMag).toFixed(1)}, PE: ${(Math.abs(BALL_GRAVITY) * this.pos.y).toFixed(1)})`);
+          }
+        }
+        this.lastBounceEnergy = totalEnergy;
 
-      const dx = this.pos.x - playerPos.x;
-      const dz = this.pos.z - playerPos.z;
-      if (dx * dx + dz * dz > BALL_MAX_DIST * BALL_MAX_DIST) {
-        const ang = Math.random() * Math.PI * 2;
-        const dist = BALL_TELE_MIN + Math.random() * (BALL_TELE_MAX - BALL_TELE_MIN);
-        this.pos.x = playerPos.x + Math.cos(ang) * dist;
-        this.pos.z = playerPos.z + Math.sin(ang) * dist;
-        this.pos.y = terrain.getHeight(this.pos.x, this.pos.z) + BALL_TELE_HEIGHT;
-
-        // Preserve absolute velocity, redirect according to terrain normal at teleport point
-        const currentSpeed = this.vel.length();
-        const n = terrain.getNormal(this.pos.x, this.pos.z);
-        const dot = this.vel.dot(n);
-        this.vel.addScaledVector(n, -2.0 * dot * BOUNCE); // Reflect velocity off terrain normal
-        this.vel.normalize().multiplyScalar(currentSpeed); // Preserve original speed
-
-        // Reset energy tracking on teleport (intentional energy reset)
-        this.lastBounceEnergy = 0;
-        // Record teleport as a bounce keyframe too (position + velocity reset)
+        // Record bounce keyframe (after velocity reflection)
         if (this.onBounce) {
           this.onBounce(this.pos.clone(), this.vel.clone());
+        }
+
+        const dx = this.pos.x - playerPos.x;
+        const dz = this.pos.z - playerPos.z;
+        if (dx * dx + dz * dz > BALL_MAX_DIST * BALL_MAX_DIST) {
+          const ang = Math.random() * Math.PI * 2;
+          const dist = BALL_TELE_MIN + Math.random() * (BALL_TELE_MAX - BALL_TELE_MIN);
+          this.pos.x = playerPos.x + Math.cos(ang) * dist;
+          this.pos.z = playerPos.z + Math.sin(ang) * dist;
+          this.pos.y = terrain.getHeight(this.pos.x, this.pos.z) + BALL_TELE_HEIGHT;
+
+          // Preserve absolute velocity, redirect according to terrain normal at teleport point
+          const currentSpeed = this.vel.length();
+          const n = terrain.getNormal(this.pos.x, this.pos.z);
+          const dot = this.vel.dot(n);
+          this.vel.addScaledVector(n, -2.0 * dot * BOUNCE); // Reflect velocity off terrain normal
+          this.vel.normalize().multiplyScalar(currentSpeed); // Preserve original speed
+
+          // Reset energy tracking on teleport (intentional energy reset)
+          this.lastBounceEnergy = 0;
+          // Record teleport as a bounce keyframe too (position + velocity reset)
+          if (this.onBounce) {
+            this.onBounce(this.pos.clone(), this.vel.clone());
+          }
         }
       }
     }
