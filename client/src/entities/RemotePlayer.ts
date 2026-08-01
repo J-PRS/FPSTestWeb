@@ -136,10 +136,17 @@ export class RemotePlayer {
       }
       this.lastServerPosition.set(targetPosition.x, targetPosition.y, targetPosition.z);
     }
+    // NOTE: death physics (gravity, bounce, tumble, shrink) are handled in tick()
+    // so they run every frame at the real dt — running them here at 20Hz with a
+    // fixed dt made dead bodies fall/tumble at ~32% speed and look choppy.
+  }
 
-    // Handle death physics (ragdoll-like rigidbody)
+  // Called every frame for smooth interpolation
+  tick(dt: number): void {
+    // Death physics (ragdoll-like rigidbody) run every frame at the real dt so
+    // bodies fall/tumble/shrink at full speed and smoothly. Moved here from
+    // update() which only fires at ~20Hz with a fixed dt.
     if (this.isDead) {
-
       // Apply gravity
       this.velocity.y += GRAVITY * dt;
       this.position.x += this.velocity.x * dt;
@@ -190,11 +197,19 @@ export class RemotePlayer {
           this.scale = shrinkFactor;
         }
       }
-    }
-  }
 
-  // Called every frame for smooth interpolation
-  tick(dt: number): void {
+      // Update model if loaded (position/rotation/scale/animation)
+      if (this._loaded) {
+        this._model.setPosition(this.position.x, this.position.y, this.position.z);
+        this._model.setRotation(this.rotation.yaw, this.rotation.pitch, this.rotation.roll);
+        if (this.scale !== 1.0) {
+          this._model.setScale(this.scale);
+        }
+        this._model.update(dt);
+      }
+      return; // Dead players skip the alive interpolation/simulation below
+    }
+
     if (!this.isDead) {
       // Dead reckoning trigger: if no updates for 300ms, start simulating
       const timeSinceUpdate = Date.now() - this._lastUpdateTime;
@@ -276,51 +291,42 @@ export class RemotePlayer {
       }
     }
 
-    // Update model if loaded
+    // Update model if loaded (alive path — dead players return early above)
     if (this._loaded) {
       this._model.setPosition(this.position.x, this.position.y, this.position.z);
       this._model.setRotation(this.rotation.yaw, this.rotation.pitch, this.rotation.roll);
 
-      // Apply scale (for death shrink effect)
-      if (this.isDead && this.scale !== 1.0) {
-        this._model.setScale(this.scale);
+      // Calculate speed for animation with hysteresis
+      const speed = this.position.distanceTo(this.previousPosition) / dt;
+      let animState: AnimationState = 'idle';
+
+      // Hysteresis to prevent flickering (same logic as local player)
+      const currentAnim = this._model['currentState'] as AnimationState;
+
+      if (currentAnim === 'run') {
+        if (speed < 6.0) {
+          animState = speed > 1.5 ? 'walk' : 'idle';
+        } else {
+          animState = 'run';
+        }
+      } else if (currentAnim === 'walk') {
+        if (speed < 0.8) {
+          animState = 'idle';
+        } else if (speed > 9.0) {
+          animState = 'run';
+        } else {
+          animState = 'walk';
+        }
+      } else {
+        if (speed > 1.5) {
+          animState = speed > 8.0 ? 'run' : 'walk';
+        } else {
+          animState = 'idle';
+        }
       }
 
-      if (this.isDead) {
-        // No animation, just physics
-      } else {
-        // Calculate speed for animation with hysteresis
-        const speed = this.position.distanceTo(this.previousPosition) / dt;
-        let animState: AnimationState = 'idle';
-        
-        // Hysteresis to prevent flickering (same logic as local player)
-        const currentAnim = this._model['currentState'] as AnimationState;
-        
-        if (currentAnim === 'run') {
-          if (speed < 6.0) {
-            animState = speed > 1.5 ? 'walk' : 'idle';
-          } else {
-            animState = 'run';
-          }
-        } else if (currentAnim === 'walk') {
-          if (speed < 0.8) {
-            animState = 'idle';
-          } else if (speed > 9.0) {
-            animState = 'run';
-          } else {
-            animState = 'walk';
-          }
-        } else {
-          if (speed > 1.5) {
-            animState = speed > 8.0 ? 'run' : 'walk';
-          } else {
-            animState = 'idle';
-          }
-        }
-        
-        this._model.setAnimationState(animState);
-        this.previousPosition.copy(this.position);
-      }
+      this._model.setAnimationState(animState);
+      this.previousPosition.copy(this.position);
       this._model.update(dt);
     }
 

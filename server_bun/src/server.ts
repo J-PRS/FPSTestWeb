@@ -22,6 +22,7 @@ function corsResponse(body: BodyInit | null, init?: ResponseInit): Response {
 
 const server = Bun.serve<WebSocketData>({
   port: CONFIG.port,
+  hostname: '0.0.0.0',
   idleTimeout: CONFIG.idleTimeoutSec,
 
   websocket: {

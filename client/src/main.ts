@@ -14,6 +14,7 @@ import { createRenderer } from './core/renderer.js';
 
 import { DemoManager } from './demo/index.js';
 import { InputFlags, JetpackFlags, ProjectileEventType, TargetEventType } from './demo/types.js';
+import type { ProjectileEvent, TargetEvent } from './demo/types.js';
 
 import { Ball, pickVariant } from './entities/balls.js';
 import { Player } from './entities/Player.js';
@@ -520,11 +521,10 @@ function loop(time: number): void {
       }
       if (!remotePlayer) return; // Skip if being created by onPlayerUpdate or failed
       // RemotePlayer.update is called via onPlayerUpdate callback to store target position
-      // Call tick() every frame for smooth interpolation (includes dead reckoning trigger)
+      // Call tick() every frame for smooth interpolation (includes dead reckoning trigger).
+      // tick() already calls this.model.update(dt) internally — do NOT call it again here,
+      // or animations advance at 2x speed (double AnimationMixer.update).
       remotePlayer.tick(dt);
-      if (remotePlayer.model && remotePlayer.loaded) {
-        remotePlayer.model.update(dt);
-      }
 
       // Update HUD indicator for this player (skip if dead)
       // Use RemotePlayer's extrapolated position for LAN-feel responsiveness
@@ -673,7 +673,8 @@ async function init(): Promise<void> {
 
   // Initialize demo system with player/input data providers
   demoManager = new DemoManager();
-  demoManager.setServerUrl('http://localhost:8000');
+  const serverHost = window.location.hostname || 'localhost';
+  demoManager.setServerUrl(`http://${serverHost}:8000`);
   demoManager.setDataProviders(
     {
       get posX() { return player.pos.x; },
@@ -717,7 +718,7 @@ async function init(): Promise<void> {
 
   // ---- Playback projectile reconstruction ----
   // Handle projectile events from demo playback: spawn projectiles on Fired, explode on Destroyed
-  demoManager.onPlaybackEvent = (events: { projectiles: any[], targets: any[] }) => {
+  demoManager.onPlaybackEvent = (events: { projectiles: ProjectileEvent[], targets: TargetEvent[] }) => {
     if (seekReconstructing) {
       // Seek reconstruction: re-create all in-flight objects at their state as of the seek time.
       // Skip objects that died before the seek time. Fast-forward in-flight objects to seek time.
@@ -732,10 +733,16 @@ async function init(): Promise<void> {
         }
       }
 
-      // Pre-scan: find ball IDs with Destroyed events — these are dead at seek time
+      // Pre-scan: find ball IDs that are dead at seek time.
+      // A ball is dead if it has a Destroyed event, OR a Hit event that reduced
+      // its health to <= 0 (some recordings emit Hit-with-kill without a follow-up
+      // Destroyed). Treat both as terminal so seek reconstruction doesn't keep
+      // fast-forwarding a dead ball's trail fade.
       const deadBallIds = new Set<number>();
       for (const ev of events.targets) {
         if (ev.eventType === TargetEventType.Destroyed) {
+          deadBallIds.add(ev.targetId);
+        } else if (ev.eventType === TargetEventType.Hit && ev.health <= 0) {
           deadBallIds.add(ev.targetId);
         }
       }
@@ -866,6 +873,31 @@ async function init(): Promise<void> {
 
     // Normal playback event processing (forward playback, not seeking)
     // Handle target events first so balls are spawned/updated before projectile hits reference them
+    //
+    // Keyframe snapping policy: balls are resimulated with the live render dt between
+    // keyframes, so their trajectory drifts slightly from the recording (different dt).
+    // Hard-snapping every keyframe (including the 0.5s periodic snapshots) produces
+    // visible micro-jumps. Instead, only hard-snap when drift is large (real desync from
+    // a bounce-timing mismatch or teleport); for small drift, gently correct toward the
+    // recorded state so the motion stays smooth and drift stays bounded over long arcs.
+    const PLAYBACK_HARD_SNAP_DIST = 1.5; // meters — large desync -> hard snap
+    const PLAYBACK_SMOOTH_FACTOR = 0.25; // per-event gentle correction for small drift
+    const smoothSnapBall = (ball: Ball, ex: number, ey: number, ez: number, evx: number, evy: number, evz: number): void => {
+      const dx = ball.pos.x - ex, dy = ball.pos.y - ey, dz = ball.pos.z - ez;
+      const drift = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      if (drift >= PLAYBACK_HARD_SNAP_DIST) {
+        ball.pos.set(ex, ey, ez);
+        ball.vel.set(evx, evy, evz);
+      } else {
+        const a = PLAYBACK_SMOOTH_FACTOR;
+        ball.pos.x += (ex - ball.pos.x) * a;
+        ball.pos.y += (ey - ball.pos.y) * a;
+        ball.pos.z += (ez - ball.pos.z) * a;
+        ball.vel.x += (evx - ball.vel.x) * a;
+        ball.vel.y += (evy - ball.vel.y) * a;
+        ball.vel.z += (evz - ball.vel.z) * a;
+      }
+    };
     for (const ev of events.targets) {
       if (ev.eventType === TargetEventType.Spawned) {
         const ball = new Ball(scene, terrain, ev.targetType as 0 | 1 | 2);
@@ -880,19 +912,17 @@ async function init(): Promise<void> {
         // Sync mesh position immediately (Ball constructor doesn't copy pos to mesh.position)
         ball.update(0, terrain, player.pos);
       } else if (ev.eventType === TargetEventType.Bounce) {
-        // Snap ball to recorded bounce keyframe to prevent physics drift
+        // Correct ball toward recorded bounce keyframe; hard-snap only on large drift
         const ball = playbackBallById.get(ev.targetId);
         if (ball && !ball.dead) {
-          ball.pos.set(ev.posX, ev.posY, ev.posZ);
-          ball.vel.set(ev.velX, ev.velY, ev.velZ);
+          smoothSnapBall(ball, ev.posX, ev.posY, ev.posZ, ev.velX, ev.velY, ev.velZ);
           ball.update(0, terrain, player.pos);
         }
       } else if (ev.eventType === TargetEventType.StateChanged) {
-        // Peak keyframe — snap position and velocity to correct trajectory
+        // Peak / periodic snapshot — correct trajectory without hard-snapping on small drift
         const ball = playbackBallById.get(ev.targetId);
         if (ball && !ball.dead) {
-          ball.pos.set(ev.posX, ev.posY, ev.posZ);
-          ball.vel.set(ev.velX, ev.velY, ev.velZ);
+          smoothSnapBall(ball, ev.posX, ev.posY, ev.posZ, ev.velX, ev.velY, ev.velZ);
           ball.update(0, terrain, player.pos);
         }
       } else if (ev.eventType === TargetEventType.Hit) {
@@ -1056,11 +1086,6 @@ async function init(): Promise<void> {
     // Clear live projectiles
     for (const r of projectiles) {
       r.dispose();
-    }
-    projectiles.length = 0;
-    // Clear live projectiles
-    for (const d of projectiles) {
-      d.dispose();
     }
     projectiles.length = 0;
     // Clear explosions, implosions, debris
@@ -1337,6 +1362,18 @@ async function init(): Promise<void> {
     // RemotePlayer will be created in the main loop when networkManager.getPlayers() includes this player
   };
 
+  // Register playerLeft handler — immediate cleanup when server broadcasts playerLeft
+  networkManager.onPlayerLeft = (playerId: string) => {
+    const remotePlayer = remotePlayers.get(playerId);
+    if (remotePlayer) {
+      remotePlayer.dispose();
+      remotePlayers.delete(playerId);
+      hud.removePlayerIndicator(playerId);
+      healthBarSystem.removeBar(playerId);
+      logger.info(`Remote player removed (playerLeft): ${playerId}`);
+    }
+  };
+
   // Register gameState handler (for initial connection and reconnection)
   networkManager.onGameState = (players: any[], localPlayerState: any) => {
     logger.debug(`gameState received, players: ${players.length}`);
@@ -1371,7 +1408,7 @@ async function init(): Promise<void> {
   };
 
   // Connect to server (non-blocking for offline mode)
-  const serverUrl = 'ws://localhost:8000/ws';
+  const serverUrl = `ws://${window.location.hostname || 'localhost'}:8000/ws`;
   profiler.markTime('networkConnectStart');
   networkManager.connect(serverUrl).then(() => {
     profiler.markTime('networkConnected');

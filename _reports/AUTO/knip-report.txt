@@ -1,0 +1,88 @@
+﻿Unused devDependencies (2)
+eslint-plugin-import  package.json:20:6
+oxlint                package.json:23:6
+Unused exports (44)
+RENDERER_PIXEL_RATIO                     src/core/config.ts:74:14             
+CLOUD_DEFAULT_COUNT                      src/core/config.ts:100:14            
+CLOUD_DEFAULT_WIND_SPEED                 src/core/config.ts:101:14            
+CLOUD_DEFAULT_DENSITY                    src/core/config.ts:102:14            
+MAX_INPUT_HISTORY                        src/core/config.ts:133:14            
+FRAG_MESSAGE_TOP_OFFSET                  src/core/config.ts:139:14            
+FRAG_MESSAGE_TEXT_SHADOW_X               src/core/config.ts:140:14            
+FRAG_MESSAGE_TEXT_SHADOW_Y               src/core/config.ts:141:14            
+FRAG_MESSAGE_TEXT_SHADOW_BLUR            src/core/config.ts:142:14            
+FRAG_MESSAGE_LINE_HEIGHT                 src/core/config.ts:143:14            
+GAME_LOOP_FIXED_DT                       src/core/config.ts:159:14            
+PLAYER_ID_LENGTH                         src/core/config.ts:164:14            
+BUTTON_TIMEOUT                           src/core/config.ts:165:14            
+IMPLOSION_LIFE                           src/core/config.ts:176:14            
+SHOCK_LIFE                               src/core/config.ts:177:14            
+FLASH_LIFE                               src/core/config.ts:178:14            
+TERRAIN_SIZE                             src/core/config.ts:181:14            
+TERRAIN_SUBDIV                           src/core/config.ts:182:14            
+default                        class     src/core/Logger.ts:182:16            
+DemoRecorder                             src/demo/index.ts:5:10               
+DemoSerializer                           src/demo/index.ts:7:10               
+DemoPlayer                               src/demo/index.ts:8:10               
+DemoUI                                   src/demo/index.ts:10:10              
+CircularBuffer                           src/demo/index.ts:12:10              
+InputFlags                               src/demo/index.ts:18:3               
+JetpackFlags                             src/demo/index.ts:18:15              
+ProjectileEventType                      src/demo/index.ts:18:29              
+TargetEventType                          src/demo/index.ts:18:50              
+DEMO_MAGIC                               src/demo/index.ts:19:3               
+DEMO_FORMAT_VERSION                      src/demo/index.ts:19:15              
+createFrame                              src/demo/index.ts:20:3               
+createHeader                             src/demo/index.ts:20:16              
+createHeader                   function  src/demo/types.ts:124:17             
+MOVEMENT_CONFIG                          src/entities/movement.ts:8:14        
+StringCompressor               class     src/networking/BitStream.ts:373:14   
+PositionEvent                  class     src/networking/EventManager.ts:23:14 
+SkiEvent                       class     src/networking/EventManager.ts:203:14
+DeathEvent                     class     src/networking/EventManager.ts:244:14
+WEAPON_CONFIGS                           src/projectiles/index.ts:14:14       
+getProjectileConfigByName      function  src/projectiles/index.ts:20:17       
+getProjectileConfig            function  src/projectiles/types.ts:50:17       
+getProjectileConfigByName      function  src/projectiles/types.ts:54:17       
+sampleHeight                   function  src/world/terrain.ts:60:17           
+sampleNormal                   function  src/world/terrain.ts:67:17           
+Unused exported types (28)
+LogLevel                  enum       src/core/Logger.ts:6:13                
+EntityState               interface  src/core/StateSnapshot.ts:5:18         
+IProjectileEventRecorder  interface  src/demo/DemoRecorder.ts:466:18        
+ITargetEventRecorder      interface  src/demo/DemoRecorder.ts:473:18        
+CoolShotEntry             type       src/demo/index.ts:4:15                 
+IProjectileEventRecorder  type       src/demo/index.ts:6:15                 
+ITargetEventRecorder      type       src/demo/index.ts:6:41                 
+PlaybackState             type       src/demo/index.ts:9:15                 
+PlaybackCallbacks         type       src/demo/index.ts:9:30                 
+DemoUICallbacks           type       src/demo/index.ts:11:15                
+IPlayerDataProvider       type       src/demo/index.ts:13:15                
+IInputProvider            type       src/demo/index.ts:13:36                
+IProjectileEventSource    type       src/demo/index.ts:13:52                
+ITargetEventSource        type       src/demo/index.ts:13:76                
+Vec3                      type       src/demo/index.ts:13:96                
+DemoFrame                 type       src/demo/index.ts:15:3                 
+ProjectileEvent           type       src/demo/index.ts:15:14                
+TargetEvent               type       src/demo/index.ts:15:31                
+DemoHeader                type       src/demo/index.ts:15:44                
+DemoFile                  type       src/demo/index.ts:15:56                
+DemoClip                  type       src/demo/index.ts:15:66                
+IProjectileEventSource    interface  src/demo/interfaces.ts:19:18           
+ITargetEventSource        interface  src/demo/interfaces.ts:26:18           
+DemoHeader                interface  src/demo/types.ts:79:18                
+DemoClip                  interface  src/demo/types.ts:103:18               
+StateMask                 enum       src/networking/GhostManager.ts:12:13   
+PlayerState               interface  src/networking/INetworkAdapter.ts:19:18
+InputState                interface  src/networking/INetworkAdapter.ts:27:18
+node.exe : Configuration hints (4)
+At C:\Program Files\nodejs\npx.ps1:29 char:3
++   & $NODE_EXE $NPX_CLI_JS $args
++   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Configuration hints (4):String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+node_modules/**    knip.json  Remove from ignore            
+dist/**            knip.json  Remove from ignore            
+reports/**         knip.json  Remove from ignore            
+msgpack-lite       knip.json  Remove from ignoreDependencies

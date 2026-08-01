@@ -128,33 +128,47 @@ export class DemoPlayer {
     if (!Number.isFinite(dt) || dt < 0) dt = 0;
     this.currentTime += dt * this.playbackSpeed;
 
-    // Handle end of playback
+    // Handle end of playback (forward direction)
     if (this.currentTime >= this.duration) {
       if (this.loop) {
+        // Emit any events in the final partial step [prevTime, duration] before
+        // wrapping, so a hit/explosion landing exactly at the end isn't lost.
+        this.emitFrameAndEvents(this.duration);
+        // Wrap to beginning: reset state and seek-reconstruct from t=0
         this.currentTime = 0;
         this.frameIndex = 0;
         this.lastProjectileEventIndex = 0;
         this.lastTargetEventIndex = 0;
-        // Clean up objects from previous iteration before replaying
         this.callbacks.onSeek?.();
+        this.emitFrameAndEvents(0);
       } else {
         this.currentTime = this.duration;
         this.playing = false;
         if (this.callbacks.onPlaybackEnd) this.callbacks.onPlaybackEnd();
         if (this.callbacks.onTimeUpdate) this.callbacks.onTimeUpdate(this.currentTime, this.duration);
-        return;
       }
+      return;
     }
 
-    // Handle rewind (negative speed)
+    // Handle rewind past the beginning (negative speed)
     if (this.currentTime < 0) {
       if (this.loop) {
+        // Emit events for the partial step [0, prevTime] then wrap to end
+        this.emitFrameAndEvents(0);
         this.currentTime = this.duration;
+        this.frameIndex = this.findFrameIndex(this.currentTime);
+        // Reverse playback can't re-emit past events incrementally, so
+        // seek-reconstruct the full state at the wrap target.
+        this.lastProjectileEventIndex = 0;
+        this.lastTargetEventIndex = 0;
+        this.callbacks.onSeek?.();
+        this.emitFrameAndEvents(this.currentTime);
       } else {
         this.currentTime = 0;
         this.playing = false;
-        return;
+        if (this.callbacks.onTimeUpdate) this.callbacks.onTimeUpdate(this.currentTime, this.duration);
       }
+      return;
     }
 
     // Find the right frame index for current time
@@ -163,9 +177,27 @@ export class DemoPlayer {
     // Interpolate state between frames
     const state = this.getInterpolatedState();
 
-    // Collect events that occurred since last update
-    const newProjEvents = this.collectNewEvents(this.demoData.projectileEvents, this.lastProjectileEventIndex);
-    const newTargetEvents = this.collectNewEvents(this.demoData.targetEvents, this.lastTargetEventIndex);
+    // Collect events that occurred since last update.
+    // For forward playback this is a simple forward slice.
+    // For reverse playback, incremental re-emission is impossible (events are
+    // timestamp-ordered and we're moving backward), so we seek-reconstruct.
+    let newProjEvents: ProjectileEvent[];
+    let newTargetEvents: TargetEvent[];
+    if (this.playbackSpeed < 0) {
+      // Reverse playback: reconstruct full state at the new time.
+      // Trigger a seek so the game clears and rebuilds all in-flight objects,
+      // then re-emit all events up to the new currentTime.
+      this.lastProjectileEventIndex = 0;
+      this.lastTargetEventIndex = 0;
+      this.callbacks.onSeek?.();
+      const projCount = this.findEventIndex(this.demoData.projectileEvents, this.currentTime);
+      const tgtCount = this.findEventIndex(this.demoData.targetEvents, this.currentTime);
+      newProjEvents = this.demoData.projectileEvents.slice(0, projCount);
+      newTargetEvents = this.demoData.targetEvents.slice(0, tgtCount);
+    } else {
+      newProjEvents = this.collectNewEvents(this.demoData.projectileEvents, this.lastProjectileEventIndex);
+      newTargetEvents = this.collectNewEvents(this.demoData.targetEvents, this.lastTargetEventIndex);
+    }
 
     if (this.callbacks.onFrameUpdate) {
       this.callbacks.onFrameUpdate(state, { projectiles: newProjEvents, targets: newTargetEvents });
@@ -180,6 +212,26 @@ export class DemoPlayer {
       this.lastProjectileEventIndex = this.findEventIndex(this.demoData.projectileEvents, this.currentTime);
       this.lastTargetEventIndex = this.findEventIndex(this.demoData.targetEvents, this.currentTime);
     }
+  }
+
+  // Emit the interpolated frame state and events up to `time` without advancing
+  // currentTime. Used by loop wraparound to flush the final partial step.
+  private emitFrameAndEvents(time: number): void {
+    if (!this.demoData) return;
+    this.frameIndex = this.findFrameIndex(time);
+    const state = this.getInterpolatedState();
+    const projCount = this.findEventIndex(this.demoData.projectileEvents, time);
+    const tgtCount = this.findEventIndex(this.demoData.targetEvents, time);
+    const newProjEvents = this.demoData.projectileEvents.slice(this.lastProjectileEventIndex, projCount);
+    const newTargetEvents = this.demoData.targetEvents.slice(this.lastTargetEventIndex, tgtCount);
+    if (this.callbacks.onFrameUpdate) {
+      this.callbacks.onFrameUpdate(state, { projectiles: newProjEvents, targets: newTargetEvents });
+    }
+    if (this.callbacks.onTimeUpdate) {
+      this.callbacks.onTimeUpdate(time, this.duration);
+    }
+    this.lastProjectileEventIndex = projCount;
+    this.lastTargetEventIndex = tgtCount;
   }
 
   private findFrameIndex(time: number): number {

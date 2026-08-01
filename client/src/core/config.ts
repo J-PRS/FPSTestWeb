@@ -75,7 +75,7 @@ export const RENDERER_PIXEL_RATIO = 1; // Device pixel ratio
 
 // Camera constants
 export const CAMERA_FOV = 90; // Field of view in degrees
-export const CAMERA_NEAR = 0.1; // Near clipping plane
+export const CAMERA_NEAR = 0.05; // Near clipping plane — small value to prevent terrain clipping at screen corners on steep slopes
 export const CAMERA_FAR = 6000; // Far clipping plane
 
 // Fog constants

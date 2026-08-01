@@ -43,7 +43,7 @@ foreach ($port in $ports) {
 $serverArgs = @(
     '-NoExit',
     '-Command',
-    'cd C:\TEMP\_WEB\FPSWebTest\server; npm run dev; $Host.UI.RawUI.WindowTitle = "FPS Server"'
+    '$env:PATH = $env:USERPROFILE + ''\.bun\bin;'' + $env:PATH; cd C:\TEMP\_WEB\FPSWebTest\server_bun; bun run dev; $Host.UI.RawUI.WindowTitle = "FPS Server"'
 )
 Start-Process powershell -ArgumentList $serverArgs -Verb RunAs
 

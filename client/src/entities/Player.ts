@@ -18,6 +18,8 @@ export class Player {
   vel = new THREE.Vector3();
   yaw = 0.0;
   pitch = 0.0;
+  // Invert vertical mouse look ("flight sim" style). Persisted in localStorage.
+  invertY = localStorage.getItem('fps-invert-y') === 'true';
 
   onGround = false;
   energy = MAX_ENERGY;
@@ -190,10 +192,21 @@ export class Player {
     document.addEventListener('mousemove', (e) => {
       if (document.pointerLockElement && !this.inputFrozen) {
         this.yaw   -= e.movementX * 0.002;
-        this.pitch += e.movementY * 0.002;
+        this.pitch += e.movementY * 0.002 * (this.invertY ? 1 : -1);
         this.pitch = Math.max(-Math.PI / 2 + 0.01, Math.min(Math.PI / 2 - 0.01, this.pitch));
       }
     });
+
+    // Wire the ESC-menu toggle for inverted vertical mouse look
+    const invertYBtn = document.getElementById('invert-y-toggle') as HTMLButtonElement | null;
+    if (invertYBtn) {
+      invertYBtn.textContent = this.invertY ? 'INVERT Y: ON' : 'INVERT Y: OFF';
+      invertYBtn.addEventListener('click', () => {
+        this.invertY = !this.invertY;
+        localStorage.setItem('fps-invert-y', this.invertY.toString());
+        invertYBtn.textContent = this.invertY ? 'INVERT Y: ON' : 'INVERT Y: OFF';
+      });
+    }
   }
 
   private getForwardXZ(): THREE.Vector2 {

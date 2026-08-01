@@ -29,6 +29,7 @@ export class PlayerManager {
       lastValidPosition: { ...spawn },
       lastValidVelocity: { x: 0, y: 0, z: 0 },
       lastValidRotation: { yaw: 0, pitch: 0 },
+      hasReceivedPosition: false,
     };
 
     this.players.set(playerId, player);
@@ -138,6 +139,11 @@ export class PlayerManager {
     player.health = CONFIG.playerMaxHealth;
     player.isDead = false;
     player.pendingRespawn = false;
+    player.lastSeq = 0;
+    player.lastValidPosition = { ...spawn };
+    player.lastValidVelocity = { x: 0, y: 0, z: 0 };
+    player.lastValidRotation = { yaw: 0, pitch: 0 };
+    player.hasReceivedPosition = false;
 
     return { position: { ...player.position }, rotation: { ...player.rotation } };
   }

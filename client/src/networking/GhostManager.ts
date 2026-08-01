@@ -72,6 +72,11 @@ export class GhostManager {
       // Check if we have space for at least ghost ID + state mask
       if (!stream.hasSpace(24)) break;
 
+      // Save bit position before packing so we can roll back just this ghost
+      // if it overflows the packet (previously stream.reset() wiped the ENTIRE
+      // buffer, discarding all ghosts packed earlier in the same packet).
+      const bitPosBeforeGhost = stream.getBitPosition();
+
       // Pack ghost ID
       stream.writeInt(ghost.id, 16);
 
@@ -103,9 +108,9 @@ export class GhostManager {
 
       // Check if we exceeded size limit
       if (stream.getByteLength() > maxBytes) {
-        // Roll back this ghost
-        stream.reset();
-        stream.reset(); // Reset twice to clear buffer
+        // Roll back just this ghost — restore bitPosition so getData() excludes
+        // the overflow bytes. Keep this ghost's stateMask so it retries next packet.
+        stream.setBitPosition(bitPosBeforeGhost);
         break;
       }
 
@@ -180,9 +185,12 @@ export class GhostManager {
 
   /**
    * Build update list based on scoping and priority
+   * Only includes ghosts with pending state changes (stateMask != 0).
+   * ScopeManager is currently a stub (returns []), so we source directly
+   * from our ghosts map to avoid the entire ghost sync path being dead.
    */
   private buildUpdateList(): Ghost[] {
-    const inScope = this.scopeManager.getInScopeGhosts();
+    const inScope = Array.from(this.ghosts.values()).filter(g => g.stateMask !== 0);
 
     // Sort by priority (status changes first, then by interest)
     return inScope.sort((a, b) => {
