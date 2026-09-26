@@ -1,5 +1,9 @@
 # Changelog
 
+## [2026-09-26] Tech Debt Pass 8 — real packet-loss metric
+
+- `NetworkManager.getPacketLoss` returned a hardcoded 0 (TCP can't lose packets — the HUD lied). Now measures delivery gaps in the 20Hz tick stream: a frame >2x the interval late counts skipped slots as missed over a sliding 5s window. What players feel as "loss" is exactly this.
+
 ## [2026-09-26] Tech Debt Pass 7 — demo split, smaller dedups
 
 ### DemoManager split (657→406)
