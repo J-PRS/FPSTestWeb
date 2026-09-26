@@ -36,6 +36,7 @@ import { HUD } from './ui/hud.js';
 import { wireOverlayInput } from './ui/overlayInput.js';
 
 import { applyDebugHooks } from './game/debugHooks.js';
+import { createProjectileRegistry } from './game/projectileRegistry.js';
 import { createCombat } from './game/combat.js';
 import { createDemoLifecycle } from './game/demoLifecycle.js';
 import { createEntities } from './game/entities.js';
@@ -86,6 +87,7 @@ let dummyUpdate: ((dt: number) => void) | null = null; // ?dummy debug hook
 const _blinkDir = new THREE.Vector3(); // scratch for the blink FX handler
 const killCounts = new Map<string, number>(); // scoreboard frags, tracked from kill broadcasts
 const projectiles: Projectile[] = [];
+const projectileRegistry = createProjectileRegistry();
 const debrisList: BallDebris[] = [];
 const playerDebrisList: PlayerDebris[] = [];
 const explosions: Explosion[] = [];
@@ -173,6 +175,7 @@ async function init(): Promise<void> {
     targets: entities.targets,
     nuggets: entities.nuggets,
     projectiles,
+    projectileRegistry,
     debrisList,
     explosions,
     implosions,
@@ -327,6 +330,7 @@ async function init(): Promise<void> {
     explosionTracker,
     logger,
     remotePlayers,
+    projectileRegistry,
     killCounts,
     playerDebrisList,
     projectiles,

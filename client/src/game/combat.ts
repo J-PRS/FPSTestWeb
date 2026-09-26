@@ -36,6 +36,7 @@ import { aoeImpulse, aoeDamage as aoeDamageOf } from '../../../shared/combat.js'
 import { poissonDisc } from '../utils/poissonSpread.js';
 import type { Terrain } from '../world/terrain.js';
 import { screenShake } from '../effects/screenShake.js';
+import type { ProjectileRegistry } from './projectileRegistry.js';
 
 export interface CombatDeps {
   scene(): THREE.Scene;
@@ -58,6 +59,7 @@ export interface CombatDeps {
   targets: import('../entities/balls.js').Targetable[]; // balls + crawlers — shootable/blastable
   nuggets: Nugget[];
   projectiles: Projectile[];
+  projectileRegistry: ProjectileRegistry;
   debrisList: BallDebris[];
   explosions: Explosion[];
   implosions: Implosion[];
@@ -72,11 +74,9 @@ const _flakUp = new THREE.Vector3();
 const _flakUp0 = new THREE.Vector3(0, 1, 0);
 const _flakDir = new THREE.Vector3();
 
-// Server projectile-id bookkeeping. Exported so the network message handlers
-// can bind server-assigned IDs back to local projectiles.
-export const pendingLocalProjectiles: Projectile[] = []; // queue: projectiles waiting for server projectileId
-export const localProjectileById = new Map<string, Projectile>(); // server projectileId -> local Projectile
-export const pendingProjectileTimestamps: Map<Projectile, number> = new Map(); // track when projectiles were created
+// Remote player positions for projectile collision — rebuilt per frame into
+// the same Map (zeroed allocations in the hot loop)
+const _remotePlayerPositions = new Map<string, THREE.Vector3>();
 
 type FireArgs = { origin: THREE.Vector3; dir: THREE.Vector3; playerVel: THREE.Vector3 };
 
@@ -92,8 +92,8 @@ export function createCombat(deps: CombatDeps) {
     deps.projectiles.push(p);
 
     if (config.needsServerTracking) {
-      pendingLocalProjectiles.push(p);
-      pendingProjectileTimestamps.set(p, Date.now());
+      deps.projectileRegistry.pending.push(p);
+      deps.projectileRegistry.pendingSince.set(p, Date.now());
     }
 
     // Record projectile fired event for demo
@@ -374,17 +374,19 @@ export function createCombat(deps: CombatDeps) {
   function updateProjectiles(dt: number): void {
     // Clean up stale pending projectiles (no server response within timeout)
     const now = Date.now();
-    for (let i = pendingLocalProjectiles.length - 1; i >= 0; i--) {
-      const p = pendingLocalProjectiles[i];
-      const timestamp = pendingProjectileTimestamps.get(p) || 0;
+    const registry = deps.projectileRegistry;
+    for (let i = registry.pending.length - 1; i >= 0; i--) {
+      const p = registry.pending[i];
+      const timestamp = registry.pendingSince.get(p) || 0;
       if (now - timestamp > PENDING_ROCKET_TIMEOUT) {
-        pendingLocalProjectiles.splice(i, 1);
-        pendingProjectileTimestamps.delete(p);
+        registry.pending.splice(i, 1);
+        registry.pendingSince.delete(p);
       }
     }
 
     // Get remote player positions for collision (skip dead players)
-    const remotePlayerPositions = new Map<string, THREE.Vector3>();
+    const remotePlayerPositions = _remotePlayerPositions;
+    remotePlayerPositions.clear();
     deps.remotePlayers.forEach((rp, playerId) => {
       if (rp.isDead) return;
       remotePlayerPositions.set(playerId, rp.position);
