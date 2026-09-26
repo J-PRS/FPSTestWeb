@@ -104,25 +104,7 @@ export class CombatHandler {
       // converge on (suppression would leave it predicting blind).
       target.forceSendUntil = Date.now() + FORCE_SEND_MS;
 
-      if (!result.killed) {
-        logger.info('Player hit', { shooter: playerId, target: targetId, damage: shotDamage, targetHealth: result.newHealth });
-        this.broadcast({
-          type: 'playerHit',
-          shooterId: playerId,
-          targetId,
-          damage: shotDamage,
-          health: result.newHealth,
-        });
-      } else {
-        this.playerManager.addKill(playerId);
-        logger.info('Player killed', { shooter: playerId, target: targetId, shooterKills: this.playerManager.getPlayer(playerId)?.kills });
-        this.broadcast({
-          type: 'playerKill',
-          shooterId: playerId,
-          targetId,
-        });
-        this.scheduleRespawn(targetId);
-      }
+      this.applyHit(playerId, targetId, shotDamage, result, 'Player hit');
     } else {
       logger.debug('Shot fired (miss)', { shooter: playerId });
 
@@ -303,25 +285,7 @@ export class CombatHandler {
 
         const result = this.playerManager.applyDamage(targetId, damage);
 
-        if (!result.killed) {
-          logger.info(`Player ${logLabel} hit`, { shooter: playerId, target: targetId, damage, dist: dist.toFixed(2), targetHealth: result.newHealth });
-          this.broadcast({
-            type: 'playerHit',
-            shooterId: playerId,
-            targetId,
-            damage,
-            health: result.newHealth,
-          });
-        } else {
-          this.playerManager.addKill(playerId);
-          logger.info(`Player killed by ${logLabel}`, { shooter: playerId, target: targetId, damage });
-          this.broadcast({
-            type: 'playerKill',
-            shooterId: playerId,
-            targetId,
-          });
-          this.scheduleRespawn(targetId);
-        }
+        this.applyHit(playerId, targetId, damage, result, `Player ${logLabel} hit`, { dist: +dist.toFixed(2) });
       }
     }
   }
@@ -334,23 +298,7 @@ export class CombatHandler {
     const damage = Math.min(40, Math.max(1, Math.round(msg.amount)));
     const result = this.playerManager.applyDamage(playerId, damage);
     player.forceSendUntil = Date.now() + FORCE_SEND_MS;
-    if (!result.killed) {
-      this.broadcast({
-        type: 'playerHit',
-        shooterId: 'environment',
-        targetId: playerId,
-        damage,
-        health: result.newHealth,
-      });
-    } else {
-      logger.info('Player killed by environment', { playerId });
-      this.broadcast({
-        type: 'playerKill',
-        shooterId: 'environment',
-        targetId: playerId,
-      });
-      this.scheduleRespawn(playerId);
-    }
+    this.applyHit('environment', playerId, damage, result, 'Player hit');
   }
 
   handleProjectileDestroy(playerId: string, msg: Extract<ClientMessage, { type: 'projectileDestroy' }>): void {
@@ -368,6 +316,21 @@ export class CombatHandler {
       type: 'projectileDestroyed',
       projectileId: msg.projectileId,
     });
+  }
+
+  // One funnel for the hit-or-kill outcome: broadcast the damage, or credit
+  // the kill and start the respawn timer. Keeps the three damage paths in
+  // lockstep — a fix here can't drift between shot/AOE/environment.
+  private applyHit(shooterId: string, targetId: string, damage: number, result: { killed: boolean; newHealth: number }, hitLabel: string, extra?: Record<string, unknown>): void {
+    if (!result.killed) {
+      logger.info(hitLabel, { shooter: shooterId, target: targetId, damage, targetHealth: result.newHealth, ...extra });
+      this.broadcast({ type: 'playerHit', shooterId, targetId, damage, health: result.newHealth });
+      return;
+    }
+    if (shooterId !== 'environment') this.playerManager.addKill(shooterId);
+    logger.info(`${hitLabel} → kill`, { shooter: shooterId, target: targetId, damage, ...extra });
+    this.broadcast({ type: 'playerKill', shooterId, targetId });
+    this.scheduleRespawn(targetId);
   }
 
   private scheduleRespawn(playerId: string): void {
