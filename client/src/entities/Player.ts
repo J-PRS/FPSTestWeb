@@ -106,7 +106,7 @@ export class Player {
     this.dashCooldown = DASH_COOLDOWN;
     const dir = this.getAimDir();
     this.vel.addScaledVector(dir, DASH_IMPULSE);
-    this.movement.setState({ pos: this.pos, vel: this.vel, yaw: this.yaw, pitch: this.pitch, onGround: this.onGround });
+    this.syncMovement();
     this.onDash?.(this.pos.clone(), dir.clone());
   }
 
@@ -115,7 +115,7 @@ export class Player {
     this.slamActive = true;
     this.slamCooldown = SLAM_COOLDOWN;
     this.vel.y = -SLAM_SPEED; // keep horizontal momentum — spike the vertical
-    this.movement.setState({ pos: this.pos, vel: this.vel, yaw: this.yaw, pitch: this.pitch, onGround: this.onGround });
+    this.syncMovement();
   }
 
   unfreezeInput(): void {
@@ -549,7 +549,7 @@ export class Player {
       if (speed > 0.01) {
         const dir = this.getAimDir();
         this.vel.copy(dir).multiplyScalar(speed);
-        this.movement.setState({ pos: this.pos, vel: this.vel, yaw: this.yaw, pitch: this.pitch, onGround: this.onGround });
+        this.syncMovement();
         this.onBounce?.(this.pos.clone(), dir.clone());
       }
       this.bounceArmed = false;
@@ -573,6 +573,13 @@ export class Player {
     this.wasOnGround = this.onGround;
   }
 
+  // Every impulse path must push pos/vel back into the controller —
+  // it owns integration and its snapshot would overwrite our values
+  // next update otherwise.
+  syncMovement(): void {
+    this.movement.setState({ pos: this.pos, vel: this.vel, yaw: this.yaw, pitch: this.pitch, onGround: this.onGround });
+  }
+
   applyKnockback(from: THREE.Vector3, force: number): void {
     const dir = this.pos.clone().sub(from).normalize();
     this.vel.addScaledVector(dir, force);
@@ -580,14 +587,7 @@ export class Player {
     // Explosion impulse ungrounds — otherwise ground friction eats the
     // horizontal component while still within the near-ground band.
     this.onGround = false;
-    // Sync back to movement controller
-    this.movement.setState({
-      pos: this.pos,
-      vel: this.vel,
-      yaw: this.yaw,
-      pitch: this.pitch,
-      onGround: this.onGround,
-    });
+    this.syncMovement();
   }
 
   applyPull(to: THREE.Vector3, force: number): void {
@@ -595,14 +595,7 @@ export class Player {
     this.vel.addScaledVector(dir, force);
     this.vel.y += force * 0.3;
     this.onGround = false;
-    // Sync back to movement controller
-    this.movement.setState({
-      pos: this.pos,
-      vel: this.vel,
-      yaw: this.yaw,
-      pitch: this.pitch,
-      onGround: this.onGround,
-    });
+    this.syncMovement();
   }
 
   getSpeed(): number {
@@ -610,10 +603,6 @@ export class Player {
   }
 
   getCameraDir(): THREE.Vector3 {
-    return new THREE.Vector3(
-      Math.cos(this.pitch) * Math.sin(this.yaw),
-      Math.sin(this.pitch),
-      Math.cos(this.pitch) * Math.cos(this.yaw)
-    ).normalize();
+    return this.getAimDir();
   }
 }
