@@ -1,5 +1,11 @@
 # Changelog
 
+## [2026-09-26] Tech Debt Pass 11 — hygiene sweep
+
+- `DemoStorage.ts`: `catch (e: any)` → `unknown` + `errMsg` helper — last `any` in the repo (client and server).
+- `Projectile.ts`: header "Known issues" block referenced the pre-extraction module — dropped resolved items, pointed trail visuals at `trailParticles.ts`.
+- Reviewed NetworkManager + DemoPlayer — both already cohesive, no changes.
+
 ## [2026-09-26] Tech Debt Pass 10 — dedup sweep
 
 - `netHandlers.ts`: duplicated RemotePlayer creation (first-seen update + respawn-into-missing) → shared `ensureRemotePlayer`.
