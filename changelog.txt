@@ -1,5 +1,10 @@
 # Changelog
 
+## [2026-09-26] Tech Debt Pass 9 — leak + dead code
+
+- `netHandlers.ts`: `remoteProjectiles` map never deleted entries on destroy — every remote shot fired leaked a Projectile reference for the whole session. Delete on destroy (fade-out visuals live on `world.projectiles`, not the map).
+- `movement.ts`: removed the dead ski-assist subsystem — `applySkiMovement`/`applySkiAccel`/`applySkiBoost`/`applySkiLift` were private and unreachable since skiing became a friction toggle. Also removed `groundedTimer`/`groundedBufferedByTime` (hard-disabled coyote-time path) and ~10 dead MOVEMENT_CONFIG keys. `skiTargetDistance` stays (live grounded-check widening while skiing). 422→~330 lines.
+
 ## [2026-09-26] Tech Debt Pass 8 — real packet-loss metric
 
 - `NetworkManager.getPacketLoss` returned a hardcoded 0 (TCP can't lose packets — the HUD lied). Now measures delivery gaps in the 20Hz tick stream: a frame >2x the interval late counts skipped slots as missed over a sliding 5s window. What players feel as "loss" is exactly this.
