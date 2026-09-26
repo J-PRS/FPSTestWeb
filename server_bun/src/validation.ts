@@ -65,7 +65,8 @@ export function validateMessage(raw: unknown): ValidationResult<ClientMessage> {
       const vel = validateVec3(obj.velocity);
       if (!vel.success) return { success: false, error: `velocity: ${vel.error}` };
       const seq = isFiniteNumber(obj.seq) ? obj.seq : undefined;
-      return { success: true, data: { type: 'position', position: pos.data, rotation: rot.data, velocity: vel.data, seq } };
+      const ping = isFiniteNumber(obj.ping) ? obj.ping : undefined;
+      return { success: true, data: { type: 'position', position: pos.data, rotation: rot.data, velocity: vel.data, seq, ping } };
     }
 
     case 'shot': {
@@ -86,6 +87,8 @@ export function validateMessage(raw: unknown): ValidationResult<ClientMessage> {
           velocity: velocity?.success ? velocity.data : undefined,
           timestamp: isFiniteNumber(obj.timestamp) ? obj.timestamp : undefined,
           projectileId: typeof obj.projectileId === 'string' ? obj.projectileId : undefined,
+          weaponType: isFiniteNumber(obj.weaponType) ? obj.weaponType : undefined,
+          airtime: isFiniteNumber(obj.airtime) ? obj.airtime : undefined,
         },
       };
     }
@@ -99,33 +102,12 @@ export function validateMessage(raw: unknown): ValidationResult<ClientMessage> {
       }
       return {
         success: true,
-        data: { type: 'aoeShot', position: pos.data, excludeTargetId: (excludeTargetId as string | null) ?? null },
-      };
-    }
-
-    case 'discAOEShot': {
-      const pos = validateVec3(obj.position);
-      if (!pos.success) return { success: false, error: `position: ${pos.error}` };
-      const excludeTargetId = obj.excludeTargetId;
-      if (excludeTargetId !== null && excludeTargetId !== undefined && typeof excludeTargetId !== 'string') {
-        return { success: false, error: 'excludeTargetId must be string or null' };
-      }
-      return {
-        success: true,
-        data: { type: 'discAOEShot', position: pos.data, excludeTargetId: (excludeTargetId as string | null) ?? null },
-      };
-    }
-
-    case 'grenadeAOEShot': {
-      const pos = validateVec3(obj.position);
-      if (!pos.success) return { success: false, error: `position: ${pos.error}` };
-      const excludeTargetId = obj.excludeTargetId;
-      if (excludeTargetId !== null && excludeTargetId !== undefined && typeof excludeTargetId !== 'string') {
-        return { success: false, error: 'excludeTargetId must be string or null' };
-      }
-      return {
-        success: true,
-        data: { type: 'grenadeAOEShot', position: pos.data, excludeTargetId: (excludeTargetId as string | null) ?? null },
+        data: {
+          type: 'aoeShot',
+          position: pos.data,
+          weaponType: isFiniteNumber(obj.weaponType) ? obj.weaponType : undefined,
+          excludeTargetId: (excludeTargetId as string | null) ?? null,
+        },
       };
     }
 
@@ -164,8 +146,11 @@ export function validateMessage(raw: unknown): ValidationResult<ClientMessage> {
       return { success: true, data: { type: 'projectileDestroy', projectileId: obj.projectileId } };
     }
 
-    case 'input': {
-      return { success: true, data: { type: 'input', input: obj.input } };
+    case 'environmentDamage': {
+      if (!isFiniteNumber(obj.amount)) {
+        return { success: false, error: 'amount must be a finite number' };
+      }
+      return { success: true, data: { type: 'environmentDamage', amount: obj.amount } };
     }
 
     case 'snapshotRequest': {

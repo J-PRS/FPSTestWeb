@@ -1,19 +1,23 @@
 import * as THREE from 'three';
 
-import { PLAYER_RADIUS, CAPSULE_HALF_HEIGHT, CAPSULE_CENTER_Y } from '../core/config.js';
+import { PLAYER_RADIUS, CAPSULE_HALF_HEIGHT, CAPSULE_CENTER_Y, EYE_OFFSET, BLOOM_LAYER } from '../core/config.js';
+import { hitRadiusAt } from '../../../shared/combat.js';
 
 import { ChildLogger } from '../core/Logger.js';
 
-import type { Ball } from '../entities/balls.js';
+import type { Ball, Targetable } from '../entities/balls.js';
 
 import { Terrain } from '../world/terrain.js';
 import type { ProjectileConfig } from './types.js';
+import { RibbonTrail } from './RibbonTrail.js';
+import { getGlowTexture } from '../effects/glowTexture.js';
 
 const logger = new ChildLogger('Projectile');
+const getTrailSpriteTex = () => getGlowTexture(64);
 
 interface TrailParticle {
-  mesh: THREE.Mesh;
-  mat: THREE.MeshBasicMaterial;
+  mesh: THREE.Mesh | THREE.Sprite;
+  mat: THREE.MeshBasicMaterial | THREE.SpriteMaterial;
   vel: THREE.Vector3;
   life: number;
   maxLife: number;
@@ -23,6 +27,56 @@ interface TrailParticle {
 const TRAIL_GEO = new THREE.SphereGeometry(1, 8, 6);
 const TRAIL_RING_GEO = new THREE.RingGeometry(0.5, 1.0, 24);
 const TRAIL_DISC_GEO = new THREE.CircleGeometry(1, 24);
+
+// Shared projectile geometries — dispose() never frees them, so reuse across shots
+const _velDir = new THREE.Vector3();
+const _lookTarget = new THREE.Vector3();
+const _FORWARD = new THREE.Vector3(0, 0, 1);
+// Trail-emission scratches — never retained (particle.vel is the only kept ref)
+const _tDir = new THREE.Vector3();
+const _tArb = new THREE.Vector3();
+const _tRight = new THREE.Vector3();
+const _tUp = new THREE.Vector3();
+const _tOff = new THREE.Vector3();
+const _tPos = new THREE.Vector3();
+const _tSpawn = new THREE.Vector3();
+const _tLookAt = new THREE.Vector3();
+const _tVel = new THREE.Vector3();
+const _tNormal = new THREE.Vector3();
+
+const MESH_GEO_CACHE = new Map<string, THREE.BufferGeometry>();
+// Projectile materials are never mutated after construction — share per color
+// so rapid fire doesn't create/dispose a material every shot
+const BODY_MAT_CACHE = new Map<number, THREE.MeshBasicMaterial>();
+const GLOW_MAT_CACHE = new Map<string, THREE.MeshBasicMaterial>();
+const GLOW_GEO = new THREE.SphereGeometry(1.0, 12, 12);
+
+function getBodyMat(color: number): THREE.MeshBasicMaterial {
+  let m = BODY_MAT_CACHE.get(color);
+  if (!m) { m = new THREE.MeshBasicMaterial({ color }); BODY_MAT_CACHE.set(color, m); }
+  return m;
+}
+
+function getGlowMat(color: number, opacity: number): THREE.MeshBasicMaterial {
+  const key = `${color}|${opacity}`;
+  let m = GLOW_MAT_CACHE.get(key);
+  if (!m) { m = new THREE.MeshBasicMaterial({ color, transparent: true, opacity, depthWrite: false }); GLOW_MAT_CACHE.set(key, m); }
+  return m;
+}
+function getMeshGeo(meshType: string, bodyRadius: number): THREE.BufferGeometry {
+  const key = `${meshType}:${bodyRadius}`;
+  let geo = MESH_GEO_CACHE.get(key);
+  if (!geo) {
+    if (meshType === 'disc') {
+      geo = new THREE.CylinderGeometry(0.3, 0.3, 0.05, 16);
+    } else {
+      geo = new THREE.CylinderGeometry(0.08, bodyRadius, 0.7, 6);
+      geo.rotateX(Math.PI / 2);
+    }
+    MESH_GEO_CACHE.set(key, geo);
+  }
+  return geo;
+}
 
 /**
  * Projectile: client-authoritative hitscan-like projectile with swept collision.
@@ -67,8 +121,9 @@ const TRAIL_DISC_GEO = new THREE.CircleGeometry(1, 24);
  *    not the actual impact point, so fast projectiles can report wrong values.
  *  - `sweepTerrain` samples the projectile center and uses a fixed step of 0.5,
  *    which may tunnel through terrain for small `terrainOffset` values.
- *  - Trail particles are currently one Mesh + one Material per particle, which
- *    is allocation- and draw-call-heavy under heavy fire.
+ *  - Trail particles are one Mesh + one Material each, but dead particles are
+ *    pooled and reused (`particlePool`) so sustained fire allocates once per
+ *    concurrent particle, not once per emitted particle.
  *  - `hitRadius` scales from `hitMin` to `hitMax` over `hitGrow` seconds (can be 0 at spawn).
  *  - `dispose()` does not set `this.dead`, so a disposed projectile can keep
  *    updating.
@@ -82,7 +137,7 @@ export class Projectile {
   age = 0.0;
   spawnedThisFrame = true; // skip first update so projectile renders at spawn pos before moving
   isRemote = false; // true for server-authoritative/demo projectiles
-  hitBall: Ball | null = null;
+  hitBall: Targetable | null = null; // balls AND crawlers — any shootable target
   hitPlayerId: string | null = null;
   serverProjectileId: string | null = null; // remote player hit tracking
   demoProjectileId = 0; // demo recording tracking ID
@@ -91,19 +146,20 @@ export class Projectile {
   hitDistance = 0.0; // travel distance from shot origin
   directHit = false; // true = hit with core hitbox, false = expanding wake hitbox
   minHitDist = 0.0; // minimum distance during sweep (for accurate accuracy)
+  readonly hitPoint = new THREE.Vector3(); // exact sweep intersection (set by sweepTerrain)
+  hitPointValid = false;
   explosionProcessed = false;
 
   readonly config: ProjectileConfig;
 
   // Wake hit tracking: only trigger when distance increases (projectile passed target)
-  private wakeBallDistances = new Map<Ball, number>(); // ball -> min distance seen
+  private wakeBallDistances = new Map<Targetable, number>(); // target -> min distance seen
   private wakePlayerDistances = new Map<string, number>(); // playerId -> min distance seen
 
+  // Wake-proxy radius — shared/combat.ts so the server's hit-claim
+  // validation computes the exact same number from the reported airtime.
   get hitRadius(): number {
-    const delay = 0.1;
-    if (this.age < delay) return 0;
-    const t = Math.min((this.age - delay) / this.config.hitGrow, 1.0);
-    return this.config.hitMax * t;
+    return hitRadiusAt(this.config.weaponType, this.age);
   }
 
   get explosionRadius(): number { return this.config.explosionRadius; }
@@ -120,9 +176,11 @@ export class Projectile {
 
   // Particle trail
   private particles: TrailParticle[] = [];
+  private particlePool: TrailParticle[] = []; // dead particles kept for reuse
   private trailAccum = 0; // fractional carry-over for even particle spacing
   private projectileRemoved = false;
   private disposed = false;
+  private ribbons: RibbonTrail[] = [];
 
   constructor(scene: THREE.Scene, origin: THREE.Vector3, dir: THREE.Vector3, playerVel: THREE.Vector3, config: ProjectileConfig) {
     this.scene = scene;
@@ -133,33 +191,42 @@ export class Projectile {
     // 50% player velocity inheritance (Tribes Ascend style)
     this.vel = dir.clone().normalize().multiplyScalar(config.speed).addScaledVector(playerVel, 0.5);
 
-    if (config.meshType === 'disc') {
-      // Disc geometry: flat cylinder - default faces Y, orient to velocity
-      const geo = new THREE.CylinderGeometry(0.3, 0.3, 0.05, 16);
-      this.mat = new THREE.MeshBasicMaterial({ color: config.meshColor });
-      this.mesh = new THREE.Mesh(geo, this.mat);
-      this.mesh.position.copy(this.pos);
-      scene.add(this.mesh);
-    } else {
-      // Rocket (or other forward-facing) geometry: cone-like cylinder
-      const geo = new THREE.CylinderGeometry(0.08, config.bodyRadius, 0.7, 6);
-      geo.rotateX(Math.PI / 2);
-      this.mat = new THREE.MeshBasicMaterial({ color: config.meshColor });
-      this.mesh = new THREE.Mesh(geo, this.mat);
-      this.mesh.position.copy(this.pos);
-      scene.add(this.mesh);
-    }
+    const geo = getMeshGeo(config.meshType, config.bodyRadius);
+    this.mat = getBodyMat(config.meshColor); // shared — never mutated
+    this.mesh = new THREE.Mesh(geo, this.mat);
+    this.mesh.position.copy(this.pos);
+    this.mesh.layers.enable(BLOOM_LAYER);
+    scene.add(this.mesh);
 
     if (config.glowShell) {
-      const glowGeo = new THREE.SphereGeometry(1.0, 12, 12);
-      this.glowMat = new THREE.MeshBasicMaterial({ color: config.glowColor, transparent: true, opacity: config.glowOpacity, depthWrite: false });
-      this.glowMesh = new THREE.Mesh(glowGeo, this.glowMat);
+      this.glowMat = getGlowMat(config.glowColor, config.glowOpacity); // shared
+      this.glowMesh = new THREE.Mesh(GLOW_GEO, this.glowMat);
       this.glowMesh.position.copy(this.pos);
+      this.glowMesh.layers.enable(BLOOM_LAYER);
       scene.add(this.glowMesh);
+    }
+
+    if (config.ribbonTrail) {
+      const color = config.ribbonColor ?? config.trailColors[0].getHex();
+      const width = config.ribbonWidth ?? 0.5;
+      const life = config.ribbonLife ?? 0.3;
+      // 3 lanes: wide outer band + thin bright core pair offset above/below —
+      // reads as a glowing energy streak with depth instead of a flat line
+      const coreColor = new THREE.Color(color).lerp(new THREE.Color(0xffffff), 0.6).getHex();
+      if (config.ribbonLanes === 1) {
+        this.ribbons = [RibbonTrail.acquire(scene, color, width, life)];
+      } else {
+        this.ribbons = [
+          RibbonTrail.acquire(scene, color, width, life),
+          RibbonTrail.acquire(scene, coreColor, width * 0.35, life * 0.8, width * 0.07),
+          RibbonTrail.acquire(scene, coreColor, width * 0.35, life * 0.8, -width * 0.07),
+        ];
+      }
     }
   }
 
-  // Swept sphere terrain check: sample along path, step size = visual radius
+  // Swept sphere terrain check: sample along path, step size = visual radius.
+  // On hit, refines the crossing point by bisection and stores it in hitPoint.
   private sweepTerrain(terrain: Terrain): boolean {
     const STEP = 0.5;
     const dx = this.pos.x - this.prevPos.x;
@@ -167,18 +234,35 @@ export class Projectile {
     const dz = this.pos.z - this.prevPos.z;
     const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
     const steps = Math.max(1, Math.ceil(dist / STEP));
-    for (let i = 0; i <= steps; i++) {
-      const t = i / steps;
+    const below = (t: number) => {
       const sx = this.prevPos.x + dx * t;
       const sy = this.prevPos.y + dy * t;
       const sz = this.prevPos.z + dz * t;
-      if (sy <= terrain.getHeight(sx, sz) + this.config.terrainOffset) return true;
+      return sy <= terrain.getHeight(sx, sz) + this.config.terrainOffset;
+    };
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      if (below(t)) {
+        // Bisect between last above-ground sample and this one
+        let lo = Math.max(0, (i - 1) / steps), hi = t;
+        for (let k = 0; k < 5; k++) {
+          const mid = (lo + hi) / 2;
+          if (below(mid)) hi = mid; else lo = mid;
+        }
+        this.hitPoint.set(
+          this.prevPos.x + dx * hi,
+          this.prevPos.y + dy * hi,
+          this.prevPos.z + dz * hi
+        );
+        this.hitPointValid = true;
+        return true;
+      }
     }
     return false;
   }
 
   // Swept sphere vs ball — checks core (direct) then expanding (wake) hitbox
-  private sweepBall(ball: Ball): boolean {
+  private sweepBall(ball: Targetable): boolean {
     const STEP = 0.1; // smaller step for precise core hit detection
     const dx = this.pos.x - this.prevPos.x;
     const dy = this.pos.y - this.prevPos.y;
@@ -230,9 +314,10 @@ export class Projectile {
   }
 
   // True continuous sphere sweep vs player capsule
-  // playerPos is the FEET position; capsule center is at feet + CAPSULE_CENTER_Y
+  // playerPos is the networked EYE position (feet + EYE_OFFSET);
+  // capsule center is at feet + CAPSULE_CENTER_Y
   private sweepPlayer(playerPos: THREE.Vector3, playerId: string): boolean {
-    const centerY = playerPos.y + CAPSULE_CENTER_Y;
+    const centerY = playerPos.y - EYE_OFFSET + CAPSULE_CENTER_Y;
 
     const dx = this.pos.x - this.prevPos.x;
     const dy = this.pos.y - this.prevPos.y;
@@ -300,7 +385,7 @@ export class Projectile {
     return false;
   }
 
-  update(dt: number, terrain: Terrain, balls?: Ball[], remotePlayers?: Map<string, THREE.Vector3>): void {
+  update(dt: number, terrain: Terrain, balls?: Targetable[], remotePlayers?: Map<string, THREE.Vector3>): void {
     if (this.dead) return;
 
     // First frame: just render at spawn position, don't apply physics yet
@@ -310,68 +395,157 @@ export class Projectile {
       return;
     }
 
-    if (!this.exploded) {
-      this.prevPos.copy(this.pos);
-      this.age += dt;
-      this.vel.y += this.config.gravity * dt;
-      this.pos.addScaledVector(this.vel, dt);
-
-      // Fuse: auto-explode if max lifetime is reached
-      if (this.config.maxLifetime && this.age >= this.config.maxLifetime) {
-        this.explode();
-        return;
-      }
-
-      // Remote (server-authoritative/demo) projectiles skip all collision
-      if (this.isRemote) {
-        this.updateMesh();
-        this.emitTrailSegment();
-        this.updateTrail(dt);
-        return;
-      }
-
-      if (this.sweepTerrain(terrain)) {
-        this.explode();
-        return;
-      }
-
-      if (balls) {
-        for (const ball of balls) {
-          if (ball.dead) continue;
-          if (this.sweepBall(ball)) {
-            this.hitBall = ball;
-            this.hitAccuracy = Math.max(0, this.minHitDist - ball.radius);
-            this.hitAge = this.age;
-            this.hitDistance = this.pos.distanceTo(this.shotOrigin);
-            this.explode();
-            return;
-          }
-        }
-      }
-
-      if (remotePlayers) {
-        for (const [playerId, playerPos] of remotePlayers) {
-          if (this.sweepPlayer(playerPos, playerId)) {
-            this.hitPlayerId = playerId;
-            this.hitAccuracy = Math.max(0, this.minHitDist - PLAYER_RADIUS);
-            this.hitAge = this.age;
-            this.hitDistance = this.pos.distanceTo(this.shotOrigin);
-            this.explode();
-            return;
-          }
-        }
-      }
-
-      this.updateMesh();
-      this.emitTrailSegment();
-    }
+    if (!this.exploded) this.updateAlive(dt, terrain, balls, remotePlayers);
 
     if (this.exploded && !this.projectileRemoved) this.removeProjectileMesh();
+    for (const r of this.ribbons) r.update(dt);
     this.updateTrail(dt);
 
-    if (this.exploded && this.particles.length === 0) {
+    if (this.exploded && this.particles.length === 0 && this.ribbons.every(r => r.done)) {
       this.dead = true;
     }
+  }
+
+  // Teleport the projectile forward along its velocity without physics steps —
+  // used to compensate remote-spawn latency so it appears where it really is
+  advanceBy(seconds: number): void {
+    this.prevPos.copy(this.pos);
+    this.pos.addScaledVector(this.vel, seconds);
+    this.age += seconds;
+    if (this.mesh) this.mesh.position.copy(this.pos);
+  }
+
+  // Physics + collision + visuals for a live (non-exploded) projectile
+  private updateAlive(dt: number, terrain: Terrain, balls?: Targetable[], remotePlayers?: Map<string, THREE.Vector3>): void {
+    this.prevPos.copy(this.pos);
+    this.age += dt;
+    // hitPoint is per-frame: a stale value from a previous bounce would
+    // teleport the explosion back to the last terrain contact (the
+    // "explosion in the wrong spot" bug on fuse/ball/player kills)
+    this.hitPointValid = false;
+    this.vel.y += this.config.gravity * dt;
+    this.pos.addScaledVector(this.vel, dt);
+
+    // Fuse: auto-explode if max lifetime is reached
+    if (this.config.maxLifetime && this.age >= this.config.maxLifetime) {
+      this.explode();
+      return;
+    }
+
+    // Remote (server-authoritative/demo) projectiles skip all collision.
+    // Exception: bouncing shells (GL) still bounce off terrain — the bounce
+    // is deterministic from spawn state, so it matches the shooter's arc
+    // and keeps remote shells from tunneling through the ground.
+    if (this.isRemote) {
+      if (this.canBounce && this.sweepTerrain(terrain) && !this.bounceOffTerrain(terrain)) {
+        this.explode(); // bounce budget/graze exhausted — die like a local shard
+        return;
+      }
+      if (!this.canBounce && this.config.armTime !== undefined && this.sweepTerrain(terrain)) {
+        this.explode(); // armed mortar shell touching terrain on a remote client
+        return;
+      }
+    } else if (this.checkCollisions(terrain, balls, remotePlayers)) {
+      return; // exploded inside checkCollisions
+    }
+
+    this.updateMesh();
+    this.emitTrailSegment();
+    for (const r of this.ribbons) r.push(this.pos, this.vel);
+  }
+
+  // Runs all swept collision checks; returns true if the projectile hit
+  // something and exploded (records hit target + accuracy data).
+  private checkCollisions(terrain: Terrain, balls?: Targetable[], remotePlayers?: Map<string, THREE.Vector3>): boolean {
+    if (this.sweepTerrain(terrain)) {
+      // arming fuse (T2 mortar): bounces only apply BEFORE the shell is armed
+      if (this.canBounce && this.bounceOffTerrain(terrain)) {
+        return false; // bounced — still live, fuse keeps running
+      }
+      this.explode();
+      return true;
+    }
+    return this.checkBalls(balls) || this.checkPlayers(remotePlayers);
+  }
+
+  // Reflect velocity off the heightfield normal at hitPoint. Returns false
+  // when the impact was too weak to bounce — caller should treat it as a
+  // detonation instead of letting the shell sink or jitter in place.
+  private bouncesTaken = 0;
+  private get armed(): boolean {
+    return this.config.armTime === undefined || this.age >= this.config.armTime;
+  }
+
+  // GL/flak shells always bounce; a mortar only bounces while unarmed —
+  // once armed it's impact-fused like any other shell.
+  private get canBounce(): boolean {
+    return !!this.config.bounces && (this.config.armTime === undefined || !this.armed);
+  }
+
+  private bounceOffTerrain(terrain: Terrain): boolean {
+    if (this.config.maxBounces !== undefined && ++this.bouncesTaken > this.config.maxBounces) {
+      return false; // out of bounces — treat as impact
+    }
+    const e = 0.5;
+    const x = this.hitPoint.x, z = this.hitPoint.z;
+    _tNormal.set(
+      -(terrain.getHeight(x + e, z) - terrain.getHeight(x - e, z)) / (2 * e),
+      1,
+      -(terrain.getHeight(x, z + e) - terrain.getHeight(x, z - e)) / (2 * e)
+    ).normalize();
+
+    const vn = this.vel.dot(_tNormal);
+    // Grazing/resting contact: armed shells detonate; unarmed (mortar
+    // pre-arm) shells bleed off the normal component and slide until the
+    // fuse arms them — the T2 mortar bounces off dirt before it can pop.
+    if (vn >= -2) {
+      if (this.armed) return false;
+      this.vel.addScaledVector(_tNormal, -vn);
+      this.pos.copy(this.hitPoint).addScaledVector(_tNormal, this.config.terrainOffset + 0.05);
+      this.prevPos.copy(this.pos);
+      return true;
+    }
+    this.vel.addScaledVector(_tNormal, -(1 + (this.config.bounceRestitution ?? 0.5)) * vn);
+    const fr = this.config.bounceFriction ?? 0.7;
+    this.vel.x *= fr;
+    this.vel.z *= fr;
+    // Sit just above the surface so the next sweep doesn't immediately retrigger
+    this.pos.copy(this.hitPoint).addScaledVector(_tNormal, this.config.terrainOffset + 0.05);
+    this.prevPos.copy(this.pos);
+    return true;
+  }
+
+  private checkBalls(balls?: Targetable[]): boolean {
+    if (!balls) return false;
+    for (const ball of balls) {
+      if (ball.dead) continue;
+      if (this.sweepBall(ball)) {
+        this.recordHit(this.minHitDist - ball.radius);
+        this.hitBall = ball;
+        this.explode();
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private checkPlayers(remotePlayers?: Map<string, THREE.Vector3>): boolean {
+    if (!remotePlayers) return false;
+    for (const [playerId, playerPos] of remotePlayers) {
+      if (this.sweepPlayer(playerPos, playerId)) {
+        this.recordHit(this.minHitDist - PLAYER_RADIUS);
+        this.hitPlayerId = playerId;
+        this.explode();
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private recordHit(minDist: number): void {
+    this.hitAccuracy = Math.max(0, minDist);
+    this.hitAge = this.age;
+    this.hitDistance = this.pos.distanceTo(this.shotOrigin);
   }
 
   private updateMesh(): void {
@@ -389,12 +563,12 @@ export class Projectile {
     this.mesh.scale.setScalar(scale);
 
     if (this.vel.lengthSq() > 0.01) {
-      const velDir = this.vel.clone().normalize();
+      _velDir.copy(this.vel).normalize();
       if (this.config.meshType === 'disc') {
-        const target = this.pos.clone().add(velDir);
-        this.mesh.lookAt(target);
+        _lookTarget.copy(this.pos).add(_velDir);
+        this.mesh.lookAt(_lookTarget);
       } else {
-        this.mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), velDir);
+        this.mesh.quaternion.setFromUnitVectors(_FORWARD, _velDir);
       }
     }
   }
@@ -407,40 +581,111 @@ export class Projectile {
     while (this.trailAccum >= spacing) {
       this.trailAccum -= spacing;
       const t = 1 - this.trailAccum / trailDist;
-      const spawnPos = this.prevPos.clone().lerp(this.pos, Math.max(0, Math.min(1, t)));
-      this.emitTrail(spawnPos);
+      this.emitTrail(_tSpawn.copy(this.prevPos).lerp(this.pos, Math.max(0, Math.min(1, t))));
     }
   }
 
   private emitTrail(spawnPos: THREE.Vector3): void {
     const dir = this.vel.lengthSq() > 0.0001
-      ? this.vel.clone().normalize()
-      : new THREE.Vector3(0, 1, 0);
+      ? _tDir.copy(this.vel).normalize()
+      : _tDir.set(0, 1, 0);
 
-    const arbitrary = Math.abs(dir.y) < 0.9 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0);
-    const right = new THREE.Vector3().crossVectors(dir, arbitrary).normalize();
-    const up = new THREE.Vector3().crossVectors(right, dir).normalize();
+    const arbitrary = _tArb.set(Math.abs(dir.y) < 0.9 ? 0 : 1, Math.abs(dir.y) < 0.9 ? 1 : 0, 0);
+    const right = _tRight.crossVectors(dir, arbitrary).normalize();
+    const up = _tUp.crossVectors(right, dir).normalize();
 
     const emitterRamp = this.config.trailRampIn > 0 ? Math.min(this.age / this.config.trailRampIn, 1.0) : 1.0;
 
     const u = (Math.random() - 0.5) * this.config.trailSpread * emitterRamp;
     const v = (Math.random() - 0.5) * this.config.trailSpread * emitterRamp;
     const w = (Math.random() - 0.5) * this.config.trailForwardSpread * emitterRamp;
-    const offset = new THREE.Vector3()
+    const offset = _tOff.set(0, 0, 0)
       .addScaledVector(right, u)
       .addScaledVector(up, v)
       .addScaledVector(dir, w);
-    const pos = spawnPos.clone().add(offset);
+    const pos = _tPos.copy(spawnPos).add(offset);
 
-    const drift = new THREE.Vector3((Math.random() - 0.5) * 0.2, (Math.random() - 0.5) * 0.2, (Math.random() - 0.5) * 0.2);
-    const vel = drift;
+    // Random drift velocity — copied into the pooled particle's Vector3,
+    // no allocation per emit
+    _tVel.set((Math.random() - 0.5) * 0.2, (Math.random() - 0.5) * 0.2, (Math.random() - 0.5) * 0.2);
 
     const life = this.config.trailLifeMin + Math.random() * (this.config.trailLifeMax - this.config.trailLifeMin);
     const size = (this.config.trailBaseSize + Math.random() * this.config.trailSizeRange) * emitterRamp;
-    this.particles.push(this.spawnTrailParticle(pos, vel, life, size, dir));
+    this.particles.push(this.spawnTrailParticle(pos, _tVel, life, size, dir));
+
+    // Wake marker: particles scattered through the wake volume — random
+    // angle, random radius out to hitRadius, dropped slightly behind the
+    // shell and drifting backward+inward. Reads as a turbulent corridor
+    // tracing the growing proxy hitbox, not a polka-dot halo.
+    if (this.config.wakeVisual) {
+      const r = this.hitRadius;
+      for (let i = 0; i < 2; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const rad = r * (0.55 + Math.random() * 0.45); // weighted to the edge
+        const ca = Math.cos(a), sa = Math.sin(a);
+        const back = Math.random() * 0.6; // lag behind the shell
+        _tPos.copy(spawnPos)
+          .addScaledVector(right, ca * rad)
+          .addScaledVector(up, sa * rad)
+          .addScaledVector(dir, -back);
+        _tVel.set(
+          -ca * 0.9 * right.x - sa * 0.9 * up.x - dir.x * 1.5,
+          -ca * 0.9 * right.y - sa * 0.9 * up.y - dir.y * 1.5,
+          -ca * 0.9 * right.z - sa * 0.9 * up.z - dir.z * 1.5
+        );
+        // Size tracks hitRadius — the corridor visibly widens as the
+        // projectile's proxy hitbox grows over hitGrow seconds
+        this.particles.push(this.spawnTrailParticle(
+          _tPos, _tVel,
+          0.12 + Math.random() * 0.12,
+          this.config.trailBaseSize * (0.4 + r * 0.3),
+          dir
+        ));
+      }
+    }
   }
 
   private spawnTrailParticle(pos: THREE.Vector3, vel: THREE.Vector3, life: number, size: number, dir: THREE.Vector3): TrailParticle {
+    const meshType = this.config.trailMeshType ?? 'sphere';
+
+    // Reuse a dead particle's mesh+material (meshType is fixed per projectile)
+    const pooled = this.particlePool.pop();
+    if (pooled) {
+      pooled.vel.copy(vel);
+      pooled.life = life;
+      pooled.maxLife = life;
+      pooled.baseSize = size;
+      pooled.mat.color.copy(this.config.trailColors[0]);
+      pooled.mat.opacity = this.config.trailOpacity;
+      pooled.mesh.position.copy(pos);
+      pooled.mesh.scale.setScalar(meshType === 'billboard' ? size * 2 : size);
+      if (meshType === 'ring' || meshType === 'disc') {
+        pooled.mesh.rotation.set(0, 0, 0);
+        pooled.mesh.lookAt(_tLookAt.copy(pos).add(dir));
+        if (meshType === 'disc') pooled.mesh.rotateX(Math.PI / 2);
+      }
+      this.scene.add(pooled.mesh);
+      return pooled;
+    }
+
+    if (meshType === 'billboard') {
+      // Sprite auto-faces the camera — visible even shooting straight ahead
+      const mat = new THREE.SpriteMaterial({
+        map: getTrailSpriteTex(),
+        color: this.config.trailColors[0],
+        transparent: true,
+        opacity: this.config.trailOpacity,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+      });
+      const mesh = new THREE.Sprite(mat);
+      mesh.layers.enable(BLOOM_LAYER);
+      mesh.position.copy(pos);
+      mesh.scale.setScalar(size * 2);
+      this.scene.add(mesh);
+      return { mesh, mat, vel: vel.clone(), life, maxLife: life, baseSize: size };
+    }
+
     const mat = new THREE.MeshBasicMaterial({
       color: this.config.trailColors[0],
       transparent: true,
@@ -449,7 +694,6 @@ export class Projectile {
       blending: THREE.AdditiveBlending,
       side: THREE.DoubleSide,
     });
-    const meshType = this.config.trailMeshType ?? 'sphere';
     let geo: THREE.BufferGeometry;
     if (meshType === 'ring') {
       geo = TRAIL_RING_GEO;
@@ -459,18 +703,19 @@ export class Projectile {
       geo = TRAIL_GEO;
     }
     const mesh = new THREE.Mesh(geo, mat);
+    mesh.layers.enable(BLOOM_LAYER);
     mesh.position.copy(pos);
     mesh.scale.setScalar(size);
     if (meshType === 'ring') {
-      mesh.lookAt(pos.clone().add(dir));
+      mesh.lookAt(_tLookAt.copy(pos).add(dir));
     } else if (meshType === 'disc') {
       // For frisbee-style trail: orient disc sideways (perpendicular to velocity)
       // so it looks like a spinning disc trail
-      mesh.lookAt(pos.clone().add(dir));
+      mesh.lookAt(_tLookAt.copy(pos).add(dir));
       mesh.rotateX(Math.PI / 2);
     }
     this.scene.add(mesh);
-    return { mesh, mat, vel, life, maxLife: life, baseSize: size };
+    return { mesh, mat, vel: vel.clone(), life, maxLife: life, baseSize: size };
   }
 
   private updateTrail(dt: number): void {
@@ -479,7 +724,7 @@ export class Projectile {
       p.life -= dt;
       if (p.life <= 0) {
         this.scene.remove(p.mesh);
-        p.mat.dispose();
+        this.particlePool.push(p); // keep mesh+mat for reuse
         this.particles.splice(i, 1);
         continue;
       }
@@ -511,10 +756,9 @@ export class Projectile {
   private removeProjectileMesh(): void {
     if (this.projectileRemoved) return;
     this.scene.remove(this.mesh);
-    this.mat.dispose();
+    // mat/glowMat are cache-shared — never dispose
     if (this.glowMesh) {
       this.scene.remove(this.glowMesh);
-      this.glowMat?.dispose();
     }
     this.projectileRemoved = true;
   }
@@ -523,16 +767,20 @@ export class Projectile {
     if (this.exploded) return;
     this.exploded = true;
     this.removeProjectileMesh();
+    for (const r of this.ribbons) r.stop();
   }
 
   dispose(): void {
     if (this.disposed) return;
     this.removeProjectileMesh();
+    for (const r of this.ribbons) r.dispose(this.scene);
     for (const p of this.particles) {
       this.scene.remove(p.mesh);
       p.mat.dispose();
     }
     this.particles.length = 0;
+    for (const p of this.particlePool) p.mat.dispose();
+    this.particlePool.length = 0;
     this.disposed = true;
   }
 }

@@ -1,5 +1,63 @@
 # Changelog
 
+## [2026-09-26] Tech Debt Implementation — Hit-Claim Validation
+
+### Server-authoritative hit validation (CRITICAL fix)
+- **`shared/combat.ts` — `validateHitClaim()`**: server recomputes whether a claimed hit was physically legal — airtime vs wall-clock age, ballistic reach (`|v|·t + ½·g·t²`), and target-vs-hitpoint distance against the capsule + the legal wake `hitRadius` at that airtime.
+- **`shared/weapons.ts` extended**: `WeaponStats` now carries speed, gravity, bodyRadius, hitMin/hitMax/hitGrow, maxLifetime — the full per-weapon ballistic+hitbox profile, single-sourced.
+- **`shared/constants.ts` (new)**: PLAYER_RADIUS/HEIGHT, capsule dims, EYE_OFFSET — shared so server and client model the same capsule (networked y is eye height).
+- **`MessageHandler.ts`**: projectiles tracked as full records `{ownerId, weaponType, origin, velocity, spawnAt}` (was owner-only). Hit claims resolve the claimed projectile (by id, or newest matching spawn when the claim outraced `projectileCreated`), validate ownership + trajectory, and apply damage from the TRACKED weaponType (forged weaponType no longer matters). `onPlayerRemoved()` drops a departed player's live projectiles (grace-period safe).
+- **`GameServer.ts`**: `onPlayerRemoved` wired into both removal paths (grace timeout + idle reap).
+- **`projectileDestroy` ownership** — already enforced via the registry.
+- **Client**: `sendShot` gains `airtime`; hit claims send `p.hitAge`. `Projectile.hitRadius` now delegates to shared `hitRadiusAt` — same formula both sides.
+- **`PROTOCOL_VERSION` → 2**: pre-airtime clients force-reload instead of silently failing every hit claim.
+- **Dead-constant purge** in `client/src/core/config.ts`: ~25 per-weapon constants (speeds, body radii, hitbox, fuse, damage) deleted — all now read from `WEAPONS[n]` in the projectile configs; capsule constants re-exported from `shared/constants.ts`.
+- **Tests**: `server_bun/tests/hitclaim.test.ts` — 11 tests covering falloff, capsule distance, and legit/forged hit claims. 88/88 bun tests pass; tsc clean client+server.
+
+### Wire boundary typing
+- `onGameState`/`onSnapshot` callbacks now typed to `GameStatePlayer[]`/`SnapshotPlayer[]`/`LocalPlayerState` (no more `any`); netHandlers updated.
+
+### Settings funnel
+- `renderer.ts` pixel-mode read routed through `settings` (with legacy `'true'` → mode 1 migration); all `localStorage` reads now pass through `client/src/core/settings.ts`.
+
+## [2026-09-26] Tech Debt Audit
+
+- **Full codebase tech debt report** at `_reports/2026-09-26_tech-debt-report.md`
+  - 9 findings across client/server: 1 critical (client-authoritative hit claims lack trajectory validation; expanding wake hitbox invisible to server), 3 high (unowned projectileDestroy, `any`-typed wire boundary, no tests + duplicated damage math), 5 medium.
+  - Includes prioritized action plan and "done right" notes (shared/ wire table, validation layer, rate limiting).
+
+## [2026-09-26] Sky Shader Overhaul
+
+### Sky Visuals
+- **Replaced fake gradient with real Rayleigh/Mie atmospheric scattering** (wwwtyro/glsl-atmosphere)
+  - Physically-based gradient: pale horizon -> deep blue-purple zenith, matches Unity procedural skybox style
+  - Exposure curve (1.6) + saturation boost (1.6) + hue shift (g*0.9, b*1.18) for vivid game-sky look
+  - Hard blend to fogColor below h=0.06 keeps terrain/sky seam invisible
+  - Sparse procedural stars (cell-hashed), suppressed near sun direction
+  - Deliberately no sun disc/halo — Tribes-style tracking of small sky targets requires uniform sky brightness without glare (matches player complaints about sun glare in Warzone/BF6)
+  - Sun moved to mid-morning angle (timeOfDay 0.38) for angled directional shading
+  - Location: client/src/world/atmosphericSky.ts, client/src/world/scene.ts, client/src/core/config.ts
+
+### Debug tooling
+- **Added URL params for headless screenshot iteration**
+  - `?yaw=<deg>&pitch=<deg>` sets initial look direction (main.ts)
+  - `?pixelated=off&postpro=off` overrides localStorage toggles (renderer.ts)
+  - Screenshots saved to `screenshots/` via headless Chrome
+
+## [2026-09-26] Demo Cool-Shot Clip Fixes
+
+### Bug Fixes
+- **Fixed server filename mismatch on uploaded clips**
+  - `uploadClipToServer` now returns the server-assigned filename and stores it on the cool shot entry
+  - Previously the entry kept the client-generated filename after upload, so playing/downloading the clip later could 404 if the timestamps disagreed
+  - Location: client/src/demo/DemoManager.ts
+
+- **Flush pending clips when recording stops**
+  - `stopRecording` now extracts all pending cool-shot clips before the buffer is abandoned
+  - Previously, stopping recording within the post-hit buffer window silently discarded the clip
+  - Refactored clip extraction into `extractPendingClip`, shared by `processPendingClips` and `stopRecording`
+  - Location: client/src/demo/DemoManager.ts
+
 ## [2026-07-09] Grenade Weapon and Disc Trail Improvements
 
 ### New Weapon - Grenade (F Key)

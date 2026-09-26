@@ -3,6 +3,14 @@ import { PlayerManager } from './PlayerManager.ts';
 import { RateLimiter } from './RateLimiter.ts';
 import { CONFIG } from './config.ts';
 import { logger } from './logger.ts';
+import { getWeaponStats } from '../../shared/weapons.ts';
+import { aoeDamage, aoeImpulse, validateHitClaim, type TrackedProjectile } from '../../shared/combat.ts';
+import { PROTOCOL_VERSION } from '../../shared/protocol.ts';
+
+// How long a hit/knocked-back player stays on the unsuppressed full-rate
+// tick path — covers the shooter's predicted-knockback window (~0.6s)
+// plus margin so the real trajectory replaces the prediction.
+const FORCE_SEND_MS = 900;
 
 type BroadcastFn = (msg: ServerMessage, excludePlayerId?: string) => void;
 type SendToPlayerFn = (playerId: string, msg: ServerMessage) => void;
@@ -13,6 +21,7 @@ export class MessageHandler {
   private broadcast: BroadcastFn;
   private sendToPlayer: SendToPlayerFn;
   private projectileCounter = 0;
+  private projectiles: Map<string, TrackedProjectile> = new Map();
   private rateLimitWarnings: Map<string, number> = new Map();
   private readonly RATE_WARN_COOLDOWN_MS = 5000;
 
@@ -28,7 +37,31 @@ export class MessageHandler {
     this.sendToPlayer = sendToPlayer;
   }
 
-  handleHandshake(playerId: string): void {
+  /** Drop per-player bookkeeping when a socket closes (grace-period cleanup
+   *  leaves PlayerManager state alive, but rate-limit warn state is per-connection) */
+  onPlayerDisconnected(playerId: string): void {
+    for (const key of this.rateLimitWarnings.keys()) {
+      if (key.startsWith(`${playerId}:`)) this.rateLimitWarnings.delete(key);
+    }
+    // Cancel any pending respawn — the player might rejoin during the grace
+    // window, and a stale timer would fire on the new session (or
+    // double-respawn if they died again after reconnecting).
+    const pending = this.respawnTimers.get(playerId);
+    if (pending) {
+      clearTimeout(pending);
+      this.respawnTimers.delete(playerId);
+    }
+  }
+
+  /** Drop live projectiles when a player is fully removed (grace timeout /
+   *  idle reap) — NOT on socket close, so a rejoining player keeps theirs. */
+  onPlayerRemoved(playerId: string): void {
+    for (const [id, proj] of this.projectiles) {
+      if (proj.ownerId === playerId) this.projectiles.delete(id);
+    }
+  }
+
+  handleHandshake(playerId: string, sessionToken?: string): void {
     const player = this.playerManager.getPlayer(playerId);
     if (!player) return;
 
@@ -38,6 +71,8 @@ export class MessageHandler {
     this.sendToPlayer(playerId, {
       type: 'gameState',
       players: playersData,
+      sessionToken,
+      protocolVersion: PROTOCOL_VERSION,
       localPlayerState: {
         position: { ...player.position },
         rotation: { ...player.rotation },
@@ -81,12 +116,6 @@ export class MessageHandler {
       case 'aoeShot':
         this.handleAOEShot(playerId, msg);
         break;
-      case 'discAOEShot':
-        this.handleDiscAOEShot(playerId, msg);
-        break;
-      case 'grenadeAOEShot':
-        this.handleGrenadeAOEShot(playerId, msg);
-        break;
       case 'jump':
         this.handleJump(playerId, msg);
         break;
@@ -96,10 +125,17 @@ export class MessageHandler {
       case 'projectileDestroy':
         this.handleProjectileDestroy(playerId, msg);
         break;
-      case 'inputMove':
-      case 'input':
+      case 'environmentDamage':
+        this.handleEnvironmentDamage(playerId, msg);
         break;
+      case 'inputMove': {
+        const player = this.playerManager.getPlayer(playerId);
+        if (player) player.skiing = msg.input.ski ? 1 : 0;
+        break;
+      }
       case 'ping':
+        player.lastSeen = Date.now(); // ping is a liveness signal too —
+        // without it a non-moving client could still go "stale"
         this.sendToPlayer(playerId, { type: 'pong', timestamp: msg.timestamp });
         break;
       case 'snapshotRequest':
@@ -115,37 +151,58 @@ export class MessageHandler {
     const player = this.playerManager.getPlayer(playerId);
     if (!player || player.isDead) return;
 
-    // Cheat prevention: position plausibility check
-    // Reject if player moved faster than max possible speed since last update
+    // Cheat prevention: position plausibility check.
+    // Compares CONSECUTIVE reports (lastPosCheck* updates even on reject),
+    // so a rejected position doesn't poison every subsequent check — the
+    // old version measured each new report against a stale accepted pos,
+    // spiralling into permanent rejection once a player got >threshold away.
     const now = Date.now();
-    const prevPos = player.position;
-    const dt = (now - player.lastSeen) / 1000;
-    if (dt > 0 && prevPos && player.hasReceivedPosition) {
-      const dx = msg.position.x - prevPos.x;
-      const dy = msg.position.y - prevPos.y;
-      const dz = msg.position.z - prevPos.z;
+    const dt = Math.max((now - player.lastPosCheckTime) / 1000, 0.05); // floor: bursts of queued packets report ~1ms gaps
+    player.lastPosCheckTime = now;
+    if (player.hasReceivedPosition && player.lastPosCheckPos) {
+      const dx = msg.position.x - player.lastPosCheckPos.x;
+      const dy = msg.position.y - player.lastPosCheckPos.y;
+      const dz = msg.position.z - player.lastPosCheckPos.z;
       const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
       const speed = dist / dt;
-      // Max plausible speed: 200 m/s (covers knockback + jetpack + falling)
-      // At 20Hz updates, that's 10m per update — very generous
-      if (speed > 200) {
+      player.lastPosCheckPos = { ...msg.position };
+      // Reject only genuine impossibilities: >50m in one report, or speed
+      // beyond any legit combination of skiing + knockback + jetpack
+      if (dist > 50 || speed > 300) {
+        player.consecutiveRejects++;
         logger.warn(`Position rejected: ${playerId} moved ${dist.toFixed(1)}m in ${dt.toFixed(3)}s (${speed.toFixed(0)} m/s)`);
-        const validState = this.playerManager.getLastValidState(playerId);
-        if (validState) {
-          this.sendToPlayer(playerId, {
-            type: 'correction',
-            seq: validState.seq,
-            position: validState.position,
-            velocity: validState.velocity,
-            rotation: validState.rotation,
-          });
+        // Send correction on the first reject of a streak only — no flood
+        if (player.consecutiveRejects === 1) {
+          const validState = this.playerManager.getLastValidState(playerId);
+          if (validState) {
+            this.sendToPlayer(playerId, {
+              type: 'correction',
+              seq: validState.seq,
+              position: validState.position,
+              velocity: validState.velocity,
+              rotation: validState.rotation,
+            });
+          }
         }
-        return;
+        // Client persisting past corrections (disputed knockback, lost
+        // correction packet): force-accept after 10 rejects to resync
+        // instead of warping the player forever.
+        if (player.consecutiveRejects > 10) {
+          logger.warn(`Position force-accepted: ${playerId} after ${player.consecutiveRejects} rejects (resync)`);
+          player.consecutiveRejects = 0;
+        } else {
+          return;
+        }
+      } else {
+        player.consecutiveRejects = 0;
       }
+    } else {
+      player.lastPosCheckPos = { ...msg.position };
     }
 
     this.playerManager.updatePosition(playerId, msg.position, msg.rotation, msg.velocity, msg.seq);
     player.hasReceivedPosition = true;
+    if (msg.ping !== undefined) player.ping = msg.ping;
     // Don't broadcast immediately — batched in tickUpdate
   }
 
@@ -168,26 +225,48 @@ export class MessageHandler {
         return;
       }
 
-      // Cheap cheat prevention: distance sanity check
-      // Reject if shooter claims hit on a target > 200m away (max rocket range + margin)
-      const dx = player.position.x - target.position.x;
-      const dy = player.position.y - target.position.y;
-      const dz = player.position.z - target.position.z;
-      const distSq = dx * dx + dy * dy + dz * dz;
-      if (distSq > 40000) { // 200m squared
-        logger.warn(`Shot rejected: ${playerId} too far from target ${targetId} (${Math.sqrt(distSq).toFixed(0)}m)`);
+      // Hit claims must name the projectile that landed them. The claimed
+      // id may be null if the hit raced the server's projectileCreated —
+      // fall back to the shooter's most recent spawn of that weapon type.
+      const proj = this.resolveClaimedProjectile(playerId, msg.projectileId, msg.weaponType);
+      if (!proj) {
+        logger.warn(`Shot rejected: ${playerId} hit ${targetId} with no known projectile`);
         return;
       }
+      if (msg.position === undefined || msg.airtime === undefined) {
+        logger.warn(`Shot rejected: ${playerId} hit claim missing position/airtime`);
+        return;
+      }
+      const verdict = validateHitClaim({
+        projectile: proj,
+        hitPos: msg.position,
+        targetPos: target.position,
+        airtime: msg.airtime,
+        shooterVel: player.velocity,
+        now: Date.now(),
+      });
+      if (!verdict.ok) {
+        logger.warn(`Shot rejected: ${playerId} → ${targetId}: ${verdict.reason}`);
+        return;
+      }
+      // The projectile exploded on impact — drop it so a second claim on
+      // the same id can't double-dip.
+      if (msg.projectileId) this.projectiles.delete(msg.projectileId);
 
-      const result = this.playerManager.applyDamage(targetId, CONFIG.shotDamage);
+      const shotDamage = getWeaponStats(proj.weaponType).directDamage;
+      const result = this.playerManager.applyDamage(targetId, shotDamage);
+      // Full-rate tick updates for the hit window — the shooter's client is
+      // extrapolating this target's knockback and needs real positions to
+      // converge on (suppression would leave it predicting blind).
+      target.forceSendUntil = Date.now() + FORCE_SEND_MS;
 
       if (!result.killed) {
-        logger.info('Player hit', { shooter: playerId, target: targetId, damage: CONFIG.shotDamage, targetHealth: result.newHealth });
+        logger.info('Player hit', { shooter: playerId, target: targetId, damage: shotDamage, targetHealth: result.newHealth });
         this.broadcast({
           type: 'playerHit',
           shooterId: playerId,
           targetId,
-          damage: CONFIG.shotDamage,
+          damage: shotDamage,
           health: result.newHealth,
         });
       } else {
@@ -205,30 +284,61 @@ export class MessageHandler {
 
       if (msg.position && msg.velocity) {
         const projectileId = `proj_${++this.projectileCounter}`;
+        this.projectiles.set(projectileId, {
+          ownerId: playerId,
+          weaponType: msg.weaponType ?? 0,
+          origin: { ...msg.position },
+          velocity: { ...msg.velocity },
+          spawnAt: Date.now(),
+        });
+        if (this.projectiles.size > 512) {
+          // Evict oldest — a live game never has >512 in-flight projectiles;
+          // the cap bounds memory if clients never send destroys
+          const oldest = this.projectiles.keys().next().value;
+          if (oldest) this.projectiles.delete(oldest);
+        }
         this.broadcast({
           type: 'projectileCreated',
           projectileId,
           ownerId: playerId,
           position: msg.position,
           velocity: msg.velocity,
+          weaponType: msg.weaponType,
         });
       }
     }
   }
 
+  /**
+   * Find the tracked projectile a hit claim refers to. The client echoes the
+   * server-assigned id when it has it; when the hit outraced the
+   * projectileCreated reply it can't, so we fall back to the shooter's most
+   * recently spawned projectile of the claimed weapon type.
+   */
+  private resolveClaimedProjectile(
+    playerId: string,
+    projectileId: string | null | undefined,
+    weaponType: number | undefined,
+  ): TrackedProjectile | undefined {
+    if (projectileId) {
+      const proj = this.projectiles.get(projectileId);
+      return proj && proj.ownerId === playerId ? proj : undefined;
+    }
+    let latest: TrackedProjectile | undefined;
+    for (const proj of this.projectiles.values()) {
+      if (proj.ownerId !== playerId) continue;
+      if (weaponType !== undefined && proj.weaponType !== weaponType) continue;
+      latest = proj;
+    }
+    return latest;
+  }
+
   private handleAOEShot(playerId: string, msg: Extract<ClientMessage, { type: 'aoeShot' }>): void {
-    this.processAOE(playerId, msg.position, msg.excludeTargetId, 'rocket');
+    // One message for all AOE weapons — stats resolve via the shared table
+    this.processAOE(playerId, msg.position, msg.excludeTargetId, getWeaponStats(msg.weaponType));
   }
 
-  private handleDiscAOEShot(playerId: string, msg: Extract<ClientMessage, { type: 'discAOEShot' }>): void {
-    this.processAOE(playerId, msg.position, msg.excludeTargetId, 'disc');
-  }
-
-  private handleGrenadeAOEShot(playerId: string, msg: Extract<ClientMessage, { type: 'grenadeAOEShot' }>): void {
-    this.processAOE(playerId, msg.position, msg.excludeTargetId, 'grenade');
-  }
-
-  private processAOE(playerId: string, position: Vec3, excludeTargetId: string | null | undefined, mode: 'rocket' | 'disc' | 'grenade'): void {
+  private processAOE(playerId: string, position: Vec3, excludeTargetId: string | null | undefined, stats: import('../../shared/weapons.ts').WeaponStats): void {
     const player = this.playerManager.getPlayer(playerId);
     if (!player || player.isDead) return;
 
@@ -242,11 +352,11 @@ export class MessageHandler {
       return;
     }
 
-    const pull = mode === 'disc';
-    const radius = pull ? CONFIG.discAoeRadius : (mode === 'grenade' ? CONFIG.grenadeAoeRadius : CONFIG.aoeRadius);
-    const baseDamage = pull ? CONFIG.discAoeDamage : (mode === 'grenade' ? CONFIG.grenadeAoeDamage : CONFIG.aoeDamage);
-    const impulseForce = pull ? CONFIG.discPullForce : (mode === 'grenade' ? CONFIG.grenadeKnockbackForce : CONFIG.knockbackForce);
-    const logLabel = pull ? 'disc AOE' : (mode === 'grenade' ? 'grenade AOE' : 'AOE');
+    const pull = stats.forceMode === 'pull';
+    const radius = stats.aoeRadius;
+    const baseDamage = stats.aoeDamage;
+    const impulseForce = stats.knockbackForce;
+    const logLabel = pull ? 'disc AOE' : 'AOE';
 
     for (const [targetId, target] of this.playerManager.getAllPlayers()) {
       if (targetId === playerId) continue; // Don't damage self
@@ -259,12 +369,12 @@ export class MessageHandler {
       const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
 
       if (dist <= radius) {
-        const falloff = 1 - dist / radius;
-        const damage = Math.round(baseDamage * falloff);
+        // shared/combat.ts — same formula the client predicts with
+        const damage = aoeDamage(baseDamage, dist, radius);
         if (damage <= 0) continue;
 
         // Apply impulse to target velocity (server-authoritative)
-        const impulseMag = impulseForce * falloff;
+        const impulseMag = aoeImpulse(impulseForce, dist, radius);
         if (dist > 0) {
           if (pull) {
             // Pull toward explosion center (reversed direction)
@@ -280,6 +390,7 @@ export class MessageHandler {
         }
 
         // Notify the target player to apply impulse to their local player
+        target.forceSendUntil = Date.now() + FORCE_SEND_MS;
         this.sendToPlayer(targetId, {
           type: 'knockback',
           targetId,
@@ -333,15 +444,59 @@ export class MessageHandler {
     }, playerId);
   }
 
-  private handleProjectileDestroy(_playerId: string, msg: Extract<ClientMessage, { type: 'projectileDestroy' }>): void {
+  // Client-reported environmental damage (crawler pounces, etc.) — self-only,
+  // clamped so it can never be aimed at another player or one-shot anyone.
+  private handleEnvironmentDamage(playerId: string, msg: Extract<ClientMessage, { type: 'environmentDamage' }>): void {
+    const player = this.playerManager.getPlayer(playerId);
+    if (!player || player.isDead) return;
+    const damage = Math.min(40, Math.max(1, Math.round(msg.amount)));
+    const result = this.playerManager.applyDamage(playerId, damage);
+    player.forceSendUntil = Date.now() + FORCE_SEND_MS;
+    if (!result.killed) {
+      this.broadcast({
+        type: 'playerHit',
+        shooterId: 'environment',
+        targetId: playerId,
+        damage,
+        health: result.newHealth,
+      });
+    } else {
+      logger.info('Player killed by environment', { playerId });
+      this.broadcast({
+        type: 'playerKill',
+        shooterId: 'environment',
+        targetId: playerId,
+      });
+      this.scheduleRespawn(playerId);
+    }
+  }
+
+  private handleProjectileDestroy(playerId: string, msg: Extract<ClientMessage, { type: 'projectileDestroy' }>): void {
+    // Ownership check: any client could otherwise destroy every other
+    // player's in-flight projectiles (grief vector — silently suppresses
+    // weapons). Unknown IDs are allowed through so client-side-only IDs
+    // still work.
+    const proj = this.projectiles.get(msg.projectileId);
+    if (proj !== undefined && proj.ownerId !== playerId) {
+      logger.warn(`projectileDestroy rejected: ${playerId} doesn't own ${msg.projectileId}`);
+      return;
+    }
+    this.projectiles.delete(msg.projectileId);
     this.broadcast({
       type: 'projectileDestroyed',
       projectileId: msg.projectileId,
     });
   }
 
+  private respawnTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
+
   private scheduleRespawn(playerId: string): void {
-    setTimeout(() => {
+    // One respawn timer per player — a second kill while dead replaces it
+    // instead of stacking.
+    const existing = this.respawnTimers.get(playerId);
+    if (existing) clearTimeout(existing);
+    const timer = setTimeout(() => {
+      this.respawnTimers.delete(playerId);
       const result = this.playerManager.respawnPlayer(playerId);
       if (!result) return;
 
@@ -358,6 +513,7 @@ export class MessageHandler {
         rotation: result.rotation,
       });
     }, CONFIG.respawnDelayMs);
+    this.respawnTimers.set(playerId, timer);
   }
 
   private handleSnapshotRequest(playerId: string): void {

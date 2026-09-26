@@ -1,6 +1,8 @@
 import { ChildLogger } from '../core/Logger.js';
-
-import { INetworkAdapter } from './INetworkAdapter.js';
+import { isWireFrame, encodePosition, decodeTickFrame } from '../../../shared/wire.js';
+import type { ClientMessage, ServerMessage, TickUpdatePlayer, GameStatePlayer, LocalPlayerState, SnapshotPlayer } from '../../../shared/protocol.js';
+import { PROTOCOL_VERSION } from '../../../shared/protocol.js';
+import { WebSocketConnection } from './WebSocketConnection.js';
 
 const logger = new ChildLogger('NetworkManager');
 
@@ -12,15 +14,18 @@ export interface RemotePlayerState {
   velocity: { x: number; y: number; z: number };
   isDead: boolean;
   health: number;
+  ping?: number;
+  ski?: number;
 }
 
 /**
- * Network manager using dependency injection
- * Supports swapping between different networking backends (ws, Colyseus, Naia)
+ * Network manager — owns the transport (WebSocketConnection) directly.
+ * One transport, one protocol layer; the binary codec lives in shared/wire.ts.
  */
 export class NetworkManager {
-  private adapter: INetworkAdapter | null = null;
+  private ws: WebSocketConnection | null = null;
   private localPlayerId: string;
+  private sessionToken: string | null;
   private connected: boolean = false;
   /** REMOTE players only — local player is never stored here */
   private players: Map<string, RemotePlayerState> = new Map();
@@ -29,14 +34,14 @@ export class NetworkManager {
   public onPlayerRespawn: ((playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }) => void) | null = null;
   public onPlayerJump: ((playerId: string, position: { x: number; y: number; z: number }) => void) | null = null;
   public onPlayerJetpack: ((playerId: string, position: { x: number; y: number; z: number }) => void) | null = null;
-  public onProjectileCreated: ((projectileId: string, ownerId: string, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }) => void) | null = null;
+  public onProjectileCreated: ((projectileId: string, ownerId: string, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }, weaponType?: number) => void) | null = null;
   public onProjectileDestroyed: ((projectileId: string) => void) | null = null;
   public onPlayerJoined: ((playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }) => void) | null = null;
   public onPlayerLeft: ((playerId: string) => void) | null = null;
   public onKnockback: ((position: { x: number; y: number; z: number }, force: number, pull?: boolean) => void) | null = null;
   public onPlayerUpdate: ((playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }, timestamp: number, velocity?: { x: number; y: number; z: number }) => void) | null = null;
-  public onGameState: ((players: any[], localPlayerState: any) => void) | null = null;
-  public onSnapshot: ((players: any[], timestamp: number) => void) | null = null;
+  public onGameState: ((players: GameStatePlayer[], localPlayerState: LocalPlayerState | undefined) => void) | null = null;
+  public onSnapshot: ((players: SnapshotPlayer[], timestamp: number) => void) | null = null;
   public onStateHash: ((hash: string, tick: number, playerCount: number, timestamp: number) => void) | null = null;
   public onCorrection: ((seq: number, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }) => void) | null = null;
   private lastPositionSendTime: number = 0;
@@ -55,296 +60,272 @@ export class NetworkManager {
   private pingHistory: number[] = []; // Recent RTT samples
   private readonly PING_HISTORY_MAX = 10;
 
-  constructor(adapter: INetworkAdapter) {
-    this.adapter = adapter;
-    this.localPlayerId = '';
-    this.setupAdapterCallbacks();
+  constructor() {
+    // Player ID persists in sessionStorage so F5 refreshes reclaim the
+    // grace-period slot instead of joining as a ghost duplicate
+    const stored = sessionStorage.getItem('fps-player-id');
+    if (stored) {
+      this.localPlayerId = stored;
+    } else {
+      this.localPlayerId = `player_${Math.random().toString(36).substr(2, 9)}`;
+      sessionStorage.setItem('fps-player-id', this.localPlayerId);
+    }
+    // Session token issued by the server on first join — required to
+    // reclaim a grace-period slot after F5/reconnect
+    this.sessionToken = sessionStorage.getItem('fps-session-token');
   }
 
   setPlayerId(playerId: string): void {
     this.localPlayerId = playerId;
   }
 
-  /**
-   * Set the control object for client-side prediction
-   * This object should have applyMove and state properties
-   */
-  setControlObject(controlObject: any): void {
-    if (this.adapter && 'setControlObject' in this.adapter) {
-      (this.adapter as any).setControlObject(controlObject);
-    }
-  }
-
-  async connect(url: string): Promise<void> {
-    if (!this.adapter) {
-      throw new Error('Network adapter not set');
-    }
-
-    try {
-      await this.adapter.connect(url);
-      this.connected = true;
-
-      // Try to get session ID from adapter if available
-      if ('getSessionId' in this.adapter) {
-        this.localPlayerId = (this.adapter as any).getSessionId();
-      } else if ('getPlayerId' in this.adapter) {
-        this.localPlayerId = (this.adapter as any).getPlayerId();
-      } else {
-        this.localPlayerId = 'unknown';
+  connect(url: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      try {
+        this.ws = new WebSocketConnection({
+          url,
+          onConnect: () => {
+            // Join handshake — must precede the queued-message flush,
+            // which WebSocketConnection guarantees (onConnect first)
+            this.sendJson({
+              type: 'join',
+              playerId: this.localPlayerId,
+              token: this.sessionToken ?? undefined,
+            });
+            this.connected = true;
+            this.hasLoggedConnectionError = false;
+            logger.info(`Connected as ${this.localPlayerId}`);
+            resolve();
+          },
+          onDisconnect: (code, reason) => {
+            // 1008 = server rejected our session — drop stored identity so
+            // auto-reconnect joins fresh instead of looping on bad creds
+            if (code === 1008) {
+              sessionStorage.removeItem('fps-player-id');
+              sessionStorage.removeItem('fps-session-token');
+              this.sessionToken = null;
+              this.localPlayerId = `player_${Math.random().toString(36).substr(2, 9)}`;
+              sessionStorage.setItem('fps-player-id', this.localPlayerId);
+              logger.info(`Session rejected (${reason}) — rejoining as ${this.localPlayerId}`);
+            }
+            logger.info('Disconnected');
+            this.connected = false;
+          },
+          onError: (error) => {
+            if (!this.hasLoggedConnectionError) {
+              logger.error('Connection error', error);
+              this.hasLoggedConnectionError = true;
+            }
+            reject(error);
+          },
+          onMessage: (data) => this.handleMessage(data),
+          onBinaryMessage: (data) => this.handleBinaryMessage(data),
+        });
+        this.ws.connect(url);
+      } catch (error) {
+        reject(error);
       }
-
-      logger.info(`Connected via adapter: ${this.localPlayerId}`);
-      this.hasLoggedConnectionError = false;
-    } catch (error) {
-      logger.error('Connection error', error);
-      throw error;
-    }
+    });
   }
 
   disconnect(): void {
-    if (this.adapter) {
-      this.adapter.disconnect();
-    }
+    this.ws?.disconnect();
+    this.ws = null;
     this.connected = false;
   }
 
-  private setupAdapterCallbacks(): void {
-    if (!this.adapter) return;
-
-    this.adapter.onMessage((data) => {
-      this.handleMessage(data);
-    });
-
-    this.adapter.onBinaryMessage((data) => {
-      this.handleBinaryMessage(data);
-    });
-
-    this.adapter.onConnect(() => {
-      logger.info('Adapter connected');
-      this.hasLoggedConnectionError = false;
-    });
-
-    this.adapter.onDisconnect(() => {
-      logger.info('Adapter disconnected');
-      this.connected = false;
-    });
-
-    this.adapter.onError((error) => {
-      if (!this.hasLoggedConnectionError) {
-        logger.error('Adapter error', error);
-        this.hasLoggedConnectionError = true;
-      }
-    });
+  private sendJson(msg: object): void {
+    this.ws?.send(JSON.stringify(msg));
   }
 
-  private handleMessage(data: any): void {
+  /** Outbound JSON event — typed against the shared protocol union. */
+  private send(msg: ClientMessage): void {
+    if (!this.ws?.connected()) return;
+    this.ws.send(JSON.stringify(msg));
+  }
+
+  /** Outbound binary frame — pre-encoded by shared/wire.ts. */
+  private sendBinary(data: Uint8Array): void {
+    if (!this.ws?.connected()) return;
+    this.ws.send(data);
+  }
+
+  private handleMessage(data: ServerMessage): void {
+    // Capture the server-issued session token for future reconnects
+    if (data?.type === 'gameState' && typeof data.sessionToken === 'string') {
+      this.sessionToken = data.sessionToken;
+      sessionStorage.setItem('fps-session-token', data.sessionToken);
+    }
     // Avoid JSON.stringify on every message — tickUpdate arrives at 20Hz
-    switch (data.type) {
-      case 'gameState':
-        // gameState is the authoritative roster on (re)connect — clear stale entries
-        // for players who left during our disconnect, then add the current set.
-        // (Local player is never stored here; state comes via localPlayerState.)
-        this.players.clear();
-        if (data.players && Array.isArray(data.players)) {
-          for (const player of data.players) {
-            if (player.id === this.localPlayerId) continue;
-            this.players.set(player.id, player);
-          }
-        }
-        if (this.onGameState) {
-          this.onGameState(data.players || [], data.localPlayerState);
-        }
-        break;
-
-      case 'tickUpdate':
-        // Batched player updates from server (delta compressed)
-        if (data.ackSeq !== undefined && data.ackSeq > 0) {
-          this.pruneStateHistory(data.ackSeq);
-        }
-        if (data.updates && Array.isArray(data.updates)) {
-          const now = Date.now();
-          for (const u of data.updates) {
-            // Defense-in-depth: server already excludes self from tickUpdate,
-            // but skip local player here too in case of any server-side regression
-            if (u.playerId === this.localPlayerId) continue;
-            const existing = this.players.get(u.playerId);
-            this.players.set(u.playerId, {
-              ...existing,
-              id: u.playerId,
-              internalId: u.internalId || existing?.internalId || '',
-              position: u.position,
-              rotation: u.rotation || { yaw: 0, pitch: 0 },
-              velocity: u.velocity || { x: 0, y: 0, z: 0 },
-              isDead: u.isDead || false,
-              health: u.health !== undefined ? u.health : (existing?.health ?? 100),
-            });
-            if (this.onPlayerUpdate) {
-              this.onPlayerUpdate(u.playerId, u.position, u.rotation, now, u.velocity);
-            }
-          }
-        }
-        break;
-
-      case 'playerJoined':
-        // Add REMOTE player to storage (server excludes self, but guard anyway)
-        if (data.playerId && data.playerId !== this.localPlayerId) {
-          this.players.set(data.playerId, {
-            id: data.playerId,
-            internalId: data.internalId,
-            position: data.position || { x: 0, y: 500, z: 0 },
-            rotation: data.rotation || { yaw: 0, pitch: 0 },
-            velocity: { x: 0, y: 0, z: 0 },
-            health: 100,
-            isDead: false
-          });
-        }
-        if (this.onPlayerJoined) {
-          this.onPlayerJoined(data.playerId, data.position, data.rotation);
-        }
-        break;
-
-      case 'playerLeft':
-        // Remove player from storage
-        if (data.playerId) {
-          this.players.delete(data.playerId);
-        }
-        if (this.onPlayerLeft) {
-          this.onPlayerLeft(data.playerId);
-        }
-        break;
-
-      case 'playerRespawn':
-        // Update REMOTE player in storage (local player respawn handled by callback)
-        if (data.playerId && data.position && data.playerId !== this.localPlayerId) {
-          const existing = this.players.get(data.playerId);
-          this.players.set(data.playerId, {
-            ...existing,
-            id: data.playerId,
-            internalId: existing?.internalId || '',
-            position: data.position,
-            rotation: data.rotation || { yaw: 0, pitch: 0 },
-            velocity: { x: 0, y: 0, z: 0 },
-            health: 100,
-            isDead: false
-          });
-        }
-        if (this.onPlayerRespawn) {
-          this.onPlayerRespawn(data.playerId, data.position, data.rotation);
-        }
-        break;
-
-      case 'playerHit':
-        // Update REMOTE player health in storage (local player health handled by callback)
-        if (data.targetId && data.targetId !== this.localPlayerId) {
-          const existing = this.players.get(data.targetId);
-          this.players.set(data.targetId, {
-            ...existing,
-            id: data.targetId,
-            internalId: existing?.internalId || '',
-            position: existing?.position || { x: 0, y: 0, z: 0 },
-            rotation: existing?.rotation || { yaw: 0, pitch: 0 },
-            velocity: existing?.velocity || { x: 0, y: 0, z: 0 },
-            isDead: existing?.isDead || false,
-            health: data.health !== undefined ? data.health : (existing?.health ?? 100),
-          });
-        }
-        if (this.onPlayerHit) {
-          this.onPlayerHit(data.shooterId, data.targetId, data.damage, data.health);
-        }
-        break;
-
-      case 'playerKill':
-        // Update REMOTE player state (local player death handled by callback)
-        if (data.targetId && data.targetId !== this.localPlayerId) {
-          const existing = this.players.get(data.targetId);
-          this.players.set(data.targetId, {
-            ...existing,
-            id: data.targetId,
-            internalId: existing?.internalId || '',
-            position: existing?.position || { x: 0, y: 0, z: 0 },
-            rotation: existing?.rotation || { yaw: 0, pitch: 0 },
-            velocity: existing?.velocity || { x: 0, y: 0, z: 0 },
-            isDead: true,
-            health: 0,
-          });
-        }
-        if (this.onPlayerKill) {
-          this.onPlayerKill(data.shooterId, data.targetId);
-        }
-        break;
-
-      case 'knockback':
-        if (this.onKnockback) {
-          this.onKnockback(data.position, data.force, data.pull);
-        }
-        break;
-
-      case 'jump':
-        if (this.onPlayerJump) {
-          this.onPlayerJump(data.playerId, data.position);
-        }
-        break;
-
-      case 'jetpack':
-        if (this.onPlayerJetpack) {
-          this.onPlayerJetpack(data.playerId, data.position);
-        }
-        break;
-
-      case 'projectileCreated':
-        if (this.onProjectileCreated) {
-          this.onProjectileCreated(data.projectileId, data.ownerId, data.position, data.velocity);
-        }
-        break;
-
-      case 'projectileDestroyed':
-        if (this.onProjectileDestroyed) {
-          this.onProjectileDestroyed(data.projectileId);
-        }
-        break;
-
-      case 'snapshot':
-        if (this.onSnapshot) {
-          this.onSnapshot(data.players || [], data.timestamp || Date.now());
-        }
-        break;
-
-      case 'stateHash':
-        if (this.onStateHash) {
-          this.onStateHash(data.hash, data.tick, data.playerCount, data.timestamp);
-        }
-        break;
-
-      case 'correction':
-        // Server rejected our position — snap to last valid state
-        logger.warn(`Server correction at seq ${data.seq}: pos=(${data.position.x.toFixed(1)},${data.position.y.toFixed(1)},${data.position.z.toFixed(1)})`);
-        this.pruneStateHistory(data.seq);
-        if (this.onCorrection) {
-          this.onCorrection(data.seq, data.position, data.velocity, data.rotation);
-        }
-        break;
-
-      case 'pong':
-        this.handlePong(data.timestamp);
-        break;
-
-      default:
-        logger.warn(`Unknown message type: ${data.type}`);
+    const handler = this.handlers[data.type] as ((d: ServerMessage) => void) | undefined;
+    if (handler) {
+      handler(data);
+    } else {
+      logger.warn(`Unknown message type: ${data.type}`);
     }
   }
 
+  private readonly handlers: { [K in ServerMessage['type']]: (data: Extract<ServerMessage, { type: K }>) => void } = {
+    gameState: (data) => this.handleGameState(data),
+    tickUpdate: (data) => this.handleTickUpdate(data),
+    playerJoined: (data) => this.handlePlayerJoined(data),
+    playerLeft: (data) => this.handlePlayerLeft(data),
+    playerRespawn: (data) => this.handlePlayerRespawn(data),
+    playerHit: (data) => this.handlePlayerHit(data),
+    playerKill: (data) => this.handlePlayerKill(data),
+    knockback: (data) => this.onKnockback?.(data.position, data.force, data.pull),
+    jump: (data) => this.onPlayerJump?.(data.playerId, data.position),
+    jetpack: (data) => this.onPlayerJetpack?.(data.playerId, data.position),
+    projectileCreated: (data) => this.onProjectileCreated?.(data.projectileId, data.ownerId, data.position, data.velocity, data.weaponType),
+    projectileDestroyed: (data) => this.onProjectileDestroyed?.(data.projectileId),
+    snapshot: (data) => this.onSnapshot?.(data.players || [], data.timestamp || Date.now()),
+    stateHash: (data) => this.onStateHash?.(data.hash, data.tick, data.playerCount, data.timestamp),
+    correction: (data) => this.handleCorrection(data),
+    pong: (data) => this.handlePong(data.timestamp),
+  };
+
+  private handleGameState(data: Extract<ServerMessage, { type: 'gameState' }>): void {
+    // Protocol handshake: a stale bundle can't parse a new wire format —
+    // force-reload once (cache-busted) instead of silently desyncing. The
+    // sessionStorage counter caps it at 2 attempts so a genuinely newer
+    // server can't reload-loop the tab.
+    const serverProto = data.protocolVersion ?? 0;
+    if (serverProto !== PROTOCOL_VERSION) {
+      const tries = Number(sessionStorage.getItem('fps-proto-reload') ?? '0');
+      logger.warn(`Protocol mismatch: client=${PROTOCOL_VERSION} server=${serverProto} (attempt ${tries + 1})`);
+      if (tries < 2) {
+        sessionStorage.setItem('fps-proto-reload', String(tries + 1));
+        const url = new URL(location.href);
+        url.searchParams.set('pv', String(Date.now())); // cache-buster vs CDN staleness
+        location.href = url.toString();
+      }
+      return;
+    }
+    sessionStorage.removeItem('fps-proto-reload'); // clean connect — reset the budget
+
+    // gameState is the authoritative roster on (re)connect — clear stale entries
+    // for players who left during our disconnect, then add the current set.
+    // (Local player is never stored here; state comes via localPlayerState.)
+    this.players.clear();
+    if (data.players && Array.isArray(data.players)) {
+      for (const player of data.players) {
+        if (player.id === this.localPlayerId) continue;
+        this.players.set(player.id, player);
+      }
+    }
+    this.onGameState?.(data.players || [], data.localPlayerState);
+  }
+
+  private handleTickUpdate(data: { updates: TickUpdatePlayer[]; ackSeq?: number }): void {
+    // Batched player updates from server (delta compressed)
+    if (data.ackSeq !== undefined && data.ackSeq > 0) {
+      this.pruneStateHistory(data.ackSeq);
+    }
+    if (!data.updates || !Array.isArray(data.updates)) return;
+    const now = Date.now();
+    for (const u of data.updates) {
+      // Defense-in-depth: server already excludes self from tickUpdate,
+      // but skip local player here too in case of any server-side regression
+      if (u.playerId === this.localPlayerId) continue;
+      const existing = this.players.get(u.playerId);
+      this.players.set(u.playerId, {
+        ...existing,
+        id: u.playerId,
+        internalId: u.internalId || existing?.internalId || '',
+        position: u.position,
+        rotation: u.rotation || { yaw: 0, pitch: 0 },
+        velocity: u.velocity || { x: 0, y: 0, z: 0 },
+        isDead: u.isDead || false,
+        health: u.health !== undefined ? u.health : (existing?.health ?? 100),
+        ping: u.ping,
+        ski: u.ski !== undefined ? u.ski : existing?.ski,
+      });
+      this.onPlayerUpdate?.(u.playerId, u.position, u.rotation, now, u.velocity);
+    }
+  }
+
+  // Upsert a remote player's roster entry, preserving fields the message doesn't carry
+  private upsertRemotePlayer(playerId: string, patch: Partial<RemotePlayerState>): void {
+    if (!playerId || playerId === this.localPlayerId) return;
+    const existing = this.players.get(playerId);
+    this.players.set(playerId, {
+      ...existing,
+      id: playerId,
+      internalId: existing?.internalId || '',
+      position: patch.position ?? existing?.position ?? { x: 0, y: 500, z: 0 },
+      rotation: patch.rotation ?? existing?.rotation ?? { yaw: 0, pitch: 0 },
+      velocity: patch.velocity ?? existing?.velocity ?? { x: 0, y: 0, z: 0 },
+      isDead: patch.isDead ?? existing?.isDead ?? false,
+      health: patch.health ?? existing?.health ?? 100,
+    });
+  }
+
+  private handlePlayerJoined(data: Extract<ServerMessage, { type: 'playerJoined' }>): void {
+    // Add REMOTE player to storage (server excludes self, but guard anyway)
+    this.upsertRemotePlayer(data.playerId, {
+      position: data.position,
+      rotation: data.rotation,
+      velocity: { x: 0, y: 0, z: 0 },
+      isDead: false,
+      health: 100,
+    });
+    this.onPlayerJoined?.(data.playerId, data.position, data.rotation);
+  }
+
+  private handlePlayerLeft(data: Extract<ServerMessage, { type: 'playerLeft' }>): void {
+    if (data.playerId) {
+      this.players.delete(data.playerId);
+    }
+    this.onPlayerLeft?.(data.playerId);
+  }
+
+  private handlePlayerRespawn(data: Extract<ServerMessage, { type: 'playerRespawn' }>): void {
+    // Update REMOTE player in storage (local player respawn handled by callback)
+    if (data.position) {
+      this.upsertRemotePlayer(data.playerId, {
+        position: data.position,
+        rotation: data.rotation,
+        velocity: { x: 0, y: 0, z: 0 },
+        isDead: false,
+        health: 100,
+      });
+    }
+    this.onPlayerRespawn?.(data.playerId, data.position, data.rotation);
+  }
+
+  private handlePlayerHit(data: Extract<ServerMessage, { type: 'playerHit' }>): void {
+    // Update REMOTE player health in storage (local player health handled by callback)
+    this.upsertRemotePlayer(data.targetId, { health: data.health });
+    this.onPlayerHit?.(data.shooterId, data.targetId, data.damage, data.health);
+  }
+
+  private handlePlayerKill(data: Extract<ServerMessage, { type: 'playerKill' }>): void {
+    // Update REMOTE player state (local player death handled by callback)
+    this.upsertRemotePlayer(data.targetId, { isDead: true, health: 0 });
+    this.onPlayerKill?.(data.shooterId, data.targetId);
+  }
+
+  private handleCorrection(data: Extract<ServerMessage, { type: 'correction' }>): void {
+    // Server rejected our position — snap to last valid state
+    logger.warn(`Server correction at seq ${data.seq}: pos=(${data.position.x.toFixed(1)},${data.position.y.toFixed(1)},${data.position.z.toFixed(1)})`);
+    this.pruneStateHistory(data.seq);
+    this.onCorrection?.(data.seq, data.position, data.velocity, data.rotation);
+  }
+
   private handleBinaryMessage(data: Uint8Array): void {
-    // Handle binary messages from the adapter
-    // This will be implemented based on the protocol used by the specific backend
-    logger.debug(`Received binary message: ${data.length} bytes`);
+    if (!isWireFrame(data)) {
+      logger.debug(`Received non-wire binary message: ${data.length} bytes`);
+      return;
+    }
+    const tick = decodeTickFrame(data);
+    if (tick) this.handleTickUpdate(tick);
   }
 
   /**
-   * Send player position to server with rate limiting
-   * Compatible with both Tribes2 and FastAPI backends
+   * Send player position to server with rate limiting (20Hz binary frame)
    */
   sendPosition(position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }, velocity: { x: number; y: number; z: number }): void {
-    if (!this.adapter || !this.adapter.isConnected()) return;
+    if (!this.isConnected()) return;
 
     const now = Date.now();
 
@@ -363,131 +344,86 @@ export class NetworkManager {
       if (oldest !== undefined) this.stateHistory.delete(oldest);
     }
 
-    // Send position update with sequence number
-    this.adapter.send({
-      type: 'position',
-      position,
-      rotation,
-      velocity,
-      seq
-    });
+    // Binary frame: 30B instead of ~140B JSON. Server decodes on the wire
+    // hot path; the message still passes through the same validation.
+    this.sendBinary(encodePosition(position, rotation, velocity, seq, this.ping));
 
     // Send ping if interval elapsed
     if (now - this.lastPingSendTime >= this.PING_INTERVAL) {
       this.lastPingSendTime = now;
-      this.adapter.send({ type: 'ping', timestamp: now });
+      this.send({ type: 'ping', timestamp: now });
     }
   }
 
   /**
-   * Send input move for client-side prediction
+   * Send input move for client-side prediction.
+   * Player calls this every frame — we only transmit on actual input change,
+   * rate-limited to the position tick rate. Yaw/pitch already ride in the
+   * binary position frame, so the rotation payload only matters when the
+   * input bits themselves change.
    */
+  private lastSentInput = '';
   sendInputMove(input: { forward: number; right: number; jump: number; ski: number }, rotation: { yaw: number; pitch: number }): void {
-    if (!this.adapter || !this.adapter.isConnected()) return;
-
-    this.adapter.send({
-      type: 'inputMove',
-      input,
-      rotation
-    });
+    const key = `${input.forward},${input.right},${input.jump},${input.ski}`;
+    if (key === this.lastSentInput) return;
+    this.lastSentInput = key;
+    this.send({ type: 'inputMove', input, rotation });
   }
 
   /**
    * Get all REMOTE players (local player is never included)
    */
-  getPlayers(): Map<string, any> {
+  getPlayers(): Map<string, RemotePlayerState> {
     return this.players;
   }
 
   /**
    * Send shot event to server
    */
-  sendShot(targetId: string | null, position?: { x: number; y: number; z: number }, velocity?: { x: number; y: number; z: number }, timestamp?: number, projectileId?: string | null): void {
-    if (!this.adapter || !this.adapter.isConnected()) return;
-
-    this.adapter.send({
+  sendShot(targetId: string | null, position?: { x: number; y: number; z: number }, velocity?: { x: number; y: number; z: number }, timestamp?: number, projectileId?: string | null, weaponType?: number, airtime?: number): void {
+    this.send({
       type: 'shot',
       targetId,
+      weaponType,
       position,
       velocity,
       timestamp,
-      projectileId
+      projectileId,
+      airtime
     });
   }
 
-  sendAOEShot(position: { x: number; y: number; z: number }, excludeTargetId?: string | null): void {
-    if (!this.adapter || !this.adapter.isConnected()) return;
-
-    this.adapter.send({
+  /** Single AOE message — weaponType resolves server-side via the shared
+   *  weapon table (WEAPONS in shared/weapons.ts). */
+  sendAOEShot(position: { x: number; y: number; z: number }, weaponType: number, excludeTargetId?: string | null): void {
+    this.send({
       type: 'aoeShot',
+      weaponType,
       position,
       excludeTargetId: excludeTargetId ?? null,
     });
   }
 
-  sendDiscAOEShot(position: { x: number; y: number; z: number }, excludeTargetId?: string | null): void {
-    if (!this.adapter || !this.adapter.isConnected()) return;
-
-    this.adapter.send({
-      type: 'discAOEShot',
-      position,
-      excludeTargetId: excludeTargetId ?? null,
-    });
-  }
-
-  sendGrenadeAOEShot(position: { x: number; y: number; z: number }, excludeTargetId?: string | null): void {
-    if (!this.adapter || !this.adapter.isConnected()) return;
-
-    this.adapter.send({
-      type: 'grenadeAOEShot',
-      position,
-      excludeTargetId: excludeTargetId ?? null,
-    });
-  }
-
-  /**
-   * Send jump event to server
-   */
   sendJump(position: { x: number; y: number; z: number }): void {
-    if (!this.adapter || !this.adapter.isConnected()) return;
-    
-    this.adapter.send({
-      type: 'jump',
-      position
-    });
+    this.send({ type: 'jump', position });
   }
 
-  /**
-   * Send jetpack event to server
-   */
   sendJetpack(position: { x: number; y: number; z: number }): void {
-    if (!this.adapter || !this.adapter.isConnected()) return;
-    
-    this.adapter.send({
-      type: 'jetpack',
-      position
-    });
+    this.send({ type: 'jetpack', position });
   }
 
-  /**
-   * Send projectile destroy event to server
-   */
   sendProjectileDestroy(projectileId: string): void {
-    if (!this.adapter || !this.adapter.isConnected()) return;
-    
-    this.adapter.send({
-      type: 'projectileDestroy',
-      projectileId
-    });
+    this.send({ type: 'projectileDestroy', projectileId });
   }
 
-  /**
-   * Request a full state snapshot from the server
-   */
+  /** Self-inflicted environment damage (crawler pounce, etc.) — the server
+   *  clamps and applies it, then broadcasts the authoritative health. */
+  sendEnvironmentDamage(amount: number): void {
+    this.send({ type: 'environmentDamage', amount });
+  }
+
   sendSnapshotRequest(): void {
-    if (!this.adapter || !this.adapter.isConnected()) return;
-    
-    this.adapter.send({ type: 'snapshotRequest' });
+    this.send({ type: 'snapshotRequest' });
   }
 
   
@@ -502,7 +438,7 @@ export class NetworkManager {
    * Check if connected
    */
   isConnected(): boolean {
-    return this.connected && this.adapter !== null && this.adapter.isConnected();
+    return this.connected && this.ws !== null && this.ws.connected();
   }
 
   getPing(): number {
@@ -536,10 +472,11 @@ export class NetworkManager {
   }
 
   private pruneStateHistory(ackSeq: number): void {
+    // Map iterates in insertion order and seqs increase monotonically —
+    // stop at the first unacked entry instead of scanning the whole map.
     for (const seq of this.stateHistory.keys()) {
-      if (seq <= ackSeq) {
-        this.stateHistory.delete(seq);
-      }
+      if (seq > ackSeq) break;
+      this.stateHistory.delete(seq);
     }
   }
 }
