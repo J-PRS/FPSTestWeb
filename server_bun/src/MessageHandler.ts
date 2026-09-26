@@ -102,10 +102,8 @@ export class MessageHandler {
         this.combat.handleAOEShot(playerId, msg);
         break;
       case 'jump':
-        this.handleJump(playerId, msg);
-        break;
       case 'jetpack':
-        this.handleJetpack(playerId, msg);
+        this.relayPresenceEvent(playerId, msg);
         break;
       case 'projectileDestroy':
         this.combat.handleProjectileDestroy(playerId, msg);
@@ -189,24 +187,12 @@ export class MessageHandler {
     // Don't broadcast immediately — batched in tickUpdate
   }
 
-  private handleJump(playerId: string, msg: Extract<ClientMessage, { type: 'jump' }>): void {
+  // jump/jetpack are pure presence relays — same shape, dead check, echo
+  // to everyone but the sender for remote-side jump-dust/jet FX.
+  private relayPresenceEvent(playerId: string, msg: Extract<ClientMessage, { type: 'jump' | 'jetpack' }>): void {
     const player = this.playerManager.getPlayer(playerId);
     if (!player || player.isDead) return;
-    this.broadcast({
-      type: 'jump',
-      playerId,
-      position: msg.position,
-    }, playerId);
-  }
-
-  private handleJetpack(playerId: string, msg: Extract<ClientMessage, { type: 'jetpack' }>): void {
-    const player = this.playerManager.getPlayer(playerId);
-    if (!player || player.isDead) return;
-    this.broadcast({
-      type: 'jetpack',
-      playerId,
-      position: msg.position,
-    }, playerId);
+    this.broadcast({ type: msg.type, playerId, position: msg.position }, playerId);
   }
 
   private handleSnapshotRequest(playerId: string): void {

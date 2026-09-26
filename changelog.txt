@@ -1,5 +1,10 @@
 # Changelog
 
+## [2026-09-26] Tech Debt Pass 14 — damage funnel
+
+- `CombatHandler.ts`: hit-or-kill broadcast + respawn was copy-pasted across shot/AOE/env paths → `applyHit` funnel (~55→18 lines of outcome logic).
+- `MessageHandler.ts`: `handleJump`/`handleJetpack` were identical → `relayPresenceEvent`.
+
 ## [2026-09-26] Tech Debt Pass 13 — server teardown + tests
 
 - `GameServer.ts`: identical 5-store teardown + `playerLeft` broadcast was duplicated between grace expiry and the idle reaper → shared `removePlayerCompletely`.
