@@ -347,8 +347,8 @@ export function createEntities(deps: EntitiesDeps) {
   }
 
   function spawnMiner(): void {
+    // Also called by director events — the species loop isn't the only caller
     if (deps.demoManager()?.isPlaying) return;
-    if (deps.demoManager()?.isPlaying) return; // KEEP: also called by director events
     if (miners.filter(m => !m.dead).length >= MINER_MAX) return;
     const m = new Miner(scene, deps.terrain(), ringPos(MINER_SPAWN_MIN, MINER_SPAWN_MAX));
     m.onMineDrop = (miner) => {

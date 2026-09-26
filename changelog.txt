@@ -1,5 +1,10 @@
 # Changelog
 
+## [2026-09-26] Tech Debt Pass 12 — wire quantizers
+
+- `shared/wire.ts`: yaw/pitch/velocity quantization was copy-pasted between `encodePosition` and `encodeTickPlayer` (+ both decoders) — drift between them would decode silently wrong. Extracted `packVel`/`unpackVel`/`packRot`/`unpackRot`.
+- `entities.ts`: `spawnMiner` had a doubled `isPlaying` guard.
+
 ## [2026-09-26] Tech Debt Pass 11 — hygiene sweep
 
 - `DemoStorage.ts`: `catch (e: any)` → `unknown` + `errMsg` helper — last `any` in the repo (client and server).
