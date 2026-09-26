@@ -1,5 +1,16 @@
 # Changelog
 
+## [2026-09-26] Tech Debt Pass 6 — entity dedup, hit-point accuracy
+
+### entities.ts species dedup (533→~440 lines)
+- Six ambient enemy species repeated the same ring-spawn math, live-count cap, spawn-interval timer, and update+dispose loop. Collapsed into `ringPos()`, `hurtPlayer()` (knockback + env-damage + hit-marker funnel), `boltPop()`, and a generic `Species{list,interval,t,spawn,tick}` + `updateSpecies()` — each species is now a literal plus a one-line update fn.
+- Eight identical `demoManager().isPlaying` spawn guards folded into the single ambient-spawn call site inside `updateSpecies` (director spawns are already gated in gameLoop).
+
+### Projectile hit reporting at the swept contact point
+- `hitDistance`/`hitAge` used the already-integrated end-of-frame position — a fast shell could overshoot a target by meters inside one frame, inflating score and hit claims. Sweeps now pass the contact sample + its path fraction into `hitAt()`; `recordHit` derives airtime (`age - dt*(1-t)`) and distance from it.
+- `hitPoint` is also set on ball/player hits, so detonations render at contact instead of the overshot position.
+- `dispose()` now sets `dead` — mass-dispose in demo teardown previously left live objects that could keep updating.
+
 ## [2026-09-26] Tech Debt Pass 5 — server split, multiplayer hardening
 
 ### Multiplayer trust holes closed
