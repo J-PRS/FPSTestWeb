@@ -1,5 +1,19 @@
 # Changelog
 
+## [2026-09-26] Tech Debt Pass 3 — main.ts slimming, dead ceremony
+
+### main.ts extraction
+- `?yaw`/`?pitch`/`?dummy` headless-screenshot hooks → `game/debugHooks.ts` (~30 lines out of init)
+- Viewmodel scene + lights → `world/viewmodelScene.ts` factory
+
+### Dead code / ceremony
+- `playersBeingCreated` set deleted — RemotePlayer construction is synchronous, so the add/construct/delete guard could never race (remotes.ts + netHandlers.ts both simplified)
+- Duplicate `logger.info` on local kill + respawn in netHandlers.ts
+- `inputMove` case re-fetched a player already fetched at the top of handleMessage — shadow removed
+
+### Verified already-fixed
+- Respawn timers are tracked (`respawnTimers` map, cancelled on disconnect) — report item was stale
+
 ## [2026-09-26] Tech Debt Pass 2 — Wire typing, handshake hardening, frame-loop perf
 
 ### Typing sweep
