@@ -89,16 +89,10 @@ function getMeshGeo(meshType: string, bodyRadius: number): THREE.BufferGeometry 
  * marks itself `exploded`, and the visual effect is handled elsewhere.
  *
  * Known issues / TODOs (see _reports/projectile-implementation-review.md):
- *  - `sweepPlayer` now uses `passedCenter` for wake hits; `sweepBall` computes it
- *    before the wake check. Verify edge cases with fast-moving targets.
- *  - Consider adding `minHitDist`/`directHit` to recorded projectile Hit events for
- *    more accurate playback frag messages.
  *  - `sweepTerrain` samples the projectile center and uses a fixed step of 0.5,
  *    which may tunnel through terrain for small `terrainOffset` values.
- *  - Trail particles are one Mesh + one Material each, but dead particles are
- *    pooled and reused (`particlePool`) so sustained fire allocates once per
- *    concurrent particle, not once per emitted particle.
  *  - `hitRadius` scales from `hitMin` to `hitMax` over `hitGrow` seconds (can be 0 at spawn).
+ *    Trail/wake particle visuals live in trailParticles.ts (TrailHost interface).
  */
 export class Projectile {
   pos: THREE.Vector3;
