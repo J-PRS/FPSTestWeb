@@ -1,5 +1,12 @@
 # Changelog
 
+## [2026-09-26] Tech Debt Pass 10 — dedup sweep
+
+- `netHandlers.ts`: duplicated RemotePlayer creation (first-seen update + respawn-into-missing) → shared `ensureRemotePlayer`.
+- `Player.ts`: `movement.setState` was inlined at 5 sites + both correction paths in netHandlers → public `syncMovement()` so a new MovementState field can't silently desync one path. `getCameraDir` was a verbatim copy of `getAimDir` → delegates.
+- `demoLifecycle.ts`: `onPlaybackStart` had 7 copy-paste species teardown loops → one loop over `DisposableTarget[]` (mines' `onDetonate` teardown hoisted as the only special case). ~50→15 lines.
+- `remotes.ts`: stale-remote filter (ping-proven + <60s fresh) duplicated between player list and scoreboard → shared `isRemoteActive`.
+
 ## [2026-09-26] Tech Debt Pass 9 — leak + dead code
 
 - `netHandlers.ts`: `remoteProjectiles` map never deleted entries on destroy — every remote shot fired leaked a Projectile reference for the whole session. Delete on destroy (fade-out visuals live on `world.projectiles`, not the map).
