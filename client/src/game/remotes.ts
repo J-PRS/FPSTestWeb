@@ -34,6 +34,16 @@ export function createRemotes(deps: RemotesDeps) {
     lastSentPos.x = pos.x; lastSentPos.y = pos.y; lastSentPos.z = pos.z;
   }
 
+  // Remote is worth showing: proven connected (has ping) and either not yet
+  // instantiated or heard from within the 60s stale window
+  function isRemoteActive(playerId: string, players: Map<string, import('../networking/NetworkManager.js').RemotePlayerState>): boolean {
+    const rp = deps.world.remotePlayers.get(playerId);
+    const ps = players.get(playerId);
+    if (ps?.ping == null) return false;
+    if (!rp) return true;
+    return Date.now() - rp.lastUpdateTime <= 60000;
+  }
+
   // Network per-frame work: send position, tick remote players, prune stale ones
   function networkTick(dt: number): void {
     const nm = deps.networkManager();
@@ -52,14 +62,7 @@ export function createRemotes(deps: RemotesDeps) {
 
     // Update player list UI — local player first; drop stale remotes (no updates in 60s)
     const localPlayerId = nm.getLocalPlayerId();
-    const activeIds = Array.from(players.keys()).filter(id => {
-      if (id === localPlayerId) return false;
-      const rp = deps.world.remotePlayers.get(id);
-      const ps = players.get(id);
-      if (ps?.ping == null) return false; // never proven connected
-      if (!rp) return true;
-      return Date.now() - rp.lastUpdateTime <= 60000;
-    });
+    const activeIds = Array.from(players.keys()).filter(id => id !== localPlayerId && isRemoteActive(id, players));
     deps.hud().updatePlayerList([localPlayerId, ...activeIds], localPlayerId);
 
     // Roster-change log — joins/leaves only; positions live in stateDebug
@@ -155,14 +158,7 @@ export function createRemotes(deps: RemotesDeps) {
     const localId = nm.getLocalPlayerId();
     const rows = [{ name: localId, frags: deps.world.killCounts.get(localId) ?? 0, ping: nm.getPing(), self: true, dead: deps.player().isDead }];
     const remoteRows = [...nm.getPlayers().keys()]
-      .filter(id => {
-        if (id === localId) return false;
-        const rp = deps.world.remotePlayers.get(id);
-        const ps = nm.getPlayers().get(id);
-        if (ps?.ping == null) return false; // never proven connected
-        if (!rp) return true;
-        return Date.now() - rp.lastUpdateTime <= 60000; // hide stale
-      })
+      .filter(id => id !== localId && isRemoteActive(id, nm.getPlayers()))
       .map(id => {
         const ps = nm.getPlayers().get(id);
         return { name: id, frags: deps.world.killCounts.get(id) ?? 0, ping: ps?.ping ?? null, self: false, dead: ps?.isDead ?? false };
