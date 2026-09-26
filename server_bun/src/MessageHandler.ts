@@ -128,11 +128,9 @@ export class MessageHandler {
       case 'environmentDamage':
         this.handleEnvironmentDamage(playerId, msg);
         break;
-      case 'inputMove': {
-        const player = this.playerManager.getPlayer(playerId);
-        if (player) player.skiing = msg.input.ski ? 1 : 0;
+      case 'inputMove':
+        player.skiing = msg.input.ski ? 1 : 0;
         break;
-      }
       case 'ping':
         player.lastSeen = Date.now(); // ping is a liveness signal too —
         // without it a non-moving client could still go "stale"
