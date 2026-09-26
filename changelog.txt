@@ -1,6 +1,12 @@
 # Changelog
 
-## [2026-09-26] Tech Debt Pass 5 — server split
+## [2026-09-26] Tech Debt Pass 5 — server split, multiplayer hardening
+
+### Multiplayer trust holes closed
+- Projectile spawn claims clamped: origin must sit within 40m of the shooter and |v| ≤ 600 — an uncapped velocity claim previously made `validateHitClaim`'s ballistic reach check tautological.
+- `position` velocity magnitude rejected >1000 — a finite-but-absurd value would poison every observer's dead reckoning and the server's suppression extrapolation.
+- **Shared target-ID allocator** (`entities/targetIds.ts`): per-class `nextId` bands already collided (Seeker/Turretter both 50000, Mine/Roller both 60000) and wrapped into the ball range. One counter over the u16 demo target space.
+- First client tests: vitest added, 13 tests covering aoe math, wake growth, hit-claim accept/reject, ID allocator, registries (`npm test` in client/).
 
 ### MessageHandler split (591→~240 lines)
 - All damage-dealing logic moved to `server_bun/src/CombatHandler.ts`: shot hit-claims, `resolveClaimedProjectile`, AOE blasts + `processAOE`, environmental damage, projectile tracking/destroy ownership, and the respawn timer map (`scheduleRespawn`, disconnect cancel, player-removed projectile purge).
