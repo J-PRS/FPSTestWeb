@@ -94,17 +94,18 @@ const AIRTIME_SLACK_S = 0.5;
 const REACH_MARGIN_M = 15.0;
 const INHERITANCE_MARGIN = 0.6; // max |shooterVel| fraction a projectile can inherit
 
-export function validateHitClaim(args: {
+// Shared legality core: claimed airtime and the point where the flight ended
+// must be consistent with what the tracked projectile could physically reach.
+// Hit claims additionally check target proximity (below); AOE blasts end the
+// flight wherever the shooter claims, so blast position IS the flight end.
+function checkFlightLegality(args: {
   projectile: TrackedProjectile;
-  hitPos: Vec3Like;
-  targetPos: Vec3Like;
-  /** Client-reported projectile age at the moment of impact (seconds) */
+  endPos: Vec3Like;
   airtime: number;
-  /** Shooter's last-known velocity (for the inherited-velocity allowance) */
   shooterVel: Vec3Like;
   now: number;
 }): HitClaimVerdict {
-  const { projectile, hitPos, targetPos, shooterVel, now } = args;
+  const { projectile, endPos, shooterVel, now } = args;
   let { airtime } = args;
   const stats = getWeaponStats(projectile.weaponType);
 
@@ -123,26 +124,60 @@ export function validateHitClaim(args: {
   // Clamp rather than reject small under-reports — reach/wake checks use it.
   airtime = Math.min(airtime, elapsed + AIRTIME_SLACK_S);
 
-  // Trajectory reach: |origin→hitPos| can't outrun v·t + ½·|g|·t² plus
+  // Trajectory reach: |origin→endPos| can't outrun v·t + ½·|g|·t² plus
   // inherited shooter speed and a margin for the end-of-frame sample error.
   const speed = Math.hypot(projectile.velocity.x, projectile.velocity.y, projectile.velocity.z)
     + Math.hypot(shooterVel.x, shooterVel.y, shooterVel.z) * INHERITANCE_MARGIN;
   const maxReach = speed * airtime + 0.5 * Math.abs(stats.gravity) * airtime * airtime + REACH_MARGIN_M;
-  const dx = hitPos.x - projectile.origin.x;
-  const dy = hitPos.y - projectile.origin.y;
-  const dz = hitPos.z - projectile.origin.z;
+  const dx = endPos.x - projectile.origin.x;
+  const dy = endPos.y - projectile.origin.y;
+  const dz = endPos.z - projectile.origin.z;
   const claimedReach = Math.sqrt(dx * dx + dy * dy + dz * dz);
   if (claimedReach > maxReach) {
-    return { ok: false, reason: `hit ${claimedReach.toFixed(1)}m beyond reach ${maxReach.toFixed(1)}m` };
+    return { ok: false, reason: `end ${claimedReach.toFixed(1)}m beyond reach ${maxReach.toFixed(1)}m` };
   }
+
+  return { ok: true, airtime };
+}
+
+export function validateHitClaim(args: {
+  projectile: TrackedProjectile;
+  hitPos: Vec3Like;
+  targetPos: Vec3Like;
+  /** Client-reported projectile age at the moment of impact (seconds) */
+  airtime: number;
+  /** Shooter's last-known velocity (for the inherited-velocity allowance) */
+  shooterVel: Vec3Like;
+  now: number;
+}): HitClaimVerdict {
+  const { projectile, hitPos, targetPos, shooterVel, now, airtime } = args;
+  const flight = checkFlightLegality({ projectile, endPos: hitPos, airtime, shooterVel, now });
+  if (!flight.ok) return flight;
 
   // Target proximity: hitPos must be within the legal hit radius at that
   // airtime (core body + grown wake) of the target's capsule.
-  const legalRadius = Math.max(stats.bodyRadius, hitRadiusAt(projectile.weaponType, airtime));
+  const stats = getWeaponStats(projectile.weaponType);
+  const legalRadius = Math.max(stats.bodyRadius, hitRadiusAt(projectile.weaponType, flight.airtime));
   const dist = pointToCapsuleDistance(hitPos, targetPos);
   if (dist > PLAYER_RADIUS + legalRadius + TARGET_SLACK) {
     return { ok: false, reason: `target ${dist.toFixed(1)}m outside legal radius ${(PLAYER_RADIUS + legalRadius).toFixed(1)}m` };
   }
 
-  return { ok: true, airtime };
+  return flight;
+}
+
+/**
+ * AOE blast claims end a tracked projectile's flight wherever the shooter
+ * says it detonated — the legality check is trajectory + airtime only.
+ * Without this, a client could detonate anywhere within 200m of itself.
+ */
+export function validateAoeClaim(args: {
+  projectile: TrackedProjectile;
+  blastPos: Vec3Like;
+  airtime: number;
+  shooterVel: Vec3Like;
+  now: number;
+}): HitClaimVerdict {
+  const { projectile, blastPos, shooterVel, now, airtime } = args;
+  return checkFlightLegality({ projectile, endPos: blastPos, airtime, shooterVel, now });
 }
