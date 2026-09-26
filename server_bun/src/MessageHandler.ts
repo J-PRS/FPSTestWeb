@@ -3,8 +3,8 @@ import { PlayerManager } from './PlayerManager.ts';
 import { RateLimiter } from './RateLimiter.ts';
 import { CONFIG } from './config.ts';
 import { logger } from './logger.ts';
-import { getWeaponStats } from '../../shared/weapons.ts';
-import { aoeDamage, aoeImpulse, validateHitClaim, type TrackedProjectile } from '../../shared/combat.ts';
+import { getWeaponStats, WeaponType } from '../../shared/weapons.ts';
+import { aoeDamage, aoeImpulse, validateHitClaim, validateAoeClaim, type TrackedProjectile } from '../../shared/combat.ts';
 import { PROTOCOL_VERSION } from '../../shared/protocol.ts';
 
 // How long a hit/knocked-back player stays on the unsuppressed full-rate
@@ -332,8 +332,51 @@ export class MessageHandler {
   }
 
   private handleAOEShot(playerId: string, msg: Extract<ClientMessage, { type: 'aoeShot' }>): void {
-    // One message for all AOE weapons — stats resolve via the shared table
-    this.processAOE(playerId, msg.position, msg.excludeTargetId, getWeaponStats(msg.weaponType));
+    const player = this.playerManager.getPlayer(playerId);
+    if (!player || player.isDead) return;
+    const stats = getWeaponStats(msg.weaponType);
+
+    if (msg.weaponType === WeaponType.Slam) {
+      // Slam is a skill, not a projectile — the blast must land where the
+      // player is (they slam into the ground under themselves).
+      const dx = player.position.x - msg.position.x;
+      const dy = player.position.y - msg.position.y;
+      const dz = player.position.z - msg.position.z;
+      const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      if (dist > stats.aoeRadius + 20) {
+        logger.warn(`AOE rejected: ${playerId} slam ${dist.toFixed(0)}m from player`);
+        return;
+      }
+      this.processAOE(playerId, msg.position, msg.excludeTargetId, stats);
+      return;
+    }
+
+    // Projectile AOEs must name the tracked projectile that detonated —
+    // same fallback resolution as direct-hit claims (race vs projectileCreated).
+    const proj = this.resolveClaimedProjectile(playerId, msg.projectileId, msg.weaponType);
+    if (!proj) {
+      logger.warn(`AOE rejected: ${playerId} blast with no known projectile`);
+      return;
+    }
+    if (msg.airtime === undefined) {
+      logger.warn(`AOE rejected: ${playerId} blast claim missing airtime`);
+      return;
+    }
+    const verdict = validateAoeClaim({
+      projectile: proj,
+      blastPos: msg.position,
+      airtime: msg.airtime,
+      shooterVel: player.velocity,
+      now: Date.now(),
+    });
+    if (!verdict.ok) {
+      logger.warn(`AOE rejected: ${playerId}: ${verdict.reason}`);
+      return;
+    }
+    // The projectile detonated — drop it so the id can't double-dip.
+    if (msg.projectileId) this.projectiles.delete(msg.projectileId);
+
+    this.processAOE(playerId, msg.position, msg.excludeTargetId, stats);
   }
 
   private processAOE(playerId: string, position: Vec3, excludeTargetId: string | null | undefined, stats: import('../../shared/weapons.ts').WeaponStats): void {

@@ -390,13 +390,18 @@ export class NetworkManager {
   }
 
   /** Single AOE message — weaponType resolves server-side via the shared
-   *  weapon table (WEAPONS in shared/weapons.ts). */
-  sendAOEShot(position: { x: number; y: number; z: number }, weaponType: number, excludeTargetId?: string | null): void {
+   *  weapon table (WEAPONS in shared/weapons.ts). projectileId/airtime bind
+   *  the blast to a tracked projectile so the server can validate the
+   *  trajectory — skill AOEs (slam) send neither and are position-checked
+   *  against the player instead. */
+  sendAOEShot(position: { x: number; y: number; z: number }, weaponType: number, excludeTargetId?: string | null, projectileId?: string | null, airtime?: number): void {
     this.send({
       type: 'aoeShot',
       weaponType,
       position,
       excludeTargetId: excludeTargetId ?? null,
+      projectileId: projectileId ?? undefined,
+      airtime,
     });
   }
 

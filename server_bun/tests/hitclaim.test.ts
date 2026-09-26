@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'bun:test';
 import {
   validateHitClaim,
+  validateAoeClaim,
   hitRadiusAt,
   pointToCapsuleDistance,
   aoeDamage,
@@ -169,5 +170,42 @@ describe('validateHitClaim', () => {
     });
     expect(verdict.ok).toBe(false);
     expect(PLAYER_RADIUS).toBeGreaterThan(0);
+  });
+});
+
+describe('validateAoeClaim', () => {
+  it('accepts a blast at the honest end of flight', () => {
+    // rocket flown 0.5s at 120m/s → blast ~60m out is legit
+    const verdict = validateAoeClaim({
+      projectile: rocketProjectile(),
+      blastPos: V(60, 0, 0),
+      airtime: 0.5,
+      shooterVel: ZERO,
+      now: 2000,
+    });
+    expect(verdict.ok).toBe(true);
+  });
+
+  it('rejects a blast placed beyond ballistic reach', () => {
+    // detonate-anywhere cheat: blast 400m out in 0.5s of flight
+    const verdict = validateAoeClaim({
+      projectile: rocketProjectile(),
+      blastPos: V(400, 0, 0),
+      airtime: 0.5,
+      shooterVel: ZERO,
+      now: 2000,
+    });
+    expect(verdict.ok).toBe(false);
+  });
+
+  it('rejects a blast claiming airtime beyond the projectile age', () => {
+    const verdict = validateAoeClaim({
+      projectile: rocketProjectile({ spawnAt: 1900 }),
+      blastPos: V(60, 0, 0),
+      airtime: 5,
+      shooterVel: ZERO,
+      now: 2000,
+    });
+    expect(verdict.ok).toBe(false);
   });
 });

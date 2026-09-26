@@ -29,7 +29,7 @@ export type ClientMessage =
   | { type: 'position'; position: Vec3; rotation: Rotation; velocity: Vec3; seq?: number; ping?: number }
   | { type: 'ping'; timestamp: number }
   | { type: 'shot'; targetId: string | null; weaponType?: number; position?: Vec3; velocity?: Vec3; timestamp?: number; projectileId?: string | null; airtime?: number }
-  | { type: 'aoeShot'; position: Vec3; weaponType?: number; excludeTargetId?: string | null }
+  | { type: 'aoeShot'; position: Vec3; weaponType?: number; excludeTargetId?: string | null; projectileId?: string | null; airtime?: number }
   | { type: 'jump'; position: Vec3 }
   | { type: 'jetpack'; position: Vec3 }
   | { type: 'inputMove'; input: { forward: number; right: number; jump: number; ski: number }; rotation: Rotation }

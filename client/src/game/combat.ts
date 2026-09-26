@@ -35,6 +35,7 @@ import { getWeaponStats, WeaponType } from '../../../shared/weapons.js';
 import { aoeImpulse, aoeDamage as aoeDamageOf } from '../../../shared/combat.js';
 import { poissonDisc } from '../utils/poissonSpread.js';
 import type { Terrain } from '../world/terrain.js';
+import { screenShake } from '../effects/screenShake.js';
 
 export interface CombatDeps {
   scene(): THREE.Scene;
@@ -217,8 +218,10 @@ export function createCombat(deps: CombatDeps) {
     // Explosion/implosion visual + scorch decal on the terrain below the blast
     if (forceMode === 'push') {
       deps.explosions.push(new Explosion(deps.scene(), pos, directHit, age, deps.terrain(), radius / ROCKET_RADIUS, explosionTint));
+      screenShake.blast(pos, radius, deps.player().pos);
     } else {
       deps.implosions.push(new Implosion(deps.scene(), pos, age, deps.terrain()));
+      screenShake.blast(pos, radius * 0.5, deps.player().pos);
     }
     // Scorch only when the blast is near the ground — a midair hit would
     // otherwise paint a phantom mark on terrain far below.
@@ -452,7 +455,8 @@ export function createCombat(deps: CombatDeps) {
     // weaponType, server resolves stats from it (no per-weapon message types)
     const networkManager = deps.networkManager();
     const weaponType = p.config.weaponType;
-    const sendAOE = (pos: { x: number; y: number; z: number }, targetId: string | null) => networkManager.sendAOEShot(pos, weaponType, targetId);
+    const sendAOE = (pos: { x: number; y: number; z: number }, targetId: string | null) =>
+      networkManager.sendAOEShot(pos, weaponType, targetId, p.serverProjectileId ?? null, p.hitAge ?? p.age);
     processProjectileExplosion(
       p.hitPointValid ? p.hitPoint : p.pos,
       p.explosionRadius,

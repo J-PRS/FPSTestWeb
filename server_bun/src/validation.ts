@@ -107,6 +107,8 @@ export function validateMessage(raw: unknown): ValidationResult<ClientMessage> {
           position: pos.data,
           weaponType: isFiniteNumber(obj.weaponType) ? obj.weaponType : undefined,
           excludeTargetId: (excludeTargetId as string | null) ?? null,
+          projectileId: typeof obj.projectileId === 'string' ? obj.projectileId : undefined,
+          airtime: isFiniteNumber(obj.airtime) ? obj.airtime : undefined,
         },
       };
     }
