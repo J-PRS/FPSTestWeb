@@ -106,12 +106,7 @@ export class GameServer {
 
     const timeout = setTimeout(() => {
       this.disconnectedPlayers.delete(playerId);
-      this.playerManager.removePlayer(playerId);
-      this.messageHandler.onPlayerRemoved(playerId);
-      this.sessionTokens.delete(playerId);
-      this.lastSentPositions.delete(playerId);
-      this.connectionManager.broadcast({ type: 'playerLeft', playerId });
-      logger.info('Player removed after grace period', { playerId, remaining: this.playerManager.getPlayerCount() });
+      this.removePlayerCompletely(playerId, 'grace period');
     }, this.reconnectGraceMs);
 
     this.disconnectedPlayers.set(playerId, { timeout });
@@ -220,6 +215,17 @@ export class GameServer {
     this.messageHandler.handleMessage(playerId, result.data);
   }
 
+  // Full teardown shared by grace expiry and idle reap — the five stores
+  // and the broadcast must move together or a stale slot/token leaks.
+  private removePlayerCompletely(playerId: string, reason: string): void {
+    this.playerManager.removePlayer(playerId);
+    this.messageHandler.onPlayerRemoved(playerId);
+    this.sessionTokens.delete(playerId);
+    this.lastSentPositions.delete(playerId);
+    this.connectionManager.broadcast({ type: 'playerLeft', playerId });
+    logger.info('Player removed', { playerId, reason, remaining: this.playerManager.getPlayerCount() });
+  }
+
   private startHashBroadcast(): void {
     this.hashTimer = setInterval(() => {
       const playerCount = this.playerManager.getPlayerCount();
@@ -293,11 +299,7 @@ export class GameServer {
           if (ws && ws.readyState === 1) {
             ws.close(1000, 'idle'); // triggers onClose → grace cleanup
           } else {
-            this.playerManager.removePlayer(playerId);
-            this.messageHandler.onPlayerRemoved(playerId);
-            this.sessionTokens.delete(playerId);
-            this.lastSentPositions.delete(playerId);
-            this.connectionManager.broadcast({ type: 'playerLeft', playerId });
+            this.removePlayerCompletely(playerId, 'idle');
           }
           logger.info('Idle player removed', { playerId, silenceMs });
           this.metrics.recordsIdleReaped++;
