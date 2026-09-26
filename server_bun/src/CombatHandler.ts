@@ -127,6 +127,21 @@ export class CombatHandler {
       logger.debug('Shot fired (miss)', { shooter: playerId });
 
       if (msg.position && msg.velocity) {
+        // Spawn sanity: the claimed muzzle position must be near the shooter
+        // (position reports lag up to ~15m at top speed + interp margin), and
+        // the claimed velocity near a real launch speed — weapon cap 250 m/s
+        // plus inherited player velocity (≤300) plus slack. An uncapped claim
+        // would make the reach check in validateHitClaim tautological.
+        const odx = msg.position.x - player.position.x;
+        const ody = msg.position.y - player.position.y;
+        const odz = msg.position.z - player.position.z;
+        const vmag = Math.sqrt(
+          msg.velocity.x * msg.velocity.x + msg.velocity.y * msg.velocity.y + msg.velocity.z * msg.velocity.z,
+        );
+        if (odx * odx + ody * ody + odz * odz > 1600 || vmag > 600) {
+          logger.warn(`Shot rejected: ${playerId} implausible spawn (origin ${Math.sqrt(odx * odx + ody * ody + odz * odz).toFixed(0)}m off, v=${vmag.toFixed(0)})`);
+          return;
+        }
         const projectileId = `proj_${++this.projectileCounter}`;
         this.projectiles.set(projectileId, {
           ownerId: playerId,
