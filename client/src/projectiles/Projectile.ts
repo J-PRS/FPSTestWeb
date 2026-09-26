@@ -93,17 +93,12 @@ function getMeshGeo(meshType: string, bodyRadius: number): THREE.BufferGeometry 
  *    before the wake check. Verify edge cases with fast-moving targets.
  *  - Consider adding `minHitDist`/`directHit` to recorded projectile Hit events for
  *    more accurate playback frag messages.
- *  - `hitDistance` and `hitAge` are computed from the end-of-frame position,
- *    not the actual impact point, so fast projectiles can report wrong values.
  *  - `sweepTerrain` samples the projectile center and uses a fixed step of 0.5,
  *    which may tunnel through terrain for small `terrainOffset` values.
  *  - Trail particles are one Mesh + one Material each, but dead particles are
  *    pooled and reused (`particlePool`) so sustained fire allocates once per
  *    concurrent particle, not once per emitted particle.
  *  - `hitRadius` scales from `hitMin` to `hitMax` over `hitGrow` seconds (can be 0 at spawn).
- *  - `dispose()` does not set `this.dead`, so a disposed projectile can keep
- *    updating.
- *  - `explosionProcessed` is declared but unused.
  */
 export class Projectile {
   pos: THREE.Vector3;
@@ -260,7 +255,23 @@ export class Projectile {
       const sx = this.prevPos.x + dx * t;
       const sy = this.prevPos.y + dy * t;
       const sz = this.prevPos.z + dz * t;
-      const ex = sx - ball.pos.x, ey = sy - ball.pos.y, ez = sz - ball.pos.z;
+      // Capsule targets: distance to a segment, not a point.
+      //  capsuleTop (Totem) — vertical, feet to feet+height
+      //  capsuleEnd (Miner) — centered, pos ± heading-aligned half-extent
+      let ex: number, ey: number, ez: number;
+      if (ball.capsuleEnd) {
+        const e = ball.capsuleEnd;
+        const eLen2 = e.lengthSq() || 1;
+        const proj = Math.max(-1, Math.min(1,
+          ((sx - ball.pos.x) * e.x + (sy - ball.pos.y) * e.y + (sz - ball.pos.z) * e.z) / eLen2));
+        ex = sx - (ball.pos.x + e.x * proj);
+        ey = sy - (ball.pos.y + e.y * proj);
+        ez = sz - (ball.pos.z + e.z * proj);
+      } else {
+        const capTop = ball.capsuleTop ? ball.pos.y + ball.capsuleTop : ball.pos.y;
+        const cy = Math.max(ball.pos.y, Math.min(capTop, sy));
+        ex = sx - ball.pos.x; ey = sy - cy; ez = sz - ball.pos.z;
+      }
       const d2 = ex * ex + ey * ey + ez * ez;
       const d = Math.sqrt(d2);
       if (d < minDist) minDist = d;
@@ -272,6 +283,7 @@ export class Projectile {
       if (d2 <= coreThresh * coreThresh) {
         this.minHitDist = minDist;
         this.directHit = true;
+        this.hitAt(sx, sy, sz, t);
         return true;
       }
 
@@ -284,6 +296,7 @@ export class Projectile {
           // Only trigger wake hit if we've passed the center (distance increasing after minimum)
           this.minHitDist = minDist;
           this.directHit = false;
+          this.hitAt(sx, sy, sz, t);
           return true;
         }
       }
@@ -317,6 +330,7 @@ export class Projectile {
       if (totalDist <= PLAYER_RADIUS + this.hitRadius) {
         this.minHitDist = totalDist;
         this.directHit = totalDist <= directThresh;
+        this.hitAt(this.pos.x, this.pos.y, this.pos.z, 1);
         return true;
       }
       return false;
@@ -347,6 +361,7 @@ export class Projectile {
 
       if (totalDist <= directThresh) {
         this.directHit = true;
+        this.hitAt(closestX, closestY, closestZ, tClamped);
         return true;
       }
 
@@ -359,6 +374,7 @@ export class Projectile {
       } else if (totalDist > prevMin && passedCenter) {
         this.directHit = false;
         logger.debug(`Wake hit at dist ${totalDist.toFixed(2)}, threshold ${(PLAYER_RADIUS + this.hitRadius).toFixed(2)}`);
+        this.hitAt(closestX, closestY, closestZ, tClamped);
         return true;
       }
     }
@@ -399,6 +415,7 @@ export class Projectile {
   // Physics + collision + visuals for a live (non-exploded) projectile
   private updateAlive(dt: number, terrain: Terrain, balls?: Targetable[], remotePlayers?: Map<string, THREE.Vector3>): void {
     this.prevPos.copy(this.pos);
+    this.lastDt = dt;
     this.age += dt;
     // hitPoint is per-frame: a stale value from a previous bounce would
     // teleport the explosion back to the last terrain contact (the
@@ -448,6 +465,10 @@ export class Projectile {
     }
     return this.checkBalls(balls) || this.checkPlayers(remotePlayers);
   }
+
+  // dt of the currently-running update — recordHit uses it to back the
+  // reported hitAge off to the actual swept contact point, not end-of-frame.
+  private lastDt = 0;
 
   // Reflect velocity off the heightfield normal at hitPoint. Returns false
   // when the impact was too weak to bounce — caller should treat it as a
@@ -523,10 +544,27 @@ export class Projectile {
     return false;
   }
 
+  // Contact point along this frame's sweep + its parametric position
+  // (0=prevPos, 1=pos). Hit distance/airtime come from here, not the
+  // already-integrated end-of-frame pos — a fast shell could overshoot the
+  // target by meters inside one frame and inflate the hit score/claim.
+  private hitX = 0; private hitY = 0; private hitZ = 0; private hitT = 1;
+  private hitAt(x: number, y: number, z: number, t: number): void {
+    this.hitX = x; this.hitY = y; this.hitZ = z; this.hitT = t;
+    // Also the detonation point — combat renders the blast at hitPoint when
+    // valid, so target hits (not just terrain) explode at contact, not at
+    // the overshot end-of-frame position.
+    this.hitPoint.set(x, y, z);
+    this.hitPointValid = true;
+  }
+
   private recordHit(minDist: number): void {
     this.hitAccuracy = Math.max(0, minDist);
-    this.hitAge = this.age;
-    this.hitDistance = this.pos.distanceTo(this.shotOrigin);
+    this.hitAge = this.age - this.lastDt * (1 - this.hitT);
+    const dx = this.hitX - this.shotOrigin.x;
+    const dy = this.hitY - this.shotOrigin.y;
+    const dz = this.hitZ - this.shotOrigin.z;
+    this.hitDistance = Math.sqrt(dx * dx + dy * dy + dz * dz);
   }
 
   private updateMesh(): void {
@@ -577,5 +615,8 @@ export class Projectile {
     for (const r of this.ribbons) r.dispose(this.scene);
     this.trail.dispose();
     this.disposed = true;
+    // Mark dead so a mass-dispose (demo teardown) can't leave a live object
+    // updating — update loops key off `dead`, not `disposed`.
+    this.dead = true;
   }
 }
