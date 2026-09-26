@@ -81,13 +81,7 @@ export class HealthBarSystem {
   }
 
   spawn(playerId: string, damage: number, health: number): void {
-    this.knownHealth.set(playerId, health);
-    const bar = this.bars.get(playerId);
-    if (bar) {
-      this.resetBar(bar, damage, health);
-      return;
-    }
-    this.bars.set(playerId, this.createHealthBar(damage, health, MAX_HEALTH, playerId));
+    this.upsertBar(playerId, damage, health);
   }
 
   spawnBall(ball: Targetable, damage: number, health: number): void {
@@ -103,7 +97,12 @@ export class HealthBarSystem {
     const bar = this.bars.get(playerId);
     const base = bar ? bar.currentHealth : (this.knownHealth.get(playerId) ?? MAX_HEALTH);
     const health = Math.max(0, base - damage);
+    this.upsertBar(playerId, damage, health);
+  }
+
+  private upsertBar(playerId: string, damage: number, health: number): void {
     this.knownHealth.set(playerId, health);
+    const bar = this.bars.get(playerId);
     if (bar) {
       this.resetBar(bar, damage, health);
       return;
