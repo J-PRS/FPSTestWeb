@@ -87,7 +87,7 @@ export class NetworkManager {
           onConnect: () => {
             // Join handshake — must precede the queued-message flush,
             // which WebSocketConnection guarantees (onConnect first)
-            this.sendJson({
+            this.send({
               type: 'join',
               playerId: this.localPlayerId,
               token: this.sessionToken ?? undefined,
@@ -132,10 +132,6 @@ export class NetworkManager {
     this.ws?.disconnect();
     this.ws = null;
     this.connected = false;
-  }
-
-  private sendJson(msg: object): void {
-    this.ws?.send(JSON.stringify(msg));
   }
 
   /** Outbound JSON event — typed against the shared protocol union. */
