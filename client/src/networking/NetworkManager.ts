@@ -213,6 +213,7 @@ export class NetworkManager {
   }
 
   private handleTickUpdate(data: { updates: TickUpdatePlayer[]; ackSeq?: number }): void {
+    this.trackTickArrival();
     // Batched player updates from server (delta compressed)
     if (data.ackSeq !== undefined && data.ackSeq > 0) {
       this.pruneStateHistory(data.ackSeq);
@@ -445,10 +446,30 @@ export class NetworkManager {
     return this.ping;
   }
 
+  // "Loss" over a reliable WS transport isn't packet loss — what players
+  // feel is delivery gaps. Track the 20Hz tick stream: a frame arriving
+  // >2x the expected interval late counts the skipped slots as missed.
+  private lastTickAt = 0;
+  private tickWindow: { t: number; missed: number }[] = [];
+  private trackTickArrival(): void {
+    const now = Date.now();
+    if (this.lastTickAt > 0) {
+      const gap = now - this.lastTickAt;
+      const missed = Math.max(0, Math.round(gap / this.POSITION_SEND_INTERVAL) - 1);
+      if (missed > 0) this.tickWindow.push({ t: now, missed });
+      // Sliding 5s window
+      while (this.tickWindow.length && now - this.tickWindow[0]!.t > 5000) this.tickWindow.shift();
+    }
+    this.lastTickAt = now;
+  }
+
   getPacketLoss(): number {
-    // Approximated from ping timeouts — if no pong received within 2x expected RTT
-    // Not directly measurable with UDP-less WebSocket, return 0 for reliable transport
-    return 0;
+    const now = Date.now();
+    if (this.lastTickAt === 0 || this.tickWindow.length === 0) return 0;
+    const missed = this.tickWindow.reduce((s, w) => s + w.missed, 0);
+    const spanMs = Math.max(1, now - Math.min(now, this.tickWindow[0]!.t));
+    const expected = Math.max(1, Math.round(Math.min(5000, spanMs) / this.POSITION_SEND_INTERVAL));
+    return Math.min(100, Math.round((missed / expected) * 100));
   }
 
   getJitter(): number {
