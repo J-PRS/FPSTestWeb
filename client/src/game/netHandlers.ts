@@ -91,7 +91,7 @@ export function wireNetworkHandlers(deps: NetDeps): void {
       player.pos.y = position.y + dy * 0.5;
       player.pos.z = position.z + dz * 0.5;
       player.vel.set(velocity.x, velocity.y, velocity.z);
-      player.movement.setState({ pos: player.pos, vel: player.vel, yaw: player.yaw, pitch: player.pitch, onGround: player.onGround });
+      player.syncMovement();
       logger.info(`Correction nudged: ${err.toFixed(2)}m (blended 50%)`);
       return;
     }
@@ -99,13 +99,7 @@ export function wireNetworkHandlers(deps: NetDeps): void {
     player.vel.set(velocity.x, velocity.y, velocity.z);
     player.yaw = rotation.yaw;
     player.pitch = rotation.pitch;
-    player.movement.setState({
-      pos: player.pos,
-      vel: player.vel,
-      yaw: player.yaw,
-      pitch: player.pitch,
-      onGround: player.onGround,
-    });
+    player.syncMovement();
   };
 
   // Register player kill handler (lethal kills)
