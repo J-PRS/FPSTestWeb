@@ -1,0 +1,134 @@
+import { describe, it, expect } from 'vitest';
+import {
+  aoeDamage, aoeImpulse, hitRadiusAt,
+  validateHitClaim, type TrackedProjectile,
+} from '../../../shared/combat';
+import { WeaponType, getWeaponStats } from '../../../shared/weapons';
+import { PLAYER_HEIGHT } from '../../../shared/constants';
+import { nextTargetId } from '../entities/targetIds';
+import { createProjectileRegistry } from '../game/projectileRegistry';
+import { createWorldState } from '../game/worldState';
+
+describe('aoe falloff math', () => {
+  it('full damage at center, zero at edge', () => {
+    const max = aoeDamage(50, 0, 10);
+    const edge = aoeDamage(50, 10, 10);
+    expect(max).toBe(50);
+    expect(edge).toBe(0);
+  });
+
+  it('monotonic falloff', () => {
+    const near = aoeDamage(50, 2, 10);
+    const mid = aoeDamage(50, 5, 10);
+    expect(near).toBeGreaterThan(mid);
+  });
+
+  it('impulse follows same falloff', () => {
+    expect(aoeImpulse(100, 0, 10)).toBe(100);
+    expect(aoeImpulse(100, 10, 10)).toBe(0);
+  });
+});
+
+describe('wake hitbox growth', () => {
+  it('starts at zero during the grace period', () => {
+    expect(hitRadiusAt(WeaponType.Rocket, 0)).toBe(0);
+    expect(hitRadiusAt(WeaponType.Rocket, 0.1)).toBe(0);
+  });
+
+  it('reaches hitMax at hitGrow + grace', () => {
+    const stats = getWeaponStats(WeaponType.Rocket);
+    expect(hitRadiusAt(WeaponType.Rocket, stats.hitGrow + 0.1)).toBe(stats.hitMax);
+    expect(hitRadiusAt(WeaponType.Rocket, stats.hitGrow * 10)).toBe(stats.hitMax);
+  });
+
+  it('undefined weaponType resolves to Rocket default', () => {
+    expect(hitRadiusAt(undefined, 0)).toBe(hitRadiusAt(WeaponType.Rocket, 0));
+  });
+});
+
+describe('validateHitClaim', () => {
+  const proj: TrackedProjectile = {
+    ownerId: 'shooter',
+    weaponType: WeaponType.Rocket,
+    origin: { x: 0, y: 60, z: 0 },
+    velocity: { x: 120, y: 0, z: 0 },
+    spawnAt: 1000,
+  };
+  const base = {
+    projectile: proj,
+    airtime: 1.0,
+    shooterVel: { x: 0, y: 0, z: 0 },
+    now: 2000,
+  };
+
+  it('accepts an honest end-of-flight hit', () => {
+    // Rocket speed 120, 1s airtime, no drop — lands ~120m out
+    const hitPos = { x: 120, y: 60, z: 0 };
+    const targetPos = { x: 120, y: 60 + PLAYER_HEIGHT / 2, z: 0 };
+    const v = validateHitClaim({ ...base, hitPos, targetPos });
+    expect(v.ok).toBe(true);
+  });
+
+  it('rejects a hit beyond ballistic reach', () => {
+    const v = validateHitClaim({
+      ...base,
+      hitPos: { x: 900, y: 60, z: 0 },
+      targetPos: { x: 900, y: 60, z: 0 },
+    });
+    expect(v.ok).toBe(false);
+  });
+
+  it('rejects airtime beyond wall-clock age', () => {
+    const v = validateHitClaim({
+      ...base,
+      airtime: 5.0,
+      hitPos: { x: 120, y: 60, z: 0 },
+      targetPos: { x: 120, y: 60, z: 0 },
+    });
+    expect(v.ok).toBe(false);
+  });
+
+  it('rejects a target outside capsule + wake radius', () => {
+    const hitPos = { x: 120, y: 60, z: 0 };
+    const farTarget = { x: 120, y: 60, z: 100 };
+    const v = validateHitClaim({ ...base, hitPos, targetPos: farTarget });
+    expect(v.ok).toBe(false);
+  });
+});
+
+describe('target ID allocator', () => {
+  it('never repeats and stays in u16 space', () => {
+    const seen = new Set<number>();
+    for (let i = 0; i < 1000; i++) {
+      const id = nextTargetId();
+      expect(id).toBeGreaterThanOrEqual(1);
+      expect(id).toBeLessThanOrEqual(65535);
+      expect(seen.has(id)).toBe(false);
+      seen.add(id);
+    }
+  });
+});
+
+describe('projectileRegistry', () => {
+  it('starts empty with pending/byId/pendingSince', () => {
+    const reg = createProjectileRegistry();
+    expect(reg.pending).toHaveLength(0);
+    expect(reg.byId.size).toBe(0);
+    expect(reg.pendingSince.size).toBe(0);
+  });
+});
+
+describe('worldState', () => {
+  it('bundles all shared collections', () => {
+    const w = createWorldState();
+    expect(w.remotePlayers.size).toBe(0);
+    expect(w.killCounts.size).toBe(0);
+    expect(w.projectiles).toHaveLength(0);
+    expect(w.projectileRegistry.byId.size).toBe(0);
+    expect(w.debrisList).toHaveLength(0);
+    expect(w.playerDebrisList).toHaveLength(0);
+    expect(w.explosions).toHaveLength(0);
+    expect(w.scorches).toHaveLength(0);
+    expect(w.implosions).toHaveLength(0);
+  });
+});
