@@ -8,6 +8,7 @@ import type { EffectsManager } from '../effects/effects.js';
 import type { NetworkManager } from '../networking/NetworkManager.js';
 import type { HealthBarSystem } from '../ui/HealthBarSystem.js';
 import type { HUD } from '../ui/hud.js';
+import type { WorldState } from './worldState.js';
 
 export interface RemotesDeps {
   networkManager: () => NetworkManager;
@@ -19,8 +20,7 @@ export interface RemotesDeps {
   healthBarSystem: () => HealthBarSystem;
   effects: () => EffectsManager;
   logger: ChildLogger;
-  remotePlayers: Map<string, RemotePlayer>;
-  killCounts: Map<string, number>;
+  world: WorldState;
 }
 
 // Remote player + scoreboard per-frame work: position send, remote ticks,
@@ -48,13 +48,13 @@ export function createRemotes(deps: RemotesDeps) {
     );
 
     const players = nm.getPlayers();
-    const previousRemoteCount = deps.remotePlayers.size;
+    const previousRemoteCount = deps.world.remotePlayers.size;
 
     // Update player list UI — local player first; drop stale remotes (no updates in 60s)
     const localPlayerId = nm.getLocalPlayerId();
     const activeIds = Array.from(players.keys()).filter(id => {
       if (id === localPlayerId) return false;
-      const rp = deps.remotePlayers.get(id);
+      const rp = deps.world.remotePlayers.get(id);
       const ps = players.get(id);
       if (ps?.ping == null) return false; // never proven connected
       if (!rp) return true;
@@ -73,8 +73,8 @@ export function createRemotes(deps: RemotesDeps) {
     players.forEach((playerState, playerId) => tickRemotePlayer(playerId, playerState, dt));
     cleanupRemotePlayers(players);
 
-    if (deps.remotePlayers.size !== previousRemoteCount) {
-      deps.logger.debug(`Remote players in scene: ${deps.remotePlayers.size} | Scene children: ${deps.scene().children.length}`);
+    if (deps.world.remotePlayers.size !== previousRemoteCount) {
+      deps.logger.debug(`Remote players in scene: ${deps.world.remotePlayers.size} | Scene children: ${deps.scene().children.length}`);
     }
   }
 
@@ -85,11 +85,11 @@ export function createRemotes(deps: RemotesDeps) {
     const hud = deps.hud();
     if (playerId === nm.getLocalPlayerId()) return;
 
-    let remotePlayer = deps.remotePlayers.get(playerId);
+    let remotePlayer = deps.world.remotePlayers.get(playerId);
     if (!remotePlayer && !playerState.isDead) {
       remotePlayer = new RemotePlayer(deps.scene(), playerId, playerState.position, terrain);
-      deps.remotePlayers.set(playerId, remotePlayer);
-      deps.logger.debug(`CREATED remote player`, { instanceId: remotePlayer.instanceId, playerId, total: deps.remotePlayers.size });
+      deps.world.remotePlayers.set(playerId, remotePlayer);
+      deps.logger.debug(`CREATED remote player`, { instanceId: remotePlayer.instanceId, playerId, total: deps.world.remotePlayers.size });
     }
     if (!remotePlayer) return;
 
@@ -135,13 +135,13 @@ export function createRemotes(deps: RemotesDeps) {
   // Remove disconnected players and dead players that have shrunk to 0
   function cleanupRemotePlayers(players: Map<string, import('../networking/NetworkManager.js').RemotePlayerState>): void {
     const hud = deps.hud();
-    for (const [playerId, remotePlayer] of deps.remotePlayers) {
+    for (const [playerId, remotePlayer] of deps.world.remotePlayers) {
       const gone = !players.has(playerId);
       const shrunkAway = remotePlayer.scale === 0;
       if (!gone && !shrunkAway) continue;
       deps.logger.debug(`REMOVED remote player`, { reason: gone ? 'player left' : 'scale=0', instanceId: remotePlayer.instanceId, playerId });
       remotePlayer.dispose();
-      deps.remotePlayers.delete(playerId);
+      deps.world.remotePlayers.delete(playerId);
       hud.removePlayerIndicator(playerId);
       deps.healthBarSystem().removeBar(playerId);
     }
@@ -153,11 +153,11 @@ export function createRemotes(deps: RemotesDeps) {
     if (!hud.scoreboardVisible) return;
     const nm = deps.networkManager();
     const localId = nm.getLocalPlayerId();
-    const rows = [{ name: localId, frags: deps.killCounts.get(localId) ?? 0, ping: nm.getPing(), self: true, dead: deps.player().isDead }];
+    const rows = [{ name: localId, frags: deps.world.killCounts.get(localId) ?? 0, ping: nm.getPing(), self: true, dead: deps.player().isDead }];
     const remoteRows = [...nm.getPlayers().keys()]
       .filter(id => {
         if (id === localId) return false;
-        const rp = deps.remotePlayers.get(id);
+        const rp = deps.world.remotePlayers.get(id);
         const ps = nm.getPlayers().get(id);
         if (ps?.ping == null) return false; // never proven connected
         if (!rp) return true;
@@ -165,7 +165,7 @@ export function createRemotes(deps: RemotesDeps) {
       })
       .map(id => {
         const ps = nm.getPlayers().get(id);
-        return { name: id, frags: deps.killCounts.get(id) ?? 0, ping: ps?.ping ?? null, self: false, dead: ps?.isDead ?? false };
+        return { name: id, frags: deps.world.killCounts.get(id) ?? 0, ping: ps?.ping ?? null, self: false, dead: ps?.isDead ?? false };
       });
     remoteRows.sort((a, b) => b.frags - a.frags);
     hud.setScoreboardRows([...rows, ...remoteRows]);

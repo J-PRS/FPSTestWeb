@@ -13,21 +13,14 @@ import { DemoManager } from './demo/index.js';
 import { InputFlags, JetpackFlags } from './demo/types.js';
 
 import { Player } from './entities/Player.js';
-import { RemotePlayer } from './entities/RemotePlayer.js';
 import { ViewModel } from './entities/ViewModel.js';
 
-import { BallDebris, PlayerDebris } from './effects/debris.js';
 import { DamageNumberManager } from './effects/damageNumbers.js';
 import { EffectsManager } from './effects/effects.js';
-import { Explosion } from './effects/explosion.js';
-import { Implosion } from './effects/implosion.js';
-import { ScorchDecal } from './effects/scorch.js';
 import { SpeedLines } from './effects/speedLines.js';
 
 import { resolveServerEndpoints } from './networking/endpoints.js';
 import { NetworkManager } from './networking/NetworkManager.js';
-
-import { Projectile } from './projectiles/Projectile.js';
 
 import { CoolShotsPanel } from './ui/CoolShotsPanel.js';
 import { FragMessages } from './ui/FragMessages.js';
@@ -36,7 +29,7 @@ import { HUD } from './ui/hud.js';
 import { wireOverlayInput } from './ui/overlayInput.js';
 
 import { applyDebugHooks } from './game/debugHooks.js';
-import { createProjectileRegistry } from './game/projectileRegistry.js';
+import { createWorldState } from './game/worldState.js';
 import { createCombat } from './game/combat.js';
 import { createDemoLifecycle } from './game/demoLifecycle.js';
 import { createEntities } from './game/entities.js';
@@ -82,17 +75,11 @@ let hud: HUD;
 let healthBarSystem: HealthBarSystem;
 let damageNumberManager: DamageNumberManager;
 let networkManager: NetworkManager;
-const remotePlayers: Map<string, RemotePlayer> = new Map();
-let dummyUpdate: ((dt: number) => void) | null = null; // ?dummy debug hook
+// All shared mutable entity collections live in world — see game/worldState.ts
+const world = createWorldState();
+const remotePlayers = world.remotePlayers;
 const _blinkDir = new THREE.Vector3(); // scratch for the blink FX handler
-const killCounts = new Map<string, number>(); // scoreboard frags, tracked from kill broadcasts
-const projectiles: Projectile[] = [];
-const projectileRegistry = createProjectileRegistry();
-const debrisList: BallDebris[] = [];
-const playerDebrisList: PlayerDebris[] = [];
-const explosions: Explosion[] = [];
-const scorches: ScorchDecal[] = [];
-const implosions: Implosion[] = [];
+let dummyUpdate: ((dt: number) => void) | null = null; // ?dummy debug hook
 let effects: EffectsManager;
 
 // ---- Input tracking ----
@@ -150,7 +137,7 @@ async function init(): Promise<void> {
     networkManager: () => networkManager,
     demoManager: () => demoManager,
     logger,
-    explosions,
+    world,
     updateBallsPlayback: (dt) => demoLifecycle.updateBallsPlayback(dt),
   });
 
@@ -170,16 +157,10 @@ async function init(): Promise<void> {
     inputTracking,
     explosionTracker,
     logger,
-    remotePlayers,
+    world,
     balls: entities.balls,
     targets: entities.targets,
     nuggets: entities.nuggets,
-    projectiles,
-    projectileRegistry,
-    debrisList,
-    explosions,
-    implosions,
-    scorches,
   });
   player.onFire = combat.onFire;
   player.onDisc = combat.onDisc;
@@ -281,11 +262,7 @@ async function init(): Promise<void> {
     crawlers: entities.crawlers,
     turrets: entities.turrets,
     rollers: entities.rollers,
-    projectiles,
-    debrisList,
-    playerDebrisList,
-    explosions,
-    implosions,
+    world,
     overlay,
     rendererCanvas: renderer.domElement,
   });
@@ -309,8 +286,7 @@ async function init(): Promise<void> {
     healthBarSystem: () => healthBarSystem,
     effects: () => effects,
     logger,
-    remotePlayers,
-    killCounts,
+    world,
   });
 
   // Load player model
@@ -329,11 +305,7 @@ async function init(): Promise<void> {
     fragMessages,
     explosionTracker,
     logger,
-    remotePlayers,
-    projectileRegistry,
-    killCounts,
-    playerDebrisList,
-    projectiles,
+    world,
     setLastSentPos: remotes.setLastSentPos,
   });
 
@@ -375,12 +347,7 @@ async function init(): Promise<void> {
     combat: () => combat,
     remotes: () => remotes,
     demoLifecycle: () => demoLifecycle,
-    remotePlayers,
-    debrisList,
-    playerDebrisList,
-    explosions,
-    scorches,
-    implosions,
+    world,
     getDummyTick: () => dummyUpdate,
   });
   profiler.markTime('initComplete');
@@ -418,8 +385,8 @@ init().then(async () => {
     wireStateDebug({
       networkManager,
       getPlayer: () => player,
-      remotePlayers,
-      projectiles,
+      remotePlayers: world.remotePlayers,
+      projectiles: world.projectiles,
       getLastSentPos: remotes.getLastSentPos,
       logger,
     });

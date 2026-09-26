@@ -6,7 +6,6 @@ import * as THREE from 'three';
 import type { ChildLogger } from '../core/Logger.js';
 import type { DemoManager } from '../demo/index.js';
 import type { Player } from '../entities/Player.js';
-import type { RemotePlayer } from '../entities/RemotePlayer.js';
 import type { ViewModel } from '../entities/ViewModel.js';
 import { THROW_RELEASE } from '../entities/ViewModel.js';
 import type { Ball } from '../entities/balls.js';
@@ -36,7 +35,7 @@ import { aoeImpulse, aoeDamage as aoeDamageOf } from '../../../shared/combat.js'
 import { poissonDisc } from '../utils/poissonSpread.js';
 import type { Terrain } from '../world/terrain.js';
 import { screenShake } from '../effects/screenShake.js';
-import type { ProjectileRegistry } from './projectileRegistry.js';
+import type { WorldState } from './worldState.js';
 
 export interface CombatDeps {
   scene(): THREE.Scene;
@@ -54,16 +53,10 @@ export interface CombatDeps {
   inputTracking: ReturnType<typeof setupInputTracking>;
   explosionTracker: ExplosionTracker;
   logger: ChildLogger;
-  remotePlayers: Map<string, RemotePlayer>;
+  world: WorldState;
   balls: Ball[];
   targets: import('../entities/balls.js').Targetable[]; // balls + crawlers — shootable/blastable
   nuggets: Nugget[];
-  projectiles: Projectile[];
-  projectileRegistry: ProjectileRegistry;
-  debrisList: BallDebris[];
-  explosions: Explosion[];
-  implosions: Implosion[];
-  scorches: ScorchDecal[];
 }
 
 const SCORCH_MAX = 48;
@@ -89,11 +82,11 @@ export function createCombat(deps: CombatDeps) {
 
     // INSTANT SHOOTING: Spawn projectile locally immediately for LAN-like feel
     const p = new Projectile(deps.scene(), e.origin, e.dir, e.playerVel, config);
-    deps.projectiles.push(p);
+    deps.world.projectiles.push(p);
 
     if (config.needsServerTracking) {
-      deps.projectileRegistry.pending.push(p);
-      deps.projectileRegistry.pendingSince.set(p, Date.now());
+      deps.world.projectileRegistry.pending.push(p);
+      deps.world.projectileRegistry.pendingSince.set(p, Date.now());
     }
 
     // Record projectile fired event for demo
@@ -217,19 +210,19 @@ export function createCombat(deps: CombatDeps) {
   ): void {
     // Explosion/implosion visual + scorch decal on the terrain below the blast
     if (forceMode === 'push') {
-      deps.explosions.push(new Explosion(deps.scene(), pos, directHit, age, deps.terrain(), radius / ROCKET_RADIUS, explosionTint));
+      deps.world.explosions.push(new Explosion(deps.scene(), pos, directHit, age, deps.terrain(), radius / ROCKET_RADIUS, explosionTint));
       screenShake.blast(pos, radius, deps.player().pos);
     } else {
-      deps.implosions.push(new Implosion(deps.scene(), pos, age, deps.terrain()));
+      deps.world.implosions.push(new Implosion(deps.scene(), pos, age, deps.terrain()));
       screenShake.blast(pos, radius * 0.5, deps.player().pos);
     }
     // Scorch only when the blast is near the ground — a midair hit would
     // otherwise paint a phantom mark on terrain far below.
     if (pos.y - deps.terrain().getHeight(pos.x, pos.z) <= radius) {
-      if (deps.scorches.length >= SCORCH_MAX) {
-        deps.scorches.shift()!.dispose();
+      if (deps.world.scorches.length >= SCORCH_MAX) {
+        deps.world.scorches.shift()!.dispose();
       }
-      deps.scorches.push(new ScorchDecal(deps.scene(), deps.terrain(), pos, radius * 0.6));
+      deps.world.scorches.push(new ScorchDecal(deps.scene(), deps.terrain(), pos, radius * 0.6));
     }
 
     // Record explosion for death impulse calculation
@@ -329,7 +322,7 @@ export function createCombat(deps: CombatDeps) {
     aoeDamage: number,
     directHitTargetId: string | null
   ): void {
-    for (const [playerId, rp] of deps.remotePlayers) {
+    for (const [playerId, rp] of deps.world.remotePlayers) {
       if (rp.isDead) continue;
       // Match server damage exactly: 1 - dist/radius inside radius, 0 outside.
       // (The wider falloffAt curve is for knockback reach only — using it here
@@ -374,7 +367,7 @@ export function createCombat(deps: CombatDeps) {
   function updateProjectiles(dt: number): void {
     // Clean up stale pending projectiles (no server response within timeout)
     const now = Date.now();
-    const registry = deps.projectileRegistry;
+    const registry = deps.world.projectileRegistry;
     for (let i = registry.pending.length - 1; i >= 0; i--) {
       const p = registry.pending[i];
       const timestamp = registry.pendingSince.get(p) || 0;
@@ -387,13 +380,13 @@ export function createCombat(deps: CombatDeps) {
     // Get remote player positions for collision (skip dead players)
     const remotePlayerPositions = _remotePlayerPositions;
     remotePlayerPositions.clear();
-    deps.remotePlayers.forEach((rp, playerId) => {
+    deps.world.remotePlayers.forEach((rp, playerId) => {
       if (rp.isDead) return;
       remotePlayerPositions.set(playerId, rp.position);
     });
 
-    for (let i = deps.projectiles.length - 1; i >= 0; i--) {
-      const p = deps.projectiles[i];
+    for (let i = deps.world.projectiles.length - 1; i >= 0; i--) {
+      const p = deps.world.projectiles[i];
       p.update(dt, deps.terrain(), deps.targets, remotePlayerPositions);
 
       if (p.exploded && !p.explosionProcessed) {
@@ -407,7 +400,7 @@ export function createCombat(deps: CombatDeps) {
           demoManager.recordProjectileDestroyed(p.demoProjectileId, { x: p.pos.x, y: p.pos.y, z: p.pos.z });
         }
         p.dispose();
-        deps.projectiles.splice(i, 1);
+        deps.world.projectiles.splice(i, 1);
       }
     }
   }
@@ -443,7 +436,7 @@ export function createCombat(deps: CombatDeps) {
       deps.effects().spawnImpact(pos, p.vel);
       return;
     }
-    deps.explosions.push(new Explosion(deps.scene(), pos, p.directHit, p.age, deps.terrain(), p.explosionRadius / ROCKET_RADIUS, p.config.damageColor));
+    deps.world.explosions.push(new Explosion(deps.scene(), pos, p.directHit, p.age, deps.terrain(), p.explosionRadius / ROCKET_RADIUS, p.config.damageColor));
   }
 
   function spawnImpactEffect(p: Projectile): void {
@@ -511,7 +504,7 @@ export function createCombat(deps: CombatDeps) {
     }
     logHitScore(p, 'ball');
     if (destroyed) {
-      deps.debrisList.push(new BallDebris(deps.scene(), deps.terrain(), ball.pos.x, ball.pos.y, ball.pos.z, ball.color, ball.scale));
+      deps.world.debrisList.push(new BallDebris(deps.scene(), deps.terrain(), ball.pos.x, ball.pos.y, ball.pos.z, ball.color, ball.scale));
       deps.player().kills++;
       // Drop nuggets (bigger balls drop more)
       for (let n = 0; n < Math.round(ball.scale); n++) {
@@ -530,7 +523,7 @@ export function createCombat(deps: CombatDeps) {
   }
 
   function handlePlayerHit(p: Projectile, playerId: string): void {
-    const targetPlayer = deps.remotePlayers.get(playerId);
+    const targetPlayer = deps.world.remotePlayers.get(playerId);
     const hitPos = targetPlayer ? targetPlayer.position : deps.player().pos;
     const directDamage = getWeaponStats(p.config.weaponType).directDamage;
     deps.damageNumbers().spawn(hitPos, directDamage, p.config.damageColor, deps.camera());
