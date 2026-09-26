@@ -47,6 +47,32 @@ export function isWireFrame(u8: Uint8Array): boolean {
   return u8.length >= 2 && u8[0] === MAGIC;
 }
 
+// Quantizers — shared by both encoders so position and tick records can
+// never drift out of sync (each would silently decode differently).
+function packVel(d: DataView, o: number, v: WireVec3): number {
+  d.setInt16(o, Math.round(v.x * 10), true); o += 2;
+  d.setInt16(o, Math.round(v.y * 10), true); o += 2;
+  d.setInt16(o, Math.round(v.z * 10), true); o += 2;
+  return o;
+}
+function unpackVel(d: DataView, o: number, out: WireVec3): number {
+  out.x = d.getInt16(o, true) / 10; o += 2;
+  out.y = d.getInt16(o, true) / 10; o += 2;
+  out.z = d.getInt16(o, true) / 10; o += 2;
+  return o;
+}
+function packRot(d: DataView, o: number, rot: WireRot): number {
+  const yaw2pi = ((rot.yaw % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+  d.setUint16(o, Math.round(yaw2pi * (65535 / (Math.PI * 2))), true); o += 2;
+  d.setInt16(o, Math.round(Math.max(-Math.PI, Math.min(Math.PI, rot.pitch)) * (32767 / Math.PI)), true); o += 2;
+  return o;
+}
+function unpackRot(d: DataView, o: number, out: WireRot): number {
+  out.yaw = d.getUint16(o, true) * ((Math.PI * 2) / 65535); o += 2;
+  out.pitch = d.getInt16(o, true) * (Math.PI / 32767); o += 2;
+  return o;
+}
+
 // ---- C→S position ----
 
 export function encodePosition(pos: WireVec3, rot: WireRot, vel: WireVec3, seq: number, ping: number): Uint8Array {
@@ -59,11 +85,8 @@ export function encodePosition(pos: WireVec3, rot: WireRot, vel: WireVec3, seq: 
   d.setFloat32(o, pos.x, true); o += 4;
   d.setFloat32(o, pos.y, true); o += 4;
   d.setFloat32(o, pos.z, true); o += 4;
-  d.setInt16(o, Math.round(vel.x * 10), true); o += 2;
-  d.setInt16(o, Math.round(vel.y * 10), true); o += 2;
-  d.setInt16(o, Math.round(vel.z * 10), true); o += 2;
-  d.setUint16(o, Math.round(((rot.yaw % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2)) * (65535 / (Math.PI * 2))), true); o += 2;
-  d.setInt16(o, Math.round(Math.max(-Math.PI, Math.min(Math.PI, rot.pitch)) * (32767 / Math.PI)), true); o += 2;
+  o = packVel(d, o, vel);
+  o = packRot(d, o, rot);
   d.setUint16(o, Math.min(65535, Math.max(0, Math.round(ping))), true); o += 2;
   return new Uint8Array(buf, 0, o);
 }
@@ -76,19 +99,18 @@ export function decodePosition(u8: Uint8Array): WirePosition | null {
   const px = d.getFloat32(o, true); o += 4;
   const py = d.getFloat32(o, true); o += 4;
   const pz = d.getFloat32(o, true); o += 4;
-  const vx = d.getInt16(o, true) / 10; o += 2;
-  const vy = d.getInt16(o, true) / 10; o += 2;
-  const vz = d.getInt16(o, true) / 10; o += 2;
-  const yaw = d.getUint16(o, true) * ((Math.PI * 2) / 65535); o += 2;
-  const pitch = d.getInt16(o, true) * (Math.PI / 32767); o += 2;
+  const velocity: WireVec3 = { x: 0, y: 0, z: 0 };
+  o = unpackVel(d, o, velocity);
+  const rotation: WireRot = { yaw: 0, pitch: 0 };
+  o = unpackRot(d, o, rotation);
   const ping = d.getUint16(o, true);
   if (!Number.isFinite(px) || !Number.isFinite(py) || !Number.isFinite(pz) ||
-      !Number.isFinite(vx) || !Number.isFinite(vy) || !Number.isFinite(vz)) return null;
+      !Number.isFinite(velocity.x) || !Number.isFinite(velocity.y) || !Number.isFinite(velocity.z)) return null;
   return {
     type: 'position',
     position: { x: px, y: py, z: pz },
-    rotation: { yaw, pitch },
-    velocity: { x: vx, y: vy, z: vz },
+    rotation,
+    velocity,
     seq,
     ping,
   };
@@ -108,11 +130,8 @@ export function encodeTickPlayer(p: WireTickPlayer): Uint8Array {
   d.setFloat32(o, p.position.x, true); o += 4;
   d.setFloat32(o, p.position.y, true); o += 4;
   d.setFloat32(o, p.position.z, true); o += 4;
-  d.setInt16(o, Math.round(p.velocity.x * 10), true); o += 2;
-  d.setInt16(o, Math.round(p.velocity.y * 10), true); o += 2;
-  d.setInt16(o, Math.round(p.velocity.z * 10), true); o += 2;
-  d.setUint16(o, Math.round(((p.rotation.yaw % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2)) * (65535 / (Math.PI * 2))), true); o += 2;
-  d.setInt16(o, Math.round(Math.max(-Math.PI, Math.min(Math.PI, p.rotation.pitch)) * (32767 / Math.PI)), true); o += 2;
+  o = packVel(d, o, p.velocity);
+  o = packRot(d, o, p.rotation);
   u8[o++] = Math.max(0, Math.min(255, Math.round(p.health)));
   u8[o++] = p.ping !== undefined ? Math.max(0, Math.min(255, Math.round(p.ping))) : 0;
   u8[o++] = (p.isDead ? 1 : 0) | (p.ski ? 2 : 0);
@@ -153,19 +172,18 @@ export function decodeTickFrame(u8: Uint8Array): { ackSeq: number; updates: Wire
     const px = d.getFloat32(o, true); o += 4;
     const py = d.getFloat32(o, true); o += 4;
     const pz = d.getFloat32(o, true); o += 4;
-    const vx = d.getInt16(o, true) / 10; o += 2;
-    const vy = d.getInt16(o, true) / 10; o += 2;
-    const vz = d.getInt16(o, true) / 10; o += 2;
-    const yaw = d.getUint16(o, true) * ((Math.PI * 2) / 65535); o += 2;
-    const pitch = d.getInt16(o, true) * (Math.PI / 32767); o += 2;
+    const vel: WireVec3 = { x: 0, y: 0, z: 0 };
+    o = unpackVel(d, o, vel);
+    const rot: WireRot = { yaw: 0, pitch: 0 };
+    o = unpackRot(d, o, rot);
     const health = u8[o++]!;
     const pingRaw = u8[o++]!;
     const flags = u8[o++]!;
     updates.push({
       playerId,
       position: { x: px, y: py, z: pz },
-      rotation: { yaw, pitch },
-      velocity: { x: vx, y: vy, z: vz },
+      rotation: rot,
+      velocity: vel,
       health,
       isDead: (flags & 1) !== 0,
       ping: pingRaw > 0 ? pingRaw : undefined,
