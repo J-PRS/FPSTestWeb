@@ -122,7 +122,10 @@ export function createEntities(deps: EntitiesDeps) {
     s.t += dt;
     if (s.t >= s.interval) {
       s.t = 0;
-      s.spawn();
+      // Ambient spawning is owned by this one path — director spawns are
+      // gated in gameLoop. (Per-species spawn fns that guard on isPlaying
+      // anyway are harmless defense — director events call them directly.)
+      if (!deps.demoManager()?.isPlaying) s.spawn();
     }
     for (let i = s.list.length - 1; i >= 0; i--) {
       const e = s.list[i]!;
@@ -240,7 +243,6 @@ export function createEntities(deps: EntitiesDeps) {
 
   // ---- Crawlers (terrain-hugging targets that pounce) ----
   function spawnCrawler(pos?: THREE.Vector3): void {
-    if (deps.demoManager()?.isPlaying) return;
     if (!pos && crawlers.filter(c => !c.dead).length >= CRAWLER_MAX) return; // events bypass the cap
     const c = new Crawler(scene, deps.terrain(), pos ?? ringPos(CRAWLER_SPAWN_MIN, CRAWLER_SPAWN_MAX));
     c.onLanded = (p) => deps.effects().spawnJumpDust(p);
@@ -258,7 +260,6 @@ export function createEntities(deps: EntitiesDeps) {
 
   // ---- Turretters (plant-and-shell enemies that lob themselves at you) ----
   function spawnTurretter(): void {
-    if (deps.demoManager()?.isPlaying) return;
     if (turrets.filter(t => !t.dead).length >= TURRET_MAX) return;
     const player = deps.player();
     const t = new Turretter(scene, deps.terrain(), ringPos(TURRET_SPAWN_MIN, TURRET_SPAWN_MAX));
@@ -282,7 +283,6 @@ export function createEntities(deps: EntitiesDeps) {
 
   // ---- Rollers (big homing boulders — the hitbox is the threat) ----
   function spawnRoller(): void {
-    if (deps.demoManager()?.isPlaying) return;
     if (rollers.filter(r => !r.dead).length >= ROLLER_MAX) return;
     const r = new Roller(scene, deps.terrain(), ringPos(ROLLER_SPAWN_MIN, ROLLER_SPAWN_MAX));
     r.onLanded = (pos) => deps.effects().spawnJumpDust(pos);
@@ -300,7 +300,6 @@ export function createEntities(deps: EntitiesDeps) {
 
   // ---- Seekers (airborne sting enemies — telegraphed darts) ----
   function spawnSeeker(): void {
-    if (deps.demoManager()?.isPlaying) return;
     if (seekers.filter(s => !s.dead).length >= SEEKER_MAX) return;
     const s = new Seeker(scene, deps.terrain(), ringPos(SEEKER_SPAWN_MIN, SEEKER_SPAWN_MAX));
     s.onSting = (sk) => hurtPlayer(sk.pos, SEEKER_STING_FORCE, SEEKER_STING_DAMAGE);
@@ -349,6 +348,7 @@ export function createEntities(deps: EntitiesDeps) {
 
   function spawnMiner(): void {
     if (deps.demoManager()?.isPlaying) return;
+    if (deps.demoManager()?.isPlaying) return; // KEEP: also called by director events
     if (miners.filter(m => !m.dead).length >= MINER_MAX) return;
     const m = new Miner(scene, deps.terrain(), ringPos(MINER_SPAWN_MIN, MINER_SPAWN_MAX));
     m.onMineDrop = (miner) => {
