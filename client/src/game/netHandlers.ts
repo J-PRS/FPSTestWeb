@@ -40,6 +40,14 @@ export function wireNetworkHandlers(deps: NetDeps): void {
   const nm = () => deps.networkManager();
   const networkManager = deps.networkManager();
 
+  // Both first-seen-update and respawn-into-missing end up here
+  function ensureRemotePlayer(playerId: string, position: { x: number; y: number; z: number }, via: string): RemotePlayer {
+    const rp = new RemotePlayer(deps.scene(), playerId, position, deps.terrain());
+    deps.world.remotePlayers.set(playerId, rp);
+    logger.debug(`CREATED remote player (${via})`, { instanceId: rp.instanceId, playerId, total: deps.world.remotePlayers.size });
+    return rp;
+  }
+
   // Register player hit handler (non-lethal hits)
   networkManager.onPlayerHit = (shooterId: string, targetId: string, damage: number, health: number) => {
     // Check if local player was hit
@@ -187,9 +195,7 @@ export function wireNetworkHandlers(deps: NetDeps): void {
     const playerData = nm().getPlayers().get(playerId);
     if (playerData?.isDead) return;
     logger.debug(`onPlayerUpdate called for unknown player: ${playerId}, creating...`);
-    remotePlayer = new RemotePlayer(deps.scene(), playerId, position, deps.terrain());
-    deps.world.remotePlayers.set(playerId, remotePlayer);
-    logger.debug(`CREATED remote player (onPlayerUpdate)`, { instanceId: remotePlayer.instanceId, playerId, total: deps.world.remotePlayers.size });
+    ensureRemotePlayer(playerId, position, 'onPlayerUpdate');
   };
 
   // Server-authoritative projectile handlers
@@ -277,9 +283,7 @@ export function wireNetworkHandlers(deps: NetDeps): void {
       logger.info(`Player ${playerId} (internalId: ${internalId}) respawned at ${JSON.stringify(position)}`);
     } else {
       // Create new remote player if they don't exist (shouldn't happen but safety check)
-      const newRemotePlayer = new RemotePlayer(deps.scene(), playerId, position, deps.terrain());
-      deps.world.remotePlayers.set(playerId, newRemotePlayer);
-      logger.debug(`CREATED remote player (onPlayerRespawn)`, { instanceId: newRemotePlayer.instanceId, playerId });
+      ensureRemotePlayer(playerId, position, 'onPlayerRespawn');
     }
 
     // Re-add HUD indicator on respawn (it was removed on kill)
