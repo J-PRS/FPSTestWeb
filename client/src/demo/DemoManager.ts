@@ -9,46 +9,26 @@ import { DemoUI } from './DemoUI.js';
 import type { IPlayerDataProvider, IInputProvider, Vec3 } from './interfaces.js';
 import { ProjectileEventType } from './types.js';
 import type { ProjectileEvent, TargetEvent, DemoFile } from './types.js';
+import { CoolShotManager } from './coolShots.js';
+import type { CoolShotEntry } from './coolShots.js';
 import { ChildLogger } from '../core/Logger.js';
 
+export type { CoolShotEntry } from './coolShots.js';
+
 const logger = new ChildLogger('Demo');
-
-// Shape of a demo record in the server's GET /demos JSON response
-interface ServerDemoRecord {
-  filename: string;
-  projectileLifetime: number;
-  timestamp: number;
-  description: string;
-}
-
-export interface CoolShotEntry {
-  id: string;
-  filename?: string; // server-side filename
-  projectileLifetime: number;
-  timestamp: number;
-  description: string;
-  clipData?: DemoFile; // only set for locally-generated clips
-}
 
 export class DemoManager {
   private recorder: DemoRecorder;
   private player: DemoPlayer;
   private ui: DemoUI;
+  // Clip queue + server sync live in CoolShotManager; playback/mode stay here
+  private coolShotMgr: CoolShotManager;
 
   private playerData: IPlayerDataProvider | null = null;
   private inputData: IInputProvider | null = null;
 
   private mode: 'idle' | 'recording' | 'playing' | 'paused' = 'idle';
   private uiVisible = false;
-
-  // Stored cool shots, sorted by lifetime descending
-  private coolShots: CoolShotEntry[] = [];
-  private static MAX_COOL_SHOTS = 20;
-
-  // Server URL for demo upload/list/download
-  private serverUrl: string = '';
-  private uploadFailureCount = 0;
-  private static MAX_UPLOAD_WARNINGS = 3;
 
   // Callback when cool shots list changes
   onCoolShotsChanged?: (shots: CoolShotEntry[]) => void;
@@ -65,6 +45,15 @@ export class DemoManager {
     this.recorder = new DemoRecorder();
     this.player = new DemoPlayer();
     this.ui = new DemoUI();
+    this.coolShotMgr = new CoolShotManager({
+      recorder: () => this.recorder,
+      isRecording: () => this.mode === 'recording',
+      setStatus: (s) => this.ui.setStatus(s),
+      playDemoData: (d) => this.playDemoData(d),
+      downloadDemoFile: (d, f) => this.downloadDemoFile(d, f),
+      timestampStr: () => this.timestampStr(),
+    });
+    this.coolShotMgr.onChanged = (shots) => this.onCoolShotsChanged?.(shots);
 
     this.setupUI();
     this.setupPlayerCallbacks();
@@ -173,10 +162,7 @@ export class DemoManager {
       this.mode = 'idle';
     }
     // Clear pending clips from previous recording (buffer is gone)
-    if (this.pendingClips.length > 0) {
-      logger.debug(`Clearing ${this.pendingClips.length} pending clip(s) from previous recording`);
-      this.pendingClips = [];
-    }
+    this.coolShotMgr.clearPending();
     this.recorder.start(this.playerData, this.inputData);
     this.mode = 'recording';
     this.ui.setRecording(true);
@@ -186,11 +172,7 @@ export class DemoManager {
 
   stopRecording(): void {
     // Extract any pending cool-shot clips before the buffer is abandoned
-    if (this.pendingClips.length > 0) {
-      const pending = this.pendingClips;
-      this.pendingClips = [];
-      for (const p of pending) this.extractPendingClip(p);
-    }
+    this.coolShotMgr.flushPending();
     this.recorder.stop();
     this.mode = 'idle';
     this.ui.setRecording(false);
@@ -246,168 +228,40 @@ export class DemoManager {
   // the clips are merged into one longer clip (chain combo).
   // minLifetime is 0.2s during testing phase so clips are easy to trigger. Raise to ~2.0s for production.
   autoClipOnHit(projectileLifetime: number, minLifetime: number = 0.2, bufferBefore: number = 5.0, bufferAfter: number = 5.0, hitTime?: number): void {
-    if (this.mode !== 'recording') return;
-    if (projectileLifetime < minLifetime) return;
-
-    const actualHitTime = hitTime ?? this.recorder.duration;
-    const shotTime = actualHitTime - projectileLifetime;
-
-    // Check if there's a pending clip whose wait period hasn't elapsed yet — merge into it
-    for (const pending of this.pendingClips) {
-      if (actualHitTime < pending.extractAt) {
-        // Extend the clip end and push extraction time back
-        pending.clipEnd = actualHitTime + bufferAfter;
-        pending.extractAt = actualHitTime + bufferAfter;
-        pending.chainCount = (pending.chainCount ?? 1) + 1;
-        pending.bestLifetime = Math.max(pending.bestLifetime ?? pending.projectileLifetime, projectileLifetime);
-        const totalDur = pending.clipEnd - pending.clipStart;
-        pending.description = `Combo x${pending.chainCount} (best ${pending.bestLifetime.toFixed(2)}s air, ${totalDur.toFixed(1)}s clip)`;
-        logger.debug(`[CoolShot] Chain x${pending.chainCount}! Extending clip to ${totalDur.toFixed(1)}s — extracting in ${bufferAfter}s...`);
-        return;
-      }
-    }
-
-    const clipStart = shotTime - bufferBefore;
-    const clipEnd = actualHitTime + bufferAfter;
-
-    const totalClipDuration = projectileLifetime + bufferBefore + bufferAfter;
-    const desc = `Cool shot (${projectileLifetime.toFixed(2)}s air, ${totalClipDuration.toFixed(1)}s clip)`;
-
-    // Defer extraction until bufferAfter seconds have elapsed so post-hit footage is in the buffer
-    this.pendingClips.push({
-      extractAt: actualHitTime + bufferAfter,
-      clipStart,
-      clipEnd,
-      projectileLifetime,
-      description: desc,
-      chainCount: 1,
-      bestLifetime: projectileLifetime,
-    });
-    logger.debug(`[CoolShot] Clip scheduled: ${desc} — extracting in ${bufferAfter}s...`);
-  }
-
-  private pendingClips: { extractAt: number; clipStart: number; clipEnd: number; projectileLifetime: number; description: string; chainCount: number; bestLifetime: number }[] = [];
-
-  private processPendingClips(): void {
-    if (this.pendingClips.length === 0) return;
-    const now = this.recorder.duration;
-    for (let i = this.pendingClips.length - 1; i >= 0; i--) {
-      const pending = this.pendingClips[i];
-      if (now < pending.extractAt) continue;
-
-      // Time to extract
-      this.pendingClips.splice(i, 1);
-      this.extractPendingClip(pending);
-    }
-  }
-
-  private extractPendingClip(pending: { extractAt: number; clipStart: number; clipEnd: number; projectileLifetime: number; description: string; chainCount: number; bestLifetime: number }): void {
-      const clipData = this.recorder.extractClip(pending.clipStart, pending.clipEnd, pending.description, pending.bestLifetime);
-      if (!clipData) {
-        logger.warn('Auto-clip: not enough buffer for this clip');
-        return;
-      }
-
-      const filename = `clip_${this.timestampStr()}_${pending.bestLifetime.toFixed(1)}s.demo`;
-
-      const entry: CoolShotEntry = {
-        id: `clip_${Date.now()}_${pending.bestLifetime.toFixed(1)}`,
-        filename,
-        projectileLifetime: pending.bestLifetime,
-        timestamp: Date.now(),
-        description: pending.description,
-        clipData,
-      };
-      // Upload to server; on success, use the server-assigned filename and free local clipData
-      this.uploadClipToServer(clipData).then((serverFilename) => {
-        if (serverFilename) {
-          entry.filename = serverFilename;
-          entry.clipData = undefined;
-          this.onCoolShotsChanged?.(this.coolShots);
-        }
-      });
-      this.coolShots.push(entry);
-      this.coolShots.sort((a, b) => b.projectileLifetime - a.projectileLifetime);
-      // Keep top 10 by lifetime + recent 10 by timestamp (may overlap)
-      const topIds = new Set(this.coolShots.slice(0, 10).map(s => s.id));
-      const recentIds = new Set([...this.coolShots].sort((a, b) => b.timestamp - a.timestamp).slice(0, 10).map(s => s.id));
-      this.coolShots = this.coolShots.filter(s => topIds.has(s.id) || recentIds.has(s.id));
-      this.onCoolShotsChanged?.(this.coolShots);
-
-      logger.debug(`Auto-saved clip: ${filename} (best lifetime ${pending.bestLifetime.toFixed(2)}s, chain x${pending.chainCount})`);
-      this.ui.setStatus(`Clip saved! ${pending.bestLifetime.toFixed(1)}s air${pending.chainCount > 1 ? ` x${pending.chainCount}` : ''}`);
+    this.coolShotMgr.onHit(projectileLifetime, minLifetime, bufferBefore, bufferAfter, hitTime);
   }
 
   getCoolShots(): CoolShotEntry[] {
-    return this.coolShots;
+    return this.coolShotMgr.list;
   }
 
   // Play a cool shot clip by index
   playCoolShot(index: number): void {
-    if (index < 0 || index >= this.coolShots.length) return;
-    const entry = this.coolShots[index];
-
-    if (entry.clipData) {
-      // Play from local memory
-      this.player.load(entry.clipData);
-      this.mode = 'playing';
-      this.player.play();
-      this.ui.setPlaying(true);
-      this.ui.show();
-      this.uiVisible = true;
-      this.ui.setTime(0, entry.clipData.header.duration);
-      this.updateHitMarkers(entry.clipData);
-      this.onPlaybackStart?.();
-      logger.debug(`Playing cool shot: ${entry.description}`);
-    } else if (entry.filename) {
-      // Download from server then play
-      this.playFromServer(entry.filename);
-    }
+    this.coolShotMgr.playAt(index);
   }
 
   // Play a cool shot clip by its entry ID
   playCoolShotById(id: string): void {
-    const index = this.coolShots.findIndex(s => s.id === id);
-    if (index >= 0) this.playCoolShot(index);
+    this.coolShotMgr.playById(id);
   }
 
   // Download a cool shot clip by its entry ID
   async downloadCoolShotById(id: string): Promise<void> {
-    const entry = this.coolShots.find(s => s.id === id);
-    if (!entry) {
-      logger.warn('Cool shot not found:', id);
-      return;
-    }
+    return this.coolShotMgr.downloadById(id);
+  }
 
-    if (entry.clipData) {
-      // Download from local memory
-      const filename = `clip_${entry.projectileLifetime.toFixed(1)}s_${this.timestampStr()}.demo`;
-      this.downloadDemoFile(entry.clipData, filename);
-      logger.debug(`Downloaded cool shot: ${entry.description}`);
-    } else if (entry.filename) {
-      // Download from server
-      if (!this.serverUrl) {
-        logger.warn('No server URL set');
-        return;
-      }
-      try {
-        this.ui.setStatus('Downloading clip...');
-        const resp = await fetch(`${this.serverUrl}/demos/${entry.filename}`);
-        if (!resp.ok) {
-          logger.warn('Failed to download clip:', resp.status);
-          this.ui.setStatus('Download failed');
-          return;
-        }
-        const buffer = await resp.arrayBuffer();
-        const data = DemoSerializer.deserialize(buffer);
-        this.downloadDemoFile(data, entry.filename);
-        this.ui.setStatus('Downloaded!');
-        logger.debug(`Downloaded cool shot from server: ${entry.filename}`);
-      } catch (e) {
-        logger.warn('Failed to download from server:', e);
-        this.ui.setStatus('Download failed');
-      }
-    }
+  // Load a demo into the player and immediately start playback — the shared
+  // tail of playCoolShot and playFromServer.
+  private playDemoData(data: DemoFile): void {
+    this.player.load(data);
+    this.mode = 'playing';
+    this.player.play();
+    this.ui.setPlaying(true);
+    this.ui.show();
+    this.uiVisible = true;
+    this.ui.setTime(0, data.header.duration);
+    this.updateHitMarkers(data);
+    this.onPlaybackStart?.();
   }
 
   private downloadDemoFile(data: DemoFile, filename: string): void {
@@ -428,117 +282,12 @@ export class DemoManager {
 
   // Set the server base URL for demo upload/list/download
   setServerUrl(url: string): void {
-    this.serverUrl = url.replace(/\/$/, '');
-  }
-
-  // Upload clip binary to server. Returns the server-assigned filename, or null on failure.
-  private async uploadClipToServer(clipData: DemoFile): Promise<string | null> {
-    if (!this.serverUrl) {
-      logger.warn('No server URL set, skipping upload');
-      return null;
-    }
-    try {
-      const buffer = DemoSerializer.serialize(clipData);
-      const resp = await fetch(`${this.serverUrl}/demos/upload`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/octet-stream' },
-        body: buffer,
-      });
-      if (!resp.ok) {
-        logger.warn('Server upload failed:', resp.status);
-        return null;
-      }
-      const result = await resp.json();
-      this.uploadFailureCount = 0;
-      if (result.rejected || !result.filename) {
-        logger.debug(`Clip rejected by server: ${result.reason ?? 'no filename returned'}`);
-        return null;
-      } else {
-        logger.debug(`Clip uploaded to server: ${result.filename}`);
-        return result.filename as string;
-      }
-    } catch (e) {
-      this.uploadFailureCount++;
-      if (this.uploadFailureCount <= DemoManager.MAX_UPLOAD_WARNINGS) {
-        logger.warn(`Failed to upload clip (${this.uploadFailureCount}):`, e);
-        if (this.uploadFailureCount === DemoManager.MAX_UPLOAD_WARNINGS) {
-          logger.warn('Suppressing further upload failure warnings. Check server CORS/network.');
-        }
-      }
-      return null;
-    }
+    this.coolShotMgr.setServerUrl(url);
   }
 
   // Fetch cool shots list from server and merge with local
   async fetchCoolShotsFromServer(): Promise<void> {
-    if (!this.serverUrl) return;
-    try {
-      const resp = await fetch(`${this.serverUrl}/demos`);
-      if (!resp.ok) {
-        logger.warn(`Failed to fetch cool shots: HTTP ${resp.status}`);
-        return;
-      }
-      const data = await resp.json();
-      const serverDemos: CoolShotEntry[] = ((data.demos || []) as ServerDemoRecord[]).map((d) => ({
-        id: d.filename,
-        filename: d.filename,
-        projectileLifetime: d.projectileLifetime,
-        timestamp: d.timestamp,
-        description: d.description,
-      }));
-      logger.debug(`Fetched ${serverDemos.length} demos from server`);
-
-      // Merge: server demos that aren't already in local list (by filename)
-      const localFilenames = new Set(this.coolShots.map(s => s.filename));
-      for (const sd of serverDemos) {
-        if (!localFilenames.has(sd.filename)) {
-          this.coolShots.push(sd);
-        }
-      }
-      this.coolShots.sort((a, b) => b.projectileLifetime - a.projectileLifetime);
-      // Keep top 10 by lifetime + recent 10 by timestamp (may overlap)
-      const topIds = new Set(this.coolShots.slice(0, 10).map(s => s.id));
-      const recentIds = new Set([...this.coolShots].sort((a, b) => b.timestamp - a.timestamp).slice(0, 10).map(s => s.id));
-      this.coolShots = this.coolShots.filter(s => topIds.has(s.id) || recentIds.has(s.id));
-      this.onCoolShotsChanged?.(this.coolShots);
-
-      logger.debug(`[CoolShots] ${this.coolShots.length} entries (top: ${this.coolShots[0]?.projectileLifetime.toFixed(2) ?? 'none'}s)`);
-    } catch (e) {
-      logger.warn('Failed to fetch cool shots from server:', e);
-    }
-  }
-
-  // Download a demo from server and play it
-  private async playFromServer(filename: string): Promise<void> {
-    if (!this.serverUrl) {
-      logger.warn('No server URL set');
-      return;
-    }
-    try {
-      this.ui.setStatus('Loading clip...');
-      const resp = await fetch(`${this.serverUrl}/demos/${filename}`);
-      if (!resp.ok) {
-        logger.warn('Failed to download clip:', resp.status);
-        this.ui.setStatus('Load failed');
-        return;
-      }
-      const buffer = await resp.arrayBuffer();
-      const data = DemoSerializer.deserialize(buffer);
-      this.player.load(data);
-      this.mode = 'playing';
-      this.player.play();
-      this.ui.setPlaying(true);
-      this.ui.show();
-      this.uiVisible = true;
-      this.ui.setTime(0, data.header.duration);
-      this.updateHitMarkers(data);
-      this.ui.setStatus('');
-      this.onPlaybackStart?.();
-      logger.debug(`Playing cool shot from server: ${filename}`);
-    } catch (e) {
-      logger.warn('Failed to play from server:', e);
-      this.ui.setStatus('Playback failed');
-    }
+    return this.coolShotMgr.fetchFromServer();
   }
 
   // Load demo from file
@@ -595,7 +344,7 @@ export class DemoManager {
   update(dt: number): void {
     if (this.mode === 'recording') {
       this.recorder.update(dt);
-      this.processPendingClips();
+      this.coolShotMgr.tick();
     } else if (this.mode === 'playing') {
       this.player.update(dt);
       // onTimeUpdate callback handles ui.setTime during playback
