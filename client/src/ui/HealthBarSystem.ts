@@ -1,12 +1,19 @@
 import * as THREE from 'three';
 
-import { MAX_HEALTH, PLAYER_HEIGHT, BALL_BASE_RADIUS } from '../core/config.js';
+import { MAX_HEALTH, PLAYER_HEIGHT } from '../core/config.js';
 
-import { Ball } from '../entities/balls.js';
+import { Ball, Targetable } from '../entities/balls.js';
+
+// Scratch vectors — update() iterates bars sequentially, safe to share
+const _cameraPos = new THREE.Vector3();
+const _cameraDir = new THREE.Vector3();
+const _targetPos = new THREE.Vector3();
+const _toTarget = new THREE.Vector3();
+const _projected = new THREE.Vector3();
 
 interface HealthBar {
   playerId?: string;
-  ball?: Ball;
+  ball?: Targetable;
   damage: number;
   flashTimer: number;
   delayTimer: number;
@@ -27,7 +34,10 @@ const BAR_LIFETIME = 1.5;
 
 export class HealthBarSystem {
   private bars: Map<string, HealthBar> = new Map();
-  private ballBars: Map<Ball, HealthBar> = new Map();
+  private ballBars: Map<Targetable, HealthBar> = new Map();
+  // Last authoritative health per player — persists beyond bar lifetime so
+  // damage predictions accumulate across hits spaced wider than BAR_LIFETIME
+  private knownHealth: Map<string, number> = new Map();
   private container: HTMLDivElement;
   private camera: THREE.Camera;
 
@@ -71,6 +81,7 @@ export class HealthBarSystem {
   }
 
   spawn(playerId: string, damage: number, health: number): void {
+    this.knownHealth.set(playerId, health);
     const bar = this.bars.get(playerId);
     if (bar) {
       this.resetBar(bar, damage, health);
@@ -79,29 +90,38 @@ export class HealthBarSystem {
     this.bars.set(playerId, this.createHealthBar(damage, health, MAX_HEALTH, playerId));
   }
 
-  spawnBall(ball: Ball, damage: number, health: number): void {
+  spawnBall(ball: Targetable, damage: number, health: number): void {
     const bar = this.ballBars.get(ball);
     if (bar) {
       this.resetBar(bar, damage, health);
       return;
     }
-    this.ballBars.set(ball, this.createHealthBar(damage, health, 3, undefined, ball));
+    this.ballBars.set(ball, this.createHealthBar(damage, health, ball.maxHealth ?? 3, undefined, ball));
   }
 
   predictDamage(playerId: string, damage: number): void {
     const bar = this.bars.get(playerId);
+    const base = bar ? bar.currentHealth : (this.knownHealth.get(playerId) ?? MAX_HEALTH);
+    const health = Math.max(0, base - damage);
+    this.knownHealth.set(playerId, health);
     if (bar) {
-      this.resetBar(bar, damage, Math.max(0, bar.currentHealth - damage));
+      this.resetBar(bar, damage, health);
       return;
     }
-    // No existing bar — spawn with predicted health
-    this.spawn(playerId, damage, Math.max(0, MAX_HEALTH - damage));
+    this.bars.set(playerId, this.createHealthBar(damage, health, MAX_HEALTH, playerId));
   }
 
-  update(dt: number, players: Map<string, { position: { x: number; y: number; z: number }; isDead: boolean }>, remotePlayers?: Map<string, { position: THREE.Vector3; isDead: boolean }>, _balls?: Ball[]): void {
-    const cameraPos = new THREE.Vector3();
+  update(dt: number, players: Map<string, { position: { x: number; y: number; z: number }; isDead: boolean; health?: number }>, remotePlayers?: Map<string, { position: THREE.Vector3; isDead: boolean }>, _balls?: Ball[]): void {
+    // Sync authoritative health from the server-fed player map (20Hz
+    // tickUpdate + playerHit) — keeps predictions anchored even while bars
+    // are dormant, and self-heals on respawn (health back to max).
+    for (const [playerId, state] of players) {
+      if (state.health !== undefined) this.knownHealth.set(playerId, state.health);
+    }
+
+    const cameraPos = _cameraPos;
     this.camera.getWorldPosition(cameraPos);
-    const cameraDir = new THREE.Vector3();
+    const cameraDir = _cameraDir;
     this.camera.getWorldDirection(cameraDir);
 
     // Update player healthbars
@@ -116,7 +136,7 @@ export class HealthBarSystem {
       }
 
       const pos = rp ? rp.position : playerState.position;
-      const targetPos = new THREE.Vector3(pos.x, pos.y + PLAYER_HEIGHT + 0.3, pos.z);
+      const targetPos = _targetPos.set(pos.x, pos.y + PLAYER_HEIGHT + 0.3, pos.z);
       this.updateBar(bar, dt, targetPos, cameraPos, cameraDir, () => this.removeBar(playerId));
     }
 
@@ -126,9 +146,9 @@ export class HealthBarSystem {
         this.removeBallBar(ball);
         continue;
       }
-      const targetPos = new THREE.Vector3(
+      const targetPos = _targetPos.set(
         ball.pos.x,
-        ball.pos.y + ball.scale * BALL_BASE_RADIUS + 0.5,
+        ball.pos.y + ball.radius + 0.5,
         ball.pos.z
       );
       this.updateBar(bar, dt, targetPos, cameraPos, cameraDir, () => this.removeBallBar(ball));
@@ -143,7 +163,7 @@ export class HealthBarSystem {
     }
   }
 
-  removeBallBar(ball: Ball): void {
+  removeBallBar(ball: Targetable): void {
     const bar = this.ballBars.get(ball);
     if (bar) {
       bar.el.remove();
@@ -160,6 +180,7 @@ export class HealthBarSystem {
       bar.el.remove();
     }
     this.ballBars.clear();
+    this.knownHealth.clear();
   }
 
   private createBarEl(): HTMLDivElement {
@@ -175,7 +196,7 @@ export class HealthBarSystem {
     health: number,
     maxHealth: number,
     playerId?: string,
-    ball?: Ball
+    ball?: Targetable
   ): HealthBar {
     const el = this.createBarEl();
     return {
@@ -249,10 +270,10 @@ export class HealthBarSystem {
 
     // No opacity fade — bar stays fully visible until life expires (matches OG behavior)
 
-    const toTarget = new THREE.Vector3().subVectors(targetPos, cameraPos);
+    const toTarget = _toTarget.subVectors(targetPos, cameraPos);
     const behind = toTarget.angleTo(cameraDir) > Math.PI / 2;
 
-    const projected = targetPos.clone();
+    const projected = _projected.copy(targetPos);
     projected.project(this.camera);
 
     if (behind) {

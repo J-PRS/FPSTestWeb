@@ -210,7 +210,7 @@ export function createCombat(deps: CombatDeps) {
     directHit: boolean = false,
     directHitTargetId?: string | null,
     age: number = 0,
-    sendAOE?: (pos: any, targetId: string | null) => void,
+    sendAOE?: (pos: { x: number; y: number; z: number }, targetId: string | null) => void,
     _explosionType: 'rocket' | 'grenade' = 'rocket',
     explosionTint?: string | number
   ): void {
@@ -348,7 +348,7 @@ export function createCombat(deps: CombatDeps) {
   function slam(pos: THREE.Vector3): void {
     const stats = getWeaponStats(WeaponType.Slam);
     const networkManager = deps.networkManager();
-    const sendAOE = (p: any, targetId: string | null) =>
+    const sendAOE = (p: { x: number; y: number; z: number }, targetId: string | null) =>
       networkManager.sendAOEShot(p, WeaponType.Slam, targetId);
     processProjectileExplosion(
       pos,
@@ -452,7 +452,7 @@ export function createCombat(deps: CombatDeps) {
     // weaponType, server resolves stats from it (no per-weapon message types)
     const networkManager = deps.networkManager();
     const weaponType = p.config.weaponType;
-    const sendAOE = (pos: any, targetId: string | null) => networkManager.sendAOEShot(pos, weaponType, targetId);
+    const sendAOE = (pos: { x: number; y: number; z: number }, targetId: string | null) => networkManager.sendAOEShot(pos, weaponType, targetId);
     processProjectileExplosion(
       p.hitPointValid ? p.hitPoint : p.pos,
       p.explosionRadius,

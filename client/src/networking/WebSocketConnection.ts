@@ -1,13 +1,12 @@
 /**
- * WebSocket Connection Wrapper with msgpack encoding
- * Based on Krunker.io's approach using msgpack for efficient binary communication
- *
- * Provides a clean API for WebSocket communication with automatic msgpack encoding/decoding
+ * WebSocket transport: reconnect/backoff, bounded send queue while
+ * connecting, and JSON-vs-binary frame routing. Protocol lives in
+ * shared/protocol.ts; the binary codec in shared/wire.ts.
  */
 
-import * as msgpack from 'msgpack-lite';
 import { ChildLogger } from '../core/Logger.js';
-import { TRIBES2_RECONNECT_INTERVAL } from '../core/config.js';
+import { WS_RECONNECT_INTERVAL } from '../core/config.js';
+import type { ServerMessage } from '../../../shared/protocol.js';
 
 const logger = new ChildLogger('WebSocketConnection');
 
@@ -16,9 +15,9 @@ export interface ConnectionConfig {
   reconnectInterval?: number;
   maxReconnectAttempts?: number;
   onConnect?: () => void;
-  onDisconnect?: () => void;
+  onDisconnect?: (code?: number, reason?: string) => void;
   onError?: (error: Error) => void;
-  onMessage?: (data: any) => void;
+  onMessage?: (data: ServerMessage) => void;
   onBinaryMessage?: (data: Uint8Array) => void;
 }
 
@@ -28,13 +27,13 @@ export class WebSocketConnection {
   private reconnectAttempts: number = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private isConnected: boolean = false;
-  private messageQueue: any[] = [];
+  private messageQueue: (string | Uint8Array)[] = [];
   private readonly MAX_QUEUE_SIZE = 100;
   private hasLoggedConnectionError: boolean = false;
 
   constructor(config: ConnectionConfig) {
     this.config = {
-      reconnectInterval: TRIBES2_RECONNECT_INTERVAL,
+      reconnectInterval: WS_RECONNECT_INTERVAL,
       maxReconnectAttempts: Infinity, // Unlimited reconnection attempts
       ...config
     };
@@ -67,8 +66,7 @@ export class WebSocketConnection {
         
         // Then send any queued messages
         while (this.messageQueue.length > 0) {
-          const msg = this.messageQueue.shift();
-          this.send(msg);
+          this.send(this.messageQueue.shift()!);
         }
       };
 
@@ -77,7 +75,7 @@ export class WebSocketConnection {
         this.isConnected = false;
         
         if (this.config.onDisconnect) {
-          this.config.onDisconnect();
+          this.config.onDisconnect(event.code, event.reason);
         }
 
         // Attempt reconnection
@@ -103,81 +101,62 @@ export class WebSocketConnection {
 
       this.ws.onmessage = (event) => {
         try {
-          // Check if message is JSON or binary
           const data = event.data;
-
           if (typeof data === 'string') {
-            // Check if it's actually binary data received as string (starts with non-JSON character)
-            if (data.charCodeAt(0) < 32 || data.charCodeAt(0) > 126) {
-              // Binary data received as string - convert to Uint8Array and route to binary handler
-              logger.warn('Binary data received as string, converting to Uint8Array');
-              const uint8Array = new Uint8Array(data.length);
-              for (let i = 0; i < data.length; i++) {
-                uint8Array[i] = data.charCodeAt(i);
-              }
-              if (this.config.onBinaryMessage) {
-                this.config.onBinaryMessage(uint8Array);
-              } else {
-                logger.warn('No onBinaryMessage callback for binary data received as string');
-              }
-              return;
-            }
-
-            // JSON message (join, joinAck, etc.)
-            try {
-              const jsonData = JSON.parse(data);
-              if (this.config.onMessage) {
-                this.config.onMessage(jsonData);
-              }
-            } catch (error) {
-              logger.error('Error parsing JSON message:', error);
-              if (this.config.onError) {
-                this.config.onError(error as Error);
-              }
-            }
+            this.handleTextMessage(data);
           } else if (data instanceof ArrayBuffer) {
-            // Binary message - route to onBinaryMessage if available
-            logger.debug('Received binary message, onBinaryMessage:', !!this.config.onBinaryMessage);
-            if (this.config.onBinaryMessage) {
-              try {
-                this.config.onBinaryMessage(new Uint8Array(data));
-              } catch (error) {
-                logger.error('Error in onBinaryMessage:', error);
-                if (this.config.onError) {
-                  this.config.onError(error as Error);
-                }
-              }
-            } else {
-              // Fallback: try msgpack, then pass raw binary
-              logger.warn('No onBinaryMessage callback, trying msgpack decode');
-              try {
-                const decoded = msgpack.decode(new Uint8Array(data));
-                if (this.config.onMessage) {
-                  this.config.onMessage(decoded);
-                }
-              } catch (msgpackError) {
-                // If msgpack fails, pass raw binary data
-                logger.warn('msgpack decode failed, passing raw binary:', msgpackError);
-                if (this.config.onMessage) {
-                  this.config.onMessage(new Uint8Array(data));
-                }
-              }
-            }
+            this.handleBinaryMessage(data);
           }
         } catch (error) {
           logger.error('Error processing message:', error);
-          if (this.config.onError) {
-            this.config.onError(error as Error);
-          }
+          this.config.onError?.(error as Error);
         }
       };
 
     } catch (error) {
       logger.error('Failed to create WebSocket:', error);
-      if (this.config.onError) {
-        this.config.onError(error as Error);
-      }
+      this.config.onError?.(error as Error);
     }
+  }
+
+  private handleTextMessage(data: string): void {
+    // Binary data can arrive as a string — non-printable first char means it's
+    // really binary; convert and route to the binary handler
+    if (data.charCodeAt(0) < 32 || data.charCodeAt(0) > 126) {
+      logger.warn('Binary data received as string, converting to Uint8Array');
+      const uint8Array = new Uint8Array(data.length);
+      for (let i = 0; i < data.length; i++) {
+        uint8Array[i] = data.charCodeAt(i);
+      }
+      if (this.config.onBinaryMessage) {
+        this.config.onBinaryMessage(uint8Array);
+      } else {
+        logger.warn('No onBinaryMessage callback for binary data received as string');
+      }
+      return;
+    }
+
+    // JSON message (join, joinAck, etc.)
+    try {
+      this.config.onMessage?.(JSON.parse(data));
+    } catch (error) {
+      logger.error('Error parsing JSON message:', error);
+      this.config.onError?.(error as Error);
+    }
+  }
+
+  private handleBinaryMessage(data: ArrayBuffer): void {
+    logger.debug('Received binary message, onBinaryMessage:', !!this.config.onBinaryMessage);
+    if (this.config.onBinaryMessage) {
+      try {
+        this.config.onBinaryMessage(new Uint8Array(data));
+      } catch (error) {
+        logger.error('Error in onBinaryMessage:', error);
+        this.config.onError?.(error as Error);
+      }
+      return;
+    }
+    logger.warn('Binary frame with no onBinaryMessage callback — dropped');
   }
 
   /**
@@ -201,9 +180,14 @@ export class WebSocketConnection {
   /**
    * Send data - handles JSON strings, objects (msgpack), and binary data
    */
-  send(data: any): boolean {
+  send(data: string | Uint8Array): boolean {
     if (!this.isConnected || !this.ws) {
-      // Limit queue size to prevent memory issues
+      // Binary frames are volatile state (position) — only the newest one
+      // is worth flushing after reconnect; drop queued predecessors instead
+      // of replaying 100 stale positions into the live socket.
+      if (data instanceof Uint8Array) {
+        this.messageQueue = this.messageQueue.filter(m => !(m instanceof Uint8Array));
+      }
       if (this.messageQueue.length < this.MAX_QUEUE_SIZE) {
         this.messageQueue.push(data);
       }
@@ -212,19 +196,20 @@ export class WebSocketConnection {
 
     try {
       if (typeof data === 'string') {
-        // Send JSON string as-is (for join messages)
+        // JSON frame as-is
         this.ws.send(data);
       } else if (data instanceof Uint8Array) {
-        // Send binary data as-is (for Tribes2 packets)
-        this.ws.send(data as any);
+        // Binary wire frame (shared/wire.ts).
+        // Fresh copy: Uint8Array<ArrayBufferLike> isn't a valid BufferSource
+        // under newer TS DOM types (SharedArrayBuffer possibility)
+        this.ws.send(new Uint8Array(data));
       } else {
-        // Encode objects using msgpack
-        const encoded = msgpack.encode(data);
-        this.ws.send(encoded as any);
+        logger.warn('send() called with non-string/non-binary data — dropped');
+        return false;
       }
       return true;
     } catch (error) {
-      console.error('Error sending message:', error);
+      logger.error('Error sending message:', error);
       if (this.config.onError) {
         this.config.onError(error as Error);
       }

@@ -112,7 +112,7 @@ export const TURRET_RELAUNCH = 75.0;      // beyond this → ballistic hop at yo
 export const TURRET_MIN_DWELL = 3.0;      // must sit planted this long between hops (no ping-pong)
 export const TURRET_HOP_T = 1.6;          // solved flight time of the launch arc
 export const TURRET_REFIRE = 1.6;         // s between bolts
-export const TURRET_BOLT_SPEED_T = 0.9;   // bolt flight time — the arc solver's knob
+export const TURRET_BOLT_SPEED = 30.0;    // m/s horizontal — constant speed, arc absorbs range
 export const TURRET_BOLT_DAMAGE = 12;
 
 // Roller — a big ball that just rolls at you. No hops, no brains:
@@ -171,7 +171,7 @@ export const CLOUD_SCALE_RANGE = 70; // Cloud sphere scale range
 
 // Lighting constants
 export const AMBIENT_COLOR = 0x886644; // Ambient light color
-export const AMBIENT_INTENSITY = 0.5; // Ambient light intensity
+export const AMBIENT_INTENSITY = 0.35; // Ambient light intensity — lower fill deepens shading
 export const SUN_COLOR = 0xffe8aa; // Sun light color
 export const SUN_INTENSITY = 3.2; // Sun light intensity
 export const SHADOW_MAP_SIZE = 2048; // Shadow map resolution

@@ -9,6 +9,17 @@ import { DemoUI } from './DemoUI.js';
 import type { IPlayerDataProvider, IInputProvider, Vec3 } from './interfaces.js';
 import { ProjectileEventType } from './types.js';
 import type { ProjectileEvent, TargetEvent, DemoFile } from './types.js';
+import { ChildLogger } from '../core/Logger.js';
+
+const logger = new ChildLogger('Demo');
+
+// Shape of a demo record in the server's GET /demos JSON response
+interface ServerDemoRecord {
+  filename: string;
+  projectileLifetime: number;
+  timestamp: number;
+  description: string;
+}
 
 export interface CoolShotEntry {
   id: string;
@@ -154,7 +165,7 @@ export class DemoManager {
   // Recording control
   startRecording(): void {
     if (!this.playerData || !this.inputData) {
-      console.warn('[Demo] Cannot start recording: data providers not set');
+      logger.warn('Cannot start recording: data providers not set');
       return;
     }
     if (this.mode === 'playing' || this.mode === 'paused') {
@@ -163,17 +174,23 @@ export class DemoManager {
     }
     // Clear pending clips from previous recording (buffer is gone)
     if (this.pendingClips.length > 0) {
-      console.log(`[Demo] Clearing ${this.pendingClips.length} pending clip(s) from previous recording`);
+      logger.debug(`Clearing ${this.pendingClips.length} pending clip(s) from previous recording`);
       this.pendingClips = [];
     }
     this.recorder.start(this.playerData, this.inputData);
     this.mode = 'recording';
     this.ui.setRecording(true);
     this.ui.setStatus('REC');
-    console.log('[Demo] Recording started — cool shots will be auto-clipped');
+    logger.debug('Recording started — cool shots will be auto-clipped');
   }
 
   stopRecording(): void {
+    // Extract any pending cool-shot clips before the buffer is abandoned
+    if (this.pendingClips.length > 0) {
+      const pending = this.pendingClips;
+      this.pendingClips = [];
+      for (const p of pending) this.extractPendingClip(p);
+    }
     this.recorder.stop();
     this.mode = 'idle';
     this.ui.setRecording(false);
@@ -215,7 +232,7 @@ export class DemoManager {
   // Save current recording to file
   saveDemo(): void {
     if (this.recorder.frameCount === 0) {
-      console.warn('[Demo] No frames to save');
+      logger.warn('No frames to save');
       return;
     }
     const data = this.recorder.buildDemoFile();
@@ -245,7 +262,7 @@ export class DemoManager {
         pending.bestLifetime = Math.max(pending.bestLifetime ?? pending.projectileLifetime, projectileLifetime);
         const totalDur = pending.clipEnd - pending.clipStart;
         pending.description = `Combo x${pending.chainCount} (best ${pending.bestLifetime.toFixed(2)}s air, ${totalDur.toFixed(1)}s clip)`;
-        console.log(`[CoolShot] Chain x${pending.chainCount}! Extending clip to ${totalDur.toFixed(1)}s — extracting in ${bufferAfter}s...`);
+        logger.debug(`[CoolShot] Chain x${pending.chainCount}! Extending clip to ${totalDur.toFixed(1)}s — extracting in ${bufferAfter}s...`);
         return;
       }
     }
@@ -266,7 +283,7 @@ export class DemoManager {
       chainCount: 1,
       bestLifetime: projectileLifetime,
     });
-    console.log(`[CoolShot] Clip scheduled: ${desc} — extracting in ${bufferAfter}s...`);
+    logger.debug(`[CoolShot] Clip scheduled: ${desc} — extracting in ${bufferAfter}s...`);
   }
 
   private pendingClips: { extractAt: number; clipStart: number; clipEnd: number; projectileLifetime: number; description: string; chainCount: number; bestLifetime: number }[] = [];
@@ -280,10 +297,15 @@ export class DemoManager {
 
       // Time to extract
       this.pendingClips.splice(i, 1);
+      this.extractPendingClip(pending);
+    }
+  }
+
+  private extractPendingClip(pending: { extractAt: number; clipStart: number; clipEnd: number; projectileLifetime: number; description: string; chainCount: number; bestLifetime: number }): void {
       const clipData = this.recorder.extractClip(pending.clipStart, pending.clipEnd, pending.description, pending.bestLifetime);
       if (!clipData) {
-        console.warn('[Demo] Auto-clip: not enough buffer for this clip');
-        continue;
+        logger.warn('Auto-clip: not enough buffer for this clip');
+        return;
       }
 
       const filename = `clip_${this.timestampStr()}_${pending.bestLifetime.toFixed(1)}s.demo`;
@@ -296,9 +318,10 @@ export class DemoManager {
         description: pending.description,
         clipData,
       };
-      // Upload to server; on success, free the local clipData to save memory
-      this.uploadClipToServer(clipData, pending.bestLifetime).then((uploaded) => {
-        if (uploaded) {
+      // Upload to server; on success, use the server-assigned filename and free local clipData
+      this.uploadClipToServer(clipData).then((serverFilename) => {
+        if (serverFilename) {
+          entry.filename = serverFilename;
           entry.clipData = undefined;
           this.onCoolShotsChanged?.(this.coolShots);
         }
@@ -311,9 +334,8 @@ export class DemoManager {
       this.coolShots = this.coolShots.filter(s => topIds.has(s.id) || recentIds.has(s.id));
       this.onCoolShotsChanged?.(this.coolShots);
 
-      console.log(`[Demo] Auto-saved clip: ${filename} (best lifetime ${pending.bestLifetime.toFixed(2)}s, chain x${pending.chainCount})`);
+      logger.debug(`Auto-saved clip: ${filename} (best lifetime ${pending.bestLifetime.toFixed(2)}s, chain x${pending.chainCount})`);
       this.ui.setStatus(`Clip saved! ${pending.bestLifetime.toFixed(1)}s air${pending.chainCount > 1 ? ` x${pending.chainCount}` : ''}`);
-    }
   }
 
   getCoolShots(): CoolShotEntry[] {
@@ -336,7 +358,7 @@ export class DemoManager {
       this.ui.setTime(0, entry.clipData.header.duration);
       this.updateHitMarkers(entry.clipData);
       this.onPlaybackStart?.();
-      console.log(`[Demo] Playing cool shot: ${entry.description}`);
+      logger.debug(`Playing cool shot: ${entry.description}`);
     } else if (entry.filename) {
       // Download from server then play
       this.playFromServer(entry.filename);
@@ -353,7 +375,7 @@ export class DemoManager {
   async downloadCoolShotById(id: string): Promise<void> {
     const entry = this.coolShots.find(s => s.id === id);
     if (!entry) {
-      console.warn('[Demo] Cool shot not found:', id);
+      logger.warn('Cool shot not found:', id);
       return;
     }
 
@@ -361,18 +383,18 @@ export class DemoManager {
       // Download from local memory
       const filename = `clip_${entry.projectileLifetime.toFixed(1)}s_${this.timestampStr()}.demo`;
       this.downloadDemoFile(entry.clipData, filename);
-      console.log(`[Demo] Downloaded cool shot: ${entry.description}`);
+      logger.debug(`Downloaded cool shot: ${entry.description}`);
     } else if (entry.filename) {
       // Download from server
       if (!this.serverUrl) {
-        console.warn('[Demo] No server URL set');
+        logger.warn('No server URL set');
         return;
       }
       try {
         this.ui.setStatus('Downloading clip...');
         const resp = await fetch(`${this.serverUrl}/demos/${entry.filename}`);
         if (!resp.ok) {
-          console.warn('[Demo] Failed to download clip:', resp.status);
+          logger.warn('Failed to download clip:', resp.status);
           this.ui.setStatus('Download failed');
           return;
         }
@@ -380,9 +402,9 @@ export class DemoManager {
         const data = DemoSerializer.deserialize(buffer);
         this.downloadDemoFile(data, entry.filename);
         this.ui.setStatus('Downloaded!');
-        console.log(`[Demo] Downloaded cool shot from server: ${entry.filename}`);
+        logger.debug(`Downloaded cool shot from server: ${entry.filename}`);
       } catch (e) {
-        console.warn('[Demo] Failed to download from server:', e);
+        logger.warn('Failed to download from server:', e);
         this.ui.setStatus('Download failed');
       }
     }
@@ -409,11 +431,11 @@ export class DemoManager {
     this.serverUrl = url.replace(/\/$/, '');
   }
 
-  // Upload clip binary to server
-  private async uploadClipToServer(clipData: DemoFile, _projectileLifetime: number): Promise<boolean> {
+  // Upload clip binary to server. Returns the server-assigned filename, or null on failure.
+  private async uploadClipToServer(clipData: DemoFile): Promise<string | null> {
     if (!this.serverUrl) {
-      console.warn('[Demo] No server URL set, skipping upload');
-      return false;
+      logger.warn('No server URL set, skipping upload');
+      return null;
     }
     try {
       const buffer = DemoSerializer.serialize(clipData);
@@ -423,27 +445,27 @@ export class DemoManager {
         body: buffer,
       });
       if (!resp.ok) {
-        console.warn('[Demo] Server upload failed:', resp.status);
-        return false;
+        logger.warn('Server upload failed:', resp.status);
+        return null;
       }
       const result = await resp.json();
       this.uploadFailureCount = 0;
-      if (result.rejected) {
-        console.log(`[Demo] Clip rejected by server: ${result.reason}`);
-        return false;
+      if (result.rejected || !result.filename) {
+        logger.debug(`Clip rejected by server: ${result.reason ?? 'no filename returned'}`);
+        return null;
       } else {
-        console.log(`[Demo] Clip uploaded to server: ${result.filename}`);
-        return true;
+        logger.debug(`Clip uploaded to server: ${result.filename}`);
+        return result.filename as string;
       }
     } catch (e) {
       this.uploadFailureCount++;
       if (this.uploadFailureCount <= DemoManager.MAX_UPLOAD_WARNINGS) {
-        console.warn(`[Demo] Failed to upload clip (${this.uploadFailureCount}):`, e);
+        logger.warn(`Failed to upload clip (${this.uploadFailureCount}):`, e);
         if (this.uploadFailureCount === DemoManager.MAX_UPLOAD_WARNINGS) {
-          console.warn('[Demo] Suppressing further upload failure warnings. Check server CORS/network.');
+          logger.warn('Suppressing further upload failure warnings. Check server CORS/network.');
         }
       }
-      return false;
+      return null;
     }
   }
 
@@ -453,18 +475,18 @@ export class DemoManager {
     try {
       const resp = await fetch(`${this.serverUrl}/demos`);
       if (!resp.ok) {
-        console.warn(`[Demo] Failed to fetch cool shots: HTTP ${resp.status}`);
+        logger.warn(`Failed to fetch cool shots: HTTP ${resp.status}`);
         return;
       }
       const data = await resp.json();
-      const serverDemos: CoolShotEntry[] = (data.demos || []).map((d: any) => ({
+      const serverDemos: CoolShotEntry[] = ((data.demos || []) as ServerDemoRecord[]).map((d) => ({
         id: d.filename,
         filename: d.filename,
         projectileLifetime: d.projectileLifetime,
         timestamp: d.timestamp,
         description: d.description,
       }));
-      console.log(`[Demo] Fetched ${serverDemos.length} demos from server`);
+      logger.debug(`Fetched ${serverDemos.length} demos from server`);
 
       // Merge: server demos that aren't already in local list (by filename)
       const localFilenames = new Set(this.coolShots.map(s => s.filename));
@@ -480,23 +502,23 @@ export class DemoManager {
       this.coolShots = this.coolShots.filter(s => topIds.has(s.id) || recentIds.has(s.id));
       this.onCoolShotsChanged?.(this.coolShots);
 
-      console.log(`[CoolShots] ${this.coolShots.length} entries (top: ${this.coolShots[0]?.projectileLifetime.toFixed(2) ?? 'none'}s)`);
+      logger.debug(`[CoolShots] ${this.coolShots.length} entries (top: ${this.coolShots[0]?.projectileLifetime.toFixed(2) ?? 'none'}s)`);
     } catch (e) {
-      console.warn('[Demo] Failed to fetch cool shots from server:', e);
+      logger.warn('Failed to fetch cool shots from server:', e);
     }
   }
 
   // Download a demo from server and play it
   private async playFromServer(filename: string): Promise<void> {
     if (!this.serverUrl) {
-      console.warn('[Demo] No server URL set');
+      logger.warn('No server URL set');
       return;
     }
     try {
       this.ui.setStatus('Loading clip...');
       const resp = await fetch(`${this.serverUrl}/demos/${filename}`);
       if (!resp.ok) {
-        console.warn('[Demo] Failed to download clip:', resp.status);
+        logger.warn('Failed to download clip:', resp.status);
         this.ui.setStatus('Load failed');
         return;
       }
@@ -512,9 +534,9 @@ export class DemoManager {
       this.updateHitMarkers(data);
       this.ui.setStatus('');
       this.onPlaybackStart?.();
-      console.log(`[Demo] Playing cool shot from server: ${filename}`);
+      logger.debug(`Playing cool shot from server: ${filename}`);
     } catch (e) {
-      console.warn('[Demo] Failed to play from server:', e);
+      logger.warn('Failed to play from server:', e);
       this.ui.setStatus('Playback failed');
     }
   }
@@ -531,7 +553,7 @@ export class DemoManager {
       this.updateHitMarkers(data);
       this.ui.setStatus(`Loaded: ${data.frames.length} frames, ${data.header.duration.toFixed(1)}s`);
     } catch (e) {
-      console.error('[Demo] Failed to load demo:', e);
+      logger.error('Failed to load demo:', e);
       this.ui.setStatus(`Load error: ${(e as Error).message}`);
     }
   }

@@ -5,7 +5,7 @@ import { hitRadiusAt } from '../../../shared/combat.js';
 
 import { ChildLogger } from '../core/Logger.js';
 
-import type { Ball, Targetable } from '../entities/balls.js';
+import type { Targetable } from '../entities/balls.js';
 
 import { Terrain } from '../world/terrain.js';
 import type { ProjectileConfig } from './types.js';

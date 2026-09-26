@@ -11,6 +11,13 @@ export interface EntityState {
   rotation?: { yaw: number; pitch: number };
 }
 
+export interface ProjectileSnapshotEntry {
+  id: string;
+  ownerId: string;
+  position: { x: number; y: number; z: number };
+  velocity: { x: number; y: number; z: number };
+}
+
 export interface GameStateSnapshot {
   timestamp: number;
   source: 'server' | 'client';
@@ -57,8 +64,8 @@ export class StateSnapshot {
    * Create a snapshot from current game state
    */
   static create(
-    players: Map<string, any>,
-    projectiles: Map<string, any> | any[],
+    players: Map<string, Omit<EntityState, 'id'>>,
+    projectiles: Map<string, ProjectileSnapshotEntry> | ProjectileSnapshotEntry[],
     source: 'server' | 'client'
   ): GameStateSnapshot {
     const playerMap = new Map<string, EntityState>();
@@ -150,63 +157,54 @@ export class StateSnapshot {
     playerDifferences: string[];
     projectileDifferences: string[];
   } {
-    const hashMatch = snapshot1.hash === snapshot2.hash;
-    const playerDifferences: string[] = [];
-    const projectileDifferences: string[] = [];
+    return {
+      hashMatch: snapshot1.hash === snapshot2.hash,
+      playerDifferences: this.comparePlayers(snapshot1, snapshot2),
+      projectileDifferences: this.compareProjectiles(snapshot1, snapshot2),
+    };
+  }
 
-    // Compare players
-    const allPlayerIds = new Set([
-      ...snapshot1.players.keys(),
-      ...snapshot2.players.keys()
-    ]);
+  private static comparePlayers(s1: GameStateSnapshot, s2: GameStateSnapshot): string[] {
+    const diffs: string[] = [];
+    const allPlayerIds = new Set([...s1.players.keys(), ...s2.players.keys()]);
 
     for (const id of allPlayerIds) {
-      const p1 = snapshot1.players.get(id);
-      const p2 = snapshot2.players.get(id);
+      const p1 = s1.players.get(id);
+      const p2 = s2.players.get(id);
 
-      if (!p1) {
-        playerDifferences.push(`Player ${id} missing in snapshot1`);
-        continue;
-      }
-      if (!p2) {
-        playerDifferences.push(`Player ${id} missing in snapshot2`);
+      if (!p1 || !p2) {
+        diffs.push(`Player ${id} missing in ${p1 ? 'snapshot2' : 'snapshot1'}`);
         continue;
       }
 
-      if (p1.position.x !== p2.position.x || 
-          p1.position.y !== p2.position.y || 
+      if (p1.position.x !== p2.position.x ||
+          p1.position.y !== p2.position.y ||
           p1.position.z !== p2.position.z) {
-        playerDifferences.push(
+        diffs.push(
           `Player ${id} position: ${JSON.stringify(p1.position)} vs ${JSON.stringify(p2.position)}`
         );
       }
       if (p1.health !== p2.health) {
-        playerDifferences.push(`Player ${id} health: ${p1.health} vs ${p2.health}`);
+        diffs.push(`Player ${id} health: ${p1.health} vs ${p2.health}`);
       }
       if (p1.isDead !== p2.isDead) {
-        playerDifferences.push(`Player ${id} isDead: ${p1.isDead} vs ${p2.isDead}`);
+        diffs.push(`Player ${id} isDead: ${p1.isDead} vs ${p2.isDead}`);
       }
     }
+    return diffs;
+  }
 
-    // Compare projectiles
-    const p1Ids = new Set(snapshot1.projectiles.map(p => p.id));
-    const p2Ids = new Set(snapshot2.projectiles.map(p => p.id));
+  private static compareProjectiles(s1: GameStateSnapshot, s2: GameStateSnapshot): string[] {
+    const diffs: string[] = [];
+    const p1Ids = new Set(s1.projectiles.map(p => p.id));
+    const p2Ids = new Set(s2.projectiles.map(p => p.id));
 
     for (const id of p1Ids) {
-      if (!p2Ids.has(id)) {
-        projectileDifferences.push(`Projectile ${id} missing in snapshot2`);
-      }
+      if (!p2Ids.has(id)) diffs.push(`Projectile ${id} missing in snapshot2`);
     }
     for (const id of p2Ids) {
-      if (!p1Ids.has(id)) {
-        projectileDifferences.push(`Projectile ${id} missing in snapshot1`);
-      }
+      if (!p1Ids.has(id)) diffs.push(`Projectile ${id} missing in snapshot1`);
     }
-
-    return {
-      hashMatch,
-      playerDifferences,
-      projectileDifferences
-    };
+    return diffs;
   }
 }

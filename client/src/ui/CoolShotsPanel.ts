@@ -1,4 +1,4 @@
-import type { DemoManager } from '../demo/index.js';
+import type { CoolShotEntry, DemoManager } from '../demo/index.js';
 
 interface CoolShotsPanelDependencies {
   demoManager: DemoManager;
@@ -12,7 +12,7 @@ export class CoolShotsPanel {
   private demoManager: DemoManager;
   private overlay: HTMLElement;
   private requestLock: () => void;
-  private lastCoolShots: any[] = [];
+  private lastCoolShots: CoolShotEntry[] = [];
 
   constructor(dependencies: CoolShotsPanelDependencies) {
     this.coolShotsTop = document.getElementById('cool-shots-top')!;
@@ -25,7 +25,7 @@ export class CoolShotsPanel {
   }
 
   private setup(): void {
-    this.demoManager.onCoolShotsChanged = (shots: any[]) => this.renderCoolShots(shots);
+    this.demoManager.onCoolShotsChanged = (shots) => this.renderCoolShots(shots);
     
     // Refresh "time ago" labels every second
     setInterval(() => {
@@ -46,7 +46,7 @@ export class CoolShotsPanel {
     return `${days}d ago`;
   }
 
-  private renderShotItem(container: HTMLElement, shot: any, rank: number): void {
+  private renderShotItem(container: HTMLElement, shot: CoolShotEntry, rank: number): void {
     const item = document.createElement('div');
     const isRecent = Date.now() - shot.timestamp < 60000;
     item.className = isRecent ? 'cool-shot-item recent' : 'cool-shot-item';
@@ -63,7 +63,7 @@ export class CoolShotsPanel {
     container.appendChild(item);
   }
 
-  private renderCoolShots(shots: any[]): void {
+  private renderCoolShots(shots: CoolShotEntry[]): void {
     this.lastCoolShots = shots;
     this.coolShotsTop.innerHTML = '';
     this.coolShotsRecent.innerHTML = '';
