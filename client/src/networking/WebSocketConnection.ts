@@ -79,7 +79,8 @@ export class WebSocketConnection {
         }
 
         // Attempt reconnection
-        if (this.reconnectAttempts < (this.config.maxReconnectAttempts || 5)) {
+        // ?? not || — an explicit 0 means "never reconnect", not "five tries"
+        if (this.reconnectAttempts < (this.config.maxReconnectAttempts ?? 5)) {
           this.reconnectAttempts++;
           logger.info(`Reconnection attempt ${this.reconnectAttempts} in ${this.config.reconnectInterval}ms`);
           
