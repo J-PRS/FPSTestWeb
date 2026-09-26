@@ -1,14 +1,22 @@
 import * as THREE from 'three';
+import { nextTargetId } from './targetIds.js';
 
-import { GRAVITY, BALL_MAX_DIST, BALL_TELE_MIN, BALL_TELE_MAX, BALL_TELE_HEIGHT, BALL_BASE_RADIUS } from '../core/config.js';
+import { GRAVITY, BALL_MAX_DIST, BALL_TELE_MIN, BALL_TELE_MAX, BALL_TELE_HEIGHT, BALL_BASE_RADIUS, BALL_ENRAGE_ENABLED, BALL_ENRAGE_FORCE, BALL_ENRAGE_TIMEOUT, BALL_ENRAGE_DASH_DIST, BALL_ENRAGE_DASH_SPEED, BALL_ENRAGE_TELEGRAPH_H } from '../core/config.js';
 
 import { Terrain } from '../world/terrain.js';
+import { RibbonTrail } from '../projectiles/RibbonTrail.js';
+import { ChildLogger } from '../core/Logger.js';
+
+const logger = new ChildLogger('Ball');
 
 const BALL_GRAVITY   = GRAVITY;
 const BOUNCE         = 1.0;
 const TRAIL_COUNT    = 14;
-const TRAIL_LIFE     = 1.2;
 const TRAIL_INTERVAL = 0.04;
+
+// scratch — trail dot spawn jitter
+const _spawn = new THREE.Vector3();
+const _scatter = new THREE.Vector3();
 
 const BALL_COLORS = [
   new THREE.Color(1.0, 0.25, 0.25),
@@ -21,20 +29,76 @@ const BALL_COLORS = [
 ];
 
 interface TrailDot {
-  mesh: THREE.Mesh;
-  mat: THREE.MeshBasicMaterial;
+  halo: THREE.Sprite;
+  core: THREE.Sprite;
   age: number;
+  life: number;    // per-dot random lifetime
+  haloSz: number;  // per-dot random base scales
+  coreSz: number;
+}
+
+// Shared radial-gradient sprite texture: hot center -> colored mid -> soft
+// transparent rim. Per-dot sprites tint it; additive blending accumulates
+// overlapping dots into the "bright core / soft halo" layered trail look.
+let _trailTex: THREE.Texture | null = null;
+function getTrailTex(): THREE.Texture {
+  if (!_trailTex) {
+    const S = 64, c = document.createElement('canvas');
+    c.width = c.height = S;
+    const ctx = c.getContext('2d')!;
+    const g = ctx.createRadialGradient(S/2, S/2, 0, S/2, S/2, S/2);
+    g.addColorStop(0,    'rgba(255,255,255,1)');
+    g.addColorStop(0.25, 'rgba(255,255,255,0.55)');
+    g.addColorStop(0.55, 'rgba(255,255,255,0.18)');
+    g.addColorStop(1,    'rgba(255,255,255,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, S, S);
+    _trailTex = new THREE.CanvasTexture(c);
+  }
+  return _trailTex;
+}
+
+// Anything a projectile can hit / an explosion can push: balls, crawlers.
+// combat.ts works against this surface — position, radius, damage, knockback.
+export interface Targetable {
+  readonly id: number;
+  variant: number;
+  pos: THREE.Vector3;
+  vel: THREE.Vector3;
+  dead: boolean;
+  health: number;
+  maxHealth?: number;
+  radius: number;
+  /** Tall targets (Totem): hitbox is a vertical capsule from pos to
+   *  pos.y + capsuleTop instead of a sphere at the feet. */
+  capsuleTop?: number;
+  /** Long targets (Miner): hitbox is a capsule on the segment
+   *  pos ± capsuleEnd (heading-aligned). Mutually exclusive w/ capsuleTop. */
+  capsuleEnd?: THREE.Vector3;
+  color: THREE.Color;
+  scale: number;
+  takeDamage(): boolean;
+  applyKnockback(from: THREE.Vector3, force: number): void;
+  applyPull(to: THREE.Vector3, force: number): void;
+  /** Fires once when destroyed — elites split, everything else ignores it. */
+  onDeath?: (t: Targetable) => void;
 }
 
 export class Ball {
-  private static nextId = 1;
+  // Camera position synced by the main loop once per frame — feeds the
+  // billboarded ribbon trails (avoids threading camPos through every
+  // update() call site including demo playback fast-forward).
+  static readonly viewPos = new THREE.Vector3();
   readonly id: number;
-  readonly variant: 0 | 1 | 2;
+  readonly variant: 0 | 1 | 2 | 3;
+  /** Elite split hook — wired by entities.ts for variant 3. */
+  onDeath?: (t: Targetable) => void;
 
   pos: THREE.Vector3;
   vel: THREE.Vector3;
   dead = false;
   health: number;
+  maxHealth: number;
   radius: number;
   color: THREE.Color;
 
@@ -43,10 +107,15 @@ export class Ball {
   private scene: THREE.Scene;
   scale: number;
   private trailDots: TrailDot[] = [];
+  private ribbons: RibbonTrail[];
+  private _lastTrailPos = new THREE.Vector3();
   private trailTimer = 0;
   private flashTimer = 0;
   private meshRemoved = false;
-  private disposed = false;
+  private _disposed = false;
+
+  // True once the ball and its trail are fully cleaned up (safe to remove)
+  get disposed(): boolean { return this._disposed; }
   private shadowBlob: THREE.Mesh | null = null;
 
   // Callbacks for demo keyframe recording
@@ -55,14 +124,23 @@ export class Ball {
   private prevVelY = 0;
   private lastBounceEnergy = 0; // Track total mechanical energy (KE + PE) after last bounce for loss detection
 
-  constructor(scene: THREE.Scene, terrain: Terrain, variant: 0 | 1 | 2 = 0) {
+  // Enrage mode (replaces teleport when BALL_ENRAGE_ENABLED): out-of-range
+  // balls get pulled toward the player while still bouncing normally
+  private enraged = false;
+  private enrageTimer = 0;
+  private dashFlash = 0; // brief white-hot pop right after a lunge
+  private static _enrageDir = new THREE.Vector3(); // scratch
+
+  constructor(scene: THREE.Scene, terrain: Terrain, variant: 0 | 1 | 2 | 3 = 0) {
     this.scene = scene;
-    this.id = Ball.nextId;
-    Ball.nextId = (Ball.nextId + 1) % 65536;
-    if (Ball.nextId === 0) Ball.nextId = 1;
+    this.id = nextTargetId();
     this.variant = variant;
 
-    if (variant === 2) {
+    if (variant === 3) {
+      // Elite — big violet splitter; death spawns two children
+      this.scale = 2.4; this.health = 5;
+      this.color = new THREE.Color(0.45, 0.2, 0.85);
+    } else if (variant === 2) {
       this.scale = 3.0; this.health = 3;
       this.color = new THREE.Color(1.0, 0.25, 0.25);
     } else if (variant === 1) {
@@ -72,7 +150,18 @@ export class Ball {
       this.scale = 1.0; this.health = 1;
       this.color = BALL_COLORS[Math.floor(Math.random() * BALL_COLORS.length)].clone();
     }
+    this.maxHealth = this.health;
     this.radius = BALL_BASE_RADIUS * this.scale;
+
+    // Two-lane billboarded ribbon: wide tinted halo + thin near-white core,
+    // same structure as the disc trails but the strip always faces the camera.
+    const coreColor = this.color.clone().lerp(new THREE.Color(1, 1, 1), 0.7);
+    // Scale color energy down — additive stacking made full-strength colors
+    // eye-searing; these are emission intensities, not hues
+    this.ribbons = [
+      RibbonTrail.acquire(scene, this.color.clone().multiplyScalar(0.55).getHex(), this.radius * 1.2, 0.5, 0, true),
+      RibbonTrail.acquire(scene, coreColor.multiplyScalar(0.7).getHex(), this.radius * 0.45, 0.4, 0, true),
+    ];
 
     const rx = (Math.random() - 0.5) * 400;
     const rz = (Math.random() - 0.5) * 400;
@@ -127,38 +216,7 @@ export class Ball {
 
   update(dt: number, terrain: Terrain, playerPos: THREE.Vector3): void {
     if (this.dead) {
-      // When dead, only update trails to fade them out
-      if (!this.meshRemoved) {
-        this.scene.remove(this.mesh);
-        this.mesh.geometry.dispose();
-        this.mat.dispose();
-        if (this.shadowBlob) {
-          this.scene.remove(this.shadowBlob);
-          (this.shadowBlob.material as THREE.ShaderMaterial).dispose();
-          this.shadowBlob = null;
-        }
-        this.meshRemoved = true;
-      }
-
-      for (let i = this.trailDots.length - 1; i >= 0; i--) {
-        const d = this.trailDots[i];
-        d.age += dt;
-        if (d.age >= TRAIL_LIFE) {
-          this.scene.remove(d.mesh);
-          d.mesh.geometry.dispose();
-          d.mat.dispose();
-          this.trailDots.splice(i, 1);
-        } else {
-          const t = 1.0 - d.age / TRAIL_LIFE;
-          d.mat.opacity = t * 0.6;
-          d.mesh.scale.setScalar(t);
-        }
-      }
-
-      // Mark as truly dead when trails are gone
-      if (this.trailDots.length === 0) {
-        this.disposed = true;
-      }
+      this.updateDead(dt);
       return;
     }
 
@@ -171,132 +229,319 @@ export class Ball {
       this.onPeak(this.pos.clone(), this.vel.clone());
     }
 
-    const gy = terrain.getHeight(this.pos.x, this.pos.z);
-    if (this.pos.y - this.radius <= gy) {
-      this.pos.y = gy + this.radius;
-      const n = terrain.getNormal(this.pos.x, this.pos.z);
-      const dot = this.vel.dot(n);
-
-      // Only treat as a bounce when the ball is moving INTO the surface (dot < 0).
-      // This prevents a spurious re-bounce when update() is called with dt=0 right
-      // after a playback keyframe snap: the ball sits exactly on the ground with
-      // upward velocity, and without this guard the reflection would flip it back
-      // downward, causing a one-frame dip/stutter (and a possible stray teleport).
-      if (dot < 0) {
-        // Calculate total mechanical energy at bounce: KE + PE
-        // KE = 0.5 * v^2, PE = g * (global height above reference)
-        // Use fixed reference (y=0) to account for terrain height changes
-        const velBeforeReflection = this.vel.clone();
-        const totalEnergy = 0.5 * velBeforeReflection.lengthSq() + Math.abs(BALL_GRAVITY) * this.pos.y;
-
-        this.vel.addScaledVector(n, -2.0 * dot * BOUNCE);
-
-        // Check if reflection itself preserves energy (should be 100% with BOUNCE=1.0)
-        const velAfterMag = this.vel.length();
-        const velBeforeMag = velBeforeReflection.length();
-        const reflectionEnergyRatio = velAfterMag / velBeforeMag;
-        if (Math.abs(reflectionEnergyRatio - 1.0) > 0.01) {
-          console.warn(`[Ball ${this.id}] Reflection lost energy: ${(reflectionEnergyRatio * 100).toFixed(1)}% (should be 100%)`);
-        }
-
-        // Compare total mechanical energy to previous bounce
-        if (this.lastBounceEnergy > 0) {
-          const energyRatio = totalEnergy / this.lastBounceEnergy;
-          if (energyRatio < 0.95) {
-            console.warn(`[Ball ${this.id}] Total energy LOSS: ${(energyRatio * 100).toFixed(1)}% (KE: ${(0.5 * velBeforeMag * velBeforeMag).toFixed(1)}, PE: ${(Math.abs(BALL_GRAVITY) * this.pos.y).toFixed(1)})`);
-          } else if (energyRatio > 1.05) {
-            console.warn(`[Ball ${this.id}] Total energy GAIN: ${(energyRatio * 100).toFixed(1)}% (KE: ${(0.5 * velBeforeMag * velBeforeMag).toFixed(1)}, PE: ${(Math.abs(BALL_GRAVITY) * this.pos.y).toFixed(1)})`);
-          }
-        }
-        this.lastBounceEnergy = totalEnergy;
-
-        // Record bounce keyframe (after velocity reflection)
-        if (this.onBounce) {
-          this.onBounce(this.pos.clone(), this.vel.clone());
-        }
-
-        const dx = this.pos.x - playerPos.x;
-        const dz = this.pos.z - playerPos.z;
-        if (dx * dx + dz * dz > BALL_MAX_DIST * BALL_MAX_DIST) {
-          const ang = Math.random() * Math.PI * 2;
-          const dist = BALL_TELE_MIN + Math.random() * (BALL_TELE_MAX - BALL_TELE_MIN);
-          this.pos.x = playerPos.x + Math.cos(ang) * dist;
-          this.pos.z = playerPos.z + Math.sin(ang) * dist;
-          this.pos.y = terrain.getHeight(this.pos.x, this.pos.z) + BALL_TELE_HEIGHT;
-
-          // Preserve absolute velocity, redirect according to terrain normal at teleport point
-          const currentSpeed = this.vel.length();
-          const n = terrain.getNormal(this.pos.x, this.pos.z);
-          const dot = this.vel.dot(n);
-          this.vel.addScaledVector(n, -2.0 * dot * BOUNCE); // Reflect velocity off terrain normal
-          this.vel.normalize().multiplyScalar(currentSpeed); // Preserve original speed
-
-          // Reset energy tracking on teleport (intentional energy reset)
-          this.lastBounceEnergy = 0;
-          // Record teleport as a bounce keyframe too (position + velocity reset)
-          if (this.onBounce) {
-            this.onBounce(this.pos.clone(), this.vel.clone());
-          }
-        }
+    // Enraged balls are pulled toward the player — a linear accel, so they
+    // still bounce and arc naturally instead of homing like missiles
+    if (this.enraged) {
+      this.enrageTimer += dt;
+      Ball._enrageDir.subVectors(playerPos, this.pos);
+      Ball._enrageDir.y += this.radius; // aim at the body, not the feet
+      const d = Ball._enrageDir.length();
+      if (d > 0.001) {
+        this.vel.addScaledVector(Ball._enrageDir.multiplyScalar(1 / d), BALL_ENRAGE_FORCE * dt);
+      }
+      // Calm down once back in play range; give up and teleport if it can
+      // never catch up (player teleporting/skiing away at speed)
+      // Rage only discharges via a lunge (in handleGroundBounce) or the
+      // timeout fallback — a ball that can't catch up eventually teleports
+      if (this.enrageTimer > BALL_ENRAGE_TIMEOUT) {
+        this.setEnraged(false);
+        this.teleportNearPlayer(terrain, playerPos);
       }
     }
 
+    // Dash telegraph: while enraged inside lunge range, burn hotter as the
+    // ball descends — a falling white-hot ball reads as "it's about to dash"
+    if (this.enraged) {
+      const ddx = this.pos.x - playerPos.x;
+      const ddz = this.pos.z - playerPos.z;
+      if (ddx * ddx + ddz * ddz <= BALL_ENRAGE_DASH_DIST * BALL_ENRAGE_DASH_DIST) {
+        const h = this.pos.y - terrain.getHeight(this.pos.x, this.pos.z) - this.radius;
+        const t = Math.min(1, Math.max(0, 1 - h / BALL_ENRAGE_TELEGRAPH_H));
+        this.mat.emissive.setRGB(0.55 + 0.45 * t, 0.45 * t, 0.35 * t); // red → white-hot
+      } else {
+        this.mat.emissive.setRGB(0.55, 0, 0);
+      }
+    }
+    if (this.dashFlash > 0) {
+      this.dashFlash -= dt;
+      this.mat.emissive.setRGB(1, 0.9, 0.7); // post-dash pop
+      if (this.dashFlash <= 0 && this.enraged) this.mat.emissive.setRGB(0.55, 0, 0);
+    }
+
+    this.handleGroundBounce(terrain, playerPos);
+    this.updateShadowBlob(terrain);
     this.mesh.position.copy(this.pos);
-
-    // Update shadow blob position
-    if (this.shadowBlob) {
-      this.shadowBlob.position.x = this.pos.x;
-      this.shadowBlob.position.z = this.pos.z;
-      this.shadowBlob.position.y = terrain.getHeight(this.pos.x, this.pos.z) + 0.05;
-      // Fade shadow when in air
-      const airHeight = this.pos.y - terrain.getHeight(this.pos.x, this.pos.z);
-      const maxFadeHeight = 10.0;
-      const fadeStart = 3.0;
-      let opacity = 0.3;
-      if (airHeight > fadeStart) {
-        opacity = Math.max(0, 0.3 * (1 - (airHeight - fadeStart) / (maxFadeHeight - fadeStart)));
-      }
-      (this.shadowBlob.material as THREE.ShaderMaterial).uniforms.opacity.value = opacity;
-    }
 
     if (this.flashTimer > 0) {
       this.flashTimer -= dt;
       if (this.flashTimer <= 0) this.mat.color.copy(this.color);
     }
 
-    // Trail
-    this.trailTimer += dt;
-    if (this.trailTimer >= TRAIL_INTERVAL) {
-      this.trailTimer = 0;
-      const spd2 = this.vel.lengthSq();
-      if (spd2 > 0.5) {
-        const tgeo = new THREE.IcosahedronGeometry(this.radius * 0.9, 0); // reduced by 10% to prevent sticking out
-        const tmat = new THREE.MeshBasicMaterial({ color: this.color.clone(), transparent: true, opacity: 0.8 });
-        const tm = new THREE.Mesh(tgeo, tmat);
-        tm.position.copy(this.pos);
-        this.scene.add(tm);
-        if (this.trailDots.length >= TRAIL_COUNT) {
-          const old = this.trailDots.shift()!;
-          this.scene.remove(old.mesh);
-          old.mesh.geometry.dispose();
-          old.mat.dispose();
-        }
-        this.trailDots.push({ mesh: tm, mat: tmat, age: 0 });
+    this.emitTrailDot(dt);
+    this.fadeTrailDots(dt);
+    // Position discontinuity (teleport or playback keyframe snap) — cut the
+    // ribbons so they don't streak across the jump
+    if (this.pos.distanceToSquared(this._lastTrailPos) > 400) {
+      for (const r of this.ribbons) r.clear();
+    }
+    this._lastTrailPos.copy(this.pos);
+    if (this.vel.lengthSq() > 0.5) {
+      for (const r of this.ribbons) r.push(this.pos, this.vel);
+    }
+    for (const r of this.ribbons) r.update(dt, Ball.viewPos);
+  }
+
+  // Dead ball: mesh already removed, just fade out remaining trail dots/ribbons
+  private updateDead(dt: number): void {
+    if (!this.meshRemoved) {
+      for (const r of this.ribbons) r.stop();
+      this.scene.remove(this.mesh);
+      this.mesh.geometry.dispose();
+      this.mat.dispose();
+      if (this.shadowBlob) {
+        this.scene.remove(this.shadowBlob);
+        (this.shadowBlob.material as THREE.ShaderMaterial).dispose();
+        this.shadowBlob = null;
+      }
+      this.meshRemoved = true;
+    }
+    this.fadeTrailDots(dt);
+    for (const r of this.ribbons) r.update(dt, Ball.viewPos);
+    if (this.trailDots.length === 0 && this.ribbons.every(r => r.done)) {
+      // Final cleanup — caller splices on `disposed` without dispose()
+      for (const d of this.dotPool) {
+        d.halo.material.dispose();
+        d.core.material.dispose();
+      }
+      this.dotPool = [];
+      for (const r of this.ribbons) r.dispose(this.scene);
+      this._disposed = true;
+    }
+  }
+
+  private handleGroundBounce(terrain: Terrain, playerPos: THREE.Vector3): void {
+    const gy = terrain.getHeight(this.pos.x, this.pos.z);
+    if (this.pos.y - this.radius > gy) return;
+    this.pos.y = gy + this.radius;
+    const n = terrain.getNormal(this.pos.x, this.pos.z);
+    const dot = this.vel.dot(n);
+
+    // Only treat as a bounce when the ball is moving INTO the surface (dot < 0).
+    // This prevents a spurious re-bounce when update() is called with dt=0 right
+    // after a playback keyframe snap: the ball sits exactly on the ground with
+    // upward velocity, and without this guard the reflection would flip it back
+    // downward, causing a one-frame dip/stutter (and a possible stray teleport).
+    if (dot >= 0) return;
+
+    // Enraged lunge: touching down within range launches at the player
+    // instead of a normal bounce — velocity is REPLACED (clean readable dash,
+    // not a bounce that adds up unpredictably)
+    if (this.enraged) {
+      const pdx = playerPos.x - this.pos.x;
+      const pdz = playerPos.z - this.pos.z;
+      const pd2 = pdx * pdx + pdz * pdz;
+      if (pd2 <= BALL_ENRAGE_DASH_DIST * BALL_ENRAGE_DASH_DIST) {
+        // Ballistic lunge — solve vy so the arc lands ON the player
+        this.dashAt(playerPos);
+        this.dashFlash = 0.15;
+        this.setEnraged(false); // lunge discharges the rage
+        for (let i = 0; i < 8; i++) this.spawnDot(); // dust-burst at takeoff
+        this.lastBounceEnergy = 0;
+        this.onBounce?.(this.pos.clone(), this.vel.clone());
+        return;
       }
     }
 
+    // Calculate total mechanical energy at bounce: KE + PE
+    // KE = 0.5 * v^2, PE = g * (global height above reference)
+    // Use fixed reference (y=0) to account for terrain height changes
+    const velBeforeReflection = this.vel.clone();
+    const totalEnergy = 0.5 * velBeforeReflection.lengthSq() + Math.abs(BALL_GRAVITY) * this.pos.y;
+
+    this.vel.addScaledVector(n, -2.0 * dot * BOUNCE);
+
+    // Check if reflection itself preserves energy (should be 100% with BOUNCE=1.0)
+    const velAfterMag = this.vel.length();
+    const velBeforeMag = velBeforeReflection.length();
+    const reflectionEnergyRatio = velAfterMag / velBeforeMag;
+    if (Math.abs(reflectionEnergyRatio - 1.0) > 0.01) {
+      logger.debug(`Ball ${this.id} reflection lost energy: ${(reflectionEnergyRatio * 100).toFixed(1)}% (should be 100%)`);
+    }
+
+    // Compare total mechanical energy to previous bounce
+    if (this.lastBounceEnergy > 0) {
+      const energyRatio = totalEnergy / this.lastBounceEnergy;
+      if (energyRatio < 0.95 || energyRatio > 1.05) {
+        const kind = energyRatio < 0.95 ? 'LOSS' : 'GAIN';
+        logger.debug(`Ball ${this.id} total energy ${kind}: ${(energyRatio * 100).toFixed(1)}% (KE: ${(0.5 * velBeforeMag * velBeforeMag).toFixed(1)}, PE: ${(Math.abs(BALL_GRAVITY) * this.pos.y).toFixed(1)})`);
+      }
+    }
+    this.lastBounceEnergy = totalEnergy;
+
+    // Record bounce keyframe (after velocity reflection)
+    this.onBounce?.(this.pos.clone(), this.vel.clone());
+
+    const dx = this.pos.x - playerPos.x;
+    const dz = this.pos.z - playerPos.z;
+    if (dx * dx + dz * dz <= BALL_MAX_DIST * BALL_MAX_DIST) return;
+    if (BALL_ENRAGE_ENABLED) {
+      this.setEnraged(true);
+      // Spring at the player on enrage — 45° launch, same redirect physics
+      // as the ground lunge. Rage stays ON (this isn't the discharging dash,
+      // it's the opening move) until a real lunge lands or timeout hits.
+      this.launchAt(playerPos, Math.SQRT1_2);
+      this.dashFlash = 0.15;
+      for (let i = 0; i < 8; i++) this.spawnDot();
+      this.onBounce?.(this.pos.clone(), this.vel.clone());
+    } else {
+      this.teleportNearPlayer(terrain, playerPos);
+    }
+  }
+
+  // Redirect velocity toward the player, preserving current speed (floored
+  // at half dash speed so a dead-slow roll still produces a real launch).
+  // upFrac is sin(launch angle): 0.34 ≈ flat lunge, √½ = 45° spring.
+  private launchAt(playerPos: THREE.Vector3, upFrac: number): void {
+    const pdx = playerPos.x - this.pos.x;
+    const pdz = playerPos.z - this.pos.z;
+    const pd = Math.sqrt(pdx * pdx + pdz * pdz) || 0.001;
+    const speed = Math.max(this.vel.length(), BALL_ENRAGE_DASH_SPEED * 0.5);
+    const h = Math.sqrt(1 - upFrac * upFrac);
+    this.vel.set((pdx / pd) * speed * h, 0, (pdz / pd) * speed * h);
+    // Launch angle, plus extra loft if the player is above
+    this.vel.y = Math.max(speed * upFrac, (playerPos.y - this.pos.y) * 0.8);
+  }
+
+  // Ballistic lunge: horizontal speed becomes the approach speed, then vy is
+  // solved so the arc lands on the player after t = dist/hspeed seconds.
+  // Angles up as needed — over bumps, up at elevated players — instead of a
+  // flat beeline that eats terrain or hits feet.
+  private dashAt(playerPos: THREE.Vector3): void {
+    const pdx = playerPos.x - this.pos.x;
+    const pdz = playerPos.z - this.pos.z;
+    const pd = Math.sqrt(pdx * pdx + pdz * pdz) || 0.001;
+    const hSpeed = Math.max(Math.hypot(this.vel.x, this.vel.z), BALL_ENRAGE_DASH_SPEED * 0.5);
+    const t = Math.max(0.15, pd / hSpeed); // flight time
+    const vy = (playerPos.y - this.pos.y + 0.5 * Math.abs(BALL_GRAVITY) * t * t) / t;
+    this.vel.set((pdx / pd) * hSpeed, vy, (pdz / pd) * hSpeed);
+  }
+
+  /** Director hook — enrage storms light up every ball at once. */
+  enrage(): void { this.setEnraged(true); }
+
+  private setEnraged(on: boolean): void {
+    if (this.enraged === on) return;
+    this.enraged = on;
+    this.enrageTimer = 0;
+    // Visual cue: emissive red burn while enraged
+    this.mat.emissive.setRGB(on ? 0.55 : 0, 0, 0);
+  }
+
+  // Ball drifted too far from the player — teleport it back into play range
+  private teleportNearPlayer(terrain: Terrain, playerPos: THREE.Vector3): void {
+    const ang = Math.random() * Math.PI * 2;
+    const dist = BALL_TELE_MIN + Math.random() * (BALL_TELE_MAX - BALL_TELE_MIN);
+    this.pos.x = playerPos.x + Math.cos(ang) * dist;
+    this.pos.z = playerPos.z + Math.sin(ang) * dist;
+    this.pos.y = terrain.getHeight(this.pos.x, this.pos.z) + BALL_TELE_HEIGHT;
+
+    // Position jumped — cut the ribbons so they don't streak across the teleport
+    for (const r of this.ribbons) r.clear();
+
+    // Preserve absolute velocity, redirect according to terrain normal at teleport point
+    const currentSpeed = this.vel.length();
+    const n = terrain.getNormal(this.pos.x, this.pos.z);
+    const dot = this.vel.dot(n);
+    this.vel.addScaledVector(n, -2.0 * dot * BOUNCE);
+    this.vel.normalize().multiplyScalar(currentSpeed);
+
+    // Reset energy tracking on teleport (intentional energy reset)
+    this.lastBounceEnergy = 0;
+    // Record teleport as a bounce keyframe too (position + velocity reset)
+    this.onBounce?.(this.pos.clone(), this.vel.clone());
+  }
+
+  private updateShadowBlob(terrain: Terrain): void {
+    if (!this.shadowBlob) return;
+    const groundY = terrain.getHeight(this.pos.x, this.pos.z);
+    this.shadowBlob.position.set(this.pos.x, groundY + 0.05, this.pos.z);
+    // Fade shadow when in air
+    const airHeight = this.pos.y - groundY;
+    const opacity = airHeight > 3.0
+      ? Math.max(0, 0.3 * (1 - (airHeight - 3.0) / 7.0))
+      : 0.3;
+    (this.shadowBlob.material as THREE.ShaderMaterial).uniforms.opacity.value = opacity;
+  }
+
+  private emitTrailDot(dt: number): void {
+    this.trailTimer += dt;
+    if (this.trailTimer < TRAIL_INTERVAL) return;
+    this.trailTimer = 0;
+    if (this.vel.lengthSq() <= 0.5) return;
+    this.spawnDot();
+  }
+
+  // Two-layer sprite dot: tinted halo + near-white core. These complement
+  // the clean ribbon — scattered spawn inside a small sphere around the
+  // ball, random size and lifetime, so they read as chaotic sparkle.
+  // Sprites come from a per-ball pool — no create/dispose churn.
+  private spawnDot(): void {
+    const spawn = _spawn.copy(this.pos).addScaledVector(_scatter.set(
+      Math.random() * 2 - 1, Math.random() * 2 - 1, Math.random() * 2 - 1,
+    ).normalize().multiplyScalar(Math.random() * this.radius * 0.6), 1);
+    const haloSz = this.radius * (1.8 + Math.random() * 2.0);
+    const coreSz = this.radius * (0.9 + Math.random() * 1.0);
+    const life = 0.35 + Math.random() * 0.85;
+    let d = this.dotPool.pop();
+    if (d) {
+      d.halo.position.copy(spawn);
+      d.core.position.copy(spawn);
+      this.scene.add(d.halo); this.scene.add(d.core);
+    } else {
+      const tex = getTrailTex();
+      const halo = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: tex, color: this.color, transparent: true,
+        blending: THREE.AdditiveBlending, depthWrite: false,
+      }));
+      const core = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: tex, color: this.color.clone().lerp(new THREE.Color(1, 1, 1), 0.65),
+        transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
+      }));
+      halo.position.copy(spawn); core.position.copy(spawn);
+      this.scene.add(halo); this.scene.add(core);
+      d = { halo, core, age: 0, life, haloSz, coreSz };
+    }
+    d.halo.scale.setScalar(haloSz);
+    d.core.scale.setScalar(coreSz);
+    if (this.trailDots.length >= TRAIL_COUNT) {
+      this.removeDot(this.trailDots.shift()!);
+    }
+    d.age = 0; d.life = life; d.haloSz = haloSz; d.coreSz = coreSz;
+    this.trailDots.push(d);
+  }
+
+  private dotPool: TrailDot[] = [];
+
+  private removeDot(d: TrailDot): void {
+    this.scene.remove(d.halo);
+    this.scene.remove(d.core);
+    this.dotPool.push(d); // pooled — materials reused, nothing disposed
+  }
+
+  private fadeTrailDots(dt: number): void {
     for (let i = this.trailDots.length - 1; i >= 0; i--) {
       const d = this.trailDots[i];
       d.age += dt;
-      if (d.age >= TRAIL_LIFE) {
-        this.scene.remove(d.mesh);
-        d.mesh.geometry.dispose();
-        d.mat.dispose();
+      if (d.age >= d.life) {
+        this.removeDot(d);
         this.trailDots.splice(i, 1);
       } else {
-        const t = 1.0 - d.age / TRAIL_LIFE;
-        d.mat.opacity = t * 0.6;
-        d.mesh.scale.setScalar(t);
+        const t = 1.0 - d.age / d.life;
+        d.halo.material.opacity = t * 0.28;
+        d.core.material.opacity = t * 0.7;
+        // Shrink-out with per-dot base sizes
+        d.core.scale.setScalar(d.coreSz * (0.4 + 0.6 * t));
+        d.halo.scale.setScalar(d.haloSz * (0.7 + 0.3 * t));
       }
     }
   }
@@ -337,17 +582,22 @@ export class Ball {
       this.shadowBlob = null;
     }
     for (const d of this.trailDots) {
-      this.scene.remove(d.mesh);
-      d.mesh.geometry.dispose();
-      d.mat.dispose();
+      this.removeDot(d);
     }
     this.trailDots = [];
+    for (const d of this.dotPool) {
+      d.halo.material.dispose();
+      d.core.material.dispose();
+    }
+    this.dotPool = [];
+    for (const r of this.ribbons) r.dispose(this.scene);
   }
 }
 
-export function pickVariant(): 0 | 1 | 2 {
+export function pickVariant(): 0 | 1 | 2 | 3 {
   const r = Math.random();
-  if (r < 0.1) return 2;
-  if (r < 0.3) return 1;
+  if (r < 0.08) return 3; // elites are rare — each one is an event
+  if (r < 0.18) return 2;
+  if (r < 0.38) return 1;
   return 0;
 }
