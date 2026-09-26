@@ -28,6 +28,11 @@ export interface DemoLifecycleDeps {
   crawlers: import('../entities/Crawler.js').Crawler[];
   turrets: import('../entities/Turretter.js').Turretter[];
   rollers: import('../entities/Roller.js').Roller[];
+  seekers: import('../entities/Seeker.js').Seeker[];
+  miners: import('../entities/Miner.js').Miner[];
+  mines: import('../entities/Mine.js').Mine[];
+  totems: import('../entities/Totem.js').Totem[];
+  rakks: import('../entities/Rakk.js').Rakk[];
   world: WorldState;
   overlay: HTMLElement;
   rendererCanvas: HTMLCanvasElement;
@@ -202,25 +207,18 @@ export function createDemoLifecycle(deps: DemoLifecycleDeps) {
       // Clear live projectiles
       for (const r of deps.world.projectiles) r.dispose();
       deps.world.projectiles.length = 0;
-      // Crawlers are live game objects too — dispose so they don't hang frozen
-      for (const c of deps.crawlers) {
-        c.dispose();
-        const ti = deps.targets.indexOf(c);
-        if (ti >= 0) deps.targets.splice(ti, 1);
+      // All live species are game objects too — dispose so they don't hang
+      // frozen in the scene during playback
+      for (const m of deps.mines) m.onDetonate = undefined; // teardown isn't a detonation
+      type DisposableTarget = import('../entities/balls.js').Targetable & { dispose(): void };
+      for (const list of [deps.crawlers, deps.turrets, deps.rollers, deps.seekers, deps.miners, deps.mines, deps.totems, deps.rakks] as DisposableTarget[][]) {
+        for (const e of list) {
+          e.dispose();
+          const ti = deps.targets.indexOf(e);
+          if (ti >= 0) deps.targets.splice(ti, 1);
+        }
+        list.length = 0;
       }
-      deps.crawlers.length = 0;
-      for (const t of deps.turrets) {
-        t.dispose();
-        const ti = deps.targets.indexOf(t);
-        if (ti >= 0) deps.targets.splice(ti, 1);
-      }
-      deps.turrets.length = 0;
-      for (const r of deps.rollers) {
-        r.dispose();
-        const ti = deps.targets.indexOf(r);
-        if (ti >= 0) deps.targets.splice(ti, 1);
-      }
-      deps.rollers.length = 0;
       clearTransientObjects();
     };
 
