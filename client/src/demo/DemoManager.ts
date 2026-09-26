@@ -81,17 +81,7 @@ export class DemoManager {
 
   private setupUI(): void {
     this.ui.setCallbacks({
-      onPlayPause: () => {
-        if (this.mode === 'playing') {
-          this.player.pause();
-          this.mode = 'paused';
-          this.ui.setPlaying(false);
-        } else if (this.mode === 'paused' || this.player.isLoaded) {
-          this.player.play();
-          this.mode = 'playing';
-          this.ui.setPlaying(true);
-        }
-      },
+      onPlayPause: () => this.togglePlayPause(),
       onSeek: (time: number) => {
         this.player.seek(time);
       },
@@ -186,7 +176,7 @@ export class DemoManager {
     this.onPlaybackStop?.();
   }
 
-  // Toggle play/pause (used by keyboard shortcut)
+  // Toggle play/pause — the UI button and the keyboard shortcut share this
   togglePlayPause(): void {
     if (this.mode === 'playing') {
       this.player.pause();
@@ -295,11 +285,7 @@ export class DemoManager {
     try {
       const buffer = await file.arrayBuffer();
       const data = DemoSerializer.deserialize(buffer);
-      this.player.load(data);
-      this.mode = 'idle';
-      this.ui.setPlaying(false);
-      this.ui.setTime(0, data.header.duration);
-      this.updateHitMarkers(data);
+      this.finishLoad(data);
       this.ui.setStatus(`Loaded: ${data.frames.length} frames, ${data.header.duration.toFixed(1)}s`);
     } catch (e) {
       logger.error('Failed to load demo:', e);
@@ -309,7 +295,12 @@ export class DemoManager {
 
   // Load demo from ArrayBuffer (for programmatic loading)
   loadDemoFromBuffer(buffer: ArrayBuffer): void {
-    const data = DemoSerializer.deserialize(buffer);
+    this.finishLoad(DemoSerializer.deserialize(buffer));
+  }
+
+  // Shared post-load: parked at 0, not playing — differs from playDemoData
+  // which starts playback immediately.
+  private finishLoad(data: DemoFile): void {
     this.player.load(data);
     this.mode = 'idle';
     this.ui.setPlaying(false);
