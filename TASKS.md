@@ -6,8 +6,9 @@
 - **Client:** Three.js rendering, custom atmospheric sky, terrain with height fog, demo recording/playback, cool shots panel
 - **Server:** `server_bun/` — Bun runtime, WebSockets, FastAPI-style HTTP routes for demo upload/download
 - **Networking:** Binary bit-packed messages (position, shot, jump, jetpack, ski, death), JSON join handshake
-- **Security:** Server validates damage/positions with lightweight checks (distance, rate, sanity); client-driven feel prioritized
+- **Security:** Server validates hit claims against tracked projectiles (ownership, ballistic reach, legal wake radius at claimed airtime) — see `shared/combat.ts` `validateHitClaim`
 - **Recent Changes:**
+  - Hit claims now server-validated against tracked projectile trajectories (shared/combat.ts); PROTOCOL_VERSION=2; weapon stats single-sourced in shared/weapons.ts; dead constants purged from config.ts
   - Additive blending on explosion particles (grenades/rockets no longer look dark)
   - Right-click download on cool shot demo tiles in ESC menu
   - Horizon/sky blending overhaul: sky sphere follows camera, 64x32 segments, height fog in terrain shader, hard fog cutoff at 200 units, unified fog color `0xbbd0e8` across scene.fog / scene.background / sky shader / terrain shader
@@ -42,7 +43,7 @@
   - Update changelog.txt after each task
   - Update architecture.txt for structural changes
   - Maintain TASKS.md for context
-- **Testing Requirements:** No unit tests currently (add as priority)
+- **Testing Requirements:** `bun test` in server_bun/ (88 tests incl. hit-claim validation); client has no test runner yet
 - **Security Considerations:**
   - Server must be authoritative for movement
   - Rate limit critical messages

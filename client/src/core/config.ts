@@ -10,54 +10,56 @@ export const EXTRA_SPEED = 14.0; // Extra random debris speed
 export const LIFE_BASE = 6.0; // Base debris lifetime
 export const LIFE_RAND = 2.0; // Random debris lifetime variation
 
-// Player physics constants
-export const PLAYER_RADIUS = 0.8; // Player collision radius (capsule radius)
-export const PLAYER_HEIGHT = 2.0; // Player total height (capsule total height including caps)
-// Derived capsule dimensions — single source of truth for gizmo AND collision
-export const CAPSULE_CYLINDER_HEIGHT = PLAYER_HEIGHT - 2 * PLAYER_RADIUS; // cylinder part only (0.4)
-export const CAPSULE_HALF_HEIGHT = CAPSULE_CYLINDER_HEIGHT / 2; // half cylinder height for Y clamping (0.2)
-export const CAPSULE_CENTER_Y = PLAYER_HEIGHT / 2; // capsule center above feet (1.0)
+// Player capsule geometry lives in shared/constants.ts — the server needs
+// the same numbers to validate hit claims against networked positions.
+export {
+  PLAYER_RADIUS, PLAYER_HEIGHT,
+  CAPSULE_CYLINDER_HEIGHT, CAPSULE_HALF_HEIGHT, CAPSULE_CENTER_Y,
+  EYE_OFFSET,
+} from '../../../shared/constants.js';
 
 // Player jetpack constants
 export const JET_FORCE_UP = 35.0; // Vertical jetpack force
 export const JET_FORCE_DIR = 10.0; // Lateral jetpack control
 export const MAX_ENERGY = 60.0; // Maximum jetpack energy
-export const JET_DRAIN = 12.0; // Energy drain per second
+export const JET_DRAIN = 15.0; // Energy drain per second
 export const JET_CHARGE = 8.0; // Energy recharge per second
 
 // Weapon constants
 export const FIRE_RATE = 0.8; // Rocket fire rate (seconds)
 export const DISC_RATE = 1.0; // Disc fire rate (seconds)
 export const GRENADE_RATE = 1.2; // Grenade fire rate (seconds)
+export const CHAINGUN_RATE = 0.09; // Chaingun fire rate (seconds)
 
-// Projectile constants
-export const ROCKET_SPEED = 120.0; // Rocket velocity
-export const ROCKET_RADIUS = 6.0; // Rocket explosion radius (visual + knockback)
-export const ROCKET_BODY_RADIUS = 0.18; // Rocket visual body radius (for direct hit detection)
-export const ROCKET_FORCE = 28.0; // Rocket knockback force
-export const ROCKET_AOE_DAMAGE = 15; // Splash damage at explosion center
-export const ROCKET_AOE_RADIUS = 6.0; // Splash damage radius (matches visual explosion)
-export const HIT_MIN = 0.0; // Minimum hitbox radius (core for direct hits)
-export const HIT_MAX = 8.0; // Maximum hitbox radius
-export const HIT_GROW = 2.0; // Seconds to reach full hitbox size
+// Projectile gameplay stats (speed, gravity, hitboxes, damage, fuse) live in
+// shared/weapons.ts — the single source of truth the server validates with.
+// The constants that remain here are visual/VFX scales only.
+export const ROCKET_RADIUS = 6.0; // Rocket explosion radius (visual)
 
 // Disc constants
-export const DISC_SPEED = 80.0; // Disc velocity
-export const DISC_RADIUS = 5.0; // Disc explosion radius
-export const DISC_FORCE = 25.0; // Disc pull force
-export const DISC_HITBOX = 0.5; // Disc core hitbox size (direct hit)
-export const DISC_HIT_MIN = 0.3; // Minimum wake hitbox radius
-export const DISC_HIT_MAX = 8.0; // Maximum wake hitbox radius
-export const DISC_HIT_GROW = 2.0; // Seconds to reach full wake hitbox size
+export const DISC_RADIUS = 5.0; // Disc explosion radius (visual)
 
 // Grenade constants
-export const GRENADE_SPEED = 40.0; // Grenade velocity
-export const GRENADE_RADIUS = 10.0; // Grenade explosion radius
-export const GRENADE_BODY_RADIUS = 0.25; // Grenade visual body radius
-export const GRENADE_FORCE = 45.0; // Grenade knockback force
-export const GRENADE_AOE_DAMAGE = 20; // Grenade splash damage
-export const GRENADE_AOE_RADIUS = 10.0; // Grenade splash radius
-export const GRENADE_MAX_LIFETIME = 2.0; // Grenade fuse before auto-explode (seconds)
+export const GRENADE_RADIUS = 10.0; // Grenade explosion radius (visual)
+
+// Mortar — T1/T2 heavy siege shell: slow lob, the biggest splash in the game
+export const MORTAR_RATE = 2.0; // Mortar fire rate — T2 is 0.5 rounds/sec
+
+// Grenade launcher — T2 style: bouncing timed shells, explode on player contact
+export const GL_RATE = 0.7; // Grenade launcher fire rate (seconds)
+export const GL_BOUNCE_RESTITUTION = 0.55; // Energy kept on the normal axis
+export const GL_BOUNCE_FRICTION = 0.7; // Tangential damping per bounce
+
+// Flak cannon — UT style: a spray of bouncing shards, direct-hit only
+export const FLAK_RATE = 1.1; // Flak fire rate (seconds)
+export const FLAK_SHARDS = 9; // Shards per shell
+export const FLAK_SPREAD = 0.10; // Cone half-angle (radians-ish slope factor)
+export const FLAK_MAX_BOUNCES = 3; // Shards die on the Nth terrain hit
+export const FLAK_BOUNCE_RESTITUTION = 0.6;
+export const FLAK_BOUNCE_FRICTION = 0.8;
+
+// Plasma gun — T1/T2 fat energy bolt, sustained midrange fire
+export const PLASMA_RATE = 0.28; // ~3.5 rps
 
 // Game constants
 export const BALL_SPAWN_INTERVAL = 2.5; // Seconds between ball spawns
@@ -67,7 +69,64 @@ export const BALL_MAX_DIST = 300.0; // Maximum distance before teleport
 export const BALL_TELE_MIN = 60.0; // Minimum teleport distance
 export const BALL_TELE_MAX = 120.0; // Maximum teleport distance
 export const BALL_TELE_HEIGHT = 25.0; // Teleport height
-export const BALL_MAX = 20; // Maximum number of balls in play
+export const BALL_MAX = 10; // Maximum number of balls in play
+
+// Ball enrage mode: instead of teleporting when out of range, far balls get
+// angry and are pulled toward the player while still bouncing normally
+export const BALL_ENRAGE_ENABLED = true; // Toggle: enrage instead of teleport
+export const BALL_ENRAGE_FORCE = 12.0; // Linear attraction accel toward player (m/s^2)
+// Balls stay enraged until they get a lunge off (or time out) — no distance
+// cooldown, otherwise they'd always calm before reaching dash range
+export const BALL_ENRAGE_TIMEOUT = 20.0; // Seconds enraged before teleport fallback
+export const BALL_ENRAGE_DASH_DIST = 100.0; // Ground hit within this XZ range becomes a lunge
+export const BALL_ENRAGE_DASH_SPEED = 45.0; // Lunge speed toward the player
+export const BALL_ENRAGE_TELEGRAPH_H = 8.0; // Glow ramps to white under this height in dash range
+
+// Crawlers — terrain-hugging targets that hop, chase, and pounce
+export const CRAWLER_MAX = 6; // Max crawlers alive
+export const CRAWLER_SPAWN_INTERVAL = 4.0; // Seconds between spawn attempts
+export const CRAWLER_SPAWN_MIN = 40.0; // Spawn ring: min distance from player
+export const CRAWLER_SPAWN_MAX = 90.0;
+export const CRAWLER_RADIUS = 0.9;
+export const CRAWLER_HEALTH = 2;
+export const CRAWLER_AGGRO_DIST = 70.0; // Chases inside this range
+export const CRAWLER_POUNCE_DIST = 25.0; // Ground inside this range → windup → pounce
+export const CRAWLER_WINDUP = 0.35; // Crouch telegraph before pounce (s)
+export const CRAWLER_HOP_SPEED = 10.0; // Chase hop horizontal speed
+export const CRAWLER_HOP_UP = 5.0; // Hop vertical kick
+export const CRAWLER_POUNCE_SPEED = 30.0; // Pounce horizontal speed
+export const CRAWLER_POUNCE_DAMAGE = 25; // Server-authoritative self-damage on pounce hit
+export const CRAWLER_STUN = 0.5; // Blast knockback suppresses hopping this long
+
+// Turretter — plants as a turret, lobs itself at the player on a perfect
+// ballistic arc when they get far. Inert in flight: the hop IS the
+// shoot-it window.
+export const TURRET_MAX = 3;
+export const TURRET_SPAWN_INTERVAL = 12.0; // spawn attempts are slow — they're persistent threats
+export const TURRET_SPAWN_MIN = 60.0;
+export const TURRET_SPAWN_MAX = 120.0;
+export const TURRET_RADIUS = 1.2;
+export const TURRET_HEALTH = 6;           // hit-count; planted halves incoming damage
+export const TURRET_RANGE = 65.0;         // fires bolts inside this
+export const TURRET_RELAUNCH = 75.0;      // beyond this → ballistic hop at you
+export const TURRET_MIN_DWELL = 3.0;      // must sit planted this long between hops (no ping-pong)
+export const TURRET_HOP_T = 1.6;          // solved flight time of the launch arc
+export const TURRET_REFIRE = 1.6;         // s between bolts
+export const TURRET_BOLT_SPEED_T = 0.9;   // bolt flight time — the arc solver's knob
+export const TURRET_BOLT_DAMAGE = 12;
+
+// Roller — a big ball that just rolls at you. No hops, no brains:
+// terrain-following homing boulder. Hitbox is the threat.
+export const ROLLER_MAX = 4;
+export const ROLLER_SPAWN_INTERVAL = 8.0;
+export const ROLLER_SPAWN_MIN = 50.0;
+export const ROLLER_SPAWN_MAX = 110.0;
+export const ROLLER_RADIUS = 1.6;        // decently big
+export const ROLLER_HEALTH = 4;
+export const ROLLER_ACCEL = 14.0;        // m/s² steering toward the player
+export const ROLLER_TOPSPEED = 26.0;     // downhill it can exceed via gravity
+export const ROLLER_HIT_DAMAGE = 18;
+export const ROLLER_HIT_FORCE = 22;      // shove on contact
 
 // Renderer constants
 export const PIXEL_SCALE = 4; // Each pixel is 4x4 screen pixels (Doom-style)
@@ -83,12 +142,12 @@ export const FOG_COLOR = 0xbbd0e8; // Fog and clear color (matches sky haze hori
 export const FOG_START = 120.0; // Linear fog start distance
 export const FOG_END = 600.0; // Linear fog end distance
 
-// Atmospheric sky constants
+// Atmospheric sky constants (physical Rayleigh/Mie scattering — glsl-atmosphere)
 export const SKY_TURBIDITY = 10.0;
-export const SKY_RAYLEIGH = 1.5; // Reduced to reduce bright spot
-export const SKY_MIE_COEFFICIENT = 0.0; // Disabled to remove white glare
-export const SKY_MIE_DIRECTIONAL_G = 0.7;
-export const SKY_SUN_INTENSITY = 1.0; // Minimal to remove white circle
+export const SKY_RAYLEIGH = 1.0; // Multiplier on Earth Rayleigh coefficients
+export const SKY_MIE_COEFFICIENT = 21e-6; // Earth Mie scattering coefficient
+export const SKY_MIE_DIRECTIONAL_G = 0.758; // Mie forward-scatter directionality
+export const SKY_SUN_INTENSITY = 22.0; // Sun radiance for scattering (not a visible disc)
 
 // Volumetric cloud constants
 export const CLOUD_COUNT = 30; // Number of cloud clusters
@@ -134,6 +193,7 @@ export const MAX_INPUT_HISTORY = 100; // Maximum input history entries for repla
 
 // Renderer constants
 export const TONE_MAPPING_EXPOSURE = 0.4; // Tone mapping exposure (lower = darker)
+export const BLOOM_LAYER = 7; // objects on this layer feed the bloom buffer (trails, explosions)
 
 // UI constants
 export const FRAG_MESSAGE_TOP_OFFSET = 60; // Pixels from center for frag message
@@ -164,13 +224,8 @@ export const MAX_HEALTH = 100; // Maximum player health
 export const PLAYER_ID_LENGTH = 9; // Length of generated player ID
 export const BUTTON_TIMEOUT = 10; // Button click timeout in milliseconds
 
-// Remote player interpolation constants
-export const REMOTE_PLAYER_BASE_LERP_FACTOR = 10.0; // Base interpolation factor
-export const REMOTE_PLAYER_MAX_LERP_FACTOR = 20.0; // Maximum interpolation factor
-export const REMOTE_PLAYER_DISTANCE_MULTIPLIER = 0.5; // Distance multiplier for adaptive interpolation
-export const REMOTE_PLAYER_ROTATION_MULTIPLIER = 1.5; // Rotation interpolation multiplier
-export const REMOTE_PLAYER_PING_MULTIPLIER = 0.02; // Ping multiplier for interpolation adjustment
-export const REMOTE_PLAYER_MAX_PING_BONUS = 10.0; // Maximum bonus from high ping
+// Remote player rendering: snapshot interpolation at a fixed delay
+// (INTERP_DELAY lives on RemotePlayer — covers ~2 missed 20Hz packets)
 
 // Effect constants
 export const IMPLOSION_LIFE = 0.35; // Implosion effect lifetime
@@ -186,11 +241,8 @@ export const TERRAIN_HEIGHTMAP_DIVISOR = 255.0; // Heightmap value divisor
 
 // Networking backend configuration
 // Options: 'tribes2' (Tribes2-style with bit-packing for LAN-like gameplay), 'fastapi' (Simple JSON-based WebSocket)
-export const NETWORK_BACKEND = 'fastapi' as const;
+// Networking: single WebSocket transport — see networking/ + shared/wire.ts
 
 // Tribes2 networking constants (per multiplayer specification)
-export const TRIBES2_MAX_PACKET_SIZE = 1400; // MTU-safe packet size
-export const TRIBES2_PACKETS_PER_SECOND = 30; // Packets per second (tick rate)
-export const TRIBES2_MAX_BYTES_PER_SECOND = 42000; // Bandwidth limit per player
-export const TRIBES2_RECONNECT_INTERVAL = 3000; // WebSocket reconnection interval (ms)
+export const WS_RECONNECT_INTERVAL = 3000; // WebSocket reconnection interval (ms)
 
