@@ -532,7 +532,13 @@ export class HUD {
     this.playerIndicators.clear();
   }
 
+  private lastPlayerListKey = '';
+
   updatePlayerList(playerIds: string[], localPlayerId: string): void {
+    // Roster changes are rare; rebuilding DOM every frame (60Hz) was pure churn
+    const key = playerIds.join('');
+    if (key === this.lastPlayerListKey) return;
+    this.lastPlayerListKey = key;
     this.playerList.innerHTML = '';
     playerIds.forEach(playerId => {
       const div = document.createElement('div');
