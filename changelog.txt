@@ -1,5 +1,21 @@
 # Changelog
 
+## [2026-09-26] Tech Debt Pass 2 — Wire typing, handshake hardening, frame-loop perf
+
+### Typing sweep
+- `WebSocketConnection`: `send()` → `string | Uint8Array`, `onMessage` → `ServerMessage`, queue typed
+- `stateDebug`: `any[]` → `SnapshotPlayer[]`; fixed a real bug — client projectile snapshots emitted `{}` because `Projectile` uses `pos`/`vel`, not `position`/`velocity` (entries now mapped properly)
+- `CoolShotsPanel`/`hud.updatePlayerIndicator`/`effects.setTerrain`/`combat.sendAOE` typed; `DemoManager` gets `ServerDemoRecord` for the `/demos` response
+- `join` added to `ClientMessage` union — the handshake goes through the typed `send()` now
+
+### Server hardening
+- `handleHandshake` requires `type === 'join'` — previously any first message with a valid playerId joined the game
+
+### Frame-loop perf (remotes.ts / hud.ts)
+- `hud.updatePlayerList` dirty-checks the roster — was rebuilding DOM nodes every frame
+- Remote-position `logger.info` reduced to roster changes only — was logging every frame while anyone moved (positions still inspectable via `?debug` stateDebug)
+- `lastSentPos` mutated in place instead of allocated per frame
+
 ## [2026-09-26] Tech Debt Implementation — Hit-Claim Validation
 
 ### Server-authoritative hit validation (CRITICAL fix)
