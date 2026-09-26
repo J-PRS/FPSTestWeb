@@ -151,6 +151,10 @@ export class GameServer {
     }
 
     const handshake = raw as Record<string, unknown>;
+    if (handshake.type !== 'join') {
+      ws.close(1008, 'Expected join handshake');
+      return;
+    }
     const playerIdResult = validatePlayerId(handshake.playerId);
     if (!playerIdResult.success) {
       logger.warn('Invalid playerId rejected', { error: playerIdResult.error });

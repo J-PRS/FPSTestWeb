@@ -25,6 +25,7 @@ export interface Rotation {
 }
 
 export type ClientMessage =
+  | { type: 'join'; playerId: string; token?: string }
   | { type: 'position'; position: Vec3; rotation: Rotation; velocity: Vec3; seq?: number; ping?: number }
   | { type: 'ping'; timestamp: number }
   | { type: 'shot'; targetId: string | null; weaponType?: number; position?: Vec3; velocity?: Vec3; timestamp?: number; projectileId?: string | null; airtime?: number }
