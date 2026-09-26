@@ -20,7 +20,6 @@ export interface RemotesDeps {
   effects: () => EffectsManager;
   logger: ChildLogger;
   remotePlayers: Map<string, RemotePlayer>;
-  playersBeingCreated: Set<string>;
   killCounts: Map<string, number>;
 }
 
@@ -87,14 +86,12 @@ export function createRemotes(deps: RemotesDeps) {
     if (playerId === nm.getLocalPlayerId()) return;
 
     let remotePlayer = deps.remotePlayers.get(playerId);
-    if (!remotePlayer && !deps.playersBeingCreated.has(playerId) && !playerState.isDead) {
-      deps.playersBeingCreated.add(playerId);
+    if (!remotePlayer && !playerState.isDead) {
       remotePlayer = new RemotePlayer(deps.scene(), playerId, playerState.position, terrain);
       deps.remotePlayers.set(playerId, remotePlayer);
-      deps.playersBeingCreated.delete(playerId);
       deps.logger.debug(`CREATED remote player`, { instanceId: remotePlayer.instanceId, playerId, total: deps.remotePlayers.size });
     }
-    if (!remotePlayer) return; // Skip if being created by onPlayerUpdate or failed
+    if (!remotePlayer) return;
 
     // Hide stale remote players — backgrounded tabs keep the socket open but
     // stop sending updates, leaving ghosts standing around. 60s grace covers

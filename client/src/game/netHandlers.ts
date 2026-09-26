@@ -34,7 +34,6 @@ export interface NetDeps {
   explosionTracker: ExplosionTracker;
   logger: ChildLogger;
   remotePlayers: Map<string, RemotePlayer>;
-  playersBeingCreated: Set<string>;
   killCounts: Map<string, number>;
   playerDebrisList: PlayerDebris[];
   projectiles: Projectile[];
@@ -111,7 +110,6 @@ export function wireNetworkHandlers(deps: NetDeps): void {
     deps.killCounts.set(shooterId, (deps.killCounts.get(shooterId) ?? 0) + 1);
     // Check if local player was killed
     if (targetId === nm().getLocalPlayerId()) {
-      logger.info(`Local player killed by ${shooterId}`);
       logger.info(`Local player killed by ${shooterId}`);
       const player = deps.player();
       player.isDead = true;
@@ -190,20 +188,13 @@ export function wireNetworkHandlers(deps: NetDeps): void {
       return;
     }
 
-    // Check if we're already creating this player (prevent race condition duplicates)
-    if (deps.playersBeingCreated.has(playerId)) {
-      logger.debug(`onPlayerUpdate called for player ${playerId} already being created, skipping`);
-      return;
-    }
     // Don't create RemotePlayer for dead players — wait for respawn event
     const playerData = nm().getPlayers().get(playerId);
     if (playerData?.isDead) return;
-    deps.playersBeingCreated.add(playerId);
     logger.debug(`onPlayerUpdate called for unknown player: ${playerId}, creating...`);
     remotePlayer = new RemotePlayer(deps.scene(), playerId, position, deps.terrain());
     deps.remotePlayers.set(playerId, remotePlayer);
     logger.debug(`CREATED remote player (onPlayerUpdate)`, { instanceId: remotePlayer.instanceId, playerId, total: deps.remotePlayers.size });
-    deps.playersBeingCreated.delete(playerId);
   };
 
   // Server-authoritative projectile handlers
@@ -266,7 +257,6 @@ export function wireNetworkHandlers(deps: NetDeps): void {
   networkManager.onPlayerRespawn = (playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }) => {
     // Check if local player respawned
     if (playerId === nm().getLocalPlayerId()) {
-      logger.info(`Local player respawned`, position);
       logger.info(`Local player respawned at ${JSON.stringify(position)}`);
       const player = deps.player();
       player.isDead = false;
