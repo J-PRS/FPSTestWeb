@@ -1,5 +1,11 @@
 # Changelog
 
+## [2026-09-26] Tech Debt Pass 5 — server split
+
+### MessageHandler split (591→~240 lines)
+- All damage-dealing logic moved to `server_bun/src/CombatHandler.ts`: shot hit-claims, `resolveClaimedProjectile`, AOE blasts + `processAOE`, environmental damage, projectile tracking/destroy ownership, and the respawn timer map (`scheduleRespawn`, disconnect cancel, player-removed projectile purge).
+- `MessageHandler` keeps handshake, rate limiting, dispatch, and the movement/presence handlers (position, jump, jetpack, inputMove, ping, snapshotRequest). A `private combat: CombatHandler` field takes the shot/aoeShot/projectileDestroy/environmentDamage cases; `onPlayerDisconnected`/`onPlayerRemoved` delegate their per-player bookkeeping. Constructor signature unchanged — GameServer wiring untouched.
+
 ## [2026-09-26] Tech Debt Pass 4 — audit-2 biggest offenders
 
 ### Critical: aoeShot cheat surface closed
