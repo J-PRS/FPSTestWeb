@@ -223,18 +223,15 @@ export class NetworkManager {
       // Defense-in-depth: server already excludes self from tickUpdate,
       // but skip local player here too in case of any server-side regression
       if (u.playerId === this.localPlayerId) continue;
-      const existing = this.players.get(u.playerId);
-      this.players.set(u.playerId, {
-        ...existing,
-        id: u.playerId,
-        internalId: u.internalId || existing?.internalId || '',
+      this.upsertRemotePlayer(u.playerId, {
+        internalId: u.internalId || undefined,
         position: u.position,
-        rotation: u.rotation || { yaw: 0, pitch: 0 },
-        velocity: u.velocity || { x: 0, y: 0, z: 0 },
-        isDead: u.isDead || false,
-        health: u.health !== undefined ? u.health : (existing?.health ?? 100),
+        rotation: u.rotation,
+        velocity: u.velocity,
+        isDead: u.isDead,
+        health: u.health,
         ping: u.ping,
-        ski: u.ski !== undefined ? u.ski : existing?.ski,
+        ski: u.ski,
       });
       this.onPlayerUpdate?.(u.playerId, u.position, u.rotation, now, u.velocity);
     }
@@ -247,12 +244,14 @@ export class NetworkManager {
     this.players.set(playerId, {
       ...existing,
       id: playerId,
-      internalId: existing?.internalId || '',
+      internalId: patch.internalId || existing?.internalId || '',
       position: patch.position ?? existing?.position ?? { x: 0, y: 500, z: 0 },
       rotation: patch.rotation ?? existing?.rotation ?? { yaw: 0, pitch: 0 },
       velocity: patch.velocity ?? existing?.velocity ?? { x: 0, y: 0, z: 0 },
       isDead: patch.isDead ?? existing?.isDead ?? false,
       health: patch.health ?? existing?.health ?? 100,
+      ping: patch.ping ?? existing?.ping,
+      ski: patch.ski ?? existing?.ski,
     });
   }
 
