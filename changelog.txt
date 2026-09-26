@@ -1,5 +1,15 @@
 # Changelog
 
+## [2026-09-26] Tech Debt Pass 7 — demo split, smaller dedups
+
+### DemoManager split (657→406)
+- Cool-shots subsystem → `demo/coolShots.ts` (`CoolShotManager`): pending-clip queue + chain merging, extraction, top-10/recent-10 retention, and all server I/O (upload/list/download/play-from-server). DemoManager keeps mode, recorder/player/UI orchestration; shared `playDemoData()` is the single playback tail. `CoolShotEntry` re-exported so existing imports still work.
+
+### Smaller cleanups
+- `NetworkManager.handleTickUpdate` reuses `upsertRemotePlayer` (was a third inline copy of the roster merge); upsert now patches internalId/ping/ski, and tick updates no longer reset `isDead`/`health` when a frame omits them.
+- `explosion.ts`: duplicated spark pool-pop/build/reset block → `allocSpark()`; callers only set color/vel/life.
+- Note: the explosion.ts commit also swept in JP's uncommitted work on that file (sprite particles, tint, TerrainRing) — it was in the working tree when I edited; flagged, not separable after the fact.
+
 ## [2026-09-26] Tech Debt Pass 6 — entity dedup, hit-point accuracy
 
 ### entities.ts species dedup (533→~440 lines)
