@@ -1,5 +1,22 @@
 # Changelog
 
+## [2026-09-26] Tech Debt Pass 4 — audit-2 biggest offenders
+
+### Critical: aoeShot cheat surface closed
+- `aoeShot` now binds to a tracked server projectile: `projectileId` + `airtime` in the protocol; `resolveClaimedProjectile` (explicit id, fallback to shooter's latest spawn of weaponType for the projectileCreated race); `validateAoeClaim` in shared/combat.ts reuses the airtime + ballistic-reach core factored out of `validateHitClaim`. Projectiles are consumed on a successful claim.
+- Slam has no projectile — blast bound to the player's own position (`aoeRadius + 20` reach cap) instead.
+- New `hitclaim.test.ts` coverage: honest end-of-flight accepted, beyond-reach and future-airtime rejected.
+
+### client architecture
+- **ProjectileRegistry** (`game/projectileRegistry.ts`): the pending/byId/pendingSince projectile-id bookkeeping was three module-level mutable exports shared between combat.ts and netHandlers.ts — now an injected instance created in main.ts.
+- **WorldState** (`game/worldState.ts`): all nine shared mutable collections (remotePlayers, killCounts, projectiles, registry, debris, player debris, explosions, scorches, implosions) bundled into one object; the five dep factories take `deps.world` instead of per-list fields.
+- **Projectile.ts split** (786→581): particle trail + wake-marker subsystem (emission, pooling, gradient fade) → `projectiles/trailParticles.ts` behind a `TrailHost` interface.
+- **Player.ts split** (741→619): camera/shadow/feet-ring/observer-cam/model-anim → `entities/PlayerVisuals.ts`; Player keeps input, skills, physics, network emission.
+- Frame perf: remote-player position Map in updateProjectiles is reused per frame instead of allocated.
+
+### Verified non-issues
+- `innerHTML` sinks all interpolate static strings or numbers only (scoreboard already uses textContent); dead network adapters were already `.old`/`.deprecated` — both audit items stale.
+
 ## [2026-09-26] Tech Debt Pass 3 — main.ts slimming, dead ceremony
 
 ### main.ts extraction
