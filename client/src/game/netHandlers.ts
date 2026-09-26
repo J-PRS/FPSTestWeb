@@ -228,11 +228,13 @@ export function wireNetworkHandlers(deps: NetDeps): void {
   };
 
   networkManager.onProjectileDestroyed = (projectileId: string) => {
-    // Kill remote projectile (explode so trail particles fade out naturally)
+    // Kill remote projectile (explode so trail particles fade out naturally).
+    // Delete the map entry now — the visual fade lives on world.projectiles,
+    // not this map; keeping dead entries leaks one record per shot ever fired.
     const remoteProjectile = remoteProjectiles.get(projectileId);
     if (remoteProjectile) {
       remoteProjectile.explode();
-      // Don't delete from remoteProjectiles - let it fade out naturally
+      remoteProjectiles.delete(projectileId);
     }
     // Kill local projectile if server says it's gone - explode to let trails fade
     const localProjectile = deps.world.projectileRegistry.byId.get(projectileId);
