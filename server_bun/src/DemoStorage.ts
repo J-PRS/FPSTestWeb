@@ -18,6 +18,10 @@ export interface DemoMeta {
 const INDEX_FILE = 'index.json';
 const MAX_DEMOS = 100;
 
+function errMsg(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
+}
+
 export class DemoStorage {
   private demosDir: string;
   private index: DemoMeta[] = [];
@@ -49,8 +53,8 @@ export class DemoStorage {
             fileSize: data.byteLength,
           });
           added++;
-        } catch (e: any) {
-          logger.warn(`Failed to parse orphaned demo ${filename}`, { error: e?.message ?? String(e) });
+        } catch (e: unknown) {
+          logger.warn(`Failed to parse orphaned demo ${filename}`, { error: errMsg(e) });
         }
       }
       if (added > 0) {
@@ -58,8 +62,8 @@ export class DemoStorage {
         await this.saveIndex();
         logger.info(`Reconciled ${added} orphaned demo(s) into index`);
       }
-    } catch (e: any) {
-      logger.warn('Failed to reconcile demo directory', { error: e?.message ?? String(e) });
+    } catch (e: unknown) {
+      logger.warn('Failed to reconcile demo directory', { error: errMsg(e) });
     }
   }
 
@@ -77,8 +81,8 @@ export class DemoStorage {
         this.index = JSON.parse(data);
         logger.info(`Demo index loaded: ${this.index.length} demos`);
       }
-    } catch (e: any) {
-      logger.warn('Failed to load demo index', { error: e?.message ?? String(e) });
+    } catch (e: unknown) {
+      logger.warn('Failed to load demo index', { error: errMsg(e) });
       this.index = [];
     }
   }
@@ -87,8 +91,8 @@ export class DemoStorage {
     try {
       const indexPath = join(this.demosDir, INDEX_FILE);
       await writeFile(indexPath, JSON.stringify(this.index, null, 2));
-    } catch (e: any) {
-      logger.warn('Failed to save demo index', { error: e?.message ?? String(e) });
+    } catch (e: unknown) {
+      logger.warn('Failed to save demo index', { error: errMsg(e) });
     }
   }
 
