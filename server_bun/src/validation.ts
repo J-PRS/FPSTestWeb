@@ -64,6 +64,12 @@ export function validateMessage(raw: unknown): ValidationResult<ClientMessage> {
       if (!rot.success) return { success: false, error: `rotation: ${rot.error}` };
       const vel = validateVec3(obj.velocity);
       if (!vel.success) return { success: false, error: `velocity: ${vel.error}` };
+      // Velocity feeds other clients' dead reckoning — a poisoned magnitude
+      // (finite but absurd) would send every observer's extrapolation flying.
+      const v = vel.data;
+      if (v.x * v.x + v.y * v.y + v.z * v.z > 1000 * 1000) {
+        return { success: false, error: 'velocity magnitude out of range' };
+      }
       const seq = isFiniteNumber(obj.seq) ? obj.seq : undefined;
       const ping = isFiniteNumber(obj.ping) ? obj.ping : undefined;
       return { success: true, data: { type: 'position', position: pos.data, rotation: rot.data, velocity: vel.data, seq, ping } };
