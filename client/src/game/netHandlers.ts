@@ -263,6 +263,7 @@ export function wireNetworkHandlers(deps: NetDeps): void {
       deps.setLastSentPos({ x: position.x, y: position.y, z: position.z });
       player.yaw = rotation.yaw;
       player.pitch = rotation.pitch;
+      player.syncMovement(); // reseat controller or its snapshot overwrites the respawn
       deps.hud().show();
       deps.hud().setDeathOverlay(false);
       return;
@@ -335,6 +336,7 @@ export function wireNetworkHandlers(deps: NetDeps): void {
     // Restore health and death state
     player.health = localPlayerState.health;
     player.isDead = localPlayerState.isDead;
+    player.syncMovement(); // reseat controller — restored pos/vel otherwise revert
 
     // If player was dead, show respawn UI
     deps.hud().setDeathOverlay(player.isDead);

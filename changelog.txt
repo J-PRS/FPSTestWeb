@@ -1,5 +1,11 @@
 # Changelog
 
+## [2026-09-26] Tech Debt Pass 15 — state-restore fix
+
+- `netHandlers.ts`: `onPlayerRespawn` and `onGameState` wrote `player.pos`/`vel` without `syncMovement()` — the movement controller's stale snapshot could overwrite the respawned/restored position on the next update (same bug class the correction path already guards against).
+- `DemoManager.ts`: `togglePlayPause` duplicated the UI `onPlayPause` block; `loadDemo`/`loadDemoFromBuffer` shared a post-load tail → `finishLoad`.
+- Reviewed `coolShots.ts`, `DemoManager.ts`, `demoLifecycle.ts` — clean.
+
 ## [2026-09-26] Tech Debt Pass 14 — damage funnel
 
 - `CombatHandler.ts`: hit-or-kill broadcast + respawn was copy-pasted across shot/AOE/env paths → `applyHit` funnel (~55→18 lines of outcome logic).
