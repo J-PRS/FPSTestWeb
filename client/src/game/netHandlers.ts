@@ -13,9 +13,7 @@ import type { NetworkManager } from '../networking/NetworkManager.js';
 import type { GameStatePlayer, LocalPlayerState } from '../../../shared/protocol.js';
 import { Projectile } from '../projectiles/Projectile.js';
 import { ROCKET_CONFIG, getProjectileConfig } from '../projectiles/index.js';
-import {
-  pendingLocalProjectiles, localProjectileById, pendingProjectileTimestamps,
-} from './combat.js';
+import type { ProjectileRegistry } from './projectileRegistry.js';
 import type { FragMessages } from '../ui/FragMessages.js';
 import type { HUD } from '../ui/hud.js';
 import type { HealthBarSystem } from '../ui/HealthBarSystem.js';
@@ -34,6 +32,7 @@ export interface NetDeps {
   explosionTracker: ExplosionTracker;
   logger: ChildLogger;
   remotePlayers: Map<string, RemotePlayer>;
+  projectileRegistry: ProjectileRegistry;
   killCounts: Map<string, number>;
   playerDebrisList: PlayerDebris[];
   projectiles: Projectile[];
@@ -203,11 +202,11 @@ export function wireNetworkHandlers(deps: NetDeps): void {
   networkManager.onProjectileCreated = (projectileId: string, ownerId: string, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }, weaponType?: number) => {
     // For own projectiles: link the pending local projectile to this server ID
     if (ownerId === nm().getLocalPlayerId()) {
-      const localProjectile = pendingLocalProjectiles.shift();
+      const localProjectile = deps.projectileRegistry.pending.shift();
       if (localProjectile) {
         localProjectile.serverProjectileId = projectileId;
-        localProjectileById.set(projectileId, localProjectile);
-        pendingProjectileTimestamps.delete(localProjectile); // Clean up timestamp
+        deps.projectileRegistry.byId.set(projectileId, localProjectile);
+        deps.projectileRegistry.pendingSince.delete(localProjectile); // Clean up timestamp
       }
       return;
     }
@@ -240,15 +239,15 @@ export function wireNetworkHandlers(deps: NetDeps): void {
       // Don't delete from remoteProjectiles - let it fade out naturally
     }
     // Kill local projectile if server says it's gone - explode to let trails fade
-    const localProjectile = localProjectileById.get(projectileId);
+    const localProjectile = deps.projectileRegistry.byId.get(projectileId);
     if (localProjectile) {
       localProjectile.explode();
-      localProjectileById.delete(projectileId);
+      deps.projectileRegistry.byId.delete(projectileId);
       // Also remove from pending queue if it's still there (shouldn't happen but defensive)
-      const pendingIndex = pendingLocalProjectiles.indexOf(localProjectile);
+      const pendingIndex = deps.projectileRegistry.pending.indexOf(localProjectile);
       if (pendingIndex !== -1) {
-        pendingLocalProjectiles.splice(pendingIndex, 1);
-        pendingProjectileTimestamps.delete(localProjectile);
+        deps.projectileRegistry.pending.splice(pendingIndex, 1);
+        deps.projectileRegistry.pendingSince.delete(localProjectile);
       }
     }
   };
