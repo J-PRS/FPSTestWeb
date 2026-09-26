@@ -1,5 +1,13 @@
 # Changelog
 
+## [2026-09-26] Tech Debt Pass 13 — server teardown + tests
+
+- `GameServer.ts`: identical 5-store teardown + `playerLeft` broadcast was duplicated between grace expiry and the idle reaper → shared `removePlayerCompletely`.
+- `WebSocketConnection.ts`: `maxReconnectAttempts || 5` treated explicit `0` as 5 → `??`.
+- `HealthBarSystem.ts`: `spawn`/`predictDamage` shared knownHealth + get-or-create → `upsertBar`.
+- `validation.ts`, `effects.ts`, `remotes.ts`, `DemoPlayer.ts` reviewed — no changes needed.
+- New `wire.test.ts`: round-trip coverage for position + tick frames (quantization, yaw wrap, pitch clamp, truncation rejection). 20/20 vitest.
+
 ## [2026-09-26] Tech Debt Pass 12 — wire quantizers
 
 - `shared/wire.ts`: yaw/pitch/velocity quantization was copy-pasted between `encodePosition` and `encodeTickPlayer` (+ both decoders) — drift between them would decode silently wrong. Extracted `packVel`/`unpackVel`/`packRot`/`unpackRot`.
