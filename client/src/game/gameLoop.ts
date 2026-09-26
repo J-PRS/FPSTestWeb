@@ -4,15 +4,11 @@ import Stats from 'stats.js';
 import { MAX_DELTA_TIME } from '../core/config.js';
 import type { DemoManager } from '../demo/index.js';
 import type { Player } from '../entities/Player.js';
-import type { RemotePlayer } from '../entities/RemotePlayer.js';
 import type { ViewModel } from '../entities/ViewModel.js';
-import type { BallDebris, PlayerDebris } from '../effects/debris.js';
 import type { DamageNumberManager } from '../effects/damageNumbers.js';
 import type { EffectsManager } from '../effects/effects.js';
-import type { Explosion } from '../effects/explosion.js';
-import type { Implosion } from '../effects/implosion.js';
-import type { ScorchDecal } from '../effects/scorch.js';
 import type { SpeedLines } from '../effects/speedLines.js';
+import { screenShake } from '../effects/screenShake.js';
 import type { NetworkManager } from '../networking/NetworkManager.js';
 import type { HUD } from '../ui/hud.js';
 import type { HealthBarSystem } from '../ui/HealthBarSystem.js';
@@ -23,6 +19,7 @@ import type { createEntities } from './entities.js';
 import type { createCombat } from './combat.js';
 import type { createDemoLifecycle } from './demoLifecycle.js';
 import type { createRemotes } from './remotes.js';
+import type { WorldState } from './worldState.js';
 
 const _zeroVel = new THREE.Vector3(); // shared zero for demo playback
 
@@ -46,12 +43,7 @@ export interface GameLoopDeps {
   combat: () => ReturnType<typeof createCombat>;
   remotes: () => ReturnType<typeof createRemotes>;
   demoLifecycle: () => ReturnType<typeof createDemoLifecycle>;
-  remotePlayers: Map<string, RemotePlayer>;
-  debrisList: BallDebris[];
-  playerDebrisList: PlayerDebris[];
-  explosions: Explosion[];
-  scorches: ScorchDecal[];
-  implosions: Implosion[];
+  world: WorldState;
   // ?dummy debug hook — null when the param isn't set
   getDummyTick: () => ((dt: number) => void) | null;
 }
@@ -140,16 +132,16 @@ export function createGameLoop(deps: GameLoopDeps) {
 
     if (!demoPaused) {
       deps.effects().update(dt);
-      updateDeadList(deps.debrisList, dt);
-      updateDeadList(deps.playerDebrisList, dt);
-      updateDeadList(deps.scorches, dt);
-      updateDeadList(deps.explosions, dt);
-      updateDeadList(deps.implosions, dt);
+      updateDeadList(deps.world.debrisList, dt);
+      updateDeadList(deps.world.playerDebrisList, dt);
+      updateDeadList(deps.world.scorches, dt);
+      updateDeadList(deps.world.explosions, dt);
+      updateDeadList(deps.world.implosions, dt);
     }
     deps.remotes().updateScoreboard();
 
     // Debug dummy remote player (?dummy) — pin it in front of the camera and tick it
-    const dummy = deps.remotePlayers.get('dummy');
+    const dummy = deps.world.remotePlayers.get('dummy');
     const dummyTick = deps.getDummyTick();
     if (dummy && dummyTick) {
       dummyTick(dt);
@@ -164,7 +156,7 @@ export function createGameLoop(deps: GameLoopDeps) {
     viewModel.update(dt, yawDelta, player.pitch - lastPlayerPitch, player.vel, camera);
     lastPlayerYaw = player.yaw;
     lastPlayerPitch = player.pitch;
-    deps.healthBarSystem().update(dt, networkManager.getPlayers(), deps.remotePlayers, entities.balls);
+    deps.healthBarSystem().update(dt, networkManager.getPlayers(), deps.world.remotePlayers, entities.balls);
 
     // Peripheral speed lines — world-space streaks along the true velocity
     // vector; suppressed during demo playback
@@ -173,6 +165,10 @@ export function createGameLoop(deps: GameLoopDeps) {
     // Update atmospheric effects
     sceneSetup.update(dt);
     sceneSetup.atmosphericSky.followCamera(camera.position);
+
+    // Explosion screen shake — applied after player.update's camera lookAt
+    // so it composes as a small rotational jitter on top
+    screenShake.update(dt, camera);
 
     renderFrame(dt);
   }

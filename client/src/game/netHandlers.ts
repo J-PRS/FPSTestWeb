@@ -13,7 +13,7 @@ import type { NetworkManager } from '../networking/NetworkManager.js';
 import type { GameStatePlayer, LocalPlayerState } from '../../../shared/protocol.js';
 import { Projectile } from '../projectiles/Projectile.js';
 import { ROCKET_CONFIG, getProjectileConfig } from '../projectiles/index.js';
-import type { ProjectileRegistry } from './projectileRegistry.js';
+import type { WorldState } from './worldState.js';
 import type { FragMessages } from '../ui/FragMessages.js';
 import type { HUD } from '../ui/hud.js';
 import type { HealthBarSystem } from '../ui/HealthBarSystem.js';
@@ -31,11 +31,7 @@ export interface NetDeps {
   fragMessages: FragMessages;
   explosionTracker: ExplosionTracker;
   logger: ChildLogger;
-  remotePlayers: Map<string, RemotePlayer>;
-  projectileRegistry: ProjectileRegistry;
-  killCounts: Map<string, number>;
-  playerDebrisList: PlayerDebris[];
-  projectiles: Projectile[];
+  world: WorldState;
   setLastSentPos(pos: { x: number; y: number; z: number }): void;
 }
 
@@ -106,7 +102,7 @@ export function wireNetworkHandlers(deps: NetDeps): void {
 
   // Register player kill handler (lethal kills)
   networkManager.onPlayerKill = (shooterId: string, targetId: string) => {
-    deps.killCounts.set(shooterId, (deps.killCounts.get(shooterId) ?? 0) + 1);
+    deps.world.killCounts.set(shooterId, (deps.world.killCounts.get(shooterId) ?? 0) + 1);
     // Check if local player was killed
     if (targetId === nm().getLocalPlayerId()) {
       logger.info(`Local player killed by ${shooterId}`);
@@ -131,7 +127,7 @@ export function wireNetworkHandlers(deps: NetDeps): void {
       playerData.health = 0;
     }
 
-    const remotePlayer = deps.remotePlayers.get(targetId);
+    const remotePlayer = deps.world.remotePlayers.get(targetId);
     if (remotePlayer) {
       // Find matching explosion from this shooter
       let explosionPos: THREE.Vector3 | undefined;
@@ -149,7 +145,7 @@ export function wireNetworkHandlers(deps: NetDeps): void {
 
       // Spawn player debris at player center (position is feet, so add half height)
       const debris = new PlayerDebris(deps.scene(), deps.terrain(), remotePlayer.position.x, remotePlayer.position.y + 1.0, remotePlayer.position.z);
-      deps.playerDebrisList.push(debris);
+      deps.world.playerDebrisList.push(debris);
 
       // Hide the model immediately
       remotePlayer.hide();
@@ -178,7 +174,7 @@ export function wireNetworkHandlers(deps: NetDeps): void {
   networkManager.onPlayerUpdate = (playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }, _timestamp: number, velocity?: { x: number; y: number; z: number }) => {
     // Safety: never process local player as a remote player
     if (playerId === nm().getLocalPlayerId()) return;
-    let remotePlayer = deps.remotePlayers.get(playerId);
+    let remotePlayer = deps.world.remotePlayers.get(playerId);
     if (remotePlayer) {
       remotePlayer.update(position, rotation, REMOTE_PLAYER_FIXED_DT, nm().getPing(), velocity);
       if (Math.random() < DEBUG_LOG_SAMPLE_RATE) { // 5% of updates log for debugging
@@ -192,8 +188,8 @@ export function wireNetworkHandlers(deps: NetDeps): void {
     if (playerData?.isDead) return;
     logger.debug(`onPlayerUpdate called for unknown player: ${playerId}, creating...`);
     remotePlayer = new RemotePlayer(deps.scene(), playerId, position, deps.terrain());
-    deps.remotePlayers.set(playerId, remotePlayer);
-    logger.debug(`CREATED remote player (onPlayerUpdate)`, { instanceId: remotePlayer.instanceId, playerId, total: deps.remotePlayers.size });
+    deps.world.remotePlayers.set(playerId, remotePlayer);
+    logger.debug(`CREATED remote player (onPlayerUpdate)`, { instanceId: remotePlayer.instanceId, playerId, total: deps.world.remotePlayers.size });
   };
 
   // Server-authoritative projectile handlers
@@ -202,11 +198,11 @@ export function wireNetworkHandlers(deps: NetDeps): void {
   networkManager.onProjectileCreated = (projectileId: string, ownerId: string, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }, weaponType?: number) => {
     // For own projectiles: link the pending local projectile to this server ID
     if (ownerId === nm().getLocalPlayerId()) {
-      const localProjectile = deps.projectileRegistry.pending.shift();
+      const localProjectile = deps.world.projectileRegistry.pending.shift();
       if (localProjectile) {
         localProjectile.serverProjectileId = projectileId;
-        deps.projectileRegistry.byId.set(projectileId, localProjectile);
-        deps.projectileRegistry.pendingSince.delete(localProjectile); // Clean up timestamp
+        deps.world.projectileRegistry.byId.set(projectileId, localProjectile);
+        deps.world.projectileRegistry.pendingSince.delete(localProjectile); // Clean up timestamp
       }
       return;
     }
@@ -225,10 +221,10 @@ export function wireNetworkHandlers(deps: NetDeps): void {
     if (lead > 0) {
       remoteProjectile.advanceBy(lead);
     }
-    deps.projectiles.push(remoteProjectile);
+    deps.world.projectiles.push(remoteProjectile);
     remoteProjectiles.set(projectileId, remoteProjectile);
     // Gun recoil kick on the shooter's remote model
-    deps.remotePlayers.get(ownerId)?.fire();
+    deps.world.remotePlayers.get(ownerId)?.fire();
   };
 
   networkManager.onProjectileDestroyed = (projectileId: string) => {
@@ -239,15 +235,15 @@ export function wireNetworkHandlers(deps: NetDeps): void {
       // Don't delete from remoteProjectiles - let it fade out naturally
     }
     // Kill local projectile if server says it's gone - explode to let trails fade
-    const localProjectile = deps.projectileRegistry.byId.get(projectileId);
+    const localProjectile = deps.world.projectileRegistry.byId.get(projectileId);
     if (localProjectile) {
       localProjectile.explode();
-      deps.projectileRegistry.byId.delete(projectileId);
+      deps.world.projectileRegistry.byId.delete(projectileId);
       // Also remove from pending queue if it's still there (shouldn't happen but defensive)
-      const pendingIndex = deps.projectileRegistry.pending.indexOf(localProjectile);
+      const pendingIndex = deps.world.projectileRegistry.pending.indexOf(localProjectile);
       if (pendingIndex !== -1) {
-        deps.projectileRegistry.pending.splice(pendingIndex, 1);
-        deps.projectileRegistry.pendingSince.delete(localProjectile);
+        deps.world.projectileRegistry.pending.splice(pendingIndex, 1);
+        deps.world.projectileRegistry.pendingSince.delete(localProjectile);
       }
     }
   };
@@ -271,7 +267,7 @@ export function wireNetworkHandlers(deps: NetDeps): void {
     }
 
     // Reset existing remote player on respawn
-    const remotePlayer = deps.remotePlayers.get(playerId);
+    const remotePlayer = deps.world.remotePlayers.get(playerId);
     if (remotePlayer) {
       const playerData = nm().getPlayers().get(playerId);
       const internalId = playerData?.internalId || 'unknown';
@@ -280,7 +276,7 @@ export function wireNetworkHandlers(deps: NetDeps): void {
     } else {
       // Create new remote player if they don't exist (shouldn't happen but safety check)
       const newRemotePlayer = new RemotePlayer(deps.scene(), playerId, position, deps.terrain());
-      deps.remotePlayers.set(playerId, newRemotePlayer);
+      deps.world.remotePlayers.set(playerId, newRemotePlayer);
       logger.debug(`CREATED remote player (onPlayerRespawn)`, { instanceId: newRemotePlayer.instanceId, playerId });
     }
 
@@ -302,10 +298,10 @@ export function wireNetworkHandlers(deps: NetDeps): void {
 
   // Register playerLeft handler — immediate cleanup when server broadcasts playerLeft
   networkManager.onPlayerLeft = (playerId: string) => {
-    const remotePlayer = deps.remotePlayers.get(playerId);
+    const remotePlayer = deps.world.remotePlayers.get(playerId);
     if (remotePlayer) {
       remotePlayer.dispose();
-      deps.remotePlayers.delete(playerId);
+      deps.world.remotePlayers.delete(playerId);
       deps.hud().removePlayerIndicator(playerId);
       deps.healthBarSystem().removeBar(playerId);
       logger.info(`Remote player removed (playerLeft): ${playerId}`);

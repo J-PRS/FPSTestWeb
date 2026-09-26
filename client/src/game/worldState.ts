@@ -1,0 +1,40 @@
+import type { RemotePlayer } from '../entities/RemotePlayer.js';
+import type { Projectile } from '../projectiles/Projectile.js';
+import type { BallDebris, PlayerDebris } from '../effects/debris.js';
+import type { Explosion } from '../effects/explosion.js';
+import type { ScorchDecal } from '../effects/scorch.js';
+import type { Implosion } from '../effects/implosion.js';
+import { createProjectileRegistry, type ProjectileRegistry } from './projectileRegistry.js';
+
+/**
+ * The shared mutable world: every entity collection the game modules
+ * (combat / remotes / netHandlers / demoLifecycle / gameLoop) read or write
+ * cross-module. Owning them in one place instead of as main.ts locals passed
+ * per-dep makes the ownership boundary visible and lets handlers reference
+ * `world.projectiles` without main.ts shuttling each list through deps.
+ */
+export interface WorldState {
+  remotePlayers: Map<string, RemotePlayer>;
+  killCounts: Map<string, number>;
+  projectiles: Projectile[];
+  projectileRegistry: ProjectileRegistry;
+  debrisList: BallDebris[];
+  playerDebrisList: PlayerDebris[];
+  explosions: Explosion[];
+  scorches: ScorchDecal[];
+  implosions: Implosion[];
+}
+
+export function createWorldState(): WorldState {
+  return {
+    remotePlayers: new Map(),
+    killCounts: new Map(),
+    projectiles: [],
+    projectileRegistry: createProjectileRegistry(),
+    debrisList: [],
+    playerDebrisList: [],
+    explosions: [],
+    scorches: [],
+    implosions: [],
+  };
+}
