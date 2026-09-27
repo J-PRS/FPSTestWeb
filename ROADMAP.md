@@ -90,9 +90,11 @@ surface. Detailed research lives in `_reports/`; this file is the current truth.
 
 ### Later / research needed
 - Client prediction + reconciliation for self (currently trust + correct).
-- Demo/replay format exists partially — formalize + use for regression tests.
-- Server ball sim is the pilot for server-owned creatures; generalize a
-  `ServerSim` registry (deployable turrets server-side eventually).
+- Replay formalization — record.ts/replay.ts capture live wire streams and
+  re-decode them offline (regression + decode-cost benchmarks landed).
+  Remaining: replay through full client netHandlers, not just the decoder.
+- ~~`ServerSim` registry~~ — landed as `room.sims`; bots/flags tick through
+  it. Deployable turrets server-side are the next sim candidate.
 - Voice/avatars/monetization — out of scope until core loops land.
 
 ## Non-goals
