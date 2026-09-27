@@ -83,6 +83,10 @@ function advance(r: Replay): void {
 }
 
 const stats = new Map<string, { n: number; max: number; sum: number; over2: number; over4: number }>();
+// Resting detection: a ball whose events ALL report |v| < 5 (the stall
+// threshold) for the whole window never got launched — the breaker's
+// target gate is suspect.
+const speeds = new Map<number, { n: number; slow: number; first: number; last: number }>();
 let events = 0;
 const ws = new WebSocket(WS_URL);
 ws.binaryType = 'arraybuffer';
@@ -104,6 +108,12 @@ ws.onmessage = (ev) => {
   if (m.t > clockT) { clockT = m.t; clockAt = now / 1000; }
   const age = clockT < 0 ? 0 : Math.max(0, Math.min(0.6, clockT + (now / 1000 - clockAt) - m.t));
   events++;
+  {
+    const sp = Math.hypot(m.velocity.x, m.velocity.y, m.velocity.z);
+    const rec = speeds.get(m.id) ?? { n: 0, slow: 0, first: now, last: now };
+    rec.n++; if (sp < 5) rec.slow++; rec.last = now;
+    speeds.set(m.id, rec);
+  }
 
   const r = replays.get(m.id);
   if (r) {
@@ -131,6 +141,12 @@ setTimeout(() => {
   ws.close();
   console.log(`\n[replay] ${events} segment events over ${DURATION_S}s, ${replays.size} live balls`);
   let fail = 0;
+  // Stall breaker should fire within ~2s of sub-5m/s movement — a ball
+  // slow across >3s of events is resting, breaker never launched it.
+  const resting = [...speeds.entries()].filter(([, s]) => s.last - s.first > 3000 && s.slow === s.n);
+  const partial = [...speeds.entries()].filter(([, s]) => s.last - s.first > 3000 && s.slow > s.n * 0.5 && s.slow < s.n);
+  console.log(`  resting balls (|v|<5 for >3s of events): ${resting.length ? resting.map(([id]) => '#' + id).join(',') : 'none'}`);
+  if (partial.length) console.log(`  mostly-slow: ${partial.map(([id, s]) => `#${id}(${s.slow}/${s.n})`).join(',')}`);
   for (const [kind, st] of [...stats.entries()].sort()) {
     const mean = st.sum / st.n;
     console.log(`  ${kind.padEnd(9)} n=${String(st.n).padStart(4)}  mean=${mean.toFixed(2)}m  max=${st.max.toFixed(1)}m  >2m:${st.over2}  >4m:${st.over4}`);

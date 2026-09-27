@@ -31,6 +31,11 @@ export const BALL_ENRAGE_DASH_SPEED = 45.0;
 // readable speeds — above this, the next bounce deadens to 50% elasticity
 // instead of conserving energy (same thud as the post-dash damp).
 export const BALL_OVERSPEED = 100.0;
+// Settle threshold: an impact slower than this doesn't reflect, it just
+// rests on the terrain — no segment. Without it a settled ball keeps
+// micro-bouncing every tick (elastic reflection never dies at low speed),
+// spamming ~20 bounce events/s per ball and visibly jittering on clients.
+export const BALL_REST_SPEED = 6.0;
 // Stall breaker: a ball loitering under MIN_SPEED for STALL_TIME gets a
 // free spring launch at its committed target — it already owns this skill
 // (the enrage launch), this just fires it on boredom instead of distance.
@@ -160,6 +165,12 @@ export function stepBall(
   // Post-dash landing OR an overspeed impact: reflect at 50% elasticity so
   // the segment ends with a thud, not a full-energy ricochet into orbit.
   const impactSpeed = Math.hypot(b.vx, b.vy, b.vz);
+  if (impactSpeed < BALL_REST_SPEED) {
+    // Settle: park on the surface with zero velocity. The stall breaker
+    // owns the wake-up — it launches every BALL_STALL_TIME regardless.
+    b.vx = 0; b.vy = 0; b.vz = 0;
+    return null;
+  }
   const elasticity = (b.dampNextBounce || impactSpeed > BALL_OVERSPEED) ? 0.5 : BALL_BOUNCE;
   b.dampNextBounce = false;
   const k = -(1.0 + elasticity) * dot;

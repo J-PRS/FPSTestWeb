@@ -5,7 +5,7 @@ import { GRAVITY, BALL_MAX_DIST, BALL_TELE_MIN, BALL_TELE_MAX, BALL_TELE_HEIGHT,
 
 import { Terrain, getHeightfield } from '../world/terrain.js';
 import { makeSimBall, stepBall, BALL_OVERSPEED, BALL_MIN_SPEED, BALL_STALL_TIME, type SimBall } from '../../../shared/ballSim.js';
-import { type Heightfield } from '../../../shared/heightfield.js';
+import { type Heightfield, hmHeight } from '../../../shared/heightfield.js';
 import { RibbonTrail } from '../projectiles/RibbonTrail.js';
 import { ChildLogger } from '../core/Logger.js';
 import { allocSlots, freeSlots, getSwarm, getShadows, type SwarmPart } from './swarms.js';
@@ -340,6 +340,14 @@ export class Ball {
           s.z + s.vz * T,
         );
         this.vel.set(s.vx, s.vy + BALL_GRAVITY * T, s.vz);
+        // Terrain floor: the server settles slow contacts to rest (no
+        // segment), and every leg ends in a bounce event that hasn't
+        // arrived yet — either way the render never dips underground.
+        const gy = Ball.field ? hmHeight(Ball.field, this.pos.x, this.pos.z) + s.radius : -Infinity;
+        if (this.pos.y < gy) {
+          this.pos.y = gy;
+          if (this.vel.y < 0) this.vel.y = 0;
+        }
       }
       this.enraged = s.enraged;
       this.enrageTimer = s.enrageTimer;

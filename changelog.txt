@@ -1873,3 +1873,4 @@ Ball rubberbanding root cause: segment lead-replay took a partial-width step, pe
 Ball prediction now gated on the stamped server sim clock (Ball.netSimNow) — was free-running on wall time and drifted ahead of tick cadence
 Ball render: inert legs now extrapolate closed-form (Euler-exact, continuous) instead of stepping at 20Hz — enraged pulls still step on the server clock
 Ball corrections now blend via renderOffset for all non-teleport kinds (residual divergence is server-clock skew, not desync); added _tools/pvptest/ballreplay.ts — live-wire replay probe measuring real divergence per segment kind
+Balls now settle on sub-6m/s contacts (park silently instead of elastic micro-bouncing every tick); client analytic legs clamp to terrain so they never render underground
