@@ -1702,3 +1702,7 @@
 - kickX sideways impulse decays faster than main shove
 == viewmodel: per-weapon fire feel ==
 - KICK_TUNE[weaponIdx]: decay/jitter/flashColor/flashScale/flashLife — mortar slow heavy (decay7, big flash), railgun fast snap cyan, flak sideways shudder, plasma green tap, disc snappy short
+== viewmodel: enum-keyed weapon models (real bug) ==
+- weapons[] was positional but switchWeapon indexes by WeaponType: Chaingun=3 showed MORTAR, Plasma=7 showed RAILGUN, Railgun=9/Melee/Slam indexed past end -> crash
+- now Map<WeaponType,Group>; DiscPull shares disc model; grenade/slam/melee = no gun (belt/fist)
+- flash parked at per-weapon MUZZLE_Z — was fixed -0.42, floated ahead of stubby barrels
