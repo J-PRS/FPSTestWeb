@@ -6,6 +6,7 @@ import {
 } from './core/config.js';
 
 import Logger, { ChildLogger } from './core/Logger.js';
+import { urlParams } from './core/params.js';
 import { watchDeployVersion } from './core/deployWatch.js';
 import { createRenderer } from './core/renderer.js';
 import * as sfx from './core/sfx.js';
@@ -297,7 +298,7 @@ async function init(): Promise<void> {
   // ?mode=nuggets|ctf|dm — offline-vs-bots modes. Bots live in
   // world.remotePlayers so creatures hunt them and projectiles hit them
   // like real players.
-  const mode = new URLSearchParams(location.search).get('mode');
+  const mode = urlParams.mode;
   // ?mode=classic — the original solo ruleset: bouncy balls only, lost balls
   // teleport back instead of raging (enrage was layered on top later)
   const classicMode = mode === 'classic';
@@ -487,7 +488,7 @@ async function init(): Promise<void> {
   // DataChannel. The HOST also embeds the real authority modules
   // (PlayerManager/CombatHandler — see networking/p2p/host.ts), so all
   // server rules apply; the host browser is just trusted by definition.
-  const p2p = new URLSearchParams(location.search).get('p2p');
+  const p2p = urlParams.p2p;
   if (!classicMode && p2p) {
     const colon = p2p.indexOf(':');
     const role = p2p.slice(0, colon);
@@ -615,7 +616,7 @@ init().then(async () => {
 
   // Desync debugging (snapshot/hash comparison + window debug functions) —
   // dev-only or ?debug, dynamically imported so it stays out of the prod bundle
-  if (networkManager && (import.meta.env.DEV || new URLSearchParams(location.search).has('debug'))) {
+  if (networkManager && (import.meta.env.DEV || urlParams.debug)) {
     const { wireStateDebug } = await import('./core/stateDebug.js');
     wireStateDebug({
       networkManager,

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { WeaponType } from '../../../shared/weapons.js';
 import { bakeVertexAO } from '../effects/vertexAO.js';
+import { urlParams } from '../core/params.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { buildWeaponMeshes, buildHandAndFlash, FIST_JAB, FIST_OFF } from './viewmodel/weaponsGeo.js';
 
@@ -161,7 +162,7 @@ export class ViewModel {
     // Export mode must serialize the PROCEDURAL meshes — if the baked swap
     // lands mid-export the GLB round-trips the stale bake and the pipeline
     // can never pick up new geometry.
-    if (new URLSearchParams(location.search).get('export')) return;
+    if (urlParams.has('export')) return;
     const loader = new GLTFLoader();
     const texLoader = new THREE.TextureLoader();
     const done = new Set<THREE.Group>();
@@ -178,7 +179,7 @@ export class ViewModel {
         // and render the albedo ~2 stops dark. Keep it linear.
         tex.colorSpace = THREE.LinearSRGBColorSpace;
         const bakedMat = new THREE.MeshLambertMaterial({ map: tex });
-        if (location.search.includes('bakedbg')) { bakedMat.map = null; bakedMat.color.set(0xff00ff); }
+        if (urlParams.has('bakedbg')) { bakedMat.map = null; bakedMat.color.set(0xff00ff); }
         // Chaingun special case: the barrel triad is ANIMATED (spinVel), not
         // static geometry — a merged bake folds it into the body and the gun
         // stops spinning forever. A bake that exports the triad as a node

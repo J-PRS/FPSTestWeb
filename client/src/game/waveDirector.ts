@@ -4,6 +4,7 @@ import type { createEntities } from './entities.js';
 import type { Player } from '../entities/Player.js';
 import type { Terrain } from '../world/terrain.js';
 import type { ChildLogger } from '../core/Logger.js';
+import { urlParams } from '../core/params.js';
 
 interface DirectorDeps {
   entities: ReturnType<typeof createEntities>;
@@ -100,10 +101,10 @@ const CREDIT_RAMP = 0.0045;  // extra credits/sec per elapsed second (~+27/min b
 // (a roll that hits a capped species just no-ops — no extra bookkeeping).
 // Weights are deliberately lopsided: fodder is common, dangerous/rare
 // enemies show up early but stay a small fraction of the population.
-const RANDOM_MODE = new URLSearchParams(location.search).get('spawns') === 'random';
+const RANDOM_MODE = urlParams.randomSpawns;
 // ?mode=classic — the ball ambient timer is the whole population; the
 // director still ticks `elapsed` so the HUD timer works
-const CLASSIC_MODE = new URLSearchParams(location.search).get('mode') === 'classic';
+const CLASSIC_MODE = urlParams.isClassic;
 
 const RANDOM_POOL: { weight: number; label: string; spawn: (e: ReturnType<typeof createEntities>) => void }[] = [
   { weight: 6.0, label: 'scarab pack', spawn: (e) => e.spawnScarab() },

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { settings } from './settings.js';
+import { urlParams } from './params.js';
 import {
   Effect,
   EffectComposer,
@@ -52,18 +53,17 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
   let bloomEnabled = settings.get('fps-bloom');
   // URL overrides for headless screenshots/testing
   {
-    const qp = new URLSearchParams(window.location.search);
-    const px = qp.get('pixelated');
+    const px = urlParams.get('pixelated');
     if (px === 'off') pixelMode = 0;
     if (px === 'hard') pixelMode = 1;
     if (px === 'medium') pixelMode = 2;
     if (px === 'smooth' || px === 'on') pixelMode = 3;
     if (px === 'dither' || px === 'dithered') pixelMode = 4;
     if (px === 'fs' || px === 'floyd') pixelMode = 5;
-    const pp = qp.get('postpro');
+    const pp = urlParams.get('postpro');
     if (pp === 'off') postproEnabled = false;
     if (pp === 'on') postproEnabled = true;
-    const bm = qp.get('bloom');
+    const bm = urlParams.get('bloom');
     if (bm === 'off') bloomEnabled = false;
     if (bm === 'on') bloomEnabled = true;
     // Pixelated is the cheap path: stored bloom/postpro don't re-engage

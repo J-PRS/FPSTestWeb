@@ -4,6 +4,7 @@ import * as sfx from '../core/sfx.js';
 import { Explosion } from '../effects/explosion.js';
 import { screenShake } from '../effects/screenShake.js';
 import { EMERGE_DUR, UBER_CHANCE } from '../core/config.js';
+import { urlParams } from '../core/params.js';
 import { TargetRegistry, type TargetCandidate, type TargetProfile } from './targeting.js';
 import type { Targetable } from '../entities/balls.js';
 import type { EntitiesDeps } from './entities.js';
@@ -253,7 +254,7 @@ export function createSpeciesKit(deps: EntitiesDeps, targets: Targetable[]) {
 
   // ?spawns=random — waveDirector's flat random mode suppresses ambient
   // per-species spawn timers so the total budget isn't double-spent.
-  const RANDOM_SPAWNS = new URLSearchParams(location.search).get('spawns') === 'random';
+  const RANDOM_SPAWNS = urlParams.randomSpawns;
 
   // AI LOD — distant enemies tick at reduced rate so swarm counts don't
   // scale the CPU linearly. Accumulated dt keeps AI math time-correct;

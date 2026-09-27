@@ -28,6 +28,7 @@ import {
   WEED_WIND_X, WEED_WIND_Z,
   ROCKET_RADIUS, // Explosion VFX scale reference — blast visuals normalize to it
 } from '../core/config.js';
+import { urlParams } from '../core/params.js';
 import * as sfx from '../core/sfx.js';
 import { createNetBalls } from './netBalls.js';
 import { createSpeciesKit, type Species } from './speciesKit.js';
@@ -97,7 +98,7 @@ export function createEntities(deps: EntitiesDeps) {
   let ballSnapshotTimer = 0;
 
   // ?mode=classic — plain bounce-and-shoot: variant-0 balls only
-  const CLASSIC_MODE = new URLSearchParams(location.search).get('mode') === 'classic';
+  const CLASSIC_MODE = urlParams.isClassic;
 
   // Shared species machinery (threat tables, damage funnel, spawn ring,
   // LOD ticking, dust/bolt emitters) lives in game/speciesKit.ts.

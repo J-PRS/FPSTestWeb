@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import Stats from 'stats.js';
 
 import { MAX_DELTA_TIME } from '../core/config.js';
+import { urlParams } from '../core/params.js';
 import type { DemoManager } from '../demo/index.js';
 import type { Player } from '../entities/Player.js';
 import { updateGibs } from '../entities/swarms.js';
@@ -33,7 +34,7 @@ const _zeroVel = new THREE.Vector3(); // shared zero for demo playback
 const _birdPosBuf: THREE.Vector3[] = []; // scratch — minimap debug blips
 
 // ?mode=classic — solo bounce-and-shoot: balls only, no rage, no roster
-const CLASSIC_MODE = new URLSearchParams(location.search).get('mode') === 'classic';
+const CLASSIC_MODE = urlParams.isClassic;
 const _camRight = new THREE.Vector3();
 
 export interface GameLoopDeps {

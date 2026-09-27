@@ -24,6 +24,7 @@ import { createLightning } from './combat/lightning.js';
 import { burstGibs } from '../entities/swarms.js';
 import type { SwarmSlotOwner } from '../entities/swarm.js';
 import { PENDING_ROCKET_TIMEOUT, ROCKET_RADIUS, CHAINGUN_RATE } from '../core/config.js';
+import { urlParams } from '../core/params.js';
 import { getWeaponStats, WeaponType, AOE_VFX_SCALE, directHitAoeBonus } from '../../../shared/weapons.js';
 import { aoeImpulse, aoeDamage as aoeDamageOf } from '../../../shared/combat.js';
 import { screenShake } from '../effects/screenShake.js';
@@ -98,7 +99,7 @@ const _lgF = new THREE.Vector3();
 
 // ?debug — show the real gameplay blast radius as a wireframe sphere on
 // every detonation (the dome VFX is only 80% of it by design)
-const AOE_DEBUG = new URLSearchParams(location.search).has('debug');
+const AOE_DEBUG = urlParams.debug;
 
 // Remote player positions for projectile collision — rebuilt per frame into
 // the same Map (zeroed allocations in the hot loop)

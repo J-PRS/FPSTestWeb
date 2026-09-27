@@ -1,11 +1,13 @@
 // Resolve backend endpoints: ?server=<host> URL param wins, then public/server.json,
 // else fall back to same-host:8000 for local dev.
+import { urlParams } from '../core/params.js';
+
 export async function resolveServerEndpoints(): Promise<{ wsUrl: string; httpUrl: string }> {
   const local = {
     wsUrl: `ws://${window.location.hostname || 'localhost'}:8000/ws`,
     httpUrl: `http://${window.location.hostname || 'localhost'}:8000`,
   };
-  let host = new URLSearchParams(window.location.search).get('server')?.trim() ?? '';
+  let host = urlParams.get('server')?.trim() ?? '';
   if (!host) {
     try {
       const cfg = await fetch('server.json', { cache: 'no-cache' }).then((r) => r.json()) as { server?: string };
