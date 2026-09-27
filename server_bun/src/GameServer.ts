@@ -478,6 +478,7 @@ export class GameServer {
           logger.info('Room disposed', { room: room.name });
           continue;
         }
+        room.checkMatchClock(now0);
         const players = room.players.getAllPlayers();
         if (players.size === 0) continue;
         this.tickRoom(room, players, now0);

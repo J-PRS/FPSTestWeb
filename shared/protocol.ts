@@ -114,7 +114,7 @@ export type ServerMessage =
   | { type: 'teamScore'; scores: { alpha: number; bravo: number }; winAt: number }
   | { type: 'ffaScore'; scores: Record<string, number>; winAt: number }
   | { type: 'ffaMatchEnd'; winner: string; scores: Record<string, number> }
-  | { type: 'matchEnd'; winner: 'alpha' | 'bravo'; scores: { alpha: number; bravo: number } }
+  | { type: 'matchEnd'; winner: 'alpha' | 'bravo' | 'draw'; scores: { alpha: number; bravo: number } }
   | { type: 'matchStart'; mode: string; scores: { alpha: number; bravo: number } };
 
 export interface GameStatePlayer {

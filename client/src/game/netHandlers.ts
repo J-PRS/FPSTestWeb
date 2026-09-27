@@ -67,9 +67,13 @@ export function wireNetworkHandlers(deps: NetDeps): void {
     if ((scores[me] ?? 0) > 0) chat.add(null, `you: ${mine} pts (leader ${lead}/${winAt})`);
   };
   networkManager.onFfaMatchEnd = (winner, scores) =>
-    chat.add(null, `${winner} WINS the deathmatch — ${scores[winner]} pts — new match starting`);
+    chat.add(null, winner === 'draw'
+      ? 'DRAW — time\'s up, new match starting'
+      : `${winner} WINS the deathmatch — ${scores[winner]} pts — new match starting`);
   networkManager.onMatchEnd = (winner, scores) =>
-    chat.add(null, `${winner.toUpperCase()} WINS ${scores.alpha}:${scores.bravo} — new match starting`);
+    chat.add(null, winner === 'draw'
+      ? `DRAW ${scores.alpha}:${scores.bravo} — time's up, new match starting`
+      : `${winner.toUpperCase()} WINS ${scores.alpha}:${scores.bravo} — new match starting`);
   networkManager.onMatchStart = (mode) =>
     chat.add(null, `match start — ${mode || 'arena'}`);
 
