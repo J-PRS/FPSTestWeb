@@ -1,5 +1,19 @@
 # Changelog
 
+## [2026-09-27] Cloak skill (Q-slot) + stale-heartbeat fix
+
+- New skill `cloak` (selectable in the skill picker): Q toggles invisibility —
+  40 energy to activate, 10/s drain while cloaked, energy regen paused, and the
+  nugget jet-boost refill does NOT subsidize the drain. Creature brains and the
+  offline bots drop the player as a target (`alive` gate); model hides in third
+  person; "CLOAKED" HUD marker. Death or skill-switch decloaks. Local-only
+  stealth — remote players still see streamed positions in MP.
+- Server: stale-player heartbeat was gated on a shared timestamp, so only the
+  first silent player in map order ever emitted heartbeat records — later stale
+  players' state desynced forever. Now gated per-player; grace-period ghost
+  recipients are skipped in the tick loop. `_tools/pvptest/staleprobe.ts`
+  verifies both senders heartbeat live.
+
 ## [2026-09-27] MP harness round 2 — ball probes, knockback verification, reconnect dedup
 
 - `bot.ts` new probes: `--balls` (30s listen → per-ball segment cadence, stamped-event age, spawn/die counters; measured ~1.8 segments/ball/s, event age p95 14ms — confirms the ball chop was the client-side 50ms render quantization, not the wire), `--watch` (join/left cadence + ghost-detection window).

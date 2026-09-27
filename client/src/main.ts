@@ -252,6 +252,7 @@ async function init(): Promise<void> {
     // Died mid-flight: the death path owns the HUD — don't resurface it
     else { hud.setSpectatorHint(false); if (!player.isDead) hud.show(); }
   };
+  player.onCloak = (on) => hud.setCloak(on);
   profiler.markTime('playerCreated');
 
   // Offline death path — the server's kill+respawn round-trip replicated

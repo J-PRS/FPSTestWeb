@@ -23,8 +23,8 @@ export interface FireEvent {
   playerVel: THREE.Vector3;
 }
 
-export type SkillId = 'bounce' | 'blink' | 'dash' | 'slam' | 'warp';
-export const SKILL_ORDER: SkillId[] = ['bounce', 'blink', 'dash', 'slam', 'warp'];
+export type SkillId = 'bounce' | 'blink' | 'dash' | 'slam' | 'warp' | 'cloak';
+export const SKILL_ORDER: SkillId[] = ['bounce', 'blink', 'dash', 'slam', 'warp', 'cloak'];
 
 export class Player {
   pos = new THREE.Vector3();
@@ -61,6 +61,19 @@ export class Player {
   // HUD hook — spectating drops the combat chrome (crosshair/health/belt)
   // and shows an exit hint instead
   onSpectate: ((on: boolean) => void) | null = null;
+
+  // Cloak state lives in PlayerSkills; mirrored here so targeting, HUD,
+  // and model visibility read one flag without reaching into the skill.
+  private cloaked = false;
+  get isCloaked(): boolean { return this.cloaked; }
+  onCloak: ((on: boolean) => void) | null = null;
+  private setCloaked(on: boolean): void {
+    if (this.cloaked === on) return;
+    this.cloaked = on;
+    this.model?.setVisible(this.thirdPerson && !this.isDead && !this.spectating && !on);
+    this.onCloak?.(on);
+  }
+
   toggleSpectator(): void {
     if (this.isDead) return; // dead already gives you this cam
     this.spectating = !this.spectating;
@@ -72,7 +85,7 @@ export class Player {
       this.firePending = false;
       this.jetPending = false;
     }
-    this.model?.setVisible(!this.spectating && this.thirdPerson && !this.isDead);
+    this.model?.setVisible(!this.spectating && this.thirdPerson && !this.isDead && !this.cloaked);
     this.onSpectate?.(this.spectating);
   }
 
@@ -289,6 +302,10 @@ export class Player {
       emitWarp: (a, b) => this.onWarp?.(a, b),
       emitSlam: (a, b) => this.onSlam?.(a, b),
       emitBounce: (a, b) => this.onBounce?.(a, b),
+      emitCloak: (on) => this.setCloaked(on),
+      energy: () => this.energy,
+      spendEnergy: (n) => { if (this.energy < n) return false; this.energy -= n; return true; },
+      drainEnergy: (n) => { this.energy = Math.max(0, this.energy - n); },
     });
 
     this.bindInput();
@@ -489,6 +506,7 @@ export class Player {
   update(dt: number): void {
     // Dying while spectating: death owns the cam now — drop the flag so
     // respawn doesn't leave the player stuck flying
+    if (this.isDead) this.setCloaked(false); // corpse can't stay hidden
     if (this.spectating && this.isDead) {
       this.spectating = false;
       this.onSpectate?.(false);
@@ -515,6 +533,7 @@ export class Player {
     this.meleeCooldown = Math.max(0, this.meleeCooldown - dt);
     this.skills.tickCooldowns(dt);
     this.skills.updateBeacon(dt);
+    this.skills.updateCloak(dt);
 
     if (this.skills.updateBlink(dt)) return;
 
@@ -569,7 +588,9 @@ export class Player {
 
     // Energy recharge — paused while jetting (Tribes-style: drain 12/s
     // while burning, recharge 8/s only when off the jet)
-    if (!isJetting) {
+    // Regen also pauses while cloaked — invisibility and jets compete
+    // for the same tank, never fill it together.
+    if (!isJetting && !this.cloaked) {
       this.energy = Math.min(MAX_ENERGY, this.energy + JET_CHARGE * dt);
     }
 
@@ -579,7 +600,7 @@ export class Player {
     this.checkCameraSpinout(dt);
     // Model visibility follows the toggle AND death (observer cam is ghost
     // flight — your corpse shouldn't fly with you)
-    this.model?.setVisible(this.thirdPerson && !this.isDead);
+    this.model?.setVisible(this.thirdPerson && !this.isDead && !this.cloaked);
     this.visuals.updateFeetMarker(this.terrain, this.pos);
     this.fireWeapons();
     this.emitMoveEvents(isJetting, input.skiHeld, input.jumpHeld, dt);

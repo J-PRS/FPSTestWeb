@@ -387,7 +387,7 @@ export class TeamBots {
     _enemies.length = 0;
     const player = this.deps.lazyPlayer();
     if (this.teamOf.get('local') !== bot.team) {
-      _enemies.push({ id: 'local', pos: player.pos, vel: player.vel, alive: !player.isDead });
+      _enemies.push({ id: 'local', pos: player.pos, vel: player.vel, alive: !player.isDead && !player.isCloaked });
     }
     for (const [id, rp] of this.deps.world.remotePlayers) {
       if (id === bot.playerId) continue;

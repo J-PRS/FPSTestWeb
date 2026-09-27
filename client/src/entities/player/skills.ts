@@ -21,6 +21,9 @@ const TL_COOLDOWN = 4.0;     // s after a teleport
 const TL_MAX_LIFE = 6.0;     // held beacon fizzles — can't camp it forever
 const TL_BOUNCE = 0.35;      // restitution — it skitters, doesn't thud
 
+const CLOAK_COST = 40;       // activation — a commitment, not a tap
+const CLOAK_DRAIN = 10;      // per second while invisible
+
 // Everything a skill needs from Player — mutable refs for pos/vel, plus
 // plumbing callbacks (aim, movement sync, the per-frame blink visuals).
 export interface SkillsCtx {
@@ -44,6 +47,14 @@ export interface SkillsCtx {
   emitWarp(from: THREE.Vector3, to: THREE.Vector3): void;
   emitSlam(pos: THREE.Vector3, impactSpeed: number): void;
   emitBounce(pos: THREE.Vector3, dir: THREE.Vector3): void;
+  emitCloak(on: boolean): void;
+  // Energy is Player-owned — skills spend/drain through these so cloak
+  // and jets share the one pool with no duplicated state.
+  energy(): number;
+  /** Atomic check+deduct: false leaves the pool untouched. */
+  spendEnergy(n: number): boolean;
+  /** Unconditional drain — nugget jet-boost does NOT subsidize cloak. */
+  drainEnergy(n: number): void;
 }
 
 // Q-slot skill state + behavior: bounce / blink / dash / slam / warp beacon.
@@ -66,6 +77,9 @@ export class PlayerSkills {
   private slamActive = false;  // falling at slam speed — detonates on landing
   private slamCooldown = 0;
 
+  private cloaked = false;
+  get isCloaked(): boolean { return this.cloaked; }
+
   private tlBeacon: { pos: THREE.Vector3; vel: THREE.Vector3; age: number; grounded: boolean } | null = null;
   private tlCooldown = 0;
   private tlMesh: THREE.Mesh | null = null;
@@ -78,6 +92,7 @@ export class PlayerSkills {
     this.bounceHeld = this.bounceArmed = false;
     this.blinkActive = false;
     this.slamActive = false;
+    this.setCloak(false);
     this.fizzleBeacon();
   }
 
@@ -87,6 +102,7 @@ export class PlayerSkills {
     else if (skill === 'dash') this.tryDash();
     else if (skill === 'slam') this.trySlam();
     else if (skill === 'warp') this.throwBeacon();
+    else if (skill === 'cloak') this.toggleCloak();
     else this.bounceHeld = true;
   }
 
@@ -145,6 +161,29 @@ export class PlayerSkills {
     }
     this.ctx.blinkFrame();
     return true;
+  }
+
+  // ---- Cloak ----
+  // Toggle on Q. The drain is unconditional (drainEnergy ignores
+  // jetBoostTimer — a nugget's free-jet seconds don't make invisibility
+  // free) and regen is suppressed on the Player side while cloaked.
+
+  private toggleCloak(): void {
+    if (this.cloaked) { this.setCloak(false); return; }
+    if (!this.ctx.spendEnergy(CLOAK_COST)) return; // can't pay the ante
+    this.setCloak(true);
+  }
+
+  private setCloak(on: boolean): void {
+    if (this.cloaked === on) return;
+    this.cloaked = on;
+    this.ctx.emitCloak(on);
+  }
+
+  updateCloak(dt: number): void {
+    if (!this.cloaked) return;
+    this.ctx.drainEnergy(CLOAK_DRAIN * dt);
+    if (this.ctx.energy() <= 0) this.setCloak(false); // tank dry — surface
   }
 
   private tryDash(): void {
