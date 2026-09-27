@@ -42,3 +42,33 @@ export function winner(s: TeamScores): TeamId | null {
   if (s.bravo >= WIN_NUGGETS) return 'bravo';
   return null;
 }
+
+// ---- Game modes ----
+export type ModeId = 'nuggets' | 'ctf' | 'dm';
+
+export interface ModeSpec {
+  /** HUD label + feed wording. */
+  label: string;
+  /** Team-based (alpha/bravo) or free-for-all. */
+  teams: boolean;
+  /** Bots spawn in FFA get their own pseudo-team each. */
+  ffa: boolean;
+  /** Flag capture mode. */
+  flags: boolean;
+  /** Score that ends the match (nuggets banked, flag captures, or DM pts). */
+  winAt: number;
+  /** DM scoring — a frag on a real player/bot vs a creature. */
+  ptsPlayerKill: number;
+  ptsCreatureKill: number;
+}
+
+export const MODES: Record<ModeId, ModeSpec> = {
+  nuggets: { label: 'NUGGET WARS', teams: true, ffa: false, flags: false, winAt: WIN_NUGGETS, ptsPlayerKill: 0, ptsCreatureKill: 0 },
+  ctf:     { label: 'CAPTURE THE FLAG', teams: true, ffa: false, flags: true, winAt: 5, ptsPlayerKill: 0, ptsCreatureKill: 0 },
+  dm:      { label: 'DEATHMATCH', teams: false, ffa: true, flags: false, winAt: 100, ptsPlayerKill: 10, ptsCreatureKill: 1 },
+};
+
+/** Flag carry rules — shared client/server. */
+export const FLAG_PICKUP_R = 2.2;   // touch distance to grab/return a flag
+export const FLAG_HOME_R = 8;       // capture ring around own base
+export const FLAG_RESET_S = 20;     // dropped flag returns home after this
