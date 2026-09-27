@@ -70,6 +70,10 @@ export class ThreatTable {
   /** Seconds since this brain committed to its current target — the
    *  "always miss first" window rides on it. */
   engagedT = 0;
+  /** Leash-dropped but not forgotten — the target went far while still
+   *  alive, so the creature keeps drifting toward the last-seen spot
+   *  instead of milling in place. Deaggro is a fade, not a switch. */
+  stalking = false;
   /** Flinch: counts down after taking damage — while >0 the creature
    *  recoils from the attacker's last position instead of chasing. */
   flinchT = 0;
@@ -95,6 +99,7 @@ export class ThreatTable {
   forget(id: string): void {
     this.threat.delete(id);
     if (this.target?.id === id) this.target = null;
+    this.stalking = false; // left the world — not "far away"
   }
 
   /**
@@ -113,8 +118,11 @@ export class ThreatTable {
     }
 
     // Current target died/left/leashed → force an immediate re-pick.
+    // Death = true deaggro; leash-out = stalking — keep lastSeen and
+    // wander TOWARD it so distant hunters drift your way, erratically.
     if (this.target && (!this.target.alive || (profile.leash > 0 &&
         selfPos.distanceToSquared(this.target.pos) > profile.leash * profile.leash))) {
+      this.stalking = this.target.alive;
       this.target = null;
       this.engagedT = 0;
     }
@@ -137,6 +145,7 @@ export class ThreatTable {
     }
     const switched = best !== this.target && best?.id !== this.target?.id;
     this.target = best;
+    if (best) this.stalking = false;
     if (switched) this.engagedT = 0;
     if (best) this.engagedT += dt;
     // Perception snapshot — only refreshes on eval ticks, and eval ticks
