@@ -235,6 +235,8 @@ export class ViewModel {
     [WeaponType.Lightning]:       [16, 0.05, 0x8fdcff, 0.4, 0.4],   // per-tick hum — tiny flash, sideways jitter
     [WeaponType.Cannon]:          [8,  0.02, 0xffaa55, 1.5, 1.3],   // heavy naval-gun thump, big warm flash
     [WeaponType.RocketLauncher]:  [10, 0.03, 0xffcc77, 1.3, 1.1],   // launch shove, hot motor bloom
+    [WeaponType.Pistol]:          [22, 0.01, 0xffe0a0, 0.35, 0.4],  // snappy crack — tiny flash, quick settle
+    [WeaponType.Revolver]:        [8,  0.05, 0xffb060, 1.1, 0.8],   // hand-cannon bark — bigger bloom, heavy push
   };
 
   kick(strength = 1): void {

@@ -647,20 +647,13 @@ export class Player {
     if (!this.mouseHeld) this.needsRelease = false;
     if (wantFire && this.fireTimer <= 0) {
       this.fireTimer = Player.WEAPON_RATES[wid];
-      const fireCallback = wid === 1 ? this.onDiscLauncher
-        : wid === 2 ? this.onChaingun
-        : wid === 3 ? this.onMortar
-        : wid === 4 ? this.onGrenadeLauncher
-        : wid === 5 ? this.onFlak
-        : wid === 6 ? this.onPlasma
-        : wid === 7 ? this.onRailgun
-        : wid === 8 ? this.onLightning
-        : wid === 9 ? this.onShotgun
-        : wid === 10 ? this.onCannon
-        : wid === 11 ? this.onRocketLauncher
-        : wid === 12 ? this.onPistol
-        : wid === 13 ? this.onRevolver
-        : this.onFire;
+      // wid is a slot-space index — the table mirrors WEAPON_RATES order
+      const fireCallback = ([
+        this.onFire, this.onDiscLauncher, this.onChaingun, this.onMortar,
+        this.onGrenadeLauncher, this.onFlak, this.onPlasma, this.onRailgun,
+        this.onLightning, this.onShotgun, this.onCannon, this.onRocketLauncher,
+        this.onPistol, this.onRevolver,
+      ] as const)[wid] ?? this.onFire;
       fireCallback?.({ origin: this.pos.clone(), dir: this.getAimDir(), playerVel: this.vel.clone() });
     }
     this.firePending = false;
