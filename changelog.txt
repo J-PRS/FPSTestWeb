@@ -1909,3 +1909,4 @@ match journal — every matchEnd/ffaMatchEnd appends to logs/matches.jsonl + a 1
 server-owned nuggets: team-mode creature kills drop a gem pickup (pickupSpawn/pickupGone, 30s TTL, cap 64); touching banks a team point — authoritative scoring, bank claim kept for back-compat; bots farm gems via shared brain's pickup slot
 match reset now clears leftover gems (pickupGone broadcast); bank claim path rate-limited to 2/s (was default 120/s — claim spam could farm a match in seconds)
 teamUpdate wire message + bot-only team rebalance: after a leaver leaves sides skewed >=2, a bot on the big side switches jerseys (humans never move); roster keeps team truth client-side
+lobby: shows 'in: <room>', marks + disables your current row, and join() early-returns on the current room (no pointless reload)

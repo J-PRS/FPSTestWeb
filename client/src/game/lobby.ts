@@ -31,7 +31,12 @@ const POLL_MS = 3000;
 export class Lobby {
   private panel: HTMLDivElement;
   private rows: HTMLDivElement;
+  private here: HTMLDivElement;
   private timer: ReturnType<typeof setInterval> | null = null;
+
+  private currentRoom(): string {
+    return new URLSearchParams(location.search).get('room') ?? 'default';
+  }
 
   constructor(private deps: LobbyDeps) {
     const btn = document.createElement('button');
@@ -45,6 +50,9 @@ export class Lobby {
     const head = document.createElement('div');
     head.textContent = 'ROOMS';
     head.style.cssText = 'color:#9cf;margin-bottom:6px;letter-spacing:1px;';
+    this.here = document.createElement('div');
+    this.here.style.cssText = 'color:#7d8;font-size:11px;margin-bottom:4px;';
+    this.here.textContent = `in: ${this.currentRoom()}`;
     this.rows = document.createElement('div');
 
     const newWrap = document.createElement('div');
@@ -77,7 +85,7 @@ export class Lobby {
       quick.appendChild(b);
     }
 
-    this.panel.append(head, quick, this.rows, newWrap);
+    this.panel.append(head, this.here, quick, this.rows, newWrap);
     document.body.append(btn, this.panel);
   }
 
@@ -115,7 +123,9 @@ export class Lobby {
     const row = document.createElement('button');
     row.style.cssText = 'display:block;width:100%;text-align:left;background:none;border:none;border-bottom:1px solid #222;color:#fff;font:inherit;padding:4px 2px;cursor:pointer;';
     const full = r.players >= r.maxPlayers;
-    if (full) { row.disabled = true; row.style.opacity = '0.45'; }
+    const current = r.name === this.currentRoom();
+    if (full || current) { row.disabled = true; row.style.opacity = current ? '0.8' : '0.45'; }
+    if (current) row.style.color = '#7d8';
     const name = document.createElement('span');
     name.textContent = r.name;
     const meta = document.createElement('span');
@@ -129,6 +139,8 @@ export class Lobby {
   }
 
   private join(name: string): void {
+    // Already there — a reload would boot us into the same seat anyway.
+    if (name === this.currentRoom()) return;
     const q = new URLSearchParams(location.search);
     if (name === 'default') q.delete('room');
     else q.set('room', name);
