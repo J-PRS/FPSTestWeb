@@ -67,7 +67,7 @@ export class Room {
         winAt: this.modeSpec?.winAt,
         onBank: (pid, n) => this.bank(pid, n),
         bases: this.spec.bases,
-        onKill: (pid) => this.flagCarrierDied(pid),
+        onKill: (pid, shooter) => this.onKill(pid, shooter),
         flags: () => this.flags?.snapshot() ?? [],
       },
     );
@@ -108,6 +108,26 @@ export class Room {
   /** Any player death drops a carried flag — called from the damage funnel. */
   flagCarrierDied(playerId: string): void {
     this.flags?.dropIfCarrier(playerId);
+  }
+
+  /** Per-player scoreboard for FFA modes (dm). Bots are in the same map —
+   *  a bot can legitimately win a deathmatch. */
+  readonly ffaScores = new Map<string, number>();
+
+  /** Kill hook from the damage funnel: flag drop in every mode, frag
+   *  points in FFA rooms. 'environment' shooters score nothing. */
+  private onKill(targetId: string, shooterId: string): void {
+    this.flagCarrierDied(targetId);
+    const spec = this.modeSpec;
+    if (!spec?.ffa || !this.players.getPlayer(shooterId)) return;
+    const pts = (this.ffaScores.get(shooterId) ?? 0) + spec.ptsPlayerKill;
+    this.ffaScores.set(shooterId, pts);
+    this.broadcast({ type: 'ffaScore', scores: Object.fromEntries(this.ffaScores), winAt: spec.winAt });
+    if (pts >= spec.winAt) {
+      this.broadcast({ type: 'ffaMatchEnd', winner: shooterId, scores: Object.fromEntries(this.ffaScores) });
+      this.ffaScores.clear();
+      this.broadcast({ type: 'matchStart', mode: this.mode, scores: { ...this.scores } });
+    }
   }
 
   /** Team point from an objective (flag capture) — separate from bank()

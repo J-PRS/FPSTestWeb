@@ -21,7 +21,7 @@ export interface RoomInfo {
    *  place flags/bases where the map says, not where the URL guessed. */
   bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } };
   /** Any kill — Room drops carried flags here. */
-  onKill?: (targetId: string) => void;
+  onKill?: (targetId: string, shooterId: string) => void;
   /** Flag snapshot supplier for gameState joins — RoomFlags.snapshot. */
   flags?: () => { team: 'alpha' | 'bravo'; pos: Vec3; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[];
 }
