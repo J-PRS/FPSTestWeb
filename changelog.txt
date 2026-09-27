@@ -1770,3 +1770,7 @@
 - ctf: flag pole+banner at team bases ±70m; touch enemy flag to carry (rides overhead), reach own base ring to capture (+1, win at 5); touch dropped own flag returns it; drops on death
 - bot brains: CTF objective priority (carry flag home > grab enemy flag > return own > fight/gem); dm bots hunt everyone incl. creatures
 - combat.hitTargetLocal returns kill bool; onCreatureKilled hook credits local in dm
+== pvptest harness fixes ==
+- --test: wait out respawn before the undeclared-jump check — the server ignores dead clients' position reports, so jumping in the dead window saw no correction
+- --test2: same respawn wait for the AOE claim; lead the target (SOAK orbits ~16 m/s — blast placed at launch-time position missed the 8m radius)
+- bots integrate knockback impulses into position (impVel accumulator) — fighter/orbit velocity recompute used to swallow the shove
