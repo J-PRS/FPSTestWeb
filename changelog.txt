@@ -1852,3 +1852,6 @@
 - main.ts slimmed: server/P2P connect (incl. ?p2p handshake orchestration) -> networking/connectServer.ts, demo recorder data providers -> demo/playerProviders.ts; init() is ~120 lines shorter
 - combat.ts blast-force cluster extracted to game/blastForce.ts (applyExplosionForce + force application to player/creatures/nuggets/remotes + splash damage numbers); combat.ts 647->512
 - Deployable turret tracers pooled (shared material, recycled geometry) — was a BufferGeometry+Material alloc per 2.2rps shot; opacity fade dropped (shared material)
+- Observability: uncaught errors + unhandled rejections now captured into the WARN+ shipping pipeline (stacks land in logs/client.log automatically)
+- Perf HUD (backquote, with stats.js panels): per-phase frame ms (player/sim/proj/fx/hud/render EMA), renderer.info draw calls/tris/geo/tex/programs, entity counts; LOW-FPS watchdog dump now includes the phase breakdown
+- npm run check — one-shot tsc+oxlint+vitest gate

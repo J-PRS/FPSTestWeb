@@ -175,6 +175,14 @@ class Logger {
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'hidden') this.flushShipping(true);
     });
+    // Uncaught errors/rejections are exactly what never reach a log line —
+    // capture them so remote bug reports come with the stack attached.
+    window.addEventListener('error', (e) => {
+      this.error(`UNCAUGHT ${e.message}`, { file: e.filename, line: e.lineno, stack: (e.error as Error)?.stack });
+    });
+    window.addEventListener('unhandledrejection', (e) => {
+      this.error('UNHANDLED REJECTION', { reason: String(e.reason), stack: (e.reason as Error)?.stack });
+    });
   }
 
   private static flushShipping(beacon = false): void {
