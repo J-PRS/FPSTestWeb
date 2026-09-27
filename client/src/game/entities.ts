@@ -58,6 +58,11 @@ export interface EntitiesDeps extends GameContext {
   camera: THREE.Camera;
   // Playback balls are owned by demoLifecycle — updateBalls defers to it
   updateBallsPlayback: (dt: number) => void;
+  /** Nugget Wars: extra collectors (bots) nuggets magnet toward, plus a
+   *  callback so each pickup banks on the right team. Absent = solo mode,
+   *  the player is the only collector. */
+  nuggetCollectors?: () => { id: string; pos: THREE.Vector3; alive: boolean }[];
+  onNuggetCollect?: (collectorId: string) => void;
 }
 
 // Owns every ambient-entity registry (balls/crawlers/turretters/rollers/
@@ -103,18 +108,35 @@ export function createEntities(deps: EntitiesDeps) {
   // ---- Nuggets (pickup gems dropped by destroyed targets) ----
   function updateNuggets(dt: number): void {
     const terrain = deps.lazyTerrain();
+    const player = deps.lazyPlayer();
+    // In team mode nuggets sweep toward the nearest living collector —
+    // bots mine gems too, that's the whole game mode.
+    const collectors = deps.nuggetCollectors?.();
     for (let i = nuggets.length - 1; i >= 0; i--) {
       const n = nuggets[i]!;
-      n.update(dt, terrain, deps.lazyPlayer().pos);
+      let magnetPos = player.pos;
+      let magnetId = 'local';
+      if (collectors) {
+        let bestD = Infinity;
+        for (const c of collectors) {
+          if (!c.alive) continue;
+          const d = c.pos.distanceToSquared(n.pos);
+          if (d < bestD) { bestD = d; magnetPos = c.pos; magnetId = c.id; }
+        }
+      }
+      n.update(dt, terrain, magnetPos);
       if (n.collected && !n.collectNotified) {
         n.collectNotified = true;
-        nuggetsCollected++;
-        deps.lazyPlayer().grantJetBoost();
-        deps.lazyPlayer().heal(0.2); // 20% max hp per nugget
-        deps.lazyNetworkManager()?.sendHeal(20); // server stays the truth — clamped 25/call
+        if (magnetId === 'local') {
+          nuggetsCollected++;
+          player.grantJetBoost();
+          player.heal(0.2); // 20% max hp per nugget
+          deps.lazyNetworkManager()?.sendHeal(20); // server stays the truth — clamped 25/call
+          sfx.pickup();
+          logger.info(`Nugget collected (${nuggetsCollected} total)`);
+        }
+        deps.onNuggetCollect?.(magnetId);
         deps.lazyEffects().spawnImpact(n.pos, n.vel);
-        sfx.pickup();
-        logger.info(`Nugget collected (${nuggetsCollected} total)`);
       }
       if (n.dead) {
         n.dispose();
@@ -724,8 +746,15 @@ export function createEntities(deps: EntitiesDeps) {
     }
   }
 
+  /** Loose gems from non-target deaths (bots fragged offline — combat's
+   *  onTargetDestroyed already covers Targetable deaths). */
+  function spawnNuggetsAt(pos: THREE.Vector3, count: number, inheritVel: THREE.Vector3): void {
+    for (let i = 0; i < count; i++) nuggets.push(new Nugget(scene, pos, inheritVel));
+  }
+
   return {
     balls, crawlers, scarabs, grubs, snakes, gnats, turrets, rollers, seekers, overlords, mines, totems, rakks, weeds, targets, nuggets,
+    spawnNuggetsAt,
     getNuggetsCollected: () => nuggetsCollected,
     spawnBall, spawnCrawler, spawnScarab, spawnGrub, spawnSnake, spawnGnatCloud, spawnTurretter, spawnRoller, spawnSeeker, spawnOverlord, spawnTotem, spawnUberTotem, spawnRakk,
     spawnEliteBall, plantMine, turretBolts, consumeBolt, cookBoltsNear,

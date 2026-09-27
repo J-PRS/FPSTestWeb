@@ -38,6 +38,9 @@ export class HUD {
   private timerEl: HTMLDivElement;
   private lastBallCount = -1;
   private lastTimerSec = -1;
+  private teamScore: HTMLDivElement;
+  private tsA: HTMLElement;
+  private tsB: HTMLElement;
 
   constructor() {
     const d = createHudDom();
@@ -66,6 +69,9 @@ export class HUD {
     this.energyBar = d.energyBar;
     this.scoreboard = d.scoreboard;
     this.sbRows = d.sbRows;
+    this.teamScore = d.teamScore;
+    this.tsA = d.tsA;
+    this.tsB = d.tsB;
     this.minimap = new Minimap(this.el);
     this.indicators = new PlayerIndicators(this.el);
   }
@@ -110,6 +116,13 @@ export class HUD {
       `<span class="dim">siege</span> ${num(siegers)} <span class="dim">(tur ${c.turrets} ovl ${c.overlords} tot ${c.totems}) mine ${c.mines} · proj ${c.projectiles} fx ${c.fx}</span>`;
   }
   private lastCountsKey = '';
+
+  /** Nugget Wars team totals — shown only while the mode runs. */
+  setTeamScore(a: number, b: number): void {
+    this.teamScore.style.display = 'block';
+    this.tsA.textContent = String(a);
+    this.tsB.textContent = String(b);
+  }
 
   /** Nuggets collected — DOM write only on change */
   setNuggets(n: number): void {

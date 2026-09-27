@@ -149,6 +149,9 @@ export function createRemotes(deps: RemotesDeps) {
   function cleanupRemotePlayers(players: Map<string, import('../networking/NetworkManager.js').RemotePlayerState>): void {
     const hud = deps.lazyHud();
     for (const [playerId, remotePlayer] of deps.world.remotePlayers) {
+      // `bot:` entries are locally driven (Nugget Wars) — the network
+      // roster knows nothing about them; cleanup is owned by TeamBots.
+      if (playerId.startsWith('bot:')) continue;
       const gone = !players.has(playerId);
       const shrunkAway = remotePlayer.scale === 0;
       if (!gone && !shrunkAway) continue;

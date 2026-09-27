@@ -35,6 +35,7 @@ import { wireOverlayInput } from './ui/overlayInput.js';
 import { applyDebugHooks } from './game/debugHooks.js';
 import { createWorldState } from './game/worldState.js';
 import { createCombat } from './game/combat.js';
+import { TeamBots } from './game/bots.js';
 import { wirePlayerHooks } from './game/playerHooks.js';
 import { createWaveDirector } from './game/waveDirector.js';
 import { createDemoLifecycle } from './game/demoLifecycle.js';
@@ -125,6 +126,7 @@ const fragMessages = new FragMessages();
 
 // ---- Combat pipeline (fire handlers, projectile updates, impact/force) ----
 let combat: ReturnType<typeof createCombat>;
+let teamBots: TeamBots | null = null; // ?mode=nuggets
 
 // ---- Remote player lifecycle (game/remotes.ts); created in init() ----
 let remotes: ReturnType<typeof createRemotes>;
@@ -193,6 +195,9 @@ async function init(): Promise<void> {
     logger,
     world,
     updateBallsPlayback: (dt) => demoLifecycle.updateBallsPlayback(dt),
+    // Team mode sweeps gems toward whoever's nearest — set once bots spawn.
+    nuggetCollectors: () => teamBots?.collectors() ?? [],
+    onNuggetCollect: (id) => teamBots?.collect(id),
   });
 
   // Hybrid wave director — scripted beats + a credit pool spent on an
@@ -220,6 +225,7 @@ async function init(): Promise<void> {
     consumeBolt: (bolt) => entities.consumeBolt(bolt as Bolt),
     cookBoltsNear: (pos, r) => entities.cookBoltsNear(pos, r),
     reportTargetDamage: (t, dmg) => entities.reportTargetDamage(t, dmg),
+    botHit: (id, dmg, fromPos) => teamBots?.hit(id, dmg, fromPos) ?? false,
     balls: entities.balls,
     targets: entities.targets,
     nuggets: entities.nuggets,
@@ -240,6 +246,79 @@ async function init(): Promise<void> {
 
   wirePlayerHooks({ player, combat, effects, viewModel, speedLines });
   profiler.markTime('playerCreated');
+
+  // ?mode=nuggets — Nugget Wars: you + 4 bots vs 5 bots, first team to bank
+  // 100 nuggets wins. Bots live in world.remotePlayers so creatures hunt
+  // them and projectiles hit them like real players.
+  if (new URLSearchParams(location.search).get('mode') === 'nuggets') {
+    teamBots = new TeamBots(
+      {
+        lazyPlayer: () => player,
+        lazyTerrain: () => terrain,
+        lazyEffects: () => effects,
+        lazyHud: () => hud,
+        lazyHealthBarSystem: () => healthBarSystem,
+        lazyNetworkManager: () => networkManager,
+        lazyDemoManager: () => demoManager,
+        lazyScene: () => scene,
+        logger,
+        world,
+        targets: entities.targets,
+      },
+      {
+        dropNuggets: (pos, n, vel) => entities.spawnNuggetsAt(pos, n, vel),
+        localPlayerKilled: (killerName) => {
+          player.isDead = true;
+          player.health = 0;
+          hud.hide();
+          hud.setDeathOverlay(true);
+          fragMessages.show(`YOU DIED\nfragged by ${killerName}`);
+          // Offline respawn — no server to send the event back.
+          setTimeout(() => {
+            player.isDead = false;
+            player.health = 100;
+            player.lastDamageSource = '';
+            player.vel.set(0, 0, 0);
+            const a = Math.random() * Math.PI * 2;
+            player.pos.set(Math.cos(a) * 40, terrain.getHeight(Math.cos(a) * 40, Math.sin(a) * 40) + 2, Math.sin(a) * 40);
+            player.syncMovement();
+            player.markTeleport();
+            hud.show();
+            hud.setDeathOverlay(false);
+          }, 3000);
+        },
+        remoteKillFeed: (text) => fragMessages.show(text),
+        nearestNugget: (pos, maxDist) => {
+          let best: typeof entities.nuggets[0] | null = null;
+          let bd = maxDist * maxDist;
+          for (const n of entities.nuggets) {
+            if (n.collected || n.dead) continue;
+            const d = n.pos.distanceToSquared(pos);
+            if (d < bd) { bd = d; best = n; }
+          }
+          return best;
+        },
+        nearestCreature: (pos, maxDist) => {
+          let best = null;
+          let bd = maxDist * maxDist;
+          for (const t of entities.targets) {
+            if (t.dead || t.scoreless) continue;
+            const d = t.pos.distanceToSquared(pos);
+            if (d < bd) { bd = d; best = t; }
+          }
+          return best;
+        },
+        damageCreature: (id, dmg) => {
+          const t = entities.targets.find(x => x.id === id);
+          if (!t || t.dead) return;
+          combat.hitTargetLocal(t, dmg); // same pipeline as a projectile hit
+        },
+      },
+      'alpha',
+      { alpha: 4, bravo: 5 },
+    );
+    hud.setTeamScore(0, 0);
+  }
 
   // ?yaw/?pitch/?dummy headless-screenshot hooks — see game/debugHooks.ts
   dummyUpdate = applyDebugHooks({ scene, player, terrain, remotePlayers, logger });
@@ -407,6 +486,7 @@ async function init(): Promise<void> {
     remotes: () => remotes,
     demoLifecycle: () => demoLifecycle,
     waveDirector: () => waveDirector,
+    teamBots: () => teamBots,
     world,
     getDummyTick: () => dummyUpdate,
   });

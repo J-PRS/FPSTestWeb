@@ -26,6 +26,7 @@ export interface HudDom {
   healthBar: HTMLDivElement;
   energyBar: HTMLDivElement;
   scoreboard: HTMLDivElement;
+  teamScore: HTMLDivElement; tsA: HTMLElement; tsB: HTMLElement;
   sbRows: HTMLElement;
 }
 
@@ -235,6 +236,13 @@ export function createHudDom(): HudDom {
       #scoreboard td:last-child { text-align: right; }
       #scoreboard tr.self td { color: #8fd8ff; font-weight: 600; }
       #scoreboard tr.dead td { opacity: 0.45; }
+      #team-score {
+        position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+        display: none; font: 700 18px/1 monospace; letter-spacing: 0.08em;
+        text-shadow: 0 0 8px #000; pointer-events: none; white-space: nowrap;
+      }
+      #team-score .a { color: #55aaff; } #team-score .b { color: #ff8855; }
+      #team-score .sep { color: #8899aa; margin: 0 10px; font-weight: 400; font-size: 13px; }
     `;
     document.head.appendChild(style);
 
@@ -270,6 +278,7 @@ export function createHudDom(): HudDom {
       <div id="dmg-dir"><div class="arc"></div></div>
       <div id="ent-counts"></div>
       <div id="hud-timer">00:00</div>
+      <div id="team-score"><span class="a">ALPHA <b id="ts-a">0</b></span><span class="sep">vs</span><span class="b"><b id="ts-b">0</b> BRAVO</span></div>
       <div id="scoreboard">
         <div class="sb-title">SCOREBOARD</div>
         <table><thead><tr><th>PLAYER</th><th>FRAGS</th><th>PING</th></tr></thead><tbody id="sb-rows"></tbody></table>
@@ -299,6 +308,9 @@ export function createHudDom(): HudDom {
     const energyBar = el.querySelector('#energy-bar') as HTMLDivElement;
     const scoreboard = el.querySelector('#scoreboard')! as HTMLDivElement;
     const sbRows = el.querySelector('#sb-rows')! as HTMLElement;
+    const teamScore = el.querySelector('#team-score')! as HTMLDivElement;
+    const tsA = el.querySelector('#ts-a')! as HTMLElement;
+    const tsB = el.querySelector('#ts-b')! as HTMLElement;
     const ballCountEl = el.querySelector('#ent-counts')! as HTMLDivElement;
     const timerEl = el.querySelector('#hud-timer')! as HTMLDivElement;
 
@@ -309,5 +321,5 @@ export function createHudDom(): HudDom {
   return { el, health, energy, ammo, speed, kills, state, ping, loss, jitter,
     fps, crosshair, hitMarker, dmgVignette, dmgDir, dmgDirArc, ghostBar,
     playerList, ballCountEl, timerEl, weaponSlots, healthBar, energyBar,
-    scoreboard, sbRows };
+    scoreboard, sbRows, teamScore, tsA, tsB };
 }

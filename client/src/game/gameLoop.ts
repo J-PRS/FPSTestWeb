@@ -57,6 +57,8 @@ export interface GameLoopDeps {
   remotes: () => ReturnType<typeof createRemotes>;
   demoLifecycle: () => ReturnType<typeof createDemoLifecycle>;
   waveDirector: () => ReturnType<typeof createWaveDirector>;
+  /** ?mode=nuggets — Nugget Wars bot manager; null otherwise. */
+  teamBots?: () => { update(dt: number): void } | null;
   world: WorldState;
   // ?dummy debug hook — null when the param isn't set
   getDummyTick: () => ((dt: number) => void) | null;
@@ -209,6 +211,7 @@ export function createGameLoop(deps: GameLoopDeps) {
     if (!demoPaused) entities.updateWeeds(dt);
     if (!demoPaused && !demoManager?.isPlaying) deps.waveDirector().update(dt);
     if (!demoManager?.isPlaying) entities.updateNuggets(dt);
+    deps.teamBots?.()?.update(dt);
     if (!demoManager?.isPlaying) {
       deps.combat()?.updateProjectiles(dt);
     }

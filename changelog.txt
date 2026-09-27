@@ -1757,3 +1757,10 @@
 == AI/bot upgrades ==
 - creatures: damage flinch (recoil ~0.45s from attacker), pack separation so packs surround instead of stacking
 - pvptest bots: aim at last-seen + lead + speed-scaled scatter, burst fire rhythm, hurt-driven jink+retreat
+== Nugget Wars (?mode=nuggets) ==
+- shared/teams.ts: team ids, colors, bank/winner, WIN_NUGGETS=100 — server can enforce same rules later
+- game/bots.ts: GameBot extends RemotePlayer (lives in world.remotePlayers — creatures hunt them, projectiles hit them); utility brain: collect nuggets > fight nearest enemy (other team OR creatures) > roam; Omicron aim delay + burst fire + hurt jink; 4s respawn, deaths drop 3 nuggets
+- combat: deps.botHit routes bot damage through local authority instead of server claims; hitTargetLocal runs bot→creature damage through the real kill pipeline
+- entities: nuggets magnet to nearest living collector (player or bot); spawnNuggetsAt for bot-death drops
+- HUD: top-center ALPHA-vs-BRAVO score; remotes cleanup exempts bot: ids
+- local player death/respawn handled offline (3s, random ring spawn)
