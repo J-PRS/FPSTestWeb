@@ -91,6 +91,9 @@ export class Room {
     // the emptier side.
     if (this.spec.bots) this.bots.populate(this.spec.bots);
     const bases = this.spec.bases;
+    if (this.modeSpec?.teams && bases?.alpha && bases?.bravo) {
+      this.players.teamBases = { alpha: { ...bases.alpha }, bravo: { ...bases.bravo } };
+    }
     if (this.modeSpec?.flags && bases?.alpha && bases?.bravo) {
       // Spec y is advisory — flags live on the ground, so touch checks
       // measure feet-to-flag, not feet-to-arbitrary-height.
@@ -187,15 +190,23 @@ export class Room {
     return this.players.getHumanCount() === 0 && this.disconnected.size === 0;
   }
 
-  /** Balance join: smallest team takes the newcomer. FFA modes no-op. */
-  assignTeam(player: PlayerState): void {
-    if (!this.modeSpec?.teams) return;
+  /** Balance pick: smallest team gets the newcomer. FFA modes return
+   *  undefined. Split from assignTeam so GameServer can pass the pick to
+   *  addPlayer — the join spawn itself is then already team-aware. */
+  nextTeam(): 'alpha' | 'bravo' | undefined {
+    if (!this.modeSpec?.teams) return undefined;
     let alpha = 0, bravo = 0;
     for (const p of this.players.getAllPlayers().values()) {
       if (p.team === 'alpha') alpha++;
       else if (p.team === 'bravo') bravo++;
     }
-    player.team = pickTeam({ alpha, bravo });
+    return pickTeam({ alpha, bravo });
+  }
+
+  /** Balance join for players added without a team (server bots populate
+   *  this way). */
+  assignTeam(player: PlayerState): void {
+    player.team ??= this.nextTeam();
   }
 
   /** A nugget banked (or a flag capped, same channel). Server clamps the
