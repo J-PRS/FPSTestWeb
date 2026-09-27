@@ -164,7 +164,8 @@ export function createSpeciesKit(deps: EntitiesDeps, targets: Targetable[], depl
       c = { id: 'local', pos: p.pos, vel: p.vel, alive: true };
       _candMap.set('local', c);
     }
-    c.alive = !p.isDead && !p.isCloaked; // cloak drops local-player aggro
+    // Spectating = dev observer noclip — you're not prey, you're a camera.
+    c.alive = !p.isDead && !p.isCloaked && !p.isSpectating;
     const now = Date.now();
     for (const [id, r] of deps.world.remotePlayers) {
       let rc = _candMap.get(id);
@@ -214,6 +215,39 @@ export function createSpeciesKit(deps: EntitiesDeps, targets: Targetable[], depl
     return w.wp;
   }
 
+  // Stalking: the committed target slipped past leash range but is still
+  // alive — the brain keeps lastSeen and drifts toward it. Waypoints step
+  // ~35m inward with wide lateral jitter: from a distance it reads as an
+  // erratic hunter working the terrain, not a bee-line or a statue.
+  // Gives up past ~1.6× leash (target truly gone) and reverts to milling.
+  function stalkFor(owner: object, selfPos: THREE.Vector3, dt: number, brain: { lastSeen: THREE.Vector3; stalking: boolean }, leash: number): THREE.Vector3 {
+    if (selfPos.distanceToSquared(brain.lastSeen) > leash * leash * 2.56) {
+      brain.stalking = false;
+      return wanderFor(owner, selfPos, dt);
+    }
+    let w = wanderReg.get(owner);
+    if (!w) {
+      w = { wp: selfPos.clone(), t: 0 };
+      wanderReg.set(owner, w);
+    }
+    w.t -= dt;
+    if (w.t <= 0 || w.wp.distanceToSquared(selfPos) < 16) {
+      w.t = 3 + Math.random() * 3;
+      _stalkDir.subVectors(brain.lastSeen, selfPos);
+      _stalkDir.y = 0;
+      const l = _stalkDir.length() || 1;
+      _stalkDir.multiplyScalar(1 / l);
+      const step = 25 + Math.random() * 20;
+      const side = (Math.random() - 0.5) * 50; // wide jitter — erratic drift, not a homing run
+      w.wp.set(
+        selfPos.x + _stalkDir.x * step - _stalkDir.z * side, 0,
+        selfPos.z + _stalkDir.z * step + _stalkDir.x * side);
+      w.wp.y = deps.lazyTerrain().getHeight(w.wp.x, w.wp.z) + 2;
+    }
+    return w.wp;
+  }
+  const _stalkDir = new THREE.Vector3();
+
   // Grace period between a brain committing to a target and its attacks
   // landing — the first-strike mercy window.
   const ENGAGE_GRACE = 1.25;
@@ -232,7 +266,10 @@ export function createSpeciesKit(deps: EntitiesDeps, targets: Targetable[], depl
   function aggroFor(owner: object, selfPos: THREE.Vector3, dt: number, profile: TargetProfile): THREE.Vector3 {
     const brain = targetReg.for(owner);
     const t = brain.update(dt, selfPos, candidates(), profile);
-    if (!t) return wanderFor(owner, selfPos, dt);
+    // No live target: stalk toward the last-seen position if this brain
+    // only lost the target to distance — otherwise mill about on a
+    // personal wander waypoint. Either way the creature keeps moving.
+    if (!t) return brain.stalking ? stalkFor(owner, selfPos, dt, brain, profile.leash || 400) : wanderFor(owner, selfPos, dt);
 
     // Flinch: freshly damaged → recoil away from the attacker's position
     // instead of pressing in. Short window; reads as "it noticed the hit".
