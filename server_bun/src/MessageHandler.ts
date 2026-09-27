@@ -1,4 +1,4 @@
-import type { ClientMessage, ServerMessage, SnapshotPlayer } from './types.ts';
+import type { ClientMessage, ServerMessage, SnapshotPlayer, Vec3 } from './types.ts';
 import { PlayerManager } from './PlayerManager.ts';
 import { RateLimiter } from './RateLimiter.ts';
 import { CombatHandler } from './CombatHandler.ts';
@@ -54,6 +54,20 @@ export class MessageHandler {
 
   setBallSim(sim: BallSim): void {
     this.ballSim = sim;
+  }
+
+  /** Server-bot fire: broadcast the visible bolt, then apply the hitscan
+   *  outcome through combat's shared funnel. */
+  botFire(shooterId: string, targetId: string | null, position: Vec3, velocity: Vec3, weaponType: number, hit: boolean): void {
+    this.broadcast({
+      type: 'projectileCreated',
+      projectileId: `bot-${shooterId}-${Date.now()}`,
+      ownerId: shooterId,
+      position,
+      velocity,
+      weaponType,
+    });
+    if (hit && targetId) this.combat.botAttack(shooterId, targetId, weaponType);
   }
 
   /** Drop per-player bookkeeping when a socket closes (grace-period cleanup

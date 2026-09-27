@@ -383,6 +383,20 @@ export class CombatHandler {
   // One funnel for the hit-or-kill outcome: broadcast the damage, or credit
   // the kill and start the respawn timer. Keeps the three damage paths in
   // lockstep — a fix here can't drift between shot/AOE/environment.
+  /** Server-bot hitscan — no wire claim to validate, the server IS the
+   *  shooter, so this goes straight to damage. Distance/hit-chance live in
+   *  ServerBots; this just runs the shared outcome funnel so bot kills,
+   *  knockback bookkeeping and respawns match player-caused ones. */
+  botAttack(shooterId: string, targetId: string, weaponType: number): void {
+    const shooter = this.playerManager.getPlayer(shooterId);
+    const target = this.playerManager.getPlayer(targetId);
+    if (!shooter || shooter.isDead || !target || target.isDead) return;
+    const damage = getWeaponStats(weaponType).directDamage;
+    const result = this.playerManager.applyDamage(targetId, damage);
+    target.forceSendUntil = Date.now() + FORCE_SEND_MS;
+    this.applyHit(shooterId, targetId, damage, result, 'Bot hit');
+  }
+
   private applyHit(shooterId: string, targetId: string, damage: number, result: { killed: boolean; newHealth: number }, hitLabel: string, extra?: Record<string, unknown>): void {
     if (!result.killed) {
       logger.info(hitLabel, { shooter: shooterId, target: targetId, damage, targetHealth: result.newHealth, ...extra });
