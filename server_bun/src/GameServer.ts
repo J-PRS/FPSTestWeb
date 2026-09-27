@@ -1,30 +1,25 @@
 import type { ServerWebSocket, Server } from 'bun';
 import { CONFIG } from './config.ts';
-import { PlayerManager } from './PlayerManager.ts';
-import { RateLimiter } from './RateLimiter.ts';
-import { ConnectionManager } from './ConnectionManager.ts';
-import { MessageHandler } from './MessageHandler.ts';
+import { Room } from './Room.ts';
 import { BallSim } from './BallSim.ts';
 import { validateMessage, validatePlayerId } from './validation.ts';
 import type { WebSocketData } from './types.ts';
 import { logger } from './logger.ts';
 import { fileURLToPath } from 'node:url';
+import type { Heightfield } from '../../shared/heightfield.ts';
 import { isWireFrame, decodePosition, encodeTickPlayer, encodeTickFrame } from '../../shared/wire.ts';
 
 export class GameServer {
-  private playerManager: PlayerManager;
-  private rateLimiter: RateLimiter;
-  private connectionManager: ConnectionManager;
-  private messageHandler: MessageHandler;
-  private ballSim: BallSim;
+  // One match's state per room — players land in 'default' unless the join
+  // handshake names a room. Everything per-match (players, sockets, ball
+  // sim, tick bookkeeping) lives inside Room; GameServer is the dispatcher.
+  private rooms = new Map<string, Room>();
+  private field: Heightfield | null = null; // shared across rooms
   private bunServer: Server<WebSocketData> | null = null;
   private hashTimer: ReturnType<typeof setInterval> | null = null;
   private tickTimer: ReturnType<typeof setInterval> | null = null;
-  private tickCounter = 0;
-  private tickSeq = 0; // monotonically increasing — drives interest-tier phasing
   private lastStatusLine: string = '';
   private statusRepeatCount: number = 0;
-  private lastSentPositions: Map<string, { x: number; y: number; z: number; vx: number; vy: number; vz: number; yaw: number; pitch: number; hp: number; dead: boolean; ski: number; t: number }> = new Map();
 
   // Tick-bandwidth metrics — aggregated per log window so we can see what
   // interest tiers + suppression are actually saving.
@@ -40,31 +35,52 @@ export class GameServer {
   };
 
   constructor() {
-    this.playerManager = new PlayerManager();
-    this.rateLimiter = new RateLimiter();
-    this.connectionManager = new ConnectionManager();
-
-    this.messageHandler = new MessageHandler(
-      this.playerManager,
-      this.rateLimiter,
-      (msg, exclude) => this.connectionManager.broadcast(msg, exclude),
-      (pid, msg) => this.connectionManager.sendToPlayer(pid, msg),
-    );
-
     // Server-owned creatures: balls are the shared-PvE pilot. A missing
     // heightmap must degrade gracefully — log and run creature-free rather
-    // than take down the whole game server.
-    this.ballSim = new BallSim(
-      this.playerManager,
-      (msg) => this.connectionManager.broadcast(msg),
-      (data) => this.connectionManager.broadcastBinary(data),
-    );
-    this.messageHandler.setBallSim(this.ballSim);
-    this.ballSim.start(CONFIG.heightmapPath || fileURLToPath(new URL('../heightmap.bin', import.meta.url)))
-      .catch(err => logger.warn('BallSim disabled — heightmap load failed', { err: String(err) }));
+    // than take down the whole game server. The parsed field is shared by
+    // every room's BallSim rather than re-read per match.
+    const heightmapPath = CONFIG.heightmapPath || fileURLToPath(new URL('../heightmap.bin', import.meta.url));
+    const bunFile = (globalThis as { Bun?: { file(p: string): { arrayBuffer(): Promise<ArrayBuffer> } } }).Bun?.file;
+    if (bunFile) {
+      bunFile(heightmapPath).arrayBuffer()
+        .then(ab => {
+          this.field = BallSim.parseHeightmap(new Uint8Array(ab));
+          // Rooms that already exist (players joined before the load
+          // finished) get the field attached now.
+          for (const room of this.rooms.values()) {
+            if (!room.ballSim.hasField) room.ballSim.attachField(this.field);
+          }
+        })
+        .catch(err => logger.warn('BallSim disabled — heightmap load failed', { err: String(err) }));
+    } else {
+      logger.warn('BallSim disabled — not running under Bun');
+    }
 
     this.startHashBroadcast();
     this.startTickBroadcast();
+  }
+
+  private static readonly ROOM_NAME_RE = /^[\w-]{1,32}$/;
+
+  /** Resolve-or-create a room. Joins may name any room; 'default' is the
+   *  unnamed lobby every existing client already lands in. */
+  private roomFor(name: string): Room {
+    let room = this.rooms.get(name);
+    if (!room) {
+      room = new Room(name, this.field);
+      this.rooms.set(name, room);
+      logger.info('Room created', { room: name });
+    }
+    return room;
+  }
+
+  /** Find which room a player lives in — used by disconnect/teardown paths
+   *  where we only have the playerId. O(#rooms), and those calls are rare. */
+  private roomOfPlayer(playerId: string): Room | undefined {
+    for (const room of this.rooms.values()) {
+      if (room.players.getPlayer(playerId)) return room;
+    }
+    return undefined;
   }
 
   onOpen(ws: ServerWebSocket<WebSocketData>): void {
@@ -78,10 +94,11 @@ export class GameServer {
       const u8 = message instanceof ArrayBuffer ? new Uint8Array(message) : new Uint8Array((message as Uint8Array).buffer, (message as Uint8Array).byteOffset, (message as Uint8Array).byteLength);
       if (isWireFrame(u8)) {
         const existingId = ws.data.playerId;
-        if (!existingId) return; // binary before join — ignore
+        const room = existingId ? this.roomOfPlayer(existingId) : undefined;
+        if (!existingId || !room) return; // binary before join — ignore
         const pos = decodePosition(u8);
         if (pos) {
-          this.handleGameMessage(existingId, pos);
+          this.handleGameMessage(room, existingId, pos);
         }
         return;
       }
@@ -98,67 +115,77 @@ export class GameServer {
     }
 
     const existingPlayerId = ws.data.playerId;
+    const room = existingPlayerId ? this.roomOfPlayer(existingPlayerId) : undefined;
 
-    if (!existingPlayerId) {
+    if (!existingPlayerId || !room) {
       this.handleHandshake(ws, raw);
       return;
     }
 
-    this.handleGameMessage(existingPlayerId, raw);
+    this.handleGameMessage(room, existingPlayerId, raw);
   }
 
   private reconnectGraceMs = CONFIG.reconnectGraceMs; // Grace period for F5 reconnect
-  private disconnectedPlayers: Map<string, { timeout: ReturnType<typeof setTimeout> }> = new Map();
-  // playerId -> secret session token. Issued on first join, echoed in the
-  // gameState response, required to reclaim a disconnected (grace-period)
-  // slot — without it anyone could hijack a stale session just by knowing
-  // the playerId format.
-  private sessionTokens: Map<string, string> = new Map();
   private static readonly IDLE_KICK_MS = CONFIG.idleKickMs; // silent >60s → remove
 
   onClose(ws: ServerWebSocket<WebSocketData>): void {
     const playerId = ws.data.playerId;
     if (!playerId) return;
+    const room = this.roomOfPlayer(playerId);
+    if (!room) return;
 
-    this.connectionManager.unregister(playerId);
-    this.rateLimiter.removePlayer(playerId);
-    this.messageHandler.onPlayerDisconnected(playerId);
+    room.connections.unregister(playerId);
+    room.rateLimiter.removePlayer(playerId);
+    room.messages.onPlayerDisconnected(playerId);
 
     // Keep player state for grace period to allow seamless F5 reconnect
-    const existingTimeout = this.disconnectedPlayers.get(playerId);
+    const existingTimeout = room.disconnected.get(playerId);
     if (existingTimeout) clearTimeout(existingTimeout.timeout);
 
     const timeout = setTimeout(() => {
-      this.disconnectedPlayers.delete(playerId);
-      this.removePlayerCompletely(playerId, 'grace period');
+      room.disconnected.delete(playerId);
+      this.removePlayerCompletely(room, playerId, 'grace period');
     }, this.reconnectGraceMs);
 
-    this.disconnectedPlayers.set(playerId, { timeout });
-    logger.info('Player disconnected, grace period started', { playerId, graceMs: this.reconnectGraceMs });
+    room.disconnected.set(playerId, { timeout });
+    logger.info('Player disconnected, grace period started', { playerId, room: room.name, graceMs: this.reconnectGraceMs });
   }
 
   onDrain(ws: ServerWebSocket<WebSocketData>): void {
     logger.debug('Backpressure drain', { playerId: ws.data.playerId });
   }
 
+  private totalPlayers(): number {
+    let n = 0;
+    for (const room of this.rooms.values()) n += room.playerCount();
+    return n;
+  }
+
   getHealthStatus(): { status: string; players: number; maxPlayers: number; tickRate: number } {
     return {
       status: 'running',
-      players: this.playerManager.getPlayerCount(),
+      players: this.totalPlayers(),
       maxPlayers: CONFIG.maxPlayers,
       tickRate: CONFIG.tickRate,
     };
   }
 
-  /** Ops snapshot for /metrics — counts since boot plus tick-lag stats. */
+  /** Ops snapshot for /metrics — counts since boot plus tick-lag stats,
+   *  with per-room occupancy/ball counts for match-level observability. */
   getMetrics() {
     const o = this.ops;
     const uptimeS = Math.floor((Date.now() - o.startedAt) / 1000);
+    const rooms = [...this.rooms.values()].map(r => ({
+      name: r.name,
+      players: r.playerCount(),
+      balls: r.ballSim.ballCount,
+      gracePending: r.disconnected.size,
+      ballSimNow: r.ballSim.simNow,
+    }));
     return {
       uptimeS,
-      players: this.playerManager.getPlayerCount(),
-      balls: this.ballSim.ballCount,
-      gracePeriodPending: this.disconnectedPlayers.size,
+      players: this.totalPlayers(),
+      rooms,
       joins: o.joins,
       leaves: o.leaves,
       msgsIn: o.msgsIn,
@@ -167,7 +194,6 @@ export class GameServer {
         avg: o.tickLagSamples ? +(o.tickLagMsSum / o.tickLagSamples).toFixed(2) : 0,
         max: o.tickLagMsMax,
       },
-      ballSimNow: this.ballSim.simNow,
     };
   }
 
@@ -204,32 +230,37 @@ export class GameServer {
 
     const playerId = playerIdResult.data;
     const token = typeof handshake.token === 'string' ? handshake.token : undefined;
+    const roomName = typeof handshake.room === 'string' && GameServer.ROOM_NAME_RE.test(handshake.room)
+      ? handshake.room
+      : 'default';
 
-    // Check for reconnect within grace period BEFORE max-players check.
-    // A reconnecting player already has a slot — they should bypass the full-server check.
-    const existingPlayer = this.playerManager.getPlayer(playerId);
-    if (existingPlayer) {
-      const disconnected = this.disconnectedPlayers.get(playerId);
-      if (disconnected) {
+    // A reclaim must land in the room the session was in — find by playerId
+    // rather than trusting the claimed room (reconnecting to a different
+    // room mid-grace would orphan the slot in the old room).
+    const reclaimRoom = this.roomOfPlayer(playerId);
+    if (reclaimRoom) {
+      const existingPlayer = reclaimRoom.players.getPlayer(playerId);
+      const disconnected = reclaimRoom.disconnected.get(playerId);
+      if (existingPlayer && disconnected) {
         // Session reclaim requires the server-issued token — bare playerId
         // knowledge must not be enough to steal a slot
-        if (token !== this.sessionTokens.get(playerId)) {
+        if (token !== reclaimRoom.sessionTokens.get(playerId)) {
           logger.warn('Reconnect rejected: bad session token', { playerId });
           ws.close(1008, 'Invalid session token');
           return;
         }
         // Cancel grace period removal, reconnect with existing state
         clearTimeout(disconnected.timeout);
-        this.disconnectedPlayers.delete(playerId);
+        reclaimRoom.disconnected.delete(playerId);
 
         ws.data.playerId = playerId;
-        this.connectionManager.register(playerId, ws);
-        this.messageHandler.handleHandshake(playerId, undefined, true);
+        reclaimRoom.connections.register(playerId, ws);
+        reclaimRoom.messages.handleHandshake(playerId, undefined, true);
         // Disconnect cancelled any pending respawn — if they come back dead,
         // re-arm it or the restored corpse stays dead forever
-        this.messageHandler.onPlayerReconnected(playerId);
+        reclaimRoom.messages.onPlayerReconnected(playerId);
 
-        logger.info('Player reconnected within grace period, state restored', { playerId, health: existingPlayer.health, pos: existingPlayer.position });
+        logger.info('Player reconnected within grace period, state restored', { playerId, room: reclaimRoom.name, health: existingPlayer.health, pos: existingPlayer.position });
         return;
       }
 
@@ -238,82 +269,81 @@ export class GameServer {
       return;
     }
 
-    if (this.playerManager.getPlayerCount() >= CONFIG.maxPlayers) {
+    const room = this.roomFor(roomName);
+
+    if (room.playerCount() >= CONFIG.maxPlayers) {
       ws.close(1013, 'Server full');
       return;
     }
 
     ws.data.playerId = playerId;
     const sessionToken = crypto.randomUUID();
-    this.sessionTokens.set(playerId, sessionToken);
-    this.playerManager.addPlayer(playerId);
-    this.connectionManager.register(playerId, ws);
-    this.messageHandler.handleHandshake(playerId, sessionToken);
+    room.sessionTokens.set(playerId, sessionToken);
+    room.players.addPlayer(playerId);
+    room.connections.register(playerId, ws);
+    room.messages.handleHandshake(playerId, sessionToken);
     this.ops.joins++;
 
-    logger.info('Player connected', { playerId, total: this.playerManager.getPlayerCount() });
+    logger.info('Player connected', { playerId, room: room.name, total: room.playerCount() });
   }
 
-  private handleGameMessage(playerId: string, raw: unknown): void {
+  private handleGameMessage(room: Room, playerId: string, raw: unknown): void {
     const result = validateMessage(raw);
     if (!result.success) {
       this.ops.msgsRejected++;
-      logger.warn('Invalid message rejected', { playerId, error: result.error });
+      logger.warn('Invalid message rejected', { playerId, room: room.name, error: result.error });
       return;
     }
 
     this.ops.msgsIn++;
-    this.messageHandler.handleMessage(playerId, result.data);
+    room.messages.handleMessage(playerId, result.data);
   }
 
   // Full teardown shared by grace expiry and idle reap — the five stores
   // and the broadcast must move together or a stale slot/token leaks.
-  private removePlayerCompletely(playerId: string, reason: string): void {
-    this.playerManager.removePlayer(playerId);
-    this.messageHandler.onPlayerRemoved(playerId);
-    this.sessionTokens.delete(playerId);
-    this.lastSentPositions.delete(playerId);
-    this.connectionManager.broadcast({ type: 'playerLeft', playerId });
+  private removePlayerCompletely(room: Room, playerId: string, reason: string): void {
+    room.removePlayerCompletely(playerId, reason, (m, o) => logger.info(m, o));
     this.ops.leaves++;
-    logger.info('Player removed', { playerId, reason, remaining: this.playerManager.getPlayerCount() });
   }
 
   private startHashBroadcast(): void {
     this.hashTimer = setInterval(() => {
-      const playerCount = this.playerManager.getPlayerCount();
-      if (playerCount === 0) return;
+      for (const room of this.rooms.values()) {
+        const playerCount = room.playerCount();
+        if (playerCount === 0) continue;
 
-      this.tickCounter++;
-      const hash = this.computeStateHash();
-      const timestamp = Date.now();
+        room.tickSeq++;
+        const hash = this.computeStateHash(room);
+        const timestamp = Date.now();
 
-      this.connectionManager.broadcast({
-        type: 'stateHash',
-        hash,
-        tick: this.tickCounter,
-        playerCount,
-        timestamp,
-      });
+        room.broadcast({
+          type: 'stateHash',
+          hash,
+          tick: room.tickSeq,
+          playerCount,
+          timestamp,
+        });
 
-      // Periodic status summary - suppress duplicates, batch with count
-      const players = this.playerManager.getAllPlayers();
-      const summary = Array.from(players.entries()).map(([id, p]) =>
-        `${id}[${p.kills}/${p.deaths}] ${p.isDead ? 'DEAD' : `HP${p.health}`} @(${p.position.x.toFixed(0)},${p.position.y.toFixed(0)},${p.position.z.toFixed(0)})`
-      ).join(' | ');
-      const statusLine = `Status [${playerCount} players] ${summary}`;
+        // Periodic status summary - suppress duplicates, batch with count
+        const players = room.players.getAllPlayers();
+        const summary = Array.from(players.entries()).map(([id, p]) =>
+          `${id}[${p.kills}/${p.deaths}] ${p.isDead ? 'DEAD' : `HP${p.health}`} @(${p.position.x.toFixed(0)},${p.position.y.toFixed(0)},${p.position.z.toFixed(0)})`
+        ).join(' | ');
+        const statusLine = `Status [${room.name} · ${playerCount} players] ${summary}`;
 
-      if (statusLine === this.lastStatusLine) {
-        this.statusRepeatCount++;
-      } else {
-        if (this.statusRepeatCount > 0) {
-          logger.info(`${this.lastStatusLine} [x${this.statusRepeatCount + 1}]`);
-          this.statusRepeatCount = 0;
+        if (statusLine === this.lastStatusLine) {
+          this.statusRepeatCount++;
+        } else {
+          if (this.statusRepeatCount > 0) {
+            logger.info(`${this.lastStatusLine} [x${this.statusRepeatCount + 1}]`);
+            this.statusRepeatCount = 0;
+          }
+          logger.info(statusLine);
+          this.lastStatusLine = statusLine;
         }
-        logger.info(statusLine);
-        this.lastStatusLine = statusLine;
-      }
 
-      logger.debug('State hash broadcast', { tick: this.tickCounter, hash, playerCount });
+        logger.debug('State hash broadcast', { room: room.name, tick: room.tickSeq, hash, playerCount });
+      }
     }, CONFIG.hashBroadcastIntervalMs);
   }
 
@@ -326,8 +356,6 @@ export class GameServer {
 
   private startTickBroadcast(): void {
     this.tickTimer = setInterval(() => {
-      const players = this.playerManager.getAllPlayers();
-      if (players.size === 0) return;
       const now0 = Date.now();
       // Tick lag: how late this interval fired vs the nominal 50ms cadence.
       // Sustained lag = sim clock drifts behind wall time — the skew that
@@ -339,6 +367,16 @@ export class GameServer {
         if (lag > this.ops.tickLagMsMax) this.ops.tickLagMsMax = lag;
       }
       this.ops.lastTickAt = now0;
+
+      for (const room of this.rooms.values()) {
+        const players = room.players.getAllPlayers();
+        if (players.size === 0) continue;
+        this.tickRoom(room, players, now0);
+      }
+    }, 50); // 20Hz tick broadcast
+  }
+
+  private tickRoom(room: Room, players: ReturnType<Room['players']['getAllPlayers']>, now0: number): void {
 
       // Batch all player updates into one message with delta compression.
       // Binary records are pre-encoded ONCE per tick — the per-recipient
@@ -354,14 +392,14 @@ export class GameServer {
         // Idle reaper: silent for >60s → not a player anymore, drop the slot.
         // Grace-period entries are owned by their removal timeout — reaping
         // them here double-removes (double playerLeft broadcast).
-        if (this.disconnectedPlayers.has(playerId)) continue;
+        if (room.disconnected.has(playerId)) continue;
         const silenceMs = now - p.lastSeen;
         if (silenceMs > GameServer.IDLE_KICK_MS) {
-          const ws = this.connectionManager.getConnection(playerId);
+          const ws = room.socketOf(playerId);
           if (ws && ws.readyState === 1) {
             ws.close(1000, 'idle'); // triggers onClose → grace cleanup
           } else {
-            this.removePlayerCompletely(playerId, 'idle');
+            this.removePlayerCompletely(room, playerId, 'idle');
           }
           logger.info('Idle player removed', { playerId, silenceMs });
           this.metrics.recordsIdleReaped++;
@@ -375,7 +413,7 @@ export class GameServer {
         // only the first stale player in map order ever heartbeat.
         const isStale = silenceMs > 5000;
         const forceSend = now < p.forceSendUntil;
-        const lastSent = this.lastSentPositions.get(playerId);
+        const lastSent = room.lastSentPositions.get(playerId);
         if (isStale && lastSent && now - lastSent.t < 2000) continue;
         if (lastSent && !forceSend) {
           const elapsed = (now - lastSent.t) / 1000;
@@ -404,7 +442,7 @@ export class GameServer {
             continue; // Skip — within extrapolation tolerance
           }
         }
-        this.lastSentPositions.set(playerId, {
+        room.lastSentPositions.set(playerId, {
           x: p.position.x, y: p.position.y, z: p.position.z,
           vx: p.velocity.x, vy: p.velocity.y, vz: p.velocity.z,
           yaw: p.rotation.yaw, pitch: p.rotation.pitch,
@@ -432,7 +470,7 @@ export class GameServer {
         this.metrics.recordsBuilt++;
       }
 
-      this.tickSeq++;
+      room.tickSeq++;
       this.metrics.ticks++;
 
       if (records.length > 0) {
@@ -443,7 +481,7 @@ export class GameServer {
         for (const [recipientId, rp] of players) {
           // Grace-period entries have no socket — record filtering for them
           // is wasted work
-          if (this.disconnectedPlayers.has(recipientId)) continue;
+          if (room.disconnected.has(recipientId)) continue;
           const others: Uint8Array[] = [];
           for (const r of records) {
             if (r.playerId === recipientId) continue;
@@ -454,17 +492,17 @@ export class GameServer {
             const tier = dSq < 22500 ? 1 : dSq < 160000 ? 2 : 10; // 150m / 400m
             // force = hit/knockback window: real positions must reach every
             // observer at full rate while they extrapolate the knockback
-            if (r.force || this.tickSeq % tier === 0) others.push(r.data);
+            if (r.force || room.tickSeq % tier === 0) others.push(r.data);
             else this.metrics.recordsTierSkipped++;
           }
           if (others.length === 0) continue;
           const frame = encodeTickFrame(
-            this.playerManager.getLastSeq(recipientId),
+            room.players.getLastSeq(recipientId),
             others,
           );
           this.metrics.recordsSent += others.length;
           this.metrics.bytesSent += frame.byteLength;
-          this.connectionManager.sendBinaryToPlayer(recipientId, frame);
+          room.connections.sendBinaryToPlayer(recipientId, frame);
         }
       }
 
@@ -485,7 +523,6 @@ export class GameServer {
           m.recordsSent = m.recordsTierSkipped = m.bytesSent = 0;
         m.windowStart = now0;
       }
-    }, 50); // 20Hz tick broadcast
   }
 
   private stopTickBroadcast(): void {
@@ -495,8 +532,8 @@ export class GameServer {
     }
   }
 
-  private computeStateHash(): string {
-    const players = this.playerManager.getAllPlayers();
+  private computeStateHash(room: Room): string {
+    const players = room.players.getAllPlayers();
     const sortedIds = Array.from(players.keys()).sort();
 
     const playerData = sortedIds.map(id => {
