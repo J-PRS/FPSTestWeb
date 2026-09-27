@@ -73,6 +73,9 @@ export class RemotePlayer {
   // chasing the newest one. Kills jitter/oscillation — the classic Quake/
   // Krunker approach. Buffer holds ~1s of the 20Hz stream.
   private snapshots: { t: number; x: number; y: number; z: number; yaw: number; pitch: number; vx: number; vy: number; vz: number }[] = [];
+  // Shifted-out snapshots go back in the pool — at 20Hz/remote a fresh
+  // object per packet is the kind of steady GC drip we sweep for
+  private snapshotPool: { t: number; x: number; y: number; z: number; yaw: number; pitch: number; vx: number; vy: number; vz: number }[] = [];
 
   // Public getters for main.ts access (removes need for (as any) casts)
   get lastUpdateTime(): number { return this._lastUpdateTime; }
@@ -94,6 +97,7 @@ export class RemotePlayer {
     this.position.copy(pos);
     this.previousPosition.copy(pos);
     this.targetPosition.copy(pos);
+    this.snapshotPool.push(...this.snapshots);
     this.snapshots.length = 0;
     this._lastUpdateTime = Date.now();
     this._isSimulating = false;
@@ -185,15 +189,15 @@ export class RemotePlayer {
     }
 
     // Push onto the snapshot buffer (interpolation samples between entries)
-    this.snapshots.push({
-      t: this.lastServerUpdateMs,
-      x: targetPosition.x, y: targetPosition.y, z: targetPosition.z,
-      yaw: targetRotation.yaw, pitch: targetRotation.pitch,
-      vx: serverVelocity?.x ?? 0, vy: serverVelocity?.y ?? 0, vz: serverVelocity?.z ?? 0,
-    });
+    const snap = this.snapshotPool.pop() ?? { t: 0, x: 0, y: 0, z: 0, yaw: 0, pitch: 0, vx: 0, vy: 0, vz: 0 };
+    snap.t = this.lastServerUpdateMs;
+    snap.x = targetPosition.x; snap.y = targetPosition.y; snap.z = targetPosition.z;
+    snap.yaw = targetRotation.yaw; snap.pitch = targetRotation.pitch;
+    snap.vx = serverVelocity?.x ?? 0; snap.vy = serverVelocity?.y ?? 0; snap.vz = serverVelocity?.z ?? 0;
+    this.snapshots.push(snap);
     const cutoff = this.lastServerUpdateMs - 1000;
     while (this.snapshots.length > 2 && this.snapshots[0].t < cutoff) {
-      this.snapshots.shift();
+      this.snapshotPool.push(this.snapshots.shift()!);
     }
 
     // Store server-reported velocity for extrapolation
@@ -559,6 +563,7 @@ export class RemotePlayer {
     this.angularVelocity.set(0, 0, 0);
     this.isOnGround = true;
     this._isSimulating = false;
+    this.snapshotPool.push(...this.snapshots);
     this.snapshots.length = 0;
     this.predictionTimer = 0;
     this.reconcileBlend = 0;
@@ -598,6 +603,7 @@ export class RemotePlayer {
     this.simulatedVelocity.x += (dx / dist) * impulseMag * s;
     this.simulatedVelocity.y += (pull ? 0.3 : 0.5) * impulseMag;
     this.simulatedVelocity.z += (dz / dist) * impulseMag * s;
+    this.snapshotPool.push(...this.snapshots);
     this.snapshots.length = 0;
     this._isSimulating = true;
     // Window: ping + one server tick + interp delay, clamped
