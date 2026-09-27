@@ -233,7 +233,7 @@ export function createCombat(deps: CombatDeps) {
     // Explosion/implosion visual + scorch decal on the terrain below the blast
     if (forceMode === 'push') {
       deps.world.explosions.push(new Explosion(deps.scene(), pos, directHit, age, deps.terrain(), vfx / ROCKET_RADIUS, explosionTint));
-    sfx.explosionAt(pos, directHit);
+      sfx.explosionAt(pos, directHit, weaponType);
       screenShake.blast(pos, vfx, deps.player().pos);
     } else {
       deps.world.implosions.push(new Implosion(deps.scene(), pos, age, deps.terrain()));
@@ -545,7 +545,7 @@ export function createCombat(deps: CombatDeps) {
     // Railgun reward: any kill (direct or its splash) instantly reloads —
     // the "not useless" payoff that turns a slow precision weapon into a
     // chain-kill tool against clusters.
-    if (weaponType === WeaponType.Railgun) deps.player().fireTimer = 0;
+    if (weaponType === WeaponType.Railgun) deps.player().refundWeaponCooldown();
     // Shell-sampled shatter — debris occupies the target's silhouette on
     // frame 0 and flies along surface normals + the killing impulse
     if (impulse) _debrisDir.copy(impulse).normalize(); else _debrisDir.set(0, 0.5, 0);

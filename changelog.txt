@@ -1693,3 +1693,5 @@
 - sample() gained per-layer lowpass + early fade-cut; layer() recipes are now [name,gain,rate,lpf,cutSec]
 - debugMix() + disc candidates in sfxdump + analyze.py (band energy, crest, sustain, spectrogram PNG per wav)
 - JP's complaint verified: old mix rang ~1.4kHz/5kHz for a full second. New disc = cannon body(lpf800,cut0.4) + clang twang(cut0.15) + punch(cut0.2): sustain 0.37s, crest 3.7, centroid 316Hz
+== sound: per-weapon explosion voices ==
+- explosionAt(pos,big,weaponType): BOOM_SAMPLES map gives each weapon its own blast — mortar=explosion1@0.6+thud_big lowpassed (deep 1.5s rumble), flak=crack+sparks, plasma=sizzle, railgun=energy zap, GL=grenade pop, chaingun=small snap
