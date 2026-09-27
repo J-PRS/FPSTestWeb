@@ -90,6 +90,28 @@ export class GameServer {
   // FPS_SECRET is set (random per boot otherwise — dev default).
   private identitySecret = CONFIG.identitySecret || randomBytes(32).toString('hex');
   private claimedIdentities = new Map<string, string>();
+  // Unbounded by default — a join-spam botnet would otherwise grow this
+  // map forever. Past the cap, evict oldest-first (insertion order).
+  private static readonly MAX_IDENTITIES = 10_000;
+
+  // Join throttle: ip → sliding window counters. Entries age out with the
+  // window so the map self-cleans.
+  private joinWindows = new Map<string, { count: number; start: number }>();
+  private static readonly JOIN_LIMIT = 5;
+  private static readonly JOIN_WINDOW_MS = 60_000;
+
+  private joinThrottleAllow(ip: string): boolean {
+    // Loopback is the dev box and the pvptest harness — fleets spawn 24+
+    // joins/minute legitimately. Flood control is for real traffic only.
+    if (ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1') return true;
+    const now = Date.now();
+    let w = this.joinWindows.get(ip);
+    if (!w || now - w.start >= GameServer.JOIN_WINDOW_MS) {
+      w = { count: 0, start: now };
+      this.joinWindows.set(ip, w);
+    }
+    return ++w.count <= GameServer.JOIN_LIMIT;
+  }
 
   private identityToken(playerId: string): string {
     return createHmac('sha256', this.identitySecret).update(playerId).digest('base64url');
@@ -341,6 +363,16 @@ export class GameServer {
     }
 
     const playerId = playerIdResult.data;
+
+    // Join flood guard: joins bypass the per-player RateLimiter (they ARE
+    // the registration), so throttle by source IP — 5 joins/min is generous
+    // for humans, lethal for a spammer script.
+    if (!this.joinThrottleAllow(ws.remoteAddress)) {
+      logger.warn('Join flood rejected', { ip: ws.remoteAddress });
+      ws.close(1013, 'Join rate limited');
+      return;
+    }
+
     const token = typeof handshake.token === 'string' ? handshake.token : undefined;
     const roomName = typeof handshake.room === 'string' && GameServer.ROOM_NAME_RE.test(handshake.room)
       ? handshake.room
@@ -400,7 +432,19 @@ export class GameServer {
       ws.close(1008, 'Player ID claimed');
       return;
     }
-    if (!claimed) this.claimedIdentities.set(playerId, idToken);
+    if (!claimed) {
+      if (this.claimedIdentities.size >= GameServer.MAX_IDENTITIES) {
+        // Map iterates insertion-ordered — dropping the first half evicts
+        // the stalest claims in one pass.
+        const it = this.claimedIdentities.keys();
+        for (let i = 0; i < GameServer.MAX_IDENTITIES / 2; i++) {
+          const k = it.next().value;
+          if (k === undefined) break;
+          this.claimedIdentities.delete(k);
+        }
+      }
+      this.claimedIdentities.set(playerId, idToken);
+    }
 
     ws.data.playerId = playerId;
     const sessionToken = idToken;
