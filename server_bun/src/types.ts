@@ -41,6 +41,9 @@ export interface PlayerState {
   lastPosCheckPos: Vec3;
   consecutiveRejects: number; // escape hatch: client persisting past corrections gets force-resynced
   ping: number; // self-reported client RTT in ms
+  // Team-mode rooms (nuggets/ctf): assigned by the room at join — absent
+  // in free-for-all modes. Owned by the server; clients never set it.
+  team?: 'alpha' | 'bravo';
   skiing: number; // last reported ski input flag (0/1), from inputMove
   // Lag-comp rewind buffer: accepted position reports stamped at server
   // receive time. Hit validation rewinds the target to the shooter's view

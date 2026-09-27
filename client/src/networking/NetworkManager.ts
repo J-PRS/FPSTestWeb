@@ -19,6 +19,7 @@ export interface RemotePlayerState {
   health: number;
   ping?: number;
   ski?: number;
+  team?: 'alpha' | 'bravo';
 }
 
 /**
@@ -44,7 +45,10 @@ export class NetworkManager {
   public onKnockback: ((position: { x: number; y: number; z: number }, force: number, pull?: boolean) => void) | null = null;
   public onChat: ((playerId: string, text: string) => void) | null = null;
   public onPlayerUpdate: ((playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }, timestamp: number, velocity?: { x: number; y: number; z: number }) => void) | null = null;
-  public onGameState: ((players: GameStatePlayer[], localPlayerState: LocalPlayerState | undefined, roomInfo?: { room?: string; mode?: string }) => void) | null = null;
+  public onGameState: ((players: GameStatePlayer[], localPlayerState: LocalPlayerState | undefined, roomInfo?: { room?: string; mode?: string; team?: 'alpha' | 'bravo'; scores?: { alpha: number; bravo: number } }) => void) | null = null;
+  public onTeamScore: ((scores: { alpha: number; bravo: number }, winAt: number) => void) | null = null;
+  public onMatchEnd: ((winner: 'alpha' | 'bravo', scores: { alpha: number; bravo: number }) => void) | null = null;
+  public onMatchStart: ((mode: string, scores: { alpha: number; bravo: number }) => void) | null = null;
   public onSnapshot: ((players: SnapshotPlayer[], timestamp: number) => void) | null = null;
   public onStateHash: ((hash: string, tick: number, playerCount: number, timestamp: number) => void) | null = null;
   public onCorrection: ((seq: number, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }) => void) | null = null;
@@ -197,6 +201,9 @@ export class NetworkManager {
     ballRoster: (data) => this.onBallRoster?.(data),
     pong: (data) => this.handlePong(data.timestamp),
     chat: (data) => this.onChat?.(data.playerId, data.text),
+    teamScore: (data) => this.onTeamScore?.(data.scores, data.winAt),
+    matchEnd: (data) => this.onMatchEnd?.(data.winner, data.scores),
+    matchStart: (data) => this.onMatchStart?.(data.mode, data.scores),
   };
 
   private handleGameState(data: Extract<ServerMessage, { type: 'gameState' }>): void {
@@ -228,7 +235,7 @@ export class NetworkManager {
         this.players.set(player.id, player);
       }
     }
-    this.onGameState?.(data.players || [], data.localPlayerState, { room: data.room, mode: data.mode });
+    this.onGameState?.(data.players || [], data.localPlayerState, { room: data.room, mode: data.mode, team: data.team, scores: data.scores });
   }
 
   private handleTickUpdate(data: { updates: TickUpdatePlayer[]; ackSeq?: number }): void {
@@ -272,6 +279,7 @@ export class NetworkManager {
       health: patch.health ?? existing?.health ?? 100,
       ping: patch.ping ?? existing?.ping,
       ski: patch.ski ?? existing?.ski,
+      team: patch.team ?? existing?.team,
     });
   }
 
@@ -287,6 +295,7 @@ export class NetworkManager {
       velocity: isNew ? { x: 0, y: 0, z: 0 } : undefined,
       isDead: isNew ? false : undefined,
       health: isNew ? 100 : undefined,
+      team: data.team,
     });
     if (isNew) this.onPlayerJoined?.(data.playerId, data.position, data.rotation);
   }
@@ -490,6 +499,11 @@ export class NetworkManager {
 
   sendChat(text: string): void {
     this.send({ type: 'chat', text });
+  }
+
+  /** Nugget/flag banking claim — team-mode rooms own the score. */
+  sendBank(n: number): void {
+    this.send({ type: 'bank', n });
   }
 
   

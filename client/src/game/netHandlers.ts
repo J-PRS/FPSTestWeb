@@ -52,6 +52,12 @@ export function wireNetworkHandlers(deps: NetDeps): void {
     localName: () => networkManager.getLocalPlayerId(),
   });
   networkManager.onChat = (playerId, text) => chat.add(playerId, text);
+  networkManager.onTeamScore = (scores, winAt) =>
+    chat.add(null, `ALPHA ${scores.alpha} : ${scores.bravo} BRAVO  (first to ${winAt})`);
+  networkManager.onMatchEnd = (winner, scores) =>
+    chat.add(null, `${winner.toUpperCase()} WINS ${scores.alpha}:${scores.bravo} — new match starting`);
+  networkManager.onMatchStart = (mode) =>
+    chat.add(null, `match start — ${mode || 'arena'}`);
 
   // Both first-seen-update and respawn-into-missing end up here
   function ensureRemotePlayer(playerId: string, position: { x: number; y: number; z: number }, via: string): RemotePlayer {
@@ -353,10 +359,13 @@ export function wireNetworkHandlers(deps: NetDeps): void {
   };
 
   // Register gameState handler (for initial connection and reconnection)
-  networkManager.onGameState = (players: GameStatePlayer[], localPlayerState: LocalPlayerState | undefined, roomInfo?: { room?: string; mode?: string }) => {
+  networkManager.onGameState = (players: GameStatePlayer[], localPlayerState: LocalPlayerState | undefined, roomInfo?: { room?: string; mode?: string; team?: 'alpha' | 'bravo'; scores?: { alpha: number; bravo: number } }) => {
     logger.debug(`gameState received, players: ${players.length}`);
     if (roomInfo?.room && roomInfo.room !== 'default') {
       chat.add(null, `joined room '${roomInfo.room}'${roomInfo.mode ? ` (${roomInfo.mode})` : ''} — ${players.length} other player(s)`);
+    }
+    if (roomInfo?.team) {
+      chat.add(null, `you are on ${roomInfo.team.toUpperCase()}${roomInfo.scores ? ` — ALPHA ${roomInfo.scores.alpha} : BRAVO ${roomInfo.scores.bravo}` : ''}`);
     }
 
     if (!localPlayerState) return;

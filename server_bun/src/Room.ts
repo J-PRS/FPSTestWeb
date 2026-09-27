@@ -16,6 +16,8 @@ import { MessageHandler } from './MessageHandler.ts';
 import { BallSim } from './BallSim.ts';
 import type { Heightfield } from '../../shared/heightfield.ts';
 import { type MapSpec, resolveMapSpec } from '../../shared/mapSpec.ts';
+import { MODES, pickTeam, makeScores, bank, winner, type ModeId, type ModeSpec, type TeamScores } from '../../shared/teams.ts';
+import type { PlayerState } from './types.ts';
 import type { ServerWebSocket } from 'bun';
 import type { WebSocketData } from './types.ts';
 
@@ -38,17 +40,27 @@ export class Room {
   tickSeq = 0;
 
   readonly spec: MapSpec;
+  // Server-owned match scoreboard — only populated in team modes.
+  readonly modeSpec: ModeSpec | null;
+  readonly scores: TeamScores = makeScores();
 
   constructor(name: string, field: Heightfield | null, mode = '', spec?: MapSpec) {
     this.name = name;
     this.spec = spec ?? resolveMapSpec(null);
     this.mode = mode || this.spec.mode || '';
+    this.modeSpec = MODES[this.mode as ModeId] ?? null;
     this.messages = new MessageHandler(
       this.players,
       this.rateLimiter,
       (msg, exclude) => this.connections.broadcast(msg, exclude),
       (pid, msg) => this.connections.sendToPlayer(pid, msg),
-      { room: name, mode },
+      {
+        room: name,
+        mode: this.mode,
+        scores: this.scores,
+        winAt: this.modeSpec?.winAt,
+        onBank: (pid, n) => this.bank(pid, n),
+      },
     );
     this.ballSim = new BallSim(
       this.players,
@@ -75,6 +87,33 @@ export class Room {
   /** Nothing left to serve: no players, no grace-period ghosts. */
   get empty(): boolean {
     return this.players.getPlayerCount() === 0 && this.disconnected.size === 0;
+  }
+
+  /** Balance join: smallest team takes the newcomer. FFA modes no-op. */
+  assignTeam(player: PlayerState): void {
+    if (!this.modeSpec?.teams) return;
+    let alpha = 0, bravo = 0;
+    for (const p of this.players.getAllPlayers().values()) {
+      if (p.team === 'alpha') alpha++;
+      else if (p.team === 'bravo') bravo++;
+    }
+    player.team = pickTeam({ alpha, bravo });
+  }
+
+  /** A nugget banked (or a flag capped, same channel). Server clamps the
+   *  claim size in validation; here we just count and judge the match. */
+  bank(playerId: string, n: number): void {
+    const player = this.players.getPlayer(playerId);
+    if (!player?.team || !this.modeSpec?.teams) return;
+    bank(this.scores, player.team, n);
+    this.broadcast({ type: 'teamScore', scores: { ...this.scores }, winAt: this.modeSpec.winAt });
+    const w = winner(this.scores, this.modeSpec.winAt);
+    if (w) {
+      this.broadcast({ type: 'matchEnd', winner: w, scores: { ...this.scores } });
+      this.scores.alpha = 0;
+      this.scores.bravo = 0;
+      this.broadcast({ type: 'matchStart', mode: this.mode, scores: { ...this.scores } });
+    }
   }
 
   dispose(): void {

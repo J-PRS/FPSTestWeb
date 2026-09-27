@@ -82,6 +82,7 @@ export class PlayerManager {
       velocity: { ...player.velocity },
       isDead: player.isDead,
       health: player.health,
+      team: player.team,
     };
   }
 
