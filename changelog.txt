@@ -1893,3 +1893,4 @@ Server bots fight back: sight-range target selection (enemy team, or humans in F
 Map spec gains ballMix: per-map variant weights [common,mid,large,elite] normalized server-side — a map can now go all-elite or fodder-only; malformed mixes fall back to the built-in table
 Nugget banking now reports to the server in networked team matches (sendBank on local pickup; offline still banks locally) and teamScore echoes drive the HUD bar, not just chat
 Server-owned CTF: RoomFlags runs tick-based touch rules off server-known positions (planar grab w/ 6m vertical gate), drop-on-any-death via combat funnel, capture feeds the same score→matchEnd channel as nuggets; clients render pole+banner from flagUpdate
+Server bots play CTF: flagGoal routes them — carrying → own base, own flag dropped → touch home, enemy flag exposed → grab it, flag moving → defend home; an enemy in sight still interrupts the objective
