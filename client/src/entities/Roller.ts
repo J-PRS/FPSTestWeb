@@ -8,23 +8,31 @@ import {
 } from '../core/config.js';
 import { Terrain } from '../world/terrain.js';
 import type { Targetable } from './balls.js';
-import { BlobShadow } from '../effects/blobShadow.js';
+import { allocSlots, freeSlots, getSwarm, getShadows } from './swarms.js';
+import type { SwarmPart, SwarmSlotOwner } from './swarm.js';
 
 const _dir = new THREE.Vector3();
 const _axis = new THREE.Vector3();
+const _dq = new THREE.Quaternion();
+const _m = new THREE.Matrix4();
+const _s = new THREE.Vector3();
 
-let _geo: THREE.IcosahedronGeometry | null = null;
-function getGeo(): THREE.IcosahedronGeometry {
-  if (!_geo) _geo = new THREE.IcosahedronGeometry(1, 2); // faceted boulder — roll reads clearly
-  return _geo;
+const _geo = new THREE.IcosahedronGeometry(1, 2); // faceted boulder — roll reads clearly
+
+let _mat: THREE.MeshLambertMaterial | null = null;
+
+/** Swarm part table — one rigid boulder per roller. */
+export function rollerParts(): SwarmPart[] {
+  if (!_mat) _mat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+  return [{ geometry: _geo, material: _mat, castShadow: true }];
 }
 
 /**
  * Roller — a big ball that just rolls toward the player. Terrain-following
  * homing boulder: steers on XZ, rides the heightmap, speeds up downhill.
- * No dodge moves — the hitbox is the whole threat. Shoot it or juke it.
+ * Renders into the shared roller swarm — owns no meshes.
  */
-export class Roller implements Targetable {
+export class Roller implements Targetable, SwarmSlotOwner {
   readonly id: number;
   readonly variant = 0;
 
@@ -37,61 +45,49 @@ export class Roller implements Targetable {
   color = new THREE.Color(0x6b5a44); // dusty rock
   scale = 1.6; // big debris on death
 
-  private mesh: THREE.Mesh;
-  private mat: THREE.MeshLambertMaterial;
-  private scene: THREE.Scene;
-  private shadow: BlobShadow;
-  private flashTimer = 0;
+  swarmSlot = -1;
+  shadowSlot = -1;
+  private hasSlots = false;
+
+  // Roll rotation is accumulated — instancing has no scene node to mutate
+  private rollQuat = new THREE.Quaternion();
+  private flash = 0;
   private hitCooldown = 0; // brief invuln so contact doesn't multi-tick
   private airborne = false;
 
-  /** Contact with the player — wire damage + knockback in main. */
   onHit?: (roller: Roller) => void;
-  /** Dust when it lands after being launched airborne. */
   onLanded?: (pos: THREE.Vector3) => void;
 
   get disposed(): boolean { return this.dead; }
 
   constructor(scene: THREE.Scene, terrain: Terrain, pos: THREE.Vector3) {
-    this.scene = scene;
+    void scene;
     this.id = nextTargetId();
-
     this.pos = pos.clone();
     this.pos.y = terrain.getHeight(pos.x, pos.z) + this.radius;
     this.vel = new THREE.Vector3();
-
-    this.mat = new THREE.MeshLambertMaterial({ color: this.color, emissive: 0x0a0705 });
-    this.mesh = new THREE.Mesh(getGeo(), this.mat);
-    this.mesh.scale.setScalar(this.radius);
-    this.mesh.position.copy(this.pos);
-    this.mesh.castShadow = true;
-    scene.add(this.mesh);
-    this.shadow = new BlobShadow(scene, this.radius * 1.05, 0.4);
+    this.hasSlots = allocSlots('roller', this);
+    if (!this.hasSlots) this.dead = true;
   }
 
   update(dt: number, terrain: Terrain, playerPos: THREE.Vector3): void {
     if (this.dead) return;
-    if (this.flashTimer > 0) {
-      this.flashTimer -= dt;
-      if (this.flashTimer <= 0) this.mat.color.copy(this.color);
-    }
+    if (this.flash > 0) this.flash -= dt;
     if (this.hitCooldown > 0) this.hitCooldown -= dt;
 
     const gy = terrain.getHeight(this.pos.x, this.pos.z);
 
     if (this.airborne) {
-      // Launched by an explosion — ballistic until it lands
       this.vel.y += GRAVITY * dt;
       this.pos.addScaledVector(this.vel, dt);
       if (this.pos.y - this.radius <= gy) {
         this.pos.y = gy + this.radius;
         this.airborne = false;
-        this.vel.x *= 0.4; this.vel.z *= 0.4; // bleed the launch
+        this.vel.x *= 0.4; this.vel.z *= 0.4;
         this.vel.y = 0;
         this.onLanded?.(this.pos);
       }
     } else {
-      // Grounded: steer toward the player on XZ, ride the heightmap.
       _dir.set(playerPos.x - this.pos.x, 0, playerPos.z - this.pos.z);
       const dist = _dir.length();
       if (dist > 0.01) {
@@ -99,8 +95,6 @@ export class Roller implements Targetable {
         this.vel.x += _dir.x * ROLLER_ACCEL * dt;
         this.vel.z += _dir.z * ROLLER_ACCEL * dt;
       }
-      // Cap steering speed — downhill momentum can exceed it (gravity does
-      // the work via the slope drop below)
       const hSpeed = Math.hypot(this.vel.x, this.vel.z);
       if (hSpeed > ROLLER_TOPSPEED) {
         const s = ROLLER_TOPSPEED / hSpeed;
@@ -112,15 +106,13 @@ export class Roller implements Targetable {
       this.pos.z += this.vel.z * dt;
       const newGy = terrain.getHeight(this.pos.x, this.pos.z);
       this.pos.y = newGy + this.radius;
-      // Rolling downhill gains real speed: convert the drop into forward gas
       const drop = prevY - this.pos.y;
       if (drop > 0 && hSpeed > 0.1) {
-        const g = -drop / (dt || 1); // fall rate → a touch of accel
+        const g = -drop / (dt || 1);
         this.vel.x += _dir.x * Math.min(g * 0.02, 4) * dt;
         this.vel.z += _dir.z * Math.min(g * 0.02, 4) * dt;
       }
 
-      // Contact — the boulder's whole job
       if (this.hitCooldown <= 0 && dist < this.radius + 1.0) {
         this.hitCooldown = 0.6;
         this.onHit?.(this);
@@ -131,16 +123,26 @@ export class Roller implements Targetable {
     const hSpeed = Math.hypot(this.vel.x, this.vel.z);
     if (hSpeed > 0.1) {
       _axis.set(this.vel.z, 0, -this.vel.x).normalize();
-      this.mesh.rotateOnWorldAxis(_axis, (hSpeed * dt) / this.radius);
+      _dq.setFromAxisAngle(_axis, (hSpeed * dt) / this.radius);
+      this.rollQuat.premultiply(_dq);
     }
-    this.mesh.position.copy(this.pos);
-    this.shadow.update(this.pos, terrain);
+
+    if (this.hasSlots) {
+      const swarm = getSwarm('roller');
+      if (swarm) {
+        _s.setScalar(this.radius);
+        _m.compose(this.pos, this.rollQuat, _s);
+        swarm.setMatrix(0, this.swarmSlot, _m);
+        const fr = this.flash > 0 ? 4 : 1;
+        swarm.setColor(0, this.swarmSlot, this.color.r * fr, this.color.g * fr, this.color.b * fr);
+      }
+      getShadows()?.set(this, this.pos, this.radius * 1.05, 0.4);
+    }
   }
 
   takeDamage(): boolean {
     this.health--;
-    this.flashTimer = 0.12;
-    this.mat.color.set(0xffffff);
+    this.flash = 0.12;
     if (this.health <= 0) { this.dead = true; return true; }
     return false;
   }
@@ -158,9 +160,9 @@ export class Roller implements Targetable {
   }
 
   dispose(): void {
-    this.shadow.dispose();
-    this.scene.remove(this.mesh);
-    this.mat.dispose();
-    // geometry is shared — never dispose
+    if (this.hasSlots) {
+      freeSlots('roller', this);
+      this.hasSlots = false;
+    }
   }
 }

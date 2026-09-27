@@ -118,6 +118,15 @@ export function createEntities(deps: EntitiesDeps) {
     spawn: () => void;
     tick: (e: T, dt: number) => void;
   }
+  // AI LOD — distant enemies tick at reduced rate so swarm counts don't
+  // scale the CPU linearly. Accumulated dt keeps AI math time-correct;
+  // 20Hz mid / 5Hz far is invisible at those distances.
+  const AI_LOD_MID_SQ = 120 * 120;
+  const AI_LOD_FAR_SQ = 300 * 300;
+  const AI_LOD_MID_DT = 1 / 20;
+  const AI_LOD_FAR_DT = 1 / 5;
+  const lodAcc = new WeakMap<Targetable, number>();
+
   function updateSpecies<T extends Targetable & { dispose(): void }>(s: Species<T>, dt: number): void {
     s.t += dt;
     if (s.t >= s.interval) {
@@ -127,10 +136,21 @@ export function createEntities(deps: EntitiesDeps) {
       // anyway are harmless defense — director events call them directly.)
       if (!deps.demoManager()?.isPlaying) s.spawn();
     }
+    const playerPos = deps.player().pos;
     for (let i = s.list.length - 1; i >= 0; i--) {
       const e = s.list[i]!;
-      s.tick(e, dt);
+      const dSq = e.pos.distanceToSquared(playerPos);
+      if (dSq > AI_LOD_FAR_SQ) {
+        const acc = (lodAcc.get(e) ?? 0) + dt;
+        if (acc >= AI_LOD_FAR_DT) { lodAcc.set(e, 0); s.tick(e, acc); } else lodAcc.set(e, acc);
+      } else if (dSq > AI_LOD_MID_SQ) {
+        const acc = (lodAcc.get(e) ?? 0) + dt;
+        if (acc >= AI_LOD_MID_DT) { lodAcc.set(e, 0); s.tick(e, acc); } else lodAcc.set(e, acc);
+      } else {
+        s.tick(e, dt);
+      }
       if (e.dead) {
+        lodAcc.delete(e);
         e.dispose();
         removeTarget(s.list, i, e);
       }
@@ -252,7 +272,8 @@ export function createEntities(deps: EntitiesDeps) {
   }
 
   const crawlerSpecies: Species<Crawler> = {
-    list: crawlers, interval: CRAWLER_SPAWN_INTERVAL, t: 0,
+    // Negative t = first-spawn delay — the run breathes in before pressure
+    list: crawlers, interval: CRAWLER_SPAWN_INTERVAL, t: -18,
     spawn: spawnCrawler,
     tick: (c, dt) => c.update(dt, deps.terrain(), deps.player().pos),
   };
@@ -275,7 +296,7 @@ export function createEntities(deps: EntitiesDeps) {
   }
 
   const turretSpecies: Species<Turretter> = {
-    list: turrets, interval: TURRET_SPAWN_INTERVAL, t: 0,
+    list: turrets, interval: TURRET_SPAWN_INTERVAL, t: -70,
     spawn: spawnTurretter,
     tick: (t, dt) => t.update(dt, deps.terrain(), deps.player().pos, deps.player().vel),
   };
@@ -292,7 +313,7 @@ export function createEntities(deps: EntitiesDeps) {
   }
 
   const rollerSpecies: Species<Roller> = {
-    list: rollers, interval: ROLLER_SPAWN_INTERVAL, t: 0,
+    list: rollers, interval: ROLLER_SPAWN_INTERVAL, t: -55,
     spawn: spawnRoller,
     tick: (r, dt) => r.update(dt, deps.terrain(), deps.player().pos),
   };
@@ -308,7 +329,7 @@ export function createEntities(deps: EntitiesDeps) {
   }
 
   const seekerSpecies: Species<Seeker> = {
-    list: seekers, interval: SEEKER_SPAWN_INTERVAL, t: 0,
+    list: seekers, interval: SEEKER_SPAWN_INTERVAL, t: -40,
     spawn: spawnSeeker,
     tick: (s, dt) => s.update(dt, deps.terrain(), deps.player().pos),
   };
@@ -360,7 +381,7 @@ export function createEntities(deps: EntitiesDeps) {
   }
 
   const minerSpecies: Species<Miner> = {
-    list: miners, interval: MINER_SPAWN_INTERVAL, t: 0,
+    list: miners, interval: MINER_SPAWN_INTERVAL, t: -100,
     spawn: spawnMiner,
     tick: (m, dt) => m.update(dt, deps.terrain(), deps.player().pos),
   };
@@ -394,7 +415,7 @@ export function createEntities(deps: EntitiesDeps) {
   }
 
   const totemSpecies: Species<Totem> = {
-    list: totems, interval: TOTEM_SPAWN_INTERVAL, t: 0,
+    list: totems, interval: TOTEM_SPAWN_INTERVAL, t: -120,
     spawn: spawnTotem,
     tick: (t, dt) => t.update(dt, deps.terrain(), deps.player().pos, deps.player().vel),
   };
@@ -412,7 +433,7 @@ export function createEntities(deps: EntitiesDeps) {
   }
 
   const rakkSpecies: Species<Rakk> = {
-    list: rakks, interval: RAKK_SPAWN_INTERVAL, t: 0,
+    list: rakks, interval: RAKK_SPAWN_INTERVAL, t: -80,
     spawn: spawnRakk,
     tick: (r, dt) => r.update(dt, deps.terrain(), deps.player().pos),
   };

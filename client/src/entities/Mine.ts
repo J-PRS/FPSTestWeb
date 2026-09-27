@@ -6,24 +6,46 @@ import {
 } from '../core/config.js';
 import { Terrain } from '../world/terrain.js';
 import type { Targetable } from './balls.js';
+import { allocSlots, freeSlots, getSwarm } from './swarms.js';
+import type { SwarmPart, SwarmSlotOwner } from './swarm.js';
 
-// Shared dome geometry — a squashed half-buried mine
-let _geo: THREE.IcosahedronGeometry | null = null;
-function getGeo(): THREE.IcosahedronGeometry {
-  if (!_geo) {
-    _geo = new THREE.IcosahedronGeometry(1, 1);
-    _geo.scale(1.0, 0.55, 1.0);
-  }
-  return _geo;
+const _root = new THREE.Matrix4();
+const _local = new THREE.Matrix4();
+const _world = new THREE.Matrix4();
+const _p = new THREE.Vector3();
+const _q = new THREE.Quaternion();
+const _s = new THREE.Vector3();
+
+const PART_DOME = 0;
+const PART_GLOW = 1; // warning glow quad on the dome top
+
+const _domeGeo = (() => {
+  const g = new THREE.IcosahedronGeometry(1, 1);
+  g.scale(1.0, 0.55, 1.0);
+  return g;
+})();
+const _glowGeo = new THREE.PlaneGeometry(1, 1);
+
+let _domeMat: THREE.MeshLambertMaterial | null = null;
+let _glowMat: THREE.MeshBasicMaterial | null = null;
+
+export function mineParts(): SwarmPart[] {
+  if (!_domeMat) _domeMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+  if (!_glowMat) _glowMat = new THREE.MeshBasicMaterial({
+    color: 0xff5522, transparent: true, blending: THREE.AdditiveBlending,
+    depthWrite: false, side: THREE.DoubleSide,
+  });
+  return [
+    { geometry: _domeGeo, material: _domeMat },
+    { geometry: _glowGeo, material: _glowMat },
+  ];
 }
 
 /**
- * Proximity mine planted by Miners. Sits flush on the terrain, pulses a
- * warning glow that quickens as the player closes in. Shootable — a killed
- * mine detonates (harmlessly at range, nastily up close). The mine calls
- * onDetonate once; entities.ts decides how hard it hits.
+ * Proximity mine planted by Miners. Blink quickens as the player closes in.
+ * Shootable — a killed mine detonates. Renders into the shared mine swarm.
  */
-export class Mine implements Targetable {
+export class Mine implements Targetable, SwarmSlotOwner {
   readonly id: number;
   readonly variant = 0;
 
@@ -36,38 +58,25 @@ export class Mine implements Targetable {
   color = new THREE.Color(0x3a2a1a); // dark shell, glow does the talking
   scale = 0.2;
 
-  private mesh: THREE.Mesh;
-  private mat: THREE.MeshLambertMaterial;
-  private glow: THREE.Sprite;
-  private glowMat: THREE.SpriteMaterial;
-  private scene: THREE.Scene;
+  swarmSlot = -1;
+  shadowSlot = -1; // mines hug the ground — the dome is its own grounding cue
+  private hasSlots = false;
+
   private age = 0;
   private blinkPhase = Math.random() * Math.PI * 2;
+  private glowPulse = 0;
 
-  /** Fired once when the mine blows (proximity, shot, or expiry). */
   onDetonate?: (mine: Mine) => void;
 
   get disposed(): boolean { return this.dead; }
 
   constructor(scene: THREE.Scene, terrain: Terrain, pos: THREE.Vector3) {
-    this.scene = scene;
+    void scene;
     this.id = nextTargetId();
-
     this.pos = pos.clone();
     this.pos.y = terrain.getHeight(pos.x, pos.z) + this.radius * 0.55;
-
-    this.mat = new THREE.MeshLambertMaterial({ color: this.color, emissive: 0x000000 });
-    this.mesh = new THREE.Mesh(getGeo(), this.mat);
-    this.mesh.scale.setScalar(this.radius);
-    this.mesh.position.copy(this.pos);
-    scene.add(this.mesh);
-
-    // Warning glow — sits on the dome top, pulses with proximity
-    this.glowMat = new THREE.SpriteMaterial({ map: getGlowTex(), color: 0xff5522, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false });
-    this.glow = new THREE.Sprite(this.glowMat);
-    this.glow.position.set(0, 0.9, 0);
-    this.glow.scale.setScalar(this.radius * 1.4);
-    this.mesh.add(this.glow);
+    this.hasSlots = allocSlots('mine', this);
+    if (!this.hasSlots) this.dead = true;
   }
 
   get armed(): boolean { return this.age >= MINE_ARM_TIME; }
@@ -80,7 +89,7 @@ export class Mine implements Targetable {
     const dist = Math.sqrt(distSq);
 
     if (this.armed && dist < MINE_TRIGGER_DIST) { this.detonate(); return; }
-    if (this.age > MINE_LIFE) { this.detonate(); return; } // fizzle-pop on expiry
+    if (this.age > MINE_LIFE) { this.detonate(); return; }
 
     // Blink rate accelerates as the player approaches — the audible-beep
     // equivalent in pure visuals. Unarmed mines blink slow and dim.
@@ -88,9 +97,27 @@ export class Mine implements Targetable {
     const rate = this.armed ? 3 + urgency * 10 : 1.5;
     const p = (Math.sin(this.age * rate * Math.PI * 2 + this.blinkPhase) + 1) / 2;
     const bright = this.armed ? 0.4 + p * (0.4 + urgency * 0.5) : 0.25 + p * 0.15;
-    this.mat.emissive.setRGB(bright, bright * 0.25, 0);
-    this.glowMat.opacity = this.armed ? 0.5 + p * 0.5 : 0.35;
-    this.glow.scale.setScalar(this.radius * (1.3 + p * 0.4));
+    this.glowPulse = bright;
+
+    if (!this.hasSlots) return;
+    const swarm = getSwarm('mine');
+    if (!swarm) return;
+    const slot = this.swarmSlot;
+    const r = this.radius;
+
+    _root.compose(this.pos, _q.identity(), _s.setScalar(r));
+    swarm.setMatrix(PART_DOME, slot, _root);
+    // instanceColor carries the emissive blink — dome brightens orange-hot
+    swarm.setColor(PART_DOME, slot,
+      this.color.r + bright, this.color.g + bright * 0.25, this.color.b);
+
+    // Warning glow quad on the dome top — pulse scales with urgency
+    const gs = 1.3 + p * 0.4;
+    _local.compose(_p.set(0, 0.9, 0), _q.identity(), _s.setScalar(gs));
+    _world.multiplyMatrices(_root, _local);
+    swarm.setMatrix(PART_GLOW, slot, _world);
+    const go = this.armed ? 0.5 + p * 0.5 : 0.35;
+    swarm.setColor(PART_GLOW, slot, go, go, go);
   }
 
   private detonate(): void {
@@ -109,26 +136,9 @@ export class Mine implements Targetable {
   applyPull(): void { /* ditto */ }
 
   dispose(): void {
-    this.scene.remove(this.mesh);
-    this.mat.dispose();
-    this.glowMat.dispose();
-    // geometry + glow texture are shared — never dispose
+    if (this.hasSlots) {
+      freeSlots('mine', this);
+      this.hasSlots = false;
+    }
   }
-}
-
-let _glowTex: THREE.Texture | null = null;
-function getGlowTex(): THREE.Texture {
-  if (!_glowTex) {
-    const c = document.createElement('canvas');
-    c.width = c.height = 32;
-    const ctx = c.getContext('2d')!;
-    const g = ctx.createRadialGradient(16, 16, 0, 16, 16, 16);
-    g.addColorStop(0, 'rgba(255,255,255,1)');
-    g.addColorStop(0.4, 'rgba(255,255,255,0.5)');
-    g.addColorStop(1, 'rgba(255,255,255,0)');
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, 32, 32);
-    _glowTex = new THREE.CanvasTexture(c);
-  }
-  return _glowTex;
 }
