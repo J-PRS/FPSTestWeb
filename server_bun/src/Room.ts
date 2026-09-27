@@ -60,6 +60,7 @@ export class Room {
         scores: this.scores,
         winAt: this.modeSpec?.winAt,
         onBank: (pid, n) => this.bank(pid, n),
+        bases: this.spec.bases,
       },
     );
     this.ballSim = new BallSim(
