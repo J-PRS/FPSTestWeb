@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-import { PLAYER_RADIUS, CAPSULE_HALF_HEIGHT, CAPSULE_CENTER_Y, EYE_OFFSET, BLOOM_LAYER } from '../core/config.js';
+import { PLAYER_RADIUS, CAPSULE_HALF_HEIGHT, CAPSULE_CENTER_Y, EYE_OFFSET } from '../core/config.js';
 import { hitRadiusAt } from '../../../shared/combat.js';
 
 import { ChildLogger } from '../core/Logger.js';
@@ -12,53 +12,13 @@ import type { ProjectileConfig } from './types.js';
 import * as sfx from '../core/sfx.js';
 import { RibbonTrail } from './RibbonTrail.js';
 import { ProjectileTrail } from './trailParticles.js';
+import { buildProjectileMeshes, updateProjectileMesh } from './visuals.js';
 
 const logger = new ChildLogger('Projectile');
 
 // Shared projectile geometries — dispose() never frees them, so reuse across shots
-const _velDir = new THREE.Vector3();
-const _lookTarget = new THREE.Vector3();
-const _FORWARD = new THREE.Vector3(0, 0, 1);
-const _tumbleAxis = new THREE.Vector3();
 const _tNormal = new THREE.Vector3();
 
-const MESH_GEO_CACHE = new Map<string, THREE.BufferGeometry>();
-// Projectile materials are never mutated after construction — share per color
-// so rapid fire doesn't create/dispose a material every shot
-const BODY_MAT_CACHE = new Map<number, THREE.MeshBasicMaterial>();
-const GLOW_MAT_CACHE = new Map<string, THREE.MeshBasicMaterial>();
-const GLOW_GEO = new THREE.SphereGeometry(1.0, 12, 12);
-
-function getBodyMat(color: number): THREE.MeshBasicMaterial {
-  let m = BODY_MAT_CACHE.get(color);
-  if (!m) { m = new THREE.MeshBasicMaterial({ color }); BODY_MAT_CACHE.set(color, m); }
-  return m;
-}
-
-function getGlowMat(color: number, opacity: number): THREE.MeshBasicMaterial {
-  const key = `${color}|${opacity}`;
-  let m = GLOW_MAT_CACHE.get(key);
-  if (!m) { m = new THREE.MeshBasicMaterial({ color, transparent: true, opacity, depthWrite: false }); GLOW_MAT_CACHE.set(key, m); }
-  return m;
-}
-function getMeshGeo(meshType: string, bodyRadius: number): THREE.BufferGeometry {
-  const key = `${meshType}:${bodyRadius}`;
-  let geo = MESH_GEO_CACHE.get(key);
-  if (!geo) {
-    if (meshType === 'disc') {
-      geo = new THREE.CylinderGeometry(0.3, 0.3, 0.05, 16);
-    } else if (meshType === 'ball') {
-      // Thrown grenade — faceted icosphere reads as a ball at any angle,
-      // unlike the oriented tube meant for rocket shells
-      geo = new THREE.IcosahedronGeometry(bodyRadius, 1);
-    } else {
-      geo = new THREE.CylinderGeometry(0.08, bodyRadius, 0.7, 6);
-      geo.rotateX(Math.PI / 2);
-    }
-    MESH_GEO_CACHE.set(key, geo);
-  }
-  return geo;
-}
 
 /**
  * Projectile: client-authoritative hitscan-like projectile with swept collision.
@@ -100,11 +60,21 @@ function getMeshGeo(meshType: string, bodyRadius: number): THREE.BufferGeometry 
  *  - `hitRadius` scales from `hitMin` to `hitMax` over `hitGrow` seconds (can be 0 at spawn).
  *    Trail/wake particle visuals live in trailParticles.ts (TrailHost interface).
  */
+// Anything swept-collidable that ISN'T a damageable target — currently
+// turretter bolts. prevPos = start-of-frame pos so the check is
+// segment-vs-segment (both objects moved this frame).
+export interface SweepObstacle {
+  readonly pos: THREE.Vector3;
+  readonly prevPos: THREE.Vector3;
+  readonly radius: number;
+}
+
 export class Projectile {
   pos: THREE.Vector3;
   vel: THREE.Vector3;
   dead = false;
   exploded = false;
+  hitBolt: SweepObstacle | null = null; // mid-air interception — combat turns this into a cookoff blast
   age = 0.0;
   spawnedThisFrame = true; // skip first update so projectile renders at spawn pos before moving
   isRemote = false; // true for server-authoritative/demo projectiles
@@ -143,9 +113,7 @@ export class Projectile {
 
   private scene: THREE.Scene;
   private mesh: THREE.Mesh;
-  private mat: THREE.MeshBasicMaterial;
   private glowMesh: THREE.Mesh | null = null;
-  private glowMat: THREE.MeshBasicMaterial | null = null;
   private prevPos: THREE.Vector3;
   private shotOrigin: THREE.Vector3;
 
@@ -164,20 +132,9 @@ export class Projectile {
     // 50% player velocity inheritance (Tribes Ascend style)
     this.vel = dir.clone().normalize().multiplyScalar(config.speed).addScaledVector(playerVel, 0.5);
 
-    const geo = getMeshGeo(config.meshType, config.bodyRadius);
-    this.mat = getBodyMat(config.meshColor); // shared — never mutated
-    this.mesh = new THREE.Mesh(geo, this.mat);
-    this.mesh.position.copy(this.pos);
-    this.mesh.layers.enable(BLOOM_LAYER);
-    scene.add(this.mesh);
-
-    if (config.glowShell) {
-      this.glowMat = getGlowMat(config.glowColor, config.glowOpacity); // shared
-      this.glowMesh = new THREE.Mesh(GLOW_GEO, this.glowMat);
-      this.glowMesh.position.copy(this.pos);
-      this.glowMesh.layers.enable(BLOOM_LAYER);
-      scene.add(this.glowMesh);
-    }
+    const v = buildProjectileMeshes(scene, config, this.pos);
+    this.mesh = v.mesh;
+    this.glowMesh = v.glowMesh;
 
     this.trail = new ProjectileTrail({
       scene, config,
@@ -186,23 +143,7 @@ export class Projectile {
       hitRadius: () => this.hitRadius,
     });
 
-    if (config.ribbonTrail) {
-      const color = config.ribbonColor ?? config.trailColors[0].getHex();
-      const width = config.ribbonWidth ?? 0.5;
-      const life = config.ribbonLife ?? 0.3;
-      // 3 lanes: wide outer band + thin bright core pair offset above/below —
-      // reads as a glowing energy streak with depth instead of a flat line
-      const coreColor = new THREE.Color(color).lerp(new THREE.Color(0xffffff), 0.6).getHex();
-      if (config.ribbonLanes === 1) {
-        this.ribbons = [RibbonTrail.acquire(scene, color, width, life)];
-      } else {
-        this.ribbons = [
-          RibbonTrail.acquire(scene, color, width, life),
-          RibbonTrail.acquire(scene, coreColor, width * 0.35, life * 0.8, width * 0.07),
-          RibbonTrail.acquire(scene, coreColor, width * 0.35, life * 0.8, -width * 0.07),
-        ];
-      }
-    }
+    this.ribbons = v.ribbons;
   }
 
   // Swept sphere terrain check: sample along path, step size = visual radius.
@@ -218,7 +159,12 @@ export class Projectile {
       const sx = this.prevPos.x + dx * t;
       const sy = this.prevPos.y + dy * t;
       const sz = this.prevPos.z + dz * t;
-      return sy <= terrain.getHeight(sx, sz) + this.config.terrainOffset;
+      // Bouncers collide on their body radius — a sphere rests ON the
+      // dirt, not center-deep in it. Non-bouncers explode on contact so
+      // the shallow offset is fine (the ball never visually sits there).
+      const offset = Math.max(this.config.terrainOffset,
+        this.canBounce ? this.config.bodyRadius : 0);
+      return sy <= terrain.getHeight(sx, sz) + offset;
     };
     for (let i = 0; i <= steps; i++) {
       const t = i / steps;
@@ -249,8 +195,9 @@ export class Projectile {
     const dz = this.pos.z - this.prevPos.z;
     const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
     const steps = Math.max(1, Math.ceil(dist / STEP));
-    const coreThresh = ball.radius + this.config.bodyRadius; // direct hit = body overlaps target
-    const wakeThresh = ball.radius + this.hitRadius; // expanding wake
+    const tr = ball.hitRadius ?? ball.radius; // render ≠ hitbox on tapered bodies (totem)
+    const coreThresh = tr + this.config.bodyRadius; // direct hit = body overlaps target
+    const wakeThresh = tr + this.hitRadius; // expanding wake
     let minDist = Infinity;
     let prevD2 = Infinity;
 
@@ -261,7 +208,7 @@ export class Projectile {
       const sz = this.prevPos.z + dz * t;
       // Capsule targets: distance to a segment, not a point.
       //  capsuleTop (Totem) — vertical, feet to feet+height
-      //  capsuleEnd (Miner) — centered, pos ± heading-aligned half-extent
+      //  capsuleEnd (Overlord) — centered, pos ± heading-aligned half-extent
       let ex: number, ey: number, ez: number;
       if (ball.capsuleEnd) {
         const e = ball.capsuleEnd;
@@ -386,7 +333,7 @@ export class Projectile {
     return false;
   }
 
-  update(dt: number, terrain: Terrain, balls?: Targetable[], remotePlayers?: Map<string, THREE.Vector3>): void {
+  update(dt: number, terrain: Terrain, balls?: Targetable[], remotePlayers?: Map<string, THREE.Vector3>, obstacles?: SweepObstacle[]): void {
     if (this.dead) return;
 
     // First frame: just render at spawn position, don't apply physics yet
@@ -396,7 +343,7 @@ export class Projectile {
       return;
     }
 
-    if (!this.exploded) this.updateAlive(dt, terrain, balls, remotePlayers);
+    if (!this.exploded) this.updateAlive(dt, terrain, balls, remotePlayers, obstacles);
 
     if (this.exploded && !this.projectileRemoved) this.removeProjectileMesh();
     for (const r of this.ribbons) r.update(dt);
@@ -417,7 +364,7 @@ export class Projectile {
   }
 
   // Physics + collision + visuals for a live (non-exploded) projectile
-  private updateAlive(dt: number, terrain: Terrain, balls?: Targetable[], remotePlayers?: Map<string, THREE.Vector3>): void {
+  private updateAlive(dt: number, terrain: Terrain, balls?: Targetable[], remotePlayers?: Map<string, THREE.Vector3>, obstacles?: SweepObstacle[]): void {
     this.prevPos.copy(this.pos);
     this.lastDt = dt;
     this.age += dt;
@@ -447,7 +394,7 @@ export class Projectile {
         this.explode(); // armed mortar shell touching terrain on a remote client
         return;
       }
-    } else if (this.checkCollisions(terrain, balls, remotePlayers)) {
+    } else if (this.checkCollisions(terrain, balls, remotePlayers, obstacles)) {
       return; // exploded inside checkCollisions
     }
 
@@ -458,7 +405,7 @@ export class Projectile {
 
   // Runs all swept collision checks; returns true if the projectile hit
   // something and exploded (records hit target + accuracy data).
-  private checkCollisions(terrain: Terrain, balls?: Targetable[], remotePlayers?: Map<string, THREE.Vector3>): boolean {
+  private checkCollisions(terrain: Terrain, balls?: Targetable[], remotePlayers?: Map<string, THREE.Vector3>, obstacles?: SweepObstacle[]): boolean {
     if (this.sweepTerrain(terrain)) {
       // arming fuse (T2 mortar): bounces only apply BEFORE the shell is armed
       if (this.canBounce && this.bounceOffTerrain(terrain)) {
@@ -467,7 +414,58 @@ export class Projectile {
       this.explode();
       return true;
     }
-    return this.checkBalls(balls) || this.checkPlayers(remotePlayers);
+    // Obstacles (turret bolts) before targets: an interception is the
+    // earliest contact worth reporting — the blast usually takes the
+    // enemy anyway, and the cookoff is the interesting outcome.
+    return this.checkObstacles(obstacles) || this.checkBalls(balls) || this.checkPlayers(remotePlayers);
+  }
+
+  // Swept hit vs a moving obstacle — segment-vs-segment closest approach.
+  // Both objects moved this frame, so the check runs in the projectile's
+  // relative frame: R(t) = (P0 − B0) + (dP − dB)·t, minimize |R|² on [0,1].
+  // No sampling steps — the closest-approach time is solved exactly.
+  private sweepObstacle(o: SweepObstacle): boolean {
+    const dx = this.pos.x - this.prevPos.x;
+    const dy = this.pos.y - this.prevPos.y;
+    const dz = this.pos.z - this.prevPos.z;
+    const ax = this.prevPos.x - o.prevPos.x;
+    const ay = this.prevPos.y - o.prevPos.y;
+    const az = this.prevPos.z - o.prevPos.z;
+    const rx = dx - (o.pos.x - o.prevPos.x);
+    const ry = dy - (o.pos.y - o.prevPos.y);
+    const rz = dz - (o.pos.z - o.prevPos.z);
+    const bb = rx * rx + ry * ry + rz * rz;
+    let t = bb > 1e-8 ? -(ax * rx + ay * ry + az * rz) / bb : 0;
+    t = t < 0 ? 0 : t > 1 ? 1 : t;
+    const cx = ax + rx * t, cy = ay + ry * t, cz = az + rz * t;
+    const d2 = cx * cx + cy * cy + cz * cz;
+    const thresh = this.config.bodyRadius + o.radius;
+    if (d2 > thresh * thresh) return false;
+    this.minHitDist = Math.sqrt(d2);
+    this.directHit = true;
+    this.hitAt(
+      this.prevPos.x + dx * t,
+      this.prevPos.y + dy * t,
+      this.prevPos.z + dz * t,
+      t,
+    );
+    return true;
+  }
+
+  private checkObstacles(obstacles?: SweepObstacle[]): boolean {
+    // Hitscan shells carry no payload — a slug can't cook off a warhead.
+    if (!obstacles || this.config.noExplosion) return false;
+    let best: SweepObstacle | null = null, bestT = Infinity;
+    for (const o of obstacles) {
+      if (this.sweepObstacle(o) && this.hitT < bestT) { best = o; bestT = this.hitT; }
+    }
+    if (!best) return false;
+    // Re-run the winning sweep so hitPoint/hitT describe ITS contact, not
+    // a later bolt's — hitAt was overwritten by each tested obstacle.
+    this.sweepObstacle(best);
+    this.hitBolt = best;
+    this.explode();
+    return true;
   }
 
   // dt of the currently-running update — recordHit uses it to back the
@@ -501,13 +499,17 @@ export class Projectile {
     ).normalize();
 
     const vn = this.vel.dot(_tNormal);
+    // hitPoint is already the center AT the collision plane (radius above
+    // the surface for bouncers) — depenetration just needs a small normal
+    // clearance so the next sweep doesn't instantly retrigger on slopes.
+    const depenetrate = this.config.terrainOffset + 0.05;
     // Grazing/resting contact: armed shells detonate; unarmed (mortar
     // pre-arm) shells bleed off the normal component and slide until the
     // fuse arms them — the T2 mortar bounces off dirt before it can pop.
     if (vn >= -2) {
       if (this.armed) return false;
       this.vel.addScaledVector(_tNormal, -vn);
-      this.pos.copy(this.hitPoint).addScaledVector(_tNormal, this.config.terrainOffset + 0.05);
+      this.pos.copy(this.hitPoint).addScaledVector(_tNormal, depenetrate);
       this.prevPos.copy(this.pos);
       if (this.config.bounceSfx) sfx.at(this.pos, this.config.bounceSfx, 0.5, 1.4);
       return true;
@@ -517,7 +519,7 @@ export class Projectile {
     this.vel.x *= fr;
     this.vel.z *= fr;
     // Sit just above the surface so the next sweep doesn't immediately retrigger
-    this.pos.copy(this.hitPoint).addScaledVector(_tNormal, this.config.terrainOffset + 0.05);
+    this.pos.copy(this.hitPoint).addScaledVector(_tNormal, depenetrate);
     this.prevPos.copy(this.pos);
     if (this.config.bounceSfx) {
       // Harder hits ping louder; weak grazes stay quiet — sells mass.
@@ -577,34 +579,17 @@ export class Projectile {
     this.hitDistance = Math.sqrt(dx * dx + dy * dy + dz * dz);
   }
 
+  // Mesh ramp-in: every projectile pops in small and grows to full size —
+  // a 1.6m cannonball spawning at your face shouldn't fill half the screen
+  // for a frame. Config overrides via meshStartScale/meshRampInDuration;
+  // meshRampIn === false opts out. Duration capped at 40% of maxLifetime
+  // so a 0.4s shotgun pellet still snaps to size fast.
+
+
   private updateMesh(): void {
-    this.mesh.position.copy(this.pos);
-    if (this.glowMesh) {
-      this.glowMesh.position.copy(this.pos);
-      // Glow scales with hitRadius (wake hitbox) so they always match
-      const glowMultiplier = this.config.glowScale ?? 1.0;
-      this.glowMesh.scale.setScalar(this.hitRadius * glowMultiplier);
-    }
-
-    const scale = this.config.meshRampIn
-      ? this.config.meshStartScale + (1.0 - this.config.meshStartScale) * Math.min(this.age / this.config.meshRampInDuration, 1.0)
-      : 1.0;
-    this.mesh.scale.setScalar(scale);
-
-    if (this.vel.lengthSq() > 0.01) {
-      _velDir.copy(this.vel).normalize();
-      if (this.config.meshType === 'disc') {
-        _lookTarget.copy(this.pos).add(_velDir);
-        this.mesh.lookAt(_lookTarget);
-      } else if (this.config.meshType === 'ball') {
-        // Spheres don't orient — they tumble. Spin around a fixed random
-        // axis, rate proportional to speed so a lobbed ball visibly rotates
-        _tumbleAxis.set(this.tumbleX, this.tumbleY, this.tumbleZ).normalize();
-        this.mesh.rotateOnAxis(_tumbleAxis, this.vel.length() * this.lastDt * 3.0);
-      } else {
-        this.mesh.quaternion.setFromUnitVectors(_FORWARD, _velDir);
-      }
-    }
+    updateProjectileMesh(this.mesh, this.glowMesh, this.pos, this.vel,
+      this.config, this.age, this.hitRadius,
+      { x: this.tumbleX, y: this.tumbleY, z: this.tumbleZ }, this.lastDt);
   }
 
   private removeProjectileMesh(): void {
