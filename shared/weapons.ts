@@ -48,11 +48,15 @@ export interface WeaponStats {
   maxLifetime?: number;
 }
 
+/** Explosion VFX dome = aoeRadius × this — damage always reaches a bit past
+ *  the visual edge (covers the shock ring), and the two can never drift. */
+export const AOE_VFX_SCALE = 0.8;
+
 export const WEAPONS: Record<number, WeaponStats> = {
   [WeaponType.Rocket]: {
     directDamage: 50,
     aoeDamage: 15,
-    aoeRadius: 6.0,
+    aoeRadius: 8.0, // ~1.3× the VFX dome — damage reaches the ring's edge
     knockbackForce: 28.0,
     forceMode: 'push',
     speed: 120.0,
@@ -65,7 +69,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
   [WeaponType.Disc]: {
     directDamage: 50,
     aoeDamage: 15,
-    aoeRadius: 5.0,
+    aoeRadius: 10.0, // slightly exceeds the 8m Implosion VFX — pull reaches everything it visibly sucks
     knockbackForce: 25.0,
     forceMode: 'pull',
     speed: 80.0,
@@ -78,7 +82,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
   [WeaponType.Grenade]: {
     directDamage: 50,
     aoeDamage: 20,
-    aoeRadius: 10.0,
+    aoeRadius: 13.0,
     knockbackForce: 45.0,
     forceMode: 'push',
     speed: 40.0,
@@ -105,7 +109,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
   [WeaponType.Mortar]: {
     directDamage: 80,
     aoeDamage: 40,
-    aoeRadius: 14.0,
+    aoeRadius: 18.0,
     knockbackForce: 55.0,
     forceMode: 'push',
     speed: 55.0,
@@ -119,7 +123,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
   [WeaponType.GrenadeLauncher]: {
     directDamage: 50,
     aoeDamage: 20,
-    aoeRadius: 10.0,
+    aoeRadius: 13.0,
     knockbackForce: 45.0,
     forceMode: 'push',
     speed: 55.0,
@@ -147,7 +151,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
   [WeaponType.Plasma]: {
     directDamage: 35,
     aoeDamage: 12,
-    aoeRadius: 4.0,
+    aoeRadius: 5.5,
     knockbackForce: 20.0,
     forceMode: 'push',
     speed: 90.0,
@@ -162,7 +166,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     // fields are inert; only aoe/knock stats are live.
     directDamage: 0,
     aoeDamage: 35,
-    aoeRadius: 7.0,
+    aoeRadius: 9.0,
     knockbackForce: 40.0,
     forceMode: 'push',
     speed: 0,

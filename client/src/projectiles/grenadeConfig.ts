@@ -1,10 +1,9 @@
 import * as THREE from 'three';
 
 import {
-  GRAVITY, GRENADE_SPEED, GRENADE_RADIUS, GRENADE_BODY_RADIUS, GRENADE_FORCE,
-  GRENADE_AOE_DAMAGE, GRENADE_AOE_RADIUS, HIT_MIN, HIT_MAX, HIT_GROW,
-  EXPLOSION_FALLOFF_MULTIPLIER_ROCKET, KNOCKBACK_MULTIPLIER, GRENADE_MAX_LIFETIME,
+  EXPLOSION_FALLOFF_MULTIPLIER_ROCKET, KNOCKBACK_MULTIPLIER,
 } from '../core/config.js';
+import { WEAPONS, AOE_VFX_SCALE } from '../../../shared/weapons.js';
 
 import type { ProjectileConfig } from './types.js';
 
@@ -12,20 +11,20 @@ export const GRENADE_CONFIG: ProjectileConfig = {
   name: 'grenade',
   displayName: 'Grenade',
   weaponType: 2,
-  speed: GRENADE_SPEED,
-  gravity: GRAVITY,
-  explosionRadius: GRENADE_RADIUS,
-  force: GRENADE_FORCE,
+  speed: WEAPONS[2].speed,
+  gravity: WEAPONS[2].gravity,
+  explosionRadius: WEAPONS[2].aoeRadius * AOE_VFX_SCALE,
+  force: WEAPONS[2].knockbackForce,
   forceMode: 'push',
-  bodyRadius: GRENADE_BODY_RADIUS,
-  hitMin: HIT_MIN,
-  hitMax: HIT_MAX,
-  hitGrow: HIT_GROW,
+  bodyRadius: WEAPONS[2].bodyRadius,
+  hitMin: WEAPONS[2].hitMin,
+  hitMax: WEAPONS[2].hitMax,
+  hitGrow: WEAPONS[2].hitGrow,
   falloffMultiplier: EXPLOSION_FALLOFF_MULTIPLIER_ROCKET,
   collisionMultiplier: 1.0, // ball radius + explosion radius
   forceMultiplier: KNOCKBACK_MULTIPLIER,
-  aoeDamage: GRENADE_AOE_DAMAGE,
-  aoeRadius: GRENADE_AOE_RADIUS,
+  aoeDamage: WEAPONS[2].aoeDamage,
+  aoeRadius: WEAPONS[2].aoeRadius,
   damageColor: '#ff6600',
   trailColors: [
     new THREE.Color(1.0, 0.9, 0.5),
@@ -55,8 +54,8 @@ export const GRENADE_CONFIG: ProjectileConfig = {
   meshRampIn: true,
   meshRampInDuration: 0.05,
   meshStartScale: 0.2,
-  terrainOffset: HIT_MIN,
-  needsServerTracking: false,
-  maxLifetime: GRENADE_MAX_LIFETIME,
+  terrainOffset: WEAPONS[2].hitMin,
+  needsServerTracking: true,
+  maxLifetime: WEAPONS[2].maxLifetime,
   trailMeshType: 'sphere',
 };
