@@ -5,6 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Three.js FPS — Tribes/Quake Style</title>
   <style>
+    /* Rajdhani Bold — damage numbers / sci-fi numerals (15KB, local, SIL OFL) */
+    @font-face {
+      font-family: 'Rajdhani';
+      font-style: normal;
+      font-weight: 700;
+      font-display: swap;
+      src: url('/fonts/rajdhani-bold.woff2') format('woff2');
+    }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { background: #000; overflow: hidden; font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif; }
     canvas { display: block; }
@@ -146,15 +154,31 @@
     }
     #loadout-bar .lo-chip.stub { opacity: 0.4; cursor: default; border-style: dashed; }
     #loadout-bar .lo-chip.stub:hover { background: rgba(255,255,255,0.06); color: #cdd9e5; }
-    /* Slot pickers are <select>s wearing chip styling — hide the native
-       arrow, darken the opened option list so it doesn't go OS-white. */
-    #loadout-bar .lo-select {
-      appearance: none; -webkit-appearance: none;
-      text-align: center; min-width: 118px;
+    /* Custom dropups — chip face + option list opening upward (the bar sits
+       at the bottom edge). No native select chrome, stays in-game UI. */
+    #loadout-bar .lo-drop {
+      position: relative; /* width set per-dropup by canvas-measured options */
+      display: flex; justify-content: space-between; align-items: center;
+      gap: 8px;
     }
-    #loadout-bar .lo-select option {
-      background: #0d1420; color: #cdd9e5; text-transform: none;
+    #loadout-bar .lo-drop .lo-caret { opacity: 0.5; font-size: 0.6rem; }
+    #loadout-bar .lo-list {
+      display: none; position: absolute; bottom: calc(100% + 4px);
+      left: -1px; right: -1px; z-index: 10;
+      flex-direction: column;
+      background: rgba(13,20,32,0.97);
+      border: 1px solid rgba(58,167,255,0.35); border-radius: 5px;
+      overflow: hidden;
+      box-shadow: 0 -6px 24px rgba(0,0,0,0.5);
     }
+    #loadout-bar .lo-drop.open .lo-list { display: flex; }
+    #loadout-bar .lo-opt {
+      padding: 7px 11px; color: #cdd9e5;
+      font-size: 0.66rem; font-weight: 600; letter-spacing: 0.08em;
+      text-transform: uppercase; white-space: nowrap;
+    }
+    #loadout-bar .lo-opt:hover { background: rgba(58,167,255,0.18); color: #fff; }
+    #loadout-bar .lo-opt.sel { color: #3aa7ff; }
     #cool-shots-top, #cool-shots-recent { display: flex; flex-direction: column; gap: 3px; }
     .cool-shot-item {
       display: flex; align-items: center; gap: 10px;

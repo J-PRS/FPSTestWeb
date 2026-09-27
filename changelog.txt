@@ -1709,3 +1709,9 @@
 - flak shot: shotgun pump swapped for cannon boom (JP: not a quake shotgun)
 - grenade projectile: faceted icosphere ball (was rocket tube), tumbles in flight, tighter ember trail, dark shell + hotter glow
 - overlord rework: Miner births rolling Banelings (homing suicide sacs, proximity fuse, pop-on-shoot) instead of static mines
+== viewmodel: real baked textures (texture-baker pipeline) ==
+- weapons now bake through Blender + texture-baker: 128-ray AO, true mesh curvature, thickness, world-normal maps; numpy composite = per-weapon luminance normalization + AO + concave darkening + two-layer curvature edge wear + up/down dust-grime tint
+- w3 chaingun barrels stay a named node (animated spin) with their own 256px bake
+- cannon rebuilt as stacked bulged segments w/ pinch rings per JP ref; shotgun model baked too
+- vmdump: continuous render loop (was screenshotting pre-swap), game-accurate ACES 0.4 + real light rig, close-up cam
+- pipeline doc: _reports/2026-09-27_weapon-bake-pipeline.md
