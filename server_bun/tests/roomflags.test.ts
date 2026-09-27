@@ -58,6 +58,16 @@ describe('RoomFlags', () => {
     expect(bravo.carrier).toBeNull();
   });
 
+  it('carrier leaving the room drops the flag', () => {
+    const room = ctfRoom();
+    addAt(room, 'p1', 'alpha', 70, 0);
+    room.tickFlags(0.05);
+    room.removePlayerCompletely('p1', 'test', () => {});
+    const bravo = room.flags!.snapshot().find((f) => f.team === 'bravo')!;
+    expect(bravo.state).toBe('dropped');
+    expect(bravo.carrier).toBeNull();
+  });
+
   it('own team touching a dropped flag returns it home', () => {
     const room = ctfRoom();
     const carrier = addAt(room, 'p1', 'alpha', 70, 0);
