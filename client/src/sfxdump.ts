@@ -81,10 +81,13 @@ const jobs: Array<[string, number, () => void]> = [
   // Disc launch candidates — [name, gain, rate, lowpassHz, cutAfterSec]
   ['disc_e_twang', 1.0, () => sfx.debugMix([
     ['shot_cannon', 0.9, 0.6, 800, 0.4], ['hg_clang', 0.5, 1.5, undefined, 0.15], ['punch', 0.4, 1.2, undefined, 0.2]])],
-  ['disc_f_spring', 1.0, () => sfx.debugMix([
-    ['shot_cannon', 0.85, 0.55, 700], ['cryst_bang', 0.4, 1.6, undefined, 0.2], ['impact', 0.5, 1.3, 2000, 0.25]])],
-  ['disc_g_body', 1.0, () => sfx.debugMix([
-    ['thud_big', 1.0, 0.7, 600, 0.35], ['hg_clang', 0.45, 1.8, undefined, 0.12], ['shot_plasma', 0.3, 1.0, 3000, 0.3]])],
+  // Bass-forward variants: let the body breathe longer
+  ['disc_h_bass', 1.0, () => sfx.debugMix([
+    ['thud_big', 1.0, 0.65, 500], ['shot_cannon', 0.8, 0.6, 900, 0.5], ['hg_clang', 0.45, 1.6, undefined, 0.15]])],
+  ['disc_i_hew', 1.0, () => sfx.debugMix([
+    ['shot_cannon', 1.0, 0.5, 600, 0.6], ['thud_big', 0.9, 0.8], ['punch', 0.5, 1.1, 2000, 0.2], ['hg_clang', 0.35, 1.8, undefined, 0.12]])],
+  ['disc_j_lurch', 1.0, () => sfx.debugMix([
+    ['thud_big', 1.0, 0.5, 400], ['shot_cannon', 0.8, 0.7, 1000, 0.45], ['sparks', 0.3, 1.4, undefined, 0.15]])],
   ['disc_d_current', 1.0, () => sfx.debugMix([
     ['shot_cannon', 0.8, 0.55], ['cryst_bang', 0.65, 0.9], ['punch', 0.5, 1.2], ['whistle', 0.3]])],
   // Loops at full intensity — same shapes gameLoop drives live
