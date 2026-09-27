@@ -121,7 +121,7 @@ export function createEntities(deps: EntitiesDeps) {
     notify: deps.deployNotify,
   });
   const {
-    removeTarget, ringPos, hurtPlayer,
+    removeTarget, ringPos, hurtPlayer, blastAtPlayer,
     aggroFor, aggroVelFor, reportTargetDamage,
     boltPop, updateSpecies, burrow, rollUber, kickDust, kickTrail,
   } = kit;
@@ -558,17 +558,8 @@ export function createEntities(deps: EntitiesDeps) {
       deps.world.explosions.push(new Explosion(scene, mine.pos, false, 0, deps.lazyTerrain(), mine.blastRadius / ROCKET_RADIUS, 0xff7733));
       sfx.explosionAt(mine.pos, true);
       screenShake.blast(mine.pos, mine.uber ? 4 : 2.5, player.pos);
-      // Player proximity damage — same env-damage path as crawler pounces
-      const dist = mine.pos.distanceTo(player.pos);
-      if (dist < mine.blastRadius) {
-        const dmg = Math.round(MINE_DAMAGE_MAX * (1 - dist / mine.blastRadius) * (mine.uber ? 1.5 : 1));
-        if (dmg > 0) {
-          player.lastDamageSource = mine.uber ? 'flowered by a doombloom' : 'blown up by a mine';
-          player.applyKnockback(mine.pos, MINE_KNOCKBACK);
-          deps.lazyNetworkManager()?.sendEnvironmentDamage(dmg);
-          deps.lazyHud().showDamage(mine.pos, dmg);
-        }
-      }
+      blastAtPlayer(mine.pos, mine.blastRadius, MINE_DAMAGE_MAX, MINE_KNOCKBACK,
+        mine.uber ? 'flowered by a doombloom' : 'blown up by a mine', mine.uber ? 1.5 : 1);
       if (mine.uber) {
         // Doombloom chain: its blast sets off every OTHER mine it touches —
         // clearing a doombloom field by shooting one is a gamble, not a plan.
@@ -595,16 +586,9 @@ export function createEntities(deps: EntitiesDeps) {
       deps.world.explosions.push(new Explosion(scene, bane.pos, false, 0, deps.lazyTerrain(), bane.blastRadius / ROCKET_RADIUS, 0x77ff44));
       sfx.explosionAt(bane.pos, true);
       screenShake.blast(bane.pos, bane.uber ? 3.5 : 2.0, player.pos);
-      const dist = bane.pos.distanceTo(player.pos);
-      if (dist < bane.blastRadius) {
-        const dmg = Math.round(BANELING_DAMAGE_MAX * (1 - dist / bane.blastRadius) * (bane.uber ? 1.4 : 1));
-        if (dmg > 0) {
-          player.lastDamageSource = bane.uber ? 'melted by a goliath' : 'melted by a baneling';
-          player.applyKnockback(bane.pos, BANELING_KNOCKBACK);
-          deps.lazyNetworkManager()?.sendEnvironmentDamage(dmg);
-          deps.lazyHud().showDamage(bane.pos, dmg);
-          sfx.playerHurt();
-        }
+      if (blastAtPlayer(bane.pos, bane.blastRadius, BANELING_DAMAGE_MAX, BANELING_KNOCKBACK,
+        bane.uber ? 'melted by a goliath' : 'melted by a baneling', bane.uber ? 1.4 : 1) > 0) {
+        sfx.playerHurt();
       }
     };
     banelings.push(b);

@@ -19,6 +19,17 @@ const MUZZLE = new THREE.Vector3(0, 1.35, 0.55); // local to head pivot
 const _v = new THREE.Vector3();
 const _aim = new THREE.Vector3();
 
+// Shared across all sentries — a handful of turrets doesn't justify
+// per-instance materials/geometries; geometries die with the module.
+const _metal = new THREE.MeshLambertMaterial({ color: 0x4a5560 });
+const _dark = new THREE.MeshLambertMaterial({ color: 0x23282e });
+const _glow = new THREE.MeshBasicMaterial({ color: 0x66ddff });
+const _geoBase = new THREE.CylinderGeometry(0.55, 0.8, 0.5, 8);
+const _geoMast = new THREE.CylinderGeometry(0.16, 0.22, 0.9, 6);
+const _geoDome = new THREE.SphereGeometry(0.42, 10, 8);
+const _geoBarrel = new THREE.BoxGeometry(0.12, 0.12, 0.9);
+const _geoEye = new THREE.SphereGeometry(0.09, 6, 5);
+
 export class DeployTurret {
   readonly id: number;
   /** Species-candidate id — what a creature's threat table commits to. */
@@ -43,20 +54,16 @@ export class DeployTurret {
     this.pos.copy(pos);
     this.pos.y = terrain.getHeight(pos.x, pos.z);
 
-    const metal = new THREE.MeshLambertMaterial({ color: 0x4a5560 });
-    const dark = new THREE.MeshLambertMaterial({ color: 0x23282e });
-    const glow = new THREE.MeshBasicMaterial({ color: 0x66ddff });
-
-    const base = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.8, 0.5, 8), dark);
+    const base = new THREE.Mesh(_geoBase, _dark);
     base.position.y = 0.25;
-    const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.22, 0.9, 6), metal);
+    const mast = new THREE.Mesh(_geoMast, _metal);
     mast.position.y = 0.9;
     this.group.add(base, mast);
 
-    const dome = new THREE.Mesh(new THREE.SphereGeometry(0.42, 10, 8), metal);
-    const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.9), dark);
+    const dome = new THREE.Mesh(_geoDome, _metal);
+    const barrel = new THREE.Mesh(_geoBarrel, _dark);
     barrel.position.set(0, 0.05, 0.45);
-    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.09, 6, 5), glow);
+    const eye = new THREE.Mesh(_geoEye, _glow);
     eye.position.set(0, 0.12, 0.42);
     this.head.add(dome, barrel, eye);
     this.head.position.y = 1.4;
@@ -80,10 +87,9 @@ export class DeployTurret {
    * in range — the caller owns damage + tracer visuals. Leading with a
    * small velocity compensation so movers still get clipped.
    */
-  update(dt: number, scene: THREE.Scene, enemies: { pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean }[]):
+  update(dt: number, enemies: { pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean }[]):
       { muzzle: THREE.Vector3; hit: THREE.Vector3 } | null {
     if (this.dead) return null;
-    void scene;
     this.flashT -= dt;
     this.flash.material.opacity = Math.max(0, this.flashT / 0.09);
 
@@ -131,8 +137,7 @@ export class DeployTurret {
 
   dispose(scene: THREE.Scene): void {
     scene.remove(this.group);
-    this.group.traverse((o) => {
-      if (o instanceof THREE.Mesh) (o.geometry as THREE.BufferGeometry).dispose();
-    });
+    // Shared materials/geometries intentionally not disposed — module-owned.
+    this.flash.material.dispose(); // per-instance SpriteMaterial
   }
 }
