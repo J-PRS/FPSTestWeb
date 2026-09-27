@@ -47,7 +47,8 @@ export function createNetBalls(deps: EntitiesDeps, ctx: NetBallsCtx, logger: Chi
       : (id ? deps.world.remotePlayers.get(id)?.pos ?? null : null);
   }
 
-  function netBallSpawn(m: { id: number; variant: number; colorIdx: number; position: { x: number; y: number; z: number }; velocity: { x: number; y: number; z: number }; t?: number; enraged?: boolean; targetId?: string | null }): void {
+  type Vec3Msg = { x: number; y: number; z: number };
+  function netBallSpawn(m: { id: number; variant: number; colorIdx: number; position: Vec3Msg; velocity: Vec3Msg; t?: number; enraged?: boolean; targetId?: string | null; tp?: Vec3Msg | null }): void {
     if (netBallById.has(m.id)) return;
     Ball.initNetMode();
     const ball = new Ball(scene, deps.lazyTerrain(), m.variant as 0 | 1 | 2 | 3, {
@@ -61,22 +62,22 @@ export function createNetBalls(deps: EntitiesDeps, ctx: NetBallsCtx, logger: Chi
     netBallById.set(m.id, ball);
     // Spawn events are stale on arrival too — fast-forward from the
     // stamped state so the ball materializes where the server already is.
-    const age = ballEventAge(m.t);
-    if (age > 0.01) {
-      ball.applyNetSegment(
-        m.position.x, m.position.y, m.position.z,
-        m.velocity.x, m.velocity.y, m.velocity.z,
-        m.enraged ?? false, m.targetId ?? null,
-        age, targetPosForId(m.targetId),
-      );
-    }
+    // Always applies (even at ~0ms): it's the only path that seeds the
+    // committed targetId + aim snapshot before the first segment lands.
+    ball.applyNetSegment(
+      m.position.x, m.position.y, m.position.z,
+      m.velocity.x, m.velocity.y, m.velocity.z,
+      m.enraged ?? false, m.targetId ?? null,
+      ballEventAge(m.t), targetPosForId(m.targetId),
+      undefined, m.tp,
+    );
   }
 
   // Rubberband watch: how far our predicted replay was from the event's
   // truth. >2m = visible warp worth logging; >4m means prediction diverged
   // hard (latency spike or a sim mismatch — that one's a bug, not lag).
   const _segPos = new THREE.Vector3();
-  function netBallSegment(m: { id: number; position: { x: number; y: number; z: number }; velocity: { x: number; y: number; z: number }; enraged: boolean; targetId: string | null; t?: number; et?: number; slowT?: number; damp?: boolean }): void {
+  function netBallSegment(m: { id: number; position: { x: number; y: number; z: number }; velocity: { x: number; y: number; z: number }; enraged: boolean; targetId: string | null; t?: number; et?: number; slowT?: number; damp?: boolean; tp?: Vec3Msg | null }): void {
     const b = netBallById.get(m.id);
     if (!b) return;
     _segPos.set(m.position.x, m.position.y, m.position.z);
@@ -99,6 +100,7 @@ export function createNetBalls(deps: EntitiesDeps, ctx: NetBallsCtx, logger: Chi
       m.enraged, m.targetId,
       age, targetPosForId(m.targetId),
       { et: m.et, slowT: m.slowT, damp: m.damp },
+      m.tp,
     );
   }
 
