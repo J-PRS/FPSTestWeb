@@ -419,7 +419,15 @@ export class RemotePlayer {
     this._model.setPosition(this.position.x, this.position.y - EYE_OFFSET, this.position.z);
     this._model.setRotation(this.rotation.yaw, this.rotation.pitch, this.rotation.roll);
     const speed = this.position.distanceTo(this.previousPosition) / dt;
-    this._model.setAnimationState(pickLocomotionAnim(this._model.animationState, speed));
+    // Airborne overrides locomotion — the speed check alone reads jetting
+    // as "run", i.e. the robot sprinting on air. Feet clearly above
+    // terrain → Jump pose; grounded/skiing keeps the walk/run cycle.
+    const airborne = this.terrain
+      ? this.feetY - this.terrain.getHeight(this.position.x, this.position.z) > 0.6
+      : false;
+    this._model.setAnimationState(airborne
+      ? 'jump'
+      : pickLocomotionAnim(this._model.animationState, speed));
     this.previousPosition.copy(this.position);
     this._model.update(dt);
   }
@@ -480,6 +488,12 @@ export class RemotePlayer {
         (Math.random() - 0.5) * 2 * tumble
       );
     }
+  }
+
+  /** Team tint on the name ring — Nugget Wars bots use it; server players
+   *  could too once teamAssign lands on the wire. */
+  setGizmoColor(hex: number): void {
+    (this.gizmo?.material as THREE.MeshBasicMaterial | undefined)?.color.setHex(hex);
   }
 
   hide(): void {

@@ -47,6 +47,10 @@ export interface CombatDeps extends GameContext {
   // Damage → aggro: feed each creature's threat table so shared-PvE
   // targeting picks shooters, not just whoever stands nearest.
   reportTargetDamage?: (target: object, amount: number, attackerId?: string) => void;
+  /** Nugget Wars local authority: a hit on a `bot:*` id resolves HERE
+   *  (no server to claim to). Returns true when it consumed the hit —
+   *  callers then skip the predictDamage/sendShot path. */
+  botHit?: (playerId: string, dmg: number, fromPos: THREE.Vector3, attackerId?: string) => boolean;
   balls: Ball[];
   targets: import('../entities/balls.js').Targetable[]; // balls + crawlers — shootable/blastable
   nuggets: Nugget[];
@@ -313,7 +317,9 @@ export function createCombat(deps: CombatDeps) {
       rp.applyPredictedKnockback(pos, impulse, forceMode === 'pull');
       if (playerId === directHitTargetId) continue;
       deps.lazyHud().showHitMarker();
-      deps.lazyHealthBarSystem().predictDamage(playerId, aoeDamageOf(aoeDamage, dist, radius));
+      const aoeDmg = aoeDamageOf(aoeDamage, dist, radius);
+      if (deps.botHit?.(playerId, aoeDmg, pos)) continue; // local authority resolved it
+      deps.lazyHealthBarSystem().predictDamage(playerId, aoeDmg);
     }
   }
 
@@ -601,6 +607,7 @@ export function createCombat(deps: CombatDeps) {
     const hitPos = targetPlayer ? targetPlayer.position : deps.lazyPlayer().pos;
     const directDamage = getWeaponStats(p.config.weaponType).directDamage;
     deps.lazyDamageNumbers().spawn(hitPos, directDamage, p.config.damageColor, deps.lazyCamera());
+    if (deps.botHit?.(playerId, directDamage, p.pos)) return; // bot authority: real damage, no claim
     deps.lazyHealthBarSystem().predictDamage(playerId, directDamage);
     const airborne = targetPlayer
       ? targetPlayer.feetY - deps.lazyTerrain().getHeight(hitPos.x, hitPos.z) > 0.6
@@ -614,6 +621,15 @@ export function createCombat(deps: CombatDeps) {
     }
   }
 
+  /** Nugget Wars bots damaging creatures: the identical funnel a
+   *  projectile hit runs — aggro report, damage numbers, kill pipeline. */
+  function hitTargetLocal(t: import('../entities/balls.js').Targetable, dmg: number): void {
+    deps.reportTargetDamage?.(t, dmg);
+    deps.lazyDamageNumbers().spawn(t.pos, Math.round(dmg), '#ffe08a', deps.lazyCamera());
+    if (t.takeDamage(dmg)) onTargetDestroyed(t, t.vel);
+    else if (!t.hideHealthBar) deps.lazyHealthBarSystem().spawnBall(t, dmg, t.health);
+  }
+
   return {
     onFire, onDisc, onGrenade, onDiscLauncher, onChaingun, onMortar, onGrenadeLauncher, onFlak, onPlasma, onRailgun, onShotgun, onCannon, onRocketLauncher,
     onMelee: fire.onMelee,
@@ -621,5 +637,6 @@ export function createCombat(deps: CombatDeps) {
     slam,
     updateProjectiles,
     updateBeamVisual,
+    hitTargetLocal,
   };
 }
