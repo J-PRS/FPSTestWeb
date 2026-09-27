@@ -3,11 +3,15 @@ import { GameServer } from './GameServer.ts';
 import { logger } from './logger.ts';
 import type { WebSocketData } from './types.ts';
 import { DemoStorage } from './DemoStorage.ts';
+import { RtcRelay } from './RtcRelay.ts';
 import { join } from 'node:path';
 import { appendFileSync, mkdirSync } from 'node:fs';
 
 const gameServer = new GameServer();
 const demoStorage = new DemoStorage(join(import.meta.dir, '..', 'demos'));
+// P2P signalling: /rtc sockets never touch GameServer — the relay just
+// shuttles SDP/ICE between the two members of a room.
+const rtcRelay = new RtcRelay();
 
 const CORS_HEADERS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
@@ -31,18 +35,22 @@ const server = Bun.serve<WebSocketData>({
     maxPayloadLength: CONFIG.maxPayloadLength,
 
     open(ws) {
+      if (ws.data.rtc) { rtcRelay.onOpen(ws); return; }
       gameServer.onOpen(ws);
     },
 
     message(ws, message) {
+      if (ws.data.rtc) { rtcRelay.onMessage(ws, message as string | ArrayBuffer); return; }
       gameServer.onMessage(ws, message as string | ArrayBuffer);
     },
 
     close(ws) {
+      if (ws.data.rtc) { rtcRelay.onClose(ws); return; }
       gameServer.onClose(ws);
     },
 
     drain(ws) {
+      if (ws.data.rtc) return;
       gameServer.onDrain(ws);
     },
   },
@@ -57,6 +65,18 @@ const server = Bun.serve<WebSocketData>({
 
     if (url.pathname === '/ws') {
       if (server.upgrade(req, { data: { playerId: '', connectedAt: Date.now() } })) {
+        return;
+      }
+      return new Response('Upgrade failed', { status: 400 });
+    }
+
+    // P2P signalling: /rtc?room=CODE — two sockets per room, opaque relay.
+    if (url.pathname === '/rtc') {
+      const room = url.searchParams.get('room') ?? '';
+      if (!/^[a-zA-Z0-9_-]{1,32}$/.test(room)) {
+        return new Response('Bad room', { status: 400 });
+      }
+      if (server.upgrade(req, { data: { playerId: '', connectedAt: Date.now(), rtc: true, room } })) {
         return;
       }
       return new Response('Upgrade failed', { status: 400 });
@@ -166,6 +186,7 @@ logger.info('FPS Bun Server started', {
 
 logger.info(`WebSocket: ws://localhost:${CONFIG.port}/ws`);
 logger.info(`Health:    http://localhost:${CONFIG.port}/health`);
+logger.info(`RTC relay: ws://localhost:${CONFIG.port}/rtc?room=CODE`);
 
 process.on('SIGINT', () => {
   logger.info('SIGINT received, shutting down...');

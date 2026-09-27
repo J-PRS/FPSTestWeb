@@ -1,5 +1,20 @@
 # Changelog
 
+## [2026-09-28] P2P duels — WebRTC DataChannel, server-mediated handshake
+
+- `?p2p=host:CODE` / `?p2p=join:CODE`: two browsers connect P2P over an
+  RTCDataChannel; the server only relays the SDP/ICE handshake via the new
+  `/rtc` relay endpoint (RtcRelay.ts — 2-member rooms, opaque forwarding).
+- The host browser embeds the REAL server modules (PlayerManager,
+  MessageHandler, RateLimiter, validation — pure TS, no Bun deps), so hit
+  validation, damage clamps, respawns and the binary wire codec are
+  byte-identical to dedicated-server rules; only the transport differs.
+- New transport seam: NetworkManager.connect(url, makeTransport?) — P2P
+  plugs in LoopbackTransport (host's own client) / DataChannelTransport
+  (guest); plain sessions keep WebSocketConnection.
+- server_bun Bun-only APIs (Bun.env, Bun.file) now read via defensive
+  globalThis so the modules stay browser-safe under embedding.
+
 ## [2026-09-27] Cloak skill (Q-slot) + stale-heartbeat fix
 
 - New skill `cloak` (selectable in the skill picker): Q toggles invisibility —
