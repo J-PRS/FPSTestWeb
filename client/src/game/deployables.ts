@@ -113,7 +113,7 @@ export class Deployables {
           if (!b.alive) continue;
           this._enemies.push(b);
         }
-        const shot = t.update(dt, this.deps.scene, this._enemies);
+        const shot = t.update(dt, this._enemies);
         if (!shot) return;
         this.spawnTracer(shot.muzzle, shot.hit);
         sfx.shotAt(shot.muzzle, 12); // pistol crack — light sentry bark

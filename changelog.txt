@@ -1846,3 +1846,6 @@
 - Plan: _reports/2026-09-29_tribes2-expansion.md — 7-slice roadmap (deployables -> inventory stations -> power grid -> vehicles -> netcode scale -> objective modes -> tac map)
 - Deployables slice 1: X deploys pack item, N cycles (both rebindable in KEYS). SENTRY turret (2 max) hitscan-snaps creatures + enemy bots at ~2.2rps/9dmg with slew-tracked head, tracer, muzzle flash; MINE (6 max) reuses the proximity mine but triggers on enemies only. Past the cap, planting retires your oldest of that kind (T2 rule)
 - Deployables are creature-visible: wildlife threat tables see dep:N candidates and gnaw them down (~10dps contact), so a planted base actually gets razed. They're excluded from entities.targets — your own rockets can't grief your base
+- speciesKit.blastAtPlayer() helper — proximity-blast damage/knockback/death-text boilerplate deduped out of plantMine + spawnBaneling onDetonate blocks
+- DeployTurret shares module-level materials/geometries (was per-instance allocation); update() signature dropped the unused scene param
+- terrain.ts split: heightmap loading/CPU sampling -> world/heightmap.ts (getHeightmapData accessor for the GPU texture), GLSL -> world/terrainShaders.ts; terrain.ts 715->220 lines, import paths unchanged via re-export

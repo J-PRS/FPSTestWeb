@@ -47,7 +47,7 @@ all T2 modes meaningful; vehicles are the biggest lift and land best once there'
 something to fight over.
 
 ## Status
-- [ ] Slice 1 — deployables framework (IN PROGRESS)
+- [x] Slice 1 — deployables framework (DONE a4ce13f)
 - [ ] Slice 2 — inventory station + credits
 - [ ] Slice 3 — generator / powered grid
 - [ ] Slice 4 — vehicles

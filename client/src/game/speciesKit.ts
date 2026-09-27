@@ -104,6 +104,24 @@ export function createSpeciesKit(deps: EntitiesDeps, targets: Targetable[], depl
     return true;
   }
 
+  // Radial blast → player damage, the block every mine/baneling detonation
+  // re-implemented: distance falloff from maxDmg at zero to 0 at radius,
+  // then the standard env-damage funnel. Returns the damage dealt (0 = the
+  // player was outside the envelope).
+  function blastAtPlayer(origin: THREE.Vector3, radius: number, maxDmg: number, knockback: number, deathText: string, mult = 1): number {
+    const p = deps.lazyPlayer();
+    if (p.isDead) return 0;
+    const dist = origin.distanceTo(p.pos);
+    if (dist >= radius) return 0;
+    const dmg = Math.round(maxDmg * (1 - dist / radius) * mult);
+    if (dmg <= 0) return 0;
+    p.lastDamageSource = deathText;
+    p.applyKnockback(origin, knockback);
+    deps.lazyNetworkManager()?.sendEnvironmentDamage(dmg);
+    deps.lazyHud().showDamage(origin, dmg);
+    return dmg;
+  }
+
   // ---- Multi-player targeting -----------------------------------------
   // Every enemy owns a ThreatTable (WeakMap — no fields added to entity
   // classes). Candidates = the local player + every remote player. Solo,
@@ -372,7 +390,7 @@ export function createSpeciesKit(deps: EntitiesDeps, targets: Targetable[], depl
   }
 
   return {
-    removeTarget, ringPos, hurtPlayer,
+    removeTarget, ringPos, hurtPlayer, blastAtPlayer,
     aggroFor, aggroVelFor, reportTargetDamage,
     boltPop, updateSpecies, burrow, rollUber, kickDust, kickTrail,
   };
