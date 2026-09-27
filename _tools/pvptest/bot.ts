@@ -101,8 +101,13 @@ function nearestTarget(): [string, Other] | null {
 let lastFireAt = 0;
 let orbitSign = 1;
 
+// Scripted test phases (TEST5 circling etc.) own pos directly — self-drive
+// must stand down or both writers fight and the stream sees teleport jumps.
+let scripted = false;
+let circleBase: { cx: number; cz: number; phase: number } | null = null;
+
 function tickBehavior(dt: number) {
-  if (dead || !connected) return;
+  if (dead || !connected || scripted) return;
   if (PARK) {
     // Parked: no self-drive, but keep applied impulses (knockback) and let
     // them decay — zeroing vel each tick would swallow a real shove.
@@ -213,7 +218,7 @@ function connect(): Promise<void> {
         const u8 = new Uint8Array(ev.data);
         if (isWireFrame(u8) && u8[1] === WIRE_TICK) {
           const now = Date.now();
-          if (tickStats.lastAt) {
+          if (tickStats.lastAt && !dead) {
             const gap = now - tickStats.lastAt;
             tickStats.gaps.push(gap);
             if (gap > tickStats.maxGap) tickStats.maxGap = gap;
@@ -276,6 +281,7 @@ function handleJson(m: any) {
         // Same as the client's markTeleport: declare the spawn jump or the
         // plausibility check reads a >50m move from the corpse and corrects.
         sendJson({ type: 'teleport', position: { ...pos }, rotation: { yaw, pitch: 0 }, velocity: vel });
+        circleBase = null; // recenter scripted paths on the new spawn
         log('respawned');
       } else {
         const o = others.get(m.playerId);
@@ -623,6 +629,7 @@ async function main() {
   }
 
   if (TEST5) {
+    scripted = true;
     // Walk a legal arc for 6s (keeps delta compression emitting frames
     // for us too — a fully-parked lobby legitimately yields ~0Hz).
     PARK && (orbitSign = 1); // ensure movement: reuse orbit around spawn
@@ -630,9 +637,16 @@ async function main() {
     while (Date.now() < endAt) {
       // 15m/s circle — inside every plausibility bound.
       const t = (Date.now() - t0) / 1000;
-      pos.x = Math.cos(t * 0.5) * 15;
-      pos.z = Math.sin(t * 0.5) * 15;
-      pos.y = groundY(pos.x, pos.z);
+      // Recenter after respawn: the circle's absolute coords would otherwise
+      // read as a 15-30m jump from wherever the spawn point dropped us.
+      if (!circleBase) circleBase = { cx: pos.x - 15, cz: pos.z, phase: -t * 0.5 };
+      pos.x = circleBase.cx + Math.cos(t * 0.5 + circleBase.phase) * 15;
+      pos.z = circleBase.cz + Math.sin(t * 0.5 + circleBase.phase) * 15;
+      // Glide y — snapping to a cliff edge trips the 300 m/s plausibility
+      // check just like a real client teleporting down a ledge would.
+      const gy = groundY(pos.x, pos.z);
+      const dy = gy - pos.y;
+      pos.y += Math.min(Math.abs(dy), 60 * 0.05) * Math.sign(dy);
       await wait(50);
     }
     const n = tickStats.frames;
