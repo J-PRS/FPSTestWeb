@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 import { WeaponType } from '../../../shared/weapons.js';
 import { bakeVertexAO } from '../effects/vertexAO.js';
-import { getMuzzleFlashTexture } from '../effects/glowTexture.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { buildWeaponMeshes, buildHandAndFlash, FIST_JAB, FIST_OFF } from './viewmodel/weaponsGeo.js';
 
 // Port of Assets/Scripts/WeaponSway.cs (Unity FPS_Test) — mouse-lag sway,
 // velocity offset, perlin-ish bob, and landing dip.
@@ -49,9 +49,6 @@ const PUNCH_Y = -0.3;    // and deep — nearly holstered, not a recoil
 const PUNCH_Z = 0.06;
 const PUNCH_ROLL = 0.5;
 const PUNCH_ROT = -0.35; // muzzle tips DOWN (negative like switch) — butt-up sweep, never recoil-up
-// Fist flight path (group-local space): off-screen bottom-left → jab center
-const FIST_OFF = new THREE.Vector3(-0.42, -0.34, -0.5);
-const FIST_JAB = new THREE.Vector3(-0.02, -0.14, -0.62);
 
 export class ViewModel {
   readonly group: THREE.Group;
@@ -64,10 +61,11 @@ export class ViewModel {
   // Muzzle Z per weapon (model space) so the flash sits AT the bore,
   // not at a fixed offset that floats ahead of stubby barrels.
   private static readonly MUZZLE_Z: Record<number, number> = {
-    [WeaponType.Rocket]: -0.31, [WeaponType.Disc]: -0.20, [WeaponType.DiscPull]: -0.20,
-    [WeaponType.Chaingun]: -0.36, [WeaponType.Mortar]: -0.28, [WeaponType.GrenadeLauncher]: -0.25,
+    [WeaponType.Rocket]: -0.44, [WeaponType.Disc]: -0.20, [WeaponType.DiscPull]: -0.20,
+    [WeaponType.Chaingun]: -0.36, [WeaponType.Mortar]: -0.28, [WeaponType.GrenadeLauncher]: -0.42,
     [WeaponType.Flak]: -0.28, [WeaponType.Plasma]: -0.28, [WeaponType.Railgun]: -0.43,
-    [WeaponType.Shotgun]: -0.36, [WeaponType.Cannon]: -0.53,
+    [WeaponType.Shotgun]: -0.41, [WeaponType.Cannon]: -0.53,
+    [WeaponType.RocketLauncher]: -0.44, // just past the warhead tip
     [WeaponType.Lightning]: -0.42, // emitter ball at the prong tips
   };
   private chainBarrels: THREE.Group | null = null;
@@ -102,302 +100,20 @@ export class ViewModel {
     this.vmCam = camera;
     this.group = new THREE.Group();
 
-    const bodyMat = new THREE.MeshLambertMaterial({ color: 0x555a60, emissive: 0x1c1e20 });
-    const darkMat = new THREE.MeshLambertMaterial({ color: 0x2a2d30, emissive: 0x0e0f10 });
-    const boreMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
-
-    const mkTube = (r1: number, r2: number, len: number, z: number, mat: THREE.Material) => {
-      const m = new THREE.Mesh(new THREE.CylinderGeometry(r1, r2, len, 8), mat);
-      m.rotation.x = Math.PI / 2;
-      m.position.z = z;
-      return m;
-    };
-    const mkBore = (r: number, z: number) => {
-      const m = new THREE.Mesh(new THREE.CircleGeometry(r, 8), boreMat);
-      m.position.z = z;
-      return m;
-    };
-
-    // Weapon 0 — rocket launcher: one fat tube + muzzle ring
-    const rocket = new THREE.Group();
-    rocket.add(mkTube(0.11, 0.13, 0.55, 0, bodyMat));
-    rocket.add(mkTube(0.14, 0.14, 0.08, -0.26, darkMat));
-    rocket.add(mkBore(0.1, -0.301));
-
-    // Weapon 1 — disc launcher: stubby wide tube with a flat disc face
-    const disc = new THREE.Group();
-    disc.add(mkTube(0.15, 0.16, 0.34, 0.02, bodyMat));
-    disc.add(mkTube(0.17, 0.17, 0.05, -0.16, darkMat));
-    const discFace = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.015, 16), darkMat);
-    discFace.rotation.x = Math.PI / 2;
-    discFace.position.z = -0.19;
-    disc.add(discFace);
-    disc.visible = false;
-
-    // Weapon 2 — chaingun: 3 thin barrels triangulated around center.
-    // Barrels stop at the housing face (z=-0.02) — a buried rear stem
-    // just clips through the receiver while spinning; nothing inside
-    // the body is visible anyway.
-    const chain = new THREE.Group();
-    this.chainBarrels = new THREE.Group();
-    // The bake pipeline treats "barrels" as a kept-separate node — it's the
-    // only viewmodel part that animates, so it can't fold into the merged mesh.
-    this.chainBarrels.name = 'barrels';
-    for (let i = 0; i < 3; i++) {
-      const a = (i / 3) * Math.PI * 2;
-      const barrel = mkTube(0.035, 0.035, 0.33, -0.18, bodyMat);
-      barrel.position.x = Math.cos(a) * 0.06;
-      barrel.position.y = Math.sin(a) * 0.06;
-      this.chainBarrels.add(barrel);
-    }
-    chain.add(this.chainBarrels);
-    chain.add(mkTube(0.09, 0.11, 0.28, 0.12, darkMat)); // receiver housing
-    chain.visible = false;
-
-    // Weapon 3 — mortar: fat short tube with a wide muzzle + rear base
-    const mortar = new THREE.Group();
-    mortar.add(mkTube(0.19, 0.16, 0.42, -0.02, darkMat));
-    mortar.add(mkTube(0.22, 0.20, 0.1, -0.22, bodyMat)); // flared muzzle
-    mortar.add(mkBore(0.17, -0.271));
-    mortar.add(mkTube(0.1, 0.14, 0.14, 0.2, darkMat)); // breech
-    mortar.visible = false;
-
-    // Weapon 4 — grenade launcher: tube + drum cylinder on the side
-    const gl = new THREE.Group();
-    gl.add(mkTube(0.12, 0.12, 0.4, -0.04, bodyMat));
-    gl.add(mkBore(0.1, -0.241));
-    const drum = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.09, 12), darkMat);
-    drum.rotation.z = Math.PI / 2;
-    drum.position.set(0.13, -0.04, 0.06);
-    gl.add(drum);
-    gl.visible = false;
-
-    // Weapon 5 — flak cannon: wide boxy breech + short ribbed barrel
-    const flak = new THREE.Group();
-    flak.add(mkTube(0.17, 0.15, 0.3, -0.08, bodyMat));
-    flak.add(mkTube(0.19, 0.19, 0.06, -0.24, darkMat)); // muzzle ring
-    flak.add(mkBore(0.15, -0.271));
-    const flakBox = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.2, 0.3), darkMat);
-    flakBox.position.set(0, 0, 0.16);
-    flak.add(flakBox);
-    // Top vents — the UT flak "grill"
-    for (let i = 0; i < 3; i++) {
-      const vent = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.03, 0.05), bodyMat);
-      vent.position.set(0, 0.11, 0.08 + i * 0.08);
-      flak.add(vent);
-    }
-    flak.visible = false;
-
-    // Weapon 6 — plasma gun: twin slim tubes + glowing emitter ring
-    const plasma = new THREE.Group();
-    plasma.add(mkTube(0.09, 0.09, 0.45, -0.02, bodyMat));
-    const sideTube = mkTube(0.04, 0.04, 0.35, -0.01, darkMat);
-    sideTube.position.x = 0.09;
-    plasma.add(sideTube);
-    plasma.add(mkTube(0.11, 0.13, 0.06, -0.24, darkMat)); // emitter collar
-    plasma.add(mkBore(0.08, -0.271));
-    const plasmaGlow = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.075, 0.075, 0.02, 16),
-      new THREE.MeshBasicMaterial({ color: 0x33ffaa })
-    );
-    plasmaGlow.rotation.x = Math.PI / 2;
-    plasmaGlow.position.z = -0.272;
-    plasma.add(plasmaGlow);
-    plasma.visible = false;
-
-    // Weapon 7 — railgun: Q3's fat coil-cannon. Thick central bore, a stack
-    // of fat accelerator coils ribbing the barrel, glowing muzzle ring.
-    // The silhouette reads "industrial capacitor bank", not sniper rifle.
-    const rail = new THREE.Group();
-    // Fat bore — the barrel itself is the chunk
-    rail.add(mkTube(0.13, 0.14, 0.55, -0.08, bodyMat));
-    // Coil stack: fat rings ribbing the barrel — THE railgun read
-    for (let i = 0; i < 4; i++) {
-      const coil = mkTube(0.165, 0.165, 0.05, -0.3 + i * 0.14, darkMat);
-      rail.add(coil);
-      // Cyan energy slit between coils — the capacitor glow peeking through
-      const glowRing = mkTube(0.15, 0.15, 0.02, -0.23 + i * 0.14,
-        new THREE.MeshBasicMaterial({ color: 0x55bbff }));
-      rail.add(glowRing);
-    }
-    // Flared muzzle + glow bore
-    rail.add(mkTube(0.16, 0.18, 0.08, -0.38, darkMat));
-    const muzzleGlow = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.11, 0.11, 0.02, 16),
-      new THREE.MeshBasicMaterial({ color: 0x66ccff })
-    );
-    muzzleGlow.rotation.x = Math.PI / 2;
-    muzzleGlow.position.z = -0.421;
-    rail.add(muzzleGlow);
-    // Rear capacitor housing — big drum behind the receiver
-    const capDrum = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.16, 12), darkMat);
-    capDrum.rotation.x = Math.PI / 2;
-    capDrum.position.set(0, -0.02, 0.22);
-    rail.add(capDrum);
-    rail.visible = false;
-
-    // Weapon 8 — lightning gun: Q3's tesla prod. Chunky insulated body, two
-    // prongs converging on a glowing emitter ball — the arc jumps between
-    // them, not out of a bore. Reads instantly different from the cannons.
-    const lg = new THREE.Group();
-    lg.add(mkTube(0.12, 0.14, 0.42, 0.02, bodyMat)); // insulated body
-    lg.add(mkTube(0.15, 0.15, 0.07, 0.2, darkMat));  // grip ring
-    const lgGlowMat = new THREE.MeshBasicMaterial({ color: 0x8fdcff });
-    for (const side of [-1, 1]) {
-      const prong = mkTube(0.028, 0.016, 0.3, -0.24, darkMat);
-      prong.position.x = side * 0.07;
-      prong.rotation.y = -side * 0.12; // converge on the emitter point
-      lg.add(prong);
-      const tip = new THREE.Mesh(new THREE.SphereGeometry(0.028, 8, 6), lgGlowMat);
-      tip.position.set(side * 0.07 * 0.82, 0, -0.38);
-      lg.add(tip);
-    }
-    // Emitter ball between the prongs — the tesla node the arc springs from
-    const emitter = new THREE.Mesh(new THREE.SphereGeometry(0.04, 10, 8), lgGlowMat);
-    emitter.position.set(0, 0, -0.4);
-    lg.add(emitter);
-    // Ceramic ribs on the body — electrical hardware, not gun furniture
-    for (let i = 0; i < 3; i++) {
-      lg.add(mkTube(0.135, 0.135, 0.03, -0.06 + i * 0.1, darkMat));
-    }
-    lg.visible = false;
-
-    // Weapon 9 — shotgun: heavy pumpgun. Fat bore over a full-length shell
-    // tube, chunky receiver, big ribbed pump — reads "combat shotgun" the
-    // instant you see the paired under-barrel stack.
-    const sg = new THREE.Group();
-    sg.add(mkTube(0.09, 0.095, 0.56, -0.07, bodyMat));  // fat barrel
-    sg.add(mkTube(0.105, 0.105, 0.08, -0.32, darkMat)); // muzzle collar
-    sg.add(mkBore(0.075, -0.361));
-    // Shell tube — parallel under the barrel for its full length, THE
-    // pumpgun silhouette read (barrel-over-mag = shotgun, not rifle)
-    const magTube = mkTube(0.055, 0.055, 0.5, -0.02, darkMat);
-    magTube.position.y = -0.115;
-    sg.add(magTube);
-    // Receiver — chunky block between barrel and stock
-    const receiver = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.16, 0.2), bodyMat);
-    receiver.position.set(0, -0.01, 0.18);
-    sg.add(receiver);
-    // Pump grip — fat ribbed slide under the fore-end
-    const pump = mkTube(0.07, 0.07, 0.17, -0.12, darkMat);
-    pump.position.y = -0.115;
-    sg.add(pump);
-    for (let i = 0; i < 3; i++) {
-      const rib = mkTube(0.075, 0.075, 0.018, -0.17 + i * 0.05, bodyMat);
-      rib.position.y = -0.115;
-      sg.add(rib);
-    }
-    // Heat-shield vents along the barrel top — rows of holes read at scale
-    for (let i = 0; i < 4; i++) {
-      const vent = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.025, 0.04), darkMat);
-      vent.position.set(0, 0.1, -0.22 + i * 0.09);
-      sg.add(vent);
-    }
-    // Stock — dropped buttstock with a visible grip wedge
-    const stock = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.14, 0.24), darkMat);
-    stock.position.set(0, -0.07, 0.3);
-    sg.add(stock);
-    const sgGrip = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.12, 0.06), darkMat);
-    sgGrip.position.set(0, -0.12, 0.16);
-    sgGrip.rotation.x = 0.3;
-    sg.add(sgGrip);
-    sg.visible = false;
-
-    // Weapon 10 — cannon: Serious Sam naval gun rebuilt per JP's Blender
-    // ref — stacked bulged barrel sections separated by pinch rings, huge
-    // bore, rounded breech ball.
-    const cn = new THREE.Group();
-    let cz = 0.0; // running z, barrel extends toward -Z from breech
-    const cnSeg = (r1: number, r2: number, len: number, mat: THREE.Material) => {
-      cn.add(mkTube(r1, r2, len, cz - len / 2, mat));
-      cz -= len;
-    };
-    cnSeg(0.10, 0.13, 0.04, bodyMat);   // breech cap flare
-    cnSeg(0.13, 0.16, 0.05, bodyMat);   // bulge 1 out
-    cnSeg(0.16, 0.11, 0.05, bodyMat);   // bulge 1 in
-    cnSeg(0.105, 0.105, 0.02, darkMat); // pinch ring
-    cnSeg(0.11, 0.165, 0.06, bodyMat);  // bulge 2 out
-    cnSeg(0.165, 0.11, 0.05, bodyMat);  // bulge 2 in
-    cnSeg(0.105, 0.105, 0.02, darkMat); // pinch ring
-    cnSeg(0.11, 0.155, 0.06, bodyMat);  // bulge 3 out
-    cnSeg(0.155, 0.175, 0.04, bodyMat); // muzzle flare
-    cnSeg(0.175, 0.175, 0.02, darkMat); // muzzle ring
-    // cz ends ≈ -0.46; muzzle ring's own capped face serves as the dark bore.
-    const cnBall = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 6), darkMat);
-    cnBall.position.set(0, -0.02, 0.06);               // rounded breech ball
-    cn.add(cnBall);
-    cn.visible = false;
-
-    // Map is keyed by WeaponType, never positionally — Grenade/Slam/Melee
-    // have no gun model (belt throw / fist), so they map to nothing.
-    const models: [number, THREE.Group][] = [
-      [WeaponType.Rocket, rocket],
-      [WeaponType.Disc, disc],
-      [WeaponType.DiscPull, disc],
-      [WeaponType.Chaingun, chain],
-      [WeaponType.Mortar, mortar],
-      [WeaponType.GrenadeLauncher, gl],
-      [WeaponType.Flak, flak],
-      [WeaponType.Plasma, plasma],
-      [WeaponType.Railgun, rail],
-      [WeaponType.Lightning, lg],
-      [WeaponType.Shotgun, sg],
-      [WeaponType.Cannon, cn],
-    ];
-    for (const [wt, g] of models) {
-      this.weapons.set(wt, g);
-      this.group.add(g);
-      const mz = new THREE.Object3D();
-      mz.position.z = ViewModel.MUZZLE_Z[wt] ?? -0.35;
-      g.add(mz);
-      this.muzzleNodes.set(wt, mz);
-    }
+    const built = buildWeaponMeshes(this.group, ViewModel.MUZZLE_Z);
+    this.weapons = built.weapons;
+    this.muzzleNodes = built.muzzleNodes;
+    this.chainBarrels = built.chainBarrels;
     // Bake vertex AO once — darkens bore interiors, part joints, crevices.
     // Primitives have no UVs so this replaces texture AO entirely.
     for (const g of this.weapons.values()) bakeVertexAO(g);
     this.loadBakedWeapons();
 
-    // Muzzle flash — single billboard quad at the bore, additive, ~70ms.
-    // Random roll each shot keeps it from looking identical.
-    this.flashMat = new THREE.MeshBasicMaterial({
-      map: getMuzzleFlashTexture(), // starburst alpha — kills the square edge
-      color: 0xffc866,
-      transparent: true,
-      opacity: 0,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-    });
-    this.flashMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.22, 0.22), this.flashMat);
-    this.flashMesh.position.set(0, 0, -0.42); // just past the bore
-    this.flashMesh.visible = false;
-    this.group.add(this.flashMesh);
-    // Second quad at 45° — crossed pair reads as a star-burst, not a square
-    this.flashMesh2 = new THREE.Mesh(new THREE.PlaneGeometry(0.16, 0.16), this.flashMat);
-    this.flashMesh2.position.set(0, 0, -0.42);
-    this.flashMesh2.rotation.z = Math.PI / 4;
-    this.flashMesh2.visible = false;
-    this.group.add(this.flashMesh2);
-
-    // Off-hand fist for melee — chunky glove: palm block + knuckle row.
-    // Parked off-screen bottom-left until punch() jabs it across the frame.
-    this.fistGroup = new THREE.Group();
-    const gloveMat = new THREE.MeshLambertMaterial({ color: 0x3a3d42, emissive: 0x111214 });
-    const knuckleMat = new THREE.MeshLambertMaterial({ color: 0x8a4a3a, emissive: 0x20100c });
-    const palm = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.09, 0.14), gloveMat);
-    this.fistGroup.add(palm);
-    for (let i = 0; i < 4; i++) {
-      const k = new THREE.Mesh(new THREE.BoxGeometry(0.024, 0.03, 0.03), knuckleMat);
-      k.position.set(-0.036 + i * 0.024, 0.03, -0.07);
-      this.fistGroup.add(k);
-    }
-    const wrist = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.05, 0.1, 6), gloveMat);
-    wrist.rotation.x = Math.PI / 2;
-    wrist.position.set(0, -0.02, 0.11);
-    this.fistGroup.add(wrist);
-    this.fistGroup.position.copy(FIST_OFF);
-    this.fistGroup.rotation.set(0.15, 0.25, -0.1);
-    this.fistGroup.visible = false;
-    this.group.add(this.fistGroup);
+    const hf = buildHandAndFlash(this.group);
+    this.fistGroup = hf.fistGroup;
+    this.flashMat = hf.flashMat;
+    this.flashMesh = hf.flashMesh;
+    this.flashMesh2 = hf.flashMesh2;
 
     // Bottom-right, mostly centered — Quake guns sit low and fat
     this.group.scale.setScalar(0.8);
@@ -406,6 +122,37 @@ export class ViewModel {
     this.group.rotation.x = this.baseRotX;
 
     camera.add(this.group);
+  }
+
+  // Camera-space muzzle offset for an ARBITRARY weapon — same math as
+  // getMuzzleOffset but not tied to whichever weapon is active (the beam
+  // keeps welding to the LG emitter during the holster dip).
+  muzzleViewPos(wt: number, out: THREE.Vector3): boolean {
+    const n = this.muzzleNodes.get(wt);
+    if (!n) return false;
+    n.getWorldPosition(out);
+    this.vmCam.worldToLocal(out);
+    return true;
+  }
+
+  // World-space point where a muzzle node actually RENDERS on screen.
+  // The gun draws through vmCam (FOV 55) while the world renders through
+  // the main camera (FOV 90) — a raw camera-space offset lands on the
+  // wrong ray, which is why the beam visibly detached from the gun tip.
+  // Project through vmCam to NDC (the pixel the emitter occupies), then
+  // unproject through the main camera → a world point on the main cam's
+  // ray through that exact pixel. Anchor and emitter can never disagree.
+  muzzleAnchorWorld(wt: number, cam: THREE.Camera, out: THREE.Vector3): boolean {
+    // vmCam's quaternion is only synced inside renderFrame — mid-update it
+    // still holds LAST frame's rotation, so fast turns leave the anchor a
+    // frame behind the rendered gun. Sync it here to this frame's truth.
+    this.vmCam.quaternion.copy(cam.quaternion);
+    this.vmCam.updateMatrixWorld();
+    if (!this.muzzleViewPos(wt, out)) return false;
+    out.applyMatrix4(this.vmCam.projectionMatrix); // view space → NDC
+    cam.updateMatrixWorld();
+    out.unproject(cam); // NDC → world along the main camera's ray
+    return true;
   }
 
   // Swap procedural meshes for Blender-baked GLB+AO when the assets exist
@@ -487,6 +234,7 @@ export class ViewModel {
     [WeaponType.Railgun]:         [18, 0.01, 0x77ccff, 1.1, 0.9],   // fast snap, cyan discharge
     [WeaponType.Lightning]:       [16, 0.05, 0x8fdcff, 0.4, 0.4],   // per-tick hum — tiny flash, sideways jitter
     [WeaponType.Cannon]:          [8,  0.02, 0xffaa55, 1.5, 1.3],   // heavy naval-gun thump, big warm flash
+    [WeaponType.RocketLauncher]:  [10, 0.03, 0xffcc77, 1.3, 1.1],   // launch shove, hot motor bloom
   };
 
   kick(strength = 1): void {
