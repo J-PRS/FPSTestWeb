@@ -81,4 +81,17 @@ describe('PlayerManager', () => {
     const pm = new PlayerManager();
     expect(pm.respawnPlayer('nobody')).toBeNull();
   });
+
+  it('team members spawn near their own base when teamBases is set', () => {
+    const pm = new PlayerManager();
+    // Ring of spawn points, bases at the two ends.
+    pm.spawnPoints = [{ x: -70, y: 0, z: 0 }, { x: 0, y: 0, z: 0 }, { x: 70, y: 0, z: 0 }];
+    pm.teamBases = { alpha: { x: -70, y: 0, z: 0 }, bravo: { x: 70, y: 0, z: 0 } };
+    pm.addPlayer('a1', 'alpha'); // first spawn: no players yet, generic
+    pm.addPlayer('b1', 'bravo');
+    const a2 = pm.addPlayer('a2', 'alpha');
+    // alpha base is at x=-70: a2 should spawn on the alpha side even
+    // though b1 stands at +70.
+    expect(a2.position.x).toBeLessThan(0);
+  });
 });

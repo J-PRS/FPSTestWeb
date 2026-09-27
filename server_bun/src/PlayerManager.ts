@@ -11,9 +11,12 @@ export class PlayerManager {
   private players: Map<string, PlayerState> = new Map();
   /** Spawn anchors — map specs override, default is the config ring. */
   spawnPoints: Vec3[] | null = null;
+  /** Team home bases — when set, team members spawn near their own flag
+   *  instead of the generic farthest-from-everyone ring. */
+  teamBases: { alpha: Vec3; bravo: Vec3 } | null = null;
 
-  addPlayer(playerId: string): PlayerState {
-    const spawn = this.pickSpawnPoint(playerId);
+  addPlayer(playerId: string, team?: 'alpha' | 'bravo'): PlayerState {
+    const spawn = this.pickSpawnPoint(playerId, team);
 
     const player: PlayerState = {
       id: playerId,
@@ -23,6 +26,7 @@ export class PlayerManager {
       velocity: { x: 0, y: 0, z: 0 },
       health: CONFIG.playerMaxHealth,
       isDead: false,
+      team,
       kills: 0,
       deaths: 0,
       lastSeen: Date.now(),
@@ -149,7 +153,7 @@ export class PlayerManager {
     const player = this.players.get(playerId);
     if (!player) return null;
 
-    const spawn = this.pickSpawnPoint(playerId);
+    const spawn = this.pickSpawnPoint(playerId, player.team);
     player.position = { ...spawn };
     player.rotation = { yaw: 0, pitch: 0 };
     player.velocity = { x: 0, y: 0, z: 0 };
@@ -175,26 +179,35 @@ export class PlayerManager {
     }
   }
 
-  private pickSpawnPoint(playerId: string): Vec3 {
+  private pickSpawnPoint(playerId: string, team?: 'alpha' | 'bravo'): Vec3 {
     const points: Vec3[] = (this.spawnPoints ?? CONFIG.spawnPoints).map((p) => ({ x: p.x, y: p.y, z: p.z }));
     if (this.players.size === 0) {
       return { ...points[0]! };
     }
 
+    // Team modes prefer own-base spawns — materializing among enemies is
+    // instant camp food. Score blends base proximity with enemy clearance.
+    const base = team === 'alpha' || team === 'bravo' ? this.teamBases?.[team] : undefined;
     let best: Vec3 = { ...points[0]! };
-    let maxMinDist = -1;
+    let bestScore = -Infinity;
 
     for (const spawn of points) {
-      let minDist = Infinity;
+      let minFoeDist = Infinity;
       for (const [id, p] of this.players) {
         if (id === playerId || p.isDead) continue;
+        // Teammates near a spawn are safety, not a threat.
+        if (base && p.team && p.team === team) continue;
         const dx = spawn.x - p.position.x;
         const dz = spawn.z - p.position.z;
         const dist = Math.sqrt(dx * dx + dz * dz);
-        if (dist < minDist) minDist = dist;
+        if (dist < minFoeDist) minFoeDist = dist;
       }
-      if (minDist > maxMinDist) {
-        maxMinDist = minDist;
+      if (minFoeDist === Infinity) minFoeDist = 0;
+      const score = base
+        ? minFoeDist - 2 * Math.hypot(spawn.x - base.x, spawn.z - base.z)
+        : minFoeDist;
+      if (score > bestScore) {
+        bestScore = score;
         best = { ...spawn };
       }
     }
