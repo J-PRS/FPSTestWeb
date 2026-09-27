@@ -26,6 +26,8 @@ export interface MapSpec {
   /** Objective anchors per team — flag stands, capture rings, generators.
    *  Generic positions the mode interprets (ctf: flag stands). */
   bases?: { alpha?: Vec3like; bravo?: Vec3like };
+  /** Server-driven filler players — wandering, shootable, team-balanced. */
+  bots?: number;
 }
 
 export interface Vec3like { x: number; y: number; z: number }
@@ -76,5 +78,6 @@ export function resolveMapSpec(raw: unknown): MapSpec {
     balls,
     spawns: spawns?.length ? spawns : undefined,
     bases: bases && (bases.alpha || bases.bravo) ? bases : undefined,
+    bots: clampInt((src as { bots?: unknown }).bots, 0, 16, 0) || undefined,
   };
 }

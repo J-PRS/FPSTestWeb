@@ -44,6 +44,8 @@ export interface PlayerState {
   // Team-mode rooms (nuggets/ctf): assigned by the room at join — absent
   // in free-for-all modes. Owned by the server; clients never set it.
   team?: 'alpha' | 'bravo';
+  /** Server-driven filler — no socket, no grace period, no idle reap. */
+  isBot?: boolean;
   skiing: number; // last reported ski input flag (0/1), from inputMove
   // Lag-comp rewind buffer: accepted position reports stamped at server
   // receive time. Hit validation rewinds the target to the shooter's view

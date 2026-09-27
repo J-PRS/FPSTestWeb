@@ -442,6 +442,9 @@ export class GameServer {
 
   private tickRoom(room: Room, players: ReturnType<Room['players']['getAllPlayers']>, now0: number): void {
 
+      // Bots move first — their writes land in this tick's records below.
+      room.bots.tick(0.05);
+
       // Batch all player updates into one message with delta compression.
       // Binary records are pre-encoded ONCE per tick — the per-recipient
       // fan-out just concatenates buffers (no JSON.stringify, no filter
@@ -458,7 +461,7 @@ export class GameServer {
         // them here double-removes (double playerLeft broadcast).
         if (room.disconnected.has(playerId)) continue;
         const silenceMs = now - p.lastSeen;
-        if (silenceMs > GameServer.IDLE_KICK_MS) {
+        if (!p.isBot && silenceMs > GameServer.IDLE_KICK_MS) {
           const ws = room.socketOf(playerId);
           if (ws && ws.readyState === 1) {
             ws.close(1000, 'idle'); // triggers onClose → grace cleanup
