@@ -28,6 +28,7 @@ export interface RemotesDeps {
 export function createRemotes(deps: RemotesDeps) {
   let lastSentPos = { x: 0, y: 0, z: 0 };
   let lastRemotePosLog = '';
+  let rosterPollT = 0;
 
   function getLastSentPos() { return lastSentPos; }
   function setLastSentPos(pos: { x: number; y: number; z: number }) {
@@ -76,11 +77,16 @@ export function createRemotes(deps: RemotesDeps) {
     deps.lazyHud().updatePlayerList([localPlayerId, ...activeIds], localPlayerId);
 
     // Roster-change log — joins/leaves only; positions live in stateDebug
-    // (?debug). Per-position logging at 60Hz was a console flood.
-    const rosterKey = [...players.keys()].filter(id => id !== localPlayerId).sort().join(',');
-    if (rosterKey !== lastRemotePosLog) {
-      lastRemotePosLog = rosterKey;
-      deps.logger.info(`Remote roster: ${rosterKey || 'none'}`);
+    // (?debug). Per-position logging at 60Hz was a console flood. Polled at
+    // 2Hz — a join/leave logged half a second late loses nothing.
+    rosterPollT -= dt;
+    if (rosterPollT <= 0) {
+      rosterPollT = 0.5;
+      const rosterKey = [...players.keys()].filter(id => id !== localPlayerId).sort().join(',');
+      if (rosterKey !== lastRemotePosLog) {
+        lastRemotePosLog = rosterKey;
+        deps.logger.info(`Remote roster: ${rosterKey || 'none'}`);
+      }
     }
 
     players.forEach((playerState, playerId) => tickRemotePlayer(playerId, playerState, dt));
