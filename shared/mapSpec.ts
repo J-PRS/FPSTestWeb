@@ -28,6 +28,10 @@ export interface MapSpec {
   bases?: { alpha?: Vec3like; bravo?: Vec3like };
   /** Server-driven filler players — wandering, shootable, team-balanced. */
   bots?: number;
+  /** Bot-fill floor: keep at least this many total bodies in the room by
+   *  spawning/retiring bots as humans come and go. Distinct from `bots`
+   *  (a fixed spawn count) — fill reacts to joins and quits. */
+  botFill?: number;
   /** Spawn weights per ball variant [common, mid, large, elite] — default
    *  [0.84, 0.07, 0.04, 0.05]. Lets a map go all-elite or fodder-only. */
   ballMix?: number[];
@@ -82,6 +86,7 @@ export function resolveMapSpec(raw: unknown): MapSpec {
     spawns: spawns?.length ? spawns : undefined,
     bases: bases && (bases.alpha || bases.bravo) ? bases : undefined,
     bots: clampInt((src as { bots?: unknown }).bots, 0, 16, 0) || undefined,
+    botFill: clampInt((src as { botFill?: unknown }).botFill, 0, 24, 0) || undefined,
     ballMix: parseBallMix((src as { ballMix?: unknown }).ballMix),
   };
 }

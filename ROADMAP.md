@@ -72,7 +72,9 @@ surface. Detailed research lives in `_reports/`; this file is the current truth.
    home as carrier, return dropped own flag, defend while flag moves).
    Server-owned CTF flags landed (RoomFlags: touch pickup, drop on
    death, planar capture ring, flagUpdate broadcast); live-verified
-   bot flag grabs over the wire.
+   bot flag grabs over the wire. `botFill` spec keeps a room at N total
+   bodies — spawns/retires bots as humans come and go (dead bots retire
+   first); `teamUpdate` wire msg + bot-only rebalancing on leaver skew.
    Next extensions: terrain ref, species mix. Shared brain landed:
    shared/botBrain.ts drives offline GameBots AND server bots — one
    personality, both runtimes.
