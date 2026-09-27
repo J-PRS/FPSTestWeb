@@ -64,6 +64,25 @@ export class GameServer {
     this.startTickBroadcast();
   }
 
+  // Per-map terrain: spec.terrain names a maps/<file>.bin heightfield;
+  // files are shared across rooms via this cache and attach when ready —
+  // a room always plays on the default field until its own terrain lands.
+  private fields = new Map<string, Promise<Heightfield | null>>();
+
+  private loadField(file: string): Promise<Heightfield | null> {
+    let p = this.fields.get(file);
+    if (!p) {
+      const bunFile = (globalThis as { Bun?: { file(p: string): { arrayBuffer(): Promise<ArrayBuffer> } } }).Bun?.file;
+      p = bunFile
+        ? bunFile(join(import.meta.dir, '..', '..', 'maps', file)).arrayBuffer()
+            .then(ab => BallSim.parseHeightmap(new Uint8Array(ab)))
+            .catch(err => { logger.warn('map terrain load failed', { file, err: String(err) }); return null; })
+        : Promise.resolve(null);
+      this.fields.set(file, p);
+    }
+    return p;
+  }
+
   private static readonly ROOM_NAME_RE = /^[\w-]{1,32}$/;
 
   // Persistent identity: playerId → HMAC(playerId, secret). A claimed id
@@ -107,6 +126,10 @@ export class GameServer {
       const spec = this.loadMapSpec(name) ?? this.loadMapSpec(mode);
       room = new Room(name, this.field, mode, spec);
       room.onMatchEnd = (rec) => this.recordMatchEnd(rec);
+      if (spec?.terrain) {
+        const r = room;
+        this.loadField(spec.terrain).then(f => { if (f && this.rooms.get(name) === r) r.ballSim.attachField(f); });
+      }
       this.rooms.set(name, room);
       logger.info('Room created', { room: name, mode: room.mode });
     }

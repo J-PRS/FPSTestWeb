@@ -35,6 +35,9 @@ export interface MapSpec {
   /** Spawn weights per ball variant [common, mid, large, elite] — default
    *  [0.84, 0.07, 0.04, 0.05]. Lets a map go all-elite or fodder-only. */
   ballMix?: number[];
+  /** Heightmap filename under maps/ (e.g. "ravine.bin") — a different
+   *  terrain for this room's BallSim. Absent = the server's default field. */
+  terrain?: string;
 }
 
 export interface Vec3like { x: number; y: number; z: number }
@@ -88,6 +91,12 @@ export function resolveMapSpec(raw: unknown): MapSpec {
     bots: clampInt((src as { bots?: unknown }).bots, 0, 16, 0) || undefined,
     botFill: clampInt((src as { botFill?: unknown }).botFill, 0, 24, 0) || undefined,
     ballMix: parseBallMix((src as { ballMix?: unknown }).ballMix),
+    // filename-only — the value is resolved under maps/ server-side, so
+    // anything with a slash or dot-traversal is dropped on the floor
+    terrain: typeof (src as { terrain?: unknown }).terrain === 'string'
+        && /^[\w-]{1,64}\.bin$/.test((src as { terrain: string }).terrain)
+      ? (src as { terrain: string }).terrain
+      : undefined,
   };
 }
 

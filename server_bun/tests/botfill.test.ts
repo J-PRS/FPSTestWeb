@@ -17,6 +17,13 @@ describe('botFill', () => {
     expect(resolveMapSpec({}).botFill).toBeUndefined();
   });
 
+  test('terrain spec accepts only plain .bin filenames', () => {
+    expect(resolveMapSpec({ terrain: 'ravine.bin' }).terrain).toBe('ravine.bin');
+    expect(resolveMapSpec({ terrain: '../etc/passwd' }).terrain).toBeUndefined();
+    expect(resolveMapSpec({ terrain: 'sub/dir.bin' }).terrain).toBeUndefined();
+    expect(resolveMapSpec({}).terrain).toBeUndefined();
+  });
+
   test('room tops up to the floor', () => {
     const room = new Room('bf', null, '', resolveMapSpec({ botFill: 5 }));
     forceMaintain(room);
