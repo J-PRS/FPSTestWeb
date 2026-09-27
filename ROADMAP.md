@@ -56,9 +56,12 @@ surface. Detailed research lives in `_reports/`; this file is the current truth.
   + bot `--room=` flag for split-fleet tests.
 
 ### Next (audit priority order)
-1. ~~Lobby UI~~ — landed: LOBBY button polls /rooms, joins via
-   ?room=NAME reload, create-room input. Next polish: show own room +
-   mode in the panel, mid-match room switching without reload.
+1. ~~Lobby UI~~ — landed: LOBBY button polls /rooms (live scores +
+   winAt now shown per row), joins via ?room=NAME reload, create-room
+   input, NUGGETS/CTF/DM quick-play buttons → `GET /join?mode=` picks
+   the emptiest live match or spins `<mode>-N` (ad-hoc names inherit
+   maps/<mode>.json). Next polish: show own room + mode in the panel,
+   mid-match room switching without reload.
 2. **Movement re-sim** — shared/stepPlayer on server during validation.
    BLOCKED on JP's in-flight Player.ts edits — extract the integrator to
    shared/movement.ts when that file settles.
