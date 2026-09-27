@@ -1851,3 +1851,4 @@
 - terrain.ts split: heightmap loading/CPU sampling -> world/heightmap.ts (getHeightmapData accessor for the GPU texture), GLSL -> world/terrainShaders.ts; terrain.ts 715->220 lines, import paths unchanged via re-export
 - main.ts slimmed: server/P2P connect (incl. ?p2p handshake orchestration) -> networking/connectServer.ts, demo recorder data providers -> demo/playerProviders.ts; init() is ~120 lines shorter
 - combat.ts blast-force cluster extracted to game/blastForce.ts (applyExplosionForce + force application to player/creatures/nuggets/remotes + splash damage numbers); combat.ts 647->512
+- Deployable turret tracers pooled (shared material, recycled geometry) — was a BufferGeometry+Material alloc per 2.2rps shot; opacity fade dropped (shared material)

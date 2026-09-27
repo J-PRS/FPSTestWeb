@@ -13,7 +13,7 @@ import { AoeGizmo } from '../effects/aoeGizmo.js';
 import { Implosion } from '../effects/implosion.js';
 import { ScorchDecal } from '../effects/scorch.js';
 import { Projectile, type SweepObstacle } from '../projectiles/Projectile.js';
-import { WEAPON_CONFIGS, computeAccuracy } from '../projectiles/index.js';
+import { computeAccuracy } from '../projectiles/index.js';
 import type { FragMessages } from '../ui/FragMessages.js';
 import * as sfx from '../core/sfx.js';
 import type { HealthBarSystem } from '../ui/HealthBarSystem.js';
@@ -27,7 +27,7 @@ import type { SwarmSlotOwner } from '../entities/swarm.js';
 import { PENDING_ROCKET_TIMEOUT, ROCKET_RADIUS, CHAINGUN_RATE } from '../core/config.js';
 import { urlParams } from '../core/params.js';
 import { getWeaponStats, WeaponType, AOE_VFX_SCALE, directHitAoeBonus } from '../../../shared/weapons.js';
-import { aoeImpulse, aoeDamage as aoeDamageOf } from '../../../shared/combat.js';
+
 import { screenShake } from '../effects/screenShake.js';
 import type { GameContext } from './context.js';
 
