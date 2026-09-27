@@ -55,7 +55,7 @@
   - Validate all client inputs
 
 ## Current Task
-- **Objective:** Continuous refinement — MP correctness (pvptest harness green), bot AI feel (perception lag / miss-first / weave), seamless debris gibs, modes (nuggets/ctf/dm/classic), keybinds menu, spectator fly (V), weapon bake pipeline (Blender UV → texture-baker maps → numpy composite)
+- **Objective:** Continuous refinement — MP correctness (pvptest harness green), bot AI feel, modes (nuggets/ctf/dm/classic), P2P duels (?p2p=host:CODE / join:CODE — WebRTC DataChannel, host browser embeds real server modules as authority), weapon bake pipeline, ongoing tech debt (Player input extracted to player/input.ts)
 
 ## Recently Completed
 - **Explosion rendering:** Additive blending on particles so overlapping layers glow instead of darken
