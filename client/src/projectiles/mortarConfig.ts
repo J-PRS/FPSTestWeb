@@ -63,6 +63,7 @@ export const MORTAR_CONFIG: ProjectileConfig = {
   needsServerTracking: true,
   maxLifetime: WEAPONS[4].maxLifetime,
   bounces: true,
+  bounceSfx: 'hg_clang',
   bounceRestitution: 0.25, // T2 BounceVelocityModifier — mortars thud, not skip
   bounceFriction: 0.7,
   armTime: 1.5, // T2 FuseTimer: bounce before this, detonate after

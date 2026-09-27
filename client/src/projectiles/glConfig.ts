@@ -64,6 +64,7 @@ export const GL_CONFIG: ProjectileConfig = {
   maxLifetime: WEAPONS[5].maxLifetime,
   trailMeshType: 'sphere',
   bounces: true,
+  bounceSfx: 'ricochet1',
   bounceRestitution: GL_BOUNCE_RESTITUTION,
   bounceFriction: GL_BOUNCE_FRICTION,
 };

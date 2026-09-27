@@ -52,6 +52,7 @@ export interface ProjectileConfig {
   ribbonLife?: number;
   ribbonColor?: number;
   bounces?: boolean; // bounce off terrain instead of exploding (grenade launcher); fuse still applies
+  bounceSfx?: string; // /sfx/<name>.ogg ping played positionally on each bounce
   bounceRestitution?: number; // velocity kept along the terrain normal per bounce
   bounceFriction?: number; // tangential velocity kept per bounce
   maxBounces?: number; // die on the Nth terrain hit (flak shards); undefined = bounce until fuse

@@ -1678,3 +1678,14 @@
 == sound: 15 more samples + layering ==
 - Second pass over the drive audit: dash (audiogen swoosh+metal-click), slam (layered crystal-metal-impact + quetoo thud at 0.7 rate), bounce (deep ball bounce), punch, missile (turretter launch), mnstr1/5/14 (enemy pounce/dart cues), sparks (zap+enemy hit), ski_scrape (looped snow-gravel footstep, rate 1.3), equip+reload (bank, unused yet)
 - sfx.ts: layer() stacks samples into one voice with per-layer rate jitter on top of per-call jitter — big explosions now = blast + deep thud stacked
+== sound: disc launcher overhaul + ricochets ==
+- Disc launch = layered voice: cannon thud at 0.8 rate + grenade-whistle tail + soft clang — the Tribes pneumatic signature
+- Projectile.bounceOffTerrain: bounceSfx per config -> positional ricochet ping, gain scaled by impact velocity; GL+flak ricochet1, mortar hg_clang (T2 thud)
+- sfx.at(pos,name,gain,rate): generic positional sample player; equip() on weapon switch (audiogen rifle-handling foley); 7 new samples (ricochet1-3, whistle, hg_throw/clang/tick) -> 48 in bank
+== sound: disc overhaul fix ==
+- REAL BUG: disc is the only pull-mode weapon -> implosion branch never played any explosion sfx at all. New implosionAt(pos,direct): shot_energy at 0.6 rate (suck-in zap) layered over a fast-pitched small blast
+- Disc launch retuned: rocket thump + railgun zap at 1.15 + whistle tail (was cannon+clang, read as 'poor')
+== sound: disc launch = own voice ==
+- Disc launch rebuilt as its own identity: crystal-metal bang (0.9 rate) + punch transient + quiet whistle tail — railgun-ish energy + rocket-ish thump register without reusing either sample verbatim
+== sound: disc bass layer ==
+- JP heard thin: launch layers were all mid/high. Added shot_cannon at 0.55 rate as the bass body under the ring/punch/whistle stack

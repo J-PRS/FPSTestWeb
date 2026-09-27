@@ -61,6 +61,8 @@ export class AudioEngine {
       'dash', 'dash2', 'slam_thud', 'bounce', 'punch', 'missile',
       'monster1', 'monster2', 'monster3', 'sparks', 'zap_loop',
       'robot_die', 'equip', 'reload', 'ski_scrape', 'thud_big', 'cryst_bang',
+      'ricochet1', 'ricochet2', 'ricochet3', 'whistle',
+      'hg_throw', 'hg_clang', 'hg_tick',
     ];
     await Promise.all(names.map(async n => {
       try {

@@ -227,6 +227,7 @@ export function createCombat(deps: CombatDeps) {
     // VFX radius is decoupled from gameplay radius — aoeRadius intentionally
     // exceeds the visual dome so damage covers the shock ring, not just the dome
     vfxRadius?: number,
+    weaponType?: number,         // kill attribution — railgun refunds its cooldown
   ): void {
     const vfx = vfxRadius ?? radius;
     // Explosion/implosion visual + scorch decal on the terrain below the blast
@@ -236,6 +237,7 @@ export function createCombat(deps: CombatDeps) {
       screenShake.blast(pos, vfx, deps.player().pos);
     } else {
       deps.world.implosions.push(new Implosion(deps.scene(), pos, age, deps.terrain()));
+      sfx.implosionAt(pos, directHit);
       screenShake.blast(pos, vfx * 0.5, deps.player().pos);
     }
     // Scorch only when the blast is near the ground — a midair hit would
@@ -251,7 +253,7 @@ export function createCombat(deps: CombatDeps) {
     // Record explosion for death impulse calculation
     deps.explosionTracker.addExplosion(pos, force, shooterId || deps.networkManager().getLocalPlayerId());
 
-    applyExplosionForce(pos, radius, force, forceMode, falloffMultiplier, collisionMultiplier, forceMultiplier, aoeDamage, directHitTargetId ?? null);
+    applyExplosionForce(pos, radius, force, forceMode, falloffMultiplier, collisionMultiplier, forceMultiplier, aoeDamage, directHitTargetId ?? null, weaponType);
 
     // AOE damage to remote players (server-side authority)
     const networkManager = deps.networkManager();
@@ -276,7 +278,8 @@ export function createCombat(deps: CombatDeps) {
     collisionMultiplier: number,
     forceMultiplier: number,
     aoeDamage: number,
-    directHitTargetId: string | null
+    directHitTargetId: string | null,
+    weaponType?: number
   ): void {
     const falloffAt = (dist: number) => 1 - dist / (radius * falloffMultiplier);
     const applyTo = (t: Forceable, f: number) =>
@@ -287,7 +290,7 @@ export function createCombat(deps: CombatDeps) {
     if (dpx < radius * falloffMultiplier) {
       applyTo(player, force * falloffAt(dpx));
     }
-    applyForceToBalls(pos, radius, force, forceMode, collisionMultiplier, forceMultiplier, aoeDamage, applyTo);
+    applyForceToBalls(pos, radius, force, forceMode, collisionMultiplier, forceMultiplier, aoeDamage, applyTo, weaponType);
     applyForceToNuggets(pos, radius, force, forceMode, forceMultiplier);
     applyForceToRemotes(pos, radius, force, forceMode, aoeDamage, directHitTargetId);
   }
@@ -319,7 +322,8 @@ export function createCombat(deps: CombatDeps) {
     collisionMultiplier: number,
     forceMultiplier: number,
     aoeDamage: number,
-    applyTo: (t: Forceable, f: number) => void
+    applyTo: (t: Forceable, f: number) => void,
+    weaponType?: number
   ): void {
     for (const ball of deps.targets) {
       if (ball.dead) continue;
@@ -333,7 +337,7 @@ export function createCombat(deps: CombatDeps) {
         // Kills route through the shared pipeline so blast kills pay out
         // nuggets/debris/splits just like direct hits.
         const dmg = aoeDamageOf(aoeDamage, db, radius);
-        if (dmg >= 1 && ball.takeDamage(dmg)) onTargetDestroyed(ball, ball.vel);
+        if (dmg >= 1 && ball.takeDamage(dmg)) onTargetDestroyed(ball, ball.vel, weaponType);
       }
     }
   }
@@ -503,7 +507,8 @@ export function createCombat(deps: CombatDeps) {
       sendAOE,
       (p.config.name === 'grenade' || p.config.name === 'grenadeLauncher') ? 'grenade' : 'rocket',
       p.config.damageColor,
-      p.explosionRadius             // VFX stays the pinned dome size
+      p.explosionRadius,            // VFX stays the pinned dome size
+      p.config.weaponType
     );
   }
 
@@ -536,7 +541,11 @@ export function createCombat(deps: CombatDeps) {
   // Shared death pipeline for direct hits AND splash kills — debris,
   // nuggets, kill credit, elite split. Without this a blast kill would
   // silently delete the entity with no payout.
-  function onTargetDestroyed(ball: import('../entities/balls.js').Targetable, impulse?: THREE.Vector3): void {
+  function onTargetDestroyed(ball: import('../entities/balls.js').Targetable, impulse?: THREE.Vector3, weaponType?: number): void {
+    // Railgun reward: any kill (direct or its splash) instantly reloads —
+    // the "not useless" payoff that turns a slow precision weapon into a
+    // chain-kill tool against clusters.
+    if (weaponType === WeaponType.Railgun) deps.player().fireTimer = 0;
     // Shell-sampled shatter — debris occupies the target's silhouette on
     // frame 0 and flies along surface normals + the killing impulse
     if (impulse) _debrisDir.copy(impulse).normalize(); else _debrisDir.set(0, 0.5, 0);
@@ -568,7 +577,7 @@ export function createCombat(deps: CombatDeps) {
       deps.healthBarSystem().spawnBall(ball, dmg, ball.health);
     }
     logHitScore(p, 'ball');
-    if (destroyed) onTargetDestroyed(ball, p.vel);
+    if (destroyed) onTargetDestroyed(ball, p.vel, p.config.weaponType);
 
     const demoManager = deps.demoManager();
     if (demoManager?.isRecording && !destroyed) {
@@ -620,7 +629,7 @@ export function createCombat(deps: CombatDeps) {
       if (_meleeToT.dot(e.dir) < MELEE_ARC_DOT) continue;
       t.applyKnockback(player.pos, stats.knockbackForce);
       deps.damageNumbers().spawn(t.pos, MELEE_DAMAGE, '#aaddff', deps.camera());
-      if (t.takeDamage(MELEE_DAMAGE)) onTargetDestroyed(t, t.vel);
+      if (t.takeDamage(MELEE_DAMAGE)) onTargetDestroyed(t, t.vel, WeaponType.Melee);
       else deps.healthBarSystem().spawnBall(t, MELEE_DAMAGE, t.health);
       deps.hud().showHitMarker();
       sfx.hitMarker(true);

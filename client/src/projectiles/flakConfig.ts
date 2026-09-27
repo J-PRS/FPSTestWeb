@@ -59,6 +59,7 @@ export const FLAK_CONFIG: ProjectileConfig = {
   trailMeshType: 'sphere',
   noExplosion: true,
   bounces: true,
+  bounceSfx: 'ricochet1',
   bounceRestitution: FLAK_BOUNCE_RESTITUTION,
   bounceFriction: FLAK_BOUNCE_FRICTION,
   maxBounces: FLAK_MAX_BOUNCES,
