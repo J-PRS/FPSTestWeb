@@ -21,6 +21,7 @@ import { ServerBots } from './ServerBots.ts';
 import { RoomFlags } from './RoomFlags.ts';
 import { RoomPickups } from './RoomPickups.ts';
 import type { PlayerState, Vec3 } from './types.ts';
+import type { ServerMessage } from '../../shared/protocol.ts';
 import type { ServerWebSocket } from 'bun';
 import type { WebSocketData } from './types.ts';
 
@@ -162,18 +163,59 @@ export class Room {
     this.awardFfa(by, spec.ptsCreatureKill);
   }
 
+  /** Match clock — the horn sounds when a mode's timeLimitS elapses.
+   *  Starts on the first human join (0 = not running), re-arms on every
+   *  matchStart. Called from the room tick; leader wins, tie is 'draw'. */
+  private matchEndsAt = 0;
+
+  checkMatchClock(now: number): void {
+    const spec = this.modeSpec;
+    if (!spec) return;
+    if (this.matchEndsAt === 0) {
+      if (this.players.getHumanCount() > 0) {
+        this.matchEndsAt = now + spec.timeLimitS * 1000;
+      }
+      return;
+    }
+    if (now < this.matchEndsAt) return;
+    if (spec.teams) {
+      const w = this.scores.alpha === this.scores.bravo ? 'draw'
+        : this.scores.alpha > this.scores.bravo ? 'alpha' : 'bravo';
+      this.endMatch(w);
+    } else {
+      let top: string | null = null, topPts = -1, tied = false;
+      for (const [id, pts] of this.ffaScores) {
+        if (pts > topPts) { top = id; topPts = pts; tied = false; }
+        else if (pts === topPts) tied = true;
+      }
+      this.endMatch(top && !tied ? top : 'draw');
+    }
+  }
+
+  /** Match resolution — every end path (score cap, flag cap, clock horn)
+   *  funnels through here: broadcast, journal, field reset, matchStart.
+   *  'draw' is a legal winner (tied clock). */
+  private endMatch(w: string): void {
+    const spec = this.modeSpec!;
+    const scores = spec.teams ? { ...this.scores } : Object.fromEntries(this.ffaScores);
+    this.broadcast({ type: spec.teams ? 'matchEnd' : 'ffaMatchEnd', winner: w, scores } as ServerMessage);
+    this.onMatchEnd?.({ room: this.name, mode: this.mode, winner: w, scores, players: this.matchPlayers() });
+    this.scores.alpha = 0;
+    this.scores.bravo = 0;
+    this.ffaScores.clear();
+    this.flags?.reset();
+    this.pickups?.clear();
+    this.players.resetStats();
+    this.matchEndsAt = Date.now() + spec.timeLimitS * 1000;
+    this.broadcast({ type: 'matchStart', mode: this.mode, scores: { ...this.scores } });
+  }
+
   private awardFfa(id: string, n: number): void {
     const spec = this.modeSpec!;
     const pts = (this.ffaScores.get(id) ?? 0) + n;
     this.ffaScores.set(id, pts);
     this.broadcast({ type: 'ffaScore', scores: Object.fromEntries(this.ffaScores), winAt: spec.winAt });
-    if (pts >= spec.winAt) {
-      this.broadcast({ type: 'ffaMatchEnd', winner: id, scores: Object.fromEntries(this.ffaScores) });
-      this.onMatchEnd?.({ room: this.name, mode: this.mode, winner: id, scores: Object.fromEntries(this.ffaScores), players: this.matchPlayers() });
-      this.ffaScores.clear();
-      this.players.resetStats();
-      this.broadcast({ type: 'matchStart', mode: this.mode, scores: { ...this.scores } });
-    }
+    if (pts >= spec.winAt) this.endMatch(id);
   }
 
   /** Kill hook from the damage funnel: flag drop in every mode, frag
@@ -192,16 +234,7 @@ export class Room {
     bank(this.scores, team, n);
     this.broadcast({ type: 'teamScore', scores: { ...this.scores }, winAt: this.modeSpec.winAt });
     const w = winner(this.scores, this.modeSpec.winAt);
-    if (w) {
-      this.broadcast({ type: 'matchEnd', winner: w, scores: { ...this.scores } });
-      this.onMatchEnd?.({ room: this.name, mode: this.mode, winner: w, scores: { ...this.scores }, players: this.matchPlayers() });
-      this.scores.alpha = 0;
-      this.scores.bravo = 0;
-      this.flags?.reset();
-      this.pickups?.clear();
-      this.players.resetStats();
-      this.broadcast({ type: 'matchStart', mode: this.mode, scores: { ...this.scores } });
-    }
+    if (w) this.endMatch(w);
   }
 
   broadcast(msg: Parameters<ConnectionManager['broadcast']>[0], exclude?: string): void {
@@ -249,15 +282,7 @@ export class Room {
     bank(this.scores, player.team, n);
     this.broadcast({ type: 'teamScore', scores: { ...this.scores }, winAt: this.modeSpec.winAt });
     const w = winner(this.scores, this.modeSpec.winAt);
-    if (w) {
-      this.broadcast({ type: 'matchEnd', winner: w, scores: { ...this.scores } });
-      this.onMatchEnd?.({ room: this.name, mode: this.mode, winner: w, scores: { ...this.scores }, players: this.matchPlayers() });
-      this.scores.alpha = 0;
-      this.scores.bravo = 0;
-      this.pickups?.clear();
-      this.players.resetStats();
-      this.broadcast({ type: 'matchStart', mode: this.mode, scores: { ...this.scores } });
-    }
+    if (w) this.endMatch(w);
   }
 
   dispose(): void {
