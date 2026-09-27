@@ -1923,3 +1923,4 @@ record/replay harness: pvptest record.ts captures a live wire stream to .rec, re
 anti-abuse: per-IP join throttle (5/min, loopback exempt for pvptest fleets) + claimedIdentities LRU cap at 10k (was unbounded — join spam = memory leak)
 overtime: tied horn no longer instant-draws — 'OVERTIME — next score wins', any lead ends it mid-tick, 120s OT cap then draw
 join now announces the match clock ('~Xm left') via gameState matchEndsAt — late joiners see remaining time
+spectate joins: join with spectate:true -> full gameState + ballRoster + every broadcast + full-rate tick frames, no player slot/team/idle-reap; /rooms exposes spectator count

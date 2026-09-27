@@ -158,6 +158,30 @@ export class MessageHandler {
     }
   }
 
+  /** Spectator join — no player record, so everyone is "others", there's
+   *  no localPlayerState, and no playerJoined goes out. The socket still
+   *  gets every broadcast + tick frame (sent to connections, not players). */
+  handleSpectatorHandshake(playerId: string): void {
+    const playersData = [...this.playerManager.getAllPlayers().values()]
+      .map((p) => this.playerManager.toGameStatePlayer(p));
+    this.sendToPlayer(playerId, {
+      type: 'gameState',
+      players: playersData,
+      protocolVersion: PROTOCOL_VERSION,
+      room: this.roomInfo.room,
+      mode: this.roomInfo.mode || undefined,
+      scores: this.roomInfo.scores ? { ...this.roomInfo.scores } : undefined,
+      ffaScores: this.roomInfo.ffaScores?.(),
+      map: this.roomInfo.bases ? { mode: this.roomInfo.mode || undefined, bases: this.roomInfo.bases } : undefined,
+      flags: this.roomInfo.flags?.(),
+      pickups: this.roomInfo.pickups?.(),
+      matchEndsAt: this.roomInfo.matchEndsAt?.() || undefined,
+    });
+    if (this.ballSim) {
+      this.sendToPlayer(playerId, { type: 'ballRoster', balls: this.ballSim.roster() });
+    }
+  }
+
   handleMessage(playerId: string, msg: ClientMessage): void {
     const player = this.playerManager.getPlayer(playerId);
     if (!player) return;
