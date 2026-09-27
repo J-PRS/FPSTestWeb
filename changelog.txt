@@ -1774,3 +1774,8 @@
 - --test: wait out respawn before the undeclared-jump check — the server ignores dead clients' position reports, so jumping in the dead window saw no correction
 - --test2: same respawn wait for the AOE claim; lead the target (SOAK orbits ~16 m/s — blast placed at launch-time position missed the 8m radius)
 - bots integrate knockback impulses into position (impVel accumulator) — fighter/orbit velocity recompute used to swallow the shove
+== Offline play fixes ==
+- NetworkManager.localAuthority: sendEnvironmentDamage/sendHeal resolve locally when there's no server — creatures could neither hurt nor heal you offline before; same 40/25 clamps the server applies
+- Shared killLocal() death+respawn path used by bot frags and wilderness deaths
+- Match end: winner banner via kill feed, 8s ceasefire, then auto-reset (scores wiped, bots respawn, flags home, NEW MATCH feed line)
+- Scoreboard now lists offline bots (they live in world.remotePlayers, not the network roster)

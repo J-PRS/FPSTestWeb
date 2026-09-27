@@ -12,7 +12,7 @@
 
 import type { Terrain } from '../world/terrain.js';
 import type { Player } from '../entities/Player.js';
-import type { NetworkManager } from '../network/NetworkManager.js';
+import type { NetworkManager } from '../networking/NetworkManager.js';
 import type { EffectsManager } from '../effects/effects.js';
 import type { HUD } from '../ui/hud.js';
 import type { DemoManager } from '../demo/DemoManager.js';

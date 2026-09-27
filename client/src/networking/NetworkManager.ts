@@ -44,6 +44,11 @@ export class NetworkManager {
   public onSnapshot: ((players: SnapshotPlayer[], timestamp: number) => void) | null = null;
   public onStateHash: ((hash: string, tick: number, playerCount: number, timestamp: number) => void) | null = null;
   public onCorrection: ((seq: number, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }) => void) | null = null;
+  public onBallSpawn: ((data: Extract<ServerMessage, { type: 'ballSpawn' }>) => void) | null = null;
+  public onBallSegment: ((data: Extract<ServerMessage, { type: 'ballSegment' }>) => void) | null = null;
+  public onBallDie: ((data: Extract<ServerMessage, { type: 'ballDie' }>) => void) | null = null;
+  public onBallRoster: ((data: Extract<ServerMessage, { type: 'ballRoster' }>) => void) | null = null;
+  public onRemoteTeleport: ((playerId: string, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }) => void) | null = null;
   private lastPositionSendTime: number = 0;
   private readonly POSITION_SEND_INTERVAL = 50; // 20Hz — extrapolation covers the gap
   private ping: number = 0;
@@ -177,6 +182,11 @@ export class NetworkManager {
     snapshot: (data) => this.onSnapshot?.(data.players || [], data.timestamp || Date.now()),
     stateHash: (data) => this.onStateHash?.(data.hash, data.tick, data.playerCount, data.timestamp),
     correction: (data) => this.handleCorrection(data),
+    teleport: (data) => this.onRemoteTeleport?.(data.playerId, data.position, data.velocity),
+    ballSpawn: (data) => this.onBallSpawn?.(data),
+    ballSegment: (data) => this.onBallSegment?.(data),
+    ballDie: (data) => this.onBallDie?.(data),
+    ballRoster: (data) => this.onBallRoster?.(data),
     pong: (data) => this.handlePong(data.timestamp),
   };
 
@@ -257,15 +267,19 @@ export class NetworkManager {
   }
 
   private handlePlayerJoined(data: Extract<ServerMessage, { type: 'playerJoined' }>): void {
-    // Add REMOTE player to storage (server excludes self, but guard anyway)
+    // Rejoins (grace-period reconnects) re-broadcast playerJoined — only the
+    // FIRST sighting is a roster event. Upserting health/isDead on a rejoin
+    // would stomp the server-truth values tickUpdate already delivered, and
+    // re-firing onPlayerJoined spam-recreates/logs the remote every time.
+    const isNew = !this.players.has(data.playerId);
     this.upsertRemotePlayer(data.playerId, {
       position: data.position,
       rotation: data.rotation,
-      velocity: { x: 0, y: 0, z: 0 },
-      isDead: false,
-      health: 100,
+      velocity: isNew ? { x: 0, y: 0, z: 0 } : undefined,
+      isDead: isNew ? false : undefined,
+      health: isNew ? 100 : undefined,
     });
-    this.onPlayerJoined?.(data.playerId, data.position, data.rotation);
+    if (isNew) this.onPlayerJoined?.(data.playerId, data.position, data.rotation);
   }
 
   private handlePlayerLeft(data: Extract<ServerMessage, { type: 'playerLeft' }>): void {
@@ -320,6 +334,16 @@ export class NetworkManager {
   /**
    * Send player position to server with rate limiting (20Hz binary frame)
    */
+  /**
+   * Declared discontinuity — the position jump (warp, respawn) is
+   * intentional. Server reseats its plausibility anchor instead of
+   * rejecting the move and rubber-banding us.
+   */
+  sendTeleport(position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }, velocity: { x: number; y: number; z: number }): void {
+    if (!this.isConnected()) return;
+    this.send({ type: 'teleport', position, rotation, velocity });
+  }
+
   sendPosition(position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }, velocity: { x: number; y: number; z: number }): void {
     if (!this.isConnected()) return;
 
@@ -394,7 +418,7 @@ export class NetworkManager {
    *  the blast to a tracked projectile so the server can validate the
    *  trajectory — skill AOEs (slam) send neither and are position-checked
    *  against the player instead. */
-  sendAOEShot(position: { x: number; y: number; z: number }, weaponType: number, excludeTargetId?: string | null, projectileId?: string | null, airtime?: number): void {
+  sendAOEShot(position: { x: number; y: number; z: number }, weaponType: number, excludeTargetId?: string | null, projectileId?: string | null, airtime?: number, power?: number, directHit?: boolean): void {
     this.send({
       type: 'aoeShot',
       weaponType,
@@ -402,6 +426,8 @@ export class NetworkManager {
       excludeTargetId: excludeTargetId ?? null,
       projectileId: projectileId ?? undefined,
       airtime,
+      power,
+      directHit,
     });
   }
 
@@ -417,10 +443,28 @@ export class NetworkManager {
     this.send({ type: 'projectileDestroy', projectileId });
   }
 
+  /** Offline authority — when there's no server, damage/heal claims apply
+   *  locally through this hook instead of being dropped on the floor. */
+  localAuthority: { envDamage(amount: number): void; heal(amount: number): void } | null = null;
+
   /** Self-inflicted environment damage (crawler pounce, etc.) — the server
    *  clamps and applies it, then broadcasts the authoritative health. */
   sendEnvironmentDamage(amount: number): void {
+    if (!this.connected) { this.localAuthority?.envDamage(amount); return; }
     this.send({ type: 'environmentDamage', amount });
+  }
+
+  /** Client-claimed heal (nugget pickup) — keeps server health the truth. */
+  sendHeal(amount: number): void {
+    if (!this.connected) { this.localAuthority?.heal(amount); return; }
+    this.send({ type: 'heal', amount });
+  }
+
+  /** Hit claim on a server-owned creature (netDriven ball). kx/ky/kz is the
+   *  impulse the shot imparted — server clamps magnitude and rebroadcasts
+   *  the new segment so every client sees the same shove. */
+  sendCreatureHit(id: number, damage: number, kx?: number, ky?: number, kz?: number): void {
+    this.send({ type: 'creatureHit', id, damage, kx, ky, kz });
   }
 
   sendSnapshotRequest(): void {

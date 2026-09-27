@@ -176,6 +176,12 @@ export function createRemotes(deps: RemotesDeps) {
         const ps = nm.getPlayers().get(id);
         return { name: id, frags: deps.world.killCounts.get(id) ?? 0, ping: ps?.ping ?? null, self: false, dead: ps?.isDead ?? false };
       });
+    // Offline bots live in world.remotePlayers, not the network roster —
+    // they'd be invisible on the scoreboard otherwise.
+    for (const [id, rp] of deps.world.remotePlayers) {
+      if (nm.getPlayers().has(id)) continue;
+      remoteRows.push({ name: id.replace('bot:', ''), frags: deps.world.killCounts.get(id) ?? 0, ping: null, self: false, dead: rp.isDead });
+    }
     remoteRows.sort((a, b) => b.frags - a.frags);
     hud.setScoreboardRows([...rows, ...remoteRows]);
   }
