@@ -52,6 +52,8 @@ import { rakkParts } from './entities/Rakk.js';
 import { mineParts } from './entities/Mine.js';
 import { minerParts } from './entities/Miner.js';
 import { totemParts } from './entities/Totem.js';
+import { turretterParts } from './entities/Turretter.js';
+import { ballParts } from './entities/balls.js';
 
 const logger = new ChildLogger('Main');
 
@@ -138,6 +140,8 @@ async function init(): Promise<void> {
     mine: { parts: mineParts, capacity: 512 },
     miner: { parts: minerParts, capacity: 64 },
     totem: { parts: totemParts, capacity: 64 },
+    turretter: { parts: turretterParts, capacity: 64 },
+    ball: { parts: ballParts, capacity: 512 },
   });
 
   effects = new EffectsManager(scene);

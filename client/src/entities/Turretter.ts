@@ -10,13 +10,20 @@ import {
 import { Terrain } from '../world/terrain.js';
 import type { Targetable } from './balls.js';
 import { getGlowTexture } from '../effects/glowTexture.js';
-import { BlobShadow } from '../effects/blobShadow.js';
 import { TerrainFoot } from '../effects/terrainFoot.js';
+import { allocSlots, freeSlots, getSwarm, getShadows, type SwarmPart } from './swarms.js';
 
 const _v = new THREE.Vector3();
 const _dir = new THREE.Vector3();
 const _q = new THREE.Quaternion();
 const _q2 = new THREE.Quaternion();
+const _e = new THREE.Euler();
+const _root = new THREE.Matrix4();
+const _head = new THREE.Matrix4();
+const _local = new THREE.Matrix4();
+const _world = new THREE.Matrix4();
+const _s = new THREE.Vector3();
+const _p = new THREE.Vector3();
 // Base bottom buries this deep below CENTER ground — shallow, constant.
 // Gaps under the rim are the foot's job, not the sink's.
 const TURRET_BURROW = 0.18;
@@ -46,6 +53,56 @@ let _boltGeo: THREE.SphereGeometry | null = null;
 function boltGeo(): THREE.SphereGeometry {
   if (!_boltGeo) _boltGeo = new THREE.SphereGeometry(0.16, 8, 6);
   return _boltGeo;
+}
+let _eyeGeo: THREE.PlaneGeometry | null = null;
+function eyeGeo(): THREE.PlaneGeometry {
+  if (!_eyeGeo) _eyeGeo = new THREE.PlaneGeometry(0.5, 0.5);
+  return _eyeGeo;
+}
+
+// Shared materials — per-turret variations ride on instanceColor instead.
+let _baseMat: THREE.MeshLambertMaterial | null = null;
+function baseMat(): THREE.MeshLambertMaterial {
+  if (!_baseMat) _baseMat = new THREE.MeshLambertMaterial({ color: 0xffffff, emissive: 0x0a0d12 });
+  return _baseMat;
+}
+let _domeMatS: THREE.MeshLambertMaterial | null = null;
+function domeMatS(): THREE.MeshLambertMaterial {
+  if (!_domeMatS) _domeMatS = new THREE.MeshLambertMaterial({ color: 0xffffff, emissive: 0x101820 });
+  return _domeMatS;
+}
+let _eyeMat: THREE.MeshBasicMaterial | null = null;
+function eyeMat(): THREE.MeshBasicMaterial {
+  if (!_eyeMat) _eyeMat = new THREE.MeshBasicMaterial({
+    map: getGlowTexture(), transparent: true,
+    blending: THREE.AdditiveBlending, depthWrite: false,
+  });
+  return _eyeMat;
+}
+let _boltMat: THREE.MeshBasicMaterial | null = null;
+function boltMat(): THREE.MeshBasicMaterial {
+  if (!_boltMat) _boltMat = new THREE.MeshBasicMaterial({ color: 0xffcc66 });
+  return _boltMat;
+}
+let _trailMat: THREE.MeshBasicMaterial | null = null;
+function trailMat(): THREE.MeshBasicMaterial {
+  if (!_trailMat) _trailMat = new THREE.MeshBasicMaterial({
+    color: 0xff8830, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
+  });
+  return _trailMat;
+}
+
+const PART_BASE = 0, PART_DOME = 1, PART_BARREL = 2, PART_EYE = 3;
+const DOME_R = 0x4a / 255, DOME_G = 0x5f / 255, DOME_B = 0x73 / 255;
+const HULL_R = 0x3a / 255, HULL_G = 0x4a / 255, HULL_B = 0x5a / 255;
+
+export function turretterParts(): SwarmPart[] {
+  return [
+    { geometry: baseGeo(), material: baseMat(), castShadow: true },
+    { geometry: domeGeo(), material: domeMatS(), castShadow: true },
+    { geometry: barrelGeo(), material: baseMat() },
+    { geometry: eyeGeo(), material: eyeMat() },
+  ];
 }
 
 interface Bolt {
@@ -87,16 +144,17 @@ export class Turretter implements Targetable {
   color = new THREE.Color(0x3a4a5a); // gunmetal
   scale = 1.2;
 
+  // Swarm-slot handles — the turret renders through instanced parts, not a
+  // scene-graph Group. bolts/trailDots stay real meshes (counts are tiny).
+  swarmSlot = -1;
+  shadowSlot = -1;
+
   private scene: THREE.Scene;
   private _terrain: Terrain;
-  private mesh: THREE.Group;
-  private domeMat: THREE.MeshLambertMaterial;
-  private turretHead: THREE.Group;   // yaw + pitch pivot
-  private boltMat: THREE.MeshBasicMaterial;
-  private trailMat: THREE.MeshBasicMaterial;
-  private boltTex: THREE.Texture;
+  private rootQuat = new THREE.Quaternion(); // terrain tilt when planted; tumble when airborne
+  private headYaw = 0;                       // turretHead yaw (world aim → tilted local frame)
+  private headPitch = 0;
   private bolts: Bolt[] = [];
-  private shadow: BlobShadow;
   private trailDots: TrailDot[] = [];
 
   private planted = false;          // false = airborne ballistic
@@ -105,7 +163,7 @@ export class Turretter implements Targetable {
   private flashTimer = 0;
   private fracDamage = 0;           // planted armor: absorbs every other hit
   private meshYOffset = 0;          // visual sink below gameplay pos (set by seat)
-  private foot: TerrainFoot;        // rim→dirt wall, conformed in seat()
+  private foot!: TerrainFoot;       // rim→dirt wall, conformed in seat() — set unless swarm alloc fails
 
   /** Landing shockwave FX hook */
   onLanded?: (pos: THREE.Vector3) => void;
@@ -128,55 +186,17 @@ export class Turretter implements Targetable {
     this.vel = new THREE.Vector3();
     this.planted = true;
 
-    this.mesh = new THREE.Group();
-    this.mesh.position.copy(this.pos);
-
-    const hullMat = new THREE.MeshLambertMaterial({ color: this.color, emissive: 0x0a0d12 });
-    const base = new THREE.Mesh(baseGeo(), hullMat);
-    base.position.y = 0.4;
-    base.castShadow = true;
-    this.mesh.add(base);
-
-    // Turret head: yaw group with a pitch-pivoted barrel
-    this.turretHead = new THREE.Group();
-    this.turretHead.position.y = 0.85;
-    this.domeMat = new THREE.MeshLambertMaterial({ color: 0x4a5f73, emissive: 0x101820 });
-    const dome = new THREE.Mesh(domeGeo(), this.domeMat);
-    dome.castShadow = true;
-    this.turretHead.add(dome);
-    const barrel = new THREE.Mesh(barrelGeo(), hullMat);
-    barrel.position.y = 0.2;
-    this.turretHead.add(barrel);
-    // Eye slit — glow when airborne (vulnerable) or aiming
-    const eye = new THREE.Sprite(new THREE.SpriteMaterial({
-      map: getGlowTexture(), color: 0xff8830, transparent: true,
-      blending: THREE.AdditiveBlending, depthWrite: false,
-    }));
-    eye.scale.setScalar(0.5);
-    eye.position.set(0, 0.3, 0.6);
-    this.turretHead.add(eye);
-    this.mesh.add(this.turretHead);
-
-    scene.add(this.mesh);
+    if (!allocSlots('turretter', this)) { this.dead = true; return; }
 
     this.foot = new TerrainFoot(scene, FOOT_RIM);
 
     this.seat(terrain); // spawned planted — sit on the slope immediately
-
-    this.boltMat = new THREE.MeshBasicMaterial({ color: 0xffcc66 });
-    this.trailMat = new THREE.MeshBasicMaterial({
-      color: 0xff8830, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
-    });
-    this.boltTex = getGlowTexture();
-    this.shadow = new BlobShadow(scene, this.radius * 1.15, 0.4);
+    this.writeInstances();
   }
 
   update(dt: number, terrain: Terrain, playerPos: THREE.Vector3, playerVel?: THREE.Vector3): void {
     if (this.dead) return;
-    if (this.flashTimer > 0) {
-      this.flashTimer -= dt;
-      if (this.flashTimer <= 0) this.domeMat.color.setHex(0x4a5f73);
-    }
+    if (this.flashTimer > 0) this.flashTimer -= dt;
 
     this.updateBolts(dt, terrain, playerPos);
 
@@ -187,8 +207,48 @@ export class Turretter implements Targetable {
       this.updateAir(dt, terrain, playerPos);
     }
 
-    this.mesh.position.set(this.pos.x, this.pos.y + this.meshYOffset, this.pos.z);
-    this.shadow.update(this.pos, terrain);
+    this.writeInstances();
+    getShadows()?.set(this, this.pos, this.radius * 1.15, 0.4);
+  }
+
+  // Compose root (pos + visual sink + tilt/tumble) then the turret-head
+  // pivot (yaw+pitch inside that frame), writing each part's matrix.
+  private writeInstances(): void {
+    const swarm = getSwarm('turretter');
+    if (!swarm || this.swarmSlot < 0) return;
+    const slot = this.swarmSlot;
+
+    _p.set(this.pos.x, this.pos.y + this.meshYOffset, this.pos.z);
+    _root.compose(_p, this.rootQuat, _s.setScalar(1));
+
+    // Head pivot at (0, 0.85, 0) in root space
+    _q.setFromEuler(_e.set(this.headPitch, this.headYaw, 0));
+    _local.compose(_v.set(0, 0.85, 0), _q, _s.setScalar(1));
+    _head.multiplyMatrices(_root, _local);
+
+    // base rides the root at y=0.4
+    _local.compose(_v.set(0, 0.4, 0), _q.identity(), _s.setScalar(1));
+    _world.multiplyMatrices(_root, _local);
+    swarm.setMatrix(PART_BASE, slot, _world);
+    swarm.setMatrix(PART_DOME, slot, _head);
+    _local.compose(_v.set(0, 0.2, 0), _q.identity(), _s.setScalar(1));
+    _world.multiplyMatrices(_head, _local);
+    swarm.setMatrix(PART_BARREL, slot, _world);
+    _local.compose(_v.set(0, 0.3, 0.6), _q.identity(), _s.setScalar(1));
+    _world.multiplyMatrices(_head, _local);
+    swarm.setMatrix(PART_EYE, slot, _world);
+
+    swarm.setColor(PART_BASE, slot, HULL_R, HULL_G, HULL_B);
+    swarm.setColor(PART_BARREL, slot, HULL_R, HULL_G, HULL_B);
+    // Damage flash and the mid-air "shoot me now" glow both ride the dome.
+    const flash = this.flashTimer > 0;
+    const hot = !this.planted;
+    swarm.setColor(PART_DOME, slot,
+      flash ? 4 : hot ? DOME_R * 3 : DOME_R,
+      flash ? 4 : hot ? DOME_G * 2 : DOME_G,
+      flash ? 4 : hot ? DOME_B : DOME_B);
+    swarm.setColor(PART_EYE, slot,
+      hot ? 2.0 : 1.0, hot ? 1.0 : 0.53, hot ? 0.4 : 0.19);
   }
 
   private updatePlanted(dt: number, playerPos: THREE.Vector3, playerVel?: THREE.Vector3): void {
@@ -208,11 +268,11 @@ export class Turretter implements Targetable {
     // transform the world-space aim into the base's local frame first;
     // otherwise yaw/pitch are off by the tilt amount.
     _dir.set(dx, playerPos.y - this.pos.y, dz);
-    _q2.copy(this.mesh.quaternion).invert();
+    _q2.copy(this.rootQuat).invert();
     _dir.applyQuaternion(_q2);
-    this.turretHead.rotation.y = Math.atan2(_dir.x, _dir.z);
+    this.headYaw = Math.atan2(_dir.x, _dir.z);
     const hd = Math.hypot(_dir.x, _dir.z);
-    this.turretHead.rotation.x = Math.max(-0.5, Math.min(0.5, -Math.atan2(_dir.y, hd)));
+    this.headPitch = Math.max(-0.5, Math.min(0.5, -Math.atan2(_dir.y, hd)));
 
     this.refire -= dt;
     if (this.refire <= 0) {
@@ -234,12 +294,12 @@ export class Turretter implements Targetable {
     }
   }
 
-  private updateAir(dt: number, terrain: Terrain, playerPos: THREE.Vector3): void {
+  private updateAir(dt: number, terrain: Terrain, _playerPos: THREE.Vector3): void {
     this.vel.y += GRAVITY * dt;
     this.pos.addScaledVector(this.vel, dt);
     // Tumble slightly in flight — reads as "thrown", not "flying"
-    this.mesh.rotation.x += dt * 2.2;
-    this.mesh.rotation.z += dt * 1.4;
+    _q.setFromEuler(_e.set(dt * 2.2, 0, dt * 1.4));
+    this.rootQuat.premultiply(_q);
 
     const gy = terrain.getHeight(this.pos.x, this.pos.z);
     if (this.pos.y - this.radius * 0.5 <= gy) {
@@ -248,7 +308,6 @@ export class Turretter implements Targetable {
       this.dwell = 0;
       this.vel.set(0, 0, 0);
       this.seat(terrain);
-      this.domeMat.emissive.setHex(0x101820);
       this.onLanded?.(this.pos);
     }
   }
@@ -264,7 +323,7 @@ export class Turretter implements Targetable {
   private seat(terrain: Terrain): void {
     const n = terrain.getNormal(this.pos.x, this.pos.z);
     _v.set(0, 1, 0);
-    this.mesh.quaternion.setFromUnitVectors(_v, n);
+    this.rootQuat.setFromUnitVectors(_v, n);
 
     const cx = this.pos.x, cz = this.pos.z;
     const gy = terrain.getHeight(cx, cz);
@@ -275,7 +334,7 @@ export class Turretter implements Targetable {
 
     // Weld the foot wall: rim ring tracks the tilted body, bottom ring is
     // driven under the terrain at each column — no gap can form.
-    this.foot.conform(cx, cz, this.pos.y + this.meshYOffset, terrain, this.mesh.quaternion);
+    this.foot.conform(cx, cz, this.pos.y + this.meshYOffset, terrain, this.rootQuat);
     this.foot.mesh.visible = true;
   }
 
@@ -293,9 +352,9 @@ export class Turretter implements Targetable {
     this.vel.set(dx / t, (dy + 0.5 * Math.abs(GRAVITY) * t * t) / t, dz / t);
     this.planted = false;
     this.meshYOffset = 0; // in flight the mesh rides the body exactly
-    this.mesh.quaternion.identity(); // reset tilt — tumble owns the rotation
+    this.rootQuat.identity(); // reset tilt — tumble owns the rotation
     this.foot.mesh.visible = false; // foundation stays behind
-    this.domeMat.emissive.setHex(0x662200); // glows hot mid-air — "shoot me now"
+    // Dome goes hot mid-air via writeInstances' instanceColor — "shoot me now"
     this.onLaunch?.(this.pos);
   }
 
@@ -343,13 +402,13 @@ export class Turretter implements Targetable {
   }
 
   private fireBolt(vel: THREE.Vector3): void {
-    const mesh = new THREE.Mesh(boltGeo(), this.boltMat);
+    const mesh = new THREE.Mesh(boltGeo(), boltMat());
     const pos = this.pos.clone();
     pos.y += 1.0;
     mesh.position.copy(pos);
     // Hot halo — the bolt reads at range even when the sphere is subpixel
     const glow = new THREE.Sprite(new THREE.SpriteMaterial({
-      map: this.boltTex, color: 0xffaa44, transparent: true,
+      map: getGlowTexture(), color: 0xffaa44, transparent: true,
       blending: THREE.AdditiveBlending, depthWrite: false,
     }));
     glow.scale.setScalar(1.6);
@@ -380,7 +439,7 @@ export class Turretter implements Targetable {
       b.trailAcc += dt;
       while (b.trailAcc > 0.03) {
         b.trailAcc -= 0.03;
-        const dot = new THREE.Mesh(boltGeo(), this.trailMat);
+        const dot = new THREE.Mesh(boltGeo(), trailMat());
         dot.scale.setScalar(0.6);
         dot.position.copy(b.pos);
         this.scene.add(dot);
@@ -420,7 +479,6 @@ export class Turretter implements Targetable {
     const dmg = this.planted ? 0.5 : 2.0;
     this.fracDamage += dmg;
     this.flashTimer = 0.12;
-    this.domeMat.color.set(0xffffff);
     const whole = Math.floor(this.fracDamage);
     if (whole > 0) {
       this.fracDamage -= whole;
@@ -443,6 +501,7 @@ export class Turretter implements Targetable {
   }
 
   dispose(): void {
+    freeSlots('turretter', this);
     for (const b of this.bolts) {
       this.scene.remove(b.mesh, b.glow);
       (b.glow.material as THREE.SpriteMaterial).dispose();
@@ -450,11 +509,6 @@ export class Turretter implements Targetable {
     this.bolts.length = 0;
     for (const d of this.trailDots) this.scene.remove(d.mesh);
     this.trailDots.length = 0;
-    this.shadow.dispose();
-    this.scene.remove(this.mesh);
     this.foot.dispose();
-    this.domeMat.dispose();
-    this.boltMat.dispose();
-    this.trailMat.dispose();
   }
 }
