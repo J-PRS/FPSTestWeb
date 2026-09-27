@@ -201,6 +201,7 @@ export class Ball {
   static hitClaim: ((netId: number, damage: number, ix: number, iy: number, iz: number) => void) | null = null;
   private _netImp = new THREE.Vector3(); // pending knockback impulse → next claim
   private netAcc = 0; // fixed-dt accumulator — prediction steps at server rate
+  private flightT = 0; // seconds flown on the current inert leg (analytic path)
   private static _simTarget = { x: 0, y: 0, z: 0 };
   // Render-only correction: segment snaps shift `pos` to truth instantly
   // (gameplay stays exact), while this offset carries the visual error and
@@ -295,33 +296,16 @@ export class Ball {
 
     this.prevVelY = this.vel.y;
     if (this.netDriven && this.sim && Ball.field) {
-      // Predict the shared sim — stepped at the SERVER's fixed 50ms, not
-      // render dt. Discrete bounce detection is step-granularity sensitive:
-      // a 16ms client finds a different contact point than the 50ms server,
-      // the reflection heading diverges, and elastic bounces compound it
-      // into hundreds of meters. Same dt + same code = same trajectory.
-      this.netAcc = Math.min(this.netAcc + dt, 0.5); // cap vs spiral-of-death on stalls
       const s = this.sim;
-      // Pull/lunge aim = the snapshot the server carried on the last
-      // segment — replaying the SAME input, not our live view of the
-      // target, is what keeps the two sims glued together.
-      const tp = Ball._simTarget;
-      tp.x = s.tx; tp.y = s.ty; tp.z = s.tz;
-      const tgt = s.tgtValid ? tp : null;
-      const simNow = Ball.netSimNow?.() ?? Infinity;
-      while (this.netAcc >= 0.05 && this.simT + 0.05 <= simNow) {
-        this.netAcc -= 0.05;
-        this.simT += 0.05;
-        s.x = this.pos.x; s.y = this.pos.y; s.z = this.pos.z;
-        s.vx = this.vel.x; s.vy = this.vel.y; s.vz = this.vel.z;
-        stepBall(s, 0.05, Ball.field, tgt, false);
-        this.pos.set(s.x, s.y, s.z);
-        this.vel.set(s.vx, s.vy, s.vz);
-      }
-      // Clock-estimate stalls must never freeze the sim — if banked time
-      // tops the cap anyway, drain it ungated (drift beats a statue).
-      if (this.netAcc >= 0.5) {
-        while (this.netAcc >= 0.05) {
+      if (s.enraged && s.tgtValid) {
+        // Enrage pull curves the flight — must be stepped. Locked to the
+        // server's 50ms grid and gated on the stamped sim clock so the
+        // replay neither phase-shifts nor free-runs ahead of authority.
+        this.netAcc = Math.min(this.netAcc + dt, 0.5);
+        const tgt = Ball._simTarget;
+        tgt.x = s.tx; tgt.y = s.ty; tgt.z = s.tz;
+        const simNow = Ball.netSimNow?.() ?? Infinity;
+        while (this.netAcc >= 0.05 && this.simT + 0.05 <= simNow) {
           this.netAcc -= 0.05;
           this.simT += 0.05;
           s.x = this.pos.x; s.y = this.pos.y; s.z = this.pos.z;
@@ -330,6 +314,32 @@ export class Ball {
           this.pos.set(s.x, s.y, s.z);
           this.vel.set(s.vx, s.vy, s.vz);
         }
+        if (this.netAcc >= 0.5) {
+          // Clock-estimate stalls must never freeze the sim.
+          while (this.netAcc >= 0.05) {
+            this.netAcc -= 0.05;
+            this.simT += 0.05;
+            s.x = this.pos.x; s.y = this.pos.y; s.z = this.pos.z;
+            s.vx = this.vel.x; s.vy = this.vel.y; s.vz = this.vel.z;
+            stepBall(s, 0.05, Ball.field, tgt, false);
+            this.pos.set(s.x, s.y, s.z);
+            this.vel.set(s.vx, s.vy, s.vz);
+          }
+        }
+      } else {
+        // Inert leg: gravity-only flight is EXACTLY solvable — stepping
+        // adds 20Hz quantization for zero benefit. Closed form matches
+        // the server's semi-implicit Euler bit-for-bit (the +T*dt/2 term
+        // is the velocity update Euler applies before the position one),
+        // so an arc flies pixel-smooth until the next bounce event lands.
+        this.flightT = Math.min(this.flightT + dt, 8);
+        const T = this.flightT;
+        this.pos.set(
+          s.x + s.vx * T,
+          s.y + s.vy * T + 0.5 * BALL_GRAVITY * (T * T + 0.05 * T),
+          s.z + s.vz * T,
+        );
+        this.vel.set(s.vx, s.vy + BALL_GRAVITY * T, s.vz);
       }
       this.enraged = s.enraged;
       this.enrageTimer = s.enrageTimer;
@@ -347,10 +357,11 @@ export class Ball {
       this.renderOffset.set(0, 0, 0);
     }
     this._rpos.copy(this.pos).add(this.renderOffset);
-    if (this.netDriven && this.sim) {
-      // The sim only advances in 50ms quanta; the leftover netAcc is elapsed
-      // time the ball has visually "not moved" through. Extrapolate the
-      // render pos ballistically over it or the ball steps at ~20fps.
+    if (this.netDriven && this.sim && this.sim.enraged && this.sim.tgtValid) {
+      // The stepped path only advances in 50ms quanta; the leftover netAcc
+      // is elapsed time the ball has visually "not moved" through.
+      // Extrapolate the render pos ballistically over it or the ball steps
+      // at ~20fps. (Inert legs already integrate continuously — skip.)
       const rem = this.netAcc;
       if (rem > 0) {
         this._rpos.x += this.vel.x * rem;
@@ -766,6 +777,7 @@ export class Ball {
     // and the render path ballistically extrapolates the sub-step
     // remainder — which is all the lead was ever for.
     this.netAcc = Math.min(lead, 0.5);
+    this.flightT = lead; // inert path flies on from the event's age — seamless handoff
     // Sim cursor anchors to the event's stamped grid time — the banked
     // lead is consumed by whole cells in update(), not stepped here.
     if (simT !== undefined) this.simT = simT;
