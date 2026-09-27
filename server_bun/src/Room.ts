@@ -17,6 +17,7 @@ import { BallSim } from './BallSim.ts';
 import type { Heightfield } from '../../shared/heightfield.ts';
 import { type MapSpec, resolveMapSpec } from '../../shared/mapSpec.ts';
 import { MODES, pickTeam, makeScores, bank, winner, type ModeId, type ModeSpec, type TeamScores } from '../../shared/teams.ts';
+import { ServerBots } from './ServerBots.ts';
 import type { PlayerState } from './types.ts';
 import type { ServerWebSocket } from 'bun';
 import type { WebSocketData } from './types.ts';
@@ -43,6 +44,8 @@ export class Room {
   // Server-owned match scoreboard — only populated in team modes.
   readonly modeSpec: ModeSpec | null;
   readonly scores: TeamScores = makeScores();
+  /** Server-driven filler players, populated from the map spec. */
+  readonly bots: ServerBots;
 
   constructor(name: string, field: Heightfield | null, mode = '', spec?: MapSpec) {
     this.name = name;
@@ -72,6 +75,10 @@ export class Room {
     if (this.spec.spawns) this.players.spawnPoints = this.spec.spawns;
     this.messages.setBallSim(this.ballSim);
     if (field) this.ballSim.attachField(field);
+    this.bots = new ServerBots(this, field);
+    // Bots populate before humans join so team balancing puts humans on
+    // the emptier side.
+    if (this.spec.bots) this.bots.populate(this.spec.bots);
   }
 
   broadcast(msg: Parameters<ConnectionManager['broadcast']>[0], exclude?: string): void {
@@ -86,9 +93,10 @@ export class Room {
     return this.connections.getConnection(playerId);
   }
 
-  /** Nothing left to serve: no players, no grace-period ghosts. */
+  /** Nothing left to serve: no humans, no grace-period ghosts. Bots don't
+   *  keep a match alive — they exist to serve the humans in it. */
   get empty(): boolean {
-    return this.players.getPlayerCount() === 0 && this.disconnected.size === 0;
+    return this.players.getHumanCount() === 0 && this.disconnected.size === 0;
   }
 
   /** Balance join: smallest team takes the newcomer. FFA modes no-op. */

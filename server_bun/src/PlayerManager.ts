@@ -75,6 +75,13 @@ export class PlayerManager {
     return this.players.size;
   }
 
+  /** Humans only — server bots don't keep a match alive on their own. */
+  getHumanCount(): number {
+    let n = 0;
+    for (const p of this.players.values()) if (!p.isBot) n++;
+    return n;
+  }
+
   toGameStatePlayer(player: PlayerState): GameStatePlayer {
     return {
       id: player.id,
