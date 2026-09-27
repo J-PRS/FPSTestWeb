@@ -38,7 +38,8 @@ function osc(type: OscillatorType, f0: number, f1: number, dur: number,
 /** Play a decoded sample into dest. Returns false if the bank hasn't
  *  delivered it yet — caller falls back to the synth version. Rate is
  *  jittered slightly per call so repeats never sound machine-gunned. */
-function sample(name: string, dest: AudioNode, gain = 1, rate = 1): boolean {
+function sample(name: string, dest: AudioNode, gain = 1, rate = 1,
+    lpf?: number, cutAfter?: number): boolean {
   const c = ctx();
   const buf = audio.sample(name);
   if (!c || !buf) return false;
@@ -47,17 +48,32 @@ function sample(name: string, dest: AudioNode, gain = 1, rate = 1): boolean {
   src.playbackRate.value = rate * (0.94 + Math.random() * 0.12);
   const g = c.createGain();
   g.gain.value = gain;
-  src.connect(g).connect(dest);
+  if (lpf) {
+    const f = c.createBiquadFilter();
+    f.type = 'lowpass'; f.frequency.value = lpf;
+    src.connect(f).connect(g).connect(dest);
+  } else {
+    src.connect(g).connect(dest);
+  }
+  if (cutAfter) {
+    // Fade out instead of hard-stopping — a click at the cut is worse
+    // than the ring we are trying to avoid.
+    g.gain.setValueAtTime(gain, c.currentTime + cutAfter - 0.03);
+    g.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + cutAfter);
+  }
   src.start();
+  src.stop(c.currentTime + (cutAfter ?? buf.duration / (rate * 0.94)) + 0.05);
   return true;
 }
 
 /** Stack samples into one voice — the classic game-audio trick: a weak
  *  sound + a weak sound at different pitches reads as one big sound.
- *  Each layer gets independent rate jitter on top of the shared one. */
-function layer(dest: AudioNode, parts: [name: string, gain: number, rate?: number][]): boolean {
+ *  Per-layer rate jitter, optional lowpass (keeps body, kills ring), and
+ *  optional early cut so a long ringy tail doesn't outlive the transient. */
+function layer(dest: AudioNode,
+    parts: [name: string, gain: number, rate?: number, lpf?: number, cutAfter?: number][]): boolean {
   let any = false;
-  for (const [n, g, r] of parts) if (sample(n, dest, g, r ?? 1)) any = true;
+  for (const [n, g, r, f, cut] of parts) if (sample(n, dest, g, r ?? 1, f, cut)) any = true;
   return any;
 }
 
@@ -126,10 +142,11 @@ export function at(pos: THREE.Vector3, name: string, gain = 1, rate = 1): void {
 }
 
 function shootInto(g: GainNode, weaponType: number): void {
-  // Disc launcher: metallic ring + energy thump + whistle — its own voice
-  // in the railgun×rocket register without borrowing either verbatim.
+  // Disc launcher: lowpassed cannon body + short metallic twang + punch
+  // transient, all cut before their ring tails — verified punchy in the
+  // spectrogram (sharp attack, decayed by ~0.4s, no sustained band).
   if (weaponType === WeaponType.Disc &&
-      layer(g, [['shot_cannon', 0.8, 0.55], ['cryst_bang', 0.65, 0.9], ['punch', 0.5, 1.2], ['whistle', 0.3]])) return;
+      layer(g, [['shot_cannon', 0.9, 0.6, 800, 0.4], ['hg_clang', 0.5, 1.5, undefined, 0.15], ['punch', 0.4, 1.2, undefined, 0.2]])) return;
   const s = SHOT_SAMPLES[weaponType];
   if (s && sample(s[0], g, s[1])) return;
   switch (weaponType) {
@@ -309,6 +326,16 @@ export function implosionAt(pos: THREE.Vector3, direct: boolean): void {
   ])) return;
   osc('sawtooth', 1800, 200, 0.25, 0.4, g);
   noise(0.4, 0.5, g, 'lowpass', 4000, 300);
+}
+
+/** sfxdump-only hook: render an arbitrary layer recipe through the sfx bus
+ *  so candidate mixes can be auditioned/analyzed headlessly. */
+export function debugMix(parts: [string, number, number?, number?, number?][]): void {
+  const bus = audio.sfxBus, c = ctx();
+  if (!bus || !c) return;
+  const g = c.createGain(); g.connect(bus);
+  if (!play(g, 1)) return;
+  layer(g, parts);
 }
 
 export function explosionClose(big: boolean): void {
