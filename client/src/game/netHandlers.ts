@@ -100,6 +100,26 @@ export function wireNetworkHandlers(deps: NetDeps): void {
     }
   };
 
+  // Server-owned nugget pickups — creature kills in team rooms drop a gem
+  // anyone on a team can touch to bank a point. Dumb renderer; all rules
+  // (radius, TTL, team credit) live in RoomPickups server-side.
+  const pickupMeshes = new Map<number, THREE.Mesh>();
+  const pickupGeo = new THREE.OctahedronGeometry(0.5);
+  const pickupMat = new THREE.MeshBasicMaterial({ color: 0xffcc44 });
+  const addPickup = (id: number, pos: { x: number; y: number; z: number }) => {
+    if (pickupMeshes.has(id)) return;
+    const m = new THREE.Mesh(pickupGeo, pickupMat);
+    m.position.set(pos.x, pos.y + 0.8, pos.z);
+    deps.lazyScene().add(m);
+    pickupMeshes.set(id, m);
+  };
+  networkManager.onPickupSpawn = (id, pos) => addPickup(id, pos);
+  networkManager.onPickupGone = (id, by) => {
+    const m = pickupMeshes.get(id);
+    if (m) { deps.lazyScene().remove(m); pickupMeshes.delete(id); }
+    if (by === nm().getLocalPlayerId()) chat.add(null, 'nugget banked +1');
+  };
+
   // Lobby browser — corner button lists the server's live rooms; joining
   // reloads with ?room=NAME (membership is fixed at connect time).
   void resolveServerEndpoints().then(({ httpUrl }) => new Lobby({
@@ -415,7 +435,7 @@ export function wireNetworkHandlers(deps: NetDeps): void {
   };
 
   // Register gameState handler (for initial connection and reconnection)
-  networkManager.onGameState = (players: GameStatePlayer[], localPlayerState: LocalPlayerState | undefined, roomInfo?: { room?: string; mode?: string; team?: 'alpha' | 'bravo'; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number> }) => {
+  networkManager.onGameState = (players: GameStatePlayer[], localPlayerState: LocalPlayerState | undefined, roomInfo?: { room?: string; mode?: string; team?: 'alpha' | 'bravo'; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number>; pickups?: { id: number; pos: { x: number; y: number; z: number } }[] }) => {
     logger.debug(`gameState received, players: ${players.length}`);
     if (roomInfo?.room && roomInfo.room !== 'default') {
       chat.add(null, `joined room '${roomInfo.room}'${roomInfo.mode ? ` (${roomInfo.mode})` : ''} — ${players.length} other player(s)`);
@@ -427,6 +447,8 @@ export function wireNetworkHandlers(deps: NetDeps): void {
       const top = Object.entries(roomInfo.ffaScores).sort((a, b) => b[1] - a[1]).slice(0, 3);
       chat.add(null, `dm board — ${top.map(([id, s]) => `${id} ${s}`).join(' / ')}`);
     }
+    // Pickups still lying on the field when we (re)joined.
+    for (const p of roomInfo?.pickups ?? []) addPickup(p.id, p.pos);
 
     if (!localPlayerState) return;
     logger.debug(`Restoring local player state from gameState: ${JSON.stringify(localPlayerState)}`);

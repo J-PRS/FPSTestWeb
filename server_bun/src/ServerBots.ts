@@ -132,6 +132,9 @@ export class ServerBots {
         pos: p.position,
         enemies: this.enemiesOf(p),
         objective: this.flagGoal(p),
+        // Team rooms drop nuggets on creature kills — bots farm them too,
+        // which is what keeps a bot-filled match's scoreboard moving.
+        pickup: this.room.pickups?.nearest(p.position) ?? undefined,
         groundY: (x, z) => (this.field ? hmHeight(this.field, x, z) : p.position.y),
         now,
       });

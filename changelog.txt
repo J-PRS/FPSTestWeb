@@ -1906,3 +1906,4 @@ GET /join?mode=X quick-join — picks emptiest live room of that mode or spins u
 team-aware spawning — teamBases from map bases; team members spawn near their own base (enemy clearance breaks the tie); join assigns team BEFORE spawn so even first spawn is sided
 CTF: capture requires your own flag to be home (classic rule) — no capping while yours is stolen/dropped
 match journal — every matchEnd/ffaMatchEnd appends to logs/matches.jsonl + a 100-entry ring served at GET /matches
+server-owned nuggets: team-mode creature kills drop a gem pickup (pickupSpawn/pickupGone, 30s TTL, cap 64); touching banks a team point — authoritative scoring, bank claim kept for back-compat; bots farm gems via shared brain's pickup slot
