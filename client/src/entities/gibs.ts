@@ -92,6 +92,9 @@ class GibMeshPool {
   }
 
   update(dt: number, terrain: Terrain): void {
+    // Nothing alive: skip the slot walk AND the GPU buffer upload — with
+    // ~20 species pools this is 20 dead matrix writes per frame otherwise
+    if (this.live === 0) return;
     // Walk live slots via the count bound; dead slots get compacted lazily
     // by skip (they're in freeIdx already).
     for (let i = 0; i < this.mesh.count; i++) {

@@ -1799,3 +1799,4 @@
 - Pistol/revolver got their own kick+flash tuning (snappy crack vs heavy bark) and the wid->fire-handler dispatch is a lookup table instead of a 13-arm ternary
 - Spectator fly now hides the combat HUD (crosshair/health/belt/minimap) and shows a small SPECTATING hint; dying mid-flight exits spectate cleanly instead of leaving you stuck flying after respawn
 - Fixed projectile terrain tunneling: sweepTerrain step now scales with the collision offset (0.08-0.5, capped at 96 samples) instead of a fixed 0.5 — thin projectiles like chaingun bolts can no longer skip the impact band
+- Gib pools now early-out of update when empty (was writing 20+ dead instanced buffers per frame)
