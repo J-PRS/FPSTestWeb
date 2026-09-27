@@ -1785,3 +1785,7 @@
 - HUD player indicators + health bars: per-frame left/top style writes → compositor-only transform; size writes skipped unless the px value changes
 - Minimap toMap returns scratch pair instead of allocating a tuple per dot per frame
 - Particle + bolt removal: splice(i,1) → swap-pop (order-independent, O(n) shift avoided)
+== Perf pass 2 ==
+- gameLoop census: count alive in-place instead of .filter() per species per frame (~15 throwaway arrays/frame)
+- Debris trail puffs pooled per-Debris (was material+mesh alloc per shard per interval during multi-kill fights)
+- HealthBarSystem: bar position via transform instead of left/top; white-fill hidden state written once

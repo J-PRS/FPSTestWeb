@@ -240,11 +240,17 @@ export function createGameLoop(deps: GameLoopDeps) {
     }
 
     hud.update(dt, player, networkManager.getPing(), networkManager.getPacketLoss(), networkManager.getJitter());
-    // Bottom-left census — alive counts per species + perf load counters
-    const cnt = (l: { dead: boolean }[]) => l.filter(e => !e.dead).length;
+    // Bottom-left census — alive counts per species + perf load counters.
+    // Counted in-place: a .filter per species per frame was ~15 throwaway
+    // arrays a frame for numbers that rarely change.
+    const cnt = (l: { dead: boolean }[]) => { let n = 0; for (const e of l) if (!e.dead) n++; return n; };
+    let balls = 0, elites = 0;
+    for (const b of entities.balls) {
+      if (b.dead || b.disposed) continue;
+      if (b.variant === 3) elites++; else balls++;
+    }
     hud.setEntityCounts({
-      balls: entities.balls.filter(b => !b.dead && !b.disposed && b.variant !== 3).length,
-      elites: entities.balls.filter(b => !b.dead && !b.disposed && b.variant === 3).length,
+      balls, elites,
       crawlers: cnt(entities.crawlers),
       scarabs: cnt(entities.scarabs),
       grubs: cnt(entities.grubs),
@@ -257,7 +263,7 @@ export function createGameLoop(deps: GameLoopDeps) {
       overlords: cnt(entities.overlords),
       totems: cnt(entities.totems),
       mines: cnt(entities.mines),
-      targets: entities.targets.filter(t => !t.dead).length,
+      targets: cnt(entities.targets),
       projectiles: deps.world.projectiles.length,
       fx: deps.world.debrisList.length + deps.world.explosions.length
         + deps.world.implosions.length + deps.world.scorches.length,
