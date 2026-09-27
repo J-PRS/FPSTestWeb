@@ -11,6 +11,10 @@ type Schema = {
   'fps-invert-y': boolean;
   'fps-sens': number;
   'fps-minimap': number;      // 0 = corner radar, 1 = crosshair threat overlay
+  'fps-loadout': string;      // "0,2,6,7" — weapon id per slot
+  'fps-belt': string;         // 'disc' | 'grenade'
+  'fps-skill': string;        // SkillId
+  'fps-volume': number;       // master volume 0..1
 };
 
 const DEFAULTS: Schema = {
@@ -20,6 +24,10 @@ const DEFAULTS: Schema = {
   'fps-invert-y': false,
   'fps-sens': 1,
   'fps-minimap': 0,
+  'fps-loadout': '0,2,6,7',
+  'fps-belt': 'disc',
+  'fps-skill': 'bounce',
+  'fps-volume': 0.7,
 };
 
 const parse = {
@@ -40,6 +48,7 @@ export const settings = {
     const def = DEFAULTS[key];
     if (LEGACY_TRUE_AS_ONE.has(key) && raw === 'true') return 1 as Schema[K];
     // `as Schema[K]` — parse.* returns the right runtime type per declared type
+    if (typeof def === 'string') return (raw ?? def) as Schema[K];
     return (typeof def === 'boolean' ? parse.boolean(raw, def as boolean) : parse.number(raw, def as number)) as Schema[K];
   },
   set<K extends keyof Schema>(key: K, value: Schema[K]): void {

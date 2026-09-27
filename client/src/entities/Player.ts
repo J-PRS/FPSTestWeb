@@ -1,11 +1,12 @@
 import * as THREE from 'three';
 
-import { JET_FORCE_UP, JET_FORCE_DIR, MAX_ENERGY, JET_DRAIN, JET_CHARGE, FIRE_RATE, DISC_RATE, GRENADE_RATE, CHAINGUN_RATE, MORTAR_RATE, GL_RATE, FLAK_RATE, PLASMA_RATE } from '../core/config.js';
+import { JET_FORCE_UP, JET_FORCE_DIR, MAX_ENERGY, JET_DRAIN, JET_CHARGE, FIRE_RATE, DISC_RATE, GRENADE_RATE, CHAINGUN_RATE, MORTAR_RATE, GL_RATE, FLAK_RATE, PLASMA_RATE, RAILGUN_RATE, MELEE_COOLDOWN, MELEE_LUNGE } from '../core/config.js';
 
 import { Terrain } from '../world/terrain.js';
 
 import { MovementController, MovementState } from './movement.js';
 import { settings } from '../core/settings.js';
+import { audio } from '../core/audio.js';
 import { PlayerModel } from './PlayerModel.js';
 import { PlayerVisuals } from './PlayerVisuals.js';
 
@@ -73,6 +74,7 @@ export class Player {
     this.bounceHeld = this.bounceArmed = false;
     this.blinkActive = false;
     this.slamActive = false;
+    settings.set('fps-skill', s);
   }
 
   private tryBlink(): void {
@@ -118,6 +120,18 @@ export class Player {
     this.syncMovement();
   }
 
+  // Power punch (E): CoD-style lunge toward the crosshair, hit itself is
+  // resolved in combat.melee() as a cone + small AOE claim.
+  private meleeCooldown = 0.0;
+  private tryMelee(): void {
+    if (this.meleeCooldown > 0) return;
+    this.meleeCooldown = MELEE_COOLDOWN;
+    const dir = this.getAimDir();
+    this.vel.addScaledVector(dir, MELEE_LUNGE);
+    this.syncMovement();
+    this.onMelee?.({ origin: this.pos.clone(), dir, playerVel: this.vel.clone() });
+  }
+
   unfreezeInput(): void {
     this.inputFrozen = false;
   }
@@ -146,7 +160,8 @@ export class Player {
   private bounceHeld = false;
   private bounceArmed = false;
   // Skills live on Q — the loadout picks which one is equipped.
-  skill: SkillId = 'bounce';
+  skill: SkillId = (SKILL_ORDER as string[]).includes(settings.get('fps-skill'))
+    ? settings.get('fps-skill') as SkillId : 'bounce';
   // Blink state: while active, physics is suspended and pos lerps
   // blinkFrom→blinkTo; blinkSavedVel restores momentum on completion.
   private blinkActive = false;
@@ -157,23 +172,52 @@ export class Player {
   private blinkSavedVel = new THREE.Vector3();
   private dashCooldown = 0;
   private slamActive = false;  // falling at slam speed — detonates on landing
+  private prevVelY = 0;        // vel.y entering this frame — impact speed at grounding (post-update vel.y is already zeroed)
   private slamCooldown = 0;
   // Weapon slots: 0 = rocket (LMB), 1 = disc launcher, 2 = chaingun,
   // 3 = mortar, 4 = grenade launcher
   weaponIndex = 0;
+  // 4-slot loadout: weaponIndex is the SLOT (0-3); loadout[slot] is the
+  // weapon id (index into WEAPON_RATES / viewmodel order). ESC menu assigns.
+  loadout: number[] = Player.parseLoadout(settings.get('fps-loadout'));
+  static readonly LOADOUT_SLOTS = 4;
+  // Belt: one throwable equipped, F throws it. ESC menu picks.
+  beltItem: 'disc' | 'grenade' = settings.get('fps-belt') === 'grenade' ? 'grenade' : 'disc';
+
+  private static parseLoadout(raw: string): number[] {
+    const ids = raw.split(',').map(Number).filter((n) => Number.isInteger(n) && n >= 0 && n < Player.WEAPON_RATES.length);
+    return ids.length === Player.LOADOUT_SLOTS ? ids : [0, 2, 6, 7];
+  }
+
+  get currentWeapon(): number { return this.loadout[this.weaponIndex]; }
+
+  setLoadoutSlot(slot: number, weaponId: number): void {
+    this.loadout[slot] = weaponId;
+    settings.set('fps-loadout', this.loadout.join(','));
+    if (this.weaponIndex === slot) this.onWeaponSwitch?.(weaponId);
+  }
+
+  setBeltItem(item: 'disc' | 'grenade'): void {
+    this.beltItem = item;
+    settings.set('fps-belt', item);
+  }
   private wheelAcc = 0; // accumulates deltaY for smooth-scroll mice
-  private static readonly WEAPON_RATES = [FIRE_RATE, DISC_RATE, CHAINGUN_RATE, MORTAR_RATE, GL_RATE, FLAK_RATE, PLASMA_RATE];
+  private static readonly WEAPON_RATES = [FIRE_RATE, DISC_RATE, CHAINGUN_RATE, MORTAR_RATE, GL_RATE, FLAK_RATE, PLASMA_RATE, RAILGUN_RATE];
   private _lastJetpackSend = 0;
 
   // Events
   onFire: ((e: FireEvent) => void) | null = null;
   onJump: ((pos: THREE.Vector3) => void) | null = null;
+  onLand: ((impactSpeed: number) => void) | null = null;
+  /** Exposed for the audio engine: continuous loops follow these flags. */
+  jetting = false;
+  skiing = false;
   onJetpack: ((pos: THREE.Vector3) => void) | null = null;
   onSki: ((pos: THREE.Vector3, vel: THREE.Vector3) => void) | null = null;
   onBounce: ((pos: THREE.Vector3, dir: THREE.Vector3) => void) | null = null; // skill FX hook
   onBlink: ((from: THREE.Vector3, to: THREE.Vector3) => void) | null = null;  // fires at blink start
   onDash: ((pos: THREE.Vector3, dir: THREE.Vector3) => void) | null = null;   // fires on dash impulse
-  onSlam: ((pos: THREE.Vector3) => void) | null = null;                        // fires on slam impact
+  onSlam: ((pos: THREE.Vector3, impactSpeed: number) => void) | null = null;  // fires on slam impact — speed scales the blast
   onDisc: ((e: FireEvent) => void) | null = null;
   onGrenade: ((e: FireEvent) => void) | null = null;
   onDiscLauncher: ((e: FireEvent) => void) | null = null;
@@ -182,6 +226,8 @@ export class Player {
   onGrenadeLauncher: ((e: FireEvent) => void) | null = null;
   onFlak: ((e: FireEvent) => void) | null = null;
   onPlasma: ((e: FireEvent) => void) | null = null;
+  onRailgun: ((e: FireEvent) => void) | null = null;
+  onMelee: ((e: FireEvent) => void) | null = null;
   onWeaponSwitch: ((index: number) => void) | null = null;
   onNetworkJump: ((pos: { x: number; y: number; z: number }) => void) | null = null;
   onNetworkJetpack: ((pos: { x: number; y: number; z: number }) => void) | null = null;
@@ -229,10 +275,11 @@ export class Player {
         this.jumpHeld = true;
       }
       if (e.code === 'KeyC') {
-        this.discHeld = true;
+        if (this.beltItem === 'disc') this.discHeld = true;
+        else this.grenadeHeld = true;
       }
-      if (e.code === 'KeyF') {
-        this.grenadeHeld = true;
+      if (e.code === 'KeyE') {
+        this.tryMelee();
       }
       if (e.code === 'KeyQ') {
         if (this.skill === 'blink') this.tryBlink();
@@ -242,9 +289,9 @@ export class Player {
       }
       if (e.code.startsWith('Digit')) {
         const idx = Number(e.code[5]) - 1;
-        if (idx >= 0 && idx < Player.WEAPON_RATES.length && idx !== this.weaponIndex) {
+        if (idx >= 0 && idx < this.loadout.length && idx !== this.weaponIndex) {
           this.weaponIndex = idx;
-          if (this.onWeaponSwitch) this.onWeaponSwitch(idx);
+          if (this.onWeaponSwitch) this.onWeaponSwitch(this.loadout[idx]);
         }
       }
     });
@@ -257,11 +304,11 @@ export class Player {
       if (Math.abs(this.wheelAcc) < 40) return;
       const step = this.wheelAcc > 0 ? 1 : -1;
       this.wheelAcc = 0;
-      const n = Player.WEAPON_RATES.length;
+      const n = this.loadout.length;
       const idx = (this.weaponIndex + step + n) % n;
       if (idx !== this.weaponIndex) {
         this.weaponIndex = idx;
-        if (this.onWeaponSwitch) this.onWeaponSwitch(idx);
+        if (this.onWeaponSwitch) this.onWeaponSwitch(this.loadout[idx]);
       }
     }, { passive: true });
     document.addEventListener('keyup', (e) => {
@@ -270,14 +317,12 @@ export class Player {
       if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
         this.jumpHeld = false;
       }
-      if (e.code === 'KeyC') {
-        this.discHeld = false;
-      }
       if (e.code === 'KeyQ') {
         this.bounceHeld = false;
         this.bounceArmed = false;
       }
-      if (e.code === 'KeyF') {
+      if (e.code === 'KeyC') {
+        this.discHeld = false;
         this.grenadeHeld = false;
       }
     });
@@ -328,6 +373,16 @@ export class Player {
       });
       // Don't let WASD-type keys inside the field reach game input
       sensInput.addEventListener('keydown', (e) => e.stopPropagation());
+    }
+
+    const volInput = document.getElementById('vol-input') as HTMLInputElement | null;
+    if (volInput) {
+      volInput.value = audio.getVolume().toString();
+      volInput.addEventListener('input', () => {
+        const v = parseFloat(volInput.value);
+        if (isFinite(v)) audio.setVolume(Math.max(0, Math.min(1, v)));
+      });
+      volInput.addEventListener('keydown', (e) => e.stopPropagation());
     }
   }
 
@@ -380,6 +435,7 @@ export class Player {
     this.fireTimer = Math.max(0, this.fireTimer - dt);
     this.discTimer = Math.max(0, this.discTimer - dt);
     this.grenadeTimer = Math.max(0, this.grenadeTimer - dt);
+    this.meleeCooldown = Math.max(0, this.meleeCooldown - dt);
     this.blinkCooldown = Math.max(0, this.blinkCooldown - dt);
     this.dashCooldown = Math.max(0, this.dashCooldown - dt);
     this.slamCooldown = Math.max(0, this.slamCooldown - dt);
@@ -417,6 +473,10 @@ export class Player {
       skiHeld: input.skiHeld,
     });
 
+    // Fall speed entering this frame — grounding inside movement.update
+    // zeroes vel.y, so the slam impact reads the pre-integration value
+    this.prevVelY = this.vel.y;
+
     // Run physics
     this.movement.update(dt);
 
@@ -436,6 +496,7 @@ export class Player {
 
     // Jetpack (separate from movement controller, applied after physics sync)
     const isJetting = this.jetPending && this.energy > 0;
+    this.jetting = isJetting;
     if (isJetting) {
       this.vel.y += JET_FORCE_UP * dt;
       this.vel.x += input.moveX * JET_FORCE_DIR * dt;
@@ -495,15 +556,17 @@ export class Player {
   // Weapon triggers: selected weapon (LMB) plus C/F belt throws.
   private fireWeapons(): void {
     // Chaingun auto-fires while held; rocket/disc launcher are per-click.
-    const wantFire = this.weaponIndex === 2 ? this.mouseHeld : (this.firePending || this.mouseHeld);
+    const wid = this.loadout[this.weaponIndex];
+    const wantFire = wid === 2 ? this.mouseHeld : (this.firePending || this.mouseHeld);
     if (wantFire && this.fireTimer <= 0) {
-      this.fireTimer = Player.WEAPON_RATES[this.weaponIndex];
-      const fireCallback = this.weaponIndex === 1 ? this.onDiscLauncher
-        : this.weaponIndex === 2 ? this.onChaingun
-        : this.weaponIndex === 3 ? this.onMortar
-        : this.weaponIndex === 4 ? this.onGrenadeLauncher
-        : this.weaponIndex === 5 ? this.onFlak
-        : this.weaponIndex === 6 ? this.onPlasma
+      this.fireTimer = Player.WEAPON_RATES[wid];
+      const fireCallback = wid === 1 ? this.onDiscLauncher
+        : wid === 2 ? this.onChaingun
+        : wid === 3 ? this.onMortar
+        : wid === 4 ? this.onGrenadeLauncher
+        : wid === 5 ? this.onFlak
+        : wid === 6 ? this.onPlasma
+        : wid === 7 ? this.onRailgun
         : this.onFire;
       fireCallback?.({ origin: this.pos.clone(), dir: this.getAimDir(), playerVel: this.vel.clone() });
     }
@@ -536,7 +599,8 @@ export class Player {
     }
 
     // Ski dust particles (when space is held, on ground, and moving)
-    if (skiHeld && this.onGround && this.vel.lengthSq() > 10 && this.onSki) {
+    this.skiing = skiHeld && this.onGround && this.vel.lengthSq() > 10;
+    if (this.skiing && this.onSki) {
       this.onSki(this.pos, this.vel); // read-only use — no clones, runs every frame
     }
 
@@ -559,7 +623,13 @@ export class Player {
     // with Bounce since they're one skill slot, so no ordering conflict)
     if (this.slamActive && !this.wasOnGround && this.onGround) {
       this.slamActive = false;
-      this.onSlam?.(this.pos.clone());
+      this.onSlam?.(this.pos.clone(), Math.max(0, -this.prevVelY));
+    }
+
+    // Ground-contact sound — any landing transition (slam stacks its own
+    // bigger boom on top via onSlam).
+    if (!this.wasOnGround && this.onGround) {
+      this.onLand?.(Math.max(0, -this.prevVelY));
     }
 
     // Trigger jump animation when leaving ground

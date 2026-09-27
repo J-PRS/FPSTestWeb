@@ -1,5 +1,16 @@
 # Changelog
 
+## [2026-09-26] Sound engine — zero-asset procedural audio
+
+- `core/audio.ts` (new): AudioEngine on raw Web Audio — master gain -> DynamicsCompressor -> destination, three buses (ui/sfx/world). No audio library: every sound is synthesized, zero downloads, latency-fine. Positional audio is cheap StereoPanner + distance gain + lowpass-with-distance (not HRTF — reads fine in a fast shooter, way cheaper). Voice cap 24 for one-shots; beyond 220m sounds don't spawn at all. `fps-volume` setting persists master volume.
+- `core/sfx.ts` (new): the whole bank — per-weapon fire signatures (rocket square-chirp, chaingun burst, mortar thump, plasma/railgun zaps...), jump/land/dash/bounce/blink/slam/melee, hit markers (direct = brighter ping), hurt, nugget pickup, kill confirm, positional explosions + enemy telegraph cues (pounce, rakk dive, turretter launch, totem blink).
+- Loops driven per-frame in `gameLoop.updateAudio`: jetpack roar (bandpass noise), ski scrape (highpass noise scaled by speed), wind rush (airspeed only — the cue that makes 100+u feel fast). Lazy-created, driven via setTargetAtTime, stopped when idle.
+- Positional remote sounds: `sfx.shotAt` reuses each weapon's signature through the world bus, so remote players' shots pan/attenuate by distance. Enemy deaths (`enemyCue 'die'`) and explosions (`explosionAt`) are positional too.
+- AudioContext unlocks on the pointer-lock click (the user gesture browsers require); everything no-ops before that.
+- Settings panel: VOLUME slider next to MOUSE SENS; `fps-volume` default 0.7.
+- Player.ts: new `onLand` hook + public `jetting`/`skiing` fields so the audio layer reads movement state without touching internals.
+- NOTE: this commit sweeps in JP's in-flight WIP on the same files (config, weapons, protocol, species edits, new ambient/birds/tumbleweed/railgun modules) — entangled working tree, same as before.
+
 ## [2026-09-26] Radar minimap
 
 - `ui/minimap.ts` (new): rotating player-centered radar — up is where you face, red dots = enemies (`entities.targets`), amber = nuggets, off-range dots clamp to the rim so distant threats still read as a direction. 160px, top-right under the ping row, ~zero DOM churn.
@@ -1660,3 +1671,10 @@
 
 ## Previous Changes
 - No prior changelog entries (this is the first entry)
+== sound: real samples ==
+- Drive-wide audio audit pipeline (_tools/audioaudit/scan.py): 2598 files -> audit.csv (dur/rms/crest/spectral-centroid/attack per file), spectrogram contact sheets in _tools/audioaudit/sheet_*.png
+- Curated 23 samples from JP's local libraries into client/public/sfx/ (291KB total, ogg q4): Audiogen sci-fi weapons/explosions, Legions Jetting_Loop + Blaster_Explosion, Tribes machinegun, Quetoo pain/teleport/supershotgun/snow ambience, Junkala retro collection (jump/land/hit/powerup), coin pickup
+- audio.ts: sample bank (fetch+decodeAudioData on unlock), sampleLoop() buffer loops; sfx.ts: sample() with +-6% rate jitter, plays real WAV/OGG when loaded, synth fallback everywhere; per-weapon SHOT_SAMPLES map; explosions/alien-deaths pick random variants; jet+wind loops hot-swap to samples when bank lands
+== sound: 15 more samples + layering ==
+- Second pass over the drive audit: dash (audiogen swoosh+metal-click), slam (layered crystal-metal-impact + quetoo thud at 0.7 rate), bounce (deep ball bounce), punch, missile (turretter launch), mnstr1/5/14 (enemy pounce/dart cues), sparks (zap+enemy hit), ski_scrape (looped snow-gravel footstep, rate 1.3), equip+reload (bank, unused yet)
+- sfx.ts: layer() stacks samples into one voice with per-layer rate jitter on top of per-call jitter — big explosions now = blast + deep thud stacked

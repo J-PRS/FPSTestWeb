@@ -24,8 +24,12 @@
       align-items: center; justify-content: center; gap: 10px;
       pointer-events: none;
     }
-    /* Hide HUD while menu is open (overlay display:flex is set inline) */
-    #overlay[style*="flex"] ~ #hud { display: none; }
+    /* Hide HUD while menu is open. Uses a body class — hud.show() sets an
+       inline display:block that would beat a plain selector, hence
+       !important. Covers HUD siblings too (health bars, frag messages). */
+    body.menu-open #hud,
+    body.menu-open #healthbar-container,
+    body.menu-open #frag-msg { display: none !important; }
     #start-btn {
       background: none; border: none;
       font-family: inherit;
@@ -88,6 +92,10 @@
       font-variant-numeric: tabular-nums;
     }
     #overlay .field-row input:focus { border-color: #3aa7ff; }
+    #overlay .field-row input[type="range"] {
+      width: 110px; padding: 0; accent-color: #3aa7ff; text-align: inherit;
+      background: transparent; border: none;
+    }
     #cool-shots-panel {
       position: absolute; top: 0; left: 0; bottom: 0;
       width: 280px;
@@ -138,6 +146,15 @@
     }
     #loadout-bar .lo-chip.stub { opacity: 0.4; cursor: default; border-style: dashed; }
     #loadout-bar .lo-chip.stub:hover { background: rgba(255,255,255,0.06); color: #cdd9e5; }
+    /* Slot pickers are <select>s wearing chip styling — hide the native
+       arrow, darken the opened option list so it doesn't go OS-white. */
+    #loadout-bar .lo-select {
+      appearance: none; -webkit-appearance: none;
+      text-align: center; min-width: 118px;
+    }
+    #loadout-bar .lo-select option {
+      background: #0d1420; color: #cdd9e5; text-transform: none;
+    }
     #cool-shots-top, #cool-shots-recent { display: flex; flex-direction: column; gap: 3px; }
     .cool-shot-item {
       display: flex; align-items: center; gap: 10px;
@@ -189,6 +206,10 @@
         <div class="field-row">
           <span>MOUSE SENS</span>
           <input id="sens-input" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" />
+        </div>
+        <div class="field-row">
+          <span>VOLUME</span>
+          <input id="vol-input" type="range" min="0" max="1" step="0.05" />
         </div>
       </div>
     </div>
