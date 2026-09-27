@@ -1876,3 +1876,4 @@ Ball corrections now blend via renderOffset for all non-teleport kinds (residual
 Balls now settle on sub-6m/s contacts (park silently instead of elastic micro-bouncing every tick); client analytic legs clamp to terrain so they never render underground
 Server ops: env-driven config (FPS_PORT/TICK_HZ/MAX_PLAYERS/IDLE_*/HEIGHTMAP/etc) + GET /metrics (uptime, players, balls, msg counts, tick-lag stats — already proving ~18% setInterval drift)
 BallSim catches up in whole 50ms cells when setInterval fires late — sim time now tracks wall clock (was drifting ~18% behind, the residual replay overshoot)
+Room model: GameServer now dispatches to per-match Room containers (players+sockets+ratelimit+messages+BallSim each). Join handshake accepts 'room' (default 'default'); grace/tokens/tick suppression all room-scoped; /metrics reports per-room occupancy. Verified live: arena2 vs default rosters isolated.

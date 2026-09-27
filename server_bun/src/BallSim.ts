@@ -71,6 +71,7 @@ export class BallSim {
     this.broadcastBinary = broadcastBinary ?? (() => {});
   }
 
+  /** Load heightmap from disk and start the tick loop. */
   async start(heightmapPath: string): Promise<void> {
     // Bun.file is Bun-only; the P2P host imports this module type-only in
     // the browser, where Bun is undefined — read it via globalThis so the
@@ -78,16 +79,26 @@ export class BallSim {
     const bunFile = (globalThis as { Bun?: { file(p: string): { arrayBuffer(): Promise<ArrayBuffer> } } }).Bun?.file;
     if (!bunFile) throw new Error('BallSim requires Bun runtime');
     const buf = new Uint8Array(await bunFile(heightmapPath).arrayBuffer());
-    const view = new DataView(buf.buffer);
+    this.attachField(BallSim.parseHeightmap(buf));
+  }
+
+  /** Attach an already-loaded heightfield and start the tick loop — rooms
+   *  share one parsed field rather than re-reading the file each. */
+  attachField(field: Heightfield): void {
+    this.field = field;
+    this.timer = setInterval(() => this.tick(), TICK_DT * 1000);
+    this.lastTickAt = performance.now();
+    logger.info('BallSim started', { heightmap: `${field.size}x${field.size}` });
+  }
+
+  static parseHeightmap(buf: Uint8Array): Heightfield {
+    const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
     const w = view.getUint32(0, true);
     const h = view.getUint32(4, true);
     if (w !== h || w < 2 || buf.byteLength !== 8 + w * h) {
       throw new Error(`Bad heightmap.bin: ${w}x${h}, ${buf.byteLength} bytes`);
     }
-    this.field = { size: w, data: buf.subarray(8), stride: 1 };
-    this.timer = setInterval(() => this.tick(), TICK_DT * 1000);
-    this.lastTickAt = performance.now();
-    logger.info('BallSim started', { heightmap: `${w}x${h}` });
+    return { size: w, data: buf.subarray(8), stride: 1 };
   }
 
   stop(): void {
@@ -101,6 +112,10 @@ export class BallSim {
 
   get simNow(): number {
     return this.simTime;
+  }
+
+  get hasField(): boolean {
+    return this.field !== null;
   }
 
   /** Current segment state of every live ball — sent to joiners. */
