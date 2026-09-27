@@ -12,6 +12,11 @@ export interface RoomRow {
   mode?: string;
   players: number;
   maxPlayers: number;
+  /** Team-mode live score. */
+  scores?: { alpha: number; bravo: number };
+  /** FFA-mode live leader [id, pts]. */
+  ffaLeader?: [string, number];
+  winAt?: number;
 }
 
 export interface LobbyDeps {
@@ -99,7 +104,9 @@ export class Lobby {
     name.textContent = r.name;
     const meta = document.createElement('span');
     meta.style.cssText = 'float:right;color:#9cf;';
-    meta.textContent = `${r.mode ? r.mode + ' ' : ''}${r.players}/${r.maxPlayers}`;
+    const scoreTxt = r.scores ? `  ${r.scores.alpha}:${r.scores.bravo}`
+      : r.ffaLeader ? `  ${r.ffaLeader[0]} ${r.ffaLeader[1]}pts` : '';
+    meta.textContent = `${r.mode ? r.mode + ' ' : ''}${r.players}/${r.maxPlayers}${scoreTxt}${r.winAt ? ` →${r.winAt}` : ''}`;
     row.append(name, meta);
     row.onclick = () => this.join(r.name);
     this.rows.appendChild(row);

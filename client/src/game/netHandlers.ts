@@ -106,7 +106,7 @@ export function wireNetworkHandlers(deps: NetDeps): void {
     listRooms: async () => {
       const res = await fetch(`${httpUrl}/rooms`);
       if (!res.ok) throw new Error(`rooms ${res.status}`);
-      return res.json() as Promise<{ name: string; mode?: string; players: number; maxPlayers: number }[]>;
+      return res.json() as Promise<import('./lobby.js').RoomRow[]>;
     },
   }));
 
