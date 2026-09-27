@@ -1750,3 +1750,7 @@
 - Projectile.ts visuals (geo caches, mesh/glow/ribbon build, updateMesh) -> projectiles/visuals.ts
 - hud.ts player indicators (projection, edge clamp, per-player divs) -> ui/hud/indicators.ts
 - main.ts player.on* wiring -> game/playerHooks.ts
+== AI feel (Quake/Valve lessons) ==
+- enemies chase a last-seen position snapshot refreshed on their eval tick, not live pos — juking works
+- first-strike grace: a brain that just committed whiffs contact damage for 1.25s
+- weave: pursuit curves laterally (fades <10m so bites connect), per-entity phase
