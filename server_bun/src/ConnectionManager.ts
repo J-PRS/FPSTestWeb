@@ -2,21 +2,17 @@ import type { ServerWebSocket } from 'bun';
 import type { WebSocketData, ServerMessage } from './types.ts';
 import { logger } from './logger.ts';
 
-const ROOM_TOPIC = 'game-room';
-
 export class ConnectionManager {
   private connections: Map<string, ServerWebSocket<WebSocketData>> = new Map();
 
   register(playerId: string, ws: ServerWebSocket<WebSocketData>): void {
     this.connections.set(playerId, ws);
-    ws.subscribe(ROOM_TOPIC);
     logger.info(`Connection registered`, { playerId, total: this.connections.size });
   }
 
   unregister(playerId: string): void {
     const ws = this.connections.get(playerId);
     if (ws) {
-      ws.unsubscribe(ROOM_TOPIC);
       this.connections.delete(playerId);
       logger.info(`Connection unregistered`, { playerId, total: this.connections.size });
     }
@@ -26,6 +22,14 @@ export class ConnectionManager {
     const ws = this.connections.get(playerId);
     if (ws && ws.readyState === 1) {
       ws.send(JSON.stringify(msg));
+    }
+  }
+
+  /** Binary hot-path frames (tickUpdate) — no JSON.stringify. */
+  sendBinaryToPlayer(playerId: string, data: Uint8Array): void {
+    const ws = this.connections.get(playerId);
+    if (ws && ws.readyState === 1) {
+      ws.send(data);
     }
   }
 

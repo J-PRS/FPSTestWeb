@@ -180,6 +180,9 @@ export class GameServer {
         ws.data.playerId = playerId;
         this.connectionManager.register(playerId, ws);
         this.messageHandler.handleHandshake(playerId);
+        // Disconnect cancelled any pending respawn — if they come back dead,
+        // re-arm it or the restored corpse stays dead forever
+        this.messageHandler.onPlayerReconnected(playerId);
 
         logger.info('Player reconnected within grace period, state restored', { playerId, health: existingPlayer.health, pos: existingPlayer.position });
         return;

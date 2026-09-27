@@ -27,6 +27,7 @@ const server = Bun.serve<WebSocketData>({
 
   websocket: {
     data: {} as WebSocketData,
+    maxPayloadLength: CONFIG.maxPayloadLength,
 
     open(ws) {
       gameServer.onOpen(ws);
@@ -69,7 +70,22 @@ const server = Bun.serve<WebSocketData>({
     // Demo upload: POST /demos/upload
     if (url.pathname === '/demos/upload' && req.method === 'POST') {
       try {
+        // Reject oversized uploads before buffering the body — clips are
+        // ~seconds of binary frames, 16MB is a generous ceiling
+        const contentLength = Number(req.headers.get('content-length') ?? 0);
+        if (contentLength > 16 * 1024 * 1024) {
+          return corsResponse(JSON.stringify({ success: false, error: 'Upload too large' }), {
+            status: 413,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
         const body = await req.arrayBuffer();
+        if (body.byteLength > 16 * 1024 * 1024) {
+          return corsResponse(JSON.stringify({ success: false, error: 'Upload too large' }), {
+            status: 413,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
         logger.info('Demo upload received', { size: body.byteLength });
         const meta = await demoStorage.saveDemo(body);
         if (!meta.filename) {
@@ -127,7 +143,6 @@ logger.info('FPS Bun Server started', {
   tickRate: CONFIG.tickRate,
   maxPlayers: CONFIG.maxPlayers,
   respawnMs: CONFIG.respawnDelayMs,
-  shotDamage: CONFIG.shotDamage,
 });
 
 logger.info(`WebSocket: ws://localhost:${CONFIG.port}/ws`);

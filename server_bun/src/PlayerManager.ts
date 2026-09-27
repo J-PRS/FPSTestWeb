@@ -30,6 +30,12 @@ export class PlayerManager {
       lastValidVelocity: { x: 0, y: 0, z: 0 },
       lastValidRotation: { yaw: 0, pitch: 0 },
       hasReceivedPosition: false,
+      lastPosCheckTime: 0,
+      lastPosCheckPos: { ...spawn },
+      consecutiveRejects: 0,
+      ping: 0,
+      skiing: 0,
+      forceSendUntil: 0,
     };
 
     this.players.set(playerId, player);
@@ -144,6 +150,9 @@ export class PlayerManager {
     player.lastValidVelocity = { x: 0, y: 0, z: 0 };
     player.lastValidRotation = { yaw: 0, pitch: 0 };
     player.hasReceivedPosition = false;
+    player.lastPosCheckTime = 0;
+    player.lastPosCheckPos = { ...spawn };
+    player.consecutiveRejects = 0;
 
     return { position: { ...player.position }, rotation: { ...player.rotation } };
   }

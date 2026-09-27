@@ -333,6 +333,23 @@ export class CombatHandler {
     this.scheduleRespawn(targetId);
   }
 
+  /** Reconnect restores state verbatim — including isDead. If the disconnect
+   *  cancelled a pending respawn (it did), a restored-dead player would stay
+   *  dead forever without this re-arm. */
+  ensureRespawn(playerId: string): void {
+    const player = this.playerManager.getPlayer(playerId);
+    if (player?.isDead && !this.respawnTimers.has(playerId)) {
+      this.scheduleRespawn(playerId);
+    }
+  }
+
+  /** Re-arm respawn for a rejoining dead player — disconnect cancels the
+   *  timer, so without this a socket flap mid-death strands them dead. */
+  ensureRespawnScheduled(playerId: string): void {
+    const player = this.playerManager.getPlayer(playerId);
+    if (player?.isDead) this.scheduleRespawn(playerId);
+  }
+
   private scheduleRespawn(playerId: string): void {
     // One respawn timer per player — a second kill while dead replaces it
     // instead of stacking.

@@ -13,16 +13,18 @@ function makeDemoFile(): DemoFile {
     createFrame(1, 0.016),
     createFrame(2, 0.033),
   ];
-  frames[0].posX = 10.5; frames[0].posY = 20.0; frames[0].posZ = -5.3;
-  frames[0].velX = 1.0; frames[0].velY = 0.0; frames[0].velZ = 3.5;
-  frames[0].yaw = 1.57; frames[0].pitch = -0.3;
-  frames[0].inputFlags = 0b10101;
-  frames[0].mouseDeltaX = -100;
-  frames[0].mouseDeltaY = 50;
-  frames[0].jetpackFlags = 1;
-  frames[0].jetpackFuel = 42.5;
+  const f0 = frames[0]!;
+  const f1 = frames[1]!;
+  f0.posX = 10.5; f0.posY = 20.0; f0.posZ = -5.3;
+  f0.velX = 1.0; f0.velY = 0.0; f0.velZ = 3.5;
+  f0.yaw = 1.57; f0.pitch = -0.3;
+  f0.inputFlags = 0b10101;
+  f0.mouseDeltaX = -100;
+  f0.mouseDeltaY = 50;
+  f0.jetpackFlags = 1;
+  f0.jetpackFuel = 42.5;
 
-  frames[1].posX = 11.0; frames[1].posY = 20.1; frames[1].posZ = -5.0;
+  f1.posX = 11.0; f1.posY = 20.1; f1.posZ = -5.0;
 
   const header = createHeader();
   header.duration = 10.5;
@@ -98,40 +100,44 @@ describe('DemoSerializer round-trip', () => {
 
     // Frames
     expect(restored.frames.length).toBe(3);
-    expect(restored.frames[0].frameNumber).toBe(0);
-    expect(restored.frames[0].timestamp).toBeCloseTo(0.0, 4);
-    expect(restored.frames[0].posX).toBeCloseTo(10.5, 4);
-    expect(restored.frames[0].posY).toBeCloseTo(20.0, 4);
-    expect(restored.frames[0].posZ).toBeCloseTo(-5.3, 4);
-    expect(restored.frames[0].velX).toBeCloseTo(1.0, 4);
-    expect(restored.frames[0].velZ).toBeCloseTo(3.5, 4);
-    expect(restored.frames[0].yaw).toBeCloseTo(1.57, 4);
-    expect(restored.frames[0].pitch).toBeCloseTo(-0.3, 4);
-    expect(restored.frames[0].inputFlags).toBe(0b10101);
-    expect(restored.frames[0].mouseDeltaX).toBe(-100);
-    expect(restored.frames[0].mouseDeltaY).toBe(50);
-    expect(restored.frames[0].jetpackFlags).toBe(1);
-    expect(restored.frames[0].jetpackFuel).toBeCloseTo(42.5, 4);
+    const rf0 = restored.frames[0]!;
+    expect(rf0.frameNumber).toBe(0);
+    expect(rf0.timestamp).toBeCloseTo(0.0, 4);
+    expect(rf0.posX).toBeCloseTo(10.5, 4);
+    expect(rf0.posY).toBeCloseTo(20.0, 4);
+    expect(rf0.posZ).toBeCloseTo(-5.3, 4);
+    expect(rf0.velX).toBeCloseTo(1.0, 4);
+    expect(rf0.velZ).toBeCloseTo(3.5, 4);
+    expect(rf0.yaw).toBeCloseTo(1.57, 4);
+    expect(rf0.pitch).toBeCloseTo(-0.3, 4);
+    expect(rf0.inputFlags).toBe(0b10101);
+    expect(rf0.mouseDeltaX).toBe(-100);
+    expect(rf0.mouseDeltaY).toBe(50);
+    expect(rf0.jetpackFlags).toBe(1);
+    expect(rf0.jetpackFuel).toBeCloseTo(42.5, 4);
 
     // Projectile events
     expect(restored.projectileEvents.length).toBe(2);
-    expect(restored.projectileEvents[0].eventType).toBe(ProjectileEventType.Fired);
-    expect(restored.projectileEvents[0].timestamp).toBeCloseTo(1.0, 4);
-    expect(restored.projectileEvents[0].projectileId).toBe(1);
-    expect(restored.projectileEvents[0].weaponType).toBe(2);
-    expect(restored.projectileEvents[1].eventType).toBe(ProjectileEventType.Hit);
-    expect(restored.projectileEvents[1].timestamp).toBeCloseTo(4.5, 4);
-    expect(restored.projectileEvents[1].targetId).toBe(42);
-    expect(restored.projectileEvents[1].hasPeakPosition).toBe(true);
-    expect(restored.projectileEvents[1].peakPosY).toBeCloseTo(90, 4);
+    const pe0 = restored.projectileEvents[0]!;
+    const pe1 = restored.projectileEvents[1]!;
+    expect(pe0.eventType).toBe(ProjectileEventType.Fired);
+    expect(pe0.timestamp).toBeCloseTo(1.0, 4);
+    expect(pe0.projectileId).toBe(1);
+    expect(pe0.weaponType).toBe(2);
+    expect(pe1.eventType).toBe(ProjectileEventType.Hit);
+    expect(pe1.timestamp).toBeCloseTo(4.5, 4);
+    expect(pe1.targetId).toBe(42);
+    expect(pe1.hasPeakPosition).toBe(true);
+    expect(pe1.peakPosY).toBeCloseTo(90, 4);
 
     // Target events
     expect(restored.targetEvents.length).toBe(1);
-    expect(restored.targetEvents[0].eventType).toBe(TargetEventType.Spawned);
-    expect(restored.targetEvents[0].timestamp).toBeCloseTo(0.5, 4);
-    expect(restored.targetEvents[0].targetId).toBe(42);
-    expect(restored.targetEvents[0].targetType).toBe(3);
-    expect(restored.targetEvents[0].health).toBeCloseTo(100, 4);
+    const te0 = restored.targetEvents[0]!;
+    expect(te0.eventType).toBe(TargetEventType.Spawned);
+    expect(te0.timestamp).toBeCloseTo(0.5, 4);
+    expect(te0.targetId).toBe(42);
+    expect(te0.targetType).toBe(3);
+    expect(te0.health).toBeCloseTo(100, 4);
   });
 
   it('rejects bad magic', () => {
