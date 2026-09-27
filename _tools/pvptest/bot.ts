@@ -28,6 +28,9 @@ const PARK = process.argv.includes('--park'); // stand at spawn — far-range ta
 const TEST4 = process.argv.includes('--test4');
 const TEST5 = process.argv.includes('--test5'); // tick-stream quality: rate, gaps, self-echo drift
 const IDLE = process.argv.includes('--idle'); // join then go silent — tests the 60s idle reap
+// --room=NAME — join a named match room instead of 'default' (load tests
+// can split fleets across rooms to prove per-match isolation).
+const ROOM = process.argv.find(a => a.startsWith('--room='))?.slice(7);
 const WATCH = process.argv.includes('--watch'); // passive observer: log join/left cadence and per-peer tick freshness
 const BALLS = process.argv.includes('--balls'); // measure ballSegment cadence + event-age jitter
 const WS_URL = process.env.PVP_WS ?? 'ws://localhost:8000/ws';
@@ -268,7 +271,7 @@ function connect(): Promise<void> {
     ws = new WebSocket(WS_URL);
     ws.binaryType = 'arraybuffer';
     ws.onopen = () => {
-      sendJson({ type: 'join', playerId: NAME, token: sessionToken });
+      sendJson({ type: 'join', playerId: NAME, token: sessionToken, room: ROOM });
     };
     ws.onmessage = (ev) => {
       if (typeof ev.data === 'string') {

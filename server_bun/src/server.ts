@@ -96,6 +96,13 @@ const server = Bun.serve<WebSocketData>({
       });
     }
 
+    // Lobby browse: GET /rooms — live matches with occupancy.
+    if (url.pathname === '/rooms') {
+      return corsResponse(JSON.stringify(gameServer.listRooms()), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
     // Demo upload: POST /demos/upload
     if (url.pathname === '/demos/upload' && req.method === 'POST') {
       try {
