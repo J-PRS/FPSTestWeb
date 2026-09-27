@@ -10,7 +10,7 @@ const logger = new ChildLogger('PlayerModel');
 const X_AXIS = new THREE.Vector3(1, 0, 0);
 const _pitchQuat = new THREE.Quaternion();
 
-export type AnimationState = 'idle' | 'walk' | 'run' | 'jump' | 'death';
+export type AnimationState = 'idle' | 'walk' | 'run' | 'jump' | 'death' | 'ski' | 'hit' | 'shoot';
 
 // Map our states to RobotExpressive animation names
 const ANIM_NAMES: Record<AnimationState, string> = {
@@ -18,8 +18,17 @@ const ANIM_NAMES: Record<AnimationState, string> = {
   'walk': 'Walking',
   'run': 'Running',
   'jump': 'Jump',
-  'death': 'Death'
+  'death': 'Death',
+  // Sitting reads as a tuck once moving — the robot pulls its legs up,
+  // which is exactly the skiing silhouette at 30+ m/s.
+  'ski': 'Sitting',
+  'hit': 'No',
+  'shoot': 'Punch'
 };
+
+// Clips that must not LoopRepeat — a flinch or a fire that loops reads as a
+// twitch loop instead of a single reaction. Callers time-revert the state.
+const ONESHOT_CLIPS = new Set(['No', 'Punch']);
 
 // Shared radial-gradient flash texture — one per process, all remote
 // muzzle sprites reuse it
@@ -240,6 +249,9 @@ export class PlayerModel {
     if (name === 'Death') {
       action.setLoop(THREE.LoopOnce, 1);
       action.clampWhenFinished = true;
+    } else if (ONESHOT_CLIPS.has(name)) {
+      action.setLoop(THREE.LoopOnce, 1);
+      action.clampWhenFinished = false;
     } else if (name === 'Jump') {
       action.setLoop(THREE.LoopPingPong, Infinity);
       action.timeScale = 0.35;

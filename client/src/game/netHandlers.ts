@@ -66,6 +66,7 @@ export function wireNetworkHandlers(deps: NetDeps): void {
     // Non-lethal hits don't trigger death animation
     logger.info(`Remote player ${targetId} hit for ${damage} damage by ${shooterId} (health: ${health})`);
     deps.lazyHealthBarSystem().spawn(targetId, damage, health);
+    deps.world.remotePlayers.get(targetId)?.flinch();
   };
 
   // Register knockback handler — server tells us to apply knockback/pull to our local player

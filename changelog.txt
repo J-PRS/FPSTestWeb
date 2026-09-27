@@ -1794,3 +1794,4 @@
 - ?mode=classic: solo bounce-and-shoot like the Unity FPS test — balls only (variant-0, no elites), no enrage (lost balls teleport back), no server connect, no bots; HUD timer still ticks
 - Keybinding menu: ESC menu → KEYS section, click a chip to capture the next key/mouse button; conflicts swap, Esc cancels, RESET KEYS restores defaults; persisted via fps-keys setting
 - Spectator fly: V (rebindable) toggles free-flight ghost cam — same noclip observer rig as death, no desaturation/vignette; weapons and action keys gated while ghosted; also fixed dead-observer vertical flight (jump and sink were both Shift and cancelled)
+- Player anim overhaul: +ski tuck (Sitting clip, grounded >11.5 m/s w/ hysteresis), +hit flinch (No oneshot on playerHit + bot local damage), +shoot pose (Punch oneshot on remote fire, throttled for rapid weapons); ONESHOT_CLIPS so flinch/shoot never loop
