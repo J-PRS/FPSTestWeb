@@ -263,11 +263,9 @@ export class HealthBarSystem {
       bar.whiteEl.style.display = 'block';
       bar.whiteEl.style.width = `${whiteWidth}px`;
       bar.whiteEl.style.left = `${BAR_WIDTH * healthRatio}px`;
-    } else {
+    } else if (bar.whiteEl.style.display !== 'none') {
       bar.whiteEl.style.display = 'none';
     }
-
-    // No opacity fade — bar stays fully visible until life expires (matches OG behavior)
 
     const toTarget = _toTarget.subVectors(targetPos, cameraPos);
     const behind = toTarget.angleTo(cameraDir) > Math.PI / 2;
@@ -290,7 +288,7 @@ export class HealthBarSystem {
     }
 
     bar.el.style.display = 'block';
-    bar.el.style.left = `${x}px`;
-    bar.el.style.top = `${y}px`;
+    // transform positioning — compositor-only, no layout work per frame
+    bar.el.style.transform = `translate(-50%, -50%) translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)`;
   }
 }

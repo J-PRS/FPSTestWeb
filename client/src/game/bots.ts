@@ -596,11 +596,22 @@ export class TeamBots {
     this.deps.lazyHud().setTeamScore?.(this.scores.alpha, this.scores.bravo);
   }
 
+  // Bolt tracers share a pool — a fresh BufferGeometry per shot meant a GL
+  // buffer upload + dispose for a 120ms visual.
   private bolts: { line: THREE.Line; t: number }[] = [];
+  private boltPool: THREE.Line[] = [];
 
   private spawnBolt(from: THREE.Vector3, to: THREE.Vector3): void {
-    const g = new THREE.BufferGeometry().setFromPoints([from.clone(), to.clone()]);
-    const line = new THREE.Line(g, BOLT_MAT);
+    let line = this.boltPool.pop();
+    if (!line) {
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
+      line = new THREE.Line(g, BOLT_MAT);
+    }
+    const a = line.geometry.getAttribute('position') as THREE.BufferAttribute;
+    a.setXYZ(0, from.x, from.y, from.z);
+    a.setXYZ(1, to.x, to.y, to.z);
+    a.needsUpdate = true;
     this.deps.lazyScene().add(line);
     this.bolts.push({ line, t: 0.12 });
   }
@@ -611,8 +622,9 @@ export class TeamBots {
       b.t -= dt;
       if (b.t <= 0) {
         this.deps.lazyScene().remove(b.line);
-        b.line.geometry.dispose();
-        this.bolts.splice(i, 1);
+        this.boltPool.push(b.line);
+        this.bolts[i] = this.bolts[this.bolts.length - 1];
+        this.bolts.pop();
       }
     }
   }
@@ -623,6 +635,10 @@ export class TeamBots {
       b.dispose();
     }
     this.bots.length = 0;
+    for (const b of this.bolts) this.deps.lazyScene().remove(b.line);
+    this.bolts.length = 0;
+    for (const l of this.boltPool) l.geometry.dispose();
+    this.boltPool.length = 0;
   }
 }
 
