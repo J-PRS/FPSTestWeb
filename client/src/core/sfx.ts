@@ -124,7 +124,9 @@ const SHOT_SAMPLES: Partial<Record<number, [string, number]>> = {
   [WeaponType.Mortar]:          ['shot_cannon', 1.0],
   [WeaponType.GrenadeLauncher]: ['shot_cannon', 0.8],
   [WeaponType.Grenade]:         ['shot_energy', 0.8],
-  [WeaponType.Flak]:            ['shot_shotgun', 0.9],
+  // Flak fires a whole shell fan — a cannon boom with a sparks tail,
+  // not a shotgun pump (JP: "boom is enough, this isn't quake shotgun").
+  [WeaponType.Flak]:            ['shot_cannon', 0.9],
   [WeaponType.Plasma]:          ['shot_plasma', 0.9],
   [WeaponType.Railgun]:         ['shot_energy', 1.0],
 };
@@ -147,6 +149,10 @@ function shootInto(g: GainNode, weaponType: number): void {
   // spectrogram (sharp attack, decayed by ~0.4s, no sustained band).
   if (weaponType === WeaponType.Disc &&
       layer(g, [['shot_cannon', 1.0, 0.5, 600, 0.6], ['thud_big', 0.9, 0.8], ['punch', 0.5, 1.1, 2000, 0.2], ['hg_clang', 0.35, 1.8, undefined, 0.12]])) return;
+  // Melee swing: whoosh (pitched-up dash) + fist crack + low thud body.
+  // The connect 'impact' plays separately in combat on an actual hit.
+  if (weaponType === WeaponType.Melee &&
+      layer(g, [['dash2', 0.7, 1.35], ['punch', 0.9, 1.15], ['slam_thud', 0.5, 0.9]])) return;
   const s = SHOT_SAMPLES[weaponType];
   if (s && sample(s[0], g, s[1])) return;
   switch (weaponType) {
@@ -159,7 +165,7 @@ function shootInto(g: GainNode, weaponType: number): void {
     case WeaponType.Flak:      noise(0.2, 0.4, g, 'lowpass', 2500, 300); osc('square', 220, 80, 0.15, 0.3, g); break;
     case WeaponType.Plasma:    osc('sawtooth', 2200, 400, 0.14, 0.18, g); osc('sine', 3300, 900, 0.1, 0.1, g); break;
     case WeaponType.Railgun:   osc('sawtooth', 2600, 200, 0.22, 0.25, g); noise(0.15, 0.2, g, 'highpass', 4000, 6000); break;
-    case WeaponType.Melee:     noise(0.1, 0.3, g, 'bandpass', 800, 400); break;
+    case WeaponType.Melee:     noise(0.15, 0.45, g, 'bandpass', 300, 2200, 1.4); osc('sine', 110, 45, 0.14, 0.5, g); break;
     default:                   osc('square', 700, 300, 0.1, 0.2, g);
   }
 }
