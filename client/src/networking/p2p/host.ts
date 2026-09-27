@@ -51,7 +51,6 @@ export class P2PHost {
   /** Wire a guest's DataChannel in as a link — same treatment as the
    *  host's own loopback after this point. */
   attachDataChannel(dc: RTCDataChannel): void {
-    const host = this;
     dc.binaryType = 'arraybuffer';
     const link: P2PLink = {
       send: (data) => {
@@ -63,9 +62,9 @@ export class P2PHost {
     };
     dc.onmessage = (ev) => {
       const data = ev.data;
-      host.onData(link, data instanceof ArrayBuffer ? new Uint8Array(data) : data as string);
+      this.onData(link, data instanceof ArrayBuffer ? new Uint8Array(data) : data as string);
     };
-    dc.onclose = () => host.onClose(link);
+    dc.onclose = () => this.onClose(link);
     logger.info('Guest DataChannel attached');
   }
 
