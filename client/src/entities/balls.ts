@@ -735,17 +735,15 @@ export class Ball {
     if (tp) { s.tx = tp.x; s.ty = tp.y; s.tz = tp.z; s.tgtValid = true; }
     else s.tgtValid = false;
     this.netTargetId = targetId;
-    if (lead > 0 && Ball.field) {
-      const tgt = Ball._simTarget;
-      tgt.x = s.tx; tgt.y = s.ty; tgt.z = s.tz;
-      let rem = lead;
-      while (rem > 0.001) {
-        const h = Math.min(0.05, rem); // server-rate substeps — same granularity as the sim
-        stepBall(s, h, Ball.field, s.tgtValid ? tgt : null, false);
-        rem -= h;
-      }
-    }
-    this.netAcc = 0; // reset the step clock — next frame starts a clean 50ms boundary
+    // Do NOT step the lead age here: a partial-width step leaves the sim
+    // cursor off the server's 0.05 grid permanently — every subsequent
+    // prediction step is phase-shifted, bounce contacts resolve at
+    // different points, and elastic reflections compound the error into
+    // the 20-100m rubberbands the logs show. Bank the age instead: the
+    // update loop consumes whole cells only (sim stays exactly on-grid),
+    // and the render path ballistically extrapolates the sub-step
+    // remainder — which is all the lead was ever for.
+    this.netAcc = Math.min(lead, 0.5);
     // Carry the visible error into renderOffset: (old rendered pos) - (new
     // truth). >6m means the prediction diverged hard — hard-snap instead of
     // smearing a long rubber slide across the screen.
