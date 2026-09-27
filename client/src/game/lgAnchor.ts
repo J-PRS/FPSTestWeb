@@ -6,9 +6,9 @@ const _f = new THREE.Vector3();
 
 // Emitter ball's rest position in view space — REST_POS 0.25/-0.28/-0.45
 // plus the muzzle node's z (-0.42) through the group's 0.8 scale.
-export const LG_MUZZLE_X = 0.25;
-export const LG_MUZZLE_Y = -0.28;
-export const LG_MUZZLE_Z = -0.79;
+const LG_MUZZLE_X = 0.25;
+const LG_MUZZLE_Y = -0.28;
+const LG_MUZZLE_Z = -0.79;
 
 // Beam-start anchor: FIXED camera-space offset re-derived from the live
 // matrix every call. The bolt can't lag what it can't depend on — no

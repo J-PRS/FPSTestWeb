@@ -62,7 +62,7 @@ function sampleHeightmap(wx: number, wz: number): number {
   return h * HSCALE;
 }
 
-export function sampleHeight(wx: number, wz: number): number {
+function sampleHeight(wx: number, wz: number): number {
   if (hmData) return sampleHeightmap(wx, wz);
   return 0;
 }
@@ -76,7 +76,7 @@ export function getHeightfield(): Heightfield | null {
 
 const _normalTmp = new THREE.Vector3();
 
-export function sampleNormal(wx: number, wz: number): THREE.Vector3 {
+function sampleNormal(wx: number, wz: number): THREE.Vector3 {
   const e = CPU_STEP * 0.5;
   const hL = sampleHeight(wx - e, wz);
   const hR = sampleHeight(wx + e, wz);

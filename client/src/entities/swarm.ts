@@ -230,8 +230,3 @@ export class InstancedBlobShadows {
   }
 }
 
-// Owners allocate a shadow slot separately — SpeciesSwarm.alloc only handles
-// the species meshes; InstancedBlobShadows.alloc is a second call.
-export function initShadowSlot(owner: SwarmSlotOwner): void {
-  owner.shadowSlot = -1;
-}

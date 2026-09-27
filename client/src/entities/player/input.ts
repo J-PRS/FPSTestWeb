@@ -184,7 +184,7 @@ export class PlayerInput {
   }
 }
 
-export const LOADOUT_SLOTS = 4;
+const LOADOUT_SLOTS = 4;
 
 const SECONDARY_BINDS: { action: BindAction; wid: number }[] = [
   { action: 'secPistol', wid: 12 },
