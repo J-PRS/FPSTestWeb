@@ -4,6 +4,7 @@ import type { BallDebris, PlayerDebris } from '../effects/debris.js';
 import type { Explosion } from '../effects/explosion.js';
 import type { ScorchDecal } from '../effects/scorch.js';
 import type { Implosion } from '../effects/implosion.js';
+import type { AoeGizmo } from '../effects/aoeGizmo.js';
 import { createProjectileRegistry, type ProjectileRegistry } from './projectileRegistry.js';
 
 /**
@@ -23,6 +24,7 @@ export interface WorldState {
   explosions: Explosion[];
   scorches: ScorchDecal[];
   implosions: Implosion[];
+  aoeGizmos: AoeGizmo[]; // ?debug blast-radius wireframes
 }
 
 export function createWorldState(): WorldState {
@@ -36,5 +38,6 @@ export function createWorldState(): WorldState {
     explosions: [],
     scorches: [],
     implosions: [],
+    aoeGizmos: [],
   };
 }

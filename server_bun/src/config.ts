@@ -37,6 +37,8 @@ export const CONFIG = {
     input: { maxCount: 120, windowMs: 1000 },
     projectileDestroy: { maxCount: 30, windowMs: 1000 },
     environmentDamage: { maxCount: 10, windowMs: 1000 }, // crawler pounces etc.
+    heal: { maxCount: 10, windowMs: 1000 }, // nugget pickups
+    creatureHit: { maxCount: 120, windowMs: 1000 }, // chaingun-rate hit claims vs server creatures
     default: { maxCount: 120, windowMs: 1000 },
   } as const,
 
