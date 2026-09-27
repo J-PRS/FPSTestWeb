@@ -1902,3 +1902,4 @@ Shared bot brain (shared/botBrain.ts): offline GameBot and server ServerBots now
 Room.sims registry: bots + flags tick through one list — GameServer just iterates room.sims; future server-side systems (deployables, generators) register there
 /rooms now carries live match state (team scores / ffa leader / winAt); lobby rows show mode, occupancy, score
 BUGFIX: flag carrier disconnecting kept the flag 'carried' forever — removePlayerCompletely now drops it (same rule as dying)
+GET /join?mode=X quick-join — picks emptiest live room of that mode or spins up <mode>-N; maps/<mode>.json is now the fallback spec for ad-hoc room names; lobby gets NUGGETS/CTF/DM quick-play buttons

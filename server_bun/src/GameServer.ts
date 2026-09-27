@@ -81,7 +81,7 @@ export class GameServer {
   private roomFor(name: string, mode = ''): Room {
     let room = this.rooms.get(name);
     if (!room) {
-      const spec = this.loadMapSpec(name);
+      const spec = this.loadMapSpec(name) ?? this.loadMapSpec(mode);
       room = new Room(name, this.field, mode, spec);
       this.rooms.set(name, room);
       logger.info('Room created', { room: name, mode: room.mode });
@@ -89,9 +89,11 @@ export class GameServer {
     return room;
   }
 
-  /** maps/<room>.json at repo root — a missing or malformed file just
-   *  means "default match rules", not an error. */
+  /** maps/<name>.json at repo root — a missing or malformed file just
+   *  means "default match rules", not an error. roomFor also tries the
+   *  mode name so ad-hoc rooms like 'ctf-2' inherit ctf.json's rules. */
   private loadMapSpec(name: string): MapSpec | undefined {
+    if (!name) return undefined;
     try {
       const path = `${import.meta.dir}/../../maps/${name}.json`;
       // readFileSync keeps roomFor synchronous — map files are tiny and
@@ -103,6 +105,20 @@ export class GameServer {
     } catch {
       return undefined;
     }
+  }
+
+  /** Quick-join: pick the emptiest open room already running `mode`,
+   *  else spin up `<mode>-N`. Mode '' matches any mode-less arena. */
+  quickRoom(mode: string): Room {
+    let best: Room | undefined;
+    for (const room of this.rooms.values()) {
+      if (room.mode !== mode || room.playerCount() >= CONFIG.maxPlayers) continue;
+      if (!best || room.playerCount() < best.playerCount()) best = room;
+    }
+    if (best) return best;
+    let n = 1;
+    while (this.rooms.has(`${mode || 'arena'}-${n}`)) n++;
+    return this.roomFor(`${mode || 'arena'}-${n}`, mode);
   }
 
   /** Find which room a player lives in — used by disconnect/teardown paths
