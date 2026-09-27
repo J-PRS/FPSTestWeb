@@ -1,7 +1,11 @@
 /** Env override for numeric/string scalars — keeps every tunable reachable
- *  from process env (docker -e, PM2, systemd) without code edits. */
+ *  from process env (docker -e, PM2, systemd) without code edits.
+ *  This file is also compiled by the client tsconfig (P2P host reuse) —
+ *  `process` isn't declared in browser-land, so declare + guard it. */
+declare const process: { env: Record<string, string | undefined> } | undefined;
+const ENV = typeof process === 'undefined' ? undefined : process.env;
 function envNum(name: string, fallback: number): number {
-  const v = process.env[name];
+  const v = ENV?.[name];
   if (v === undefined || v === '') return fallback;
   const n = Number(v);
   if (!Number.isFinite(n)) {
@@ -11,7 +15,7 @@ function envNum(name: string, fallback: number): number {
   return n;
 }
 function envStr(name: string, fallback: string): string {
-  const v = process.env[name];
+  const v = ENV?.[name];
   return v === undefined || v === '' ? fallback : v;
 }
 
@@ -62,6 +66,7 @@ export const CONFIG = {
     environmentDamage: { maxCount: 10, windowMs: 1000 }, // crawler pounces etc.
     heal: { maxCount: 10, windowMs: 1000 }, // nugget pickups
     creatureHit: { maxCount: 120, windowMs: 1000 }, // chaingun-rate hit claims vs server creatures
+    chat: { maxCount: 4, windowMs: 1000 }, // human typing speed, generous
     default: { maxCount: 120, windowMs: 1000 },
   } as const,
 

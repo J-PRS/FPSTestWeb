@@ -17,6 +17,7 @@ import { ROCKET_CONFIG, getProjectileConfig } from '../projectiles/index.js';
 import type { WorldState } from './worldState.js';
 import type { createEntities } from './entities.js';
 import type { FragMessages } from '../ui/FragMessages.js';
+import { Chat } from './chat.js';
 import type { HUD } from '../ui/hud.js';
 import type { HealthBarSystem } from '../ui/HealthBarSystem.js';
 import type { ExplosionTracker } from '../utils/ExplosionTracker.js';
@@ -42,6 +43,15 @@ export function wireNetworkHandlers(deps: NetDeps): void {
   const { logger } = deps;
   const nm = () => deps.lazyNetworkManager();
   const networkManager = deps.lazyNetworkManager();
+
+  // Chat is self-contained (own DOM + key routing) — netHandlers is just
+  // where network↔game wiring already lives.
+  const chat = new Chat({
+    send: (text) => networkManager.sendChat(text),
+    isConnected: () => networkManager.isConnected(),
+    localName: () => networkManager.getLocalPlayerId(),
+  });
+  networkManager.onChat = (playerId, text) => chat.add(playerId, text);
 
   // Both first-seen-update and respawn-into-missing end up here
   function ensureRemotePlayer(playerId: string, position: { x: number; y: number; z: number }, via: string): RemotePlayer {
