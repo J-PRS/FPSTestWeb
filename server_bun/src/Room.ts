@@ -68,6 +68,7 @@ export class Room {
       (data) => this.connections.broadcastBinary(data),
     );
     this.ballSim.population = this.spec.balls;
+    if (this.spec.spawns) this.players.spawnPoints = this.spec.spawns;
     this.messages.setBallSim(this.ballSim);
     if (field) this.ballSim.attachField(field);
   }
