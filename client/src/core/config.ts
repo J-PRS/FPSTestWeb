@@ -98,8 +98,12 @@ export const BALL_TELE_HEIGHT = 25.0; // Teleport height
 export const BALL_MAX = 10; // Maximum number of balls in play
 
 // Ball enrage mode: instead of teleporting when out of range, far balls get
-// angry and are pulled toward the player while still bouncing normally
-export const BALL_ENRAGE_ENABLED = true; // Toggle: enrage instead of teleport
+// angry and are pulled toward the player while still bouncing normally.
+// `let`, not const — ?mode=classic flips it off at boot for the pure
+// bounce-and-shoot ruleset (balls teleport when lost, like the Unity original)
+export let BALL_ENRAGE_ENABLED = true;
+// ESM `let` exports can't be assigned by importers — flip via the setter
+export function setBallEnrage(on: boolean): void { BALL_ENRAGE_ENABLED = on; }
 export const BALL_ENRAGE_FORCE = 12.0; // Linear attraction accel toward player (m/s^2)
 // Balls stay enraged until they get a lunge off (or time out) — no distance
 // cooldown, otherwise they'd always calm before reaching dash range

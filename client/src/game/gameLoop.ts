@@ -31,6 +31,9 @@ import Logger from '../core/Logger.js';
 
 const _zeroVel = new THREE.Vector3(); // shared zero for demo playback
 const _birdPosBuf: THREE.Vector3[] = []; // scratch — minimap debug blips
+
+// ?mode=classic — solo bounce-and-shoot: balls only, no rage, no roster
+const CLASSIC_MODE = new URLSearchParams(location.search).get('mode') === 'classic';
 const _camRight = new THREE.Vector3();
 
 export interface GameLoopDeps {
@@ -197,18 +200,22 @@ export function createGameLoop(deps: GameLoopDeps) {
     }
     const demoPaused = tickDemo(dt);
     if (!demoPaused) entities.updateBalls(dt);
-    if (!demoPaused) entities.updateCrawlers(dt);
-    if (!demoPaused) entities.updateScarabs(dt);
-    if (!demoPaused) entities.updateGrubs(dt);
-    if (!demoPaused) entities.updateSnakes(dt);
-    if (!demoPaused) entities.updateGnats(dt);
-    if (!demoPaused) entities.updateTurrets(dt);
-    if (!demoPaused) entities.updateRollers(dt);
-    if (!demoPaused) entities.updateSeekers(dt);
-    if (!demoPaused) entities.updateOverlords(dt);
-    if (!demoPaused) entities.updateTotems(dt);
-    if (!demoPaused) entities.updateRakks(dt);
-    if (!demoPaused) entities.updateWeeds(dt);
+    // ?mode=classic — balls are the whole roster, every other species'
+    // tick is skipped (they self-spawn ambiently, so ticking = populating)
+    if (!demoPaused && !CLASSIC_MODE) {
+      entities.updateCrawlers(dt);
+      entities.updateScarabs(dt);
+      entities.updateGrubs(dt);
+      entities.updateSnakes(dt);
+      entities.updateGnats(dt);
+      entities.updateTurrets(dt);
+      entities.updateRollers(dt);
+      entities.updateSeekers(dt);
+      entities.updateOverlords(dt);
+      entities.updateTotems(dt);
+      entities.updateRakks(dt);
+      entities.updateWeeds(dt);
+    }
     if (!demoPaused && !demoManager?.isPlaying) deps.waveDirector().update(dt);
     if (!demoManager?.isPlaying) entities.updateNuggets(dt);
     deps.teamBots?.()?.update(dt);

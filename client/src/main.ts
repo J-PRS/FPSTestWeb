@@ -2,7 +2,7 @@ import * as THREE from 'three';
 
 import {
   CAMERA_FOV, CAMERA_NEAR, CAMERA_FAR,
-  FOG_COLOR,
+  FOG_COLOR, setBallEnrage,
 } from './core/config.js';
 
 import Logger, { ChildLogger } from './core/Logger.js';
@@ -291,6 +291,10 @@ async function init(): Promise<void> {
   // world.remotePlayers so creatures hunt them and projectiles hit them
   // like real players.
   const mode = new URLSearchParams(location.search).get('mode');
+  // ?mode=classic — the original solo ruleset: bouncy balls only, lost balls
+  // teleport back instead of raging (enrage was layered on top later)
+  const classicMode = mode === 'classic';
+  if (classicMode) setBallEnrage(false);
   if (mode === 'nuggets' || mode === 'ctf' || mode === 'dm') {
     teamBots = new TeamBots(
       {
@@ -467,8 +471,11 @@ async function init(): Promise<void> {
     entities: () => entities,
   });
 
-  // Connect to server (non-blocking for offline mode)
+  // Connect to server (non-blocking for offline mode). Classic is a solo
+  // ruleset — connecting would hand ball ownership to the server sim,
+  // which enrages and spawns the full roster behind your back.
   const serverUrl = (await serverEndpoints).wsUrl;
+  if (!classicMode) {
   profiler.markTime('networkConnectStart');
   networkManager.connect(serverUrl).then(() => {
     profiler.markTime('networkConnected');
@@ -476,6 +483,7 @@ async function init(): Promise<void> {
   }).catch((error) => {
     logger.error('Failed to connect to server', error);
   });
+  }
 
   // Initial balls
   for (let i = 0; i < 8; i++) entities.spawnBall();

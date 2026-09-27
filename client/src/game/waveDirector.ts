@@ -101,6 +101,9 @@ const CREDIT_RAMP = 0.0045;  // extra credits/sec per elapsed second (~+27/min b
 // Weights are deliberately lopsided: fodder is common, dangerous/rare
 // enemies show up early but stay a small fraction of the population.
 const RANDOM_MODE = new URLSearchParams(location.search).get('spawns') === 'random';
+// ?mode=classic — the ball ambient timer is the whole population; the
+// director still ticks `elapsed` so the HUD timer works
+const CLASSIC_MODE = new URLSearchParams(location.search).get('mode') === 'classic';
 
 const RANDOM_POOL: { weight: number; label: string; spawn: (e: ReturnType<typeof createEntities>) => void }[] = [
   { weight: 6.0, label: 'scarab pack', spawn: (e) => e.spawnScarab() },
@@ -184,6 +187,7 @@ export function createWaveDirector(deps: DirectorDeps) {
   function update(dt: number): void {
     if (RANDOM_MODE) { updateRandom(dt); return; }
     elapsed += dt;
+    if (CLASSIC_MODE) return;
     credits = Math.min(CREDIT_CAP, credits + (CREDIT_BASE + elapsed * CREDIT_RAMP) * dt);
 
     // Scripted beats — after the table runs out, loop the heavy ones
