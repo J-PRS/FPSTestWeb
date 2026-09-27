@@ -10,4 +10,5 @@ target/
 .cargo/config
 __pycache__
 
-*.demoserver_bun/demos/*.demo
+*.demo
+server_bun/demos/*.demo
