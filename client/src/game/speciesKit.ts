@@ -59,8 +59,13 @@ export function createSpeciesKit(deps: EntitiesDeps, targets: Targetable[]) {
     // (Was: every bite anywhere on the map drained the local player — the
     // 300m-away phantom hits in the logs.)
     if (attacker) {
-      const t = targetReg.for(attacker).target;
+      const brain = targetReg.for(attacker);
+      const t = brain.target;
       if (!t || t.id !== 'local') return false;
+      // "Always miss the first time" — a creature that JUST committed to you
+      // whiffs its opening strike instead of arriving pre-warmed. Reads as a
+      // warning shot: you get a beat to react before contact damage starts.
+      if (brain.engagedT < ENGAGE_GRACE) return false;
     }
     // Reach audit — melee callers pass their contact reach. A hit landing
     // from beyond it means the trigger measured the wrong distance (the
@@ -149,18 +154,50 @@ export function createSpeciesKit(deps: EntitiesDeps, targets: Targetable[]) {
     return w.wp;
   }
 
-  // The chase position for an enemy this frame: its committed threat-table
-  // target, or a personal wander waypoint when nobody's alive to hate.
-  // `owner` is any object — the brain lives in WeakMaps keyed by identity.
+  // Grace period between a brain committing to a target and its attacks
+  // landing — the first-strike mercy window.
+  const ENGAGE_GRACE = 1.25;
+
+  // Weave: approaches run a lateral sine around the beeline so pursuit
+  // curves instead of homing on rails. Per-entity phase desyncs the pack;
+  // amplitude fades near contact so bites still connect.
+  const weaveReg = new WeakMap<object, number>();
+  const _weaveDir = new THREE.Vector3();
+  const _weaveOut = new THREE.Vector3();
+
+  // The chase position for an enemy this frame: where its brain last SAW
+  // the committed target (perception snapshot, not live position), offset
+  // by the approach weave; or a personal wander waypoint when nobody's
+  // alive to hate. `owner` is any object — brains live in WeakMaps.
   function aggroFor(owner: object, selfPos: THREE.Vector3, dt: number, profile: TargetProfile): THREE.Vector3 {
-    const t = targetReg.for(owner).update(dt, selfPos, candidates(), profile);
-    return t ? t.pos : wanderFor(owner, selfPos, dt);
+    const brain = targetReg.for(owner);
+    const t = brain.update(dt, selfPos, candidates(), profile);
+    if (!t) return wanderFor(owner, selfPos, dt);
+
+    _weaveOut.copy(brain.lastSeen);
+    // Sinusoidal lateral offset perpendicular to the chase direction.
+    let phase = weaveReg.get(owner);
+    if (phase === undefined) { phase = Math.random() * Math.PI * 2; weaveReg.set(owner, phase); }
+    weaveReg.set(owner, phase + dt * 2.2);
+    const dist = selfPos.distanceTo(brain.lastSeen);
+    // Beyond ~60m weave barely matters; inside ~10m it shuts off so the
+    // strike zone isn't dodged by our own decoration.
+    const amp = Math.min(8, dist * 0.25) * THREE.MathUtils.clamp((dist - 10) / 15, 0, 1);
+    if (amp > 0.01 && dist > 1) {
+      _weaveDir.subVectors(brain.lastSeen, selfPos).normalize();
+      const px = -_weaveDir.z, pz = _weaveDir.x; // horizontal perpendicular
+      const s = Math.sin(phase) * amp;
+      _weaveOut.x += px * s;
+      _weaveOut.z += pz * s;
+    }
+    return _weaveOut;
   }
 
   // Target VELOCITY for predictive species (totem lead, seeker aim) — the
-  // committed target's vel, not always the local player's.
+  // committed target's last-seen vel, matching the perception snapshot.
   function aggroVelFor(e: object): THREE.Vector3 {
-    return targetReg.for(e).target?.vel ?? _zeroVel;
+    const brain = targetReg.for(e);
+    return brain.target ? brain.lastSeenVel : _zeroVel;
   }
 
   // Combat reports damage here — the aggro hook. 'local' today; shared
