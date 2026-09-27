@@ -55,8 +55,6 @@ const _tNormal = new THREE.Vector3();
  * marks itself `exploded`, and the visual effect is handled elsewhere.
  *
  * Known issues / TODOs (see _reports/projectile-implementation-review.md):
- *  - `sweepTerrain` samples the projectile center and uses a fixed step of 0.5,
- *    which may tunnel through terrain for small `terrainOffset` values.
  *  - `hitRadius` scales from `hitMin` to `hitMax` over `hitGrow` seconds (can be 0 at spawn).
  *    Trail/wake particle visuals live in trailParticles.ts (TrailHost interface).
  */
@@ -146,24 +144,27 @@ export class Projectile {
     this.ribbons = v.ribbons;
   }
 
-  // Swept sphere terrain check: sample along path, step size = visual radius.
-  // On hit, refines the crossing point by bisection and stores it in hitPoint.
+  // Swept sphere terrain check: sample along path, then bisect to refine
+  // the crossing point into hitPoint. The step scales with the effective
+  // collision offset — a fixed 0.5 step tunnels through the thin
+  // "surface + offset" band for small-radius projectiles (a 0.05-offset
+  // chaingun bolt could clear a whole sample between checks).
   private sweepTerrain(terrain: Terrain): boolean {
-    const STEP = 0.5;
     const dx = this.pos.x - this.prevPos.x;
     const dy = this.pos.y - this.prevPos.y;
     const dz = this.pos.z - this.prevPos.z;
     const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-    const steps = Math.max(1, Math.ceil(dist / STEP));
+    // Bouncers collide on their body radius — a sphere rests ON the
+    // dirt, not center-deep in it. Non-bouncers explode on contact so
+    // the shallow offset is fine (the ball never visually sits there).
+    const offset = Math.max(this.config.terrainOffset,
+      this.canBounce ? this.config.bodyRadius : 0);
+    const step = Math.max(0.08, Math.min(0.5, offset));
+    const steps = Math.max(1, Math.min(96, Math.ceil(dist / step)));
     const below = (t: number) => {
       const sx = this.prevPos.x + dx * t;
       const sy = this.prevPos.y + dy * t;
       const sz = this.prevPos.z + dz * t;
-      // Bouncers collide on their body radius — a sphere rests ON the
-      // dirt, not center-deep in it. Non-bouncers explode on contact so
-      // the shallow offset is fine (the ball never visually sits there).
-      const offset = Math.max(this.config.terrainOffset,
-        this.canBounce ? this.config.bodyRadius : 0);
       return sy <= terrain.getHeight(sx, sz) + offset;
     };
     for (let i = 0; i <= steps; i++) {
