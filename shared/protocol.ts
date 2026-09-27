@@ -105,6 +105,8 @@ export type ServerMessage =
   // --- Match scoreboard (team-mode rooms) --------------------------------
   | { type: 'flagUpdate'; flags: { team: 'alpha' | 'bravo'; pos: Vec3; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[] }
   | { type: 'teamScore'; scores: { alpha: number; bravo: number }; winAt: number }
+  | { type: 'ffaScore'; scores: Record<string, number>; winAt: number }
+  | { type: 'ffaMatchEnd'; winner: string; scores: Record<string, number> }
   | { type: 'matchEnd'; winner: 'alpha' | 'bravo'; scores: { alpha: number; bravo: number } }
   | { type: 'matchStart'; mode: string; scores: { alpha: number; bravo: number } };
 

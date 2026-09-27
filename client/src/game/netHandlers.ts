@@ -58,6 +58,16 @@ export function wireNetworkHandlers(deps: NetDeps): void {
     deps.lazyHud().setTeamScore?.(scores.alpha, scores.bravo);
     chat.add(null, `ALPHA ${scores.alpha} : ${scores.bravo} BRAVO  (first to ${winAt})`);
   };
+  networkManager.onFfaScore = (scores, winAt) => {
+    const me = nm().getLocalPlayerId();
+    const mine = scores[me] ?? 0;
+    let lead = 0; for (const v of Object.values(scores)) if (v > lead) lead = v;
+    // Only announce when the lead changes hands or YOU score — a per-kill
+    // feed line for every bot frag would drown the chat.
+    if ((scores[me] ?? 0) > 0) chat.add(null, `you: ${mine} pts (leader ${lead}/${winAt})`);
+  };
+  networkManager.onFfaMatchEnd = (winner, scores) =>
+    chat.add(null, `${winner} WINS the deathmatch — ${scores[winner]} pts — new match starting`);
   networkManager.onMatchEnd = (winner, scores) =>
     chat.add(null, `${winner.toUpperCase()} WINS ${scores.alpha}:${scores.bravo} — new match starting`);
   networkManager.onMatchStart = (mode) =>
