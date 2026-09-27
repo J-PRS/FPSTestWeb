@@ -31,6 +31,10 @@ interface Shard {
   dead: boolean;
   trailTimer: number;
   trails: TrailParticle[];
+  brush: boolean;
+  goo: boolean;
+  /** Geometry borrowed from the dying body — never dispose it. */
+  sharedGeo: boolean;
 }
 
 interface DebrisOptions {
@@ -46,6 +50,12 @@ interface DebrisOptions {
   impulseDir?: THREE.Vector3;
   /** The dead body's velocity — debris inherits momentum. */
   inheritVel?: THREE.Vector3;
+  /** 'brush' = thin sticks that flutter; 'goo' = organic splat blobs that
+   *  hit the ground and STICK. */
+  kind?: 'rock' | 'brush' | 'goo';
+  /** Real fragments of the dying body (tumbleweed twigs) — shards use
+   *  these geometries so the burst is made of the thing that died. */
+  shardGeos?: THREE.BufferGeometry[];
 }
 
 // Generic tumbling-shard debris burst. BallDebris/PlayerDebris are just
@@ -89,8 +99,17 @@ export class Debris {
       const sh = 0.18 + Math.random() * 0.45;
       const sd = 0.20 + Math.random() * 0.50;
 
-      const geoType = Math.random();
       let geo: THREE.BufferGeometry;
+      if (opts.shardGeos?.length) {
+        geo = opts.shardGeos[Math.floor(Math.random() * opts.shardGeos.length)]!;
+      } else if (opts.kind === 'brush') {
+        // Splintered twig — thin tapered stick, random length
+        geo = new THREE.CylinderGeometry(0.008, 0.014, 0.2 + Math.random() * 0.35, 3);
+      } else if (opts.kind === 'goo') {
+        // Splat blob — organic pop into droplets
+        geo = new THREE.SphereGeometry(0.05 + Math.random() * 0.1, 5, 4);
+      } else {
+      const geoType = Math.random();
       if (geoType < 0.4) {
         geo = new THREE.TetrahedronGeometry(Math.max(sw, sh, sd), 0);
       } else if (geoType < 0.7) {
@@ -99,6 +118,7 @@ export class Debris {
         geo = new THREE.IcosahedronGeometry(Math.max(sw, sh, sd), 0);
       }
       geo.scale(sw / Math.max(sw, sh, sd), sh / Math.max(sw, sh, sd), sd / Math.max(sw, sh, sd));
+      }
 
       const v   = 0.75 + Math.random() * 0.25;
       const cr  = color.r * v;
@@ -150,6 +170,7 @@ export class Debris {
       mesh.castShadow = false;
       scene.add(mesh);
 
+      const sharedGeo = !!opts.shardGeos?.length;
       const tumble = 4.0 + Math.random() * 8.0;
 
       this.shards.push({
@@ -159,12 +180,16 @@ export class Debris {
         rx: (Math.random() - 0.5) * 2 * tumble,
         ry: (Math.random() - 0.5) * 2 * tumble,
         rz: (Math.random() - 0.5) * 2 * tumble,
-        life: LIFE_BASE + Math.random() * LIFE_RAND,
+        life: (opts.kind === 'brush' ? 0.7 : 1) * (LIFE_BASE + Math.random() * LIFE_RAND),
         elapsed: 0,
-        radius: Math.max(sw, sh, sd),
+        radius: sharedGeo ? (geo.boundingSphere?.radius ?? 0.3) * 0.5
+          : opts.kind === 'brush' ? 0.08 : opts.kind === 'goo' ? 0.06 : Math.max(sw, sh, sd),
         landed: false, landedAt: 0,
         cr, cg, cb, dead: false,
         trailTimer: 0, trails: [],
+        brush: opts.kind === 'brush',
+        goo: opts.kind === 'goo',
+        sharedGeo,
       });
     }
   }
@@ -197,8 +222,12 @@ export class Debris {
 
   // Returns false when the shard has fully shrunk away after landing
   private stepShard(s: Shard, dt: number): boolean {
-    // Physics
-    s.vy += GRAVITY * dt;
+    // Physics — brush shards flutter: light gravity, air drag, soft bounce
+    s.vy += GRAVITY * (s.brush ? 0.3 : 1) * dt;
+    if (s.brush) {
+      const drag = 1 - 1.2 * dt;
+      s.vx *= drag; s.vz *= drag;
+    }
     s.x  += s.vx * dt;
     s.y  += s.vy * dt;
     s.z  += s.vz * dt;
@@ -207,9 +236,15 @@ export class Debris {
     const gy = this.terrain.getHeight(s.x, s.z);
     if (s.y - s.radius <= gy) {
       s.y   = gy + s.radius;
-      s.vy  = -s.vy * BOUNCE_Y;
-      s.vx *= FRICTION_XZ;
-      s.vz *= FRICTION_XZ;
+      if (s.goo) {
+        // Splat — sticks where it lands, flattens, shrinks away fast
+        s.vy = 0; s.vx *= 0.1; s.vz *= 0.1;
+        s.mesh.scale.y = 0.25;
+      } else {
+        s.vy  = -s.vy * (s.brush ? 0.25 : BOUNCE_Y); // twigs flop, not bounce
+        s.vx *= FRICTION_XZ;
+        s.vz *= FRICTION_XZ;
+      }
       s.rx *= 0.3; s.ry *= 0.3; s.rz *= 0.3;
       if (!s.landed) { s.landed = true; s.landedAt = s.elapsed; }
     }
@@ -284,7 +319,7 @@ export class Debris {
 
   private removeShard(s: Shard): void {
     this.scene.remove(s.mesh);
-    s.mesh.geometry.dispose();
+    if (!s.sharedGeo) s.mesh.geometry.dispose();
     s.mat.dispose();
     s.dead = true;
   }
@@ -313,7 +348,7 @@ export class BallDebris extends Debris {
     scene: THREE.Scene, terrain: Terrain,
     px: number, py: number, pz: number,
     color: THREE.Color, scale: number = 1.0,
-    opts?: { bodyRadius?: number; impulseDir?: THREE.Vector3; inheritVel?: THREE.Vector3 }
+    opts?: { bodyRadius?: number; impulseDir?: THREE.Vector3; inheritVel?: THREE.Vector3; kind?: 'rock' | 'brush' | 'goo'; shardGeos?: THREE.BufferGeometry[] }
   ) {
     const spread = 0.6 * scale;
     super(scene, terrain, px, py, pz, color, {
@@ -322,6 +357,8 @@ export class BallDebris extends Debris {
       shellRadius: opts?.bodyRadius,
       impulseDir: opts?.impulseDir,
       inheritVel: opts?.inheritVel,
+      kind: opts?.kind,
+      shardGeos: opts?.shardGeos,
     });
   }
 }
