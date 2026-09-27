@@ -1917,3 +1917,4 @@ match journal now records per-player K/D (+team) at the horn, and K/D resets per
 match time limits: nuggets 15m / ctf 20m / dm 10m, clock arms on first human join, leader wins at horn (ties = draw); the 3 duplicated win blocks consolidated into one endMatch funnel
 per-map terrain: spec.terrain names maps/<file>.bin, loaded lazily + shared via a field cache; room keeps the default field until its own lands
 match clock on the wire: matchEndsAt in gameState for late joiners, timeLeftMs in /rooms so the lobby shows a countdown per row
+60s match warning: matchNotice wire type -> system chat line, once per match, re-arms on matchStart

@@ -78,6 +78,8 @@ export type ServerMessage =
   // Team reassignment mid-match — team comes through playerJoined/gameState
   // otherwise; this is the only channel for a swap after join (bot rebalance).
   | { type: 'teamUpdate'; playerId: string; team: 'alpha' | 'bravo' }
+  // Server system line — renders unstyled (no "name:" prefix) in chat.
+  | { type: 'matchNotice'; text: string }
   | { type: 'playerHit'; shooterId: string; targetId: string; damage: number; health: number }
   | { type: 'playerKill'; shooterId: string; targetId: string }
   | { type: 'knockback'; targetId: string; position: Vec3; force: number; pull?: boolean }

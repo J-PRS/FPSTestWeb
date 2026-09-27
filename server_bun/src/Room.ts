@@ -168,6 +168,7 @@ export class Room {
    *  Starts on the first human join (0 = not running), re-arms on every
    *  matchStart. Called from the room tick; leader wins, tie is 'draw'. */
   private matchEndsAt = 0;
+  private matchWarned = false; // 60s warning — once per match
 
   /** ms until the horn; 0 when the clock isn't armed. */
   matchTimeLeftMs(): number {
@@ -182,6 +183,10 @@ export class Room {
         this.matchEndsAt = now + spec.timeLimitS * 1000;
       }
       return;
+    }
+    if (!this.matchWarned && this.matchEndsAt - now <= 60_000) {
+      this.matchWarned = true;
+      this.broadcast({ type: 'matchNotice', text: '60 seconds left' });
     }
     if (now < this.matchEndsAt) return;
     if (spec.teams) {
@@ -213,6 +218,7 @@ export class Room {
     this.pickups?.clear();
     this.players.resetStats();
     this.matchEndsAt = Date.now() + spec.timeLimitS * 1000;
+    this.matchWarned = false;
     this.broadcast({ type: 'matchStart', mode: this.mode, scores: { ...this.scores } });
   }
 
