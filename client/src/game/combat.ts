@@ -20,6 +20,7 @@ import type { HealthBarSystem } from '../ui/HealthBarSystem.js';
 import type { ExplosionTracker } from '../utils/ExplosionTracker.js';
 import type { setupInputTracking } from '../utils/InputTracking.js';
 import { createFire } from './combat/fire.js';
+import { createBlastForce } from './blastForce.js';
 import { createLightning } from './combat/lightning.js';
 import { burstGibs } from '../entities/swarms.js';
 import type { SwarmSlotOwner } from '../entities/swarm.js';
@@ -110,6 +111,11 @@ export type FireArgs = { origin: THREE.Vector3; dir: THREE.Vector3; playerVel: T
 export function createCombat(deps: CombatDeps) {
   const { logger } = deps;
 
+  // Push/pull force on player/creatures/nuggets/remotes + splash damage —
+  // game/blastForce.ts. Built first: fire + lightning hooks take it.
+  const blast = createBlastForce(deps, { onTargetDestroyed });
+  const { applyExplosionForce, applyForceToRemotes } = blast;
+
   // Trigger handlers (all 13 weapons + melee) live in combat/fire.ts.
   // They only need deps — their destruction/blast callbacks hoist-resolve.
   const fire = createFire(deps, { onTargetDestroyed, applyForceToRemotes });
@@ -182,148 +188,6 @@ export function createCombat(deps: CombatDeps) {
     const networkManager = deps.lazyNetworkManager();
     if (networkManager && networkManager.isConnected() && sendAOE) {
       sendAOE({ x: pos.x, y: pos.y, z: pos.z }, directHitTargetId ?? null);
-    }
-  }
-
-  interface Forceable {
-    pos: THREE.Vector3;
-    applyKnockback(from: THREE.Vector3, force: number): void;
-    applyPull(to: THREE.Vector3, force: number): void;
-  }
-
-  // Self-inflicted splash is nominal — enough to feel the blast on a
-  // rocket jump without it eating your health bar
-  const SELF_AOE_DAMAGE_SCALE = 0.15;
-
-  // Apply push/pull force to local player, balls, and remote players
-  function applyExplosionForce(
-    pos: THREE.Vector3,
-    radius: number,
-    force: number,
-    forceMode: 'push' | 'pull',
-    falloffMultiplier: number,
-    collisionMultiplier: number,
-    forceMultiplier: number,
-    aoeDamage: number,
-    directHitTargetId: string | null,
-    weaponType?: number
-  ): void {
-    const falloffAt = (dist: number) => 1 - dist / (radius * falloffMultiplier);
-    const applyTo = (t: Forceable, f: number) =>
-      forceMode === 'push' ? t.applyKnockback(pos, f) : t.applyPull(pos, f);
-
-    const player = deps.lazyPlayer();
-    const dpx = player.pos.distanceTo(pos);
-    if (dpx < radius * falloffMultiplier) {
-      applyTo(player, force * falloffAt(dpx));
-      // Self-AOE damage: a tiny fraction of what an enemy would take at the
-      // same distance — rocket jumps should be viable, not lethal. Faint
-      // vignette only, no hurt sound (JP: the grunt is too much for this).
-      const selfDmg = aoeDamageOf(aoeDamage, dpx, radius) * SELF_AOE_DAMAGE_SCALE;
-      if (selfDmg >= 1 && !player.isDead) {
-        player.lastDamageSource = 'cooked by your own blast'; // suicide reads as suicide, not "a crawler"
-        deps.lazyNetworkManager()?.sendEnvironmentDamage(selfDmg);
-        deps.lazyHud().showDamage(null, selfDmg);
-      }
-    }
-    applyForceToBalls(pos, radius, force, forceMode, collisionMultiplier, forceMultiplier, aoeDamage, applyTo, weaponType);
-    applyForceToNuggets(pos, radius, force, forceMode, forceMultiplier);
-    applyForceToRemotes(pos, radius, force, forceMode, aoeDamage, directHitTargetId);
-  }
-
-  // Nuggets are light pickups — blast throws them at a boosted force so
-  // explosions visibly scatter loot instead of it hovering through the blast
-  function applyForceToNuggets(
-    pos: THREE.Vector3,
-    radius: number,
-    force: number,
-    forceMode: 'push' | 'pull',
-    forceMultiplier: number
-  ): void {
-    const f = force * forceMultiplier * 1.3;
-    for (const n of deps.nuggets) {
-      if (n.dead || n.collected) continue;
-      if (n.pos.distanceToSquared(pos) < radius * radius) {
-        if (forceMode === 'push') n.applyKnockback(pos, f);
-        else n.applyPull(pos, f);
-      }
-    }
-  }
-
-  // Splash damage-number color follows the weapon — WEAPON_CONFIGS is
-  // weaponType-indexed (same order as the shared enum for slots 0–9).
-  function splashColor(weaponType?: number): string {
-    return WEAPON_CONFIGS[weaponType ?? 0]?.damageColor ?? '#ffcc66';
-  }
-
-  function applyForceToBalls(
-    pos: THREE.Vector3,
-    radius: number,
-    force: number,
-    forceMode: 'push' | 'pull',
-    collisionMultiplier: number,
-    forceMultiplier: number,
-    aoeDamage: number,
-    applyTo: (t: Forceable, f: number) => void,
-    weaponType?: number
-  ): void {
-    for (const ball of deps.targets) {
-      if (ball.dead) continue;
-      const db = ball.pos.distanceTo(pos);
-      const br = ball.hitRadius ?? ball.radius;
-      const threshold = forceMode === 'push'
-        ? radius + br
-        : radius * collisionMultiplier + br;
-      if (db < threshold) {
-        applyTo(ball, force * forceMultiplier);
-        // Splash actually hurts enemies — falloff-scaled like players, with
-        // the same damage number + health bar feedback as direct hits
-        // (without it, splash damage was invisible and read as "no damage").
-        const dmg = aoeDamageOf(aoeDamage, db, radius);
-        if (dmg >= 1) {
-          deps.lazyDamageNumbers().spawn(ball.pos, dmg, splashColor(weaponType), deps.lazyCamera());
-          deps.reportTargetDamage?.(ball, dmg);
-          if (ball.takeDamage(dmg)) onTargetDestroyed(ball, ball.vel, weaponType);
-          else {
-            if (!ball.hideHealthBar) deps.lazyHealthBarSystem().spawnBall(ball, dmg, ball.health);
-            const dm = deps.lazyDemoManager();
-            if (dm?.isRecording) {
-              dm.recordTargetHit(ball.id, { x: ball.pos.x, y: ball.pos.y, z: ball.pos.z }, { x: ball.vel.x, y: ball.vel.y, z: ball.vel.z }, ball.variant, ball.health);
-            }
-          }
-        }
-      }
-    }
-  }
-
-  // Remote players: damage preview + predicted knockback. Prediction mirrors
-  // the server's impulse math (force * (1-dist/radius)) and only bridges the
-  // ~1 RTT before the victim's real trajectory streams back — RemotePlayer
-  // runs it as dead reckoning and clears stale pre-hit snapshots so there's
-  // no snap-back when interpolation resumes.
-  function applyForceToRemotes(
-    pos: THREE.Vector3,
-    radius: number,
-    force: number,
-    forceMode: 'push' | 'pull',
-    aoeDamage: number,
-    directHitTargetId: string | null
-  ): void {
-    for (const [playerId, rp] of deps.world.remotePlayers) {
-      if (rp.isDead) continue;
-      // Match server damage exactly: 1 - dist/radius inside radius, 0 outside.
-      // (The wider falloffAt curve is for knockback reach only — using it here
-      // predicts splash damage the server never applies, and the health bar
-      // snaps back to full on the next authoritative update.)
-      const dist = rp.position.distanceTo(pos);
-      const impulse = aoeImpulse(force, dist, radius);
-      if (impulse <= 0) continue;
-      rp.applyPredictedKnockback(pos, impulse, forceMode === 'pull');
-      if (playerId === directHitTargetId) continue;
-      deps.lazyHud().showHitMarker();
-      const aoeDmg = aoeDamageOf(aoeDamage, dist, radius);
-      if (deps.botHit?.(playerId, aoeDmg, pos)) continue; // local authority resolved it
-      deps.lazyHealthBarSystem().predictDamage(playerId, aoeDmg);
     }
   }
 
