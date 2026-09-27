@@ -1855,3 +1855,5 @@
 - Observability: uncaught errors + unhandled rejections now captured into the WARN+ shipping pipeline (stacks land in logs/client.log automatically)
 - Perf HUD (backquote, with stats.js panels): per-phase frame ms (player/sim/proj/fx/hud/render EMA), renderer.info draw calls/tris/geo/tex/programs, entity counts; LOW-FPS watchdog dump now includes the phase breakdown
 - npm run check — one-shot tsc+oxlint+vitest gate
+- Fix: localAuthority assignment ran before `new NetworkManager()` (crash on boot since the connectServer extraction); moved below construction
+- Dedup: spawnTotem/spawnUberTotem merged into spawnTotem(uber)

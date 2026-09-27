@@ -285,23 +285,6 @@ async function init(): Promise<void> {
       hud.setDeathOverlay(false);
     }, 3000);
   };
-  // No server? Damage/heal claims resolve here — same clamps the server
-  // applies (40 max env hit, 25 max heal) so offline can't cheat easier.
-  networkManager.localAuthority = {
-    envDamage: (amount) => {
-      const dmg = Math.min(40, Math.max(1, Math.round(amount)));
-      if (player.isDead) return;
-      player.health = Math.max(0, player.health - dmg);
-      player.lastDamageSource = 'the wilderness';
-      hud.showDamage(player.pos, dmg);
-      sfx.playerHurt();
-      if (player.health <= 0) { teamBots?.localDied(); killLocal('killed by the wilderness'); }
-    },
-    heal: (amount) => {
-      player.health = Math.min(100, player.health + Math.min(25, Math.max(1, Math.round(amount))));
-    },
-  };
-
   // ?mode=nuggets|ctf|dm — offline-vs-bots modes. Bots live in
   // world.remotePlayers so creatures hunt them and projectiles hit them
   // like real players.
@@ -371,6 +354,23 @@ async function init(): Promise<void> {
   player.onNetworkJump = (pos) => networkManager.sendJump(pos);
   player.onNetworkJetpack = (pos) => networkManager.sendJetpack(pos);
   player.onNetworkInput = (input, rotation) => networkManager.sendInputMove(input, rotation);
+
+  // No server? Damage/heal claims resolve here — same clamps the server
+  // applies (40 max env hit, 25 max heal) so offline can't cheat easier.
+  networkManager.localAuthority = {
+    envDamage: (amount) => {
+      const dmg = Math.min(40, Math.max(1, Math.round(amount)));
+      if (player.isDead) return;
+      player.health = Math.max(0, player.health - dmg);
+      player.lastDamageSource = 'the wilderness';
+      hud.showDamage(player.pos, dmg);
+      sfx.playerHurt();
+      if (player.health <= 0) { teamBots?.localDied(); killLocal('killed by the wilderness'); }
+    },
+    heal: (amount) => {
+      player.health = Math.min(100, player.health + Math.min(25, Math.max(1, Math.round(amount))));
+    },
+  };
 
   // Initialize demo system with player/input data providers
   demoManager = new DemoManager();
