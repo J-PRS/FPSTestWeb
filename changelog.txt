@@ -1,5 +1,22 @@
 # Changelog
 
+## [2026-09-27] Multiplayer E2E harness + combat hardening
+
+- `_tools/pvptest/bot.ts` (new): headless PvE-free bot that joins the live server as a real player over the binary wire protocol. `bun bot.ts <name> [--fighter] [--orbit]` spawns a live opponent (orbits nearest player, fires legal rocket claims); `--park` stands still as a range target; `--idle` joins then goes silent; `--test`/`--test2`/`--test3`/`--test4` run assertion suites and exit nonzero on failure.
+- Verified on the live server: damage/kill/respawn, AOE falloff + knockback, reconnect grace, playerLeft propagation, idle reap at 60s, zero corrections under legal movement and during a 4-bot 75s pileup.
+- Abuse surface locked down server-side and proven: hit claims with no spawned projectile rejected, impossible reach (claimed airtime can't cover distance) rejected, self-targets rejected, heal 999 clamps to 25/call, 60-frame position spam tolerated without correction floods, foreign projectileDestroy ignored, spawn claims >40m off or |v|>600 rejected, environmentDamage clamps to 40 self-only.
+- `CombatHandler`: hit claims on dead targets now return silently — corpse hits were broadcasting phantom playerHit and stacking damage past respawn.
+- Tests updated for the no-grace `hitRadiusAt` contract (growth from spawn): server_bun hitclaim + client combat suites, 91/91 + 23/23 green.
+
+## [2026-09-27] Seamless enemy shatter + lightning beam weld + weapon models
+
+- `entities/gibs.ts` (new): `GibPool` — per-species instanced debris. On death each part instance is snapshotted at its exact world transform into a gib InstancedMesh sharing the swarm's geometry/material — the corpse on frame 0 is pixel-identical to the living body (no pop). Gibs fling outward from the body center, inherit the kill impulse + body velocity, tumble, terrain-bounce, grey to ash, shrink away. Pool capped 192/part, freelist-recycled, zero geometry allocation.
+- `swarms.ts`: `burstGibs(owner, center, impulse, vel)` + `updateGibs(dt)`; `allocSlots` stamps `swarmSpecies` so the death path needs no concrete class. `swarm.ts`: `setMatrix/setColor` guard slot<0 (dying owner may tick once after its slot freed), `snapshot` helpers (`perFor`, `partCount`).
+- `combat.ts` `onTargetDestroyed`: instanced multi-part species gib; single-part bodies (balls) keep the shell-sampled shard burst.
+- Tumbleweed bursts into its own real twigs — `weedTwigs()` keeps ~20 of the pre-merge TubeGeometry stems; `debrisKind: 'brush'` shards use them via new `debrisGeos`/`shardGeos` plumbing (shared geos, never disposed).
+- Lightning gun beam weld: anchor now reads the muzzle node's rendered pixel — `ViewModel.muzzleAnchorWorld` projects the node through the vm camera (FOV 55) to NDC then unprojects through the main camera (FOV 90); the old fixed camera-space offset landed on the wrong ray and read as lag/detach on strafes. Also: vmCam quaternion synced inside the anchor call (was last-frame stale), `updateBeamVisual` moved after `screenShake.update` (post-shake camera), ribbon endpoints re-pin to live from/to every frame (jag skeleton still throttles to 30ms), beam ribbons `depthTest:false` so the bolt never clips under terrain, core/glow widened.
+- w0 Rocket rebuilt as chunky straight-sided slab + split rail (JP's Unity ref, not tapered); w5 GrenadeLauncher rebuilt as MGL-style revolver — fat drum under the barrel, receiver block, skeletal stock, grip; muzzle Z updated. w13 shotgun got its first bake.
+
 ## [2026-09-26] Sound engine — zero-asset procedural audio
 
 - `core/audio.ts` (new): AudioEngine on raw Web Audio — master gain -> DynamicsCompressor -> destination, three buses (ui/sfx/world). No audio library: every sound is synthesized, zero downloads, latency-fine. Positional audio is cheap StereoPanner + distance gain + lowpass-with-distance (not HRTF — reads fine in a fast shooter, way cheaper). Voice cap 24 for one-shots; beyond 220m sounds don't spawn at all. `fps-volume` setting persists master volume.

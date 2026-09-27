@@ -30,14 +30,15 @@ describe('aoe falloff math', () => {
 });
 
 describe('wake hitbox growth', () => {
-  it('starts at zero during the grace period', () => {
+  it('grows linearly from spawn (no grace period)', () => {
+    const stats = getWeaponStats(WeaponType.Rocket);
     expect(hitRadiusAt(WeaponType.Rocket, 0)).toBe(0);
-    expect(hitRadiusAt(WeaponType.Rocket, 0.1)).toBe(0);
+    expect(hitRadiusAt(WeaponType.Rocket, stats.hitGrow / 2)).toBeCloseTo(stats.hitMax / 2);
   });
 
-  it('reaches hitMax at hitGrow + grace', () => {
+  it('reaches hitMax at hitGrow', () => {
     const stats = getWeaponStats(WeaponType.Rocket);
-    expect(hitRadiusAt(WeaponType.Rocket, stats.hitGrow + 0.1)).toBe(stats.hitMax);
+    expect(hitRadiusAt(WeaponType.Rocket, stats.hitGrow)).toBe(stats.hitMax);
     expect(hitRadiusAt(WeaponType.Rocket, stats.hitGrow * 10)).toBe(stats.hitMax);
   });
 
