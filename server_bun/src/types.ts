@@ -58,4 +58,8 @@ export interface PlayerState {
   // the shooter's ~0.6s predicted-knockback window, or remotes flap
   // between the predicted sim and the stale suppressed position.
   forceSendUntil: number;
+  // Spawn protection: while Date.now() < protectedUntil, applyDamage
+  // no-ops on this player. Set on join/respawn; firing clears it —
+  // shooting from inside your own shield is the standard trade.
+  protectedUntil: number;
 }
