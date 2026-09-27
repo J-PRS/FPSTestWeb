@@ -20,9 +20,9 @@ export interface NetBallsCtx {
 export function createNetBalls(deps: EntitiesDeps, ctx: NetBallsCtx, logger: ChildLogger) {
   const { scene, balls, targets } = { scene: deps.scene, ...ctx };
   const netBallById = new Map<number, Ball>();
-  const serverBalls = (): boolean => deps.networkManager()?.isConnected() ?? false;
+  const serverBalls = (): boolean => deps.lazyNetworkManager()?.isConnected() ?? false;
   Ball.hitClaim = (netId, dmg, ix, iy, iz) =>
-    deps.networkManager()?.sendCreatureHit(netId, dmg, ix, iy, iz);
+    deps.lazyNetworkManager()?.sendCreatureHit(netId, dmg, ix, iy, iz);
 
   // Server-sim clock: every ball event is stamped with the server's
   // monotonic sim time. Track the newest stamp + when it arrived to
@@ -33,7 +33,7 @@ export function createNetBalls(deps: EntitiesDeps, ctx: NetBallsCtx, logger: Chi
   function ballEventAge(t: number | undefined): number {
     if (t === undefined) {
       // Unstamped (shouldn't happen post-v3) — fall back to ½RTT.
-      return Math.min(0.2, (deps.networkManager()?.getPing() ?? 0) / 2000);
+      return Math.min(0.2, (deps.lazyNetworkManager()?.getPing() ?? 0) / 2000);
     }
     const now = performance.now() / 1000;
     if (t > ballClock.t) { ballClock.t = t; ballClock.at = now; }
@@ -42,15 +42,15 @@ export function createNetBalls(deps: EntitiesDeps, ctx: NetBallsCtx, logger: Chi
   }
 
   function targetPosForId(id: string | null | undefined): THREE.Vector3 | null {
-    const nm = deps.networkManager();
-    return id === nm?.getLocalPlayerId() ? deps.player().pos
+    const nm = deps.lazyNetworkManager();
+    return id === nm?.getLocalPlayerId() ? deps.lazyPlayer().pos
       : (id ? deps.world.remotePlayers.get(id)?.pos ?? null : null);
   }
 
   function netBallSpawn(m: { id: number; variant: number; colorIdx: number; position: { x: number; y: number; z: number }; velocity: { x: number; y: number; z: number }; t?: number; enraged?: boolean; targetId?: string | null }): void {
     if (netBallById.has(m.id)) return;
     Ball.initNetMode();
-    const ball = new Ball(scene, deps.terrain(), m.variant as 0 | 1 | 2 | 3, {
+    const ball = new Ball(scene, deps.lazyTerrain(), m.variant as 0 | 1 | 2 | 3, {
       id: m.id,
       x: m.position.x, y: m.position.y, z: m.position.z,
       vx: m.velocity.x, vy: m.velocity.y, vz: m.velocity.z,
@@ -107,10 +107,10 @@ export function createNetBalls(deps: EntitiesDeps, ctx: NetBallsCtx, logger: Chi
     netBallById.delete(m.id);
     b.netKill();
     sfx.enemyCue(b.pos, 'die');
-    screenShake.blast(b.pos, 1.6, deps.player().pos);
-    if (m.by && m.by === deps.networkManager()?.getLocalPlayerId()) {
+    screenShake.blast(b.pos, 1.6, deps.lazyPlayer().pos);
+    if (m.by && m.by === deps.lazyNetworkManager()?.getLocalPlayerId()) {
       // Our kill: credit + loot locally (server doesn't own nuggets yet)
-      deps.player().kills++;
+      deps.lazyPlayer().kills++;
       for (let n = 0; n < Math.round(b.scale); n++) {
         ctx.nuggets.push(new Nugget(scene, b.pos, b.vel));
       }

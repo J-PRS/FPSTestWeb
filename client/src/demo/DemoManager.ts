@@ -318,14 +318,21 @@ export class DemoManager {
       }
     }
 
-    const hitTimes: number[] = [];
-    const shotTimes: number[] = [];
+    // "Hot" = the shot this clip exists for: fired→hit airtime matching the
+    // header's recorded best lifetime (80% band catches float jitter and
+    // near-equal combo partners). Full recordings (lifetime 0) show all hot.
+    const best = data.header.projectileLifetime;
+    const isHot = (lifetime: number) => best <= 0 || lifetime >= best * 0.8;
+
+    const hitTimes: { t: number; hot: boolean }[] = [];
+    const shotTimes: { t: number; hot: boolean }[] = [];
     for (const e of data.projectileEvents) {
       if (e.eventType !== ProjectileEventType.Hit) continue;
       const firedAt = firedTimes.get(e.projectileId);
       if (firedAt === undefined) continue;
-      hitTimes.push(e.timestamp);
-      shotTimes.push(firedAt);
+      const hot = isHot(e.timestamp - firedAt);
+      hitTimes.push({ t: e.timestamp, hot });
+      shotTimes.push({ t: firedAt, hot });
     }
 
     this.ui.setMarkers(hitTimes, shotTimes, data.header.duration);

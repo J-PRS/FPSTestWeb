@@ -39,11 +39,11 @@ export interface FireHooks {
 export function createFire(deps: CombatDeps, hooks: FireHooks) {
   function spawnProjectile(config: ProjectileConfig, e: FireArgs, quiet = false): void {
     if (deps.inputTracking.isTabHidden()) return;
-    if (deps.demoManager()?.isPlaying) return;
+    if (deps.lazyDemoManager()?.isPlaying) return;
 
     if (!quiet) sfx.shoot(config.weaponType);
     // INSTANT SHOOTING: Spawn projectile locally immediately for LAN-like feel
-    const p = new Projectile(deps.scene(), e.origin, e.dir, e.playerVel, config);
+    const p = new Projectile(deps.lazyScene(), e.origin, e.dir, e.playerVel, config);
     deps.world.projectiles.push(p);
 
     if (config.needsServerTracking) {
@@ -52,7 +52,7 @@ export function createFire(deps: CombatDeps, hooks: FireHooks) {
     }
 
     // Record projectile fired event for demo
-    const demoManager = deps.demoManager();
+    const demoManager = deps.lazyDemoManager();
     if (demoManager?.isRecording) {
       const velocity = e.dir.clone().normalize().multiplyScalar(config.speed).addScaledVector(e.playerVel, 0.5);
       p.demoProjectileId = demoManager.recordProjectileFired(
@@ -65,7 +65,7 @@ export function createFire(deps: CombatDeps, hooks: FireHooks) {
     // Send shot to server with projectile position/velocity so remote clients
     // see the shot (all weapons, weaponType selects their visual config)
     const velocity = e.dir.clone().normalize().multiplyScalar(config.speed);
-    deps.networkManager().sendShot(
+    deps.lazyNetworkManager().sendShot(
       null, // no target yet
       { x: e.origin.x, y: e.origin.y, z: e.origin.z },
       { x: velocity.x, y: velocity.y, z: velocity.z },
@@ -78,7 +78,7 @@ export function createFire(deps: CombatDeps, hooks: FireHooks) {
   // Belt items release mid-throw-anim; compute fresh aim at release time
   // (player may be skiing fast — stale origin would be meters off)
   function freshFireArgs(): FireArgs {
-    const player = deps.player();
+    const player = deps.lazyPlayer();
     return {
       origin: player.pos.clone(),
       dir: new THREE.Vector3(
@@ -91,37 +91,37 @@ export function createFire(deps: CombatDeps, hooks: FireHooks) {
   }
 
   function onFire(e: FireArgs): void {
-    deps.viewModel()?.kick();
+    deps.lazyViewModel()?.kick();
     spawnProjectile(ROCKET_CONFIG, e);
   }
 
   function onDisc(_e: FireArgs): void {
-    deps.viewModel()?.startThrow();
+    deps.lazyViewModel()?.startThrow();
     setTimeout(() => spawnProjectile(BELT_DISC_CONFIG, freshFireArgs()), THROW_RELEASE * 1000);
   }
 
   function onGrenade(_e: FireArgs): void {
-    deps.viewModel()?.startThrow();
+    deps.lazyViewModel()?.startThrow();
     setTimeout(() => spawnProjectile(GRENADE_CONFIG, freshFireArgs()), THROW_RELEASE * 1000);
   }
 
   function onDiscLauncher(e: FireArgs): void {
-    deps.viewModel()?.kick();
+    deps.lazyViewModel()?.kick();
     spawnProjectile(DISC_CONFIG, e);
   }
 
   function onChaingun(e: FireArgs): void {
-    deps.viewModel()?.kick(0.15);
+    deps.lazyViewModel()?.kick(0.15);
     spawnProjectile(CHAINGUN_CONFIG, e);
   }
 
   function onMortar(e: FireArgs): void {
-    deps.viewModel()?.kick(2.0); // heavy thump — mortar is the big one
+    deps.lazyViewModel()?.kick(2.0); // heavy thump — mortar is the big one
     spawnProjectile(MORTAR_CONFIG, e);
   }
 
   function onGrenadeLauncher(e: FireArgs): void {
-    deps.viewModel()?.kick(0.6);
+    deps.lazyViewModel()?.kick(0.6);
     spawnProjectile(GL_CONFIG, e);
   }
 
@@ -129,7 +129,7 @@ export function createFire(deps: CombatDeps, hooks: FireHooks) {
   // a poisson-disc sample (even coverage, no random clumping), rotated by a
   // random angle per shot so the pattern isn't visually memorized.
   function onFlak(e: FireArgs): void {
-    deps.viewModel()?.kick(1.4);
+    deps.lazyViewModel()?.kick(1.4);
     sfx.shoot(FLAK_CONFIG.weaponType); // once for the fan, not once per shard
     const pts = poissonDisc(FLAK_SHARDS);
     const rot = Math.random() * Math.PI * 2;
@@ -151,7 +151,7 @@ export function createFire(deps: CombatDeps, hooks: FireHooks) {
   // Shotgun: same poisson fan as flak but ~3× tighter cone on fast flat
   // slugs — the burst lands as a pattern, not a scatter. Mid-range viable.
   function onShotgun(e: FireArgs): void {
-    deps.viewModel()?.kick(1.6);
+    deps.lazyViewModel()?.kick(1.6);
     sfx.shoot(SHOTGUN_CONFIG.weaponType); // once for the burst
     const pts = poissonDisc(SG_PELLETS);
     const rot = Math.random() * Math.PI * 2;
@@ -173,40 +173,40 @@ export function createFire(deps: CombatDeps, hooks: FireHooks) {
   // Serious Sam cannon: one big iron ball that skips off terrain and pops
   // on contact. Heavy kick — the thump is half the fun.
   function onCannon(e: FireArgs): void {
-    deps.viewModel()?.kick(1.2);
+    deps.lazyViewModel()?.kick(1.2);
     spawnProjectile(CANNON_CONFIG, e);
   }
 
   // RPG missile: straight flight, slow enough to track in the air, big
   // warhead pop. Heavy kick — the launch should shove your view.
   function onRocketLauncher(e: FireArgs): void {
-    deps.viewModel()?.kick(1.6);
+    deps.lazyViewModel()?.kick(1.6);
     spawnProjectile(RKT_CONFIG, e);
   }
 
   function onPlasma(e: FireArgs): void {
-    deps.viewModel()?.kick(0.4);
+    deps.lazyViewModel()?.kick(0.4);
     spawnProjectile(PLASMA_CONFIG, e);
   }
 
   // Railgun: hypervelocity slug, big kick — the precision slot.
   function onRailgun(e: FireArgs): void {
-    deps.viewModel()?.kick(1.8);
+    deps.lazyViewModel()?.kick(1.8);
     spawnProjectile(RAILGUN_CONFIG, e);
   }
 
   // Melee sweep — the arc check happens around a point pushed forward
   // centered ahead of the fist so the puncher is outside its own radius.
   function melee(e: FireArgs): void {
-    const player = deps.player();
+    const player = deps.lazyPlayer();
     const stats = getWeaponStats(WeaponType.Melee);
     sfx.shoot(WeaponType.Melee);
     _meleeHitPos.copy(player.pos).addScaledVector(e.dir, MELEE_RANGE * 0.7);
 
     // Weapon sweeps aside for the punch — no recoil kick, reads as melee
-    deps.viewModel()?.punch();
+    deps.lazyViewModel()?.punch();
     deps.world.explosions.push(new Explosion(
-      deps.scene(), _meleeHitPos, true, 0, deps.terrain(),
+      deps.lazyScene(), _meleeHitPos, true, 0, deps.lazyTerrain(),
       (stats.aoeRadius * 0.7) / ROCKET_RADIUS, 0xaaddff,
     ));
     screenShake.blast(_meleeHitPos, stats.aoeRadius, player.pos);
@@ -220,18 +220,18 @@ export function createFire(deps: CombatDeps, hooks: FireHooks) {
       _meleeToT.divideScalar(dist || 1);
       if (_meleeToT.dot(e.dir) < MELEE_ARC_DOT) continue;
       t.applyKnockback(player.pos, stats.knockbackForce);
-      deps.damageNumbers().spawn(t.pos, MELEE_DAMAGE, '#aaddff', deps.camera());
+      deps.lazyDamageNumbers().spawn(t.pos, MELEE_DAMAGE, '#aaddff', deps.lazyCamera());
       deps.reportTargetDamage?.(t, MELEE_DAMAGE);
       if (t.takeDamage(MELEE_DAMAGE)) hooks.onTargetDestroyed(t, t.vel, WeaponType.Melee);
-      else if (!t.hideHealthBar) deps.healthBarSystem().spawnBall(t, MELEE_DAMAGE, t.health);
-      deps.hud().showHitMarker();
+      else if (!t.hideHealthBar) deps.lazyHealthBarSystem().spawnBall(t, MELEE_DAMAGE, t.health);
+      deps.lazyHud().showHitMarker();
       connected ??= t.pos;
     }
     // The crack that sells it — positional impact only when the punch lands
     if (connected) { sfx.at(connected, 'impact', 1); sfx.hitMarker(true); }
 
     // Players go through the authoritative AOE claim
-    const networkManager = deps.networkManager();
+    const networkManager = deps.lazyNetworkManager();
     if (networkManager?.isConnected()) {
       networkManager.sendAOEShot(
         { x: _meleeHitPos.x, y: _meleeHitPos.y, z: _meleeHitPos.z },

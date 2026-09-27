@@ -7,8 +7,8 @@ import type { ChildLogger } from '../core/Logger.js';
 
 interface DirectorDeps {
   entities: ReturnType<typeof createEntities>;
-  player: () => Player;
-  terrain: () => Terrain;
+  lazyPlayer: () => Player;
+  lazyTerrain: () => Terrain;
   logger: ChildLogger;
 }
 
@@ -24,15 +24,31 @@ interface PoolEntry {
 }
 
 const POOL: PoolEntry[] = [
+  { cost: 4,  minT: 0,   weight: 5, label: 'grub',       spawn: (e) => e.spawnGrub() },
+  { cost: 5,  minT: 0,   weight: 5, label: 'scarab pack', spawn: (e) => e.spawnScarab() },
+  { cost: 6,  minT: 15,  weight: 4, label: 'gnat cloud', spawn: (e) => e.spawnGnatCloud() },
   { cost: 6,  minT: 0,   weight: 4, label: 'ball',       spawn: (e) => e.spawnBall() },
   { cost: 10, minT: 0,   weight: 4, label: 'crawler',    spawn: (e) => e.spawnCrawler() },
+  { cost: 11, minT: 30,  weight: 4, label: 'viper',      spawn: (e) => e.spawnSnake() },
   { cost: 12, minT: 40,  weight: 3, label: 'seeker',     spawn: (e) => e.spawnSeeker() },
   { cost: 14, minT: 75,  weight: 3, label: 'rakk',       spawn: (e) => e.spawnRakk() },
-  { cost: 15, minT: 90,  weight: 3, label: 'roller',     spawn: (e) => e.spawnRoller() },
+  { cost: 15, minT: 90,  weight: 3, label: 'boulder',     spawn: (e) => e.spawnRoller() },
   { cost: 20, minT: 120, weight: 2, label: 'turretter',  spawn: (e) => e.spawnTurretter() },
-  { cost: 25, minT: 150, weight: 2, label: 'miner',      spawn: (e) => e.spawnMiner() },
+  { cost: 25, minT: 150, weight: 2, label: 'overlord',      spawn: (e) => e.spawnOverlord() },
   { cost: 28, minT: 180, weight: 2, label: 'totem',      spawn: (e) => e.spawnTotem() },
+  { cost: 60, minT: 300, weight: 1, label: 'uber totem', spawn: (e) => e.spawnUberTotem() },
   { cost: 30, minT: 150, weight: 1, label: 'elite ball', spawn: (e) => e.spawnEliteBall() },
+  // Ubers — rare, expensive, late. Named threats, not population filler.
+  { cost: 25, minT: 200, weight: 0.8, label: 'dreadbeetle',  spawn: (e) => e.spawnScarab(undefined, true) },
+  { cost: 18, minT: 150, weight: 0.8, label: 'bloatgrub',    spawn: (e) => e.spawnGrub(undefined, true) },
+  { cost: 22, minT: 200, weight: 0.8, label: 'gnat queen',   spawn: (e) => e.spawnGnatCloud(true) },
+  { cost: 45, minT: 300, weight: 0.7, label: 'matriarch',    spawn: (e) => e.spawnCrawler(undefined, true) },
+  { cost: 28, minT: 220, weight: 0.7, label: 'king serpent', spawn: (e) => e.spawnSnake(undefined, true) },
+  { cost: 32, minT: 240, weight: 0.8, label: 'avalanche',    spawn: (e) => e.spawnRoller(true) },
+  { cost: 24, minT: 160, weight: 0.8, label: 'lancer',       spawn: (e) => e.spawnSeeker(true) },
+  { cost: 30, minT: 220, weight: 0.7, label: 'elder rakk',   spawn: (e) => e.spawnRakk(true) },
+  { cost: 42, minT: 280, weight: 0.7, label: 'siege turret', spawn: (e) => e.spawnTurretter(true) },
+  { cost: 55, minT: 340, weight: 0.6, label: 'broodmother',  spawn: (e) => e.spawnOverlord(true) },
 ];
 
 // ---- Scripted beats: authored moments on the clock -------------------------
@@ -40,7 +56,7 @@ const POOL: PoolEntry[] = [
 interface WaveBeat { at: number; name: string; run: (d: DirectorDeps) => void }
 
 function ringOf(d: DirectorDeps, n: number, dist: number, fn: (pos: THREE.Vector3) => void): void {
-  const p = d.player().pos;
+  const p = d.lazyPlayer().pos;
   const off = Math.random() * Math.PI * 2;
   for (let i = 0; i < n; i++) {
     const a = off + (i / n) * Math.PI * 2;
@@ -53,10 +69,12 @@ const WAVES: WaveBeat[] = [
   { at: 100, name: 'Seeker pair + pack', run: (d) => { d.entities.spawnSeeker(); d.entities.spawnSeeker(); ringOf(d, 3, 35, (p) => d.entities.spawnCrawler(p)); } },
   { at: 160, name: 'Rakk flock',         run: (d) => { d.entities.spawnRakk(); d.entities.spawnRakk(); d.entities.spawnRakk(); } },
   { at: 220, name: 'Mine rain',          run: (d) => {
-      const p = d.player().pos;
+      const p = d.lazyPlayer().pos;
       for (let i = 0; i < 6; i++) {
         const a = Math.random() * Math.PI * 2, r = 8 + Math.random() * 22;
-        d.entities.plantMine(new THREE.Vector3(p.x + Math.cos(a) * r, 0, p.z + Math.sin(a) * r));
+        // One doombloom hidden in the rain — clear the field carelessly
+        // and the whole garden goes up at once.
+        d.entities.plantMine(new THREE.Vector3(p.x + Math.cos(a) * r, 0, p.z + Math.sin(a) * r), i === 0);
       }
     } },
   { at: 290, name: 'Elite + enrage storm', run: (d) => {
@@ -75,10 +93,67 @@ const CREDIT_CAP = 140;      // hoard cap — prevents absurd dump-bursts
 const CREDIT_BASE = 0.45;    // credits/sec at t=0 — one cheap pick every ~15s early
 const CREDIT_RAMP = 0.0045;  // extra credits/sec per elapsed second (~+27/min by minute 10)
 
+// ---- Random mode (?spawns=random) ----------------------------------------
+// Testing mode: no scripted beats, no credit economy, no unlock timeline —
+// EVERYTHING can spawn from t=0. Two knobs ramp slowly: total alive budget
+// and spawn cadence. Per-species MAX caps inside the spawn fns still apply
+// (a roll that hits a capped species just no-ops — no extra bookkeeping).
+// Weights are deliberately lopsided: fodder is common, dangerous/rare
+// enemies show up early but stay a small fraction of the population.
+const RANDOM_MODE = new URLSearchParams(location.search).get('spawns') === 'random';
+
+const RANDOM_POOL: { weight: number; label: string; spawn: (e: ReturnType<typeof createEntities>) => void }[] = [
+  { weight: 6.0, label: 'scarab pack', spawn: (e) => e.spawnScarab() },
+  { weight: 6.0, label: 'grub',       spawn: (e) => e.spawnGrub() },
+  { weight: 4.0, label: 'gnat cloud', spawn: (e) => e.spawnGnatCloud() },
+  { weight: 5.0, label: 'ball',       spawn: (e) => e.spawnBall() },
+  { weight: 4.0, label: 'crawler',    spawn: (e) => e.spawnCrawler() },
+  { weight: 3.0, label: 'viper',      spawn: (e) => e.spawnSnake() },
+  { weight: 2.5, label: 'seeker',     spawn: (e) => e.spawnSeeker() },
+  { weight: 2.0, label: 'rakk',       spawn: (e) => e.spawnRakk() },
+  { weight: 1.5, label: 'boulder',     spawn: (e) => e.spawnRoller() },
+  { weight: 1.0, label: 'turretter',  spawn: (e) => e.spawnTurretter() },
+  { weight: 0.7, label: 'overlord',   spawn: (e) => e.spawnOverlord() },
+  { weight: 0.6, label: 'totem',      spawn: (e) => e.spawnTotem() },
+  { weight: 0.2, label: 'uber totem', spawn: (e) => e.spawnUberTotem() },
+  { weight: 0.4, label: 'elite ball', spawn: (e) => e.spawnEliteBall() },
+  // Ubers — same weight tier as the named elites
+  { weight: 0.3, label: 'dreadbeetle',  spawn: (e) => e.spawnScarab(undefined, true) },
+  { weight: 0.3, label: 'bloatgrub',    spawn: (e) => e.spawnGrub(undefined, true) },
+  { weight: 0.3, label: 'gnat queen',   spawn: (e) => e.spawnGnatCloud(true) },
+  { weight: 0.25, label: 'matriarch',   spawn: (e) => e.spawnCrawler(undefined, true) },
+  { weight: 0.25, label: 'king serpent', spawn: (e) => e.spawnSnake(undefined, true) },
+  { weight: 0.3, label: 'avalanche',    spawn: (e) => e.spawnRoller(true) },
+  { weight: 0.3, label: 'lancer',       spawn: (e) => e.spawnSeeker(true) },
+  { weight: 0.25, label: 'elder rakk',  spawn: (e) => e.spawnRakk(true) },
+  { weight: 0.25, label: 'siege turret', spawn: (e) => e.spawnTurretter(true) },
+  { weight: 0.2, label: 'broodmother',  spawn: (e) => e.spawnOverlord(true) },
+];
+const RANDOM_WEIGHT_TOTAL = RANDOM_POOL.reduce((s, p) => s + p.weight, 0);
+
+// Budget ramp: 14 alive at t=0, +1 per 20s, hard-capped at 40 — the world
+// fills in over the first minutes instead of dumping the cap instantly.
+const RANDOM_BUDGET_BASE = 14;
+const RANDOM_BUDGET_RAMP_T = 20;   // s per +1
+const RANDOM_BUDGET_MAX = 40;
+// Cadence ramp: one roll every 3.5s at t=0, tightening to ~1.3s by minute 6.
+const RANDOM_INTERVAL_BASE = 3.5;
+const RANDOM_INTERVAL_MIN = 1.3;
+const RANDOM_INTERVAL_RAMP = 0.006; // s shaved off per elapsed second
+
+function aliveCount(e: ReturnType<typeof createEntities>): number {
+  let n = 0;
+  for (const l of [e.balls, e.crawlers, e.turrets, e.rollers, e.seekers, e.overlords, e.totems, e.rakks] as { dead: boolean }[][]) {
+    for (const t of l) if (!t.dead) n++;
+  }
+  return n;
+}
+
 /**
  * Hybrid wave director: scripted beats on the clock (authored moments) +
  * a credit pool spent on a weighted random roster that unlocks over time.
  * Left 4 Dead / VS-style: the timeline gives pacing, the pool gives chaos.
+ * ?spawns=random replaces all of it with flat weighted-random spawning.
  */
 export function createWaveDirector(deps: DirectorDeps) {
   let elapsed = 0;
@@ -86,8 +161,28 @@ export function createWaveDirector(deps: DirectorDeps) {
   let spendTimer = 12; // first spend ~12s in, not instantly
   let waveIdx = 0;
   let loopCount = 0;
+  let randomT = 1.5; // first random roll lands early — populate fast for testing
+
+  function updateRandom(dt: number): void {
+    elapsed += dt;
+    randomT -= dt;
+    if (randomT > 0) return;
+    randomT = Math.max(RANDOM_INTERVAL_MIN, RANDOM_INTERVAL_BASE - elapsed * RANDOM_INTERVAL_RAMP);
+    const budget = Math.min(RANDOM_BUDGET_MAX, RANDOM_BUDGET_BASE + Math.floor(elapsed / RANDOM_BUDGET_RAMP_T));
+    if (aliveCount(deps.entities) >= budget) return;
+    let roll = Math.random() * RANDOM_WEIGHT_TOTAL;
+    for (const p of RANDOM_POOL) {
+      roll -= p.weight;
+      if (roll <= 0) {
+        p.spawn(deps.entities);
+        deps.logger.debug(`[Director:random] ${p.label} (alive ${aliveCount(deps.entities)}/${budget})`);
+        return;
+      }
+    }
+  }
 
   function update(dt: number): void {
+    if (RANDOM_MODE) { updateRandom(dt); return; }
     elapsed += dt;
     credits = Math.min(CREDIT_CAP, credits + (CREDIT_BASE + elapsed * CREDIT_RAMP) * dt);
 

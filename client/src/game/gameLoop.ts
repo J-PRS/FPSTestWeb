@@ -4,6 +4,7 @@ import Stats from 'stats.js';
 import { MAX_DELTA_TIME } from '../core/config.js';
 import type { DemoManager } from '../demo/index.js';
 import type { Player } from '../entities/Player.js';
+import { updateGibs } from '../entities/swarms.js';
 import type { ViewModel } from '../entities/ViewModel.js';
 import type { DamageNumberManager } from '../effects/damageNumbers.js';
 import type { EffectsManager } from '../effects/effects.js';
@@ -26,25 +27,27 @@ import type { createRemotes } from './remotes.js';
 import type { createWaveDirector } from './waveDirector.js';
 import type { WorldState } from './worldState.js';
 import { audio } from '../core/audio.js';
+import Logger from '../core/Logger.js';
 
 const _zeroVel = new THREE.Vector3(); // shared zero for demo playback
+const _birdPosBuf: THREE.Vector3[] = []; // scratch — minimap debug blips
 const _camRight = new THREE.Vector3();
 
 export interface GameLoopDeps {
   camera: THREE.PerspectiveCamera;
   sceneSetup: ReturnType<typeof createScene>;
   rendererSetup: ReturnType<typeof createRenderer>;
-  terrain: () => Terrain;
-  player: () => Player;
-  viewModel: () => ViewModel;
+  lazyTerrain: () => Terrain;
+  lazyPlayer: () => Player;
+  lazyViewModel: () => ViewModel;
   vmScene: () => THREE.Scene;
   vmCamera: () => THREE.PerspectiveCamera;
-  hud: () => HUD;
-  healthBarSystem: () => HealthBarSystem;
+  lazyHud: () => HUD;
+  lazyHealthBarSystem: () => HealthBarSystem;
   damageNumberManager: () => DamageNumberManager;
-  networkManager: () => NetworkManager;
-  demoManager: () => DemoManager | null;
-  effects: () => EffectsManager;
+  lazyNetworkManager: () => NetworkManager;
+  lazyDemoManager: () => DemoManager | null;
+  lazyEffects: () => EffectsManager;
   speedLines: SpeedLines;
   ambientLayers: AmbientParticles[];
   groundMist: () => GroundMist;
@@ -66,18 +69,71 @@ export function createGameLoop(deps: GameLoopDeps) {
   let lastPlayerYaw = 0;
   let lastPlayerPitch = 0;
 
-  // stats.js perf panel — bottom right, toggled with ` (backquote)
-  const stats = new Stats();
-  stats.showPanel(0);
-  const statsDom = stats.dom as HTMLElement;
-  statsDom.style.cssText = 'position:fixed;bottom:56px;right:20px;left:auto;top:auto;z-index:10000;display:none;';
-  document.body.appendChild(statsDom);
+  // stats.js perf panels — FPS/MS/MB stacked bottom right, toggled with ` (backquote).
+  // stats.js only renders one panel per instance, so use one per metric.
+  const statsPanels = [0, 1, 2].map((panel, i) => {
+    const s = new Stats();
+    s.showPanel(panel);
+    const dom = s.dom as HTMLElement;
+    dom.style.cssText = `position:fixed;bottom:${56 + i * 48}px;right:20px;left:auto;top:auto;z-index:10000;display:none;`;
+    document.body.appendChild(dom);
+    return s;
+  });
   document.addEventListener('keydown', (e) => {
     if (e.code === 'Backquote') {
       e.preventDefault();
-      statsDom.style.display = statsDom.style.display === 'none' ? 'block' : 'none';
+      for (const s of statsPanels) {
+        const dom = s.dom as HTMLElement;
+        dom.style.display = dom.style.display === 'none' ? 'block' : 'none';
+      }
     }
   });
+
+  // FPS watchdog — sustained <40fps for >10 consecutive frames fires a
+  // one-shot stats dump (ships to logs/client.log via the WARN+ pipeline),
+  // throttled to once per 10s. Uses rawElapsed, not clamped dt, and skips
+  // hidden tabs (rAF throttling ≠ real perf).
+  let lowFpsFrames = 0;
+  let lowFpsAccum = 0;
+  let lastFpsDump = 0;
+  function fpsWatchdog(rawElapsed: number, now: number): void {
+    if (document.hidden || rawElapsed <= 0) return;
+    if (1 / rawElapsed < 40) { lowFpsFrames++; lowFpsAccum += rawElapsed; }
+    else { lowFpsFrames = 0; lowFpsAccum = 0; }
+    if (lowFpsFrames > 10 && now - lastFpsDump > 10_000) {
+      lastFpsDump = now;
+      const player = deps.lazyPlayer();
+      const nm = deps.lazyNetworkManager();
+      const info = deps.rendererSetup.renderer.info;
+      const entities = deps.entities;
+      Logger.warn('LOW FPS sustained — perf dump', {
+        avgFps: Math.round(lowFpsFrames / lowFpsAccum),
+        frames: lowFpsFrames,
+        pos: { x: +player.pos.x.toFixed(1), y: +player.pos.y.toFixed(1), z: +player.pos.z.toFixed(1) },
+        speed: +player.vel.length().toFixed(1),
+        dead: player.isDead,
+        demo: deps.lazyDemoManager()?.isPlaying ?? false,
+        targets: entities.targets.length,
+        balls: entities.balls.filter(b => !b.dead && !b.disposed).length,
+        nuggets: entities.nuggets.length,
+        remotes: deps.world.remotePlayers.size,
+        projectiles: deps.world.projectiles.length,
+        explosions: deps.world.explosions.length,
+        debris: deps.world.debrisList.length + deps.world.playerDebrisList.length,
+        scorches: deps.world.scorches.length,
+        drawCalls: info.render.calls,
+        triangles: info.render.triangles,
+        geometries: info.memory.geometries,
+        textures: info.memory.textures,
+        ping: nm?.getPing?.(),
+        packetLoss: nm?.getPacketLoss?.(),
+        heapMB: (performance as { memory?: { usedJSHeapSize: number } }).memory
+          ? Math.round((performance as { memory?: { usedJSHeapSize: number } }).memory!.usedJSHeapSize / 1048576)
+          : undefined,
+      });
+      lowFpsFrames = 0; lowFpsAccum = 0;
+    }
+  }
 
   // Update a list of dead-checkable effect/entity objects, disposing finished ones
   function updateDeadList<T extends { update(dt: number): void; dead: boolean; dispose(): void }>(list: T[], dt: number): void {
@@ -90,8 +146,8 @@ export function createGameLoop(deps: GameLoopDeps) {
   // Demo bookkeeping: update recorder/player, freeze input during playback.
   // Returns whether demo playback is currently paused.
   function tickDemo(dt: number): boolean {
-    const demoManager = deps.demoManager();
-    const player = deps.player();
+    const demoManager = deps.lazyDemoManager();
+    const player = deps.lazyPlayer();
     if (demoManager) demoManager.update(dt); // zero-overhead when idle
     const shouldFreeze = demoManager?.isPlaying ?? false;
     if (shouldFreeze && !player.inputFrozen) player.freezeInput();
@@ -101,18 +157,27 @@ export function createGameLoop(deps: GameLoopDeps) {
 
   function loop(time: number): void {
     requestAnimationFrame(loop);
-    stats.update();
-    const dt = Math.min((time - lastTime) / 1000, MAX_DELTA_TIME);
+    for (const s of statsPanels) s.update();
+    const rawElapsed = (time - lastTime) / 1000;
+    const dt = Math.min(rawElapsed, MAX_DELTA_TIME);
     lastTime = time;
+    fpsWatchdog(rawElapsed, time);
+
+    // Hidden tabs get ~1 rAF/sec — dt clamps to 0.05 so game logic runs in
+    // slow motion, but cosmetic VFX must still expire in real time or they
+    // stack into an overdraw bomb while you're AFK (explosions, damage
+    // numbers, debris all spawned by enemies beating on the idle player).
+    // fxDt = wall-clock (clamped at 2s) when hidden; normal dt when visible.
+    const fxDt = document.hidden ? Math.min(rawElapsed, 2) : dt;
 
     const { camera, sceneSetup, entities } = deps;
     const { scene } = sceneSetup;
-    const player = deps.player();
-    const terrain = deps.terrain();
-    const networkManager = deps.networkManager();
-    const demoManager = deps.demoManager();
-    const viewModel = deps.viewModel();
-    const hud = deps.hud();
+    const player = deps.lazyPlayer();
+    const terrain = deps.lazyTerrain();
+    const networkManager = deps.lazyNetworkManager();
+    const demoManager = deps.lazyDemoManager();
+    const viewModel = deps.lazyViewModel();
+    const hud = deps.lazyHud();
 
     // Update player physics even when tab is hidden (to keep position changing)
     player.update(dt);
@@ -131,10 +196,14 @@ export function createGameLoop(deps: GameLoopDeps) {
     const demoPaused = tickDemo(dt);
     if (!demoPaused) entities.updateBalls(dt);
     if (!demoPaused) entities.updateCrawlers(dt);
+    if (!demoPaused) entities.updateScarabs(dt);
+    if (!demoPaused) entities.updateGrubs(dt);
+    if (!demoPaused) entities.updateSnakes(dt);
+    if (!demoPaused) entities.updateGnats(dt);
     if (!demoPaused) entities.updateTurrets(dt);
     if (!demoPaused) entities.updateRollers(dt);
     if (!demoPaused) entities.updateSeekers(dt);
-    if (!demoPaused) entities.updateMiners(dt);
+    if (!demoPaused) entities.updateOverlords(dt);
     if (!demoPaused) entities.updateTotems(dt);
     if (!demoPaused) entities.updateRakks(dt);
     if (!demoPaused) entities.updateWeeds(dt);
@@ -148,13 +217,14 @@ export function createGameLoop(deps: GameLoopDeps) {
     if (!demoPaused) deps.demoLifecycle().updatePlaybackProjectiles(dt);
 
     if (!demoPaused) {
-      deps.effects().update(dt);
-      updateDeadList(deps.world.debrisList, dt);
-      updateDeadList(deps.world.playerDebrisList, dt);
-      updateDeadList(deps.world.scorches, dt);
-      updateDeadList(deps.world.explosions, dt);
-      updateDeadList(deps.world.implosions, dt);
-      updateDeadList(deps.world.aoeGizmos, dt);
+      deps.lazyEffects().update(fxDt);
+      updateDeadList(deps.world.debrisList, fxDt);
+      updateDeadList(deps.world.playerDebrisList, fxDt);
+      updateGibs(fxDt);
+      updateDeadList(deps.world.scorches, fxDt);
+      updateDeadList(deps.world.explosions, fxDt);
+      updateDeadList(deps.world.implosions, fxDt);
+      updateDeadList(deps.world.aoeGizmos, fxDt);
     }
     deps.remotes().updateScoreboard();
 
@@ -167,26 +237,48 @@ export function createGameLoop(deps: GameLoopDeps) {
     }
 
     hud.update(dt, player, networkManager.getPing(), networkManager.getPacketLoss(), networkManager.getJitter());
-    hud.setBallCount(entities.balls.filter(b => !b.dead && !b.disposed).length);
+    // Bottom-left census — alive counts per species + perf load counters
+    const cnt = (l: { dead: boolean }[]) => l.filter(e => !e.dead).length;
+    hud.setEntityCounts({
+      balls: entities.balls.filter(b => !b.dead && !b.disposed && b.variant !== 3).length,
+      elites: entities.balls.filter(b => !b.dead && !b.disposed && b.variant === 3).length,
+      crawlers: cnt(entities.crawlers),
+      scarabs: cnt(entities.scarabs),
+      grubs: cnt(entities.grubs),
+      snakes: cnt(entities.snakes),
+      gnats: cnt(entities.gnats),
+      seekers: cnt(entities.seekers),
+      rakks: cnt(entities.rakks),
+      rollers: cnt(entities.rollers),
+      turrets: cnt(entities.turrets),
+      overlords: cnt(entities.overlords),
+      totems: cnt(entities.totems),
+      mines: cnt(entities.mines),
+      targets: entities.targets.filter(t => !t.dead).length,
+      projectiles: deps.world.projectiles.length,
+      fx: deps.world.debrisList.length + deps.world.explosions.length
+        + deps.world.implosions.length + deps.world.scorches.length,
+    });
     hud.setNuggets(entities.getNuggetsCollected());
     hud.setTimer(deps.waveDirector().elapsed);
-    hud.updateMinimap(entities.targets, entities.nuggets, player.pos, player.yaw);
-    viewModel.group.visible = !demoManager?.isPlaying && !player.isDead;
+    deps.ambientBirds.positions(_birdPosBuf);
+    hud.updateMinimap(entities.targets, entities.nuggets, player.pos, player.yaw, _birdPosBuf);
+    viewModel.group.visible = !demoManager?.isPlaying && !player.isDead && !player.thirdPerson;
     const yawDelta = Math.atan2(Math.sin(player.yaw - lastPlayerYaw), Math.cos(player.yaw - lastPlayerYaw));
     viewModel.update(dt, yawDelta, player.pitch - lastPlayerPitch, player.vel, camera);
     lastPlayerYaw = player.yaw;
     lastPlayerPitch = player.pitch;
-    deps.healthBarSystem().update(dt, networkManager.getPlayers(), deps.world.remotePlayers, entities.balls);
+    deps.lazyHealthBarSystem().update(dt, networkManager.getPlayers(), deps.world.remotePlayers, entities.balls);
 
     // Peripheral speed lines — world-space streaks along the true velocity
     // vector; suppressed during demo playback
-    deps.speedLines.update(dt, camera.position, demoManager?.isPlaying ? _zeroVel : player.vel);
+    deps.speedLines.update(fxDt, camera.position, demoManager?.isPlaying ? _zeroVel : player.vel);
 
     // Ambient layers — world-anchored motes drifting around the camera
     // volume, plus valley mist banks yawing toward the camera
-    for (const layer of deps.ambientLayers) layer.update(dt, camera.position, terrain);
-    deps.groundMist().update(dt, camera.position);
-    deps.ambientBirds.update(dt, player.pos, terrain);
+    for (const layer of deps.ambientLayers) layer.update(fxDt, camera.position, terrain);
+    deps.groundMist().update(fxDt, camera.position);
+    deps.ambientBirds.update(fxDt, player.pos, terrain, player.isDead);
 
     // Update atmospheric effects
     sceneSetup.update(dt);
@@ -196,9 +288,14 @@ export function createGameLoop(deps: GameLoopDeps) {
     // so it composes as a small rotational jitter on top
     screenShake.update(dt, camera);
 
+    // LG beam weld — last write before renderFrame: needs the viewmodel's
+    // swayed transform AND the post-shake camera, or fast moves + blasts
+    // leave the bolt anchored one camera-frame stale
+    deps.combat()?.updateBeamVisual();
+
     updateAudio(dt, player, camera);
 
-    renderFrame(dt);
+    renderFrame(fxDt); // damage numbers ride fxDt — same hidden-tab decay fix
   }
 
   // Movement/ambience loops live here: they're continuous sounds driven by
@@ -240,19 +337,35 @@ export function createGameLoop(deps: GameLoopDeps) {
 
   function renderFrame(dt: number): void {
     const { camera, rendererSetup, sceneSetup } = deps;
-    const viewModel = deps.viewModel();
+    // FLOYD overlay hook — idempotent; the VM draw runs inside fsRender so
+    // the gun lands in the readPixels buffer and gets dithered too.
+    rendererSetup.setOverlayPass(() => {
+      const vm = deps.lazyViewModel(), vmc = deps.vmCamera();
+      if (!vm.group.visible) return;
+      vmc.aspect = camera.aspect;
+      vmc.updateProjectionMatrix();
+      vmc.quaternion.copy(camera.quaternion);
+      const prev = rendererSetup.renderer.autoClear;
+      rendererSetup.renderer.autoClear = false;
+      rendererSetup.renderer.clearDepth();
+      rendererSetup.renderer.render(deps.vmScene(), vmc);
+      rendererSetup.renderer.autoClear = prev;
+    });
+    const viewModel = deps.lazyViewModel();
     const vmCamera = deps.vmCamera();
     const vmScene = deps.vmScene();
     const renderer = rendererSetup.renderer;
 
     if (rendererSetup.needsComposer()) {
-      rendererSetup.render(dt);
+      rendererSetup.render(dt); // FLOYD: overlay pass (the VM draw below) runs inside
     } else {
       renderer.render(sceneSetup.scene, camera);
     }
 
-    // Viewmodel pass — clear depth only, draw gun on top with its own FOV
-    if (viewModel.group.visible) {
+    // Viewmodel pass — clear depth only, draw gun on top with its own FOV.
+    // In FLOYD the GL canvas is hidden and this same draw is injected into
+    // fsRender via the overlay hook — skip it here or it draws post-readback.
+    if (viewModel.group.visible && !rendererSetup.isFloyd()) {
       vmCamera.aspect = camera.aspect;
       vmCamera.updateProjectionMatrix();
       vmCamera.quaternion.copy(camera.quaternion);

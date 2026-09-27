@@ -39,7 +39,7 @@ export function createSpeciesKit(deps: EntitiesDeps, targets: Targetable[]) {
   function ringPos(min: number, max: number): THREE.Vector3 {
     const ang = Math.random() * Math.PI * 2;
     const dist = min + Math.random() * (max - min);
-    const player = deps.player();
+    const player = deps.lazyPlayer();
     return new THREE.Vector3(
       player.pos.x + Math.cos(ang) * dist, 0, player.pos.z + Math.sin(ang) * dist,
     );
@@ -50,7 +50,7 @@ export function createSpeciesKit(deps: EntitiesDeps, targets: Targetable[]) {
   // the kill-feed attribution ("devoured by a crawler") recorded in case
   // this damage is the killing blow — the server only reports 'environment'.
   function hurtPlayer(fromPos: THREE.Vector3, force: number, damage: number, deathText: string, reach?: number, attacker?: object): boolean {
-    const p = deps.player();
+    const p = deps.lazyPlayer();
     if (p.isDead) return false; // corpse shouldn't get knocked around or re-hurt
     // Victim check — a creature's bite fires for whomever ITS threat table
     // committed to. Only an EXPLICIT local commitment hurts this client: a
@@ -78,8 +78,8 @@ export function createSpeciesKit(deps: EntitiesDeps, targets: Targetable[]) {
     }
     p.lastDamageSource = deathText;
     p.applyKnockback(fromPos, force);
-    deps.networkManager()?.sendEnvironmentDamage(damage);
-    deps.hud().showDamage(fromPos, damage); // vignette + directional arc
+    deps.lazyNetworkManager()?.sendEnvironmentDamage(damage);
+    deps.lazyHud().showDamage(fromPos, damage); // vignette + directional arc
     sfx.playerHurt();
     return true;
   }
@@ -96,7 +96,7 @@ export function createSpeciesKit(deps: EntitiesDeps, targets: Targetable[]) {
   const _zeroVel = new THREE.Vector3();
 
   function candidates(): TargetCandidate[] {
-    const p = deps.player();
+    const p = deps.lazyPlayer();
     let c = _candMap.get('local');
     if (!c) {
       c = { id: 'local', pos: p.pos, vel: p.vel, alive: true };
@@ -144,7 +144,7 @@ export function createSpeciesKit(deps: EntitiesDeps, targets: Targetable[]) {
       const a = Math.random() * Math.PI * 2;
       const d = 8 + Math.random() * 22;
       w.wp.set(selfPos.x + Math.cos(a) * d, 0, selfPos.z + Math.sin(a) * d);
-      w.wp.y = deps.terrain().getHeight(w.wp.x, w.wp.z) + 2;
+      w.wp.y = deps.lazyTerrain().getHeight(w.wp.x, w.wp.z) + 2;
     }
     return w.wp;
   }
@@ -172,8 +172,8 @@ export function createSpeciesKit(deps: EntitiesDeps, targets: Targetable[]) {
   // Compact orange pop shared by turret shells, totem bolts, mines — reads
   // as a small explosion, not a rocket.
   function boltPop(pos: THREE.Vector3, scale: number, color: number, shake: number): void {
-    deps.world.explosions.push(new Explosion(scene, pos, false, 0, deps.terrain(), scale, color));
-    screenShake.blast(pos, shake, deps.player().pos);
+    deps.world.explosions.push(new Explosion(scene, pos, false, 0, deps.lazyTerrain(), scale, color));
+    screenShake.blast(pos, shake, deps.lazyPlayer().pos);
     sfx.explosionAt(pos, false);
   }
 
@@ -199,9 +199,9 @@ export function createSpeciesKit(deps: EntitiesDeps, targets: Targetable[]) {
       // anyway are harmless defense — director events call them directly.)
       // ?spawns=random: ambient timers stay off — the random director
       // owns population so the total budget isn't double-spent.
-      if (!RANDOM_SPAWNS && !deps.demoManager()?.isPlaying) s.spawn();
+      if (!RANDOM_SPAWNS && !deps.lazyDemoManager()?.isPlaying) s.spawn();
     }
-    const playerPos = deps.player().pos;
+    const playerPos = deps.lazyPlayer().pos;
     for (let i = s.list.length - 1; i >= 0; i--) {
       const e = s.list[i]!;
       const dSq = e.pos.distanceToSquared(playerPos);
@@ -229,7 +229,7 @@ export function createSpeciesKit(deps: EntitiesDeps, targets: Targetable[]) {
     e.emergeT = EMERGE_DUR;
     e.emergeDepth = e.radius * 2.2;
     e.emergeRestY = e.pos.y;
-    deps.effects().spawnJumpDust(e.pos);
+    deps.lazyEffects().spawnJumpDust(e.pos);
   }
 
   // Rare uber roll — ambient (no-pos) spawns only. Event/demo/director
@@ -245,13 +245,13 @@ export function createSpeciesKit(deps: EntitiesDeps, targets: Targetable[]) {
     if (e.dead) return;
     const sp = Math.hypot(e.vel.x, e.vel.z);
     if (sp < 2) return; // creepers don't raise dust
-    const gy = deps.terrain().getHeight(e.pos.x, e.pos.z);
+    const gy = deps.lazyTerrain().getHeight(e.pos.x, e.pos.z);
     if (e.pos.y - gy > e.radius * 2.5) return; // airborne — no ground contact
     const acc = (dustAcc.get(e) ?? 0) + sp * dt;
     const spacing = e.radius * 1.5 + 0.4;
     if (acc >= spacing) {
       dustAcc.set(e, acc - spacing);
-      deps.effects().spawnMoveDust(e.pos, e.vel, sp, e.radius);
+      deps.lazyEffects().spawnMoveDust(e.pos, e.vel, sp, e.radius);
     }
   }
 
@@ -268,7 +268,7 @@ export function createSpeciesKit(deps: EntitiesDeps, targets: Targetable[]) {
     const spacing = 2.5 + Math.random() * 1.5; // irregular — no dotted-line uniformity
     if (acc >= spacing) {
       trailAcc.set(e, acc - spacing);
-      deps.effects().spawnFlyTrail(e.pos, e.vel, sp);
+      deps.lazyEffects().spawnFlyTrail(e.pos, e.vel, sp);
     }
   }
 

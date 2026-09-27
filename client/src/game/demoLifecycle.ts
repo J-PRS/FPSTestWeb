@@ -15,21 +15,21 @@ import type { WorldState } from './worldState.js';
 const logger = new ChildLogger('DemoPlayback');
 
 export interface DemoLifecycleDeps {
-  scene: () => THREE.Scene;
-  terrain: () => Terrain;
-  camera: () => THREE.PerspectiveCamera;
-  player: () => Player;
-  demoManager: () => DemoManager | null;
+  lazyScene: () => THREE.Scene;
+  lazyTerrain: () => Terrain;
+  lazyCamera: () => THREE.PerspectiveCamera;
+  lazyPlayer: () => Player;
+  lazyDemoManager: () => DemoManager | null;
   damageNumberManager: () => DamageNumberManager;
   fragMessages: () => FragMessages;
-  hud: () => HUD;
+  lazyHud: () => HUD;
   balls: Ball[];
   targets: import('../entities/balls.js').Targetable[]; // balls+crawlers live here too — keep in sync on removal
   crawlers: import('../entities/Crawler.js').Crawler[];
   turrets: import('../entities/Turretter.js').Turretter[];
   rollers: import('../entities/Roller.js').Roller[];
   seekers: import('../entities/Seeker.js').Seeker[];
-  miners: import('../entities/Miner.js').Miner[];
+  overlords: import('../entities/Overlord.js').Overlord[];
   mines: import('../entities/Mine.js').Mine[];
   totems: import('../entities/Totem.js').Totem[];
   rakks: import('../entities/Rakk.js').Rakk[];
@@ -50,10 +50,10 @@ export function createDemoLifecycle(deps: DemoLifecycleDeps) {
   let seekReconstructing = false;
 
   const playbackWorld: PlaybackWorld = {
-    get scene() { return deps.scene(); },
-    get terrain() { return deps.terrain(); },
-    get camera() { return deps.camera(); },
-    getPlayer: () => deps.player(),
+    get scene() { return deps.lazyScene(); },
+    get terrain() { return deps.lazyTerrain(); },
+    get camera() { return deps.lazyCamera(); },
+    getPlayer: () => deps.lazyPlayer(),
     balls: deps.balls,
     debrisList: deps.world.debrisList,
     explosions: deps.world.explosions,
@@ -64,13 +64,13 @@ export function createDemoLifecycle(deps: DemoLifecycleDeps) {
     playbackProjectileOrigin,
     get damageNumberManager() { return deps.damageNumberManager(); },
     get fragMessages() { return deps.fragMessages(); },
-    get hud() { return deps.hud(); },
+    get hud() { return deps.lazyHud(); },
   };
 
   function updatePlaybackProjectiles(dt: number): void {
     for (let i = playbackProjectiles.length - 1; i >= 0; i--) {
       const r = playbackProjectiles[i];
-      r.update(dt, deps.terrain());
+      r.update(dt, deps.lazyTerrain());
       if (r.dead) {
         r.dispose();
         playbackProjectiles.splice(i, 1);
@@ -86,8 +86,8 @@ export function createDemoLifecycle(deps: DemoLifecycleDeps) {
 
   // During playback: only update playback balls, skip live game balls and spawning
   function updateBallsPlayback(dt: number): void {
-    const terrain = deps.terrain();
-    const player = deps.player();
+    const terrain = deps.lazyTerrain();
+    const player = deps.lazyPlayer();
     const playbackBallSet = new Set(playbackBallById.values());
     let frozenCount = 0;
     for (let i = deps.balls.length - 1; i >= 0; i--) {
@@ -135,6 +135,8 @@ export function createDemoLifecycle(deps: DemoLifecycleDeps) {
     deps.world.explosions.length = 0;
     for (const i of deps.world.implosions) i.dispose();
     deps.world.implosions.length = 0;
+    for (const g of deps.world.aoeGizmos) g.dispose();
+    deps.world.aoeGizmos.length = 0;
     for (const d of deps.world.playerDebrisList) d.dispose();
     deps.world.playerDebrisList.length = 0;
   }
@@ -142,7 +144,7 @@ export function createDemoLifecycle(deps: DemoLifecycleDeps) {
   // Snapshot existing alive balls into the demo recording — needed when recording
   // starts after balls are already in the scene (they have no Spawned event yet).
   function snapshotExistingBallsForRecording(onBallRecorded?: (ball: Ball) => void): void {
-    const dm = deps.demoManager();
+    const dm = deps.lazyDemoManager();
     if (!dm?.isRecording) return;
     for (const ball of deps.balls) {
       if (ball.dead) continue;
@@ -163,7 +165,7 @@ export function createDemoLifecycle(deps: DemoLifecycleDeps) {
     };
     demoManager.onPlaybackState = (state) => {
       if (demoManager.isPlaying) {
-        const player = deps.player();
+        const player = deps.lazyPlayer();
         player.pos.set(state.posX, state.posY, state.posZ);
         player.vel.set(state.velX, state.velY, state.velZ);
         player.yaw = state.yaw;
@@ -185,6 +187,7 @@ export function createDemoLifecycle(deps: DemoLifecycleDeps) {
         document.exitPointerLock();
       }
       deps.overlay.style.display = 'flex';
+      document.body.classList.add('menu-open'); // hides the HUD layer — same as overlayInput.setOverlay
       demoManager.fetchCoolShotsFromServer();
       // Resume recording for new cool shots
       demoManager.startRecording();
@@ -211,7 +214,7 @@ export function createDemoLifecycle(deps: DemoLifecycleDeps) {
       // frozen in the scene during playback
       for (const m of deps.mines) m.onDetonate = undefined; // teardown isn't a detonation
       type DisposableTarget = import('../entities/balls.js').Targetable & { dispose(): void };
-      for (const list of [deps.crawlers, deps.turrets, deps.rollers, deps.seekers, deps.miners, deps.mines, deps.totems, deps.rakks] as DisposableTarget[][]) {
+      for (const list of [deps.crawlers, deps.turrets, deps.rollers, deps.seekers, deps.overlords, deps.mines, deps.totems, deps.rakks] as DisposableTarget[][]) {
         for (const e of list) {
           e.dispose();
           const ti = deps.targets.indexOf(e);

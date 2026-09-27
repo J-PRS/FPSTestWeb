@@ -15,6 +15,7 @@ import type { GameStatePlayer, LocalPlayerState } from '../../../shared/protocol
 import { Projectile } from '../projectiles/Projectile.js';
 import { ROCKET_CONFIG, getProjectileConfig } from '../projectiles/index.js';
 import type { WorldState } from './worldState.js';
+import type { createEntities } from './entities.js';
 import type { FragMessages } from '../ui/FragMessages.js';
 import type { HUD } from '../ui/hud.js';
 import type { HealthBarSystem } from '../ui/HealthBarSystem.js';
@@ -22,28 +23,29 @@ import type { ExplosionTracker } from '../utils/ExplosionTracker.js';
 import type { Terrain } from '../world/terrain.js';
 
 export interface NetDeps {
-  networkManager(): NetworkManager;
-  scene(): THREE.Scene;
-  terrain(): Terrain;
-  player(): Player;
-  effects(): EffectsManager;
-  hud(): HUD;
-  healthBarSystem(): HealthBarSystem;
+  lazyNetworkManager(): NetworkManager;
+  lazyScene(): THREE.Scene;
+  lazyTerrain(): Terrain;
+  lazyPlayer(): Player;
+  lazyEffects(): EffectsManager;
+  lazyHud(): HUD;
+  lazyHealthBarSystem(): HealthBarSystem;
   fragMessages: FragMessages;
   explosionTracker: ExplosionTracker;
   logger: ChildLogger;
   world: WorldState;
   setLastSentPos(pos: { x: number; y: number; z: number }): void;
+  entities: () => ReturnType<typeof createEntities>;
 }
 
 export function wireNetworkHandlers(deps: NetDeps): void {
   const { logger } = deps;
-  const nm = () => deps.networkManager();
-  const networkManager = deps.networkManager();
+  const nm = () => deps.lazyNetworkManager();
+  const networkManager = deps.lazyNetworkManager();
 
   // Both first-seen-update and respawn-into-missing end up here
   function ensureRemotePlayer(playerId: string, position: { x: number; y: number; z: number }, via: string): RemotePlayer {
-    const rp = new RemotePlayer(deps.scene(), playerId, position, deps.terrain());
+    const rp = new RemotePlayer(deps.lazyScene(), playerId, position, deps.lazyTerrain());
     deps.world.remotePlayers.set(playerId, rp);
     logger.debug(`CREATED remote player (${via})`, { instanceId: rp.instanceId, playerId, total: deps.world.remotePlayers.size });
     return rp;
@@ -53,9 +55,9 @@ export function wireNetworkHandlers(deps: NetDeps): void {
   networkManager.onPlayerHit = (shooterId: string, targetId: string, damage: number, health: number) => {
     // Check if local player was hit
     if (targetId === nm().getLocalPlayerId()) {
-      deps.player().health = health;
+      deps.lazyPlayer().health = health;
       // Point the damage arc at the shooter's last known position
-      deps.hud().showDamage(deps.world.remotePlayers.get(shooterId)?.pos ?? null, damage);
+      deps.lazyHud().showDamage(deps.world.remotePlayers.get(shooterId)?.pos ?? null, damage);
       sfx.playerHurt();
       logger.info(`Local player hit for ${damage} damage by ${shooterId} (health: ${health})`);
       return;
@@ -63,13 +65,13 @@ export function wireNetworkHandlers(deps: NetDeps): void {
 
     // Non-lethal hits don't trigger death animation
     logger.info(`Remote player ${targetId} hit for ${damage} damage by ${shooterId} (health: ${health})`);
-    deps.healthBarSystem().spawn(targetId, damage, health);
+    deps.lazyHealthBarSystem().spawn(targetId, damage, health);
   };
 
   // Register knockback handler — server tells us to apply knockback/pull to our local player
   networkManager.onKnockback = (position: { x: number; y: number; z: number }, force: number, pull?: boolean) => {
     const from = new THREE.Vector3(position.x, position.y, position.z);
-    const player = deps.player();
+    const player = deps.lazyPlayer();
     if (pull) {
       player.applyPull(from, force);
     } else {
@@ -83,7 +85,7 @@ export function wireNetworkHandlers(deps: NetDeps): void {
   //  <5m          → blend halfway toward server state (soft nudge)
   //  ≥5m          → hard snap: genuine desync, take the server state
   networkManager.onCorrection = (_seq: number, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }) => {
-    const player = deps.player();
+    const player = deps.lazyPlayer();
     const dx = player.pos.x - position.x, dy = player.pos.y - position.y, dz = player.pos.z - position.z;
     const err = Math.sqrt(dx * dx + dy * dy + dz * dz);
     if (err < 0.5) {
@@ -101,9 +103,20 @@ export function wireNetworkHandlers(deps: NetDeps): void {
     }
     player.pos.set(position.x, position.y, position.z);
     player.vel.set(velocity.x, velocity.y, velocity.z);
-    player.yaw = rotation.yaw;
-    player.pitch = rotation.pitch;
+    // NEVER touch yaw/pitch — the server echoes our last *accepted*
+    // rotation, which can be seconds stale. Aim is client-authoritative;
+    // snapping it warps the camera 40-60° for no gameplay reason.
+    void rotation;
     player.syncMovement();
+  };
+
+  // Declared remote teleport (another player's warp): snap the visual —
+  // interpolating across a 50m gap reads as a rocket-flight glitch
+  networkManager.onRemoteTeleport = (playerId: string, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }) => {
+    const rp = deps.world.remotePlayers.get(playerId);
+    if (!rp) return;
+    rp.teleportTo(new THREE.Vector3(position.x, position.y, position.z));
+    void velocity; // next tick record carries it — no need to touch internals
   };
 
   // Register player kill handler (lethal kills)
@@ -112,12 +125,14 @@ export function wireNetworkHandlers(deps: NetDeps): void {
     // Check if local player was killed
     if (targetId === nm().getLocalPlayerId()) {
       logger.info(`Local player killed by ${shooterId}`);
-      const player = deps.player();
+      const player = deps.lazyPlayer();
       player.isDead = true;
       player.health = 0;
-      deps.hud().hide();
-      deps.hud().setDeathOverlay(true);
-      deps.fragMessages.show(shooterId === 'environment' ? 'YOU DIED\ndevoured by a crawler' : `YOU DIED\nfragged by ${shooterId}`);
+      deps.lazyHud().hide();
+      deps.lazyHud().setDeathOverlay(true);
+      deps.fragMessages.show(shooterId === 'environment'
+        ? `YOU DIED\n${player.lastDamageSource || 'claimed by the wasteland'}`
+        : `YOU DIED\nfragged by ${shooterId}`);
       return;
     }
 
@@ -151,15 +166,15 @@ export function wireNetworkHandlers(deps: NetDeps): void {
       remotePlayer.playDeath(explosionPos, explosionForce);
 
       // Spawn player debris at player center (position is feet, so add half height)
-      const debris = new PlayerDebris(deps.scene(), deps.terrain(), remotePlayer.position.x, remotePlayer.position.y + 1.0, remotePlayer.position.z);
+      const debris = new PlayerDebris(deps.lazyScene(), deps.lazyTerrain(), remotePlayer.position.x, remotePlayer.position.y + 1.0, remotePlayer.position.z);
       deps.world.playerDebrisList.push(debris);
 
       // Hide the model immediately
       remotePlayer.hide();
 
       // Remove HUD indicator on kill
-      deps.hud().removePlayerIndicator(targetId);
-      deps.healthBarSystem().removeBar(targetId);
+      deps.lazyHud().removePlayerIndicator(targetId);
+      deps.lazyHealthBarSystem().removeBar(targetId);
 
       logger.info(`Player ${targetId} killed by ${shooterId}`);
     }
@@ -168,13 +183,13 @@ export function wireNetworkHandlers(deps: NetDeps): void {
   // Register jump handler for remote players
   networkManager.onPlayerJump = (_playerId: string, position: { x: number; y: number; z: number }) => {
     const pos = new THREE.Vector3(position.x, position.y, position.z);
-    deps.effects().spawnJumpDust(pos);
+    deps.lazyEffects().spawnJumpDust(pos);
   };
 
   // Register jetpack handler for remote players
   networkManager.onPlayerJetpack = (_playerId: string, position: { x: number; y: number; z: number }) => {
     const pos = new THREE.Vector3(position.x, position.y, position.z);
-    deps.effects().spawnJetpack(pos);
+    deps.lazyEffects().spawnJetpack(pos);
   };
 
   // Register player update handler for remote players
@@ -216,7 +231,7 @@ export function wireNetworkHandlers(deps: NetDeps): void {
     const origin = new THREE.Vector3(position.x, position.y, position.z);
     const dir = vel.clone().normalize();
     const cfg = (weaponType !== undefined ? getProjectileConfig(weaponType) : undefined) ?? ROCKET_CONFIG;
-    const remoteProjectile = new Projectile(deps.scene(), origin, dir, new THREE.Vector3(0, 0, 0), cfg);
+    const remoteProjectile = new Projectile(deps.lazyScene(), origin, dir, new THREE.Vector3(0, 0, 0), cfg);
     remoteProjectile.vel.copy(vel); // override with exact server velocity
     remoteProjectile.isRemote = true;
     remoteProjectile.spawnedThisFrame = false; // remote projectiles don't need first-frame skip
@@ -261,17 +276,19 @@ export function wireNetworkHandlers(deps: NetDeps): void {
     // Check if local player respawned
     if (playerId === nm().getLocalPlayerId()) {
       logger.info(`Local player respawned at ${JSON.stringify(position)}`);
-      const player = deps.player();
+      const player = deps.lazyPlayer();
       player.isDead = false;
       player.health = 100;
+      player.lastDamageSource = ''; // stale attribution shouldn't survive a life
       player.vel.set(0, 0, 0);
       player.pos.set(position.x, position.y, position.z);
       deps.setLastSentPos({ x: position.x, y: position.y, z: position.z });
       player.yaw = rotation.yaw;
       player.pitch = rotation.pitch;
       player.syncMovement(); // reseat controller or its snapshot overwrites the respawn
-      deps.hud().show();
-      deps.hud().setDeathOverlay(false);
+      player.markTeleport(); // spawn point can sit >50m from the corpse
+      deps.lazyHud().show();
+      deps.lazyHud().setDeathOverlay(false);
       return;
     }
 
@@ -291,13 +308,22 @@ export function wireNetworkHandlers(deps: NetDeps): void {
     // The updatePlayerIndicator in the main loop will recreate it automatically
   };
 
+  // ---- Server-owned creatures (balls) ------------------------------------
+  // Events only — the client replays the shared sim between segments.
+  networkManager.onBallSpawn = (data) => deps.entities().netBallSpawn(data);
+  networkManager.onBallSegment = (data) => deps.entities().netBallSegment(data);
+  networkManager.onBallDie = (data) => deps.entities().netBallDie(data);
+  networkManager.onBallRoster = (data) => {
+    for (const b of data.balls) deps.entities().netBallSpawn(b);
+  };
+
   // Register playerJoined handler (for new players joining after initial connection)
   networkManager.onPlayerJoined = (playerId: string, position: { x: number; y: number; z: number }, _rotation: { yaw: number; pitch: number }) => {
     // Safety: server excludes self from playerJoined broadcast, but guard anyway
     if (playerId === nm().getLocalPlayerId()) return;
     const playerData = nm().getPlayers().get(playerId);
     const internalId = playerData?.internalId || 'unknown';
-    const terrainHeight = deps.terrain().getHeight(position.x, position.z);
+    const terrainHeight = deps.lazyTerrain().getHeight(position.x, position.z);
     const aboveTerrain = position.y >= terrainHeight;
     logger.info(`Player joined: ${playerId} (internalId: ${internalId}) at ${JSON.stringify(position)} | Terrain height: ${terrainHeight.toFixed(1)} | ${aboveTerrain ? '✓ Above/at terrain' : '✗ BELOW TERRAIN'}`);
     // RemotePlayer will be created in the main loop when networkManager.getPlayers() includes this player
@@ -309,8 +335,8 @@ export function wireNetworkHandlers(deps: NetDeps): void {
     if (remotePlayer) {
       remotePlayer.dispose();
       deps.world.remotePlayers.delete(playerId);
-      deps.hud().removePlayerIndicator(playerId);
-      deps.healthBarSystem().removeBar(playerId);
+      deps.lazyHud().removePlayerIndicator(playerId);
+      deps.lazyHealthBarSystem().removeBar(playerId);
       logger.info(`Remote player removed (playerLeft): ${playerId}`);
     }
   };
@@ -322,7 +348,7 @@ export function wireNetworkHandlers(deps: NetDeps): void {
     if (!localPlayerState) return;
     logger.debug(`Restoring local player state from gameState: ${JSON.stringify(localPlayerState)}`);
 
-    const player = deps.player();
+    const player = deps.lazyPlayer();
     // Restore position and rotation
     player.pos.set(localPlayerState.position.x, localPlayerState.position.y, localPlayerState.position.z);
     deps.setLastSentPos({ x: localPlayerState.position.x, y: localPlayerState.position.y, z: localPlayerState.position.z });
@@ -345,11 +371,11 @@ export function wireNetworkHandlers(deps: NetDeps): void {
     player.syncMovement(); // reseat controller — restored pos/vel otherwise revert
 
     // If player was dead, show respawn UI
-    deps.hud().setDeathOverlay(player.isDead);
+    deps.lazyHud().setDeathOverlay(player.isDead);
     if (player.isDead) {
-      deps.hud().hide();
+      deps.lazyHud().hide();
     } else {
-      deps.hud().show();
+      deps.lazyHud().show();
     }
 
     logger.debug(`Player state restored from gameState - pos(${localPlayerState.position.x.toFixed(1)},${localPlayerState.position.y.toFixed(1)},${localPlayerState.position.z.toFixed(1)}) vel(${localPlayerState.velocity?.x.toFixed(1) || 0},${localPlayerState.velocity?.y.toFixed(1) || 0},${localPlayerState.velocity?.z.toFixed(1) || 0}) health:${localPlayerState.health} dead:${localPlayerState.isDead}`);

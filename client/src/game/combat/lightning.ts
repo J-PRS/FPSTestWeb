@@ -53,7 +53,7 @@ export function createLightning(deps: CombatDeps, hooks: LightningHooks) {
   // viewmodel pass (55) and world pass (90) means a raw view-space offset
   // lands on the wrong ray, which read as the bolt lagging the gun.
   function lgAnchorLive(cam: THREE.Camera, out: THREE.Vector3): void {
-    if (!deps.viewModel()?.muzzleAnchorWorld(WeaponType.Lightning, cam, out)) {
+    if (!deps.lazyViewModel()?.muzzleAnchorWorld(WeaponType.Lightning, cam, out)) {
       lgMuzzleAnchor(cam, out); // fixed-offset fallback until the node exists
     }
   }
@@ -64,7 +64,7 @@ export function createLightning(deps: CombatDeps, hooks: LightningHooks) {
   function pickChain(from: THREE.Vector3, exclude: (typeof deps.targets)[number]): (typeof deps.targets)[number] | null {
     let best: (typeof deps.targets)[number] | null = null;
     let bestD2 = LG_CHAIN_RANGE * LG_CHAIN_RANGE;
-    const cam = deps.camera();
+    const cam = deps.lazyCamera();
     cam.getWorldDirection(_lgTo);
     for (const t of deps.targets) {
       if (t.dead || t === exclude) continue;
@@ -95,7 +95,7 @@ export function createLightning(deps: CombatDeps, hooks: LightningHooks) {
       undefined, false, null, 0,
       // Server sees a normal Lightning blast for remote-player prediction;
       // the scaled damage is the PvE fantasy side (enemies are client-run)
-      (p, targetId) => deps.networkManager()?.sendAOEShot(p, WeaponType.Lightning, targetId),
+      (p, targetId) => deps.lazyNetworkManager()?.sendAOEShot(p, WeaponType.Lightning, targetId),
       'rocket', 0x8fdcff, radius * 0.8, WeaponType.Lightning,
     );
   }
@@ -115,7 +115,7 @@ export function createLightning(deps: CombatDeps, hooks: LightningHooks) {
     let hitT = LG_RANGE;
     for (let d = 1.5; d <= LG_RANGE; d += 1.5) {
       _lgP.copy(_lgO).addScaledVector(_lgD, d);
-      if (_lgP.y < deps.terrain().getHeight(_lgP.x, _lgP.z)) { hitT = d; break; }
+      if (_lgP.y < deps.lazyTerrain().getHeight(_lgP.x, _lgP.z)) { hitT = d; break; }
     }
 
     // Targets: ray-vs-sphere, nearest wins — tip lands on the SURFACE entry
@@ -160,7 +160,7 @@ export function createLightning(deps: CombatDeps, hooks: LightningHooks) {
   // the eye) — the bolt is welded to the rendered gun, sway and all.
   function updateBeamVisual(): void {
     if (!lgBeam || lgLastFire <= 0 || performance.now() - lgLastFire > 90) return;
-    const cam = deps.camera();
+    const cam = deps.lazyCamera();
     lgAnchorLive(cam, _lgMuzzle);
     // Re-trace EVERY FRAME — the 44ms tick tip goes ~1.7m stale during a
     // strafe, and a live trace tracks the enemy's surface as it moves.
@@ -191,10 +191,10 @@ export function createLightning(deps: CombatDeps, hooks: LightningHooks) {
   }
 
   function lightning(_e: FireArgs): void {
-    const cam = deps.camera();
-    const player = deps.player();
+    const cam = deps.lazyCamera();
+    const player = deps.lazyPlayer();
     const stats = getWeaponStats(WeaponType.Lightning);
-    if (!lgBeam) lgBeam = new LightningBeam(deps.scene());
+    if (!lgBeam) lgBeam = new LightningBeam(deps.lazyScene());
 
     const { hitT, hitTarget, hitPlayerId } = lgTrace(cam);
 
@@ -213,15 +213,15 @@ export function createLightning(deps: CombatDeps, hooks: LightningHooks) {
     lgAnchorLive(cam, _lgMuzzle);
     lgBeam.fire(_lgMuzzle, _lgHit, _lgO, hitT < LG_RANGE);
 
-    deps.viewModel()?.kick(0.22); // per-tick hum — stacks into a buzz
+    deps.lazyViewModel()?.kick(0.22); // per-tick hum — stacks into a buzz
     // Contact sparks only when the bolt actually lands on something —
     // a max-range miss is arcing into empty air, no impact to show
-    if (hitT < LG_RANGE) deps.effects().spawnImpact(_lgHit, _lgD);
+    if (hitT < LG_RANGE) deps.lazyEffects().spawnImpact(_lgHit, _lgD);
     sfx.shoot(WeaponType.Lightning);
 
     if (hitTarget) {
       hitTarget.applyKnockback(player.pos, stats.knockbackForce); // the pin
-      deps.damageNumbers().spawn(hitTarget.pos, stats.directDamage, '#8fdcff', cam);
+      deps.lazyDamageNumbers().spawn(hitTarget.pos, stats.directDamage, '#8fdcff', cam);
       // Charge: every tick pumped into this target banks toward its pop
       const acc = (lgAcc.get(hitTarget.id) ?? 0) + stats.directDamage;
       lgAcc.set(hitTarget.id, acc);
@@ -231,9 +231,9 @@ export function createLightning(deps: CombatDeps, hooks: LightningHooks) {
         lgPop(hitTarget.pos, acc);
         lgAcc.delete(hitTarget.id);
       } else if (!hitTarget.hideHealthBar) {
-        deps.healthBarSystem().spawnBall(hitTarget, stats.directDamage, hitTarget.health);
+        deps.lazyHealthBarSystem().spawnBall(hitTarget, stats.directDamage, hitTarget.health);
       }
-      deps.hud().showHitMarker();
+      deps.lazyHud().showHitMarker();
 
       // Chain fork: arc from the CONTACT POINT to the nearest OTHER enemy
       // in range — half damage, but it banks its own pop charge too
@@ -242,7 +242,7 @@ export function createLightning(deps: CombatDeps, hooks: LightningHooks) {
         lgBeam.fireChain(_lgHit, chainT.pos);
         const cdmg = stats.directDamage * LG_CHAIN_DMG_SCALE;
         chainT.applyKnockback(hitTarget.pos, stats.knockbackForce * 0.6);
-        deps.damageNumbers().spawn(chainT.pos, cdmg, '#8fdcff', cam);
+        deps.lazyDamageNumbers().spawn(chainT.pos, cdmg, '#8fdcff', cam);
         const cAcc = (lgAcc.get(chainT.id) ?? 0) + cdmg;
         lgAcc.set(chainT.id, cAcc);
         deps.reportTargetDamage?.(chainT, cdmg);
@@ -251,7 +251,7 @@ export function createLightning(deps: CombatDeps, hooks: LightningHooks) {
           lgPop(chainT.pos, cAcc);
           lgAcc.delete(chainT.id);
         } else if (!chainT.hideHealthBar) {
-          deps.healthBarSystem().spawnBall(chainT, cdmg, chainT.health);
+          deps.lazyHealthBarSystem().spawnBall(chainT, cdmg, chainT.health);
         }
       }
     }
@@ -259,7 +259,7 @@ export function createLightning(deps: CombatDeps, hooks: LightningHooks) {
     if (hitPlayerId) {
       // Server-authoritative damage claim at the point the beam lands on them;
       // applyForceToRemotes mirrors knockback+damage through the RTT gap.
-      const networkManager = deps.networkManager();
+      const networkManager = deps.lazyNetworkManager();
       if (networkManager?.isConnected()) {
         networkManager.sendAOEShot(
           { x: _lgHit.x, y: _lgHit.y, z: _lgHit.z },

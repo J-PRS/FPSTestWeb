@@ -1740,3 +1740,10 @@
 - cannon rebuilt as stacked bulged segments w/ pinch rings per JP ref; shotgun model baked too
 - vmdump: continuous render loop (was screenshotting pre-swap), game-accurate ACES 0.4 + real light rig, close-up cam
 - pipeline doc: _reports/2026-09-27_weapon-bake-pipeline.md
+== architecture overhaul (structure only, no behavior changes) ==
+- combat.ts split: fire handlers -> game/combat/fire.ts, lightning gun -> game/combat/lightning.ts
+- Player.ts skills state (bounce/blink/dash/slam/warp) -> entities/player/skills.ts
+- ViewModel weapon mesh builders -> entities/viewmodel/weaponsGeo.ts
+- sfx.ts -> core/sfx/ per-family modules (barrel re-export, call sites unchanged)
+- hud.ts stylesheet/DOM -> ui/hud/dom.ts
+- dep-bag flatten: lazy* naming on all deferred getters; shared GameContext in game/context.ts

@@ -7,6 +7,7 @@ import { DemoRecorder } from './DemoRecorder.js';
 import { DemoSerializer } from './DemoSerializer.js';
 import type { DemoFile } from './types.js';
 import { ChildLogger } from '../core/Logger.js';
+import { feedShot } from '../ui/shotFeed.js';
 
 const logger = new ChildLogger('Demo');
 
@@ -32,6 +33,8 @@ interface PendingClip {
   clipStart: number;
   clipEnd: number;
   projectileLifetime: number;
+  /** Recording time when the (first) shot was fired — for the battle log. */
+  shotTime: number;
   description: string;
   chainCount: number;
   bestLifetime: number;
@@ -120,6 +123,7 @@ export class CoolShotManager {
       clipStart,
       clipEnd,
       projectileLifetime,
+      shotTime,
       description: desc,
       chainCount: 1,
       bestLifetime: projectileLifetime,
@@ -170,6 +174,7 @@ export class CoolShotManager {
 
     logger.debug(`Auto-saved clip: ${filename} (best lifetime ${pending.bestLifetime.toFixed(2)}s, chain x${pending.chainCount})`);
     this.deps.setStatus(`Clip saved! ${pending.bestLifetime.toFixed(1)}s air${pending.chainCount > 1 ? ` x${pending.chainCount}` : ''}`);
+    feedShot(pending.shotTime, pending.bestLifetime, pending.chainCount);
   }
 
   // Keep top 10 by lifetime + recent 10 by timestamp (may overlap)
