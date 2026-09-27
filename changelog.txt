@@ -1764,3 +1764,9 @@
 - entities: nuggets magnet to nearest living collector (player or bot); spawnNuggetsAt for bot-death drops
 - HUD: top-center ALPHA-vs-BRAVO score; remotes cleanup exempts bot: ids
 - local player death/respawn handled offline (3s, random ring spawn)
+== CTF + DM modes (?mode=ctf / ?mode=dm) ==
+- shared/teams.ts: MODES table (label/teams/ffa/flags/winAt/kill pts) + flag rules (pickup 2.2m, home ring 8m, 20s auto-return)
+- dm: FFA — each bot its own pseudo-team, player kill +10, creature kill +1, win at 100; HUD shows you-vs-leader
+- ctf: flag pole+banner at team bases ±70m; touch enemy flag to carry (rides overhead), reach own base ring to capture (+1, win at 5); touch dropped own flag returns it; drops on death
+- bot brains: CTF objective priority (carry flag home > grab enemy flag > return own > fight/gem); dm bots hunt everyone incl. creatures
+- combat.hitTargetLocal returns kill bool; onCreatureKilled hook credits local in dm

@@ -51,6 +51,8 @@ export interface CombatDeps extends GameContext {
    *  (no server to claim to). Returns true when it consumed the hit —
    *  callers then skip the predictDamage/sendShot path. */
   botHit?: (playerId: string, dmg: number, fromPos: THREE.Vector3, attackerId?: string) => boolean;
+  /** A creature died by local hands — DM scoring credits 'local'. */
+  onCreatureKilled?: () => void;
   balls: Ball[];
   targets: import('../entities/balls.js').Targetable[]; // balls + crawlers — shootable/blastable
   nuggets: Nugget[];
@@ -556,7 +558,7 @@ export function createCombat(deps: CombatDeps) {
     }
     screenShake.blast(ball.pos, 1.6, deps.lazyPlayer().pos);
     sfx.enemyCue(ball.pos, ball.dieCue ?? 'die');
-    if (!ball.scoreless) deps.lazyPlayer().kills++;
+    if (!ball.scoreless) { deps.lazyPlayer().kills++; deps.onCreatureKilled?.(); }
     if (!ball.lootless) {
       for (let n = 0; n < Math.round(ball.scale); n++) {
         deps.nuggets.push(new Nugget(deps.lazyScene(), ball.pos, ball.vel));
@@ -623,11 +625,12 @@ export function createCombat(deps: CombatDeps) {
 
   /** Nugget Wars bots damaging creatures: the identical funnel a
    *  projectile hit runs — aggro report, damage numbers, kill pipeline. */
-  function hitTargetLocal(t: import('../entities/balls.js').Targetable, dmg: number): void {
+  function hitTargetLocal(t: import('../entities/balls.js').Targetable, dmg: number): boolean {
     deps.reportTargetDamage?.(t, dmg);
     deps.lazyDamageNumbers().spawn(t.pos, Math.round(dmg), '#ffe08a', deps.lazyCamera());
-    if (t.takeDamage(dmg)) onTargetDestroyed(t, t.vel);
-    else if (!t.hideHealthBar) deps.lazyHealthBarSystem().spawnBall(t, dmg, t.health);
+    if (t.takeDamage(dmg)) { onTargetDestroyed(t, t.vel); return true; }
+    if (!t.hideHealthBar) deps.lazyHealthBarSystem().spawnBall(t, dmg, t.health);
+    return false;
   }
 
   return {

@@ -226,6 +226,7 @@ async function init(): Promise<void> {
     cookBoltsNear: (pos, r) => entities.cookBoltsNear(pos, r),
     reportTargetDamage: (t, dmg) => entities.reportTargetDamage(t, dmg),
     botHit: (id, dmg, fromPos) => teamBots?.hit(id, dmg, fromPos) ?? false,
+    onCreatureKilled: () => teamBots?.creatureKilled('local'),
     balls: entities.balls,
     targets: entities.targets,
     nuggets: entities.nuggets,
@@ -247,10 +248,11 @@ async function init(): Promise<void> {
   wirePlayerHooks({ player, combat, effects, viewModel, speedLines });
   profiler.markTime('playerCreated');
 
-  // ?mode=nuggets — Nugget Wars: you + 4 bots vs 5 bots, first team to bank
-  // 100 nuggets wins. Bots live in world.remotePlayers so creatures hunt
-  // them and projectiles hit them like real players.
-  if (new URLSearchParams(location.search).get('mode') === 'nuggets') {
+  // ?mode=nuggets|ctf|dm — offline-vs-bots modes. Bots live in
+  // world.remotePlayers so creatures hunt them and projectiles hit them
+  // like real players.
+  const mode = new URLSearchParams(location.search).get('mode');
+  if (mode === 'nuggets' || mode === 'ctf' || mode === 'dm') {
     teamBots = new TeamBots(
       {
         lazyPlayer: () => player,
@@ -310,12 +312,13 @@ async function init(): Promise<void> {
         },
         damageCreature: (id, dmg) => {
           const t = entities.targets.find(x => x.id === id);
-          if (!t || t.dead) return;
-          combat.hitTargetLocal(t, dmg); // same pipeline as a projectile hit
+          if (!t || t.dead) return false;
+          return combat.hitTargetLocal(t, dmg); // same pipeline as a projectile hit
         },
       },
       'alpha',
-      { alpha: 4, bravo: 5 },
+      mode === 'dm' ? { alpha: 5, bravo: 4 } : { alpha: 4, bravo: 5 },
+      mode,
     );
     hud.setTeamScore(0, 0);
   }
