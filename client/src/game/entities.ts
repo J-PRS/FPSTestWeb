@@ -641,37 +641,27 @@ export function createEntities(deps: EntitiesDeps) {
   }
 
   // ---- Totems (peak-seeking sniper obelisks) ----
-  function spawnTotem(): void {
+  // Uber totem — the elite sniper: predicts your velocity, tags a held
+  // course. One at a time; the fat gold obelisk + wide death ray IS the tell.
+  function spawnTotem(uber = false): void {
     if (deps.lazyDemoManager()?.isPlaying) return;
-    if (totems.filter(t => !t.dead).length >= TOTEM_MAX) return;
+    const cap = uber ? UBER_TOTEM_MAX : TOTEM_MAX;
+    if (totems.filter(t => !t.dead && (!uber || t.uber)).length >= cap) return;
     const player = deps.lazyPlayer();
-    const t = new Totem(scene, deps.lazyTerrain(), ringPos(TOTEM_SPAWN_MIN, TOTEM_SPAWN_MAX));
-    t.onBoltLand = (pos) => boltPop(pos, 0.35, 0xff5566, 2.0);
+    const bolt = uber
+      ? { scale: 0.6, color: 0xffaa33, popDur: 3.0, force: 14, dmg: UBER_TOTEM_BOLT_DAMAGE, text: 'sniped by the grand totem' }
+      : { scale: 0.35, color: 0xff5566, popDur: 2.0, force: 8, dmg: TOTEM_BOLT_DAMAGE, text: 'struck down by a totem' };
+    const t = new Totem(scene, deps.lazyTerrain(), ringPos(TOTEM_SPAWN_MIN, TOTEM_SPAWN_MAX), uber);
+    t.onBoltLand = (pos) => boltPop(pos, bolt.scale, bolt.color, bolt.popDur);
     t.onBoltHit = () => {
-      boltPop(player.pos.clone(), 0.35, 0xff5566, 2.0);
-      hurtPlayer(t.pos, 8, TOTEM_BOLT_DAMAGE, 'struck down by a totem', undefined, t);
+      boltPop(player.pos.clone(), bolt.scale, bolt.color, bolt.popDur);
+      hurtPlayer(t.pos, bolt.force, bolt.dmg, bolt.text, undefined, t);
     };
     t.onBlink = (pos) => { deps.lazyEffects().spawnJumpDust(pos); sfx.enemyCue(pos, 'zap'); }; // departure puff at the old spot
     totems.push(t);
     targets.push(t);
   }
-
-  // Uber totem — the elite sniper: predicts your velocity, tags a held
-  // course. One at a time; the fat gold obelisk + wide death ray IS the tell.
-  function spawnUberTotem(): void {
-    if (deps.lazyDemoManager()?.isPlaying) return;
-    if (totems.filter(t => !t.dead && t.uber).length >= UBER_TOTEM_MAX) return;
-    const player = deps.lazyPlayer();
-    const t = new Totem(scene, deps.lazyTerrain(), ringPos(TOTEM_SPAWN_MIN, TOTEM_SPAWN_MAX), true);
-    t.onBoltLand = (pos) => boltPop(pos, 0.6, 0xffaa33, 3.0); // bigger ground scar
-    t.onBoltHit = () => {
-      boltPop(player.pos.clone(), 0.6, 0xffaa33, 3.0);
-      hurtPlayer(t.pos, 14, UBER_TOTEM_BOLT_DAMAGE, 'sniped by the grand totem', undefined, t);
-    };
-    t.onBlink = (pos) => { deps.lazyEffects().spawnJumpDust(pos); sfx.enemyCue(pos, 'zap'); };
-    totems.push(t);
-    targets.push(t);
-  }
+  function spawnUberTotem(): void { spawnTotem(true); }
 
   const totemSpecies: Species<Totem> = {
     list: totems, interval: TOTEM_SPAWN_INTERVAL, t: -120,
