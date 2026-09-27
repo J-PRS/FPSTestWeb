@@ -41,10 +41,11 @@ surface. Detailed research lives in `_reports/`; this file is the current truth.
   secondary weapons, remote-player anim overhaul, SnapshotBuffer tests
 - pvptest E2E harness: --test…--test5, staleprobe, ballreplay
 
+- Persistent identity: playerId claims are HMAC-signed (FPS_SECRET env;
+  random per boot if unset). localStorage-backed on the client — names
+  survive restarts and can't be stolen by id knowledge alone.
+
 ### Next (audit priority order)
-2. **Persistence** — sessionStorage identity is forgeable. Options: signed
-   session tokens (HMAC, zero deps) → later real accounts. Server issues
-   `{playerId, sig}` cookie/payload; reconnects + name claims get real.
 3. **16-24 bot load test** — prove headroom before matchmaking exists.
    Measure /metrics tick lag + bandwidth at 16/24/32 fake players.
 4. **Lag compensation** — hitscan/AOE rewind buffer (~150ms of positions per

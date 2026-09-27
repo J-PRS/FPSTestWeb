@@ -53,6 +53,10 @@ export const CONFIG = {
   // Server-owned creature sim — binary heightmap (8-byte w/h header + raw R
   // channel) matching the client's test_vertex.png source.
   heightmapPath: envStr('FPS_HEIGHTMAP', ''),
+  // Identity secret: session tokens are HMAC(playerId, secret). Set
+  // FPS_SECRET to keep identities valid across restarts; unset = random
+  // per boot (fine for dev, tokens die with the process).
+  identitySecret: envStr('FPS_SECRET', ''),
 
   rateLimits: {
     position: { maxCount: 30, windowMs: 1000 },

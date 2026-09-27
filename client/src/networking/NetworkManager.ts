@@ -68,18 +68,18 @@ export class NetworkManager {
   private readonly PING_INTERVAL = 2000; // Send ping every 2 seconds
 
   constructor() {
-    // Player ID persists in sessionStorage so F5 refreshes reclaim the
-    // grace-period slot instead of joining as a ghost duplicate
-    const stored = sessionStorage.getItem('fps-player-id');
+    // Player ID + token persist in localStorage — a claimed identity
+    // survives F5, browser restarts, and (with FPS_SECRET) server restarts.
+    const stored = localStorage.getItem('fps-player-id');
     if (stored) {
       this.localPlayerId = stored;
     } else {
       this.localPlayerId = `player_${Math.random().toString(36).substr(2, 9)}`;
-      sessionStorage.setItem('fps-player-id', this.localPlayerId);
+      localStorage.setItem('fps-player-id', this.localPlayerId);
     }
     // Session token issued by the server on first join — required to
     // reclaim a grace-period slot after F5/reconnect
-    this.sessionToken = sessionStorage.getItem('fps-session-token');
+    this.sessionToken = localStorage.getItem('fps-session-token');
   }
 
   setPlayerId(playerId: string): void {
@@ -113,11 +113,11 @@ export class NetworkManager {
             // 1008 = server rejected our session — drop stored identity so
             // auto-reconnect joins fresh instead of looping on bad creds
             if (code === 1008) {
-              sessionStorage.removeItem('fps-player-id');
-              sessionStorage.removeItem('fps-session-token');
+              localStorage.removeItem('fps-player-id');
+              localStorage.removeItem('fps-session-token');
               this.sessionToken = null;
               this.localPlayerId = `player_${Math.random().toString(36).substr(2, 9)}`;
-              sessionStorage.setItem('fps-player-id', this.localPlayerId);
+              localStorage.setItem('fps-player-id', this.localPlayerId);
               logger.info(`Session rejected (${reason}) — rejoining as ${this.localPlayerId}`);
             }
             logger.info('Disconnected');
@@ -162,7 +162,7 @@ export class NetworkManager {
     // Capture the server-issued session token for future reconnects
     if (data?.type === 'gameState' && typeof data.sessionToken === 'string') {
       this.sessionToken = data.sessionToken;
-      sessionStorage.setItem('fps-session-token', data.sessionToken);
+      localStorage.setItem('fps-session-token', data.sessionToken);
     }
     // Avoid JSON.stringify on every message — tickUpdate arrives at 20Hz
     const handler = this.handlers[data.type] as ((d: ServerMessage) => void) | undefined;
