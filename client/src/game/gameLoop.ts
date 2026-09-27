@@ -279,7 +279,7 @@ export function createGameLoop(deps: GameLoopDeps) {
     hud.setTimer(deps.waveDirector().elapsed);
     deps.ambientBirds.positions(_birdPosBuf);
     hud.updateMinimap(entities.targets, entities.nuggets, player.pos, player.yaw, _birdPosBuf);
-    viewModel.group.visible = !demoManager?.isPlaying && !player.isDead && !player.thirdPerson;
+    viewModel.group.visible = !demoManager?.isPlaying && !player.isDead && !player.thirdPerson && !player.isSpectating;
     const yawDelta = Math.atan2(Math.sin(player.yaw - lastPlayerYaw), Math.cos(player.yaw - lastPlayerYaw));
     viewModel.update(dt, yawDelta, player.pitch - lastPlayerPitch, player.vel, camera);
     lastPlayerYaw = player.yaw;

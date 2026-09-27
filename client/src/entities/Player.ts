@@ -53,6 +53,25 @@ export class Player {
   lastDamageSource = '';
   inputFrozen = false; // when true, keyboard/mouse input is ignored (demo playback)
 
+  // Spectator fly: the death-observer free-flight cam without dying — no
+  // desaturation, no respawn timer, body follows the ghost (pos IS the
+  // camera rig). Toggled by the 'spectate' bind (V).
+  private spectating = false;
+  get isSpectating(): boolean { return this.spectating; }
+  toggleSpectator(): void {
+    if (this.isDead) return; // dead already gives you this cam
+    this.spectating = !this.spectating;
+    // Land mid-toggle-off in the air and the body floats — drop the ghost's
+    // drift so gravity owns the fall again. Also drop any fire/jet clicks
+    // queued while ghosted so they don't discharge on the way out.
+    if (!this.spectating) {
+      this.vel.set(0, 0, 0);
+      this.firePending = false;
+      this.jetPending = false;
+    }
+    this.model?.setVisible(!this.spectating && this.thirdPerson && !this.isDead);
+  }
+
   freezeInput(): void {
     this.inputFrozen = true;
     // Clear all tracked input so nothing leaks from before playback
@@ -272,6 +291,10 @@ export class Player {
     document.addEventListener('keydown', (e) => {
       if (this.inputFrozen) return;
       this.keys[e.code] = true;
+      if (matchCode('spectate', e.code) && !e.repeat) this.toggleSpectator();
+      // Spectating: only the spectate toggle and raw movement keys (tracked
+      // above for the fly cam) respond — no weapons, skills, camera flips
+      if (this.spectating) return;
       if (matchCode('jump', e.code)) {
         this.jumpHeld = true;
       }
@@ -430,11 +453,11 @@ export class Player {
   }
 
   update(dt: number): void {
-    if (this.isDead) {
+    if (this.isDead || this.spectating) {
       const obInput = this.readMoveInput();
       // T1/T2 observer mode: free-look + fly till respawn
       this.visuals.updateObserverCam(dt, this.camera, this.terrain, this.pos, this.vel, this.yaw, this.pitch, {
-        forward: obInput.forward, right: obInput.right, jumpHeld: obInput.jumpHeld,
+        forward: obInput.forward, right: obInput.right, jumpHeld: obInput.skiHeld,
         shiftDown: !!(this.keys['ShiftLeft'] || this.keys['ShiftRight']),
       });
       return;
