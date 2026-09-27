@@ -103,7 +103,18 @@ let orbitSign = 1;
 
 function tickBehavior(dt: number) {
   if (dead || !connected) return;
-  if (PARK) { vel = { x: 0, y: 0, z: 0 }; return; }
+  if (PARK) {
+    // Parked: no self-drive, but keep applied impulses (knockback) and let
+    // them decay — zeroing vel each tick would swallow a real shove.
+    vel.x *= 0.92; vel.z *= 0.92;
+    vel.y += -28 * dt; // gravity, same pull the sim uses
+    pos.x += vel.x * dt;
+    pos.y += vel.y * dt;
+    pos.z += vel.z * dt;
+    const gy = groundY(pos.x, pos.z);
+    if (pos.y < gy) { pos.y = gy; vel.y = 0; }
+    return;
+  }
   const tgt = nearestTarget();
 
   if (tgt) {
@@ -308,7 +319,20 @@ function handleJson(m: any) {
     case 'ballSpawn': ballSegStats.spawns++; break;
     case 'ballDie': ballSegStats.dies++; break;
     case 'knockback':
-      if (m.targetId === NAME) { knockbackCount++; log('knockback received', m.force); }
+      if (m.targetId === NAME) {
+        knockbackCount++;
+        // Real clients apply the impulse — a real shove must show up in
+        // the victim's subsequent position stream or it's cosmetic-only.
+        const dx = pos.x - m.position.x, dy = pos.y - m.position.y, dz = pos.z - m.position.z;
+        const d = Math.hypot(dx, dy, dz) || 1;
+        const f = m.force ?? 0;
+        if (m.pull) {
+          vel.x += -(dx / d) * f; vel.y += 0.3 * f; vel.z += -(dz / d) * f;
+        } else {
+          vel.x += (dx / d) * f; vel.y += 0.5 * f; vel.z += (dz / d) * f;
+        }
+        log(`knockback received f=${f.toFixed(1)}`);
+      }
       break;
     case 'teleport':
       if (m.playerId !== NAME) {
@@ -426,6 +450,7 @@ async function main() {
       const airtime = Math.max(0.05, dist / ROCKET_SPEED);
       await wait(airtime * 1000);
       const hpBefore = to.health;
+      const posBefore = { ...to.pos };
       const sawAoeHit = { v: false };
       hitListener = (m) => { if (m.targetId === tid) sawAoeHit.v = true; };
       // Detonate 3m short of the target — inside the rocket's AOE radius.
@@ -434,9 +459,13 @@ async function main() {
         type: 'aoeShot', position: blast, weaponType: WeaponType.Rocket,
         projectileId: lastProjId, airtime,
       });
-      await wait(400);
+      // Wait past the forceSend window so the shoved velocity/pos streams back.
+      await wait(700);
       hitListener = null;
       check('aoe damage lands', sawAoeHit.v, `hp ${hpBefore} → ${others.get(tid)?.health}`);
+      const moved = others.get(tid);
+      const disp = moved ? Math.hypot(moved.pos.x - posBefore.x, moved.pos.y - posBefore.y, moved.pos.z - posBefore.z) : 0;
+      check('knockback displaces victim in stream', disp > 0.5, `moved ${disp.toFixed(2)}m`);
     }
 
     // Reconnect: close + rejoin with the session token — server should
