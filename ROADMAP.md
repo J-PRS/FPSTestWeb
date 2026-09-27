@@ -64,9 +64,11 @@ surface. Detailed research lives in `_reports/`; this file is the current truth.
 3. ~~Map format~~ — landed: `maps/<room>.json` (mode + ball population,
    clamped with defaults; examples swarm/duel). Next extensions: spawn
    anchors, bases/objectives, species mix, terrain ref.
-4. **Server-owned teams/score for MP modes** — rooms know their mode;
-   team assignment + scoring still client-side. Port shared/teams.ts
-   tables into a per-Room scoreboard broadcast.
+4. ~~Server-owned teams/score~~ — landed: rooms assign alpha/bravo on
+   join, {type:'bank'} feeds a room scoreboard, teamScore/matchEnd/
+   matchStart broadcast; verified live. REMAINING seam: the client's
+   nugget-pickup code must call sendBank(n) — pickup detection lives in
+   JP's in-flight files.
 
 ### Later / research needed
 - Client prediction + reconciliation for self (currently trust + correct).
