@@ -1,0 +1,1 @@
+{ "mode": "dm", "bots": 8, "ballMix": [0.2, 0.2, 0.2, 0.4], "balls": { "base": 20, "perPlayer": 6, "max": 60 } }

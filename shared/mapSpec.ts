@@ -28,6 +28,9 @@ export interface MapSpec {
   bases?: { alpha?: Vec3like; bravo?: Vec3like };
   /** Server-driven filler players — wandering, shootable, team-balanced. */
   bots?: number;
+  /** Spawn weights per ball variant [common, mid, large, elite] — default
+   *  [0.84, 0.07, 0.04, 0.05]. Lets a map go all-elite or fodder-only. */
+  ballMix?: number[];
 }
 
 export interface Vec3like { x: number; y: number; z: number }
@@ -79,5 +82,14 @@ export function resolveMapSpec(raw: unknown): MapSpec {
     spawns: spawns?.length ? spawns : undefined,
     bases: bases && (bases.alpha || bases.bravo) ? bases : undefined,
     bots: clampInt((src as { bots?: unknown }).bots, 0, 16, 0) || undefined,
+    ballMix: parseBallMix((src as { ballMix?: unknown }).ballMix),
   };
+}
+
+/** Four non-negative weights, normalized. Anything malformed → undefined
+ *  (sim falls back to its built-in mix). */
+function parseBallMix(raw: unknown): number[] | undefined {
+  if (!Array.isArray(raw) || raw.length !== 4) return undefined;
+  const w = raw.map((v) => (typeof v === 'number' && isFinite(v) && v > 0 ? v : 0));
+  return w.some((v) => v > 0) ? w : undefined;
 }
