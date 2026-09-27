@@ -4,9 +4,11 @@ import { PlayerManager } from './PlayerManager.ts';
 import { RateLimiter } from './RateLimiter.ts';
 import { ConnectionManager } from './ConnectionManager.ts';
 import { MessageHandler } from './MessageHandler.ts';
+import { BallSim } from './BallSim.ts';
 import { validateMessage, validatePlayerId } from './validation.ts';
 import type { WebSocketData } from './types.ts';
 import { logger } from './logger.ts';
+import { fileURLToPath } from 'node:url';
 import { isWireFrame, decodePosition, encodeTickPlayer, encodeTickFrame } from '../../shared/wire.ts';
 
 export class GameServer {
@@ -14,6 +16,7 @@ export class GameServer {
   private rateLimiter: RateLimiter;
   private connectionManager: ConnectionManager;
   private messageHandler: MessageHandler;
+  private ballSim: BallSim;
   private bunServer: Server<WebSocketData> | null = null;
   private hashTimer: ReturnType<typeof setInterval> | null = null;
   private tickTimer: ReturnType<typeof setInterval> | null = null;
@@ -38,6 +41,14 @@ export class GameServer {
       (msg, exclude) => this.connectionManager.broadcast(msg, exclude),
       (pid, msg) => this.connectionManager.sendToPlayer(pid, msg),
     );
+
+    // Server-owned creatures: balls are the shared-PvE pilot. A missing
+    // heightmap must degrade gracefully — log and run creature-free rather
+    // than take down the whole game server.
+    this.ballSim = new BallSim(this.playerManager, (msg) => this.connectionManager.broadcast(msg));
+    this.messageHandler.setBallSim(this.ballSim);
+    this.ballSim.start(fileURLToPath(new URL('../heightmap.bin', import.meta.url)))
+      .catch(err => logger.warn('BallSim disabled — heightmap load failed', { err: String(err) }));
 
     this.startHashBroadcast();
     this.startTickBroadcast();
@@ -179,7 +190,7 @@ export class GameServer {
 
         ws.data.playerId = playerId;
         this.connectionManager.register(playerId, ws);
-        this.messageHandler.handleHandshake(playerId);
+        this.messageHandler.handleHandshake(playerId, undefined, true);
         // Disconnect cancelled any pending respawn — if they come back dead,
         // re-arm it or the restored corpse stays dead forever
         this.messageHandler.onPlayerReconnected(playerId);

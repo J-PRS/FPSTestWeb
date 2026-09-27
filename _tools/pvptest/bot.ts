@@ -27,6 +27,7 @@ const TEST3 = process.argv.includes('--test3');
 const PARK = process.argv.includes('--park'); // stand at spawn — far-range target for abuse tests
 const TEST4 = process.argv.includes('--test4');
 const IDLE = process.argv.includes('--idle'); // join then go silent — tests the 60s idle reap
+const WATCH = process.argv.includes('--watch'); // passive observer: log join/left cadence and per-peer tick freshness
 const WS_URL = process.env.PVP_WS ?? 'ws://localhost:8000/ws';
 const POS_HZ = 20;            // under the 30/s rate limit
 const MOVE_SPEED = 30;        // m/s — well under the 300 reject bound
@@ -61,6 +62,7 @@ let lastProjId: string | null = null;
 let snapListener: ((m: any) => void) | null = null;
 let projDestroyedListener: ((id: string) => void) | null = null;
 let lastForeignProjId: string | null = null;
+let dupJoins = 0;
 const pendingShots: { id: string | null; target: string; at: number; airtime: number; aimPos: Vec3 }[] = [];
 const killsOf = new Map<string, number>();
 
@@ -212,6 +214,7 @@ function handleJson(m: any) {
       break;
     case 'playerJoined':
       if (m.playerId !== NAME) {
+        if (others.has(m.playerId)) dupJoins++; // grace reconnect re-announce = spam
         others.set(m.playerId, { pos: m.position, vel: { x: 0, y: 0, z: 0 }, health: 100, dead: false, lastTick: Date.now() });
         log(`${m.playerId} joined`);
       }
@@ -305,6 +308,34 @@ async function main() {
       const fails = results.filter((r) => !r.ok).length;
       log(`${results.length - fails}/${results.length} checks passed`);
       process.exit(fails ? 1 : 0);
+    }
+    if (WATCH) {
+      // 40s passive window: report join/left cadence and which peers never
+      // emit a tick (ghost joins that never send positions).
+      const joined = new Map<string, number>();
+      const left = new Map<string, number>();
+      const origHandle = handleJson;
+      handleJson = (m: any) => {
+        if (m.type === 'playerJoined') joined.set(m.playerId, Date.now());
+        if (m.type === 'playerLeft') left.set(m.playerId, Date.now());
+        origHandle(m);
+      };
+      await new Promise((r) => setTimeout(r, 40_000));
+      const now = Date.now();
+      const lines: string[] = [];
+      for (const [id, o] of others) {
+        lines.push(`${id}: lastTick ${now - o.lastTick}ms ago, dead=${o.dead}, hp=${o.health}`);
+      }
+      log(`--- watch report (${others.size} known peers) ---`);
+      for (const l of lines) log(l);
+      const joiners = [...joined.entries()].filter(([id]) => !left.has(id));
+      const flappers = [...joined.keys()].filter((id) => left.has(id));
+      log(`joined this window: ${joiners.length} stayed, ${flappers.length} flapped, ${dupJoins} duplicate join announcements`);
+      for (const id of flappers) {
+        const age = ((left.get(id)! - joined.get(id)!) / 1000).toFixed(1);
+        log(`  flapper ${id}: alive ${age}s`);
+      }
+      process.exit(0);
     }
     log('running (Ctrl+C to quit)');
     return;
