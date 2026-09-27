@@ -112,7 +112,7 @@ export function crawlerParts(): SwarmPart[] {
 // Sub-slot math: leg/fang/eye InstancedMeshes index by crawler.slot * N + i.
 // Capacity is expressed in crawlers; sub-parts allocate N× the capacity via a
 // wider InstancedMesh — see crawlerPartsCapacity in swarms.ts usage.
-export const CRAWLER_SUBPARTS = { legs: LEGS_PER, fangs: FANGS_PER, eyes: EYES_PER };
+
 
 /**
  * Ground-hugging target: hops along the terrain in short ballistic arcs,
