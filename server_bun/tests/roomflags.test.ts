@@ -46,6 +46,26 @@ describe('RoomFlags', () => {
     expect(bravo.state).toBe('home');
   });
 
+  it('no capture while your own flag is in enemy hands', () => {
+    const room = ctfRoom();
+    const p1 = addAt(room, 'p1', 'alpha', 70, 0);
+    const p2 = addAt(room, 'p2', 'bravo', -70, 0);
+    room.tickFlags(0.05); // p1 grabs bravo's flag, p2 grabs alpha's
+    p1.position = { x: -70, y: 0, z: 0 }; // p1 reaches home ring
+    p2.position = { x: 30, y: 0, z: 0 };  // p2 mid-field, still carrying alpha's
+    room.tickFlags(0.05);
+    expect(room.scores.alpha).toBe(0); // alpha flag not home → no cap
+    // p2 gets killed, alpha flag drops; a teammate returns it → now cap.
+    p2.isDead = true;
+    room.tickFlags(0.05); // alpha flag drops at 30
+    const p3 = addAt(room, 'p3', 'alpha', 30, 0);
+    room.tickFlags(0.05); // p3 touches own dropped flag → returns home
+    void p3;
+    p1.position = { x: -70, y: 0, z: 0 };
+    room.tickFlags(0.05);
+    expect(room.scores.alpha).toBe(1);
+  });
+
   it('death drops the flag where the carrier fell', () => {
     const room = ctfRoom();
     const p = addAt(room, 'p1', 'alpha', 70, 0);

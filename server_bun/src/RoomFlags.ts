@@ -89,10 +89,14 @@ export class RoomFlags {
         }
         f.pos = { ...carrier.position };
         this.dirty = true; // carried flags stream their position every tick
-        // Reaching own base ring with the enemy flag scores.
-        const ownBase = this.flags.get(carrier.team === 'alpha' ? 'alpha' : 'bravo')!.home;
+        // Reaching own base ring with the enemy flag scores — but only
+        // while your own flag is home; classic CTF, otherwise a team
+        // could cap while its flag sits in enemy hands.
+        const ownFlag = this.flags.get(carrier.team as TeamId)!;
+        const ownBase = ownFlag.home;
         const cdx = f.pos.x - ownBase.x, cdz = f.pos.z - ownBase.z;
-        if (carrier.team !== f.team && Math.sqrt(cdx * cdx + cdz * cdz) <= FLAG_HOME_R) {
+        if (carrier.team !== f.team && ownFlag.state === 'home'
+          && Math.sqrt(cdx * cdx + cdz * cdz) <= FLAG_HOME_R) {
           f.state = 'home';
           f.pos = { ...f.home };
           f.carrier = null;
