@@ -30,6 +30,11 @@ export function createNetBalls(deps: EntitiesDeps, ctx: NetBallsCtx, logger: Chi
   // staleness including packet loss/retransmit delay, which ping÷2 can't
   // see (at 50% loss, events routinely arrive hundreds of ms late).
   const ballClock = { t: -1, at: 0 };
+  // Predicted balls gate their stepping on this estimate of the server's
+  // sim clock — free-running on wall time drifted ahead of the tick loop
+  // and watched bounces early, which is what the residual warns were.
+  Ball.netSimNow = () =>
+    ballClock.t < 0 ? Infinity : ballClock.t + (performance.now() / 1000 - ballClock.at);
   function ballEventAge(t: number | undefined): number {
     if (t === undefined) {
       // Unstamped (shouldn't happen post-v3) — fall back to ½RTT.
@@ -69,7 +74,7 @@ export function createNetBalls(deps: EntitiesDeps, ctx: NetBallsCtx, logger: Chi
       m.velocity.x, m.velocity.y, m.velocity.z,
       m.enraged ?? false, m.targetId ?? null,
       ballEventAge(m.t), targetPosForId(m.targetId),
-      undefined, m.tp,
+      undefined, m.tp, m.t,
     );
   }
 
@@ -100,7 +105,7 @@ export function createNetBalls(deps: EntitiesDeps, ctx: NetBallsCtx, logger: Chi
       m.enraged, m.targetId,
       age, targetPosForId(m.targetId),
       { et: m.et, slowT: m.slowT, damp: m.damp },
-      m.tp,
+      m.tp, m.t,
     );
   }
 

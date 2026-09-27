@@ -1870,3 +1870,4 @@ sendShot/sendAOEShot take arg objects now (7-positional-param smell, same fix as
 NetworkManager ping/loss/jitter telemetry extracted to networking/netTelemetry.ts
 Creatures no longer hard-deaggro: leash-drop = 'stalking' — drift erratically toward last-seen pos instead of standing
 Ball rubberbanding root cause: segment lead-replay took a partial-width step, permanently phase-shifting the client sim off the server's 50ms grid — every bounce diverged 20-100m. Banked age into netAcc instead (grid-aligned steps, render extrapolates remainder)
+Ball prediction now gated on the stamped server sim clock (Ball.netSimNow) — was free-running on wall time and drifted ahead of tick cadence

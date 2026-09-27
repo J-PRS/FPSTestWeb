@@ -191,6 +191,12 @@ export class Ball {
   netTargetId: string | null = null;
   private sim: SimBall | null = null;
   private static field: Heightfield | null = null;
+  /** Sim-time the ball's pos is evaluated at — server grid multiples of
+   *  0.05. Steps fire only while the next cell is behind the server clock
+   *  estimate: free-running ahead is what bounced early and snapped back. */
+  private simT = 0;
+  /** Server-sim "now" estimate — wired by netBalls from stamped events. */
+  static netSimNow: (() => number) | null = null;
   /** entities.ts wires this once — hit claims go to the server, not local health. */
   static hitClaim: ((netId: number, damage: number, ix: number, iy: number, iz: number) => void) | null = null;
   private _netImp = new THREE.Vector3(); // pending knockback impulse → next claim
@@ -302,13 +308,28 @@ export class Ball {
       const tp = Ball._simTarget;
       tp.x = s.tx; tp.y = s.ty; tp.z = s.tz;
       const tgt = s.tgtValid ? tp : null;
-      while (this.netAcc >= 0.05) {
+      const simNow = Ball.netSimNow?.() ?? Infinity;
+      while (this.netAcc >= 0.05 && this.simT + 0.05 <= simNow) {
         this.netAcc -= 0.05;
+        this.simT += 0.05;
         s.x = this.pos.x; s.y = this.pos.y; s.z = this.pos.z;
         s.vx = this.vel.x; s.vy = this.vel.y; s.vz = this.vel.z;
         stepBall(s, 0.05, Ball.field, tgt, false);
         this.pos.set(s.x, s.y, s.z);
         this.vel.set(s.vx, s.vy, s.vz);
+      }
+      // Clock-estimate stalls must never freeze the sim — if banked time
+      // tops the cap anyway, drain it ungated (drift beats a statue).
+      if (this.netAcc >= 0.5) {
+        while (this.netAcc >= 0.05) {
+          this.netAcc -= 0.05;
+          this.simT += 0.05;
+          s.x = this.pos.x; s.y = this.pos.y; s.z = this.pos.z;
+          s.vx = this.vel.x; s.vy = this.vel.y; s.vz = this.vel.z;
+          stepBall(s, 0.05, Ball.field, tgt, false);
+          this.pos.set(s.x, s.y, s.z);
+          this.vel.set(s.vx, s.vy, s.vz);
+        }
       }
       this.enraged = s.enraged;
       this.enrageTimer = s.enrageTimer;
@@ -719,6 +740,7 @@ export class Ball {
     lead = 0, targetPos?: THREE.Vector3 | null,
     timers?: { et?: number; slowT?: number; damp?: boolean },
     tp?: { x: number; y: number; z: number } | null,
+    simT?: number,
   ): void {
     const s = this.sim;
     if (!s) return;
@@ -744,6 +766,9 @@ export class Ball {
     // and the render path ballistically extrapolates the sub-step
     // remainder — which is all the lead was ever for.
     this.netAcc = Math.min(lead, 0.5);
+    // Sim cursor anchors to the event's stamped grid time — the banked
+    // lead is consumed by whole cells in update(), not stepped here.
+    if (simT !== undefined) this.simT = simT;
     // Carry the visible error into renderOffset: (old rendered pos) - (new
     // truth). >6m means the prediction diverged hard — hard-snap instead of
     // smearing a long rubber slide across the screen.
