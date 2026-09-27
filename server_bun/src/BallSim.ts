@@ -34,12 +34,16 @@ const RETARGET_INTERVAL = 2.0;  // seconds between nearest-player re-evals
 const RESYNC_INTERVAL = 1.2;
 const _snap: SimVec = { x: 0, y: 0, z: 0 }; // scratch — stepBall's target arg
 
-// 5% elite, otherwise weighted fodder sizes (v0 common, v1/v2 rare)
-function rollVariant(): BallVariant {
-  const r = Math.random();
-  if (r < 0.05) return 3;
-  if (r < 0.09) return 2;
-  if (r < 0.16) return 1;
+// 5% elite, otherwise weighted fodder sizes (v0 common, v1/v2 rare).
+// Weights are cumulative so a map spec can override the whole table.
+const DEFAULT_MIX: readonly number[] = [0.84, 0.07, 0.04, 0.05];
+function rollVariant(mix: readonly number[] = DEFAULT_MIX): BallVariant {
+  const total = mix[0]! + mix[1]! + mix[2]! + mix[3]!;
+  let r = Math.random() * total;
+  for (let i = 0; i < 4; i++) {
+    r -= mix[i]!;
+    if (r <= 0) return i as BallVariant;
+  }
   return 0;
 }
 
@@ -63,6 +67,8 @@ export class BallSim {
   private tickAcc = 0;
   private static readonly TICK_CATCHUP_CAP = 0.25; // don't spiral on a 1s hiccup
   population: BallPopulation = DEFAULT_MAP_SPEC.balls;
+  /** Variant spawn weights from the map spec — default mix below. */
+  ballMix: readonly number[] = DEFAULT_MIX;
 
   constructor(players: PlayerManager, broadcast: (msg: ServerMessage) => void, broadcastBinary?: (data: Uint8Array) => void) {
     this.players = players;
@@ -286,7 +292,7 @@ export class BallSim {
     const target = Math.min(pop.max, pop.base + Math.max(0, alive.length - 1) * pop.perPlayer);
     if (this.balls.size + this.pendingRespawns < target) {
       const near = alive[Math.floor(Math.random() * alive.length)]!.pos;
-      this.spawnBall(rollVariant(), near);
+      this.spawnBall(rollVariant(this.ballMix), near);
     }
 
     while (this.tickAcc >= TICK_DT) {
