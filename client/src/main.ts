@@ -8,6 +8,7 @@ import {
 import { ChildLogger } from './core/Logger.js';
 import { watchDeployVersion } from './core/deployWatch.js';
 import { createRenderer } from './core/renderer.js';
+import * as sfx from './core/sfx.js';
 
 import { DemoManager } from './demo/index.js';
 import { InputFlags, JetpackFlags } from './demo/types.js';
@@ -18,6 +19,9 @@ import { ViewModel } from './entities/ViewModel.js';
 import { DamageNumberManager } from './effects/damageNumbers.js';
 import { EffectsManager } from './effects/effects.js';
 import { SpeedLines } from './effects/speedLines.js';
+import { AmbientParticles } from './effects/ambientParticles.js';
+import { GroundMist } from './effects/groundMist.js';
+import { AmbientBirds } from './effects/birds.js';
 
 import { resolveServerEndpoints } from './networking/endpoints.js';
 import { NetworkManager } from './networking/NetworkManager.js';
@@ -54,6 +58,7 @@ import { minerParts } from './entities/Miner.js';
 import { totemParts } from './entities/Totem.js';
 import { turretterParts } from './entities/Turretter.js';
 import { ballParts } from './entities/balls.js';
+import { weedParts } from './entities/Tumbleweed.js';
 
 const logger = new ChildLogger('Main');
 
@@ -70,6 +75,16 @@ const { scene, sun } = sceneSetup;
 // World-space speed lines — streak quads spawn around the camera along
 // the actual velocity vector; flying through them gives real relative motion
 const speedLines = new SpeedLines(scene);
+
+// Ambient particle layers — one Points cloud each; motes respawn in a
+// sphere around the camera so the world always feels inhabited.
+const ambientLayers = [
+  new AmbientParticles(scene, 'dust'),
+  new AmbientParticles(scene, 'embers'),
+  new AmbientParticles(scene, 'ash'),
+];
+let groundMist: GroundMist; // needs terrain — created in init()
+const ambientBirds = new AmbientBirds(scene); // kettle of buzzards on a thermal
 
 // ---- Renderer ----
 const rendererSetup = createRenderer(camera, scene);
@@ -142,10 +157,12 @@ async function init(): Promise<void> {
     totem: { parts: totemParts, capacity: 64 },
     turretter: { parts: turretterParts, capacity: 64 },
     ball: { parts: ballParts, capacity: 512 },
+    tumbleweed: { parts: weedParts, capacity: 64 },
   });
 
   effects = new EffectsManager(scene);
   effects.setTerrain(terrain);
+  groundMist = new GroundMist(scene, terrain); // valley fog banks
   profiler.markTime('effectsCreated');
 
   player = new Player(terrain, camera, scene);
@@ -201,25 +218,39 @@ async function init(): Promise<void> {
   player.onGrenadeLauncher = combat.onGrenadeLauncher;
   player.onFlak = combat.onFlak;
   player.onPlasma = combat.onPlasma;
+  player.onRailgun = combat.onRailgun;
+  player.onMelee = combat.onMelee;
   player.onWeaponSwitch = (i) => viewModel?.switchWeapon(i);
-  player.onJump = (pos) => effects.spawnJumpDust(pos);
+  player.onJump = (pos) => { effects.spawnJumpDust(pos); sfx.jump(); };
+  player.onLand = (impactSpeed) => sfx.land(impactSpeed);
   player.onJetpack = (pos) => effects.spawnJetpack(pos);
   player.onSki = (pos, vel) => effects.spawnSkiDust(pos, vel);
-  player.onBounce = (pos, dir) => { effects.spawnBounce(pos, dir); viewModel?.kick(0.5); speedLines.burst(); };
+  player.onBounce = (pos, dir) => { effects.spawnBounce(pos, dir); viewModel?.kick(0.5); speedLines.burst(); sfx.bounce(); };
   player.onBlink = (from, to) => {
-    speedLines.burst();
+    // Tracer-style whoosh — cyan streaks stamped along the blink path
+    speedLines.surge(from, to, 0x55ccff);
     viewModel?.kick(0.35);
     // Cyan flash at both ends — departure pop + arrival streak along the path
     _blinkDir.subVectors(to, from).normalize();
     effects.spawnBounce(from, _blinkDir);
     effects.spawnBounce(to, _blinkDir);
+    sfx.blink();
   };
-  player.onDash = (pos, dir) => { effects.spawnBounce(pos, dir); speedLines.burst(); viewModel?.kick(0.4); };
-  player.onSlam = (pos) => {
-    combat.slam(pos);
+  player.onDash = (pos, dir) => {
+    // White-hot streak line along the dash — reads as a boost, not a redirect
+    // (bounce's cyan cone is the redirect cue; dash shares no shape language)
+    _blinkDir.copy(dir).multiplyScalar(7).add(pos);
+    speedLines.surge(pos, _blinkDir, 0xfff2cc, 10);
+    effects.spawnJumpDust(pos);
+    viewModel?.kick(0.4);
+    sfx.dash();
+  };
+  player.onSlam = (pos, impactSpeed) => {
+    combat.slam(pos, impactSpeed);
     speedLines.burst();
     viewModel?.kick(0.8);
     effects.spawnJumpDust(pos);
+    sfx.slam();
   };
   profiler.markTime('playerCreated');
 
@@ -378,6 +409,9 @@ async function init(): Promise<void> {
     demoManager: () => demoManager,
     effects: () => effects,
     speedLines,
+    ambientLayers,
+    groundMist: () => groundMist,
+    ambientBirds,
     entities,
     combat: () => combat,
     remotes: () => remotes,

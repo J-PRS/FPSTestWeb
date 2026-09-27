@@ -4,6 +4,7 @@
 
 import * as THREE from 'three';
 import { REMOTE_PLAYER_FIXED_DT, DEBUG_LOG_SAMPLE_RATE } from '../core/config.js';
+import * as sfx from '../core/sfx.js';
 import type { ChildLogger } from '../core/Logger.js';
 import type { Player } from '../entities/Player.js';
 import { RemotePlayer } from '../entities/RemotePlayer.js';
@@ -53,6 +54,9 @@ export function wireNetworkHandlers(deps: NetDeps): void {
     // Check if local player was hit
     if (targetId === nm().getLocalPlayerId()) {
       deps.player().health = health;
+      // Point the damage arc at the shooter's last known position
+      deps.hud().showDamage(deps.world.remotePlayers.get(shooterId)?.pos ?? null, damage);
+      sfx.playerHurt();
       logger.info(`Local player hit for ${damage} damage by ${shooterId} (health: ${health})`);
       return;
     }
@@ -120,6 +124,7 @@ export function wireNetworkHandlers(deps: NetDeps): void {
     // Show frag message if local player got the kill
     if (shooterId === nm().getLocalPlayerId()) {
       deps.fragMessages.show(`FRAGGED PLAYER!`);
+      sfx.killConfirm();
     }
 
     // Mark player as dead in NetworkManager immediately so main loop knows
@@ -225,6 +230,7 @@ export function wireNetworkHandlers(deps: NetDeps): void {
     remoteProjectiles.set(projectileId, remoteProjectile);
     // Gun recoil kick on the shooter's remote model
     deps.world.remotePlayers.get(ownerId)?.fire();
+    sfx.shotAt(origin, cfg.weaponType);
   };
 
   networkManager.onProjectileDestroyed = (projectileId: string) => {

@@ -1,9 +1,9 @@
 import type { ChildLogger } from '../core/Logger.js';
 import type { DemoManager } from '../demo/index.js';
-import type { Player } from '../entities/Player.js';
-import { SKILL_ORDER } from '../entities/Player.js';
+import { SKILL_ORDER, Player, type SkillId } from '../entities/Player.js';
 import type { HUD } from './hud.js';
 import { WEAPON_CONFIGS } from '../projectiles/index.js';
+import { audio } from '../core/audio.js';
 
 export interface OverlayInputDeps {
   overlay: HTMLElement;
@@ -22,71 +22,102 @@ export function wireOverlayInput(deps: OverlayInputDeps) {
   const { overlay, rendererCanvas, logger } = deps;
 
   // ---- Loadout bar (bottom-center of the ESC menu) ----
-  // Weapon chips are generated from WEAPON_CONFIGS so a new weapon just
-  // appears. Belt items (C/F) are display-only today — they become real
-  // choices once the loadout model exists. Skill slot is a stub.
+  // Each of the 4 slots is a dropdown — click a slot, pick the weapon.
+  // Belt (F) is a pair of chips; skill (Q) toggles on click.
   const loadoutBar = document.getElementById('loadout-bar');
-  const weaponChips: HTMLElement[] = [];
-  let skillChipRef: HTMLElement | null = null;
+  const slotSelects: HTMLSelectElement[] = [];
+  let beltSelRef: HTMLSelectElement | null = null;
+  let skillSelRef: HTMLSelectElement | null = null;
   if (loadoutBar) {
-    const row = document.createElement('div');
-    row.className = 'lo-row';
-    const label = document.createElement('span');
-    label.className = 'lo-label';
-    label.textContent = 'WEAPON';
-    row.appendChild(label);
-    WEAPON_CONFIGS.forEach((cfg, i) => {
-      const chip = document.createElement('button');
-      chip.className = 'lo-chip';
-      chip.innerHTML = `<span class="k">${i + 1}</span>${cfg.displayName}`;
-      chip.addEventListener('click', (e) => {
-        e.stopPropagation(); // don't fall through to overlay-resume click
-        const player = deps.player();
-        if (player.weaponIndex !== i) {
-          player.weaponIndex = i;
-          player.onWeaponSwitch?.(i);
-        }
+    for (let i = 0; i < Player.LOADOUT_SLOTS; i++) {
+      const row = document.createElement('div');
+      row.className = 'lo-row';
+      const label = document.createElement('span');
+      label.className = 'lo-label';
+      label.textContent = `SLOT ${i + 1}`;
+      row.appendChild(label);
+      const sel = document.createElement('select');
+      sel.className = 'lo-chip lo-select';
+      WEAPON_CONFIGS.forEach((cfg, wid) => {
+        const opt = document.createElement('option');
+        opt.value = String(wid);
+        opt.textContent = cfg.displayName;
+        sel.appendChild(opt);
+      });
+      sel.addEventListener('click', (e) => e.stopPropagation());
+      sel.addEventListener('change', (e) => {
+        e.stopPropagation();
+        deps.player().setLoadoutSlot(i, Number(sel.value));
         refreshLoadout();
       });
-      row.appendChild(chip);
-      weaponChips.push(chip);
-    });
-    loadoutBar.appendChild(row);
+      row.appendChild(sel);
+      slotSelects.push(sel);
+      loadoutBar.appendChild(row);
+    }
 
     const beltRow = document.createElement('div');
     beltRow.className = 'lo-row';
-    beltRow.innerHTML = `<span class="lo-label">BELT</span>`;
-    for (const [key, name] of [['C', 'Disc'], ['F', 'Grenade']] as const) {
-      const chip = document.createElement('span');
-      chip.className = 'lo-chip stub';
-      chip.innerHTML = `<span class="k">${key}</span>${name}`;
-      beltRow.appendChild(chip);
+    beltRow.innerHTML = `<span class="lo-label">BELT (C)</span>`;
+    const beltSel = document.createElement('select');
+    beltSel.className = 'lo-chip lo-select';
+    for (const item of ['disc', 'grenade'] as const) {
+      const opt = document.createElement('option');
+      opt.value = item;
+      opt.textContent = item === 'disc' ? 'Disc' : 'Grenade';
+      beltSel.appendChild(opt);
     }
-    // Skill slot — one skill equipped at a time, click to toggle
-    const skillChip = document.createElement('button');
-    skillChip.className = 'lo-chip';
-    skillChip.addEventListener('click', (e) => {
+    beltSel.addEventListener('click', (e) => e.stopPropagation());
+    beltSel.addEventListener('change', (e) => {
       e.stopPropagation();
-      const player = deps.player();
-      const next = SKILL_ORDER[(SKILL_ORDER.indexOf(player.skill) + 1) % SKILL_ORDER.length];
-      player.setSkill(next);
-      refreshLoadout();
+      deps.player().setBeltItem(beltSel.value as 'disc' | 'grenade');
     });
-    beltRow.appendChild(skillChip);
+    beltRow.appendChild(beltSel);
+    beltSelRef = beltSel;
+
+    const skillSel = document.createElement('select');
+    skillSel.className = 'lo-chip lo-select';
+    for (const s of SKILL_ORDER) {
+      const opt = document.createElement('option');
+      opt.value = s;
+      opt.textContent = s[0].toUpperCase() + s.slice(1);
+      skillSel.appendChild(opt);
+    }
+    skillSel.addEventListener('click', (e) => e.stopPropagation());
+    skillSel.addEventListener('change', (e) => {
+      e.stopPropagation();
+      deps.player().setSkill(skillSel.value as SkillId);
+    });
+    const skillWrap = document.createElement('div');
+    skillWrap.className = 'lo-row';
+    skillWrap.innerHTML = `<span class="lo-label">SKILL (Q)</span>`;
+    skillWrap.appendChild(skillSel);
+    skillSelRef = skillSel;
     loadoutBar.appendChild(beltRow);
-    skillChipRef = skillChip;
+    loadoutBar.appendChild(skillWrap);
   }
   function refreshLoadout(): void {
     const player = deps.player();
-    const idx = player.weaponIndex;
-    weaponChips.forEach((c, i) => c.classList.toggle('active', i === idx));
-    if (skillChipRef) {
-      skillChipRef.innerHTML = `<span class="k">Q</span>${player.skill.toUpperCase()}`;
-      skillChipRef.classList.add('active');
-    }
+    slotSelects.forEach((sel, i) => {
+      sel.value = String(player.loadout[i]);
+      sel.classList.toggle('active', i === player.weaponIndex);
+    });
+    if (beltSelRef) beltSelRef.value = player.beltItem;
+    if (skillSelRef) skillSelRef.value = player.skill;
+  }
+
+  // Single source of truth for menu visibility — sets overlay display AND
+  // the body class that hides the HUD layer (inline display:block left by
+  // hud.show() would beat a plain CSS selector, so the rule uses !important).
+  function setOverlay(open: boolean): void {
+    overlay.style.display = open ? 'flex' : 'none';
+    document.body.classList.toggle('menu-open', open);
+    if (open) refreshLoadout();
   }
 
   function requestLock(): void {
+    // AudioContext unlocks on user gesture — the click that enters pointer
+    // lock is exactly that gesture.
+    audio.unlock();
     const p = rendererCanvas.requestPointerLock();
     if (p && typeof (p as Promise<void>).catch === 'function') {
       (p as Promise<void>).catch(() => {
@@ -98,13 +129,12 @@ export function wireOverlayInput(deps: OverlayInputDeps) {
   document.addEventListener('pointerlockchange', () => {
     logger.debug(`Pointer lock changed: locked=${document.pointerLockElement === rendererCanvas}`);
     if (document.pointerLockElement === rendererCanvas) {
-      overlay.style.display = 'none';
+      setOverlay(false);
     } else if (deps.isGameStarted()) {
       // Browsers reserve ESC for exiting pointer lock — its keydown never reaches
       // the page while locked. So treat any lock exit (ESC, alt-tab, browser UI)
       // as "open the menu", same as Krunker.
-      overlay.style.display = 'flex';
-      refreshLoadout();
+      setOverlay(true);
       const dm = deps.demoManager();
       dm?.onCoolShotsChanged?.(dm.getCoolShots());
       dm?.fetchCoolShotsFromServer();
@@ -137,12 +167,11 @@ export function wireOverlayInput(deps: OverlayInputDeps) {
       document.exitPointerLock();
       // pointerlockchange handler opens the overlay
     } else if (overlay.style.display === 'flex') {
-      overlay.style.display = 'none';
+      setOverlay(false);
       logger.debug('Requesting pointer lock...');
       requestLock();
     } else {
-      overlay.style.display = 'flex';
-      refreshLoadout();
+      setOverlay(true);
     }
   }
 

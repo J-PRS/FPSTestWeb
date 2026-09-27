@@ -14,8 +14,11 @@ import {
   TOTEM_BOLT_DAMAGE,
   RAKK_MAX, RAKK_SPAWN_INTERVAL, RAKK_SPAWN_MIN, RAKK_SPAWN_MAX,
   RAKK_CLAW_DAMAGE, RAKK_CLAW_FORCE,
+  WEED_MAX, WEED_SPAWN_INTERVAL, WEED_SPAWN_MIN, WEED_SPAWN_MAX,
+  WEED_WIND_X, WEED_WIND_Z,
   ROCKET_RADIUS, // Explosion VFX scale reference — blast visuals normalize to it
 } from '../core/config.js';
+import * as sfx from '../core/sfx.js';
 import type { ChildLogger } from '../core/Logger.js';
 import type { DemoManager } from '../demo/index.js';
 import { Ball, pickVariant, type Targetable } from '../entities/balls.js';
@@ -29,6 +32,7 @@ import { Roller } from '../entities/Roller.js';
 import { Seeker } from '../entities/Seeker.js';
 import { Totem } from '../entities/Totem.js';
 import { Turretter } from '../entities/Turretter.js';
+import { Tumbleweed } from '../entities/Tumbleweed.js';
 import type { EffectsManager } from '../effects/effects.js';
 import { Explosion } from '../effects/explosion.js';
 import { screenShake } from '../effects/screenShake.js';
@@ -68,6 +72,7 @@ export function createEntities(deps: EntitiesDeps) {
   const mines: Mine[] = [];
   const totems: Totem[] = [];
   const rakks: Rakk[] = [];
+  const weeds: Tumbleweed[] = [];
   const targets: Targetable[] = [];
   const nuggets: Nugget[] = [];
   let nuggetsCollected = 0;
@@ -98,7 +103,8 @@ export function createEntities(deps: EntitiesDeps) {
   function hurtPlayer(fromPos: THREE.Vector3, force: number, damage: number): void {
     deps.player().applyKnockback(fromPos, force);
     deps.networkManager()?.sendEnvironmentDamage(damage);
-    deps.hud().showHitMarker();
+    deps.hud().showDamage(fromPos, damage); // vignette + directional arc
+    sfx.playerHurt();
   }
 
   // Compact orange pop shared by turret shells, totem bolts, mines — reads
@@ -106,6 +112,7 @@ export function createEntities(deps: EntitiesDeps) {
   function boltPop(pos: THREE.Vector3, scale: number, color: number, shake: number): void {
     deps.world.explosions.push(new Explosion(scene, pos, false, 0, deps.terrain(), scale, color));
     screenShake.blast(pos, shake, deps.player().pos);
+    sfx.explosionAt(pos, false);
   }
 
   // One ambient species: a live-count cap, a spawn cadence timer, and a
@@ -167,6 +174,7 @@ export function createEntities(deps: EntitiesDeps) {
         n.collectNotified = true;
         nuggetsCollected++;
         deps.effects().spawnImpact(n.pos, n.vel);
+        sfx.pickup();
         logger.info(`Nugget collected (${nuggetsCollected} total)`);
       }
       if (n.dead) {
@@ -265,7 +273,7 @@ export function createEntities(deps: EntitiesDeps) {
   function spawnCrawler(pos?: THREE.Vector3): void {
     if (!pos && crawlers.filter(c => !c.dead).length >= CRAWLER_MAX) return; // events bypass the cap
     const c = new Crawler(scene, deps.terrain(), pos ?? ringPos(CRAWLER_SPAWN_MIN, CRAWLER_SPAWN_MAX));
-    c.onLanded = (p) => deps.effects().spawnJumpDust(p);
+    c.onLanded = (p) => { deps.effects().spawnJumpDust(p); sfx.enemyCue(p, 'pounce'); };
     c.onPounceHit = (cr) => hurtPlayer(cr.pos, 10, CRAWLER_POUNCE_DAMAGE);
     crawlers.push(c);
     targets.push(c);
@@ -285,7 +293,7 @@ export function createEntities(deps: EntitiesDeps) {
     const player = deps.player();
     const t = new Turretter(scene, deps.terrain(), ringPos(TURRET_SPAWN_MIN, TURRET_SPAWN_MAX));
     t.onLanded = (pos) => boltPop(pos, 0.4, 0xff8844, 2.4);
-    t.onLaunch = (pos) => deps.effects().spawnJumpDust(pos);
+    t.onLaunch = (pos) => { deps.effects().spawnJumpDust(pos); sfx.enemyCue(pos, 'launch'); };
     t.onBoltLand = (pos) => boltPop(pos, 0.3, 0xffaa44, 1.8);
     t.onBoltHit = () => {
       boltPop(player.pos.clone(), 0.3, 0xffaa44, 1.8);
@@ -351,6 +359,7 @@ export function createEntities(deps: EntitiesDeps) {
     m.onDetonate = (mine) => {
       // Mine pop — compact dirty-orange blast, not a rocket
       deps.world.explosions.push(new Explosion(scene, mine.pos, false, 0, deps.terrain(), MINE_BLAST_RADIUS / ROCKET_RADIUS, 0xff7733));
+      sfx.explosionAt(mine.pos, true);
       screenShake.blast(mine.pos, 2.5, player.pos);
       // Player proximity damage — same env-damage path as crawler pounces
       const dist = mine.pos.distanceTo(player.pos);
@@ -359,7 +368,7 @@ export function createEntities(deps: EntitiesDeps) {
         if (dmg > 0) {
           player.applyKnockback(mine.pos, MINE_KNOCKBACK);
           deps.networkManager()?.sendEnvironmentDamage(dmg);
-          deps.hud().showHitMarker();
+          deps.hud().showDamage(mine.pos, dmg);
         }
       }
     };
@@ -409,7 +418,7 @@ export function createEntities(deps: EntitiesDeps) {
       boltPop(player.pos.clone(), 0.35, 0xff5566, 2.0);
       hurtPlayer(t.pos, 8, TOTEM_BOLT_DAMAGE);
     };
-    t.onBlink = (pos) => deps.effects().spawnJumpDust(pos); // departure puff at the old spot
+    t.onBlink = (pos) => { deps.effects().spawnJumpDust(pos); sfx.enemyCue(pos, 'zap'); }; // departure puff at the old spot
     totems.push(t);
     targets.push(t);
   }
@@ -427,7 +436,7 @@ export function createEntities(deps: EntitiesDeps) {
     if (rakks.filter(r => !r.dead).length >= RAKK_MAX) return;
     const r = new Rakk(scene, deps.terrain(), ringPos(RAKK_SPAWN_MIN, RAKK_SPAWN_MAX));
     r.onClawHit = (rk) => hurtPlayer(rk.pos, RAKK_CLAW_FORCE, RAKK_CLAW_DAMAGE);
-    r.onDive = (rk) => deps.effects().spawnJumpDust(rk.pos); // wing-tuck puff — silhouette cue
+    r.onDive = (rk) => { deps.effects().spawnJumpDust(rk.pos); sfx.enemyCue(rk.pos, 'dart'); }; // wing-tuck puff — silhouette cue
     rakks.push(r);
     targets.push(r);
   }
@@ -438,6 +447,32 @@ export function createEntities(deps: EntitiesDeps) {
     tick: (r, dt) => r.update(dt, deps.terrain(), deps.player().pos),
   };
   function updateRakks(dt: number): void { updateSpecies(rakkSpecies, dt); }
+
+  // ---- Tumbleweeds (destructible wind-blown props — ambience you can shoot) ----
+  const weedWind = new THREE.Vector3(WEED_WIND_X, 0, WEED_WIND_Z).normalize();
+  function spawnWeed(): void {
+    if (weeds.filter(w => !w.dead).length >= WEED_MAX) return;
+    const player = deps.player();
+    // Spawn upwind so it rolls across the player's field of view; a lateral
+    // jitter keeps the parade from becoming a conveyor line.
+    const dist = WEED_SPAWN_MIN + Math.random() * (WEED_SPAWN_MAX - WEED_SPAWN_MIN);
+    const side = (Math.random() - 0.5) * WEED_SPAWN_MAX;
+    const pos = new THREE.Vector3(
+      player.pos.x - weedWind.x * dist - weedWind.z * side,
+      0,
+      player.pos.z - weedWind.z * dist + weedWind.x * side,
+    );
+    const w = new Tumbleweed(scene, deps.terrain(), pos);
+    weeds.push(w);
+    targets.push(w);
+  }
+
+  const weedSpecies: Species<Tumbleweed> = {
+    list: weeds, interval: WEED_SPAWN_INTERVAL, t: 0,
+    spawn: spawnWeed,
+    tick: (w, dt) => w.update(dt, deps.terrain(), deps.player().pos),
+  };
+  function updateWeeds(dt: number): void { updateSpecies(weedSpecies, dt); }
 
   // Periodic ball position snapshot for demo recording (every 0.5s)
   // This ensures clip snapshots for pre-existing balls are never stale
@@ -455,11 +490,11 @@ export function createEntities(deps: EntitiesDeps) {
   }
 
   return {
-    balls, crawlers, turrets, rollers, seekers, miners, mines, totems, rakks, targets, nuggets,
+    balls, crawlers, turrets, rollers, seekers, miners, mines, totems, rakks, weeds, targets, nuggets,
     getNuggetsCollected: () => nuggetsCollected,
     spawnBall, spawnCrawler, spawnTurretter, spawnRoller, spawnSeeker, spawnMiner, spawnTotem, spawnRakk,
     spawnEliteBall, plantMine,
-    updateBalls, updateCrawlers, updateTurrets, updateRollers, updateSeekers, updateMiners, updateTotems, updateRakks, updateNuggets,
+    updateBalls, updateCrawlers, updateTurrets, updateRollers, updateSeekers, updateMiners, updateTotems, updateRakks, updateWeeds, updateNuggets,
     recordBallKeyframes,
   };
 }

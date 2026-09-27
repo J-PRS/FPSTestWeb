@@ -1,0 +1,50 @@
+explosion	0.57s	917Hz	C:/Users/JPrice/Downloads\[ARCHIVE]\2024.01.05\Legions\game\legions\data\sound\weapons\Blaster\Blaster_Explosion.wav
+explosion	1.00s	1649Hz	C:/Users/JPrice/Downloads\[AUDIOGEN]\Batch3\g_short-sudden-powerful-scifi-explosion-blast-high-quality_1_7bd34.flac
+explosion	1.00s	1322Hz	C:/Users/JPrice/Downloads\[AUDIOGEN]\Batch4\g_powerful-explosion-sound-effect-weapon-sound-effect_3_0d062.flac
+explosion	1.00s	1718Hz	C:/Users/JPrice/Downloads\[AUDIOGEN]\Batch3\g_short-sudden-powerful-scifi-explosion-blast-high-quality_2_7bd34.flac
+explosion	1.00s	2021Hz	C:/Users/JPrice/Downloads\[AUDIOGEN]\Batch5\g_single-scifi-machinegun-shot-powerful-impact-explosion-sound-effect-high-quality_4_19c85.flac
+explosion	1.00s	1846Hz	C:/Users/JPrice/Downloads\[AUDIOGEN]\Batch3\g_short-sudden-powerful-scifi-explosion-blast-high-quality_3_7bd34.flac
+explosion	1.00s	1610Hz	C:/Users/JPrice/Downloads\[AUDIOGEN]\Batch3\g_short-sudden-powerful-scifi-explosion-blast-high-quality_4_7bd34.flac
+explosion	1.00s	2057Hz	C:/Users/JPrice/Downloads\[AUDIOGEN]\Batch5\g_single-scifi-machinegun-shot-powerful-impact-explosion-sound-effect-high-quality_2_19c85.flac
+shot	0.30s	2742Hz	C:/Users/JPrice/Downloads\[Tribes 1]\Tribes 2015\base\voices\machinegun2.ogg
+shot	1.00s	810Hz	C:/Users/JPrice/Downloads\[AUDIOGEN]\Batch5\g_scifi-cannon-plasma-one-shot-powerful-impact-loud-sound-effect-high-quality_3_f5516.flac
+shot	1.00s	1113Hz	C:/Users/JPrice/Downloads\[AUDIOGEN]\Batch5\g_scifi-cannon-plasma-one-shot-powerful-impact-loud-sound-effect-high-quality_1_f5516.flac
+shot	0.88s	4310Hz	C:/Users/JPrice/Downloads\[Tribes 1]\Tribes 1.30\StarWars\MachineGun.wav
+shot	1.00s	950Hz	C:/Users/JPrice/Downloads\[AUDIOGEN]\Batch5\g_scifi-cannon-plasma-one-shot-powerful-impact-loud-sound-effect-high-quality_2_f5516.flac
+shot	1.00s	886Hz	C:/Users/JPrice/Downloads\[AUDIOGEN]\Batch5\g_scifi-cannon-plasma-one-shot-powerful-impact-loud-sound-effect-high-quality_4_f5516.flac
+shot	0.12s	3462Hz	C:/Users/JPrice/Downloads\[ARCHIVE]\2023.12.25\The Essential Retro Video Game Sound Effects Collection [512 sounds]\The Essential Retro Video Game Sound Effects Collection [512 sounds] By Juhani Junkala\Weapons\Lasers\sfx_wpn_laser2.wav
+shot	1.00s	963Hz	C:/Users/JPrice/Downloads\[AUDIOGEN]\Batch5\g_scifi-machinegun-energy-one-shot-powerful-impact-loud-sound-effect-high-quality_1_8f896.flac
+shot	1.00s	1984Hz	C:/Users/JPrice/Downloads\[ARCHIVE]\2026.05.23\powerful_plasma_shot_#4-1778956282554.wav
+shot	1.00s	1068Hz	C:/Users/JPrice/Downloads\[AUDIOGEN]\Batch5\g_scifi-machinegun-power-plasma-laser-one-shot-powerful-impact-loud-sound-effect-high-quality_4_74910.flac
+shot	1.00s	845Hz	C:/Users/JPrice/Downloads\[AUDIOGEN]\Batch5\g_scifi-machinegun-cannon-plasma-one-shot-powerful-impact-loud-sound-effect-high-quality_2_7bbab.flac
+shot	0.77s	3124Hz	C:/Users/JPrice/Downloads\STUFF\quetoo-bundle-x86_64-pc-windows\share\default\sounds\weapons\quake_supershotgun\fire.wav
+hit	0.04s	1185Hz	C:/Users/JPrice/Downloads\[ARCHIVE]\2023.12.25\The Essential Retro Video Game Sound Effects Collection [512 sounds]\The Essential Retro Video Game Sound Effects Collection [512 sounds] By Juhani Junkala\General Sounds\Simple Damage Sounds\sfx_damage_hit4.wav
+hit	0.14s	4038Hz	C:/Users/JPrice/Downloads\[ARCHIVE]\2023.12.25\The Essential Retro Video Game Sound Effects Collection [512 sounds]\The Essential Retro Video Game Sound Effects Collection [512 sounds] By Juhani Junkala\General Sounds\Impacts\sfx_sounds_impact2.wav
+hit	0.08s	1918Hz	C:/Users/JPrice/Downloads\[ARCHIVE]\2023.12.25\The Essential Retro Video Game Sound Effects Collection [512 sounds]\The Essential Retro Video Game Sound Effects Collection [512 sounds] By Juhani Junkala\General Sounds\Simple Damage Sounds\sfx_damage_hit10.wav
+hit	0.75s	1369Hz	C:/Users/JPrice/Downloads\[Tribes 1]\Tribes 1.30\StarWars\EMPhit.wav
+hit	0.14s	2300Hz	C:/Users/JPrice/Downloads\[ARCHIVE]\2023.12.25\The Essential Retro Video Game Sound Effects Collection [512 sounds]\The Essential Retro Video Game Sound Effects Collection [512 sounds] By Juhani Junkala\General Sounds\Impacts\sfx_sounds_impact8.wav
+hit	0.54s	3276Hz	C:/Users/JPrice/Downloads\[Tribes 1]\Tribes 1.30\StarWars\saberhit.wav
+hit	0.05s	1977Hz	C:/Users/JPrice/Downloads\[ARCHIVE]\2023.12.25\The Essential Retro Video Game Sound Effects Collection [512 sounds]\The Essential Retro Video Game Sound Effects Collection [512 sounds] By Juhani Junkala\General Sounds\Impacts\sfx_sounds_impact3.wav
+hit	0.06s	2251Hz	C:/Users/JPrice/Downloads\[ARCHIVE]\2023.12.25\The Essential Retro Video Game Sound Effects Collection [512 sounds]\The Essential Retro Video Game Sound Effects Collection [512 sounds] By Juhani Junkala\General Sounds\Simple Damage Sounds\sfx_damage_hit1.wav
+move	0.28s	2556Hz	C:/Users/JPrice/Downloads\[ARCHIVE]\2023.12.25\The Essential Retro Video Game Sound Effects Collection [512 sounds]\The Essential Retro Video Game Sound Effects Collection [512 sounds] By Juhani Junkala\Movement\Jumping and Landing\sfx_movement_jump7.wav
+move	0.39s	2601Hz	C:/Users/JPrice/Downloads\[ARCHIVE]\2023.12.25\The Essential Retro Video Game Sound Effects Collection [512 sounds]\The Essential Retro Video Game Sound Effects Collection [512 sounds] By Juhani Junkala\Movement\Jumping and Landing\sfx_movement_jump11.wav
+move	0.14s	2658Hz	C:/Users/JPrice/Downloads\[ARCHIVE]\2023.12.25\The Essential Retro Video Game Sound Effects Collection [512 sounds]\The Essential Retro Video Game Sound Effects Collection [512 sounds] By Juhani Junkala\Movement\Jumping and Landing\sfx_movement_jump1.wav
+move	0.23s	1873Hz	C:/Users/JPrice/Downloads\[ARCHIVE]\2023.12.25\The Essential Retro Video Game Sound Effects Collection [512 sounds]\The Essential Retro Video Game Sound Effects Collection [512 sounds] By Juhani Junkala\Movement\Jumping and Landing\sfx_movement_jump16.wav
+move	0.38s	1654Hz	C:/Users/JPrice/Downloads\[ARCHIVE]\2023.12.25\The Essential Retro Video Game Sound Effects Collection [512 sounds]\The Essential Retro Video Game Sound Effects Collection [512 sounds] By Juhani Junkala\Movement\Jumping and Landing\sfx_movement_jump19.wav
+move	0.19s	3063Hz	C:/Users/JPrice/Downloads\[ARCHIVE]\2023.12.25\The Essential Retro Video Game Sound Effects Collection [512 sounds]\The Essential Retro Video Game Sound Effects Collection [512 sounds] By Juhani Junkala\Movement\Jumping and Landing\sfx_movement_jump3.wav
+move	0.16s	3675Hz	C:/Users/JPrice/Downloads\[ARCHIVE]\2023.12.25\The Essential Retro Video Game Sound Effects Collection [512 sounds]\The Essential Retro Video Game Sound Effects Collection [512 sounds] By Juhani Junkala\Movement\Jumping and Landing\sfx_movement_jump12.wav
+move	0.19s	2738Hz	C:/Users/JPrice/Downloads\[ARCHIVE]\2023.12.25\The Essential Retro Video Game Sound Effects Collection [512 sounds]\The Essential Retro Video Game Sound Effects Collection [512 sounds] By Juhani Junkala\Movement\Jumping and Landing\sfx_movement_jump2.wav
+ui	0.11s	3952Hz	C:/Users/JPrice/Downloads\[ARCHIVE]\2023.12.25\The Essential Retro Video Game Sound Effects Collection [512 sounds]\The Essential Retro Video Game Sound Effects Collection [512 sounds] By Juhani Junkala\General Sounds\High Pitched Sounds\sfx_sounds_high6.wav
+ui	0.10s	4463Hz	C:/Users/JPrice/Downloads\[ARCHIVE]\2023.12.25\The Essential Retro Video Game Sound Effects Collection [512 sounds]\The Essential Retro Video Game Sound Effects Collection [512 sounds] By Juhani Junkala\General Sounds\Negative Sounds\sfx_sounds_error6.wav
+ui	0.25s	4179Hz	C:/Users/JPrice/Downloads\[ARCHIVE]\2023.12.25\The Essential Retro Video Game Sound Effects Collection [512 sounds]\The Essential Retro Video Game Sound Effects Collection [512 sounds] By Juhani Junkala\General Sounds\High Pitched Sounds\sfx_sounds_high7.wav
+ui	0.14s	2147Hz	C:/Users/JPrice/Downloads\[ARCHIVE]\2023.12.25\The Essential Retro Video Game Sound Effects Collection [512 sounds]\The Essential Retro Video Game Sound Effects Collection [512 sounds] By Juhani Junkala\General Sounds\Negative Sounds\sfx_sounds_error7.wav
+ui	0.29s	1598Hz	C:/Users/JPrice/Downloads\[ARCHIVE]\2023.12.25\The Essential Retro Video Game Sound Effects Collection [512 sounds]\The Essential Retro Video Game Sound Effects Collection [512 sounds] By Juhani Junkala\General Sounds\Positive Sounds\sfx_sounds_powerup6.wav
+ui	0.18s	3293Hz	C:/Users/JPrice/Downloads\[ARCHIVE]\2023.12.25\The Essential Retro Video Game Sound Effects Collection [512 sounds]\The Essential Retro Video Game Sound Effects Collection [512 sounds] By Juhani Junkala\General Sounds\High Pitched Sounds\sfx_sounds_high2.wav
+ui	0.14s	1409Hz	C:/Users/JPrice/Downloads\[ARCHIVE]\2023.12.25\The Essential Retro Video Game Sound Effects Collection [512 sounds]\The Essential Retro Video Game Sound Effects Collection [512 sounds] By Juhani Junkala\General Sounds\Interactions\sfx_sounds_interaction7.wav
+ui	0.07s	2829Hz	C:/Users/JPrice/Downloads\[ARCHIVE]\2023.12.25\The Essential Retro Video Game Sound Effects Collection [512 sounds]\The Essential Retro Video Game Sound Effects Collection [512 sounds] By Juhani Junkala\General Sounds\Simple Bleeps\sfx_sounds_Blip9.wav
+loop	7.62s	2838Hz	C:/Users/JPrice/Downloads\[ARCHIVE]\2023.06.12 Assets\GameLoops CC0\House_1.wav
+loop	9.52s	3181Hz	C:/Users/JPrice/Downloads\[ARCHIVE]\2023.06.12 Assets\GameLoops CC0\MelodicHouse_4.wav
+loop	11.03s	2851Hz	C:/Users/JPrice/Downloads\[ARCHIVE]\2023.06.12 Assets\GameLoops CC0\DnB_1.wav
+loop	11.08s	2842Hz	C:/Users/JPrice/Downloads\[ARCHIVE]\2023.06.12 Assets\GameLoops CC0\DirtyElectroHouse_3.wav
+loop	7.62s	3491Hz	C:/Users/JPrice/Downloads\[ARCHIVE]\2023.06.12 Assets\GameLoops CC0\MelodicHouse_3.wav
+loop	1.15s	1925Hz	C:/Users/JPrice/Downloads\[ARCHIVE]\2023.12.25\The Essential Retro Video Game Sound Effects Collection [512 sounds]\The Essential Retro Video Game Sound Effects Collection [512 sounds] By Juhani Junkala\Movement\Vehicles\sfx_vehicle_engineloop.wav

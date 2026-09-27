@@ -8,7 +8,11 @@ import type { ViewModel } from '../entities/ViewModel.js';
 import type { DamageNumberManager } from '../effects/damageNumbers.js';
 import type { EffectsManager } from '../effects/effects.js';
 import type { SpeedLines } from '../effects/speedLines.js';
+import type { AmbientParticles } from '../effects/ambientParticles.js';
+import type { GroundMist } from '../effects/groundMist.js';
+import type { AmbientBirds } from '../effects/birds.js';
 import { screenShake } from '../effects/screenShake.js';
+
 import type { NetworkManager } from '../networking/NetworkManager.js';
 import type { HUD } from '../ui/hud.js';
 import type { HealthBarSystem } from '../ui/HealthBarSystem.js';
@@ -21,8 +25,10 @@ import type { createDemoLifecycle } from './demoLifecycle.js';
 import type { createRemotes } from './remotes.js';
 import type { createWaveDirector } from './waveDirector.js';
 import type { WorldState } from './worldState.js';
+import { audio } from '../core/audio.js';
 
 const _zeroVel = new THREE.Vector3(); // shared zero for demo playback
+const _camRight = new THREE.Vector3();
 
 export interface GameLoopDeps {
   camera: THREE.PerspectiveCamera;
@@ -40,6 +46,9 @@ export interface GameLoopDeps {
   demoManager: () => DemoManager | null;
   effects: () => EffectsManager;
   speedLines: SpeedLines;
+  ambientLayers: AmbientParticles[];
+  groundMist: () => GroundMist;
+  ambientBirds: AmbientBirds;
   entities: ReturnType<typeof createEntities>;
   combat: () => ReturnType<typeof createCombat>;
   remotes: () => ReturnType<typeof createRemotes>;
@@ -128,6 +137,7 @@ export function createGameLoop(deps: GameLoopDeps) {
     if (!demoPaused) entities.updateMiners(dt);
     if (!demoPaused) entities.updateTotems(dt);
     if (!demoPaused) entities.updateRakks(dt);
+    if (!demoPaused) entities.updateWeeds(dt);
     if (!demoPaused && !demoManager?.isPlaying) deps.waveDirector().update(dt);
     if (!demoManager?.isPlaying) entities.updateNuggets(dt);
     if (!demoManager?.isPlaying) {
@@ -144,6 +154,7 @@ export function createGameLoop(deps: GameLoopDeps) {
       updateDeadList(deps.world.scorches, dt);
       updateDeadList(deps.world.explosions, dt);
       updateDeadList(deps.world.implosions, dt);
+      updateDeadList(deps.world.aoeGizmos, dt);
     }
     deps.remotes().updateScoreboard();
 
@@ -171,6 +182,12 @@ export function createGameLoop(deps: GameLoopDeps) {
     // vector; suppressed during demo playback
     deps.speedLines.update(dt, camera.position, demoManager?.isPlaying ? _zeroVel : player.vel);
 
+    // Ambient layers — world-anchored motes drifting around the camera
+    // volume, plus valley mist banks yawing toward the camera
+    for (const layer of deps.ambientLayers) layer.update(dt, camera.position, terrain);
+    deps.groundMist().update(dt, camera.position);
+    deps.ambientBirds.update(dt, player.pos, terrain);
+
     // Update atmospheric effects
     sceneSetup.update(dt);
     sceneSetup.atmosphericSky.followCamera(camera.position);
@@ -179,7 +196,46 @@ export function createGameLoop(deps: GameLoopDeps) {
     // so it composes as a small rotational jitter on top
     screenShake.update(dt, camera);
 
+    updateAudio(dt, player, camera);
+
     renderFrame(dt);
+  }
+
+  // Movement/ambience loops live here: they're continuous sounds driven by
+  // per-frame player state (velocity, ski/jet flags) rather than discrete
+  // events, so they can't ride the callback hooks like jump/land do.
+  // Right-axis for positional panning comes from the camera basis.
+  let jetLoop: { set(v: number): void; stop(): void } | null = null;
+  let skiLoop: { set(v: number): void; stop(): void } | null = null;
+  let windLoop: { set(v: number): void; stop(): void } | null = null;
+
+  function updateAudio(_dt: number, player: Player, camera: THREE.PerspectiveCamera): void {
+    if (!audio.ready) return;
+    _camRight.setFromMatrixColumn(camera.matrixWorld, 0);
+    audio.updateListener(camera.position, _camRight);
+
+    const speed = player.vel.length();
+    const airborne = !player.onGround;
+
+    // Jet: filtered-noise roar while the pack is burning
+    if (player.jetting) {
+      jetLoop = jetLoop ?? audio.noiseLoop('lowpass', 700);
+      jetLoop?.set(Math.min(1, speed / 60) * 0.45 + 0.05);
+    } else if (jetLoop) { jetLoop.stop(); jetLoop = null; }
+
+    // Ski: hardpack scrape, scales with ground speed
+    if (player.skiing) {
+      skiLoop = skiLoop ?? audio.noiseLoop('bandpass', 1400);
+      skiLoop?.set(Math.min(1, speed / 90) * 0.35);
+    } else if (skiLoop) { skiLoop.stop(); skiLoop = null; }
+
+    // Wind rush: always on while flying fast through air — the speed cue
+    // that makes 100+u feel like 100+u
+    const windAmt = airborne ? Math.max(0, (speed - 25) / 90) : 0;
+    if (windAmt > 0.02) {
+      windLoop = windLoop ?? audio.noiseLoop('lowpass', 900);
+      windLoop?.set(Math.min(1, windAmt) * 0.5);
+    } else if (windLoop) { windLoop.stop(); windLoop = null; }
   }
 
   function renderFrame(dt: number): void {

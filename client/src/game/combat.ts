@@ -14,22 +14,24 @@ import { BallDebris } from '../effects/debris.js';
 import type { DamageNumberManager } from '../effects/damageNumbers.js';
 import type { EffectsManager } from '../effects/effects.js';
 import { Explosion } from '../effects/explosion.js';
+import { AoeGizmo } from '../effects/aoeGizmo.js';
 import { Implosion } from '../effects/implosion.js';
 import { ScorchDecal } from '../effects/scorch.js';
 import type { NetworkManager } from '../networking/NetworkManager.js';
 import { Projectile } from '../projectiles/Projectile.js';
 import {
   ROCKET_CONFIG, DISC_CONFIG, GRENADE_CONFIG, CHAINGUN_CONFIG,
-  MORTAR_CONFIG, GL_CONFIG, FLAK_CONFIG, PLASMA_CONFIG,
+  MORTAR_CONFIG, GL_CONFIG, FLAK_CONFIG, PLASMA_CONFIG, RAILGUN_CONFIG,
   computeAccuracy,
 } from '../projectiles/index.js';
 import type { ProjectileConfig } from '../projectiles/types.js';
 import type { FragMessages } from '../ui/FragMessages.js';
+import * as sfx from '../core/sfx.js';
 import type { HUD } from '../ui/hud.js';
 import type { HealthBarSystem } from '../ui/HealthBarSystem.js';
 import type { ExplosionTracker } from '../utils/ExplosionTracker.js';
 import type { setupInputTracking } from '../utils/InputTracking.js';
-import { PENDING_ROCKET_TIMEOUT, FLAK_SHARDS, FLAK_SPREAD, ROCKET_RADIUS } from '../core/config.js';
+import { PENDING_ROCKET_TIMEOUT, FLAK_SHARDS, FLAK_SPREAD, ROCKET_RADIUS, MELEE_RANGE, MELEE_ARC_DOT, MELEE_DAMAGE } from '../core/config.js';
 import { getWeaponStats, WeaponType, AOE_VFX_SCALE } from '../../../shared/weapons.js';
 import { aoeImpulse, aoeDamage as aoeDamageOf } from '../../../shared/combat.js';
 import { poissonDisc } from '../utils/poissonSpread.js';
@@ -67,6 +69,12 @@ const _flakUp = new THREE.Vector3();
 const _flakUp0 = new THREE.Vector3(0, 1, 0);
 const _flakDir = new THREE.Vector3();
 const _debrisDir = new THREE.Vector3();
+const _meleeHitPos = new THREE.Vector3();
+const _meleeToT = new THREE.Vector3();
+
+// ?debug — show the real gameplay blast radius as a wireframe sphere on
+// every detonation (the dome VFX is only 80% of it by design)
+const AOE_DEBUG = new URLSearchParams(location.search).has('debug');
 
 // Remote player positions for projectile collision — rebuilt per frame into
 // the same Map (zeroed allocations in the hot loop)
@@ -77,10 +85,11 @@ type FireArgs = { origin: THREE.Vector3; dir: THREE.Vector3; playerVel: THREE.Ve
 export function createCombat(deps: CombatDeps) {
   const { logger } = deps;
 
-  function spawnProjectile(config: ProjectileConfig, e: FireArgs): void {
+  function spawnProjectile(config: ProjectileConfig, e: FireArgs, quiet = false): void {
     if (deps.inputTracking.isTabHidden()) return;
     if (deps.demoManager()?.isPlaying) return;
 
+    if (!quiet) sfx.shoot(config.weaponType);
     // INSTANT SHOOTING: Spawn projectile locally immediately for LAN-like feel
     const p = new Projectile(deps.scene(), e.origin, e.dir, e.playerVel, config);
     deps.world.projectiles.push(p);
@@ -169,6 +178,7 @@ export function createCombat(deps: CombatDeps) {
   // random angle per shot so the pattern isn't visually memorized.
   function onFlak(e: FireArgs): void {
     deps.viewModel()?.kick(1.4);
+    sfx.shoot(FLAK_CONFIG.weaponType); // once for the fan, not once per shard
     const pts = poissonDisc(FLAK_SHARDS);
     const rot = Math.random() * Math.PI * 2;
     const cs = Math.cos(rot), sn = Math.sin(rot);
@@ -182,13 +192,19 @@ export function createCombat(deps: CombatDeps) {
         .addScaledVector(_flakRight, ox)
         .addScaledVector(_flakUp, oy)
         .normalize();
-      spawnProjectile(FLAK_CONFIG, { origin: e.origin, dir: _flakDir.clone(), playerVel: e.playerVel });
+      spawnProjectile(FLAK_CONFIG, { origin: e.origin, dir: _flakDir.clone(), playerVel: e.playerVel }, true);
     }
   }
 
   function onPlasma(e: FireArgs): void {
     deps.viewModel()?.kick(0.4);
     spawnProjectile(PLASMA_CONFIG, e);
+  }
+
+  // Railgun: hypervelocity slug, big kick — the precision slot.
+  function onRailgun(e: FireArgs): void {
+    deps.viewModel()?.kick(1.8);
+    spawnProjectile(RAILGUN_CONFIG, e);
   }
 
   // ---- Projectile explosion processing (push or pull based on config) ----
@@ -216,6 +232,7 @@ export function createCombat(deps: CombatDeps) {
     // Explosion/implosion visual + scorch decal on the terrain below the blast
     if (forceMode === 'push') {
       deps.world.explosions.push(new Explosion(deps.scene(), pos, directHit, age, deps.terrain(), vfx / ROCKET_RADIUS, explosionTint));
+    sfx.explosionAt(pos, directHit);
       screenShake.blast(pos, vfx, deps.player().pos);
     } else {
       deps.world.implosions.push(new Implosion(deps.scene(), pos, age, deps.terrain()));
@@ -229,6 +246,7 @@ export function createCombat(deps: CombatDeps) {
       }
       deps.world.scorches.push(new ScorchDecal(deps.scene(), deps.terrain(), pos, vfx * 0.6));
     }
+    if (AOE_DEBUG) deps.world.aoeGizmos.push(new AoeGizmo(deps.scene(), pos, radius));
 
     // Record explosion for death impulse calculation
     deps.explosionTracker.addExplosion(pos, force, shooterId || deps.networkManager().getLocalPlayerId());
@@ -269,7 +287,7 @@ export function createCombat(deps: CombatDeps) {
     if (dpx < radius * falloffMultiplier) {
       applyTo(player, force * falloffAt(dpx));
     }
-    applyForceToBalls(pos, radius, force, forceMode, collisionMultiplier, forceMultiplier, applyTo);
+    applyForceToBalls(pos, radius, force, forceMode, collisionMultiplier, forceMultiplier, aoeDamage, applyTo);
     applyForceToNuggets(pos, radius, force, forceMode, forceMultiplier);
     applyForceToRemotes(pos, radius, force, forceMode, aoeDamage, directHitTargetId);
   }
@@ -300,6 +318,7 @@ export function createCombat(deps: CombatDeps) {
     forceMode: 'push' | 'pull',
     collisionMultiplier: number,
     forceMultiplier: number,
+    aoeDamage: number,
     applyTo: (t: Forceable, f: number) => void
   ): void {
     for (const ball of deps.targets) {
@@ -310,6 +329,11 @@ export function createCombat(deps: CombatDeps) {
         : radius * collisionMultiplier + ball.radius;
       if (db < threshold) {
         applyTo(ball, force * forceMultiplier);
+        // Splash actually hurts enemies now — falloff-scaled like players.
+        // Kills route through the shared pipeline so blast kills pay out
+        // nuggets/debris/splits just like direct hits.
+        const dmg = aoeDamageOf(aoeDamage, db, radius);
+        if (dmg >= 1 && ball.takeDamage(dmg)) onTargetDestroyed(ball, ball.vel);
       }
     }
   }
@@ -346,17 +370,21 @@ export function createCombat(deps: CombatDeps) {
   // Q-skill Slam landing — the "explosion" is the player hitting terrain.
   // Runs through the same blast path as projectiles so prediction,
   // particles, scorch, and the server aoeShot all behave identically.
-  function slam(pos: THREE.Vector3): void {
+  function slam(pos: THREE.Vector3, impactSpeed: number): void {
     const stats = getWeaponStats(WeaponType.Slam);
+    // Blast scales with landing speed: the skill spikes you at 55 m/s, so a
+    // tap-slam lands ~55 and a full dive can exceed 100. ~0.2 at a lazy hop
+    // floor, 1.8 max on a huge fall. Server applies the same power factor.
+    const power = Math.min(Math.max((impactSpeed - 30) / 50, 0.2), 1.8);
     const networkManager = deps.networkManager();
     const sendAOE = (p: { x: number; y: number; z: number }, targetId: string | null) =>
-      networkManager.sendAOEShot(p, WeaponType.Slam, targetId);
+      networkManager.sendAOEShot(p, WeaponType.Slam, targetId, null, undefined, power);
     processProjectileExplosion(
       pos,
-      stats.aoeRadius,
-      stats.knockbackForce,
+      stats.aoeRadius * power,
+      stats.knockbackForce * power,
       stats.forceMode,
-      stats.aoeDamage,
+      stats.aoeDamage * power,
       1.0, 1.0, 1.0,          // falloff/collision/force multipliers
       undefined,              // shooterId — defaults to local player
       false,                  // directHit — slam has no proxy-hit bonus layer
@@ -365,7 +393,7 @@ export function createCombat(deps: CombatDeps) {
       sendAOE,
       'rocket',
       0xffcc66,               // hot slam flash
-      stats.aoeRadius * AOE_VFX_SCALE // VFX = 80% of damage reach, same rule as projectiles
+      stats.aoeRadius * power * AOE_VFX_SCALE // VFX = 80% of damage reach, same rule as projectiles
     );
   }
 
@@ -443,6 +471,7 @@ export function createCombat(deps: CombatDeps) {
       return;
     }
     deps.world.explosions.push(new Explosion(deps.scene(), pos, p.directHit, p.age, deps.terrain(), p.explosionRadius / ROCKET_RADIUS, p.config.damageColor));
+    sfx.explosionAt(pos, p.directHit);
   }
 
   function spawnImpactEffect(p: Projectile): void {
@@ -501,42 +530,49 @@ export function createCombat(deps: CombatDeps) {
     logger.info(`[Hit] ${target} direct=${p.directHit} accRaw=${p.hitAccuracy.toFixed(2)} acc=${acc.toFixed(1)} dist=${dist.toFixed(1)} air=${air.toFixed(2)}s score=${score}`);
     deps.fragMessages.show(`${acc.toFixed(1)} · ${Math.round(dist)} · ${air.toFixed(2)}s\n${score}`);
     deps.hud().showHitMarker();
+    sfx.hitMarker(p.directHit);
   }
 
-  function handleBallHit(p: Projectile, ball: import('../entities/balls.js').Targetable): void {
-    const destroyed = ball.takeDamage();
-    deps.damageNumbers().spawn(ball.pos, 1, p.config.damageColor, deps.camera());
-    if (!destroyed) {
-      deps.healthBarSystem().spawnBall(ball, 1, ball.health);
-    }
-    logHitScore(p, 'ball');
-    if (destroyed) {
-      // Shell-sampled shatter — debris occupies the ball's own silhouette on
-      // frame 0, flies along surface normals, and inherits the ball's momentum
-      // + the shot's push so the burst reads as "the ball broke", not
-      // "debris spawned where a ball was".
-      _debrisDir.copy(p.vel).normalize();
-      deps.world.debrisList.push(new BallDebris(
-        deps.scene(), deps.terrain(), ball.pos.x, ball.pos.y, ball.pos.z,
-        ball.color, ball.scale,
-        { bodyRadius: ball.radius, impulseDir: _debrisDir, inheritVel: ball.vel },
-      ));
-      screenShake.blast(ball.pos, 1.6, deps.player().pos); // small pop kick — distant kills barely register
+  // Shared death pipeline for direct hits AND splash kills — debris,
+  // nuggets, kill credit, elite split. Without this a blast kill would
+  // silently delete the entity with no payout.
+  function onTargetDestroyed(ball: import('../entities/balls.js').Targetable, impulse?: THREE.Vector3): void {
+    // Shell-sampled shatter — debris occupies the target's silhouette on
+    // frame 0 and flies along surface normals + the killing impulse
+    if (impulse) _debrisDir.copy(impulse).normalize(); else _debrisDir.set(0, 0.5, 0);
+    deps.world.debrisList.push(new BallDebris(
+      deps.scene(), deps.terrain(), ball.pos.x, ball.pos.y, ball.pos.z,
+      ball.color, ball.scale,
+      { bodyRadius: ball.radius, impulseDir: _debrisDir, inheritVel: ball.vel },
+    ));
+    screenShake.blast(ball.pos, 1.6, deps.player().pos);
+    sfx.enemyCue(ball.pos, 'die');
+    if (!ball.scoreless) {
       deps.player().kills++;
-      // Drop nuggets (bigger balls drop more)
       for (let n = 0; n < Math.round(ball.scale); n++) {
         deps.nuggets.push(new Nugget(deps.scene(), ball.pos, ball.vel));
       }
-      ball.onDeath?.(ball); // elite split — entities.ts spawns the children
     }
+    ball.onDeath?.(ball); // elite split — entities.ts spawns the children
+    // Record here, not in handleBallHit — splash kills need it too
+    if (deps.demoManager()?.isRecording) {
+      deps.demoManager()!.recordTargetDestroyed(ball.id, { x: ball.pos.x, y: ball.pos.y, z: ball.pos.z }, ball.variant, ball.health);
+    }
+  }
+
+  function handleBallHit(p: Projectile, ball: import('../entities/balls.js').Targetable): void {
+    const dmg = getWeaponStats(p.config.weaponType).directDamage;
+    const destroyed = ball.takeDamage(dmg);
+    deps.damageNumbers().spawn(ball.pos, Math.round(dmg), p.config.damageColor, deps.camera());
+    if (!destroyed) {
+      deps.healthBarSystem().spawnBall(ball, dmg, ball.health);
+    }
+    logHitScore(p, 'ball');
+    if (destroyed) onTargetDestroyed(ball, p.vel);
 
     const demoManager = deps.demoManager();
-    if (demoManager?.isRecording) {
-      if (destroyed) {
-        demoManager.recordTargetDestroyed(ball.id, { x: ball.pos.x, y: ball.pos.y, z: ball.pos.z }, ball.variant, ball.health);
-      } else {
-        demoManager.recordTargetHit(ball.id, { x: ball.pos.x, y: ball.pos.y, z: ball.pos.z }, { x: ball.vel.x, y: ball.vel.y, z: ball.vel.z }, ball.variant, ball.health);
-      }
+    if (demoManager?.isRecording && !destroyed) {
+      demoManager.recordTargetHit(ball.id, { x: ball.pos.x, y: ball.pos.y, z: ball.pos.z }, { x: ball.vel.x, y: ball.vel.y, z: ball.vel.z }, ball.variant, ball.health);
     }
   }
 
@@ -555,8 +591,55 @@ export function createCombat(deps: CombatDeps) {
     }
   }
 
+  // ---- Melee (E): power punch ----
+  // Enemies: client-side cone check (they're client-authoritative anyway) —
+  // flat damage + heavy knockback away from the player. Players: the shared
+  // aoeShot path lets the server validate and apply the hit; prediction via
+  // applyForceToRemotes mirrors the impulse for the ~1RTT gap. The blast is
+  // centered ahead of the fist so the puncher is outside its own radius.
+  function melee(e: FireArgs): void {
+    const player = deps.player();
+    const stats = getWeaponStats(WeaponType.Melee);
+    sfx.shoot(WeaponType.Melee);
+    _meleeHitPos.copy(player.pos).addScaledVector(e.dir, MELEE_RANGE * 0.7);
+
+    // Viewmodel jab + a hot flash at the contact point
+    deps.viewModel()?.kick(2.2);
+    deps.world.explosions.push(new Explosion(
+      deps.scene(), _meleeHitPos, true, 0, deps.terrain(),
+      (stats.aoeRadius * 0.7) / ROCKET_RADIUS, 0xaaddff,
+    ));
+    screenShake.blast(_meleeHitPos, stats.aoeRadius, player.pos);
+
+    for (const t of deps.targets) {
+      if (t.dead) continue;
+      _meleeToT.copy(t.pos).sub(player.pos);
+      const dist = _meleeToT.length();
+      if (dist > MELEE_RANGE + t.radius) continue;
+      _meleeToT.divideScalar(dist || 1);
+      if (_meleeToT.dot(e.dir) < MELEE_ARC_DOT) continue;
+      t.applyKnockback(player.pos, stats.knockbackForce);
+      deps.damageNumbers().spawn(t.pos, MELEE_DAMAGE, '#aaddff', deps.camera());
+      if (t.takeDamage(MELEE_DAMAGE)) onTargetDestroyed(t, t.vel);
+      else deps.healthBarSystem().spawnBall(t, MELEE_DAMAGE, t.health);
+      deps.hud().showHitMarker();
+      sfx.hitMarker(true);
+    }
+
+    // Players go through the authoritative AOE claim
+    const networkManager = deps.networkManager();
+    if (networkManager?.isConnected()) {
+      networkManager.sendAOEShot(
+        { x: _meleeHitPos.x, y: _meleeHitPos.y, z: _meleeHitPos.z },
+        WeaponType.Melee, null,
+      );
+    }
+    applyForceToRemotes(_meleeHitPos, stats.aoeRadius, stats.knockbackForce, 'push', stats.aoeDamage, null);
+  }
+
   return {
-    onFire, onDisc, onGrenade, onDiscLauncher, onChaingun, onMortar, onGrenadeLauncher, onFlak, onPlasma,
+    onFire, onDisc, onGrenade, onDiscLauncher, onChaingun, onMortar, onGrenadeLauncher, onFlak, onPlasma, onRailgun,
+    onMelee: melee,
     slam,
     updateProjectiles,
   };
