@@ -1913,3 +1913,4 @@ lobby: shows 'in: <room>', marks + disables your current row, and join() early-r
 botFill map spec: rooms hold N total bodies — bots spawn on departures and retire on arrivals (dead bots retire first); also lobby 'in: room' marker landed earlier this leg
 carried flags stop streaming at 20Hz — client pins the flag mesh to the carrier's rendered pos via onBeforeRender; flagUpdate now fires on transitions only; late joiners finally see flags (gameState.flags was sent but dropped client-side)
 spawn protection: 2s invuln on join/respawn, firing breaks your own shield — ends spawn-gibbing; PlayerManager.breakShield() test seam
+match journal now records per-player K/D (+team) at the horn, and K/D resets per match so entries aren't career totals
