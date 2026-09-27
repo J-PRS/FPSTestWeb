@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { WeaponType } from '../../../shared/weapons.js';
 
 // Port of Assets/Scripts/WeaponSway.cs (Unity FPS_Test) — mouse-lag sway,
 // velocity offset, perlin-ish bob, and landing dip.
@@ -32,21 +33,33 @@ const SWITCH_RAISE_TIME = 0.16;
 const SWITCH_DIP_Y = -0.34;
 const SWITCH_DIP_ROT = -0.35; // muzzle tips down as it holsters
 
-// Melee punch: gun sweeps off right-down (the arm clears for the fist) —
-// fast in, short hold, spring back. No muzzle flash, no recoil kick.
-const PUNCH_IN = 0.08;
-const PUNCH_HOLD = 0.06;
-const PUNCH_OUT = 0.3;
+// Melee punch: CoD-style — the weapon drops low/right like holstering while
+// an off-hand fist jabs in from bottom-left. Fast in, impact hold, spring back.
+const PUNCH_IN = 0.09;
+const PUNCH_HOLD = 0.08;
+const PUNCH_OUT = 0.32;
 const PUNCH_TOTAL = PUNCH_IN + PUNCH_HOLD + PUNCH_OUT;
-const PUNCH_X = 0.16;    // sweeps right
-const PUNCH_Y = -0.24;   // and down
-const PUNCH_Z = 0.08;    // toward camera — it's coming out of the frame
-const PUNCH_ROLL = 0.55; // rolls with the swing
-const PUNCH_ROT = 0.3;   // muzzle tips down into the punch
+const PUNCH_X = 0.18;    // gun swings right
+const PUNCH_Y = -0.3;    // and deep — nearly holstered, not a recoil
+const PUNCH_Z = 0.06;
+const PUNCH_ROLL = 0.5;
+const PUNCH_ROT = -0.35; // muzzle tips DOWN (negative like switch) — butt-up sweep, never recoil-up
+// Fist flight path (group-local space): off-screen bottom-left → jab center
+const FIST_OFF = new THREE.Vector3(-0.42, -0.34, -0.5);
+const FIST_JAB = new THREE.Vector3(-0.02, -0.14, -0.62);
 
 export class ViewModel {
   readonly group: THREE.Group;
-  private weapons: THREE.Group[] = [];
+  // Keyed by WeaponType — the array order used to collide with the enum
+  // (Chaingun=3 showed the mortar mesh, Railgun=9 indexed past the end).
+  private weapons = new Map<number, THREE.Group>();
+  // Muzzle Z per weapon (model space) so the flash sits AT the bore,
+  // not at a fixed offset that floats ahead of stubby barrels.
+  private static readonly MUZZLE_Z: Record<number, number> = {
+    [WeaponType.Rocket]: -0.31, [WeaponType.Disc]: -0.20, [WeaponType.DiscPull]: -0.20,
+    [WeaponType.Chaingun]: -0.36, [WeaponType.Mortar]: -0.28, [WeaponType.GrenadeLauncher]: -0.25,
+    [WeaponType.Flak]: -0.28, [WeaponType.Plasma]: -0.28, [WeaponType.Railgun]: -0.43,
+  };
   private chainBarrels: THREE.Group | null = null;
   private spinVel = 0;
   private static readonly SPIN_MAX = 40; // rad/s at full spin
@@ -60,6 +73,7 @@ export class ViewModel {
   private flashLifeScale = 1;
   private throwT = -1;
   private punchT = -1;
+  private fistGroup: THREE.Group;
   private baseRotX = 0.04;
   private baseRotZ = 0;
   private flashMesh: THREE.Mesh;
@@ -203,8 +217,20 @@ export class ViewModel {
     rail.add(capDrum);
     rail.visible = false;
 
-    this.weapons = [rocket, disc, chain, mortar, gl, flak, plasma, rail];
-    for (const w of this.weapons) this.group.add(w);
+    // Map is keyed by WeaponType, never positionally — Grenade/Slam/Melee
+    // have no gun model (belt throw / fist), so they map to nothing.
+    const models: [number, THREE.Group][] = [
+      [WeaponType.Rocket, rocket],
+      [WeaponType.Disc, disc],
+      [WeaponType.DiscPull, disc],
+      [WeaponType.Chaingun, chain],
+      [WeaponType.Mortar, mortar],
+      [WeaponType.GrenadeLauncher, gl],
+      [WeaponType.Flak, flak],
+      [WeaponType.Plasma, plasma],
+      [WeaponType.Railgun, rail],
+    ];
+    for (const [wt, g] of models) { this.weapons.set(wt, g); this.group.add(g); }
 
     // Muzzle flash — single billboard quad at the bore, additive, ~70ms.
     // Random roll each shot keeps it from looking identical.
@@ -226,6 +252,27 @@ export class ViewModel {
     this.flashMesh2.visible = false;
     this.group.add(this.flashMesh2);
 
+    // Off-hand fist for melee — chunky glove: palm block + knuckle row.
+    // Parked off-screen bottom-left until punch() jabs it across the frame.
+    this.fistGroup = new THREE.Group();
+    const gloveMat = new THREE.MeshLambertMaterial({ color: 0x3a3d42, emissive: 0x111214 });
+    const knuckleMat = new THREE.MeshLambertMaterial({ color: 0x8a4a3a, emissive: 0x20100c });
+    const palm = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.09, 0.14), gloveMat);
+    this.fistGroup.add(palm);
+    for (let i = 0; i < 4; i++) {
+      const k = new THREE.Mesh(new THREE.BoxGeometry(0.024, 0.03, 0.03), knuckleMat);
+      k.position.set(-0.036 + i * 0.024, 0.03, -0.07);
+      this.fistGroup.add(k);
+    }
+    const wrist = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.05, 0.1, 6), gloveMat);
+    wrist.rotation.x = Math.PI / 2;
+    wrist.position.set(0, -0.02, 0.11);
+    this.fistGroup.add(wrist);
+    this.fistGroup.position.copy(FIST_OFF);
+    this.fistGroup.rotation.set(0.15, 0.25, -0.1);
+    this.fistGroup.visible = false;
+    this.group.add(this.fistGroup);
+
     // Bottom-right, mostly centered — Quake guns sit low and fat
     this.group.scale.setScalar(0.8);
     this.group.position.copy(REST_POS);
@@ -239,22 +286,23 @@ export class ViewModel {
   // Same spring everywhere — only the impulse shape changes per weapon,
   // the Quake approach: one damped oscillator, re-triggered per shot.
   private static readonly KICK_TUNE: Record<number, [number, number, number, number, number]> = {
-    0: [12, 0.00, 0xffc866, 1.0, 1.0],   // rocket — classic straight-back
-    1: [16, 0.04, 0x99ddff, 0.7, 0.7],  // disc launcher — snappy, short travel
-    2: [18, 0.02, 0xffaa44, 0.6, 0.5],  // chaingun — tiny buzz, no big flash
-    3: [7, 0.00, 0xffdd99, 1.6, 1.5],   // mortar — slow heavy drop-kick, big flash
-    4: [11, 0.03, 0xffc866, 0.8, 0.9],  // GL — pump pop
-    5: [10, 0.09, 0xffbb55, 1.3, 1.0],  // flak — hard shove + sideways shudder
-    6: [15, 0.00, 0x44ffbb, 0.5, 0.6],  // plasma — light tap, green glow
-    7: [18, 0.01, 0x77ccff, 1.1, 0.9],  // railgun — fast snap, cyan discharge
+    [WeaponType.Rocket]:          [12, 0.00, 0xffc866, 1.0, 1.0],   // classic straight-back
+    [WeaponType.Disc]:            [16, 0.04, 0x99ddff, 0.7, 0.7],   // snappy, short travel
+    [WeaponType.DiscPull]:        [16, 0.04, 0x99ddff, 0.7, 0.7],
+    [WeaponType.Chaingun]:        [18, 0.02, 0xffaa44, 0.6, 0.5],   // tiny buzz, no big flash
+    [WeaponType.Mortar]:          [7,  0.00, 0xffdd99, 1.6, 1.5],   // slow heavy drop-kick, big flash
+    [WeaponType.GrenadeLauncher]: [11, 0.03, 0xffc866, 0.8, 0.9],   // pump pop
+    [WeaponType.Flak]:            [10, 0.09, 0xffbb55, 1.3, 1.0],   // hard shove + sideways shudder
+    [WeaponType.Plasma]:          [15, 0.00, 0x44ffbb, 0.5, 0.6],   // light tap, green glow
+    [WeaponType.Railgun]:         [18, 0.01, 0x77ccff, 1.1, 0.9],   // fast snap, cyan discharge
   };
 
   kick(strength = 1): void {
-    const t = ViewModel.KICK_TUNE[this.activeWeapon] ?? ViewModel.KICK_TUNE[0];
+    const t = ViewModel.KICK_TUNE[this.activeWeapon] ?? ViewModel.KICK_TUNE[WeaponType.Rocket];
     this.kickAmount = strength;
     this.kickDecay = t[0];
     this.kickX = (Math.random() - 0.5) * t[1];
-    if (this.activeWeapon === 2) {
+    if (this.activeWeapon === WeaponType.Chaingun) {
       this.spinVel = Math.min(this.spinVel + strength * 140, ViewModel.SPIN_MAX);
     }
     this.flashMat.color.setHex(t[2]);
@@ -276,6 +324,7 @@ export class ViewModel {
   // punch, not a shot. No flash (melee isn't a discharge).
   punch(): void {
     this.punchT = 0;
+    this.fistGroup.visible = true;
   }
 
   // Lower → swap model at the bottom → raise. Cosmetic only; firing isn't gated.
@@ -386,9 +435,15 @@ export class ViewModel {
     const t = this.switchT;
     if (t < SWITCH_LOWER_TIME) return t / SWITCH_LOWER_TIME;
     if (this.pendingWeapon >= 0 && this.pendingWeapon !== this.activeWeapon) {
-      this.weapons[this.activeWeapon].visible = false;
+      const prev = this.weapons.get(this.activeWeapon);
+      if (prev) prev.visible = false;
       this.activeWeapon = this.pendingWeapon;
-      this.weapons[this.activeWeapon].visible = true;
+      const next = this.weapons.get(this.activeWeapon);
+      if (next) next.visible = true;
+      // Park the flash at this weapon's actual muzzle, not a shared offset
+      const mz = ViewModel.MUZZLE_Z[this.activeWeapon] ?? -0.35;
+      this.flashMesh.position.z = mz;
+      this.flashMesh2.position.z = mz;
     }
     const dip = Math.max(0, 1 - (t - SWITCH_LOWER_TIME) / SWITCH_RAISE_TIME);
     if (dip <= 0) { this.switchT = -1; this.pendingWeapon = -1; }
@@ -396,13 +451,25 @@ export class ViewModel {
   }
 
   // Punch swing envelope: snap in, brief apex hold, spring back out.
+  // Also flies the fist — weapon envelope drives the gun, this moves the glove.
   private updatePunchDip(dt: number): number {
     if (this.punchT < 0) return 0;
     this.punchT += dt;
     const t = this.punchT;
-    if (t >= PUNCH_TOTAL) { this.punchT = -1; return 0; }
-    if (t < PUNCH_IN) return t / PUNCH_IN;
-    if (t < PUNCH_IN + PUNCH_HOLD) return 1;
-    return 1 - (t - PUNCH_IN - PUNCH_HOLD) / PUNCH_OUT;
+    if (t >= PUNCH_TOTAL) {
+      this.punchT = -1;
+      this.fistGroup.visible = false;
+      this.fistGroup.position.copy(FIST_OFF);
+      return 0;
+    }
+    let env: number;
+    if (t < PUNCH_IN) env = t / PUNCH_IN;
+    else if (t < PUNCH_IN + PUNCH_HOLD) env = 1;
+    else env = 1 - (t - PUNCH_IN - PUNCH_HOLD) / PUNCH_OUT;
+    // Fist leads: it jabs in on the weapon's way out and snaps back first
+    const ft = t < PUNCH_IN ? t / PUNCH_IN : t < PUNCH_IN + PUNCH_HOLD + 0.05 ? 1 : Math.max(0, 1 - (t - PUNCH_IN - PUNCH_HOLD - 0.05) / 0.12);
+    const ease = 1 - (1 - ft) * (1 - ft); // ease-out — fast launch, lands hard
+    this.fistGroup.position.lerpVectors(FIST_OFF, FIST_JAB, ease);
+    return env;
   }
 }
