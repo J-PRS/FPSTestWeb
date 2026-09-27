@@ -395,3 +395,5 @@ export function createSpeciesKit(deps: EntitiesDeps, targets: Targetable[], depl
     boltPop, updateSpecies, burrow, rollUber, kickDust, kickTrail,
   };
 }
+
+export type SpeciesKit = ReturnType<typeof createSpeciesKit>;
