@@ -1911,3 +1911,4 @@ match reset now clears leftover gems (pickupGone broadcast); bank claim path rat
 teamUpdate wire message + bot-only team rebalance: after a leaver leaves sides skewed >=2, a bot on the big side switches jerseys (humans never move); roster keeps team truth client-side
 lobby: shows 'in: <room>', marks + disables your current row, and join() early-returns on the current room (no pointless reload)
 botFill map spec: rooms hold N total bodies — bots spawn on departures and retire on arrivals (dead bots retire first); also lobby 'in: room' marker landed earlier this leg
+carried flags stop streaming at 20Hz — client pins the flag mesh to the carrier's rendered pos via onBeforeRender; flagUpdate now fires on transitions only; late joiners finally see flags (gameState.flags was sent but dropped client-side)

@@ -87,8 +87,10 @@ export class RoomFlags {
           this.dirty = true;
           continue;
         }
-        f.pos = { ...carrier.position };
-        this.dirty = true; // carried flags stream their position every tick
+        f.pos = { ...carrier.position }; // truth for the capture check below —
+        // but NOT broadcast: clients pin a carried flag to the carrier's
+        // rendered position, so we only send flagUpdate on transitions.
+        // Saves a 20Hz stream per carried flag for zero visible difference.
         // Reaching own base ring with the enemy flag scores — but only
         // while your own flag is home; classic CTF, otherwise a team
         // could cap while its flag sits in enemy hands.

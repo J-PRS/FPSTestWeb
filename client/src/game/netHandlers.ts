@@ -75,7 +75,11 @@ export function wireNetworkHandlers(deps: NetDeps): void {
 
   // Server-owned CTF flags — dumb renderers: pole+banner meshes that just
   // follow flagUpdate positions. All rules live in RoomFlags server-side.
+  // Carried flags get no position stream (server stopped broadcasting it) —
+  // the mesh pins to the carrier's rendered position at draw time instead,
+  // which is smoother than any wire rate anyway.
   const flagMeshes = new Map<string, THREE.Group>();
+  const flagCarriers = new Map<string, string>();
   const ensureFlagMesh = (team: 'alpha' | 'bravo'): THREE.Group => {
     let g = flagMeshes.get(team);
     if (g) return g;
@@ -89,6 +93,17 @@ export function wireNetworkHandlers(deps: NetDeps): void {
       new THREE.MeshBasicMaterial({ color: team === 'alpha' ? 0x55aaff : 0xff8855 }));
     banner.position.set(0.55, 3.4, 0);
     g.add(pole, banner);
+    g.onBeforeRender = () => {
+      const carrier = flagCarriers.get(team);
+      if (!carrier) return;
+      if (carrier === networkManager.getLocalPlayerId()) {
+        g.position.copy(deps.lazyPlayer().pos);
+      } else {
+        const rp = deps.world.remotePlayers.get(carrier);
+        if (rp) g.position.copy(rp.pos);
+      }
+      g.position.y += 0.4; // ride the shoulders, not the boots
+    };
     deps.lazyScene().add(g);
     flagMeshes.set(team, g);
     return g;
@@ -97,6 +112,8 @@ export function wireNetworkHandlers(deps: NetDeps): void {
     for (const f of flags) {
       const g = ensureFlagMesh(f.team);
       g.position.set(f.pos.x, f.pos.y, f.pos.z);
+      if (f.state === 'carried' && f.carrier) flagCarriers.set(f.team, f.carrier);
+      else flagCarriers.delete(f.team);
     }
   };
 
@@ -435,7 +452,7 @@ export function wireNetworkHandlers(deps: NetDeps): void {
   };
 
   // Register gameState handler (for initial connection and reconnection)
-  networkManager.onGameState = (players: GameStatePlayer[], localPlayerState: LocalPlayerState | undefined, roomInfo?: { room?: string; mode?: string; team?: 'alpha' | 'bravo'; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number>; pickups?: { id: number; pos: { x: number; y: number; z: number } }[] }) => {
+  networkManager.onGameState = (players: GameStatePlayer[], localPlayerState: LocalPlayerState | undefined, roomInfo?: { room?: string; mode?: string; team?: 'alpha' | 'bravo'; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number>; pickups?: { id: number; pos: { x: number; y: number; z: number } }[]; flags?: { team: 'alpha' | 'bravo'; pos: { x: number; y: number; z: number }; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[] }) => {
     logger.debug(`gameState received, players: ${players.length}`);
     if (roomInfo?.room && roomInfo.room !== 'default') {
       chat.add(null, `joined room '${roomInfo.room}'${roomInfo.mode ? ` (${roomInfo.mode})` : ''} — ${players.length} other player(s)`);
@@ -449,6 +466,8 @@ export function wireNetworkHandlers(deps: NetDeps): void {
     }
     // Pickups still lying on the field when we (re)joined.
     for (const p of roomInfo?.pickups ?? []) addPickup(p.id, p.pos);
+    // Flags mid-flight when we joined — same path as a flagUpdate broadcast.
+    if (roomInfo?.flags?.length) networkManager.onFlagUpdate?.(roomInfo.flags);
 
     if (!localPlayerState) return;
     logger.debug(`Restoring local player state from gameState: ${JSON.stringify(localPlayerState)}`);
