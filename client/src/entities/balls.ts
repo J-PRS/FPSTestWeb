@@ -3,7 +3,9 @@ import { nextTargetId } from './targetIds.js';
 
 import { GRAVITY, BALL_MAX_DIST, BALL_TELE_MIN, BALL_TELE_MAX, BALL_TELE_HEIGHT, BALL_BASE_RADIUS, BALL_ENRAGE_ENABLED, BALL_ENRAGE_FORCE, BALL_ENRAGE_TIMEOUT, BALL_ENRAGE_DASH_DIST, BALL_ENRAGE_DASH_SPEED, BALL_ENRAGE_TELEGRAPH_H } from '../core/config.js';
 
-import { Terrain } from '../world/terrain.js';
+import { Terrain, getHeightfield } from '../world/terrain.js';
+import { makeSimBall, stepBall, BALL_OVERSPEED, BALL_MIN_SPEED, BALL_STALL_TIME, type SimBall } from '../../../shared/ballSim.js';
+import { type Heightfield } from '../../../shared/heightfield.js';
 import { RibbonTrail } from '../projectiles/RibbonTrail.js';
 import { ChildLogger } from '../core/Logger.js';
 import { allocSlots, freeSlots, getSwarm, getShadows, type SwarmPart } from './swarms.js';
@@ -22,6 +24,8 @@ const _m = new THREE.Matrix4();
 const _q = new THREE.Quaternion();
 const _s = new THREE.Vector3();
 const _c = new THREE.Color();
+const _enrageTint = new THREE.Color(1, 0.12, 0.08);
+const _white = new THREE.Color(1, 1, 1);
 
 // One shared geometry for every ball — radius baked in, per-ball scale lives
 // in the instance matrix.
@@ -92,17 +96,33 @@ export interface Targetable {
   health: number;
   maxHealth?: number;
   radius: number;
+  /** Collision radius override — render and physics radius diverge on
+   *  tapered bodies (Totem's obelisk is ~0.7× its scale factor). */
+  hitRadius?: number;
   /** Tall targets (Totem): hitbox is a vertical capsule from pos to
    *  pos.y + capsuleTop instead of a sphere at the feet. */
   capsuleTop?: number;
-  /** Long targets (Miner): hitbox is a capsule on the segment
+  /** Long targets (Overlord): hitbox is a capsule on the segment
    *  pos ± capsuleEnd (heading-aligned). Mutually exclusive w/ capsuleTop. */
   capsuleEnd?: THREE.Vector3;
   color: THREE.Color;
   scale: number;
-  takeDamage(): boolean;
+  takeDamage(damage: number): boolean;
   applyKnockback(from: THREE.Vector3, force: number): void;
   applyPull(to: THREE.Vector3, force: number): void;
+  /** Props (Tumbleweed) die visually but shouldn't credit frags. */
+  scoreless?: boolean;
+  /** Suppress nugget drops — wildlife and pure props. */
+  lootless?: boolean;
+  /** Suppress floating health bars — set for props, not hostile wildlife. */
+  hideHealthBar?: boolean;
+  /** 'brush' = fluttering twigs/feathers; 'goo' = sticky splat blobs. */
+  debrisKind?: 'rock' | 'brush' | 'goo';
+  /** Real fragment geometries for the death burst (tumbleweed twigs) —
+   *  debris shards use these instead of generated chunks. */
+  debrisGeos?: THREE.BufferGeometry[];
+  /** Death-cue override — crawlers splat, weeds rustle, most use default. */
+  dieCue?: 'die' | 'splat' | 'rustle' | 'squawk';
   /** Fires once when destroyed — elites split, everything else ignores it. */
   onDeath?: (t: Targetable) => void;
 }
@@ -153,28 +173,58 @@ export class Ball {
   // Enrage mode (replaces teleport when BALL_ENRAGE_ENABLED): out-of-range
   // balls get pulled toward the player while still bouncing normally
   private enraged = false;
+  /** Minimap reads this — enraged balls are threats, not ambient cyan. */
+  get isEnraged(): boolean { return this.enraged; }
   private enrageTimer = 0;
+  private slowTimer = 0; // seconds under BALL_MIN_SPEED — fires the stall breaker
   private dampNextBounce = false; // set by the enrage dash — next ground bounce reflects at 50%
   private dashFlash = 0; // brief white-hot pop right after a lunge
   private static _enrageDir = new THREE.Vector3(); // scratch
 
-  constructor(scene: THREE.Scene, terrain: Terrain, variant: 0 | 1 | 2 | 3 = 0) {
+  // ---- Server-driven mode (shared PvE) ---------------------------------
+  // A netDriven ball replays shared/ballSim.ts NON-authoritatively: server
+  // `ballSegment` events snap pos/vel/target, and between events the local
+  // stepper predicts the same arc against the same heightfield — bounce-for
+  // -bounce identical, so corrections are invisible unless latency spikes.
+  netDriven = false;
+  netId = 0;
+  netTargetId: string | null = null;
+  private sim: SimBall | null = null;
+  private static field: Heightfield | null = null;
+  /** entities.ts wires this once — hit claims go to the server, not local health. */
+  static hitClaim: ((netId: number, damage: number, ix: number, iy: number, iz: number) => void) | null = null;
+  private _netImp = new THREE.Vector3(); // pending knockback impulse → next claim
+  private netAcc = 0; // fixed-dt accumulator — prediction steps at server rate
+  private static _simTarget = { x: 0, y: 0, z: 0 };
+  // Render-only correction: segment snaps shift `pos` to truth instantly
+  // (gameplay stays exact), while this offset carries the visual error and
+  // decays over ~0.2s — the ball slides instead of teleporting.
+  private readonly renderOffset = new THREE.Vector3();
+  private readonly _rpos = new THREE.Vector3(); // pos + renderOffset, scratch
+
+  /** One-time init: the heightfield the shared sim needs for bounce prediction. */
+  static initNetMode(): void {
+    if (!Ball.field) Ball.field = getHeightfield();
+  }
+
+  constructor(scene: THREE.Scene, terrain: Terrain, variant: 0 | 1 | 2 | 3 = 0,
+    netSpawn?: { id: number; x: number; y: number; z: number; vx: number; vy: number; vz: number; colorIdx: number }) {
     this.scene = scene;
     this.id = nextTargetId();
     this.variant = variant;
 
     if (variant === 3) {
       // Elite — big violet splitter; death spawns two children
-      this.scale = 2.4; this.health = 5;
+      this.scale = 2.4; this.health = 350;
       this.color = new THREE.Color(0.45, 0.2, 0.85);
     } else if (variant === 2) {
-      this.scale = 3.0; this.health = 3;
+      this.scale = 3.0; this.health = 130;
       this.color = new THREE.Color(1.0, 0.25, 0.25);
     } else if (variant === 1) {
-      this.scale = 2.0; this.health = 2;
+      this.scale = 2.0; this.health = 70;
       this.color = new THREE.Color(0.25, 0.85, 0.25);
     } else {
-      this.scale = 1.0; this.health = 1;
+      this.scale = 1.0; this.health = 30;
       this.color = BALL_COLORS[Math.floor(Math.random() * BALL_COLORS.length)].clone();
     }
     this.maxHealth = this.health;
@@ -190,14 +240,26 @@ export class Ball {
       RibbonTrail.acquire(scene, coreColor.multiplyScalar(0.7).getHex(), this.radius * 0.45, 0.4, 0, true),
     ];
 
-    const rx = (Math.random() - 0.5) * 400;
-    const rz = (Math.random() - 0.5) * 400;
-    const gy = terrain.getHeight(rx, rz);
-    this.pos = new THREE.Vector3(rx, gy + 80 + Math.random() * 60, rz);
+    if (netSpawn) {
+      // Server-owned spawn — pos/vel/color come off the wire, nothing rolled
+      this.netDriven = true;
+      this.netId = netSpawn.id;
+      this.id = 0x40000000 + netSpawn.id; // net namespace — can't collide with local targetIds
+      this.pos = new THREE.Vector3(netSpawn.x, netSpawn.y, netSpawn.z);
+      this.vel = new THREE.Vector3(netSpawn.vx, netSpawn.vy, netSpawn.vz);
+      if (variant === 0) this.color = BALL_COLORS[netSpawn.colorIdx % BALL_COLORS.length]!.clone();
+      this.sim = makeSimBall(netSpawn.id, variant, netSpawn.colorIdx,
+        netSpawn.x, netSpawn.y, netSpawn.z, netSpawn.vx, netSpawn.vy, netSpawn.vz);
+    } else {
+      const rx = (Math.random() - 0.5) * 400;
+      const rz = (Math.random() - 0.5) * 400;
+      const gy = terrain.getHeight(rx, rz);
+      this.pos = new THREE.Vector3(rx, gy + 80 + Math.random() * 60, rz);
 
-    const ang = Math.random() * Math.PI * 2;
-    const spd = Math.random() * 20;
-    this.vel = new THREE.Vector3(Math.cos(ang) * spd, -2, Math.sin(ang) * spd);
+      const ang = Math.random() * Math.PI * 2;
+      const spd = Math.random() * 20;
+      this.vel = new THREE.Vector3(Math.cos(ang) * spd, -2, Math.sin(ang) * spd);
+    }
 
     if (!allocSlots('ball', this)) { this.dead = true; this._disposed = true; }
     this.writeInstance();
@@ -208,7 +270,8 @@ export class Ball {
     if (this.meshRemoved || this.swarmSlot < 0) return;
     const swarm = getSwarm('ball');
     if (!swarm) return;
-    _m.compose(this.pos, _q.identity(), _s.setScalar(this.scale));
+    this._rpos.copy(this.pos).add(this.renderOffset);
+    _m.compose(this._rpos, _q.identity(), _s.setScalar(this.scale));
     swarm.setMatrix(0, this.swarmSlot, _m);
     if (this.flashTimer > 0) {
       swarm.setColor(0, this.swarmSlot, 4, 4, 4);
@@ -225,8 +288,55 @@ export class Ball {
     }
 
     this.prevVelY = this.vel.y;
-    this.vel.y += BALL_GRAVITY * dt;
-    this.pos.addScaledVector(this.vel, dt);
+    if (this.netDriven && this.sim && Ball.field) {
+      // Predict the shared sim — stepped at the SERVER's fixed 50ms, not
+      // render dt. Discrete bounce detection is step-granularity sensitive:
+      // a 16ms client finds a different contact point than the 50ms server,
+      // the reflection heading diverges, and elastic bounces compound it
+      // into hundreds of meters. Same dt + same code = same trajectory.
+      this.netAcc = Math.min(this.netAcc + dt, 0.5); // cap vs spiral-of-death on stalls
+      const s = this.sim;
+      const tp = Ball._simTarget;
+      tp.x = playerPos.x; tp.y = playerPos.y; tp.z = playerPos.z;
+      // target=null when nobody's committed (caller passes own pos) — the
+      // stall breaker + enrage pull are deterministic, so predictors run
+      // them too and pre-land the same launch the server broadcasts.
+      const tgt = playerPos === this.pos ? null : tp;
+      while (this.netAcc >= 0.05) {
+        this.netAcc -= 0.05;
+        s.x = this.pos.x; s.y = this.pos.y; s.z = this.pos.z;
+        s.vx = this.vel.x; s.vy = this.vel.y; s.vz = this.vel.z;
+        stepBall(s, 0.05, Ball.field, tgt, false);
+        this.pos.set(s.x, s.y, s.z);
+        this.vel.set(s.vx, s.vy, s.vz);
+      }
+      this.enraged = s.enraged;
+      this.enrageTimer = s.enrageTimer;
+      this.dampNextBounce = s.dampNextBounce;
+      if (s.dead && !this.dead) this.dead = true;
+    } else {
+      this.vel.y += BALL_GRAVITY * dt;
+      this.pos.addScaledVector(this.vel, dt);
+    }
+
+    // Segment corrections drain back to zero — exp decay, ~0.2s time constant.
+    if (this.renderOffset.lengthSq() > 0.0001) {
+      this.renderOffset.multiplyScalar(Math.exp(-dt * 10));
+    } else {
+      this.renderOffset.set(0, 0, 0);
+    }
+    this._rpos.copy(this.pos).add(this.renderOffset);
+    if (this.netDriven && this.sim) {
+      // The sim only advances in 50ms quanta; the leftover netAcc is elapsed
+      // time the ball has visually "not moved" through. Extrapolate the
+      // render pos ballistically over it or the ball steps at ~20fps.
+      const rem = this.netAcc;
+      if (rem > 0) {
+        this._rpos.x += this.vel.x * rem;
+        this._rpos.y += this.vel.y * rem + 0.5 * BALL_GRAVITY * rem * rem;
+        this._rpos.z += this.vel.z * rem;
+      }
+    }
 
     // Peak detection: vel.y crossed from positive to negative (apex of arc)
     if (this.prevVelY > 0 && this.vel.y <= 0 && this.onPeak) {
@@ -234,8 +344,9 @@ export class Ball {
     }
 
     // Enraged balls are pulled toward the player — a linear accel, so they
-    // still bounce and arc naturally instead of homing like missiles
-    if (this.enraged) {
+    // still bounce and arc naturally instead of homing like missiles.
+    // (netDriven: the shared stepper already applied this pull above.)
+    if (this.enraged && !this.netDriven) {
       this.enrageTimer += dt;
       Ball._enrageDir.subVectors(playerPos, this.pos);
       Ball._enrageDir.y += this.radius; // aim at the body, not the feet
@@ -263,7 +374,10 @@ export class Ball {
         const t = Math.min(1, Math.max(0, 1 - h / BALL_ENRAGE_TELEGRAPH_H));
         this.emissive.setRGB(0.55 + 0.45 * t, 0.45 * t, 0.35 * t); // red → white-hot
       } else {
-        this.emissive.setRGB(0.55, 0, 0);
+        // Pulsing red burn — a static tint reads as texture; a ~2.5Hz throb
+        // reads as "hostile". Bright enough to push past any base hue.
+        const p = 0.75 + 0.85 * (0.5 + 0.5 * Math.sin(this.enrageTimer * 15));
+        this.emissive.setRGB(p, p * 0.1, p * 0.08);
       }
     }
     if (this.dashFlash > 0) {
@@ -272,8 +386,24 @@ export class Ball {
       if (this.dashFlash <= 0 && this.enraged) this.emissive.setRGB(0.55, 0, 0);
     }
 
-    this.handleGroundBounce(terrain, playerPos);
-    getShadows()?.set(this, this.pos, this.radius, 0.3);
+    if (!this.netDriven) this.handleGroundBounce(terrain, playerPos);
+
+    // Stall breaker — loitering under MIN_SPEED for STALL_TIME earns a free
+    // spring launch at the target (same skill as the enrage launch, fired
+    // on boredom instead of distance). Mirrors shared/ballSim.ts — a ball
+    // resting in a dip can't just sit there being scenery.
+    if (!this.netDriven) {
+      const sp = this.vel.length();
+      this.slowTimer = sp < BALL_MIN_SPEED ? this.slowTimer + dt : 0;
+      if (this.slowTimer >= BALL_STALL_TIME) {
+        this.slowTimer = 0;
+        this.launchAt(playerPos, Math.SQRT1_2);
+        this.dashFlash = 0.15;
+        for (let i = 0; i < 8; i++) this.spawnDot();
+        this.onBounce?.(this.pos.clone(), this.vel.clone());
+      }
+    }
+    getShadows()?.set(this, this._rpos, this.radius, 0.3);
     this.writeInstance();
 
     if (this.flashTimer > 0) {
@@ -285,12 +415,12 @@ export class Ball {
     this.fadeTrailDots(dt);
     // Position discontinuity (teleport or playback keyframe snap) — cut the
     // ribbons so they don't streak across the jump
-    if (this.pos.distanceToSquared(this._lastTrailPos) > 400) {
+    if (this._rpos.distanceToSquared(this._lastTrailPos) > 400) {
       for (const r of this.ribbons) r.clear();
     }
-    this._lastTrailPos.copy(this.pos);
+    this._lastTrailPos.copy(this._rpos);
     if (this.vel.lengthSq() > 0.5) {
-      for (const r of this.ribbons) r.push(this.pos, this.vel);
+      for (const r of this.ribbons) r.push(this._rpos, this.vel);
     }
     for (const r of this.ribbons) r.update(dt, Ball.viewPos);
   }
@@ -356,9 +486,10 @@ export class Ball {
     const velBeforeReflection = this.vel.clone();
     const totalEnergy = 0.5 * velBeforeReflection.lengthSq() + Math.abs(BALL_GRAVITY) * this.pos.y;
 
-    // Post-dash landing: reflect at 50% elasticity so the lunge ends with a
-    // thud, not a full-energy ricochet back into orbit
-    const elasticity = this.dampNextBounce ? 0.5 : BOUNCE;
+    // Post-dash landing OR an overspeed impact: reflect at 50% elasticity
+    // so the segment ends with a thud, not a full-energy ricochet into
+    // orbit. (Mirrors shared/ballSim.ts BALL_OVERSPEED — keep in sync.)
+    const elasticity = (this.dampNextBounce || velBeforeReflection.length() > BALL_OVERSPEED) ? 0.5 : BOUNCE;
     this.dampNextBounce = false;
     this.vel.addScaledVector(n, -(1.0 + elasticity) * dot);
 
@@ -476,7 +607,7 @@ export class Ball {
   // ball, random size and lifetime, so they read as chaotic sparkle.
   // Sprites come from a per-ball pool — no create/dispose churn.
   private spawnDot(): void {
-    const spawn = _spawn.copy(this.pos).addScaledVector(_scatter.set(
+    const spawn = _spawn.copy(this._rpos).addScaledVector(_scatter.set(
       Math.random() * 2 - 1, Math.random() * 2 - 1, Math.random() * 2 - 1,
     ).normalize().multiplyScalar(Math.random() * this.radius * 0.6), 1);
     const haloSz = this.radius * (1.8 + Math.random() * 2.0);
@@ -501,6 +632,11 @@ export class Ball {
       this.scene.add(halo); this.scene.add(core);
       d = { halo, core, age: 0, life, haloSz, coreSz };
     }
+    // Enraged balls bleed a red trail — the sparkle is the biggest
+    // on-screen tell, so it has to carry the hostility signal
+    const tint = this.enraged ? _enrageTint : this.color;
+    (d.halo.material as THREE.SpriteMaterial).color.copy(tint);
+    (d.core.material as THREE.SpriteMaterial).color.copy(tint).lerp(_white, 0.65);
     d.halo.scale.setScalar(haloSz);
     d.core.scale.setScalar(coreSz);
     if (this.trailDots.length >= TRAIL_COUNT) {
@@ -544,8 +680,16 @@ export class Ball {
     return dx * dx + dy * dy + dz * dz <= r * r;
   }
 
-  takeDamage(): boolean {
-    this.health--;
+  takeDamage(damage: number): boolean {
+    if (this.netDriven) {
+      // Server-authoritative: claim the hit (with any knockback the caller
+      // already staged), flash locally, and let ballDie decide death.
+      Ball.hitClaim?.(this.netId, damage, this._netImp.x, this._netImp.y, this._netImp.z);
+      this._netImp.set(0, 0, 0);
+      this.flashTimer = 0.15;
+      return false;
+    }
+    this.health -= damage;
     this.flashTimer = 0.15;
     if (this.health <= 0) { this.dead = true; return true; }
     return false;
@@ -553,12 +697,62 @@ export class Ball {
 
   applyKnockback(from: THREE.Vector3, force: number): void {
     const dir = this.pos.clone().sub(from).normalize();
+    if (this.netDriven) { this._netImp.addScaledVector(dir, force); return; }
     this.vel.addScaledVector(dir, force);
   }
 
   applyPull(to: THREE.Vector3, force: number): void {
     const dir = to.clone().sub(this.pos).normalize();
+    if (this.netDriven) { this._netImp.addScaledVector(dir, force); return; }
     this.vel.addScaledVector(dir, force);
+  }
+
+  /** Authoritative resync — a segment event lands mid-flight: snap the sim
+   *  (and the render) to server truth, then advance it by `lead` seconds
+   *  (≈half RTT) because the event is already stale when it arrives —
+   *  without this every bounce visibly rewinds the ball before re-flying.
+   *  The >20m trail-cut already handles teleport discontinuities. */
+  applyNetSegment(
+    px: number, py: number, pz: number,
+    vx: number, vy: number, vz: number,
+    enraged: boolean, targetId: string | null,
+    lead = 0, targetPos?: THREE.Vector3 | null,
+  ): void {
+    const s = this.sim;
+    if (!s) return;
+    s.x = px; s.y = py; s.z = pz;
+    s.vx = vx; s.vy = vy; s.vz = vz;
+    s.enraged = enraged;
+    s.enrageTimer = 0;
+    this.netTargetId = targetId;
+    if (lead > 0 && Ball.field) {
+      const tp = Ball._simTarget;
+      if (targetPos) { tp.x = targetPos.x; tp.y = targetPos.y; tp.z = targetPos.z; }
+      let rem = lead;
+      while (rem > 0.001) {
+        const h = Math.min(0.05, rem); // server-rate substeps — same granularity as the sim
+        stepBall(s, h, Ball.field, enraged && targetPos ? tp : null, false);
+        rem -= h;
+      }
+    }
+    this.netAcc = 0; // reset the step clock — next frame starts a clean 50ms boundary
+    // Carry the visible error into renderOffset: (old rendered pos) - (new
+    // truth). >6m means the prediction diverged hard — hard-snap instead of
+    // smearing a long rubber slide across the screen.
+    this._rpos.copy(this.pos).add(this.renderOffset);
+    this._rpos.x -= s.x; this._rpos.y -= s.y; this._rpos.z -= s.z;
+    if (this._rpos.lengthSq() > 36) this.renderOffset.set(0, 0, 0);
+    else this.renderOffset.copy(this._rpos);
+    this.pos.set(s.x, s.y, s.z);
+    this.vel.set(s.vx, s.vy, s.vz);
+    this.enraged = s.enraged;
+    this.enrageTimer = 0;
+    if (!enraged) this.emissive.setRGB(0, 0, 0);
+  }
+
+  /** Server said dead — the updateDead path fades trails as usual. */
+  netKill(): void {
+    this.dead = true;
   }
 
   dispose(): void {
