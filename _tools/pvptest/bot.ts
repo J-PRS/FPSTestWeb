@@ -26,6 +26,7 @@ const TEST2 = process.argv.includes('--test2');
 const TEST3 = process.argv.includes('--test3');
 const PARK = process.argv.includes('--park'); // stand at spawn — far-range target for abuse tests
 const TEST4 = process.argv.includes('--test4');
+const TEST5 = process.argv.includes('--test5'); // tick-stream quality: rate, gaps, self-echo drift
 const IDLE = process.argv.includes('--idle'); // join then go silent — tests the 60s idle reap
 const WATCH = process.argv.includes('--watch'); // passive observer: log join/left cadence and per-peer tick freshness
 const WS_URL = process.env.PVP_WS ?? 'ws://localhost:8000/ws';
@@ -63,6 +64,10 @@ let snapListener: ((m: any) => void) | null = null;
 let projDestroyedListener: ((id: string) => void) | null = null;
 let lastForeignProjId: string | null = null;
 let dupJoins = 0;
+// Tick-stream stats for --test5: inter-frame gaps, out-of-order seqs,
+// self-echo drift (does the server see us where we say we are?).
+const tickStats = { frames: 0, gaps: [] as number[], lastAt: 0, maxGap: 0, minGap: 1e9 };
+let selfEcho: { pos: Vec3; at: number } | null = null;
 const pendingShots: { id: string | null; target: string; at: number; airtime: number; aimPos: Vec3 }[] = [];
 const killsOf = new Map<string, number>();
 
@@ -188,9 +193,18 @@ function connect(): Promise<void> {
       } else {
         const u8 = new Uint8Array(ev.data);
         if (isWireFrame(u8) && u8[1] === WIRE_TICK) {
+          const now = Date.now();
+          if (tickStats.lastAt) {
+            const gap = now - tickStats.lastAt;
+            tickStats.gaps.push(gap);
+            if (gap > tickStats.maxGap) tickStats.maxGap = gap;
+            if (gap < tickStats.minGap) tickStats.minGap = gap;
+          }
+          tickStats.lastAt = now;
+          tickStats.frames++;
           const f = decodeTickFrame(u8);
           if (f) for (const u of f.updates) {
-            if (u.playerId === NAME) continue;
+            if (u.playerId === NAME) { selfEcho = { pos: u.position, at: now }; continue; }
             const o = others.get(u.playerId) ?? { pos: u.position, vel: u.velocity, health: u.health, dead: u.isDead, lastTick: 0 };
             o.pos = u.position; o.vel = u.velocity; o.health = u.health; o.dead = u.isDead;
             o.lastTick = Date.now();
@@ -294,7 +308,7 @@ async function main() {
     if (!IDLE) sendPosition();
   }, POS_MS);
 
-  if (!TEST && !TEST2 && !TEST3 && !TEST4) {
+  if (!TEST && !TEST2 && !TEST3 && !TEST4 && !TEST5) {
     if (IDLE) {
       // Silent socket: server should reap us past the ~60s idle window.
       const deadAt = await new Promise<number>((res) => {
@@ -525,6 +539,58 @@ async function main() {
       envHit.dmg >= 0 && envHit.dmg <= 40 && envHit.tgt === NAME,
       `dmg=${envHit.dmg} tgt=${envHit.tgt}`);
     hitListener = null;
+
+    clearInterval(posTimer);
+    const fails = results.filter((r) => !r.ok).length;
+    log(`${results.length - fails}/${results.length} checks passed`);
+    process.exit(fails ? 1 : 0);
+  }
+
+  if (TEST5) {
+    // Walk a legal arc for 6s (keeps delta compression emitting frames
+    // for us too — a fully-parked lobby legitimately yields ~0Hz).
+    PARK && (orbitSign = 1); // ensure movement: reuse orbit around spawn
+    const endAt = Date.now() + 6000;
+    while (Date.now() < endAt) {
+      // 15m/s circle — inside every plausibility bound.
+      const t = (Date.now() - t0) / 1000;
+      pos.x = Math.cos(t * 0.5) * 15;
+      pos.z = Math.sin(t * 0.5) * 15;
+      pos.y = groundY(pos.x, pos.z);
+      await wait(50);
+    }
+    const n = tickStats.frames;
+    const gaps = tickStats.gaps.slice().sort((a, b) => a - b);
+    const p50 = gaps[Math.floor(gaps.length * 0.5)] ?? 0;
+    const p95 = gaps[Math.floor(gaps.length * 0.95)] ?? 0;
+    const rate = n / 6;
+    // Server suppresses empty frames: no player change → no broadcast, so
+    // effective rate depends on live peers. A healthy window is 8-40Hz;
+    // sustained 0Hz with live moving peers would be the failure.
+    check('tick frames arrive while moving', rate > 5, `${rate.toFixed(1)}Hz over 6s`);
+    check('tick p50 gap sane', p50 < 150, `p50=${p50}ms p95=${p95}ms max=${tickStats.maxGap}ms`);
+    // Self-echo: the server intentionally doesn't echo our own record
+    // (client-authoritative position). Report drift if it ever appears.
+    if (selfEcho) {
+      const drift = Math.hypot(selfEcho.pos.x - pos.x, selfEcho.pos.y - pos.y, selfEcho.pos.z - pos.z);
+      log(`self-echo drift ${drift.toFixed(2)}m (informational)`);
+    }
+    check('no corrections while circling', corrections === 0, `${corrections} corrections`);
+
+    // Incremental legal move (steps stay under the 300 m/s cap) — the echo
+    // should track without any correction.
+    const c0 = corrections;
+    const startX = pos.x;
+    for (let i = 0; i < 10; i++) { // ~3m per 100ms ≈ 30 m/s
+      pos.x += 3; pos.y = groundY(pos.x, pos.z);
+      await wait(100);
+    }
+    await wait(200);
+    if (selfEcho) {
+      const drift = Math.hypot(selfEcho.pos.x - pos.x, selfEcho.pos.y - pos.y, selfEcho.pos.z - pos.z);
+      check('self-echo tracks legal move', drift < 10, `drift=${drift.toFixed(2)}m after +30m`);
+    }
+    check('no correction on stepped move', corrections === c0, `${corrections - c0}`);
 
     clearInterval(posTimer);
     const fails = results.filter((r) => !r.ok).length;
