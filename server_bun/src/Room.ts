@@ -39,6 +39,8 @@ export class Room {
   // Per-room session bookkeeping (was global — a grace-period slot belongs
   // to the match it was in, not the whole server).
   readonly disconnected = new Map<string, { timeout: ReturnType<typeof setTimeout> }>();
+  /** Watching sockets — no player record, get broadcasts + ticks. */
+  readonly spectators = new Set<string>();
   readonly sessionTokens = new Map<string, string>();
   readonly lastSentPositions = new Map<string, { x: number; y: number; z: number; vx: number; vy: number; vz: number; yaw: number; pitch: number; hp: number; dead: boolean; ski: number; t: number }>();
   tickSeq = 0;
@@ -283,7 +285,8 @@ export class Room {
   /** Nothing left to serve: no humans, no grace-period ghosts. Bots don't
    *  keep a match alive — they exist to serve the humans in it. */
   get empty(): boolean {
-    return this.players.getHumanCount() === 0 && this.disconnected.size === 0;
+    return this.players.getHumanCount() === 0 && this.disconnected.size === 0
+      && this.spectators.size === 0;
   }
 
   /** Balance pick: smallest team gets the newcomer. FFA modes return

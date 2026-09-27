@@ -199,6 +199,9 @@ export class GameServer {
     return undefined;
   }
 
+  /** Spectator sockets aren't players — roomOfPlayer can't find them. */
+  private specRooms = new Map<string, Room>();
+
   onOpen(ws: ServerWebSocket<WebSocketData>): void {
     logger.debug('WebSocket connection opened', { remoteAddress: ws.remoteAddress });
   }
@@ -231,6 +234,7 @@ export class GameServer {
     }
 
     const existingPlayerId = ws.data.playerId;
+    if (existingPlayerId && this.specRooms.has(existingPlayerId)) return; // spectators are read-only
     const room = existingPlayerId ? this.roomOfPlayer(existingPlayerId) : undefined;
 
     if (!existingPlayerId || !room) {
@@ -247,6 +251,14 @@ export class GameServer {
   onClose(ws: ServerWebSocket<WebSocketData>): void {
     const playerId = ws.data.playerId;
     if (!playerId) return;
+    const specRoom = this.specRooms.get(playerId);
+    if (specRoom) {
+      specRoom.spectators.delete(playerId);
+      specRoom.connections.unregister(playerId);
+      this.specRooms.delete(playerId);
+      logger.info('Spectator left', { playerId, room: specRoom.name });
+      return;
+    }
     const room = this.roomOfPlayer(playerId);
     if (!room) return;
 
@@ -278,6 +290,7 @@ export class GameServer {
       mode: r.mode || undefined,
       players: r.playerCount(),
       maxPlayers: CONFIG.maxPlayers,
+      spectators: r.spectators.size || undefined,
       // Live match state so the lobby row shows more than occupancy.
       scores: r.modeSpec?.teams ? { ...r.scores } : undefined,
       ffaLeader: r.modeSpec?.ffa
@@ -417,6 +430,24 @@ export class GameServer {
       ? handshake.mode
       : '';
     const room = this.roomFor(roomName, roomMode);
+
+    // Watch-only join: `spectate: true` registers the socket for this
+    // room's broadcasts + tick stream without spawning a player — no
+    // roster entry, no team, no idle-reap, no slot in the match.
+    if (handshake.spectate === true) {
+      if (room.spectators.size >= CONFIG.maxPlayers) {
+        ws.close(1013, 'Spectators full');
+        return;
+      }
+      ws.data.playerId = playerId;
+      room.spectators.add(playerId);
+      this.specRooms.set(playerId, room);
+      room.connections.register(playerId, ws);
+      room.messages.handleSpectatorHandshake(playerId);
+      this.ops.joins++;
+      logger.info('Spectator joined', { playerId, room: room.name });
+      return;
+    }
 
     if (room.playerCount() >= CONFIG.maxPlayers) {
       ws.close(1013, 'Server full');
@@ -686,6 +717,13 @@ export class GameServer {
           this.metrics.recordsSent += others.length;
           this.metrics.bytesSent += frame.byteLength;
           room.connections.sendBinaryToPlayer(recipientId, frame);
+        }
+        // Spectators have no viewpoint for interest tiers — they get the
+        // full record set every tick.
+        if (room.spectators.size > 0) {
+          const frame = encodeTickFrame(room.tickSeq, records.map(r => r.data));
+          this.metrics.bytesSent += frame.byteLength * room.spectators.size;
+          for (const id of room.spectators) room.connections.sendBinaryToPlayer(id, frame);
         }
       }
 
