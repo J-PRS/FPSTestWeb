@@ -1789,3 +1789,4 @@
 - gameLoop census: count alive in-place instead of .filter() per species per frame (~15 throwaway arrays/frame)
 - Debris trail puffs pooled per-Debris (was material+mesh alloc per shard per interval during multi-kill fights)
 - HealthBarSystem: bar position via transform instead of left/top; white-fill hidden state written once
+- RemotePlayer: interp snapshot buffer pooled (one object per 20Hz packet per remote no longer allocates)
