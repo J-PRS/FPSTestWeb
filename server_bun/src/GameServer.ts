@@ -444,6 +444,7 @@ export class GameServer {
 
       // Bots move first — their writes land in this tick's records below.
       room.bots.tick(0.05);
+      room.tickFlags(0.05);
 
       // Batch all player updates into one message with delta compression.
       // Binary records are pre-encoded ONCE per tick — the per-recipient

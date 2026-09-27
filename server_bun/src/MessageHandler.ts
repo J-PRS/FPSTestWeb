@@ -20,6 +20,10 @@ export interface RoomInfo {
   /** Objective anchors from the map spec — echoed on gameState so clients
    *  place flags/bases where the map says, not where the URL guessed. */
   bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } };
+  /** Any kill — Room drops carried flags here. */
+  onKill?: (targetId: string) => void;
+  /** Flag snapshot supplier for gameState joins — RoomFlags.snapshot. */
+  flags?: () => { team: 'alpha' | 'bravo'; pos: Vec3; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[];
 }
 
 export class MessageHandler {
@@ -49,7 +53,7 @@ export class MessageHandler {
     this.broadcast = broadcast;
     this.sendToPlayer = sendToPlayer;
     if (roomInfo) this.roomInfo = roomInfo;
-    this.combat = new CombatHandler(playerManager, broadcast, sendToPlayer);
+    this.combat = new CombatHandler(playerManager, broadcast, sendToPlayer, roomInfo?.onKill);
   }
 
   setBallSim(sim: BallSim): void {
@@ -112,6 +116,7 @@ export class MessageHandler {
       team: player.team,
       scores: this.roomInfo.scores ? { ...this.roomInfo.scores } : undefined,
       map: this.roomInfo.bases ? { mode: this.roomInfo.mode || undefined, bases: this.roomInfo.bases } : undefined,
+      flags: this.roomInfo.flags?.(),
       localPlayerState: {
         position: { ...player.position },
         rotation: { ...player.rotation },

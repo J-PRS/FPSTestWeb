@@ -72,7 +72,7 @@ export interface TickUpdatePlayer {
 export type ServerMessage =
   // room/mode: which match this state belongs to — set by the room's first
   // joiner, inherited by everyone after (join claims can't redefine it).
-  | { type: 'gameState'; players: GameStatePlayer[]; localPlayerState?: LocalPlayerState; sessionToken?: string; protocolVersion?: number; room?: string; mode?: string; team?: 'alpha' | 'bravo'; scores?: { alpha: number; bravo: number }; map?: { mode?: string; bases?: { alpha?: Vec3; bravo?: Vec3 } } }
+  | { type: 'gameState'; players: GameStatePlayer[]; localPlayerState?: LocalPlayerState; sessionToken?: string; protocolVersion?: number; room?: string; mode?: string; team?: 'alpha' | 'bravo'; scores?: { alpha: number; bravo: number }; map?: { mode?: string; bases?: { alpha?: Vec3; bravo?: Vec3 } }; flags?: { team: 'alpha' | 'bravo'; pos: Vec3; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[] }
   | { type: 'playerJoined'; playerId: string; internalId: string; position: Vec3; rotation: Rotation; team?: 'alpha' | 'bravo' }
   | { type: 'playerLeft'; playerId: string }
   | { type: 'playerHit'; shooterId: string; targetId: string; damage: number; health: number }
@@ -103,6 +103,7 @@ export type ServerMessage =
   | { type: 'pong'; timestamp: number }
   | { type: 'chat'; playerId: string; text: string }
   // --- Match scoreboard (team-mode rooms) --------------------------------
+  | { type: 'flagUpdate'; flags: { team: 'alpha' | 'bravo'; pos: Vec3; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[] }
   | { type: 'teamScore'; scores: { alpha: number; bravo: number }; winAt: number }
   | { type: 'matchEnd'; winner: 'alpha' | 'bravo'; scores: { alpha: number; bravo: number } }
   | { type: 'matchStart'; mode: string; scores: { alpha: number; bravo: number } };
