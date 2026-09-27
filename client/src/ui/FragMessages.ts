@@ -2,6 +2,7 @@ import { FRAG_MESSAGE_DURATION, FRAG_MESSAGE_FADE } from '../core/config.js';
 
 export class FragMessages {
   private scoreDiv: HTMLDivElement;
+  private fadeTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor() {
     this.scoreDiv = document.createElement('div');
@@ -19,8 +20,8 @@ export class FragMessages {
     this.scoreDiv.textContent = msg;
     this.scoreDiv.style.transition = 'none';
     this.scoreDiv.style.opacity = '1';
-    clearTimeout((this.scoreDiv as any)._t);
-    (this.scoreDiv as any)._t = setTimeout(() => {
+    clearTimeout(this.fadeTimer);
+    this.fadeTimer = setTimeout(() => {
       this.scoreDiv.style.transition = `opacity ${FRAG_MESSAGE_FADE}ms ease`;
       this.scoreDiv.style.opacity = '0';
     }, FRAG_MESSAGE_DURATION);

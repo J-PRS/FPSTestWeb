@@ -2,7 +2,7 @@
 // server, full snapshot diffs on mismatch, and window-scope debug functions
 // (takeClientSnapshot / requestServerSnapshot / compareState / exportClientSnapshots).
 
-import { ChildLogger } from './Logger.js';
+import Logger, { ChildLogger } from './Logger.js';
 import { StateSnapshot, type EntityState, type GameStateSnapshot } from './StateSnapshot.js';
 import type { SnapshotPlayer } from '../../../shared/protocol.js';
 import type { Player } from '../entities/Player.js';
@@ -249,6 +249,29 @@ export function wireStateDebug(ctx: StateDebugContext): void {
       }
     };
   };
+
+  // Alt+Q/export header — live game state for bug reports. Keyed toward
+  // "why didn't X happen" questions: death/respawn state, connection health,
+  // what the server thinks vs what we have.
+  Logger.setDiagnostics(() => {
+    const nm = ctx.networkManager;
+    const p = ctx.getPlayer();
+    const fmt = (v: { x: number; y: number; z: number }) =>
+      `(${v.x.toFixed(1)},${v.y.toFixed(1)},${v.z.toFixed(1)})`;
+    const remotes = [...nm.getPlayers().entries()].map(([id, ps]) =>
+      `${id.slice(0, 16)} dead=${ps.isDead} hp=${ps.health} ping=${ps.ping ?? '?'} pos=${fmt(ps.position)}`
+    );
+    return [
+      `localId: ${nm.getLocalPlayerId()}`,
+      `connected: ${nm.isConnected()} ping: ${nm.getPing()}ms loss: ${nm.getPacketLoss()}% jitter: ${nm.getJitter()}ms`,
+      `local: dead=${p.isDead} hp=${p.health} pos=${fmt(p.pos)} vel=${fmt(p.vel)} yaw=${p.yaw.toFixed(2)} pitch=${p.pitch.toFixed(2)} onGround=${p.onGround}`,
+      `lastSentPos: ${fmt(ctx.getLastSentPos())}`,
+      `remotes: ${ctx.remotePlayers.size} rendered / ${nm.getPlayers().size} known`,
+      ...remotes.map(r => `  remote ${r}`),
+      `projectiles: ${ctx.projectiles.length} live`,
+      `uptime: ${(performance.now() / 1000).toFixed(0)}s`,
+    ];
+  });
 
   exposeDebugWindowFunctions(ctx);
 }

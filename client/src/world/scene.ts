@@ -54,7 +54,6 @@ export function createScene(): SceneSetup {
     mieDirectionalG: SKY_MIE_DIRECTIONAL_G,
     sunIntensity: SKY_SUN_INTENSITY,
     fogColor: new THREE.Color(FOG_COLOR),
-    zenithColor: new THREE.Color(0x2e6cb8),
   });
 
   // Volumetric Clouds

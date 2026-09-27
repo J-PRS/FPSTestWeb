@@ -30,7 +30,7 @@ import type { HealthBarSystem } from '../ui/HealthBarSystem.js';
 import type { ExplosionTracker } from '../utils/ExplosionTracker.js';
 import type { setupInputTracking } from '../utils/InputTracking.js';
 import { PENDING_ROCKET_TIMEOUT, FLAK_SHARDS, FLAK_SPREAD, ROCKET_RADIUS } from '../core/config.js';
-import { getWeaponStats, WeaponType } from '../../../shared/weapons.js';
+import { getWeaponStats, WeaponType, AOE_VFX_SCALE } from '../../../shared/weapons.js';
 import { aoeImpulse, aoeDamage as aoeDamageOf } from '../../../shared/combat.js';
 import { poissonDisc } from '../utils/poissonSpread.js';
 import type { Terrain } from '../world/terrain.js';
@@ -66,6 +66,7 @@ const _flakRight = new THREE.Vector3();
 const _flakUp = new THREE.Vector3();
 const _flakUp0 = new THREE.Vector3(0, 1, 0);
 const _flakDir = new THREE.Vector3();
+const _debrisDir = new THREE.Vector3();
 
 // Remote player positions for projectile collision — rebuilt per frame into
 // the same Map (zeroed allocations in the hot loop)
@@ -206,23 +207,27 @@ export function createCombat(deps: CombatDeps) {
     age: number = 0,
     sendAOE?: (pos: { x: number; y: number; z: number }, targetId: string | null) => void,
     _explosionType: 'rocket' | 'grenade' = 'rocket',
-    explosionTint?: string | number
+    explosionTint?: string | number,
+    // VFX radius is decoupled from gameplay radius — aoeRadius intentionally
+    // exceeds the visual dome so damage covers the shock ring, not just the dome
+    vfxRadius?: number,
   ): void {
+    const vfx = vfxRadius ?? radius;
     // Explosion/implosion visual + scorch decal on the terrain below the blast
     if (forceMode === 'push') {
-      deps.world.explosions.push(new Explosion(deps.scene(), pos, directHit, age, deps.terrain(), radius / ROCKET_RADIUS, explosionTint));
-      screenShake.blast(pos, radius, deps.player().pos);
+      deps.world.explosions.push(new Explosion(deps.scene(), pos, directHit, age, deps.terrain(), vfx / ROCKET_RADIUS, explosionTint));
+      screenShake.blast(pos, vfx, deps.player().pos);
     } else {
       deps.world.implosions.push(new Implosion(deps.scene(), pos, age, deps.terrain()));
-      screenShake.blast(pos, radius * 0.5, deps.player().pos);
+      screenShake.blast(pos, vfx * 0.5, deps.player().pos);
     }
     // Scorch only when the blast is near the ground — a midair hit would
     // otherwise paint a phantom mark on terrain far below.
-    if (pos.y - deps.terrain().getHeight(pos.x, pos.z) <= radius) {
+    if (pos.y - deps.terrain().getHeight(pos.x, pos.z) <= vfx) {
       if (deps.world.scorches.length >= SCORCH_MAX) {
         deps.world.scorches.shift()!.dispose();
       }
-      deps.world.scorches.push(new ScorchDecal(deps.scene(), deps.terrain(), pos, radius * 0.6));
+      deps.world.scorches.push(new ScorchDecal(deps.scene(), deps.terrain(), pos, vfx * 0.6));
     }
 
     // Record explosion for death impulse calculation
@@ -359,7 +364,8 @@ export function createCombat(deps: CombatDeps) {
       0,
       sendAOE,
       'rocket',
-      0xffcc66                // hot slam flash
+      0xffcc66,               // hot slam flash
+      stats.aoeRadius * AOE_VFX_SCALE // VFX = 80% of damage reach, same rule as projectiles
     );
   }
 
@@ -454,7 +460,7 @@ export function createCombat(deps: CombatDeps) {
       networkManager.sendAOEShot(pos, weaponType, targetId, p.serverProjectileId ?? null, p.hitAge ?? p.age);
     processProjectileExplosion(
       p.hitPointValid ? p.hitPoint : p.pos,
-      p.explosionRadius,
+      p.config.aoeRadius,           // gameplay radius = server truth
       p.force,
       p.forceMode,
       p.config.aoeDamage,
@@ -467,7 +473,8 @@ export function createCombat(deps: CombatDeps) {
       p.age,
       sendAOE,
       (p.config.name === 'grenade' || p.config.name === 'grenadeLauncher') ? 'grenade' : 'rocket',
-      p.config.damageColor
+      p.config.damageColor,
+      p.explosionRadius             // VFX stays the pinned dome size
     );
   }
 
@@ -504,12 +511,23 @@ export function createCombat(deps: CombatDeps) {
     }
     logHitScore(p, 'ball');
     if (destroyed) {
-      deps.world.debrisList.push(new BallDebris(deps.scene(), deps.terrain(), ball.pos.x, ball.pos.y, ball.pos.z, ball.color, ball.scale));
+      // Shell-sampled shatter — debris occupies the ball's own silhouette on
+      // frame 0, flies along surface normals, and inherits the ball's momentum
+      // + the shot's push so the burst reads as "the ball broke", not
+      // "debris spawned where a ball was".
+      _debrisDir.copy(p.vel).normalize();
+      deps.world.debrisList.push(new BallDebris(
+        deps.scene(), deps.terrain(), ball.pos.x, ball.pos.y, ball.pos.z,
+        ball.color, ball.scale,
+        { bodyRadius: ball.radius, impulseDir: _debrisDir, inheritVel: ball.vel },
+      ));
+      screenShake.blast(ball.pos, 1.6, deps.player().pos); // small pop kick — distant kills barely register
       deps.player().kills++;
       // Drop nuggets (bigger balls drop more)
       for (let n = 0; n < Math.round(ball.scale); n++) {
         deps.nuggets.push(new Nugget(deps.scene(), ball.pos, ball.vel));
       }
+      ball.onDeath?.(ball); // elite split — entities.ts spawns the children
     }
 
     const demoManager = deps.demoManager();

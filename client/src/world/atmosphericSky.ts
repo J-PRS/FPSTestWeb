@@ -4,24 +4,149 @@ import * as THREE from 'three';
 // Rayleigh and Mie scattering for realistic sky colors
 
 const atmosphereVertexShader = /* glsl */`
-  varying float vHeight;
+  varying vec3 vDir;
   void main() {
-    vHeight = normalize(position).y;
+    vDir = normalize(position);
     gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
   }
 `;
 
+// Real Rayleigh/Mie single-scattering (wwwtyro/glsl-atmosphere), the same
+// technique Unity's procedural skybox is based on. Produces a physically
+// plausible gradient — deep zenith, pale horizon, natural warmth toward the
+// sun — without hand-tuned color bands.
 const atmosphereFragmentShader = /* glsl */`
-  varying float vHeight;
-  uniform vec3 fogColor;   // linear-space horizon color (matches terrain fog exactly)
-  uniform vec3 zenithColor; // linear-space zenith color
+  varying vec3 vDir;
+  uniform vec3 fogColor;      // horizon haze color (matches terrain fog exactly)
+  uniform vec3 sunPosition;   // world-space sun position (used for direction only)
+  uniform float sunIntensity;
+  uniform float rayleigh;
+  uniform float mieCoefficient;
+  uniform float mieDirectionalG;
+  uniform float starIntensity;
+
+  #define PI 3.141592
+  #define iSteps 16
+  #define jSteps 8
+
+  float hash3(vec3 p) {
+    return fract(sin(dot(p, vec3(12.9898, 78.233, 45.164))) * 43758.5453);
+  }
+
+  // ray-sphere intersection, sphere centered at origin
+  vec2 rsi(vec3 r0, vec3 rd, float sr) {
+    float a = dot(rd, rd);
+    float b = 2.0 * dot(rd, r0);
+    float c = dot(r0, r0) - (sr * sr);
+    float d = (b * b) - 4.0 * a * c;
+    if (d < 0.0) return vec2(1e5, -1e5);
+    return vec2(
+      (-b - sqrt(d)) / (2.0 * a),
+      (-b + sqrt(d)) / (2.0 * a)
+    );
+  }
+
+  vec3 atmosphere(vec3 r, vec3 r0, vec3 pSun, float iSun, float rPlanet, float rAtmos,
+                  vec3 kRlh, float kMie, float shRlh, float shMie, float g) {
+    pSun = normalize(pSun);
+    r = normalize(r);
+
+    vec2 p = rsi(r0, r, rAtmos);
+    if (p.x > p.y) return vec3(0.0);
+    p.y = min(p.y, rsi(r0, r, rPlanet).x);
+    float iStepSize = (p.y - p.x) / float(iSteps);
+
+    float iTime = 0.0;
+    vec3 totalRlh = vec3(0.0);
+    vec3 totalMie = vec3(0.0);
+    float iOdRlh = 0.0;
+    float iOdMie = 0.0;
+
+    float mu = dot(r, pSun);
+    float mumu = mu * mu;
+    float gg = g * g;
+    float pRlh = 3.0 / (16.0 * PI) * (1.0 + mumu);
+    float pMie = 3.0 / (8.0 * PI) * ((1.0 - gg) * (mumu + 1.0))
+      / (pow(1.0 + gg - 2.0 * mu * g, 1.5) * (2.0 + gg));
+
+    for (int i = 0; i < iSteps; i++) {
+      vec3 iPos = r0 + r * (iTime + iStepSize * 0.5);
+      float iHeight = length(iPos) - rPlanet;
+      float odStepRlh = exp(-iHeight / shRlh) * iStepSize;
+      float odStepMie = exp(-iHeight / shMie) * iStepSize;
+      iOdRlh += odStepRlh;
+      iOdMie += odStepMie;
+
+      float jStepSize = rsi(iPos, pSun, rAtmos).y / float(jSteps);
+      float jTime = 0.0;
+      float jOdRlh = 0.0;
+      float jOdMie = 0.0;
+      for (int j = 0; j < jSteps; j++) {
+        vec3 jPos = iPos + pSun * (jTime + jStepSize * 0.5);
+        float jHeight = length(jPos) - rPlanet;
+        jOdRlh += exp(-jHeight / shRlh) * jStepSize;
+        jOdMie += exp(-jHeight / shMie) * jStepSize;
+        jTime += jStepSize;
+      }
+
+      vec3 attn = exp(-(kMie * (iOdMie + jOdMie) + kRlh * (iOdRlh + jOdRlh)));
+      totalRlh += odStepRlh * attn;
+      totalMie += odStepMie * attn;
+      iTime += iStepSize;
+    }
+
+    return iSun * (pRlh * kRlh * totalRlh + pMie * kMie * totalMie);
+  }
 
   void main() {
-    // Flat horizon band: sky is exactly fogColor for vHeight < 0.02,
-    // so fully-fogged terrain is invisible against the sky at the horizon.
-    // Transition to zenith starts at 0.02 and ends at 0.45.
-    float t = smoothstep(0.02, 0.45, vHeight);
-    vec3 color = mix(fogColor, zenithColor, t);
+    vec3 dir = normalize(vDir);
+    float h = dir.y;
+
+    // Earth-like atmosphere, observer at surface
+    vec3 color = atmosphere(
+      dir,
+      vec3(0.0, 6372e3, 0.0),           // ray origin: planet surface
+      sunPosition,
+      sunIntensity,
+      6371e3,                            // planet radius (m)
+      6471e3,                            // atmosphere radius (m)
+      vec3(5.5e-6, 13.0e-6, 22.4e-6) * rayleigh, // Rayleigh coefficients
+      mieCoefficient,                    // Mie coefficient
+      8e3,                               // Rayleigh scale height
+      1.2e3,                             // Mie scale height
+      mieDirectionalG                    // Mie preferred direction
+    );
+
+    // Soft exposure curve (the raw HDR output needs tonemapping)
+    color = 1.0 - exp(-1.6 * color);
+
+    // Saturation boost — physical scattering trends toward hazy teal;
+    // push toward the vivid royal blue of a stylized/game sky.
+    float luma = dot(color, vec3(0.299, 0.587, 0.114));
+    color = mix(vec3(luma), color, 1.6);
+    // Hue shift toward royal blue — raw Rayleigh reads too cyan/green
+    color.g *= 0.90;
+    color.b *= 1.18;
+    color = clamp(color, 0.0, 1.0);
+
+    // Blend to exact fogColor just above the horizon so fully-fogged terrain
+    // is invisible against the sky.
+    color = mix(fogColor, color, smoothstep(0.0, 0.06, h));
+
+    // No sun disc — Tribes-style tracking needs uniform sky brightness.
+    // sunPosition only suppresses stars near the sun direction below.
+    float sunDot = max(dot(dir, normalize(sunPosition)), 0.0);
+
+    // Stars: sparse cell-hashed pinpoints, fading in above the haze.
+    if (h > 0.05) {
+      vec3 cell = floor(dir * 220.0);
+      vec3 f = fract(dir * 220.0) - 0.5;
+      float rnd = hash3(cell);
+      float star = smoothstep(0.22, 0.0, length(f)) * step(0.988, rnd);
+      float twinkle = 0.7 + 0.3 * hash3(cell + 1.7);
+      float fade = smoothstep(0.35, 0.6, h) * (1.0 - pow(sunDot, 6.0));
+      color += vec3(1.0, 1.0, 0.95) * star * twinkle * fade * starIntensity;
+    }
 
     gl_FragColor = vec4(color, 1.0);
   }
@@ -34,7 +159,7 @@ export interface AtmosphericSkyParams {
   mieDirectionalG?: number;
   sunIntensity?: number;
   fogColor?: THREE.Color;
-  zenithColor?: THREE.Color;
+  starIntensity?: number;
 }
 
 export class AtmosphericSky {
@@ -54,12 +179,12 @@ export class AtmosphericSky {
       uniforms: {
         sunPosition: { value: this.sunPosition },
         sunIntensity: { value: params.sunIntensity ?? 22.0 },
-        rayleigh: { value: params.rayleigh ?? 3.0 },
-        mieCoefficient: { value: params.mieCoefficient ?? 0.005 },
-        mieDirectionalG: { value: params.mieDirectionalG ?? 0.7 },
+        rayleigh: { value: params.rayleigh ?? 1.0 },
+        mieCoefficient: { value: params.mieCoefficient ?? 21e-6 },
+        mieDirectionalG: { value: params.mieDirectionalG ?? 0.758 },
         turbidity: { value: params.turbidity ?? 10.0 },
         fogColor: { value: params.fogColor ?? new THREE.Color(0xbbd0e8) },
-        zenithColor: { value: params.zenithColor ?? new THREE.Color(0x2e6cb8) },
+        starIntensity: { value: params.starIntensity ?? 0.9 },
       },
       side: THREE.BackSide,
       depthWrite: false,
@@ -68,8 +193,9 @@ export class AtmosphericSky {
     this.mesh = new THREE.Mesh(geometry, this.material);
     scene.add(this.mesh);
     
-    // Set initial time to noon
-    this.setTimeOfDay(0.5);
+    // Mid-morning sun: high enough for bright light, angled enough to be
+    // visible in the sky and to give directional shading.
+    this.setTimeOfDay(0.38);
   }
 
   setTimeOfDay(t: number): void {
