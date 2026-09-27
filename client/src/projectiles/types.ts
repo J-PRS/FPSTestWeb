@@ -44,7 +44,19 @@ export interface ProjectileConfig {
   terrainOffset: number;
   needsServerTracking: boolean;
   maxLifetime?: number; // 0 or undefined = no auto-explode; >0 auto-explodes after age reaches this (seconds)
-  trailMeshType?: 'sphere' | 'ring' | 'disc'; // trail particle geometry; defaults to sphere
+  trailMeshType?: 'sphere' | 'ring' | 'disc' | 'billboard'; // trail particle geometry; defaults to sphere
+  noExplosion?: boolean; // true = hit produces no explosion/knockback (hitscan-style bullets)
+  ribbonTrail?: boolean; // flat ribbon trail strip (single mesh, cheap) in addition to particles
+  ribbonLanes?: number; // 1 = single strip; 3 = main band + 2 offset core lanes (default)
+  ribbonWidth?: number;
+  ribbonLife?: number;
+  ribbonColor?: number;
+  bounces?: boolean; // bounce off terrain instead of exploding (grenade launcher); fuse still applies
+  bounceRestitution?: number; // velocity kept along the terrain normal per bounce
+  bounceFriction?: number; // tangential velocity kept per bounce
+  maxBounces?: number; // die on the Nth terrain hit (flak shards); undefined = bounce until fuse
+  armTime?: number; // T2 mortar arming delay: contacts before this age BOUNCE, after it they detonate
+  wakeVisual?: boolean; // turbulent wake particles marking the growing proxy hitbox (off by default — tuning pending)
 }
 
 export function getProjectileConfig(configs: ProjectileConfig[], weaponType: number): ProjectileConfig | undefined {

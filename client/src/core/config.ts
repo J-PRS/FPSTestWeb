@@ -37,7 +37,7 @@ export const CHAINGUN_RATE = 0.09; // Chaingun fire rate (seconds)
 export const ROCKET_RADIUS = 6.0; // Rocket explosion radius (visual)
 
 // Disc constants
-export const DISC_RADIUS = 5.0; // Disc explosion radius (visual)
+export const DISC_RADIUS = 8.0; // Disc VFX radius — aoeRadius (10m) intentionally exceeds it
 
 // Grenade constants
 export const GRENADE_RADIUS = 10.0; // Grenade explosion radius (visual)
@@ -112,7 +112,7 @@ export const TURRET_RELAUNCH = 75.0;      // beyond this → ballistic hop at yo
 export const TURRET_MIN_DWELL = 3.0;      // must sit planted this long between hops (no ping-pong)
 export const TURRET_HOP_T = 1.6;          // solved flight time of the launch arc
 export const TURRET_REFIRE = 1.6;         // s between bolts
-export const TURRET_BOLT_SPEED = 30.0;    // m/s horizontal — constant speed, arc absorbs range
+export const TURRET_BOLT_SPEED = 60.0;    // m/s muzzle speed — elevation solved per shot
 export const TURRET_BOLT_DAMAGE = 12;
 
 // Roller — a big ball that just rolls at you. No hops, no brains:
@@ -127,6 +127,98 @@ export const ROLLER_ACCEL = 14.0;        // m/s² steering toward the player
 export const ROLLER_TOPSPEED = 26.0;     // downhill it can exceed via gravity
 export const ROLLER_HIT_DAMAGE = 18;
 export const ROLLER_HIT_FORCE = 22;      // shove on contact
+
+// Seeker — airborne skull-wasp. Ignores terrain while cruising above it,
+// commits to a telegraphed straight-line dart (the dodge window IS the
+// design), stings on contact, then drifts off to recover.
+export const SEEKER_MAX = 4;
+export const SEEKER_SPAWN_INTERVAL = 7.0;
+export const SEEKER_SPAWN_MIN = 35.0;
+export const SEEKER_SPAWN_MAX = 70.0;
+export const SEEKER_RADIUS = 0.6;
+export const SEEKER_HEALTH = 2;
+export const SEEKER_AGGRO_DIST = 45.0;
+export const SEEKER_HOVER = 5.0;        // cruise height above terrain
+export const SEEKER_SPEED = 16.0;       // chase top speed
+export const SEEKER_ACCEL = 22.0;
+export const SEEKER_DART_RANGE = 11.0;  // telegraph triggers inside this
+export const SEEKER_DART_SPEED = 32.0;
+export const SEEKER_DART_TELEGRAPH = 0.4; // rear-back pause before launch
+export const SEEKER_DART_MAX = 0.8;     // committed dash duration
+export const SEEKER_STING_DIST = 1.8;   // contact damage range
+export const SEEKER_STING_DAMAGE = 10;  // server-authoritative self-damage
+export const SEEKER_STING_FORCE = 14;   // shove on sting
+export const SEEKER_RECOVER = 1.2;      // post-dart drift-away window
+export const SEEKER_STUN = 0.6;         // blast knockback suppresses attacks this long
+
+// Miner — the flying dredge: a big slow gasbag that circles the player and
+// sows mines across the dunes. Always visible, huge hitbox, high HP — a
+// priority target, not a lurker. The mine trail punishes ignoring it.
+export const MINER_MAX = 2;
+export const MINER_SPAWN_INTERVAL = 20.0; // slow — a persistent menace, not a swarm
+export const MINER_SPAWN_MIN = 60.0;
+export const MINER_SPAWN_MAX = 100.0;
+export const MINER_RADIUS = 2.2;
+export const MINER_HEALTH = 10;
+export const MINER_SPEED = 5.0;         // ponderous drift
+export const MINER_ACCEL = 3.0;
+export const MINER_ALTITUDE = 11.0;     // cruise height above terrain
+export const MINER_LOITER_DIST = 30.0;  // ring radius it circles the player at
+export const MINER_DROP_INTERVAL = 2.8; // seconds between mine drops
+export const MINER_DROP_RANGE = 50.0;   // only sows inside the player's play space
+export const MINER_STUN = 0.4;          // blast knockback stalls its steering
+
+// Mines — the droppings. Shootable (detonating one clears it), proximity-fused.
+export const MINE_MAX = 10;             // global cap — oldest fields thin out
+export const MINE_RADIUS = 0.5;
+export const MINE_ARM_TIME = 1.0;       // seconds before it can trigger
+export const MINE_TRIGGER_DIST = 3.2;   // proximity fuse
+export const MINE_BLAST_RADIUS = 6.0;   // damage falloff radius
+export const MINE_DAMAGE_MAX = 22;      // at zero distance
+export const MINE_KNOCKBACK = 12.0;
+export const MINE_LIFE = 45.0;          // seconds before it fizzle-pops
+
+// Totem — peak-seeking sniper obelisk. Blinks to local high ground, charges
+// a visible aim-beam, fires a fast flat bolt. Relocates when crowded,
+// when LOS is blocked, or after a few shots — it always wants the crest.
+export const TOTEM_MAX = 2;
+export const TOTEM_SPAWN_INTERVAL = 18.0; // rare — a persistent ranged threat
+export const TOTEM_SPAWN_MIN = 50.0;
+export const TOTEM_SPAWN_MAX = 95.0;    // inside readable fog distance
+export const TOTEM_RADIUS = 1.0;
+export const TOTEM_HEALTH = 4;
+export const TOTEM_RANGE = 105.0;       // engages inside the fog line — sniping from beyond it reads as invisible cheating
+export const TOTEM_MIN_RANGE = 22.0;    // player closer than this → blink away
+export const TOTEM_REFIRE = 2.6;        // seconds between shots
+export const TOTEM_BOLT_SPEED = 110.0;  // fast flat bolt — dodgeable perpendicular
+export const TOTEM_BOLT_DAMAGE = 15;
+export const TOTEM_CHARGE = 0.65;       // aim-beam telegraph — dodgeable, not free
+export const TOTEM_RELOCATE_HOPS = 3;   // shots fired before seeking a new perch
+export const TOTEM_PEAK_RADIUS = 45.0;  // how far it samples terrain for peaks
+export const TOTEM_PEAK_MIN_GAIN = 3.0; // min height gain to count as "better perch"
+export const TOTEM_MATERIALIZE = 0.7;   // post-blink vulnerable window
+
+// Rakk — the cliff-racer. Soars overhead in lazy circles, folds its wings,
+// and swoops a gliding pass through the player. Flock attack token keeps
+// it to one diver at a time; the slow climb-out is the shoot-it window.
+export const RAKK_MAX = 3;
+export const RAKK_SPAWN_INTERVAL = 9.0;
+export const RAKK_SPAWN_MIN = 40.0;
+export const RAKK_SPAWN_MAX = 80.0;
+export const RAKK_RADIUS = 1.1;
+export const RAKK_HEALTH = 3;
+export const RAKK_ORBIT_ALT = 22.0;     // cruise height above terrain
+export const RAKK_ORBIT_R = 25.0;       // circling radius around the player
+export const RAKK_SPEED = 18.0;         // soar speed
+export const RAKK_ACCEL = 18.0;
+export const RAKK_DIVE_CD_MIN = 3.0;    // seconds between dive opportunities
+export const RAKK_DIVE_CD_MAX = 7.0;
+export const RAKK_DIVE_SPEED = 40.0;    // fold-and-scream speed
+export const RAKK_CLAW_DIST = 2.2;      // pass-through contact range
+export const RAKK_CLAW_DAMAGE = 12;
+export const RAKK_CLAW_FORCE = 10;      // shove on hit
+export const RAKK_CLIMB_T = 2.2;        // the slow vulnerable climb-out
+export const RAKK_STUN = 0.5;
 
 // Renderer constants
 export const PIXEL_SCALE = 4; // Each pixel is 4x4 screen pixels (Doom-style)

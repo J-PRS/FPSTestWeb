@@ -1,31 +1,30 @@
 import * as THREE from 'three';
 
 import {
-  GRAVITY, ROCKET_SPEED, ROCKET_RADIUS, ROCKET_BODY_RADIUS, ROCKET_FORCE,
-  ROCKET_AOE_DAMAGE, ROCKET_AOE_RADIUS, HIT_MIN, HIT_MAX, HIT_GROW,
   EXPLOSION_FALLOFF_MULTIPLIER_ROCKET, KNOCKBACK_MULTIPLIER,
 } from '../core/config.js';
+import { WEAPONS, AOE_VFX_SCALE } from '../../../shared/weapons.js';
 
 import type { ProjectileConfig } from './types.js';
 
 export const ROCKET_CONFIG: ProjectileConfig = {
   name: 'rocket',
-  displayName: 'Rocket',
+  displayName: 'Bolt Launcher',
   weaponType: 0,
-  speed: ROCKET_SPEED,
-  gravity: GRAVITY,
-  explosionRadius: ROCKET_RADIUS,
-  force: ROCKET_FORCE,
+  speed: WEAPONS[0].speed,
+  gravity: WEAPONS[0].gravity,
+  explosionRadius: WEAPONS[0].aoeRadius * AOE_VFX_SCALE,
+  force: WEAPONS[0].knockbackForce, // shared table — must match server AOE impulse
   forceMode: 'push',
-  bodyRadius: ROCKET_BODY_RADIUS,
-  hitMin: HIT_MIN,
-  hitMax: HIT_MAX,
-  hitGrow: HIT_GROW,
+  bodyRadius: WEAPONS[0].bodyRadius,
+  hitMin: WEAPONS[0].hitMin,
+  hitMax: WEAPONS[0].hitMax,
+  hitGrow: WEAPONS[0].hitGrow,
   falloffMultiplier: EXPLOSION_FALLOFF_MULTIPLIER_ROCKET,
   collisionMultiplier: 1.0, // ball radius + explosion radius
   forceMultiplier: KNOCKBACK_MULTIPLIER,
-  aoeDamage: ROCKET_AOE_DAMAGE,
-  aoeRadius: ROCKET_AOE_RADIUS,
+  aoeDamage: WEAPONS[0].aoeDamage,
+  aoeRadius: WEAPONS[0].aoeRadius,
   damageColor: '#ffd700',
   trailColors: [
     new THREE.Color(1.0, 0.7, 0.1),
@@ -55,6 +54,10 @@ export const ROCKET_CONFIG: ProjectileConfig = {
   meshRampIn: true,
   meshRampInDuration: 0.05,
   meshStartScale: 0.2,
-  terrainOffset: HIT_MIN,
+  terrainOffset: WEAPONS[0].hitMin,
   needsServerTracking: true,
+  ribbonTrail: true,
+  ribbonWidth: 0.45,
+  ribbonLife: 0.3,
+  ribbonColor: 0xff7733,
 };

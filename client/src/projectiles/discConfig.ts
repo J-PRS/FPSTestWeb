@@ -1,10 +1,10 @@
 import * as THREE from 'three';
 
 import {
-  DISC_SPEED, DISC_RADIUS, DISC_FORCE, DISC_HITBOX, DISC_HIT_MIN, DISC_HIT_MAX,
-  DISC_HIT_GROW, EXPLOSION_FALLOFF_MULTIPLIER_DISC, EXPLOSION_COLLISION_MULTIPLIER,
-  PULL_MULTIPLIER, ROCKET_AOE_DAMAGE,
+  EXPLOSION_FALLOFF_MULTIPLIER_DISC, EXPLOSION_COLLISION_MULTIPLIER,
+  PULL_MULTIPLIER,
 } from '../core/config.js';
+import { WEAPONS, AOE_VFX_SCALE } from '../../../shared/weapons.js';
 
 import type { ProjectileConfig } from './types.js';
 
@@ -12,20 +12,20 @@ export const DISC_CONFIG: ProjectileConfig = {
   name: 'disc',
   displayName: 'Disc',
   weaponType: 1,
-  speed: DISC_SPEED,
-  gravity: 0,
-  explosionRadius: DISC_RADIUS,
-  force: DISC_FORCE,
+  speed: WEAPONS[1].speed,
+  gravity: WEAPONS[1].gravity,
+  explosionRadius: WEAPONS[1].aoeRadius * AOE_VFX_SCALE,
+  force: WEAPONS[1].knockbackForce,
   forceMode: 'pull',
-  bodyRadius: DISC_HITBOX,
-  hitMin: DISC_HIT_MIN,
-  hitMax: DISC_HIT_MAX,
-  hitGrow: DISC_HIT_GROW,
+  bodyRadius: WEAPONS[1].bodyRadius,
+  hitMin: WEAPONS[1].hitMin,
+  hitMax: WEAPONS[1].hitMax,
+  hitGrow: WEAPONS[1].hitGrow,
   falloffMultiplier: EXPLOSION_FALLOFF_MULTIPLIER_DISC,
   collisionMultiplier: EXPLOSION_COLLISION_MULTIPLIER,
   forceMultiplier: PULL_MULTIPLIER,
-  aoeDamage: ROCKET_AOE_DAMAGE,
-  aoeRadius: DISC_RADIUS,
+  aoeDamage: WEAPONS[1].aoeDamage,
+  aoeRadius: WEAPONS[1].aoeRadius,
   damageColor: '#00ffff',
   trailColors: [
     new THREE.Color(0.0, 0.5, 1.0),
@@ -56,6 +56,10 @@ export const DISC_CONFIG: ProjectileConfig = {
   meshRampInDuration: 0.15,
   meshStartScale: 0.25,
   terrainOffset: 0.2,
-  needsServerTracking: false,
-  trailMeshType: 'ring',
+  needsServerTracking: true,
+  trailMeshType: 'billboard',
+  ribbonTrail: true,
+  ribbonWidth: 0.6,
+  ribbonLife: 0.35,
+  ribbonColor: 0x0066ff,
 };
