@@ -266,6 +266,29 @@ export class Room {
     this.sessionTokens.delete(playerId);
     this.lastSentPositions.delete(playerId);
     this.connections.broadcast({ type: 'playerLeft', playerId });
+    this.rebalanceTeams();
     log('Player removed', { room: this.name, playerId, reason, remaining: this.playerCount() });
+  }
+
+  /** Even out team sizes after a departure by moving bots to the short
+   *  side. Bots absorb the swing because flipping a human mid-match is
+   *  hostile; a bot doesn't care which jersey it's wearing. No-op in
+   *  non-team modes and when the delta is ≤1 (already balanced). */
+  private rebalanceTeams(): void {
+    if (!this.modeSpec?.teams) return;
+    const counts = this.players.teamCounts();
+    let [big, small] =
+      counts.alpha >= counts.bravo
+        ? (['alpha', 'bravo'] as const)
+        : (['bravo', 'alpha'] as const);
+    if (counts[big] - counts[small] < 2) return;
+    for (const p of this.players.getAllPlayers().values()) {
+      if (counts[big] - counts[small] < 2) break;
+      if (p.team !== big || !p.id.startsWith('bot')) continue;
+      this.players.setTeam(p.id, small);
+      this.broadcast({ type: 'teamUpdate', playerId: p.id, team: small });
+      counts[big]--;
+      counts[small]++;
+    }
   }
 }
