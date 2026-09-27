@@ -56,6 +56,7 @@ export class CombatHandler {
     private broadcast: BroadcastFn,
     private sendToPlayer: SendToPlayerFn,
     private onKill?: (targetId: string, shooterId: string) => void,
+    private onHit?: (targetId: string, shooterId: string) => void,
   ) {}
 
   /** Drop live projectiles when a player is fully removed (grace timeout /
@@ -399,6 +400,7 @@ export class CombatHandler {
   }
 
   private applyHit(shooterId: string, targetId: string, damage: number, result: { killed: boolean; newHealth: number }, hitLabel: string, extra?: Record<string, unknown>): void {
+    this.onHit?.(targetId, shooterId);
     if (!result.killed) {
       logger.info(hitLabel, { shooter: shooterId, target: targetId, damage, targetHealth: result.newHealth, ...extra });
       this.broadcast({ type: 'playerHit', shooterId, targetId, damage, health: result.newHealth });

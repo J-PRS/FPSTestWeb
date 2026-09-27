@@ -69,6 +69,7 @@ export class Room {
         onBank: (pid, n) => this.bank(pid, n),
         bases: this.spec.bases,
         onKill: (pid, shooter) => this.onKill(pid, shooter),
+        onHit: (pid, shooter) => this.bots.flinch(pid, shooter),
         flags: () => this.flags?.snapshot() ?? [],
       },
     );

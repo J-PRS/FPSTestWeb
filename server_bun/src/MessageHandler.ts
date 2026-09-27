@@ -22,6 +22,8 @@ export interface RoomInfo {
   bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } };
   /** Any kill — Room drops carried flags here. */
   onKill?: (targetId: string, shooterId: string) => void;
+  /** Any damage event — Room flinches bot brains here. */
+  onHit?: (targetId: string, shooterId: string) => void;
   /** FFA scoreboard supplier for gameState joins — Room.ffaScores. */
   ffaScores?: () => Record<string, number>;
   /** Flag snapshot supplier for gameState joins — RoomFlags.snapshot. */
@@ -55,7 +57,7 @@ export class MessageHandler {
     this.broadcast = broadcast;
     this.sendToPlayer = sendToPlayer;
     if (roomInfo) this.roomInfo = roomInfo;
-    this.combat = new CombatHandler(playerManager, broadcast, sendToPlayer, roomInfo?.onKill);
+    this.combat = new CombatHandler(playerManager, broadcast, sendToPlayer, roomInfo?.onKill, roomInfo?.onHit);
   }
 
   setBallSim(sim: BallSim): void {
