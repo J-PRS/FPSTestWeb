@@ -1,0 +1,164 @@
+# Game name candidates + naming method
+
+Working doc for naming the project (currently `testfps` / "Three.js FPS").
+Tribes-inspired desert skiing shooter: jets, discs, knockback chaos,
+canyon/mesa terrain, enemy wildlife, wave-survival flavor.
+
+## The method (what we learned)
+
+The name doesn't describe the game — the game colonizes the word.
+"Quake" isn't about earthquakes, "Tribes" isn't about anthropology,
+"Broadside" worked because it's a Tribes map reference *and* a cool word.
+So the job is: pick a resonant real word with empty namespace, not
+encode mechanics into the title.
+
+### Filters that kill candidates
+
+1. **Namespace** — is there a Steam/itch game on it already? (Scree:
+   taken by an unreleased indie pet project — even obscure geo words go.)
+2. **Spellcheck/autocorrect** — does Google say "did you mean X"?
+   Scarp → scrap. Dead. If the algorithm thinks it's a typo, nobody
+   will ever type it right.
+3. **Diacritics** — Żleb / Łuna / Raróg look great but hurt typing,
+   indexing, and international pronunciation. Plain-ASCII spelling must
+   survive (Grom ✓, Żleb ✗).
+4. **Profanity** — rozkurw is semantically perfect (total mayhem) but
+   kills Steam/portal/school-network distribution.
+5. **Mouthfeel** — 1–2 punchy syllables or a clean compound. Must survive
+   "wanna play ___?" and a kill feed.
+6. **Double-loading is a bonus** — Broadside = Tribes map + cool word.
+   Hoodoo = desert spire + curse. Ammo = Greek sand + ammunition.
+
+### JP's actual naming register
+
+Previous games: **proxxle, rocket mastery, mite, fps-test**.
+→ weird minimal nouns, deadpan placeholders, coined near-words.
+More Megabonk/Balatro than Quake/Doom. An understated name that the
+game fills with meaning beats an epic title.
+
+## Candidate pool
+
+### ⭐ Survivors so far (pass filters, worth checking for collisions)
+
+| Name | Meaning | Notes |
+|------|---------|-------|
+| **Couloir** | steep mountain chute you ski down | On-theme like Katabatic; skiers know it. Maybe the winner. |
+| **Hoodoo** | desert rock spire + "a curse" | Double-loaded, memorable mouthfeel |
+| **Katabatic** | gravity-driven downslope wind; also a Tribes map | Literally the skiing mechanic; Tribes-heritage pick |
+| **Inselberg** | lone mountain rising from a plain | German; perfect for a desert map |
+| **Haboob** | Arabic: the giant dust wall that eats cities | Funny but legit; .io energy |
+| **Fusillade** | simultaneous volley of fire | Unused artillery word |
+| **Sukhovey** | Russian: scorching killing steppe wind | Desert's Katabatic; foreign so no autocorrect |
+| **Auster** | Roman south wind; root of "austere" (dry, harsh) | Clean 6 letters, Quake register |
+| **Syrtis** | Roman sand-graveyard + Mars region | Sounds AAA already |
+| **Ammo/Ammos** | Greek *ammos* = sand; pun on ammunition | Probably claimed; if free it's cheating |
+| **Mote** | dust mote | Mite-register: tiny real word, deadpan |
+| **Dreg** | the dregs/leftover sediment | Short, nasty, deadpan |
+| **Brood** | the swarm (game literally has baneling broods) | Dark, real, maybe collides w/ StarCraft usage |
+| **Defile** | narrow mountain pass armies get ambushed in | Chokepoint + sounds like destruction |
+| **Jebel** | Arabic: mountain | Clean 5 letters |
+
+### Desert / wind
+
+- Sirocco (Sahara wind — VW Scirocco keeps it spelled right)
+- Simoom/Simoon (the Sahara "poison wind")
+- Khamsin (Egyptian hot wind, "fifty days")
+- Shamal (Persian Gulf wind)
+- Harmattan (West African dust wind — long)
+- Halny (Polish Tatra killer foehn wind)
+- Erg (technical term for a sand-sea — 3 letters)
+- Barchan (crescent dune)
+- Registan ("place of sand" — fictional-kingdom register)
+- Maru / Marut (Sanskrit desert / storm-gods — homophone double-load)
+- Vayu (wind god, 4 letters)
+
+### Dry mountain / terrain
+
+- Arête (ridge knife-edge — accent problem)
+- Tor (rock stack — 3 letters)
+- Koppie/Kopje (SA "little rocky hill", Boer-war vocab)
+- Tepui (Venezuelan table-mountain)
+- Nunatak (peak through ice)
+- Yardang, Kalout (wind-carved ridges)
+- Kloof (SA ravine — guttural-good)
+- Hoodoo, Defile, Couloir (promoted above)
+- Talus (scree's fancier name — borderline: ankle-bone results)
+- Scoria, Tephra, Lahar (volcanic mudflow — nasty)
+- Pluton, Caldera
+- Colluvium, Ventifact, Dreikanter (too obscure/hard)
+
+### Tiny deadpan words (proxxle/mite register)
+
+- Mote, Dreg, Husk, Scurf, Slake, Dross, Silt, Brume, Frit, Chaff, Riffle, Swale, Drift
+
+### Violence / momentum
+
+- Salvo, Volley, Barrage, Shear, Slew, Squall, Sunder, Rupture
+- Coriolis, Kinesis, Anabatic (uphill katabatic)
+- Terminal, Spindrift, Whiteout, Powder, Slipstream (mostly occupied namespace)
+
+### Polish
+
+- **Grom** (thunder — great but collides with Honda Grom minibike)
+- **Piorun** (thunderbolt — Polish military resonance)
+- Raróg (fire-falcon storm spirit — diacritics)
+- Żleb (couloir — diacritics kill it)
+- Gołoborze (scree field — diacritics)
+- Zamieć, Zawieja (ground blizzard / drift)
+- Jatka, Rzeź (slaughter)
+- Młot (hammer — brutal 4 letters)
+- Orkan (hurricane), Wichur, Wir (vortex — 3 letters, nasty)
+- Nawał (onslaught/deluge)
+- Łuna (distant fire glow — collides with "Luna")
+- Otchłań (abyss), Bezdroża (trackless waste), Pustkowie
+- Piachy ("the sands"), Bój, Kosa, Hałda, Morena
+- Rozwałka (wreckage/carnage), ~~rozkurw~~ (profane — unusable)
+
+### German / Russian / other
+
+- Treibsand (quicksand — "drift-sand")
+- Flugsand (windborne sand), Ödnis (desolation)
+- Karakum ("black sand" desert), Buran (steppe blizzard)
+- Pustynia (wasteland)
+- Sich (Cossack stronghold camp)
+
+### Greek / Latin
+
+- Arena/harena (Latin: the sand on the amphitheater floor — best concept, worst namespace)
+- Ammos, Psammo/Psammite, Eremos, Ammon
+- Africus (sand-carrying wind), Sabulum
+- Vasto/Vastatio (wasteland / act of laying waste)
+- Numidia, Silex, Calx, Strata
+
+### Tribes-lineage homage (Broadside's trick: steal map/term names)
+
+- Katabatic ✓ (map + wind term)
+- Raindance, Drydock, Equinox, Blastside (T1/T2 maps)
+- Spinfusor register: coined weapon-name energy
+
+### Coined near-words (weak seam — "kabamski" tier was rejected as corny)
+
+- Powdoom, Kersplode, Slopequake — portmanteau risk: only if one survives
+  the say-it-out-loud test
+
+## Dead / taken
+
+- **Scree** — existing Steam game (app/2016900), unreleased pet project
+- **Ricochet** (HL2 mod), **Dropzone** (1996), **Descent**, **Apex**,
+  **Riptide**, **Avalanche**, **Overwatch**, **Onslaught**, **Dune**,
+  **Mirage**, **Badlands**, **Arena**, **Volley** — all occupied
+- **Grom** — Honda Grom minibike
+- **Scarp** — Google "did you mean scrap" → fails spellcheck filter
+- **rozkurw** — profane, undistributable
+
+## Verification workflow (next step)
+
+Bulk-check the ⭐ list before committing:
+
+1. **Steam store search API** — `store.steampowered.com/api/storesearch/?term=X&cc=us&l=en` (JSON, no key)
+2. **itch.io search** — `itch.io/search?q=X`
+3. **Domain RDAP** — `rdap.verisign.com/com/v1/domain/X.com` (404 = free)
+4. Search triage: `"name" game`, `"name" steam` — keep URLs/snippets
+5. Trademark check is a separate pass — clean search ≠ legally clear
+
+Search cleanliness = triage only, not legal clearance.
