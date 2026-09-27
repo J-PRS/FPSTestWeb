@@ -66,14 +66,12 @@ export function createFire(deps: CombatDeps, hooks: FireHooks) {
     // Send shot to server with projectile position/velocity so remote clients
     // see the shot (all weapons, weaponType selects their visual config)
     const velocity = e.dir.clone().normalize().multiplyScalar(config.speed);
-    deps.lazyNetworkManager().sendShot(
-      null, // no target yet
-      { x: e.origin.x, y: e.origin.y, z: e.origin.z },
-      { x: velocity.x, y: velocity.y, z: velocity.z },
-      undefined,
-      undefined,
-      config.weaponType
-    );
+    deps.lazyNetworkManager().sendShot({
+      targetId: null, // no target yet
+      position: { x: e.origin.x, y: e.origin.y, z: e.origin.z },
+      velocity: { x: velocity.x, y: velocity.y, z: velocity.z },
+      weaponType: config.weaponType,
+    });
   }
 
   // Belt items release mid-throw-anim; compute fresh aim at release time
@@ -245,10 +243,10 @@ export function createFire(deps: CombatDeps, hooks: FireHooks) {
     // Players go through the authoritative AOE claim
     const networkManager = deps.lazyNetworkManager();
     if (networkManager?.isConnected()) {
-      networkManager.sendAOEShot(
-        { x: _meleeHitPos.x, y: _meleeHitPos.y, z: _meleeHitPos.z },
-        WeaponType.Melee, null,
-      );
+      networkManager.sendAOEShot({
+        position: { x: _meleeHitPos.x, y: _meleeHitPos.y, z: _meleeHitPos.z },
+        weaponType: WeaponType.Melee, excludeTargetId: null,
+      });
     }
     hooks.applyForceToRemotes(_meleeHitPos, stats.aoeRadius, stats.knockbackForce, 'push', stats.aoeDamage, null);
   }

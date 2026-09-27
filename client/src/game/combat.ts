@@ -207,7 +207,7 @@ export function createCombat(deps: CombatDeps) {
     const power = Math.min(Math.max((impactSpeed - 30) / 50, 0.2), 1.8);
     const networkManager = deps.lazyNetworkManager();
     const sendAOE = (p: { x: number; y: number; z: number }, targetId: string | null) =>
-      networkManager.sendAOEShot(p, WeaponType.Slam, targetId, null, undefined, power);
+      networkManager.sendAOEShot({ position: p, weaponType: WeaponType.Slam, excludeTargetId: targetId, power });
     processProjectileExplosion({
       pos,
       radius: stats.aoeRadius * power,
@@ -354,7 +354,11 @@ export function createCombat(deps: CombatDeps) {
     // VFX dome grow together so the visual never lies about the damage area
     const bloom = p.directHit ? directHitAoeBonus(weaponType) : 1;
     const sendAOE = (pos: { x: number; y: number; z: number }, targetId: string | null) =>
-      networkManager.sendAOEShot(pos, weaponType, targetId, p.serverProjectileId ?? null, p.hitAge ?? p.age, undefined, p.directHit || undefined);
+      networkManager.sendAOEShot({
+        position: pos, weaponType, excludeTargetId: targetId,
+        projectileId: p.serverProjectileId ?? null, airtime: p.hitAge ?? p.age,
+        directHit: p.directHit || undefined,
+      });
     processProjectileExplosion({
       pos: p.hitPointValid ? p.hitPoint : p.pos,
       radius: p.config.aoeRadius * bloom,   // gameplay radius = server truth
@@ -485,7 +489,13 @@ export function createCombat(deps: CombatDeps) {
 
     const networkManager = deps.lazyNetworkManager();
     if (networkManager) {
-      networkManager.sendShot(playerId, { x: p.pos.x, y: p.pos.y, z: p.pos.z }, { x: p.vel.x, y: p.vel.y, z: p.vel.z }, Date.now(), p.serverProjectileId, p.config.weaponType, p.hitAge);
+      networkManager.sendShot({
+        targetId: playerId,
+        position: { x: p.pos.x, y: p.pos.y, z: p.pos.z },
+        velocity: { x: p.vel.x, y: p.vel.y, z: p.vel.z },
+        timestamp: Date.now(), projectileId: p.serverProjectileId,
+        weaponType: p.config.weaponType, airtime: p.hitAge,
+      });
       logger.info(`[Shot] Sent to server: player=${playerId} proj=${p.serverProjectileId} direct=${p.directHit} air=${p.hitAge.toFixed(2)}s`);
     }
   }
