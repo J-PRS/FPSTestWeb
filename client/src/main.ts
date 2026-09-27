@@ -31,6 +31,7 @@ import { wireOverlayInput } from './ui/overlayInput.js';
 import { applyDebugHooks } from './game/debugHooks.js';
 import { createWorldState } from './game/worldState.js';
 import { createCombat } from './game/combat.js';
+import { createWaveDirector } from './game/waveDirector.js';
 import { createDemoLifecycle } from './game/demoLifecycle.js';
 import { createEntities } from './game/entities.js';
 import { createGameLoop } from './game/gameLoop.js';
@@ -43,6 +44,14 @@ import { LoadProfiler } from './utils/profiling.js';
 import { createScene } from './world/scene.js';
 import { createViewModelScene } from './world/viewmodelScene.js';
 import { loadHeightmap, Terrain } from './world/terrain.js';
+import { initSwarms } from './entities/swarms.js';
+import { crawlerParts } from './entities/Crawler.js';
+import { rollerParts } from './entities/Roller.js';
+import { seekerParts } from './entities/Seeker.js';
+import { rakkParts } from './entities/Rakk.js';
+import { mineParts } from './entities/Mine.js';
+import { minerParts } from './entities/Miner.js';
+import { totemParts } from './entities/Totem.js';
 
 const logger = new ChildLogger('Main');
 
@@ -102,6 +111,7 @@ let demoLifecycle: ReturnType<typeof createDemoLifecycle>;
 
 // ---- Ambient entities: balls/crawlers/turretters/rollers/nuggets ----
 let entities: ReturnType<typeof createEntities>;
+let waveDirector: ReturnType<typeof createWaveDirector>;
 
 // ---- Frame loop + render pass (game/gameLoop.ts); created in init() ----
 let gameLoop: ReturnType<typeof createGameLoop>;
@@ -117,6 +127,18 @@ async function init(): Promise<void> {
 
   terrain = new Terrain(scene, sun.position.clone().normalize());
   profiler.markTime('terrainCreated');
+
+  // Instanced enemy rendering — one draw call per species-part. Species
+  // register their part tables here; slots alloc lazily on first spawn.
+  initSwarms(scene, terrain, {
+    crawler: { parts: crawlerParts, capacity: 512 },
+    roller: { parts: rollerParts, capacity: 256 },
+    seeker: { parts: seekerParts, capacity: 256 },
+    rakk: { parts: rakkParts, capacity: 256 },
+    mine: { parts: mineParts, capacity: 512 },
+    miner: { parts: minerParts, capacity: 64 },
+    totem: { parts: totemParts, capacity: 64 },
+  });
 
   effects = new EffectsManager(scene);
   effects.setTerrain(terrain);
@@ -140,6 +162,10 @@ async function init(): Promise<void> {
     world,
     updateBallsPlayback: (dt) => demoLifecycle.updateBallsPlayback(dt),
   });
+
+  // Hybrid wave director — scripted beats + a credit pool spent on an
+  // unlocking roster. Lives beside entities, drives its spawn fns.
+  waveDirector = createWaveDirector({ entities, player: () => player, terrain: () => terrain, logger });
 
   combat = createCombat({
     scene: () => scene,
@@ -262,6 +288,11 @@ async function init(): Promise<void> {
     crawlers: entities.crawlers,
     turrets: entities.turrets,
     rollers: entities.rollers,
+    seekers: entities.seekers,
+    miners: entities.miners,
+    mines: entities.mines,
+    totems: entities.totems,
+    rakks: entities.rakks,
     world,
     overlay,
     rendererCanvas: renderer.domElement,
@@ -347,6 +378,7 @@ async function init(): Promise<void> {
     combat: () => combat,
     remotes: () => remotes,
     demoLifecycle: () => demoLifecycle,
+    waveDirector: () => waveDirector,
     world,
     getDummyTick: () => dummyUpdate,
   });

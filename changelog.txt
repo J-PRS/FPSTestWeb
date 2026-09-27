@@ -1,5 +1,14 @@
 # Changelog
 
+## [2026-09-26] Instanced enemy rendering — massive enemy counts (Tier 2)
+
+- `entities/swarm.ts` (new): `SpeciesSwarm` — one `InstancedMesh` per (species, part); `per` multiplier for sub-parts (6 crawler legs, 3 miner fins); slots swap-remove so `mesh.count` covers the live range; `instanceColor` fakes damage-flash and emissive telegraph ramps. `InstancedBlobShadows` — a single instanced shadow pool with per-instance `aOpacity` (terrain height + altitude fade), replacing per-enemy BlobShadow meshes.
+- `entities/swarms.ts` (new): registry — `initSwarms(scene, terrain, { species: { parts, capacity } })`, lazy swarm creation, `allocSlots`/`freeSlots`.
+- Crawler, Roller, Seeker, Rakk, Mine, Miner, Totem rewritten: enemy logic/AI unchanged, rendering reroutes to swarm slots; animation-state scalars (squash, glow, fold, beamOn...) feed `writeInstances` composing `root * local` matrices per part. Transient parts (Totem beam/shimmer) hide via zero-scale matrix.
+- Turretter + balls deferred (in the uncommitted WIP tree). Draw calls at 300 enemies: ~2000+ → ~30.
+- `game/entities.ts` AI LOD: enemies >120u tick at 20Hz, >300u at 5Hz, with accumulated-dt so AI math stays time-correct.
+- Note: `AOE_VFX_SCALE` (JP WIP in shared/weapons.ts — declared twice, line 14 and 57) currently breaks tsc/vitest; unrelated to this work.
+
 ## [2026-09-26] Tech Debt Pass 15 — state-restore fix
 
 - `netHandlers.ts`: `onPlayerRespawn` and `onGameState` wrote `player.pos`/`vel` without `syncMovement()` — the movement controller's stale snapshot could overwrite the respawned/restored position on the next update (same bug class the correction path already guards against).
