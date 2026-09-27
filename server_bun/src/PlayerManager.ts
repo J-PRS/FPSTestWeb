@@ -9,6 +9,8 @@ function nextInternalId(): string {
 
 export class PlayerManager {
   private players: Map<string, PlayerState> = new Map();
+  /** Spawn anchors — map specs override, default is the config ring. */
+  spawnPoints: Vec3[] | null = null;
 
   addPlayer(playerId: string): PlayerState {
     const spawn = this.pickSpawnPoint(playerId);
@@ -167,7 +169,7 @@ export class PlayerManager {
   }
 
   private pickSpawnPoint(playerId: string): Vec3 {
-    const points: Vec3[] = CONFIG.spawnPoints.map((p) => ({ x: p.x, y: p.y, z: p.z }));
+    const points: Vec3[] = (this.spawnPoints ?? CONFIG.spawnPoints).map((p) => ({ x: p.x, y: p.y, z: p.z }));
     if (this.players.size === 0) {
       return { ...points[0]! };
     }

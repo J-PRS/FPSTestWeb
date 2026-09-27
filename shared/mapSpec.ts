@@ -20,6 +20,9 @@ export interface BallPopulation {
 export interface MapSpec {
   mode?: string;
   balls: BallPopulation;
+  /** Spawn anchors — farthest-from-enemies pick among these. Absent = the
+   *  server's default spawn ring. */
+  spawns?: { x: number; y: number; z: number }[];
 }
 
 export const DEFAULT_MAP_SPEC: MapSpec = {
@@ -44,8 +47,20 @@ export function resolveMapSpec(raw: unknown): MapSpec {
     max: clampInt(src.balls?.max, 0, 200, d.max),
   };
   if (balls.max < balls.base) balls.max = balls.base;
+
+  const spawns = Array.isArray((src as { spawns?: unknown }).spawns)
+    ? (src as { spawns: unknown[] }).spawns
+        .filter((s): s is { x: number; y: number; z: number } =>
+          !!s && typeof s === 'object' &&
+          Number.isFinite((s as { x: number }).x) &&
+          Number.isFinite((s as { y: number }).y) &&
+          Number.isFinite((s as { z: number }).z))
+        .slice(0, 32)
+    : undefined;
+
   return {
     mode: typeof src.mode === 'string' && /^[\w-]{1,32}$/.test(src.mode) ? src.mode : undefined,
     balls,
+    spawns: spawns?.length ? spawns : undefined,
   };
 }
