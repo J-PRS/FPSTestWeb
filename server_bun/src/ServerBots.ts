@@ -116,6 +116,22 @@ export class ServerBots {
     );
   }
 
+  /** CTF objective for a bot: carrying the enemy flag → own base; own flag
+   *  dropped → touch it home; enemy flag reachable → go grab it. */
+  private flagGoal(p: { id: string; team?: string }): { x: number; z: number } | null {
+    const flags = this.room.flags;
+    if (!flags || !p.team) return null;
+    const me = p.team as 'alpha' | 'bravo';
+    const enemyTeam = me === 'alpha' ? 'bravo' : 'alpha';
+    const enemy = flags.flags.get(enemyTeam);
+    const own = flags.flags.get(me);
+    if (!enemy || !own) return null;
+    if (enemy.carrier === p.id) return { x: own.home.x, z: own.home.z };
+    if (own.state === 'dropped') return { x: own.pos.x, z: own.pos.z };
+    if (enemy.state !== 'carried') return { x: enemy.pos.x, z: enemy.pos.z };
+    return { x: own.home.x, z: own.home.z }; // flag's moving — defend home
+  }
+
   private waypoint(p: { id: string; position: Vec3 }): void {
     // Roam around own position — keeps bots spread, no homing beacons.
     this.waypoints.set(p.id, {
@@ -135,14 +151,17 @@ export class ServerBots {
         // or the idle reaper would cull them on schedule
 
       this.tryFire(p, now);
-      // Chase the nearest enemy while it's in sight; roam otherwise.
+      // In flag rooms the objective outranks a distant skirmish: run the
+      // enemy flag, or touch a dropped own flag home, unless an enemy is
+      // already in sight (fight first, objective after).
       const foe = this.nearestEnemy(p);
-      const goal = foe ? { x: foe.position.x, z: foe.position.z } : wp;
+      const objective = this.flagGoal(p);
+      const goal: { x: number; z: number } = foe ? foe.position : objective ?? wp;
       const dx = goal.x - p.position.x;
       const dz = goal.z - p.position.z;
       const dist = Math.sqrt(dx * dx + dz * dz);
+      if (!foe && !objective && dist < WP_REACH) { this.waypoint(p); continue; }
       // In a fight, hold a loose orbit instead of hugging the target.
-      if (!foe && dist < WP_REACH) { this.waypoint(p); continue; }
       if (foe && dist < 12) { p.velocity.x = 0; p.velocity.z = 0; p.lastSeq++; continue; }
 
       const nx = dx / (dist || 1), nz = dz / (dist || 1);
