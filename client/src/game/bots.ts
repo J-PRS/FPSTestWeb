@@ -94,6 +94,7 @@ export class GameBot extends RemotePlayer {
     // Flinch toward cover — bots sidestep after taking a hit like creatures do.
     this.flinchT = 0.4;
     this.flinchFrom.copy(fromPos);
+    this.flinch(); // RemotePlayer 'hit' oneshot — the model reacts, not just the brain
     if (this.botHp <= 0) {
       this.playDeath(fromPos, dmg * 0.4);
       this.respawnAt = BOT_RESPAWN_S;

@@ -429,15 +429,37 @@ export class RemotePlayer {
     const airborne = this.terrain
       ? this.feetY - this.terrain.getHeight(this.position.x, this.position.z) > 0.6
       : false;
-    this._model.setAnimationState(airborne
-      ? 'jump'
-      : pickLocomotionAnim(this._model.animationState, speed));
+    // Damage flinch outranks locomotion briefly — 'hit' is a oneshot clip,
+    // so once the timer expires the normal pick reclaims the model.
+    // A fired shot likewise pops a short 'shoot' pose underneath flinch.
+    if (this.hitT > 0) {
+      this.hitT -= dt;
+      if (this.hitT > 0) this._model.setAnimationState('hit');
+    } else if (this.shootT > 0) {
+      this.shootT -= dt;
+      if (this.shootT > 0) this._model.setAnimationState('shoot');
+    } else {
+      this._model.setAnimationState(airborne
+        ? 'jump'
+        : pickLocomotionAnim(this._model.animationState, speed));
+    }
     this.previousPosition.copy(this.position);
     this._model.update(dt);
   }
 
+  // Damage flinch / shot recoil timers — drive the oneshot states in
+  // updateAliveModel; hit outranks shoot so a flinch still reads mid-fight
+  private hitT = 0;
+  private shootT = 0;
+
+  /** Non-lethal hit feedback — the model plays the 'No' flinch briefly. */
+  flinch(): void {
+    if (!this._isDead) this.hitT = 0.35;
+  }
+
   playDeath(explosionPos?: THREE.Vector3, explosionForce?: number): void {
     this._isDead = true;
+    this.hitT = 0;
     this.landed = false;
     this.landedAt = 0;
     this._scale = 1.0;
@@ -584,6 +606,9 @@ export class RemotePlayer {
 
   // Remote fired a weapon — kick the gun's procedural recoil
   fire(): void {
+    // Only re-arm once the previous oneshot expired — spam-restarting the
+    // clip under rapid fire pins the model mid-Punch
+    if (!this._isDead && this.shootT <= 0) this.shootT = 0.3;
     if (this._loaded) this._model.fire();
   }
 
