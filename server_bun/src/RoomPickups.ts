@@ -28,6 +28,14 @@ export class RoomPickups {
     this.room.broadcast({ type: 'pickupSpawn', id, pos: { ...pos } });
   }
 
+  /** Match reset — clear the field and tell clients to drop the gems. */
+  clear(): void {
+    for (const id of this.pickups.keys()) {
+      this.room.broadcast({ type: 'pickupGone', id, by: null });
+    }
+    this.pickups.clear();
+  }
+
   snapshot(): { id: number; pos: Vec3 }[] {
     return [...this.pickups.values()].map((p) => ({ id: p.id, pos: { ...p.pos } }));
   }
