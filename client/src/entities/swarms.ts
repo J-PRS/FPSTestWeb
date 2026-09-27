@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { SpeciesSwarm, InstancedBlobShadows, type SwarmPart, type SwarmSlotOwner } from './swarm.js';
+import { GibPool } from './gibs.js';
 import type { Terrain } from '../world/terrain.js';
 
 export type { SwarmPart, SwarmSlotOwner } from './swarm.js';
@@ -10,13 +11,16 @@ export type { SwarmPart, SwarmSlotOwner } from './swarm.js';
 interface SwarmSpec { parts: () => SwarmPart[]; capacity: number }
 
 const swarms = new Map<string, SpeciesSwarm>();
+const gibPools = new Map<string, GibPool>();
 let shadows: InstancedBlobShadows | null = null;
 let registryScene: THREE.Scene | null = null;
+let registryTerrain: Terrain | null = null;
 let specTable: Record<string, SwarmSpec> = {};
 
 /** Called once at boot — scene + terrain the swarm layers live in. */
 export function initSwarms(scene: THREE.Scene, terrain: Terrain, specs: Record<string, SwarmSpec>): void {
   registryScene = scene;
+  registryTerrain = terrain;
   specTable = specs;
   shadows = new InstancedBlobShadows(scene, terrain);
 }
@@ -40,12 +44,49 @@ export function allocSlots(species: string, owner: SwarmSlotOwner): boolean {
   const swarm = getSwarm(species);
   if (!swarm || swarm.alloc(owner) < 0) return false;
   owner.shadowSlot = shadows?.alloc(owner) ?? -1;
+  owner.swarmSpecies = species;
   return true;
 }
 
 export function freeSlots(species: string, owner: SwarmSlotOwner): void {
   swarms.get(species)?.free(owner.swarmSlot);
   if (owner.shadowSlot >= 0) shadows?.free(owner);
+}
+
+function getGibPool(species: string): GibPool | null {
+  const existing = gibPools.get(species);
+  if (existing) return existing;
+  const swarm = getSwarm(species);
+  if (!swarm || !registryScene) return null;
+  const pool = new GibPool(registryScene, swarm);
+  gibPools.set(species, pool);
+  return pool;
+}
+
+/**
+ * Shatter a swarm-rendered body: every part instance becomes a gib at its
+ * exact current world transform (pixel-identical handoff — no pop), then
+ * the swarm + shadow slots free. Returns false for single-part species or
+ * when the body already released its slot — callers fall back to shard
+ * debris there.
+ */
+export function burstGibs(
+  owner: SwarmSlotOwner, center: THREE.Vector3,
+  impulseDir: THREE.Vector3 | null, inheritVel: THREE.Vector3 | null,
+): boolean {
+  const species = owner.swarmSpecies;
+  if (!species || owner.swarmSlot < 0) return false;
+  const pool = getGibPool(species);
+  if (!pool || !pool.burst(owner.swarmSlot, center, impulseDir, inheritVel)) return false;
+  freeSlots(species, owner);
+  owner.swarmSlot = -1;
+  return true;
+}
+
+/** Per-frame gib integration — same tick as the shard debris update. */
+export function updateGibs(dt: number): void {
+  if (!registryTerrain) return;
+  for (const pool of gibPools.values()) pool.update(dt, registryTerrain);
 }
 
 // No flush pass needed — SpeciesSwarm.setMatrix/setColor and

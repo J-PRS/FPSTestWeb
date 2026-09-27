@@ -16,6 +16,9 @@ export interface SwarmSlotOwner {
   swarmSlot: number;
   /** Handle into the shared instanced blob-shadow pass (-1 = none). */
   shadowSlot: number;
+  /** Species key this owner allocated under — set by allocSlots, lets the
+   *  death path gib the body without knowing the concrete class. */
+  swarmSpecies?: string;
 }
 
 const _m = new THREE.Matrix4();
@@ -96,16 +99,22 @@ export class SpeciesSwarm {
 
   /** slot is the raw instance index — for `per` parts pass owner.slot*per+i. */
   setMatrix(part: number, slot: number, matrix: THREE.Matrix4): void {
+    if (slot < 0) return; // slot already freed (gib burst) — a dying owner may still tick once
     const m = this.meshes[part]!;
     m.setMatrixAt(slot, matrix);
     m.instanceMatrix.needsUpdate = true;
   }
 
   setColor(part: number, slot: number, r: number, g: number, b: number): void {
+    if (slot < 0) return;
     const m = this.meshes[part]!;
     m.instanceColor!.setXYZ(slot, r, g, b);
     m.instanceColor!.needsUpdate = true;
   }
+
+  /** Instances per owner for a part index — exposed for gib snapshots. */
+  perFor(part: number): number { return this.pers[part]!; }
+  get partCount(): number { return this.meshes.length; }
 
   /** Per-frame upload flag — call once after all species have updated. */
   flagDirty(): void {

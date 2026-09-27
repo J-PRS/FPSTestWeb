@@ -15,6 +15,8 @@ import { allocSlots, freeSlots, getSwarm, getShadows, type SwarmPart } from './s
 
 const _v = new THREE.Vector3();
 const _dir = new THREE.Vector3();
+const _fan = new THREE.Vector3();
+const _UP = new THREE.Vector3(0, 1, 0);
 const _q = new THREE.Quaternion();
 const _q2 = new THREE.Quaternion();
 const _e = new THREE.Euler();
@@ -105,10 +107,12 @@ export function turretterParts(): SwarmPart[] {
   ];
 }
 
-interface Bolt {
+export interface Bolt {
   mesh: THREE.Mesh;
   glow: THREE.Sprite;
   pos: THREE.Vector3;
+  prevPos: THREE.Vector3; // start-of-frame pos — swept interception is segment-vs-segment
+  radius: number;         // intercept envelope (visual sphere is only 0.16 — this is the forgiving hitbox)
   vel: THREE.Vector3;
   life: number;
   trailAcc: number;
@@ -132,12 +136,14 @@ export class Turretter implements Targetable {
   readonly id: number;
   readonly variant = 0;
 
+  readonly uber: boolean;
+
   pos: THREE.Vector3;
   vel: THREE.Vector3;
   dead = false;
-  health = TURRET_HEALTH;
-  maxHealth = TURRET_HEALTH;
-  radius = TURRET_RADIUS;
+  health: number;
+  maxHealth: number;
+  radius: number;
   // Dome tops out ~1.8m above pos — capsule covers the turret head, not
   // just the squashed sphere at the base (top-of-dome shots were whiffing).
   capsuleTop = 1.8;
@@ -154,14 +160,15 @@ export class Turretter implements Targetable {
   private rootQuat = new THREE.Quaternion(); // terrain tilt when planted; tumble when airborne
   private headYaw = 0;                       // turretHead yaw (world aim → tilted local frame)
   private headPitch = 0;
-  private bolts: Bolt[] = [];
+  // Live lobbed shells — public so combat can proximity-check them: a
+  // player explosive clipping a bolt cooks it off mid-air (detonateBolt).
+  readonly bolts: Bolt[] = [];
   private trailDots: TrailDot[] = [];
 
   private planted = false;          // false = airborne ballistic
   private dwell = 0;                // time since landing
   private refire = TURRET_REFIRE;   // first shot is immediate-ish
   private flashTimer = 0;
-  private fracDamage = 0;           // planted armor: absorbs every other hit
   private meshYOffset = 0;          // visual sink below gameplay pos (set by seat)
   private foot!: TerrainFoot;       // rim→dirt wall, conformed in seat() — set unless swarm alloc fails
 
@@ -176,10 +183,16 @@ export class Turretter implements Targetable {
 
   get disposed(): boolean { return this.dead; }
 
-  constructor(scene: THREE.Scene, terrain: Terrain, pos: THREE.Vector3) {
+  constructor(scene: THREE.Scene, terrain: Terrain, pos: THREE.Vector3, uber = false) {
     this.scene = scene;
     this._terrain = terrain;
     this.id = nextTargetId();
+    // Uber = "siege engine": double tank, bigger chassis, and a THREE-BOLT
+    // volley — a fanned spread that punishes a straight approach.
+    this.uber = uber;
+    this.health = this.maxHealth = uber ? TURRET_HEALTH * 2 : TURRET_HEALTH;
+    this.radius = uber ? TURRET_RADIUS * 1.4 : TURRET_RADIUS;
+    if (uber) this.color.set(0x5a3a2a); // rusted siege bronze
 
     this.pos = pos.clone();
     this.pos.y = terrain.getHeight(pos.x, pos.z) + this.radius;
@@ -280,6 +293,14 @@ export class Turretter implements Targetable {
       if (sol && this.pathClear(sol)) {
         this.refire = TURRET_REFIRE;
         this.fireBolt(sol);
+        if (this.uber) {
+          // Siege volley: two flank shells fanned off the solve — same arc
+          // energy, spread laterally so sidestepping one eats the other.
+          _fan.copy(sol).applyAxisAngle(_UP, 0.28);
+          this.fireBolt(_fan);
+          _fan.copy(sol).applyAxisAngle(_UP, -0.28);
+          this.fireBolt(_fan);
+        }
       } else if (sol) {
         // Terrain eats the arc — reposition instead of shelling a hillside.
         // Still gated by the dwell floor so a blocked turret doesn't hop-spam.
@@ -416,10 +437,22 @@ export class Turretter implements Targetable {
     this.scene.add(mesh, glow);
     this.bolts.push({
       mesh, glow, pos,
+      prevPos: pos.clone(),
+      radius: 1.5, // generous — clipping a 60m/s shell mid-air is a skill shot
       vel: vel.clone(),
-      life: 3.0,
+      life: 10.0, // lobbed shells are slow arks — long fuse so a shot fired
+      // at range actually lands instead of fizzing mid-air
       trailAcc: 0,
     });
+  }
+
+  /** Cooked mid-air by a player shell — same cleanup as a landed bolt, no callbacks. */
+  detonateBolt(i: number): void {
+    const b = this.bolts[i];
+    if (!b) return;
+    this.scene.remove(b.mesh, b.glow);
+    (b.glow.material as THREE.SpriteMaterial).dispose();
+    this.bolts.splice(i, 1);
   }
 
   private updateBolts(dt: number, terrain: Terrain, playerPos: THREE.Vector3): void {
@@ -427,6 +460,7 @@ export class Turretter implements Targetable {
       const b = this.bolts[i];
       b.life -= dt;
       b.vel.y += GRAVITY * dt;
+      b.prevPos.copy(b.pos);
       b.pos.addScaledVector(b.vel, dt);
       b.mesh.position.copy(b.pos);
       b.glow.position.copy(b.pos);
@@ -474,16 +508,11 @@ export class Turretter implements Targetable {
     }
   }
 
-  /** Hit-based damage: planted = armored (half damage), air = vulnerable (double). */
-  takeDamage(): boolean {
-    const dmg = this.planted ? 0.5 : 2.0;
-    this.fracDamage += dmg;
+  /** Planted = armored (half damage), airborne = vulnerable (triple — the
+   *  airshot window is the skill check, make it pay). */
+  takeDamage(damage: number): boolean {
+    this.health -= damage * (this.planted ? 0.5 : 3.0);
     this.flashTimer = 0.12;
-    const whole = Math.floor(this.fracDamage);
-    if (whole > 0) {
-      this.fracDamage -= whole;
-      this.health -= whole;
-    }
     if (this.health <= 0) { this.dead = true; return true; }
     return false;
   }

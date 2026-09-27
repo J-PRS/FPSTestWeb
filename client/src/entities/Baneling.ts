@@ -5,7 +5,7 @@ import {
   GRAVITY,
   BANELING_RADIUS, BANELING_HEALTH,
   BANELING_ACCEL, BANELING_TOPSPEED,
-  BANELING_FUSE_DIST, BANELING_LIFE,
+  BANELING_FUSE_DIST, BANELING_LIFE, BANELING_BLAST_RADIUS,
 } from '../core/config.js';
 import { Terrain } from '../world/terrain.js';
 import type { Targetable } from './balls.js';
@@ -54,13 +54,18 @@ export class Baneling implements Targetable, SwarmSlotOwner {
   readonly id: number;
   readonly variant = 0;
 
+  readonly uber: boolean;
+  /** Blast envelope — entities reads this so a goliath pops bigger. */
+  readonly blastRadius: number;
+
   pos: THREE.Vector3;
   vel: THREE.Vector3;
   dead = false;
-  health = BANELING_HEALTH;
-  maxHealth = BANELING_HEALTH;
-  radius = BANELING_RADIUS;
+  health: number;
+  maxHealth: number;
+  radius: number;
   color = new THREE.Color(0x4a8a2a); // swollen green sac
+  readonly debrisKind = 'goo' as const; // pops into splat blobs, not shards
   scale = 0.9; // small gibs — it's a sac of goo, not a body
 
   swarmSlot = -1;
@@ -78,9 +83,15 @@ export class Baneling implements Targetable, SwarmSlotOwner {
 
   get disposed(): boolean { return this.dead; }
 
-  constructor(scene: THREE.Scene, terrain: Terrain, pos: THREE.Vector3) {
+  constructor(scene: THREE.Scene, terrain: Terrain, pos: THREE.Vector3, uber = false) {
     void scene;
     this.id = nextTargetId();
+    // Uber = "goliath": a wobbling bomb-sack — bigger pop, harder to pop.
+    this.uber = uber;
+    this.health = this.maxHealth = uber ? BANELING_HEALTH * 4 : BANELING_HEALTH;
+    this.radius = uber ? BANELING_RADIUS * 1.7 : BANELING_RADIUS;
+    this.blastRadius = uber ? BANELING_BLAST_RADIUS * 1.7 : BANELING_BLAST_RADIUS;
+    if (uber) this.color.set(0x8a6a1a); // overripe amber — visibly worse
     this.pos = pos.clone();
     const gy = terrain.getHeight(pos.x, pos.z);
     if (this.pos.y < gy + this.radius) this.pos.y = gy + this.radius;
@@ -131,7 +142,9 @@ export class Baneling implements Targetable, SwarmSlotOwner {
       this.pos.z += this.vel.z * dt;
       this.pos.y = terrain.getHeight(this.pos.x, this.pos.z) + this.radius;
 
-      if (dist < BANELING_FUSE_DIST) { this.detonate(); return; }
+      // Fuse is 3D — `dist` is horizontal (steering); hovering overhead
+      // shouldn't pop the sac, you have to actually be in the blast.
+      if (this.pos.distanceTo(playerPos) < BANELING_FUSE_DIST) { this.detonate(); return; }
     }
 
     if (this.age > BANELING_LIFE) { this.detonate(); return; }

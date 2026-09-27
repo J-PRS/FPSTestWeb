@@ -11,6 +11,7 @@ import { Terrain } from '../world/terrain.js';
 import type { Targetable } from './balls.js';
 import { allocSlots, freeSlots, getSwarm, getShadows } from './swarms.js';
 import type { SwarmPart, SwarmSlotOwner } from './swarm.js';
+import { getGlowTexture } from '../effects/glowTexture.js';
 
 const _dir = new THREE.Vector3();
 const _scratch = new THREE.Vector3();
@@ -53,7 +54,7 @@ export function seekerParts(): SwarmPart[] {
   if (!_bodyMat) _bodyMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
   if (!_wingMat) _wingMat = new THREE.MeshLambertMaterial({ color: 0x776655, transparent: true, opacity: 0.45, side: THREE.DoubleSide });
   if (!_eyeMat) _eyeMat = new THREE.MeshBasicMaterial({
-    color: 0xffcc44, transparent: true, blending: THREE.AdditiveBlending,
+    map: getGlowTexture(), color: 0xffcc44, transparent: true, blending: THREE.AdditiveBlending,
     depthWrite: false, side: THREE.DoubleSide,
   });
   return [
@@ -73,13 +74,16 @@ export class Seeker implements Targetable, SwarmSlotOwner {
   readonly id: number;
   readonly variant = 0;
 
+  readonly uber: boolean;
+
   pos: THREE.Vector3;
   vel: THREE.Vector3;
   dead = false;
-  health = SEEKER_HEALTH;
-  maxHealth = SEEKER_HEALTH;
-  radius = SEEKER_RADIUS;
+  health: number;
+  maxHealth: number;
+  radius: number;
   color = new THREE.Color(0xcfc39a); // bone-pale chitin
+  readonly debrisKind = 'goo' as const;
   scale = 0.3;
 
   swarmSlot = -1;
@@ -106,9 +110,16 @@ export class Seeker implements Targetable, SwarmSlotOwner {
 
   get disposed(): boolean { return this.dead; }
 
-  constructor(scene: THREE.Scene, terrain: Terrain, pos: THREE.Vector3) {
+  constructor(scene: THREE.Scene, terrain: Terrain, pos: THREE.Vector3, uber = false) {
     void scene;
     this.id = nextTargetId();
+    // Uber = "lancer": bigger, tankier, and it LEADS the dart — telegraph
+    // locks onto pos + vel × flight time, so holding a strafe line into
+    // the dart gets you stung. Juke during the telegraph.
+    this.uber = uber;
+    this.health = this.maxHealth = uber ? SEEKER_HEALTH * 3 : SEEKER_HEALTH;
+    this.radius = uber ? SEEKER_RADIUS * 1.8 : SEEKER_RADIUS;
+    if (uber) this.color.set(0x9a2a2a); // blood lancer
     this.pos = pos.clone();
     this.pos.y = terrain.getHeight(pos.x, pos.z) + SEEKER_HOVER;
     this.vel = new THREE.Vector3();
@@ -116,7 +127,7 @@ export class Seeker implements Targetable, SwarmSlotOwner {
     if (!this.hasSlots) this.dead = true;
   }
 
-  update(dt: number, terrain: Terrain, playerPos: THREE.Vector3): void {
+  update(dt: number, terrain: Terrain, playerPos: THREE.Vector3, playerVel?: THREE.Vector3): void {
     if (this.dead) return;
     if (this.stunTimer > 0) this.stunTimer -= dt;
     if (this.flash > 0) this.flash -= dt;
@@ -155,7 +166,14 @@ export class Seeker implements Targetable, SwarmSlotOwner {
       case 'telegraph': {
         this.telegraphTimer -= dt;
         this.vel.multiplyScalar(1 - 4 * dt);
-        _dir.subVectors(playerPos, this.pos).normalize();
+        _dir.subVectors(playerPos, this.pos);
+        if (this.uber && playerVel) {
+          // Predictive lock: aim where you'll BE when the dart lands —
+          // flight ≈ dist / dartSpeed, capped so orbiters don't overshoot
+          const d = _dir.length() || 0.001;
+          _dir.addScaledVector(playerVel, Math.min(0.6, d / SEEKER_DART_SPEED));
+        }
+        _dir.normalize();
         this.dartDir.lerp(_dir, 6 * dt).normalize();
         const t = 1 - this.telegraphTimer / SEEKER_DART_TELEGRAPH;
         this.glow = 0.7 * t;
@@ -290,8 +308,8 @@ export class Seeker implements Targetable, SwarmSlotOwner {
     if (s > max) this.vel.multiplyScalar(max / s);
   }
 
-  takeDamage(): boolean {
-    this.health--;
+  takeDamage(damage: number): boolean {
+    this.health -= damage;
     this.flash = 0.15;
     if (this.health <= 0) { this.dead = true; return true; }
     return false;
