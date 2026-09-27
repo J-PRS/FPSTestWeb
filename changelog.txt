@@ -1,5 +1,14 @@
 # Changelog
 
+## [2026-09-28] Tech debt: Player input extraction + P2P tests
+
+- Player.ts 804→671: input binding (keys/mouse/wheel/ESC-menu controls)
+  extracted to entities/player/input.ts — PlayerInput owns DOM listeners +
+  raw flags; game semantics via a handlers interface (spectate, melee,
+  skill press/release, hold-out secondaries, slot select, look deltas).
+- p2pHost.test.ts (8) + rtcrelay.test.ts (4) cover the P2P authority and
+  signalling relay.
+
 ## [2026-09-28] P2P duels — WebRTC DataChannel, server-mediated handshake
 
 - `?p2p=host:CODE` / `?p2p=join:CODE`: two browsers connect P2P over an
