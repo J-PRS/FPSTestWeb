@@ -70,6 +70,7 @@ export const CONFIG = {
     environmentDamage: { maxCount: 10, windowMs: 1000 }, // crawler pounces etc.
     heal: { maxCount: 10, windowMs: 1000 }, // nugget pickups
     creatureHit: { maxCount: 120, windowMs: 1000 }, // chaingun-rate hit claims vs server creatures
+    bank: { maxCount: 2, windowMs: 1000 }, // back-compat claim path — at 20/claim a spammer still farms a match in seconds otherwise
     chat: { maxCount: 4, windowMs: 1000 }, // human typing speed, generous
     default: { maxCount: 120, windowMs: 1000 },
   } as const,

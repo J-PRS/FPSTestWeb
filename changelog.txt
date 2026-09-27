@@ -1907,3 +1907,4 @@ team-aware spawning — teamBases from map bases; team members spawn near their 
 CTF: capture requires your own flag to be home (classic rule) — no capping while yours is stolen/dropped
 match journal — every matchEnd/ffaMatchEnd appends to logs/matches.jsonl + a 100-entry ring served at GET /matches
 server-owned nuggets: team-mode creature kills drop a gem pickup (pickupSpawn/pickupGone, 30s TTL, cap 64); touching banks a team point — authoritative scoring, bank claim kept for back-compat; bots farm gems via shared brain's pickup slot
+match reset now clears leftover gems (pickupGone broadcast); bank claim path rate-limited to 2/s (was default 120/s — claim spam could farm a match in seconds)

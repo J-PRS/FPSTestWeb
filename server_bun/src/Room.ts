@@ -190,6 +190,7 @@ export class Room {
       this.scores.alpha = 0;
       this.scores.bravo = 0;
       this.flags?.reset();
+      this.pickups?.clear();
       this.broadcast({ type: 'matchStart', mode: this.mode, scores: { ...this.scores } });
     }
   }
@@ -244,6 +245,7 @@ export class Room {
       this.onMatchEnd?.({ room: this.name, mode: this.mode, winner: w, scores: { ...this.scores } });
       this.scores.alpha = 0;
       this.scores.bravo = 0;
+      this.pickups?.clear();
       this.broadcast({ type: 'matchStart', mode: this.mode, scores: { ...this.scores } });
     }
   }
