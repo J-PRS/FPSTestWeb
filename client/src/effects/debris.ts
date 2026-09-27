@@ -260,23 +260,28 @@ export class Debris {
     return this.shrinkLanded(s);
   }
 
+  // Dead puffs are pooled per-Debris — the burst fires a material+mesh pair
+  // per shard per interval, which GC'd hard during multi-kill fights.
+  private trailPool: { mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial }[] = [];
+
   private emitTrail(s: Shard, dt: number): void {
     s.trailTimer += dt;
     while (s.trailTimer >= TRAIL_INTERVAL) {
       s.trailTimer -= TRAIL_INTERVAL;
       const size = s.radius * 0.4;
-      const mat = new THREE.MeshBasicMaterial({
-        color: new THREE.Color(s.cr, s.cg, s.cb),
-        transparent: true,
-        opacity: 0.5,
-        depthWrite: false,
-        blending: THREE.AdditiveBlending,
-      });
-      const mesh = new THREE.Mesh(TRAIL_GEO, mat);
-      mesh.position.set(s.x, s.y, s.z);
-      mesh.scale.setScalar(size);
-      this.scene.add(mesh);
-      s.trails.push({ mesh, mat, life: TRAIL_LIFE, maxLife: TRAIL_LIFE, baseSize: size });
+      let p = this.trailPool.pop();
+      if (!p) {
+        const mat = new THREE.MeshBasicMaterial({
+          transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+        });
+        p = { mesh: new THREE.Mesh(TRAIL_GEO, mat), mat };
+      }
+      p.mat.color.setRGB(s.cr, s.cg, s.cb);
+      p.mat.opacity = 0.5;
+      p.mesh.position.set(s.x, s.y, s.z);
+      p.mesh.scale.setScalar(size);
+      this.scene.add(p.mesh);
+      s.trails.push({ mesh: p.mesh, mat: p.mat, life: TRAIL_LIFE, maxLife: TRAIL_LIFE, baseSize: size });
     }
   }
 
@@ -286,8 +291,9 @@ export class Debris {
       p.life -= dt;
       if (p.life <= 0) {
         this.scene.remove(p.mesh);
-        p.mat.dispose();
-        s.trails.splice(i, 1);
+        this.trailPool.push({ mesh: p.mesh, mat: p.mat });
+        s.trails[i] = s.trails[s.trails.length - 1];
+        s.trails.pop();
         continue;
       }
       const t = p.life / p.maxLife;
@@ -338,6 +344,8 @@ export class Debris {
         p.mat.dispose();
       }
     }
+    for (const p of this.trailPool) p.mat.dispose();
+    this.trailPool.length = 0;
   }
 }
 

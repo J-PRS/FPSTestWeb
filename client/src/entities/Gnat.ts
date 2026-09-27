@@ -3,7 +3,7 @@ import { nextTargetId } from './targetIds.js';
 
 import {
   GNAT_RADIUS, GNAT_HEALTH, GNAT_SPEED, GNAT_DART_SPEED,
-  GNAT_ORBIT_R, GNAT_ORBIT_ALT, GNAT_NIP_DIST, GNAT_NIP_CD, GNAT_FLOCK_CD,
+  GNAT_ORBIT_R, GNAT_NIP_DIST, GNAT_NIP_CD, GNAT_FLOCK_CD,
   GNAT_STUN,
 } from '../core/config.js';
 import { Terrain } from '../world/terrain.js';

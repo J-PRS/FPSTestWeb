@@ -157,7 +157,6 @@ export class Snake implements Targetable, SwarmSlotOwner {
     } else if (this.stunTimer <= 0 && distSq < SNAKE_AGGRO_DIST * SNAKE_AGGRO_DIST) {
       // Serpentine approach — heading weaves around the target line; the
       // render lays segments along the S so the whole body side-winds.
-      const d = Math.sqrt(distSq) || 0.001;
       const wantYaw = Math.atan2(dx, dz);
       const weave = Math.sin(this.animT * 7) * 0.5; // ±~29° serpentine
       const wy = wantYaw + weave;
