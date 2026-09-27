@@ -1922,3 +1922,4 @@ load test: 24 bots / 3 rooms on one server — tick 18Hz delivered, p50 gap 61ms
 record/replay harness: pvptest record.ts captures a live wire stream to .rec, replay.ts feeds it through the real decoder — 147 frames, 5.9us decode avg, regression-checkable
 anti-abuse: per-IP join throttle (5/min, loopback exempt for pvptest fleets) + claimedIdentities LRU cap at 10k (was unbounded — join spam = memory leak)
 overtime: tied horn no longer instant-draws — 'OVERTIME — next score wins', any lead ends it mid-tick, 120s OT cap then draw
+join now announces the match clock ('~Xm left') via gameState matchEndsAt — late joiners see remaining time
