@@ -29,6 +29,15 @@ export class GameServer {
   // Tick-bandwidth metrics — aggregated per log window so we can see what
   // interest tiers + suppression are actually saving.
   private metrics = { ticks: 0, recordsBuilt: 0, recordsSuppressed: 0, recordsIdleReaped: 0, recordsSent: 0, recordsTierSkipped: 0, bytesSent: 0, windowStart: 0 };
+  // Ops counters — cheap ints, read by /metrics. msgsIn counts everything
+  // that passed validation; tick lag measures setInterval drift (the
+  // server-clock skew that makes client replays overshoot).
+  private ops = {
+    startedAt: Date.now(),
+    msgsIn: 0, msgsRejected: 0, joins: 0, leaves: 0,
+    tickLagMsMax: 0, tickLagMsSum: 0, tickLagSamples: 0,
+    lastTickAt: 0,
+  };
 
   constructor() {
     this.playerManager = new PlayerManager();
@@ -51,7 +60,7 @@ export class GameServer {
       (data) => this.connectionManager.broadcastBinary(data),
     );
     this.messageHandler.setBallSim(this.ballSim);
-    this.ballSim.start(fileURLToPath(new URL('../heightmap.bin', import.meta.url)))
+    this.ballSim.start(CONFIG.heightmapPath || fileURLToPath(new URL('../heightmap.bin', import.meta.url)))
       .catch(err => logger.warn('BallSim disabled — heightmap load failed', { err: String(err) }));
 
     this.startHashBroadcast();
@@ -98,14 +107,14 @@ export class GameServer {
     this.handleGameMessage(existingPlayerId, raw);
   }
 
-  private reconnectGraceMs = 10000; // Grace period for F5 reconnect
+  private reconnectGraceMs = CONFIG.reconnectGraceMs; // Grace period for F5 reconnect
   private disconnectedPlayers: Map<string, { timeout: ReturnType<typeof setTimeout> }> = new Map();
   // playerId -> secret session token. Issued on first join, echoed in the
   // gameState response, required to reclaim a disconnected (grace-period)
   // slot — without it anyone could hijack a stale session just by knowing
   // the playerId format.
   private sessionTokens: Map<string, string> = new Map();
-  private static readonly IDLE_KICK_MS = 60_000; // silent >60s → remove
+  private static readonly IDLE_KICK_MS = CONFIG.idleKickMs; // silent >60s → remove
 
   onClose(ws: ServerWebSocket<WebSocketData>): void {
     const playerId = ws.data.playerId;
@@ -138,6 +147,27 @@ export class GameServer {
       players: this.playerManager.getPlayerCount(),
       maxPlayers: CONFIG.maxPlayers,
       tickRate: CONFIG.tickRate,
+    };
+  }
+
+  /** Ops snapshot for /metrics — counts since boot plus tick-lag stats. */
+  getMetrics() {
+    const o = this.ops;
+    const uptimeS = Math.floor((Date.now() - o.startedAt) / 1000);
+    return {
+      uptimeS,
+      players: this.playerManager.getPlayerCount(),
+      balls: this.ballSim.ballCount,
+      gracePeriodPending: this.disconnectedPlayers.size,
+      joins: o.joins,
+      leaves: o.leaves,
+      msgsIn: o.msgsIn,
+      msgsRejected: o.msgsRejected,
+      tickLagMs: {
+        avg: o.tickLagSamples ? +(o.tickLagMsSum / o.tickLagSamples).toFixed(2) : 0,
+        max: o.tickLagMsMax,
+      },
+      ballSimNow: this.ballSim.simNow,
     };
   }
 
@@ -219,6 +249,7 @@ export class GameServer {
     this.playerManager.addPlayer(playerId);
     this.connectionManager.register(playerId, ws);
     this.messageHandler.handleHandshake(playerId, sessionToken);
+    this.ops.joins++;
 
     logger.info('Player connected', { playerId, total: this.playerManager.getPlayerCount() });
   }
@@ -226,10 +257,12 @@ export class GameServer {
   private handleGameMessage(playerId: string, raw: unknown): void {
     const result = validateMessage(raw);
     if (!result.success) {
+      this.ops.msgsRejected++;
       logger.warn('Invalid message rejected', { playerId, error: result.error });
       return;
     }
 
+    this.ops.msgsIn++;
     this.messageHandler.handleMessage(playerId, result.data);
   }
 
@@ -241,6 +274,7 @@ export class GameServer {
     this.sessionTokens.delete(playerId);
     this.lastSentPositions.delete(playerId);
     this.connectionManager.broadcast({ type: 'playerLeft', playerId });
+    this.ops.leaves++;
     logger.info('Player removed', { playerId, reason, remaining: this.playerManager.getPlayerCount() });
   }
 
@@ -295,6 +329,16 @@ export class GameServer {
       const players = this.playerManager.getAllPlayers();
       if (players.size === 0) return;
       const now0 = Date.now();
+      // Tick lag: how late this interval fired vs the nominal 50ms cadence.
+      // Sustained lag = sim clock drifts behind wall time — the skew that
+      // pushes client ball replays ahead of authority.
+      if (this.ops.lastTickAt > 0) {
+        const lag = now0 - this.ops.lastTickAt - 50;
+        this.ops.tickLagMsSum += lag;
+        this.ops.tickLagSamples++;
+        if (lag > this.ops.tickLagMsMax) this.ops.tickLagMsMax = lag;
+      }
+      this.ops.lastTickAt = now0;
 
       // Batch all player updates into one message with delta compression.
       // Binary records are pre-encoded ONCE per tick — the per-recipient

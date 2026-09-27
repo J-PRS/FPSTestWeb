@@ -87,6 +87,14 @@ export class BallSim {
     this.timer = null;
   }
 
+  get ballCount(): number {
+    return this.balls.size;
+  }
+
+  get simNow(): number {
+    return this.simTime;
+  }
+
   /** Current segment state of every live ball — sent to joiners. */
   roster(): { id: number; variant: number; colorIdx: number; position: SimVec; velocity: SimVec; enraged: boolean; targetId: string | null; t: number }[] {
     const out = [];
