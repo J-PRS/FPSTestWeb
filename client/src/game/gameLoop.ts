@@ -29,6 +29,7 @@ import type { createWaveDirector } from './waveDirector.js';
 import type { WorldState } from './worldState.js';
 import { audio } from '../core/audio.js';
 import Logger from '../core/Logger.js';
+import { createPerfHud } from '../core/perfHud.js';
 
 const _zeroVel = new THREE.Vector3(); // shared zero for demo playback
 const _birdPosBuf: THREE.Vector3[] = []; // scratch — minimap debug blips
@@ -85,13 +86,15 @@ export function createGameLoop(deps: GameLoopDeps) {
     document.body.appendChild(dom);
     return s;
   });
+  const perf = createPerfHud();
   document.addEventListener('keydown', (e) => {
     if (e.code === 'Backquote') {
       e.preventDefault();
+      const show = (statsPanels[0]!.dom as HTMLElement).style.display === 'none';
       for (const s of statsPanels) {
-        const dom = s.dom as HTMLElement;
-        dom.style.display = dom.style.display === 'none' ? 'block' : 'none';
+        (s.dom as HTMLElement).style.display = show ? 'block' : 'none';
       }
+      perf.setVisible(show);
     }
   });
 
@@ -131,6 +134,7 @@ export function createGameLoop(deps: GameLoopDeps) {
         triangles: info.render.triangles,
         geometries: info.memory.geometries,
         textures: info.memory.textures,
+        phases: perf.snapshot(),
         ping: nm?.getPing?.(),
         packetLoss: nm?.getPacketLoss?.(),
         heapMB: (performance as { memory?: { usedJSHeapSize: number } }).memory
@@ -168,6 +172,7 @@ export function createGameLoop(deps: GameLoopDeps) {
     const dt = Math.min(rawElapsed, MAX_DELTA_TIME);
     lastTime = time;
     fpsWatchdog(rawElapsed, time);
+    perf.begin();
 
     // Hidden tabs get ~1 rAF/sec — dt clamps to 0.05 so game logic runs in
     // slow motion, but cosmetic VFX must still expire in real time or they
@@ -194,6 +199,7 @@ export function createGameLoop(deps: GameLoopDeps) {
     if (networkManager && networkManager.isConnected() && !player.isDead && !demoManager?.isPlaying) {
       deps.remotes().networkTick(dt);
     }
+    perf.mark('player');
 
     // Sync fog uniforms to terrain shader (all clipmap levels)
     if (scene.fog instanceof THREE.Fog) {
@@ -221,12 +227,14 @@ export function createGameLoop(deps: GameLoopDeps) {
     if (!demoPaused && !demoManager?.isPlaying) deps.waveDirector().update(dt);
     if (!demoManager?.isPlaying) entities.updateNuggets(dt);
     deps.teamBots?.()?.update(dt);
+    perf.mark('sim');
     if (!demoManager?.isPlaying) {
       deps.combat()?.updateProjectiles(dt);
     }
 
     // Update playback projectiles (deterministic reconstruction from events)
     if (!demoPaused) deps.demoLifecycle().updatePlaybackProjectiles(dt);
+    perf.mark('proj');
 
     if (!demoPaused) {
       deps.lazyEffects().update(fxDt);
@@ -238,6 +246,7 @@ export function createGameLoop(deps: GameLoopDeps) {
       updateDeadList(deps.world.implosions, fxDt);
       updateDeadList(deps.world.aoeGizmos, fxDt);
     }
+    perf.mark('fx');
     deps.remotes().updateScoreboard();
 
     // Debug dummy remote player (?dummy) — pin it in front of the camera and tick it
@@ -312,8 +321,10 @@ export function createGameLoop(deps: GameLoopDeps) {
     deps.combat()?.updateBeamVisual();
 
     updateAudio(dt, player, camera);
+    perf.mark('hud');
 
     renderFrame(fxDt); // damage numbers ride fxDt — same hidden-tab decay fix
+    perf.end(deps.rendererSetup.renderer, () => `tgt ${deps.entities.targets.length} rem ${deps.world.remotePlayers.size}`);
   }
 
   // Movement/ambience loops live here: they're continuous sounds driven by

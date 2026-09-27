@@ -7,7 +7,8 @@
     "dev:noreload": "vite --mode noreload",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "check": "tsc --noEmit -p tsconfig.json && oxlint src && vitest run"
   },
   "dependencies": {
     "postprocessing": "^6.39.5",
