@@ -1885,3 +1885,4 @@ Lobby seam: GET /rooms lists live matches (name, players, cap); pvptest bots tak
 Rooms carry a match mode: first joiner's ?mode= defines it, /rooms lists it, gameState echoes room+mode so joining clients announce it in chat
 Map spec format: maps/<room>.json defines per-match mode + ball population (resolveMapSpec clamps/defaults); duel.json + swarm.json ship as examples; spec wiring is per-Room
 Server-owned teams/score: rooms assign alpha/bravo by smallest team, {type:'bank'} claims feed a room scoreboard (teamScore/matchEnd/matchStart broadcasts), client announces in chat; verified live
+Lobby browser: corner LOBBY button lists GET /rooms (name/mode/occupancy) polled while open, join reloads ?room=NAME, create-a-room input included
