@@ -30,6 +30,9 @@ export interface RoomInfo {
   flags?: () => { team: 'alpha' | 'bravo'; pos: Vec3; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[];
   /** Live pickups for gameState joins — RoomPickups.snapshot. */
   pickups?: () => { id: number; pos: Vec3 }[];
+  /** Match-clock deadline (epoch ms) for gameState joins — Room.matchEndsAt.
+   *  0 means "not armed yet" (no humans have joined). */
+  matchEndsAt?: () => number;
 }
 
 export class MessageHandler {
@@ -125,6 +128,7 @@ export class MessageHandler {
       map: this.roomInfo.bases ? { mode: this.roomInfo.mode || undefined, bases: this.roomInfo.bases } : undefined,
       flags: this.roomInfo.flags?.(),
       pickups: this.roomInfo.pickups?.(),
+      matchEndsAt: this.roomInfo.matchEndsAt?.() || undefined,
       localPlayerState: {
         position: { ...player.position },
         rotation: { ...player.rotation },

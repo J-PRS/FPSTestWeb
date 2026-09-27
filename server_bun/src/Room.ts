@@ -88,6 +88,7 @@ export class Room {
         onHit: (pid, shooter) => this.bots.flinch(pid, shooter),
         flags: () => this.flags?.snapshot() ?? [],
         pickups: () => this.pickups?.snapshot() ?? [],
+        matchEndsAt: () => this.matchEndsAt,
       },
     );
     this.ballSim = new BallSim(
@@ -167,6 +168,11 @@ export class Room {
    *  Starts on the first human join (0 = not running), re-arms on every
    *  matchStart. Called from the room tick; leader wins, tie is 'draw'. */
   private matchEndsAt = 0;
+
+  /** ms until the horn; 0 when the clock isn't armed. */
+  matchTimeLeftMs(): number {
+    return this.matchEndsAt ? Math.max(0, this.matchEndsAt - Date.now()) : 0;
+  }
 
   checkMatchClock(now: number): void {
     const spec = this.modeSpec;

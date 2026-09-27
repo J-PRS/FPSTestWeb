@@ -262,6 +262,8 @@ export class GameServer {
         ? [...r.ffaScores.entries()].sort((a, b) => b[1] - a[1])[0]
         : undefined,
       winAt: r.modeSpec?.winAt,
+      // Lobby countdown — ms until the horn; omitted when the clock isn't armed.
+      timeLeftMs: r.matchTimeLeftMs() || undefined,
     }));
   }
 
