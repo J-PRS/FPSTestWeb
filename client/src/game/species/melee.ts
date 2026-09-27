@@ -25,7 +25,7 @@ import type { SpeciesCtx } from './context.js';
 // same funnel: spawn ring → burrow entrance → bite callback → hurtPlayer.
 export function createMeleeSpecies({ deps, kit, targets }: SpeciesCtx) {
   const { scene } = deps;
-  const { burrow, rollUber, ringPos, hurtPlayer, aggroFor, kickDust, updateSpecies } = kit;
+  const { burrow, rollUber, ringPos, hurtPlayer, aggroFor, kickDust, updateSpecies, atCap } = kit;
 
   const crawlers: Crawler[] = [];
   const scarabs: Scarab[] = [];
@@ -35,7 +35,7 @@ export function createMeleeSpecies({ deps, kit, targets }: SpeciesCtx) {
 
   // ---- Crawlers (terrain-hugging targets that pounce) ----
   function spawnCrawler(pos?: THREE.Vector3, uber?: boolean): void {
-    if (!pos && crawlers.filter(c => !c.dead).length >= CRAWLER_MAX) return; // events bypass the cap
+    if (!pos && atCap(crawlers, CRAWLER_MAX)) return; // events bypass the cap
     const u = uber ?? (!pos && rollUber());
     const c = new Crawler(scene, deps.lazyTerrain(), pos ?? ringPos(CRAWLER_SPAWN_MIN, CRAWLER_SPAWN_MAX), u);
     c.onLanded = (p) => { deps.lazyEffects().spawnJumpDust(p); sfx.enemyCue(p, 'skitter'); };
@@ -43,7 +43,7 @@ export function createMeleeSpecies({ deps, kit, targets }: SpeciesCtx) {
       cr.uber ? 'devoured by the matriarch' : 'devoured by a crawler', cr.radius + 3, cr);
     c.onBrood = (cr) => {
       // Matriarch births a scarab — cap-checked, positioned just off her hip
-      if (scarabs.filter(s => !s.dead).length >= SCARAB_MAX) return;
+      if (atCap(scarabs, SCARAB_MAX)) return;
       const s = new Scarab(scene, deps.lazyTerrain(), cr.pos.clone().add(new THREE.Vector3(
         (Math.random() - 0.5) * 3, 0, (Math.random() - 0.5) * 3)));
       s.onBite = (sc) => hurtPlayer(sc.pos, SCARAB_BITE_FORCE, SCARAB_BITE_DAMAGE, 'swarmed by scarabs', sc.radius + SCARAB_BITE_DIST + 1, sc);
@@ -67,14 +67,14 @@ export function createMeleeSpecies({ deps, kit, targets }: SpeciesCtx) {
 
   // ---- Scarabs (pack fodder — mow them down in clumps) ----
   function spawnScarab(pos?: THREE.Vector3, uber?: boolean): void {
-    if (!pos && scarabs.filter(s => !s.dead).length >= SCARAB_MAX) return;
+    if (!pos && atCap(scarabs, SCARAB_MAX)) return;
     const u = uber ?? (!pos && rollUber());
     // One spawn attempt = a whole pack, clustered on the same burrow spot.
     // An uber roll drops ONE dreadbeetle instead — a pack of those is a raid boss.
     const base = pos ?? ringPos(SCARAB_SPAWN_MIN, SCARAB_SPAWN_MAX);
     const n = u ? 1 : pos ? 1 : SCARAB_PACK_MIN + Math.floor(Math.random() * (SCARAB_PACK_MAX - SCARAB_PACK_MIN + 1));
     for (let k = 0; k < n; k++) {
-      if (scarabs.filter(s => !s.dead).length >= SCARAB_MAX) break;
+      if (atCap(scarabs, SCARAB_MAX)) break;
       const s = new Scarab(scene, deps.lazyTerrain(), base.clone().add(new THREE.Vector3(
         (Math.random() - 0.5) * 6, 0, (Math.random() - 0.5) * 6)), u);
       s.onBite = (sc) => hurtPlayer(sc.pos,
@@ -96,7 +96,7 @@ export function createMeleeSpecies({ deps, kit, targets }: SpeciesCtx) {
 
   // ---- Grubs (walking piñatas — slow, fat, poppable) ----
   function spawnGrub(pos?: THREE.Vector3, uber?: boolean): void {
-    if (!pos && grubs.filter(g => !g.dead).length >= GRUB_MAX) return;
+    if (!pos && atCap(grubs, GRUB_MAX)) return;
     const u = uber ?? (!pos && rollUber());
     const g = new Grub(scene, deps.lazyTerrain(), pos ?? ringPos(GRUB_SPAWN_MIN, GRUB_SPAWN_MAX), u);
     g.onBite = (gr) => hurtPlayer(gr.pos, GRUB_BITE_FORCE * (gr.uber ? 2 : 1),
@@ -105,7 +105,7 @@ export function createMeleeSpecies({ deps, kit, targets }: SpeciesCtx) {
     if (u) g.onDeath = (mother) => {
       // Bloatgrub births on pop: three live grubs spill out of the corpse —
       // cap-checked so a bloatgrub chain can't flood the field.
-      for (let k = 0; k < 3 && grubs.filter(x => !x.dead).length < GRUB_MAX; k++) {
+      for (let k = 0; k < 3 && !atCap(grubs, GRUB_MAX); k++) {
         const child = new Grub(scene, deps.lazyTerrain(), mother.pos.clone().add(new THREE.Vector3(
           (Math.random() - 0.5) * 2, 0, (Math.random() - 0.5) * 2)));
         child.onBite = g.onBite; // same wiring — children are normal grubs
@@ -128,7 +128,7 @@ export function createMeleeSpecies({ deps, kit, targets }: SpeciesCtx) {
 
   // ---- Snakes (sand vipers — weave in, coil, lunge) ----
   function spawnSnake(pos?: THREE.Vector3, uber?: boolean): void {
-    if (!pos && snakes.filter(s => !s.dead).length >= SNAKE_MAX) return;
+    if (!pos && atCap(snakes, SNAKE_MAX)) return;
     const u = uber ?? (!pos && rollUber());
     const s = new Snake(scene, deps.lazyTerrain(), pos ?? ringPos(SNAKE_SPAWN_MIN, SNAKE_SPAWN_MAX), u);
     s.onStrike = (sn) => hurtPlayer(sn.pos,
@@ -148,7 +148,7 @@ export function createMeleeSpecies({ deps, kit, targets }: SpeciesCtx) {
 
   // ---- Rollers (big homing boulders — the hitbox is the threat) ----
   function spawnRoller(uber?: boolean): void {
-    if (rollers.filter(r => !r.dead).length >= ROLLER_MAX) return;
+    if (atCap(rollers, ROLLER_MAX)) return;
     const u = uber ?? rollUber();
     const r = new Roller(scene, deps.lazyTerrain(), ringPos(ROLLER_SPAWN_MIN, ROLLER_SPAWN_MAX), u);
     r.onLanded = (pos) => deps.lazyEffects().spawnJumpDust(pos);

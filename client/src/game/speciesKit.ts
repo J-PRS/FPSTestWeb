@@ -353,6 +353,16 @@ export function createSpeciesKit(deps: EntitiesDeps, targets: Targetable[], depl
   // spawns pass an explicit pos and never surprise-upgrade unless asked.
   const rollUber = (): boolean => Math.random() < UBER_CHANCE;
 
+  // Living-population check — every species spawn gate filters out dead
+  // members; counting in-place avoids a temp array per spawn attempt.
+  function atCap<T extends { dead: boolean }>(list: T[], max: number): boolean {
+    let n = 0;
+    for (const e of list) {
+      if (!e.dead && ++n >= max) return true;
+    }
+    return false;
+  }
+
   // Ground dust: distance-based emission, so faster movers naturally puff
   // more and a standing creature puffs nothing. SpawnMoveDust scales the
   // puff itself by speed + body radius — rollers roostertail, grubs barely
@@ -392,7 +402,7 @@ export function createSpeciesKit(deps: EntitiesDeps, targets: Targetable[], depl
   return {
     removeTarget, ringPos, hurtPlayer, blastAtPlayer,
     aggroFor, aggroVelFor, reportTargetDamage,
-    boltPop, updateSpecies, burrow, rollUber, kickDust, kickTrail,
+    boltPop, updateSpecies, burrow, rollUber, kickDust, kickTrail, atCap,
   };
 }
 
