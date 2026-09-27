@@ -61,10 +61,12 @@ surface. Detailed research lives in `_reports/`; this file is the current truth.
 2. **Movement re-sim** — shared/stepPlayer on server during validation.
    BLOCKED on JP's in-flight Player.ts edits — extract the integrator to
    shared/movement.ts when that file settles.
-3. **Map format** — declarative match definition: terrain ref, bases,
-   objectives, spawn anchors, species mix. Kills "the map is the binary".
-4. **Per-match species/modes** — rooms already own a BallSim; extend to
-   per-match mode + species mix (the map-format hook).
+3. ~~Map format~~ — landed: `maps/<room>.json` (mode + ball population,
+   clamped with defaults; examples swarm/duel). Next extensions: spawn
+   anchors, bases/objectives, species mix, terrain ref.
+4. **Server-owned teams/score for MP modes** — rooms know their mode;
+   team assignment + scoring still client-side. Port shared/teams.ts
+   tables into a per-Room scoreboard broadcast.
 
 ### Later / research needed
 - Client prediction + reconciliation for self (currently trust + correct).
