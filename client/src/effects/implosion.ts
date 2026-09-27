@@ -1,8 +1,10 @@
 import * as THREE from 'three';
+import { BLOOM_LAYER } from '../core/config.js';
+import { Terrain } from '../world/terrain.js';
 
 interface IP {
-  mesh: THREE.Mesh;
-  mat: THREE.MeshBasicMaterial;
+  mesh: THREE.Mesh | THREE.Sprite;
+  mat: THREE.MeshBasicMaterial | THREE.SpriteMaterial;
   vx: number; vy: number; vz: number;
   life: number; elapsed: number;
   baseScale: number;
@@ -11,7 +13,39 @@ interface IP {
   r2: number; g2: number; b2: number;
   dead: boolean;
   startDist: number;
+  isSprite: boolean;
 }
+
+import { getGlowTexture as getGlowTex } from './glowTexture.js';
+import { TerrainRing } from './TerrainRing.js';
+
+// ---- Shared GPU resources (never disposed) ----
+const GEO_SPHERE = new THREE.SphereGeometry(1, 5, 5);      // unit — scaled per particle
+const GEO_SHOCK  = new THREE.SphereGeometry(0.3, 16, 16);
+const GEO_CORE   = new THREE.SphereGeometry(1.2, 16, 16);
+const ARC_SEGS   = 8;
+const ARC_POINTS = ARC_SEGS + 1;
+
+const _v = new THREE.Vector3();
+const _c = new THREE.Color();
+
+interface Arc {
+  line: THREE.Line;
+  life: number; elapsed: number; dead: boolean;
+  basePts: Float32Array;              // ARC_POINTS*3 — spawn-time offsets from center
+  posAttr: THREE.BufferAttribute;     // preallocated, rewritten per frame
+  mat: THREE.LineBasicMaterial;
+}
+
+interface Shock { mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial; life: number; elapsed: number; maxRadius: number; dead: boolean }
+interface Core  { mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial; dead: boolean }
+
+// ---- Module pools — shared across all Implosion instances ----
+const spritePool: IP[] = [];
+const meshPool: IP[] = [];
+const shockPool: Shock[] = [];
+const corePool: Core[] = [];
+const arcPool: Arc[] = [];
 
 export class Implosion {
   dead = false;
@@ -19,12 +53,12 @@ export class Implosion {
   private scene: THREE.Scene;
   private elapsed = 0;
   private ox: number; private oy: number; private oz: number;
-  private shockwaves: { mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial; life: number; elapsed: number; maxRadius: number }[] = [];
-  private coreMesh: THREE.Mesh | null = null;
-  private coreMat: THREE.MeshBasicMaterial | null = null;
-  private arcs: { line: THREE.Line; life: number; elapsed: number; points: THREE.Vector3[] }[] = [];
+  private shockwaves: Shock[] = [];
+  private rings: TerrainRing[] = [];
+  private core: Core | null = null;
+  private arcs: Arc[] = [];
 
-  constructor(scene: THREE.Scene, pos: THREE.Vector3, age: number = 0) {
+  constructor(scene: THREE.Scene, pos: THREE.Vector3, age: number = 0, terrain?: Terrain) {
     this.scene = scene;
     this.ox = pos.x; this.oy = pos.y; this.oz = pos.z;
 
@@ -76,72 +110,130 @@ export class Implosion {
     }
 
     // Layer 5: Shockwave - expanding cyan sphere
-    const shockGeo = new THREE.SphereGeometry(0.3, 16, 16);
-    const shockMat = new THREE.MeshBasicMaterial({
-      color: 0x00ffff,
-      transparent: true,
-      opacity: 0.8,
-      side: THREE.BackSide,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false
-    });
-    const shockMesh = new THREE.Mesh(shockGeo, shockMat);
-    shockMesh.position.copy(pos);
-    this.scene.add(shockMesh);
-    this.shockwaves.push({
-      mesh: shockMesh,
-      mat: shockMat,
-      life: 0.4,
-      elapsed: 0,
-      maxRadius: 8.0 * timeScale
-    });
+    let sw = shockPool.pop();
+    if (sw) {
+      this.scene.add(sw.mesh);
+    } else {
+      const mat = new THREE.MeshBasicMaterial({
+        transparent: true, side: THREE.BackSide,
+        blending: THREE.AdditiveBlending, depthWrite: false,
+      });
+      const mesh = new THREE.Mesh(GEO_SHOCK, mat);
+      mesh.layers.enable(BLOOM_LAYER);
+      this.scene.add(mesh);
+      sw = { mesh, mat, life: 0, elapsed: 0, maxRadius: 0, dead: false };
+    }
+    sw.mat.color.setHex(0x00ffff);
+    sw.mat.opacity = 0.8;
+    sw.mesh.position.copy(pos);
+    sw.life = 0.4; sw.elapsed = 0; sw.maxRadius = 8.0 * timeScale; sw.dead = false;
+    this.shockwaves.push(sw);
+
+    // Layer 5b: Terrain-draped expanding ground ring (+ ghost pass for
+    // terrain-occluded arcs) — see TerrainRing
+    this.rings.push(new TerrainRing(this.scene, pos, 0x66eeff, 0.5, 10.0 * timeScale, terrain));
 
     // Layer 6: Collapsing core - bright white sphere that shrinks
-    const coreGeo = new THREE.SphereGeometry(0.5, 16, 16);
-    this.coreMat = new THREE.MeshBasicMaterial({
-      color: 0xffffff,
-      transparent: true,
-      opacity: 1.0,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false
-    });
-    this.coreMesh = new THREE.Mesh(coreGeo, this.coreMat);
-    this.coreMesh.position.copy(pos);
-    this.scene.add(this.coreMesh);
+    let core = corePool.pop();
+    if (core) {
+      this.scene.add(core.mesh);
+    } else {
+      const mat = new THREE.MeshBasicMaterial({
+        transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
+      });
+      const mesh = new THREE.Mesh(GEO_CORE, mat);
+      mesh.layers.enable(BLOOM_LAYER);
+      this.scene.add(mesh);
+      core = { mesh, mat, dead: false };
+    }
+    core.mat.color.setHex(0xffffff);
+    core.mat.opacity = 1.0;
+    core.mesh.position.copy(pos);
+    core.mesh.scale.setScalar(1);
+    core.dead = false;
+    this.core = core;
 
     // Layer 7: Electric arcs - lightning lines spiraling inward
     const arcCount = Math.floor(8 * timeScale);
     for (let i = 0; i < arcCount; i++) {
-      const arcPoints: THREE.Vector3[] = [];
-      const segments = 8;
       const startRadius = 3 + Math.random() * 2;
-      for (let j = 0; j <= segments; j++) {
-        const t = j / segments;
+
+      let arc = arcPool.pop();
+      if (arc) {
+        this.scene.add(arc.line);
+      } else {
+        const geo = new THREE.BufferGeometry();
+        const posAttr = new THREE.BufferAttribute(new Float32Array(ARC_POINTS * 3), 3);
+        posAttr.setUsage(THREE.DynamicDrawUsage);
+        geo.setAttribute('position', posAttr);
+        const mat = new THREE.LineBasicMaterial({
+          transparent: true, blending: THREE.AdditiveBlending,
+        });
+        const line = new THREE.Line(geo, mat);
+        line.layers.enable(BLOOM_LAYER);
+        line.frustumCulled = false;
+        this.scene.add(line);
+        arc = { line, life: 0, elapsed: 0, dead: false,
+                basePts: new Float32Array(ARC_POINTS * 3), posAttr, mat };
+      }
+      // Store spawn-time point offsets relative to explosion center
+      for (let j = 0; j < ARC_POINTS; j++) {
+        const t = j / ARC_SEGS;
         const radius = startRadius * (1 - t);
         const angle = (Math.PI * 2 * i / arcCount) + t * Math.PI * 2 + Math.random() * 0.5;
         const elv = (Math.random() - 0.5) * 0.5;
-        arcPoints.push(new THREE.Vector3(
-          pos.x + radius * Math.cos(elv) * Math.sin(angle),
-          pos.y + radius * Math.sin(elv),
-          pos.z + radius * Math.cos(elv) * Math.cos(angle)
-        ));
+        arc.basePts[j * 3]     = radius * Math.cos(elv) * Math.sin(angle);
+        arc.basePts[j * 3 + 1] = radius * Math.sin(elv);
+        arc.basePts[j * 3 + 2] = radius * Math.cos(elv) * Math.cos(angle);
       }
-      const arcGeo = new THREE.BufferGeometry().setFromPoints(arcPoints);
-      const arcMat = new THREE.LineBasicMaterial({
-        color: 0x88ffff,
-        transparent: true,
-        opacity: 0.8,
-        blending: THREE.AdditiveBlending
-      });
-      const arcLine = new THREE.Line(arcGeo, arcMat);
-      this.scene.add(arcLine);
-      this.arcs.push({
-        line: arcLine,
-        life: 0.3,
-        elapsed: 0,
-        points: arcPoints
-      });
+      arc.mat.color.setHex(0x88ffff);
+      arc.mat.opacity = 0.8;
+      arc.life = 0.3; arc.elapsed = 0; arc.dead = false;
+      this.arcs.push(arc);
     }
+  }
+
+  private allocSprite(pos: THREE.Vector3, color: THREE.Color, opacity: number, additive: boolean): IP {
+    let p = spritePool.pop();
+    if (p) {
+      this.scene.add(p.mesh);
+    } else {
+      const mat = new THREE.SpriteMaterial({
+        map: getGlowTex(), transparent: true, depthWrite: false,
+      });
+      const sprite = new THREE.Sprite(mat);
+      sprite.layers.enable(BLOOM_LAYER);
+      this.scene.add(sprite);
+      p = { mesh: sprite, mat, vx: 0, vy: 0, vz: 0, life: 0, elapsed: 0, baseScale: 1, gravity: 0,
+            r1: 0, g1: 0, b1: 0, r2: 0, g2: 0, b2: 0, dead: false, startDist: 0, isSprite: true };
+    }
+    const m = p.mat as THREE.SpriteMaterial;
+    m.color.copy(color);
+    m.opacity = opacity;
+    m.blending = additive ? THREE.AdditiveBlending : THREE.NormalBlending;
+    p.mesh.position.copy(pos);
+    return p;
+  }
+
+  private allocMesh(pos: THREE.Vector3, color: THREE.Color): IP {
+    let p = meshPool.pop();
+    if (p) {
+      this.scene.add(p.mesh);
+    } else {
+      const mat = new THREE.MeshBasicMaterial({ transparent: true });
+      const mesh = new THREE.Mesh(GEO_SPHERE, mat);
+      mesh.layers.enable(BLOOM_LAYER);
+      this.scene.add(mesh);
+      p = { mesh, mat, vx: 0, vy: 0, vz: 0, life: 0, elapsed: 0, baseScale: 1, gravity: 0,
+            r1: 0, g1: 0, b1: 0, r2: 0, g2: 0, b2: 0, dead: false, startDist: 0, isSprite: false };
+    }
+    const m = p.mat;
+    m.color.copy(color);
+    m.opacity = 1.0;
+    m.blending = THREE.NormalBlending;
+    m.depthWrite = true;
+    p.mesh.position.copy(pos);
+    return p;
   }
 
   private spawn(
@@ -165,7 +257,7 @@ export class Implosion {
 
     // Velocity points toward center
     let vx = -speed * Math.cos(elv) * Math.sin(ang);
-    let vy = -speed * Math.sin(elv);
+    const vy = -speed * Math.sin(elv);
     let vz = -speed * Math.cos(elv) * Math.cos(ang);
 
     // Add spiral motion (tangential velocity)
@@ -177,145 +269,169 @@ export class Implosion {
       vz += tanZ * spiralSpeed;
     }
 
-    const geo = new THREE.SphereGeometry(size, 5, 5);
-    const mat = new THREE.MeshBasicMaterial({
-      color: new THREE.Color(r1, g1, b1),
-      transparent: true,
-      opacity: additive ? 0.5 : 1.0,
-      depthWrite: !additive,
-      blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending,
-    });
-    const mesh = new THREE.Mesh(geo, mat);
-    mesh.position.set(sx, sy, zpos);
-    this.scene.add(mesh);
-    this.particles.push({ mesh, mat, vx, vy, vz, life, elapsed: 0, baseScale: size, gravity, r1, g1, b1, r2, g2, b2, dead: false, startDist });
+    _v.set(sx, sy, zpos);
+    _c.setRGB(r1, g1, b1);
+
+    let p: IP;
+    if (additive) {
+      // Billboarded glow sprite — much bigger/brighter read than a tiny sphere
+      p = this.allocSprite(_v, _c, 0.9, true);
+      p.mesh.scale.setScalar(size * 3);
+      p.baseScale = size * 3;
+    } else {
+      // Unit sphere scaled by size — no per-particle geometry
+      p = this.allocMesh(_v, _c);
+      p.baseScale = size;
+    }
+    Object.assign(p, { vx, vy, vz, life, elapsed: 0, gravity, r1, g1, b1, r2, g2, b2, dead: false, startDist });
+    this.particles.push(p);
   }
 
   update(dt: number): void {
     this.elapsed += dt;
-    let alive = 0;
+    let alive =
+      this.updateParticles(dt) +
+      this.updateCore() +
+      this.updateShockwaves(dt) +
+      this.updateArcs(dt);
+    for (const r of this.rings) if (r.update(dt)) alive++;
 
+    if (alive === 0) this.dead = true;
+  }
+
+  private updateParticles(dt: number): number {
+    let alive = 0;
     for (const p of this.particles) {
       if (p.dead) continue;
       p.elapsed += dt;
       if (p.elapsed >= p.life) {
         this.scene.remove(p.mesh);
-        p.mesh.geometry.dispose();
-        p.mat.dispose();
         p.dead = true;
+        if (p.isSprite) spritePool.push(p); else meshPool.push(p);
         continue;
       }
       alive++;
       const t = p.elapsed / p.life;
       const ft = 1 - t;
-      
+
       // Move inward
       p.mesh.position.x += p.vx * dt;
       p.mesh.position.y += p.vy * dt;
       p.mesh.position.z += p.vz * dt;
-      
-      // Shrink as they approach center
-      const scl = p.baseScale * ft;
+
+      // Sprites keep most of their size and fade out; chunks shrink to a point
+      const scl = p.isSprite
+        ? p.baseScale * (0.5 + 0.5 * ft)
+        : p.baseScale * ft;
       p.mesh.scale.setScalar(Math.max(scl, 0.01));
-      
+
       // Color gradient
       p.mat.color.setRGB(
         p.r1 + (p.r2 - p.r1) * t,
         p.g1 + (p.g2 - p.g1) * t,
         p.b1 + (p.b2 - p.b1) * t,
       );
-      p.mat.opacity = ft * (p.mat.depthWrite ? 1.0 : 0.5);
+      p.mat.opacity = ft * (p.isSprite ? 0.9 : 1.0);
     }
+    return alive;
+  }
 
-    // Update core collapse
-    if (this.coreMesh && this.coreMat) {
-      const coreLife = 0.25;
-      if (this.elapsed < coreLife) {
-        const t = this.elapsed / coreLife;
-        const scale = 1.0 - t;
-        this.coreMesh.scale.setScalar(scale);
-        this.coreMat.opacity = 1.0 - t * 0.5;
-        alive++;
-      } else {
-        this.scene.remove(this.coreMesh);
-        this.coreMesh.geometry.dispose();
-        this.coreMat.dispose();
-        this.coreMesh = null;
-        this.coreMat = null;
-      }
+  private updateCore(): number {
+    if (!this.core) return 0;
+    const coreLife = 0.25;
+    if (this.elapsed < coreLife) {
+      const t = this.elapsed / coreLife;
+      const scale = 1.0 - t;
+      this.core.mesh.scale.setScalar(scale);
+      this.core.mat.opacity = 1.0 - t * 0.5;
+      return 1;
     }
+    this.scene.remove(this.core.mesh);
+    this.core.dead = true;
+    corePool.push(this.core);
+    this.core = null;
+    return 0;
+  }
 
-    // Update shockwaves
+  private updateShockwaves(dt: number): number {
+    let alive = 0;
     for (const sw of this.shockwaves) {
+      if (sw.dead) continue;
       sw.elapsed += dt;
       if (sw.elapsed >= sw.life) {
         this.scene.remove(sw.mesh);
-        sw.mesh.geometry.dispose();
-        sw.mat.dispose();
+        sw.dead = true;
+        shockPool.push(sw);
         continue;
       }
       alive++;
       const t = sw.elapsed / sw.life;
-      const ft = 1 - t;
-      const currentRadius = sw.maxRadius * t;
-      sw.mesh.scale.setScalar(currentRadius / 0.3);
-      sw.mat.opacity = ft * 0.8;
+      sw.mesh.scale.setScalar(sw.maxRadius * t / 0.3);
+      sw.mat.opacity = (1 - t) * 0.8;
     }
+    return alive;
+  }
 
-    // Update electric arcs
+  private updateArcs(dt: number): number {
+    let alive = 0;
     for (const arc of this.arcs) {
+      if (arc.dead) continue;
       arc.elapsed += dt;
       if (arc.elapsed >= arc.life) {
         this.scene.remove(arc.line);
-        arc.line.geometry.dispose();
-        (arc.line.material as THREE.Material).dispose();
+        arc.dead = true;
+        arcPool.push(arc);
         continue;
       }
       alive++;
       const t = arc.elapsed / arc.life;
       const ft = 1 - t;
-      
-      // Shrink arc points toward center
-      const positions = new Float32Array(arc.points.length * 3);
-      for (let i = 0; i < arc.points.length; i++) {
-        const shrinkFactor = ft;
-        positions[i * 3] = this.ox + (arc.points[i].x - this.ox) * shrinkFactor;
-        positions[i * 3 + 1] = this.oy + (arc.points[i].y - this.oy) * shrinkFactor;
-        positions[i * 3 + 2] = this.oz + (arc.points[i].z - this.oz) * shrinkFactor;
-      }
-      arc.line.geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-      (arc.line.material as THREE.LineBasicMaterial).opacity = ft * 0.8;
-    }
 
-    if (alive === 0) this.dead = true;
+      // Shrink arc points toward center — rewrite the preallocated attribute
+      const arr = arc.posAttr.array as Float32Array;
+      for (let i = 0; i < ARC_POINTS; i++) {
+        arr[i * 3]     = this.ox + arc.basePts[i * 3] * ft;
+        arr[i * 3 + 1] = this.oy + arc.basePts[i * 3 + 1] * ft;
+        arr[i * 3 + 2] = this.oz + arc.basePts[i * 3 + 2] * ft;
+      }
+      arc.posAttr.needsUpdate = true;
+      arc.mat.opacity = ft * 0.8;
+    }
+    return alive;
   }
 
   dispose(): void {
     for (const p of this.particles) {
       if (!p.dead) {
         this.scene.remove(p.mesh);
-        p.mesh.geometry.dispose();
-        p.mat.dispose();
+        p.dead = true;
+        if (p.isSprite) spritePool.push(p); else meshPool.push(p);
       }
     }
     for (const sw of this.shockwaves) {
-      this.scene.remove(sw.mesh);
-      sw.mesh.geometry.dispose();
-      sw.mat.dispose();
+      if (!sw.dead) {
+        this.scene.remove(sw.mesh);
+        sw.dead = true;
+        shockPool.push(sw);
+      }
     }
-    if (this.coreMesh && this.coreMat) {
-      this.scene.remove(this.coreMesh);
-      this.coreMesh.geometry.dispose();
-      this.coreMat.dispose();
+    for (const r of this.rings) r.dispose();
+    if (this.core && !this.core.dead) {
+      this.scene.remove(this.core.mesh);
+      this.core.dead = true;
+      corePool.push(this.core);
     }
     for (const arc of this.arcs) {
-      this.scene.remove(arc.line);
-      arc.line.geometry.dispose();
-      (arc.line.material as THREE.Material).dispose();
+      if (!arc.dead) {
+        this.scene.remove(arc.line);
+        arc.dead = true;
+        arcPool.push(arc);
+      }
     }
+    this.particles = [];
     this.shockwaves = [];
+    this.rings = [];
     this.arcs = [];
-    this.coreMesh = null;
-    this.coreMat = null;
+    this.core = null;
   }
 }
