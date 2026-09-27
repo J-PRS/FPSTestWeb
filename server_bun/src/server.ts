@@ -103,6 +103,19 @@ const server = Bun.serve<WebSocketData>({
       });
     }
 
+    // Quick-join: GET /join?mode=ctf → {room, mode} — the lobby uses it
+    // to drop players into the emptiest live match of a mode.
+    if (url.pathname === '/join') {
+      const mode = url.searchParams.get('mode') ?? '';
+      if (!/^[a-z0-9_-]{0,16}$/.test(mode)) {
+        return corsResponse('Bad mode', { status: 400 });
+      }
+      const room = gameServer.quickRoom(mode);
+      return corsResponse(JSON.stringify({ room: room.name, mode: room.mode }), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
     // Demo upload: POST /demos/upload
     if (url.pathname === '/demos/upload' && req.method === 'POST') {
       try {

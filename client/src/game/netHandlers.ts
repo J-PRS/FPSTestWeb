@@ -108,6 +108,11 @@ export function wireNetworkHandlers(deps: NetDeps): void {
       if (!res.ok) throw new Error(`rooms ${res.status}`);
       return res.json() as Promise<import('./lobby.js').RoomRow[]>;
     },
+    quickJoin: async (mode) => {
+      const res = await fetch(`${httpUrl}/join?mode=${encodeURIComponent(mode)}`);
+      if (!res.ok) throw new Error(`join ${res.status}`);
+      return res.json() as Promise<{ room: string }>;
+    },
   }));
 
   // Both first-seen-update and respawn-into-missing end up here

@@ -22,6 +22,8 @@ export interface RoomRow {
 export interface LobbyDeps {
   /** GETs {name, mode?, players, maxPlayers}[]; throws when offline. */
   listRooms(): Promise<RoomRow[]>;
+  /** GET /join?mode — server picks the emptiest live match (or makes one). */
+  quickJoin(mode: string): Promise<{ room: string }>;
 }
 
 const POLL_MS = 3000;
@@ -61,7 +63,21 @@ export class Lobby {
     create.onclick = () => input.value.trim() && this.join(input.value.trim());
     newWrap.append(input, create);
 
-    this.panel.append(head, this.rows, newWrap);
+    const quick = document.createElement('div');
+    quick.style.cssText = 'display:flex;gap:4px;margin:6px 0;';
+    for (const mode of ['nuggets', 'ctf', 'dm']) {
+      const b = document.createElement('button');
+      b.textContent = mode.toUpperCase();
+      b.style.cssText = 'flex:1;background:#16303f;border:1px solid #345;color:#9cf;font:inherit;padding:3px 0;cursor:pointer;';
+      b.onclick = async () => {
+        b.disabled = true;
+        try { this.join((await this.deps.quickJoin(mode)).room); }
+        catch { b.disabled = false; }
+      };
+      quick.appendChild(b);
+    }
+
+    this.panel.append(head, quick, this.rows, newWrap);
     document.body.append(btn, this.panel);
   }
 
