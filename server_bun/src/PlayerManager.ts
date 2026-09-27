@@ -35,6 +35,7 @@ export class PlayerManager {
       consecutiveRejects: 0,
       ping: 0,
       skiing: 0,
+      history: [],
       forceSendUntil: 0,
     };
 

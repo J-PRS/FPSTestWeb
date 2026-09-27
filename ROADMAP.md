@@ -52,8 +52,9 @@ surface. Detailed research lives in `_reports/`; this file is the current truth.
 ### Next (audit priority order)
 3. **Bigger load test** — 19 players held fine; push to 32+ bots with a
    room to prove multi-match cost, watch tickLagMs + bandwidth rollup.
-4. **Lag compensation** — hitscan/AOE rewind buffer (~150ms of positions per
-   room). Needed before any competitive claim.
+4. ~~Lag compensation~~ — landed: per-player 400ms position history,
+   hitscan + AOE validated against target rewound by clamped shooter ping
+   (≤250ms). Verified by code review; live-verify needs a real-ping match.
 5. **Movement re-sim** — shared/stepPlayer on server during validation,
    cheap sanity (not full rollback yet).
 6. **Lobby/matchmaking UI** — room list, join codes, team assignment by

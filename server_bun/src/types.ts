@@ -42,6 +42,11 @@ export interface PlayerState {
   consecutiveRejects: number; // escape hatch: client persisting past corrections gets force-resynced
   ping: number; // self-reported client RTT in ms
   skiing: number; // last reported ski input flag (0/1), from inputMove
+  // Lag-comp rewind buffer: accepted position reports stamped at server
+  // receive time. Hit validation rewinds the target to the shooter's view
+  // (now - shooterPing) so a 100ms player shoots the ghost they saw, not
+  // the live position. Capped ~400ms / appended in handlePosition.
+  history: { t: number; x: number; y: number; z: number }[];
   // Tick-send override: while Date.now() < forceSendUntil, this player is
   // included in every tick regardless of movement/distance suppression.
   // Set on hit/knockback — the victim's real trajectory MUST flow during
