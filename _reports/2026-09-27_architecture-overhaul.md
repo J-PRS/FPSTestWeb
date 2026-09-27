@@ -89,3 +89,17 @@ Each slice is: extract cohesive block → new file → rewire imports → `tsc -
   extend. All callable dep getters renamed `lazy*` across the codebase
   (`deps.player()` → `deps.lazyPlayer()` etc.) so laziness is visible at
   every call site; eager fields stay plain.
+
+## Post-plan extensions (2026-09-28)
+
+- Projectile.ts: geometry/material caches + mesh/glow/ribbon construction +
+  updateMesh → `projectiles/visuals.ts` (732→622).
+- hud.ts second cut: player-indicator projection/lifecycle →
+  `ui/hud/indicators.ts` (`PlayerIndicators` owns the div map + scratch
+  vectors). hud.ts → 362.
+- main.ts: the `player.on*` wiring block (combat routes + skill FX) →
+  `game/playerHooks.ts` (`wirePlayerHooks(ctx)`). main.ts 537→476 — the
+  composition root now reads as construction order.
+- Left alone deliberately: entities/balls.ts (JP's in-flight ballSim
+  refactor), entities.ts's remaining 737 lines (a uniform per-species
+  registry — further splitting would scatter it, not clarify it).

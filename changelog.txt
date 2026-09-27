@@ -1747,3 +1747,6 @@
 - sfx.ts -> core/sfx/ per-family modules (barrel re-export, call sites unchanged)
 - hud.ts stylesheet/DOM -> ui/hud/dom.ts
 - dep-bag flatten: lazy* naming on all deferred getters; shared GameContext in game/context.ts
+- Projectile.ts visuals (geo caches, mesh/glow/ribbon build, updateMesh) -> projectiles/visuals.ts
+- hud.ts player indicators (projection, edge clamp, per-player divs) -> ui/hud/indicators.ts
+- main.ts player.on* wiring -> game/playerHooks.ts
