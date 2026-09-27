@@ -20,6 +20,9 @@ import type { WebSocketData } from './types.ts';
 
 export class Room {
   readonly name: string;
+  // First joiner's mode locks the match — later joins inherit it via
+  // gameState rather than a per-client URL param.
+  readonly mode: string;
   readonly players = new PlayerManager();
   readonly connections = new ConnectionManager();
   readonly rateLimiter = new RateLimiter();
@@ -33,13 +36,15 @@ export class Room {
   readonly lastSentPositions = new Map<string, { x: number; y: number; z: number; vx: number; vy: number; vz: number; yaw: number; pitch: number; hp: number; dead: boolean; ski: number; t: number }>();
   tickSeq = 0;
 
-  constructor(name: string, field: Heightfield | null) {
+  constructor(name: string, field: Heightfield | null, mode = '') {
     this.name = name;
+    this.mode = mode;
     this.messages = new MessageHandler(
       this.players,
       this.rateLimiter,
       (msg, exclude) => this.connections.broadcast(msg, exclude),
       (pid, msg) => this.connections.sendToPlayer(pid, msg),
+      { room: name, mode },
     );
     this.ballSim = new BallSim(
       this.players,

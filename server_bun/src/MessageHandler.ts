@@ -22,16 +22,20 @@ export class MessageHandler {
   private rateLimitWarnings: Map<string, number> = new Map();
   private readonly RATE_WARN_COOLDOWN_MS = 5000;
 
+  private roomInfo: { room: string; mode: string } = { room: 'default', mode: '' };
+
   constructor(
     playerManager: PlayerManager,
     rateLimiter: RateLimiter,
     broadcast: BroadcastFn,
     sendToPlayer: SendToPlayerFn,
+    roomInfo?: { room: string; mode: string },
   ) {
     this.playerManager = playerManager;
     this.rateLimiter = rateLimiter;
     this.broadcast = broadcast;
     this.sendToPlayer = sendToPlayer;
+    if (roomInfo) this.roomInfo = roomInfo;
     this.combat = new CombatHandler(playerManager, broadcast, sendToPlayer);
   }
 
@@ -76,6 +80,8 @@ export class MessageHandler {
       players: playersData,
       sessionToken,
       protocolVersion: PROTOCOL_VERSION,
+      room: this.roomInfo.room,
+      mode: this.roomInfo.mode || undefined,
       localPlayerState: {
         position: { ...player.position },
         rotation: { ...player.rotation },

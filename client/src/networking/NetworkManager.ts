@@ -44,7 +44,7 @@ export class NetworkManager {
   public onKnockback: ((position: { x: number; y: number; z: number }, force: number, pull?: boolean) => void) | null = null;
   public onChat: ((playerId: string, text: string) => void) | null = null;
   public onPlayerUpdate: ((playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }, timestamp: number, velocity?: { x: number; y: number; z: number }) => void) | null = null;
-  public onGameState: ((players: GameStatePlayer[], localPlayerState: LocalPlayerState | undefined) => void) | null = null;
+  public onGameState: ((players: GameStatePlayer[], localPlayerState: LocalPlayerState | undefined, roomInfo?: { room?: string; mode?: string }) => void) | null = null;
   public onSnapshot: ((players: SnapshotPlayer[], timestamp: number) => void) | null = null;
   public onStateHash: ((hash: string, tick: number, playerCount: number, timestamp: number) => void) | null = null;
   public onCorrection: ((seq: number, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }) => void) | null = null;
@@ -103,6 +103,7 @@ export class NetworkManager {
               playerId: this.localPlayerId,
               token: this.sessionToken ?? undefined,
               room: urlParams.room ?? undefined,
+              mode: urlParams.mode ?? undefined,
             });
             this.connected = true;
             this.hasLoggedConnectionError = false;
@@ -227,7 +228,7 @@ export class NetworkManager {
         this.players.set(player.id, player);
       }
     }
-    this.onGameState?.(data.players || [], data.localPlayerState);
+    this.onGameState?.(data.players || [], data.localPlayerState, { room: data.room, mode: data.mode });
   }
 
   private handleTickUpdate(data: { updates: TickUpdatePlayer[]; ackSeq?: number }): void {

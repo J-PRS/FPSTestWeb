@@ -74,13 +74,14 @@ export class GameServer {
   }
 
   /** Resolve-or-create a room. Joins may name any room; 'default' is the
-   *  unnamed lobby every existing client already lands in. */
-  private roomFor(name: string): Room {
+   *  unnamed lobby every existing client already lands in. `mode` is only
+   *  honored at creation — the first joiner defines the match. */
+  private roomFor(name: string, mode = ''): Room {
     let room = this.rooms.get(name);
     if (!room) {
-      room = new Room(name, this.field);
+      room = new Room(name, this.field, mode);
       this.rooms.set(name, room);
-      logger.info('Room created', { room: name });
+      logger.info('Room created', { room: name, mode });
     }
     return room;
   }
@@ -170,6 +171,7 @@ export class GameServer {
   listRooms() {
     return [...this.rooms.values()].map(r => ({
       name: r.name,
+      mode: r.mode || undefined,
       players: r.playerCount(),
       maxPlayers: CONFIG.maxPlayers,
     }));
@@ -289,7 +291,10 @@ export class GameServer {
       return;
     }
 
-    const room = this.roomFor(roomName);
+    const roomMode = typeof handshake.mode === 'string' && GameServer.ROOM_NAME_RE.test(handshake.mode)
+      ? handshake.mode
+      : '';
+    const room = this.roomFor(roomName, roomMode);
 
     if (room.playerCount() >= CONFIG.maxPlayers) {
       ws.close(1013, 'Server full');

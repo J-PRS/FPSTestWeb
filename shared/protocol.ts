@@ -25,8 +25,9 @@ export interface Rotation {
 }
 
 export type ClientMessage =
-  // room: optional match room — server validates [\w-]{1,32}, absent = 'default'
-  | { type: 'join'; playerId: string; token?: string; room?: string }
+  // room: optional match room — server validates [\w-]{1,32}, absent =
+  // 'default'. mode: only honored when the join creates the room.
+  | { type: 'join'; playerId: string; token?: string; room?: string; mode?: string }
   | { type: 'position'; position: Vec3; rotation: Rotation; velocity: Vec3; seq?: number; ping?: number }
   // Declared discontinuity (warp beacon, respawn): the position is
   // authoritative, not a plausibility-checked move — the server reseats
@@ -65,7 +66,9 @@ export interface TickUpdatePlayer {
 }
 
 export type ServerMessage =
-  | { type: 'gameState'; players: GameStatePlayer[]; localPlayerState?: LocalPlayerState; sessionToken?: string; protocolVersion?: number }
+  // room/mode: which match this state belongs to — set by the room's first
+  // joiner, inherited by everyone after (join claims can't redefine it).
+  | { type: 'gameState'; players: GameStatePlayer[]; localPlayerState?: LocalPlayerState; sessionToken?: string; protocolVersion?: number; room?: string; mode?: string }
   | { type: 'playerJoined'; playerId: string; internalId: string; position: Vec3; rotation: Rotation }
   | { type: 'playerLeft'; playerId: string }
   | { type: 'playerHit'; shooterId: string; targetId: string; damage: number; health: number }
