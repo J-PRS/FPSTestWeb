@@ -17,6 +17,8 @@ export interface RoomRow {
   /** FFA-mode live leader [id, pts]. */
   ffaLeader?: [string, number];
   winAt?: number;
+  /** ms until the match clock's horn — omitted while unarmed. */
+  timeLeftMs?: number;
 }
 
 export interface LobbyDeps {
@@ -132,7 +134,8 @@ export class Lobby {
     meta.style.cssText = 'float:right;color:#9cf;';
     const scoreTxt = r.scores ? `  ${r.scores.alpha}:${r.scores.bravo}`
       : r.ffaLeader ? `  ${r.ffaLeader[0]} ${r.ffaLeader[1]}pts` : '';
-    meta.textContent = `${r.mode ? r.mode + ' ' : ''}${r.players}/${r.maxPlayers}${scoreTxt}${r.winAt ? ` →${r.winAt}` : ''}`;
+    const clock = r.timeLeftMs ? ` ${Math.ceil(r.timeLeftMs / 60000)}m` : '';
+    meta.textContent = `${r.mode ? r.mode + ' ' : ''}${r.players}/${r.maxPlayers}${scoreTxt}${r.winAt ? ` →${r.winAt}` : ''}${clock}`;
     row.append(name, meta);
     row.onclick = () => this.join(r.name);
     this.rows.appendChild(row);
