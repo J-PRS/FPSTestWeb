@@ -19,9 +19,14 @@ const SPEED = 14;          // m/s ground wander
 const WP_REACH = 4;        // waypoint arrival distance
 const WP_RANGE = 60;       // new waypoint radius around current pos
 const HOP_CHANCE = 0.004;  // per-tick (50ms) — a hop every ~4s
+const SIGHT = 70;          // engage range — beyond this bots roam blind
+const FIRE_MS = 1100;      // base refire; ±400ms jitter per shot
+const BOLT_SPEED = 60;     // m/s visual bolt + hitscan travel is instant
+const AIM_ERR = 0.18;      // radians of cone error — misses look like misses
 
 export class ServerBots {
   private waypoints = new Map<string, Vec3>();
+  private lastFire = new Map<string, number>();
   private readonly room: Room;
   private readonly field: Heightfield | null;
 
@@ -60,6 +65,55 @@ export class ServerBots {
   /** Prune a bot that was fully removed (room teardown / test hooks). */
   untrack(playerId: string): void {
     this.waypoints.delete(playerId);
+    this.lastFire.delete(playerId);
+  }
+
+  /** Nearest living enemy in sight. Team modes fight the other side; FFA
+   *  bots pick any non-bot (fighting filler-vs-filler burns ticks nobody
+   *  asked for). */
+  private nearestEnemy(p: { id: string; position: Vec3; team?: string }): { id: string; position: Vec3; dist: number } | null {
+    let best: { id: string; position: Vec3; dist: number } | null = null;
+    for (const q of this.room.players.getAllPlayers().values()) {
+      if (q.id === p.id || q.isDead) continue;
+      if (this.room.modeSpec?.teams) {
+        if (q.team === p.team) continue;
+      } else if (q.isBot) continue;
+      const dx = q.position.x - p.position.x;
+      const dz = q.position.z - p.position.z;
+      const dy = q.position.y - p.position.y;
+      const dist = Math.sqrt(dx * dx + dz * dz + dy * dy);
+      if (dist < SIGHT && (!best || dist < best.dist)) best = { id: q.id, position: q.position, dist };
+    }
+    return best;
+  }
+
+  private tryFire(p: { id: string; position: Vec3; team?: string }, now: number): void {
+    const last = this.lastFire.get(p.id) ?? 0;
+    if (now - last < FIRE_MS) return;
+    const target = this.nearestEnemy(p);
+    if (!target) return;
+    this.lastFire.set(p.id, now + (Math.random() * 800 - 400));
+
+    // Bolt direction: aim at target chest with a cone of error; whether the
+    // roll hits decides damage, the visible bolt follows the error so a
+    // miss reads as a miss.
+    const dx = target.position.x - p.position.x;
+    const dy = target.position.y + 1 - (p.position.y + 1.4);
+    const dz = target.position.z - p.position.z;
+    const len = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1;
+    const err = AIM_ERR;
+    const ax = dx / len + (Math.random() * 2 - 1) * err;
+    const ay = dy / len + (Math.random() * 2 - 1) * err;
+    const az = dz / len + (Math.random() * 2 - 1) * err;
+    const alen = Math.sqrt(ax * ax + ay * ay + az * az) || 1;
+    const hit = Math.random() < Math.max(0.15, 0.6 - target.dist / 200);
+    this.room.messages.botFire(
+      p.id, hit ? target.id : null,
+      { x: p.position.x, y: p.position.y + 1.4, z: p.position.z },
+      { x: (ax / alen) * BOLT_SPEED, y: (ay / alen) * BOLT_SPEED, z: (az / alen) * BOLT_SPEED },
+      3, // Chaingun — cheap tracer, readable hit
+      hit,
+    );
   }
 
   private waypoint(p: { id: string; position: Vec3 }): void {
@@ -80,12 +134,18 @@ export class ServerBots {
       p.lastSeen = now; // bots never send positions — heartbeat manually
         // or the idle reaper would cull them on schedule
 
-      const dx = wp.x - p.position.x;
-      const dz = wp.z - p.position.z;
+      this.tryFire(p, now);
+      // Chase the nearest enemy while it's in sight; roam otherwise.
+      const foe = this.nearestEnemy(p);
+      const goal = foe ? { x: foe.position.x, z: foe.position.z } : wp;
+      const dx = goal.x - p.position.x;
+      const dz = goal.z - p.position.z;
       const dist = Math.sqrt(dx * dx + dz * dz);
-      if (dist < WP_REACH) { this.waypoint(p); continue; }
+      // In a fight, hold a loose orbit instead of hugging the target.
+      if (!foe && dist < WP_REACH) { this.waypoint(p); continue; }
+      if (foe && dist < 12) { p.velocity.x = 0; p.velocity.z = 0; p.lastSeq++; continue; }
 
-      const nx = dx / dist, nz = dz / dist;
+      const nx = dx / (dist || 1), nz = dz / (dist || 1);
       p.velocity.x = nx * SPEED;
       p.velocity.z = nz * SPEED;
       // Terrain clamp — bots are ground walkers; a hop pops them over bumps

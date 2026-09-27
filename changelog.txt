@@ -1889,3 +1889,4 @@ Lobby browser: corner LOBBY button lists GET /rooms (name/mode/occupancy) polled
 Map spec gains spawn anchors: maps/<room>.json spawns[] override the default ring (farthest-from-enemies pick still applies); duel.json shows two-base anchors
 Map spec gains bases (flag stands/objective anchors) echoed on gameState.map; ctf.json example matches the client's hard-coded ±70m flag spots
 Server bots: maps/<room>.json bots:N fills a match with wandering shootable players (real PlayerState entries — hit claims, knockback, respawns, tick fan-out all reuse player machinery); they don't keep an empty room alive or trip the idle reaper
+Server bots fight back: sight-range target selection (enemy team, or humans in FFA rooms), chase when in sight, hold a loose orbit in range, hitscan bolts with cone error broadcast as real projectileCreated tracers; damage runs the shared CombatHandler funnel so kills/respawns/knockback match player rules
