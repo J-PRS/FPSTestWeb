@@ -57,6 +57,13 @@ export class BallSim {
   private players: PlayerManager;
   private timer: ReturnType<typeof setInterval> | null = null;
   private simTime = 0; // monotonic sim clock — stamped on every event so clients measure TRUE age, not ping guesses
+  private lastTickAt = 0;
+  // setInterval under load fires LATE (measured +11ms avg) — stepping once
+  // per fire makes sim time run ~18% behind wall clock, and every client
+  // replay overshoots by that much. Accumulate real elapsed time and catch
+  // up in whole 50ms cells so sim time tracks wall time.
+  private tickAcc = 0;
+  private static readonly TICK_CATCHUP_CAP = 0.25; // don't spiral on a 1s hiccup
 
   constructor(players: PlayerManager, broadcast: (msg: ServerMessage) => void, broadcastBinary?: (data: Uint8Array) => void) {
     this.players = players;
@@ -79,6 +86,7 @@ export class BallSim {
     }
     this.field = { size: w, data: buf.subarray(8), stride: 1 };
     this.timer = setInterval(() => this.tick(), TICK_DT * 1000);
+    this.lastTickAt = performance.now();
     logger.info('BallSim started', { heightmap: `${w}x${h}` });
   }
 
@@ -249,16 +257,31 @@ export class BallSim {
 
   private tick(): void {
     if (!this.field) return;
-    this.simTime += TICK_DT;
-    const alive = this.alivePlayers();
-    if (alive.length === 0) return; // room empty — freeze the ecosystem
+    const now = performance.now();
+    this.tickAcc += Math.min(now - this.lastTickAt, 1000) / 1000;
+    this.lastTickAt = now;
+    // Catch up in whole cells; cap keeps a long hiccup from exploding.
+    this.tickAcc = Math.min(this.tickAcc, BallSim.TICK_CATCHUP_CAP);
+    if (this.tickAcc < TICK_DT) return;
 
-    // Population: base + per-player, spawn drip-fed one per tick
+    const alive = this.alivePlayers();
+    if (alive.length === 0) { this.tickAcc = 0; return; } // room empty — freeze the ecosystem
+
+    // Population: base + per-player, spawn drip-fed one per tick fire
     const target = Math.min(MAX_BALLS, BASE_BALLS + Math.max(0, alive.length - 1) * BALLS_PER_PLAYER);
     if (this.balls.size + this.pendingRespawns < target) {
       const near = alive[Math.floor(Math.random() * alive.length)]!.pos;
       this.spawnBall(rollVariant(), near);
     }
+
+    while (this.tickAcc >= TICK_DT) {
+      this.tickAcc -= TICK_DT;
+      this.stepAll(alive);
+    }
+  }
+
+  private stepAll(alive: { id: string; pos: SimVec }[]): void {
+    this.simTime += TICK_DT;
 
     for (const b of this.balls.values()) {
       if (b.dead) continue;
@@ -282,7 +305,7 @@ export class BallSim {
       // Pull/lunge aim comes from the snapshot last emitted on a segment —
       // predictors replay the identical input, not the live player pos.
       _snap.x = b.tx; _snap.y = b.ty; _snap.z = b.tz;
-      const kind = stepBall(b, TICK_DT, this.field, b.tgtValid ? _snap : null, true);
+      const kind = stepBall(b, TICK_DT, this.field!, b.tgtValid ? _snap : null, true);
       if (kind) {
         this.segment(b, kind);
       } else {
