@@ -55,6 +55,7 @@ import { seekerParts } from './entities/Seeker.js';
 import { rakkParts } from './entities/Rakk.js';
 import { mineParts } from './entities/Mine.js';
 import { minerParts } from './entities/Miner.js';
+import { banelingParts } from './entities/Baneling.js';
 import { totemParts } from './entities/Totem.js';
 import { turretterParts } from './entities/Turretter.js';
 import { ballParts } from './entities/balls.js';
@@ -154,6 +155,7 @@ async function init(): Promise<void> {
     rakk: { parts: rakkParts, capacity: 256 },
     mine: { parts: mineParts, capacity: 512 },
     miner: { parts: minerParts, capacity: 64 },
+    baneling: { parts: banelingParts, capacity: 128 },
     totem: { parts: totemParts, capacity: 64 },
     turretter: { parts: turretterParts, capacity: 64 },
     ball: { parts: ballParts, capacity: 512 },
@@ -440,6 +442,27 @@ const { requestLock } = wireOverlayInput({
   isGameStarted: () => gameStarted,
   player: () => player,
 });
+
+// Stale-code badge (noreload dev mode): the vite plugin swallows reloads
+// and pushes 'stale:changed' events — we count them so you know how much
+// new code is waiting behind Ctrl+R.
+const hot = (import.meta as { hot?: { on(e: string, cb: (d: { count: number }) => void): void } }).hot;
+if (hot) {
+  let stale = 0;
+  let badge: HTMLDivElement | null = null;
+  hot.on('stale:changed', (d) => {
+    stale += d.count;
+    if (!badge) {
+      badge = document.createElement('div');
+      badge.style.cssText =
+        'position:fixed;bottom:8px;right:10px;z-index:9999;pointer-events:none;' +
+        'font:11px/1.4 monospace;color:#ffb84d;opacity:0.85;text-shadow:0 1px 2px #000;' +
+        'background:rgba(0,0,0,0.35);padding:3px 7px;border-radius:4px;';
+      document.body.appendChild(badge);
+    }
+    badge.textContent = `⟳ ${stale} file${stale === 1 ? '' : 's'} changed — Ctrl+R`;
+  });
+}
 
 // Auto-start: init immediately, overlay stays hidden until ESC is pressed
 init().then(async () => {

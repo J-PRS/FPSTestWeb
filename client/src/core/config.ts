@@ -60,6 +60,12 @@ export const FLAK_BOUNCE_FRICTION = 0.8;
 
 // Plasma gun — T1/T2 fat energy bolt, sustained midrange fire
 export const PLASMA_RATE = 0.28; // ~3.5 rps
+export const RAILGUN_RATE = 1.5; // Quake railgun cadence
+export const MELEE_COOLDOWN = 0.9;
+export const MELEE_RANGE = 3.2;    // fist reach, meters
+export const MELEE_ARC_DOT = 0.55; // ~57° half-cone — generous, CoD-style
+export const MELEE_LUNGE = 8.0;    // forward shove on swing
+export const MELEE_DAMAGE = 60;    // flat enemy damage — a punch doesn't falloff
 
 // Game constants
 export const BALL_SPAWN_INTERVAL = 2.5; // Seconds between ball spawns
@@ -88,7 +94,7 @@ export const CRAWLER_SPAWN_INTERVAL = 4.0; // Seconds between spawn attempts
 export const CRAWLER_SPAWN_MIN = 40.0; // Spawn ring: min distance from player
 export const CRAWLER_SPAWN_MAX = 90.0;
 export const CRAWLER_RADIUS = 0.9;
-export const CRAWLER_HEALTH = 2;
+export const CRAWLER_HEALTH = 70; // damage points — a rocket (50+15 splash) one-shots, chaingun needs ~14 slugs
 export const CRAWLER_AGGRO_DIST = 70.0; // Chases inside this range
 export const CRAWLER_POUNCE_DIST = 25.0; // Ground inside this range → windup → pounce
 export const CRAWLER_WINDUP = 0.35; // Crouch telegraph before pounce (s)
@@ -106,7 +112,7 @@ export const TURRET_SPAWN_INTERVAL = 12.0; // spawn attempts are slow — they'r
 export const TURRET_SPAWN_MIN = 60.0;
 export const TURRET_SPAWN_MAX = 120.0;
 export const TURRET_RADIUS = 1.2;
-export const TURRET_HEALTH = 6;           // hit-count; planted halves incoming damage
+export const TURRET_HEALTH = 300;         // planted halves incoming damage, airborne doubles it
 export const TURRET_RANGE = 65.0;         // fires bolts inside this
 export const TURRET_RELAUNCH = 75.0;      // beyond this → ballistic hop at you
 export const TURRET_MIN_DWELL = 3.0;      // must sit planted this long between hops (no ping-pong)
@@ -122,11 +128,25 @@ export const ROLLER_SPAWN_INTERVAL = 8.0;
 export const ROLLER_SPAWN_MIN = 50.0;
 export const ROLLER_SPAWN_MAX = 110.0;
 export const ROLLER_RADIUS = 1.6;        // decently big
-export const ROLLER_HEALTH = 4;
+export const ROLLER_HEALTH = 200;
 export const ROLLER_ACCEL = 14.0;        // m/s² steering toward the player
 export const ROLLER_TOPSPEED = 26.0;     // downhill it can exceed via gravity
 export const ROLLER_HIT_DAMAGE = 18;
 export const ROLLER_HIT_FORCE = 22;      // shove on contact
+
+// Tumbleweed — destructible rolling props. Wind-blown (same drift direction
+// as the ambient dust), bounce off slopes, pop into twigs when shot.
+export const WEED_MAX = 10;
+export const WEED_SPAWN_INTERVAL = 2.5;
+export const WEED_SPAWN_MIN = 40.0;      // spawn upwind of the player…
+export const WEED_SPAWN_MAX = 70.0;
+export const WEED_KILL_DIST = 110.0;     // …despawn once blown this far past
+export const WEED_RADIUS = 1.1;
+export const WEED_HEALTH = 25;           // pops to any direct hit
+export const WEED_SPEED = 7.0;           // cruise speed downwind
+export const WEED_WIND_X = 1.4;          // same wind vector as ambientParticles
+export const WEED_WIND_Z = 0.6;
+export const WEED_HOP = 3.0;             // bounce impulse cresting bumps
 
 // Seeker — airborne skull-wasp. Ignores terrain while cruising above it,
 // commits to a telegraphed straight-line dart (the dodge window IS the
@@ -136,7 +156,7 @@ export const SEEKER_SPAWN_INTERVAL = 7.0;
 export const SEEKER_SPAWN_MIN = 35.0;
 export const SEEKER_SPAWN_MAX = 70.0;
 export const SEEKER_RADIUS = 0.6;
-export const SEEKER_HEALTH = 2;
+export const SEEKER_HEALTH = 70;
 export const SEEKER_AGGRO_DIST = 45.0;
 export const SEEKER_HOVER = 5.0;        // cruise height above terrain
 export const SEEKER_SPEED = 16.0;       // chase top speed
@@ -159,7 +179,7 @@ export const MINER_SPAWN_INTERVAL = 20.0; // slow — a persistent menace, not a
 export const MINER_SPAWN_MIN = 60.0;
 export const MINER_SPAWN_MAX = 100.0;
 export const MINER_RADIUS = 2.2;
-export const MINER_HEALTH = 10;
+export const MINER_HEALTH = 400;
 export const MINER_SPEED = 5.0;         // ponderous drift
 export const MINER_ACCEL = 3.0;
 export const MINER_ALTITUDE = 11.0;     // cruise height above terrain
@@ -178,6 +198,18 @@ export const MINE_DAMAGE_MAX = 22;      // at zero distance
 export const MINE_KNOCKBACK = 12.0;
 export const MINE_LIFE = 45.0;          // seconds before it fizzle-pops
 
+// Banelings — rolling suicide bombs birthed by the Overlord (was: Miner)
+export const BANELING_MAX = 12;          // brood cap across all overlords
+export const BANELING_RADIUS = 0.7;      // small — an exploding sac, not a boulder
+export const BANELING_HEALTH = 15;       // pops to a couple of hits
+export const BANELING_ACCEL = 22.0;      // zippy homing
+export const BANELING_TOPSPEED = 20.0;
+export const BANELING_FUSE_DIST = 2.6;   // proximity fuse
+export const BANELING_BLAST_RADIUS = 5.0;
+export const BANELING_DAMAGE_MAX = 18;   // at zero distance
+export const BANELING_KNOCKBACK = 14.0;
+export const BANELING_LIFE = 25.0;       // self-detonates eventually
+
 // Totem — peak-seeking sniper obelisk. Blinks to local high ground, charges
 // a visible aim-beam, fires a fast flat bolt. Relocates when crowded,
 // when LOS is blocked, or after a few shots — it always wants the crest.
@@ -186,7 +218,7 @@ export const TOTEM_SPAWN_INTERVAL = 18.0; // rare — a persistent ranged threat
 export const TOTEM_SPAWN_MIN = 50.0;
 export const TOTEM_SPAWN_MAX = 95.0;    // inside readable fog distance
 export const TOTEM_RADIUS = 1.0;
-export const TOTEM_HEALTH = 4;
+export const TOTEM_HEALTH = 200;
 export const TOTEM_RANGE = 105.0;       // engages inside the fog line — sniping from beyond it reads as invisible cheating
 export const TOTEM_MIN_RANGE = 22.0;    // player closer than this → blink away
 export const TOTEM_REFIRE = 2.6;        // seconds between shots
@@ -206,7 +238,7 @@ export const RAKK_SPAWN_INTERVAL = 9.0;
 export const RAKK_SPAWN_MIN = 40.0;
 export const RAKK_SPAWN_MAX = 80.0;
 export const RAKK_RADIUS = 1.1;
-export const RAKK_HEALTH = 3;
+export const RAKK_HEALTH = 100;
 export const RAKK_ORBIT_ALT = 22.0;     // cruise height above terrain
 export const RAKK_ORBIT_R = 25.0;       // circling radius around the player
 export const RAKK_SPEED = 18.0;         // soar speed

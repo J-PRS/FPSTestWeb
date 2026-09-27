@@ -10,6 +10,7 @@ import {
   SEEKER_STING_DAMAGE, SEEKER_STING_FORCE,
   MINER_MAX, MINER_SPAWN_INTERVAL, MINER_SPAWN_MIN, MINER_SPAWN_MAX,
   MINE_MAX, MINE_BLAST_RADIUS, MINE_DAMAGE_MAX, MINE_KNOCKBACK,
+  BANELING_MAX, BANELING_BLAST_RADIUS, BANELING_DAMAGE_MAX, BANELING_KNOCKBACK,
   TOTEM_MAX, TOTEM_SPAWN_INTERVAL, TOTEM_SPAWN_MIN, TOTEM_SPAWN_MAX,
   TOTEM_BOLT_DAMAGE,
   RAKK_MAX, RAKK_SPAWN_INTERVAL, RAKK_SPAWN_MIN, RAKK_SPAWN_MAX,
@@ -27,6 +28,7 @@ import { Nugget } from '../entities/Nugget.js';
 import type { Player } from '../entities/Player.js';
 import { Miner } from '../entities/Miner.js';
 import { Mine } from '../entities/Mine.js';
+import { Baneling } from '../entities/Baneling.js';
 import { Rakk } from '../entities/Rakk.js';
 import { Roller } from '../entities/Roller.js';
 import { Seeker } from '../entities/Seeker.js';
@@ -70,6 +72,7 @@ export function createEntities(deps: EntitiesDeps) {
   const seekers: Seeker[] = [];
   const miners: Miner[] = [];
   const mines: Mine[] = [];
+  const banelings: Baneling[] = [];
   const totems: Totem[] = [];
   const rakks: Rakk[] = [];
   const weeds: Tumbleweed[] = [];
@@ -101,10 +104,52 @@ export function createEntities(deps: EntitiesDeps) {
   // Enemy-contact damage funnel: knockback + server env-damage + hit flash.
   // Identical at every onHit/onSting/onClaw/onBoltHit site.
   function hurtPlayer(fromPos: THREE.Vector3, force: number, damage: number): void {
-    deps.player().applyKnockback(fromPos, force);
+    const p = deps.player();
+    if (p.isDead) return; // corpse shouldn't get knocked around or re-hurt
+    p.applyKnockback(fromPos, force);
     deps.networkManager()?.sendEnvironmentDamage(damage);
     deps.hud().showDamage(fromPos, damage); // vignette + directional arc
     sfx.playerHurt();
+  }
+
+  // ---- Deaggro: when the player dies, enemies lose the scent. Their target
+  // point stops being the corpse and becomes a phantom that wanders off —
+  // they mill around, drift away, and quit camping your body instead of
+  // pile-driving it forever. ----
+  const _aggroPos = new THREE.Vector3();
+  const _aggroWaypoint = new THREE.Vector3();
+  const _zeroVel = new THREE.Vector3();
+  let aggroWanderT = 0;
+  let aggroSeeded = false;
+
+  function aggroPos(dt: number): THREE.Vector3 {
+    const p = deps.player();
+    if (!p.isDead) { aggroSeeded = false; return p.pos; }
+    if (!aggroSeeded) {
+      aggroSeeded = true;
+      _aggroPos.copy(p.pos);
+      _aggroWaypoint.copy(p.pos);
+      aggroWanderT = 0;
+    }
+    // Wander: pick a new waypoint 15–45m away every few seconds, drift at ~4m/s.
+    aggroWanderT -= dt;
+    if (aggroWanderT <= 0 || _aggroPos.distanceToSquared(_aggroWaypoint) < 4) {
+      aggroWanderT = 3 + Math.random() * 4;
+      const a = Math.random() * Math.PI * 2;
+      const d = 15 + Math.random() * 30;
+      _aggroWaypoint.set(
+        p.pos.x + Math.cos(a) * d,
+        0,
+        p.pos.z + Math.sin(a) * d,
+      );
+      _aggroWaypoint.y = deps.terrain().getHeight(_aggroWaypoint.x, _aggroWaypoint.z) + 2;
+    }
+    _aggroPos.lerp(_aggroWaypoint, Math.min(1, dt * 4 / Math.max(1, _aggroPos.distanceTo(_aggroWaypoint))));
+    return _aggroPos;
+  }
+
+  function aggroVel(): THREE.Vector3 {
+    return deps.player().isDead ? _zeroVel : deps.player().vel;
   }
 
   // Compact orange pop shared by turret shells, totem bolts, mines — reads
@@ -173,6 +218,7 @@ export function createEntities(deps: EntitiesDeps) {
       if (n.collected && !n.collectNotified) {
         n.collectNotified = true;
         nuggetsCollected++;
+        deps.player().grantJetBoost();
         deps.effects().spawnImpact(n.pos, n.vel);
         sfx.pickup();
         logger.info(`Nugget collected (${nuggetsCollected} total)`);
@@ -261,7 +307,7 @@ export function createEntities(deps: EntitiesDeps) {
     Ball.viewPos.copy(camera.position); // feeds billboarded ball ribbon trails
     for (let i = balls.length - 1; i >= 0; i--) {
       const b = balls[i]!;
-      b.update(dt, deps.terrain(), deps.player().pos);
+      b.update(dt, deps.terrain(), aggroPos(dt));
       // Only remove ball when trails have fully faded out
       if (b.disposed) removeTarget(balls, i, b);
     }
@@ -283,7 +329,7 @@ export function createEntities(deps: EntitiesDeps) {
     // Negative t = first-spawn delay — the run breathes in before pressure
     list: crawlers, interval: CRAWLER_SPAWN_INTERVAL, t: -18,
     spawn: spawnCrawler,
-    tick: (c, dt) => c.update(dt, deps.terrain(), deps.player().pos),
+    tick: (c, dt) => c.update(dt, deps.terrain(), aggroPos(dt)),
   };
   function updateCrawlers(dt: number): void { updateSpecies(crawlerSpecies, dt); }
 
@@ -306,7 +352,7 @@ export function createEntities(deps: EntitiesDeps) {
   const turretSpecies: Species<Turretter> = {
     list: turrets, interval: TURRET_SPAWN_INTERVAL, t: -70,
     spawn: spawnTurretter,
-    tick: (t, dt) => t.update(dt, deps.terrain(), deps.player().pos, deps.player().vel),
+    tick: (t, dt) => t.update(dt, deps.terrain(), aggroPos(dt), aggroVel()),
   };
   function updateTurrets(dt: number): void { updateSpecies(turretSpecies, dt); }
 
@@ -323,7 +369,7 @@ export function createEntities(deps: EntitiesDeps) {
   const rollerSpecies: Species<Roller> = {
     list: rollers, interval: ROLLER_SPAWN_INTERVAL, t: -55,
     spawn: spawnRoller,
-    tick: (r, dt) => r.update(dt, deps.terrain(), deps.player().pos),
+    tick: (r, dt) => r.update(dt, deps.terrain(), aggroPos(dt)),
   };
   function updateRollers(dt: number): void { updateSpecies(rollerSpecies, dt); }
 
@@ -339,7 +385,7 @@ export function createEntities(deps: EntitiesDeps) {
   const seekerSpecies: Species<Seeker> = {
     list: seekers, interval: SEEKER_SPAWN_INTERVAL, t: -40,
     spawn: spawnSeeker,
-    tick: (s, dt) => s.update(dt, deps.terrain(), deps.player().pos),
+    tick: (s, dt) => s.update(dt, deps.terrain(), aggroPos(dt)),
   };
   function updateSeekers(dt: number): void { updateSpecies(seekerSpecies, dt); }
 
@@ -376,14 +422,39 @@ export function createEntities(deps: EntitiesDeps) {
     targets.push(m);
   }
 
+  // Overlord brood: green sac pop — same blast read as a mine, but rolling
+  function spawnBaneling(pos: THREE.Vector3): void {
+    if (banelings.filter(b => !b.dead).length >= BANELING_MAX) return;
+    const b = new Baneling(scene, deps.terrain(), pos);
+    if (b.dead) { b.dispose(); return; }
+    const player = deps.player();
+    b.onDetonate = (bane) => {
+      deps.world.explosions.push(new Explosion(scene, bane.pos, false, 0, deps.terrain(), BANELING_BLAST_RADIUS / ROCKET_RADIUS, 0x77ff44));
+      sfx.explosionAt(bane.pos, true);
+      screenShake.blast(bane.pos, 2.0, player.pos);
+      const dist = bane.pos.distanceTo(player.pos);
+      if (dist < BANELING_BLAST_RADIUS) {
+        const dmg = Math.round(BANELING_DAMAGE_MAX * (1 - dist / BANELING_BLAST_RADIUS));
+        if (dmg > 0) {
+          player.applyKnockback(bane.pos, BANELING_KNOCKBACK);
+          deps.networkManager()?.sendEnvironmentDamage(dmg);
+          deps.hud().showDamage(bane.pos, dmg);
+          sfx.playerHurt();
+        }
+      }
+    };
+    banelings.push(b);
+    targets.push(b);
+  }
+
   function spawnMiner(): void {
     // Also called by director events — the species loop isn't the only caller
     if (deps.demoManager()?.isPlaying) return;
     if (miners.filter(m => !m.dead).length >= MINER_MAX) return;
     const m = new Miner(scene, deps.terrain(), ringPos(MINER_SPAWN_MIN, MINER_SPAWN_MAX));
     m.onMineDrop = (miner) => {
-      plantMine(miner.pos); // Mine clamps itself to the terrain below
-      deps.effects().spawnJumpDust(miner.pos); // belly puff marks the drop
+      spawnBaneling(miner.pos); // drops to the terrain and immediately rolls
+      deps.effects().spawnJumpDust(miner.pos); // belly puff marks the birth
     };
     miners.push(m);
     targets.push(m);
@@ -392,17 +463,24 @@ export function createEntities(deps: EntitiesDeps) {
   const minerSpecies: Species<Miner> = {
     list: miners, interval: MINER_SPAWN_INTERVAL, t: -100,
     spawn: spawnMiner,
-    tick: (m, dt) => m.update(dt, deps.terrain(), deps.player().pos),
+    tick: (m, dt) => m.update(dt, deps.terrain(), aggroPos(dt)),
   };
   function updateMiners(dt: number): void {
     updateSpecies(minerSpecies, dt);
-    const player = deps.player();
     for (let i = mines.length - 1; i >= 0; i--) {
       const m = mines[i]!;
-      m.update(dt, player.pos);
+      m.update(dt, aggroPos(dt));
       if (m.dead) {
         m.dispose();
         removeTarget(mines, i, m);
+      }
+    }
+    for (let i = banelings.length - 1; i >= 0; i--) {
+      const b = banelings[i]!;
+      b.update(dt, deps.terrain(), aggroPos(dt));
+      if (b.dead) {
+        b.dispose();
+        removeTarget(banelings, i, b);
       }
     }
   }
@@ -426,7 +504,7 @@ export function createEntities(deps: EntitiesDeps) {
   const totemSpecies: Species<Totem> = {
     list: totems, interval: TOTEM_SPAWN_INTERVAL, t: -120,
     spawn: spawnTotem,
-    tick: (t, dt) => t.update(dt, deps.terrain(), deps.player().pos, deps.player().vel),
+    tick: (t, dt) => t.update(dt, deps.terrain(), aggroPos(dt), aggroVel()),
   };
   function updateTotems(dt: number): void { updateSpecies(totemSpecies, dt); }
 
@@ -444,7 +522,7 @@ export function createEntities(deps: EntitiesDeps) {
   const rakkSpecies: Species<Rakk> = {
     list: rakks, interval: RAKK_SPAWN_INTERVAL, t: -80,
     spawn: spawnRakk,
-    tick: (r, dt) => r.update(dt, deps.terrain(), deps.player().pos),
+    tick: (r, dt) => r.update(dt, deps.terrain(), aggroPos(dt)),
   };
   function updateRakks(dt: number): void { updateSpecies(rakkSpecies, dt); }
 
