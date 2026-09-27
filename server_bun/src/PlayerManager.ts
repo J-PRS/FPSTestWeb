@@ -204,6 +204,12 @@ export class PlayerManager {
     return { position: { ...player.position }, rotation: { ...player.rotation } };
   }
 
+  /** Fresh match — wipe everyone's K/D so the journal records per-match
+   *  stats, not career totals. */
+  resetStats(): void {
+    for (const p of this.players.values()) { p.kills = 0; p.deaths = 0; }
+  }
+
   addKill(playerId: string): void {
     const player = this.players.get(playerId);
     if (player) {
