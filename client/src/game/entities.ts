@@ -96,6 +96,9 @@ export function createEntities(deps: EntitiesDeps) {
   let ballTimer = 0;
   let ballSnapshotTimer = 0;
 
+  // ?mode=classic — plain bounce-and-shoot: variant-0 balls only
+  const CLASSIC_MODE = new URLSearchParams(location.search).get('mode') === 'classic';
+
   // Shared species machinery (threat tables, damage funnel, spawn ring,
   // LOD ticking, dust/bolt emitters) lives in game/speciesKit.ts.
   const kit = createSpeciesKit(deps, targets);
@@ -168,7 +171,8 @@ export function createEntities(deps: EntitiesDeps) {
     if (dm?.isPlaying) return; // skip normal spawning during demo playback
     if (serverBalls()) return; // connected: the server owns ball spawning
     if (balls.filter(b => !b.dead).length >= BALL_MAX) return;
-    spawnBallOfVariant(pickVariant());
+    // Classic mode is plain bouncy balls — no elites, no variants
+    spawnBallOfVariant(CLASSIC_MODE ? 0 : pickVariant());
   }
 
   // Shared spawn path — director events need to spawn specific variants
