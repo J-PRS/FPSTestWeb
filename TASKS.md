@@ -19,6 +19,11 @@
   - Client: Three.js 0.184.0, Vite 8.x, TypeScript
   - Server: Bun runtime, no npm deps except `@types/bun`
 - **Key Components:**
+  - `client/src/game/bots.ts` — offline bot brains + GameBot (extends RemotePlayer); modes live in `shared/teams.ts` (`?mode=nuggets|ctf|dm|classic`)
+  - `client/src/entities/RemotePlayer.ts` — networked/bot player visual; anim states idle/walk/run/jump/ski/hit/shoot/death (RobotExpressive clips)
+  - `client/src/core/keybinds.ts` — source of truth for rebindable keys (`fps-keys` setting), consumed by Player input + KEYS menu
+  - `_tools/pvptest/bot.ts` — headless WS client: `--fighter` sparring bot, `--test*` assertion suites, `--watch` passive probe
+  - `_tools/vmdump/` — weapon bake pipeline: export.js (GLB dump) → bake.py (Blender unwrap+texture-baker maps+numpy composite) → shot.js (screenshots)
   - `client/src/world/atmosphericSky.ts` — custom sky sphere shader, follows camera each frame
   - `client/src/world/terrain.ts` — chunked terrain with custom GLSL shader (height fog, hard cutoff)
   - `client/src/world/scene.ts` — scene setup, fog, lighting
@@ -43,26 +48,14 @@
   - Update changelog.txt after each task
   - Update architecture.txt for structural changes
   - Maintain TASKS.md for context
-- **Testing Requirements:** `bun test` in server_bun/ (88 tests incl. hit-claim validation); client has no test runner yet
+- **Testing Requirements:** `bun test` in server_bun/ (91 tests incl. hit-claim validation); `npx vitest run` in client/ (23 tests — wire protocol, combat math, team rules); `_tools/pvptest/` has live E2E suites (`--test`/`--test2`/`--test3`/`--test4`/`--test5` + `--watch` soak)
 - **Security Considerations:**
   - Server must be authoritative for movement
   - Rate limit critical messages
   - Validate all client inputs
 
 ## Current Task
-- **Objective:** Horizon/sky fog blending — seamless Tribes 2-style haze
-- **Status:** In progress — colors unified, hard cutoff at 200 units implemented, still refining visual match
-- **What's done so far:**
-  - Sky sphere follows camera each frame (no edge visible)
-  - Sphere segments increased to 64x32 (no polygon edges at horizon)
-  - Sky fragment shader: wide haze band at `h=0`, `hazeColor = vec3(0.7333, 0.8157, 0.9098)` = `0xbbd0e8`
-  - Terrain shader: height fog + hard cutoff at 200 units forcing 100% fogColor
-  - Terrain `fogColor = 0xbbd0e8`, `fogDensity = 0.030`
-  - `scene.fog = FogExp2(0xbbd0e8, 0.030)`, `scene.background = 0xbbd0e8`
-  - `renderer.setClearColor(0xbbd0e8)`
-  - `ambientColor` raised to `(0.38, 0.45, 0.55)` to reduce dark tint on distant terrain
-- **Remaining issue:** Subtle visible seam — terrain still slightly darker than sky at horizon
-- **Ideal next step:** Post-processing depth-based fog pass (one ShaderPass reads depth buffer, applies sky-gradient fog to whole frame — eliminates all color sync issues)
+- **Objective:** Continuous refinement — MP correctness (pvptest harness green), bot AI feel (perception lag / miss-first / weave), seamless debris gibs, modes (nuggets/ctf/dm/classic), keybinds menu, spectator fly (V), weapon bake pipeline (Blender UV → texture-baker maps → numpy composite)
 
 ## Recently Completed
 - **Explosion rendering:** Additive blending on particles so overlapping layers glow instead of darken
@@ -72,5 +65,7 @@
 
 ## Next Tasks
 - **Post-processing fog pass** (medium complexity) — depth buffer → reconstruct position → apply sky-gradient fog per pixel. Eliminates all color sync issues permanently. See `_reports/fog-sky-blending-research.md` for details.
-- **Refactor `main.ts`** (low priority) — currently large monolithic file; split into Game.ts, Renderer.ts, etc.
-- **Remove deprecated files** — `server/` old Node.js server, `.deprecated`/`.old` files in `server/src/` — user's call when to remove
+- **MP team scoring** — modes' shared/teams.ts rules exist client-side; server needs a `teamScore` broadcast to enforce nuggets/ctf/dm scoring for real players.
+- **w4 mortar palette** — authored albedo near-black; normalization lifts but it stays darkest. JP's call.
+- **Remote fire events for anim** — projectileSpawn drives muzzle flash/shoot pose already; richer (weapon type) could pick per-gun poses later.
+- **Remove deprecated files** — `server/` old Node.js server, `.deprecated`/`.old` files — user's call when to remove
