@@ -216,6 +216,7 @@ export function createGameLoop(deps: GameLoopDeps) {
       entities.updateTotems(dt);
       entities.updateRakks(dt);
       entities.updateWeeds(dt);
+      entities.updateDeployables(dt);
     }
     if (!demoPaused && !demoManager?.isPlaying) deps.waveDirector().update(dt);
     if (!demoManager?.isPlaying) entities.updateNuggets(dt);

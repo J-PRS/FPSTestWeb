@@ -228,6 +228,9 @@ export class Player {
   onRevolver: ((e: FireEvent) => void) | null = null;
   onMelee: ((e: FireEvent) => void) | null = null;
   onWeaponSwitch: ((index: number) => void) | null = null;
+  /** Pack items — main wires these to the deployables manager. */
+  onDeploy: (() => void) | null = null;
+  onCycleDeploy: (() => void) | null = null;
   onNetworkJump: ((pos: { x: number; y: number; z: number }) => void) | null = null;
   onNetworkJetpack: ((pos: { x: number; y: number; z: number }) => void) | null = null;
   onNetworkInput: ((input: { forward: number; right: number; jump: number; ski: number }, rotation: { yaw: number; pitch: number }) => void) | null = null;
@@ -306,6 +309,8 @@ export class Player {
           this.onWeaponSwitch?.(this.currentWeapon);
         }
       },
+      deploy: () => this.onDeploy?.(),
+      cycleDeploy: () => this.onCycleDeploy?.(),
       selectSlot: (i) => {
         if (i !== this.weaponIndex) {
           this.weaponIndex = i;
