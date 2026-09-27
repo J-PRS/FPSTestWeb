@@ -1,0 +1,252 @@
+/**
+ * BallSim — server-authoritative bouncy-ball flight.
+ *
+ * Balls are the shared-PvE pilot species (docs/2026.09.27-shared-pve-creatures):
+ * flight is closed-form between velocity discontinuities, so instead of a
+ * position stream this emits SEGMENT events — spawn / bounce / lunge /
+ * enrage / teleport / knockback / die — and every client replays the same
+ * integrator (shared/ballSim.ts) against the same heightfield
+ * (shared/heightfield.ts, data from heightmap.bin). A ball costs ~1 bounce
+ * event per second; 40 balls ≈ 40 × ~60B/s ≈ 2.4 KB/s split across all
+ * clients, versus ~30 KB/s for a naive position stream.
+ *
+ * Target rule (fodder profile): nearest ALIVE player, re-evaluated every
+ * few seconds — a retarget is itself a segment event so replays keep
+ * pulling toward the same player's live position.
+ */
+import { type Heightfield, hmHeight } from '../../shared/heightfield.ts';
+import {
+  type SimBall, type SimVec, type BallVariant, type SegmentKind,
+  makeSimBall, stepBall, applySimDamage,
+} from '../../shared/ballSim.ts';
+import type { PlayerManager } from './PlayerManager.ts';
+import type { ServerMessage } from './types.ts';
+import { logger } from './logger.ts';
+
+const TICK_DT = 0.05;           // 20Hz — matches GameServer tick broadcast
+const RETARGET_INTERVAL = 2.0;  // seconds between nearest-player re-evals
+// Resync floor: a ball in long flat flight emits NO bounce events, and
+// client prediction diverges freely meanwhile — force a segment every
+// ~1.2s so the worst-case replay error is bounded by ~1.2s of drift, not
+// by however long the ball happens to stay airborne. 40 balls ≈ 2KB/s.
+const RESYNC_INTERVAL = 1.2;
+const BASE_BALLS = 10;          // solo population
+const BALLS_PER_PLAYER = 4;     // extra per additional player
+const MAX_BALLS = 40;
+
+// 5% elite, otherwise weighted fodder sizes (v0 common, v1/v2 rare)
+function rollVariant(): BallVariant {
+  const r = Math.random();
+  if (r < 0.05) return 3;
+  if (r < 0.09) return 2;
+  if (r < 0.16) return 1;
+  return 0;
+}
+
+export class BallSim {
+  private field: Heightfield | null = null;
+  private balls = new Map<number, SimBall>();
+  private nextId = 1;
+  private pendingRespawns = 0;
+  private retargetAcc = new Map<number, number>();
+  private resyncAcc = new Map<number, number>();
+  private broadcast: (msg: ServerMessage) => void;
+  private players: PlayerManager;
+  private timer: ReturnType<typeof setInterval> | null = null;
+  private simTime = 0; // monotonic sim clock — stamped on every event so clients measure TRUE age, not ping guesses
+
+  constructor(players: PlayerManager, broadcast: (msg: ServerMessage) => void) {
+    this.players = players;
+    this.broadcast = broadcast;
+  }
+
+  async start(heightmapPath: string): Promise<void> {
+    const buf = new Uint8Array(await Bun.file(heightmapPath).arrayBuffer());
+    const view = new DataView(buf.buffer);
+    const w = view.getUint32(0, true);
+    const h = view.getUint32(4, true);
+    if (w !== h || w < 2 || buf.byteLength !== 8 + w * h) {
+      throw new Error(`Bad heightmap.bin: ${w}x${h}, ${buf.byteLength} bytes`);
+    }
+    this.field = { size: w, data: buf.subarray(8), stride: 1 };
+    this.timer = setInterval(() => this.tick(), TICK_DT * 1000);
+    logger.info('BallSim started', { heightmap: `${w}x${h}` });
+  }
+
+  stop(): void {
+    if (this.timer) clearInterval(this.timer);
+    this.timer = null;
+  }
+
+  /** Current segment state of every live ball — sent to joiners. */
+  roster(): { id: number; variant: number; colorIdx: number; position: SimVec; velocity: SimVec; enraged: boolean; targetId: string | null; t: number }[] {
+    const out = [];
+    for (const b of this.balls.values()) {
+      if (b.dead) continue;
+      out.push({
+        id: b.id, variant: b.variant, colorIdx: b.colorIdx,
+        position: { x: b.x, y: b.y, z: b.z },
+        velocity: { x: b.vx, y: b.vy, z: b.vz },
+        enraged: b.enraged, targetId: b.targetId,
+        t: this.simTime,
+      });
+    }
+    return out;
+  }
+
+  private alivePlayers(): { id: string; pos: SimVec }[] {
+    const out: { id: string; pos: SimVec }[] = [];
+    for (const [id, p] of this.players.getAllPlayers()) {
+      if (!p.isDead) out.push({ id, pos: p.position });
+    }
+    return out;
+  }
+
+  private nearestPlayer(b: SimBall, alive: { id: string; pos: SimVec }[]): { id: string; pos: SimVec } | null {
+    let best: { id: string; pos: SimVec } | null = null;
+    let bestD = Infinity;
+    for (const p of alive) {
+      const dx = p.pos.x - b.x;
+      const dz = p.pos.z - b.z;
+      const d = dx * dx + dz * dz;
+      if (d < bestD) { bestD = d; best = p; }
+    }
+    return best;
+  }
+
+  private spawnBall(variant: BallVariant, near?: SimVec, posOverride?: SimVec): SimBall {
+    const field = this.field!;
+    let x: number, z: number;
+    if (posOverride) {
+      x = posOverride.x; z = posOverride.z;
+    } else {
+      const cx = near ? near.x : 0;
+      const cz = near ? near.z : 0;
+      const ang = Math.random() * Math.PI * 2;
+      const dist = 60 + Math.random() * 60;
+      x = cx + Math.cos(ang) * dist;
+      z = cz + Math.sin(ang) * dist;
+    }
+    const y = posOverride ? posOverride.y : hmHeight(field, x, z) + 40 + Math.random() * 40;
+    const ang = Math.random() * Math.PI * 2;
+    const spd = Math.random() * 20;
+    const b = makeSimBall(
+      this.nextId++, variant, Math.floor(Math.random() * 8),
+      x, y, z,
+      Math.cos(ang) * spd, -2, Math.sin(ang) * spd,
+    );
+    b.targetId = this.nearestPlayer(b, this.alivePlayers())?.id ?? null;
+    this.balls.set(b.id, b);
+    this.broadcast({
+      type: 'ballSpawn', id: b.id, variant: b.variant, colorIdx: b.colorIdx,
+      position: { x: b.x, y: b.y, z: b.z },
+      velocity: { x: b.vx, y: b.vy, z: b.vz },
+      t: this.simTime,
+    });
+    return b;
+  }
+
+  private segment(b: SimBall, kind: SegmentKind): void {
+    this.resyncAcc.set(b.id, 0);
+    this.broadcast({
+      type: 'ballSegment', id: b.id, kind,
+      position: { x: b.x, y: b.y, z: b.z },
+      velocity: { x: b.vx, y: b.vy, z: b.vz },
+      enraged: b.enraged, targetId: b.targetId,
+      t: this.simTime,
+    });
+  }
+
+  /** creatureHit claim. Lenient sanity clamps only — real validation is an
+   *  anticheat-phase concern; a bogus claim costs a shoved ball, not state. */
+  handleHit(playerId: string, id: number, damage: number, kx?: number, ky?: number, kz?: number): void {
+    const b = this.balls.get(id);
+    if (!b || b.dead || !this.field) return;
+    const claimer = this.players.getPlayer(playerId);
+    if (!claimer) return;
+    // Loose plausibility: claimer within engagement envelope of the ball
+    const dx = claimer.position.x - b.x;
+    const dy = claimer.position.y - b.y;
+    const dz = claimer.position.z - b.z;
+    if (dx * dx + dy * dy + dz * dz > 600 * 600) return;
+
+    const dmg = Math.max(1, Math.min(300, damage));
+    let ix = 0, iy = 0, iz = 0;
+    if (kx !== undefined && ky !== undefined && kz !== undefined) {
+      const m = Math.hypot(kx, ky, kz);
+      const cap = 60; // impulse magnitude ceiling
+      if (m > 0.001) {
+        const s = Math.min(cap, m) / m;
+        ix = kx * s; iy = ky * s; iz = kz * s;
+      }
+    }
+    if (applySimDamage(b, dmg, ix, iy, iz)) {
+      this.kill(b, playerId);
+    } else {
+      this.segment(b, 'hit'); // the impulse IS a velocity discontinuity
+    }
+  }
+
+  private kill(b: SimBall, by?: string): void {
+    b.dead = true;
+    this.balls.delete(b.id);
+    this.broadcast({ type: 'ballDie', id: b.id, position: { x: b.x, y: b.y, z: b.z }, by: by ?? null });
+    // Elite splitter: two child balls at the corpse
+    if (b.variant === 3) {
+      for (let i = 0; i < 2; i++) {
+        const c = this.spawnBall(0, undefined, { x: b.x, y: b.y + 2, z: b.z });
+        const a = Math.random() * Math.PI * 2;
+        c.vx = Math.cos(a) * 15; c.vy = 14 + Math.random() * 6; c.vz = Math.sin(a) * 15;
+        this.segment(c, 'spawn');
+      }
+    }
+  }
+
+  private tick(): void {
+    if (!this.field) return;
+    this.simTime += TICK_DT;
+    const alive = this.alivePlayers();
+    if (alive.length === 0) return; // room empty — freeze the ecosystem
+
+    // Population: base + per-player, spawn drip-fed one per tick
+    const target = Math.min(MAX_BALLS, BASE_BALLS + Math.max(0, alive.length - 1) * BALLS_PER_PLAYER);
+    if (this.balls.size + this.pendingRespawns < target) {
+      const near = alive[Math.floor(Math.random() * alive.length)]!.pos;
+      this.spawnBall(rollVariant(), near);
+    }
+
+    for (const b of this.balls.values()) {
+      if (b.dead) continue;
+
+      // Periodic retarget — committed-target rules, fodder = nearest alive.
+      // Retarget broadcasts even without a velocity change: it doubles as a
+      // resync heartbeat for replay drift.
+      const ra = (this.retargetAcc.get(b.id) ?? 0) + TICK_DT;
+      if (ra >= RETARGET_INTERVAL) {
+        this.retargetAcc.set(b.id, 0);
+        const t = this.nearestPlayer(b, alive);
+        if ((t?.id ?? null) !== b.targetId) {
+          b.targetId = t?.id ?? null;
+          this.segment(b, 'bounce');
+          continue;
+        }
+      } else {
+        this.retargetAcc.set(b.id, ra);
+      }
+
+      const target = alive.find(p => p.id === b.targetId)?.pos
+        ?? this.nearestPlayer(b, alive)?.pos
+        ?? null;
+      const kind = stepBall(b, TICK_DT, this.field, target, true);
+      if (kind) {
+        this.segment(b, kind);
+      } else {
+        // No discontinuity this step — but silence itself desyncs a
+        // long flight: periodic forced segment bounds client divergence.
+        const rs = (this.resyncAcc.get(b.id) ?? 0) + TICK_DT;
+        if (rs >= RESYNC_INTERVAL) this.segment(b, 'bounce');
+        else this.resyncAcc.set(b.id, rs);
+      }
+    }
+  }
+}

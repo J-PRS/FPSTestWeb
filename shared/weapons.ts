@@ -19,6 +19,13 @@ export enum WeaponType {
   Flak = 6,
   Plasma = 7,
   Slam = 8, // skill ground-slam — not a projectile, but lands as an AOE
+  Railgun = 9,
+  Melee = 10, // E-key punch — not a projectile; aoe fields drive server validation
+  DiscPull = 11, // belt disc (C) — the implosion variant; launcher disc pushes
+  Lightning = 12, // Quake LG: hitscan beam, ticks ~22/s; aoe fields validate the pin-blast
+  Shotgun = 13, // pellet burst — tighter cone than flak, works to mid range
+  Cannon = 14, // Serious Sam cannonball — fast, fat, skips off terrain, pops on contact
+  RocketLauncher = 15, // classic RPG: slow straight-flying missile, big boom, rocket-jump friendly
 }
 
 export interface WeaponStats {
@@ -52,6 +59,18 @@ export interface WeaponStats {
  *  the visual edge (covers the shock ring), and the two can never drift. */
 export const AOE_VFX_SCALE = 0.8;
 
+/** Canonical launchers (Bolt + Disc) bloom their blast on a direct hit:
+ *  aoeRadius × this. Shared so client prediction and server validation
+ *  compute the same reach — the client claims `directHit` on the aoeShot
+ *  and the server re-derives the bonus from this table, never trusting a
+ *  radius over the wire. */
+export const DIRECT_HIT_AOE_BONUS = 1.5;
+export function directHitAoeBonus(weaponType: number): number {
+  return (weaponType === WeaponType.Rocket || weaponType === WeaponType.Disc)
+    ? DIRECT_HIT_AOE_BONUS
+    : 1;
+}
+
 export const WEAPONS: Record<number, WeaponStats> = {
   [WeaponType.Rocket]: {
     directDamage: 50,
@@ -67,6 +86,20 @@ export const WEAPONS: Record<number, WeaponStats> = {
     hitGrow: 2.0,
   },
   [WeaponType.Disc]: {
+    directDamage: 50,
+    aoeDamage: 15,
+    aoeRadius: 10.0,
+    knockbackForce: 25.0,
+    forceMode: 'push', // launcher disc knocks back like everything else
+    speed: 80.0,
+    gravity: 0,
+    bodyRadius: 0.5,
+    hitMin: 0.3,
+    hitMax: 8.0,
+    hitGrow: 2.0,
+  },
+  [WeaponType.DiscPull]: {
+    // Belt disc (C): the implosion — pulls targets toward the blast.
     directDamage: 50,
     aoeDamage: 15,
     aoeRadius: 10.0, // slightly exceeds the 8m Implosion VFX — pull reaches everything it visibly sucks
@@ -94,7 +127,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     maxLifetime: 2.0,
   },
   [WeaponType.Chaingun]: {
-    directDamage: 5,
+    directDamage: 8, // ~89 dps at 11/s — below plasma (125) but hitscan-easy; 13 slugs to kill a player
     aoeDamage: 0,
     aoeRadius: 0,
     knockbackForce: 0,
@@ -160,6 +193,104 @@ export const WEAPONS: Record<number, WeaponStats> = {
     hitMin: 0.0,
     hitMax: 2.0, // tight proxy — the fat bolt is already generous
     hitGrow: 2.0,
+  },
+  [WeaponType.Railgun]: {
+    // Quake railgun: 80dmg slug at 450 m/s ≈ hitscan past ~200m. Small AOE
+    // so near-misses still pop and the weapon isn't useless vs movement.
+    directDamage: 80,
+    aoeDamage: 30,
+    aoeRadius: 6.0,
+    knockbackForce: 35.0,
+    forceMode: 'push',
+    speed: 450.0,
+    gravity: 0,
+    bodyRadius: 0.18,
+    hitMin: 0.0,
+    hitMax: 0.5, // tight — a rail is precision, not a wake
+    hitGrow: 0.15, // fast ramp, no grace — full proxy by ~68m of travel
+    maxLifetime: 1.2, // ~540m of reach
+  },
+  [WeaponType.Melee]: {
+    // Power punch: instant cone in front of the player. Ballistic fields inert;
+    // aoeDamage/aoeRadius are the authoritative reach the server validates.
+    directDamage: 0,
+    aoeDamage: 55,
+    aoeRadius: 3.2,
+    knockbackForce: 50.0,
+    forceMode: 'push',
+    speed: 0,
+    gravity: 0,
+    bodyRadius: 0,
+    hitMin: 0,
+    hitMax: 0,
+    hitGrow: 0,
+  },
+  [WeaponType.Lightning]: {
+    // Hitscan beam — not a projectile; ballistic fields inert. Tick damage is
+    // directDamage (~178 dps vs enemies); aoeDamage/aoeRadius validate the
+    // per-tick blast claim the client sends for remote-player hits.
+    directDamage: 8,
+    aoeDamage: 5,
+    aoeRadius: 1.6, // narrow shaft — tracking weapon, not a wake
+    knockbackForce: 4, // the pin: a nudge per tick — it accrues at 22/s, keep it modest
+    forceMode: 'push',
+    speed: 0,
+    gravity: 0,
+    bodyRadius: 0,
+    hitMin: 0,
+    hitMax: 0,
+    hitGrow: 0,
+  },
+  [WeaponType.Shotgun]: {
+    // Pump pellets: 10 × 7dmg ≈ 70 point-blank, ~3× tighter cone than flak.
+    // Fast slugs (300 m/s) on a 0.4s fuse ≈ 120m of reach — usable at mid
+    // range where flak's lobbed shards scatter into nothing.
+    directDamage: 7, // per pellet — 10 pellets ≈ 70 max
+    aoeDamage: 0,
+    aoeRadius: 0,
+    knockbackForce: 0,
+    forceMode: 'push',
+    speed: 300.0,
+    gravity: 0,
+    bodyRadius: 0.1,
+    hitMin: 0.0,
+    hitMax: 0.4,
+    hitGrow: 0.1,
+    maxLifetime: 0.4,
+  },
+  [WeaponType.Cannon]: {
+    // Serious Sam cannonball: a big iron sphere that SKIPS off terrain
+    // (client bounce config) and detonates on target contact or fuse.
+    // The GL's rowdier bigger brother — trades shell count for presence.
+    directDamage: 70,
+    aoeDamage: 25,
+    aoeRadius: 10.0,
+    knockbackForce: 50.0,
+    forceMode: 'push',
+    speed: 72.0,    // faster than GL's 55 — it skips far between bounces
+    gravity: -28.0,
+    bodyRadius: 0.8, // HUGE — the comedy is the ball, not the damage
+    hitMin: 0.0,
+    hitMax: 2.0,    // proxy scaled to match the bigger ball
+    hitGrow: 1.5,
+    maxLifetime: 6.0, // skitters around until fuse or contact ends it
+  },
+  [WeaponType.RocketLauncher]: {
+    // RPG-style missile: flat trajectory, deliberately SLOW (readable in
+    // flight, dodgeable at range) in exchange for the biggest non-mortar
+    // blast. The Tribes/Quake rocket niche the Bolt Launcher never filled.
+    directDamage: 90,
+    aoeDamage: 35,
+    aoeRadius: 14.0, // big — but under mortar's 18
+    knockbackForce: 55.0, // rocket-jump tier — the tool IS the movement
+    forceMode: 'push',
+    speed: 48.0,
+    gravity: 0,
+    bodyRadius: 0.35,
+    hitMin: 0.0,
+    hitMax: 2.5, // a fat warhead drags a real wake
+    hitGrow: 0.4,
+    maxLifetime: 6.0, // ~290m of flat reach
   },
   [WeaponType.Slam]: {
     // Not a projectile — the Q-skill lands as a ground AOE. Ballistic

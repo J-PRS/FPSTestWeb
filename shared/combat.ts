@@ -49,11 +49,11 @@ export function aoeImpulseAt(dist: number, weaponType: number | undefined): numb
 /**
  * Wake-proxy hit radius at a given airtime — mirrors the client's
  * Projectile.hitRadius getter exactly (hitMin is only a descriptive floor;
- * the formula interpolates 0 → hitMax over hitGrow after a 0.1s grace).
+ * the formula interpolates 0 → hitMax over hitGrow from spawn, no grace).
  */
 export function hitRadiusAt(weaponType: number | undefined, airtime: number): number {
   const s = getWeaponStats(weaponType);
-  const t = Math.min(Math.max((airtime - 0.1) / s.hitGrow, 0), 1);
+  const t = Math.min(Math.max(airtime / s.hitGrow, 0), 1);
   return s.hitMax * t;
 }
 

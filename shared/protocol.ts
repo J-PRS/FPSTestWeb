@@ -11,7 +11,7 @@
  * message, changed field semantics). The server stamps it on gameState;
  * the client force-reloads on mismatch instead of silently desyncing.
  */
-export const PROTOCOL_VERSION = 2;
+export const PROTOCOL_VERSION = 3;
 
 export interface Vec3 {
   x: number;
@@ -27,14 +27,27 @@ export interface Rotation {
 export type ClientMessage =
   | { type: 'join'; playerId: string; token?: string }
   | { type: 'position'; position: Vec3; rotation: Rotation; velocity: Vec3; seq?: number; ping?: number }
+  // Declared discontinuity (warp beacon, respawn): the position is
+  // authoritative, not a plausibility-checked move — the server reseats
+  // its check anchor here instead of rejecting it as a speedhack.
+  | { type: 'teleport'; position: Vec3; rotation: Rotation; velocity: Vec3 }
   | { type: 'ping'; timestamp: number }
   | { type: 'shot'; targetId: string | null; weaponType?: number; position?: Vec3; velocity?: Vec3; timestamp?: number; projectileId?: string | null; airtime?: number }
-  | { type: 'aoeShot'; position: Vec3; weaponType?: number; excludeTargetId?: string | null; projectileId?: string | null; airtime?: number }
+  | { type: 'aoeShot'; position: Vec3; weaponType?: number; excludeTargetId?: string | null; projectileId?: string | null; airtime?: number; power?: number; directHit?: boolean }
   | { type: 'jump'; position: Vec3 }
   | { type: 'jetpack'; position: Vec3 }
   | { type: 'inputMove'; input: { forward: number; right: number; jump: number; ski: number }; rotation: Rotation }
   | { type: 'projectileDestroy'; projectileId: string }
   | { type: 'environmentDamage'; amount: number }
+  // Client-claimed pickups (nuggets): self-only heal, server clamps the
+  // amount so it can't be a cheat lever — it exists so server health stays
+  // the truth instead of drifting under each nugget the client ate.
+  | { type: 'heal'; amount: number }
+  // Hit claim on a server-owned creature (balls are server-authoritative
+  // when connected). damage is clamped server-side; kx/ky/kz is the
+  // normalized knockback direction the shot imparted (server scales it
+  // by weapon force itself). See server_bun/src/BallSim.ts.
+  | { type: 'creatureHit'; id: number; damage: number; kx?: number; ky?: number; kz?: number }
   | { type: 'snapshotRequest' };
 
 export interface TickUpdatePlayer {
@@ -65,6 +78,19 @@ export type ServerMessage =
   | { type: 'stateHash'; hash: string; tick: number; playerCount: number; timestamp: number }
   | { type: 'tickUpdate'; updates: TickUpdatePlayer[]; ackSeq?: number }
   | { type: 'correction'; seq: number; position: Vec3; velocity: Vec3; rotation: Rotation }
+  // Relayed declared-teleport — observers snap instead of interpolating
+  // across the gap (interp across 50m reads as a rocket-flight glitch)
+  | { type: 'teleport'; playerId: string; position: Vec3; velocity: Vec3 }
+  // --- Server-simmed creatures (balls) -----------------------------------
+  // Flight is closed-form between events (gravity + enrage accel are both
+  // deterministic), so the wire carries only SEGMENT boundaries: every
+  // velocity discontinuity. A client replays the same integrator and lands
+  // on the same arc — no position stream at all.
+  | { type: 'ballSpawn'; id: number; variant: number; colorIdx: number; position: Vec3; velocity: Vec3; t: number }
+  | { type: 'ballSegment'; id: number; position: Vec3; velocity: Vec3; enraged: boolean; targetId: string | null; kind: string; t: number }
+  | { type: 'ballDie'; id: number; position: Vec3; by?: string | null }
+  // Roster for joiners/reconnects — current segment state of every live ball
+  | { type: 'ballRoster'; balls: { id: number; variant: number; colorIdx: number; position: Vec3; velocity: Vec3; enraged: boolean; targetId: string | null; t: number }[] }
   | { type: 'pong'; timestamp: number };
 
 export interface GameStatePlayer {

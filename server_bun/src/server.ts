@@ -4,6 +4,7 @@ import { logger } from './logger.ts';
 import type { WebSocketData } from './types.ts';
 import { DemoStorage } from './DemoStorage.ts';
 import { join } from 'node:path';
+import { appendFileSync, mkdirSync } from 'node:fs';
 
 const gameServer = new GameServer();
 const demoStorage = new DemoStorage(join(import.meta.dir, '..', 'demos'));
@@ -103,6 +104,24 @@ const server = Bun.serve<WebSocketData>({
           status: 500,
           headers: { 'Content-Type': 'application/json' },
         });
+      }
+    }
+
+    // Client log shipping: POST /client-log — appended to logs/client.log.
+    // Bodies are plain text lines (WARN/ERROR only by client convention).
+    const LOGS_DIR = join(import.meta.dir, '..', '..', 'logs');
+    if (url.pathname === '/client-log' && req.method === 'POST') {
+      try {
+        const body = await req.text();
+        if (body.length > 512 * 1024) {
+          return corsResponse('Too large', { status: 413 });
+        }
+        mkdirSync(LOGS_DIR, { recursive: true });
+        appendFileSync(join(LOGS_DIR, 'client.log'), body);
+        return corsResponse('ok');
+      } catch (e) {
+        logger.warn('Client log append failed', { error: (e as Error).message });
+        return corsResponse('append failed', { status: 500 });
       }
     }
 

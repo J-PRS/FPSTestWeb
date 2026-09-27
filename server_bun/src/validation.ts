@@ -75,6 +75,22 @@ export function validateMessage(raw: unknown): ValidationResult<ClientMessage> {
       return { success: true, data: { type: 'position', position: pos.data, rotation: rot.data, velocity: vel.data, seq, ping } };
     }
 
+    case 'teleport': {
+      const pos = validateVec3(obj.position);
+      if (!pos.success) return { success: false, error: `position: ${pos.error}` };
+      const rot = validateRotation(obj.rotation);
+      if (!rot.success) return { success: false, error: `rotation: ${rot.error}` };
+      const vel = validateVec3(obj.velocity);
+      if (!vel.success) return { success: false, error: `velocity: ${vel.error}` };
+      // Same velocity-magnitude guard as position — a poisoned teleport
+      // still feeds observers' dead reckoning
+      const v = vel.data;
+      if (v.x * v.x + v.y * v.y + v.z * v.z > 1000 * 1000) {
+        return { success: false, error: 'velocity magnitude out of range' };
+      }
+      return { success: true, data: { type: 'teleport', position: pos.data, rotation: rot.data, velocity: vel.data } };
+    }
+
     case 'shot': {
       const targetId = obj.targetId;
       if (targetId !== null && typeof targetId !== 'string') {
@@ -115,6 +131,8 @@ export function validateMessage(raw: unknown): ValidationResult<ClientMessage> {
           excludeTargetId: (excludeTargetId as string | null) ?? null,
           projectileId: typeof obj.projectileId === 'string' ? obj.projectileId : undefined,
           airtime: isFiniteNumber(obj.airtime) ? obj.airtime : undefined,
+          power: isFiniteNumber(obj.power) ? obj.power : undefined,
+          directHit: obj.directHit === true ? true : undefined,
         },
       };
     }
@@ -159,6 +177,26 @@ export function validateMessage(raw: unknown): ValidationResult<ClientMessage> {
         return { success: false, error: 'amount must be a finite number' };
       }
       return { success: true, data: { type: 'environmentDamage', amount: obj.amount } };
+    }
+
+    case 'heal': {
+      if (!isFiniteNumber(obj.amount)) {
+        return { success: false, error: 'amount must be a finite number' };
+      }
+      return { success: true, data: { type: 'heal', amount: obj.amount } };
+    }
+
+    case 'creatureHit': {
+      if (!isFiniteNumber(obj.id) || !Number.isInteger(obj.id) || obj.id < 0) {
+        return { success: false, error: 'id must be a non-negative integer' };
+      }
+      if (!isFiniteNumber(obj.damage)) {
+        return { success: false, error: 'damage must be a finite number' };
+      }
+      const kx = isFiniteNumber(obj.kx) ? obj.kx : undefined;
+      const ky = isFiniteNumber(obj.ky) ? obj.ky : undefined;
+      const kz = isFiniteNumber(obj.kz) ? obj.kz : undefined;
+      return { success: true, data: { type: 'creatureHit', id: obj.id, damage: obj.damage, kx, ky, kz } };
     }
 
     case 'snapshotRequest': {
