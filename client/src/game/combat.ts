@@ -84,8 +84,6 @@ const _flakUp = new THREE.Vector3();
 const _flakUp0 = new THREE.Vector3(0, 1, 0);
 const _flakDir = new THREE.Vector3();
 const _debrisDir = new THREE.Vector3();
-const _meleeHitPos = new THREE.Vector3();
-const _meleeToT = new THREE.Vector3();
 // Lightning beam scratch
 const _lgO = new THREE.Vector3();   // eye position — the honest ray
 const _lgD = new THREE.Vector3();

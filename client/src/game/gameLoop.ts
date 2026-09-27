@@ -14,6 +14,7 @@ import type { AmbientParticles } from '../effects/ambientParticles.js';
 import type { GroundMist } from '../effects/groundMist.js';
 import type { AmbientBirds } from '../effects/birds.js';
 import { screenShake } from '../effects/screenShake.js';
+import * as sfxAudio from '../core/sfx/world.js';
 
 import type { NetworkManager } from '../networking/NetworkManager.js';
 import type { HUD } from '../ui/hud.js';
@@ -27,7 +28,6 @@ import type { createDemoLifecycle } from './demoLifecycle.js';
 import type { createRemotes } from './remotes.js';
 import type { createWaveDirector } from './waveDirector.js';
 import type { WorldState } from './worldState.js';
-import { audio } from '../core/audio.js';
 import Logger from '../core/Logger.js';
 import { createPerfHud } from '../core/perfHud.js';
 
@@ -320,48 +320,11 @@ export function createGameLoop(deps: GameLoopDeps) {
     // leave the bolt anchored one camera-frame stale
     deps.combat()?.updateBeamVisual();
 
-    updateAudio(dt, player, camera);
+    sfxAudio.updateAudio(dt, player, camera);
     perf.mark('hud');
 
     renderFrame(fxDt); // damage numbers ride fxDt — same hidden-tab decay fix
     perf.end(deps.rendererSetup.renderer, () => `tgt ${deps.entities.targets.length} rem ${deps.world.remotePlayers.size}`);
-  }
-
-  // Movement/ambience loops live here: they're continuous sounds driven by
-  // per-frame player state (velocity, ski/jet flags) rather than discrete
-  // events, so they can't ride the callback hooks like jump/land do.
-  // Right-axis for positional panning comes from the camera basis.
-  let jetLoop: { set(v: number): void; stop(): void } | null = null;
-  let skiLoop: { set(v: number): void; stop(): void } | null = null;
-  let windLoop: { set(v: number): void; stop(): void } | null = null;
-
-  function updateAudio(_dt: number, player: Player, camera: THREE.PerspectiveCamera): void {
-    if (!audio.ready) return;
-    _camRight.setFromMatrixColumn(camera.matrixWorld, 0);
-    audio.updateListener(camera.position, _camRight);
-
-    const speed = player.vel.length();
-    const airborne = !player.onGround;
-
-    // Jet: filtered-noise roar while the pack is burning
-    if (player.jetting) {
-      jetLoop = jetLoop ?? audio.noiseLoop('lowpass', 700);
-      jetLoop?.set(Math.min(1, speed / 60) * 0.45 + 0.05);
-    } else if (jetLoop) { jetLoop.stop(); jetLoop = null; }
-
-    // Ski: hardpack scrape, scales with ground speed
-    if (player.skiing) {
-      skiLoop = skiLoop ?? audio.noiseLoop('bandpass', 1400);
-      skiLoop?.set(Math.min(1, speed / 90) * 0.35);
-    } else if (skiLoop) { skiLoop.stop(); skiLoop = null; }
-
-    // Wind rush: always on while flying fast through air — the speed cue
-    // that makes 100+u feel like 100+u
-    const windAmt = airborne ? Math.max(0, (speed - 25) / 90) : 0;
-    if (windAmt > 0.02) {
-      windLoop = windLoop ?? audio.noiseLoop('lowpass', 900);
-      windLoop?.set(Math.min(1, windAmt) * 0.5);
-    } else if (windLoop) { windLoop.stop(); windLoop = null; }
   }
 
   function renderFrame(dt: number): void {

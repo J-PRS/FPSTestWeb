@@ -95,17 +95,6 @@ export function pickup(): void {
   o2.start(c.currentTime + 0.07); o2.stop(c.currentTime + 0.25);
 }
 
-export function melee(): void {
-  const bus = audio.sfxBus, c = ctx();
-  if (!bus || !c) return;
-  const g = c.createGain(); g.connect(bus);
-  if (!play(g, 0.25)) return;
-  if (sample('punch', g, 0.8) || sample('impact', g, 0.7)) return;
-  // Arm-whoosh up, fist-thud down — reads as a punch even without a hit
-  noise(0.18, 0.3, g, 'bandpass', 400, 1800, 1.2);
-  osc('sine', 140, 60, 0.12, 0.35, g);
-}
-
 export function equip(): void {
   const bus = audio.sfxBus, c = ctx();
   if (!bus || !c) return;
