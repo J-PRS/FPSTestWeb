@@ -77,10 +77,13 @@ surface. Detailed research lives in `_reports/`; this file is the current truth.
    shared/botBrain.ts drives offline GameBots AND server bots — one
    personality, both runtimes.
 4. ~~Server-owned teams/score~~ — landed: rooms assign alpha/bravo on
-   join, {type:'bank'} feeds a room scoreboard, teamScore/matchEnd/
-   matchStart broadcast; verified live. REMAINING seam: the client's
-   nugget-pickup code must call sendBank(n) — pickup detection lives in
-   JP's in-flight files.
+   join (before spawn — team-base spawning), teamScore/matchEnd/
+   matchStart broadcast, match journal → logs/matches.jsonl + /matches.
+   Server-owned nugget pickups landed: creature kills drop gems
+   (RoomPickups, touch-to-bank, TTL 30s) — 'nuggets' scoring is now
+   fully server-observed; {type:'bank'} claim kept for back-compat.
+   CTF classic rule: own flag must be home to cap; carrier disconnect
+   drops the flag.
 
 ### Later / research needed
 - Client prediction + reconciliation for self (currently trust + correct).
