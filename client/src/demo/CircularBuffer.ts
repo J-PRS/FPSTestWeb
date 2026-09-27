@@ -33,22 +33,22 @@ export class CircularBuffer<T> {
     if (index < 0 || index >= this.count) {
       throw new Error(`Index ${index} out of range [0, ${this.count - 1}]`);
     }
-    return this.buffer[(this.tail + index) % this.capacity];
+    return this.buffer[(this.tail + index) % this.capacity]!;
   }
 
   // Get without bounds checking - for hot paths
   getUnsafe(index: number): T {
-    return this.buffer[(this.tail + index) % this.capacity];
+    return this.buffer[(this.tail + index) % this.capacity]!;
   }
 
   peekNewest(): T {
     if (this.count === 0) throw new Error('Buffer is empty');
-    return this.buffer[(this.head - 1 + this.capacity) % this.capacity];
+    return this.buffer[(this.head - 1 + this.capacity) % this.capacity]!;
   }
 
   peekOldest(): T {
     if (this.count === 0) throw new Error('Buffer is empty');
-    return this.buffer[this.tail];
+    return this.buffer[this.tail]!;
   }
 
   clear(): void {

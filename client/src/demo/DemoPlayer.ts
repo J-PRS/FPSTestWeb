@@ -87,20 +87,12 @@ export class DemoPlayer {
     if (!Number.isFinite(time)) time = 0;
     this.currentTime = Math.max(0, Math.min(time, this.duration));
     this.frameIndex = this.findFrameIndex(this.currentTime);
-    // Reset event pointers to 0 so all events from the beginning get re-emitted.
-    // This allows the playback to reconstruct all in-flight projectiles and balls
-    // that existed at the seek time.
-    this.lastProjectileEventIndex = 0;
-    this.lastTargetEventIndex = 0;
-    // Notify callback so spawned projectiles can be cleaned up
-    this.callbacks.onSeek?.();
-    // Emit frame state and all events up to seek time directly, so reconstruction
-    // works even when paused (update() returns early when not playing)
+    // Reset event pointers and re-emit all events from the beginning, so
+    // playback reconstructs all in-flight projectiles and balls at the seek
+    // time — works even when paused (update() returns early when not playing).
+    const { newProjEvents, newTargetEvents, projCount, tgtCount } =
+      this.reconstructToTime(this.currentTime);
     const state = this.getInterpolatedState();
-    const projEventCount = this.findEventIndex(this.demoData.projectileEvents, this.currentTime);
-    const targetEventCount = this.findEventIndex(this.demoData.targetEvents, this.currentTime);
-    const newProjEvents = this.demoData.projectileEvents.slice(0, projEventCount);
-    const newTargetEvents = this.demoData.targetEvents.slice(0, targetEventCount);
     if (this.callbacks.onFrameUpdate) {
       this.callbacks.onFrameUpdate(state, { projectiles: newProjEvents, targets: newTargetEvents });
     }
@@ -108,8 +100,8 @@ export class DemoPlayer {
       this.callbacks.onTimeUpdate(this.currentTime, this.duration);
     }
     // Update event indices to current time for continued playback
-    this.lastProjectileEventIndex = projEventCount;
-    this.lastTargetEventIndex = targetEventCount;
+    this.lastProjectileEventIndex = projCount;
+    this.lastTargetEventIndex = tgtCount;
   }
 
   setSpeed(speed: number): void {
@@ -128,48 +120,8 @@ export class DemoPlayer {
     if (!Number.isFinite(dt) || dt < 0) dt = 0;
     this.currentTime += dt * this.playbackSpeed;
 
-    // Handle end of playback (forward direction)
-    if (this.currentTime >= this.duration) {
-      if (this.loop) {
-        // Emit any events in the final partial step [prevTime, duration] before
-        // wrapping, so a hit/explosion landing exactly at the end isn't lost.
-        this.emitFrameAndEvents(this.duration);
-        // Wrap to beginning: reset state and seek-reconstruct from t=0
-        this.currentTime = 0;
-        this.frameIndex = 0;
-        this.lastProjectileEventIndex = 0;
-        this.lastTargetEventIndex = 0;
-        this.callbacks.onSeek?.();
-        this.emitFrameAndEvents(0);
-      } else {
-        this.currentTime = this.duration;
-        this.playing = false;
-        if (this.callbacks.onPlaybackEnd) this.callbacks.onPlaybackEnd();
-        if (this.callbacks.onTimeUpdate) this.callbacks.onTimeUpdate(this.currentTime, this.duration);
-      }
-      return;
-    }
-
-    // Handle rewind past the beginning (negative speed)
-    if (this.currentTime < 0) {
-      if (this.loop) {
-        // Emit events for the partial step [0, prevTime] then wrap to end
-        this.emitFrameAndEvents(0);
-        this.currentTime = this.duration;
-        this.frameIndex = this.findFrameIndex(this.currentTime);
-        // Reverse playback can't re-emit past events incrementally, so
-        // seek-reconstruct the full state at the wrap target.
-        this.lastProjectileEventIndex = 0;
-        this.lastTargetEventIndex = 0;
-        this.callbacks.onSeek?.();
-        this.emitFrameAndEvents(this.currentTime);
-      } else {
-        this.currentTime = 0;
-        this.playing = false;
-        if (this.callbacks.onTimeUpdate) this.callbacks.onTimeUpdate(this.currentTime, this.duration);
-      }
-      return;
-    }
+    if (this.currentTime >= this.duration) { this.handleEndOfPlayback(); return; }
+    if (this.currentTime < 0) { this.handleRewindWrap(); return; }
 
     // Find the right frame index for current time
     this.frameIndex = this.findFrameIndex(this.currentTime);
@@ -185,15 +137,7 @@ export class DemoPlayer {
     let newTargetEvents: TargetEvent[];
     if (this.playbackSpeed < 0) {
       // Reverse playback: reconstruct full state at the new time.
-      // Trigger a seek so the game clears and rebuilds all in-flight objects,
-      // then re-emit all events up to the new currentTime.
-      this.lastProjectileEventIndex = 0;
-      this.lastTargetEventIndex = 0;
-      this.callbacks.onSeek?.();
-      const projCount = this.findEventIndex(this.demoData.projectileEvents, this.currentTime);
-      const tgtCount = this.findEventIndex(this.demoData.targetEvents, this.currentTime);
-      newProjEvents = this.demoData.projectileEvents.slice(0, projCount);
-      newTargetEvents = this.demoData.targetEvents.slice(0, tgtCount);
+      ({ newProjEvents, newTargetEvents } = this.reconstructToTime(this.currentTime));
     } else {
       newProjEvents = this.collectNewEvents(this.demoData.projectileEvents, this.lastProjectileEventIndex);
       newTargetEvents = this.collectNewEvents(this.demoData.targetEvents, this.lastTargetEventIndex);
@@ -212,6 +156,62 @@ export class DemoPlayer {
       this.lastProjectileEventIndex = this.findEventIndex(this.demoData.projectileEvents, this.currentTime);
       this.lastTargetEventIndex = this.findEventIndex(this.demoData.targetEvents, this.currentTime);
     }
+  }
+
+  private handleEndOfPlayback(): void {
+    if (this.loop) {
+      // Emit any events in the final partial step [prevTime, duration] before
+      // wrapping, so a hit/explosion landing exactly at the end isn't lost.
+      this.emitFrameAndEvents(this.duration);
+      // Wrap to beginning: reset state and seek-reconstruct from t=0
+      this.currentTime = 0;
+      this.frameIndex = 0;
+      this.lastProjectileEventIndex = 0;
+      this.lastTargetEventIndex = 0;
+      this.callbacks.onSeek?.();
+      this.emitFrameAndEvents(0);
+    } else {
+      this.currentTime = this.duration;
+      this.playing = false;
+      this.callbacks.onPlaybackEnd?.();
+      this.callbacks.onTimeUpdate?.(this.currentTime, this.duration);
+    }
+  }
+
+  private handleRewindWrap(): void {
+    if (this.loop) {
+      // Emit events for the partial step [0, prevTime] then wrap to end
+      this.emitFrameAndEvents(0);
+      this.currentTime = this.duration;
+      this.frameIndex = this.findFrameIndex(this.currentTime);
+      // Reverse playback can't re-emit past events incrementally, so
+      // seek-reconstruct the full state at the wrap target.
+      this.lastProjectileEventIndex = 0;
+      this.lastTargetEventIndex = 0;
+      this.callbacks.onSeek?.();
+      this.emitFrameAndEvents(this.currentTime);
+    } else {
+      this.currentTime = 0;
+      this.playing = false;
+      this.callbacks.onTimeUpdate?.(this.currentTime, this.duration);
+    }
+  }
+
+  // Clear all in-flight objects and return every event up to `time`, so the
+  // game can rebuild the full state at that timestamp (seek/reverse playback).
+  private reconstructToTime(time: number): { newProjEvents: ProjectileEvent[]; newTargetEvents: TargetEvent[]; projCount: number; tgtCount: number } {
+    if (!this.demoData) return { newProjEvents: [], newTargetEvents: [], projCount: 0, tgtCount: 0 };
+    this.lastProjectileEventIndex = 0;
+    this.lastTargetEventIndex = 0;
+    this.callbacks.onSeek?.();
+    const projCount = this.findEventIndex(this.demoData.projectileEvents, time);
+    const tgtCount = this.findEventIndex(this.demoData.targetEvents, time);
+    return {
+      newProjEvents: this.demoData.projectileEvents.slice(0, projCount),
+      newTargetEvents: this.demoData.targetEvents.slice(0, tgtCount),
+      projCount,
+      tgtCount,
+    };
   }
 
   // Emit the interpolated frame state and events up to `time` without advancing
@@ -241,7 +241,7 @@ export class DemoPlayer {
     let lo = 0, hi = frames.length - 1;
     while (lo < hi) {
       const mid = (lo + hi + 1) >> 1;
-      if (frames[mid].timestamp <= time) {
+      if (frames[mid]!.timestamp <= time) {
         lo = mid;
       } else {
         hi = mid - 1;
@@ -255,7 +255,7 @@ export class DemoPlayer {
     let lo = 0, hi = events.length;
     while (lo < hi) {
       const mid = (lo + hi) >> 1;
-      if (events[mid].timestamp <= time) {
+      if (events[mid]!.timestamp <= time) {
         lo = mid + 1;
       } else {
         hi = mid;
@@ -284,9 +284,9 @@ export class DemoPlayer {
     }
 
     const frames = this.demoData.frames;
-    const i = this.frameIndex;
-    const f0 = frames[i];
-    const f1 = i + 1 < frames.length ? frames[i + 1] : f0;
+    const i = Math.min(this.frameIndex, frames.length - 1);
+    const f0 = frames[i]!;
+    const f1 = i + 1 < frames.length ? frames[i + 1]! : f0;
 
     // Interpolation factor
     let t = 0;

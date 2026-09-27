@@ -14,6 +14,19 @@ const DEFAULT_BUFFER_SECONDS = 30;
 const DEFAULT_TICK_RATE = 60; // frames per second
 const MAX_EVENTS_PER_SEC = 1000;
 
+// Splice out all events with timestamp < cutoff in one batch (list is
+// append-ordered, so binary search finds the first keeper index).
+function pruneEventsBefore(events: { timestamp: number }[], cutoff: number): void {
+  if (events.length === 0 || events[0].timestamp >= cutoff) return;
+  let lo = 0, hi = events.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (events[mid].timestamp < cutoff) lo = mid + 1;
+    else hi = mid;
+  }
+  events.splice(0, lo);
+}
+
 export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecorder {
   private frameBuffer: CircularBuffer<DemoFrame>;
   private projectileEvents: ProjectileEvent[] = [];
@@ -97,26 +110,8 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
 
     // Prune events older than the frame buffer window — they can never be used in a clip
     const cutoff = this.elapsedTime - this.bufferSeconds;
-    // Find first index with timestamp >= cutoff, then splice in one batch
-    if (this.projectileEvents.length > 0 && this.projectileEvents[0].timestamp < cutoff) {
-      // Binary search for first event >= cutoff
-      let lo = 0, hi = this.projectileEvents.length;
-      while (lo < hi) {
-        const mid = (lo + hi) >> 1;
-        if (this.projectileEvents[mid].timestamp < cutoff) lo = mid + 1;
-        else hi = mid;
-      }
-      this.projectileEvents.splice(0, lo);
-    }
-    if (this.targetEvents.length > 0 && this.targetEvents[0].timestamp < cutoff) {
-      let lo = 0, hi = this.targetEvents.length;
-      while (lo < hi) {
-        const mid = (lo + hi) >> 1;
-        if (this.targetEvents[mid].timestamp < cutoff) lo = mid + 1;
-        else hi = mid;
-      }
-      this.targetEvents.splice(0, lo);
-    }
+    pruneEventsBefore(this.projectileEvents, cutoff);
+    pruneEventsBefore(this.targetEvents, cutoff);
   }
 
   private checkEventRate(): boolean {
@@ -315,119 +310,8 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
     }
     if (frames.length === 0) return null;
 
-    // Collect events in range, plus snapshot events for balls/projectiles alive before clip start
-    // Build snapshot of projectiles in-flight at clipStart:
-    // For each projectileId, find the most recent event before clipStart.
-    // If it was Fired or Bounce (not Hit/Destroyed), inject a synthetic Fired at clipStart.
-    const aliveProjectiles = new Map<number, ProjectileEvent>();
-    for (const e of this.projectileEvents) {
-      if (e.timestamp >= clipStart) break;
-      if (e.eventType === ProjectileEventType.Hit || e.eventType === ProjectileEventType.Destroyed) {
-        aliveProjectiles.delete(e.projectileId);
-      } else if (e.eventType === ProjectileEventType.Fired) {
-        aliveProjectiles.set(e.projectileId, e);
-      } else {
-        // Bounce — update position/velocity
-        const existing = aliveProjectiles.get(e.projectileId);
-        if (existing) {
-          aliveProjectiles.set(e.projectileId, {
-            ...existing,
-            posX: e.posX, posY: e.posY, posZ: e.posZ,
-            velX: e.velX, velY: e.velY, velZ: e.velZ,
-          });
-        }
-      }
-    }
-
-    // Create synthetic Fired events at clipStart for in-flight projectiles
-    const snapshotProjEvents: ProjectileEvent[] = [];
-    for (const [, e] of aliveProjectiles) {
-      snapshotProjEvents.push({
-        ...e,
-        eventType: ProjectileEventType.Fired,
-        timestamp: clipStart,
-      });
-    }
-
-    const projEvents = [
-      ...snapshotProjEvents,
-      ...this.projectileEvents.filter(
-        e => e.timestamp >= clipStart && e.timestamp <= clipEnd
-      ),
-    ];
-
-    // Build snapshot of balls alive at clipStart:
-    // For each targetId, find the most recent event before clipStart.
-    // If it was Spawned/Bounce/StateChanged/Hit (not Destroyed), inject a Spawned at clipStart.
-    // If the Spawned event was pruned, Bounce/StateChanged/Hit events still carry the
-    // targetType and position/velocity, so we can create a snapshot from them.
-    const aliveBalls = new Map<number, TargetEvent>();
-    for (const e of this.targetEvents) {
-      if (e.timestamp >= clipStart) break;
-      if (e.eventType === TargetEventType.Destroyed) {
-        aliveBalls.delete(e.targetId);
-      } else {
-        // Spawned/Bounce/StateChanged/Hit — update or create alive entry
-        const existing = aliveBalls.get(e.targetId);
-        if (existing) {
-          // Preserve targetType and health if the new event doesn't carry them (legacy 0)
-          const targetType = e.targetType !== 0 ? e.targetType : existing.targetType;
-          const health = e.health !== 0 ? e.health : existing.health;
-          aliveBalls.set(e.targetId, {
-            ...e,
-            targetType,
-            health,
-          });
-        } else {
-          aliveBalls.set(e.targetId, e);
-        }
-      }
-    }
-
-    // Create synthetic Spawned events at clipStart for alive balls
-    const snapshotEvents: TargetEvent[] = [];
-    for (const [, e] of aliveBalls) {
-      snapshotEvents.push({
-        ...e,
-        eventType: TargetEventType.Spawned,
-        timestamp: clipStart,
-      });
-    }
-
-    // Target events that fall inside the clip window
-    const actualTgtEvents = this.targetEvents.filter(
-      e => e.timestamp >= clipStart && e.timestamp <= clipEnd
-    );
-
-    // For any targetId that appears inside the clip but has no Spawned event and
-    // no alive snapshot, create a synthetic Spawned at clipStart from its first event.
-    // This covers Spawned events that were pruned before extractClip ran.
-    const firstEventByTargetId = new Map<number, TargetEvent>();
-    const hasSpawnedInClip = new Set<number>();
-    for (const e of actualTgtEvents) {
-      if (!firstEventByTargetId.has(e.targetId)) {
-        firstEventByTargetId.set(e.targetId, e);
-      }
-      if (e.eventType === TargetEventType.Spawned) {
-        hasSpawnedInClip.add(e.targetId);
-      }
-    }
-    const additionalSpawned: TargetEvent[] = [];
-    for (const [targetId, first] of firstEventByTargetId) {
-      if (aliveBalls.has(targetId)) continue;
-      if (hasSpawnedInClip.has(targetId)) continue;
-      additionalSpawned.push({
-        ...first,
-        eventType: TargetEventType.Spawned,
-        timestamp: clipStart,
-      });
-    }
-
-    const tgtEvents = [
-      ...snapshotEvents,
-      ...additionalSpawned,
-      ...actualTgtEvents,
-    ];
+    const projEvents = this.collectProjectileEvents(clipStart, clipEnd);
+    const tgtEvents = this.collectTargetEvents(clipStart, clipEnd);
 
     // Renormalize timestamps to clip start
     const first = frames[0];
@@ -460,6 +344,133 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
       projectileEvents: normProj,
       targetEvents: normTgt,
     };
+  }
+
+  // Projectile events in [clipStart, clipEnd], plus synthetic Fired events at
+  // clipStart for projectiles that were in-flight when the clip began.
+  private collectProjectileEvents(clipStart: number, clipEnd: number): ProjectileEvent[] {
+    // For each projectileId, find the most recent event before clipStart.
+    // If it was Fired or Bounce (not Hit/Destroyed), inject a synthetic Fired at clipStart.
+    const aliveProjectiles = new Map<number, ProjectileEvent>();
+    for (const e of this.projectileEvents) {
+      if (e.timestamp >= clipStart) break;
+      if (e.eventType === ProjectileEventType.Hit || e.eventType === ProjectileEventType.Destroyed) {
+        aliveProjectiles.delete(e.projectileId);
+      } else if (e.eventType === ProjectileEventType.Fired) {
+        aliveProjectiles.set(e.projectileId, e);
+      } else {
+        // Bounce — update position/velocity
+        const existing = aliveProjectiles.get(e.projectileId);
+        if (existing) {
+          aliveProjectiles.set(e.projectileId, {
+            ...existing,
+            posX: e.posX, posY: e.posY, posZ: e.posZ,
+            velX: e.velX, velY: e.velY, velZ: e.velZ,
+          });
+        }
+      }
+    }
+
+    const snapshotProjEvents: ProjectileEvent[] = [];
+    for (const [, e] of aliveProjectiles) {
+      snapshotProjEvents.push({
+        ...e,
+        eventType: ProjectileEventType.Fired,
+        timestamp: clipStart,
+      });
+    }
+
+    return [
+      ...snapshotProjEvents,
+      ...this.projectileEvents.filter(
+        e => e.timestamp >= clipStart && e.timestamp <= clipEnd
+      ),
+    ];
+  }
+
+  // Target events in [clipStart, clipEnd], plus synthetic Spawned events at
+  // clipStart for balls that were alive when the clip began (or whose Spawned
+  // event was pruned before extractClip ran).
+  private collectTargetEvents(clipStart: number, clipEnd: number): TargetEvent[] {
+    // For each targetId, find the most recent event before clipStart.
+    // If it was Spawned/Bounce/StateChanged/Hit (not Destroyed), inject a Spawned at clipStart.
+    // If the Spawned event was pruned, Bounce/StateChanged/Hit events still carry the
+    // targetType and position/velocity, so we can create a snapshot from them.
+    // For each targetId, find the most recent event before clipStart.
+    // If it was Spawned/Bounce/StateChanged/Hit (not Destroyed), inject a Spawned at clipStart.
+    const aliveBalls = this.findAliveTargets(clipStart);
+
+    // Create synthetic Spawned events at clipStart for alive balls
+    const snapshotEvents: TargetEvent[] = [];
+    for (const [, e] of aliveBalls) {
+      snapshotEvents.push({
+        ...e,
+        eventType: TargetEventType.Spawned,
+        timestamp: clipStart,
+      });
+    }
+
+    // Target events that fall inside the clip window
+    const actualTgtEvents = this.targetEvents.filter(
+      e => e.timestamp >= clipStart && e.timestamp <= clipEnd
+    );
+
+    return [
+      ...snapshotEvents,
+      ...this.recoverMissingSpawns(actualTgtEvents, aliveBalls, clipStart),
+      ...actualTgtEvents,
+    ];
+  }
+
+  // Replay target events before clipStart to find which balls were alive then.
+  // If the Spawned event was pruned, Bounce/StateChanged/Hit events still carry
+  // the targetType and position/velocity, so we can create a snapshot from them.
+  private findAliveTargets(clipStart: number): Map<number, TargetEvent> {
+    const aliveBalls = new Map<number, TargetEvent>();
+    for (const e of this.targetEvents) {
+      if (e.timestamp >= clipStart) break;
+      if (e.eventType === TargetEventType.Destroyed) {
+        aliveBalls.delete(e.targetId);
+        continue;
+      }
+      // Spawned/Bounce/StateChanged/Hit — update or create alive entry
+      const existing = aliveBalls.get(e.targetId);
+      if (!existing) {
+        aliveBalls.set(e.targetId, e);
+        continue;
+      }
+      // Preserve targetType and health if the new event doesn't carry them (legacy 0)
+      const targetType = e.targetType !== 0 ? e.targetType : existing.targetType;
+      const health = e.health !== 0 ? e.health : existing.health;
+      aliveBalls.set(e.targetId, { ...e, targetType, health });
+    }
+    return aliveBalls;
+  }
+
+  // For any targetId that appears inside the clip but has no Spawned event and
+  // no alive snapshot, create a synthetic Spawned at clipStart from its first
+  // event. This covers Spawned events that were pruned before extractClip ran.
+  private recoverMissingSpawns(actualTgtEvents: TargetEvent[], aliveBalls: Map<number, TargetEvent>, clipStart: number): TargetEvent[] {
+    const firstEventByTargetId = new Map<number, TargetEvent>();
+    const hasSpawnedInClip = new Set<number>();
+    for (const e of actualTgtEvents) {
+      if (!firstEventByTargetId.has(e.targetId)) {
+        firstEventByTargetId.set(e.targetId, e);
+      }
+      if (e.eventType === TargetEventType.Spawned) {
+        hasSpawnedInClip.add(e.targetId);
+      }
+    }
+    const additionalSpawned: TargetEvent[] = [];
+    for (const [targetId, first] of firstEventByTargetId) {
+      if (aliveBalls.has(targetId) || hasSpawnedInClip.has(targetId)) continue;
+      additionalSpawned.push({
+        ...first,
+        eventType: TargetEventType.Spawned,
+        timestamp: clipStart,
+      });
+    }
+    return additionalSpawned;
   }
 }
 
