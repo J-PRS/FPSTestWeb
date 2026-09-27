@@ -19,6 +19,7 @@ const logger = new ChildLogger('Projectile');
 const _velDir = new THREE.Vector3();
 const _lookTarget = new THREE.Vector3();
 const _FORWARD = new THREE.Vector3(0, 0, 1);
+const _tumbleAxis = new THREE.Vector3();
 const _tNormal = new THREE.Vector3();
 
 const MESH_GEO_CACHE = new Map<string, THREE.BufferGeometry>();
@@ -46,6 +47,10 @@ function getMeshGeo(meshType: string, bodyRadius: number): THREE.BufferGeometry 
   if (!geo) {
     if (meshType === 'disc') {
       geo = new THREE.CylinderGeometry(0.3, 0.3, 0.05, 16);
+    } else if (meshType === 'ball') {
+      // Thrown grenade — faceted icosphere reads as a ball at any angle,
+      // unlike the oriented tube meant for rocket shells
+      geo = new THREE.IcosahedronGeometry(bodyRadius, 1);
     } else {
       geo = new THREE.CylinderGeometry(0.08, bodyRadius, 0.7, 6);
       geo.rotateX(Math.PI / 2);
@@ -117,6 +122,10 @@ export class Projectile {
   explosionProcessed = false;
 
   readonly config: ProjectileConfig;
+  // Random tumble axis for 'ball' projectiles — fixed per shot
+  private readonly tumbleX = Math.random() * 2 - 1;
+  private readonly tumbleY = Math.random() * 2 - 1;
+  private readonly tumbleZ = Math.random() * 2 - 1;
 
   // Wake hit tracking: only trigger when distance increases (projectile passed target)
   private wakeBallDistances = new Map<Targetable, number>(); // target -> min distance seen
@@ -587,6 +596,11 @@ export class Projectile {
       if (this.config.meshType === 'disc') {
         _lookTarget.copy(this.pos).add(_velDir);
         this.mesh.lookAt(_lookTarget);
+      } else if (this.config.meshType === 'ball') {
+        // Spheres don't orient — they tumble. Spin around a fixed random
+        // axis, rate proportional to speed so a lobbed ball visibly rotates
+        _tumbleAxis.set(this.tumbleX, this.tumbleY, this.tumbleZ).normalize();
+        this.mesh.rotateOnAxis(_tumbleAxis, this.vel.length() * this.lastDt * 3.0);
       } else {
         this.mesh.quaternion.setFromUnitVectors(_FORWARD, _velDir);
       }
