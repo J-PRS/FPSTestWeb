@@ -28,15 +28,32 @@ describe('match clock', () => {
     expect(room.scores.alpha).toBe(0); // reset for the next match
   });
 
-  test('tied horn is a draw', () => {
+  test('tied horn → overtime; unresolved OT → draw', () => {
     const room = new Room('c2', null, '', resolveMapSpec({ mode: 'ctf' }));
     let endedWinner = '';
     room.onMatchEnd = (r) => { endedWinner = r.winner; };
     const t0 = Date.now();
     room.players.addPlayer('h1');
     room.checkMatchClock(t0);
-    room.checkMatchClock(t0 + MODES.ctf.timeLimitS * 1000 + 1);
+    const horn = t0 + MODES.ctf.timeLimitS * 1000 + 1;
+    room.checkMatchClock(horn);
+    expect(endedWinner).toBe(''); // overtime, not a draw yet
+    room.checkMatchClock(horn + 121_000); // OT cap spent
     expect(endedWinner).toBe('draw');
+  });
+
+  test('overtime lead ends the match instantly', () => {
+    const room = new Room('ot', null, '', resolveMapSpec({ mode: 'nuggets' }));
+    let endedWinner = '';
+    room.onMatchEnd = (r) => { endedWinner = r.winner; };
+    const t0 = Date.now();
+    room.players.addPlayer('h1');
+    room.checkMatchClock(t0);
+    const horn = t0 + MODES.nuggets.timeLimitS * 1000 + 1;
+    room.checkMatchClock(horn); // tie → OT
+    room.scores.alpha = 1;
+    room.checkMatchClock(horn + 50); // lead during OT ends it now
+    expect(endedWinner).toBe('alpha');
   });
 
   test('60s warning fires once per match', () => {
@@ -51,8 +68,11 @@ describe('match clock', () => {
     priv.matchWarned = false; // re-arm check: only fires once
     room.checkMatchClock(horn - 30_000);
     expect(priv.matchWarned).toBe(true);
-    // match reset re-arms the warning for the next match
+    // match reset re-arms the warning for the next match (tied horn → OT,
+    // so end it with a score before checking the flag)
     room.checkMatchClock(horn + 1);
+    room.ffaScores.set('h1', 1);
+    room.checkMatchClock(horn + 2);
     expect(priv.matchWarned).toBe(false);
   });
 
@@ -65,7 +85,9 @@ describe('match clock', () => {
     room.checkMatchClock(t0);
     room.ffaScores.set('h1', 30);
     room.ffaScores.set('bot-x', 30);
-    room.checkMatchClock(t0 + MODES.dm.timeLimitS * 1000 + 1);
+    const horn = t0 + MODES.dm.timeLimitS * 1000 + 1;
+    room.checkMatchClock(horn);          // tied → overtime
+    room.checkMatchClock(horn + 121_000); // OT spent → draw
     expect(endedWinner).toBe('draw');
   });
 });
