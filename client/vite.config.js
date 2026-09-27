@@ -33,25 +33,8 @@ export default defineConfig({
     watch: {
       usePolling: true, // Enable polling for reliable HMR in WSL2/Docker
     },
-    proxy: {
-      '/server': {
-        target: 'ws://localhost:8080',
-        ws: true,
-        changeOrigin: true,
-        timeout: 30000, // 30 second timeout
-        proxyTimeout: 30000,
-        configure: (proxy, _options) => {
-          proxy.on('error', (err, _req, _res) => {
-            console.log('[Vite Proxy] WebSocket error:', err.message);
-          });
-          proxy.on('proxyReq', (proxyReq, req, _res) => {
-            console.log('[Vite Proxy] Proxying WebSocket request:', req.url);
-          });
-          proxy.on('proxyReqWs', (proxyReq, req, _socket, _options, _head) => {
-            console.log('[Vite Proxy] Proxying WebSocket upgrade:', req.url);
-          });
-        },
-      },
-    },
+    // No /server proxy: the client connects to ws://host:8000/ws directly,
+    // and the stale proxy was swallowing /server.json (prefix match) and
+    // trying to WS-proxy it to :8080 — ECONNREFUSED spam.
   },
 });
