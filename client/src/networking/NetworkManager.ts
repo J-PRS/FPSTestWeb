@@ -5,6 +5,7 @@ import { PROTOCOL_VERSION } from '../../../shared/protocol.js';
 import { WebSocketConnection } from './WebSocketConnection.js';
 import type { GameTransport, TransportFactory } from './transport.js';
 import { NetTelemetry } from './netTelemetry.js';
+import { urlParams } from '../core/params.js';
 
 const logger = new ChildLogger('NetworkManager');
 
@@ -41,6 +42,7 @@ export class NetworkManager {
   public onPlayerJoined: ((playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }) => void) | null = null;
   public onPlayerLeft: ((playerId: string) => void) | null = null;
   public onKnockback: ((position: { x: number; y: number; z: number }, force: number, pull?: boolean) => void) | null = null;
+  public onChat: ((playerId: string, text: string) => void) | null = null;
   public onPlayerUpdate: ((playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }, timestamp: number, velocity?: { x: number; y: number; z: number }) => void) | null = null;
   public onGameState: ((players: GameStatePlayer[], localPlayerState: LocalPlayerState | undefined) => void) | null = null;
   public onSnapshot: ((players: SnapshotPlayer[], timestamp: number) => void) | null = null;
@@ -100,6 +102,7 @@ export class NetworkManager {
               type: 'join',
               playerId: this.localPlayerId,
               token: this.sessionToken ?? undefined,
+              room: urlParams.room ?? undefined,
             });
             this.connected = true;
             this.hasLoggedConnectionError = false;
@@ -192,6 +195,7 @@ export class NetworkManager {
     ballDie: (data) => this.onBallDie?.(data),
     ballRoster: (data) => this.onBallRoster?.(data),
     pong: (data) => this.handlePong(data.timestamp),
+    chat: (data) => this.onChat?.(data.playerId, data.text),
   };
 
   private handleGameState(data: Extract<ServerMessage, { type: 'gameState' }>): void {
@@ -481,6 +485,10 @@ export class NetworkManager {
 
   sendSnapshotRequest(): void {
     this.send({ type: 'snapshotRequest' });
+  }
+
+  sendChat(text: string): void {
+    this.send({ type: 'chat', text });
   }
 
   

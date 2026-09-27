@@ -25,13 +25,15 @@ export interface Rotation {
 }
 
 export type ClientMessage =
-  | { type: 'join'; playerId: string; token?: string }
+  // room: optional match room — server validates [\w-]{1,32}, absent = 'default'
+  | { type: 'join'; playerId: string; token?: string; room?: string }
   | { type: 'position'; position: Vec3; rotation: Rotation; velocity: Vec3; seq?: number; ping?: number }
   // Declared discontinuity (warp beacon, respawn): the position is
   // authoritative, not a plausibility-checked move — the server reseats
   // its check anchor here instead of rejecting it as a speedhack.
   | { type: 'teleport'; position: Vec3; rotation: Rotation; velocity: Vec3 }
   | { type: 'ping'; timestamp: number }
+  | { type: 'chat'; text: string }
   | { type: 'shot'; targetId: string | null; weaponType?: number; position?: Vec3; velocity?: Vec3; timestamp?: number; projectileId?: string | null; airtime?: number }
   | { type: 'aoeShot'; position: Vec3; weaponType?: number; excludeTargetId?: string | null; projectileId?: string | null; airtime?: number; power?: number; directHit?: boolean }
   | { type: 'jump'; position: Vec3 }
@@ -91,7 +93,8 @@ export type ServerMessage =
   | { type: 'ballDie'; id: number; position: Vec3; by?: string | null }
   // Roster for joiners/reconnects — current segment state of every live ball
   | { type: 'ballRoster'; balls: { id: number; variant: number; colorIdx: number; position: Vec3; velocity: Vec3; enraged: boolean; targetId: string | null; tp?: Vec3 | null; t: number }[] }
-  | { type: 'pong'; timestamp: number };
+  | { type: 'pong'; timestamp: number }
+  | { type: 'chat'; playerId: string; text: string };
 
 export interface GameStatePlayer {
   id: string;

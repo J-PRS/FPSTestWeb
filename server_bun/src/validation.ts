@@ -203,6 +203,15 @@ export function validateMessage(raw: unknown): ValidationResult<ClientMessage> {
       return { success: true, data: { type: 'snapshotRequest' } };
     }
 
+    case 'chat': {
+      // Relay-only content: length cap is the whole validation — the server
+      // never interprets the text, clients render it escaped (textContent).
+      if (typeof obj.text !== 'string' || obj.text.length === 0 || obj.text.length > 200) {
+        return { success: false, error: 'chat text must be 1-200 chars' };
+      }
+      return { success: true, data: { type: 'chat', text: obj.text } };
+    }
+
     case 'ping': {
       if (!isFiniteNumber(obj.timestamp)) {
         return { success: false, error: 'ping timestamp must be a finite number' };

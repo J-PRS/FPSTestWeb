@@ -151,6 +151,10 @@ export class MessageHandler {
       case 'inputMove':
         player.skiing = msg.input.ski ? 1 : 0;
         break;
+      case 'chat':
+        // Room-scoped relay — broadcast() only reaches this room's sockets.
+        this.broadcast({ type: 'chat', playerId, text: msg.text });
+        break;
       case 'ping':
         player.lastSeen = Date.now(); // ping is a liveness signal too —
         // without it a non-moving client could still go "stale"
