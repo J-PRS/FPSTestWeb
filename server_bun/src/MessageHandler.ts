@@ -4,6 +4,7 @@ import { RateLimiter } from './RateLimiter.ts';
 import { CombatHandler } from './CombatHandler.ts';
 import { logger } from './logger.ts';
 import { PROTOCOL_VERSION } from '../../shared/protocol.ts';
+import type { BallSim } from './BallSim.ts';
 
 type BroadcastFn = (msg: ServerMessage, excludePlayerId?: string) => void;
 type SendToPlayerFn = (playerId: string, msg: ServerMessage) => void;
@@ -15,6 +16,9 @@ export class MessageHandler {
   private sendToPlayer: SendToPlayerFn;
   // Everything that deals damage — projectiles, blasts, env damage, respawns
   private combat: CombatHandler;
+  // Server-owned creatures (balls). Optional — a missing/unloadable
+  // heightmap must not take down the whole game server.
+  private ballSim: BallSim | null = null;
   private rateLimitWarnings: Map<string, number> = new Map();
   private readonly RATE_WARN_COOLDOWN_MS = 5000;
 
@@ -29,6 +33,10 @@ export class MessageHandler {
     this.broadcast = broadcast;
     this.sendToPlayer = sendToPlayer;
     this.combat = new CombatHandler(playerManager, broadcast, sendToPlayer);
+  }
+
+  setBallSim(sim: BallSim): void {
+    this.ballSim = sim;
   }
 
   /** Drop per-player bookkeeping when a socket closes (grace-period cleanup
@@ -52,7 +60,7 @@ export class MessageHandler {
     this.combat.ensureRespawn(playerId);
   }
 
-  handleHandshake(playerId: string, sessionToken?: string): void {
+  handleHandshake(playerId: string, sessionToken?: string, isReconnect = false): void {
     const player = this.playerManager.getPlayer(playerId);
     if (!player) return;
 
@@ -77,13 +85,23 @@ export class MessageHandler {
       },
     });
 
-    this.broadcast({
-      type: 'playerJoined',
-      playerId: player.id,
-      internalId: player.internalId,
-      position: player.position,
-      rotation: player.rotation,
-    }, playerId);
+    // Creature roster — joiner/reconnect replays the live ball set from
+    // these segment snapshots; anything spawned after is a ballSpawn event.
+    if (this.ballSim) {
+      this.sendToPlayer(playerId, { type: 'ballRoster', balls: this.ballSim.roster() });
+    }
+
+    // Grace reconnects never emitted a playerLeft — peers still have this
+    // player on their roster, so re-announcing playerJoined is pure spam.
+    if (!isReconnect) {
+      this.broadcast({
+        type: 'playerJoined',
+        playerId: player.id,
+        internalId: player.internalId,
+        position: player.position,
+        rotation: player.rotation,
+      }, playerId);
+    }
   }
 
   handleMessage(playerId: string, msg: ClientMessage): void {
@@ -105,6 +123,9 @@ export class MessageHandler {
       case 'position':
         this.handlePosition(playerId, msg);
         break;
+      case 'teleport':
+        this.handleTeleport(playerId, msg);
+        break;
       case 'shot':
         this.combat.handleShot(playerId, msg);
         break;
@@ -120,6 +141,12 @@ export class MessageHandler {
         break;
       case 'environmentDamage':
         this.combat.handleEnvironmentDamage(playerId, msg);
+        break;
+      case 'heal':
+        this.combat.handleHeal(playerId, msg);
+        break;
+      case 'creatureHit':
+        this.ballSim?.handleHit(playerId, msg.id, msg.damage, msg.kx, msg.ky, msg.kz);
         break;
       case 'inputMove':
         player.skiing = msg.input.ski ? 1 : 0;
@@ -173,6 +200,17 @@ export class MessageHandler {
               velocity: validState.velocity,
               rotation: validState.rotation,
             });
+            // COMMIT the anchor: reseat the check point AT the corrected
+            // position. We just told the client to teleport there — its
+            // post-snap report legitimately sits ~far from the rejected
+            // pos we recorded above, and without this reseat it is
+            // guaranteed-rejected, accumulates to the >10 force-accept,
+            // flips lastValid to the far anchor, and the next correction
+            // snaps the client BACK — the infinite ping-pong. One anchor,
+            // one commit: either the client lands at the correction
+            // (accepts immediately) or keeps fighting (rejects count up
+            // to the force-accept, which then sticks).
+            player.lastPosCheckPos = { ...validState.position };
           }
         }
         // Client persisting past corrections (disputed knockback, lost
@@ -195,6 +233,27 @@ export class MessageHandler {
     player.hasReceivedPosition = true;
     if (msg.ping !== undefined) player.ping = msg.ping;
     // Don't broadcast immediately — batched in tickUpdate
+  }
+
+  // Declared discontinuity (warp beacon, respawn): position arrives
+  // pre-accepted — reseat the plausibility anchor so the NEXT report
+  // deltas from here instead of measuring a 50m jump as a speedhack.
+  private handleTeleport(playerId: string, msg: Extract<ClientMessage, { type: 'teleport' }>): void {
+    const player = this.playerManager.getPlayer(playerId);
+    if (!player || player.isDead) return;
+    player.lastPosCheckPos = { ...msg.position };
+    player.lastPosCheckTime = Date.now();
+    player.consecutiveRejects = 0;
+    this.playerManager.updatePosition(playerId, msg.position, msg.rotation, msg.velocity, undefined);
+    // updatePosition only touches lastValid on a seq bump — a declared
+    // teleport has no seq, so seat it manually or the next correction
+    // would snap the player back to BEFORE the warp
+    player.lastValidPosition = { ...msg.position };
+    player.lastValidVelocity = { ...msg.velocity };
+    player.lastValidRotation = { ...msg.rotation };
+    player.hasReceivedPosition = true;
+    // Relay so observers snap instead of interpolating across the gap
+    this.broadcast({ type: 'teleport', playerId, position: msg.position, velocity: msg.velocity }, playerId);
   }
 
   // jump/jetpack are pure presence relays — same shape, dead check, echo
