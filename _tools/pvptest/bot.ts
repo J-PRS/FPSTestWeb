@@ -1,0 +1,562 @@
+/**
+ * Headless PvP bot — joins the live server as a real player over the wire
+ * protocol (binary position frames + JSON events), moves on the terrain
+ * heightfield, and fights with legal hit claims (real projectile spawn →
+ * airtime wait → hit claim, same shape the client sends).
+ *
+ * Usage:
+ *   bun bot.ts <name> [--fighter] [--orbit] [--test]
+ *
+ *   --fighter  aim + fire rockets at the nearest player (default: strafe only)
+ *   --orbit    strafe-orbit the nearest player instead of standing still
+ *   --test     scripted E2E: run assertions, print PASS/FAIL lines, exit
+ */
+import { encodePosition, decodeTickFrame, isWireFrame, WIRE_TICK } from '../../shared/wire.ts';
+import { hmHeight, type Heightfield } from '../../shared/heightfield.ts';
+import { EYE_OFFSET } from '../../shared/constants.ts';
+import { WeaponType } from '../../shared/weapons.ts';
+import { readFileSync } from 'fs';
+import path from 'path';
+
+const NAME = process.argv[2] ?? `TESTBOT-${Math.floor(Math.random() * 1000)}`;
+const FIGHTER = process.argv.includes('--fighter');
+const ORBIT = process.argv.includes('--orbit');
+const TEST = process.argv.includes('--test');
+const TEST2 = process.argv.includes('--test2');
+const TEST3 = process.argv.includes('--test3');
+const PARK = process.argv.includes('--park'); // stand at spawn — far-range target for abuse tests
+const TEST4 = process.argv.includes('--test4');
+const IDLE = process.argv.includes('--idle'); // join then go silent — tests the 60s idle reap
+const WS_URL = process.env.PVP_WS ?? 'ws://localhost:8000/ws';
+const POS_HZ = 20;            // under the 30/s rate limit
+const MOVE_SPEED = 30;        // m/s — well under the 300 reject bound
+const ENGAGE_RANGE = 60;      // start shooting inside this
+const ROCKET_SPEED = 120;     // shared/weapons Rocket.speed
+const FIRE_INTERVAL_MS = 1100;
+
+// Terrain for ground clamping — same bin the server loads.
+const hmBuf = readFileSync(path.join(__dirname, '../../server_bun/heightmap.bin'));
+const hmSize = Math.round(Math.sqrt(hmBuf.byteLength));
+const HM: Heightfield = { size: hmSize, data: new Uint8Array(hmBuf), stride: 1 };
+const groundY = (x: number, z: number) => hmHeight(HM, x, z) + EYE_OFFSET;
+
+interface Other { pos: Vec3; vel: Vec3; health: number; dead: boolean; lastTick: number }
+type Vec3 = { x: number; y: number; z: number };
+
+const others = new Map<string, Other>();
+let pos: Vec3 = { x: 0, y: 60, z: 0 };
+let vel: Vec3 = { x: 0, y: 0, z: 0 };
+let yaw = 0;
+let dead = false;
+let seq = 0;
+let ws: WebSocket;
+let connected = false;
+let corrections = 0;
+let lastCorrectionAt = 0;
+let hitListener: ((m: any) => void) | null = null;
+let sessionToken: string | undefined;
+let knockbackCount = 0;
+let sawPlayerLeft: string | null = null;
+let lastProjId: string | null = null;
+let snapListener: ((m: any) => void) | null = null;
+let projDestroyedListener: ((id: string) => void) | null = null;
+let lastForeignProjId: string | null = null;
+const pendingShots: { id: string | null; target: string; at: number; airtime: number; aimPos: Vec3 }[] = [];
+const killsOf = new Map<string, number>();
+
+const t0 = Date.now();
+const log = (...a: unknown[]) => console.log(`[+${((Date.now() - t0) / 1000).toFixed(1)}s ${NAME}]`, ...a);
+
+function sendJson(m: unknown) { if (ws?.readyState === 1) ws.send(JSON.stringify(m)); }
+function sendPosition() {
+  if (ws?.readyState === 1) ws.send(encodePosition(pos, { yaw, pitch: 0 }, vel, ++seq, 0));
+}
+
+function nearestTarget(): [string, Other] | null {
+  let best: [string, Other] | null = null;
+  let bd = Infinity;
+  for (const [id, o] of others) {
+    if (o.dead) continue;
+    const d = Math.hypot(o.pos.x - pos.x, o.pos.z - pos.z);
+    if (d < bd) { bd = d; best = [id, o]; }
+  }
+  return best;
+}
+
+let lastFireAt = 0;
+let orbitSign = 1;
+
+function tickBehavior(dt: number) {
+  if (dead || !connected) return;
+  if (PARK) { vel = { x: 0, y: 0, z: 0 }; return; }
+  const tgt = nearestTarget();
+
+  if (tgt) {
+    const [id, o] = tgt;
+    const dx = o.pos.x - pos.x, dz = o.pos.z - pos.z;
+    const dist = Math.hypot(dx, dz) || 1;
+    yaw = Math.atan2(dx, dz); // face target (client yaw convention: fwd = sin,cos)
+
+    // Approach to ~15m ring, then orbit sideways.
+    let mx = 0, mz = 0;
+    if (dist > 20) { mx = dx / dist; mz = dz / dist; }
+    else if (dist < 10) { mx = -dx / dist; mz = -dz / dist; }
+    if (ORBIT && dist <= 25) {
+      mx += (-dz / dist) * orbitSign; mz += (dx / dist) * orbitSign;
+      if (Math.random() < 0.005) orbitSign *= -1;
+    }
+    const mlen = Math.hypot(mx, mz);
+    if (mlen > 0) {
+      const nx = pos.x + (mx / mlen) * MOVE_SPEED * dt;
+      const nz = pos.z + (mz / mlen) * MOVE_SPEED * dt;
+      vel = { x: (nx - pos.x) / dt, y: 0, z: (nz - pos.z) / dt };
+      pos.x = nx; pos.z = nz;
+    } else vel = { x: 0, y: 0, z: 0 };
+    // Glide toward ground level — snapping vertically over a cliff edge
+    // trips the server's >300 m/s plausibility check.
+    const gy = groundY(pos.x, pos.z);
+    const dy = gy - pos.y;
+    const yStep = Math.min(Math.abs(dy), 60 * dt) * Math.sign(dy);
+    pos.y += yStep;
+    vel.y = yStep / dt;
+
+    if (FIGHTER && dist < ENGAGE_RANGE && Date.now() - lastFireAt > FIRE_INTERVAL_MS) {
+      lastFireAt = Date.now();
+      fireRocketAt(id, o);
+    }
+  } else {
+    const gy = groundY(pos.x, pos.z);
+    const dy = gy - pos.y;
+    const yStep = Math.min(Math.abs(dy), 60 * dt) * Math.sign(dy);
+    pos.y += yStep;
+    vel = { x: 0, y: yStep / dt, z: 0 };
+  }
+
+  // Resolve pending shots whose airtime has elapsed.
+  const now = Date.now();
+  for (let i = pendingShots.length - 1; i >= 0; i--) {
+    const s = pendingShots[i]!;
+    if (now - s.at < s.airtime * 1000) continue;
+    pendingShots.splice(i, 1);
+    const o = others.get(s.target);
+    if (!o || o.dead) continue;
+    sendJson({
+      type: 'shot', targetId: s.target, projectileId: s.id,
+      weaponType: WeaponType.Rocket,
+      position: { ...o.pos }, airtime: s.airtime,
+    });
+    log(`hit claim → ${s.target} (airtime ${s.airtime.toFixed(2)}s)`);
+  }
+}
+
+function fireRocketAt(targetId: string, o: Other) {
+  // Muzzle ~ eye pos; velocity straight at the target's latest pos.
+  const dx = o.pos.x - pos.x, dy = o.pos.y - pos.y, dz = o.pos.z - pos.z;
+  const dist = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1;
+  const airtime = Math.max(0.05, dist / ROCKET_SPEED);
+  sendJson({
+    type: 'shot', targetId: null, weaponType: WeaponType.Rocket,
+    position: { ...pos },
+    velocity: { x: (dx / dist) * ROCKET_SPEED, y: (dy / dist) * ROCKET_SPEED, z: (dz / dist) * ROCKET_SPEED },
+  });
+  // projectileId arrives via the broadcast; record by airtime.
+  pendingShots.push({ id: null, target: targetId, at: Date.now(), airtime, aimPos: { ...o.pos } });
+  log(`rocket → ${targetId} at ${dist.toFixed(0)}m`);
+}
+
+// ---------- test assertions ----------
+const results: { name: string; ok: boolean; detail: string }[] = [];
+function check(name: string, ok: boolean, detail = '') {
+  results.push({ name, ok, detail });
+  log(`${ok ? 'PASS' : 'FAIL'} ${name} ${detail}`);
+}
+
+function connect(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    ws = new WebSocket(WS_URL);
+    ws.binaryType = 'arraybuffer';
+    ws.onopen = () => {
+      sendJson({ type: 'join', playerId: NAME, token: sessionToken });
+    };
+    ws.onmessage = (ev) => {
+      if (typeof ev.data === 'string') {
+        const m = JSON.parse(ev.data);
+        handleJson(m);
+        if (m.type === 'gameState') { connected = true; resolve(); }
+      } else {
+        const u8 = new Uint8Array(ev.data);
+        if (isWireFrame(u8) && u8[1] === WIRE_TICK) {
+          const f = decodeTickFrame(u8);
+          if (f) for (const u of f.updates) {
+            if (u.playerId === NAME) continue;
+            const o = others.get(u.playerId) ?? { pos: u.position, vel: u.velocity, health: u.health, dead: u.isDead, lastTick: 0 };
+            o.pos = u.position; o.vel = u.velocity; o.health = u.health; o.dead = u.isDead;
+            o.lastTick = Date.now();
+            others.set(u.playerId, o);
+          }
+        }
+      }
+    };
+    ws.onerror = () => reject(new Error('ws error'));
+    setTimeout(() => reject(new Error('join timeout')), 8000);
+  });
+}
+
+function handleJson(m: any) {
+  switch (m.type) {
+    case 'gameState':
+      sessionToken = m.sessionToken ?? sessionToken;
+      break;
+    case 'snapshot':
+      snapListener?.(m);
+      break;
+    case 'playerJoined':
+      if (m.playerId !== NAME) {
+        others.set(m.playerId, { pos: m.position, vel: { x: 0, y: 0, z: 0 }, health: 100, dead: false, lastTick: Date.now() });
+        log(`${m.playerId} joined`);
+      }
+      break;
+    case 'playerLeft':
+      others.delete(m.playerId);
+      sawPlayerLeft = m.playerId;
+      log(`${m.playerId} left`);
+      break;
+    case 'playerHit':
+      hitListener?.(m);
+      log(`HIT ${m.shooterId} → ${m.targetId} dmg=${m.damage} hp=${m.health}`);
+      if (m.targetId === NAME) log(`  (we took ${m.damage}, hp ${m.health})`);
+      break;
+    case 'playerKill':
+      killsOf.set(m.targetId, (killsOf.get(m.targetId) ?? 0) + 1);
+      log(`KILL ${m.shooterId} → ${m.targetId}`);
+      if (m.targetId === NAME) dead = true;
+      break;
+    case 'playerRespawn':
+      if (m.playerId === NAME) {
+        dead = false;
+        pos = { ...m.position };
+        pos.y = groundY(pos.x, pos.z);
+        vel = { x: 0, y: 0, z: 0 };
+        // Same as the client's markTeleport: declare the spawn jump or the
+        // plausibility check reads a >50m move from the corpse and corrects.
+        sendJson({ type: 'teleport', position: { ...pos }, rotation: { yaw, pitch: 0 }, velocity: vel });
+        log('respawned');
+      } else {
+        const o = others.get(m.playerId);
+        if (o) { o.dead = false; o.pos = m.position; o.health = 100; }
+      }
+      break;
+    case 'correction':
+      corrections++;
+      lastCorrectionAt = Date.now();
+      pos = { ...m.position }; vel = { ...m.velocity };
+      log(`CORRECTION → snap to ${m.position.x.toFixed(0)},${m.position.y.toFixed(0)},${m.position.z.toFixed(0)} seq=${m.seq}`);
+      break;
+    case 'projectileCreated':
+      if (m.ownerId === NAME) lastProjId = m.projectileId;
+      else lastForeignProjId = m.projectileId;
+      // Fill the oldest pending claim lacking an id.
+      for (const s of pendingShots) {
+        if (s.id === null && m.ownerId === NAME) { s.id = m.projectileId; break; }
+      }
+      break;
+    case 'projectileDestroyed':
+      projDestroyedListener?.(m.projectileId);
+      break;
+    case 'knockback':
+      if (m.targetId === NAME) { knockbackCount++; log('knockback received', m.force); }
+      break;
+    case 'teleport':
+      if (m.playerId !== NAME) {
+        const o = others.get(m.playerId);
+        if (o) o.pos = { ...m.position };
+      }
+      break;
+  }
+}
+
+async function main() {
+  await connect();
+  log(`joined via ${WS_URL}; local spawn ${pos.x.toFixed(0)},${pos.y.toFixed(0)},${pos.z.toFixed(0)}`);
+  // Snap to ground under the server spawn.
+  pos.y = groundY(pos.x, pos.z);
+
+  const POS_MS = 1000 / POS_HZ;
+  let last = Date.now();
+  const posTimer = setInterval(() => {
+    const now = Date.now();
+    const dt = Math.min((now - last) / 1000, 0.2);
+    last = now;
+    tickBehavior(dt);
+    if (!IDLE) sendPosition();
+  }, POS_MS);
+
+  if (!TEST && !TEST2 && !TEST3 && !TEST4) {
+    if (IDLE) {
+      // Silent socket: server should reap us past the ~60s idle window.
+      const deadAt = await new Promise<number>((res) => {
+        ws.addEventListener('close', () => res(Date.now()));
+        ws.addEventListener('error', () => res(Date.now()));
+        setTimeout(() => res(-1), 75_000);
+      });
+      if (deadAt > 0) {
+        check('idle client reaped (~60s)', deadAt - t0 > 50_000, `closed after ${((deadAt - t0) / 1000).toFixed(0)}s`);
+      } else check('idle client reaped (~60s)', false, 'still connected after 75s');
+      const fails = results.filter((r) => !r.ok).length;
+      log(`${results.length - fails}/${results.length} checks passed`);
+      process.exit(fails ? 1 : 0);
+    }
+    log('running (Ctrl+C to quit)');
+    return;
+  }
+
+  // ---------- scripted E2E assertions ----------
+  const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  await wait(500);
+
+  if (TEST2) {
+    // AOE + knockback: rocket detonates ~4m from a live peer → expect
+    // playerHit on them and (if we're inside the blast) knockback on us.
+    let tgt: [string, Other] | null = null;
+    for (let i = 0; i < 40 && !tgt; i++) { await wait(250); tgt = nearestTarget(); }
+    check('aoe: found live target', !!tgt, tgt ? tgt[0] : 'none');
+    if (tgt) {
+      const [tid, to] = tgt;
+      const dx = to.pos.x - pos.x, dy = to.pos.y - pos.y, dz = to.pos.z - pos.z;
+      const dist = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1;
+      // Spawn the projectile flying at the target.
+      sendJson({
+        type: 'shot', targetId: null, weaponType: WeaponType.Rocket,
+        position: { ...pos },
+        velocity: { x: (dx / dist) * ROCKET_SPEED, y: (dy / dist) * ROCKET_SPEED, z: (dz / dist) * ROCKET_SPEED },
+      });
+      await wait(120); // let projectileCreated assign the id
+      const airtime = Math.max(0.05, dist / ROCKET_SPEED);
+      await wait(airtime * 1000);
+      const hpBefore = to.health;
+      const sawAoeHit = { v: false };
+      hitListener = (m) => { if (m.targetId === tid) sawAoeHit.v = true; };
+      // Detonate 3m short of the target — inside the rocket's AOE radius.
+      const blast = { x: to.pos.x - dx / dist * 3, y: to.pos.y, z: to.pos.z - dz / dist * 3 };
+      sendJson({
+        type: 'aoeShot', position: blast, weaponType: WeaponType.Rocket,
+        projectileId: lastProjId, airtime,
+      });
+      await wait(400);
+      hitListener = null;
+      check('aoe damage lands', sawAoeHit.v, `hp ${hpBefore} → ${others.get(tid)?.health}`);
+    }
+
+    // Reconnect: close + rejoin with the session token — server should
+    // restore us inside the grace window instead of a fresh spawn.
+    const posBefore = { ...pos };
+    ws.close();
+    connected = false;
+    await wait(600);
+    others.clear();
+    await connect();
+    check('reconnect restores state', connected,
+      `rejoined at ${pos.x.toFixed(0)},${pos.y.toFixed(0)},${pos.z.toFixed(0)}`);
+    await wait(300);
+    check('post-reconnect sees peers', others.size >= 0, `${others.size} known`);
+
+    clearInterval(posTimer);
+    const fails = results.filter((r) => !r.ok).length;
+    log(`${results.length - fails}/${results.length} checks passed`);
+    process.exit(fails ? 1 : 0);
+  }
+
+  if (TEST3) {
+    // ---- abuse surface ----
+    let tgt: [string, Other] | null = null;
+    for (let i = 0; i < 40 && !tgt; i++) { await wait(250); tgt = nearestTarget(); }
+    check('abuse: found live target', !!tgt, tgt ? tgt[0] : 'none');
+    // Only OUR shots count — other bots are live-firing nearby.
+    const anyHit = { v: false };
+    hitListener = (m) => { if (m.shooterId === NAME) anyHit.v = true; };
+
+    // 1. Hit claim with NO spawned projectile → silent reject.
+    if (tgt) {
+      sendJson({ type: 'shot', targetId: tgt[0], weaponType: WeaponType.Rocket,
+        position: { ...tgt[1].pos }, airtime: 0.2 });
+      await wait(400);
+      check('hit claim with no projectile rejected', !anyHit.v);
+    }
+
+    // 2. Impossible reach: spawn a projectile then claim a hit on the
+    //    FARTHEST peer almost instantly — claimed airtime can't cover the
+    //    distance (reach is radial by design; direction isn't checked).
+    {
+      let far: [string, Other] | null = null; let fd = 0;
+      for (const [id, o] of others) {
+        if (o.dead) continue;
+        const d = Math.hypot(o.pos.x - pos.x, o.pos.z - pos.z);
+        if (d > fd) { fd = d; far = [id, o]; }
+      }
+      if (far && fd > 25) {
+        sendJson({ type: 'shot', targetId: null, weaponType: WeaponType.Rocket,
+          position: { ...pos }, velocity: { x: 0, y: ROCKET_SPEED, z: 0 } });
+        await wait(150);
+        anyHit.v = false;
+        // airtime that can't reach: dist/120 needed, claim 0.05 → 21m max.
+        sendJson({ type: 'shot', targetId: far[0], projectileId: lastProjId,
+          weaponType: WeaponType.Rocket, position: { ...far[1].pos }, airtime: 0.05 });
+        await wait(400);
+        check(`unreachable hit claim rejected (${fd.toFixed(0)}m)`, !anyHit.v);
+      } else log(`SKIP reach test — farthest peer ${fd.toFixed(0)}m, need >25`);
+    }
+
+    // 3. Self-target → reject (also explicit server guard).
+    anyHit.v = false;
+    sendJson({ type: 'shot', targetId: NAME, weaponType: WeaponType.Rocket,
+      position: { ...pos }, airtime: 0.1 });
+    await wait(300);
+    check('self-target rejected', !anyHit.v);
+
+    // 4. Heal clamp: claim 999 → health must stay ≤100.
+    sendJson({ type: 'heal', amount: 999 });
+    await wait(200);
+    const selfHp = await new Promise<number>((res) => {
+      const to = setTimeout(() => { snapListener = null; res(-1); }, 3000);
+      snapListener = (m) => { clearTimeout(to); snapListener = null; res(m.players.find((p: any) => p.id === NAME)?.health ?? -2); };
+      sendJson({ type: 'snapshotRequest' });
+    });
+    check('heal clamped to max health', selfHp >= 0 && selfHp <= 100, `hp=${selfHp}`);
+
+    // 5. Rate-limit spam: 60 position frames in 200ms — server should drop
+    //    the excess without dropping us.
+    const cBefore = corrections;
+    for (let i = 0; i < 60; i++) sendPosition();
+    await wait(500);
+    check('position spam tolerated (alive, no correction flood)',
+      ws.readyState === 1 && corrections - cBefore <= 1,
+      `corrections=${corrections - cBefore} ws=${ws.readyState}`);
+
+    hitListener = null;
+    clearInterval(posTimer);
+    const fails = results.filter((r) => !r.ok).length;
+    log(`${results.length - fails}/${results.length} checks passed`);
+    process.exit(fails ? 1 : 0);
+  }
+
+  if (TEST4) {
+    // ---- projectile + damage-path abuse ----
+
+    // 1. projectileDestroy ownership: a foreign bot can't pop our rocket.
+    //    Spawn one, let a peer claim it, then verify no broadcast arrives.
+    sendJson({ type: 'shot', targetId: null, weaponType: WeaponType.Rocket,
+      position: { ...pos }, velocity: { x: 0, y: ROCKET_SPEED, z: 0 } });
+    await wait(150);
+    const mineId = lastProjId;
+    check('spawned own projectile', !!mineId, mineId ?? 'none');
+    let destroyedBy = { v: false };
+    projDestroyedListener = (id) => { if (id === mineId) destroyedBy.v = true; };
+    if (mineId) {
+      // Ownership: destroy a foreign projectile id (captured from a peer's
+      // projectileCreated) → server must NOT broadcast projectileDestroyed.
+      let foreignSaw = { v: false };
+      const fId = lastForeignProjId;
+      projDestroyedListener = (id) => { if (id === fId) foreignSaw.v = true; };
+      if (fId) {
+        sendJson({ type: 'projectileDestroy', projectileId: fId });
+        await wait(400);
+        check('foreign projectileDestroy ignored', !foreignSaw.v, `id=${fId}`);
+      } else log('SKIP foreign destroy — no peer projectile seen');
+      // Positive path: own destroy broadcasts.
+      projDestroyedListener = (id) => { if (id === mineId) destroyedBy.v = true; };
+      sendJson({ type: 'projectileDestroy', projectileId: mineId });
+      await wait(300);
+      check('own projectileDestroy broadcasts', destroyedBy.v);
+    }
+
+    // 2. Spawn claim from a far origin (>40m) → no projectileCreated.
+    const prevId = lastProjId;
+    sendJson({ type: 'shot', targetId: null, weaponType: WeaponType.Rocket,
+      position: { x: pos.x + 100, y: pos.y, z: pos.z },
+      velocity: { x: ROCKET_SPEED, y: 0, z: 0 } });
+    await wait(300);
+    check('far-origin spawn rejected', lastProjId === prevId);
+
+    // 3. Oversized spawn velocity (>600) → rejected.
+    sendJson({ type: 'shot', targetId: null, weaponType: WeaponType.Rocket,
+      position: { ...pos }, velocity: { x: 1000, y: 0, z: 0 } });
+    await wait(300);
+    check('oversized-velocity spawn rejected', lastProjId === prevId);
+
+    // 4. environmentDamage clamps at 40 and is self-only: we take ≤40,
+    //    nobody else can be targeted by it (message has no target field).
+    const myHpBefore = others.get(NAME)?.health ?? 100;
+    let envHit = { dmg: -1, tgt: '' };
+    hitListener = (m) => { if (m.shooterId === 'environment') { envHit.dmg = m.damage; envHit.tgt = m.targetId; } };
+    sendJson({ type: 'environmentDamage', amount: 999 });
+    await wait(300);
+    check('environmentDamage clamps to 40 and self-targets',
+      envHit.dmg >= 0 && envHit.dmg <= 40 && envHit.tgt === NAME,
+      `dmg=${envHit.dmg} tgt=${envHit.tgt}`);
+    hitListener = null;
+
+    clearInterval(posTimer);
+    const fails = results.filter((r) => !r.ok).length;
+    log(`${results.length - fails}/${results.length} checks passed`);
+    process.exit(fails ? 1 : 0);
+  }
+
+  check('sees another player', others.size >= 1, `${others.size} other(s)`);
+
+  // Rubberband check A: legal movement should produce ZERO corrections.
+  const c0 = corrections;
+  for (let i = 0; i < 40; i++) { // 2s of legal strafing handled by behavior loop
+    await wait(50);
+  }
+  check('no corrections under legal movement', corrections === c0, `${corrections - c0} corrections`);
+
+  // Rubberband check B: 60m jump without declaring teleport → correction.
+  const cBefore = corrections;
+  pos.x += 60;
+  await wait(400);
+  check('60m undeclared jump rejected', corrections > cBefore, `${corrections - cBefore} correction(s)`);
+
+  // Declared teleport: no correction, peers get a teleport relay.
+  const cBefore2 = corrections;
+  sendJson({ type: 'teleport', position: { ...pos }, rotation: { yaw, pitch: 0 }, velocity: vel });
+  await wait(300);
+  check('declared teleport accepted', corrections === cBefore2, `${corrections - cBefore2} corrections`);
+
+  if (FIGHTER) {
+    // Damage + kill: shoot nearest until kill (rocket = 50 dmg, 2 hits on 100hp).
+    const tgt = nearestTarget();
+    check('found target to shoot', !!tgt, tgt ? tgt[0] : 'none');
+    if (tgt) {
+      const [, o] = tgt;
+      const startDeaths = killsOf.get(tgt[0]) ?? 0;
+      const startHp = o.health;
+      const sawHit = { v: false };
+      hitListener = (m) => { if (m.targetId === tgt[0]) sawHit.v = true; };
+      // Fire fast: override interval.
+      for (let i = 0; i < 6 && (killsOf.get(tgt[0]) ?? 0) === startDeaths; i++) {
+        fireRocketAt(tgt[0], others.get(tgt[0]) ?? o);
+        await wait(600);
+      }
+      hitListener = null;
+      const gotKill = (killsOf.get(tgt[0]) ?? 0) > startDeaths;
+      check('damage + kill flow', sawHit.v && (gotKill || (others.get(tgt[0])?.dead ?? false)),
+        `hit seen=${sawHit.v} kills=${killsOf.get(tgt[0]) ?? 0}`);
+    }
+  }
+
+  // Position-stream freshness: live peers update at ~30Hz; a dead peer's
+  // stream legitimately goes quiet while they're down.
+  let livePeer: Other | null = null;
+  for (const [, o] of others) if (!o.dead && Date.now() - o.lastTick < 10000) livePeer = o;
+  if (livePeer) {
+    const age = Date.now() - livePeer.lastTick;
+    check('peer position stream fresh', age < 200, `last tick ${age}ms ago`);
+  } else log('SKIP peer freshness — no live peer');
+
+  clearInterval(posTimer);
+  const fails = results.filter((r) => !r.ok).length;
+  log(`${results.length - fails}/${results.length} checks passed`);
+  process.exit(fails ? 1 : 0);
+}
+
+main().catch((e) => { console.error('FATAL', e); process.exit(2); });

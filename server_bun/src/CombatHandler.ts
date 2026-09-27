@@ -1,7 +1,7 @@
 import type { ClientMessage, ServerMessage, Vec3 } from './types.ts';
 import type { PlayerManager } from './PlayerManager.ts';
 import type { WeaponStats } from '../../shared/weapons.ts';
-import { getWeaponStats, WeaponType } from '../../shared/weapons.ts';
+import { getWeaponStats, WeaponType, directHitAoeBonus } from '../../shared/weapons.ts';
 import { aoeDamage, aoeImpulse, validateHitClaim, validateAoeClaim, type TrackedProjectile } from '../../shared/combat.ts';
 import { CONFIG } from './config.ts';
 import { logger } from './logger.ts';
@@ -68,6 +68,9 @@ export class CombatHandler {
         logger.warn(`Shot rejected: ${playerId} targeted unknown player ${targetId}`);
         return;
       }
+      // Dead targets are untouchable — without this, corpse hits still
+      // broadcast playerHit and can stack phantom damage past respawn.
+      if (target.isDead) return;
 
       // Hit claims must name the projectile that landed them. The claimed
       // id may be null if the hit raced the server's projectileCreated —
@@ -181,7 +184,9 @@ export class CombatHandler {
 
     if (msg.weaponType === WeaponType.Slam) {
       // Slam is a skill, not a projectile — the blast must land where the
-      // player is (they slam into the ground under themselves).
+      // player is (they slam into the ground under themselves). Power is a
+      // client-reported impact-speed scaler; clamped to the same range the
+      // client uses so a forged value can't exceed a max-dive blast.
       const dx = player.position.x - msg.position.x;
       const dy = player.position.y - msg.position.y;
       const dz = player.position.z - msg.position.z;
@@ -190,7 +195,15 @@ export class CombatHandler {
         logger.warn(`AOE rejected: ${playerId} slam ${dist.toFixed(0)}m from player`);
         return;
       }
-      this.processAOE(playerId, msg.position, msg.excludeTargetId, stats);
+      const power = msg.power !== undefined
+        ? Math.min(Math.max(msg.power, 0.2), 1.8)
+        : 1;
+      this.processAOE(playerId, msg.position, msg.excludeTargetId, {
+        ...stats,
+        aoeDamage: stats.aoeDamage * power,
+        aoeRadius: stats.aoeRadius * power,
+        knockbackForce: stats.knockbackForce * power,
+      });
       return;
     }
 
@@ -219,7 +232,12 @@ export class CombatHandler {
     // The projectile detonated — drop it so the id can't double-dip.
     if (msg.projectileId) this.projectiles.delete(msg.projectileId);
 
-    this.processAOE(playerId, msg.position, msg.excludeTargetId, stats);
+    // Canonical launchers (Bolt/Disc): a claimed direct hit blooms the
+    // blast. Server re-derives the bonus from the shared table — the
+    // client can't widen the radius past what the weapon allows.
+    const bloom = msg.directHit ? directHitAoeBonus(msg.weaponType ?? -1) : 1;
+    this.processAOE(playerId, msg.position, msg.excludeTargetId,
+      bloom === 1 ? stats : { ...stats, aoeRadius: stats.aoeRadius * bloom });
   }
 
   private processAOE(playerId: string, position: Vec3, excludeTargetId: string | null | undefined, stats: WeaponStats): void {
@@ -299,6 +317,18 @@ export class CombatHandler {
     const result = this.playerManager.applyDamage(playerId, damage);
     player.forceSendUntil = Date.now() + FORCE_SEND_MS;
     this.applyHit('environment', playerId, damage, result, 'Player hit');
+  }
+
+  // Client-claimed heal (nugget pickups) — self-only, hard-capped per call
+  // so it can't be spammed into invincibility. No broadcast: health rides
+  // the next tickUpdate; forceSend makes sure it isn't delta-suppressed.
+  handleHeal(playerId: string, msg: Extract<ClientMessage, { type: 'heal' }>): void {
+    const player = this.playerManager.getPlayer(playerId);
+    if (!player || player.isDead) return;
+    const heal = Math.min(25, Math.max(1, Math.round(msg.amount)));
+    player.health = Math.min(CONFIG.playerMaxHealth, player.health + heal);
+    player.forceSendUntil = Date.now() + FORCE_SEND_MS;
+    logger.info('Player healed', { playerId, heal, health: player.health });
   }
 
   handleProjectileDestroy(playerId: string, msg: Extract<ClientMessage, { type: 'projectileDestroy' }>): void {
