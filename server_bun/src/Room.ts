@@ -65,6 +65,7 @@ export class Room {
         mode: this.mode,
         scores: this.scores,
         winAt: this.modeSpec?.winAt,
+        ffaScores: () => Object.fromEntries(this.ffaScores),
         onBank: (pid, n) => this.bank(pid, n),
         bases: this.spec.bases,
         onKill: (pid, shooter) => this.onKill(pid, shooter),
