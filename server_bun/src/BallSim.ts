@@ -23,6 +23,7 @@ import type { PlayerManager } from './PlayerManager.ts';
 import type { ServerMessage } from './types.ts';
 import { encodeBallSegment } from '../../shared/wire.ts';
 import { logger } from './logger.ts';
+import { type BallPopulation, DEFAULT_MAP_SPEC } from '../../shared/mapSpec.ts';
 
 const TICK_DT = 0.05;           // 20Hz — matches GameServer tick broadcast
 const RETARGET_INTERVAL = 2.0;  // seconds between nearest-player re-evals
@@ -31,9 +32,6 @@ const RETARGET_INTERVAL = 2.0;  // seconds between nearest-player re-evals
 // ~1.2s so the worst-case replay error is bounded by ~1.2s of drift, not
 // by however long the ball happens to stay airborne. 40 balls ≈ 2KB/s.
 const RESYNC_INTERVAL = 1.2;
-const BASE_BALLS = 10;          // solo population
-const BALLS_PER_PLAYER = 4;     // extra per additional player
-const MAX_BALLS = 40;
 const _snap: SimVec = { x: 0, y: 0, z: 0 }; // scratch — stepBall's target arg
 
 // 5% elite, otherwise weighted fodder sizes (v0 common, v1/v2 rare)
@@ -64,6 +62,7 @@ export class BallSim {
   // up in whole 50ms cells so sim time tracks wall time.
   private tickAcc = 0;
   private static readonly TICK_CATCHUP_CAP = 0.25; // don't spiral on a 1s hiccup
+  population: BallPopulation = DEFAULT_MAP_SPEC.balls;
 
   constructor(players: PlayerManager, broadcast: (msg: ServerMessage) => void, broadcastBinary?: (data: Uint8Array) => void) {
     this.players = players;
@@ -283,7 +282,8 @@ export class BallSim {
     if (alive.length === 0) { this.tickAcc = 0; return; } // room empty — freeze the ecosystem
 
     // Population: base + per-player, spawn drip-fed one per tick fire
-    const target = Math.min(MAX_BALLS, BASE_BALLS + Math.max(0, alive.length - 1) * BALLS_PER_PLAYER);
+    const pop = this.population;
+    const target = Math.min(pop.max, pop.base + Math.max(0, alive.length - 1) * pop.perPlayer);
     if (this.balls.size + this.pendingRespawns < target) {
       const near = alive[Math.floor(Math.random() * alive.length)]!.pos;
       this.spawnBall(rollVariant(), near);
