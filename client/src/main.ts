@@ -199,6 +199,10 @@ async function init(): Promise<void> {
     // Team mode sweeps gems toward whoever's nearest — set once bots spawn.
     nuggetCollectors: () => teamBots?.collectors() ?? [],
     onNuggetCollect: (id) => teamBots?.collect(id),
+    lazyCombat: () => combat,
+    deployEnemyBots: () => teamBots?.enemyBotsForLocal() ?? [],
+    deployDamageBot: (id, dmg, from) => teamBots?.hit(id, dmg, from, 'local') ?? false,
+    deployNotify: (text) => fragMessages.show(text),
   });
 
   // Hybrid wave director — scripted beats + a credit pool spent on an
@@ -254,6 +258,8 @@ async function init(): Promise<void> {
     else { hud.setSpectatorHint(false); if (!player.isDead) hud.show(); }
   };
   player.onCloak = (on) => hud.setCloak(on);
+  player.onDeploy = () => entities.deployables.deploy();
+  player.onCycleDeploy = () => entities.deployables.cycle();
   profiler.markTime('playerCreated');
 
   // Offline death path — the server's kill+respawn round-trip replicated

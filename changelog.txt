@@ -1842,3 +1842,7 @@
 - SnapshotBuffer now has vitest coverage (interp midpoint, bounded extrapolation, ±PI yaw arc, pool reuse) — first netcode unit tests in the suite
 - Server: stale-player heartbeat was gated on a SHARED timestamp so only the first stale player in map order ever heartbeat (later ones desynced forever) — now gated per-player on their own last-sent time; grace-period ghosts also skipped as tick recipients
 - URL param parsing centralized into core/params.ts (urlParams.{get,has,mode,isClassic,randomSpawns,debug,p2p}) — mode/spawns/debug/p2p were each re-parsed by multiple call sites
+== T2 expansion ==
+- Plan: _reports/2026-09-29_tribes2-expansion.md — 7-slice roadmap (deployables -> inventory stations -> power grid -> vehicles -> netcode scale -> objective modes -> tac map)
+- Deployables slice 1: X deploys pack item, N cycles (both rebindable in KEYS). SENTRY turret (2 max) hitscan-snaps creatures + enemy bots at ~2.2rps/9dmg with slew-tracked head, tracer, muzzle flash; MINE (6 max) reuses the proximity mine but triggers on enemies only. Past the cap, planting retires your oldest of that kind (T2 rule)
+- Deployables are creature-visible: wildlife threat tables see dep:N candidates and gnaw them down (~10dps contact), so a planted base actually gets razed. They're excluded from entities.targets — your own rockets can't grief your base

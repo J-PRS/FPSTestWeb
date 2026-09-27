@@ -381,6 +381,15 @@ export class TeamBots {
     this.deps.lazyHud().setTeamScore(me, lead);
   }
 
+  /** Bots hostile to the LOCAL player — the deployable turret's target
+   *  list. Enemy-team members in team modes, everyone in FFA. */
+  enemyBotsForLocal(): { playerId: string; pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean }[] {
+    const myTeam = this.teamOf.get('local');
+    return this.bots
+      .filter(b => !b.isDead && b.team !== myTeam)
+      .map(b => ({ playerId: b.playerId, pos: b.pos, vel: b.vel, alive: true }));
+  }
+
   /** Everything the bot may legally shoot: enemy-team players (the local
    *  player included) and hostile creatures. */
   private enemyList(bot: GameBot): { id: string; pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean }[] {

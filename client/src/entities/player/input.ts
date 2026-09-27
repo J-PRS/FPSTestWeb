@@ -24,6 +24,8 @@ export interface PlayerInputHandlers {
   secondaryUp(wid: number): void;
   selectSlot(i: number): void;
   cycleWeapon(step: number): void;
+  deploy(): void;
+  cycleDeploy(): void;
   /** Raw mouse deltas; Player applies sens/invertY/clamp to yaw/pitch. */
   look(dx: number, dy: number): void;
 }
@@ -84,6 +86,8 @@ export class PlayerInput {
       if (matchCode('melee', e.code)) h.melee();
       if (matchCode('camera', e.code)) h.toggleCamera();
       if (matchCode('skill', e.code) && !e.repeat) h.skillPress();
+      if (matchCode('deploy', e.code) && !e.repeat) h.deploy();
+      if (matchCode('cycleDeploy', e.code) && !e.repeat) h.cycleDeploy();
       for (let i = 0; i < LOADOUT_SLOTS; i++) {
         if (matchCode(`slot${i}` as BindAction, e.code)) h.selectSlot(i);
       }

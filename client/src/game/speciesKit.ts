@@ -25,7 +25,21 @@ export interface Species<T extends Targetable & { dispose(): void }> {
 // spawn-ring placement, the LOD-ticking species loop, and the small dust/
 // bolt fx emitters. Nothing here owns state of its own — it operates on
 // deps + the shared `targets` surface passed in.
-export function createSpeciesKit(deps: EntitiesDeps, targets: Targetable[]) {
+/** Structural slice of game/deployables.ts — the Deployables manager.
+ *  Passed lazily because deployables is constructed after this kit. */
+export interface DeployableRef {
+  /** Live deployable candidates for creature brains (id `dep:N`). */
+  candidates(): TargetCandidate[];
+  /** Contact damage from a creature chewing on this deployable. */
+  hurt(candId: string, dmg: number): void;
+}
+
+// Contact DPS a committed creature deals to a deployable it's standing on.
+// Generic funnel — per-species bite damage lives in each entity's onHit,
+// which only reaches the player; gnaw is the deployable-specific path.
+const DEP_GNAW_DPS = 10;
+
+export function createSpeciesKit(deps: EntitiesDeps, targets: Targetable[], deployables?: () => DeployableRef | null) {
   const { scene, logger } = deps;
 
   // Remove a dead/disposed entity from its registry AND the shared targets
@@ -136,6 +150,9 @@ export function createSpeciesKit(deps: EntitiesDeps, targets: Targetable[]) {
     }
     _candList.length = 0;
     for (const c of _candMap.values()) _candList.push(c);
+    // Deployables are chewable scenery — a planted turret draws aggro like
+    // a player, which is what makes base defense matter.
+    for (const c of deployables?.()?.candidates() ?? []) _candList.push(c);
     return _candList;
   }
 
@@ -280,14 +297,21 @@ export function createSpeciesKit(deps: EntitiesDeps, targets: Targetable[]) {
     for (let i = s.list.length - 1; i >= 0; i--) {
       const e = s.list[i]!;
       const dSq = e.pos.distanceToSquared(playerPos);
+      let tickDt = dt;
       if (dSq > AI_LOD_FAR_SQ) {
         const acc = (lodAcc.get(e) ?? 0) + dt;
-        if (acc >= AI_LOD_FAR_DT) { lodAcc.set(e, 0); s.tick(e, acc); } else lodAcc.set(e, acc);
+        if (acc >= AI_LOD_FAR_DT) { lodAcc.set(e, 0); tickDt = acc; } else { lodAcc.set(e, acc); tickDt = 0; }
       } else if (dSq > AI_LOD_MID_SQ) {
         const acc = (lodAcc.get(e) ?? 0) + dt;
-        if (acc >= AI_LOD_MID_DT) { lodAcc.set(e, 0); s.tick(e, acc); } else lodAcc.set(e, acc);
-      } else {
-        s.tick(e, dt);
+        if (acc >= AI_LOD_MID_DT) { lodAcc.set(e, 0); tickDt = acc; } else { lodAcc.set(e, acc); tickDt = 0; }
+      }
+      if (tickDt > 0) s.tick(e, tickDt);
+      // Gnaw: a creature committed to a deployable and standing on it chews
+      // it down — reach envelope is generous since bite anim reach varies.
+      const bt = targetReg.for(e).target;
+      if (bt && bt.id.startsWith('dep:') && tickDt > 0) {
+        const rr = e.radius + 2.5;
+        if (e.pos.distanceToSquared(bt.pos) < rr * rr) deployables?.()?.hurt(bt.id, DEP_GNAW_DPS * tickDt);
       }
       if (e.dead) {
         lodAcc.delete(e);

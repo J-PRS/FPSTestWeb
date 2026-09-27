@@ -52,6 +52,7 @@ import { Tumbleweed } from '../entities/Tumbleweed.js';
 import { Explosion } from '../effects/explosion.js';
 import { screenShake } from '../effects/screenShake.js';
 import type { GameContext } from './context.js';
+import { Deployables } from './deployables.js';
 
 export interface EntitiesDeps extends GameContext {
   // scene/camera exist before entities is constructed — eager refs, no lazy needed
@@ -64,6 +65,12 @@ export interface EntitiesDeps extends GameContext {
    *  the player is the only collector. */
   nuggetCollectors?: () => { id: string; pos: THREE.Vector3; alive: boolean }[];
   onNuggetCollect?: (collectorId: string) => void;
+  /** Deployables: combat resolves after entities is built — lazy getter. */
+  lazyCombat?: () => { hitTargetLocal(t: Targetable, dmg: number): boolean } | undefined;
+  /** Enemy bots deployable turrets may shoot (deployer's team excluded). */
+  deployEnemyBots?: () => { playerId: string; pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean }[];
+  deployDamageBot?: (playerId: string, dmg: number, fromPos: THREE.Vector3) => boolean;
+  deployNotify?: (text: string) => void;
 }
 
 // Owns every ambient-entity registry (balls/crawlers/turretters/rollers/
@@ -102,7 +109,17 @@ export function createEntities(deps: EntitiesDeps) {
 
   // Shared species machinery (threat tables, damage funnel, spawn ring,
   // LOD ticking, dust/bolt emitters) lives in game/speciesKit.ts.
-  const kit = createSpeciesKit(deps, targets);
+  // Assigned right after the kit — brains reference it lazily, so the
+  // constructor order (kit → deployables) doesn't matter to call sites.
+  const kit = createSpeciesKit(deps, targets, () => deployables);
+  const deployables = new Deployables({
+    ...deps,
+    targets,
+    lazyCombat: () => deps.lazyCombat?.(),
+    enemyBots: deps.deployEnemyBots,
+    damageBot: deps.deployDamageBot,
+    notify: deps.deployNotify,
+  });
   const {
     removeTarget, ringPos, hurtPlayer,
     aggroFor, aggroVelFor, reportTargetDamage,
@@ -764,6 +781,8 @@ export function createEntities(deps: EntitiesDeps) {
     spawnBall, spawnCrawler, spawnScarab, spawnGrub, spawnSnake, spawnGnatCloud, spawnTurretter, spawnRoller, spawnSeeker, spawnOverlord, spawnTotem, spawnUberTotem, spawnRakk,
     spawnEliteBall, plantMine, turretBolts, consumeBolt, cookBoltsNear,
     reportTargetDamage,
+    deployables,
+    updateDeployables: (dt: number) => deployables.update(dt),
     netBallSpawn, netBallSegment, netBallDie,
     updateBalls, updateCrawlers, updateScarabs, updateGrubs, updateSnakes, updateGnats, updateTurrets, updateRollers, updateSeekers, updateOverlords, updateTotems, updateRakks, updateWeeds, updateNuggets,
     recordBallKeyframes,
