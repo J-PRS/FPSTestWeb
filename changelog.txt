@@ -1796,3 +1796,4 @@
 - Spectator fly: V (rebindable) toggles free-flight ghost cam — same noclip observer rig as death, no desaturation/vignette; weapons and action keys gated while ghosted; also fixed dead-observer vertical flight (jump and sink were both Shift and cancelled)
 - Player anim overhaul: +ski tuck (Sitting clip, grounded >11.5 m/s w/ hysteresis), +hit flinch (No oneshot on playerHit + bot local damage), +shoot pose (Punch oneshot on remote fire, throttled for rapid weapons); ONESHOT_CLIPS so flinch/shoot never loop
 - Hold-out sidearms: G=pistol (14dmg, 4.5rps), T=revolver (34dmg, 1.7rps), B=shotgun — hold swaps the viewmodel in and auto-fires, release returns to your slot weapon; both rebindable in KEYS. Pistol/revolver also join the loadout menu as wids 12/13.
+- Pistol/revolver got their own kick+flash tuning (snappy crack vs heavy bark) and the wid->fire-handler dispatch is a lookup table instead of a 13-arm ternary
