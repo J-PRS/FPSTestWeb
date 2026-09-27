@@ -7,6 +7,7 @@ export { MORTAR_CONFIG } from './mortarConfig.js';
 export { GL_CONFIG } from './glConfig.js';
 export { FLAK_CONFIG } from './flakConfig.js';
 export { PLASMA_CONFIG } from './plasmaConfig.js';
+export { RAILGUN_CONFIG } from './railgunConfig.js';
 
 import { ROCKET_CONFIG } from './rocketConfig.js';
 import { DISC_CONFIG } from './discConfig.js';
@@ -16,12 +17,18 @@ import { MORTAR_CONFIG } from './mortarConfig.js';
 import { GL_CONFIG } from './glConfig.js';
 import { FLAK_CONFIG } from './flakConfig.js';
 import { PLASMA_CONFIG } from './plasmaConfig.js';
+import { RAILGUN_CONFIG } from './railgunConfig.js';
 
 import { ACCURACY_MAX, ACCURACY_NORMALIZATION } from '../core/config.js';
 
 import type { ProjectileConfig } from './types.js';
 
-export const WEAPON_CONFIGS: ProjectileConfig[] = [ROCKET_CONFIG, DISC_CONFIG, GRENADE_CONFIG, CHAINGUN_CONFIG, MORTAR_CONFIG, GL_CONFIG, FLAK_CONFIG, PLASMA_CONFIG];
+export const WEAPON_CONFIGS: ProjectileConfig[] = [ROCKET_CONFIG, DISC_CONFIG, GRENADE_CONFIG, CHAINGUN_CONFIG, MORTAR_CONFIG, GL_CONFIG, FLAK_CONFIG, PLASMA_CONFIG, RAILGUN_CONFIG];
+
+// Slot-space order — index IS the weapon id (WEAPON_RATES / viewmodel order).
+// The belt grenade is NOT here: it has no slot. Menus/HUD must use this list,
+// never WEAPON_CONFIGS, which is weaponType-keyed and includes belt items.
+export const SLOT_WEAPONS: ProjectileConfig[] = [ROCKET_CONFIG, DISC_CONFIG, CHAINGUN_CONFIG, MORTAR_CONFIG, GL_CONFIG, FLAK_CONFIG, PLASMA_CONFIG, RAILGUN_CONFIG];
 
 export function getProjectileConfig(weaponType: number): ProjectileConfig | undefined {
   return WEAPON_CONFIGS.find((c) => c.weaponType === weaponType);

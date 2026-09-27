@@ -9,6 +9,7 @@ import type { Targetable } from '../entities/balls.js';
 
 import { Terrain } from '../world/terrain.js';
 import type { ProjectileConfig } from './types.js';
+import * as sfx from '../core/sfx.js';
 import { RibbonTrail } from './RibbonTrail.js';
 import { ProjectileTrail } from './trailParticles.js';
 
@@ -499,6 +500,7 @@ export class Projectile {
       this.vel.addScaledVector(_tNormal, -vn);
       this.pos.copy(this.hitPoint).addScaledVector(_tNormal, this.config.terrainOffset + 0.05);
       this.prevPos.copy(this.pos);
+      if (this.config.bounceSfx) sfx.at(this.pos, this.config.bounceSfx, 0.5, 1.4);
       return true;
     }
     this.vel.addScaledVector(_tNormal, -(1 + (this.config.bounceRestitution ?? 0.5)) * vn);
@@ -508,6 +510,11 @@ export class Projectile {
     // Sit just above the surface so the next sweep doesn't immediately retrigger
     this.pos.copy(this.hitPoint).addScaledVector(_tNormal, this.config.terrainOffset + 0.05);
     this.prevPos.copy(this.pos);
+    if (this.config.bounceSfx) {
+      // Harder hits ping louder; weak grazes stay quiet — sells mass.
+      const gain = Math.min(1, -vn / 40);
+      sfx.at(this.pos, `ricochet${1 + Math.floor(Math.random() * 3)}`, gain);
+    }
     return true;
   }
 

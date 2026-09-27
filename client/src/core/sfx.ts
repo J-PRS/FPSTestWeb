@@ -104,7 +104,6 @@ export function shotAt(pos: THREE.Vector3, weaponType: number): void {
 
 const SHOT_SAMPLES: Partial<Record<number, [string, number]>> = {
   [WeaponType.Rocket]:          ['shot_rocket', 0.9],
-  [WeaponType.Disc]:            ['shot_laser', 0.9],
   [WeaponType.Chaingun]:        ['shot_chaingun', 0.8],
   [WeaponType.Mortar]:          ['shot_cannon', 1.0],
   [WeaponType.GrenadeLauncher]: ['shot_cannon', 0.8],
@@ -114,7 +113,23 @@ const SHOT_SAMPLES: Partial<Record<number, [string, number]>> = {
   [WeaponType.Railgun]:         ['shot_energy', 1.0],
 };
 
+/** Any sample through the world bus at a position — the generic positional
+ *  player for bounce pings, debris hits, etc. */
+export function at(pos: THREE.Vector3, name: string, gain = 1, rate = 1): void {
+  const c = ctx();
+  if (!c || !audio.sample(name)) return;
+  const inNode = audio.worldInput(pos);
+  if (!inNode) return;
+  const g = c.createGain(); g.connect(inNode);
+  if (!play(g, 1)) return;
+  sample(name, g, gain, rate);
+}
+
 function shootInto(g: GainNode, weaponType: number): void {
+  // Disc launcher: metallic ring + energy thump + whistle — its own voice
+  // in the railgun×rocket register without borrowing either verbatim.
+  if (weaponType === WeaponType.Disc &&
+      layer(g, [['shot_cannon', 0.8, 0.55], ['cryst_bang', 0.65, 0.9], ['punch', 0.5, 1.2], ['whistle', 0.3]])) return;
   const s = SHOT_SAMPLES[weaponType];
   if (s && sample(s[0], g, s[1])) return;
   switch (weaponType) {
@@ -236,6 +251,15 @@ export function melee(): void {
   osc('sine', 140, 60, 0.12, 0.35, g);
 }
 
+export function equip(): void {
+  const bus = audio.sfxBus, c = ctx();
+  if (!bus || !c) return;
+  const g = c.createGain(); g.connect(bus);
+  if (!play(g, 0.5)) return;
+  if (sample('equip', g, 0.55)) return;
+  osc('square', 500, 700, 0.06, 0.1, g);
+}
+
 export function killConfirm(): void {
   const bus = audio.uiBus, c = ctx();
   if (!bus || !c) return;
@@ -269,6 +293,22 @@ function explosionSample(g: GainNode, big: boolean): boolean {
     [Math.random() < 0.5 ? 'explosion1' : 'explosion2', 0.9],
     ['thud_big', 0.5, 0.7],
   ]);
+}
+
+/** Pull-mode detonation (disc) — a suck-in zap layered over a deep pop. */
+export function implosionAt(pos: THREE.Vector3, direct: boolean): void {
+  const c = ctx();
+  if (!c) return;
+  const inNode = audio.worldInput(pos);
+  if (!inNode) return;
+  const g = c.createGain(); g.connect(inNode);
+  if (!play(g, 0.7)) return;
+  if (layer(g, [
+    ['shot_energy', 0.8, 0.6],
+    ['explosion_small', direct ? 0.7 : 0.5, 1.2],
+  ])) return;
+  osc('sawtooth', 1800, 200, 0.25, 0.4, g);
+  noise(0.4, 0.5, g, 'lowpass', 4000, 300);
 }
 
 export function explosionClose(big: boolean): void {

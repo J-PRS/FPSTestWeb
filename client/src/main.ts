@@ -220,7 +220,7 @@ async function init(): Promise<void> {
   player.onPlasma = combat.onPlasma;
   player.onRailgun = combat.onRailgun;
   player.onMelee = combat.onMelee;
-  player.onWeaponSwitch = (i) => viewModel?.switchWeapon(i);
+  player.onWeaponSwitch = (i) => { viewModel?.switchWeapon(i); sfx.equip(); };
   player.onJump = (pos) => { effects.spawnJumpDust(pos); sfx.jump(); };
   player.onLand = (impactSpeed) => sfx.land(impactSpeed);
   player.onJetpack = (pos) => effects.spawnJetpack(pos);
