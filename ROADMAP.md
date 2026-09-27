@@ -62,9 +62,11 @@ surface. Detailed research lives in `_reports/`; this file is the current truth.
 2. **Movement re-sim** — shared/stepPlayer on server during validation.
    BLOCKED on JP's in-flight Player.ts edits — extract the integrator to
    shared/movement.ts when that file settles.
-3. ~~Map format~~ — landed: `maps/<room>.json` (mode + ball population,
-   clamped with defaults; examples swarm/duel). Next extensions: spawn
-   anchors, bases/objectives, species mix, terrain ref.
+3. ~~Map format~~ — landed: `maps/<room>.json` (mode, ball population,
+   spawn anchors, bases/objectives, bot count — all clamped with
+   defaults; examples swarm/duel/nugwar/ctf). Server bots populate
+   matches per spec. Next extensions: terrain ref, species mix,
+   smarter bot brains (share a brain with offline bots via shared/).
 4. ~~Server-owned teams/score~~ — landed: rooms assign alpha/bravo on
    join, {type:'bank'} feeds a room scoreboard, teamScore/matchEnd/
    matchStart broadcast; verified live. REMAINING seam: the client's
