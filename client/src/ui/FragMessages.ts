@@ -6,18 +6,55 @@ export class FragMessages {
 
   constructor() {
     this.scoreDiv = document.createElement('div');
+    this.scoreDiv.id = 'frag-msg'; // hidden with the rest of the HUD via body.menu-open
     this.scoreDiv.style.cssText = `
-      position:absolute; top:calc(50% - 60px); left:50%; transform:translate(-50%,-100%);
-      font-family:sans-serif; font-size:1rem; color:#fff;
-      text-shadow:1px 1px 3px #000;
-      pointer-events:none; text-align:center; white-space:pre; line-height:1.5;
+      position:absolute; top:25%; left:50%; transform:translate(-50%,-50%);
+      font-family:Rajdhani,'Segoe UI',sans-serif; color:#fff;
+      text-transform:uppercase; letter-spacing:0.08em;
+      pointer-events:none; text-align:center; line-height:1.3;
       opacity:0; transition:opacity ${FRAG_MESSAGE_FADE}ms ease;
     `;
     document.body.appendChild(this.scoreDiv);
   }
 
   show(msg: string): void {
-    this.scoreDiv.textContent = msg;
+    // First line is the headline (YOU DIED / FRAGGED X) — big Rajdhani
+    // slab; the rest reads as a smaller subtitle under it.
+    const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+    const [head, ...rest] = msg.split('\n');
+    this.scoreDiv.innerHTML =
+      `<div style="font-size:2.6rem;font-weight:700;color:#ff5544;letter-spacing:0.12em;text-shadow:0 0 18px rgba(255,60,40,0.55),1px 2px 4px #000">${esc(head ?? '')}</div>` +
+      (rest.length
+        ? `<div style="font-size:1.05rem;font-weight:600;color:#e8d8cc;letter-spacing:0.15em;text-shadow:1px 1px 3px #000">${esc(rest.join(' · '))}</div>`
+        : '');
+    this.flash();
+  }
+
+  // On-shot score tick ("84.2 · 41 · 0.35s · +8") — the OLD small style.
+  // The headline treatment is for deaths/frags only; a 2.6rem slab every
+  // hit is screen spam. `air` scales the score in discrete steps — a 2s
+  // airtime frag is a bigger deal than a 0.4s plink, so it LOOKS bigger.
+  private static readonly SCORE_TIERS: [number, string, string][] = [
+    // [min airtime, stats font, score font] — capped at the top tier
+    [2.0, '1.05rem', '2.2rem'],
+    [1.0, '0.95rem', '1.7rem'],
+    [0.5, '0.9rem', '1.4rem'],
+    [0.0, '0.85rem', '1.2rem'],
+  ];
+
+  showScore(msg: string, air = 0): void {
+    const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+    const tier = FragMessages.SCORE_TIERS.find(t => air >= t[0])!;
+    const [head, ...rest] = msg.split('\n');
+    this.scoreDiv.innerHTML =
+      `<div style="font-size:${tier[1]};font-weight:600;color:#cfe0ff;letter-spacing:0.1em;text-shadow:1px 1px 3px #000">${esc(head ?? '')}</div>` +
+      (rest.length
+        ? `<div style="font-size:${tier[2]};font-weight:700;color:#8fd8a8;letter-spacing:0.08em;text-shadow:1px 1px 3px #000">${esc(rest.join(' · '))}</div>`
+        : '');
+    this.flash();
+  }
+
+  private flash(): void {
     this.scoreDiv.style.transition = 'none';
     this.scoreDiv.style.opacity = '1';
     clearTimeout(this.fadeTimer);
