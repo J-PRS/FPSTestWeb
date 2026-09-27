@@ -1,6 +1,19 @@
 import { defineConfig } from 'vite';
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
+  // `vite --mode noreload` (npm run dev:noreload): agentic edit batches were
+  // nuking in-world state on every file save. HMR socket stays alive but the
+  // stale-notify plugin SWALLOWS every update and instead pushes a custom
+  // event — the client counts changed files in a corner badge.
+  // Manual Ctrl+R when you want the new code.
+  plugins: mode === 'noreload' ? [{
+    name: 'stale-notify',
+    handleHotUpdate({ server, modules }) {
+      const files = modules.map(m => m.file).filter(Boolean);
+      server.ws.send({ type: 'custom', event: 'stale:changed', data: { count: files.length } });
+      return []; // swallow — no HMR, no full-reload
+    },
+  }] : [],
   optimizeDeps: {
     include: ['colyseus.js'],
   },
@@ -37,4 +50,4 @@ export default defineConfig({
     // and the stale proxy was swallowing /server.json (prefix match) and
     // trying to WS-proxy it to :8080 — ECONNREFUSED spam.
   },
-});
+}));

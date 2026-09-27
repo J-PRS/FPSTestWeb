@@ -295,7 +295,7 @@ function applyPlaybackProjectileHit(world: PlaybackWorld, ev: ProjectileEvent, r
     const dist = r.pos.distanceTo(origin);
     const air = r.age;
     const score = Math.round(acc * dist * air);
-    world.fragMessages.show(`${acc.toFixed(1)} · ${Math.round(dist)} · ${air.toFixed(2)}s\n${score}`);
+    world.fragMessages.showScore(`${acc.toFixed(1)} · ${Math.round(dist)} · ${air.toFixed(2)}s\n${score}`, air);
     world.hud.showHitMarker();
   }
 
