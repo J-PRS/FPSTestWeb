@@ -29,6 +29,9 @@ export const DEPLOY_DEFS: { kind: DeployKind; label: string; max: number }[] = [
 ];
 
 const TURRET_DMG = 9;
+const TRACER_MAT = new THREE.LineBasicMaterial({
+  color: 0x88ddff, transparent: true, blending: THREE.AdditiveBlending,
+});
 const DEPLOY_AHEAD = 4;   // meters in front of the player
 const DEPLOY_SLOPE = 0.75; // normal.y floor — can't plant on cliffs
 
@@ -214,11 +217,21 @@ export class Deployables {
     }
   }
 
+  // Tracers share a material + reused geometry — per-shot BufferGeometry
+  // meant a GL upload + dispose for a 120ms streak.
+  private tracerPool: THREE.Line[] = [];
+
   private spawnTracer(from: THREE.Vector3, to: THREE.Vector3): void {
-    const g = new THREE.BufferGeometry().setFromPoints([from, to]);
-    const line = new THREE.Line(g, new THREE.LineBasicMaterial({
-      color: 0x88ddff, transparent: true, blending: THREE.AdditiveBlending,
-    }));
+    let line = this.tracerPool.pop();
+    if (!line) {
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
+      line = new THREE.Line(g, TRACER_MAT);
+    }
+    const a = line.geometry.getAttribute('position') as THREE.BufferAttribute;
+    a.setXYZ(0, from.x, from.y, from.z);
+    a.setXYZ(1, to.x, to.y, to.z);
+    a.needsUpdate = true;
     this.deps.scene.add(line);
     this.tracers.push({ line, t: 0.12 });
   }
@@ -249,13 +262,19 @@ export class Deployables {
     for (let i = this.tracers.length - 1; i >= 0; i--) {
       const tr = this.tracers[i]!;
       tr.t -= dt;
-      (tr.line.material as THREE.LineBasicMaterial).opacity = Math.max(0, tr.t / 0.12);
       if (tr.t <= 0) {
         this.deps.scene.remove(tr.line);
-        tr.line.geometry.dispose();
-        (tr.line.material as THREE.Material).dispose();
-        this.tracers.splice(i, 1);
+        this.tracerPool.push(tr.line);
+        this.tracers[i] = this.tracers[this.tracers.length - 1]!;
+        this.tracers.pop();
       }
     }
+  }
+
+  dispose(): void {
+    for (const tr of this.tracers) this.deps.scene.remove(tr.line);
+    this.tracers.length = 0;
+    for (const l of this.tracerPool) l.geometry.dispose();
+    this.tracerPool.length = 0;
   }
 }
