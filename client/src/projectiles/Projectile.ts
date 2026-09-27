@@ -54,9 +54,10 @@ const _tNormal = new THREE.Vector3();
  * On impact, the projectile records `hitBall`, `directHit`, `hitAccuracy`, etc.,
  * marks itself `exploded`, and the visual effect is handled elsewhere.
  *
- * Known issues / TODOs (see _reports/projectile-implementation-review.md):
- *  - `hitRadius` scales from `hitMin` to `hitMax` over `hitGrow` seconds (can be 0 at spawn).
- *    Trail/wake particle visuals live in trailParticles.ts (TrailHost interface).
+ * Trail/wake particle visuals live in trailParticles.ts (TrailHost interface).
+ * (Not a bug: `hitRadius` starts at `hitMin`=0 by design — it's the expanding
+ *  WAKE threshold, not the direct-hit radius, and a fresh projectile must not
+ *  whack its own shooter. Core hits use the constant `bodyRadius`.)
  */
 // Anything swept-collidable that ISN'T a damageable target — currently
 // turretter bolts. prevPos = start-of-frame pos so the check is
