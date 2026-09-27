@@ -87,7 +87,7 @@ export function createLightning(deps: CombatDeps, hooks: LightningHooks) {
       falloffMultiplier: 1, collisionMultiplier: 1, forceMultiplier: 1,
       // Server sees a normal Lightning blast for remote-player prediction;
       // the scaled damage is the PvE fantasy side (enemies are client-run)
-      sendAOE: (p, targetId) => deps.lazyNetworkManager()?.sendAOEShot(p, WeaponType.Lightning, targetId),
+      sendAOE: (p, targetId) => deps.lazyNetworkManager()?.sendAOEShot({ position: p, weaponType: WeaponType.Lightning, excludeTargetId: targetId }),
       explosionTint: 0x8fdcff, vfxRadius: radius * 0.8, weaponType: WeaponType.Lightning,
     });
   }
@@ -253,10 +253,10 @@ export function createLightning(deps: CombatDeps, hooks: LightningHooks) {
       // applyForceToRemotes mirrors knockback+damage through the RTT gap.
       const networkManager = deps.lazyNetworkManager();
       if (networkManager?.isConnected()) {
-        networkManager.sendAOEShot(
-          { x: _lgHit.x, y: _lgHit.y, z: _lgHit.z },
-          WeaponType.Lightning, hitPlayerId,
-        );
+        networkManager.sendAOEShot({
+          position: { x: _lgHit.x, y: _lgHit.y, z: _lgHit.z },
+          weaponType: WeaponType.Lightning, excludeTargetId: hitPlayerId,
+        });
       }
       hooks.applyForceToRemotes(_lgHit, stats.aoeRadius, stats.knockbackForce, 'push', stats.aoeDamage, null);
     }

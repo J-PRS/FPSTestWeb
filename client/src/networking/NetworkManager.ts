@@ -418,17 +418,12 @@ export class NetworkManager {
   /**
    * Send shot event to server
    */
-  sendShot(targetId: string | null, position?: { x: number; y: number; z: number }, velocity?: { x: number; y: number; z: number }, timestamp?: number, projectileId?: string | null, weaponType?: number, airtime?: number): void {
-    this.send({
-      type: 'shot',
-      targetId,
-      weaponType,
-      position,
-      velocity,
-      timestamp,
-      projectileId,
-      airtime
-    });
+  sendShot(a: {
+    targetId: string | null; position?: { x: number; y: number; z: number };
+    velocity?: { x: number; y: number; z: number }; timestamp?: number;
+    projectileId?: string | null; weaponType?: number; airtime?: number;
+  }): void {
+    this.send({ type: 'shot', ...a });
   }
 
   /** Single AOE message — weaponType resolves server-side via the shared
@@ -436,16 +431,16 @@ export class NetworkManager {
    *  the blast to a tracked projectile so the server can validate the
    *  trajectory — skill AOEs (slam) send neither and are position-checked
    *  against the player instead. */
-  sendAOEShot(position: { x: number; y: number; z: number }, weaponType: number, excludeTargetId?: string | null, projectileId?: string | null, airtime?: number, power?: number, directHit?: boolean): void {
+  sendAOEShot(a: {
+    position: { x: number; y: number; z: number }; weaponType: number;
+    excludeTargetId?: string | null; projectileId?: string | null;
+    airtime?: number; power?: number; directHit?: boolean;
+  }): void {
     this.send({
       type: 'aoeShot',
-      weaponType,
-      position,
-      excludeTargetId: excludeTargetId ?? null,
-      projectileId: projectileId ?? undefined,
-      airtime,
-      power,
-      directHit,
+      ...a,
+      excludeTargetId: a.excludeTargetId ?? null,
+      projectileId: a.projectileId ?? undefined,
     });
   }
 
