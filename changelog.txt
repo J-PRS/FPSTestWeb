@@ -1798,3 +1798,4 @@
 - Hold-out sidearms: G=pistol (14dmg, 4.5rps), T=revolver (34dmg, 1.7rps), B=shotgun — hold swaps the viewmodel in and auto-fires, release returns to your slot weapon; both rebindable in KEYS. Pistol/revolver also join the loadout menu as wids 12/13.
 - Pistol/revolver got their own kick+flash tuning (snappy crack vs heavy bark) and the wid->fire-handler dispatch is a lookup table instead of a 13-arm ternary
 - Spectator fly now hides the combat HUD (crosshair/health/belt/minimap) and shows a small SPECTATING hint; dying mid-flight exits spectate cleanly instead of leaving you stuck flying after respawn
+- Fixed projectile terrain tunneling: sweepTerrain step now scales with the collision offset (0.08-0.5, capped at 96 samples) instead of a fixed 0.5 — thin projectiles like chaingun bolts can no longer skip the impact band
