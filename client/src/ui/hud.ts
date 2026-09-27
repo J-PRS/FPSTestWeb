@@ -1,20 +1,11 @@
 import * as THREE from 'three';
 import { Minimap } from './minimap.js';
 import { createHudDom } from './hud/dom.js';
+import { PlayerIndicators } from './hud/indicators.js';
 import type { Targetable } from '../entities/balls.js';
 import type { Nugget } from '../entities/Nugget.js';
 
 import { Player } from '../entities/Player.js';
-import { ChildLogger } from '../core/Logger.js';
-
-const logger = new ChildLogger('HUD');
-
-// Scratch vectors for updatePlayerIndicator (runs per-player per-frame)
-const _cameraPos = new THREE.Vector3();
-const _cameraDir = new THREE.Vector3();
-const _targetPos = new THREE.Vector3();
-const _toTarget = new THREE.Vector3();
-const _projected = new THREE.Vector3();
 
 export class HUD {
   private el: HTMLDivElement;
@@ -41,7 +32,7 @@ export class HUD {
   private lastPlayerYaw = 0;
   private ghostBar: HTMLDivElement;
   private ghostPct = 100;      // trails healthPct downward on damage
-  private playerIndicators: Map<string, HTMLDivElement> = new Map();
+  private indicators!: PlayerIndicators;
   private playerList: HTMLDivElement;
   private ballCountEl: HTMLDivElement;
   private timerEl: HTMLDivElement;
@@ -76,6 +67,7 @@ export class HUD {
     this.scoreboard = d.scoreboard;
     this.sbRows = d.sbRows;
     this.minimap = new Minimap(this.el);
+    this.indicators = new PlayerIndicators(this.el);
   }
 
   /** Run clock — MM:SS, DOM write only when the second rolls over */
@@ -341,109 +333,15 @@ export class HUD {
   }
 
   updatePlayerIndicator(playerId: string, position: { x: number; y: number; z: number }, camera: THREE.Camera, isDead: boolean = false): void {
-    let indicator = this.playerIndicators.get(playerId);
-    if (!indicator) {
-      indicator = document.createElement('div');
-      indicator.className = 'player-indicator';
-      this.el.appendChild(indicator);
-      this.playerIndicators.set(playerId, indicator);
-      logger.debug(`INDICATOR CREATED`, { playerId, total: this.playerIndicators.size });
-    }
-
-    if (isDead) {
-      indicator.classList.add('hidden');
-      return;
-    } else {
-      indicator.classList.remove('hidden');
-    }
-
-    // Get camera position and direction (module scratch — no per-call allocs)
-    camera.getWorldPosition(_cameraPos);
-    camera.getWorldDirection(_cameraDir);
-
-    // Calculate vector from camera to target
-    // Position is at feet, but we want to point to the player center (feet + 1.0)
-    const targetPos = _targetPos.set(position.x, position.y + 1.0, position.z);
-    const toTarget = _toTarget.subVectors(targetPos, _cameraPos);
-
-    // Check if target is behind camera (angle > 90 degrees)
-    const behind = toTarget.angleTo(_cameraDir) > Math.PI / 2;
-
-    // Project 3D position to 2D screen space
-    const vector = _projected.copy(targetPos);
-    vector.project(camera);
-
-    let x = (vector.x * 0.5 + 0.5) * window.innerWidth;
-    let y = (-(vector.y * 0.5) + 0.5) * window.innerHeight;
-
-    // If behind camera, invert coordinates
-    if (behind) {
-      x = window.innerWidth - x;
-      y = window.innerHeight - y;
-    }
-
-    // Check if player is on screen
-    const onScreen = !behind && x >= 0 && x <= window.innerWidth && y >= 0 && y <= window.innerHeight;
-
-    indicator.classList.remove('hidden');
-
-    if (onScreen) {
-      // Player is visible on screen - show indicator at actual position
-      indicator.classList.remove('offscreen');
-      // Scale dot by inverse square root of distance (gentler than 1/d)
-      const distance = _cameraPos.distanceTo(targetPos);
-      const REF_DIST = 50;
-      const MIN_SIZE = 6;
-      const MAX_SIZE = 12;
-      const scale = REF_DIST / Math.sqrt(Math.max(distance, 1));
-      const size = Math.max(MIN_SIZE, Math.min(MAX_SIZE, 12 * scale));
-      indicator.style.width = `${size}px`;
-      indicator.style.height = `${size}px`;
-      indicator.style.left = `${x}px`;
-      indicator.style.top = `${y}px`;
-    } else {
-      // Player is off-screen - show indicator at screen edge
-      indicator.classList.add('offscreen');
-
-      // Calculate direction from center of screen to player
-      const centerX = window.innerWidth / 2;
-      const centerY = window.innerHeight / 2;
-      const dx = x - centerX;
-      const dy = y - centerY;
-      const angle = Math.atan2(dy, dx);
-
-      // Clamp to screen edge using proper edge calculation
-      const margin = 40;
-      const halfWidth = window.innerWidth / 2 - margin;
-      const halfHeight = window.innerHeight / 2 - margin;
-
-      // Calculate distance to each edge
-      const distWidth = halfWidth / Math.abs(Math.cos(angle));
-      const distHeight = halfHeight / Math.abs(Math.sin(angle));
-      const dist = Math.min(distWidth, distHeight);
-
-      const clampedX = centerX + Math.cos(angle) * dist;
-      const clampedY = centerY + Math.sin(angle) * dist;
-
-      indicator.style.left = `${clampedX}px`;
-      indicator.style.top = `${clampedY}px`;
-    }
+    this.indicators.update(playerId, position, camera, isDead);
   }
 
   removePlayerIndicator(playerId: string): void {
-    const indicator = this.playerIndicators.get(playerId);
-    if (indicator) {
-      indicator.remove();
-      this.playerIndicators.delete(playerId);
-      logger.debug(`INDICATOR REMOVED`, { playerId, total: this.playerIndicators.size });
-    } else {
-      // Indicator already removed - this is called every frame for dead players
-    }
+    this.indicators.remove(playerId);
   }
 
   clearPlayerIndicators(): void {
-    this.playerIndicators.forEach(indicator => indicator.remove());
-    this.playerIndicators.clear();
+    this.indicators.clear();
   }
 
   private lastPlayerListKey = '';
