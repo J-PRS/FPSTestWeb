@@ -329,6 +329,9 @@ export class TeamBots {
   /** A nugget was collected by 'local' or a bot id — bank it for the team. */
   collect(collectorId: string): void {
     if (this.spec.ffa || this.over) return; // dm: nuggets heal, don't score
+    // In a networked match the server owns the scoreboard — report our
+    // pickup and let teamScore echo back the truth. Offline sends no-op.
+    if (collectorId === 'local') this.deps.lazyNetworkManager()?.sendBank(1);
     const team = this.teamOf.get(collectorId) as TeamId | undefined;
     if (!team) return;
     bank(this.scores, team);

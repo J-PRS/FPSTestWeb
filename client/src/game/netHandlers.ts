@@ -54,8 +54,10 @@ export function wireNetworkHandlers(deps: NetDeps): void {
     localName: () => networkManager.getLocalPlayerId(),
   });
   networkManager.onChat = (playerId, text) => chat.add(playerId, text);
-  networkManager.onTeamScore = (scores, winAt) =>
+  networkManager.onTeamScore = (scores, winAt) => {
+    deps.lazyHud().setTeamScore?.(scores.alpha, scores.bravo);
     chat.add(null, `ALPHA ${scores.alpha} : ${scores.bravo} BRAVO  (first to ${winAt})`);
+  };
   networkManager.onMatchEnd = (winner, scores) =>
     chat.add(null, `${winner.toUpperCase()} WINS ${scores.alpha}:${scores.bravo} — new match starting`);
   networkManager.onMatchStart = (mode) =>
