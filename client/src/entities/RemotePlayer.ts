@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-import { GRAVITY, BOUNCE_Y, FRICTION_XZ, EYE_OFFSET } from '../core/config.js';
+import { GRAVITY, EYE_OFFSET } from '../core/config.js';
 
 import { Terrain } from '../world/terrain.js';
 import { ChildLogger } from '../core/Logger.js';
@@ -9,6 +9,7 @@ import { PlayerModel } from './PlayerModel.js';
 import { pickLocomotionAnim } from './locomotionAnim.js';
 import { SnapshotBuffer } from './remoteSnapshots.js';
 import { RemoteGizmo } from './remoteGizmo.js';
+import { resetCorpse, launchCorpse, stepCorpse, type CorpseState } from './remoteDeath.js';
 
 const logger = new ChildLogger('RemotePlayer');
 
@@ -49,10 +50,7 @@ export class RemotePlayer {
   private angularVelocity: THREE.Vector3 = new THREE.Vector3();
   private isOnGround: boolean = true;
   private terrain: Terrain | null = null;
-  private landed: boolean = false;
-  private landedAt: number = 0;
-  private shrinkDuration: number = 0.5;
-  private _scale: number = 1.0;
+  private corpse!: CorpseState; // ctor assigns — aliases live position/vel/rotation refs
   private targetPosition: THREE.Vector3;
   private targetRotation: { yaw: number; pitch: number };
   private ping: number = 0; // Connection ping in milliseconds
@@ -71,7 +69,7 @@ export class RemotePlayer {
   // Alias for the Forceable interface (Player/Ball use `pos`, we use `position`)
   get pos(): THREE.Vector3 { return this.position; }
   get isDead(): boolean { return this._isDead; }
-  get scale(): number { return this._scale; }
+  get scale(): number { return this.corpse.scale; }
   get isSimulating(): boolean { return this._isSimulating; }
   get loaded(): boolean { return this._loaded; }
   get model(): PlayerModel { return this._model; }
@@ -100,6 +98,11 @@ export class RemotePlayer {
     this.rotation = { yaw: 0, pitch: 0, roll: 0 };
     this._isDead = false; // Reset death state on construction
     this.terrain = terrain || null;
+    this.corpse = {
+      position: this.position, velocity: this.velocity,
+      angularVelocity: this.angularVelocity, rotation: this.rotation,
+      landed: false, landedAt: 0, scale: 1,
+    };
     this.targetPosition = this.position.clone();
     this.targetRotation = { yaw: 0, pitch: 0 };
     this._lastUpdateTime = Date.now(); // Initialize to current time to prevent immediate dead reckoning
@@ -193,42 +196,17 @@ export class RemotePlayer {
 
   // Death physics (ragdoll-like rigidbody) run every frame at the real dt so
   // bodies fall/tumble/shrink at full speed and smoothly. Moved here from
-  // update() which only fires at ~20Hz with a fixed dt.
+  // update() which only fires at ~20Hz with a fixed dt — and now extracted
+  // to remoteDeath.ts.
   private tickDead(dt: number): void {
-    this.velocity.y += GRAVITY * dt;
-    this.position.addScaledVector(this.velocity, dt);
-
-    // Apply angular velocity (tumbling on all axes)
-    this.rotation.yaw += this.angularVelocity.x * dt;
-    this.rotation.pitch += this.angularVelocity.y * dt;
-    this.rotation.roll += this.angularVelocity.z * dt;
-
-    // Ground collision with bounce (flat 0 fallback without terrain)
-    const groundY = this.terrain ? this.terrain.getHeight(this.position.x, this.position.z) : 0;
-    if (this.position.y < groundY) {
-      this.position.y = groundY;
-      this.velocity.y = -this.velocity.y * BOUNCE_Y;
-      this.velocity.x *= FRICTION_XZ;
-      this.velocity.z *= FRICTION_XZ;
-      this.angularVelocity.multiplyScalar(0.3); // Dampen rotation on bounce
-      if (!this.landed) {
-        this.landed = true;
-        this.landedAt = 0;
-      }
-    }
-
-    // Shrink after landing
-    if (this.landed) {
-      this.landedAt += dt;
-      this._scale = Math.max(0, 1.0 - this.landedAt / this.shrinkDuration);
-    }
+    stepCorpse(this.corpse, dt, this.terrain);
 
     // Update model if loaded (position/rotation/scale/animation)
     if (this._loaded) {
       this._model.setPosition(this.position.x, this.position.y - EYE_OFFSET, this.position.z);
       this._model.setRotation(this.rotation.yaw, this.rotation.pitch, this.rotation.roll);
-      if (this._scale !== 1.0) {
-        this._model.setScale(this._scale);
+      if (this.corpse.scale !== 1.0) {
+        this._model.setScale(this.corpse.scale);
       }
       this._model.update(dt);
     }
@@ -345,9 +323,8 @@ export class RemotePlayer {
   playDeath(explosionPos?: THREE.Vector3, explosionForce?: number): void {
     this._isDead = true;
     this.hitT = 0;
-    this.landed = false;
-    this.landedAt = 0;
-    this._scale = 1.0;
+    resetCorpse(this.corpse);
+    launchCorpse(this.corpse, explosionPos, explosionForce);
 
     // Remove gizmo from scene immediately on death
     if (this.gizmo) {
@@ -357,48 +334,6 @@ export class RemotePlayer {
 
     // Remove collider gizmo from scene on death (not just hide it)
     this.model.removeColliderGizmo();
-
-    if (explosionPos && explosionForce) {
-      // Calculate velocity from explosion
-      const toPlayer = new THREE.Vector3().subVectors(this.position, explosionPos);
-      const distance = toPlayer.length();
-      const direction = toPlayer.normalize();
-      
-      // Force falloff based on distance
-      const falloff = Math.max(0, 1 - distance / (explosionForce * 2.5));
-      const speed = explosionForce * falloff * 0.8; // 80% of explosion force
-      
-      this.velocity.set(
-        direction.x * speed,
-        direction.y * speed + 3.0, // Add upward kick
-        direction.z * speed
-      );
-
-      // Tumbling based on explosion force
-      const tumble = explosionForce * 0.5;
-      this.angularVelocity.set(
-        (Math.random() - 0.5) * 2 * tumble,
-        (Math.random() - 0.5) * 2 * tumble,
-        (Math.random() - 0.5) * 2 * tumble
-      );
-    } else {
-      // Fallback: random velocity (for deaths without explosion)
-      const speed = 8.0 + Math.random() * 6.0;
-      const angle = Math.random() * Math.PI * 2;
-      const elevation = Math.random() * Math.PI * 0.5;
-      this.velocity.set(
-        Math.cos(elevation) * Math.cos(angle) * speed,
-        Math.sin(elevation) * speed + 3.0,
-        Math.cos(elevation) * Math.sin(angle) * speed
-      );
-
-      const tumble = 5.0 + Math.random() * 10.0;
-      this.angularVelocity.set(
-        (Math.random() - 0.5) * 2 * tumble,
-        (Math.random() - 0.5) * 2 * tumble,
-        (Math.random() - 0.5) * 2 * tumble
-      );
-    }
   }
 
   /** Team tint on the name ring — Nugget Wars bots use it; server players
@@ -449,9 +384,7 @@ export class RemotePlayer {
 
   respawn(position: { x: number; y: number; z: number }): void {
     this._isDead = false;
-    this.landed = false;
-    this.landedAt = 0;
-    this._scale = 1.0;
+    resetCorpse(this.corpse);
     this.position.set(position.x, position.y, position.z);
     this.previousPosition.copy(this.position);
     this.targetPosition.copy(this.position);

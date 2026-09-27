@@ -1864,3 +1864,4 @@ ballSegments now binary over the wire (~50B vs ~160B JSON, ~10 seg/s per ball ×
 entities.ts species blocks extracted to game/species/{melee,flyers,siege,ambient}.ts (764->270 lines); shared SpeciesKit type exported
 speciesKit: atCap() helper replaces per-spawn list.filter(!dead) temp-array allocations
 speciesKit: bite() helper collapses 11 near-identical melee hit call sites
+RemotePlayer death physics extracted to entities/remoteDeath.ts (corpse state + launch/step/reset)
