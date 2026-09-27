@@ -113,7 +113,7 @@ export function createSpeciesKit(deps: EntitiesDeps, targets: Targetable[]) {
       c = { id: 'local', pos: p.pos, vel: p.vel, alive: true };
       _candMap.set('local', c);
     }
-    c.alive = !p.isDead;
+    c.alive = !p.isDead && !p.isCloaked; // cloak drops local-player aggro
     const now = Date.now();
     for (const [id, r] of deps.world.remotePlayers) {
       let rc = _candMap.get(id);

@@ -215,6 +215,27 @@ export class HUD {
     }
   }
 
+  // Cloak chrome: unlike spectate the combat HUD stays up — this small
+  // marker is the only tell that you're invisible (energy bar shows cost).
+  private cloakHint: HTMLDivElement | null = null;
+
+  setCloak(on: boolean): void {
+    if (on && !this.cloakHint) {
+      const d = document.createElement('div');
+      d.style.cssText = `
+        position:absolute; top:14px; left:50%; transform:translateX(-50%);
+        pointer-events:none; z-index:5; color:#b9c8ff; opacity:0.75;
+        font:600 13px/1 monospace; letter-spacing:0.2em; text-shadow:0 1px 3px #000;
+      `;
+      d.textContent = 'CLOAKED';
+      document.body.appendChild(d);
+      this.cloakHint = d;
+    } else if (!on && this.cloakHint) {
+      this.cloakHint.remove();
+      this.cloakHint = null;
+    }
+  }
+
   private fpsAccum = 0;
   private fpsFrames = 0;
   private fpsValue = 0;
