@@ -37,9 +37,9 @@ export function bank(s: TeamScores, team: TeamId, n = 1): number {
 }
 
 /** First team at/over the win threshold, or null. */
-export function winner(s: TeamScores): TeamId | null {
-  if (s.alpha >= WIN_NUGGETS) return 'alpha';
-  if (s.bravo >= WIN_NUGGETS) return 'bravo';
+export function winner(s: TeamScores, winAt = WIN_NUGGETS): TeamId | null {
+  if (s.alpha >= winAt) return 'alpha';
+  if (s.bravo >= winAt) return 'bravo';
   return null;
 }
 

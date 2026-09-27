@@ -9,6 +9,16 @@ import type { BallSim } from './BallSim.ts';
 type BroadcastFn = (msg: ServerMessage, excludePlayerId?: string) => void;
 type SendToPlayerFn = (playerId: string, msg: ServerMessage) => void;
 
+/** What the enclosing Room tells its MessageHandler about the match. */
+export interface RoomInfo {
+  room: string;
+  mode: string;
+  /** Live scoreboard object (mutated by Room.bank) — echoed into gameState. */
+  scores?: { alpha: number; bravo: number };
+  winAt?: number;
+  onBank?: (playerId: string, n: number) => void;
+}
+
 export class MessageHandler {
   private playerManager: PlayerManager;
   private rateLimiter: RateLimiter;
@@ -22,14 +32,14 @@ export class MessageHandler {
   private rateLimitWarnings: Map<string, number> = new Map();
   private readonly RATE_WARN_COOLDOWN_MS = 5000;
 
-  private roomInfo: { room: string; mode: string } = { room: 'default', mode: '' };
+  private roomInfo: RoomInfo = { room: 'default', mode: '' };
 
   constructor(
     playerManager: PlayerManager,
     rateLimiter: RateLimiter,
     broadcast: BroadcastFn,
     sendToPlayer: SendToPlayerFn,
-    roomInfo?: { room: string; mode: string },
+    roomInfo?: RoomInfo,
   ) {
     this.playerManager = playerManager;
     this.rateLimiter = rateLimiter;
@@ -82,6 +92,8 @@ export class MessageHandler {
       protocolVersion: PROTOCOL_VERSION,
       room: this.roomInfo.room,
       mode: this.roomInfo.mode || undefined,
+      team: player.team,
+      scores: this.roomInfo.scores ? { ...this.roomInfo.scores } : undefined,
       localPlayerState: {
         position: { ...player.position },
         rotation: { ...player.rotation },
@@ -106,6 +118,7 @@ export class MessageHandler {
         internalId: player.internalId,
         position: player.position,
         rotation: player.rotation,
+        team: player.team,
       }, playerId);
     }
   }
@@ -156,6 +169,9 @@ export class MessageHandler {
         break;
       case 'inputMove':
         player.skiing = msg.input.ski ? 1 : 0;
+        break;
+      case 'bank':
+        this.roomInfo.onBank?.(playerId, msg.n);
         break;
       case 'chat':
         // Room-scoped relay — broadcast() only reaches this room's sockets.

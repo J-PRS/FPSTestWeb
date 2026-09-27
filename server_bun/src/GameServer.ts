@@ -334,7 +334,8 @@ export class GameServer {
     ws.data.playerId = playerId;
     const sessionToken = idToken;
     room.sessionTokens.set(playerId, sessionToken);
-    room.players.addPlayer(playerId);
+    const player = room.players.addPlayer(playerId);
+    room.assignTeam(player);
     room.connections.register(playerId, ws);
     room.messages.handleHandshake(playerId, sessionToken);
     this.ops.joins++;

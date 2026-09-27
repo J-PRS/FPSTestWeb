@@ -46,6 +46,10 @@ export type ClientMessage =
   // amount so it can't be a cheat lever — it exists so server health stays
   // the truth instead of drifting under each nugget the client ate.
   | { type: 'heal'; amount: number }
+  // Nugget banking claim — the client says "my team just banked n"
+  // (pickups are client-detected); server clamps n so it's not a cheat
+  // lever, then owns the score. Only meaningful in team-mode rooms.
+  | { type: 'bank'; n: number }
   // Hit claim on a server-owned creature (balls are server-authoritative
   // when connected). damage is clamped server-side; kx/ky/kz is the
   // normalized knockback direction the shot imparted (server scales it
@@ -68,8 +72,8 @@ export interface TickUpdatePlayer {
 export type ServerMessage =
   // room/mode: which match this state belongs to — set by the room's first
   // joiner, inherited by everyone after (join claims can't redefine it).
-  | { type: 'gameState'; players: GameStatePlayer[]; localPlayerState?: LocalPlayerState; sessionToken?: string; protocolVersion?: number; room?: string; mode?: string }
-  | { type: 'playerJoined'; playerId: string; internalId: string; position: Vec3; rotation: Rotation }
+  | { type: 'gameState'; players: GameStatePlayer[]; localPlayerState?: LocalPlayerState; sessionToken?: string; protocolVersion?: number; room?: string; mode?: string; team?: 'alpha' | 'bravo'; scores?: { alpha: number; bravo: number } }
+  | { type: 'playerJoined'; playerId: string; internalId: string; position: Vec3; rotation: Rotation; team?: 'alpha' | 'bravo' }
   | { type: 'playerLeft'; playerId: string }
   | { type: 'playerHit'; shooterId: string; targetId: string; damage: number; health: number }
   | { type: 'playerKill'; shooterId: string; targetId: string }
@@ -97,7 +101,11 @@ export type ServerMessage =
   // Roster for joiners/reconnects — current segment state of every live ball
   | { type: 'ballRoster'; balls: { id: number; variant: number; colorIdx: number; position: Vec3; velocity: Vec3; enraged: boolean; targetId: string | null; tp?: Vec3 | null; t: number }[] }
   | { type: 'pong'; timestamp: number }
-  | { type: 'chat'; playerId: string; text: string };
+  | { type: 'chat'; playerId: string; text: string }
+  // --- Match scoreboard (team-mode rooms) --------------------------------
+  | { type: 'teamScore'; scores: { alpha: number; bravo: number }; winAt: number }
+  | { type: 'matchEnd'; winner: 'alpha' | 'bravo'; scores: { alpha: number; bravo: number } }
+  | { type: 'matchStart'; mode: string; scores: { alpha: number; bravo: number } };
 
 export interface GameStatePlayer {
   id: string;
@@ -107,6 +115,8 @@ export interface GameStatePlayer {
   velocity: Vec3;
   isDead: boolean;
   health: number;
+  /** Team-mode rooms only — absent in free-for-all. */
+  team?: 'alpha' | 'bravo';
 }
 
 export interface SnapshotPlayer {
