@@ -7,6 +7,7 @@ import { ChildLogger } from '../core/Logger.js';
 
 import { PlayerModel } from './PlayerModel.js';
 import { pickLocomotionAnim } from './locomotionAnim.js';
+import { SnapshotBuffer } from './remoteSnapshots.js';
 
 const logger = new ChildLogger('RemotePlayer');
 
@@ -25,13 +26,9 @@ const _extrapolated = new THREE.Vector3();
 const _sampledRot = { yaw: 0, pitch: 0 };
 
 export class RemotePlayer {
-  // Base render delay — grows with measured arrival jitter (Mirror-style
-  // adaptive buffer): 20Hz packets + jitter margin, clamped [80, 300]ms
-  private static readonly BASE_INTERP_DELAY = 100;
-  private static readonly MAX_INTERP_DELAY = 300;
-  private interpDelay = RemotePlayer.BASE_INTERP_DELAY;
-  private arrivalJitter = 0; // EMA of |arrival interval - 50ms|
-  private arrivalInterval = 50; // EMA of measured arrival interval (ms)
+  // Snapshot buffer + adaptive interp delay — the pure netcode half lives
+  // in remoteSnapshots.ts (unit-testable, no scene deps)
+  private net = new SnapshotBuffer();
 
   position: THREE.Vector3;
   /** Feet height — `position.y` is the networked EYE height; convert
@@ -68,15 +65,6 @@ export class RemotePlayer {
   private gizmoMismatchLogTimer: number = 0; // Throttle for gizmo mismatch warnings
   private lastServerPosition: THREE.Vector3 = new THREE.Vector3(); // Last raw server position (for velocity estimation)
 
-  // Snapshot buffer for interpolation: we render remote players ~INTERP_DELAY
-  // in the past and interpolate BETWEEN two real server snapshots instead of
-  // chasing the newest one. Kills jitter/oscillation — the classic Quake/
-  // Krunker approach. Buffer holds ~1s of the 20Hz stream.
-  private snapshots: { t: number; x: number; y: number; z: number; yaw: number; pitch: number; vx: number; vy: number; vz: number }[] = [];
-  // Shifted-out snapshots go back in the pool — at 20Hz/remote a fresh
-  // object per packet is the kind of steady GC drip we sweep for
-  private snapshotPool: { t: number; x: number; y: number; z: number; yaw: number; pitch: number; vx: number; vy: number; vz: number }[] = [];
-
   // Public getters for main.ts access (removes need for (as any) casts)
   get lastUpdateTime(): number { return this._lastUpdateTime; }
   // Alias for the Forceable interface (Player/Ball use `pos`, we use `position`)
@@ -97,8 +85,7 @@ export class RemotePlayer {
     this.position.copy(pos);
     this.previousPosition.copy(pos);
     this.targetPosition.copy(pos);
-    this.snapshotPool.push(...this.snapshots);
-    this.snapshots.length = 0;
+    this.net.clear();
     this._lastUpdateTime = Date.now();
     this._isSimulating = false;
   }
@@ -172,33 +159,14 @@ export class RemotePlayer {
     this.targetPosition.set(targetPosition.x, targetPosition.y, targetPosition.z);
     this.targetRotation = { yaw: targetRotation.yaw, pitch: targetRotation.pitch };
 
-    // Track arrival jitter — feeds the adaptive render delay. Jitter is
-    // measured against the OBSERVED cadence (arrivalInterval EMA), not a
-    // fixed 20Hz assumption: server-side send suppression legitimately
-    // stretches gaps to ~250ms for idle/extrapolated remotes, and counting
-    // that as jitter would pin interpDelay at the 300ms ceiling and leave
-    // resumed motion rendering stale.
-    const arrivalGap = this.lastServerUpdateMs - prevUpdateMs;
-    if (arrivalGap > 10 && arrivalGap < 2000) {
-      this.arrivalInterval += (arrivalGap - this.arrivalInterval) * 0.15;
-      this.arrivalJitter += (Math.abs(arrivalGap - this.arrivalInterval) - this.arrivalJitter) * 0.1;
-      this.interpDelay = Math.min(
-        RemotePlayer.MAX_INTERP_DELAY,
-        RemotePlayer.BASE_INTERP_DELAY + this.arrivalJitter * 2
-      );
-    }
-
-    // Push onto the snapshot buffer (interpolation samples between entries)
-    const snap = this.snapshotPool.pop() ?? { t: 0, x: 0, y: 0, z: 0, yaw: 0, pitch: 0, vx: 0, vy: 0, vz: 0 };
-    snap.t = this.lastServerUpdateMs;
-    snap.x = targetPosition.x; snap.y = targetPosition.y; snap.z = targetPosition.z;
-    snap.yaw = targetRotation.yaw; snap.pitch = targetRotation.pitch;
-    snap.vx = serverVelocity?.x ?? 0; snap.vy = serverVelocity?.y ?? 0; snap.vz = serverVelocity?.z ?? 0;
-    this.snapshots.push(snap);
-    const cutoff = this.lastServerUpdateMs - 1000;
-    while (this.snapshots.length > 2 && this.snapshots[0].t < cutoff) {
-      this.snapshotPool.push(this.snapshots.shift()!);
-    }
+    // Push onto the snapshot buffer — it also tracks arrival jitter and
+    // adapts the render delay (see remoteSnapshots.ts)
+    this.net.push(
+      this.lastServerUpdateMs,
+      targetPosition.x, targetPosition.y, targetPosition.z,
+      targetRotation.yaw, targetRotation.pitch,
+      serverVelocity?.x ?? 0, serverVelocity?.y ?? 0, serverVelocity?.z ?? 0,
+    );
 
     // Store server-reported velocity for extrapolation
     if (serverVelocity) {
@@ -282,7 +250,7 @@ export class RemotePlayer {
     // packets at that player's actual send rate. Fixed 300/450ms thresholds
     // flapped DR on/off when heartbeats arrived slower than their nominal
     // 250ms interval (dr threshold straddled the real cadence).
-    const drThreshold = Math.min(1500, Math.max(350, this.arrivalInterval * 2.5));
+    const drThreshold = Math.min(1500, Math.max(350, this.net.arrivalInterval * 2.5));
     const timeSinceUpdate = Date.now() - this._lastUpdateTime;
     if (timeSinceUpdate > drThreshold && !this._isSimulating) {
       this._isSimulating = true;
@@ -308,80 +276,12 @@ export class RemotePlayer {
     }
   }
 
-  // Sample the snapshot buffer at renderTime = now - INTERP_DELAY.
-  // Interpolates between the two bracketing snapshots (position + rotation);
-  // extrapolates from the newest snapshot's velocity if we run past the end.
+  // Sample the snapshot buffer at renderTime = now - adaptive interp delay
+  // (the math lives in remoteSnapshots.ts — Hermite tangents from the
+  // server-reported velocities, linear fallback on wild overshoot)
   private sampleSnapshots(outPos: THREE.Vector3, outYawPitch: { yaw: number; pitch: number }): void {
-    const renderTime = Date.now() - this.interpDelay;
-    const snaps = this.snapshots;
-
-    if (snaps.length === 0) {
-      outPos.copy(this.targetPosition);
-      outYawPitch.yaw = this.targetRotation.yaw;
-      outYawPitch.pitch = this.targetRotation.pitch;
-      return;
-    }
-
-    const newest = snaps[snaps.length - 1]!;
-    if (renderTime >= newest.t) {
-      // Past the buffer — extrapolate briefly from the newest snapshot
-      const ext = Math.min(0.25, (renderTime - newest.t) / 1000);
-      outPos.set(newest.x + newest.vx * ext, newest.y + newest.vy * ext, newest.z + newest.vz * ext);
-      outYawPitch.yaw = newest.yaw;
-      outYawPitch.pitch = newest.pitch;
-      return;
-    }
-
-    // Find the pair straddling renderTime
-    let i = snaps.length - 2;
-    while (i >= 0 && snaps[i]!.t > renderTime) i--;
-    if (i < 0) {
-      const s = snaps[0]!;
-      outPos.set(s.x, s.y, s.z);
-      outYawPitch.yaw = s.yaw;
-      outYawPitch.pitch = s.pitch;
-      return;
-    }
-
-    const s0 = snaps[i]!;
-    const s1 = snaps[i + 1]!;
-    const span = s1.t - s0.t;
-    const a = span > 0 ? (renderTime - s0.t) / span : 1;
-
-    // Cubic Hermite: use server-reported velocities as tangents → C1-continuous
-    // motion (direction changes curve smoothly instead of zig-zagging between
-    // linear segments). Guard: if the curve overshoots wildly vs the straight
-    // lerp (stale/bogus velocity), fall back to linear.
-    const spanSec = span / 1000;
-    const ddx = s1.x - s0.x, ddy = s1.y - s0.y, ddz = s1.z - s0.z;
-    const lx = s0.x + ddx * a, ly = s0.y + ddy * a, lz = s0.z + ddz * a;
-    let useHermite = false;
-    if (spanSec > 0 && spanSec < 0.5) {
-      const t2 = a * a, t3 = t2 * a;
-      const h00 = 2 * t3 - 3 * t2 + 1;
-      const h10 = t3 - 2 * t2 + a;
-      const h01 = -2 * t3 + 3 * t2;
-      const h11 = t3 - t2;
-      const hx = h00 * s0.x + h10 * s0.vx * spanSec + h01 * s1.x + h11 * s1.vx * spanSec;
-      const hy = h00 * s0.y + h10 * s0.vy * spanSec + h01 * s1.y + h11 * s1.vy * spanSec;
-      const hz = h00 * s0.z + h10 * s0.vz * spanSec + h01 * s1.z + h11 * s1.vz * spanSec;
-      const ox = hx - lx, oy = hy - ly, oz = hz - lz;
-      const dist = Math.sqrt(ddx * ddx + ddy * ddy + ddz * ddz);
-      // Overshoot tolerance: fraction of segment length (min 0.5m absolute)
-      if (ox * ox + oy * oy + oz * oz < (0.5 * dist + 0.5) * (0.5 * dist + 0.5)) {
-        outPos.set(hx, hy, hz);
-        useHermite = true;
-      }
-    }
-    if (!useHermite) {
-      outPos.set(lx, ly, lz);
-    }
-    // Yaw: lerp along shortest arc
-    let dy = s1.yaw - s0.yaw;
-    while (dy > Math.PI) dy -= 2 * Math.PI;
-    while (dy < -Math.PI) dy += 2 * Math.PI;
-    outYawPitch.yaw = s0.yaw + dy * a;
-    outYawPitch.pitch = s0.pitch + (s1.pitch - s0.pitch) * a;
+    this.net.sample(outPos, outYawPitch,
+      this.targetPosition, this.targetRotation.yaw, this.targetRotation.pitch);
   }
 
   // Interpolate between buffered server snapshots (skipped during
@@ -586,8 +486,7 @@ export class RemotePlayer {
     this.angularVelocity.set(0, 0, 0);
     this.isOnGround = true;
     this._isSimulating = false;
-    this.snapshotPool.push(...this.snapshots);
-    this.snapshots.length = 0;
+    this.net.clear();
     this.predictionTimer = 0;
     this.reconcileBlend = 0;
     this.lastServerPosition.copy(this.position);
@@ -629,8 +528,7 @@ export class RemotePlayer {
     this.simulatedVelocity.x += (dx / dist) * impulseMag * s;
     this.simulatedVelocity.y += (pull ? 0.3 : 0.5) * impulseMag;
     this.simulatedVelocity.z += (dz / dist) * impulseMag * s;
-    this.snapshotPool.push(...this.snapshots);
-    this.snapshots.length = 0;
+    this.net.clear();
     this._isSimulating = true;
     // Window: ping + one server tick + interp delay, clamped
     this.predictionTimer = Math.min(0.6, Math.max(0.15, (this.ping + 200) / 1000));
