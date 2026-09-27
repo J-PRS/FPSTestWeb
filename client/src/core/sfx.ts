@@ -146,7 +146,7 @@ function shootInto(g: GainNode, weaponType: number): void {
   // transient, all cut before their ring tails — verified punchy in the
   // spectrogram (sharp attack, decayed by ~0.4s, no sustained band).
   if (weaponType === WeaponType.Disc &&
-      layer(g, [['shot_cannon', 0.9, 0.6, 800, 0.4], ['hg_clang', 0.5, 1.5, undefined, 0.15], ['punch', 0.4, 1.2, undefined, 0.2]])) return;
+      layer(g, [['shot_cannon', 1.0, 0.5, 600, 0.6], ['thud_big', 0.9, 0.8], ['punch', 0.5, 1.1, 2000, 0.2], ['hg_clang', 0.35, 1.8, undefined, 0.12]])) return;
   const s = SHOT_SAMPLES[weaponType];
   if (s && sample(s[0], g, s[1])) return;
   switch (weaponType) {
