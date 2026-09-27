@@ -15,6 +15,7 @@ import { RateLimiter } from './RateLimiter.ts';
 import { MessageHandler } from './MessageHandler.ts';
 import { BallSim } from './BallSim.ts';
 import type { Heightfield } from '../../shared/heightfield.ts';
+import { type MapSpec, resolveMapSpec } from '../../shared/mapSpec.ts';
 import type { ServerWebSocket } from 'bun';
 import type { WebSocketData } from './types.ts';
 
@@ -36,9 +37,12 @@ export class Room {
   readonly lastSentPositions = new Map<string, { x: number; y: number; z: number; vx: number; vy: number; vz: number; yaw: number; pitch: number; hp: number; dead: boolean; ski: number; t: number }>();
   tickSeq = 0;
 
-  constructor(name: string, field: Heightfield | null, mode = '') {
+  readonly spec: MapSpec;
+
+  constructor(name: string, field: Heightfield | null, mode = '', spec?: MapSpec) {
     this.name = name;
-    this.mode = mode;
+    this.spec = spec ?? resolveMapSpec(null);
+    this.mode = mode || this.spec.mode || '';
     this.messages = new MessageHandler(
       this.players,
       this.rateLimiter,
@@ -51,6 +55,7 @@ export class Room {
       (msg) => this.connections.broadcast(msg),
       (data) => this.connections.broadcastBinary(data),
     );
+    this.ballSim.population = this.spec.balls;
     this.messages.setBallSim(this.ballSim);
     if (field) this.ballSim.attachField(field);
   }

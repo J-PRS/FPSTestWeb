@@ -9,6 +9,8 @@ import { fileURLToPath } from 'node:url';
 import type { Heightfield } from '../../shared/heightfield.ts';
 import { isWireFrame, decodePosition, encodeTickPlayer, encodeTickFrame } from '../../shared/wire.ts';
 import { createHmac, randomBytes } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { type MapSpec, resolveMapSpec } from '../../shared/mapSpec.ts';
 
 export class GameServer {
   // One match's state per room — players land in 'default' unless the join
@@ -79,11 +81,28 @@ export class GameServer {
   private roomFor(name: string, mode = ''): Room {
     let room = this.rooms.get(name);
     if (!room) {
-      room = new Room(name, this.field, mode);
+      const spec = this.loadMapSpec(name);
+      room = new Room(name, this.field, mode, spec);
       this.rooms.set(name, room);
-      logger.info('Room created', { room: name, mode });
+      logger.info('Room created', { room: name, mode: room.mode });
     }
     return room;
+  }
+
+  /** maps/<room>.json at repo root — a missing or malformed file just
+   *  means "default match rules", not an error. */
+  private loadMapSpec(name: string): MapSpec | undefined {
+    try {
+      const path = `${import.meta.dir}/../../maps/${name}.json`;
+      // readFileSync keeps roomFor synchronous — map files are tiny and
+      // loaded once per room lifetime.
+      const raw = readFileSync(path, 'utf8');
+      const spec = resolveMapSpec(JSON.parse(raw));
+      logger.info('Map spec loaded', { room: name, path });
+      return spec;
+    } catch {
+      return undefined;
+    }
   }
 
   /** Find which room a player lives in — used by disconnect/teardown paths

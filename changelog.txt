@@ -1883,3 +1883,4 @@ Empty named rooms self-dispose (ballSim.stop + map entry); 16-bot spot check: ti
 Lag compensation: 400ms position history per player; hitscan + AOE validate against target rewound by shooter ping (clamped ≤250ms) — shoot the ghost you saw
 Lobby seam: GET /rooms lists live matches (name, players, cap); pvptest bots take --room=NAME; 35-player 2-room load test clean (tick lag flat, 0 rejected)
 Rooms carry a match mode: first joiner's ?mode= defines it, /rooms lists it, gameState echoes room+mode so joining clients announce it in chat
+Map spec format: maps/<room>.json defines per-match mode + ball population (resolveMapSpec clamps/defaults); duel.json + swarm.json ship as examples; spec wiring is per-Room
