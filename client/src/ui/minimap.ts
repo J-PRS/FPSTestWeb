@@ -58,7 +58,7 @@ export class Minimap {
          background: rgba(8,12,18,0.55); pointer-events: none;`;
   }
 
-  update(targets: Targetable[], nuggets: Nugget[], pos: THREE.Vector3, yaw: number): void {
+  update(targets: Targetable[], nuggets: Nugget[], pos: THREE.Vector3, yaw: number, birds?: THREE.Vector3[]): void {
     const c = this.ctx;
     const mid = SIZE / 2;
     c.clearRect(0, 0, SIZE, SIZE);
@@ -77,13 +77,30 @@ export class Minimap {
     }
     for (const e of targets) {
       if (e.dead) continue;
-      if (this.cross && e instanceof Ball) continue;
+      // Scoreless props (tumbleweeds, buzzards) aren't threats — don't ping
+      // radar. Buzzards still get their own debug rings below.
+      if (e.scoreless) continue;
+      // Crosshair mode is threats-only — but an enraged ball IS a threat
+      if (this.cross && e instanceof Ball && !e.isEnraged) continue;
       const [sx, sy] = this.toMap(e.pos.x - pos.x, e.pos.z - pos.z, sin, cos, k, mid);
-      // Balls don't attack — cyan hazard, not red threat
-      c.fillStyle = e instanceof Ball ? 'rgba(80,200,255,0.9)' : 'rgba(255,70,60,0.95)';
+      // Enraged balls are actively hunting you — promote cyan hazard to
+      // red threat so an incoming dash pings radar like a real enemy.
+      c.fillStyle = e instanceof Ball && !e.isEnraged ? 'rgba(80,200,255,0.9)' : 'rgba(255,70,60,0.95)';
       c.beginPath();
       c.arc(sx, sy, 2.5, 0, Math.PI * 2);
       c.fill();
+    }
+
+    // Debug: ambient buzzards — white hollow rings, unmistakably not enemies
+    if (birds) {
+      c.strokeStyle = 'rgba(240,240,255,0.8)';
+      c.lineWidth = 1;
+      for (const b of birds) {
+        const [sx, sy] = this.toMap(b.x - pos.x, b.z - pos.z, sin, cos, k, mid);
+        c.beginPath();
+        c.arc(sx, sy, 2.5, 0, Math.PI * 2);
+        c.stroke();
+      }
     }
 
     // Center wedge = the player facing up (crosshair mode: the reticle

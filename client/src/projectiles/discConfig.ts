@@ -2,28 +2,29 @@ import * as THREE from 'three';
 
 import {
   EXPLOSION_FALLOFF_MULTIPLIER_DISC, EXPLOSION_COLLISION_MULTIPLIER,
-  PULL_MULTIPLIER,
+  KNOCKBACK_MULTIPLIER, PULL_MULTIPLIER,
 } from '../core/config.js';
-import { WEAPONS, AOE_VFX_SCALE } from '../../../shared/weapons.js';
+import { WEAPONS, AOE_VFX_SCALE, WeaponType } from '../../../shared/weapons.js';
 
 import type { ProjectileConfig } from './types.js';
 
+// Launcher disc (slot): normal knockback blast. Belt disc (C): implosion.
 export const DISC_CONFIG: ProjectileConfig = {
   name: 'disc',
-  displayName: 'Disc',
+  displayName: 'Disc Launcher',
   weaponType: 1,
   speed: WEAPONS[1].speed,
   gravity: WEAPONS[1].gravity,
   explosionRadius: WEAPONS[1].aoeRadius * AOE_VFX_SCALE,
   force: WEAPONS[1].knockbackForce,
-  forceMode: 'pull',
+  forceMode: 'push',
   bodyRadius: WEAPONS[1].bodyRadius,
   hitMin: WEAPONS[1].hitMin,
   hitMax: WEAPONS[1].hitMax,
   hitGrow: WEAPONS[1].hitGrow,
   falloffMultiplier: EXPLOSION_FALLOFF_MULTIPLIER_DISC,
   collisionMultiplier: EXPLOSION_COLLISION_MULTIPLIER,
-  forceMultiplier: PULL_MULTIPLIER,
+  forceMultiplier: KNOCKBACK_MULTIPLIER,
   aoeDamage: WEAPONS[1].aoeDamage,
   aoeRadius: WEAPONS[1].aoeRadius,
   damageColor: '#00ffff',
@@ -62,4 +63,17 @@ export const DISC_CONFIG: ProjectileConfig = {
   ribbonWidth: 0.6,
   ribbonLife: 0.35,
   ribbonColor: 0x0066ff,
+};
+
+// Belt disc (C) — the implosion variant. Same flight/damage, opposite force:
+// sucks targets toward the blast instead of scattering them.
+export const BELT_DISC_CONFIG: ProjectileConfig = {
+  ...DISC_CONFIG,
+  name: 'beltDisc',
+  weaponType: WeaponType.DiscPull,
+  force: WEAPONS[WeaponType.DiscPull].knockbackForce,
+  forceMode: 'pull',
+  forceMultiplier: PULL_MULTIPLIER,
+  aoeDamage: WEAPONS[WeaponType.DiscPull].aoeDamage,
+  aoeRadius: WEAPONS[WeaponType.DiscPull].aoeRadius,
 };

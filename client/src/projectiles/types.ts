@@ -38,9 +38,9 @@ export interface ProjectileConfig {
   glowColor: number;
   glowOpacity: number;
   glowScale?: number; // override glow mesh size; defaults to hitRadius if not set
-  meshRampIn: boolean;
-  meshRampInDuration: number;
-  meshStartScale: number;
+  meshRampIn?: boolean; // default ON — projectiles spawn small and grow; false = pop in at full size
+  meshRampInDuration?: number; // default 0.2s, capped at 40% of maxLifetime
+  meshStartScale?: number; // default 0.2
   terrainOffset: number;
   needsServerTracking: boolean;
   maxLifetime?: number; // 0 or undefined = no auto-explode; >0 auto-explodes after age reaches this (seconds)
