@@ -1910,3 +1910,4 @@ server-owned nuggets: team-mode creature kills drop a gem pickup (pickupSpawn/pi
 match reset now clears leftover gems (pickupGone broadcast); bank claim path rate-limited to 2/s (was default 120/s — claim spam could farm a match in seconds)
 teamUpdate wire message + bot-only team rebalance: after a leaver leaves sides skewed >=2, a bot on the big side switches jerseys (humans never move); roster keeps team truth client-side
 lobby: shows 'in: <room>', marks + disables your current row, and join() early-returns on the current room (no pointless reload)
+botFill map spec: rooms hold N total bodies — bots spawn on departures and retire on arrivals (dead bots retire first); also lobby 'in: room' marker landed earlier this leg

@@ -29,12 +29,15 @@ export class ServerBots {
     this.field = field;
   }
 
+  private nextIdx = 1;
+  private maintainAt = 0;
+
   /** Spawn n bots — each is a real roster entry (playerJoined broadcasts)
    *  minus a socket. Call once at room creation, before human joins, so
    *  team balancing lands humans on the emptier side. */
   populate(n: number): void {
     for (let i = 0; i < n; i++) {
-      const id = `BOT-${this.room.name}${i + 1}`;
+      const id = `BOT-${this.room.name}${this.nextIdx++}`;
       const p = this.room.players.addPlayer(id);
       p.isBot = true;
       p.lastSeen = Date.now();
@@ -119,7 +122,42 @@ export class ServerBots {
     if (brain && shooter) brain.takeHit(shooter.position);
   }
 
+  /** botFill floor — once a second, top up or retire bots so the room
+   *  holds `spec.botFill` total bodies. Retirees prefer a dead bot
+   *  (popping a live one mid-fight reads as a vanish). */
+  private maintain(now: number): void {
+    const fill = this.room.spec.botFill;
+    if (!fill || now < this.maintainAt) return;
+    this.maintainAt = now + 1000;
+    const humans = this.room.playerCount() - this.brains.size;
+    const want = Math.max(0, Math.min(16, fill - humans));
+    if (this.brains.size < want) {
+      this.populate(want - this.brains.size);
+      return;
+    }
+    let excess = this.brains.size - want;
+    if (excess <= 0) return;
+    for (const id of [...this.brains.keys()]) {
+      if (excess <= 0) break;
+      const p = this.room.players.getPlayer(id);
+      if (p && !p.isDead) continue; // keep live bots, kill the corpse queue first
+      this.retire(id);
+      excess--;
+    }
+    for (const id of [...this.brains.keys()]) {
+      if (excess <= 0) break;
+      this.retire(id);
+      excess--;
+    }
+  }
+
+  private retire(id: string): void {
+    this.brains.delete(id);
+    this.room.removePlayerCompletely(id, 'botFill', (m, o) => logger.info(m, o));
+  }
+
   tick(dt: number): void {
+    this.maintain(Date.now());
     if (this.brains.size === 0) return;
     const now = Date.now();
     for (const [id, brain] of this.brains) {
