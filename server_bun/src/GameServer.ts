@@ -166,6 +166,15 @@ export class GameServer {
     logger.debug('Backpressure drain', { playerId: ws.data.playerId });
   }
 
+  /** Lobby listing — live matches a client can join by name. */
+  listRooms() {
+    return [...this.rooms.values()].map(r => ({
+      name: r.name,
+      players: r.playerCount(),
+      maxPlayers: CONFIG.maxPlayers,
+    }));
+  }
+
   private totalPlayers(): number {
     let n = 0;
     for (const room of this.rooms.values()) n += room.playerCount();

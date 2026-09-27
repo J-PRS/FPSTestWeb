@@ -44,24 +44,27 @@ surface. Detailed research lives in `_reports/`; this file is the current truth.
 - Persistent identity: playerId claims are HMAC-signed (FPS_SECRET env;
   random per boot if unset). localStorage-backed on the client — names
   survive restarts and can't be stolen by id knowledge alone.
-
+- Lag compensation: per-player 400ms position history; hitscan + AOE
+  validated against target rewound by clamped shooter ping (≤250ms).
 - Load spot-check: 19 players (16 orbit bots + devs) — tick lag flat at
   ~11ms avg / 29ms max, no degradation vs 3 players. Empty named rooms
   now dispose themselves (ballSim.stop + map delete; 'default' immortal).
+- 35-player multi-room load test: 19 in default + 16 in loadb, ~25s
+  sustained — tick lag avg 11.2ms (unchanged vs 3 players; it's this
+  box's baseline setInterval drift, not load), max 36ms, 0 rejected.
+  Second BallSim spun up cleanly per room. `GET /rooms` lobby listing
+  + bot `--room=` flag for split-fleet tests.
 
 ### Next (audit priority order)
-3. **Bigger load test** — 19 players held fine; push to 32+ bots with a
-   room to prove multi-match cost, watch tickLagMs + bandwidth rollup.
-4. ~~Lag compensation~~ — landed: per-player 400ms position history,
-   hitscan + AOE validated against target rewound by clamped shooter ping
-   (≤250ms). Verified by code review; live-verify needs a real-ping match.
-5. **Movement re-sim** — shared/stepPlayer on server during validation,
-   cheap sanity (not full rollback yet).
-6. **Lobby/matchmaking UI** — room list, join codes, team assignment by
-   server (server owns teams/score for MP modes — client currently assigns).
-7. **Map format** — declarative match definition: terrain ref, bases,
+1. **Lobby/matchmaking UI** — server /rooms exists; client needs a room
+   picker + server-owned team/score for MP modes (client assigns today).
+2. **Movement re-sim** — shared/stepPlayer on server during validation.
+   BLOCKED on JP's in-flight Player.ts edits — extract the integrator to
+   shared/movement.ts when that file settles.
+3. **Map format** — declarative match definition: terrain ref, bases,
    objectives, spawn anchors, species mix. Kills "the map is the binary".
-8. **Ball sim as Room resident** — done; extend to per-match species/modes.
+4. **Per-match species/modes** — rooms already own a BallSim; extend to
+   per-match mode + species mix (the map-format hook).
 
 ### Later / research needed
 - Client prediction + reconciliation for self (currently trust + correct).
