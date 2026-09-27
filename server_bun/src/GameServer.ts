@@ -391,6 +391,14 @@ export class GameServer {
       this.ops.lastTickAt = now0;
 
       for (const room of this.rooms.values()) {
+        // Empty named rooms are teardown: the sim timer + entry would leak
+        // per room name otherwise. 'default' is immortal.
+        if (room.empty && room.name !== 'default') {
+          room.dispose();
+          this.rooms.delete(room.name);
+          logger.info('Room disposed', { room: room.name });
+          continue;
+        }
         const players = room.players.getAllPlayers();
         if (players.size === 0) continue;
         this.tickRoom(room, players, now0);
