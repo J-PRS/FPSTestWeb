@@ -88,6 +88,14 @@ const server = Bun.serve<WebSocketData>({
       });
     }
 
+    // Ops metrics: GET /metrics — uptime, players, balls, message counts,
+    // tick-lag stats (setInterval drift behind wall time).
+    if (url.pathname === '/metrics') {
+      return corsResponse(JSON.stringify(gameServer.getMetrics()), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
     // Demo upload: POST /demos/upload
     if (url.pathname === '/demos/upload' && req.method === 'POST') {
       try {
@@ -129,6 +137,7 @@ const server = Bun.serve<WebSocketData>({
 
     // Client log shipping: POST /client-log — appended to logs/client.log.
     // Bodies are plain text lines (WARN/ERROR only by client convention).
+    // Lines also fan out by level: client_warning.log / client_error.log.
     const LOGS_DIR = join(import.meta.dir, '..', '..', 'logs');
     if (url.pathname === '/client-log' && req.method === 'POST') {
       try {
@@ -138,6 +147,15 @@ const server = Bun.serve<WebSocketData>({
         }
         mkdirSync(LOGS_DIR, { recursive: true });
         appendFileSync(join(LOGS_DIR, 'client.log'), body);
+        const warnLines: string[] = [];
+        const errLines: string[] = [];
+        for (const line of body.split('\n')) {
+          if (!line) continue;
+          if (line.includes('[ERROR]')) errLines.push(line);
+          else if (line.includes('[WARN]')) warnLines.push(line);
+        }
+        if (warnLines.length) appendFileSync(join(LOGS_DIR, 'client_warning.log'), warnLines.join('\n') + '\n');
+        if (errLines.length) appendFileSync(join(LOGS_DIR, 'client_error.log'), errLines.join('\n') + '\n');
         return corsResponse('ok');
       } catch (e) {
         logger.warn('Client log append failed', { error: (e as Error).message });

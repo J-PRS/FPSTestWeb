@@ -1,7 +1,24 @@
+/** Env override for numeric/string scalars — keeps every tunable reachable
+ *  from process env (docker -e, PM2, systemd) without code edits. */
+function envNum(name: string, fallback: number): number {
+  const v = process.env[name];
+  if (v === undefined || v === '') return fallback;
+  const n = Number(v);
+  if (!Number.isFinite(n)) {
+    console.warn(`[config] ${name}=${v} is not a number — using ${fallback}`);
+    return fallback;
+  }
+  return n;
+}
+function envStr(name: string, fallback: string): string {
+  const v = process.env[name];
+  return v === undefined || v === '' ? fallback : v;
+}
+
 export const CONFIG = {
-  port: 8000,
-  tickRate: 30,
-  maxPlayers: 32,
+  port: envNum('FPS_PORT', 8000),
+  tickRate: envNum('FPS_TICK_HZ', 30),
+  maxPlayers: envNum('FPS_MAX_PLAYERS', 32),
 
   playerMaxHealth: 100,
   respawnDelayMs: 3000,
@@ -19,13 +36,19 @@ export const CONFIG = {
     { x: 80, y: 60, z: -80 },
   ] as const,
 
-  idleTimeoutSec: 120,
-  maxPayloadLength: 1024 * 1024,
-  hashBroadcastIntervalMs: 2000,
+  idleTimeoutSec: envNum('FPS_IDLE_TIMEOUT_S', 120),
+  maxPayloadLength: envNum('FPS_MAX_PAYLOAD', 1024 * 1024),
+  hashBroadcastIntervalMs: envNum('FPS_HASH_INTERVAL_MS', 2000),
+  reconnectGraceMs: envNum('FPS_RECONNECT_GRACE_MS', 10000),
+  idleKickMs: envNum('FPS_IDLE_KICK_MS', 60_000),
 
   // Minimum projectile airtime (seconds) for a demo to be listed as a "cool shot".
   // Set to 0.2s during testing phase so clips are easy to trigger. Raise to ~2.0s for production.
-  minDemoLifetime: 0.2,
+  minDemoLifetime: envNum('FPS_MIN_DEMO_LIFETIME', 0.2),
+
+  // Server-owned creature sim — binary heightmap (8-byte w/h header + raw R
+  // channel) matching the client's test_vertex.png source.
+  heightmapPath: envStr('FPS_HEIGHTMAP', ''),
 
   rateLimits: {
     position: { maxCount: 30, windowMs: 1000 },
