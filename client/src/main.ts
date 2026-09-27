@@ -12,7 +12,7 @@ import { createRenderer } from './core/renderer.js';
 import * as sfx from './core/sfx.js';
 
 import { DemoManager } from './demo/index.js';
-import { InputFlags, JetpackFlags } from './demo/types.js';
+import { playerProviders } from './demo/playerProviders.js';
 
 import { Player } from './entities/Player.js';
 import { ViewModel } from './entities/ViewModel.js';
@@ -26,6 +26,7 @@ import { AmbientBirds } from './effects/birds.js';
 
 import { resolveServerEndpoints } from './networking/endpoints.js';
 import { NetworkManager } from './networking/NetworkManager.js';
+import { connectServer } from './networking/connectServer.js';
 
 import { CoolShotsPanel } from './ui/CoolShotsPanel.js';
 import { FragMessages } from './ui/FragMessages.js';
@@ -376,39 +377,8 @@ async function init(): Promise<void> {
   const httpUrl = (await serverEndpoints).httpUrl;
   Logger.initShipping(httpUrl); // WARN+ lines stream to logs/client.log
   demoManager.setServerUrl(httpUrl);
-  demoManager.setDataProviders(
-    {
-      get posX() { return player.pos.x; },
-      get posY() { return player.pos.y; },
-      get posZ() { return player.pos.z; },
-      get velX() { return player.vel.x; },
-      get velY() { return player.vel.y; },
-      get velZ() { return player.vel.z; },
-      get yaw() { return player.yaw; },
-      get pitch() { return player.pitch; },
-    },
-    {
-      get inputFlags() {
-        const input = player.getInputState();
-        let flags = 0;
-        if (input.forward > 0) flags |= InputFlags.Forward;
-        if (input.forward < 0) flags |= InputFlags.Backward;
-        if (input.right < 0) flags |= InputFlags.Left;
-        if (input.right > 0) flags |= InputFlags.Right;
-        if (input.jumpHeld) flags |= InputFlags.Jump;
-        if (input.skiHeld) flags |= InputFlags.Ski;
-        if (input.firePressed) flags |= InputFlags.Fire;
-        if (input.discHeld) flags |= InputFlags.Disc;
-        return flags;
-      },
-      get mouseDeltaX() { return 0; },
-      get mouseDeltaY() { return 0; },
-      get jetpackFlags() {
-        return player.getInputState().jetHeld ? JetpackFlags.Active : JetpackFlags.None;
-      },
-      get jetpackFuel() { return player.energy; },
-    }
-  );
+  const { playerData, inputData } = playerProviders(player);
+  demoManager.setDataProviders(playerData, inputData);
 
   // Wire cool shots panel
   new CoolShotsPanel({
@@ -489,51 +459,7 @@ async function init(): Promise<void> {
   // ruleset — connecting would hand ball ownership to the server sim,
   // which enrages and spawns the full roster behind your back.
   const serverUrl = (await serverEndpoints).wsUrl;
-  // ?p2p=host:CODE / ?p2p=join:CODE — the server only relays the WebRTC
-  // handshake (/rtc?room=CODE), then the peers talk directly over a
-  // DataChannel. The HOST also embeds the real authority modules
-  // (PlayerManager/CombatHandler — see networking/p2p/host.ts), so all
-  // server rules apply; the host browser is just trusted by definition.
-  const p2p = urlParams.p2p;
-  if (!classicMode && p2p) {
-    const colon = p2p.indexOf(':');
-    const role = p2p.slice(0, colon);
-    const room = p2p.slice(colon + 1) || 'duel';
-    profiler.markTime('networkConnectStart');
-    try {
-      const { connectP2P } = await import('./networking/p2p/signalling.js');
-      const { P2PHost } = await import('./networking/p2p/host.js');
-      const { LoopbackTransport, DataChannelTransport } = await import('./networking/p2p/transport.js');
-      const sig = new URL(serverUrl);
-      sig.pathname = '/rtc';
-      sig.search = `?room=${encodeURIComponent(room)}`;
-      if (role === 'host') {
-        const host = new P2PHost();
-        const dc = connectP2P({ signalUrl: sig.toString() }); // resolves when guest's channel opens
-        // Host plays immediately over loopback — no need to wait for a guest
-        await networkManager.connect(serverUrl, (cfg) => new LoopbackTransport(host, cfg));
-        dc.then((chan) => host.attachDataChannel(chan)).catch((e) => logger.warn('P2P guest handshake failed', e));
-        logger.info(`P2P hosting room "${room}" — share ?p2p=join:${room}`);
-        fragMessages?.show(`P2P room "${room}" — friend joins with ?p2p=join:${room}`);
-      } else {
-        const dc = await connectP2P({ signalUrl: sig.toString() });
-        await networkManager.connect(serverUrl, (cfg) => new DataChannelTransport(dc, cfg));
-        logger.info(`P2P joined room "${room}"`);
-      }
-      profiler.markTime('networkConnected');
-    } catch (error) {
-      logger.error('P2P connect failed', error);
-      fragMessages?.show('P2P connect failed — playing offline');
-    }
-  } else if (!classicMode) {
-  profiler.markTime('networkConnectStart');
-  networkManager.connect(serverUrl).then(() => {
-    profiler.markTime('networkConnected');
-    logger.info(`Connected to server at ${serverUrl}`);
-  }).catch((error) => {
-    logger.error('Failed to connect to server', error);
-  });
-  }
+  await connectServer({ serverUrl, classicMode, networkManager, logger, fragMessages, profiler });
 
   // Initial balls
   for (let i = 0; i < 8; i++) entities.spawnBall();
