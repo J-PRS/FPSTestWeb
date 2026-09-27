@@ -5,6 +5,7 @@ import { GRAVITY, BALL_MAX_DIST, BALL_TELE_MIN, BALL_TELE_MAX, BALL_TELE_HEIGHT,
 
 import { Terrain } from '../world/terrain.js';
 import { RibbonTrail } from '../projectiles/RibbonTrail.js';
+import { BlobShadow } from '../effects/blobShadow.js';
 import { ChildLogger } from '../core/Logger.js';
 
 const logger = new ChildLogger('Ball');
@@ -116,7 +117,7 @@ export class Ball {
 
   // True once the ball and its trail are fully cleaned up (safe to remove)
   get disposed(): boolean { return this._disposed; }
-  private shadowBlob: THREE.Mesh | null = null;
+  private shadow: BlobShadow;
 
   // Callbacks for demo keyframe recording
   onBounce?: (pos: THREE.Vector3, vel: THREE.Vector3) => void;
@@ -180,38 +181,8 @@ export class Ball {
     this.mesh.receiveShadow = true;
     scene.add(this.mesh);
 
-    // Create simple shadow blob for ball
-    const shadowGeo = new THREE.CircleGeometry(this.radius, 32);
-    const shadowMat = new THREE.ShaderMaterial({
-      uniforms: {
-        color: { value: new THREE.Color(0x000000) },
-        opacity: { value: 0.3 }
-      },
-      vertexShader: `
-        varying vec2 vUv;
-        void main() {
-          vUv = uv;
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-        }
-      `,
-      fragmentShader: `
-        uniform vec3 color;
-        uniform float opacity;
-        varying vec2 vUv;
-        void main() {
-          float dist = distance(vUv, vec2(0.5));
-          float alpha = smoothstep(0.5, 0.2, dist) * opacity;
-          gl_FragColor = vec4(color, alpha);
-        }
-      `,
-      transparent: true,
-      depthWrite: false,
-      depthTest: false
-    });
-    this.shadowBlob = new THREE.Mesh(shadowGeo, shadowMat);
-    this.shadowBlob.rotation.x = -Math.PI / 2;
-    this.shadowBlob.renderOrder = 999;
-    scene.add(this.shadowBlob);
+    // Shared blob shadow — depth-tested so ridges occlude it
+    this.shadow = new BlobShadow(scene, this.radius, 0.3);
   }
 
   update(dt: number, terrain: Terrain, playerPos: THREE.Vector3): void {
@@ -298,11 +269,7 @@ export class Ball {
       this.scene.remove(this.mesh);
       this.mesh.geometry.dispose();
       this.mat.dispose();
-      if (this.shadowBlob) {
-        this.scene.remove(this.shadowBlob);
-        (this.shadowBlob.material as THREE.ShaderMaterial).dispose();
-        this.shadowBlob = null;
-      }
+      this.shadow.dispose();
       this.meshRemoved = true;
     }
     this.fadeTrailDots(dt);
@@ -462,15 +429,7 @@ export class Ball {
   }
 
   private updateShadowBlob(terrain: Terrain): void {
-    if (!this.shadowBlob) return;
-    const groundY = terrain.getHeight(this.pos.x, this.pos.z);
-    this.shadowBlob.position.set(this.pos.x, groundY + 0.05, this.pos.z);
-    // Fade shadow when in air
-    const airHeight = this.pos.y - groundY;
-    const opacity = airHeight > 3.0
-      ? Math.max(0, 0.3 * (1 - (airHeight - 3.0) / 7.0))
-      : 0.3;
-    (this.shadowBlob.material as THREE.ShaderMaterial).uniforms.opacity.value = opacity;
+    this.shadow.update(this.pos, terrain);
   }
 
   private emitTrailDot(dt: number): void {
@@ -576,11 +535,7 @@ export class Ball {
     this.scene.remove(this.mesh);
     this.mesh.geometry.dispose();
     this.mat.dispose();
-    if (this.shadowBlob) {
-      this.scene.remove(this.shadowBlob);
-      (this.shadowBlob.material as THREE.ShaderMaterial).dispose();
-      this.shadowBlob = null;
-    }
+    this.shadow.dispose();
     for (const d of this.trailDots) {
       this.removeDot(d);
     }

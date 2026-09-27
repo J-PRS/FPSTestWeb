@@ -43,7 +43,8 @@ export class PlayerVisuals {
       `,
       transparent: true,
       depthWrite: false,
-      depthTest: false
+      // depthTest on — the blob behind a ridge must be occluded by it
+      depthTest: true
     });
     this.shadowBlob = new THREE.Mesh(shadowGeo, shadowMat);
     this.shadowBlob.rotation.x = -Math.PI / 2; // Lay flat on ground
@@ -75,9 +76,12 @@ export class PlayerVisuals {
     if (camera.position.y < groundAtCam + 0.25) {
       camera.position.y = groundAtCam + 0.25;
     }
-    const tx = pos.x + Math.cos(pitch) * Math.sin(yaw);
-    const ty = pos.y + Math.sin(pitch);
-    const tz = pos.z + Math.cos(pitch) * Math.cos(yaw);
+    // Look target from the CLAMPED camera position — if the eye got lifted
+    // above the terrain while pos sits lower (dead-observer noclip), aiming
+    // at pos would tilt the view pitch. yaw/pitch must mean mouse-look only.
+    const tx = camera.position.x + Math.cos(pitch) * Math.sin(yaw);
+    const ty = camera.position.y + Math.sin(pitch);
+    const tz = camera.position.z + Math.cos(pitch) * Math.cos(yaw);
     camera.lookAt(tx, ty, tz);
   }
 
@@ -109,6 +113,10 @@ export class PlayerVisuals {
     pos.addScaledVector(right, input.right * OBSERVER_SPEED * dt);
     if (input.jumpHeld) pos.y += OBSERVER_SPEED * dt;
     if (input.shiftDown) pos.y -= OBSERVER_SPEED * dt;
+    // Ghost can fly anywhere but not under the floor — otherwise the camera
+    // clamp fights the buried body every frame
+    const groundY = terrain.getHeight(pos.x, pos.z) + 0.25;
+    if (pos.y < groundY) pos.y = groundY;
     vel.set(0, 0, 0); // observer drift isn't body momentum
     this.updateCamera(camera, terrain, pos, yaw, pitch); // keeps the camera above the terrain surface
   }
