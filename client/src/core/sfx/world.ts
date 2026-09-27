@@ -1,0 +1,167 @@
+import * as THREE from 'three';
+import { audio } from '../audio.js';
+import type { LoopHandle } from '../audio.js';
+import { ctx, play, osc, sample, layer, noise } from './util.js';
+
+// ---------------------------------------------------------------------------
+// Continuous loops — persistent nodes driven per-frame from the game loop.
+
+
+
+let loops: { wind: LoopHandle | null; ski: LoopHandle | null; jet: LoopHandle | null } | null = null;
+let samplesSwapped = false;
+const _right = new THREE.Vector3();
+
+/** Structural player shape — avoids importing Player (cycle). */
+interface LoopPlayer {
+  vel: THREE.Vector3;
+  jetting: boolean;
+  skiing: boolean;
+}
+
+/**
+ * Per-frame audio state: listener pose + continuous loops (wind whistle by
+ * airspeed, ski scrape, jetpack hum). Called from the game loop; safe before
+ * the AudioContext unlocks.
+ */
+export function updateAudio(dt: number, player: LoopPlayer, camera: THREE.PerspectiveCamera): void {
+  if (!audio.ready) return;
+
+  // Listener: camera position + its right axis drives cheap stereo pan
+  _right.set(1, 0, 0).applyQuaternion(camera.quaternion);
+  audio.updateListener(camera.position, _right);
+
+  if (!loops) {
+    loops = {
+      // snow_amb is a real blizzard loop — the Tribes wind bed.
+      // jet_loop is the actual Legions jetpack sample.
+      wind: audio.sampleLoop('snow_amb') ?? audio.noiseLoop('bandpass', 900),
+      ski: audio.noiseLoop('bandpass', 2400),
+      jet: audio.sampleLoop('jet_loop') ?? audio.oscLoop('sawtooth', 90),
+    };
+  }
+
+  // Samples fetch async after unlock — swap the synth placeholders for the
+  // real recordings once they land (one shot at it, then stay put).
+  if (!samplesSwapped && (audio.sample('jet_loop') || audio.sample('snow_amb') || audio.sample('ski_scrape'))) {
+    samplesSwapped = true;
+    const jetBuf = audio.sample('jet_loop') && audio.sampleLoop('jet_loop');
+    const windBuf = audio.sample('snow_amb') && audio.sampleLoop('snow_amb');
+    // ski_scrape is a snow-footstep sample — looped slightly fast it reads
+    // as crunching granular scrape, better than filtered noise.
+    const skiBuf = audio.sample('ski_scrape') && audio.sampleLoop('ski_scrape', 1.3);
+    if (jetBuf) { loops.jet?.stop(); loops.jet = jetBuf; }
+    if (windBuf) { loops.wind?.stop(); loops.wind = windBuf; }
+    if (skiBuf) { loops.ski?.stop(); loops.ski = skiBuf; }
+  }
+
+  const speed = player.vel.length();
+  // Wind whistles with airspeed — THE Tribes sound. Never fully silent:
+  // a desert has a base breeze even standing still.
+  loops.wind?.set(Math.min(0.28, 0.04 + speed / 160 * 0.24));
+  // Ski scrape only when flagged — ground contact + speed gating lives
+  // on the Player side so this just follows the flag.
+  loops.ski?.set(player.skiing ? Math.min(0.2, speed / 90 * 0.2) : 0);
+  loops.jet?.set(player.jetting ? 0.55 : 0);
+}
+
+/** Enemy telegraph/death sounds at world position. */
+/** Warp beacon toss — quick electric chirp, rising. */
+export function warpThrow(): void {
+  const c = ctx();
+  if (!c) return;
+  const bus = audio.sfxBus; if (!bus) return;
+  const g = c.createGain(); g.connect(bus);
+  if (!play(g, 0.45)) return;
+  if (layer(g, [['shot_energy', 0.7, 1.5], ['hg_tick', 0.4, 2.2, undefined, 0.06]])) return;
+  osc('sawtooth', 700, 2600, 0.14, 0.35, g);
+}
+
+/** Warp teleport — the money sound: discharge crack + whoosh collapse.
+ *  Positional at the ARRIVAL point so distant warps read quiet. */
+export function warpJump(pos: THREE.Vector3): void {
+  const c = ctx();
+  if (!c) return;
+  const inNode = audio.worldInput(pos);
+  if (!inNode) return;
+  const g = c.createGain(); g.connect(inNode);
+  if (!play(g, 0.8)) return;
+  if (layer(g, [
+    ['sparks', 0.9, 1.15, undefined, 0.2],
+    ['shot_energy', 0.65, 0.8],
+    ['dash2', 0.55, 1.0, undefined, 0.12],
+    ['explosion_small', 0.4, 1.6, 3000, 0.15],
+  ])) return;
+  noise(0.2, 0.55, g, 'highpass', 2800, 5000);
+  osc('sawtooth', 280, 2400, 0.22, 0.45, g);
+  osc('sine', 140, 40, 0.3, 0.35, g); // sub-thump under the crack
+}
+
+export function enemyCue(pos: THREE.Vector3, kind: 'pounce' | 'skitter' | 'splat' | 'dart' | 'zap' | 'launch' | 'die' | 'hit' | 'rustle' | 'squawk'): void {
+  const c = ctx();
+  if (!c) return;
+  const inNode = audio.worldInput(pos);
+  if (!inNode) return;
+  const g = c.createGain(); g.connect(inNode);
+  if (!play(g, 0.4)) return;
+  switch (kind) {
+    case 'pounce': if (sample('monster1', g, 0.7)) break; osc('sawtooth', 400, 900, 0.15, 0.45, g); break;
+    case 'skitter': {
+      // Crawler landing: chitin tick-rattle + short hiss + soft leg thud —
+      // insectoid, not a monster bellow
+      if (sample('hg_tick', g, 0.55, 1.9)) {
+        sample('hg_tick', g, 0.45, 2.3, undefined, undefined, 0.035);
+        sample('hg_tick', g, 0.35, 1.6, undefined, undefined, 0.075);
+        sample('sparks', g, 0.3, 1.8, 4000, 0.15, 0.02);
+        sample('punch', g, 0.25, 1.4, 900, 0.05);
+        break;
+      }
+      for (let i = 0; i < 3; i++) noise(0.02, 0.3, g, 'highpass', 4000 - i * 800, 5000);
+      noise(0.1, 0.25, g, 'bandpass', 3500, 5000, 3);
+      break;
+    }
+    case 'splat': {
+      // Crawler death: wet pop + squelch, not an alien roar
+      if (sample('impact', g, 0.7, 0.8)) {
+        sample('punch', g, 0.5, 0.6, 600, 0.12, 0.02);
+        noise(0.14, 0.3, g, 'lowpass', 900, 150);
+        break;
+      }
+      noise(0.12, 0.5, g, 'lowpass', 1000, 150);
+      osc('sine', 160, 50, 0.1, 0.4, g);
+      break;
+    }
+    case 'dart':   if (sample('monster2', g, 0.6, 1.4)) break; noise(0.25, 0.55, g, 'bandpass', 1500, 3000, 2); break;
+    case 'zap':    if (sample('sparks', g, 0.8)) break; osc('sawtooth', 1800, 400, 0.12, 0.45, g); break;
+    case 'launch': if (sample('missile', g, 0.8)) break; noise(0.3, 0.6, g, 'bandpass', 300, 1200); break;
+    case 'die':    if (sample(`alien_die${1 + Math.floor(Math.random() * 3)}`, g, 0.8)) break;
+                   noise(0.3, 0.5, g, 'lowpass', 1500, 200); osc('square', 300, 60, 0.2, 0.35, g); break;
+    case 'rustle': {
+      // Brush breaking apart: 3-4 dry snap ticks + a short papery crunch —
+      // a tumbleweed should crackle, not squeal
+      if (sample('hg_tick', g, 0.5, 1.1)) {
+        sample('hg_tick', g, 0.4, 0.9, undefined, undefined, 0.03);
+        sample('hg_tick', g, 0.35, 1.4, undefined, undefined, 0.07);
+        sample('punch', g, 0.2, 2.0, 1400, 0.04);
+        noise(0.1, 0.22, g, 'highpass', 2600, 3500);
+        break;
+      }
+      for (let i = 0; i < 3; i++) noise(0.02, 0.28, g, 'highpass', 3200 - i * 600, 4500);
+      noise(0.12, 0.2, g, 'bandpass', 2400, 4000, 2);
+      break;
+    }
+    case 'squawk': {
+      // Bird death: short raucous screech (pitched monster bark) + wing
+      // thrash — dying wildlife, not a monster roar
+      if (sample('monster2', g, 0.4, 2.4, undefined, 0.25)) {
+        noise(0.16, 0.3, g, 'bandpass', 2800, 5000, 2);
+        sample('hg_tick', g, 0.3, 0.8, undefined, undefined, 0.1);
+        break;
+      }
+      osc('sawtooth', 1600, 500, 0.2, 0.5, g);
+      noise(0.18, 0.3, g, 'bandpass', 2500, 4500, 2);
+      break;
+    }
+    case 'hit':    if (sample('sparks', g, 0.5, 1.3)) break; noise(0.08, 0.35, g, 'highpass', 2000, 3000); break;
+  }
+}
