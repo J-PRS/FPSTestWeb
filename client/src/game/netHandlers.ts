@@ -76,6 +76,7 @@ export function wireNetworkHandlers(deps: NetDeps): void {
       : `${winner.toUpperCase()} WINS ${scores.alpha}:${scores.bravo} — new match starting`);
   networkManager.onMatchStart = (mode) =>
     chat.add(null, `match start — ${mode || 'arena'}`);
+  networkManager.onMatchNotice = (text) => chat.add(null, text);
 
   // Server-owned CTF flags — dumb renderers: pole+banner meshes that just
   // follow flagUpdate positions. All rules live in RoomFlags server-side.

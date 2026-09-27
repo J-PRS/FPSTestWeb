@@ -39,6 +39,23 @@ describe('match clock', () => {
     expect(endedWinner).toBe('draw');
   });
 
+  test('60s warning fires once per match', () => {
+    const room = new Room('w', null, '', resolveMapSpec({ mode: 'dm' }));
+    const priv = room as unknown as { matchEndsAt: number; matchWarned: boolean };
+    const t0 = Date.now();
+    room.players.addPlayer('h1');
+    room.checkMatchClock(t0);
+    const horn = priv.matchEndsAt;
+    room.checkMatchClock(horn - 59_000);
+    expect(priv.matchWarned).toBe(true);
+    priv.matchWarned = false; // re-arm check: only fires once
+    room.checkMatchClock(horn - 30_000);
+    expect(priv.matchWarned).toBe(true);
+    // match reset re-arms the warning for the next match
+    room.checkMatchClock(horn + 1);
+    expect(priv.matchWarned).toBe(false);
+  });
+
   test('ffa horn picks the top scorer; ties draw', () => {
     const room = new Room('c3', null, '', resolveMapSpec({ mode: 'dm' }));
     let endedWinner = '';

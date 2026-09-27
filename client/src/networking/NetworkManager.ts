@@ -51,6 +51,7 @@ export class NetworkManager {
   public onMatchStart: ((mode: string, scores: { alpha: number; bravo: number }) => void) | null = null;
   /** Server-owned flag state (CTF rooms) — pos/state/carrier per team. */
   public onFlagUpdate: ((flags: { team: 'alpha' | 'bravo'; pos: { x: number; y: number; z: number }; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]) => void) | null = null;
+  public onMatchNotice: ((text: string) => void) | null = null;
   public onPickupSpawn: ((id: number, pos: { x: number; y: number; z: number }) => void) | null = null;
   public onPickupGone: ((id: number, by: string | null) => void) | null = null;
   public onFfaScore: ((scores: Record<string, number>, winAt: number) => void) | null = null;
@@ -209,6 +210,7 @@ export class NetworkManager {
     pong: (data) => this.handlePong(data.timestamp),
     chat: (data) => this.onChat?.(data.playerId, data.text),
     flagUpdate: (data) => this.onFlagUpdate?.(data.flags),
+    matchNotice: (data) => this.onMatchNotice?.(data.text),
     pickupSpawn: (data) => this.onPickupSpawn?.(data.id, data.pos),
     pickupGone: (data) => this.onPickupGone?.(data.id, data.by ?? null),
     teamScore: (data) => this.onTeamScore?.(data.scores, data.winAt),
