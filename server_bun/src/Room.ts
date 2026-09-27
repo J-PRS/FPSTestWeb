@@ -19,7 +19,8 @@ import { type MapSpec, resolveMapSpec } from '../../shared/mapSpec.ts';
 import { MODES, pickTeam, makeScores, bank, winner, type ModeId, type ModeSpec, type TeamScores } from '../../shared/teams.ts';
 import { ServerBots } from './ServerBots.ts';
 import { RoomFlags } from './RoomFlags.ts';
-import type { PlayerState } from './types.ts';
+import { RoomPickups } from './RoomPickups.ts';
+import type { PlayerState, Vec3 } from './types.ts';
 import type { ServerWebSocket } from 'bun';
 import type { WebSocketData } from './types.ts';
 
@@ -49,6 +50,8 @@ export class Room {
   readonly bots: ServerBots;
   /** CTF flag authority — only when the mode has flags AND the map has bases. */
   readonly flags: RoomFlags | null = null;
+  /** Server-owned nuggets — team modes drop a gem on each creature kill. */
+  readonly pickups: RoomPickups | null = null;
   /** Server-side simulations ticked each room tick, in order. */
   readonly sims: { tick(dt: number): void }[] = [];
   /** Match-results journal hook — GameServer writes matches.jsonl and
@@ -76,6 +79,7 @@ export class Room {
         onKill: (pid, shooter) => this.onKill(pid, shooter),
         onHit: (pid, shooter) => this.bots.flinch(pid, shooter),
         flags: () => this.flags?.snapshot() ?? [],
+        pickups: () => this.pickups?.snapshot() ?? [],
       },
     );
     this.ballSim = new BallSim(
@@ -84,7 +88,7 @@ export class Room {
       (data) => this.connections.broadcastBinary(data),
     );
     this.ballSim.population = this.spec.balls;
-    this.ballSim.onKilled = (by) => this.creatureKill(by);
+    this.ballSim.onKilled = (by, pos) => this.creatureKill(by, pos);
     if (this.spec.ballMix) this.ballSim.ballMix = this.spec.ballMix;
     if (this.spec.spawns) this.players.spawnPoints = this.spec.spawns;
     this.messages.setBallSim(this.ballSim);
@@ -96,6 +100,13 @@ export class Room {
     const bases = this.spec.bases;
     if (this.modeSpec?.teams && bases?.alpha && bases?.bravo) {
       this.players.teamBases = { alpha: { ...bases.alpha }, bravo: { ...bases.bravo } };
+    }
+    if (this.modeSpec?.teams) {
+      this.pickups = new RoomPickups(this);
+      this.pickups.onCollect = (pid) => {
+        const team = this.players.getPlayer(pid)?.team;
+        if (team === 'alpha' || team === 'bravo') this.score(team);
+      };
     }
     if (this.modeSpec?.flags && bases?.alpha && bases?.bravo) {
       // Spec y is advisory — flags live on the ground, so touch checks
@@ -111,6 +122,7 @@ export class Room {
     // of editing the tick loop.
     this.sims.push({ tick: (dt) => this.bots.tick(dt) });
     if (this.flags) this.sims.push({ tick: (dt) => this.tickFlags(dt) });
+    if (this.pickups) this.sims.push({ tick: (dt) => this.pickups!.tick(dt) });
   }
 
   /** Flag tick — called from GameServer's room tick. Captures feed the
@@ -130,10 +142,15 @@ export class Room {
    *  a bot can legitimately win a deathmatch. */
   readonly ffaScores = new Map<string, number>();
 
-  /** Creature kill — ballDie attribution from BallSim. FFA-only for now;
-   *  team modes bank nuggets through the claim path instead. */
-  private creatureKill(by: string): void {
+  /** Creature kill — ballDie attribution from BallSim. FFA modes award
+   *  the killer directly; team modes drop a nugget at the corpse that
+   *  anyone must touch to bank (kill-confirmed style scoring). */
+  private creatureKill(by: string, pos: Vec3): void {
     const spec = this.modeSpec;
+    if (spec?.teams) {
+      this.pickups?.spawn(pos);
+      return;
+    }
     if (!spec?.ffa || spec.ptsCreatureKill <= 0 || !this.players.getPlayer(by)) return;
     this.awardFfa(by, spec.ptsCreatureKill);
   }

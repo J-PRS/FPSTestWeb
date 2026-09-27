@@ -20,7 +20,7 @@ import {
   makeSimBall, stepBall, applySimDamage,
 } from '../../shared/ballSim.ts';
 import type { PlayerManager } from './PlayerManager.ts';
-import type { ServerMessage } from './types.ts';
+import type { ServerMessage, Vec3 } from './types.ts';
 import { encodeBallSegment } from '../../shared/wire.ts';
 import { logger } from './logger.ts';
 import { type BallPopulation, DEFAULT_MAP_SPEC } from '../../shared/mapSpec.ts';
@@ -260,14 +260,16 @@ export class BallSim {
     }
   }
 
-  /** Kill notification for the room's scoreboard (DM creature points). */
-  onKilled: ((by: string) => void) | null = null;
+  /** Kill notification for the room's scoreboard (DM creature points,
+   *  team-mode nugget drops) — carries the corpse position. */
+  onKilled: ((by: string, pos: Vec3) => void) | null = null;
 
   private kill(b: SimBall, by?: string): void {
     b.dead = true;
     this.balls.delete(b.id);
-    this.broadcast({ type: 'ballDie', id: b.id, position: { x: b.x, y: b.y, z: b.z }, by: by ?? null });
-    if (by) this.onKilled?.(by);
+    const pos = { x: b.x, y: b.y, z: b.z };
+    this.broadcast({ type: 'ballDie', id: b.id, position: pos, by: by ?? null });
+    if (by) this.onKilled?.(by, pos);
     // Elite splitter: two child balls at the corpse
     if (b.variant === 3) {
       for (let i = 0; i < 2; i++) {

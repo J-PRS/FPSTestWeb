@@ -45,12 +45,14 @@ export class NetworkManager {
   public onKnockback: ((position: { x: number; y: number; z: number }, force: number, pull?: boolean) => void) | null = null;
   public onChat: ((playerId: string, text: string) => void) | null = null;
   public onPlayerUpdate: ((playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }, timestamp: number, velocity?: { x: number; y: number; z: number }) => void) | null = null;
-  public onGameState: ((players: GameStatePlayer[], localPlayerState: LocalPlayerState | undefined, roomInfo?: { room?: string; mode?: string; team?: 'alpha' | 'bravo'; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number> }) => void) | null = null;
+  public onGameState: ((players: GameStatePlayer[], localPlayerState: LocalPlayerState | undefined, roomInfo?: { room?: string; mode?: string; team?: 'alpha' | 'bravo'; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number>; pickups?: { id: number; pos: { x: number; y: number; z: number } }[] }) => void) | null = null;
   public onTeamScore: ((scores: { alpha: number; bravo: number }, winAt: number) => void) | null = null;
   public onMatchEnd: ((winner: 'alpha' | 'bravo', scores: { alpha: number; bravo: number }) => void) | null = null;
   public onMatchStart: ((mode: string, scores: { alpha: number; bravo: number }) => void) | null = null;
   /** Server-owned flag state (CTF rooms) — pos/state/carrier per team. */
   public onFlagUpdate: ((flags: { team: 'alpha' | 'bravo'; pos: { x: number; y: number; z: number }; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]) => void) | null = null;
+  public onPickupSpawn: ((id: number, pos: { x: number; y: number; z: number }) => void) | null = null;
+  public onPickupGone: ((id: number, by: string | null) => void) | null = null;
   public onFfaScore: ((scores: Record<string, number>, winAt: number) => void) | null = null;
   public onFfaMatchEnd: ((winner: string, scores: Record<string, number>) => void) | null = null;
   public onSnapshot: ((players: SnapshotPlayer[], timestamp: number) => void) | null = null;
@@ -206,6 +208,8 @@ export class NetworkManager {
     pong: (data) => this.handlePong(data.timestamp),
     chat: (data) => this.onChat?.(data.playerId, data.text),
     flagUpdate: (data) => this.onFlagUpdate?.(data.flags),
+    pickupSpawn: (data) => this.onPickupSpawn?.(data.id, data.pos),
+    pickupGone: (data) => this.onPickupGone?.(data.id, data.by ?? null),
     teamScore: (data) => this.onTeamScore?.(data.scores, data.winAt),
     ffaScore: (data) => this.onFfaScore?.(data.scores, data.winAt),
     ffaMatchEnd: (data) => this.onFfaMatchEnd?.(data.winner, data.scores),
@@ -242,7 +246,7 @@ export class NetworkManager {
         this.players.set(player.id, player);
       }
     }
-    this.onGameState?.(data.players || [], data.localPlayerState, { room: data.room, mode: data.mode, team: data.team, scores: data.scores, ffaScores: data.ffaScores });
+    this.onGameState?.(data.players || [], data.localPlayerState, { room: data.room, mode: data.mode, team: data.team, scores: data.scores, ffaScores: data.ffaScores, pickups: data.pickups });
   }
 
   private handleTickUpdate(data: { updates: TickUpdatePlayer[]; ackSeq?: number }): void {

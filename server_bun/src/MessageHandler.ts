@@ -28,6 +28,8 @@ export interface RoomInfo {
   ffaScores?: () => Record<string, number>;
   /** Flag snapshot supplier for gameState joins — RoomFlags.snapshot. */
   flags?: () => { team: 'alpha' | 'bravo'; pos: Vec3; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[];
+  /** Live pickups for gameState joins — RoomPickups.snapshot. */
+  pickups?: () => { id: number; pos: Vec3 }[];
 }
 
 export class MessageHandler {
@@ -122,6 +124,7 @@ export class MessageHandler {
       ffaScores: this.roomInfo.ffaScores?.(),
       map: this.roomInfo.bases ? { mode: this.roomInfo.mode || undefined, bases: this.roomInfo.bases } : undefined,
       flags: this.roomInfo.flags?.(),
+      pickups: this.roomInfo.pickups?.(),
       localPlayerState: {
         position: { ...player.position },
         rotation: { ...player.rotation },
