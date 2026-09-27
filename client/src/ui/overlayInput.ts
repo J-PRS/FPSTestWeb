@@ -4,6 +4,8 @@ import { SKILL_ORDER, Player, type SkillId } from '../entities/Player.js';
 import type { HUD } from './hud.js';
 import { SLOT_WEAPONS } from '../projectiles/index.js';
 import { audio } from '../core/audio.js';
+import { buildKeysMenu } from './keysMenu.js';
+import { isCapturing, codeFor, codeLabel } from '../core/keybinds.js';
 
 export interface OverlayInputDeps {
   overlay: HTMLElement;
@@ -29,6 +31,8 @@ export function wireOverlayInput(deps: OverlayInputDeps) {
   const slotDrops: Drop[] = [];
   let beltDrop: Drop | null = null;
   let skillDrop: Drop | null = null;
+  let beltLabel: HTMLElement | null = null;
+  let skillLabel: HTMLElement | null = null;
   let openDrop: HTMLElement | null = null;
 
   // Chip width is measured, not hardcoded — canvas-measure the widest
@@ -96,6 +100,9 @@ export function wireOverlayInput(deps: OverlayInputDeps) {
     openDrop = null;
   });
 
+  const keysPanel = document.getElementById('keys-panel');
+  if (keysPanel) buildKeysMenu(keysPanel);
+
   if (loadoutBar) {
     const weaponOpts = SLOT_WEAPONS.map((cfg, wid) => ({ v: String(wid), label: cfg.displayName }));
     for (let i = 0; i < Player.LOADOUT_SLOTS; i++) {
@@ -113,7 +120,9 @@ export function wireOverlayInput(deps: OverlayInputDeps) {
 
     const beltRow = document.createElement('div');
     beltRow.className = 'lo-row';
-    beltRow.innerHTML = `<span class="lo-label">BELT (C)</span>`;
+    beltLabel = document.createElement('span');
+    beltLabel.className = 'lo-label';
+    beltRow.appendChild(beltLabel);
     beltDrop = mkDrop(
       [{ v: 'disc', label: 'Disc' }, { v: 'grenade', label: 'Grenade' }],
       (v) => deps.lazyPlayer().setBeltItem(v as 'disc' | 'grenade'),
@@ -123,7 +132,9 @@ export function wireOverlayInput(deps: OverlayInputDeps) {
 
     const skillRow = document.createElement('div');
     skillRow.className = 'lo-row';
-    skillRow.innerHTML = `<span class="lo-label">SKILL (Q)</span>`;
+    skillLabel = document.createElement('span');
+    skillLabel.className = 'lo-label';
+    skillRow.appendChild(skillLabel);
     skillDrop = mkDrop(
       SKILL_ORDER.map((s) => ({ v: s, label: s[0].toUpperCase() + s.slice(1) })),
       (v) => deps.lazyPlayer().setSkill(v as SkillId),
@@ -137,6 +148,8 @@ export function wireOverlayInput(deps: OverlayInputDeps) {
     slotDrops.forEach((d, i) => d.setValue(String(player.loadout[i])));
     beltDrop?.setValue(player.beltItem);
     skillDrop?.setValue(player.skill);
+    if (beltLabel) beltLabel.textContent = `BELT (${codeLabel(codeFor('belt'))})`;
+    if (skillLabel) skillLabel.textContent = `SKILL (${codeLabel(codeFor('skill'))})`;
   }
 
   // Single source of truth for menu visibility — sets overlay display AND
@@ -210,6 +223,10 @@ export function wireOverlayInput(deps: OverlayInputDeps) {
   }
 
   document.addEventListener('keydown', (e) => {
+    // A keybind capture owns the next keystroke — it must not leak into
+    // menu/demo handling (its listener already stops propagation, this is
+    // belt-and-braces for ordering across modules)
+    if (isCapturing()) return;
     if (e.code === 'Tab') {
       e.preventDefault();
       deps.lazyHud().setScoreboardVisible(true);

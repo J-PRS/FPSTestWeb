@@ -1792,3 +1792,4 @@
 - RemotePlayer: interp snapshot buffer pooled (one object per 20Hz packet per remote no longer allocates)
 == Modes ==
 - ?mode=classic: solo bounce-and-shoot like the Unity FPS test — balls only (variant-0, no elites), no enrage (lost balls teleport back), no server connect, no bots; HUD timer still ticks
+- Keybinding menu: ESC menu → KEYS section, click a chip to capture the next key/mouse button; conflicts swap, Esc cancels, RESET KEYS restores defaults; persisted via fps-keys setting
