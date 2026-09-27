@@ -5,8 +5,8 @@ import { GRAVITY, BALL_MAX_DIST, BALL_TELE_MIN, BALL_TELE_MAX, BALL_TELE_HEIGHT,
 
 import { Terrain } from '../world/terrain.js';
 import { RibbonTrail } from '../projectiles/RibbonTrail.js';
-import { BlobShadow } from '../effects/blobShadow.js';
 import { ChildLogger } from '../core/Logger.js';
+import { allocSlots, freeSlots, getSwarm, getShadows, type SwarmPart } from './swarms.js';
 
 const logger = new ChildLogger('Ball');
 
@@ -18,6 +18,28 @@ const TRAIL_INTERVAL = 0.04;
 // scratch — trail dot spawn jitter
 const _spawn = new THREE.Vector3();
 const _scatter = new THREE.Vector3();
+const _m = new THREE.Matrix4();
+const _q = new THREE.Quaternion();
+const _s = new THREE.Vector3();
+const _c = new THREE.Color();
+
+// One shared geometry for every ball — radius baked in, per-ball scale lives
+// in the instance matrix.
+let _ballGeo: THREE.IcosahedronGeometry | null = null;
+function ballGeo(): THREE.IcosahedronGeometry {
+  if (!_ballGeo) _ballGeo = new THREE.IcosahedronGeometry(BALL_BASE_RADIUS, 0);
+  return _ballGeo;
+}
+let _ballMat: THREE.MeshLambertMaterial | null = null;
+function ballMat(): THREE.MeshLambertMaterial {
+  // White diffuse — instanceColor carries hue + emissive-style glow
+  if (!_ballMat) _ballMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+  return _ballMat;
+}
+
+export function ballParts(): SwarmPart[] {
+  return [{ geometry: ballGeo(), material: ballMat(), castShadow: true }];
+}
 
 const BALL_COLORS = [
   new THREE.Color(1.0, 0.25, 0.25),
@@ -103,21 +125,24 @@ export class Ball {
   radius: number;
   color: THREE.Color;
 
-  private mesh: THREE.Mesh;
-  private mat: THREE.MeshLambertMaterial;
+  // Renders through the 'ball' swarm — instanceColor carries hue plus the
+  // enrage/dash/flash glow (values >1 fake emissive).
+  swarmSlot = -1;
+  shadowSlot = -1;
+
   private scene: THREE.Scene;
   scale: number;
+  private emissive = new THREE.Color(0, 0, 0); // additive glow — folded into instanceColor
   private trailDots: TrailDot[] = [];
   private ribbons: RibbonTrail[];
   private _lastTrailPos = new THREE.Vector3();
   private trailTimer = 0;
   private flashTimer = 0;
-  private meshRemoved = false;
+  private meshRemoved = false; // swarm slot freed; name kept — it gates dead-ball cleanup
   private _disposed = false;
 
   // True once the ball and its trail are fully cleaned up (safe to remove)
   get disposed(): boolean { return this._disposed; }
-  private shadow: BlobShadow;
 
   // Callbacks for demo keyframe recording
   onBounce?: (pos: THREE.Vector3, vel: THREE.Vector3) => void;
@@ -129,6 +154,7 @@ export class Ball {
   // balls get pulled toward the player while still bouncing normally
   private enraged = false;
   private enrageTimer = 0;
+  private dampNextBounce = false; // set by the enrage dash — next ground bounce reflects at 50%
   private dashFlash = 0; // brief white-hot pop right after a lunge
   private static _enrageDir = new THREE.Vector3(); // scratch
 
@@ -173,16 +199,23 @@ export class Ball {
     const spd = Math.random() * 20;
     this.vel = new THREE.Vector3(Math.cos(ang) * spd, -2, Math.sin(ang) * spd);
 
-    const geo = new THREE.IcosahedronGeometry(BALL_BASE_RADIUS, 0);
-    this.mat = new THREE.MeshLambertMaterial({ color: this.color });
-    this.mesh = new THREE.Mesh(geo, this.mat);
-    this.mesh.scale.setScalar(this.scale);
-    this.mesh.castShadow = true;
-    this.mesh.receiveShadow = true;
-    scene.add(this.mesh);
+    if (!allocSlots('ball', this)) { this.dead = true; this._disposed = true; }
+    this.writeInstance();
+  }
 
-    // Shared blob shadow — depth-tested so ridges occlude it
-    this.shadow = new BlobShadow(scene, this.radius, 0.3);
+  // Ball body → swarm slot; instanceColor = hue + emissive glow.
+  private writeInstance(): void {
+    if (this.meshRemoved || this.swarmSlot < 0) return;
+    const swarm = getSwarm('ball');
+    if (!swarm) return;
+    _m.compose(this.pos, _q.identity(), _s.setScalar(this.scale));
+    swarm.setMatrix(0, this.swarmSlot, _m);
+    if (this.flashTimer > 0) {
+      swarm.setColor(0, this.swarmSlot, 4, 4, 4);
+    } else {
+      _c.copy(this.color).add(this.emissive);
+      swarm.setColor(0, this.swarmSlot, _c.r, _c.g, _c.b);
+    }
   }
 
   update(dt: number, terrain: Terrain, playerPos: THREE.Vector3): void {
@@ -228,24 +261,24 @@ export class Ball {
       if (ddx * ddx + ddz * ddz <= BALL_ENRAGE_DASH_DIST * BALL_ENRAGE_DASH_DIST) {
         const h = this.pos.y - terrain.getHeight(this.pos.x, this.pos.z) - this.radius;
         const t = Math.min(1, Math.max(0, 1 - h / BALL_ENRAGE_TELEGRAPH_H));
-        this.mat.emissive.setRGB(0.55 + 0.45 * t, 0.45 * t, 0.35 * t); // red → white-hot
+        this.emissive.setRGB(0.55 + 0.45 * t, 0.45 * t, 0.35 * t); // red → white-hot
       } else {
-        this.mat.emissive.setRGB(0.55, 0, 0);
+        this.emissive.setRGB(0.55, 0, 0);
       }
     }
     if (this.dashFlash > 0) {
       this.dashFlash -= dt;
-      this.mat.emissive.setRGB(1, 0.9, 0.7); // post-dash pop
-      if (this.dashFlash <= 0 && this.enraged) this.mat.emissive.setRGB(0.55, 0, 0);
+      this.emissive.setRGB(1, 0.9, 0.7); // post-dash pop
+      if (this.dashFlash <= 0 && this.enraged) this.emissive.setRGB(0.55, 0, 0);
     }
 
     this.handleGroundBounce(terrain, playerPos);
-    this.updateShadowBlob(terrain);
-    this.mesh.position.copy(this.pos);
+    getShadows()?.set(this, this.pos, this.radius, 0.3);
+    this.writeInstance();
 
     if (this.flashTimer > 0) {
       this.flashTimer -= dt;
-      if (this.flashTimer <= 0) this.mat.color.copy(this.color);
+      if (this.flashTimer <= 0) this.emissive.setRGB(0, 0, 0);
     }
 
     this.emitTrailDot(dt);
@@ -262,14 +295,11 @@ export class Ball {
     for (const r of this.ribbons) r.update(dt, Ball.viewPos);
   }
 
-  // Dead ball: mesh already removed, just fade out remaining trail dots/ribbons
+  // Dead ball: swarm slot freed, just fade out remaining trail dots/ribbons
   private updateDead(dt: number): void {
     if (!this.meshRemoved) {
       for (const r of this.ribbons) r.stop();
-      this.scene.remove(this.mesh);
-      this.mesh.geometry.dispose();
-      this.mat.dispose();
-      this.shadow.dispose();
+      freeSlots('ball', this);
       this.meshRemoved = true;
     }
     this.fadeTrailDots(dt);
@@ -312,6 +342,7 @@ export class Ball {
         this.dashAt(playerPos);
         this.dashFlash = 0.15;
         this.setEnraged(false); // lunge discharges the rage
+        this.dampNextBounce = true; // the landing bounce is deadened — no slingshot flyout
         for (let i = 0; i < 8; i++) this.spawnDot(); // dust-burst at takeoff
         this.lastBounceEnergy = 0;
         this.onBounce?.(this.pos.clone(), this.vel.clone());
@@ -325,7 +356,11 @@ export class Ball {
     const velBeforeReflection = this.vel.clone();
     const totalEnergy = 0.5 * velBeforeReflection.lengthSq() + Math.abs(BALL_GRAVITY) * this.pos.y;
 
-    this.vel.addScaledVector(n, -2.0 * dot * BOUNCE);
+    // Post-dash landing: reflect at 50% elasticity so the lunge ends with a
+    // thud, not a full-energy ricochet back into orbit
+    const elasticity = this.dampNextBounce ? 0.5 : BOUNCE;
+    this.dampNextBounce = false;
+    this.vel.addScaledVector(n, -(1.0 + elasticity) * dot);
 
     // Check if reflection itself preserves energy (should be 100% with BOUNCE=1.0)
     const velAfterMag = this.vel.length();
@@ -401,7 +436,7 @@ export class Ball {
     this.enraged = on;
     this.enrageTimer = 0;
     // Visual cue: emissive red burn while enraged
-    this.mat.emissive.setRGB(on ? 0.55 : 0, 0, 0);
+    this.emissive.setRGB(on ? 0.55 : 0, 0, 0);
   }
 
   // Ball drifted too far from the player — teleport it back into play range
@@ -426,10 +461,6 @@ export class Ball {
     this.lastBounceEnergy = 0;
     // Record teleport as a bounce keyframe too (position + velocity reset)
     this.onBounce?.(this.pos.clone(), this.vel.clone());
-  }
-
-  private updateShadowBlob(terrain: Terrain): void {
-    this.shadow.update(this.pos, terrain);
   }
 
   private emitTrailDot(dt: number): void {
@@ -516,7 +547,6 @@ export class Ball {
   takeDamage(): boolean {
     this.health--;
     this.flashTimer = 0.15;
-    this.mat.color.set(0xffffff);
     if (this.health <= 0) { this.dead = true; return true; }
     return false;
   }
@@ -532,10 +562,7 @@ export class Ball {
   }
 
   dispose(): void {
-    this.scene.remove(this.mesh);
-    this.mesh.geometry.dispose();
-    this.mat.dispose();
-    this.shadow.dispose();
+    if (!this.meshRemoved) { freeSlots('ball', this); this.meshRemoved = true; }
     for (const d of this.trailDots) {
       this.removeDot(d);
     }

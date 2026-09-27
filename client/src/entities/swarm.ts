@@ -37,7 +37,7 @@ export class SpeciesSwarm {
   private live = 0;
 
   constructor(scene: THREE.Scene, parts: SwarmPart[], capacity: number) {
-    this.owners = new Array<SwarmSlotOwner | undefined>(capacity);
+    this.owners = Array.from<SwarmSlotOwner | undefined>({ length: capacity });
     for (const p of parts) {
       const per = p.per ?? 1;
       const mesh = new THREE.InstancedMesh(p.geometry, p.material, capacity * per);
@@ -171,7 +171,7 @@ export class InstancedBlobShadows {
     this.mesh.renderOrder = 999;
     this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     scene.add(this.mesh);
-    this.owners = new Array<SwarmSlotOwner | undefined>(SHADOW_CAPACITY);
+    this.owners = Array.from<SwarmSlotOwner | undefined>({ length: SHADOW_CAPACITY });
   }
 
   alloc(owner: SwarmSlotOwner): number {
