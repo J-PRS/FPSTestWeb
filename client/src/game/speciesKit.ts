@@ -104,6 +104,24 @@ export function createSpeciesKit(deps: EntitiesDeps, targets: Targetable[], depl
     return true;
   }
 
+  // Melee/bite call-site shorthand — every species' onBite/onSting/onClaw
+  // was the same uber-scaled funnel: force×k, dmg×k, uber death text, reach
+  // = radius + gap. One entry point keeps the variants consistent.
+  function bite(
+    attacker: { pos: THREE.Vector3; radius: number; uber: boolean },
+    force: number, dmg: number, text: string,
+    uber?: { force?: number; dmg?: number; text?: string },
+    reachGap?: number,
+  ): boolean {
+    const u = attacker.uber;
+    return hurtPlayer(attacker.pos,
+      force * (u ? (uber?.force ?? 2) : 1),
+      dmg * (u ? (uber?.dmg ?? 2) : 1),
+      u && uber?.text ? uber.text : text,
+      reachGap !== undefined ? attacker.radius + reachGap : undefined,
+      attacker);
+  }
+
   // Radial blast → player damage, the block every mine/baneling detonation
   // re-implemented: distance falloff from maxDmg at zero to 0 at radius,
   // then the standard env-damage funnel. Returns the damage dealt (0 = the
@@ -400,7 +418,7 @@ export function createSpeciesKit(deps: EntitiesDeps, targets: Targetable[], depl
   }
 
   return {
-    removeTarget, ringPos, hurtPlayer, blastAtPlayer,
+    removeTarget, ringPos, hurtPlayer, blastAtPlayer, bite,
     aggroFor, aggroVelFor, reportTargetDamage,
     boltPop, updateSpecies, burrow, rollUber, kickDust, kickTrail, atCap,
   };

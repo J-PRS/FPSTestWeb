@@ -1863,3 +1863,4 @@ projectiles: swept-collision math extracted to projectiles/sweep.ts (SweepHost, 
 ballSegments now binary over the wire (~50B vs ~160B JSON, ~10 seg/s per ball ×26 balls): shared wire codec + server broadcastBinary + client decode to the same message shape
 entities.ts species blocks extracted to game/species/{melee,flyers,siege,ambient}.ts (764->270 lines); shared SpeciesKit type exported
 speciesKit: atCap() helper replaces per-spawn list.filter(!dead) temp-array allocations
+speciesKit: bite() helper collapses 11 near-identical melee hit call sites
