@@ -22,7 +22,7 @@ import type { SpeciesCtx } from './context.js';
 // flyer aggro profile.
 export function createFlyerSpecies({ deps, kit, targets }: SpeciesCtx) {
   const { scene } = deps;
-  const { rollUber, ringPos, hurtPlayer, aggroFor, aggroVelFor, kickTrail, updateSpecies, atCap } = kit;
+  const { rollUber, ringPos, hurtPlayer, bite, aggroFor, aggroVelFor, kickTrail, updateSpecies, atCap } = kit;
 
   const gnats: Gnat[] = [];
   // Live gnat clouds — members share these objects; centers chase the player
@@ -57,9 +57,7 @@ export function createFlyerSpecies({ deps, kit, targets }: SpeciesCtx) {
       const g = new Gnat(scene, deps.lazyTerrain(), cloud.center.clone().add(new THREE.Vector3(
         (Math.random() - 0.5) * 8, (Math.random() - 0.5) * 4, (Math.random() - 0.5) * 8)), queen);
       g.joinCloud(cloud);
-      g.onNip = (gn) => hurtPlayer(gn.pos,
-        GNAT_NIP_FORCE * (gn.uber ? 2 : 1), GNAT_NIP_DAMAGE * (gn.uber ? 3 : 1),
-        gn.uber ? 'drained by the gnat queen' : 'drained by gnats', gn.radius + GNAT_NIP_DIST + 2, gn);
+      g.onNip = (gn) => bite(gn, GNAT_NIP_FORCE, GNAT_NIP_DAMAGE, 'drained by gnats', { dmg: 3, text: 'drained by the gnat queen' }, GNAT_NIP_DIST + 2);
       gnats.push(g);
       targets.push(g);
     }
@@ -94,9 +92,7 @@ export function createFlyerSpecies({ deps, kit, targets }: SpeciesCtx) {
     if (atCap(seekers, SEEKER_MAX)) return;
     const u = uber ?? rollUber();
     const s = new Seeker(scene, deps.lazyTerrain(), ringPos(SEEKER_SPAWN_MIN, SEEKER_SPAWN_MAX), u);
-    s.onSting = (sk) => hurtPlayer(sk.pos, SEEKER_STING_FORCE * (sk.uber ? 1.5 : 1),
-      SEEKER_STING_DAMAGE * (sk.uber ? 2 : 1),
-      sk.uber ? 'run through by a lancer' : 'stung to death by a seeker', sk.radius + SEEKER_STING_DIST + 1, sk);
+    s.onSting = (sk) => bite(sk, SEEKER_STING_FORCE, SEEKER_STING_DAMAGE, 'stung to death by a seeker', { force: 1.5, text: 'run through by a lancer' }, SEEKER_STING_DIST + 1);
     seekers.push(s);
     targets.push(s);
   }

@@ -25,7 +25,7 @@ import type { SpeciesCtx } from './context.js';
 // same funnel: spawn ring → burrow entrance → bite callback → hurtPlayer.
 export function createMeleeSpecies({ deps, kit, targets }: SpeciesCtx) {
   const { scene } = deps;
-  const { burrow, rollUber, ringPos, hurtPlayer, aggroFor, kickDust, updateSpecies, atCap } = kit;
+  const { burrow, rollUber, ringPos, bite, aggroFor, kickDust, updateSpecies, atCap } = kit;
 
   const crawlers: Crawler[] = [];
   const scarabs: Scarab[] = [];
@@ -39,14 +39,13 @@ export function createMeleeSpecies({ deps, kit, targets }: SpeciesCtx) {
     const u = uber ?? (!pos && rollUber());
     const c = new Crawler(scene, deps.lazyTerrain(), pos ?? ringPos(CRAWLER_SPAWN_MIN, CRAWLER_SPAWN_MAX), u);
     c.onLanded = (p) => { deps.lazyEffects().spawnJumpDust(p); sfx.enemyCue(p, 'skitter'); };
-    c.onPounceHit = (cr) => hurtPlayer(cr.pos, 10, CRAWLER_POUNCE_DAMAGE * (cr.uber ? 2 : 1),
-      cr.uber ? 'devoured by the matriarch' : 'devoured by a crawler', cr.radius + 3, cr);
+    c.onPounceHit = (cr) => bite(cr, 10, CRAWLER_POUNCE_DAMAGE, 'devoured by a crawler', { text: 'devoured by the matriarch' }, 3);
     c.onBrood = (cr) => {
       // Matriarch births a scarab — cap-checked, positioned just off her hip
       if (atCap(scarabs, SCARAB_MAX)) return;
       const s = new Scarab(scene, deps.lazyTerrain(), cr.pos.clone().add(new THREE.Vector3(
         (Math.random() - 0.5) * 3, 0, (Math.random() - 0.5) * 3)));
-      s.onBite = (sc) => hurtPlayer(sc.pos, SCARAB_BITE_FORCE, SCARAB_BITE_DAMAGE, 'swarmed by scarabs', sc.radius + SCARAB_BITE_DIST + 1, sc);
+      s.onBite = (sc) => bite(sc, SCARAB_BITE_FORCE, SCARAB_BITE_DAMAGE, 'swarmed by scarabs', undefined, SCARAB_BITE_DIST + 1);
       s.onLanded = (p) => deps.lazyEffects().spawnJumpDust(p);
       scarabs.push(s);
       targets.push(s);
@@ -77,9 +76,7 @@ export function createMeleeSpecies({ deps, kit, targets }: SpeciesCtx) {
       if (atCap(scarabs, SCARAB_MAX)) break;
       const s = new Scarab(scene, deps.lazyTerrain(), base.clone().add(new THREE.Vector3(
         (Math.random() - 0.5) * 6, 0, (Math.random() - 0.5) * 6)), u);
-      s.onBite = (sc) => hurtPlayer(sc.pos,
-        SCARAB_BITE_FORCE * (sc.uber ? 2.5 : 1), SCARAB_BITE_DAMAGE * (sc.uber ? 3 : 1),
-        sc.uber ? 'trampled by a dreadbeetle' : 'swarmed by scarabs', sc.radius + SCARAB_BITE_DIST + 1, sc);
+      s.onBite = (sc) => bite(sc, SCARAB_BITE_FORCE, SCARAB_BITE_DAMAGE, 'swarmed by scarabs', { force: 2.5, dmg: 3, text: 'trampled by a dreadbeetle' }, SCARAB_BITE_DIST + 1);
       s.onLanded = (p) => deps.lazyEffects().spawnJumpDust(p);
       if (!pos) burrow(s);
       scarabs.push(s);
@@ -99,9 +96,7 @@ export function createMeleeSpecies({ deps, kit, targets }: SpeciesCtx) {
     if (!pos && atCap(grubs, GRUB_MAX)) return;
     const u = uber ?? (!pos && rollUber());
     const g = new Grub(scene, deps.lazyTerrain(), pos ?? ringPos(GRUB_SPAWN_MIN, GRUB_SPAWN_MAX), u);
-    g.onBite = (gr) => hurtPlayer(gr.pos, GRUB_BITE_FORCE * (gr.uber ? 2 : 1),
-      GRUB_BITE_DAMAGE * (gr.uber ? 2 : 1),
-      gr.uber ? 'crushed by a bloatgrub' : 'gummed to death by a grub', gr.radius + GRUB_BITE_DIST + 1, gr);
+    g.onBite = (gr) => bite(gr, GRUB_BITE_FORCE, GRUB_BITE_DAMAGE, 'gummed to death by a grub', { text: 'crushed by a bloatgrub' }, GRUB_BITE_DIST + 1);
     if (u) g.onDeath = (mother) => {
       // Bloatgrub births on pop: three live grubs spill out of the corpse —
       // cap-checked so a bloatgrub chain can't flood the field.
@@ -131,9 +126,7 @@ export function createMeleeSpecies({ deps, kit, targets }: SpeciesCtx) {
     if (!pos && atCap(snakes, SNAKE_MAX)) return;
     const u = uber ?? (!pos && rollUber());
     const s = new Snake(scene, deps.lazyTerrain(), pos ?? ringPos(SNAKE_SPAWN_MIN, SNAKE_SPAWN_MAX), u);
-    s.onStrike = (sn) => hurtPlayer(sn.pos,
-      SNAKE_BITE_FORCE * (sn.uber ? 2 : 1), SNAKE_BITE_DAMAGE * (sn.uber ? 2.5 : 1),
-      sn.uber ? 'swallowed by the king serpent' : 'bitten by a sand viper', sn.radius + SNAKE_BITE_DIST + 1, sn);
+    s.onStrike = (sn) => bite(sn, SNAKE_BITE_FORCE, SNAKE_BITE_DAMAGE, 'bitten by a sand viper', { dmg: 2.5, text: 'swallowed by the king serpent' }, SNAKE_BITE_DIST + 1);
     if (!pos) burrow(s);
     snakes.push(s);
     targets.push(s);
@@ -152,9 +145,7 @@ export function createMeleeSpecies({ deps, kit, targets }: SpeciesCtx) {
     const u = uber ?? rollUber();
     const r = new Roller(scene, deps.lazyTerrain(), ringPos(ROLLER_SPAWN_MIN, ROLLER_SPAWN_MAX), u);
     r.onLanded = (pos) => deps.lazyEffects().spawnJumpDust(pos);
-    r.onHit = (rl) => hurtPlayer(rl.pos, ROLLER_HIT_FORCE * (rl.uber ? 1.5 : 1),
-      ROLLER_HIT_DAMAGE * (rl.uber ? 2 : 1),
-      rl.uber ? 'buried by an avalanche' : 'steamrolled by a boulder', rl.radius + 1.5, rl);
+    r.onHit = (rl) => bite(rl, ROLLER_HIT_FORCE, ROLLER_HIT_DAMAGE, 'steamrolled by a boulder', { force: 1.5, text: 'buried by an avalanche' }, 1.5);
     burrow(r);
     rollers.push(r);
     targets.push(r);

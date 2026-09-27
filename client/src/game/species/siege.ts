@@ -28,7 +28,7 @@ import type { SpeciesCtx } from './context.js';
 export function createSiegeSpecies({ deps, kit, targets }: SpeciesCtx) {
   const { scene } = deps;
   const {
-    removeTarget, ringPos, hurtPlayer, blastAtPlayer,
+    removeTarget, ringPos, hurtPlayer, bite, blastAtPlayer,
     aggroFor, aggroVelFor, boltPop, updateSpecies, burrow, rollUber, kickDust, kickTrail, atCap,
   } = kit;
 
@@ -49,9 +49,7 @@ export function createSiegeSpecies({ deps, kit, targets }: SpeciesCtx) {
     t.onBoltLand = (pos) => boltPop(pos, 0.3, 0xffaa44, 1.8);
     t.onBoltHit = () => {
       boltPop(player.pos.clone(), 0.3, 0xffaa44, 1.8);
-      hurtPlayer(t.pos, 6, TURRET_BOLT_DAMAGE * (t.uber ? 1.5 : 1),
-        t.uber ? 'shelled by a siege engine' : 'shelled by a turretter',
-        undefined, t);
+      bite(t, 6, TURRET_BOLT_DAMAGE, 'shelled by a turretter', { force: 1, dmg: 1.5, text: 'shelled by a siege engine' });
     };
     turrets.push(t);
     targets.push(t);
