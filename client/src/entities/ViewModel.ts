@@ -32,6 +32,18 @@ const SWITCH_RAISE_TIME = 0.16;
 const SWITCH_DIP_Y = -0.34;
 const SWITCH_DIP_ROT = -0.35; // muzzle tips down as it holsters
 
+// Melee punch: gun sweeps off right-down (the arm clears for the fist) —
+// fast in, short hold, spring back. No muzzle flash, no recoil kick.
+const PUNCH_IN = 0.08;
+const PUNCH_HOLD = 0.06;
+const PUNCH_OUT = 0.3;
+const PUNCH_TOTAL = PUNCH_IN + PUNCH_HOLD + PUNCH_OUT;
+const PUNCH_X = 0.16;    // sweeps right
+const PUNCH_Y = -0.24;   // and down
+const PUNCH_Z = 0.08;    // toward camera — it's coming out of the frame
+const PUNCH_ROLL = 0.55; // rolls with the swing
+const PUNCH_ROT = 0.3;   // muzzle tips down into the punch
+
 export class ViewModel {
   readonly group: THREE.Group;
   private weapons: THREE.Group[] = [];
@@ -43,7 +55,11 @@ export class ViewModel {
   private pendingWeapon = -1;
   private timer = 0;
   private kickAmount = 0;
+  private kickX = 0;         // sideways kick — flak/melee shudder
+  private kickDecay = 12;    // per-weapon spring rate
+  private flashLifeScale = 1;
   private throwT = -1;
+  private punchT = -1;
   private baseRotX = 0.04;
   private baseRotZ = 0;
   private flashMesh: THREE.Mesh;
@@ -156,7 +172,38 @@ export class ViewModel {
     plasma.add(plasmaGlow);
     plasma.visible = false;
 
-    this.weapons = [rocket, disc, chain, mortar, gl, flak, plasma];
+    // Weapon 7 — railgun: Q3's fat coil-cannon. Thick central bore, a stack
+    // of fat accelerator coils ribbing the barrel, glowing muzzle ring.
+    // The silhouette reads "industrial capacitor bank", not sniper rifle.
+    const rail = new THREE.Group();
+    // Fat bore — the barrel itself is the chunk
+    rail.add(mkTube(0.13, 0.14, 0.55, -0.08, bodyMat));
+    // Coil stack: fat rings ribbing the barrel — THE railgun read
+    for (let i = 0; i < 4; i++) {
+      const coil = mkTube(0.165, 0.165, 0.05, -0.3 + i * 0.14, darkMat);
+      rail.add(coil);
+      // Cyan energy slit between coils — the capacitor glow peeking through
+      const glowRing = mkTube(0.15, 0.15, 0.02, -0.23 + i * 0.14,
+        new THREE.MeshBasicMaterial({ color: 0x55bbff }));
+      rail.add(glowRing);
+    }
+    // Flared muzzle + glow bore
+    rail.add(mkTube(0.16, 0.18, 0.08, -0.38, darkMat));
+    const muzzleGlow = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.11, 0.11, 0.02, 16),
+      new THREE.MeshBasicMaterial({ color: 0x66ccff })
+    );
+    muzzleGlow.rotation.x = Math.PI / 2;
+    muzzleGlow.position.z = -0.421;
+    rail.add(muzzleGlow);
+    // Rear capacitor housing — big drum behind the receiver
+    const capDrum = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.16, 12), darkMat);
+    capDrum.rotation.x = Math.PI / 2;
+    capDrum.position.set(0, -0.02, 0.22);
+    rail.add(capDrum);
+    rail.visible = false;
+
+    this.weapons = [rocket, disc, chain, mortar, gl, flak, plasma, rail];
     for (const w of this.weapons) this.group.add(w);
 
     // Muzzle flash — single billboard quad at the bore, additive, ~70ms.
@@ -188,23 +235,47 @@ export class ViewModel {
     camera.add(this.group);
   }
 
+  // Per-weapon fire feel: [decay, sideways jitter, flashColor, flashScale, flashLife]
+  // Same spring everywhere — only the impulse shape changes per weapon,
+  // the Quake approach: one damped oscillator, re-triggered per shot.
+  private static readonly KICK_TUNE: Record<number, [number, number, number, number, number]> = {
+    0: [12, 0.00, 0xffc866, 1.0, 1.0],   // rocket — classic straight-back
+    1: [16, 0.04, 0x99ddff, 0.7, 0.7],  // disc launcher — snappy, short travel
+    2: [18, 0.02, 0xffaa44, 0.6, 0.5],  // chaingun — tiny buzz, no big flash
+    3: [7, 0.00, 0xffdd99, 1.6, 1.5],   // mortar — slow heavy drop-kick, big flash
+    4: [11, 0.03, 0xffc866, 0.8, 0.9],  // GL — pump pop
+    5: [10, 0.09, 0xffbb55, 1.3, 1.0],  // flak — hard shove + sideways shudder
+    6: [15, 0.00, 0x44ffbb, 0.5, 0.6],  // plasma — light tap, green glow
+    7: [18, 0.01, 0x77ccff, 1.1, 0.9],  // railgun — fast snap, cyan discharge
+  };
+
   kick(strength = 1): void {
+    const t = ViewModel.KICK_TUNE[this.activeWeapon] ?? ViewModel.KICK_TUNE[0];
     this.kickAmount = strength;
-    // Chaingun: each shot feeds barrel spin — sustained fire reaches full speed
+    this.kickDecay = t[0];
+    this.kickX = (Math.random() - 0.5) * t[1];
     if (this.activeWeapon === 2) {
       this.spinVel = Math.min(this.spinVel + strength * 140, ViewModel.SPIN_MAX);
     }
-    // Muzzle flash: random roll + slight size jitter per shot
-    this.flashT = ViewModel.FLASH_LIFE;
+    this.flashMat.color.setHex(t[2]);
+    this.flashT = ViewModel.FLASH_LIFE * t[4];
+    this.flashLifeScale = t[4];
     this.flashMesh.visible = true;
     this.flashMesh2.visible = true;
     this.flashMesh.rotation.z = Math.random() * Math.PI * 2;
-    const s = 0.85 + Math.random() * 0.3;
+    const s = (0.85 + Math.random() * 0.3) * t[3];
     this.flashMesh.scale.setScalar(s);
+    this.flashMesh2.scale.setScalar(s * 0.7);
   }
 
   startThrow(): void {
     this.throwT = 0;
+  }
+
+  // Melee swing: sweeps the weapon aside instead of kicking — reads as a
+  // punch, not a shot. No flash (melee isn't a discharge).
+  punch(): void {
+    this.punchT = 0;
   }
 
   // Lower → swap model at the bottom → raise. Cosmetic only; firing isn't gated.
@@ -256,22 +327,24 @@ export class ViewModel {
 
     // Fire kick — sharp push toward camera + muzzle rise, fast spring back.
     // Quake-style: decay the impulse, don't tween a position.
-    this.kickAmount *= Math.exp(-dt * 12);
+    this.kickAmount *= Math.exp(-dt * this.kickDecay);
+    this.kickX *= Math.exp(-dt * this.kickDecay * 1.4); // jitter settles faster than the shove
     const kickZ = this.kickAmount * 0.36;
     const kickY = this.kickAmount * 0.08;
     const dip = this.updateThrowDip(dt);
     const switchDip = this.updateSwitchDip(dt);
+    const punch = this.updatePunchDip(dt);
     const totalDip = Math.max(dip, switchDip);
 
     const target = this.tmpDir.set(
-      REST_POS.x + moveX + bobX + fallX,
-      REST_POS.y + moveY + bobY + fallY + kickY + dip * THROW_DIP_Y + switchDip * SWITCH_DIP_Y,
-      REST_POS.z + fallZ + kickZ + dip * THROW_DIP_Z
+      REST_POS.x + moveX + bobX + fallX + this.kickX * this.kickAmount + punch * PUNCH_X,
+      REST_POS.y + moveY + bobY + fallY + kickY + dip * THROW_DIP_Y + switchDip * SWITCH_DIP_Y + punch * PUNCH_Y,
+      REST_POS.z + fallZ + kickZ + dip * THROW_DIP_Z + punch * PUNCH_Z
     );
     // Snap fast to the kicked pose so the punch is actually visible
     this.group.position.lerp(target, Math.min(dt * 20, 1));
-    this.group.rotation.x = this.baseRotX + this.kickAmount * 0.28 + dip * THROW_DIP_ROT + switchDip * SWITCH_DIP_ROT;
-    this.group.rotation.z = this.baseRotZ + totalDip * THROW_DIP_ROLL;
+    this.group.rotation.x = this.baseRotX + this.kickAmount * 0.28 + dip * THROW_DIP_ROT + switchDip * SWITCH_DIP_ROT + punch * PUNCH_ROT;
+    this.group.rotation.z = this.baseRotZ + totalDip * THROW_DIP_ROLL + punch * PUNCH_ROLL;
 
     // Chaingun barrel spin — decays over ~0.7s after firing stops
     if (this.chainBarrels && this.spinVel > 0) {
@@ -283,7 +356,7 @@ export class ViewModel {
     // Flash decay — sqrt curve: bright spike, fast falloff
     if (this.flashT > 0) {
       this.flashT -= dt;
-      const k = Math.max(this.flashT / ViewModel.FLASH_LIFE, 0);
+      const k = Math.max(this.flashT / (ViewModel.FLASH_LIFE * this.flashLifeScale), 0);
       this.flashMat.opacity = Math.sqrt(k);
       if (this.flashT <= 0) { this.flashMesh.visible = false; this.flashMesh2.visible = false; }
     }
@@ -320,5 +393,16 @@ export class ViewModel {
     const dip = Math.max(0, 1 - (t - SWITCH_LOWER_TIME) / SWITCH_RAISE_TIME);
     if (dip <= 0) { this.switchT = -1; this.pendingWeapon = -1; }
     return dip;
+  }
+
+  // Punch swing envelope: snap in, brief apex hold, spring back out.
+  private updatePunchDip(dt: number): number {
+    if (this.punchT < 0) return 0;
+    this.punchT += dt;
+    const t = this.punchT;
+    if (t >= PUNCH_TOTAL) { this.punchT = -1; return 0; }
+    if (t < PUNCH_IN) return t / PUNCH_IN;
+    if (t < PUNCH_IN + PUNCH_HOLD) return 1;
+    return 1 - (t - PUNCH_IN - PUNCH_HOLD) / PUNCH_OUT;
   }
 }
