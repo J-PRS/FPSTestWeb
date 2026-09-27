@@ -23,7 +23,12 @@ export interface MapSpec {
   /** Spawn anchors — farthest-from-enemies pick among these. Absent = the
    *  server's default spawn ring. */
   spawns?: { x: number; y: number; z: number }[];
+  /** Objective anchors per team — flag stands, capture rings, generators.
+   *  Generic positions the mode interprets (ctf: flag stands). */
+  bases?: { alpha?: Vec3like; bravo?: Vec3like };
 }
+
+export interface Vec3like { x: number; y: number; z: number }
 
 export const DEFAULT_MAP_SPEC: MapSpec = {
   balls: { base: 10, perPlayer: 4, max: 40 },
@@ -48,19 +53,28 @@ export function resolveMapSpec(raw: unknown): MapSpec {
   };
   if (balls.max < balls.base) balls.max = balls.base;
 
+  const isVec = (s: unknown): s is Vec3like =>
+    !!s && typeof s === 'object' &&
+    Number.isFinite((s as Vec3like).x) &&
+    Number.isFinite((s as Vec3like).y) &&
+    Number.isFinite((s as Vec3like).z);
+
   const spawns = Array.isArray((src as { spawns?: unknown }).spawns)
-    ? (src as { spawns: unknown[] }).spawns
-        .filter((s): s is { x: number; y: number; z: number } =>
-          !!s && typeof s === 'object' &&
-          Number.isFinite((s as { x: number }).x) &&
-          Number.isFinite((s as { y: number }).y) &&
-          Number.isFinite((s as { z: number }).z))
-        .slice(0, 32)
+    ? (src as { spawns: unknown[] }).spawns.filter(isVec).slice(0, 32)
+    : undefined;
+
+  const rawBases = (src as { bases?: unknown }).bases;
+  const bases = rawBases && typeof rawBases === 'object'
+    ? {
+        alpha: isVec((rawBases as { alpha?: unknown }).alpha) ? (rawBases as { alpha: Vec3like }).alpha : undefined,
+        bravo: isVec((rawBases as { bravo?: unknown }).bravo) ? (rawBases as { bravo: Vec3like }).bravo : undefined,
+      }
     : undefined;
 
   return {
     mode: typeof src.mode === 'string' && /^[\w-]{1,32}$/.test(src.mode) ? src.mode : undefined,
     balls,
     spawns: spawns?.length ? spawns : undefined,
+    bases: bases && (bases.alpha || bases.bravo) ? bases : undefined,
   };
 }

@@ -1887,3 +1887,4 @@ Map spec format: maps/<room>.json defines per-match mode + ball population (reso
 Server-owned teams/score: rooms assign alpha/bravo by smallest team, {type:'bank'} claims feed a room scoreboard (teamScore/matchEnd/matchStart broadcasts), client announces in chat; verified live
 Lobby browser: corner LOBBY button lists GET /rooms (name/mode/occupancy) polled while open, join reloads ?room=NAME, create-a-room input included
 Map spec gains spawn anchors: maps/<room>.json spawns[] override the default ring (farthest-from-enemies pick still applies); duel.json shows two-base anchors
+Map spec gains bases (flag stands/objective anchors) echoed on gameState.map; ctf.json example matches the client's hard-coded ±70m flag spots

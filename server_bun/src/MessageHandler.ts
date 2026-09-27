@@ -17,6 +17,9 @@ export interface RoomInfo {
   scores?: { alpha: number; bravo: number };
   winAt?: number;
   onBank?: (playerId: string, n: number) => void;
+  /** Objective anchors from the map spec — echoed on gameState so clients
+   *  place flags/bases where the map says, not where the URL guessed. */
+  bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } };
 }
 
 export class MessageHandler {
@@ -94,6 +97,7 @@ export class MessageHandler {
       mode: this.roomInfo.mode || undefined,
       team: player.team,
       scores: this.roomInfo.scores ? { ...this.roomInfo.scores } : undefined,
+      map: this.roomInfo.bases ? { mode: this.roomInfo.mode || undefined, bases: this.roomInfo.bases } : undefined,
       localPlayerState: {
         position: { ...player.position },
         rotation: { ...player.rotation },
