@@ -29,6 +29,7 @@ const TEST4 = process.argv.includes('--test4');
 const TEST5 = process.argv.includes('--test5'); // tick-stream quality: rate, gaps, self-echo drift
 const IDLE = process.argv.includes('--idle'); // join then go silent — tests the 60s idle reap
 const WATCH = process.argv.includes('--watch'); // passive observer: log join/left cadence and per-peer tick freshness
+const BALLS = process.argv.includes('--balls'); // measure ballSegment cadence + event-age jitter
 const WS_URL = process.env.PVP_WS ?? 'ws://localhost:8000/ws';
 const POS_HZ = 20;            // under the 30/s rate limit
 const MOVE_SPEED = 30;        // m/s — well under the 300 reject bound
@@ -68,6 +69,13 @@ let dupJoins = 0;
 // self-echo drift (does the server see us where we say we are?).
 const tickStats = { frames: 0, gaps: [] as number[], lastAt: 0, maxGap: 0, minGap: 1e9 };
 let selfEcho: { pos: Vec3; at: number } | null = null;
+// --balls: per-ball segment gaps + event age (simClock stamp vs arrival).
+const ballSegStats = {
+  total: 0, spawns: 0, dies: 0,
+  gaps: [] as number[], ages: [] as number[], maxGap: 0,
+  lastByBall: new Map<number, { at: number; t: number }>(),
+};
+const ballClock = { t: -1, at: 0 }; // newest simTime stamp + local arrival ms
 const pendingShots: { id: string | null; target: string; at: number; airtime: number; aimPos: Vec3 }[] = [];
 const killsOf = new Map<string, number>();
 
@@ -280,6 +288,25 @@ function handleJson(m: any) {
     case 'projectileDestroyed':
       projDestroyedListener?.(m.projectileId);
       break;
+    case 'ballSegment': {
+      const now = Date.now();
+      const prev = ballSegStats.lastByBall.get(m.id);
+      if (prev) {
+        const gap = now - prev.at;
+        ballSegStats.gaps.push(gap);
+        if (gap > ballSegStats.maxGap) ballSegStats.maxGap = gap;
+      }
+      ballSegStats.lastByBall.set(m.id, { at: now, t: m.t ?? 0 });
+      ballSegStats.total++;
+      if (m.t !== undefined) {
+        const age = ballClock.t > 0 ? Math.max(0, ballClock.t + (now - ballClock.at) / 1000 - m.t) : 0;
+        ballSegStats.ages.push(age);
+      }
+      if ((m.t ?? -1) > ballClock.t) { ballClock.t = m.t; ballClock.at = now; }
+      break;
+    }
+    case 'ballSpawn': ballSegStats.spawns++; break;
+    case 'ballDie': ballSegStats.dies++; break;
     case 'knockback':
       if (m.targetId === NAME) { knockbackCount++; log('knockback received', m.force); }
       break;
@@ -322,6 +349,26 @@ async function main() {
       const fails = results.filter((r) => !r.ok).length;
       log(`${results.length - fails}/${results.length} checks passed`);
       process.exit(fails ? 1 : 0);
+    }
+    if (BALLS) {
+      // 30s listen: report segment cadence per ball, event age, spawns/dies.
+      await new Promise((r) => setTimeout(r, 30_000));
+      const gaps = ballSegStats.gaps.slice().sort((a, b) => a - b);
+      const ages = ballSegStats.ages.slice().sort((a, b) => a - b);
+      const balls = ballSegStats.lastByBall.size;
+      log(`--- ball report: ${balls} balls, ${ballSegStats.total} segments, ${ballSegStats.spawns} spawns, ${ballSegStats.dies} dies ---`);
+      if (gaps.length) {
+        const p50 = gaps[Math.floor(gaps.length * 0.5)];
+        const p95 = gaps[Math.floor(gaps.length * 0.95)];
+        log(`segment gap p50=${p50}ms p95=${p95}ms max=${ballSegStats.maxGap}ms`);
+      }
+      if (ages.length) {
+        const a50 = ages[Math.floor(ages.length * 0.5)];
+        const a95 = ages[Math.floor(ages.length * 0.95)];
+        log(`event age p50=${(a50 * 1000).toFixed(0)}ms p95=${(a95 * 1000).toFixed(0)}ms`);
+      }
+      check('ball segments flowing', ballSegStats.total > balls * 2, `${ballSegStats.total} events over 30s`);
+      process.exit(0);
     }
     if (WATCH) {
       // 40s passive window: report join/left cadence and which peers never
