@@ -62,6 +62,15 @@ export class Room {
     return this.connections.getConnection(playerId);
   }
 
+  /** Nothing left to serve: no players, no grace-period ghosts. */
+  get empty(): boolean {
+    return this.players.getPlayerCount() === 0 && this.disconnected.size === 0;
+  }
+
+  dispose(): void {
+    this.ballSim.stop();
+  }
+
   /** Full teardown — every store moves together or a slot/token leaks. */
   removePlayerCompletely(playerId: string, reason: string, log: (m: string, o?: object) => void): void {
     this.players.removePlayer(playerId);

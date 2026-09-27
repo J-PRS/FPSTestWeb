@@ -45,9 +45,13 @@ surface. Detailed research lives in `_reports/`; this file is the current truth.
   random per boot if unset). localStorage-backed on the client — names
   survive restarts and can't be stolen by id knowledge alone.
 
+- Load spot-check: 19 players (16 orbit bots + devs) — tick lag flat at
+  ~11ms avg / 29ms max, no degradation vs 3 players. Empty named rooms
+  now dispose themselves (ballSim.stop + map delete; 'default' immortal).
+
 ### Next (audit priority order)
-3. **16-24 bot load test** — prove headroom before matchmaking exists.
-   Measure /metrics tick lag + bandwidth at 16/24/32 fake players.
+3. **Bigger load test** — 19 players held fine; push to 32+ bots with a
+   room to prove multi-match cost, watch tickLagMs + bandwidth rollup.
 4. **Lag compensation** — hitscan/AOE rewind buffer (~150ms of positions per
    room). Needed before any competitive claim.
 5. **Movement re-sim** — shared/stepPlayer on server during validation,
