@@ -1,5 +1,13 @@
 # Changelog
 
+## [2026-09-27] MP harness round 2 — ball probes, knockback verification, reconnect dedup
+
+- `bot.ts` new probes: `--balls` (30s listen → per-ball segment cadence, stamped-event age, spawn/die counters; measured ~1.8 segments/ball/s, event age p95 14ms — confirms the ball chop was the client-side 50ms render quantization, not the wire), `--watch` (join/left cadence + ghost-detection window).
+- `--test5` tick-stream suite: frame rate while moving, gap percentiles, self-echo drift, zero-correction assertions for legal circling and stepped moves. Fixed its own flakiness: scripted paths now suspend the self-drive loop (two writers to `pos` = fake teleports), circle recenters on respawn position, tick gaps only counted while alive (death = legitimately suppressed frames).
+- `--test2` extended: blast knockback now asserted end-to-end — victim bots apply the impulse like a real client and the resulting displacement must appear in their position stream (measured 2.49m). `--park` bots integrate velocity + gravity so the shove reads.
+- Server: `handleHandshake(..., isReconnect)` — grace-period reconnects no longer re-broadcast `playerJoined` (peers already hold the roster entry; ghost sockets were spamming phantom joins every ~4s).
+- Balls smoothness: `balls.ts` render position now extrapolates `pos + vel*rem + ½g·rem²` over the un-stepped `netAcc` remainder — the sim only steps in 50ms quanta and the dropped remainder rendered as ~20fps chop.
+
 ## [2026-09-27] Multiplayer E2E harness + combat hardening
 
 - `_tools/pvptest/bot.ts` (new): headless PvE-free bot that joins the live server as a real player over the binary wire protocol. `bun bot.ts <name> [--fighter] [--orbit]` spawns a live opponent (orbits nearest player, fires legal rocket claims); `--park` stands still as a range target; `--idle` joins then goes silent; `--test`/`--test2`/`--test3`/`--test4` run assertion suites and exit nonzero on failure.
