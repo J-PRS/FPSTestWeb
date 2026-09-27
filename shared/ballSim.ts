@@ -166,12 +166,12 @@ export function stepBall(
     const dx = b.x - target.x;
     const dz = b.z - target.z;
     if (dx * dx + dz * dz > BALL_MAX_DIST * BALL_MAX_DIST) {
-      if (authoritative) {
-        b.enraged = true;
-        b.enrageTimer = 0;
-        launchAt(b, target, Math.SQRT1_2);
-        return 'enrage';
-      }
+      // launchAt is RNG-free — the predictor commits the same enrage spring
+      // the authority does instead of waiting one tick for the segment.
+      b.enraged = true;
+      b.enrageTimer = 0;
+      launchAt(b, target, Math.SQRT1_2);
+      return 'enrage';
     }
   }
   return 'bounce';

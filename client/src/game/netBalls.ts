@@ -76,7 +76,7 @@ export function createNetBalls(deps: EntitiesDeps, ctx: NetBallsCtx, logger: Chi
   // truth. >2m = visible warp worth logging; >4m means prediction diverged
   // hard (latency spike or a sim mismatch — that one's a bug, not lag).
   const _segPos = new THREE.Vector3();
-  function netBallSegment(m: { id: number; position: { x: number; y: number; z: number }; velocity: { x: number; y: number; z: number }; enraged: boolean; targetId: string | null; t?: number }): void {
+  function netBallSegment(m: { id: number; position: { x: number; y: number; z: number }; velocity: { x: number; y: number; z: number }; enraged: boolean; targetId: string | null; t?: number; et?: number; slowT?: number; damp?: boolean }): void {
     const b = netBallById.get(m.id);
     if (!b) return;
     _segPos.set(m.position.x, m.position.y, m.position.z);
@@ -98,6 +98,7 @@ export function createNetBalls(deps: EntitiesDeps, ctx: NetBallsCtx, logger: Chi
       m.velocity.x, m.velocity.y, m.velocity.z,
       m.enraged, m.targetId,
       age, targetPosForId(m.targetId),
+      { et: m.et, slowT: m.slowT, damp: m.damp },
     );
   }
 

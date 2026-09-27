@@ -717,13 +717,19 @@ export class Ball {
     vx: number, vy: number, vz: number,
     enraged: boolean, targetId: string | null,
     lead = 0, targetPos?: THREE.Vector3 | null,
+    timers?: { et?: number; slowT?: number; damp?: boolean },
   ): void {
     const s = this.sim;
     if (!s) return;
     s.x = px; s.y = py; s.z = pz;
     s.vx = vx; s.vy = vy; s.vz = vz;
     s.enraged = enraged;
-    s.enrageTimer = 0;
+    // The timers ride the wire — resetting them here would restart the
+    // server's 20s enrage countdown on every heartbeat and the client ball
+    // would outlive enrages the authority already teleported out of.
+    s.enrageTimer = timers?.et ?? 0;
+    s.slowTimer = timers?.slowT ?? 0;
+    s.dampNextBounce = timers?.damp ?? false;
     this.netTargetId = targetId;
     if (lead > 0 && Ball.field) {
       const tp = Ball._simTarget;
