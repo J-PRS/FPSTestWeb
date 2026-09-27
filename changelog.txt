@@ -1872,3 +1872,4 @@ Creatures no longer hard-deaggro: leash-drop = 'stalking' — drift erratically 
 Ball rubberbanding root cause: segment lead-replay took a partial-width step, permanently phase-shifting the client sim off the server's 50ms grid — every bounce diverged 20-100m. Banked age into netAcc instead (grid-aligned steps, render extrapolates remainder)
 Ball prediction now gated on the stamped server sim clock (Ball.netSimNow) — was free-running on wall time and drifted ahead of tick cadence
 Ball render: inert legs now extrapolate closed-form (Euler-exact, continuous) instead of stepping at 20Hz — enraged pulls still step on the server clock
+Ball corrections now blend via renderOffset for all non-teleport kinds (residual divergence is server-clock skew, not desync); added _tools/pvptest/ballreplay.ts — live-wire replay probe measuring real divergence per segment kind
