@@ -60,8 +60,14 @@ export interface SimBall {
   dampNextBounce: boolean;
   dead: boolean;
   /** The player it's raging/lunging at — travels on segment events so a
-   *  replay applies the same pull toward the same target's live pos. */
+   *  replay applies the same pull toward the same target. */
   targetId: string | null;
+  /** Target position SNAPSHOT — set when a segment is emitted and carried
+   *  on the wire (tp). Both sims must pull toward the SAME point: if the
+   *  authority aims at its stale player pos while a predictor aims at the
+   *  live pos, the two arcs diverge ~100m per segment. */
+  tx: number; ty: number; tz: number;
+  tgtValid: boolean;
 }
 
 const _n: SimVec = { x: 0, y: 0, z: 0 };
@@ -76,6 +82,7 @@ export function makeSimBall(id: number, variant: BallVariant, colorIdx: number, 
     health, maxHealth: health,
     enraged: false, enrageTimer: 0, slowTimer: 0, dampNextBounce: false,
     dead: false, targetId: null,
+    tx: 0, ty: 0, tz: 0, tgtValid: false,
   };
 }
 

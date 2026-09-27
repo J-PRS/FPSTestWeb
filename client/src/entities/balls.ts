@@ -296,12 +296,12 @@ export class Ball {
       // into hundreds of meters. Same dt + same code = same trajectory.
       this.netAcc = Math.min(this.netAcc + dt, 0.5); // cap vs spiral-of-death on stalls
       const s = this.sim;
+      // Pull/lunge aim = the snapshot the server carried on the last
+      // segment — replaying the SAME input, not our live view of the
+      // target, is what keeps the two sims glued together.
       const tp = Ball._simTarget;
-      tp.x = playerPos.x; tp.y = playerPos.y; tp.z = playerPos.z;
-      // target=null when nobody's committed (caller passes own pos) — the
-      // stall breaker + enrage pull are deterministic, so predictors run
-      // them too and pre-land the same launch the server broadcasts.
-      const tgt = playerPos === this.pos ? null : tp;
+      tp.x = s.tx; tp.y = s.ty; tp.z = s.tz;
+      const tgt = s.tgtValid ? tp : null;
       while (this.netAcc >= 0.05) {
         this.netAcc -= 0.05;
         s.x = this.pos.x; s.y = this.pos.y; s.z = this.pos.z;
@@ -718,6 +718,7 @@ export class Ball {
     enraged: boolean, targetId: string | null,
     lead = 0, targetPos?: THREE.Vector3 | null,
     timers?: { et?: number; slowT?: number; damp?: boolean },
+    tp?: { x: number; y: number; z: number } | null,
   ): void {
     const s = this.sim;
     if (!s) return;
@@ -730,14 +731,17 @@ export class Ball {
     s.enrageTimer = timers?.et ?? 0;
     s.slowTimer = timers?.slowT ?? 0;
     s.dampNextBounce = timers?.damp ?? false;
+    // Aim snapshot — the server pulled toward THIS point, so we do too.
+    if (tp) { s.tx = tp.x; s.ty = tp.y; s.tz = tp.z; s.tgtValid = true; }
+    else s.tgtValid = false;
     this.netTargetId = targetId;
     if (lead > 0 && Ball.field) {
-      const tp = Ball._simTarget;
-      if (targetPos) { tp.x = targetPos.x; tp.y = targetPos.y; tp.z = targetPos.z; }
+      const tgt = Ball._simTarget;
+      tgt.x = s.tx; tgt.y = s.ty; tgt.z = s.tz;
       let rem = lead;
       while (rem > 0.001) {
         const h = Math.min(0.05, rem); // server-rate substeps — same granularity as the sim
-        stepBall(s, h, Ball.field, enraged && targetPos ? tp : null, false);
+        stepBall(s, h, Ball.field, s.tgtValid ? tgt : null, false);
         rem -= h;
       }
     }

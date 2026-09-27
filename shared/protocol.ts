@@ -86,11 +86,11 @@ export type ServerMessage =
   // deterministic), so the wire carries only SEGMENT boundaries: every
   // velocity discontinuity. A client replays the same integrator and lands
   // on the same arc — no position stream at all.
-  | { type: 'ballSpawn'; id: number; variant: number; colorIdx: number; position: Vec3; velocity: Vec3; t: number }
-  | { type: 'ballSegment'; id: number; position: Vec3; velocity: Vec3; enraged: boolean; targetId: string | null; kind: string; t: number; et?: number; slowT?: number; damp?: boolean }
+  | { type: 'ballSpawn'; id: number; variant: number; colorIdx: number; position: Vec3; velocity: Vec3; targetId?: string | null; tp?: Vec3 | null; t: number }
+  | { type: 'ballSegment'; id: number; position: Vec3; velocity: Vec3; enraged: boolean; targetId: string | null; kind: string; t: number; et?: number; slowT?: number; damp?: boolean; tp?: Vec3 | null }
   | { type: 'ballDie'; id: number; position: Vec3; by?: string | null }
   // Roster for joiners/reconnects — current segment state of every live ball
-  | { type: 'ballRoster'; balls: { id: number; variant: number; colorIdx: number; position: Vec3; velocity: Vec3; enraged: boolean; targetId: string | null; t: number }[] }
+  | { type: 'ballRoster'; balls: { id: number; variant: number; colorIdx: number; position: Vec3; velocity: Vec3; enraged: boolean; targetId: string | null; tp?: Vec3 | null; t: number }[] }
   | { type: 'pong'; timestamp: number };
 
 export interface GameStatePlayer {

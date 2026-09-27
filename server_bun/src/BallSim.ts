@@ -33,6 +33,7 @@ const RESYNC_INTERVAL = 1.2;
 const BASE_BALLS = 10;          // solo population
 const BALLS_PER_PLAYER = 4;     // extra per additional player
 const MAX_BALLS = 40;
+const _snap: SimVec = { x: 0, y: 0, z: 0 }; // scratch — stepBall's target arg
 
 // 5% elite, otherwise weighted fodder sizes (v0 common, v1/v2 rare)
 function rollVariant(): BallVariant {
@@ -92,7 +93,7 @@ export class BallSim {
         id: b.id, variant: b.variant, colorIdx: b.colorIdx,
         position: { x: b.x, y: b.y, z: b.z },
         velocity: { x: b.vx, y: b.vy, z: b.vz },
-        enraged: b.enraged, targetId: b.targetId,
+        enraged: b.enraged, targetId: b.targetId, tp: this.targetSnap(b),
         t: this.simTime,
       });
     }
@@ -141,23 +142,44 @@ export class BallSim {
       Math.cos(ang) * spd, -2, Math.sin(ang) * spd,
     );
     b.targetId = this.nearestPlayer(b, this.alivePlayers())?.id ?? null;
+    this.snapTarget(b);
     this.balls.set(b.id, b);
     this.broadcast({
       type: 'ballSpawn', id: b.id, variant: b.variant, colorIdx: b.colorIdx,
       position: { x: b.x, y: b.y, z: b.z },
       velocity: { x: b.vx, y: b.vy, z: b.vz },
+      targetId: b.targetId, tp: this.targetSnap(b),
       t: this.simTime,
     });
     return b;
   }
 
+  /** Freeze the pull/lunge aim into the sim ball. stepBall reads the
+   *  snapshot, the wire carries it — both sides integrate the same input.
+   *  (If the predictor aimed at the LIVE local player pos while the server
+   *  aimed at its last-received pos, arcs diverged ~100m per segment.) */
+  private snapTarget(b: SimBall): void {
+    const p = b.targetId ? this.players.getPlayer(b.targetId) : null;
+    if (p && !p.isDead) {
+      b.tx = p.position.x; b.ty = p.position.y; b.tz = p.position.z;
+      b.tgtValid = true;
+    } else {
+      b.tgtValid = false;
+    }
+  }
+
+  private targetSnap(b: SimBall): SimVec | null {
+    return b.tgtValid ? { x: b.tx, y: b.ty, z: b.tz } : null;
+  }
+
   private segment(b: SimBall, kind: SegmentKind): void {
     this.resyncAcc.set(b.id, 0);
+    this.snapTarget(b); // segment boundary = aim refresh; clients get the same point
     this.broadcast({
       type: 'ballSegment', id: b.id, kind,
       position: { x: b.x, y: b.y, z: b.z },
       velocity: { x: b.vx, y: b.vy, z: b.vz },
-      enraged: b.enraged, targetId: b.targetId,
+      enraged: b.enraged, targetId: b.targetId, tp: this.targetSnap(b),
       // Full-sim resync: the predictors run the same integrator, so the
       // timers ride along or a client's 20s timeout / stall breaker drifts
       // off the server's (heartbeats would otherwise keep resetting them).
@@ -243,10 +265,10 @@ export class BallSim {
         this.retargetAcc.set(b.id, ra);
       }
 
-      const target = alive.find(p => p.id === b.targetId)?.pos
-        ?? this.nearestPlayer(b, alive)?.pos
-        ?? null;
-      const kind = stepBall(b, TICK_DT, this.field, target, true);
+      // Pull/lunge aim comes from the snapshot last emitted on a segment —
+      // predictors replay the identical input, not the live player pos.
+      _snap.x = b.tx; _snap.y = b.ty; _snap.z = b.tz;
+      const kind = stepBall(b, TICK_DT, this.field, b.tgtValid ? _snap : null, true);
       if (kind) {
         this.segment(b, kind);
       } else {
