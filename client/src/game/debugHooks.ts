@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 
 import type { ChildLogger } from '../core/Logger.js';
+import { urlParams } from '../core/params.js';
 import type { Player } from '../entities/Player.js';
 import { RemotePlayer } from '../entities/RemotePlayer.js';
 import type { Terrain } from '../world/terrain.js';
@@ -19,7 +20,7 @@ export interface DebugHooksDeps {
 //     re-placed in front of the camera every frame so it's always in frame
 // Returns the per-frame dummy tick, or null when ?dummy is absent.
 export function applyDebugHooks(deps: DebugHooksDeps): ((dt: number) => void) | null {
-  const qp = new URLSearchParams(window.location.search);
+  const qp = urlParams;
   const { player } = deps;
 
   if (qp.has('yaw')) player.yaw = (parseFloat(qp.get('yaw')!) || 0) * Math.PI / 180;
