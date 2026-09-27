@@ -8,8 +8,8 @@ import { PlayerSkills } from './player/skills.js';
 import { MovementController, MovementState } from './movement.js';
 import { WeaponType } from '../../../shared/weapons.js';
 import { settings } from '../core/settings.js';
-import { matchCode, isDown, type BindAction } from '../core/keybinds.js';
-import { audio } from '../core/audio.js';
+import { isDown } from '../core/keybinds.js';
+import { PlayerInput } from './player/input.js';
 import { PlayerModel } from './PlayerModel.js';
 import { PlayerVisuals } from './PlayerVisuals.js';
 import { THROW_TOTAL } from './ViewModel.js';
@@ -31,9 +31,6 @@ export class Player {
   vel = new THREE.Vector3();
   yaw = 0.0;
   pitch = 0.0;
-  // Invert vertical mouse look ("flight sim" style). Persisted via settings.
-  invertY = settings.get('fps-invert-y');
-  sensitivity = settings.get('fps-sens');
 
   onGround = false;
   energy = MAX_ENERGY;
@@ -51,7 +48,7 @@ export class Player {
   /** Verb phrase for the death message ("devoured by a crawler") — set by
    *  every environment-damage path so the kill feed names the real killer. */
   lastDamageSource = '';
-  inputFrozen = false; // when true, keyboard/mouse input is ignored (demo playback)
+  get inputFrozen(): boolean { return this.input.frozen; } // true = keyboard/mouse ignored (demo playback)
 
   // Spectator fly: the death-observer free-flight cam without dying — no
   // desaturation, no respawn timer, body follows the ghost (pos IS the
@@ -82,23 +79,17 @@ export class Player {
     // queued while ghosted so they don't discharge on the way out.
     if (!this.spectating) {
       this.vel.set(0, 0, 0);
-      this.firePending = false;
-      this.jetPending = false;
+      this.input.firePending = false;
+      this.input.jetPending = false;
     }
     this.model?.setVisible(!this.spectating && this.thirdPerson && !this.isDead && !this.cloaked);
     this.onSpectate?.(this.spectating);
   }
 
   freezeInput(): void {
-    this.inputFrozen = true;
     // Clear all tracked input so nothing leaks from before playback
-    this.keys = {};
-    this.mouseHeld = false;
-    this.firePending = false;
-    this.jetPending = false;
-    this.jumpHeld = false;
-    this.discHeld = false;
-    this.grenadeHeld = false;
+    this.input.frozen = true;
+    this.input.clearAll();
     this.skills.reset(); // abandon blink mid-flight, kill the beacon
   }
 
@@ -121,7 +112,7 @@ export class Player {
   }
 
   unfreezeInput(): void {
-    this.inputFrozen = false;
+    this.input.frozen = false;
   }
 
   private terrain: Terrain;
@@ -132,18 +123,9 @@ export class Player {
   private wasOnGround = false;
   private visuals: PlayerVisuals; // camera/shadow/gizmo/observer — see PlayerVisuals.ts
 
-  // Input state
-  private keys: Record<string, boolean> = {};
-  private mouseHeld = false;
-  private firePending = false;
-  // Railgun kill-refund zeroes the cooldown — but the shot is still held,
-  // so without this the same click re-fires the gun on kill. Require a
-  // mouse release before the next shot.
-  private needsRelease = false;
-  private jetPending = false;
-  private jumpHeld = false;
-  private discHeld = false;
-  private grenadeHeld = false;
+  // Input state lives in PlayerInput — raw DOM events → flags, game
+  // semantics reach back through the handler interface it was given.
+  private input!: PlayerInput;
   // Skills live on Q — the loadout picks which one is equipped.
   skill: SkillId = (SKILL_ORDER as string[]).includes(settings.get('fps-skill'))
     ? settings.get('fps-skill') as SkillId : 'bounce';
@@ -177,7 +159,7 @@ export class Player {
    *  without needsRelease the still-held trigger would re-fire same-frame. */
   refundWeaponCooldown(): void {
     this.fireTimer = 0;
-    this.needsRelease = true;
+    this.input.needsRelease = true;
   }
 
   setLoadoutSlot(slot: number, weaponId: number): void {
@@ -196,7 +178,6 @@ export class Player {
     this.beltItem = item;
     settings.set('fps-belt', item);
   }
-  private wheelAcc = 0; // accumulates deltaY for smooth-scroll mice
   private static readonly WEAPON_RATES = [FIRE_RATE, DISC_RATE, CHAINGUN_RATE, MORTAR_RATE, GL_RATE, FLAK_RATE, PLASMA_RATE, RAILGUN_RATE, LG_RATE, SHOTGUN_RATE, CANNON_RATE, RKT_RATE, PISTOL_RATE, REVOLVER_RATE];
   // wid (loadout/WEAPON_RATES index) → WeaponType wire id. The enum has
   // Grenade=2/Slam=8/Railgun=9/Melee=10 gaps, so positional ids diverge
@@ -210,12 +191,6 @@ export class Player {
   // auto-fires at its own cadence; release snaps back to the loadout slot.
   // wids are slot-space indices into WEAPON_RATES/SLOT_WEAPONS.
   private secondaryWid: number | null = null;
-  private static readonly SECONDARY_ACTIONS = ['secPistol', 'secRevolver', 'secShotgun'] as const;
-  private static readonly SECONDARY_WID: Record<string, number> = {
-    secPistol: 12,
-    secRevolver: 13,
-    secShotgun: 9,
-  };
 
   // Events
   onFire: ((e: FireEvent) => void) | null = null;
@@ -308,7 +283,49 @@ export class Player {
       drainEnergy: (n) => { this.energy = Math.max(0, this.energy - n); },
     });
 
-    this.bindInput();
+    this.input = new PlayerInput({
+      isSpectating: () => this.spectating,
+      toggleSpectator: () => this.toggleSpectator(),
+      beltItem: () => this.beltItem,
+      melee: () => this.tryMelee(),
+      toggleCamera: () => {
+        this.thirdPerson = !this.thirdPerson;
+        this.model?.setVisible(this.thirdPerson && !this.isDead && !this.cloaked);
+      },
+      skillPress: () => this.skills.press(this.skill),
+      skillRelease: () => this.skills.release(this.skill),
+      secondaryDown: (wid) => {
+        if (wid !== this.secondaryWid) {
+          this.secondaryWid = wid;
+          this.onWeaponSwitch?.(wid);
+        }
+      },
+      secondaryUp: (wid) => {
+        if (this.secondaryWid === wid) {
+          this.secondaryWid = null;
+          this.onWeaponSwitch?.(this.currentWeapon);
+        }
+      },
+      selectSlot: (i) => {
+        if (i !== this.weaponIndex) {
+          this.weaponIndex = i;
+          this.onWeaponSwitch?.(this.loadout[i]);
+        }
+      },
+      cycleWeapon: (step) => {
+        const n = this.loadout.length;
+        const idx = (this.weaponIndex + step + n) % n;
+        if (idx !== this.weaponIndex) {
+          this.weaponIndex = idx;
+          this.onWeaponSwitch?.(this.loadout[idx]);
+        }
+      },
+      look: (dx, dy) => {
+        this.yaw -= dx * 0.002 * this.input.sensitivity;
+        this.pitch += dy * 0.002 * this.input.sensitivity * (this.input.invertY ? 1 : -1);
+        this.pitch = Math.max(-Math.PI / 2 + 0.01, Math.min(Math.PI / 2 - 0.01, this.pitch));
+      },
+    });
   }
 
   async loadModel(): Promise<void> {
@@ -321,158 +338,6 @@ export class Player {
     }
   }
 
-  private bindInput(): void {
-    document.addEventListener('keydown', (e) => {
-      if (this.inputFrozen) return;
-      this.keys[e.code] = true;
-      if (matchCode('spectate', e.code) && !e.repeat) this.toggleSpectator();
-      // Spectating: only the spectate toggle and raw movement keys (tracked
-      // above for the fly cam) respond — no weapons, skills, camera flips
-      if (this.spectating) return;
-      for (const a of Player.SECONDARY_ACTIONS) {
-        if (matchCode(a, e.code)) {
-          const wid = Player.SECONDARY_WID[a];
-          if (wid !== this.secondaryWid) {
-            this.secondaryWid = wid;
-            this.onWeaponSwitch?.(wid);
-          }
-          break;
-        }
-      }
-      if (matchCode('jump', e.code)) {
-        this.jumpHeld = true;
-      }
-      if (matchCode('belt', e.code)) {
-        if (this.beltItem === 'disc') this.discHeld = true;
-        else this.grenadeHeld = true;
-      }
-      if (matchCode('melee', e.code)) {
-        this.tryMelee();
-      }
-      if (matchCode('camera', e.code)) {
-        this.thirdPerson = !this.thirdPerson;
-        this.model?.setVisible(this.thirdPerson && !this.isDead);
-      }
-      if (matchCode('skill', e.code) && !e.repeat) this.skills.press(this.skill);
-      for (let i = 0; i < Player.LOADOUT_SLOTS; i++) {
-        if (matchCode(`slot${i}` as BindAction, e.code) && i !== this.weaponIndex) {
-          this.weaponIndex = i;
-          if (this.onWeaponSwitch) this.onWeaponSwitch(this.loadout[i]);
-        }
-      }
-    });
-    // Mouse wheel cycles weapons (down = next, up = previous). Accumulate
-    // deltaY so smooth-scroll/trackpads switch once per gesture, not per tick.
-    document.addEventListener('wheel', (e) => {
-      if (this.inputFrozen) return;
-      if (!document.pointerLockElement) return;
-      this.wheelAcc += e.deltaY;
-      if (Math.abs(this.wheelAcc) < 40) return;
-      const step = this.wheelAcc > 0 ? 1 : -1;
-      this.wheelAcc = 0;
-      const n = this.loadout.length;
-      const idx = (this.weaponIndex + step + n) % n;
-      if (idx !== this.weaponIndex) {
-        this.weaponIndex = idx;
-        if (this.onWeaponSwitch) this.onWeaponSwitch(this.loadout[idx]);
-      }
-    }, { passive: true });
-    document.addEventListener('keyup', (e) => {
-      if (this.inputFrozen) return;
-      this.keys[e.code] = false;
-      if (matchCode('jump', e.code)) {
-        this.jumpHeld = false;
-      }
-      if (matchCode('skill', e.code)) this.skills.release(this.skill);
-      if (matchCode('belt', e.code)) {
-        this.discHeld = false;
-        this.grenadeHeld = false;
-      }
-      for (const a of Player.SECONDARY_ACTIONS) {
-        if (matchCode(a, e.code) && this.secondaryWid === Player.SECONDARY_WID[a]) {
-          this.secondaryWid = null;
-          this.onWeaponSwitch?.(this.currentWeapon);
-          break;
-        }
-      }
-    });
-    document.addEventListener('mousedown', (e) => {
-      if (this.inputFrozen) return;
-      if (!document.pointerLockElement) return; // ignore clicks that lock the cursor
-      this.keys[`Mouse${e.button}`] = true;
-      if (e.button === 0) { this.firePending = true; this.mouseHeld = true; this.needsRelease = false; }
-      if (e.button === 2) { this.jetPending = true; }
-      // Buttons bound to key actions (keybinds allow Mouse0-4) need the
-      // same press/release semantics as keyboard codes
-      if (matchCode('jump', `Mouse${e.button}`)) this.jumpHeld = true;
-      if (matchCode('skill', `Mouse${e.button}`)) this.skills.press(this.skill);
-      if (matchCode('belt', `Mouse${e.button}`)) {
-        if (this.beltItem === 'disc') this.discHeld = true; else this.grenadeHeld = true;
-      }
-      if (matchCode('melee', `Mouse${e.button}`)) this.tryMelee();
-      if (matchCode('camera', `Mouse${e.button}`)) {
-        this.thirdPerson = !this.thirdPerson;
-        this.model?.setVisible(this.thirdPerson && !this.isDead);
-      }
-    });
-    document.addEventListener('mouseup', (e) => {
-      if (this.inputFrozen) return;
-      this.keys[`Mouse${e.button}`] = false;
-      if (e.button === 0) this.mouseHeld = false;
-      if (e.button === 2) { this.jetPending = false; }
-      if (matchCode('jump', `Mouse${e.button}`)) this.jumpHeld = false;
-      if (matchCode('skill', `Mouse${e.button}`)) this.skills.release(this.skill);
-      if (matchCode('belt', `Mouse${e.button}`)) { this.discHeld = false; this.grenadeHeld = false; }
-    });
-    document.addEventListener('contextmenu', (e) => e.preventDefault());
-    document.addEventListener('mousemove', (e) => {
-      if (document.pointerLockElement && !this.inputFrozen) {
-        this.yaw   -= e.movementX * 0.002 * this.sensitivity;
-        this.pitch += e.movementY * 0.002 * this.sensitivity * (this.invertY ? 1 : -1);
-        this.pitch = Math.max(-Math.PI / 2 + 0.01, Math.min(Math.PI / 2 - 0.01, this.pitch));
-      }
-    });
-
-    // Wire the ESC-menu toggle for inverted vertical mouse look
-    const invertYBtn = document.getElementById('invert-y-toggle') as HTMLButtonElement | null;
-    if (invertYBtn) {
-      invertYBtn.textContent = this.invertY ? 'INVERT Y: ON' : 'INVERT Y: OFF';
-      invertYBtn.addEventListener('click', () => {
-        this.invertY = !this.invertY;
-        settings.set('fps-invert-y', this.invertY);
-        invertYBtn.textContent = this.invertY ? 'INVERT Y: ON' : 'INVERT Y: OFF';
-      });
-    }
-
-    // Wire the ESC-menu sensitivity field (plain decimal input, no steppers).
-    // Display scale is ×10 the internal multiplier so default shows "10" and
-    // whole numbers give coarse-but-usable steps.
-    const sensInput = document.getElementById('sens-input') as HTMLInputElement | null;
-    if (sensInput) {
-      sensInput.value = (this.sensitivity * 10).toString();
-      // Click/focus selects the whole value so typing replaces it outright
-      sensInput.addEventListener('focus', () => sensInput.select());
-      sensInput.addEventListener('input', () => {
-        const v = parseFloat(sensInput.value);
-        if (!isFinite(v)) return;
-        this.sensitivity = Math.max(0.5, Math.min(100, v)) / 10;
-        settings.set('fps-sens', this.sensitivity);
-      });
-      // Don't let WASD-type keys inside the field reach game input
-      sensInput.addEventListener('keydown', (e) => e.stopPropagation());
-    }
-
-    const volInput = document.getElementById('vol-input') as HTMLInputElement | null;
-    if (volInput) {
-      volInput.value = audio.getVolume().toString();
-      volInput.addEventListener('input', () => {
-        const v = parseFloat(volInput.value);
-        if (isFinite(v)) audio.setVolume(Math.max(0, Math.min(1, v)));
-      });
-      volInput.addEventListener('keydown', (e) => e.stopPropagation());
-    }
-  }
-
   private getForwardXZ(): THREE.Vector2 {
     return new THREE.Vector2(Math.sin(this.yaw), Math.cos(this.yaw));
   }
@@ -481,11 +346,12 @@ export class Player {
   }
 
   getInputState(): { forward: number; right: number; jumpPressed: boolean; jumpHeld: boolean; skiHeld: boolean; firePressed: boolean; jetHeld: boolean; discHeld: boolean; grenadeHeld: boolean } {
+    const keys = this.input.keys;
     let forward = 0, right = 0;
-    if (isDown(this.keys, 'forward') || this.keys['ArrowUp'])    forward += 1;
-    if (isDown(this.keys, 'back') || this.keys['ArrowDown'])     forward -= 1;
-    if (isDown(this.keys, 'left') || this.keys['ArrowLeft'])     right -= 1;
-    if (isDown(this.keys, 'right') || this.keys['ArrowRight'])   right += 1;
+    if (isDown(keys, 'forward') || keys['ArrowUp'])    forward += 1;
+    if (isDown(keys, 'back') || keys['ArrowDown'])     forward -= 1;
+    if (isDown(keys, 'left') || keys['ArrowLeft'])     right -= 1;
+    if (isDown(keys, 'right') || keys['ArrowRight'])   right += 1;
 
     const mlen = Math.sqrt(forward * forward + right * right);
     if (mlen > 0) { forward /= mlen; right /= mlen; }
@@ -493,13 +359,13 @@ export class Player {
     return {
       forward,
       right,
-      jumpPressed: this.jumpHeld,
-      jumpHeld: this.jumpHeld,
-      skiHeld: isDown(this.keys, 'ski'),
-      firePressed: this.firePending,
-      jetHeld: this.jetPending,
-      discHeld: this.discHeld,
-      grenadeHeld: this.grenadeHeld
+      jumpPressed: this.input.jumpHeld,
+      jumpHeld: this.input.jumpHeld,
+      skiHeld: isDown(keys, 'ski'),
+      firePressed: this.input.firePending,
+      jetHeld: this.input.jetPending,
+      discHeld: this.input.discHeld,
+      grenadeHeld: this.input.grenadeHeld
     };
   }
 
@@ -516,11 +382,11 @@ export class Player {
       // T1/T2 observer mode: free-look + fly till respawn
       this.visuals.updateObserverCam(dt, this.camera, this.terrain, this.pos, this.vel, this.yaw, this.pitch, {
         forward: obInput.forward, right: obInput.right, jumpHeld: obInput.skiHeld,
-        shiftDown: !!(this.keys['ShiftLeft'] || this.keys['ShiftRight']),
+        shiftDown: !!(this.input.keys['ShiftLeft'] || this.input.keys['ShiftRight']),
       });
       return;
     }
-    if (this.inputFrozen) {
+    if (this.input.frozen) {
       // still update camera for demo playback
       this.visuals.updateFrozenCamera(this.camera, this.terrain, this.pos, this.yaw, this.pitch);
       return;
@@ -576,7 +442,7 @@ export class Player {
 
     // Jetpack (separate from movement controller, applied after physics sync)
     if (this.jetBoostTimer > 0) this.jetBoostTimer -= dt;
-    const isJetting = this.jetPending && (this.energy > 0 || this.jetBoostTimer > 0);
+    const isJetting = this.input.jetPending && (this.energy > 0 || this.jetBoostTimer > 0);
     this.jetting = isJetting;
     if (isJetting) {
       this.vel.y += JET_FORCE_UP * dt;
@@ -636,12 +502,13 @@ export class Player {
   private readMoveInput(): { forward: number; right: number; jumpHeld: boolean; skiHeld: boolean; moveX: number; moveZ: number } {
     const fwd = this.getForwardXZ();
     const rgt = this.getRightXZ();
+    const keys = this.input.keys;
 
     let forward = 0, right = 0;
-    if (isDown(this.keys, 'forward') || this.keys['ArrowUp'])    forward += 1;
-    if (isDown(this.keys, 'back') || this.keys['ArrowDown'])     forward -= 1;
-    if (isDown(this.keys, 'left') || this.keys['ArrowLeft'])     right -= 1;
-    if (isDown(this.keys, 'right') || this.keys['ArrowRight'])   right += 1;
+    if (isDown(keys, 'forward') || keys['ArrowUp'])    forward += 1;
+    if (isDown(keys, 'back') || keys['ArrowDown'])     forward -= 1;
+    if (isDown(keys, 'left') || keys['ArrowLeft'])     right -= 1;
+    if (isDown(keys, 'right') || keys['ArrowRight'])   right += 1;
 
     // Normalize input
     const mlen = Math.sqrt(forward * forward + right * right);
@@ -649,8 +516,8 @@ export class Player {
 
     return {
       forward, right,
-      jumpHeld: this.jumpHeld, // autoHop: held = pressed
-      skiHeld: isDown(this.keys, 'ski'),
+      jumpHeld: this.input.jumpHeld, // autoHop: held = pressed
+      skiHeld: isDown(keys, 'ski'),
       // World-space move dir for jetpack thrust
       moveX: fwd.x * forward + rgt.x * right,
       moveZ: fwd.y * forward + rgt.y * right,
@@ -674,8 +541,8 @@ export class Player {
     // A held secondary auto-fires at its own cadence — no click needed.
     const wantFire = this.throwLockT <= 0 &&
       (this.secondaryWid !== null ? true
-        : isBeam ? this.mouseHeld : (this.firePending || (this.mouseHeld && !this.needsRelease)));
-    if (!this.mouseHeld) this.needsRelease = false;
+        : isBeam ? this.input.mouseHeld : (this.input.firePending || (this.input.mouseHeld && !this.input.needsRelease)));
+    if (!this.input.mouseHeld) this.input.needsRelease = false;
     if (wantFire && this.fireTimer <= 0) {
       this.fireTimer = Player.WEAPON_RATES[wid];
       // wid is a slot-space index — the table mirrors WEAPON_RATES order
@@ -687,17 +554,17 @@ export class Player {
       ] as const)[wid] ?? this.onFire;
       fireCallback?.({ origin: this.pos.clone(), dir: this.getAimDir(), playerVel: this.vel.clone() });
     }
-    this.firePending = false;
+    this.input.firePending = false;
 
     // Disc (C key) - belt throw, hold to fire
-    if (this.discHeld && this.discTimer <= 0) {
+    if (this.input.discHeld && this.discTimer <= 0) {
       this.discTimer = DISC_RATE;
       this.throwLockT = THROW_TOTAL;
       this.onDisc?.({ origin: this.pos.clone(), dir: this.getAimDir(), playerVel: this.vel.clone() });
     }
 
     // Grenade (F key) - belt throw, hold to fire
-    if (this.grenadeHeld && this.grenadeTimer <= 0) {
+    if (this.input.grenadeHeld && this.grenadeTimer <= 0) {
       this.grenadeTimer = GRENADE_RATE;
       this.throwLockT = THROW_TOTAL;
       this.onGrenade?.({ origin: this.pos.clone(), dir: this.getAimDir(), playerVel: this.vel.clone() });
