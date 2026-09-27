@@ -5,16 +5,8 @@ export const CONFIG = {
 
   playerMaxHealth: 100,
   respawnDelayMs: 3000,
-  shotDamage: 50,
-  aoeDamage: 15,
-  aoeRadius: 6.0,
-  knockbackForce: 28.0,
-  discAoeDamage: 10,
-  discAoeRadius: 5.0,
-  discPullForce: 25.0,
-  grenadeAoeDamage: 20,
-  grenadeAoeRadius: 10.0,
-  grenadeKnockbackForce: 45.0,
+  // Weapon damage/radius/knockback live in shared/weapons.ts — single
+  // source of truth for client + server. Don't re-add stats here.
 
   spawnPoints: [
     { x: 0, y: 60, z: 0 },
@@ -37,15 +29,14 @@ export const CONFIG = {
 
   rateLimits: {
     position: { maxCount: 30, windowMs: 1000 },
-    shot: { maxCount: 10, windowMs: 1000 },
-    aoeShot: { maxCount: 10, windowMs: 1000 },
-    discAOEShot: { maxCount: 10, windowMs: 1000 },
-    grenadeAOEShot: { maxCount: 10, windowMs: 1000 },
+    shot: { maxCount: 20, windowMs: 1000 }, // chaingun fires ~11/s spawn events
+    aoeShot: { maxCount: 15, windowMs: 1000 }, // all AOE weapons share one bucket — GL spam is the ceiling
     jump: { maxCount: 10, windowMs: 1000 },
     jetpack: { maxCount: 60, windowMs: 1000 },
     inputMove: { maxCount: 120, windowMs: 1000 },
     input: { maxCount: 120, windowMs: 1000 },
     projectileDestroy: { maxCount: 30, windowMs: 1000 },
+    environmentDamage: { maxCount: 10, windowMs: 1000 }, // crawler pounces etc.
     default: { maxCount: 120, windowMs: 1000 },
   } as const,
 

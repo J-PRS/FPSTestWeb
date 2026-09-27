@@ -46,9 +46,19 @@ export class MessageHandler {
     this.combat.onPlayerRemoved(playerId);
   }
 
+  /** A reclaimed session may restore a dead player whose respawn timer was
+   *  cancelled at disconnect — re-arm it or they stay a ghost forever. */
+  onPlayerReconnected(playerId: string): void {
+    this.combat.ensureRespawn(playerId);
+  }
+
   handleHandshake(playerId: string, sessionToken?: string): void {
     const player = this.playerManager.getPlayer(playerId);
     if (!player) return;
+
+    // Reconnecting dead player: the disconnect cancelled their respawn
+    // timer — re-arm it or they stay dead for the rest of the session.
+    this.combat.ensureRespawnScheduled(playerId);
 
     const others = this.playerManager.getOtherPlayers(playerId);
     const playersData = others.map((p) => this.playerManager.toGameStatePlayer(p));
