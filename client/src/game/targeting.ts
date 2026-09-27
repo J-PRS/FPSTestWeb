@@ -70,6 +70,10 @@ export class ThreatTable {
   /** Seconds since this brain committed to its current target — the
    *  "always miss first" window rides on it. */
   engagedT = 0;
+  /** Flinch: counts down after taking damage — while >0 the creature
+   *  recoils from the attacker's last position instead of chasing. */
+  flinchT = 0;
+  readonly flinchFrom = new THREE.Vector3();
   private threat = new Map<string, number>();
   private evalT = Math.random() * 0.5; // desync evals so a pack doesn't all snap at once
 
@@ -77,6 +81,14 @@ export class ThreatTable {
    *  attacker's id ('local' today, playerId in shared mode). */
   reportDamage(id: string, amount: number): void {
     this.threat.set(id, (this.threat.get(id) ?? 0) + amount);
+  }
+
+  /** Took damage from `from` — flinch: brief recoil away before resuming
+   *  the hunt. Long hits (one per ~0.5s under sustained fire) don't stack
+   *  to a permadebuff; each just re-arms the flinch. */
+  flinch(from: THREE.Vector3): void {
+    this.flinchT = 0.45;
+    this.flinchFrom.copy(from);
   }
 
   /** Forget a candidate entirely (disconnect/leave). */

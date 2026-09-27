@@ -100,6 +100,43 @@ function nearestTarget(): [string, Other] | null {
 
 let lastFireAt = 0;
 let orbitSign = 1;
+let lastHurtAt = 0;
+let burstLeft = 0;
+let burstGapUntil = 0;
+// Omicron-style perception: we shoot where the target WAS, not where it is.
+// A short rolling history per target feeds the aim the player's old spot —
+// fast movers dodge our rockets like they'd dodge a human's.
+const AIM_DELAY_MS = 350;
+const aimHist = new Map<string, { t: number; pos: Vec3; vel: Vec3 }[]>();
+function snapshotTargets(now: number) {
+  for (const [id, o] of others) {
+    let h = aimHist.get(id);
+    if (!h) { h = []; aimHist.set(id, h); }
+    h.push({ t: now, pos: { ...o.pos }, vel: { ...o.vel } });
+    while (h.length > 12) h.shift();
+  }
+}
+function aimPoint(id: string, o: Other, airtime: number): Vec3 {
+  const h = aimHist.get(id);
+  let base = o.pos;
+  if (h && h.length) {
+    const want = Date.now() - AIM_DELAY_MS;
+    let pick = h[0]!;
+    for (const e of h) { if (e.t <= want) pick = e; else break; }
+    base = pick.pos;
+  }
+  // Lead by airtime off the target's CURRENT vel (a human guesses the
+  // drift — stale pos + live vel reads like tracking aim).
+  // Aim error grows with target speed — leading a still target is easy,
+  // a strafing one gets the human scatter.
+  const sp = Math.hypot(o.vel.x, o.vel.z);
+  const err = 0.6 + sp * 0.12;
+  return {
+    x: base.x + o.vel.x * airtime * 0.8 + (Math.random() - 0.5) * err,
+    y: base.y + o.vel.y * airtime * 0.5 + (Math.random() - 0.5) * err * 0.5,
+    z: base.z + o.vel.z * airtime * 0.8 + (Math.random() - 0.5) * err,
+  };
+}
 
 // Scripted test phases (TEST5 circling etc.) own pos directly — self-drive
 // must stand down or both writers fight and the stream sees teleport jumps.
@@ -120,6 +157,7 @@ function tickBehavior(dt: number) {
     if (pos.y < gy) { pos.y = gy; vel.y = 0; }
     return;
   }
+  snapshotTargets(Date.now());
   const tgt = nearestTarget();
 
   if (tgt) {
@@ -136,6 +174,13 @@ function tickBehavior(dt: number) {
       mx += (-dz / dist) * orbitSign; mz += (dx / dist) * orbitSign;
       if (Math.random() < 0.005) orbitSign *= -1;
     }
+    // Just got hit → jink hard sideways + slight retreat: a human swerves
+    // when shot, they don't keep a stable orbit eating the next rocket.
+    if (Date.now() - lastHurtAt < 1400) {
+      mx += (-dz / dist) * orbitSign * 1.8 - (dx / dist) * 0.5;
+      mz += (dx / dist) * orbitSign * 1.8 - (dz / dist) * 0.5;
+      if (Math.random() < 0.06) orbitSign *= -1;
+    }
     const mlen = Math.hypot(mx, mz);
     if (mlen > 0) {
       const nx = pos.x + (mx / mlen) * MOVE_SPEED * dt;
@@ -151,9 +196,17 @@ function tickBehavior(dt: number) {
     pos.y += yStep;
     vel.y = yStep / dt;
 
-    if (FIGHTER && dist < ENGAGE_RANGE && Date.now() - lastFireAt > FIRE_INTERVAL_MS) {
-      lastFireAt = Date.now();
-      fireRocketAt(id, o);
+    // Burst fire: 3 rockets ~0.9s apart, then a ~2s lull — human trigger
+    // rhythm, not a metronome.
+    if (FIGHTER && dist < ENGAGE_RANGE && Date.now() - lastFireAt > FIRE_INTERVAL_MS * 0.8) {
+      const now = Date.now();
+      if (burstLeft <= 0 && now >= burstGapUntil) burstLeft = 3;
+      if (burstLeft > 0) {
+        burstLeft--;
+        lastFireAt = now;
+        fireRocketAt(id, o);
+        if (burstLeft === 0) burstGapUntil = now + 1800 + Math.random() * 900;
+      }
     }
   } else {
     const gy = groundY(pos.x, pos.z);
@@ -181,10 +234,12 @@ function tickBehavior(dt: number) {
 }
 
 function fireRocketAt(targetId: string, o: Other) {
-  // Muzzle ~ eye pos; velocity straight at the target's latest pos.
-  const dx = o.pos.x - pos.x, dy = o.pos.y - pos.y, dz = o.pos.z - pos.z;
+  // Muzzle ~ eye pos; velocity aimed at the last-seen point + lead + error.
+  const rawDist = Math.sqrt((o.pos.x - pos.x) ** 2 + (o.pos.y - pos.y) ** 2 + (o.pos.z - pos.z) ** 2) || 1;
+  const airtime = Math.max(0.05, rawDist / ROCKET_SPEED);
+  const aim = aimPoint(targetId, o, airtime);
+  const dx = aim.x - pos.x, dy = aim.y - pos.y, dz = aim.z - pos.z;
   const dist = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1;
-  const airtime = Math.max(0.05, dist / ROCKET_SPEED);
   sendJson({
     type: 'shot', targetId: null, weaponType: WeaponType.Rocket,
     position: { ...pos },
@@ -265,7 +320,7 @@ function handleJson(m: any) {
     case 'playerHit':
       hitListener?.(m);
       log(`HIT ${m.shooterId} → ${m.targetId} dmg=${m.damage} hp=${m.health}`);
-      if (m.targetId === NAME) log(`  (we took ${m.damage}, hp ${m.health})`);
+      if (m.targetId === NAME) { lastHurtAt = Date.now(); log(`  (we took ${m.damage}, hp ${m.health})`); }
       break;
     case 'playerKill':
       killsOf.set(m.targetId, (killsOf.get(m.targetId) ?? 0) + 1);
@@ -711,7 +766,8 @@ async function main() {
 
   if (FIGHTER) {
     // Damage + kill: shoot nearest until kill (rocket = 50 dmg, 2 hits on 100hp).
-    const tgt = nearestTarget();
+    snapshotTargets(Date.now());
+  const tgt = nearestTarget();
     check('found target to shoot', !!tgt, tgt ? tgt[0] : 'none');
     if (tgt) {
       const [, o] = tgt;

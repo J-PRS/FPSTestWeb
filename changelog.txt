@@ -1754,3 +1754,6 @@
 - enemies chase a last-seen position snapshot refreshed on their eval tick, not live pos — juking works
 - first-strike grace: a brain that just committed whiffs contact damage for 1.25s
 - weave: pursuit curves laterally (fades <10m so bites connect), per-entity phase
+== AI/bot upgrades ==
+- creatures: damage flinch (recoil ~0.45s from attacker), pack separation so packs surround instead of stacking
+- pvptest bots: aim at last-seen + lead + speed-scaled scatter, burst fire rhythm, hurt-driven jink+retreat

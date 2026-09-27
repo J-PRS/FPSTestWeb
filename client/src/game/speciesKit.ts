@@ -174,6 +174,17 @@ export function createSpeciesKit(deps: EntitiesDeps, targets: Targetable[]) {
     const t = brain.update(dt, selfPos, candidates(), profile);
     if (!t) return wanderFor(owner, selfPos, dt);
 
+    // Flinch: freshly damaged → recoil away from the attacker's position
+    // instead of pressing in. Short window; reads as "it noticed the hit".
+    if (brain.flinchT > 0) {
+      brain.flinchT -= dt;
+      _weaveOut.subVectors(selfPos, brain.flinchFrom);
+      _weaveOut.y = 0;
+      const l = _weaveOut.length() || 1;
+      _weaveOut.multiplyScalar(6 / l).add(selfPos); // flee point ~6m away
+      return _weaveOut;
+    }
+
     _weaveOut.copy(brain.lastSeen);
     // Sinusoidal lateral offset perpendicular to the chase direction.
     let phase = weaveReg.get(owner);
@@ -190,6 +201,22 @@ export function createSpeciesKit(deps: EntitiesDeps, targets: Targetable[]) {
       _weaveOut.x += px * s;
       _weaveOut.z += pz * s;
     }
+
+    // Pack spacing — creatures shove the chase point away from crowded
+    // neighbors so a pack surrounds instead of stacking on one spot.
+    // Cheap O(n) over the shared targets surface, 8m influence radius.
+    let sepX = 0, sepZ = 0;
+    for (const o of targets) {
+      if (o === owner) continue;
+      const dx = selfPos.x - o.pos.x, dz = selfPos.z - o.pos.z;
+      const d2 = dx * dx + dz * dz;
+      if (d2 > 64 || d2 < 0.01) continue;
+      const d = Math.sqrt(d2);
+      const w = (8 - d) / 8 / d;
+      sepX += dx * w; sepZ += dz * w;
+    }
+    _weaveOut.x += sepX * 1.5;
+    _weaveOut.z += sepZ * 1.5;
     return _weaveOut;
   }
 
@@ -201,9 +228,13 @@ export function createSpeciesKit(deps: EntitiesDeps, targets: Targetable[]) {
   }
 
   // Combat reports damage here — the aggro hook. 'local' today; shared
-  // PvE delivers remote playerIds through the same funnel.
+  // PvE delivers remote playerIds through the same funnel. Also arms the
+  // flinch: the creature recoils from the attacker's known position.
   function reportTargetDamage(e: object, amount: number, attackerId = 'local'): void {
-    targetReg.reportDamage(e, attackerId, amount);
+    const brain = targetReg.for(e);
+    brain.reportDamage(attackerId, amount);
+    const from = attackerId === 'local' ? deps.lazyPlayer().pos : _candMap.get(attackerId)?.pos;
+    if (from) brain.flinch(from);
   }
 
   // Compact orange pop shared by turret shells, totem bolts, mines — reads
