@@ -422,7 +422,8 @@ export class RemotePlayer {
     if (!this._loaded) return;
     this._model.setPosition(this.position.x, this.position.y - EYE_OFFSET, this.position.z);
     this._model.setRotation(this.rotation.yaw, this.rotation.pitch, this.rotation.roll);
-    const speed = this.position.distanceTo(this.previousPosition) / dt;
+    // dt=0 (paused/first frame) would blow speed to Infinity → 'ski' flicker
+    const speed = dt > 0 ? this.position.distanceTo(this.previousPosition) / dt : 0;
     // Airborne overrides locomotion — the speed check alone reads jetting
     // as "run", i.e. the robot sprinting on air. Feet clearly above
     // terrain → Jump pose; grounded/skiing keeps the walk/run cycle.
