@@ -22,6 +22,8 @@ export interface RoomInfo {
   bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } };
   /** Any kill — Room drops carried flags here. */
   onKill?: (targetId: string, shooterId: string) => void;
+  /** FFA scoreboard supplier for gameState joins — Room.ffaScores. */
+  ffaScores?: () => Record<string, number>;
   /** Flag snapshot supplier for gameState joins — RoomFlags.snapshot. */
   flags?: () => { team: 'alpha' | 'bravo'; pos: Vec3; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[];
 }
@@ -115,6 +117,7 @@ export class MessageHandler {
       mode: this.roomInfo.mode || undefined,
       team: player.team,
       scores: this.roomInfo.scores ? { ...this.roomInfo.scores } : undefined,
+      ffaScores: this.roomInfo.ffaScores?.(),
       map: this.roomInfo.bases ? { mode: this.roomInfo.mode || undefined, bases: this.roomInfo.bases } : undefined,
       flags: this.roomInfo.flags?.(),
       localPlayerState: {

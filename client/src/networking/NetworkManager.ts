@@ -45,7 +45,7 @@ export class NetworkManager {
   public onKnockback: ((position: { x: number; y: number; z: number }, force: number, pull?: boolean) => void) | null = null;
   public onChat: ((playerId: string, text: string) => void) | null = null;
   public onPlayerUpdate: ((playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }, timestamp: number, velocity?: { x: number; y: number; z: number }) => void) | null = null;
-  public onGameState: ((players: GameStatePlayer[], localPlayerState: LocalPlayerState | undefined, roomInfo?: { room?: string; mode?: string; team?: 'alpha' | 'bravo'; scores?: { alpha: number; bravo: number } }) => void) | null = null;
+  public onGameState: ((players: GameStatePlayer[], localPlayerState: LocalPlayerState | undefined, roomInfo?: { room?: string; mode?: string; team?: 'alpha' | 'bravo'; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number> }) => void) | null = null;
   public onTeamScore: ((scores: { alpha: number; bravo: number }, winAt: number) => void) | null = null;
   public onMatchEnd: ((winner: 'alpha' | 'bravo', scores: { alpha: number; bravo: number }) => void) | null = null;
   public onMatchStart: ((mode: string, scores: { alpha: number; bravo: number }) => void) | null = null;
@@ -242,7 +242,7 @@ export class NetworkManager {
         this.players.set(player.id, player);
       }
     }
-    this.onGameState?.(data.players || [], data.localPlayerState, { room: data.room, mode: data.mode, team: data.team, scores: data.scores });
+    this.onGameState?.(data.players || [], data.localPlayerState, { room: data.room, mode: data.mode, team: data.team, scores: data.scores, ffaScores: data.ffaScores });
   }
 
   private handleTickUpdate(data: { updates: TickUpdatePlayer[]; ackSeq?: number }): void {
