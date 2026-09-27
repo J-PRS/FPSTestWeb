@@ -75,6 +75,9 @@ export type ServerMessage =
   | { type: 'gameState'; players: GameStatePlayer[]; localPlayerState?: LocalPlayerState; sessionToken?: string; protocolVersion?: number; room?: string; mode?: string; team?: 'alpha' | 'bravo'; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number>; map?: { mode?: string; bases?: { alpha?: Vec3; bravo?: Vec3 } }; flags?: { team: 'alpha' | 'bravo'; pos: Vec3; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]; pickups?: { id: number; pos: Vec3 }[] }
   | { type: 'playerJoined'; playerId: string; internalId: string; position: Vec3; rotation: Rotation; team?: 'alpha' | 'bravo' }
   | { type: 'playerLeft'; playerId: string }
+  // Team reassignment mid-match — team comes through playerJoined/gameState
+  // otherwise; this is the only channel for a swap after join (bot rebalance).
+  | { type: 'teamUpdate'; playerId: string; team: 'alpha' | 'bravo' }
   | { type: 'playerHit'; shooterId: string; targetId: string; damage: number; health: number }
   | { type: 'playerKill'; shooterId: string; targetId: string }
   | { type: 'knockback'; targetId: string; position: Vec3; force: number; pull?: boolean }

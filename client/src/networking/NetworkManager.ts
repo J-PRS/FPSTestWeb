@@ -189,6 +189,7 @@ export class NetworkManager {
     tickUpdate: (data) => this.handleTickUpdate(data),
     playerJoined: (data) => this.handlePlayerJoined(data),
     playerLeft: (data) => this.handlePlayerLeft(data),
+    teamUpdate: (data) => this.upsertRemotePlayer(data.playerId, { team: data.team }),
     playerRespawn: (data) => this.handlePlayerRespawn(data),
     playerHit: (data) => this.handlePlayerHit(data),
     playerKill: (data) => this.handlePlayerKill(data),

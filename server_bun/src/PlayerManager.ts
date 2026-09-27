@@ -61,6 +61,22 @@ export class PlayerManager {
     return this.players.get(playerId);
   }
 
+  /** Mid-match team swap — callers broadcast teamUpdate. */
+  setTeam(playerId: string, team: 'alpha' | 'bravo'): void {
+    const p = this.players.get(playerId);
+    if (p) p.team = team;
+  }
+
+  /** Live player counts per team. */
+  teamCounts(): { alpha: number; bravo: number } {
+    let alpha = 0, bravo = 0;
+    for (const p of this.players.values()) {
+      if (p.team === 'alpha') alpha++;
+      else if (p.team === 'bravo') bravo++;
+    }
+    return { alpha, bravo };
+  }
+
   getAllPlayers(): Map<string, PlayerState> {
     return this.players;
   }
