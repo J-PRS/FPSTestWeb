@@ -7,9 +7,6 @@ import {
   EffectPass,
   BloomEffect,
   BrightnessContrastEffect,
-  TextureEffect,
-  ToneMappingEffect,
-  ToneMappingMode,
   BlendFunction,
 } from 'postprocessing';
 import {
@@ -41,7 +38,7 @@ export interface RendererSetup {
 }
 
 export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Scene): RendererSetup {
-  // Pixel mode: 0 = off, 1 = hard nearest pixels, 2 = edge-aware upscale
+  // Pixel mode: 0 = off, 1 = hard 4x4, 2 = medium 2x2, 3 = xBR-smooth upscale
   let pixelMode = settings.get('fps-pixelated');
   // All post-processing defaults OFF — the scene reads cleanest raw.
   // Opt in via localStorage or ?postpro=on / ?bloom=on.
@@ -53,13 +50,20 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
     const px = qp.get('pixelated');
     if (px === 'off') pixelMode = 0;
     if (px === 'hard') pixelMode = 1;
-    if (px === 'smooth' || px === 'on') pixelMode = 2;
+    if (px === 'medium') pixelMode = 2;
+    if (px === 'smooth' || px === 'on') pixelMode = 3;
     const pp = qp.get('postpro');
     if (pp === 'off') postproEnabled = false;
     if (pp === 'on') postproEnabled = true;
     const bm = qp.get('bloom');
     if (bm === 'off') bloomEnabled = false;
     if (bm === 'on') bloomEnabled = true;
+    // Pixelated is the cheap path: stored bloom/postpro don't re-engage
+    // under it (hard mode has no composer at all); URL params may opt in.
+    if (pixelMode > 0 && pp === null && bm === null) {
+      postproEnabled = false;
+      bloomEnabled = false;
+    }
   }
 
   const renderer = new THREE.WebGLRenderer({ antialias: false });
@@ -68,8 +72,34 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
     return pixelMode > 0 ? 1 : Math.min(window.devicePixelRatio, 2);
   }
 
+  // Pixel factor by mode: hard = 4x4 blocks, medium = 2x2, smooth renders
+  // at the hard scale so the xBR pass has real chunky texels to work with.
+  function pixelFactor(): number {
+    if (pixelMode === 1) return PIXEL_SCALE;
+    if (pixelMode === 2) return PIXEL_SCALE / 2;
+    return 1;
+  }
+
+  function pixelLabel(): string {
+    return pixelMode === 0 ? 'PIXELATION: OFF' : pixelMode === 1 ? 'PIXELATION: HARD'
+      : pixelMode === 2 ? 'PIXELATION: MEDIUM' : 'PIXELATION: SMOOTH';
+  }
+
   function updateRendererSize(): void {
-    // Canvas stays full-res — in pixelated mode only the composer buffers
+    if (pixelMode === 1 || pixelMode === 2) {
+      // Hard/medium never touch the composer: render straight into a
+      // low-res canvas and let CSS upscale it — colors are identical to
+      // direct rendering by construction, and it's the cheapest path.
+      const f = pixelFactor();
+      renderer.setPixelRatio(1);
+      renderer.setSize(Math.floor(window.innerWidth / f),
+        Math.floor(window.innerHeight / f), false);
+      renderer.domElement.style.imageRendering = 'pixelated';
+      renderer.domElement.style.width = '100%';
+      renderer.domElement.style.height = '100%';
+      return;
+    }
+    // Canvas stays full-res — in smooth mode only the composer buffers
     // drop to 1/PIXEL_SCALE and the upscale pass reconstructs to screen.
     renderer.setPixelRatio(getPixelRatio());
     renderer.setSize(window.innerWidth, window.innerHeight);
@@ -78,11 +108,7 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
     renderer.domElement.style.height = '100%';
   }
 
-  renderer.setPixelRatio(getPixelRatio());
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.domElement.style.imageRendering = 'auto';
-  renderer.domElement.style.width = '100%';
-  renderer.domElement.style.height = '100%';
+  updateRendererSize();
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -91,7 +117,7 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
 
   // Initialize button text from localStorage
   const pixelToggleBtn = document.getElementById('pixel-toggle')! as HTMLButtonElement;
-  pixelToggleBtn.textContent = pixelMode === 0 ? 'PIXELATED: OFF' : pixelMode === 1 ? 'PIXELATED: HARD' : 'PIXELATED: SMOOTH';
+  pixelToggleBtn.textContent = pixelLabel();
 
   const bloomToggleBtn = document.getElementById('bloom-toggle')! as HTMLButtonElement;
   bloomToggleBtn.textContent = bloomEnabled ? 'BLOOM: ON' : 'BLOOM: OFF';
@@ -99,32 +125,20 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
   const postproToggleBtn = document.getElementById('postpro-toggle')! as HTMLButtonElement;
   postproToggleBtn.textContent = postproEnabled ? 'POST-PROCESSING: ON' : 'POST-PROCESSING: OFF';
 
-  // Selective bloom: a second composer renders ONLY objects flagged with
-  // BLOOM_LAYER into an HDR buffer, blurs it, and the main composer adds the
-  // result over the untouched scene. Base-scene pixels can never wash out.
-  const bloomCamera = camera.clone() as THREE.PerspectiveCamera;
-  bloomCamera.layers.set(BLOOM_LAYER);
-
-  const bloomComposer = new EffectComposer(renderer, {
-    frameBufferType: THREE.HalfFloatType,
-    multisampling: 0,
-  });
-  const bloomRenderPass = new RenderPass(scene, bloomCamera);
-  bloomRenderPass.ignoreBackground = true;
-  bloomRenderPass.clearPass.overrideClearColor = new THREE.Color(0, 0, 0);
-  bloomRenderPass.clearPass.overrideClearAlpha = 1;
-  bloomComposer.addPass(bloomRenderPass);
-  bloomComposer.addPass(new EffectPass(bloomCamera, new BloomEffect({
+  // Whole-scene bloom gated by a luminance threshold: emitters (trails,
+  // explosions, nuggets) push the brightest colors, the lit terrain and sky
+  // stay under it, so bloom never washes the frame. (A second composer and
+  // SelectiveBloomEffect both proved fragile here — keep the simple one.)
+  const bloomEffect = new BloomEffect({
     mipmapBlur: true,
-    luminanceThreshold: 0,   // buffer contains only emitters — everything glows
+    luminanceThreshold: 0.9,
     intensity: 1.5,
     radius: 0.6,
-  })));
-  // Keep the bloom result in the buffer, not on screen.
-  bloomComposer.passes[bloomComposer.passes.length - 1].renderToScreen = false;
+  });
 
-  // Edge-aware upscaler for pixelated mode: flat texel interiors sample
-  // nearest (crisp pixels), detected edges get diagonal-aware blending.
+  // xBR-lite upscaler for SMOOTH pixelated mode: the scene renders at
+  // 1/PIXEL_SCALE, then flat texel interiors sample nearest (crisp pixels)
+  // while detected edges get diagonal-aware blending — xBR philosophy.
   const upscaleEffect = new Effect('EdgeUpscale', /* glsl */ `
     uniform vec2 lowTexel; // 1/low-res-buffer size
     uniform float mode;  // 0 = nearest (hard pixels), 1 = edge-aware
@@ -189,18 +203,15 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
   });
   composer.addPass(new RenderPass(scene, camera));
 
-  const bloomTextureEffect = new TextureEffect({
-    texture: bloomComposer.inputBuffer.texture,
-    blendFunction: BlendFunction.ADD,
-  });
-  const bloomMergePass = new EffectPass(camera, bloomTextureEffect);
+  const bloomMergePass = new EffectPass(camera, bloomEffect);
   composer.addPass(bloomMergePass);
 
   const contrastPass = new EffectPass(camera, new BrightnessContrastEffect({ contrast: 0.06 }));
   composer.addPass(contrastPass);
 
-  // ACES tone map so composer output matches direct rendering
-  composer.addPass(new EffectPass(camera, new ToneMappingEffect({ mode: ToneMappingMode.ACES_FILMIC })));
+  // No composer tone-map pass: ToneMappingEffect can't apply our 0.4
+  // exposure, so instead the scene renders WITH renderer ACES+exposure into
+  // the buffer — pixelated output stays color-identical to direct render.
 
   // Pixelated mode: scene renders at 1/PIXEL_SCALE into the composer buffer,
   // then this pass upscales to the full-res canvas with edge-aware blending.
@@ -209,64 +220,55 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
 
   bloomMergePass.enabled = bloomEnabled;
   contrastPass.enabled = postproEnabled;
-  upscalePass.enabled = pixelMode > 0;
-  upscaleEffect.uniforms.get('mode')!.value = pixelMode === 2 ? 1 : 0;
+  upscalePass.enabled = pixelMode === 3;
+  upscaleEffect.uniforms.get('mode')!.value = 1;
 
   // composer.setSize() also resizes the canvas — so always set buffers first,
   // then restore the canvas to full res. Pixelated = low-res buffers upscaled
   // by the final pass; the canvas itself never shrinks.
   function applyBufferSizes(): void {
-    const w = pixelMode > 0 ? Math.floor(window.innerWidth / PIXEL_SCALE) : window.innerWidth;
-    const h = pixelMode > 0 ? Math.floor(window.innerHeight / PIXEL_SCALE) : window.innerHeight;
+    // Composer buffers only shrink for smooth mode — hard/medium bypass it.
+    const w = pixelMode === 3 ? Math.floor(window.innerWidth / PIXEL_SCALE) : window.innerWidth;
+    const h = pixelMode === 3 ? Math.floor(window.innerHeight / PIXEL_SCALE) : window.innerHeight;
     composer.setSize(w, h);
-    bloomComposer.setSize(w, h);
     upscaleEffect.uniforms.get('lowTexel')!.value.set(1 / w, 1 / h);
-    renderer.setPixelRatio(getPixelRatio());
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.domElement.style.width = '100%';
-    renderer.domElement.style.height = '100%';
+    // composer.setSize() also resizes the canvas — restore whichever canvas
+    // sizing the active pixel mode wants.
+    updateRendererSize();
   }
   applyBufferSizes();
 
   function render(dt?: number): void {
-    // Tone map is applied by the composer's ToneMappingEffect — the renderer's
-    // own tone mapping must be off while the scene renders into buffers, or
-    // ACES gets applied twice. Restore ACES afterwards so direct passes that
-    // run after this (e.g. the viewmodel overlay) stay tone-mapped.
-    renderer.toneMapping = THREE.NoToneMapping;
-    if (bloomEnabled) {
-      bloomCamera.projectionMatrix.copy(camera.projectionMatrix);
-      bloomCamera.projectionMatrixInverse.copy(camera.projectionMatrixInverse);
-      bloomCamera.position.copy(camera.position);
-      bloomCamera.quaternion.copy(camera.quaternion);
-      bloomComposer.render(dt);
-      // composer's internal buffers ping-pong each frame — rebind the texture
-      // that actually holds the bloom result
-      bloomTextureEffect.uniforms.get('map')!.value = bloomComposer.inputBuffer.texture;
-    }
     composer.render(dt);
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
   }
 
   function setPixelated(mode: number): void {
     pixelMode = mode;
     settings.set('fps-pixelated', pixelMode);
-    upscalePass.enabled = pixelMode > 0;
-    upscaleEffect.uniforms.get('mode')!.value = pixelMode === 2 ? 1 : 0;
+    upscalePass.enabled = pixelMode === 3;
+    upscaleEffect.uniforms.get('mode')!.value = 1;
+    // Pixelated is the cheap/retro path — bloom and contrast post-pro are
+    // the opposite of "simple low-res render", so opting in drops them.
+    if (pixelMode > 0) {
+      if (postproEnabled) setPostProcessingEnabled(false);
+      if (bloomEnabled) setBloomEnabled(false);
+    }
     updateRendererSize();
     applyBufferSizes();
-    pixelToggleBtn.textContent = pixelMode === 0 ? 'PIXELATED: OFF' : pixelMode === 1 ? 'PIXELATED: HARD' : 'PIXELATED: SMOOTH';
+    pixelToggleBtn.textContent = pixelLabel();
   }
 
   function setPostProcessingEnabled(enabled: boolean): void {
-    postproEnabled = enabled;
+    // Hard/medium pixelation have no composer — post can't exist there.
+    postproEnabled = enabled && (pixelMode === 0 || pixelMode === 3);
     settings.set('fps-postpro', postproEnabled);
     contrastPass.enabled = postproEnabled;
     postproToggleBtn.textContent = postproEnabled ? 'POST-PROCESSING: ON' : 'POST-PROCESSING: OFF';
   }
 
   function setBloomEnabled(enabled: boolean): void {
-    bloomEnabled = enabled;
+    // Bloom needs the composer — hard/medium pixelation have none.
+    bloomEnabled = enabled && (pixelMode === 0 || pixelMode === 3);
     settings.set('fps-bloom', bloomEnabled);
     bloomMergePass.enabled = bloomEnabled;
     bloomToggleBtn.textContent = bloomEnabled ? 'BLOOM: ON' : 'BLOOM: OFF';
@@ -285,7 +287,7 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
 
   // Setup button event listeners
   pixelToggleBtn.addEventListener('click', () => {
-    setPixelated((pixelMode + 1) % 3);
+    setPixelated((pixelMode + 1) % 4);
   });
 
   bloomToggleBtn.addEventListener('click', () => {
@@ -302,7 +304,7 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
     bloomPass: bloomMergePass,
     contrastPass,
     render,
-    needsComposer: () => pixelMode > 0 || bloomEnabled || postproEnabled,
+    needsComposer: () => pixelMode === 3 || bloomEnabled || postproEnabled,
     isPostProcessingEnabled: () => postproEnabled,
     isBloomEnabled: () => bloomEnabled,
     setBloomEnabled,

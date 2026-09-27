@@ -234,7 +234,7 @@ function applyPlaybackTargetEvent(world: PlaybackWorld, ev: TargetEvent): void {
     ball.pos.set(ev.posX, ev.posY, ev.posZ);
     ball.vel.set(ev.velX, ev.velY, ev.velZ);
     // Flash the ball and then sync to the recorded post-hit health
-    ball.takeDamage();
+    ball.takeDamage(1); // health is force-synced from the event — amount is cosmetic
     ball.health = ev.health;
     ball.dead = ball.health <= 0;
     ball.update(0, terrain, playerPos);
