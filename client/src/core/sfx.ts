@@ -118,15 +118,20 @@ export function shotAt(pos: THREE.Vector3, weaponType: number): void {
   shootInto(g, weaponType);
 }
 
+// Layered shot recipes — checked before SHOT_SAMPLES. Flak's voice is a
+// deep boom + sparks tail (a shell fan going off, not a shotgun pump).
+const SHOT_LAYERS: Partial<Record<number, [name: string, gain: number, rate?: number, lpf?: number, cutAfter?: number][]>> = {
+  [WeaponType.Flak]: [['shot_cannon', 0.9, 0.8], ['sparks', 0.45, 1.3, undefined, 0.3]],
+};
+
 const SHOT_SAMPLES: Partial<Record<number, [string, number]>> = {
   [WeaponType.Rocket]:          ['shot_rocket', 0.9],
   [WeaponType.Chaingun]:        ['shot_chaingun', 0.8],
   [WeaponType.Mortar]:          ['shot_cannon', 1.0],
   [WeaponType.GrenadeLauncher]: ['shot_cannon', 0.8],
   [WeaponType.Grenade]:         ['shot_energy', 0.8],
-  // Flak fires a whole shell fan — a cannon boom with a sparks tail,
-  // not a shotgun pump (JP: "boom is enough, this isn't quake shotgun").
-  [WeaponType.Flak]:            ['shot_cannon', 0.9],
+  // Flak is layered below in SHOT_LAYERS — not a shotgun pump.
+
   [WeaponType.Plasma]:          ['shot_plasma', 0.9],
   [WeaponType.Railgun]:         ['shot_energy', 1.0],
 };
@@ -153,6 +158,8 @@ function shootInto(g: GainNode, weaponType: number): void {
   // The connect 'impact' plays separately in combat on an actual hit.
   if (weaponType === WeaponType.Melee &&
       layer(g, [['dash2', 0.7, 1.35], ['punch', 0.9, 1.15], ['slam_thud', 0.5, 0.9]])) return;
+  const layered = SHOT_LAYERS[weaponType];
+  if (layered && layer(g, layered)) return;
   const s = SHOT_SAMPLES[weaponType];
   if (s && sample(s[0], g, s[1])) return;
   switch (weaponType) {
@@ -243,7 +250,8 @@ export function playerHurt(): void {
   if (!bus || !c) return;
   const g = c.createGain(); g.connect(bus);
   if (!play(g, 0.2)) return;
-  if (sample('hurt', g, 0.6)) return;
+  // Neutral short snap — 'hurt' was a monster grunt, impact+punch too heavy
+  if (sample('impact', g, 0.45, 1.3, 2500, 0.15)) return;
   osc('sawtooth', 300, 120, 0.15, 0.25, g);
   noise(0.12, 0.2, g, 'lowpass', 600, 200);
 }

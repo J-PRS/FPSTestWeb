@@ -1708,3 +1708,4 @@
 - flash parked at per-weapon MUZZLE_Z — was fixed -0.42, floated ahead of stubby barrels
 - flak shot: shotgun pump swapped for cannon boom (JP: not a quake shotgun)
 - grenade projectile: faceted icosphere ball (was rocket tube), tumbles in flight, tighter ember trail, dark shell + hotter glow
+- overlord rework: Miner births rolling Banelings (homing suicide sacs, proximity fuse, pop-on-shoot) instead of static mines
