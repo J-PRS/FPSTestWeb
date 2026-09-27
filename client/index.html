@@ -6,73 +6,158 @@
   <title>Three.js FPS — Tribes/Quake Style</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { background: #000; overflow: hidden; font-family: 'Courier New', monospace; }
+    body { background: #000; overflow: hidden; font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif; }
     canvas { display: block; }
     #overlay {
       position: absolute; inset: 0;
-      display: none; align-items: center; justify-content: center;
-      background: rgba(0,0,0,0.85);
-      color: #0ff;
+      display: none;
+      background: rgba(4,7,12,0.45);
+      color: #dde8f2;
       z-index: 10;
+      cursor: pointer;
+      user-select: none;
+      -webkit-user-select: none;
     }
-    #overlay-inner {
-      text-align: center;
-      border: 1px solid #0ff;
-      padding: 40px 60px;
-      background: rgba(0,20,40,0.9);
+    #overlay-center {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 10px;
+      pointer-events: none;
     }
-    #overlay h1 { font-size: 2.4rem; letter-spacing: 0.15em; margin-bottom: 8px; color: #fff; }
-    #overlay .sub { font-size: 0.9rem; color: #08f; margin-bottom: 24px; letter-spacing: 0.1em; }
-    #overlay .controls { font-size: 0.78rem; color: #8cf; line-height: 1.9; text-align: left; }
-    #overlay .controls span { color: #fff; font-weight: bold; }
-    #overlay button {
-      margin-top: 28px;
-      padding: 12px 36px;
-      background: #0af;
-      color: #000;
-      border: none;
-      font-family: 'Courier New', monospace;
-      font-size: 1rem;
-      font-weight: bold;
-      letter-spacing: 0.12em;
+    /* Hide HUD while menu is open (overlay display:flex is set inline) */
+    #overlay[style*="flex"] ~ #hud { display: none; }
+    #start-btn {
+      background: none; border: none;
+      font-family: inherit;
+      font-size: 1.6rem; font-weight: 700; letter-spacing: 0.3em;
+      color: #fff; text-transform: uppercase;
+      text-shadow: 0 0 20px rgba(58,167,255,0.5);
+      animation: resumePulse 1.8s ease-in-out infinite;
+      pointer-events: none;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    @keyframes resumePulse {
+      0%, 100% { opacity: 0.65; }
+      50% { opacity: 1; }
+    }
+    #menu-side {
+      position: absolute; top: 0; right: 0; bottom: 0;
+      width: 280px;
+      background: rgba(8,11,16,0.75);
+      border-left: 1px solid rgba(255,255,255,0.07);
+      padding: 24px 18px;
+      cursor: default;
+    }
+    #overlay .menu-section {
+      font-size: 0.62rem; letter-spacing: 0.2em; font-weight: 600;
+      color: rgba(140,170,195,0.6); margin-bottom: 10px;
+    }
+    #overlay .btn-row { display: flex; flex-direction: column; gap: 6px; }
+    #overlay .btn-row button {
+      padding: 9px 14px; text-align: left;
+      background: rgba(255,255,255,0.07);
+      color: #cdd9e5;
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 6px;
+      font-family: inherit;
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.1em;
       cursor: pointer;
       text-transform: uppercase;
+      transition: background 0.12s, border-color 0.12s, color 0.12s;
     }
-    #overlay button:hover { background: #fff; }
+    #overlay .btn-row button:hover { background: rgba(255,255,255,0.14); color: #fff; }
+    #overlay .field-row {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 10px; padding: 9px 14px;
+      background: rgba(255,255,255,0.07);
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 6px;
+      font-size: 0.72rem; font-weight: 600;
+      letter-spacing: 0.1em; color: #cdd9e5;
+    }
+    #overlay .field-row input {
+      width: 72px; padding: 4px 8px;
+      background: rgba(0,0,0,0.35);
+      border: 1px solid rgba(255,255,255,0.18);
+      border-radius: 4px;
+      color: #fff; font-family: inherit; font-size: 0.8rem;
+      text-align: right; outline: none;
+      font-variant-numeric: tabular-nums;
+    }
+    #overlay .field-row input:focus { border-color: #3aa7ff; }
     #cool-shots-panel {
       position: absolute; top: 0; left: 0; bottom: 0;
-      width: 320px;
-      background: rgba(0,15,30,0.92);
-      border-right: 1px solid #0ff;
-      padding: 16px 16px;
+      width: 280px;
+      background: rgba(8,11,16,0.75);
+      border-right: 1px solid rgba(255,255,255,0.07);
+      padding: 24px 18px;
       overflow-y: auto;
-      color: #8cf;
-      font-size: 0.82rem;
+      color: #b8c8d8;
+      font-size: 0.8rem;
+      cursor: default;
     }
     #cool-shots-panel h2 {
-      font-size: 1.1rem; color: #fff; letter-spacing: 0.1em;
-      margin-bottom: 4px; border-bottom: 1px solid #0ff; padding-bottom: 6px;
+      font-size: 0.85rem; color: #fff; letter-spacing: 0.22em;
+      margin-bottom: 14px; font-weight: 700;
     }
-    #cool-shots-panel .sub { font-size: 0.7rem; color: #08f; margin-bottom: 16px; letter-spacing: 0.08em; }
+    #cool-shots-panel .sub { font-size: 0.65rem; color: rgba(140,170,195,0.6); margin-bottom: 12px; letter-spacing: 0.08em; }
+    /* Loadout picker — bottom-center strip inside the ESC overlay */
+    #loadout-bar {
+      position: absolute; left: 50%; bottom: 26px;
+      transform: translateX(-50%);
+      display: flex; flex-direction: column; gap: 6px;
+      align-items: center;
+      cursor: default;
+    }
+    #loadout-bar .lo-row { display: flex; gap: 5px; align-items: center; }
+    #loadout-bar .lo-label {
+      font-size: 0.55rem; letter-spacing: 0.2em; font-weight: 600;
+      color: rgba(140,170,195,0.55); width: 52px; text-align: right;
+      margin-right: 4px;
+    }
+    #loadout-bar .lo-chip {
+      padding: 6px 11px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 5px;
+      color: #cdd9e5; font-family: inherit;
+      font-size: 0.66rem; font-weight: 600; letter-spacing: 0.08em;
+      cursor: pointer; text-transform: uppercase;
+      transition: background 0.12s, border-color 0.12s, color 0.12s;
+    }
+    #loadout-bar .lo-chip:hover { background: rgba(58,167,255,0.15); color: #fff; }
+    #loadout-bar .lo-chip.active {
+      background: rgba(58,167,255,0.25); border-color: #3aa7ff; color: #fff;
+      box-shadow: 0 0 12px rgba(58,167,255,0.25);
+    }
+    #loadout-bar .lo-chip .k {
+      color: rgba(140,170,195,0.65); margin-right: 6px; font-size: 0.58rem;
+    }
+    #loadout-bar .lo-chip.stub { opacity: 0.4; cursor: default; border-style: dashed; }
+    #loadout-bar .lo-chip.stub:hover { background: rgba(255,255,255,0.06); color: #cdd9e5; }
     #cool-shots-top, #cool-shots-recent { display: flex; flex-direction: column; gap: 3px; }
     .cool-shot-item {
-      display: flex; align-items: center; gap: 8px;
-      padding: 4px 10px;
-      background: rgba(0,40,60,0.6);
-      border: 1px solid #055;
+      display: flex; align-items: center; gap: 10px;
+      padding: 6px 10px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid transparent;
+      border-left: 2px solid rgba(255,255,255,0.1);
       border-radius: 4px;
       cursor: pointer;
-      transition: background 0.15s, border-color 0.15s;
+      transition: background 0.12s, border-color 0.12s;
     }
-    .cool-shot-item:hover { background: rgba(0,80,120,0.8); border-color: #0ff; }
-    .cool-shot-item.recent { background: rgba(0,60,20,0.7); border-color: #2a2; }
-    .cool-shot-item.recent:hover { background: rgba(0,100,30,0.8); border-color: #4f4; }
-    .cool-shot-item .rank { font-size: 0.85rem; font-weight: bold; color: #0ff; min-width: 18px; }
-    .cool-shot-item .lifetime { font-size: 0.8rem; font-weight: bold; color: #fff; }
-    .cool-shot-item .time-ago { font-size: 0.6rem; color: #8ac; margin-left: auto; }
-    .cool-shot-item.empty { color: #456; cursor: default; text-align: center; justify-content: center; }
-    .cool-shot-item.empty:hover { background: rgba(0,40,60,0.6); border-color: #055; }
-    .section-label { font-size: 0.65rem; color: #08f; letter-spacing: 0.1em; margin-bottom: 4px; margin-top: 12px; padding-bottom: 3px; border-bottom: 1px solid #033; }
+    .cool-shot-item:hover { background: rgba(58,167,255,0.12); border-left-color: #3aa7ff; }
+    .cool-shot-item.recent { border-left-color: #4caf6d; }
+    .cool-shot-item.recent:hover { background: rgba(76,175,109,0.12); border-left-color: #6fcf8f; }
+    .cool-shot-item .rank { font-size: 0.7rem; font-weight: 700; color: rgba(140,170,195,0.7); min-width: 16px; }
+    .cool-shot-item .lifetime { font-size: 0.85rem; font-weight: 600; color: #fff; font-variant-numeric: tabular-nums; }
+    .cool-shot-item .time-ago { font-size: 0.65rem; color: rgba(140,170,195,0.55); margin-left: auto; }
+    .cool-shot-item.empty { color: rgba(140,170,195,0.4); cursor: default; text-align: center; justify-content: center; }
+    .cool-shot-item.empty:hover { background: rgba(255,255,255,0.04); border-left-color: rgba(255,255,255,0.1); }
+    .section-label { font-size: 0.62rem; color: rgba(140,170,195,0.6); letter-spacing: 0.2em; font-weight: 600; margin-bottom: 6px; margin-top: 18px; }
     .section-label:first-of-type { margin-top: 0; }
   </style>
 </head>
@@ -89,22 +174,22 @@
         <div class="cool-shot-item empty">No recent shots</div>
       </div>
     </div>
-    <div id="overlay-inner">
-      <h1>VORTEX FPS</h1>
-      <div class="sub">Three.js &bull; Tribes/Quake Style</div>
-      <div class="controls">
-        <span>WASD</span> — Move &nbsp;&nbsp; <span>SPACE</span> — Jump / Ski (hold on ground)<br>
-        <span>RMB</span> — Jetpack &nbsp;&nbsp; <span>LMB</span> — Fire rocket<br>
-        <span>C</span> — Fire disc (spin) &nbsp;&nbsp; <span>F</span> — Fire grenade (arc, auto-explodes)<br>
-        <span>MOUSE</span> — Look &nbsp;&nbsp; <span>R</span> — Reload<br>
-        <br>
-        Shoot the bouncing spheres!<br>
-        Rocket-jump &amp; jetpack to reach high ground.
+    <div id="overlay-center">
+      <button id="start-btn">Click to Resume</button>
+    </div>
+    <div id="loadout-bar"></div>
+    <div id="menu-side">
+      <div class="menu-section">SETTINGS</div>
+      <div class="btn-row">
+        <button id="pixel-toggle">PIXELATED</button>
+        <button id="bloom-toggle">BLOOM: OFF</button>
+        <button id="postpro-toggle">POST-PROCESSING: OFF</button>
+        <button id="invert-y-toggle">INVERT Y: OFF</button>
+        <div class="field-row">
+          <span>MOUSE SENS</span>
+          <input id="sens-input" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" />
+        </div>
       </div>
-      <button id="pixel-toggle" style="margin-top: 16px; padding: 8px 24px; font-size: 0.85rem;">TOGGLE PIXELATED</button>
-      <button id="bloom-toggle" style="margin-top: 16px; padding: 8px 24px; font-size: 0.85rem;">POST-PROCESSING: ON</button>
-      <button id="invert-y-toggle" style="margin-top: 16px; padding: 8px 24px; font-size: 0.85rem;">INVERT Y: OFF</button>
-      <button id="start-btn">CLICK TO PLAY</button>
     </div>
   </div>
   <script type="module" src="src/main.ts"></script>
