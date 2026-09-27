@@ -8,7 +8,7 @@ import {
   LG_CHAIN_RANGE, LG_CHAIN_DMG_SCALE,
 } from '../../core/config.js';
 import { getWeaponStats, WeaponType } from '../../../../shared/weapons.js';
-import type { CombatDeps, FireArgs } from '../combat.js';
+import type { CombatDeps, FireArgs, ExplosionArgs } from '../combat.js';
 import type { Targetable } from '../../entities/balls.js';
 
 // Lightning beam scratch — rebuilt per trace, never retained
@@ -20,15 +20,7 @@ const _lgTo2 = new THREE.Vector3(); // chain-pick scratch
 const _lgHit = new THREE.Vector3();
 const _lgMuzzle = new THREE.Vector3(); // visual start — bottom-right of view
 
-type ProcessExplosion = (
-  pos: THREE.Vector3, radius: number, force: number, forceMode: 'push' | 'pull',
-  aoeDamage: number, falloffMultiplier: number, collisionMultiplier: number,
-  forceMultiplier: number, shooterId?: string, directHit?: boolean,
-  directHitTargetId?: string | null, age?: number,
-  sendAOE?: (pos: { x: number; y: number; z: number }, targetId: string | null) => void,
-  explosionType?: 'rocket' | 'grenade', explosionTint?: string | number,
-  vfxRadius?: number, weaponType?: number,
-) => void;
+type ProcessExplosion = (a: ExplosionArgs) => void;
 
 export interface LightningHooks {
   processExplosion: ProcessExplosion;
@@ -90,14 +82,14 @@ export function createLightning(deps: CombatDeps, hooks: LightningHooks) {
   function lgPop(pos: THREE.Vector3, acc: number): void {
     const dmg = Math.min(acc, LG_POP_DMG_CAP);
     const radius = Math.min(LG_POP_RADIUS_MIN + acc * 0.12, LG_POP_RADIUS_MAX);
-    hooks.processExplosion(
-      pos, radius, 30, 'push', dmg, 1, 1, 1,
-      undefined, false, null, 0,
+    hooks.processExplosion({
+      pos, radius, force: 30, forceMode: 'push', aoeDamage: dmg,
+      falloffMultiplier: 1, collisionMultiplier: 1, forceMultiplier: 1,
       // Server sees a normal Lightning blast for remote-player prediction;
       // the scaled damage is the PvE fantasy side (enemies are client-run)
-      (p, targetId) => deps.lazyNetworkManager()?.sendAOEShot(p, WeaponType.Lightning, targetId),
-      'rocket', 0x8fdcff, radius * 0.8, WeaponType.Lightning,
-    );
+      sendAOE: (p, targetId) => deps.lazyNetworkManager()?.sendAOEShot(p, WeaponType.Lightning, targetId),
+      explosionTint: 0x8fdcff, vfxRadius: radius * 0.8, weaponType: WeaponType.Lightning,
+    });
   }
 
   // Shared ray: eye + current camera forward → terrain march + nearest

@@ -106,6 +106,29 @@ const _remotePlayerPositions = new Map<string, THREE.Vector3>();
 
 export type FireArgs = { origin: THREE.Vector3; dir: THREE.Vector3; playerVel: THREE.Vector3 };
 
+/** One explosion call — named args beat the old 15-positional-param
+ *  signature where every call site had to comment which holes were empty. */
+export interface ExplosionArgs {
+  pos: THREE.Vector3;
+  radius: number;
+  force: number;
+  forceMode: 'push' | 'pull';
+  aoeDamage: number;
+  falloffMultiplier: number;
+  collisionMultiplier: number;
+  forceMultiplier: number;
+  shooterId?: string;
+  directHit?: boolean;
+  directHitTargetId?: string | null;
+  age?: number;
+  sendAOE?: (pos: { x: number; y: number; z: number }, targetId: string | null) => void;
+  explosionTint?: string | number;
+  /** Decoupled from gameplay `radius` — damage covers the shock ring. */
+  vfxRadius?: number;
+  /** Kill attribution — railgun refunds its cooldown. */
+  weaponType?: number;
+}
+
 export function createCombat(deps: CombatDeps) {
   const { logger } = deps;
 
@@ -135,35 +158,19 @@ export function createCombat(deps: CombatDeps) {
 
 
   // ---- Projectile explosion processing (push or pull based on config) ----
-  function processProjectileExplosion(
-    pos: THREE.Vector3,
-    radius: number,
-    force: number,
-    forceMode: 'push' | 'pull',
-    aoeDamage: number,
-    falloffMultiplier: number,
-    collisionMultiplier: number,
-    forceMultiplier: number,
-    shooterId?: string,
-    directHit: boolean = false,
-    directHitTargetId?: string | null,
-    age: number = 0,
-    sendAOE?: (pos: { x: number; y: number; z: number }, targetId: string | null) => void,
-    _explosionType: 'rocket' | 'grenade' = 'rocket',
-    explosionTint?: string | number,
-    // VFX radius is decoupled from gameplay radius — aoeRadius intentionally
-    // exceeds the visual dome so damage covers the shock ring, not just the dome
-    vfxRadius?: number,
-    weaponType?: number,         // kill attribution — railgun refunds its cooldown
-  ): void {
-    const vfx = vfxRadius ?? radius;
+  // VFX radius is decoupled from gameplay radius — aoeRadius intentionally
+  // exceeds the visual dome so damage covers the shock ring, not just the dome.
+  function processProjectileExplosion(a: ExplosionArgs): void {
+    const { pos, radius, force, forceMode, aoeDamage } = a;
+    const directHit = a.directHit ?? false;
+    const vfx = a.vfxRadius ?? radius;
     // Explosion/implosion visual + scorch decal on the terrain below the blast
     if (forceMode === 'push') {
-      deps.world.explosions.push(new Explosion(deps.lazyScene(), pos, directHit, age, deps.lazyTerrain(), vfx / ROCKET_RADIUS, explosionTint));
-      sfx.explosionAt(pos, directHit, weaponType);
+      deps.world.explosions.push(new Explosion(deps.lazyScene(), pos, directHit, a.age ?? 0, deps.lazyTerrain(), vfx / ROCKET_RADIUS, a.explosionTint));
+      sfx.explosionAt(pos, directHit, a.weaponType);
       screenShake.blast(pos, vfx, deps.lazyPlayer().pos);
     } else {
-      deps.world.implosions.push(new Implosion(deps.lazyScene(), pos, age, deps.lazyTerrain()));
+      deps.world.implosions.push(new Implosion(deps.lazyScene(), pos, a.age ?? 0, deps.lazyTerrain()));
       sfx.implosionAt(pos, directHit);
       screenShake.blast(pos, vfx * 0.5, deps.lazyPlayer().pos);
     }
@@ -178,14 +185,14 @@ export function createCombat(deps: CombatDeps) {
     if (AOE_DEBUG) deps.world.aoeGizmos.push(new AoeGizmo(deps.lazyScene(), pos, radius));
 
     // Record explosion for death impulse calculation
-    deps.explosionTracker.addExplosion(pos, force, shooterId || deps.lazyNetworkManager().getLocalPlayerId());
+    deps.explosionTracker.addExplosion(pos, force, a.shooterId || deps.lazyNetworkManager().getLocalPlayerId());
 
-    applyExplosionForce(pos, radius, force, forceMode, falloffMultiplier, collisionMultiplier, forceMultiplier, aoeDamage, directHitTargetId ?? null, weaponType);
+    applyExplosionForce(pos, radius, force, forceMode, a.falloffMultiplier, a.collisionMultiplier, a.forceMultiplier, aoeDamage, a.directHitTargetId ?? null, a.weaponType);
 
     // AOE damage to remote players (server-side authority)
     const networkManager = deps.lazyNetworkManager();
-    if (networkManager && networkManager.isConnected() && sendAOE) {
-      sendAOE({ x: pos.x, y: pos.y, z: pos.z }, directHitTargetId ?? null);
+    if (networkManager && networkManager.isConnected() && a.sendAOE) {
+      a.sendAOE({ x: pos.x, y: pos.y, z: pos.z }, a.directHitTargetId ?? null);
     }
   }
 
@@ -201,22 +208,18 @@ export function createCombat(deps: CombatDeps) {
     const networkManager = deps.lazyNetworkManager();
     const sendAOE = (p: { x: number; y: number; z: number }, targetId: string | null) =>
       networkManager.sendAOEShot(p, WeaponType.Slam, targetId, null, undefined, power);
-    processProjectileExplosion(
+    processProjectileExplosion({
       pos,
-      stats.aoeRadius * power,
-      stats.knockbackForce * power,
-      stats.forceMode,
-      stats.aoeDamage * power,
-      1.0, 1.0, 1.0,          // falloff/collision/force multipliers
-      undefined,              // shooterId — defaults to local player
-      false,                  // directHit — slam has no proxy-hit bonus layer
-      null,
-      0,
+      radius: stats.aoeRadius * power,
+      force: stats.knockbackForce * power,
+      forceMode: stats.forceMode,
+      aoeDamage: stats.aoeDamage * power,
+      falloffMultiplier: 1, collisionMultiplier: 1, forceMultiplier: 1,
+      // no directHit — slam has no proxy-hit bonus layer
       sendAOE,
-      'rocket',
-      0xffcc66,               // hot slam flash
-      stats.aoeRadius * power * AOE_VFX_SCALE // VFX = 80% of damage reach, same rule as projectiles
-    );
+      explosionTint: 0xffcc66,               // hot slam flash
+      vfxRadius: stats.aoeRadius * power * AOE_VFX_SCALE, // VFX = 80% of damage reach
+    });
   }
 
   // ---- Update projectiles ----
@@ -288,10 +291,12 @@ export function createCombat(deps: CombatDeps) {
   // environment-adjacent), but the blast still shoves/kills client-run
   // targets including the turret that lobbed it.
   function boltCookoff(pos: THREE.Vector3): void {
-    processProjectileExplosion(
-      pos, BOLT_MEGA_RADIUS, BOLT_MEGA_FORCE, 'push', BOLT_MEGA_DAMAGE, 1, 1, 1,
-      undefined, true, null, 0, undefined, 'rocket', 0xffaa44, BOLT_MEGA_RADIUS,
-    );
+    processProjectileExplosion({
+      pos, radius: BOLT_MEGA_RADIUS, force: BOLT_MEGA_FORCE, forceMode: 'push',
+      aoeDamage: BOLT_MEGA_DAMAGE,
+      falloffMultiplier: 1, collisionMultiplier: 1, forceMultiplier: 1,
+      directHit: true, explosionTint: 0xffaa44, vfxRadius: BOLT_MEGA_RADIUS,
+    });
   }
 
   // Projectile exploded: spawn effect, apply AOE, score hits, notify server/demo
@@ -350,25 +355,23 @@ export function createCombat(deps: CombatDeps) {
     const bloom = p.directHit ? directHitAoeBonus(weaponType) : 1;
     const sendAOE = (pos: { x: number; y: number; z: number }, targetId: string | null) =>
       networkManager.sendAOEShot(pos, weaponType, targetId, p.serverProjectileId ?? null, p.hitAge ?? p.age, undefined, p.directHit || undefined);
-    processProjectileExplosion(
-      p.hitPointValid ? p.hitPoint : p.pos,
-      p.config.aoeRadius * bloom,   // gameplay radius = server truth
-      p.force,
-      p.forceMode,
-      p.config.aoeDamage,
-      p.config.falloffMultiplier,
-      p.config.collisionMultiplier,
-      p.config.forceMultiplier,
-      undefined,
-      p.directHit,
-      p.hitPlayerId,
-      p.age,
+    processProjectileExplosion({
+      pos: p.hitPointValid ? p.hitPoint : p.pos,
+      radius: p.config.aoeRadius * bloom,   // gameplay radius = server truth
+      force: p.force,
+      forceMode: p.forceMode,
+      aoeDamage: p.config.aoeDamage,
+      falloffMultiplier: p.config.falloffMultiplier,
+      collisionMultiplier: p.config.collisionMultiplier,
+      forceMultiplier: p.config.forceMultiplier,
+      directHit: p.directHit,
+      directHitTargetId: p.hitPlayerId,
+      age: p.age,
       sendAOE,
-      (p.config.name === 'grenade' || p.config.name === 'grenadeLauncher') ? 'grenade' : 'rocket',
-      p.config.damageColor,
-      p.explosionRadius * bloom,    // VFX dome grows with the damage area
-      p.config.weaponType
-    );
+      explosionTint: p.config.damageColor,
+      vfxRadius: p.explosionRadius * bloom, // VFX dome grows with the damage area
+      weaponType,
+    });
   }
 
   // Demo recording + cool-shot logging for any hit (terrain, ball, or player)
