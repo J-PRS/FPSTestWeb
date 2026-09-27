@@ -16,6 +16,7 @@ const MAGIC = 0x54; // 'T'
 
 export const WIRE_POSITION = 0x01;
 export const WIRE_TICK = 0x02;
+export const WIRE_BALLSEG = 0x03;
 
 const ENC = new TextEncoder();
 const DEC = new TextDecoder();
@@ -191,4 +192,88 @@ export function decodeTickFrame(u8: Uint8Array): { ackSeq: number; updates: Wire
     });
   }
   return { ackSeq, updates };
+}
+
+// ---- S→C ballSegment (highest-rate event: every bounce/heartbeat) ----
+
+const SEG_KINDS = ['bounce', 'lunge', 'enrage', 'stall', 'teleport', 'spawn', 'knockback', 'hit'] as const;
+const segKindIdx = new Map<string, number>(SEG_KINDS.map((k, i) => [k, i]));
+
+export interface WireBallSegment {
+  id: number;
+  kind: string;
+  position: WireVec3;
+  velocity: WireVec3;
+  enraged: boolean;
+  targetId: string | null;
+  tp: WireVec3 | null;
+  et: number;     // enrageTimer, seconds
+  slowT: number;  // stall timer, seconds
+  damp: boolean;  // dampNextBounce
+  t: number;      // server sim time
+}
+
+/** ~40B fixed + optional fields vs ~140B+ JSON. Timers are u8 tenths of a
+ *  second — the sim only needs ±0.05s granularity to stay glued. */
+export function encodeBallSegment(s: WireBallSegment): Uint8Array {
+  const idBytes = s.targetId !== null ? ENC.encode(s.targetId) : null;
+  const buf = new ArrayBuffer(50 + (idBytes ? 1 + idBytes.length : 0));
+  const u8 = new Uint8Array(buf);
+  const d = new DataView(buf);
+  let o = 0;
+  d.setUint8(o++, MAGIC);
+  d.setUint8(o++, WIRE_BALLSEG);
+  d.setUint32(o, s.id >>> 0, true); o += 4;
+  d.setUint8(o++, segKindIdx.get(s.kind) ?? 0);
+  d.setFloat32(o, s.t, true); o += 4;
+  d.setFloat32(o, s.position.x, true); o += 4;
+  d.setFloat32(o, s.position.y, true); o += 4;
+  d.setFloat32(o, s.position.z, true); o += 4;
+  d.setFloat32(o, s.velocity.x, true); o += 4;
+  d.setFloat32(o, s.velocity.y, true); o += 4;
+  d.setFloat32(o, s.velocity.z, true); o += 4;
+  d.setUint8(o++,
+    (s.enraged ? 1 : 0) | (s.damp ? 2 : 0) | (s.tp ? 4 : 0) | (idBytes ? 8 : 0));
+  d.setUint8(o++, Math.min(255, Math.round(s.et * 10)));
+  d.setUint8(o++, Math.min(255, Math.round(s.slowT * 10)));
+  if (s.tp) {
+    d.setFloat32(o, s.tp.x, true); o += 4;
+    d.setFloat32(o, s.tp.y, true); o += 4;
+    d.setFloat32(o, s.tp.z, true); o += 4;
+  }
+  if (idBytes) {
+    d.setUint8(o++, idBytes.length);
+    u8.set(idBytes, o); o += idBytes.length;
+  }
+  return new Uint8Array(buf, 0, o);
+}
+
+export function decodeBallSegment(u8: Uint8Array): WireBallSegment | null {
+  if (u8.length < 38 || u8[0] !== MAGIC || u8[1] !== WIRE_BALLSEG) return null;
+  const d = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+  let o = 2;
+  const id = d.getUint32(o, true); o += 4;
+  const kind = SEG_KINDS[d.getUint8(o++)] ?? 'bounce';
+  const t = d.getFloat32(o, true); o += 4;
+  const position = { x: d.getFloat32(o, true), y: d.getFloat32(o + 4, true), z: d.getFloat32(o + 8, true) }; o += 12;
+  const velocity = { x: d.getFloat32(o, true), y: d.getFloat32(o + 4, true), z: d.getFloat32(o + 8, true) }; o += 12;
+  const flags = d.getUint8(o++);
+  const et = d.getUint8(o++) / 10;
+  const slowT = d.getUint8(o++) / 10;
+  let tp: WireVec3 | null = null;
+  if (flags & 4) {
+    tp = { x: d.getFloat32(o, true), y: d.getFloat32(o + 4, true), z: d.getFloat32(o + 8, true) }; o += 12;
+  }
+  let targetId: string | null = null;
+  if (flags & 8) {
+    const idLen = d.getUint8(o++);
+    if (o + idLen > u8.length) return null;
+    targetId = DEC.decode(u8.subarray(o, o + idLen));
+  }
+  return {
+    id, kind, position, velocity,
+    enraged: (flags & 1) !== 0,
+    damp: (flags & 2) !== 0,
+    targetId, tp, et, slowT, t,
+  };
 }

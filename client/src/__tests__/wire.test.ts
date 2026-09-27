@@ -85,3 +85,48 @@ describe('tick frame round-trip', () => {
     expect(isWireFrame(new Uint8Array([0x54]))).toBe(false);
   });
 });
+
+import { encodeBallSegment, decodeBallSegment } from '../../../shared/wire';
+
+describe('ballSegment binary codec', () => {
+  const full = {
+    id: 42, kind: 'enrage',
+    position: { x: 12.5, y: -3.25, z: 999.5 },
+    velocity: { x: 40.1, y: -12.75, z: 0.5 },
+    enraged: true, targetId: 'player_abc', tp: { x: 1, y: 2, z: 3 },
+    et: 12.34, slowT: 1.9, damp: true, t: 1234.5,
+  };
+
+  it('round-trips all fields', () => {
+    const s = decodeBallSegment(encodeBallSegment(full))!;
+    expect(s).not.toBeNull();
+    expect(s.id).toBe(42);
+    expect(s.kind).toBe('enrage');
+    expect(s.position.x).toBeCloseTo(12.5);
+    expect(s.velocity.y).toBeCloseTo(-12.75);
+    expect(s.enraged).toBe(true);
+    expect(s.damp).toBe(true);
+    expect(s.targetId).toBe('player_abc');
+    expect(s.tp!.z).toBeCloseTo(3);
+    expect(s.et).toBeCloseTo(12.34, 1);
+    expect(s.slowT).toBeCloseTo(1.9, 1);
+    expect(s.t).toBeCloseTo(1234.5);
+  });
+
+  it('omits optional fields cleanly', () => {
+    const s = decodeBallSegment(encodeBallSegment({ ...full, targetId: null, tp: null, damp: false }))!;
+    expect(s.targetId).toBeNull();
+    expect(s.tp).toBeNull();
+    expect(s.damp).toBe(false);
+  });
+
+  it('is ~3x smaller than JSON', () => {
+    const bin = encodeBallSegment(full);
+    const json = JSON.stringify({ type: 'ballSegment', ...full });
+    expect(bin.length).toBeLessThan(json.length / 3);
+  });
+
+  it('rejects garbage', () => {
+    expect(decodeBallSegment(new Uint8Array(10))).toBeNull();
+  });
+});

@@ -1,5 +1,5 @@
 import { ChildLogger } from '../core/Logger.js';
-import { isWireFrame, encodePosition, decodeTickFrame } from '../../../shared/wire.js';
+import { isWireFrame, encodePosition, decodeTickFrame, decodeBallSegment, WIRE_BALLSEG } from '../../../shared/wire.js';
 import type { ClientMessage, ServerMessage, TickUpdatePlayer, GameStatePlayer, LocalPlayerState, SnapshotPlayer } from '../../../shared/protocol.js';
 import { PROTOCOL_VERSION } from '../../../shared/protocol.js';
 import { WebSocketConnection } from './WebSocketConnection.js';
@@ -330,6 +330,19 @@ export class NetworkManager {
   private handleBinaryMessage(data: Uint8Array): void {
     if (!isWireFrame(data)) {
       logger.debug(`Received non-wire binary message: ${data.length} bytes`);
+      return;
+    }
+    // Binary ball segments decode straight into the JSON message's shape —
+    // netBallSegment sees one type regardless of transport.
+    if (data[1] === WIRE_BALLSEG) {
+      const seg = decodeBallSegment(data);
+      if (seg) this.onBallSegment?.({
+        type: 'ballSegment',
+        id: seg.id, kind: seg.kind,
+        position: seg.position, velocity: seg.velocity,
+        enraged: seg.enraged, targetId: seg.targetId,
+        tp: seg.tp, et: seg.et, slowT: seg.slowT, damp: seg.damp, t: seg.t,
+      });
       return;
     }
     const tick = decodeTickFrame(data);

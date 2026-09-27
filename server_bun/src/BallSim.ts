@@ -21,6 +21,7 @@ import {
 } from '../../shared/ballSim.ts';
 import type { PlayerManager } from './PlayerManager.ts';
 import type { ServerMessage } from './types.ts';
+import { encodeBallSegment } from '../../shared/wire.ts';
 import { logger } from './logger.ts';
 
 const TICK_DT = 0.05;           // 20Hz — matches GameServer tick broadcast
@@ -52,13 +53,15 @@ export class BallSim {
   private retargetAcc = new Map<number, number>();
   private resyncAcc = new Map<number, number>();
   private broadcast: (msg: ServerMessage) => void;
+  private broadcastBinary: (data: Uint8Array) => void;
   private players: PlayerManager;
   private timer: ReturnType<typeof setInterval> | null = null;
   private simTime = 0; // monotonic sim clock — stamped on every event so clients measure TRUE age, not ping guesses
 
-  constructor(players: PlayerManager, broadcast: (msg: ServerMessage) => void) {
+  constructor(players: PlayerManager, broadcast: (msg: ServerMessage) => void, broadcastBinary?: (data: Uint8Array) => void) {
     this.players = players;
     this.broadcast = broadcast;
+    this.broadcastBinary = broadcastBinary ?? (() => {});
   }
 
   async start(heightmapPath: string): Promise<void> {
@@ -175,8 +178,11 @@ export class BallSim {
   private segment(b: SimBall, kind: SegmentKind): void {
     this.resyncAcc.set(b.id, 0);
     this.snapTarget(b); // segment boundary = aim refresh; clients get the same point
-    this.broadcast({
-      type: 'ballSegment', id: b.id, kind,
+    // Binary — segments are the highest-rate message (~10/s per ball of
+    // bounces + heartbeats); ~50B vs ~160B JSON, and no per-client
+    // JSON.stringify.
+    this.broadcastBinary(encodeBallSegment({
+      id: b.id, kind,
       position: { x: b.x, y: b.y, z: b.z },
       velocity: { x: b.vx, y: b.vy, z: b.vz },
       enraged: b.enraged, targetId: b.targetId, tp: this.targetSnap(b),
@@ -185,7 +191,7 @@ export class BallSim {
       // off the server's (heartbeats would otherwise keep resetting them).
       et: b.enrageTimer, slowT: b.slowTimer, damp: b.dampNextBounce,
       t: this.simTime,
-    });
+    }));
   }
 
   /** creatureHit claim. Lenient sanity clamps only — real validation is an
