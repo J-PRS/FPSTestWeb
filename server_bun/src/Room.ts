@@ -213,6 +213,9 @@ export class Room {
   /** Full teardown — every store moves together or a slot/token leaks. */
   removePlayerCompletely(playerId: string, reason: string, log: (m: string, o?: object) => void): void {
     this.players.removePlayer(playerId);
+    if (this.ffaScores.delete(playerId)) {
+      this.broadcast({ type: 'ffaScore', scores: Object.fromEntries(this.ffaScores), winAt: this.modeSpec!.winAt });
+    }
     this.messages.onPlayerRemoved(playerId);
     this.sessionTokens.delete(playerId);
     this.lastSentPositions.delete(playerId);
