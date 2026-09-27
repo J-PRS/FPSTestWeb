@@ -8,6 +8,7 @@ import { logger } from './logger.ts';
 import { fileURLToPath } from 'node:url';
 import type { Heightfield } from '../../shared/heightfield.ts';
 import { isWireFrame, decodePosition, encodeTickPlayer, encodeTickFrame } from '../../shared/wire.ts';
+import { createHmac, randomBytes } from 'node:crypto';
 
 export class GameServer {
   // One match's state per room — players land in 'default' unless the join
@@ -61,6 +62,16 @@ export class GameServer {
   }
 
   private static readonly ROOM_NAME_RE = /^[\w-]{1,32}$/;
+
+  // Persistent identity: playerId → HMAC(playerId, secret). A claimed id
+  // can't be taken without its token; tokens survive server restarts when
+  // FPS_SECRET is set (random per boot otherwise — dev default).
+  private identitySecret = CONFIG.identitySecret || randomBytes(32).toString('hex');
+  private claimedIdentities = new Map<string, string>();
+
+  private identityToken(playerId: string): string {
+    return createHmac('sha256', this.identitySecret).update(playerId).digest('base64url');
+  }
 
   /** Resolve-or-create a room. Joins may name any room; 'default' is the
    *  unnamed lobby every existing client already lands in. */
@@ -276,8 +287,19 @@ export class GameServer {
       return;
     }
 
+    // Claimed identity: a taken name needs its HMAC token, or the claimer
+    // and the claimant get rejected — no stealing by knowing the id.
+    const claimed = this.claimedIdentities.get(playerId);
+    const idToken = this.identityToken(playerId);
+    if (claimed && claimed !== token) {
+      logger.warn('Join rejected: claimed playerId, bad token', { playerId });
+      ws.close(1008, 'Player ID claimed');
+      return;
+    }
+    if (!claimed) this.claimedIdentities.set(playerId, idToken);
+
     ws.data.playerId = playerId;
-    const sessionToken = crypto.randomUUID();
+    const sessionToken = idToken;
     room.sessionTokens.set(playerId, sessionToken);
     room.players.addPlayer(playerId);
     room.connections.register(playerId, ws);
