@@ -169,6 +169,7 @@ export class Room {
    *  matchStart. Called from the room tick; leader wins, tie is 'draw'. */
   private matchEndsAt = 0;
   private matchWarned = false; // 60s warning — once per match
+  private matchOvertime = false; // tied horn → next score wins
 
   /** ms until the horn; 0 when the clock isn't armed. */
   matchTimeLeftMs(): number {
@@ -188,19 +189,36 @@ export class Room {
       this.matchWarned = true;
       this.broadcast({ type: 'matchNotice', text: '60 seconds left' });
     }
-    if (now < this.matchEndsAt) return;
-    if (spec.teams) {
-      const w = this.scores.alpha === this.scores.bravo ? 'draw'
-        : this.scores.alpha > this.scores.bravo ? 'alpha' : 'bravo';
-      this.endMatch(w);
-    } else {
-      let top: string | null = null, topPts = -1, tied = false;
-      for (const [id, pts] of this.ffaScores) {
-        if (pts > topPts) { top = id; topPts = pts; tied = false; }
-        else if (pts === topPts) tied = true;
-      }
-      this.endMatch(top && !tied ? top : 'draw');
+    // In overtime the horn is already past — any lead ends it instantly.
+    if (this.matchOvertime) {
+      const w = this.leader();
+      if (w !== null) { this.endMatch(w); return; }
     }
+    if (now < this.matchEndsAt) return;
+    const w = this.leader();
+    if (w === null) {
+      if (this.matchOvertime) { this.endMatch('draw'); return; } // OT window spent
+      this.matchOvertime = true;
+      this.matchEndsAt = now + 120_000; // OT cap: still tied → draw
+      this.broadcast({ type: 'matchNotice', text: 'OVERTIME — next score wins' });
+      return;
+    }
+    this.endMatch(w);
+  }
+
+  /** Current match leader: team id / playerId, or null when tied. */
+  private leader(): string | null {
+    const spec = this.modeSpec!;
+    if (spec.teams) {
+      return this.scores.alpha === this.scores.bravo ? null
+        : this.scores.alpha > this.scores.bravo ? 'alpha' : 'bravo';
+    }
+    let top: string | null = null, topPts = -1, tied = false;
+    for (const [id, pts] of this.ffaScores) {
+      if (pts > topPts) { top = id; topPts = pts; tied = false; }
+      else if (pts === topPts) tied = true;
+    }
+    return top && !tied ? top : null;
   }
 
   /** Match resolution — every end path (score cap, flag cap, clock horn)
@@ -219,6 +237,7 @@ export class Room {
     this.players.resetStats();
     this.matchEndsAt = Date.now() + spec.timeLimitS * 1000;
     this.matchWarned = false;
+    this.matchOvertime = false;
     this.broadcast({ type: 'matchStart', mode: this.mode, scores: { ...this.scores } });
   }
 

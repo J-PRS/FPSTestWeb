@@ -48,14 +48,14 @@
   - Update changelog.txt after each task
   - Update architecture.txt for structural changes
   - Maintain TASKS.md for context
-- **Testing Requirements:** `bun test` in server_bun/ (91 tests incl. hit-claim validation); `npx vitest run` in client/ (23 tests — wire protocol, combat math, team rules); `_tools/pvptest/` has live E2E suites (`--test`/`--test2`/`--test3`/`--test4`/`--test5` + `--watch` soak)
+- **Testing Requirements:** `bun test` in server_bun/ (139 tests — rooms, CTF flags, DM scoring, match clock+OT, bot fill, hit claims, rate limits); `npx vitest run` in client/ (48 tests); `_tools/pvptest/` live E2E (`--test*`/`--watch`/`--balls`), `record.ts`+`replay.ts` wire capture/replay
 - **Security Considerations:**
   - Server must be authoritative for movement
   - Rate limit critical messages
   - Validate all client inputs
 
 ## Current Task
-- **Objective:** Continuous refinement — MP correctness (pvptest harness green), bot AI feel, modes (nuggets/ctf/dm/classic), P2P duels (?p2p=host:CODE / join:CODE — WebRTC DataChannel, host browser embeds real server modules as authority), weapon bake pipeline, ongoing tech debt (Player input extracted to player/input.ts)
+- **Objective:** Continuous overhaul toward Tribes-scale MP (see ROADMAP.md — the living plan). Now landed: multi-room match model (maps/<room>.json: mode/balls/spawns/bases/bots/botFill/ballMix/terrain), server-owned teams+score+CTF flags+nugget pickups+DM frags, match clock w/ overtime+60s warn, match journal→/matches, lobby picker + /join quick-play, server bots w/ shared brain, join throttle + identity cap, wire record/replay harness.
 
 ## Recently Completed
 - **Explosion rendering:** Additive blending on particles so overlapping layers glow instead of darken
