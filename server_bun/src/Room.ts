@@ -51,6 +51,9 @@ export class Room {
   readonly flags: RoomFlags | null = null;
   /** Server-side simulations ticked each room tick, in order. */
   readonly sims: { tick(dt: number): void }[] = [];
+  /** Match-results journal hook — GameServer writes matches.jsonl and
+   *  feeds /matches from it. Fired on every win condition. */
+  onMatchEnd?: (record: { room: string; mode: string; winner: string; scores: Record<string, number> }) => void;
 
   constructor(name: string, field: Heightfield | null, mode = '', spec?: MapSpec) {
     this.name = name;
@@ -142,6 +145,7 @@ export class Room {
     this.broadcast({ type: 'ffaScore', scores: Object.fromEntries(this.ffaScores), winAt: spec.winAt });
     if (pts >= spec.winAt) {
       this.broadcast({ type: 'ffaMatchEnd', winner: id, scores: Object.fromEntries(this.ffaScores) });
+      this.onMatchEnd?.({ room: this.name, mode: this.mode, winner: id, scores: Object.fromEntries(this.ffaScores) });
       this.ffaScores.clear();
       this.broadcast({ type: 'matchStart', mode: this.mode, scores: { ...this.scores } });
     }
@@ -165,6 +169,7 @@ export class Room {
     const w = winner(this.scores, this.modeSpec.winAt);
     if (w) {
       this.broadcast({ type: 'matchEnd', winner: w, scores: { ...this.scores } });
+      this.onMatchEnd?.({ room: this.name, mode: this.mode, winner: w, scores: { ...this.scores } });
       this.scores.alpha = 0;
       this.scores.bravo = 0;
       this.flags?.reset();
@@ -219,6 +224,7 @@ export class Room {
     const w = winner(this.scores, this.modeSpec.winAt);
     if (w) {
       this.broadcast({ type: 'matchEnd', winner: w, scores: { ...this.scores } });
+      this.onMatchEnd?.({ room: this.name, mode: this.mode, winner: w, scores: { ...this.scores } });
       this.scores.alpha = 0;
       this.scores.bravo = 0;
       this.broadcast({ type: 'matchStart', mode: this.mode, scores: { ...this.scores } });

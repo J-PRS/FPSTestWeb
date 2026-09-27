@@ -9,7 +9,8 @@ import { fileURLToPath } from 'node:url';
 import type { Heightfield } from '../../shared/heightfield.ts';
 import { isWireFrame, decodePosition, encodeTickPlayer, encodeTickFrame } from '../../shared/wire.ts';
 import { createHmac, randomBytes } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { readFileSync, appendFileSync, mkdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { type MapSpec, resolveMapSpec } from '../../shared/mapSpec.ts';
 
 export class GameServer {
@@ -75,6 +76,28 @@ export class GameServer {
     return createHmac('sha256', this.identitySecret).update(playerId).digest('base64url');
   }
 
+  // Match journal — every win condition lands one JSON line on disk plus
+  // a small in-memory ring for /matches. Append-only so a restart never
+  // loses history; the ring is just a cheap read cache.
+  private matchRing: ({ t: number; room: string; mode: string; winner: string; scores: Record<string, number> })[] = [];
+  private recordMatchEnd(rec: { room: string; mode: string; winner: string; scores: Record<string, number> }): void {
+    const entry = { t: Date.now(), ...rec };
+    this.matchRing.push(entry);
+    if (this.matchRing.length > 100) this.matchRing.shift();
+    try {
+      const dir = join(import.meta.dir, '..', '..', 'logs');
+      mkdirSync(dir, { recursive: true });
+      appendFileSync(join(dir, 'matches.jsonl'), JSON.stringify(entry) + '\n');
+    } catch (e) {
+      logger.warn('Match journal write failed', { err: String(e) });
+    }
+  }
+
+  /** Recent match results — newest last. */
+  listMatches(): unknown[] {
+    return this.matchRing;
+  }
+
   /** Resolve-or-create a room. Joins may name any room; 'default' is the
    *  unnamed lobby every existing client already lands in. `mode` is only
    *  honored at creation — the first joiner defines the match. */
@@ -83,6 +106,7 @@ export class GameServer {
     if (!room) {
       const spec = this.loadMapSpec(name) ?? this.loadMapSpec(mode);
       room = new Room(name, this.field, mode, spec);
+      room.onMatchEnd = (rec) => this.recordMatchEnd(rec);
       this.rooms.set(name, room);
       logger.info('Room created', { room: name, mode: room.mode });
     }

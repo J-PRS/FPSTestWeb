@@ -103,6 +103,14 @@ const server = Bun.serve<WebSocketData>({
       });
     }
 
+    // Match history: GET /matches — ring of recent matchEnd/ffaMatchEnd
+    // records (also journaled to logs/matches.jsonl).
+    if (url.pathname === '/matches') {
+      return corsResponse(JSON.stringify(gameServer.listMatches()), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
     // Quick-join: GET /join?mode=ctf → {room, mode} — the lobby uses it
     // to drop players into the emptiest live match of a mode.
     if (url.pathname === '/join') {

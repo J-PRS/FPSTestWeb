@@ -12,3 +12,5 @@ __pycache__
 
 *.demo
 server_bun/demos/*.demo
+logs/
+*.jsonl
