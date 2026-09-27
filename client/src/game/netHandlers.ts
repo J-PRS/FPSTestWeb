@@ -63,6 +63,33 @@ export function wireNetworkHandlers(deps: NetDeps): void {
   networkManager.onMatchStart = (mode) =>
     chat.add(null, `match start — ${mode || 'arena'}`);
 
+  // Server-owned CTF flags — dumb renderers: pole+banner meshes that just
+  // follow flagUpdate positions. All rules live in RoomFlags server-side.
+  const flagMeshes = new Map<string, THREE.Group>();
+  const ensureFlagMesh = (team: 'alpha' | 'bravo'): THREE.Group => {
+    let g = flagMeshes.get(team);
+    if (g) return g;
+    g = new THREE.Group();
+    const pole = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.06, 0.08, 4, 6),
+      new THREE.MeshBasicMaterial({ color: 0x888888 }));
+    pole.position.y = 2;
+    const banner = new THREE.Mesh(
+      new THREE.ConeGeometry(0.5, 1.2, 4),
+      new THREE.MeshBasicMaterial({ color: team === 'alpha' ? 0x55aaff : 0xff8855 }));
+    banner.position.set(0.55, 3.4, 0);
+    g.add(pole, banner);
+    deps.lazyScene().add(g);
+    flagMeshes.set(team, g);
+    return g;
+  };
+  networkManager.onFlagUpdate = (flags) => {
+    for (const f of flags) {
+      const g = ensureFlagMesh(f.team);
+      g.position.set(f.pos.x, f.pos.y, f.pos.z);
+    }
+  };
+
   // Lobby browser — corner button lists the server's live rooms; joining
   // reloads with ?room=NAME (membership is fixed at connect time).
   void resolveServerEndpoints().then(({ httpUrl }) => new Lobby({

@@ -49,6 +49,8 @@ export class NetworkManager {
   public onTeamScore: ((scores: { alpha: number; bravo: number }, winAt: number) => void) | null = null;
   public onMatchEnd: ((winner: 'alpha' | 'bravo', scores: { alpha: number; bravo: number }) => void) | null = null;
   public onMatchStart: ((mode: string, scores: { alpha: number; bravo: number }) => void) | null = null;
+  /** Server-owned flag state (CTF rooms) — pos/state/carrier per team. */
+  public onFlagUpdate: ((flags: { team: 'alpha' | 'bravo'; pos: { x: number; y: number; z: number }; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]) => void) | null = null;
   public onSnapshot: ((players: SnapshotPlayer[], timestamp: number) => void) | null = null;
   public onStateHash: ((hash: string, tick: number, playerCount: number, timestamp: number) => void) | null = null;
   public onCorrection: ((seq: number, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }) => void) | null = null;
@@ -201,6 +203,7 @@ export class NetworkManager {
     ballRoster: (data) => this.onBallRoster?.(data),
     pong: (data) => this.handlePong(data.timestamp),
     chat: (data) => this.onChat?.(data.playerId, data.text),
+    flagUpdate: (data) => this.onFlagUpdate?.(data.flags),
     teamScore: (data) => this.onTeamScore?.(data.scores, data.winAt),
     matchEnd: (data) => this.onMatchEnd?.(data.winner, data.scores),
     matchStart: (data) => this.onMatchStart?.(data.mode, data.scores),

@@ -14,10 +14,11 @@ import { ConnectionManager } from './ConnectionManager.ts';
 import { RateLimiter } from './RateLimiter.ts';
 import { MessageHandler } from './MessageHandler.ts';
 import { BallSim } from './BallSim.ts';
-import type { Heightfield } from '../../shared/heightfield.ts';
+import { hmHeight, type Heightfield } from '../../shared/heightfield.ts';
 import { type MapSpec, resolveMapSpec } from '../../shared/mapSpec.ts';
 import { MODES, pickTeam, makeScores, bank, winner, type ModeId, type ModeSpec, type TeamScores } from '../../shared/teams.ts';
 import { ServerBots } from './ServerBots.ts';
+import { RoomFlags } from './RoomFlags.ts';
 import type { PlayerState } from './types.ts';
 import type { ServerWebSocket } from 'bun';
 import type { WebSocketData } from './types.ts';
@@ -46,6 +47,8 @@ export class Room {
   readonly scores: TeamScores = makeScores();
   /** Server-driven filler players, populated from the map spec. */
   readonly bots: ServerBots;
+  /** CTF flag authority — only when the mode has flags AND the map has bases. */
+  readonly flags: RoomFlags | null = null;
 
   constructor(name: string, field: Heightfield | null, mode = '', spec?: MapSpec) {
     this.name = name;
@@ -64,6 +67,8 @@ export class Room {
         winAt: this.modeSpec?.winAt,
         onBank: (pid, n) => this.bank(pid, n),
         bases: this.spec.bases,
+        onKill: (pid) => this.flagCarrierDied(pid),
+        flags: () => this.flags?.snapshot() ?? [],
       },
     );
     this.ballSim = new BallSim(
@@ -80,6 +85,45 @@ export class Room {
     // Bots populate before humans join so team balancing puts humans on
     // the emptier side.
     if (this.spec.bots) this.bots.populate(this.spec.bots);
+    const bases = this.spec.bases;
+    if (this.modeSpec?.flags && bases?.alpha && bases?.bravo) {
+      // Spec y is advisory — flags live on the ground, so touch checks
+      // measure feet-to-flag, not feet-to-arbitrary-height.
+      const snap = (v: { x: number; y: number; z: number }) => ({
+        ...v,
+        y: field ? hmHeight(field, v.x, v.z) : v.y,
+      });
+      this.flags = new RoomFlags(this, { alpha: snap(bases.alpha), bravo: snap(bases.bravo) });
+    }
+  }
+
+  /** Flag tick — called from GameServer's room tick. Captures feed the
+   *  same bank→teamScore→matchEnd funnel nuggets use (worth winAt/5-ish:
+   *  one capture = one score point). */
+  tickFlags(dt: number): void {
+    const scoredBy = this.flags?.tick(dt);
+    if (scoredBy) this.score(scoredBy);
+  }
+
+  /** Any player death drops a carried flag — called from the damage funnel. */
+  flagCarrierDied(playerId: string): void {
+    this.flags?.dropIfCarrier(playerId);
+  }
+
+  /** Team point from an objective (flag capture) — separate from bank()
+   *  claims since the server itself is the source of truth. */
+  score(team: 'alpha' | 'bravo', n = 1): void {
+    if (!this.modeSpec?.teams) return;
+    bank(this.scores, team, n);
+    this.broadcast({ type: 'teamScore', scores: { ...this.scores }, winAt: this.modeSpec.winAt });
+    const w = winner(this.scores, this.modeSpec.winAt);
+    if (w) {
+      this.broadcast({ type: 'matchEnd', winner: w, scores: { ...this.scores } });
+      this.scores.alpha = 0;
+      this.scores.bravo = 0;
+      this.flags?.reset();
+      this.broadcast({ type: 'matchStart', mode: this.mode, scores: { ...this.scores } });
+    }
   }
 
   broadcast(msg: Parameters<ConnectionManager['broadcast']>[0], exclude?: string): void {

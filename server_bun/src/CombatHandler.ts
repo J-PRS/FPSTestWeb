@@ -55,6 +55,7 @@ export class CombatHandler {
     private playerManager: PlayerManager,
     private broadcast: BroadcastFn,
     private sendToPlayer: SendToPlayerFn,
+    private onKill?: (targetId: string) => void,
   ) {}
 
   /** Drop live projectiles when a player is fully removed (grace timeout /
@@ -406,6 +407,7 @@ export class CombatHandler {
     if (shooterId !== 'environment') this.playerManager.addKill(shooterId);
     logger.info(`${hitLabel} → kill`, { shooter: shooterId, target: targetId, damage, ...extra });
     this.broadcast({ type: 'playerKill', shooterId, targetId });
+    this.onKill?.(targetId);
     this.scheduleRespawn(targetId);
   }
 
