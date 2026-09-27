@@ -1,14 +1,20 @@
 import * as THREE from 'three';
 
-import { JET_FORCE_UP, JET_FORCE_DIR, MAX_ENERGY, JET_DRAIN, JET_CHARGE, FIRE_RATE, DISC_RATE, GRENADE_RATE, CHAINGUN_RATE, MORTAR_RATE, GL_RATE, FLAK_RATE, PLASMA_RATE, RAILGUN_RATE, MELEE_COOLDOWN, MELEE_LUNGE } from '../core/config.js';
+import { JET_FORCE_UP, JET_FORCE_DIR, MAX_ENERGY, MAX_HEALTH, JET_DRAIN, JET_CHARGE, FIRE_RATE, DISC_RATE, GRENADE_RATE, CHAINGUN_RATE, MORTAR_RATE, GL_RATE, FLAK_RATE, PLASMA_RATE, RAILGUN_RATE, LG_RATE, SHOTGUN_RATE, CANNON_RATE, RKT_RATE, MELEE_COOLDOWN, MELEE_LUNGE } from '../core/config.js';
 
 import { Terrain } from '../world/terrain.js';
+import { PlayerSkills } from './player/skills.js';
 
 import { MovementController, MovementState } from './movement.js';
+import { WeaponType } from '../../../shared/weapons.js';
 import { settings } from '../core/settings.js';
 import { audio } from '../core/audio.js';
 import { PlayerModel } from './PlayerModel.js';
 import { PlayerVisuals } from './PlayerVisuals.js';
+import { THROW_TOTAL } from './ViewModel.js';
+import { ChildLogger } from '../core/Logger.js';
+
+const logger = new ChildLogger('Player');
 
 export interface FireEvent {
   origin: THREE.Vector3;
@@ -16,24 +22,8 @@ export interface FireEvent {
   playerVel: THREE.Vector3;
 }
 
-export type SkillId = 'bounce' | 'blink' | 'dash' | 'slam';
-export const SKILL_ORDER: SkillId[] = ['bounce', 'blink', 'dash', 'slam'];
-
-// Blink: freeze (momentum suspended), fast-lerp along the crosshair, then
-// restore the pre-blink velocity exactly — Tracer-style repositioning
-// that keeps your ski speed through the warp.
-const BLINK_RANGE = 20;      // metres along the crosshair
-const BLINK_TIME = 0.16;     // lerp duration — reads as a flash, not a slide
-const BLINK_COOLDOWN = 1.2;  // s between blinks
-// Dash: instant impulse along the crosshair — vel += dir * impulse, so it
-// stacks with current momentum rather than redirecting it.
-const DASH_IMPULSE = 25;     // m/s added along aim
-const DASH_COOLDOWN = 0.9;   // s between dashes
-// Slam: airborne-only — kills vertical velocity and spikes you straight
-// down; the landing detonates an AOE (shared weapon table, type 8).
-// Horizontal momentum is kept so you can slam-dive down a slope.
-const SLAM_SPEED = 55;       // m/s straight down
-const SLAM_COOLDOWN = 1.4;   // s
+export type SkillId = 'bounce' | 'blink' | 'dash' | 'slam' | 'warp';
+export const SKILL_ORDER: SkillId[] = ['bounce', 'blink', 'dash', 'slam', 'warp'];
 
 export class Player {
   pos = new THREE.Vector3();
@@ -46,12 +36,20 @@ export class Player {
 
   onGround = false;
   energy = MAX_ENERGY;
+  /** Nugget pickup: free jetting for a few seconds (refresh, not stack). */
+  jetBoostTimer = 0;
   fireTimer = 0.0;
   discTimer = 0.0;
   grenadeTimer = 0.0;
+  // Primary fire is locked while the belt-throw anim plays — the weapon is
+  // physically lowered, shooting mid-throw would fire through the hip.
+  throwLockT = 0;
   health = 100;
   kills = 0;
   isDead = false;
+  /** Verb phrase for the death message ("devoured by a crawler") — set by
+   *  every environment-damage path so the kill feed names the real killer. */
+  lastDamageSource = '';
   inputFrozen = false; // when true, keyboard/mouse input is ignored (demo playback)
 
   freezeInput(): void {
@@ -64,60 +62,13 @@ export class Player {
     this.jumpHeld = false;
     this.discHeld = false;
     this.grenadeHeld = false;
-    this.bounceHeld = false;
-    this.bounceArmed = false;
-    this.blinkActive = false; // abandon a blink mid-flight
+    this.skills.reset(); // abandon blink mid-flight, kill the beacon
   }
 
   setSkill(s: SkillId): void {
     this.skill = s;
-    this.bounceHeld = this.bounceArmed = false;
-    this.blinkActive = false;
-    this.slamActive = false;
+    this.skills.reset();
     settings.set('fps-skill', s);
-  }
-
-  private tryBlink(): void {
-    if (this.blinkActive || this.blinkCooldown > 0) return;
-
-    const dir = this.getAimDir();
-    // March the ray — truncate at the last point that stays clear of
-    // terrain so you can't blink inside a hillside.
-    let dist = 0;
-    for (let d = 0.5; d <= BLINK_RANGE; d += 0.5) {
-      const px = this.pos.x + dir.x * d;
-      const py = this.pos.y + dir.y * d;
-      const pz = this.pos.z + dir.z * d;
-      if (py < this.terrain.getHeight(px, pz) + 0.5) break;
-      dist = d;
-    }
-    if (dist < 2) return; // wall in the face — fizzle, no cooldown
-
-    this.blinkFrom.copy(this.pos);
-    this.blinkTo.copy(dir).multiplyScalar(dist).add(this.pos);
-    this.blinkSavedVel.copy(this.vel);
-    this.blinkT = 0;
-    this.blinkActive = true;
-    this.blinkCooldown = BLINK_COOLDOWN;
-    this.vel.set(0, 0, 0);
-    this.onBlink?.(this.blinkFrom, this.blinkTo);
-  }
-
-  private tryDash(): void {
-    if (this.dashCooldown > 0) return;
-    this.dashCooldown = DASH_COOLDOWN;
-    const dir = this.getAimDir();
-    this.vel.addScaledVector(dir, DASH_IMPULSE);
-    this.syncMovement();
-    this.onDash?.(this.pos.clone(), dir.clone());
-  }
-
-  private trySlam(): void {
-    if (this.onGround || this.slamCooldown > 0) return; // airborne only
-    this.slamActive = true;
-    this.slamCooldown = SLAM_COOLDOWN;
-    this.vel.y = -SLAM_SPEED; // keep horizontal momentum — spike the vertical
-    this.syncMovement();
   }
 
   // Power punch (E): CoD-style lunge toward the crosshair, hit itself is
@@ -148,32 +99,26 @@ export class Player {
   private keys: Record<string, boolean> = {};
   private mouseHeld = false;
   private firePending = false;
+  // Railgun kill-refund zeroes the cooldown — but the shot is still held,
+  // so without this the same click re-fires the gun on kill. Require a
+  // mouse release before the next shot.
+  private needsRelease = false;
   private jetPending = false;
   private jumpHeld = false;
   private discHeld = false;
   private grenadeHeld = false;
-  // Bounce skill (hold Q): arms while airborne — on the first terrain
-  // touch after arming, velocity is redirected along the crosshair with
-  // its magnitude preserved exactly (like an enraged ball's lunge, but
-  // aimed by you). Consumed on trigger; re-arms on the next airborne
-  // period so holding Q across a landing only fires once.
-  private bounceHeld = false;
-  private bounceArmed = false;
   // Skills live on Q — the loadout picks which one is equipped.
   skill: SkillId = (SKILL_ORDER as string[]).includes(settings.get('fps-skill'))
     ? settings.get('fps-skill') as SkillId : 'bounce';
-  // Blink state: while active, physics is suspended and pos lerps
-  // blinkFrom→blinkTo; blinkSavedVel restores momentum on completion.
-  private blinkActive = false;
-  private blinkT = 0;
-  private blinkCooldown = 0;
-  private blinkFrom = new THREE.Vector3();
-  private blinkTo = new THREE.Vector3();
-  private blinkSavedVel = new THREE.Vector3();
-  private dashCooldown = 0;
-  private slamActive = false;  // falling at slam speed — detonates on landing
+  private skills!: PlayerSkills;
+  // Declared discontinuity: next position report goes out as a 'teleport'
+  // message so the server reseats its plausibility anchor instead of
+  // rejecting the jump as a speedhack (the >50m rubber-band loop).
+  pendingTeleport = false;
+  markTeleport(): void { this.pendingTeleport = true; }
+
+  private scene: THREE.Scene;
   private prevVelY = 0;        // vel.y entering this frame — impact speed at grounding (post-update vel.y is already zeroed)
-  private slamCooldown = 0;
   // Weapon slots: 0 = rocket (LMB), 1 = disc launcher, 2 = chaingun,
   // 3 = mortar, 4 = grenade launcher
   weaponIndex = 0;
@@ -191,10 +136,23 @@ export class Player {
 
   get currentWeapon(): number { return this.loadout[this.weaponIndex]; }
 
+  /** Kill-refund (railgun): ready instantly, but requires a fresh click —
+   *  without needsRelease the still-held trigger would re-fire same-frame. */
+  refundWeaponCooldown(): void {
+    this.fireTimer = 0;
+    this.needsRelease = true;
+  }
+
   setLoadoutSlot(slot: number, weaponId: number): void {
+    // Picking a weapon that's already equipped elsewhere swaps the slots
+    // instead of duplicating it — standard loadout-menu behavior.
+    const other = this.loadout.indexOf(weaponId);
+    if (other >= 0 && other !== slot) this.loadout[other] = this.loadout[slot];
     this.loadout[slot] = weaponId;
     settings.set('fps-loadout', this.loadout.join(','));
-    if (this.weaponIndex === slot) this.onWeaponSwitch?.(weaponId);
+    if (this.weaponIndex === slot || this.weaponIndex === other) {
+      this.onWeaponSwitch?.(this.loadout[this.weaponIndex]);
+    }
   }
 
   setBeltItem(item: 'disc' | 'grenade'): void {
@@ -202,7 +160,13 @@ export class Player {
     settings.set('fps-belt', item);
   }
   private wheelAcc = 0; // accumulates deltaY for smooth-scroll mice
-  private static readonly WEAPON_RATES = [FIRE_RATE, DISC_RATE, CHAINGUN_RATE, MORTAR_RATE, GL_RATE, FLAK_RATE, PLASMA_RATE, RAILGUN_RATE];
+  private static readonly WEAPON_RATES = [FIRE_RATE, DISC_RATE, CHAINGUN_RATE, MORTAR_RATE, GL_RATE, FLAK_RATE, PLASMA_RATE, RAILGUN_RATE, LG_RATE, SHOTGUN_RATE, CANNON_RATE, RKT_RATE];
+  // wid (loadout/WEAPON_RATES index) → WeaponType wire id. The enum has
+  // Grenade=2/Slam=8/Railgun=9/Melee=10 gaps, so positional ids diverge
+  // from wid 2 onward — viewmodel/HUD consumers need this mapping.
+  static widToWeaponType(wid: number): WeaponType {
+    return ([0, 1, 3, 4, 5, 6, 7, 9, 12, 13, 14, 15] as const)[wid] ?? WeaponType.Rocket;
+  }
   private _lastJetpackSend = 0;
 
   // Events
@@ -212,11 +176,17 @@ export class Player {
   /** Exposed for the audio engine: continuous loops follow these flags. */
   jetting = false;
   skiing = false;
+  /** Z toggles Tribes Ascend-style chase cam — centered, under the crosshair. */
+  thirdPerson = false;
   onJetpack: ((pos: THREE.Vector3) => void) | null = null;
   onSki: ((pos: THREE.Vector3, vel: THREE.Vector3) => void) | null = null;
+  onFootDust: ((pos: THREE.Vector3, vel: THREE.Vector3) => void) | null = null;
   onBounce: ((pos: THREE.Vector3, dir: THREE.Vector3) => void) | null = null; // skill FX hook
   onBlink: ((from: THREE.Vector3, to: THREE.Vector3) => void) | null = null;  // fires at blink start
   onDash: ((pos: THREE.Vector3, dir: THREE.Vector3) => void) | null = null;   // fires on dash impulse
+  onWarpThrow: ((pos: THREE.Vector3, vel: THREE.Vector3) => void) | null = null; // beacon launch
+  onWarpTick: ((pos: THREE.Vector3) => void) | null = null; // trail emitter while beacon flies
+  onWarp: ((from: THREE.Vector3, to: THREE.Vector3) => void) | null = null; // the warp itself
   onSlam: ((pos: THREE.Vector3, impactSpeed: number) => void) | null = null;  // fires on slam impact — speed scales the blast
   onDisc: ((e: FireEvent) => void) | null = null;
   onGrenade: ((e: FireEvent) => void) | null = null;
@@ -227,6 +197,10 @@ export class Player {
   onFlak: ((e: FireEvent) => void) | null = null;
   onPlasma: ((e: FireEvent) => void) | null = null;
   onRailgun: ((e: FireEvent) => void) | null = null;
+  onLightning: ((e: FireEvent) => void) | null = null;
+  onShotgun: ((e: FireEvent) => void) | null = null;
+  onCannon: ((e: FireEvent) => void) | null = null;
+  onRocketLauncher: ((e: FireEvent) => void) | null = null;
   onMelee: ((e: FireEvent) => void) | null = null;
   onWeaponSwitch: ((index: number) => void) | null = null;
   onNetworkJump: ((pos: { x: number; y: number; z: number }) => void) | null = null;
@@ -236,6 +210,7 @@ export class Player {
   constructor(terrain: Terrain, camera: THREE.PerspectiveCamera, scene: THREE.Scene) {
     this.terrain = terrain;
     this.camera = camera;
+    this.scene = scene;
 
     const startH = terrain.getHeight(0, 0);
     this.pos.set(0, startH + 10, 0);
@@ -253,6 +228,31 @@ export class Player {
     // Initialize player model
     this.model = new PlayerModel(scene);
     this.visuals = new PlayerVisuals(scene);
+
+    // Q-slot skills — reads pos/vel by ref and reaches the assignable on*
+    // hooks through emit closures (they're wired after construction).
+    this.skills = new PlayerSkills({
+      pos: this.pos,
+      vel: this.vel,
+      scene,
+      terrain,
+      isOnGround: () => this.onGround,
+      aimDir: () => this.getAimDir(),
+      syncMovement: () => this.syncMovement(),
+      markTeleport: () => this.markTeleport(),
+      blinkFrame: () => {
+        this.movement.setState({ pos: this.pos, vel: this.vel, yaw: this.yaw, pitch: this.pitch, onGround: false });
+        this.visuals.updateCamera(this.camera, this.terrain, this.pos, this.yaw, this.pitch);
+        this.visuals.updateShadowBlob(this.terrain, this.pos);
+      },
+      emitBlink: (a, b) => this.onBlink?.(a, b),
+      emitDash: (a, b) => this.onDash?.(a, b),
+      emitWarpThrow: (a, b) => this.onWarpThrow?.(a, b),
+      emitWarpTick: (a) => this.onWarpTick?.(a),
+      emitWarp: (a, b) => this.onWarp?.(a, b),
+      emitSlam: (a, b) => this.onSlam?.(a, b),
+      emitBounce: (a, b) => this.onBounce?.(a, b),
+    });
 
     this.bindInput();
   }
@@ -281,12 +281,11 @@ export class Player {
       if (e.code === 'KeyE') {
         this.tryMelee();
       }
-      if (e.code === 'KeyQ') {
-        if (this.skill === 'blink') this.tryBlink();
-        else if (this.skill === 'dash') this.tryDash();
-        else if (this.skill === 'slam') this.trySlam();
-        else this.bounceHeld = true;
+      if (e.code === 'KeyZ') {
+        this.thirdPerson = !this.thirdPerson;
+        this.model?.setVisible(this.thirdPerson && !this.isDead);
       }
+      if (e.code === 'KeyQ' && !e.repeat) this.skills.press(this.skill);
       if (e.code.startsWith('Digit')) {
         const idx = Number(e.code[5]) - 1;
         if (idx >= 0 && idx < this.loadout.length && idx !== this.weaponIndex) {
@@ -317,10 +316,7 @@ export class Player {
       if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
         this.jumpHeld = false;
       }
-      if (e.code === 'KeyQ') {
-        this.bounceHeld = false;
-        this.bounceArmed = false;
-      }
+      if (e.code === 'KeyQ') this.skills.release(this.skill);
       if (e.code === 'KeyC') {
         this.discHeld = false;
         this.grenadeHeld = false;
@@ -329,7 +325,7 @@ export class Player {
     document.addEventListener('mousedown', (e) => {
       if (this.inputFrozen) return;
       if (!document.pointerLockElement) return; // ignore clicks that lock the cursor
-      if (e.button === 0) { this.firePending = true; this.mouseHeld = true; }
+      if (e.button === 0) { this.firePending = true; this.mouseHeld = true; this.needsRelease = false; }
       if (e.button === 2) { this.jetPending = true; }
     });
     document.addEventListener('mouseup', (e) => {
@@ -435,27 +431,12 @@ export class Player {
     this.fireTimer = Math.max(0, this.fireTimer - dt);
     this.discTimer = Math.max(0, this.discTimer - dt);
     this.grenadeTimer = Math.max(0, this.grenadeTimer - dt);
+    this.throwLockT = Math.max(0, this.throwLockT - dt);
     this.meleeCooldown = Math.max(0, this.meleeCooldown - dt);
-    this.blinkCooldown = Math.max(0, this.blinkCooldown - dt);
-    this.dashCooldown = Math.max(0, this.dashCooldown - dt);
-    this.slamCooldown = Math.max(0, this.slamCooldown - dt);
+    this.skills.tickCooldowns(dt);
+    this.skills.updateBeacon(dt);
 
-    // Blink: physics suspended, position lerps along the stored path,
-    // velocity held at zero until the restore on completion.
-    if (this.blinkActive) {
-      this.blinkT += dt / BLINK_TIME;
-      const t = Math.min(this.blinkT, 1);
-      const ease = t * t * (3 - 2 * t); // smoothstep — snap in, settle out
-      this.pos.lerpVectors(this.blinkFrom, this.blinkTo, ease);
-      if (t >= 1) {
-        this.blinkActive = false;
-        this.vel.copy(this.blinkSavedVel);
-      }
-      this.movement.setState({ pos: this.pos, vel: this.vel, yaw: this.yaw, pitch: this.pitch, onGround: false });
-      this.visuals.updateCamera(this.camera, this.terrain, this.pos, this.yaw, this.pitch);
-      this.visuals.updateShadowBlob(this.terrain, this.pos);
-      return;
-    }
+    if (this.skills.updateBlink(dt)) return;
 
     const input = this.readMoveInput();
 
@@ -495,13 +476,14 @@ export class Player {
     this.onGround = moveState.onGround;
 
     // Jetpack (separate from movement controller, applied after physics sync)
-    const isJetting = this.jetPending && this.energy > 0;
+    if (this.jetBoostTimer > 0) this.jetBoostTimer -= dt;
+    const isJetting = this.jetPending && (this.energy > 0 || this.jetBoostTimer > 0);
     this.jetting = isJetting;
     if (isJetting) {
       this.vel.y += JET_FORCE_UP * dt;
       this.vel.x += input.moveX * JET_FORCE_DIR * dt;
       this.vel.z += input.moveZ * JET_FORCE_DIR * dt;
-      this.energy -= JET_DRAIN * dt;
+      if (this.jetBoostTimer <= 0) this.energy -= JET_DRAIN * dt;
       this.onGround = false; // Force off ground if jetting
     }
 
@@ -513,12 +495,41 @@ export class Player {
 
     // ---- All visual/event spawns below use the final post-physics position ----
 
-    this.visuals.updateCamera(this.camera, this.terrain, this.pos, this.yaw, this.pitch);
+    this.visuals.updateCamera(this.camera, this.terrain, this.pos, this.yaw, this.pitch, this.thirdPerson);
+    this.checkCameraSpinout(dt);
+    // Model visibility follows the toggle AND death (observer cam is ghost
+    // flight — your corpse shouldn't fly with you)
+    this.model?.setVisible(this.thirdPerson && !this.isDead);
     this.visuals.updateFeetMarker(this.terrain, this.pos);
     this.fireWeapons();
-    this.emitMoveEvents(isJetting, input.skiHeld, input.jumpHeld);
+    this.emitMoveEvents(isJetting, input.skiHeld, input.jumpHeld, dt);
     this.visuals.updateShadowBlob(this.terrain, this.pos);
-    this.jumpAnimTimer = this.visuals.updateModelAnim(this.model, this.pos, this.yaw, this.pitch, this.jumpAnimTimer, this.getSpeed(), dt);
+    this.jumpAnimTimer = this.visuals.updateModelAnim(this.model, this.pos, this.yaw, this.pitch, this.jumpAnimTimer, this.getSpeed(), dt, this.onGround);
+  }
+
+  // Spinout detector: a camera rotation jump >35° in a single frame is a
+  // discontinuity (snap/teleport/NaN), not human input — even a violent
+  // flick is <2°/frame at 60fps. Warn logs carry pose so we can repro.
+  private _prevCamQuat = new THREE.Quaternion();
+  private _camQuatValid = false;
+  private _spinoutCd = 0;
+
+  private checkCameraSpinout(dt: number): void {
+    const q = this.camera.quaternion;
+    if (this._camQuatValid && this._spinoutCd <= 0) {
+      const deg = q.angleTo(this._prevCamQuat) * 180 / Math.PI;
+      if (deg > 35) {
+        this._spinoutCd = 0.5; // throttle — a stuck spinout spams otherwise
+        logger.warn(`Camera spinout ${deg.toFixed(1)}deg/frame`, {
+          pos: `(${this.pos.x.toFixed(1)},${this.pos.y.toFixed(1)},${this.pos.z.toFixed(1)})`,
+          yaw: this.yaw.toFixed(3), pitch: this.pitch.toFixed(3),
+          dt: dt.toFixed(4), thirdPerson: this.thirdPerson, dead: this.isDead,
+        });
+      }
+    }
+    this._spinoutCd -= dt;
+    this._prevCamQuat.copy(q);
+    this._camQuatValid = true;
   }
 
   private readMoveInput(): { forward: number; right: number; jumpHeld: boolean; skiHeld: boolean; moveX: number; moveZ: number } {
@@ -555,9 +566,13 @@ export class Player {
 
   // Weapon triggers: selected weapon (LMB) plus C/F belt throws.
   private fireWeapons(): void {
-    // Chaingun auto-fires while held; rocket/disc launcher are per-click.
+    // Chaingun + lightning gun auto-fire while held; the rest are per-click.
     const wid = this.loadout[this.weaponIndex];
-    const wantFire = wid === 2 ? this.mouseHeld : (this.firePending || this.mouseHeld);
+    const isBeam = wid === 2 || wid === 8;
+    // Weapon is lowered during a belt-throw — no primary fire mid-throw.
+    const wantFire = this.throwLockT <= 0 &&
+      (isBeam ? this.mouseHeld : (this.firePending || (this.mouseHeld && !this.needsRelease)));
+    if (!this.mouseHeld) this.needsRelease = false;
     if (wantFire && this.fireTimer <= 0) {
       this.fireTimer = Player.WEAPON_RATES[wid];
       const fireCallback = wid === 1 ? this.onDiscLauncher
@@ -567,6 +582,10 @@ export class Player {
         : wid === 5 ? this.onFlak
         : wid === 6 ? this.onPlasma
         : wid === 7 ? this.onRailgun
+        : wid === 8 ? this.onLightning
+        : wid === 9 ? this.onShotgun
+        : wid === 10 ? this.onCannon
+        : wid === 11 ? this.onRocketLauncher
         : this.onFire;
       fireCallback?.({ origin: this.pos.clone(), dir: this.getAimDir(), playerVel: this.vel.clone() });
     }
@@ -575,18 +594,22 @@ export class Player {
     // Disc (C key) - belt throw, hold to fire
     if (this.discHeld && this.discTimer <= 0) {
       this.discTimer = DISC_RATE;
+      this.throwLockT = THROW_TOTAL;
       this.onDisc?.({ origin: this.pos.clone(), dir: this.getAimDir(), playerVel: this.vel.clone() });
     }
 
     // Grenade (F key) - belt throw, hold to fire
     if (this.grenadeHeld && this.grenadeTimer <= 0) {
       this.grenadeTimer = GRENADE_RATE;
+      this.throwLockT = THROW_TOTAL;
       this.onGrenade?.({ origin: this.pos.clone(), dir: this.getAimDir(), playerVel: this.vel.clone() });
     }
   }
 
   // Movement-event FX: jetpack trail, ski dust, jump event + anim trigger
-  private emitMoveEvents(isJetting: boolean, skiHeld: boolean, jumpHeld: boolean): void {
+  private stepAcc = 0; // footstep-dust distance accumulator
+
+  private emitMoveEvents(isJetting: boolean, skiHeld: boolean, jumpHeld: boolean, dt: number): void {
     // Jetpack trail particles
     if (isJetting && this.onJetpack) {
       this.onJetpack(this.pos); // read-only use — no clone, runs every frame
@@ -604,27 +627,21 @@ export class Player {
       this.onSki(this.pos, this.vel); // read-only use — no clones, runs every frame
     }
 
-    // Bounce skill: arm while airborne, fire on the landing transition —
-    // redirect full speed along the crosshair. Pure redirect: magnitude
-    // preserved, nothing added or taken away.
-    if (this.bounceHeld && !this.onGround) this.bounceArmed = true;
-    if (this.bounceArmed && !this.wasOnGround && this.onGround) {
-      const speed = this.vel.length();
-      if (speed > 0.01) {
-        const dir = this.getAimDir();
-        this.vel.copy(dir).multiplyScalar(speed);
-        this.syncMovement();
-        this.onBounce?.(this.pos.clone(), dir.clone());
+    // Footstep dust — grounded, not skiing, actually moving. Distance-paced
+    // (~0.9m ≈ one puff per step) so a jog puffs at footfall cadence and
+    // standing still puffs nothing.
+    const wsp = Math.hypot(this.vel.x, this.vel.z);
+    if (this.onGround && !this.skiing && wsp > 1.5) {
+      this.stepAcc += wsp * dt;
+      if (this.stepAcc >= 0.9) {
+        this.stepAcc = 0;
+        this.onFootDust?.(this.pos, this.vel);
       }
-      this.bounceArmed = false;
+    } else {
+      this.stepAcc = 0;
     }
 
-    // Slam detonation — the landing IS the trigger (mutually exclusive
-    // with Bounce since they're one skill slot, so no ordering conflict)
-    if (this.slamActive && !this.wasOnGround && this.onGround) {
-      this.slamActive = false;
-      this.onSlam?.(this.pos.clone(), Math.max(0, -this.prevVelY));
-    }
+    this.skills.postMove(this.wasOnGround, this.onGround, this.prevVelY);
 
     // Ground-contact sound — any landing transition (slam stacks its own
     // bigger boom on top via onSlam).
@@ -648,6 +665,17 @@ export class Player {
   // next update otherwise.
   syncMovement(): void {
     this.movement.setState({ pos: this.pos, vel: this.vel, yaw: this.yaw, pitch: this.pitch, onGround: this.onGround });
+  }
+
+  /** Nugget pickup: refill the tank + free jetting for 5s (refresh only). */
+  grantJetBoost(): void {
+    this.energy = MAX_ENERGY;
+    this.jetBoostTimer = 5;
+  }
+
+  /** Nugget pickup: restore a chunk of health, capped at max. */
+  heal(fraction: number): void {
+    this.health = Math.min(MAX_HEALTH, this.health + MAX_HEALTH * fraction);
   }
 
   applyKnockback(from: THREE.Vector3, force: number): void {
