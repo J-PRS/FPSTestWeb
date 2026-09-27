@@ -25,7 +25,7 @@ export class GameServer {
   private lastStatusLine: string = '';
   private statusRepeatCount: number = 0;
   private lastSentPositions: Map<string, { x: number; y: number; z: number; vx: number; vy: number; vz: number; yaw: number; pitch: number; hp: number; dead: boolean; ski: number; t: number }> = new Map();
-  private lastStaleHeartbeat = 0;
+
   // Tick-bandwidth metrics — aggregated per log window so we can see what
   // interest tiers + suppression are actually saving.
   private metrics = { ticks: 0, recordsBuilt: 0, recordsSuppressed: 0, recordsIdleReaped: 0, recordsSent: 0, recordsTierSkipped: 0, bytesSent: 0, windowStart: 0 };
@@ -322,11 +322,13 @@ export class GameServer {
         // Silent sockets (backgrounded tabs) get no regular updates — but a
         // low-rate heartbeat keeps clients' stored state (health, isDead)
         // converged; otherwise a stale player's fields desync permanently
-        // while the state hash still counts them.
+        // while the state hash still counts them. Gated on THAT player's
+        // lastSent, not a shared clock — a single shared timestamp meant
+        // only the first stale player in map order ever heartbeat.
         const isStale = silenceMs > 5000;
-        if (isStale && now - this.lastStaleHeartbeat < 2000) continue;
         const forceSend = now < p.forceSendUntil;
         const lastSent = this.lastSentPositions.get(playerId);
+        if (isStale && lastSent && now - lastSent.t < 2000) continue;
         if (lastSent && !forceSend) {
           const elapsed = (now - lastSent.t) / 1000;
           // Suppression: if reported state still matches where the clients'
@@ -354,7 +356,6 @@ export class GameServer {
             continue; // Skip — within extrapolation tolerance
           }
         }
-        if (isStale) this.lastStaleHeartbeat = now;
         this.lastSentPositions.set(playerId, {
           x: p.position.x, y: p.position.y, z: p.position.z,
           vx: p.velocity.x, vy: p.velocity.y, vz: p.velocity.z,
@@ -392,6 +393,9 @@ export class GameServer {
         // Hits/kills travel on reliable events, so stale far ghosts only
         // lose smoothness on targets that are visually specks anyway.
         for (const [recipientId, rp] of players) {
+          // Grace-period entries have no socket — record filtering for them
+          // is wasted work
+          if (this.disconnectedPlayers.has(recipientId)) continue;
           const others: Uint8Array[] = [];
           for (const r of records) {
             if (r.playerId === recipientId) continue;

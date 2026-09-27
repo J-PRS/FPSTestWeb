@@ -1802,3 +1802,4 @@
 - Gib pools now early-out of update when empty (was writing 20+ dead instanced buffers per frame)
 - RemotePlayer netcode core extracted to entities/remoteSnapshots.ts: snapshot buffer, adaptive jitter delay, and Hermite-velocity interpolation are now a standalone unit (RemotePlayer 652->545 lines, math is unit-testable)
 - SnapshotBuffer now has vitest coverage (interp midpoint, bounded extrapolation, ±PI yaw arc, pool reuse) — first netcode unit tests in the suite
+- Server: stale-player heartbeat was gated on a SHARED timestamp so only the first stale player in map order ever heartbeat (later ones desynced forever) — now gated per-player on their own last-sent time; grace-period ghosts also skipped as tick recipients
