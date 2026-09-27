@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 
 import type { Terrain } from '../world/terrain.js';
+import { EYE_OFFSET } from '../core/config.js';
 import { pickLocomotionAnim } from './locomotionAnim.js';
 import type { AnimationState, PlayerModel } from './PlayerModel.js';
 
@@ -17,8 +18,11 @@ export class PlayerVisuals {
   private groundGizmoGhost: THREE.Mesh;
 
   constructor(scene: THREE.Scene) {
-    // Simple shadow blob for first-person view with soft edges
-    const shadowGeo = new THREE.CircleGeometry(0.8, 32);
+    // Shadow blob — a small grid conforming to the terrain, not a flat
+    // circle: on slopes a flat disc buries its uphill half inside the hill
+    // and depthTest clips it. Vertices are displaced per-frame in
+    // updateShadowBlob so the blob hugs the ground.
+    const shadowGeo = new THREE.PlaneGeometry(1.6, 1.6, 10, 10);
     const shadowMat = new THREE.ShaderMaterial({
       uniforms: {
         color: { value: new THREE.Color(0x000000) },
@@ -43,8 +47,13 @@ export class PlayerVisuals {
       `,
       transparent: true,
       depthWrite: false,
-      // depthTest on — the blob behind a ridge must be occluded by it
-      depthTest: true
+      // depthTest on — the blob behind a ridge must be occluded by it.
+      // polygonOffset biases depth toward the camera so terrain detail
+      // between grid vertices doesn't clip the blob as polygon wedges.
+      depthTest: true,
+      polygonOffset: true,
+      polygonOffsetFactor: -4,
+      polygonOffsetUnits: -4
     });
     this.shadowBlob = new THREE.Mesh(shadowGeo, shadowMat);
     this.shadowBlob.rotation.x = -Math.PI / 2; // Lay flat on ground
@@ -67,10 +76,44 @@ export class PlayerVisuals {
     scene.add(this.groundGizmoGhost);
   }
 
+  // Third-person chase cam — Tribes Ascend style: camera backs out along the
+  // horizontal look axis and sits a little high, aim stays at screen center,
+  // and the body renders in the lower third. No shoulder offset.
+  private static readonly TP_BACK = 4.2;   // boom length
+  private static readonly TP_UP = 1.7;     // constant lift — keeps the body under the crosshair
+  private static readonly TP_FOCUS = 180;  // camera converges on the aim point at this range
+
   // Update camera to final position — never let it go below the terrain
   // surface, or steep slopes put the eye inside the mesh and you see the
   // interior of the mountain.
-  updateCamera(camera: THREE.PerspectiveCamera, terrain: Terrain, pos: THREE.Vector3, yaw: number, pitch: number): void {
+  updateCamera(camera: THREE.PerspectiveCamera, terrain: Terrain, pos: THREE.Vector3, yaw: number, pitch: number, thirdPerson = false): void {
+    if (thirdPerson) {
+      // Spherical orbit: the boom opposes the FULL aim vector — aim down
+      // and the camera swings up overhead, aim up and it drops low behind
+      // you. This is what separates a chase cam from "FP moved back".
+      const ax = Math.cos(pitch) * Math.sin(yaw);
+      const ay = Math.sin(pitch);
+      const az = Math.cos(pitch) * Math.cos(yaw);
+      camera.position.set(
+        pos.x - ax * PlayerVisuals.TP_BACK,
+        pos.y - ay * PlayerVisuals.TP_BACK + PlayerVisuals.TP_UP,
+        pos.z - az * PlayerVisuals.TP_BACK,
+      );
+      const groundAtCam = terrain.getHeight(camera.position.x, camera.position.z);
+      if (camera.position.y < groundAtCam + 0.25) {
+        camera.position.y = groundAtCam + 0.25;
+      }
+      // Converge on the aim point at TP_FOCUS range, not parallel gaze —
+      // the slight downward tilt toward YOU is what drops the body into
+      // the lower third and makes it feel like a chase cam, while the
+      // crosshair still lands shots at typical engagement distances
+      const f = PlayerVisuals.TP_FOCUS;
+      const tx = pos.x + Math.cos(pitch) * Math.sin(yaw) * f;
+      const ty = pos.y + Math.sin(pitch) * f;
+      const tz = pos.z + Math.cos(pitch) * Math.cos(yaw) * f;
+      camera.lookAt(tx, ty, tz);
+      return;
+    }
     camera.position.copy(pos);
     const groundAtCam = terrain.getHeight(camera.position.x, camera.position.z);
     if (camera.position.y < groundAtCam + 0.25) {
@@ -121,9 +164,19 @@ export class PlayerVisuals {
     this.updateCamera(camera, terrain, pos, yaw, pitch); // keeps the camera above the terrain surface
   }
 
+  private shadowPosAttr: THREE.BufferAttribute | null = null;
+
   updateShadowBlob(terrain: Terrain, pos: THREE.Vector3): void {
     const groundY = terrain.getHeight(pos.x, pos.z);
-    this.shadowBlob.position.set(pos.x, groundY + 0.05, pos.z); // slightly above ground to prevent z-fighting
+    // Conform the grid to the terrain — local (x,y) → world (x,−y), local
+    // z → world up, so each vertex samples its own ground height.
+    const attr = this.shadowPosAttr
+      ?? (this.shadowPosAttr = this.shadowBlob.geometry.getAttribute('position') as THREE.BufferAttribute);
+    for (let i = 0; i < attr.count; i++) {
+      attr.setZ(i, terrain.getHeight(pos.x + attr.getX(i), pos.z - attr.getY(i)) + 0.05);
+    }
+    attr.needsUpdate = true;
+    this.shadowBlob.position.set(pos.x, 0, pos.z);
     // Fade shadow smoothly when in air
     const airHeight = pos.y - groundY;
     const opacity = airHeight > 2.0
@@ -134,17 +187,20 @@ export class PlayerVisuals {
 
   // Returns the new jumpAnimTimer (the one piece of player state the
   // animation owns — set back on the Player by the caller)
-  updateModelAnim(model: PlayerModel | null, pos: THREE.Vector3, yaw: number, pitch: number, jumpAnimTimer: number, speed: number, dt: number): number {
+  updateModelAnim(model: PlayerModel | null, pos: THREE.Vector3, yaw: number, pitch: number, jumpAnimTimer: number, speed: number, dt: number, onGround: boolean): number {
     if (!model) return jumpAnimTimer;
     if (jumpAnimTimer > 0) {
       jumpAnimTimer = Math.max(0, jumpAnimTimer - dt);
     }
-    // Jump animation takes priority over locomotion
-    const animState: AnimationState = jumpAnimTimer > 0
+    // Airborne takes priority over locomotion — not just the jump
+    // transition: sustained jetting/falling at speed reads as "run on
+    // air" under the pure speed pick.
+    const animState: AnimationState = jumpAnimTimer > 0 || !onGround
       ? 'jump'
       : pickLocomotionAnim(model['currentState'] as AnimationState, speed);
     model.setAnimationState(animState);
-    model.setPosition(pos.x, pos.y, pos.z);
+    // pos is eye height — the model plants its feet 1.8m below
+    model.setPosition(pos.x, pos.y - EYE_OFFSET, pos.z);
     model.setRotation(yaw, pitch);
     model.update(dt);
     return jumpAnimTimer;

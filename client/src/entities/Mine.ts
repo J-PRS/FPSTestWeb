@@ -2,12 +2,14 @@ import * as THREE from 'three';
 import { nextTargetId } from './targetIds.js';
 
 import {
-  MINE_RADIUS, MINE_ARM_TIME, MINE_TRIGGER_DIST, MINE_LIFE,
+  MINE_RADIUS, MINE_ARM_TIME, MINE_TRIGGER_DIST, MINE_LIFE, MINE_BLAST_RADIUS,
+  EMERGE_DUR,
 } from '../core/config.js';
 import { Terrain } from '../world/terrain.js';
 import type { Targetable } from './balls.js';
 import { allocSlots, freeSlots, getSwarm } from './swarms.js';
 import type { SwarmPart, SwarmSlotOwner } from './swarm.js';
+import { getGlowTexture } from '../effects/glowTexture.js';
 
 const _root = new THREE.Matrix4();
 const _local = new THREE.Matrix4();
@@ -32,7 +34,7 @@ let _glowMat: THREE.MeshBasicMaterial | null = null;
 export function mineParts(): SwarmPart[] {
   if (!_domeMat) _domeMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
   if (!_glowMat) _glowMat = new THREE.MeshBasicMaterial({
-    color: 0xff5522, transparent: true, blending: THREE.AdditiveBlending,
+    map: getGlowTexture(), color: 0xff5522, transparent: true, blending: THREE.AdditiveBlending,
     depthWrite: false, side: THREE.DoubleSide,
   });
   return [
@@ -42,19 +44,23 @@ export function mineParts(): SwarmPart[] {
 }
 
 /**
- * Proximity mine planted by Miners. Blink quickens as the player closes in.
+ * Proximity mine planted by Overlords. Blink quickens as the player closes in.
  * Shootable — a killed mine detonates. Renders into the shared mine swarm.
  */
 export class Mine implements Targetable, SwarmSlotOwner {
   readonly id: number;
   readonly variant = 0;
 
+  readonly uber: boolean;
+  /** Blast envelope — entities reads this so a doombloom detonates bigger. */
+  readonly blastRadius: number;
+
   pos: THREE.Vector3;
   vel = new THREE.Vector3(); // mines don't move — knockback would be weird
   dead = false;
   health = 1;
   maxHealth = 1;
-  radius = MINE_RADIUS;
+  radius: number;
   color = new THREE.Color(0x3a2a1a); // dark shell, glow does the talking
   scale = 0.2;
 
@@ -63,18 +69,33 @@ export class Mine implements Targetable, SwarmSlotOwner {
   private hasSlots = false;
 
   private age = 0;
+  // Burrow-in state (set by spawn) — the dome slides up out of the ground
+  emergeT = 0;
+  emergeDepth = 0;
+  emergeRestY = 0;
   private blinkPhase = Math.random() * Math.PI * 2;
   private glowPulse = 0;
+  // Slope tilt — mines don't move, so the ground-normal alignment is a
+  // one-time compute in the constructor; a dome planted on a hillside
+  // hugs the slope instead of floating on the downhill edge.
+  private tilt = new THREE.Quaternion();
 
   onDetonate?: (mine: Mine) => void;
 
   get disposed(): boolean { return this.dead; }
 
-  constructor(scene: THREE.Scene, terrain: Terrain, pos: THREE.Vector3) {
+  constructor(scene: THREE.Scene, terrain: Terrain, pos: THREE.Vector3, uber = false) {
     void scene;
     this.id = nextTargetId();
+    // Uber = "doombloom": a bigger pod with a bigger payload — twice the
+    // blast envelope, and it triggers from further out.
+    this.uber = uber;
+    this.radius = uber ? MINE_RADIUS * 1.7 : MINE_RADIUS;
+    this.blastRadius = uber ? MINE_BLAST_RADIUS * 2 : MINE_BLAST_RADIUS;
+    this.scale = uber ? 0.4 : 0.2;
     this.pos = pos.clone();
     this.pos.y = terrain.getHeight(pos.x, pos.z) + this.radius * 0.55;
+    this.tilt.setFromUnitVectors(new THREE.Vector3(0, 1, 0), terrain.getNormal(pos.x, pos.z));
     this.hasSlots = allocSlots('mine', this);
     if (!this.hasSlots) this.dead = true;
   }
@@ -85,15 +106,23 @@ export class Mine implements Targetable, SwarmSlotOwner {
     if (this.dead) return;
     this.age += dt;
 
+    if (this.emergeT > 0) {
+      // Burrow-in: the dome slides up out of the dirt, ease-out
+      this.emergeT -= dt;
+      const k = 1 - Math.max(0, this.emergeT) / EMERGE_DUR;
+      this.pos.y = this.emergeRestY - this.emergeDepth * (1 - k * k);
+    }
+
     const distSq = this.pos.distanceToSquared(playerPos);
     const dist = Math.sqrt(distSq);
 
-    if (this.armed && dist < MINE_TRIGGER_DIST) { this.detonate(); return; }
+    const trig = this.uber ? MINE_TRIGGER_DIST * 1.5 : MINE_TRIGGER_DIST;
+    if (this.armed && dist < trig) { this.detonate(); return; }
     if (this.age > MINE_LIFE) { this.detonate(); return; }
 
     // Blink rate accelerates as the player approaches — the audible-beep
     // equivalent in pure visuals. Unarmed mines blink slow and dim.
-    const urgency = 1 - Math.min(1, dist / (MINE_TRIGGER_DIST * 4));
+    const urgency = 1 - Math.min(1, dist / (trig * 4));
     const rate = this.armed ? 3 + urgency * 10 : 1.5;
     const p = (Math.sin(this.age * rate * Math.PI * 2 + this.blinkPhase) + 1) / 2;
     const bright = this.armed ? 0.4 + p * (0.4 + urgency * 0.5) : 0.25 + p * 0.15;
@@ -105,7 +134,7 @@ export class Mine implements Targetable, SwarmSlotOwner {
     const slot = this.swarmSlot;
     const r = this.radius;
 
-    _root.compose(this.pos, _q.identity(), _s.setScalar(r));
+    _root.compose(this.pos, this.tilt, _s.setScalar(r));
     swarm.setMatrix(PART_DOME, slot, _root);
     // instanceColor carries the emissive blink — dome brightens orange-hot
     swarm.setColor(PART_DOME, slot,
@@ -127,7 +156,7 @@ export class Mine implements Targetable, SwarmSlotOwner {
   }
 
   takeDamage(): boolean {
-    // Shot mines detonate — clearing a field by shooting it is the counterplay
+    // Any damage detonates — clearing a field by shooting it is the counterplay
     this.detonate();
     return true;
   }

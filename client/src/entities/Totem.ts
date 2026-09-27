@@ -6,16 +6,20 @@ import {
   TOTEM_RANGE, TOTEM_MIN_RANGE, TOTEM_REFIRE,
   TOTEM_CHARGE, TOTEM_RELOCATE_HOPS,
   TOTEM_PEAK_RADIUS, TOTEM_PEAK_MIN_GAIN, TOTEM_MATERIALIZE,
+  UBER_TOTEM_RADIUS, UBER_TOTEM_HEALTH, UBER_TOTEM_REFIRE,
+  UBER_TOTEM_CHARGE, UBER_TOTEM_HIT_RADIUS, UBER_TOTEM_BEAM_WIDTH,
 } from '../core/config.js';
 import { Terrain } from '../world/terrain.js';
 import type { Targetable } from './balls.js';
 import { allocSlots, freeSlots, getSwarm, getShadows } from './swarms.js';
 import type { SwarmPart, SwarmSlotOwner } from './swarm.js';
 import { TerrainFoot } from '../effects/terrainFoot.js';
+import { getGlowTexture } from '../effects/glowTexture.js';
 
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _dir = new THREE.Vector3();
+const _zeroVel = new THREE.Vector3();
 const _root = new THREE.Matrix4();
 const _local = new THREE.Matrix4();
 const _world = new THREE.Matrix4();
@@ -28,6 +32,7 @@ const PART_CAP = 1;
 const PART_EYE = 2;      // glow slit quad near the top
 const PART_BEAM = 3;     // aim-beam quad — zero-scale when idle
 const PART_SHIMMER = 4;  // blink-in arrival column — zero-scale when idle
+const PART_CORE = 5;     // white-hot core of the FIRED ray — zero-scale otherwise
 
 const _shaftGeo = new THREE.CylinderGeometry(0.35, 0.7, 4.2, 4); // 4-sided obelisk
 const _capGeo = new THREE.ConeGeometry(0.5, 1.0, 4);
@@ -45,11 +50,12 @@ let _shaftMat: THREE.MeshLambertMaterial | null = null;
 let _eyeMat: THREE.MeshBasicMaterial | null = null;
 let _beamMat: THREE.MeshBasicMaterial | null = null;
 let _shimmerMat: THREE.MeshBasicMaterial | null = null;
+let _coreMat: THREE.MeshBasicMaterial | null = null;
 
 export function totemParts(): SwarmPart[] {
   if (!_shaftMat) _shaftMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
   if (!_eyeMat) _eyeMat = new THREE.MeshBasicMaterial({
-    color: 0x66ddff, transparent: true, blending: THREE.AdditiveBlending,
+    map: getGlowTexture(), color: 0x66ddff, transparent: true, blending: THREE.AdditiveBlending,
     depthWrite: false, side: THREE.DoubleSide,
   });
   if (!_beamMat) _beamMat = new THREE.MeshBasicMaterial({
@@ -60,12 +66,17 @@ export function totemParts(): SwarmPart[] {
     color: 0x8899ff, transparent: true, blending: THREE.AdditiveBlending,
     depthWrite: false,
   });
+  if (!_coreMat) _coreMat = new THREE.MeshBasicMaterial({
+    color: 0xffffff, transparent: true, blending: THREE.AdditiveBlending,
+    depthWrite: false, side: THREE.DoubleSide,
+  });
   return [
     { geometry: _shaftGeo, material: _shaftMat, castShadow: true },
     { geometry: _capGeo, material: _shaftMat },
     { geometry: _eyeGeo, material: _eyeMat },
     { geometry: _beamGeo, material: _beamMat },
     { geometry: _shaftGeo, material: _shimmerMat },
+    { geometry: _beamGeo, material: _coreMat },
   ];
 }
 
@@ -82,14 +93,19 @@ export class Totem implements Targetable, SwarmSlotOwner {
   pos: THREE.Vector3;
   vel = new THREE.Vector3(); // never ballistic — it blinks, not hops
   dead = false;
-  health = TOTEM_HEALTH;
-  maxHealth = TOTEM_HEALTH;
-  radius = TOTEM_RADIUS;
-  // Obelisk is ~6m tall — capsule hitbox covers the whole shaft, not a
-  // 1m sphere at the feet (this was the "can't hit him" whiff zone).
-  capsuleTop = 4.2 * 1.4;
-  color = new THREE.Color(0x2a2438); // dark obsidian violet
-  scale = 1.4;
+  readonly uber: boolean;
+  health: number;
+  maxHealth: number;
+  radius: number;
+  // Obelisk hitbox: the 4-sided shaft is 0.7×radius at the base corners
+  // tapering to ~0.35 — a sphere at scale-radius is ~2× too fat at the
+  // top. 0.68 splits the difference (corner-grazes at the base, mildly
+  // generous at the tip — better than whiffing the visible shaft).
+  hitRadius = 0;
+  // Capsule covers feet→cap tip: shaft 4.2 + cap ~1.0, all ×radius scale.
+  capsuleTop = 0;
+  color: THREE.Color;
+  scale: number;
 
   swarmSlot = -1;
   shadowSlot = -1;
@@ -111,7 +127,7 @@ export class Totem implements Targetable, SwarmSlotOwner {
   private state: 'materialize' | 'aim' | 'charge' | 'blinkOut' | 'blinkIn' = 'materialize';
   private stateTimer = TOTEM_MATERIALIZE;
   private chargeTimer = 0;
-  private refire = TOTEM_REFIRE;
+  private refire: number;
   private shotsFired = 0;
   private blinkTarget = new THREE.Vector3();
   private lockPoint = new THREE.Vector3(); // beam locks here — dodge by moving after lock
@@ -126,9 +142,19 @@ export class Totem implements Targetable, SwarmSlotOwner {
   get disposed(): boolean { return this.dead; }
   private get intangible(): boolean { return this.state === 'blinkOut' || this.state === 'blinkIn'; }
 
-  constructor(scene: THREE.Scene, terrain: Terrain, pos: THREE.Vector3) {
+  constructor(scene: THREE.Scene, terrain: Terrain, pos: THREE.Vector3, uber = false) {
     this._terrain = terrain;
     this.id = nextTargetId();
+    this.uber = uber;
+    this.health = this.maxHealth = uber ? UBER_TOTEM_HEALTH : TOTEM_HEALTH;
+    this.radius = uber ? UBER_TOTEM_RADIUS : TOTEM_RADIUS;
+    this.hitRadius = this.radius * 0.68;
+    this.capsuleTop = 5.2 * this.radius; // visual top: cap tip at 5.2r
+    this.refire = uber ? UBER_TOTEM_REFIRE : TOTEM_REFIRE;
+    // Uber reads as a crowned elder — gold-bronze massif, not obsidian
+    this.color = new THREE.Color(uber ? 0x5a4020 : 0x2a2438);
+    this.scale = uber ? 2.4 : 1.4;
+
     this.pos = pos.clone();
     this.pos.y = terrain.getHeight(pos.x, pos.z);
 
@@ -142,7 +168,6 @@ export class Totem implements Targetable, SwarmSlotOwner {
   }
 
   update(dt: number, terrain: Terrain, playerPos: THREE.Vector3, playerVel?: THREE.Vector3): void {
-    void playerVel;
     if (this.dead) return;
     if (this.flash > 0) this.flash -= dt;
 
@@ -174,8 +199,18 @@ export class Totem implements Targetable, SwarmSlotOwner {
         }
         if (this.refire <= 0 && dist < TOTEM_RANGE) {
           this.state = 'charge';
-          this.chargeTimer = TOTEM_CHARGE;
-          this.lockPoint.copy(playerPos); // LOCK the line now — no more tracking
+          const charge = this.uber ? UBER_TOTEM_CHARGE : TOTEM_CHARGE;
+          this.chargeTimer = charge;
+          if (this.uber) {
+            // PREDICTIVE LOCK — the beam locks where you WILL BE when it
+            // fires, not where you are: pos + vel × charge. Holding a
+            // strafe line gets you tagged; the only dodge is changing
+            // direction after the lock shows.
+            this.lockPoint.copy(playerPos)
+              .addScaledVector(playerVel ?? _zeroVel, charge);
+          } else {
+            this.lockPoint.copy(playerPos); // LOCK the line now — no more tracking
+          }
           this.solveBeam();
           this.beamOn = true;
         }
@@ -183,8 +218,10 @@ export class Totem implements Targetable, SwarmSlotOwner {
       }
       case 'charge': {
         this.chargeTimer -= dt;
-        const t = 1 - Math.max(0, this.chargeTimer / TOTEM_CHARGE);
-        this.beamWidth = 0.65 - t * 0.55;
+        const charge = this.uber ? UBER_TOTEM_CHARGE : TOTEM_CHARGE;
+        const w0 = this.uber ? UBER_TOTEM_BEAM_WIDTH : 0.65;
+        const t = 1 - Math.max(0, this.chargeTimer / charge);
+        this.beamWidth = w0 - t * (w0 - 0.1);
         this.beamOpacity = 0.3 + t * 0.55;
         this.eyeBright = 0.8 + t * 0.2;
         this.eyeScale = 1.1 + t * 1.4;
@@ -280,14 +317,31 @@ export class Totem implements Targetable, SwarmSlotOwner {
     if (this.beamOn || this.beamFade > 0) {
       _p.set(this.pos.x, this.pos.y + 3.9 * r, this.pos.z);
       _v2.copy(_p).addScaledVector(this.lockDir, this.lockDist);
-      _root.lookAt(_p, _v2, _v.set(0, 1, 0));
+      // Matrix4.lookAt aims +Z eye→target — swapped args on purpose:
+      // eye=_v2 (far end), target=_p (totem) makes +Z point totem→player,
+      // which is where the beam quad extends. The old order drew the
+      // telegraph line BACKWARD — "totem fires in a random direction".
+      _root.lookAt(_v2, _p, _v.set(0, 1, 0));
       _q.setFromRotationMatrix(_root);
       _root.compose(_p, _q, _s.set(1, this.beamWidth, this.lockDist));
       swarm.setMatrix(PART_BEAM, slot, _root);
       const bo = this.beamOpacity;
-      swarm.setColor(PART_BEAM, slot, bo, bo * (0.35 - this.beamWidth * 0.1), bo * 0.3);
+      if (this.beamFade > 0) {
+        // FIRED: two-layer energy ray. The outer quad becomes a cyan
+        // plasma sheath; a thinner WHITE core quad rides inside it —
+        // the classic hot-center/colored-edge discharge read.
+        swarm.setColor(PART_BEAM, slot, bo * 0.3, bo * 0.85, bo * 1.7);
+        _local.compose(_p, _q, _s.set(1, this.beamWidth * 0.35, this.lockDist));
+        swarm.setMatrix(PART_CORE, slot, _local);
+        swarm.setColor(PART_CORE, slot, bo * 2.2, bo * 2.2, bo * 2.2);
+      } else {
+        // Charging: red aiming laser that narrows as it heats up
+        swarm.setColor(PART_BEAM, slot, bo, bo * (0.35 - this.beamWidth * 0.1), bo * 0.3);
+        swarm.setMatrix(PART_CORE, slot, zeroM(_local));
+      }
     } else {
       swarm.setMatrix(PART_BEAM, slot, zeroM(_root));
+      swarm.setMatrix(PART_CORE, slot, zeroM(_root));
     }
 
     // Arrival shimmer column during blinkIn
@@ -366,23 +420,28 @@ export class Totem implements Targetable, SwarmSlotOwner {
 
     _v2.subVectors(playerPos, _v);
     const proj = _v2.dot(_dir);
-    if (proj > 0 && proj < dist && _v2.addScaledVector(_dir, -proj).lengthSq() < 1.7) {
+    // Uber's death ray is a fat line — a wider catch envelope matches the
+    // telegraph width. It can't miss a held course; it CAN miss a juke.
+    const hitR2 = this.uber ? UBER_TOTEM_HIT_RADIUS * UBER_TOTEM_HIT_RADIUS : 1.7;
+    if (proj > 0 && proj < dist && _v2.addScaledVector(_dir, -proj).lengthSq() < hitR2) {
       this.onBoltHit?.(this);
     } else if (hitGround) {
       _v2.copy(_v).addScaledVector(_dir, dist);
       this.onBoltLand?.(_v2);
     }
 
-    // Post-shot flash: thin blinding line, decays via beamFade
-    this.beamWidth = 0.18;
-    this.beamOpacity = 0.95;
-    this.beamFade = 0.3;
+    // Post-shot flash: the DISCHARGE — starts wide like the charge beam's
+    // full envelope (energy leaving the whole line), snaps thin as it
+    // decays. beamFade drives the white-hot color in writeInstances.
+    this.beamWidth = this.uber ? UBER_TOTEM_BEAM_WIDTH * 0.5 : 0.3;
+    this.beamOpacity = 1.0;
+    this.beamFade = 0.35;
     this.beamOn = true;
   }
 
-  takeDamage(): boolean {
+  takeDamage(damage: number): boolean {
     if (this.intangible) return false;
-    this.health--;
+    this.health -= damage;
     this.flash = 0.12;
     if (this.health <= 0) { this.dead = true; return true; }
     return false;

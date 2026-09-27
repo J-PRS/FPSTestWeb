@@ -11,6 +11,7 @@ import { Terrain } from '../world/terrain.js';
 import type { Targetable } from './balls.js';
 import { allocSlots, freeSlots, getSwarm, getShadows } from './swarms.js';
 import type { SwarmPart, SwarmSlotOwner } from './swarm.js';
+import { getGlowTexture } from '../effects/glowTexture.js';
 
 const _dir = new THREE.Vector3();
 const _scratch = new THREE.Vector3();
@@ -23,24 +24,27 @@ const _e = new THREE.Euler();
 const _s = new THREE.Vector3();
 
 const PART_BODY = 0;
-const PART_BEAK = 1;
-const PART_WING = 2; // 2 per rakk
-const PART_TAIL = 3;
+const PART_EAR = 1;  // 2 per rakk — big pointed bat ears
+const PART_WING = 2; // 2 per rakk — membrane wings
+const PART_MEMB = 3; // rear membrane between the legs
 const PART_EYE = 4;  // 2 per rakk — glow quads
 const WINGS_PER = 2;
+const EARS_PER = 2;
 const EYES_PER = 2;
 
 let _bodyGeo: THREE.IcosahedronGeometry | null = null;
 function bodyGeo(): THREE.BufferGeometry {
   if (!_bodyGeo) {
     _bodyGeo = new THREE.IcosahedronGeometry(1, 1);
-    _bodyGeo.scale(0.5, 0.4, 1.4); // long low fuselage
+    _bodyGeo.scale(0.75, 0.6, 1.0); // stocky furry torso, not a bird fuselage
   }
   return _bodyGeo;
 }
-const _wingGeo = new THREE.BoxGeometry(2.6, 0.05, 0.7);
-const _beakGeo = new THREE.ConeGeometry(0.14, 0.8, 4);
-const _tailGeo = new THREE.BoxGeometry(0.9, 0.04, 0.5);
+// Membrane wing — wide chord, swept back; a bat's wing is skin stretched
+// on fingers, so it reads as a big flat sail, not a feathered plank.
+const _wingGeo = new THREE.BoxGeometry(2.4, 0.04, 1.1);
+const _earGeo = new THREE.ConeGeometry(0.14, 0.7, 4);
+const _membGeo = new THREE.BoxGeometry(0.9, 0.03, 0.7); // uropatagium — rear skin flap
 const _eyeGeo = new THREE.PlaneGeometry(1, 1);
 
 let _bodyMat: THREE.MeshLambertMaterial | null = null;
@@ -49,16 +53,16 @@ let _eyeMat: THREE.MeshBasicMaterial | null = null;
 
 export function rakkParts(): SwarmPart[] {
   if (!_bodyMat) _bodyMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
-  if (!_wingMat) _wingMat = new THREE.MeshLambertMaterial({ color: 0x8a4526, side: THREE.DoubleSide });
+  if (!_wingMat) _wingMat = new THREE.MeshLambertMaterial({ color: 0x4a2f3a, side: THREE.DoubleSide });
   if (!_eyeMat) _eyeMat = new THREE.MeshBasicMaterial({
-    color: 0xffe066, transparent: true, blending: THREE.AdditiveBlending,
+    map: getGlowTexture(), color: 0xffe066, transparent: true, blending: THREE.AdditiveBlending,
     depthWrite: false, side: THREE.DoubleSide,
   });
   return [
     { geometry: bodyGeo(), material: _bodyMat, castShadow: true },
-    { geometry: _beakGeo, material: _bodyMat },
+    { geometry: _earGeo, material: _bodyMat, per: EARS_PER },
     { geometry: _wingGeo, material: _wingMat, per: WINGS_PER },
-    { geometry: _tailGeo, material: _wingMat },
+    { geometry: _membGeo, material: _wingMat },
     { geometry: _eyeGeo, material: _eyeMat, per: EYES_PER },
   ];
 }
@@ -72,14 +76,16 @@ export class Rakk implements Targetable, SwarmSlotOwner {
   static attackHeldBy: number | null = null; // flock attack token — one diver at a time
   readonly id: number;
   readonly variant = 0;
+  readonly uber: boolean;
 
   pos: THREE.Vector3;
   vel: THREE.Vector3;
   dead = false;
-  health = RAKK_HEALTH;
-  maxHealth = RAKK_HEALTH;
-  radius = RAKK_RADIUS;
-  color = new THREE.Color(0xa8572e); // dusty rust-orange bird
+  health: number;
+  maxHealth: number;
+  radius: number;
+  color = new THREE.Color(0x54413f); // dusky brown-purple fur
+  readonly debrisKind = 'brush' as const; // feathers flutter, not rock
   scale = 0.8;
 
   swarmSlot = -1;
@@ -104,9 +110,15 @@ export class Rakk implements Targetable, SwarmSlotOwner {
 
   get disposed(): boolean { return this.dead; }
 
-  constructor(scene: THREE.Scene, terrain: Terrain, pos: THREE.Vector3) {
+  constructor(scene: THREE.Scene, terrain: Terrain, pos: THREE.Vector3, uber = false) {
     void scene;
     this.id = nextTargetId();
+    // Uber = "elder": a wingspan you can't miss — and its claw hit TALONS
+    // you upward instead of just shredding (wired in entities).
+    this.uber = uber;
+    this.health = this.maxHealth = uber ? RAKK_HEALTH * 3 : RAKK_HEALTH;
+    this.radius = uber ? RAKK_RADIUS * 1.9 : RAKK_RADIUS;
+    if (uber) this.color.set(0x2a1a3a); // near-black elder hide
     this.pos = pos.clone();
     this.pos.y = terrain.getHeight(pos.x, pos.z) + RAKK_ORBIT_ALT;
     this.vel = new THREE.Vector3();
@@ -201,39 +213,45 @@ export class Rakk implements Targetable, SwarmSlotOwner {
     const cr = this.color.r * fr, cg = this.color.g * fr, cb = this.color.b * fr;
     swarm.setMatrix(PART_BODY, slot, _root);
     swarm.setColor(PART_BODY, slot, cr, cg, cb);
-    swarm.setColor(PART_BEAK, slot, cr, cg, cb);
 
-    // Beak — the head reads predatory at silhouette scale
-    _e.set(Math.PI / 2, 0, 0);
-    _q.setFromEuler(_e);
-    _local.compose(_p.set(0, -0.05, 1.6), _q, _s.set(1, 1, 1));
-    _world.multiplyMatrices(_root, _local);
-    swarm.setMatrix(PART_BEAK, slot, _world);
+    // Ears — the bat tell: two pointy horns up top, splayed outward
+    for (let i = 0; i < EARS_PER; i++) {
+      const side = i === 0 ? -1 : 1;
+      _e.set(-0.2, 0, side * 0.35);
+      _q.setFromEuler(_e);
+      _local.compose(_p.set(side * 0.28, 0.55, 0.55), _q, _s.set(1, 1, 1));
+      _world.multiplyMatrices(_root, _local);
+      swarm.setMatrix(PART_EAR, slot * EARS_PER + i, _world);
+      swarm.setColor(PART_EAR, slot * EARS_PER + i, cr, cg, cb);
+    }
 
-    // Wings — slow soar flap, hard tuck in the dive, flailing climb
+    // Membrane wings — attached at the flank, swept back. Orbit flap is a
+    // deep rowing beat (bats row, birds flap); dive folds them into a dart.
     const dive = this.state === 'dive';
-    const flapAmp = dive ? 0.15 : this.state === 'climb' ? 0.9 : 0.35;
-    const flapRate = dive ? 4 : this.state === 'climb' ? 14 : 5;
+    const flapAmp = dive ? 0.12 : this.state === 'climb' ? 1.0 : 0.55;
+    const flapRate = dive ? 3 : this.state === 'climb' ? 13 : 6;
     const flap = Math.sin(this.animT * flapRate) * flapAmp;
-    const fold = dive ? 0.7 : 0;
+    const fold = dive ? 0.9 : 0;
     for (let i = 0; i < WINGS_PER; i++) {
       const side = i === 0 ? -1 : 1;
-      _e.set(0, -side * fold * 0.6, side * (0.1 + flap + fold));
+      _e.set(0, -side * (0.45 + fold * 0.5), side * (0.15 + flap + fold));
       _q.setFromEuler(_e);
-      _local.compose(_p.set(side * 1.5, 0.1, -0.1), _q, _s.set(1, 1, 1));
+      _local.compose(_p.set(side * 1.1, 0.15, -0.15), _q, _s.set(1, 1, 1));
       _world.multiplyMatrices(_root, _local);
       swarm.setMatrix(PART_WING, slot * WINGS_PER + i, _world);
     }
 
-    // Tail fan
-    _local.compose(_p.set(0, 0.05, -1.5), _q.identity(), _s.set(1, 1, 1));
+    // Rear membrane — the leg-to-leg skin flap, tilts with the wingbeat
+    _e.set(-0.3 - flap * 0.4, 0, 0);
+    _q.setFromEuler(_e);
+    _local.compose(_p.set(0, -0.1, -1.1), _q, _s.set(1, 1, 1));
     _world.multiplyMatrices(_root, _local);
-    swarm.setMatrix(PART_TAIL, slot, _world);
+    swarm.setMatrix(PART_MEMB, slot, _world);
 
-    // Eyes — paired glow quads on the head
+    // Eyes — paired glow quads low on the snout
     for (let i = 0; i < EYES_PER; i++) {
       const side = i === 0 ? -1 : 1;
-      _local.compose(_p.set(side * 0.2, 0.15, 1.1), _q.identity(), _s.setScalar(0.3));
+      _local.compose(_p.set(side * 0.18, 0.25, 0.85), _q.identity(), _s.setScalar(0.25));
       _world.multiplyMatrices(_root, _local);
       swarm.setMatrix(PART_EYE, slot * EYES_PER + i, _world);
     }
@@ -265,8 +283,8 @@ export class Rakk implements Targetable, SwarmSlotOwner {
     if (Rakk.attackHeldBy === this.id) Rakk.attackHeldBy = null;
   }
 
-  takeDamage(): boolean {
-    this.health--;
+  takeDamage(damage: number): boolean {
+    this.health -= damage;
     this.flash = 0.15;
     if (this.health <= 0) { this.dead = true; this.releaseToken(); return true; }
     return false;

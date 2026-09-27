@@ -231,13 +231,22 @@ export class PlayerModel {
 
     action.reset();
     action.fadeIn(0.2);
-    
-    // Death animation should play once, others loop
+    action.timeScale = 1;
+    // Death: play once, clamp the corpse.
+    // Jump: Tribes-style fall cycle — ping-pong at ~1/3 speed. LoopRepeat
+    // restarts the clip every cycle (bunny-hop midair); a frozen clamp
+    // reads as a statue. The slow reversed tuck↔extend cycle reads as
+    // flailing/swimming through air and needs no separate fall anim.
     if (name === 'Death') {
       action.setLoop(THREE.LoopOnce, 1);
       action.clampWhenFinished = true;
+    } else if (name === 'Jump') {
+      action.setLoop(THREE.LoopPingPong, Infinity);
+      action.timeScale = 0.35;
+      action.clampWhenFinished = false;
     } else {
       action.setLoop(THREE.LoopRepeat, Infinity);
+      action.clampWhenFinished = false;
     }
     
     action.play();

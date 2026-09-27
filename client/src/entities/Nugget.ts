@@ -78,6 +78,13 @@ export class Nugget {
       opacity: 0.85,
       depthWrite: false,
       blending: THREE.AdditiveBlending,
+      // Depth bias toward the camera: the billboard's lower half grazing
+      // the terrain plane is a depth near-tie, so the bias wins it — but a
+      // ridge genuinely IN FRONT of the nugget is a gross depth gap and
+      // still occludes. Keeps depthTest for real occlusion, no float-lift.
+      polygonOffset: true,
+      polygonOffsetFactor: -4,
+      polygonOffsetUnits: -4,
     });
     this.glow = new THREE.Sprite(this.glowMat);
     this.glow.scale.setScalar(2.2);
@@ -185,6 +192,8 @@ export class Nugget {
       this.mat.color.setHex(0xffee88).multiplyScalar(pulse);
       this.glowMat.opacity = 0.7 + Math.sin(this.age * 5) * 0.15;
     }
+    // Halo stays welded to the nugget — the polygonOffset bias handles the
+    // terrain-graze clip, so no visual lift needed.
     this.glow.position.copy(this.mesh.position);
   }
 
