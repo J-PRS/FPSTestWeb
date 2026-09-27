@@ -5,10 +5,11 @@ import {
   FOG_COLOR,
 } from './core/config.js';
 
-import { ChildLogger } from './core/Logger.js';
+import Logger, { ChildLogger } from './core/Logger.js';
 import { watchDeployVersion } from './core/deployWatch.js';
 import { createRenderer } from './core/renderer.js';
 import * as sfx from './core/sfx.js';
+import { screenShake } from './effects/screenShake.js';
 
 import { DemoManager } from './demo/index.js';
 import { InputFlags, JetpackFlags } from './demo/types.js';
@@ -50,14 +51,18 @@ import { createViewModelScene } from './world/viewmodelScene.js';
 import { loadHeightmap, Terrain } from './world/terrain.js';
 import { initSwarms } from './entities/swarms.js';
 import { crawlerParts } from './entities/Crawler.js';
+import { scarabParts } from './entities/Scarab.js';
+import { grubParts } from './entities/Grub.js';
+import { snakeParts } from './entities/Snake.js';
+import { gnatParts } from './entities/Gnat.js';
 import { rollerParts } from './entities/Roller.js';
 import { seekerParts } from './entities/Seeker.js';
 import { rakkParts } from './entities/Rakk.js';
 import { mineParts } from './entities/Mine.js';
-import { minerParts } from './entities/Miner.js';
+import { overlordParts } from './entities/Overlord.js';
 import { banelingParts } from './entities/Baneling.js';
 import { totemParts } from './entities/Totem.js';
-import { turretterParts } from './entities/Turretter.js';
+import { turretterParts, type Bolt } from './entities/Turretter.js';
 import { ballParts } from './entities/balls.js';
 import { weedParts } from './entities/Tumbleweed.js';
 
@@ -150,11 +155,15 @@ async function init(): Promise<void> {
   // register their part tables here; slots alloc lazily on first spawn.
   initSwarms(scene, terrain, {
     crawler: { parts: crawlerParts, capacity: 512 },
+    scarab: { parts: scarabParts, capacity: 512 },
+    grub: { parts: grubParts, capacity: 256 },
+    snake: { parts: snakeParts, capacity: 256 },
+    gnat: { parts: gnatParts, capacity: 256 },
     roller: { parts: rollerParts, capacity: 256 },
     seeker: { parts: seekerParts, capacity: 256 },
     rakk: { parts: rakkParts, capacity: 256 },
     mine: { parts: mineParts, capacity: 512 },
-    miner: { parts: minerParts, capacity: 64 },
+    overlord: { parts: overlordParts, capacity: 64 },
     baneling: { parts: banelingParts, capacity: 128 },
     totem: { parts: totemParts, capacity: 64 },
     turretter: { parts: turretterParts, capacity: 64 },
@@ -174,13 +183,13 @@ async function init(): Promise<void> {
 
   entities = createEntities({
     scene,
-    terrain: () => terrain,
+    lazyTerrain: () => terrain,
     camera,
-    player: () => player,
-    effects: () => effects,
-    hud: () => hud,
-    networkManager: () => networkManager,
-    demoManager: () => demoManager,
+    lazyPlayer: () => player,
+    lazyEffects: () => effects,
+    lazyHud: () => hud,
+    lazyNetworkManager: () => networkManager,
+    lazyDemoManager: () => demoManager,
     logger,
     world,
     updateBallsPlayback: (dt) => demoLifecycle.updateBallsPlayback(dt),
@@ -188,29 +197,47 @@ async function init(): Promise<void> {
 
   // Hybrid wave director — scripted beats + a credit pool spent on an
   // unlocking roster. Lives beside entities, drives its spawn fns.
-  waveDirector = createWaveDirector({ entities, player: () => player, terrain: () => terrain, logger });
+  waveDirector = createWaveDirector({ entities, lazyPlayer: () => player, lazyTerrain: () => terrain, logger });
 
   combat = createCombat({
-    scene: () => scene,
-    terrain: () => terrain,
-    camera: () => camera,
-    player: () => player,
-    viewModel: () => viewModel,
-    demoManager: () => demoManager,
-    networkManager: () => networkManager,
-    effects: () => effects,
-    hud: () => hud,
-    healthBarSystem: () => healthBarSystem,
-    damageNumbers: () => damageNumberManager,
+    lazyScene: () => scene,
+    lazyTerrain: () => terrain,
+    lazyCamera: () => camera,
+    lazyPlayer: () => player,
+    lazyViewModel: () => viewModel,
+    lazyDemoManager: () => demoManager,
+    lazyNetworkManager: () => networkManager,
+    lazyEffects: () => effects,
+    lazyHud: () => hud,
+    lazyHealthBarSystem: () => healthBarSystem,
+    lazyDamageNumbers: () => damageNumberManager,
     fragMessages,
     inputTracking,
     explosionTracker,
     logger,
     world,
+    turretBolts: () => entities.turretBolts(),
+    consumeBolt: (bolt) => entities.consumeBolt(bolt as Bolt),
+    cookBoltsNear: (pos, r) => entities.cookBoltsNear(pos, r),
+    reportTargetDamage: (t, dmg) => entities.reportTargetDamage(t, dmg),
     balls: entities.balls,
     targets: entities.targets,
     nuggets: entities.nuggets,
   });
+  // Buzzards join the shootable world — they fly through the shared targets
+  // surface so projectiles/blasts hit them. One shot aggros the WHOLE flock
+  // into a dive-bomb: 200hp each, a peck that takes half a health bar.
+  // Don't shoot the wildlife.
+  entities.targets.push(...ambientBirds.targets);
+  ambientBirds.onPeck = (pos) => {
+    if (player.isDead) return;
+    player.lastDamageSource = 'pecked to death by a buzzard';
+    player.applyKnockback(pos, 18);
+    networkManager?.sendEnvironmentDamage(45);
+    hud?.showDamage(pos, 45);
+    sfx.playerHurt();
+  };
+
   player.onFire = combat.onFire;
   player.onDisc = combat.onDisc;
   player.onGrenade = combat.onGrenade;
@@ -221,12 +248,32 @@ async function init(): Promise<void> {
   player.onFlak = combat.onFlak;
   player.onPlasma = combat.onPlasma;
   player.onRailgun = combat.onRailgun;
+  player.onLightning = combat.onLightning;
+  player.onShotgun = combat.onShotgun;
+  player.onCannon = combat.onCannon;
+  player.onRocketLauncher = combat.onRocketLauncher;
+  player.onWarpThrow = (pos) => { effects.spawnImpact(pos, player.vel); sfx.warpThrow(); };
+  player.onWarpTick = (pos) => effects.spawnWarpTrail(pos); // spark trail ON the beacon
+  player.onWarp = (from, to) => {
+    // Two-stage pop: a collapse burst where you left, a bigger discharge
+    // where you arrive — the arrival is the anchor point, it gets more.
+    effects.spawnBounce(from, player.vel);
+    effects.spawnImpact(from, player.vel);
+    effects.spawnBounce(to, player.vel);
+    effects.spawnImpact(to, player.vel);
+    effects.spawnJetpack(to); // extra sparks at the landing anchor
+    screenShake.blast(to, 2.2, player.pos);
+    sfx.warpJump(to);
+  };
   player.onMelee = combat.onMelee;
-  player.onWeaponSwitch = (i) => { viewModel?.switchWeapon(i); sfx.equip(); };
+  player.onWeaponSwitch = (i) => { viewModel?.switchWeapon(Player.widToWeaponType(i)); sfx.equip(); };
   player.onJump = (pos) => { effects.spawnJumpDust(pos); sfx.jump(); };
   player.onLand = (impactSpeed) => sfx.land(impactSpeed);
   player.onJetpack = (pos) => effects.spawnJetpack(pos);
   player.onSki = (pos, vel) => effects.spawnSkiDust(pos, vel);
+  // Footstep dust — small radius (feet), speed drives the puff size so a
+  // sprint kicks visibly more than a stroll
+  player.onFootDust = (pos, vel) => effects.spawnMoveDust(pos, vel, Math.hypot(vel.x, vel.z), 0.5);
   player.onBounce = (pos, dir) => { effects.spawnBounce(pos, dir); viewModel?.kick(0.5); speedLines.burst(); sfx.bounce(); };
   player.onBlink = (from, to) => {
     // Tracer-style whoosh — cyan streaks stamped along the blink path
@@ -268,7 +315,9 @@ async function init(): Promise<void> {
 
   // Initialize demo system with player/input data providers
   demoManager = new DemoManager();
-  demoManager.setServerUrl((await serverEndpoints).httpUrl);
+  const httpUrl = (await serverEndpoints).httpUrl;
+  Logger.initShipping(httpUrl); // WARN+ lines stream to logs/client.log
+  demoManager.setServerUrl(httpUrl);
   demoManager.setDataProviders(
     {
       get posX() { return player.pos.x; },
@@ -312,21 +361,21 @@ async function init(): Promise<void> {
 
   // Demo playback lifecycle: owns playback registries + all onPlayback* handlers
   demoLifecycle = createDemoLifecycle({
-    scene: () => scene,
-    terrain: () => terrain,
-    camera: () => camera,
-    player: () => player,
-    demoManager: () => demoManager,
+    lazyScene: () => scene,
+    lazyTerrain: () => terrain,
+    lazyCamera: () => camera,
+    lazyPlayer: () => player,
+    lazyDemoManager: () => demoManager,
     damageNumberManager: () => damageNumberManager,
     fragMessages: () => fragMessages,
-    hud: () => hud,
+    lazyHud: () => hud,
     balls: entities.balls,
     targets: entities.targets,
     crawlers: entities.crawlers,
     turrets: entities.turrets,
     rollers: entities.rollers,
     seekers: entities.seekers,
-    miners: entities.miners,
+    overlords: entities.overlords,
     mines: entities.mines,
     totems: entities.totems,
     rakks: entities.rakks,
@@ -345,14 +394,14 @@ async function init(): Promise<void> {
 
   // Remote player lifecycle: per-frame ticks, pruning, scoreboard
   remotes = createRemotes({
-    networkManager: () => networkManager,
-    scene: () => scene,
-    terrain: () => terrain,
-    camera: () => camera,
-    player: () => player,
-    hud: () => hud,
-    healthBarSystem: () => healthBarSystem,
-    effects: () => effects,
+    lazyNetworkManager: () => networkManager,
+    lazyScene: () => scene,
+    lazyTerrain: () => terrain,
+    lazyCamera: () => camera,
+    lazyPlayer: () => player,
+    lazyHud: () => hud,
+    lazyHealthBarSystem: () => healthBarSystem,
+    lazyEffects: () => effects,
     logger,
     world,
   });
@@ -363,18 +412,19 @@ async function init(): Promise<void> {
 
   // Register all server message handlers (hit/kill/respawn/projectiles/gameState)
   wireNetworkHandlers({
-    networkManager: () => networkManager,
-    scene: () => scene,
-    terrain: () => terrain,
-    player: () => player,
-    effects: () => effects,
-    hud: () => hud,
-    healthBarSystem: () => healthBarSystem,
+    lazyNetworkManager: () => networkManager,
+    lazyScene: () => scene,
+    lazyTerrain: () => terrain,
+    lazyPlayer: () => player,
+    lazyEffects: () => effects,
+    lazyHud: () => hud,
+    lazyHealthBarSystem: () => healthBarSystem,
     fragMessages,
     explosionTracker,
     logger,
     world,
     setLastSentPos: remotes.setLastSentPos,
+    entities: () => entities,
   });
 
   // Connect to server (non-blocking for offline mode)
@@ -399,17 +449,17 @@ async function init(): Promise<void> {
     camera,
     sceneSetup,
     rendererSetup,
-    terrain: () => terrain,
-    player: () => player,
-    viewModel: () => viewModel,
+    lazyTerrain: () => terrain,
+    lazyPlayer: () => player,
+    lazyViewModel: () => viewModel,
     vmScene: () => vmSetup.scene,
     vmCamera: () => vmSetup.camera,
-    hud: () => hud,
-    healthBarSystem: () => healthBarSystem,
+    lazyHud: () => hud,
+    lazyHealthBarSystem: () => healthBarSystem,
     damageNumberManager: () => damageNumberManager,
-    networkManager: () => networkManager,
-    demoManager: () => demoManager,
-    effects: () => effects,
+    lazyNetworkManager: () => networkManager,
+    lazyDemoManager: () => demoManager,
+    lazyEffects: () => effects,
     speedLines,
     ambientLayers,
     groundMist: () => groundMist,
@@ -436,11 +486,11 @@ let gameStarted = false;
 const { requestLock } = wireOverlayInput({
   overlay,
   rendererCanvas: renderer.domElement,
-  demoManager: () => demoManager,
-  hud: () => hud,
+  lazyDemoManager: () => demoManager,
+  lazyHud: () => hud,
   logger,
   isGameStarted: () => gameStarted,
-  player: () => player,
+  lazyPlayer: () => player,
 });
 
 // Stale-code badge (noreload dev mode): the vite plugin swallows reloads

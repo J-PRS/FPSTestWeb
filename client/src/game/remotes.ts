@@ -11,14 +11,14 @@ import type { HUD } from '../ui/hud.js';
 import type { WorldState } from './worldState.js';
 
 export interface RemotesDeps {
-  networkManager: () => NetworkManager;
-  scene: () => THREE.Scene;
-  terrain: () => Terrain;
-  camera: () => THREE.PerspectiveCamera;
-  player: () => Player;
-  hud: () => HUD;
-  healthBarSystem: () => HealthBarSystem;
-  effects: () => EffectsManager;
+  lazyNetworkManager: () => NetworkManager;
+  lazyScene: () => THREE.Scene;
+  lazyTerrain: () => Terrain;
+  lazyCamera: () => THREE.PerspectiveCamera;
+  lazyPlayer: () => Player;
+  lazyHud: () => HUD;
+  lazyHealthBarSystem: () => HealthBarSystem;
+  lazyEffects: () => EffectsManager;
   logger: ChildLogger;
   world: WorldState;
 }
@@ -46,11 +46,21 @@ export function createRemotes(deps: RemotesDeps) {
 
   // Network per-frame work: send position, tick remote players, prune stale ones
   function networkTick(dt: number): void {
-    const nm = deps.networkManager();
-    const player = deps.player();
+    const nm = deps.lazyNetworkManager();
+    const player = deps.lazyPlayer();
     lastSentPos.x = player.pos.x;
     lastSentPos.y = player.pos.y;
     lastSentPos.z = player.pos.z;
+    // Declared teleport (warp/respawn): precede the position stream so
+    // the server anchors its plausibility check at the NEW spot
+    if (player.pendingTeleport) {
+      player.pendingTeleport = false;
+      nm.sendTeleport(
+        { x: player.pos.x, y: player.pos.y, z: player.pos.z },
+        { yaw: player.yaw, pitch: player.pitch },
+        { x: player.vel.x, y: player.vel.y, z: player.vel.z },
+      );
+    }
     nm.sendPosition(
       { x: player.pos.x, y: player.pos.y, z: player.pos.z },
       { yaw: player.yaw, pitch: player.pitch },
@@ -63,7 +73,7 @@ export function createRemotes(deps: RemotesDeps) {
     // Update player list UI — local player first; drop stale remotes (no updates in 60s)
     const localPlayerId = nm.getLocalPlayerId();
     const activeIds = Array.from(players.keys()).filter(id => id !== localPlayerId && isRemoteActive(id, players));
-    deps.hud().updatePlayerList([localPlayerId, ...activeIds], localPlayerId);
+    deps.lazyHud().updatePlayerList([localPlayerId, ...activeIds], localPlayerId);
 
     // Roster-change log — joins/leaves only; positions live in stateDebug
     // (?debug). Per-position logging at 60Hz was a console flood.
@@ -77,20 +87,20 @@ export function createRemotes(deps: RemotesDeps) {
     cleanupRemotePlayers(players);
 
     if (deps.world.remotePlayers.size !== previousRemoteCount) {
-      deps.logger.debug(`Remote players in scene: ${deps.world.remotePlayers.size} | Scene children: ${deps.scene().children.length}`);
+      deps.logger.debug(`Remote players in scene: ${deps.world.remotePlayers.size} | Scene children: ${deps.lazyScene().children.length}`);
     }
   }
 
   // Per-remote-player frame work: create if new, hide if stale, tick, ski dust, HUD
   function tickRemotePlayer(playerId: string, playerState: import('../networking/NetworkManager.js').RemotePlayerState, dt: number): void {
-    const nm = deps.networkManager();
-    const terrain = deps.terrain();
-    const hud = deps.hud();
+    const nm = deps.lazyNetworkManager();
+    const terrain = deps.lazyTerrain();
+    const hud = deps.lazyHud();
     if (playerId === nm.getLocalPlayerId()) return;
 
     let remotePlayer = deps.world.remotePlayers.get(playerId);
     if (!remotePlayer && !playerState.isDead) {
-      remotePlayer = new RemotePlayer(deps.scene(), playerId, playerState.position, terrain);
+      remotePlayer = new RemotePlayer(deps.lazyScene(), playerId, playerState.position, terrain);
       deps.world.remotePlayers.set(playerId, remotePlayer);
       deps.logger.debug(`CREATED remote player`, { instanceId: remotePlayer.instanceId, playerId, total: deps.world.remotePlayers.size });
     }
@@ -105,7 +115,7 @@ export function createRemotes(deps: RemotesDeps) {
     remotePlayer.setStaleHidden(inactive);
     if (inactive) {
       hud.removePlayerIndicator(playerId);
-      deps.healthBarSystem().removeBar(playerId);
+      deps.lazyHealthBarSystem().removeBar(playerId);
       return;
     }
 
@@ -122,14 +132,14 @@ export function createRemotes(deps: RemotesDeps) {
       const feetY = remotePlayer.feetY;
       const groundY = terrain.getHeight(remotePlayer.position.x, remotePlayer.position.z);
       if (horizSq > 10 && feetY - groundY < 0.8) {
-        deps.effects().spawnSkiDust(remotePlayer.position, v);
+        deps.lazyEffects().spawnSkiDust(remotePlayer.position, v);
       }
     }
 
     // Update HUD indicator for this player (skip if dead)
     // Use RemotePlayer's extrapolated position for LAN-feel responsiveness
     if (!playerState.isDead) {
-      hud.updatePlayerIndicator(playerId, remotePlayer.position, deps.camera(), false);
+      hud.updatePlayerIndicator(playerId, remotePlayer.position, deps.lazyCamera(), false);
     } else {
       hud.removePlayerIndicator(playerId);
     }
@@ -137,7 +147,7 @@ export function createRemotes(deps: RemotesDeps) {
 
   // Remove disconnected players and dead players that have shrunk to 0
   function cleanupRemotePlayers(players: Map<string, import('../networking/NetworkManager.js').RemotePlayerState>): void {
-    const hud = deps.hud();
+    const hud = deps.lazyHud();
     for (const [playerId, remotePlayer] of deps.world.remotePlayers) {
       const gone = !players.has(playerId);
       const shrunkAway = remotePlayer.scale === 0;
@@ -146,17 +156,17 @@ export function createRemotes(deps: RemotesDeps) {
       remotePlayer.dispose();
       deps.world.remotePlayers.delete(playerId);
       hud.removePlayerIndicator(playerId);
-      deps.healthBarSystem().removeBar(playerId);
+      deps.lazyHealthBarSystem().removeBar(playerId);
     }
   }
 
   // Scoreboard rows: local player first, then remotes sorted by frags desc
   function updateScoreboard(): void {
-    const hud = deps.hud();
+    const hud = deps.lazyHud();
     if (!hud.scoreboardVisible) return;
-    const nm = deps.networkManager();
+    const nm = deps.lazyNetworkManager();
     const localId = nm.getLocalPlayerId();
-    const rows = [{ name: localId, frags: deps.world.killCounts.get(localId) ?? 0, ping: nm.getPing(), self: true, dead: deps.player().isDead }];
+    const rows = [{ name: localId, frags: deps.world.killCounts.get(localId) ?? 0, ping: nm.getPing(), self: true, dead: deps.lazyPlayer().isDead }];
     const remoteRows = [...nm.getPlayers().keys()]
       .filter(id => id !== localId && isRemoteActive(id, nm.getPlayers()))
       .map(id => {

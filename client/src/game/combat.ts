@@ -3,25 +3,19 @@
 // All shared game state arrives via CombatDeps (getters for late-init objects).
 
 import * as THREE from 'three';
-import type { ChildLogger } from '../core/Logger.js';
-import type { DemoManager } from '../demo/index.js';
-import type { Player } from '../entities/Player.js';
 import type { ViewModel } from '../entities/ViewModel.js';
 import type { Ball } from '../entities/balls.js';
 import { Nugget } from '../entities/Nugget.js';
 import { BallDebris } from '../effects/debris.js';
 import type { DamageNumberManager } from '../effects/damageNumbers.js';
-import type { EffectsManager } from '../effects/effects.js';
 import { Explosion } from '../effects/explosion.js';
 import { AoeGizmo } from '../effects/aoeGizmo.js';
 import { Implosion } from '../effects/implosion.js';
 import { ScorchDecal } from '../effects/scorch.js';
-import type { NetworkManager } from '../networking/NetworkManager.js';
 import { Projectile, type SweepObstacle } from '../projectiles/Projectile.js';
 import { WEAPON_CONFIGS, computeAccuracy } from '../projectiles/index.js';
 import type { FragMessages } from '../ui/FragMessages.js';
 import * as sfx from '../core/sfx.js';
-import type { HUD } from '../ui/hud.js';
 import type { HealthBarSystem } from '../ui/HealthBarSystem.js';
 import type { ExplosionTracker } from '../utils/ExplosionTracker.js';
 import type { setupInputTracking } from '../utils/InputTracking.js';
@@ -32,27 +26,18 @@ import type { SwarmSlotOwner } from '../entities/swarm.js';
 import { PENDING_ROCKET_TIMEOUT, ROCKET_RADIUS, CHAINGUN_RATE } from '../core/config.js';
 import { getWeaponStats, WeaponType, AOE_VFX_SCALE, directHitAoeBonus } from '../../../shared/weapons.js';
 import { aoeImpulse, aoeDamage as aoeDamageOf } from '../../../shared/combat.js';
-import type { Terrain } from '../world/terrain.js';
 import { screenShake } from '../effects/screenShake.js';
-import type { WorldState } from './worldState.js';
+import type { GameContext } from './context.js';
 
-export interface CombatDeps {
-  scene(): THREE.Scene;
-  terrain(): Terrain;
-  camera(): THREE.Camera;
-  player(): Player;
-  viewModel(): ViewModel | undefined;
-  demoManager(): DemoManager | null;
-  networkManager(): NetworkManager;
-  effects(): EffectsManager;
-  hud(): HUD;
-  healthBarSystem(): HealthBarSystem;
-  damageNumbers(): DamageNumberManager;
+export interface CombatDeps extends GameContext {
+  lazyScene(): THREE.Scene;
+  lazyCamera(): THREE.Camera;
+  lazyViewModel(): ViewModel | undefined;
+  lazyHealthBarSystem(): HealthBarSystem;
+  lazyDamageNumbers(): DamageNumberManager;
   fragMessages: FragMessages;
   inputTracking: ReturnType<typeof setupInputTracking>;
   explosionTracker: ExplosionTracker;
-  logger: ChildLogger;
-  world: WorldState;
   // Shootable turret shells: the live bolt list for the projectile sweep,
   // removal of an intercepted bolt, and chain-cookoff of bolts caught in
   // a mega blast. Entities owns the bolt storage, combat owns the check.
@@ -162,31 +147,31 @@ export function createCombat(deps: CombatDeps) {
     const vfx = vfxRadius ?? radius;
     // Explosion/implosion visual + scorch decal on the terrain below the blast
     if (forceMode === 'push') {
-      deps.world.explosions.push(new Explosion(deps.scene(), pos, directHit, age, deps.terrain(), vfx / ROCKET_RADIUS, explosionTint));
+      deps.world.explosions.push(new Explosion(deps.lazyScene(), pos, directHit, age, deps.lazyTerrain(), vfx / ROCKET_RADIUS, explosionTint));
       sfx.explosionAt(pos, directHit, weaponType);
-      screenShake.blast(pos, vfx, deps.player().pos);
+      screenShake.blast(pos, vfx, deps.lazyPlayer().pos);
     } else {
-      deps.world.implosions.push(new Implosion(deps.scene(), pos, age, deps.terrain()));
+      deps.world.implosions.push(new Implosion(deps.lazyScene(), pos, age, deps.lazyTerrain()));
       sfx.implosionAt(pos, directHit);
-      screenShake.blast(pos, vfx * 0.5, deps.player().pos);
+      screenShake.blast(pos, vfx * 0.5, deps.lazyPlayer().pos);
     }
     // Scorch only when the blast is near the ground — a midair hit would
     // otherwise paint a phantom mark on terrain far below.
-    if (pos.y - deps.terrain().getHeight(pos.x, pos.z) <= vfx) {
+    if (pos.y - deps.lazyTerrain().getHeight(pos.x, pos.z) <= vfx) {
       if (deps.world.scorches.length >= SCORCH_MAX) {
         deps.world.scorches.shift()!.dispose();
       }
-      deps.world.scorches.push(new ScorchDecal(deps.scene(), deps.terrain(), pos, vfx * 0.6));
+      deps.world.scorches.push(new ScorchDecal(deps.lazyScene(), deps.lazyTerrain(), pos, vfx * 0.6));
     }
-    if (AOE_DEBUG) deps.world.aoeGizmos.push(new AoeGizmo(deps.scene(), pos, radius));
+    if (AOE_DEBUG) deps.world.aoeGizmos.push(new AoeGizmo(deps.lazyScene(), pos, radius));
 
     // Record explosion for death impulse calculation
-    deps.explosionTracker.addExplosion(pos, force, shooterId || deps.networkManager().getLocalPlayerId());
+    deps.explosionTracker.addExplosion(pos, force, shooterId || deps.lazyNetworkManager().getLocalPlayerId());
 
     applyExplosionForce(pos, radius, force, forceMode, falloffMultiplier, collisionMultiplier, forceMultiplier, aoeDamage, directHitTargetId ?? null, weaponType);
 
     // AOE damage to remote players (server-side authority)
-    const networkManager = deps.networkManager();
+    const networkManager = deps.lazyNetworkManager();
     if (networkManager && networkManager.isConnected() && sendAOE) {
       sendAOE({ x: pos.x, y: pos.y, z: pos.z }, directHitTargetId ?? null);
     }
@@ -219,7 +204,7 @@ export function createCombat(deps: CombatDeps) {
     const applyTo = (t: Forceable, f: number) =>
       forceMode === 'push' ? t.applyKnockback(pos, f) : t.applyPull(pos, f);
 
-    const player = deps.player();
+    const player = deps.lazyPlayer();
     const dpx = player.pos.distanceTo(pos);
     if (dpx < radius * falloffMultiplier) {
       applyTo(player, force * falloffAt(dpx));
@@ -229,8 +214,8 @@ export function createCombat(deps: CombatDeps) {
       const selfDmg = aoeDamageOf(aoeDamage, dpx, radius) * SELF_AOE_DAMAGE_SCALE;
       if (selfDmg >= 1 && !player.isDead) {
         player.lastDamageSource = 'cooked by your own blast'; // suicide reads as suicide, not "a crawler"
-        deps.networkManager()?.sendEnvironmentDamage(selfDmg);
-        deps.hud().showDamage(null, selfDmg);
+        deps.lazyNetworkManager()?.sendEnvironmentDamage(selfDmg);
+        deps.lazyHud().showDamage(null, selfDmg);
       }
     }
     applyForceToBalls(pos, radius, force, forceMode, collisionMultiplier, forceMultiplier, aoeDamage, applyTo, weaponType);
@@ -288,12 +273,12 @@ export function createCombat(deps: CombatDeps) {
         // (without it, splash damage was invisible and read as "no damage").
         const dmg = aoeDamageOf(aoeDamage, db, radius);
         if (dmg >= 1) {
-          deps.damageNumbers().spawn(ball.pos, dmg, splashColor(weaponType), deps.camera());
+          deps.lazyDamageNumbers().spawn(ball.pos, dmg, splashColor(weaponType), deps.lazyCamera());
           deps.reportTargetDamage?.(ball, dmg);
           if (ball.takeDamage(dmg)) onTargetDestroyed(ball, ball.vel, weaponType);
           else {
-            if (!ball.hideHealthBar) deps.healthBarSystem().spawnBall(ball, dmg, ball.health);
-            const dm = deps.demoManager();
+            if (!ball.hideHealthBar) deps.lazyHealthBarSystem().spawnBall(ball, dmg, ball.health);
+            const dm = deps.lazyDemoManager();
             if (dm?.isRecording) {
               dm.recordTargetHit(ball.id, { x: ball.pos.x, y: ball.pos.y, z: ball.pos.z }, { x: ball.vel.x, y: ball.vel.y, z: ball.vel.z }, ball.variant, ball.health);
             }
@@ -327,8 +312,8 @@ export function createCombat(deps: CombatDeps) {
       if (impulse <= 0) continue;
       rp.applyPredictedKnockback(pos, impulse, forceMode === 'pull');
       if (playerId === directHitTargetId) continue;
-      deps.hud().showHitMarker();
-      deps.healthBarSystem().predictDamage(playerId, aoeDamageOf(aoeDamage, dist, radius));
+      deps.lazyHud().showHitMarker();
+      deps.lazyHealthBarSystem().predictDamage(playerId, aoeDamageOf(aoeDamage, dist, radius));
     }
   }
 
@@ -341,7 +326,7 @@ export function createCombat(deps: CombatDeps) {
     // tap-slam lands ~55 and a full dive can exceed 100. ~0.2 at a lazy hop
     // floor, 1.8 max on a huge fall. Server applies the same power factor.
     const power = Math.min(Math.max((impactSpeed - 30) / 50, 0.2), 1.8);
-    const networkManager = deps.networkManager();
+    const networkManager = deps.lazyNetworkManager();
     const sendAOE = (p: { x: number; y: number; z: number }, targetId: string | null) =>
       networkManager.sendAOEShot(p, WeaponType.Slam, targetId, null, undefined, power);
     processProjectileExplosion(
@@ -391,7 +376,7 @@ export function createCombat(deps: CombatDeps) {
 
     for (let i = deps.world.projectiles.length - 1; i >= 0; i--) {
       const p = deps.world.projectiles[i];
-      p.update(dt, deps.terrain(), deps.targets, remotePlayerPositions, bolts);
+      p.update(dt, deps.lazyTerrain(), deps.targets, remotePlayerPositions, bolts);
 
       // Mid-air interception: the projectile's sweep tagged a bolt.
       // hitPoint is the exact swept contact — both cookoffs land there.
@@ -416,7 +401,7 @@ export function createCombat(deps: CombatDeps) {
       }
 
       if (p.dead) {
-        const demoManager = deps.demoManager();
+        const demoManager = deps.lazyDemoManager();
         if (demoManager?.isRecording && p.demoProjectileId) {
           demoManager.recordProjectileDestroyed(p.demoProjectileId, { x: p.pos.x, y: p.pos.y, z: p.pos.z });
         }
@@ -449,7 +434,7 @@ export function createCombat(deps: CombatDeps) {
 
     // Notify server to destroy tracked projectile
     if (p.serverProjectileId) {
-      deps.networkManager().sendProjectileDestroy(p.serverProjectileId);
+      deps.lazyNetworkManager().sendProjectileDestroy(p.serverProjectileId);
     }
 
     spawnImpactEffect(p);
@@ -465,11 +450,11 @@ export function createCombat(deps: CombatDeps) {
     // already inside the terrain and the blast would render underground
     const pos = p.hitPointValid ? p.hitPoint : p.pos;
     if (p.config.noExplosion) {
-      deps.effects().spawnImpact(pos, p.vel);
-      if (!p.hitBall && !p.hitPlayerId) deps.effects().spawnBulletMark(pos);
+      deps.lazyEffects().spawnImpact(pos, p.vel);
+      if (!p.hitBall && !p.hitPlayerId) deps.lazyEffects().spawnBulletMark(pos);
       return;
     }
-    deps.world.explosions.push(new Explosion(deps.scene(), pos, p.directHit, p.age, deps.terrain(), p.explosionRadius / ROCKET_RADIUS, p.config.damageColor));
+    deps.world.explosions.push(new Explosion(deps.lazyScene(), pos, p.directHit, p.age, deps.lazyTerrain(), p.explosionRadius / ROCKET_RADIUS, p.config.damageColor));
     sfx.explosionAt(pos, p.directHit);
   }
 
@@ -478,15 +463,15 @@ export function createCombat(deps: CombatDeps) {
       // Bullet impact at the exact sweep intersection point (terrain hits
       // use the bisected hitPoint; ball/player hits use pos).
       const hitPos = p.hitPointValid ? p.hitPoint : p.pos;
-      deps.effects().spawnImpact(hitPos, p.vel);
+      deps.lazyEffects().spawnImpact(hitPos, p.vel);
       // Bullet hole on terrain hits only — enemy/player hits already get
       // damage numbers, bars, and spark feedback
-      if (!p.hitBall && !p.hitPlayerId) deps.effects().spawnBulletMark(hitPos);
+      if (!p.hitBall && !p.hitPlayerId) deps.lazyEffects().spawnBulletMark(hitPos);
       return;
     }
     // One AOE message for all weapons — the shared weapon table carries
     // weaponType, server resolves stats from it (no per-weapon message types)
-    const networkManager = deps.networkManager();
+    const networkManager = deps.lazyNetworkManager();
     const weaponType = p.config.weaponType;
     // Canonical launchers bloom on a direct hit — the blast reach AND its
     // VFX dome grow together so the visual never lies about the damage area
@@ -516,7 +501,7 @@ export function createCombat(deps: CombatDeps) {
 
   // Demo recording + cool-shot logging for any hit (terrain, ball, or player)
   function recordProjectileHit(p: Projectile): void {
-    const demoManager = deps.demoManager();
+    const demoManager = deps.lazyDemoManager();
     if (demoManager?.isRecording && p.demoProjectileId) {
       const targetId = p.hitBall ? p.hitBall.id : (p.hitPlayerId ? 0xFFFF : 0);
       demoManager.recordProjectileHit(p.demoProjectileId, { x: p.pos.x, y: p.pos.y, z: p.pos.z }, targetId);
@@ -539,7 +524,7 @@ export function createCombat(deps: CombatDeps) {
     const score = Math.round(acc * dist * air);
     logger.info(`[Hit] ${target} direct=${p.directHit} air=${airborne} accRaw=${p.hitAccuracy.toFixed(2)} acc=${acc.toFixed(1)} dist=${dist.toFixed(1)} air=${air.toFixed(2)}s score=${score}`);
     if (airborne) deps.fragMessages.showScore(`${acc.toFixed(1)} · ${Math.round(dist)} · ${air.toFixed(2)}s\n${score}`, air);
-    deps.hud().showHitMarker();
+    deps.lazyHud().showHitMarker();
     sfx.hitMarker(p.directHit);
   }
 
@@ -550,7 +535,7 @@ export function createCombat(deps: CombatDeps) {
     // Railgun reward: any kill (direct or its splash) instantly reloads —
     // the "not useless" payoff that turns a slow precision weapon into a
     // chain-kill tool against clusters.
-    if (weaponType === WeaponType.Railgun) deps.player().refundWeaponCooldown();
+    if (weaponType === WeaponType.Railgun) deps.lazyPlayer().refundWeaponCooldown();
     // Seamless shatter for instanced species: the body's own part
     // instances become the debris at identical transforms — the corpse IS
     // the wreckage on frame 0, no pop to mask. Single-part bodies (balls)
@@ -558,23 +543,23 @@ export function createCombat(deps: CombatDeps) {
     if (impulse) _debrisDir.copy(impulse).normalize(); else _debrisDir.set(0, 0.5, 0);
     if (!burstGibs(ball as unknown as SwarmSlotOwner, ball.pos, _debrisDir, ball.vel)) {
       deps.world.debrisList.push(new BallDebris(
-        deps.scene(), deps.terrain(), ball.pos.x, ball.pos.y, ball.pos.z,
+        deps.lazyScene(), deps.lazyTerrain(), ball.pos.x, ball.pos.y, ball.pos.z,
         ball.color, ball.scale,
         { bodyRadius: ball.radius, impulseDir: _debrisDir, inheritVel: ball.vel, kind: ball.debrisKind, shardGeos: ball.debrisGeos },
       ));
     }
-    screenShake.blast(ball.pos, 1.6, deps.player().pos);
+    screenShake.blast(ball.pos, 1.6, deps.lazyPlayer().pos);
     sfx.enemyCue(ball.pos, ball.dieCue ?? 'die');
-    if (!ball.scoreless) deps.player().kills++;
+    if (!ball.scoreless) deps.lazyPlayer().kills++;
     if (!ball.lootless) {
       for (let n = 0; n < Math.round(ball.scale); n++) {
-        deps.nuggets.push(new Nugget(deps.scene(), ball.pos, ball.vel));
+        deps.nuggets.push(new Nugget(deps.lazyScene(), ball.pos, ball.vel));
       }
     }
     ball.onDeath?.(ball); // elite split — entities.ts spawns the children
     // Record here, not in handleBallHit — splash kills need it too
-    if (deps.demoManager()?.isRecording) {
-      deps.demoManager()!.recordTargetDestroyed(ball.id, { x: ball.pos.x, y: ball.pos.y, z: ball.pos.z }, ball.variant, ball.health);
+    if (deps.lazyDemoManager()?.isRecording) {
+      deps.lazyDemoManager()!.recordTargetDestroyed(ball.id, { x: ball.pos.x, y: ball.pos.y, z: ball.pos.z }, ball.variant, ball.health);
     }
   }
 
@@ -597,15 +582,15 @@ export function createCombat(deps: CombatDeps) {
     }
     deps.reportTargetDamage?.(ball, dmg);
     const destroyed = ball.takeDamage(dmg);
-    deps.damageNumbers().spawn(ball.pos, Math.round(dmg), p.config.damageColor, deps.camera());
+    deps.lazyDamageNumbers().spawn(ball.pos, Math.round(dmg), p.config.damageColor, deps.lazyCamera());
     if (!destroyed && !ball.hideHealthBar) {
-      deps.healthBarSystem().spawnBall(ball, dmg, ball.health);
+      deps.lazyHealthBarSystem().spawnBall(ball, dmg, ball.health);
     }
-    const airborne = ball.pos.y - ball.radius - deps.terrain().getHeight(ball.pos.x, ball.pos.z) > 0.6;
+    const airborne = ball.pos.y - ball.radius - deps.lazyTerrain().getHeight(ball.pos.x, ball.pos.z) > 0.6;
     logHitScore(p, 'ball', airborne);
     if (destroyed) onTargetDestroyed(ball, p.vel, p.config.weaponType);
 
-    const demoManager = deps.demoManager();
+    const demoManager = deps.lazyDemoManager();
     if (demoManager?.isRecording && !destroyed) {
       demoManager.recordTargetHit(ball.id, { x: ball.pos.x, y: ball.pos.y, z: ball.pos.z }, { x: ball.vel.x, y: ball.vel.y, z: ball.vel.z }, ball.variant, ball.health);
     }
@@ -613,16 +598,16 @@ export function createCombat(deps: CombatDeps) {
 
   function handlePlayerHit(p: Projectile, playerId: string): void {
     const targetPlayer = deps.world.remotePlayers.get(playerId);
-    const hitPos = targetPlayer ? targetPlayer.position : deps.player().pos;
+    const hitPos = targetPlayer ? targetPlayer.position : deps.lazyPlayer().pos;
     const directDamage = getWeaponStats(p.config.weaponType).directDamage;
-    deps.damageNumbers().spawn(hitPos, directDamage, p.config.damageColor, deps.camera());
-    deps.healthBarSystem().predictDamage(playerId, directDamage);
+    deps.lazyDamageNumbers().spawn(hitPos, directDamage, p.config.damageColor, deps.lazyCamera());
+    deps.lazyHealthBarSystem().predictDamage(playerId, directDamage);
     const airborne = targetPlayer
-      ? targetPlayer.feetY - deps.terrain().getHeight(hitPos.x, hitPos.z) > 0.6
+      ? targetPlayer.feetY - deps.lazyTerrain().getHeight(hitPos.x, hitPos.z) > 0.6
       : false;
     logHitScore(p, 'player', airborne);
 
-    const networkManager = deps.networkManager();
+    const networkManager = deps.lazyNetworkManager();
     if (networkManager) {
       networkManager.sendShot(playerId, { x: p.pos.x, y: p.pos.y, z: p.pos.z }, { x: p.vel.x, y: p.vel.y, z: p.vel.z }, Date.now(), p.serverProjectileId, p.config.weaponType, p.hitAge);
       logger.info(`[Shot] Sent to server: player=${playerId} proj=${p.serverProjectileId} direct=${p.directHit} air=${p.hitAge.toFixed(2)}s`);

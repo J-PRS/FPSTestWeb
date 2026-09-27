@@ -2,17 +2,17 @@ import type { ChildLogger } from '../core/Logger.js';
 import type { DemoManager } from '../demo/index.js';
 import { SKILL_ORDER, Player, type SkillId } from '../entities/Player.js';
 import type { HUD } from './hud.js';
-import { WEAPON_CONFIGS } from '../projectiles/index.js';
+import { SLOT_WEAPONS } from '../projectiles/index.js';
 import { audio } from '../core/audio.js';
 
 export interface OverlayInputDeps {
   overlay: HTMLElement;
   rendererCanvas: HTMLCanvasElement;
-  demoManager: () => DemoManager | null;
-  hud: () => HUD;
+  lazyDemoManager: () => DemoManager | null;
+  lazyHud: () => HUD;
   logger: ChildLogger;
   isGameStarted: () => boolean;
-  player: () => Player;
+  lazyPlayer: () => Player;
 }
 
 // Overlay / pointer-lock / global key handling: ESC menu flow (Krunker-style —
@@ -22,13 +22,82 @@ export function wireOverlayInput(deps: OverlayInputDeps) {
   const { overlay, rendererCanvas, logger } = deps;
 
   // ---- Loadout bar (bottom-center of the ESC menu) ----
-  // Each of the 4 slots is a dropdown — click a slot, pick the weapon.
-  // Belt (F) is a pair of chips; skill (Q) toggles on click.
+  // Custom dropups, not <select> — a native popup is OS chrome and breaks
+  // the game-menu illusion. Chip face + styled option list opening upward.
   const loadoutBar = document.getElementById('loadout-bar');
-  const slotSelects: HTMLSelectElement[] = [];
-  let beltSelRef: HTMLSelectElement | null = null;
-  let skillSelRef: HTMLSelectElement | null = null;
+  interface Drop { el: HTMLElement; setValue(v: string): void; }
+  const slotDrops: Drop[] = [];
+  let beltDrop: Drop | null = null;
+  let skillDrop: Drop | null = null;
+  let openDrop: HTMLElement | null = null;
+
+  // Chip width is measured, not hardcoded — canvas-measure the widest
+  // option (uppercased, same font as .lo-opt) + padding + caret so no
+  // label ever overflows and no chip is wider than it needs to be.
+  const measureCtx = document.createElement('canvas').getContext('2d')!;
+  function dropWidth(options: { label: string }[]): number {
+    // Same font as .lo-opt: 600 0.66rem in the body family, uppercased
+    measureCtx.font = `600 ${0.66 * 16}px ${getComputedStyle(document.body).fontFamily}`;
+    let w = 0;
+    for (const o of options) w = Math.max(w, measureCtx.measureText(o.label.toUpperCase()).width);
+    return Math.ceil(w) + 11 * 2 + 8 + 12; // padding + gap + caret
+  }
+
+  function mkDrop(
+    options: { v: string; label: string }[],
+    onPick: (v: string) => void,
+  ): Drop {
+    const el = document.createElement('div');
+    el.className = 'lo-chip lo-drop';
+    el.style.minWidth = `${dropWidth(options)}px`;
+    const face = document.createElement('span');
+    el.appendChild(face);
+    const caret = document.createElement('span');
+    caret.className = 'lo-caret';
+    caret.textContent = '▴';
+    el.appendChild(caret);
+    const list = document.createElement('div');
+    list.className = 'lo-list';
+    for (const o of options) {
+      const it = document.createElement('div');
+      it.className = 'lo-opt';
+      it.textContent = o.label;
+      it.dataset.v = o.v;
+      it.addEventListener('click', (e) => {
+        e.stopPropagation();
+        onPick(o.v);
+        el.classList.remove('open');
+        openDrop = null;
+        refreshLoadout();
+      });
+      list.appendChild(it);
+    }
+    el.appendChild(list);
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const was = el.classList.contains('open');
+      openDrop?.classList.remove('open');
+      el.classList.toggle('open', !was);
+      openDrop = was ? null : el;
+    });
+    return {
+      el,
+      setValue(v) {
+        face.textContent = options.find((o) => o.v === v)?.label ?? v;
+        list.querySelectorAll<HTMLElement>('.lo-opt').forEach((o) =>
+          o.classList.toggle('sel', o.dataset.v === v));
+      },
+    };
+  }
+
+  // Clicking the bar's dead space closes any open dropup
+  loadoutBar?.addEventListener('click', () => {
+    openDrop?.classList.remove('open');
+    openDrop = null;
+  });
+
   if (loadoutBar) {
+    const weaponOpts = SLOT_WEAPONS.map((cfg, wid) => ({ v: String(wid), label: cfg.displayName }));
     for (let i = 0; i < Player.LOADOUT_SLOTS; i++) {
       const row = document.createElement('div');
       row.className = 'lo-row';
@@ -36,73 +105,38 @@ export function wireOverlayInput(deps: OverlayInputDeps) {
       label.className = 'lo-label';
       label.textContent = `SLOT ${i + 1}`;
       row.appendChild(label);
-      const sel = document.createElement('select');
-      sel.className = 'lo-chip lo-select';
-      WEAPON_CONFIGS.forEach((cfg, wid) => {
-        const opt = document.createElement('option');
-        opt.value = String(wid);
-        opt.textContent = cfg.displayName;
-        sel.appendChild(opt);
-      });
-      sel.addEventListener('click', (e) => e.stopPropagation());
-      sel.addEventListener('change', (e) => {
-        e.stopPropagation();
-        deps.player().setLoadoutSlot(i, Number(sel.value));
-        refreshLoadout();
-      });
-      row.appendChild(sel);
-      slotSelects.push(sel);
+      const drop = mkDrop(weaponOpts, (v) => deps.lazyPlayer().setLoadoutSlot(i, Number(v)));
+      row.appendChild(drop.el);
+      slotDrops.push(drop);
       loadoutBar.appendChild(row);
     }
 
     const beltRow = document.createElement('div');
     beltRow.className = 'lo-row';
     beltRow.innerHTML = `<span class="lo-label">BELT (C)</span>`;
-    const beltSel = document.createElement('select');
-    beltSel.className = 'lo-chip lo-select';
-    for (const item of ['disc', 'grenade'] as const) {
-      const opt = document.createElement('option');
-      opt.value = item;
-      opt.textContent = item === 'disc' ? 'Disc' : 'Grenade';
-      beltSel.appendChild(opt);
-    }
-    beltSel.addEventListener('click', (e) => e.stopPropagation());
-    beltSel.addEventListener('change', (e) => {
-      e.stopPropagation();
-      deps.player().setBeltItem(beltSel.value as 'disc' | 'grenade');
-    });
-    beltRow.appendChild(beltSel);
-    beltSelRef = beltSel;
-
-    const skillSel = document.createElement('select');
-    skillSel.className = 'lo-chip lo-select';
-    for (const s of SKILL_ORDER) {
-      const opt = document.createElement('option');
-      opt.value = s;
-      opt.textContent = s[0].toUpperCase() + s.slice(1);
-      skillSel.appendChild(opt);
-    }
-    skillSel.addEventListener('click', (e) => e.stopPropagation());
-    skillSel.addEventListener('change', (e) => {
-      e.stopPropagation();
-      deps.player().setSkill(skillSel.value as SkillId);
-    });
-    const skillWrap = document.createElement('div');
-    skillWrap.className = 'lo-row';
-    skillWrap.innerHTML = `<span class="lo-label">SKILL (Q)</span>`;
-    skillWrap.appendChild(skillSel);
-    skillSelRef = skillSel;
+    beltDrop = mkDrop(
+      [{ v: 'disc', label: 'Disc' }, { v: 'grenade', label: 'Grenade' }],
+      (v) => deps.lazyPlayer().setBeltItem(v as 'disc' | 'grenade'),
+    );
+    beltRow.appendChild(beltDrop.el);
     loadoutBar.appendChild(beltRow);
-    loadoutBar.appendChild(skillWrap);
+
+    const skillRow = document.createElement('div');
+    skillRow.className = 'lo-row';
+    skillRow.innerHTML = `<span class="lo-label">SKILL (Q)</span>`;
+    skillDrop = mkDrop(
+      SKILL_ORDER.map((s) => ({ v: s, label: s[0].toUpperCase() + s.slice(1) })),
+      (v) => deps.lazyPlayer().setSkill(v as SkillId),
+    );
+    skillRow.appendChild(skillDrop.el);
+    loadoutBar.appendChild(skillRow);
   }
+
   function refreshLoadout(): void {
-    const player = deps.player();
-    slotSelects.forEach((sel, i) => {
-      sel.value = String(player.loadout[i]);
-      sel.classList.toggle('active', i === player.weaponIndex);
-    });
-    if (beltSelRef) beltSelRef.value = player.beltItem;
-    if (skillSelRef) skillSelRef.value = player.skill;
+    const player = deps.lazyPlayer();
+    slotDrops.forEach((d, i) => d.setValue(String(player.loadout[i])));
+    beltDrop?.setValue(player.beltItem);
+    skillDrop?.setValue(player.skill);
   }
 
   // Single source of truth for menu visibility — sets overlay display AND
@@ -135,7 +169,7 @@ export function wireOverlayInput(deps: OverlayInputDeps) {
       // the page while locked. So treat any lock exit (ESC, alt-tab, browser UI)
       // as "open the menu", same as Krunker.
       setOverlay(true);
-      const dm = deps.demoManager();
+      const dm = deps.lazyDemoManager();
       dm?.onCoolShotsChanged?.(dm.getCoolShots());
       dm?.fetchCoolShotsFromServer();
     }
@@ -143,7 +177,7 @@ export function wireOverlayInput(deps: OverlayInputDeps) {
 
   // Demo playback keys (arrow keys). Returns true if the key was consumed.
   function handleDemoKey(e: KeyboardEvent): boolean {
-    const dm = deps.demoManager();
+    const dm = deps.lazyDemoManager();
     if (!dm?.isPlaying) return false;
     const action = ({
       ArrowUp: () => dm.togglePlayPause(),
@@ -158,7 +192,7 @@ export function wireOverlayInput(deps: OverlayInputDeps) {
   }
 
   function handleEscapeKey(): void {
-    const dm = deps.demoManager();
+    const dm = deps.lazyDemoManager();
     if (dm?.isPlaying) {
       dm.stopPlayback();
       return;
@@ -178,10 +212,10 @@ export function wireOverlayInput(deps: OverlayInputDeps) {
   document.addEventListener('keydown', (e) => {
     if (e.code === 'Tab') {
       e.preventDefault();
-      deps.hud().setScoreboardVisible(true);
+      deps.lazyHud().setScoreboardVisible(true);
       return;
     }
-    const dm = deps.demoManager();
+    const dm = deps.lazyDemoManager();
     if (dm?.isPlaying && e.code !== 'Escape' && e.code !== 'F6' &&
         e.code !== 'ArrowUp' && e.code !== 'ArrowDown' && e.code !== 'ArrowLeft' && e.code !== 'ArrowRight') {
       return;
@@ -197,26 +231,26 @@ export function wireOverlayInput(deps: OverlayInputDeps) {
   document.addEventListener('keyup', (e) => {
     if (e.code === 'Tab') {
       e.preventDefault();
-      deps.hud().setScoreboardVisible(false);
+      deps.lazyHud().setScoreboardVisible(false);
     }
     if (e.code === 'F6') {
-      deps.demoManager()?.toggleUI();
+      deps.lazyDemoManager()?.toggleUI();
     }
-    if (e.code === 'Space' && deps.demoManager()?.isLoadedForPlayback) {
+    if (e.code === 'Space' && deps.lazyDemoManager()?.isLoadedForPlayback) {
       e.preventDefault();
-      deps.demoManager()!.togglePlayPause();
+      deps.lazyDemoManager()!.togglePlayPause();
       return;
     }
   });
 
   overlay.addEventListener('click', (e) => {
     if (e.target !== overlay) return;
-    const dm = deps.demoManager();
+    const dm = deps.lazyDemoManager();
     if (dm?.isPlaying) { dm.stopPlayback(); return; }
     requestLock();
   });
   rendererCanvas.addEventListener('click', () => {
-    if (deps.demoManager()?.isPlaying) return;
+    if (deps.lazyDemoManager()?.isPlaying) return;
     if (document.pointerLockElement !== rendererCanvas) requestLock();
   });
 

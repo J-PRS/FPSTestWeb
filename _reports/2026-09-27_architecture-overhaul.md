@@ -68,4 +68,24 @@ Each slice is: extract cohesive block → new file → rewire imports → `tsc -
 
 ## Execution log
 
-(updated per slice)
+- Slice 1 (entities): targeting/spawning/entityUpdate extracted.
+- Slice 2 (combat): fire handlers → `game/combat/fire.ts`, lightning gun →
+  `game/combat/lightning.ts`; shared blast path stays in combat.ts and is
+  handed to submodules as a `processExplosion` hook. combat.ts 1067→~640.
+- Slice 3 (Player): adapted — jetpack etc. live in `movement.ts` already,
+  so extracted the skills state machine (bounce/blink/dash/slam/warp
+  beacon) to `entities/player/skills.ts`. Player.ts 918→706.
+- Slice 4 (ViewModel): all 13 weapon mesh builders →
+  `entities/viewmodel/weaponsGeo.ts` (`buildWeaponMeshes`,
+  `buildHandAndFlash`). ViewModel.ts 790→431.
+- Slice 5 (sfx): per-family modules in `core/sfx/` (util/beam/weapons/
+  player/explosions/world); `sfx.ts` is now a 10-line re-export barrel —
+  zero call-site changes.
+- Slice 6 (hud): stylesheet + DOM tree + selector wiring →
+  `ui/hud/dom.ts` (`createHudDom()` returns the element bag). hud.ts
+  711→~450, keeps all behavior/widgets.
+- Slice 7 (GameContext): `game/context.ts` defines `GameContext` — the
+  shared lazy-getter surface both `CombatDeps` and `EntitiesDeps` now
+  extend. All callable dep getters renamed `lazy*` across the codebase
+  (`deps.player()` → `deps.lazyPlayer()` etc.) so laziness is visible at
+  every call site; eager fields stay plain.
