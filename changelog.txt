@@ -1,5 +1,11 @@
 # Changelog
 
+## [2026-09-26] Radar minimap
+
+- `ui/minimap.ts` (new): rotating player-centered radar — up is where you face, red dots = enemies (`entities.targets`), amber = nuggets, off-range dots clamp to the rim so distant threats still read as a direction. 160px, top-right under the ping row, ~zero DOM churn.
+- Wired in `gameLoop` via `hud.updateMinimap`; HUD owns the canvas inside #hud.
+- `?minimap=cross` (persists via `fps-minimap` setting): transparent threats-only radar pinned to the crosshair — no dish, no balls/nuggets, no center wedge. `?minimap=corner` restores the corner dish.
+
 ## [2026-09-26] Instanced enemy rendering — massive enemy counts (Tier 2)
 
 - `entities/swarm.ts` (new): `SpeciesSwarm` — one `InstancedMesh` per (species, part); `per` multiplier for sub-parts (6 crawler legs, 3 miner fins); slots swap-remove so `mesh.count` covers the live range; `instanceColor` fakes damage-flash and emissive telegraph ramps. `InstancedBlobShadows` — a single instanced shadow pool with per-instance `aOpacity` (terrain height + altitude fade), replacing per-enemy BlobShadow meshes.

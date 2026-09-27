@@ -1,4 +1,7 @@
 import * as THREE from 'three';
+import { Minimap } from './minimap.js';
+import type { Targetable } from '../entities/balls.js';
+import type { Nugget } from '../entities/Nugget.js';
 
 import { Player } from '../entities/Player.js';
 import { ChildLogger } from '../core/Logger.js';
@@ -26,6 +29,7 @@ export class HUD {
   private fps: HTMLSpanElement;
   private crosshair: HTMLDivElement;
   private hitMarker: HTMLDivElement;
+  private minimap: Minimap;
   private hitTimer = 0;
   private playerIndicators: Map<string, HTMLDivElement> = new Map();
   private playerList: HTMLDivElement;
@@ -258,6 +262,7 @@ export class HUD {
     this.jitter   = this.el.querySelector('#jitter')!;
     this.fps      = this.el.querySelector('#fps')!;
     this.crosshair = this.el.querySelector('#crosshair')!;
+    this.minimap = new Minimap(this.el);
     this.playerList = this.el.querySelector('#player-list')!;
     this.hitMarker = this.el.querySelector('#hit-marker')!;
     this.weaponSlots = Array.from(this.el.querySelectorAll('.wslot'));
@@ -366,6 +371,10 @@ export class HUD {
     if (this.lastText[key] === value) return;
     this.lastText[key] = value;
     el.textContent = value;
+  }
+
+  updateMinimap(targets: Targetable[], nuggets: Nugget[], pos: THREE.Vector3, yaw: number): void {
+    this.minimap.update(targets, nuggets, pos, yaw);
   }
 
   update(dt: number, player: Player, ping: number = 0, packetLoss: number = 0, jitter: number = 0): void {
