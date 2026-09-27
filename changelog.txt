@@ -1875,3 +1875,4 @@ Ball render: inert legs now extrapolate closed-form (Euler-exact, continuous) in
 Ball corrections now blend via renderOffset for all non-teleport kinds (residual divergence is server-clock skew, not desync); added _tools/pvptest/ballreplay.ts — live-wire replay probe measuring real divergence per segment kind
 Balls now settle on sub-6m/s contacts (park silently instead of elastic micro-bouncing every tick); client analytic legs clamp to terrain so they never render underground
 Server ops: env-driven config (FPS_PORT/TICK_HZ/MAX_PLAYERS/IDLE_*/HEIGHTMAP/etc) + GET /metrics (uptime, players, balls, msg counts, tick-lag stats — already proving ~18% setInterval drift)
+BallSim catches up in whole 50ms cells when setInterval fires late — sim time now tracks wall clock (was drifting ~18% behind, the residual replay overshoot)
