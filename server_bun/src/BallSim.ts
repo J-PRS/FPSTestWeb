@@ -158,6 +158,10 @@ export class BallSim {
       position: { x: b.x, y: b.y, z: b.z },
       velocity: { x: b.vx, y: b.vy, z: b.vz },
       enraged: b.enraged, targetId: b.targetId,
+      // Full-sim resync: the predictors run the same integrator, so the
+      // timers ride along or a client's 20s timeout / stall breaker drifts
+      // off the server's (heartbeats would otherwise keep resetting them).
+      et: b.enrageTimer, slowT: b.slowTimer, damp: b.dampNextBounce,
       t: this.simTime,
     });
   }
