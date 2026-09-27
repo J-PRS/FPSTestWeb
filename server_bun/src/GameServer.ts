@@ -45,7 +45,11 @@ export class GameServer {
     // Server-owned creatures: balls are the shared-PvE pilot. A missing
     // heightmap must degrade gracefully — log and run creature-free rather
     // than take down the whole game server.
-    this.ballSim = new BallSim(this.playerManager, (msg) => this.connectionManager.broadcast(msg));
+    this.ballSim = new BallSim(
+      this.playerManager,
+      (msg) => this.connectionManager.broadcast(msg),
+      (data) => this.connectionManager.broadcastBinary(data),
+    );
     this.messageHandler.setBallSim(this.ballSim);
     this.ballSim.start(fileURLToPath(new URL('../heightmap.bin', import.meta.url)))
       .catch(err => logger.warn('BallSim disabled — heightmap load failed', { err: String(err) }));

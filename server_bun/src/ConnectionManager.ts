@@ -33,6 +33,13 @@ export class ConnectionManager {
     }
   }
 
+  /** High-rate binary broadcasts (ball segments) — encode once, send raw. */
+  broadcastBinary(data: Uint8Array): void {
+    this.connections.forEach((ws) => {
+      if (ws.readyState === 1) ws.send(data);
+    });
+  }
+
   broadcast(msg: ServerMessage, excludePlayerId?: string): void {
     const data = JSON.stringify(msg);
     this.connections.forEach((ws, pid) => {
