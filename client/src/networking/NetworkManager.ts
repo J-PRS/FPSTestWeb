@@ -4,6 +4,7 @@ import type { ClientMessage, ServerMessage, TickUpdatePlayer, GameStatePlayer, L
 import { PROTOCOL_VERSION } from '../../../shared/protocol.js';
 import { WebSocketConnection } from './WebSocketConnection.js';
 import type { GameTransport, TransportFactory } from './transport.js';
+import { NetTelemetry } from './netTelemetry.js';
 
 const logger = new ChildLogger('NetworkManager');
 
@@ -52,7 +53,7 @@ export class NetworkManager {
   public onRemoteTeleport: ((playerId: string, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }) => void) | null = null;
   private lastPositionSendTime: number = 0;
   private readonly POSITION_SEND_INTERVAL = 50; // 20Hz — extrapolation covers the gap
-  private ping: number = 0;
+  private readonly telemetry = new NetTelemetry(this.POSITION_SEND_INTERVAL);
   private hasLoggedConnectionError: boolean = false;
 
   // --- Client-side prediction: sequence tracking + state history ---
@@ -63,8 +64,6 @@ export class NetworkManager {
   // --- Ping measurement ---
   private lastPingSendTime: number = 0;
   private readonly PING_INTERVAL = 2000; // Send ping every 2 seconds
-  private pingHistory: number[] = []; // Recent RTT samples
-  private readonly PING_HISTORY_MAX = 10;
 
   constructor() {
     // Player ID persists in sessionStorage so F5 refreshes reclaim the
@@ -228,7 +227,7 @@ export class NetworkManager {
   }
 
   private handleTickUpdate(data: { updates: TickUpdatePlayer[]; ackSeq?: number }): void {
-    this.trackTickArrival();
+    this.telemetry.onTickArrival(Date.now());
     // Batched player updates from server (delta compressed)
     if (data.ackSeq !== undefined && data.ackSeq > 0) {
       this.pruneStateHistory(data.ackSeq);
@@ -384,7 +383,7 @@ export class NetworkManager {
 
     // Binary frame: 30B instead of ~140B JSON. Server decodes on the wire
     // hot path; the message still passes through the same validation.
-    this.sendBinary(encodePosition(position, rotation, velocity, seq, this.ping));
+    this.sendBinary(encodePosition(position, rotation, velocity, seq, this.telemetry.ping));
 
     // Send ping if interval elapsed
     if (now - this.lastPingSendTime >= this.PING_INTERVAL) {
@@ -500,53 +499,19 @@ export class NetworkManager {
   }
 
   getPing(): number {
-    return this.ping;
-  }
-
-  // "Loss" over a reliable WS transport isn't packet loss — what players
-  // feel is delivery gaps. Track the 20Hz tick stream: a frame arriving
-  // >2x the expected interval late counts the skipped slots as missed.
-  private lastTickAt = 0;
-  private tickWindow: { t: number; missed: number }[] = [];
-  private trackTickArrival(): void {
-    const now = Date.now();
-    if (this.lastTickAt > 0) {
-      const gap = now - this.lastTickAt;
-      const missed = Math.max(0, Math.round(gap / this.POSITION_SEND_INTERVAL) - 1);
-      if (missed > 0) this.tickWindow.push({ t: now, missed });
-      // Sliding 5s window
-      while (this.tickWindow.length && now - this.tickWindow[0]!.t > 5000) this.tickWindow.shift();
-    }
-    this.lastTickAt = now;
+    return this.telemetry.ping;
   }
 
   getPacketLoss(): number {
-    const now = Date.now();
-    if (this.lastTickAt === 0 || this.tickWindow.length === 0) return 0;
-    const missed = this.tickWindow.reduce((s, w) => s + w.missed, 0);
-    const spanMs = Math.max(1, now - Math.min(now, this.tickWindow[0]!.t));
-    const expected = Math.max(1, Math.round(Math.min(5000, spanMs) / this.POSITION_SEND_INTERVAL));
-    return Math.min(100, Math.round((missed / expected) * 100));
+    return this.telemetry.packetLoss(Date.now());
   }
 
   getJitter(): number {
-    if (this.pingHistory.length < 2) return 0;
-    let sumDiff = 0;
-    for (let i = 1; i < this.pingHistory.length; i++) {
-      sumDiff += Math.abs(this.pingHistory[i] - this.pingHistory[i - 1]);
-    }
-    return Math.round(sumDiff / (this.pingHistory.length - 1));
+    return this.telemetry.jitter();
   }
 
   private handlePong(timestamp: number): void {
-    const rtt = Date.now() - timestamp;
-    if (rtt >= 0 && rtt < 10000) {
-      this.ping = Math.round(rtt);
-      this.pingHistory.push(rtt);
-      if (this.pingHistory.length > this.PING_HISTORY_MAX) {
-        this.pingHistory.shift();
-      }
-    }
+    this.telemetry.onPong(timestamp, Date.now());
   }
 
   private pruneStateHistory(ackSeq: number): void {

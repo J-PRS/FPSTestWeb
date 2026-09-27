@@ -1867,3 +1867,4 @@ speciesKit: bite() helper collapses 11 near-identical melee hit call sites
 RemotePlayer death physics extracted to entities/remoteDeath.ts (corpse state + launch/step/reset)
 combat.ts + lightning.ts: processProjectileExplosion now takes an ExplosionArgs object (15 positional params -> named); dropped dead explosionType param
 sendShot/sendAOEShot take arg objects now (7-positional-param smell, same fix as ExplosionArgs)
+NetworkManager ping/loss/jitter telemetry extracted to networking/netTelemetry.ts
