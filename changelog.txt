@@ -1904,3 +1904,4 @@ Room.sims registry: bots + flags tick through one list — GameServer just itera
 BUGFIX: flag carrier disconnecting kept the flag 'carried' forever — removePlayerCompletely now drops it (same rule as dying)
 GET /join?mode=X quick-join — picks emptiest live room of that mode or spins up <mode>-N; maps/<mode>.json is now the fallback spec for ad-hoc room names; lobby gets NUGGETS/CTF/DM quick-play buttons
 team-aware spawning — teamBases from map bases; team members spawn near their own base (enemy clearance breaks the tie); join assigns team BEFORE spawn so even first spawn is sided
+CTF: capture requires your own flag to be home (classic rule) — no capping while yours is stolen/dropped
