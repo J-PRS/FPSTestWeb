@@ -236,7 +236,16 @@ export class MessageHandler {
     this.playerManager.updatePosition(playerId, msg.position, msg.rotation, msg.velocity, msg.seq);
     player.hasReceivedPosition = true;
     if (msg.ping !== undefined) player.ping = msg.ping;
+    this.pushHistory(player, now);
     // Don't broadcast immediately — batched in tickUpdate
+  }
+
+  private static readonly HISTORY_MS = 400; // rewind window for lag comp
+  private pushHistory(player: { history: { t: number; x: number; y: number; z: number }[]; position: { x: number; y: number; z: number } }, now: number): void {
+    player.history.push({ t: now, x: player.position.x, y: player.position.y, z: player.position.z });
+    while (player.history.length > 0 && player.history[0]!.t < now - MessageHandler.HISTORY_MS) {
+      player.history.shift();
+    }
   }
 
   // Declared discontinuity (warp beacon, respawn): position arrives
@@ -256,6 +265,7 @@ export class MessageHandler {
     player.lastValidVelocity = { ...msg.velocity };
     player.lastValidRotation = { ...msg.rotation };
     player.hasReceivedPosition = true;
+    this.pushHistory(player, Date.now());
     // Relay so observers snap instead of interpolating across the gap
     this.broadcast({ type: 'teleport', playerId, position: msg.position, velocity: msg.velocity }, playerId);
   }

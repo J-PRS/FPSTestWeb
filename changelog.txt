@@ -1880,3 +1880,4 @@ Room model: GameServer now dispatches to per-match Room containers (players+sock
 ROADMAP.md = living overhaul manifesto; ?room= client param; in-game chat (T, room-scoped relay, rate-limited, escaped rendering)
 Persistent identity: playerId claims are HMAC(playerId, FPS_SECRET|random-per-boot); token reuse required for claimed names; identity moved to localStorage client-side
 Empty named rooms self-dispose (ballSim.stop + map entry); 16-bot spot check: tick lag flat at ~11ms avg under 19 players
+Lag compensation: 400ms position history per player; hitscan + AOE validate against target rewound by shooter ping (clamped ≤250ms) — shoot the ghost you saw

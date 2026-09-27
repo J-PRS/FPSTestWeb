@@ -3,8 +3,34 @@ import type { PlayerManager } from './PlayerManager.ts';
 import type { WeaponStats } from '../../shared/weapons.ts';
 import { getWeaponStats, WeaponType, directHitAoeBonus } from '../../shared/weapons.ts';
 import { aoeDamage, aoeImpulse, validateHitClaim, validateAoeClaim, type TrackedProjectile } from '../../shared/combat.ts';
+import type { PlayerState } from './types.ts';
 import { CONFIG } from './config.ts';
 import { logger } from './logger.ts';
+
+// Lag compensation: clamp self-reported ping to a sane rewind window —
+// unclamped, a forged 60s "ping" could rewind targets anywhere.
+const MAX_REWIND_MS = 250;
+function clampPing(ping: number): number {
+  return Math.min(Math.max(ping, 0), MAX_REWIND_MS);
+}
+
+// Interpolated position at (now - backMs) from the player's rewind buffer.
+function rewindPos(target: PlayerState, backMs: number): { x: number; y: number; z: number } {
+  const h = target.history;
+  if (h.length === 0) return target.position;
+  const tAt = Date.now() - backMs;
+  if (tAt <= h[0]!.t) return h[0]!;
+  const last = h[h.length - 1]!;
+  if (tAt >= last.t) return target.position;
+  for (let i = h.length - 1; i > 0; i--) {
+    if (h[i - 1]!.t <= tAt) {
+      const a = h[i - 1]!, b = h[i]!;
+      const f = (tAt - a.t) / Math.max(b.t - a.t, 1);
+      return { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f, z: a.z + (b.z - a.z) * f };
+    }
+  }
+  return last;
+}
 
 // How long a hit/knocked-back player stays on the unsuppressed full-rate
 // tick path — covers the shooter's predicted-knockback window (~0.6s)
@@ -84,10 +110,13 @@ export class CombatHandler {
         logger.warn(`Shot rejected: ${playerId} hit claim missing position/airtime`);
         return;
       }
+      // Lag compensation: validate against where the target was when the
+      // shooter saw it (now - ping), not where it is now — otherwise a
+      // 100ms client aims at ghosts by design.
       const verdict = validateHitClaim({
         projectile: proj,
         hitPos: msg.position,
-        targetPos: target.position,
+        targetPos: rewindPos(target, clampPing(player.ping)),
         airtime: msg.airtime,
         shooterVel: player.velocity,
         now: Date.now(),
@@ -265,9 +294,12 @@ export class CombatHandler {
       if (targetId === excludeTargetId) continue; // Skip direct hit target
       if (target.isDead) continue;
 
-      const dx = target.position.x - position.x;
-      const dy = target.position.y - position.y;
-      const dz = target.position.z - position.z;
+      // Lag-comp the victim position the same as hitscan — a rocket
+      // that exploded on the shooter's screen should hit the ghost.
+      const tpos = rewindPos(target, clampPing(player.ping));
+      const dx = tpos.x - position.x;
+      const dy = tpos.y - position.y;
+      const dz = tpos.z - position.z;
       const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
 
       if (dist <= radius) {
