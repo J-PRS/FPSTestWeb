@@ -65,6 +65,11 @@ surface. Detailed research lives in `_reports/`; this file is the current truth.
 3. ~~Map format~~ — landed: `maps/<room>.json` (mode, ball population,
    spawn anchors, bases/objectives, bot count — all clamped with
    defaults; examples swarm/duel/nugwar/ctf). Server bots populate
+   matches AND play objectives (flagGoal: grab exposed enemy flag, run
+   home as carrier, return dropped own flag, defend while flag moves).
+   Server-owned CTF flags landed (RoomFlags: touch pickup, drop on
+   death, planar capture ring, flagUpdate broadcast); live-verified
+   bot flag grabs over the wire.
    matches per spec. Next extensions: terrain ref, species mix,
    smarter bot brains (share a brain with offline bots via shared/).
 4. ~~Server-owned teams/score~~ — landed: rooms assign alpha/bravo on
