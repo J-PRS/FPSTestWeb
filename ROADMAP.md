@@ -56,8 +56,9 @@ surface. Detailed research lives in `_reports/`; this file is the current truth.
   + bot `--room=` flag for split-fleet tests.
 
 ### Next (audit priority order)
-1. **Lobby/matchmaking UI** — server /rooms exists; client needs a room
-   picker + server-owned team/score for MP modes (client assigns today).
+1. ~~Lobby UI~~ — landed: LOBBY button polls /rooms, joins via
+   ?room=NAME reload, create-room input. Next polish: show own room +
+   mode in the panel, mid-match room switching without reload.
 2. **Movement re-sim** — shared/stepPlayer on server during validation.
    BLOCKED on JP's in-flight Player.ts edits — extract the integrator to
    shared/movement.ts when that file settles.
