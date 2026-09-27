@@ -220,6 +220,8 @@ export class Room {
 
   /** Full teardown — every store moves together or a slot/token leaks. */
   removePlayerCompletely(playerId: string, reason: string, log: (m: string, o?: object) => void): void {
+    // A carrier leaving drops the flag — same rule as dying with it.
+    this.flagCarrierDied(playerId);
     this.players.removePlayer(playerId);
     if (this.ffaScores.delete(playerId)) {
       this.broadcast({ type: 'ffaScore', scores: Object.fromEntries(this.ffaScores), winAt: this.modeSpec!.winAt });
