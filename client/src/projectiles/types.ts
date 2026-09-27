@@ -60,10 +60,3 @@ export interface ProjectileConfig {
   wakeVisual?: boolean; // turbulent wake particles marking the growing proxy hitbox (off by default — tuning pending)
 }
 
-export function getProjectileConfig(configs: ProjectileConfig[], weaponType: number): ProjectileConfig | undefined {
-  return configs.find((c: ProjectileConfig) => c.weaponType === weaponType);
-}
-
-export function getProjectileConfigByName(configs: ProjectileConfig[], name: string): ProjectileConfig | undefined {
-  return configs.find((c: ProjectileConfig) => c.name === name);
-}

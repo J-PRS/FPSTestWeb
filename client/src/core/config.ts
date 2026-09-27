@@ -47,11 +47,7 @@ export const LG_CHAIN_DMG_SCALE = 0.5;
 // The constants that remain here are visual/VFX scales only.
 export const ROCKET_RADIUS = 6.0; // Rocket explosion radius (visual)
 
-// Disc constants
-export const DISC_RADIUS = 8.0; // Disc VFX radius — aoeRadius (10m) intentionally exceeds it
 
-// Grenade constants
-export const GRENADE_RADIUS = 10.0; // Grenade explosion radius (visual)
 
 // Mortar — T1/T2 heavy siege shell: slow lob, the biggest splash in the game
 export const MORTAR_RATE = 2.0; // Mortar fire rate — T2 is 0.5 rounds/sec
@@ -329,7 +325,6 @@ export const TOTEM_HEALTH = 200;
 export const TOTEM_RANGE = 105.0;       // engages inside the fog line — sniping from beyond it reads as invisible cheating
 export const TOTEM_MIN_RANGE = 22.0;    // player closer than this → blink away
 export const TOTEM_REFIRE = 2.6;        // seconds between shots
-export const TOTEM_BOLT_SPEED = 110.0;  // fast flat bolt — dodgeable perpendicular
 export const TOTEM_BOLT_DAMAGE = 15;
 export const TOTEM_CHARGE = 0.65;       // aim-beam telegraph — dodgeable, not free
 export const TOTEM_RELOCATE_HOPS = 3;   // shots fired before seeking a new perch
@@ -378,7 +373,6 @@ export const RAKK_STUN = 0.5;
 
 // Renderer constants
 export const PIXEL_SCALE = 4; // Each pixel is 4x4 screen pixels (Doom-style)
-export const RENDERER_PIXEL_RATIO = 1; // Device pixel ratio
 
 // Camera constants
 export const CAMERA_FOV = 90; // Field of view in degrees
@@ -404,9 +398,6 @@ export const CLOUD_WIND_SPEED = 3.0; // Wind speed
 export const CLOUD_MIN_HEIGHT = 500; // Minimum cloud height
 export const CLOUD_MAX_HEIGHT = 900; // Maximum cloud height
 export const CLOUD_SPREAD_RADIUS = 4000; // Cloud spread radius
-export const CLOUD_DEFAULT_COUNT = 50; // Default cloud cluster count
-export const CLOUD_DEFAULT_WIND_SPEED = 5.0; // Default wind speed
-export const CLOUD_DEFAULT_DENSITY = 0.4; // Default cloud density
 export const CLOUD_SPHERES_PER_CLOUD = 10; // Spheres per cloud cluster
 export const CLOUD_DEFAULT_MIN_HEIGHT = 400; // Default minimum height
 export const CLOUD_DEFAULT_MAX_HEIGHT = 800; // Default maximum height
@@ -436,19 +427,13 @@ export const FRAG_MESSAGE_DURATION = 2000; // Milliseconds to show frag message
 export const FRAG_MESSAGE_FADE = 500; // Milliseconds for frag message fade transition
 export const BALL_BASE_RADIUS = 1.2; // Base ball radius
 
-// Input/prediction constants
-export const MAX_INPUT_HISTORY = 100; // Maximum input history entries for replay
+
 
 // Renderer constants
 export const TONE_MAPPING_EXPOSURE = 0.4; // Tone mapping exposure (lower = darker)
 export const BLOOM_LAYER = 7; // objects on this layer feed the bloom buffer (trails, explosions)
 
-// UI constants
-export const FRAG_MESSAGE_TOP_OFFSET = 60; // Pixels from center for frag message
-export const FRAG_MESSAGE_TEXT_SHADOW_X = 1; // Text shadow x offset
-export const FRAG_MESSAGE_TEXT_SHADOW_Y = 1; // Text shadow y offset
-export const FRAG_MESSAGE_TEXT_SHADOW_BLUR = 3; // Text shadow blur
-export const FRAG_MESSAGE_LINE_HEIGHT = 1.5; // Line height multiplier
+
 
 // Explosion physics constants
 export const EXPLOSION_FALLOFF_MULTIPLIER_ROCKET = 2.5; // Rocket explosion falloff multiplier
@@ -464,25 +449,17 @@ export const ACCURACY_NORMALIZATION = 8.0; // Accuracy normalization divisor
 // Game loop constants
 export const MAX_DELTA_TIME = 0.05; // Maximum delta time in seconds
 export const REMOTE_PLAYER_FIXED_DT = 0.016; // Fixed delta time for remote player updates
-export const GAME_LOOP_FIXED_DT = 1 / 15; // Fixed delta time for game loop (15Hz)
 export const DEBUG_LOG_SAMPLE_RATE = 0.05; // 5% of updates log for debugging
 
 // Player constants
 export const MAX_HEALTH = 100; // Maximum player health
-export const PLAYER_ID_LENGTH = 9; // Length of generated player ID
-export const BUTTON_TIMEOUT = 10; // Button click timeout in milliseconds
 
 // Remote player rendering: snapshot interpolation at a fixed delay
 // (INTERP_DELAY lives on RemotePlayer — covers ~2 missed 20Hz packets)
 
 // Effect constants
-export const IMPLOSION_LIFE = 0.35; // Implosion effect lifetime
-export const SHOCK_LIFE = 0.25; // Shockwave lifetime
-export const FLASH_LIFE = 0.09; // Flash lifetime
 
 // Terrain constants
-export const TERRAIN_SIZE = 500.0; // Terrain size
-export const TERRAIN_SUBDIV = 100; // Terrain subdivision
 export const TERRAIN_HEIGHT_SCALE = 125.0; // Terrain height scale
 export const TERRAIN_WORLD_SCALE = 1500.0; // Terrain world scale
 export const TERRAIN_HEIGHTMAP_DIVISOR = 255.0; // Heightmap value divisor

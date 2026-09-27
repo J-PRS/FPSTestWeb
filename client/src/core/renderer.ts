@@ -13,14 +13,7 @@ import {
 import {
   PIXEL_SCALE,
   TONE_MAPPING_EXPOSURE,
-  BLOOM_LAYER,
 } from './config.js';
-
-// Mark an object (and its children) as a bloom emitter — only layer-flagged
-// objects feed the bloom buffer, so bloom can never touch the base scene.
-export function markBloom(root: THREE.Object3D): void {
-  root.traverse(o => o.layers.enable(BLOOM_LAYER));
-}
 
 export interface RendererSetup {
   renderer: THREE.WebGLRenderer;

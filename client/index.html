@@ -94,6 +94,33 @@
       cursor: pointer;
     }
     .keys-reset:hover { background: rgba(255,90,90,0.15); color: #ffb0b0; }
+    /* Central keybinds popup — opened from the side menu's KEYBINDS button */
+    #keys-modal {
+      position: absolute; inset: 0;
+      display: none; align-items: center; justify-content: center;
+      background: rgba(4,7,12,0.55);
+    }
+    #keys-modal.open { display: flex; }
+    #keys-modal .keys-box {
+      width: 560px; max-height: 80vh; overflow-y: auto;
+      background: rgba(10,14,20,0.96);
+      border: 1px solid rgba(58,167,255,0.3); border-radius: 8px;
+      padding: 18px 20px;
+      box-shadow: 0 12px 48px rgba(0,0,0,0.6);
+    }
+    #keys-modal .keys-head {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    #keys-modal .keys-title {
+      font-size: 0.8rem; font-weight: 700; letter-spacing: 0.22em; color: #fff;
+    }
+    #keys-modal .keys-close {
+      background: none; border: none; color: rgba(140,170,195,0.7);
+      font-family: inherit; font-size: 0.9rem; cursor: pointer; padding: 2px 6px;
+    }
+    #keys-modal .keys-close:hover { color: #fff; }
+    .keys-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 18px; }
     #overlay .menu-section {
       font-size: 0.62rem; letter-spacing: 0.2em; font-weight: 600;
       color: rgba(140,170,195,0.6); margin-bottom: 10px;
@@ -268,10 +295,10 @@
           <span>VOLUME</span>
           <input id="vol-input" type="range" min="0" max="1" step="0.05" />
         </div>
+        <button id="keys-open">KEYBINDS</button>
       </div>
-      <div class="menu-section" style="margin-top: 18px;">KEYS</div>
-      <div id="keys-panel"></div>
     </div>
+    <div id="keys-modal"></div>
   </div>
   <script type="module" src="src/main.ts"></script>
 </body>

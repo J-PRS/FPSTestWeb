@@ -20,7 +20,6 @@
     "@typescript-eslint/eslint-plugin": "^8.63.0",
     "@typescript-eslint/parser": "^8.63.0",
     "eslint": "^9.39.4",
-    "eslint-plugin-import": "^2.32.0",
     "eslint-plugin-sonarjs": "^4.1.0",
     "knip": "^6.25.0",
     "oxlint": "^1.73.0",

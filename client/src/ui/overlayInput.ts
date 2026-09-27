@@ -100,8 +100,9 @@ export function wireOverlayInput(deps: OverlayInputDeps) {
     openDrop = null;
   });
 
-  const keysPanel = document.getElementById('keys-panel');
-  if (keysPanel) buildKeysMenu(keysPanel);
+  const keysOpen = document.getElementById('keys-open');
+  const keysModal = document.getElementById('keys-modal');
+  if (keysOpen && keysModal) buildKeysMenu(keysOpen, keysModal);
 
   if (loadoutBar) {
     const weaponOpts = SLOT_WEAPONS.map((cfg, wid) => ({ v: String(wid), label: cfg.displayName }));
