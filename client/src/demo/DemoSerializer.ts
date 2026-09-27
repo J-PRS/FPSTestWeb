@@ -25,7 +25,7 @@ const crcTable = (() => {
 function crc32(data: Uint8Array): number {
   let crc = 0xFFFFFFFF;
   for (let i = 0; i < data.length; i++) {
-    crc = crcTable[(crc ^ data[i]) & 0xFF] ^ (crc >>> 8);
+    crc = crcTable[(crc ^ data[i]!) & 0xFF]! ^ (crc >>> 8);
   }
   return (crc ^ 0xFFFFFFFF) >>> 0;
 }
@@ -36,30 +36,9 @@ function writeString(view: DataView, offset: number, str: string): number {
   view.setUint16(offset, bytes.length, true);
   offset += 2;
   for (let i = 0; i < bytes.length; i++) {
-    view.setUint8(offset++, bytes[i]);
+    view.setUint8(offset++, bytes[i]!);
   }
   return offset;
-}
-
-function readString(view: DataView, offset: number): [string, number] {
-  if (offset + 2 > view.byteLength) {
-    throw new Error('Demo file truncated: cannot read string length');
-  }
-  const len = view.getUint16(offset, true);
-  offset += 2;
-  if (offset + len > view.byteLength) {
-    throw new Error(`Demo file truncated: string needs ${len} bytes but only ${view.byteLength - offset} remain`);
-  }
-  const bytes = new Uint8Array(view.buffer, view.byteOffset + offset, len);
-  const str = new TextDecoder().decode(bytes);
-  return [str, offset + len];
-}
-
-// Check that enough bytes remain for a read of `size` bytes at `offset`.
-function ensureBytes(view: DataView, offset: number, size: number, what: string): void {
-  if (offset + size > view.byteLength) {
-    throw new Error(`Demo file truncated: cannot read ${what} at offset ${offset} (need ${size} bytes, have ${view.byteLength - offset})`);
-  }
 }
 
 // Frame size: 2 + 4 + 12 + 12 + 8 + 1 + 2 + 2 + 1 + 4 = 48 bytes
@@ -195,174 +174,190 @@ export class DemoSerializer {
   }
 
   static deserialize(buffer: ArrayBuffer): DemoFile {
-    const view = new DataView(buffer);
-    let offset = 0;
-
-    // Validate minimum size for header start
-    ensureBytes(view, offset, 1 + 4, 'magic + formatVersion');
-
-    // Validate magic
-    const magic = view.getUint8(offset++);
-    if (magic !== DEMO_MAGIC) {
-      throw new Error(`Invalid demo file: bad magic 0x${magic.toString(16)}`);
-    }
-
-    const formatVersion = view.getInt32(offset, true); offset += 4;
-    if (formatVersion < 1 || formatVersion > DEMO_FORMAT_VERSION) {
-      throw new Error(`Unsupported demo format version ${formatVersion} (supported 1..${DEMO_FORMAT_VERSION})`);
-    }
-
-    const [gameVersion, off1] = readString(view, offset); offset = off1;
-    const timestamp = view.getFloat64(offset, true); offset += 8;
-    const duration = view.getFloat32(offset, true); offset += 4;
-    const totalFrames = view.getUint32(offset, true); offset += 4;
-    const projectileEventCount = view.getUint32(offset, true); offset += 4;
-    const targetEventCount = view.getUint32(offset, true); offset += 4;
-    const checksum = view.getUint32(offset, true); offset += 4;
-    const [description, off2] = readString(view, offset); offset = off2;
-    const startPosX = view.getFloat32(offset, true); offset += 4;
-    const startPosY = view.getFloat32(offset, true); offset += 4;
-    const startPosZ = view.getFloat32(offset, true); offset += 4;
-    const startYaw = view.getFloat32(offset, true); offset += 4;
-    const startPitch = view.getFloat32(offset, true); offset += 4;
-    const startVelX = view.getFloat32(offset, true); offset += 4;
-    const startVelY = view.getFloat32(offset, true); offset += 4;
-    const startVelZ = view.getFloat32(offset, true); offset += 4;
-
-    // projectileLifetime added in format v2; absent in v1
-    let projectileLifetime = 0;
-    if (formatVersion >= 2) {
-      projectileLifetime = view.getFloat32(offset, true); offset += 4;
-    }
-
-    // Verify checksum
-    const checksumOffset = 1 + 4 + 2 + new TextEncoder().encode(gameVersion).length + 8 + 4 + 4 + 4 + 4;
-    const dataAfterChecksum = new Uint8Array(buffer, checksumOffset + 4);
-    const computedChecksum = crc32(dataAfterChecksum);
-    if (computedChecksum !== checksum) {
-      throw new Error('Demo file checksum mismatch - file may be corrupted');
-    }
-
-    // Read frames
-    ensureBytes(view, offset, 4, 'frame count');
-    const frameCount = view.getUint32(offset, true); offset += 4;
-    if (frameCount > 720000) throw new Error(`Invalid frame count: ${frameCount} (max 720000)`);
-    ensureBytes(view, offset, frameCount * FRAME_SIZE, 'frame array');
-    const frames: DemoFrame[] = Array.from({ length: frameCount });
-    for (let i = 0; i < frameCount; i++) {
-      frames[i] = {
-        frameNumber: view.getUint16(offset, true),
-        timestamp: view.getFloat32(offset + 2, true),
-        posX: view.getFloat32(offset + 6, true),
-        posY: view.getFloat32(offset + 10, true),
-        posZ: view.getFloat32(offset + 14, true),
-        velX: view.getFloat32(offset + 18, true),
-        velY: view.getFloat32(offset + 22, true),
-        velZ: view.getFloat32(offset + 26, true),
-        yaw: view.getFloat32(offset + 30, true),
-        pitch: view.getFloat32(offset + 34, true),
-        inputFlags: view.getUint8(offset + 38),
-        mouseDeltaX: view.getInt16(offset + 39, true),
-        mouseDeltaY: view.getInt16(offset + 41, true),
-        jetpackFlags: view.getUint8(offset + 43),
-        jetpackFuel: view.getFloat32(offset + 44, true),
-      };
-      offset += FRAME_SIZE;
-    }
-
-    // Read projectile events
-    ensureBytes(view, offset, 4, 'projectile event count');
-    const projCount = view.getUint32(offset, true); offset += 4;
-    if (projCount > 100000) throw new Error(`Invalid projectile event count: ${projCount} (max 100000)`);
-    ensureBytes(view, offset, projCount * PROJECTILE_EVENT_SIZE, 'projectile event array');
-    const projectileEvents: ProjectileEvent[] = Array.from({ length: projCount });
-    for (let i = 0; i < projCount; i++) {
-      const eventTypeVal = view.getUint8(offset);
-      if (eventTypeVal > 3) {
-        throw new Error(`Invalid projectile event type ${eventTypeVal} at event ${i} (max 3)`);
-      }
-      projectileEvents[i] = {
-        eventType: eventTypeVal as ProjectileEventType,
-        timestamp: view.getFloat32(offset + 1, true),
-        posX: view.getFloat32(offset + 5, true),
-        posY: view.getFloat32(offset + 9, true),
-        posZ: view.getFloat32(offset + 13, true),
-        velX: view.getFloat32(offset + 17, true),
-        velY: view.getFloat32(offset + 21, true),
-        velZ: view.getFloat32(offset + 25, true),
-        projectileId: view.getUint16(offset + 29, true),
-        weaponType: view.getUint8(offset + 31),
-        surfaceNormalX: view.getFloat32(offset + 32, true),
-        surfaceNormalY: view.getFloat32(offset + 36, true),
-        surfaceNormalZ: view.getFloat32(offset + 40, true),
-        targetId: view.getUint16(offset + 44, true),
-        hasPeakPosition: view.getUint8(offset + 46) !== 0,
-        peakPosX: view.getFloat32(offset + 47, true),
-        peakPosY: view.getFloat32(offset + 51, true),
-        peakPosZ: view.getFloat32(offset + 55, true),
-      };
-      offset += PROJECTILE_EVENT_SIZE;
-    }
-
-    // Read target events
-    ensureBytes(view, offset, 4, 'target event count');
-    const targetCount = view.getUint32(offset, true); offset += 4;
-    if (targetCount > 100000) throw new Error(`Invalid target event count: ${targetCount} (max 100000)`);
-    ensureBytes(view, offset, targetCount * TARGET_EVENT_SIZE, 'target event array');
-    const targetEvents: TargetEvent[] = Array.from({ length: targetCount });
-    for (let i = 0; i < targetCount; i++) {
-      const eventTypeVal = view.getUint8(offset);
-      if (eventTypeVal > 4) {
-        throw new Error(`Invalid target event type ${eventTypeVal} at event ${i} (max 4)`);
-      }
-      targetEvents[i] = {
-        eventType: eventTypeVal as TargetEventType,
-        timestamp: view.getFloat32(offset + 1, true),
-        posX: view.getFloat32(offset + 5, true),
-        posY: view.getFloat32(offset + 9, true),
-        posZ: view.getFloat32(offset + 13, true),
-        velX: view.getFloat32(offset + 17, true),
-        velY: view.getFloat32(offset + 21, true),
-        velZ: view.getFloat32(offset + 25, true),
-        targetId: view.getUint16(offset + 29, true),
-        targetType: view.getUint8(offset + 31),
-        health: view.getFloat32(offset + 32, true),
-        hasPeakPosition: view.getUint8(offset + 36) !== 0,
-        peakPosX: view.getFloat32(offset + 37, true),
-        peakPosY: view.getFloat32(offset + 41, true),
-        peakPosZ: view.getFloat32(offset + 45, true),
-      };
-      offset += TARGET_EVENT_SIZE;
-    }
-
-    // Validate header counts against actual array lengths (catches silent corruption
-    // where the header count prefixes disagree with the per-array count prefixes).
-    if (totalFrames !== frames.length) {
-      throw new Error(`Demo file header totalFrames (${totalFrames}) != actual frame count (${frames.length})`);
-    }
-    if (projectileEventCount !== projectileEvents.length) {
-      throw new Error(`Demo file header projectileEventCount (${projectileEventCount}) != actual (${projectileEvents.length})`);
-    }
-    if (targetEventCount !== targetEvents.length) {
-      throw new Error(`Demo file header targetEventCount (${targetEventCount}) != actual (${targetEvents.length})`);
-    }
-
-    return {
-      header: {
-        magic, formatVersion, gameVersion, timestamp, duration,
-        totalFrames, projectileEventCount, targetEventCount, checksum, description,
-        startPosX, startPosY, startPosZ, startYaw, startPitch,
-        startVelX, startVelY, startVelZ, projectileLifetime,
-      },
-      frames,
-      projectileEvents,
-      targetEvents,
-    };
+    const r = new Reader(buffer);
+    const header = readDemoHeader(r, buffer);
+    const frames = readFrames(r);
+    const projectileEvents = readProjectileEvents(r);
+    const targetEvents = readTargetEvents(r);
+    validateHeaderCounts(header, frames, projectileEvents, targetEvents);
+    return { header, frames, projectileEvents, targetEvents };
   }
 
   // Serialize to Blob for file download
   static toBlob(data: DemoFile): Blob {
     const buffer = this.serialize(data);
     return new Blob([buffer], { type: 'application/octet-stream' });
+  }
+}
+
+// Little-endian cursor over an ArrayBuffer with bounds checking.
+class Reader {
+  private view: DataView;
+  private offset = 0;
+
+  constructor(buffer: ArrayBuffer) {
+    this.view = new DataView(buffer);
+  }
+
+  ensure(size: number, what: string): void {
+    if (this.offset + size > this.view.byteLength) {
+      throw new Error(`Demo file truncated: cannot read ${what}`);
+    }
+  }
+
+  u8(): number { const v = this.view.getUint8(this.offset); this.offset += 1; return v; }
+  u16(): number { const v = this.view.getUint16(this.offset, true); this.offset += 2; return v; }
+  u32(): number { const v = this.view.getUint32(this.offset, true); this.offset += 4; return v; }
+  i16(): number { const v = this.view.getInt16(this.offset, true); this.offset += 2; return v; }
+  i32(): number { const v = this.view.getInt32(this.offset, true); this.offset += 4; return v; }
+  f32(): number { const v = this.view.getFloat32(this.offset, true); this.offset += 4; return v; }
+  f64(): number { const v = this.view.getFloat64(this.offset, true); this.offset += 8; return v; }
+
+  str(): string {
+    this.ensure(2, 'string length');
+    const len = this.u16();
+    this.ensure(len, `string of ${len} bytes`);
+    const bytes = new Uint8Array(this.view.buffer, this.view.byteOffset + this.offset, len);
+    this.offset += len;
+    return new TextDecoder().decode(bytes);
+  }
+}
+
+function readDemoHeader(r: Reader, buffer: ArrayBuffer): DemoFile['header'] {
+  // Validate minimum size for header start
+  r.ensure(1 + 4, 'magic + formatVersion');
+
+  const magic = r.u8();
+  if (magic !== DEMO_MAGIC) {
+    throw new Error(`Invalid demo file: bad magic 0x${magic.toString(16)}`);
+  }
+
+  const formatVersion = r.i32();
+  if (formatVersion < 1 || formatVersion > DEMO_FORMAT_VERSION) {
+    throw new Error(`Unsupported demo format version ${formatVersion} (supported 1..${DEMO_FORMAT_VERSION})`);
+  }
+
+  const gameVersion = r.str();
+  const timestamp = r.f64();
+  const duration = r.f32();
+  const totalFrames = r.u32();
+  const projectileEventCount = r.u32();
+  const targetEventCount = r.u32();
+  const checksum = r.u32();
+  const description = r.str();
+  const startPosX = r.f32();
+  const startPosY = r.f32();
+  const startPosZ = r.f32();
+  const startYaw = r.f32();
+  const startPitch = r.f32();
+  const startVelX = r.f32();
+  const startVelY = r.f32();
+  const startVelZ = r.f32();
+
+  // projectileLifetime added in format v2; absent in v1
+  const projectileLifetime = formatVersion >= 2 ? r.f32() : 0;
+
+  // Verify checksum
+  const checksumOffset = 1 + 4 + 2 + new TextEncoder().encode(gameVersion).length + 8 + 4 + 4 + 4 + 4;
+  const dataAfterChecksum = new Uint8Array(buffer, checksumOffset + 4);
+  if (crc32(dataAfterChecksum) !== checksum) {
+    throw new Error('Demo file checksum mismatch - file may be corrupted');
+  }
+
+  return {
+    magic, formatVersion, gameVersion, timestamp, duration,
+    totalFrames, projectileEventCount, targetEventCount, checksum, description,
+    startPosX, startPosY, startPosZ, startYaw, startPitch,
+    startVelX, startVelY, startVelZ, projectileLifetime,
+  };
+}
+
+// Read a count-prefixed array of fixed-size records, with a sanity cap.
+function readRecordCount(r: Reader, what: string, recordSize: number, max: number): number {
+  r.ensure(4, `${what} count`);
+  const count = r.u32();
+  if (count > max) throw new Error(`Invalid ${what} count: ${count} (max ${max})`);
+  r.ensure(count * recordSize, `${what} array`);
+  return count;
+}
+
+function readFrames(r: Reader): DemoFrame[] {
+  const count = readRecordCount(r, 'frame', FRAME_SIZE, 720000);
+  const frames: DemoFrame[] = Array.from({ length: count });
+  for (let i = 0; i < count; i++) {
+    frames[i] = {
+      frameNumber: r.u16(),
+      timestamp: r.f32(),
+      posX: r.f32(), posY: r.f32(), posZ: r.f32(),
+      velX: r.f32(), velY: r.f32(), velZ: r.f32(),
+      yaw: r.f32(), pitch: r.f32(),
+      inputFlags: r.u8(),
+      mouseDeltaX: r.i16(),
+      mouseDeltaY: r.i16(),
+      jetpackFlags: r.u8(),
+      jetpackFuel: r.f32(),
+    };
+  }
+  return frames;
+}
+
+function readProjectileEvents(r: Reader): ProjectileEvent[] {
+  const count = readRecordCount(r, 'projectile event', PROJECTILE_EVENT_SIZE, 100000);
+  const events: ProjectileEvent[] = Array.from({ length: count });
+  for (let i = 0; i < count; i++) {
+    const eventTypeVal = r.u8();
+    if (eventTypeVal > 3) {
+      throw new Error(`Invalid projectile event type ${eventTypeVal} at event ${i} (max 3)`);
+    }
+    events[i] = {
+      eventType: eventTypeVal as ProjectileEventType,
+      timestamp: r.f32(),
+      posX: r.f32(), posY: r.f32(), posZ: r.f32(),
+      velX: r.f32(), velY: r.f32(), velZ: r.f32(),
+      projectileId: r.u16(),
+      weaponType: r.u8(),
+      surfaceNormalX: r.f32(), surfaceNormalY: r.f32(), surfaceNormalZ: r.f32(),
+      targetId: r.u16(),
+      hasPeakPosition: r.u8() !== 0,
+      peakPosX: r.f32(), peakPosY: r.f32(), peakPosZ: r.f32(),
+    };
+  }
+  return events;
+}
+
+function readTargetEvents(r: Reader): TargetEvent[] {
+  const count = readRecordCount(r, 'target event', TARGET_EVENT_SIZE, 100000);
+  const events: TargetEvent[] = Array.from({ length: count });
+  for (let i = 0; i < count; i++) {
+    const eventTypeVal = r.u8();
+    if (eventTypeVal > 4) {
+      throw new Error(`Invalid target event type ${eventTypeVal} at event ${i} (max 4)`);
+    }
+    events[i] = {
+      eventType: eventTypeVal as TargetEventType,
+      timestamp: r.f32(),
+      posX: r.f32(), posY: r.f32(), posZ: r.f32(),
+      velX: r.f32(), velY: r.f32(), velZ: r.f32(),
+      targetId: r.u16(),
+      targetType: r.u8(),
+      health: r.f32(),
+      hasPeakPosition: r.u8() !== 0,
+      peakPosX: r.f32(), peakPosY: r.f32(), peakPosZ: r.f32(),
+    };
+  }
+  return events;
+}
+
+// Validate header counts against actual array lengths (catches silent corruption
+// where the header count prefixes disagree with the per-array count prefixes).
+function validateHeaderCounts(header: DemoFile['header'], frames: DemoFrame[], projectileEvents: ProjectileEvent[], targetEvents: TargetEvent[]): void {
+  if (header.totalFrames !== frames.length) {
+    throw new Error(`Demo file header totalFrames (${header.totalFrames}) != actual frame count (${frames.length})`);
+  }
+  if (header.projectileEventCount !== projectileEvents.length) {
+    throw new Error(`Demo file header projectileEventCount (${header.projectileEventCount}) != actual (${projectileEvents.length})`);
+  }
+  if (header.targetEventCount !== targetEvents.length) {
+    throw new Error(`Demo file header targetEventCount (${header.targetEventCount}) != actual (${targetEvents.length})`);
   }
 }
