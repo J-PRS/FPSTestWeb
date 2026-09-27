@@ -58,6 +58,9 @@ export class Player {
   // camera rig). Toggled by the 'spectate' bind (V).
   private spectating = false;
   get isSpectating(): boolean { return this.spectating; }
+  // HUD hook — spectating drops the combat chrome (crosshair/health/belt)
+  // and shows an exit hint instead
+  onSpectate: ((on: boolean) => void) | null = null;
   toggleSpectator(): void {
     if (this.isDead) return; // dead already gives you this cam
     this.spectating = !this.spectating;
@@ -70,6 +73,7 @@ export class Player {
       this.jetPending = false;
     }
     this.model?.setVisible(!this.spectating && this.thirdPerson && !this.isDead);
+    this.onSpectate?.(this.spectating);
   }
 
   freezeInput(): void {
@@ -483,6 +487,12 @@ export class Player {
   }
 
   update(dt: number): void {
+    // Dying while spectating: death owns the cam now — drop the flag so
+    // respawn doesn't leave the player stuck flying
+    if (this.spectating && this.isDead) {
+      this.spectating = false;
+      this.onSpectate?.(false);
+    }
     if (this.isDead || this.spectating) {
       const obInput = this.readMoveInput();
       // T1/T2 observer mode: free-look + fly till respawn

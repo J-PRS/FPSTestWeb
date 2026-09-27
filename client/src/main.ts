@@ -246,6 +246,12 @@ async function init(): Promise<void> {
   };
 
   wirePlayerHooks({ player, combat, effects, viewModel, speedLines });
+  // Spectator fly: strip the combat HUD, leave only a "SPECTATING" hint
+  player.onSpectate = (on) => {
+    if (on) { hud.hide(); hud.setSpectatorHint(true); }
+    // Died mid-flight: the death path owns the HUD — don't resurface it
+    else { hud.setSpectatorHint(false); if (!player.isDead) hud.show(); }
+  };
   profiler.markTime('playerCreated');
 
   // Offline death path — the server's kill+respawn round-trip replicated

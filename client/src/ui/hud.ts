@@ -194,6 +194,27 @@ export class HUD {
     }
   }
 
+  // Spectator chrome: HUD hides entirely while flying; this hint is all
+  // that remains so the exit key stays discoverable.
+  private spectateHint: HTMLDivElement | null = null;
+
+  setSpectatorHint(on: boolean): void {
+    if (on && !this.spectateHint) {
+      const d = document.createElement('div');
+      d.style.cssText = `
+        position:absolute; top:14px; left:50%; transform:translateX(-50%);
+        pointer-events:none; z-index:5; color:#cfe8ff; opacity:0.7;
+        font:600 13px/1 monospace; letter-spacing:0.15em; text-shadow:0 1px 3px #000;
+      `;
+      d.textContent = 'SPECTATING';
+      document.body.appendChild(d);
+      this.spectateHint = d;
+    } else if (!on && this.spectateHint) {
+      this.spectateHint.remove();
+      this.spectateHint = null;
+    }
+  }
+
   private fpsAccum = 0;
   private fpsFrames = 0;
   private fpsValue = 0;
