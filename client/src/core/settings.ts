@@ -15,6 +15,7 @@ type Schema = {
   'fps-belt': string;         // 'disc' | 'grenade'
   'fps-skill': string;        // SkillId
   'fps-volume': number;       // master volume 0..1
+  'fps-keys': string;         // "forward=KeyW,back=KeyS,..." — see core/keybinds.ts
 };
 
 const DEFAULTS: Schema = {
@@ -28,6 +29,7 @@ const DEFAULTS: Schema = {
   'fps-belt': 'disc',
   'fps-skill': 'bounce',
   'fps-volume': 0.7,
+  'fps-keys': '',
 };
 
 const parse = {

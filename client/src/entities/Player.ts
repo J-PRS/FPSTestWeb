@@ -8,6 +8,7 @@ import { PlayerSkills } from './player/skills.js';
 import { MovementController, MovementState } from './movement.js';
 import { WeaponType } from '../../../shared/weapons.js';
 import { settings } from '../core/settings.js';
+import { matchCode, isDown, type BindAction } from '../core/keybinds.js';
 import { audio } from '../core/audio.js';
 import { PlayerModel } from './PlayerModel.js';
 import { PlayerVisuals } from './PlayerVisuals.js';
@@ -271,26 +272,25 @@ export class Player {
     document.addEventListener('keydown', (e) => {
       if (this.inputFrozen) return;
       this.keys[e.code] = true;
-      if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
+      if (matchCode('jump', e.code)) {
         this.jumpHeld = true;
       }
-      if (e.code === 'KeyC') {
+      if (matchCode('belt', e.code)) {
         if (this.beltItem === 'disc') this.discHeld = true;
         else this.grenadeHeld = true;
       }
-      if (e.code === 'KeyE') {
+      if (matchCode('melee', e.code)) {
         this.tryMelee();
       }
-      if (e.code === 'KeyZ') {
+      if (matchCode('camera', e.code)) {
         this.thirdPerson = !this.thirdPerson;
         this.model?.setVisible(this.thirdPerson && !this.isDead);
       }
-      if (e.code === 'KeyQ' && !e.repeat) this.skills.press(this.skill);
-      if (e.code.startsWith('Digit')) {
-        const idx = Number(e.code[5]) - 1;
-        if (idx >= 0 && idx < this.loadout.length && idx !== this.weaponIndex) {
-          this.weaponIndex = idx;
-          if (this.onWeaponSwitch) this.onWeaponSwitch(this.loadout[idx]);
+      if (matchCode('skill', e.code) && !e.repeat) this.skills.press(this.skill);
+      for (let i = 0; i < Player.LOADOUT_SLOTS; i++) {
+        if (matchCode(`slot${i}` as BindAction, e.code) && i !== this.weaponIndex) {
+          this.weaponIndex = i;
+          if (this.onWeaponSwitch) this.onWeaponSwitch(this.loadout[i]);
         }
       }
     });
@@ -313,11 +313,11 @@ export class Player {
     document.addEventListener('keyup', (e) => {
       if (this.inputFrozen) return;
       this.keys[e.code] = false;
-      if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
+      if (matchCode('jump', e.code)) {
         this.jumpHeld = false;
       }
-      if (e.code === 'KeyQ') this.skills.release(this.skill);
-      if (e.code === 'KeyC') {
+      if (matchCode('skill', e.code)) this.skills.release(this.skill);
+      if (matchCode('belt', e.code)) {
         this.discHeld = false;
         this.grenadeHeld = false;
       }
@@ -325,13 +325,30 @@ export class Player {
     document.addEventListener('mousedown', (e) => {
       if (this.inputFrozen) return;
       if (!document.pointerLockElement) return; // ignore clicks that lock the cursor
+      this.keys[`Mouse${e.button}`] = true;
       if (e.button === 0) { this.firePending = true; this.mouseHeld = true; this.needsRelease = false; }
       if (e.button === 2) { this.jetPending = true; }
+      // Buttons bound to key actions (keybinds allow Mouse0-4) need the
+      // same press/release semantics as keyboard codes
+      if (matchCode('jump', `Mouse${e.button}`)) this.jumpHeld = true;
+      if (matchCode('skill', `Mouse${e.button}`)) this.skills.press(this.skill);
+      if (matchCode('belt', `Mouse${e.button}`)) {
+        if (this.beltItem === 'disc') this.discHeld = true; else this.grenadeHeld = true;
+      }
+      if (matchCode('melee', `Mouse${e.button}`)) this.tryMelee();
+      if (matchCode('camera', `Mouse${e.button}`)) {
+        this.thirdPerson = !this.thirdPerson;
+        this.model?.setVisible(this.thirdPerson && !this.isDead);
+      }
     });
     document.addEventListener('mouseup', (e) => {
       if (this.inputFrozen) return;
+      this.keys[`Mouse${e.button}`] = false;
       if (e.button === 0) this.mouseHeld = false;
       if (e.button === 2) { this.jetPending = false; }
+      if (matchCode('jump', `Mouse${e.button}`)) this.jumpHeld = false;
+      if (matchCode('skill', `Mouse${e.button}`)) this.skills.release(this.skill);
+      if (matchCode('belt', `Mouse${e.button}`)) { this.discHeld = false; this.grenadeHeld = false; }
     });
     document.addEventListener('contextmenu', (e) => e.preventDefault());
     document.addEventListener('mousemove', (e) => {
@@ -391,10 +408,10 @@ export class Player {
 
   getInputState(): { forward: number; right: number; jumpPressed: boolean; jumpHeld: boolean; skiHeld: boolean; firePressed: boolean; jetHeld: boolean; discHeld: boolean; grenadeHeld: boolean } {
     let forward = 0, right = 0;
-    if (this.keys['KeyW'] || this.keys['ArrowUp'])    forward += 1;
-    if (this.keys['KeyS'] || this.keys['ArrowDown'])  forward -= 1;
-    if (this.keys['KeyA'] || this.keys['ArrowLeft'])  right -= 1;
-    if (this.keys['KeyD'] || this.keys['ArrowRight']) right += 1;
+    if (isDown(this.keys, 'forward') || this.keys['ArrowUp'])    forward += 1;
+    if (isDown(this.keys, 'back') || this.keys['ArrowDown'])     forward -= 1;
+    if (isDown(this.keys, 'left') || this.keys['ArrowLeft'])     right -= 1;
+    if (isDown(this.keys, 'right') || this.keys['ArrowRight'])   right += 1;
 
     const mlen = Math.sqrt(forward * forward + right * right);
     if (mlen > 0) { forward /= mlen; right /= mlen; }
@@ -404,7 +421,7 @@ export class Player {
       right,
       jumpPressed: this.jumpHeld,
       jumpHeld: this.jumpHeld,
-      skiHeld: this.keys['Space'] || false,
+      skiHeld: isDown(this.keys, 'ski'),
       firePressed: this.firePending,
       jetHeld: this.jetPending,
       discHeld: this.discHeld,
@@ -537,10 +554,10 @@ export class Player {
     const rgt = this.getRightXZ();
 
     let forward = 0, right = 0;
-    if (this.keys['KeyW'] || this.keys['ArrowUp'])    forward += 1;
-    if (this.keys['KeyS'] || this.keys['ArrowDown'])  forward -= 1;
-    if (this.keys['KeyA'] || this.keys['ArrowLeft'])  right -= 1;
-    if (this.keys['KeyD'] || this.keys['ArrowRight']) right += 1;
+    if (isDown(this.keys, 'forward') || this.keys['ArrowUp'])    forward += 1;
+    if (isDown(this.keys, 'back') || this.keys['ArrowDown'])     forward -= 1;
+    if (isDown(this.keys, 'left') || this.keys['ArrowLeft'])     right -= 1;
+    if (isDown(this.keys, 'right') || this.keys['ArrowRight'])   right += 1;
 
     // Normalize input
     const mlen = Math.sqrt(forward * forward + right * right);
@@ -549,7 +566,7 @@ export class Player {
     return {
       forward, right,
       jumpHeld: this.jumpHeld, // autoHop: held = pressed
-      skiHeld: this.keys['Space'] || false,
+      skiHeld: isDown(this.keys, 'ski'),
       // World-space move dir for jetpack thrust
       moveX: fwd.x * forward + rgt.x * right,
       moveZ: fwd.y * forward + rgt.y * right,
