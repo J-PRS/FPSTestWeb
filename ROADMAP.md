@@ -70,8 +70,8 @@ surface. Detailed research lives in `_reports/`; this file is the current truth.
    Server-owned CTF flags landed (RoomFlags: touch pickup, drop on
    death, planar capture ring, flagUpdate broadcast); live-verified
    bot flag grabs over the wire.
-   matches per spec. Next extensions: terrain ref, species mix,
-   smarter bot brains (share a brain with offline bots via shared/).
+   Next extensions: terrain ref, species mix, smarter bot brains
+   (share a brain with offline bots via shared/).
 4. ~~Server-owned teams/score~~ — landed: rooms assign alpha/bravo on
    join, {type:'bank'} feeds a room scoreboard, teamScore/matchEnd/
    matchStart broadcast; verified live. REMAINING seam: the client's
