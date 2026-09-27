@@ -1899,3 +1899,4 @@ DM creature kills score too: BallSim.onKilled(by) → Room.creatureKill → awar
 Late joiners into dm rooms get the live ffaScores board in gameState; client echoes the top-3 board in the feed
 ffaScores entries expire with the player — removePlayerCompletely drops the row and rebroadcasts
 Shared bot brain (shared/botBrain.ts): offline GameBot and server ServerBots now run the same decision core — target pick, objective>pickup>wander priority, orbit ring, flinch recoil, burst-fire with lead+scatter. Server adds a hit roll on the brain's aim; combat funnel flinches bot brains via onHit.
+Room.sims registry: bots + flags tick through one list — GameServer just iterates room.sims; future server-side systems (deployables, generators) register there

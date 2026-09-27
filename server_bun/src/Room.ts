@@ -49,6 +49,8 @@ export class Room {
   readonly bots: ServerBots;
   /** CTF flag authority — only when the mode has flags AND the map has bases. */
   readonly flags: RoomFlags | null = null;
+  /** Server-side simulations ticked each room tick, in order. */
+  readonly sims: { tick(dt: number): void }[] = [];
 
   constructor(name: string, field: Heightfield | null, mode = '', spec?: MapSpec) {
     this.name = name;
@@ -98,6 +100,11 @@ export class Room {
       });
       this.flags = new RoomFlags(this, { alpha: snap(bases.alpha), bravo: snap(bases.bravo) });
     }
+    // The tick registry — GameServer steps every entry per tick; new
+    // server-side systems (deployables, generators) register here instead
+    // of editing the tick loop.
+    this.sims.push({ tick: (dt) => this.bots.tick(dt) });
+    if (this.flags) this.sims.push({ tick: (dt) => this.tickFlags(dt) });
   }
 
   /** Flag tick — called from GameServer's room tick. Captures feed the
