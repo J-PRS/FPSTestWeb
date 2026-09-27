@@ -315,6 +315,41 @@ rpgSight.position.set(0, 0.14, -0.1);
 rpg.add(rpgSight);
 rpg.visible = false;
 
+// Sidearms — compact silhouettes so the hold-out swap reads instantly.
+// Pistol: slide + stubby barrel + raked grip.
+const pistol = new THREE.Group();
+pistol.add(mkTube(0.03, 0.03, 0.16, -0.08, darkMat)); // barrel
+const slide = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.07, 0.24), bodyMat);
+slide.position.set(0, 0.02, -0.05);
+pistol.add(slide);
+const pGrip = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.15, 0.08), darkMat);
+pGrip.position.set(0, -0.09, 0.06);
+pGrip.rotation.x = 0.35;
+pistol.add(pGrip);
+const pSight = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.03, 0.02), darkMat);
+pSight.position.set(0, 0.07, -0.15);
+pistol.add(pSight);
+pistol.visible = false;
+
+// Revolver: long barrel + big cylinder + hammer — the hand-cannon profile.
+const revolver = new THREE.Group();
+revolver.add(mkTube(0.032, 0.032, 0.24, -0.14, darkMat)); // long barrel
+const cyl = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.08, 8), bodyMat);
+cyl.rotation.z = Math.PI / 2;
+cyl.position.set(0, 0, 0.02);
+revolver.add(cyl);
+const frame = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.045, 0.15), bodyMat);
+frame.position.set(0, 0.045, -0.06);
+revolver.add(frame);
+const rGrip = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.14, 0.08), darkMat);
+rGrip.position.set(0, -0.09, 0.09);
+rGrip.rotation.x = 0.45;
+revolver.add(rGrip);
+const hammer = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.05, 0.025), darkMat);
+hammer.position.set(0, 0.05, 0.1);
+revolver.add(hammer);
+revolver.visible = false;
+
 // Map is keyed by WeaponType, never positionally — Grenade/Slam/Melee
 // have no gun model (belt throw / fist), so they map to nothing.
 const models: [number, THREE.Group][] = [
@@ -331,6 +366,8 @@ const models: [number, THREE.Group][] = [
   [WeaponType.Shotgun, sg],
   [WeaponType.Cannon, cn],
   [WeaponType.RocketLauncher, rpg],
+  [WeaponType.Pistol, pistol],
+  [WeaponType.Revolver, revolver],
 ];
 for (const [wt, g] of models) {
   weapons.set(wt, g);

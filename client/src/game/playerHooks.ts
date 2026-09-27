@@ -36,6 +36,8 @@ export function wirePlayerHooks(c: PlayerHookCtx): void {
   player.onShotgun = combat.onShotgun;
   player.onCannon = combat.onCannon;
   player.onRocketLauncher = combat.onRocketLauncher;
+  player.onPistol = combat.onPistol;
+  player.onRevolver = combat.onRevolver;
   player.onWarpThrow = (pos) => { effects.spawnImpact(pos, player.vel); sfx.warpThrow(); };
   player.onWarpTick = (pos) => effects.spawnWarpTrail(pos); // spark trail ON the beacon
   player.onWarp = (from, to) => {

@@ -8,6 +8,7 @@ import {
   ROCKET_CONFIG, DISC_CONFIG, GRENADE_CONFIG, CHAINGUN_CONFIG,
   MORTAR_CONFIG, GL_CONFIG, FLAK_CONFIG, PLASMA_CONFIG, RAILGUN_CONFIG,
   BELT_DISC_CONFIG, SHOTGUN_CONFIG, CANNON_CONFIG, RKT_CONFIG,
+  PISTOL_CONFIG, REVOLVER_CONFIG,
 } from '../../projectiles/index.js';
 import type { ProjectileConfig } from '../../projectiles/types.js';
 import { THROW_RELEASE } from '../../entities/ViewModel.js';
@@ -184,6 +185,17 @@ export function createFire(deps: CombatDeps, hooks: FireHooks) {
     spawnProjectile(RKT_CONFIG, e);
   }
 
+  // Hold-out sidearms — single tracers, light kick (pistol), heavy (revolver)
+  function onPistol(e: FireArgs): void {
+    deps.lazyViewModel()?.kick(0.3);
+    spawnProjectile(PISTOL_CONFIG, e);
+  }
+
+  function onRevolver(e: FireArgs): void {
+    deps.lazyViewModel()?.kick(1.0);
+    spawnProjectile(REVOLVER_CONFIG, e);
+  }
+
   function onPlasma(e: FireArgs): void {
     deps.lazyViewModel()?.kick(0.4);
     spawnProjectile(PLASMA_CONFIG, e);
@@ -245,6 +257,7 @@ export function createFire(deps: CombatDeps, hooks: FireHooks) {
     spawnProjectile,
     onFire, onDisc, onGrenade, onDiscLauncher, onChaingun, onMortar, onGrenadeLauncher,
     onFlak, onPlasma, onRailgun, onShotgun, onCannon, onRocketLauncher,
+    onPistol, onRevolver,
     onMelee: melee,
   };
 }

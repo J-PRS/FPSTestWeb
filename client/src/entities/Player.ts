@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-import { JET_FORCE_UP, JET_FORCE_DIR, MAX_ENERGY, MAX_HEALTH, JET_DRAIN, JET_CHARGE, FIRE_RATE, DISC_RATE, GRENADE_RATE, CHAINGUN_RATE, MORTAR_RATE, GL_RATE, FLAK_RATE, PLASMA_RATE, RAILGUN_RATE, LG_RATE, SHOTGUN_RATE, CANNON_RATE, RKT_RATE, MELEE_COOLDOWN, MELEE_LUNGE } from '../core/config.js';
+import { JET_FORCE_UP, JET_FORCE_DIR, MAX_ENERGY, MAX_HEALTH, JET_DRAIN, JET_CHARGE, FIRE_RATE, DISC_RATE, GRENADE_RATE, CHAINGUN_RATE, MORTAR_RATE, GL_RATE, FLAK_RATE, PLASMA_RATE, RAILGUN_RATE, LG_RATE, SHOTGUN_RATE, CANNON_RATE, RKT_RATE, PISTOL_RATE, REVOLVER_RATE, MELEE_COOLDOWN, MELEE_LUNGE } from '../core/config.js';
 
 import { Terrain } from '../world/terrain.js';
 import { PlayerSkills } from './player/skills.js';
@@ -180,14 +180,25 @@ export class Player {
     settings.set('fps-belt', item);
   }
   private wheelAcc = 0; // accumulates deltaY for smooth-scroll mice
-  private static readonly WEAPON_RATES = [FIRE_RATE, DISC_RATE, CHAINGUN_RATE, MORTAR_RATE, GL_RATE, FLAK_RATE, PLASMA_RATE, RAILGUN_RATE, LG_RATE, SHOTGUN_RATE, CANNON_RATE, RKT_RATE];
+  private static readonly WEAPON_RATES = [FIRE_RATE, DISC_RATE, CHAINGUN_RATE, MORTAR_RATE, GL_RATE, FLAK_RATE, PLASMA_RATE, RAILGUN_RATE, LG_RATE, SHOTGUN_RATE, CANNON_RATE, RKT_RATE, PISTOL_RATE, REVOLVER_RATE];
   // wid (loadout/WEAPON_RATES index) → WeaponType wire id. The enum has
   // Grenade=2/Slam=8/Railgun=9/Melee=10 gaps, so positional ids diverge
   // from wid 2 onward — viewmodel/HUD consumers need this mapping.
   static widToWeaponType(wid: number): WeaponType {
-    return ([0, 1, 3, 4, 5, 6, 7, 9, 12, 13, 14, 15] as const)[wid] ?? WeaponType.Rocket;
+    return ([0, 1, 3, 4, 5, 6, 7, 9, 12, 13, 14, 15, 16, 17] as const)[wid] ?? WeaponType.Rocket;
   }
   private _lastJetpackSend = 0;
+
+  // Hold-out secondaries: while the bind is held the weapon swaps in and
+  // auto-fires at its own cadence; release snaps back to the loadout slot.
+  // wids are slot-space indices into WEAPON_RATES/SLOT_WEAPONS.
+  private secondaryWid: number | null = null;
+  private static readonly SECONDARY_ACTIONS = ['secPistol', 'secRevolver', 'secShotgun'] as const;
+  private static readonly SECONDARY_WID: Record<string, number> = {
+    secPistol: 12,
+    secRevolver: 13,
+    secShotgun: 9,
+  };
 
   // Events
   onFire: ((e: FireEvent) => void) | null = null;
@@ -221,6 +232,8 @@ export class Player {
   onShotgun: ((e: FireEvent) => void) | null = null;
   onCannon: ((e: FireEvent) => void) | null = null;
   onRocketLauncher: ((e: FireEvent) => void) | null = null;
+  onPistol: ((e: FireEvent) => void) | null = null;
+  onRevolver: ((e: FireEvent) => void) | null = null;
   onMelee: ((e: FireEvent) => void) | null = null;
   onWeaponSwitch: ((index: number) => void) | null = null;
   onNetworkJump: ((pos: { x: number; y: number; z: number }) => void) | null = null;
@@ -295,6 +308,16 @@ export class Player {
       // Spectating: only the spectate toggle and raw movement keys (tracked
       // above for the fly cam) respond — no weapons, skills, camera flips
       if (this.spectating) return;
+      for (const a of Player.SECONDARY_ACTIONS) {
+        if (matchCode(a, e.code)) {
+          const wid = Player.SECONDARY_WID[a];
+          if (wid !== this.secondaryWid) {
+            this.secondaryWid = wid;
+            this.onWeaponSwitch?.(wid);
+          }
+          break;
+        }
+      }
       if (matchCode('jump', e.code)) {
         this.jumpHeld = true;
       }
@@ -343,6 +366,13 @@ export class Player {
       if (matchCode('belt', e.code)) {
         this.discHeld = false;
         this.grenadeHeld = false;
+      }
+      for (const a of Player.SECONDARY_ACTIONS) {
+        if (matchCode(a, e.code) && this.secondaryWid === Player.SECONDARY_WID[a]) {
+          this.secondaryWid = null;
+          this.onWeaponSwitch?.(this.currentWeapon);
+          break;
+        }
       }
     });
     document.addEventListener('mousedown', (e) => {
@@ -607,11 +637,13 @@ export class Player {
   // Weapon triggers: selected weapon (LMB) plus C/F belt throws.
   private fireWeapons(): void {
     // Chaingun + lightning gun auto-fire while held; the rest are per-click.
-    const wid = this.loadout[this.weaponIndex];
+    const wid = this.secondaryWid ?? this.loadout[this.weaponIndex];
     const isBeam = wid === 2 || wid === 8;
     // Weapon is lowered during a belt-throw — no primary fire mid-throw.
+    // A held secondary auto-fires at its own cadence — no click needed.
     const wantFire = this.throwLockT <= 0 &&
-      (isBeam ? this.mouseHeld : (this.firePending || (this.mouseHeld && !this.needsRelease)));
+      (this.secondaryWid !== null ? true
+        : isBeam ? this.mouseHeld : (this.firePending || (this.mouseHeld && !this.needsRelease)));
     if (!this.mouseHeld) this.needsRelease = false;
     if (wantFire && this.fireTimer <= 0) {
       this.fireTimer = Player.WEAPON_RATES[wid];
@@ -626,6 +658,8 @@ export class Player {
         : wid === 9 ? this.onShotgun
         : wid === 10 ? this.onCannon
         : wid === 11 ? this.onRocketLauncher
+        : wid === 12 ? this.onPistol
+        : wid === 13 ? this.onRevolver
         : this.onFire;
       fireCallback?.({ origin: this.pos.clone(), dir: this.getAimDir(), playerVel: this.vel.clone() });
     }
