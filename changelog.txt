@@ -1895,3 +1895,4 @@ Nugget banking now reports to the server in networked team matches (sendBank on 
 Server-owned CTF: RoomFlags runs tick-based touch rules off server-known positions (planar grab w/ 6m vertical gate), drop-on-any-death via combat funnel, capture feeds the same score→matchEnd channel as nuggets; clients render pole+banner from flagUpdate
 Server bots play CTF: flagGoal routes them — carrying → own base, own flag dropped → touch home, enemy flag exposed → grab it, flag moving → defend home; an enemy in sight still interrupts the objective
 Server-owned DM scoring: frags in ffa rooms bank into ffaScores through the shared kill funnel (onKill now carries shooterId), broadcast ffaScore/ffaMatchEnd, board resets on winAt; environment kills score nothing; client echoes yours/leader to the feed. dmscore.test.ts 4 tests.
+DM creature kills score too: BallSim.onKilled(by) → Room.creatureKill → awardFfa (ptsCreatureKill); frag/creature paths share awardFfa
