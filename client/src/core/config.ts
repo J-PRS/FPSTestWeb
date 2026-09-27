@@ -30,6 +30,17 @@ export const FIRE_RATE = 0.8; // Rocket fire rate (seconds)
 export const DISC_RATE = 1.0; // Disc fire rate (seconds)
 export const GRENADE_RATE = 1.2; // Grenade fire rate (seconds)
 export const CHAINGUN_RATE = 0.09; // Chaingun fire rate (seconds)
+export const LG_RATE = 0.045;      // Lightning gun tick — Quake's 44ms beam
+export const LG_RANGE = 55.0;      // hard beam cap — mid-range tracker, outranged by totems
+// Death-burst: a beam kill detonates the corpse for (accumulated beam
+// damage dealt to it) — overcharging a fat target pays out a fat pop.
+export const LG_POP_DMG_CAP = 160;   // explosion damage ceiling
+export const LG_POP_RADIUS_MAX = 14; // blast radius ceiling (m)
+export const LG_POP_RADIUS_MIN = 3;  // even a popgun kill pops SOMETHING
+// Chain fork: after the beam lands, it arcs to one more enemy within range
+// of the first — half damage, but it charges the pop too
+export const LG_CHAIN_RANGE = 9.0;
+export const LG_CHAIN_DMG_SCALE = 0.5;
 
 // Projectile gameplay stats (speed, gravity, hitboxes, damage, fuse) live in
 // shared/weapons.ts — the single source of truth the server validates with.
@@ -54,6 +65,8 @@ export const GL_BOUNCE_FRICTION = 0.7; // Tangential damping per bounce
 export const FLAK_RATE = 1.1; // Flak fire rate (seconds)
 export const FLAK_SHARDS = 9; // Shards per shell
 export const FLAK_SPREAD = 0.10; // Cone half-angle (radians-ish slope factor)
+export const SG_PELLETS = 10;   // pellets per pump
+export const SG_SPREAD = 0.035; // ~3× tighter than flak — mid-range viable
 export const FLAK_MAX_BOUNCES = 3; // Shards die on the Nth terrain hit
 export const FLAK_BOUNCE_RESTITUTION = 0.6;
 export const FLAK_BOUNCE_FRICTION = 0.8;
@@ -61,6 +74,13 @@ export const FLAK_BOUNCE_FRICTION = 0.8;
 // Plasma gun — T1/T2 fat energy bolt, sustained midrange fire
 export const PLASMA_RATE = 0.28; // ~3.5 rps
 export const RAILGUN_RATE = 1.5; // Quake railgun cadence
+export const SHOTGUN_RATE = 0.7; // pump cadence — punchy per shot, not spam
+export const CANNON_RATE = 0.55; // Serious Sam cadence — satisfying thump-thump
+export const RKT_RATE = 0.85; // RPG cadence — deliberate, each missile is an event
+// Cannonball skips: livelier than the GL shell (0.55/0.7) — keeps its speed
+// across hops, that's the whole joke
+export const CANNON_BOUNCE_RESTITUTION = 0.75;
+export const CANNON_BOUNCE_FRICTION = 0.85;
 export const MELEE_COOLDOWN = 0.9;
 export const MELEE_RANGE = 3.2;    // fist reach, meters
 export const MELEE_ARC_DOT = 0.55; // ~57° half-cone — generous, CoD-style
@@ -88,6 +108,8 @@ export const BALL_ENRAGE_DASH_DIST = 100.0; // Ground hit within this XZ range b
 export const BALL_ENRAGE_DASH_SPEED = 45.0; // Lunge speed toward the player
 export const BALL_ENRAGE_TELEGRAPH_H = 8.0; // Glow ramps to white under this height in dash range
 
+export const EMERGE_DUR = 0.8; // Ground spawns burrow up out of the dirt over this many seconds
+
 // Crawlers — terrain-hugging targets that hop, chase, and pounce
 export const CRAWLER_MAX = 6; // Max crawlers alive
 export const CRAWLER_SPAWN_INTERVAL = 4.0; // Seconds between spawn attempts
@@ -103,6 +125,84 @@ export const CRAWLER_HOP_UP = 5.0; // Hop vertical kick
 export const CRAWLER_POUNCE_SPEED = 30.0; // Pounce horizontal speed
 export const CRAWLER_POUNCE_DAMAGE = 25; // Server-authoritative self-damage on pounce hit
 export const CRAWLER_STUN = 0.5; // Blast knockback suppresses hopping this long
+
+// Scarabs — cannon fodder. Spawn in packs, skitter fast, weak nibble.
+// Everything about them is small except the count — they exist to be
+// mowed down in satisfying clumps.
+export const SCARAB_MAX = 16;             // total alive — packs chew through the cap
+export const SCARAB_SPAWN_INTERVAL = 5.0;
+export const SCARAB_SPAWN_MIN = 45.0;
+export const SCARAB_SPAWN_MAX = 85.0;
+export const SCARAB_PACK_MIN = 4;         // spawn cluster size
+export const SCARAB_PACK_MAX = 7;
+export const SCARAB_RADIUS = 0.55;
+export const SCARAB_HEALTH = 20;          // one chaingun burst, a rocket takes the whole pack
+export const SCARAB_SPEED = 12.0;         // fast ground skitter — they close distance NOW
+export const SCARAB_ZIGZAG = 5.0;         // lateral weave amplitude (m/s) — hard to track
+export const SCARAB_AGGRO_DIST = 90.0;    // pack descends from far
+export const SCARAB_BITE_DIST = 1.4;      // contact nibble reach
+export const SCARAB_BITE_DAMAGE = 4;      // chip damage — dangerous ONLY in a swarm
+export const SCARAB_BITE_FORCE = 3;
+export const SCARAB_BITE_CD = 0.7;
+export const SCARAB_STUN = 0.3;
+
+// Grubs — the most mundane thing alive: slow fat maggots that inch
+// toward you and pop. Walking piñatas — the nuggets are the point.
+export const GRUB_MAX = 10;
+export const GRUB_SPAWN_INTERVAL = 7.0;
+export const GRUB_SPAWN_MIN = 40.0;
+export const GRUB_SPAWN_MAX = 80.0;
+export const GRUB_RADIUS = 0.7;
+export const GRUB_HEALTH = 30;
+export const GRUB_SPEED = 2.4;            // genuinely slow — a slug pace
+export const GRUB_AGGRO_DIST = 60.0;
+export const GRUB_BITE_DIST = 1.5;
+export const GRUB_BITE_DAMAGE = 6;
+export const GRUB_BITE_FORCE = 5;
+export const GRUB_BITE_CD = 1.2;
+export const GRUB_STUN = 0.4;
+
+// Snakes — sand vipers. Serpentine weave toward you, a readable coil
+// wind-up, then a committed straight-line lunge. Mid-tier predator:
+// faster and meaner than fodder, frailer than a crawler.
+export const SNAKE_MAX = 8;
+export const SNAKE_SPAWN_INTERVAL = 9.0;
+export const SNAKE_SPAWN_MIN = 30.0;
+export const SNAKE_SPAWN_MAX = 60.0;
+export const SNAKE_RADIUS = 0.5;
+export const SNAKE_HEALTH = 45;
+export const SNAKE_SPEED = 6.5;           // weaves in FAST
+export const SNAKE_AGGRO_DIST = 70.0;
+export const SNAKE_STRIKE_DIST = 5.5;     // coil trigger (3D)
+export const SNAKE_STRIKE_CD = 2.2;
+export const SNAKE_WINDUP = 0.45;         // telegraph — dodge window
+export const SNAKE_LUNGE_TIME = 0.4;
+export const SNAKE_LUNGE_SPEED = 14.0;
+export const SNAKE_BITE_DIST = 2.4;       // lunge contact (3D)
+export const SNAKE_BITE_DAMAGE = 14;
+export const SNAKE_BITE_FORCE = 9;
+
+// Gnats — a boid cloud of insectoid harassers. They ORBIT you in a
+// jittery swarm; individuals dart in for a nip and zip back out. Never
+// a committed divebomb — harassment, not a bombing run.
+export const GNAT_MAX = 16;               // total alive across all clouds
+export const GNAT_SPAWN_INTERVAL = 6.5;
+export const GNAT_SPAWN_MIN = 50.0;
+export const GNAT_SPAWN_MAX = 80.0;
+export const GNAT_CLOUD_MIN = 5;          // swarm size per spawn
+export const GNAT_CLOUD_MAX = 9;
+export const GNAT_RADIUS = 0.3;
+export const GNAT_HEALTH = 8;             // a single chaingun slug pops one
+export const GNAT_SPEED = 13.0;           // cruise speed around the cloud
+export const GNAT_DART_SPEED = 24.0;      // nip dart — quick in-and-out
+export const GNAT_ORBIT_R = 5.0;          // cloud radius around its center
+export const GNAT_ORBIT_ALT = 4.0;        // cloud hovers above the player
+export const GNAT_NIP_DIST = 1.3;         // nip contact range
+export const GNAT_NIP_DAMAGE = 3;         // mosquito-tier — insult, not injury
+export const GNAT_NIP_FORCE = 2;
+export const GNAT_NIP_CD = 2.2;           // per-gnat cooldown between darts
+export const GNAT_FLOCK_CD = 0.7;         // min spacing between ANY two darts
+export const GNAT_STUN = 0.3;
 
 // Turretter — plants as a turret, lobs itself at the player on a perfect
 // ballistic arc when they get far. Inert in flight: the hop IS the
@@ -141,7 +241,7 @@ export const WEED_SPAWN_INTERVAL = 2.5;
 export const WEED_SPAWN_MIN = 40.0;      // spawn upwind of the player…
 export const WEED_SPAWN_MAX = 70.0;
 export const WEED_KILL_DIST = 110.0;     // …despawn once blown this far past
-export const WEED_RADIUS = 1.1;
+export const WEED_RADIUS = 1.5;
 export const WEED_HEALTH = 25;           // pops to any direct hit
 export const WEED_SPEED = 7.0;           // cruise speed downwind
 export const WEED_WIND_X = 1.4;          // same wind vector as ambientParticles
@@ -171,22 +271,22 @@ export const SEEKER_STING_FORCE = 14;   // shove on sting
 export const SEEKER_RECOVER = 1.2;      // post-dart drift-away window
 export const SEEKER_STUN = 0.6;         // blast knockback suppresses attacks this long
 
-// Miner — the flying dredge: a big slow gasbag that circles the player and
+// Overlord — the flying dredge: a big slow gasbag that circles the player and
 // sows mines across the dunes. Always visible, huge hitbox, high HP — a
 // priority target, not a lurker. The mine trail punishes ignoring it.
-export const MINER_MAX = 2;
-export const MINER_SPAWN_INTERVAL = 20.0; // slow — a persistent menace, not a swarm
-export const MINER_SPAWN_MIN = 60.0;
-export const MINER_SPAWN_MAX = 100.0;
-export const MINER_RADIUS = 2.2;
-export const MINER_HEALTH = 400;
-export const MINER_SPEED = 5.0;         // ponderous drift
-export const MINER_ACCEL = 3.0;
-export const MINER_ALTITUDE = 11.0;     // cruise height above terrain
-export const MINER_LOITER_DIST = 30.0;  // ring radius it circles the player at
-export const MINER_DROP_INTERVAL = 2.8; // seconds between mine drops
-export const MINER_DROP_RANGE = 50.0;   // only sows inside the player's play space
-export const MINER_STUN = 0.4;          // blast knockback stalls its steering
+export const OVERLORD_MAX = 2;
+export const OVERLORD_SPAWN_INTERVAL = 20.0; // slow — a persistent menace, not a swarm
+export const OVERLORD_SPAWN_MIN = 60.0;
+export const OVERLORD_SPAWN_MAX = 100.0;
+export const OVERLORD_RADIUS = 2.2;
+export const OVERLORD_HEALTH = 400;
+export const OVERLORD_SPEED = 5.0;         // ponderous drift
+export const OVERLORD_ACCEL = 3.0;
+export const OVERLORD_ALTITUDE = 11.0;     // cruise height above terrain
+export const OVERLORD_LOITER_DIST = 30.0;  // ring radius it circles the player at
+export const OVERLORD_DROP_INTERVAL = 2.8; // seconds between mine drops
+export const OVERLORD_DROP_RANGE = 50.0;   // only sows inside the player's play space
+export const OVERLORD_STUN = 0.4;          // blast knockback stalls its steering
 
 // Mines — the droppings. Shootable (detonating one clears it), proximity-fused.
 export const MINE_MAX = 10;             // global cap — oldest fields thin out
@@ -198,7 +298,7 @@ export const MINE_DAMAGE_MAX = 22;      // at zero distance
 export const MINE_KNOCKBACK = 12.0;
 export const MINE_LIFE = 45.0;          // seconds before it fizzle-pops
 
-// Banelings — rolling suicide bombs birthed by the Overlord (was: Miner)
+// Banelings — rolling suicide bombs birthed by the Overlord (was: Overlord)
 export const BANELING_MAX = 12;          // brood cap across all overlords
 export const BANELING_RADIUS = 0.7;      // small — an exploding sac, not a boulder
 export const BANELING_HEALTH = 15;       // pops to a couple of hits
@@ -229,6 +329,23 @@ export const TOTEM_RELOCATE_HOPS = 3;   // shots fired before seeking a new perc
 export const TOTEM_PEAK_RADIUS = 45.0;  // how far it samples terrain for peaks
 export const TOTEM_PEAK_MIN_GAIN = 3.0; // min height gain to count as "better perch"
 export const TOTEM_MATERIALIZE = 0.7;   // post-blink vulnerable window
+
+// Uber totem — the elite sniper. Bigger, tankier, slower to fire, but it
+// LEADS you: the beam locks pos + vel × charge, so holding a strafe line
+// gets you tagged. The only dodge is changing direction after the lock.
+export const UBER_TOTEM_MAX = 1;          // one at a time — it's a named threat
+
+// Rare "uber" variants — every ambient (non-event) enemy spawn rolls this.
+// Ubers are bigger, tankier, and carry one unique hook; they never REPLACE
+// the base species, they just occasionally show up instead.
+export const UBER_CHANCE = 0.07;          // ~1 in 14 ambient spawns is an uber
+export const UBER_TOTEM_RADIUS = 1.8;     // nearly double the obelisk
+export const UBER_TOTEM_HEALTH = 500;
+export const UBER_TOTEM_REFIRE = 4.5;     // slow, deliberate, devastating
+export const UBER_TOTEM_CHARGE = 1.0;     // long telegraph — your juke window
+export const UBER_TOTEM_BOLT_DAMAGE = 30;
+export const UBER_TOTEM_HIT_RADIUS = 1.5; // beam catch envelope vs 1.7²≈1.3 normal
+export const UBER_TOTEM_BEAM_WIDTH = 1.2; // fat red telegraph — reads "death ray"
 
 // Rakk — the cliff-racer. Soars overhead in lazy circles, folds its wings,
 // and swoops a gliding pass through the player. Flock attack token keeps

@@ -94,6 +94,9 @@ class Logger {
       ? `${fullMessage} ${JSON.stringify(context)}`
       : fullMessage;
     this.logBuffer.push(logLine);
+
+    // WARN+ also queues for server shipping — the on-disk client.log
+    if (level >= LogLevel.WARN) this.shipQueue.push(logLine);
     
     // Keep buffer size limited
     if (this.logBuffer.length > this.maxBufferSize) {
@@ -159,10 +162,38 @@ class Logger {
     }
   }
 
+  // ---- Log shipping ----
+  // WARN/ERROR lines stream to POST <server>/client-log, which appends to
+  // logs/client.log on disk. Batched every 5s; a sendBeacon on pagehide
+  // catches the tail. No-op until initShipping is called with the URL.
+  private static shipQueue: string[] = [];
+  private static shipUrl = '';
+
+  static initShipping(httpUrl: string): void {
+    this.shipUrl = `${httpUrl.replace(/\/$/, '')}/client-log`;
+    setInterval(() => this.flushShipping(), 5000);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') this.flushShipping(true);
+    });
+  }
+
+  private static flushShipping(beacon = false): void {
+    if (!this.shipUrl || this.shipQueue.length === 0) return;
+    const body = this.shipQueue.splice(0, this.shipQueue.length).join('\n') + '\n';
+    try {
+      if (beacon && navigator.sendBeacon) {
+        navigator.sendBeacon(this.shipUrl, body);
+      } else {
+        void fetch(this.shipUrl, { method: 'POST', body, keepalive: true }).catch(() => {});
+      }
+    } catch { /* shipping must never break the game */ }
+  }
+
   /** Push a line from outside the logger (console wrapper) */
   static pushRaw(line: string): void {
     this.logBuffer.push(line);
     if (this.logBuffer.length > this.maxBufferSize) this.logBuffer.shift();
+    if (line.includes('[WARN]') || line.includes('[ERROR]')) this.shipQueue.push(line);
   }
 
   static get isWritingToConsole(): boolean {

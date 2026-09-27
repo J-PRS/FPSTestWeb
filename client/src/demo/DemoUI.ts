@@ -242,14 +242,20 @@ export class DemoUI {
     this.speedSelect.value = String(speed);
   }
 
-  setMarkers(hitTimes: number[], firedTimes: number[], duration: number): void {
+  setMarkers(hitTimes: { t: number; hot: boolean }[], firedTimes: { t: number; hot: boolean }[], duration: number): void {
     this.clearMarkers();
     if (duration <= 0) return;
-    for (const t of hitTimes) {
-      this.markerOverlay.appendChild(this.createMarker(t, duration, '#ff4444', 'rgba(255,68,68,0.8)'));
+    // Cold = background noise in the clip window — grey, unlit, so the
+    // featured shot's markers pop instead of drowning in unrelated fire.
+    for (const { t, hot } of hitTimes) {
+      this.markerOverlay.appendChild(hot
+        ? this.createMarker(t, duration, '#ff4444', 'rgba(255,68,68,0.8)')
+        : this.createMarker(t, duration, '#555', 'transparent'));
     }
-    for (const t of firedTimes) {
-      this.markerOverlay.appendChild(this.createMarker(t, duration, '#4488ff', 'rgba(68,136,255,0.8)'));
+    for (const { t, hot } of firedTimes) {
+      this.markerOverlay.appendChild(hot
+        ? this.createMarker(t, duration, '#4488ff', 'rgba(68,136,255,0.8)')
+        : this.createMarker(t, duration, '#444', 'transparent'));
     }
   }
 

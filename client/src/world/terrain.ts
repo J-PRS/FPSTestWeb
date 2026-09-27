@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type { Heightfield } from '../../../shared/heightfield.js';
 
 import {
   TERRAIN_HEIGHT_SCALE, TERRAIN_WORLD_SCALE, TERRAIN_HEIGHTMAP_DIVISOR
@@ -64,6 +65,13 @@ function sampleHeightmap(wx: number, wz: number): number {
 export function sampleHeight(wx: number, wz: number): number {
   if (hmData) return sampleHeightmap(wx, wz);
   return 0;
+}
+
+/** The heightmap in the shared format — server-owned creatures (ballSim)
+ *  replay flight against the identical field, so prediction lands on the
+ *  same vertices as the server's sim. */
+export function getHeightfield(): Heightfield | null {
+  return hmData ? { size: hmSize, data: hmData, stride: 4 } : null;
 }
 
 const _normalTmp = new THREE.Vector3();
