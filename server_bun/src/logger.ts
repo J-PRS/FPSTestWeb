@@ -61,6 +61,8 @@ class Logger {
   }
 }
 
-export const logger = new Logger(
-  (Bun.env.LOG_LEVEL as LogLevel | undefined) ?? 'info',
-);
+// P2P hosts embed the server modules (PlayerManager/CombatHandler) inside
+// the browser — Bun.env doesn't exist there, so read it defensively.
+const envLevel = (globalThis as { Bun?: { env: Record<string, string | undefined> } })
+  .Bun?.env?.LOG_LEVEL as LogLevel | undefined;
+export const logger = new Logger(envLevel ?? 'info');

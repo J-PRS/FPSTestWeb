@@ -61,7 +61,12 @@ export class BallSim {
   }
 
   async start(heightmapPath: string): Promise<void> {
-    const buf = new Uint8Array(await Bun.file(heightmapPath).arrayBuffer());
+    // Bun.file is Bun-only; the P2P host imports this module type-only in
+    // the browser, where Bun is undefined — read it via globalThis so the
+    // reference doesn't break browser type-checking or bundling.
+    const bunFile = (globalThis as { Bun?: { file(p: string): { arrayBuffer(): Promise<ArrayBuffer> } } }).Bun?.file;
+    if (!bunFile) throw new Error('BallSim requires Bun runtime');
+    const buf = new Uint8Array(await bunFile(heightmapPath).arrayBuffer());
     const view = new DataView(buf.buffer);
     const w = view.getUint32(0, true);
     const h = view.getUint32(4, true);

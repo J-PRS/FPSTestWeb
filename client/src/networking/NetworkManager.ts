@@ -3,6 +3,7 @@ import { isWireFrame, encodePosition, decodeTickFrame } from '../../../shared/wi
 import type { ClientMessage, ServerMessage, TickUpdatePlayer, GameStatePlayer, LocalPlayerState, SnapshotPlayer } from '../../../shared/protocol.js';
 import { PROTOCOL_VERSION } from '../../../shared/protocol.js';
 import { WebSocketConnection } from './WebSocketConnection.js';
+import type { GameTransport, TransportFactory } from './transport.js';
 
 const logger = new ChildLogger('NetworkManager');
 
@@ -23,7 +24,7 @@ export interface RemotePlayerState {
  * One transport, one protocol layer; the binary codec lives in shared/wire.ts.
  */
 export class NetworkManager {
-  private ws: WebSocketConnection | null = null;
+  private ws: GameTransport | null = null;
   private localPlayerId: string;
   private sessionToken: string | null;
   private connected: boolean = false;
@@ -84,10 +85,14 @@ export class NetworkManager {
     this.localPlayerId = playerId;
   }
 
-  connect(url: string): Promise<void> {
+  /** `makeTransport` swaps the wire: P2P passes a factory that builds a
+   *  LoopbackTransport (host) or DataChannelTransport (guest) instead of
+   *  a real WebSocket. Same callbacks, same protocol, different pipe. */
+  connect(url: string, makeTransport?: TransportFactory): Promise<void> {
     return new Promise((resolve, reject) => {
       try {
-        this.ws = new WebSocketConnection({
+        const factory = makeTransport ?? ((cfg) => new WebSocketConnection(cfg));
+        this.ws = factory({
           url,
           onConnect: () => {
             // Join handshake — must precede the queued-message flush,

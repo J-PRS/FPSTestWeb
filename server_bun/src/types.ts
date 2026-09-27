@@ -13,6 +13,9 @@ import type { Vec3, Rotation } from '../../shared/protocol.ts';
 export interface WebSocketData {
   playerId: string;
   connectedAt: number;
+  /** /rtc signalling sockets: relayed room-to-room, never reach GameServer. */
+  rtc?: boolean;
+  room?: string;
 }
 
 export interface PlayerState {

@@ -7,6 +7,10 @@
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "skipLibCheck": true,
+    // P2P host reuses server_bun modules, which import each other with
+    // explicit .ts suffixes (Bun-style). Bundler resolution + noEmit make
+    // this legal here.
+    "allowImportingTsExtensions": true,
     "noEmit": true
   },
   "include": ["src", "../shared"]
