@@ -752,6 +752,7 @@ export class Ball {
     timers?: { et?: number; slowT?: number; damp?: boolean },
     tp?: { x: number; y: number; z: number } | null,
     simT?: number,
+    hard = false,
   ): void {
     const s = this.sim;
     if (!s) return;
@@ -782,11 +783,13 @@ export class Ball {
     // lead is consumed by whole cells in update(), not stepped here.
     if (simT !== undefined) this.simT = simT;
     // Carry the visible error into renderOffset: (old rendered pos) - (new
-    // truth). >6m means the prediction diverged hard — hard-snap instead of
-    // smearing a long rubber slide across the screen.
+    // truth). Prediction-vs-truth divergence is dominated by server-clock
+    // skew, not real desync — so every non-discontinuity correction blends
+    // (a 10m slide over 0.2s on a moving arc reads as nothing). Only
+    // teleport/spawn hard-snap: there continuity is impossible anyway.
     this._rpos.copy(this.pos).add(this.renderOffset);
     this._rpos.x -= s.x; this._rpos.y -= s.y; this._rpos.z -= s.z;
-    if (this._rpos.lengthSq() > 36) this.renderOffset.set(0, 0, 0);
+    if (hard || this._rpos.lengthSq() > 3600) this.renderOffset.set(0, 0, 0);
     else this.renderOffset.copy(this._rpos);
     this.pos.set(s.x, s.y, s.z);
     this.vel.set(s.vx, s.vy, s.vz);
