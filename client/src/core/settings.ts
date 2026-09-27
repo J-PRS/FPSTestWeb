@@ -10,6 +10,7 @@ type Schema = {
   'fps-bloom': boolean;
   'fps-invert-y': boolean;
   'fps-sens': number;
+  'fps-minimap': number;      // 0 = corner radar, 1 = crosshair threat overlay
 };
 
 const DEFAULTS: Schema = {
@@ -18,6 +19,7 @@ const DEFAULTS: Schema = {
   'fps-bloom': false,
   'fps-invert-y': false,
   'fps-sens': 1,
+  'fps-minimap': 0,
 };
 
 const parse = {

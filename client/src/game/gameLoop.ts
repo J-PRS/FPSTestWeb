@@ -159,6 +159,7 @@ export function createGameLoop(deps: GameLoopDeps) {
     hud.setBallCount(entities.balls.filter(b => !b.dead && !b.disposed).length);
     hud.setNuggets(entities.getNuggetsCollected());
     hud.setTimer(deps.waveDirector().elapsed);
+    hud.updateMinimap(entities.targets, entities.nuggets, player.pos, player.yaw);
     viewModel.group.visible = !demoManager?.isPlaying && !player.isDead;
     const yawDelta = Math.atan2(Math.sin(player.yaw - lastPlayerYaw), Math.cos(player.yaw - lastPlayerYaw));
     viewModel.update(dt, yawDelta, player.pitch - lastPlayerPitch, player.vel, camera);
