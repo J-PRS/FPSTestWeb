@@ -41,10 +41,14 @@ function hmSample(x: number, z: number): number {
 }
 
 function sampleHeightmap(wx: number, wz: number): number {
-  const u = (((wx / HM_WORLD_SCALE) % 1.0) + 1.0) % 1.0 * hmSize;
-  const v = (((wz / HM_WORLD_SCALE) % 1.0) + 1.0) % 1.0 * hmSize;
-  const x0 = Math.floor(u) % hmSize;
-  const z0 = Math.floor(v) % hmSize;
+  // GPU texture2D + LinearFilter evaluates at texel CENTERS — texel i sits at
+  // (i + 0.5)/N in UV space. Sample identically on CPU (u shifted by -0.5) or
+  // physics height is offset half a texel from the rendered mesh, which puts
+  // the player/projectiles inside hills on steep slopes.
+  const u = (((wx / HM_WORLD_SCALE) % 1.0) + 1.0) % 1.0 * hmSize - 0.5;
+  const v = (((wz / HM_WORLD_SCALE) % 1.0) + 1.0) % 1.0 * hmSize - 0.5;
+  const x0 = ((Math.floor(u) % hmSize) + hmSize) % hmSize;
+  const z0 = ((Math.floor(v) % hmSize) + hmSize) % hmSize;
   const x1 = (x0 + 1) % hmSize;
   const z1 = (z0 + 1) % hmSize;
   const fx = u - Math.floor(u);
@@ -139,6 +143,8 @@ const terrainVert = /* glsl */`
   varying vec3 vWorldPos;
   varying vec3 vCameraPos;
 
+  #include <shadowmap_pars_vertex>
+
   float sampleHeightGPU(vec2 worldXZ) {
     vec2 uv = fract(worldXZ / hmWorldScale);
     return texture2D(heightMap, uv).r * hScale;
@@ -212,6 +218,15 @@ const terrainVert = /* glsl */`
     vWorldPos = worldPos;
     vCameraPos = cameraPosition;
 
+    // Shadow-receive coords — computed manually so vNormal (already
+    // world-space) provides the bias offset; the mesh transform is identity.
+    #if defined( USE_SHADOWMAP ) && NUM_DIR_LIGHT_SHADOWS > 0
+      for ( int i = 0; i < NUM_DIR_LIGHT_SHADOWS; i ++ ) {
+        vec4 shadowWorldPosition = vec4(worldPos, 1.0) + vec4(vNormal * directionalLightShadows[ i ].shadowNormalBias, 0.0);
+        vDirectionalShadowCoord[ i ] = directionalShadowMatrix[ i ] * shadowWorldPosition;
+      }
+    #endif
+
     gl_Position = projectionMatrix * viewMatrix * vec4(worldPos, 1.0);
   }
 `;
@@ -220,6 +235,12 @@ const terrainFrag = /* glsl */`
   varying vec3 vNormal;
   varying vec3 vWorldPos;
   varying vec3 vCameraPos;
+
+  #include <common>
+  #include <packing>
+  uniform bool receiveShadow; // bound by the renderer (mesh.receiveShadow)
+  #include <shadowmap_pars_fragment>
+  #include <shadowmask_pars_fragment>
 
   uniform vec3 sunDir;
   uniform vec3 sunColor;
@@ -269,6 +290,42 @@ const terrainFrag = /* glsl */`
     return v;
   }
   float fbm(vec2 p) { return fbmErosion(p, 6); }
+
+  uniform vec4 scorchData[16]; // x, z, radius, intensity (w<=0 = unused slot)
+  uniform float scorchEmber[16]; // per-slot ember rim glow (0 = none)
+
+  // Projected explosion-scorch decals: darken albedo inside each scorch
+  // circle with a noise-jittered edge. Applied in the fragment shader so it
+  // conforms to the displaced surface exactly — no z-fighting, no decals
+  // bridging dips or floating over slopes.
+  float scorchMask(vec2 p) {
+    float m = 0.0;
+    for (int i = 0; i < 16; i++) {
+      vec4 s = scorchData[i];
+      if (s.w <= 0.0) continue;
+      // Mostly circular blast ring with slight edge irregularity
+      float edge = s.z * (0.9 + 0.15 * noise(p * 0.8 + float(i) * 7.31));
+      float d = distance(p, s.xy);
+      m = max(m, s.w * (1.0 - smoothstep(edge * 0.4, edge, d)));
+    }
+    return m;
+  }
+
+  // Ember rim: additive orange ring at the blast edge, fades in ~1s.
+  // Projected in-shader so it always sits ON the terrain — a mesh ring
+  // gets eaten by surface bumps at grazing angles.
+  vec3 scorchEmberGlow(vec2 p) {
+    float g = 0.0;
+    for (int i = 0; i < 16; i++) {
+      vec4 s = scorchData[i];
+      float eb = scorchEmber[i];
+      if (eb <= 0.0) continue;
+      float d = distance(p, s.xy);
+      float ring = 1.0 - smoothstep(0.0, s.z * 0.3, abs(d - s.z * 0.7));
+      g += eb * max(ring, 0.0);
+    }
+    return vec3(1.0, 0.45, 0.1) * min(g, 1.2);
+  }
 
   // --- Worley / cell noise for rocky variation ---
   float worley(vec2 p) {
@@ -355,6 +412,8 @@ const terrainFrag = /* glsl */`
     }
     float slope  = 1.0 - clamp(vNormal.y, 0.0, 1.0);
     float height = clamp(vWorldPos.y / hscale, 0.0, 1.0);
+    // Real cast shadows: 1 = lit, <1 = occluded by balls/crawlers/players
+    float shadowMask = getShadowMask();
 
     // --- multi-scale UVs ---
     vec2 uv    = vWorldPos.xz * 0.032;
@@ -364,14 +423,20 @@ const terrainFrag = /* glsl */`
     // --- desert preset (sand + dirt + rock only) ---
     if(terrainPreset == 1) {
       // Desert only needs: micro, cell, triRock, macro, medium, triDetail
-      float micro  = noise(uvFin) * 0.5 + noise(uvFin*2.8+1.7)*0.5;
-      float cell   = worley(uvMed * 1.4);
-      float triRock = triplanarNoise(vWorldPos, 0.22);
-      float triDetail = triplanarNoise(vWorldPos, 0.85);
       vec2 warp = vec2(fbm(uv), fbm(uv + vec2(5.2, 1.3)));
       float macro  = fbm(uv + 0.8 * warp);
-      float medium = fbm(uvMed + vec2(3.1, 7.4));
-      float detail = macro*0.40 + medium*0.30 + micro*0.15 + triDetail*0.10;
+      // Warp medium + micro too — unwarped fixed-frequency noise reads as
+      // tiling at ground level even though nothing literally repeats
+      float medium = fbm(uvMed + vec2(3.1, 7.4) + 0.35 * warp);
+      float micro  = noise(uvFin + warp * 2.0) * 0.5 + noise(uvFin * 2.8 + warp * 3.5 + 1.7) * 0.5;
+      float cell   = worley(uvMed * 1.4 + warp * 0.6);
+      float triRock = triplanarNoise(vWorldPos, 0.22);
+      float triDetail = triplanarNoise(vWorldPos, 0.85);
+      // Patchiness: low-freq mask varies detail amplitude across the map so
+      // every square meter doesn't share identical noise statistics
+      float patchMask = smoothstep(0.25, 0.75, fbm(vWorldPos.xz * 0.008));
+      float detail = (macro*0.40 + medium*0.30 + micro*0.15 + triDetail*0.10)
+                   * (0.55 + 0.9 * patchMask);
 
       vec3 cDesertSand = vec3(0.78, 0.66, 0.28) + micro * vec3(0.10, 0.08, 0.02);
       vec3 cDesertRock = vec3(0.28, 0.24, 0.18) + cell * vec3(0.12, 0.10, 0.08) + triRock * vec3(0.08, 0.07, 0.05);
@@ -385,12 +450,18 @@ const terrainFrag = /* glsl */`
       vec3 slopeCol = mix(cDirt, cDesertCliff, smoothstep(0.30, 0.65, slope));
       col = mix(col, slopeCol, slopeBlend);
       col *= 0.86 + 0.28 * detail;
+      col *= 1.0 - scorchMask(vWorldPos.xz);
       float diff = max(dot(vNormal, sunDir), 0.0);
       float shadow = diff * diff;
       float rim = pow(1.0 - max(dot(vNormal, vec3(0,1,0)), 0.0), 2.5) * 0.15;
-      vec3 lit = ambientColor + sunColor * shadow + vec3(rim);
+      vec3 lit = ambientColor + sunColor * shadow * shadowMask + vec3(rim);
       col *= lit;
-      float fogDist = length(vWorldPos - vCameraPos);
+      col += scorchEmberGlow(vWorldPos.xz);
+      // Fog distance: dampen the DOWNWARD vertical component so terrain
+      // below an airborne camera isn't over-fogged (looking down a valley,
+      // ground 200m below shouldn't haze like it's 200m across the map).
+      vec3 fogDelta = vWorldPos - vCameraPos;
+      float fogDist = length(vec3(fogDelta.x, min(fogDelta.y, 0.0) * 0.3, fogDelta.z));
       float fogFactor = smoothstep(fogStart, fogEnd, fogDist);
       float heightFog = smoothstep(fogStart * 0.6, fogEnd * 0.7, fogDist) * smoothstep(0.3, 0.8, height);
       fogFactor = clamp(fogFactor + heightFog, 0.0, 1.0);
@@ -456,15 +527,19 @@ const terrainFrag = /* glsl */`
 
     // --- micro darkening in concavities via detail ---
     col *= 0.86 + 0.28 * detail;
+    col *= 1.0 - scorchMask(vWorldPos.xz);
 
     // --- lighting ---
     float diff   = max(dot(vNormal, sunDir), 0.0);
     float shadow = diff * diff;
     // subtle fresnel-like rim on slopes facing away
     float rim = pow(1.0 - max(dot(vNormal, vec3(0,1,0)), 0.0), 2.5) * 0.15;
-    vec3 lit = ambientColor + sunColor * shadow + vec3(rim);
+    vec3 lit = ambientColor + sunColor * shadow * shadowMask + vec3(rim);
     col *= lit;
-    float dist = length(vWorldPos - vCameraPos);
+    col += scorchEmberGlow(vWorldPos.xz);
+    // Same dampened-downward-distance fog as the desert branch — see above
+    vec3 fogDelta = vWorldPos - vCameraPos;
+    float dist = length(vec3(fogDelta.x, min(fogDelta.y, 0.0) * 0.3, fogDelta.z));
     float fogFactor = smoothstep(fogStart, fogEnd, dist);
     // Height-augmented fog: tall terrain at distance gets extra fog
     float heightFog = smoothstep(fogStart * 0.6, fogEnd * 0.7, dist)
@@ -480,6 +555,10 @@ export class Terrain {
   private levels: ClipmapLevel[] = [];
   private heightTexture: THREE.DataTexture;
   private gridGeo: THREE.BufferGeometry;
+  // Shader-projected scorch decals: x, z, radius, intensity (16 slots)
+  private scorchList: { x: number; z: number; r: number; intensity: number; ember: number }[] = [];
+  private scorchArr = new Float32Array(16 * 4);
+  private scorchEmberArr = new Float32Array(16);
 
   constructor(scene: THREE.Scene, sunDir: THREE.Vector3) {
     this.scene = scene;
@@ -510,10 +589,13 @@ export class Terrain {
       const material = new THREE.ShaderMaterial({
         vertexShader: terrainVert,
         fragmentShader: terrainFrag,
+        lights: true, // binds sun shadow map/matrices — enables USE_SHADOWMAP
         polygonOffset: i > 0,
         polygonOffsetFactor: -1,
         polygonOffsetUnits: -1,
         uniforms: {
+          // Required with lights:true — renderer writes light/shadow state here
+          ...THREE.UniformsLib.lights,
           heightMap:       { value: this.heightTexture },
           hmWorldScale:    { value: HM_WORLD_SCALE },
           hScale:          { value: HSCALE },
@@ -531,6 +613,8 @@ export class Terrain {
           fogColor:        { value: new THREE.Color(0xbbd0e8) },
           fogStart:        { value: 80.0 },
           fogEnd:          { value: 400.0 },
+          scorchData:      { value: this.scorchArr },
+          scorchEmber:     { value: this.scorchEmberArr },
         },
       });
 
@@ -566,6 +650,33 @@ export class Terrain {
         level.material.uniforms.innerGridOrigin.value.copy(inner.gridOrigin);
       }
     }
+
+    // Upload scorch decal slots (shared Float32Array across all level materials)
+    this.scorchArr.fill(0);
+    this.scorchEmberArr.fill(0);
+    for (let i = 0; i < this.scorchList.length; i++) {
+      const s = this.scorchList[i];
+      const o = i * 4;
+      this.scorchArr[o] = s.x;
+      this.scorchArr[o + 1] = s.z;
+      this.scorchArr[o + 2] = s.r;
+      this.scorchArr[o + 3] = s.intensity;
+      this.scorchEmberArr[i] = s.ember;
+    }
+  }
+
+  // Register a projected scorch decal. Returns a handle whose `intensity`
+  // and `ember` the caller animates; pass it back to removeScorch when done.
+  addScorch(x: number, z: number, r: number) {
+    const entry = { x, z, r, intensity: 0.5, ember: 0 };
+    if (this.scorchList.length >= 16) this.scorchList.shift();
+    this.scorchList.push(entry);
+    return entry;
+  }
+
+  removeScorch(entry: { x: number; z: number; r: number; intensity: number; ember: number }): void {
+    const i = this.scorchList.indexOf(entry);
+    if (i >= 0) this.scorchList.splice(i, 1);
   }
 
   updateFog(color: THREE.Color, start: number, end: number): void {

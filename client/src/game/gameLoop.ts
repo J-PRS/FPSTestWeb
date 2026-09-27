@@ -19,6 +19,7 @@ import type { createEntities } from './entities.js';
 import type { createCombat } from './combat.js';
 import type { createDemoLifecycle } from './demoLifecycle.js';
 import type { createRemotes } from './remotes.js';
+import type { createWaveDirector } from './waveDirector.js';
 import type { WorldState } from './worldState.js';
 
 const _zeroVel = new THREE.Vector3(); // shared zero for demo playback
@@ -43,6 +44,7 @@ export interface GameLoopDeps {
   combat: () => ReturnType<typeof createCombat>;
   remotes: () => ReturnType<typeof createRemotes>;
   demoLifecycle: () => ReturnType<typeof createDemoLifecycle>;
+  waveDirector: () => ReturnType<typeof createWaveDirector>;
   world: WorldState;
   // ?dummy debug hook — null when the param isn't set
   getDummyTick: () => ((dt: number) => void) | null;
@@ -122,6 +124,11 @@ export function createGameLoop(deps: GameLoopDeps) {
     if (!demoPaused) entities.updateCrawlers(dt);
     if (!demoPaused) entities.updateTurrets(dt);
     if (!demoPaused) entities.updateRollers(dt);
+    if (!demoPaused) entities.updateSeekers(dt);
+    if (!demoPaused) entities.updateMiners(dt);
+    if (!demoPaused) entities.updateTotems(dt);
+    if (!demoPaused) entities.updateRakks(dt);
+    if (!demoPaused && !demoManager?.isPlaying) deps.waveDirector().update(dt);
     if (!demoManager?.isPlaying) entities.updateNuggets(dt);
     if (!demoManager?.isPlaying) {
       deps.combat()?.updateProjectiles(dt);
@@ -151,6 +158,7 @@ export function createGameLoop(deps: GameLoopDeps) {
     hud.update(dt, player, networkManager.getPing(), networkManager.getPacketLoss(), networkManager.getJitter());
     hud.setBallCount(entities.balls.filter(b => !b.dead && !b.disposed).length);
     hud.setNuggets(entities.getNuggetsCollected());
+    hud.setTimer(deps.waveDirector().elapsed);
     viewModel.group.visible = !demoManager?.isPlaying && !player.isDead;
     const yawDelta = Math.atan2(Math.sin(player.yaw - lastPlayerYaw), Math.cos(player.yaw - lastPlayerYaw));
     viewModel.update(dt, yawDelta, player.pitch - lastPlayerPitch, player.vel, camera);

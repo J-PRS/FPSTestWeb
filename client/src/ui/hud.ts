@@ -30,7 +30,9 @@ export class HUD {
   private playerIndicators: Map<string, HTMLDivElement> = new Map();
   private playerList: HTMLDivElement;
   private ballCountEl: HTMLDivElement;
+  private timerEl: HTMLDivElement;
   private lastBallCount = -1;
+  private lastTimerSec = -1;
 
   constructor() {
     const style = document.createElement('style');
@@ -96,6 +98,13 @@ export class HUD {
         position: fixed; bottom: 24px; left: 24px;
         font-size: 1.4rem; font-weight: bold; color: #fc8;
         font-variant-numeric: tabular-nums;
+      }
+      #hud-timer {
+        position: absolute; top: 14px; left: 50%;
+        transform: translateX(-50%);
+        font-size: 1.5rem; font-weight: bold; color: #ffd9a0;
+        font-variant-numeric: tabular-nums;
+        text-shadow: 0 0 6px rgba(0,0,0,0.8), 1px 1px 0 #000;
       }
       #hud-tl {
         position: absolute; top: 14px; left: 20px;
@@ -230,6 +239,7 @@ export class HUD {
       <div id="crosshair"></div>
       <div id="hit-marker"></div>
       <div id="ball-count">0</div>
+      <div id="hud-timer">00:00</div>
       <div id="scoreboard">
         <div class="sb-title">SCOREBOARD</div>
         <table><thead><tr><th>PLAYER</th><th>FRAGS</th><th>PING</th></tr></thead><tbody id="sb-rows"></tbody></table>
@@ -259,6 +269,16 @@ export class HUD {
     this.scoreboard = this.el.querySelector('#scoreboard')!;
     this.sbRows = this.el.querySelector('#sb-rows')!;
     this.ballCountEl = this.el.querySelector('#ball-count')!;
+    this.timerEl = this.el.querySelector('#hud-timer')!;
+  }
+
+  /** Run clock — MM:SS, DOM write only when the second rolls over */
+  setTimer(seconds: number): void {
+    const s = Math.floor(seconds);
+    if (s === this.lastTimerSec) return;
+    this.lastTimerSec = s;
+    this.timerEl.textContent =
+      `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
   }
 
   /** Live ball count — DOM write only on change */

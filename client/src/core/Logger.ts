@@ -12,9 +12,12 @@ export enum LogLevel {
 
 class Logger {
   private static currentLevel: LogLevel = LogLevel.INFO;
+  // Console output is WARN+ only — INFO/DEBUG still land in the Alt+Q buffer
+  private static consoleLevel: LogLevel = LogLevel.WARN;
   private static context: string = '';
   private static logBuffer: string[] = [];
   private static maxBufferSize = 1000; // Keep last 1000 log entries
+  private static writingToConsole = false; // suppress console wrapper re-entry
 
   /**
    * Set the minimum log level (default: INFO)
@@ -66,19 +69,24 @@ class Logger {
     const prefix = this.context ? `[${this.context}]` : '';
     const fullMessage = `${timestamp} ${prefix} [${levelStr}] ${message}`;
 
-    switch (level) {
-      case LogLevel.DEBUG:
-        console.log(fullMessage, context || '');
-        break;
-      case LogLevel.INFO:
-        console.log(fullMessage, context || '');
-        break;
-      case LogLevel.WARN:
-        console.warn(fullMessage, context || '');
-        break;
-      case LogLevel.ERROR:
-        console.error(fullMessage, context || '');
-        break;
+    if (level >= this.consoleLevel) {
+      this.writingToConsole = true;
+      try {
+        switch (level) {
+          case LogLevel.DEBUG:
+          case LogLevel.INFO:
+            console.log(fullMessage, context || '');
+            break;
+          case LogLevel.WARN:
+            console.warn(fullMessage, context || '');
+            break;
+          case LogLevel.ERROR:
+            console.error(fullMessage, context || '');
+            break;
+        }
+      } finally {
+        this.writingToConsole = false;
+      }
     }
 
     // Add to in-memory buffer for export
@@ -93,11 +101,29 @@ class Logger {
     }
   }
 
+  /** Register a diagnostics dump — prepended to Alt+Q/export output so bug
+   *  reports carry live game state (isDead, connection, ids) not just logs. */
+  private static diagnosticsProvider: (() => string[]) | null = null;
+  static setDiagnostics(fn: () => string[]): void {
+    this.diagnosticsProvider = fn;
+  }
+
+  private static buildHeader(): string[] {
+    const lines = [`=== DIAGNOSTICS @ ${new Date().toISOString()} ===`];
+    try {
+      if (this.diagnosticsProvider) lines.push(...this.diagnosticsProvider());
+    } catch (e) {
+      lines.push(`diagnostics threw: ${e}`);
+    }
+    lines.push('=== LOGS ===');
+    return lines;
+  }
+
   /**
    * Export logs as a downloadable file
    */
   static exportLogs(): void {
-    const logContent = this.logBuffer.join('\n');
+    const logContent = [...this.buildHeader(), ...this.logBuffer].join('\n');
     const blob = new Blob([logContent], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -116,6 +142,33 @@ class Logger {
     return [...this.logBuffer];
   }
 
+  /**
+   * Copy the last `count` buffered lines to the clipboard (Alt+Q).
+   * Keydown counts as a user gesture so navigator.clipboard is allowed.
+   */
+  static async copyLogs(count = 300): Promise<number> {
+    const lines = [...this.buildHeader(), ...this.logBuffer.slice(-count)].join('\n');
+    try {
+      await navigator.clipboard.writeText(lines);
+      return this.logBuffer.slice(-count).length;
+    } catch {
+      // Clipboard unavailable (insecure context / denied) — fall back to console
+      // (error so it bypasses the log/info console filter)
+      console.error(lines);
+      return -1;
+    }
+  }
+
+  /** Push a line from outside the logger (console wrapper) */
+  static pushRaw(line: string): void {
+    this.logBuffer.push(line);
+    if (this.logBuffer.length > this.maxBufferSize) this.logBuffer.shift();
+  }
+
+  static get isWritingToConsole(): boolean {
+    return this.writingToConsole;
+  }
+
   static debug(message: string, context?: any): void {
     this.log(LogLevel.DEBUG, message, context);
   }
@@ -131,6 +184,14 @@ class Logger {
   static error(message: string, context?: any): void {
     this.log(LogLevel.ERROR, message, context);
   }
+
+  /** Log with a one-shot context tag (used by ChildLogger) */
+  static logTagged(level: LogLevel, tag: string, message: string, context?: any): void {
+    const prevContext = this.context;
+    this.context = tag;
+    this.log(level, message, context);
+    this.context = prevContext;
+  }
 }
 
 /**
@@ -140,43 +201,84 @@ export class ChildLogger {
   constructor(private context: string) {}
 
   debug(message: string, context?: any): void {
-    const prevContext = (Logger as any).context;
-    (Logger as any).context = this.context;
-    Logger.debug(message, context);
-    (Logger as any).context = prevContext;
+    Logger.logTagged(LogLevel.DEBUG, this.context, message, context);
   }
 
   info(message: string, context?: any): void {
-    const prevContext = (Logger as any).context;
-    (Logger as any).context = this.context;
-    Logger.info(message, context);
-    (Logger as any).context = prevContext;
+    Logger.logTagged(LogLevel.INFO, this.context, message, context);
   }
 
   warn(message: string, context?: any): void {
-    const prevContext = (Logger as any).context;
-    (Logger as any).context = this.context;
-    Logger.warn(message, context);
-    (Logger as any).context = prevContext;
+    Logger.logTagged(LogLevel.WARN, this.context, message, context);
   }
 
   error(message: string, context?: any): void {
-    const prevContext = (Logger as any).context;
-    (Logger as any).context = this.context;
-    Logger.error(message, context);
-    (Logger as any).context = prevContext;
+    Logger.logTagged(LogLevel.ERROR, this.context, message, context);
+  }
+}
+
+declare global {
+  interface Window {
+    exportClientLogs?: () => void;
   }
 }
 
 // Initialize log level from environment variable if available (Vite)
-if (typeof import.meta !== 'undefined' && (import.meta as any).env?.LOG_LEVEL) {
-  Logger.setLogLevelFromString((import.meta as any).env.LOG_LEVEL);
+const viteEnv = (import.meta as { env?: Record<string, string | undefined> }).env;
+if (viteEnv?.LOG_LEVEL) {
+  Logger.setLogLevelFromString(viteEnv.LOG_LEVEL);
 }
 
 // Expose export function globally for manual export
 if (typeof window !== 'undefined') {
-  (window as any).exportClientLogs = () => Logger.exportLogs();
-  console.log('Client logging initialized. Call exportClientLogs() to download logs.');
+  window.exportClientLogs = () => Logger.exportLogs();
+
+  // Capture raw console.* calls that bypass the logger into the same buffer
+  // (logger output is excluded via isWritingToConsole to avoid duplicates)
+  const fmt = (args: unknown[]) =>
+    args.map(a => (typeof a === 'string' ? a : (() => { try { return JSON.stringify(a); } catch { return String(a); } })())).join(' ');
+  for (const m of ['log', 'info', 'warn', 'error'] as const) {
+    const orig = console[m].bind(console);
+    // log/info stay buffered for Alt+Q but don't hit the console — only
+    // warn/error pass through (mirrors the Logger console filter)
+    const passthrough = m === 'warn' || m === 'error';
+    console[m] = (...args: unknown[]) => {
+      if (!Logger.isWritingToConsole) Logger.pushRaw(`${new Date().toISOString()} [${m.toUpperCase()}] ${fmt(args)}`);
+      if (passthrough) orig(...args);
+    };
+  }
+
+  // Alt+Q — copy last 300 log lines to clipboard without opening devtools
+  let toastEl: HTMLDivElement | null = null;
+  let toastTimer = 0;
+  const toast = (msg: string, ok = true) => {
+    if (!toastEl) {
+      toastEl = document.createElement('div');
+      toastEl.style.cssText = 'position:fixed;top:18px;left:50%;transform:translateX(-50%);padding:8px 18px;border-radius:6px;background:rgba(10,16,22,0.9);border:1px solid rgba(255,255,255,0.2);color:#dfe;font:600 13px/1.2 "Segoe UI",Arial,sans-serif;letter-spacing:0.05em;z-index:99999;pointer-events:none;transition:opacity 0.2s;';
+      document.body.appendChild(toastEl);
+    }
+    toastEl.textContent = msg;
+    toastEl.style.borderColor = ok ? 'rgba(120,255,180,0.5)' : 'rgba(255,120,120,0.5)';
+    toastEl.style.opacity = '1';
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { toastEl!.style.opacity = '0'; }, 1500) as unknown as number;
+  };
+  document.addEventListener('keydown', (e) => {
+    if (e.altKey && e.code === 'KeyQ') {
+      e.preventDefault();
+      Logger.copyLogs(300).then(n => {
+        if (n >= 0) {
+          toast(`Copied ${n} log lines`);
+          console.log(`[Logger] Copied ${n} log lines to clipboard`);
+        } else {
+          toast('Clipboard unavailable — dumped to console', false);
+          console.log('[Logger] Clipboard unavailable — dumped to console');
+        }
+      });
+    }
+  });
+
+  console.log('Client logging initialized. Call exportClientLogs() to download logs, Alt+Q to copy.');
 }
 
 export default Logger;
