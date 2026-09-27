@@ -8,6 +8,7 @@ import { ChildLogger } from '../core/Logger.js';
 import { PlayerModel } from './PlayerModel.js';
 import { pickLocomotionAnim } from './locomotionAnim.js';
 import { SnapshotBuffer } from './remoteSnapshots.js';
+import { RemoteGizmo } from './remoteGizmo.js';
 
 const logger = new ChildLogger('RemotePlayer');
 
@@ -42,7 +43,7 @@ export class RemotePlayer {
   private previousPosition: THREE.Vector3;
   private _loaded: boolean = false;
   private _isDead: boolean = false;
-  private gizmo: THREE.Mesh | null = null;
+  private gizmo: RemoteGizmo | null = null;
   private scene: THREE.Scene;
   private velocity: THREE.Vector3 = new THREE.Vector3();
   private angularVelocity: THREE.Vector3 = new THREE.Vector3();
@@ -105,19 +106,7 @@ export class RemotePlayer {
     this.lastServerUpdateMs = this.lastUpdateTime;
     this.lastServerPosition.copy(this.position);
 
-    // Create visual gizmo (ring above head)
-    const ringGeometry = new THREE.RingGeometry(0.3, 0.4, 32);
-    const ringMaterial = new THREE.MeshBasicMaterial({
-      color: 0x00ff00,
-      side: THREE.DoubleSide,
-      transparent: true,
-      opacity: 0.7
-    });
-    this.gizmo = new THREE.Mesh(ringGeometry, ringMaterial);
-    this.gizmo.rotation.x = -Math.PI / 2; // Lay flat
-    // Position just above the head — head top is ~0.6 above eye height
-    this.gizmo.position.set(startPos.x, startPos.y + 0.7, startPos.z);
-    scene.add(this.gizmo);
+    this.gizmo = new RemoteGizmo(scene, startPos);
     logger.debug(`GIZMO ADDED`, { playerId, instanceId: this.instanceId });
 
     // Initialize player model
@@ -268,12 +257,7 @@ export class RemotePlayer {
 
     this.updateAliveModel(dt);
 
-    // Update gizmo position (only if alive)
-    if (this.gizmo) {
-      this.gizmo.position.set(this.position.x, this.position.y + 0.7, this.position.z);
-      (this.gizmo.material as THREE.MeshBasicMaterial).color.setHex(0x00ff00);
-      this.gizmo.visible = true;
-    }
+    this.gizmo?.follow(this.position);
   }
 
   // Sample the snapshot buffer at renderTime = now - adaptive interp delay
@@ -367,7 +351,7 @@ export class RemotePlayer {
 
     // Remove gizmo from scene immediately on death
     if (this.gizmo) {
-      this.scene.remove(this.gizmo);
+      this.gizmo.detach();
       logger.debug(`GIZMO REMOVED on death`, { playerId: this.playerId });
     }
 
@@ -420,14 +404,12 @@ export class RemotePlayer {
   /** Team tint on the name ring — Nugget Wars bots use it; server players
    *  could too once teamAssign lands on the wire. */
   setGizmoColor(hex: number): void {
-    (this.gizmo?.material as THREE.MeshBasicMaterial | undefined)?.color.setHex(hex);
+    this.gizmo?.setColor(hex);
   }
 
   hide(): void {
     this.model.setVisible(false);
-    if (this.gizmo) {
-      this.gizmo.visible = false;
-    }
+    this.gizmo?.hide();
   }
 
   show(): void {
@@ -436,14 +418,7 @@ export class RemotePlayer {
     if (this.loaded) {
       this.model.addColliderGizmo();
     }
-    if (this.gizmo) {
-      // Re-add gizmo to scene if it was removed
-      if (!this.scene.children.includes(this.gizmo)) {
-        this.scene.add(this.gizmo);
-      }
-      this.gizmo.visible = true;
-      (this.gizmo.material as THREE.MeshBasicMaterial).color.setHex(0x00ff00);
-    }
+    this.gizmo?.attach();
   }
 
   // Simulate physics when player stops sending updates (dead reckoning)
@@ -540,9 +515,7 @@ export class RemotePlayer {
     logger.debug(`DISPOSE called`, { playerId: this.playerId, instanceId: this.instanceId });
     this._model.dispose();
     if (this.gizmo) {
-      this.scene.remove(this.gizmo);
-      this.gizmo.geometry.dispose();
-      (this.gizmo.material as THREE.Material).dispose();
+      this.gizmo.dispose();
       this.gizmo = null;
       logger.debug(`GIZMO REMOVED`, { playerId: this.playerId, instanceId: this.instanceId });
     }

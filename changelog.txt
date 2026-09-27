@@ -1857,3 +1857,4 @@
 - npm run check — one-shot tsc+oxlint+vitest gate
 - Fix: localAuthority assignment ran before `new NetworkManager()` (crash on boot since the connectServer extraction); moved below construction
 - Dedup: spawnTotem/spawnUberTotem merged into spawnTotem(uber)
+- Extract RemoteGizmo (entities/remoteGizmo.ts) — ring marker logic out of RemotePlayer; team tint no longer clobbered by the per-frame green reset
