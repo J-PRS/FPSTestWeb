@@ -1918,3 +1918,4 @@ match time limits: nuggets 15m / ctf 20m / dm 10m, clock arms on first human joi
 per-map terrain: spec.terrain names maps/<file>.bin, loaded lazily + shared via a field cache; room keeps the default field until its own lands
 match clock on the wire: matchEndsAt in gameState for late joiners, timeLeftMs in /rooms so the lobby shows a countdown per row
 60s match warning: matchNotice wire type -> system chat line, once per match, re-arms on matchStart
+load test: 24 bots / 3 rooms on one server — tick 18Hz delivered, p50 gap 61ms, max 76ms, 0 corrections, 0 msgs rejected, tick lag avg 11ms max 19ms; rooms disposed cleanly after mass leave
