@@ -118,16 +118,58 @@ export class EffectsManager {
     flash.mesh.lookAt(_v3.copy(pos).add(back));
   }
 
+  // Bullet pock — small dark disc pressed onto the terrain surface, shrinks
+  // out over ~1s. Pooled; only stamped for actual terrain hits (a mid-air
+  // mark where a ball stood would read as a floating smudge).
+  spawnBulletMark(pos: THREE.Vector3): void {
+    if (!this.terrain) return;
+    const e = 0.4;
+    const h  = this.terrain.getHeight(pos.x, pos.z);
+    const hx = this.terrain.getHeight(pos.x + e, pos.z) - this.terrain.getHeight(pos.x - e, pos.z);
+    const hz = this.terrain.getHeight(pos.x, pos.z + e) - this.terrain.getHeight(pos.x, pos.z - e);
+    _v.set(-hx / (2 * e), 1, -hz / (2 * e)).normalize(); // surface normal
+    // Lift along the normal enough to clear surface bumps between the
+    // disc's center and rim — 3cm buried edges on anything but flat ground
+    _v2.set(pos.x, h, pos.z).addScaledVector(_v, 0.12);
+    _c.setHex(0x14100c);
+    const mark = this.alloc(this.sharedDiscGeo, _v2, _v3.set(0, 0, 0), 1.0, _c,
+      { opacity: 0.7, depthWrite: false, noGravity: true, sizeScale: 0.2, side: THREE.DoubleSide });
+    mark.mesh.lookAt(_v3.copy(_v2).add(_v));
+  }
+
+  // Jet contrail — NOT an exhaust cloud. Tribes-style: a thin additive
+  // streak fired DOWN hard (~16m/s) so particles exit the view cone in
+  // ~0.1s — looking down you see a stream leaving, not a column of fat
+  // blobs you're inside of. Additive + small sizeScale so overlaps add
+  // light instead of mass, and the grow-on-age update reads as streaks.
   spawnJetpack(pos: THREE.Vector3): void {
-    for (let i = 0; i < 3; i++) {
-      _c.setRGB(0.2, 0.6 + Math.random() * 0.4, 1.0);
+    for (let i = 0; i < 2; i++) {
+      _c.setRGB(0.3 + Math.random() * 0.3, 0.7 + Math.random() * 0.3, 1.0);
       _v.set(
-        (Math.random() - 0.5) * 3,
-        -(2 + Math.random() * 4),
-        (Math.random() - 0.5) * 3
+        (Math.random() - 0.5) * 2.5,
+        -(14 + Math.random() * 6), // exhaust velocity — clears your face fast
+        (Math.random() - 0.5) * 2.5
       );
-      _v2.copy(pos).addScaledVector(_v3.set(0, -1, 0), 1.2);
-      this.alloc(this.sharedGeo, _v2, _v, 0.2 + Math.random() * 0.15, _c);
+      _v2.copy(pos).addScaledVector(_v3.set(0, -1, 0), 1.1);
+      _v2.x += (Math.random() - 0.5) * 0.3;
+      _v2.z += (Math.random() - 0.5) * 0.3;
+      this.alloc(this.sharedGeo, _v2, _v, 0.18 + Math.random() * 0.12, _c,
+        { opacity: 0.4, additive: true, depthWrite: false, sizeScale: 0.35 });
+    }
+  }
+
+  // Warp beacon trail — emits AT the beacon (spawnJetpack offsets -1.2m
+  // for feet, which drags the trail under the disc). Sparks shed backward
+  // with a slight sag so the arc of the flight path reads.
+  spawnWarpTrail(pos: THREE.Vector3): void {
+    for (let i = 0; i < 2; i++) {
+      _c.setRGB(0.35, 0.9 + Math.random() * 0.1, 0.95); // teal — matches beacon glow
+      _v.set(
+        (Math.random() - 0.5) * 2,
+        -(0.5 + Math.random() * 1.5), // gentle shed, not a jet exhaust
+        (Math.random() - 0.5) * 2
+      );
+      this.alloc(this.sharedGeo, pos, _v, 0.25 + Math.random() * 0.15, _c);
     }
   }
 
@@ -198,6 +240,50 @@ export class EffectsManager {
       );
       this.alloc(this.sharedGeo, _v2, _v, 0.3 + Math.random() * 0.3, _c, { opacity: 0.3, noGravity: true });
     }
+  }
+
+  // Creature ground dust — ONE puff per call, callers emit on a distance
+  // accumulator so faster movers naturally kick more. `speed` scales the
+  // puff's size/opacity/upthrow; `radius` spreads it under bigger bodies.
+  // A roller at speed plows a real roostertail; a grub barely puffs.
+  spawnMoveDust(pos: THREE.Vector3, vel: THREE.Vector3, speed: number, radius: number): void {
+    const groundY = this.terrain ? this.terrain.getHeight(pos.x, pos.z) : 0;
+    const k = Math.min(1, speed / 14); // 0=creep, 1=hauling
+    const n = speed > 8 ? 2 : 1;       // fast movers shed pairs per puff
+    for (let i = 0; i < n; i++) {
+      const shade = 0.55 + Math.random() * 0.2 + k * 0.15; // faster = kicked higher, dries brighter
+      _c.setRGB(shade, shade * 0.92, shade * 0.72);
+      _v2.set(
+        pos.x + (Math.random() - 0.5) * radius * 1.6,
+        groundY + 0.15 + k * 0.3,
+        pos.z + (Math.random() - 0.5) * radius * 1.6
+      );
+      _v.set(
+        -vel.x * 0.06 + (Math.random() - 0.5) * (1 + k * 2),
+        0.4 + k * 2.2 + Math.random() * 0.6, // speed throws it UP
+        -vel.z * 0.06 + (Math.random() - 0.5) * (1 + k * 2)
+      );
+      this.alloc(this.sharedGeo, _v2, _v, 0.35 + k * 0.5 + Math.random() * 0.2, _c,
+        { opacity: 0.22 + k * 0.3, noGravity: true, sizeScale: 0.6 + k * 0.9 });
+    }
+  }
+
+  // Flyer trail — ONE faint mote per call, callers emit on a distance
+  // accumulator. A pale slipstream wisp shed behind the body: not smoke,
+  // not a contrail — just enough to make fast silhouettes read motion.
+  spawnFlyTrail(pos: THREE.Vector3, vel: THREE.Vector3, speed: number): void {
+    const k = Math.min(1, speed / 18);
+    const shade = 0.6 + k * 0.2;
+    _c.setRGB(shade, shade * 0.95, shade * 0.85);
+    _v2.set(
+      pos.x + (Math.random() - 0.5) * 0.4,
+      pos.y + (Math.random() - 0.5) * 0.4,
+      pos.z + (Math.random() - 0.5) * 0.4
+    );
+    // Shed slightly back + drift down — a settling slipstream, not a jet
+    _v.set(-vel.x * 0.1 + (Math.random() - 0.5) * 0.4, -0.3 - k * 0.4, -vel.z * 0.1 + (Math.random() - 0.5) * 0.4);
+    this.alloc(this.sharedGeo, _v2, _v, 0.5 + k * 0.6, _c,
+      { opacity: 0.10 + k * 0.12, noGravity: true, sizeScale: 0.35 + k * 0.4 });
   }
 
   update(dt: number): void {

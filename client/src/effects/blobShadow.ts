@@ -41,19 +41,36 @@ export class BlobShadow {
       transparent: true,
       depthWrite: false,
       // depthTest ON — a blob behind a ridge must be occluded by it.
-      // The +0.05 lift in update() prevents z-fighting where it's visible.
+      // polygonOffset biases depth toward the camera: the conformed grid
+      // still grazes under terrain between vertices, and without the bias
+      // those fragments clip out as hard polygon wedges.
       depthTest: true,
+      polygonOffset: true,
+      polygonOffsetFactor: -4,
+      polygonOffsetUnits: -4,
     });
-    this.mesh = new THREE.Mesh(new THREE.CircleGeometry(radius, 32), this.mat);
+    // Grid conforming to the terrain — a flat disc buries its uphill half
+    // inside any slope and depthTest clips it. Each vertex is displaced to
+    // the local terrain height in update(), so the blob hugs the ground.
+    this.mesh = new THREE.Mesh(new THREE.PlaneGeometry(radius * 2, radius * 2, 10, 10), this.mat);
     this.mesh.rotation.x = -Math.PI / 2;
     this.mesh.renderOrder = 999;
     scene.add(this.mesh);
   }
 
+  private posAttr: THREE.BufferAttribute | null = null;
+
   /** Pin to terrain under `pos`; fade as height above ground grows. */
   update(pos: THREE.Vector3, terrain: Terrain): void {
+    const attr = this.posAttr
+      ?? (this.posAttr = this.mesh.geometry.getAttribute('position') as THREE.BufferAttribute);
+    // Local (x, y) → world (x, −y) under rotation.x = −π/2; local z → world up
+    for (let i = 0; i < attr.count; i++) {
+      attr.setZ(i, terrain.getHeight(pos.x + attr.getX(i), pos.z - attr.getY(i)) + 0.05);
+    }
+    attr.needsUpdate = true;
+    this.mesh.position.set(pos.x, 0, pos.z);
     const groundY = terrain.getHeight(pos.x, pos.z);
-    this.mesh.position.set(pos.x, groundY + 0.05, pos.z);
     const airHeight = pos.y - groundY;
     const base = this.mat.uniforms.baseOpacity.value as number;
     this.mat.uniforms.opacity.value = airHeight > 3.0

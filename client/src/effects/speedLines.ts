@@ -53,6 +53,47 @@ export class SpeedLines {
     this.burstLvl = 1;
   }
 
+  /**
+   * Tracer-style blink surge — a line of tinted streaks stamped along the
+   * travel path so the teleport reads as a whoosh, not a cut. Also flares
+   * intensity so they render even if velocity just changed.
+   */
+  surge(from: THREE.Vector3, to: THREE.Vector3, color = 0x55ccff, count = 14): void {
+    _velDir.subVectors(to, from);
+    const len = _velDir.length();
+    if (len < 0.5) { this.burst(); return; }
+    _velDir.normalize();
+    _side.crossVectors(_velDir, _upAxis);
+    if (_side.lengthSq() < 1e-6) _side.set(1, 0, 0); else _side.normalize();
+    _up.crossVectors(_side, _velDir);
+
+    for (let i = 0; i < count; i++) {
+      const s = this.alloc();
+      const t = Math.random();
+      const ang = Math.random() * Math.PI * 2;
+      const rad = 0.8 + Math.random() * 2.4;
+      _pos.lerpVectors(from, to, t)
+        .addScaledVector(_side, Math.cos(ang) * rad)
+        .addScaledVector(_up, Math.sin(ang) * rad);
+      s.mesh.position.copy(_pos);
+
+      // Same cylindrical billboard orientation as spawnOne — streaks lie
+      // along the blink direction
+      _toCam.subVectors(_pos, from).addScaledVector(_velDir, -_toCam.dot(_velDir));
+      if (_toCam.lengthSq() < 1e-6) _toCam.set(0, 0, 1); else _toCam.normalize();
+      _x.crossVectors(_velDir, _toCam);
+      _m.makeBasis(_x, _velDir, _toCam);
+      s.mesh.quaternion.setFromRotationMatrix(_m);
+      s.mesh.scale.y = STREAK_LEN_MIN + Math.random() * (STREAK_LEN_MAX - STREAK_LEN_MIN);
+
+      s.mat.color.setHex(color);
+      s.drift.copy(_velDir).multiplyScalar(-4 - Math.random() * 4);
+      s.maxLife = s.life = LIFE_MAX;
+      this.streaks.push(s);
+    }
+    this.burstLvl = 1;
+  }
+
   constructor(scene: THREE.Scene) {
     this.scene = scene;
   }
