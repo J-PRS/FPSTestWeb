@@ -75,7 +75,8 @@ surface. Detailed research lives in `_reports/`; this file is the current truth.
    bot flag grabs over the wire. `botFill` spec keeps a room at N total
    bodies — spawns/retires bots as humans come and go (dead bots retire
    first); `teamUpdate` wire msg + bot-only rebalancing on leaver skew.
-   Next extensions: terrain ref, species mix. Shared brain landed:
+   Next extensions: species mix. `terrain` ref landed: maps/<file>.bin
+   heightfields per room (lazy, cached, shared). Shared brain landed:
    shared/botBrain.ts drives offline GameBots AND server bots — one
    personality, both runtimes.
 4. ~~Server-owned teams/score~~ — landed: rooms assign alpha/bravo on
