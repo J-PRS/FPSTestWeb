@@ -48,6 +48,20 @@ describe('Room DM scoring', () => {
     expect(sent.some((m) => m.type === 'ffaScore')).toBe(false);
   });
 
+  it('creature kills bank ptsCreatureKill', () => {
+    const sent: ServerMessage[] = [];
+    const room = dmRoom(sent);
+    room.players.addPlayer('hunter');
+    room.ballSim.onKilled!('hunter');
+    const fs = sent.filter((m) => m.type === 'ffaScore');
+    expect(fs.length).toBe(1);
+    expect((fs[0] as { scores: Record<string, number> }).scores.hunter).toBe(MODES.dm.ptsCreatureKill);
+    // Unknown/environment-ish killers score nothing
+    sent.length = 0;
+    room.ballSim.onKilled!('ghost');
+    expect(sent.some((m) => m.type === 'ffaScore')).toBe(false);
+  });
+
   it('reaching winAt ends the match and resets the board', () => {
     const sent: ServerMessage[] = [];
     const room = dmRoom(sent);

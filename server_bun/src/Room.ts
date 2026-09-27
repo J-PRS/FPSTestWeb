@@ -77,6 +77,7 @@ export class Room {
       (data) => this.connections.broadcastBinary(data),
     );
     this.ballSim.population = this.spec.balls;
+    this.ballSim.onKilled = (by) => this.creatureKill(by);
     if (this.spec.ballMix) this.ballSim.ballMix = this.spec.ballMix;
     if (this.spec.spawns) this.players.spawnPoints = this.spec.spawns;
     this.messages.setBallSim(this.ballSim);
@@ -114,20 +115,33 @@ export class Room {
    *  a bot can legitimately win a deathmatch. */
   readonly ffaScores = new Map<string, number>();
 
+  /** Creature kill — ballDie attribution from BallSim. FFA-only for now;
+   *  team modes bank nuggets through the claim path instead. */
+  private creatureKill(by: string): void {
+    const spec = this.modeSpec;
+    if (!spec?.ffa || spec.ptsCreatureKill <= 0 || !this.players.getPlayer(by)) return;
+    this.awardFfa(by, spec.ptsCreatureKill);
+  }
+
+  private awardFfa(id: string, n: number): void {
+    const spec = this.modeSpec!;
+    const pts = (this.ffaScores.get(id) ?? 0) + n;
+    this.ffaScores.set(id, pts);
+    this.broadcast({ type: 'ffaScore', scores: Object.fromEntries(this.ffaScores), winAt: spec.winAt });
+    if (pts >= spec.winAt) {
+      this.broadcast({ type: 'ffaMatchEnd', winner: id, scores: Object.fromEntries(this.ffaScores) });
+      this.ffaScores.clear();
+      this.broadcast({ type: 'matchStart', mode: this.mode, scores: { ...this.scores } });
+    }
+  }
+
   /** Kill hook from the damage funnel: flag drop in every mode, frag
    *  points in FFA rooms. 'environment' shooters score nothing. */
   private onKill(targetId: string, shooterId: string): void {
     this.flagCarrierDied(targetId);
     const spec = this.modeSpec;
     if (!spec?.ffa || !this.players.getPlayer(shooterId)) return;
-    const pts = (this.ffaScores.get(shooterId) ?? 0) + spec.ptsPlayerKill;
-    this.ffaScores.set(shooterId, pts);
-    this.broadcast({ type: 'ffaScore', scores: Object.fromEntries(this.ffaScores), winAt: spec.winAt });
-    if (pts >= spec.winAt) {
-      this.broadcast({ type: 'ffaMatchEnd', winner: shooterId, scores: Object.fromEntries(this.ffaScores) });
-      this.ffaScores.clear();
-      this.broadcast({ type: 'matchStart', mode: this.mode, scores: { ...this.scores } });
-    }
+    this.awardFfa(shooterId, spec.ptsPlayerKill);
   }
 
   /** Team point from an objective (flag capture) — separate from bank()
