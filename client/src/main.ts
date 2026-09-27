@@ -248,6 +248,45 @@ async function init(): Promise<void> {
   wirePlayerHooks({ player, combat, effects, viewModel, speedLines });
   profiler.markTime('playerCreated');
 
+  // Offline death path — the server's kill+respawn round-trip replicated
+  // locally. Shared by bot frags and creature/environment damage.
+  const killLocal = (source: string) => {
+    if (player.isDead) return;
+    player.isDead = true;
+    player.health = 0;
+    hud.hide();
+    hud.setDeathOverlay(true);
+    fragMessages.show(`YOU DIED\n${source}`);
+    setTimeout(() => {
+      player.isDead = false;
+      player.health = 100;
+      player.lastDamageSource = '';
+      player.vel.set(0, 0, 0);
+      const a = Math.random() * Math.PI * 2;
+      player.pos.set(Math.cos(a) * 40, terrain.getHeight(Math.cos(a) * 40, Math.sin(a) * 40) + 2, Math.sin(a) * 40);
+      player.syncMovement();
+      player.markTeleport();
+      hud.show();
+      hud.setDeathOverlay(false);
+    }, 3000);
+  };
+  // No server? Damage/heal claims resolve here — same clamps the server
+  // applies (40 max env hit, 25 max heal) so offline can't cheat easier.
+  networkManager.localAuthority = {
+    envDamage: (amount) => {
+      const dmg = Math.min(40, Math.max(1, Math.round(amount)));
+      if (player.isDead) return;
+      player.health = Math.max(0, player.health - dmg);
+      player.lastDamageSource = 'the wilderness';
+      hud.showDamage(player.pos, dmg);
+      sfx.playerHurt();
+      if (player.health <= 0) { teamBots?.localDied(); killLocal('killed by the wilderness'); }
+    },
+    heal: (amount) => {
+      player.health = Math.min(100, player.health + Math.min(25, Math.max(1, Math.round(amount))));
+    },
+  };
+
   // ?mode=nuggets|ctf|dm — offline-vs-bots modes. Bots live in
   // world.remotePlayers so creatures hunt them and projectiles hit them
   // like real players.
@@ -269,26 +308,7 @@ async function init(): Promise<void> {
       },
       {
         dropNuggets: (pos, n, vel) => entities.spawnNuggetsAt(pos, n, vel),
-        localPlayerKilled: (killerName) => {
-          player.isDead = true;
-          player.health = 0;
-          hud.hide();
-          hud.setDeathOverlay(true);
-          fragMessages.show(`YOU DIED\nfragged by ${killerName}`);
-          // Offline respawn — no server to send the event back.
-          setTimeout(() => {
-            player.isDead = false;
-            player.health = 100;
-            player.lastDamageSource = '';
-            player.vel.set(0, 0, 0);
-            const a = Math.random() * Math.PI * 2;
-            player.pos.set(Math.cos(a) * 40, terrain.getHeight(Math.cos(a) * 40, Math.sin(a) * 40) + 2, Math.sin(a) * 40);
-            player.syncMovement();
-            player.markTeleport();
-            hud.show();
-            hud.setDeathOverlay(false);
-          }, 3000);
-        },
+        localPlayerKilled: (killerName) => killLocal(`fragged by ${killerName}`),
         remoteKillFeed: (text) => fragMessages.show(text),
         nearestNugget: (pos, maxDist) => {
           let best: typeof entities.nuggets[0] | null = null;

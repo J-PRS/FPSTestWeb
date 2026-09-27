@@ -310,13 +310,52 @@ export class TeamBots {
         nugget: this.spec.flags ? null : this.hooks.nearestNugget(bot.position, 60),
         objective: this.spec.flags ? this.flagObjective(bot) : null,
       });
-      if (shot) this.resolveShot(bot, shot.targetId, shot.aim);
+      if (shot && !this.over) this.resolveShot(bot, shot.targetId, shot.aim); // ceasefire while the banner's up
     }
     if (this.spec.flags) this.updateFlags(dt);
     if (!this.over) {
       const w = this.checkWin();
-      if (w) this.over = w;
+      if (w) {
+        this.over = w;
+        this.hooks.remoteKillFeed(this.winText(w));
+        sfx.pickup();
+        this.overAt = performance.now();
+      }
+    } else if (performance.now() - this.overAt > 8000) {
+      this.resetMatch();
     }
+  }
+
+  private overAt = 0;
+
+  private winText(w: string): string {
+    if (!this.spec.ffa) return `${TEAM_LABEL[w as TeamId]} WINS — ${this.scores.alpha}:${this.scores.bravo}`;
+    const name = w === 'local' ? 'YOU' : w.replace('bot:', '');
+    return `${name} WINS the deathmatch — ${this.ffaScores.get(w)} pts`;
+  }
+
+  /** Match over → wipe scores, respawn every bot, flags home. */
+  private resetMatch(): void {
+    this.over = null;
+    this.scores.alpha = 0; this.scores.bravo = 0;
+    for (const k of this.ffaScores.keys()) this.ffaScores.set(k, 0);
+    const player = this.deps.lazyPlayer();
+    const terrain = this.deps.lazyTerrain();
+    for (const bot of this.bots) {
+      const a = Math.random() * Math.PI * 2;
+      const r = 20 + Math.random() * 40;
+      const sp = new THREE.Vector3(player.pos.x + Math.cos(a) * r, 0, player.pos.z + Math.sin(a) * r);
+      sp.y = terrain.getHeight(sp.x, sp.z) + EYE;
+      bot.respawn({ x: sp.x, y: sp.y, z: sp.z });
+      bot.botHp = BOT_HP;
+      bot.carryingFlag = false;
+      bot.show();
+    }
+    for (const f of this.flags.values()) {
+      f.state = 'home'; f.carrier = null; f.pos.copy(f.home); f.mesh.position.copy(f.home);
+    }
+    this.pushScore();
+    this.hooks.remoteKillFeed(`${this.spec.label} — NEW MATCH`);
   }
 
   private checkWin(): string | null {
