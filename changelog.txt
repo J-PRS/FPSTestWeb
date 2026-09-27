@@ -1779,3 +1779,9 @@
 - Shared killLocal() death+respawn path used by bot frags and wilderness deaths
 - Match end: winner banner via kill feed, 8s ceasefire, then auto-reset (scores wiped, bots respawn, flags home, NEW MATCH feed line)
 - Scoreboard now lists offline bots (they live in world.remotePlayers, not the network roster)
+== Perf pass: hot-loop allocations ==
+- Bot bolt tracers pooled (bots.ts) — was a fresh BufferGeometry + GL upload per shot for a 120ms visual
+- speciesKit.candidates() cached per frame — was rebuilding the full target roster once per entity per tick (O(entities × roster))
+- HUD player indicators + health bars: per-frame left/top style writes → compositor-only transform; size writes skipped unless the px value changes
+- Minimap toMap returns scratch pair instead of allocating a tuple per dot per frame
+- Particle + bolt removal: splice(i,1) → swap-pop (order-independent, O(n) shift avoided)

@@ -15,6 +15,9 @@ const _projected = new THREE.Vector3();
 export class PlayerIndicators {
   private readonly container: HTMLElement;
   private readonly indicators = new Map<string, HTMLDivElement>();
+  // Cache last written values — position via transform (compositor-only,
+  // no layout) and size only when the px value actually changes.
+  private readonly lastSize = new Map<string, number>();
 
   constructor(container: HTMLElement) {
     this.container = container;
@@ -66,11 +69,13 @@ export class PlayerIndicators {
       const MIN_SIZE = 6;
       const MAX_SIZE = 12;
       const scale = REF_DIST / Math.sqrt(Math.max(distance, 1));
-      const size = Math.max(MIN_SIZE, Math.min(MAX_SIZE, 12 * scale));
-      indicator.style.width = `${size}px`;
-      indicator.style.height = `${size}px`;
-      indicator.style.left = `${x}px`;
-      indicator.style.top = `${y}px`;
+      const size = Math.round(Math.max(MIN_SIZE, Math.min(MAX_SIZE, 12 * scale)));
+      if (this.lastSize.get(playerId) !== size) {
+        this.lastSize.set(playerId, size);
+        indicator.style.width = `${size}px`;
+        indicator.style.height = `${size}px`;
+      }
+      this.setPos(indicator, x, y);
     } else {
       indicator.classList.add('offscreen');
 
@@ -85,9 +90,14 @@ export class PlayerIndicators {
       const halfHeight = window.innerHeight / 2 - margin;
       const dist = Math.min(halfWidth / Math.abs(Math.cos(angle)), halfHeight / Math.abs(Math.sin(angle)));
 
-      indicator.style.left = `${centerX + Math.cos(angle) * dist}px`;
-      indicator.style.top = `${centerY + Math.sin(angle) * dist}px`;
+      this.setPos(indicator, centerX + Math.cos(angle) * dist, centerY + Math.sin(angle) * dist);
     }
+  }
+
+  // transform keeps the -50% centering from the stylesheet while moving the
+  // element on the compositor — layout isn't touched at 60Hz.
+  private setPos(el: HTMLElement, x: number, y: number): void {
+    el.style.transform = `translate(-50%, -50%) translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)`;
   }
 
   remove(playerId: string): void {
@@ -95,6 +105,7 @@ export class PlayerIndicators {
     if (indicator) {
       indicator.remove();
       this.indicators.delete(playerId);
+      this.lastSize.delete(playerId);
       logger.debug('INDICATOR REMOVED', { playerId, total: this.indicators.size });
     }
   }
@@ -102,5 +113,6 @@ export class PlayerIndicators {
   clear(): void {
     this.indicators.forEach(i => i.remove());
     this.indicators.clear();
+    this.lastSize.clear();
   }
 }

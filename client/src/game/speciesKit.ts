@@ -99,8 +99,14 @@ export function createSpeciesKit(deps: EntitiesDeps, targets: Targetable[]) {
   const _candMap = new Map<string, TargetCandidate>();
   const _candList: TargetCandidate[] = [];
   const _zeroVel = new THREE.Vector3();
+  // The roster only changes between frames, never mid-frame — rebuilding
+  // it per entity multiplied a full map scan by entity count.
+  let _candFrame = -1;
 
   function candidates(): TargetCandidate[] {
+    const frame = Math.floor(performance.now() / 16);
+    if (frame === _candFrame) return _candList;
+    _candFrame = frame;
     const p = deps.lazyPlayer();
     let c = _candMap.get('local');
     if (!c) {

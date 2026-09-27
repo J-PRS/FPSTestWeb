@@ -19,6 +19,7 @@ export class Minimap {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
   private cross: boolean;
+  private readonly _map: [number, number] = [0, 0];
 
   constructor(parent: HTMLElement) {
     // ?minimap=cross|corner — persists to the fps-minimap setting
@@ -67,12 +68,13 @@ export class Minimap {
     const k = RIM / RANGE;
 
     // Crosshair mode is threats-only — pickups and hazards aren't threats.
+    const m = this._map; // scratch — toMap fills it instead of allocating
     if (!this.cross) {
       // Nuggets under enemies — pickups shouldn't hide threats
       for (const n of nuggets) {
-        const [sx, sy] = this.toMap(n.pos.x - pos.x, n.pos.z - pos.z, sin, cos, k, mid);
+        this.toMap(n.pos.x - pos.x, n.pos.z - pos.z, sin, cos, k, mid);
         c.fillStyle = 'rgba(255,213,74,0.9)';
-        c.fillRect(sx - 1, sy - 1, 2, 2);
+        c.fillRect(m[0] - 1, m[1] - 1, 2, 2);
       }
     }
     for (const e of targets) {
@@ -82,12 +84,12 @@ export class Minimap {
       if (e.scoreless) continue;
       // Crosshair mode is threats-only — but an enraged ball IS a threat
       if (this.cross && e instanceof Ball && !e.isEnraged) continue;
-      const [sx, sy] = this.toMap(e.pos.x - pos.x, e.pos.z - pos.z, sin, cos, k, mid);
+      this.toMap(e.pos.x - pos.x, e.pos.z - pos.z, sin, cos, k, mid);
       // Enraged balls are actively hunting you — promote cyan hazard to
       // red threat so an incoming dash pings radar like a real enemy.
       c.fillStyle = e instanceof Ball && !e.isEnraged ? 'rgba(80,200,255,0.9)' : 'rgba(255,70,60,0.95)';
       c.beginPath();
-      c.arc(sx, sy, 2.5, 0, Math.PI * 2);
+      c.arc(m[0], m[1], 2.5, 0, Math.PI * 2);
       c.fill();
     }
 
@@ -96,9 +98,9 @@ export class Minimap {
       c.strokeStyle = 'rgba(240,240,255,0.8)';
       c.lineWidth = 1;
       for (const b of birds) {
-        const [sx, sy] = this.toMap(b.x - pos.x, b.z - pos.z, sin, cos, k, mid);
+        this.toMap(b.x - pos.x, b.z - pos.z, sin, cos, k, mid);
         c.beginPath();
-        c.arc(sx, sy, 2.5, 0, Math.PI * 2);
+        c.arc(m[0], m[1], 2.5, 0, Math.PI * 2);
         c.stroke();
       }
     }
@@ -116,14 +118,15 @@ export class Minimap {
     }
   }
 
-  private toMap(dx: number, dz: number, sin: number, cos: number, k: number, mid: number): [number, number] {
+  private toMap(dx: number, dz: number, sin: number, cos: number, k: number, mid: number): void {
     // right = (-cos, sin), forward = (sin, cos) — same basis as Player
     const rx = -dx * cos + dz * sin;
     const ry = dx * sin + dz * cos;
     const px = rx * k, py = -ry * k; // screen y grows down
     const d = Math.hypot(px, py);
-    if (d <= RIM) return [mid + px, mid + py];
+    const m = this._map;
+    if (d <= RIM) { m[0] = mid + px; m[1] = mid + py; return; }
     const s = RIM / d;
-    return [mid + px * s, mid + py * s];
+    m[0] = mid + px * s; m[1] = mid + py * s;
   }
 }

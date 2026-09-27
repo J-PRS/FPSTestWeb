@@ -294,7 +294,9 @@ export class EffectsManager {
       if (p.life <= 0) {
         this.scene.remove(p.mesh);
         this.pool.push(p); // pooled — mesh+mat reused, nothing disposed
-        this.particles.splice(i, 1);
+        const last = this.particles.length - 1;
+        this.particles[i] = this.particles[last];
+        this.particles.pop(); // order doesn't matter — splice is O(n) shift
         continue;
       }
       const t = p.life / p.maxLife;
