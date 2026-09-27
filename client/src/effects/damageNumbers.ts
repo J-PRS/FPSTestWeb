@@ -3,69 +3,70 @@ import * as THREE from 'three';
 export class DamageNumber {
   private sprite: THREE.Sprite;
   private material: THREE.SpriteMaterial;
+  private canvas: HTMLCanvasElement;
+  private ctx: CanvasRenderingContext2D;
+  private texture: THREE.CanvasTexture;
   private age = 0;
   private dead = false;
   private readonly duration = 1.0; // seconds
   private readonly floatHeight = 2.0; // units to float upward
-  private readonly startY: number;
-  private readonly popScale: number; // Initial pop scale
-  private readonly baseScale: number; // Base scale for distance calculation
-  private readonly distScale: number; // Distance-based scale factor
+  private readonly popScale = 0.1; // Initial pop scale
+  private readonly baseScale = 8; // Base scale factor
+  private distScale = 1; // Distance-based scale factor
+  private _startY = 0;
 
-  constructor(scene: THREE.Scene, pos: THREE.Vector3, damage: number, color: string = '#ffffff', camera?: THREE.Camera) {
-    this.startY = pos.y + 1.0; // Offset upward to appear above target
-    this.popScale = 0.1; // Start small for pop effect
-    this.baseScale = 8; // Base scale factor
+  constructor(scene: THREE.Scene) {
+    this.canvas = document.createElement('canvas');
+    this.ctx = this.canvas.getContext('2d')!;
+    this.canvas.width = 192;
+    this.canvas.height = 96;
+    this.texture = new THREE.CanvasTexture(this.canvas);
+    this.material = new THREE.SpriteMaterial({
+      map: this.texture,
+      transparent: true,
+      depthTest: false,
+      depthWrite: false,
+      opacity: 1.0,
+    });
+    this.sprite = new THREE.Sprite(this.material);
+    scene.add(this.sprite);
+  }
 
-    // Random horizontal spread to prevent stacking
-    const spreadX = (Math.random() - 0.5) * 1.5;
-    const spreadZ = (Math.random() - 0.5) * 1.5;
-
-    // Calculate distance-based scale (UI-like scaling with sqrt)
+  /** Reuse the sprite/canvas/texture for a new number — zero GPU alloc. */
+  reset(pos: THREE.Vector3, damage: number, color: string = '#ffffff', camera?: THREE.Camera): void {
+    this._startY = pos.y + 1.0;
     let distScale = 1.0;
     if (camera) {
       const dist = camera.position.distanceTo(pos);
-      // Scale with sqrt(distance): closer = larger, farther = smaller
-      // At 10 units: scale 1.0, at 100 units: scale ~0.4
       distScale = Math.max(0.4, Math.min(1.5, 2.5 / Math.sqrt(dist)));
     }
     this.distScale = distScale;
 
-    // Create canvas for text
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d')!;
-    const fontSize = 48;
-    canvas.width = 192;
-    canvas.height = 96;
-
-    // Draw text
-    ctx.font = `bold ${fontSize}px "Courier New", monospace`;
+    const ctx = this.ctx;
+    ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    ctx.font = `bold 48px "Courier New", monospace`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = color;
     ctx.strokeStyle = '#000';
     ctx.lineWidth = 5;
-    ctx.strokeText(Math.round(damage).toString(), canvas.width / 2, canvas.height / 2);
-    ctx.fillText(Math.round(damage).toString(), canvas.width / 2, canvas.height / 2);
+    const text = Math.round(damage).toString();
+    ctx.strokeText(text, this.canvas.width / 2, this.canvas.height / 2);
+    ctx.fillText(text, this.canvas.width / 2, this.canvas.height / 2);
+    this.texture.needsUpdate = true;
 
-    // Create texture from canvas
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.needsUpdate = true;
-
-    // Create sprite material
-    this.material = new THREE.SpriteMaterial({
-      map: texture,
-      transparent: true,
-      depthTest: false, // Always visible
-      depthWrite: false,
-      opacity: 1.0 // Explicitly set full opacity
-    });
-
-    // Create sprite
-    this.sprite = new THREE.Sprite(this.material);
-    this.sprite.position.set(pos.x + spreadX, this.startY, pos.z + spreadZ);
-    this.sprite.scale.set(this.baseScale * distScale * this.popScale, (this.baseScale / 2) * distScale * this.popScale, (this.baseScale / 2) * distScale * this.popScale);
-    scene.add(this.sprite);
+    const spreadX = (Math.random() - 0.5) * 1.5;
+    const spreadZ = (Math.random() - 0.5) * 1.5;
+    this.sprite.position.set(pos.x + spreadX, this._startY, pos.z + spreadZ);
+    this.sprite.scale.set(
+      this.baseScale * distScale * this.popScale,
+      (this.baseScale / 2) * distScale * this.popScale,
+      (this.baseScale / 2) * distScale * this.popScale,
+    );
+    this.sprite.visible = true;
+    this.material.opacity = 1.0;
+    this.age = 0;
+    this.dead = false;
   }
 
   update(dt: number): void {
@@ -85,7 +86,7 @@ export class DamageNumber {
     }
 
     // Float upward
-    this.sprite.position.y = this.startY + t * this.floatHeight;
+    this.sprite.position.y = this._startY + t * this.floatHeight;
 
     // Fade out (stay visible longer, fade quickly at end)
     if (t > 0.6) {
@@ -93,9 +94,14 @@ export class DamageNumber {
     }
   }
 
-  dispose(scene: THREE.Scene): void {
-    scene.remove(this.sprite);
-    this.material.map?.dispose();
+  /** Detach from scene but keep resources for pooling. */
+  deactivate(): void {
+    this.sprite.visible = false;
+  }
+
+  dispose(): void {
+    this.sprite.removeFromParent();
+    this.texture.dispose();
     this.material.dispose();
   }
 
@@ -106,6 +112,7 @@ export class DamageNumber {
 
 export class DamageNumberManager {
   private numbers: DamageNumber[] = [];
+  private pool: DamageNumber[] = [];
   private scene: THREE.Scene;
 
   constructor(scene: THREE.Scene) {
@@ -113,7 +120,9 @@ export class DamageNumberManager {
   }
 
   spawn(pos: THREE.Vector3, damage: number, color?: string, camera?: THREE.Camera): void {
-    this.numbers.push(new DamageNumber(this.scene, pos, damage, color, camera));
+    const num = this.pool.pop() ?? new DamageNumber(this.scene);
+    num.reset(pos, damage, color, camera);
+    this.numbers.push(num);
   }
 
   update(dt: number): void {
@@ -121,16 +130,17 @@ export class DamageNumberManager {
       const num = this.numbers[i];
       num.update(dt);
       if (num.isDead) {
-        num.dispose(this.scene);
+        num.deactivate(); // pooled — sprite stays in scene hidden
+        this.pool.push(num);
         this.numbers.splice(i, 1);
       }
     }
   }
 
   dispose(): void {
-    for (const num of this.numbers) {
-      num.dispose(this.scene);
-    }
+    for (const num of this.numbers) num.dispose();
+    for (const num of this.pool) num.dispose();
     this.numbers = [];
+    this.pool = [];
   }
 }
