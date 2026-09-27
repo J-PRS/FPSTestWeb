@@ -115,6 +115,7 @@ export function createCombat(deps: CombatDeps) {
   const {
     onFire, onDisc, onGrenade, onDiscLauncher, onChaingun, onMortar, onGrenadeLauncher,
     onFlak, onPlasma, onRailgun, onShotgun, onCannon, onRocketLauncher,
+    onPistol, onRevolver,
   } = fire;
 
   // Lightning gun (hitscan tick + beam visual + chain fork) lives in
@@ -634,7 +635,7 @@ export function createCombat(deps: CombatDeps) {
   }
 
   return {
-    onFire, onDisc, onGrenade, onDiscLauncher, onChaingun, onMortar, onGrenadeLauncher, onFlak, onPlasma, onRailgun, onShotgun, onCannon, onRocketLauncher,
+    onFire, onDisc, onGrenade, onDiscLauncher, onChaingun, onMortar, onGrenadeLauncher, onFlak, onPlasma, onRailgun, onShotgun, onCannon, onRocketLauncher, onPistol, onRevolver,
     onMelee: fire.onMelee,
     onLightning: lightning,
     slam,

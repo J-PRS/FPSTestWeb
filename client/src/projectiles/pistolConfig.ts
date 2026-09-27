@@ -1,0 +1,58 @@
+import * as THREE from 'three';
+
+import { WEAPONS } from '../../../shared/weapons.js';
+
+import type { ProjectileConfig } from './types.js';
+
+// Hold-out pistol: a fast flat slug that reads as a tracer — the mesh IS
+// the visual (same trick as chaingun, no particle trail).
+export const PISTOL_CONFIG: ProjectileConfig = {
+  name: 'pistol',
+  displayName: 'Pistol',
+  weaponType: 16,
+  speed: WEAPONS[16].speed,
+  gravity: WEAPONS[16].gravity,
+  explosionRadius: 0,
+  force: 0,
+  forceMode: 'push',
+  bodyRadius: WEAPONS[16].bodyRadius,
+  hitMin: WEAPONS[16].hitMin,
+  hitMax: WEAPONS[16].hitMax,
+  hitGrow: WEAPONS[16].hitGrow,
+  falloffMultiplier: 1.0,
+  collisionMultiplier: 1.0,
+  forceMultiplier: 0,
+  aoeDamage: 0,
+  aoeRadius: 0,
+  damageColor: '#ffd27a',
+  trailColors: [new THREE.Color(1.0, 0.85, 0.5)],
+  trailParticlesPerUnit: 0,
+  trailLifeMin: 0,
+  trailLifeMax: 0,
+  trailSpread: 0,
+  trailForwardSpread: 0,
+  trailParticleGravity: 0,
+  trailOpacity: 0.6,
+  trailBaseSize: 0.04,
+  trailSizeRange: 0.03,
+  trailScaleMin: 0.3,
+  trailScaleMax: 1.0,
+  trailRampIn: 0,
+  meshColor: 0xffd27a,
+  meshType: 'rocket',
+  glowShell: false,
+  glowColor: 0xffd27a,
+  glowOpacity: 0,
+  meshRampIn: false,
+  meshRampInDuration: 0,
+  meshStartScale: 1.0,
+  terrainOffset: 0.05,
+  needsServerTracking: true,
+  noExplosion: true,
+  trailMeshType: 'sphere',
+  ribbonTrail: true,
+  ribbonLanes: 1,
+  ribbonWidth: 0.16,
+  ribbonLife: 0.06,
+  ribbonColor: 0xffd27a,
+};

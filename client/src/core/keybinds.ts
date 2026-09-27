@@ -11,6 +11,7 @@ import { settings } from './settings.js';
 export type BindAction =
   | 'forward' | 'back' | 'left' | 'right'
   | 'jump' | 'ski' | 'belt' | 'melee' | 'camera' | 'skill' | 'spectate'
+  | 'secPistol' | 'secRevolver' | 'secShotgun'
   | 'slot0' | 'slot1' | 'slot2' | 'slot3';
 
 export interface BindDef { action: BindAction; label: string; def: string }
@@ -27,6 +28,9 @@ export const BIND_DEFS: BindDef[] = [
   { action: 'camera',  label: 'Third person',  def: 'KeyZ' },
   { action: 'skill',   label: 'Skill',         def: 'KeyQ' },
   { action: 'spectate', label: 'Spectator fly', def: 'KeyV' },
+  { action: 'secPistol', label: 'Pistol (hold)',   def: 'KeyG' },
+  { action: 'secRevolver', label: 'Revolver (hold)', def: 'KeyT' },
+  { action: 'secShotgun', label: 'Shotgun (hold)',  def: 'KeyB' },
   { action: 'slot0',   label: 'Weapon slot 1', def: 'Digit1' },
   { action: 'slot1',   label: 'Weapon slot 2', def: 'Digit2' },
   { action: 'slot2',   label: 'Weapon slot 3', def: 'Digit3' },

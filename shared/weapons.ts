@@ -26,6 +26,8 @@ export enum WeaponType {
   Shotgun = 13, // pellet burst — tighter cone than flak, works to mid range
   Cannon = 14, // Serious Sam cannonball — fast, fat, skips off terrain, pops on contact
   RocketLauncher = 15, // classic RPG: slow straight-flying missile, big boom, rocket-jump friendly
+  Pistol = 16,        // hold-out sidearm (G): quick semi-auto slug, no splash
+  Revolver = 17,      // hold-out sidearm (T): slow hand-cannon slug, no splash
 }
 
 export interface WeaponStats {
@@ -291,6 +293,37 @@ export const WEAPONS: Record<number, WeaponStats> = {
     hitMax: 2.5, // a fat warhead drags a real wake
     hitGrow: 0.4,
     maxLifetime: 6.0, // ~290m of flat reach
+  },
+  [WeaponType.Pistol]: {
+    // Hold-out sidearm: fast flat slug, modest damage — the panic button
+    // when the primary is dry or wrong for the range.
+    directDamage: 14,
+    aoeDamage: 0,
+    aoeRadius: 0,
+    knockbackForce: 4.0,
+    forceMode: 'push',
+    speed: 220.0,
+    gravity: 0,
+    bodyRadius: 0.12,
+    hitMin: 0.0,
+    hitMax: 0.5,
+    hitGrow: 0.1,
+    maxLifetime: 0.6,
+  },
+  [WeaponType.Revolver]: {
+    // Hand cannon: three hits kill — slow cadence, heavy single slug.
+    directDamage: 34,
+    aoeDamage: 0,
+    aoeRadius: 0,
+    knockbackForce: 8.0,
+    forceMode: 'push',
+    speed: 260.0,
+    gravity: 0,
+    bodyRadius: 0.14,
+    hitMin: 0.0,
+    hitMax: 0.5,
+    hitGrow: 0.1,
+    maxLifetime: 0.5,
   },
   [WeaponType.Slam]: {
     // Not a projectile — the Q-skill lands as a ground AOE. Ballistic

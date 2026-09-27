@@ -66,6 +66,18 @@ const SHOT_LAYERS: Partial<Record<number, [name: string, gain: number, rate?: nu
     ['punch', 0.45, 0.9, 1500, 0.15],
     ['hg_clang', 0.3, 0.8, undefined, 0.25],
   ],
+  // Sidearms: pistol = short snappy crack + hammer tick; revolver = deeper
+  // bark with a metallic ring — the two need to be distinguishable blind.
+  [WeaponType.Pistol]: [
+    ['shot_chaingun', 0.8, 1.3, undefined, 0.06],
+    ['hg_tick', 0.4, 1.8, 3000, 0.05],
+    ['punch', 0.3, 1.0, 1200, 0.05],
+  ],
+  [WeaponType.Revolver]: [
+    ['shot_cannon', 0.85, 1.1, 900, 0.16],
+    ['punch', 0.55, 0.9, 1800, 0.1],
+    ['hg_clang', 0.3, 1.5, undefined, 0.18],
+  ],
   [WeaponType.Chaingun]: [
     ['shot_chaingun', 0.75, 1.15, undefined, 0.08],
     ['punch', 0.35, 0.7, 700, 0.06],

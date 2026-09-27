@@ -1,0 +1,58 @@
+import * as THREE from 'three';
+
+import { WEAPONS } from '../../../shared/weapons.js';
+
+import type { ProjectileConfig } from './types.js';
+
+// Hold-out revolver: the heavy slug — slower cadence than the pistol, a
+// fatter/brighter tracer so the big shot announces itself.
+export const REVOLVER_CONFIG: ProjectileConfig = {
+  name: 'revolver',
+  displayName: 'Revolver',
+  weaponType: 17,
+  speed: WEAPONS[17].speed,
+  gravity: WEAPONS[17].gravity,
+  explosionRadius: 0,
+  force: 0,
+  forceMode: 'push',
+  bodyRadius: WEAPONS[17].bodyRadius,
+  hitMin: WEAPONS[17].hitMin,
+  hitMax: WEAPONS[17].hitMax,
+  hitGrow: WEAPONS[17].hitGrow,
+  falloffMultiplier: 1.0,
+  collisionMultiplier: 1.0,
+  forceMultiplier: 0,
+  aoeDamage: 0,
+  aoeRadius: 0,
+  damageColor: '#ff9a5a',
+  trailColors: [new THREE.Color(1.0, 0.65, 0.3)],
+  trailParticlesPerUnit: 0,
+  trailLifeMin: 0,
+  trailLifeMax: 0,
+  trailSpread: 0,
+  trailForwardSpread: 0,
+  trailParticleGravity: 0,
+  trailOpacity: 0.6,
+  trailBaseSize: 0.05,
+  trailSizeRange: 0.03,
+  trailScaleMin: 0.3,
+  trailScaleMax: 1.0,
+  trailRampIn: 0,
+  meshColor: 0xff9a5a,
+  meshType: 'rocket',
+  glowShell: false,
+  glowColor: 0xff9a5a,
+  glowOpacity: 0,
+  meshRampIn: false,
+  meshRampInDuration: 0,
+  meshStartScale: 1.0,
+  terrainOffset: 0.05,
+  needsServerTracking: true,
+  noExplosion: true,
+  trailMeshType: 'sphere',
+  ribbonTrail: true,
+  ribbonLanes: 1,
+  ribbonWidth: 0.24,
+  ribbonLife: 0.09,
+  ribbonColor: 0xff8840,
+};
