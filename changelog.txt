@@ -1859,3 +1859,4 @@
 - Dedup: spawnTotem/spawnUberTotem merged into spawnTotem(uber)
 - Extract RemoteGizmo (entities/remoteGizmo.ts) — ring marker logic out of RemotePlayer; team tint no longer clobbered by the per-frame green reset
 ball netcode: ride sim timers on segments + predictive enrage launch (rubberband fix); audio: use authored sfx/world updateAudio
+projectiles: swept-collision math extracted to projectiles/sweep.ts (SweepHost, unit-testable)
