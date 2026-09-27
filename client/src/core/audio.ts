@@ -75,8 +75,12 @@ export class AudioEngine {
   }
 
   /** Offline-rendering hook for the WAV dump pipeline — attaches a
-   *  pre-made OfflineAudioContext instead of creating a live one. */
-  attachOffline(ctx: BaseAudioContext): void { this.wire(ctx); }
+   *  pre-made OfflineAudioContext instead of creating a live one.
+   *  Resolves once the sample bank is decoded so renders use real clips. */
+  async attachOffline(ctx: BaseAudioContext): Promise<void> {
+    this.wire(ctx);
+    await this.loadSamples();
+  }
 
   private wire(ctx: BaseAudioContext): void {
     this.ctx = ctx;

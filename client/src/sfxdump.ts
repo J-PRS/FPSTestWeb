@@ -25,7 +25,7 @@ function floatToWav(data: Float32Array, sampleRate: number): ArrayBuffer {
 async function render(name: string, secs: number, fn: () => void): Promise<string> {
   const sr = 22050;
   const ctx = new OfflineAudioContext(1, Math.ceil(sr * secs), sr);
-  audio.attachOffline(ctx);
+  await audio.attachOffline(ctx);
   audio.resetVoices();
   fn();
   const buf = await ctx.startRendering();
@@ -74,6 +74,15 @@ const jobs: Array<[string, number, () => void]> = [
   ['cue_launch', 0.8, () => sfx.enemyCue(near, 'launch')],
   ['cue_die', 0.8, () => sfx.enemyCue(near, 'die')],
   ['cue_die_far', 0.8, () => sfx.enemyCue(far, 'die')],
+  // Disc launch candidates — [name, gain, rate, lowpassHz, cutAfterSec]
+  ['disc_e_twang', 1.0, () => sfx.debugMix([
+    ['shot_cannon', 0.9, 0.6, 800, 0.4], ['hg_clang', 0.5, 1.5, undefined, 0.15], ['punch', 0.4, 1.2, undefined, 0.2]])],
+  ['disc_f_spring', 1.0, () => sfx.debugMix([
+    ['shot_cannon', 0.85, 0.55, 700], ['cryst_bang', 0.4, 1.6, undefined, 0.2], ['impact', 0.5, 1.3, 2000, 0.25]])],
+  ['disc_g_body', 1.0, () => sfx.debugMix([
+    ['thud_big', 1.0, 0.7, 600, 0.35], ['hg_clang', 0.45, 1.8, undefined, 0.12], ['shot_plasma', 0.3, 1.0, 3000, 0.3]])],
+  ['disc_d_current', 1.0, () => sfx.debugMix([
+    ['shot_cannon', 0.8, 0.55], ['cryst_bang', 0.65, 0.9], ['punch', 0.5, 1.2], ['whistle', 0.3]])],
   // Loops at full intensity — same shapes gameLoop drives live
   ['loop_jet', 1.0, () => audio.noiseLoop('lowpass', 700)?.set(0.5)],
   ['loop_ski', 1.0, () => audio.noiseLoop('bandpass', 1400)?.set(0.35)],
