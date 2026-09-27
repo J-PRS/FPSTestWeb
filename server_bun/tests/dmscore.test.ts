@@ -18,6 +18,7 @@ describe('Room DM scoring', () => {
     const room = dmRoom(sent);
     room.players.addPlayer('shooter');
     room.players.addPlayer('victim');
+    room.players.breakShield('victim'); // fresh spawns are protected — tests drive instant damage
     // Drive a kill through the shared combat funnel.
     const combat = (room.messages as unknown as { combat: { botAttack(s: string, t: string, w: number): void } }).combat;
     // High damage guarantees the kill regardless of weapon stats.
@@ -35,6 +36,7 @@ describe('Room DM scoring', () => {
     room.players.addPlayer('victim');
     const combat = (room.messages as unknown as { combat: { handleEnvironmentDamage(p: string, m: { type: 'environmentDamage'; damage: number }): void } }).combat;
     combat.handleEnvironmentDamage('victim', { type: 'environmentDamage', damage: 500 });
+    // Shielded or not, environment kills never score.
     expect(sent.some((m) => m.type === 'ffaScore')).toBe(false);
   });
 
@@ -43,6 +45,7 @@ describe('Room DM scoring', () => {
     const room = new Room('t', null, '', resolveMapSpec({ mode: 'ctf', bases: { alpha: { x: 0, y: 0, z: 0 }, bravo: { x: 10, y: 0, z: 0 } } }));
     room.connections.broadcast = (m) => { sent.push(m as ServerMessage); return 0; };
     room.players.addPlayer('a'); room.players.addPlayer('b');
+    room.players.breakShield('b');
     const combat = (room.messages as unknown as { combat: { botAttack(s: string, t: string, w: number): void } }).combat;
     for (let i = 0; i < 20 && !room.players.getPlayer('b')!.isDead; i++) combat.botAttack('a', 'b', 1);
     expect(sent.some((m) => m.type === 'ffaScore')).toBe(false);
@@ -71,6 +74,7 @@ describe('Room DM scoring', () => {
     for (let i = 0; i < frags; i++) {
       const vid = `v${i}`;
       room.players.addPlayer(vid);
+      room.players.breakShield(vid);
       for (let j = 0; j < 20 && !room.players.getPlayer(vid)!.isDead; j++) combat.botAttack('shooter', vid, 1);
       room.players.getPlayer(vid)!.isDead = false; // stand back up — respawn timer is async
     }

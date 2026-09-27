@@ -11,6 +11,10 @@ export class PlayerManager {
   private players: Map<string, PlayerState> = new Map();
   /** Spawn anchors — map specs override, default is the config ring. */
   spawnPoints: Vec3[] | null = null;
+  /** Spawn protection window — long enough to orient, short enough that
+   *  camping a spawn ring still works. */
+  static readonly SPAWN_PROTECT_MS = 2000;
+
   /** Team home bases — when set, team members spawn near their own flag
    *  instead of the generic farthest-from-everyone ring. */
   teamBases: { alpha: Vec3; bravo: Vec3 } | null = null;
@@ -43,6 +47,7 @@ export class PlayerManager {
       skiing: 0,
       history: [],
       forceSendUntil: 0,
+      protectedUntil: Date.now() + PlayerManager.SPAWN_PROTECT_MS,
     };
 
     this.players.set(playerId, player);
@@ -55,6 +60,13 @@ export class PlayerManager {
       this.players.delete(playerId);
     }
     return player;
+  }
+
+  /** Drop the spawn shield — firing calls this; tests use it to reach
+   *  the damage path without sleeping 2s. */
+  breakShield(playerId: string): void {
+    const p = this.players.get(playerId);
+    if (p) p.protectedUntil = 0;
   }
 
   getPlayer(playerId: string): PlayerState | undefined {
@@ -152,6 +164,9 @@ export class PlayerManager {
     if (!target || target.isDead) {
       return { killed: false, newHealth: 0 };
     }
+    if (Date.now() < target.protectedUntil) {
+      return { killed: false, newHealth: target.health };
+    }
 
     target.health -= damage;
     if (target.health <= 0) {
@@ -184,6 +199,7 @@ export class PlayerManager {
     player.lastPosCheckTime = 0;
     player.lastPosCheckPos = { ...spawn };
     player.consecutiveRejects = 0;
+    player.protectedUntil = Date.now() + PlayerManager.SPAWN_PROTECT_MS;
 
     return { position: { ...player.position }, rotation: { ...player.rotation } };
   }

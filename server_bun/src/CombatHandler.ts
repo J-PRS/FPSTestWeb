@@ -81,6 +81,7 @@ export class CombatHandler {
   handleShot(playerId: string, msg: Extract<ClientMessage, { type: 'shot' }>): void {
     const player = this.playerManager.getPlayer(playerId);
     if (!player || player.isDead) return;
+    player.protectedUntil = 0; // firing breaks your own spawn shield
 
     const { targetId } = msg;
 
@@ -211,6 +212,7 @@ export class CombatHandler {
   handleAOEShot(playerId: string, msg: Extract<ClientMessage, { type: 'aoeShot' }>): void {
     const player = this.playerManager.getPlayer(playerId);
     if (!player || player.isDead) return;
+    player.protectedUntil = 0; // firing breaks your own spawn shield
     const stats = getWeaponStats(msg.weaponType);
 
     if (msg.weaponType === WeaponType.Slam) {
