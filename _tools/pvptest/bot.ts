@@ -103,6 +103,7 @@ let orbitSign = 1;
 let lastHurtAt = 0;
 let burstLeft = 0;
 let burstGapUntil = 0;
+const impVel = { x: 0, y: 0, z: 0 }; // knockback impulse accumulator
 // Omicron-style perception: we shoot where the target WAS, not where it is.
 // A short rolling history per target feeds the aim the player's old spot —
 // fast movers dodge our rockets like they'd dodge a human's.
@@ -145,6 +146,11 @@ let circleBase: { cx: number; cz: number; phase: number } | null = null;
 
 function tickBehavior(dt: number) {
   if (dead || !connected || scripted) return;
+  // Knockback impulses land on vel; fighter/orbit recompute vel from
+  // movement each tick, which would swallow the shove — integrate the
+  // impulse into pos directly and decay it instead.
+  pos.x += impVel.x * dt; pos.y += impVel.y * dt; pos.z += impVel.z * dt;
+  impVel.x *= Math.max(0, 1 - dt * 4); impVel.y *= Math.max(0, 1 - dt * 4); impVel.z *= Math.max(0, 1 - dt * 4);
   if (PARK) {
     // Parked: no self-drive, but keep applied impulses (knockback) and let
     // them decay — zeroing vel each tick would swallow a real shove.
@@ -388,9 +394,9 @@ function handleJson(m: any) {
         const d = Math.hypot(dx, dy, dz) || 1;
         const f = m.force ?? 0;
         if (m.pull) {
-          vel.x += -(dx / d) * f; vel.y += 0.3 * f; vel.z += -(dz / d) * f;
+          impVel.x += -(dx / d) * f; impVel.y += 0.3 * f; impVel.z += -(dz / d) * f;
         } else {
-          vel.x += (dx / d) * f; vel.y += 0.5 * f; vel.z += (dz / d) * f;
+          impVel.x += (dx / d) * f; impVel.y += 0.5 * f; impVel.z += (dz / d) * f;
         }
         log(`knockback received f=${f.toFixed(1)}`);
       }
@@ -495,27 +501,37 @@ async function main() {
     // AOE + knockback: rocket detonates ~4m from a live peer → expect
     // playerHit on them and (if we're inside the blast) knockback on us.
     let tgt: [string, Other] | null = null;
+    // Same dead-window hazard as --test: the server drops a dead client's
+    // aoeShot claim entirely, so if a fighter fragged us, wait out respawn.
+    for (let i = 0; i < 100 && dead; i++) await wait(100);
     for (let i = 0; i < 40 && !tgt; i++) { await wait(250); tgt = nearestTarget(); }
     check('aoe: found live target', !!tgt, tgt ? tgt[0] : 'none');
     if (tgt) {
       const [tid, to] = tgt;
-      const dx = to.pos.x - pos.x, dy = to.pos.y - pos.y, dz = to.pos.z - pos.z;
+      // Lead the target: the blast lands at detonation time, and a moving
+      // target (SOAK orbits ~16m/s) would be outside the 8m radius if we
+      // aimed where it stood when the rocket launched.
+      const dist0 = Math.hypot(to.pos.x - pos.x, to.pos.y - pos.y, to.pos.z - pos.z) || 1;
+      const airtime = Math.max(0.05, dist0 / ROCKET_SPEED);
+      const px = to.pos.x + to.vel.x * airtime;
+      const py = to.pos.y + to.vel.y * airtime;
+      const pz = to.pos.z + to.vel.z * airtime;
+      const dx = px - pos.x, dy = py - pos.y, dz = pz - pos.z;
       const dist = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1;
-      // Spawn the projectile flying at the target.
+      // Spawn the projectile flying at the predicted point.
       sendJson({
         type: 'shot', targetId: null, weaponType: WeaponType.Rocket,
         position: { ...pos },
         velocity: { x: (dx / dist) * ROCKET_SPEED, y: (dy / dist) * ROCKET_SPEED, z: (dz / dist) * ROCKET_SPEED },
       });
       await wait(120); // let projectileCreated assign the id
-      const airtime = Math.max(0.05, dist / ROCKET_SPEED);
       await wait(airtime * 1000);
       const hpBefore = to.health;
       const posBefore = { ...to.pos };
       const sawAoeHit = { v: false };
       hitListener = (m) => { if (m.targetId === tid) sawAoeHit.v = true; };
-      // Detonate 3m short of the target — inside the rocket's AOE radius.
-      const blast = { x: to.pos.x - dx / dist * 3, y: to.pos.y, z: to.pos.z - dz / dist * 3 };
+      // Detonate 3m short of the predicted point — inside the rocket's AOE radius.
+      const blast = { x: px - dx / dist * 3, y: py, z: pz - dz / dist * 3 };
       sendJson({
         type: 'aoeShot', position: blast, weaponType: WeaponType.Rocket,
         projectileId: lastProjId, airtime,
@@ -753,6 +769,10 @@ async function main() {
   check('no corrections under legal movement', corrections === c0, `${corrections - c0} corrections`);
 
   // Rubberband check B: 60m jump without declaring teleport → correction.
+  // The server ignores dead clients' positions entirely — SOAK may have
+  // fragged us moments ago, so wait out the respawn window first or the
+  // jump never reaches the plausibility check.
+  for (let i = 0; i < 100 && dead; i++) await wait(100);
   const cBefore = corrections;
   pos.x += 60;
   await wait(400);
