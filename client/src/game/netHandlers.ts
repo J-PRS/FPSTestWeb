@@ -13,6 +13,8 @@ import type { EffectsManager } from '../effects/effects.js';
 import type { NetworkManager } from '../networking/NetworkManager.js';
 import type { GameStatePlayer, LocalPlayerState } from '../../../shared/protocol.js';
 import { Projectile } from '../projectiles/Projectile.js';
+import { Lobby } from './lobby.js';
+import { resolveServerEndpoints } from '../networking/endpoints.js';
 import { ROCKET_CONFIG, getProjectileConfig } from '../projectiles/index.js';
 import type { WorldState } from './worldState.js';
 import type { createEntities } from './entities.js';
@@ -58,6 +60,16 @@ export function wireNetworkHandlers(deps: NetDeps): void {
     chat.add(null, `${winner.toUpperCase()} WINS ${scores.alpha}:${scores.bravo} — new match starting`);
   networkManager.onMatchStart = (mode) =>
     chat.add(null, `match start — ${mode || 'arena'}`);
+
+  // Lobby browser — corner button lists the server's live rooms; joining
+  // reloads with ?room=NAME (membership is fixed at connect time).
+  void resolveServerEndpoints().then(({ httpUrl }) => new Lobby({
+    listRooms: async () => {
+      const res = await fetch(`${httpUrl}/rooms`);
+      if (!res.ok) throw new Error(`rooms ${res.status}`);
+      return res.json() as Promise<{ name: string; mode?: string; players: number; maxPlayers: number }[]>;
+    },
+  }));
 
   // Both first-seen-update and respawn-into-missing end up here
   function ensureRemotePlayer(playerId: string, position: { x: number; y: number; z: number }, via: string): RemotePlayer {
