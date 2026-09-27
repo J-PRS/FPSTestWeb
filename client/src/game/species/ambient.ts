@@ -12,13 +12,13 @@ import type { SpeciesCtx } from './context.js';
 // Tumbleweeds: wind-blown ambience you can shoot.
 export function createAmbientSpecies({ deps, kit, targets }: SpeciesCtx) {
   const { scene } = deps;
-  const { burrow, updateSpecies, kickDust } = kit;
+  const { burrow, updateSpecies, kickDust, atCap } = kit;
 
   const weeds: Tumbleweed[] = [];
   const weedWind = new THREE.Vector3(WEED_WIND_X, 0, WEED_WIND_Z).normalize();
 
   function spawnWeed(): void {
-    if (weeds.filter(w => !w.dead).length >= WEED_MAX) return;
+    if (atCap(weeds, WEED_MAX)) return;
     const player = deps.lazyPlayer();
     // Spawn upwind so it rolls across the player's field of view; a lateral
     // jitter keeps the parade from becoming a conveyor line.

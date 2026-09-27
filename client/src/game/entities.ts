@@ -68,7 +68,7 @@ export function createEntities(deps: EntitiesDeps) {
     notify: deps.deployNotify,
   });
   const {
-    removeTarget, aggroFor, reportTargetDamage, kickDust,
+    removeTarget, aggroFor, reportTargetDamage, kickDust, atCap,
   } = kit;
 
   // Species families — registries + spawn + update wiring live in
@@ -145,7 +145,7 @@ export function createEntities(deps: EntitiesDeps) {
     const dm = deps.lazyDemoManager();
     if (dm?.isPlaying) return; // skip normal spawning during demo playback
     if (serverBalls()) return; // connected: the server owns ball spawning
-    if (balls.filter(b => !b.dead).length >= BALL_MAX) return;
+    if (atCap(balls, BALL_MAX)) return;
     // Classic mode is plain bouncy balls — no elites, no variants
     spawnBallOfVariant(CLASSIC_MODE ? 0 : pickVariant());
   }

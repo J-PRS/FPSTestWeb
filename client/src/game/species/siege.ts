@@ -29,7 +29,7 @@ export function createSiegeSpecies({ deps, kit, targets }: SpeciesCtx) {
   const { scene } = deps;
   const {
     removeTarget, ringPos, hurtPlayer, blastAtPlayer,
-    aggroFor, aggroVelFor, boltPop, updateSpecies, burrow, rollUber, kickDust, kickTrail,
+    aggroFor, aggroVelFor, boltPop, updateSpecies, burrow, rollUber, kickDust, kickTrail, atCap,
   } = kit;
 
   const turrets: Turretter[] = [];
@@ -40,7 +40,7 @@ export function createSiegeSpecies({ deps, kit, targets }: SpeciesCtx) {
 
   // ---- Turretters (plant-and-shell enemies that lob themselves at you) ----
   function spawnTurretter(uber?: boolean): void {
-    if (turrets.filter(t => !t.dead).length >= TURRET_MAX) return;
+    if (atCap(turrets, TURRET_MAX)) return;
     const u = uber ?? rollUber();
     const player = deps.lazyPlayer();
     const t = new Turretter(scene, deps.lazyTerrain(), ringPos(TURRET_SPAWN_MIN, TURRET_SPAWN_MAX), u);
@@ -140,7 +140,7 @@ export function createSiegeSpecies({ deps, kit, targets }: SpeciesCtx) {
 
   // Overlord brood: green sac pop — same blast read as a mine, but rolling
   function spawnBaneling(pos: THREE.Vector3, uber = false): void {
-    if (banelings.filter(b => !b.dead).length >= BANELING_MAX) return;
+    if (atCap(banelings, BANELING_MAX)) return;
     const b = new Baneling(scene, deps.lazyTerrain(), pos, uber);
     if (b.dead) { b.dispose(); return; }
     const player = deps.lazyPlayer();
@@ -161,7 +161,7 @@ export function createSiegeSpecies({ deps, kit, targets }: SpeciesCtx) {
   function spawnOverlord(uber?: boolean): void {
     // Also called by director events — the species loop isn't the only caller
     if (deps.lazyDemoManager()?.isPlaying) return;
-    if (overlords.filter(m => !m.dead).length >= OVERLORD_MAX) return;
+    if (atCap(overlords, OVERLORD_MAX)) return;
     const u = uber ?? rollUber();
     const m = new Overlord(scene, deps.lazyTerrain(), ringPos(OVERLORD_SPAWN_MIN, OVERLORD_SPAWN_MAX), u);
     m.onMineDrop = (overlord) => {
