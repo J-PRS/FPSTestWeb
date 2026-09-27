@@ -1,0 +1,30 @@
+import { ChildLogger } from '../core/Logger.js';
+
+import { FastAPIAdapter } from './FastAPIAdapter.js';
+import { INetworkAdapter } from './INetworkAdapter.js';
+
+const logger = new ChildLogger('NetworkAdapterFactory');
+
+/**
+ * Supported networking backend types
+ * 'fastapi' is the JSON WebSocket backend (the only live backend)
+ */
+export type NetworkBackend = 'fastapi';
+
+/**
+ * Factory for creating network adapters
+ */
+export class NetworkAdapterFactory {
+  static createAdapter(backend: NetworkBackend): INetworkAdapter {
+    logger.info(`Creating network adapter for backend: ${backend}`);
+
+    switch (backend) {
+      case 'fastapi':
+        return new FastAPIAdapter();
+
+      default:
+        const unsupported: never = backend;
+        throw new Error(`Unsupported network backend: ${unsupported}`);
+    }
+  }
+}

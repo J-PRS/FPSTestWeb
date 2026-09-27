@@ -2,10 +2,12 @@
  * Networking adapter interface for dependency injection
  * Allows swapping between different networking libraries (ws, Colyseus, Rivalis, etc.)
  */
+import type { ClientMessage } from '../../../shared/protocol.js';
+
 export interface INetworkAdapter {
   connect(url: string): Promise<void>;
   disconnect(): void;
-  send(data: any): void;
+  send(data: ClientMessage): void;
   sendBinary(data: Uint8Array): void;
   onMessage(callback: (data: any) => void): void;
   onBinaryMessage(callback: (data: Uint8Array) => void): void;
@@ -14,6 +16,8 @@ export interface INetworkAdapter {
   onError(callback: (error: Error) => void): void;
   isConnected(): boolean;
   setControlObject?(controlObject: any): void; // For client-side prediction
+  getSessionId?(): string; // Backend-specific local player/session id
+  getPlayerId?(): string;
 }
 
 export interface PlayerState {
