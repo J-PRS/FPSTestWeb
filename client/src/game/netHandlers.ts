@@ -353,8 +353,11 @@ export function wireNetworkHandlers(deps: NetDeps): void {
   };
 
   // Register gameState handler (for initial connection and reconnection)
-  networkManager.onGameState = (players: GameStatePlayer[], localPlayerState: LocalPlayerState | undefined) => {
+  networkManager.onGameState = (players: GameStatePlayer[], localPlayerState: LocalPlayerState | undefined, roomInfo?: { room?: string; mode?: string }) => {
     logger.debug(`gameState received, players: ${players.length}`);
+    if (roomInfo?.room && roomInfo.room !== 'default') {
+      chat.add(null, `joined room '${roomInfo.room}'${roomInfo.mode ? ` (${roomInfo.mode})` : ''} — ${players.length} other player(s)`);
+    }
 
     if (!localPlayerState) return;
     logger.debug(`Restoring local player state from gameState: ${JSON.stringify(localPlayerState)}`);
