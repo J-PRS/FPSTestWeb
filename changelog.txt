@@ -1,3 +1,4 @@
+2026-10-03 - botmobility.md review: 87 windows, 100%% ski/air, 0 sheep/stuck warnings; spec.ts spectate-room holder probe
 2026-10-03 - match boundary beats: horn stinger + center banner on matchStart/matchEnd (VICTORY when you/your team wins)
 2026-10-03 - CTF flag stingers: distinct sfx.flagCue per event (taken/dropped/returned/captured) keyed to whose flag it is
 2026-10-03 - fillprobe.ts: botFill soak verified live (bots retire/refill to hold 10 total bodies across human join/leave)
