@@ -27,6 +27,9 @@ const _s = new THREE.Vector3();
 
 const PART_BODY = 0;
 const PART_WING = 1; // 2 per — thin blade fins, not membrane sails
+type StriferState = 'orbit' | 'hover';
+interface StriferCtx { dt: number; terrain: Terrain; playerPos: THREE.Vector3; playerVel?: THREE.Vector3 }
+
 const PART_EYE = 2;  // 1 per — the gun-muzzle glow that telegraphs a shot
 const WINGS_PER = 2;
 const EYES_PER = 1;
@@ -96,7 +99,7 @@ export class Strifer implements Targetable, SwarmSlotOwner {
   private roll = 0;
   private flash = 0;
 
-  private state: 'orbit' | 'hover' = 'orbit';
+  private state: StriferState = 'orbit';
   private stateTimer = STRIFER_REFIRE_MIN + Math.random() * (STRIFER_REFIRE_MAX - STRIFER_REFIRE_MIN);
   private orbitPhase = Math.random() * Math.PI * 2;
   private orbitDir = Math.random() < 0.5 ? 1 : -1;
@@ -138,36 +141,10 @@ export class Strifer implements Targetable, SwarmSlotOwner {
     if (this.stunTimer > 0) {
       // staggered — drift, no maneuvering
       this.capSpeed(STRIFER_SPEED * 0.3);
-    } else if (this.state === 'orbit') {
-      this.orbitPhase += dt * (STRIFER_SPEED / STRIFER_ORBIT_R) * this.orbitDir;
-      _dir.set(
-        playerPos.x + Math.cos(this.orbitPhase) * STRIFER_ORBIT_R,
-        terrain.getHeight(playerPos.x, playerPos.z) + STRIFER_ORBIT_ALT + Math.sin(this.animT * 1.1) * 2,
-        playerPos.z + Math.sin(this.orbitPhase) * STRIFER_ORBIT_R,
-      );
-      this.steerToward(_dir, STRIFER_SPEED, dt);
-      if (Math.random() < dt * 0.12) this.orbitDir *= -1;
-
-      if (this.stateTimer <= 0) {
-        this.state = 'hover';
-        this.stateTimer = STRIFER_HOVER_T;
-        this.volleyLeft = this.uber ? 5 : 3;
-        this.volleyGap = 0.25; // small settle so the burst reads as aimed
-        this.vel.multiplyScalar(0.4);
-      }
     } else {
-      // hover — brake hard and bleed off the volley
-      this.vel.multiplyScalar(Math.max(0, 1 - 4 * dt));
-      this.volleyGap -= dt;
-      if (this.volleyLeft > 0 && this.volleyGap <= 0) {
-        this.volleyGap = 0.5;
-        this.volleyLeft--;
-        this.fireBolt(playerPos, playerVel);
-      }
-      if (this.stateTimer <= 0 && this.volleyLeft <= 0) {
-        this.state = 'orbit';
-        this.stateTimer = STRIFER_REFIRE_MIN + Math.random() * (STRIFER_REFIRE_MAX - STRIFER_REFIRE_MIN);
-      }
+      const ctx = Strifer._ctx;
+      ctx.dt = dt; ctx.terrain = terrain; ctx.playerPos = playerPos; ctx.playerVel = playerVel;
+      Strifer.STATES[this.state](this, ctx);
     }
 
     this.pos.addScaledVector(this.vel, dt);
@@ -195,6 +172,43 @@ export class Strifer implements Targetable, SwarmSlotOwner {
     this.writeInstances();
     getShadows()?.set(this, this.pos, this.radius, 0.35);
   }
+
+  // Static state table + shared scratch ctx — see Seeker for the pattern.
+  private static readonly _ctx: StriferCtx = { dt: 0, terrain: null as never, playerPos: null as never };
+  private static readonly STATES: Record<StriferState, (s: Strifer, c: StriferCtx) => void> = {
+    orbit(s, c) {
+      s.orbitPhase += c.dt * (STRIFER_SPEED / STRIFER_ORBIT_R) * s.orbitDir;
+      _dir.set(
+        c.playerPos.x + Math.cos(s.orbitPhase) * STRIFER_ORBIT_R,
+        c.terrain.getHeight(c.playerPos.x, c.playerPos.z) + STRIFER_ORBIT_ALT + Math.sin(s.animT * 1.1) * 2,
+        c.playerPos.z + Math.sin(s.orbitPhase) * STRIFER_ORBIT_R,
+      );
+      s.steerToward(_dir, STRIFER_SPEED, c.dt);
+      if (Math.random() < c.dt * 0.12) s.orbitDir *= -1;
+
+      if (s.stateTimer <= 0) {
+        s.state = 'hover';
+        s.stateTimer = STRIFER_HOVER_T;
+        s.volleyLeft = s.uber ? 5 : 3;
+        s.volleyGap = 0.25; // small settle so the burst reads as aimed
+        s.vel.multiplyScalar(0.4);
+      }
+    },
+    // brake hard and bleed off the volley
+    hover(s, c) {
+      s.vel.multiplyScalar(Math.max(0, 1 - 4 * c.dt));
+      s.volleyGap -= c.dt;
+      if (s.volleyLeft > 0 && s.volleyGap <= 0) {
+        s.volleyGap = 0.5;
+        s.volleyLeft--;
+        s.fireBolt(c.playerPos, c.playerVel);
+      }
+      if (s.stateTimer <= 0 && s.volleyLeft <= 0) {
+        s.state = 'orbit';
+        s.stateTimer = STRIFER_REFIRE_MIN + Math.random() * (STRIFER_REFIRE_MAX - STRIFER_REFIRE_MIN);
+      }
+    },
+  };
 
   private fireBolt(playerPos: THREE.Vector3, playerVel?: THREE.Vector3): void {
     _dir.copy(playerPos);
