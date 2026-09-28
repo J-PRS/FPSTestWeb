@@ -43,4 +43,28 @@ describe('RoomPickups', () => {
     for (let i = 0; i < 700; i++) room.pickups!.tick(0.05); // 35s > 30s TTL
     expect(room.pickups!.snapshot().length).toBe(0);
   });
+
+  it('heal claims need gem credit in team rooms', () => {
+    const room = new Room('t', null, '', TEAM_SPEC);
+    const p = addAt(room, 'p1', 'alpha', 10, 0);
+    p.health = 50;
+    p.protectedUntil = 0;
+    room.messages.handleMessage('p1', { type: 'heal', amount: 25 });
+    expect(p.health).toBe(50); // no credit, no heal
+    room.pickups!.spawn({ x: 10, y: 0, z: 0 });
+    room.pickups!.tick(0.05);
+    room.messages.handleMessage('p1', { type: 'heal', amount: 25 });
+    expect(p.health).toBe(75); // credit consumed
+    room.messages.handleMessage('p1', { type: 'heal', amount: 25 });
+    expect(p.health).toBe(75); // credit spent — second claim drops
+  });
+
+  it('ffa rooms heal free-form (local nuggets, no server backing)', () => {
+    const room = new Room('f', null, '', FFA_SPEC);
+    const p = addAt(room, 'p1', undefined, 0, 0);
+    p.health = 50;
+    p.protectedUntil = 0;
+    room.messages.handleMessage('p1', { type: 'heal', amount: 25 });
+    expect(p.health).toBe(75);
+  });
 });

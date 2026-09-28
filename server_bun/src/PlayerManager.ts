@@ -48,6 +48,7 @@ export class PlayerManager {
       history: [],
       forceSendUntil: 0,
       protectedUntil: Date.now() + PlayerManager.SPAWN_PROTECT_MS,
+      healCredit: 0,
     };
 
     this.players.set(playerId, player);
