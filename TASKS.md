@@ -64,8 +64,8 @@
 - **Demo download:** Right-click on cool shot tiles in ESC menu downloads the `.demo` file (local or from server)
 
 ## Next Tasks
-- **Replay through real netHandlers** — recordings decode offline but never exercise the live client message pipeline; needs a DOM-stub harness (Chat/HUD/sfx deps make it heavy)
-- **WT tier in tests** — untestable locally while dev server holds 9443; needs a distinct test port or a free window
+- ~~**Replay through real netHandlers**~~ — DONE: `netReplay.test.ts` feeds committed `.rec` captures through `handleMessage`/`handleBinaryMessage` via a DOM-stubbed harness (`netHarness.ts`).
+- **WT tier in tests** — test server can run `FPS_WT_PORT=<free>` on a distinct port; dev server only blocks the default 9443.
 - **Ops items needing JP's domain+VPS:** TURN server, CA cert for WebTransport — see `_docs/2026-09-28_deploy-netcode-v2.md`
 - **Post-processing fog pass** (medium complexity) — depth buffer → reconstruct position → apply sky-gradient fog per pixel. Eliminates all color sync issues permanently. See `_reports/fog-sky-blending-research.md` for details.
 - **w4 mortar palette** — authored albedo near-black; normalization lifts but it stays darkest. JP's call.
