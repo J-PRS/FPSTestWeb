@@ -73,14 +73,22 @@ class WtSocketAdapter {
     const rr = stream.readable.getReader();
     for (;;) {
       const { done: readDone, value } = await rr.read();
-      if (readDone) return;
+      if (readDone) break;
       carry += this.decoder.decode(value, { stream: true });
+      // A peer that never sends '\n' grows this buffer forever — cap it.
+      if (carry.length > 65536) { this.close(1009, 'oversize frame'); return; }
       let nl: number;
       while ((nl = carry.indexOf('\n')) >= 0) {
         const line = carry.slice(0, nl);
         carry = carry.slice(nl + 1);
         if (line) this.game.onMessage(this.asSocket(), line);
       }
+    }
+    // Reliable stream ended while the session lives — the lane is dead,
+    // treat the socket as closed rather than leaving a zombie.
+    if (this.open) {
+      this.open = false;
+      this.game.onClose(this.asSocket());
     }
   }
 

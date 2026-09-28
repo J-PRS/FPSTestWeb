@@ -115,6 +115,8 @@ export class RtcServer {
     let m: { type?: string; sdp?: string };
     try { m = JSON.parse(message); } catch { return; }
     if (m.type !== 'offer' || typeof m.sdp !== 'string') return;
+    // Each offer spawns a native PeerConnection — cap in-flight ones.
+    if (this.peers.size >= 64) { ws.close(1013, 'rtc busy'); return; }
     void this.answerOffer(ws, m.sdp);
   }
 
@@ -127,13 +129,21 @@ export class RtcServer {
     const adapter = new RtcSocketAdapter();
     const sock = adapter as unknown as ServerWebSocket<WebSocketData>;
     let opened = false;
+    // Half-open peer guard: if signaling finished but no datachannel
+    // arrives (client vanished mid-handshake), don't hold the PC forever.
+    const staleTimer = setTimeout(() => {
+      if (!opened) {
+        this.peers.delete(ws);
+        try { pc.close(); } catch { /* gone */ }
+      }
+    }, 30_000);
     pc.onDataChannel((dc) => {
       adapter.attach(dc as DataChannelLabeled);
       this.adapterOf.set(dc, adapter);
       dc.onMessage((msg) => this.game.onMessage(sock, msg instanceof Uint8Array ? msg : String(msg)));
       dc.onOpen(() => {
         // game.onOpen once — whichever channel opens first starts the session
-        if (!opened) { opened = true; this.game.onOpen(sock); }
+        if (!opened) { opened = true; clearTimeout(staleTimer); this.game.onOpen(sock); }
       });
       dc.onClosed(() => {
         this.adapterOf.delete(dc);
@@ -159,6 +169,7 @@ export class RtcServer {
       // Malformed SDP (no ICE ufrag, truncated, etc.) — answer with a close
       // so the client's probe times out and falls back to the WS tier.
       logger.warn('RTC offer rejected', { error: (e as Error).message });
+      clearTimeout(staleTimer);
       this.peers.delete(ws);
       try { pc.close(); } catch { /* gone */ }
       ws.close(1008, 'bad offer');
@@ -173,4 +184,7 @@ export class RtcServer {
       try { pc.close(); } catch { /* gone */ }
     }
   }
+
+  /** Cap how many un-answered offers can pile up — each holds a PC. */
+  get pendingPeers(): number { return this.peers.size; }
 }
