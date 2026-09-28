@@ -183,6 +183,10 @@ surface. Detailed research lives in `_reports/`; this file is the current truth.
   funnel: kill credit, friendly gate, spawn protection). turretShot
   broadcast paints the rocket on every client; remote deployables render
   via remoteSpawn/remoteRemove + join-time roster reconcile.
+- Mines + pads server-side (2026-10-01): proximity fuse trips a mineBlast
+  through the shared AOE funnel (falloff, knockback, friendly gate,
+  owner splash); mineBoom broadcast for blast FX. Stations heal
+  friendlies in a 9m envelope at 9%/s of maxHealth.
 - Netcode v2 (2026-09-28): GameTransport seam w/ three real tiers —
   WebTransport (QUIC datagrams, cert-pinned via /wthash) → WebRTC
   DataChannel (game=unreliable binary, ctrl=reliable JSON, /rtcs
