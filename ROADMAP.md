@@ -73,8 +73,14 @@ surface. Detailed research lives in `_reports/`; this file is the current truth.
    declared perk (featherjets/overcharge), cloak/shield/mend antes and
    per-sec drains ride the inputMove status bits, shield soak and gem
    refills burn/refill the same tank — infinite-jet claims get gated.
-   Remaining: true input-only reporting + seq-anchored replay (client
-   already blends/snaps corrections — see net/players.ts).
+   **Authority mode landed** behind FPS_MOVE_AUTHORITY=1: the sim OWNS
+   player truth — reports degrade to aim/ping/liveness hints, the tick
+   commits sim pos+vel into the player record (broadcast + rewind buffer
+   see sim state), divergence tolerance tightens to 1.5m at 100ms ack
+   throttle so prediction converges. No heightfield = auto judge
+   fallback. Client needs zero changes (3-tier correction reconcile).
+   Remaining: seq-anchored input replay so corrections refeed only the
+   inputs the server missed (today a correction blends without replay).
 3. ~~Map format~~ — landed: `maps/<room>.json` (mode, ball population,
    spawn anchors, bases/objectives, bot count — all clamped with
    defaults; examples swarm/duel/nugwar/ctf). Server bots populate
