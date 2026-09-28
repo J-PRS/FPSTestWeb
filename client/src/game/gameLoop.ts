@@ -261,6 +261,7 @@ export function createGameLoop(deps: GameLoopDeps) {
       deps.world.matchEndsAt ? deps.world.matchEndsAt - Date.now() : null,
       deps.world.flagStates,
     );
+    hud.updateDeathCountdown(deps.world.respawnMs);
     deps.ambientBirds.positions(_birdPosBuf);
     hud.updateMinimap(entities.targets, entities.nuggets, player.pos, player.yaw, _birdPosBuf);
 

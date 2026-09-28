@@ -5,6 +5,7 @@ import { CombatHandler } from './CombatHandler.ts';
 import { logger } from './logger.ts';
 import { PROTOCOL_VERSION } from '../../shared/protocol.ts';
 import { STATUS_MASK } from '../../shared/status.ts';
+import { CONFIG } from './config.ts';
 import type { BallSim } from './BallSim.ts';
 
 type BroadcastFn = (msg: ServerMessage, excludePlayerId?: string) => void;
@@ -194,6 +195,7 @@ export class MessageHandler {
       pickups: this.roomInfo.pickups?.(),
       deployables: this.roomInfo.deployables?.(),
       matchEndsAt: this.roomInfo.matchEndsAt?.() || undefined,
+      respawnMs: CONFIG.respawnDelayMs,
     };
   }
 
