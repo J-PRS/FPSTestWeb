@@ -213,11 +213,10 @@ export interface WireBallSegment {
   t: number;      // server sim time
 }
 
-/** ~40B fixed + optional fields vs ~140B+ JSON. Timers are u8 tenths of a
- *  second — the sim only needs ±0.05s granularity to stay glued. */
+/** ~46B fixed + optional fields vs ~140B+ JSON. */
 export function encodeBallSegment(s: WireBallSegment): Uint8Array {
   const idBytes = s.targetId !== null ? ENC.encode(s.targetId) : null;
-  const buf = new ArrayBuffer(50 + (idBytes ? 1 + idBytes.length : 0));
+  const buf = new ArrayBuffer(56 + (idBytes ? 1 + idBytes.length : 0));
   const u8 = new Uint8Array(buf);
   const d = new DataView(buf);
   let o = 0;
@@ -234,8 +233,11 @@ export function encodeBallSegment(s: WireBallSegment): Uint8Array {
   d.setFloat32(o, s.velocity.z, true); o += 4;
   d.setUint8(o++,
     (s.enraged ? 1 : 0) | (s.damp ? 2 : 0) | (s.tp ? 4 : 0) | (idBytes ? 8 : 0));
-  d.setUint8(o++, Math.min(255, Math.round(s.et * 10)));
-  d.setUint8(o++, Math.min(255, Math.round(s.slowT * 10)));
+  // Float32, not tenths: the client replays the pull with these timers and
+  // ±0.05s of quantization error compounds into meters of divergence at
+  // bounces — the last mid-leg mismatch after grid-locking.
+  d.setFloat32(o, s.et, true); o += 4;
+  d.setFloat32(o, s.slowT, true); o += 4;
   if (s.tp) {
     d.setFloat32(o, s.tp.x, true); o += 4;
     d.setFloat32(o, s.tp.y, true); o += 4;
@@ -249,7 +251,7 @@ export function encodeBallSegment(s: WireBallSegment): Uint8Array {
 }
 
 export function decodeBallSegment(u8: Uint8Array): WireBallSegment | null {
-  if (u8.length < 38 || u8[0] !== MAGIC || u8[1] !== WIRE_BALLSEG) return null;
+  if (u8.length < 44 || u8[0] !== MAGIC || u8[1] !== WIRE_BALLSEG) return null;
   const d = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
   let o = 2;
   const id = d.getUint32(o, true); o += 4;
@@ -258,8 +260,8 @@ export function decodeBallSegment(u8: Uint8Array): WireBallSegment | null {
   const position = { x: d.getFloat32(o, true), y: d.getFloat32(o + 4, true), z: d.getFloat32(o + 8, true) }; o += 12;
   const velocity = { x: d.getFloat32(o, true), y: d.getFloat32(o + 4, true), z: d.getFloat32(o + 8, true) }; o += 12;
   const flags = d.getUint8(o++);
-  const et = d.getUint8(o++) / 10;
-  const slowT = d.getUint8(o++) / 10;
+  const et = d.getFloat32(o, true); o += 4;
+  const slowT = d.getFloat32(o, true); o += 4;
   let tp: WireVec3 | null = null;
   if (flags & 4) {
     tp = { x: d.getFloat32(o, true), y: d.getFloat32(o + 4, true), z: d.getFloat32(o + 8, true) }; o += 12;
