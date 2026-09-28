@@ -129,4 +129,23 @@ describe('projectile claim ordering', () => {
     // p1's later claim still resolves — the bogus destroy was refused.
     expect(rejections(sentTo, 'p1')).toEqual([]);
   });
+
+  it('melee aoeShot needs no projectile — the swing validates on reach', () => {
+    const { players, combat, sentTo } = harness();
+    const p1 = players.addPlayer('p1');
+    p1.position = { x: 0, y: 10, z: 0 };
+    const target = players.addPlayer('p2');
+    target.position = { x: 1, y: 10, z: -0.5 };
+    target.protectedUntil = 0;
+
+    combat.handleAOEShot('p1', {
+      type: 'aoeShot',
+      position: { x: 0, y: 10, z: -1 }, // swing point in front of p1
+      weaponType: WeaponType.Melee,
+      // no projectileId, no airtime — melee is a skill, not a shell
+    });
+
+    expect(rejections(sentTo, 'p1')).toEqual([]);
+    expect(target.health).toBeLessThan(target.maxHealth);
+  });
 });
