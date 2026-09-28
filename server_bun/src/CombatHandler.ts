@@ -71,6 +71,9 @@ export class CombatHandler {
     /** Movement shadow sim — gets the same impulse deltas we apply to
      *  target.velocity so a legit blast doesn't read as divergence. */
     private moveImpulse?: (playerId: string, dv: Vec3) => void,
+    /** Server-driven respawn is a declared discontinuity — reseat the
+     *  shadow at the spawn or the corpse→spawn jump reads as divergence. */
+    private moveResync?: (playerId: string, pos: Vec3, yaw: number) => void,
   ) {}
 
   /** Claim refused: server-side warn plus a shotRejected to the shooter so
@@ -297,6 +300,23 @@ export class CombatHandler {
     if (!player || player.isDead) return;
     player.protectedUntil = 0; // firing breaks your own spawn shield
     const stats = getWeaponStats(msg.weaponType);
+
+    if (msg.weaponType === WeaponType.Melee) {
+      // The punch is a skill, not a projectile — same self-positioned
+      // contract as Slam, tightened to melee reach. No projectile to
+      // resolve, no airtime to check: the swing point just has to sit
+      // in front of the swinger.
+      const dx = player.position.x - msg.position.x;
+      const dy = player.position.y - msg.position.y;
+      const dz = player.position.z - msg.position.z;
+      const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      if (dist > stats.aoeRadius + 10) {
+        this.reject(playerId, 'AOE', `melee ${dist.toFixed(0)}m from player`, undefined, msg.weaponType);
+        return;
+      }
+      this.processAOE(playerId, msg.position, msg.excludeTargetId, stats, msg.weaponType);
+      return;
+    }
 
     if (msg.weaponType === WeaponType.Slam) {
       // Slam is a skill, not a projectile — the blast must land where the
@@ -631,6 +651,7 @@ export class CombatHandler {
       if (!player) return;
 
       logger.info('Player respawned', { playerId, position: result.position });
+      this.moveResync?.(playerId, result.position, result.rotation.yaw);
 
       this.broadcast({
         type: 'playerRespawn',

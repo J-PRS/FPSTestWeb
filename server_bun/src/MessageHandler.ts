@@ -95,7 +95,7 @@ export class MessageHandler {
     this.broadcast = broadcast;
     this.sendToPlayer = sendToPlayer;
     if (roomInfo) this.roomInfo = roomInfo;
-    this.combat = new CombatHandler(playerManager, broadcast, sendToPlayer, roomInfo?.onKill, roomInfo?.onHit, roomInfo?.teams ?? false, roomInfo?.moveImpulse);
+    this.combat = new CombatHandler(playerManager, broadcast, sendToPlayer, roomInfo?.onKill, roomInfo?.onHit, roomInfo?.teams ?? false, roomInfo?.moveImpulse, roomInfo?.moveResync);
 
     // Per-type dispatch — a new message type is one table entry. Field
     // order: handlers need this.combat, so the table is built last.

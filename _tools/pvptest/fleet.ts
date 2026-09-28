@@ -125,6 +125,24 @@ async function spawnBot(room: string, name: string): Promise<void> {
             pos: { ...m.position }, vel: { ...(m.velocity ?? { x: 0, y: 0, z: 0 }) },
             yaw: m.rotation?.yaw ?? bot.yaw, pitch: 0, onGround: m.grounded ?? true,
           });
+        } else if (m.type === 'playerRespawn' && m.playerId === name && bot.sim) {
+          // Own respawn — reseat the sim at the spawn point exactly like the
+          // client's syncMovement, or the corpse-to-spawn jump reads as a
+          // (legit, once-per-life) divergence spike.
+          bot.sim.setState({
+            pos: { ...m.position }, vel: { x: 0, y: 0, z: 0 },
+            yaw: m.rotation?.yaw ?? bot.yaw, pitch: 0, onGround: true,
+          });
+        } else if (m.type === 'knockback' && bot.sim && m.targetId === name) {
+          // Server shoved us — apply the same impulse the real client would,
+          // or the judge sees the un-eaten impulse as divergence.
+          const s = bot.sim.state;
+          const dx = s.pos.x - m.position.x, dz = s.pos.z - m.position.z;
+          const dist = Math.sqrt(dx * dx + dz * dz) || 1;
+          const sgn = m.pull ? -1 : 1;
+          s.vel.x += sgn * (dx / dist) * m.force;
+          s.vel.y += (m.pull ? 0.3 : 0.5) * m.force;
+          s.vel.z += sgn * (dz / dist) * m.force;
         }
       } else {
         const u8 = ev.data instanceof Uint8Array ? ev.data : new Uint8Array(ev.data);
