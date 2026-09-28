@@ -11,7 +11,7 @@ import { isWireFrame, decodePosition, encodeTickPlayer, encodeTickFrame } from '
 import { STATUS } from '../../shared/status.ts';
 import { isPerkId, perkMods } from '../../shared/perks.ts';
 import { createHmac, randomBytes } from 'node:crypto';
-import { readFileSync, appendFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, appendFileSync, mkdirSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { type MapSpec, resolveMapSpec } from '../../shared/mapSpec.ts';
 
@@ -187,10 +187,15 @@ export class GameServer {
   /** Resolve-or-create a room. Joins may name any room; 'default' is the
    *  unnamed lobby every existing client already lands in. `mode` is only
    *  honored at creation — the first joiner defines the match. */
-  private roomFor(name: string, mode = ''): Room {
+  private roomFor(name: string, mode = '', map = '', bots?: number): Room {
     let room = this.rooms.get(name);
     if (!room) {
-      const spec = this.loadMapSpec(name) ?? this.loadMapSpec(mode);
+      let spec = this.loadMapSpec(name);
+      let src = spec ? name : '';
+      if (!spec && map) { spec = this.loadMapSpec(map); src = map; }
+      if (!spec) { spec = this.loadMapSpec(mode); src = spec ? mode : ''; }
+      if (spec && bots !== undefined) spec = { ...spec, bots, botFill: bots };
+      if (src) this.roomMapName.set(name, src);
       room = new Room(name, this.field, mode, spec);
       room.onMatchEnd = (rec) => this.recordMatchEnd(rec);
       if (spec?.terrain) {
@@ -221,18 +226,47 @@ export class GameServer {
     }
   }
 
-  /** Quick-join: pick the emptiest open room already running `mode`,
-   *  else spin up `<mode>-N`. Mode '' matches any mode-less arena. */
-  quickRoom(mode: string): Room {
+  /** Which maps/<X>.json spawned each room — lets quick-join group by
+   *  map rather than room name. */
+  private roomMapName = new Map<string, string>();
+
+  /** Quick-join: pick the emptiest open room already running `mode`
+   *  (and `map` when given), else spin up `<map|mode>-N`. `bots`
+   *  overrides the spec's bot count/botFill on creation only. */
+  quickRoom(mode: string, map = '', bots?: number): Room {
     let best: Room | undefined;
     for (const room of this.rooms.values()) {
-      if (room.mode !== mode || room.playerCount() >= CONFIG.maxPlayers) continue;
+      if (map ? this.roomMapName.get(room.name) !== map
+              : room.mode !== mode) continue;
+      if (room.playerCount() >= CONFIG.maxPlayers) continue;
       if (!best || room.playerCount() < best.playerCount()) best = room;
     }
     if (best) return best;
+    const base = map || mode || 'arena';
     let n = 1;
-    while (this.rooms.has(`${mode || 'arena'}-${n}`)) n++;
-    return this.roomFor(`${mode || 'arena'}-${n}`, mode);
+    while (this.rooms.has(`${base}-${n}`)) n++;
+    return this.roomFor(`${base}-${n}`, mode, map, bots);
+  }
+
+  /** Playable map list for the menu — name + declared mode + default
+   *  bot count, straight from maps/*.json. */
+  listMaps(): { name: string; mode: string; bots: number }[] {
+    try {
+      const dir = `${import.meta.dir}/../../maps`;
+      return readdirSync(dir)
+        .filter((f) => f.endsWith('.json'))
+        .map((f) => {
+          const spec = this.loadMapSpec(f.slice(0, -5));
+          return {
+            name: f.slice(0, -5),
+            mode: spec?.mode ?? '',
+            bots: spec?.bots ?? spec?.botFill ?? 0,
+          };
+        })
+        .sort((a, b) => a.name.localeCompare(b.name));
+    } catch {
+      return [];
+    }
   }
 
   // playerId → room index: the binary position path calls this at 20Hz per
@@ -522,7 +556,15 @@ export class GameServer {
     const roomMode = typeof handshake.mode === 'string' && GameServer.ROOM_NAME_RE.test(handshake.mode)
       ? handshake.mode
       : '';
-    const room = this.roomFor(roomName, roomMode);
+    // Map/bots hints ride the join so a disposed quick-join room rebuilds
+    // with the same spec — the room name alone doesn't carry it.
+    const joinMap = typeof handshake.map === 'string' && GameServer.ROOM_NAME_RE.test(handshake.map)
+      ? handshake.map
+      : '';
+    const joinBots = typeof handshake.bots === 'number' && Number.isFinite(handshake.bots)
+      ? Math.max(0, Math.min(24, Math.floor(handshake.bots)))
+      : undefined;
+    const room = this.roomFor(roomName, roomMode, joinMap, joinBots);
 
     // Watch-only join: `spectate: true` registers the socket for this
     // room's broadcasts + tick stream without spawning a player — no

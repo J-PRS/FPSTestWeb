@@ -27,7 +27,11 @@ export interface Rotation {
 export type ClientMessage =
   // room: optional match room — server validates [\w-]{1,32}, absent =
   // 'default'. mode: only honored when the join creates the room.
-  | { type: 'join'; playerId: string; token?: string; room?: string; mode?: string; perk?: string }
+  | { type: 'join'; playerId: string; token?: string; room?: string; mode?: string; perk?: string;
+      /** map hint for room creation — /join-spawned rooms can be disposed
+       *  and rebuilt before the first join lands, so the join carries the
+       *  spec source too. bots overrides the spec's bot count. */
+      map?: string; bots?: number }
   | { type: 'position'; position: Vec3; rotation: Rotation; velocity: Vec3; seq?: number; ping?: number }
   // Declared discontinuity (warp beacon, respawn): the position is
   // authoritative, not a plausibility-checked move — the server reseats

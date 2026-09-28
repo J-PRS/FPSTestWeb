@@ -126,6 +126,8 @@ export class NetworkManager {
               token: this.sessionToken ?? undefined,
               room: urlParams.room ?? undefined,
               mode: urlParams.mode ?? undefined,
+              map: urlParams.map ?? undefined,
+              bots: urlParams.bots,
               perk: this.joinPerk?.(),
             });
             this.connected = true;
