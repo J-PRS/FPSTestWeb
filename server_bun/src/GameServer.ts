@@ -200,7 +200,7 @@ export class GameServer {
       if (!spec) { spec = this.loadMapSpec(mode); src = spec ? mode : ''; }
       if (spec && bots !== undefined) spec = { ...spec, bots, botFill: bots };
       if (src) this.roomMapName.set(name, src);
-      room = new Room(name, this.field, mode, spec);
+      room = new Room(name, this.field, mode, spec, CONFIG.moveAuthority);
       room.onMatchEnd = (rec) => this.recordMatchEnd(rec);
       if (spec?.terrain) {
         const r = room;
@@ -757,6 +757,19 @@ export class GameServer {
   private tickRoom(room: Room, players: ReturnType<Room['players']['getAllPlayers']>, now0: number): void {
     // Server sims move first — bot/flag writes land in this tick's records.
     for (const sim of room.sims) sim.tick(0.05);
+
+    // Authority mode: the shadow sim's output is the broadcast truth.
+    // Reports only fed it aim/liveness hints — what every other player
+    // sees (and the rewind buffer stores) is the simulated position.
+    if (room.moveAuthority) {
+      for (const [playerId, p] of players) {
+        if (p.isBot) continue;
+        const s = room.moveSim.simState(playerId);
+        if (!s) continue;
+        p.position = { x: s.pos.x, y: s.pos.y, z: s.pos.z };
+        p.velocity = { x: s.vel.x, y: s.vel.y, z: s.vel.z };
+      }
+    }
 
     const records = this.buildRecords(room, players, now0);
 

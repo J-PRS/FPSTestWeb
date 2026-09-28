@@ -49,6 +49,12 @@ export const CONFIG = {
   reconnectGraceMs: envNum('FPS_RECONNECT_GRACE_MS', 10000),
   idleKickMs: envNum('FPS_IDLE_KICK_MS', 60_000),
 
+  // Movement authority flip: when set, the room's shadow sim OWNS player
+  // truth — position reports become hints (yaw/ping/liveness) and the
+  // sim's position is broadcast to everyone + echoed back as corrections.
+  // Off = judge mode (report is truth, sim only flags divergence).
+  moveAuthority: envStr('FPS_MOVE_AUTHORITY', '0') === '1',
+
   // Minimum projectile airtime (seconds) for a demo to be listed as a "cool shot".
   // Set to 0.2s during testing phase so clips are easy to trigger. Raise to ~2.0s for production.
   minDemoLifetime: envNum('FPS_MIN_DEMO_LIFETIME', 0.2),

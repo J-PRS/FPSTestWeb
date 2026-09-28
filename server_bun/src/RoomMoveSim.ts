@@ -57,10 +57,24 @@ interface Shadow {
 export class RoomMoveSim {
   private surface: FieldSurface | null;
   private shadows = new Map<string, Shadow>();
+  // Judge mode tolerates prediction noise; authority mode is truth — the
+  // client needs tight, frequent acks or its prediction drifts for real.
   private static readonly DIVERGENCE_M = 8;
+  private static readonly AUTHORITY_DIVERGENCE_M = 1.5;
+  private static readonly CORRECT_MS = 400;
+  private static readonly AUTHORITY_CORRECT_MS = 100;
+  readonly authoritative: boolean;
 
-  constructor(field: Heightfield | null) {
+  constructor(field: Heightfield | null, authoritative = false) {
     this.surface = field ? new FieldSurface(field) : null;
+    this.authoritative = authoritative && !!field;
+  }
+
+  private get divergenceM(): number {
+    return this.authoritative ? RoomMoveSim.AUTHORITY_DIVERGENCE_M : RoomMoveSim.DIVERGENCE_M;
+  }
+  private get correctMs(): number {
+    return this.authoritative ? RoomMoveSim.AUTHORITY_CORRECT_MS : RoomMoveSim.CORRECT_MS;
   }
 
   /** Call on join/spawn — seeds the sim at the reported spot. */
@@ -142,14 +156,14 @@ export class RoomMoveSim {
     if (vel) { s.vel.x = vel.x; s.vel.y = vel.y; s.vel.z = vel.z; }
     const dx = pos.x - s.pos.x, dy = pos.y - s.pos.y, dz = pos.z - s.pos.z;
     const dist = Math.hypot(dx, dy, dz);
-    if (dist <= RoomMoveSim.DIVERGENCE_M) return null;
+    if (dist <= this.divergenceM) return null;
 
     sh.divergences++;
     if (sh.divergences === 1 || sh.divergences % 20 === 0) {
       logger.warn('Move sim divergence', { playerId, dist: dist.toFixed(1), count: sh.divergences });
     }
     const now = Date.now();
-    if (now - sh.lastCorrection < 400) return null;
+    if (now - sh.lastCorrection < this.correctMs) return null;
     sh.lastCorrection = now;
     // The sim keeps its own position — resyncing onto the rejected report
     // would make the correction we just sent diverge from the next report
@@ -193,5 +207,11 @@ export class RoomMoveSim {
   /** Server-computed position — for future authoritative use. */
   simPos(playerId: string): Vec3Like | null {
     return this.shadows.get(playerId)?.sim.state.pos ?? null;
+  }
+
+  /** Full sim state (live refs — read, don't mutate). Authority mode's
+   *  tick commit copies pos+vel into the player record from this. */
+  simState(playerId: string): MoveState | null {
+    return this.shadows.get(playerId)?.sim.state ?? null;
   }
 }
