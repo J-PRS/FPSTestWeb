@@ -30,7 +30,7 @@ export function wireWorld(ctx: NetCtx): void {
   };
   networkManager.onBallRoster = (data) => {
     if (deps.world.playbackMode) return;
-    for (const b of data.balls) deps.entities().netBallSpawn(b);
+    deps.entities().netBallRoster(data);
   };
 
   // Admin hot-reload — the room's map spec changed mid-match. Rebuild the
