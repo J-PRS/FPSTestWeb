@@ -118,7 +118,11 @@ export function wireOverlayInput(deps: OverlayInputDeps) {
 
 
   if (loadoutBar) {
-    const weaponOpts = SLOT_DEFS.map((def, wid) => ({ v: String(wid), label: def.config.displayName }));
+    // Sidearms are chosen in their own row — a primary slot offering them
+    // would let a loadout double-carry the hold-out tier.
+    const weaponOpts = SLOT_DEFS
+      .map((def, wid) => ({ v: String(wid), label: def.config.displayName, sidearm: !!def.sidearm }))
+      .filter((o) => !o.sidearm);
     for (let i = 0; i < Player.LOADOUT_SLOTS; i++) {
       const row = document.createElement('div');
       row.className = 'lo-row';

@@ -54,15 +54,19 @@ export interface WeaponDef {
   readonly auto: boolean;
   /** Fan weapons only: pellet count + cone spread. */
   readonly pellets?: { readonly count: number; readonly spread: number };
+  /** Hold-out weapon — excluded from loadout slot menus (chosen via the
+   *  sidearm row, not a primary slot). */
+  readonly sidearm?: boolean;
 }
 
 function def(weaponType: WeaponType, rate: number, config: ProjectileConfig,
-             kick: number, opts: { auto?: boolean; pellets?: { count: number; spread: number } } = {}): WeaponDef {
+             kick: number, opts: { auto?: boolean; pellets?: { count: number; spread: number }; sidearm?: boolean } = {}): WeaponDef {
   return {
     weaponType, rate, config, kick,
     kind: opts.pellets ? 'fan' : weaponType === WeaponType.Lightning ? 'beam' : 'projectile',
     auto: opts.auto ?? false,
     pellets: opts.pellets,
+    sidearm: opts.sidearm,
   };
 }
 
@@ -79,11 +83,11 @@ export const SLOT_DEFS: readonly WeaponDef[] = [
   def(WeaponType.PlasmaCannon, PLASMA_RATE, PLASMA_CONFIG, 0.4),
   def(WeaponType.Railgun, RAILGUN_RATE, RAILGUN_CONFIG, 1.8),
   def(WeaponType.Lightning, LG_RATE, LIGHTNING_CONFIG, 0, { auto: true }),
-  def(WeaponType.Shotgun, SHOTGUN_RATE, SHOTGUN_CONFIG, 1.6, { pellets: { count: SG_PELLETS, spread: SG_SPREAD } }),
+  def(WeaponType.Shotgun, SHOTGUN_RATE, SHOTGUN_CONFIG, 1.6, { pellets: { count: SG_PELLETS, spread: SG_SPREAD }, sidearm: true }),
   def(WeaponType.Cannon, CANNON_RATE, CANNON_CONFIG, 1.2),
   def(WeaponType.RocketLauncher, RKT_RATE, RKT_CONFIG, 1.6),
-  def(WeaponType.Pistol, PISTOL_RATE, PISTOL_CONFIG, 0.3),
-  def(WeaponType.Revolver, REVOLVER_RATE, REVOLVER_CONFIG, 1.0),
+  def(WeaponType.Pistol, PISTOL_RATE, PISTOL_CONFIG, 0.3, { sidearm: true }),
+  def(WeaponType.Revolver, REVOLVER_RATE, REVOLVER_CONFIG, 1.0, { sidearm: true }),
   def(WeaponType.Sticky, STICKY_RATE, STICKY_CONFIG, 0.8),
   def(WeaponType.PlasmaGun, PLASMAGUN_RATE, PLASMAGUN_CONFIG, 0.2),
 ];
