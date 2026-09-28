@@ -73,6 +73,9 @@ export class NetworkManager {
   public onDeployGone: ((id: number) => void) | null = null;
   /** Server sim fired a remote sentry — paint the rocket at the deployable. */
   public onTurretShot: ((id: number, owner: string, targetId: string) => void) | null = null;
+  /** Server-owned mine exploded — explosion FX only; damage flows via the
+   *  normal playerHit/knockback channel. */
+  public onMineBoom: ((id: number, pos: { x: number; y: number; z: number }) => void) | null = null;
   public onSnapshot: ((players: SnapshotPlayer[], timestamp: number) => void) | null = null;
   public onStateHash: ((hash: string, tick: number, playerCount: number, timestamp: number) => void) | null = null;
   public onCorrection: ((seq: number, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }, inputSeq?: number, grounded?: boolean) => void) | null = null;
@@ -248,6 +251,7 @@ export class NetworkManager {
     deploySpawn: (data) => this.onDeploySpawn?.(data.id, data.owner, data.kind, data.pos, data.team),
     deployGone: (data) => this.onDeployGone?.(data.id),
     turretShot: (data) => this.onTurretShot?.(data.id, data.owner, data.targetId),
+    mineBoom: (data) => this.onMineBoom?.(data.id, data.pos),
   };
 
   private handleGameState(data: Extract<ServerMessage, { type: 'gameState' }>): void {

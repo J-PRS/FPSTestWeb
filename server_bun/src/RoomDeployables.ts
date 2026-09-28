@@ -32,6 +32,17 @@ const TURRET_RANGE = 42;
 const TURRET_FIRE_INTERVAL = 1.25;
 const TURRET_DAMAGE = 14;
 const TURRET_UNFOLD_S = 0.45;
+// Mirrors client config.ts MINE_* — proximity fuse + blast envelope.
+const MINE_ARM_S = 1.0;
+const MINE_TRIGGER_DIST = 3.2;
+const MINE_BLAST_RADIUS = 6.0;
+const MINE_DAMAGE = 22;
+const MINE_KNOCKBACK = 12.0;
+// Mirrors client DeployStation: recharge envelope.
+const STATION_RANGE = 9;
+const STATION_HP_RATE = 0.09;   // fraction of maxHealth per second
+const STATION_HEAL_CD = 0.5;    // heal tick cadence
+const FORCE_SEND_MS = 900;      // health rides tickUpdate; force past suppression
 
 export class RoomDeployables {
   private items = new Map<number, Deployed>();
@@ -56,7 +67,10 @@ export class RoomDeployables {
       this.remove(owned[0]!.id);
     }
     const id = this.nextId++;
-    this.items.set(id, { id, owner: playerId, kind: k, pos: { ...pos }, ttl: TTL_S[k], fireCd: TURRET_UNFOLD_S + Math.random() * 0.4 });
+    const armDelay = k === 'turret' ? TURRET_UNFOLD_S + Math.random() * 0.4
+      : k === 'mine' ? MINE_ARM_S
+      : k === 'station' ? STATION_HEAL_CD : 0;
+    this.items.set(id, { id, owner: playerId, kind: k, pos: { ...pos }, ttl: TTL_S[k], fireCd: armDelay });
     this.room.broadcast({ type: 'deploySpawn', id, owner: playerId, kind: k, pos: { ...pos }, team: player.team } as ServerMessage);
   }
 
@@ -87,6 +101,49 @@ export class RoomDeployables {
       d.ttl -= dt;
       if (d.ttl <= 0) { this.remove(d.id); continue; }
       if (d.kind === 'turret') this.tickTurret(d, dt);
+      else if (d.kind === 'mine') this.tickMine(d, dt);
+      else if (d.kind === 'station') this.tickStation(d, dt);
+    }
+  }
+
+  /** Proximity mine: after the arm delay, a hostile stepping inside the
+   *  fuse radius detonates it — blast applies through the shared AOE
+   *  funnel (falloff + knockback + friendly gate), clients paint the boom
+   *  off the mineBoom broadcast. */
+  private tickMine(d: Deployed, _dt: number): void {
+    d.fireCd -= _dt; // doubles as the arm timer
+    if (d.fireCd > 0) return;
+    const owner = this.room.players.getPlayer(d.owner);
+    for (const [pid, p] of this.room.players.getAllPlayers()) {
+      if (p.isDead || pid === d.owner) continue;
+      if (owner?.team && p.team === owner.team) continue;
+      const dx = p.position.x - d.pos.x, dy = p.position.y - d.pos.y, dz = p.position.z - d.pos.z;
+      if (dx * dx + dy * dy + dz * dz < MINE_TRIGGER_DIST * MINE_TRIGGER_DIST) {
+        this.room.broadcast({ type: 'mineBoom', id: d.id, owner: d.owner, pos: { ...d.pos } } as ServerMessage);
+        this.remove(d.id);
+        this.room.messages.mineBlast(d.owner, d.pos, MINE_DAMAGE, MINE_BLAST_RADIUS, MINE_KNOCKBACK);
+        return;
+      }
+    }
+  }
+
+  /** Resupply pad: friendlies in the envelope get a slow health refill.
+   *  Energy stays client-side (the move shadow doesn't model the tank
+   *  top-off) — health is the server-owned half of the pad's job. */
+  private tickStation(d: Deployed, dt: number): void {
+    d.fireCd -= dt;
+    if (d.fireCd > 0) return;
+    d.fireCd = STATION_HEAL_CD;
+    const owner = this.room.players.getPlayer(d.owner);
+    for (const [pid, p] of this.room.players.getAllPlayers()) {
+      if (p.isDead) continue;
+      if (owner?.team && p.team !== owner.team) continue;
+      const dx = p.position.x - d.pos.x, dy = p.position.y - d.pos.y, dz = p.position.z - d.pos.z;
+      if (dx * dx + dy * dy + dz * dz > STATION_RANGE * STATION_RANGE) continue;
+      if (p.health >= p.maxHealth) continue;
+      p.health = Math.min(p.maxHealth, p.health + p.maxHealth * STATION_HP_RATE * STATION_HEAL_CD);
+      p.forceSendUntil = Date.now() + FORCE_SEND_MS;
+      void pid;
     }
   }
 

@@ -330,6 +330,13 @@ export class Deployables {
     sfx.shotAt(item.pos, WeaponType.RocketLauncher);
   }
 
+  /** Server tripped a mine — paint the blast at the reported position.
+   *  remoteRemove also arrives (deployGone); either order resolves since
+   *  the item may already be gone locally. */
+  remoteMineBoom(_id: number, pos: { x: number; y: number; z: number }): void {
+    sfx.explosionAt(new THREE.Vector3(pos.x, pos.y, pos.z), true);
+  }
+
   private adoptTurret(t: DeployTurret): void {
     const item: Item = {
       kind: 'turret', candId: t.candId, pos: t.pos, dead: false,

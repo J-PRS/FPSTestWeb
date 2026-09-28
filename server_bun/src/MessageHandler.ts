@@ -143,6 +143,10 @@ export class MessageHandler {
 
   /** Server-sim entry point — deployable sentries fire through the same
    *  outcome funnel as player/bot damage. */
+  mineBlast(ownerId: string, pos: Vec3, maxDamage: number, radius: number, knockback: number): void {
+    this.combat.mineBlast(ownerId, pos, maxDamage, radius, knockback);
+  }
+
   turretAttack(ownerId: string, targetId: string, damage: number): void {
     this.combat.turretAttack(ownerId, targetId, damage);
   }

@@ -132,6 +132,9 @@ export type ServerMessage =
   // Server-owned sentry fired at a player — clients render the rocket
   // visual; damage itself arrives through playerHit like everything else.
   | { type: 'turretShot'; id: number; owner: string; targetId: string }
+  // Server-owned mine tripped — clients paint the blast FX; damage itself
+  // arrives through playerHit/knockback like everything else.
+  | { type: 'mineBoom'; id: number; owner: string; pos: Vec3 }
   | { type: 'pickupGone'; id: number; by: string | null }
   | { type: 'teamScore'; scores: { alpha: number; bravo: number }; winAt: number }
   | { type: 'ffaScore'; scores: Record<string, number>; winAt: number }

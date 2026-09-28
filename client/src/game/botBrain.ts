@@ -40,6 +40,10 @@ export class GameBot extends RemotePlayer {
     super(scene, `bot:${name}`, { x: spawn.x, y: spawn.y, z: spawn.z }, terrain);
     this.team = team;
     this.brain = new BotBrain({ x: spawn.x, y: spawn.y, z: spawn.z });
+    // Local authority: think() writes position/rotation directly — routing
+    // them through update()→snapshot interp made tick() stomp pos with a
+    // ~200ms-delayed sample every frame (the frozen/crawling bot bug).
+    this.localDriven = true;
     this.setGizmoColor(team === 'ffa' ? 0xcc66ff : TEAM_COLORS[team]);
   }
 
@@ -97,10 +101,12 @@ export class GameBot extends RemotePlayer {
     if (pos.y < gy) { pos.y = gy; this.botVel.y = 0; }
     else if (pos.y > gy + 0.05 && this.botVel.y < -2) { /* falling */ }
 
-    // Drive the RemotePlayer visual: feed our own pos as the "server" target.
-    this.update({ x: pos.x, y: pos.y, z: pos.z },
-      { yaw: Math.atan2(dest.x - pos.x, dest.z - pos.z), pitch: 0 }, dt, 0,
-      { x: this.botVel.x, y: this.botVel.y, z: this.botVel.z });
+    // Drive the RemotePlayer visual directly — localDriven means tick()
+    // skips snapshot interp, so we own position/rotation/velocity.
+    this.rotation.yaw = Math.atan2(dest.x - pos.x, dest.z - pos.z);
+    this.rotation.pitch = 0;
+    this.velocity.copy(this.botVel);
+    this.serverVelocity.copy(this.botVel); // vel getter prefers this
 
     if (!out.fire) return null;
     this.fire();

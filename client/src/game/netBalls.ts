@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 
 import * as sfx from '../core/sfx.js';
+import { hmHeight, hmFingerprint } from '../../../shared/heightfield.js';
 import { screenShake } from '../effects/screenShake.js';
 import { Ball, type Targetable } from '../entities/balls.js';
 import { Nugget } from '../entities/Nugget.js';
@@ -123,9 +124,19 @@ export function createNetBalls(deps: EntitiesDeps, ctx: NetBallsCtx, logger: Chi
     const warnAt = kind === 'lunge' || kind === 'teleport' || kind === 'spawn' ? 40
       : kind === 'bounce' || kind === 'stall' ? 12 : 4;
     if (err > warnAt) {
+      // Terrain forensics: a bounce stamp lands at ground contact, so
+      // truth.y should sit ~radius above the field the sim bounced on.
+      // fieldH vs terrainH split "stale heightfield" from "integrator
+      // drift" — if they differ, Ball.field is a dead snapshot.
+      const bf = Ball.netField;
+      const fieldH = bf ? hmHeight(bf, m.position.x, m.position.z) : NaN;
+      const terrainH = deps.lazyTerrain().getHeight(m.position.x, m.position.z);
       logger.warn(`ball #${m.id} ${kind} rubberband ${err.toFixed(1)}m (age ${(age * 1000).toFixed(0)}ms) — prediction diverged`, {
         pred: { x: +b.pos.x.toFixed(1), y: +b.pos.y.toFixed(1), z: +b.pos.z.toFixed(1) },
         truth: { x: +m.position.x.toFixed(1), y: +m.position.y.toFixed(1), z: +m.position.z.toFixed(1) },
+        fieldH: +fieldH.toFixed(1),
+        terrainH: +terrainH.toFixed(1),
+        fieldFp: bf ? hmFingerprint(bf) : 'none',
       });
     } else if (err > 2) {
       logger.debug(`ball #${m.id} segment correction ${err.toFixed(1)}m`);

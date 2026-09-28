@@ -15,6 +15,7 @@ export function wireDeployables(ctx: NetCtx): void {
   };
   networkManager.onDeployGone = (id) => mgr().remoteRemove(id);
   networkManager.onTurretShot = (id, _owner, targetId) => mgr().remoteTurretShot(id, targetId);
+  networkManager.onMineBoom = (id, pos) => mgr().remoteMineBoom(id, pos);
 }
 
 /** Join-time roster — same reconcile the pickups get: spawn what the

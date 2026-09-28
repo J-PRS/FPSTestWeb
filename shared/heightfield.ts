@@ -42,6 +42,21 @@ export function hmHeight(f: Heightfield, wx: number, wz: number): number {
   return (h / HM_DIVISOR) * HM_HEIGHT_SCALE;
 }
 
+/** Cheap field identity for desync forensics — not a hash, just enough
+ *  bits to tell "client is simming a different heightfield than the
+ *  server" apart from integrator drift in one log line. */
+export function hmFingerprint(f: Heightfield): string {
+  const N = f.size;
+  const s = f.stride;
+  const d = f.data;
+  let acc = 0;
+  for (let i = 0; i < 64; i++) {
+    const cell = Math.floor((i / 64) * N * N);
+    acc = (acc * 31 + d[cell * s]!) | 0;
+  }
+  return `${N}:${(acc >>> 0).toString(16)}`;
+}
+
 export function hmNormal(f: Heightfield, wx: number, wz: number, out: { x: number; y: number; z: number }): void {
   const e = CPU_STEP * 0.5;
   const hL = hmHeight(f, wx - e, wz);

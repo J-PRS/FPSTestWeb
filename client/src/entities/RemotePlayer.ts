@@ -58,7 +58,7 @@ export class RemotePlayer {
   private _regenAura = false;
   private ddAura: ShieldBubble | null = null;
   private _ddAura = false;
-  private velocity: THREE.Vector3 = new THREE.Vector3();
+  protected velocity: THREE.Vector3 = new THREE.Vector3();
   private angularVelocity: THREE.Vector3 = new THREE.Vector3();
   private isOnGround: boolean = true;
   private terrain: Terrain | null = null;
@@ -70,7 +70,7 @@ export class RemotePlayer {
   private _isSimulating: boolean = false; // True if we're simulating physics (dead reckoning)
   private simulatedVelocity: THREE.Vector3 = new THREE.Vector3(); // Velocity during simulation
   private predictionTimer: number = 0; // Seconds of forced local prediction (bridges server round-trip)
-  private serverVelocity: THREE.Vector3 = new THREE.Vector3(); // Velocity reported by server
+  protected serverVelocity: THREE.Vector3 = new THREE.Vector3(); // Velocity reported by server
   private lastServerUpdateMs: number = 0; // Timestamp of last server update (ms)
   private reconcileBlend: number = 0; // Blends from predicted to server position (0 = done)
   private gizmoMismatchLogTimer: number = 0; // Throttle for gizmo mismatch warnings
@@ -83,6 +83,10 @@ export class RemotePlayer {
   get isDead(): boolean { return this._isDead; }
   get scale(): number { return this.corpse.scale; }
   get isSimulating(): boolean { return this._isSimulating; }
+  /** Local authority (GameBot): position is written directly each frame,
+   *  so the snapshot interp / dead-reckoning path would fight it — tick
+   *  short-circuits to model+gizmo upkeep only. */
+  localDriven = false;
   get loaded(): boolean { return this._loaded; }
   get model(): PlayerModel { return this._model; }
   // Server-reported velocity (for dust/trail effects); falls back to position-derived estimate
@@ -231,7 +235,7 @@ export class RemotePlayer {
     // 250ms interval (dr threshold straddled the real cadence).
     const drThreshold = Math.min(1500, Math.max(350, this.net.arrivalInterval * 2.5));
     const timeSinceUpdate = Date.now() - this._lastUpdateTime;
-    if (timeSinceUpdate > drThreshold && !this._isSimulating) {
+    if (timeSinceUpdate > drThreshold && !this._isSimulating && !this.localDriven) {
       this._isSimulating = true;
       logger.debug(`STARTING dead reckoning`, { playerId: this.playerId, silentMs: timeSinceUpdate });
     }
@@ -241,9 +245,11 @@ export class RemotePlayer {
         this.predictionTimer = Math.max(0, this.predictionTimer - dt);
       }
       this.simulatePhysics(dt);
-    } else {
+    } else if (!this.localDriven) {
       this.interpolate(dt);
     }
+    // localDriven: position/rotation were already written by the owner —
+    // interpolating would stomp them with a delayed snapshot sample.
 
     this.updateAliveModel(dt);
 

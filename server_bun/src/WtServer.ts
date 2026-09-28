@@ -155,9 +155,17 @@ export class WtServer {
       // known-benign code at the boundary. Anything else still crashes.
       if (!WtServer.sessionCloseGuardInstalled) {
         WtServer.sessionCloseGuardInstalled = true;
-        process.on('unhandledRejection', (err) => {
-          if (String(err).includes('E_SESSION_CLOSED')) return;
-          throw err;
+        const swallow = (err: unknown) => String(err).includes('E_SESSION_CLOSED');
+        process.on('unhandledRejection', (err) => { if (!swallow(err)) throw err; });
+        // The addon also throws E_SESSION_CLOSED synchronously inside
+        // stream-start callbacks — that lands as uncaughtException, not a
+        // rejection, so the rejection-only guard used to miss it.
+        process.on('uncaughtException', (err) => {
+          if (swallow(err)) { logger.warn('WT session died mid-stream (E_SESSION_CLOSED)', {}); return; }
+          // Preserve crash-on-unknown semantics — throwing from inside an
+          // uncaughtException handler just recurses, so exit directly.
+          logger.error('Uncaught exception', { error: String(err), stack: (err as Error).stack });
+          process.exit(1);
         });
       }
       logger.info('WebTransport listening', { port: opts.port });

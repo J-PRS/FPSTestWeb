@@ -14,7 +14,7 @@
  * few seconds — a retarget is itself a segment event so replays keep
  * pulling toward the same player's live position.
  */
-import { type Heightfield, hmHeight } from '../../shared/heightfield.ts';
+import { type Heightfield, hmHeight, hmFingerprint } from '../../shared/heightfield.ts';
 import {
   type SimBall, type SimVec, type BallVariant, type SegmentKind,
   makeSimBall, stepBall, applySimDamage, type StructureCollider,
@@ -101,7 +101,7 @@ export class BallSim {
     this.field = field;
     this.timer = setInterval(() => this.tick(), TICK_DT * 1000);
     this.lastTickAt = performance.now();
-    logger.info('BallSim started', { heightmap: `${field.size}x${field.size}` });
+    logger.info('BallSim started', { heightmap: `${field.size}x${field.size}`, fp: hmFingerprint(field) });
   }
 
   static parseHeightmap(buf: Uint8Array): Heightfield {

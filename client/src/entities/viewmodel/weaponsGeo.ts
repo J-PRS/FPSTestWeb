@@ -51,14 +51,61 @@ const railR = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.045, 0.1), darkMat);
 railR.position.set(0, 0.14, 0.1);
 rocket.add(railR);
 
-// Weapon 1 — disc launcher: stubby wide tube with a flat disc face
+// Weapon 1 — disc launcher (T1/T2 spinfusor DNA, not a copy): the
+// silhouette is a FORK — two flat mag rails sandwiching a vertical disc
+// you can see seated in the breach, glowing hub at the axle. No barrel
+// tube at all; the disc IS the weapon.
 const disc = new THREE.Group();
-disc.add(mkTube(0.15, 0.16, 0.34, 0.02, bodyMat));
-disc.add(mkTube(0.17, 0.17, 0.05, -0.16, darkMat));
-const discFace = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.015, 16), darkMat);
-discFace.rotation.x = Math.PI / 2;
-discFace.position.z = -0.19;
-disc.add(discFace);
+const discRailGeo = new THREE.BoxGeometry(0.035, 0.16, 0.52);
+for (const side of [-1, 1]) {
+  const rail = new THREE.Mesh(discRailGeo, bodyMat);
+  rail.position.set(side * 0.075, 0, -0.08);
+  disc.add(rail);
+  // Rail tips narrow toward the muzzle — the prongs the disc spins
+  // between, mag-lev style
+  const tip = new THREE.Mesh(new THREE.BoxGeometry(0.028, 0.07, 0.14), darkMat);
+  tip.position.set(side * 0.075, 0.045, -0.38);
+  disc.add(tip);
+}
+// The chambered disc — edge-on vertical disc filling the fork, slightly
+// proud of the rails so the round profile reads at viewmodel distance.
+// Amber emissive hub so "loaded" is visible even in shadow.
+const discLoadedMat = new THREE.MeshLambertMaterial({ color: 0x3a3f45, emissive: 0x14161a });
+const loadedDisc = new THREE.Mesh(new THREE.CylinderGeometry(0.115, 0.115, 0.02, 16), discLoadedMat);
+loadedDisc.rotation.z = Math.PI / 2; // axis across the gun — disc plane faces forward
+loadedDisc.position.set(0, 0.01, -0.18);
+disc.add(loadedDisc);
+const hubMat = new THREE.MeshBasicMaterial({ color: 0xffb038 });
+for (const side of [-1, 1]) {
+  const hub = new THREE.Mesh(new THREE.CircleGeometry(0.03, 10), hubMat);
+  hub.position.set(side * 0.014, 0.01, -0.18);
+  hub.rotation.y = side * Math.PI / 2;
+  disc.add(hub);
+}
+// Axle blocks clamping the disc between the rails
+for (const side of [-1, 1]) {
+  const axle = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.05, 0.09), darkMat);
+  axle.position.set(side * 0.075, 0.01, -0.18);
+  disc.add(axle);
+}
+// Breech block behind the fork — mag feed comes up through it
+const discRecv = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.15, 0.22), bodyMat);
+discRecv.position.set(0, -0.01, 0.2);
+disc.add(discRecv);
+// Spare-disc magazine on top of the breech — a short stack of edges
+// visible over the top rail, the ammo read
+const magDiscGeo = new THREE.CylinderGeometry(0.075, 0.075, 0.018, 12);
+for (let i = 0; i < 3; i++) {
+  const mag = new THREE.Mesh(magDiscGeo, darkMat);
+  mag.rotation.z = Math.PI / 2;
+  mag.position.set(0, 0.1, 0.14 + i * 0.025);
+  disc.add(mag);
+}
+// Grip under the breech
+const discGrip = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.12, 0.06), darkMat);
+discGrip.position.set(0, -0.13, 0.14);
+discGrip.rotation.x = 0.35;
+disc.add(discGrip);
 disc.visible = false;
 
 // Weapon 2 — chaingun: 3 thin barrels triangulated around center.

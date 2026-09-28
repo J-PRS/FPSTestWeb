@@ -66,7 +66,7 @@ export class ViewModel {
   // Muzzle Z per weapon (model space) so the flash sits AT the bore,
   // not at a fixed offset that floats ahead of stubby barrels.
   private static readonly MUZZLE_Z: Record<number, number> = {
-    [WeaponType.Rocket]: -0.44, [WeaponType.Disc]: -0.20, [WeaponType.DiscPull]: -0.20,
+    [WeaponType.Rocket]: -0.44, [WeaponType.Disc]: -0.46, [WeaponType.DiscPull]: -0.46, // just past the fork's prong tips
     [WeaponType.Chaingun]: -0.36, [WeaponType.Mortar]: -0.28, [WeaponType.GrenadeLauncher]: -0.42,
     [WeaponType.Flak]: -0.28, [WeaponType.PlasmaCannon]: -0.28, [WeaponType.PlasmaGun]: -0.26,
     [WeaponType.Railgun]: -0.43,

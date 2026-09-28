@@ -5,7 +5,7 @@ import { GRAVITY, BALL_MAX_DIST, BALL_TELE_MIN, BALL_TELE_MAX, BALL_TELE_HEIGHT,
 
 import { Terrain, getHeightfield } from '../world/terrain.js';
 import { makeSimBall, stepBall, BALL_OVERSPEED, BALL_MIN_SPEED, BALL_REST_SPEED, BALL_STALL_TIME, type SimBall, type StructureCollider } from '../../../shared/ballSim.js';
-import { type Heightfield, hmHeight } from '../../../shared/heightfield.js';
+import { type Heightfield, hmHeight, hmFingerprint } from '../../../shared/heightfield.js';
 import { RibbonTrail } from '../projectiles/RibbonTrail.js';
 import { ChildLogger } from '../core/Logger.js';
 import { allocSlots, freeSlots, getSwarm, getShadows, type SwarmPart } from './swarms.js';
@@ -191,6 +191,9 @@ export class Ball {
   netTargetId: string | null = null;
   private sim: SimBall | null = null;
   private static field: Heightfield | null = null;
+  /** Read-only for desync forensics (netBalls logs its fingerprint on
+   *  rubberbands). Mutate via initNetMode only. */
+  static get netField(): Heightfield | null { return Ball.field; }
   /** Map-structure colliders from gameState — prediction ricochets off
    *  walls/pillars identically to the server. Set by netHandlers. */
   static colliders: readonly StructureCollider[] = [];
@@ -217,7 +220,10 @@ export class Ball {
 
   /** One-time init: the heightfield the shared sim needs for bounce prediction. */
   static initNetMode(force = false): void {
-    if (force || !Ball.field) Ball.field = getHeightfield();
+    if (force || !Ball.field) {
+      Ball.field = getHeightfield();
+      if (Ball.field) console.warn(`[Ball] netmode field bound fp=${hmFingerprint(Ball.field)}`);
+    }
   }
 
   constructor(scene: THREE.Scene, terrain: Terrain, variant: 0 | 1 | 2 | 3 = 0,

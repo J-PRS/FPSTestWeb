@@ -439,6 +439,40 @@ export class CombatHandler {
    *  knockback bookkeeping and respawns match player-caused ones. */
   /** Server-owned sentry hit — owner is the shooter for scoring/friendly
    *  checks, but the sim drives the trigger, not a client claim. */
+  /** Server-owned mine blast — owner is the shooter for scoring/friendly
+   *  checks, but the sim decided to detonate. Position check skipped: the
+   *  blast center is the mine's own spot, not the owner's. */
+  mineBlast(ownerId: string, pos: Vec3, maxDamage: number, radius: number, knockback: number): void {
+    const owner = this.playerManager.getPlayer(ownerId);
+    const baseDamage = maxDamage * (owner ? this.ddMult(owner) : 1);
+    for (const [targetId, target] of this.playerManager.getAllPlayers()) {
+      if (target.isDead) continue;
+      const dx = target.position.x - pos.x;
+      const dy = target.position.y - pos.y;
+      const dz = target.position.z - pos.z;
+      const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      if (dist > radius) continue;
+      // Falloff + shove from shared formulas — client predicts the same hit.
+      const damage = targetId === ownerId ? 0 : aoeDamage(baseDamage, dist, radius);
+      const impulseMag = aoeImpulse(knockback, dist, radius) * perkMods(target.perk).knockbackTaken;
+      if (dist > 0) {
+        const dv: Vec3 = { x: (dx / dist) * impulseMag, y: 0.5 * impulseMag, z: (dz / dist) * impulseMag };
+        target.velocity.x += dv.x;
+        target.velocity.y += dv.y;
+        target.velocity.z += dv.z;
+        this.moveImpulse?.(targetId, dv);
+        target.forceSendUntil = Date.now() + FORCE_SEND_MS;
+        this.sendToPlayer(targetId, { type: 'knockback', targetId, position: pos, force: impulseMag });
+      }
+      // Owner eats the blast too — mines don't pick friends.
+      if (!this.friendly(ownerId, targetId) && damage > 0) {
+        const result = this.playerManager.applyDamage(targetId, damage);
+        target.forceSendUntil = Date.now() + FORCE_SEND_MS;
+        this.applyHit(ownerId, targetId, damage, result, 'Mine hit', { dist: +dist.toFixed(2) });
+      }
+    }
+  }
+
   turretAttack(ownerId: string, targetId: string, damage: number): void {
     const owner = this.playerManager.getPlayer(ownerId);
     const target = this.playerManager.getPlayer(targetId);
