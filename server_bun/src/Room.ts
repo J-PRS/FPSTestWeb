@@ -110,11 +110,11 @@ export class Room {
         onDeploy: (pid, kind, pos) => this.deployables.handleDeploy(pid, kind, pos),
         deployables: () => this.deployables.snapshot(),
         matchEndsAt: () => this.matchEndsAt,
-        moveInput: (pid, i, status) => this.moveSim.setInput(pid, {
+        moveInput: (pid, i, status, seq) => this.moveSim.setInput(pid, {
           forward: i.forward, right: i.right,
           jumpPressed: !!i.jump, jumpHeld: !!i.jump, skiHeld: !!i.ski,
           jetHeld: !!i.jet,
-        }, status),
+        }, status, seq),
         moveReport: (pid, pos, yaw, vel) => this.moveSim.reconcile(pid, pos, yaw, vel),
         moveImpulse: (pid, dv) => this.moveSim.applyImpulse(pid, dv),
         moveResync: (pid, pos, yaw) => this.moveSim.resync(pid, pos, yaw),

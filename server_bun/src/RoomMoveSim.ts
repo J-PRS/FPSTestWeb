@@ -49,6 +49,9 @@ interface Shadow {
   skillSuppressRegen: boolean;
   /** For ante deduction on 0→1 bit transitions. */
   lastStatus: number;
+  /** inputMove ordering — change-only events on unordered transports
+   *  (RTC/WT datagrams) can land out of order; regressions are dropped. */
+  lastInputSeq: number;
 }
 
 export class RoomMoveSim {
@@ -74,6 +77,7 @@ export class RoomMoveSim {
       energy: ENERGY.max,
       jetDrain: mods.jetDrain, jetRegen: mods.jetRegen, energyRegen: mods.energyRegen,
       jetWanted: false, skillDrainPerSec: 0, skillSuppressRegen: false, lastStatus: 0,
+      lastInputSeq: 0,
     });
   }
 
@@ -82,9 +86,11 @@ export class RoomMoveSim {
   /** inputMove → sim input. Rotation/yaw comes from position reports.
    *  `status` is the claimed toggle bits — used to model skill energy
    *  drain and activation antes (rising-edge costs). */
-  setInput(playerId: string, input: Partial<MoveInput>, status = 0): void {
+  setInput(playerId: string, input: Partial<MoveInput>, status = 0, seq?: number): boolean {
     const sh = this.shadows.get(playerId);
-    if (!sh) return;
+    if (!sh) return true; // no field → no sim → nothing to order
+    if (seq !== undefined && seq <= sh.lastInputSeq) return false;
+    if (seq !== undefined) sh.lastInputSeq = seq;
     if (input.jetHeld !== undefined) sh.jetWanted = input.jetHeld;
     sh.sim.setInput({ ...input, jetHeld: sh.jetWanted && sh.energy > 0 });
 
@@ -101,6 +107,7 @@ export class RoomMoveSim {
       (status & STATUS.SHIELD ? ENERGY.shieldDrain : 0) +
       (status & STATUS.MEND ? ENERGY.mendDrain : 0);
     sh.skillSuppressRegen = sh.skillDrainPerSec > 0;
+    return true;
   }
 
   /** Energy refunds the world grants — gem pickup half-tank refill. */
