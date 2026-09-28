@@ -216,6 +216,9 @@ export class HUD {
   // Lives outside #hud (appended to body) so hide() doesn't remove it;
   // pure DOM/CSS — one backdrop-filter composite, no render-pass cost.
   private deathOverlay: HTMLDivElement | null = null;
+  private deathClock: HTMLDivElement | null = null;
+  private diedAt = 0;
+  private lastDeathTxt = '';
 
   setDeathOverlay(on: boolean): void {
     if (on && !this.deathOverlay) {
@@ -227,11 +230,33 @@ export class HUD {
         backdrop-filter: grayscale(0.7) brightness(0.85);
         -webkit-backdrop-filter: grayscale(0.7) brightness(0.85);
       `;
+      const c = document.createElement('div');
+      c.style.cssText = `
+        position:absolute; left:50%; bottom:22%; transform:translateX(-50%);
+        color:#cfe8ff; font:700 26px/1 Rajdhani,sans-serif; letter-spacing:0.2em;
+        text-shadow:0 1px 4px #000; opacity:0.9;
+      `;
+      d.appendChild(c);
       document.body.appendChild(d);
       this.deathOverlay = d;
+      this.deathClock = c;
+      this.diedAt = performance.now();
+      this.lastDeathTxt = '';
     } else if (!on && this.deathOverlay) {
       this.deathOverlay.remove();
       this.deathOverlay = null;
+      this.deathClock = null;
+    }
+  }
+
+  /** Frame tick while dead — counts down to the server respawnMs deadline. */
+  updateDeathCountdown(respawnMs: number): void {
+    if (!this.deathClock) return;
+    const left = Math.max(0, respawnMs - (performance.now() - this.diedAt));
+    const txt = left > 0 ? `RESPAWN IN ${(left / 1000).toFixed(1)}` : 'RESPAWNING';
+    if (txt !== this.lastDeathTxt) {
+      this.deathClock.textContent = txt;
+      this.lastDeathTxt = txt;
     }
   }
 

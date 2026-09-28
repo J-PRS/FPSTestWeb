@@ -33,6 +33,7 @@ export interface WorldState {
   teamScores: { alpha: number; bravo: number } | null;
   /** Match-clock deadline (epoch ms) from gameState — HUD countdown. */
   matchEndsAt: number | null;
+  respawnMs: number;
   /** CTF flag status per team — HUD chips (home/carried/dropped). */
   flagStates: { alpha?: 'home' | 'carried' | 'dropped'; bravo?: 'home' | 'carried' | 'dropped' };
   // Demo playback is a different world than the live one — while set, the
@@ -56,6 +57,7 @@ export function createWorldState(): WorldState {
     ffaScores: new Map(),
     teamScores: null,
     matchEndsAt: null,
+    respawnMs: 3000,
     flagStates: {},
     playbackMode: false,
   };
