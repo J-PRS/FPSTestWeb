@@ -132,6 +132,7 @@ export class PlayerManager {
       health: player.health,
       status: player.status,
       team: player.team,
+      transport: player.transport,
     };
   }
 

@@ -178,7 +178,7 @@ export class HUD {
 
   get scoreboardVisible(): boolean { return this.sbVisible; }
 
-  setScoreboardRows(rows: { name: string; frags: number; score: number | null; ping: number | null; self: boolean; dead: boolean; team?: 'alpha' | 'bravo' }[]): void {
+  setScoreboardRows(rows: { name: string; frags: number; score: number | null; ping: number | null; net?: string | null; self: boolean; dead: boolean; team?: 'alpha' | 'bravo' }[]): void {
     this.sbData = rows;
   }
 
@@ -197,7 +197,7 @@ export class HUD {
   private sbRows: HTMLElement;
   private sbVisible = false;
   private sbRefresh = 0;
-  private sbData: { name: string; frags: number; score: number | null; ping: number | null; self: boolean; dead: boolean; team?: 'alpha' | 'bravo' }[] = [];
+  private sbData: { name: string; frags: number; score: number | null; ping: number | null; net?: string | null; self: boolean; dead: boolean; team?: 'alpha' | 'bravo' }[] = [];
 
   showHitMarker(): void {
     this.hitTimer = 0.12;
@@ -460,7 +460,7 @@ export class HUD {
       const mkRow = (r: typeof this.sbData[number]) => {
         const tr = document.createElement('tr');
         tr.className = `${r.self ? 'self' : ''}${r.dead ? ' dead' : ''}`;
-        for (const cell of [r.name, String(r.frags), r.score === null ? '—' : String(r.score), r.ping === null ? '—' : String(Math.round(r.ping))]) {
+        for (const cell of [r.name, String(r.frags), r.score === null ? '—' : String(r.score), r.net ?? '—', r.ping === null ? '—' : String(Math.round(r.ping))]) {
           const td = document.createElement('td');
           td.textContent = cell;
           tr.appendChild(td);
@@ -480,7 +480,7 @@ export class HUD {
         const th = document.createElement('tr');
         th.className = `sb-team ${team}`;
         const td = document.createElement('td');
-        td.colSpan = 4;
+        td.colSpan = 5;
         td.textContent = team.toUpperCase();
         th.appendChild(td);
         kids.push(th, ...trs);

@@ -15,6 +15,7 @@ const logger = new ChildLogger('P2P');
 
 /** Host-side: the local client's "socket" is a function call. */
 export class LoopbackTransport implements GameTransport {
+  readonly tier = 'host' as const;
   private open = false;
   private link: P2PLink;
 
@@ -52,6 +53,7 @@ export class LoopbackTransport implements GameTransport {
 
 /** Guest-side: frames ride the RTCDataChannel to the host's browser. */
 export class DataChannelTransport implements GameTransport {
+  readonly tier = 'p2p' as const;
   private open = false;
 
   constructor(private dc: RTCDataChannel, private config: ConnectionConfig) {

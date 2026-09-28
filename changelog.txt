@@ -1,3 +1,4 @@
+2026-09-28  scoreboard NET column — each client's transport tier shown next to ping (wt/rtc/ws from join claim → playerJoined/gameState; 'host'/'p2p' for LAN mode, 'bot' for bots)
 2026-09-28  ui: CSS extraction — dom.ts stylesheet → ui/hud/hud.css (Vite import), index.html <style> → ui/chrome.css, lobby palette constants → shared .lb-* classes; cloak/shield/mend collapsed to one statusFx helper
 2026-09-28  netcode v2 ops gaps — join reports negotiated tier (wt/rtc/ws) into /metrics tiers{}; /rtcconfig serves STUN/TURN from FPS_ICE_SERVERS so RTC probes get deployment ICE servers
 2026-09-28  respawn countdown — gameState carries respawnMs; death overlay shows live RESPAWN IN x.x timer
