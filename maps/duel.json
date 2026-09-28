@@ -1,8 +1,21 @@
 {
   "mode": "dm",
-  "balls": { "base": 0, "perPlayer": 0, "max": 0 },
+  "balls": {
+    "base": 0,
+    "perPlayer": 0,
+    "max": 0
+  },
   "spawns": [
-    { "x": -70, "y": 60, "z": 0 },
-    { "x": 70, "y": 60, "z": 0 }
-  ]
+    {
+      "x": -70,
+      "y": 60,
+      "z": 0
+    },
+    {
+      "x": 70,
+      "y": 60,
+      "z": 0
+    }
+  ],
+  "terrain": "duel.bin"
 }

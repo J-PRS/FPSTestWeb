@@ -2,7 +2,16 @@
   "mode": "ctf",
   "bots": 6,
   "bases": {
-    "alpha": { "x": -70, "y": 0, "z": 0 },
-    "bravo": { "x": 70, "y": 0, "z": 0 }
-  }
+    "alpha": {
+      "x": -70,
+      "y": 0,
+      "z": 0
+    },
+    "bravo": {
+      "x": 70,
+      "y": 0,
+      "z": 0
+    }
+  },
+  "terrain": "ctf.bin"
 }
