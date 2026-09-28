@@ -1,3 +1,4 @@
+2026-10-03 - netReplay: real .rec wire captures replay through actual netHandlers headlessly (fixture: live duel room w/ fleet+server bots)
 2026-10-03 - netHandlers replay harness: new client/src/__tests__/netHarness.test.ts — real ServerMessages fed through the actual NetworkManager dispatch into real netHandlers, headless (fake deps, real RemoteSet/WorldState). 7 cases: gameState meta, join→tickUpdate→left lifecycle, kill feed, pickups, deployables roster, flagUpdate, correction snap threshold. setup.ts gained sessionStorage + window listeners + element children for Chat/NetworkManager
 2026-10-03 - demo endpoints soaked: new _tools/pvptest/demosoak.ts — crafts valid v3 demo binaries; accept/reject lifecycle, traversal + missing + GET-upload all 404, download round-trips byte-identical
 2026-10-03 - rtc relay soaked: new _tools/pvptest/rtcrelay.ts — host/non-host roles, peer kick, opaque SDP/ICE shuttle both ways, 3rd member refused 1008, peer-left on close
