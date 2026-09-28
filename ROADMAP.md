@@ -190,6 +190,15 @@ surface. Detailed research lives in `_reports/`; this file is the current truth.
 - Drones server-side (2026-10-01): escort shadow anchors to owner +2.5m,
   35m scan, 1.6s plink for 9 via turretAttack; dies with its owner.
   Deployables arc complete: all four kinds server-owned end-to-end.
+- Bots as legal players (2026-10-01, per _docs/2026.10.01-bots-as-players.md):
+  Phase 1 done — brains emit move hints (ski/jet/jump from slope probe,
+  speed, airborne) not destinations; ServerBots drives RoomMoveSim shadows
+  (faceYaw + ordered setInput + commit stepped state). Bots ski/jet for
+  real, burn the shared energy tank, reseat on respawn via deadSet.
+  Phase 2 next: real projectiles — shared/projSim.ts + server ballistic
+  sim + projectileCreated/Destroyed wire msgs; botFire becomes hitscan
+  fallback only. Phase 3: belt+skills+energy intents (STATUS bits).
+  Phase 4: per-bot loadouts/roles + range-band weapon select.
 - Netcode v2 (2026-09-28): GameTransport seam w/ three real tiers —
   WebTransport (QUIC datagrams, cert-pinned via /wthash) → WebRTC
   DataChannel (game=unreliable binary, ctrl=reliable JSON, /rtcs
