@@ -17,6 +17,7 @@ import { EYE_OFFSET } from '../../shared/constants.ts';
 import { WeaponType } from '../../shared/weapons.ts';
 import { readFileSync } from 'fs';
 import path from 'path';
+import { openSocket, type BotSocket, type Tier } from './net.ts';
 
 const NAME = process.argv[2] ?? `TESTBOT-${Math.floor(Math.random() * 1000)}`;
 const FIGHTER = process.argv.includes('--fighter');
@@ -34,6 +35,9 @@ const ROOM = process.argv.find(a => a.startsWith('--room='))?.slice(7);
 const WATCH = process.argv.includes('--watch'); // passive observer: log join/left cadence and per-peer tick freshness
 const BALLS = process.argv.includes('--balls'); // measure ballSegment cadence + event-age jitter
 const WS_URL = process.env.PVP_WS ?? 'ws://localhost:8000/ws';
+// --tier=wt|rtc|ws — ride a specific netcode-v2 transport instead of
+// WebSocket, so the fleet can exercise all three (net.ts adapters).
+const TIER = (process.argv.find(a => a.startsWith('--tier='))?.slice(7) ?? 'ws') as Tier;
 const POS_HZ = 20;            // under the 30/s rate limit
 const MOVE_SPEED = 30;        // m/s — well under the 300 reject bound
 const ENGAGE_RANGE = 60;      // start shooting inside this
@@ -55,7 +59,7 @@ let vel: Vec3 = { x: 0, y: 0, z: 0 };
 let yaw = 0;
 let dead = false;
 let seq = 0;
-let ws: WebSocket;
+let ws: BotSocket;
 let connected = false;
 let corrections = 0;
 let lastCorrectionAt = 0;
@@ -87,7 +91,8 @@ const log = (...a: unknown[]) => console.log(`[+${((Date.now() - t0) / 1000).toF
 
 function sendJson(m: unknown) { if (ws?.readyState === 1) ws.send(JSON.stringify(m)); }
 function sendPosition() {
-  if (ws?.readyState === 1) ws.send(encodePosition(pos, { yaw, pitch: 0 }, vel, ++seq, 0));
+  // Position frames want UDP semantics on tiers that have them.
+  if (ws?.readyState === 1) (ws.sendUnreliable ?? ws.send).call(ws, encodePosition(pos, { yaw, pitch: 0 }, vel, ++seq, 0));
 }
 
 function nearestTarget(): [string, Other] | null {
@@ -268,18 +273,17 @@ function check(name: string, ok: boolean, detail = '') {
 
 function connect(): Promise<void> {
   return new Promise((resolve, reject) => {
-    ws = new WebSocket(WS_URL);
-    ws.binaryType = 'arraybuffer';
-    ws.onopen = () => {
-      sendJson({ type: 'join', playerId: NAME, token: sessionToken, room: ROOM });
-    };
-    ws.onmessage = (ev) => {
+    // openSocket resolves only once the tier's session is live — send the
+    // join right away, no onopen dance needed.
+    openSocket(WS_URL, TIER).then((s) => {
+      ws = s;
+      ws.onmessage = (ev) => {
       if (typeof ev.data === 'string') {
         const m = JSON.parse(ev.data);
         handleJson(m);
         if (m.type === 'gameState') { connected = true; resolve(); }
       } else {
-        const u8 = new Uint8Array(ev.data);
+        const u8 = ev.data instanceof Uint8Array ? ev.data : new Uint8Array(ev.data);
         if (isWireFrame(u8) && u8[1] === WIRE_TICK) {
           const now = Date.now();
           if (tickStats.lastAt && !dead) {
@@ -301,8 +305,12 @@ function connect(): Promise<void> {
         }
       }
     };
-    ws.onerror = () => reject(new Error('ws error'));
-    setTimeout(() => reject(new Error('join timeout')), 8000);
+      ws.onerror = () => reject(new Error(`${TIER} error`));
+      sendJson({ type: 'join', playerId: NAME, token: sessionToken, room: ROOM, transport: TIER });
+    }).catch(reject);
+    // RTC/WT session setup (gather → answer → channel open) eats several
+    // seconds before the join can even leave.
+    setTimeout(() => reject(new Error('join timeout')), 20000);
   });
 }
 
@@ -433,8 +441,8 @@ async function main() {
     if (IDLE) {
       // Silent socket: server should reap us past the ~60s idle window.
       const deadAt = await new Promise<number>((res) => {
-        ws.addEventListener('close', () => res(Date.now()));
-        ws.addEventListener('error', () => res(Date.now()));
+        ws.onclose = () => res(Date.now());
+        ws.onerror = () => res(Date.now());
         setTimeout(() => res(-1), 75_000);
       });
       if (deadAt > 0) {

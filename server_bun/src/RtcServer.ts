@@ -100,6 +100,10 @@ export class RtcServer {
   private signalSockets = new Set<ServerWebSocket<WebSocketData>>();
   private peers = new Map<ServerWebSocket<WebSocketData>, PeerConnectionLike>();
   private adapterOf = new Map<DataChannelLike, RtcSocketAdapter>();
+  // Signal sockets close right after the answer (browser + headless both
+  // do this) — track which signal ws already have a live datachannel so
+  // onClose doesn't kill a session that successfully negotiated.
+  private livePeers = new Set<ServerWebSocket<WebSocketData>>();
 
   constructor(private game: GameServer) {}
 
@@ -143,11 +147,16 @@ export class RtcServer {
       dc.onMessage((msg) => this.game.onMessage(sock, msg instanceof Uint8Array ? msg : String(msg)));
       dc.onOpen(() => {
         // game.onOpen once — whichever channel opens first starts the session
-        if (!opened) { opened = true; clearTimeout(staleTimer); this.game.onOpen(sock); }
+        if (!opened) { opened = true; clearTimeout(staleTimer); this.livePeers.add(ws); this.game.onOpen(sock); }
       });
       dc.onClosed(() => {
         this.adapterOf.delete(dc);
-        if (adapter.readyState !== 1) this.game.onClose(sock);
+        if (adapter.readyState !== 1) {
+          this.game.onClose(sock);
+          this.livePeers.delete(ws);
+          this.peers.delete(ws);
+          try { pc.close(); } catch { /* gone */ }
+        }
       });
     });
     pc.onGatheringStateChange((state) => {
@@ -178,11 +187,11 @@ export class RtcServer {
 
   onClose(ws: ServerWebSocket<WebSocketData>): void {
     this.signalSockets.delete(ws);
-    const pc = this.peers.get(ws);
-    if (pc) {
-      this.peers.delete(ws);
-      try { pc.close(); } catch { /* gone */ }
-    }
+    // Signaling is one-shot: clients close it right after the answer —
+    // long BEFORE the datachannel opens. Never close the pc here: the
+    // stale-peer timer reaps never-opened peers, dc.onClosed reaps the
+    // rest. peers.delete keeps the in-flight-offer cap honest.
+    this.peers.delete(ws);
   }
 
   /** Cap how many un-answered offers can pile up — each holds a PC. */
