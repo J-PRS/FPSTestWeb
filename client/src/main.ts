@@ -61,6 +61,7 @@ import { gnatParts } from './entities/Gnat.js';
 import { rollerParts } from './entities/Roller.js';
 import { seekerParts } from './entities/Seeker.js';
 import { rakkParts } from './entities/Rakk.js';
+import { striferParts } from './entities/Strifer.js';
 import { mineParts } from './entities/Mine.js';
 import { overlordParts } from './entities/Overlord.js';
 import { banelingParts } from './entities/Baneling.js';
@@ -166,6 +167,7 @@ async function init(): Promise<void> {
     roller: { parts: rollerParts, capacity: 256 },
     seeker: { parts: seekerParts, capacity: 256 },
     rakk: { parts: rakkParts, capacity: 256 },
+    strifer: { parts: striferParts, capacity: 128 },
     mine: { parts: mineParts, capacity: 512 },
     overlord: { parts: overlordParts, capacity: 64 },
     baneling: { parts: banelingParts, capacity: 128 },

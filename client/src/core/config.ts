@@ -372,6 +372,27 @@ export const RAKK_CLAW_FORCE = 10;      // shove on hit
 export const RAKK_CLIMB_T = 2.2;        // the slow vulnerable climb-out
 export const RAKK_STUN = 0.5;
 
+// Strifer — standoff strafing drone: orbits you at range, hovers to volley
+export const STRIFER_RADIUS = 0.9;
+export const STRIFER_HEALTH = 55;
+export const STRIFER_ORBIT_ALT = 14.0;    // lower than rakk — it wants line of fire
+export const STRIFER_ORBIT_R = 34.0;      // standoff ring — outside melee reach
+export const STRIFER_SPEED = 22.0;
+export const STRIFER_ACCEL = 20.0;
+export const STRIFER_REFIRE_MIN = 4.0;    // seconds of orbiting between volleys
+export const STRIFER_REFIRE_MAX = 8.0;
+export const STRIFER_HOVER_T = 3.0;       // max hover window
+export const STRIFER_BOLT_SPEED = 55.0;
+export const STRIFER_BOLT_LIFE = 3.0;
+export const STRIFER_BOLT_DIST = 1.6;     // bolt contact radius
+export const STRIFER_BOLT_DAMAGE = 9;
+export const STRIFER_BOLT_FORCE = 5;      // bolt impact shove
+export const STRIFER_STUN = 0.6;
+export const STRIFER_MAX = 3;
+export const STRIFER_SPAWN_INTERVAL = 11.0;
+export const STRIFER_SPAWN_MIN = 45.0;
+export const STRIFER_SPAWN_MAX = 90.0;
+
 // Renderer constants
 export const PIXEL_SCALE = 4; // Each pixel is 4x4 screen pixels (Doom-style)
 

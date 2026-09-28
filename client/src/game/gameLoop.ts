@@ -223,6 +223,7 @@ export function createGameLoop(deps: GameLoopDeps) {
       entities.updateOverlords(dt);
       entities.updateTotems(dt);
       entities.updateRakks(dt);
+      entities.updateStrifers(dt);
       entities.updateWeeds(dt);
       entities.updateDeployables(dt);
     }
