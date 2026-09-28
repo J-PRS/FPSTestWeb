@@ -115,6 +115,16 @@ surface. Detailed research lives in `_reports/`; this file is the current truth.
   netBalls hooks. world.playbackMode freezes the whole live wire during
   replay (no sends, no corrections, no live entity mutation) and hides
   live remotes. v1-v2 files still deserialize.
+- Dispatch-table sweep (2026-09-26): every big switch became a
+  Record<type, fn> — server validateMessage (c83), server fetch routes
+  (c60), MessageHandler (c24→dispatch + shared roomEcho), client
+  netHandlers split into game/net/ domain modules on a shared NetCtx
+  (match/flags/pickups/players/projectiles/world). Species: Seeker,
+  Totem, Strifer use static STATES tables; Gnat/Rakk/Crawler queued —
+  Snake/Roller/Overlord have no state field (timer-driven, leave be).
+- Perf pass (2026-09-26): computeStateHash rolling-FNV (no sort/strings),
+  tick fanout hoists, in-place snapshots, 2Hz roster polling, playerId→room
+  O(1) index, room hibernation, global player cap (FPS_GLOBAL_MAX_PLAYERS).
 
 ### Later / research needed
 - Client prediction + reconciliation for self (currently trust + correct).

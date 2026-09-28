@@ -76,7 +76,45 @@ export class MessageHandler {
     this.sendToPlayer = sendToPlayer;
     if (roomInfo) this.roomInfo = roomInfo;
     this.combat = new CombatHandler(playerManager, broadcast, sendToPlayer, roomInfo?.onKill, roomInfo?.onHit, roomInfo?.teams ?? false);
+
+    // Per-type dispatch — a new message type is one table entry. Field
+    // order: handlers need this.combat, so the table is built last.
+    this.handlers = {
+      position: (id, m) => this.handlePosition(id, m as Extract<ClientMessage, { type: 'position' }>),
+      teleport: (id, m) => this.handleTeleport(id, m as Extract<ClientMessage, { type: 'teleport' }>),
+      shot: (id, m) => this.combat.handleShot(id, m as Extract<ClientMessage, { type: 'shot' }>),
+      aoeShot: (id, m) => this.combat.handleAOEShot(id, m as Extract<ClientMessage, { type: 'aoeShot' }>),
+      jump: (id, m) => this.relayPresenceEvent(id, m as Extract<ClientMessage, { type: 'jump' }>),
+      jetpack: (id, m) => this.relayPresenceEvent(id, m as Extract<ClientMessage, { type: 'jetpack' }>),
+      projectileDestroy: (id, m) => this.combat.handleProjectileDestroy(id, m as Extract<ClientMessage, { type: 'projectileDestroy' }>),
+      environmentDamage: (id, m) => this.combat.handleEnvironmentDamage(id, m as Extract<ClientMessage, { type: 'environmentDamage' }>),
+      heal: (id, m) => this.combat.handleHeal(id, m as Extract<ClientMessage, { type: 'heal' }>),
+      deploy: (id, m) => this.roomInfo.onDeploy?.(id, (m as Extract<ClientMessage, { type: 'deploy' }>).kind, (m as Extract<ClientMessage, { type: 'deploy' }>).position),
+      creatureHit: (id, m) => {
+        const h = m as Extract<ClientMessage, { type: 'creatureHit' }>;
+        this.ballSim?.handleHit(id, h.id, h.damage, h.kx, h.ky, h.kz);
+      },
+      inputMove: (id, m) => {
+        const p = this.playerManager.getPlayer(id);
+        if (!p) return;
+        const i = (m as Extract<ClientMessage, { type: 'inputMove' }>).input;
+        p.skiing = i.ski ? 1 : 0;
+        p.status = (i.status ?? 0) & STATUS_MASK;
+      },
+      // Room-scoped relay — broadcast() only reaches this room's sockets.
+      chat: (id, m) => this.broadcast({ type: 'chat', playerId: id, text: (m as Extract<ClientMessage, { type: 'chat' }>).text }),
+      ping: (id, m) => {
+        const p = this.playerManager.getPlayer(id);
+        if (!p) return;
+        p.lastSeen = Date.now(); // ping is a liveness signal too —
+        // without it a non-moving client could still go "stale"
+        this.sendToPlayer(id, { type: 'pong', timestamp: (m as Extract<ClientMessage, { type: 'ping' }>).timestamp });
+      },
+      snapshotRequest: (id) => this.handleSnapshotRequest(id),
+    };
   }
+
+  private handlers: Record<string, (playerId: string, msg: ClientMessage) => void> = {};
 
   setBallSim(sim: BallSim): void {
     this.ballSim = sim;
@@ -132,6 +170,24 @@ export class MessageHandler {
     this.combat.ensureRespawn(playerId);
   }
 
+  /** The room-echo half of gameState — identical for joiners and
+   *  spectators: mode, team scores, map layout, mid-flight world state. */
+  private roomEcho() {
+    return {
+      room: this.roomInfo.room,
+      mode: this.roomInfo.mode || undefined,
+      scores: this.roomInfo.scores ? { ...this.roomInfo.scores } : undefined,
+      ffaScores: this.roomInfo.ffaScores?.(),
+      map: this.roomInfo.bases || this.roomInfo.structures || this.roomInfo.arena
+        ? { mode: this.roomInfo.mode || undefined, bases: this.roomInfo.bases, structures: this.roomInfo.structures, arena: this.roomInfo.arena, ambient: this.roomInfo.ambient }
+        : undefined,
+      flags: this.roomInfo.flags?.(),
+      pickups: this.roomInfo.pickups?.(),
+      deployables: this.roomInfo.deployables?.(),
+      matchEndsAt: this.roomInfo.matchEndsAt?.() || undefined,
+    };
+  }
+
   handleHandshake(playerId: string, sessionToken?: string, isReconnect = false): void {
     const player = this.playerManager.getPlayer(playerId);
     if (!player) return;
@@ -148,18 +204,8 @@ export class MessageHandler {
       players: playersData,
       sessionToken,
       protocolVersion: PROTOCOL_VERSION,
-      room: this.roomInfo.room,
-      mode: this.roomInfo.mode || undefined,
+      ...this.roomEcho(),
       team: player.team,
-      scores: this.roomInfo.scores ? { ...this.roomInfo.scores } : undefined,
-      ffaScores: this.roomInfo.ffaScores?.(),
-      map: this.roomInfo.bases || this.roomInfo.structures || this.roomInfo.arena
-        ? { mode: this.roomInfo.mode || undefined, bases: this.roomInfo.bases, structures: this.roomInfo.structures, arena: this.roomInfo.arena, ambient: this.roomInfo.ambient }
-        : undefined,
-      flags: this.roomInfo.flags?.(),
-      pickups: this.roomInfo.pickups?.(),
-      deployables: this.roomInfo.deployables?.(),
-      matchEndsAt: this.roomInfo.matchEndsAt?.() || undefined,
       localPlayerState: {
         position: { ...player.position },
         rotation: { ...player.rotation },
@@ -199,17 +245,7 @@ export class MessageHandler {
       type: 'gameState',
       players: playersData,
       protocolVersion: PROTOCOL_VERSION,
-      room: this.roomInfo.room,
-      mode: this.roomInfo.mode || undefined,
-      scores: this.roomInfo.scores ? { ...this.roomInfo.scores } : undefined,
-      ffaScores: this.roomInfo.ffaScores?.(),
-      map: this.roomInfo.bases || this.roomInfo.structures || this.roomInfo.arena
-        ? { mode: this.roomInfo.mode || undefined, bases: this.roomInfo.bases, structures: this.roomInfo.structures, arena: this.roomInfo.arena, ambient: this.roomInfo.ambient }
-        : undefined,
-      flags: this.roomInfo.flags?.(),
-      pickups: this.roomInfo.pickups?.(),
-      deployables: this.roomInfo.deployables?.(),
-      matchEndsAt: this.roomInfo.matchEndsAt?.() || undefined,
+      ...this.roomEcho(),
     });
     if (this.ballSim) {
       this.sendToPlayer(playerId, { type: 'ballRoster', balls: this.ballSim.roster() });
@@ -231,58 +267,12 @@ export class MessageHandler {
       return;
     }
 
-    switch (msg.type) {
-      case 'position':
-        this.handlePosition(playerId, msg);
-        break;
-      case 'teleport':
-        this.handleTeleport(playerId, msg);
-        break;
-      case 'shot':
-        this.combat.handleShot(playerId, msg);
-        break;
-      case 'aoeShot':
-        this.combat.handleAOEShot(playerId, msg);
-        break;
-      case 'jump':
-      case 'jetpack':
-        this.relayPresenceEvent(playerId, msg);
-        break;
-      case 'projectileDestroy':
-        this.combat.handleProjectileDestroy(playerId, msg);
-        break;
-      case 'environmentDamage':
-        this.combat.handleEnvironmentDamage(playerId, msg);
-        break;
-      case 'heal':
-        this.combat.handleHeal(playerId, msg);
-        break;
-      case 'deploy':
-        this.roomInfo.onDeploy?.(playerId, msg.kind, msg.position);
-        break;
-      case 'creatureHit':
-        this.ballSim?.handleHit(playerId, msg.id, msg.damage, msg.kx, msg.ky, msg.kz);
-        break;
-      case 'inputMove':
-        player.skiing = msg.input.ski ? 1 : 0;
-        player.status = (msg.input.status ?? 0) & STATUS_MASK;
-        break;
-      case 'chat':
-        // Room-scoped relay — broadcast() only reaches this room's sockets.
-        this.broadcast({ type: 'chat', playerId, text: msg.text });
-        break;
-      case 'ping':
-        player.lastSeen = Date.now(); // ping is a liveness signal too —
-        // without it a non-moving client could still go "stale"
-        this.sendToPlayer(playerId, { type: 'pong', timestamp: msg.timestamp });
-        break;
-      case 'snapshotRequest':
-        this.handleSnapshotRequest(playerId);
-        break;
-      default:
-        logger.warn(`Unhandled message type`, { playerId, type: (msg as { type: string }).type });
-        break;
+    const handler = this.handlers[msg.type];
+    if (!handler) {
+      logger.warn(`Unhandled message type`, { playerId, type: (msg as { type: string }).type });
+      return;
     }
+    handler(playerId, msg);
   }
 
   private handlePosition(playerId: string, msg: Extract<ClientMessage, { type: 'position' }>): void {
