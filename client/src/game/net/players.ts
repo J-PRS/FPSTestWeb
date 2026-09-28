@@ -23,7 +23,7 @@ const STREAK_NAMES: [number, string][] = [
 function wirePlayerCombat(ctx: NetCtx): void {
   const { deps, networkManager, nm } = ctx;
   const logger = deps.logger;
-  let localStreak = 0;
+  const streak = { v: 0 }; // kills since last local death — reset inside the kill handler
 
   networkManager.onPlayerHit = (shooterId: string, targetId: string, damage: number, health: number, armor?: number) => {
     if (deps.world.playbackMode) return;
@@ -134,70 +134,75 @@ function wirePlayerCombat(ctx: NetCtx): void {
     void velocity; // next tick record carries it — no need to touch internals
   };
 
-  networkManager.onPlayerKill = (shooterId: string, targetId: string) => {
-    if (deps.world.playbackMode) return;
-    deps.world.killCounts.set(shooterId, (deps.world.killCounts.get(shooterId) ?? 0) + 1);
-    // Check if local player was killed
-    if (targetId === nm().getLocalPlayerId()) {
-      logger.info(`Local player killed by ${shooterId}`);
-      const player = deps.lazyPlayer();
-      player.isDead = true;
-      player.health = 0;
-      deps.lazyHud().hide();
-      deps.lazyHud().setDeathOverlay(true);
-      localStreak = 0;
-      deps.fragMessages.show(shooterId === 'environment'
-        ? `YOU DIED\n${player.lastDamageSource || 'claimed by the wasteland'}`
-        : `YOU DIED\nfragged by ${shooterId}`);
-      return;
-    }
+  networkManager.onPlayerKill = (shooterId, targetId) => onPlayerKill(ctx, streak, shooterId, targetId);
+}
 
-    // Show frag message if local player got the kill — streak counts
-    // run-kills since your last death (reset in the death branch above).
-    if (shooterId === nm().getLocalPlayerId()) {
-      const streak = ++localStreak;
-      const streakName = STREAK_NAMES.find(([n]) => streak >= n)?.[1];
-      deps.fragMessages.show(streakName ? `FRAGGED PLAYER!\n${streakName}` : `FRAGGED PLAYER!`);
-      sfx.killConfirm();
-    }
+/** A kill landed somewhere: feed row for everyone, death overlay when it's
+ *  you, frag headline + streak when it's yours, ragdoll for the victim. */
+function onPlayerKill(ctx: NetCtx, streak: { v: number }, shooterId: string, targetId: string): void {
+  const { deps, nm } = ctx;
+  const logger = deps.logger;
+  if (deps.world.playbackMode) return;
+  deps.world.killCounts.set(shooterId, (deps.world.killCounts.get(shooterId) ?? 0) + 1);
+  const localId = nm().getLocalPlayerId();
+  deps.lazyHud().feedKill(shooterId, targetId, shooterId === localId, targetId === localId);
+  if (targetId === localId) {
+    logger.info(`Local player killed by ${shooterId}`);
+    const player = deps.lazyPlayer();
+    player.isDead = true;
+    player.health = 0;
+    deps.lazyHud().hide();
+    deps.lazyHud().setDeathOverlay(true);
+    streak.v = 0;
+    deps.fragMessages.show(shooterId === 'environment'
+      ? `YOU DIED\n${player.lastDamageSource || 'claimed by the wasteland'}`
+      : `YOU DIED\nfragged by ${shooterId}`);
+    return;
+  }
 
-    // Mark player as dead in NetworkManager immediately so main loop knows
-    const playerData = nm().getPlayers().get(targetId);
-    if (playerData) {
-      playerData.isDead = true;
-      playerData.health = 0;
-    }
+  // Streak counts run-kills since your last death (reset in the branch above).
+  if (shooterId === localId) {
+    const streakName = STREAK_NAMES.find(([n]) => ++streak.v >= n)?.[1];
+    deps.fragMessages.show(streakName ? `FRAGGED PLAYER!\n${streakName}` : `FRAGGED PLAYER!`);
+    sfx.killConfirm();
+  }
 
-    const remotePlayer = deps.world.remotePlayers.get(targetId);
-    if (remotePlayer) {
-      // Find matching explosion from this shooter
-      let explosionPos: THREE.Vector3 | undefined;
-      let explosionForce: number | undefined;
-      for (const exp of deps.explosionTracker.getRecentExplosions()) {
-        if (exp.shooterId === shooterId) {
-          explosionPos = exp.position;
-          explosionForce = exp.force;
-          break;
-        }
+  // Mark dead immediately so the main loop stops simulating them
+  const playerData = nm().getPlayers().get(targetId);
+  if (playerData) {
+    playerData.isDead = true;
+    playerData.health = 0;
+  }
+
+  const remotePlayer = deps.world.remotePlayers.get(targetId);
+  if (remotePlayer) {
+    // Find matching explosion from this shooter
+    let explosionPos: THREE.Vector3 | undefined;
+    let explosionForce: number | undefined;
+    for (const exp of deps.explosionTracker.getRecentExplosions()) {
+      if (exp.shooterId === shooterId) {
+        explosionPos = exp.position;
+        explosionForce = exp.force;
+        break;
       }
-
-      // Play death animation (ragdoll physics with explosion impulse)
-      remotePlayer.playDeath(explosionPos, explosionForce);
-
-      // Spawn player debris at player center (position is feet, so add half height)
-      const debris = new PlayerDebris(deps.lazyScene(), deps.lazyTerrain(), remotePlayer.position.x, remotePlayer.position.y + 1.0, remotePlayer.position.z);
-      deps.world.playerDebrisList.push(debris);
-
-      // Hide the model immediately
-      remotePlayer.hide();
-
-      // Remove HUD indicator on kill
-      deps.lazyHud().removePlayerIndicator(targetId);
-      deps.lazyHealthBarSystem().removeBar(targetId);
-
-      logger.info(`Player ${targetId} killed by ${shooterId}`);
     }
-  };
+
+    // Play death animation (ragdoll physics with explosion impulse)
+    remotePlayer.playDeath(explosionPos, explosionForce);
+
+    // Spawn player debris at player center (position is feet, so add half height)
+    const debris = new PlayerDebris(deps.lazyScene(), deps.lazyTerrain(), remotePlayer.position.x, remotePlayer.position.y + 1.0, remotePlayer.position.z);
+    deps.world.playerDebrisList.push(debris);
+
+    // Hide the model immediately
+    remotePlayer.hide();
+
+    // Remove HUD indicator on kill
+    deps.lazyHud().removePlayerIndicator(targetId);
+    deps.lazyHealthBarSystem().removeBar(targetId);
+
+    logger.info(`Player ${targetId} killed by ${shooterId}`);
+  }
 }
 
 /** Updates, respawns, join/leave, movement events — the presence wire. */

@@ -32,6 +32,7 @@ export interface HudDom {
   teamScore: HTMLDivElement; tsA: HTMLElement; tsB: HTMLElement;
   matchStatus: HTMLDivElement; matchClock: HTMLElement; flagA: HTMLElement; flagB: HTMLElement;
   sbRows: HTMLElement;
+  killFeed: HTMLDivElement;
 }
 
 export function createHudDom(): HudDom {
@@ -74,6 +75,7 @@ export function createHudDom(): HudDom {
       <div id="hud-timer">00:00</div>
       <div id="team-score"><span class="a">ALPHA <b id="ts-a">0</b></span><span class="sep">vs</span><span class="b"><b id="ts-b">0</b> BRAVO</span></div>
       <div id="match-status"><span class="fchip a" id="flag-a">⚑</span><span class="clock" id="match-clock"></span><span class="fchip b" id="flag-b">⚑</span></div>
+      <div id="killfeed"></div>
       <div id="scoreboard">
         <div class="sb-title">SCOREBOARD</div>
         <table><thead><tr><th>PLAYER</th><th>FRAGS</th><th>PTS</th><th>NET</th><th>PING</th></tr></thead><tbody id="sb-rows"></tbody></table>
@@ -115,6 +117,7 @@ export function createHudDom(): HudDom {
     const flagB = el.querySelector('#flag-b')! as HTMLElement;
     const ballCountEl = el.querySelector('#ent-counts')! as HTMLDivElement;
     const timerEl = el.querySelector('#hud-timer')! as HTMLDivElement;
+    const killFeed = el.querySelector('#killfeed')! as HTMLDivElement;
 
   // Nugget counter — starts at 0, updated via setNuggets
   ammo.textContent = '0';
@@ -125,5 +128,5 @@ export function createHudDom(): HudDom {
     playerList, ballCountEl, timerEl, weaponSlots, healthBar, energyBar,
     armor, armorBar, buffsRow,
     scoreboard, sbRows, teamScore, tsA, tsB,
-    matchStatus, matchClock, flagA, flagB };
+    matchStatus, matchClock, flagA, flagB, killFeed };
 }

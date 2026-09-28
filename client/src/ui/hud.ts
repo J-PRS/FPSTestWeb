@@ -84,8 +84,32 @@ export class HUD {
     this.matchClock = d.matchClock;
     this.flagA = d.flagA;
     this.flagB = d.flagB;
+    this.killFeed = d.killFeed;
     this.minimap = new Minimap(this.el);
     this.indicators = new PlayerIndicators(this.el);
+  }
+
+  private killFeed: HTMLDivElement;
+
+  /** Kill feed — "shooter ▸ target" under the match strip. Timed fade,
+   *  capped at 6 rows; textContent only (names are server strings). */
+  feedKill(shooter: string, target: string, localIsShooter: boolean, localIsTarget: boolean): void {
+    const row = document.createElement('div');
+    row.className = 'kf-row';
+    if (localIsShooter) row.classList.add('me');
+    const s = document.createElement('span');
+    s.className = 'kf-s';
+    s.textContent = shooter === 'environment' ? '☠' : shooter;
+    const arrow = document.createElement('span');
+    arrow.className = 'kf-arrow';
+    arrow.textContent = ' ▸ ';
+    const t = document.createElement('span');
+    t.className = 'kf-t' + (localIsTarget ? ' dead' : '');
+    t.textContent = target;
+    row.append(s, arrow, t);
+    this.killFeed.append(row);
+    while (this.killFeed.childElementCount > 6) this.killFeed.firstElementChild!.remove();
+    setTimeout(() => { row.classList.add('fade'); setTimeout(() => row.remove(), 600); }, 5200);
   }
 
   /** Run clock — MM:SS, DOM write only when the second rolls over */
