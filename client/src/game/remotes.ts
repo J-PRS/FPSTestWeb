@@ -84,17 +84,17 @@ export function createRemotes(deps: RemotesDeps) {
     const players = nm.getPlayers();
     const previousRemoteCount = deps.world.remotePlayers.size;
 
-    // Update player list UI — local player first; drop stale remotes (no updates in 60s)
     const localPlayerId = nm.getLocalPlayerId();
-    const activeIds = Array.from(players.keys()).filter(id => id !== localPlayerId && isRemoteActive(id, players));
-    deps.lazyHud().updatePlayerList([localPlayerId, ...activeIds], localPlayerId);
 
-    // Roster-change log — joins/leaves only; positions live in stateDebug
-    // (?debug). Per-position logging at 60Hz was a console flood. Polled at
-    // 2Hz — a join/leave logged half a second late loses nothing.
+    // Roster work — player list UI + join/leave log — is polled at 2Hz.
+    // Per-position logging at 60Hz was a console flood, and building the
+    // roster arrays every frame was pure GC churn; a join/leave rendered
+    // half a second late loses nothing.
     rosterPollT -= dt;
     if (rosterPollT <= 0) {
       rosterPollT = 0.5;
+      const activeIds = Array.from(players.keys()).filter(id => id !== localPlayerId && isRemoteActive(id, players));
+      deps.lazyHud().updatePlayerList([localPlayerId, ...activeIds], localPlayerId);
       const rosterKey = [...players.keys()].filter(id => id !== localPlayerId).sort().join(',');
       if (rosterKey !== lastRemotePosLog) {
         lastRemotePosLog = rosterKey;

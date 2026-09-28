@@ -761,12 +761,18 @@ export class GameServer {
             continue; // Skip — within extrapolation tolerance
           }
         }
-        room.lastSentPositions.set(playerId, {
-          x: p.position.x, y: p.position.y, z: p.position.z,
-          vx: p.velocity.x, vy: p.velocity.y, vz: p.velocity.z,
-          yaw: p.rotation.yaw, pitch: p.rotation.pitch,
-          hp: p.health, dead: p.isDead, ski: p.skiing, status: p.status, t: now,
-        });
+        // Mutate the snapshot in place — a fresh object per record per tick
+        // was the last steady-state alloc in this loop.
+        let snap = lastSent;
+        if (!snap) {
+          snap = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, yaw: 0, pitch: 0, hp: 0, dead: false, ski: 0, status: 0, t: 0 };
+          room.lastSentPositions.set(playerId, snap);
+        }
+        snap.x = p.position.x; snap.y = p.position.y; snap.z = p.position.z;
+        snap.vx = p.velocity.x; snap.vy = p.velocity.y; snap.vz = p.velocity.z;
+        snap.yaw = p.rotation.yaw; snap.pitch = p.rotation.pitch;
+        snap.hp = p.health; snap.dead = p.isDead; snap.ski = p.skiing;
+        snap.status = p.status; snap.t = now;
 
         records.push({
           playerId,
