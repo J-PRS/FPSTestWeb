@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { WeaponType } from '../../../shared/weapons.js';
 import { Minimap } from './minimap.js';
 import { createHudDom } from './hud/dom.js';
 import { PlayerIndicators } from './hud/indicators.js';
@@ -91,22 +92,23 @@ export class HUD {
 
   private killFeed: HTMLDivElement;
 
-  /** Kill feed — "shooter ▸ target" under the match strip. Timed fade,
-   *  capped at 6 rows; textContent only (names are server strings). */
-  feedKill(shooter: string, target: string, localIsShooter: boolean, localIsTarget: boolean): void {
+  /** Kill feed — "shooter [weapon] ▸ target" under the match strip. Timed
+   *  fade, capped at 6 rows; textContent only (names are server strings). */
+  feedKill(shooter: string, target: string, localIsShooter: boolean, localIsTarget: boolean, weapon?: number): void {
     const row = document.createElement('div');
     row.className = 'kf-row';
     if (localIsShooter) row.classList.add('me');
     const s = document.createElement('span');
     s.className = 'kf-s';
     s.textContent = shooter === 'environment' ? '☠' : shooter;
-    const arrow = document.createElement('span');
-    arrow.className = 'kf-arrow';
-    arrow.textContent = ' ▸ ';
+    const w = document.createElement('span');
+    w.className = 'kf-w';
+    // Enum-name reverse lookup: `WeaponType[7]` → 'PlasmaCannon'. Unknown/absent → nothing shown.
+    w.textContent = weapon !== undefined && WeaponType[weapon] ? `[${WeaponType[weapon]}] ` : '';
     const t = document.createElement('span');
     t.className = 'kf-t' + (localIsTarget ? ' dead' : '');
     t.textContent = target;
-    row.append(s, arrow, t);
+    row.append(s, w, t);
     this.killFeed.append(row);
     while (this.killFeed.childElementCount > 6) this.killFeed.firstElementChild!.remove();
     setTimeout(() => { row.classList.add('fade'); setTimeout(() => row.remove(), 600); }, 5200);
