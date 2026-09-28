@@ -25,6 +25,149 @@ function corsResponse(body: BodyInit | null, init?: ResponseInit): Response {
   return new Response(body, { ...init, headers });
 }
 
+const JSON_HEADERS = { 'Content-Type': 'application/json' };
+const json = (data: unknown, init?: ResponseInit) =>
+  corsResponse(JSON.stringify(data), { ...init, headers: JSON_HEADERS });
+
+// Plain GET endpoints — a new JSON route is one table entry.
+const ROUTES: Record<string, (url: URL) => Response | Promise<Response>> = {
+  '/': () => json(gameServer.getHealthStatus()),
+  '/health': () => json(gameServer.getHealthStatus()),
+  // Ops metrics — uptime, players, balls, tick-lag stats.
+  '/metrics': () => json(gameServer.getMetrics()),
+  // Server-browser card — identity + occupancy for master lists / LAN.
+  '/serverinfo': () => json(gameServer.getServerInfo()),
+  // Lobby browse — live matches with occupancy.
+  '/rooms': () => json(gameServer.listRooms()),
+  // Match history ring (also journaled to logs/matches.jsonl).
+  '/matches': () => json(gameServer.listMatches()),
+  // Lifetime per-player aggregates off the match journal.
+  '/stats': async () => json(await gameServer.getStats()),
+  // Quick-join: /join?mode=ctf → emptiest live match of a mode.
+  '/join': (url) => {
+    const mode = url.searchParams.get('mode') ?? '';
+    if (!/^[a-z0-9_-]{0,16}$/.test(mode)) {
+      return corsResponse('Bad mode', { status: 400 });
+    }
+    const room = gameServer.quickRoom(mode);
+    return json({ room: room.name, mode: room.mode });
+  },
+};
+
+// Admin API — bearer-token guarded (FPS_ADMIN_TOKEN). Unset = closed.
+//   POST /admin/reload?room=X   re-read maps/X.json into the live room
+//   POST /admin/kick?player=X   boot a player
+//   POST /admin/end?room=X      force-end the match (leader wins)
+//   GET  /admin/rooms           detailed live dump
+function adminRoute(req: Request, url: URL): Response {
+  const want = CONFIG.adminToken;
+  if (!want) return corsResponse('admin disabled (FPS_ADMIN_TOKEN unset)', { status: 403 });
+  const got = req.headers.get('authorization')?.replace(/^bearer\s+/i, '');
+  if (got !== want) return corsResponse('unauthorized', { status: 401 });
+
+  if (url.pathname === '/admin/rooms' && req.method === 'GET') {
+    return json(gameServer.listRooms());
+  }
+  if (req.method !== 'POST') return corsResponse('POST only', { status: 405 });
+
+  const ADMIN_ACTIONS: Record<string, () => Response> = {
+    '/admin/reload': () => {
+      const r = gameServer.reloadRoom(url.searchParams.get('room') ?? '');
+      return json({ ok: r === 'ok', result: r }, { status: r === 'ok' ? 200 : 404 });
+    },
+    '/admin/kick': () => {
+      const ok = gameServer.kickPlayer(url.searchParams.get('player') ?? '');
+      return json({ ok }, { status: ok ? 200 : 404 });
+    },
+    '/admin/end': () => {
+      const r = gameServer.forceEndMatch(url.searchParams.get('room') ?? '');
+      return json({ ok: r === 'ok', result: r }, { status: r === 'ok' ? 200 : 404 });
+    },
+  };
+  return ADMIN_ACTIONS[url.pathname]?.() ?? corsResponse('Unknown admin route', { status: 404 });
+}
+
+// Demo endpoints: POST /demos/upload, GET /demos/:filename.
+// (GET /demos is an exact-path route, handled in ROUTES below.)
+async function demoRoute(req: Request, url: URL): Promise<Response> {
+  if (url.pathname === '/demos/upload' && req.method === 'POST') {
+    try {
+      // Reject oversized uploads before buffering the body — clips are
+      // ~seconds of binary frames, 16MB is a generous ceiling
+      const contentLength = Number(req.headers.get('content-length') ?? 0);
+      if (contentLength > 16 * 1024 * 1024) {
+        return json({ success: false, error: 'Upload too large' }, { status: 413 });
+      }
+      const body = await req.arrayBuffer();
+      if (body.byteLength > 16 * 1024 * 1024) {
+        return json({ success: false, error: 'Upload too large' }, { status: 413 });
+      }
+      logger.info('Demo upload received', { size: body.byteLength });
+      const meta = await demoStorage.saveDemo(body);
+      if (!meta.filename) {
+        return json({ success: false, rejected: true, reason: 'Below minimum lifetime' });
+      }
+      return json({ success: true, ...meta });
+    } catch (e) {
+      logger.warn('Demo upload failed', { error: (e as Error).message });
+      return json({ success: false, error: (e as Error).message }, { status: 500 });
+    }
+  }
+
+  if (req.method === 'GET') {
+    const filename = url.pathname.slice('/demos/'.length);
+    if (filename === 'upload' || filename === '') {
+      return corsResponse('Not found', { status: 404 });
+    }
+    const data = await demoStorage.loadDemo(filename);
+    if (!data) {
+      logger.info('Demo download not found', { filename });
+      return corsResponse('Not found', { status: 404 });
+    }
+    logger.info('Demo downloaded', { filename, size: data.byteLength });
+    return corsResponse(data, {
+      headers: { 'Content-Type': 'application/octet-stream' },
+    });
+  }
+
+  return corsResponse('Not found', { status: 404 });
+}
+
+ROUTES['/demos'] = async () => {
+  const list = await demoStorage.listDemos();
+  logger.info('Demo list requested', { count: list.length, top: list[0]?.projectileLifetime.toFixed(2) ?? 'none' });
+  return json({ demos: list });
+};
+
+const LOGS_DIR = join(import.meta.dir, '..', '..', 'logs');
+
+// Client log shipping: POST /client-log — appended to logs/client.log.
+// Bodies are plain text lines (WARN/ERROR only by client convention).
+// Lines also fan out by level: client_warning.log / client_error.log.
+async function clientLogRoute(req: Request): Promise<Response> {
+  try {
+    const body = await req.text();
+    if (body.length > 512 * 1024) {
+      return corsResponse('Too large', { status: 413 });
+    }
+    mkdirSync(LOGS_DIR, { recursive: true });
+    appendFileSync(join(LOGS_DIR, 'client.log'), body);
+    const warnLines: string[] = [];
+    const errLines: string[] = [];
+    for (const line of body.split('\n')) {
+      if (!line) continue;
+      if (line.includes('[ERROR]')) errLines.push(line);
+      else if (line.includes('[WARN]')) warnLines.push(line);
+    }
+    if (warnLines.length) appendFileSync(join(LOGS_DIR, 'client_warning.log'), warnLines.join('\n') + '\n');
+    if (errLines.length) appendFileSync(join(LOGS_DIR, 'client_error.log'), errLines.join('\n') + '\n');
+    return corsResponse('ok');
+  } catch (e) {
+    logger.warn('Client log append failed', { error: (e as Error).message });
+    return corsResponse('append failed', { status: 500 });
+  }
+}
+
 const server = Bun.serve<WebSocketData>({
   port: CONFIG.port,
   hostname: '0.0.0.0',
@@ -55,7 +198,7 @@ const server = Bun.serve<WebSocketData>({
     },
   },
 
-  async fetch(req, server) {
+  async fetch(req, srv) {
     const url = new URL(req.url);
 
     // Handle CORS preflight
@@ -64,7 +207,7 @@ const server = Bun.serve<WebSocketData>({
     }
 
     if (url.pathname === '/ws') {
-      if (server.upgrade(req, { data: { playerId: '', connectedAt: Date.now() } })) {
+      if (srv.upgrade(req, { data: { playerId: '', connectedAt: Date.now() } })) {
         return;
       }
       return new Response('Upgrade failed', { status: 400 });
@@ -76,208 +219,19 @@ const server = Bun.serve<WebSocketData>({
       if (!/^[a-zA-Z0-9_-]{1,32}$/.test(room)) {
         return new Response('Bad room', { status: 400 });
       }
-      if (server.upgrade(req, { data: { playerId: '', connectedAt: Date.now(), rtc: true, room } })) {
+      if (srv.upgrade(req, { data: { playerId: '', connectedAt: Date.now(), rtc: true, room } })) {
         return;
       }
       return new Response('Upgrade failed', { status: 400 });
     }
 
-    if (url.pathname === '/' || url.pathname === '/health') {
-      return corsResponse(JSON.stringify(gameServer.getHealthStatus()), {
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
+    const route = ROUTES[url.pathname];
+    if (route) return route(url);
 
-    // Ops metrics: GET /metrics — uptime, players, balls, message counts,
-    // tick-lag stats (setInterval drift behind wall time).
-    if (url.pathname === '/metrics') {
-      return corsResponse(JSON.stringify(gameServer.getMetrics()), {
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
-
-    // Server-browser card: GET /serverinfo — identity + occupancy for a
-    // master list or LAN browser. Ping is measured by the client's RTT.
-    if (url.pathname === '/serverinfo') {
-      return corsResponse(JSON.stringify(gameServer.getServerInfo()), {
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
-
-    // Lobby browse: GET /rooms — live matches with occupancy.
-    if (url.pathname === '/rooms') {
-      return corsResponse(JSON.stringify(gameServer.listRooms()), {
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
-
-    // Match history: GET /matches — ring of recent matchEnd/ffaMatchEnd
-    // records (also journaled to logs/matches.jsonl).
-    if (url.pathname === '/matches') {
-      return corsResponse(JSON.stringify(gameServer.listMatches()), {
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
-
-    // Leaderboard: GET /stats — lifetime per-player aggregates read off
-    // the match journal (wins/kills/deaths/matches, sorted by wins).
-    if (url.pathname === '/stats') {
-      return corsResponse(JSON.stringify(await gameServer.getStats()), {
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
-
-    // Quick-join: GET /join?mode=ctf → {room, mode} — the lobby uses it
-    // to drop players into the emptiest live match of a mode.
-    if (url.pathname === '/join') {
-      const mode = url.searchParams.get('mode') ?? '';
-      if (!/^[a-z0-9_-]{0,16}$/.test(mode)) {
-        return corsResponse('Bad mode', { status: 400 });
-      }
-      const room = gameServer.quickRoom(mode);
-      return corsResponse(JSON.stringify({ room: room.name, mode: room.mode }), {
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
-
-    // ---- Admin API --------------------------------------------------
-    // Bearer-token guarded (FPS_ADMIN_TOKEN). Unset = closed entirely.
-    //   POST /admin/reload?room=X     re-read maps/X.json into the live room
-    //   POST /admin/kick?player=X     boot a player
-    //   POST /admin/end?room=X        force-end the match (leader wins)
-    //   GET  /admin/rooms             detailed live dump
-    if (url.pathname.startsWith('/admin/')) {
-      const want = CONFIG.adminToken;
-      if (!want) return corsResponse('admin disabled (FPS_ADMIN_TOKEN unset)', { status: 403 });
-      const got = req.headers.get('authorization')?.replace(/^bearer\s+/i, '');
-      if (got !== want) return corsResponse('unauthorized', { status: 401 });
-
-      if (url.pathname === '/admin/rooms' && req.method === 'GET') {
-        return corsResponse(JSON.stringify(gameServer.listRooms()), {
-          headers: { 'Content-Type': 'application/json' },
-        });
-      }
-      if (req.method !== 'POST') return corsResponse('POST only', { status: 405 });
-
-      if (url.pathname === '/admin/reload') {
-        const room = url.searchParams.get('room') ?? '';
-        const r = gameServer.reloadRoom(room);
-        return corsResponse(JSON.stringify({ ok: r === 'ok', result: r }), {
-          status: r === 'ok' ? 200 : 404,
-          headers: { 'Content-Type': 'application/json' },
-        });
-      }
-      if (url.pathname === '/admin/kick') {
-        const player = url.searchParams.get('player') ?? '';
-        const ok = gameServer.kickPlayer(player);
-        return corsResponse(JSON.stringify({ ok }), {
-          status: ok ? 200 : 404,
-          headers: { 'Content-Type': 'application/json' },
-        });
-      }
-      if (url.pathname === '/admin/end') {
-        const room = url.searchParams.get('room') ?? '';
-        const r = gameServer.forceEndMatch(room);
-        return corsResponse(JSON.stringify({ ok: r === 'ok', result: r }), {
-          status: r === 'ok' ? 200 : 404,
-          headers: { 'Content-Type': 'application/json' },
-        });
-      }
-      return corsResponse('Unknown admin route', { status: 404 });
-    }
-
-    // Demo upload: POST /demos/upload
-    if (url.pathname === '/demos/upload' && req.method === 'POST') {
-      try {
-        // Reject oversized uploads before buffering the body — clips are
-        // ~seconds of binary frames, 16MB is a generous ceiling
-        const contentLength = Number(req.headers.get('content-length') ?? 0);
-        if (contentLength > 16 * 1024 * 1024) {
-          return corsResponse(JSON.stringify({ success: false, error: 'Upload too large' }), {
-            status: 413,
-            headers: { 'Content-Type': 'application/json' },
-          });
-        }
-        const body = await req.arrayBuffer();
-        if (body.byteLength > 16 * 1024 * 1024) {
-          return corsResponse(JSON.stringify({ success: false, error: 'Upload too large' }), {
-            status: 413,
-            headers: { 'Content-Type': 'application/json' },
-          });
-        }
-        logger.info('Demo upload received', { size: body.byteLength });
-        const meta = await demoStorage.saveDemo(body);
-        if (!meta.filename) {
-          return corsResponse(JSON.stringify({ success: false, rejected: true, reason: 'Below minimum lifetime' }), {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' },
-          });
-        }
-        return corsResponse(JSON.stringify({ success: true, ...meta }), {
-          headers: { 'Content-Type': 'application/json' },
-        });
-      } catch (e) {
-        logger.warn('Demo upload failed', { error: (e as Error).message });
-        return corsResponse(JSON.stringify({ success: false, error: (e as Error).message }), {
-          status: 500,
-          headers: { 'Content-Type': 'application/json' },
-        });
-      }
-    }
-
-    // Client log shipping: POST /client-log — appended to logs/client.log.
-    // Bodies are plain text lines (WARN/ERROR only by client convention).
-    // Lines also fan out by level: client_warning.log / client_error.log.
-    const LOGS_DIR = join(import.meta.dir, '..', '..', 'logs');
-    if (url.pathname === '/client-log' && req.method === 'POST') {
-      try {
-        const body = await req.text();
-        if (body.length > 512 * 1024) {
-          return corsResponse('Too large', { status: 413 });
-        }
-        mkdirSync(LOGS_DIR, { recursive: true });
-        appendFileSync(join(LOGS_DIR, 'client.log'), body);
-        const warnLines: string[] = [];
-        const errLines: string[] = [];
-        for (const line of body.split('\n')) {
-          if (!line) continue;
-          if (line.includes('[ERROR]')) errLines.push(line);
-          else if (line.includes('[WARN]')) warnLines.push(line);
-        }
-        if (warnLines.length) appendFileSync(join(LOGS_DIR, 'client_warning.log'), warnLines.join('\n') + '\n');
-        if (errLines.length) appendFileSync(join(LOGS_DIR, 'client_error.log'), errLines.join('\n') + '\n');
-        return corsResponse('ok');
-      } catch (e) {
-        logger.warn('Client log append failed', { error: (e as Error).message });
-        return corsResponse('append failed', { status: 500 });
-      }
-    }
-
-    // Demo list: GET /demos
-    if (url.pathname === '/demos' && req.method === 'GET') {
-      const list = await demoStorage.listDemos();
-      logger.info('Demo list requested', { count: list.length, top: list[0]?.projectileLifetime.toFixed(2) ?? 'none' });
-      return corsResponse(JSON.stringify({ demos: list }), {
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
-
-    // Demo download: GET /demos/:filename
-    if (url.pathname.startsWith('/demos/') && req.method === 'GET') {
-      const filename = url.pathname.slice('/demos/'.length);
-      if (filename === 'upload' || filename === '') {
-        return corsResponse('Not found', { status: 404 });
-      }
-      const data = await demoStorage.loadDemo(filename);
-      if (!data) {
-        logger.info('Demo download not found', { filename });
-        return corsResponse('Not found', { status: 404 });
-      }
-      logger.info('Demo downloaded', { filename, size: data.byteLength });
-      return corsResponse(data, {
-        headers: { 'Content-Type': 'application/octet-stream' },
-      });
-    }
+    // Prefix routes — path carries params (admin query args, demo filename).
+    if (url.pathname.startsWith('/admin/')) return adminRoute(req, url);
+    if (url.pathname.startsWith('/demos/')) return demoRoute(req, url);
+    if (url.pathname === '/client-log' && req.method === 'POST') return clientLogRoute(req);
 
     return corsResponse('Not found', { status: 404 });
   },
