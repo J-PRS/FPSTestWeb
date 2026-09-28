@@ -262,6 +262,16 @@ export function createEntities(deps: EntitiesDeps) {
     updateRollers: melee.updateRollers,
     updateTurrets: siege.updateTurrets, updateOverlords: siege.updateOverlords, updateTotems: siege.updateTotems,
     updateWeeds: ambient.updateWeeds,
+    // All per-species ticks in one iterable — gameLoop iterates, so adding
+    // a species never touches the loop. Deployables stay separate (they
+    // aren't a species — no spawn cadence, no targets registry).
+    updateSpeciesAll: (dt: number) => {
+      melee.updateCrawlers(dt); melee.updateScarabs(dt); melee.updateGrubs(dt);
+      melee.updateSnakes(dt); melee.updateRollers(dt);
+      flyers.updateGnats(dt); flyers.updateSeekers(dt); flyers.updateRakks(dt); flyers.updateStrifers(dt);
+      siege.updateTurrets(dt); siege.updateOverlords(dt); siege.updateTotems(dt);
+      ambient.updateWeeds(dt);
+    },
     updateNuggets,
     recordBallKeyframes,
   };

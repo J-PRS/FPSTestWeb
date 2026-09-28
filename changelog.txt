@@ -1,3 +1,4 @@
+2026-09-26  species registry — SWARM_SPECS table moved to game/species/registry.ts; gameLoop ticks one updateSpeciesAll instead of 12 per-species lines
 2026-09-26  Strifer species — standoff strafing drone: orbits at 34m, hovers to fire a bolt volley, then re-orbits; blast knockback knocks it out of its firing hover
 2026-09-26  nugget rebalance — pickup restores 50% max energy (infinite-jet window removed); per-variant drop counts server-side (v1×2, v2×3, elite×3)
 2026-09-26  4 tradeoff perks: sharpshooter (+20% direct, -40% blast radius), bombardier (inverse), juggernaut (knockback resist), scavenger (heal boost) — enforced server-side on shots, AOE radius, impulse and heals
