@@ -623,7 +623,10 @@ export class GameServer {
     ws.data.playerId = playerId;
     const sessionToken = idToken;
     room.sessionTokens.set(playerId, sessionToken);
-    room.players.addPlayer(playerId, room.nextTeam(), isPerkId(handshake.perk) ? handshake.perk : 'none');
+    const joinedPlayer = room.players.addPlayer(playerId, room.nextTeam(), isPerkId(handshake.perk) ? handshake.perk : 'none');
+    if (handshake.transport === 'wt' || handshake.transport === 'rtc' || handshake.transport === 'ws') {
+      joinedPlayer.transport = handshake.transport;
+    }
     this.playerRoom.set(playerId, room);
     room.connections.register(playerId, ws);
     room.messages.handleHandshake(playerId, sessionToken);

@@ -33,7 +33,7 @@ export type ClientMessage =
        *  spec source too. bots overrides the spec's bot count. */
       map?: string; bots?: number;
       /** Netcode-v2 tier the client negotiated — /metrics tier counts. */
-      transport?: 'wt' | 'rtc' | 'ws' }
+      transport?: string }
   | { type: 'position'; position: Vec3; rotation: Rotation; velocity: Vec3; seq?: number; ping?: number }
   // Declared discontinuity (warp beacon, respawn): the position is
   // authoritative, not a plausibility-checked move — the server reseats
@@ -78,7 +78,7 @@ export type ServerMessage =
   // room/mode: which match this state belongs to — set by the room's first
   // joiner, inherited by everyone after (join claims can't redefine it).
   | { type: 'gameState'; players: GameStatePlayer[]; localPlayerState?: LocalPlayerState; sessionToken?: string; protocolVersion?: number; room?: string; mode?: string; team?: 'alpha' | 'bravo'; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number>; map?: { mode?: string; bases?: { alpha?: Vec3; bravo?: Vec3 }; structures?: { kind: 'box' | 'wall' | 'pillar' | 'ramp'; pos: Vec3; size: Vec3; rotY?: number; team?: 'alpha' | 'bravo' }[]; arena?: { x: number; z: number; radius: number }; ambient?: Record<string, number> }; flags?: { team: 'alpha' | 'bravo'; pos: Vec3; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]; pickups?: { id: number; pos: Vec3; kind?: 'gem' | 'tag' }[]; deployables?: { id: number; owner: string; kind: 'turret' | 'mine' | 'station' | 'drone'; pos: Vec3 }[]; matchEndsAt?: number; respawnMs?: number }
-  | { type: 'playerJoined'; playerId: string; internalId: string; position: Vec3; rotation: Rotation; team?: 'alpha' | 'bravo' }
+  | { type: 'playerJoined'; playerId: string; internalId: string; position: Vec3; rotation: Rotation; team?: 'alpha' | 'bravo'; transport?: 'wt' | 'rtc' | 'ws' }
   | { type: 'playerLeft'; playerId: string }
   // Team reassignment mid-match — team comes through playerJoined/gameState
   // otherwise; this is the only channel for a swap after join (bot rebalance).
@@ -140,6 +140,8 @@ export interface GameStatePlayer {
   status?: number;
   /** Team-mode rooms only — absent in free-for-all. */
   team?: 'alpha' | 'bravo';
+  /** Netcode-v2 tier this client connected on — scoreboard NET column. */
+  transport?: 'wt' | 'rtc' | 'ws';
 }
 
 export interface SnapshotPlayer {

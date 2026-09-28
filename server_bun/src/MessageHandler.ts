@@ -243,6 +243,7 @@ export class MessageHandler {
         position: player.position,
         rotation: player.rotation,
         team: player.team,
+        transport: player.transport,
       }, playerId);
     }
   }

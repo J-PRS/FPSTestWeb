@@ -218,18 +218,19 @@ export function createRemotes(deps: RemotesDeps) {
     const nm = deps.lazyNetworkManager();
     const localId = nm.getLocalPlayerId();
     const ffa = deps.world.ffaScores;
-    const rows = [{ name: localId, frags: deps.world.killCounts.get(localId) ?? 0, score: ffa.get(localId) ?? null, ping: nm.getPing(), self: true, dead: deps.lazyPlayer().isDead, team: deps.world.localTeam }];
-    const remoteRows = [...nm.getPlayers().keys()]
+    const rows = [{ name: localId, frags: deps.world.killCounts.get(localId) ?? 0, score: ffa.get(localId) ?? null, ping: nm.getPing(), net: nm.getTransportTier() ?? null, self: true, dead: deps.lazyPlayer().isDead, team: deps.world.localTeam }];
+    // net is string|null — 'bot' rows carry a label, not a transport tier.
+    const remoteRows: { name: string; frags: number; score: number | null; ping: number | null; net: string | null; self: boolean; dead: boolean; team?: 'alpha' | 'bravo' }[] = [...nm.getPlayers().keys()]
       .filter(id => id !== localId && isRemoteActive(id, nm.getPlayers()))
       .map(id => {
         const ps = nm.getPlayers().get(id);
-        return { name: id, frags: deps.world.killCounts.get(id) ?? 0, score: ffa.get(id) ?? null, ping: ps?.ping ?? null, self: false, dead: ps?.isDead ?? false, team: ps?.team };
+        return { name: id, frags: deps.world.killCounts.get(id) ?? 0, score: ffa.get(id) ?? null, ping: ps?.ping ?? null, net: ps?.transport ?? null, self: false, dead: ps?.isDead ?? false, team: ps?.team };
       });
     // Offline bots live in world.remotePlayers, not the network roster —
     // they'd be invisible on the scoreboard otherwise.
     for (const [id, rp] of deps.world.remotePlayers) {
       if (nm.getPlayers().has(id)) continue;
-      remoteRows.push({ name: id.replace('bot:', ''), frags: deps.world.killCounts.get(id) ?? 0, score: deps.world.ffaScores.get(id) ?? null, ping: null, self: false, dead: rp.isDead, team: undefined });
+      remoteRows.push({ name: id.replace('bot:', ''), frags: deps.world.killCounts.get(id) ?? 0, score: deps.world.ffaScores.get(id) ?? null, ping: null, net: 'bot', self: false, dead: rp.isDead, team: undefined });
     }
     remoteRows.sort((a, b) => (b.score ?? b.frags) - (a.score ?? a.frags));
     hud.setScoreboardRows([...rows, ...remoteRows]);

@@ -22,6 +22,8 @@ export interface RemotePlayerState {
   /** Status bitmask — STATUS_* bits (shared/status.ts). */
   status?: number;
   team?: 'alpha' | 'bravo';
+  /** Server-reported connect tier (join transport claim) — scoreboard NET. */
+  transport?: 'wt' | 'rtc' | 'ws';
 }
 
 /**
@@ -317,6 +319,7 @@ export class NetworkManager {
       ski: patch.ski ?? existing?.ski,
       status: patch.status ?? existing?.status,
       team: patch.team ?? existing?.team,
+      transport: patch.transport ?? existing?.transport,
     });
   }
 
@@ -333,6 +336,7 @@ export class NetworkManager {
       isDead: isNew ? false : undefined,
       health: isNew ? 100 : undefined,
       team: data.team,
+      transport: data.transport,
     });
     if (isNew) this.onPlayerJoined?.(data.playerId, data.position, data.rotation);
   }
@@ -569,6 +573,12 @@ export class NetworkManager {
 
   getJitter(): number {
     return this.telemetry.jitter();
+  }
+
+  /** Netcode-v2 tier our own connection negotiated — self row on the
+   *  scoreboard (remotes get theirs from gameState/playerJoined). */
+  getTransportTier(): 'wt' | 'rtc' | 'ws' | 'p2p' | 'host' | undefined {
+    return this.ws?.tier;
   }
 
   private handlePong(timestamp: number): void {
