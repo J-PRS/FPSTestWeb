@@ -1,3 +1,4 @@
+2026-09-26  ThreatTable.update -> decayThreat/dropInvalidTarget/pickBest; last flagged complexity hotspot cleared
 2026-09-26  Room ctor (complexity 29) -> wireModeFeatures (teams/pickups/flags) + registerSims; pickups/flags now set in helper
 2026-09-26  updateProjectiles -> prunePendingShots/collectBoltIntercept/chainStickies; dropped 5 dead lightning scratch vectors
 2026-09-26  tickRemotePlayer -> ensureRemote/applyStatusVisuals/applyTeamTint/tickRemoteCosmetics; WirePlayerState alias
