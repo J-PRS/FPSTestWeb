@@ -349,8 +349,13 @@ export class MessageHandler {
       const speed = dist / dt;
       player.lastPosCheckPos = { ...msg.position };
       // Reject only genuine impossibilities: >50m in one report, or speed
-      // beyond any legit combination of skiing + knockback + jetpack
-      if (dist > 50 || speed > 300) {
+      // beyond any legit combination of skiing + knockback + jetpack.
+      // The window has to be a REAL window — position reports stream at
+      // 20Hz, so dt > ~0.5s means the report chain broke (transport blip,
+      // hidden tab, transport switch), and the accumulated distance over
+      // a dead interval isn't speed evidence (34s gap → 589m at 17m/s
+      // used to reject). Reseat the anchor and resume measuring.
+      if (dt <= 0.5 && (dist > 50 || speed > 300)) {
         player.consecutiveRejects++;
         logger.warn(`Position rejected: ${playerId} moved ${dist.toFixed(1)}m in ${dt.toFixed(3)}s (${speed.toFixed(0)} m/s)`);
         // Send correction on the first reject of a streak only — no flood
