@@ -81,6 +81,9 @@ export class Room {
   /** Match-results journal hook — GameServer writes matches.jsonl and
    *  feeds /matches from it. Fired on every win condition. */
   onMatchEnd?: (record: { room: string; mode: string; winner: string; scores: Record<string, number>; players: { id: string; team?: string; kills: number; deaths: number }[] }) => void;
+  /** Map-rotation hook — GameServer returns the next same-mode spec at
+   *  the horn, or null to replay the current map. */
+  onRotate?: () => MapSpec | null;
 
   /** Per-player K/D at the horn — the match journal's useful payload. */
   private matchPlayers(): { id: string; team?: string; kills: number; deaths: number }[] {
@@ -364,6 +367,11 @@ export class Room {
     this.pickups?.clear();
     this.deployables.clearAll();
     this.players.resetStats();
+    // Rotation comes between reset and matchStart so players spawn onto
+    // the NEW map (applySpec re-points spawnPoints) rather than eating
+    // one old-map spawn before mapUpdate lands.
+    const next = this.onRotate?.();
+    if (next) this.applySpec(next);
     this.matchEndsAt = Date.now() + spec.timeLimitS * 1000;
     this.matchWarned = false;
     this.matchOvertime = false;

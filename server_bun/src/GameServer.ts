@@ -161,18 +161,65 @@ export class GameServer {
       if (src) this.roomMapName.set(name, src);
       room = new Room(name, this.field, mode, spec, CONFIG.moveAuthority);
       room.onMatchEnd = (rec) => this.recordMatchEnd(rec);
-      if (spec?.terrain) {
-        const r = room;
-        this.loadField(spec.terrain).then(f => {
-          if (!f || this.rooms.get(name) !== r) return;
-          r.ballSim.attachField(f);
-          r.moveSim.attachField(f);
-        });
-      }
+      room.onRotate = () => this.nextRotationSpec(room);
+      if (spec?.terrain) this.attachTerrain(room, spec);
       this.rooms.set(name, room);
       logger.info('Room created', { room: name, mode: room.mode });
     }
     return room;
+  }
+
+  /** Attach a spec's terrain to every room sim that sweeps it — missing
+   *  one means two systems disagree about where the ground is. */
+  private attachTerrain(room: Room, spec: MapSpec): void {
+    if (!spec.terrain) return;
+    const roomName = room.name;
+    this.loadField(spec.terrain).then(f => {
+      if (!f || this.rooms.get(roomName) !== room) return;
+      room.ballSim.attachField(f);
+      room.moveSim.attachField(f);
+      room.projectiles.attachField(f);
+    });
+  }
+
+  // Map rotation pool: maps/rotation.json (["name","name",…]) or the
+  // FPS_MAP_ROTATION env (comma list). Rooms advance a shared cursor —
+  // every room on the rotation marches the same sequence.
+  private rotationList: string[] | null | undefined;
+  private rotationIdx = 0;
+
+  private rotation(): string[] {
+    if (this.rotationList === undefined) {
+      const env = (process.env.FPS_MAP_ROTATION ?? '').split(',')
+        .map(s => s.trim()).filter(Boolean);
+      if (env.length) this.rotationList = env;
+      else {
+        try {
+          const raw = readFileSync(`${import.meta.dir}/../../maps/rotation.json`, 'utf8');
+          const list = JSON.parse(raw);
+          this.rotationList = Array.isArray(list) ? list.filter(s => typeof s === 'string') : [];
+        } catch { this.rotationList = null; }
+      }
+    }
+    return this.rotationList ?? [];
+  }
+
+  /** Next map in the rotation whose mode matches the room's — a mode
+   *  swap would need Room reconstruction (mode wiring is ctor-time), so
+   *  foreign-mode specs are skipped rather than half-applied. */
+  private nextRotationSpec(room: Room): MapSpec | null {
+    const list = this.rotation();
+    if (!list.length) return null;
+    for (let i = 0; i < list.length; i++) {
+      const name = list[this.rotationIdx++ % list.length];
+      const spec = this.loadMapSpec(name);
+      if (!spec || (spec.mode && room.mode && spec.mode !== room.mode)) continue;
+      this.rotationIdx %= list.length;
+      this.attachTerrain(room, spec);
+      logger.info('Map rotated', { room: room.name, map: name });
+      return spec;
+    }
+    return null;
   }
 
   /** maps/<name>.json at repo root — a missing or malformed file just
@@ -221,7 +268,7 @@ export class GameServer {
     try {
       const dir = `${import.meta.dir}/../../maps`;
       return readdirSync(dir)
-        .filter((f) => f.endsWith('.json'))
+        .filter((f) => f.endsWith('.json') && f !== 'rotation.json') // rotation.json is a playlist, not a map
         .map((f) => {
           const spec = this.loadMapSpec(f.slice(0, -5));
           return {
@@ -365,13 +412,7 @@ export class GameServer {
     const spec = this.loadMapSpec(name);
     if (!spec) return 'no-spec';
     room.applySpec(spec);
-    if (spec.terrain) {
-      this.loadField(spec.terrain).then(f => {
-        if (!f || this.rooms.get(name) !== room) return;
-        room.ballSim.attachField(f);
-        room.moveSim.attachField(f);
-      });
-    }
+    this.attachTerrain(room, spec);
     logger.info('Room spec reloaded', { room: name });
     return 'ok';
   }

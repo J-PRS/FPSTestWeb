@@ -41,12 +41,18 @@ const FLOOR_Y = -220;
 
 export class RoomProjectiles {
   private readonly room: Room;
-  private readonly field: Heightfield | null;
+  private field: Heightfield | null;
   private projs = new Map<string, LiveProj>();
   private nextId = 1;
 
   constructor(room: Room, field: Heightfield | null) {
     this.room = room;
+    this.field = field;
+  }
+
+  /** Map rotation / admin reload can swap the terrain under a live
+   *  room — shells must sweep the field players actually stand on. */
+  attachField(field: Heightfield | null): void {
     this.field = field;
   }
 
