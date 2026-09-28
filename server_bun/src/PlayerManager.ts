@@ -3,6 +3,7 @@ import { CONFIG } from './config.ts';
 import { STATUS } from '../../shared/status.ts';
 import { perkMods } from '../../shared/perks.ts';
 import { POWERUP } from '../../shared/pickups.ts';
+import { ENERGY } from '../../shared/movement.ts';
 
 let internalIdCounter = 0;
 
@@ -21,6 +22,10 @@ export class PlayerManager {
   /** Team home bases — when set, team members spawn near their own flag
    *  instead of the generic farthest-from-everyone ring. */
   teamBases: { alpha: Vec3; bravo: Vec3 } | null = null;
+
+  /** Sink for energy burns the sim must mirror — shield soak in
+   *  applyDamage burns the move shadow's modeled tank. Room wires it. */
+  energyBurn?: (playerId: string, energy: number) => void;
 
   addPlayer(playerId: string, team?: 'alpha' | 'bravo', perk: string = 'none'): PlayerState {
     const spawn = this.pickSpawnPoint(playerId, team);
@@ -184,6 +189,7 @@ export class PlayerManager {
     // energy tank, not their health — the client drains dmg/10 energy and
     // drops the flag when the pool bottoms out (inputMove carries it).
     if (target.status & STATUS.SHIELD) {
+      this.energyBurn?.(targetId, damage / ENERGY.shieldDmgPerEnergy);
       return { killed: false, newHealth: target.health, newArmor: target.armor };
     }
 

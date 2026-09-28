@@ -47,7 +47,7 @@ export interface RoomInfo {
   onDeploy?: (playerId: string, kind: string, pos: Vec3) => void;
   /** Shadow-move hooks — Room.moveSim. Position reports reconcile the
    *  sim; teleport/respawn resync it; inputMove feeds it. */
-  moveInput?: (playerId: string, input: { forward: number; right: number; jump: number; ski: number; jet?: number }) => void;
+  moveInput?: (playerId: string, input: { forward: number; right: number; jump: number; ski: number; jet?: number }, status?: number) => void;
   /** Reports reconcile the sim; a non-null return is the sim's truth when
    *  the report diverged past tolerance — send it back as a correction. */
   moveReport?: (playerId: string, pos: Vec3, yaw: number, vel?: Vec3) => { pos: Vec3; vel: Vec3 } | null;
@@ -112,7 +112,7 @@ export class MessageHandler {
         const i = (m as Extract<ClientMessage, { type: 'inputMove' }>).input;
         p.skiing = i.ski ? 1 : 0;
         p.status = (i.status ?? 0) & CLIENT_STATUS_MASK;
-        this.roomInfo.moveInput?.(id, i);
+        this.roomInfo.moveInput?.(id, i, p.status);
       },
       // Room-scoped relay — broadcast() only reaches this room's sockets.
       chat: (id, m) => this.broadcast({ type: 'chat', playerId: id, text: (m as Extract<ClientMessage, { type: 'chat' }>).text }),

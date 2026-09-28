@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { RoomMoveSim } from '../src/RoomMoveSim.ts';
 import { MOVEMENT_CONFIG } from '../../shared/movement.ts';
+import { STATUS } from '../../shared/status.ts';
 import type { Heightfield } from '../../shared/heightfield.ts';
 
 const flat: Heightfield = { width: 2, height: 2, data: new Uint8Array(4) };
@@ -59,5 +60,50 @@ describe('RoomMoveSim', () => {
   test('config stays in lockstep with the client values', () => {
     expect(MOVEMENT_CONFIG.jumpSpeed).toBe(7.0);
     expect(MOVEMENT_CONFIG.maxVelocityGround).toBe(7.0);
+  });
+
+  test('modeled energy gates the jet claim — infinite jetting dries up', () => {
+    const m = new RoomMoveSim(flat);
+    m.track('p1', { x: 0, y: 0, z: 0 }, 0);
+    m.setInput('p1', { jetHeld: true });
+    let peak = 0;
+    for (let i = 0; i < 200; i++) { // 10s of claimed jet
+      m.tick(0.05);
+      peak = Math.max(peak, m.simPos('p1')!.y);
+    }
+    // 60 energy / 15 per sec ≈ 4s of thrust — after that gravity wins
+    // and the player comes back down; an ungated sim would still climb.
+    const y = m.simPos('p1')!.y;
+    expect(peak).toBeGreaterThan(5);
+    expect(y).toBeLessThan(peak);
+  });
+
+  test('featherjets perk burns the tank slower', () => {
+    const base = new RoomMoveSim(flat);
+    const feat = new RoomMoveSim(flat);
+    base.track('b', { x: 0, y: 0, z: 0 }, 0);
+    feat.track('f', { x: 0, y: 0, z: 0 }, 0, 'featherjets');
+    base.setInput('b', { jetHeld: true });
+    feat.setInput('f', { jetHeld: true });
+    // At 5s the base tank (60/15=4s) is dry; featherjets (60/10.5≈5.7s)
+    // is still burning and still climbing.
+    for (let i = 0; i < 100; i++) { base.tick(0.05); feat.tick(0.05); }
+    expect(feat.simPos('f')!.y).toBeGreaterThan(base.simPos('b')!.y);
+  });
+
+  test('cloak ante + drain charge the shadow tank', () => {
+    const m = new RoomMoveSim(flat);
+    // Stand above the collision plane — spawning under it tunnels.
+    m.track('p1', { x: 0, y: MOVEMENT_CONFIG.playerHeight + 0.5, z: 0 }, 0);
+    // Rising edge on CLOAK costs 20 immediately, then 5/s while up;
+    // recharge is suppressed while a toggle skill runs.
+    m.setInput('p1', { jetHeld: true }, STATUS.CLOAK);
+    let peak = 0;
+    for (let i = 0; i < 100; i++) { m.tick(0.05); peak = Math.max(peak, m.simPos('p1')!.y); }
+    // 40 energy after the ante ÷ (15+5)/s ≈ 2s of jet — much less
+    // than the ~4s a clean tank buys.
+    const base = 2.3;
+    expect(peak).toBeGreaterThan(base);
+    expect(peak).toBeLessThan(60);
   });
 });

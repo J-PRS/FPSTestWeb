@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { getGlowTexture } from '../../effects/glowTexture.js';
 import type { Terrain } from '../../world/terrain.js';
 import { GRAVITY } from '../../core/config.js';
+import { ENERGY } from '../../../../shared/movement.js';
 import type { SkillId } from '../Player.js';
 
 // ---- Skill tuning ----
@@ -21,15 +22,17 @@ const TL_COOLDOWN = 4.0;     // s after a teleport
 const TL_MAX_LIFE = 6.0;     // held beacon fizzles — can't camp it forever
 const TL_BOUNCE = 0.35;      // restitution — it skitters, doesn't thud
 
-const CLOAK_COST = 20;       // activation — a commitment, not a tap
-const CLOAK_DRAIN = 5;       // per second while invisible
+// Energy economy constants live in shared/movement.ts (ENERGY) — the
+// server shadow sims the same tank to judge jet/skill claims.
+const CLOAK_COST = ENERGY.cloakCost;   // activation — a commitment, not a tap
+const CLOAK_DRAIN = ENERGY.cloakDrain; // per second while invisible
 
-const SHIELD_COST = 20;      // activation — same ante as cloak
-const SHIELD_DRAIN = 5;      // per second while the bubble is up
-export const SHIELD_DMG_PER_ENERGY = 10; // 10 absorbed damage burns 1 energy
+const SHIELD_COST = ENERGY.shieldCost;   // activation — same ante as cloak
+const SHIELD_DRAIN = ENERGY.shieldDrain; // per second while the bubble is up
+export const SHIELD_DMG_PER_ENERGY = ENERGY.shieldDmgPerEnergy;
 
-const MEND_COST = 20;        // activation — same ante
-const MEND_DRAIN = 15;       // per second — mending burns fast, heals slow
+const MEND_COST = ENERGY.mendCost;   // activation — same ante
+const MEND_DRAIN = ENERGY.mendDrain; // per second — mending burns fast, heals slow
 export const MEND_HP_PER_SEC = 12; // server applies this while the flag is up
 
 // Everything a skill needs from Player — mutable refs for pos/vel, plus
