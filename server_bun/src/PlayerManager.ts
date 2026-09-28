@@ -45,6 +45,7 @@ export class PlayerManager {
       consecutiveRejects: 0,
       ping: 0,
       skiing: 0,
+      cloaked: 0,
       history: [],
       forceSendUntil: 0,
       protectedUntil: Date.now() + PlayerManager.SPAWN_PROTECT_MS,
@@ -124,6 +125,7 @@ export class PlayerManager {
       velocity: { ...player.velocity },
       isDead: player.isDead,
       health: player.health,
+      cloaked: player.cloaked,
       team: player.team,
     };
   }
@@ -173,6 +175,7 @@ export class PlayerManager {
     if (target.health <= 0) {
       target.health = 0;
       target.isDead = true;
+      target.cloaked = 0; // death strips the veil — remotes must see the corpse
       target.deaths++;
       target.pendingRespawn = true;
       return { killed: true, newHealth: 0 };
@@ -191,6 +194,7 @@ export class PlayerManager {
     player.velocity = { x: 0, y: 0, z: 0 };
     player.health = CONFIG.playerMaxHealth;
     player.isDead = false;
+    player.cloaked = 0; // a corpse decloaks — respawned cloaked is invisible forever if the toggle died with them
     player.pendingRespawn = false;
     player.lastSeq = 0;
     player.lastValidPosition = { ...spawn };

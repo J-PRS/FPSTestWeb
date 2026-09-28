@@ -260,6 +260,7 @@ export class MessageHandler {
         break;
       case 'inputMove':
         player.skiing = msg.input.ski ? 1 : 0;
+        player.cloaked = msg.input.cloak ? 1 : 0;
         break;
       case 'chat':
         // Room-scoped relay — broadcast() only reaches this room's sockets.

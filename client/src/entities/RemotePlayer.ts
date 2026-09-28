@@ -400,7 +400,7 @@ export class RemotePlayer {
     this.lastServerPosition.copy(this.position);
     this.lastServerUpdateMs = Date.now();
     this._lastUpdateTime = Date.now();
-    this.show();
+    if (!this._cloakHidden) this.show();
   }
 
   // Staleness gate: hide players whose updates stopped arriving (backgrounded
@@ -409,8 +409,18 @@ export class RemotePlayer {
   setStaleHidden(hidden: boolean): void {
     if (hidden === this._staleHidden) return;
     this._staleHidden = hidden;
-    if (hidden) this.hide(); else this.show();
+    if (hidden) this.hide(); else if (!this._cloakHidden) this.show();
   }
+
+  // Server-authoritative cloak — separate flag from staleHidden because a
+  // decloak must restore visibility even while a stale socket stays hidden.
+  private _cloakHidden = false;
+  setCloakHidden(hidden: boolean): void {
+    if (hidden === this._cloakHidden) return;
+    this._cloakHidden = hidden;
+    if (hidden) this.hide(); else if (!this._staleHidden) this.show();
+  }
+  get isCloakHidden(): boolean { return this._cloakHidden; }
 
   // Remote fired a weapon — kick the gun's procedural recoil
   fire(): void {

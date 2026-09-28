@@ -19,6 +19,7 @@ export interface RemotePlayerState {
   health: number;
   ping?: number;
   ski?: number;
+  cloaked?: number;
   team?: 'alpha' | 'bravo';
 }
 
@@ -282,6 +283,7 @@ export class NetworkManager {
         health: u.health,
         ping: u.ping,
         ski: u.ski,
+        cloaked: u.cloaked,
       });
       this.onPlayerUpdate?.(u.playerId, u.position, u.rotation, now, u.velocity);
     }
@@ -302,6 +304,7 @@ export class NetworkManager {
       health: patch.health ?? existing?.health ?? 100,
       ping: patch.ping ?? existing?.ping,
       ski: patch.ski ?? existing?.ski,
+      cloaked: patch.cloaked ?? existing?.cloaked,
       team: patch.team ?? existing?.team,
     });
   }
@@ -437,8 +440,8 @@ export class NetworkManager {
    * input bits themselves change.
    */
   private lastSentInput = '';
-  sendInputMove(input: { forward: number; right: number; jump: number; ski: number }, rotation: { yaw: number; pitch: number }): void {
-    const key = `${input.forward},${input.right},${input.jump},${input.ski}`;
+  sendInputMove(input: { forward: number; right: number; jump: number; ski: number; cloak?: number }, rotation: { yaw: number; pitch: number }): void {
+    const key = `${input.forward},${input.right},${input.jump},${input.ski},${input.cloak ?? 0}`;
     if (key === this.lastSentInput) return;
     this.lastSentInput = key;
     this.send({ type: 'inputMove', input, rotation });
