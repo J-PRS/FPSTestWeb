@@ -31,6 +31,10 @@ export interface WorldState {
   localTeam?: 'alpha' | 'bravo';
   ffaScores: Map<string, number>;
   teamScores: { alpha: number; bravo: number } | null;
+  /** Match-clock deadline (epoch ms) from gameState — HUD countdown. */
+  matchEndsAt: number | null;
+  /** CTF flag status per team — HUD chips (home/carried/dropped). */
+  flagStates: { alpha?: 'home' | 'carried' | 'dropped'; bravo?: 'home' | 'carried' | 'dropped' };
   // Demo playback is a different world than the live one — while set, the
   // wire must not mutate the scene (corrections/projectiles/live balls)
   // and we must not stream recorded camera motion to the server.
@@ -51,6 +55,8 @@ export function createWorldState(): WorldState {
     aoeGizmos: [],
     ffaScores: new Map(),
     teamScores: null,
+    matchEndsAt: null,
+    flagStates: {},
     playbackMode: false,
   };
 }

@@ -62,6 +62,7 @@ function applyRoomInfo(ctx: NetCtx, playerCount: number, roomInfo?: Parameters<N
   deps.world.mode = roomInfo.mode;
   deps.world.localTeam = roomInfo.team;
   if (roomInfo.scores) deps.world.teamScores = roomInfo.scores;
+  if (roomInfo.matchEndsAt) deps.world.matchEndsAt = roomInfo.matchEndsAt;
   if (roomInfo.ffaScores) deps.world.ffaScores = new Map(Object.entries(roomInfo.ffaScores));
   announceRoom(ctx, playerCount, roomInfo);
   // Pickups still lying on the field when we (re)joined.

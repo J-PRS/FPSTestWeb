@@ -257,6 +257,10 @@ export function createGameLoop(deps: GameLoopDeps) {
     hud.setEntityCounts(censusEntities(entities));
     hud.setNuggets(entities.getNuggetsCollected());
     hud.setTimer(deps.waveDirector().elapsed);
+    hud.setMatchStatus(
+      deps.world.matchEndsAt ? deps.world.matchEndsAt - Date.now() : null,
+      deps.world.flagStates,
+    );
     deps.ambientBirds.positions(_birdPosBuf);
     hud.updateMinimap(entities.targets, entities.nuggets, player.pos, player.yaw, _birdPosBuf);
 

@@ -27,6 +27,7 @@ export interface HudDom {
   energyBar: HTMLDivElement;
   scoreboard: HTMLDivElement;
   teamScore: HTMLDivElement; tsA: HTMLElement; tsB: HTMLElement;
+  matchStatus: HTMLDivElement; matchClock: HTMLElement; flagA: HTMLElement; flagB: HTMLElement;
   sbRows: HTMLElement;
 }
 
@@ -249,6 +250,20 @@ export function createHudDom(): HudDom {
       }
       #team-score .a { color: #55aaff; } #team-score .b { color: #ff8855; }
       #team-score .sep { color: #8899aa; margin: 0 10px; font-weight: 400; font-size: 13px; }
+      /* Match meta strip under the score — clock + flag chips. Only shows
+         in matches that declare them (same gate as the score strip). */
+      #match-status {
+        position: fixed; top: 58px; left: 50%; transform: translateX(-50%);
+        display: none; align-items: center; gap: 12px;
+        font-size: 12px; letter-spacing: 0.12em; color: #cdd9e5;
+        font-variant-numeric: tabular-nums;
+      }
+      #match-status .clock { font-weight: 700; color: #fff; }
+      #match-status .clock.late { color: #ff6b6b; animation: resumePulse 1s ease-in-out infinite; }
+      #match-status .fchip { padding: 2px 8px; border-radius: 4px; font-size: 0.62rem; font-weight: 700; }
+      #match-status .fchip.a { color: #55aaff; border: 1px solid rgba(85,170,255,0.4); }
+      #match-status .fchip.b { color: #ff8855; border: 1px solid rgba(255,136,85,0.4); }
+      #match-status .fchip.taken { animation: resumePulse 1s ease-in-out infinite; }
     `;
     document.head.appendChild(style);
 
@@ -285,6 +300,7 @@ export function createHudDom(): HudDom {
       <div id="ent-counts"></div>
       <div id="hud-timer">00:00</div>
       <div id="team-score"><span class="a">ALPHA <b id="ts-a">0</b></span><span class="sep">vs</span><span class="b"><b id="ts-b">0</b> BRAVO</span></div>
+      <div id="match-status"><span class="fchip a" id="flag-a">⚑</span><span class="clock" id="match-clock"></span><span class="fchip b" id="flag-b">⚑</span></div>
       <div id="scoreboard">
         <div class="sb-title">SCOREBOARD</div>
         <table><thead><tr><th>PLAYER</th><th>FRAGS</th><th>PTS</th><th>PING</th></tr></thead><tbody id="sb-rows"></tbody></table>
@@ -317,6 +333,10 @@ export function createHudDom(): HudDom {
     const teamScore = el.querySelector('#team-score')! as HTMLDivElement;
     const tsA = el.querySelector('#ts-a')! as HTMLElement;
     const tsB = el.querySelector('#ts-b')! as HTMLElement;
+    const matchStatus = el.querySelector('#match-status')! as HTMLDivElement;
+    const matchClock = el.querySelector('#match-clock')! as HTMLElement;
+    const flagA = el.querySelector('#flag-a')! as HTMLElement;
+    const flagB = el.querySelector('#flag-b')! as HTMLElement;
     const ballCountEl = el.querySelector('#ent-counts')! as HTMLDivElement;
     const timerEl = el.querySelector('#hud-timer')! as HTMLDivElement;
 
@@ -327,5 +347,6 @@ export function createHudDom(): HudDom {
   return { el, health, energy, ammo, speed, kills, state, ping, loss, jitter,
     fps, crosshair, hitMarker, dmgVignette, dmgDir, dmgDirArc, ghostBar,
     playerList, ballCountEl, timerEl, weaponSlots, healthBar, energyBar,
-    scoreboard, sbRows, teamScore, tsA, tsB };
+    scoreboard, sbRows, teamScore, tsA, tsB,
+    matchStatus, matchClock, flagA, flagB };
 }
