@@ -27,6 +27,8 @@ export interface RoomInfo {
   structures?: { kind: 'box' | 'wall' | 'pillar' | 'ramp'; pos: { x: number; y: number; z: number }; size: { x: number; y: number; z: number }; rotY?: number; team?: 'alpha' | 'bravo' }[];
   /** Arena dome from the map spec — center {x,z} + radius. */
   arena?: { x: number; z: number; radius: number };
+  /** Ambient species population overrides from the map spec. */
+  ambient?: Record<string, number>;
   /** Any kill — Room drops carried flags here. */
   onKill?: (targetId: string, shooterId: string) => void;
   /** Any damage event — Room flinches bot brains here. */
@@ -87,10 +89,12 @@ export class MessageHandler {
     bases: RoomInfo['bases'],
     structures: RoomInfo['structures'],
     arena: RoomInfo['arena'],
+    ambient?: RoomInfo['ambient'],
   ): void {
     this.roomInfo.bases = bases;
     this.roomInfo.structures = structures;
     this.roomInfo.arena = arena;
+    this.roomInfo.ambient = ambient;
   }
 
   /** Server-bot fire: broadcast the visible bolt, then apply the hitscan
@@ -150,7 +154,7 @@ export class MessageHandler {
       scores: this.roomInfo.scores ? { ...this.roomInfo.scores } : undefined,
       ffaScores: this.roomInfo.ffaScores?.(),
       map: this.roomInfo.bases || this.roomInfo.structures || this.roomInfo.arena
-        ? { mode: this.roomInfo.mode || undefined, bases: this.roomInfo.bases, structures: this.roomInfo.structures, arena: this.roomInfo.arena }
+        ? { mode: this.roomInfo.mode || undefined, bases: this.roomInfo.bases, structures: this.roomInfo.structures, arena: this.roomInfo.arena, ambient: this.roomInfo.ambient }
         : undefined,
       flags: this.roomInfo.flags?.(),
       pickups: this.roomInfo.pickups?.(),
@@ -200,7 +204,7 @@ export class MessageHandler {
       scores: this.roomInfo.scores ? { ...this.roomInfo.scores } : undefined,
       ffaScores: this.roomInfo.ffaScores?.(),
       map: this.roomInfo.bases || this.roomInfo.structures || this.roomInfo.arena
-        ? { mode: this.roomInfo.mode || undefined, bases: this.roomInfo.bases, structures: this.roomInfo.structures, arena: this.roomInfo.arena }
+        ? { mode: this.roomInfo.mode || undefined, bases: this.roomInfo.bases, structures: this.roomInfo.structures, arena: this.roomInfo.arena, ambient: this.roomInfo.ambient }
         : undefined,
       flags: this.roomInfo.flags?.(),
       pickups: this.roomInfo.pickups?.(),

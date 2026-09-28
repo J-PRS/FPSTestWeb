@@ -26,6 +26,7 @@ import type { ExplosionTracker } from '../utils/ExplosionTracker.js';
 import type { Terrain } from '../world/terrain.js';
 import { buildStructures, buildArenaDome, clearArenaDome } from '../world/mapStructures.js';
 import type { StructureSpec } from '../../../shared/mapSpec.js';
+import { setAmbientCaps } from './species/ambientCaps.js';
 import { structureColliders } from '../../../shared/ballSim.js';
 import { Ball } from '../entities/balls.js';
 
@@ -529,7 +530,7 @@ export function wireNetworkHandlers(deps: NetDeps): void {
   };
 
   // Register gameState handler (for initial connection and reconnection)
-  networkManager.onGameState = (players: GameStatePlayer[], localPlayerState: LocalPlayerState | undefined, roomInfo?: { room?: string; mode?: string; team?: 'alpha' | 'bravo'; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number>; pickups?: { id: number; pos: { x: number; y: number; z: number }; kind?: 'gem' | 'tag' }[]; flags?: { team: 'alpha' | 'bravo'; pos: { x: number; y: number; z: number }; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]; matchEndsAt?: number; map?: { mode?: string; bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } }; structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number } } }) => {
+  networkManager.onGameState = (players: GameStatePlayer[], localPlayerState: LocalPlayerState | undefined, roomInfo?: { room?: string; mode?: string; team?: 'alpha' | 'bravo'; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number>; pickups?: { id: number; pos: { x: number; y: number; z: number }; kind?: 'gem' | 'tag' }[]; flags?: { team: 'alpha' | 'bravo'; pos: { x: number; y: number; z: number }; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]; matchEndsAt?: number; map?: { mode?: string; bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } }; structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number }; ambient?: Record<string, number> } }) => {
     logger.debug(`gameState received, players: ${players.length}`);
     deps.world.mode = roomInfo?.mode;
     deps.world.localTeam = roomInfo?.team;
@@ -561,6 +562,7 @@ export function wireNetworkHandlers(deps: NetDeps): void {
       const a = roomInfo.map.arena;
       buildArenaDome(a, deps.lazyTerrain().getHeight(a.x, a.z), deps.lazyScene());
     }
+    setAmbientCaps(roomInfo?.map?.ambient);
     // Flags mid-flight when we joined — same path as a flagUpdate broadcast.
     if (roomInfo?.flags?.length) networkManager.onFlagUpdate?.(roomInfo.flags);
 

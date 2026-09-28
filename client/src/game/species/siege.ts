@@ -20,6 +20,7 @@ import { Baneling } from '../../entities/Baneling.js';
 import { Explosion } from '../../effects/explosion.js';
 import { screenShake } from '../../effects/screenShake.js';
 import type { SpeciesCtx } from './context.js';
+import { capFor } from './ambientCaps.js';
 
 // Siege family — things that hurt you at range or punish standing still:
 // turretters (self-lobbing artillery with shootable shells), totems (peak
@@ -40,7 +41,7 @@ export function createSiegeSpecies({ deps, kit, targets }: SpeciesCtx) {
 
   // ---- Turretters (plant-and-shell enemies that lob themselves at you) ----
   function spawnTurretter(uber?: boolean): void {
-    if (atCap(turrets, TURRET_MAX)) return;
+    if (atCap(turrets, capFor('turret', TURRET_MAX))) return;
     const u = uber ?? rollUber();
     const player = deps.lazyPlayer();
     const t = new Turretter(scene, deps.lazyTerrain(), ringPos(TURRET_SPAWN_MIN, TURRET_SPAWN_MAX), u);
@@ -138,7 +139,7 @@ export function createSiegeSpecies({ deps, kit, targets }: SpeciesCtx) {
 
   // Overlord brood: green sac pop — same blast read as a mine, but rolling
   function spawnBaneling(pos: THREE.Vector3, uber = false): void {
-    if (atCap(banelings, BANELING_MAX)) return;
+    if (atCap(banelings, capFor('baneling', BANELING_MAX))) return;
     const b = new Baneling(scene, deps.lazyTerrain(), pos, uber);
     if (b.dead) { b.dispose(); return; }
     const player = deps.lazyPlayer();
@@ -159,7 +160,7 @@ export function createSiegeSpecies({ deps, kit, targets }: SpeciesCtx) {
   function spawnOverlord(uber?: boolean): void {
     // Also called by director events — the species loop isn't the only caller
     if (deps.lazyDemoManager()?.isPlaying) return;
-    if (atCap(overlords, OVERLORD_MAX)) return;
+    if (atCap(overlords, capFor('overlord', OVERLORD_MAX))) return;
     const u = uber ?? rollUber();
     const m = new Overlord(scene, deps.lazyTerrain(), ringPos(OVERLORD_SPAWN_MIN, OVERLORD_SPAWN_MAX), u);
     m.onMineDrop = (overlord) => {
