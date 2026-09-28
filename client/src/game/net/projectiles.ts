@@ -5,7 +5,9 @@ import * as THREE from 'three';
 import * as sfx from '../../core/sfx.js';
 import { Projectile } from '../../projectiles/Projectile.js';
 import { ROCKET_CONFIG, getProjectileConfig } from '../../projectiles/index.js';
-import { WeaponType } from '../../../../shared/weapons.js';
+import { WeaponType, getWeaponStats } from '../../../../shared/weapons.js';
+import { Explosion } from '../../effects/explosion.js';
+import { MELEE_RANGE, ROCKET_RADIUS } from '../../core/config.js';
 import type { NetCtx } from './ctx.js';
 
 export function wireProjectiles(ctx: NetCtx): void {
@@ -74,6 +76,16 @@ export function wireProjectiles(ctx: NetCtx): void {
       const cfg = getProjectileConfig(WeaponType.Lightning);
       const d = new THREE.Vector3(dir.x, dir.y, dir.z).normalize();
       deps.lazyEffects().spawnBeam(origin, origin.clone().addScaledVector(d, 80), cfg?.glowColor ?? 0x8fdcff);
+    }
+    // Melee swing — same small impact flash the puncher sees at the
+    // reach point, so observers read the whiff, not just hear a whoosh.
+    if (dir && weaponType === WeaponType.Melee) {
+      const d = new THREE.Vector3(dir.x, dir.y, dir.z).normalize();
+      const hit = origin.clone().addScaledVector(d, MELEE_RANGE * 0.7);
+      deps.world.explosions.push(new Explosion(
+        deps.lazyScene(), hit, true, 0, deps.lazyTerrain(),
+        (getWeaponStats(WeaponType.Melee).aoeRadius * 0.7) / ROCKET_RADIUS, 0xaaddff,
+      ));
     }
   };
 
