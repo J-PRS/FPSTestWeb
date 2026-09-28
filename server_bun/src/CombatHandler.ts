@@ -386,9 +386,9 @@ export class CombatHandler {
       if (player.healCredit <= 0) return;
       const applied = Math.min(heal, player.healCredit);
       player.healCredit -= applied;
-      player.health = Math.min(CONFIG.playerMaxHealth, player.health + applied);
+      player.health = Math.min(player.maxHealth, player.health + applied);
     } else {
-      player.health = Math.min(CONFIG.playerMaxHealth, player.health + heal);
+      player.health = Math.min(player.maxHealth, player.health + heal);
     }
     player.forceSendUntil = Date.now() + FORCE_SEND_MS;
     logger.info('Player healed', { playerId, heal, health: player.health });

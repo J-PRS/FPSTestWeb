@@ -1,6 +1,7 @@
 import type { ChildLogger } from '../core/Logger.js';
 import type { DemoManager } from '../demo/index.js';
 import { SKILL_ORDER, Player, type SkillId } from '../entities/Player.js';
+import { PERKS, PERK_ORDER, type PerkId } from '../../../shared/perks.js';
 import type { HUD } from './hud.js';
 import { SLOT_WEAPONS } from '../projectiles/index.js';
 import { audio } from '../core/audio.js';
@@ -31,6 +32,7 @@ export function wireOverlayInput(deps: OverlayInputDeps) {
   const slotDrops: Drop[] = [];
   let beltDrop: Drop | null = null;
   let skillDrop: Drop | null = null;
+  let perkDrop: Drop | null = null;
   let sidearmDrop: Drop | null = null;
   let packDrop: Drop | null = null;
   let beltLabel: HTMLElement | null = null;
@@ -171,6 +173,19 @@ export function wireOverlayInput(deps: OverlayInputDeps) {
     );
     skillRow.appendChild(skillDrop.el);
     loadoutBar.appendChild(skillRow);
+
+    const perkRow = document.createElement('div');
+    perkRow.className = 'lo-row';
+    const perkLabel = document.createElement('span');
+    perkLabel.className = 'lo-label';
+    perkLabel.textContent = 'PERK';
+    perkRow.appendChild(perkLabel);
+    perkDrop = mkDrop(
+      PERK_ORDER.map((p) => ({ v: p, label: PERKS[p].name })),
+      (v) => deps.lazyPlayer().setPerk(v as PerkId),
+    );
+    perkRow.appendChild(perkDrop.el);
+    loadoutBar.appendChild(perkRow);
   }
 
   function refreshLoadout(): void {
@@ -178,6 +193,7 @@ export function wireOverlayInput(deps: OverlayInputDeps) {
     slotDrops.forEach((d, i) => d.setValue(String(player.loadout[i])));
     beltDrop?.setValue(player.beltItem);
     skillDrop?.setValue(player.skill);
+    perkDrop?.setValue(player.perk);
     sidearmDrop?.setValue(player.sidearm);
     packDrop?.setValue(player.packItem);
     if (beltLabel) beltLabel.textContent = `BELT (${codeLabel(codeFor('belt'))})`;

@@ -1,6 +1,7 @@
 import type { PlayerState, Vec3, Rotation, GameStatePlayer } from './types.ts';
 import { CONFIG } from './config.ts';
 import { STATUS } from '../../shared/status.ts';
+import { perkMods } from '../../shared/perks.ts';
 
 let internalIdCounter = 0;
 
@@ -20,8 +21,9 @@ export class PlayerManager {
    *  instead of the generic farthest-from-everyone ring. */
   teamBases: { alpha: Vec3; bravo: Vec3 } | null = null;
 
-  addPlayer(playerId: string, team?: 'alpha' | 'bravo'): PlayerState {
+  addPlayer(playerId: string, team?: 'alpha' | 'bravo', perk: string = 'none'): PlayerState {
     const spawn = this.pickSpawnPoint(playerId, team);
+    const maxHealth = CONFIG.playerMaxHealth + perkMods(perk).maxHealth;
 
     const player: PlayerState = {
       id: playerId,
@@ -29,7 +31,9 @@ export class PlayerManager {
       position: { ...spawn },
       rotation: { yaw: 0, pitch: 0 },
       velocity: { x: 0, y: 0, z: 0 },
-      health: CONFIG.playerMaxHealth,
+      health: maxHealth,
+      perk,
+      maxHealth,
       isDead: false,
       team,
       kills: 0,
@@ -178,7 +182,10 @@ export class PlayerManager {
       return { killed: false, newHealth: target.health };
     }
 
-    target.health -= damage;
+    // Perk damage resist — the join-declared table owns the modifier,
+    // the server applies it so the number can't be client-inflated.
+    const incoming = damage * (1 - perkMods(target.perk).damageResist);
+    target.health -= incoming;
     if (target.health <= 0) {
       target.health = 0;
       target.isDead = true;
@@ -199,7 +206,7 @@ export class PlayerManager {
     player.position = { ...spawn };
     player.rotation = { yaw: 0, pitch: 0 };
     player.velocity = { x: 0, y: 0, z: 0 };
-    player.health = CONFIG.playerMaxHealth;
+    player.health = player.maxHealth;
     player.isDead = false;
     player.status = 0; // a corpse carries no channels — toggles died with them
     player.pendingRespawn = false;
