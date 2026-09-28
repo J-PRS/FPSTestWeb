@@ -136,6 +136,10 @@ async function applyTerrain(ctx: NetCtx, file: string): Promise<void> {
       const { httpUrl } = await resolveServerEndpoints();
       await loadHeightfieldBin(`${httpUrl}/maps/${file}`);
       deps.lazyTerrain().reloadHeightmap();
+      // Ball.field captured the previous heightfield OBJECT — hmData is
+      // swapped, not mutated, so the sim would keep predicting bounces on
+      // the old terrain. Re-read it now that the new field is resident.
+      Ball.initNetMode(true);
       terrainActive = file;
       deps.logger.info(`Terrain swapped to maps/${file}`);
     } catch (e) {
