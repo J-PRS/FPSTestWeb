@@ -55,6 +55,14 @@ interface Shadow {
   /** inputMove ordering — change-only events on unordered transports
    *  (RTC/WT datagrams) can land out of order; regressions are dropped. */
   lastInputSeq: number;
+  /** Sim state per consumed input seq, stamped with the sim tick it was
+   *  captured at. A report stamped seq N behind the shadow's consumed seq
+   *  must compare against the journal entry at N replayed to now — the
+   *  live sim applied inputs the report predates (e.g. a jump), which
+   *  reads as a divergence otherwise. Insertion-ordered; bounded. */
+  seqStates: Map<number, { st: MoveState; tick: number }>;
+  /** Number of 1/30 sim quanta the shadow has integrated. */
+  simTicks: number;
   /** Tick substeps accumulate in the client's 1/30 quantum so the shadow
    *  integrates identically to the client sim despite the 50ms room tick. */
   acc: number;
@@ -132,7 +140,7 @@ export class RoomMoveSim {
       energy: ENERGY.max,
       jetDrain: mods.jetDrain, jetRegen: mods.jetRegen, energyRegen: mods.energyRegen,
       jetWanted: false, skillDrainPerSec: 0, skillSuppressRegen: false, lastStatus: 0,
-      lastInputSeq: 0, acc: 0,
+      lastInputSeq: 0, acc: 0, seqStates: new Map(), simTicks: 0,
     });
   }
 
@@ -145,7 +153,15 @@ export class RoomMoveSim {
     const sh = this.shadows.get(playerId);
     if (!sh) return true; // no field → no sim → nothing to order
     if (seq !== undefined && seq <= sh.lastInputSeq) return false;
-    if (seq !== undefined) sh.lastInputSeq = seq;
+    if (seq !== undefined) {
+      sh.lastInputSeq = seq;
+      const s = sh.sim.state;
+      sh.seqStates.set(seq, {
+        st: { pos: { ...s.pos }, vel: { ...s.vel }, yaw: s.yaw, pitch: s.pitch, onGround: s.onGround },
+        tick: sh.simTicks,
+      });
+      if (sh.seqStates.size > 32) sh.seqStates.delete(sh.seqStates.keys().next().value!);
+    }
     if (input.jetHeld !== undefined) sh.jetWanted = input.jetHeld;
     sh.sim.setInput({ ...input, jetHeld: sh.jetWanted && sh.energy > 0 });
 
@@ -205,15 +221,9 @@ export class RoomMoveSim {
     // (inputs still in flight), the client is legitimately ahead by up
     // to ~vel * pending-steps — compare against a probe stepped forward
     // that many ticks with the last-seen input instead of the stale sim.
-    let cmp = s;
-    if (reportInputSeq !== undefined && reportInputSeq > sh.lastInputSeq) {
-      const pending = Math.min(reportInputSeq - sh.lastInputSeq, 8);
-      const probe = (sh.probe ??= new MoveSim(this.surface!, s));
-      probe.setState(s);
-      Object.assign(probe.input, sh.sim.input);
-      for (let i = 0; i < pending; i++) probe.update(1 / 30);
-      cmp = probe.state;
-    }
+    const cmp = reportInputSeq !== undefined
+      ? this.anchoredCompare(sh, s, reportInputSeq)
+      : s;
     const dx = pos.x - cmp.pos.x, dy = pos.y - cmp.pos.y, dz = pos.z - cmp.pos.z;
     const dist = Math.hypot(dx, dy, dz);
     const speed = Math.hypot(s.vel.x, s.vel.z);
@@ -221,8 +231,13 @@ export class RoomMoveSim {
     if (dist <= tol) return null;
 
     sh.divergences++;
+    // A single just-over-tolerance clip is a crest-lip contact-timing
+    // gap — the next correction converges it, count never accumulates.
+    // WARN only on repeats or blow-throughs; count=1 marginal clips are
+    // the known noise floor and stay INFO for later review.
+    const transient = dist < tol * 1.5;
     if (sh.divergences === 1 || sh.divergences % 20 === 0) {
-      logger.warn('Move sim divergence', { playerId, dist: dist.toFixed(1), tol: tol.toFixed(1), count: sh.divergences });
+      logger[transient ? 'info' : 'warn']('Move sim divergence', { playerId, dist: dist.toFixed(1), tol: tol.toFixed(1), count: sh.divergences });
     }
     const now = Date.now();
     if (now - sh.lastCorrection < this.correctMs) return null;
@@ -241,6 +256,31 @@ export class RoomMoveSim {
     return truth;
   }
 
+  /** Pick the sim state a seq-stamped report should be compared against.
+   *  Client ahead (report seq > consumed): probe the live state forward
+   *  by the in-flight input gap. Shadow ahead: replay from the journal
+   *  anchor at/below the report seq up to now — the live sim applied
+   *  inputs the report predates, which reads as divergence otherwise. */
+  private anchoredCompare(sh: Shadow, s: MoveState, reportSeq: number): MoveState {
+    if (reportSeq > sh.lastInputSeq) return this.probeForward(sh, s, reportSeq - sh.lastInputSeq);
+    let anchorSeq: number | undefined;
+    for (const k of sh.seqStates.keys()) {
+      if (k <= reportSeq && (anchorSeq === undefined || k > anchorSeq)) anchorSeq = k;
+    }
+    const anchor = anchorSeq !== undefined ? sh.seqStates.get(anchorSeq) : undefined;
+    if (!anchor) return s;
+    const steps = sh.simTicks - anchor.tick;
+    return steps > 0 ? this.probeForward(sh, anchor.st, steps) : anchor.st;
+  }
+
+  private probeForward(sh: Shadow, from: MoveState, steps: number): MoveState {
+    const probe = (sh.probe ??= new MoveSim(this.surface!, from));
+    probe.setState(from);
+    Object.assign(probe.input, sh.sim.input);
+    for (let i = 0, n = Math.min(steps, 8); i < n; i++) probe.update(1 / 30);
+    return probe.state;
+  }
+
   /** Aim/heading update for entities that never send position reports
    *  (server bots): facing is host truth, not a claim. */
   faceYaw(playerId: string, yaw: number): void {
@@ -257,6 +297,9 @@ export class RoomMoveSim {
       pos: { x: pos.x, y: pos.y, z: pos.z },
       vel: { x: 0, y: 0, z: 0 }, yaw, pitch: s.pitch, onGround: true,
     });
+    // Journal anchors pre-teleport positions — the discarded trajectory
+    // would swallow fresh reports' divergence checks.
+    sh.seqStates.clear();
   }
 
   tick(dt: number): void {
@@ -279,6 +322,7 @@ export class RoomMoveSim {
       while (sh.acc >= 1 / 30) {
         sh.acc -= 1 / 30;
         sh.sim.update(1 / 30);
+        sh.simTicks++;
       }
     }
   }
