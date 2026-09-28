@@ -113,7 +113,8 @@ const speeds = new Map<number, { n: number; slow: number; first: number; last: n
 let events = 0;
 const ws = new WebSocket(WS_URL);
 ws.binaryType = 'arraybuffer';
-ws.onopen = () => ws.send(JSON.stringify({ type: 'join', playerId: NAME }));
+const ROOM = process.env.PVP_ROOM;
+ws.onopen = () => ws.send(JSON.stringify({ type: 'join', playerId: NAME, ...(ROOM ? { room: ROOM } : {}) }));
 ws.onmessage = (ev) => {
   if (typeof ev.data === 'string') {
     try {
