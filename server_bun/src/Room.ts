@@ -20,6 +20,7 @@ import { MODES, pickTeam, makeScores, bank, winner, type ModeId, type ModeSpec, 
 import { ServerBots } from './ServerBots.ts';
 import { RoomFlags } from './RoomFlags.ts';
 import { RoomPickups } from './RoomPickups.ts';
+import { RoomArena } from './RoomArena.ts';
 import type { PlayerState, Vec3 } from './types.ts';
 import type { ServerMessage } from '../../shared/protocol.ts';
 import type { ServerWebSocket } from 'bun';
@@ -141,6 +142,10 @@ export class Room {
     this.sims.push({ tick: (dt) => this.bots.tick(dt) });
     if (this.flags) this.sims.push({ tick: (dt) => this.tickFlags(dt) });
     if (this.pickups) this.sims.push({ tick: (dt) => this.pickups!.tick(dt) });
+    if (this.spec.arena) {
+      const arena = new RoomArena(this, this.spec.arena);
+      this.sims.push({ tick: (dt) => arena.tick(dt) });
+    }
   }
 
   /** Flag tick — called from GameServer's room tick. Captures feed the
