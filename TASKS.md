@@ -48,24 +48,26 @@
   - Update changelog.txt after each task
   - Update architecture.txt for structural changes
   - Maintain TASKS.md for context
-- **Testing Requirements:** `bun test` in server_bun/ (139 tests — rooms, CTF flags, DM scoring, match clock+OT, bot fill, hit claims, rate limits); `npx vitest run` in client/ (48 tests); `_tools/pvptest/` live E2E (`--test*`/`--watch`/`--balls`), `record.ts`+`replay.ts` wire capture/replay
+- **Testing Requirements:** `bun test` in server_bun/ (213 tests); `npx vitest run` in client/ (77 tests); `_tools/pvptest/` live E2E (`fleet.ts` honest-bot swarm w/ journal replay + correction metrics, `--test*`/`--watch`/`--balls`), `record.ts`+`replay.ts` wire capture/replay
 - **Security Considerations:**
   - Server must be authoritative for movement
   - Rate limit critical messages
   - Validate all client inputs
 
 ## Current Task
-- **Objective:** Continuous overhaul toward Tribes-scale MP (see ROADMAP.md — the living plan). Now landed: multi-room match model (maps/<room>.json: mode/balls/spawns/bases/bots/botFill/ballMix/terrain), server-owned teams+score+CTF flags+nugget pickups+DM frags, match clock w/ overtime+60s warn, match journal→/matches, lobby picker + /join quick-play, server bots w/ shared brain, join throttle + identity cap, wire record/replay harness.
+- **Objective:** Continuous overhaul toward Tribes-scale MP (see ROADMAP.md — the living plan). Now landed: multi-room match model (maps/<room>.json: mode/balls/spawns/bases/bots/botFill/ballMix/terrain), server-owned teams+score+CTF flags+nugget pickups+DM frags, match clock w/ OT, match journal→/matches, lobby picker + /join quick-play, server bots w/ shared brain, join throttle + identity cap, wire record/replay harness — plus: bots-as-legal-players (shared MoveSim + BrainCtx senses, energy economy, real projectiles via RoomProjectiles), per-map heightfield pipeline (maps/*.bin → sims + client terrain hot-swap), map rotation, TDM kill-confirmed, server-owned deployables (turret/mine/station/drone), kill feed w/ weapon attribution, RemoteSet entity lifecycle, GameServer → TickLoop + SessionManager split, input-replay corrections + seq-anchored divergence probe + correction grace window.
 
 ## Recently Completed
-- **Explosion rendering:** Additive blending on particles so overlapping layers glow instead of darken
+- **Validation arc (standing priority):** live fleet runs clean — 0 shot rejects, 0 sheep/stuck warns, server bots 100% ski/air; residual divergence class reduced to transient ~10m clips at contact events (self-correcting, non-accumulating)
+- **Fleet honesty:** test bots replicate real client behavior — 30Hz sim cadence, correction snaps + journaled-input replay, knockback impulses, respawn reseat, correction metrics (count + worst pre-snap gap)
+- **Known residual:** authority mode (`FPS_MOVE_AUTHORITY=1`) shows a steady ~2m phase-lag divergence on the synthetic fleet — report-vs-shadow tick offset; corrections bound it. Real clients converge via journal replay.
 - **Demo download:** Right-click on cool shot tiles in ESC menu downloads the `.demo` file (local or from server)
-- **Horizon blending:** Sky sphere camera follow, segment increase, height fog, hard cutoff, unified colors
-- **Fog research report:** `_reports/fog-sky-blending-research.md` documents root causes, Three.js forum findings, techniques used, and ideal future solution
 
 ## Next Tasks
+- **Replay through real netHandlers** — recordings decode offline but never exercise the live client message pipeline; needs a DOM-stub harness (Chat/HUD/sfx deps make it heavy)
+- **WT tier in tests** — untestable locally while dev server holds 9443; needs a distinct test port or a free window
+- **Ops items needing JP's domain+VPS:** TURN server, CA cert for WebTransport — see `_docs/2026-09-28_deploy-netcode-v2.md`
 - **Post-processing fog pass** (medium complexity) — depth buffer → reconstruct position → apply sky-gradient fog per pixel. Eliminates all color sync issues permanently. See `_reports/fog-sky-blending-research.md` for details.
-- **MP team scoring** — modes' shared/teams.ts rules exist client-side; server needs a `teamScore` broadcast to enforce nuggets/ctf/dm scoring for real players.
 - **w4 mortar palette** — authored albedo near-black; normalization lifts but it stays darkest. JP's call.
 - **Remote fire events for anim** — projectileSpawn drives muzzle flash/shoot pose already; richer (weapon type) could pick per-gun poses later.
 - **Remove deprecated files** — `server/` old Node.js server, `.deprecated`/`.old` files — user's call when to remove
