@@ -1,3 +1,4 @@
+2026-09-26  handleMessage switch -> per-type dispatch table; roomEcho() dedupes joiner/spectator gameState builders
 2026-09-26  server fetch (complexity 60) -> ROUTES table + adminRoute/demoRoute/clientLogRoute; new endpoints are table entries
 2026-09-26  validateMessage (complexity 83) -> VALIDATORS dispatch table + shared validateBody/optVec helpers; worst offender gone
 2026-09-26  netHandlers.ts (604 lines) split into game/net/ domain modules — match/flags/pickups/players(combat+lifecycle)/projectiles/world take a shared NetCtx; onGameState split into applyRoomInfo/announceRoom/applyMapSnapshot/restoreLocalPlayer
