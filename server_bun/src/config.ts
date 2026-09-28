@@ -83,6 +83,7 @@ export const CONFIG = {
     teleport: { maxCount: 3, windowMs: 1000 },
     heal: { maxCount: 10, windowMs: 1000 }, // nugget pickups
     creatureHit: { maxCount: 120, windowMs: 1000 }, // chaingun-rate hit claims vs server creatures
+    deploy: { maxCount: 4, windowMs: 1000 }, // plants are deliberate, not per-frame
     chat: { maxCount: 4, windowMs: 1000 }, // human typing speed, generous
     default: { maxCount: 120, windowMs: 1000 },
   } as const,

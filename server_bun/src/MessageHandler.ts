@@ -39,6 +39,10 @@ export interface RoomInfo {
   /** Match-clock deadline (epoch ms) for gameState joins — Room.matchEndsAt.
    *  0 means "not armed yet" (no humans have joined). */
   matchEndsAt?: () => number;
+  /** Deploy claim sink — Room.deployables.handleDeploy. */
+  onDeploy?: (playerId: string, kind: string, pos: Vec3) => void;
+  /** Live deployables for gameState joins — RoomDeployables.snapshot. */
+  deployables?: () => { id: number; owner: string; kind: string; pos: Vec3 }[];
 }
 
 export class MessageHandler {
@@ -149,6 +153,7 @@ export class MessageHandler {
         : undefined,
       flags: this.roomInfo.flags?.(),
       pickups: this.roomInfo.pickups?.(),
+      deployables: this.roomInfo.deployables?.(),
       matchEndsAt: this.roomInfo.matchEndsAt?.() || undefined,
       localPlayerState: {
         position: { ...player.position },
@@ -198,6 +203,7 @@ export class MessageHandler {
         : undefined,
       flags: this.roomInfo.flags?.(),
       pickups: this.roomInfo.pickups?.(),
+      deployables: this.roomInfo.deployables?.(),
       matchEndsAt: this.roomInfo.matchEndsAt?.() || undefined,
     });
     if (this.ballSim) {
@@ -245,6 +251,9 @@ export class MessageHandler {
         break;
       case 'heal':
         this.combat.handleHeal(playerId, msg);
+        break;
+      case 'deploy':
+        this.roomInfo.onDeploy?.(playerId, msg.kind, msg.position);
         break;
       case 'creatureHit':
         this.ballSim?.handleHit(playerId, msg.id, msg.damage, msg.kx, msg.ky, msg.kz);
