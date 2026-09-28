@@ -66,12 +66,15 @@ function wirePlayerCombat(ctx: NetCtx): void {
     }
   };
 
-  // Server correction — three-tier reconciliation (CFWK model):
-  //  <0.5m error  → ignore: the prediction error is sub-visible, snapping
+  // Server correction — CFWK rewind+replay, not a blunt snap:
+  //  <0.5m error  → ignore: the prediction error is sub-visible, replaying
   //                 would be a worse warp than the desync it fixes
-  //  <5m          → blend halfway toward server state (soft nudge)
-  //  ≥5m          → hard snap: genuine desync, take the server state
-  networkManager.onCorrection = (_seq: number, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }) => {
+  //  ≥0.5m        → rewind the sim to the server's state, then replay every
+  //                 journaled input the server hadn't consumed yet (inputSeq)
+  //                 so our converged position already includes what we did
+  //                 during the round trip. No replay data (old server) →
+  //                 hard snap fallback.
+  networkManager.onCorrection = (_seq: number, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }, inputSeq?: number, grounded?: boolean) => {
     // During demo playback corrections fire constantly (recorded positions
     // desync from what the server last accepted) and would warp the replay.
     if (deps.world.playbackMode) return;
@@ -82,22 +85,44 @@ function wirePlayerCombat(ctx: NetCtx): void {
       logger.info(`Correction ignored: ${err.toFixed(2)}m below snap threshold`);
       return;
     }
-    if (err < 5.0) {
-      player.pos.x = position.x + dx * 0.5;
-      player.pos.y = position.y + dy * 0.5;
-      player.pos.z = position.z + dz * 0.5;
+    const journal = inputSeq !== undefined ? nm().inputsAfter(inputSeq) : [];
+    if (journal.length === 0) {
+      player.pos.set(position.x, position.y, position.z);
       player.vel.set(velocity.x, velocity.y, velocity.z);
+      // NEVER touch yaw/pitch — the server echoes our last *accepted*
+      // rotation, which can be seconds stale. Aim is client-authoritative;
+      // snapping it warps the camera 40-60° for no gameplay reason.
+      void rotation;
       player.syncMovement();
-      logger.info(`Correction nudged: ${err.toFixed(2)}m (blended 50%)`);
       return;
     }
-    player.pos.set(position.x, position.y, position.z);
-    player.vel.set(velocity.x, velocity.y, velocity.z);
-    // NEVER touch yaw/pitch — the server echoes our last *accepted*
-    // rotation, which can be seconds stale. Aim is client-authoritative;
-    // snapping it warps the camera 40-60° for no gameplay reason.
-    void rotation;
+    // Rewind the shared sim to server truth. Yaw stays ours — aim is
+    // client-authoritative and the echoed rotation can be seconds stale.
+    player.movement.setState({
+      pos: new THREE.Vector3(position.x, position.y, position.z),
+      vel: new THREE.Vector3(velocity.x, velocity.y, velocity.z),
+      yaw: player.yaw, pitch: player.pitch,
+      onGround: grounded ?? true,
+    });
+    // Entry i's input governed [t_i, t_{i+1}); clamp segment dt so a stale
+    // journal can't produce a giant catch-up step.
+    const now = performance.now();
+    for (let i = 0; i < journal.length; i++) {
+      const e = journal[i];
+      const nextT = i + 1 < journal.length ? journal[i + 1].t : now;
+      player.movement.setInput({
+        forward: e.input.forward, right: e.input.right,
+        jumpPressed: !!e.input.jump, jumpHeld: !!e.input.jump,
+        skiHeld: !!e.input.ski, jetHeld: !!e.input.jet,
+      });
+      player.movement.update(Math.min(0.25, Math.max(0, (nextT - e.t) / 1000)));
+    }
+    const st = player.movement.getState();
+    player.pos.set(st.pos.x, st.pos.y, st.pos.z);
+    player.vel.set(st.vel.x, st.vel.y, st.vel.z);
+    player.onGround = st.onGround;
     player.syncMovement();
+    logger.info(`Correction replayed: ${err.toFixed(2)}m err, ${journal.length} inputs from seq ${inputSeq}`);
   };
 
   // Declared remote teleport (another player's warp): snap the visual —

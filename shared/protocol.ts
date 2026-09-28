@@ -103,7 +103,10 @@ export type ServerMessage =
   | { type: 'snapshot'; players: SnapshotPlayer[]; timestamp: number }
   | { type: 'stateHash'; hash: string; tick: number; playerCount: number; timestamp: number }
   | { type: 'tickUpdate'; updates: TickUpdatePlayer[]; ackSeq?: number }
-  | { type: 'correction'; seq: number; position: Vec3; velocity: Vec3; rotation: Rotation }
+  | { type: 'correction'; seq: number; position: Vec3; velocity: Vec3; rotation: Rotation;
+      /** Last inputMove seq the server consumed — the client replays its
+       *  input journal from here after rewinding to this state. */
+      inputSeq?: number; grounded?: boolean }
   // Relayed declared-teleport — observers snap instead of interpolating
   // across the gap (interp across 50m reads as a rocket-flight glitch)
   | { type: 'teleport'; playerId: string; position: Vec3; velocity: Vec3 }

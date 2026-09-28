@@ -148,7 +148,7 @@ export class RoomMoveSim {
   /** Compare a client position report against the shadow sim. Returns the
    *  sim's own state when the report is past the divergence tolerance —
    *  the caller turns it into a client correction (witness → judge). */
-  reconcile(playerId: string, pos: Vec3Like, yaw: number, vel?: Vec3Like): MoveState | null {
+  reconcile(playerId: string, pos: Vec3Like, yaw: number, vel?: Vec3Like): (MoveState & { inputSeq: number }) | null {
     const sh = this.shadows.get(playerId);
     if (!sh) return null;
     const s = sh.sim.state;
@@ -168,10 +168,13 @@ export class RoomMoveSim {
     // The sim keeps its own position — resyncing onto the rejected report
     // would make the correction we just sent diverge from the next report
     // and ping-pong forever. Convergence comes from the client snapping.
-    const truth: MoveState = {
+    const truth: MoveState & { inputSeq: number } = {
       pos: { x: s.pos.x, y: s.pos.y, z: s.pos.z },
       vel: { x: s.vel.x, y: s.vel.y, z: s.vel.z },
       yaw, pitch: s.pitch, onGround: s.onGround,
+      // Which client input event the sim consumed last — the correction
+      // anchor so the client replays only what the server never saw.
+      inputSeq: sh.lastInputSeq,
     };
     return truth;
   }

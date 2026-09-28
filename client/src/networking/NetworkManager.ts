@@ -73,7 +73,7 @@ export class NetworkManager {
   public onDeployGone: ((id: number) => void) | null = null;
   public onSnapshot: ((players: SnapshotPlayer[], timestamp: number) => void) | null = null;
   public onStateHash: ((hash: string, tick: number, playerCount: number, timestamp: number) => void) | null = null;
-  public onCorrection: ((seq: number, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }) => void) | null = null;
+  public onCorrection: ((seq: number, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }, inputSeq?: number, grounded?: boolean) => void) | null = null;
   public onBallSpawn: ((data: Extract<ServerMessage, { type: 'ballSpawn' }>) => void) | null = null;
   public onBallSegment: ((data: Extract<ServerMessage, { type: 'ballSegment' }>) => void) | null = null;
   public onBallDie: ((data: Extract<ServerMessage, { type: 'ballDie' }>) => void) | null = null;
@@ -382,7 +382,7 @@ export class NetworkManager {
     // Server rejected our position — snap to last valid state
     logger.warn(`Server correction at seq ${data.seq}: pos=(${data.position.x.toFixed(1)},${data.position.y.toFixed(1)},${data.position.z.toFixed(1)})`);
     this.pruneStateHistory(data.seq);
-    this.onCorrection?.(data.seq, data.position, data.velocity, data.rotation);
+    this.onCorrection?.(data.seq, data.position, data.velocity, data.rotation, data.inputSeq, data.grounded);
   }
 
   private handleBinaryMessage(data: Uint8Array): void {
@@ -466,13 +466,30 @@ export class NetworkManager {
    */
   private lastSentInput = '';
   private inputSeq = 0;
+  /** Journal of transmitted input events (change-only stream). On a server
+   *  correction the client rewinds to the echoed state and replays every
+   *  entry with seq > the server's last consumed inputSeq — CFWK-style
+   *  input replay so missed packets converge instead of re-diverging. */
+  private inputJournal: { seq: number; t: number; input: { forward: number; right: number; jump: number; ski: number; jet?: number; status?: number } }[] = [];
+  private static readonly INPUT_JOURNAL_MAX = 128;
+
   sendInputMove(input: { forward: number; right: number; jump: number; ski: number; jet?: number; status?: number }, rotation: { yaw: number; pitch: number }): void {
     const key = `${input.forward},${input.right},${input.jump},${input.ski},${input.jet ?? 0},${input.status ?? 0}`;
     if (key === this.lastSentInput) return;
     this.lastSentInput = key;
     // Change-only stream → unordered transports can deliver stale events
     // after fresh ones; the seq lets the server drop them.
-    this.send({ type: 'inputMove', seq: ++this.inputSeq, input, rotation });
+    const seq = ++this.inputSeq;
+    this.inputJournal.push({ seq, t: performance.now(), input: { ...input } });
+    if (this.inputJournal.length > NetworkManager.INPUT_JOURNAL_MAX) this.inputJournal.shift();
+    this.send({ type: 'inputMove', seq, input, rotation });
+  }
+
+  /** Journal entries with seq > `after` — what the server hadn't consumed
+   *  when it issued a correction. Also prunes consumed entries. */
+  inputsAfter(after: number): { t: number; input: { forward: number; right: number; jump: number; ski: number; jet?: number; status?: number } }[] {
+    while (this.inputJournal.length && this.inputJournal[0].seq <= after) this.inputJournal.shift();
+    return this.inputJournal;
   }
 
   /**
