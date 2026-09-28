@@ -207,6 +207,10 @@ surface. Detailed research lives in `_reports/`; this file is the current truth.
   bombardier/plated/overcharge — maxHealth + jet economy as-declared)
   plus a range-band weapon table: Chaingun <15m, primary mid, Rocket
   >40m. All four phases complete: bots are virtual clients end to end.
+  Observability (2026-10-02): ServerBots stuck watchdog logs 'Bot stuck'
+  at 2m/5s (2.5s for flag carriers) with hunting/carrying/pos — plus the
+  root fix it caught: ski-held-at-standstill skipped ground physics in
+  shared MoveSim, freezing bots (and could freeze a human) on hills.
 - Netcode v2 (2026-09-28): GameTransport seam w/ three real tiers —
   WebTransport (QUIC datagrams, cert-pinned via /wthash) → WebRTC
   DataChannel (game=unreliable binary, ctrl=reliable JSON, /rtcs
