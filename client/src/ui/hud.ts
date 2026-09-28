@@ -137,7 +137,7 @@ export class HUD {
 
   get scoreboardVisible(): boolean { return this.sbVisible; }
 
-  setScoreboardRows(rows: { name: string; frags: number; ping: number | null; self: boolean; dead: boolean }[]): void {
+  setScoreboardRows(rows: { name: string; frags: number; score: number | null; ping: number | null; self: boolean; dead: boolean; team?: 'alpha' | 'bravo' }[]): void {
     this.sbData = rows;
   }
 
@@ -156,7 +156,7 @@ export class HUD {
   private sbRows: HTMLElement;
   private sbVisible = false;
   private sbRefresh = 0;
-  private sbData: { name: string; frags: number; ping: number | null; self: boolean; dead: boolean }[] = [];
+  private sbData: { name: string; frags: number; score: number | null; ping: number | null; self: boolean; dead: boolean; team?: 'alpha' | 'bravo' }[] = [];
 
   showHitMarker(): void {
     this.hitTimer = 0.12;
@@ -215,12 +215,22 @@ export class HUD {
     }
   }
 
-  // Cloak chrome: unlike spectate the combat HUD stays up — this small
-  // marker is the only tell that you're invisible (energy bar shows cost).
+  // Cloak chrome: unlike spectate the combat HUD stays up — the CLOAKED
+  // marker + a cool edge vignette are the tell that you're invisible
+  // (the energy bar shows the drain).
   private cloakHint: HTMLDivElement | null = null;
+  private cloakVignette: HTMLDivElement | null = null;
 
   setCloak(on: boolean): void {
     if (on && !this.cloakHint) {
+      const v = document.createElement('div');
+      v.style.cssText = `
+        position:fixed; inset:0; pointer-events:none; z-index:4;
+        box-shadow: inset 0 0 22vmax rgba(90,120,255,0.5),
+                    inset 0 0 6vmax rgba(140,170,255,0.35);
+      `;
+      document.body.appendChild(v);
+      this.cloakVignette = v;
       const d = document.createElement('div');
       d.style.cssText = `
         position:absolute; top:14px; left:50%; transform:translateX(-50%);
@@ -233,6 +243,8 @@ export class HUD {
     } else if (!on && this.cloakHint) {
       this.cloakHint.remove();
       this.cloakHint = null;
+      this.cloakVignette?.remove();
+      this.cloakVignette = null;
     }
   }
 
@@ -374,16 +386,38 @@ export class HUD {
       this.sbRefresh = 0.25;
       // textContent, not innerHTML — display names will be player-chosen
       // strings; interpolating them raw is a stored-XSS hole in waiting.
-      this.sbRows.replaceChildren(...this.sbData.map(r => {
+      const mkRow = (r: typeof this.sbData[number]) => {
         const tr = document.createElement('tr');
         tr.className = `${r.self ? 'self' : ''}${r.dead ? ' dead' : ''}`;
-        for (const cell of [r.name, String(r.frags), r.ping === null ? '—' : String(Math.round(r.ping))]) {
+        for (const cell of [r.name, String(r.frags), r.score === null ? '—' : String(r.score), r.ping === null ? '—' : String(Math.round(r.ping))]) {
           const td = document.createElement('td');
           td.textContent = cell;
           tr.appendChild(td);
         }
         return tr;
-      }));
+      };
+      // Any row carrying a team → split into sections; otherwise flat FFA.
+      const hasTeams = this.sbData.some(r => r.team);
+      if (!hasTeams) {
+        this.sbRows.replaceChildren(...this.sbData.map(mkRow));
+        return;
+      }
+      const kids: HTMLElement[] = [];
+      for (const team of ['alpha', 'bravo'] as const) {
+        const trs = this.sbData.filter(r => r.team === team).map(mkRow);
+        if (!trs.length) continue;
+        const th = document.createElement('tr');
+        th.className = `sb-team ${team}`;
+        const td = document.createElement('td');
+        td.colSpan = 4;
+        td.textContent = team.toUpperCase();
+        th.appendChild(td);
+        kids.push(th, ...trs);
+      }
+      // Teamless stragglers (spectators, unteamed) under their own header.
+      const rest = this.sbData.filter(r => !r.team);
+      if (rest.length) kids.push(...rest.map(mkRow));
+      this.sbRows.replaceChildren(...kids);
     }
   }
 
