@@ -1,3 +1,5 @@
+2026-10-03 - map rotation + admin reload no longer double-attach terrain (rides applySpec's onTerrain hook); rotation live-verified raindance→crossfire mid-match
+
 2026-10-03 - judge: attachField reseats shadows onto reported server pos — join-window tracking against the boot field no longer spikes a 40m divergence when the map's .bin lands
 
 2026-10-03 - judge: server respawn reseats the move shadow (moveResync wired into CombatHandler.scheduleRespawn) — corpse→spawn no longer reads as divergence; fleet bots now eat knockback impulses + own-respawn reseat like real clients (divergence warns 4→1 per 60s run; remainder is a one-off join-window field-attach race)
