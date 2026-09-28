@@ -75,8 +75,9 @@ export const CONFIG = {
   serverRegion: envStr('FPS_SERVER_REGION', ''),
   // WebTransport tier (netcode v2): separate QUIC/HTTP3 UDP listener.
   // 0 = disabled. Cert/key are PEM file paths — WT has no plaintext mode;
-  // a self-signed pair works in dev (clients pin serverCertificateHashes).
-  wtPort: envNum('FPS_WT_PORT', 0),
+  // certs/dev.{crt,key} are the built-in dev fallback. Default port 9443 so
+  // a plain `bun src/server.ts` serves all three tiers.
+  wtPort: envNum('FPS_WT_PORT', 9443),
   wtCertPath: envStr('FPS_WT_CERT', ''),
   wtKeyPath: envStr('FPS_WT_KEY', ''),
   // WebRTC tier: ICE servers (STUN/TURN) as JSON, e.g.
