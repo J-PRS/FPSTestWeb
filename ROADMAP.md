@@ -198,9 +198,12 @@ surface. Detailed research lives in `_reports/`; this file is the current truth.
   Phase 2 done — RoomProjectiles (shared/projSim.ts swept ballistics)
   gives bots real PlasmaGun shells with velocity lead; hits run through
   botAttack + trusted serverBlast. botFire = creature path + fallback.
-  Phase 3 next: belt+skills+energy intents (STATUS bits, brain energy
-  gating via BrainCtx.energy). Phase 4: per-bot loadouts/roles +
-  range-band weapon select (Rocket past 40m, Chaingun inside 15m).
+  Phase 3 done — brains read the shadow tank (BrainCtx.energy/healthFrac),
+  gate jets on energy, claim real STATUS bits (MEND hurt/unpressured,
+  SHIELD in a fight) through CLIENT_STATUS_MASK, and lob Grenade shells
+  on a ~9s cooldown in mid-range hunts.
+  Phase 4 next: per-bot loadouts/roles + range-band weapon select
+  (Rocket past 40m, Chaingun inside 15m).
 - Netcode v2 (2026-09-28): GameTransport seam w/ three real tiers —
   WebTransport (QUIC datagrams, cert-pinned via /wthash) → WebRTC
   DataChannel (game=unreliable binary, ctrl=reliable JSON, /rtcs
