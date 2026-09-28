@@ -1947,3 +1947,4 @@ sticky launcher (wid 14 / WeaponType 18): glue bombs stick on contact (terrain/s
 server: GET /serverinfo — name/region/tick/occupancy card for future server browser (FPS_SERVER_NAME, FPS_SERVER_REGION)
 client: lobby quick-join adds TDM button
 dev: bun dev restarts server on shared/ or src/ edits (dev-watch.ts wrapper — bun --watch misses shared/)
+server: global player cap FPS_GLOBAL_MAX_PLAYERS (default 128) across all rooms — one process/core bounds total load

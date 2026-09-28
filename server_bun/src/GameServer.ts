@@ -526,7 +526,11 @@ export class GameServer {
       return;
     }
 
-    if (room.playerCount() >= CONFIG.maxPlayers) {
+    // Two caps: the room's own seat count and the process-wide budget —
+    // rooms share one core, so total bodies is the number that matters
+    // for latency, not per-room occupancy.
+    if (room.playerCount() >= CONFIG.maxPlayers ||
+        (CONFIG.globalMaxPlayers > 0 && this.totalPlayers() >= CONFIG.globalMaxPlayers)) {
       ws.close(1013, 'Server full');
       return;
     }

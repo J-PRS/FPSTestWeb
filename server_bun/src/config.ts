@@ -23,6 +23,9 @@ export const CONFIG = {
   port: envNum('FPS_PORT', 8000),
   tickRate: envNum('FPS_TICK_HZ', 30),
   maxPlayers: envNum('FPS_MAX_PLAYERS', 32),
+  // Whole-server cap across ALL rooms — rooms share one process/core, so
+  // a per-room limit alone can't bound real load. 0 = unlimited.
+  globalMaxPlayers: envNum('FPS_GLOBAL_MAX_PLAYERS', 128),
 
   playerMaxHealth: 100,
   respawnDelayMs: 3000,
