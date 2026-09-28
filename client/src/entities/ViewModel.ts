@@ -68,7 +68,7 @@ export class ViewModel {
   private static readonly MUZZLE_Z: Record<number, number> = {
     [WeaponType.Rocket]: -0.44, [WeaponType.Disc]: -0.46, [WeaponType.DiscPull]: -0.46, // just past the fork's prong tips
     [WeaponType.Chaingun]: -0.55, // just past the barrel cluster tips [WeaponType.Mortar]: -0.28, [WeaponType.GrenadeLauncher]: -0.42,
-    [WeaponType.Flak]: -0.28, [WeaponType.PlasmaCannon]: -0.28, [WeaponType.PlasmaGun]: -0.26,
+    [WeaponType.Flak]: -0.28, [WeaponType.PlasmaCannon]: -0.35, [WeaponType.PlasmaGun]: -0.26,
     [WeaponType.Railgun]: -0.43,
     [WeaponType.Shotgun]: -0.41, [WeaponType.Cannon]: -0.53,
     [WeaponType.RocketLauncher]: -0.44, // just past the warhead tip

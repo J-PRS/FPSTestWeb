@@ -52,6 +52,12 @@ function wirePlayerCombat(ctx: NetCtx): void {
     logger.info(`Remote player ${targetId} hit for ${damage} damage by ${shooterId} (health: ${health})`);
     deps.lazyHealthBarSystem().spawn(targetId, damage, health);
     deps.world.remotePlayers.get(targetId)?.flinch();
+    // Server-confirmed hit on a remote: flash the marker even when client
+    // prediction didn't (e.g. lag-comp rewound the victim into the shot).
+    if (shooterId === nm().getLocalPlayerId()) {
+      deps.lazyHud().showHitMarker();
+      sfx.hitMarker(false);
+    }
   };
 
   // Server tells us to apply knockback/pull to our local player

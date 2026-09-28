@@ -38,3 +38,37 @@ describe('BotBrain pathing', () => {
     expect(Math.abs(out.dest.x)).toBeGreaterThan(5);
   });
 });
+
+describe('BotBrain senses', () => {
+  const enemy = (x: number, z: number): BrainCtx['enemies'] => [
+    { id: 'e1', pos: { x, y: 1.6, z }, vel: { x: 0, y: 0, z: 0 }, alive: true },
+  ];
+
+  it('acquires and fires on a visible enemy', () => {
+    const b = new BotBrain({ x: 0, y: 0, z: 0 });
+    const pos = { x: 0, y: 1.6, z: 0 };
+    const out = b.think(0.4, ctx(pos, flat, { enemies: enemy(20, 0) }));
+    expect(out.fire).toBeDefined();
+    expect(out.fire!.targetId).toBe('e1');
+  });
+
+  it('ignores an enemy behind a hill — no wallhack', () => {
+    const b = new BotBrain({ x: 0, y: 0, z: 0 });
+    const pos = { x: 0, y: 1.6, z: 0 };
+    // Ridge 30m tall spanning x∈(10,30) — the eye line eats it
+    const ridge = (x: number) => (x > 10 && x < 30 ? 30 : 0);
+    const out = b.think(0.4, ctx(pos, ridge, { enemies: enemy(50, 0) }));
+    expect(out.fire).toBeUndefined();
+    // No hunt → no approach toward the target either
+    expect(out.dest.x).toBeLessThan(10);
+  });
+
+  it('holds a good spot instead of orbiting when position-picking', () => {
+    const b = new BotBrain({ x: 0, y: 0, z: 0 });
+    const pos = { x: 0, y: 1.6, z: 0 };
+    // Enemy at mid-range on flat ground — "here" should score well enough
+    // that the inertia bonus keeps it (or picks a valid nearby spot).
+    const out = b.think(0.4, ctx(pos, flat, { enemies: enemy(15, 0) }));
+    expect(Math.hypot(out.dest.x - pos.x, out.dest.z - pos.z)).toBeLessThanOrEqual(14);
+  });
+});

@@ -115,6 +115,7 @@ export class BotBrain {
   private readonly orbitClose = ORBIT_TOO_CLOSE * (0.85 + Math.random() * 0.3);
   private readonly wanderlust = 0.7 + Math.random() * 0.6;
   private readonly temper = 0.7 + Math.random() * 0.6; // fire-cadence scale
+  private fightPos: BotVec | null = null; // combat spot from the last replan
 
   /** Getting shot makes the bot recoil — call from the damage funnel. */
   takeHit(from: BotVec): void {
@@ -145,11 +146,19 @@ export class BotBrain {
         this.lastSeen = { ...best.pos };
         this.lastSeenVel = { ...best.vel };
         this.lastSeenAt = now;
-      } else if (ctx.objective) {
+      }
+      // Combat replan rides the slow cadence — the ring eval is the
+      // expensive part (LOS per candidate per enemy) and 3Hz is plenty
+      // for position keeping.
+      this.fightPos = null;
+      if (best && dist3(pos, best.pos) <= this.orbitFar) {
+        this.fightPos = this.pickFightPos(ctx, pos, best);
+      }
+      if (!best && ctx.objective) {
         this.goal = { ...ctx.objective };
-      } else if (ctx.pickup) {
+      } else if (!best && ctx.pickup) {
         this.goal = { ...ctx.pickup };
-      } else if (this.wanderT <= 0 || distSq(pos, this.wanderWp) < 9) {
+      } else if (!best && (this.wanderT <= 0 || distSq(pos, this.wanderWp) < 9)) {
         this.wanderT = (3 + Math.random() * 4) / this.wanderlust;
         const a = Math.random() * Math.PI * 2;
         const r = (15 + Math.random() * 40) * this.wanderlust;
@@ -179,25 +188,9 @@ export class BotBrain {
       if (d > this.orbitFar) {
         dest = { ...t.pos };
       } else {
-        // Position-picking (Killzone-style): score a ring of candidate
-        // spots by LOS to the target, preferred range band, exposure to
-        // the rest of the enemy roster, and how climbable the ground is —
-        // then let steering route there. Standing still stays an option:
-        // the bot's own spot is candidate 0 with an inertia bonus.
-        const mid = (this.orbitFar + this.orbitClose) * 0.5;
-        const g0 = ctx.groundY(pos.x, pos.z);
-        let bx = pos.x, bz = pos.z, bs = this.scorePos(ctx, pos, pos, t, mid, g0) + 0.4;
-        for (let i = 0; i < 12; i++) {
-          const a = (i / 12) * Math.PI * 2;
-          const cx = pos.x + Math.cos(a) * 10, cz = pos.z + Math.sin(a) * 10;
-          const cy = ctx.groundY(cx, cz);
-          if (cy - g0 > 4) continue; // can't stand there
-          const s = this.scorePos(ctx, pos, { x: cx, y: cy + BOT_EYE, z: cz }, t, mid, cy);
-          if (s > bs) { bs = s; bx = cx; bz = cz; }
-        }
-        dest = Math.hypot(bx - pos.x, bz - pos.z) < 3
-          ? { ...pos } // best move is no move — hold and shoot
-          : { x: bx, y: pos.y, z: bz };
+        // fightPos comes from the last replan tick — no pick yet (or the
+        // pick was "hold") means stand and shoot.
+        dest = this.fightPos ?? { ...pos };
       }
     } else {
       dest = this.goal;
@@ -249,6 +242,28 @@ export class BotBrain {
     }
 
     return { dest, fire };
+  }
+
+  /** Killzone-style position pick: score a ring of candidate spots by
+   *  LOS to the target, preferred range band, exposure to the rest of
+   *  the enemy roster, and climbable ground. Standing still is candidate
+   *  0 with an inertia bonus, so a good spot is kept instead of orbiting
+   *  for orbit's sake. Returns null to hold position. */
+  private pickFightPos(ctx: BrainCtx, pos: BotVec, t: BotEnemy): BotVec | null {
+    const mid = (this.orbitFar + this.orbitClose) * 0.5;
+    const g0 = ctx.groundY(pos.x, pos.z);
+    let bx = pos.x, bz = pos.z;
+    let bs = this.scorePos(ctx, pos, pos, t, mid, g0) + 0.4;
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2;
+      const cx = pos.x + Math.cos(a) * 10, cz = pos.z + Math.sin(a) * 10;
+      const cy = ctx.groundY(cx, cz);
+      if (cy - g0 > 4) continue; // can't stand there
+      const s = this.scorePos(ctx, pos, { x: cx, y: cy + BOT_EYE, z: cz }, t, mid, cy);
+      if (s > bs) { bs = s; bx = cx; bz = cz; }
+    }
+    if (Math.hypot(bx - pos.x, bz - pos.z) < 3) return null;
+    return { x: bx, y: pos.y, z: bz };
   }
 
   /** Score one candidate position for the combat picker: LOS to the hunt

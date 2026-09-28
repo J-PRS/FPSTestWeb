@@ -273,7 +273,7 @@ export class Deployables {
     if (newest) this.byId.set(id, newest);
   }
 
-  remoteSpawn(id: number, _owner: string, kind: DeployKind, pos: { x: number; y: number; z: number }): void {
+  remoteSpawn(id: number, owner: string, kind: DeployKind, pos: { x: number; y: number; z: number }): void {
     if (this.remote.has(id)) return;
     const terrain = this.deps.lazyTerrain();
     const at = new THREE.Vector3(pos.x, pos.y, pos.z);

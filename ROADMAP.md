@@ -187,6 +187,9 @@ surface. Detailed research lives in `_reports/`; this file is the current truth.
   through the shared AOE funnel (falloff, knockback, friendly gate,
   owner splash); mineBoom broadcast for blast FX. Stations heal
   friendlies in a 9m envelope at 9%/s of maxHealth.
+- Drones server-side (2026-10-01): escort shadow anchors to owner +2.5m,
+  35m scan, 1.6s plink for 9 via turretAttack; dies with its owner.
+  Deployables arc complete: all four kinds server-owned end-to-end.
 - Netcode v2 (2026-09-28): GameTransport seam w/ three real tiers —
   WebTransport (QUIC datagrams, cert-pinned via /wthash) → WebRTC
   DataChannel (game=unreliable binary, ctrl=reliable JSON, /rtcs
