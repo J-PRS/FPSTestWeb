@@ -86,6 +86,7 @@ export class Room {
         winAt: this.modeSpec?.winAt,
         ffaScores: () => Object.fromEntries(this.ffaScores),
         bases: this.spec.bases,
+        structures: this.spec.structures,
         onKill: (pid, shooter) => this.onKill(pid, shooter),
         onHit: (pid, shooter) => this.bots.flinch(pid, shooter),
         flags: () => this.flags?.snapshot() ?? [],

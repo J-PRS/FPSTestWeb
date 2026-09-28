@@ -38,6 +38,20 @@ export interface MapSpec {
   /** Heightmap filename under maps/ (e.g. "ravine.bin") — a different
    *  terrain for this room's BallSim. Absent = the server's default field. */
   terrain?: string;
+  /** Static structures — axis-aligned boxes the server echoes into
+   *  gameState so every client builds the same base compounds/cover.
+   *  `kind` selects the renderer; `pos` is the piece's center. */
+  structures?: StructureSpec[];
+}
+
+export interface StructureSpec {
+  kind: 'box' | 'wall' | 'pillar' | 'ramp';
+  pos: Vec3like;
+  size: Vec3like;
+  /** Y-rotation in radians (ramps/boxes), default 0. */
+  rotY?: number;
+  /** Team tint — 'alpha'|'bravo' bases color differently, else neutral. */
+  team?: 'alpha' | 'bravo';
 }
 
 export interface Vec3like { x: number; y: number; z: number }
@@ -97,7 +111,44 @@ export function resolveMapSpec(raw: unknown): MapSpec {
         && /^[\w-]{1,64}\.bin$/.test((src as { terrain: string }).terrain)
       ? (src as { terrain: string }).terrain
       : undefined,
+    structures: parseStructures((src as { structures?: unknown }).structures),
   };
+}
+
+const STRUCT_KINDS = new Set(['box', 'wall', 'pillar', 'ramp']);
+/** Validated structure list — bad entries dropped, sane clamps, cap 256. */
+function parseStructures(raw: unknown): StructureSpec[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const isVec = (s: unknown): s is Vec3like =>
+    !!s && typeof s === 'object' &&
+    Number.isFinite((s as Vec3like).x) &&
+    Number.isFinite((s as Vec3like).y) &&
+    Number.isFinite((s as Vec3like).z);
+  const out: StructureSpec[] = [];
+  for (const s of raw) {
+    if (!s || typeof s !== 'object') continue;
+    const o = s as Record<string, unknown>;
+    if (typeof o.kind !== 'string' || !STRUCT_KINDS.has(o.kind)) continue;
+    if (!isVec(o.pos) || !isVec(o.size)) continue;
+    const size = {
+      x: Math.max(0.2, Math.min(120, o.size.x)),
+      y: Math.max(0.2, Math.min(60, o.size.y)),
+      z: Math.max(0.2, Math.min(120, o.size.z)),
+    };
+    const pos = {
+      x: Math.max(-2000, Math.min(2000, o.pos.x)),
+      y: Math.max(-100, Math.min(300, o.pos.y)),
+      z: Math.max(-2000, Math.min(2000, o.pos.z)),
+    };
+    out.push({
+      kind: o.kind as StructureSpec['kind'],
+      pos, size,
+      rotY: typeof o.rotY === 'number' && Number.isFinite(o.rotY) ? o.rotY : undefined,
+      team: o.team === 'alpha' || o.team === 'bravo' ? o.team : undefined,
+    });
+    if (out.length >= 256) break;
+  }
+  return out.length ? out : undefined;
 }
 
 /** Four non-negative weights, normalized. Anything malformed → undefined
