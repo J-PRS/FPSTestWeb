@@ -168,6 +168,16 @@ async function demoRoute(req: Request, url: URL): Promise<Response> {
   return corsResponse('Not found', { status: 404 });
 }
 
+// Heightfield distribution — gameState names maps/<file>.bin; clients fetch
+// the same bytes the room's sims consume so terrain matches bit-for-bit.
+async function mapBinRoute(url: URL): Promise<Response> {
+  const file = url.pathname.slice('/maps/'.length);
+  if (!/^[\w-]{1,64}\.bin$/.test(file)) return corsResponse('Not found', { status: 404 });
+  const f = Bun.file(`${import.meta.dir}/../../maps/${file}`);
+  if (!(await f.exists())) return corsResponse('Not found', { status: 404 });
+  return corsResponse(f, { headers: { 'Content-Type': 'application/octet-stream' } });
+}
+
 ROUTES['/demos'] = async () => {
   const list = await demoStorage.listDemos();
   logger.info('Demo list requested', { count: list.length, top: list[0]?.projectileLifetime.toFixed(2) ?? 'none' });
@@ -278,6 +288,7 @@ const server = Bun.serve<WebSocketData>({
     // Prefix routes — path carries params (admin query args, demo filename).
     if (url.pathname.startsWith('/admin/')) return adminRoute(req, url);
     if (url.pathname.startsWith('/demos/')) return demoRoute(req, url);
+    if (url.pathname.startsWith('/maps/')) return mapBinRoute(url);
     if (url.pathname === '/client-log' && req.method === 'POST') return clientLogRoute(req);
 
     return corsResponse('Not found', { status: 404 });

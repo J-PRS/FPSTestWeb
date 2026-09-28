@@ -30,6 +30,9 @@ export interface RoomInfo {
   arena?: { x: number; z: number; radius: number };
   /** Ambient species population overrides from the map spec. */
   ambient?: Record<string, number>;
+  /** Heightfield file (maps/<name>.bin) — echoed on gameState so clients
+   *  fetch the identical terrain the server's sims run on. */
+  terrain?: string;
   /** Any kill — Room drops carried flags here. */
   onKill?: (targetId: string, shooterId: string) => void;
   /** Any damage event — Room flinches bot brains here. */
@@ -150,11 +153,13 @@ export class MessageHandler {
     structures: RoomInfo['structures'],
     arena: RoomInfo['arena'],
     ambient?: RoomInfo['ambient'],
+    terrain?: RoomInfo['terrain'],
   ): void {
     this.roomInfo.bases = bases;
     this.roomInfo.structures = structures;
     this.roomInfo.arena = arena;
     this.roomInfo.ambient = ambient;
+    this.roomInfo.terrain = terrain;
   }
 
   /** Server-bot fire: broadcast the visible bolt, then apply the hitscan
@@ -201,8 +206,8 @@ export class MessageHandler {
       mode: this.roomInfo.mode || undefined,
       scores: this.roomInfo.scores ? { ...this.roomInfo.scores } : undefined,
       ffaScores: this.roomInfo.ffaScores?.(),
-      map: this.roomInfo.bases || this.roomInfo.structures || this.roomInfo.arena
-        ? { mode: this.roomInfo.mode || undefined, bases: this.roomInfo.bases, structures: this.roomInfo.structures, arena: this.roomInfo.arena, ambient: this.roomInfo.ambient }
+      map: this.roomInfo.bases || this.roomInfo.structures || this.roomInfo.arena || this.roomInfo.terrain
+        ? { mode: this.roomInfo.mode || undefined, bases: this.roomInfo.bases, structures: this.roomInfo.structures, arena: this.roomInfo.arena, ambient: this.roomInfo.ambient, terrain: this.roomInfo.terrain }
         : undefined,
       flags: this.roomInfo.flags?.(),
       pickups: this.roomInfo.pickups?.(),

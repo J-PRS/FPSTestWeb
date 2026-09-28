@@ -163,7 +163,11 @@ export class GameServer {
       room.onMatchEnd = (rec) => this.recordMatchEnd(rec);
       if (spec?.terrain) {
         const r = room;
-        this.loadField(spec.terrain).then(f => { if (f && this.rooms.get(name) === r) r.ballSim.attachField(f); });
+        this.loadField(spec.terrain).then(f => {
+          if (!f || this.rooms.get(name) !== r) return;
+          r.ballSim.attachField(f);
+          r.moveSim.attachField(f);
+        });
       }
       this.rooms.set(name, room);
       logger.info('Room created', { room: name, mode: room.mode });
@@ -361,6 +365,13 @@ export class GameServer {
     const spec = this.loadMapSpec(name);
     if (!spec) return 'no-spec';
     room.applySpec(spec);
+    if (spec.terrain) {
+      this.loadField(spec.terrain).then(f => {
+        if (!f || this.rooms.get(name) !== room) return;
+        room.ballSim.attachField(f);
+        room.moveSim.attachField(f);
+      });
+    }
     logger.info('Room spec reloaded', { room: name });
     return 'ok';
   }

@@ -148,6 +148,27 @@ export class Terrain {
     }
   }
 
+  /** Hot-swap the heightfield (map change via gameState): re-upload the
+   *  displacement texture and point every level's material at it. Positions
+   *  already in flight resolve against the new field on the next sample —
+   *  callers reseat the player right after to avoid a frame under terrain. */
+  reloadHeightmap(): void {
+    const hm = getHeightmapData();
+    if (!hm) return;
+    this.heightTexture.dispose();
+    this.heightTexture = new THREE.DataTexture(
+      hm.data, hm.size, hm.size, THREE.RGBAFormat, THREE.UnsignedByteType
+    );
+    this.heightTexture.wrapS = THREE.RepeatWrapping;
+    this.heightTexture.wrapT = THREE.RepeatWrapping;
+    this.heightTexture.magFilter = THREE.LinearFilter;
+    this.heightTexture.minFilter = THREE.LinearFilter;
+    this.heightTexture.needsUpdate = true;
+    for (const level of this.levels) {
+      level.material.uniforms.heightMap.value = this.heightTexture;
+    }
+  }
+
   update(px: number, pz: number): void {
     for (let i = 0; i < this.levels.length; i++) {
       const level = this.levels[i];

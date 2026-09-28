@@ -66,7 +66,7 @@ export class NetworkManager {
   public onFfaScore: ((scores: Record<string, number>, winAt: number) => void) | null = null;
   public onFfaMatchEnd: ((winner: string, scores: Record<string, number>) => void) | null = null;
   /** Admin hot-reload — structures/arena changed mid-match; rebuild them. */
-  public onMapUpdate: ((map: { bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } }; structures?: import('../../../shared/mapSpec.js').StructureSpec[]; arena?: { x: number; z: number; radius: number } | null }) => void) | null = null;
+  public onMapUpdate: ((map: { bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } }; structures?: import('../../../shared/mapSpec.js').StructureSpec[]; arena?: { x: number; z: number; radius: number } | null; terrain?: string }) => void) | null = null;
   // Server-owned deployables — rendered as dumb visuals client-side;
   // the sim (firing/damage) stays authoritative on the server.
   public onDeploySpawn: ((id: number, owner: string, kind: 'turret' | 'mine' | 'station' | 'drone', pos: { x: number; y: number; z: number }, team?: 'alpha' | 'bravo') => void) | null = null;

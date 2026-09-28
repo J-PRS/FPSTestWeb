@@ -14,6 +14,34 @@ const CPU_STEP = 5.0;
 let hmData: Uint8ClampedArray | null = null;
 let hmSize = 0;
 
+/** Server-format heightmap: 8-byte LE header (w,h) + uint8 grid, stride 1.
+ *  This is what maps/<name>.bin carries — same bytes the server's
+ *  BallSim/RoomMoveSim parse, so client prediction and server truth sample
+ *  the identical field. */
+export async function loadHeightfieldBin(url: string): Promise<void> {
+  const buf = new Uint8Array(await (await fetch(url)).arrayBuffer());
+  const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+  const w = view.getUint32(0, true);
+  const h = view.getUint32(4, true);
+  if (w !== h || w < 2 || buf.byteLength !== 8 + w * h) {
+    throw new Error(`Bad heightfield bin: ${w}x${h}, ${buf.byteLength} bytes (${url})`);
+  }
+  const src = buf.subarray(8);
+  const rgba = new Uint8ClampedArray(w * h * 4);
+  for (let i = 0; i < w * h; i++) {
+    rgba[i * 4] = src[i]!;
+    rgba[i * 4 + 1] = src[i]!;
+    rgba[i * 4 + 2] = src[i]!;
+    rgba[i * 4 + 3] = 255;
+  }
+  hmData = rgba;
+  hmSize = w;
+}
+
+/** Swap the active field after a reload — Terrain picks it up on
+ *  reloadHeightmap(). */
+export function heightmapSize(): number { return hmSize; }
+
 export async function loadHeightmap(url: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const img = new Image();
