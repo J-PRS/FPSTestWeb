@@ -2,7 +2,6 @@ import * as THREE from 'three';
 import { Ball, type Targetable } from '../entities/balls.js';
 import type { Nugget } from '../entities/Nugget.js';
 import { settings } from '../core/settings.js';
-import { urlParams } from '../core/params.js';
 
 /**
  * Radar minimap — rotating, player-centered. Up on the map is where the
@@ -23,10 +22,6 @@ export class Minimap {
   private readonly _map: [number, number] = [0, 0];
 
   constructor(parent: HTMLElement) {
-    // ?minimap=cross|corner — persists to the fps-minimap setting
-    const qp = urlParams.get('minimap');
-    if (qp === 'cross' || qp === 'crosshair') settings.set('fps-minimap', 1);
-    else if (qp === 'corner') settings.set('fps-minimap', 0);
     this.cross = settings.get('fps-minimap') === 1;
 
     this.canvas = document.createElement('canvas');

@@ -27,6 +27,29 @@ describe('PlayerManager', () => {
     expect(result.newHealth).toBe(70);
   });
 
+  it('energy shield absorbs hits without touching health', () => {
+    const pm = new PlayerManager();
+    pm.addPlayer('alice'); pm.breakShield('alice');
+    pm.getPlayer('alice')!.shielded = 1;
+    const result = pm.applyDamage('alice', 50);
+    expect(result.killed).toBe(false);
+    expect(result.newHealth).toBe(100);
+    // Flag off → damage lands normally
+    pm.getPlayer('alice')!.shielded = 0;
+    expect(pm.applyDamage('alice', 50).newHealth).toBe(50);
+  });
+
+  it('death clears the shield flag', () => {
+    const pm = new PlayerManager();
+    pm.addPlayer('alice'); pm.breakShield('alice');
+    // Kill once to establish the flag is unset on death, then flag back on
+    pm.applyDamage('alice', 100);
+    const p = pm.getPlayer('alice')!;
+    p.shielded = 1;
+    pm.respawnPlayer('alice');
+    expect(p.shielded).toBe(0);
+  });
+
   it('kills player when health reaches 0', () => {
     const pm = new PlayerManager();
     pm.addPlayer('alice'); pm.breakShield('alice');

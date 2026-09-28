@@ -194,6 +194,7 @@ async function init(): Promise<void> {
     lazyHud: () => hud,
     lazyNetworkManager: () => networkManager,
     lazyDemoManager: () => demoManager,
+    lazyViewModel: () => viewModel,
     logger,
     world,
     updateBallsPlayback: (dt) => demoLifecycle.updateBallsPlayback(dt),
@@ -203,7 +204,6 @@ async function init(): Promise<void> {
     lazyCombat: () => combat,
     deployEnemyBots: () => teamBots?.enemyBotsForLocal() ?? [],
     deployDamageBot: (id, dmg, from) => teamBots?.hit(id, dmg, from, 'local') ?? false,
-    deployNotify: (text) => fragMessages.show(text),
   });
 
   // Hybrid wave director — scripted beats + a credit pool spent on an
@@ -258,9 +258,14 @@ async function init(): Promise<void> {
     // Died mid-flight: the death path owns the HUD — don't resurface it
     else { hud.setSpectatorHint(false); if (!player.isDead) hud.show(); }
   };
-  player.onCloak = (on) => hud.setCloak(on);
+  player.onCloak = (on) => { hud.setCloak(on); viewModel.setGhost(on); };
+  // Shield: HUD chip + cyan vignette, viewmodel charge glow, synth cues.
+  player.onShield = (on) => {
+    hud.setShield(on);
+    viewModel.setShield(on);
+    if (on) sfx.shieldOn(); else sfx.shieldBreak();
+  };
   player.onDeploy = () => entities.deployables.deploy();
-  player.onCycleDeploy = () => entities.deployables.cycle();
   profiler.markTime('playerCreated');
 
   // Offline death path — the server's kill+respawn round-trip replicated
@@ -342,7 +347,6 @@ async function init(): Promise<void> {
       mode === 'dm' ? { alpha: 5, bravo: 4 } : { alpha: 4, bravo: 5 },
       mode,
     );
-    hud.setTeamScore(0, 0);
   }
 
   // ?yaw/?pitch/?dummy headless-screenshot hooks — see game/debugHooks.ts
@@ -416,6 +420,7 @@ async function init(): Promise<void> {
   });
 
   hud = new HUD();
+  if (mode === 'nuggets' || mode === 'ctf' || mode === 'dm') hud.setTeamScore(0, 0);
   healthBarSystem = new HealthBarSystem(camera);
   damageNumberManager = new DamageNumberManager(scene);
   profiler.markTime('hudCreated');
@@ -467,6 +472,7 @@ async function init(): Promise<void> {
   // Auto-start demo recording so cool shots are captured seamlessly
   demoManager?.startRecording();
   demoLifecycle.snapshotExistingBallsForRecording(entities.recordBallKeyframes);
+
 
   // Frame loop — everything mutable is passed via deps getters
   gameLoop = createGameLoop({

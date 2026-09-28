@@ -14,3 +14,4 @@ __pycache__
 server_bun/demos/*.demo
 logs/
 *.jsonl
+client/nul.old

@@ -36,6 +36,9 @@ const THROW_DIP_ROLL = 0.18; // rolls outward, weapon tips to the right
 // Weapon switch: quick lower, swap model at the bottom, raise back up
 const SWITCH_LOWER_TIME = 0.12;
 const SWITCH_RAISE_TIME = 0.16;
+// Sidearm hold-out gates its fire on the raise completing — a "pull it out
+// and it's live" beat, same window the viewmodel spends drawing the gun.
+export const SIDEARM_DRAW_TIME = SWITCH_LOWER_TIME + SWITCH_RAISE_TIME;
 const SWITCH_DIP_Y = -0.34;
 const SWITCH_DIP_ROT = -0.35; // muzzle tips down as it holsters
 
@@ -68,6 +71,7 @@ export class ViewModel {
     [WeaponType.Shotgun]: -0.41, [WeaponType.Cannon]: -0.53,
     [WeaponType.RocketLauncher]: -0.44, // just past the warhead tip
     [WeaponType.Lightning]: -0.42, // emitter ball at the prong tips
+    [WeaponType.Sticky]: -0.40,
   };
   private chainBarrels: THREE.Group | null = null;
   private spinVel = 0;
@@ -77,7 +81,9 @@ export class ViewModel {
   private pendingWeapon = -1;
   private timer = 0;
   private kickAmount = 0;
+  private kickVel = 0;       // spring velocity — impulse IN, overshoot settle
   private kickX = 0;         // sideways kick — flak/melee shudder
+  private kickRoll = 0;      // per-shot roll — alternating twist reads as torque
   private kickDecay = 12;    // per-weapon spring rate
   private flashLifeScale = 1;
   private throwT = -1;
@@ -215,6 +221,25 @@ export class ViewModel {
           m.material = inBarrels && barrelMat ? barrelMat : bakedMat;
         });
         g.add(gltf.scene);
+        // A bake landing mid-cloak must join the ghost set — otherwise the
+        // weapon pops back opaque while you're invisible.
+        if (this.ghostMats.length) {
+          const seen = new Set<THREE.Material>();
+          const toShell: THREE.Mesh[] = [];
+          gltf.scene.traverse((o) => {
+            const mesh = o as THREE.Mesh;
+            if (!mesh.isMesh) return;
+            const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+            let shelled = false;
+            for (const m of mats) {
+              if (!m || seen.has(m)) continue;
+              seen.add(m);
+              if (!m.transparent && !shelled) { toShell.push(mesh); shelled = true; }
+              this.ghostify(m);
+            }
+          });
+          for (const mesh of toShell) this.ghostifyMesh(mesh);
+        }
         console.log(`[vm] w${wt} baked swap: removed ${swap.size} procedural meshes`);
       } catch (e) { console.log(`[vm] w${wt} bake load failed:`, e); /* procedural+vertexAO stays */ }
     }
@@ -238,13 +263,18 @@ export class ViewModel {
     [WeaponType.RocketLauncher]:  [10, 0.03, 0xffcc77, 1.3, 1.1],   // launch shove, hot motor bloom
     [WeaponType.Pistol]:          [22, 0.01, 0xffe0a0, 0.35, 0.4],  // snappy crack — tiny flash, quick settle
     [WeaponType.Revolver]:        [8,  0.05, 0xffb060, 1.1, 0.8],   // hand-cannon bark — bigger bloom, heavy push
+    [WeaponType.Sticky]:          [13, 0.02, 0xff66dd, 0.8, 0.7],   // thoomp — tube launch, magenta spit
   };
 
   kick(strength = 1): void {
     const t = ViewModel.KICK_TUNE[this.activeWeapon] ?? ViewModel.KICK_TUNE[WeaponType.Rocket];
-    this.kickAmount = strength;
+    // Velocity impulse, not a position set: rapid shots stack into a bigger
+    // swing instead of re-triggering a flat one, and the spring below
+    // overshoots rest so the gun snaps rather than slides.
+    this.kickVel += strength * 14;
     this.kickDecay = t[0];
     this.kickX = (Math.random() - 0.5) * t[1];
+    this.kickRoll = (Math.random() - 0.5) * t[1] * 4 + strength * 0.04;
     if (this.activeWeapon === WeaponType.Chaingun) {
       this.spinVel = Math.min(this.spinVel + strength * 140, ViewModel.SPIN_MAX);
     }
@@ -277,6 +307,101 @@ export class ViewModel {
 
   startThrow(): void {
     this.throwT = 0;
+  }
+
+  // Cloak ghosting — a true "whole-layer" fade, not per-surface alpha.
+  // Each opaque mesh gets an invisible depth-only clone that renders in the
+  // opaque pass BEFORE the transparent weapon: the silhouette's depth lands
+  // in the buffer first, so the transparent pass culls every surface behind
+  // the frontmost one. The gun fades against the world while still
+  // occluding ITSELF — no backside bleed, no alphaHash grain.
+  // Already-transparent stuff (muzzle flash, glow sprites) just dims.
+  private ghostMats: { m: THREE.Material; opacity: number; transparent: boolean; depthWrite: boolean }[] = [];
+  private ghostShells: THREE.Mesh[] = [];
+  private static depthShellMat = new THREE.MeshBasicMaterial({ colorWrite: false });
+
+  private ghostifyMesh(mesh: THREE.Mesh): void {
+    const shell = new THREE.Mesh(mesh.geometry, ViewModel.depthShellMat);
+    shell.renderOrder = mesh.renderOrder;
+    mesh.parent?.add(shell);
+    shell.position.copy(mesh.position);
+    shell.quaternion.copy(mesh.quaternion);
+    shell.scale.copy(mesh.scale);
+    this.ghostShells.push(shell);
+  }
+
+  private ghostify(m: THREE.Material): void {
+    this.ghostMats.push({ m, opacity: m.opacity, transparent: m.transparent, depthWrite: m.depthWrite });
+    m.opacity = Math.min(m.opacity, m.transparent ? 0.25 : 0.3);
+    m.transparent = true;
+    m.depthWrite = false; // shells own the depth now — color pass only blends
+    // `transparent` is a shader define — post-compile flips are inert until
+    // the program rebuilds (three.js #23866).
+    m.needsUpdate = true;
+  }
+
+  setGhost(on: boolean): void {
+    if (!on) {
+      for (const g of this.ghostMats) {
+        g.m.opacity = g.opacity;
+        g.m.transparent = g.transparent;
+        g.m.depthWrite = g.depthWrite;
+        g.m.needsUpdate = true;
+      }
+      this.ghostMats = [];
+      for (const s of this.ghostShells) s.parent?.remove(s);
+      this.ghostShells = [];
+      return;
+    }
+    const seen = new Set<THREE.Material>();
+    const toShell: THREE.Mesh[] = [];
+    this.group.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (!mesh.isMesh) {
+        const spr = o as THREE.Sprite;
+        if (spr.isSprite && spr.material && !seen.has(spr.material)) {
+          seen.add(spr.material);
+          this.ghostify(spr.material);
+        }
+        return;
+      }
+      const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      let shelled = false;
+      for (const m of mats) {
+        if (!m || seen.has(m)) continue;
+        seen.add(m);
+        if (!m.transparent && !shelled) { toShell.push(mesh); shelled = true; }
+        this.ghostify(m);
+      }
+    });
+    for (const mesh of toShell) this.ghostifyMesh(mesh);
+  }
+
+  // Energy shield: the gun runs hot with charge — a cyan emissive haze on
+  // the weapon frame while the bubble is up. Cheaper than ghosting: just a
+  // tinted shell copy slapped over the active weapon mesh.
+  private shieldShell: THREE.Object3D | null = null;
+  setShield(on: boolean): void {
+    if (!on) {
+      if (this.shieldShell) { this.shieldShell.parent?.remove(this.shieldShell); this.shieldShell = null; }
+      return;
+    }
+    if (this.shieldShell) return;
+    // Glow shell wraps the whole weapon group — it already sits under the
+    // viewmodel group, so no re-parenting or weapon-index bookkeeping.
+    const src = this.weapons.get(this.activeWeapon);
+    if (!src) return;
+    const shell = src.clone(true);
+    shell.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (m.isMesh) m.material = new THREE.MeshBasicMaterial({
+        color: 0x66ccff, transparent: true, opacity: 0.22,
+        blending: THREE.AdditiveBlending, depthWrite: false,
+      });
+    });
+    shell.scale.setScalar(1.04);
+    src.parent?.add(shell);
+    this.shieldShell = shell;
   }
 
   // Melee swing: sweeps the weapon aside instead of kicking — reads as a
@@ -333,9 +458,13 @@ export class ViewModel {
       fallX = this.tmpDir.x; fallY = this.tmpDir.y; fallZ = this.tmpDir.z;
     }
 
-    // Fire kick — sharp push toward camera + muzzle rise, fast spring back.
-    // Quake-style: decay the impulse, don't tween a position.
-    this.kickAmount *= Math.exp(-dt * this.kickDecay);
+    // Fire kick — underdamped spring on velocity, not a decaying position
+    // offset: sharp impulse in, slight overshoot past rest, settle. That's
+    // the difference between "snap" and "slide" — ζ≈0.55 keeps one visible
+    // bounce-back without ringing.
+    const s = this.kickDecay * 2.2;
+    this.kickVel += (-this.kickAmount * s * s - this.kickVel * 1.1 * s) * dt;
+    this.kickAmount += this.kickVel * dt;
     this.kickX *= Math.exp(-dt * this.kickDecay * 1.4); // jitter settles faster than the shove
     const kickZ = this.kickAmount * 0.36;
     const kickY = this.kickAmount * 0.08;
@@ -352,7 +481,8 @@ export class ViewModel {
     // Snap fast to the kicked pose so the punch is actually visible
     this.group.position.lerp(target, Math.min(dt * 20, 1));
     this.group.rotation.x = this.baseRotX + this.kickAmount * 0.28 + dip * THROW_DIP_ROT + switchDip * SWITCH_DIP_ROT + punch * PUNCH_ROT;
-    this.group.rotation.z = this.baseRotZ + totalDip * THROW_DIP_ROLL + punch * PUNCH_ROLL;
+    this.group.rotation.z = this.baseRotZ + totalDip * THROW_DIP_ROLL + punch * PUNCH_ROLL
+      + this.kickRoll * this.kickAmount;
 
     // Chaingun barrel spin — decays over ~0.7s after firing stops
     if (this.chainBarrels && this.spinVel > 0) {

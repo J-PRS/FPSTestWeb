@@ -31,7 +31,6 @@ export interface EntitiesDeps extends GameContext {
   /** Enemy bots deployable turrets may shoot (deployer's team excluded). */
   deployEnemyBots?: () => { playerId: string; pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean }[];
   deployDamageBot?: (playerId: string, dmg: number, fromPos: THREE.Vector3) => boolean;
-  deployNotify?: (text: string) => void;
 }
 
 // Owns every ambient-entity registry (balls/crawlers/turretters/rollers/
@@ -65,7 +64,6 @@ export function createEntities(deps: EntitiesDeps) {
     lazyCombat: () => deps.lazyCombat?.(),
     enemyBots: deps.deployEnemyBots,
     damageBot: deps.deployDamageBot,
-    notify: deps.deployNotify,
   });
   const {
     removeTarget, aggroFor, reportTargetDamage, kickDust, atCap,

@@ -48,6 +48,7 @@ export interface PlayerState {
   isBot?: boolean;
   skiing: number; // last reported ski input flag (0/1), from inputMove
   cloaked: number; // last reported cloak flag (0/1), from inputMove
+  shielded: number; // energy-shield flag (0/1), from inputMove — damage soaks into their tank
   // Lag-comp rewind buffer: accepted position reports stamped at server
   // receive time. Hit validation rewinds the target to the shooter's view
   // (now - shooterPing) so a 100ms player shoots the ghost they saw, not

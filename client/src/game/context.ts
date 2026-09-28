@@ -12,6 +12,7 @@
 
 import type { Terrain } from '../world/terrain.js';
 import type { Player } from '../entities/Player.js';
+import type { ViewModel } from '../entities/ViewModel.js';
 import type { NetworkManager } from '../networking/NetworkManager.js';
 import type { EffectsManager } from '../effects/effects.js';
 import type { HUD } from '../ui/hud.js';
@@ -26,6 +27,8 @@ export interface GameContext {
   lazyHud: () => HUD;
   lazyNetworkManager: () => NetworkManager;
   lazyDemoManager: () => DemoManager | null;
+  /** Optional — factories that need first-person anims (belt/deploy throws). */
+  lazyViewModel?: () => ViewModel | undefined;
   world: WorldState;
   logger: ChildLogger;
 }

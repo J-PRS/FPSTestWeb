@@ -147,6 +147,7 @@ export function createRemotes(deps: RemotesDeps) {
     // give no trace. Ski dust and indicators stop too (dust off an
     // invisible skier is a giveaway).
     remotePlayer.setCloakHidden(!!playerState.cloaked);
+    remotePlayer.setShielded(!!playerState.shielded);
     if (playerState.cloaked) {
       hud.removePlayerIndicator(playerId);
       deps.lazyHealthBarSystem().removeBar(playerId);

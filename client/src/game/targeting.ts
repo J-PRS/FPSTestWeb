@@ -78,6 +78,11 @@ export class ThreatTable {
    *  recoils from the attacker's last position instead of chasing. */
   flinchT = 0;
   readonly flinchFrom = new THREE.Vector3();
+  /** Frenzy: hurt by an attacker it can't see (cloak). Frantic waypoints —
+   *  pounce at the last-known position, scatter, sometimes get lucky.
+   *  Only drives behavior while no live target is committed. */
+  frenzyT = 0;
+  readonly frenzyFrom = new THREE.Vector3();
   private threat = new Map<string, number>();
   private evalT = Math.random() * 0.5; // desync evals so a pack doesn't all snap at once
 
@@ -95,6 +100,14 @@ export class ThreatTable {
     this.flinchFrom.copy(from);
   }
 
+  /** Hurt by something invisible — panic. Repeated hits re-arm with
+   *  jittered duration so sustained fire keeps the pack riled without
+   *  ratcheting to a permanent frenzy. */
+  frenzy(from: THREE.Vector3): void {
+    this.frenzyT = Math.max(this.frenzyT, 6 + Math.random() * 5);
+    this.frenzyFrom.copy(from);
+  }
+
   /** Forget a candidate entirely (disconnect/leave). */
   forget(id: string): void {
     this.threat.delete(id);
@@ -108,6 +121,7 @@ export class ThreatTable {
    * `candidates` may be rebuilt every call; dead candidates are ignored.
    */
   update(dt: number, selfPos: THREE.Vector3, candidates: TargetCandidate[], profile: TargetProfile): TargetCandidate | null {
+    this.frenzyT = Math.max(0, this.frenzyT - dt);
     // Damage threat decays — a burst pulls aggro NOW, not forever.
     const d = 1 - Math.min(1, profile.decay * dt * 10);
     if (d > 0) {

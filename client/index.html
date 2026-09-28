@@ -141,6 +141,11 @@
       transition: background 0.12s, border-color 0.12s, color 0.12s;
     }
     #overlay .btn-row button:hover { background: rgba(255,255,255,0.14); color: #fff; }
+    #overlay .btn-row button.active {
+      border-color: #3aa7ff; color: #fff;
+      background: rgba(58,167,255,0.22);
+      box-shadow: 0 0 10px rgba(58,167,255,0.2);
+    }
     #overlay .field-row {
       display: flex; align-items: center; justify-content: space-between;
       gap: 10px; padding: 9px 14px;
@@ -164,6 +169,15 @@
       width: 110px; padding: 0; accent-color: #3aa7ff; text-align: inherit;
       background: transparent; border: none;
     }
+    #overlay .field-row select {
+      padding: 4px 8px;
+      background: rgba(0,0,0,0.35);
+      border: 1px solid rgba(255,255,255,0.18);
+      border-radius: 4px;
+      color: #fff; font-family: inherit; font-size: 0.72rem;
+      letter-spacing: 0.08em; outline: none; cursor: pointer;
+    }
+    #overlay .field-row select:focus { border-color: #3aa7ff; }
     #cool-shots-panel {
       position: absolute; top: 0; left: 0; bottom: 0;
       width: 280px;
@@ -288,6 +302,18 @@
         <button id="invert-y-toggle">INVERT Y: OFF</button>
         <button id="minimap-toggle">MINIMAP: CORNER</button>
         <div class="field-row">
+          <span>MODE</span>
+          <select id="mode-select">
+            <option value="">OFF (solo)</option>
+            <option value="nuggets">NUGGET WARS 5v5</option>
+            <option value="ctf">CTF 5v5</option>
+            <option value="dm">DEATHMATCH ×10</option>
+            <option value="classic">CLASSIC</option>
+          </select>
+        </div>
+        <button id="spawns-toggle">SPAWNS: SCRIPTED</button>
+        <button id="debug-toggle">DEBUG: OFF</button>
+        <div class="field-row">
           <span>MOUSE SENS</span>
           <input id="sens-input" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" />
         </div>
@@ -297,7 +323,6 @@
         </div>
         <button id="keys-open">KEYBINDS</button>
       </div>
-    </div>
     <div id="keys-modal"></div>
   </div>
   <script type="module" src="src/main.ts"></script>

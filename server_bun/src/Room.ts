@@ -45,7 +45,7 @@ export class Room {
   /** Watching sockets — no player record, get broadcasts + ticks. */
   readonly spectators = new Set<string>();
   readonly sessionTokens = new Map<string, string>();
-  readonly lastSentPositions = new Map<string, { x: number; y: number; z: number; vx: number; vy: number; vz: number; yaw: number; pitch: number; hp: number; dead: boolean; ski: number; cloak: number; t: number }>();
+  readonly lastSentPositions = new Map<string, { x: number; y: number; z: number; vx: number; vy: number; vz: number; yaw: number; pitch: number; hp: number; dead: boolean; ski: number; cloak: number; shield: number; t: number }>();
   tickSeq = 0;
 
   spec: MapSpec; // mutable — admin hot-reload rewrites it live

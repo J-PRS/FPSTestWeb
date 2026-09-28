@@ -31,8 +31,12 @@ export function wireOverlayInput(deps: OverlayInputDeps) {
   const slotDrops: Drop[] = [];
   let beltDrop: Drop | null = null;
   let skillDrop: Drop | null = null;
+  let sidearmDrop: Drop | null = null;
+  let packDrop: Drop | null = null;
   let beltLabel: HTMLElement | null = null;
   let skillLabel: HTMLElement | null = null;
+  let sidearmLabel: HTMLElement | null = null;
+  let packLabel: HTMLElement | null = null;
   let openDrop: HTMLElement | null = null;
 
   // Chip width is measured, not hardcoded — canvas-measure the widest
@@ -104,6 +108,7 @@ export function wireOverlayInput(deps: OverlayInputDeps) {
   const keysModal = document.getElementById('keys-modal');
   if (keysOpen && keysModal) buildKeysMenu(keysOpen, keysModal);
 
+
   if (loadoutBar) {
     const weaponOpts = SLOT_WEAPONS.map((cfg, wid) => ({ v: String(wid), label: cfg.displayName }));
     for (let i = 0; i < Player.LOADOUT_SLOTS; i++) {
@@ -131,6 +136,30 @@ export function wireOverlayInput(deps: OverlayInputDeps) {
     beltRow.appendChild(beltDrop.el);
     loadoutBar.appendChild(beltRow);
 
+    const sidearmRow = document.createElement('div');
+    sidearmRow.className = 'lo-row';
+    sidearmLabel = document.createElement('span');
+    sidearmLabel.className = 'lo-label';
+    sidearmRow.appendChild(sidearmLabel);
+    sidearmDrop = mkDrop(
+      [{ v: 'pistol', label: 'Pistol' }, { v: 'revolver', label: 'Revolver' }, { v: 'shotgun', label: 'Shotgun' }],
+      (v) => deps.lazyPlayer().setSidearm(v as 'pistol' | 'revolver' | 'shotgun'),
+    );
+    sidearmRow.appendChild(sidearmDrop.el);
+    loadoutBar.appendChild(sidearmRow);
+
+    const packRow = document.createElement('div');
+    packRow.className = 'lo-row';
+    packLabel = document.createElement('span');
+    packLabel.className = 'lo-label';
+    packRow.appendChild(packLabel);
+    packDrop = mkDrop(
+      [{ v: 'turret', label: 'Sentry' }, { v: 'mine', label: 'Mine' }, { v: 'station', label: 'Pad' }, { v: 'drone', label: 'Drone' }],
+      (v) => deps.lazyPlayer().setPackItem(v as 'turret' | 'mine' | 'station' | 'drone'),
+    );
+    packRow.appendChild(packDrop.el);
+    loadoutBar.appendChild(packRow);
+
     const skillRow = document.createElement('div');
     skillRow.className = 'lo-row';
     skillLabel = document.createElement('span');
@@ -149,8 +178,12 @@ export function wireOverlayInput(deps: OverlayInputDeps) {
     slotDrops.forEach((d, i) => d.setValue(String(player.loadout[i])));
     beltDrop?.setValue(player.beltItem);
     skillDrop?.setValue(player.skill);
+    sidearmDrop?.setValue(player.sidearm);
+    packDrop?.setValue(player.packItem);
     if (beltLabel) beltLabel.textContent = `BELT (${codeLabel(codeFor('belt'))})`;
     if (skillLabel) skillLabel.textContent = `SKILL (${codeLabel(codeFor('skill'))})`;
+    if (sidearmLabel) sidearmLabel.textContent = `SIDEARM (${codeLabel(codeFor('sidearm'))})`;
+    if (packLabel) packLabel.textContent = `PACK (${codeLabel(codeFor('deploy'))})`;
   }
 
   // Single source of truth for menu visibility — sets overlay display AND
