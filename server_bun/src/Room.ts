@@ -24,6 +24,7 @@ import { RoomFlags } from './RoomFlags.ts';
 import { RoomPickups } from './RoomPickups.ts';
 import { RoomArena } from './RoomArena.ts';
 import { RoomDeployables } from './RoomDeployables.ts';
+import { RoomProjectiles } from './RoomProjectiles.ts';
 import type { PlayerState, Vec3 } from './types.ts';
 import type { ServerMessage } from '../../shared/protocol.ts';
 import { POWERUP, rollCreatureDrop, type PowerupKind } from '../../shared/pickups.ts';
@@ -65,6 +66,9 @@ export class Room {
   /** Server-owned deployables — turrets/mines/stations/drones a `deploy`
    *  claim plants; caps + TTL + teardown live here. */
   readonly deployables: RoomDeployables;
+  /** Server-simulated projectiles — bot fire spawns real shells here
+   *  instead of rolled hitscan (bots-as-legal-players phase 2). */
+  readonly projectiles: RoomProjectiles;
   /** Server-side simulations ticked each room tick, in order. */
   readonly sims: { tick(dt: number): void }[] = [];
   /** Per-player movement shadow — MoveSim fed by inputMove, reconciled
@@ -150,6 +154,7 @@ export class Room {
     if (this.spec.bots) this.bots.populate(this.spec.bots);
     this.wireModeFeatures(field);
     this.deployables = new RoomDeployables(this);
+    this.projectiles = new RoomProjectiles(this, field);
     this.registerSims();
   }
 
@@ -202,6 +207,7 @@ export class Room {
       this.sims.push({ tick: (dt) => arena.tick(dt) });
     }
     this.sims.push({ tick: (dt) => this.deployables.tick(dt) });
+    this.sims.push({ tick: (dt) => this.projectiles.tick(dt) });
     this.sims.push({ tick: (dt) => this.moveSim.tick(dt) });
   }
 
@@ -483,6 +489,7 @@ export class Room {
     // A carrier leaving drops the flag — same rule as dying with it.
     this.flagCarrierDied(playerId);
     this.deployables.clearOwner(playerId);
+    this.projectiles.clearOwner(playerId);
     this.players.removePlayer(playerId);
     if (this.ffaScores.delete(playerId)) {
       this.broadcast({ type: 'ffaScore', scores: Object.fromEntries(this.ffaScores), winAt: this.modeSpec!.winAt });

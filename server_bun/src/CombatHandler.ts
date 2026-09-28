@@ -309,7 +309,15 @@ export class CombatHandler {
     }
   }
 
-  private processAOE(playerId: string, position: Vec3, excludeTargetId: string | null | undefined, stats: WeaponStats, weapon?: number): void {
+  /** Server-owned blast — the room's projectile/deployable sims decided
+   *  where this pops, so the shooter-distance sanity check doesn't apply. */
+  serverBlast(ownerId: string, position: Vec3, weaponType: number, excludeTargetId?: string | null): void {
+    const stats = getWeaponStats(weaponType);
+    if (!stats || stats.aoeRadius <= 0) return;
+    this.processAOE(ownerId, position, excludeTargetId, stats, weaponType, true);
+  }
+
+  private processAOE(playerId: string, position: Vec3, excludeTargetId: string | null | undefined, stats: WeaponStats, weapon?: number, trusted = false): void {
     const player = this.playerManager.getPlayer(playerId);
     if (!player || player.isDead) return;
 
@@ -318,7 +326,7 @@ export class CombatHandler {
     const dy = player.position.y - position.y;
     const dz = player.position.z - position.z;
     const distSq = dx * dx + dy * dy + dz * dz;
-    if (distSq > 40000) { // 200m squared
+    if (!trusted && distSq > 40000) { // 200m squared
       logger.warn(`AOE rejected: ${playerId} too far from explosion (${Math.sqrt(distSq).toFixed(0)}m)`);
       return;
     }

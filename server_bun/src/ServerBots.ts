@@ -7,8 +7,11 @@
  *
  * Brains are shared/botBrain.ts — the same decision core the offline
  * GameBot runs, so personality is tuned once and ships to both runtimes.
- * This class owns locomotion (terrain clamp + hop) and turns the brain's
- * fire command into a botFire broadcast with a distance-based hit roll.
+ * Movement rides the room's MoveSim shadow (same physics + energy tank as
+ * humans) when a heightfield is attached; the legacy terrain-clamp hop is
+ * the no-field fallback. Fire spawns real RoomProjectiles shells —
+ * botFire's rolled tracer only remains as the creature path and the
+ * fallback when a spawn is refused.
  */
 import type { Vec3 } from './types.ts';
 import type { Room } from './Room.ts';
@@ -16,6 +19,7 @@ import { hmHeight, type Heightfield } from '../../shared/heightfield.ts';
 import { BotBrain, type BotEnemy, type BotVec } from '../../shared/botBrain.ts';
 import { logger } from './logger.ts';
 import { STATUS } from '../../shared/status.ts';
+import { WeaponType, getWeaponStats } from '../../shared/weapons.ts';
 
 const SPEED = 14;          // m/s ground move
 const BOLT_SPEED = 60;     // m/s visual bolt + hitscan travel is instant
@@ -138,18 +142,29 @@ export class ServerBots {
     }
     const target = this.room.players.getPlayer(targetId);
     if (!target || target.isDead) return;
-    const dx = aim.x - p.position.x;
-    const dy = aim.y - (p.position.y + 1.4);
-    const dz = aim.z - p.position.z;
-    const len = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1;
-    const hit = isSuper(p.id) || Math.random() < Math.max(0.15, 0.6 - len / 200);
-    this.room.messages.botFire(
-      p.id, hit ? targetId : null,
-      { x: p.position.x, y: p.position.y + 1.4, z: p.position.z },
-      { x: (dx / len) * BOLT_SPEED, y: (dy / len) * BOLT_SPEED, z: (dz / len) * BOLT_SPEED },
-      3, // Chaingun — cheap tracer, readable hit
-      hit,
-    );
+    const stats = getWeaponStats(WeaponType.PlasmaGun);
+    const muzzle = { x: p.position.x, y: p.position.y + 1.4, z: p.position.z };
+    // Lead the target by its velocity over the shell's flight time —
+    // without it every bolt lands behind a skiing player forever.
+    const dx0 = aim.x - muzzle.x, dy0 = aim.y - muzzle.y, dz0 = aim.z - muzzle.z;
+    const dist = Math.sqrt(dx0 * dx0 + dy0 * dy0 + dz0 * dz0) || 1;
+    const lead = isSuper(p.id) ? dist / stats.speed : (dist / stats.speed) * 0.8;
+    const ax = aim.x + target.velocity.x * lead - muzzle.x;
+    const ay = aim.y + target.velocity.y * lead - muzzle.y;
+    const az = aim.z + target.velocity.z * lead - muzzle.z;
+    const alen = Math.sqrt(ax * ax + ay * ay + az * az) || 1;
+    const dir = { x: ax / alen, y: ay / alen, z: az / alen };
+    const spawnPos = { x: p.position.x, y: p.position.y + 1.4, z: p.position.z };
+    if (!this.room.projectiles.spawn(p.id, WeaponType.PlasmaGun, spawnPos, dir, p.velocity)) {
+      // Spawn refused (owner gone / hitscan stat line) — rolled-tracer
+      // fallback keeps the bot armed rather than silently disarmed.
+      const hit = isSuper(p.id) || Math.random() < Math.max(0.15, 0.6 - dist / 200);
+      this.room.messages.botFire(
+        p.id, hit ? targetId : null, muzzle,
+        { x: dir.x * BOLT_SPEED, y: dir.y * BOLT_SPEED, z: dir.z * BOLT_SPEED },
+        3, hit,
+      );
+    }
   }
 
   /** CTF objective for a bot: carrying the enemy flag → own base; own flag
