@@ -1,3 +1,4 @@
+2026-09-26  validateMessage (complexity 83) -> VALIDATORS dispatch table + shared validateBody/optVec helpers; worst offender gone
 2026-09-26  netHandlers.ts (604 lines) split into game/net/ domain modules — match/flags/pickups/players(combat+lifecycle)/projectiles/world take a shared NetCtx; onGameState split into applyRoomInfo/announceRoom/applyMapSnapshot/restoreLocalPlayer
 2026-09-26  strifer.update -> static state table (orbit/hover handlers); 3 species converted
 2026-09-26  tickRoom (complexity 41) split into buildRecords/fanoutRecords/isSuppressed/rollupMetrics — named stages, each lint-readable
