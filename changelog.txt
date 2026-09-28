@@ -1,3 +1,4 @@
+2026-09-26  .oxlintrc.json — correctness=error, suspicious/perf=warn + size rules (file>1000, fn>120, complexity>15, depth>4, params>6); _dangle/await-in-loop off
 2026-09-26  perf: lastSentPositions snapshot mutates in place; roster work (playerlist+joinlog) polled at 2Hz — removes last per-frame/per-tick allocs in hot loops
 2026-09-26  totem.update -> static state table (complexity 28 -> ~8/handler); species state machine pattern now on 2 species
 2026-09-26  seeker.update refactored to static state-handler table (complexity 33 -> per-handler ~8); pilot for species state machines
