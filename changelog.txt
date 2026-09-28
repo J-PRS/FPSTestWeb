@@ -1,3 +1,4 @@
+2026-09-26  netcode v2: tier selection now automatic — WT+RTC probe in parallel, WS floor; ?net= pins a tier for testing
 2026-09-26  netcode v2: WT tier E2E-verified from real Chrome — cert-pinned QUIC handshake, bidi-stream join, 63B tick datagrams flowing
 2026-09-26  netcode v2: RTC tier E2E-verified — /rtcs offer/answer → datachannel → join → live 30Hz tick frames over SCTP
 2026-09-26  netcode v2: /wthash discovery endpoint (DER sha256 of FPS_WT_CERT); client WT probe pins cert via serverCertificateHashes + reads WT port from it
