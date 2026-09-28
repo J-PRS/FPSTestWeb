@@ -25,18 +25,23 @@ export class ConnectionManager {
     }
   }
 
-  /** Binary hot-path frames (tickUpdate) — no JSON.stringify. */
+  /** Binary hot-path frames (tickUpdate) — no JSON.stringify.
+   *  Transports that expose `sendUnreliable` (WT datagram lane) use it;
+   *  plain WS has no UDP lane so everything rides the same stream. */
   sendBinaryToPlayer(playerId: string, data: Uint8Array): void {
-    const ws = this.connections.get(playerId);
+    const ws = this.connections.get(playerId) as (ServerWebSocket<WebSocketData> & { sendUnreliable?(d: Uint8Array): number }) | undefined;
     if (ws && ws.readyState === 1) {
-      ws.send(data);
+      (ws.sendUnreliable ?? ws.send).call(ws, data);
     }
   }
 
   /** High-rate binary broadcasts (ball segments) — encode once, send raw. */
   broadcastBinary(data: Uint8Array): void {
     this.connections.forEach((ws) => {
-      if (ws.readyState === 1) ws.send(data);
+      if (ws.readyState === 1) {
+        const w = ws as ServerWebSocket<WebSocketData> & { sendUnreliable?(d: Uint8Array): number };
+        (w.sendUnreliable ?? w.send).call(w, data);
+      }
     });
   }
 

@@ -67,6 +67,12 @@ export const CONFIG = {
   serverName: envStr('FPS_SERVER_NAME', 'kribes server'),
   // Free-text label (e.g. 'eu', 'lan', 'jp-lan') — clients just display it.
   serverRegion: envStr('FPS_SERVER_REGION', ''),
+  // WebTransport tier (netcode v2): separate QUIC/HTTP3 UDP listener.
+  // 0 = disabled. Cert/key are PEM file paths — WT has no plaintext mode;
+  // a self-signed pair works in dev (clients pin serverCertificateHashes).
+  wtPort: envNum('FPS_WT_PORT', 0),
+  wtCertPath: envStr('FPS_WT_CERT', ''),
+  wtKeyPath: envStr('FPS_WT_KEY', ''),
 
   rateLimits: {
     position: { maxCount: 30, windowMs: 1000 },
