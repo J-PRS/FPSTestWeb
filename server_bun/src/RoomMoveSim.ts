@@ -67,6 +67,12 @@ export class RoomMoveSim {
   // an honest fleet bot at 20Hz drifts ~8m, a 60Hz human drifts less).
   // Real cheats diverge by orders of magnitude more.
   private static readonly DIVERGENCE_M = 10;
+  /** Per-step integration noise scales with speed — a skier at 35m/s
+   *  legitimately drifts ~60% farther per tick than a walker, and
+   *  contact-timing differences (crest lips) widen it more. Scale the
+   *  tolerance so honest speed doesn't produce count=1 warn clips;
+   *  real teleports are still an order of magnitude past. */
+  private static readonly SPEED_TOL_REF = 60; // m/s at which tolerance doubles
   private static readonly AUTHORITY_DIVERGENCE_M = 1.5;
   private static readonly CORRECT_MS = 400;
   private static readonly AUTHORITY_CORRECT_MS = 100;
@@ -207,11 +213,13 @@ export class RoomMoveSim {
     }
     const dx = pos.x - cmp.pos.x, dy = pos.y - cmp.pos.y, dz = pos.z - cmp.pos.z;
     const dist = Math.hypot(dx, dy, dz);
-    if (dist <= this.divergenceM) return null;
+    const speed = Math.hypot(s.vel.x, s.vel.z);
+    const tol = this.divergenceM * (1 + speed / RoomMoveSim.SPEED_TOL_REF);
+    if (dist <= tol) return null;
 
     sh.divergences++;
     if (sh.divergences === 1 || sh.divergences % 20 === 0) {
-      logger.warn('Move sim divergence', { playerId, dist: dist.toFixed(1), count: sh.divergences });
+      logger.warn('Move sim divergence', { playerId, dist: dist.toFixed(1), tol: tol.toFixed(1), count: sh.divergences });
     }
     const now = Date.now();
     if (now - sh.lastCorrection < this.correctMs) return null;
