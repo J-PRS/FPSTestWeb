@@ -1928,3 +1928,4 @@ removed the 'bank' claim message end-to-end — team score now only ever moves t
 friendly fire off in team rooms — teammate damage dropped at the funnel (shots, AOE, bot attacks); splash knockback survives for boost assists, self-splash stays legal
 GET /stats — lifetime leaderboard aggregated off the append-only match journal (matches/wins/kills/deaths per player, FFA winners by id, team winners by side)
 heal claims in team rooms now require server-granted credit (a gem touch backs +25) — free-form self-heal stays in ffa rooms where local nuggets are legit; kills the invincibility cheat lever
+PROTOCOL_VERSION 3->4 (bank message removed — stale clients force-reload instead of desyncing)

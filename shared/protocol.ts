@@ -11,7 +11,7 @@
  * message, changed field semantics). The server stamps it on gameState;
  * the client force-reloads on mismatch instead of silently desyncing.
  */
-export const PROTOCOL_VERSION = 3;
+export const PROTOCOL_VERSION = 4;
 
 export interface Vec3 {
   x: number;

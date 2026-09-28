@@ -87,7 +87,12 @@ surface. Detailed research lives in `_reports/`; this file is the current truth.
    fully server-observed — the {type:'bank'} claim message was removed
    end-to-end (protocol, validation, handler, client sender).
    CTF classic rule: own flag must be home to cap; carrier disconnect
-   drops the flag.
+   drops the flag. Spawn protection (2s, breaks on fire), friendly-fire
+   gate (damage only — splash still boosts teammates), heal claims in
+   team rooms need gem credit, teleport capped 3/s, PROTOCOL_VERSION=4.
+   Ops: GET /stats lifetime leaderboard off matches.jsonl; match clock
+   + overtime + draw resolution + 60s warning; spectate joins
+   (watch-only socket, full-rate ticks).
 
 ### Later / research needed
 - Client prediction + reconciliation for self (currently trust + correct).
