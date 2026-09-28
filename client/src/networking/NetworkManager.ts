@@ -2,7 +2,7 @@ import { ChildLogger } from '../core/Logger.js';
 import { isWireFrame, encodePosition, decodeTickFrame, decodeBallSegment, WIRE_BALLSEG } from '../../../shared/wire.js';
 import type { ClientMessage, ServerMessage, TickUpdatePlayer, GameStatePlayer, LocalPlayerState, SnapshotPlayer } from '../../../shared/protocol.js';
 import { PROTOCOL_VERSION } from '../../../shared/protocol.js';
-import { WebSocketConnection } from './WebSocketConnection.js';
+import { TieredTransport } from './tiers.js';
 import type { GameTransport, TransportFactory } from './transport.js';
 import { NetTelemetry } from './netTelemetry.js';
 import { urlParams } from '../core/params.js';
@@ -113,7 +113,7 @@ export class NetworkManager {
   connect(url: string, makeTransport?: TransportFactory): Promise<void> {
     return new Promise((resolve, reject) => {
       try {
-        const factory = makeTransport ?? ((cfg) => new WebSocketConnection(cfg));
+        const factory = makeTransport ?? ((cfg) => new TieredTransport(cfg));
         this.ws = factory({
           url,
           onConnect: () => {
