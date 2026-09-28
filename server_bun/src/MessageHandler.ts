@@ -104,6 +104,7 @@ export class MessageHandler {
       teleport: (id, m) => this.handleTeleport(id, m as Extract<ClientMessage, { type: 'teleport' }>),
       shot: (id, m) => this.combat.handleShot(id, m as Extract<ClientMessage, { type: 'shot' }>),
       aoeShot: (id, m) => this.combat.handleAOEShot(id, m as Extract<ClientMessage, { type: 'aoeShot' }>),
+      shotFired: (id, m) => this.combat.handleShotFired(id, m as Extract<ClientMessage, { type: 'shotFired' }>),
       jump: (id, m) => this.relayPresenceEvent(id, m as Extract<ClientMessage, { type: 'jump' }>),
       jetpack: (id, m) => this.relayPresenceEvent(id, m as Extract<ClientMessage, { type: 'jetpack' }>),
       projectileDestroy: (id, m) => this.combat.handleProjectileDestroy(id, m as Extract<ClientMessage, { type: 'projectileDestroy' }>),

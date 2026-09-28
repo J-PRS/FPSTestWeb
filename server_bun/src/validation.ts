@@ -132,6 +132,19 @@ const VALIDATORS: Record<string, (obj: Record<string, unknown>) => ValidationRes
     };
   },
 
+  shotFired: (obj) => {
+    const dir = optVec(obj.dir);
+    if (!dir.ok) return { success: false, error: `dir: ${dir.error}` };
+    return {
+      success: true,
+      data: {
+        type: 'shotFired',
+        weaponType: isFiniteNumber(obj.weaponType) ? obj.weaponType : undefined,
+        dir: dir.ok ? dir.data : undefined,
+      },
+    };
+  },
+
   jump: (obj) => {
     const pos = validateVec3(obj.position);
     if (!pos.success) return { success: false, error: `position: ${pos.error}` };

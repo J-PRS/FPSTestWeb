@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import * as sfx from '../../core/sfx.js';
 import { Projectile } from '../../projectiles/Projectile.js';
 import { ROCKET_CONFIG, getProjectileConfig } from '../../projectiles/index.js';
+import { WeaponType } from '../../../../shared/weapons.js';
 import type { NetCtx } from './ctx.js';
 
 export function wireProjectiles(ctx: NetCtx): void {
@@ -53,6 +54,27 @@ export function wireProjectiles(ctx: NetCtx): void {
     // Gun recoil kick on the shooter's remote model
     deps.world.remotePlayers.get(ownerId)?.fire();
     sfx.shotAt(origin, cfg.weaponType);
+  };
+
+  // Hitscan fire relay — observers get muzzle audio at the shooter's
+  // server-stamped position plus a recoil kick on the remote model; beams
+  // also paint a short tracer along the claimed aim dir.
+  networkManager.onPlayerShot = (id, weaponType, pos, dir) => {
+    if (deps.world.playbackMode) return;
+    const rp = deps.world.remotePlayers.get(id);
+    const origin = pos
+      ? new THREE.Vector3(pos.x, pos.y, pos.z)
+      : rp?.position;
+    if (!origin) return;
+    rp?.fire();
+    sfx.shotAt(origin, weaponType ?? 0);
+    // The LG beam is instant on the shooter's screen — paint the same
+    // flash for observers along the claimed aim (clamped, cosmetic-only).
+    if (dir && weaponType === WeaponType.Lightning) {
+      const cfg = getProjectileConfig(WeaponType.Lightning);
+      const d = new THREE.Vector3(dir.x, dir.y, dir.z).normalize();
+      deps.lazyEffects().spawnBeam(origin, origin.clone().addScaledVector(d, 80), cfg?.glowColor ?? 0x8fdcff);
+    }
   };
 
   networkManager.onProjectileDestroyed = (projectileId: string) => {

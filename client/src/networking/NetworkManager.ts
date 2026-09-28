@@ -47,6 +47,7 @@ export class NetworkManager {
   public onPlayerJump: ((playerId: string, position: { x: number; y: number; z: number }) => void) | null = null;
   public onPlayerJetpack: ((playerId: string, position: { x: number; y: number; z: number }) => void) | null = null;
   public onProjectileCreated: ((projectileId: string, ownerId: string, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }, weaponType?: number) => void) | null = null;
+  public onPlayerShot: ((id: string, weaponType: number | undefined, pos: { x: number; y: number; z: number } | undefined, dir: { x: number; y: number; z: number } | undefined) => void) | null = null;
   public onProjectileDestroyed: ((projectileId: string) => void) | null = null;
   public onPlayerJoined: ((playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }) => void) | null = null;
   public onPlayerLeft: ((playerId: string) => void) | null = null;
@@ -228,6 +229,7 @@ export class NetworkManager {
     jump: (data) => this.onPlayerJump?.(data.playerId, data.position),
     jetpack: (data) => this.onPlayerJetpack?.(data.playerId, data.position),
     projectileCreated: (data) => this.onProjectileCreated?.(data.projectileId, data.ownerId, data.position, data.velocity, data.weaponType),
+    playerShot: (data) => this.onPlayerShot?.(data.id, data.weaponType, data.pos, data.dir),
     projectileDestroyed: (data) => this.onProjectileDestroyed?.(data.projectileId),
     snapshot: (data) => this.onSnapshot?.(data.players || [], data.timestamp || Date.now()),
     stateHash: (data) => this.onStateHash?.(data.hash, data.tick, data.playerCount, data.timestamp),
@@ -550,6 +552,13 @@ export class NetworkManager {
 
   sendJetpack(position: { x: number; y: number; z: number }): void {
     this.send({ type: 'jetpack', position });
+  }
+
+  /** Cosmetic fire relay — hitscan kinds (fan/beam) leave no projectile,
+   *  so this tells the server to paint muzzle audio/visual on observers. */
+  sendShotFired(a: { weaponType?: number; dir?: { x: number; y: number; z: number } }): void {
+    if (!this.connected) return;
+    this.send({ type: 'shotFired', ...a });
   }
 
   sendProjectileDestroy(projectileId: string): void {

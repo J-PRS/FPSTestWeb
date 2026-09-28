@@ -317,17 +317,20 @@ export function createCombat(deps: CombatDeps) {
       return;
     }
 
-    // Notify server to destroy tracked projectile
-    if (p.serverProjectileId) {
-      deps.lazyNetworkManager().sendProjectileDestroy(p.serverProjectileId);
-    }
-
     spawnImpactEffect(p);
     recordProjectileHit(p);
     if (p.config.cluster) spawnClusterBomblets(p);
 
     if (p.hitBall) handleBallHit(p, p.hitBall);
     if (p.hitPlayerId) handlePlayerHit(p, p.hitPlayerId);
+
+    // Destroy LAST — this tombstones the server-tracked id. WS is ordered,
+    // so sending it ahead of the aoeShot/shot claims above used to make
+    // every blast arrive at a projectile the server no longer knew
+    // ("blast with no known projectile" — splash silently never applied).
+    if (p.serverProjectileId) {
+      deps.lazyNetworkManager().sendProjectileDestroy(p.serverProjectileId);
+    }
   }
 
   // Visual effect only — no AOE, no damage, no server traffic
@@ -370,7 +373,10 @@ export function createCombat(deps: CombatDeps) {
       : (pos: { x: number; y: number; z: number }, targetId: string | null) =>
       networkManager.sendAOEShot({
         position: pos, weaponType, excludeTargetId: targetId,
-        projectileId: p.serverProjectileId ?? null, airtime: p.hitAge ?? p.age,
+        // hitAge is 0 when the projectile detonated without a swept hit
+        // (terrain, fuse) — 0 isn't nullish, so `??` never fell back and
+        // claims went out with airtime=0 → reach check rejected them all.
+        projectileId: p.serverProjectileId ?? null, airtime: p.hitAge > 0 ? p.hitAge : p.age,
         directHit: p.directHit || undefined,
       });
     processProjectileExplosion({
@@ -547,6 +553,13 @@ export function createCombat(deps: CombatDeps) {
 
   return {
     onWeaponFire: (def: WeaponDef, e: FireEvent) => {
+      // Hitscan kinds leave no projectile for observers — tell the server
+      // so it can relay a cosmetic playerShot (muzzle audio/visual).
+      if (def.kind === 'fan' || def.kind === 'beam') {
+        deps.lazyNetworkManager()?.sendShotFired({
+          weaponType: def.weaponType, dir: { x: e.dir.x, y: e.dir.y, z: e.dir.z },
+        });
+      }
       if (def.kind === 'beam') lightning(e);
       else fire.fireWeapon(def, e);
     },

@@ -58,6 +58,9 @@ export class CombatHandler {
    *  resolve ONE claim of each kind, then are dead. 5s staleness cap. */
   private spentProjectiles = new Map<string, { proj: TrackedProjectile; shot: boolean; aoe: boolean; at: number }>();
   private respawnTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
+  /** Cosmetic relay gate for shotFired — a hitscan pull has no damage
+   *  semantics, so excess ones are silently dropped instead of rejected. */
+  private lastFireNotify = new Map<string, number>();
 
   constructor(
     private playerManager: PlayerManager,
@@ -224,6 +227,24 @@ export class CombatHandler {
         });
       }
     }
+  }
+
+  /** Hitscan fire leaves no projectile for observers to see — relay a
+   *  cosmetic 'playerShot' so other clients render muzzle audio/visual.
+   *  Origin is server-stamped (rewound to fire time, like spawn sanity
+   *  checks) so a forged claim can't paint shots from arbitrary points;
+   *  dir stays cosmetic — observers only use it to aim a beam flash. */
+  handleShotFired(playerId: string, msg: Extract<ClientMessage, { type: 'shotFired' }>): void {
+    const player = this.playerManager.getPlayer(playerId);
+    if (!player || player.isDead) return;
+    const now = Date.now();
+    if (now - (this.lastFireNotify.get(playerId) ?? 0) < 50) return;
+    this.lastFireNotify.set(playerId, now);
+    const at = rewindPos(player, clampPing(player.ping));
+    this.broadcast({
+      type: 'playerShot', id: playerId, weaponType: msg.weaponType,
+      pos: { x: at.x, y: at.y + 1.6, z: at.z }, dir: msg.dir,
+    }, playerId);
   }
 
   /**

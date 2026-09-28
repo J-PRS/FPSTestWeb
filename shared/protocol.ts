@@ -44,6 +44,10 @@ export type ClientMessage =
   | { type: 'chat'; text: string }
   | { type: 'shot'; targetId: string | null; weaponType?: number; position?: Vec3; velocity?: Vec3; timestamp?: number; projectileId?: string | null; airtime?: number }
   | { type: 'aoeShot'; position: Vec3; weaponType?: number; excludeTargetId?: string | null; projectileId?: string | null; airtime?: number; power?: number; directHit?: boolean }
+  // Hitscan fire (fan/beam kinds) has no projectile for observers to see —
+  // this cosmetic "I pulled the trigger" lets the server relay a playerShot
+  // so firefights are audible/visible. Carries no damage semantics.
+  | { type: 'shotFired'; weaponType?: number; dir?: Vec3 }
   | { type: 'jump'; position: Vec3 }
   | { type: 'jetpack'; position: Vec3 }
   // inputMove is a change-only stream — on unordered transports (RTC/WT
@@ -104,6 +108,10 @@ export type ServerMessage =
   | { type: 'jump'; playerId: string; position: Vec3 }
   | { type: 'jetpack'; playerId: string; position: Vec3 }
   | { type: 'projectileCreated'; projectileId: string; ownerId: string; position: Vec3; velocity: Vec3; weaponType?: number }
+  // Cosmetic relay of a hitscan trigger-pull: pos is server-stamped
+  // (rewind to fire time), dir is the shooter's claimed aim — never
+  // trusted for damage, only for muzzle audio/visual on observers.
+  | { type: 'playerShot'; id: string; weaponType?: number; pos?: Vec3; dir?: Vec3 }
   | { type: 'projectileDestroyed'; projectileId: string }
   | { type: 'snapshot'; players: SnapshotPlayer[]; timestamp: number }
   | { type: 'stateHash'; hash: string; tick: number; playerCount: number; timestamp: number }
