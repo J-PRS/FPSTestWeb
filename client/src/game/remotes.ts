@@ -9,6 +9,10 @@ import type { NetworkManager } from '../networking/NetworkManager.js';
 import type { HealthBarSystem } from '../ui/HealthBarSystem.js';
 import type { HUD } from '../ui/hud.js';
 import type { WorldState } from './worldState.js';
+import { TEAM_COLORS } from '../../../shared/teams.js';
+
+// Hostiles always read red — team colors are for your own side only.
+const ENEMY_RED = 0xff3333;
 
 export interface RemotesDeps {
   lazyNetworkManager: () => NetworkManager;
@@ -28,6 +32,7 @@ export interface RemotesDeps {
 export function createRemotes(deps: RemotesDeps) {
   let lastSentPos = { x: 0, y: 0, z: 0 };
   let lastRemotePosLog = '';
+  const lastTintOf = new Map<string, string>();
   let rosterPollT = 0;
 
   function getLastSentPos() { return lastSentPos; }
@@ -130,6 +135,15 @@ export function createRemotes(deps: RemotesDeps) {
     // tick() already calls this.model.update(dt) internally — do NOT call it again here,
     // or animations advance at 2x speed (double AnimationMixer.update).
     remotePlayer.tick(dt);
+
+    // Friend-or-foe marker: teammates wear their team's color, enemies are
+    // always red — matching a remote's wire team only when it differs from
+    // the last applied tint avoids re-setting every frame.
+    const theirTeam = playerState.team;
+    if (theirTeam && theirTeam !== lastTintOf.get(playerId)) {
+      lastTintOf.set(playerId, theirTeam);
+      remotePlayer.setGizmoColor(theirTeam === deps.world.localTeam ? TEAM_COLORS[theirTeam] : ENEMY_RED);
+    }
 
     // Ski dust: networked ski flag (via tickUpdate) + near-ground + moving
     if (!playerState.isDead && playerState.ski) {
