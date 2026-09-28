@@ -24,13 +24,13 @@ import type { PerkId } from '../../shared/perks.ts';
 
 /** A bot's kit — weapon picked by engagement range, perk set at spawn so
  *  maxHealth and the move shadow's jet economy match a real loadout. */
-interface BotLoadout { perk: PerkId; near: WeaponType; mid: WeaponType; far: WeaponType; }
+interface BotLoadout { perk: PerkId; near: WeaponType; mid: WeaponType; far: WeaponType; belt: WeaponType; }
 const NEAR_M = 15, FAR_M = 40;
 const BOT_LOADOUTS: BotLoadout[] = [
-  { perk: 'featherjets', near: WeaponType.Chaingun, mid: WeaponType.PlasmaGun, far: WeaponType.Rocket }, // chaser
-  { perk: 'bombardier',  near: WeaponType.Chaingun, mid: WeaponType.Disc,      far: WeaponType.Rocket }, // siege
-  { perk: 'plated',      near: WeaponType.Chaingun, mid: WeaponType.PlasmaGun, far: WeaponType.Disc },   // anchor
-  { perk: 'overcharge',  near: WeaponType.Chaingun, mid: WeaponType.Disc,      far: WeaponType.Rocket }, // skirmisher
+  { perk: 'featherjets', near: WeaponType.Chaingun, mid: WeaponType.PlasmaGun, far: WeaponType.Rocket,        belt: WeaponType.Grenade },       // chaser
+  { perk: 'bombardier',  near: WeaponType.Chaingun, mid: WeaponType.Disc,      far: WeaponType.Rocket,        belt: WeaponType.RemoteRailgun }, // siege
+  { perk: 'plated',      near: WeaponType.Chaingun, mid: WeaponType.PlasmaGun, far: WeaponType.Disc,          belt: WeaponType.Grenade },       // anchor
+  { perk: 'overcharge',  near: WeaponType.Chaingun, mid: WeaponType.Disc,      far: WeaponType.Rocket,        belt: WeaponType.RemoteRailgun }, // skirmisher
 ];
 
 const SPEED = 14;          // m/s ground move
@@ -189,19 +189,21 @@ export class ServerBots {
   /** Belt throw — a lobbed grenade at the hunt's last-seen spot. Same
    *  spawn path as the plasma bolt: RoomProjectiles owns the flight. */
   private throwBelt(p: { id: string; position: Vec3; velocity: Vec3 }): void {
-    const stats = getWeaponStats(WeaponType.Grenade);
+    const wt = this.loadouts.get(p.id)?.belt ?? WeaponType.Grenade;
+    const stats = getWeaponStats(wt);
     if (!stats || stats.speed <= 0) return;
     const hunt = this.room.players.getPlayer(this.lastHuntId(p.id) ?? '');
     const aim = hunt?.position;
     if (!aim) return;
     const dx = aim.x - p.position.x, dz = aim.z - p.position.z;
     const d = Math.hypot(dx, dz) || 1;
-    // 40 m/s flat throw + an arc: pick the elevation that lands ~d meters
-    // out. Rough ballistic pitch: aim +y = climb needed at max range.
-    const pitch = Math.min(0.7, d / stats.speed);
+    // Grenade: lob the arc that lands ~d out. Remote railgun: throw
+    // nearly flat — the beam discharges along the velocity line, so a
+    // steep pitch aims the rail at the sky.
+    const pitch = stats.rayDelay ? 0.15 : Math.min(0.7, d / stats.speed);
     const dir = { x: dx / d, y: pitch, z: dz / d };
     const len = Math.hypot(dir.x, dir.y, dir.z);
-    this.room.projectiles.spawn(p.id, WeaponType.Grenade,
+    this.room.projectiles.spawn(p.id, wt,
       { x: p.position.x, y: p.position.y + 1.4, z: p.position.z },
       { x: dir.x / len, y: dir.y / len, z: dir.z / len }, p.velocity);
   }

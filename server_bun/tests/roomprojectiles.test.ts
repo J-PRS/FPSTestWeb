@@ -68,6 +68,39 @@ describe('RoomProjectiles', () => {
     expect(true).toBe(true);
   });
 
+  it('remote railgun discharges its beam along the velocity line', () => {
+    const { room, shooter, target } = arena();
+    shooter.position = { x: 0, y: FLOOR + 1.4, z: 0 };
+    target.position = { x: 30, y: FLOOR, z: 0 };
+    const stats = getWeaponStats(WeaponType.RemoteRailgun);
+    // The beam inherits the shell's velocity line — gravity over rayDelay
+    // drags it down, so a slight upward lob lands level on the target.
+    room.projectiles.spawn(shooter.id, WeaponType.RemoteRailgun,
+      { x: 0, y: FLOOR + 1.4, z: 0 }, { x: 1, y: 0.15, z: 0 }, { x: 0, y: 0, z: 0 });
+    for (let i = 0; i < 20 && target.health === CONFIG.playerMaxHealth; i++) {
+      room.projectiles.tick(0.05);
+    }
+    expect(stats.rayDelay).toBeGreaterThan(0);
+    expect(target.health).toBeLessThan(CONFIG.playerMaxHealth);
+  });
+
+  it('a ridge between shell and target blocks the beam', () => {
+    const { room, shooter, target } = arena();
+    // Tall narrow field: a berm at x≈30 the beam must cross first.
+    const berm: Heightfield = { size: 64, data: new Uint8Array(64).fill(60), stride: 1 };
+    for (let i = 30; i < 32; i++) berm.data[i] = 200; // ~140m-high wall
+    const room2 = new Room('t2', berm, '', resolveMapSpec({ mode: 'dm' }));
+    const s2 = room2.players.addPlayer('BOT-t1'); s2.isBot = true;
+    const t2 = room2.players.addPlayer('human');
+    s2.protectedUntil = 0; t2.protectedUntil = 0;
+    t2.position = { x: 40, y: hmHeight(berm, 40, 0), z: 0 };
+    room2.projectiles.spawn(s2.id, WeaponType.RemoteRailgun,
+      { x: 0, y: hmHeight(berm, 0, 0) + 1.4, z: 0 }, { x: 1, y: 0, z: 0 }, { x: 0, y: 0, z: 0 });
+    for (let i = 0; i < 20; i++) room2.projectiles.tick(0.05);
+    expect(t2.health).toBe(CONFIG.playerMaxHealth);
+    void shooter; void target; void room;
+  });
+
   it('hitscan weapons refuse a body — spawn returns null', () => {
     const { room, shooter } = arena();
     expect(room.projectiles.spawn(shooter.id, WeaponType.Slam,

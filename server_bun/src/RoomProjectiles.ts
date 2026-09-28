@@ -13,10 +13,11 @@
  *
  * Deliberate simplifications vs the client Projectile: no terrain bounce
  * (a server shell pops on contact — bounces are cosmetic anyway since
- * clients resolve their own arcs), no stickies, no ray-burst. Bots don't
- * carry those weapons yet; add them when loadouts land (phase 4).
+ * clients resolve their own arcs) and no stickies. Ray-burst IS modeled:
+ * crossing stats.rayDelay discharges a hitscan beam along the velocity
+ * line (dischargeRay) so remote railgun blasts land where the beam hit.
  */
-import { projStep, segFieldHit, segPointDist, type SimProjectile } from '../../shared/projSim.ts';
+import { projStep, segFieldHit, segPointDist, segPointT, type SimProjectile } from '../../shared/projSim.ts';
 import type { Heightfield } from '../../shared/heightfield.ts';
 import { PLAYER_RADIUS } from '../../shared/constants.ts';
 import { getWeaponStats } from '../../shared/weapons.ts';
@@ -75,29 +76,78 @@ export class RoomProjectiles {
     for (const proj of this.projs.values()) {
       const stats = getWeaponStats(proj.weaponType);
       const p = proj.p;
+      const prevAge = p.age;
       const from = projStep(p, dt, stats.gravity);
       const ttl = stats.maxLifetime ?? HARD_TTL_S;
       if (p.age >= ttl || p.pos.y < FLOOR_Y) { this.detonate(proj, { ...p.pos }); continue; }
 
-      // Terrain contact — server shells pop on first contact; the client's
-      // own bounce arc diverges cosmetically, never in damage outcome.
-      if (this.field) {
-        const hit = segFieldHit(from, p.pos, this.field);
-        if (hit) { this.detonate(proj, hit); continue; }
+      // Ray-burst discharge (remote railgun): crossing rayDelay turns the
+      // shell's velocity line into a hitscan beam — the earliest contact
+      // along it is where the payload detonates.
+      if (stats.rayDelay && prevAge < stats.rayDelay && p.age >= stats.rayDelay) {
+        this.dischargeRay(proj, stats.rayRange ?? 160);
+        continue;
       }
 
-      // Player sweep — same legal radius the hit-claim validator allows:
-      // capsule radius + the larger of body/wake radius at this airtime.
-      const reach = PLAYER_RADIUS + Math.max(stats.bodyRadius, hitRadiusAt(proj.weaponType, p.age));
-      let hitId: string | null = null;
-      for (const [pid, target] of this.room.players.getAllPlayers()) {
-        if (pid === proj.ownerId || target.isDead) continue;
-        const center = { x: target.position.x, y: target.position.y + CHEST_Y, z: target.position.z };
-        if (segPointDist(from, p.pos, center) <= reach) { hitId = pid; break; }
-      }
-      if (hitId !== null) this.detonate(proj, { ...p.pos }, hitId);
+      if (this.stepContact(proj, stats, from)) continue;
       // No contact — still flying; survives to the next tick.
     }
+  }
+
+  /** Swept terrain + player contact for one flight step; detonates on
+   *  first touch and reports whether the shell is gone. */
+  private stepContact(proj: LiveProj, stats: ReturnType<typeof getWeaponStats>, from: Vec3): boolean {
+    const p = proj.p;
+    // Server shells pop on first contact; the client's own bounce arc
+    // diverges cosmetically, never in damage outcome.
+    if (this.field) {
+      const hit = segFieldHit(from, p.pos, this.field);
+      if (hit) { this.detonate(proj, hit); return true; }
+    }
+    // Player sweep — same legal radius the hit-claim validator allows:
+    // capsule radius + the larger of body/wake radius at this airtime.
+    const reach = PLAYER_RADIUS + Math.max(stats.bodyRadius, hitRadiusAt(proj.weaponType, p.age));
+    for (const [pid, target] of this.room.players.getAllPlayers()) {
+      if (pid === proj.ownerId || target.isDead) continue;
+      const center = { x: target.position.x, y: target.position.y + CHEST_Y, z: target.position.z };
+      if (segPointDist(from, p.pos, center) <= reach) {
+        this.detonate(proj, { ...p.pos }, pid);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /** Fire the shell's hitscan beam along its velocity line. Order of
+   *  contacts decides the blast point: nearest wins between terrain and
+   *  players, so a beam that clips a ridge never splashes past it. */
+  private dischargeRay(proj: LiveProj, range: number): void {
+    const p = proj.p;
+    const speed = Math.hypot(p.vel.x, p.vel.y, p.vel.z) || 1;
+    const end: Vec3 = {
+      x: p.pos.x + (p.vel.x / speed) * range,
+      y: p.pos.y + (p.vel.y / speed) * range,
+      z: p.pos.z + (p.vel.z / speed) * range,
+    };
+    const reach = PLAYER_RADIUS + getWeaponStats(proj.weaponType).bodyRadius;
+    // Track the earliest contact as a segment parameter [0..1].
+    let bestT = 1, hitId: string | null = null;
+    if (this.field) {
+      const th = segFieldHit(p.pos, end, this.field);
+      if (th) bestT = segPointT(p.pos, end, th);
+    }
+    for (const [pid, target] of this.room.players.getAllPlayers()) {
+      if (pid === proj.ownerId || target.isDead) continue;
+      const center = { x: target.position.x, y: target.position.y + CHEST_Y, z: target.position.z };
+      const t = segPointT(p.pos, end, center);
+      if (t <= bestT && segPointDist(p.pos, end, center) <= reach) { bestT = t; hitId = pid; }
+    }
+    const at: Vec3 = {
+      x: p.pos.x + (end.x - p.pos.x) * bestT,
+      y: p.pos.y + (end.y - p.pos.y) * bestT,
+      z: p.pos.z + (end.z - p.pos.z) * bestT,
+    };
+    this.detonate(proj, at, hitId);
   }
 
   private detonate(proj: LiveProj, at: Vec3, directHitId?: string | null): void {
