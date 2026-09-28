@@ -1,3 +1,4 @@
+2026-10-03 - demo endpoints soaked: new _tools/pvptest/demosoak.ts — crafts valid v3 demo binaries; accept/reject lifecycle, traversal + missing + GET-upload all 404, download round-trips byte-identical
 2026-10-03 - rtc relay soaked: new _tools/pvptest/rtcrelay.ts — host/non-host roles, peer kick, opaque SDP/ICE shuttle both ways, 3rd member refused 1008, peer-left on close
 2026-10-03 - API surface + spectate soaked: new _tools/pvptest/apisoak.ts — all GET routes, /join param gate, spectate join (no player state, receives ticks, writes ignored), admin auth gate (401/200), /admin/end → ffaMatchEnd broadcast, /matches journal, /admin/kick closes socket, /client-log accepted
 2026-10-03 - deployables soaked over real sockets: new _tools/pvptest/deployprobe.ts — deploySpawn per kind, bad-kind/far-plant ignored, cap recycle fires deployGone, proximity mine tripped live by a roaming bot (mineBoom), turret fired turretShot, owner-leave teardown after grace
