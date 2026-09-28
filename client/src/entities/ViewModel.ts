@@ -4,6 +4,7 @@ import { bakeVertexAO } from '../effects/vertexAO.js';
 import { urlParams } from '../core/params.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { buildWeaponMeshes, buildHandAndFlash, FIST_JAB, FIST_OFF } from './viewmodel/weaponsGeo.js';
+import { makeShieldMaterial } from '../effects/shieldBubble.js';
 
 // Port of Assets/Scripts/WeaponSway.cs (Unity FPS_Test) — mouse-lag sway,
 // velocity offset, perlin-ish bob, and landing dip.
@@ -377,31 +378,36 @@ export class ViewModel {
     for (const mesh of toShell) this.ghostifyMesh(mesh);
   }
 
-  // Energy shield: the gun runs hot with charge — a cyan emissive haze on
-  // the weapon frame while the bubble is up. Cheaper than ghosting: just a
-  // tinted shell copy slapped over the active weapon mesh.
-  private shieldShell: THREE.Object3D | null = null;
+  // Energy shield, first-person read: the same hex+fresnel field that wraps
+  // the third-person bubble crawls over the gun's surface — the player who
+  // raised it sees the charge on their own weapon.
+  private shieldShells: THREE.Object3D[] = [];
   setShield(on: boolean): void {
     if (!on) {
-      if (this.shieldShell) { this.shieldShell.parent?.remove(this.shieldShell); this.shieldShell = null; }
+      for (const s of this.shieldShells) s.parent?.remove(s);
+      this.shieldShells = [];
       return;
     }
-    if (this.shieldShell) return;
-    // Glow shell wraps the whole weapon group — it already sits under the
-    // viewmodel group, so no re-parenting or weapon-index bookkeeping.
+    if (this.shieldShells.length) return;
     const src = this.weapons.get(this.activeWeapon);
     if (!src) return;
     const shell = src.clone(true);
     shell.traverse((o) => {
       const m = o as THREE.Mesh;
-      if (m.isMesh) m.material = new THREE.MeshBasicMaterial({
-        color: 0x66ccff, transparent: true, opacity: 0.22,
-        blending: THREE.AdditiveBlending, depthWrite: false,
-      });
+      if (m.isMesh) m.material = makeShieldMaterial();
     });
-    shell.scale.setScalar(1.04);
+    shell.scale.setScalar(1.06);
     src.parent?.add(shell);
-    this.shieldShell = shell;
+    this.shieldShells.push(shell);
+  }
+  /** Tick the field animation on the gun shells (called from update). */
+  private updateShieldShells(dt: number): void {
+    for (const s of this.shieldShells) {
+      s.traverse((o) => {
+        const m = (o as THREE.Mesh).material as THREE.ShaderMaterial;
+        if (m?.uniforms?.uTime) m.uniforms.uTime.value += dt;
+      });
+    }
   }
 
   // Melee swing: sweeps the weapon aside instead of kicking — reads as a
@@ -428,6 +434,7 @@ export class ViewModel {
     // tmpQuat is the inverse camera rotation — shared by sway and landing-dip
     // world->camera-space conversions
     camera.getWorldQuaternion(this.tmpQuat).invert();
+    this.updateShieldShells(dt);
 
     // Mouse sway — weapon lags behind look direction
     let moveX = THREE.MathUtils.clamp(-lookDeltaX * SWAY_AMOUNT * 60, -SWAY_MAX, SWAY_MAX);
@@ -529,6 +536,8 @@ export class ViewModel {
       this.activeWeapon = this.pendingWeapon;
       const next = this.weapons.get(this.activeWeapon);
       if (next) next.visible = true;
+      // The field shell wraps the OLD gun's silhouette — re-wrap the new one.
+      if (this.shieldShells.length) { this.setShield(false); this.setShield(true); }
       // Park the flash at this weapon's actual muzzle, not a shared offset
       const mz = ViewModel.MUZZLE_Z[this.activeWeapon] ?? -0.35;
       this.flashMesh.position.z = mz;

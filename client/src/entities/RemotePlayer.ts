@@ -10,6 +10,7 @@ import { pickLocomotionAnim } from './locomotionAnim.js';
 import { SnapshotBuffer } from './remoteSnapshots.js';
 import { RemoteGizmo } from './remoteGizmo.js';
 import { resetCorpse, launchCorpse, stepCorpse, type CorpseState } from './remoteDeath.js';
+import { makeShieldBubble, ShieldBubble } from '../effects/shieldBubble.js';
 
 const logger = new ChildLogger('RemotePlayer');
 
@@ -49,7 +50,7 @@ export class RemotePlayer {
   // Energy-shield bubble — lazily built on first use so un-shielded remotes
   // cost nothing. Lives at scene level (not inside the model) so cloak's
   // setVisible(false) can't silently take it down with the body.
-  private shieldBubble: THREE.Mesh | null = null;
+  private shieldBubble: ShieldBubble | null = null;
   private _shielded = false;
   private velocity: THREE.Vector3 = new THREE.Vector3();
   private angularVelocity: THREE.Vector3 = new THREE.Vector3();
@@ -311,10 +312,9 @@ export class RemotePlayer {
         ? 'jump'
         : pickLocomotionAnim(this._model.animationState, speed));
     }
-    if (this.shieldBubble?.visible) {
-      this.shieldBubble.position.set(this.position.x, this.position.y - EYE_OFFSET + 1.1, this.position.z);
-      const m = this.shieldBubble.material as THREE.MeshBasicMaterial;
-      m.opacity = 0.18 + Math.sin(performance.now() * 0.004) * 0.06;
+    if (this.shieldBubble) {
+      this.shieldBubble.update(dt);
+      if (this._shielded) this.shieldBubble.mesh.position.set(this.position.x, this.position.y - EYE_OFFSET + 1.1, this.position.z);
     }
     this.previousPosition.copy(this.position);
     this._model.update(dt);
@@ -328,6 +328,7 @@ export class RemotePlayer {
   /** Non-lethal hit feedback — the model plays the 'No' flinch briefly. */
   flinch(): void {
     if (!this._isDead) this.hitT = 0.35;
+    if (this._shielded) this.shieldBubble?.flash(); // soaked — flare the lattice
   }
 
   playDeath(explosionPos?: THREE.Vector3, explosionForce?: number): void {
@@ -355,7 +356,7 @@ export class RemotePlayer {
   hide(): void {
     this.model.setVisible(false);
     this.gizmo?.hide();
-    if (this.shieldBubble) this.shieldBubble.visible = false;
+    if (this.shieldBubble) this.shieldBubble.mesh.visible = false;
   }
 
   show(): void {
@@ -365,7 +366,7 @@ export class RemotePlayer {
       this.model.addColliderGizmo();
     }
     this.gizmo?.attach();
-    if (this.shieldBubble && this._shielded) this.shieldBubble.visible = true;
+    if (this.shieldBubble && this._shielded) this.shieldBubble.mesh.visible = true;
   }
 
   // Simulate physics when player stops sending updates (dead reckoning)
@@ -437,17 +438,8 @@ export class RemotePlayer {
   setShielded(on: boolean): void {
     if (on === this._shielded) return;
     this._shielded = on;
-    if (on && !this.shieldBubble) {
-      const geo = new THREE.SphereGeometry(2.2, 24, 16);
-      const mat = new THREE.MeshBasicMaterial({
-        color: 0x66ccff, transparent: true, opacity: 0.22,
-        side: THREE.DoubleSide, depthWrite: false,
-        blending: THREE.AdditiveBlending,
-      });
-      this.shieldBubble = new THREE.Mesh(geo, mat);
-      this.scene.add(this.shieldBubble);
-    }
-    if (this.shieldBubble) this.shieldBubble.visible = on;
+    if (on && !this.shieldBubble) this.shieldBubble = makeShieldBubble(this.scene);
+    if (this.shieldBubble) this.shieldBubble.mesh.visible = on;
   }
   get isShielded(): boolean { return this._shielded; }
 

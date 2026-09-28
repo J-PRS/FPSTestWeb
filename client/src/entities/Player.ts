@@ -4,6 +4,7 @@ import { JET_FORCE_UP, JET_FORCE_DIR, MAX_ENERGY, MAX_HEALTH, JET_DRAIN, JET_CHA
 
 import { Terrain } from '../world/terrain.js';
 import { PlayerSkills, SHIELD_DMG_PER_ENERGY } from './player/skills.js';
+import { makeShieldBubble, ShieldBubble } from '../effects/shieldBubble.js';
 
 import { MovementController, MovementState } from './movement.js';
 import { WeaponType } from '../../../shared/weapons.js';
@@ -76,22 +77,14 @@ export class Player {
   get isShielded(): boolean { return this.shielded; }
   onShield: ((on: boolean) => void) | null = null;
   // Third-person bubble — lazily built so a non-shield slot costs nothing.
-  private shieldMesh: THREE.Mesh | null = null;
+  private shieldBubble: ShieldBubble | null = null;
   private setShielded(on: boolean): void {
     if (this.shielded === on) return;
     this.shielded = on;
-    if (on && !this.shieldMesh && this.scene) {
-      this.shieldMesh = new THREE.Mesh(
-        new THREE.SphereGeometry(2.2, 24, 16),
-        new THREE.MeshBasicMaterial({
-          color: 0x66ccff, transparent: true, opacity: 0.2,
-          side: THREE.DoubleSide, depthWrite: false,
-          blending: THREE.AdditiveBlending,
-        })
-      );
-      this.scene.add(this.shieldMesh);
-    }
-    if (this.shieldMesh) this.shieldMesh.visible = on;
+    if (on && !this.shieldBubble) this.shieldBubble = makeShieldBubble(this.scene);
+    // Own bubble only renders in third person — in first person it would
+    // swallow the camera; the gun shell + vignette are the FP read instead.
+    if (this.shieldBubble) this.shieldBubble.mesh.visible = on && this.thirdPerson;
     this.onShield?.(on);
   }
 
@@ -101,6 +94,7 @@ export class Player {
   absorbShieldDamage(dmg: number): number {
     if (!this.shielded) return dmg;
     this.energy = Math.max(0, this.energy - dmg / SHIELD_DMG_PER_ENERGY);
+    this.shieldBubble?.flash();
     if (this.energy <= 0) {
       this.skills.forceShieldOff();
       return 0; // popped exactly on empty — the breaking hit is still soaked
@@ -355,6 +349,9 @@ export class Player {
       toggleCamera: () => {
         this.thirdPerson = !this.thirdPerson;
         this.model?.setVisible(this.thirdPerson && !this.isDead && !this.cloaked);
+        // Own bubble exists for spectators/remote eyes only — FP is the
+        // gun shell + vignette, so it flips with the camera toggle.
+        if (this.shieldBubble) this.shieldBubble.mesh.visible = this.shielded && this.thirdPerson;
       },
       skillPress: () => this.skills.press(this.skill),
       skillRelease: () => this.skills.release(this.skill),
@@ -469,10 +466,9 @@ export class Player {
     this.skills.updateBeacon(dt);
     this.skills.updateCloak(dt);
     this.skills.updateShield(dt);
-    if (this.shieldMesh?.visible) {
-      this.shieldMesh.position.set(this.pos.x, this.pos.y - 0.6, this.pos.z);
-      const m = this.shieldMesh.material as THREE.MeshBasicMaterial;
-      m.opacity = 0.16 + Math.sin(performance.now() * 0.004) * 0.05;
+    if (this.shieldBubble) {
+      this.shieldBubble.update(dt);
+      if (this.shielded) this.shieldBubble.mesh.position.set(this.pos.x, this.pos.y - 0.6, this.pos.z);
     }
 
     if (this.skills.updateBlink(dt)) return;
