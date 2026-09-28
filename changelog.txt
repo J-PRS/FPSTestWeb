@@ -1934,3 +1934,4 @@ bots: server bots now hunt creatures (ballSim roster in enemies) — nuggets roo
 server: superbot knob (FPS_SUPERBOT=substr: 3x speed, perfect aim, 400hp); flag grab/return/capture logged
 tools: ballreplay takes PVP_ROOM to probe non-default rooms
 hud: Tab scoreboard — team-grouped sections, PTS column, sorted by score/frags
+maps: structures[] spec field + raindance.json CTF map (henge midfield, team bases)
