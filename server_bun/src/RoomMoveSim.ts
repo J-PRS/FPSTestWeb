@@ -55,6 +55,9 @@ interface Shadow {
   /** inputMove ordering — change-only events on unordered transports
    *  (RTC/WT datagrams) can land out of order; regressions are dropped. */
   lastInputSeq: number;
+  /** Tick substeps accumulate in the client's 1/30 quantum so the shadow
+   *  integrates identically to the client sim despite the 50ms room tick. */
+  acc: number;
 }
 
 export class RoomMoveSim {
@@ -129,7 +132,7 @@ export class RoomMoveSim {
       energy: ENERGY.max,
       jetDrain: mods.jetDrain, jetRegen: mods.jetRegen, energyRegen: mods.energyRegen,
       jetWanted: false, skillDrainPerSec: 0, skillSuppressRegen: false, lastStatus: 0,
-      lastInputSeq: 0,
+      lastInputSeq: 0, acc: 0,
     });
   }
 
@@ -269,7 +272,14 @@ export class RoomMoveSim {
       }
       sh.energy = Math.max(0, sh.energy);
       sh.sim.setInput({ jetHeld: jetting });
-      sh.sim.update(dt);
+      // Integrate in the client's 1/30 quanta — the room tick is 50ms, and
+      // a single 50ms step resolves ski/ground contact differently than
+      // the client's 33ms steps, producing a permanent ~2m divergence.
+      sh.acc += dt;
+      while (sh.acc >= 1 / 30) {
+        sh.acc -= 1 / 30;
+        sh.sim.update(1 / 30);
+      }
     }
   }
 
