@@ -8,7 +8,8 @@ import type { WebGLRenderer } from 'three';
 export function createPerfHud() {
   const el = document.createElement('pre');
   el.style.cssText =
-    'position:fixed;bottom:6px;right:20px;z-index:10000;display:none;' +
+    // Sits directly above the stats.js chart row (40px + 48px chart height).
+    'position:fixed;bottom:94px;right:20px;z-index:10000;display:none;' +
     'color:#8f8;background:rgba(0,0,0,0.55);padding:4px 8px;font:11px/1.35 monospace;' +
     'margin:0;pointer-events:none;text-align:right;';
   document.body.appendChild(el);

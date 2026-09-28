@@ -13,8 +13,8 @@ import type { Terrain } from '../world/terrain.js';
 // gnaw funnel (they commit to it like any candidate and chew it down).
 
 const RANGE = 42;           // acquire envelope
-const FIRE_INTERVAL = 0.45; // ~2.2 shots/sec — reads as a sentry, not a hose
-const MUZZLE = new THREE.Vector3(0, 1.35, 0.55); // local to head pivot
+const FIRE_INTERVAL = 1.25; // mini-rockets: heavier shots, longer beat
+const MUZZLE = new THREE.Vector3(0, 0.05, 0.95); // local to head pivot — tube mouth
 
 const _v = new THREE.Vector3();
 const _aim = new THREE.Vector3();
@@ -27,7 +27,10 @@ const _glow = new THREE.MeshBasicMaterial({ color: 0x66ddff });
 const _geoBase = new THREE.CylinderGeometry(0.55, 0.8, 0.5, 8);
 const _geoMast = new THREE.CylinderGeometry(0.16, 0.22, 0.9, 6);
 const _geoDome = new THREE.SphereGeometry(0.42, 10, 8);
-const _geoBarrel = new THREE.BoxGeometry(0.12, 0.12, 0.9);
+// Rocket pod: a housing block with two fat launch tubes — the silhouette
+// reads "missile sentry", not "pin gun".
+const _geoPod = new THREE.BoxGeometry(0.5, 0.34, 0.72);
+const _geoTube = new THREE.CylinderGeometry(0.15, 0.17, 1.1, 8);
 const _geoEye = new THREE.SphereGeometry(0.09, 6, 5);
 
 export class DeployTurret {
@@ -47,6 +50,10 @@ export class DeployTurret {
   private flashT = 0;
   private fireCd = 0.6 + Math.random() * 0.4; // stagger multi-turret volleys
   private idleSpin = Math.random() * Math.PI * 2;
+  // Unfold beat: the thrown pod carries a folded sentry that assembles
+  // mid-air — group scales up with a back-ease overshoot, mast rises.
+  // Firing is gated until it finishes.
+  private unfoldT = 0;
 
   constructor(scene: THREE.Scene, terrain: Terrain, pos: THREE.Vector3) {
     this.id = nextTargetId();
@@ -61,11 +68,17 @@ export class DeployTurret {
     this.group.add(base, mast);
 
     const dome = new THREE.Mesh(_geoDome, _metal);
-    const barrel = new THREE.Mesh(_geoBarrel, _dark);
-    barrel.position.set(0, 0.05, 0.45);
+    const pod = new THREE.Mesh(_geoPod, _metal);
+    pod.position.set(0, 0.08, 0.3);
+    const tubeL = new THREE.Mesh(_geoTube, _dark);
+    tubeL.rotation.x = Math.PI / 2;
+    tubeL.position.set(-0.14, 0.08, 0.55);
+    const tubeR = new THREE.Mesh(_geoTube, _dark);
+    tubeR.rotation.x = Math.PI / 2;
+    tubeR.position.set(0.14, 0.08, 0.55);
     const eye = new THREE.Mesh(_geoEye, _glow);
-    eye.position.set(0, 0.12, 0.42);
-    this.head.add(dome, barrel, eye);
+    eye.position.set(0, 0.3, 0.3);
+    this.head.add(dome, pod, tubeL, tubeR, eye);
     this.head.position.y = 1.4;
     this.group.add(this.head);
 
@@ -83,13 +96,14 @@ export class DeployTurret {
   }
 
   /**
-   * Returns a shot {muzzle, hit} when the fire cycle lands on a live enemy
-   * in range — the caller owns damage + tracer visuals. Leading with a
-   * small velocity compensation so movers still get clipped.
+   * Returns a shot {muzzle, target} when the fire cycle lands on a live
+   * enemy in range — the caller owns the rocket body, steering, and the
+   * blast. The target entry is handed back so the rocket can home on it.
    */
   update(dt: number, enemies: { pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean }[]):
-      { muzzle: THREE.Vector3; hit: THREE.Vector3 } | null {
+      { muzzle: THREE.Vector3; target: { pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean } } | null {
     if (this.dead) return null;
+    if (this.unfoldT < 1) { this.tickUnfold(dt); return null; } // still assembling
     this.flashT -= dt;
     this.flash.material.opacity = Math.max(0, this.flashT / 0.09);
 
@@ -121,12 +135,26 @@ export class DeployTurret {
     this.fireCd = FIRE_INTERVAL;
     this.flashT = 0.09;
 
-    // Hitscan with a 0.2s velocity lead — under-lead keeps skiiers honest
-    // without making the turret omniscient.
+    // Launch point: the tube mouth in world space. The rocket owns lead
+    // and steering from here — the turret just picks WHO to shoot.
     const muzzle = _v.copy(MUZZLE).applyQuaternion(this.head.getWorldQuaternion(new THREE.Quaternion())).add(this.pos).clone();
-    const hit = _aim.copy(best.pos).addScaledVector(best.vel, 0.2);
-    hit.y += 0.6; // center-mass, not feet
-    return { muzzle, hit };
+    return { muzzle, target: best };
+  }
+
+  /** Advance the unfold anim. The throw pod drives this while airborne so
+   *  the sentry lands already deployed — not springing up post-touchdown. */
+  tickUnfold(dt: number): void {
+    if (this.unfoldT >= 1) return;
+    this.unfoldT = Math.min(1, this.unfoldT + dt / 0.45);
+    const k = this.unfoldT - 1;
+    this.group.scale.setScalar(Math.max(0.08, 1 + 2.7 * k * k * k + 1.7 * k * k)); // easeOutBack
+    this.head.position.y = 0.6 + this.unfoldT * 0.8; // mast rises out of the base
+  }
+
+  unfoldDone(): void {
+    this.unfoldT = 1;
+    this.group.scale.setScalar(1);
+    this.head.position.y = 1.4;
   }
 
   takeDamage(dmg: number): void {

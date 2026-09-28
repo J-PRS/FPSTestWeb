@@ -104,6 +104,37 @@ export function equip(): void {
   osc('square', 500, 700, 0.06, 0.1, g);
 }
 
+export function shieldOn(): void {
+  const bus = audio.sfxBus, c = ctx();
+  if (!bus || !c) return;
+  const g = c.createGain(); g.connect(bus);
+  if (!play(g, 0.4)) return;
+  // Rising shimmer — a wall of charge snapping into place.
+  osc('sine', 300, 900, 0.18, 0.22, g);
+  osc('triangle', 600, 1800, 0.22, 0.1, g);
+  noise(0.15, 0.12, g, 'bandpass', 2000, 5000, 1.2);
+}
+
+export function shieldHit(): void {
+  const bus = audio.sfxBus, c = ctx();
+  if (!bus || !c) return;
+  const g = c.createGain(); g.connect(bus);
+  if (!play(g, 0.12)) return;
+  // Metallic ping + absorbed thud — energy taking the punch.
+  osc('sine', 1500, 900, 0.07, 0.2, g);
+  noise(0.06, 0.15, g, 'highpass', 3000);
+}
+
+export function shieldBreak(): void {
+  const bus = audio.sfxBus, c = ctx();
+  if (!bus || !c) return;
+  const g = c.createGain(); g.connect(bus);
+  if (!play(g, 0.4)) return;
+  // Falling shimmer — the bubble collapsing.
+  osc('sine', 900, 180, 0.28, 0.25, g);
+  noise(0.2, 0.18, g, 'bandpass', 4000, 600, 1.4);
+}
+
 export function killConfirm(): void {
   const bus = audio.uiBus, c = ctx();
   if (!bus || !c) return;

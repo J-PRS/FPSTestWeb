@@ -8,6 +8,7 @@ import { WEAPON_CONFIGS } from '../projectiles/index.js';
 import { aoeImpulse, aoeDamage as aoeDamageOf } from '../../../shared/combat.js';
 import type { CombatDeps } from './combat.js';
 import type { Targetable } from '../entities/balls.js';
+import * as sfx from '../core/sfx.js';
 
 export interface BlastForceHooks {
   onTargetDestroyed(t: Targetable, impulse?: THREE.Vector3, weaponType?: number): void;
@@ -146,9 +147,17 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
       // vignette only, no hurt sound (JP: the grunt is too much for this).
       const selfDmg = aoeDamageOf(aoeDamage, dpx, radius) * SELF_AOE_DAMAGE_SCALE;
       if (selfDmg >= 1 && !player.isDead) {
-        player.lastDamageSource = 'cooked by your own blast'; // suicide reads as suicide, not "a crawler"
-        deps.lazyNetworkManager()?.sendEnvironmentDamage(selfDmg);
-        deps.lazyHud().showDamage(null, selfDmg);
+        // Shield soaks self-splash too — the server holds health steady so
+        // the only thing to report is the energy burn + its flash.
+        if (player.isShielded) {
+          player.absorbShieldDamage(selfDmg);
+          deps.lazyHud().showShieldDamage(null, selfDmg);
+          sfx.shieldHit();
+        } else {
+          player.lastDamageSource = 'cooked by your own blast'; // suicide reads as suicide, not "a crawler"
+          deps.lazyNetworkManager()?.sendEnvironmentDamage(selfDmg);
+          deps.lazyHud().showDamage(null, selfDmg);
+        }
       }
     }
     applyForceToBalls(pos, radius, force, forceMode, collisionMultiplier, forceMultiplier, aoeDamage, applyTo, weaponType);

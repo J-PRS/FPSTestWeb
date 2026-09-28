@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { JET_FORCE_UP, JET_FORCE_DIR, MAX_ENERGY, MAX_HEALTH, JET_DRAIN, JET_CHARGE, FIRE_RATE, DISC_RATE, GRENADE_RATE, CHAINGUN_RATE, MORTAR_RATE, GL_RATE, FLAK_RATE, PLASMA_RATE, RAILGUN_RATE, LG_RATE, SHOTGUN_RATE, CANNON_RATE, RKT_RATE, PISTOL_RATE, REVOLVER_RATE, STICKY_RATE, MELEE_COOLDOWN, MELEE_LUNGE } from '../core/config.js';
 
 import { Terrain } from '../world/terrain.js';
-import { PlayerSkills } from './player/skills.js';
+import { PlayerSkills, SHIELD_DMG_PER_ENERGY } from './player/skills.js';
 
 import { MovementController, MovementState } from './movement.js';
 import { WeaponType } from '../../../shared/weapons.js';
@@ -23,8 +23,8 @@ export interface FireEvent {
   playerVel: THREE.Vector3;
 }
 
-export type SkillId = 'bounce' | 'blink' | 'dash' | 'slam' | 'warp' | 'cloak';
-export const SKILL_ORDER: SkillId[] = ['bounce', 'blink', 'dash', 'slam', 'warp', 'cloak'];
+export type SkillId = 'bounce' | 'blink' | 'dash' | 'slam' | 'warp' | 'cloak' | 'shield';
+export const SKILL_ORDER: SkillId[] = ['bounce', 'blink', 'dash', 'slam', 'warp', 'cloak', 'shield'];
 
 export class Player {
   pos = new THREE.Vector3();
@@ -69,6 +69,43 @@ export class Player {
     this.cloaked = on;
     this.model?.setVisible(this.thirdPerson && !this.isDead && !this.spectating && !on);
     this.onCloak?.(on);
+  }
+
+  // Shield mirrors cloak: one flag consumed by wire send + HUD + model fx.
+  private shielded = false;
+  get isShielded(): boolean { return this.shielded; }
+  onShield: ((on: boolean) => void) | null = null;
+  // Third-person bubble — lazily built so a non-shield slot costs nothing.
+  private shieldMesh: THREE.Mesh | null = null;
+  private setShielded(on: boolean): void {
+    if (this.shielded === on) return;
+    this.shielded = on;
+    if (on && !this.shieldMesh && this.scene) {
+      this.shieldMesh = new THREE.Mesh(
+        new THREE.SphereGeometry(2.2, 24, 16),
+        new THREE.MeshBasicMaterial({
+          color: 0x66ccff, transparent: true, opacity: 0.2,
+          side: THREE.DoubleSide, depthWrite: false,
+          blending: THREE.AdditiveBlending,
+        })
+      );
+      this.scene.add(this.shieldMesh);
+    }
+    if (this.shieldMesh) this.shieldMesh.visible = on;
+    this.onShield?.(on);
+  }
+
+  /** Inbound damage while the bubble is up burns energy (10 dmg = 1 energy)
+   *  instead of health. Returns the health damage that still gets through —
+   *  zero while the tank holds. */
+  absorbShieldDamage(dmg: number): number {
+    if (!this.shielded) return dmg;
+    this.energy = Math.max(0, this.energy - dmg / SHIELD_DMG_PER_ENERGY);
+    if (this.energy <= 0) {
+      this.skills.forceShieldOff();
+      return 0; // popped exactly on empty — the breaking hit is still soaked
+    }
+    return 0;
   }
 
   toggleSpectator(): void {
@@ -255,7 +292,7 @@ export class Player {
   onDeploy: (() => void) | null = null;
   onNetworkJump: ((pos: { x: number; y: number; z: number }) => void) | null = null;
   onNetworkJetpack: ((pos: { x: number; y: number; z: number }) => void) | null = null;
-  onNetworkInput: ((input: { forward: number; right: number; jump: number; ski: number; cloak?: number }, rotation: { yaw: number; pitch: number }) => void) | null = null;
+  onNetworkInput: ((input: { forward: number; right: number; jump: number; ski: number; cloak?: number; shield?: number }, rotation: { yaw: number; pitch: number }) => void) | null = null;
 
   constructor(terrain: Terrain, camera: THREE.PerspectiveCamera, scene: THREE.Scene) {
     this.terrain = terrain;
@@ -303,6 +340,8 @@ export class Player {
       emitSlam: (a, b) => this.onSlam?.(a, b),
       emitBounce: (a, b) => this.onBounce?.(a, b),
       emitCloak: (on) => this.setCloaked(on),
+      emitShield: (on) => this.setShielded(on),
+      shieldAbsorb: (dmg) => { this.energy = Math.max(0, this.energy - dmg); if (this.energy <= 0) this.setShielded(false); },
       energy: () => this.energy,
       spendEnergy: (n) => { if (this.energy < n) return false; this.energy -= n; return true; },
       drainEnergy: (n) => { this.energy = Math.max(0, this.energy - n); },
@@ -429,6 +468,12 @@ export class Player {
     this.skills.tickCooldowns(dt);
     this.skills.updateBeacon(dt);
     this.skills.updateCloak(dt);
+    this.skills.updateShield(dt);
+    if (this.shieldMesh?.visible) {
+      this.shieldMesh.position.set(this.pos.x, this.pos.y - 0.6, this.pos.z);
+      const m = this.shieldMesh.material as THREE.MeshBasicMaterial;
+      m.opacity = 0.16 + Math.sin(performance.now() * 0.004) * 0.05;
+    }
 
     if (this.skills.updateBlink(dt)) return;
 
@@ -458,7 +503,7 @@ export class Player {
     // Send input to network for client-side prediction
     if (this.onNetworkInput) {
       this.onNetworkInput(
-        { forward: input.forward, right: input.right, jump: input.jumpHeld ? 1 : 0, ski: input.skiHeld ? 1 : 0, cloak: this.cloaked ? 1 : 0 },
+        { forward: input.forward, right: input.right, jump: input.jumpHeld ? 1 : 0, ski: input.skiHeld ? 1 : 0, cloak: this.cloaked ? 1 : 0, shield: this.shielded ? 1 : 0 },
         { yaw: this.yaw, pitch: this.pitch }
       );
     }
@@ -485,7 +530,7 @@ export class Player {
     // while burning, recharge 8/s only when off the jet)
     // Regen also pauses while cloaked — invisibility and jets compete
     // for the same tank, never fill it together.
-    if (!isJetting && !this.cloaked) {
+    if (!isJetting && !this.cloaked && !this.shielded) {
       this.energy = Math.min(MAX_ENERGY, this.energy + JET_CHARGE * dt);
     }
 

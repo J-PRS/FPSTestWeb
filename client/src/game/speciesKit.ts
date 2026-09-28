@@ -76,7 +76,13 @@ export function createSpeciesKit(deps: EntitiesDeps, targets: Targetable[], depl
     if (attacker) {
       const brain = targetReg.for(attacker);
       const t = brain.target;
-      if (!t || t.id !== 'local') return false;
+      // Committed to someone else — their sim claims it, not yours.
+      if (t && t.id !== 'local') return false;
+      // No commitment: a waypoint bite is biting air — UNLESS the creature
+      // is frenzied, where its thrash lunges at your last-known position
+      // are real contact and landing one is legit. This is what keeps
+      // point-blank cloak sniping dangerous.
+      if (!t && brain.frenzyT <= 0) return false;
       // "Always miss the first time" — a creature that JUST committed to you
       // whiffs its opening strike instead of arriving pre-warmed. Reads as a
       // warning shot: you get a beat to react before contact damage starts.
@@ -248,6 +254,40 @@ export function createSpeciesKit(deps: EntitiesDeps, targets: Targetable[], depl
   }
   const _stalkDir = new THREE.Vector3();
 
+  // Frenzy: hurt by an invisible attacker. The pack has no target — only
+  // where the damage came FROM — so it thrashes: pounce at the remembered
+  // spot, scatter in panic, repeat on a frantic cadence. A close creature
+  // also gets a "scent" chance to lunge at the real position — standing
+  // still inside a frenzied pack is how you get clipped by accident.
+  const FRENZY_SCENT = 15;    // metres — inside this they can smell you
+  const FRENZY_RADIUS = 70;   // packmates within this of the victim panic too
+  function frenzyFor(owner: object, selfPos: THREE.Vector3, dt: number, brain: { frenzyFrom: THREE.Vector3 }): THREE.Vector3 {
+    let w = wanderReg.get(owner);
+    if (!w) {
+      w = { wp: selfPos.clone(), t: 0 };
+      wanderReg.set(owner, w);
+    }
+    w.t -= dt;
+    if (w.t <= 0 || w.wp.distanceToSquared(selfPos) < 4) {
+      w.t = 0.6 + Math.random() * 1.0; // frantic re-pick, not the lazy wander cadence
+      const p = deps.lazyPlayer().pos;
+      if (selfPos.distanceToSquared(p) < FRENZY_SCENT * FRENZY_SCENT && Math.random() < 0.45) {
+        // Close enough to smell the invisible threat — lunge at it
+        w.wp.set(p.x + (Math.random() - 0.5) * 6, 0, p.z + (Math.random() - 0.5) * 6);
+      } else if (Math.random() < 0.55) {
+        // Pounce at where the attack came from — they remember the pain
+        const a = Math.random() * Math.PI * 2, d = 4 + Math.random() * 18;
+        w.wp.set(brain.frenzyFrom.x + Math.cos(a) * d, 0, brain.frenzyFrom.z + Math.sin(a) * d);
+      } else {
+        // Bolt somewhere — pure panic scatter
+        const a = Math.random() * Math.PI * 2, d = 10 + Math.random() * 30;
+        w.wp.set(selfPos.x + Math.cos(a) * d, 0, selfPos.z + Math.sin(a) * d);
+      }
+      w.wp.y = deps.lazyTerrain().getHeight(w.wp.x, w.wp.z) + 2;
+    }
+    return w.wp;
+  }
+
   // Grace period between a brain committing to a target and its attacks
   // landing — the first-strike mercy window.
   const ENGAGE_GRACE = 1.25;
@@ -266,10 +306,13 @@ export function createSpeciesKit(deps: EntitiesDeps, targets: Targetable[], depl
   function aggroFor(owner: object, selfPos: THREE.Vector3, dt: number, profile: TargetProfile): THREE.Vector3 {
     const brain = targetReg.for(owner);
     const t = brain.update(dt, selfPos, candidates(), profile);
-    // No live target: stalk toward the last-seen position if this brain
-    // only lost the target to distance — otherwise mill about on a
-    // personal wander waypoint. Either way the creature keeps moving.
-    if (!t) return brain.stalking ? stalkFor(owner, selfPos, dt, brain, profile.leash || 400) : wanderFor(owner, selfPos, dt);
+    // No live target: frenzy outranks everything — an invisible attacker
+    // whipped it into a panic. Then stalk (lost a far target) before
+    // plain milling. Either way the creature keeps moving.
+    if (!t) {
+      if (brain.frenzyT > 0) return frenzyFor(owner, selfPos, dt, brain);
+      return brain.stalking ? stalkFor(owner, selfPos, dt, brain, profile.leash || 400) : wanderFor(owner, selfPos, dt);
+    }
 
     // Flinch: freshly damaged → recoil away from the attacker's position
     // instead of pressing in. Short window; reads as "it noticed the hit".
@@ -330,8 +373,22 @@ export function createSpeciesKit(deps: EntitiesDeps, targets: Targetable[], depl
   function reportTargetDamage(e: object, amount: number, attackerId = 'local'): void {
     const brain = targetReg.for(e);
     brain.reportDamage(attackerId, amount);
-    const from = attackerId === 'local' ? deps.lazyPlayer().pos : _candMap.get(attackerId)?.pos;
+    const p = deps.lazyPlayer();
+    const from = attackerId === 'local' ? p.pos : _candMap.get(attackerId)?.pos;
     if (from) brain.flinch(from);
+    // Shot while cloaked — the pack can't see you, it PANICS: the victim
+    // plus every creature nearby thrashes at your last-known position.
+    // Cloak sniping stays possible but never safe at close range.
+    if (attackerId === 'local' && p.isCloaked) {
+      brain.frenzy(p.pos);
+      const ep = (e as Targetable).pos;
+      for (const o of targets) {
+        if (o === e || o.dead) continue;
+        if (o.pos.distanceToSquared(ep) < FRENZY_RADIUS * FRENZY_RADIUS) {
+          targetReg.for(o).frenzy(p.pos);
+        }
+      }
+    }
   }
 
   // Compact orange pop shared by turret shells, totem bolts, mines — reads

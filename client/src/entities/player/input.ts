@@ -19,13 +19,17 @@ export interface PlayerInputHandlers {
   toggleCamera(): void;
   skillPress(): void;
   skillRelease(): void;
-  /** Hold-out secondary bind — wid is the loadout-space weapon id. */
+  /** The loadout-chosen sidearm's slot-space weapon id — resolved at
+   *  press time so a mid-match loadout change takes effect immediately. */
+  sidearmWid(): number;
+  /** Hold-out sidearm bind — wid is the loadout-space weapon id. */
   secondaryDown(wid: number): void;
-  secondaryUp(wid: number): void;
+  /** Releases whatever sidearm is currently held — no arg, the held wid is
+   *  the player's state (loadout may have changed while the key was down). */
+  secondaryUp(): void;
   selectSlot(i: number): void;
   cycleWeapon(step: number): void;
   deploy(): void;
-  cycleDeploy(): void;
   /** Raw mouse deltas; Player applies sens/invertY/clamp to yaw/pitch. */
   look(dx: number, dy: number): void;
 }
@@ -72,12 +76,7 @@ export class PlayerInput {
       // Spectating: only the spectate toggle and raw movement keys (tracked
       // above for the fly cam) respond — no weapons, skills, camera flips
       if (h.isSpectating()) return;
-      for (const a of SECONDARY_BINDS) {
-        if (matchCode(a.action, e.code)) {
-          h.secondaryDown(a.wid);
-          break;
-        }
-      }
+      if (matchCode('sidearm', e.code)) h.secondaryDown(h.sidearmWid());
       if (matchCode('jump', e.code)) this.jumpHeld = true;
       if (matchCode('belt', e.code)) {
         if (h.beltItem() === 'disc') this.discHeld = true;
@@ -87,7 +86,6 @@ export class PlayerInput {
       if (matchCode('camera', e.code)) h.toggleCamera();
       if (matchCode('skill', e.code) && !e.repeat) h.skillPress();
       if (matchCode('deploy', e.code) && !e.repeat) h.deploy();
-      if (matchCode('cycleDeploy', e.code) && !e.repeat) h.cycleDeploy();
       for (let i = 0; i < LOADOUT_SLOTS; i++) {
         if (matchCode(`slot${i}` as BindAction, e.code)) h.selectSlot(i);
       }
@@ -109,9 +107,7 @@ export class PlayerInput {
       if (matchCode('jump', e.code)) this.jumpHeld = false;
       if (matchCode('skill', e.code)) h.skillRelease();
       if (matchCode('belt', e.code)) { this.discHeld = false; this.grenadeHeld = false; }
-      for (const a of SECONDARY_BINDS) {
-        if (matchCode(a.action, e.code)) { h.secondaryUp(a.wid); break; }
-      }
+      if (matchCode('sidearm', e.code)) h.secondaryUp();
     });
     document.addEventListener('mousedown', (e) => {
       if (this.frozen) return;
@@ -185,13 +181,39 @@ export class PlayerInput {
       });
       volInput.addEventListener('keydown', (e) => e.stopPropagation());
     }
+
+    // Boot-time flags: mode/spawns/debug are read once at module init, so
+    // a change persists the setting and reloads rather than half-applying.
+    const modeSelect = document.getElementById('mode-select') as HTMLSelectElement | null;
+    if (modeSelect) {
+      modeSelect.value = settings.get('fps-mode');
+      modeSelect.addEventListener('change', () => {
+        settings.set('fps-mode', modeSelect.value);
+        location.reload();
+      });
+      modeSelect.addEventListener('keydown', (e) => e.stopPropagation());
+    }
+
+    const spawnsBtn = document.getElementById('spawns-toggle') as HTMLButtonElement | null;
+    if (spawnsBtn) {
+      const label = () => { spawnsBtn.textContent = settings.get('fps-spawns') ? 'SPAWNS: RANDOM' : 'SPAWNS: SCRIPTED'; };
+      label();
+      spawnsBtn.addEventListener('click', () => {
+        settings.set('fps-spawns', settings.get('fps-spawns') ? 0 : 1);
+        location.reload();
+      });
+    }
+
+    const debugBtn = document.getElementById('debug-toggle') as HTMLButtonElement | null;
+    if (debugBtn) {
+      const label = () => { debugBtn.textContent = settings.get('fps-debug') ? 'DEBUG: ON' : 'DEBUG: OFF'; };
+      label();
+      debugBtn.addEventListener('click', () => {
+        settings.set('fps-debug', settings.get('fps-debug') ? 0 : 1);
+        location.reload();
+      });
+    }
   }
 }
 
 const LOADOUT_SLOTS = 4;
-
-const SECONDARY_BINDS: { action: BindAction; wid: number }[] = [
-  { action: 'secPistol', wid: 12 },
-  { action: 'secRevolver', wid: 13 },
-  { action: 'secShotgun', wid: 9 },
-];

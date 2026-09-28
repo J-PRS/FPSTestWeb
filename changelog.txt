@@ -1960,3 +1960,4 @@ server: RoomDeployables sim — 'deploy' claims plant server-owned turret/mine/s
 - added .agents/skills/headless-game-testing (puppeteer-core recipe for locked-desktop E2E: pointer-lock stub, __test hook, 7x headless slowdown, hit-aiming)
 - video export: captureStream+MediaRecorder 'MP4' button in demo bar (mp4 pref, webm fallback), stop flushes clip; demorender tool: scrubTo pump + NVENC/AMF/QSV + readPixels->rawvideo fast path + --realtime screencast mode
 - cloak over MP: cloak bit rides inputMove->tick flag4 (proto v6); remotes hide model+gizmo+HUD indicator+healthbar; bots/balls lose cloaked targets; death strips cloak
+shield skill (Q): 20 energy activation, 5/s drain, damage routes to energy 10:1 — server absorbs hits while flag set, cyan bubble on remotes, viewmodel glow + HUD chip + synth cues (protocol v7)

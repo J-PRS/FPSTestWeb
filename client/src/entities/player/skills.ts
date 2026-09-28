@@ -21,8 +21,12 @@ const TL_COOLDOWN = 4.0;     // s after a teleport
 const TL_MAX_LIFE = 6.0;     // held beacon fizzles — can't camp it forever
 const TL_BOUNCE = 0.35;      // restitution — it skitters, doesn't thud
 
-const CLOAK_COST = 40;       // activation — a commitment, not a tap
-const CLOAK_DRAIN = 10;      // per second while invisible
+const CLOAK_COST = 20;       // activation — a commitment, not a tap
+const CLOAK_DRAIN = 5;       // per second while invisible
+
+const SHIELD_COST = 20;      // activation — same ante as cloak
+const SHIELD_DRAIN = 5;      // per second while the bubble is up
+export const SHIELD_DMG_PER_ENERGY = 10; // 10 absorbed damage burns 1 energy
 
 // Everything a skill needs from Player — mutable refs for pos/vel, plus
 // plumbing callbacks (aim, movement sync, the per-frame blink visuals).
@@ -48,6 +52,9 @@ export interface SkillsCtx {
   emitSlam(pos: THREE.Vector3, impactSpeed: number): void;
   emitBounce(pos: THREE.Vector3, dir: THREE.Vector3): void;
   emitCloak(on: boolean): void;
+  emitShield(on: boolean): void;
+  /** Damage landed while shielded → drains energy (dmg/10), breaks at 0. */
+  shieldAbsorb(dmg: number): void;
   // Energy is Player-owned — skills spend/drain through these so cloak
   // and jets share the one pool with no duplicated state.
   energy(): number;
@@ -80,6 +87,9 @@ export class PlayerSkills {
   private cloaked = false;
   get isCloaked(): boolean { return this.cloaked; }
 
+  private shielded = false;
+  get isShielded(): boolean { return this.shielded; }
+
   private tlBeacon: { pos: THREE.Vector3; vel: THREE.Vector3; age: number; grounded: boolean } | null = null;
   private tlCooldown = 0;
   private tlMesh: THREE.Mesh | null = null;
@@ -93,6 +103,7 @@ export class PlayerSkills {
     this.blinkActive = false;
     this.slamActive = false;
     this.setCloak(false);
+    this.setShield(false);
     this.fizzleBeacon();
   }
 
@@ -103,6 +114,7 @@ export class PlayerSkills {
     else if (skill === 'slam') this.trySlam();
     else if (skill === 'warp') this.throwBeacon();
     else if (skill === 'cloak') this.toggleCloak();
+    else if (skill === 'shield') this.toggleShield();
     else this.bounceHeld = true;
   }
 
@@ -184,6 +196,32 @@ export class PlayerSkills {
     if (!this.cloaked) return;
     this.ctx.drainEnergy(CLOAK_DRAIN * dt);
     if (this.ctx.energy() <= 0) this.setCloak(false); // tank dry — surface
+  }
+
+  // ---- Shield ----
+  // Same economy as cloak; instead of hiding you it soaks damage into the
+  // energy pool. Shield hits don't bypass the tank — a dried-up bubble pops.
+
+  private toggleShield(): void {
+    if (this.shielded) { this.setShield(false); return; }
+    if (!this.ctx.spendEnergy(SHIELD_COST)) return;
+    this.setShield(true);
+  }
+
+  private setShield(on: boolean): void {
+    if (this.shielded === on) return;
+    this.shielded = on;
+    this.ctx.emitShield(on);
+  }
+
+  /** Outside forces (damage soak, death) drop the bubble through the same
+   *  emit path so the wire flag and FX never disagree. */
+  forceShieldOff(): void { this.setShield(false); }
+
+  updateShield(dt: number): void {
+    if (!this.shielded) return;
+    this.ctx.drainEnergy(SHIELD_DRAIN * dt);
+    if (this.ctx.energy() <= 0) this.setShield(false); // tank dry — pop
   }
 
   private tryDash(): void {

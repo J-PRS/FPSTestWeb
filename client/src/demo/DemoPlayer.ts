@@ -137,6 +137,32 @@ export class DemoPlayer {
     this.playbackSpeed = speed;
   }
 
+  // Forward-only incremental step to `time` — emits just the events in
+  // (currentTime, time], unlike seek() which rebuilds the whole world.
+  // Offline renderers pump this per output frame; O(new events) not O(all).
+  scrubTo(time: number): void {
+    if (!this.demoData) return;
+    if (!Number.isFinite(time)) time = 0;
+    time = Math.max(0, Math.min(time, this.duration));
+    if (time < this.currentTime) { this.seek(time); return; }
+    this.currentTime = time;
+    this.frameIndex = this.findFrameIndex(this.currentTime);
+    const state = this.getInterpolatedState();
+    const projCount = this.findEventIndex(this.demoData.projectileEvents, this.currentTime);
+    const tgtCount = this.findEventIndex(this.demoData.targetEvents, this.currentTime);
+    const remoteCount = this.findEventIndex(this.demoData.remoteFrames, this.currentTime);
+    const events = {
+      projectiles: this.demoData.projectileEvents.slice(this.lastProjectileEventIndex, projCount),
+      targets: this.demoData.targetEvents.slice(this.lastTargetEventIndex, tgtCount),
+      remotes: this.demoData.remoteFrames.slice(this.lastRemoteFrameIndex, remoteCount),
+    };
+    this.lastProjectileEventIndex = projCount;
+    this.lastTargetEventIndex = tgtCount;
+    this.lastRemoteFrameIndex = remoteCount;
+    this.callbacks.onFrameUpdate?.(state, events);
+    this.callbacks.onTimeUpdate?.(this.currentTime, this.duration);
+  }
+
   setLoop(loop: boolean): void {
     this.loop = loop;
   }

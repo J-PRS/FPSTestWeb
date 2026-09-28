@@ -76,13 +76,15 @@ export function createGameLoop(deps: GameLoopDeps) {
   let lastPlayerYaw = 0;
   let lastPlayerPitch = 0;
 
-  // stats.js perf panels — FPS/MS/MB stacked bottom right, toggled with ` (backquote).
-  // stats.js only renders one panel per instance, so use one per metric.
+  // stats.js perf panels — FPS/MS/MB in a row along the bottom-right,
+  // toggled with ` (backquote). stats.js only renders one panel per
+  // instance, so use one per metric; panels are 80px wide + 8px gap.
   const statsPanels = [0, 1, 2].map((panel, i) => {
     const s = new Stats();
     s.showPanel(panel);
     const dom = s.dom as HTMLElement;
-    dom.style.cssText = `position:fixed;bottom:${56 + i * 48}px;right:20px;left:auto;top:auto;z-index:10000;display:none;`;
+    // bottom:40 — above the "⟳ files changed" badge strip (bottom:8, ~24px tall)
+    dom.style.cssText = `position:fixed;bottom:40px;right:${20 + (2 - i) * 88}px;left:auto;top:auto;z-index:10000;display:none;`;
     document.body.appendChild(dom);
     return s;
   });

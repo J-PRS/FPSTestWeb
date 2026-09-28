@@ -46,6 +46,7 @@ export class PlayerManager {
       ping: 0,
       skiing: 0,
       cloaked: 0,
+      shielded: 0,
       history: [],
       forceSendUntil: 0,
       protectedUntil: Date.now() + PlayerManager.SPAWN_PROTECT_MS,
@@ -126,6 +127,7 @@ export class PlayerManager {
       isDead: player.isDead,
       health: player.health,
       cloaked: player.cloaked,
+      shielded: player.shielded,
       team: player.team,
     };
   }
@@ -170,12 +172,19 @@ export class PlayerManager {
     if (Date.now() < target.protectedUntil) {
       return { killed: false, newHealth: target.health };
     }
+    // Energy shield: while the flag is up the hit routes to the player's
+    // energy tank, not their health — the client drains dmg/10 energy and
+    // drops the flag when the pool bottoms out (inputMove carries it).
+    if (target.shielded) {
+      return { killed: false, newHealth: target.health };
+    }
 
     target.health -= damage;
     if (target.health <= 0) {
       target.health = 0;
       target.isDead = true;
       target.cloaked = 0; // death strips the veil — remotes must see the corpse
+      target.shielded = 0;
       target.deaths++;
       target.pendingRespawn = true;
       return { killed: true, newHealth: 0 };
@@ -195,6 +204,7 @@ export class PlayerManager {
     player.health = CONFIG.playerMaxHealth;
     player.isDead = false;
     player.cloaked = 0; // a corpse decloaks — respawned cloaked is invisible forever if the toggle died with them
+    player.shielded = 0;
     player.pendingRespawn = false;
     player.lastSeq = 0;
     player.lastValidPosition = { ...spawn };

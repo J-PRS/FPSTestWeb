@@ -739,7 +739,7 @@ export class GameServer {
           // State fields (health/death/ski) must never be eaten by the
           // position check — a flag change forces the record even when the
           // player hasn't moved.
-          const stateChanged = p.health !== lastSent.hp || p.isDead !== lastSent.dead || p.skiing !== lastSent.ski || p.cloaked !== lastSent.cloak;
+          const stateChanged = p.health !== lastSent.hp || p.isDead !== lastSent.dead || p.skiing !== lastSent.ski || p.cloaked !== lastSent.cloak || p.shielded !== lastSent.shield;
           // Idle players still heartbeat at 4Hz — a >300ms silence would
           // trigger client-side dead reckoning on a stationary player
           if (!stateChanged && predErrSq < 0.09 && yawDiff < 0.02 && pitchDiff < 0.03 && now - lastSent.t < 250) {
@@ -751,7 +751,7 @@ export class GameServer {
           x: p.position.x, y: p.position.y, z: p.position.z,
           vx: p.velocity.x, vy: p.velocity.y, vz: p.velocity.z,
           yaw: p.rotation.yaw, pitch: p.rotation.pitch,
-          hp: p.health, dead: p.isDead, ski: p.skiing, cloak: p.cloaked, t: now,
+          hp: p.health, dead: p.isDead, ski: p.skiing, cloak: p.cloaked, shield: p.shielded, t: now,
         });
 
         records.push({
@@ -769,6 +769,7 @@ export class GameServer {
             ping: p.ping > 0 ? p.ping : undefined,
             ski: p.skiing,
             cloaked: p.cloaked,
+            shielded: p.shielded,
           }),
           pos: p.position,
           force: forceSend,

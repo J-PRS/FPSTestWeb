@@ -212,7 +212,17 @@ export function wireNetworkHandlers(deps: NetDeps): void {
     if (deps.world.playbackMode) return;
     // Check if local player was hit
     if (targetId === nm().getLocalPlayerId()) {
-      deps.lazyPlayer().health = health;
+      const player = deps.lazyPlayer();
+      // Shielded hits route to the energy tank (server kept health
+      // unchanged) — the soak reads as a cyan flash + hum, not a grunt.
+      if (player.isShielded) {
+        player.absorbShieldDamage(damage);
+        deps.lazyHud().showShieldDamage(deps.world.remotePlayers.get(shooterId)?.pos ?? null, damage);
+        sfx.shieldHit();
+        player.health = health;
+        return;
+      }
+      player.health = health;
       // Point the damage arc at the shooter's last known position
       deps.lazyHud().showDamage(deps.world.remotePlayers.get(shooterId)?.pos ?? null, damage);
       sfx.playerHurt();

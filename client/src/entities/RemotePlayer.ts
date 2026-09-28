@@ -46,6 +46,11 @@ export class RemotePlayer {
   private _isDead: boolean = false;
   private gizmo: RemoteGizmo | null = null;
   private scene: THREE.Scene;
+  // Energy-shield bubble — lazily built on first use so un-shielded remotes
+  // cost nothing. Lives at scene level (not inside the model) so cloak's
+  // setVisible(false) can't silently take it down with the body.
+  private shieldBubble: THREE.Mesh | null = null;
+  private _shielded = false;
   private velocity: THREE.Vector3 = new THREE.Vector3();
   private angularVelocity: THREE.Vector3 = new THREE.Vector3();
   private isOnGround: boolean = true;
@@ -306,6 +311,11 @@ export class RemotePlayer {
         ? 'jump'
         : pickLocomotionAnim(this._model.animationState, speed));
     }
+    if (this.shieldBubble?.visible) {
+      this.shieldBubble.position.set(this.position.x, this.position.y - EYE_OFFSET + 1.1, this.position.z);
+      const m = this.shieldBubble.material as THREE.MeshBasicMaterial;
+      m.opacity = 0.18 + Math.sin(performance.now() * 0.004) * 0.06;
+    }
     this.previousPosition.copy(this.position);
     this._model.update(dt);
   }
@@ -345,6 +355,7 @@ export class RemotePlayer {
   hide(): void {
     this.model.setVisible(false);
     this.gizmo?.hide();
+    if (this.shieldBubble) this.shieldBubble.visible = false;
   }
 
   show(): void {
@@ -354,6 +365,7 @@ export class RemotePlayer {
       this.model.addColliderGizmo();
     }
     this.gizmo?.attach();
+    if (this.shieldBubble && this._shielded) this.shieldBubble.visible = true;
   }
 
   // Simulate physics when player stops sending updates (dead reckoning)
@@ -421,6 +433,23 @@ export class RemotePlayer {
     if (hidden) this.hide(); else if (!this._staleHidden) this.show();
   }
   get isCloakHidden(): boolean { return this._cloakHidden; }
+
+  setShielded(on: boolean): void {
+    if (on === this._shielded) return;
+    this._shielded = on;
+    if (on && !this.shieldBubble) {
+      const geo = new THREE.SphereGeometry(2.2, 24, 16);
+      const mat = new THREE.MeshBasicMaterial({
+        color: 0x66ccff, transparent: true, opacity: 0.22,
+        side: THREE.DoubleSide, depthWrite: false,
+        blending: THREE.AdditiveBlending,
+      });
+      this.shieldBubble = new THREE.Mesh(geo, mat);
+      this.scene.add(this.shieldBubble);
+    }
+    if (this.shieldBubble) this.shieldBubble.visible = on;
+  }
+  get isShielded(): boolean { return this._shielded; }
 
   // Remote fired a weapon — kick the gun's procedural recoil
   fire(): void {

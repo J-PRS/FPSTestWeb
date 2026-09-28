@@ -156,10 +156,27 @@ export class PlayerVisuals {
     pos.addScaledVector(right, input.right * OBSERVER_SPEED * dt);
     if (input.jumpHeld) pos.y += OBSERVER_SPEED * dt;
     if (input.shiftDown) pos.y -= OBSERVER_SPEED * dt;
-    // Ghost can fly anywhere but not under the floor — otherwise the camera
-    // clamp fights the buried body every frame
-    const groundY = terrain.getHeight(pos.x, pos.z) + 0.25;
-    if (pos.y < groundY) pos.y = groundY;
+    // Terrain collider, spectator-flavored: the floor under the EYE always
+    // holds, and when the view pitches down the terrain ahead of the eye
+    // matters too — the near plane is what dirt clips. Blend the look-dir
+    // footprint in by sin(pitch): level flight is only clamped by ground
+    // below, steep-down flight is clamped by the slope it's about to face.
+    // Creature/projectile collision stays off — it's a ghost, just not a
+    // dirty one.
+    let groundY = terrain.getHeight(pos.x, pos.z);
+    const down = Math.max(0, -Math.sin(pitch)); // pitch<0 = looking down
+    if (down > 0.01) {
+      const fx = Math.sin(yaw) * 1.6, fz = Math.cos(yaw) * 1.6; // ~1.6m ahead
+      const sx = Math.cos(yaw) * 1.0, sz = -Math.sin(yaw) * 1.0; // flank flares
+      const aheadY = Math.max(
+        terrain.getHeight(pos.x + fx, pos.z + fz),
+        terrain.getHeight(pos.x + fx + sx, pos.z + fz + sz),
+        terrain.getHeight(pos.x + fx - sx, pos.z + fz - sz),
+      );
+      if (aheadY > groundY) groundY += (aheadY - groundY) * down;
+    }
+    const floorY = groundY + 0.6; // eye clearance — not a buried-body fight
+    if (pos.y < floorY) pos.y = floorY;
     vel.set(0, 0, 0); // observer drift isn't body momentum
     this.updateCamera(camera, terrain, pos, yaw, pitch); // keeps the camera above the terrain surface
   }

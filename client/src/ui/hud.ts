@@ -283,6 +283,60 @@ export class HUD {
     }
   }
 
+  /** Shielded hit — same directional language as showDamage but cyan and
+   *  punchier: the bubble ate it, the energy bar is the real damage readout. */
+  showShieldDamage(fromPos: THREE.Vector3 | null, damage: number): void {
+    this.dmgT = Math.min(1, this.dmgT + 0.12 + damage * 0.008);
+    this.dmgVignette.style.opacity = String(Math.min(0.6, this.dmgT));
+    this.dmgVignette.style.boxShadow =
+      'inset 0 0 18vmax rgba(90,200,255,0.55), inset 0 0 5vmax rgba(140,220,255,0.4)';
+    // Restore the red shadow for the next real hit — showDamage resets it.
+    clearTimeout(this.shieldVignetteReset);
+    this.shieldVignetteReset = window.setTimeout(() => {
+      this.dmgVignette.style.boxShadow = '';
+    }, 300);
+    if (fromPos) {
+      const dx = fromPos.x - this.lastPlayerPos.x;
+      const dz = fromPos.z - this.lastPlayerPos.z;
+      let rel = Math.atan2(dx, dz) - this.lastPlayerYaw;
+      while (rel > Math.PI) rel -= Math.PI * 2;
+      while (rel < -Math.PI) rel += Math.PI * 2;
+      this.dmgDirArc.style.transform = `rotate(${-rel}rad)`;
+      this.dmgDirT = 1;
+      this.dmgDir.style.opacity = '1';
+    }
+  }
+  private shieldVignetteReset = 0;
+
+  setShield(on: boolean): void {
+    if (on && !this.shieldHint) {
+      const d = document.createElement('div');
+      d.style.cssText = `
+        position:absolute; top:30px; left:50%; transform:translateX(-50%);
+        pointer-events:none; z-index:5; color:#9adcf9; opacity:0.8;
+        font:600 13px/1 monospace; letter-spacing:0.2em; text-shadow:0 1px 3px #000;
+      `;
+      d.textContent = 'SHIELDED';
+      document.body.appendChild(d);
+      this.shieldHint = d;
+      const v = document.createElement('div');
+      v.style.cssText = `
+        position:fixed; inset:0; pointer-events:none; z-index:4;
+        box-shadow: inset 0 0 20vmax rgba(80,190,255,0.4),
+                    inset 0 0 5vmax rgba(140,220,255,0.3);
+      `;
+      document.body.appendChild(v);
+      this.shieldVignette = v;
+    } else if (!on && this.shieldHint) {
+      this.shieldHint.remove();
+      this.shieldHint = null;
+      this.shieldVignette?.remove();
+      this.shieldVignette = null;
+    }
+  }
+  private shieldHint: HTMLDivElement | null = null;
+  private shieldVignette: HTMLDivElement | null = null;
+
   updateMinimap(targets: Targetable[], nuggets: Nugget[], pos: THREE.Vector3, yaw: number, birds?: THREE.Vector3[]): void {
     this.minimap.update(targets, nuggets, pos, yaw, birds);
   }
