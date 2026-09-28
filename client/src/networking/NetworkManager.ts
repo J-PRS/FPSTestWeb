@@ -175,10 +175,12 @@ export class NetworkManager {
     this.ws.send(JSON.stringify(msg));
   }
 
-  /** Outbound binary frame — pre-encoded by shared/wire.ts. */
+  /** Outbound binary frame — pre-encoded by shared/wire.ts. Position state
+   *  is volatile: only the newest matters, so it rides the unreliable lane
+   *  (on TCP this degrades to the same socket — no behavior change). */
   private sendBinary(data: Uint8Array): void {
     if (!this.ws?.connected()) return;
-    this.ws.send(data);
+    (this.ws.sendUnreliable ?? this.ws.send).call(this.ws, data);
   }
 
   private handleMessage(data: ServerMessage): void {
