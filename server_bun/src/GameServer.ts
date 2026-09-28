@@ -51,7 +51,7 @@ export class GameServer {
           // Rooms that already exist (players joined before the load
           // finished) get the field attached now.
           for (const room of this.rooms.values()) {
-            if (!room.ballSim.hasField) room.ballSim.attachField(this.field);
+            if (!room.ballSim.hasField) { room.field = this.field; room.ballSim.attachField(this.field); }
           }
         })
         .catch(err => logger.warn('BallSim disabled — heightmap load failed', { err: String(err) }));
@@ -182,6 +182,7 @@ export class GameServer {
     const target = spec.terrain ? this.loadField(spec.terrain) : Promise.resolve(this.field);
     target.then(f => {
       if (!f || this.rooms.get(roomName) !== room) return;
+      room.field = f;
       room.ballSim.attachField(f);
       room.moveSim.attachField(f, (pid) => room.players.getPlayer(pid)?.position);
       room.projectiles.attachField(f);

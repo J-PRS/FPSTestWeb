@@ -98,8 +98,13 @@ export class Room {
     }));
   }
 
+  /** Room's current heightfield — GameServer updates it on terrain
+   *  attach/rotation so gameplay code can resolve ground height. */
+  field: Heightfield | null = null;
+
   constructor(name: string, field: Heightfield | null, mode = '', spec?: MapSpec, moveAuthority = false) {
     this.name = name;
+    this.field = field;
     this.moveAuthority = moveAuthority && !!field;
     this.spec = spec ?? resolveMapSpec(null);
     this.mode = mode || this.spec.mode || '';
@@ -244,8 +249,11 @@ export class Room {
   private creatureKill(by: string, pos: Vec3, variant = 0): void {
     // Powerup drops roll in EVERY mode — the pickup does the granting.
     const powerup = rollCreatureDrop();
+    // Creatures die mid-flight — the drop must land on the ground or the
+    // dy<=6 pickup grab can never reach it and the economy starves.
+    const gy = (this.field ? hmHeight(this.field, pos.x, pos.z) : pos.y) + 0.5;
     if (powerup) {
-      this.pickups?.spawn({ x: pos.x + (Math.random() - 0.5) * 2, y: pos.y, z: pos.z + (Math.random() - 0.5) * 2 }, powerup);
+      this.pickups?.spawn({ x: pos.x + (Math.random() - 0.5) * 2, y: gy, z: pos.z + (Math.random() - 0.5) * 2 }, powerup);
     }
     const spec = this.modeSpec;
     if (spec?.teams) {
@@ -253,7 +261,7 @@ export class Room {
       // burst, fodder still drops one (same scale curve the client uses).
       const drops = [1, 2, 3, 3][variant] ?? 1;
       for (let i = 0; i < drops; i++) {
-        this.pickups?.spawn({ x: pos.x + (Math.random() - 0.5) * 2, y: pos.y, z: pos.z + (Math.random() - 0.5) * 2 });
+        this.pickups?.spawn({ x: pos.x + (Math.random() - 0.5) * 2, y: gy, z: pos.z + (Math.random() - 0.5) * 2 });
       }
       return;
     }

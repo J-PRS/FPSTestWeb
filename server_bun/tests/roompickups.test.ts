@@ -77,6 +77,19 @@ describe('RoomPickups', () => {
     expect(room.pickups!.snapshot().length).toBe(0);
   });
 
+  it('full nuggets funnel: creature kill → gem drop → touch → teamScore', () => {
+    const room = new Room('t', null, '', TEAM_SPEC);
+    const p = addAt(room, 'hunter', 'alpha', 10, 0);
+    // BallSim routes kills through creatureKill — the gem must actually
+    // materialize at the corpse for the mode to have a loop at all.
+    room.ballSim.onKilled!('hunter', { x: 10, y: 0, z: 0 }, 0);
+    expect(room.pickups!.snapshot().length).toBeGreaterThanOrEqual(1);
+    // Hunter stands on the corpse — next tick banks the point.
+    room.pickups!.tick(0.05);
+    expect(room.scores.alpha).toBe(1);
+    expect(p.health).toBeGreaterThan(0);
+  });
+
   it('a teamless or dead player cannot collect', () => {
     const room = new Room('t', null, '', TEAM_SPEC);
     addAt(room, 'ghost', undefined, 10, 0);
