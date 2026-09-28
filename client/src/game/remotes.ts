@@ -143,6 +143,16 @@ export function createRemotes(deps: RemotesDeps) {
     // or animations advance at 2x speed (double AnimationMixer.update).
     remotePlayer.tick(dt);
 
+    // Wire cloak: hide model+gizmo+marker entirely — an enemy's HUD must
+    // give no trace. Ski dust and indicators stop too (dust off an
+    // invisible skier is a giveaway).
+    remotePlayer.setCloakHidden(!!playerState.cloaked);
+    if (playerState.cloaked) {
+      hud.removePlayerIndicator(playerId);
+      deps.lazyHealthBarSystem().removeBar(playerId);
+      return;
+    }
+
     // Friend-or-foe marker: teammates wear their team's color, enemies are
     // always red — matching a remote's wire team only when it differs from
     // the last applied tint avoids re-setting every frame.

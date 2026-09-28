@@ -11,7 +11,7 @@
  * message, changed field semantics). The server stamps it on gameState;
  * the client force-reloads on mismatch instead of silently desyncing.
  */
-export const PROTOCOL_VERSION = 5;
+export const PROTOCOL_VERSION = 6; // tick flag bit 4 = cloaked; inputMove carries cloak
 
 export interface Vec3 {
   x: number;
@@ -39,7 +39,7 @@ export type ClientMessage =
   | { type: 'aoeShot'; position: Vec3; weaponType?: number; excludeTargetId?: string | null; projectileId?: string | null; airtime?: number; power?: number; directHit?: boolean }
   | { type: 'jump'; position: Vec3 }
   | { type: 'jetpack'; position: Vec3 }
-  | { type: 'inputMove'; input: { forward: number; right: number; jump: number; ski: number }; rotation: Rotation }
+  | { type: 'inputMove'; input: { forward: number; right: number; jump: number; ski: number; cloak?: number }; rotation: Rotation }
   | { type: 'projectileDestroy'; projectileId: string }
   | { type: 'environmentDamage'; amount: number }
   // Client-claimed pickups (nuggets): self-only heal, server clamps the
@@ -64,6 +64,7 @@ export interface TickUpdatePlayer {
   isDead: boolean;
   ping?: number;
   ski?: number;
+  cloaked?: number;
 }
 
 export type ServerMessage =
@@ -129,6 +130,7 @@ export interface GameStatePlayer {
   velocity: Vec3;
   isDead: boolean;
   health: number;
+  cloaked?: number;
   /** Team-mode rooms only — absent in free-for-all. */
   team?: 'alpha' | 'bravo';
 }

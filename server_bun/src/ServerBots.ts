@@ -80,6 +80,7 @@ export class ServerBots {
       if (this.room.modeSpec?.teams) {
         if (q.team === p.team) continue;
       } else if (q.isBot) continue;
+      if (q.cloaked) continue; // bots can't aim what they can't see
       out.push({ id: q.id, pos: q.position, vel: q.velocity, alive: !q.isDead });
     }
     // Creatures are huntable too — in nuggets rooms they're the whole

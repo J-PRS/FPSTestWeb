@@ -149,7 +149,7 @@ export class BallSim {
   private alivePlayers(): { id: string; pos: SimVec }[] {
     const out: { id: string; pos: SimVec }[] = [];
     for (const [id, p] of this.players.getAllPlayers()) {
-      if (!p.isDead) out.push({ id, pos: p.position });
+      if (!p.isDead && !p.cloaked) out.push({ id, pos: p.position });
     }
     return out;
   }
@@ -206,7 +206,7 @@ export class BallSim {
    *  aimed at its last-received pos, arcs diverged ~100m per segment.) */
   private snapTarget(b: SimBall): void {
     const p = b.targetId ? this.players.getPlayer(b.targetId) : null;
-    if (p && !p.isDead) {
+    if (p && !p.isDead && !p.cloaked) {
       b.tx = p.position.x; b.ty = p.position.y; b.tz = p.position.z;
       b.tgtValid = true;
     } else {

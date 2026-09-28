@@ -42,6 +42,7 @@ export interface WireTickPlayer {
   isDead: boolean;
   ping?: number;
   ski: number;
+  cloaked?: number;
 }
 
 export function isWireFrame(u8: Uint8Array): boolean {
@@ -135,7 +136,7 @@ export function encodeTickPlayer(p: WireTickPlayer): Uint8Array {
   o = packRot(d, o, p.rotation);
   u8[o++] = Math.max(0, Math.min(255, Math.round(p.health)));
   u8[o++] = p.ping !== undefined ? Math.max(0, Math.min(255, Math.round(p.ping))) : 0;
-  u8[o++] = (p.isDead ? 1 : 0) | (p.ski ? 2 : 0);
+  u8[o++] = (p.isDead ? 1 : 0) | (p.ski ? 2 : 0) | (p.cloaked ? 4 : 0);
   return new Uint8Array(buf, 0, o);
 }
 
@@ -189,6 +190,7 @@ export function decodeTickFrame(u8: Uint8Array): { ackSeq: number; updates: Wire
       isDead: (flags & 1) !== 0,
       ping: pingRaw > 0 ? pingRaw : undefined,
       ski: (flags & 2) !== 0 ? 1 : 0,
+      cloaked: (flags & 4) !== 0 ? 1 : 0,
     });
   }
   return { ackSeq, updates };
