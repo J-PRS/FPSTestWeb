@@ -798,21 +798,26 @@ export class GameServer {
         // <150m (engagement range) every tick · <400m half rate · beyond 1/10.
         // Hits/kills travel on reliable events, so stale far ghosts only
         // lose smoothness on targets that are visually specks anyway.
+        // Precompute per-record tier phases once per tick (tier depends on
+        // recipient distance, so the O(n²) check stays — but only the cheap
+        // distance math; encode was already done once per record above).
+        const seq = room.tickSeq;
         for (const [recipientId, rp] of players) {
           // Grace-period entries have no socket — record filtering for them
           // is wasted work
           if (room.disconnected.has(recipientId)) continue;
+          const rx = rp.position.x, ry = rp.position.y, rz = rp.position.z;
           const others: Uint8Array[] = [];
           for (const r of records) {
             if (r.playerId === recipientId) continue;
-            const dx = r.pos.x - rp.position.x;
-            const dy = r.pos.y - rp.position.y;
-            const dz = r.pos.z - rp.position.z;
+            const dx = r.pos.x - rx;
+            const dy = r.pos.y - ry;
+            const dz = r.pos.z - rz;
             const dSq = dx * dx + dy * dy + dz * dz;
             const tier = dSq < 22500 ? 1 : dSq < 160000 ? 2 : 10; // 150m / 400m
             // force = hit/knockback window: real positions must reach every
             // observer at full rate while they extrapolate the knockback
-            if (r.force || room.tickSeq % tier === 0) others.push(r.data);
+            if (r.force || seq % tier === 0) others.push(r.data);
             else this.metrics.recordsTierSkipped++;
           }
           if (others.length === 0) continue;
@@ -860,18 +865,21 @@ export class GameServer {
   }
 
   private computeStateHash(room: Room): string {
-    const players = room.players.getAllPlayers();
-    const sortedIds = Array.from(players.keys()).sort();
-
-    const playerData = sortedIds.map(id => {
-      const p = players.get(id)!;
-      return `${id}:${Math.round(p.position.x)},${Math.round(p.position.y)},${Math.round(p.position.z)}:${p.health}:${p.isDead ? 1 : 0}`;
-    }).join('|');
-
-    let hash = 5381;
-    for (let i = 0; i < playerData.length; i++) {
-      hash = ((hash << 5) + hash) + playerData.charCodeAt(i);
+    // Rolling FNV over quantized state — no sort, no string join. Player
+    // ids hash first so membership changes can't alias. (Order-insensitive
+    // on purpose: iteration order can differ across a reconnect.)
+    let h = 0x811c9dc5;
+    for (const [id, p] of room.players.getAllPlayers()) {
+      for (let i = 0; i < id.length; i++) {
+        h ^= id.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0;
+      }
+      for (const v of [
+        Math.round(p.position.x), Math.round(p.position.y), Math.round(p.position.z),
+        Math.round(p.health), p.isDead ? 1 : 0,
+      ]) {
+        h ^= v & 0xffff; h = Math.imul(h, 0x01000193) >>> 0;
+      }
     }
-    return (hash >>> 0).toString(16);
+    return h.toString(16);
   }
 }
