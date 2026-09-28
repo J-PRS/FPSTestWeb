@@ -13,10 +13,17 @@ export function wirePlayers(ctx: NetCtx): void {
   wirePlayerLifecycle(ctx);
 }
 
+/** Tribes streak titles by kills-since-death — subtitle under the frag
+ *  headline at 3/5/7/10. */
+const STREAK_NAMES: [number, string][] = [
+  [10, 'GODLIKE'], [7, 'UNSTOPPABLE'], [5, 'RAMPAGE'], [3, 'KILLING SPREE'],
+];
+
 /** Hit feedback, knockback, reconciliation, kills — the damage wire. */
 function wirePlayerCombat(ctx: NetCtx): void {
   const { deps, networkManager, nm } = ctx;
   const logger = deps.logger;
+  let localStreak = 0;
 
   networkManager.onPlayerHit = (shooterId: string, targetId: string, damage: number, health: number) => {
     if (deps.world.playbackMode) return;
@@ -112,15 +119,19 @@ function wirePlayerCombat(ctx: NetCtx): void {
       player.health = 0;
       deps.lazyHud().hide();
       deps.lazyHud().setDeathOverlay(true);
+      localStreak = 0;
       deps.fragMessages.show(shooterId === 'environment'
         ? `YOU DIED\n${player.lastDamageSource || 'claimed by the wasteland'}`
         : `YOU DIED\nfragged by ${shooterId}`);
       return;
     }
 
-    // Show frag message if local player got the kill
+    // Show frag message if local player got the kill — streak counts
+    // run-kills since your last death (reset in the death branch above).
     if (shooterId === nm().getLocalPlayerId()) {
-      deps.fragMessages.show(`FRAGGED PLAYER!`);
+      const streak = ++localStreak;
+      const streakName = STREAK_NAMES.find(([n]) => streak >= n)?.[1];
+      deps.fragMessages.show(streakName ? `FRAGGED PLAYER!\n${streakName}` : `FRAGGED PLAYER!`);
       sfx.killConfirm();
     }
 
