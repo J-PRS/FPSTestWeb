@@ -817,6 +817,10 @@ export class GameServer {
    *  <150m (engagement range) every tick · <400m half rate · beyond 1/10.
    *  Hits/kills travel on reliable events, so stale far ghosts only lose
    *  smoothness on targets that are visually specks anyway. */
+  // Reused per-recipient record list — the fanout loop runs every tick and
+  // a fresh Uint8Array[] per recipient was the biggest GC churn source.
+  private readonly scratchOthers: Uint8Array[] = [];
+
   private fanoutRecords(room: Room, players: ReturnType<Room['players']['getAllPlayers']>, records: TickRecord[]): void {
     const seq = room.tickSeq;
     for (const [recipientId, rp] of players) {
@@ -824,7 +828,10 @@ export class GameServer {
       // is wasted work
       if (room.disconnected.has(recipientId)) continue;
       const rx = rp.position.x, ry = rp.position.y, rz = rp.position.z;
-      const others: Uint8Array[] = [];
+      // Scratch array: same array every tick, zero allocation on the hot
+      // path — encodeTickFrame consumes it before the next recipient iterates.
+      const others = this.scratchOthers;
+      others.length = 0;
       for (const r of records) {
         if (r.playerId === recipientId) continue;
         const dx = r.pos.x - rx;
