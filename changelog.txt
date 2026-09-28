@@ -1,3 +1,4 @@
+2026-09-26  netcode v2: RTC two-lane fix — reliable ctrl channel carries join/events; game channel stays unordered/unreliable; E2E re-verified
 2026-09-26  netcode v2: WT pre-open send queue — join/other JSON sent before the bidi stream is live no longer drops
 2026-09-26  netcode v2: TieredTransport reconnect loop — dropped WT/RTC sessions re-probe with 1s backoff; WS inner tier self-reconnects as before
 2026-09-26  netcode v2: tier selection now automatic — WT+RTC probe in parallel, WS floor; ?net= pins a tier for testing
