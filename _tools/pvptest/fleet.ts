@@ -215,7 +215,7 @@ const moveTimer = setInterval(() => {
       }));
       const s = b.sim.state;
       (b.ws.sendUnreliable ?? b.ws.send).call(b.ws, encodePosition(
-        s.pos, { yaw: b.yaw, pitch: 0 }, s.vel, b.seq, 0,
+        s.pos, { yaw: b.yaw, pitch: 0 }, s.vel, b.seq, 0, b.seq,
       ));
     } else {
       b.angle += dt * 1.2;

@@ -464,7 +464,7 @@ export class NetworkManager {
 
     // Binary frame: 30B instead of ~140B JSON. Server decodes on the wire
     // hot path; the message still passes through the same validation.
-    this.sendBinary(encodePosition(position, rotation, velocity, seq, this.telemetry.ping));
+    this.sendBinary(encodePosition(position, rotation, velocity, seq, this.telemetry.ping, this.inputSeq));
 
     // Send ping if interval elapsed
     if (now - this.lastPingSendTime >= this.PING_INTERVAL) {

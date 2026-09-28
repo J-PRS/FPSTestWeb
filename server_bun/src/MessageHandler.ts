@@ -55,7 +55,7 @@ export interface RoomInfo {
   moveInput?: (playerId: string, input: { forward: number; right: number; jump: number; ski: number; jet?: number }, status?: number, seq?: number) => boolean | void;
   /** Reports reconcile the sim; a non-null return is the sim's truth when
    *  the report diverged past tolerance — send it back as a correction. */
-  moveReport?: (playerId: string, pos: Vec3, yaw: number, vel?: Vec3) => { pos: Vec3; vel: Vec3; inputSeq: number; onGround: boolean } | null;
+  moveReport?: (playerId: string, pos: Vec3, yaw: number, vel?: Vec3, inputSeq?: number) => { pos: Vec3; vel: Vec3; inputSeq: number; onGround: boolean } | null;
   /** Server-side impulses (knockback) the sim must also receive. */
   moveImpulse?: (playerId: string, dv: Vec3) => void;
   moveResync?: (playerId: string, pos: Vec3, yaw: number) => void;
@@ -398,7 +398,9 @@ export class MessageHandler {
       player.lastPosCheckPos = { ...msg.position };
     }
 
-    const simTruth = this.roomInfo.moveReport?.(playerId, msg.position, msg.rotation.yaw, msg.velocity);
+    // inputSeq (not the frame seq) anchors the probe: it's the count of
+    // inputMove events the client had consumed when it took this snapshot.
+    const simTruth = this.roomInfo.moveReport?.(playerId, msg.position, msg.rotation.yaw, msg.velocity, msg.inputSeq);
 
     if (this.roomInfo.moveAuthority?.()) {
       // Authority mode: the sim owns position — the report only feeds it

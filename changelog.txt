@@ -1,3 +1,5 @@
+2026-10-03 - position frames carry inputSeq (34B, backward-compat) so the judge compares reports against a probe stepped forward by in-flight inputs instead of the stale shadow — kills systematic input-latency divergence
+
 2026-10-03 - fleet bots now send + sim at the server's 30Hz cadence (was 20Hz with single 50ms steps) — halves report latency, kills step-granularity drift; residual ~10m count=1 divergences are end-of-run packet-loss bursts, awaiting seq-anchored shadow replay
 
 2026-10-03 - admin reload resolves the room's CURRENT map (roomMapName) instead of the room name — works on ad-hoc/join-created rooms; rotation keeps roomMapName fresh

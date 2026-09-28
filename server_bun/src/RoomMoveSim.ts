@@ -28,6 +28,9 @@ class FieldSurface {
 
 interface Shadow {
   sim: MoveSim;
+  /** Scratch sim for seq-anchored compares — stepped ahead by the inputs
+   *  the report reflects but the shadow hasn't consumed yet. */
+  probe?: MoveSim;
   divergences: number;
   /** Corrections throttle — a client fighting the snap reports divergent
    *  positions every tick; one correction per window is enough. */
@@ -182,13 +185,27 @@ export class RoomMoveSim {
   /** Compare a client position report against the shadow sim. Returns the
    *  sim's own state when the report is past the divergence tolerance —
    *  the caller turns it into a client correction (witness → judge). */
-  reconcile(playerId: string, pos: Vec3Like, yaw: number, vel?: Vec3Like): (MoveState & { inputSeq: number }) | null {
+  reconcile(playerId: string, pos: Vec3Like, yaw: number, vel?: Vec3Like, reportInputSeq?: number): (MoveState & { inputSeq: number }) | null {
     const sh = this.shadows.get(playerId);
     if (!sh) return null;
     const s = sh.sim.state;
     s.yaw = yaw; // facing is client truth — sim only needs it for input dir
     if (vel) { s.vel.x = vel.x; s.vel.y = vel.y; s.vel.z = vel.z; }
-    const dx = pos.x - s.pos.x, dy = pos.y - s.pos.y, dz = pos.z - s.pos.z;
+    // The report's seq tells us how many input events the client had
+    // consumed when it generated this position. If the shadow is behind
+    // (inputs still in flight), the client is legitimately ahead by up
+    // to ~vel * pending-steps — compare against a probe stepped forward
+    // that many ticks with the last-seen input instead of the stale sim.
+    let cmp = s;
+    if (reportInputSeq !== undefined && reportInputSeq > sh.lastInputSeq) {
+      const pending = Math.min(reportInputSeq - sh.lastInputSeq, 8);
+      const probe = (sh.probe ??= new MoveSim(this.surface!, s));
+      probe.setState(s);
+      Object.assign(probe.input, sh.sim.input);
+      for (let i = 0; i < pending; i++) probe.update(1 / 30);
+      cmp = probe.state;
+    }
+    const dx = pos.x - cmp.pos.x, dy = pos.y - cmp.pos.y, dz = pos.z - cmp.pos.z;
     const dist = Math.hypot(dx, dy, dz);
     if (dist <= this.divergenceM) return null;
 

@@ -75,8 +75,9 @@ const VALIDATORS: Record<string, (obj: Record<string, unknown>) => ValidationRes
     const body = validateBody(obj);
     if (!body.success) return body;
     const seq = isFiniteNumber(obj.seq) ? obj.seq : undefined;
+    const inputSeq = isFiniteNumber(obj.inputSeq) ? obj.inputSeq : undefined;
     const ping = isFiniteNumber(obj.ping) ? obj.ping : undefined;
-    return { success: true, data: { type: 'position', ...body.data, seq, ping } };
+    return { success: true, data: { type: 'position', ...body.data, seq, inputSeq, ping } };
   },
 
   teleport: (obj) => {

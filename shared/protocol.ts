@@ -35,7 +35,7 @@ export type ClientMessage =
       map?: string; bots?: number;
       /** Netcode-v2 tier the client negotiated — /metrics tier counts. */
       transport?: string }
-  | { type: 'position'; position: Vec3; rotation: Rotation; velocity: Vec3; seq?: number; ping?: number }
+  | { type: 'position'; position: Vec3; rotation: Rotation; velocity: Vec3; seq?: number; inputSeq?: number; ping?: number }
   // Declared discontinuity (warp beacon, respawn): the position is
   // authoritative, not a plausibility-checked move — the server reseats
   // its check anchor here instead of rejecting it as a speedhack.

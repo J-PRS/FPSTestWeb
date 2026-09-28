@@ -84,6 +84,12 @@ export class Room {
   /** Map-rotation hook — GameServer returns the next same-mode spec at
    *  the horn, or null to replay the current map. */
   onRotate?: () => MapSpec | null;
+  /** Terrain swap — GameServer owns the field cache and attaches the
+   *  loaded heightfield to ballSim/moveSim/projectiles. applySpec calls
+   *  this when the new spec names a different terrain; without it the
+   *  sims keep the OLD map's field while clients load the new one —
+   *  balls bounce on ground that doesn't exist (the rubberband storm). */
+  onTerrain?: (spec: MapSpec) => void;
 
   /** Per-player K/D at the horn — the match journal's useful payload. */
   private matchPlayers(): { id: string; team?: string; kills: number; deaths: number }[] {
@@ -127,7 +133,7 @@ export class Room {
           jumpPressed: !!i.jump, jumpHeld: !!i.jump, skiHeld: !!i.ski,
           jetHeld: !!i.jet,
         }, status, seq),
-        moveReport: (pid, pos, yaw, vel) => this.moveSim.reconcile(pid, pos, yaw, vel),
+        moveReport: (pid, pos, yaw, vel, inputSeq) => this.moveSim.reconcile(pid, pos, yaw, vel, inputSeq),
         moveImpulse: (pid, dv) => this.moveSim.applyImpulse(pid, dv),
         moveResync: (pid, pos, yaw) => this.moveSim.resync(pid, pos, yaw),
         moveTrack: (pid, pos, yaw) => this.moveSim.track(pid, pos, yaw, this.players.getPlayer(pid)?.perk),
@@ -143,6 +149,7 @@ export class Room {
       this.players,
       (msg) => this.connections.broadcast(msg),
       (data) => this.connections.broadcastBinary(data),
+      (data) => this.connections.broadcastBinaryReliable(data),
     );
     this.ballSim.population = this.spec.balls;
     this.ballSim.onKilled = (by, pos, variant) => this.creatureKill(by, pos, variant);
@@ -493,6 +500,7 @@ export class Room {
    *  structures, arena, ball mix/population, bot fill. Clients get a
    *  mapUpdate broadcast to rebuild their geometry. */
   applySpec(spec: MapSpec): void {
+    const terrainChanged = spec.terrain !== this.spec.terrain;
     this.spec = spec;
     if (spec.spawns) this.players.spawnPoints = spec.spawns;
     this.ballSim.colliders = structureColliders(spec.structures);
@@ -507,6 +515,10 @@ export class Room {
       ambient: spec.ambient,
       terrain: spec.terrain,
     });
+    // Rotate the sims' heightfield WITH the broadcast — clients rebuild on
+    // mapUpdate; a sim still running the old field disagrees about where
+    // the ground is for the entire match.
+    if (terrainChanged) this.onTerrain?.(spec);
     // Top up / retire bots toward the new spec count.
     const want = spec.bots ?? 0;
     if (this.bots.count < want) this.bots.populate(want - this.bots.count);
