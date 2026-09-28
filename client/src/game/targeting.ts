@@ -122,41 +122,14 @@ export class ThreatTable {
    */
   update(dt: number, selfPos: THREE.Vector3, candidates: TargetCandidate[], profile: TargetProfile): TargetCandidate | null {
     this.frenzyT = Math.max(0, this.frenzyT - dt);
-    // Damage threat decays — a burst pulls aggro NOW, not forever.
-    const d = 1 - Math.min(1, profile.decay * dt * 10);
-    if (d > 0) {
-      for (const [id, v] of this.threat) {
-        const nv = v * d;
-        if (nv < 0.5) this.threat.delete(id); else this.threat.set(id, nv);
-      }
-    }
-
-    // Current target died/left/leashed → force an immediate re-pick.
-    // Death = true deaggro; leash-out = stalking — keep lastSeen and
-    // wander TOWARD it so distant hunters drift your way, erratically.
-    if (this.target && (!this.target.alive || (profile.leash > 0 &&
-        selfPos.distanceToSquared(this.target.pos) > profile.leash * profile.leash))) {
-      this.stalking = this.target.alive;
-      this.target = null;
-      this.engagedT = 0;
-    }
+    this.decayThreat(dt, profile);
+    this.dropInvalidTarget(selfPos, profile);
 
     this.evalT -= dt;
     if (this.evalT > 0) { if (this.target) this.engagedT += dt; return this.target; }
     this.evalT = profile.evalEvery * (0.8 + Math.random() * 0.4); // jitter — packs don't move in lockstep
 
-    let best: TargetCandidate | null = null, bestScore = -Infinity;
-    for (const c of candidates) {
-      if (!c.alive) continue;
-      const dist = selfPos.distanceTo(c.pos);
-      if (profile.leash > 0 && dist > profile.leash) continue;
-      // Score: proximity (per ~40m) + decaying damage aggro + commit bonus.
-      const s =
-        profile.wDist / (1 + dist / 40) +
-        profile.wDmg * Math.min(1, (this.threat.get(c.id) ?? 0) / 60) +
-        (c === this.target || c.id === this.target?.id ? profile.sticky : 0);
-      if (s > bestScore) { bestScore = s; best = c; }
-    }
+    const best = this.pickBest(selfPos, candidates, profile);
     const switched = best !== this.target && best?.id !== this.target?.id;
     this.target = best;
     if (best) this.stalking = false;
@@ -168,6 +141,45 @@ export class ThreatTable {
     if (this.target) {
       this.lastSeen.copy(this.target.pos);
       this.lastSeenVel.copy(this.target.vel);
+    }
+    return best;
+  }
+
+  // Damage threat decays — a burst pulls aggro NOW, not forever.
+  private decayThreat(dt: number, profile: TargetProfile): void {
+    const d = 1 - Math.min(1, profile.decay * dt * 10);
+    if (d <= 0) return;
+    for (const [id, v] of this.threat) {
+      const nv = v * d;
+      if (nv < 0.5) this.threat.delete(id); else this.threat.set(id, nv);
+    }
+  }
+
+  // Current target died/left/leashed → force an immediate re-pick.
+  // Death = true deaggro; leash-out = stalking — keep lastSeen and
+  // wander TOWARD it so distant hunters drift your way, erratically.
+  private dropInvalidTarget(selfPos: THREE.Vector3, profile: TargetProfile): void {
+    if (!this.target) return;
+    if (this.target.alive && (profile.leash <= 0 ||
+        selfPos.distanceToSquared(this.target.pos) <= profile.leash * profile.leash)) return;
+    this.stalking = this.target.alive;
+    this.target = null;
+    this.engagedT = 0;
+  }
+
+  // Score each live in-leash candidate: proximity (per ~40m) + decaying
+  // damage aggro + commit bonus on the incumbent.
+  private pickBest(selfPos: THREE.Vector3, candidates: TargetCandidate[], profile: TargetProfile): TargetCandidate | null {
+    let best: TargetCandidate | null = null, bestScore = -Infinity;
+    for (const c of candidates) {
+      if (!c.alive) continue;
+      const dist = selfPos.distanceTo(c.pos);
+      if (profile.leash > 0 && dist > profile.leash) continue;
+      const s =
+        profile.wDist / (1 + dist / 40) +
+        profile.wDmg * Math.min(1, (this.threat.get(c.id) ?? 0) / 60) +
+        (c === this.target || c.id === this.target?.id ? profile.sticky : 0);
+      if (s > bestScore) { bestScore = s; best = c; }
     }
     return best;
   }

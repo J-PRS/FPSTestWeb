@@ -120,8 +120,20 @@ surface. Detailed research lives in `_reports/`; this file is the current truth.
   (c60), MessageHandler (c24→dispatch + shared roomEcho), client
   netHandlers split into game/net/ domain modules on a shared NetCtx
   (match/flags/pickups/players/projectiles/world). Species: Seeker,
-  Totem, Strifer use static STATES tables; Gnat/Rakk/Crawler queued —
-  Snake/Roller/Overlord have no state field (timer-driven, leave be).
+  Totem, Strifer use static STATES tables — Gnat/Rakk/Crawler audited
+  and skipped (2-branch state checks, a table would be ceremony);
+  Snake/Roller/Overlord are timer-driven, leave be.
+- Complexity sweep (2026-09-26): every oxlint-flagged function split —
+  gameLoop loop (c38) → simTick/fxTick/hudTick, tickRoom (c41) →
+  buildRecords/fanoutRecords/rollupMetrics, tickRemotePlayer (c29) →
+  ensure/status/tint/cosmetics, updateProjectiles (c28) →
+  prune/intercept/chain, Room ctor (c29) → wireModeFeatures/registerSims,
+  ThreatTable.update (c26) → decay/drop/pick. Remaining warnings are
+  factory-length only (createGameLoop/createCombat/createRemotes are
+  composition roots — cohesive, not complex).
+- Maps (2026-09-26): crossfire (CTF, diagonal axis + mid plateau),
+  slagheap (FFA dome bowl, ramps as ski lanes), pit (45m duel ring).
+  All pure spec-JSON — structures + arena + spawns, no heightmaps.
 - Perf pass (2026-09-26): computeStateHash rolling-FNV (no sort/strings),
   tick fanout hoists, in-place snapshots, 2Hz roster polling, playerId→room
   O(1) index, room hibernation, global player cap (FPS_GLOBAL_MAX_PLAYERS).
