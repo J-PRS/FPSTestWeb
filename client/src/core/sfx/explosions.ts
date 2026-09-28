@@ -25,7 +25,10 @@ const BOOM_SAMPLES: Partial<Record<number, [string, number, number?, number?, nu
   [WeaponType.GrenadeLauncher]: [['explosion_small', 0.9, 0.9], ['thud_big', 0.4, 0.8, 500]],
   [WeaponType.Grenade]: [['explosion_small', 0.9, 1.2]],
   [WeaponType.Flak]: [['explosion_small', 0.9, 1.5], ['sparks', 0.4, 1.2, undefined, 0.3]],
-  [WeaponType.Plasma]: [['explosion_small', 0.6, 1.3], ['sparks', 0.5, 1.0, undefined, 0.4]],
+  [WeaponType.PlasmaCannon]: [['explosion_small', 0.6, 1.3], ['sparks', 0.5, 1.0, undefined, 0.4]],
+  // Rapid bolt pop — bright and small; a chain of these shouldn't stack
+  // into a roar, so it stays thin and pitched up.
+  [WeaponType.PlasmaGun]: [['explosion_small', 0.35, 1.7], ['sparks', 0.25, 1.4, undefined, 0.25]],
   [WeaponType.Railgun]: [['shot_energy', 0.7, 0.8], ['explosion_small', 0.6, 1.4]],
   [WeaponType.Chaingun]: [['explosion_small', 0.5, 1.6]],
   // LG death-burst: an electric discharge, not a powder blast — zap body,

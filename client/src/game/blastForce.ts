@@ -4,7 +4,7 @@
 
 import * as THREE from 'three';
 
-import { WEAPON_CONFIGS } from '../projectiles/index.js';
+import { getProjectileConfig } from '../projectiles/index.js';
 import { aoeImpulse, aoeDamage as aoeDamageOf } from '../../../shared/combat.js';
 import type { CombatDeps } from './combat.js';
 import type { Targetable } from '../entities/balls.js';
@@ -25,10 +25,10 @@ interface Forceable {
 const SELF_AOE_DAMAGE_SCALE = 0.15;
 
 export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
-  // Splash damage-number color follows the weapon — WEAPON_CONFIGS is
-  // weaponType-indexed (same order as the shared enum for slots 0–9).
+  // Splash damage-number color follows the weapon — getProjectileConfig
+  // looks up by wire weaponType (the array order isn't the enum).
   function splashColor(weaponType?: number): string {
-    return WEAPON_CONFIGS[weaponType ?? 0]?.damageColor ?? '#ffcc66';
+    return getProjectileConfig(weaponType ?? 0)?.damageColor ?? '#ffcc66';
   }
 
   // Nuggets are light pickups — blast throws them at a boosted force so

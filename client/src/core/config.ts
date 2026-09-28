@@ -67,8 +67,10 @@ export const FLAK_MAX_BOUNCES = 3; // Shards die on the Nth terrain hit
 export const FLAK_BOUNCE_RESTITUTION = 0.6;
 export const FLAK_BOUNCE_FRICTION = 0.8;
 
-// Plasma gun — T1/T2 fat energy bolt, sustained midrange fire
+// Plasma cannon — T1/T2 fat energy bolt, sustained midrange fire
 export const PLASMA_RATE = 0.28; // ~3.5 rps
+// Plasma gun — Quake-style rapid bolts, cadence just under chaingun
+export const PLASMAGUN_RATE = 0.13; // ~7.7 rps
 export const RAILGUN_RATE = 1.5; // Quake railgun cadence
 export const SHOTGUN_RATE = 0.7; // pump cadence — punchy per shot, not spam
 export const CANNON_RATE = 0.55; // Serious Sam cadence — satisfying thump-thump
