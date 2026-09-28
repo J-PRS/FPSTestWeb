@@ -79,14 +79,23 @@ export class RoomMoveSim {
   /** Late-arriving terrain (map spec named a .bin loaded async): attach it
    *  and honor the authority flag that was waiting on a field. Existing
    *  shadows keep their sims — the surface object they read is per-sim,
-   *  so re-track to pick the new field up. */
-  attachField(field: Heightfield): void {
+   *  so re-track to pick the new field up — then reseat onto the player's
+   *  current server position: ticks stepped against the WRONG field during
+   *  the join window would otherwise surface as a one-off divergence. */
+  attachField(field: Heightfield, reportedPos?: (playerId: string) => Vec3Like | undefined): void {
     this.surface = new FieldSurface(field);
     this.authoritative = this.wantsAuthority;
-    for (const [, sh] of this.shadows) {
+    for (const [pid, sh] of this.shadows) {
       const old = sh.sim;
       sh.sim = new MoveSim(this.surface, old.state);
       Object.assign(sh.sim.input, old.input);
+      const pos = reportedPos?.(pid);
+      if (pos) {
+        sh.sim.setState({
+          pos: { x: pos.x, y: pos.y, z: pos.z }, vel: { ...old.state.vel },
+          yaw: old.state.yaw, pitch: old.state.pitch, onGround: old.state.onGround,
+        });
+      }
     }
   }
 

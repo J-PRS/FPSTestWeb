@@ -160,9 +160,12 @@ export class GameServer {
       if (spec && bots !== undefined) spec = { ...spec, bots, botFill: bots };
       if (src) this.roomMapName.set(name, src);
       room = new Room(name, this.field, mode, spec, CONFIG.moveAuthority);
+      // `room` is a mutable let — bind a const for the closures or TS
+      // widens them back to Room | undefined.
+      const r = room;
       room.onMatchEnd = (rec) => this.recordMatchEnd(rec);
-      room.onRotate = () => this.nextRotationSpec(room);
-      room.onTerrain = (s) => this.attachTerrain(room, s);
+      room.onRotate = () => this.nextRotationSpec(r);
+      room.onTerrain = (s) => this.attachTerrain(r, s);
       if (spec?.terrain) this.attachTerrain(room, spec);
       this.rooms.set(name, room);
       logger.info('Room created', { room: name, mode: room.mode });
@@ -180,7 +183,7 @@ export class GameServer {
     target.then(f => {
       if (!f || this.rooms.get(roomName) !== room) return;
       room.ballSim.attachField(f);
-      room.moveSim.attachField(f);
+      room.moveSim.attachField(f, (pid) => room.players.getPlayer(pid)?.position);
       room.projectiles.attachField(f);
       logger.info('Room terrain attached', { room: roomName, terrain: spec.terrain ?? 'default' });
     });
