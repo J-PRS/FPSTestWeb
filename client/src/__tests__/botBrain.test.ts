@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { BotBrain, type BrainCtx } from '../../../shared/botBrain.js';
 
 const flat = () => 0;
@@ -116,5 +116,40 @@ describe('BotBrain senses', () => {
     b.think(0.5, ctx(pos, flat, {}));
     const out = b.think(0.4, ctx(pos, flat, {}));
     expect(out.dest.x - pos.x).toBeGreaterThan(0);
+  });
+
+  it('a hurt non-hero bot retreats from the shooter but keeps firing', () => {
+    // Force the hero roll off so the fear path is deterministic.
+    const roll = vi.spyOn(Math, 'random').mockReturnValue(0.99);
+    try {
+      const b = new BotBrain({ x: 0, y: 0, z: 0 });
+      const pos = { x: 0, y: 1.6, z: 0 };
+      b.think(0.4, ctx(pos, flat, { enemies: enemy(20, 0), healthFrac: 0.2, now: 0 }));
+      const out = b.think(0.35, ctx(pos, flat, { enemies: enemy(20, 0), healthFrac: 0.2, now: 350 }));
+      expect(out.dest.x - pos.x).toBeLessThan(0); // backing away from +x
+      // Suppression continues — fire lands on a cadence tick somewhere
+      // in the next couple seconds.
+      let fired = false;
+      for (let i = 1; i <= 8 && !fired; i++) {
+        fired = !!b.think(0.35, ctx(pos, flat, { enemies: enemy(20, 0), healthFrac: 0.2, now: 350 + i * 350 })).fire;
+      }
+      expect(fired).toBe(true);
+    } finally {
+      roll.mockRestore();
+    }
+  });
+
+  it('a hero bot pushes into the fight even while hurt', () => {
+    // Force the hero roll on — the rising edge of hurt arms hero mode.
+    const roll = vi.spyOn(Math, 'random').mockReturnValue(0.0);
+    try {
+      const b = new BotBrain({ x: 0, y: 0, z: 0 });
+      const pos = { x: 0, y: 1.6, z: 0 };
+      b.think(0.4, ctx(pos, flat, { healthFrac: 0.2, now: 0 })); // arm hero
+      const out = b.think(0.35, ctx(pos, flat, { enemies: enemy(30, 0), healthFrac: 0.2, now: 350 }));
+      expect(out.dest.x - pos.x).toBeGreaterThan(0); // closes instead of retreating
+    } finally {
+      roll.mockRestore();
+    }
   });
 });

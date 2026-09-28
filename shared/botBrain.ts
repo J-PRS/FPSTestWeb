@@ -83,6 +83,14 @@ const FLINCH_DIST = 8;
 const DODGE_RANGE = 12;  // m — only react to shells already inbound
 const DODGE_STEP = 9;    // m — lateral hop, ~one body-length burst
 
+// Fear / hero — both are sense tuning, never new moves or info. Below
+// FEAR_HP the bot breaks contact (retreat, sloppy suppression on purpose);
+// a rare hero roll on entering that state instead sharpens every sense a
+// human could sharpen: cadence, aim, dodge horizon, acquisition range.
+const FEAR_HP = 0.35;
+const HERO_CHANCE = 0.08; // per hurt episode, rolled on the rising edge
+const HERO_S = 6;         // seconds of hero before it cools off
+
 // --- context steering senses ---
 const SLOTS = 16;        // directions sampled around the circle
 const PROBE_A = 4;       // m — near slope probe
@@ -149,6 +157,8 @@ export class BotBrain {
   // goals near a death spot is how map denial emerges: nobody scripts
   // "that corner is dangerous", the squad just stops wandering back.
   private deaths: { x: number; z: number; t: number }[] = [];
+  private heroT = 0;      // hero-mode seconds remaining
+  private hurtLatch = false; // rising-edge detector for the hero roll
 
   /** Host reports the bot's corpse spot on death. */
   markDeath(pos: BotVec): void {
@@ -192,12 +202,23 @@ export class BotBrain {
     const pos = ctx.pos;
     const now = ctx.now;
 
+    // Fear/hero state rides the health fraction — a rare hero roll on the
+    // rising edge of getting hurt decides whether low HP means retreat or
+    // a desperate last stand. Latch resets once healed so the next wound
+    // gets a fresh roll.
+    const hurt = (ctx.healthFrac ?? 1) < FEAR_HP;
+    if (hurt && !this.hurtLatch && Math.random() < HERO_CHANCE) this.heroT = HERO_S;
+    this.hurtLatch = hurt;
+    this.heroT = Math.max(0, this.heroT - dt);
+    const hero = this.heroT > 0;
+    const fearing = hurt && !hero;
+
     // --- pick a hunt target / refresh the goal (slow cadence) ---
     this.thinkT -= dt;
     if (this.thinkT <= 0) {
-      this.thinkT = THINK_S;
+      this.thinkT = hero ? THINK_S * 0.45 : THINK_S;
       let best: BotEnemy | null = null;
-      let bestD = BOT_FIRE_RANGE;
+      let bestD = hero ? BOT_FIRE_RANGE * 1.4 : BOT_FIRE_RANGE;
       for (const e of ctx.enemies) {
         if (!e.alive) continue;
         const d = dist3(pos, e.pos);
@@ -214,9 +235,10 @@ export class BotBrain {
       }
       // Combat replan rides the slow cadence — the ring eval is the
       // expensive part (LOS per candidate per enemy) and 3Hz is plenty
-      // for position keeping.
+      // for position keeping. A fearing bot skips position-keeping: the
+      // destination block below breaks contact instead.
       this.fightPos = null;
-      if (best && dist3(pos, best.pos) <= this.orbitFar) {
+      if (best && !fearing && dist3(pos, best.pos) <= this.orbitFar) {
         this.fightPos = this.pickFightPos(ctx, pos, best);
       }
       if (!best) this.pickGoal(ctx, pos);
@@ -237,7 +259,21 @@ export class BotBrain {
     } else if (this.hunt) {
       const t = this.hunt;
       const d = dist3(pos, t.pos);
-      if (d > this.orbitFar) {
+      if (fearing) {
+        // Retreat: straight away from the shooter, folding toward the
+        // nearest body when one is near — suppression keeps them honest.
+        const ax = pos.x - t.pos.x, az = pos.z - t.pos.z;
+        const al = Math.hypot(ax, az) || 1;
+        let rx = pos.x + (ax / al) * 24, rz = pos.z + (az / al) * 24;
+        let ally: BotVec | null = null;
+        let ad = Infinity;
+        for (const o of ctx.others ?? []) {
+          const od = distSq(pos, o);
+          if (od < ad && od > 4) { ad = od; ally = o; }
+        }
+        if (ally && ad < 2500) { rx = (rx + ally.x) * 0.5; rz = (rz + ally.z) * 0.5; }
+        dest = { x: rx, y: pos.y, z: rz };
+      } else if (d > this.orbitFar * (hero ? 0.7 : 1)) {
         dest = { ...t.pos };
       } else {
         // fightPos comes from the last replan tick — no pick yet (or the
@@ -273,26 +309,7 @@ export class BotBrain {
     }
 
     // --- dodge: sidestep the nearest closing shell ---
-    // A perpendicular step dodges a ballistic arc without abandoning the
-    // fight; the side that keeps current momentum wins (dodging backward
-    // through your own velocity reads as a stumble, not a juke).
-    let nearest: BotVec | null = null;
-    let nearestD = DODGE_RANGE;
-    for (const t of ctx.threats ?? []) {
-      const d = dist3(pos, t);
-      if (d < nearestD) { nearestD = d; nearest = t; }
-    }
-    if (nearest) {
-      const tx = pos.x - nearest.x, tz = pos.z - nearest.z;
-      const tl = Math.hypot(tx, tz) || 1;
-      const vx = ctx.vel?.x ?? 0, vz = ctx.vel?.z ?? 0;
-      const side = (vx * -tz + vz * tx) * tl >= 0 ? 1 : -1; // keep momentum
-      dest = {
-        x: pos.x + (-tz / tl) * side * DODGE_STEP,
-        y: pos.y,
-        z: pos.z + (tx / tl) * side * DODGE_STEP,
-      };
-    }
+    dest = this.dodge(ctx, pos, dest, hero);
 
     // --- fire ---
     let fire: BrainOut['fire'];
@@ -301,9 +318,13 @@ export class BotBrain {
       if (this.fireT <= 0) {
         if (this.burstLeft <= 0) this.burstLeft = 3;
         this.burstLeft--;
-        this.fireT = (this.burstLeft > 0 ? 0.85 : 1.6 + Math.random()) / this.temper;
+        this.fireT = (this.burstLeft > 0 ? 0.85 : 1.6 + Math.random()) / this.temper
+          * (hero ? 0.65 : fearing ? 0.75 : 1);
         const d = dist3(pos, this.lastSeen);
-        const err = 0.5 + Math.hypot(this.lastSeenVel.x, this.lastSeenVel.y, this.lastSeenVel.z) * 0.1 + d * 0.02;
+        // Suppressive fire is deliberately sloppy — noise, not hits. Hero
+        // aim just stops being sloppy.
+        let err = 0.5 + Math.hypot(this.lastSeenVel.x, this.lastSeenVel.y, this.lastSeenVel.z) * 0.1 + d * 0.02;
+        err *= hero ? 0.3 : fearing ? 2.5 : 1;
         fire = {
           targetId: this.hunt.id,
           aim: {
@@ -324,6 +345,31 @@ export class BotBrain {
     }
 
     return { dest, move: this.moveHints(ctx, pos, dest), fire, status: this.statusIntent(ctx), belt };
+  }
+
+  /** Sidestep the nearest closing shell — a perpendicular step dodges a
+   *  ballistic arc without abandoning the fight; the side that keeps
+   *  current momentum wins (dodging backward through your own velocity
+   *  reads as a stumble, not a juke). Hero sharpens both senses: it sees
+   *  the shell sooner and hops farther. */
+  private dodge(ctx: BrainCtx, pos: BotVec, dest: BotVec, hero: boolean): BotVec {
+    let nearest: BotVec | null = null;
+    let nearestD = hero ? DODGE_RANGE * 1.7 : DODGE_RANGE;
+    for (const t of ctx.threats ?? []) {
+      const d = dist3(pos, t);
+      if (d < nearestD) { nearestD = d; nearest = t; }
+    }
+    if (!nearest) return dest;
+    const dodgeStep = hero ? DODGE_STEP * 1.4 : DODGE_STEP;
+    const tx = pos.x - nearest.x, tz = pos.z - nearest.z;
+    const tl = Math.hypot(tx, tz) || 1;
+    const vx = ctx.vel?.x ?? 0, vz = ctx.vel?.z ?? 0;
+    const side = (vx * -tz + vz * tx) * tl >= 0 ? 1 : -1; // keep momentum
+    return {
+      x: pos.x + (-tz / tl) * side * dodgeStep,
+      y: pos.y,
+      z: pos.z + (tx / tl) * side * dodgeStep,
+    };
   }
 
   /** Idle-goal selection, in priority order: objective > pickup >
