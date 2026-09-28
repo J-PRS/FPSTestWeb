@@ -1,6 +1,11 @@
 import { describe, it, expect } from 'bun:test';
 import { Room } from '../src/Room.ts';
 import { resolveMapSpec } from '../../shared/mapSpec.ts';
+import type { Heightfield } from '../../shared/heightfield.ts';
+
+// A real field turns on the MoveSim path — bots then integrate through the
+// same physics + energy economy as human shadows instead of direct writes.
+const flat: Heightfield = { size: 4, data: new Uint8Array(16).fill(60), stride: 1 };
 
 // ServerBots needs a Room for players/messages/assignTeam — a plain Room
 // (no field, no sockets) is enough: broadcasts just hit zero recipients.
@@ -71,5 +76,33 @@ describe('ServerBots', () => {
     room.bots.tick(0.05);
     expect(p.position).toEqual(before);
     expect(p.lastSeq).toBe(seq);
+  });
+
+  it('bots integrate through the move shadow when a field is attached', () => {
+    const room = new Room('t', flat, '', resolveMapSpec({ bots: 1 }));
+    const id = 'BOT-t1';
+    expect(room.moveSim.simState(id)).not.toBeNull();
+    const p = room.players.getPlayer(id)!;
+    const before = { ...p.position };
+    // Room ticks sims in order: bots set inputs, then moveSim steps them.
+    for (let i = 0; i < 40; i++) { room.bots.tick(0.05); room.moveSim.tick(0.05); }
+    const moved = Math.hypot(p.position.x - before.x, p.position.z - before.z);
+    expect(moved).toBeGreaterThan(1);
+    // The commit path writes the sim's velocity, not a synthetic hop.
+    expect(Math.hypot(p.velocity.x, p.velocity.z)).toBeGreaterThan(0);
+  });
+
+  it('respawning a bot reseats the shadow at the new position', () => {
+    const room = new Room('t', flat, '', resolveMapSpec({ bots: 1 }));
+    const id = 'BOT-t1';
+    const p = room.players.getPlayer(id)!;
+    p.isDead = true;
+    room.bots.tick(0.05); // marks the bot in deadSet
+    // Room respawns the body somewhere new.
+    p.isDead = false;
+    p.position = { x: 300, y: 30, z: -200 };
+    room.bots.tick(0.05);
+    const sh = room.moveSim.simState(id)!;
+    expect(Math.hypot(sh.pos.x - 300, sh.pos.z + 200)).toBeLessThan(30);
   });
 });

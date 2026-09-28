@@ -23,6 +23,8 @@ export interface BotEnemy {
 export interface BrainCtx {
   /** The bot's own position. */
   pos: BotVec;
+  /** The bot's own velocity — ski policy keys off speed, jet off climbs. */
+  vel?: BotVec;
   enemies: BotEnemy[];
   /** Objective anchor (CTF flag/base) — outranks pickup and wander. */
   objective?: BotVec | null;
@@ -41,6 +43,9 @@ export interface BrainCtx {
 export interface BrainOut {
   /** Where the caller should move the bot this step. */
   dest: BotVec;
+  /** Legal-input hints for the host sim — same keys a human holds.
+   *  Omitted fields mean "not held". */
+  move?: { ski?: boolean; jet?: boolean; jump?: boolean };
   /** Fire command when the bot wants to shoot this step. */
   fire?: { targetId: string; aim: BotVec };
 }
@@ -241,7 +246,32 @@ export class BotBrain {
       }
     }
 
-    return { dest, fire };
+    return { dest, move: this.moveHints(ctx, pos, dest), fire };
+  }
+
+  /** Ski/jet/jump as the same buttons a human presses: ski downhill or
+   *  when already fast, jet when the goal sits above a climbable wall,
+   *  jump when an uphill stall is the blocker (pairs with detour). */
+  private moveHints(ctx: BrainCtx, pos: BotVec, dest: BotVec): BrainOut['move'] {
+    const dx = dest.x - pos.x, dz = dest.z - pos.z;
+    const gd = Math.hypot(dx, dz);
+    if (gd < 0.5) return { ski: false, jet: false, jump: false };
+    const nx = dx / gd, nz = dz / gd;
+    const g0 = ctx.groundY(pos.x, pos.z);
+    const ahead = ctx.groundY(pos.x + nx * 6, pos.z + nz * 6);
+    const rise = ahead - g0;
+    const speed = ctx.vel ? Math.hypot(ctx.vel.x, ctx.vel.z) : 0;
+    const airborne = pos.y - g0 > 2;
+    // Jet when the way ahead climbs faster than running covers — or the
+    // hunt target is clearly airborne and pursuit needs altitude.
+    const uphill = rise > 3;
+    const targetHigh = this.hunt ? this.hunt.pos.y - pos.y > 6 : false;
+    return {
+      ski: rise < -0.5 || speed > 8 || airborne,
+      jet: (uphill || targetHigh) && speed > 0.5,
+      // Uphill + near-stationary = hop it; autohop chains the rest.
+      jump: uphill && speed < 3 && !airborne,
+    };
   }
 
   /** Killzone-style position pick: score a ring of candidate spots by

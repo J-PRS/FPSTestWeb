@@ -27,6 +27,10 @@ const isSuper = (id: string) => SUPERBOT !== '' && id.includes(SUPERBOT);
 
 export class ServerBots {
   private brains = new Map<string, BotBrain>();
+  /** Bots we saw dead — respawn transition resyncs the move shadow. */
+  private deadSet = new Set<string>();
+  /** inputMove ordering key — the shadow drops non-increasing seqs. */
+  private seq = 1;
   private readonly room: Room;
   private readonly field: Heightfield | null;
 
@@ -58,6 +62,9 @@ export class ServerBots {
         team: p.team,
       });
       this.brains.set(id, new BotBrain(p.position));
+      // Legal body: the bot gets a move shadow exactly like a human join —
+      // brains emit inputs, the sim owns motion, energy model included.
+      this.room.moveSim.track(id, p.position, p.rotation.yaw, p.perk);
     }
     if (n > 0) logger.info('Bots spawned', { room: this.room.name, count: n });
   }
@@ -69,6 +76,7 @@ export class ServerBots {
   /** Prune a bot that was fully removed (room teardown / test hooks). */
   untrack(playerId: string): void {
     this.brains.delete(playerId);
+    this.room.moveSim.untrack(playerId);
   }
 
   /** Hostiles this bot may hunt. Team modes fight the other side; FFA
@@ -182,14 +190,15 @@ export class ServerBots {
     }
     let excess = this.brains.size - want;
     if (excess <= 0) return;
-    for (const id of [...this.brains.keys()]) {
+    // Map iterators tolerate mid-loop delete — no snapshot needed.
+    for (const id of this.brains.keys()) {
       if (excess <= 0) break;
       const p = this.room.players.getPlayer(id);
       if (p && !p.isDead) continue; // keep live bots, kill the corpse queue first
       this.retire(id);
       excess--;
     }
-    for (const id of [...this.brains.keys()]) {
+    for (const id of this.brains.keys()) {
       if (excess <= 0) break;
       this.retire(id);
       excess--;
@@ -198,6 +207,7 @@ export class ServerBots {
 
   private retire(id: string): void {
     this.brains.delete(id);
+    this.room.moveSim.untrack(id);
     this.room.removePlayerCompletely(id, 'botFill', (m, o) => logger.info(m, o));
   }
 
@@ -207,12 +217,22 @@ export class ServerBots {
     const now = Date.now();
     for (const [id, brain] of this.brains) {
       const p = this.room.players.getPlayer(id);
-      if (!p || p.isDead) continue;
+      if (!p) continue;
+      if (p.isDead) { this.deadSet.add(id); continue; }
       p.lastSeen = now; // bots never send positions — heartbeat manually
         // or the idle reaper would cull them on schedule
 
+      // Respawn moved the body — reseat the shadow or the sim keeps
+      // integrating from the corpse spot and every tick diverges.
+      const wasDead = this.deadSet.has(id);
+      if (!p.isDead && wasDead) {
+        this.deadSet.delete(id);
+        this.room.moveSim.resync(id, p.position, p.rotation.yaw);
+      }
+
       const out = brain.think(dt, {
         pos: p.position,
+        vel: p.velocity,
         enemies: this.enemiesOf(p),
         objective: this.flagGoal(p),
         // Team rooms drop nuggets on creature kills — bots farm them too,
@@ -227,23 +247,47 @@ export class ServerBots {
       const dx = out.dest.x - p.position.x;
       const dz = out.dest.z - p.position.z;
       const dist = Math.sqrt(dx * dx + dz * dz);
-      if (dist < 0.5) { p.velocity.x = 0; p.velocity.z = 0; p.lastSeq++; continue; }
 
-      const nx = dx / dist, nz = dz / dist;
-      const speed = isSuper(id) ? SPEED * 3 : SPEED;
-      p.velocity.x = nx * speed;
-      p.velocity.z = nz * speed;
-      // Terrain clamp — bots are ground walkers; a hop pops them over bumps
-      const groundY = this.field ? hmHeight(this.field, p.position.x, p.position.z) : p.position.y;
-      const targetY = Math.max(groundY + 0.1, p.position.y - 9 * dt);
-      const hopping = p.position.y > groundY + 1.2;
-      p.velocity.y = hopping ? p.velocity.y - 30 * dt : 0;
-      p.position.x += p.velocity.x * dt;
-      p.position.z += p.velocity.z * dt;
-      p.position.y += p.velocity.y * dt;
-      if (p.position.y < targetY) { p.position.y = targetY; p.velocity.y = 0; }
+      const sh = this.room.moveSim.simState(id);
+      if (sh) {
+        // Legal path: convert the brain's destination into human inputs
+        // (heading → yaw, walk = forward key) and let the sim integrate.
+        // Commit happens on the NEXT tick — sims[] order puts moveSim.tick
+        // after bots.tick, so this reads the fresh post-step state.
+        if (dist >= 0.5) {
+          const yaw = Math.atan2(dx, dz);
+          this.room.moveSim.faceYaw(id, yaw);
+          p.rotation.yaw = yaw;
+          this.room.moveSim.setInput(id, {
+            forward: 1, right: 0,
+            jumpPressed: !!out.move?.jump, jumpHeld: !!out.move?.jump,
+            skiHeld: !!out.move?.ski, jetHeld: !!out.move?.jet,
+          }, p.status, this.seq++);
+        } else {
+          this.room.moveSim.setInput(id, { forward: 0, right: 0, jumpHeld: false, skiHeld: false, jetHeld: false }, p.status, this.seq++);
+        }
+        p.position.x = sh.pos.x; p.position.y = sh.pos.y; p.position.z = sh.pos.z;
+        p.velocity.x = sh.vel.x; p.velocity.y = sh.vel.y; p.velocity.z = sh.vel.z;
+        // Ski bit rides the tick flag byte (bit 2) — drives remote dust.
+        p.skiing = out.move?.ski ? 1 : 0;
+      } else {
+        // No heightfield → no shadow → legacy direct-write fallback.
+        if (dist < 0.5) { p.velocity.x = 0; p.velocity.z = 0; p.lastSeq++; continue; }
+        const nx = dx / dist, nz = dz / dist;
+        const speed = isSuper(id) ? SPEED * 3 : SPEED;
+        p.velocity.x = nx * speed;
+        p.velocity.z = nz * speed;
+        const groundY = this.field ? hmHeight(this.field, p.position.x, p.position.z) : p.position.y;
+        const targetY = Math.max(groundY + 0.1, p.position.y - 9 * dt);
+        const hopping = p.position.y > groundY + 1.2;
+        p.velocity.y = hopping ? p.velocity.y - 30 * dt : 0;
+        p.position.x += p.velocity.x * dt;
+        p.position.z += p.velocity.z * dt;
+        p.position.y += p.velocity.y * dt;
+        if (p.position.y < targetY) { p.position.y = targetY; p.velocity.y = 0; }
+        p.rotation.yaw = Math.atan2(nx, nz);
+      }
 
-      p.rotation.yaw = Math.atan2(nx, nz);
       p.lastValidPosition = { ...p.position };
       p.lastValidVelocity = { ...p.velocity };
       p.lastSeq++; // tick stream keys staleness off seq

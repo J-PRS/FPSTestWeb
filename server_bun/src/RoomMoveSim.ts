@@ -195,6 +195,13 @@ export class RoomMoveSim {
     return truth;
   }
 
+  /** Aim/heading update for entities that never send position reports
+   *  (server bots): facing is host truth, not a claim. */
+  faceYaw(playerId: string, yaw: number): void {
+    const sh = this.shadows.get(playerId);
+    if (sh) sh.sim.state.yaw = yaw;
+  }
+
   /** Declared discontinuity (teleport/respawn) — resync without counting. */
   resync(playerId: string, pos: Vec3Like, yaw: number): void {
     const sh = this.shadows.get(playerId);
