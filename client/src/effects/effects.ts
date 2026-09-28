@@ -33,18 +33,29 @@ interface SpawnOpts {
  * Mesh+Material and get reconfigured on the next spawn. Steady-state cost
  * while jetting/skiing is zero allocation (was ~700 allocs/sec before).
  */
+interface BeamFx {
+  mesh: THREE.Mesh;
+  mat: THREE.MeshBasicMaterial;
+  life: number;
+  maxLife: number;
+}
+
 export class EffectsManager {
   private scene: THREE.Scene;
   private particles: Particle[] = [];
   private pool: Particle[] = [];
   private sharedGeo: THREE.SphereGeometry;
   private sharedDiscGeo: THREE.CircleGeometry;
+  private beamGeo: THREE.CylinderGeometry;
+  private beams: BeamFx[] = [];
+  private beamPool: BeamFx[] = [];
   private terrain: Terrain | null = null;
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
     this.sharedGeo = new THREE.SphereGeometry(0.15, 8, 8);
     this.sharedDiscGeo = new THREE.CircleGeometry(0.5, 8);
+    this.beamGeo = new THREE.CylinderGeometry(1, 1, 1, 6, 1, true);
   }
 
   setTerrain(terrain: Terrain): void {
@@ -286,7 +297,44 @@ export class EffectsManager {
       { opacity: 0.10 + k * 0.12, noGravity: true, sizeScale: 0.35 + k * 0.4 });
   }
 
+  // Hitscan beam flash (remote railgun discharge): a transient additive
+  // rod from→to that fades fast. Pooled like particles — mesh+mat reused.
+  spawnBeam(from: THREE.Vector3, to: THREE.Vector3, colorHex = 0x99eeff): void {
+    _v.subVectors(to, from);
+    const len = _v.length();
+    if (len < 0.01) return;
+    let b = this.beamPool.pop();
+    if (!b) {
+      const mat = new THREE.MeshBasicMaterial({
+        transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
+      });
+      b = { mesh: new THREE.Mesh(this.beamGeo, mat), mat, life: 0, maxLife: 0 };
+    }
+    b.mesh.position.copy(from).addScaledVector(_v, 0.5);
+    b.mesh.quaternion.setFromUnitVectors(_v3.set(0, 1, 0), _v.normalize());
+    b.mesh.scale.set(0.14, len, 0.14);
+    b.mat.color.setHex(colorHex);
+    b.mat.opacity = 0.85;
+    b.life = b.maxLife = 0.35;
+    this.scene.add(b.mesh);
+    this.beams.push(b);
+  }
+
   update(dt: number): void {
+    for (let i = this.beams.length - 1; i >= 0; i--) {
+      const b = this.beams[i];
+      b.life -= dt;
+      if (b.life <= 0) {
+        this.scene.remove(b.mesh);
+        this.beamPool.push(b);
+        this.beams[i] = this.beams[this.beams.length - 1];
+        this.beams.pop();
+        continue;
+      }
+      const t = b.life / b.maxLife;
+      b.mat.opacity = t * 0.85;
+      b.mesh.scale.x = b.mesh.scale.z = 0.14 * (0.4 + t); // the collapse sells the discharge
+    }
     const gravity = GRAVITY;
     for (let i = this.particles.length - 1; i >= 0; i--) {
       const p = this.particles[i];

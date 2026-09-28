@@ -63,5 +63,12 @@ export interface ProjectileConfig {
    *  pop after `fuse`s. Damage is server-side via WeaponStats.cluster. */
   cluster?: { count: number; spread: number; fuse: number };
   wakeVisual?: boolean; // turbulent wake particles marking the growing proxy hitbox (off by default — tuning pending)
+  /** Mid-flight hitscan discharge (remote railgun): at `delay` seconds the
+   *  slug fires a beam along its velocity — implemented as one giant swept
+   *  step so terrain/target/obstacle hits apply to the beam — then dies at
+   *  the hit point or at `range` on a clean miss. Values come from the
+   *  shared WEAPONS table (rayDelay/rayRange) so the server's reach check
+   *  allows the jump. */
+  rayBurst?: { delay: number; range: number };
 }
 

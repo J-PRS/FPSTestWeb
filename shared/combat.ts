@@ -128,7 +128,11 @@ function checkFlightLegality(args: {
   // inherited shooter speed and a margin for the end-of-frame sample error.
   const speed = Math.hypot(projectile.velocity.x, projectile.velocity.y, projectile.velocity.z)
     + Math.hypot(shooterVel.x, shooterVel.y, shooterVel.z) * INHERITANCE_MARGIN;
-  const maxReach = speed * airtime + 0.5 * Math.abs(stats.gravity) * airtime * airtime + REACH_MARGIN_M;
+  // Ray-burst weapons (remote railgun) teleport forward along their velocity
+  // once they pass the discharge delay — the beam's range is legal reach.
+  const rayReach = (stats.rayRange !== undefined && stats.rayDelay !== undefined && airtime >= stats.rayDelay)
+    ? stats.rayRange : 0;
+  const maxReach = speed * airtime + 0.5 * Math.abs(stats.gravity) * airtime * airtime + rayReach + REACH_MARGIN_M;
   const dx = endPos.x - projectile.origin.x;
   const dy = endPos.y - projectile.origin.y;
   const dz = endPos.z - projectile.origin.z;
