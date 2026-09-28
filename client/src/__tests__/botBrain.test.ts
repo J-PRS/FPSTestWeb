@@ -71,4 +71,50 @@ describe('BotBrain senses', () => {
     const out = b.think(0.4, ctx(pos, flat, { enemies: enemy(15, 0) }));
     expect(Math.hypot(out.dest.x - pos.x, out.dest.z - pos.z)).toBeLessThanOrEqual(14);
   });
+
+  it('sidesteps perpendicular to an inbound shell', () => {
+    const b = new BotBrain({ x: 0, y: 0, z: 0 });
+    const pos = { x: 0, y: 1.6, z: 0 };
+    // Shell closing in from +x — the dodge must move off the x-axis.
+    const out = b.think(0.4, ctx(pos, flat, {
+      threats: [{ x: 8, y: 1.6, z: 0 }],
+      vel: { x: 5, y: 0, z: 0 },
+    }));
+    expect(Math.abs(out.dest.z)).toBeGreaterThan(2);
+  });
+
+  it('walks toward a heard fight', () => {
+    const b = new BotBrain({ x: 0, y: 0, z: 0 });
+    const pos = { x: 0, y: 1.6, z: 0 };
+    // Noise at +x, 30m out — most personalities take the bait; retry a
+    // few thinks so the curiosity roll can't flake the assertion.
+    let moved = false;
+    for (let i = 0; i < 12 && !moved; i++) {
+      const out = b.think(0.35, ctx(pos, flat, { sounds: [{ x: 30, y: 0, z: 0 }] }));
+      moved = moved || out.dest.x - pos.x > 2;
+    }
+    expect(moved).toBe(true);
+  });
+
+  it('avoids wandering back to a death spot', () => {
+    const b = new BotBrain({ x: 0, y: 0, z: 0 });
+    const pos = { x: 0, y: 1.6, z: 0 };
+    b.markDeath({ x: 0, y: 0, z: 20 }); // died just north
+    // Wander goals that land inside the repel radius get re-rolled — run
+    // several think cadences; none should settle ~north of the body.
+    for (let i = 0; i < 12; i++) b.think(4, ctx(pos, flat, {}));
+    const goal = (b as unknown as { goal: { x: number; z: number } }).goal;
+    expect(Math.hypot(goal.x, goal.z - 20) > 12 || Math.hypot(goal.x - pos.x, goal.z - pos.z) < 15).toBe(true);
+  });
+
+  it('pushes toward an unseen attacker after a hit', () => {
+    const b = new BotBrain({ x: 0, y: 0, z: 0 });
+    const pos = { x: 0, y: 1.6, z: 0 };
+    b.think(0.4, ctx(pos, flat, {})); // settle a wander goal
+    b.takeHit({ x: 50, y: 0, z: 0 });
+    // Skip the flinch window, then the goal should swing toward +x.
+    b.think(0.5, ctx(pos, flat, {}));
+    const out = b.think(0.4, ctx(pos, flat, {}));
+    expect(out.dest.x - pos.x).toBeGreaterThan(0);
+  });
 });
