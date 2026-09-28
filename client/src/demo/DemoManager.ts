@@ -11,6 +11,7 @@ import { ProjectileEventType } from './types.js';
 import type { ProjectileEvent, TargetEvent, DemoFile } from './types.js';
 import { CoolShotManager } from './coolShots.js';
 import type { CoolShotEntry } from './coolShots.js';
+import { VideoRecorder } from './VideoRecorder.js';
 import { ChildLogger } from '../core/Logger.js';
 import { urlParams } from '../core/params.js';
 
@@ -30,6 +31,7 @@ export class DemoManager {
 
   private mode: 'idle' | 'recording' | 'playing' | 'paused' = 'idle';
   private uiVisible = false;
+  private video: VideoRecorder = new VideoRecorder();
 
   // Callback when cool shots list changes
   onCoolShotsChanged?: (shots: CoolShotEntry[]) => void;
@@ -65,6 +67,10 @@ export class DemoManager {
       room: urlParams.room ?? 'default',
       mode: urlParams.mode ?? 'offline',
     });
+
+    // Render-tool entry point (tools/demorender drives seek+capture through
+    // this handle — the DOM only exposes coarse ±2s keys otherwise).
+    (window as unknown as { __demoManager?: DemoManager }).__demoManager = this;
 
     this.setupUI();
     this.setupPlayerCallbacks();
@@ -112,6 +118,9 @@ export class DemoManager {
         this.ui.hide();
         this.uiVisible = false;
         this.onPlaybackStop?.();
+        // Stop exits replay — flush any in-flight video export so the clip
+        // isn't abandoned silently.
+        if (this.video.isRecording) this.toggleVideoRecord();
       },
       onSave: () => {
         this.saveDemo();
@@ -125,6 +134,9 @@ export class DemoManager {
         } else {
           this.startRecording();
         }
+      },
+      onVideoToggle: () => {
+        this.toggleVideoRecord();
       },
     });
   }
@@ -167,6 +179,30 @@ export class DemoManager {
   }
 
   get isUIVisible(): boolean { return this.uiVisible; }
+
+  // One-click video export: records the render canvas live (captureStream +
+  // MediaRecorder), downloads mp4/webm when stopped. The render canvas is the
+  // largest canvas in the DOM — found lazily so no main.ts wiring is needed.
+  toggleVideoRecord(): void {
+    if (!VideoRecorder.isSupported()) { this.ui.setStatus('no video capture'); return; }
+    if (this.video.isRecording) {
+      this.ui.setVideoRecording(false);
+      const ctx = this.player.isLoaded ? 'demo' : 'live';
+      void this.video.stopAndDownload(`kribes_${ctx}_${this.timestampStr()}`).then(ok => {
+        this.ui.setStatus(ok ? 'video saved' : 'video failed');
+      });
+      return;
+    }
+    const canvas = [...document.querySelectorAll('canvas')].sort((a, b) => b.width * b.height - a.width * a.height)[0];
+    if (!canvas) { this.ui.setStatus('no canvas'); return; }
+    this.video.setCanvas(canvas);
+    if (this.video.start(60)) {
+      this.ui.setVideoRecording(true);
+      this.ui.setStatus('rec video');
+    } else {
+      this.ui.setStatus('video unsupported');
+    }
+  }
 
   get isRecording(): boolean { return this.mode === 'recording'; }
   get isPlaying(): boolean { return this.mode === 'playing' || this.mode === 'paused'; }

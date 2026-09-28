@@ -1958,3 +1958,4 @@ server: RoomDeployables sim — 'deploy' claims plant server-owned turret/mine/s
 - roadmap: demo v3 status line (MP recording + playbackMode isolation)
 - demo controls hardening: cool-shot play now closes menu + grabs pointer lock; file-loaded clips fire onPlaybackStart (playbackMode was skipped); ESC-stop hides control bar; reverse-wrap settles like end-of-playback; paused seek snaps remote replicas
 - added .agents/skills/headless-game-testing (puppeteer-core recipe for locked-desktop E2E: pointer-lock stub, __test hook, 7x headless slowdown, hit-aiming)
+- video export: captureStream+MediaRecorder 'MP4' button in demo bar (mp4 pref, webm fallback), stop flushes clip; demorender tool: scrubTo pump + NVENC/AMF/QSV + readPixels->rawvideo fast path + --realtime screencast mode
