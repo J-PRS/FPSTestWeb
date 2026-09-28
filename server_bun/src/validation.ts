@@ -199,6 +199,16 @@ export function validateMessage(raw: unknown): ValidationResult<ClientMessage> {
       return { success: true, data: { type: 'creatureHit', id: obj.id, damage: obj.damage, kx, ky, kz } };
     }
 
+    case 'deploy': {
+      const kind = obj.kind;
+      if (kind !== 'turret' && kind !== 'mine' && kind !== 'station' && kind !== 'drone') {
+        return { success: false, error: 'kind must be turret|mine|station|drone' };
+      }
+      const dpos = validateVec3(obj.position);
+      if (!dpos.success) return { success: false, error: `position: ${dpos.error}` };
+      return { success: true, data: { type: 'deploy', kind, position: dpos.data } };
+    }
+
     case 'snapshotRequest': {
       return { success: true, data: { type: 'snapshotRequest' } };
     }

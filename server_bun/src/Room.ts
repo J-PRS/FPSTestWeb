@@ -22,6 +22,7 @@ import { ServerBots } from './ServerBots.ts';
 import { RoomFlags } from './RoomFlags.ts';
 import { RoomPickups } from './RoomPickups.ts';
 import { RoomArena } from './RoomArena.ts';
+import { RoomDeployables } from './RoomDeployables.ts';
 import type { PlayerState, Vec3 } from './types.ts';
 import type { ServerMessage } from '../../shared/protocol.ts';
 import type { ServerWebSocket } from 'bun';
@@ -57,6 +58,9 @@ export class Room {
   readonly flags: RoomFlags | null = null;
   /** Server-owned nuggets — team modes drop a gem on each creature kill. */
   readonly pickups: RoomPickups | null = null;
+  /** Server-owned deployables — turrets/mines/stations/drones a `deploy`
+   *  claim plants; caps + TTL + teardown live here. */
+  readonly deployables: RoomDeployables;
   /** Server-side simulations ticked each room tick, in order. */
   readonly sims: { tick(dt: number): void }[] = [];
   /** Match-results journal hook — GameServer writes matches.jsonl and
@@ -94,6 +98,8 @@ export class Room {
         onHit: (pid, shooter) => this.bots.flinch(pid, shooter),
         flags: () => this.flags?.snapshot() ?? [],
         pickups: () => this.pickups?.snapshot() ?? [],
+        onDeploy: (pid, kind, pos) => this.deployables.handleDeploy(pid, kind, pos),
+        deployables: () => this.deployables.snapshot(),
         matchEndsAt: () => this.matchEndsAt,
       },
     );
@@ -148,6 +154,8 @@ export class Room {
       const arena = new RoomArena(this, this.spec.arena);
       this.sims.push({ tick: (dt) => arena.tick(dt) });
     }
+    this.deployables = new RoomDeployables(this);
+    this.sims.push({ tick: (dt) => this.deployables.tick(dt) });
   }
 
   /** Flag tick — called from GameServer's room tick. Captures feed the
@@ -268,6 +276,7 @@ export class Room {
     this.ffaScores.clear();
     this.flags?.reset();
     this.pickups?.clear();
+    this.deployables.clearAll();
     this.players.resetStats();
     this.matchEndsAt = Date.now() + spec.timeLimitS * 1000;
     this.matchWarned = false;
@@ -287,6 +296,7 @@ export class Room {
    *  points in FFA rooms. 'environment' shooters score nothing. */
   private onKill(targetId: string, shooterId: string): void {
     this.flagCarrierDied(targetId);
+    this.deployables.clearOwner(targetId);
     const spec = this.modeSpec;
     const shooter = this.players.getPlayer(shooterId);
     if (!spec || !shooter || spec.ptsPlayerKill <= 0) return;
@@ -388,6 +398,7 @@ export class Room {
   removePlayerCompletely(playerId: string, reason: string, log: (m: string, o?: object) => void): void {
     // A carrier leaving drops the flag — same rule as dying with it.
     this.flagCarrierDied(playerId);
+    this.deployables.clearOwner(playerId);
     this.players.removePlayer(playerId);
     if (this.ffaScores.delete(playerId)) {
       this.broadcast({ type: 'ffaScore', scores: Object.fromEntries(this.ffaScores), winAt: this.modeSpec!.winAt });

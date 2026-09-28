@@ -1953,3 +1953,4 @@ stress test: 100 networked bots / 10 rooms (fleet.ts single-process harness) —
 server: playerId->room index (playerRoom map) — position hot path no longer scans all rooms per frame
 lobby: SERVER host field + P2P duel controls — every URL param now has a UI path (fps-server/fps-p2p settings; ?server/?p2p still override for links)
 wire: ballSegment et/slowT -> float32 (unquantized enrage/stall timers; kills last mid-leg replay divergence); PROTOCOL_VERSION=5
+server: RoomDeployables sim — 'deploy' claims plant server-owned turret/mine/station/drone (per-player caps, plant-range check, TTL, death/leave/match-reset teardown, gameState join snapshot); protocol deploy/deploySpawn/deployGone
