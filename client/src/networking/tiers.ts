@@ -27,10 +27,17 @@ export async function connectGameTransport(config: ConnectionConfig): Promise<Ga
   if (want === 'wt') return (await tryWebTransport(config)) ?? new WebSocketConnection(config);
   if (want === 'rtc') return (await tryWebRTC(config)) ?? new WebSocketConnection(config);
 
+  const now = Date.now();
+  const probeWt = now >= missUntil.wt;
+  const probeRtc = now >= missUntil.rtc;
   const [wt, rtc] = await Promise.all([
-    tryWebTransport(config).catch(() => null),
-    tryWebRTC(config).catch(() => null),
+    probeWt ? tryWebTransport(config).catch(() => null) : null,
+    probeRtc ? tryWebRTC(config).catch(() => null) : null,
   ]);
+  // Only an actual probe refreshes the miss window — a skipped probe must
+  // not extend the cache or the tier never gets retried.
+  if (probeWt && !wt) missUntil.wt = Date.now() + MISS_CACHE_MS;
+  if (probeRtc && !rtc) missUntil.rtc = Date.now() + MISS_CACHE_MS;
   if (wt) { void rtc?.disconnect(); logger.info('tier: WebTransport'); return wt; }
   if (rtc) { logger.info('tier: WebRTC'); return rtc; }
   logger.info('tier: WebSocket');
@@ -64,22 +71,26 @@ class WebTransportGameTransport implements GameTransport {
       this.dgWriter = wt.datagrams.writable.getWriter();
       void this.pumpReliable(stream.readable.getReader());
       void this.pumpDatagrams(wt.datagrams.readable.getReader());
-      for (const d of this.preOpen) void this.writer.write(this.encoder.encode(d + '\n'));
+      for (const d of this.preOpen) void this.writer.write(this.encoder.encode(d + '\n')).catch(() => {});
       this.preOpen.length = 0;
       this.config.onConnect?.();
     }).catch((e) => {
       this.config.onError?.(e instanceof Error ? e : new Error(String(e)));
       this.config.onDisconnect?.(1006, 'webtransport failed');
     });
-    wt.closed.then(() => {
-      if (this.open) { this.open = false; this.config.onDisconnect?.(1006, 'webtransport closed'); }
-    });
+    // wt.closed REJECTS on abnormal close — an unhandled rejection for
+    // every failed probe (the log-spam bug). Rejection = closed.
+    wt.closed.then(
+      () => { if (this.open) { this.open = false; this.config.onDisconnect?.(1006, 'webtransport closed'); } },
+      () => { if (this.open) { this.open = false; this.config.onDisconnect?.(1006, 'webtransport closed'); } },
+    );
   }
 
   private async pumpReliable(reader: ReadableStreamDefaultReader<Uint8Array>): Promise<void> {
     // JSON frames arrive newline-delimited over the reliable stream.
     let carry = '';
-    for (;;) {
+    try {
+      for (;;) {
       const { done, value } = await reader.read();
       if (done) return;
       carry += this.decoder.decode(value, { stream: true });
@@ -89,26 +100,44 @@ class WebTransportGameTransport implements GameTransport {
       while ((nl = carry.indexOf('\n')) >= 0) {
         const line = carry.slice(0, nl);
         carry = carry.slice(nl + 1);
-        if (line) try { this.config.onMessage?.(JSON.parse(line)); } catch { /* malformed */ }
+        if (line) try {
+          const m = JSON.parse(line);
+          // Server wraps reliable-binary frames in a JSON envelope — the
+          // stream is text-framed so raw bytes would corrupt it (this is
+          // how ball segments arrive on the wt tier).
+          if (m && m.type === 'bin' && typeof m.d === 'string') {
+            this.config.onBinaryMessage?.(Uint8Array.from(atob(m.d), (c) => c.charCodeAt(0)));
+          } else {
+            this.config.onMessage?.(m);
+          }
+        } catch { /* malformed */ }
+        }
       }
-    }
+    } catch { /* stream reset on close — expected teardown */ }
   }
 
   private async pumpDatagrams(reader: ReadableStreamDefaultReader<Uint8Array>): Promise<void> {
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) return;
-      this.config.onBinaryMessage?.(value);
-    }
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) return;
+        this.config.onBinaryMessage?.(value);
+      }
+    } catch { /* datagrams drop with the session — expected teardown */ }
   }
 
   send(data: string | Uint8Array): boolean {
     if (!this.open) return false;
-    const payload = typeof data === 'string' ? data : this.decoder.decode(data);
+    // Binary must be enveloped too — decoding arbitrary bytes as UTF-8
+    // mangled them before this ever worked.
+    const payload = typeof data === 'string' ? data
+      : `{"type":"bin","d":"${btoa(Array.from(data, (b) => String.fromCharCode(b)).join(''))}"}`;
     // onConnect fires only after the stream is live, but a same-tick send
     // can still race the writer assignment — hold those briefly.
     if (!this.writer) { this.preOpen.push(payload); return true; }
-    void this.writer.write(this.encoder.encode(payload + '\n'));
+    // A write can outlive the session — teardown rejects it; that's a
+    // normal close, not an error.
+    void this.writer.write(this.encoder.encode(payload + '\n')).catch(() => {});
     return true;
   }
 
@@ -141,13 +170,31 @@ async function tryWebTransport(config: ConnectionConfig): Promise<GameTransport 
     const wt = new WebTransport(`https://${host}:${info.port}`, {
       serverCertificateHashes: [{ algorithm: 'sha-256', value: hashBytes }],
     });
-    // The probe IS the session — don't handshake twice.
-    await Promise.race([wt.ready, new Promise((_, rej) => setTimeout(rej, 3000))]);
+    // Failed probes leave wt.closed rejected with no subscriber —
+    // unhandledrejection noise. Swallow it here; the winning session's
+    // close is handled by WebTransportGameTransport's own subscription.
+    void wt.closed.catch(() => {});
+    try {
+      // The probe IS the session — don't handshake twice.
+      await Promise.race([wt.ready, new Promise((_, rej) => setTimeout(rej, 3000))]);
+    } catch {
+      // A losing probe otherwise leaks a pending session (Chrome caps at
+      // 64 — reconnects exhausted it before the miss cache existed).
+      wt.close();
+      return null;
+    }
     return new WebTransportGameTransport(config, wt);
   } catch {
     return null;
   }
 }
+
+// Negative tier cache — a failed WT probe leaves the QUIC session pending
+// in Chrome (cap: 64 per profile). Retrying every reconnect tick exhausts
+// it ("Too many pending WebTransport sessions") and the transport starts
+// failing for unrelated reasons. Cache the miss for 30s.
+const missUntil = { wt: 0, rtc: 0 };
+const MISS_CACHE_MS = 30_000;
 
 /**
  * WebRTC tier — client side. Opens a signaling WebSocket to the server's
@@ -179,8 +226,13 @@ class ServerRtcTransport implements GameTransport {
     dc.addEventListener('open', () => { this.open = true; config.onConnect?.(); });
     dc.addEventListener('close', () => { this.open = false; config.onDisconnect?.(1000, 'rtc closed'); });
     ctrl?.addEventListener('message', (ev) => {
-      if (typeof ev.data === 'string') {
-        try { config.onMessage?.(JSON.parse(ev.data)); } catch { /* malformed */ }
+      const data = ev.data;
+      // Binary CAN arrive here — the server pushes ball segments down the
+      // reliable lane, which is this channel on RTC. Dropping them was a
+      // silent desync source.
+      if (data instanceof ArrayBuffer) { config.onBinaryMessage?.(new Uint8Array(data)); return; }
+      if (typeof data === 'string') {
+        try { config.onMessage?.(JSON.parse(data)); } catch { /* malformed */ }
       }
     });
   }
@@ -218,6 +270,7 @@ class ServerRtcTransport implements GameTransport {
 
 async function tryWebRTC(config: ConnectionConfig): Promise<GameTransport | null> {
   if (typeof RTCPeerConnection === 'undefined') return null;
+  let pc: RTCPeerConnection | undefined;
   try {
     // ICE servers come from the server itself (/rtcconfig) — STUN/TURN is a
     // deployment property, not a client constant; LAN/dev needs neither.
@@ -226,25 +279,26 @@ async function tryWebRTC(config: ConnectionConfig): Promise<GameTransport | null
       .then((r) => r.json())
       .then((j) => (Array.isArray(j?.iceServers) ? j.iceServers : []))
       .catch(() => []);
-    const pc = new RTCPeerConnection({ iceServers });
-    const dc = pc.createDataChannel('game', { ordered: false, maxRetransmits: 0 });
-    const ctrl = pc.createDataChannel('ctrl'); // reliable+ordered — join, claims, events
+    pc = new RTCPeerConnection({ iceServers });
+    const conn = pc;
+    const dc = conn.createDataChannel('game', { ordered: false, maxRetransmits: 0 });
+    const ctrl = conn.createDataChannel('ctrl'); // reliable+ordered — join, claims, events
     // Signal over the dedicated /rtcs socket — one offer in, one answer out.
     // The offer is sent only after ICE gathering completes so candidates
     // are embedded in the SDP (non-trickle — the server doesn't accept
     // trickle candidates; on LAN/host scenarios that's sufficient).
     const signal = new WebSocket(config.url.replace(/\/ws$/, '/rtcs'));
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-    if (pc.iceGatheringState !== 'complete') {
+    const offer = await conn.createOffer();
+    await conn.setLocalDescription(offer);
+    if (conn.iceGatheringState !== 'complete') {
       await new Promise<void>((res) => {
         const t = setTimeout(res, 2500);
-        pc.addEventListener('icegatheringstatechange', () => {
-          if (pc.iceGatheringState === 'complete') { clearTimeout(t); res(); }
+        conn.addEventListener('icegatheringstatechange', () => {
+          if (conn.iceGatheringState === 'complete') { clearTimeout(t); res(); }
         });
       });
     }
-    const sdp = pc.localDescription?.sdp ?? offer.sdp;
+    const sdp = conn.localDescription?.sdp ?? offer.sdp;
     const answer = await new Promise<RTCSessionDescriptionInit>((res, rej) => {
       const timer = setTimeout(() => rej(new Error('rtc signal timeout')), 3000);
       signal.addEventListener('message', (ev) => {
@@ -263,10 +317,12 @@ async function tryWebRTC(config: ConnectionConfig): Promise<GameTransport | null
         signal.addEventListener('open', () => signal.send(JSON.stringify({ type: 'offer', sdp })));
       }
     });
-    await pc.setRemoteDescription(answer);
+    await conn.setRemoteDescription(answer);
     signal.close();
-    return new ServerRtcTransport(dc, config, pc, ctrl);
+    return new ServerRtcTransport(dc, config, conn, ctrl);
   } catch {
+    // Failed probe — the ICE/DTLS machinery keeps running without this.
+    try { pc?.close(); } catch { /* gone */ }
     return null;
   }
 }
@@ -323,6 +379,8 @@ export class TieredTransport implements GameTransport {
       t.connect(url);
       for (const d of this.pending) t.send(d);
       this.pending.length = 0;
+    }).catch((e) => {
+      this.config.onError?.(e instanceof Error ? e : new Error(String(e)));
     });
   }
 

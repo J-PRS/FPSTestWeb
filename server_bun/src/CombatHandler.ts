@@ -3,7 +3,7 @@ import type { PlayerManager } from './PlayerManager.ts';
 import type { WeaponStats } from '../../shared/weapons.ts';
 import { getWeaponStats, WeaponType, directHitAoeBonus } from '../../shared/weapons.ts';
 import { perkMods } from '../../shared/perks.ts';
-import { aoeDamage, aoeImpulse, validateHitClaim, validateAoeClaim, type TrackedProjectile } from '../../shared/combat.ts';
+import { aoeDamage, aoeImpulse, KNOCKBACK_SCALE, validateHitClaim, validateAoeClaim, type TrackedProjectile } from '../../shared/combat.ts';
 import { POWERUP } from '../../shared/pickups.ts';
 import type { PlayerState } from './types.ts';
 import { CONFIG } from './config.ts';
@@ -51,6 +51,12 @@ type SendToPlayerFn = (playerId: string, msg: ServerMessage) => void;
 export class CombatHandler {
   private projectileCounter = 0;
   private projectiles: Map<string, TrackedProjectile> = new Map();
+  /** Claimed-once projectiles — a detonating shell produces TWO claims
+   *  (direct `shot` + blast `aoeShot`) naming the same id; the first claim
+   *  used to delete the record so the second bounced with "no known
+   *  projectile" and splash damage silently never applied. Spent entries
+   *  resolve ONE claim of each kind, then are dead. 5s staleness cap. */
+  private spentProjectiles = new Map<string, { proj: TrackedProjectile; shot: boolean; aoe: boolean; at: number }>();
   private respawnTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
 
   constructor(
@@ -67,6 +73,13 @@ export class CombatHandler {
     private moveImpulse?: (playerId: string, dv: Vec3) => void,
   ) {}
 
+  /** Claim refused: server-side warn plus a shotRejected to the shooter so
+   *  their client can log WHY predicted damage never happened. */
+  private reject(playerId: string, kind: string, reason: string, targetId?: string, weaponType?: number): void {
+    logger.warn(`${kind} rejected: ${playerId}${targetId ? ` → ${targetId}` : ''}: ${reason}`);
+    this.sendToPlayer(playerId, { type: 'shotRejected', reason: `${kind}: ${reason}`, targetId, weaponType });
+  }
+
   private friendly(shooterId: string, targetId: string): boolean {
     if (!this.teamMode || shooterId === targetId) return false; // self-splash = rocket jumps
     const s = this.playerManager.getPlayer(shooterId);
@@ -79,6 +92,9 @@ export class CombatHandler {
   onPlayerRemoved(playerId: string): void {
     for (const [id, proj] of this.projectiles) {
       if (proj.ownerId === playerId) this.projectiles.delete(id);
+    }
+    for (const [id, rec] of this.spentProjectiles) {
+      if (rec.proj.ownerId === playerId) this.spentProjectiles.delete(id);
     }
   }
 
@@ -103,31 +119,37 @@ export class CombatHandler {
     if (targetId) {
       // Reject self-damage — client should never send its own ID as targetId
       if (targetId === playerId) {
-        logger.warn(`Shot rejected: ${playerId} tried to hit themselves`);
+        this.reject(playerId, 'Shot', 'self-target');
         return;
       }
 
       const target = this.playerManager.getPlayer(targetId);
       if (!target) {
-        logger.warn(`Shot rejected: ${playerId} targeted unknown player ${targetId}`);
+        this.reject(playerId, 'Shot', 'unknown target', targetId, msg.weaponType);
         return;
       }
       // Dead targets are untouchable — without this, corpse hits still
       // broadcast playerHit and can stack phantom damage past respawn.
-      if (target.isDead) return;
+      if (target.isDead) {
+        this.reject(playerId, 'Shot', 'target already dead', targetId, msg.weaponType);
+        return;
+      }
       // Friendly fire: no damage (and no playerHit) between teammates.
-      if (this.friendly(playerId, targetId)) return;
+      if (this.friendly(playerId, targetId)) {
+        this.reject(playerId, 'Shot', 'friendly fire', targetId, msg.weaponType);
+        return;
+      }
 
       // Hit claims must name the projectile that landed them. The claimed
       // id may be null if the hit raced the server's projectileCreated —
       // fall back to the shooter's most recent spawn of that weapon type.
-      const proj = this.resolveClaimedProjectile(playerId, msg.projectileId, msg.weaponType);
+      const proj = this.resolveClaimedProjectile(playerId, msg.projectileId, msg.weaponType, 'shot');
       if (!proj) {
-        logger.warn(`Shot rejected: ${playerId} hit ${targetId} with no known projectile`);
+        this.reject(playerId, 'Shot', `no known projectile (id=${msg.projectileId ?? 'null'})`, targetId, msg.weaponType);
         return;
       }
       if (msg.position === undefined || msg.airtime === undefined) {
-        logger.warn(`Shot rejected: ${playerId} hit claim missing position/airtime`);
+        this.reject(playerId, 'Shot', 'missing position/airtime', targetId, msg.weaponType);
         return;
       }
       // Lag compensation: validate against where the target was when the
@@ -142,13 +164,9 @@ export class CombatHandler {
         now: Date.now(),
       });
       if (!verdict.ok) {
-        logger.warn(`Shot rejected: ${playerId} → ${targetId}: ${verdict.reason}`);
+        this.reject(playerId, 'Shot', verdict.reason, targetId, msg.weaponType);
         return;
       }
-      // The projectile exploded on impact — drop it so a second claim on
-      // the same id can't double-dip.
-      if (msg.projectileId) this.projectiles.delete(msg.projectileId);
-
       const shotDamage = getWeaponStats(proj.weaponType).directDamage * perkMods(player.perk).directDamage * this.ddMult(player);
       const result = this.playerManager.applyDamage(targetId, shotDamage);
       // Full-rate tick updates for the hit window — the shooter's client is
@@ -176,7 +194,7 @@ export class CombatHandler {
           msg.velocity.x * msg.velocity.x + msg.velocity.y * msg.velocity.y + msg.velocity.z * msg.velocity.z,
         );
         if (odx * odx + ody * ody + odz * odz > 1600 || vmag > 600) {
-          logger.warn(`Shot rejected: ${playerId} implausible spawn (origin ${Math.sqrt(odx * odx + ody * ody + odz * odz).toFixed(0)}m off, v=${vmag.toFixed(0)})`);
+          this.reject(playerId, 'Shot', `implausible spawn (origin ${Math.sqrt(odx * odx + ody * ody + odz * odz).toFixed(0)}m off, v=${vmag.toFixed(0)})`, undefined, msg.weaponType);
           return;
         }
         const projectileId = `proj_${++this.projectileCounter}`;
@@ -215,18 +233,63 @@ export class CombatHandler {
     playerId: string,
     projectileId: string | null | undefined,
     weaponType: number | undefined,
+    claim: 'shot' | 'aoe',
   ): TrackedProjectile | undefined {
+    // A live projectile's first claim moves it to `spent` — the same shell
+    // can then satisfy the paired claim (a rocket's direct hit AND its
+    // blast name one id). Each spent id fuels one shot claim and one AOE
+    // claim, so a cheater can't double-dip either kind.
+    const take = (rec: { proj: TrackedProjectile; shot: boolean; aoe: boolean }) => {
+      if (claim === 'shot' ? rec.shot : rec.aoe) return undefined;
+      if (claim === 'shot') rec.shot = true; else rec.aoe = true;
+      return rec.proj;
+    };
     if (projectileId) {
-      const proj = this.projectiles.get(projectileId);
-      return proj && proj.ownerId === playerId ? proj : undefined;
+      const live = this.projectiles.get(projectileId);
+      if (live) {
+        if (live.ownerId !== playerId) return undefined;
+        this.projectiles.delete(projectileId);
+        const rec = { proj: live, shot: false, aoe: false, at: Date.now() };
+        this.spentProjectiles.set(projectileId, rec);
+        this.sweepSpent();
+        return take(rec);
+      }
+      const spent = this.spentProjectiles.get(projectileId);
+      if (spent && spent.proj.ownerId === playerId && Date.now() - spent.at < 5000) {
+        return take(spent);
+      }
+      return undefined;
     }
-    let latest: TrackedProjectile | undefined;
-    for (const proj of this.projectiles.values()) {
+    // Null-id fallback (claim outraced projectileCreated): latest projectile
+    // the shooter owns, of the claimed type — live first, then spent.
+    let latest: { proj: TrackedProjectile; shot: boolean; aoe: boolean; at: number } | undefined;
+    for (const [id, proj] of this.projectiles) {
       if (proj.ownerId !== playerId) continue;
       if (weaponType !== undefined && proj.weaponType !== weaponType) continue;
-      latest = proj;
+      this.projectiles.delete(id);
+      latest = { proj, shot: false, aoe: false, at: Date.now() };
+      this.spentProjectiles.set(id, latest);
     }
-    return latest;
+    if (latest) return take(latest);
+    for (const rec of this.spentProjectiles.values()) {
+      if (rec.proj.ownerId !== playerId) continue;
+      if (weaponType !== undefined && rec.proj.weaponType !== weaponType) continue;
+      if (Date.now() - rec.at >= 5000) continue;
+      latest = rec;
+    }
+    return latest ? take(latest) : undefined;
+  }
+
+  /** Bound the spent map — same 512 cap as live projectiles, plus a lazy
+   *  age sweep so stale ids can't resolve hours later. */
+  private sweepSpent(): void {
+    const now = Date.now();
+    for (const [id, rec] of this.spentProjectiles) {
+      if (now - rec.at > 10000) this.spentProjectiles.delete(id);
+    }
+    while (this.spentProjectiles.size > 512) {
+      this.spentProjectiles.delete(this.spentProjectiles.keys().next().value!);
+    }
   }
 
   handleAOEShot(playerId: string, msg: Extract<ClientMessage, { type: 'aoeShot' }>): void {
@@ -245,7 +308,7 @@ export class CombatHandler {
       const dz = player.position.z - msg.position.z;
       const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
       if (dist > stats.aoeRadius + 20) {
-        logger.warn(`AOE rejected: ${playerId} slam ${dist.toFixed(0)}m from player`);
+        this.reject(playerId, 'AOE', `slam ${dist.toFixed(0)}m from player`, undefined, msg.weaponType);
         return;
       }
       const power = msg.power !== undefined
@@ -262,13 +325,13 @@ export class CombatHandler {
 
     // Projectile AOEs must name the tracked projectile that detonated —
     // same fallback resolution as direct-hit claims (race vs projectileCreated).
-    const proj = this.resolveClaimedProjectile(playerId, msg.projectileId, msg.weaponType);
+    const proj = this.resolveClaimedProjectile(playerId, msg.projectileId, msg.weaponType, 'aoe');
     if (!proj) {
-      logger.warn(`AOE rejected: ${playerId} blast with no known projectile`);
+      this.reject(playerId, 'AOE', `blast with no known projectile (id=${msg.projectileId ?? 'null'})`, undefined, msg.weaponType);
       return;
     }
     if (msg.airtime === undefined) {
-      logger.warn(`AOE rejected: ${playerId} blast claim missing airtime`);
+      this.reject(playerId, 'AOE', 'blast claim missing airtime', undefined, msg.weaponType);
       return;
     }
     const verdict = validateAoeClaim({
@@ -279,11 +342,12 @@ export class CombatHandler {
       now: Date.now(),
     });
     if (!verdict.ok) {
-      logger.warn(`AOE rejected: ${playerId}: ${verdict.reason}`);
+      this.reject(playerId, 'AOE', verdict.reason, undefined, msg.weaponType);
       return;
     }
-    // The projectile detonated — drop it so the id can't double-dip.
-    if (msg.projectileId) this.projectiles.delete(msg.projectileId);
+    // (The id stays resolvable in spentProjectiles for the paired claim —
+    // deletion happens via projectileDestroy, the 5s staleness cap, or
+    // the eviction sweep.)
 
     // Canonical launchers (Bolt/Disc): a claimed direct hit blooms the
     // blast. Server re-derives the bonus from the shared table — the
@@ -327,7 +391,7 @@ export class CombatHandler {
     const dz = player.position.z - position.z;
     const distSq = dx * dx + dy * dy + dz * dz;
     if (!trusted && distSq > 40000) { // 200m squared
-      logger.warn(`AOE rejected: ${playerId} too far from explosion (${Math.sqrt(distSq).toFixed(0)}m)`);
+      this.reject(playerId, 'AOE', `blast too far from shooter (${Math.sqrt(distSq).toFixed(0)}m)`, undefined, weapon);
       return;
     }
 
@@ -358,7 +422,7 @@ export class CombatHandler {
         if (damage <= 0) continue;
 
         // Apply impulse to target velocity (server-authoritative)
-        const impulseMag = aoeImpulse(impulseForce, dist, radius) * perkMods(target.perk).knockbackTaken;
+        const impulseMag = aoeImpulse(impulseForce, dist, radius) * KNOCKBACK_SCALE * perkMods(target.perk).knockbackTaken;
         if (dist > 0) {
           const dv: Vec3 = pull
             ? { x: -(dx / dist) * impulseMag, y: 0.3 * impulseMag, z: -(dz / dist) * impulseMag }
@@ -427,11 +491,24 @@ export class CombatHandler {
     // weapons). Unknown IDs are allowed through so client-side-only IDs
     // still work.
     const proj = this.projectiles.get(msg.projectileId);
-    if (proj !== undefined && proj.ownerId !== playerId) {
+    const spent = this.spentProjectiles.get(msg.projectileId);
+    const owner = proj?.ownerId ?? spent?.proj.ownerId;
+    if (owner !== undefined && owner !== playerId) {
       logger.warn(`projectileDestroy rejected: ${playerId} doesn't own ${msg.projectileId}`);
       return;
     }
     this.projectiles.delete(msg.projectileId);
+    // The spent tombstone survives — and a still-live projectile gets one
+    // now too: on unordered transports (WT/RTC datagram lanes) this
+    // destroy can land BEFORE the shot/aoeShot it pairs with, and the
+    // tombstone is the only thing resolving those reordered claims.
+    // Deleting outright here was the "blast with no known projectile"
+    // storm. sweepSpent's age/size caps bound it instead.
+    if (proj) {
+      this.spentProjectiles.set(msg.projectileId, { proj, shot: false, aoe: false, at: Date.now() });
+      this.sweepSpent();
+    }
+
     this.broadcast({
       type: 'projectileDestroyed',
       projectileId: msg.projectileId,
@@ -462,7 +539,7 @@ export class CombatHandler {
       if (dist > radius) continue;
       // Falloff + shove from shared formulas — client predicts the same hit.
       const damage = targetId === ownerId ? 0 : aoeDamage(baseDamage, dist, radius);
-      const impulseMag = aoeImpulse(knockback, dist, radius) * perkMods(target.perk).knockbackTaken;
+      const impulseMag = aoeImpulse(knockback, dist, radius) * KNOCKBACK_SCALE * perkMods(target.perk).knockbackTaken;
       if (dist > 0) {
         const dv: Vec3 = { x: (dx / dist) * impulseMag, y: 0.5 * impulseMag, z: (dz / dist) * impulseMag };
         target.velocity.x += dv.x;
