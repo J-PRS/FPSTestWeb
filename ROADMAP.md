@@ -93,6 +93,21 @@ surface. Detailed research lives in `_reports/`; this file is the current truth.
    Ops: GET /stats lifetime leaderboard off matches.jsonl; match clock
    + overtime + draw resolution + 60s warning; spectate joins
    (watch-only socket, full-rate ticks).
+- TDM mode: kill-confirmed scoring — frags +1 and drop a scoopable dog
+  tag (either team banks it). Quicksand arena map: dome barrier,
+  server-side RoomArena boundary pushback.
+- Map structures landed: box/wall/pillar/ramp specs render client-side,
+  balls ricochet off them (shared sphere-vs-yaw-OBB in stepBall —
+  identical server + client prediction), arena domes fade in <80m.
+- Admin API (FPS_ADMIN_TOKEN): /admin/reload hot-swaps a live room's
+  map spec + mapUpdate broadcast, /admin/kick, /admin/end, /admin/rooms.
+- Sticky launcher (WeaponType 18): bombs glue to terrain/structures/
+  targets, 3s fuse at 0.8s cadence (3 live max), detonation chain-cooks
+  sibling stickies in radius — stacked cluster = one overlapping boom.
+- Shot validation hardening: muzzle origin rewound by shooter ping,
+  rewind buffer cleared on respawn/teleport.
+- GET /serverinfo: host card (name/region/tick/rooms) for a future
+  CS/Quake-style server browser; FPS_SERVER_NAME/_REGION env.
 
 ### Later / research needed
 - Client prediction + reconciliation for self (currently trust + correct).

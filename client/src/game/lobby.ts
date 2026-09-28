@@ -75,7 +75,7 @@ export class Lobby {
 
     const quick = document.createElement('div');
     quick.style.cssText = 'display:flex;gap:4px;margin:6px 0;';
-    for (const mode of ['nuggets', 'ctf', 'dm']) {
+    for (const mode of ['nuggets', 'ctf', 'dm', 'tdm']) {
       const b = document.createElement('button');
       b.textContent = mode.toUpperCase();
       b.style.cssText = 'flex:1;background:#16303f;border:1px solid #345;color:#9cf;font:inherit;padding:3px 0;cursor:pointer;';
