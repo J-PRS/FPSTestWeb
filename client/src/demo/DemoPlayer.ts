@@ -257,6 +257,9 @@ export class DemoPlayer {
     } else {
       this.currentTime = 0;
       this.playing = false;
+      // Same settlement as the forward-end path — without it the manager's
+      // mode stays 'playing' against a dead player and Space can't resume.
+      this.callbacks.onPlaybackEnd?.();
       this.callbacks.onTimeUpdate?.(this.currentTime, this.duration);
     }
   }
