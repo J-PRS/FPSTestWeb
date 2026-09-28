@@ -341,9 +341,16 @@ export class Ball {
         // T comes off the (rate-corrected) server sim clock — a lagging
         // tick loop never overshoots; wall-time fallback until seeded.
         const simNow2 = Ball.netSimNow?.();
-        const T = this.legT0 >= 0 && simNow2 !== undefined && Number.isFinite(simNow2)
+        let T = this.legT0 >= 0 && simNow2 !== undefined && Number.isFinite(simNow2)
           ? Math.min(Math.max(0, simNow2 - this.legT0), 8)
           : (this.flightT = Math.min(this.flightT + dt, 8));
+        // Structures hit mid-leg: the server resolves sphere∩box in
+        // stepBall and stamps a bounce at contact — an analytic arc that
+        // ignores them sails through the wall and the stamp lands 50-150m
+        // off. March the leg for the earliest contact and park T there;
+        // the stamped segment arrives with the reflected velocity.
+        const tcS = firstStructureContact(s, T);
+        if (tcS < T) T = tcS;
         this.pos.set(
           s.x + s.vx * T,
           s.y + s.vy * T + 0.5 * BALL_GRAVITY * (T * T + 0.05 * T),
@@ -854,6 +861,36 @@ export class Ball {
     this.dotPool = [];
     for (const r of this.ribbons) r.dispose(this.scene);
   }
+}
+
+/** Earliest analytic-time sphere∩OBB touch along a ballistic leg, marched
+ *  in the server's 0.05 grid cells. Same contact predicate as
+ *  shared/ballSim.ts collideStructures (clamped-point distance < radius)
+ *  so the predictor finds the wall at (≤1 tick behind) the same instant
+ *  authority does. Infinity = no contact before T. */
+function firstStructureContact(s: SimBall, T: number): number {
+  const colliders = Ball.colliders;
+  if (!colliders.length) return Infinity;
+  const r = s.radius;
+  for (let tt = 0.05; tt <= T; tt += 0.05) {
+    const x = s.x + s.vx * tt;
+    const y = s.y + s.vy * tt + 0.5 * BALL_GRAVITY * (tt * tt + 0.05 * tt);
+    const z = s.z + s.vz * tt;
+    for (const c of colliders) {
+      const dx = x - c.cx, dz = z - c.cz;
+      const rr = Math.max(c.hx, c.hz) + r + 0.5;
+      if (dx * dx + dz * dz > rr * rr) continue; // cheap xz broadphase
+      const lx = dx * c.cos + dz * c.sin;
+      const lz = -dx * c.sin + dz * c.cos;
+      const dy = y - c.cy;
+      const qx = Math.max(-c.hx, Math.min(c.hx, lx));
+      const qy = Math.max(-c.hy, Math.min(c.hy, dy));
+      const qz = Math.max(-c.hz, Math.min(c.hz, lz));
+      const ex = lx - qx, ey = dy - qy, ez = lz - qz;
+      if (ex * ex + ey * ey + ez * ez < r * r) return tt;
+    }
+  }
+  return Infinity;
 }
 
 export function pickVariant(): 0 | 1 | 2 | 3 {

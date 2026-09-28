@@ -42,11 +42,13 @@ export function createRemotes(deps: RemotesDeps) {
   }
 
   // Remote is worth showing: proven connected (has ping) and either not yet
-  // instantiated or heard from within the 60s stale window
+  // instantiated or heard from within the 60s stale window. Server bots
+  // never ping — they're hosted in the room sim, not on a socket — so
+  // BOT- ids skip the liveness check entirely.
   function isRemoteActive(playerId: string, players: Map<string, import('../networking/NetworkManager.js').RemotePlayerState>): boolean {
     const rp = deps.world.remotePlayers.get(playerId);
     const ps = players.get(playerId);
-    if (ps?.ping == null) return false;
+    if (!playerId.startsWith('BOT-') && ps?.ping == null) return false;
     if (!rp) return true;
     return Date.now() - rp.lastUpdateTime <= 60000;
   }
@@ -178,7 +180,7 @@ export function createRemotes(deps: RemotesDeps) {
     // genuine packet loss; dead reckoning handles shorter gaps. Players that
     // never reported ping (>5s without one) are dead sockets — hide them too.
     const inactive = Date.now() - remotePlayer.lastUpdateTime > 60000
-      || nm.getPlayers().get(playerId)?.ping == null;
+      || (!playerId.startsWith('BOT-') && nm.getPlayers().get(playerId)?.ping == null);
     remotePlayer.setStaleHidden(inactive);
     if (inactive) {
       deps.lazyHud().removePlayerIndicator(playerId);
