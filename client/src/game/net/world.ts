@@ -66,7 +66,10 @@ function applyRoomInfo(ctx: NetCtx, playerCount: number, roomInfo?: Parameters<N
   if (roomInfo.respawnMs) deps.world.respawnMs = roomInfo.respawnMs;
   if (roomInfo.ffaScores) deps.world.ffaScores = new Map(Object.entries(roomInfo.ffaScores));
   announceRoom(ctx, playerCount, roomInfo);
-  // Pickups still lying on the field when we (re)joined.
+  // Pickups still lying on the field when we (re)joined — the roster is
+  // authoritative both ways: spawn what's there, drop ghosts whose
+  // pickupGone we missed while disconnected.
+  ctx.reconcilePickups(new Set((roomInfo.pickups ?? []).map(p => p.id)));
   for (const p of roomInfo.pickups ?? []) ctx.addPickup(p.id, p.pos, p.kind ?? 'gem');
   applyMapSnapshot(ctx, roomInfo.map);
   // Flags mid-flight when we joined — same path as a flagUpdate broadcast.

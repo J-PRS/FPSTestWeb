@@ -15,4 +15,7 @@ export interface NetCtx {
   ensureRemotePlayer(playerId: string, position: { x: number; y: number; z: number }, via: string): RemotePlayer;
   /** Server-owned pickup meshes — gem/dog-tag renderers. */
   addPickup(id: number, pos: { x: number; y: number; z: number }, kind?: import('../../../../shared/pickups.js').PickupKind): void;
+  /** Reconcile against the server roster — drop meshes whose ids aren't in
+   *  the set (their pickupGone was missed during a disconnect). */
+  reconcilePickups(liveIds: ReadonlySet<number>): void;
 }

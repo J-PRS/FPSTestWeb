@@ -36,6 +36,13 @@ export function wirePickups(ctx: NetCtx): void {
   };
   // Re-export on ctx — gameState needs it for pickups lying down on join.
   ctx.addPickup = addPickup;
+  ctx.reconcilePickups = (liveIds) => {
+    for (const [id, e] of pickupMeshes) {
+      if (liveIds.has(id)) continue;
+      deps.lazyScene().remove(e.mesh);
+      pickupMeshes.delete(id);
+    }
+  };
 
   networkManager.onPickupSpawn = (id, pos, kind) => {
     if (deps.world.playbackMode) return; // live match gems don't belong in the replay
