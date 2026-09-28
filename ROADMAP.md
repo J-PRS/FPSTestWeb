@@ -116,6 +116,11 @@ surface. Detailed research lives in `_reports/`; this file is the current truth.
   identical server + client prediction), arena domes fade in <80m.
 - Admin API (FPS_ADMIN_TOKEN): /admin/reload hot-swaps a live room's
   map spec + mapUpdate broadcast, /admin/kick, /admin/end, /admin/rooms.
+- Weapon registry rework (2026-09-30): client/src/weapons.ts SLOT_DEFS is
+  the single weapon table — index is the wid, each def carries
+  weaponType/rate/config/kick/kind(auto|fan|beam). The four hand-aligned
+  parallel arrays are gone; combat dispatches fire by def.kind. New weapon
+  = one def entry. Alignment invariants pinned in weaponTables.test.ts.
 - Sticky launcher (WeaponType 18): bombs glue to terrain/structures/
   targets, 3s fuse at 0.8s cadence (3 live max), detonation chain-cooks
   sibling stickies in radius — stacked cluster = one overlapping boom.
