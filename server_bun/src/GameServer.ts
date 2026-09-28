@@ -224,6 +224,7 @@ export class GameServer {
       this.rotationIdx %= list.length;
       // Terrain attach rides applySpec's onTerrain hook — calling it here
       // too would double-attach the same field.
+      this.roomMapName.set(room.name, name);
       logger.info('Map rotated', { room: room.name, map: name });
       return spec;
     }
@@ -477,7 +478,9 @@ export class GameServer {
   reloadRoom(name: string): 'ok' | 'no-room' | 'no-spec' {
     const room = this.rooms.get(name);
     if (!room) return 'no-room';
-    const spec = this.loadMapSpec(name);
+    // The room's name isn't always its map's (ad-hoc room names, map= pick
+    // in /join, post-rotation state) — reload whatever spec it's playing.
+    const spec = this.loadMapSpec(this.roomMapName.get(name) ?? name);
     if (!spec) return 'no-spec';
     room.applySpec(spec);
     logger.info('Room spec reloaded', { room: name });

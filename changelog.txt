@@ -1,3 +1,5 @@
+2026-10-03 - admin reload resolves the room's CURRENT map (roomMapName) instead of the room name — works on ad-hoc/join-created rooms; rotation keeps roomMapName fresh
+
 2026-10-03 - map rotation + admin reload no longer double-attach terrain (rides applySpec's onTerrain hook); rotation live-verified raindance→crossfire mid-match
 
 2026-10-03 - judge: attachField reseats shadows onto reported server pos — join-window tracking against the boot field no longer spikes a 40m divergence when the map's .bin lands
