@@ -440,8 +440,11 @@ export class Room {
 
   /** Every broadcast carrying a firing position is audible. */
   broadcast(msg: Parameters<ConnectionManager['broadcast']>[0], exclude?: string): void {
-    if ((msg as { type?: string }).type === 'projectileCreated') {
-      const pos = (msg as { position?: Vec3 }).position;
+    const t = (msg as { type?: string }).type;
+    if (t === 'projectileCreated' || t === 'playerShot') {
+      // Hitscan relays carry `pos` (server-stamped), spawns carry `position`.
+      const m = msg as { position?: Vec3; pos?: Vec3 };
+      const pos = m.position ?? m.pos;
       if (pos) this.pushNoise(pos);
     }
     this.connections.broadcast(msg, exclude);
