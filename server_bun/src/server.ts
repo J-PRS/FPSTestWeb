@@ -5,6 +5,7 @@ import type { WebSocketData } from './types.ts';
 import { DemoStorage } from './DemoStorage.ts';
 import { RtcRelay } from './RtcRelay.ts';
 import { RtcServer } from './RtcServer.ts';
+import { WtServer } from './WtServer.ts';
 import { join } from 'node:path';
 import { appendFileSync, mkdirSync } from 'node:fs';
 
@@ -16,6 +17,7 @@ const rtcRelay = new RtcRelay();
 // Server-peer WebRTC tier: /rtcs sockets carry signalling; the negotiated
 // DataChannel is adapted onto GameServer as if it were a /ws socket.
 const rtcServer = new RtcServer(gameServer);
+const wtServer = new WtServer(gameServer);
 
 const CORS_HEADERS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
@@ -254,6 +256,22 @@ const server = Bun.serve<WebSocketData>({
 });
 
 gameServer.setBunServer(server);
+
+// WebTransport tier — opt-in via env (FPS_WT_PORT + cert/key paths).
+// Shares GameServer through the socket adapter; failure here must never
+// stop the WS game, so all errors are logged-and-continue inside start().
+if (CONFIG.wtPort > 0 && CONFIG.wtCertPath && CONFIG.wtKeyPath) {
+  try {
+    const { readFileSync: rf } = await import('node:fs');
+    void wtServer.start({
+      port: CONFIG.wtPort,
+      certPem: rf(CONFIG.wtCertPath, 'utf8'),
+      keyPem: rf(CONFIG.wtKeyPath, 'utf8'),
+    });
+  } catch (e) {
+    logger.warn('WebTransport disabled — cert/key unreadable', { error: (e as Error).message });
+  }
+}
 
 logger.info('FPS Bun Server started', {
   port: CONFIG.port,

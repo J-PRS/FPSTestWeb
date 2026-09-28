@@ -42,19 +42,16 @@ export async function connectGameTransport(config: ConnectionConfig): Promise<Ga
  * endpoint doesn't exist yet — the handshake just fails and we fall through.
  */
 class WebTransportGameTransport implements GameTransport {
-  private wt: WebTransport | null = null;
   private open = false;
   private writer: WritableStreamDefaultWriter<Uint8Array> | null = null;
   private dgWriter: WritableStreamDefaultWriter<Uint8Array> | null = null;
   private encoder = new TextEncoder();
   private decoder = new TextDecoder();
 
-  constructor(private url: string, private config: ConnectionConfig) {}
+  constructor(private config: ConnectionConfig, private wt: WebTransport) {}
 
   connect(): void {
-    const https = this.url.replace(/^wss?:/, 'https:');
-    const wt = new WebTransport(https);
-    this.wt = wt;
+    const wt = this.wt;
     wt.ready.then(async () => {
       this.open = true;
       // Reliable JSON lane: one bidi stream, newline-delimited frames.
@@ -120,10 +117,12 @@ async function tryWebTransport(config: ConnectionConfig): Promise<GameTransport 
   // WebTransport speaks https:, not wss: — the endpoint shares the host.
   const https = config.url.replace(/^wss?:/, 'https:');
   try {
-    const probe = new WebTransport(https);
-    await Promise.race([probe.ready, new Promise((_, rej) => setTimeout(rej, 3000))]);
-    void probe.close();
-    return new WebTransportGameTransport(config.url, config);
+    // The probe IS the session — don't handshake twice. If ready resolves
+    // we hand the live transport to the adapter; connect() then just
+    // opens its lanes.
+    const wt = new WebTransport(https);
+    await Promise.race([wt.ready, new Promise((_, rej) => setTimeout(rej, 3000))]);
+    return new WebTransportGameTransport(config, wt);
   } catch {
     return null;
   }
@@ -139,16 +138,16 @@ class ServerRtcTransport implements GameTransport {
   private open = false;
   constructor(private dc: RTCDataChannel, private config: ConnectionConfig) {
     dc.binaryType = 'arraybuffer';
-    dc.onmessage = (ev) => {
+    dc.addEventListener('message', (ev) => {
       const data = ev.data;
       if (typeof data === 'string') {
         try { config.onMessage?.(JSON.parse(data)); } catch { /* malformed */ }
       } else if (data instanceof ArrayBuffer) {
         config.onBinaryMessage?.(new Uint8Array(data));
       }
-    };
-    dc.onopen = () => { this.open = true; config.onConnect?.(); };
-    dc.onclose = () => { this.open = false; config.onDisconnect?.(1000, 'rtc closed'); };
+    });
+    dc.addEventListener('open', () => { this.open = true; config.onConnect?.(); });
+    dc.addEventListener('close', () => { this.open = false; config.onDisconnect?.(1000, 'rtc closed'); });
   }
   connect(): void {
     if (this.dc.readyState === 'open') {
@@ -192,14 +191,14 @@ async function tryWebRTC(config: ConnectionConfig): Promise<GameTransport | null
     const sdp = pc.localDescription?.sdp ?? offer.sdp;
     const answer = await new Promise<RTCSessionDescriptionInit>((res, rej) => {
       const timer = setTimeout(() => rej(new Error('rtc signal timeout')), 3000);
-      signal.onmessage = (ev) => {
+      signal.addEventListener('message', (ev) => {
         try {
           const m = JSON.parse(ev.data);
           if (m.type === 'answer') { clearTimeout(timer); res(m); }
         } catch { /* not ours */ }
-      };
-      signal.onerror = () => rej(new Error('rtc signal error'));
-      signal.onopen = () => signal.send(JSON.stringify({ type: 'offer', sdp }));
+      });
+      signal.addEventListener('error', () => rej(new Error('rtc signal error')));
+      signal.addEventListener('open', () => signal.send(JSON.stringify({ type: 'offer', sdp })));
     });
     await pc.setRemoteDescription(answer);
     signal.close();
