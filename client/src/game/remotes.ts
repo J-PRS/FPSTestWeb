@@ -148,6 +148,7 @@ export function createRemotes(deps: RemotesDeps) {
     // invisible skier is a giveaway).
     remotePlayer.setCloakHidden(!!playerState.cloaked);
     remotePlayer.setShielded(!!playerState.shielded);
+    remotePlayer.setMending(!!playerState.mending);
     if (playerState.cloaked) {
       hud.removePlayerIndicator(playerId);
       deps.lazyHealthBarSystem().removeBar(playerId);

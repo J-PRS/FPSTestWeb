@@ -97,6 +97,10 @@ export class GameServer {
   // Join throttle: ip → sliding window counters. Entries age out with the
   // window so the map self-cleans.
   private joinWindows = new Map<string, { count: number; start: number }>();
+  // Medkit: hp restored per broadcast tick while the mending flag is up.
+  // 12 hp/s at the room's tick rate — a field patch, not a fountain.
+  private static readonly MEND_HP_PER_TICK = 12 / CONFIG.tickRate;
+
   private static readonly JOIN_LIMIT = 5;
   private static readonly JOIN_WINDOW_MS = 60_000;
 
@@ -716,6 +720,12 @@ export class GameServer {
         // while the state hash still counts them. Gated on THAT player's
         // lastSent, not a shared clock — a single shared timestamp meant
         // only the first stale player in map order ever heartbeat.
+        // Medkit channel: server owns health, so the flag drives the heal.
+        // The client burns energy and drops the flag when the tank is dry —
+        // a mending player's health ticks up one slice per tick.
+        if (p.mending && !p.isDead && p.health < CONFIG.playerMaxHealth) {
+          p.health = Math.min(CONFIG.playerMaxHealth, p.health + MEND_HP_PER_TICK);
+        }
         const isStale = silenceMs > 5000;
         const forceSend = now < p.forceSendUntil;
         const lastSent = room.lastSentPositions.get(playerId);
@@ -739,7 +749,7 @@ export class GameServer {
           // State fields (health/death/ski) must never be eaten by the
           // position check — a flag change forces the record even when the
           // player hasn't moved.
-          const stateChanged = p.health !== lastSent.hp || p.isDead !== lastSent.dead || p.skiing !== lastSent.ski || p.cloaked !== lastSent.cloak || p.shielded !== lastSent.shield;
+          const stateChanged = p.health !== lastSent.hp || p.isDead !== lastSent.dead || p.skiing !== lastSent.ski || p.cloaked !== lastSent.cloak || p.shielded !== lastSent.shield || p.mending !== lastSent.mend;
           // Idle players still heartbeat at 4Hz — a >300ms silence would
           // trigger client-side dead reckoning on a stationary player
           if (!stateChanged && predErrSq < 0.09 && yawDiff < 0.02 && pitchDiff < 0.03 && now - lastSent.t < 250) {
@@ -751,7 +761,7 @@ export class GameServer {
           x: p.position.x, y: p.position.y, z: p.position.z,
           vx: p.velocity.x, vy: p.velocity.y, vz: p.velocity.z,
           yaw: p.rotation.yaw, pitch: p.rotation.pitch,
-          hp: p.health, dead: p.isDead, ski: p.skiing, cloak: p.cloaked, shield: p.shielded, t: now,
+          hp: p.health, dead: p.isDead, ski: p.skiing, cloak: p.cloaked, shield: p.shielded, mend: p.mending, t: now,
         });
 
         records.push({
@@ -770,6 +780,7 @@ export class GameServer {
             ski: p.skiing,
             cloaked: p.cloaked,
             shielded: p.shielded,
+            mending: p.mending,
           }),
           pos: p.position,
           force: forceSend,

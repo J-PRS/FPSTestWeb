@@ -382,24 +382,28 @@ export class ViewModel {
   // the third-person bubble crawls over the gun's surface — the player who
   // raised it sees the charge on their own weapon.
   private shieldShells: THREE.Object3D[] = [];
-  setShield(on: boolean): void {
+  private shellColor = 0x66ccff;
+  setShield(on: boolean, color = 0x66ccff): void {
     if (!on) {
       for (const s of this.shieldShells) s.parent?.remove(s);
       this.shieldShells = [];
       return;
     }
     if (this.shieldShells.length) return;
+    this.shellColor = color;
     const src = this.weapons.get(this.activeWeapon);
     if (!src) return;
     const shell = src.clone(true);
     shell.traverse((o) => {
       const m = o as THREE.Mesh;
-      if (m.isMesh) m.material = makeShieldMaterial();
+      if (m.isMesh) m.material = makeShieldMaterial(color);
     });
     shell.scale.setScalar(1.06);
     src.parent?.add(shell);
     this.shieldShells.push(shell);
   }
+  // Medkit reuses the gun shell — same field, green read.
+  setMend(on: boolean): void { this.setShield(on, 0x3fdd6f); }
   /** Tick the field animation on the gun shells (called from update). */
   private updateShieldShells(dt: number): void {
     for (const s of this.shieldShells) {
@@ -537,7 +541,7 @@ export class ViewModel {
       const next = this.weapons.get(this.activeWeapon);
       if (next) next.visible = true;
       // The field shell wraps the OLD gun's silhouette — re-wrap the new one.
-      if (this.shieldShells.length) { this.setShield(false); this.setShield(true); }
+      if (this.shieldShells.length) { this.setShield(false); this.setShield(true, this.shellColor); }
       // Park the flash at this weapon's actual muzzle, not a shared offset
       const mz = ViewModel.MUZZLE_Z[this.activeWeapon] ?? -0.35;
       this.flashMesh.position.z = mz;

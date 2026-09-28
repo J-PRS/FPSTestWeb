@@ -265,6 +265,11 @@ async function init(): Promise<void> {
     viewModel.setShield(on);
     if (on) sfx.shieldOn(); else sfx.shieldBreak();
   };
+  player.onMend = (on) => {
+    hud.setMend(on);
+    viewModel.setMend(on);
+    if (on) sfx.mendOn(); else sfx.mendOff();
+  };
   player.onDeploy = () => entities.deployables.deploy();
   profiler.markTime('playerCreated');
 
@@ -465,6 +470,7 @@ async function init(): Promise<void> {
   // which enrages and spawns the full roster behind your back.
   const serverUrl = (await serverEndpoints).wsUrl;
   await connectServer({ serverUrl, classicMode, networkManager, logger, fragMessages, profiler });
+  player.serverOwnsHealth = () => networkManager.isConnected();
 
   // Initial balls
   for (let i = 0; i < 8; i++) entities.spawnBall();

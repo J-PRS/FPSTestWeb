@@ -1,3 +1,4 @@
+2026-09-26  medkit skill — energy->health channel (20 to activate, 15/s drain, 12hp/s server tick heal while flag up, offline self-heal); mend flag on inputMove+tick bit16, green aura remote + green gun shell + MENDING chip/vignette + sfx; protocol v8
 # Changelog
 
 ## [2026-09-28] Tech debt: Player input extraction + P2P tests

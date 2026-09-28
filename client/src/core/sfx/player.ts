@@ -135,6 +135,24 @@ export function shieldBreak(): void {
   noise(0.2, 0.18, g, 'bandpass', 4000, 600, 1.4);
 }
 
+export function mendOn(): void {
+  const bus = audio.sfxBus, c = ctx();
+  if (!bus || !c) return;
+  const g = c.createGain(); g.connect(bus);
+  if (!play(g, 0.35)) return;
+  // Warm rising hum — the field knitting you back together.
+  osc('sine', 400, 800, 0.2, 0.2, g);
+  osc('triangle', 800, 1200, 0.25, 0.08, g);
+}
+
+export function mendOff(): void {
+  const bus = audio.sfxBus, c = ctx();
+  if (!bus || !c) return;
+  const g = c.createGain(); g.connect(bus);
+  if (!play(g, 0.25)) return;
+  osc('sine', 800, 350, 0.18, 0.15, g);
+}
+
 export function killConfirm(): void {
   const bus = audio.uiBus, c = ctx();
   if (!bus || !c) return;

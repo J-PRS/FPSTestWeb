@@ -63,7 +63,7 @@ const FRAG = /* glsl */ `
 
 /** The raw field material — for callers that wrap their own geometry
  *  (viewmodel gun overlay). They own mesh lifecycle + uTime ticking. */
-export function makeShieldMaterial(): THREE.ShaderMaterial {
+export function makeShieldMaterial(color = 0x3fa8dd): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
     vertexShader: VERT,
     fragmentShader: FRAG,
@@ -74,7 +74,7 @@ export function makeShieldMaterial(): THREE.ShaderMaterial {
     uniforms: {
       uTime: { value: Math.random() * 100 },
       uHit: { value: 0 },
-      uColor: { value: new THREE.Color(0x3fa8dd) },
+      uColor: { value: new THREE.Color(color) },
     },
   });
 }
@@ -87,14 +87,14 @@ export interface ShieldBubble {
   dispose(): void;
 }
 
-export function makeShieldBubble(parent: THREE.Object3D, radius = 2.2): ShieldBubble {
-  return makeShieldedMesh(parent, new THREE.SphereGeometry(radius, 32, 20));
+export function makeShieldBubble(parent: THREE.Object3D, radius = 2.2, color = 0x3fa8dd): ShieldBubble {
+  return makeShieldedMesh(parent, new THREE.SphereGeometry(radius, 32, 20), color);
 }
 
 /** Same field, wrapped around arbitrary geometry (the first-person gun).
  *  `parent` is whatever the mesh should be added to — a Scene for world
  *  bubbles, the viewmodel group for the gun overlay. */
-export function makeShieldedMesh(parent: THREE.Object3D, geometry: THREE.BufferGeometry): ShieldBubble {
+export function makeShieldedMesh(parent: THREE.Object3D, geometry: THREE.BufferGeometry, color = 0x3fa8dd): ShieldBubble {
   const mat = new THREE.ShaderMaterial({
     vertexShader: VERT,
     fragmentShader: FRAG,
@@ -105,7 +105,7 @@ export function makeShieldedMesh(parent: THREE.Object3D, geometry: THREE.BufferG
     uniforms: {
       uTime: { value: Math.random() * 100 }, // desync bubbles on the field
       uHit: { value: 0 },
-      uColor: { value: new THREE.Color(0x3fa8dd) },
+      uColor: { value: new THREE.Color(color) },
     },
   });
   const mesh = new THREE.Mesh(geometry, mat);
