@@ -232,11 +232,42 @@ async function tryWebRTC(config: ConnectionConfig): Promise<GameTransport | null
 export class TieredTransport implements GameTransport {
   private inner: GameTransport | null = null;
   private pending: (string | Uint8Array)[] = [];
+  private url: string | undefined;
+  private closed = false;
+  private attempts = 0;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private static readonly BACKOFF_MS = 1000;
 
   constructor(private readonly config: ConnectionConfig) {}
 
   connect(url?: string): void {
-    void connectGameTransport(this.config).then((t) => {
+    this.url = url;
+    // Re-probe on each (re)connect: the previous best tier may be gone.
+    // Inner transports see wrapped callbacks — a drop re-arms the probe
+    // here, mirroring WebSocketConnection's own reconnect loop so a WT/RTC
+    // session survives a blip instead of dying on first packet loss.
+    const innerConfig: ConnectionConfig = {
+      ...this.config,
+      onDisconnect: (code, reason) => {
+        this.config.onDisconnect?.(code, reason);
+        if (this.closed) return;
+        // WebSocketConnection runs its own reconnect loop — reprobing here
+        // would double-schedule connections.
+        if (this.inner instanceof WebSocketConnection) return;
+        if (this.attempts < (this.config.maxReconnectAttempts ?? Infinity)) {
+          this.attempts++;
+          this.reconnectTimer = setTimeout(() => {
+            if (!this.closed) this.connect(this.url);
+          }, TieredTransport.BACKOFF_MS);
+        }
+      },
+      onConnect: () => {
+        this.attempts = 0;
+        this.config.onConnect?.();
+      },
+    };
+    void connectGameTransport(innerConfig).then((t) => {
+      if (this.closed) { t.disconnect(); return; }
       this.inner = t;
       t.connect(url);
       for (const d of this.pending) t.send(d);
@@ -255,5 +286,9 @@ export class TieredTransport implements GameTransport {
   }
 
   connected(): boolean { return this.inner?.connected() ?? false; }
-  disconnect(): void { this.inner?.disconnect(); }
+  disconnect(): void {
+    this.closed = true;
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+    this.inner?.disconnect();
+  }
 }
