@@ -1,3 +1,4 @@
+2026-10-03 - API surface + spectate soaked: new _tools/pvptest/apisoak.ts — all GET routes, /join param gate, spectate join (no player state, receives ticks, writes ignored), admin auth gate (401/200), /admin/end → ffaMatchEnd broadcast, /matches journal, /admin/kick closes socket, /client-log accepted
 2026-10-03 - deployables soaked over real sockets: new _tools/pvptest/deployprobe.ts — deploySpawn per kind, bad-kind/far-plant ignored, cap recycle fires deployGone, proximity mine tripped live by a roaming bot (mineBoom), turret fired turretShot, owner-leave teardown after grace
 2026-10-03 - reconnect path soaked over real sockets: new _tools/pvptest/reconnect.ts — grace-token reclaim restores the same identity with a clean roster (no dupes); wrong token rejected with 1008; live connected ids reject steals even WITH the token (duplicate-id gate — by design)
 
