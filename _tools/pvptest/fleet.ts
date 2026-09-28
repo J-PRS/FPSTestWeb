@@ -141,6 +141,10 @@ const moveTimer = setInterval(() => {
   const dt = 0.05;
   for (const b of bots) {
     if (!b.joined || !b.ws || b.ws.readyState !== 1) continue;
+    // Honest bots hold all sends until the sim is seeded — the frames
+    // between gameState and the async field load would otherwise leave
+    // as orbit spoofs and get rejected as teleports.
+    if (!SPOOF && !b.sim) continue;
     if (!SPOOF && b.sim) {
       b.yaw += dt * 0.35; // gentle arc — a Tribes-ish carve
       b.sim.setInput({ forward: 1, right: 0, jumpHeld: false, skiHeld: true, jetHeld: false });
