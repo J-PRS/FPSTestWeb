@@ -79,6 +79,10 @@ interface Bot {
   /** Largest pre-snap gap a correction was asked to fix — a measure of
    *  how far the two sims had drifted when the server stepped in. */
   maxCorrectionGap: number;
+  /** Next plant time + cycling kind — exercises the deploy claim path. */
+  deployAt: number;
+  deployKind: number;
+  deploys: number;
   /** Journaled inputs not yet acked by the server — replayed over a
    *  correction snap exactly like the real client's input journal. */
   journal: { seq: number; yaw: number }[];
@@ -86,6 +90,7 @@ interface Bot {
 
 const bots: Bot[] = [];
 let joins = 0, joinFails = 0, totalTickFrames = 0, totalSends = 0;
+let deploySpawns = 0, deployGones = 0, turretShots = 0, mineBooms = 0;
 
 async function spawnBot(room: string, name: string): Promise<void> {
   const bot: Bot = {
@@ -97,6 +102,7 @@ async function spawnBot(room: string, name: string): Promise<void> {
     yaw: Math.random() * Math.PI * 2,
     remotes: new Map(), pending: null, fireAt: 0, rejects: 0, kills: 0,
     corrections: 0, maxCorrectionGap: 0, journal: [],
+    deployAt: Date.now() + 3000 + Math.random() * 4000, deployKind: 0, deploys: 0,
   };
   bots.push(bot);
   try {
@@ -111,9 +117,25 @@ async function spawnBot(room: string, name: string): Promise<void> {
           bot.rejects++;
           if (bot.rejects <= 5) console.log(`  ${name} shotRejected: ${m.reason}`);
           if (bot.pending?.id) bot.pending = null;
-        } else if (m.type === 'playerKill' && m.shooterId === name) {
-          bot.kills++;
-          bot.pending = null;
+        } else if (m.type === 'deploySpawn') {
+          deploySpawns++;
+        } else if (m.type === 'deployGone') {
+          deployGones++;
+        } else if (m.type === 'turretShot') {
+          turretShots++;
+        } else if (m.type === 'mineBoom') {
+          mineBooms++;
+        } else if (m.type === 'playerLeft') {
+          // Stale roster entries read as 'unknown target' rejects — a bot
+          // that never forgets departed players keeps shooting ghosts.
+          bot.remotes.delete(m.playerId);
+        } else if (m.type === 'playerKill') {
+          const v = bot.remotes.get(m.targetId);
+          if (v) v.dead = true;
+          if (m.shooterId === name) {
+            bot.kills++;
+            bot.pending = null;
+          }
         } else if (m.type === 'gameState') {
           bot.joined = true; joins++;
           bot.team = m.team;
@@ -154,14 +176,18 @@ async function spawnBot(room: string, name: string): Promise<void> {
           // with the server — a residual still >2m means the two sims
           // disagree structurally, not just on timing.
           bot.maxCorrectionGap = Math.max(bot.maxCorrectionGap, before);
-        } else if (m.type === 'playerRespawn' && m.playerId === name && bot.sim) {
-          // Own respawn — reseat the sim at the spawn point exactly like the
-          // client's syncMovement, or the corpse-to-spawn jump reads as a
-          // (legit, once-per-life) divergence spike.
-          bot.sim.setState({
-            pos: { ...m.position }, vel: { x: 0, y: 0, z: 0 },
-            yaw: m.rotation?.yaw ?? bot.yaw, pitch: 0, onGround: true,
-          });
+        } else if (m.type === 'playerRespawn') {
+          const v = bot.remotes.get(m.playerId);
+          if (v) v.dead = false;
+          if (m.playerId === name && bot.sim) {
+            // Own respawn — reseat the sim at the spawn point exactly like the
+            // client's syncMovement, or the corpse-to-spawn jump reads as a
+            // (legit, once-per-life) divergence spike.
+            bot.sim.setState({
+              pos: { ...m.position }, vel: { x: 0, y: 0, z: 0 },
+              yaw: m.rotation?.yaw ?? bot.yaw, pitch: 0, onGround: true,
+            });
+          }
         } else if (m.type === 'knockback' && bot.sim && m.targetId === name) {
           // Server shoved us — apply the same impulse the real client would,
           // or the judge sees the un-eaten impulse as divergence.
@@ -325,9 +351,34 @@ const fireTimer = setInterval(() => {
   }
 }, 80);
 
+// Deployables: every few seconds each honest bot plants the next kind in
+// rotation a few meters ahead — exercises the deploy claim path, caps,
+// TTLs, and the server-side combat sims under load.
+const DEPLOY_KINDS = ['turret', 'mine', 'station', 'drone'];
+const deployTimer = setInterval(() => {
+  const now = Date.now();
+  for (const b of bots) {
+    if (!b.joined || !b.ws || b.ws.readyState !== 1 || !b.sim) continue;
+    if (now < b.deployAt) continue;
+    b.deployAt = now + 6000 + Math.random() * 6000;
+    const s = b.sim.state;
+    const pos = {
+      x: s.pos.x + Math.cos(b.yaw) * 3,
+      y: s.pos.y,
+      z: s.pos.z + Math.sin(b.yaw) * 3,
+    };
+    b.ws.send(JSON.stringify({
+      type: 'deploy', kind: DEPLOY_KINDS[b.deployKind++ % DEPLOY_KINDS.length],
+      position: pos,
+    }));
+    b.deploys++;
+  }
+}, 250);
+
 setTimeout(() => {
   clearInterval(moveTimer);
   clearInterval(fireTimer);
+  clearInterval(deployTimer);
   const joined = bots.filter(b => b.joined).length;
   console.log(`\n=== FLEET RESULTS ===`);
   console.log(`joined: ${joined}/${bots.length}  failed: ${joinFails}`);
@@ -338,6 +389,8 @@ setTimeout(() => {
   const corr = bots.reduce((n, b) => n + b.corrections, 0);
   const worstGap = Math.max(0, ...bots.map(b => b.maxCorrectionGap));
   console.log(`corrections: ${corr} (worst pre-snap gap ${worstGap.toFixed(1)}m)`);
+  const deploys = bots.reduce((n, b) => n + b.deploys, 0);
+  console.log(`deployables: ${deploys} claims → ${deploySpawns} spawns, ${deployGones} gones, ${turretShots} turret shots, ${mineBooms} mine booms`);
   for (const b of bots.slice(0, 3)) {
     console.log(`  ${b.name}: ${b.tickFrames} frames, ${b.sends} sends, ${b.kills} kills, ${b.rejects} rejects, ${b.corrections} corr`);
   }
