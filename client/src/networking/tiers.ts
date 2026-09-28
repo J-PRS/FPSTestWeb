@@ -47,6 +47,7 @@ class WebTransportGameTransport implements GameTransport {
   private open = false;
   private writer: WritableStreamDefaultWriter<Uint8Array> | null = null;
   private dgWriter: WritableStreamDefaultWriter<Uint8Array> | null = null;
+  private preOpen: string[] = [];
   private encoder = new TextEncoder();
   private decoder = new TextDecoder();
 
@@ -62,6 +63,8 @@ class WebTransportGameTransport implements GameTransport {
       this.dgWriter = wt.datagrams.writable.getWriter();
       void this.pumpReliable(stream.readable.getReader());
       void this.pumpDatagrams(wt.datagrams.readable.getReader());
+      for (const d of this.preOpen) void this.writer.write(this.encoder.encode(d + '\n'));
+      this.preOpen.length = 0;
       this.config.onConnect?.();
     }).catch((e) => {
       this.config.onError?.(e instanceof Error ? e : new Error(String(e)));
@@ -99,7 +102,10 @@ class WebTransportGameTransport implements GameTransport {
   send(data: string | Uint8Array): boolean {
     if (!this.open) return false;
     const payload = typeof data === 'string' ? data : this.decoder.decode(data);
-    void this.writer?.write(this.encoder.encode(payload + '\n'));
+    // onConnect fires only after the stream is live, but a same-tick send
+    // can still race the writer assignment — hold those briefly.
+    if (!this.writer) { this.preOpen.push(payload); return true; }
+    void this.writer.write(this.encoder.encode(payload + '\n'));
     return true;
   }
 
