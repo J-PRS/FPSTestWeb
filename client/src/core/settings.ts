@@ -13,9 +13,16 @@ type Schema = {
   'fps-minimap': number;      // 0 = corner radar, 1 = crosshair threat overlay
   'fps-loadout': string;      // "0,2,6,7" — weapon id per slot
   'fps-belt': string;         // 'disc' | 'grenade'
+  'fps-sidearm': string;      // 'pistol' | 'revolver' | 'shotgun'
+  'fps-pack': string;         // DeployKind — 'turret' | 'mine' | 'station'
   'fps-skill': string;        // SkillId
+  'fps-mode': string;         // '' | 'nuggets' | 'ctf' | 'dm' | 'classic'
+  'fps-spawns': number;       // 1 = all-random creature spawns, no scripted beats
+  'fps-debug': number;        // dev overlays / verbose combat logging
   'fps-volume': number;       // master volume 0..1
   'fps-keys': string;         // "forward=KeyW,back=KeyS,..." — see core/keybinds.ts
+  'fps-server': string;       // remote host (trycloudflare name or full host) — '' = same-host dev
+  'fps-p2p': string;          // 'host:CODE' | 'join:CODE' — WebRTC duel, '' = off
 };
 
 const DEFAULTS: Schema = {
@@ -27,9 +34,16 @@ const DEFAULTS: Schema = {
   'fps-minimap': 0,
   'fps-loadout': '0,2,6,7',
   'fps-belt': 'disc',
+  'fps-sidearm': 'pistol',
+  'fps-pack': 'turret',
   'fps-skill': 'bounce',
+  'fps-mode': '',
+  'fps-spawns': 0,
+  'fps-debug': 0,
   'fps-volume': 0.7,
   'fps-keys': '',
+  'fps-server': '',
+  'fps-p2p': '',
 };
 
 const parse = {
