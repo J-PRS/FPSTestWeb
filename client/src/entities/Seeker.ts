@@ -23,6 +23,9 @@ const _q = new THREE.Quaternion();
 const _e = new THREE.Euler();
 const _s = new THREE.Vector3();
 
+type SeekerState = 'patrol' | 'chase' | 'telegraph' | 'dart' | 'recover';
+interface SeekerCtx { dt: number; distSq: number; playerPos: THREE.Vector3; playerVel?: THREE.Vector3 }
+
 const PART_BODY = 0;
 const PART_WING = 1;    // 2 per seeker
 const PART_STINGER = 2;
@@ -98,7 +101,7 @@ export class Seeker implements Targetable, SwarmSlotOwner {
   private glow = 0;
   private flash = 0;
 
-  private state: 'patrol' | 'chase' | 'telegraph' | 'dart' | 'recover' = 'patrol';
+  private state: SeekerState = 'patrol';
   private telegraphTimer = 0;
   private dartTimer = 0;
   private recoverTimer = 0;
@@ -127,6 +130,76 @@ export class Seeker implements Targetable, SwarmSlotOwner {
     if (!this.hasSlots) this.dead = true;
   }
 
+  // State handlers live in a static table — each is a small (self, ctx)
+  // function, so no per-instance closures or switch boilerplate. Adding a
+  // behavior is a table entry, not another case in a 100-line update.
+  // Reused scratch — update runs per frame per seeker, no allocation wanted
+  private static readonly _ctx: SeekerCtx = { dt: 0, distSq: 0, playerPos: null as never };
+
+  private static readonly STATES: Record<SeekerState, (s: Seeker, c: SeekerCtx) => void> = {
+    patrol(s, c) {
+      _dir.subVectors(c.playerPos, s.pos);
+      const d = _dir.length() || 0.001;
+      _dir.multiplyScalar(1 / d);
+      const hold = SEEKER_AGGRO_DIST * 0.8;
+      const pull = Math.max(-1, Math.min(1, (d - hold) / hold));
+      s.vel.addScaledVector(_dir, pull * SEEKER_ACCEL * 0.4 * c.dt);
+      s.capSpeed(SEEKER_SPEED * 0.4);
+      if (c.distSq < SEEKER_AGGRO_DIST * SEEKER_AGGRO_DIST) s.state = 'chase';
+      s.glow = 0;
+    },
+    chase(s, c) {
+      if (c.distSq > SEEKER_AGGRO_DIST * SEEKER_AGGRO_DIST * 1.4) { s.state = 'patrol'; return; }
+      _dir.subVectors(c.playerPos, s.pos);
+      const d = _dir.length() || 0.001;
+      _dir.multiplyScalar(1 / d);
+      s.vel.addScaledVector(_dir, SEEKER_ACCEL * c.dt);
+      s.capSpeed(SEEKER_SPEED);
+      s.glow = 0.2;
+      if (d < SEEKER_DART_RANGE && s.stunTimer <= 0) {
+        s.state = 'telegraph';
+        s.telegraphTimer = SEEKER_DART_TELEGRAPH;
+        s.dartDir.copy(_dir);
+      }
+    },
+    telegraph(s, c) {
+      s.telegraphTimer -= c.dt;
+      s.vel.multiplyScalar(1 - 4 * c.dt);
+      _dir.subVectors(c.playerPos, s.pos);
+      if (s.uber && c.playerVel) {
+        // Predictive lock: aim where you'll BE when the dart lands —
+        // flight ≈ dist / dartSpeed, capped so orbiters don't overshoot
+        const d = _dir.length() || 0.001;
+        _dir.addScaledVector(c.playerVel, Math.min(0.6, d / SEEKER_DART_SPEED));
+      }
+      _dir.normalize();
+      s.dartDir.lerp(_dir, 6 * c.dt).normalize();
+      const t = 1 - s.telegraphTimer / SEEKER_DART_TELEGRAPH;
+      s.glow = 0.7 * t;
+      s.eyeScale = 0.9 + t * 0.8;
+      s.vel.addScaledVector(s.dartDir, -6 * c.dt);
+      if (s.telegraphTimer <= 0) {
+        s.state = 'dart';
+        s.dartTimer = SEEKER_DART_MAX;
+        s.vel.copy(s.dartDir).multiplyScalar(SEEKER_DART_SPEED);
+        s.glow = 0.8;
+      }
+    },
+    dart(s, c) {
+      s.dartTimer -= c.dt;
+      if (s.dartTimer <= 0) s.beginRecover();
+    },
+    recover(s, c) {
+      s.recoverTimer -= c.dt;
+      _dir.subVectors(s.pos, c.playerPos);
+      _dir.y = 0.8;
+      s.vel.addScaledVector(_dir.normalize(), SEEKER_ACCEL * 0.5 * c.dt);
+      s.capSpeed(SEEKER_SPEED * 0.6);
+      s.glow = 0;
+      if (s.recoverTimer <= 0) s.state = 'chase';
+    },
+  };
+
   update(dt: number, terrain: Terrain, playerPos: THREE.Vector3, playerVel?: THREE.Vector3): void {
     if (this.dead) return;
     if (this.stunTimer > 0) this.stunTimer -= dt;
@@ -135,74 +208,9 @@ export class Seeker implements Targetable, SwarmSlotOwner {
     this.animT += dt;
     const distSq = this.pos.distanceToSquared(playerPos);
 
-    switch (this.state) {
-      case 'patrol': {
-        _dir.subVectors(playerPos, this.pos);
-        const d = _dir.length() || 0.001;
-        _dir.multiplyScalar(1 / d);
-        const hold = SEEKER_AGGRO_DIST * 0.8;
-        const pull = Math.max(-1, Math.min(1, (d - hold) / hold));
-        this.vel.addScaledVector(_dir, pull * SEEKER_ACCEL * 0.4 * dt);
-        this.capSpeed(SEEKER_SPEED * 0.4);
-        if (distSq < SEEKER_AGGRO_DIST * SEEKER_AGGRO_DIST) this.state = 'chase';
-        this.glow = 0;
-        break;
-      }
-      case 'chase': {
-        if (distSq > SEEKER_AGGRO_DIST * SEEKER_AGGRO_DIST * 1.4) { this.state = 'patrol'; break; }
-        _dir.subVectors(playerPos, this.pos);
-        const d = _dir.length() || 0.001;
-        _dir.multiplyScalar(1 / d);
-        this.vel.addScaledVector(_dir, SEEKER_ACCEL * dt);
-        this.capSpeed(SEEKER_SPEED);
-        this.glow = 0.2;
-        if (d < SEEKER_DART_RANGE && this.stunTimer <= 0) {
-          this.state = 'telegraph';
-          this.telegraphTimer = SEEKER_DART_TELEGRAPH;
-          this.dartDir.copy(_dir);
-        }
-        break;
-      }
-      case 'telegraph': {
-        this.telegraphTimer -= dt;
-        this.vel.multiplyScalar(1 - 4 * dt);
-        _dir.subVectors(playerPos, this.pos);
-        if (this.uber && playerVel) {
-          // Predictive lock: aim where you'll BE when the dart lands —
-          // flight ≈ dist / dartSpeed, capped so orbiters don't overshoot
-          const d = _dir.length() || 0.001;
-          _dir.addScaledVector(playerVel, Math.min(0.6, d / SEEKER_DART_SPEED));
-        }
-        _dir.normalize();
-        this.dartDir.lerp(_dir, 6 * dt).normalize();
-        const t = 1 - this.telegraphTimer / SEEKER_DART_TELEGRAPH;
-        this.glow = 0.7 * t;
-        this.eyeScale = 0.9 + t * 0.8;
-        this.vel.addScaledVector(this.dartDir, -6 * dt);
-        if (this.telegraphTimer <= 0) {
-          this.state = 'dart';
-          this.dartTimer = SEEKER_DART_MAX;
-          this.vel.copy(this.dartDir).multiplyScalar(SEEKER_DART_SPEED);
-          this.glow = 0.8;
-        }
-        break;
-      }
-      case 'dart': {
-        this.dartTimer -= dt;
-        if (this.dartTimer <= 0) this.beginRecover();
-        break;
-      }
-      case 'recover': {
-        this.recoverTimer -= dt;
-        _dir.subVectors(this.pos, playerPos);
-        _dir.y = 0.8;
-        this.vel.addScaledVector(_dir.normalize(), SEEKER_ACCEL * 0.5 * dt);
-        this.capSpeed(SEEKER_SPEED * 0.6);
-        this.glow = 0;
-        if (this.recoverTimer <= 0) this.state = 'chase';
-        break;
-      }
-    }
+    const ctx = Seeker._ctx;
+    ctx.dt = dt; ctx.distSq = distSq; ctx.playerPos = playerPos; ctx.playerVel = playerVel;
+    Seeker.STATES[this.state](this, ctx);
 
     if ((this.state === 'dart' || this.state === 'chase') && distSq < SEEKER_STING_DIST * SEEKER_STING_DIST) {
       this.onSting?.(this);
