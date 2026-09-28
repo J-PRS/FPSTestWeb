@@ -2,6 +2,7 @@ import type { ClientMessage, ServerMessage, Vec3 } from './types.ts';
 import type { PlayerManager } from './PlayerManager.ts';
 import type { WeaponStats } from '../../shared/weapons.ts';
 import { getWeaponStats, WeaponType, directHitAoeBonus } from '../../shared/weapons.ts';
+import { perkMods } from '../../shared/perks.ts';
 import { aoeDamage, aoeImpulse, validateHitClaim, validateAoeClaim, type TrackedProjectile } from '../../shared/combat.ts';
 import type { PlayerState } from './types.ts';
 import { CONFIG } from './config.ts';
@@ -144,7 +145,7 @@ export class CombatHandler {
       // the same id can't double-dip.
       if (msg.projectileId) this.projectiles.delete(msg.projectileId);
 
-      const shotDamage = getWeaponStats(proj.weaponType).directDamage;
+      const shotDamage = getWeaponStats(proj.weaponType).directDamage * perkMods(player.perk).directDamage;
       const result = this.playerManager.applyDamage(targetId, shotDamage);
       // Full-rate tick updates for the hit window — the shooter's client is
       // extrapolating this target's knockback and needs real positions to
@@ -303,7 +304,9 @@ export class CombatHandler {
     }
 
     const pull = stats.forceMode === 'pull';
-    const radius = stats.aoeRadius;
+    // Perk modifies the blast envelope, not the damage numbers — a
+    // Sharpshooter's rocket lands tighter, not weaker.
+    const radius = stats.aoeRadius * perkMods(player.perk).aoeRadius;
     const baseDamage = stats.aoeDamage;
     const impulseForce = stats.knockbackForce;
     const logLabel = pull ? 'disc AOE' : 'AOE';
@@ -327,7 +330,7 @@ export class CombatHandler {
         if (damage <= 0) continue;
 
         // Apply impulse to target velocity (server-authoritative)
-        const impulseMag = aoeImpulse(impulseForce, dist, radius);
+        const impulseMag = aoeImpulse(impulseForce, dist, radius) * perkMods(target.perk).knockbackTaken;
         if (dist > 0) {
           if (pull) {
             // Pull toward explosion center (reversed direction)
@@ -381,7 +384,7 @@ export class CombatHandler {
   handleHeal(playerId: string, msg: Extract<ClientMessage, { type: 'heal' }>): void {
     const player = this.playerManager.getPlayer(playerId);
     if (!player || player.isDead) return;
-    const heal = Math.min(25, Math.max(1, Math.round(msg.amount)));
+    const heal = Math.min(25, Math.max(1, Math.round(msg.amount * perkMods(player.perk).healBoost)));
     if (this.teamMode) {
       if (player.healCredit <= 0) return;
       const applied = Math.min(heal, player.healCredit);
@@ -423,7 +426,7 @@ export class CombatHandler {
     const target = this.playerManager.getPlayer(targetId);
     if (!shooter || shooter.isDead || !target || target.isDead) return;
     if (this.friendly(shooterId, targetId)) return;
-    const damage = getWeaponStats(weaponType).directDamage;
+    const damage = getWeaponStats(weaponType).directDamage * perkMods(shooter.perk).directDamage;
     const result = this.playerManager.applyDamage(targetId, damage);
     target.forceSendUntil = Date.now() + FORCE_SEND_MS;
     this.applyHit(shooterId, targetId, damage, result, 'Bot hit');

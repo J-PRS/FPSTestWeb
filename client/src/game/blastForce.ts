@@ -141,7 +141,7 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
     const player = deps.lazyPlayer();
     const dpx = player.pos.distanceTo(pos);
     if (dpx < radius * falloffMultiplier) {
-      applyTo(player, force * falloffAt(dpx));
+      applyTo(player, force * falloffAt(dpx) * player.mods.knockbackTaken);
       // Self-AOE damage: a tiny fraction of what an enemy would take at the
       // same distance — rocket jumps should be viable, not lethal. Faint
       // vignette only, no hurt sound (JP: the grunt is too much for this).
