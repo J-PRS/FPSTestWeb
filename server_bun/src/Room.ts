@@ -391,6 +391,9 @@ export class Room {
   private onKill(targetId: string, shooterId: string): void {
     this.flagCarrierDied(targetId);
     this.deployables.clearOwner(targetId);
+    // A death is audible — nearby idle bots drift toward the kill spot.
+    const corpse = this.players.getPlayer(targetId);
+    if (corpse) this.pushNoise(corpse.position);
     const spec = this.modeSpec;
     const shooter = this.players.getPlayer(shooterId);
     if (!spec || !shooter || spec.ptsPlayerKill <= 0) return;
