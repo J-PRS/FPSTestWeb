@@ -7,6 +7,8 @@
  * point of rooms. Mode is inherited from the room, not the URL.
  */
 
+import { settings } from '../core/settings.js';
+
 export interface RoomRow {
   name: string;
   mode?: string;
@@ -87,7 +89,55 @@ export class Lobby {
       quick.appendChild(b);
     }
 
-    this.panel.append(head, this.here, quick, this.rows, newWrap);
+    // Server + P2P — the URL params ?server=/​?p2p= still work for links,
+    // but these fields make them reachable without editing the URL.
+    const srvRow = document.createElement('div');
+    srvRow.style.cssText = 'display:flex;gap:6px;margin-top:8px;align-items:center;';
+    const srvLbl = document.createElement('span');
+    srvLbl.textContent = 'SERVER';
+    srvLbl.style.cssText = 'color:#9cf;font-size:11px;';
+    const srvIn = document.createElement('input');
+    srvIn.placeholder = 'host (blank = this machine)';
+    srvIn.value = settings.get('fps-server');
+    srvIn.style.cssText = 'flex:1;background:#111;border:1px solid #444;color:#fff;font:inherit;padding:3px 6px;outline:none;';
+    srvIn.onkeydown = (e) => e.stopPropagation();
+    const srvBtn = document.createElement('button');
+    srvBtn.textContent = 'GO';
+    srvBtn.style.cssText = 'background:#16303f;border:1px solid #345;color:#9cf;font:inherit;padding:3px 8px;cursor:pointer;';
+    srvBtn.onclick = () => { settings.set('fps-server', srvIn.value.trim()); location.reload(); };
+    srvRow.append(srvLbl, srvIn, srvBtn);
+
+    const p2pRow = document.createElement('div');
+    p2pRow.style.cssText = 'display:flex;gap:6px;margin-top:6px;align-items:center;';
+    const p2pLbl = document.createElement('span');
+    p2pLbl.textContent = 'P2P DUEL';
+    p2pLbl.style.cssText = 'color:#9cf;font-size:11px;';
+    const p2pIn = document.createElement('input');
+    p2pIn.maxLength = 24;
+    p2pIn.placeholder = 'code (blank = off)';
+    // Strip the role prefix for display; the saved value is 'role:code'.
+    const savedP2p = settings.get('fps-p2p');
+    p2pIn.value = savedP2p.includes(':') ? savedP2p.slice(savedP2p.indexOf(':') + 1) : '';
+    p2pIn.style.cssText = 'flex:1;background:#111;border:1px solid #444;color:#fff;font:inherit;padding:3px 6px;outline:none;';
+    p2pIn.onkeydown = (e) => e.stopPropagation();
+    for (const role of ['host', 'join'] as const) {
+      const b = document.createElement('button');
+      b.textContent = role.toUpperCase();
+      b.style.cssText = 'background:#16303f;border:1px solid #345;color:#9cf;font:inherit;padding:3px 8px;cursor:pointer;';
+      b.onclick = () => {
+        const code = p2pIn.value.trim() || 'duel';
+        settings.set('fps-p2p', `${role}:${code}`);
+        location.reload();
+      };
+      p2pRow.append(p2pLbl, p2pIn, b);
+    }
+    const p2pOff = document.createElement('button');
+    p2pOff.textContent = 'OFF';
+    p2pOff.style.cssText = 'background:#3f1616;border:1px solid #543;color:#f99;font:inherit;padding:3px 8px;cursor:pointer;';
+    p2pOff.onclick = () => { settings.set('fps-p2p', ''); location.reload(); };
+    p2pRow.appendChild(p2pOff);
+
+    this.panel.append(head, this.here, quick, this.rows, newWrap, srvRow, p2pRow);
     document.body.append(btn, this.panel);
   }
 

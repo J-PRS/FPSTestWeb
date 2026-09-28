@@ -25,8 +25,9 @@ export const urlParams = {
   /** Dev overlays / verbose combat logging — menu toggle OR ?debug (the
    *  param stays as a headless-capture override). */
   debug: qp.has('debug') || settings.get('fps-debug') === 1,
-  /** ?p2p=host:CODE|join:CODE — WebRTC duel via /rtc handshake relay */
-  p2p: qp.get('p2p'),
+  /** ?p2p=host:CODE|join:CODE — WebRTC duel via /rtc handshake relay.
+   *  URL wins for shareability; falls back to the lobby's saved field. */
+  p2p: qp.get('p2p') || settings.get('fps-p2p') || null,
   /** ?room=NAME — match room on the server (default: 'default'). Lets two
    *  matches coexist on one server; share the URL to share the room. */
   room: qp.get('room'),
