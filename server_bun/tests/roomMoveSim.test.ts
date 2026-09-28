@@ -16,16 +16,19 @@ describe('RoomMoveSim', () => {
     expect(Math.abs(pos.x) + Math.abs(pos.z)).toBeGreaterThan(0.5);
   });
 
-  test('honest report reconciles quietly; teleport diverges and resyncs', () => {
+  test('honest report reconciles quietly; divergence returns sim truth', () => {
     const m = new RoomMoveSim(flat);
     m.track('p1', { x: 0, y: 0, z: 0 }, 0);
     for (let i = 0; i < 10; i++) m.tick(0.05);
     // small drift — no divergence
-    m.reconcile('p1', { x: 1, y: 0, z: 0 }, 0);
-    expect(m.simPos('p1')!.x).toBeLessThan(8);
-    // 100m blink — counted + resynced to the report
-    m.reconcile('p1', { x: 100, y: 0, z: 0 }, 0);
-    expect(m.simPos('p1')!.x).toBe(100);
+    expect(m.reconcile('p1', { x: 1, y: 0, z: 0 }, 0)).toBeNull();
+    // 100m blink — correction state comes back, sim keeps its own truth
+    // (resyncing onto the rejected report would ping-pong corrections).
+    const truth = m.reconcile('p1', { x: 100, y: 0, z: 0 }, 0);
+    expect(truth).not.toBeNull();
+    expect(Math.abs(m.simPos('p1')!.x)).toBeLessThan(8);
+    // Throttled — an immediate second divergent report doesn't refire.
+    expect(m.reconcile('p1', { x: 100, y: 0, z: 0 }, 0)).toBeNull();
   });
 
   test('resync resets to the declared position', () => {

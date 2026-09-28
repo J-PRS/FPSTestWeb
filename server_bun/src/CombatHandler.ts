@@ -61,6 +61,9 @@ export class CombatHandler {
     // Team-mode rooms block damage between teammates (knockback still
     // applies — boosting off a teammate's splash is intentional).
     private teamMode = false,
+    /** Movement shadow sim — gets the same impulse deltas we apply to
+     *  target.velocity so a legit blast doesn't read as divergence. */
+    private moveImpulse?: (playerId: string, dv: Vec3) => void,
   ) {}
 
   private friendly(shooterId: string, targetId: string): boolean {
@@ -348,17 +351,13 @@ export class CombatHandler {
         // Apply impulse to target velocity (server-authoritative)
         const impulseMag = aoeImpulse(impulseForce, dist, radius) * perkMods(target.perk).knockbackTaken;
         if (dist > 0) {
-          if (pull) {
-            // Pull toward explosion center (reversed direction)
-            target.velocity.x -= (dx / dist) * impulseMag;
-            target.velocity.y += 0.3 * impulseMag;
-            target.velocity.z -= (dz / dist) * impulseMag;
-          } else {
-            // Push away from explosion center
-            target.velocity.x += (dx / dist) * impulseMag;
-            target.velocity.y += 0.5 * impulseMag;
-            target.velocity.z += (dz / dist) * impulseMag;
-          }
+          const dv: Vec3 = pull
+            ? { x: -(dx / dist) * impulseMag, y: 0.3 * impulseMag, z: -(dz / dist) * impulseMag }
+            : { x: (dx / dist) * impulseMag, y: 0.5 * impulseMag, z: (dz / dist) * impulseMag };
+          target.velocity.x += dv.x;
+          target.velocity.y += dv.y;
+          target.velocity.z += dv.z;
+          this.moveImpulse?.(targetId, dv);
         }
 
         // Notify the target player to apply impulse to their local player

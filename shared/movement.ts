@@ -22,6 +22,11 @@ export const MOVEMENT_CONFIG = {
   // skier counts as grounded a little higher off the surface.
   skiTargetDistance: 0.5,
   playerHeight: 1.8,
+  // Jetpack thrust. Energy economy lives outside the sim (client: HUD +
+  // skill spends; server: not modelled) — the sim only needs "thrust
+  // while held" so reported jet trajectories don't read as divergence.
+  jetForceUp: 35.0,
+  jetForceDir: 10.0,
 } as const;
 
 export interface Vec3Like { x: number; y: number; z: number }
@@ -40,6 +45,7 @@ export interface MoveInput {
   jumpPressed: boolean;
   jumpHeld: boolean;
   skiHeld: boolean;
+  jetHeld: boolean;
 }
 
 /** What the sim needs from the world: terrain height + surface normal. */
@@ -56,7 +62,7 @@ const _n = { x: 0, y: 1, z: 0 };
 
 export class MoveSim {
   readonly state: MoveState;
-  readonly input: MoveInput = { forward: 0, right: 0, jumpPressed: false, jumpHeld: false, skiHeld: false };
+  readonly input: MoveInput = { forward: 0, right: 0, jumpPressed: false, jumpHeld: false, skiHeld: false, jetHeld: false };
 
   private groundedBuffered = false;
   private wishJump = false;
@@ -92,6 +98,18 @@ export class MoveSim {
     }
 
     this.applyMovement(dt);
+
+    // Jetpack thrust rides after collision resolution — same order the
+    // client used to apply it post-sync — so ground clamping can't eat
+    // the lift and the trajectory stays identical on both ends.
+    if (this.input.jetHeld) {
+      const dir = this.inputDirection();
+      const s = this.state;
+      s.vel.y += MOVEMENT_CONFIG.jetForceUp * dt;
+      s.vel.x += dir.x * MOVEMENT_CONFIG.jetForceDir * dt;
+      s.vel.z += dir.z * MOVEMENT_CONFIG.jetForceDir * dt;
+      s.onGround = false;
+    }
   }
 
   private checkGrounded(threshold = 0.2, offset = MOVEMENT_CONFIG.playerHeight): boolean {

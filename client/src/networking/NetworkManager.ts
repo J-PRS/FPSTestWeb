@@ -461,8 +461,8 @@ export class NetworkManager {
    * input bits themselves change.
    */
   private lastSentInput = '';
-  sendInputMove(input: { forward: number; right: number; jump: number; ski: number; status?: number }, rotation: { yaw: number; pitch: number }): void {
-    const key = `${input.forward},${input.right},${input.jump},${input.ski},${input.status ?? 0}`;
+  sendInputMove(input: { forward: number; right: number; jump: number; ski: number; jet?: number; status?: number }, rotation: { yaw: number; pitch: number }): void {
+    const key = `${input.forward},${input.right},${input.jump},${input.ski},${input.jet ?? 0},${input.status ?? 0}`;
     if (key === this.lastSentInput) return;
     this.lastSentInput = key;
     this.send({ type: 'inputMove', input, rotation });
