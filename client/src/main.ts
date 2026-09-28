@@ -1,4 +1,3 @@
-import './ui/chrome.css';
 import * as THREE from 'three';
 
 import {
