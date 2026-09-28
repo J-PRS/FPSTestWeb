@@ -35,7 +35,7 @@ export interface RoomInfo {
   /** Flag snapshot supplier for gameState joins — RoomFlags.snapshot. */
   flags?: () => { team: 'alpha' | 'bravo'; pos: Vec3; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[];
   /** Live pickups for gameState joins — RoomPickups.snapshot. */
-  pickups?: () => { id: number; pos: Vec3 }[];
+  pickups?: () => { id: number; pos: Vec3; kind: 'gem' | 'tag' }[];
   /** Match-clock deadline (epoch ms) for gameState joins — Room.matchEndsAt.
    *  0 means "not armed yet" (no humans have joined). */
   matchEndsAt?: () => number;

@@ -14,18 +14,18 @@ const PICKUP_TTL_S = 30; // dropped loot decays — no infinite accumulation
 const MAX_PICKUPS = 64;  // cap so a ball-farm can't flood the room
 
 export class RoomPickups {
-  private pickups = new Map<number, { id: number; pos: Vec3; ttl: number }>();
+  private pickups = new Map<number, { id: number; pos: Vec3; ttl: number; kind: 'gem' | 'tag' }>();
   private nextId = 1;
   /** Set by the room — banks the point for the collector's team. */
-  onCollect: ((playerId: string) => void) | null = null;
+  onCollect: ((playerId: string, kind: 'gem' | 'tag') => void) | null = null;
 
   constructor(private room: Room) {}
 
-  spawn(pos: Vec3): void {
+  spawn(pos: Vec3, kind: 'gem' | 'tag' = 'gem'): void {
     if (this.pickups.size >= MAX_PICKUPS) return;
     const id = this.nextId++;
-    this.pickups.set(id, { id, pos: { ...pos }, ttl: PICKUP_TTL_S });
-    this.room.broadcast({ type: 'pickupSpawn', id, pos: { ...pos } });
+    this.pickups.set(id, { id, pos: { ...pos }, ttl: PICKUP_TTL_S, kind });
+    this.room.broadcast({ type: 'pickupSpawn', id, pos: { ...pos }, kind });
   }
 
   /** Match reset — clear the field and tell clients to drop the gems. */
@@ -36,8 +36,8 @@ export class RoomPickups {
     this.pickups.clear();
   }
 
-  snapshot(): { id: number; pos: Vec3 }[] {
-    return [...this.pickups.values()].map((p) => ({ id: p.id, pos: { ...p.pos } }));
+  snapshot(): { id: number; pos: Vec3; kind: 'gem' | 'tag' }[] {
+    return [...this.pickups.values()].map((p) => ({ id: p.id, pos: { ...p.pos }, kind: p.kind }));
   }
 
   /** Nearest live pickup to a point — bots chase these. */
@@ -74,7 +74,7 @@ export class RoomPickups {
         const dx = pl.position.x - p.pos.x, dz = pl.position.z - p.pos.z;
         if (dx * dx + dz * dz > PICKUP_R * PICKUP_R) continue;
         this.remove(p.id, pl.id);
-        this.onCollect?.(pl.id);
+        this.onCollect?.(pl.id, p.kind);
         break;
       }
     }
