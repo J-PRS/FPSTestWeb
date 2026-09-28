@@ -8,20 +8,21 @@
  */
 import type { Vec3 } from './types.ts';
 import type { Room } from './Room.ts';
+import type { PickupKind } from '../../shared/pickups.ts';
 
 const PICKUP_R = 2.2;   // planar grab radius, same feel as flag pickup
 const PICKUP_TTL_S = 30; // dropped loot decays — no infinite accumulation
 const MAX_PICKUPS = 64;  // cap so a ball-farm can't flood the room
 
 export class RoomPickups {
-  private pickups = new Map<number, { id: number; pos: Vec3; ttl: number; kind: 'gem' | 'tag' }>();
+  private pickups = new Map<number, { id: number; pos: Vec3; ttl: number; kind: PickupKind }>();
   private nextId = 1;
-  /** Set by the room — banks the point for the collector's team. */
-  onCollect: ((playerId: string, kind: 'gem' | 'tag') => void) | null = null;
+  /** Set by the room — banks the point or applies the powerup. */
+  onCollect: ((playerId: string, kind: PickupKind) => void) | null = null;
 
   constructor(private room: Room) {}
 
-  spawn(pos: Vec3, kind: 'gem' | 'tag' = 'gem'): void {
+  spawn(pos: Vec3, kind: PickupKind = 'gem'): void {
     if (this.pickups.size >= MAX_PICKUPS) return;
     const id = this.nextId++;
     this.pickups.set(id, { id, pos: { ...pos }, ttl: PICKUP_TTL_S, kind });
@@ -36,7 +37,7 @@ export class RoomPickups {
     this.pickups.clear();
   }
 
-  snapshot(): { id: number; pos: Vec3; kind: 'gem' | 'tag' }[] {
+  snapshot(): { id: number; pos: Vec3; kind: PickupKind }[] {
     return [...this.pickups.values()].map((p) => ({ id: p.id, pos: { ...p.pos }, kind: p.kind }));
   }
 
@@ -66,7 +67,10 @@ export class RoomPickups {
         continue;
       }
       for (const pl of players) {
-        if (pl.isDead || !pl.team) continue;
+        if (pl.isDead) continue;
+        // Score pickups (gems/tags) only exist in team modes; powerups
+        // are grab-able by anyone alive in any mode.
+        if ((p.kind === 'gem' || p.kind === 'tag') && !pl.team) continue;
         // Planar grab — a jump shouldn't put a nugget out of reach,
         // but a jetpack flyover isn't a pickup.
         const dy = Math.abs(pl.position.y - p.pos.y);

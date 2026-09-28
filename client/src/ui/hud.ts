@@ -41,6 +41,11 @@ export class HUD {
   private teamScore: HTMLDivElement;
   private tsA: HTMLElement;
   private tsB: HTMLElement;
+  private armor: HTMLSpanElement;
+  private armorBar: HTMLDivElement;
+  private buffsRow: HTMLDivElement;
+  private lastArmor = -1;
+  private lastBuffsKey = '';
 
   constructor() {
     const d = createHudDom();
@@ -67,6 +72,9 @@ export class HUD {
     this.weaponSlots = d.weaponSlots;
     this.healthBar = d.healthBar;
     this.energyBar = d.energyBar;
+    this.armor = d.armor;
+    this.armorBar = d.armorBar;
+    this.buffsRow = d.buffsRow;
     this.scoreboard = d.scoreboard;
     this.sbRows = d.sbRows;
     this.teamScore = d.teamScore;
@@ -378,6 +386,24 @@ export class HUD {
       this.ghostPct = Math.max(healthPct, this.ghostPct - 40 * dt);
       this.ghostBar.style.left = `${healthPct}%`;
       this.ghostBar.style.width = `${this.ghostPct - healthPct}%`;
+    }
+
+    const armor = Math.round(player.armor);
+    if (armor !== this.lastArmor) {
+      this.lastArmor = armor;
+      this.setText(this.armor, 'armor', String(armor));
+      this.armorBar.style.width = `${armor}%`;
+    }
+    // Timed buffs — chips with seconds left; rebuilt only on change.
+    const now = Date.now();
+    const buffsKey = `${player.buffUntil.regen > now ? Math.ceil((player.buffUntil.regen - now) / 1000) : 0}|${player.buffUntil.dd > now ? Math.ceil((player.buffUntil.dd - now) / 1000) : 0}`;
+    if (buffsKey !== this.lastBuffsKey) {
+      this.lastBuffsKey = buffsKey;
+      const chips: string[] = [];
+      const [rs, ds] = buffsKey.split('|').map(Number);
+      if (rs > 0) chips.push(`<span class="buff regen">REGEN ${rs}s</span>`);
+      if (ds > 0) chips.push(`<span class="buff dd">2×DMG ${ds}s</span>`);
+      this.buffsRow.innerHTML = chips.join('');
     }
 
     this.lastPlayerPos.copy(player.pos);

@@ -49,6 +49,13 @@ export class Player {
   // physically lowered, shooting mid-throw would fire through the hip.
   throwLockT = 0;
   health = 100;
+  /** Server-owned bonus pool (powerup drops) — absorbs most of a hit
+   *  before health; mirrored from playerHit/buff messages, never set
+   *  locally. */
+  armor = 0;
+  /** Timed powerup expiries (server epoch ms — same clock offset the
+   *  buff message `until` arrives on; we just compare against Date.now). */
+  buffUntil = { regen: 0, dd: 0 };
   /** Passive loadout pick — mods from shared/perks.ts; announced at join. */
   perk: PerkId = (PERK_ORDER as string[]).includes(settings.get('fps-perk')) ? settings.get('fps-perk') as PerkId : 'none';
   get mods() { return perkMods(this.perk); }

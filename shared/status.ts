@@ -17,7 +17,15 @@ export const STATUS = {
   CLOAK: 4,  // invisible to remotes (model, marker, shadow, indicators)
   SHIELD: 8, // energy bubble — damage routes to energy (server: no health damage)
   MEND: 16,  // medkit channel — server regenerates health while up
+  // Powerup buffs — SERVER-OWNED bits: the server ORs them onto tick
+  // records itself; inputMove claims carrying them are stripped (clients
+  // must not be able to claim a regen/dd they never picked up).
+  REGEN: 32,
+  DD: 64,
 } as const;
 
 /** Mask of every bit the status channel owns (bits ≥4). */
 export const STATUS_MASK = 0xFC;
+
+/** Bits the client may legitimately claim in inputMove.status. */
+export const CLIENT_STATUS_MASK = STATUS_MASK & ~(STATUS.REGEN | STATUS.DD);

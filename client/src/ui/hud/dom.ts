@@ -25,6 +25,9 @@ export interface HudDom {
   weaponSlots: HTMLSpanElement[];
   healthBar: HTMLDivElement;
   energyBar: HTMLDivElement;
+  armor: HTMLSpanElement;
+  armorBar: HTMLDivElement;
+  buffsRow: HTMLDivElement;
   scoreboard: HTMLDivElement;
   teamScore: HTMLDivElement; tsA: HTMLElement; tsB: HTMLElement;
   matchStatus: HTMLDivElement; matchClock: HTMLElement; flagA: HTMLElement; flagB: HTMLElement;
@@ -53,6 +56,7 @@ export function createHudDom(): HudDom {
         </div>
         <div class="labels">
           <span>HEALTH<span class="v" id="hp">100</span></span>
+          <span>ARMOR<span class="v" id="armor">0</span></span>
           <span>NUGGETS<span class="v" id="ammo">0</span></span>
         </div>
         <div class="labels">
@@ -60,7 +64,9 @@ export function createHudDom(): HudDom {
           <span>KILLS<span class="v" id="kills">0</span></span>
         </div>
         <div class="bar-wrap"><div class="bar-ghost" id="health-ghost"></div><div class="bar-fill" id="health-bar"></div></div>
+        <div class="bar-wrap thin armor"><div class="bar-fill" id="armor-bar"></div></div>
         <div class="bar-wrap thin"><div class="bar-fill" id="energy-bar"></div></div>
+        <div id="buffs"></div>
       </div>
       <div id="crosshair"></div>
       <div id="hit-marker"></div>
@@ -97,6 +103,9 @@ export function createHudDom(): HudDom {
     const weaponSlots = Array.from(el.querySelectorAll<HTMLSpanElement>('.wslot'));
     const healthBar = el.querySelector('#health-bar') as HTMLDivElement;
     const energyBar = el.querySelector('#energy-bar') as HTMLDivElement;
+    const armor = el.querySelector('#armor')! as HTMLSpanElement;
+    const armorBar = el.querySelector('#armor-bar') as HTMLDivElement;
+    const buffsRow = el.querySelector('#buffs')! as HTMLDivElement;
     const scoreboard = el.querySelector('#scoreboard')! as HTMLDivElement;
     const sbRows = el.querySelector('#sb-rows')! as HTMLElement;
     const teamScore = el.querySelector('#team-score')! as HTMLDivElement;
@@ -116,6 +125,7 @@ export function createHudDom(): HudDom {
   return { el, health, energy, ammo, speed, kills, state, ping, loss, jitter,
     fps, crosshair, hitMarker, dmgVignette, dmgDir, dmgDirArc, ghostBar,
     playerList, ballCountEl, timerEl, weaponSlots, healthBar, energyBar,
+    armor, armorBar, buffsRow,
     scoreboard, sbRows, teamScore, tsA, tsB,
     matchStatus, matchClock, flagA, flagB };
 }

@@ -2,6 +2,7 @@ import type { PlayerState, Vec3, Rotation, GameStatePlayer } from './types.ts';
 import { CONFIG } from './config.ts';
 import { STATUS } from '../../shared/status.ts';
 import { perkMods } from '../../shared/perks.ts';
+import { POWERUP } from '../../shared/pickups.ts';
 
 let internalIdCounter = 0;
 
@@ -55,6 +56,9 @@ export class PlayerManager {
       forceSendUntil: 0,
       protectedUntil: Date.now() + PlayerManager.SPAWN_PROTECT_MS,
       healCredit: 0,
+      armor: 0,
+      regenUntil: 0,
+      ddUntil: 0,
     };
 
     this.players.set(playerId, player);
@@ -168,24 +172,31 @@ export class PlayerManager {
     };
   }
 
-  applyDamage(targetId: string, damage: number): { killed: boolean; newHealth: number } {
+  applyDamage(targetId: string, damage: number): { killed: boolean; newHealth: number; newArmor: number } {
     const target = this.players.get(targetId);
     if (!target || target.isDead) {
-      return { killed: false, newHealth: 0 };
+      return { killed: false, newHealth: 0, newArmor: 0 };
     }
     if (Date.now() < target.protectedUntil) {
-      return { killed: false, newHealth: target.health };
+      return { killed: false, newHealth: target.health, newArmor: target.armor };
     }
     // Energy shield: while the flag is up the hit routes to the player's
     // energy tank, not their health — the client drains dmg/10 energy and
     // drops the flag when the pool bottoms out (inputMove carries it).
     if (target.status & STATUS.SHIELD) {
-      return { killed: false, newHealth: target.health };
+      return { killed: false, newHealth: target.health, newArmor: target.armor };
     }
 
     // Perk damage resist — the join-declared table owns the modifier,
     // the server applies it so the number can't be client-inflated.
-    const incoming = damage * (1 - perkMods(target.perk).damageResist);
+    let incoming = damage * (1 - perkMods(target.perk).damageResist);
+    // Armor pool: absorbs armorAbsorb of the hit while it lasts, overflow
+    // leaks to health (100hp/100armor taking 100 → 80hp/20armor).
+    if (target.armor > 0) {
+      const soaked = Math.min(target.armor, incoming * POWERUP.armorAbsorb);
+      target.armor -= soaked;
+      incoming -= soaked;
+    }
     target.health -= incoming;
     if (target.health <= 0) {
       target.health = 0;
@@ -193,10 +204,13 @@ export class PlayerManager {
       target.status = 0; // death strips every channel — a cloaked/mending corpse is a lie
       target.deaths++;
       target.pendingRespawn = true;
-      return { killed: true, newHealth: 0 };
+      target.armor = 0;
+      target.regenUntil = 0;
+      target.ddUntil = 0;
+      return { killed: true, newHealth: 0, newArmor: 0 };
     }
 
-    return { killed: false, newHealth: target.health };
+    return { killed: false, newHealth: target.health, newArmor: target.armor };
   }
 
   respawnPlayer(playerId: string): { position: Vec3; rotation: Rotation } | null {
@@ -210,6 +224,9 @@ export class PlayerManager {
     player.health = player.maxHealth;
     player.isDead = false;
     player.status = 0; // a corpse carries no channels — toggles died with them
+    player.armor = 0;
+    player.regenUntil = 0;
+    player.ddUntil = 0;
     player.pendingRespawn = false;
     player.lastSeq = 0;
     player.lastValidPosition = { ...spawn };

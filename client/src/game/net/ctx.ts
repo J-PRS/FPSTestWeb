@@ -14,5 +14,5 @@ export interface NetCtx {
   /** Both first-seen-update and respawn-into-missing end up here. */
   ensureRemotePlayer(playerId: string, position: { x: number; y: number; z: number }, via: string): RemotePlayer;
   /** Server-owned pickup meshes — gem/dog-tag renderers. */
-  addPickup(id: number, pos: { x: number; y: number; z: number }, kind?: 'gem' | 'tag'): void;
+  addPickup(id: number, pos: { x: number; y: number; z: number }, kind?: import('../../../../shared/pickups.js').PickupKind): void;
 }

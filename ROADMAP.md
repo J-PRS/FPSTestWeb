@@ -90,7 +90,12 @@ surface. Detailed research lives in `_reports/`; this file is the current truth.
    Server-owned nugget pickups landed: creature kills drop gems
    (RoomPickups, touch-to-bank, TTL 30s) — 'nuggets' scoring is now
    fully server-observed — the {type:'bank'} claim message was removed
-   end-to-end (protocol, validation, handler, client sender).
+   end-to-end (protocol, validation, handler, client sender). Powerup
+   drops landed (2026-09-29): creature kills roll heal/armor/regen/dd in
+   every mode (shared/pickups.ts weighted table); armor pool absorbs 80%
+   of a hit server-side; regen/dd are timed server-owned status bits so
+   clients can't claim them; buff msg + armor on playerHit; HUD armor
+   bar + buff chips + remote aura tells.
    CTF classic rule: own flag must be home to cap; carrier disconnect
    drops the flag. Spawn protection (2s, breaks on fire), friendly-fire
    gate (damage only — splash still boosts teammates), heal claims in

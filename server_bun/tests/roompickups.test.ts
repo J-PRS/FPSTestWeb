@@ -12,10 +12,60 @@ function addAt(room: Room, id: string, team: 'alpha' | 'bravo' | undefined, x: n
 }
 
 describe('RoomPickups', () => {
-  it('exists only in team modes', () => {
+  it('exists in every mode (powerups drop anywhere)', () => {
     expect(new Room('t', null, '', TEAM_SPEC).pickups).not.toBeNull();
-    expect(new Room('f', null, '', FFA_SPEC).pickups).toBeNull();
-    expect(new Room('a', null, '', resolveMapSpec(null)).pickups).toBeNull();
+    expect(new Room('f', null, '', FFA_SPEC).pickups).not.toBeNull();
+    expect(new Room('a', null, '', resolveMapSpec(null)).pickups).not.toBeNull();
+  });
+
+  it('powerup collection grants armor and blocks scoreless gems for teamless players', () => {
+    const room = new Room('f', null, '', FFA_SPEC);
+    const p = addAt(room, 'p1', undefined, 10, 0);
+    p.protectedUntil = 0;
+    room.pickups!.spawn({ x: 10, y: 0, z: 0 }, 'armor');
+    room.pickups!.tick(0.05);
+    expect(p.armor).toBe(100);
+    // teamless player walking over a gem must NOT bank anything
+    room.pickups!.spawn({ x: 10, y: 0, z: 0 }, 'gem');
+    room.pickups!.tick(0.05);
+    expect(room.pickups!.snapshot().length).toBe(1);
+  });
+
+  it('armor soaks 80% of a hit, overflow leaks to health', () => {
+    const room = new Room('f', null, '', FFA_SPEC);
+    const p = addAt(room, 'p1', undefined, 10, 0);
+    p.protectedUntil = 0;
+    p.armor = 100;
+    const r = room.players.applyDamage('p1', 100);
+    expect(p.health).toBe(80);
+    expect(p.armor).toBe(20);
+    expect(r.newArmor).toBe(20);
+  });
+
+  it('dd doubles outgoing damage while the buff lasts', () => {
+    const room = new Room('f', null, '', FFA_SPEC);
+    const shooter = addAt(room, 's1', undefined, 0, 0);
+    const target = addAt(room, 't1', undefined, 10, 0);
+    shooter.protectedUntil = 0;
+    target.protectedUntil = 0;
+    shooter.ddUntil = Date.now() + 10_000;
+    const base = 25;
+    const dmg = base * (shooter.ddUntil > Date.now() ? 2 : 1);
+    room.players.applyDamage('t1', dmg);
+    expect(target.health).toBe(target.maxHealth - 50);
+  });
+
+  it('death strips powerups', () => {
+    const room = new Room('f', null, '', FFA_SPEC);
+    const p = addAt(room, 'p1', undefined, 10, 0);
+    p.protectedUntil = 0;
+    p.armor = 100;
+    p.regenUntil = Date.now() + 10_000;
+    p.ddUntil = Date.now() + 10_000;
+    room.players.applyDamage('p1', 9999);
+    expect(p.armor).toBe(0);
+    expect(p.regenUntil).toBe(0);
+    expect(p.ddUntil).toBe(0);
   });
 
   it('touching a gem banks a team point', () => {

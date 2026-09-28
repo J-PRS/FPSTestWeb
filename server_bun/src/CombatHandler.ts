@@ -4,6 +4,7 @@ import type { WeaponStats } from '../../shared/weapons.ts';
 import { getWeaponStats, WeaponType, directHitAoeBonus } from '../../shared/weapons.ts';
 import { perkMods } from '../../shared/perks.ts';
 import { aoeDamage, aoeImpulse, validateHitClaim, validateAoeClaim, type TrackedProjectile } from '../../shared/combat.ts';
+import { POWERUP } from '../../shared/pickups.ts';
 import type { PlayerState } from './types.ts';
 import { CONFIG } from './config.ts';
 import { logger } from './logger.ts';
@@ -148,7 +149,7 @@ export class CombatHandler {
       // the same id can't double-dip.
       if (msg.projectileId) this.projectiles.delete(msg.projectileId);
 
-      const shotDamage = getWeaponStats(proj.weaponType).directDamage * perkMods(player.perk).directDamage;
+      const shotDamage = getWeaponStats(proj.weaponType).directDamage * perkMods(player.perk).directDamage * this.ddMult(player);
       const result = this.playerManager.applyDamage(targetId, shotDamage);
       // Full-rate tick updates for the hit window — the shooter's client is
       // extrapolating this target's knockback and needs real positions to
@@ -326,7 +327,7 @@ export class CombatHandler {
     // Perk modifies the blast envelope, not the damage numbers — a
     // Sharpshooter's rocket lands tighter, not weaker.
     const radius = stats.aoeRadius * perkMods(player.perk).aoeRadius;
-    const baseDamage = stats.aoeDamage;
+    const baseDamage = stats.aoeDamage * this.ddMult(player);
     const impulseForce = stats.knockbackForce;
     const logLabel = pull ? 'disc AOE' : 'AOE';
 
@@ -441,17 +442,23 @@ export class CombatHandler {
     const target = this.playerManager.getPlayer(targetId);
     if (!shooter || shooter.isDead || !target || target.isDead) return;
     if (this.friendly(shooterId, targetId)) return;
-    const damage = getWeaponStats(weaponType).directDamage * perkMods(shooter.perk).directDamage;
+    const damage = getWeaponStats(weaponType).directDamage * perkMods(shooter.perk).directDamage * this.ddMult(shooter);
     const result = this.playerManager.applyDamage(targetId, damage);
     target.forceSendUntil = Date.now() + FORCE_SEND_MS;
     this.applyHit(shooterId, targetId, damage, result, 'Bot hit');
   }
 
-  private applyHit(shooterId: string, targetId: string, damage: number, result: { killed: boolean; newHealth: number }, hitLabel: string, extra?: Record<string, unknown>): void {
+  // Double-damage pickup: multiplies OUTGOING damage while the buff lasts.
+  // Applies to every path that already routes through applyHit.
+  private ddMult(shooter: PlayerState): number {
+    return shooter.ddUntil > Date.now() ? POWERUP.ddMult : 1;
+  }
+
+  private applyHit(shooterId: string, targetId: string, damage: number, result: { killed: boolean; newHealth: number; newArmor: number }, hitLabel: string, extra?: Record<string, unknown>): void {
     this.onHit?.(targetId, shooterId);
     if (!result.killed) {
       logger.info(hitLabel, { shooter: shooterId, target: targetId, damage, targetHealth: result.newHealth, ...extra });
-      this.broadcast({ type: 'playerHit', shooterId, targetId, damage, health: result.newHealth });
+      this.broadcast({ type: 'playerHit', shooterId, targetId, damage, health: result.newHealth, armor: result.newArmor });
       return;
     }
     if (shooterId !== 'environment') this.playerManager.addKill(shooterId);
