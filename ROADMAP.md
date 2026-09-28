@@ -62,10 +62,14 @@ surface. Detailed research lives in `_reports/`; this file is the current truth.
    the emptiest live match or spins `<mode>-N` (ad-hoc names inherit
    maps/<mode>.json). Next polish: show own room + mode in the panel,
    mid-match room switching without reload.
-2. **Movement re-sim** — LANDED (shadow mode): shared/movement.ts MoveSim
-   drives client physics AND a per-player server shadow (RoomMoveSim).
-   Reported pos stays truth; >8m divergence logs as a cheat signal. Next
-   step: flip to server-authoritative + client reconciliation.
+2. **Movement re-sim** — LANDED (judge mode): shared/movement.ts MoveSim
+   drives client physics AND a per-player server shadow (RoomMoveSim) fed
+   by inputMove. Divergence >8m now sends a real correction to the client
+   (witness→judge; 400ms throttle; sim keeps its own truth, no resync-
+   ping-pong). Jetpack thrust is inside the sim (inputMove 'jet' bit) so
+   jetting doesn't false-positive; knockback impulses feed the shadow.
+   Remaining: true input-only reporting + seq-anchored replay (client
+   already blends/snaps corrections — see net/players.ts).
 3. ~~Map format~~ — landed: `maps/<room>.json` (mode, ball population,
    spawn anchors, bases/objectives, bot count — all clamped with
    defaults; examples swarm/duel/nugwar/ctf). Server bots populate
