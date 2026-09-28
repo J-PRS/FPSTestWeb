@@ -72,6 +72,10 @@ export class HUD {
     this.teamScore = d.teamScore;
     this.tsA = d.tsA;
     this.tsB = d.tsB;
+    this.matchStatus = d.matchStatus;
+    this.matchClock = d.matchClock;
+    this.flagA = d.flagA;
+    this.flagB = d.flagB;
     this.minimap = new Minimap(this.el);
     this.indicators = new PlayerIndicators(this.el);
   }
@@ -122,6 +126,43 @@ export class HUD {
     this.teamScore.style.display = 'block';
     this.tsA.textContent = String(a);
     this.tsB.textContent = String(b);
+  }
+
+  /** Match clock + flag chips under the score strip. null hides the
+   *  strip's clock; flag chips show only for teams the wire described. */
+  private matchStatus!: HTMLDivElement;
+  private matchClock!: HTMLElement;
+  private flagA!: HTMLElement;
+  private flagB!: HTMLElement;
+  private lastClockTxt = '';
+  private lastFlagsKey = '';
+
+  setMatchStatus(msLeft: number | null, flags: { alpha?: string; bravo?: string }): void {
+    const hasAny = msLeft !== null || flags.alpha || flags.bravo;
+    this.matchStatus.style.display = hasAny ? 'flex' : 'none';
+    if (!hasAny) return;
+    let txt = '';
+    if (msLeft !== null) {
+      const s = Math.max(0, Math.floor(msLeft / 1000));
+      txt = msLeft <= 0 ? 'OT' : `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+      this.matchClock.classList.toggle('late', msLeft < 60_000);
+      this.matchClock.style.display = '';
+    } else {
+      this.matchClock.style.display = 'none';
+    }
+    if (txt !== this.lastClockTxt) { this.lastClockTxt = txt; this.matchClock.textContent = txt; }
+    const key = `${flags.alpha ?? ''}|${flags.bravo ?? ''}`;
+    if (key !== this.lastFlagsKey) {
+      this.lastFlagsKey = key;
+      const paint = (el: HTMLElement, st?: string) => {
+        el.style.display = st ? '' : 'none';
+        if (!st) return;
+        el.textContent = st === 'home' ? '⚑' : st === 'carried' ? '⚑ TAKEN' : '⚑ LOOSE';
+        el.classList.toggle('taken', st !== 'home');
+      };
+      paint(this.flagA, flags.alpha);
+      paint(this.flagB, flags.bravo);
+    }
   }
 
   /** Nuggets collected — DOM write only on change */

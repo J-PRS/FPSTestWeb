@@ -46,6 +46,7 @@ export function wireFlags(ctx: NetCtx): void {
       g.position.set(f.pos.x, f.pos.y, f.pos.z);
       if (f.state === 'carried' && f.carrier) flagCarriers.set(f.team, f.carrier);
       else flagCarriers.delete(f.team);
+      deps.world.flagStates[f.team] = f.state;
     }
   };
 }
