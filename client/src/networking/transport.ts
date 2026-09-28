@@ -14,6 +14,9 @@ export interface GameTransport {
   sendUnreliable?(data: string | Uint8Array): boolean;
   connected(): boolean;
   disconnect(): void;
+  /** Which netcode-v2 tier this transport is — reported in the join so
+   *  /metrics shows the real deployment's transport mix. */
+  readonly tier?: 'wt' | 'rtc' | 'ws';
 }
 
 export type TransportFactory = (config: ConnectionConfig) => GameTransport;

@@ -22,6 +22,7 @@ export interface ConnectionConfig {
 }
 
 export class WebSocketConnection {
+  readonly tier = 'ws' as const;
   private ws: WebSocket | null = null;
   private config: ConnectionConfig;
   private reconnectAttempts: number = 0;

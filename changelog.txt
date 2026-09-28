@@ -1,3 +1,4 @@
+2026-09-28  netcode v2 ops gaps — join reports negotiated tier (wt/rtc/ws) into /metrics tiers{}; /rtcconfig serves STUN/TURN from FPS_ICE_SERVERS so RTC probes get deployment ICE servers
 2026-09-28  respawn countdown — gameState carries respawnMs; death overlay shows live RESPAWN IN x.x timer
 2026-09-28  killstreak callouts — KILLING SPREE/RAMPAGE/UNSTOPPABLE/GODLIKE subtitle at 3/5/7/10 frags since your last death
 2026-09-28  flag callouts — center-screen Tribes-style headlines on transitions: FLAG TAKEN/DROPPED/RETURNED/CAPTURED, perspective-aware (yours vs enemy), skipped on join replay

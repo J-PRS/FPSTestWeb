@@ -45,6 +45,9 @@ export class GameServer {
   private ops = {
     startedAt: Date.now(),
     msgsIn: 0, msgsRejected: 0, joins: 0, leaves: 0,
+    // Which netcode-v2 tier clients actually land on — the cost/perf mix
+    // this deployment is paying for.
+    tierWs: 0, tierWt: 0, tierRtc: 0, tierOther: 0,
     tickLagMsMax: 0, tickLagMsSum: 0, tickLagSamples: 0,
     lastTickAt: 0,
   };
@@ -464,6 +467,7 @@ export class GameServer {
       leaves: o.leaves,
       msgsIn: o.msgsIn,
       msgsRejected: o.msgsRejected,
+      tiers: { ws: o.tierWs, wt: o.tierWt, rtc: o.tierRtc, other: o.tierOther },
       tickLagMs: {
         avg: o.tickLagSamples ? +(o.tickLagMsSum / o.tickLagSamples).toFixed(2) : 0,
         max: o.tickLagMsMax,
@@ -624,6 +628,12 @@ export class GameServer {
     room.connections.register(playerId, ws);
     room.messages.handleHandshake(playerId, sessionToken);
     this.ops.joins++;
+    switch (handshake.transport) {
+      case 'ws': this.ops.tierWs++; break;
+      case 'wt': this.ops.tierWt++; break;
+      case 'rtc': this.ops.tierRtc++; break;
+      default: this.ops.tierOther++;
+    }
 
     logger.info('Player connected', { playerId, room: room.name, total: room.playerCount() });
   }

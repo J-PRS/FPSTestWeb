@@ -73,6 +73,10 @@ export const CONFIG = {
   wtPort: envNum('FPS_WT_PORT', 0),
   wtCertPath: envStr('FPS_WT_CERT', ''),
   wtKeyPath: envStr('FPS_WT_KEY', ''),
+  // WebRTC tier: ICE servers (STUN/TURN) as JSON, e.g.
+  // FPS_ICE_SERVERS='[{"urls":"stun:stun.l.google.com:19302"},{"urls":"turn:turn.example.com","username":"u","credential":"p"}]'
+  // Empty = LAN/direct-connect only, which is what dev needs anyway.
+  iceServersJson: envStr('FPS_ICE_SERVERS', ''),
 
   rateLimits: {
     position: { maxCount: 30, windowMs: 1000 },
