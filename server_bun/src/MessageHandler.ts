@@ -376,6 +376,8 @@ export class MessageHandler {
         this.sendToPlayer(playerId, {
           type: 'correction',
           seq: msg.seq ?? 0,
+          inputSeq: simTruth.inputSeq,
+          grounded: simTruth.onGround,
           position: simTruth.pos,
           velocity: simTruth.vel,
           rotation: msg.rotation,
@@ -398,6 +400,8 @@ export class MessageHandler {
       this.sendToPlayer(playerId, {
         type: 'correction',
         seq: msg.seq ?? 0,
+        inputSeq: simTruth.inputSeq,
+        grounded: simTruth.onGround,
         position: simTruth.pos,
         velocity: simTruth.vel,
         rotation: msg.rotation,
