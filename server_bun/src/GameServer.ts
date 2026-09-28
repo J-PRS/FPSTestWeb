@@ -7,23 +7,13 @@ import type { WebSocketData } from './types.ts';
 import { logger } from './logger.ts';
 import { fileURLToPath } from 'node:url';
 import type { Heightfield } from '../../shared/heightfield.ts';
-import { isWireFrame, decodePosition, encodeTickPlayer, encodeTickFrame } from '../../shared/wire.ts';
-import { STATUS } from '../../shared/status.ts';
-import { isPerkId, perkMods } from '../../shared/perks.ts';
-import { POWERUP } from '../../shared/pickups.ts';
+import { isWireFrame, decodePosition } from '../../shared/wire.ts';
+import { isPerkId } from '../../shared/perks.ts';
+import { TickLoop } from './TickLoop.ts';
 import { createHmac, randomBytes } from 'node:crypto';
 import { readFileSync, appendFileSync, mkdirSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { type MapSpec, resolveMapSpec } from '../../shared/mapSpec.ts';
-
-/** One encoded position update waiting for fanout — data is pre-encoded
- *  once so per-recipient sends are buffer concatenation, not re-serialization. */
-interface TickRecord {
-  playerId: string;
-  data: Uint8Array;
-  pos: { x: number; y: number; z: number };
-  force: boolean;
-}
 
 export class GameServer {
   // One match's state per room — players land in 'default' unless the join
@@ -32,14 +22,8 @@ export class GameServer {
   private rooms = new Map<string, Room>();
   private field: Heightfield | null = null; // shared across rooms
   private bunServer: Server<WebSocketData> | null = null;
-  private hashTimer: ReturnType<typeof setInterval> | null = null;
-  private tickTimer: ReturnType<typeof setInterval> | null = null;
-  private lastStatusLine: string = '';
-  private statusRepeatCount: number = 0;
+  private readonly tickLoop: TickLoop;
 
-  // Tick-bandwidth metrics — aggregated per log window so we can see what
-  // interest tiers + suppression are actually saving.
-  private metrics = { ticks: 0, recordsBuilt: 0, recordsSuppressed: 0, recordsIdleReaped: 0, recordsSent: 0, recordsTierSkipped: 0, bytesSent: 0, windowStart: 0 };
   // Ops counters — cheap ints, read by /metrics. msgsIn counts everything
   // that passed validation; tick lag measures setInterval drift (the
   // server-clock skew that makes client replays overshoot).
@@ -75,8 +59,10 @@ export class GameServer {
       logger.warn('BallSim disabled — not running under Bun');
     }
 
-    this.startHashBroadcast();
-    this.startTickBroadcast();
+    // The broadcast engine — owns both timers; teardown delegates back
+    // here so playerRoom/ops stay in one place.
+    this.tickLoop = new TickLoop(this.rooms, this.ops, (room, id, reason) => this.removePlayerCompletely(room, id, reason));
+    this.tickLoop.start();
   }
 
   // Per-map terrain: spec.terrain names a maps/<file>.bin heightfield;
@@ -112,10 +98,6 @@ export class GameServer {
   // Join throttle: ip → sliding window counters. Entries age out with the
   // window so the map self-cleans.
   private joinWindows = new Map<string, { count: number; start: number }>();
-  // Medkit: hp restored per broadcast tick while the mending flag is up.
-  // 12 hp/s at the room's tick rate — a field patch, not a fountain.
-  private static readonly MEND_HP_PER_TICK = 12 / CONFIG.tickRate;
-
   private static readonly JOIN_LIMIT = 5;
   private static readonly JOIN_WINDOW_MS = 60_000;
 
@@ -336,7 +318,6 @@ export class GameServer {
   }
 
   private reconnectGraceMs = CONFIG.reconnectGraceMs; // Grace period for F5 reconnect
-  private static readonly IDLE_KICK_MS = CONFIG.idleKickMs; // silent >60s → remove
 
   onClose(ws: ServerWebSocket<WebSocketData>): void {
     const playerId = ws.data.playerId;
@@ -487,8 +468,7 @@ export class GameServer {
   }
 
   stop(): void {
-    this.stopHashBroadcast();
-    this.stopTickBroadcast();
+    this.tickLoop.stop();
     if (this.bunServer) {
       this.bunServer.stop(true);
       logger.info('Server stopped');
@@ -668,325 +648,4 @@ export class GameServer {
     this.ops.leaves++;
   }
 
-  private startHashBroadcast(): void {
-    this.hashTimer = setInterval(() => {
-      for (const room of this.rooms.values()) {
-        const playerCount = room.playerCount();
-        if (playerCount === 0) continue;
-
-        room.tickSeq++;
-        const hash = this.computeStateHash(room);
-        const timestamp = Date.now();
-
-        room.broadcast({
-          type: 'stateHash',
-          hash,
-          tick: room.tickSeq,
-          playerCount,
-          timestamp,
-        });
-
-        // Periodic status summary - suppress duplicates, batch with count
-        const players = room.players.getAllPlayers();
-        const summary = Array.from(players.entries()).map(([id, p]) =>
-          `${id}[${p.kills}/${p.deaths}] ${p.isDead ? 'DEAD' : `HP${p.health}`} @(${p.position.x.toFixed(0)},${p.position.y.toFixed(0)},${p.position.z.toFixed(0)})`
-        ).join(' | ');
-        const statusLine = `Status [${room.name} · ${playerCount} players] ${summary}`;
-
-        if (statusLine === this.lastStatusLine) {
-          this.statusRepeatCount++;
-        } else {
-          if (this.statusRepeatCount > 0) {
-            logger.info(`${this.lastStatusLine} [x${this.statusRepeatCount + 1}]`);
-            this.statusRepeatCount = 0;
-          }
-          logger.info(statusLine);
-          this.lastStatusLine = statusLine;
-        }
-
-        logger.debug('State hash broadcast', { room: room.name, tick: room.tickSeq, hash, playerCount });
-      }
-    }, CONFIG.hashBroadcastIntervalMs);
-  }
-
-  private stopHashBroadcast(): void {
-    if (this.hashTimer) {
-      clearInterval(this.hashTimer);
-      this.hashTimer = null;
-    }
-  }
-
-  private startTickBroadcast(): void {
-    this.tickTimer = setInterval(() => {
-      const now0 = Date.now();
-      // Tick lag: how late this interval fired vs the nominal 50ms cadence.
-      // Sustained lag = sim clock drifts behind wall time — the skew that
-      // pushes client ball replays ahead of authority.
-      if (this.ops.lastTickAt > 0) {
-        const lag = now0 - this.ops.lastTickAt - 50;
-        this.ops.tickLagMsSum += lag;
-        this.ops.tickLagSamples++;
-        if (lag > this.ops.tickLagMsMax) this.ops.tickLagMsMax = lag;
-      }
-      this.ops.lastTickAt = now0;
-
-      for (const room of this.rooms.values()) {
-        // Empty named rooms are teardown: the sim timer + entry would leak
-        // per room name otherwise. 'default' is immortal.
-        if (room.empty && room.name !== 'default') {
-          room.dispose();
-          this.rooms.delete(room.name);
-          logger.info('Room disposed', { room: room.name });
-          continue;
-        }
-        room.checkMatchClock(now0);
-        // Hibernation: nobody watching → freeze ball sim + skip the whole
-        // room tick. Bots alone don't count as an audience — they exist
-        // to serve humans, and a bot-only 'default' would otherwise sim
-        // forever. A rejoining human wakes the room instantly.
-        const audience = room.players.getHumanCount() > 0 || room.spectators.size > 0;
-        room.ballSim.dormant = !audience;
-        if (!audience) continue;
-        const players = room.players.getAllPlayers();
-        if (players.size === 0) continue;
-        this.tickRoom(room, players, now0);
-      }
-    }, 50); // 20Hz tick broadcast
-  }
-
-  private tickRoom(room: Room, players: ReturnType<Room['players']['getAllPlayers']>, now0: number): void {
-    // Server sims move first — bot/flag writes land in this tick's records.
-    for (const sim of room.sims) sim.tick(0.05);
-
-    // Authority mode: the shadow sim's output is the broadcast truth.
-    // Reports only fed it aim/liveness hints — what every other player
-    // sees (and the rewind buffer stores) is the simulated position.
-    if (room.moveAuthority) {
-      for (const [playerId, p] of players) {
-        if (p.isBot) continue;
-        const s = room.moveSim.simState(playerId);
-        if (!s) continue;
-        p.position = { x: s.pos.x, y: s.pos.y, z: s.pos.z };
-        p.velocity = { x: s.vel.x, y: s.vel.y, z: s.vel.z };
-      }
-    }
-
-    const records = this.buildRecords(room, players, now0);
-
-    room.tickSeq++;
-    this.metrics.ticks++;
-
-    if (records.length > 0) this.fanoutRecords(room, players, records);
-
-    this.rollupMetrics(now0, players.size);
-  }
-
-  /** One encoded record per player needing an update this tick — idle
-   *  reap, server-owned health regen, stale-heartbeat, and dead-reckoning
-   *  suppression all live here. Encodes ONCE; fanout only concatenates. */
-  private buildRecords(room: Room, players: ReturnType<Room['players']['getAllPlayers']>, now: number): TickRecord[] {
-    const records: TickRecord[] = [];
-    for (const [playerId, p] of players) {
-      // Grace-period entries are owned by their removal timeout — reaping
-      // them here double-removes (double playerLeft broadcast).
-      if (room.disconnected.has(playerId)) continue;
-      const silenceMs = now - p.lastSeen;
-      if (!p.isBot && silenceMs > GameServer.IDLE_KICK_MS) {
-        const ws = room.socketOf(playerId);
-        if (ws && ws.readyState === 1) {
-          ws.close(1000, 'idle'); // triggers onClose → grace cleanup
-        } else {
-          this.removePlayerCompletely(room, playerId, 'idle');
-        }
-        logger.info('Idle player removed', { playerId, silenceMs });
-        this.metrics.recordsIdleReaped++;
-        continue;
-      }
-      // Silent sockets (backgrounded tabs) get no regular updates — but a
-      // low-rate heartbeat keeps clients' stored state (health, isDead)
-      // converged; otherwise a stale player's fields desync permanently
-      // while the state hash still counts them. Gated on THAT player's
-      // lastSent, not a shared clock — a single shared timestamp meant
-      // only the first stale player in map order ever heartbeat.
-      // Health channels the server owns: medkit channel (flag), regenerator
-      // perk (passive), regen powerup (timed). All cap at the perk max.
-      if (!p.isDead && p.health < p.maxHealth) {
-        let heal = 0;
-        if (p.status & STATUS.MEND) heal += MEND_HP_PER_TICK;
-        if (now < p.regenUntil) heal += POWERUP.regenHpPerSec / CONFIG.tickRate;
-        heal += perkMods(p.perk).regen / CONFIG.tickRate;
-        if (heal > 0) p.health = Math.min(p.maxHealth, p.health + heal);
-      }
-      const isStale = silenceMs > 5000;
-      const forceSend = now < p.forceSendUntil;
-      const lastSent = room.lastSentPositions.get(playerId);
-      if (isStale && lastSent && now - lastSent.t < 2000) continue;
-      if (lastSent && !forceSend && this.isSuppressed(p, lastSent, now)) {
-        this.metrics.recordsSuppressed++;
-        continue; // Skip — within extrapolation tolerance
-      }
-      // Mutate the snapshot in place — a fresh object per record per tick
-      // was the last steady-state alloc in this loop.
-      let snap = lastSent;
-      if (!snap) {
-        snap = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, yaw: 0, pitch: 0, hp: 0, dead: false, ski: 0, status: 0, t: 0 };
-        room.lastSentPositions.set(playerId, snap);
-      }
-      snap.x = p.position.x; snap.y = p.position.y; snap.z = p.position.z;
-      snap.vx = p.velocity.x; snap.vy = p.velocity.y; snap.vz = p.velocity.z;
-      snap.yaw = p.rotation.yaw; snap.pitch = p.rotation.pitch;
-      snap.hp = p.health; snap.dead = p.isDead; snap.ski = p.skiing;
-      // Buff bits are server-owned (stripped from client claims at
-      // inputMove) so they must be OR-ed on here, not read off p.status.
-      snap.status = p.status
-        | (now < p.regenUntil ? STATUS.REGEN : 0)
-        | (now < p.ddUntil ? STATUS.DD : 0);
-      snap.t = now;
-
-      records.push({
-        playerId,
-        data: encodeTickPlayer({
-          playerId,
-          position: p.position,
-          rotation: p.rotation,
-          velocity: p.velocity,
-          health: p.health,
-          isDead: p.isDead,
-          // Only advertise a proven ping — stale heartbeats above would
-          // otherwise broadcast the default 0 for ghosts that never
-          // reported (renders them with a bogus "0ms" ping).
-          ping: p.ping > 0 ? p.ping : undefined,
-          ski: p.skiing,
-          status: snap.status,
-        }),
-        pos: p.position,
-        force: forceSend,
-      });
-      this.metrics.recordsBuilt++;
-    }
-    return records;
-  }
-
-  /** Suppression: if reported state still matches where the clients' dead
-   *  reckoning would put them (linear extrapolation of the last sent
-   *  pos+vel), the update carries no new information — skip it.
-   *  Constant-velocity skiers extrapolate perfectly; error appears only on
-   *  direction change, bounded by the tolerance. */
-  private isSuppressed(p: { position: { x: number; y: number; z: number }; rotation: { yaw: number; pitch: number }; health: number; isDead: boolean; skiing: number; status: number },
-                     lastSent: { x: number; y: number; z: number; vx: number; vy: number; vz: number; yaw: number; pitch: number; hp: number; dead: boolean; ski: number; status: number; t: number },
-                     now: number): boolean {
-    const elapsed = (now - lastSent.t) / 1000;
-    const ex = lastSent.x + lastSent.vx * elapsed;
-    const ey = lastSent.y + lastSent.vy * elapsed;
-    const ez = lastSent.z + lastSent.vz * elapsed;
-    const dx = p.position.x - ex;
-    const dy = p.position.y - ey;
-    const dz = p.position.z - ez;
-    const predErrSq = dx * dx + dy * dy + dz * dz;
-    const yawDiff = Math.abs(p.rotation.yaw - lastSent.yaw);
-    const pitchDiff = Math.abs(p.rotation.pitch - lastSent.pitch);
-    // State fields (health/death/ski/status) must never be eaten by the
-    // position check — a flag change forces the record even when the
-    // player hasn't moved.
-    const stateChanged = p.health !== lastSent.hp || p.isDead !== lastSent.dead || p.skiing !== lastSent.ski || p.status !== lastSent.status;
-    // Idle players still heartbeat at 4Hz — a >300ms silence would trigger
-    // client-side dead reckoning on a stationary player.
-    return !stateChanged && predErrSq < 0.09 && yawDiff < 0.02 && pitchDiff < 0.03 && now - lastSent.t < 250;
-  }
-
-  /** Interest management: distance-tiered update rate per recipient.
-   *  <150m (engagement range) every tick · <400m half rate · beyond 1/10.
-   *  Hits/kills travel on reliable events, so stale far ghosts only lose
-   *  smoothness on targets that are visually specks anyway. */
-  // Reused per-recipient record list — the fanout loop runs every tick and
-  // a fresh Uint8Array[] per recipient was the biggest GC churn source.
-  private readonly scratchOthers: Uint8Array[] = [];
-
-  private fanoutRecords(room: Room, players: ReturnType<Room['players']['getAllPlayers']>, records: TickRecord[]): void {
-    const seq = room.tickSeq;
-    for (const [recipientId, rp] of players) {
-      // Grace-period entries have no socket — record filtering for them
-      // is wasted work
-      if (room.disconnected.has(recipientId)) continue;
-      const rx = rp.position.x, ry = rp.position.y, rz = rp.position.z;
-      // Scratch array: same array every tick, zero allocation on the hot
-      // path — encodeTickFrame consumes it before the next recipient iterates.
-      const others = this.scratchOthers;
-      others.length = 0;
-      for (const r of records) {
-        if (r.playerId === recipientId) continue;
-        const dx = r.pos.x - rx;
-        const dy = r.pos.y - ry;
-        const dz = r.pos.z - rz;
-        const dSq = dx * dx + dy * dy + dz * dz;
-        const tier = dSq < 22500 ? 1 : dSq < 160000 ? 2 : 10; // 150m / 400m
-        // force = hit/knockback window: real positions must reach every
-        // observer at full rate while they extrapolate the knockback
-        if (r.force || seq % tier === 0) others.push(r.data);
-        else this.metrics.recordsTierSkipped++;
-      }
-      if (others.length === 0) continue;
-      const frame = encodeTickFrame(
-        room.players.getLastSeq(recipientId),
-        seq,
-        others,
-      );
-      this.metrics.recordsSent += others.length;
-      this.metrics.bytesSent += frame.byteLength;
-      room.connections.sendBinaryToPlayer(recipientId, frame);
-    }
-    // Spectators have no viewpoint for interest tiers — they get the
-    // full record set every tick.
-    if (room.spectators.size > 0) {
-      const frame = encodeTickFrame(room.tickSeq, room.tickSeq, records.map(r => r.data));
-      this.metrics.bytesSent += frame.byteLength * room.spectators.size;
-      for (const id of room.spectators) room.connections.sendBinaryToPlayer(id, frame);
-    }
-  }
-
-  /** Metrics rollup every 10s while anyone's connected — answers "what
-   *  did the optimization buy" with real numbers instead of estimates. */
-  private rollupMetrics(now0: number, playerCount: number): void {
-    const m = this.metrics;
-    if (m.windowStart === 0) m.windowStart = now0;
-    if (now0 - m.windowStart > 10000) {
-      const secs = (now0 - m.windowStart) / 1000;
-      logger.info('Tick bandwidth', {
-        kbpsDownTotal: +(m.bytesSent * 8 / 1000 / secs).toFixed(1),
-        recordsPerSec: +(m.recordsSent / secs).toFixed(0),
-        suppressedPerSec: +(m.recordsSuppressed / secs).toFixed(0),
-        tierSkippedPerSec: +(m.recordsTierSkipped / secs).toFixed(0),
-        players: playerCount,
-      });
-      m.ticks = m.recordsBuilt = m.recordsSuppressed = m.recordsIdleReaped =
-        m.recordsSent = m.recordsTierSkipped = m.bytesSent = 0;
-      m.windowStart = now0;
-    }
-  }
-
-  private stopTickBroadcast(): void {
-    if (this.tickTimer) {
-      clearInterval(this.tickTimer);
-      this.tickTimer = null;
-    }
-  }
-
-  private computeStateHash(room: Room): string {
-    // Rolling FNV over quantized state — no sort, no string join. Player
-    // ids hash first so membership changes can't alias. (Order-insensitive
-    // on purpose: iteration order can differ across a reconnect.)
-    let h = 0x811c9dc5;
-    for (const [id, p] of room.players.getAllPlayers()) {
-      for (let i = 0; i < id.length; i++) {
-        h ^= id.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0;
-      }
-      for (const v of [
-        Math.round(p.position.x), Math.round(p.position.y), Math.round(p.position.z),
-        Math.round(p.health), p.isDead ? 1 : 0,
-      ]) {
-        h ^= v & 0xffff; h = Math.imul(h, 0x01000193) >>> 0;
-      }
-    }
-    return h.toString(16);
-  }
 }
