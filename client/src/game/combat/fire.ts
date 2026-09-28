@@ -5,19 +5,16 @@ import { Explosion } from '../../effects/explosion.js';
 import { screenShake } from '../../effects/screenShake.js';
 import { Projectile } from '../../projectiles/Projectile.js';
 import {
-  ROCKET_CONFIG, DISC_CONFIG, GRENADE_CONFIG, CHAINGUN_CONFIG,
-  MORTAR_CONFIG, GL_CONFIG, FLAK_CONFIG, PLASMA_CONFIG, RAILGUN_CONFIG,
-  BELT_DISC_CONFIG, SHOTGUN_CONFIG, CANNON_CONFIG, RKT_CONFIG,
-  PISTOL_CONFIG, REVOLVER_CONFIG, STICKY_CONFIG, PLASMAGUN_CONFIG,
+  GRENADE_CONFIG, BELT_DISC_CONFIG, STICKY_CONFIG,
   CLUSTER_CONFIG, JAVELIN_CONFIG, IMPACT_CONFIG, REMOTE_RAILGUN_CONFIG,
 } from '../../projectiles/index.js';
+import type { WeaponDef } from '../../weapons.js';
 import type { BeltItem } from '../../entities/Player.js';
 import type { ProjectileConfig } from '../../projectiles/types.js';
 import { THROW_RELEASE } from '../../entities/ViewModel.js';
 import { poissonDisc } from '../../utils/poissonSpread.js';
 import {
-  FLAK_SHARDS, FLAK_SPREAD, SG_PELLETS, SG_SPREAD, ROCKET_RADIUS,
-  MELEE_RANGE, MELEE_ARC_DOT, MELEE_DAMAGE,
+  ROCKET_RADIUS, MELEE_RANGE, MELEE_ARC_DOT, MELEE_DAMAGE,
 } from '../../core/config.js';
 import { getWeaponStats, WeaponType } from '../../../../shared/weapons.js';
 import type { CombatDeps, FireArgs } from '../combat.js';
@@ -102,11 +99,6 @@ export function createFire(deps: CombatDeps, hooks: FireHooks) {
     };
   }
 
-  function onFire(e: FireArgs): void {
-    deps.lazyViewModel()?.kick();
-    spawnProjectile(ROCKET_CONFIG, e);
-  }
-
   // Belt loadout → the projectile it throws. Belt sticky reuses the
   // launcher's glue bomb — same fuse, same chain rule, hand-thrown arc.
   const BELT_THROWS: Record<BeltItem, ProjectileConfig> = {
@@ -125,119 +117,35 @@ export function createFire(deps: CombatDeps, hooks: FireHooks) {
     setTimeout(() => spawnProjectile(config, freshFireArgs()), THROW_RELEASE * 1000);
   }
 
-  function onDiscLauncher(e: FireArgs): void {
-    deps.lazyViewModel()?.kick();
-    spawnProjectile(DISC_CONFIG, e);
-  }
-
-  function onChaingun(e: FireArgs): void {
-    deps.lazyViewModel()?.kick(0.15);
-    spawnProjectile(CHAINGUN_CONFIG, e);
-  }
-
-  function onMortar(e: FireArgs): void {
-    deps.lazyViewModel()?.kick(2.0); // heavy thump — mortar is the big one
-    spawnProjectile(MORTAR_CONFIG, e);
-  }
-
-  function onGrenadeLauncher(e: FireArgs): void {
-    deps.lazyViewModel()?.kick(0.6);
-    spawnProjectile(GL_CONFIG, e);
-  }
-
-  // UT flak: one shell = a fan of bouncing shards. Spread pattern comes from
-  // a poisson-disc sample (even coverage, no random clumping), rotated by a
-  // random angle per shot so the pattern isn't visually memorized.
-  function onFlak(e: FireArgs): void {
-    deps.lazyViewModel()?.kick(1.4);
-    sfx.shoot(FLAK_CONFIG.weaponType); // once for the fan, not once per shard
-    const pts = poissonDisc(FLAK_SHARDS);
+  // Pellet fan (flak/shotgun): one trigger = a poisson-disc spread of
+  // projectiles — even coverage without clumping, rotated per shot so the
+  // pattern isn't visually memorized. One shot sfx for the whole burst.
+  function spawnFan(config: ProjectileConfig, e: FireArgs, count: number, spread: number): void {
+    sfx.shoot(config.weaponType);
+    const pts = poissonDisc(count);
     const rot = Math.random() * Math.PI * 2;
     const cs = Math.cos(rot), sn = Math.sin(rot);
     _flakRight.crossVectors(e.dir, _flakUp0);
     if (_flakRight.lengthSq() < 1e-8) _flakRight.set(1, 0, 0); else _flakRight.normalize();
     _flakUp.crossVectors(_flakRight, e.dir);
     for (const pt of pts) {
-      const ox = (pt.x * cs - pt.y * sn) * FLAK_SPREAD;
-      const oy = (pt.x * sn + pt.y * cs) * FLAK_SPREAD;
+      const ox = (pt.x * cs - pt.y * sn) * spread;
+      const oy = (pt.x * sn + pt.y * cs) * spread;
       _flakDir.copy(e.dir)
         .addScaledVector(_flakRight, ox)
         .addScaledVector(_flakUp, oy)
         .normalize();
-      spawnProjectile(FLAK_CONFIG, { origin: e.origin, dir: _flakDir.clone(), playerVel: e.playerVel }, true);
+      spawnProjectile(config, { origin: e.origin, dir: _flakDir.clone(), playerVel: e.playerVel }, true);
     }
   }
 
-  // Shotgun: same poisson fan as flak but ~3× tighter cone on fast flat
-  // slugs — the burst lands as a pattern, not a scatter. Mid-range viable.
-  function onShotgun(e: FireArgs): void {
-    deps.lazyViewModel()?.kick(1.6);
-    sfx.shoot(SHOTGUN_CONFIG.weaponType); // once for the burst
-    const pts = poissonDisc(SG_PELLETS);
-    const rot = Math.random() * Math.PI * 2;
-    const cs = Math.cos(rot), sn = Math.sin(rot);
-    _flakRight.crossVectors(e.dir, _flakUp0);
-    if (_flakRight.lengthSq() < 1e-8) _flakRight.set(1, 0, 0); else _flakRight.normalize();
-    _flakUp.crossVectors(_flakRight, e.dir);
-    for (const pt of pts) {
-      const ox = (pt.x * cs - pt.y * sn) * SG_SPREAD;
-      const oy = (pt.x * sn + pt.y * cs) * SG_SPREAD;
-      _flakDir.copy(e.dir)
-        .addScaledVector(_flakRight, ox)
-        .addScaledVector(_flakUp, oy)
-        .normalize();
-      spawnProjectile(SHOTGUN_CONFIG, { origin: e.origin, dir: _flakDir.clone(), playerVel: e.playerVel }, true);
-    }
-  }
-
-  // Serious Sam cannon: one big iron ball that skips off terrain and pops
-  // on contact. Heavy kick — the thump is half the fun.
-  function onCannon(e: FireArgs): void {
-    deps.lazyViewModel()?.kick(1.2);
-    spawnProjectile(CANNON_CONFIG, e);
-  }
-
-  // RPG missile: straight flight, slow enough to track in the air, big
-  // warhead pop. Heavy kick — the launch should shove your view.
-  function onRocketLauncher(e: FireArgs): void {
-    deps.lazyViewModel()?.kick(1.6);
-    spawnProjectile(RKT_CONFIG, e);
-  }
-
-  // Hold-out sidearms — single tracers, light kick (pistol), heavy (revolver)
-  function onPistol(e: FireArgs): void {
-    deps.lazyViewModel()?.kick(0.3);
-    spawnProjectile(PISTOL_CONFIG, e);
-  }
-
-  function onRevolver(e: FireArgs): void {
-    deps.lazyViewModel()?.kick(1.0);
-    spawnProjectile(REVOLVER_CONFIG, e);
-  }
-
-  function onPlasma(e: FireArgs): void {
-    deps.lazyViewModel()?.kick(0.4);
-    spawnProjectile(PLASMA_CONFIG, e);
-  }
-
-  // Rapid plasma: light kick, bolt per trigger — the cadence sells it.
-  function onPlasmaGun(e: FireArgs): void {
-    deps.lazyViewModel()?.kick(0.2);
-    spawnProjectile(PLASMAGUN_CONFIG, e);
-  }
-
-  // Sticky launcher as a primary slot (wid 14) — belt throws reuse the
-  // same config but this path never got a callback, so the slot silently
-  // fell back to rockets.
-  function onStickyLauncher(e: FireArgs): void {
-    deps.lazyViewModel()?.kick(0.8);
-    spawnProjectile(STICKY_CONFIG, e);
-  }
-
-  // Railgun: hypervelocity slug, big kick — the precision slot.
-  function onRailgun(e: FireArgs): void {
-    deps.lazyViewModel()?.kick(1.8);
-    spawnProjectile(RAILGUN_CONFIG, e);
+  // Trigger dispatch: kick + spawn shape come from the def. 'beam' never
+  // reaches here — combat.ts routes it to the lightning module, which owns
+  // its own tick/raycast loop.
+  function fireWeapon(def: WeaponDef, e: FireArgs): void {
+    deps.lazyViewModel()?.kick(def.kick);
+    if (def.pellets) spawnFan(def.config, e, def.pellets.count, def.pellets.spread);
+    else spawnProjectile(def.config, e);
   }
 
   // Melee sweep — the arc check happens around a point pushed forward
@@ -287,10 +195,6 @@ export function createFire(deps: CombatDeps, hooks: FireHooks) {
   }
 
   return {
-    spawnProjectile,
-    onFire, onBelt, onDiscLauncher, onChaingun, onMortar, onGrenadeLauncher,
-    onFlak, onPlasma, onRailgun, onShotgun, onCannon, onRocketLauncher,
-    onPistol, onRevolver, onSticky: onStickyLauncher, onPlasmaGun,
-    onMelee: melee,
+    spawnProjectile, fireWeapon, onBelt, onMelee: melee,
   };
 }
