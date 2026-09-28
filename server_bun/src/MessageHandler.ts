@@ -355,7 +355,13 @@ export class MessageHandler {
       // hidden tab, transport switch), and the accumulated distance over
       // a dead interval isn't speed evidence (34s gap → 589m at 17m/s
       // used to reject). Reseat the anchor and resume measuring.
-      if (dt <= 0.5 && (dist > 50 || speed > 300)) {
+      // A correction we just sent snaps the client's reports onto sim
+      // truth — but reports emitted before the packet landed still come
+      // from the old trajectory and would all read as impossible speed.
+      // Mute the check while those in-flight reports drain (grace covers
+      // ~2 RTTs of stragglers).
+      const grace = now < player.correctionGraceUntil;
+      if (!grace && dt <= 0.5 && (dist > 50 || speed > 300)) {
         player.consecutiveRejects++;
         logger.warn(`Position rejected: ${playerId} moved ${dist.toFixed(1)}m in ${dt.toFixed(3)}s (${speed.toFixed(0)} m/s)`);
         // Send correction on the first reject of a streak only — no flood
@@ -380,6 +386,7 @@ export class MessageHandler {
             // (accepts immediately) or keeps fighting (rejects count up
             // to the force-accept, which then sticks).
             player.lastPosCheckPos = { ...validState.position };
+            player.correctionGraceUntil = now + 500;
           }
         }
         // Client persisting past corrections (disputed knockback, lost
@@ -416,6 +423,11 @@ export class MessageHandler {
           velocity: simTruth.vel,
           rotation: msg.rotation,
         });
+        // Reseat the plausibility anchor at the corrected position: the
+        // client's next report legitimately snaps to simTruth.pos, and
+        // without this the snap itself reads as a speedhack reject.
+        player.lastPosCheckPos = { ...simTruth.pos };
+        player.correctionGraceUntil = now + 500;
       }
       player.rotation = { ...msg.rotation };
       player.lastSeen = now;
@@ -441,6 +453,7 @@ export class MessageHandler {
         rotation: msg.rotation,
       });
       player.lastPosCheckPos = { ...simTruth.pos };
+      player.correctionGraceUntil = now + 500;
     }
     this.playerManager.updatePosition(playerId, msg.position, msg.rotation, msg.velocity, msg.seq);
     player.hasReceivedPosition = true;

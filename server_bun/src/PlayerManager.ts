@@ -54,6 +54,7 @@ export class PlayerManager {
       lastPosCheckTime: 0,
       lastPosCheckPos: { ...spawn },
       consecutiveRejects: 0,
+      correctionGraceUntil: 0,
       ping: 0,
       skiing: 0,
       status: 0,

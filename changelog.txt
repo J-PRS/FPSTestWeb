@@ -1,3 +1,5 @@
+2026-10-03 - correction grace window (500ms): in-flight pre-snap reports after a correction no longer trip the plausibility reject — kills the post-correction false-speedhack cascade seen in live logs
+
 2026-10-03 - regression tests pin the judge changes: inputSeq wire round-trip + legacy 30B decode; probe-ahead reconcile; speed-scaled tolerance
 
 2026-10-03 - judge tolerance scales with speed (divergenceM * (1 + v/60)) — ski-speed integration noise and crest-timing clips no longer warn; warns now log the effective tol

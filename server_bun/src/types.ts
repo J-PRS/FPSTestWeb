@@ -42,6 +42,10 @@ export interface PlayerState {
   lastPosCheckTime: number;
   lastPosCheckPos: Vec3;
   consecutiveRejects: number; // escape hatch: client persisting past corrections gets force-resynced
+  /** Plausibility check is muted until this time after a correction is
+   *  sent — reports still in flight from the pre-snap trajectory would
+   *  otherwise read as impossible speed. */
+  correctionGraceUntil: number;
   ping: number; // self-reported client RTT in ms
   /** Netcode-v2 tier the join negotiated — surfaced to the scoreboard. */
   transport?: 'wt' | 'rtc' | 'ws';
