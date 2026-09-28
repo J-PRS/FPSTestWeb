@@ -333,6 +333,16 @@ export class BotBrain {
       // Hit from somewhere unseen: push toward the shooter rather than
       // continue a patrol — the flinch already spent the recoil.
       this.goal = { ...this.revengeFrom };
+    } else if ((ctx.healthFrac ?? 1) < 0.4 && ctx.others && ctx.others.length > 0) {
+      // Hurt with nobody shooting back at: fold toward the nearest body.
+      // Safety-in-numbers emerges — nobody scripts a retreat.
+      let ally: BotVec | null = null;
+      let ad = Infinity;
+      for (const o of ctx.others) {
+        const d = distSq(pos, o);
+        if (d < ad && d > 4) { ad = d; ally = o; }
+      }
+      if (ally) this.goal = { ...ally };
     } else if (ctx.objective) {
       this.goal = { ...ctx.objective };
     } else if (ctx.pickup) {
