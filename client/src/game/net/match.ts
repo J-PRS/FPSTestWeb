@@ -7,6 +7,22 @@ import * as sfx from '../../core/sfx.js';
 export function wireMatchEvents(ctx: NetCtx): void {
   const { deps, networkManager, chat, nm } = ctx;
 
+  // End-of-match standings: pin the scoreboard at the horn unless the
+  // player already had it open — auto-shown means auto-dismissed at the
+  // next matchStart, so a deliberate Tab is never hijacked.
+  let sbAutoShown = false;
+  const pinScoreboard = (): void => {
+    const hud = deps.lazyHud();
+    if (hud.scoreboardVisible) return;
+    hud.setScoreboardVisible(true);
+    sbAutoShown = true;
+  };
+  const releaseScoreboard = (): void => {
+    if (!sbAutoShown) return;
+    sbAutoShown = false;
+    deps.lazyHud().setScoreboardVisible(false);
+  };
+
   networkManager.onTeamScore = (scores, winAt) => {
     deps.world.teamScores = scores;
     deps.lazyHud().setTeamScore?.(scores.alpha, scores.bravo);
@@ -29,6 +45,7 @@ export function wireMatchEvents(ctx: NetCtx): void {
       : `${winner} WINS the deathmatch — ${scores[winner]} pts — new match starting`);
     deps.fragMessages.show(winner === 'draw' ? 'DRAW' : iWon ? 'VICTORY' : `${winner} WINS`);
     sfx.matchHorn(iWon ? 'win' : 'end');
+    pinScoreboard();
   };
   networkManager.onMatchEnd = (winner, scores) => {
     const iWon = winner === deps.world.localTeam;
@@ -37,8 +54,10 @@ export function wireMatchEvents(ctx: NetCtx): void {
       : `${winner.toUpperCase()} WINS ${scores.alpha}:${scores.bravo} — new match starting`);
     deps.fragMessages.show(winner === 'draw' ? 'DRAW' : iWon ? 'VICTORY' : `${winner.toUpperCase()} WINS`);
     sfx.matchHorn(iWon ? 'win' : 'end');
+    pinScoreboard();
   };
   networkManager.onMatchStart = (mode) => {
+    releaseScoreboard();
     chat.add(null, `match start — ${mode || 'arena'}`);
     sfx.matchHorn('start');
   };

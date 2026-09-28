@@ -1,3 +1,4 @@
+2026-10-03 - end-of-match standings: scoreboard auto-pins at the horn, auto-dismisses on next matchStart (manual Tab never hijacked)
 2026-10-03 - lobby: /rooms rows carry the spec map (follows rotation), shown per-row and in the IN: banner
 2026-10-03 - remote jet/ski audio: positional worldLoop channel (re-aimed dist/pan/lowpass per frame), pooled per-remote loops driven off the ski-dust cosmetics tick; cloak/death silent; jet inferred from powered climb
 2026-10-03 - RoomMoveSim seq journal: reports compare vs sim state at their input seq (server-ahead replayed-to-now, client-ahead probed); transient count=1 clips demoted to INFO
