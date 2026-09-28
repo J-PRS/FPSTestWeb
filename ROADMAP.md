@@ -79,8 +79,9 @@ surface. Detailed research lives in `_reports/`; this file is the current truth.
    see sim state), divergence tolerance tightens to 1.5m at 100ms ack
    throttle so prediction converges. No heightfield = auto judge
    fallback. Client needs zero changes (3-tier correction reconcile).
-   Remaining: seq-anchored input replay so corrections refeed only the
-   inputs the server missed (today a correction blends without replay).
+   Seq-anchored input replay landed (b7ac7d2): corrections carry the
+   server's last consumed inputSeq; client rewinds the sim and replays
+   journaled inputs — convergent corrections instead of blind blends.
 3. ~~Map format~~ — landed: `maps/<room>.json` (mode, ball population,
    spawn anchors, bases/objectives, bot count — all clamped with
    defaults; examples swarm/duel/nugwar/ctf). Server bots populate
