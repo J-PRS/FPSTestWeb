@@ -4,7 +4,7 @@ import { nextTargetId } from './targetIds.js';
 import { GRAVITY, BALL_MAX_DIST, BALL_TELE_MIN, BALL_TELE_MAX, BALL_TELE_HEIGHT, BALL_BASE_RADIUS, BALL_ENRAGE_ENABLED, BALL_ENRAGE_FORCE, BALL_ENRAGE_TIMEOUT, BALL_ENRAGE_DASH_DIST, BALL_ENRAGE_DASH_SPEED, BALL_ENRAGE_TELEGRAPH_H } from '../core/config.js';
 
 import { Terrain, getHeightfield } from '../world/terrain.js';
-import { makeSimBall, stepBall, BALL_OVERSPEED, BALL_MIN_SPEED, BALL_STALL_TIME, type SimBall } from '../../../shared/ballSim.js';
+import { makeSimBall, stepBall, BALL_OVERSPEED, BALL_MIN_SPEED, BALL_REST_SPEED, BALL_STALL_TIME, type SimBall } from '../../../shared/ballSim.js';
 import { type Heightfield, hmHeight } from '../../../shared/heightfield.js';
 import { RibbonTrail } from '../projectiles/RibbonTrail.js';
 import { ChildLogger } from '../core/Logger.js';
@@ -202,6 +202,9 @@ export class Ball {
   private _netImp = new THREE.Vector3(); // pending knockback impulse → next claim
   private netAcc = 0; // fixed-dt accumulator — prediction steps at server rate
   private flightT = 0; // seconds flown on the current inert leg (analytic path)
+  private legT0 = -1;  // sim-time stamp the current leg started at; inert
+                       // flight measures T off the server clock so tick
+                       // drift can't push prediction ahead of authority
   private static _simTarget = { x: 0, y: 0, z: 0 };
   // Render-only correction: segment snaps shift `pos` to truth instantly
   // (gameplay stays exact), while this offset carries the visual error and
@@ -328,25 +331,46 @@ export class Ball {
         }
       } else {
         // Inert leg: gravity-only flight is EXACTLY solvable — stepping
-        // adds 20Hz quantization for zero benefit. Closed form matches
+        // adds 20Hz quantization for zero benefit. The closed form matches
         // the server's semi-implicit Euler bit-for-bit (the +T*dt/2 term
         // is the velocity update Euler applies before the position one),
         // so an arc flies pixel-smooth until the next bounce event lands.
-        this.flightT = Math.min(this.flightT + dt, 8);
-        const T = this.flightT;
+        // T comes off the (rate-corrected) server sim clock — a lagging
+        // tick loop never overshoots; wall-time fallback until seeded.
+        const simNow2 = Ball.netSimNow?.();
+        const T = this.legT0 >= 0 && simNow2 !== undefined && Number.isFinite(simNow2)
+          ? Math.min(Math.max(0, simNow2 - this.legT0), 8)
+          : (this.flightT = Math.min(this.flightT + dt, 8));
         this.pos.set(
           s.x + s.vx * T,
           s.y + s.vy * T + 0.5 * BALL_GRAVITY * (T * T + 0.05 * T),
           s.z + s.vz * T,
         );
         this.vel.set(s.vx, s.vy + BALL_GRAVITY * T, s.vz);
-        // Terrain floor: the server settles slow contacts to rest (no
-        // segment), and every leg ends in a bounce event that hasn't
-        // arrived yet — either way the render never dips underground.
+        // Terrain: the server parks sub-REST contacts silently — no
+        // segment is emitted — so a leg that touched down slow never
+        // ends in an event. Walking T back to first contact and parking
+        // keeps the prediction where authority actually left it (the
+        // stall pounce event re-wakes it ~2s later). Fast contacts DO
+        // produce a bounce event imminently — clamp, don't park.
         const gy = Ball.field ? hmHeight(Ball.field, this.pos.x, this.pos.z) + s.radius : -Infinity;
-        if (this.pos.y < gy) {
-          this.pos.y = gy;
-          if (this.vel.y < 0) this.vel.y = 0;
+        if (this.pos.y < gy && Ball.field) {
+          let tc = T;
+          while (tc > 0.05) {
+            const tt = tc - 0.05;
+            const yy = s.y + s.vy * tt + 0.5 * BALL_GRAVITY * (tt * tt + 0.05 * tt);
+            if (yy > hmHeight(Ball.field, s.x + s.vx * tt, s.z + s.vz * tt) + s.radius) break;
+            tc = tt;
+          }
+          const spd = Math.hypot(s.vx, s.vy + BALL_GRAVITY * tc, s.vz);
+          if (spd < BALL_REST_SPEED) {
+            const cx = s.x + s.vx * tc, cz = s.z + s.vz * tc;
+            this.pos.set(cx, hmHeight(Ball.field, cx, cz) + s.radius, cz);
+            this.vel.set(0, 0, 0);
+          } else {
+            this.pos.y = gy;
+            if (this.vel.y < 0) this.vel.y = 0;
+          }
         }
       }
       this.enraged = s.enraged;
@@ -787,6 +811,9 @@ export class Ball {
     // remainder — which is all the lead was ever for.
     this.netAcc = Math.min(lead, 0.5);
     this.flightT = lead; // inert path flies on from the event's age — seamless handoff
+    // The leg's flight clock anchors to the stamped sim time — update()
+    // measures T as estSimNow−legT0 so server-clock drift can't skew it.
+    this.legT0 = simT ?? -1; // unstamped event → wall-time fallback
     // Sim cursor anchors to the event's stamped grid time — the banked
     // lead is consumed by whole cells in update(), not stepped here.
     if (simT !== undefined) this.simT = simT;

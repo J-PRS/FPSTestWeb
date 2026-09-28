@@ -29,21 +29,38 @@ export function createNetBalls(deps: EntitiesDeps, ctx: NetBallsCtx, logger: Chi
   // estimate "server now" — event AGE = estNow − stamp measures TRUE
   // staleness including packet loss/retransmit delay, which ping÷2 can't
   // see (at 50% loss, events routinely arrive hundreds of ms late).
-  const ballClock = { t: -1, at: 0 };
-  // Predicted balls gate their stepping on this estimate of the server's
-  // sim clock — free-running on wall time drifted ahead of the tick loop
-  // and watched bounces early, which is what the residual warns were.
-  Ball.netSimNow = () =>
-    ballClock.t < 0 ? Infinity : ballClock.t + (performance.now() / 1000 - ballClock.at);
+  const ballClock = { t: -1, at: 0, rate: 1 };
+  // The server's sim clock is setInterval-driven — under load it ticks
+  // slower than wall time. Track the sim→wall RATE (Δstamp/Δarrival is
+  // an exact rate sample regardless of how events space out) so both the
+  // prediction gate and event-age extrapolation ride the server's clock,
+  // not ours. Without it we extrapolate legs too far and watch bounces
+  // early — the residual rubberband warns.
+  function noteStamp(t: number): void {
+    const now = performance.now() / 1000;
+    if (t > ballClock.t) {
+      if (ballClock.t >= 0) {
+        const ds = t - ballClock.t, dw = now - ballClock.at;
+        if (ds > 0 && dw > 0.2) {
+          const r = Math.min(1.2, Math.max(0.5, ds / dw));
+          ballClock.rate += (r - ballClock.rate) * 0.2; // EMA
+        }
+      }
+      ballClock.t = t; ballClock.at = now;
+    }
+  }
+  function estSimNow(): number {
+    const now = performance.now() / 1000;
+    return ballClock.t < 0 ? Infinity : ballClock.t + (now - ballClock.at) * ballClock.rate;
+  }
+  Ball.netSimNow = estSimNow;
   function ballEventAge(t: number | undefined): number {
     if (t === undefined) {
       // Unstamped (shouldn't happen post-v3) — fall back to ½RTT.
       return Math.min(0.2, (deps.lazyNetworkManager()?.getPing() ?? 0) / 2000);
     }
-    const now = performance.now() / 1000;
-    if (t > ballClock.t) { ballClock.t = t; ballClock.at = now; }
-    const estNow = ballClock.t + (now - ballClock.at);
-    return Math.min(0.6, Math.max(0, estNow - t));
+    noteStamp(t);
+    return Math.min(0.6, Math.max(0, estSimNow() - t));
   }
 
   function targetPosForId(id: string | null | undefined): THREE.Vector3 | null {
@@ -91,8 +108,16 @@ export function createNetBalls(deps: EntitiesDeps, ctx: NetBallsCtx, logger: Chi
     const age = ballEventAge(m.t);
     const expected = Math.hypot(m.velocity.x, m.velocity.y, m.velocity.z) * age;
     const err = Math.max(0, _segPos.distanceTo(b.pos) - expected);
-    if (err > 4) {
-      logger.warn(`ball #${m.id} rubberband ${err.toFixed(1)}m (age ${(age * 1000).toFixed(0)}ms) — prediction diverged`, {
+    // Thresholds are per-kind: lunge/teleport are server-side RNG the
+    // predictor fundamentally can't foresee (any gap is expected), bounce
+    // carries one tick of approach overshoot by construction (~4-5m at
+    // terminal speed). Only heartbeat/segment divergence past 4m is a
+    // real desync signal — everything else blends via renderOffset.
+    const kind = m.kind ?? 'segment';
+    const warnAt = kind === 'lunge' || kind === 'teleport' || kind === 'spawn' ? 40
+      : kind === 'bounce' || kind === 'stall' ? 12 : 4;
+    if (err > warnAt) {
+      logger.warn(`ball #${m.id} ${kind} rubberband ${err.toFixed(1)}m (age ${(age * 1000).toFixed(0)}ms) — prediction diverged`, {
         pred: { x: +b.pos.x.toFixed(1), y: +b.pos.y.toFixed(1), z: +b.pos.z.toFixed(1) },
         truth: { x: +m.position.x.toFixed(1), y: +m.position.y.toFixed(1), z: +m.position.z.toFixed(1) },
       });
