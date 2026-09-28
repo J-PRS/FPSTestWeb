@@ -72,6 +72,29 @@ init (REVERT after testing):
 - Working example scripts: `C:\TEMP\_WEB\headless-test\demo-e2e.js`,
   `probe2.js`, `legacy-play.js`.
 
+## Server-side bots (multiplayer testing)
+
+- Start server: `export PATH="$HOME/.bun/bin:$PATH" && cd server_bun && bun run src/server.ts`
+  (port :8000). `curl localhost:8000/metrics` lists rooms/player counts.
+  Watch for `EADDRINUSE` — stale sockets from other processes (e.g. wpscloudsvr.exe)
+  can hold :8000; check `netstat -ano | grep :8000` and kill the owning PID.
+- Join a bot room: `?room=<name>&map=<map>&bots=N` — join handshake forwards
+  room/map/bots; `spec.botFill` is TOTAL bodies incl. humans, so bots spawned =
+  botFill − humans. Add `networkManager` to the `__test` hook to inspect.
+- Server bot ids are `BOT-<roomname><idx>` (NOT `bot:` — that prefix is the
+  offline TeamBots namespace). They live in `world.remotePlayers` keyed by id.
+- Interpolation check: `rp.position` is the rendered/interpolated pos,
+  `rp.targetPosition` is the latest wire snapshot — compare them; snapshot
+  arrival means `rp.update()` fires, movement means `rp.tick()` fires
+  (instrument by wrapping methods — a frozen `position` with moving
+  `targetPosition` indicates a client-side interp/staleness bug).
+- Watch out: `remotes.ts` marks remotes inactive when `ping == null`; server
+  bots never report ping (GameServer broadcasts `ping` only when `p.ping > 0`),
+  so they can be stale-hidden — check `rp.scale`/model visibility, not just
+  position.
+- In-game spectate is the V key (`spectate` keybind → `#spectate-hint` shows
+  "SPECTATING"); there is no `spectate:true` handshake from the client.
+
 ## Devin Secrets Needed
 
 - none for offline testing. The game server (:8000) is optional — connect
