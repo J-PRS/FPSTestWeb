@@ -413,8 +413,41 @@ export class Room {
     if (w) this.endMatch(w);
   }
 
+  // Combat noise — a short-lived ring of recent loud events (shots,
+  // blasts). Bots "hear" these without LOS, which produces emergent
+  // scouting: a fight across the map attracts attention.
+  private noises: { pos: Vec3; at: number }[] = [];
+  private static NOISE_TTL = 2000; // ms — old noise fades
+  private static NOISE_MAX = 24;
+
+  /** Every broadcast carrying a firing position is audible. */
   broadcast(msg: Parameters<ConnectionManager['broadcast']>[0], exclude?: string): void {
+    if ((msg as { type?: string }).type === 'projectileCreated') {
+      const pos = (msg as { position?: Vec3 }).position;
+      if (pos) this.pushNoise(pos);
+    }
     this.connections.broadcast(msg, exclude);
+  }
+
+  /** Blasts detonate server-side without a broadcast position — the sim
+   *  reports them here so bots hear explosions as well as muzzle fire. */
+  pushNoise(pos: Vec3): void {
+    const now = Date.now();
+    while (this.noises.length && now - this.noises[0].at > Room.NOISE_TTL) this.noises.shift();
+    this.noises.push({ pos: { ...pos }, at: now });
+    if (this.noises.length > Room.NOISE_MAX) this.noises.shift();
+  }
+
+  /** Recent noise positions within earshot of pos (no LOS required). */
+  noisesNear(pos: Vec3, radius: number): Vec3[] {
+    const now = Date.now();
+    const out: Vec3[] = [];
+    for (const n of this.noises) {
+      if (now - n.at > Room.NOISE_TTL) continue;
+      const dx = n.pos.x - pos.x, dy = n.pos.y - pos.y, dz = n.pos.z - pos.z;
+      if (dx * dx + dy * dy + dz * dz <= radius * radius) out.push(n.pos);
+    }
+    return out;
   }
 
   playerCount(): number {

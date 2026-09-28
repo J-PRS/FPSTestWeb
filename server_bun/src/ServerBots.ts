@@ -311,6 +311,7 @@ export class ServerBots {
         // Inbound shells feed the dodge sense — bots sidestep rockets
         // like a human reading the arc instead of eating every volley.
         threats: this.room.projectiles.incomingNear(p.position, 12),
+        sounds: this.room.noisesNear(p.position, 50),
         now,
       });
       // The brain's status intent IS the player's claim — same rising-edge

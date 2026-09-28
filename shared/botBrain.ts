@@ -50,6 +50,10 @@ export interface BrainCtx {
    *  inbound shells) — the dodge sense. Omit where no projectile sim
    *  exists (offline bots, legacy path). */
   threats?: BotVec[];
+  /** Recent loud events within earshot (host pre-filters radius + age) —
+   *  the hearing sense. No LOS required: a fight over the ridge pulls
+   *  an idle bot toward it, which is how scouting emerges. */
+  sounds?: BotVec[];
 }
 
 export interface BrainOut {
@@ -186,21 +190,7 @@ export class BotBrain {
       if (best && dist3(pos, best.pos) <= this.orbitFar) {
         this.fightPos = this.pickFightPos(ctx, pos, best);
       }
-      if (!best && ctx.objective) {
-        this.goal = { ...ctx.objective };
-      } else if (!best && ctx.pickup) {
-        this.goal = { ...ctx.pickup };
-      } else if (!best && (this.wanderT <= 0 || distSq(pos, this.wanderWp) < 9)) {
-        this.wanderT = (3 + Math.random() * 4) / this.wanderlust;
-        const a = Math.random() * Math.PI * 2;
-        const r = (15 + Math.random() * 40) * this.wanderlust;
-        this.wanderWp = {
-          x: pos.x + Math.cos(a) * r,
-          y: ctx.groundY(pos.x + Math.cos(a) * r, pos.z + Math.sin(a) * r) + BOT_EYE,
-          z: pos.z + Math.sin(a) * r,
-        };
-        this.goal = { ...this.wanderWp };
-      }
+      if (!best) this.pickGoal(ctx, pos);
     }
     this.wanderT -= dt;
     // detourT decays here, with the other timers — decrementing it inside
@@ -304,6 +294,36 @@ export class BotBrain {
     }
 
     return { dest, move: this.moveHints(ctx, pos, dest), fire, status: this.statusIntent(ctx), belt };
+  }
+
+  /** Idle-goal selection, in priority order: objective > pickup >
+   *  heard fight > wander. Runs on the slow think cadence. */
+  private pickGoal(ctx: BrainCtx, pos: BotVec): void {
+    if (ctx.objective) {
+      this.goal = { ...ctx.objective };
+    } else if (ctx.pickup) {
+      this.goal = { ...ctx.pickup };
+    } else if (ctx.sounds && ctx.sounds.length > 0) {
+      // Heard a fight: investigate the nearest noise. Curiosity is a
+      // personality roll so a squad doesn't stampede as one.
+      let loudest: BotVec | null = null;
+      let ld = Infinity;
+      for (const s of ctx.sounds) {
+        const d = distSq(pos, s);
+        if (d < ld) { ld = d; loudest = s; }
+      }
+      if (loudest && Math.random() < this.wanderlust * 0.5) this.goal = { ...loudest };
+    } else if (this.wanderT <= 0 || distSq(pos, this.wanderWp) < 9) {
+      this.wanderT = (3 + Math.random() * 4) / this.wanderlust;
+      const a = Math.random() * Math.PI * 2;
+      const r = (15 + Math.random() * 40) * this.wanderlust;
+      this.wanderWp = {
+        x: pos.x + Math.cos(a) * r,
+        y: ctx.groundY(pos.x + Math.cos(a) * r, pos.z + Math.sin(a) * r) + BOT_EYE,
+        z: pos.z + Math.sin(a) * r,
+      };
+      this.goal = { ...this.wanderWp };
+    }
   }
 
   /** Toggle-skill intent — the STATUS bits a legal client claims. Mend

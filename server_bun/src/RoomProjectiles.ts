@@ -160,6 +160,7 @@ export class RoomProjectiles {
     this.projs.delete(proj.id);
     this.room.broadcast({ type: 'projectileDestroyed', projectileId: proj.id });
     if (directHitId) this.room.messages.botAttack(proj.ownerId, directHitId, proj.weaponType);
+    this.room.pushNoise(at); // a blast is louder than the muzzle that launched it
     this.room.messages.serverBlast(proj.ownerId, at, proj.weaponType, directHitId ?? null);
   }
 
