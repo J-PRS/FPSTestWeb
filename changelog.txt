@@ -1,3 +1,4 @@
+2026-09-26  nugget rebalance — pickup restores 50% max energy (infinite-jet window removed); per-variant drop counts server-side (v1×2, v2×3, elite×3)
 2026-09-26  4 tradeoff perks: sharpshooter (+20% direct, -40% blast radius), bombardier (inverse), juggernaut (knockback resist), scavenger (heal boost) — enforced server-side on shots, AOE radius, impulse and heals
 2026-09-26  perk system — shared/perks.ts modifier table (featherjets/plated/vitality/regenerator/overcharge), join-announced so server enforces resist+maxHealth+regen; loadout PERK dropdown; offline applies mods locally
 2026-09-26  status bitmask channel — cloak/shield/mend collapse into one relayed int (shared/status.ts); next toggle effect = one bit + one remote handler, protocol v9

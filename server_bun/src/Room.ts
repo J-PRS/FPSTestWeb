@@ -109,7 +109,7 @@ export class Room {
       (data) => this.connections.broadcastBinary(data),
     );
     this.ballSim.population = this.spec.balls;
-    this.ballSim.onKilled = (by, pos) => this.creatureKill(by, pos);
+    this.ballSim.onKilled = (by, pos, variant) => this.creatureKill(by, pos, variant);
     this.ballSim.colliders = structureColliders(this.spec.structures);
     if (this.spec.ballMix) this.ballSim.ballMix = this.spec.ballMix;
     if (this.spec.spawns) this.players.spawnPoints = this.spec.spawns;
@@ -178,10 +178,15 @@ export class Room {
   /** Creature kill — ballDie attribution from BallSim. FFA modes award
    *  the killer directly; team modes drop a nugget at the corpse that
    *  anyone must touch to bank (kill-confirmed style scoring). */
-  private creatureKill(by: string, pos: Vec3): void {
+  private creatureKill(by: string, pos: Vec3, variant = 0): void {
     const spec = this.modeSpec;
     if (spec?.teams) {
-      this.pickups?.spawn(pos);
+      // Pay for the corpse's threat: variant 3 elites and v2 tanks drop a
+      // burst, fodder still drops one (same scale curve the client uses).
+      const drops = [1, 2, 3, 3][variant] ?? 1;
+      for (let i = 0; i < drops; i++) {
+        this.pickups?.spawn({ x: pos.x + (Math.random() - 0.5) * 2, y: pos.y, z: pos.z + (Math.random() - 0.5) * 2 });
+      }
       return;
     }
     if (!spec?.ffa || spec.ptsCreatureKill <= 0 || !this.players.getPlayer(by)) return;
