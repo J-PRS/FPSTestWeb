@@ -3,6 +3,7 @@
 // reads as construction order, not a wall of lambdas.
 import * as THREE from 'three';
 import { Player } from '../entities/Player.js';
+import { weaponDef } from '../weapons.js';
 import type { createCombat } from './combat.js';
 import type { EffectsManager } from '../effects/effects.js';
 import type { ViewModel } from '../entities/ViewModel.js';
@@ -22,23 +23,8 @@ export interface PlayerHookCtx {
 
 export function wirePlayerHooks(c: PlayerHookCtx): void {
   const { player, combat, effects, viewModel, speedLines } = c;
-  player.onFire = combat.onFire;
+  player.onWeaponFire = combat.onWeaponFire;
   player.onBelt = combat.onBelt;
-  player.onDiscLauncher = combat.onDiscLauncher;
-  player.onChaingun = combat.onChaingun;
-  player.onMortar = combat.onMortar;
-  player.onGrenadeLauncher = combat.onGrenadeLauncher;
-  player.onFlak = combat.onFlak;
-  player.onPlasma = combat.onPlasma;
-  player.onRailgun = combat.onRailgun;
-  player.onLightning = combat.onLightning;
-  player.onShotgun = combat.onShotgun;
-  player.onCannon = combat.onCannon;
-  player.onRocketLauncher = combat.onRocketLauncher;
-  player.onPistol = combat.onPistol;
-  player.onRevolver = combat.onRevolver;
-  player.onSticky = combat.onSticky;
-  player.onPlasmaGun = combat.onPlasmaGun;
   player.onWarpThrow = (pos) => { effects.spawnImpact(pos, player.vel); sfx.warpThrow(); };
   player.onWarpTick = (pos) => effects.spawnWarpTrail(pos); // spark trail ON the beacon
   player.onWarp = (from, to) => {
@@ -53,7 +39,7 @@ export function wirePlayerHooks(c: PlayerHookCtx): void {
   sfx.warpJump(to);
   };
   player.onMelee = combat.onMelee;
-  player.onWeaponSwitch = (i) => { viewModel?.switchWeapon(Player.widToWeaponType(i)); sfx.equip(); };
+  player.onWeaponSwitch = (i) => { viewModel?.switchWeapon(weaponDef(i).weaponType); sfx.equip(); };
   player.onJump = (pos) => { effects.spawnJumpDust(pos); sfx.jump(); };
   player.onLand = (impactSpeed) => sfx.land(impactSpeed);
   player.onJetpack = (pos) => effects.spawnJetpack(pos);

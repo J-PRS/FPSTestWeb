@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-import { MAX_ENERGY, MAX_HEALTH, JET_DRAIN, JET_CHARGE, FIRE_RATE, DISC_RATE, CHAINGUN_RATE, MORTAR_RATE, GL_RATE, FLAK_RATE, PLASMA_RATE, RAILGUN_RATE, LG_RATE, SHOTGUN_RATE, CANNON_RATE, RKT_RATE, PISTOL_RATE, REVOLVER_RATE, STICKY_RATE, PLASMAGUN_RATE, MELEE_COOLDOWN, MELEE_LUNGE } from '../core/config.js';
+import { MAX_ENERGY, MAX_HEALTH, JET_DRAIN, JET_CHARGE, DISC_RATE, MELEE_COOLDOWN, MELEE_LUNGE } from '../core/config.js';
 
 import { Terrain } from '../world/terrain.js';
 import { PlayerSkills, SHIELD_DMG_PER_ENERGY } from './player/skills.js';
@@ -9,7 +9,7 @@ import { perkMods, PERK_ORDER, type PerkId } from '../../../shared/perks.js';
 import { makeShieldBubble, ShieldBubble } from '../effects/shieldBubble.js';
 
 import { MovementController, MovementState } from './movement.js';
-import { WeaponType } from '../../../shared/weapons.js';
+import { weaponDef, SLOT_COUNT, type WeaponDef } from '../weapons.js';
 import { settings } from '../core/settings.js';
 import { isDown } from '../core/keybinds.js';
 import { PlayerInput } from './player/input.js';
@@ -213,14 +213,14 @@ export class Player {
   // 3 = mortar, 4 = grenade launcher
   weaponIndex = 0;
   // 4-slot loadout: weaponIndex is the SLOT (0-3); loadout[slot] is the
-  // weapon id (index into WEAPON_RATES / viewmodel order). ESC menu assigns.
+  // weapon id (index into weapons.ts SLOT_DEFS). ESC menu assigns.
   loadout: number[] = Player.parseLoadout(settings.get('fps-loadout'));
   static readonly LOADOUT_SLOTS = 4;
   // Belt: one throwable equipped, the belt key throws it. ESC menu picks.
   beltItem: BeltItem = (BELT_ITEMS as readonly string[]).includes(settings.get('fps-belt'))
     ? settings.get('fps-belt') as BeltItem : 'disc';
   // Sidearm: one hold-out weapon — the sidearm key pulls it while held.
-  // wid is slot-space (WEAPON_RATES index): pistol 12, revolver 13, shotgun 9.
+  // wid is slot-space (SLOT_DEFS index): pistol 12, revolver 13, shotgun 9.
   // (sticky launcher sits at wid 14 — primary loadout, not a hold-out.)
   static readonly SIDEARM_WIDS = { pistol: 12, revolver: 13, shotgun: 9 } as const;
   sidearm: 'pistol' | 'revolver' | 'shotgun' =
@@ -232,7 +232,7 @@ export class Player {
       ? settings.get('fps-pack') as 'turret' | 'mine' | 'station' | 'drone' : 'turret';
 
   private static parseLoadout(raw: string): number[] {
-    const ids = raw.split(',').map(Number).filter((n) => Number.isInteger(n) && n >= 0 && n < Player.WEAPON_RATES.length);
+    const ids = raw.split(',').map(Number).filter((n) => Number.isInteger(n) && n >= 0 && n < SLOT_COUNT);
     return ids.length === Player.LOADOUT_SLOTS ? ids : [0, 2, 6, 7];
   }
 
@@ -270,25 +270,21 @@ export class Player {
     settings.set('fps-pack', p);
   }
   get sidearmWid(): number { return Player.SIDEARM_WIDS[this.sidearm]; }
-  private static readonly WEAPON_RATES = [FIRE_RATE, DISC_RATE, CHAINGUN_RATE, MORTAR_RATE, GL_RATE, FLAK_RATE, PLASMA_RATE, RAILGUN_RATE, LG_RATE, SHOTGUN_RATE, CANNON_RATE, RKT_RATE, PISTOL_RATE, REVOLVER_RATE, STICKY_RATE, PLASMAGUN_RATE];
-  // wid (loadout/WEAPON_RATES index) → WeaponType wire id. The enum has
-  // Grenade=2/Slam=8/Railgun=9/Melee=10 gaps, so positional ids diverge
-  // from wid 2 onward — viewmodel/HUD consumers need this mapping.
-  static widToWeaponType(wid: number): WeaponType {
-    return ([0, 1, 3, 4, 5, 6, 7, 9, 12, 13, 14, 15, 16, 17, 18, 23] as const)[wid] ?? WeaponType.Rocket;
-  }
+  // wid → WeaponType lives on the def: weaponDef(wid).weaponType.
   private _lastJetpackSend = 0;
 
   // Hold-out secondaries: while the bind is held the weapon swaps in and
   // auto-fires at its own cadence; release snaps back to the loadout slot.
-  // wids are slot-space indices into WEAPON_RATES/SLOT_WEAPONS.
+  // wids are slot-space indices into SLOT_DEFS.
   private secondaryWid: number | null = null;
   // Draw delay — the hold-out key swaps the model in instantly but firing
   // waits for the raise, so the gun isn't shooting through its own holster.
   private secondaryDrawT = 0;
 
   // Events
-  onFire: ((e: FireEvent) => void) | null = null;
+  /** Trigger handler — receives the weapon's def so combat dispatches by
+   *  kind (projectile / pellet fan / beam) instead of a per-weapon table. */
+  onWeaponFire: ((def: WeaponDef, e: FireEvent) => void) | null = null;
   onJump: ((pos: THREE.Vector3) => void) | null = null;
   onLand: ((impactSpeed: number) => void) | null = null;
   /** Exposed for the audio engine: continuous loops follow these flags. */
@@ -307,22 +303,7 @@ export class Player {
   onWarp: ((from: THREE.Vector3, to: THREE.Vector3) => void) | null = null; // the warp itself
   onSlam: ((pos: THREE.Vector3, impactSpeed: number) => void) | null = null;  // fires on slam impact — speed scales the blast
   onBelt: ((e: FireEvent, item: BeltItem) => void) | null = null;
-  onDiscLauncher: ((e: FireEvent) => void) | null = null;
-  onChaingun: ((e: FireEvent) => void) | null = null;
-  onMortar: ((e: FireEvent) => void) | null = null;
-  onGrenadeLauncher: ((e: FireEvent) => void) | null = null;
-  onFlak: ((e: FireEvent) => void) | null = null;
-  onPlasma: ((e: FireEvent) => void) | null = null;
-  onRailgun: ((e: FireEvent) => void) | null = null;
-  onLightning: ((e: FireEvent) => void) | null = null;
-  onShotgun: ((e: FireEvent) => void) | null = null;
-  onCannon: ((e: FireEvent) => void) | null = null;
-  onRocketLauncher: ((e: FireEvent) => void) | null = null;
-  onPistol: ((e: FireEvent) => void) | null = null;
-  onRevolver: ((e: FireEvent) => void) | null = null;
   onMelee: ((e: FireEvent) => void) | null = null;
-  onSticky: ((e: FireEvent) => void) | null = null;
-  onPlasmaGun: ((e: FireEvent) => void) | null = null;
   onWeaponSwitch: ((index: number) => void) | null = null;
   /** Pack items — main wires these to the deployables manager. */
   onDeploy: (() => void) | null = null;
@@ -654,25 +635,17 @@ export class Player {
 
   // Weapon triggers: selected weapon (LMB) plus C/F belt throws.
   private fireWeapons(): void {
-    // Chaingun + lightning gun auto-fire while held; the rest are per-click.
     const wid = this.secondaryWid ?? this.loadout[this.weaponIndex];
-    const isBeam = wid === 2 || wid === 8;
+    const def = weaponDef(wid);
     // Weapon is lowered during a belt-throw — no primary fire mid-throw.
     // A held secondary auto-fires at its own cadence — no click needed.
     const wantFire = this.throwLockT <= 0 &&
       (this.secondaryWid !== null ? this.secondaryDrawT <= 0
-        : isBeam ? this.input.mouseHeld : (this.input.firePending || (this.input.mouseHeld && !this.input.needsRelease)));
+        : def.auto ? this.input.mouseHeld : (this.input.firePending || (this.input.mouseHeld && !this.input.needsRelease)));
     if (!this.input.mouseHeld) this.input.needsRelease = false;
     if (wantFire && this.fireTimer <= 0) {
-      this.fireTimer = Player.WEAPON_RATES[wid];
-      // wid is a slot-space index — the table mirrors WEAPON_RATES order
-      const fireCallback = ([
-        this.onFire, this.onDiscLauncher, this.onChaingun, this.onMortar,
-        this.onGrenadeLauncher, this.onFlak, this.onPlasma, this.onRailgun,
-        this.onLightning, this.onShotgun, this.onCannon, this.onRocketLauncher,
-        this.onPistol, this.onRevolver, this.onSticky, this.onPlasmaGun,
-      ] as const)[wid] ?? this.onFire;
-      fireCallback?.({ origin: this.pos.clone(), dir: this.getAimDir(), playerVel: this.vel.clone() });
+      this.fireTimer = def.rate;
+      this.onWeaponFire?.(def, { origin: this.pos.clone(), dir: this.getAimDir(), playerVel: this.vel.clone() });
     }
     this.input.firePending = false;
 

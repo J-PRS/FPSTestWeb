@@ -3,7 +3,7 @@ import type { DemoManager } from '../demo/index.js';
 import { SKILL_ORDER, Player, type SkillId, BELT_ITEMS, type BeltItem } from '../entities/Player.js';
 import { PERKS, PERK_ORDER, type PerkId } from '../../../shared/perks.js';
 import type { HUD } from './hud.js';
-import { SLOT_WEAPONS } from '../projectiles/index.js';
+import { SLOT_DEFS } from '../weapons.js';
 import { audio } from '../core/audio.js';
 import { buildKeysMenu } from './keysMenu.js';
 import { isCapturing, codeFor, codeLabel } from '../core/keybinds.js';
@@ -118,7 +118,7 @@ export function wireOverlayInput(deps: OverlayInputDeps) {
 
 
   if (loadoutBar) {
-    const weaponOpts = SLOT_WEAPONS.map((cfg, wid) => ({ v: String(wid), label: cfg.displayName }));
+    const weaponOpts = SLOT_DEFS.map((def, wid) => ({ v: String(wid), label: def.config.displayName }));
     for (let i = 0; i < Player.LOADOUT_SLOTS; i++) {
       const row = document.createElement('div');
       row.className = 'lo-row';

@@ -20,6 +20,8 @@ import type { HealthBarSystem } from '../ui/HealthBarSystem.js';
 import type { ExplosionTracker } from '../utils/ExplosionTracker.js';
 import type { setupInputTracking } from '../utils/InputTracking.js';
 import { createFire } from './combat/fire.js';
+import type { WeaponDef } from '../weapons.js';
+import type { FireEvent } from '../entities/Player.js';
 import { createBlastForce } from './blastForce.js';
 import { createLightning } from './combat/lightning.js';
 import { burstGibs } from '../entities/swarms.js';
@@ -123,14 +125,11 @@ export function createCombat(deps: CombatDeps) {
   const blast = createBlastForce(deps, { onTargetDestroyed });
   const { applyExplosionForce, applyForceToRemotes } = blast;
 
-  // Trigger handlers (all 13 weapons + melee) live in combat/fire.ts.
-  // They only need deps — their destruction/blast callbacks hoist-resolve.
+  // Trigger dispatch lives in combat/fire.ts — it fires whatever the
+  // WeaponDef says (kick + projectile or pellet fan). 'beam' kinds route to
+  // the lightning module, which owns its own tick/raycast loop.
   const fire = createFire(deps, { onTargetDestroyed, applyForceToRemotes });
-  const {
-    onFire, onBelt, onDiscLauncher, onChaingun, onMortar, onGrenadeLauncher,
-    onFlak, onPlasma, onRailgun, onShotgun, onCannon, onRocketLauncher,
-    onPistol, onRevolver, onSticky, onPlasmaGun,
-  } = fire;
+  const { onBelt } = fire;
 
   // Lightning gun (hitscan tick + beam visual + chain fork) lives in
   // combat/lightning.ts — hooks reach back into this module's shared blast
@@ -547,7 +546,11 @@ export function createCombat(deps: CombatDeps) {
   }
 
   return {
-    onFire, onBelt, onDiscLauncher, onChaingun, onMortar, onGrenadeLauncher, onFlak, onPlasma, onRailgun, onShotgun, onCannon, onRocketLauncher, onPistol, onRevolver, onSticky, onPlasmaGun,
+    onWeaponFire: (def: WeaponDef, e: FireEvent) => {
+      if (def.kind === 'beam') lightning(e);
+      else fire.fireWeapon(def, e);
+    },
+    onBelt,
     onMelee: fire.onMelee,
     onLightning: lightning,
     slam,
