@@ -135,6 +135,14 @@ surface. Detailed research lives in `_reports/`; this file is the current truth.
 - Maps (2026-09-26): crossfire (CTF, diagonal axis + mid plateau),
   slagheap (FFA dome bowl, ramps as ski lanes), pit (45m duel ring).
   All pure spec-JSON — structures + arena + spawns, no heightmaps.
+- Netcode v2 (2026-09-28): GameTransport seam w/ three real tiers —
+  WebTransport (QUIC datagrams, cert-pinned via /wthash) → WebRTC
+  DataChannel (game=unreliable binary, ctrl=reliable JSON, /rtcs
+  signaling, /rtcconfig ICE servers from FPS_ICE_SERVERS) → WebSocket.
+  Parallel probe picks the best live tier automatically; `?net=` pins.
+  Verified end-to-end in Chrome + headless fleets (net.ts adapters,
+  `fleet.ts --tier=`): WT 3/3, RTC 4/4 at full 30Hz. Reconnect re-probes.
+  Scoreboard NET column shows each player's tier; /metrics tiers{}.
 - Perf pass (2026-09-26): computeStateHash rolling-FNV (no sort/strings),
   tick fanout hoists, in-place snapshots, 2Hz roster polling, playerId→room
   O(1) index, room hibernation, global player cap (FPS_GLOBAL_MAX_PLAYERS).
