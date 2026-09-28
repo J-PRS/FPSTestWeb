@@ -1,7 +1,10 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 
 import { PLAYER_RADIUS, CAPSULE_CYLINDER_HEIGHT, CAPSULE_CENTER_Y } from '../core/config.js';
+import { getProjectileConfig } from '../projectiles/index.js';
+import { urlParams } from '../core/params.js';
 
 import { ChildLogger } from '../core/Logger.js';
 
@@ -9,26 +12,57 @@ const logger = new ChildLogger('PlayerModel');
 
 const X_AXIS = new THREE.Vector3(1, 0, 0);
 const _pitchQuat = new THREE.Quaternion();
+const _white = new THREE.Color(0xffffff);
+const _footW = new THREE.Vector3();
+const _footQ = new THREE.Quaternion();
+const _footPQ = new THREE.Quaternion();
 
 export type AnimationState = 'idle' | 'walk' | 'run' | 'jump' | 'death' | 'ski' | 'hit' | 'shoot';
 
-// Map our states to RobotExpressive animation names
-const ANIM_NAMES: Record<AnimationState, string> = {
-  'idle': 'Idle',
-  'walk': 'Walking',
-  'run': 'Running',
-  'jump': 'Jump',
-  'death': 'Death',
-  // Sitting reads as a tuck once moving — the robot pulls its legs up,
-  // which is exactly the skiing silhouette at 30+ m/s.
-  'ski': 'Sitting',
-  'hit': 'No',
-  'shoot': 'Punch'
+// Map our states to clip names. UAL_* clips are retargeted at load from the
+// Quaternius Universal Animation Library (CC0) — the robot's native set is
+// an emote pack (Dance/Wave/Yes...) with no aim, crouch, or fall poses.
+// Each entry falls back to the native clip if retargeting didn't run.
+const ANIM_NAMES: Record<AnimationState, [ual: string, fallback: string]> = {
+  'idle':   ['UAL_Idle_Loop',         'Idle'],
+  'walk':   ['UAL_Jog_Fwd_Loop',      'Walking'],
+  'run':    ['UAL_Sprint_Loop',       'Running'],
+  'jump':   ['UAL_Jump_Loop',         'Jump'],
+  'death':  ['UAL_Death01',           'Death'],
+  // Crouch_Fwd is a real tucked ski silhouette — knees bent, weight low —
+  // a straight upgrade over Sitting-as-tuck.
+  'ski':    ['UAL_Crouch_Fwd_Loop',   'Sitting'],
+  'hit':    ['UAL_Hit_Chest',         'No'],
+  'shoot':  ['UAL_Pistol_Shoot',      'Punch']
+};
+
+// RobotExpressive bone → UAL source bone. RobotExpressive bones carry
+// Blender names (UpperArm.L); UAL uses DEF-* (DEF-upper_arm.L). Both sides
+// get name-sanitized by GLTFLoader, so matching is done on lowercase
+// alphanumerics — see findSrcBones().
+const UAL_BONE_MAP: Record<string, string> = {
+  Hips: 'hips',
+  Abdomen: 'spine001',
+  // GLTFLoader dedupes name clashes — the mesh under Body is 'Torso', the
+  // spine bone got renamed 'Torso_1'.
+  Torso_1: 'spine003',
+  Neck: 'neck',
+  Head: 'head',
+  ShoulderL: 'shoulderl', UpperArmL: 'upper_arml', LowerArmL: 'forearml', Palm2L: 'handl',
+  ShoulderR: 'shoulderr', UpperArmR: 'upper_armr', LowerArmR: 'forearmr', Palm2R: 'handr',
+  UpperLegL: 'thighl', LowerLegL: 'shinl',
+  UpperLegR: 'thighr', LowerLegR: 'shinr',
+  // Foot.L/R are deliberately unmapped — they're IK-target bones detached
+  // from the leg chain; feet get snapped to the shin tips procedurally.
 };
 
 // Clips that must not LoopRepeat — a flinch or a fire that loops reads as a
 // twitch loop instead of a single reaction. Callers time-revert the state.
-const ONESHOT_CLIPS = new Set(['No', 'Punch']);
+const ONESHOT_CLIPS = new Set(['No', 'Punch', 'UAL_Pistol_Shoot', 'UAL_Hit_Chest', 'UAL_Hit_Head']);
+
+const normBone = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+
 
 // Shared radial-gradient flash texture — one per process, all remote
 // muzzle sprites reuse it
@@ -51,11 +85,22 @@ function makeFlashTexture(): THREE.CanvasTexture {
 export class PlayerModel {
   private scene: THREE.Scene;
   private model: THREE.Group | null = null;
+  // Disposed before the GLB finishes loading (pruned remote, ?dummy reaped
+  // by the roster cleanup): the async onLoad must not re-add the mesh or
+  // repopulate animations — that zombie re-add was the invisible-model bug.
+  private _disposed = false;
+  // Warn-once per clip name — a bad clip set used to flood the log at
+  // frame rate (11730 'Animation not found' lines in one session).
+  private _warnedAnims = new Set<string>();
 
   // Read-only access to the loaded object3D (debug tooling)
   get object3D(): THREE.Group | null { return this.model; }
   private mixer: THREE.AnimationMixer | null = null;
   private animations: Map<string, THREE.AnimationAction> = new Map();
+  private _loaded = false;
+  // Requests that arrive before the GLB lands — anim state still applies
+  // on load instead of warning against an empty map.
+  private _queuedAnim: string | null = null;
   private currentAction: THREE.AnimationAction | null = null;
   private currentState: AnimationState = 'idle';
   private colliderGizmo: THREE.Mesh | null = null;
@@ -71,6 +116,113 @@ export class PlayerModel {
   private recoil = 0;
   private muzzleFlash: THREE.Sprite | null = null;
   private flashTTL = 0;
+  // Damage flash — same white-pop the creatures do (flash timer × brighter
+  // surface). Skinned materials can't use instanceColor, so we lerp each
+  // material's emissive toward white and back from a cached baseline.
+  private dmgFlash = 0;
+  private flashMats: { m: THREE.MeshStandardMaterial; e: THREE.Color; i: number }[] = [];
+
+  // ---- Retargeted UAL clips ------------------------------------------
+  // Two-stage global cache: the GLB fetch/parse is shared, then the FIRST
+  // live model to need clips pays the resample bake (retarget needs a
+  // target skeleton — result is name-keyed data identical for every
+  // instance). Kept as two stages because a bake bound to one disposed
+  // model must not poison the cache for everyone else.
+  private static ualSource: Promise<{
+    src: THREE.Object3D;
+    srcBones: THREE.Object3D[];
+    srcByNorm: Map<string, THREE.Object3D>;
+    srcHip: THREE.Object3D;
+    clips: THREE.AnimationClip[];
+  }> | null = null;
+  private static bakedClips: Map<string, THREE.AnimationClip> | null = null;
+  private currentClipName: string | null = null;
+  private playingUAL = false;
+  // Foot bones are IK targets detached from the leg chain — retargeted
+  // clips leave them frozen mid-air. When a UAL clip plays, snap each foot
+  // to its shin tip (the *_end leaf node follows the skinned leg).
+  private footSnaps: { foot: THREE.Object3D; shin: THREE.Object3D; tip: THREE.Object3D }[] = [];
+
+  // ---- Gibs: real body parts for the death shatter ---------------------
+  // Skinned verts only exist in bind pose, so at load we group every
+  // triangle under its dominant bone (arms/legs/head separate) and keep
+  // the ORIGINAL vertex indices. On death each part is baked through
+  // SkinnedMesh.applyBoneTransform — full weight blending at the seams,
+  // bindMatrix handled, mesh-node transforms handled. One index-grouping
+  // pass at load; ~30k skinned vertex bakes per kill (a few ms, once).
+  private gibParts: { mesh: THREE.SkinnedMesh; indices: number[] }[] | null = null;
+
+  private buildGibs(): void {
+    if (this.gibParts || !this.model) return;
+    this.gibParts = [];
+    const out = this.gibParts;
+    this.model.traverse((o) => {
+      const sk = o as THREE.SkinnedMesh;
+      if (!sk.isSkinnedMesh) return;
+      const geo = sk.geometry;
+      const sIdx = geo.getAttribute('skinIndex');
+      const sWt = geo.getAttribute('skinWeight');
+      const pos = geo.getAttribute('position');
+      if (!pos || !sIdx || !sWt) return;
+      const index = geo.index;
+      const triCount = Math.floor((index ? index.count : pos.count) / 3);
+      const domBone = (v: number): number => {
+        let bi = 0, bw = -1;
+        for (let k = 0; k < 4; k++) {
+          const w = sWt.getComponent(v, k);
+          if (w > bw) { bw = w; bi = sIdx.getComponent(v, k); }
+        }
+        return bi;
+      };
+      const buckets = new Map<number, number[]>();
+      for (let t = 0; t < triCount; t++) {
+        const a = index ? index.getX(t * 3) : t * 3;
+        const b = index ? index.getX(t * 3 + 1) : t * 3 + 2;
+        const c = index ? index.getX(t * 3 + 2) : t * 3 + 2;
+        const bone = domBone(a);
+        const arr = buckets.get(bone) ?? buckets.set(bone, []).get(bone)!;
+        arr.push(a, b, c);
+      }
+      for (const [bi, indices] of buckets) {
+        if (!sk.skeleton.bones[bi] || indices.length < 9) continue; // a triangle or two isn't a part
+        out.push({ mesh: sk, indices });
+      }
+    });
+    if (!out.length) this.gibParts = null;
+    else logger.debug(`gibs built: ${out.length} body parts`);
+  }
+
+  /** Posed body-part fragments at the corpse's current stance — recentered
+   *  chunk geometries + their world centroids. Null until loaded / if the
+   *  model has no skinned meshes (caller falls back to generic debris). */
+  deathParts(): { geo: THREE.BufferGeometry; pos: THREE.Vector3 }[] | null {
+    this.buildGibs();
+    if (!this.gibParts || !this.model) return null;
+    this.model.updateMatrixWorld(true);
+    const v = new THREE.Vector3();
+    const out: { geo: THREE.BufferGeometry; pos: THREE.Vector3 }[] = [];
+    for (const p of this.gibParts) {
+      const pos = p.mesh.geometry.getAttribute('position');
+      const verts = new Float32Array(p.indices.length * 3);
+      for (let i = 0; i < p.indices.length; i++) {
+        const vi = p.indices[i];
+        // Full skinned transform: bindMatrix → Σw·(boneWorld×boneInverse)
+        // → bindMatrixInverse, then out to world via the mesh matrix.
+        v.fromBufferAttribute(pos, vi);
+        p.mesh.applyBoneTransform(vi, v);
+        v.applyMatrix4(p.mesh.matrixWorld);
+        verts[i * 3] = v.x; verts[i * 3 + 1] = v.y; verts[i * 3 + 2] = v.z;
+      }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.BufferAttribute(verts, 3));
+      g.computeVertexNormals();
+      g.computeBoundingSphere();
+      const c = g.boundingSphere!.center.clone();
+      g.translate(-c.x, -c.y, -c.z);
+      out.push({ geo: g, pos: c });
+    }
+    return out;
+  }
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
@@ -83,6 +235,7 @@ export class PlayerModel {
       loader.load(
         '/assets/models/RobotExpressive.glb',
         (gltf) => {
+          if (this._disposed) { resolve(); return; }
           this.model = gltf.scene;
           
           // Log model bounding box for hitbox calibration
@@ -102,6 +255,16 @@ export class PlayerModel {
               if ((child as THREE.SkinnedMesh).isSkinnedMesh) {
                 child.frustumCulled = false;
               }
+              // Capture emissive materials for the damage flash — dedupe,
+              // a GLB often shares one material across several meshes.
+              const mats = Array.isArray(child.material) ? child.material : [child.material];
+              for (const m of mats) {
+                if ((m as THREE.MeshStandardMaterial).isMeshStandardMaterial
+                  && !this.flashMats.some(f => f.m === m)) {
+                  const sm = m as THREE.MeshStandardMaterial;
+                  this.flashMats.push({ m: sm, e: sm.emissive.clone(), i: sm.emissiveIntensity });
+                }
+              }
             }
             // Grab aim/attachment bones — name-based since the model also has
             // same-named plain nodes; only real Bones qualify
@@ -113,6 +276,15 @@ export class PlayerModel {
               // GLTFLoader sanitizes names ('Palm2.R' -> 'Palm2R')
               } else if (child.name === 'Palm2R' && !this.handBone) {
                 this.handBone = child as THREE.Bone;
+              }
+              // Foot-snap rig for retargeted clips (UAL doesn't drive the
+              // robot's IK foot bones — see footSnaps comment).
+              const grab = (want: string) => this.model!.getObjectByName(want);
+              if (child.name === 'FootL' || child.name === 'FootR') {
+                const s = child.name === 'FootL' ? 'L' : 'R';
+                const shin = grab(`LowerLeg${s}`);
+                const tip = grab(`LowerLeg${s}_end`);
+                if (shin && tip) this.footSnaps.push({ foot: child, shin, tip });
               }
             }
           });
@@ -182,8 +354,16 @@ export class PlayerModel {
           
           logger.debug('Loaded animations:', Array.from(this.animations.keys()));
           
-          // Start with idle
-          this.playAnimation('Idle');
+          this._loaded = true;
+          // Start with whatever the last request was (remotes spawn mid-
+          // load and ask for Running/Walking before the mixer exists).
+          this.playAnimation(this._queuedAnim ?? 'Idle');
+          this._queuedAnim = null;
+
+          // Retargeted UAL clips arrive async — a native clip plays until
+          // they land, then the current state re-resolves onto the better
+          // clip. Cached globally so only the first model pays the bake.
+          this.retargetUAL();
           
           this.scene.add(this.model);
           logger.debug('MODEL ADDED to scene', { children: this.scene.children.length });
@@ -206,7 +386,9 @@ export class PlayerModel {
           // So local y = CAPSULE_CENTER_Y / 0.5
           this.colliderGizmo.position.y = CAPSULE_CENTER_Y / 0.5;
           this.colliderGizmo.renderOrder = 999; // Render last (on top)
-          this.colliderGizmo.visible = true; // Ensure it's visible
+          // Hitbox visualization is a debug overlay — same flag as the
+          // AOE blast wireframes (menu DEBUG toggle / ?debug).
+          this.colliderGizmo.visible = urlParams.debug;
           this.model.add(this.colliderGizmo); // Add as child of model so it moves with it
           logger.debug('COLLIDER GIZMO ADDED to model', { children: this.scene.children.length });
 
@@ -224,9 +406,13 @@ export class PlayerModel {
   }
 
   playAnimation(name: string): void {
+    if (!this._loaded) { this._queuedAnim = name; return; }
     const action = this.animations.get(name);
     if (!action) {
-      logger.warn(`Animation not found: ${name}`);
+      if (!this._warnedAnims.has(name)) {
+        this._warnedAnims.add(name);
+        logger.warn(`Animation not found: ${name}`);
+      }
       return;
     }
 
@@ -246,7 +432,7 @@ export class PlayerModel {
     // restarts the clip every cycle (bunny-hop midair); a frozen clamp
     // reads as a statue. The slow reversed tuck↔extend cycle reads as
     // flailing/swimming through air and needs no separate fall anim.
-    if (name === 'Death') {
+    if (name === 'Death' || name === 'UAL_Death01') {
       action.setLoop(THREE.LoopOnce, 1);
       action.clampWhenFinished = true;
     } else if (ONESHOT_CLIPS.has(name)) {
@@ -263,6 +449,8 @@ export class PlayerModel {
     
     action.play();
     this.currentAction = action;
+    this.currentClipName = name;
+    this.playingUAL = name.startsWith('UAL_');
   }
 
   get animationState(): AnimationState {
@@ -277,7 +465,132 @@ export class PlayerModel {
   // Force animation switch without checking current state (for hysteresis)
   forceAnimationState(state: AnimationState): void {
     this.currentState = state;
-    this.playAnimation(ANIM_NAMES[state]);
+    const [ual, fallback] = ANIM_NAMES[state];
+    // Prefer the retargeted clip; fall back to the native emote until the
+    // UAL bake lands (or forever if the retarget failed).
+    this.playAnimation(this.animations.has(ual) ? ual : fallback);
+  }
+
+  /**
+   * Bake the Quaternius UAL clips onto the robot skeleton — once per
+   * process. The first loaded model pays the resample; every later
+   * instance reuses the name-keyed clip data (all robots share the same
+   * rest pose, so the results are identical).
+   */
+  private retargetUAL(): void {
+    PlayerModel.ualSource ??= (async () => {
+      const gltf = await new GLTFLoader().loadAsync('/assets/models/robot-anims.glb');
+      const src = gltf.scene;
+      src.updateMatrixWorld(true);
+
+      // No meshes in the trimmed GLB — the joints arrive as plain
+      // Object3Ds. retargetClip only needs .skeleton.bones to iterate;
+      // hand it a duck-typed skeleton over the DEF-* hierarchy.
+      const srcBones: THREE.Object3D[] = [];
+      src.traverse(o => { if (normBone(o.name).startsWith('def')) srcBones.push(o); });
+      (src as unknown as { skeleton: object }).skeleton = {
+        bones: srcBones,
+        // PropertyBinding.findNode resolves track node names through this.
+        getBoneByName(n: string) { return srcBones.find(b => b.name === n); },
+      };
+      const srcByNorm = new Map(srcBones.map(b => [normBone(b.name), b]));
+      const srcHip = srcByNorm.get('defhips');
+      if (!srcHip) throw new Error('UAL rig missing DEF-hips');
+      return { src, srcBones, srcByNorm, srcHip, clips: gltf.animations };
+    })().catch(e => {
+      logger.warn('UAL anims failed to load — native clips only', e);
+      PlayerModel.ualSource = null; // let a later model retry (e.g. transient 404)
+      return Promise.reject(e);
+    });
+
+    PlayerModel.ualSource.then(({ src, srcBones, srcByNorm, srcHip, clips }) => {
+      if (this._disposed || !this.mixer || !this.model) return;
+      if (!PlayerModel.bakedClips) {
+        // Target: this model's skinned mesh + its full skeleton.
+        let target: THREE.SkinnedMesh | undefined;
+        this.model.traverse(o => { if (!target && (o as THREE.SkinnedMesh).isSkinnedMesh) target = o as THREE.SkinnedMesh; });
+        if (!target) return;
+        target.skeleton.pose();
+        target.updateMatrixWorld(true);
+
+        // names: target bone name → source bone name
+        const names: Record<string, string> = {};
+        for (const b of target.skeleton.bones) {
+          const want = UAL_BONE_MAP[b.name];
+          const hit = want && srcByNorm.get('def' + want);
+          if (hit) names[b.name] = hit.name;
+        }
+
+        // Rest-pose correction — the load-bearing trick for mixed rigs.
+        // retarget copies the SOURCE bone's world rotation onto the target
+        // bone each frame, so any bind-pose difference (mannequin T-pose vs
+        // robot rest, differing bone axis conventions) bakes a constant
+        // tilt into every clip — the 'Jump_Loop face-down' artifact.
+        // localOffsets[b] = srcRest⁻¹ × tgtRest makes rest→rest and turns
+        // the animation into a DELTA applied on the robot's own skeleton.
+        const localOffsets: Record<string, THREE.Matrix4> = {};
+        const _m1 = new THREE.Matrix4();
+        const qs = new THREE.Quaternion();
+        const qt = new THREE.Quaternion();
+        logger.debug('UAL skeleton bones', target.skeleton.bones.map(b => b.name));
+        for (const [tName, sName] of Object.entries(names)) {
+          // Limb bones share the Blender Y-along-bone convention, so the
+          // absolute world-rotation copy is already correct for them — an
+          // offset would convert raises into tiny rest-relative deltas and
+          // flatten them. The TORSO chain (hips/abdomen/torso/neck/head) is
+          // different: the mannequin's spine rest pose leans differently
+          // than the chibi robot's, and absolute copy bakes a constant
+          // forward hunch into every clip. Delta-map the torso, keep limbs
+          // absolute.
+          if (!/^(Hips|Abdomen|Torso_1|Neck|Head)$/.test(tName)) continue;
+          const tb = target.skeleton.getBoneByName(tName);
+          const sb = srcBones.find(b => b.name === sName);
+          if (!tb || !sb) continue;
+          sb.getWorldQuaternion(qs).invert();
+          // Rest quat in SKELETON space — retarget runs with
+          // target.matrixWorld = identity, so the model group's own π yaw
+          // must be stripped, else it gets baked into every frame twice.
+          qt.setFromRotationMatrix(_m1.copy(this.model.matrixWorld).invert().multiply(tb.matrixWorld));
+          localOffsets[tName] = new THREE.Matrix4().makeRotationFromQuaternion(qs.clone().multiply(qt));
+        }
+
+        logger.debug('UAL offsets built', Object.keys(localOffsets));
+
+        // Hip translation scale: ratio of rest-pose hip offsets in each
+        // rig's local units (mannequin ~1.8m vs chibi robot proportions).
+        const tgtHip = target.skeleton.bones.find(b => names[b.name] === srcHip.name);
+        const scale = tgtHip && srcHip.position.lengthSq() > 0
+          ? tgtHip.position.length() / srcHip.position.length() : 1;
+
+        const t0 = performance.now();
+        const baked = new Map<string, THREE.AnimationClip>();
+        for (const clip of clips) {
+          const rt = SkeletonUtils.retargetClip(target, src, clip, {
+            names,
+            hip: srcHip.name,
+            scale,
+            fps: 30, // keep resampled tracks small — clips ship at 30 anyway
+            // Runtime-supported but missing from the .d.ts — per-target-bone
+            // offset matrices applied after the source world rotation.
+            localOffsets,
+          } as Parameters<typeof SkeletonUtils.retargetClip>[3]);
+          // retargetClip emits '.bones[Name].prop' tracks that only bind via
+          // a skeleton on the mixer root — our mixer roots at the model
+          // group, so rewrite to plain 'Name.prop' like native GLTF tracks.
+          for (const t of rt.tracks) t.name = t.name.replace(/^\.bones\[(.+)\]\./, '$1.');
+          rt.name = 'UAL_' + clip.name;
+          baked.set(rt.name, rt);
+        }
+        logger.debug(`UAL retarget baked ${baked.size} clips in ${(performance.now() - t0).toFixed(0)}ms`);
+        PlayerModel.bakedClips = baked;
+      }
+      for (const [name, clip] of PlayerModel.bakedClips) {
+        this.animations.set(name, this.mixer.clipAction(clip));
+      }
+      // Re-resolve the current state onto the better clip if one landed.
+      const want = ANIM_NAMES[this.currentState][0];
+      this.playAnimation(this.animations.has(want) ? want : (this.currentClipName ?? 'Idle'));
+    }).catch(() => { /* load failure already logged; native clips remain */ });
   }
 
   update(dt: number): void {
@@ -295,6 +608,18 @@ export class PlayerModel {
       ab.last.setFromAxisAngle(X_AXIS, -this.aimPitch * ab.factor);
       ab.bone.quaternion.multiply(ab.last);
     }
+    // Retargeted clips don't drive the robot's IK foot bones — pin each
+    // foot to its shin tip and give it the shin's orientation.
+    if (this.playingUAL && this.footSnaps.length) {
+      for (const fs of this.footSnaps) {
+        fs.tip.getWorldPosition(_footW); // forces fresh chain matrices
+        const parent = fs.foot.parent!;
+        fs.foot.position.copy(parent.worldToLocal(_footW));
+        fs.shin.getWorldQuaternion(_footQ);
+        parent.getWorldQuaternion(_footPQ).invert();
+        fs.foot.quaternion.copy(_footPQ.multiply(_footQ));
+      }
+    }
     // Recoil: exponential decay kick on the gun (position + muzzle flip)
     if (this.gun && this.recoil > 0) {
       this.recoil = Math.max(0, this.recoil - dt * 7);
@@ -311,12 +636,34 @@ export class PlayerModel {
     } else if (this.muzzleFlash && this.muzzleFlash.scale.x > 0) {
       this.muzzleFlash.scale.setScalar(0);
     }
+    // Damage flash: emissive snaps toward white then decays back to each
+    // material's own baseline (the gun keeps its 0x334455 glow).
+    if (this.dmgFlash > 0) {
+      this.dmgFlash = Math.max(0, this.dmgFlash - dt);
+      const k = this.dmgFlash / 0.15;
+      for (const f of this.flashMats) {
+        f.m.emissive.copy(f.e).lerp(_white, k);
+        f.m.emissiveIntensity = f.i + k * 2.5;
+      }
+    }
   }
 
-  // Procedural fire kick + muzzle flash — call when the remote player shoots
-  fire(): void {
+  /** Damage white-pop — creature-style hit readability on the robot body. */
+  damageFlash(): void {
+    this.dmgFlash = 0.15;
+  }
+
+  // Procedural fire kick + muzzle flash — call when the remote player shoots.
+  // weaponType tints the flash so an LG blast reads differently to a shotgun.
+  fire(weaponType?: number): void {
     this.recoil = 1;
     this.flashTTL = 0.09;
+    // Reset to the default tint too — a shotgun shouldn't leave the next
+    // LG shot flashing amber.
+    if (this.muzzleFlash) {
+      const glow = weaponType !== undefined ? getProjectileConfig(weaponType)?.glowColor : undefined;
+      (this.muzzleFlash.material as THREE.SpriteMaterial).color.set(glow ?? 0xaad4ff);
+    }
   }
 
   setPosition(x: number, y: number, z: number): void {
@@ -354,7 +701,7 @@ export class PlayerModel {
 
   setColliderVisible(visible: boolean): void {
     if (this.colliderGizmo) {
-      this.colliderGizmo.visible = visible;
+      this.colliderGizmo.visible = visible && urlParams.debug;
     }
   }
 
@@ -369,7 +716,7 @@ export class PlayerModel {
   addColliderGizmo(): void {
     if (this.colliderGizmo && this.model && !this.model.children.includes(this.colliderGizmo)) {
       this.model.add(this.colliderGizmo);
-      this.colliderGizmo.visible = true;
+      this.colliderGizmo.visible = urlParams.debug;
       logger.debug('COLLIDER GIZMO RE-ADDED to model');
     }
   }
@@ -382,6 +729,7 @@ export class PlayerModel {
 
   dispose(): void {
     logger.debug('DISPOSE called');
+    this._disposed = true;
     if (this.model) {
       this.scene.remove(this.model);
       logger.debug('MODEL REMOVED from scene');
@@ -390,6 +738,7 @@ export class PlayerModel {
       this.model = null;
       this.mixer = null;
       this.currentAction = null;
+      this.gibParts = null; // just (mesh, indices) — nothing GPU-owned here
     }
     if (this.colliderGizmo) {
       // Collider gizmo is a child of the model, so it's already removed when model is removed

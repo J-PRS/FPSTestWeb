@@ -183,9 +183,13 @@ export function createFire(deps: CombatDeps, hooks: FireHooks) {
     // The crack that sells it — positional impact only when the punch lands
     if (connected) { sfx.at(connected, 'impact', 1); sfx.hitMarker(true); }
 
-    // Players go through the authoritative AOE claim
+    // Players go through the authoritative AOE claim; the swing itself
+    // rides the cosmetic fire relay so observers see/hear the punch.
     const networkManager = deps.lazyNetworkManager();
     if (networkManager?.isConnected()) {
+      networkManager.sendShotFired({
+        weaponType: WeaponType.Melee, dir: { x: e.dir.x, y: e.dir.y, z: e.dir.z },
+      });
       networkManager.sendAOEShot({
         position: { x: _meleeHitPos.x, y: _meleeHitPos.y, z: _meleeHitPos.z },
         weaponType: WeaponType.Melee, excludeTargetId: null,

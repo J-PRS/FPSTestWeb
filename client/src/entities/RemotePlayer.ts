@@ -352,6 +352,7 @@ export class RemotePlayer {
   /** Non-lethal hit feedback — the model plays the 'No' flinch briefly. */
   flinch(): void {
     if (!this._isDead) this.hitT = 0.35;
+    if (this._loaded) this._model.damageFlash(); // creature-style white pop
     if (this._shielded) this.shieldBubble?.flash(); // soaked — flare the lattice
   }
 
@@ -428,6 +429,10 @@ export class RemotePlayer {
   respawn(position: { x: number; y: number; z: number }): void {
     this._isDead = false;
     resetCorpse(this.corpse);
+    // Corpse shrink writes the MODEL's scale directly — reset it here or
+    // a respawned player keeps the shrunken size forever (tickAlive never
+    // re-asserts scale).
+    this._model.setScale(1);
     this.position.set(position.x, position.y, position.z);
     this.previousPosition.copy(this.position);
     this.targetPosition.copy(this.position);
@@ -498,11 +503,11 @@ export class RemotePlayer {
   }
 
   // Remote fired a weapon — kick the gun's procedural recoil
-  fire(): void {
+  fire(weaponType?: number): void {
     // Only re-arm once the previous oneshot expired — spam-restarting the
     // clip under rapid fire pins the model mid-Punch
     if (!this._isDead && this.shootT <= 0) this.shootT = 0.3;
-    if (this._loaded) this._model.fire();
+    if (this._loaded) this._model.fire(weaponType);
   }
 
   // Predicted knockback: run the victim through dead reckoning for ~1 RTT
@@ -531,6 +536,9 @@ export class RemotePlayer {
 
   dispose(): void {
     logger.debug(`DISPOSE called`, { playerId: this.playerId, instanceId: this.instanceId });
+    // Drop the loaded flag too — a dangling tick (debug hooks, orphaned
+    // owner loop) must not walk into a cleared animation map.
+    this._loaded = false;
     this._model.dispose();
     if (this.gizmo) {
       this.gizmo.dispose();

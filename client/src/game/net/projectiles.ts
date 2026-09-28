@@ -52,7 +52,7 @@ export function wireProjectiles(ctx: NetCtx): void {
     deps.world.projectiles.push(remoteProjectile);
     remoteProjectiles.set(projectileId, remoteProjectile);
     // Gun recoil kick on the shooter's remote model
-    deps.world.remotePlayers.get(ownerId)?.fire();
+    deps.world.remotePlayers.get(ownerId)?.fire(weaponType);
     sfx.shotAt(origin, cfg.weaponType);
   };
 
@@ -66,7 +66,7 @@ export function wireProjectiles(ctx: NetCtx): void {
       ? new THREE.Vector3(pos.x, pos.y, pos.z)
       : rp?.position;
     if (!origin) return;
-    rp?.fire();
+    rp?.fire(weaponType);
     sfx.shotAt(origin, weaponType ?? 0);
     // The LG beam is instant on the shooter's screen — paint the same
     // flash for observers along the claimed aim (clamped, cosmetic-only).
