@@ -167,6 +167,29 @@ plasmaGlow.position.z = -0.272;
 plasma.add(plasmaGlow);
 plasma.visible = false;
 
+// Weapon — plasma gun (Quake-style rapid bolts): shorter and squatter
+// than the cannon — three prongs around a hot blue emitter, reads as a
+// repeater, not a launcher.
+const plasmagun = new THREE.Group();
+plasmagun.add(mkTube(0.11, 0.12, 0.34, -0.05, bodyMat));
+for (let i = 0; i < 3; i++) {
+  const prong = mkTube(0.025, 0.025, 0.22, -0.2, darkMat);
+  const a = (i / 3) * Math.PI * 2;
+  prong.position.x = Math.cos(a) * 0.09;
+  prong.position.y = Math.sin(a) * 0.09;
+  plasmagun.add(prong);
+}
+plasmagun.add(mkTube(0.12, 0.13, 0.05, -0.22, darkMat)); // emitter collar
+plasmagun.add(mkBore(0.09, -0.246));
+const plasmagunGlow = new THREE.Mesh(
+  new THREE.CylinderGeometry(0.08, 0.08, 0.02, 16),
+  new THREE.MeshBasicMaterial({ color: 0x44bbff })
+);
+plasmagunGlow.rotation.x = Math.PI / 2;
+plasmagunGlow.position.z = -0.247;
+plasmagun.add(plasmagunGlow);
+plasmagun.visible = false;
+
 // Weapon 7 — railgun: Q3's fat coil-cannon. Thick central bore, a stack
 // of fat accelerator coils ribbing the barrel, glowing muzzle ring.
 // The silhouette reads "industrial capacitor bank", not sniper rifle.
@@ -379,7 +402,8 @@ const models: [number, THREE.Group][] = [
   [WeaponType.Mortar, mortar],
   [WeaponType.GrenadeLauncher, gl],
   [WeaponType.Flak, flak],
-  [WeaponType.Plasma, plasma],
+  [WeaponType.PlasmaCannon, plasma],
+  [WeaponType.PlasmaGun, plasmagun],
   [WeaponType.Railgun, rail],
   [WeaponType.Lightning, lg],
   [WeaponType.Shotgun, sg],

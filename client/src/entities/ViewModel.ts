@@ -68,7 +68,8 @@ export class ViewModel {
   private static readonly MUZZLE_Z: Record<number, number> = {
     [WeaponType.Rocket]: -0.44, [WeaponType.Disc]: -0.20, [WeaponType.DiscPull]: -0.20,
     [WeaponType.Chaingun]: -0.36, [WeaponType.Mortar]: -0.28, [WeaponType.GrenadeLauncher]: -0.42,
-    [WeaponType.Flak]: -0.28, [WeaponType.Plasma]: -0.28, [WeaponType.Railgun]: -0.43,
+    [WeaponType.Flak]: -0.28, [WeaponType.PlasmaCannon]: -0.28, [WeaponType.PlasmaGun]: -0.26,
+    [WeaponType.Railgun]: -0.43,
     [WeaponType.Shotgun]: -0.41, [WeaponType.Cannon]: -0.53,
     [WeaponType.RocketLauncher]: -0.44, // just past the warhead tip
     [WeaponType.Lightning]: -0.42, // emitter ball at the prong tips
@@ -257,7 +258,8 @@ export class ViewModel {
     [WeaponType.Mortar]:          [7,  0.00, 0xffdd99, 1.6, 1.5],   // slow heavy drop-kick, big flash
     [WeaponType.GrenadeLauncher]: [11, 0.03, 0xffc866, 0.8, 0.9],   // pump pop
     [WeaponType.Flak]:            [10, 0.09, 0xffbb55, 1.3, 1.0],   // hard shove + sideways shudder
-    [WeaponType.Plasma]:          [15, 0.00, 0x44ffbb, 0.5, 0.6],   // light tap, green glow
+    [WeaponType.PlasmaCannon]:          [15, 0.00, 0x44ffbb, 0.5, 0.6],   // light tap, green glow
+    [WeaponType.PlasmaGun]:       [14, 0.01, 0x66ccff, 0.35, 0.35], // repeater — small kick, cool flash
     [WeaponType.Railgun]:         [18, 0.01, 0x77ccff, 1.1, 0.9],   // fast snap, cyan discharge
     [WeaponType.Lightning]:       [16, 0.05, 0x8fdcff, 0.4, 0.4],   // per-tick hum — tiny flash, sideways jitter
     [WeaponType.Cannon]:          [8,  0.02, 0xffaa55, 1.5, 1.3],   // heavy naval-gun thump, big warm flash

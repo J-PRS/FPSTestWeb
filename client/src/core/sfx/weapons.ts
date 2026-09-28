@@ -88,7 +88,7 @@ const SHOT_LAYERS: Partial<Record<number, [name: string, gain: number, rate?: nu
   ],
 };
 
-const SHOT_SAMPLES: Partial<Record<number, [string, number]>> = {
+const SHOT_SAMPLES: Partial<Record<number, [string, number, number?]>> = {
   [WeaponType.Rocket]:          ['shot_rocket', 0.9],
   [WeaponType.Chaingun]:        ['shot_chaingun', 0.8],
   [WeaponType.Mortar]:          ['shot_cannon', 1.0],
@@ -96,7 +96,10 @@ const SHOT_SAMPLES: Partial<Record<number, [string, number]>> = {
   [WeaponType.Grenade]:         ['shot_energy', 0.8],
   // Flak is layered below in SHOT_LAYERS — not a shotgun pump.
 
-  [WeaponType.Plasma]:          ['shot_plasma', 0.9],
+  [WeaponType.PlasmaCannon]:    ['shot_plasma', 0.9],
+  // Plasma gun bolt — reuse the plasma shot but pitched up + quieter;
+  // at ~8/s a fat sample would smear into a hum.
+  [WeaponType.PlasmaGun]:       ['shot_plasma', 0.4, 1.6],
   [WeaponType.Railgun]:         ['shot_energy', 1.0],
 };
 
@@ -116,7 +119,7 @@ function shootInto(g: GainNode, weaponType: number): void {
   // identical-waveform buzz is most audible
   if (layered && layer(g, layered, weaponType === WeaponType.Chaingun ? 0.22 : 0.1)) return;
   const s = SHOT_SAMPLES[weaponType];
-  if (s && sample(s[0], g, s[1])) return;
+  if (s && sample(s[0], g, s[1], s[2])) return;
   switch (weaponType) {
     case WeaponType.Rocket:    osc('square', 900, 300, 0.12, 0.25, g); noise(0.12, 0.15, g, 'lowpass', 2000, 400); break;
     case WeaponType.Disc:
@@ -137,7 +140,14 @@ function shootInto(g: GainNode, weaponType: number): void {
     case WeaponType.Shotgun:   noise(0.18, 0.6, g, 'lowpass', 1800, 250); osc('sine', 160, 55, 0.18, 0.5, g); noise(0.05, 0.3, g, 'highpass', 3500, 5000); break;
     case WeaponType.Cannon:    osc('sine', 130, 45, 0.3, 0.7, g); noise(0.25, 0.35, g, 'lowpass', 800, 150); osc('square', 700, 200, 0.06, 0.15, g); break;
     case WeaponType.RocketLauncher: osc('sine', 150, 60, 0.2, 0.5, g); noise(0.3, 0.3, g, 'bandpass', 800, 500, 1.5); break; // thump + whoosh
-    case WeaponType.Plasma:    osc('sawtooth', 2200, 400, 0.14, 0.18, g); osc('sine', 3300, 900, 0.1, 0.1, g); break;
+    case WeaponType.PlasmaCannon:    osc('sawtooth', 2200, 400, 0.14, 0.18, g); osc('sine', 3300, 900, 0.1, 0.1, g); break;
+    case WeaponType.PlasmaGun:   {
+      // Quick zap — jittered like chaingun so the volley doesn't phase
+      const j = 1 + (Math.random() - 0.5) * 0.3;
+      osc('sawtooth', 2800 * j, 900 * j, 0.07, 0.13, g);
+      osc('sine', 3800 * j, 1400, 0.05, 0.07, g);
+      break;
+    }
     case WeaponType.Railgun:   osc('sawtooth', 2600, 200, 0.22, 0.25, g); noise(0.15, 0.2, g, 'highpass', 4000, 6000); break;
     case WeaponType.Lightning: {
       // Per-tick crackle — jittered heavily so 22/s reads as a live arc,

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-import { MAX_ENERGY, MAX_HEALTH, JET_DRAIN, JET_CHARGE, FIRE_RATE, DISC_RATE, CHAINGUN_RATE, MORTAR_RATE, GL_RATE, FLAK_RATE, PLASMA_RATE, RAILGUN_RATE, LG_RATE, SHOTGUN_RATE, CANNON_RATE, RKT_RATE, PISTOL_RATE, REVOLVER_RATE, STICKY_RATE, MELEE_COOLDOWN, MELEE_LUNGE } from '../core/config.js';
+import { MAX_ENERGY, MAX_HEALTH, JET_DRAIN, JET_CHARGE, FIRE_RATE, DISC_RATE, CHAINGUN_RATE, MORTAR_RATE, GL_RATE, FLAK_RATE, PLASMA_RATE, RAILGUN_RATE, LG_RATE, SHOTGUN_RATE, CANNON_RATE, RKT_RATE, PISTOL_RATE, REVOLVER_RATE, STICKY_RATE, PLASMAGUN_RATE, MELEE_COOLDOWN, MELEE_LUNGE } from '../core/config.js';
 
 import { Terrain } from '../world/terrain.js';
 import { PlayerSkills, SHIELD_DMG_PER_ENERGY } from './player/skills.js';
@@ -269,12 +269,12 @@ export class Player {
     settings.set('fps-pack', p);
   }
   get sidearmWid(): number { return Player.SIDEARM_WIDS[this.sidearm]; }
-  private static readonly WEAPON_RATES = [FIRE_RATE, DISC_RATE, CHAINGUN_RATE, MORTAR_RATE, GL_RATE, FLAK_RATE, PLASMA_RATE, RAILGUN_RATE, LG_RATE, SHOTGUN_RATE, CANNON_RATE, RKT_RATE, PISTOL_RATE, REVOLVER_RATE, STICKY_RATE];
+  private static readonly WEAPON_RATES = [FIRE_RATE, DISC_RATE, CHAINGUN_RATE, MORTAR_RATE, GL_RATE, FLAK_RATE, PLASMA_RATE, RAILGUN_RATE, LG_RATE, SHOTGUN_RATE, CANNON_RATE, RKT_RATE, PISTOL_RATE, REVOLVER_RATE, STICKY_RATE, PLASMAGUN_RATE];
   // wid (loadout/WEAPON_RATES index) → WeaponType wire id. The enum has
   // Grenade=2/Slam=8/Railgun=9/Melee=10 gaps, so positional ids diverge
   // from wid 2 onward — viewmodel/HUD consumers need this mapping.
   static widToWeaponType(wid: number): WeaponType {
-    return ([0, 1, 3, 4, 5, 6, 7, 9, 12, 13, 14, 15, 16, 17, 18] as const)[wid] ?? WeaponType.Rocket;
+    return ([0, 1, 3, 4, 5, 6, 7, 9, 12, 13, 14, 15, 16, 17, 18, 23] as const)[wid] ?? WeaponType.Rocket;
   }
   private _lastJetpackSend = 0;
 
@@ -320,6 +320,8 @@ export class Player {
   onPistol: ((e: FireEvent) => void) | null = null;
   onRevolver: ((e: FireEvent) => void) | null = null;
   onMelee: ((e: FireEvent) => void) | null = null;
+  onSticky: ((e: FireEvent) => void) | null = null;
+  onPlasmaGun: ((e: FireEvent) => void) | null = null;
   onWeaponSwitch: ((index: number) => void) | null = null;
   /** Pack items — main wires these to the deployables manager. */
   onDeploy: (() => void) | null = null;
@@ -667,7 +669,7 @@ export class Player {
         this.onFire, this.onDiscLauncher, this.onChaingun, this.onMortar,
         this.onGrenadeLauncher, this.onFlak, this.onPlasma, this.onRailgun,
         this.onLightning, this.onShotgun, this.onCannon, this.onRocketLauncher,
-        this.onPistol, this.onRevolver,
+        this.onPistol, this.onRevolver, this.onSticky, this.onPlasmaGun,
       ] as const)[wid] ?? this.onFire;
       fireCallback?.({ origin: this.pos.clone(), dir: this.getAimDir(), playerVel: this.vel.clone() });
     }

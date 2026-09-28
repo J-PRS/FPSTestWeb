@@ -17,7 +17,7 @@ export enum WeaponType {
   Mortar = 4,
   GrenadeLauncher = 5,
   Flak = 6,
-  Plasma = 7,
+  PlasmaCannon = 7, // the fat slow T1/T2 bolt — was 'Plasma'; id kept for wire compat
   Slam = 8, // skill ground-slam — not a projectile, but lands as an AOE
   Railgun = 9,
   Melee = 10, // E-key punch — not a projectile; aoe fields drive server validation
@@ -33,6 +33,7 @@ export enum WeaponType {
   Javelin = 20,       // belt throw: fast flat dart — direct damage only, no splash
   ImpactGrenade = 21, // belt throw: flat arc, contact pop, low damage, big shove
   ClusterBomblet = 22,// spawned by ClusterBomb detonation — never fired directly
+  PlasmaGun = 23,     // Quake-style rapid plasma: fast cadence, mid-speed fat bolt
 }
 
 export interface WeaponStats {
@@ -193,7 +194,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     hitGrow: 0.5,
     maxLifetime: 4.0,
   },
-  [WeaponType.Plasma]: {
+  [WeaponType.PlasmaCannon]: {
     directDamage: 35,
     aoeDamage: 12,
     aoeRadius: 5.5,
@@ -205,6 +206,23 @@ export const WEAPONS: Record<number, WeaponStats> = {
     hitMin: 0.0,
     hitMax: 2.0, // tight proxy — the fat bolt is already generous
     hitGrow: 2.0,
+  },
+  [WeaponType.PlasmaGun]: {
+    // Quake 2/3 plasma: rapid volley of fat bolts — chain-like cadence
+    // (~7.7/s, ~108dps) but a visible projectile you can dodge, so it
+    // pays below chaingun's effective DPS vs movers and above vs track.
+    directDamage: 14,
+    aoeDamage: 4,
+    aoeRadius: 2.5, // tiny pop — bolts sting, they don't splash
+    knockbackForce: 8.0,
+    forceMode: 'push',
+    speed: 160.0,   // slower than chain slugs (250), fast enough to lead lightly
+    gravity: 0,
+    bodyRadius: 0.32, // visibly chunky bolt — generous vs players
+    hitMin: 0.0,
+    hitMax: 1.2,
+    hitGrow: 0.3,
+    maxLifetime: 1.5, // ~240m of reach
   },
   [WeaponType.Railgun]: {
     // Quake railgun: 80dmg slug at 450 m/s ≈ hitscan past ~200m. Small AOE

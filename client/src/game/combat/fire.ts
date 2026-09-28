@@ -8,7 +8,7 @@ import {
   ROCKET_CONFIG, DISC_CONFIG, GRENADE_CONFIG, CHAINGUN_CONFIG,
   MORTAR_CONFIG, GL_CONFIG, FLAK_CONFIG, PLASMA_CONFIG, RAILGUN_CONFIG,
   BELT_DISC_CONFIG, SHOTGUN_CONFIG, CANNON_CONFIG, RKT_CONFIG,
-  PISTOL_CONFIG, REVOLVER_CONFIG, STICKY_CONFIG,
+  PISTOL_CONFIG, REVOLVER_CONFIG, STICKY_CONFIG, PLASMAGUN_CONFIG,
   CLUSTER_CONFIG, JAVELIN_CONFIG, IMPACT_CONFIG,
 } from '../../projectiles/index.js';
 import type { BeltItem } from '../../entities/Player.js';
@@ -208,6 +208,20 @@ export function createFire(deps: CombatDeps, hooks: FireHooks) {
     spawnProjectile(PLASMA_CONFIG, e);
   }
 
+  // Rapid plasma: light kick, bolt per trigger — the cadence sells it.
+  function onPlasmaGun(e: FireArgs): void {
+    deps.lazyViewModel()?.kick(0.2);
+    spawnProjectile(PLASMAGUN_CONFIG, e);
+  }
+
+  // Sticky launcher as a primary slot (wid 14) — belt throws reuse the
+  // same config but this path never got a callback, so the slot silently
+  // fell back to rockets.
+  function onStickyLauncher(e: FireArgs): void {
+    deps.lazyViewModel()?.kick(0.8);
+    spawnProjectile(STICKY_CONFIG, e);
+  }
+
   // Railgun: hypervelocity slug, big kick — the precision slot.
   function onRailgun(e: FireArgs): void {
     deps.lazyViewModel()?.kick(1.8);
@@ -264,7 +278,7 @@ export function createFire(deps: CombatDeps, hooks: FireHooks) {
     spawnProjectile,
     onFire, onBelt, onDiscLauncher, onChaingun, onMortar, onGrenadeLauncher,
     onFlak, onPlasma, onRailgun, onShotgun, onCannon, onRocketLauncher,
-    onPistol, onRevolver,
+    onPistol, onRevolver, onSticky: onStickyLauncher, onPlasmaGun,
     onMelee: melee,
   };
 }

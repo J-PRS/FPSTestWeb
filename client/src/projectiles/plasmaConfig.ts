@@ -7,11 +7,12 @@ import { WEAPONS, AOE_VFX_SCALE } from '../../../shared/weapons.js';
 
 import type { ProjectileConfig } from './types.js';
 
-// T1/T2 plasma: fat glowing bolt, no gravity, small splash — the
-// sustained midrange weapon between chaingun and rocket.
+// T1/T2 plasma cannon: fat glowing bolt, no gravity, small splash — the
+// sustained midrange weapon between chaingun and rocket. The rapid-fire
+// Quake-style sibling is PLASMAGUN_CONFIG.
 export const PLASMA_CONFIG: ProjectileConfig = {
   name: 'plasma',
-  displayName: 'Plasma Gun',
+  displayName: 'Plasma Cannon',
   weaponType: 7,
   speed: WEAPONS[7].speed,
   gravity: WEAPONS[7].gravity,
