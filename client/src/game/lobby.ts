@@ -85,9 +85,11 @@ export class Lobby {
   }
 
   constructor(private deps: LobbyDeps) {
-    const btn0 = btn('LOBBY');
-    btn0.classList.add('lb-open');
-    btn0.onclick = () => this.toggle();
+    // The trigger lives in the ESC menu (#lobby-open in index.html) —
+    // a floating HUD button during gameplay was HUD clutter. The panel
+    // mounts inside #overlay so menu-close takes it down too.
+    const openBtn = document.getElementById('lobby-open');
+    if (openBtn) openBtn.onclick = () => this.toggle();
 
     this.panel = document.createElement('div');
     this.panel.className = 'lb-panel';
@@ -107,7 +109,7 @@ export class Lobby {
     const mapRow = field('MAP');
     this.mapSelect = document.createElement('select');
     this.mapSelect.className = 'lb-input';
-    this.mapSelect.style.cssText = 'cursor:pointer;max-width:150px;';
+    this.mapSelect.style.cssText = 'cursor:pointer;flex:1;min-width:0;';
     mapRow.appendChild(this.mapSelect);
     const botsRow = field('BOTS');
     this.botsInput = document.createElement('input');
@@ -150,12 +152,21 @@ export class Lobby {
     input.placeholder = 'new room name';
     input.className = 'lb-input';
     input.style.flex = '1';
+    // Named-room joins honor the HOST MATCH pickers — a fresh room spins up
+    // from the selected spec + bot count instead of always landing bare.
+    const named = () => {
+      const v = input.value.trim();
+      if (!v) return;
+      const map = this.mapSelect.value || undefined;
+      const bots = this.botsInput.value === '' ? undefined : Math.max(0, Math.min(24, Number(this.botsInput.value) || 0));
+      this.join(v, map, bots);
+    };
     input.onkeydown = (e) => {
       e.stopPropagation();
-      if (e.key === 'Enter' && input.value.trim()) this.join(input.value.trim());
+      if (e.key === 'Enter') named();
     };
     const create = btn('JOIN');
-    create.onclick = () => input.value.trim() && this.join(input.value.trim());
+    create.onclick = named;
     newWrap.append(input, create);
 
     // Server + P2P — the URL params ?server=/​?p2p= still work for links,
@@ -173,7 +184,6 @@ export class Lobby {
     srvRow.append(srvIn, srvBtn);
 
     const p2pRow = field('P2P DUEL');
-    p2pRow.style.flexWrap = 'wrap';
     const p2pIn = document.createElement('input');
     p2pIn.maxLength = 24;
     p2pIn.placeholder = 'code';
@@ -181,26 +191,32 @@ export class Lobby {
     const savedP2p = settings.get('fps-p2p');
     p2pIn.value = savedP2p.includes(':') ? savedP2p.slice(savedP2p.indexOf(':') + 1) : '';
     p2pIn.className = 'lb-input';
-    p2pIn.style.cssText = 'flex:1;min-width:70px;margin:0 6px;';
+    p2pIn.style.cssText = 'flex:1;min-width:0;';
     p2pIn.onkeydown = (e) => e.stopPropagation();
     p2pRow.appendChild(p2pIn);
+    // Role buttons get their own row — inline flex-wrap left OFF stranded alone.
+    const p2pBtns = document.createElement('div');
+    p2pBtns.className = 'lb-quick';
     for (const role of ['host', 'join'] as const) {
       const b = btn(role.toUpperCase());
-      b.style.padding = '5px 8px';
       b.onclick = () => {
         const code = p2pIn.value.trim() || 'duel';
         settings.set('fps-p2p', `${role}:${code}`);
         location.reload();
       };
-      p2pRow.appendChild(b);
+      p2pBtns.appendChild(b);
     }
     const p2pOff = btn('OFF');
-    p2pOff.style.padding = '5px 8px';
     p2pOff.onclick = () => { settings.set('fps-p2p', ''); location.reload(); };
-    p2pRow.appendChild(p2pOff);
+    p2pBtns.appendChild(p2pOff);
 
-    this.panel.append(head, this.here, this.rows, hostLbl, mapRow, botsRow, hostBtn, quickLbl, quick, newWrap, connLbl, srvRow, p2pRow);
-    document.body.append(btn0, this.panel);
+    this.panel.append(head, this.here, this.rows, hostLbl, mapRow, botsRow, hostBtn, quickLbl, quick, newWrap, connLbl, srvRow, p2pRow, p2pBtns);
+    (document.getElementById('overlay') ?? document.body).appendChild(this.panel);
+    // Menu closed while the panel was open (resume / re-lock) — display:none
+    // hides it anyway, but the poll timer would keep burning for nothing.
+    new MutationObserver(() => {
+      if (!document.body.classList.contains('menu-open') && this.panel.style.display !== 'none') this.toggle();
+    }).observe(document.body, { attributes: true, attributeFilter: ['class'] });
   }
 
   /** Populate the map picker once per open — cheap, menu is user-paced. */

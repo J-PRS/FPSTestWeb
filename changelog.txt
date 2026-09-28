@@ -1,3 +1,4 @@
+2026-10-03 - lobby: named-room joins now honor map+bots pickers instead of always spawning bare
 2026-10-03 - fleet deploy coverage: bots plant turret/mine/station/drone claims; fixed fleet ghost-target rejects (remotes never pruned on playerLeft/kill)
 2026-10-03 - netReplay: real .rec wire captures replay through actual netHandlers headlessly (fixture: live duel room w/ fleet+server bots)
 2026-10-03 - netHandlers replay harness: new client/src/__tests__/netHarness.test.ts — real ServerMessages fed through the actual NetworkManager dispatch into real netHandlers, headless (fake deps, real RemoteSet/WorldState). 7 cases: gameState meta, join→tickUpdate→left lifecycle, kill feed, pickups, deployables roster, flagUpdate, correction snap threshold. setup.ts gained sessionStorage + window listeners + element children for Chat/NetworkManager
