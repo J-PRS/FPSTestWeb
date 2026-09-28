@@ -16,6 +16,7 @@ import { MessageHandler } from './MessageHandler.ts';
 import { BallSim } from './BallSim.ts';
 import { structureColliders } from '../../shared/ballSim.ts';
 import { hmHeight, type Heightfield } from '../../shared/heightfield.ts';
+import { RoomMoveSim } from './RoomMoveSim.ts';
 import { type MapSpec, resolveMapSpec } from '../../shared/mapSpec.ts';
 import { MODES, pickTeam, makeScores, bank, winner, type ModeId, type ModeSpec, type TeamScores } from '../../shared/teams.ts';
 import { ServerBots } from './ServerBots.ts';
@@ -63,6 +64,10 @@ export class Room {
   readonly deployables: RoomDeployables;
   /** Server-side simulations ticked each room tick, in order. */
   readonly sims: { tick(dt: number): void }[] = [];
+  /** Per-player movement shadow — MoveSim fed by inputMove, reconciled
+   *  against reported positions. Reported pos stays truth; divergence is
+   *  the anti-cheat signal. */
+  readonly moveSim: RoomMoveSim;
   /** Match-results journal hook — GameServer writes matches.jsonl and
    *  feeds /matches from it. Fired on every win condition. */
   onMatchEnd?: (record: { room: string; mode: string; winner: string; scores: Record<string, number>; players: { id: string; team?: string; kills: number; deaths: number }[] }) => void;
@@ -102,8 +107,17 @@ export class Room {
         onDeploy: (pid, kind, pos) => this.deployables.handleDeploy(pid, kind, pos),
         deployables: () => this.deployables.snapshot(),
         matchEndsAt: () => this.matchEndsAt,
+        moveInput: (pid, i) => this.moveSim.setInput(pid, {
+          forward: i.forward, right: i.right,
+          jumpPressed: !!i.jump, jumpHeld: !!i.jump, skiHeld: !!i.ski,
+        }),
+        moveReport: (pid, pos, yaw, vel) => this.moveSim.reconcile(pid, pos, yaw, vel),
+        moveResync: (pid, pos, yaw) => this.moveSim.resync(pid, pos, yaw),
+        moveTrack: (pid, pos, yaw) => this.moveSim.track(pid, pos, yaw),
+        moveUntrack: (pid) => this.moveSim.untrack(pid),
       },
     );
+    this.moveSim = new RoomMoveSim(field);
     this.ballSim = new BallSim(
       this.players,
       (msg) => this.connections.broadcast(msg),
@@ -167,6 +181,7 @@ export class Room {
       this.sims.push({ tick: (dt) => arena.tick(dt) });
     }
     this.sims.push({ tick: (dt) => this.deployables.tick(dt) });
+    this.sims.push({ tick: (dt) => this.moveSim.tick(dt) });
   }
 
   /** Flag tick — called from GameServer's room tick. Captures feed the
