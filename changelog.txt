@@ -1935,3 +1935,4 @@ server: superbot knob (FPS_SUPERBOT=substr: 3x speed, perfect aim, 400hp); flag 
 tools: ballreplay takes PVP_ROOM to probe non-default rooms
 hud: Tab scoreboard — team-grouped sections, PTS column, sorted by score/frags
 maps: structures[] spec field + raindance.json CTF map (henge midfield, team bases)
+netplay: friend/foe gizmo tint — teammates team-colored, enemies always red
