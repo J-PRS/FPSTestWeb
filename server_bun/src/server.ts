@@ -4,6 +4,7 @@ import { logger } from './logger.ts';
 import type { WebSocketData } from './types.ts';
 import { DemoStorage } from './DemoStorage.ts';
 import { RtcRelay } from './RtcRelay.ts';
+import { RtcServer } from './RtcServer.ts';
 import { join } from 'node:path';
 import { appendFileSync, mkdirSync } from 'node:fs';
 
@@ -12,6 +13,9 @@ const demoStorage = new DemoStorage(join(import.meta.dir, '..', 'demos'));
 // P2P signalling: /rtc sockets never touch GameServer — the relay just
 // shuttles SDP/ICE between the two members of a room.
 const rtcRelay = new RtcRelay();
+// Server-peer WebRTC tier: /rtcs sockets carry signalling; the negotiated
+// DataChannel is adapted onto GameServer as if it were a /ws socket.
+const rtcServer = new RtcServer(gameServer);
 
 const CORS_HEADERS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
@@ -179,21 +183,24 @@ const server = Bun.serve<WebSocketData>({
 
     open(ws) {
       if (ws.data.rtc) { rtcRelay.onOpen(ws); return; }
+      if (ws.data.rtcs) { rtcServer.onOpen(ws); return; }
       gameServer.onOpen(ws);
     },
 
     message(ws, message) {
       if (ws.data.rtc) { rtcRelay.onMessage(ws, message as string | ArrayBuffer); return; }
+      if (ws.data.rtcs) { rtcServer.onMessage(ws, message as string | ArrayBuffer); return; }
       gameServer.onMessage(ws, message as string | ArrayBuffer);
     },
 
     close(ws) {
       if (ws.data.rtc) { rtcRelay.onClose(ws); return; }
+      if (ws.data.rtcs) { rtcServer.onClose(ws); return; }
       gameServer.onClose(ws);
     },
 
     drain(ws) {
-      if (ws.data.rtc) return;
+      if (ws.data.rtc || ws.data.rtcs) return;
       gameServer.onDrain(ws);
     },
   },
@@ -220,6 +227,15 @@ const server = Bun.serve<WebSocketData>({
         return new Response('Bad room', { status: 400 });
       }
       if (srv.upgrade(req, { data: { playerId: '', connectedAt: Date.now(), rtc: true, room } })) {
+        return;
+      }
+      return new Response('Upgrade failed', { status: 400 });
+    }
+
+    // Server-peer WebRTC signalling: /rtcs — one shot offer/answer, then
+    // the DataChannel becomes the game socket.
+    if (url.pathname === '/rtcs') {
+      if (srv.upgrade(req, { data: { playerId: '', connectedAt: Date.now(), rtcs: true } })) {
         return;
       }
       return new Response('Upgrade failed', { status: 400 });

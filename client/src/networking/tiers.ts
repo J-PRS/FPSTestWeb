@@ -174,10 +174,22 @@ async function tryWebRTC(config: ConnectionConfig): Promise<GameTransport | null
   try {
     const pc = new RTCPeerConnection();
     const dc = pc.createDataChannel('game', { ordered: false, maxRetransmits: 0 });
-    // Signal over the plain WS path — the relay echoes envelopes verbatim.
-    const signal = new WebSocket(config.url.replace(/\/ws$/, '/rtc'));
+    // Signal over the dedicated /rtcs socket — one offer in, one answer out.
+    // The offer is sent only after ICE gathering completes so candidates
+    // are embedded in the SDP (non-trickle — the server doesn't accept
+    // trickle candidates; on LAN/host scenarios that's sufficient).
+    const signal = new WebSocket(config.url.replace(/\/ws$/, '/rtcs'));
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
+    if (pc.iceGatheringState !== 'complete') {
+      await new Promise<void>((res) => {
+        const t = setTimeout(res, 2500);
+        pc.addEventListener('icegatheringstatechange', () => {
+          if (pc.iceGatheringState === 'complete') { clearTimeout(t); res(); }
+        });
+      });
+    }
+    const sdp = pc.localDescription?.sdp ?? offer.sdp;
     const answer = await new Promise<RTCSessionDescriptionInit>((res, rej) => {
       const timer = setTimeout(() => rej(new Error('rtc signal timeout')), 3000);
       signal.onmessage = (ev) => {
@@ -187,7 +199,7 @@ async function tryWebRTC(config: ConnectionConfig): Promise<GameTransport | null
         } catch { /* not ours */ }
       };
       signal.onerror = () => rej(new Error('rtc signal error'));
-      signal.onopen = () => signal.send(JSON.stringify({ type: 'offer', sdp: offer.sdp }));
+      signal.onopen = () => signal.send(JSON.stringify({ type: 'offer', sdp }));
     });
     await pc.setRemoteDescription(answer);
     signal.close();

@@ -16,6 +16,8 @@ export interface WebSocketData {
   /** /rtc signalling sockets: relayed room-to-room, never reach GameServer. */
   rtc?: boolean;
   room?: string;
+  /** /rtcs signalling sockets: negotiate a server-peer DataChannel. */
+  rtcs?: boolean;
 }
 
 export interface PlayerState {

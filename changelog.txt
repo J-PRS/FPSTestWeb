@@ -1,3 +1,4 @@
+2026-09-26  netcode v2: server WebRTC peer (/rtcs + node-datachannel + RtcSocketAdapter into GameServer); client RTC/WT transports real; loopback-verified handshake
 2026-09-26  netcode v2: real client transports — WebTransport (datagram+bidi lanes) and server-facing WebRTC datachannel (unordered/unreliable, /rtc signaling); TieredTransport probes on ?net=
 2026-09-26  wire: tick frames carry server tickSeq; client drops stale/out-of-order frames; PROTOCOL_VERSION=10
 2026-09-26  netcode v2: TieredTransport default in NetworkManager — ?net=wt|rtc probes UDP tiers, falls back to WS
