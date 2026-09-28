@@ -86,7 +86,8 @@ surface. Detailed research lives in `_reports/`; this file is the current truth.
    spawn anchors, bases/objectives, bot count — all clamped with
    defaults; examples swarm/duel/nugwar/ctf). Server bots populate
    matches AND play objectives (flagGoal: grab exposed enemy flag, run
-   home as carrier, return dropped own flag, defend while flag moves).
+   home as carrier, escort teammate carriers, intercept thieves, return
+   dropped own flag; plated bots anchor defense at their stand).
    Server-owned CTF flags landed (RoomFlags: touch pickup, drop on
    death, planar capture ring, flagUpdate broadcast); live-verified
    bot flag grabs over the wire. `botFill` spec keeps a room at N total

@@ -44,6 +44,8 @@ const isSuper = (id: string) => SUPERBOT !== '' && id.includes(SUPERBOT);
 export class ServerBots {
   private brains = new Map<string, BotBrain>();
   private loadouts = new Map<string, BotLoadout>();
+  /** CTF role: plated anchors hold the stand, the rest press. */
+  private roles = new Map<string, 'offense' | 'defense'>();
   /** Bots we saw dead — respawn transition resyncs the move shadow. */
   private deadSet = new Set<string>();
   /** inputMove ordering key — the shadow drops non-increasing seqs. */
@@ -77,6 +79,9 @@ export class ServerBots {
       const loadout = BOT_LOADOUTS[(this.nextIdx - 2 + BOT_LOADOUTS.length) % BOT_LOADOUTS.length];
       const p = this.room.players.addPlayer(id, undefined, loadout.perk);
       this.loadouts.set(id, loadout);
+      // CTF role from the loadout: plated anchors hold home, everyone else
+      // presses. A whole team grabbing leaves the stand unguarded.
+      this.roles.set(id, loadout.perk === 'plated' ? 'defense' : 'offense');
       p.isBot = true;
       if (isSuper(id)) p.health = 400; // superbot tanks a beating
       p.lastSeen = Date.now();
@@ -105,6 +110,7 @@ export class ServerBots {
   untrack(playerId: string): void {
     this.brains.delete(playerId);
     this.loadouts.delete(playerId);
+    this.roles.delete(playerId);
     this.room.moveSim.untrack(playerId);
   }
 
@@ -228,7 +234,8 @@ export class ServerBots {
    *  carried off → run down the carrier (the carrier's position IS known —
    *  tickUpdate streams it, this is a legal pursuit not a wallhack); own
    *  flag dropped → touch it home; a teammate carrying → escort them;
-   *  enemy flag reachable → go grab it. */
+   *  enemy flag reachable → go grab it. Defenders invert it: their flag
+   *  recovery/intercept outranks pressing the enemy stand. */
   private flagGoal(p: { id: string; team?: string; position: Vec3 }): BotVec | null {
     const flags = this.room.flags;
     if (!flags || !p.team) return null;
@@ -238,18 +245,31 @@ export class ServerBots {
     const own = flags.flags.get(me);
     if (!enemy || !own) return null;
     if (enemy.carrier === p.id) return own.home;
+    const role = this.roles.get(p.id) ?? 'offense';
+
+    // Own flag's carrier — chase the thief, not the base.
+    const thief = own.state === 'carried' && own.carrier
+      ? this.room.players.getPlayer(own.carrier) : null;
+    // Own flag dropped — anyone close enough touches it home; defenders
+    // treat it as top priority, offenders only when it's convenient.
+    const dropped = own.state === 'dropped' ? own.pos : null;
+
+    if (role === 'defense') {
+      if (thief) return thief.position;
+      if (dropped) return dropped;
+      // Guard the stand — a defender parked on the stand ring stays in
+      // intercept range of anyone who comes for it.
+      return own.home;
+    }
+
     // Carrier escort: a teammate has the enemy flag — bodyguard them home
     // rather than crowd the now-empty enemy stand.
     if (enemy.carrier) {
       const escort = this.room.players.getPlayer(enemy.carrier);
       if (escort && escort.team === me) return escort.position;
     }
-    // Intercept: our flag is being carried — chase the thief, not the base.
-    if (own.state === 'carried' && own.carrier) {
-      const thief = this.room.players.getPlayer(own.carrier);
-      if (thief) return thief.position;
-    }
-    if (own.state === 'dropped') return own.pos;
+    if (thief) return thief.position;
+    if (dropped) return dropped;
     if (enemy.state !== 'carried') return enemy.pos;
     return own.home; // flag's moving — defend home
   }
@@ -294,6 +314,7 @@ export class ServerBots {
   private retire(id: string): void {
     this.brains.delete(id);
     this.loadouts.delete(id);
+    this.roles.delete(id);
     this.watchdog.delete(id);
     this.room.moveSim.untrack(id);
     this.room.removePlayerCompletely(id, 'botFill', (m, o) => logger.info(m, o));

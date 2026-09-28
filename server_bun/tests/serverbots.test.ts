@@ -154,9 +154,12 @@ describe('ServerBots', () => {
       (room.bots as unknown as { flagGoal: (q: unknown) => { x: number; z: number } }).flagGoal(p);
     const bots = [...(room.bots as unknown as { brains: Map<string, unknown> }).brains.keys()]
       .map((id) => room.players.getPlayer(id)!);
-    const alphas = bots.filter((b) => b.team === 'alpha');
-    const bravos = bots.filter((b) => b.team === 'bravo');
-    const carrier = alphas[0], escort = alphas[1], defender = bravos[0];
+    const roles = (room.bots as unknown as { roles: Map<string, string> }).roles;
+    const carrier = bots.find((b) => b.team === 'alpha')!;
+    // An offense teammate escorts; a plated defender holds the stand.
+    const escort = bots.find((b) => b.team === 'alpha' && b !== carrier)!;
+    const defender = bots.find((b) => b.team === 'bravo')!;
+    if (escort) roles.set(escort.id, 'offense'); // deterministic role for the assert
 
     // Alpha bot grabs bravo's flag — park it on the enemy stand.
     carrier.position = { x: 70, y: 0, z: 0 };
@@ -173,5 +176,15 @@ describe('ServerBots', () => {
     // Carrier moves — the pursuit tracks the live position.
     carrier.position = { x: 10, y: 0, z: 5 };
     expect(flagGoal(defender)).toMatchObject({ x: 10, z: 5 });
+
+    // With no flags in play, a plated defender holds its own stand.
+    for (const f of room.flags!.flags.values()) {
+      f.state = 'home'; f.carrier = null; f.pos = { ...f.home };
+    }
+    const anchor = bots.find((b) => roles.get(b.id) === 'defense');
+    if (anchor) {
+      const home = room.flags!.flags.get(anchor.team as 'alpha' | 'bravo')!.home;
+      expect(flagGoal(anchor)).toMatchObject({ x: home.x, z: home.z });
+    }
   });
 });
