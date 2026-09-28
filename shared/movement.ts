@@ -185,7 +185,11 @@ export class MoveSim {
     const dir = this.inputDirection();
     const s = this.state;
 
-    if (s.onGround && !this.wishJump && !this.input.skiHeld) {
+    // Ski preserves momentum but is not a motor: below walk speed a
+    // grounded skier still needs ground physics to push off — otherwise a
+    // stationary bot (or human holding ski at a standstill) never moves.
+    const hSpeed = Math.hypot(s.vel.x, s.vel.z);
+    if (s.onGround && !this.wishJump && !(this.input.skiHeld && hSpeed > MOVEMENT_CONFIG.maxVelocityGround)) {
       this.applyGround(dt, dir);
     }
     if (!s.onGround) {

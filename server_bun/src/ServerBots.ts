@@ -50,6 +50,9 @@ export class ServerBots {
   private seq = 1;
   private readonly room: Room;
   private readonly field: Heightfield | null;
+  /** Stuck watchdog — last-seen position + when it last moved. A bot that
+   *  doesn't cover ground is a bug worth a log line, not silent scenery. */
+  private watchdog = new Map<string, { x: number; z: number; since: number; warned: boolean }>();
 
   constructor(room: Room, field: Heightfield | null) {
     this.room = room;
@@ -58,6 +61,12 @@ export class ServerBots {
 
   private nextIdx = 1;
   private maintainAt = 0;
+
+  // Warn when an alive bot hasn't moved ~2m in this window; flag carriers
+  // get the tighter leash since a parked carrier stalls the whole match.
+  private static STUCK_MS = 5000;
+  private static STUCK_MS_FLAG = 2500;
+  private static STUCK_DIST = 2;
 
   /** Spawn n bots — each is a real roster entry (playerJoined broadcasts)
    *  minus a socket. Call once at room creation, before human joins, so
@@ -271,8 +280,37 @@ export class ServerBots {
   private retire(id: string): void {
     this.brains.delete(id);
     this.loadouts.delete(id);
+    this.watchdog.delete(id);
     this.room.moveSim.untrack(id);
     this.room.removePlayerCompletely(id, 'botFill', (m, o) => logger.info(m, o));
+  }
+
+  /** Stuck watchdog: warn when an alive bot hasn't covered ~2m in a few
+   *  seconds (shorter leash for flag carriers — a parked carrier stalls
+   *  the match). Re-arms each time the bot actually moves, so the log
+   *  line marks the stall boundary rather than spamming every tick. */
+  private checkStuck(id: string, p: { position: Vec3 }, brain: BotBrain, now: number): void {
+    let w = this.watchdog.get(id);
+    if (!w) {
+      this.watchdog.set(id, { x: p.position.x, z: p.position.z, since: now, warned: false });
+      return;
+    }
+    const dx = p.position.x - w.x, dz = p.position.z - w.z;
+    if (dx * dx + dz * dz >= ServerBots.STUCK_DIST * ServerBots.STUCK_DIST) {
+      w.x = p.position.x; w.z = p.position.z; w.since = now; w.warned = false;
+      return;
+    }
+    const carrying = this.room.flags?.snapshot().some(f => f.carrier === id) ?? false;
+    const leash = carrying ? ServerBots.STUCK_MS_FLAG : ServerBots.STUCK_MS;
+    if (!w.warned && now - w.since > leash) {
+      w.warned = true;
+      logger.warn('Bot stuck', {
+        room: this.room.name, bot: id,
+        ms: now - w.since, carrying,
+        hunting: brain.currentHuntId !== null,
+        pos: { x: +p.position.x.toFixed(1), y: +p.position.y.toFixed(1), z: +p.position.z.toFixed(1) },
+      });
+    }
   }
 
   tick(dt: number): void {
@@ -373,6 +411,8 @@ export class ServerBots {
         if (p.position.y < targetY) { p.position.y = targetY; p.velocity.y = 0; }
         p.rotation.yaw = Math.atan2(nx, nz);
       }
+
+      this.checkStuck(id, p, brain, now);
 
       p.lastValidPosition = { ...p.position };
       p.lastValidVelocity = { ...p.velocity };

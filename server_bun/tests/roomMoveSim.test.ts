@@ -135,4 +135,15 @@ describe('RoomMoveSim', () => {
     // seq-less callers (old clients / tests) always pass.
     expect(m.setInput('p1', { forward: 0 })).toBe(true);
   });
+
+  test('a grounded skier at a standstill can still push off', () => {
+    // Regression: ski used to skip ground physics entirely, so a
+    // zero-speed skier holding forward never accelerated (frozen bots).
+    const m = new RoomMoveSim(flat);
+    m.track('p1', { x: 0, y: MOVEMENT_CONFIG.playerHeight, z: 0 }, 0);
+    m.setInput('p1', { forward: 1, right: 0, jumpPressed: false, jumpHeld: false, skiHeld: true });
+    for (let i = 0; i < 20; i++) m.tick(0.05);
+    const pos = m.simPos('p1')!;
+    expect(Math.abs(pos.x) + Math.abs(pos.z)).toBeGreaterThan(0.5);
+  });
 });
