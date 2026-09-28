@@ -50,6 +50,15 @@ describe('PlayerManager', () => {
     expect(p.shielded).toBe(0);
   });
 
+  it('death clears the medkit flag', () => {
+    const pm = new PlayerManager();
+    pm.addPlayer('alice'); pm.breakShield('alice');
+    const p = pm.getPlayer('alice')!;
+    p.mending = 1;
+    pm.applyDamage('alice', 200);
+    expect(p.mending).toBe(0);
+  });
+
   it('kills player when health reaches 0', () => {
     const pm = new PlayerManager();
     pm.addPlayer('alice'); pm.breakShield('alice');

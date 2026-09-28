@@ -337,6 +337,35 @@ export class HUD {
   private shieldHint: HTMLDivElement | null = null;
   private shieldVignette: HTMLDivElement | null = null;
 
+  setMend(on: boolean): void {
+    if (on && !this.mendHint) {
+      const d = document.createElement('div');
+      d.style.cssText = `
+        position:absolute; top:48px; left:50%; transform:translateX(-50%);
+        pointer-events:none; z-index:5; color:#8ff5ae; opacity:0.8;
+        font:600 13px/1 monospace; letter-spacing:0.2em; text-shadow:0 1px 3px #000;
+      `;
+      d.textContent = 'MENDING';
+      document.body.appendChild(d);
+      this.mendHint = d;
+      const v = document.createElement('div');
+      v.style.cssText = `
+        position:fixed; inset:0; pointer-events:none; z-index:4;
+        box-shadow: inset 0 0 18vmax rgba(80,230,140,0.35),
+                    inset 0 0 5vmax rgba(150,255,190,0.25);
+      `;
+      document.body.appendChild(v);
+      this.mendVignette = v;
+    } else if (!on && this.mendHint) {
+      this.mendHint.remove();
+      this.mendHint = null;
+      this.mendVignette?.remove();
+      this.mendVignette = null;
+    }
+  }
+  private mendHint: HTMLDivElement | null = null;
+  private mendVignette: HTMLDivElement | null = null;
+
   updateMinimap(targets: Targetable[], nuggets: Nugget[], pos: THREE.Vector3, yaw: number, birds?: THREE.Vector3[]): void {
     this.minimap.update(targets, nuggets, pos, yaw, birds);
   }

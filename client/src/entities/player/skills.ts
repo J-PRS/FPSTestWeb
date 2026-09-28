@@ -28,6 +28,10 @@ const SHIELD_COST = 20;      // activation — same ante as cloak
 const SHIELD_DRAIN = 5;      // per second while the bubble is up
 export const SHIELD_DMG_PER_ENERGY = 10; // 10 absorbed damage burns 1 energy
 
+const MEND_COST = 20;        // activation — same ante
+const MEND_DRAIN = 15;       // per second — mending burns fast, heals slow
+export const MEND_HP_PER_SEC = 12; // server applies this while the flag is up
+
 // Everything a skill needs from Player — mutable refs for pos/vel, plus
 // plumbing callbacks (aim, movement sync, the per-frame blink visuals).
 export interface SkillsCtx {
@@ -55,6 +59,11 @@ export interface SkillsCtx {
   emitShield(on: boolean): void;
   /** Damage landed while shielded → drains energy (dmg/10), breaks at 0. */
   shieldAbsorb(dmg: number): void;
+  emitMend(on: boolean): void;
+  /** Medkit trickle — offline only; MP heals through the server tick. */
+  healSelf(hp: number): void;
+  /** True once a server owns health — mend stops self-healing. */
+  netHeals(): boolean;
   // Energy is Player-owned — skills spend/drain through these so cloak
   // and jets share the one pool with no duplicated state.
   energy(): number;
@@ -90,6 +99,9 @@ export class PlayerSkills {
   private shielded = false;
   get isShielded(): boolean { return this.shielded; }
 
+  private mending = false;
+  get isMending(): boolean { return this.mending; }
+
   private tlBeacon: { pos: THREE.Vector3; vel: THREE.Vector3; age: number; grounded: boolean } | null = null;
   private tlCooldown = 0;
   private tlMesh: THREE.Mesh | null = null;
@@ -104,6 +116,7 @@ export class PlayerSkills {
     this.slamActive = false;
     this.setCloak(false);
     this.setShield(false);
+    this.setMend(false);
     this.fizzleBeacon();
   }
 
@@ -115,6 +128,7 @@ export class PlayerSkills {
     else if (skill === 'warp') this.throwBeacon();
     else if (skill === 'cloak') this.toggleCloak();
     else if (skill === 'shield') this.toggleShield();
+    else if (skill === 'medkit') this.toggleMend();
     else this.bounceHeld = true;
   }
 
@@ -222,6 +236,31 @@ export class PlayerSkills {
     if (!this.shielded) return;
     this.ctx.drainEnergy(SHIELD_DRAIN * dt);
     if (this.ctx.energy() <= 0) this.setShield(false); // tank dry — pop
+  }
+
+  // ---- Medkit ----
+  // Energy → health conversion channel. Health itself is server-owned
+  // (server regens while the mend flag is up); the client owns the energy
+  // burn — dry tank = mend off. Deliberately a trickle: it patches you up
+  // between fights, it doesn't win them.
+
+  private toggleMend(): void {
+    if (this.mending) { this.setMend(false); return; }
+    if (!this.ctx.spendEnergy(MEND_COST)) return;
+    this.setMend(true);
+  }
+
+  private setMend(on: boolean): void {
+    if (this.mending === on) return;
+    this.mending = on;
+    this.ctx.emitMend(on);
+  }
+
+  updateMend(dt: number): void {
+    if (!this.mending) return;
+    this.ctx.drainEnergy(MEND_DRAIN * dt);
+    if (this.ctx.energy() <= 0) { this.setMend(false); return; } // tank dry — channel ends
+    if (!this.ctx.netHeals()) this.ctx.healSelf(MEND_HP_PER_SEC * dt);
   }
 
   private tryDash(): void {

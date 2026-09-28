@@ -11,7 +11,7 @@
  * message, changed field semantics). The server stamps it on gameState;
  * the client force-reloads on mismatch instead of silently desyncing.
  */
-export const PROTOCOL_VERSION = 7; // tick flag bit 8 = shielded; inputMove carries shield
+export const PROTOCOL_VERSION = 8; // tick flag bit 16 = mending; inputMove carries mend
 
 export interface Vec3 {
   x: number;
@@ -39,7 +39,7 @@ export type ClientMessage =
   | { type: 'aoeShot'; position: Vec3; weaponType?: number; excludeTargetId?: string | null; projectileId?: string | null; airtime?: number; power?: number; directHit?: boolean }
   | { type: 'jump'; position: Vec3 }
   | { type: 'jetpack'; position: Vec3 }
-  | { type: 'inputMove'; input: { forward: number; right: number; jump: number; ski: number; cloak?: number; shield?: number }; rotation: Rotation }
+  | { type: 'inputMove'; input: { forward: number; right: number; jump: number; ski: number; cloak?: number; shield?: number; mend?: number }; rotation: Rotation }
   | { type: 'projectileDestroy'; projectileId: string }
   | { type: 'environmentDamage'; amount: number }
   // Client-claimed pickups (nuggets): self-only heal, server clamps the
@@ -66,6 +66,7 @@ export interface TickUpdatePlayer {
   ski?: number;
   cloaked?: number;
   shielded?: number;
+  mending?: number;
 }
 
 export type ServerMessage =
@@ -133,6 +134,7 @@ export interface GameStatePlayer {
   health: number;
   cloaked?: number;
   shielded?: number;
+  mending?: number;
   /** Team-mode rooms only — absent in free-for-all. */
   team?: 'alpha' | 'bravo';
 }

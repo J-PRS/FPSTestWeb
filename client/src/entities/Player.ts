@@ -24,8 +24,8 @@ export interface FireEvent {
   playerVel: THREE.Vector3;
 }
 
-export type SkillId = 'bounce' | 'blink' | 'dash' | 'slam' | 'warp' | 'cloak' | 'shield';
-export const SKILL_ORDER: SkillId[] = ['bounce', 'blink', 'dash', 'slam', 'warp', 'cloak', 'shield'];
+export type SkillId = 'bounce' | 'blink' | 'dash' | 'slam' | 'warp' | 'cloak' | 'shield' | 'medkit';
+export const SKILL_ORDER: SkillId[] = ['bounce', 'blink', 'dash', 'slam', 'warp', 'cloak', 'shield', 'medkit'];
 
 export class Player {
   pos = new THREE.Vector3();
@@ -76,6 +76,21 @@ export class Player {
   private shielded = false;
   get isShielded(): boolean { return this.shielded; }
   onShield: ((on: boolean) => void) | null = null;
+
+  // Medkit: flag rides the wire like cloak/shield; the server heals while
+  // it's up, the client burns energy — see skills.ts for the economy.
+  private mending = false;
+  get isMending(): boolean { return this.mending; }
+  onMend: ((on: boolean) => void) | null = null;
+  /** Live connectivity probe — in MP the server ticks the heal, not us.
+   *  Queried per-frame rather than latched: a mid-match disconnect must
+   *  hand health authority back to the client. */
+  serverOwnsHealth: (() => boolean) | null = null;
+  private setMending(on: boolean): void {
+    if (this.mending === on) return;
+    this.mending = on;
+    this.onMend?.(on);
+  }
   // Third-person bubble — lazily built so a non-shield slot costs nothing.
   private shieldBubble: ShieldBubble | null = null;
   private setShielded(on: boolean): void {
@@ -286,7 +301,7 @@ export class Player {
   onDeploy: (() => void) | null = null;
   onNetworkJump: ((pos: { x: number; y: number; z: number }) => void) | null = null;
   onNetworkJetpack: ((pos: { x: number; y: number; z: number }) => void) | null = null;
-  onNetworkInput: ((input: { forward: number; right: number; jump: number; ski: number; cloak?: number; shield?: number }, rotation: { yaw: number; pitch: number }) => void) | null = null;
+  onNetworkInput: ((input: { forward: number; right: number; jump: number; ski: number; cloak?: number; shield?: number; mend?: number }, rotation: { yaw: number; pitch: number }) => void) | null = null;
 
   constructor(terrain: Terrain, camera: THREE.PerspectiveCamera, scene: THREE.Scene) {
     this.terrain = terrain;
@@ -335,6 +350,9 @@ export class Player {
       emitBounce: (a, b) => this.onBounce?.(a, b),
       emitCloak: (on) => this.setCloaked(on),
       emitShield: (on) => this.setShielded(on),
+      emitMend: (on) => this.setMending(on),
+      healSelf: (hp) => { this.health = Math.min(MAX_HEALTH, this.health + hp); },
+      netHeals: () => this.serverOwnsHealth?.() ?? false,
       shieldAbsorb: (dmg) => { this.energy = Math.max(0, this.energy - dmg); if (this.energy <= 0) this.setShielded(false); },
       energy: () => this.energy,
       spendEnergy: (n) => { if (this.energy < n) return false; this.energy -= n; return true; },
@@ -466,6 +484,7 @@ export class Player {
     this.skills.updateBeacon(dt);
     this.skills.updateCloak(dt);
     this.skills.updateShield(dt);
+    this.skills.updateMend(dt);
     if (this.shieldBubble) {
       this.shieldBubble.update(dt);
       if (this.shielded) this.shieldBubble.mesh.position.set(this.pos.x, this.pos.y - 0.6, this.pos.z);
@@ -499,7 +518,7 @@ export class Player {
     // Send input to network for client-side prediction
     if (this.onNetworkInput) {
       this.onNetworkInput(
-        { forward: input.forward, right: input.right, jump: input.jumpHeld ? 1 : 0, ski: input.skiHeld ? 1 : 0, cloak: this.cloaked ? 1 : 0, shield: this.shielded ? 1 : 0 },
+        { forward: input.forward, right: input.right, jump: input.jumpHeld ? 1 : 0, ski: input.skiHeld ? 1 : 0, cloak: this.cloaked ? 1 : 0, shield: this.shielded ? 1 : 0, mend: this.mending ? 1 : 0 },
         { yaw: this.yaw, pitch: this.pitch }
       );
     }
@@ -526,7 +545,7 @@ export class Player {
     // while burning, recharge 8/s only when off the jet)
     // Regen also pauses while cloaked — invisibility and jets compete
     // for the same tank, never fill it together.
-    if (!isJetting && !this.cloaked && !this.shielded) {
+    if (!isJetting && !this.cloaked && !this.shielded && !this.mending) {
       this.energy = Math.min(MAX_ENERGY, this.energy + JET_CHARGE * dt);
     }
 

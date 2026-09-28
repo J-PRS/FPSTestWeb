@@ -52,6 +52,8 @@ export class RemotePlayer {
   // setVisible(false) can't silently take it down with the body.
   private shieldBubble: ShieldBubble | null = null;
   private _shielded = false;
+  private mendAura: ShieldBubble | null = null;
+  private _mending = false;
   private velocity: THREE.Vector3 = new THREE.Vector3();
   private angularVelocity: THREE.Vector3 = new THREE.Vector3();
   private isOnGround: boolean = true;
@@ -316,6 +318,10 @@ export class RemotePlayer {
       this.shieldBubble.update(dt);
       if (this._shielded) this.shieldBubble.mesh.position.set(this.position.x, this.position.y - EYE_OFFSET + 1.1, this.position.z);
     }
+    if (this.mendAura) {
+      this.mendAura.update(dt);
+      if (this._mending) this.mendAura.mesh.position.set(this.position.x, this.position.y - EYE_OFFSET + 1.0, this.position.z);
+    }
     this.previousPosition.copy(this.position);
     this._model.update(dt);
   }
@@ -357,6 +363,7 @@ export class RemotePlayer {
     this.model.setVisible(false);
     this.gizmo?.hide();
     if (this.shieldBubble) this.shieldBubble.mesh.visible = false;
+    if (this.mendAura) this.mendAura.mesh.visible = false;
   }
 
   show(): void {
@@ -367,6 +374,7 @@ export class RemotePlayer {
     }
     this.gizmo?.attach();
     if (this.shieldBubble && this._shielded) this.shieldBubble.mesh.visible = true;
+    if (this.mendAura && this._mending) this.mendAura.mesh.visible = true;
   }
 
   // Simulate physics when player stops sending updates (dead reckoning)
@@ -442,6 +450,15 @@ export class RemotePlayer {
     if (this.shieldBubble) this.shieldBubble.mesh.visible = on;
   }
   get isShielded(): boolean { return this._shielded; }
+
+  // Medkit channel — a tighter green aura inside where the bubble sits.
+  setMending(on: boolean): void {
+    if (on === this._mending) return;
+    this._mending = on;
+    if (on && !this.mendAura) this.mendAura = makeShieldBubble(this.scene, 1.6, 0x3fdd6f);
+    if (this.mendAura) this.mendAura.mesh.visible = on && !this._cloakHidden && !this._staleHidden;
+  }
+  get isMending(): boolean { return this._mending; }
 
   // Remote fired a weapon — kick the gun's procedural recoil
   fire(): void {
