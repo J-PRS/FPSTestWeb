@@ -68,9 +68,12 @@ export class Room {
   /** Server-side simulations ticked each room tick, in order. */
   readonly sims: { tick(dt: number): void }[] = [];
   /** Per-player movement shadow — MoveSim fed by inputMove, reconciled
-   *  against reported positions. Reported pos stays truth; divergence is
-   *  the anti-cheat signal. */
+   *  against reported positions. Judge mode: reported pos stays truth,
+   *  divergence is the anti-cheat signal. Authority mode
+   *  (FPS_MOVE_AUTHORITY): sim pos IS truth — GameServer's tick commits
+   *  it into the player record and reports only carry aim/ping/liveness. */
   readonly moveSim: RoomMoveSim;
+  readonly moveAuthority: boolean;
   /** Match-results journal hook — GameServer writes matches.jsonl and
    *  feeds /matches from it. Fired on every win condition. */
   onMatchEnd?: (record: { room: string; mode: string; winner: string; scores: Record<string, number>; players: { id: string; team?: string; kills: number; deaths: number }[] }) => void;
@@ -82,8 +85,9 @@ export class Room {
     }));
   }
 
-  constructor(name: string, field: Heightfield | null, mode = '', spec?: MapSpec) {
+  constructor(name: string, field: Heightfield | null, mode = '', spec?: MapSpec, moveAuthority = false) {
     this.name = name;
+    this.moveAuthority = moveAuthority && !!field;
     this.spec = spec ?? resolveMapSpec(null);
     this.mode = mode || this.spec.mode || '';
     this.modeSpec = MODES[this.mode as ModeId] ?? null;
@@ -120,9 +124,10 @@ export class Room {
         moveResync: (pid, pos, yaw) => this.moveSim.resync(pid, pos, yaw),
         moveTrack: (pid, pos, yaw) => this.moveSim.track(pid, pos, yaw, this.players.getPlayer(pid)?.perk),
         moveUntrack: (pid) => this.moveSim.untrack(pid),
+        moveAuthority: () => this.moveAuthority,
       },
     );
-    this.moveSim = new RoomMoveSim(field);
+    this.moveSim = new RoomMoveSim(field, this.moveAuthority);
     // Shield soak burns the same tank the jet model owns — without this
     // a shielded player under fire runs the sim tank ahead of the real one.
     this.players.energyBurn = (pid, n) => this.moveSim.drainEnergy(pid, n);

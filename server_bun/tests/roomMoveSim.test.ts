@@ -107,6 +107,22 @@ describe('RoomMoveSim', () => {
     expect(peak).toBeLessThan(60);
   });
 
+  test('authority mode tightens divergence + correction throttle', () => {
+    const m = new RoomMoveSim(flat, true);
+    expect(m.authoritative).toBe(true);
+    m.track('p1', { x: 0, y: 0, z: 0 }, 0);
+    for (let i = 0; i < 10; i++) m.tick(0.05);
+    // 2m off — inside judge tolerance, past the authority bound: truth fires.
+    expect(m.reconcile('p1', { x: 2, y: 0, z: 0 }, 0)).not.toBeNull();
+    // Throttled at 100ms — an immediate second report doesn't refire.
+    expect(m.reconcile('p1', { x: 2, y: 0, z: 0 }, 0)).toBeNull();
+  });
+
+  test('authority without a field falls back to judge (no sim, no flag)', () => {
+    const m = new RoomMoveSim(null, true);
+    expect(m.authoritative).toBe(false);
+  });
+
   test('stale inputMove seqs are dropped — unordered transports can reorder', () => {
     const m = new RoomMoveSim(flat);
     m.track('p1', { x: 0, y: MOVEMENT_CONFIG.playerHeight + 0.5, z: 0 }, 0);

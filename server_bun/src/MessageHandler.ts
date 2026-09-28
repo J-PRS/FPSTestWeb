@@ -58,6 +58,9 @@ export interface RoomInfo {
   moveResync?: (playerId: string, pos: Vec3, yaw: number) => void;
   moveTrack?: (playerId: string, pos: Vec3, yaw: number) => void;
   moveUntrack?: (playerId: string) => void;
+  /** When set, the sim is truth: position reports degrade to aim/ping/
+   *  liveness hints and never write player.position. */
+  moveAuthority?: () => boolean;
   /** Live deployables for gameState joins — RoomDeployables.snapshot. */
   deployables?: () => { id: number; owner: string; kind: 'turret' | 'mine' | 'station' | 'drone'; pos: Vec3 }[];
 }
@@ -364,6 +367,29 @@ export class MessageHandler {
     }
 
     const simTruth = this.roomInfo.moveReport?.(playerId, msg.position, msg.rotation.yaw, msg.velocity);
+
+    if (this.roomInfo.moveAuthority?.()) {
+      // Authority mode: the sim owns position — the report only feeds it
+      // yaw/vel hints and carries ping + liveness. Corrections still flow
+      // on divergence (tighter tolerance/throttle inside the sim).
+      if (simTruth) {
+        this.sendToPlayer(playerId, {
+          type: 'correction',
+          seq: msg.seq ?? 0,
+          position: simTruth.pos,
+          velocity: simTruth.vel,
+          rotation: msg.rotation,
+        });
+      }
+      player.rotation = { ...msg.rotation };
+      player.lastSeen = now;
+      if (msg.seq !== undefined && msg.seq > player.lastSeq) player.lastSeq = msg.seq;
+      player.hasReceivedPosition = true;
+      if (msg.ping !== undefined) player.ping = msg.ping;
+      this.pushHistory(player, now); // player.position is sim truth
+      return;
+    }
+
     if (simTruth) {
       // Sim judge mode: the trajectory is impossible given this player's
       // inputs + the terrain — correct the client to the sim's state.
