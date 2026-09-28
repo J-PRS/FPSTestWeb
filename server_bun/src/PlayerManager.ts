@@ -1,5 +1,6 @@
 import type { PlayerState, Vec3, Rotation, GameStatePlayer } from './types.ts';
 import { CONFIG } from './config.ts';
+import { STATUS } from '../../shared/status.ts';
 
 let internalIdCounter = 0;
 
@@ -45,9 +46,7 @@ export class PlayerManager {
       consecutiveRejects: 0,
       ping: 0,
       skiing: 0,
-      cloaked: 0,
-      shielded: 0,
-      mending: 0,
+      status: 0,
       history: [],
       forceSendUntil: 0,
       protectedUntil: Date.now() + PlayerManager.SPAWN_PROTECT_MS,
@@ -127,9 +126,7 @@ export class PlayerManager {
       velocity: { ...player.velocity },
       isDead: player.isDead,
       health: player.health,
-      cloaked: player.cloaked,
-      shielded: player.shielded,
-      mending: player.mending,
+      status: player.status,
       team: player.team,
     };
   }
@@ -177,7 +174,7 @@ export class PlayerManager {
     // Energy shield: while the flag is up the hit routes to the player's
     // energy tank, not their health — the client drains dmg/10 energy and
     // drops the flag when the pool bottoms out (inputMove carries it).
-    if (target.shielded) {
+    if (target.status & STATUS.SHIELD) {
       return { killed: false, newHealth: target.health };
     }
 
@@ -185,9 +182,7 @@ export class PlayerManager {
     if (target.health <= 0) {
       target.health = 0;
       target.isDead = true;
-      target.cloaked = 0; // death strips the veil — remotes must see the corpse
-      target.shielded = 0;
-      target.mending = 0;
+      target.status = 0; // death strips every channel — a cloaked/mending corpse is a lie
       target.deaths++;
       target.pendingRespawn = true;
       return { killed: true, newHealth: 0 };
@@ -206,9 +201,7 @@ export class PlayerManager {
     player.velocity = { x: 0, y: 0, z: 0 };
     player.health = CONFIG.playerMaxHealth;
     player.isDead = false;
-    player.cloaked = 0; // a corpse decloaks — respawned cloaked is invisible forever if the toggle died with them
-    player.shielded = 0;
-    player.mending = 0;
+    player.status = 0; // a corpse carries no channels — toggles died with them
     player.pendingRespawn = false;
     player.lastSeq = 0;
     player.lastValidPosition = { ...spawn };

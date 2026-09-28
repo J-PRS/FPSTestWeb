@@ -15,6 +15,7 @@ import type { Room } from './Room.ts';
 import { hmHeight, type Heightfield } from '../../shared/heightfield.ts';
 import { BotBrain, type BotEnemy, type BotVec } from '../../shared/botBrain.ts';
 import { logger } from './logger.ts';
+import { STATUS } from '../../shared/status.ts';
 
 const SPEED = 14;          // m/s ground move
 const BOLT_SPEED = 60;     // m/s visual bolt + hitscan travel is instant
@@ -80,7 +81,7 @@ export class ServerBots {
       if (this.room.modeSpec?.teams) {
         if (q.team === p.team) continue;
       } else if (q.isBot) continue;
-      if (q.cloaked) continue; // bots can't aim what they can't see
+      if (q.status & STATUS.CLOAK) continue; // bots can't aim what they can't see
       out.push({ id: q.id, pos: q.position, vel: q.velocity, alive: !q.isDead });
     }
     // Creatures are huntable too — in nuggets rooms they're the whole

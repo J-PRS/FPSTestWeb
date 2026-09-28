@@ -8,6 +8,7 @@ import { logger } from './logger.ts';
 import { fileURLToPath } from 'node:url';
 import type { Heightfield } from '../../shared/heightfield.ts';
 import { isWireFrame, decodePosition, encodeTickPlayer, encodeTickFrame } from '../../shared/wire.ts';
+import { STATUS } from '../../shared/status.ts';
 import { createHmac, randomBytes } from 'node:crypto';
 import { readFileSync, appendFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -723,7 +724,7 @@ export class GameServer {
         // Medkit channel: server owns health, so the flag drives the heal.
         // The client burns energy and drops the flag when the tank is dry —
         // a mending player's health ticks up one slice per tick.
-        if (p.mending && !p.isDead && p.health < CONFIG.playerMaxHealth) {
+        if ((p.status & STATUS.MEND) && !p.isDead && p.health < CONFIG.playerMaxHealth) {
           p.health = Math.min(CONFIG.playerMaxHealth, p.health + MEND_HP_PER_TICK);
         }
         const isStale = silenceMs > 5000;
@@ -749,7 +750,7 @@ export class GameServer {
           // State fields (health/death/ski) must never be eaten by the
           // position check — a flag change forces the record even when the
           // player hasn't moved.
-          const stateChanged = p.health !== lastSent.hp || p.isDead !== lastSent.dead || p.skiing !== lastSent.ski || p.cloaked !== lastSent.cloak || p.shielded !== lastSent.shield || p.mending !== lastSent.mend;
+          const stateChanged = p.health !== lastSent.hp || p.isDead !== lastSent.dead || p.skiing !== lastSent.ski || p.status !== lastSent.status;
           // Idle players still heartbeat at 4Hz — a >300ms silence would
           // trigger client-side dead reckoning on a stationary player
           if (!stateChanged && predErrSq < 0.09 && yawDiff < 0.02 && pitchDiff < 0.03 && now - lastSent.t < 250) {
@@ -761,7 +762,7 @@ export class GameServer {
           x: p.position.x, y: p.position.y, z: p.position.z,
           vx: p.velocity.x, vy: p.velocity.y, vz: p.velocity.z,
           yaw: p.rotation.yaw, pitch: p.rotation.pitch,
-          hp: p.health, dead: p.isDead, ski: p.skiing, cloak: p.cloaked, shield: p.shielded, mend: p.mending, t: now,
+          hp: p.health, dead: p.isDead, ski: p.skiing, status: p.status, t: now,
         });
 
         records.push({
@@ -778,9 +779,7 @@ export class GameServer {
             // reported (renders them with a bogus "0ms" ping).
             ping: p.ping > 0 ? p.ping : undefined,
             ski: p.skiing,
-            cloaked: p.cloaked,
-            shielded: p.shielded,
-            mending: p.mending,
+            status: p.status,
           }),
           pos: p.position,
           force: forceSend,

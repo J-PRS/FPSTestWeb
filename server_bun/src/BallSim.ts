@@ -22,6 +22,7 @@ import {
 import type { PlayerManager } from './PlayerManager.ts';
 import type { ServerMessage, Vec3 } from './types.ts';
 import { encodeBallSegment } from '../../shared/wire.ts';
+import { STATUS } from '../../shared/status.ts';
 import { logger } from './logger.ts';
 import { type BallPopulation, DEFAULT_MAP_SPEC } from '../../shared/mapSpec.ts';
 
@@ -149,7 +150,7 @@ export class BallSim {
   private alivePlayers(): { id: string; pos: SimVec }[] {
     const out: { id: string; pos: SimVec }[] = [];
     for (const [id, p] of this.players.getAllPlayers()) {
-      if (!p.isDead && !p.cloaked) out.push({ id, pos: p.position });
+      if (!p.isDead && !(p.status & STATUS.CLOAK)) out.push({ id, pos: p.position });
     }
     return out;
   }
@@ -206,7 +207,7 @@ export class BallSim {
    *  aimed at its last-received pos, arcs diverged ~100m per segment.) */
   private snapTarget(b: SimBall): void {
     const p = b.targetId ? this.players.getPlayer(b.targetId) : null;
-    if (p && !p.isDead && !p.cloaked) {
+    if (p && !p.isDead && !(p.status & STATUS.CLOAK)) {
       b.tx = p.position.x; b.ty = p.position.y; b.tz = p.position.z;
       b.tgtValid = true;
     } else {

@@ -4,6 +4,7 @@ import { RateLimiter } from './RateLimiter.ts';
 import { CombatHandler } from './CombatHandler.ts';
 import { logger } from './logger.ts';
 import { PROTOCOL_VERSION } from '../../shared/protocol.ts';
+import { STATUS_MASK } from '../../shared/status.ts';
 import type { BallSim } from './BallSim.ts';
 
 type BroadcastFn = (msg: ServerMessage, excludePlayerId?: string) => void;
@@ -260,9 +261,7 @@ export class MessageHandler {
         break;
       case 'inputMove':
         player.skiing = msg.input.ski ? 1 : 0;
-        player.cloaked = msg.input.cloak ? 1 : 0;
-        player.shielded = msg.input.shield ? 1 : 0;
-        player.mending = msg.input.mend ? 1 : 0;
+        player.status = (msg.input.status ?? 0) & STATUS_MASK;
         break;
       case 'chat':
         // Room-scoped relay — broadcast() only reaches this room's sockets.
