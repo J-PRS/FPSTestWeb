@@ -111,6 +111,14 @@ const server = Bun.serve<WebSocketData>({
       });
     }
 
+    // Leaderboard: GET /stats — lifetime per-player aggregates read off
+    // the match journal (wins/kills/deaths/matches, sorted by wins).
+    if (url.pathname === '/stats') {
+      return corsResponse(JSON.stringify(await gameServer.getStats()), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
     // Quick-join: GET /join?mode=ctf → {room, mode} — the lobby uses it
     // to drop players into the emptiest live match of a mode.
     if (url.pathname === '/join') {

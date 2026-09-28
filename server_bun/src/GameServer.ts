@@ -121,7 +121,10 @@ export class GameServer {
   // a small in-memory ring for /matches. Append-only so a restart never
   // loses history; the ring is just a cheap read cache.
   private matchRing: ({ t: number; room: string; mode: string; winner: string; scores: Record<string, number> })[] = [];
-  private recordMatchEnd(rec: { room: string; mode: string; winner: string; scores: Record<string, number> }): void {
+  private recordMatchEnd(rec: {
+    room: string; mode: string; winner: string; scores: Record<string, number>;
+    players?: { id: string; team?: string; kills: number; deaths: number }[];
+  }): void {
     const entry = { t: Date.now(), ...rec };
     this.matchRing.push(entry);
     if (this.matchRing.length > 100) this.matchRing.shift();
@@ -137,6 +140,33 @@ export class GameServer {
   /** Recent match results — newest last. */
   listMatches(): unknown[] {
     return this.matchRing;
+  }
+
+  /** Lifetime leaderboard read off the match journal — survives restarts
+   *  since matches.jsonl is append-only. Read-per-request is fine at this
+   *  scale; cache it if the file ever grows past a few MB. */
+  async getStats(): Promise<unknown[]> {
+    interface Row { playerId: string; matches: number; wins: number; kills: number; deaths: number }
+    const agg = new Map<string, Row>();
+    try {
+      const file = Bun.file(join(import.meta.dir, '..', '..', 'logs', 'matches.jsonl'));
+      const text = await file.text();
+      for (const line of text.split('\n')) {
+        if (!line.trim()) continue;
+        let rec: { winner?: string; players?: { id: string; team?: string; kills?: number; deaths?: number }[] };
+        try { rec = JSON.parse(line); } catch { continue; }
+        for (const p of rec.players ?? []) {
+          const row = agg.get(p.id) ?? { playerId: p.id, matches: 0, wins: 0, kills: 0, deaths: 0 };
+          row.matches++;
+          row.kills += p.kills ?? 0;
+          row.deaths += p.deaths ?? 0;
+          // FFA records name the player; team records name the side.
+          if (rec.winner === p.id || (p.team && rec.winner === p.team)) row.wins++;
+          agg.set(p.id, row);
+        }
+      }
+    } catch { /* no journal yet — empty leaderboard */ }
+    return [...agg.values()].sort((a, b) => b.wins - a.wins || b.kills - a.kills);
   }
 
   /** Resolve-or-create a room. Joins may name any room; 'default' is the
