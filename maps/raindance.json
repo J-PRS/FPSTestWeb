@@ -1,6 +1,7 @@
 {
   "mode": "ctf",
   "bots": 8,
+  "terrain": "raindance.bin",
   "bases": {
     "alpha": { "x": -90, "y": 0, "z": 0 },
     "bravo": { "x": 90, "y": 0, "z": 0 }

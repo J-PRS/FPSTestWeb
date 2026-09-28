@@ -216,8 +216,8 @@ export class Ball {
   private readonly _rpos = new THREE.Vector3(); // pos + renderOffset, scratch
 
   /** One-time init: the heightfield the shared sim needs for bounce prediction. */
-  static initNetMode(): void {
-    if (!Ball.field) Ball.field = getHeightfield();
+  static initNetMode(force = false): void {
+    if (force || !Ball.field) Ball.field = getHeightfield();
   }
 
   constructor(scene: THREE.Scene, terrain: Terrain, variant: 0 | 1 | 2 | 3 = 0,
