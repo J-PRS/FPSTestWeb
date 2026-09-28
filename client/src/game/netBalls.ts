@@ -105,42 +105,87 @@ export function createNetBalls(deps: EntitiesDeps, ctx: NetBallsCtx, logger: Chi
   // Rubberband watch: how far our predicted replay was from the event's
   // truth. >2m = visible warp worth logging; >4m means prediction diverged
   // hard (latency spike or a sim mismatch — that one's a bug, not lag).
+  // Rubberband warns throttle per-ball: first divergence in a window
+  // fires immediately, repeats within 2s are counted and folded into the
+  // next line as ×N — a desyncing ball would otherwise drown every other
+  // warn stream (and client_warning.log) at ~10 lines/sec.
   const _segPos = new THREE.Vector3();
+  const _truthPos = new THREE.Vector3();
+  const rbLastWarn = new Map<number, number>();
+  const rbSuppressed = new Map<number, number>();
+  const RB_WARN_MS = 2000;
+
+  /** Rubberband watch: how far our predicted replay is from the event's
+   *  truth advanced to NOW (pos + vel·age). >2m = visible warp; past the
+   *  per-kind warnAt means prediction genuinely diverged — that one's a
+   *  bug signal, not lag. Per-ball throttle folds repeats into ×N. */
+  function rubberbandCheck(b: Ball, m: { id: number; kind?: string; position: Vec3Msg; velocity: Vec3Msg; t?: number }): void {
+    _segPos.set(m.position.x, m.position.y, m.position.z);
+    const age = ballEventAge(m.t);
+    const speed = Math.hypot(m.velocity.x, m.velocity.y, m.velocity.z);
+    _truthPos.set(
+      m.position.x + m.velocity.x * age,
+      m.position.y + m.velocity.y * age,
+      m.position.z + m.velocity.z * age,
+    );
+    const err = _segPos.distanceTo(_truthPos);
+    // Bounce carries approach overshoot proportional to speed — a
+    // terminal-speed ball legitimately diverges tens of meters on a
+    // bounce tick, so its floor scales with velocity. Lunge/teleport are
+    // server-side RNG the predictor can't foresee; heartbeat/segment is
+    // the only kind where >4m is a real desync.
+    const kind = m.kind ?? 'segment';
+    const warnAt = kind === 'lunge' || kind === 'teleport' || kind === 'spawn' ? 40
+      : kind === 'bounce' || kind === 'stall' ? Math.max(12, speed * 0.6) : 4;
+    if (err <= warnAt) {
+      if (err > 2) logger.debug(`ball #${m.id} segment correction ${err.toFixed(1)}m`);
+      return;
+    }
+    const nowMs = performance.now();
+    const lastW = rbLastWarn.get(m.id) ?? -Infinity;
+    if (nowMs - lastW < RB_WARN_MS) {
+      rbSuppressed.set(m.id, (rbSuppressed.get(m.id) ?? 0) + 1);
+      return;
+    }
+    const sup = rbSuppressed.get(m.id) ?? 0;
+    rbLastWarn.set(m.id, nowMs);
+    rbSuppressed.delete(m.id);
+    // Terrain forensics: a bounce stamp lands at ground contact, so
+    // truth.y should sit ~radius above the field the sim bounced on.
+    // fieldH vs terrainH split "stale heightfield" from "integrator
+    // drift" — if they differ, Ball.field is a dead snapshot.
+    const bf = Ball.netField;
+    const fieldH = bf ? hmHeight(bf, m.position.x, m.position.z) : NaN;
+    const terrainH = deps.lazyTerrain().getHeight(m.position.x, m.position.z);
+    const diag = b.netDiag;
+    logger.warn(`ball #${m.id} ${kind} rubberband ${err.toFixed(1)}m (age ${(age * 1000).toFixed(0)}ms) — prediction diverged${sup ? ` (×${sup + 1})` : ''}`, {
+      pred: { x: +b.pos.x.toFixed(1), y: +b.pos.y.toFixed(1), z: +b.pos.z.toFixed(1) },
+      truth: { x: +m.position.x.toFixed(1), y: +m.position.y.toFixed(1), z: +m.position.z.toFixed(1) },
+      fieldH: +fieldH.toFixed(1),
+      terrainH: +terrainH.toFixed(1),
+      fieldFp: bf ? hmFingerprint(bf) : 'none',
+      // Regime forensics: simT>simNow = the catch-all free-ran ahead;
+      // legAge pinned ~8 = inert leg extrapolating a stale anchor.
+      simT: diag ? +diag.simT.toFixed(2) : null,
+      simNow: diag?.simNow ?? null,
+      legT0: diag ? +diag.legT0.toFixed(2) : null,
+      legAge: diag ? +diag.legAge.toFixed(2) : null,
+      enraged: diag?.enraged ?? null,
+    });
+  }
+
   function netBallSegment(m: { id: number; kind?: string; position: { x: number; y: number; z: number }; velocity: { x: number; y: number; z: number }; enraged: boolean; targetId: string | null; t?: number; et?: number; slowT?: number; damp?: boolean; tp?: Vec3Msg | null }): void {
     const b = netBallById.get(m.id);
     if (!b) return;
-    _segPos.set(m.position.x, m.position.y, m.position.z);
-    // Compare where our prediction is NOW against where the event will
-    // have carried truth — i.e. event state advanced by its real age.
-    const age = ballEventAge(m.t);
-    const expected = Math.hypot(m.velocity.x, m.velocity.y, m.velocity.z) * age;
-    const err = Math.max(0, _segPos.distanceTo(b.pos) - expected);
-    // Thresholds are per-kind: lunge/teleport are server-side RNG the
-    // predictor fundamentally can't foresee (any gap is expected), bounce
-    // carries one tick of approach overshoot by construction (~4-5m at
-    // terminal speed). Only heartbeat/segment divergence past 4m is a
-    // real desync signal — everything else blends via renderOffset.
-    const kind = m.kind ?? 'segment';
-    const warnAt = kind === 'lunge' || kind === 'teleport' || kind === 'spawn' ? 40
-      : kind === 'bounce' || kind === 'stall' ? 12 : 4;
-    if (err > warnAt) {
-      // Terrain forensics: a bounce stamp lands at ground contact, so
-      // truth.y should sit ~radius above the field the sim bounced on.
-      // fieldH vs terrainH split "stale heightfield" from "integrator
-      // drift" — if they differ, Ball.field is a dead snapshot.
-      const bf = Ball.netField;
-      const fieldH = bf ? hmHeight(bf, m.position.x, m.position.z) : NaN;
-      const terrainH = deps.lazyTerrain().getHeight(m.position.x, m.position.z);
-      logger.warn(`ball #${m.id} ${kind} rubberband ${err.toFixed(1)}m (age ${(age * 1000).toFixed(0)}ms) — prediction diverged`, {
-        pred: { x: +b.pos.x.toFixed(1), y: +b.pos.y.toFixed(1), z: +b.pos.z.toFixed(1) },
-        truth: { x: +m.position.x.toFixed(1), y: +m.position.y.toFixed(1), z: +m.position.z.toFixed(1) },
-        fieldH: +fieldH.toFixed(1),
-        terrainH: +terrainH.toFixed(1),
-        fieldFp: bf ? hmFingerprint(bf) : 'none',
-      });
-    } else if (err > 2) {
-      logger.debug(`ball #${m.id} segment correction ${err.toFixed(1)}m`);
+    // Out-of-order delivery guard: an older stamp would rewind the sim
+    // anchor and the next frames would extrapolate a stale leg — that
+    // rewind was a live source of the giant rubberband warns.
+    if (b.isStaleSegment(m.t)) {
+      logger.debug(`ball #${m.id} stale segment dropped (t=${m.t})`);
+      return;
     }
+    rubberbandCheck(b, m);
+    const age = ballEventAge(m.t);
     b.applyNetSegment(
       m.position.x, m.position.y, m.position.z,
       m.velocity.x, m.velocity.y, m.velocity.z,
