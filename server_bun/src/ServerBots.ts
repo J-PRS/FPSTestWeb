@@ -19,6 +19,11 @@ import { logger } from './logger.ts';
 const SPEED = 14;          // m/s ground move
 const BOLT_SPEED = 60;     // m/s visual bolt + hitscan travel is instant
 
+// Demo/debug knob: FPS_SUPERBOT=<id-substring> gives the matching bot
+// superpowers — 3× ground speed and a hit roll that never misses.
+const SUPERBOT = process.env.FPS_SUPERBOT ?? '';
+const isSuper = (id: string) => SUPERBOT !== '' && id.includes(SUPERBOT);
+
 export class ServerBots {
   private brains = new Map<string, BotBrain>();
   private readonly room: Room;
@@ -40,6 +45,7 @@ export class ServerBots {
       const id = `BOT-${this.room.name}${this.nextIdx++}`;
       const p = this.room.players.addPlayer(id);
       p.isBot = true;
+      if (isSuper(id)) p.health = 400; // superbot tanks a beating
       p.lastSeen = Date.now();
       this.room.assignTeam(p);
       this.room.broadcast({
@@ -104,8 +110,8 @@ export class ServerBots {
         { x: (dxb / lenb) * BOLT_SPEED, y: (dyb / lenb) * BOLT_SPEED, z: (dzb / lenb) * BOLT_SPEED },
         3, false,
       );
-      if (Math.random() < Math.max(0.15, 0.6 - lenb / 200)) {
-        this.room.ballSim.handleHit(p.id, ball, 8);
+      if (isSuper(p.id) || Math.random() < Math.max(0.15, 0.6 - lenb / 200)) {
+        this.room.ballSim.handleHit(p.id, ball, isSuper(p.id) ? 30 : 8);
       }
       return;
     }
@@ -115,7 +121,7 @@ export class ServerBots {
     const dy = aim.y - (p.position.y + 1.4);
     const dz = aim.z - p.position.z;
     const len = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1;
-    const hit = Math.random() < Math.max(0.15, 0.6 - len / 200);
+    const hit = isSuper(p.id) || Math.random() < Math.max(0.15, 0.6 - len / 200);
     this.room.messages.botFire(
       p.id, hit ? targetId : null,
       { x: p.position.x, y: p.position.y + 1.4, z: p.position.z },
@@ -210,8 +216,9 @@ export class ServerBots {
       if (dist < 0.5) { p.velocity.x = 0; p.velocity.z = 0; p.lastSeq++; continue; }
 
       const nx = dx / dist, nz = dz / dist;
-      p.velocity.x = nx * SPEED;
-      p.velocity.z = nz * SPEED;
+      const speed = isSuper(id) ? SPEED * 3 : SPEED;
+      p.velocity.x = nx * speed;
+      p.velocity.z = nz * speed;
       // Terrain clamp — bots are ground walkers; a hop pops them over bumps
       const groundY = this.field ? hmHeight(this.field, p.position.x, p.position.z) : p.position.y;
       const targetY = Math.max(groundY + 0.1, p.position.y - 9 * dt);
