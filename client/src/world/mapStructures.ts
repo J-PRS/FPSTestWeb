@@ -26,6 +26,15 @@ let built: THREE.Group | null = null;
 
 let dome: THREE.Mesh | null = null;
 
+/** Drop the arena dome — admin hot-reload removed the boundary. */
+export function clearArenaDome(scene: THREE.Scene): void {
+  if (!dome) return;
+  scene.remove(dome);
+  dome.geometry.dispose();
+  (dome.material as THREE.Material).dispose();
+  dome = null;
+}
+
 /** Translucent dome marking the arena boundary (Quicksand-style). Non-
  * blocking — visible geometry only; enforcement is a separate layer. */
 export function buildArenaDome(a: { x: number; z: number; radius: number }, groundY: number, scene: THREE.Scene): void {

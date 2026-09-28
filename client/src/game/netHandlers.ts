@@ -24,7 +24,7 @@ import type { HUD } from '../ui/hud.js';
 import type { HealthBarSystem } from '../ui/HealthBarSystem.js';
 import type { ExplosionTracker } from '../utils/ExplosionTracker.js';
 import type { Terrain } from '../world/terrain.js';
-import { buildStructures, buildArenaDome } from '../world/mapStructures.js';
+import { buildStructures, buildArenaDome, clearArenaDome } from '../world/mapStructures.js';
 import type { StructureSpec } from '../../../shared/mapSpec.js';
 import { structureColliders } from '../../../shared/ballSim.js';
 import { Ball } from '../entities/balls.js';
@@ -126,6 +126,19 @@ export function wireNetworkHandlers(deps: NetDeps): void {
       if (f.state === 'carried' && f.carrier) flagCarriers.set(f.team, f.carrier);
       else flagCarriers.delete(f.team);
     }
+  };
+
+  // Admin hot-reload — the room's map spec changed mid-match. Rebuild the
+  // static geometry exactly like the join path does from gameState.
+  networkManager.onMapUpdate = (map) => {
+    buildStructures(map.structures ?? [], deps.lazyScene());
+    Ball.colliders = structureColliders(map.structures);
+    if (map.arena) {
+      buildArenaDome(map.arena, deps.lazyTerrain().getHeight(map.arena.x, map.arena.z), deps.lazyScene());
+    } else {
+      clearArenaDome(deps.lazyScene());
+    }
+    chat.add(null, 'map updated by admin');
   };
 
   // Server-owned nugget pickups — creature kills in team rooms drop a gem

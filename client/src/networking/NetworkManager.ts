@@ -56,6 +56,8 @@ export class NetworkManager {
   public onPickupGone: ((id: number, by: string | null) => void) | null = null;
   public onFfaScore: ((scores: Record<string, number>, winAt: number) => void) | null = null;
   public onFfaMatchEnd: ((winner: string, scores: Record<string, number>) => void) | null = null;
+  /** Admin hot-reload — structures/arena changed mid-match; rebuild them. */
+  public onMapUpdate: ((map: { bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } }; structures?: import('../../../shared/mapSpec.js').StructureSpec[]; arena?: { x: number; z: number; radius: number } | null }) => void) | null = null;
   public onSnapshot: ((players: SnapshotPlayer[], timestamp: number) => void) | null = null;
   public onStateHash: ((hash: string, tick: number, playerCount: number, timestamp: number) => void) | null = null;
   public onCorrection: ((seq: number, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }) => void) | null = null;
@@ -218,6 +220,7 @@ export class NetworkManager {
     ffaMatchEnd: (data) => this.onFfaMatchEnd?.(data.winner, data.scores),
     matchEnd: (data) => this.onMatchEnd?.(data.winner, data.scores),
     matchStart: (data) => this.onMatchStart?.(data.mode, data.scores),
+    mapUpdate: (data) => this.onMapUpdate?.(data),
   };
 
   private handleGameState(data: Extract<ServerMessage, { type: 'gameState' }>): void {
