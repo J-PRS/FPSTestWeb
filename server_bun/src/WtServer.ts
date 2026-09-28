@@ -48,18 +48,22 @@ class WtSocketAdapter {
   ) {
     // The client's first action after connect is creating THE reliable
     // bidi stream — grab it and start pumping both lanes.
-    void this.acceptReliable();
-    void this.pumpDatagrams();
-    session.closed.then(() => {
-      if (this.open) {
-        this.open = false;
-        this.game.onClose(this.asSocket());
-      }
-    });
+    void this.acceptReliable().catch(() => this.die());
+    void this.pumpDatagrams().catch(() => {}); // session death ends the iterator
+    // Every lane here rejects with E_SESSION_CLOSED when the peer drops —
+    // an unhandled rejection in the native addon's stream callbacks kills
+    // the whole bun process, so each one is caught at its boundary.
+    session.closed.then(() => this.die()).catch(() => this.die());
   }
 
   private asSocket(): ServerWebSocket<WebSocketData> {
     return this as unknown as ServerWebSocket<WebSocketData>;
+  }
+
+  private die(): void {
+    if (!this.open) return;
+    this.open = false;
+    this.game.onClose(this.asSocket());
   }
 
   private async acceptReliable(): Promise<void> {
@@ -86,10 +90,7 @@ class WtSocketAdapter {
     }
     // Reliable stream ended while the session lives — the lane is dead,
     // treat the socket as closed rather than leaving a zombie.
-    if (this.open) {
-      this.open = false;
-      this.game.onClose(this.asSocket());
-    }
+    this.die();
   }
 
   private async pumpDatagrams(): Promise<void> {
@@ -104,7 +105,7 @@ class WtSocketAdapter {
   send(msg: string | Uint8Array): number {
     if (!this.open || !this.writer) return 0;
     const bytes = typeof msg === 'string' ? this.encoder.encode(msg + '\n') : new Uint8Array(msg);
-    void this.writer.write(bytes);
+    void this.writer.write(bytes).catch(() => {});
     return bytes.byteLength;
   }
 
@@ -128,6 +129,7 @@ class WtSocketAdapter {
  * are unset or the native addon won't load.
  */
 export class WtServer {
+  private static sessionCloseGuardInstalled = false;
   private server: { close(): Promise<void> } | null = null;
 
   constructor(private game: GameServer) {}
@@ -147,6 +149,17 @@ export class WtServer {
         tls: { certPem: opts.certPem, keyPem: opts.keyPem, allowSelfSigned: true },
         onSession: (session) => this.onSession(session),
       });
+      // The native addon throws E_SESSION_CLOSED inside its stream-start
+      // callbacks on peer drop — if any of those escape our adapter
+      // catches they'd take down the whole process, so filter that one
+      // known-benign code at the boundary. Anything else still crashes.
+      if (!WtServer.sessionCloseGuardInstalled) {
+        WtServer.sessionCloseGuardInstalled = true;
+        process.on('unhandledRejection', (err) => {
+          if (String(err).includes('E_SESSION_CLOSED')) return;
+          throw err;
+        });
+      }
       logger.info('WebTransport listening', { port: opts.port });
       return true;
     } catch (e) {
