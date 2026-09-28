@@ -166,6 +166,19 @@ export function createNetBalls(deps: EntitiesDeps, ctx: NetBallsCtx, logger: Chi
     }
   }
 
+  // Roster is authoritative for membership, not just spawns: a ball that
+  // died while we were reconnecting (or whose ballDie dropped on an
+  // unreliable lane) would otherwise ghost forever — nothing else removes it.
+  function netBallRoster(m: { balls: { id: number; variant: number; colorIdx: number; position: Vec3Msg; velocity: Vec3Msg; t?: number; enraged?: boolean; targetId?: string | null; tp?: Vec3Msg | null }[] }): void {
+    const live = new Set<number>();
+    for (const b of m.balls) { live.add(b.id); netBallSpawn(b); }
+    for (const [id, ball] of netBallById) {
+      if (live.has(id)) continue;
+      netBallById.delete(id);
+      ball.netKill();
+    }
+  }
+
   // A netDriven ball pulls toward ITS committed target — resolve the id to
   // a live position (ours or the remote's) each frame.
   function netTargetPosFor(b: Ball): THREE.Vector3 {
@@ -177,5 +190,5 @@ export function createNetBalls(deps: EntitiesDeps, ctx: NetBallsCtx, logger: Chi
     return b.pos; // no committed target — self pos means zero pull direction
   }
 
-  return { serverBalls, netBallSpawn, netBallSegment, netBallDie, netTargetPosFor };
+  return { serverBalls, netBallSpawn, netBallSegment, netBallDie, netBallRoster, netTargetPosFor };
 }

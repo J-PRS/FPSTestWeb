@@ -136,7 +136,7 @@ export function createEntities(deps: EntitiesDeps) {
   // Server-owned ball lifecycle (ballSpawn/ballSegment/ballDie handlers +
   // the stamped-sim-time clock) lives in game/netBalls.ts.
   const netBalls = createNetBalls(deps, { balls, targets, nuggets }, logger);
-  const { serverBalls, netBallSpawn, netBallSegment, netBallDie, netTargetPosFor } = netBalls;
+  const { serverBalls, netBallSpawn, netBallSegment, netBallDie, netBallRoster, netTargetPosFor } = netBalls;
 
   // ---- Balls ----
   function spawnBall(): void {
@@ -254,7 +254,7 @@ export function createEntities(deps: EntitiesDeps) {
     reportTargetDamage,
     deployables,
     updateDeployables: (dt: number) => deployables.update(dt),
-    netBallSpawn, netBallSegment, netBallDie,
+    netBallSpawn, netBallSegment, netBallDie, netBallRoster,
     updateBalls,
     updateCrawlers: melee.updateCrawlers, updateScarabs: melee.updateScarabs,
     updateGrubs: melee.updateGrubs, updateSnakes: melee.updateSnakes,
