@@ -69,6 +69,7 @@ export function wireNetworkHandlers(deps: NetDeps): void {
   const ctx: NetCtx = {
     deps, nm, networkManager, chat, ensureRemotePlayer,
     addPickup: () => { throw new Error('addPickup assigned by wirePickups'); },
+    reconcilePickups: () => { throw new Error('reconcilePickups assigned by wirePickups'); },
   };
 
   // Order matters: pickups defines ctx.addPickup which world.ts's gameState
