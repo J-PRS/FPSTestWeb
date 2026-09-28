@@ -353,6 +353,9 @@ export class MessageHandler {
     player.lastValidVelocity = { ...msg.velocity };
     player.lastValidRotation = { ...msg.rotation };
     player.hasReceivedPosition = true;
+    // Pre-warp samples are a different location entirely — keeping them
+    // lets lag-comp rewind land the shooter/target back at the corpse.
+    player.history.length = 0;
     this.pushHistory(player, Date.now());
     // Relay so observers snap instead of interpolating across the gap
     this.broadcast({ type: 'teleport', playerId, position: msg.position, velocity: msg.velocity }, playerId);

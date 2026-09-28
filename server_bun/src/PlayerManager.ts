@@ -200,6 +200,10 @@ export class PlayerManager {
     player.lastPosCheckTime = 0;
     player.lastPosCheckPos = { ...spawn };
     player.consecutiveRejects = 0;
+    // Rewind buffer: corpse-side samples must not survive the respawn —
+    // hit validation and muzzle checks would rewind to the death site.
+    player.history.length = 0;
+    player.history.push({ t: Date.now(), x: spawn.x, y: spawn.y, z: spawn.z });
     player.protectedUntil = Date.now() + PlayerManager.SPAWN_PROTECT_MS;
 
     return { position: { ...player.position }, rotation: { ...player.rotation } };

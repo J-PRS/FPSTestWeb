@@ -156,14 +156,17 @@ export class CombatHandler {
       logger.debug('Shot fired (miss)', { shooter: playerId });
 
       if (msg.position && msg.velocity) {
-        // Spawn sanity: the claimed muzzle position must be near the shooter
-        // (position reports lag up to ~15m at top speed + interp margin), and
-        // the claimed velocity near a real launch speed — weapon cap 250 m/s
-        // plus inherited player velocity (≤300) plus slack. An uncapped claim
+        // Spawn sanity: the claimed muzzle position must be near where the
+        // shooter was WHEN THEY FIRED — rewind by their ping (respawn,
+        // knockback and teleports all legitimately move the server-side
+        // position between "fire" and "claim arrives"), and the claimed
+        // velocity near a real launch speed — weapon cap 250 m/s plus
+        // inherited player velocity (≤300) plus slack. An uncapped claim
         // would make the reach check in validateHitClaim tautological.
-        const odx = msg.position.x - player.position.x;
-        const ody = msg.position.y - player.position.y;
-        const odz = msg.position.z - player.position.z;
+        const shooterAt = rewindPos(player, clampPing(player.ping));
+        const odx = msg.position.x - shooterAt.x;
+        const ody = msg.position.y - shooterAt.y;
+        const odz = msg.position.z - shooterAt.z;
         const vmag = Math.sqrt(
           msg.velocity.x * msg.velocity.x + msg.velocity.y * msg.velocity.y + msg.velocity.z * msg.velocity.z,
         );

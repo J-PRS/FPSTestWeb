@@ -1940,3 +1940,4 @@ tdm mode + quicksand map (dome arena, lip spawns, center tower); dome fades in n
 tdm: kill drops a tag pickup — any team banks it for a pt (kill-confirmed)
 arena: dome enforcement — out-of-bounds players get shoved back inside (grace + rim push)
 tests: tdm kill-confirmed coverage (frag→team pt + tag drop, cross-team tag bank)
+server: shot muzzle check rewinds shooter by ping; rewind buffer cleared on respawn/teleport
