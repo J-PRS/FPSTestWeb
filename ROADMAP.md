@@ -226,6 +226,13 @@ surface. Detailed research lives in `_reports/`; this file is the current truth.
   demo endpoints (demosoak.ts: v3 header craft, accept/reject,
   traversal 404, byte-identical round-trip). Divergence noise floor:
   count=1 crest clips only.
+- Divergence seq journal (2026-10-03): every shadow journals the
+  sim state captured per consumed input seq — a report stamped seq N
+  behind the shadow now replays from that anchor to now (the live sim
+  applied inputs the report predates; comparing stale flagged honest
+  clients). Client-ahead reports still probe the live state forward.
+  Transient count=1 crest clips demoted to INFO; WARN means repeat
+  or blow-through now.
 - Netcode v2 (2026-09-28): GameTransport seam w/ three real tiers —
   WebTransport (QUIC datagrams, cert-pinned via /wthash) → WebRTC
   DataChannel (game=unreliable binary, ctrl=reliable JSON, /rtcs
