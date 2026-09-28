@@ -1961,3 +1961,4 @@ server: RoomDeployables sim — 'deploy' claims plant server-owned turret/mine/s
 - video export: captureStream+MediaRecorder 'MP4' button in demo bar (mp4 pref, webm fallback), stop flushes clip; demorender tool: scrubTo pump + NVENC/AMF/QSV + readPixels->rawvideo fast path + --realtime screencast mode
 - cloak over MP: cloak bit rides inputMove->tick flag4 (proto v6); remotes hide model+gizmo+HUD indicator+healthbar; bots/balls lose cloaked targets; death strips cloak
 shield skill (Q): 20 energy activation, 5/s drain, damage routes to energy 10:1 — server absorbs hits while flag set, cyan bubble on remotes, viewmodel glow + HUD chip + synth cues (protocol v7)
+shield VFX: procedural hex+fresnel ShaderMaterial bubble (hit-flare via uHit uniform), same field wraps the viewmodel gun in FP; own bubble renders only in third person
