@@ -11,8 +11,21 @@ if (typeof globalThis.localStorage === 'undefined') {
     key: (i: number) => [...store.keys()][i] ?? null,
   };
 }
+if (typeof globalThis.sessionStorage === 'undefined') {
+  const store = new Map<string, string>();
+  (globalThis as Record<string, unknown>).sessionStorage = {
+    getItem: (k: string) => store.get(k) ?? null,
+    setItem: (k: string, v: string) => { store.set(k, String(v)); },
+    removeItem: (k: string) => { store.delete(k); },
+    clear: () => store.clear(),
+  };
+}
 if (typeof globalThis.window === 'undefined') {
-  (globalThis as Record<string, unknown>).window = { location: { search: '', href: 'http://localhost/' } };
+  (globalThis as Record<string, unknown>).window = {
+    location: { search: '', href: 'http://localhost/' },
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  };
 }
 if (typeof globalThis.document === 'undefined') {
   // Enough of the DOM for module-level listeners/setup in Logger/hud-adjacent
@@ -23,7 +36,17 @@ if (typeof globalThis.document === 'undefined') {
     getElementById: () => null,
     querySelector: () => null,
     querySelectorAll: () => [],
-    createElement: () => ({ style: {}, addEventListener: () => {}, appendChild: () => {} }),
+    createElement: () => ({
+      style: {},
+      children: [] as unknown[],
+      firstChild: null,
+      id: '',
+      maxLength: 0,
+      placeholder: '',
+      addEventListener: () => {},
+      appendChild() { return null; },
+      remove() {},
+    }),
     body: { appendChild: () => {}, removeChild: () => {} },
     hidden: false,
   };
