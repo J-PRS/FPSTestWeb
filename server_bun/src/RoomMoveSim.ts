@@ -59,7 +59,11 @@ export class RoomMoveSim {
   private shadows = new Map<string, Shadow>();
   // Judge mode tolerates prediction noise; authority mode is truth — the
   // client needs tight, frequent acks or its prediction drifts for real.
-  private static readonly DIVERGENCE_M = 8;
+  // Judge tolerance sits above the systematic offset a different-rate
+  // predictor produces (server steps 30Hz; clients step at frame rate —
+  // an honest fleet bot at 20Hz drifts ~8m, a 60Hz human drifts less).
+  // Real cheats diverge by orders of magnitude more.
+  private static readonly DIVERGENCE_M = 10;
   private static readonly AUTHORITY_DIVERGENCE_M = 1.5;
   private static readonly CORRECT_MS = 400;
   private static readonly AUTHORITY_CORRECT_MS = 100;
