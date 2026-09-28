@@ -46,6 +46,10 @@ export interface BrainCtx {
   energy?: number;
   /** Own health as a 0..1 fraction — mend decision input. */
   healthFrac?: number;
+  /** Positions of projectiles closing on the bot (host pre-filters to
+   *  inbound shells) — the dodge sense. Omit where no projectile sim
+   *  exists (offline bots, legacy path). */
+  threats?: BotVec[];
 }
 
 export interface BrainOut {
@@ -72,6 +76,8 @@ const ORBIT_TOO_CLOSE = 12;
 const STALE_MS = 1200;   // last-seen older than this = stop firing blind
 const FLINCH_S = 0.4;
 const FLINCH_DIST = 8;
+const DODGE_RANGE = 12;  // m — only react to shells already inbound
+const DODGE_STEP = 9;    // m — lateral hop, ~one body-length burst
 
 // --- context steering senses ---
 const SLOTS = 16;        // directions sampled around the circle
@@ -244,6 +250,28 @@ export class BotBrain {
     }
     if (this.detourT > 0 && this.detour) {
       dest = this.detour;
+    }
+
+    // --- dodge: sidestep the nearest closing shell ---
+    // A perpendicular step dodges a ballistic arc without abandoning the
+    // fight; the side that keeps current momentum wins (dodging backward
+    // through your own velocity reads as a stumble, not a juke).
+    let nearest: BotVec | null = null;
+    let nearestD = DODGE_RANGE;
+    for (const t of ctx.threats ?? []) {
+      const d = dist3(pos, t);
+      if (d < nearestD) { nearestD = d; nearest = t; }
+    }
+    if (nearest) {
+      const tx = pos.x - nearest.x, tz = pos.z - nearest.z;
+      const tl = Math.hypot(tx, tz) || 1;
+      const vx = ctx.vel?.x ?? 0, vz = ctx.vel?.z ?? 0;
+      const side = (vx * -tz + vz * tx) * tl >= 0 ? 1 : -1; // keep momentum
+      dest = {
+        x: pos.x + (-tz / tl) * side * DODGE_STEP,
+        y: pos.y,
+        z: pos.z + (tx / tl) * side * DODGE_STEP,
+      };
     }
 
     // --- fire ---

@@ -308,6 +308,9 @@ export class ServerBots {
         // shields, mends. Null field → undefined → full-tank behavior.
         energy: this.room.moveSim.energyOf(id) ?? undefined,
         healthFrac: p.maxHealth > 0 ? p.health / p.maxHealth : 1,
+        // Inbound shells feed the dodge sense — bots sidestep rockets
+        // like a human reading the arc instead of eating every volley.
+        threats: this.room.projectiles.incomingNear(p.position, 12),
         now,
       });
       // The brain's status intent IS the player's claim — same rising-edge

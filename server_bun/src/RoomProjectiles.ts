@@ -163,6 +163,23 @@ export class RoomProjectiles {
     this.room.messages.serverBlast(proj.ownerId, at, proj.weaponType, directHitId ?? null);
   }
 
+  /** Shells inside `radius` that are closing on `pos` — feeds bot threat
+   *  sense so brains can sidestep incoming fire like a human reading a
+   *  rocket's approach. A shell flying away is no threat regardless of
+   *  distance. */
+  incomingNear(pos: Vec3, radius: number): Vec3[] {
+    const out: Vec3[] = [];
+    for (const proj of this.projs.values()) {
+      const dx = pos.x - proj.p.pos.x, dy = pos.y - proj.p.pos.y, dz = pos.z - proj.p.pos.z;
+      const d = Math.hypot(dx, dy, dz);
+      if (d > radius) continue;
+      const closing = proj.p.vel.x * dx + proj.p.vel.y * dy + proj.p.vel.z * dz;
+      if (closing <= 0) continue; // moving away — ignore
+      out.push(proj.p.pos);
+    }
+    return out;
+  }
+
   /** Drop an owner's live shells — disconnect/reap cleanup like the
    *  client-side destroy path. */
   clearOwner(ownerId: string): void {
