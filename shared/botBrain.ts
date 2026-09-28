@@ -405,21 +405,26 @@ export class BotBrain {
       if (loudest && Math.random() < this.wanderlust * 0.5) this.goal = { ...loudest };
     } else if (this.wanderT <= 0 || distSq(pos, this.wanderWp) < 9) {
       this.wanderT = (3 + Math.random() * 4) / this.wanderlust;
-      // Roll a few candidate waypoints; the first one away from a death
-      // spot wins. Falling through keeps the last goal — a bot that died
-      // wandering simply keeps moving somewhere else.
+      // Roll a few candidate waypoints; downhill lines win — picking the
+      // low ground is what makes wander read as skiing runs instead of a
+      // jog across flats. Death spots are skipped outright.
+      const g0 = ctx.groundY(pos.x, pos.z);
+      let best: { x: number; y: number; z: number } | null = null;
+      let bestDrop = -Infinity;
       for (let tries = 0; tries < 3; tries++) {
         const a = Math.random() * Math.PI * 2;
         const r = (15 + Math.random() * 40) * this.wanderlust;
         const wp = { x: pos.x + Math.cos(a) * r, z: pos.z + Math.sin(a) * r };
         if (this.nearDeath(wp)) continue;
-        this.wanderWp = {
-          x: wp.x,
-          y: ctx.groundY(wp.x, wp.z) + BOT_EYE,
-          z: wp.z,
-        };
+        const drop = g0 - ctx.groundY(wp.x, wp.z);
+        if (drop > bestDrop) {
+          bestDrop = drop;
+          best = { x: wp.x, y: ctx.groundY(wp.x, wp.z) + BOT_EYE, z: wp.z };
+        }
+      }
+      if (best) {
+        this.wanderWp = best;
         this.goal = { ...this.wanderWp };
-        break;
       }
     }
   }
@@ -458,9 +463,16 @@ export class BotBrain {
     // Jet respects the tank — below the reserve the bot saves energy for
     // skills rather than hovering dry at the wall.
     const tanked = ctx.energy === undefined || ctx.energy > 15;
+    // The Tribes hop: on gentle rises, ski through the approach and jet-
+    // assist over the lip — the up-over-down rhythm that converts energy
+    // into speed. A bot that only jets on cliffs never gets dynamic.
+    const hop = rise > 0.8 && rise <= 3;
     return {
-      ski: rise < -0.5 || speed > 8 || airborne,
-      jet: (uphill || targetHigh) && speed > 0.5 && tanked,
+      // Ski to keep whatever momentum exists — downhill, airborne, or
+      // already moving. Held constantly so speed compounds into real
+      // skiing instead of decaying to a jog.
+      ski: rise < -0.3 || speed > 4 || airborne || hop,
+      jet: (uphill || targetHigh || (hop && speed > 4)) && speed > 0.3 && tanked,
       // Uphill + near-stationary = hop it; autohop chains the rest.
       jump: uphill && speed < 3 && !airborne,
     };

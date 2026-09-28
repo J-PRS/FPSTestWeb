@@ -10,10 +10,33 @@ const LEVEL_PRIORITY: Record<LogLevel, number> = {
 class Logger {
   private level: LogLevel;
   private readonly startTime: number;
+  private logFile: string | null = null;
 
   constructor(level: LogLevel = 'info') {
     this.level = level;
     this.startTime = performance.now();
+    // File sink — warn+ always land on disk so degraded behavior is
+    // observable after the fact, not just in a live console. Bun-only:
+    // browser hosts (P2P embeds of PlayerManager/CombatHandler) have no
+    // fs, so resolve it through require at construction and stay quiet
+    // if it isn't there.
+    try {
+      const g = globalThis as { Bun?: unknown; require?: (m: string) => { appendFileSync(p: string, s: string): void; mkdirSync(p: string, o?: { recursive: boolean }): void } };
+      if (!g.Bun) return;
+      // globalThis.require (not bare `require`) keeps this file valid in
+      // the browser tsconfig that typechecks server modules for P2P embeds.
+      const fs = g.require?.('node:fs');
+      if (!fs) return;
+      fs.mkdirSync('logs', { recursive: true });
+      this.logFile = 'logs/server.log';
+      this.append = (line) => fs.appendFileSync(this.logFile!, line + '\n');
+    } catch { /* console-only */ }
+  }
+
+  private append: ((line: string) => void) | null = null;
+
+  private toFile(line: string): void {
+    try { this.append?.(line); } catch { /* a bad disk write must never take a tick down */ }
   }
 
   setLevel(level: LogLevel): void {
@@ -53,11 +76,17 @@ class Logger {
   }
 
   warn(msg: string, data?: unknown): void {
-    if (this.shouldLog('warn')) console.warn(this.format('warn', msg, data));
+    if (!this.shouldLog('warn')) return;
+    const line = this.format('warn', msg, data);
+    console.warn(line);
+    this.toFile(line);
   }
 
   error(msg: string, data?: unknown): void {
-    if (this.shouldLog('error')) console.error(this.format('error', msg, data));
+    if (!this.shouldLog('error')) return;
+    const line = this.format('error', msg, data);
+    console.error(line);
+    this.toFile(line);
   }
 }
 
