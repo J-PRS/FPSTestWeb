@@ -20,6 +20,7 @@ import type { NetworkManager } from '../networking/NetworkManager.js';
 import type { HUD } from '../ui/hud.js';
 import type { HealthBarSystem } from '../ui/HealthBarSystem.js';
 import type { createScene } from '../world/scene.js';
+import { updateDirectionalFog } from '../world/directionalFog.js';
 import type { createRenderer } from '../core/renderer.js';
 import type { Terrain } from '../world/terrain.js';
 import type { createEntities } from './entities.js';
@@ -32,6 +33,7 @@ import Logger from '../core/Logger.js';
 import { createPerfHud } from '../core/perfHud.js';
 
 const _zeroVel = new THREE.Vector3(); // shared zero for demo playback
+const _sunDir = new THREE.Vector3(); // scratch — directional fog sun lookup
 const _birdPosBuf: THREE.Vector3[] = []; // scratch — minimap debug blips
 
 // ?mode=classic — solo bounce-and-shoot: balls only, no rage, no roster
@@ -197,14 +199,25 @@ export function createGameLoop(deps: GameLoopDeps) {
     };
   }
 
+  // Fog uniforms ride the terrain shader — must sync every frame. Fog color
+  // follows the sun: looking sunward warms the haze, away cools it; the sky
+  // horizon uniform takes the same tint so fogged ground stays seamless.
+  function syncFog(terrain: Terrain): void {
+    const fog = deps.sceneSetup.scene.fog;
+    if (!(fog instanceof THREE.Fog)) return;
+    _sunDir.copy(deps.sceneSetup.sun.position).normalize();
+    const tinted = updateDirectionalFog(fog, deps.camera, _sunDir);
+    fog.color.copy(tinted);
+    deps.sceneSetup.atmosphericSky.setFogColor(tinted);
+    terrain.updateFog(fog.color, fog.near, fog.far);
+  }
+
   /** Stage 1 — world sim: player, terrain, entities, wave director,
    *  projectiles. Returns demoPaused for the later stages. */
   function simTick(dt: number, player: Player, terrain: Terrain, networkManager: NetworkManager, demoManager: DemoManager | null): boolean {
     player.update(dt);
     terrain.update(player.pos.x, player.pos.z);
-    // Fog uniforms ride the terrain shader — must sync every frame.
-    const fog = deps.sceneSetup.scene.fog;
-    if (fog instanceof THREE.Fog) terrain.updateFog(fog.color, fog.near, fog.far);
+    syncFog(terrain);
 
     // Position send even when hidden — the server needs liveness.
     if (networkManager.isConnected() && !player.isDead && !demoManager?.isPlaying) {

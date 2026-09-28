@@ -230,6 +230,10 @@ export class AtmosphericSky {
     return this.sunPosition.clone().normalize();
   }
 
+  setFogColor(color: THREE.Color): void {
+    this.material.uniforms.fogColor.value.copy(color);
+  }
+
   isDay(): boolean {
     return this.timeOfDay > 0.25 && this.timeOfDay < 0.75;
   }

@@ -1,3 +1,4 @@
+2026-10-03 - directional sun-aware fog: scene fog + sky horizon + terrain tint warm when the camera faces the sun, cool away (camera-facing Mie stand-in, no post-pass needed)
 2026-10-03 - remote melee reads the whiff: observers get the same small reach-point flash the puncher sees (Explosion at pos+dir*reach)
 2026-10-03 - tests: pin the shotFired relay (stamped pos + exclude-shooter + 50ms gate + dead-shooter drop) and playerShot noise-ring feeding
 2026-10-03 - remote fire detail: muzzle flash tints by the relayed weaponType (per-gun glow), melee swings ride the shotFired relay so observers see/hear punches, projectile spawns pass weaponType to the recoil anim
