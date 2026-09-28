@@ -177,6 +177,12 @@ surface. Detailed research lives in `_reports/`; this file is the current truth.
 - Kill feed (2026-10-01): HUD rows "shooter [Weapon] ▸ target" on every
   playerKill (weapon threaded through applyHit/processAOE end-to-end),
   6-row cap, timed fade, gold edge on own frags, red on own death.
+- Server turrets (2026-10-01): deploy claims reach the server on pod
+  attach (sendDeploy); RoomDeployables sims sentry fire — nearest hostile
+  in 42m every 1.25s through CombatHandler.turretAttack (shared applyHit
+  funnel: kill credit, friendly gate, spawn protection). turretShot
+  broadcast paints the rocket on every client; remote deployables render
+  via remoteSpawn/remoteRemove + join-time roster reconcile.
 - Netcode v2 (2026-09-28): GameTransport seam w/ three real tiers —
   WebTransport (QUIC datagrams, cert-pinned via /wthash) → WebRTC
   DataChannel (game=unreliable binary, ctrl=reliable JSON, /rtcs
