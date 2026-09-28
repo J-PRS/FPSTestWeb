@@ -1,3 +1,4 @@
+2026-10-03 - validation: WT tier now covered in fleet soaks — test server on FPS_WT_PORT=19443, --tier=wt ran 2/2 QUIC joins + real kills, 0 rejects
 2026-10-03 - hitscan fire is visible to observers: shotFired (fan/beam kinds) relays server-side as playerShot with a rewind-stamped muzzle pos + claimed dir; observers get shotAt audio, recoil anim, and an 80m beam flash for the LG. Also commits the client-side destroy-order + airtime-zero AOE claim fixes that were staged uncommitted.
 2026-10-03 - end-of-match standings: scoreboard auto-pins at the horn, auto-dismisses on next matchStart (manual Tab never hijacked)
 2026-10-03 - lobby: /rooms rows carry the spec map (follows rotation), shown per-row and in the IN: banner
