@@ -1,3 +1,5 @@
+2026-10-03 - arena dome pushback was inverted: rim-anchored knockback pushed offenders FURTHER out (knockback pushes away from `position`), stacking 300+ m/s rejects; now a center-anchored pull, and the move shadow eats the same impulse — TDM quicksand soak went from 1018 corrections/839m worst gap to 25/27m, zero position rejects
+
 2026-10-03 - move shadow integrates in the client's 1/30 quanta inside the 50ms room tick (acc substeps) — the 20Hz single-step integration was a systematic divergence source under authority mode
 
 2026-10-03 - fleet honesty: correction handler now replays journaled inputs over the snap (mirrors client replay) and results report correction count + worst pre-snap gap — live authority-mode run shows ~2 corr/sec/bot at ~2m worst gap, the residual phase-lag class

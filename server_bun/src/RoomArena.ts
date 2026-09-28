@@ -32,13 +32,16 @@ export class RoomArena {
       const since = this.outsideSince.get(p.id);
       if (since === undefined) { this.outsideSince.set(p.id, now); continue; }
       if (now - since < GRACE_OUTSIDE_S) continue;
-      // Push back toward the dome center — knockback msg is targeted at the
-      // offender only; the rim position tells the client where the wall is.
+      // Pull toward the dome center — knockback semantics push AWAY from
+      // `position`, so a rim-anchored shove would launch offenders further
+      // out. pull:true draws them inward instead. The shadow must eat the
+      // same impulse or its trajectory diverges from the client's real one.
       const inv = 1 / (d || 1);
-      const rim: Vec3 = { x: cx + dx * inv * r * 0.98, y: p.position.y, z: cz + dz * inv * r * 0.98 };
+      const center: Vec3 = { x: cx, y: p.position.y, z: cz };
       this.room.connections.sendToPlayer(p.id, {
-        type: 'knockback', targetId: p.id, position: rim, force: PUSH_FORCE,
+        type: 'knockback', targetId: p.id, position: center, force: PUSH_FORCE, pull: true,
       } as Parameters<Room['broadcast']>[0]);
+      this.room.moveSim.applyImpulse(p.id, { x: -dx * inv * PUSH_FORCE, y: PUSH_FORCE * 0.3, z: -dz * inv * PUSH_FORCE });
       this.outsideSince.set(p.id, now + PUSH_INTERVAL_S);
     }
   }
