@@ -84,7 +84,6 @@ export class Room {
         scores: this.scores,
         winAt: this.modeSpec?.winAt,
         ffaScores: () => Object.fromEntries(this.ffaScores),
-        onBank: (pid, n) => this.bank(pid, n),
         bases: this.spec.bases,
         onKill: (pid, shooter) => this.onKill(pid, shooter),
         onHit: (pid, shooter) => this.bots.flinch(pid, shooter),
@@ -260,8 +259,7 @@ export class Room {
     this.awardFfa(shooterId, spec.ptsPlayerKill);
   }
 
-  /** Team point from an objective (flag capture) — separate from bank()
-   *  claims since the server itself is the source of truth. */
+  /** Team point from a server-observed objective (flag cap, gem touch). */
   score(team: 'alpha' | 'bravo', n = 1): void {
     if (!this.modeSpec?.teams) return;
     bank(this.scores, team, n);
@@ -306,17 +304,6 @@ export class Room {
    *  this way). */
   assignTeam(player: PlayerState): void {
     player.team ??= this.nextTeam();
-  }
-
-  /** A nugget banked (or a flag capped, same channel). Server clamps the
-   *  claim size in validation; here we just count and judge the match. */
-  bank(playerId: string, n: number): void {
-    const player = this.players.getPlayer(playerId);
-    if (!player?.team || !this.modeSpec?.teams) return;
-    bank(this.scores, player.team, n);
-    this.broadcast({ type: 'teamScore', scores: { ...this.scores }, winAt: this.modeSpec.winAt });
-    const w = winner(this.scores, this.modeSpec.winAt);
-    if (w) this.endMatch(w);
   }
 
   dispose(): void {

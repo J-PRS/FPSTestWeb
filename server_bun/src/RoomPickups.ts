@@ -3,8 +3,8 @@
  * gem at the corpse; the first living player to touch it banks a point
  * for their team via the room's score funnel. This is what makes
  * 'nuggets' mode trustworthy: the server sees the kill, the drop, and
- * the touch — no client claim involved (the 'bank' message stays only
- * for back-compat with the offline-mode pickup path).
+ * the touch — no client claim involved; the old 'bank' claim message
+ * was removed entirely since this path covers every legit bank.
  */
 import type { Vec3 } from './types.ts';
 import type { Room } from './Room.ts';

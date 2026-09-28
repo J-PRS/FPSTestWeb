@@ -1924,3 +1924,4 @@ anti-abuse: per-IP join throttle (5/min, loopback exempt for pvptest fleets) + c
 overtime: tied horn no longer instant-draws — 'OVERTIME — next score wins', any lead ends it mid-tick, 120s OT cap then draw
 join now announces the match clock ('~Xm left') via gameState matchEndsAt — late joiners see remaining time
 spectate joins: join with spectate:true -> full gameState + ballRoster + every broadcast + full-rate tick frames, no player slot/team/idle-reap; /rooms exposes spectator count
+removed the 'bank' claim message end-to-end — team score now only ever moves through server-observed objective touches (gem/flag); netDriven kill nuggets no longer spawn locally, pickup-by-me grants heal+jetboost; teleport claims rate-limited 3/s (plausibility-free channel)

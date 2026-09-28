@@ -515,12 +515,7 @@ export class NetworkManager {
     this.send({ type: 'chat', text });
   }
 
-  /** Nugget/flag banking claim — team-mode rooms own the score. */
-  sendBank(n: number): void {
-    this.send({ type: 'bank', n });
-  }
 
-  
   /**
    * Get local player ID
    */

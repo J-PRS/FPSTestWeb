@@ -68,9 +68,11 @@ export const CONFIG = {
     input: { maxCount: 120, windowMs: 1000 },
     projectileDestroy: { maxCount: 30, windowMs: 1000 },
     environmentDamage: { maxCount: 10, windowMs: 1000 }, // crawler pounces etc.
+    // teleport skips plausibility checks by design (declared warp), so the
+    // only defense is rate: legit uses are respawn + blink, a few per minute
+    teleport: { maxCount: 3, windowMs: 1000 },
     heal: { maxCount: 10, windowMs: 1000 }, // nugget pickups
     creatureHit: { maxCount: 120, windowMs: 1000 }, // chaingun-rate hit claims vs server creatures
-    bank: { maxCount: 2, windowMs: 1000 }, // back-compat claim path — at 20/claim a spammer still farms a match in seconds otherwise
     chat: { maxCount: 4, windowMs: 1000 }, // human typing speed, generous
     default: { maxCount: 120, windowMs: 1000 },
   } as const,
