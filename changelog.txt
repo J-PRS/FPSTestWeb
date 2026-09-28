@@ -1,3 +1,4 @@
+2026-09-28  flag callouts — center-screen Tribes-style headlines on transitions: FLAG TAKEN/DROPPED/RETURNED/CAPTURED, perspective-aware (yours vs enemy), skipped on join replay
 2026-09-28  HUD match strip — live match-clock countdown (red pulse <60s, OT at horn) + per-team flag chips (HOME/TAKEN/LOOSE) under the team score; driven by world.flagStates/matchEndsAt
 2026-09-28  match setup: /maps endpoint + /join?map&bots; lobby restyled to overlay palette with HOST MATCH (map picker + bot count); map/bots hints ride the join so disposed rooms rebuild with their spec
 2026-09-28  RoomMoveSim — server shadows every player with shared MoveSim (inputMove-driven, heightfield surface); >8m divergence logged as cheat signal; tracked on join, resynced on teleport, dropped on leave
