@@ -1,3 +1,6 @@
+2026-09-26  netcode v2: WT tier E2E-verified from real Chrome — cert-pinned QUIC handshake, bidi-stream join, 63B tick datagrams flowing
+2026-09-26  netcode v2: RTC tier E2E-verified — /rtcs offer/answer → datachannel → join → live 30Hz tick frames over SCTP
+2026-09-26  netcode v2: /wthash discovery endpoint (DER sha256 of FPS_WT_CERT); client WT probe pins cert via serverCertificateHashes + reads WT port from it
 2026-09-26  netcode v2: WT probe now reuses the probed session (no double handshake); addEventListener throughout tiers.ts
 2026-09-26  netcode v2: WebTransport server tier — WtServer (QUIC/HTTP3 via @webtransport-bun/webtransport), WtSocketAdapter, env-gated (FPS_WT_PORT+CERT+KEY); binary fanout prefers sendUnreliable datagram lane
 2026-09-26  netcode v2: server WebRTC peer (/rtcs + node-datachannel + RtcSocketAdapter into GameServer); client RTC/WT transports real; loopback-verified handshake
