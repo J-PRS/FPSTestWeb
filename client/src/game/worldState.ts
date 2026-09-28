@@ -25,6 +25,12 @@ export interface WorldState {
   scorches: ScorchDecal[];
   implosions: Implosion[];
   aoeGizmos: AoeGizmo[]; // ?debug blast-radius wireframes
+  // Match meta from the wire — scoreboard needs mode/team/scores to group
+  // rows; populated by netHandlers on gameState/teamScore/ffaScore.
+  mode?: string;
+  localTeam?: 'alpha' | 'bravo';
+  ffaScores: Map<string, number>;
+  teamScores: { alpha: number; bravo: number } | null;
 }
 
 export function createWorldState(): WorldState {
@@ -39,5 +45,7 @@ export function createWorldState(): WorldState {
     scorches: [],
     implosions: [],
     aoeGizmos: [],
+    ffaScores: new Map(),
+    teamScores: null,
   };
 }

@@ -55,10 +55,12 @@ export function wireNetworkHandlers(deps: NetDeps): void {
   });
   networkManager.onChat = (playerId, text) => chat.add(playerId, text);
   networkManager.onTeamScore = (scores, winAt) => {
+    deps.world.teamScores = scores;
     deps.lazyHud().setTeamScore?.(scores.alpha, scores.bravo);
     chat.add(null, `ALPHA ${scores.alpha} : ${scores.bravo} BRAVO  (first to ${winAt})`);
   };
   networkManager.onFfaScore = (scores, winAt) => {
+    deps.world.ffaScores = new Map(Object.entries(scores));
     const me = nm().getLocalPlayerId();
     const mine = scores[me] ?? 0;
     let lead = 0; for (const v of Object.values(scores)) if (v > lead) lead = v;
@@ -467,6 +469,10 @@ export function wireNetworkHandlers(deps: NetDeps): void {
   // Register gameState handler (for initial connection and reconnection)
   networkManager.onGameState = (players: GameStatePlayer[], localPlayerState: LocalPlayerState | undefined, roomInfo?: { room?: string; mode?: string; team?: 'alpha' | 'bravo'; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number>; pickups?: { id: number; pos: { x: number; y: number; z: number } }[]; flags?: { team: 'alpha' | 'bravo'; pos: { x: number; y: number; z: number }; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]; matchEndsAt?: number }) => {
     logger.debug(`gameState received, players: ${players.length}`);
+    deps.world.mode = roomInfo?.mode;
+    deps.world.localTeam = roomInfo?.team;
+    if (roomInfo?.scores) deps.world.teamScores = roomInfo.scores;
+    if (roomInfo?.ffaScores) deps.world.ffaScores = new Map(Object.entries(roomInfo.ffaScores));
     if (roomInfo?.matchEndsAt) {
       const leftMin = Math.max(0, Math.ceil((roomInfo.matchEndsAt - Date.now()) / 60000));
       chat.add(null, `match clock — ~${leftMin}m left${leftMin === 0 ? ' (overtime)' : ''}`);

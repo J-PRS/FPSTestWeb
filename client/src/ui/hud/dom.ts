@@ -236,6 +236,12 @@ export function createHudDom(): HudDom {
       #scoreboard td:last-child { text-align: right; }
       #scoreboard tr.self td { color: #8fd8ff; font-weight: 600; }
       #scoreboard tr.dead td { opacity: 0.45; }
+      #scoreboard tr.sb-team td {
+        font-size: 0.62rem; letter-spacing: 0.2em; font-weight: 700;
+        padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1);
+      }
+      #scoreboard tr.sb-team.alpha td { color: #55aaff; }
+      #scoreboard tr.sb-team.bravo td { color: #ff8855; }
       #team-score {
         position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
         display: none; font: 700 18px/1 monospace; letter-spacing: 0.08em;
@@ -281,7 +287,7 @@ export function createHudDom(): HudDom {
       <div id="team-score"><span class="a">ALPHA <b id="ts-a">0</b></span><span class="sep">vs</span><span class="b"><b id="ts-b">0</b> BRAVO</span></div>
       <div id="scoreboard">
         <div class="sb-title">SCOREBOARD</div>
-        <table><thead><tr><th>PLAYER</th><th>FRAGS</th><th>PING</th></tr></thead><tbody id="sb-rows"></tbody></table>
+        <table><thead><tr><th>PLAYER</th><th>FRAGS</th><th>PTS</th><th>PING</th></tr></thead><tbody id="sb-rows"></tbody></table>
       </div>
     `;
     document.body.appendChild(el);
