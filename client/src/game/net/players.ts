@@ -284,12 +284,7 @@ function wirePlayerLifecycle(ctx: NetCtx): void {
   };
 
   networkManager.onPlayerLeft = (playerId: string) => {
-    const remotePlayer = deps.world.remotePlayers.get(playerId);
-    if (remotePlayer) {
-      remotePlayer.dispose();
-      deps.world.remotePlayers.delete(playerId);
-      deps.lazyHud().removePlayerIndicator(playerId);
-      deps.lazyHealthBarSystem().removeBar(playerId);
+    if (deps.world.remotePlayers.remove(playerId)) {
       logger.info(`Remote player removed (playerLeft): ${playerId}`);
     }
   };

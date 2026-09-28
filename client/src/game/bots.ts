@@ -90,7 +90,7 @@ export class TeamBots {
         }
         this.bots.push(bot);
         this.teamOf.set(bot.playerId, bot.team);
-        deps.world.remotePlayers.set(bot.playerId, bot);
+        deps.world.remotePlayers.adopt(bot.playerId, bot);
       }
     };
     if (ffa) {
@@ -386,10 +386,7 @@ export class TeamBots {
   }
 
   dispose(): void {
-    for (const b of this.bots) {
-      this.deps.world.remotePlayers.delete(b.playerId);
-      b.dispose();
-    }
+    for (const b of this.bots) this.deps.world.remotePlayers.remove(b.playerId);
     this.bots.length = 0;
     for (const b of this.bolts) this.deps.lazyScene().remove(b.line);
     this.bolts.length = 0;

@@ -75,6 +75,26 @@ export class RemoteSet<T extends RemoteEntity, S> {
   /** Apply the stale gate: hidden entities skip their tick entirely. */
   setStale(ent: T, hidden: boolean): void { ent.setStaleHidden(hidden); }
 
+  /** Register an entity built by its owner (local bots, respawn path) —
+   *  fires onCreate so logging can't tell it apart from a wire spawn. */
+  adopt(id: string, ent: T): T {
+    this.entities.set(id, ent);
+    this.hooks.onCreate?.(id, ent);
+    return ent;
+  }
+
+  /** Owner-initiated teardown (playerLeft, bot squad dispose) — routes
+   *  through onRemove exactly like a prune, so HUD/health-bar cleanup
+   *  can't be forgotten at the call site. */
+  remove(id: string): boolean {
+    const ent = this.entities.get(id);
+    if (!ent) return false;
+    ent.dispose();
+    this.entities.delete(id);
+    this.hooks.onRemove?.(id, ent, 'gone');
+    return true;
+  }
+
   /** Dispose every entity whose id is absent from the live roster, or
    *  which finished its death-shrink (scale === 0). */
   prune(liveIds: (id: string) => boolean): void {

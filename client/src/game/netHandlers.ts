@@ -61,7 +61,7 @@ export function wireNetworkHandlers(deps: NetDeps): void {
   // Both first-seen-update and respawn-into-missing end up here.
   const ensureRemotePlayer = (playerId: string, position: { x: number; y: number; z: number }, via: string): RemotePlayer => {
     const rp = new RemotePlayer(deps.lazyScene(), playerId, position, deps.lazyTerrain());
-    deps.world.remotePlayers.set(playerId, rp);
+    deps.world.remotePlayers.adopt(playerId, rp);
     logger.debug(`CREATED remote player (${via})`, { instanceId: rp.instanceId, playerId, total: deps.world.remotePlayers.size });
     return rp;
   };
