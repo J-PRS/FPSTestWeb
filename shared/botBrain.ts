@@ -69,6 +69,10 @@ export class BotBrain {
   private flinchFrom: BotVec = { x: 0, y: 0, z: 0 };
   private wanderWp: BotVec = { x: 0, y: 0, z: 0 };
   private wanderT = 0;
+  private progressPos: BotVec = { x: 0, y: 0, z: 0 };
+  private progressT = 0;
+  private detour: BotVec | null = null;
+  private detourT = 0;
 
   /** Getting shot makes the bot recoil — call from the damage funnel. */
   takeHit(from: BotVec): void {
@@ -113,6 +117,9 @@ export class BotBrain {
       }
     }
     this.wanderT -= dt;
+    // detourT decays here, with the other timers — decrementing it inside
+    // the dest block below would let the setting call's dt eat the window.
+    this.detourT -= dt;
 
     // --- choose the step destination ---
     let dest: BotVec;
@@ -136,6 +143,48 @@ export class BotBrain {
       }
     } else {
       dest = this.goal;
+    }
+
+    // --- pathing lite: walls and steep faces ---
+    // Contour slide — if the step ahead climbs >6m in 4m (~56°+), blend
+    // along the flatter slope instead of stalling on the wall.
+    const sx = dest.x - pos.x, sz = dest.z - pos.z;
+    const sl = Math.hypot(sx, sz);
+    if (sl > 0.5) {
+      const g0 = ctx.groundY(pos.x, pos.z);
+      const rise = ctx.groundY(pos.x + (sx / sl) * 4, pos.z + (sz / sl) * 4) - g0;
+      if (rise > 6) {
+        const px = -(sz / sl), pz = sx / sl;
+        const l = Math.abs(ctx.groundY(pos.x + px * 4, pos.z + pz * 4) - g0);
+        const r = Math.abs(ctx.groundY(pos.x - px * 4, pos.z - pz * 4) - g0);
+        const s = l <= r ? 1 : -1;
+        dest = {
+          x: pos.x + px * s * 4 + (sx / sl) * 1.5,
+          y: pos.y,
+          z: pos.z + pz * s * 4 + (sz / sl) * 1.5,
+        };
+      }
+    }
+
+    // Stuck break — no progress for 1.5s means the straight line is
+    // blocked (structure, cliff, another bot). Sidestep perpendicular to
+    // the goal for a beat; random side per incident keeps herds from
+    // detouring in lockstep.
+    this.progressT += dt;
+    if (this.progressT >= 1.5) {
+      this.progressT = 0;
+      if (distSq(pos, this.progressPos) < 2.25 && this.detourT <= 0) {
+        const gx = this.goal.x - pos.x, gz = this.goal.z - pos.z;
+        const gl = Math.hypot(gx, gz) || 1;
+        const side = Math.random() < 0.5 ? -1 : 1;
+        const dx = (-gz / gl) * side * 14, dz = (gx / gl) * side * 14;
+        this.detour = { x: pos.x + dx, y: ctx.groundY(pos.x + dx, pos.z + dz) + BOT_EYE, z: pos.z + dz };
+        this.detourT = 1.2;
+      }
+      this.progressPos = { ...pos };
+    }
+    if (this.detourT > 0 && this.detour) {
+      dest = this.detour;
     }
 
     // --- fire ---
