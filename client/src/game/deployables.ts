@@ -297,7 +297,15 @@ export class Deployables {
       group.position.copy(at);
       group.position.y = terrain.getHeight(at.x, at.z);
       this.deps.scene.add(group);
-      item = { kind, candId: `rdep:${id}`, pos: group.position, dead: false, hurt: () => {}, update: () => {}, dispose: () => this.deps.scene.remove(group) };
+      // Drones chase their owner's shadow server-side — mirror that anchor
+      // here or the visual stays parked at the pod's landing spot.
+      const update = kind === 'drone'
+        ? () => {
+            const op = this.deps.lazyNetworkManager().getPlayers().get(owner)?.position;
+            if (op) group.position.set(op.x, op.y + 2.5, op.z);
+          }
+        : () => {};
+      item = { kind, candId: `rdep:${id}`, pos: group.position, dead: false, hurt: () => {}, update, dispose: () => this.deps.scene.remove(group) };
     }
     this.remote.set(id, item);
     this.byId.set(id, item);

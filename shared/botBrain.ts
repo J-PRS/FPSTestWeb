@@ -63,6 +63,26 @@ const SEP_RANGE = 7;     // m — personal space vs other bodies
 const MEM_MS = 4000;     // recently-visited ground repels for this long
 const MEM_RANGE = 12;    // m — memory trail influence radius
 
+/** Heightfield LOS — march the eye→target line, fail where ground rises
+ *  above it. pos.y is eye-height on the client and near-feet on the
+ *  server, so the eye point is whichever is higher of pos.y and
+ *  ground+eye. Structures aren't modeled — callers don't hand them in —
+ *  so this is "can I see over the terrain", not full occlusion. */
+function losClear(ctx: BrainCtx, from: BotVec, to: BotVec): boolean {
+  const dx = to.x - from.x, dz = to.z - from.z;
+  const dist = Math.hypot(dx, dz);
+  if (dist < 4) return true; // point-blank: probes are coarser than the gap
+  const steps = Math.ceil(dist / 3);
+  const y0 = Math.max(from.y + 0.4, ctx.groundY(from.x, from.z) + BOT_EYE);
+  const y1 = Math.max(to.y + 0.4, ctx.groundY(to.x, to.z) + BOT_EYE);
+  for (let i = 1; i < steps; i++) {
+    const t = i / steps;
+    const x = from.x + dx * t, z = from.z + dz * t;
+    if (ctx.groundY(x, z) > y0 + (y1 - y0) * t + 0.5) return false;
+  }
+  return true;
+}
+
 export class BotBrain {
   /** Set the spawn point as the initial goal. */
   constructor(spawn: BotVec) {
@@ -89,6 +109,12 @@ export class BotBrain {
   private heading = { x: 1, z: 0 };
   private memory: { x: number; z: number; t: number }[] = [];
   private memT = 0;
+  // Personality scalars — ±20-30% per bot so a squad doesn't read as one
+  // centipede: different preferred ranges, wander appetites, tempers.
+  private readonly orbitFar = ORBIT_FAR * (0.85 + Math.random() * 0.3);
+  private readonly orbitClose = ORBIT_TOO_CLOSE * (0.85 + Math.random() * 0.3);
+  private readonly wanderlust = 0.7 + Math.random() * 0.6;
+  private readonly temper = 0.7 + Math.random() * 0.6; // fire-cadence scale
 
   /** Getting shot makes the bot recoil — call from the damage funnel. */
   takeHit(from: BotVec): void {
@@ -109,7 +135,10 @@ export class BotBrain {
       for (const e of ctx.enemies) {
         if (!e.alive) continue;
         const d = dist3(pos, e.pos);
-        if (d < bestD) { bestD = d; best = e; }
+        // No wallhack: only acquire what the eye line can actually see.
+        // An occluded enemy clears the hunt entirely — breaking LOS behind
+        // a ridge shakes pursuit like it would a human.
+        if (d < bestD && losClear(ctx, pos, e.pos)) { bestD = d; best = e; }
       }
       this.hunt = best;
       if (best) {
@@ -121,9 +150,9 @@ export class BotBrain {
       } else if (ctx.pickup) {
         this.goal = { ...ctx.pickup };
       } else if (this.wanderT <= 0 || distSq(pos, this.wanderWp) < 9) {
-        this.wanderT = 3 + Math.random() * 4;
+        this.wanderT = (3 + Math.random() * 4) / this.wanderlust;
         const a = Math.random() * Math.PI * 2;
-        const r = 15 + Math.random() * 40;
+        const r = (15 + Math.random() * 40) * this.wanderlust;
         this.wanderWp = {
           x: pos.x + Math.cos(a) * r,
           y: ctx.groundY(pos.x + Math.cos(a) * r, pos.z + Math.sin(a) * r) + BOT_EYE,
@@ -147,15 +176,28 @@ export class BotBrain {
     } else if (this.hunt) {
       const t = this.hunt;
       const d = dist3(pos, t.pos);
-      if (d > ORBIT_FAR) {
+      if (d > this.orbitFar) {
         dest = { ...t.pos };
       } else {
-        // Orbit at ring distance; back off when hugged.
-        const ox = pos.x - t.pos.x, oz = pos.z - t.pos.z;
-        const ol = Math.hypot(ox, oz) || 1;
-        const px = -oz / ol, pz = ox / ol; // perpendicular
-        dest = { x: pos.x + px * 6, y: pos.y, z: pos.z + pz * 6 };
-        if (d < ORBIT_TOO_CLOSE) { dest.x += (ox / ol) * 4; dest.z += (oz / ol) * 4; }
+        // Position-picking (Killzone-style): score a ring of candidate
+        // spots by LOS to the target, preferred range band, exposure to
+        // the rest of the enemy roster, and how climbable the ground is —
+        // then let steering route there. Standing still stays an option:
+        // the bot's own spot is candidate 0 with an inertia bonus.
+        const mid = (this.orbitFar + this.orbitClose) * 0.5;
+        const g0 = ctx.groundY(pos.x, pos.z);
+        let bx = pos.x, bz = pos.z, bs = this.scorePos(ctx, pos, pos, t, mid, g0) + 0.4;
+        for (let i = 0; i < 12; i++) {
+          const a = (i / 12) * Math.PI * 2;
+          const cx = pos.x + Math.cos(a) * 10, cz = pos.z + Math.sin(a) * 10;
+          const cy = ctx.groundY(cx, cz);
+          if (cy - g0 > 4) continue; // can't stand there
+          const s = this.scorePos(ctx, pos, { x: cx, y: cy + BOT_EYE, z: cz }, t, mid, cy);
+          if (s > bs) { bs = s; bx = cx; bz = cz; }
+        }
+        dest = Math.hypot(bx - pos.x, bz - pos.z) < 3
+          ? { ...pos } // best move is no move — hold and shoot
+          : { x: bx, y: pos.y, z: bz };
       }
     } else {
       dest = this.goal;
@@ -192,7 +234,7 @@ export class BotBrain {
       if (this.fireT <= 0) {
         if (this.burstLeft <= 0) this.burstLeft = 3;
         this.burstLeft--;
-        this.fireT = this.burstLeft > 0 ? 0.85 : 1.6 + Math.random();
+        this.fireT = (this.burstLeft > 0 ? 0.85 : 1.6 + Math.random()) / this.temper;
         const d = dist3(pos, this.lastSeen);
         const err = 0.5 + Math.hypot(this.lastSeenVel.x, this.lastSeenVel.y, this.lastSeenVel.z) * 0.1 + d * 0.02;
         fire = {
@@ -207,6 +249,22 @@ export class BotBrain {
     }
 
     return { dest, fire };
+  }
+
+  /** Score one candidate position for the combat picker: LOS to the hunt
+   *  target (a spot that can't see it is cover — mildly bad on offense),
+   *  closeness to the preferred range band, exposure to every OTHER enemy
+   *  that could see the spot, and how much vertical scrambling it needs. */
+  private scorePos(ctx: BrainCtx, self: BotVec, cand: BotVec, t: BotEnemy, mid: number, candGround: number): number {
+    const dt = dist3(cand, t.pos);
+    let s = losClear(ctx, cand, t.pos) ? 2 : -1.5;
+    s -= Math.abs(dt - mid) * 0.08;
+    for (const e of ctx.enemies) {
+      if (!e.alive || e === t) continue;
+      if (losClear(ctx, cand, e.pos)) s -= 0.6; // a second gun covers this spot
+    }
+    s -= Math.abs(candGround - ctx.groundY(self.x, self.z)) * 0.05;
+    return s;
   }
 
   /** Context steering — every direction is scored instead of testing

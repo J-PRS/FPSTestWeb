@@ -38,6 +38,11 @@ const MINE_TRIGGER_DIST = 3.2;
 const MINE_BLAST_RADIUS = 6.0;
 const MINE_DAMAGE = 22;
 const MINE_KNOCKBACK = 12.0;
+// Mirrors client DeployDrone: escort trades damage for following you.
+const DRONE_RANGE = 35;
+const DRONE_FIRE_INTERVAL = 1.6;
+const DRONE_DAMAGE = 9;
+const DRONE_HOVER_UP = 2.5;
 // Mirrors client DeployStation: recharge envelope.
 const STATION_RANGE = 9;
 const STATION_HP_RATE = 0.09;   // fraction of maxHealth per second
@@ -103,7 +108,34 @@ export class RoomDeployables {
       if (d.kind === 'turret') this.tickTurret(d, dt);
       else if (d.kind === 'mine') this.tickMine(d, dt);
       else if (d.kind === 'station') this.tickStation(d, dt);
+      else if (d.kind === 'drone') this.tickDrone(d, dt);
     }
+  }
+
+  /** Escort drone: shadow follows the owner's hover anchor, and the same
+   *  nearest-hostile scan as the sentry plinks whoever's in range. */
+  private tickDrone(d: Deployed, dt: number): void {
+    const owner = this.room.players.getPlayer(d.owner);
+    if (!owner || owner.isDead) { this.remove(d.id); return; }
+    d.pos.x = owner.position.x;
+    d.pos.y = owner.position.y + DRONE_HOVER_UP;
+    d.pos.z = owner.position.z;
+    d.fireCd -= dt;
+    if (d.fireCd > 0) return;
+    let target: string | null = null;
+    let bestD2 = DRONE_RANGE * DRONE_RANGE;
+    for (const [pid, p] of this.room.players.getAllPlayers()) {
+      if (p.isDead || pid === d.owner) continue;
+      if (owner.team && p.team === owner.team) continue;
+      if (p.protectedUntil > Date.now()) continue;
+      const dx = p.position.x - d.pos.x, dy = p.position.y - d.pos.y, dz = p.position.z - d.pos.z;
+      const d2 = dx * dx + dy * dy + dz * dz;
+      if (d2 < bestD2) { bestD2 = d2; target = pid; }
+    }
+    if (!target) { d.fireCd = 0.15; return; }
+    d.fireCd = DRONE_FIRE_INTERVAL;
+    this.room.broadcast({ type: 'turretShot', id: d.id, owner: d.owner, targetId: target } as ServerMessage);
+    this.room.messages.turretAttack(d.owner, target, DRONE_DAMAGE);
   }
 
   /** Proximity mine: after the arm delay, a hostile stepping inside the

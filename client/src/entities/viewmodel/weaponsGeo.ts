@@ -108,10 +108,10 @@ discGrip.rotation.x = 0.35;
 disc.add(discGrip);
 disc.visible = false;
 
-// Weapon 2 — chaingun: 3 thin barrels triangulated around center.
-// Barrels stop at the housing face (z=-0.02) — a buried rear stem
-// just clips through the receiver while spinning; nothing inside
-// the body is visible anyway.
+// Weapon 2 — chaingun: the ref reads as one long chamfered slab
+// swallowing the barrel cluster — barrels peek out the front of a heavy
+// shroud, dark recessed channel under the belly. Not three floating
+// sticks: the SHROUD is the gun.
 const chain = new THREE.Group();
 chainBarrels = new THREE.Group();
 // The bake pipeline treats "barrels" as a kept-separate node — it's the
@@ -119,13 +119,51 @@ chainBarrels = new THREE.Group();
 chainBarrels.name = 'barrels';
 for (let i = 0; i < 3; i++) {
   const a = (i / 3) * Math.PI * 2;
-  const barrel = mkTube(0.035, 0.035, 0.33, -0.18, bodyMat);
-  barrel.position.x = Math.cos(a) * 0.06;
-  barrel.position.y = Math.sin(a) * 0.06;
+  // longer, thicker barrels on a wider ring so they still read as a
+  // cluster where they exit the shroud
+  const barrel = mkTube(0.045, 0.045, 0.5, -0.28, bodyMat);
+  barrel.position.x = Math.cos(a) * 0.075;
+  barrel.position.y = Math.sin(a) * 0.075;
   chainBarrels.add(barrel);
 }
 chain.add(chainBarrels);
-chain.add(mkTube(0.09, 0.11, 0.28, 0.12, darkMat)); // receiver housing
+// Chamfered slab shroud — a flattened octagonal prism gives the cut
+// corners the ref shows. Swallows the barrels' rear 2/3; they spin
+// inside it and protrude past the front collar.
+const chainShroud = new THREE.Mesh(new THREE.CylinderGeometry(0.125, 0.14, 0.58, 8), bodyMat);
+chainShroud.rotation.x = Math.PI / 2;
+chainShroud.scale.x = 1.35;   // wide slab, chamfered shoulders
+chainShroud.scale.y = 0.85;   // NB: local y = cylinder axis → shortens, not flattens
+chainShroud.position.z = -0.02;
+chain.add(chainShroud);
+// Dark recessed channel under the belly — the ref's lower slot where
+// the drive train lives. Two stacked boxes step the underside.
+const chainBelly = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.07, 0.5), darkMat);
+chainBelly.position.set(0, -0.105, -0.05);
+chain.add(chainBelly);
+const chainBelly2 = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.05, 0.3), darkMat);
+chainBelly2.position.set(0, -0.15, 0.05);
+chain.add(chainBelly2);
+// Front collar — the ring the barrels exit through. Slightly wider than
+// the cluster so the plate frames them.
+const chainCollar = new THREE.Mesh(new THREE.CylinderGeometry(0.115, 0.115, 0.04, 8), darkMat);
+chainCollar.rotation.x = Math.PI / 2;
+chainCollar.position.z = -0.27;
+chain.add(chainCollar);
+// Bore face behind the collar ring so the muzzle doesn't read hollow
+chain.add(mkBore(0.1, -0.25));
+// Rear receiver block + top rail to match the family
+const chainRecv = new THREE.Mesh(new THREE.BoxGeometry(0.17, 0.16, 0.2), darkMat);
+chainRecv.position.set(0, 0, 0.32);
+chain.add(chainRecv);
+const chainRail = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.04, 0.3), darkMat);
+chainRail.position.set(0, 0.135, -0.08);
+chain.add(chainRail);
+// Grip — the shroud's belly means it mounts lower than most guns
+const chainGrip = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.12, 0.07), darkMat);
+chainGrip.position.set(0, -0.19, 0.18);
+chainGrip.rotation.x = 0.3;
+chain.add(chainGrip);
 chain.visible = false;
 
 // Weapon 3 — mortar: fat short tube with a wide muzzle + rear base
@@ -241,21 +279,76 @@ for (let i = 0; i < 3; i++) {
 }
 flak.visible = false;
 
-// Weapon 6 — plasma gun: twin slim tubes + glowing emitter ring
+// Weapon 6 — plasma cannon: a fat energy projector, not a tube — heavy
+// finned emitter head up front, glowing core slats behind it, capacitor
+// bottle under the receiver. T2's plasma gun reads BULKY — the emitter
+// dish is the widest thing on the model.
 const plasma = new THREE.Group();
-plasma.add(mkTube(0.09, 0.09, 0.45, -0.02, bodyMat));
-const sideTube = mkTube(0.04, 0.04, 0.35, -0.01, darkMat);
-sideTube.position.x = 0.09;
-plasma.add(sideTube);
-plasma.add(mkTube(0.11, 0.13, 0.06, -0.24, darkMat)); // emitter collar
-plasma.add(mkBore(0.08, -0.271));
+// Main body — shorter and much fatter than the old slim tube
+plasma.add(mkTube(0.115, 0.13, 0.3, 0.0, bodyMat));
+// Flared emitter head — a wide shallow dish the bolt charges inside.
+// Two nested cones: outer bell + inner throat.
+const plasmaBell = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.115, 0.1, 10), darkMat);
+plasmaBell.rotation.x = Math.PI / 2;
+plasmaBell.position.z = -0.2;
+plasma.add(plasmaBell);
+const plasmaThroat = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.13, 0.08, 10), darkMat);
+plasmaThroat.rotation.x = Math.PI / 2;
+plasmaThroat.position.z = -0.29;
+plasma.add(plasmaThroat);
+plasma.add(mkBore(0.085, -0.331));
+// Emitter core — big green iris recessed in the throat, wider than the
+// old ring so the muzzle reads HOT at viewmodel distance
 const plasmaGlow = new THREE.Mesh(
-  new THREE.CylinderGeometry(0.075, 0.075, 0.02, 16),
+  new THREE.CylinderGeometry(0.078, 0.078, 0.02, 14),
   new THREE.MeshBasicMaterial({ color: 0x33ffaa })
 );
 plasmaGlow.rotation.x = Math.PI / 2;
-plasmaGlow.position.z = -0.272;
+plasmaGlow.position.z = -0.332;
 plasma.add(plasmaGlow);
+// Cooling fins — four flat blades radiating off the emitter head, the
+// silhouette detail that separates "energy projector" from "tube"
+for (let i = 0; i < 4; i++) {
+  const a = (i / 4) * Math.PI * 2;
+  const fin = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.11, 0.14), darkMat);
+  fin.position.set(Math.cos(a) * 0.115, Math.sin(a) * 0.115, -0.15);
+  fin.rotation.z = a;
+  plasma.add(fin);
+}
+// Core slats — green glow strips along the body so the energy read
+// isn't only at the muzzle
+for (let i = 0; i < 4; i++) {
+  const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+  const slat = new THREE.Mesh(
+    new THREE.BoxGeometry(0.015, 0.015, 0.16),
+    new THREE.MeshBasicMaterial({ color: 0x22cc88 })
+  );
+  slat.position.set(Math.cos(a) * 0.125, Math.sin(a) * 0.125, 0.0);
+  plasma.add(slat);
+}
+// Capacitor bottle under the receiver — a fat cell slung low, same
+// trick as the GL drum / sticky magazine: ammo you can see
+const plasmaCell = mkTube(0.07, 0.07, 0.22, 0.05, darkMat);
+plasmaCell.position.y = -0.13;
+plasma.add(plasmaCell);
+const plasmaCellGlow = new THREE.Mesh(
+  new THREE.CylinderGeometry(0.045, 0.045, 0.015, 10),
+  new THREE.MeshBasicMaterial({ color: 0x33ffaa })
+);
+plasmaCellGlow.rotation.x = Math.PI / 2;
+plasmaCellGlow.position.set(0, -0.13, -0.07);
+plasma.add(plasmaCellGlow);
+// Receiver block + top rail to sit in the family
+const plasmaRecv = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.16, 0.16), bodyMat);
+plasmaRecv.position.set(0, -0.01, 0.22);
+plasma.add(plasmaRecv);
+const plasmaRail = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.035, 0.26), darkMat);
+plasmaRail.position.set(0, 0.135, 0.02);
+plasma.add(plasmaRail);
+const plasmaGrip = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.12, 0.06), darkMat);
+plasmaGrip.position.set(0, -0.15, 0.14);
+plasmaGrip.rotation.x = 0.3;
+plasma.add(plasmaGrip);
 plasma.visible = false;
 
 // Weapon — plasma gun (Quake-style rapid bolts): shorter and squatter
