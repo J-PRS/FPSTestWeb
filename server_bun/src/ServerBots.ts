@@ -18,7 +18,7 @@ import type { Room } from './Room.ts';
 import { hmHeight, type Heightfield } from '../../shared/heightfield.ts';
 import { BotBrain, type BotEnemy, type BotVec } from '../../shared/botBrain.ts';
 import { logger } from './logger.ts';
-import { STATUS } from '../../shared/status.ts';
+import { STATUS, CLIENT_STATUS_MASK } from '../../shared/status.ts';
 import { WeaponType, getWeaponStats } from '../../shared/weapons.ts';
 
 const SPEED = 14;          // m/s ground move
@@ -119,7 +119,7 @@ export class ServerBots {
   /** Translate the brain's fire command into the wire broadcast — the
    *  distance roll decides damage, the visible bolt follows the aim error
    *  so a miss reads as a miss. */
-  private fireAt(p: { id: string; position: Vec3 }, targetId: string, aim: Vec3): void {
+  private fireAt(p: { id: string; position: Vec3; velocity: Vec3 }, targetId: string, aim: Vec3): void {
     // Creature targets route through the same claim funnel a client's
     // creatureHit uses — plausibility check and all — so a bot kill drops
     // its gem/FFA point identically.
@@ -165,6 +165,33 @@ export class ServerBots {
         3, hit,
       );
     }
+  }
+
+  /** Belt throw — a lobbed grenade at the hunt's last-seen spot. Same
+   *  spawn path as the plasma bolt: RoomProjectiles owns the flight. */
+  private throwBelt(p: { id: string; position: Vec3; velocity: Vec3 }): void {
+    const stats = getWeaponStats(WeaponType.Grenade);
+    if (!stats || stats.speed <= 0) return;
+    const hunt = this.room.players.getPlayer(this.lastHuntId(p.id) ?? '');
+    const aim = hunt?.position;
+    if (!aim) return;
+    const dx = aim.x - p.position.x, dz = aim.z - p.position.z;
+    const d = Math.hypot(dx, dz) || 1;
+    // 40 m/s flat throw + an arc: pick the elevation that lands ~d meters
+    // out. Rough ballistic pitch: aim +y = climb needed at max range.
+    const pitch = Math.min(0.7, d / stats.speed);
+    const dir = { x: dx / d, y: pitch, z: dz / d };
+    const len = Math.hypot(dir.x, dir.y, dir.z);
+    this.room.projectiles.spawn(p.id, WeaponType.Grenade,
+      { x: p.position.x, y: p.position.y + 1.4, z: p.position.z },
+      { x: dir.x / len, y: dir.y / len, z: dir.z / len }, p.velocity);
+  }
+
+  /** The brain's current hunt target id — needed by throwBelt since the
+   *  belt intent carries no aim point of its own. */
+  private lastHuntId(botId: string): string | null {
+    const brain = this.brains.get(botId);
+    return brain?.currentHuntId ?? null;
   }
 
   /** CTF objective for a bot: carrying the enemy flag → own base; own flag
@@ -255,9 +282,21 @@ export class ServerBots {
         pickup: this.room.pickups?.nearest(p.position) ?? undefined,
         groundY: (x, z) => (this.field ? hmHeight(this.field, x, z) : p.position.y),
         others: this.othersOf(p),
+        // The shadow tank is the truth — brains read it to gate jets,
+        // shields, mends. Null field → undefined → full-tank behavior.
+        energy: this.room.moveSim.energyOf(id) ?? undefined,
+        healthFrac: p.maxHealth > 0 ? p.health / p.maxHealth : 1,
         now,
       });
+      // The brain's status intent IS the player's claim — same rising-edge
+      // antes + drains the human path models, applied via setInput below.
+      // Keep server-owned buff bits (REGEN/DD) — the brain only claims
+      // the toggle skills a client could legitimately hold.
+      if (out.status !== undefined) {
+        p.status = (p.status & ~CLIENT_STATUS_MASK) | (out.status & CLIENT_STATUS_MASK);
+      }
       if (out.fire) this.fireAt(p, out.fire.targetId, out.fire.aim);
+      if (out.belt) this.throwBelt(p);
 
       const dx = out.dest.x - p.position.x;
       const dz = out.dest.z - p.position.z;

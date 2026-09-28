@@ -152,6 +152,11 @@ export class RoomMoveSim {
     if (sh) sh.energy = Math.max(0, sh.energy - amount);
   }
 
+  /** Modeled tank level — brains read this for jet/skill gating. */
+  energyOf(playerId: string): number | null {
+    return this.shadows.get(playerId)?.energy ?? null;
+  }
+
   /** Knockback/AOE impulses the server itself applied — the sim must get
    *  the same delta or every blast reads as a divergence. */
   applyImpulse(playerId: string, dv: Vec3Like): void {

@@ -11,6 +11,9 @@
  * locomotion, the visual, and resolving the hit.
  */
 
+import { STATUS } from './status.ts';
+import { ENERGY } from './movement.ts';
+
 export interface BotVec { x: number; y: number; z: number }
 
 export interface BotEnemy {
@@ -38,6 +41,11 @@ export interface BrainCtx {
   others?: BotVec[];
   /** Wall/sim time in ms — brain cooldowns key off this, not frames. */
   now: number;
+  /** Modeled energy tank (server shadow truth) — skills/jet gate on it.
+   *  Omitted on hosts without an energy model; hints assume a full tank. */
+  energy?: number;
+  /** Own health as a 0..1 fraction — mend decision input. */
+  healthFrac?: number;
 }
 
 export interface BrainOut {
@@ -48,6 +56,12 @@ export interface BrainOut {
   move?: { ski?: boolean; jet?: boolean; jump?: boolean };
   /** Fire command when the bot wants to shoot this step. */
   fire?: { targetId: string; aim: BotVec };
+  /** Claimed toggle bits — same STATUS mask a human's inputMove carries.
+   *  The host applies rising-edge antes + drains, so the brain only
+   *  picks bits it can afford; omit → keep current status. */
+  status?: number;
+  /** Belt throw this step (grenade arc at the hunt target). */
+  belt?: boolean;
 }
 
 export const BOT_EYE = 1.6;
@@ -107,6 +121,7 @@ export class BotBrain {
   private flinchFrom: BotVec = { x: 0, y: 0, z: 0 };
   private wanderWp: BotVec = { x: 0, y: 0, z: 0 };
   private wanderT = 0;
+  private beltT = 4 + Math.random() * 4; // stagger first throws across the squad
   private progressPos: BotVec = { x: 0, y: 0, z: 0 };
   private progressT = 0;
   private detour: BotVec | null = null;
@@ -121,6 +136,12 @@ export class BotBrain {
   private readonly wanderlust = 0.7 + Math.random() * 0.6;
   private readonly temper = 0.7 + Math.random() * 0.6; // fire-cadence scale
   private fightPos: BotVec | null = null; // combat spot from the last replan
+
+  /** Current hunt target — the belt intent carries no aim of its own,
+   *  so hosts resolve the throw's arc off this. */
+  get currentHuntId(): string | null {
+    return this.hunt?.id ?? null;
+  }
 
   /** Getting shot makes the bot recoil — call from the damage funnel. */
   takeHit(from: BotVec): void {
@@ -246,7 +267,29 @@ export class BotBrain {
       }
     }
 
-    return { dest, move: this.moveHints(ctx, pos, dest), fire };
+    // --- belt: lob a grenade into a mid-range fight on a slow cooldown ---
+    this.beltT -= dt;
+    let belt = false;
+    if (this.hunt && this.beltT <= 0 && now - this.lastSeenAt <= STALE_MS) {
+      const d = dist3(pos, this.lastSeen);
+      if (d > 10 && d < 35) { belt = true; this.beltT = 9; }
+    }
+
+    return { dest, move: this.moveHints(ctx, pos, dest), fire, status: this.statusIntent(ctx), belt };
+  }
+
+  /** Toggle-skill intent — the STATUS bits a legal client claims. Mend
+   *  wins: hurt + unpressured + can afford the ante. Otherwise shield up
+   *  in a real fight while the tank can carry the drain. Returns
+   *  undefined when the host has no energy model (offline bots). */
+  private statusIntent(ctx: BrainCtx): number | undefined {
+    if (ctx.energy === undefined) return undefined;
+    const fighting = this.hunt !== null;
+    const hurt = (ctx.healthFrac ?? 1) < 0.6;
+    let status = 0;
+    if (!fighting && hurt && ctx.energy >= ENERGY.mendCost + 10) status |= STATUS.MEND;
+    else if (fighting && ctx.energy >= ENERGY.shieldCost + 15) status |= STATUS.SHIELD;
+    return status;
   }
 
   /** Ski/jet/jump as the same buttons a human presses: ski downhill or
@@ -266,9 +309,12 @@ export class BotBrain {
     // hunt target is clearly airborne and pursuit needs altitude.
     const uphill = rise > 3;
     const targetHigh = this.hunt ? this.hunt.pos.y - pos.y > 6 : false;
+    // Jet respects the tank — below the reserve the bot saves energy for
+    // skills rather than hovering dry at the wall.
+    const tanked = ctx.energy === undefined || ctx.energy > 15;
     return {
       ski: rise < -0.5 || speed > 8 || airborne,
-      jet: (uphill || targetHigh) && speed > 0.5,
+      jet: (uphill || targetHigh) && speed > 0.5 && tanked,
       // Uphill + near-stationary = hop it; autohop chains the rest.
       jump: uphill && speed < 3 && !airborne,
     };

@@ -92,6 +92,15 @@ describe('ServerBots', () => {
     expect(Math.hypot(p.velocity.x, p.velocity.z)).toBeGreaterThan(0);
   });
 
+  it('skill intents drain the shadow tank like a human claim', () => {
+    const room = new Room('t', flat, '', resolveMapSpec({ bots: 1, mode: 'dm' }));
+    const p = room.players.getPlayer('BOT-t1')!;
+    p.health = 10; // hurt — the brain picks mend/shield, and the sim charges it
+    const full = room.moveSim.energyOf('BOT-t1')!;
+    for (let i = 0; i < 40; i++) { room.bots.tick(0.05); room.moveSim.tick(0.05); }
+    expect(room.moveSim.energyOf('BOT-t1')!).toBeLessThan(full);
+  });
+
   it('respawning a bot reseats the shadow at the new position', () => {
     const room = new Room('t', flat, '', resolveMapSpec({ bots: 1 }));
     const id = 'BOT-t1';
