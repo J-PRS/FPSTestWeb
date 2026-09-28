@@ -226,6 +226,12 @@ surface. Detailed research lives in `_reports/`; this file is the current truth.
   demo endpoints (demosoak.ts: v3 header craft, accept/reject,
   traversal 404, byte-identical round-trip). Divergence noise floor:
   count=1 crest clips only.
+- Hitscan fire relay (2026-10-03): hitscan kinds (fan/beam) + melee send a
+  cosmetic `shotFired` → server relays `playerShot` (rewind-stamped muzzle
+  pos, claimed dir, 50ms gate, dead shooters dropped) — observers get
+  positional shot audio, recoil anim, weapon-tinted muzzle flash, and an
+  80m LG beam flash. Relays also feed the Room noise ring so bots hear
+  chaingun fights. Pinned in combatorder.test.ts + noise.test.ts.
 - Divergence seq journal (2026-10-03): every shadow journals the
   sim state captured per consumed input seq — a report stamped seq N
   behind the shadow now replays from that anchor to now (the live sim
