@@ -1,5 +1,7 @@
 import { reconstructSeek, applyPlaybackEvents, type PlaybackWorld } from '../demo/playbackReconstruction.js';
 import type { ProjectileEvent, TargetEvent } from '../demo/types.js';
+import { RemoteFrameFlags } from '../demo/types.js';
+import type { RemoteSample } from '../demo/DemoRecorder.js';
 import type { DemoManager } from '../demo/index.js';
 import type { Ball } from '../entities/balls.js';
 import type { DamageNumberManager } from '../effects/damageNumbers.js';
@@ -11,6 +13,7 @@ import type { Terrain } from '../world/terrain.js';
 import * as THREE from 'three';
 import { ChildLogger } from '../core/Logger.js';
 import type { WorldState } from './worldState.js';
+import { RemotePlayer } from '../entities/RemotePlayer.js';
 
 const logger = new ChildLogger('DemoPlayback');
 
@@ -46,6 +49,9 @@ export function createDemoLifecycle(deps: DemoLifecycleDeps) {
   const playbackProjectileById = new Map<number, Projectile>();
   const playbackBallById = new Map<number, Ball>();
   const playbackProjectileOrigin = new Map<number, THREE.Vector3>();
+  // Recorded remote players replayed as real RemotePlayer replicas — their
+  // snapshot buffer smooths the 20Hz samples exactly like live net code.
+  const playbackRemotes = new Map<number, RemotePlayer>();
   let playbackFrozenWarnCounter = 0;
   let seekReconstructing = false;
 
@@ -88,11 +94,10 @@ export function createDemoLifecycle(deps: DemoLifecycleDeps) {
   function updateBallsPlayback(dt: number): void {
     const terrain = deps.lazyTerrain();
     const player = deps.lazyPlayer();
-    const playbackBallSet = new Set(playbackBallById.values());
     let frozenCount = 0;
     for (let i = deps.balls.length - 1; i >= 0; i--) {
       const b = deps.balls[i];
-      if (playbackBallSet.has(b)) {
+      if (playbackBallById.has(b.id)) {
         b.update(dt, terrain, player.pos);
         // Detect frozen balls (near-zero velocity, not dead, not on ground resting)
         if (!b.dead && b.vel.lengthSq() < 0.01) {
@@ -108,7 +113,7 @@ export function createDemoLifecycle(deps: DemoLifecycleDeps) {
     if (frozenCount > 0) {
       playbackFrozenWarnCounter++;
       if (playbackFrozenWarnCounter <= 5 || playbackFrozenWarnCounter % 60 === 0) {
-        logger.debug(`${frozenCount} ball(s) frozen midair (vel~0). Total playback balls: ${playbackBallSet.size}`);
+        logger.debug(`${frozenCount} ball(s) frozen midair (vel~0). Total playback balls: ${playbackBallById.size}`);
       }
     } else {
       playbackFrozenWarnCounter = 0;
@@ -117,6 +122,8 @@ export function createDemoLifecycle(deps: DemoLifecycleDeps) {
 
   // Shared cleanup: dispose live + playback transient objects
   function clearTransientObjects(): void {
+    for (const rp of playbackRemotes.values()) rp.dispose();
+    playbackRemotes.clear();
     for (const r of playbackProjectiles) r.dispose();
     playbackProjectiles.length = 0;
     playbackProjectileById.clear();
@@ -181,6 +188,8 @@ export function createDemoLifecycle(deps: DemoLifecycleDeps) {
 
     // User explicitly stops playback (ESC, UI stop button) — full cleanup
     demoManager.onPlaybackStop = () => {
+      deps.world.playbackMode = false;
+      for (const rp of deps.world.remotePlayers.values()) rp.setStaleHidden(false);
       clearTransientObjects();
       // Show overlay menu so user can replay or pick another clip
       if (document.pointerLockElement === deps.rendererCanvas) {
@@ -196,6 +205,10 @@ export function createDemoLifecycle(deps: DemoLifecycleDeps) {
 
     // Clear live game objects when playback starts so they don't hang frozen in the scene
     demoManager.onPlaybackStart = () => {
+      // The replay is its own world — the live wire must not fight it
+      deps.world.playbackMode = true;
+      // Live remote players would otherwise stand ghosted inside the replay
+      for (const rp of deps.world.remotePlayers.values()) rp.setStaleHidden(true);
       // Dispose all non-playback balls (live game balls)
       const playbackBallSet = new Set(playbackBallById.values());
       for (let i = deps.balls.length - 1; i >= 0; i--) {
@@ -230,6 +243,47 @@ export function createDemoLifecycle(deps: DemoLifecycleDeps) {
       seekReconstructing = true;
       clearTransientObjects();
     };
+
+    // Recorded remote players — states arrive already interpolated at demo
+    // time; RemotePlayer's own snapshot buffer gets them as live updates,
+    // so replica smoothing is literally the production netcode path.
+    demoManager.onRemotePlayback = (states, dt) => {
+      const roster = demoManager.getRoster();
+      const seen = new Set<number>();
+      for (const s of states) {
+        seen.add(s.rosterIdx);
+        let rp = playbackRemotes.get(s.rosterIdx);
+        const pos = { x: s.posX, y: s.posY, z: s.posZ };
+        if (!rp) {
+          rp = new RemotePlayer(deps.lazyScene(), roster[s.rosterIdx] ?? `remote${s.rosterIdx}`, pos, deps.lazyTerrain());
+          playbackRemotes.set(s.rosterIdx, rp);
+        }
+        rp.update(pos, { yaw: s.yaw, pitch: s.pitch }, dt, 0, { x: s.velX, y: s.velY, z: s.velZ });
+        rp.tick(dt);
+        rp.setStaleHidden((s.flags & RemoteFrameFlags.Dead) !== 0);
+      }
+      // Roster players absent at this time keep their replica but hidden —
+      // e.g. they joined after the seek target or hadn't spawned yet.
+      for (const [idx, rp] of playbackRemotes) {
+        if (!seen.has(idx)) rp.setStaleHidden(true);
+      }
+    };
+
+    // Recording source: every remote player the world knows about. Bot
+    // entries ('bot:'-prefixed) ride along too — they're in the same map.
+    demoManager.setRemoteSource(() => {
+      const out: RemoteSample[] = [];
+      for (const [id, rp] of deps.world.remotePlayers) {
+        out.push({
+          id,
+          posX: rp.position.x, posY: rp.position.y, posZ: rp.position.z,
+          velX: rp.vel.x, velY: rp.vel.y, velZ: rp.vel.z,
+          yaw: rp.rotation.yaw, pitch: rp.rotation.pitch,
+          dead: rp.isDead, ski: false,
+        });
+      }
+      return out;
+    });
   }
 
   return {

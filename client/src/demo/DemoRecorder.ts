@@ -3,16 +3,19 @@
 
 import { CircularBuffer } from './CircularBuffer.js';
 import {
-  DemoFrame, ProjectileEvent, TargetEvent,
+  DemoFrame, ProjectileEvent, TargetEvent, RemoteFrame, RemoteFrameFlags,
   ProjectileEventType, TargetEventType,
   createFrame, DEMO_MAGIC, DEMO_FORMAT_VERSION,
-  type DemoFile,
+  type DemoFile, type DemoRosterEntry,
 } from './types.js';
 import type { IPlayerDataProvider, IInputProvider, Vec3 } from './interfaces.js';
 
 const DEFAULT_BUFFER_SECONDS = 30;
 const DEFAULT_TICK_RATE = 60; // frames per second
 const MAX_EVENTS_PER_SEC = 1000;
+// Remote players don't need the local tick rate — the wire itself only
+// carries ~20Hz, so sampling faster just stores duplicates.
+const REMOTE_SAMPLE_HZ = 20;
 
 // Splice out all events with timestamp < cutoff in one batch (list is
 // append-ordered, so binary search finds the first keeper index).
@@ -27,10 +30,30 @@ function pruneEventsBefore(events: { timestamp: number }[], cutoff: number): voi
   events.splice(0, lo);
 }
 
+// Minimal shape the recorder needs from a live remote player —
+// RemotePlayer and the bots' entries both satisfy it.
+export interface RemoteSample {
+  id: string;
+  posX: number; posY: number; posZ: number;
+  velX: number; velY: number; velZ: number;
+  yaw: number; pitch: number;
+  dead: boolean; ski: boolean;
+}
+
+export interface DemoContext {
+  room: string; mode: string; playerName: string;
+}
+
 export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecorder {
   private frameBuffer: CircularBuffer<DemoFrame>;
   private projectileEvents: ProjectileEvent[] = [];
   private targetEvents: TargetEvent[] = [];
+  private remoteFrames: RemoteFrame[] = [];
+  private rosterIdxById = new Map<string, number>();
+  private roster: DemoRosterEntry[] = [];
+  private remoteSource: (() => Iterable<RemoteSample>) | null = null;
+  private lastRemoteSampleT = 0;
+  private context: DemoContext = { room: '', mode: '', playerName: '' };
 
   private recording = false;
   private frameNumber = 0;
@@ -71,6 +94,10 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
     this.eventCountThisSecond = 0;
     this.projectileEvents = [];
     this.targetEvents = [];
+    this.remoteFrames = [];
+    this.rosterIdxById.clear();
+    this.roster = [];
+    this.lastRemoteSampleT = 0;
     this.frameBuffer.clear();
     this.playerData = playerData;
     this.inputData = inputData;
@@ -78,6 +105,38 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
 
   stop(): void {
     this.recording = false;
+  }
+
+  // Who/where the clip happened — stamped into every file written from now on
+  setContext(ctx: Partial<DemoContext>): void {
+    Object.assign(this.context, ctx);
+  }
+
+  // Live remote-player source; polled at REMOTE_SAMPLE_HZ while recording
+  setRemoteSource(source: (() => Iterable<RemoteSample>) | null): void {
+    this.remoteSource = source;
+  }
+
+  private sampleRemotes(now: number): void {
+    if (!this.remoteSource) return;
+    if (now - this.lastRemoteSampleT < 1 / REMOTE_SAMPLE_HZ) return;
+    this.lastRemoteSampleT = now;
+    for (const s of this.remoteSource()) {
+      let idx = this.rosterIdxById.get(s.id);
+      if (idx === undefined) {
+        idx = this.roster.length;
+        this.rosterIdxById.set(s.id, idx);
+        this.roster.push({ name: s.id });
+      }
+      this.remoteFrames.push({
+        timestamp: now,
+        rosterIdx: idx,
+        posX: s.posX, posY: s.posY, posZ: s.posZ,
+        velX: s.velX, velY: s.velY, velZ: s.velZ,
+        yaw: s.yaw, pitch: s.pitch,
+        flags: (s.dead ? RemoteFrameFlags.Dead : 0) | (s.ski ? RemoteFrameFlags.Ski : 0),
+      });
+    }
   }
 
   // Called every game frame. Only records at tick interval.
@@ -108,10 +167,13 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
     this.frameBuffer.add(frame);
     this.frameNumber = (this.frameNumber + 1) % 65536;
 
+    this.sampleRemotes(now);
+
     // Prune events older than the frame buffer window — they can never be used in a clip
     const cutoff = this.elapsedTime - this.bufferSeconds;
     pruneEventsBefore(this.projectileEvents, cutoff);
     pruneEventsBefore(this.targetEvents, cutoff);
+    pruneEventsBefore(this.remoteFrames, cutoff);
   }
 
   private checkEventRate(): boolean {
@@ -143,7 +205,8 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
   }
 
   recordBounce(projectileId: number, position: Vec3, velocity: Vec3, surfaceNormal: Vec3): void {
-    if (!this.recording || !this.checkEventRate()) return;
+    // 0 = recordFired's rate-limit/not-recording sentinel — no live projectile
+    if (projectileId === 0 || !this.recording || !this.checkEventRate()) return;
     this.projectileEvents.push({
       eventType: ProjectileEventType.Bounce,
       timestamp: this.elapsedTime,
@@ -157,7 +220,7 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
   }
 
   recordHit(projectileId: number, position: Vec3, targetId: number): void {
-    if (!this.recording || !this.checkEventRate()) return;
+    if (projectileId === 0 || !this.recording || !this.checkEventRate()) return;
     this.projectileEvents.push({
       eventType: ProjectileEventType.Hit,
       timestamp: this.elapsedTime,
@@ -171,7 +234,7 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
   }
 
   recordDestroyed(projectileId: number, position: Vec3): void {
-    if (!this.recording || !this.checkEventRate()) return;
+    if (projectileId === 0 || !this.recording || !this.checkEventRate()) return;
     this.projectileEvents.push({
       eventType: ProjectileEventType.Destroyed,
       timestamp: this.elapsedTime,
@@ -276,10 +339,13 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
         startVelY: first?.velY ?? 0,
         startVelZ: first?.velZ ?? 0,
         projectileLifetime: 0,
+        ...this.context,
       },
       frames,
       projectileEvents: [...this.projectileEvents],
       targetEvents: [...this.targetEvents],
+      roster: this.roster.map(r => ({ ...r })),
+      remoteFrames: [...this.remoteFrames],
     };
   }
 
@@ -313,12 +379,13 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
     const projEvents = this.collectProjectileEvents(clipStart, clipEnd);
     const tgtEvents = this.collectTargetEvents(clipStart, clipEnd);
 
-    // Renormalize timestamps to clip start
+    // Renormalize timestamps to clip start. frameNumber wraps at 65536, so
+    // a clip spanning the wrap would produce negative numbers — mod back.
     const first = frames[0];
     const normFrames = frames.map(f => ({
       ...f,
       timestamp: f.timestamp - clipStart,
-      frameNumber: f.frameNumber - first.frameNumber,
+      frameNumber: (f.frameNumber - first.frameNumber + 65536) % 65536,
     }));
     const normProj = projEvents.map(e => ({ ...e, timestamp: e.timestamp - clipStart }));
     const normTgt = tgtEvents.map(e => ({ ...e, timestamp: e.timestamp - clipStart }));
@@ -339,11 +406,35 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
         startYaw: first.yaw, startPitch: first.pitch,
         startVelX: first.velX, startVelY: first.velY, startVelZ: first.velZ,
         projectileLifetime,
+        ...this.context,
       },
       frames: normFrames,
       projectileEvents: normProj,
       targetEvents: normTgt,
+      roster: this.roster.map(r => ({ ...r })),
+      remoteFrames: this.collectRemoteFrames(clipStart, clipEnd),
     };
+  }
+
+  // Remote frames inside the clip window, plus one synthetic frame at
+  // clipStart per remote whose last sample predates the window — playback
+  // shouldn't wait for the next 20Hz sample to place them.
+  private collectRemoteFrames(clipStart: number, clipEnd: number): RemoteFrame[] {
+    const lastBefore = new Map<number, RemoteFrame>();
+    for (const f of this.remoteFrames) {
+      if (f.timestamp >= clipStart) break;
+      lastBefore.set(f.rosterIdx, f);
+    }
+    const inWindow = this.remoteFrames.filter(
+      f => f.timestamp >= clipStart && f.timestamp <= clipEnd
+    );
+    const out: RemoteFrame[] = [];
+    for (const [, f] of lastBefore) {
+      out.push({ ...f, timestamp: clipStart });
+    }
+    out.push(...inWindow);
+    out.sort((a, b) => a.timestamp - b.timestamp);
+    return out.map(f => ({ ...f, timestamp: f.timestamp - clipStart }));
   }
 
   // Projectile events in [clipStart, clipEnd], plus synthetic Fired events at

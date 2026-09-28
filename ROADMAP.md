@@ -108,6 +108,13 @@ surface. Detailed research lives in `_reports/`; this file is the current truth.
   rewind buffer cleared on respawn/teleport.
 - GET /serverinfo: host card (name/region/tick/rooms) for a future
   CS/Quake-style server browser; FPS_SERVER_NAME/_REGION env.
+- Demo system v3 (MP-aware): header stamps room/mode/playerName; roster +
+  remoteFrames sections record remote players at 20Hz and replay them as
+  real RemotePlayer replicas (production snapshot interpolation, not a
+  second smoothing path). Server-ball spawn/bounce/die recorded via
+  netBalls hooks. world.playbackMode freezes the whole live wire during
+  replay (no sends, no corrections, no live entity mutation) and hides
+  live remotes. v1-v2 files still deserialize.
 
 ### Later / research needed
 - Client prediction + reconciliation for self (currently trust + correct).

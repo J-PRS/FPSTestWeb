@@ -1954,3 +1954,5 @@ server: playerId->room index (playerRoom map) — position hot path no longer sc
 lobby: SERVER host field + P2P duel controls — every URL param now has a UI path (fps-server/fps-p2p settings; ?server/?p2p still override for links)
 wire: ballSegment et/slowT -> float32 (unquantized enrage/stall timers; kills last mid-leg replay divergence); PROTOCOL_VERSION=5
 server: RoomDeployables sim — 'deploy' claims plant server-owned turret/mine/station/drone (per-player caps, plant-range check, TTL, death/leave/match-reset teardown, gameState join snapshot); protocol deploy/deploySpawn/deployGone
+- demo format v3: room/mode/playerName header, roster + remoteFrames sections; MP demos record remote players (20Hz via RemotePlayer replicas on playback) and server-ball lifecycle events; playbackMode flag freezes the live wire (no position sends, corrections, live balls/projectiles) during replay; clip export frameNumber wrap + id-0 event guards + seek/remote replica snap fixes
+- roadmap: demo v3 status line (MP recording + playbackMode isolation)

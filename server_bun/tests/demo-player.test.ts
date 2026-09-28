@@ -69,7 +69,7 @@ function makeDemoFile(duration: number = 5.0): DemoFile {
     },
   ];
 
-  return { header, frames, projectileEvents, targetEvents };
+  return { header, frames, projectileEvents, targetEvents, roster: [], remoteFrames: [] };
 }
 
 describe('DemoPlayer', () => {

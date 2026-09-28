@@ -82,6 +82,12 @@ export function createNetBalls(deps: EntitiesDeps, ctx: NetBallsCtx, logger: Chi
     balls.push(ball);
     targets.push(ball);
     netBallById.set(m.id, ball);
+    // Server-owned balls never pass through the offline spawn path, so the
+    // demo recorder needs its lifecycle events written here instead.
+    const dm = deps.lazyDemoManager();
+    if (dm?.isRecording) {
+      dm.recordTargetSpawned(m.id, m.position, m.velocity, m.variant);
+    }
     // Spawn events are stale on arrival too — fast-forward from the
     // stamped state so the ball materializes where the server already is.
     // Always applies (even at ~0ms): it's the only path that seeds the
@@ -132,12 +138,24 @@ export function createNetBalls(deps: EntitiesDeps, ctx: NetBallsCtx, logger: Chi
       { et: m.et, slowT: m.slowT, damp: m.damp },
       m.tp, m.t, m.kind === 'teleport' || m.kind === 'spawn',
     );
+    // Only real discontinuities are worth a demo keyframe — 'segment'
+    // heartbeats would drown the event stream (dozens/sec fleet-wide).
+    if (m.kind && m.kind !== 'segment') {
+      const dm = deps.lazyDemoManager();
+      if (dm?.isRecording) {
+        dm.recordTargetBounce(m.id, m.position, m.velocity, b.variant);
+      }
+    }
   }
 
   function netBallDie(m: { id: number; position: { x: number; y: number; z: number }; by?: string | null }): void {
     const b = netBallById.get(m.id);
     if (!b) return;
     netBallById.delete(m.id);
+    const dm = deps.lazyDemoManager();
+    if (dm?.isRecording) {
+      dm.recordTargetDestroyed(m.id, m.position, b.variant, b.health);
+    }
     b.netKill();
     sfx.enemyCue(b.pos, 'die');
     screenShake.blast(b.pos, 1.6, deps.lazyPlayer().pos);

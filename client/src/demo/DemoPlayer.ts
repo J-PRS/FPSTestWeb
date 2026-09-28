@@ -1,7 +1,15 @@
 // Demo playback engine - replays recorded frames with interpolation.
 // Supports play, pause, seek, speed control, and rewind.
 
-import type { ProjectileEvent, TargetEvent, DemoFile } from './types.js';
+import type { ProjectileEvent, TargetEvent, RemoteFrame, DemoFile } from './types.js';
+
+export interface InterpolatedRemote {
+  rosterIdx: number;
+  posX: number; posY: number; posZ: number;
+  velX: number; velY: number; velZ: number;
+  yaw: number; pitch: number;
+  flags: number;
+}
 
 export interface PlaybackState {
   posX: number; posY: number; posZ: number;
@@ -13,7 +21,7 @@ export interface PlaybackState {
 }
 
 export interface PlaybackCallbacks {
-  onFrameUpdate?: (state: PlaybackState, events: { projectiles: ProjectileEvent[], targets: TargetEvent[] }) => void;
+  onFrameUpdate?: (state: PlaybackState, events: { projectiles: ProjectileEvent[], targets: TargetEvent[], remotes?: RemoteFrame[] }) => void;
   onPlaybackEnd?: () => void;
   onTimeUpdate?: (currentTime: number, duration: number) => void;
   onSeek?: () => void;
@@ -31,12 +39,18 @@ export class DemoPlayer {
   // Track which events have been emitted
   private lastProjectileEventIndex = 0;
   private lastTargetEventIndex = 0;
+  private lastRemoteFrameIndex = 0;
+
+  // Remote frames grouped per roster index at load — the wire interleaves
+  // players, but interpolation wants a per-player ordered stream.
+  private remotesByIdx: Map<number, RemoteFrame[]> = new Map();
 
   get isPlaying(): boolean { return this.playing; }
   get isLoaded(): boolean { return this.demoData !== null; }
   get duration(): number { return this.demoData?.header.duration ?? 0; }
   get currentTimeValue(): number { return this.currentTime; }
   get speed(): number { return this.playbackSpeed; }
+  get roster(): { name: string }[] { return this.demoData?.roster ?? []; }
 
   load(data: DemoFile): void {
     this.demoData = data;
@@ -44,6 +58,13 @@ export class DemoPlayer {
     this.frameIndex = 0;
     this.lastProjectileEventIndex = 0;
     this.lastTargetEventIndex = 0;
+    this.lastRemoteFrameIndex = 0;
+    this.remotesByIdx.clear();
+    for (const f of data.remoteFrames) {
+      let arr = this.remotesByIdx.get(f.rosterIdx);
+      if (!arr) this.remotesByIdx.set(f.rosterIdx, arr = []);
+      arr.push(f);
+    }
     this.playing = false;
   }
 
@@ -51,6 +72,7 @@ export class DemoPlayer {
     this.demoData = null;
     this.currentTime = 0;
     this.frameIndex = 0;
+    this.remotesByIdx.clear();
     this.playing = false;
   }
 
@@ -65,6 +87,7 @@ export class DemoPlayer {
       this.frameIndex = 0;
       this.lastProjectileEventIndex = 0;
       this.lastTargetEventIndex = 0;
+      this.lastRemoteFrameIndex = 0;
     }
     this.playing = true;
   }
@@ -79,6 +102,7 @@ export class DemoPlayer {
     this.frameIndex = 0;
     this.lastProjectileEventIndex = 0;
     this.lastTargetEventIndex = 0;
+    this.lastRemoteFrameIndex = 0;
   }
 
   seek(time: number): void {
@@ -94,7 +118,9 @@ export class DemoPlayer {
       this.reconstructToTime(this.currentTime);
     const state = this.getInterpolatedState();
     if (this.callbacks.onFrameUpdate) {
-      this.callbacks.onFrameUpdate(state, { projectiles: newProjEvents, targets: newTargetEvents });
+      // remotes aren't re-emitted on seek — the handler reads
+      // getRemoteStates() and snaps every replica to its pose at `time`
+      this.callbacks.onFrameUpdate(state, { projectiles: newProjEvents, targets: newTargetEvents, remotes: [] });
     }
     if (this.callbacks.onTimeUpdate) {
       this.callbacks.onTimeUpdate(this.currentTime, this.duration);
@@ -102,9 +128,12 @@ export class DemoPlayer {
     // Update event indices to current time for continued playback
     this.lastProjectileEventIndex = projCount;
     this.lastTargetEventIndex = tgtCount;
+    this.lastRemoteFrameIndex = this.findEventIndex(this.demoData.remoteFrames, this.currentTime);
   }
 
   setSpeed(speed: number): void {
+    // 0 would freeze playback silently forever; NaN poisons currentTime
+    if (!Number.isFinite(speed) || speed === 0) return;
     this.playbackSpeed = speed;
   }
 
@@ -135,16 +164,21 @@ export class DemoPlayer {
     // timestamp-ordered and we're moving backward), so we seek-reconstruct.
     let newProjEvents: ProjectileEvent[];
     let newTargetEvents: TargetEvent[];
+    let newRemoteFrames: RemoteFrame[];
     if (this.playbackSpeed < 0) {
       // Reverse playback: reconstruct full state at the new time.
       ({ newProjEvents, newTargetEvents } = this.reconstructToTime(this.currentTime));
+      newRemoteFrames = [];
     } else {
       newProjEvents = this.collectNewEvents(this.demoData.projectileEvents, this.lastProjectileEventIndex);
       newTargetEvents = this.collectNewEvents(this.demoData.targetEvents, this.lastTargetEventIndex);
+      const newRemoteIdx = this.findEventIndex(this.demoData.remoteFrames, this.currentTime);
+      newRemoteFrames = this.demoData.remoteFrames.slice(this.lastRemoteFrameIndex, newRemoteIdx);
+      this.lastRemoteFrameIndex = newRemoteIdx;
     }
 
     if (this.callbacks.onFrameUpdate) {
-      this.callbacks.onFrameUpdate(state, { projectiles: newProjEvents, targets: newTargetEvents });
+      this.callbacks.onFrameUpdate(state, { projectiles: newProjEvents, targets: newTargetEvents, remotes: newRemoteFrames });
     }
 
     if (this.callbacks.onTimeUpdate) {
@@ -158,6 +192,34 @@ export class DemoPlayer {
     }
   }
 
+  // Interpolated pose of every rostered remote at the current demo time —
+  // used on seek and when the caller needs positions without event deltas.
+  getRemoteStates(): InterpolatedRemote[] {
+    const out: InterpolatedRemote[] = [];
+    for (const [rosterIdx, frames] of this.remotesByIdx) {
+      if (frames.length === 0) continue;
+      const i = this.findEventIndex(frames, this.currentTime) - 1;
+      if (i < 0) continue; // not spawned yet at this time
+      const f0 = frames[i]!;
+      const f1 = i + 1 < frames.length ? frames[i + 1]! : f0;
+      let t = 0;
+      const range = f1.timestamp - f0.timestamp;
+      if (range > 0) t = Math.max(0, Math.min(1, (this.currentTime - f0.timestamp) / range));
+      out.push({
+        rosterIdx,
+        posX: f0.posX + (f1.posX - f0.posX) * t,
+        posY: f0.posY + (f1.posY - f0.posY) * t,
+        posZ: f0.posZ + (f1.posZ - f0.posZ) * t,
+        velX: f0.velX + (f1.velX - f0.velX) * t,
+        velY: f0.velY + (f1.velY - f0.velY) * t,
+        velZ: f0.velZ + (f1.velZ - f0.velZ) * t,
+        yaw: f0.yaw, pitch: f0.pitch + (f1.pitch - f0.pitch) * t,
+        flags: f0.flags,
+      });
+    }
+    return out;
+  }
+
   private handleEndOfPlayback(): void {
     if (this.loop) {
       // Emit any events in the final partial step [prevTime, duration] before
@@ -168,6 +230,7 @@ export class DemoPlayer {
       this.frameIndex = 0;
       this.lastProjectileEventIndex = 0;
       this.lastTargetEventIndex = 0;
+      this.lastRemoteFrameIndex = 0;
       this.callbacks.onSeek?.();
       this.emitFrameAndEvents(0);
     } else {
@@ -188,6 +251,7 @@ export class DemoPlayer {
       // seek-reconstruct the full state at the wrap target.
       this.lastProjectileEventIndex = 0;
       this.lastTargetEventIndex = 0;
+      this.lastRemoteFrameIndex = 0;
       this.callbacks.onSeek?.();
       this.emitFrameAndEvents(this.currentTime);
     } else {
@@ -203,6 +267,7 @@ export class DemoPlayer {
     if (!this.demoData) return { newProjEvents: [], newTargetEvents: [], projCount: 0, tgtCount: 0 };
     this.lastProjectileEventIndex = 0;
     this.lastTargetEventIndex = 0;
+    this.lastRemoteFrameIndex = 0;
     this.callbacks.onSeek?.();
     const projCount = this.findEventIndex(this.demoData.projectileEvents, time);
     const tgtCount = this.findEventIndex(this.demoData.targetEvents, time);
@@ -224,14 +289,17 @@ export class DemoPlayer {
     const tgtCount = this.findEventIndex(this.demoData.targetEvents, time);
     const newProjEvents = this.demoData.projectileEvents.slice(this.lastProjectileEventIndex, projCount);
     const newTargetEvents = this.demoData.targetEvents.slice(this.lastTargetEventIndex, tgtCount);
+    const remoteCount = this.findEventIndex(this.demoData.remoteFrames, time);
+    const newRemoteFrames = this.demoData.remoteFrames.slice(this.lastRemoteFrameIndex, remoteCount);
     if (this.callbacks.onFrameUpdate) {
-      this.callbacks.onFrameUpdate(state, { projectiles: newProjEvents, targets: newTargetEvents });
+      this.callbacks.onFrameUpdate(state, { projectiles: newProjEvents, targets: newTargetEvents, remotes: newRemoteFrames });
     }
     if (this.callbacks.onTimeUpdate) {
       this.callbacks.onTimeUpdate(time, this.duration);
     }
     this.lastProjectileEventIndex = projCount;
     this.lastTargetEventIndex = tgtCount;
+    this.lastRemoteFrameIndex = remoteCount;
   }
 
   private findFrameIndex(time: number): number {

@@ -31,6 +31,10 @@ export interface WorldState {
   localTeam?: 'alpha' | 'bravo';
   ffaScores: Map<string, number>;
   teamScores: { alpha: number; bravo: number } | null;
+  // Demo playback is a different world than the live one — while set, the
+  // wire must not mutate the scene (corrections/projectiles/live balls)
+  // and we must not stream recorded camera motion to the server.
+  playbackMode: boolean;
 }
 
 export function createWorldState(): WorldState {
@@ -47,5 +51,6 @@ export function createWorldState(): WorldState {
     aoeGizmos: [],
     ffaScores: new Map(),
     teamScores: null,
+    playbackMode: false,
   };
 }

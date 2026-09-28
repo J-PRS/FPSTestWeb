@@ -58,6 +58,10 @@ export class NetworkManager {
   public onFfaMatchEnd: ((winner: string, scores: Record<string, number>) => void) | null = null;
   /** Admin hot-reload — structures/arena changed mid-match; rebuild them. */
   public onMapUpdate: ((map: { bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } }; structures?: import('../../../shared/mapSpec.js').StructureSpec[]; arena?: { x: number; z: number; radius: number } | null }) => void) | null = null;
+  // Server-owned deployables — rendered as dumb visuals client-side;
+  // the sim (firing/damage) stays authoritative on the server.
+  public onDeploySpawn: ((id: number, owner: string, kind: 'turret' | 'mine' | 'station' | 'drone', pos: { x: number; y: number; z: number }, team?: 'alpha' | 'bravo') => void) | null = null;
+  public onDeployGone: ((id: number) => void) | null = null;
   public onSnapshot: ((players: SnapshotPlayer[], timestamp: number) => void) | null = null;
   public onStateHash: ((hash: string, tick: number, playerCount: number, timestamp: number) => void) | null = null;
   public onCorrection: ((seq: number, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }) => void) | null = null;
@@ -221,6 +225,8 @@ export class NetworkManager {
     matchEnd: (data) => this.onMatchEnd?.(data.winner, data.scores),
     matchStart: (data) => this.onMatchStart?.(data.mode, data.scores),
     mapUpdate: (data) => this.onMapUpdate?.(data),
+    deploySpawn: (data) => this.onDeploySpawn?.(data.id, data.owner, data.kind, data.pos, data.team),
+    deployGone: (data) => this.onDeployGone?.(data.id),
   };
 
   private handleGameState(data: Extract<ServerMessage, { type: 'gameState' }>): void {
