@@ -1,3 +1,4 @@
+2026-10-03 - fillprobe.ts: botFill soak verified live (bots retire/refill to hold 10 total bodies across human join/leave)
 2026-10-03 - WT tier soak green on distinct FPS_WT_PORT (3/3 QUIC joins, 0 rejects, deployables over datagrams); TASKS.md refresh
 2026-10-03 - lobby: named-room joins now honor map+bots pickers instead of always spawning bare
 2026-10-03 - fleet deploy coverage: bots plant turret/mine/station/drone claims; fixed fleet ghost-target rejects (remotes never pruned on playerLeft/kill)

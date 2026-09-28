@@ -217,7 +217,7 @@ surface. Detailed research lives in `_reports/`; this file is the current truth.
   over real sockets — nuggets economy (3 bugs fixed: grounded gem drops,
   huntCreatures target pass, kill→bank funnel), TDM quicksand (inverted
   arena pushback fixed), CTF crossfire (real cap), DM duel, multi-room
-  isolation, reconnect/token reclaim, deployables lifecycle
+  isolation, reconnect/token reclaim, botFill (fillprobe.ts: retire/refill holds spec.botFill bodies across human join/leave), deployables lifecycle
   (deployprobe.ts: spawn/cap/distance validation, live mine trip +
   turretShot, leave teardown). + Full HTTP/API surface (apisoak.ts:
   all GET routes, /join gate, spectate join, admin 401/200 gate,
