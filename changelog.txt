@@ -1,3 +1,4 @@
+2026-10-03 - match boundary beats: horn stinger + center banner on matchStart/matchEnd (VICTORY when you/your team wins)
 2026-10-03 - CTF flag stingers: distinct sfx.flagCue per event (taken/dropped/returned/captured) keyed to whose flag it is
 2026-10-03 - fillprobe.ts: botFill soak verified live (bots retire/refill to hold 10 total bodies across human join/leave)
 2026-10-03 - WT tier soak green on distinct FPS_WT_PORT (3/3 QUIC joins, 0 rejects, deployables over datagrams); TASKS.md refresh

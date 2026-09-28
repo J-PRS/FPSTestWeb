@@ -185,6 +185,32 @@ export function flagCue(kind: 'taken' | 'dropped' | 'returned' | 'captured', min
   }
 }
 
+/** Match-boundary horn. start: single rising brass blast — the kickoff
+ *  whistle. end: win = bright two-note resolve; loss/draw = a low flat
+ *  buzzer so "we lost" doesn't need the banner to read. */
+export function matchHorn(kind: 'start' | 'win' | 'end'): void {
+  const bus = audio.uiBus, c = ctx();
+  if (!bus || !c) return;
+  const g = c.createGain(); g.connect(bus);
+  if (!play(g, 1)) return;
+  const t0 = c.currentTime;
+  const note = (f: number, dt: number, dur: number, peak: number, type: OscillatorType = 'sawtooth') => {
+    const o = c.createOscillator(); const g2 = c.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(f, t0 + dt);
+    env(g2, t0 + dt, peak, dur);
+    o.connect(g2).connect(g);
+    o.start(t0 + dt); o.stop(t0 + dt + dur + 0.05);
+  };
+  if (kind === 'start') {
+    note(392, 0, 0.5, 0.12); note(392 * 1.5, 0, 0.5, 0.06); // octave-fifth brass
+  } else if (kind === 'win') {
+    note(523, 0, 0.18, 0.14); note(784, 0.18, 0.5, 0.15);
+  } else {
+    note(196, 0, 0.7, 0.14); note(185, 0, 0.7, 0.1); // detuned low buzzer
+  }
+}
+
 export function killConfirm(): void {
   const bus = audio.uiBus, c = ctx();
   if (!bus || !c) return;
