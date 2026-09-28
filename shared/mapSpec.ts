@@ -46,6 +46,10 @@ export interface MapSpec {
    *  clients for the barrier render; server uses it for out-of-bounds
    *  checks (future: damage/skid-push on contact). */
   arena?: { x: number; z: number; radius: number };
+  /** Ambient species population overrides — { crawler: 0 } silences a
+   *  species, { overlord: 4 } makes a boss map. Keys are species names
+   *  ('crawler','seeker','rakk','strifer','gnat',...); absent = defaults. */
+  ambient?: Record<string, number>;
 }
 
 export interface StructureSpec {
@@ -117,7 +121,18 @@ export function resolveMapSpec(raw: unknown): MapSpec {
       : undefined,
     structures: parseStructures((src as { structures?: unknown }).structures),
     arena: parseArena((src as { arena?: unknown }).arena),
+    ambient: parseAmbient((src as { ambient?: unknown }).ambient),
   };
+}
+
+function parseAmbient(raw: unknown): Record<string, number> | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const out: Record<string, number> = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (!/^[\w-]{1,24}$/.test(k)) continue;
+    if (typeof v === 'number' && Number.isFinite(v)) out[k] = Math.max(0, Math.min(200, Math.floor(v)));
+  }
+  return Object.keys(out).length ? out : undefined;
 }
 
 function parseArena(raw: unknown): MapSpec['arena'] {

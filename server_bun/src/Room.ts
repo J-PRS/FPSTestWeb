@@ -94,6 +94,7 @@ export class Room {
         bases: this.spec.bases,
         structures: this.spec.structures,
         arena: this.spec.arena,
+        ambient: this.spec.ambient,
         onKill: (pid, shooter) => this.onKill(pid, shooter),
         onHit: (pid, shooter) => this.bots.flinch(pid, shooter),
         flags: () => this.flags?.snapshot() ?? [],
@@ -373,7 +374,7 @@ export class Room {
     this.ballSim.colliders = structureColliders(spec.structures);
     if (spec.balls) this.ballSim.population = spec.balls;
     if (spec.ballMix) this.ballSim.ballMix = spec.ballMix;
-    this.messages.setMap(spec.bases, spec.structures, spec.arena);
+    this.messages.setMap(spec.bases, spec.structures, spec.arena, spec.ambient);
     this.broadcast({
       type: 'mapUpdate',
       bases: spec.bases,

@@ -19,6 +19,7 @@ import { Seeker } from '../../entities/Seeker.js';
 import { Rakk } from '../../entities/Rakk.js';
 import { Strifer } from '../../entities/Strifer.js';
 import type { SpeciesCtx } from './context.js';
+import { capFor } from './ambientCaps.js';
 
 // Air family — gnats (boid clouds), seekers (darting stingers), rakks
 // (swooping cliff-racers). Shared shape: ringPos spawn, one damage callback,
@@ -37,7 +38,7 @@ export function createFlyerSpecies({ deps, kit, targets }: SpeciesCtx) {
 
   // ---- Gnats (boid harasser cloud — orbits you, darts for nips) ----
   function spawnGnatCloud(uber?: boolean): void {
-    if (atCap(gnats, GNAT_MAX)) return;
+    if (atCap(gnats, capFor('gnat', GNAT_MAX))) return;
     const u = uber ?? rollUber();
     const base = ringPos(GNAT_SPAWN_MIN, GNAT_SPAWN_MAX);
     const player = deps.lazyPlayer();
@@ -56,7 +57,7 @@ export function createFlyerSpecies({ deps, kit, targets }: SpeciesCtx) {
       ? 1 + Math.floor(Math.random() * 3) + 2      // queen + 2-4 escorts
       : GNAT_CLOUD_MIN + Math.floor(Math.random() * (GNAT_CLOUD_MAX - GNAT_CLOUD_MIN + 1));
     for (let k = 0; k < n; k++) {
-      if (atCap(gnats, GNAT_MAX)) break;
+      if (atCap(gnats, capFor('gnat', GNAT_MAX))) break;
       const queen = u && k === 0; // firstborn is the queen
       const g = new Gnat(scene, deps.lazyTerrain(), cloud.center.clone().add(new THREE.Vector3(
         (Math.random() - 0.5) * 8, (Math.random() - 0.5) * 4, (Math.random() - 0.5) * 8)), queen);
@@ -93,7 +94,7 @@ export function createFlyerSpecies({ deps, kit, targets }: SpeciesCtx) {
 
   // ---- Seekers (airborne sting enemies — telegraphed darts) ----
   function spawnSeeker(uber?: boolean): void {
-    if (atCap(seekers, SEEKER_MAX)) return;
+    if (atCap(seekers, capFor('seeker', SEEKER_MAX))) return;
     const u = uber ?? rollUber();
     const s = new Seeker(scene, deps.lazyTerrain(), ringPos(SEEKER_SPAWN_MIN, SEEKER_SPAWN_MAX), u);
     s.onSting = (sk) => bite(sk, SEEKER_STING_FORCE, SEEKER_STING_DAMAGE, 'stung to death by a seeker', { force: 1.5, text: 'run through by a lancer' }, SEEKER_STING_DIST + 1);
@@ -111,7 +112,7 @@ export function createFlyerSpecies({ deps, kit, targets }: SpeciesCtx) {
   // ---- Rakks (circling cliff-racers — fold-and-swoop passes) ----
   function spawnRakk(uber?: boolean): void {
     if (deps.lazyDemoManager()?.isPlaying) return;
-    if (atCap(rakks, RAKK_MAX)) return;
+    if (atCap(rakks, capFor('rakk', RAKK_MAX))) return;
     const u = uber ?? rollUber();
     const r = new Rakk(scene, deps.lazyTerrain(), ringPos(RAKK_SPAWN_MIN, RAKK_SPAWN_MAX), u);
     r.onClawHit = (rk) => {
@@ -140,7 +141,7 @@ export function createFlyerSpecies({ deps, kit, targets }: SpeciesCtx) {
   // ---- Strifers (standoff strafing drones — orbit, hover, bolt volley) ----
   function spawnStrifer(uber?: boolean): void {
     if (deps.lazyDemoManager()?.isPlaying) return;
-    if (atCap(strifers, STRIFER_MAX)) return;
+    if (atCap(strifers, capFor('strifer', STRIFER_MAX))) return;
     const u = uber ?? rollUber();
     const st = new Strifer(scene, deps.lazyTerrain(), ringPos(STRIFER_SPAWN_MIN, STRIFER_SPAWN_MAX), u);
     st.onBoltHit = (x) => bite(x, STRIFER_BOLT_FORCE, STRIFER_BOLT_DAMAGE * (x.uber ? 2 : 1),

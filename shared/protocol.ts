@@ -71,7 +71,7 @@ export interface TickUpdatePlayer {
 export type ServerMessage =
   // room/mode: which match this state belongs to — set by the room's first
   // joiner, inherited by everyone after (join claims can't redefine it).
-  | { type: 'gameState'; players: GameStatePlayer[]; localPlayerState?: LocalPlayerState; sessionToken?: string; protocolVersion?: number; room?: string; mode?: string; team?: 'alpha' | 'bravo'; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number>; map?: { mode?: string; bases?: { alpha?: Vec3; bravo?: Vec3 }; structures?: { kind: 'box' | 'wall' | 'pillar' | 'ramp'; pos: Vec3; size: Vec3; rotY?: number; team?: 'alpha' | 'bravo' }[]; arena?: { x: number; z: number; radius: number } }; flags?: { team: 'alpha' | 'bravo'; pos: Vec3; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]; pickups?: { id: number; pos: Vec3; kind?: 'gem' | 'tag' }[]; deployables?: { id: number; owner: string; kind: 'turret' | 'mine' | 'station' | 'drone'; pos: Vec3 }[]; matchEndsAt?: number }
+  | { type: 'gameState'; players: GameStatePlayer[]; localPlayerState?: LocalPlayerState; sessionToken?: string; protocolVersion?: number; room?: string; mode?: string; team?: 'alpha' | 'bravo'; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number>; map?: { mode?: string; bases?: { alpha?: Vec3; bravo?: Vec3 }; structures?: { kind: 'box' | 'wall' | 'pillar' | 'ramp'; pos: Vec3; size: Vec3; rotY?: number; team?: 'alpha' | 'bravo' }[]; arena?: { x: number; z: number; radius: number }; ambient?: Record<string, number> }; flags?: { team: 'alpha' | 'bravo'; pos: Vec3; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]; pickups?: { id: number; pos: Vec3; kind?: 'gem' | 'tag' }[]; deployables?: { id: number; owner: string; kind: 'turret' | 'mine' | 'station' | 'drone'; pos: Vec3 }[]; matchEndsAt?: number }
   | { type: 'playerJoined'; playerId: string; internalId: string; position: Vec3; rotation: Rotation; team?: 'alpha' | 'bravo' }
   | { type: 'playerLeft'; playerId: string }
   // Team reassignment mid-match — team comes through playerJoined/gameState
@@ -121,7 +121,7 @@ export type ServerMessage =
   | { type: 'matchStart'; mode: string; scores: { alpha: number; bravo: number } }
   // Admin hot-reload: the room's map spec changed — clients rebuild
   // structures/dome from this instead of re-joining for a gameState.
-  | { type: 'mapUpdate'; bases?: { alpha?: Vec3; bravo?: Vec3 }; structures?: { kind: 'box' | 'wall' | 'pillar' | 'ramp'; pos: Vec3; size: Vec3; rotY?: number; team?: 'alpha' | 'bravo' }[]; arena?: { x: number; z: number; radius: number } | null };
+  | { type: 'mapUpdate'; bases?: { alpha?: Vec3; bravo?: Vec3 }; structures?: { kind: 'box' | 'wall' | 'pillar' | 'ramp'; pos: Vec3; size: Vec3; rotY?: number; team?: 'alpha' | 'bravo' }[]; arena?: { x: number; z: number; radius: number } | null; ambient?: Record<string, number> };
 
 export interface GameStatePlayer {
   id: string;
