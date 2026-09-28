@@ -1,3 +1,4 @@
+2026-09-26  4 tradeoff perks: sharpshooter (+20% direct, -40% blast radius), bombardier (inverse), juggernaut (knockback resist), scavenger (heal boost) — enforced server-side on shots, AOE radius, impulse and heals
 2026-09-26  perk system — shared/perks.ts modifier table (featherjets/plated/vitality/regenerator/overcharge), join-announced so server enforces resist+maxHealth+regen; loadout PERK dropdown; offline applies mods locally
 2026-09-26  status bitmask channel — cloak/shield/mend collapse into one relayed int (shared/status.ts); next toggle effect = one bit + one remote handler, protocol v9
 2026-09-26  medkit skill — energy->health channel (20 to activate, 15/s drain, 12hp/s server tick heal while flag up, offline self-heal); mend flag on inputMove+tick bit16, green aura remote + green gun shell + MENDING chip/vignette + sfx; protocol v8

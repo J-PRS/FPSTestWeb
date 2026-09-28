@@ -210,7 +210,7 @@ export function createCombat(deps: CombatDeps) {
       networkManager.sendAOEShot({ position: p, weaponType: WeaponType.Slam, excludeTargetId: targetId, power });
     processProjectileExplosion({
       pos,
-      radius: stats.aoeRadius * power,
+      radius: stats.aoeRadius * power * deps.lazyPlayer().mods.aoeRadius,
       force: stats.knockbackForce * power,
       forceMode: stats.forceMode,
       aoeDamage: stats.aoeDamage * power,
@@ -380,7 +380,7 @@ export function createCombat(deps: CombatDeps) {
       });
     processProjectileExplosion({
       pos: p.hitPointValid ? p.hitPoint : p.pos,
-      radius: p.config.aoeRadius * bloom,   // gameplay radius = server truth
+      radius: p.config.aoeRadius * bloom * deps.lazyPlayer().mods.aoeRadius,   // gameplay radius = server truth (incl. perk)
       force: p.force,
       forceMode: p.forceMode,
       aoeDamage: p.config.aoeDamage,
@@ -466,7 +466,7 @@ export function createCombat(deps: CombatDeps) {
   const chainRamp = new Map<number, { t: number; n: number }>();
 
   function handleBallHit(p: Projectile, ball: import('../entities/balls.js').Targetable): void {
-    let dmg = getWeaponStats(p.config.weaponType).directDamage;
+    let dmg = getWeaponStats(p.config.weaponType).directDamage * deps.lazyPlayer().mods.directDamage;
     if (p.config.weaponType === WeaponType.Chaingun) {
       const now = performance.now() / 1000;
       const st = chainRamp.get(ball.id);
@@ -497,7 +497,7 @@ export function createCombat(deps: CombatDeps) {
   function handlePlayerHit(p: Projectile, playerId: string): void {
     const targetPlayer = deps.world.remotePlayers.get(playerId);
     const hitPos = targetPlayer ? targetPlayer.position : deps.lazyPlayer().pos;
-    const directDamage = getWeaponStats(p.config.weaponType).directDamage;
+    const directDamage = getWeaponStats(p.config.weaponType).directDamage * deps.lazyPlayer().mods.directDamage;
     deps.lazyDamageNumbers().spawn(hitPos, directDamage, p.config.damageColor, deps.lazyCamera());
     if (deps.botHit?.(playerId, directDamage, p.pos)) return; // bot authority: real damage, no claim
     deps.lazyHealthBarSystem().predictDamage(playerId, directDamage);
