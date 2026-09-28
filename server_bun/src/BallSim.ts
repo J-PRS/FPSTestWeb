@@ -17,7 +17,7 @@
 import { type Heightfield, hmHeight } from '../../shared/heightfield.ts';
 import {
   type SimBall, type SimVec, type BallVariant, type SegmentKind,
-  makeSimBall, stepBall, applySimDamage,
+  makeSimBall, stepBall, applySimDamage, type StructureCollider,
 } from '../../shared/ballSim.ts';
 import type { PlayerManager } from './PlayerManager.ts';
 import type { ServerMessage, Vec3 } from './types.ts';
@@ -69,6 +69,9 @@ export class BallSim {
   population: BallPopulation = DEFAULT_MAP_SPEC.balls;
   /** Variant spawn weights from the map spec — default mix below. */
   ballMix: readonly number[] = DEFAULT_MIX;
+  /** Map-structure colliders — set from the room spec at construction;
+   *  balls ricochet off walls/pillars. Empty on structureless maps. */
+  colliders: readonly StructureCollider[] = [];
 
   constructor(players: PlayerManager, broadcast: (msg: ServerMessage) => void, broadcastBinary?: (data: Uint8Array) => void) {
     this.players = players;
@@ -332,7 +335,7 @@ export class BallSim {
       // Pull/lunge aim comes from the snapshot last emitted on a segment —
       // predictors replay the identical input, not the live player pos.
       _snap.x = b.tx; _snap.y = b.ty; _snap.z = b.tz;
-      const kind = stepBall(b, TICK_DT, this.field!, b.tgtValid ? _snap : null, true);
+      const kind = stepBall(b, TICK_DT, this.field!, b.tgtValid ? _snap : null, true, this.colliders);
       if (kind) {
         this.segment(b, kind);
       } else {

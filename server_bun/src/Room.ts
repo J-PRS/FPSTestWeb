@@ -14,6 +14,7 @@ import { ConnectionManager } from './ConnectionManager.ts';
 import { RateLimiter } from './RateLimiter.ts';
 import { MessageHandler } from './MessageHandler.ts';
 import { BallSim } from './BallSim.ts';
+import { structureColliders } from '../../shared/ballSim.ts';
 import { hmHeight, type Heightfield } from '../../shared/heightfield.ts';
 import { type MapSpec, resolveMapSpec } from '../../shared/mapSpec.ts';
 import { MODES, pickTeam, makeScores, bank, winner, type ModeId, type ModeSpec, type TeamScores } from '../../shared/teams.ts';
@@ -103,6 +104,7 @@ export class Room {
     );
     this.ballSim.population = this.spec.balls;
     this.ballSim.onKilled = (by, pos) => this.creatureKill(by, pos);
+    this.ballSim.colliders = structureColliders(this.spec.structures);
     if (this.spec.ballMix) this.ballSim.ballMix = this.spec.ballMix;
     if (this.spec.spawns) this.players.spawnPoints = this.spec.spawns;
     this.messages.setBallSim(this.ballSim);

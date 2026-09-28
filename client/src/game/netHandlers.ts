@@ -26,6 +26,8 @@ import type { ExplosionTracker } from '../utils/ExplosionTracker.js';
 import type { Terrain } from '../world/terrain.js';
 import { buildStructures, buildArenaDome } from '../world/mapStructures.js';
 import type { StructureSpec } from '../../../shared/mapSpec.js';
+import { structureColliders } from '../../../shared/ballSim.js';
+import { Ball } from '../entities/balls.js';
 
 export interface NetDeps {
   lazyNetworkManager(): NetworkManager;
@@ -502,7 +504,12 @@ export function wireNetworkHandlers(deps: NetDeps): void {
     }
     // Pickups still lying on the field when we (re)joined.
     for (const p of roomInfo?.pickups ?? []) addPickup(p.id, p.pos, p.kind ?? 'gem');
-    if (roomInfo?.map?.structures?.length) buildStructures(roomInfo.map.structures, deps.lazyScene());
+    if (roomInfo?.map?.structures?.length) {
+      buildStructures(roomInfo.map.structures, deps.lazyScene());
+      // Same collider list the server sims against — ball prediction
+      // ricochets off structures identically instead of phasing through.
+      Ball.colliders = structureColliders(roomInfo.map.structures);
+    }
     if (roomInfo?.map?.arena) {
       const a = roomInfo.map.arena;
       buildArenaDome(a, deps.lazyTerrain().getHeight(a.x, a.z), deps.lazyScene());
