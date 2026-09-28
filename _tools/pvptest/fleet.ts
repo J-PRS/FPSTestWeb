@@ -75,6 +75,13 @@ interface Bot {
   fireAt: number;
   rejects: number;
   kills: number;
+  corrections: number;
+  /** Largest pre-snap gap a correction was asked to fix — a measure of
+   *  how far the two sims had drifted when the server stepped in. */
+  maxCorrectionGap: number;
+  /** Journaled inputs not yet acked by the server — replayed over a
+   *  correction snap exactly like the real client's input journal. */
+  journal: { seq: number; yaw: number }[];
 }
 
 const bots: Bot[] = [];
@@ -89,6 +96,7 @@ async function spawnBot(room: string, name: string): Promise<void> {
     tickFrames: 0, sends: 0, seq: 0,
     yaw: Math.random() * Math.PI * 2,
     remotes: new Map(), pending: null, fireAt: 0, rejects: 0, kills: 0,
+    corrections: 0, maxCorrectionGap: 0, journal: [],
   };
   bots.push(bot);
   try {
@@ -123,10 +131,29 @@ async function spawnBot(room: string, name: string): Promise<void> {
         } else if (m.type === 'correction' && bot.sim) {
           // A correction is the server's truth — snap the sim to it
           // exactly like the client does, or divergence compounds.
+          bot.corrections++;
+          const before = Math.hypot(
+            m.position.x - bot.sim.state.pos.x,
+            m.position.y - bot.sim.state.pos.y,
+            m.position.z - bot.sim.state.pos.z);
           bot.sim.setState({
             pos: { ...m.position }, vel: { ...(m.velocity ?? { x: 0, y: 0, z: 0 }) },
             yaw: m.rotation?.yaw ?? bot.yaw, pitch: 0, onGround: m.grounded ?? true,
           });
+          // Replay the journaled inputs the server hadn't consumed — the
+          // blind snap would otherwise shed in-flight input and the sims
+          // sit at a permanent ~RTT lag, re-triggering corrections.
+          bot.journal = bot.journal.filter(j => j.seq > (m.inputSeq ?? -1));
+          for (const j of bot.journal) {
+            bot.yaw = j.yaw;
+            bot.sim.state.yaw = j.yaw;
+            bot.sim.setInput({ forward: 1, right: 0, jumpHeld: false, skiHeld: true, jetHeld: false });
+            bot.sim.update(1 / 30);
+          }
+          // The correction should bring the client sim into near-agreement
+          // with the server — a residual still >2m means the two sims
+          // disagree structurally, not just on timing.
+          bot.maxCorrectionGap = Math.max(bot.maxCorrectionGap, before);
         } else if (m.type === 'playerRespawn' && m.playerId === name && bot.sim) {
           // Own respawn — reseat the sim at the spawn point exactly like the
           // client's syncMovement, or the corpse-to-spawn jump reads as a
@@ -213,6 +240,8 @@ const moveTimer = setInterval(() => {
         input: { forward: 1, right: 0, jump: 0, ski: 1, jet: 0, status: 0 },
         rotation: { yaw: b.yaw, pitch: 0 },
       }));
+      b.journal.push({ seq: b.seq, yaw: b.yaw });
+      if (b.journal.length > 60) b.journal.splice(0, b.journal.length - 60);
       const s = b.sim.state;
       (b.ws.sendUnreliable ?? b.ws.send).call(b.ws, encodePosition(
         s.pos, { yaw: b.yaw, pitch: 0 }, s.vel, b.seq, 0, b.seq,
@@ -306,8 +335,11 @@ setTimeout(() => {
   const kills = bots.reduce((n, b) => n + b.kills, 0);
   const rejects = bots.reduce((n, b) => n + b.rejects, 0);
   console.log(`combat: ${kills} kills, ${rejects} shot rejects`);
+  const corr = bots.reduce((n, b) => n + b.corrections, 0);
+  const worstGap = Math.max(0, ...bots.map(b => b.maxCorrectionGap));
+  console.log(`corrections: ${corr} (worst pre-snap gap ${worstGap.toFixed(1)}m)`);
   for (const b of bots.slice(0, 3)) {
-    console.log(`  ${b.name}: ${b.tickFrames} frames, ${b.sends} sends, ${b.kills} kills, ${b.rejects} rejects`);
+    console.log(`  ${b.name}: ${b.tickFrames} frames, ${b.sends} sends, ${b.kills} kills, ${b.rejects} rejects, ${b.corrections} corr`);
   }
   process.exit(joined === bots.length ? 0 : 1);
 }, SECONDS * 1000 + ROOMS * PER_ROOM * 40 + 2000);

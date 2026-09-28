@@ -1,3 +1,5 @@
+2026-10-03 - fleet honesty: correction handler now replays journaled inputs over the snap (mirrors client replay) and results report correction count + worst pre-snap gap — live authority-mode run shows ~2 corr/sec/bot at ~2m worst gap, the residual phase-lag class
+
 2026-10-03 - correction grace window (500ms): in-flight pre-snap reports after a correction no longer trip the plausibility reject — kills the post-correction false-speedhack cascade seen in live logs
 
 2026-10-03 - regression tests pin the judge changes: inputSeq wire round-trip + legacy 30B decode; probe-ahead reconcile; speed-scaled tolerance
