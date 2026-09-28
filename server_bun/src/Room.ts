@@ -26,6 +26,7 @@ import { RoomArena } from './RoomArena.ts';
 import { RoomDeployables } from './RoomDeployables.ts';
 import type { PlayerState, Vec3 } from './types.ts';
 import type { ServerMessage } from '../../shared/protocol.ts';
+import { POWERUP, rollCreatureDrop, type PowerupKind } from '../../shared/pickups.ts';
 import type { ServerWebSocket } from 'bun';
 import type { WebSocketData } from './types.ts';
 
@@ -57,7 +58,8 @@ export class Room {
   readonly bots: ServerBots;
   /** CTF flag authority — only when the mode has flags AND the map has bases. */
   flags: RoomFlags | null = null;
-  /** Server-owned nuggets — team modes drop a gem on each creature kill. */
+  /** Server-owned ground loot — gems/tags score in team modes, powerups
+   *  (heal/armor/regen/dd) drop from creature kills in every mode. */
   pickups: RoomPickups | null = null;
   /** Server-owned deployables — turrets/mines/stations/drones a `deploy`
    *  claim plants; caps + TTL + teardown live here. */
@@ -148,18 +150,20 @@ export class Room {
     if (this.modeSpec?.teams && bases?.alpha && bases?.bravo) {
       this.players.teamBases = { alpha: { ...bases.alpha }, bravo: { ...bases.bravo } };
     }
-    if (this.modeSpec?.teams) {
-      this.pickups = new RoomPickups(this);
-      this.pickups.onCollect = (pid, kind) => {
-        const p = this.players.getPlayer(pid);
-        if (!p) return;
+    this.pickups = new RoomPickups(this);
+    this.pickups.onCollect = (pid, kind) => {
+      const p = this.players.getPlayer(pid);
+      if (!p) return;
+      if (kind === 'gem' || kind === 'tag') {
         // Gems back the collector's next heal claim; kill-confirmed tags
         // are pure score — no resource bundled into the same pickup.
         if (kind === 'gem') p.healCredit += 25;
         const team = p.team;
         if (team === 'alpha' || team === 'bravo') this.score(team);
-      };
-    }
+        return;
+      }
+      this.applyPowerup(p, kind);
+    };
     if (this.modeSpec?.flags && bases?.alpha && bases?.bravo) {
       // Spec y is advisory — flags live on the ground, so touch checks
       // measure feet-to-flag, not feet-to-arbitrary-height.
@@ -207,6 +211,11 @@ export class Room {
    *  the killer directly; team modes drop a nugget at the corpse that
    *  anyone must touch to bank (kill-confirmed style scoring). */
   private creatureKill(by: string, pos: Vec3, variant = 0): void {
+    // Powerup drops roll in EVERY mode — the pickup does the granting.
+    const powerup = rollCreatureDrop();
+    if (powerup) {
+      this.pickups?.spawn({ x: pos.x + (Math.random() - 0.5) * 2, y: pos.y, z: pos.z + (Math.random() - 0.5) * 2 }, powerup);
+    }
     const spec = this.modeSpec;
     if (spec?.teams) {
       // Pay for the corpse's threat: variant 3 elites and v2 tanks drop a
@@ -219,6 +228,29 @@ export class Room {
     }
     if (!spec?.ffa || spec.ptsCreatureKill <= 0 || !this.players.getPlayer(by)) return;
     this.awardFfa(by, spec.ptsCreatureKill);
+  }
+
+  /** Powerup pickup resolution — buffs are server-owned so a client can
+   *  never claim regen/dd it didn't touch. Bots collect too: they read
+   *  the fields directly, no wire message needed for them. */
+  private applyPowerup(p: PlayerState, kind: PowerupKind): void {
+    const now = Date.now();
+    const buff: Extract<ServerMessage, { type: 'buff' }> = { type: 'buff', kind };
+    if (kind === 'heal') {
+      p.health = Math.min(p.maxHealth, p.health + POWERUP.heal);
+      buff.health = p.health;
+    } else if (kind === 'armor') {
+      p.armor = Math.min(POWERUP.maxArmor, p.armor + POWERUP.armor);
+      buff.armor = p.armor;
+    } else if (kind === 'regen') {
+      p.regenUntil = now + POWERUP.regenMs;
+      buff.until = p.regenUntil;
+    } else {
+      p.ddUntil = now + POWERUP.ddMs;
+      buff.until = p.ddUntil;
+    }
+    p.forceSendUntil = now + 500; // buffed health/status rides the next ticks
+    this.connections.sendToPlayer(p.id, buff);
   }
 
   /** Match clock — the horn sounds when a mode's timeLimitS elapses.

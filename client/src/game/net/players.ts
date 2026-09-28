@@ -25,11 +25,12 @@ function wirePlayerCombat(ctx: NetCtx): void {
   const logger = deps.logger;
   let localStreak = 0;
 
-  networkManager.onPlayerHit = (shooterId: string, targetId: string, damage: number, health: number) => {
+  networkManager.onPlayerHit = (shooterId: string, targetId: string, damage: number, health: number, armor?: number) => {
     if (deps.world.playbackMode) return;
     // Check if local player was hit
     if (targetId === nm().getLocalPlayerId()) {
       const player = deps.lazyPlayer();
+      if (armor !== undefined) player.armor = armor;
       // Shielded hits route to the energy tank (server kept health
       // unchanged) — the soak reads as a cyan flash + hum, not a grunt.
       if (player.isShielded) {
@@ -216,6 +217,9 @@ function wirePlayerLifecycle(ctx: NetCtx): void {
       const player = deps.lazyPlayer();
       player.isDead = false;
       player.health = player.maxHealth;
+      player.armor = 0;
+      player.buffUntil.regen = 0;
+      player.buffUntil.dd = 0;
       player.lastDamageSource = ''; // stale attribution shouldn't survive a life
       player.vel.set(0, 0, 0);
       player.pos.set(position.x, position.y, position.z);

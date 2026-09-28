@@ -54,6 +54,10 @@ export class RemotePlayer {
   private _shielded = false;
   private mendAura: ShieldBubble | null = null;
   private _mending = false;
+  private regenAura: ShieldBubble | null = null;
+  private _regenAura = false;
+  private ddAura: ShieldBubble | null = null;
+  private _ddAura = false;
   private velocity: THREE.Vector3 = new THREE.Vector3();
   private angularVelocity: THREE.Vector3 = new THREE.Vector3();
   private isOnGround: boolean = true;
@@ -322,6 +326,14 @@ export class RemotePlayer {
       this.mendAura.update(dt);
       if (this._mending) this.mendAura.mesh.position.set(this.position.x, this.position.y - EYE_OFFSET + 1.0, this.position.z);
     }
+    if (this.regenAura) {
+      this.regenAura.update(dt);
+      if (this._regenAura) this.regenAura.mesh.position.set(this.position.x, this.position.y - EYE_OFFSET + 1.0, this.position.z);
+    }
+    if (this.ddAura) {
+      this.ddAura.update(dt);
+      if (this._ddAura) this.ddAura.mesh.position.set(this.position.x, this.position.y - EYE_OFFSET + 1.0, this.position.z);
+    }
     this.previousPosition.copy(this.position);
     this._model.update(dt);
   }
@@ -364,6 +376,8 @@ export class RemotePlayer {
     this.gizmo?.hide();
     if (this.shieldBubble) this.shieldBubble.mesh.visible = false;
     if (this.mendAura) this.mendAura.mesh.visible = false;
+    if (this.regenAura) this.regenAura.mesh.visible = false;
+    if (this.ddAura) this.ddAura.mesh.visible = false;
   }
 
   show(): void {
@@ -375,6 +389,8 @@ export class RemotePlayer {
     this.gizmo?.attach();
     if (this.shieldBubble && this._shielded) this.shieldBubble.mesh.visible = true;
     if (this.mendAura && this._mending) this.mendAura.mesh.visible = true;
+    if (this.regenAura && this._regenAura) this.regenAura.mesh.visible = true;
+    if (this.ddAura && this._ddAura) this.ddAura.mesh.visible = true;
   }
 
   // Simulate physics when player stops sending updates (dead reckoning)
@@ -459,6 +475,21 @@ export class RemotePlayer {
     if (this.mendAura) this.mendAura.mesh.visible = on && !this._cloakHidden && !this._staleHidden;
   }
   get isMending(): boolean { return this._mending; }
+
+  // Powerup tells — a buffed enemy should be readable at range: regen
+  // shimmers teal, double-damage burns red. Server-owned bits.
+  setRegenAura(on: boolean): void {
+    if (on === this._regenAura) return;
+    this._regenAura = on;
+    if (on && !this.regenAura) this.regenAura = makeShieldBubble(this.scene, 1.8, 0x66ffee);
+    if (this.regenAura) this.regenAura.mesh.visible = on && !this._cloakHidden && !this._staleHidden;
+  }
+  setDdAura(on: boolean): void {
+    if (on === this._ddAura) return;
+    this._ddAura = on;
+    if (on && !this.ddAura) this.ddAura = makeShieldBubble(this.scene, 1.8, 0xff4422);
+    if (this.ddAura) this.ddAura.mesh.visible = on && !this._cloakHidden && !this._staleHidden;
+  }
 
   // Remote fired a weapon — kick the gun's procedural recoil
   fire(): void {

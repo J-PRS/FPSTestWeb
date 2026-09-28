@@ -130,6 +130,8 @@ export function createRemotes(deps: RemotesDeps) {
     remotePlayer.setCloakHidden(!!(status & STATUS.CLOAK));
     remotePlayer.setShielded(!!(status & STATUS.SHIELD));
     remotePlayer.setMending(!!(status & STATUS.MEND));
+    remotePlayer.setRegenAura(!!(status & STATUS.REGEN));
+    remotePlayer.setDdAura(!!(status & STATUS.DD));
     if (!(status & STATUS.CLOAK)) return true;
     deps.lazyHud().removePlayerIndicator(playerId);
     deps.lazyHealthBarSystem().removeBar(playerId);

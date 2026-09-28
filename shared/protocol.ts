@@ -11,7 +11,8 @@
  * message, changed field semantics). The server stamps it on gameState;
  * the client force-reloads on mismatch instead of silently desyncing.
  */
-export const PROTOCOL_VERSION = 10; // tick frames carry server tickSeq for stale-drop under unordered transports
+import type { PickupKind } from './pickups.js';
+export const PROTOCOL_VERSION = 11; // powerup pickup kinds + buff msg — stale clients' pickup tables would miss them
 
 export interface Vec3 {
   x: number;
@@ -77,7 +78,7 @@ export interface TickUpdatePlayer {
 export type ServerMessage =
   // room/mode: which match this state belongs to — set by the room's first
   // joiner, inherited by everyone after (join claims can't redefine it).
-  | { type: 'gameState'; players: GameStatePlayer[]; localPlayerState?: LocalPlayerState; sessionToken?: string; protocolVersion?: number; room?: string; mode?: string; team?: 'alpha' | 'bravo'; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number>; map?: { mode?: string; bases?: { alpha?: Vec3; bravo?: Vec3 }; structures?: { kind: 'box' | 'wall' | 'pillar' | 'ramp'; pos: Vec3; size: Vec3; rotY?: number; team?: 'alpha' | 'bravo' }[]; arena?: { x: number; z: number; radius: number }; ambient?: Record<string, number> }; flags?: { team: 'alpha' | 'bravo'; pos: Vec3; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]; pickups?: { id: number; pos: Vec3; kind?: 'gem' | 'tag' }[]; deployables?: { id: number; owner: string; kind: 'turret' | 'mine' | 'station' | 'drone'; pos: Vec3 }[]; matchEndsAt?: number; respawnMs?: number }
+  | { type: 'gameState'; players: GameStatePlayer[]; localPlayerState?: LocalPlayerState; sessionToken?: string; protocolVersion?: number; room?: string; mode?: string; team?: 'alpha' | 'bravo'; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number>; map?: { mode?: string; bases?: { alpha?: Vec3; bravo?: Vec3 }; structures?: { kind: 'box' | 'wall' | 'pillar' | 'ramp'; pos: Vec3; size: Vec3; rotY?: number; team?: 'alpha' | 'bravo' }[]; arena?: { x: number; z: number; radius: number }; ambient?: Record<string, number> }; flags?: { team: 'alpha' | 'bravo'; pos: Vec3; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]; pickups?: { id: number; pos: Vec3; kind?: PickupKind }[]; deployables?: { id: number; owner: string; kind: 'turret' | 'mine' | 'station' | 'drone'; pos: Vec3 }[]; matchEndsAt?: number; respawnMs?: number }
   | { type: 'playerJoined'; playerId: string; internalId: string; position: Vec3; rotation: Rotation; team?: 'alpha' | 'bravo'; transport?: 'wt' | 'rtc' | 'ws' }
   | { type: 'playerLeft'; playerId: string }
   // Team reassignment mid-match — team comes through playerJoined/gameState
@@ -85,7 +86,10 @@ export type ServerMessage =
   | { type: 'teamUpdate'; playerId: string; team: 'alpha' | 'bravo' }
   // Server system line — renders unstyled (no "name:" prefix) in chat.
   | { type: 'matchNotice'; text: string }
-  | { type: 'playerHit'; shooterId: string; targetId: string; damage: number; health: number }
+  | { type: 'playerHit'; shooterId: string; targetId: string; damage: number; health: number; armor?: number }
+  // Powerup grabbed — heal/armor/regen/dd buff applied to the collector.
+  // `until` is server epoch ms for timed buffs; armor/health are absolute.
+  | { type: 'buff'; kind: 'heal' | 'armor' | 'regen' | 'dd'; armor?: number; health?: number; until?: number }
   | { type: 'playerKill'; shooterId: string; targetId: string }
   | { type: 'knockback'; targetId: string; position: Vec3; force: number; pull?: boolean }
   | { type: 'playerRespawn'; playerId: string; internalId: string; position: Vec3; rotation: Rotation }
@@ -116,7 +120,7 @@ export type ServerMessage =
   | { type: 'flagUpdate'; flags: { team: 'alpha' | 'bravo'; pos: Vec3; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[] }
   // Server-owned pickups: creature kills drop a nugget gem; touching it
   // banks a team point — replaces trusting client 'bank' claims.
-  | { type: 'pickupSpawn'; id: number; pos: Vec3; kind?: 'gem' | 'tag' }
+  | { type: 'pickupSpawn'; id: number; pos: Vec3; kind?: PickupKind }
   | { type: 'deploySpawn'; id: number; owner: string; kind: 'turret' | 'mine' | 'station' | 'drone'; pos: Vec3; team?: 'alpha' | 'bravo' }
   | { type: 'deployGone'; id: number }
   | { type: 'pickupGone'; id: number; by: string | null }
@@ -162,4 +166,5 @@ export interface LocalPlayerState {
   velocity: Vec3;
   health: number;
   isDead: boolean;
+  armor?: number;
 }

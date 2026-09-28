@@ -10,6 +10,7 @@ import type { Heightfield } from '../../shared/heightfield.ts';
 import { isWireFrame, decodePosition, encodeTickPlayer, encodeTickFrame } from '../../shared/wire.ts';
 import { STATUS } from '../../shared/status.ts';
 import { isPerkId, perkMods } from '../../shared/perks.ts';
+import { POWERUP } from '../../shared/pickups.ts';
 import { createHmac, randomBytes } from 'node:crypto';
 import { readFileSync, appendFileSync, mkdirSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -794,11 +795,12 @@ export class GameServer {
       // while the state hash still counts them. Gated on THAT player's
       // lastSent, not a shared clock — a single shared timestamp meant
       // only the first stale player in map order ever heartbeat.
-      // Health channels the server owns: medkit channel (flag) and
-      // regenerator perk (passive). Both cap at the player's perk max.
+      // Health channels the server owns: medkit channel (flag), regenerator
+      // perk (passive), regen powerup (timed). All cap at the perk max.
       if (!p.isDead && p.health < p.maxHealth) {
         let heal = 0;
         if (p.status & STATUS.MEND) heal += MEND_HP_PER_TICK;
+        if (now < p.regenUntil) heal += POWERUP.regenHpPerSec / CONFIG.tickRate;
         heal += perkMods(p.perk).regen / CONFIG.tickRate;
         if (heal > 0) p.health = Math.min(p.maxHealth, p.health + heal);
       }
@@ -821,7 +823,12 @@ export class GameServer {
       snap.vx = p.velocity.x; snap.vy = p.velocity.y; snap.vz = p.velocity.z;
       snap.yaw = p.rotation.yaw; snap.pitch = p.rotation.pitch;
       snap.hp = p.health; snap.dead = p.isDead; snap.ski = p.skiing;
-      snap.status = p.status; snap.t = now;
+      // Buff bits are server-owned (stripped from client claims at
+      // inputMove) so they must be OR-ed on here, not read off p.status.
+      snap.status = p.status
+        | (now < p.regenUntil ? STATUS.REGEN : 0)
+        | (now < p.ddUntil ? STATUS.DD : 0);
+      snap.t = now;
 
       records.push({
         playerId,
@@ -837,7 +844,7 @@ export class GameServer {
           // reported (renders them with a bogus "0ms" ping).
           ping: p.ping > 0 ? p.ping : undefined,
           ski: p.skiing,
-          status: p.status,
+          status: snap.status,
         }),
         pos: p.position,
         force: forceSend,

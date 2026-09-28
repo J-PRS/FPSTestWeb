@@ -48,6 +48,14 @@
 }
 #health-bar { background: linear-gradient(90deg, #e33, #f77); box-shadow: 0 0 6px rgba(255,80,80,0.5); }
 #energy-bar { background: linear-gradient(90deg, #0af, #7df); box-shadow: 0 0 6px rgba(80,180,255,0.5); }
+#armor-bar { background: linear-gradient(90deg, #fa0, #fc6); box-shadow: 0 0 6px rgba(255,170,40,0.5); }
+#buffs { display: flex; gap: 8px; justify-content: center; margin-top: 5px; min-height: 14px; }
+#buffs .buff {
+  font-size: 0.6rem; letter-spacing: 0.12em; font-weight: 700;
+  padding: 1px 6px; border-radius: 2px;
+}
+#buffs .buff.regen { color: #6f6; background: rgba(60,220,80,0.15); border: 1px solid rgba(60,220,80,0.4); }
+#buffs .buff.dd { color: #f88; background: rgba(240,60,60,0.15); border: 1px solid rgba(240,60,60,0.4); }
 #hud-tr {
   position: absolute; top: 14px; right: 20px;
   font-size: 0.75rem; color: #8cf; text-align: right;

@@ -4,7 +4,7 @@ import { RateLimiter } from './RateLimiter.ts';
 import { CombatHandler } from './CombatHandler.ts';
 import { logger } from './logger.ts';
 import { PROTOCOL_VERSION } from '../../shared/protocol.ts';
-import { STATUS_MASK } from '../../shared/status.ts';
+import { CLIENT_STATUS_MASK } from '../../shared/status.ts';
 import { CONFIG } from './config.ts';
 import type { BallSim } from './BallSim.ts';
 
@@ -111,7 +111,7 @@ export class MessageHandler {
         if (!p) return;
         const i = (m as Extract<ClientMessage, { type: 'inputMove' }>).input;
         p.skiing = i.ski ? 1 : 0;
-        p.status = (i.status ?? 0) & STATUS_MASK;
+        p.status = (i.status ?? 0) & CLIENT_STATUS_MASK;
         this.roomInfo.moveInput?.(id, i);
       },
       // Room-scoped relay — broadcast() only reaches this room's sockets.
@@ -227,6 +227,7 @@ export class MessageHandler {
         rotation: { ...player.rotation },
         velocity: { ...player.velocity },
         health: player.health,
+        armor: player.armor,
         isDead: player.isDead,
       },
     });
