@@ -31,4 +31,8 @@ export const urlParams = {
   /** ?room=NAME — match room on the server (default: 'default'). Lets two
    *  matches coexist on one server; share the URL to share the room. */
   room: qp.get('room'),
+  /** ?net=wt|rtc — probe that transport tier before falling back to
+   *  WebSocket (netcode v2; the UDP tiers are stubbed until server halves
+   *  exist). Absent param = straight WS, today's behavior. */
+  net: qp.get('net'),
 };
