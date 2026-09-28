@@ -273,6 +273,25 @@ export function createCombat(deps: CombatDeps) {
       if (p.exploded && !p.explosionProcessed) {
         p.explosionProcessed = true;
         handleProjectileImpact(p);
+        // Sticky chain: the pop cooks every sibling bomb inside its blast
+        // radius — stack 3 under a door and they go off as one triple boom.
+        // BFS so a chain ripples outward through spaced bombs.
+        if (p.config.sticks) {
+          let frontier: Projectile[] = [p];
+          for (let pass = 0; pass < 4 && frontier.length; pass++) {
+            const next: Projectile[] = [];
+            for (const src of frontier) {
+              for (const q of deps.world.projectiles) {
+                if (!q.config.sticks || q.exploded || q === src) continue;
+                if (q.pos.distanceToSquared(src.pos) <= p.config.aoeRadius * p.config.aoeRadius) {
+                  q.explode();
+                  next.push(q);
+                }
+              }
+            }
+            frontier = next;
+          }
+        }
       }
 
       if (p.dead) {

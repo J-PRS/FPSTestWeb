@@ -115,6 +115,25 @@ glGrip.rotation.x = 0.3;
 gl.add(glGrip);
 gl.visible = false;
 
+// Sticky launcher: stubby drum-fed glue gun — fat barrel, glowing pink
+// reservoir so the silhouette reads "sticky" at a glance
+const sticky = new THREE.Group();
+sticky.add(mkTube(0.12, 0.13, 0.26, -0.18, bodyMat));
+sticky.add(mkTube(0.14, 0.14, 0.06, -0.34, darkMat)); // muzzle collar
+sticky.add(mkBore(0.1, -0.371));
+const stickyTankMat = new THREE.MeshStandardMaterial({ color: 0xdd44cc, roughness: 0.3, metalness: 0.1, emissive: 0x661155 });
+const stickyTank = new THREE.Mesh(new THREE.SphereGeometry(0.09, 10, 8), stickyTankMat);
+stickyTank.position.set(0, 0.12, 0.02);
+sticky.add(stickyTank);
+const stickyRecv = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.16, 0.22), bodyMat);
+stickyRecv.position.set(0, -0.02, 0.1);
+sticky.add(stickyRecv);
+const stickyGrip = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.1, 0.06), darkMat);
+stickyGrip.position.set(0, -0.16, 0.02);
+stickyGrip.rotation.x = 0.3;
+sticky.add(stickyGrip);
+sticky.visible = false;
+
 // Weapon 5 — flak cannon: wide boxy breech + short ribbed barrel
 const flak = new THREE.Group();
 flak.add(mkTube(0.17, 0.15, 0.3, -0.08, bodyMat));
@@ -368,6 +387,7 @@ const models: [number, THREE.Group][] = [
   [WeaponType.RocketLauncher, rpg],
   [WeaponType.Pistol, pistol],
   [WeaponType.Revolver, revolver],
+  [WeaponType.Sticky, sticky],
 ];
 for (const [wt, g] of models) {
   weapons.set(wt, g);

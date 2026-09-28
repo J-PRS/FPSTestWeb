@@ -76,6 +76,7 @@ export const RKT_RATE = 0.85; // RPG cadence — deliberate, each missile is an 
 // Hold-out sidearms (G/T/B) — pulled while the key is held, holstered on release
 export const PISTOL_RATE = 0.22;  // snappy semi-auto — ~4.5 rps while held
 export const REVOLVER_RATE = 0.6; // hand-cannon cadence — deliberate thumps
+export const STICKY_RATE = 0.8; // sticky launcher — 0.8s vs 3s fuse ⇒ up to 3 live bombs per shooter
 // Cannonball skips: livelier than the GL shell (0.55/0.7) — keeps its speed
 // across hops, that's the whole joke
 export const CANNON_BOUNCE_RESTITUTION = 0.75;

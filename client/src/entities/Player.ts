@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-import { JET_FORCE_UP, JET_FORCE_DIR, MAX_ENERGY, MAX_HEALTH, JET_DRAIN, JET_CHARGE, FIRE_RATE, DISC_RATE, GRENADE_RATE, CHAINGUN_RATE, MORTAR_RATE, GL_RATE, FLAK_RATE, PLASMA_RATE, RAILGUN_RATE, LG_RATE, SHOTGUN_RATE, CANNON_RATE, RKT_RATE, PISTOL_RATE, REVOLVER_RATE, MELEE_COOLDOWN, MELEE_LUNGE } from '../core/config.js';
+import { JET_FORCE_UP, JET_FORCE_DIR, MAX_ENERGY, MAX_HEALTH, JET_DRAIN, JET_CHARGE, FIRE_RATE, DISC_RATE, GRENADE_RATE, CHAINGUN_RATE, MORTAR_RATE, GL_RATE, FLAK_RATE, PLASMA_RATE, RAILGUN_RATE, LG_RATE, SHOTGUN_RATE, CANNON_RATE, RKT_RATE, PISTOL_RATE, REVOLVER_RATE, STICKY_RATE, MELEE_COOLDOWN, MELEE_LUNGE } from '../core/config.js';
 
 import { Terrain } from '../world/terrain.js';
 import { PlayerSkills } from './player/skills.js';
@@ -12,7 +12,7 @@ import { isDown } from '../core/keybinds.js';
 import { PlayerInput } from './player/input.js';
 import { PlayerModel } from './PlayerModel.js';
 import { PlayerVisuals } from './PlayerVisuals.js';
-import { THROW_TOTAL } from './ViewModel.js';
+import { THROW_TOTAL, SIDEARM_DRAW_TIME } from './ViewModel.js';
 import { ChildLogger } from '../core/Logger.js';
 
 const logger = new ChildLogger('Player');
@@ -147,6 +147,17 @@ export class Player {
   static readonly LOADOUT_SLOTS = 4;
   // Belt: one throwable equipped, F throws it. ESC menu picks.
   beltItem: 'disc' | 'grenade' = settings.get('fps-belt') === 'grenade' ? 'grenade' : 'disc';
+  // Sidearm: one hold-out weapon — the sidearm key pulls it while held.
+  // wid is slot-space (WEAPON_RATES index): pistol 12, revolver 13, shotgun 9.
+  // (sticky launcher sits at wid 14 — primary loadout, not a hold-out.)
+  static readonly SIDEARM_WIDS = { pistol: 12, revolver: 13, shotgun: 9 } as const;
+  sidearm: 'pistol' | 'revolver' | 'shotgun' =
+    (settings.get('fps-sidearm') as 'pistol' | 'revolver' | 'shotgun') in Player.SIDEARM_WIDS
+      ? settings.get('fps-sidearm') as 'pistol' | 'revolver' | 'shotgun' : 'pistol';
+  // Pack: one deployable on the deploy key — ESC menu picks.
+  packItem: 'turret' | 'mine' | 'station' | 'drone' =
+    (['turret', 'mine', 'station', 'drone'] as const).includes(settings.get('fps-pack') as 'turret' | 'mine' | 'station' | 'drone')
+      ? settings.get('fps-pack') as 'turret' | 'mine' | 'station' | 'drone' : 'turret';
 
   private static parseLoadout(raw: string): number[] {
     const ids = raw.split(',').map(Number).filter((n) => Number.isInteger(n) && n >= 0 && n < Player.WEAPON_RATES.length);
@@ -178,12 +189,21 @@ export class Player {
     this.beltItem = item;
     settings.set('fps-belt', item);
   }
-  private static readonly WEAPON_RATES = [FIRE_RATE, DISC_RATE, CHAINGUN_RATE, MORTAR_RATE, GL_RATE, FLAK_RATE, PLASMA_RATE, RAILGUN_RATE, LG_RATE, SHOTGUN_RATE, CANNON_RATE, RKT_RATE, PISTOL_RATE, REVOLVER_RATE];
+  setSidearm(s: 'pistol' | 'revolver' | 'shotgun'): void {
+    this.sidearm = s;
+    settings.set('fps-sidearm', s);
+  }
+  setPackItem(p: 'turret' | 'mine' | 'station' | 'drone'): void {
+    this.packItem = p;
+    settings.set('fps-pack', p);
+  }
+  get sidearmWid(): number { return Player.SIDEARM_WIDS[this.sidearm]; }
+  private static readonly WEAPON_RATES = [FIRE_RATE, DISC_RATE, CHAINGUN_RATE, MORTAR_RATE, GL_RATE, FLAK_RATE, PLASMA_RATE, RAILGUN_RATE, LG_RATE, SHOTGUN_RATE, CANNON_RATE, RKT_RATE, PISTOL_RATE, REVOLVER_RATE, STICKY_RATE];
   // wid (loadout/WEAPON_RATES index) → WeaponType wire id. The enum has
   // Grenade=2/Slam=8/Railgun=9/Melee=10 gaps, so positional ids diverge
   // from wid 2 onward — viewmodel/HUD consumers need this mapping.
   static widToWeaponType(wid: number): WeaponType {
-    return ([0, 1, 3, 4, 5, 6, 7, 9, 12, 13, 14, 15, 16, 17] as const)[wid] ?? WeaponType.Rocket;
+    return ([0, 1, 3, 4, 5, 6, 7, 9, 12, 13, 14, 15, 16, 17, 18] as const)[wid] ?? WeaponType.Rocket;
   }
   private _lastJetpackSend = 0;
 
@@ -191,6 +211,9 @@ export class Player {
   // auto-fires at its own cadence; release snaps back to the loadout slot.
   // wids are slot-space indices into WEAPON_RATES/SLOT_WEAPONS.
   private secondaryWid: number | null = null;
+  // Draw delay — the hold-out key swaps the model in instantly but firing
+  // waits for the raise, so the gun isn't shooting through its own holster.
+  private secondaryDrawT = 0;
 
   // Events
   onFire: ((e: FireEvent) => void) | null = null;
@@ -230,7 +253,6 @@ export class Player {
   onWeaponSwitch: ((index: number) => void) | null = null;
   /** Pack items — main wires these to the deployables manager. */
   onDeploy: (() => void) | null = null;
-  onCycleDeploy: (() => void) | null = null;
   onNetworkJump: ((pos: { x: number; y: number; z: number }) => void) | null = null;
   onNetworkJetpack: ((pos: { x: number; y: number; z: number }) => void) | null = null;
   onNetworkInput: ((input: { forward: number; right: number; jump: number; ski: number }, rotation: { yaw: number; pitch: number }) => void) | null = null;
@@ -297,20 +319,21 @@ export class Player {
       },
       skillPress: () => this.skills.press(this.skill),
       skillRelease: () => this.skills.release(this.skill),
+      sidearmWid: () => this.sidearmWid,
       secondaryDown: (wid) => {
         if (wid !== this.secondaryWid) {
           this.secondaryWid = wid;
+          this.secondaryDrawT = SIDEARM_DRAW_TIME;
           this.onWeaponSwitch?.(wid);
         }
       },
-      secondaryUp: (wid) => {
-        if (this.secondaryWid === wid) {
+      secondaryUp: () => {
+        if (this.secondaryWid !== null) {
           this.secondaryWid = null;
           this.onWeaponSwitch?.(this.currentWeapon);
         }
       },
       deploy: () => this.onDeploy?.(),
-      cycleDeploy: () => this.onCycleDeploy?.(),
       selectSlot: (i) => {
         if (i !== this.weaponIndex) {
           this.weaponIndex = i;
@@ -401,6 +424,7 @@ export class Player {
     this.discTimer = Math.max(0, this.discTimer - dt);
     this.grenadeTimer = Math.max(0, this.grenadeTimer - dt);
     this.throwLockT = Math.max(0, this.throwLockT - dt);
+    this.secondaryDrawT = Math.max(0, this.secondaryDrawT - dt);
     this.meleeCooldown = Math.max(0, this.meleeCooldown - dt);
     this.skills.tickCooldowns(dt);
     this.skills.updateBeacon(dt);
@@ -545,7 +569,7 @@ export class Player {
     // Weapon is lowered during a belt-throw — no primary fire mid-throw.
     // A held secondary auto-fires at its own cadence — no click needed.
     const wantFire = this.throwLockT <= 0 &&
-      (this.secondaryWid !== null ? true
+      (this.secondaryWid !== null ? this.secondaryDrawT <= 0
         : isBeam ? this.input.mouseHeld : (this.input.firePending || (this.input.mouseHeld && !this.input.needsRelease)));
     if (!this.input.mouseHeld) this.input.needsRelease = false;
     if (wantFire && this.fireTimer <= 0) {

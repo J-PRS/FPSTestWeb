@@ -1943,3 +1943,4 @@ tests: tdm kill-confirmed coverage (frag→team pt + tag drop, cross-team tag ba
 server: shot muzzle check rewinds shooter by ping; rewind buffer cleared on respawn/teleport
 balls collide with map structures: shared sphere-vs-OBB in stepBall, server+client prediction identical; test ballstruct
 server: admin API (FPS_ADMIN_TOKEN) — /admin/reload hot-swaps map spec into live room + mapUpdate broadcast, /admin/kick, /admin/end, /admin/rooms
+sticky launcher (wid 14 / WeaponType 18): glue bombs stick on contact (terrain/structures/targets), 3s fuse, 0.8s rate; detonation chain-cooks sibling stickies in blast radius (BFS in combat.ts); WEAPONS[18] stats + stickyConfig + viewmodel + server test

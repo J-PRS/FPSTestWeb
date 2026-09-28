@@ -86,6 +86,9 @@ export class Projectile {
   readonly hitPoint = new THREE.Vector3(); // exact sweep intersection (set by sweepTerrain)
   hitPointValid = false;
   explosionProcessed = false;
+  // Sticky: froze to a surface — physics off, fuse still burning. The
+  // blast is what hurts people, not the glue point.
+  stuck = false;
 
   readonly config: ProjectileConfig;
   // Random tumble axis for 'ball' projectiles — fixed per shot
@@ -181,6 +184,14 @@ export class Projectile {
     this.prevPos.copy(this.pos);
     this.lastDt = dt;
     this.age += dt;
+
+    // Stuck bomb: planted on a surface, ticking down to fuse. No physics,
+    // no collision — only the timer matters.
+    if (this.stuck) {
+      if (this.config.maxLifetime && this.age >= this.config.maxLifetime) this.explode();
+      else this.updateMesh();
+      return;
+    }
     // hitPoint is per-frame: a stale value from a previous bounce would
     // teleport the explosion back to the last terrain contact (the
     // "explosion in the wrong spot" bug on fuse/ball/player kills)
@@ -207,6 +218,9 @@ export class Projectile {
         this.explode(); // armed mortar shell touching terrain on a remote client
         return;
       }
+      // Remote stickies glue identically — the fuse clock is the shared
+      // truth, so both sides pop at the same age regardless of contact.
+      if (this.config.sticks && sweepTerrain(this, terrain)) this.stickAt(this.hitPoint);
     } else if (this.checkCollisions(terrain, balls, remotePlayers, obstacles)) {
       return; // exploded inside checkCollisions
     }
@@ -223,6 +237,10 @@ export class Projectile {
       // arming fuse (T2 mortar): bounces only apply BEFORE the shell is armed
       if (this.canBounce && this.bounceOffTerrain(terrain)) {
         return false; // bounced — still live, fuse keeps running
+      }
+      if (this.config.sticks) {
+        this.stickAt(this.hitPoint);
+        return true;
       }
       this.explode();
       return true;
@@ -245,6 +263,11 @@ export class Projectile {
     // a later bolt's — hitAt was overwritten by each tested obstacle.
     sweepObstacle(this, best);
     this.hitBolt = best;
+    if (this.config.sticks) {
+      // Shot down mid-flight — cook off on the spot, the bolt eats the pop.
+      this.explode();
+      return true;
+    }
     this.explode();
     return true;
   }
@@ -317,6 +340,13 @@ export class Projectile {
       if (sweepBall(this, ball)) {
         this.recordHit(this.minHitDist - ball.radius);
         this.hitBall = ball;
+        if (this.config.sticks) {
+          // Glued to the target's contact point — fuse keeps burning and
+          // the blast catches it. (Tracking a moving ball mid-stick is
+          // wasted fidelity; it won't outrun 11m of splash.)
+          this.stickAt(this.hitPoint);
+          return true;
+        }
         this.explode();
         return true;
       }
@@ -330,6 +360,10 @@ export class Projectile {
       if (sweepPlayer(this, playerPos, playerId)) {
         this.recordHit(this.minHitDist - PLAYER_RADIUS);
         this.hitPlayerId = playerId;
+        if (this.config.sticks) {
+          this.stickAt(this.hitPoint);
+          return true;
+        }
         this.explode();
         return true;
       }
@@ -381,6 +415,16 @@ export class Projectile {
       this.scene.remove(this.glowMesh);
     }
     this.projectileRemoved = true;
+  }
+
+  /** Plant the bomb at a contact point — motion and sweeps stop, the
+   *  fuse doesn't. */
+  private stickAt(p: THREE.Vector3): void {
+    this.stuck = true;
+    this.pos.copy(p);
+    this.prevPos.copy(p);
+    this.vel.set(0, 0, 0);
+    this.updateMesh();
   }
 
   explode(): void {
