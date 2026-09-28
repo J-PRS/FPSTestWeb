@@ -36,7 +36,16 @@ const _birdPosBuf: THREE.Vector3[] = []; // scratch — minimap debug blips
 
 // ?mode=classic — solo bounce-and-shoot: balls only, no rage, no roster
 const CLASSIC_MODE = urlParams.isClassic;
-const _camRight = new THREE.Vector3();
+
+// Dead-checkable effect list — update each, dispose+splice the finished.
+function updateDeadList<T extends { update(dt: number): void; dead: boolean; dispose(): void }>(list: T[], dt: number): void {
+  for (let i = list.length - 1; i >= 0; i--) {
+    list[i]!.update(dt);
+    if (list[i]!.dead) { list[i]!.dispose(); list.splice(i, 1); }
+  }
+}
+
+const _aliveCount = (l: { dead: boolean }[]) => { let n = 0; for (const e of l) if (!e.dead) n++; return n; };
 
 export interface GameLoopDeps {
   camera: THREE.PerspectiveCamera;
@@ -147,14 +156,6 @@ export function createGameLoop(deps: GameLoopDeps) {
     }
   }
 
-  // Update a list of dead-checkable effect/entity objects, disposing finished ones
-  function updateDeadList<T extends { update(dt: number): void; dead: boolean; dispose(): void }>(list: T[], dt: number): void {
-    for (let i = list.length - 1; i >= 0; i--) {
-      list[i]!.update(dt);
-      if (list[i]!.dead) { list[i]!.dispose(); list.splice(i, 1); }
-    }
-  }
-
   // Demo bookkeeping: update recorder/player, freeze input during playback.
   // Returns whether demo playback is currently paused.
   function tickDemo(dt: number): boolean {
@@ -165,6 +166,123 @@ export function createGameLoop(deps: GameLoopDeps) {
     if (shouldFreeze && !player.inputFrozen) player.freezeInput();
     else if (!shouldFreeze && player.inputFrozen) player.unfreezeInput();
     return demoManager?.isPaused ?? false;
+  }
+
+  // Species census for the bottom-left debug readout — in-place count,
+  // no per-frame filter arrays.
+  function censusEntities(entities: ReturnType<typeof createEntities>) {
+    let balls = 0, elites = 0;
+    for (const b of entities.balls) {
+      if (b.dead || b.disposed) continue;
+      if (b.variant === 3) elites++; else balls++;
+    }
+    return {
+      balls, elites,
+      crawlers: _aliveCount(entities.crawlers),
+      scarabs: _aliveCount(entities.scarabs),
+      grubs: _aliveCount(entities.grubs),
+      snakes: _aliveCount(entities.snakes),
+      gnats: _aliveCount(entities.gnats),
+      seekers: _aliveCount(entities.seekers),
+      rakks: _aliveCount(entities.rakks),
+      rollers: _aliveCount(entities.rollers),
+      turrets: _aliveCount(entities.turrets),
+      overlords: _aliveCount(entities.overlords),
+      totems: _aliveCount(entities.totems),
+      mines: _aliveCount(entities.mines),
+      targets: _aliveCount(entities.targets),
+      projectiles: deps.world.projectiles.length,
+      fx: deps.world.debrisList.length + deps.world.explosions.length
+        + deps.world.implosions.length + deps.world.scorches.length,
+    };
+  }
+
+  /** Stage 1 — world sim: player, terrain, entities, wave director,
+   *  projectiles. Returns demoPaused for the later stages. */
+  function simTick(dt: number, player: Player, terrain: Terrain, networkManager: NetworkManager, demoManager: DemoManager | null): boolean {
+    player.update(dt);
+    terrain.update(player.pos.x, player.pos.z);
+    // Fog uniforms ride the terrain shader — must sync every frame.
+    const fog = deps.sceneSetup.scene.fog;
+    if (fog instanceof THREE.Fog) terrain.updateFog(fog.color, fog.near, fog.far);
+
+    // Position send even when hidden — the server needs liveness.
+    if (networkManager.isConnected() && !player.isDead && !demoManager?.isPlaying) {
+      deps.remotes().networkTick(dt);
+    }
+    perf.mark('player');
+
+    const demoPaused = tickDemo(dt);
+    if (demoPaused) return true;
+
+    const entities = deps.entities;
+    entities.updateBalls(dt);
+    // ?mode=classic — balls are the whole roster, every other species'
+    // tick is skipped (they self-spawn ambiently, so ticking = populating)
+    if (!CLASSIC_MODE) {
+      entities.updateSpeciesAll(dt);
+      entities.updateDeployables(dt);
+    }
+    if (!demoManager?.isPlaying) deps.waveDirector().update(dt);
+    if (!demoManager?.isPlaying) entities.updateNuggets(dt);
+    deps.teamBots?.()?.update(dt);
+    perf.mark('sim');
+    if (!demoManager?.isPlaying) deps.combat()?.updateProjectiles(dt);
+    deps.demoLifecycle().updatePlaybackProjectiles(dt);
+    perf.mark('proj');
+    return false;
+  }
+
+  /** Stage 2 — transient VFX on wall-clock fxDt so they decay while the
+   *  tab is hidden instead of stacking into an overdraw bomb. */
+  function fxTick(fxDt: number): void {
+    deps.lazyEffects().update(fxDt);
+    updateDeadList(deps.world.debrisList, fxDt);
+    updateDeadList(deps.world.playerDebrisList, fxDt);
+    updateGibs(fxDt);
+    updateDeadList(deps.world.scorches, fxDt);
+    updateDeadList(deps.world.explosions, fxDt);
+    updateDeadList(deps.world.implosions, fxDt);
+    updateDeadList(deps.world.aoeGizmos, fxDt);
+  }
+
+  /** Stage 3 — HUD + viewmodel + ambient/atmosphere, then render. */
+  function hudTick(dt: number, fxDt: number, player: Player, networkManager: NetworkManager, demoManager: DemoManager | null): void {
+    const { camera, sceneSetup, entities } = deps;
+    const hud = deps.lazyHud();
+    const viewModel = deps.lazyViewModel();
+    const terrain = deps.lazyTerrain();
+
+    hud.update(dt, player, networkManager.getPing(), networkManager.getPacketLoss(), networkManager.getJitter());
+    hud.setEntityCounts(censusEntities(entities));
+    hud.setNuggets(entities.getNuggetsCollected());
+    hud.setTimer(deps.waveDirector().elapsed);
+    deps.ambientBirds.positions(_birdPosBuf);
+    hud.updateMinimap(entities.targets, entities.nuggets, player.pos, player.yaw, _birdPosBuf);
+
+    viewModel.group.visible = !demoManager?.isPlaying && !player.isDead && !player.thirdPerson && !player.isSpectating;
+    const yawDelta = Math.atan2(Math.sin(player.yaw - lastPlayerYaw), Math.cos(player.yaw - lastPlayerYaw));
+    viewModel.update(dt, yawDelta, player.pitch - lastPlayerPitch, player.vel, camera);
+    lastPlayerYaw = player.yaw;
+    lastPlayerPitch = player.pitch;
+    deps.lazyHealthBarSystem().update(dt, networkManager.getPlayers(), deps.world.remotePlayers, entities.balls);
+
+    // Peripheral speed lines along the true velocity vector; demo-suppressed.
+    deps.speedLines.update(fxDt, camera.position, demoManager?.isPlaying ? _zeroVel : player.vel);
+
+    for (const layer of deps.ambientLayers) layer.update(fxDt, camera.position, terrain);
+    deps.groundMist().update(fxDt, camera.position);
+    deps.ambientBirds.update(fxDt, player.pos, terrain, player.isDead);
+
+    sceneSetup.update(dt);
+    sceneSetup.atmosphericSky.followCamera(camera.position);
+
+    // Shake composes after player.update's camera write; the LG beam weld
+    // is last — it needs the swayed viewmodel AND the post-shake camera or
+    // fast moves leave the bolt a frame stale.
+    screenShake.update(dt, camera);
+    deps.combat()?.updateBeamVisual();
+    sfxAudio.updateAudio(dt, player, camera);
   }
 
   function loop(time: number): void {
@@ -178,140 +296,26 @@ export function createGameLoop(deps: GameLoopDeps) {
 
     // Hidden tabs get ~1 rAF/sec — dt clamps to 0.05 so game logic runs in
     // slow motion, but cosmetic VFX must still expire in real time or they
-    // stack into an overdraw bomb while you're AFK (explosions, damage
-    // numbers, debris all spawned by enemies beating on the idle player).
-    // fxDt = wall-clock (clamped at 2s) when hidden; normal dt when visible.
+    // stack into an overdraw bomb while you're AFK. fxDt = wall-clock
+    // (clamped 2s) when hidden; normal dt when visible.
     const fxDt = document.hidden ? Math.min(rawElapsed, 2) : dt;
 
-    const { camera, sceneSetup, entities } = deps;
-    const { scene } = sceneSetup;
     const player = deps.lazyPlayer();
     const terrain = deps.lazyTerrain();
     const networkManager = deps.lazyNetworkManager();
     const demoManager = deps.lazyDemoManager();
-    const viewModel = deps.lazyViewModel();
-    const hud = deps.lazyHud();
 
-    // Update player physics even when tab is hidden (to keep position changing)
-    player.update(dt);
-    terrain.update(player.pos.x, player.pos.z);
-
-    // Send position to server if connected (even when tab is hidden)
-    // Don't send position updates while dead or during demo playback
-    if (networkManager && networkManager.isConnected() && !player.isDead && !demoManager?.isPlaying) {
-      deps.remotes().networkTick(dt);
-    }
-    perf.mark('player');
-
-    // Sync fog uniforms to terrain shader (all clipmap levels)
-    if (scene.fog instanceof THREE.Fog) {
-      terrain.updateFog(scene.fog.color, scene.fog.near, scene.fog.far);
-    }
-    const demoPaused = tickDemo(dt);
-    if (!demoPaused) entities.updateBalls(dt);
-    // ?mode=classic — balls are the whole roster, every other species'
-    // tick is skipped (they self-spawn ambiently, so ticking = populating)
-    if (!demoPaused && !CLASSIC_MODE) {
-      entities.updateSpeciesAll(dt);
-      entities.updateDeployables(dt);
-    }
-    if (!demoPaused && !demoManager?.isPlaying) deps.waveDirector().update(dt);
-    if (!demoManager?.isPlaying) entities.updateNuggets(dt);
-    deps.teamBots?.()?.update(dt);
-    perf.mark('sim');
-    if (!demoManager?.isPlaying) {
-      deps.combat()?.updateProjectiles(dt);
-    }
-
-    // Update playback projectiles (deterministic reconstruction from events)
-    if (!demoPaused) deps.demoLifecycle().updatePlaybackProjectiles(dt);
-    perf.mark('proj');
-
-    if (!demoPaused) {
-      deps.lazyEffects().update(fxDt);
-      updateDeadList(deps.world.debrisList, fxDt);
-      updateDeadList(deps.world.playerDebrisList, fxDt);
-      updateGibs(fxDt);
-      updateDeadList(deps.world.scorches, fxDt);
-      updateDeadList(deps.world.explosions, fxDt);
-      updateDeadList(deps.world.implosions, fxDt);
-      updateDeadList(deps.world.aoeGizmos, fxDt);
-    }
+    const demoPaused = simTick(dt, player, terrain, networkManager, demoManager);
+    if (!demoPaused) fxTick(fxDt);
     perf.mark('fx');
     deps.remotes().updateScoreboard();
 
-    // Debug dummy remote player (?dummy) — pin it in front of the camera and tick it
+    // ?dummy debug remote — pin it in front of the camera and tick it
     const dummy = deps.world.remotePlayers.get('dummy');
     const dummyTick = deps.getDummyTick();
-    if (dummy && dummyTick) {
-      dummyTick(dt);
-      dummy.tick(dt);
-    }
+    if (dummy && dummyTick) { dummyTick(dt); dummy.tick(dt); }
 
-    hud.update(dt, player, networkManager.getPing(), networkManager.getPacketLoss(), networkManager.getJitter());
-    // Bottom-left census — alive counts per species + perf load counters.
-    // Counted in-place: a .filter per species per frame was ~15 throwaway
-    // arrays a frame for numbers that rarely change.
-    const cnt = (l: { dead: boolean }[]) => { let n = 0; for (const e of l) if (!e.dead) n++; return n; };
-    let balls = 0, elites = 0;
-    for (const b of entities.balls) {
-      if (b.dead || b.disposed) continue;
-      if (b.variant === 3) elites++; else balls++;
-    }
-    hud.setEntityCounts({
-      balls, elites,
-      crawlers: cnt(entities.crawlers),
-      scarabs: cnt(entities.scarabs),
-      grubs: cnt(entities.grubs),
-      snakes: cnt(entities.snakes),
-      gnats: cnt(entities.gnats),
-      seekers: cnt(entities.seekers),
-      rakks: cnt(entities.rakks),
-      rollers: cnt(entities.rollers),
-      turrets: cnt(entities.turrets),
-      overlords: cnt(entities.overlords),
-      totems: cnt(entities.totems),
-      mines: cnt(entities.mines),
-      targets: cnt(entities.targets),
-      projectiles: deps.world.projectiles.length,
-      fx: deps.world.debrisList.length + deps.world.explosions.length
-        + deps.world.implosions.length + deps.world.scorches.length,
-    });
-    hud.setNuggets(entities.getNuggetsCollected());
-    hud.setTimer(deps.waveDirector().elapsed);
-    deps.ambientBirds.positions(_birdPosBuf);
-    hud.updateMinimap(entities.targets, entities.nuggets, player.pos, player.yaw, _birdPosBuf);
-    viewModel.group.visible = !demoManager?.isPlaying && !player.isDead && !player.thirdPerson && !player.isSpectating;
-    const yawDelta = Math.atan2(Math.sin(player.yaw - lastPlayerYaw), Math.cos(player.yaw - lastPlayerYaw));
-    viewModel.update(dt, yawDelta, player.pitch - lastPlayerPitch, player.vel, camera);
-    lastPlayerYaw = player.yaw;
-    lastPlayerPitch = player.pitch;
-    deps.lazyHealthBarSystem().update(dt, networkManager.getPlayers(), deps.world.remotePlayers, entities.balls);
-
-    // Peripheral speed lines — world-space streaks along the true velocity
-    // vector; suppressed during demo playback
-    deps.speedLines.update(fxDt, camera.position, demoManager?.isPlaying ? _zeroVel : player.vel);
-
-    // Ambient layers — world-anchored motes drifting around the camera
-    // volume, plus valley mist banks yawing toward the camera
-    for (const layer of deps.ambientLayers) layer.update(fxDt, camera.position, terrain);
-    deps.groundMist().update(fxDt, camera.position);
-    deps.ambientBirds.update(fxDt, player.pos, terrain, player.isDead);
-
-    // Update atmospheric effects
-    sceneSetup.update(dt);
-    sceneSetup.atmosphericSky.followCamera(camera.position);
-
-    // Explosion screen shake — applied after player.update's camera lookAt
-    // so it composes as a small rotational jitter on top
-    screenShake.update(dt, camera);
-
-    // LG beam weld — last write before renderFrame: needs the viewmodel's
-    // swayed transform AND the post-shake camera, or fast moves + blasts
-    // leave the bolt anchored one camera-frame stale
-    deps.combat()?.updateBeamVisual();
-
-    sfxAudio.updateAudio(dt, player, camera);
+    hudTick(dt, fxDt, player, networkManager, demoManager);
     perf.mark('hud');
 
     renderFrame(fxDt); // damage numbers ride fxDt — same hidden-tab decay fix
