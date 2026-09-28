@@ -1932,3 +1932,4 @@ PROTOCOL_VERSION 3->4 (bank message removed — stale clients force-reload inste
 net: ball prediction rides rate-corrected server clock; silent landings parked at contact; per-kind rubberband thresholds
 bots: server bots now hunt creatures (ballSim roster in enemies) — nuggets rooms score autonomously
 server: superbot knob (FPS_SUPERBOT=substr: 3x speed, perfect aim, 400hp); flag grab/return/capture logged
+tools: ballreplay takes PVP_ROOM to probe non-default rooms
