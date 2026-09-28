@@ -287,6 +287,22 @@ export class CombatHandler {
     const bloom = msg.directHit ? directHitAoeBonus(msg.weaponType ?? -1) : 1;
     this.processAOE(playerId, msg.position, msg.excludeTargetId,
       bloom === 1 ? stats : { ...stats, aoeRadius: stats.aoeRadius * bloom });
+
+    // Cluster carrier: the carrier's blast is only the delivery pop — the
+    // real damage is `count` bomblet blasts scattered inside `radius`, each
+    // rolled with ClusterBomblet stats. Client bomblets are visual-only.
+    if (stats.cluster) {
+      const bomblet = getWeaponStats(WeaponType.ClusterBomblet);
+      for (let i = 0; i < stats.cluster.count; i++) {
+        const ang = Math.random() * Math.PI * 2;
+        const r = Math.random() * stats.cluster.radius;
+        this.processAOE(playerId, {
+          x: msg.position.x + Math.cos(ang) * r,
+          y: msg.position.y, // bomblets scatter on the blast plane
+          z: msg.position.z + Math.sin(ang) * r,
+        }, msg.excludeTargetId, bomblet);
+      }
+    }
   }
 
   private processAOE(playerId: string, position: Vec3, excludeTargetId: string | null | undefined, stats: WeaponStats): void {

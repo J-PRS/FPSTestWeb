@@ -58,6 +58,10 @@ export interface ProjectileConfig {
   maxBounces?: number; // die on the Nth terrain hit (flak shards); undefined = bounce until fuse
   armTime?: number; // T2 mortar arming delay: contacts before this age BOUNCE, after it they detonate
   sticks?: boolean; // sticky launcher: on contact the bomb freezes in place and waits out its fuse; a detonation cooks off sibling sticks in radius
+  /** Cluster carrier — detonation spawns `count` VISUAL bomblets
+   *  (BOMBLET_CONFIG) in an upward cone of half-angle `spread` (rad) that
+   *  pop after `fuse`s. Damage is server-side via WeaponStats.cluster. */
+  cluster?: { count: number; spread: number; fuse: number };
   wakeVisual?: boolean; // turbulent wake particles marking the growing proxy hitbox (off by default — tuning pending)
 }
 

@@ -8,8 +8,10 @@ import {
   ROCKET_CONFIG, DISC_CONFIG, GRENADE_CONFIG, CHAINGUN_CONFIG,
   MORTAR_CONFIG, GL_CONFIG, FLAK_CONFIG, PLASMA_CONFIG, RAILGUN_CONFIG,
   BELT_DISC_CONFIG, SHOTGUN_CONFIG, CANNON_CONFIG, RKT_CONFIG,
-  PISTOL_CONFIG, REVOLVER_CONFIG,
+  PISTOL_CONFIG, REVOLVER_CONFIG, STICKY_CONFIG,
+  CLUSTER_CONFIG, JAVELIN_CONFIG, IMPACT_CONFIG,
 } from '../../projectiles/index.js';
+import type { BeltItem } from '../../entities/Player.js';
 import type { ProjectileConfig } from '../../projectiles/types.js';
 import { THROW_RELEASE } from '../../entities/ViewModel.js';
 import { poissonDisc } from '../../utils/poissonSpread.js';
@@ -94,14 +96,21 @@ export function createFire(deps: CombatDeps, hooks: FireHooks) {
     spawnProjectile(ROCKET_CONFIG, e);
   }
 
-  function onDisc(_e: FireArgs): void {
-    deps.lazyViewModel()?.startThrow();
-    setTimeout(() => spawnProjectile(BELT_DISC_CONFIG, freshFireArgs()), THROW_RELEASE * 1000);
-  }
+  // Belt loadout → the projectile it throws. Belt sticky reuses the
+  // launcher's glue bomb — same fuse, same chain rule, hand-thrown arc.
+  const BELT_THROWS: Record<BeltItem, ProjectileConfig> = {
+    disc: BELT_DISC_CONFIG,
+    grenade: GRENADE_CONFIG,
+    cluster: CLUSTER_CONFIG,
+    javelin: JAVELIN_CONFIG,
+    sticky: STICKY_CONFIG,
+    impact: IMPACT_CONFIG,
+  };
 
-  function onGrenade(_e: FireArgs): void {
+  function onBelt(_e: FireArgs, item: BeltItem): void {
     deps.lazyViewModel()?.startThrow();
-    setTimeout(() => spawnProjectile(GRENADE_CONFIG, freshFireArgs()), THROW_RELEASE * 1000);
+    const config = BELT_THROWS[item] ?? BELT_DISC_CONFIG;
+    setTimeout(() => spawnProjectile(config, freshFireArgs()), THROW_RELEASE * 1000);
   }
 
   function onDiscLauncher(e: FireArgs): void {
@@ -253,7 +262,7 @@ export function createFire(deps: CombatDeps, hooks: FireHooks) {
 
   return {
     spawnProjectile,
-    onFire, onDisc, onGrenade, onDiscLauncher, onChaingun, onMortar, onGrenadeLauncher,
+    onFire, onBelt, onDiscLauncher, onChaingun, onMortar, onGrenadeLauncher,
     onFlak, onPlasma, onRailgun, onShotgun, onCannon, onRocketLauncher,
     onPistol, onRevolver,
     onMelee: melee,

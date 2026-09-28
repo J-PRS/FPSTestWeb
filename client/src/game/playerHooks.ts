@@ -23,8 +23,7 @@ export interface PlayerHookCtx {
 export function wirePlayerHooks(c: PlayerHookCtx): void {
   const { player, combat, effects, viewModel, speedLines } = c;
   player.onFire = combat.onFire;
-  player.onDisc = combat.onDisc;
-  player.onGrenade = combat.onGrenade;
+  player.onBelt = combat.onBelt;
   player.onDiscLauncher = combat.onDiscLauncher;
   player.onChaingun = combat.onChaingun;
   player.onMortar = combat.onMortar;

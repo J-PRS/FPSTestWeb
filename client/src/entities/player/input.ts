@@ -14,7 +14,6 @@ import { audio } from '../../core/audio.js';
 export interface PlayerInputHandlers {
   isSpectating(): boolean;
   toggleSpectator(): void;
-  beltItem(): 'disc' | 'grenade';
   melee(): void;
   toggleCamera(): void;
   skillPress(): void;
@@ -44,8 +43,7 @@ export class PlayerInput {
   needsRelease = false;
   jetPending = false;
   jumpHeld = false;
-  discHeld = false;
-  grenadeHeld = false;
+  beltHeld = false;
   // When true, keyboard/mouse input is ignored (demo playback)
   frozen = false;
   invertY = settings.get('fps-invert-y');
@@ -63,8 +61,7 @@ export class PlayerInput {
     this.firePending = false;
     this.jetPending = false;
     this.jumpHeld = false;
-    this.discHeld = false;
-    this.grenadeHeld = false;
+    this.beltHeld = false;
   }
 
   private bindInput(): void {
@@ -78,10 +75,7 @@ export class PlayerInput {
       if (h.isSpectating()) return;
       if (matchCode('sidearm', e.code)) h.secondaryDown(h.sidearmWid());
       if (matchCode('jump', e.code)) this.jumpHeld = true;
-      if (matchCode('belt', e.code)) {
-        if (h.beltItem() === 'disc') this.discHeld = true;
-        else this.grenadeHeld = true;
-      }
+      if (matchCode('belt', e.code)) this.beltHeld = true;
       if (matchCode('melee', e.code)) h.melee();
       if (matchCode('camera', e.code)) h.toggleCamera();
       if (matchCode('skill', e.code) && !e.repeat) h.skillPress();
@@ -106,7 +100,7 @@ export class PlayerInput {
       this.keys[e.code] = false;
       if (matchCode('jump', e.code)) this.jumpHeld = false;
       if (matchCode('skill', e.code)) h.skillRelease();
-      if (matchCode('belt', e.code)) { this.discHeld = false; this.grenadeHeld = false; }
+      if (matchCode('belt', e.code)) this.beltHeld = false;
       if (matchCode('sidearm', e.code)) h.secondaryUp();
     });
     document.addEventListener('mousedown', (e) => {
@@ -119,9 +113,7 @@ export class PlayerInput {
       // same press/release semantics as keyboard codes
       if (matchCode('jump', `Mouse${e.button}`)) this.jumpHeld = true;
       if (matchCode('skill', `Mouse${e.button}`)) h.skillPress();
-      if (matchCode('belt', `Mouse${e.button}`)) {
-        if (h.beltItem() === 'disc') this.discHeld = true; else this.grenadeHeld = true;
-      }
+      if (matchCode('belt', `Mouse${e.button}`)) this.beltHeld = true;
       if (matchCode('melee', `Mouse${e.button}`)) h.melee();
       if (matchCode('camera', `Mouse${e.button}`)) h.toggleCamera();
     });
@@ -132,7 +124,7 @@ export class PlayerInput {
       if (e.button === 2) { this.jetPending = false; }
       if (matchCode('jump', `Mouse${e.button}`)) this.jumpHeld = false;
       if (matchCode('skill', `Mouse${e.button}`)) h.skillRelease();
-      if (matchCode('belt', `Mouse${e.button}`)) { this.discHeld = false; this.grenadeHeld = false; }
+      if (matchCode('belt', `Mouse${e.button}`)) this.beltHeld = false;
     });
     document.addEventListener('contextmenu', (e) => e.preventDefault());
     document.addEventListener('mousemove', (e) => {

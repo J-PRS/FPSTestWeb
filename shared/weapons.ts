@@ -29,6 +29,10 @@ export enum WeaponType {
   Pistol = 16,        // hold-out sidearm (G): quick semi-auto slug, no splash
   Revolver = 17,      // hold-out sidearm (T): slow hand-cannon slug, no splash
   Sticky = 18,        // sticky launcher: lobbed bomb that glues to surface/player, 3s fuse, chain-detonates
+  ClusterBomb = 19,   // belt throw: fuse pop scatters bomblets that each detonate
+  Javelin = 20,       // belt throw: fast flat dart — direct damage only, no splash
+  ImpactGrenade = 21, // belt throw: flat arc, contact pop, low damage, big shove
+  ClusterBomblet = 22,// spawned by ClusterBomb detonation — never fired directly
 }
 
 export interface WeaponStats {
@@ -56,6 +60,11 @@ export interface WeaponStats {
   hitGrow: number;
   /** Fuse self-detonate time (s); 0/undefined = terrain/target contact only */
   maxLifetime?: number;
+  /** Cluster carrier — on detonation the SERVER scatters `count` bomblet
+   *  blasts (ClusterBomblet stats) inside `radius` of the impact point.
+   *  Client bomblets are visual-only: they never claim damage, so remote
+   *  hits stay server-authoritative. */
+  cluster?: { count: number; radius: number };
 }
 
 /** Explosion VFX dome = aoeRadius × this — damage always reaches a bit past
@@ -344,6 +353,72 @@ export const WEAPONS: Record<number, WeaponStats> = {
     hitMax: 2.0, // sticks sit still — the blast is the reach, not the wake
     hitGrow: 0.5,
     maxLifetime: 3.0, // THE fuse — 0.8s rate ⇒ ~3 bombs live per shooter
+  },
+  [WeaponType.ClusterBomb]: {
+    // Belt cluster: a fuse bomb whose pop is only the carrier — the real
+    // damage is the bomblet scatter it releases (each claims with
+    // ClusterBomblet stats, so the parent's radius stays honest).
+    directDamage: 30,
+    aoeDamage: 15,
+    aoeRadius: 8.0,
+    knockbackForce: 35.0,
+    forceMode: 'push',
+    speed: 42.0,
+    gravity: -28.0,
+    bodyRadius: 0.3,
+    hitMin: 0.0,
+    hitMax: 8.0,
+    hitGrow: 2.0,
+    maxLifetime: 1.6, // fuse pop releases the bomblets
+    cluster: { count: 5, radius: 6.0 }, // bomblet scatter footprint around the pop
+  },
+  [WeaponType.ClusterBomblet]: {
+    // Child charge — small pop, small radius; count is the weapon.
+    directDamage: 15,
+    aoeDamage: 12,
+    aoeRadius: 6.0,
+    knockbackForce: 25.0,
+    forceMode: 'push',
+    speed: 0, // spawned mid-air by the carrier, never muzzle-fired
+    gravity: -28.0,
+    bodyRadius: 0.15,
+    hitMin: 0.0,
+    hitMax: 4.0,
+    hitGrow: 1.0,
+    maxLifetime: 1.1,
+  },
+  [WeaponType.Javelin]: {
+    // Thrown dart: near-flat long throw, heavy single-target pierce.
+    // No splash — the skill shot IS the reward.
+    directDamage: 60,
+    aoeDamage: 0,
+    aoeRadius: 0,
+    knockbackForce: 14.0,
+    forceMode: 'push',
+    speed: 95.0,
+    gravity: -6.0, // barely drops — a spear, not a lob
+    bodyRadius: 0.15,
+    hitMin: 0.0,
+    hitMax: 0.6,
+    hitGrow: 0.2,
+    maxLifetime: 3.0, // ~285m of reach
+  },
+  [WeaponType.ImpactGrenade]: {
+    // Contact-fused knockback tool: flies flat and far, pops on ANY touch,
+    // throws targets (and the thrower) hard without hurting much — the
+    // dismount/boost grenade.
+    directDamage: 25,
+    aoeDamage: 10,
+    aoeRadius: 7.0,
+    knockbackForce: 65.0, // biggest shove in the belt
+    forceMode: 'push',
+    speed: 55.0,
+    gravity: -14.0, // flies long before it sags
+    bodyRadius: 0.25,
+    hitMin: 0.0,
+    hitMax: 6.0,
+    hitGrow: 1.5,
+    maxLifetime: 4.0, // contact usually pops it first
   },
   [WeaponType.Slam]: {
     // Not a projectile — the Q-skill lands as a ground AOE. Ballistic

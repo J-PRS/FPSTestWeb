@@ -15,6 +15,7 @@ export { RKT_CONFIG } from './rocketLauncherConfig.js';
 export { PISTOL_CONFIG } from './pistolConfig.js';
 export { REVOLVER_CONFIG } from './revolverConfig.js';
 export { STICKY_CONFIG } from './stickyConfig.js';
+export { CLUSTER_CONFIG, BOMBLET_CONFIG, JAVELIN_CONFIG, IMPACT_CONFIG } from './beltConfigs.js';
 
 import { ROCKET_CONFIG } from './rocketConfig.js';
 import { DISC_CONFIG, BELT_DISC_CONFIG } from './discConfig.js';
@@ -32,12 +33,13 @@ import { RKT_CONFIG } from './rocketLauncherConfig.js';
 import { PISTOL_CONFIG } from './pistolConfig.js';
 import { REVOLVER_CONFIG } from './revolverConfig.js';
 import { STICKY_CONFIG } from './stickyConfig.js';
+import { CLUSTER_CONFIG, BOMBLET_CONFIG, JAVELIN_CONFIG, IMPACT_CONFIG } from './beltConfigs.js';
 
 import { ACCURACY_MAX, ACCURACY_NORMALIZATION } from '../core/config.js';
 
 import type { ProjectileConfig } from './types.js';
 
-export const WEAPON_CONFIGS: ProjectileConfig[] = [ROCKET_CONFIG, DISC_CONFIG, GRENADE_CONFIG, CHAINGUN_CONFIG, MORTAR_CONFIG, GL_CONFIG, FLAK_CONFIG, PLASMA_CONFIG, RAILGUN_CONFIG, BELT_DISC_CONFIG, LIGHTNING_CONFIG, SHOTGUN_CONFIG, CANNON_CONFIG, RKT_CONFIG, PISTOL_CONFIG, REVOLVER_CONFIG, STICKY_CONFIG];
+export const WEAPON_CONFIGS: ProjectileConfig[] = [ROCKET_CONFIG, DISC_CONFIG, GRENADE_CONFIG, CHAINGUN_CONFIG, MORTAR_CONFIG, GL_CONFIG, FLAK_CONFIG, PLASMA_CONFIG, RAILGUN_CONFIG, BELT_DISC_CONFIG, LIGHTNING_CONFIG, SHOTGUN_CONFIG, CANNON_CONFIG, RKT_CONFIG, PISTOL_CONFIG, REVOLVER_CONFIG, STICKY_CONFIG, CLUSTER_CONFIG, BOMBLET_CONFIG, JAVELIN_CONFIG, IMPACT_CONFIG];
 
 // Slot-space order — index IS the weapon id (WEAPON_RATES / viewmodel order).
 // The belt grenade is NOT here: it has no slot. Menus/HUD must use this list,
