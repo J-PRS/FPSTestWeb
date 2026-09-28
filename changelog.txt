@@ -1,3 +1,5 @@
+2026-10-03 - regression tests pin the judge changes: inputSeq wire round-trip + legacy 30B decode; probe-ahead reconcile; speed-scaled tolerance
+
 2026-10-03 - judge tolerance scales with speed (divergenceM * (1 + v/60)) — ski-speed integration noise and crest-timing clips no longer warn; warns now log the effective tol
 
 2026-10-03 - position frames carry inputSeq (34B, backward-compat) so the judge compares reports against a probe stepped forward by in-flight inputs instead of the stale shadow — kills systematic input-latency divergence

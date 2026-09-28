@@ -146,4 +146,37 @@ describe('RoomMoveSim', () => {
     const pos = m.simPos('p1')!;
     expect(Math.abs(pos.x) + Math.abs(pos.z)).toBeGreaterThan(0.5);
   });
+
+  test('a report ahead of the shadow by in-flight inputs compares against the probe', () => {
+    // The client consumed inputs the server hasn't received yet — its
+    // position legitimately leads the sim by ~vel * pending. With the
+    // inputSeq anchor this must not flag; without it the same report is
+    // a teleport-scale divergence at ski speeds.
+    const m = new RoomMoveSim(flat);
+    m.track('p1', { x: 0, y: MOVEMENT_CONFIG.playerHeight, z: 0 }, 0);
+    m.setInput('p1', { forward: 1, right: 0, jumpHeld: false, skiHeld: true }, 0, 1);
+    for (let i = 0; i < 60; i++) m.tick(1 / 30); // build up real speed
+    const s = m.simState('p1')!;
+    // A report ~4 steps ahead of the sim — inside probe range (cap 8).
+    const ahead = { x: s.pos.x + s.vel.x * (4 / 30), y: s.pos.y, z: s.pos.z + s.vel.z * (4 / 30) };
+    expect(m.reconcile('p1', ahead, 0, s.vel, 5)).toBeNull();
+    // Same offset with no anchor (old client) → judged on stale state.
+    // At ski speed the gap can exceed tolerance, so this is allowed to
+    // flag — the assert that matters is above.
+  });
+
+  test('speed-scaled tolerance absorbs ski-speed drift but not teleports', () => {
+    const m = new RoomMoveSim(flat);
+    m.track('p1', { x: 0, y: MOVEMENT_CONFIG.playerHeight, z: 0 }, 0);
+    m.setInput('p1', { forward: 1, right: 0, skiHeld: true }, 0, 1);
+    for (let i = 0; i < 60; i++) m.tick(1 / 30);
+    const s = m.simState('p1')!;
+    const speed = Math.hypot(s.vel.x, s.vel.z);
+    const tol = 10 * (1 + speed / 60);
+    // Drift just under the scaled tolerance reconciles quietly.
+    const near = { x: s.pos.x + tol * 0.9, y: s.pos.y, z: s.pos.z };
+    expect(m.reconcile('p1', near, 0, s.vel)).toBeNull();
+    // A real teleport still flags.
+    expect(m.reconcile('p1', { x: s.pos.x + 200, y: s.pos.y, z: s.pos.z }, 0, s.vel)).not.toBeNull();
+  });
 });

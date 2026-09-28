@@ -39,6 +39,21 @@ describe('position frame round-trip', () => {
     const good = encodePosition({ x: 0, y: 0, z: 0 }, { yaw: 0, pitch: 0 }, { x: 0, y: 0, z: 0 }, 1, 0);
     expect(decodePosition(good.slice(0, 10))).toBeNull();
   });
+
+  it('round-trips inputSeq and decodes old 30-byte frames without it', () => {
+    const pos = { x: 1, y: 2, z: 3 };
+    const rot = { yaw: 0, pitch: 0 };
+    const vel = { x: 0, y: 0, z: 0 };
+    const framed = encodePosition(pos, rot, vel, 7, 12, 1234);
+    expect(framed.length).toBe(34);
+    expect(decodePosition(framed)!.inputSeq).toBe(1234);
+    // Legacy client: no inputSeq field — frame is 30B and decodes clean.
+    const legacy = encodePosition(pos, rot, vel, 7, 12);
+    expect(legacy.length).toBe(30);
+    const d = decodePosition(legacy)!;
+    expect(d.seq).toBe(7);
+    expect(d.inputSeq).toBeUndefined();
+  });
 });
 
 describe('tick frame round-trip', () => {
