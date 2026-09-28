@@ -660,6 +660,13 @@ export class GameServer {
           continue;
         }
         room.checkMatchClock(now0);
+        // Hibernation: nobody watching → freeze ball sim + skip the whole
+        // room tick. Bots alone don't count as an audience — they exist
+        // to serve humans, and a bot-only 'default' would otherwise sim
+        // forever. A rejoining human wakes the room instantly.
+        const audience = room.players.getHumanCount() > 0 || room.spectators.size > 0;
+        room.ballSim.dormant = !audience;
+        if (!audience) continue;
         const players = room.players.getAllPlayers();
         if (players.size === 0) continue;
         this.tickRoom(room, players, now0);
