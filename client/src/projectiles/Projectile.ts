@@ -15,6 +15,7 @@ import { sweepTerrain, sweepBall, sweepPlayer, sweepObstacle } from './sweep.js'
 
 // Shared projectile geometries — dispose() never frees them, so reuse across shots
 const _tNormal = new THREE.Vector3();
+const _rayDir = new THREE.Vector3();
 
 
 /**
@@ -90,6 +91,16 @@ export class Projectile {
   // blast is what hurts people, not the glue point.
   stuck = false;
 
+  // Ray-burst (remote railgun): at rayBurst.delay the slug discharges a
+  // hitscan beam down its velocity line — implemented as one giant swept
+  // step so terrain/target/obstacle collision applies to the beam itself.
+  // Terminal: hit or miss, the slug is spent at the end of the segment.
+  private rayFired = false;
+  private rayDone = false;
+  private readonly rayFrom = new THREE.Vector3();
+  /** Visual/sfx hook — fired once at discharge with (beam origin, end). */
+  onRayBurst: ((from: THREE.Vector3, to: THREE.Vector3) => void) | null = null;
+
   readonly config: ProjectileConfig;
   // Random tumble axis for 'ball' projectiles — fixed per shot
   private readonly tumbleX = Math.random() * 2 - 1;
@@ -161,6 +172,16 @@ export class Projectile {
 
     if (!this.exploded) this.updateAlive(dt, terrain, balls, remotePlayers, obstacles);
 
+    // Discharge aftermath: beam visual fires once with the resolved
+    // endpoint (swept hitPoint on a hit, range cap on a miss), then the
+    // slug detonates there. Lives in update() so early returns inside
+    // updateAlive can't skip it.
+    if (this.rayFired && !this.rayDone) {
+      this.rayDone = true;
+      this.onRayBurst?.(this.rayFrom, this.hitPointValid ? this.hitPoint : this.pos);
+      if (!this.exploded) this.explode();
+    }
+
     if (this.exploded && !this.projectileRemoved) this.removeProjectileMesh();
     for (const r of this.ribbons) r.update(dt);
     this.trail.update(dt);
@@ -205,11 +226,26 @@ export class Projectile {
       return;
     }
 
+    // Ray-burst discharge: the rest of this frame's travel is the beam —
+    // prevPos stays at the discharge point so the swept segment covers the
+    // whole ray. Applies to remote replicas too: delay/direction/range are
+    // all deterministic from spawn state, like bounces.
+    if (this.config.rayBurst && !this.rayFired && this.age >= this.config.rayBurst.delay) {
+      this.rayFired = true;
+      this.rayFrom.copy(this.pos);
+      _rayDir.copy(this.vel).normalize();
+      this.prevPos.copy(this.pos);
+      this.pos.addScaledVector(_rayDir, this.config.rayBurst.range);
+    }
+
     // Remote (server-authoritative/demo) projectiles skip all collision.
     // Exception: bouncing shells (GL) still bounce off terrain — the bounce
     // is deterministic from spawn state, so it matches the shooter's arc
     // and keeps remote shells from tunneling through the ground.
     if (this.isRemote) {
+      // A discharged beam still respects terrain — the sweep sets hitPoint
+      // so update() pops the slug at contact, not at the range cap.
+      if (this.rayFired) sweepTerrain(this, terrain);
       if (this.canBounce && sweepTerrain(this, terrain) && !this.bounceOffTerrain(terrain)) {
         this.explode(); // bounce budget/graze exhausted — die like a local shard
         return;

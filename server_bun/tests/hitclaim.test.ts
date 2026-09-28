@@ -208,4 +208,46 @@ describe('validateAoeClaim', () => {
     });
     expect(verdict.ok).toBe(false);
   });
+
+  // Remote railgun: the slug's ray burst teleports the detonation forward
+  // by rayRange once past rayDelay — the reach check must allow the jump
+  // but only for that weapon and only after the delay.
+  const rrgProjectile = () => rocketProjectile({
+    weaponType: WeaponType.RemoteRailgun,
+    velocity: V(55, 0, 0),
+  });
+
+  it('accepts a remote-railgun blast at the discharged beam endpoint', () => {
+    // 0.5s flight ≈ 27.5m + gravity sag, then up to 160m of beam.
+    const verdict = validateAoeClaim({
+      projectile: rrgProjectile(),
+      blastPos: V(180, -10, 0),
+      airtime: 0.5,
+      shooterVel: ZERO,
+      now: 2000,
+    });
+    expect(verdict.ok).toBe(true);
+  });
+
+  it('rejects the same blast claimed before the discharge delay', () => {
+    const verdict = validateAoeClaim({
+      projectile: rrgProjectile(),
+      blastPos: V(180, -10, 0),
+      airtime: 0.2,
+      shooterVel: ZERO,
+      now: 2000,
+    });
+    expect(verdict.ok).toBe(false);
+  });
+
+  it('rejects a remote-railgun blast past the beam range', () => {
+    const verdict = validateAoeClaim({
+      projectile: rrgProjectile(),
+      blastPos: V(320, 0, 0),
+      airtime: 0.5,
+      shooterVel: ZERO,
+      now: 2000,
+    });
+    expect(verdict.ok).toBe(false);
+  });
 });

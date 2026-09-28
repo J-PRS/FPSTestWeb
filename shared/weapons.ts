@@ -34,6 +34,7 @@ export enum WeaponType {
   ImpactGrenade = 21, // belt throw: flat arc, contact pop, low damage, big shove
   ClusterBomblet = 22,// spawned by ClusterBomb detonation — never fired directly
   PlasmaGun = 23,     // Quake-style rapid plasma: fast cadence, mid-speed fat bolt
+  RemoteRailgun = 24, // belt throw: slug discharges a hitscan rail mid-flight, pops at the hit point
 }
 
 export interface WeaponStats {
@@ -66,6 +67,12 @@ export interface WeaponStats {
    *  Client bomblets are visual-only: they never claim damage, so remote
    *  hits stay server-authoritative. */
   cluster?: { count: number; radius: number };
+  /** Mid-flight hitscan discharge (remote railgun): at `rayDelay` seconds
+   *  the projectile fires a beam along its velocity and dies at the hit
+   *  point (or at rayRange on a miss). The server reach check adds
+   *  rayRange to the legal flight distance once airtime passes rayDelay. */
+  rayDelay?: number;
+  rayRange?: number;
 }
 
 /** Explosion VFX dome = aoeRadius × this — damage always reaches a bit past
@@ -437,6 +444,25 @@ export const WEAPONS: Record<number, WeaponStats> = {
     hitMax: 6.0,
     hitGrow: 1.5,
     maxLifetime: 4.0, // contact usually pops it first
+  },
+  [WeaponType.RemoteRailgun]: {
+    // Belt capacitor slug: 0.4s of readable lob, then a railgun-class beam
+    // down its velocity line and a pop at whatever the beam touches. The
+    // slug itself can also contact-pop before discharge like an impact nade.
+    directDamage: 70,
+    aoeDamage: 25,
+    aoeRadius: 7.0,
+    knockbackForce: 35.0,
+    forceMode: 'push',
+    speed: 55.0,
+    gravity: -28.0,
+    bodyRadius: 0.3,
+    hitMin: 0.0,
+    hitMax: 0.6, // the slug is a small throw — its reach is the beam, not a wake
+    hitGrow: 0.3,
+    maxLifetime: 4.0, // intercept before discharge → plain impact pop
+    rayDelay: 0.4,
+    rayRange: 160.0,
   },
   [WeaponType.Slam]: {
     // Not a projectile — the Q-skill lands as a ground AOE. Ballistic

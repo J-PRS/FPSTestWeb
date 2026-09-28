@@ -32,6 +32,15 @@ export function wireProjectiles(ctx: NetCtx): void {
     const remoteProjectile = new Projectile(deps.lazyScene(), origin, dir, new THREE.Vector3(0, 0, 0), cfg);
     remoteProjectile.vel.copy(vel); // override with exact server velocity
     remoteProjectile.isRemote = true;
+    // Ray-burst replicas discharge deterministically (delay/dir/range are
+    // spawn-derived) — hook the beam flash so observers see the rail too.
+    if (cfg.rayBurst) {
+      const beamColor = cfg.glowColor;
+      remoteProjectile.onRayBurst = (from, to) => {
+        deps.lazyEffects().spawnBeam(from, to, beamColor);
+        sfx.at(from, 'shot_energy', 0.9, 1.3);
+      };
+    }
     remoteProjectile.spawnedThisFrame = false; // remote projectiles don't need first-frame skip
     // Fast-forward by half-RTT: the server relays the spawn ~half a round-trip
     // late, so without this the projectile lags behind the shooter's real one

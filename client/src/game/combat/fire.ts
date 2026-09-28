@@ -9,7 +9,7 @@ import {
   MORTAR_CONFIG, GL_CONFIG, FLAK_CONFIG, PLASMA_CONFIG, RAILGUN_CONFIG,
   BELT_DISC_CONFIG, SHOTGUN_CONFIG, CANNON_CONFIG, RKT_CONFIG,
   PISTOL_CONFIG, REVOLVER_CONFIG, STICKY_CONFIG, PLASMAGUN_CONFIG,
-  CLUSTER_CONFIG, JAVELIN_CONFIG, IMPACT_CONFIG,
+  CLUSTER_CONFIG, JAVELIN_CONFIG, IMPACT_CONFIG, REMOTE_RAILGUN_CONFIG,
 } from '../../projectiles/index.js';
 import type { BeltItem } from '../../entities/Player.js';
 import type { ProjectileConfig } from '../../projectiles/types.js';
@@ -65,6 +65,17 @@ export function createFire(deps: CombatDeps, hooks: FireHooks) {
       );
     }
 
+    // Ray-burst discharge (remote railgun): beam flash along the slug's
+    // velocity line + capacitor zap at the discharge point. The damage is
+    // the normal explosion claim at the resolved endpoint — this is pure FX.
+    if (config.rayBurst) {
+      const beamColor = config.glowColor;
+      p.onRayBurst = (from, to) => {
+        deps.lazyEffects().spawnBeam(from, to, beamColor);
+        sfx.at(from, 'shot_energy', 0.9, 1.3);
+      };
+    }
+
     // Send shot to server with projectile position/velocity so remote clients
     // see the shot (all weapons, weaponType selects their visual config)
     const velocity = e.dir.clone().normalize().multiplyScalar(config.speed);
@@ -105,6 +116,7 @@ export function createFire(deps: CombatDeps, hooks: FireHooks) {
     javelin: JAVELIN_CONFIG,
     sticky: STICKY_CONFIG,
     impact: IMPACT_CONFIG,
+    remoterailgun: REMOTE_RAILGUN_CONFIG,
   };
 
   function onBelt(_e: FireArgs, item: BeltItem): void {

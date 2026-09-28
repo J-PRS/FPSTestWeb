@@ -56,6 +56,7 @@ export function wireOverlayInput(deps: OverlayInputDeps) {
   const BELT_LABELS: Record<BeltItem, string> = {
     disc: 'Disc', grenade: 'Grenade', cluster: 'Cluster Bomb',
     javelin: 'Javelin', sticky: 'Sticky Bomb', impact: 'Impact Grenade',
+    remoterailgun: 'Remote Railgun',
   };
 
   function mkDrop(
