@@ -4,10 +4,10 @@
  *
  *   WebTransport (QUIC datagrams) → WebRTC datachannel → WebSocket
  *
- * Today only the WebSocket tier is wired — the others stub to null until
- * their server halves exist (webtransport-bun / node-datachannel). The seam
- * is what matters: adding a tier means implementing `try*` and returning
- * early — callers and game code never change.
+ * All three tiers are live. Probes run in parallel so the wait is the
+ * slowest single probe (~3s cap), not the sum; WS needs no probe at all.
+ * ?net=wt|rtc|ws pins one tier for testing; absent the param the best
+ * available wins automatically.
  */
 
 import type { ConnectionConfig } from './WebSocketConnection.js';
@@ -18,20 +18,22 @@ import { urlParams } from '../core/params.js';
 
 const logger = new ChildLogger('NetTiers');
 
-/** Opt-in knobs while the UDP tiers are stubbed: ?net=wt / ?net=rtc probe
- *  that tier before falling back; absent the param we go straight to WS. */
+/** Best-tier selection: ?net=wt|rtc|ws pins a single tier; otherwise WT and
+ *  RTC probe in parallel and the better of whatever succeeded wins. WS is
+ *  always the floor. */
 export async function connectGameTransport(config: ConnectionConfig): Promise<GameTransport> {
   const want = urlParams.net;
-  if (want === 'wt') {
-    const t = await tryWebTransport(config);
-    if (t) return t;
-    logger.warn('WebTransport unavailable — falling through');
-  }
-  if (want === 'wt' || want === 'rtc') {
-    const t = await tryWebRTC(config);
-    if (t) return t;
-    logger.warn('WebRTC unavailable — falling through to WebSocket');
-  }
+  if (want === 'ws') return new WebSocketConnection(config);
+  if (want === 'wt') return (await tryWebTransport(config)) ?? new WebSocketConnection(config);
+  if (want === 'rtc') return (await tryWebRTC(config)) ?? new WebSocketConnection(config);
+
+  const [wt, rtc] = await Promise.all([
+    tryWebTransport(config).catch(() => null),
+    tryWebRTC(config).catch(() => null),
+  ]);
+  if (wt) { void rtc?.disconnect(); logger.info('tier: WebTransport'); return wt; }
+  if (rtc) { logger.info('tier: WebRTC'); return rtc; }
+  logger.info('tier: WebSocket');
   return new WebSocketConnection(config);
 }
 
@@ -142,7 +144,9 @@ async function tryWebTransport(config: ConnectionConfig): Promise<GameTransport 
  */
 class ServerRtcTransport implements GameTransport {
   private open = false;
-  constructor(private dc: RTCDataChannel, private config: ConnectionConfig) {
+  // `pc` is kept so a losing probe can be fully torn down — closing only
+  // the datachannel leaves the ICE/DTLS machinery running server-side.
+  constructor(private dc: RTCDataChannel, private config: ConnectionConfig, private pc?: RTCPeerConnection) {
     dc.binaryType = 'arraybuffer';
     dc.addEventListener('message', (ev) => {
       const data = ev.data;
@@ -171,7 +175,11 @@ class ServerRtcTransport implements GameTransport {
   // the UDP lane. JSON events lose ordering here; that's acceptable for this
   // tier (position state is the high-rate traffic; events tolerate it).
   connected(): boolean { return this.open && this.dc.readyState === 'open'; }
-  disconnect(): void { this.open = false; try { this.dc.close(); } catch { /* gone */ } }
+  disconnect(): void {
+    this.open = false;
+    try { this.dc.close(); } catch { /* gone */ }
+    try { this.pc?.close(); } catch { /* gone */ }
+  }
 }
 
 async function tryWebRTC(config: ConnectionConfig): Promise<GameTransport | null> {
@@ -208,7 +216,7 @@ async function tryWebRTC(config: ConnectionConfig): Promise<GameTransport | null
     });
     await pc.setRemoteDescription(answer);
     signal.close();
-    return new ServerRtcTransport(dc, config);
+    return new ServerRtcTransport(dc, config, pc);
   } catch {
     return null;
   }
