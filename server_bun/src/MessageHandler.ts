@@ -44,6 +44,13 @@ export interface RoomInfo {
   matchEndsAt?: () => number;
   /** Deploy claim sink — Room.deployables.handleDeploy. */
   onDeploy?: (playerId: string, kind: string, pos: Vec3) => void;
+  /** Shadow-move hooks — Room.moveSim. Position reports reconcile the
+   *  sim; teleport/respawn resync it; inputMove feeds it. */
+  moveInput?: (playerId: string, input: { forward: number; right: number; jump: number; ski: number }) => void;
+  moveReport?: (playerId: string, pos: Vec3, yaw: number, vel?: Vec3) => void;
+  moveResync?: (playerId: string, pos: Vec3, yaw: number) => void;
+  moveTrack?: (playerId: string, pos: Vec3, yaw: number) => void;
+  moveUntrack?: (playerId: string) => void;
   /** Live deployables for gameState joins — RoomDeployables.snapshot. */
   deployables?: () => { id: number; owner: string; kind: 'turret' | 'mine' | 'station' | 'drone'; pos: Vec3 }[];
 }
@@ -100,6 +107,7 @@ export class MessageHandler {
         const i = (m as Extract<ClientMessage, { type: 'inputMove' }>).input;
         p.skiing = i.ski ? 1 : 0;
         p.status = (i.status ?? 0) & STATUS_MASK;
+        this.roomInfo.moveInput?.(id, i);
       },
       // Room-scoped relay — broadcast() only reaches this room's sockets.
       chat: (id, m) => this.broadcast({ type: 'chat', playerId: id, text: (m as Extract<ClientMessage, { type: 'chat' }>).text }),
@@ -156,6 +164,7 @@ export class MessageHandler {
       if (key.startsWith(`${playerId}:`)) this.rateLimitWarnings.delete(key);
     }
     this.combat.onPlayerDisconnected(playerId);
+    this.roomInfo.moveUntrack?.(playerId);
   }
 
   /** Drop live projectiles when a player is fully removed (grace timeout /
@@ -191,6 +200,7 @@ export class MessageHandler {
   handleHandshake(playerId: string, sessionToken?: string, isReconnect = false): void {
     const player = this.playerManager.getPlayer(playerId);
     if (!player) return;
+    this.roomInfo.moveTrack?.(playerId, player.position, player.rotation.yaw);
 
     // Reconnecting dead player: the disconnect cancelled their respawn
     // timer — re-arm it or they stay dead for the rest of the session.
@@ -339,6 +349,7 @@ export class MessageHandler {
       player.lastPosCheckPos = { ...msg.position };
     }
 
+    this.roomInfo.moveReport?.(playerId, msg.position, msg.rotation.yaw, msg.velocity);
     this.playerManager.updatePosition(playerId, msg.position, msg.rotation, msg.velocity, msg.seq);
     player.hasReceivedPosition = true;
     if (msg.ping !== undefined) player.ping = msg.ping;
@@ -371,6 +382,7 @@ export class MessageHandler {
     player.lastValidVelocity = { ...msg.velocity };
     player.lastValidRotation = { ...msg.rotation };
     player.hasReceivedPosition = true;
+    this.roomInfo.moveResync?.(playerId, msg.position, msg.rotation.yaw);
     // Pre-warp samples are a different location entirely — keeping them
     // lets lag-comp rewind land the shooter/target back at the corpse.
     player.history.length = 0;

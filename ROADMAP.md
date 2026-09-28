@@ -62,9 +62,10 @@ surface. Detailed research lives in `_reports/`; this file is the current truth.
    the emptiest live match or spins `<mode>-N` (ad-hoc names inherit
    maps/<mode>.json). Next polish: show own room + mode in the panel,
    mid-match room switching without reload.
-2. **Movement re-sim** — shared/stepPlayer on server during validation.
-   BLOCKED on JP's in-flight Player.ts edits — extract the integrator to
-   shared/movement.ts when that file settles.
+2. **Movement re-sim** — LANDED (shadow mode): shared/movement.ts MoveSim
+   drives client physics AND a per-player server shadow (RoomMoveSim).
+   Reported pos stays truth; >8m divergence logs as a cheat signal. Next
+   step: flip to server-authoritative + client reconciliation.
 3. ~~Map format~~ — landed: `maps/<room>.json` (mode, ball population,
    spawn anchors, bases/objectives, bot count — all clamped with
    defaults; examples swarm/duel/nugwar/ctf). Server bots populate
