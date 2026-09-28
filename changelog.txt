@@ -1,3 +1,4 @@
+2026-09-26  strifer.update -> static state table (orbit/hover handlers); 3 species converted
 2026-09-26  tickRoom (complexity 41) split into buildRecords/fanoutRecords/isSuppressed/rollupMetrics — named stages, each lint-readable
 2026-09-26  .oxlintrc.json — correctness=error, suspicious/perf=warn + size rules (file>1000, fn>120, complexity>15, depth>4, params>6); _dangle/await-in-loop off
 2026-09-26  perf: lastSentPositions snapshot mutates in place; roster work (playerlist+joinlog) polled at 2Hz — removes last per-frame/per-tick allocs in hot loops
