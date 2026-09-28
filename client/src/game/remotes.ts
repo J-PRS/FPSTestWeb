@@ -110,82 +110,87 @@ export function createRemotes(deps: RemotesDeps) {
     }
   }
 
-  // Per-remote-player frame work: create if new, hide if stale, tick, ski dust, HUD
-  function tickRemotePlayer(playerId: string, playerState: import('../networking/NetworkManager.js').RemotePlayerState, dt: number): void {
-    const nm = deps.lazyNetworkManager();
-    const terrain = deps.lazyTerrain();
-    const hud = deps.lazyHud();
-    if (playerId === nm.getLocalPlayerId()) return;
+  type WirePlayerState = import('../networking/NetworkManager.js').RemotePlayerState;
 
+  function ensureRemote(playerId: string, playerState: WirePlayerState): RemotePlayer | undefined {
     let remotePlayer = deps.world.remotePlayers.get(playerId);
     if (!remotePlayer && !playerState.isDead) {
-      remotePlayer = new RemotePlayer(deps.lazyScene(), playerId, playerState.position, terrain);
+      remotePlayer = new RemotePlayer(deps.lazyScene(), playerId, playerState.position, deps.lazyTerrain());
       deps.world.remotePlayers.set(playerId, remotePlayer);
       deps.logger.debug(`CREATED remote player`, { instanceId: remotePlayer.instanceId, playerId, total: deps.world.remotePlayers.size });
     }
+    return remotePlayer;
+  }
+
+  // Status bitmask → per-effect visuals. One bit = one row; the next
+  // toggle effect lands here, nowhere else in the netcode. Returns false
+  // when cloaked — an enemy's HUD must give no trace (dust off an
+  // invisible skier is a giveaway).
+  function applyStatusVisuals(playerId: string, remotePlayer: RemotePlayer, status: number): boolean {
+    remotePlayer.setCloakHidden(!!(status & STATUS.CLOAK));
+    remotePlayer.setShielded(!!(status & STATUS.SHIELD));
+    remotePlayer.setMending(!!(status & STATUS.MEND));
+    if (!(status & STATUS.CLOAK)) return true;
+    deps.lazyHud().removePlayerIndicator(playerId);
+    deps.lazyHealthBarSystem().removeBar(playerId);
+    return false;
+  }
+
+  // Friend-or-foe marker: teammates wear their team's color, enemies are
+  // always red. Tint applies only when the wire team changes.
+  function applyTeamTint(playerId: string, remotePlayer: RemotePlayer, theirTeam: string | undefined): void {
+    if (!theirTeam || theirTeam === lastTintOf.get(playerId)) return;
+    lastTintOf.set(playerId, theirTeam);
+    remotePlayer.setGizmoColor(theirTeam === deps.world.localTeam ? TEAM_COLORS[theirTeam] : ENEMY_RED);
+  }
+
+  // Ski dust off a networked ski flag near the ground, plus the HUD
+  // name marker from the extrapolated position.
+  function tickRemoteCosmetics(playerId: string, remotePlayer: RemotePlayer, playerState: WirePlayerState): void {
+    const hud = deps.lazyHud();
+    if (!playerState.isDead && playerState.ski) {
+      const v = remotePlayer.vel;
+      const terrain = deps.lazyTerrain();
+      const groundY = terrain.getHeight(remotePlayer.position.x, remotePlayer.position.z);
+      if (v.x * v.x + v.z * v.z > 10 && remotePlayer.feetY - groundY < 0.8) {
+        deps.lazyEffects().spawnSkiDust(remotePlayer.position, v);
+      }
+    }
+    if (!playerState.isDead) {
+      hud.updatePlayerIndicator(playerId, remotePlayer.position, deps.lazyCamera(), false);
+    } else {
+      hud.removePlayerIndicator(playerId);
+    }
+  }
+
+  // Per-remote-player frame work: create if new, hide if stale, tick, then cosmetics
+  function tickRemotePlayer(playerId: string, playerState: WirePlayerState, dt: number): void {
+    const nm = deps.lazyNetworkManager();
+    if (playerId === nm.getLocalPlayerId()) return;
+
+    const remotePlayer = ensureRemote(playerId, playerState);
     if (!remotePlayer) return;
 
     // Hide stale remote players — backgrounded tabs keep the socket open but
     // stop sending updates, leaving ghosts standing around. 60s grace covers
     // genuine packet loss; dead reckoning handles shorter gaps. Players that
     // never reported ping (>5s without one) are dead sockets — hide them too.
-    const age = Date.now() - remotePlayer.lastUpdateTime;
-    const inactive = age > 60000 || nm.getPlayers().get(playerId)?.ping == null;
+    const inactive = Date.now() - remotePlayer.lastUpdateTime > 60000
+      || nm.getPlayers().get(playerId)?.ping == null;
     remotePlayer.setStaleHidden(inactive);
     if (inactive) {
-      hud.removePlayerIndicator(playerId);
+      deps.lazyHud().removePlayerIndicator(playerId);
       deps.lazyHealthBarSystem().removeBar(playerId);
       return;
     }
 
-    // RemotePlayer.update is called via onPlayerUpdate callback to store target position
-    // Call tick() every frame for smooth interpolation (includes dead reckoning trigger).
-    // tick() already calls this.model.update(dt) internally — do NOT call it again here,
-    // or animations advance at 2x speed (double AnimationMixer.update).
+    // tick() drives interpolation + dead reckoning and internally advances
+    // the AnimationMixer — a second model.update here would 2x animations.
     remotePlayer.tick(dt);
 
-    // Wire cloak: hide model+gizmo+marker entirely — an enemy's HUD must
-    // give no trace. Ski dust and indicators stop too (dust off an
-    // invisible skier is a giveaway).
-    // Status bitmask → per-effect visuals. One bit = one row; the next
-    // toggle effect lands here, nowhere else in the netcode.
-    const status = playerState.status ?? 0;
-    remotePlayer.setCloakHidden(!!(status & STATUS.CLOAK));
-    remotePlayer.setShielded(!!(status & STATUS.SHIELD));
-    remotePlayer.setMending(!!(status & STATUS.MEND));
-    if (status & STATUS.CLOAK) {
-      hud.removePlayerIndicator(playerId);
-      deps.lazyHealthBarSystem().removeBar(playerId);
-      return;
-    }
-
-    // Friend-or-foe marker: teammates wear their team's color, enemies are
-    // always red — matching a remote's wire team only when it differs from
-    // the last applied tint avoids re-setting every frame.
-    const theirTeam = playerState.team;
-    if (theirTeam && theirTeam !== lastTintOf.get(playerId)) {
-      lastTintOf.set(playerId, theirTeam);
-      remotePlayer.setGizmoColor(theirTeam === deps.world.localTeam ? TEAM_COLORS[theirTeam] : ENEMY_RED);
-    }
-
-    // Ski dust: networked ski flag (via tickUpdate) + near-ground + moving
-    if (!playerState.isDead && playerState.ski) {
-      const v = remotePlayer.vel;
-      const horizSq = v.x * v.x + v.z * v.z;
-      const feetY = remotePlayer.feetY;
-      const groundY = terrain.getHeight(remotePlayer.position.x, remotePlayer.position.z);
-      if (horizSq > 10 && feetY - groundY < 0.8) {
-        deps.lazyEffects().spawnSkiDust(remotePlayer.position, v);
-      }
-    }
-
-    // Update HUD indicator for this player (skip if dead)
-    // Use RemotePlayer's extrapolated position for LAN-feel responsiveness
-    if (!playerState.isDead) {
-      hud.updatePlayerIndicator(playerId, remotePlayer.position, deps.lazyCamera(), false);
-    } else {
-      hud.removePlayerIndicator(playerId);
-    }
+    if (!applyStatusVisuals(playerId, remotePlayer, playerState.status ?? 0)) return;
+    applyTeamTint(playerId, remotePlayer, playerState.team);
+    tickRemoteCosmetics(playerId, remotePlayer, playerState);
   }
 
   // Remove disconnected players and dead players that have shrunk to 0

@@ -1,3 +1,4 @@
+2026-09-26  tickRemotePlayer -> ensureRemote/applyStatusVisuals/applyTeamTint/tickRemoteCosmetics; WirePlayerState alias
 2026-09-26  gameLoop frame body (complexity 38) -> simTick/fxTick/hudTick stages + module-scope updateDeadList/_aliveCount
 2026-09-26  maps: crossfire (diagonal-axis CTF, mid plateau w/ ramps), slagheap (FFA crater bowl, dome+perimeter ramps), pit (45m duel arena)
 2026-09-26  handleMessage switch -> per-type dispatch table; roomEcho() dedupes joiner/spectator gameState builders
