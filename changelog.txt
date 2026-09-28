@@ -1,3 +1,4 @@
+2026-09-26  seeker.update refactored to static state-handler table (complexity 33 -> per-handler ~8); pilot for species state machines
 2026-09-26  perf audit — computeStateHash rolling FNV (no sort/string build); tick fanout per-tick reads hoisted
 2026-09-26  per-map ambient species caps — map spec ambient {species: max} overrides spawn gates; echoed via gameState/mapUpdate, applied through kit.capFor
 2026-09-26  species registry — SWARM_SPECS table moved to game/species/registry.ts; gameLoop ticks one updateSpeciesAll instead of 12 per-species lines
