@@ -34,8 +34,6 @@ export interface HudDom {
   sbRows: HTMLElement;
 }
 
-import './hud.css';
-
 export function createHudDom(): HudDom {
 
 

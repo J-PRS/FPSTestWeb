@@ -4,6 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Three.js FPS — Tribes/Quake Style</title>
+  <!-- Linked, not JS-imported: stylesheet-in-JS waits on module eval →
+       unstyled HTML flashes on refresh (FOUC). -->
+  <link rel="stylesheet" href="/src/ui/chrome.css" />
+  <link rel="stylesheet" href="/src/ui/hud/hud.css" />
 </head>
 <body>
   <div id="overlay">
