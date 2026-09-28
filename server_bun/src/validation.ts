@@ -203,15 +203,6 @@ export function validateMessage(raw: unknown): ValidationResult<ClientMessage> {
       return { success: true, data: { type: 'snapshotRequest' } };
     }
 
-    case 'bank': {
-      // Nugget banking is a claim — cap the claim size so one message
-      // can't swing a match; real rate control is the limiter bucket.
-      if (!isFiniteNumber(obj.n) || !Number.isInteger(obj.n) || obj.n < 1 || obj.n > 20) {
-        return { success: false, error: 'bank n must be an integer 1-20' };
-      }
-      return { success: true, data: { type: 'bank', n: obj.n } };
-    }
-
     case 'chat': {
       // Relay-only content: length cap is the whole validation — the server
       // never interprets the text, clients render it escaped (textContent).

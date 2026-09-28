@@ -139,7 +139,15 @@ export function wireNetworkHandlers(deps: NetDeps): void {
   networkManager.onPickupGone = (id, by) => {
     const m = pickupMeshes.get(id);
     if (m) { deps.lazyScene().remove(m); pickupMeshes.delete(id); }
-    if (by === nm().getLocalPlayerId()) chat.add(null, 'nugget banked +1');
+    if (by === nm().getLocalPlayerId()) {
+      // Server-verified collect — grant the same reward local nuggets
+      // give offline (heal + jet boost), since MP drops no local loot.
+      const p = deps.lazyPlayer();
+      p.heal(0.2);
+      p.grantJetBoost();
+      nm().sendHeal(20);
+      chat.add(null, 'nugget banked +1');
+    }
   };
 
   // Lobby browser — corner button lists the server's live rooms; joining

@@ -46,10 +46,6 @@ export type ClientMessage =
   // amount so it can't be a cheat lever — it exists so server health stays
   // the truth instead of drifting under each nugget the client ate.
   | { type: 'heal'; amount: number }
-  // Nugget banking claim — the client says "my team just banked n"
-  // (pickups are client-detected); server clamps n so it's not a cheat
-  // lever, then owns the score. Only meaningful in team-mode rooms.
-  | { type: 'bank'; n: number }
   // Hit claim on a server-owned creature (balls are server-authoritative
   // when connected). damage is clamped server-side; kx/ky/kz is the
   // normalized knockback direction the shot imparted (server scales it

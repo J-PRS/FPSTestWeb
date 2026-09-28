@@ -13,10 +13,9 @@ type SendToPlayerFn = (playerId: string, msg: ServerMessage) => void;
 export interface RoomInfo {
   room: string;
   mode: string;
-  /** Live scoreboard object (mutated by Room.bank) — echoed into gameState. */
+  /** Live scoreboard object (mutated by Room.score) — echoed into gameState. */
   scores?: { alpha: number; bravo: number };
   winAt?: number;
-  onBank?: (playerId: string, n: number) => void;
   /** Objective anchors from the map spec — echoed on gameState so clients
    *  place flags/bases where the map says, not where the URL guessed. */
   bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } };
@@ -228,9 +227,6 @@ export class MessageHandler {
         break;
       case 'inputMove':
         player.skiing = msg.input.ski ? 1 : 0;
-        break;
-      case 'bank':
-        this.roomInfo.onBank?.(playerId, msg.n);
         break;
       case 'chat':
         // Room-scoped relay — broadcast() only reaches this room's sockets.

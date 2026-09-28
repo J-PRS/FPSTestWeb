@@ -117,11 +117,9 @@ export function createNetBalls(deps: EntitiesDeps, ctx: NetBallsCtx, logger: Chi
     sfx.enemyCue(b.pos, 'die');
     screenShake.blast(b.pos, 1.6, deps.lazyPlayer().pos);
     if (m.by && m.by === deps.lazyNetworkManager()?.getLocalPlayerId()) {
-      // Our kill: credit + loot locally (server doesn't own nuggets yet)
+      // Our kill — in team rooms the server drops a gem at the corpse
+      // (pickupSpawn); collecting it is the score AND the reward.
       deps.lazyPlayer().kills++;
-      for (let n = 0; n < Math.round(b.scale); n++) {
-        ctx.nuggets.push(new Nugget(scene, b.pos, b.vel));
-      }
     }
   }
 
