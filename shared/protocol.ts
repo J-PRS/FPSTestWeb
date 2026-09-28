@@ -11,7 +11,7 @@
  * message, changed field semantics). The server stamps it on gameState;
  * the client force-reloads on mismatch instead of silently desyncing.
  */
-export const PROTOCOL_VERSION = 9; // status bitmask replaces per-flag fields (see shared/status.ts)
+export const PROTOCOL_VERSION = 10; // tick frames carry server tickSeq for stale-drop under unordered transports
 
 export interface Vec3 {
   x: number;

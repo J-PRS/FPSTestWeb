@@ -35,6 +35,7 @@ export class P2PHost {
   private links = new Map<P2PLink, string>(); // link → playerId
   private byPlayer = new Map<string, P2PLink>();
   private tickTimer: ReturnType<typeof setInterval>;
+  private tickSeq = 0;
 
   constructor() {
     this.messageHandler = new MessageHandler(
@@ -166,7 +167,7 @@ export class P2PHost {
         }));
       }
       if (records.length === 0) continue;
-      try { link.send(encodeTickFrame(this.playerManager.getLastSeq(recipientId), records)); } catch { /* dead pipe */ }
+      try { link.send(encodeTickFrame(this.playerManager.getLastSeq(recipientId), this.tickSeq++, records)); } catch { /* dead pipe */ }
     }
   }
 

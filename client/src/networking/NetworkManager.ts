@@ -81,6 +81,7 @@ export class NetworkManager {
 
   // --- Client-side prediction: sequence tracking + state history ---
   private sequenceCounter: number = 0;
+  private lastTickSeq = -1; // highest server tickSeq applied — stale frames drop
   private stateHistory: Map<number, { position: { x: number; y: number; z: number }; velocity: { x: number; y: number; z: number }; rotation: { yaw: number; pitch: number } }> = new Map();
   private readonly STATE_HISTORY_MAX = 120; // ~6s at 20Hz
 
@@ -145,6 +146,7 @@ export class NetworkManager {
             }
             logger.info('Disconnected');
             this.connected = false;
+            this.lastTickSeq = -1; // a reconnect starts a fresh seq space
           },
           onError: (error) => {
             if (!this.hasLoggedConnectionError) {
@@ -391,7 +393,13 @@ export class NetworkManager {
       return;
     }
     const tick = decodeTickFrame(data);
-    if (tick) this.handleTickUpdate(tick);
+    if (!tick) return;
+    // Stale-drop: under an unordered transport a late frame carries an older
+    // tickSeq — interpolating it would rewind remotes. On TCP this never
+    // trips (frames can't reorder); it exists for the UDP tiers.
+    if (tick.tickSeq <= this.lastTickSeq) return;
+    this.lastTickSeq = tick.tickSeq;
+    this.handleTickUpdate(tick);
   }
 
   /**
