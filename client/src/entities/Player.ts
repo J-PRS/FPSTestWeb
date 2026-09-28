@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-import { JET_FORCE_UP, JET_FORCE_DIR, MAX_ENERGY, MAX_HEALTH, JET_DRAIN, JET_CHARGE, FIRE_RATE, DISC_RATE, CHAINGUN_RATE, MORTAR_RATE, GL_RATE, FLAK_RATE, PLASMA_RATE, RAILGUN_RATE, LG_RATE, SHOTGUN_RATE, CANNON_RATE, RKT_RATE, PISTOL_RATE, REVOLVER_RATE, STICKY_RATE, MELEE_COOLDOWN, MELEE_LUNGE } from '../core/config.js';
+import { MAX_ENERGY, MAX_HEALTH, JET_DRAIN, JET_CHARGE, FIRE_RATE, DISC_RATE, CHAINGUN_RATE, MORTAR_RATE, GL_RATE, FLAK_RATE, PLASMA_RATE, RAILGUN_RATE, LG_RATE, SHOTGUN_RATE, CANNON_RATE, RKT_RATE, PISTOL_RATE, REVOLVER_RATE, STICKY_RATE, MELEE_COOLDOWN, MELEE_LUNGE } from '../core/config.js';
 
 import { Terrain } from '../world/terrain.js';
 import { PlayerSkills, SHIELD_DMG_PER_ENERGY } from './player/skills.js';
@@ -318,7 +318,7 @@ export class Player {
   onDeploy: (() => void) | null = null;
   onNetworkJump: ((pos: { x: number; y: number; z: number }) => void) | null = null;
   onNetworkJetpack: ((pos: { x: number; y: number; z: number }) => void) | null = null;
-  onNetworkInput: ((input: { forward: number; right: number; jump: number; ski: number; status?: number }, rotation: { yaw: number; pitch: number }) => void) | null = null;
+  onNetworkInput: ((input: { forward: number; right: number; jump: number; ski: number; jet?: number; status?: number }, rotation: { yaw: number; pitch: number }) => void) | null = null;
 
   constructor(terrain: Terrain, camera: THREE.PerspectiveCamera, scene: THREE.Scene) {
     this.terrain = terrain;
@@ -520,6 +520,9 @@ export class Player {
       forward: input.forward, right: input.right,
       jumpPressed: input.jumpHeld, jumpHeld: input.jumpHeld, // autoHop: pressed = held
       skiHeld: input.skiHeld,
+      // Jet thrust lives inside the sim so the server's shadow replay
+      // produces the same trajectory the client renders.
+      jetHeld: this.input.jetPending && this.energy > 0,
     });
 
     // Fall speed entering this frame — grounding inside movement.update
@@ -532,7 +535,7 @@ export class Player {
     // Send input to network for client-side prediction
     if (this.onNetworkInput) {
       this.onNetworkInput(
-        { forward: input.forward, right: input.right, jump: input.jumpHeld ? 1 : 0, ski: input.skiHeld ? 1 : 0, status: this.statusBits() },
+        { forward: input.forward, right: input.right, jump: input.jumpHeld ? 1 : 0, ski: input.skiHeld ? 1 : 0, jet: this.input.jetPending && this.energy > 0 ? 1 : 0, status: this.statusBits() },
         { yaw: this.yaw, pitch: this.pitch }
       );
     }
@@ -543,15 +546,14 @@ export class Player {
     this.vel.copy(moveState.vel);
     this.onGround = moveState.onGround;
 
-    // Jetpack (separate from movement controller, applied after physics sync)
+    // Jetpack thrust is inside the shared sim now (fed via jetHeld above,
+    // applied post-collision inside MoveSim.update) — here only the energy
+    // economy and the FX flag remain.
     const isJetting = this.input.jetPending && this.energy > 0;
     this.jetting = isJetting;
     if (isJetting) {
-      this.vel.y += JET_FORCE_UP * dt;
-      this.vel.x += input.moveX * JET_FORCE_DIR * dt;
-      this.vel.z += input.moveZ * JET_FORCE_DIR * dt;
       this.energy -= JET_DRAIN * this.mods.jetDrain * dt;
-      this.onGround = false; // Force off ground if jetting
+      this.onGround = false;
     }
 
     // Energy recharge — paused while jetting (Tribes-style: drain 12/s

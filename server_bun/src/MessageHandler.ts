@@ -47,8 +47,12 @@ export interface RoomInfo {
   onDeploy?: (playerId: string, kind: string, pos: Vec3) => void;
   /** Shadow-move hooks — Room.moveSim. Position reports reconcile the
    *  sim; teleport/respawn resync it; inputMove feeds it. */
-  moveInput?: (playerId: string, input: { forward: number; right: number; jump: number; ski: number }) => void;
-  moveReport?: (playerId: string, pos: Vec3, yaw: number, vel?: Vec3) => void;
+  moveInput?: (playerId: string, input: { forward: number; right: number; jump: number; ski: number; jet?: number }) => void;
+  /** Reports reconcile the sim; a non-null return is the sim's truth when
+   *  the report diverged past tolerance — send it back as a correction. */
+  moveReport?: (playerId: string, pos: Vec3, yaw: number, vel?: Vec3) => { pos: Vec3; vel: Vec3 } | null;
+  /** Server-side impulses (knockback) the sim must also receive. */
+  moveImpulse?: (playerId: string, dv: Vec3) => void;
   moveResync?: (playerId: string, pos: Vec3, yaw: number) => void;
   moveTrack?: (playerId: string, pos: Vec3, yaw: number) => void;
   moveUntrack?: (playerId: string) => void;
@@ -83,7 +87,7 @@ export class MessageHandler {
     this.broadcast = broadcast;
     this.sendToPlayer = sendToPlayer;
     if (roomInfo) this.roomInfo = roomInfo;
-    this.combat = new CombatHandler(playerManager, broadcast, sendToPlayer, roomInfo?.onKill, roomInfo?.onHit, roomInfo?.teams ?? false);
+    this.combat = new CombatHandler(playerManager, broadcast, sendToPlayer, roomInfo?.onKill, roomInfo?.onHit, roomInfo?.teams ?? false, roomInfo?.moveImpulse);
 
     // Per-type dispatch — a new message type is one table entry. Field
     // order: handlers need this.combat, so the table is built last.
@@ -352,7 +356,21 @@ export class MessageHandler {
       player.lastPosCheckPos = { ...msg.position };
     }
 
-    this.roomInfo.moveReport?.(playerId, msg.position, msg.rotation.yaw, msg.velocity);
+    const simTruth = this.roomInfo.moveReport?.(playerId, msg.position, msg.rotation.yaw, msg.velocity);
+    if (simTruth) {
+      // Sim judge mode: the trajectory is impossible given this player's
+      // inputs + the terrain — correct the client to the sim's state.
+      // Reseat the plausibility anchor the same way a rejected position
+      // does, or the post-snap report reads as one giant jump.
+      this.sendToPlayer(playerId, {
+        type: 'correction',
+        seq: msg.seq ?? 0,
+        position: simTruth.pos,
+        velocity: simTruth.vel,
+        rotation: msg.rotation,
+      });
+      player.lastPosCheckPos = { ...simTruth.pos };
+    }
     this.playerManager.updatePosition(playerId, msg.position, msg.rotation, msg.velocity, msg.seq);
     player.hasReceivedPosition = true;
     if (msg.ping !== undefined) player.ping = msg.ping;

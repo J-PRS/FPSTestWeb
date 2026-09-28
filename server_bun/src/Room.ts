@@ -110,8 +110,10 @@ export class Room {
         moveInput: (pid, i) => this.moveSim.setInput(pid, {
           forward: i.forward, right: i.right,
           jumpPressed: !!i.jump, jumpHeld: !!i.jump, skiHeld: !!i.ski,
+          jetHeld: !!i.jet,
         }),
         moveReport: (pid, pos, yaw, vel) => this.moveSim.reconcile(pid, pos, yaw, vel),
+        moveImpulse: (pid, dv) => this.moveSim.applyImpulse(pid, dv),
         moveResync: (pid, pos, yaw) => this.moveSim.resync(pid, pos, yaw),
         moveTrack: (pid, pos, yaw) => this.moveSim.track(pid, pos, yaw),
         moveUntrack: (pid) => this.moveSim.untrack(pid),

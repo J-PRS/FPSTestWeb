@@ -158,7 +158,7 @@ const VALIDATORS: Record<string, (obj: Record<string, unknown>) => ValidationRes
       success: true,
       data: {
         type: 'inputMove',
-        input: { forward: i.forward, right: i.right, jump: i.jump, ski: i.ski, status: isFiniteNumber(i.status) ? i.status : 0 },
+        input: { forward: i.forward, right: i.right, jump: i.jump, ski: i.ski, jet: isFiniteNumber(i.jet) ? i.jet : 0, status: isFiniteNumber(i.status) ? i.status : 0 },
         rotation: rot.data,
       },
     };

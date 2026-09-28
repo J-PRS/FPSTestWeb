@@ -45,7 +45,7 @@ export type ClientMessage =
   | { type: 'aoeShot'; position: Vec3; weaponType?: number; excludeTargetId?: string | null; projectileId?: string | null; airtime?: number; power?: number; directHit?: boolean }
   | { type: 'jump'; position: Vec3 }
   | { type: 'jetpack'; position: Vec3 }
-  | { type: 'inputMove'; input: { forward: number; right: number; jump: number; ski: number; status?: number }; rotation: Rotation }
+  | { type: 'inputMove'; input: { forward: number; right: number; jump: number; ski: number; jet?: number; status?: number }; rotation: Rotation }
   | { type: 'projectileDestroy'; projectileId: string }
   | { type: 'environmentDamage'; amount: number }
   // Client-claimed pickups (nuggets): self-only heal, server clamps the
