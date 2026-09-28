@@ -225,7 +225,10 @@ export class ServerBots {
   }
 
   /** CTF objective for a bot: carrying the enemy flag → own base; own flag
-   *  dropped → touch it home; enemy flag reachable → go grab it. */
+   *  carried off → run down the carrier (the carrier's position IS known —
+   *  tickUpdate streams it, this is a legal pursuit not a wallhack); own
+   *  flag dropped → touch it home; a teammate carrying → escort them;
+   *  enemy flag reachable → go grab it. */
   private flagGoal(p: { id: string; team?: string; position: Vec3 }): BotVec | null {
     const flags = this.room.flags;
     if (!flags || !p.team) return null;
@@ -235,6 +238,17 @@ export class ServerBots {
     const own = flags.flags.get(me);
     if (!enemy || !own) return null;
     if (enemy.carrier === p.id) return own.home;
+    // Carrier escort: a teammate has the enemy flag — bodyguard them home
+    // rather than crowd the now-empty enemy stand.
+    if (enemy.carrier) {
+      const escort = this.room.players.getPlayer(enemy.carrier);
+      if (escort && escort.team === me) return escort.position;
+    }
+    // Intercept: our flag is being carried — chase the thief, not the base.
+    if (own.state === 'carried' && own.carrier) {
+      const thief = this.room.players.getPlayer(own.carrier);
+      if (thief) return thief.position;
+    }
     if (own.state === 'dropped') return own.pos;
     if (enemy.state !== 'carried') return enemy.pos;
     return own.home; // flag's moving — defend home

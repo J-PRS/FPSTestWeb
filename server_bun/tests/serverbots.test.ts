@@ -143,4 +143,35 @@ describe('ServerBots', () => {
     const sh = room.moveSim.simState(id)!;
     expect(Math.hypot(sh.pos.x - 300, sh.pos.z + 200)).toBeLessThan(30);
   });
+
+  it('CTF: bots intercept the thief and escort their own carrier', () => {
+    const room = new Room('t', null, '', resolveMapSpec({
+      mode: 'ctf', bots: 4,
+      bases: { alpha: { x: -70, y: 0, z: 0 }, bravo: { x: 70, y: 0, z: 0 } },
+    }));
+    expect(room.flags).not.toBeNull();
+    const flagGoal = (p: { id: string; team?: string; position: { x: number; y: number; z: number } }) =>
+      (room.bots as unknown as { flagGoal: (q: unknown) => { x: number; z: number } }).flagGoal(p);
+    const bots = [...(room.bots as unknown as { brains: Map<string, unknown> }).brains.keys()]
+      .map((id) => room.players.getPlayer(id)!);
+    const alphas = bots.filter((b) => b.team === 'alpha');
+    const bravos = bots.filter((b) => b.team === 'bravo');
+    const carrier = alphas[0], escort = alphas[1], defender = bravos[0];
+
+    // Alpha bot grabs bravo's flag — park it on the enemy stand.
+    carrier.position = { x: 70, y: 0, z: 0 };
+    room.tickFlags(0.05);
+    expect(room.flags!.flags.get('bravo')!.carrier).toBe(carrier.id);
+
+    // Carrier's own goal is its home base.
+    expect(flagGoal(carrier)).toMatchObject({ x: -70, z: 0 });
+    // Teammate escorts the carrier, not the now-empty enemy stand.
+    expect(flagGoal(escort)).toMatchObject({ x: 70, z: 0 });
+    // Bravo bot intercepts the carrier's live position, not its own base.
+    expect(flagGoal(defender)).toMatchObject({ x: 70, z: 0 });
+
+    // Carrier moves — the pursuit tracks the live position.
+    carrier.position = { x: 10, y: 0, z: 5 };
+    expect(flagGoal(defender)).toMatchObject({ x: 10, z: 5 });
+  });
 });
