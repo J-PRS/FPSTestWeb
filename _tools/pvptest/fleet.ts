@@ -65,6 +65,8 @@ interface Bot {
   sends: number;
   seq: number;
   sim?: MoveSim;
+  /** Leftover time budget carried into the next send tick for fixed-rate sim substeps. */
+  acc: number;
   yaw: number;
   /** Honest combat: remotes seen on tick frames + one in-flight slug. */
   remotes: Map<string, { x: number; y: number; z: number; vx: number; vy: number; vz: number; dead: boolean }>;
@@ -186,7 +188,9 @@ for (let r = 0; r < ROOMS; r++) {
 // Movement: honest bots drive their sim with ski+forward in a gentle
 // carve; spoof bots teleport-orbit at fixed altitude (old behavior).
 const moveTimer = setInterval(() => {
-  const dt = 0.05;
+  // Send at the server's 30Hz cadence: at 20Hz an input sits ~50ms in the
+  // pipe before the shadow sees it, which alone is ~10m at ski speeds.
+  const dt = 1 / 30;
   for (const b of bots) {
     if (!b.joined || !b.ws || b.ws.readyState !== 1) continue;
     // Honest bots hold all sends until the sim is seeded — the frames
@@ -194,9 +198,16 @@ const moveTimer = setInterval(() => {
     // as orbit spoofs and get rejected as teleports.
     if (!SPOOF && !b.sim) continue;
     if (!SPOOF && b.sim) {
-      b.yaw += dt * 0.35; // gentle arc — a Tribes-ish carve
-      b.sim.setInput({ forward: 1, right: 0, jumpHeld: false, skiHeld: true, jetHeld: false });
-      b.sim.update(dt);
+      // Step at exactly the server's 1/30 rate with an accumulator: any
+      // other granularity integrates ski/ground contact differently than
+      // the 30Hz shadow and drifts ~8-10m — right at the tolerance edge.
+      b.acc = (b.acc ?? 0) + dt;
+      while (b.acc >= 1 / 30) {
+        b.acc -= 1 / 30;
+        b.yaw += (1 / 30) * 0.35; // gentle arc — a Tribes-ish carve
+        b.sim.setInput({ forward: 1, right: 0, jumpHeld: false, skiHeld: true, jetHeld: false });
+        b.sim.update(1 / 30);
+      }
       b.ws.send(JSON.stringify({
         type: 'inputMove', seq: ++b.seq,
         input: { forward: 1, right: 0, jump: 0, ski: 1, jet: 0, status: 0 },
@@ -222,7 +233,7 @@ const moveTimer = setInterval(() => {
     }
     b.sends++; totalSends++;
   }
-}, 50);
+}, 33);
 
 // Honest combat: honest bots lob real PlasmaGun bolts at the nearest
 // remote seen on tick frames — spawn the projectile (miss-branch shot),
