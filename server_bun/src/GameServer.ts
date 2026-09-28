@@ -220,13 +220,14 @@ export class GameServer {
     return this.roomFor(`${mode || 'arena'}-${n}`, mode);
   }
 
-  /** Find which room a player lives in — used by disconnect/teardown paths
-   *  where we only have the playerId. O(#rooms), and those calls are rare. */
+  // playerId → room index: the binary position path calls this at 20Hz per
+  // player, so scanning this.rooms per frame doesn't scale. Kept in sync at
+  // join/addPlayer and every removal (close/grace/kick/idle paths all funnel
+  // through removePlayerCompletely or onClose).
+  private playerRoom = new Map<string, Room>();
+
   private roomOfPlayer(playerId: string): Room | undefined {
-    for (const room of this.rooms.values()) {
-      if (room.players.getPlayer(playerId)) return room;
-    }
-    return undefined;
+    return this.playerRoom.get(playerId);
   }
 
   /** Spectator sockets aren't players — roomOfPlayer can't find them. */
@@ -352,7 +353,7 @@ export class GameServer {
     const room = this.roomOfPlayer(playerId);
     if (!room) return false;
     room.socketOf(playerId)?.close(1000, 'kicked');
-    room.removePlayerCompletely(playerId, 'adminKick', (m, o) => logger.info(m, o));
+    this.removePlayerCompletely(room, playerId, 'adminKick');
     logger.info('Player kicked', { playerId });
     return true;
   }
@@ -562,6 +563,7 @@ export class GameServer {
     const sessionToken = idToken;
     room.sessionTokens.set(playerId, sessionToken);
     room.players.addPlayer(playerId, room.nextTeam());
+    this.playerRoom.set(playerId, room);
     room.connections.register(playerId, ws);
     room.messages.handleHandshake(playerId, sessionToken);
     this.ops.joins++;
@@ -585,6 +587,7 @@ export class GameServer {
   // and the broadcast must move together or a stale slot/token leaks.
   private removePlayerCompletely(room: Room, playerId: string, reason: string): void {
     room.removePlayerCompletely(playerId, reason, (m, o) => logger.info(m, o));
+    this.playerRoom.delete(playerId);
     this.ops.leaves++;
   }
 
