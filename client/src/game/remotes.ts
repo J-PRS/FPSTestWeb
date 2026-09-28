@@ -110,6 +110,15 @@ export function createRemotes(deps: RemotesDeps) {
     }
 
     players.forEach((playerState, playerId) => tickRemotePlayer(playerId, playerState, dt));
+    // Local bots ('bot:', 'dummy') aren't in the network roster, so the
+    // forEach above never touches them — same red marker as real remotes.
+    const hud = deps.lazyHud();
+    const cam = deps.lazyCamera();
+    for (const [id, rp] of deps.world.remotePlayers) {
+      if (players.has(id)) continue;
+      if (rp.isDead) hud.removePlayerIndicator(id);
+      else hud.updatePlayerIndicator(id, rp.position, cam, false);
+    }
     cleanupRemotePlayers(players);
 
     if (deps.world.remotePlayers.size !== previousRemoteCount) {

@@ -41,7 +41,7 @@ export class NetworkManager {
   /** REMOTE players only — local player is never stored here */
   private players: Map<string, RemotePlayerState> = new Map();
   public onPlayerHit: ((shooterId: string, targetId: string, damage: number, health: number, armor?: number) => void) | null = null;
-  public onPlayerKill: ((shooterId: string, targetId: string) => void) | null = null;
+  public onPlayerKill: ((shooterId: string, targetId: string, weapon?: number) => void) | null = null;
   public onPlayerRespawn: ((playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }) => void) | null = null;
   public onPlayerJump: ((playerId: string, position: { x: number; y: number; z: number }) => void) | null = null;
   public onPlayerJetpack: ((playerId: string, position: { x: number; y: number; z: number }) => void) | null = null;
@@ -375,7 +375,7 @@ export class NetworkManager {
   private handlePlayerKill(data: Extract<ServerMessage, { type: 'playerKill' }>): void {
     // Update REMOTE player state (local player death handled by callback)
     this.upsertRemotePlayer(data.targetId, { isDead: true, health: 0 });
-    this.onPlayerKill?.(data.shooterId, data.targetId);
+    this.onPlayerKill?.(data.shooterId, data.targetId, data.weapon);
   }
 
   private handleCorrection(data: Extract<ServerMessage, { type: 'correction' }>): void {

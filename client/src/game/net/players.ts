@@ -134,18 +134,18 @@ function wirePlayerCombat(ctx: NetCtx): void {
     void velocity; // next tick record carries it — no need to touch internals
   };
 
-  networkManager.onPlayerKill = (shooterId, targetId) => onPlayerKill(ctx, streak, shooterId, targetId);
+  networkManager.onPlayerKill = (shooterId, targetId, weapon) => onPlayerKill(ctx, streak, shooterId, targetId, weapon);
 }
 
 /** A kill landed somewhere: feed row for everyone, death overlay when it's
  *  you, frag headline + streak when it's yours, ragdoll for the victim. */
-function onPlayerKill(ctx: NetCtx, streak: { v: number }, shooterId: string, targetId: string): void {
+function onPlayerKill(ctx: NetCtx, streak: { v: number }, shooterId: string, targetId: string, weapon?: number): void {
   const { deps, nm } = ctx;
   const logger = deps.logger;
   if (deps.world.playbackMode) return;
   deps.world.killCounts.set(shooterId, (deps.world.killCounts.get(shooterId) ?? 0) + 1);
   const localId = nm().getLocalPlayerId();
-  deps.lazyHud().feedKill(shooterId, targetId, shooterId === localId, targetId === localId);
+  deps.lazyHud().feedKill(shooterId, targetId, shooterId === localId, targetId === localId, weapon);
   if (targetId === localId) {
     logger.info(`Local player killed by ${shooterId}`);
     const player = deps.lazyPlayer();

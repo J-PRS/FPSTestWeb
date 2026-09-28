@@ -156,7 +156,7 @@ export class CombatHandler {
       // converge on (suppression would leave it predicting blind).
       target.forceSendUntil = Date.now() + FORCE_SEND_MS;
 
-      this.applyHit(playerId, targetId, shotDamage, result, 'Player hit');
+      this.applyHit(playerId, targetId, shotDamage, result, 'Player hit', undefined, proj.weaponType);
     } else {
       logger.debug('Shot fired (miss)', { shooter: playerId });
 
@@ -256,7 +256,7 @@ export class CombatHandler {
         aoeDamage: stats.aoeDamage * power,
         aoeRadius: stats.aoeRadius * power,
         knockbackForce: stats.knockbackForce * power,
-      });
+      }, msg.weaponType);
       return;
     }
 
@@ -290,7 +290,7 @@ export class CombatHandler {
     // client can't widen the radius past what the weapon allows.
     const bloom = msg.directHit ? directHitAoeBonus(msg.weaponType ?? -1) : 1;
     this.processAOE(playerId, msg.position, msg.excludeTargetId,
-      bloom === 1 ? stats : { ...stats, aoeRadius: stats.aoeRadius * bloom });
+      bloom === 1 ? stats : { ...stats, aoeRadius: stats.aoeRadius * bloom }, msg.weaponType);
 
     // Cluster carrier: the carrier's blast is only the delivery pop — the
     // real damage is `count` bomblet blasts scattered inside `radius`, each
@@ -304,12 +304,12 @@ export class CombatHandler {
           x: msg.position.x + Math.cos(ang) * r,
           y: msg.position.y, // bomblets scatter on the blast plane
           z: msg.position.z + Math.sin(ang) * r,
-        }, msg.excludeTargetId, bomblet);
+        }, msg.excludeTargetId, bomblet, WeaponType.ClusterBomb);
       }
     }
   }
 
-  private processAOE(playerId: string, position: Vec3, excludeTargetId: string | null | undefined, stats: WeaponStats): void {
+  private processAOE(playerId: string, position: Vec3, excludeTargetId: string | null | undefined, stats: WeaponStats, weapon?: number): void {
     const player = this.playerManager.getPlayer(playerId);
     if (!player || player.isDead) return;
 
@@ -375,7 +375,7 @@ export class CombatHandler {
         // never deals damage to them in team rooms.
         if (!this.friendly(playerId, targetId)) {
           const result = this.playerManager.applyDamage(targetId, damage);
-          this.applyHit(playerId, targetId, damage, result, `Player ${logLabel} hit`, { dist: +dist.toFixed(2) });
+          this.applyHit(playerId, targetId, damage, result, `Player ${logLabel} hit`, { dist: +dist.toFixed(2) }, weapon);
         }
       }
     }
@@ -445,7 +445,7 @@ export class CombatHandler {
     const damage = getWeaponStats(weaponType).directDamage * perkMods(shooter.perk).directDamage * this.ddMult(shooter);
     const result = this.playerManager.applyDamage(targetId, damage);
     target.forceSendUntil = Date.now() + FORCE_SEND_MS;
-    this.applyHit(shooterId, targetId, damage, result, 'Bot hit');
+    this.applyHit(shooterId, targetId, damage, result, 'Bot hit', undefined, weaponType);
   }
 
   // Double-damage pickup: multiplies OUTGOING damage while the buff lasts.
@@ -454,7 +454,7 @@ export class CombatHandler {
     return shooter.ddUntil > Date.now() ? POWERUP.ddMult : 1;
   }
 
-  private applyHit(shooterId: string, targetId: string, damage: number, result: { killed: boolean; newHealth: number; newArmor: number }, hitLabel: string, extra?: Record<string, unknown>): void {
+  private applyHit(shooterId: string, targetId: string, damage: number, result: { killed: boolean; newHealth: number; newArmor: number }, hitLabel: string, extra?: Record<string, unknown>, weapon?: number): void {
     this.onHit?.(targetId, shooterId);
     if (!result.killed) {
       logger.info(hitLabel, { shooter: shooterId, target: targetId, damage, targetHealth: result.newHealth, ...extra });
@@ -463,7 +463,7 @@ export class CombatHandler {
     }
     if (shooterId !== 'environment') this.playerManager.addKill(shooterId);
     logger.info(`${hitLabel} → kill`, { shooter: shooterId, target: targetId, damage, ...extra });
-    this.broadcast({ type: 'playerKill', shooterId, targetId });
+    this.broadcast({ type: 'playerKill', shooterId, targetId, weapon });
     this.onKill?.(targetId, shooterId);
     this.scheduleRespawn(targetId);
   }
