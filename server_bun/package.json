@@ -9,5 +9,8 @@
   },
   "devDependencies": {
     "@types/bun": "latest"
+  },
+  "dependencies": {
+    "node-datachannel": "^0.33.4"
   }
 }
