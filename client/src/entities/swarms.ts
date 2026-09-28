@@ -8,7 +8,7 @@ export type { SwarmPart, SwarmSlotOwner } from './swarm.js';
 // Per-species instanced renderers — created lazily on first spawn so the
 // scene only pays for species actually in play. Capacity per species is
 // generous: slots are cheap, and a full swarm just refuses to spawn.
-interface SwarmSpec { parts: () => SwarmPart[]; capacity: number }
+export interface SwarmSpec { parts: () => SwarmPart[]; capacity: number }
 
 const swarms = new Map<string, SpeciesSwarm>();
 const gibPools = new Map<string, GibPool>();

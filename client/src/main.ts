@@ -52,23 +52,9 @@ import { LoadProfiler } from './utils/profiling.js';
 import { createScene } from './world/scene.js';
 import { createViewModelScene } from './world/viewmodelScene.js';
 import { loadHeightmap, Terrain } from './world/terrain.js';
+import { SWARM_SPECS } from './game/species/registry.js';
 import { initSwarms } from './entities/swarms.js';
-import { crawlerParts } from './entities/Crawler.js';
-import { scarabParts } from './entities/Scarab.js';
-import { grubParts } from './entities/Grub.js';
-import { snakeParts } from './entities/Snake.js';
-import { gnatParts } from './entities/Gnat.js';
-import { rollerParts } from './entities/Roller.js';
-import { seekerParts } from './entities/Seeker.js';
-import { rakkParts } from './entities/Rakk.js';
-import { striferParts } from './entities/Strifer.js';
-import { mineParts } from './entities/Mine.js';
-import { overlordParts } from './entities/Overlord.js';
-import { banelingParts } from './entities/Baneling.js';
-import { totemParts } from './entities/Totem.js';
-import { turretterParts, type Bolt } from './entities/Turretter.js';
-import { ballParts } from './entities/balls.js';
-import { weedParts } from './entities/Tumbleweed.js';
+import type { Bolt } from './entities/Turretter.js';
 
 const logger = new ChildLogger('Main');
 
@@ -158,24 +144,7 @@ async function init(): Promise<void> {
 
   // Instanced enemy rendering — one draw call per species-part. Species
   // register their part tables here; slots alloc lazily on first spawn.
-  initSwarms(scene, terrain, {
-    crawler: { parts: crawlerParts, capacity: 512 },
-    scarab: { parts: scarabParts, capacity: 512 },
-    grub: { parts: grubParts, capacity: 256 },
-    snake: { parts: snakeParts, capacity: 256 },
-    gnat: { parts: gnatParts, capacity: 256 },
-    roller: { parts: rollerParts, capacity: 256 },
-    seeker: { parts: seekerParts, capacity: 256 },
-    rakk: { parts: rakkParts, capacity: 256 },
-    strifer: { parts: striferParts, capacity: 128 },
-    mine: { parts: mineParts, capacity: 512 },
-    overlord: { parts: overlordParts, capacity: 64 },
-    baneling: { parts: banelingParts, capacity: 128 },
-    totem: { parts: totemParts, capacity: 64 },
-    turretter: { parts: turretterParts, capacity: 64 },
-    ball: { parts: ballParts, capacity: 512 },
-    tumbleweed: { parts: weedParts, capacity: 64 },
-  });
+  initSwarms(scene, terrain, SWARM_SPECS);
 
   effects = new EffectsManager(scene);
   effects.setTerrain(terrain);

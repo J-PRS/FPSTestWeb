@@ -212,19 +212,7 @@ export function createGameLoop(deps: GameLoopDeps) {
     // ?mode=classic — balls are the whole roster, every other species'
     // tick is skipped (they self-spawn ambiently, so ticking = populating)
     if (!demoPaused && !CLASSIC_MODE) {
-      entities.updateCrawlers(dt);
-      entities.updateScarabs(dt);
-      entities.updateGrubs(dt);
-      entities.updateSnakes(dt);
-      entities.updateGnats(dt);
-      entities.updateTurrets(dt);
-      entities.updateRollers(dt);
-      entities.updateSeekers(dt);
-      entities.updateOverlords(dt);
-      entities.updateTotems(dt);
-      entities.updateRakks(dt);
-      entities.updateStrifers(dt);
-      entities.updateWeeds(dt);
+      entities.updateSpeciesAll(dt);
       entities.updateDeployables(dt);
     }
     if (!demoPaused && !demoManager?.isPlaying) deps.waveDirector().update(dt);
