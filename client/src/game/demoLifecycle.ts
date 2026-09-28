@@ -207,6 +207,12 @@ export function createDemoLifecycle(deps: DemoLifecycleDeps) {
     demoManager.onPlaybackStart = () => {
       // The replay is its own world — the live wire must not fight it
       deps.world.playbackMode = true;
+      // Cool-shot clicks come from the overlay menu — a replay behind an
+      // open menu is invisible. Close it and grab pointer lock (the click
+      // is a user gesture, so the request is legal).
+      deps.overlay.style.display = 'none';
+      document.body.classList.remove('menu-open');
+      deps.rendererCanvas.requestPointerLock();
       // Live remote players would otherwise stand ghosted inside the replay
       for (const rp of deps.world.remotePlayers.values()) rp.setStaleHidden(true);
       // Dispose all non-playback balls (live game balls)

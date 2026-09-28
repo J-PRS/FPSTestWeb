@@ -206,6 +206,9 @@ export class DemoManager {
     this.player.stop();
     this.mode = 'idle';
     this.ui.setPlaying(false);
+    // ESC-stop used to leave the control bar hanging over live play
+    this.ui.hide();
+    this.uiVisible = false;
     this.onPlaybackStop?.();
   }
 
@@ -216,6 +219,10 @@ export class DemoManager {
       this.mode = 'paused';
       this.ui.setPlaying(false);
     } else if (this.mode === 'paused' || this.player.isLoaded) {
+      // A clip parked via finishLoad starts here, bypassing playDemoData —
+      // without this the world never enters playbackMode and the live wire
+      // fights the replay.
+      if (this.mode === 'idle') this.onPlaybackStart?.();
       this.player.play();
       this.mode = 'playing';
       this.ui.setPlaying(true);
@@ -226,12 +233,15 @@ export class DemoManager {
   seekBy(delta: number): void {
     if (this.mode !== 'playing' && this.mode !== 'paused') return;
     this.player.seek(this.player.currentTimeValue + delta);
+    // Arrow-key seek while paused must still snap the replicas
+    this.onRemotePlayback?.(this.player.getRemoteStates(), 0);
   }
 
   // Restart demo from the beginning
   restart(): void {
     if (this.mode !== 'playing' && this.mode !== 'paused') return;
     this.player.seek(0);
+    this.onRemotePlayback?.(this.player.getRemoteStates(), 0);
   }
 
   // Save current recording to file
