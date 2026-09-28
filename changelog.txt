@@ -1,3 +1,5 @@
+2026-10-03 - nuggets bots farm: brains get huntCreatures (nuggets rooms) — creatures preferred at <=65m when no player threatens within 55m (bigger, slower prey at plink range); before, creatures were never worth hunting so the gem economy starved. /metrics rooms now report scores + pickups-on-floor for live observability
+
 2026-10-03 - nuggets economy was dead: creature kills dropped gems at corpse altitude (creatures fly ~100m up) where the dy<=6 pickup grab can never reach — drops now ground at terrain height; Room keeps its heightfield (GameServer refreshes it on attach/rotation); live sim: 4 kills, gems grounded, first point banked
 
 2026-10-03 - arena dome pushback was inverted: rim-anchored knockback pushed offenders FURTHER out (knockback pushes away from `position`), stacking 300+ m/s rejects; now a center-anchored pull, and the move shadow eats the same impulse — TDM quicksand soak went from 1018 corrections/839m worst gap to 25/27m, zero position rejects

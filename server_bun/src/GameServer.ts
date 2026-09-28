@@ -544,6 +544,8 @@ export class GameServer {
       name: r.name,
       players: r.playerCount(),
       balls: r.ballSim.ballCount,
+      scores: r.modeSpec?.teams ? { ...r.scores } : undefined,
+      pickups: r.pickups?.snapshot().length ?? 0,
       gracePending: r.disconnected.size,
       ballSimNow: r.ballSim.simNow,
     }));

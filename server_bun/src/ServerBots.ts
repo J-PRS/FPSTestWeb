@@ -427,6 +427,9 @@ export class ServerBots {
         // Team rooms drop nuggets on creature kills — bots farm them too,
         // which is what keeps a bot-filled match's scoreboard moving.
         pickup: this.room.pickups?.nearest(p.position) ?? undefined,
+        // Gem-economy rooms make hunting creatures the actual objective;
+        // elsewhere food is just a distraction and this stays unset.
+        huntCreatures: this.room.mode === 'nuggets',
         groundY: (x, z) => (this.field ? hmHeight(this.field, x, z) : p.position.y),
         others: this.othersOf(p),
         // The shadow tank is the truth — brains read it to gate jets,

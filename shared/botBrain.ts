@@ -54,6 +54,10 @@ export interface BrainCtx {
    *  the hearing sense. No LOS required: a fight over the ridge pulls
    *  an idle bot toward it, which is how scouting emerges. */
   sounds?: BotVec[];
+  /** Nuggets-style economy rooms: when no player threatens, prefer
+   *  creature targets (id prefix `b:`) — farming is the objective, and a
+   *  human would do the same. Enemies still outrank food when close. */
+  huntCreatures?: boolean;
 }
 
 export interface BrainOut {
@@ -77,6 +81,11 @@ export interface BrainOut {
 // every local bot's feet sat 0.2m inside the terrain.
 export const BOT_EYE = 1.8;
 export const BOT_FIRE_RANGE = 45;
+// Creatures are big, slow, and fly — a human plinks them past the normal
+// duel range, so the farming reach runs longer (3D distance still applies:
+// a beast parked 80m overhead is out of reach until it swoops).
+const CREATURE_FIRE_RANGE = 65;
+const THREAT_M = 55; // a player inside this radius always outranks farming
 const THINK_S = 0.3;
 const ORBIT_FAR = 22;    // orbit the target inside this ring distance
 const ORBIT_TOO_CLOSE = 12;
@@ -222,14 +231,25 @@ export class BotBrain {
       this.thinkT = hero ? THINK_S * 0.45 : THINK_S;
       let best: BotEnemy | null = null;
       let bestD = hero ? BOT_FIRE_RANGE * 1.4 : BOT_FIRE_RANGE;
+      let bestBeast: BotEnemy | null = null;
+      let bestBeastD = ctx.huntCreatures ? CREATURE_FIRE_RANGE : 0;
       for (const e of ctx.enemies) {
         if (!e.alive) continue;
         const d = dist3(pos, e.pos);
         // No wallhack: only acquire what the eye line can actually see.
         // An occluded enemy clears the hunt entirely — breaking LOS behind
         // a ridge shakes pursuit like it would a human.
-        if (d < bestD && losClear(ctx, pos, e.pos)) { bestD = d; best = e; }
+        if (!losClear(ctx, pos, e.pos)) continue;
+        if (e.id.startsWith('b:')) {
+          if (ctx.huntCreatures && d < bestBeastD) { bestBeastD = d; bestBeast = e; }
+          continue;
+        }
+        if (d < bestD) { bestD = d; best = e; }
       }
+      // In economy rooms, only an actual nearby player threat outranks
+      // the harvest — otherwise the bot keeps farming past a firefight
+      // across the map like a human focused on the score.
+      if (bestBeast && (!best || bestD > THREAT_M)) best = bestBeast;
       this.hunt = best;
       if (best) {
         this.lastSeen = { ...best.pos };
