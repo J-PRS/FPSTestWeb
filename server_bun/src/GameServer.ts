@@ -287,6 +287,12 @@ export class GameServer {
 
   onOpen(ws: ServerWebSocket<WebSocketData>): void {
     logger.debug('WebSocket connection opened', { remoteAddress: ws.remoteAddress });
+    // Join deadline: a socket that connects but never completes the join
+    // handshake would otherwise sit forever (QUIC/RTC peers don't die on
+    // their own quickly). 15s is generous — real clients join in ms.
+    setTimeout(() => {
+      if (!ws.data.playerId && ws.readyState === 1) ws.close(1000, 'join timeout');
+    }, 15000).unref?.();
   }
 
   onMessage(ws: ServerWebSocket<WebSocketData>, message: string | ArrayBuffer): void {
