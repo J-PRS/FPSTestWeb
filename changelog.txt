@@ -1949,3 +1949,4 @@ client: lobby quick-join adds TDM button
 dev: bun dev restarts server on shared/ or src/ edits (dev-watch.ts wrapper — bun --watch misses shared/)
 server: global player cap FPS_GLOBAL_MAX_PLAYERS (default 128) across all rooms — one process/core bounds total load
 server: room hibernation — no humans/spectators freezes BallSim + skips the room tick (bot-filled immortal rooms no longer burn CPU)
+stress test: 100 networked bots / 10 rooms (fleet.ts single-process harness) — 0 join fails, 0 rejected msgs, 112k position frames, tick lag avg 11.7ms (=empty baseline), rooms self-disposed after
