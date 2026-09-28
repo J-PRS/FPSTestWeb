@@ -457,6 +457,7 @@ export class GameServer {
     return [...this.rooms.values()].map(r => ({
       name: r.name,
       mode: r.mode || undefined,
+      map: this.roomMapName.get(r.name),
       players: r.playerCount(),
       maxPlayers: CONFIG.maxPlayers,
       spectators: r.spectators.size || undefined,

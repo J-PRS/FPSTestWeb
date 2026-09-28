@@ -13,6 +13,8 @@ import { settings } from '../core/settings.js';
 export interface RoomRow {
   name: string;
   mode?: string;
+  /** Spec map the room is playing — set server-side, follows rotation. */
+  map?: string;
   players: number;
   maxPlayers: number;
   /** Team-mode live score. */
@@ -276,7 +278,7 @@ export class Lobby {
     // Default lobby first — it's the immortal room.
     rooms.sort((a, b) => (a.name === 'default' ? -1 : b.name === 'default' ? 1 : a.name.localeCompare(b.name)));
     const cur = rooms.find((r) => r.name === this.currentRoom());
-    this.here.textContent = `IN: ${this.currentRoom().toUpperCase()}${cur?.mode ? ` · ${cur.mode.toUpperCase()}` : ''}`;
+    this.here.textContent = `IN: ${this.currentRoom().toUpperCase()}${cur?.mode ? ` · ${cur.mode.toUpperCase()}` : ''}${cur?.map ? ` · ${cur.map.toUpperCase()}` : ''}`;
     for (const r of rooms) this.addRow(r);
   }
 
@@ -295,7 +297,7 @@ export class Lobby {
     const scoreTxt = r.scores ? `  ${r.scores.alpha}:${r.scores.bravo}`
       : r.ffaLeader ? `  ${r.ffaLeader[0]} ${r.ffaLeader[1]}pts` : '';
     const clock = r.timeLeftMs ? ` ${Math.ceil(r.timeLeftMs / 60000)}m` : '';
-    meta.textContent = `${r.mode ? r.mode + ' ' : ''}${r.players}/${r.maxPlayers}${scoreTxt}${r.winAt ? ` →${r.winAt}` : ''}${clock}`;
+    meta.textContent = `${r.mode ? r.mode + ' ' : ''}${r.map ? r.map + ' ' : ''}${r.players}/${r.maxPlayers}${scoreTxt}${r.winAt ? ` →${r.winAt}` : ''}${clock}`;
     row.append(name, meta);
     row.onclick = () => this.join(r.name);
     this.rows.appendChild(row);
