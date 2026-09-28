@@ -196,3 +196,64 @@ describe('shotFired relay', () => {
     expect(broadcasts.length).toBe(0);
   });
 });
+
+describe('spree announcements', () => {
+  const killHarness = () => {
+    const players = new PlayerManager();
+    const broadcasts: { msg: ServerMessage; exclude?: string }[] = [];
+    const combat = new CombatHandler(
+      players,
+      (msg, exclude) => { broadcasts.push({ msg, exclude }); },
+      () => {},
+    );
+    const kill = (shooter: string, target: string) => {
+      const t = players.getPlayer(target)!;
+      t.health = 1;
+      t.armor = 0;
+      t.protectedUntil = 0;
+      combat.botAttack(shooter, target, 0);
+    };
+    const notices = () => broadcasts
+      .map((b) => b.msg)
+      .filter((m): m is Extract<ServerMessage, { type: 'matchNotice' }> => m.type === 'matchNotice')
+      .map((m) => m.text);
+    return { players, combat, kill, notices };
+  };
+
+  it('first blood fires exactly once per match', () => {
+    const { players, kill, notices } = killHarness();
+    players.addPlayer('a');
+    players.addPlayer('b');
+    kill('a', 'b');
+    expect(notices().some((t) => t.includes('first blood'))).toBe(true);
+    players.getPlayer('b')!.isDead = false;
+    kill('a', 'b');
+    expect(notices().filter((t) => t.includes('first blood')).length).toBe(1);
+  });
+
+  it('three unanswered kills announce a killing spree', () => {
+    const { players, kill, notices } = killHarness();
+    players.addPlayer('a');
+    players.addPlayer('b');
+    for (let i = 0; i < 3; i++) {
+      players.getPlayer('b')!.isDead = false;
+      kill('a', 'b');
+    }
+    expect(notices().some((t) => t.includes('killing spree') && t.includes('a'))).toBe(true);
+  });
+
+  it('a streak-ending kill calls out both names', () => {
+    const { players, kill, notices } = killHarness();
+    players.addPlayer('a');
+    players.addPlayer('b');
+    for (let i = 0; i < 3; i++) {
+      players.getPlayer('a')!.isDead = false;
+      kill('b', 'a'); // b builds a 3-streak
+    }
+    players.getPlayer('b')!.isDead = false;
+    players.getPlayer('a')!.isDead = false; // a died to b three times — revive before the revenge kill
+    kill('a', 'b');
+    expect(notices().some((t) => t.includes('a') && t.includes('b') && t.includes('ended'))).toBe(true);
+    expect(players.getPlayer('b')!.streak).toBe(0);
+  });
+});

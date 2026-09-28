@@ -637,8 +637,40 @@ export class CombatHandler {
     if (shooterId !== 'environment') this.playerManager.addKill(shooterId);
     logger.info(`${hitLabel} → kill`, { shooter: shooterId, target: targetId, damage, ...extra });
     this.broadcast({ type: 'playerKill', shooterId, targetId, weapon });
+    this.announceKill(shooterId, targetId);
     this.onKill?.(targetId, shooterId);
     this.scheduleRespawn(targetId);
+  }
+
+  // Spree callouts ride matchNotice (system chat line). killTotal()===1 pins
+  // first blood exactly — stats are wiped at match boundaries, so a 1 can
+  // only mean the opening frag.
+  private static readonly SPREE_TIERS: [number, string][] = [
+    [3, 'killing spree'], [5, 'rampage'], [8, 'dominating'], [12, 'unstoppable'],
+  ];
+
+  private announceKill(shooterId: string, targetId: string): void {
+    const victim = this.playerManager.getPlayer(targetId);
+    const ended = victim?.streak ?? 0;
+    if (victim) victim.streak = 0;
+    if (shooterId === 'environment') return;
+
+    const shooter = this.playerManager.getPlayer(shooterId);
+    if (!shooter) return;
+    shooter.streak++;
+
+    if (this.playerManager.killTotal() === 1) {
+      this.broadcast({ type: 'matchNotice', text: `${shooterId} draws first blood` });
+    }
+    const tier = CombatHandler.SPREE_TIERS.find(([n]) => n === shooter.streak);
+    if (tier) {
+      this.broadcast({ type: 'matchNotice', text: `${shooterId} is on a ${tier[1]} (${tier[0]})` });
+    } else if (shooter.streak > 12 && shooter.streak % 4 === 0) {
+      this.broadcast({ type: 'matchNotice', text: `${shooterId} is godlike (${shooter.streak})` });
+    }
+    if (ended >= 3) {
+      this.broadcast({ type: 'matchNotice', text: `${shooterId} ended ${targetId}'s ${ended}-kill streak` });
+    }
   }
 
   /** Reconnect restores state verbatim — including isDead. If the disconnect

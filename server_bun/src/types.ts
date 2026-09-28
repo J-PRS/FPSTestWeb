@@ -30,6 +30,9 @@ export interface PlayerState {
   isDead: boolean;
   kills: number;
   deaths: number;
+  // Consecutive kills without dying — drives spree announcements. Wiped by
+  // resetStats like kills/deaths (per-match, not career).
+  streak: number;
   lastSeen: number;
   pendingRespawn: boolean;
   lastSeq: number;

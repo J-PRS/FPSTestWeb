@@ -44,6 +44,7 @@ export class PlayerManager {
       team,
       kills: 0,
       deaths: 0,
+      streak: 0,
       lastSeen: Date.now(),
       pendingRespawn: false,
       lastSeq: 0,
@@ -255,7 +256,15 @@ export class PlayerManager {
   /** Fresh match — wipe everyone's K/D so the journal records per-match
    *  stats, not career totals. */
   resetStats(): void {
-    for (const p of this.players.values()) { p.kills = 0; p.deaths = 0; }
+    for (const p of this.players.values()) { p.kills = 0; p.deaths = 0; p.streak = 0; }
+  }
+
+  /** Total kills across the roster — `=== 1` exactly at a match's first kill
+   *  (resetStats zeroes the table, so it can't lag a match boundary). */
+  killTotal(): number {
+    let n = 0;
+    for (const p of this.players.values()) n += p.kills;
+    return n;
   }
 
   addKill(playerId: string): void {
