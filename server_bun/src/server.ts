@@ -68,7 +68,20 @@ const ROUTES: Record<string, (url: URL) => Response | Promise<Response>> = {
   // WebTransport discovery: browser clients pin self-signed certs via
   // serverCertificateHashes — this is the DER SHA-256 of FPS_WT_CERT.
   '/wthash': () => json(wtInfo() ?? { enabled: false }),
+  // WebRTC tier: STUN/TURN servers come from the deployment, not the
+  // client build — parsed once at boot from FPS_ICE_SERVERS.
+  '/rtcconfig': () => json({ iceServers: iceServers() }),
 };
+
+let _ice: unknown[] | null = null;
+function iceServers(): unknown[] {
+  if (_ice === null) {
+    try { _ice = CONFIG.iceServersJson ? JSON.parse(CONFIG.iceServersJson) : []; }
+    catch { logger.warn('FPS_ICE_SERVERS is not valid JSON — RTC tier will run without STUN/TURN'); _ice = []; }
+    if (!Array.isArray(_ice)) _ice = [];
+  }
+  return _ice;
+}
 
 let wtCertHash: string | null = null;
 function wtInfo(): { enabled: true; port: number; sha256: string } | null {

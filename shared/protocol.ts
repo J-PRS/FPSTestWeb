@@ -31,7 +31,9 @@ export type ClientMessage =
       /** map hint for room creation — /join-spawned rooms can be disposed
        *  and rebuilt before the first join lands, so the join carries the
        *  spec source too. bots overrides the spec's bot count. */
-      map?: string; bots?: number }
+      map?: string; bots?: number;
+      /** Netcode-v2 tier the client negotiated — /metrics tier counts. */
+      transport?: 'wt' | 'rtc' | 'ws' }
   | { type: 'position'; position: Vec3; rotation: Rotation; velocity: Vec3; seq?: number; ping?: number }
   // Declared discontinuity (warp beacon, respawn): the position is
   // authoritative, not a plausibility-checked move — the server reseats

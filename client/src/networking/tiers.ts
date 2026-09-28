@@ -44,6 +44,7 @@ export async function connectGameTransport(config: ConnectionConfig): Promise<Ga
  * endpoint doesn't exist yet — the handshake just fails and we fall through.
  */
 class WebTransportGameTransport implements GameTransport {
+  readonly tier = 'wt' as const;
   private open = false;
   private writer: WritableStreamDefaultWriter<Uint8Array> | null = null;
   private dgWriter: WritableStreamDefaultWriter<Uint8Array> | null = null;
@@ -151,6 +152,7 @@ async function tryWebTransport(config: ConnectionConfig): Promise<GameTransport 
  * peer (node-datachannel) the offer never answers and we fall through.
  */
 class ServerRtcTransport implements GameTransport {
+  readonly tier = 'rtc' as const;
   private open = false;
   // `pc` is kept so a losing probe can be fully torn down — closing only
   // the datachannel leaves the ICE/DTLS machinery running server-side.
@@ -213,7 +215,14 @@ class ServerRtcTransport implements GameTransport {
 async function tryWebRTC(config: ConnectionConfig): Promise<GameTransport | null> {
   if (typeof RTCPeerConnection === 'undefined') return null;
   try {
-    const pc = new RTCPeerConnection();
+    // ICE servers come from the server itself (/rtcconfig) — STUN/TURN is a
+    // deployment property, not a client constant; LAN/dev needs neither.
+    const httpBase = config.url.replace(/^wss?:/, 'http' + (config.url.startsWith('wss') ? 's' : '') + ':').replace(/\/ws$/, '');
+    const iceServers = await fetch(`${httpBase}/rtcconfig`)
+      .then((r) => r.json())
+      .then((j) => (Array.isArray(j?.iceServers) ? j.iceServers : []))
+      .catch(() => []);
+    const pc = new RTCPeerConnection({ iceServers });
     const dc = pc.createDataChannel('game', { ordered: false, maxRetransmits: 0 });
     const ctrl = pc.createDataChannel('ctrl'); // reliable+ordered — join, claims, events
     // Signal over the dedicated /rtcs socket — one offer in, one answer out.
@@ -268,6 +277,8 @@ export class TieredTransport implements GameTransport {
   private static readonly BACKOFF_MS = 1000;
 
   constructor(private readonly config: ConnectionConfig) {}
+
+  get tier() { return this.inner?.tier; }
 
   connect(url?: string): void {
     this.url = url;

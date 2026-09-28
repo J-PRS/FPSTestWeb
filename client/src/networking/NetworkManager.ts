@@ -129,6 +129,7 @@ export class NetworkManager {
               map: urlParams.map ?? undefined,
               bots: urlParams.bots,
               perk: this.joinPerk?.(),
+              transport: this.ws?.tier,
             });
             this.connected = true;
             this.hasLoggedConnectionError = false;
