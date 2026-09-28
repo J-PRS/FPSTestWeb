@@ -1,21 +1,16 @@
-// Server message handlers — registered once inside init(). Each on* callback
-// maps a network event to game-state changes (remote player lifecycle,
-// server-authoritative projectile spawn/destroy, damage/kill/respawn, snapshots).
+// Server message wiring — assembles the shared NetCtx and hands it to the
+// per-domain modules under ./net/. Each wire event lives in its domain file;
+// this orchestrator only owns the cross-domain pieces (chat, lobby, pickup
+// mesh factory feeding both pickups.ts and the join path in world.ts).
 
 import * as THREE from 'three';
-import { REMOTE_PLAYER_FIXED_DT, DEBUG_LOG_SAMPLE_RATE } from '../core/config.js';
-import * as sfx from '../core/sfx.js';
 import type { ChildLogger } from '../core/Logger.js';
 import type { Player } from '../entities/Player.js';
 import { RemotePlayer } from '../entities/RemotePlayer.js';
-import { PlayerDebris } from '../effects/debris.js';
 import type { EffectsManager } from '../effects/effects.js';
 import type { NetworkManager } from '../networking/NetworkManager.js';
-import type { GameStatePlayer, LocalPlayerState } from '../../../shared/protocol.js';
-import { Projectile } from '../projectiles/Projectile.js';
 import { Lobby } from './lobby.js';
 import { resolveServerEndpoints } from '../networking/endpoints.js';
-import { ROCKET_CONFIG, getProjectileConfig } from '../projectiles/index.js';
 import type { WorldState } from './worldState.js';
 import type { createEntities } from './entities.js';
 import type { FragMessages } from '../ui/FragMessages.js';
@@ -24,11 +19,14 @@ import type { HUD } from '../ui/hud.js';
 import type { HealthBarSystem } from '../ui/HealthBarSystem.js';
 import type { ExplosionTracker } from '../utils/ExplosionTracker.js';
 import type { Terrain } from '../world/terrain.js';
-import { buildStructures, buildArenaDome, clearArenaDome } from '../world/mapStructures.js';
-import type { StructureSpec } from '../../../shared/mapSpec.js';
-import { setAmbientCaps } from './species/ambientCaps.js';
-import { structureColliders } from '../../../shared/ballSim.js';
-import { Ball } from '../entities/balls.js';
+
+import type { NetCtx } from './net/ctx.js';
+import { wireMatchEvents } from './net/match.js';
+import { wireFlags } from './net/flags.js';
+import { wirePickups } from './net/pickups.js';
+import { wirePlayers } from './net/players.js';
+import { wireProjectiles } from './net/projectiles.js';
+import { wireWorld } from './net/world.js';
 
 export interface NetDeps {
   lazyNetworkManager(): NetworkManager;
@@ -51,139 +49,36 @@ export function wireNetworkHandlers(deps: NetDeps): void {
   const nm = () => deps.lazyNetworkManager();
   const networkManager = deps.lazyNetworkManager();
 
-  // Chat is self-contained (own DOM + key routing) — netHandlers is just
-  // where network↔game wiring already lives.
+  // Chat is self-contained (own DOM + key routing) — net wiring is just
+  // where network↔game glue already lives.
   const chat = new Chat({
     send: (text) => networkManager.sendChat(text),
     isConnected: () => networkManager.isConnected(),
     localName: () => networkManager.getLocalPlayerId(),
   });
   networkManager.onChat = (playerId, text) => chat.add(playerId, text);
-  networkManager.onTeamScore = (scores, winAt) => {
-    deps.world.teamScores = scores;
-    deps.lazyHud().setTeamScore?.(scores.alpha, scores.bravo);
-    chat.add(null, `ALPHA ${scores.alpha} : ${scores.bravo} BRAVO  (first to ${winAt})`);
-  };
-  networkManager.onFfaScore = (scores, winAt) => {
-    deps.world.ffaScores = new Map(Object.entries(scores));
-    const me = nm().getLocalPlayerId();
-    const mine = scores[me] ?? 0;
-    let lead = 0; for (const v of Object.values(scores)) if (v > lead) lead = v;
-    // Only announce when the lead changes hands or YOU score — a per-kill
-    // feed line for every bot frag would drown the chat.
-    if ((scores[me] ?? 0) > 0) chat.add(null, `you: ${mine} pts (leader ${lead}/${winAt})`);
-  };
-  networkManager.onFfaMatchEnd = (winner, scores) =>
-    chat.add(null, winner === 'draw'
-      ? 'DRAW — time\'s up, new match starting'
-      : `${winner} WINS the deathmatch — ${scores[winner]} pts — new match starting`);
-  networkManager.onMatchEnd = (winner, scores) =>
-    chat.add(null, winner === 'draw'
-      ? `DRAW ${scores.alpha}:${scores.bravo} — time's up, new match starting`
-      : `${winner.toUpperCase()} WINS ${scores.alpha}:${scores.bravo} — new match starting`);
-  networkManager.onMatchStart = (mode) =>
-    chat.add(null, `match start — ${mode || 'arena'}`);
-  networkManager.onMatchNotice = (text) => chat.add(null, text);
 
-  // Server-owned CTF flags — dumb renderers: pole+banner meshes that just
-  // follow flagUpdate positions. All rules live in RoomFlags server-side.
-  // Carried flags get no position stream (server stopped broadcasting it) —
-  // the mesh pins to the carrier's rendered position at draw time instead,
-  // which is smoother than any wire rate anyway.
-  const flagMeshes = new Map<string, THREE.Group>();
-  const flagCarriers = new Map<string, string>();
-  const ensureFlagMesh = (team: 'alpha' | 'bravo'): THREE.Group => {
-    let g = flagMeshes.get(team);
-    if (g) return g;
-    g = new THREE.Group();
-    const pole = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.06, 0.08, 4, 6),
-      new THREE.MeshBasicMaterial({ color: 0x888888 }));
-    pole.position.y = 2;
-    const banner = new THREE.Mesh(
-      new THREE.ConeGeometry(0.5, 1.2, 4),
-      new THREE.MeshBasicMaterial({ color: team === 'alpha' ? 0x55aaff : 0xff8855 }));
-    banner.position.set(0.55, 3.4, 0);
-    g.add(pole, banner);
-    g.onBeforeRender = () => {
-      const carrier = flagCarriers.get(team);
-      if (!carrier) return;
-      if (carrier === networkManager.getLocalPlayerId()) {
-        g.position.copy(deps.lazyPlayer().pos);
-      } else {
-        const rp = deps.world.remotePlayers.get(carrier);
-        if (rp) g.position.copy(rp.pos);
-      }
-      g.position.y += 0.4; // ride the shoulders, not the boots
-    };
-    deps.lazyScene().add(g);
-    flagMeshes.set(team, g);
-    return g;
-  };
-  networkManager.onFlagUpdate = (flags) => {
-    for (const f of flags) {
-      const g = ensureFlagMesh(f.team);
-      g.position.set(f.pos.x, f.pos.y, f.pos.z);
-      if (f.state === 'carried' && f.carrier) flagCarriers.set(f.team, f.carrier);
-      else flagCarriers.delete(f.team);
-    }
+  // Both first-seen-update and respawn-into-missing end up here.
+  const ensureRemotePlayer = (playerId: string, position: { x: number; y: number; z: number }, via: string): RemotePlayer => {
+    const rp = new RemotePlayer(deps.lazyScene(), playerId, position, deps.lazyTerrain());
+    deps.world.remotePlayers.set(playerId, rp);
+    logger.debug(`CREATED remote player (${via})`, { instanceId: rp.instanceId, playerId, total: deps.world.remotePlayers.size });
+    return rp;
   };
 
-  // Admin hot-reload — the room's map spec changed mid-match. Rebuild the
-  // static geometry exactly like the join path does from gameState.
-  networkManager.onMapUpdate = (map) => {
-    buildStructures(map.structures ?? [], deps.lazyScene());
-    Ball.colliders = structureColliders(map.structures);
-    if (map.arena) {
-      buildArenaDome(map.arena, deps.lazyTerrain().getHeight(map.arena.x, map.arena.z), deps.lazyScene());
-    } else {
-      clearArenaDome(deps.lazyScene());
-    }
-    chat.add(null, 'map updated by admin');
+  const ctx: NetCtx = {
+    deps, nm, networkManager, chat, ensureRemotePlayer,
+    addPickup: () => { throw new Error('addPickup assigned by wirePickups'); },
   };
 
-  // Server-owned nugget pickups — creature kills in team rooms drop a gem
-  // anyone on a team can touch to bank a point. Dumb renderer; all rules
-  // (radius, TTL, team credit) live in RoomPickups server-side.
-  const pickupMeshes = new Map<number, { mesh: THREE.Mesh; kind: 'gem' | 'tag' }>();
-  const pickupGeos = {
-    gem: new THREE.OctahedronGeometry(0.5),
-    // Dog tag — flat plate reads as "kill token", not loot.
-    tag: new THREE.BoxGeometry(0.7, 0.14, 0.45),
-  };
-  const pickupMats = {
-    gem: new THREE.MeshBasicMaterial({ color: 0xffcc44 }),
-    tag: new THREE.MeshBasicMaterial({ color: 0xff3355 }),
-  };
-  const addPickup = (id: number, pos: { x: number; y: number; z: number }, kind: 'gem' | 'tag' = 'gem') => {
-    if (pickupMeshes.has(id)) return;
-    const m = new THREE.Mesh(pickupGeos[kind], pickupMats[kind]);
-    m.position.set(pos.x, pos.y + 0.8, pos.z);
-    deps.lazyScene().add(m);
-    pickupMeshes.set(id, { mesh: m, kind });
-  };
-  networkManager.onPickupSpawn = (id, pos, kind) => {
-    if (deps.world.playbackMode) return; // live match gems don't belong in the replay
-    addPickup(id, pos, kind ?? 'gem');
-  };
-  networkManager.onPickupGone = (id, by) => {
-    if (deps.world.playbackMode) return;
-    const e = pickupMeshes.get(id);
-    if (e) { deps.lazyScene().remove(e.mesh); pickupMeshes.delete(id); }
-    if (by === nm().getLocalPlayerId()) {
-      if (e?.kind === 'tag') {
-        chat.add(null, 'tag confirmed +1');
-      } else {
-        // Server-verified collect — grant the same reward local nuggets
-        // give offline (heal + jet boost), since MP drops no local loot.
-        const p = deps.lazyPlayer();
-        p.heal(0.2);
-        p.grantJetBoost();
-        nm().sendHeal(20);
-        chat.add(null, 'nugget banked +1');
-      }
-    }
-  };
+  // Order matters: pickups defines ctx.addPickup which world.ts's gameState
+  // handler consumes at runtime (not at wire time — safe either way).
+  wireMatchEvents(ctx);
+  wireFlags(ctx);
+  wirePickups(ctx);
+  wirePlayers(ctx);
+  wireProjectiles(ctx);
+  wireWorld(ctx);
 
   // Lobby browser — corner button lists the server's live rooms; joining
   // reloads with ?room=NAME (membership is fixed at connect time).
@@ -199,406 +94,4 @@ export function wireNetworkHandlers(deps: NetDeps): void {
       return res.json() as Promise<{ room: string }>;
     },
   }));
-
-  // Both first-seen-update and respawn-into-missing end up here
-  function ensureRemotePlayer(playerId: string, position: { x: number; y: number; z: number }, via: string): RemotePlayer {
-    const rp = new RemotePlayer(deps.lazyScene(), playerId, position, deps.lazyTerrain());
-    deps.world.remotePlayers.set(playerId, rp);
-    logger.debug(`CREATED remote player (${via})`, { instanceId: rp.instanceId, playerId, total: deps.world.remotePlayers.size });
-    return rp;
-  }
-
-  // Register player hit handler (non-lethal hits)
-  networkManager.onPlayerHit = (shooterId: string, targetId: string, damage: number, health: number) => {
-    if (deps.world.playbackMode) return;
-    // Check if local player was hit
-    if (targetId === nm().getLocalPlayerId()) {
-      const player = deps.lazyPlayer();
-      // Shielded hits route to the energy tank (server kept health
-      // unchanged) — the soak reads as a cyan flash + hum, not a grunt.
-      if (player.isShielded) {
-        player.absorbShieldDamage(damage);
-        deps.lazyHud().showShieldDamage(deps.world.remotePlayers.get(shooterId)?.pos ?? null, damage);
-        sfx.shieldHit();
-        player.health = health;
-        return;
-      }
-      player.health = health;
-      // Point the damage arc at the shooter's last known position
-      deps.lazyHud().showDamage(deps.world.remotePlayers.get(shooterId)?.pos ?? null, damage);
-      sfx.playerHurt();
-      logger.info(`Local player hit for ${damage} damage by ${shooterId} (health: ${health})`);
-      return;
-    }
-
-    // Non-lethal hits don't trigger death animation
-    logger.info(`Remote player ${targetId} hit for ${damage} damage by ${shooterId} (health: ${health})`);
-    deps.lazyHealthBarSystem().spawn(targetId, damage, health);
-    deps.world.remotePlayers.get(targetId)?.flinch();
-  };
-
-  // Register knockback handler — server tells us to apply knockback/pull to our local player
-  networkManager.onKnockback = (position: { x: number; y: number; z: number }, force: number, pull?: boolean) => {
-    if (deps.world.playbackMode) return; // replay owns the camera's body
-    const from = new THREE.Vector3(position.x, position.y, position.z);
-    const player = deps.lazyPlayer();
-    if (pull) {
-      player.applyPull(from, force);
-    } else {
-      player.applyKnockback(from, force);
-    }
-  };
-
-  // Server correction — three-tier reconciliation (CFWK model):
-  //  <0.5m error  → ignore: the prediction error is sub-visible, snapping
-  //                 would be a worse warp than the desync it fixes
-  //  <5m          → blend halfway toward server state (soft nudge)
-  //  ≥5m          → hard snap: genuine desync, take the server state
-  networkManager.onCorrection = (_seq: number, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }) => {
-    // During demo playback corrections fire constantly (recorded positions
-    // desync from what the server last accepted) and would warp the replay.
-    if (deps.world.playbackMode) return;
-    const player = deps.lazyPlayer();
-    const dx = player.pos.x - position.x, dy = player.pos.y - position.y, dz = player.pos.z - position.z;
-    const err = Math.sqrt(dx * dx + dy * dy + dz * dz);
-    if (err < 0.5) {
-      logger.info(`Correction ignored: ${err.toFixed(2)}m below snap threshold`);
-      return;
-    }
-    if (err < 5.0) {
-      player.pos.x = position.x + dx * 0.5;
-      player.pos.y = position.y + dy * 0.5;
-      player.pos.z = position.z + dz * 0.5;
-      player.vel.set(velocity.x, velocity.y, velocity.z);
-      player.syncMovement();
-      logger.info(`Correction nudged: ${err.toFixed(2)}m (blended 50%)`);
-      return;
-    }
-    player.pos.set(position.x, position.y, position.z);
-    player.vel.set(velocity.x, velocity.y, velocity.z);
-    // NEVER touch yaw/pitch — the server echoes our last *accepted*
-    // rotation, which can be seconds stale. Aim is client-authoritative;
-    // snapping it warps the camera 40-60° for no gameplay reason.
-    void rotation;
-    player.syncMovement();
-  };
-
-  // Declared remote teleport (another player's warp): snap the visual —
-  // interpolating across a 50m gap reads as a rocket-flight glitch
-  networkManager.onRemoteTeleport = (playerId: string, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }) => {
-    const rp = deps.world.remotePlayers.get(playerId);
-    if (!rp) return;
-    rp.teleportTo(new THREE.Vector3(position.x, position.y, position.z));
-    void velocity; // next tick record carries it — no need to touch internals
-  };
-
-  // Register player kill handler (lethal kills)
-  networkManager.onPlayerKill = (shooterId: string, targetId: string) => {
-    if (deps.world.playbackMode) return;
-    deps.world.killCounts.set(shooterId, (deps.world.killCounts.get(shooterId) ?? 0) + 1);
-    // Check if local player was killed
-    if (targetId === nm().getLocalPlayerId()) {
-      logger.info(`Local player killed by ${shooterId}`);
-      const player = deps.lazyPlayer();
-      player.isDead = true;
-      player.health = 0;
-      deps.lazyHud().hide();
-      deps.lazyHud().setDeathOverlay(true);
-      deps.fragMessages.show(shooterId === 'environment'
-        ? `YOU DIED\n${player.lastDamageSource || 'claimed by the wasteland'}`
-        : `YOU DIED\nfragged by ${shooterId}`);
-      return;
-    }
-
-    // Show frag message if local player got the kill
-    if (shooterId === nm().getLocalPlayerId()) {
-      deps.fragMessages.show(`FRAGGED PLAYER!`);
-      sfx.killConfirm();
-    }
-
-    // Mark player as dead in NetworkManager immediately so main loop knows
-    const playerData = nm().getPlayers().get(targetId);
-    if (playerData) {
-      playerData.isDead = true;
-      playerData.health = 0;
-    }
-
-    const remotePlayer = deps.world.remotePlayers.get(targetId);
-    if (remotePlayer) {
-      // Find matching explosion from this shooter
-      let explosionPos: THREE.Vector3 | undefined;
-      let explosionForce: number | undefined;
-      for (const exp of deps.explosionTracker.getRecentExplosions()) {
-        if (exp.shooterId === shooterId) {
-          explosionPos = exp.position;
-          explosionForce = exp.force;
-          break;
-        }
-      }
-
-      // Play death animation (ragdoll physics with explosion impulse)
-      remotePlayer.playDeath(explosionPos, explosionForce);
-
-      // Spawn player debris at player center (position is feet, so add half height)
-      const debris = new PlayerDebris(deps.lazyScene(), deps.lazyTerrain(), remotePlayer.position.x, remotePlayer.position.y + 1.0, remotePlayer.position.z);
-      deps.world.playerDebrisList.push(debris);
-
-      // Hide the model immediately
-      remotePlayer.hide();
-
-      // Remove HUD indicator on kill
-      deps.lazyHud().removePlayerIndicator(targetId);
-      deps.lazyHealthBarSystem().removeBar(targetId);
-
-      logger.info(`Player ${targetId} killed by ${shooterId}`);
-    }
-  };
-
-  // Register jump handler for remote players
-  networkManager.onPlayerJump = (_playerId: string, position: { x: number; y: number; z: number }) => {
-    const pos = new THREE.Vector3(position.x, position.y, position.z);
-    deps.lazyEffects().spawnJumpDust(pos);
-  };
-
-  // Register jetpack handler for remote players
-  networkManager.onPlayerJetpack = (_playerId: string, position: { x: number; y: number; z: number }) => {
-    const pos = new THREE.Vector3(position.x, position.y, position.z);
-    deps.lazyEffects().spawnJetpack(pos);
-  };
-
-  // Register player update handler for remote players
-  networkManager.onPlayerUpdate = (playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }, _timestamp: number, velocity?: { x: number; y: number; z: number }) => {
-    // Safety: never process local player as a remote player
-    if (playerId === nm().getLocalPlayerId()) return;
-    let remotePlayer = deps.world.remotePlayers.get(playerId);
-    if (remotePlayer) {
-      remotePlayer.update(position, rotation, REMOTE_PLAYER_FIXED_DT, nm().getPing(), velocity);
-      if (Math.random() < DEBUG_LOG_SAMPLE_RATE) { // 5% of updates log for debugging
-        logger.debug(`onPlayerUpdate: ${playerId} at ${position.x.toFixed(1)},${position.y.toFixed(1)},${position.z.toFixed(1)}`);
-      }
-      return;
-    }
-
-    // Don't create RemotePlayer for dead players — wait for respawn event
-    const playerData = nm().getPlayers().get(playerId);
-    if (playerData?.isDead) return;
-    logger.debug(`onPlayerUpdate called for unknown player: ${playerId}, creating...`);
-    ensureRemotePlayer(playerId, position, 'onPlayerUpdate');
-  };
-
-  // Server-authoritative projectile handlers
-  const remoteProjectiles = new Map<string, Projectile>();
-
-  networkManager.onProjectileCreated = (projectileId: string, ownerId: string, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }, weaponType?: number) => {
-    if (deps.world.playbackMode) return; // live shots don't belong in the replay
-    // For own projectiles: link the pending local projectile to this server ID
-    if (ownerId === nm().getLocalPlayerId()) {
-      const localProjectile = deps.world.projectileRegistry.pending.shift();
-      if (localProjectile) {
-        localProjectile.serverProjectileId = projectileId;
-        deps.world.projectileRegistry.byId.set(projectileId, localProjectile);
-        deps.world.projectileRegistry.pendingSince.delete(localProjectile); // Clean up timestamp
-      }
-      return;
-    }
-
-    const vel = new THREE.Vector3(velocity.x, velocity.y, velocity.z);
-    const origin = new THREE.Vector3(position.x, position.y, position.z);
-    const dir = vel.clone().normalize();
-    const cfg = (weaponType !== undefined ? getProjectileConfig(weaponType) : undefined) ?? ROCKET_CONFIG;
-    const remoteProjectile = new Projectile(deps.lazyScene(), origin, dir, new THREE.Vector3(0, 0, 0), cfg);
-    remoteProjectile.vel.copy(vel); // override with exact server velocity
-    remoteProjectile.isRemote = true;
-    remoteProjectile.spawnedThisFrame = false; // remote projectiles don't need first-frame skip
-    // Fast-forward by half-RTT: the server relays the spawn ~half a round-trip
-    // late, so without this the projectile lags behind the shooter's real one
-    const lead = Math.min(0.15, nm().getPing() / 2000);
-    if (lead > 0) {
-      remoteProjectile.advanceBy(lead);
-    }
-    deps.world.projectiles.push(remoteProjectile);
-    remoteProjectiles.set(projectileId, remoteProjectile);
-    // Gun recoil kick on the shooter's remote model
-    deps.world.remotePlayers.get(ownerId)?.fire();
-    sfx.shotAt(origin, cfg.weaponType);
-  };
-
-  networkManager.onProjectileDestroyed = (projectileId: string) => {
-    if (deps.world.playbackMode) return;
-    // Kill remote projectile (explode so trail particles fade out naturally).
-    // Delete the map entry now — the visual fade lives on world.projectiles,
-    // not this map; keeping dead entries leaks one record per shot ever fired.
-    const remoteProjectile = remoteProjectiles.get(projectileId);
-    if (remoteProjectile) {
-      remoteProjectile.explode();
-      remoteProjectiles.delete(projectileId);
-    }
-    // Kill local projectile if server says it's gone - explode to let trails fade
-    const localProjectile = deps.world.projectileRegistry.byId.get(projectileId);
-    if (localProjectile) {
-      localProjectile.explode();
-      deps.world.projectileRegistry.byId.delete(projectileId);
-      // Also remove from pending queue if it's still there (shouldn't happen but defensive)
-      const pendingIndex = deps.world.projectileRegistry.pending.indexOf(localProjectile);
-      if (pendingIndex !== -1) {
-        deps.world.projectileRegistry.pending.splice(pendingIndex, 1);
-        deps.world.projectileRegistry.pendingSince.delete(localProjectile);
-      }
-    }
-  };
-
-  // Register player respawn handler
-  networkManager.onPlayerRespawn = (playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }) => {
-    if (deps.world.playbackMode) return;
-    // Check if local player respawned
-    if (playerId === nm().getLocalPlayerId()) {
-      logger.info(`Local player respawned at ${JSON.stringify(position)}`);
-      const player = deps.lazyPlayer();
-      player.isDead = false;
-      player.health = player.maxHealth;
-      player.lastDamageSource = ''; // stale attribution shouldn't survive a life
-      player.vel.set(0, 0, 0);
-      player.pos.set(position.x, position.y, position.z);
-      deps.setLastSentPos({ x: position.x, y: position.y, z: position.z });
-      player.yaw = rotation.yaw;
-      player.pitch = rotation.pitch;
-      player.syncMovement(); // reseat controller or its snapshot overwrites the respawn
-      player.markTeleport(); // spawn point can sit >50m from the corpse
-      deps.lazyHud().show();
-      deps.lazyHud().setDeathOverlay(false);
-      return;
-    }
-
-    // Reset existing remote player on respawn
-    const remotePlayer = deps.world.remotePlayers.get(playerId);
-    if (remotePlayer) {
-      const playerData = nm().getPlayers().get(playerId);
-      const internalId = playerData?.internalId || 'unknown';
-      remotePlayer.respawn(position);
-      logger.info(`Player ${playerId} (internalId: ${internalId}) respawned at ${JSON.stringify(position)}`);
-    } else {
-      // Create new remote player if they don't exist (shouldn't happen but safety check)
-      ensureRemotePlayer(playerId, position, 'onPlayerRespawn');
-    }
-
-    // Re-add HUD indicator on respawn (it was removed on kill)
-    // The updatePlayerIndicator in the main loop will recreate it automatically
-  };
-
-  // ---- Server-owned creatures (balls) ------------------------------------
-  // Events only — the client replays the shared sim between segments.
-  networkManager.onBallSpawn = (data) => {
-    if (deps.world.playbackMode) return;
-    deps.entities().netBallSpawn(data);
-  };
-  networkManager.onBallSegment = (data) => {
-    if (deps.world.playbackMode) return;
-    deps.entities().netBallSegment(data);
-  };
-  networkManager.onBallDie = (data) => {
-    if (deps.world.playbackMode) return;
-    deps.entities().netBallDie(data);
-  };
-  networkManager.onBallRoster = (data) => {
-    if (deps.world.playbackMode) return;
-    for (const b of data.balls) deps.entities().netBallSpawn(b);
-  };
-
-  // Register playerJoined handler (for new players joining after initial connection)
-  networkManager.onPlayerJoined = (playerId: string, position: { x: number; y: number; z: number }, _rotation: { yaw: number; pitch: number }) => {
-    if (deps.world.playbackMode) return;
-    // Safety: server excludes self from playerJoined broadcast, but guard anyway
-    if (playerId === nm().getLocalPlayerId()) return;
-    const playerData = nm().getPlayers().get(playerId);
-    const internalId = playerData?.internalId || 'unknown';
-    const terrainHeight = deps.lazyTerrain().getHeight(position.x, position.z);
-    const aboveTerrain = position.y >= terrainHeight;
-    logger.info(`Player joined: ${playerId} (internalId: ${internalId}) at ${JSON.stringify(position)} | Terrain height: ${terrainHeight.toFixed(1)} | ${aboveTerrain ? '✓ Above/at terrain' : '✗ BELOW TERRAIN'}`);
-    // RemotePlayer will be created in the main loop when networkManager.getPlayers() includes this player
-  };
-
-  // Register playerLeft handler — immediate cleanup when server broadcasts playerLeft
-  networkManager.onPlayerLeft = (playerId: string) => {
-    const remotePlayer = deps.world.remotePlayers.get(playerId);
-    if (remotePlayer) {
-      remotePlayer.dispose();
-      deps.world.remotePlayers.delete(playerId);
-      deps.lazyHud().removePlayerIndicator(playerId);
-      deps.lazyHealthBarSystem().removeBar(playerId);
-      logger.info(`Remote player removed (playerLeft): ${playerId}`);
-    }
-  };
-
-  // Register gameState handler (for initial connection and reconnection)
-  networkManager.onGameState = (players: GameStatePlayer[], localPlayerState: LocalPlayerState | undefined, roomInfo?: { room?: string; mode?: string; team?: 'alpha' | 'bravo'; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number>; pickups?: { id: number; pos: { x: number; y: number; z: number }; kind?: 'gem' | 'tag' }[]; flags?: { team: 'alpha' | 'bravo'; pos: { x: number; y: number; z: number }; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]; matchEndsAt?: number; map?: { mode?: string; bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } }; structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number }; ambient?: Record<string, number> } }) => {
-    logger.debug(`gameState received, players: ${players.length}`);
-    deps.world.mode = roomInfo?.mode;
-    deps.world.localTeam = roomInfo?.team;
-    if (roomInfo?.scores) deps.world.teamScores = roomInfo.scores;
-    if (roomInfo?.ffaScores) deps.world.ffaScores = new Map(Object.entries(roomInfo.ffaScores));
-    if (roomInfo?.matchEndsAt) {
-      const leftMin = Math.max(0, Math.ceil((roomInfo.matchEndsAt - Date.now()) / 60000));
-      chat.add(null, `match clock — ~${leftMin}m left${leftMin === 0 ? ' (overtime)' : ''}`);
-    }
-    if (roomInfo?.room && roomInfo.room !== 'default') {
-      chat.add(null, `joined room '${roomInfo.room}'${roomInfo.mode ? ` (${roomInfo.mode})` : ''} — ${players.length} other player(s)`);
-    }
-    if (roomInfo?.team) {
-      chat.add(null, `you are on ${roomInfo.team.toUpperCase()}${roomInfo.scores ? ` — ALPHA ${roomInfo.scores.alpha} : BRAVO ${roomInfo.scores.bravo}` : ''}`);
-    }
-    if (roomInfo?.ffaScores && Object.keys(roomInfo.ffaScores).length) {
-      const top = Object.entries(roomInfo.ffaScores).sort((a, b) => b[1] - a[1]).slice(0, 3);
-      chat.add(null, `dm board — ${top.map(([id, s]) => `${id} ${s}`).join(' / ')}`);
-    }
-    // Pickups still lying on the field when we (re)joined.
-    for (const p of roomInfo?.pickups ?? []) addPickup(p.id, p.pos, p.kind ?? 'gem');
-    if (roomInfo?.map?.structures?.length) {
-      buildStructures(roomInfo.map.structures, deps.lazyScene());
-      // Same collider list the server sims against — ball prediction
-      // ricochets off structures identically instead of phasing through.
-      Ball.colliders = structureColliders(roomInfo.map.structures);
-    }
-    if (roomInfo?.map?.arena) {
-      const a = roomInfo.map.arena;
-      buildArenaDome(a, deps.lazyTerrain().getHeight(a.x, a.z), deps.lazyScene());
-    }
-    setAmbientCaps(roomInfo?.map?.ambient);
-    // Flags mid-flight when we joined — same path as a flagUpdate broadcast.
-    if (roomInfo?.flags?.length) networkManager.onFlagUpdate?.(roomInfo.flags);
-
-    if (!localPlayerState) return;
-    logger.debug(`Restoring local player state from gameState: ${JSON.stringify(localPlayerState)}`);
-
-    const player = deps.lazyPlayer();
-    // Restore position and rotation
-    player.pos.set(localPlayerState.position.x, localPlayerState.position.y, localPlayerState.position.z);
-    deps.setLastSentPos({ x: localPlayerState.position.x, y: localPlayerState.position.y, z: localPlayerState.position.z });
-    player.yaw = localPlayerState.rotation.yaw;
-    player.pitch = localPlayerState.rotation.pitch;
-
-    // Restore velocity only if it's a gentle drift — the stored value is
-    // whatever the last packet before disconnect reported, and replaying a
-    // stale knockback/momentum vector on reload produced phantom launches.
-    const v = localPlayerState.velocity;
-    if (v && Math.hypot(v.x, v.y, v.z) < 10) {
-      player.vel.set(v.x, v.y, v.z);
-    } else {
-      player.vel.set(0, 0, 0);
-    }
-
-    // Restore health and death state
-    player.health = localPlayerState.health;
-    player.isDead = localPlayerState.isDead;
-    player.syncMovement(); // reseat controller — restored pos/vel otherwise revert
-
-    // If player was dead, show respawn UI
-    deps.lazyHud().setDeathOverlay(player.isDead);
-    if (player.isDead) {
-      deps.lazyHud().hide();
-    } else {
-      deps.lazyHud().show();
-    }
-
-    logger.debug(`Player state restored from gameState - pos(${localPlayerState.position.x.toFixed(1)},${localPlayerState.position.y.toFixed(1)},${localPlayerState.position.z.toFixed(1)}) vel(${localPlayerState.velocity?.x.toFixed(1) || 0},${localPlayerState.velocity?.y.toFixed(1) || 0},${localPlayerState.velocity?.z.toFixed(1) || 0}) health:${localPlayerState.health} dead:${localPlayerState.isDead}`);
-  };
 }
