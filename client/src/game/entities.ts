@@ -77,7 +77,7 @@ export function createEntities(deps: EntitiesDeps) {
   const ambient = createAmbientSpecies({ deps, kit, targets });
 
   const { crawlers, scarabs, grubs, snakes, rollers } = melee;
-  const { gnats, seekers, rakks } = flyers;
+  const { gnats, seekers, rakks, strifers } = flyers;
   const { turrets, overlords, mines, totems } = siege;
   const { weeds } = ambient;
 
@@ -240,7 +240,7 @@ export function createEntities(deps: EntitiesDeps) {
   }
 
   return {
-    balls, crawlers, scarabs, grubs, snakes, gnats, turrets, rollers, seekers, overlords, mines, totems, rakks, weeds, targets, nuggets,
+    balls, crawlers, scarabs, grubs, snakes, gnats, turrets, rollers, seekers, overlords, mines, totems, rakks, weeds, strifers, targets, nuggets,
     spawnNuggetsAt,
     getNuggetsCollected: () => nuggetsCollected,
     spawnBall,
@@ -258,7 +258,7 @@ export function createEntities(deps: EntitiesDeps) {
     updateBalls,
     updateCrawlers: melee.updateCrawlers, updateScarabs: melee.updateScarabs,
     updateGrubs: melee.updateGrubs, updateSnakes: melee.updateSnakes,
-    updateGnats: flyers.updateGnats, updateSeekers: flyers.updateSeekers, updateRakks: flyers.updateRakks,
+    updateGnats: flyers.updateGnats, updateSeekers: flyers.updateSeekers, updateRakks: flyers.updateRakks, updateStrifers: flyers.updateStrifers,
     updateRollers: melee.updateRollers,
     updateTurrets: siege.updateTurrets, updateOverlords: siege.updateOverlords, updateTotems: siege.updateTotems,
     updateWeeds: ambient.updateWeeds,

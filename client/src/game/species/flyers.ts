@@ -8,6 +8,8 @@ import {
   SEEKER_STING_DAMAGE, SEEKER_STING_FORCE, SEEKER_STING_DIST,
   RAKK_MAX, RAKK_SPAWN_INTERVAL, RAKK_SPAWN_MIN, RAKK_SPAWN_MAX,
   RAKK_CLAW_DAMAGE, RAKK_CLAW_FORCE, RAKK_CLAW_DIST,
+  STRIFER_MAX, STRIFER_SPAWN_INTERVAL, STRIFER_SPAWN_MIN, STRIFER_SPAWN_MAX,
+  STRIFER_BOLT_DAMAGE, STRIFER_BOLT_FORCE,
 } from '../../core/config.js';
 import * as sfx from '../../core/sfx.js';
 import type { Species } from '../speciesKit.js';
@@ -15,6 +17,7 @@ import { PROFILES } from '../targeting.js';
 import { Gnat } from '../../entities/Gnat.js';
 import { Seeker } from '../../entities/Seeker.js';
 import { Rakk } from '../../entities/Rakk.js';
+import { Strifer } from '../../entities/Strifer.js';
 import type { SpeciesCtx } from './context.js';
 
 // Air family — gnats (boid clouds), seekers (darting stingers), rakks
@@ -29,6 +32,7 @@ export function createFlyerSpecies({ deps, kit, targets }: SpeciesCtx) {
   const gnatClouds: { center: THREE.Vector3; nipGate: number }[] = [];
   const seekers: Seeker[] = [];
   const rakks: Rakk[] = [];
+  const strifers: Strifer[] = [];
   const _gnatTarget = new THREE.Vector3();
 
   // ---- Gnats (boid harasser cloud — orbits you, darts for nips) ----
@@ -133,9 +137,30 @@ export function createFlyerSpecies({ deps, kit, targets }: SpeciesCtx) {
   };
   function updateRakks(dt: number): void { updateSpecies(rakkSpecies, dt); }
 
+  // ---- Strifers (standoff strafing drones — orbit, hover, bolt volley) ----
+  function spawnStrifer(uber?: boolean): void {
+    if (deps.lazyDemoManager()?.isPlaying) return;
+    if (atCap(strifers, STRIFER_MAX)) return;
+    const u = uber ?? rollUber();
+    const st = new Strifer(scene, deps.lazyTerrain(), ringPos(STRIFER_SPAWN_MIN, STRIFER_SPAWN_MAX), u);
+    st.onBoltHit = (x) => bite(x, STRIFER_BOLT_FORCE, STRIFER_BOLT_DAMAGE * (x.uber ? 2 : 1),
+      x.uber ? 'raked by an elder strifer' : 'shot down by a strifer');
+    st.onBoltLand = (pos) => deps.lazyEffects().spawnImpact(pos, new THREE.Vector3(0, 1, 0));
+    st.onFire = (x) => sfx.enemyCue(x.pos, 'zap');
+    strifers.push(st);
+    targets.push(st);
+  }
+
+  const striferSpecies: Species<Strifer> = {
+    list: strifers, interval: STRIFER_SPAWN_INTERVAL, t: -30,
+    spawn: spawnStrifer,
+    tick: (st, dt) => { st.update(dt, deps.lazyTerrain(), aggroFor(st, st.pos, dt, PROFILES.flyer), aggroVelFor(st)); kickTrail(st, dt); },
+  };
+  function updateStrifers(dt: number): void { updateSpecies(striferSpecies, dt); }
+
   return {
-    gnats, gnatClouds, seekers, rakks,
-    spawnGnatCloud, spawnSeeker, spawnRakk,
-    updateGnats, updateSeekers, updateRakks,
+    gnats, gnatClouds, seekers, rakks, strifers,
+    spawnGnatCloud, spawnSeeker, spawnRakk, spawnStrifer,
+    updateGnats, updateSeekers, updateRakks, updateStrifers,
   };
 }
