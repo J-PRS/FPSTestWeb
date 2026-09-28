@@ -42,6 +42,10 @@ export interface MapSpec {
    *  gameState so every client builds the same base compounds/cover.
    *  `kind` selects the renderer; `pos` is the piece's center. */
   structures?: StructureSpec[];
+  /** Arena boundary — a dome centered on {x,z} with this radius. Echoed to
+   *  clients for the barrier render; server uses it for out-of-bounds
+   *  checks (future: damage/skid-push on contact). */
+  arena?: { x: number; z: number; radius: number };
 }
 
 export interface StructureSpec {
@@ -112,7 +116,16 @@ export function resolveMapSpec(raw: unknown): MapSpec {
       ? (src as { terrain: string }).terrain
       : undefined,
     structures: parseStructures((src as { structures?: unknown }).structures),
+    arena: parseArena((src as { arena?: unknown }).arena),
   };
+}
+
+function parseArena(raw: unknown): MapSpec['arena'] {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const a = raw as { x?: unknown; z?: unknown; radius?: unknown };
+  if (!Number.isFinite(a.x) || !Number.isFinite(a.z) || !Number.isFinite(a.radius)) return undefined;
+  const radius = Math.max(10, Math.min(750, a.radius as number));
+  return { x: a.x as number, z: a.z as number, radius };
 }
 
 const STRUCT_KINDS = new Set(['box', 'wall', 'pillar', 'ramp']);

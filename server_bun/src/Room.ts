@@ -87,6 +87,7 @@ export class Room {
         ffaScores: () => Object.fromEntries(this.ffaScores),
         bases: this.spec.bases,
         structures: this.spec.structures,
+        arena: this.spec.arena,
         onKill: (pid, shooter) => this.onKill(pid, shooter),
         onHit: (pid, shooter) => this.bots.flinch(pid, shooter),
         flags: () => this.flags?.snapshot() ?? [],
@@ -261,8 +262,10 @@ export class Room {
   private onKill(targetId: string, shooterId: string): void {
     this.flagCarrierDied(targetId);
     const spec = this.modeSpec;
-    if (!spec?.ffa || !this.players.getPlayer(shooterId)) return;
-    this.awardFfa(shooterId, spec.ptsPlayerKill);
+    const shooter = this.players.getPlayer(shooterId);
+    if (!spec || !shooter || spec.ptsPlayerKill <= 0) return;
+    if (spec.ffa) this.awardFfa(shooterId, spec.ptsPlayerKill);
+    else if (shooter.team) this.score(shooter.team, spec.ptsPlayerKill);
   }
 
   /** Team point from a server-observed objective (flag cap, gem touch). */

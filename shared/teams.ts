@@ -44,7 +44,7 @@ export function winner(s: TeamScores, winAt = WIN_NUGGETS): TeamId | null {
 }
 
 // ---- Game modes ----
-export type ModeId = 'nuggets' | 'ctf' | 'dm';
+export type ModeId = 'nuggets' | 'ctf' | 'dm' | 'tdm';
 
 export interface ModeSpec {
   /** HUD label + feed wording. */
@@ -69,6 +69,7 @@ export const MODES: Record<ModeId, ModeSpec> = {
   nuggets: { label: 'NUGGET WARS', teams: true, ffa: false, flags: false, winAt: WIN_NUGGETS, timeLimitS: 900, ptsPlayerKill: 0, ptsCreatureKill: 0 },
   ctf:     { label: 'CAPTURE THE FLAG', teams: true, ffa: false, flags: true, winAt: 5, timeLimitS: 1200, ptsPlayerKill: 0, ptsCreatureKill: 0 },
   dm:      { label: 'DEATHMATCH', teams: false, ffa: true, flags: false, winAt: 100, timeLimitS: 600, ptsPlayerKill: 10, ptsCreatureKill: 1 },
+  tdm:     { label: 'TEAM DEATHMATCH', teams: true, ffa: false, flags: false, winAt: 100, timeLimitS: 900, ptsPlayerKill: 1, ptsCreatureKill: 0 },
 };
 
 /** Flag carry rules — shared client/server. */
