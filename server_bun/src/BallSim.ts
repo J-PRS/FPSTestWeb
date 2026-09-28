@@ -90,6 +90,10 @@ export class BallSim {
     this.attachField(BallSim.parseHeightmap(buf));
   }
 
+  // No humans and no spectators watching → freeze the sim (cheap
+  // hibernation for immortal rooms like 'default' that never dispose).
+  dormant = false;
+
   /** Attach an already-loaded heightfield and start the tick loop — rooms
    *  share one parsed field rather than re-reading the file each. */
   attachField(field: Heightfield): void {
@@ -285,7 +289,7 @@ export class BallSim {
   }
 
   private tick(): void {
-    if (!this.field) return;
+    if (!this.field || this.dormant) return;
     const now = performance.now();
     this.tickAcc += Math.min(now - this.lastTickAt, 1000) / 1000;
     this.lastTickAt = now;
