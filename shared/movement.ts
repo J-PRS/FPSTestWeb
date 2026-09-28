@@ -81,6 +81,15 @@ export class MoveSim {
   private wishJump = false;
   private lastJumpableNormal = { x: 0, y: 1, z: 0 };
   private allowNextJump = true;
+  /** Fixed-step accumulator — the sim integrates at a constant 60Hz on
+   *  both ends so a 144Hz client and a 30Hz server tick produce the same
+   *  trajectory for the same input stream (variable dt is the top source
+   *  of false divergence). Sub-step remainder carries to the next update. */
+  private acc = 0;
+  static readonly STEP = 1 / 60;
+  /** Cap catch-up work after a stall — a huge dt would otherwise spin
+   *  hundreds of steps in one call. */
+  static readonly MAX_DT = 0.25;
 
   constructor(private surface: MoveSurface, initial: MoveState) {
     this.state = initial;
@@ -95,6 +104,14 @@ export class MoveSim {
   }
 
   update(dt: number): void {
+    this.acc += Math.min(dt, MoveSim.MAX_DT);
+    while (this.acc >= MoveSim.STEP) {
+      this.acc -= MoveSim.STEP;
+      this.step(MoveSim.STEP);
+    }
+  }
+
+  private step(dt: number): void {
     // Auto-hop: jump key acts as hold-to-jump.
     this.wishJump = MOVEMENT_CONFIG.autoHop
       ? this.input.jumpHeld
