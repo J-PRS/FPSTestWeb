@@ -282,3 +282,21 @@
   pointer-events: none; z-index: 5; color: #cfe8ff; opacity: 0.7;
   font: 600 13px/1 monospace; letter-spacing: 0.15em; text-shadow: 0 1px 3px #000;
 }
+
+/* Kill feed — top-right, newest at bottom, timed fade */
+#killfeed {
+  position: fixed; top: 84px; right: 14px; display: flex; flex-direction: column;
+  align-items: flex-end; gap: 4px; pointer-events: none; z-index: 6;
+  font: 600 12px/1.2 monospace; letter-spacing: 0.06em;
+}
+.kf-row {
+  padding: 3px 9px; border-radius: 3px; background: rgba(8,14,22,0.55);
+  color: #cdd9e5; text-shadow: 0 1px 2px #000;
+  animation: kfIn 0.18s ease-out;
+  transition: opacity 0.6s;
+}
+.kf-row.me { border-left: 2px solid #ffd54a; }
+.kf-row .kf-arrow { color: #8899aa; }
+.kf-row .kf-t.dead { color: #ff6b6b; }
+.kf-row.fade { opacity: 0; }
+@keyframes kfIn { from { transform: translateX(12px); opacity: 0; } to { transform: none; opacity: 1; } }
