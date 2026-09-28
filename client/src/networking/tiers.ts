@@ -114,13 +114,19 @@ class WebTransportGameTransport implements GameTransport {
 
 async function tryWebTransport(config: ConnectionConfig): Promise<GameTransport | null> {
   if (typeof WebTransport === 'undefined') return null;
-  // WebTransport speaks https:, not wss: — the endpoint shares the host.
-  const https = config.url.replace(/^wss?:/, 'https:');
+  // WT runs on its own QUIC port — ask /wthash (plain HTTP on the WS port)
+  // for the port + the cert's DER SHA-256 so self-signed dev certs pin
+  // without a CA install. Absent/disabled → no tier.
   try {
-    // The probe IS the session — don't handshake twice. If ready resolves
-    // we hand the live transport to the adapter; connect() then just
-    // opens its lanes.
-    const wt = new WebTransport(https);
+    const httpBase = config.url.replace(/^wss?:/, 'http' + (config.url.startsWith('wss') ? 's' : '') + ':').replace(/\/ws$/, '');
+    const info = await (await fetch(`${httpBase}/wthash`)).json();
+    if (!info?.enabled || !info.port || !info.sha256) return null;
+    const host = new URL(httpBase).hostname;
+    const hashBytes = Uint8Array.from(atob(info.sha256), (c) => c.charCodeAt(0));
+    const wt = new WebTransport(`https://${host}:${info.port}`, {
+      serverCertificateHashes: [{ algorithm: 'sha-256', value: hashBytes }],
+    });
+    // The probe IS the session — don't handshake twice.
     await Promise.race([wt.ready, new Promise((_, rej) => setTimeout(rej, 3000))]);
     return new WebTransportGameTransport(config, wt);
   } catch {

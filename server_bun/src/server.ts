@@ -58,7 +58,16 @@ const ROUTES: Record<string, (url: URL) => Response | Promise<Response>> = {
     const room = gameServer.quickRoom(mode);
     return json({ room: room.name, mode: room.mode });
   },
+  // WebTransport discovery: browser clients pin self-signed certs via
+  // serverCertificateHashes — this is the DER SHA-256 of FPS_WT_CERT.
+  '/wthash': () => json(wtInfo() ?? { enabled: false }),
 };
+
+let wtCertHash: string | null = null;
+function wtInfo(): { enabled: true; port: number; sha256: string } | null {
+  if (!wtCertHash) return null;
+  return { enabled: true, port: CONFIG.wtPort, sha256: wtCertHash };
+}
 
 // Admin API — bearer-token guarded (FPS_ADMIN_TOKEN). Unset = closed.
 //   POST /admin/reload?room=X   re-read maps/X.json into the live room
@@ -263,9 +272,14 @@ gameServer.setBunServer(server);
 if (CONFIG.wtPort > 0 && CONFIG.wtCertPath && CONFIG.wtKeyPath) {
   try {
     const { readFileSync: rf } = await import('node:fs');
+    const { createHash, X509Certificate } = await import('node:crypto');
+    const certPem = rf(CONFIG.wtCertPath, 'utf8');
+    // DER hash is what serverCertificateHashes expects — PEM is just the
+    // base64 wrapper, so decode via X509Certificate to get the raw bytes.
+    wtCertHash = createHash('sha256').update(new X509Certificate(certPem).raw).digest('base64');
     void wtServer.start({
       port: CONFIG.wtPort,
-      certPem: rf(CONFIG.wtCertPath, 'utf8'),
+      certPem,
       keyPem: rf(CONFIG.wtKeyPath, 'utf8'),
     });
   } catch (e) {
