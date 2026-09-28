@@ -36,21 +36,26 @@ export function createRemotes(deps: RemotesDeps) {
   const lastTintOf = new Map<string, string>();
   let rosterPollT = 0;
 
+  // RemoteSet lifecycle hooks — world created the set before deps existed.
+  deps.world.remotePlayers.hooks = {
+    create: (id, state) => state.isDead ? undefined : new RemotePlayer(deps.lazyScene(), id, state.position, deps.lazyTerrain()),
+    // Bots are hosted in the room sim — they never ping, so the
+    // dead-socket gate can't apply to them or they render as ghosts.
+    isLive: (id, state) => id.startsWith('BOT-') || state?.ping != null,
+    onCreate: (id, rp) => deps.logger.debug(`CREATED remote player`, { instanceId: rp.instanceId, playerId: id, total: deps.world.remotePlayers.size }),
+    onRemove: (id) => {
+      deps.lazyHud().removePlayerIndicator(id);
+      deps.lazyHealthBarSystem().removeBar(id);
+    },
+  };
+
   function getLastSentPos() { return lastSentPos; }
   function setLastSentPos(pos: { x: number; y: number; z: number }) {
     lastSentPos.x = pos.x; lastSentPos.y = pos.y; lastSentPos.z = pos.z;
   }
 
-  // Remote is worth showing: proven connected (has ping) and either not yet
-  // instantiated or heard from within the 60s stale window. Server bots
-  // never ping — they're hosted in the room sim, not on a socket — so
-  // BOT- ids skip the liveness check entirely.
   function isRemoteActive(playerId: string, players: Map<string, import('../networking/NetworkManager.js').RemotePlayerState>): boolean {
-    const rp = deps.world.remotePlayers.get(playerId);
-    const ps = players.get(playerId);
-    if (!playerId.startsWith('BOT-') && ps?.ping == null) return false;
-    if (!rp) return true;
-    return Date.now() - rp.lastUpdateTime <= 60000;
+    return deps.world.remotePlayers.active(playerId, deps.world.remotePlayers.get(playerId), players.get(playerId));
   }
 
   // Network per-frame work: send position, tick remote players, prune stale ones
@@ -115,13 +120,7 @@ export function createRemotes(deps: RemotesDeps) {
   type WirePlayerState = import('../networking/NetworkManager.js').RemotePlayerState;
 
   function ensureRemote(playerId: string, playerState: WirePlayerState): RemotePlayer | undefined {
-    let remotePlayer = deps.world.remotePlayers.get(playerId);
-    if (!remotePlayer && !playerState.isDead) {
-      remotePlayer = new RemotePlayer(deps.lazyScene(), playerId, playerState.position, deps.lazyTerrain());
-      deps.world.remotePlayers.set(playerId, remotePlayer);
-      deps.logger.debug(`CREATED remote player`, { instanceId: remotePlayer.instanceId, playerId, total: deps.world.remotePlayers.size });
-    }
-    return remotePlayer;
+    return deps.world.remotePlayers.ensure(playerId, playerState);
   }
 
   // Status bitmask → per-effect visuals. One bit = one row; the next
@@ -179,9 +178,8 @@ export function createRemotes(deps: RemotesDeps) {
     // stop sending updates, leaving ghosts standing around. 60s grace covers
     // genuine packet loss; dead reckoning handles shorter gaps. Players that
     // never reported ping (>5s without one) are dead sockets — hide them too.
-    const inactive = Date.now() - remotePlayer.lastUpdateTime > 60000
-      || (!playerId.startsWith('BOT-') && nm.getPlayers().get(playerId)?.ping == null);
-    remotePlayer.setStaleHidden(inactive);
+    const inactive = !deps.world.remotePlayers.active(playerId, remotePlayer, nm.getPlayers().get(playerId));
+    deps.world.remotePlayers.setStale(remotePlayer, inactive);
     if (inactive) {
       deps.lazyHud().removePlayerIndicator(playerId);
       deps.lazyHealthBarSystem().removeBar(playerId);
@@ -199,20 +197,9 @@ export function createRemotes(deps: RemotesDeps) {
 
   // Remove disconnected players and dead players that have shrunk to 0
   function cleanupRemotePlayers(players: Map<string, import('../networking/NetworkManager.js').RemotePlayerState>): void {
-    const hud = deps.lazyHud();
-    for (const [playerId, remotePlayer] of deps.world.remotePlayers) {
-      // `bot:` entries are locally driven (Nugget Wars) — the network
-      // roster knows nothing about them; cleanup is owned by TeamBots.
-      if (playerId.startsWith('bot:')) continue;
-      const gone = !players.has(playerId);
-      const shrunkAway = remotePlayer.scale === 0;
-      if (!gone && !shrunkAway) continue;
-      deps.logger.debug(`REMOVED remote player`, { reason: gone ? 'player left' : 'scale=0', instanceId: remotePlayer.instanceId, playerId });
-      remotePlayer.dispose();
-      deps.world.remotePlayers.delete(playerId);
-      hud.removePlayerIndicator(playerId);
-      deps.lazyHealthBarSystem().removeBar(playerId);
-    }
+    // `bot:` entries are locally driven (Nugget Wars) — the network roster
+    // knows nothing about them; cleanup is owned by TeamBots.
+    deps.world.remotePlayers.prune((id) => id.startsWith('bot:') || players.has(id));
   }
 
   // Scoreboard rows: local player first, then remotes sorted by frags desc
