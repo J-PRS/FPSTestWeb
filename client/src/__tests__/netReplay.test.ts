@@ -7,7 +7,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import recText from './fixtures/duel.rec?raw';
 
-vi.mock('../core/sfx.js', () => ({ at: () => {}, shotAt: () => {}, init: () => {} }));
+vi.mock('../core/sfx.js', () => ({ at: () => {}, shotAt: () => {}, init: () => {}, hitMarker: () => {}, playerHurt: () => {}, shieldHit: () => {}, killConfirm: () => {}, flagCue: () => {} }));
 vi.mock('../entities/PlayerModel.js', () => ({
   // RemotePlayer's GLTF model can't load headless — permissive proxy so any
   // visual method is a no-op while lifecycle code (RemoteSet) runs for real.

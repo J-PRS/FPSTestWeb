@@ -153,12 +153,63 @@ export function mendOff(): void {
   osc('sine', 800, 350, 0.18, 0.15, g);
 }
 
+/** CTF flag stingers — the cue has to read the event AND whose flag it is
+ *  in under a second, before the frag callout is even parsed.
+ *  taken: enemy snatch = urgent rising alarm; ours grabbed = dread drop.
+ *  dropped: muted mid-thud — chase is on.
+ *  returned: clean rising resolve. captured: chime for us, heavy toll for them. */
+export function flagCue(kind: 'taken' | 'dropped' | 'returned' | 'captured', mine: boolean): void {
+  const bus = audio.uiBus, c = ctx();
+  if (!bus || !c) return;
+  const g = c.createGain(); g.connect(bus);
+  if (!play(g, 0.6)) return;
+  const t0 = c.currentTime;
+  const note = (f: number, dt: number, dur: number, peak: number, type: OscillatorType = 'triangle') => {
+    const o = c.createOscillator(); const g2 = c.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(f, t0 + dt);
+    env(g2, t0 + dt, peak, dur);
+    o.connect(g2).connect(g);
+    o.start(t0 + dt); o.stop(t0 + dt + dur + 0.05);
+  };
+  if (kind === 'taken') {
+    if (mine) { note(620, 0, 0.14, 0.22); note(310, 0.12, 0.3, 0.2, 'sine'); } // sinking dread — ours is gone
+    else { note(880, 0, 0.08, 0.18); note(1175, 0.08, 0.14, 0.16); }          // rising alarm — we took theirs
+  } else if (kind === 'dropped') {
+    note(200, 0, 0.12, 0.2, 'sine'); noise(0.08, 0.12, g, 'lowpass', 500, 150);
+  } else if (kind === 'returned') {
+    note(520, 0, 0.09, 0.16); note(780, 0.09, 0.15, 0.14);
+  } else { // captured
+    if (mine) { note(210, 0, 0.35, 0.3, 'sine'); note(140, 0.12, 0.4, 0.28, 'sine'); } // they scored — heavy toll
+    else { for (const [f, dt] of [[523, 0], [659, 0.08], [784, 0.16], [1047, 0.26]] as const) note(f, dt, 0.2, 0.16); }
+  }
+}
+
 export function killConfirm(): void {
   const bus = audio.uiBus, c = ctx();
   if (!bus || !c) return;
   const g = c.createGain(); g.connect(bus);
-  if (!play(g, 0.3)) return;
-  if (sample('powerup', g, 0.5)) return;
-  osc('square', 660, 660, 0.06, 0.15, g);
-  osc('square', 990, 990, 0.12, 0.15, g);
+  if (!play(g, 0.5)) return;
+  // The payoff: a frag should read as IMPACT, not a menu ding. Meaty low
+  // thunk + a metallic frag-bell clang + punch transient, then a short
+  // two-note chime on top so the "confirmed" rise survives the hit.
+  if (layer(g, [
+    ['slam_thud', 0.8, 0.85, 900, 0.3],
+    ['hg_clang', 0.55, 1.5, undefined, 0.22, 0.02],
+    ['punch', 0.4, 1.2, 2500, 0.08],
+  ])) {
+    // chime below still runs — the reward notes on top of the impact
+  } else {
+    osc('sine', 140, 60, 0.22, 0.35, g); // fallback body when the bank's dry
+  }
+  // Rising two-note chime — scheduled manually since osc() has no delay arg
+  const t0 = c.currentTime;
+  for (const [f, dt, dur, peak] of [[740, 0.02, 0.09, 0.16], [1110, 0.1, 0.16, 0.14]] as const) {
+    const o = c.createOscillator(); const g2 = c.createGain();
+    o.type = 'triangle';
+    o.frequency.setValueAtTime(f, t0 + dt);
+    env(g2, t0 + dt, peak, dur);
+    o.connect(g2).connect(g);
+    o.start(t0 + dt); o.stop(t0 + dt + dur + 0.05);
+  }
 }

@@ -3,6 +3,7 @@
 
 import * as THREE from 'three';
 import type { NetCtx } from './ctx.js';
+import * as sfx from '../../core/sfx.js';
 
 const _flagMarker = new THREE.Vector3();
 
@@ -62,11 +63,14 @@ export function wireFlags(ctx: NetCtx): void {
     if (f.state === 'carried') {
       if (iAmCarrier) frag.show('YOU HAVE THE FLAG!');
       else frag.show(mine ? 'OUR FLAG TAKEN!' : 'ENEMY FLAG TAKEN!');
+      sfx.flagCue('taken', mine);
     } else if (f.state === 'dropped') {
       frag.show(mine ? 'OUR FLAG DROPPED' : 'ENEMY FLAG DROPPED');
+      sfx.flagCue('dropped', mine);
     } else if (f.state === 'home') {
       if (prev === 'carried') frag.show(mine ? 'THEY SCORED!' : 'CAPTURED!');
       else frag.show(mine ? 'FLAG RETURNED' : 'ENEMY FLAG RETURNED');
+      sfx.flagCue(prev === 'carried' ? 'captured' : 'returned', mine);
     }
   };
 
