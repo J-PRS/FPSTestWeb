@@ -90,11 +90,6 @@ const _lgD = new THREE.Vector3();
 const _lgP = new THREE.Vector3();   // terrain march point
 const _lgTo = new THREE.Vector3();
 const _lgTo2 = new THREE.Vector3(); // chain-pick scratch
-const _lgHit = new THREE.Vector3();
-const _lgMuzzle = new THREE.Vector3(); // visual start — bottom-right of view
-const _lgR = new THREE.Vector3();   // camera basis vectors
-const _lgU = new THREE.Vector3();
-const _lgF = new THREE.Vector3();
 
 // ?debug — show the real gameplay blast radius as a wireframe sphere on
 // every detonation (the dome VFX is only 80% of it by design)
@@ -223,26 +218,63 @@ export function createCombat(deps: CombatDeps) {
   }
 
   // ---- Update projectiles ----
-  function updateProjectiles(dt: number): void {
-    lg.tickBeam(dt); // beam fades ~80ms after the last tick
-    // Clean up stale pending projectiles (no server response within timeout)
+  // Pending shots that never got a server ack age out — the registry is
+  // the only thing linking our local projectile to its wire id.
+  function prunePendingShots(): void {
     const now = Date.now();
     const registry = deps.world.projectileRegistry;
     for (let i = registry.pending.length - 1; i >= 0; i--) {
       const p = registry.pending[i];
-      const timestamp = registry.pendingSince.get(p) || 0;
-      if (now - timestamp > PENDING_ROCKET_TIMEOUT) {
+      if (now - (registry.pendingSince.get(p) || 0) > PENDING_ROCKET_TIMEOUT) {
         registry.pending.splice(i, 1);
         registry.pendingSince.delete(p);
       }
     }
+  }
 
-    // Get remote player positions for collision (skip dead players)
+  // Mid-air interception: the projectile's sweep tagged a turret shell —
+  // cook it at the exact swept contact, then ripple the mega blast through
+  // neighboring shells with a bounded worklist (no infinite chain).
+  function collectBoltIntercept(p: Projectile): void {
+    if (!p.hitBolt || !deps.consumeBolt) return;
+    const at = p.hitPointValid ? p.hitPoint : p.pos;
+    deps.consumeBolt(p.hitBolt);
+    boltCookoff(at);
+    if (!deps.cookBoltsNear) return;
+    let frontier = deps.cookBoltsNear(at, BOLT_CHAIN_RADIUS);
+    for (let pass = 0; pass < BOLT_CHAIN_PASSES && frontier.length; pass++) {
+      for (const bp of frontier) boltCookoff(bp);
+      frontier = deps.cookBoltsNear(frontier[0], BOLT_CHAIN_RADIUS);
+    }
+  }
+
+  // Sticky chain: one pop cooks every sibling bomb inside its blast —
+  // BFS so the detonation ripples outward through spaced bombs.
+  function chainStickies(src: Projectile): void {
+    let frontier: Projectile[] = [src];
+    for (let pass = 0; pass < 4 && frontier.length; pass++) {
+      const next: Projectile[] = [];
+      for (const s of frontier) {
+        for (const q of deps.world.projectiles) {
+          if (!q.config.sticks || q.exploded || q === s) continue;
+          if (q.pos.distanceToSquared(s.pos) <= src.config.aoeRadius * src.config.aoeRadius) {
+            q.explode();
+            next.push(q);
+          }
+        }
+      }
+      frontier = next;
+    }
+  }
+
+  function updateProjectiles(dt: number): void {
+    lg.tickBeam(dt); // beam fades ~80ms after the last tick
+    prunePendingShots();
+
     const remotePlayerPositions = _remotePlayerPositions;
     remotePlayerPositions.clear();
     deps.world.remotePlayers.forEach((rp, playerId) => {
-      if (rp.isDead) return;
-      remotePlayerPositions.set(playerId, rp.position);
+      if (!rp.isDead) remotePlayerPositions.set(playerId, rp.position);
     });
 
     // Live turret shells — collected once per frame, swept inside each
@@ -253,45 +285,12 @@ export function createCombat(deps: CombatDeps) {
       const p = deps.world.projectiles[i];
       p.update(dt, deps.lazyTerrain(), deps.targets, remotePlayerPositions, bolts);
 
-      // Mid-air interception: the projectile's sweep tagged a bolt.
-      // hitPoint is the exact swept contact — both cookoffs land there.
-      if (p.hitBolt && deps.consumeBolt) {
-        const at = p.hitPointValid ? p.hitPoint : p.pos;
-        deps.consumeBolt(p.hitBolt);
-        boltCookoff(at);
-        // Chain reaction — the mega blast cooks neighboring shells. A
-        // bounded worklist so one chain can ripple outward but not loop.
-        if (deps.cookBoltsNear) {
-          let frontier = deps.cookBoltsNear(at, BOLT_CHAIN_RADIUS);
-          for (let pass = 0; pass < BOLT_CHAIN_PASSES && frontier.length; pass++) {
-            for (const bp of frontier) boltCookoff(bp);
-            frontier = deps.cookBoltsNear(frontier[0], BOLT_CHAIN_RADIUS);
-          }
-        }
-      }
+      collectBoltIntercept(p);
 
       if (p.exploded && !p.explosionProcessed) {
         p.explosionProcessed = true;
         handleProjectileImpact(p);
-        // Sticky chain: the pop cooks every sibling bomb inside its blast
-        // radius — stack 3 under a door and they go off as one triple boom.
-        // BFS so a chain ripples outward through spaced bombs.
-        if (p.config.sticks) {
-          let frontier: Projectile[] = [p];
-          for (let pass = 0; pass < 4 && frontier.length; pass++) {
-            const next: Projectile[] = [];
-            for (const src of frontier) {
-              for (const q of deps.world.projectiles) {
-                if (!q.config.sticks || q.exploded || q === src) continue;
-                if (q.pos.distanceToSquared(src.pos) <= p.config.aoeRadius * p.config.aoeRadius) {
-                  q.explode();
-                  next.push(q);
-                }
-              }
-            }
-            frontier = next;
-          }
-        }
+        if (p.config.sticks) chainStickies(p);
       }
 
       if (p.dead) {
