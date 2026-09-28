@@ -115,7 +115,11 @@ export class Room {
     if (this.modeSpec?.teams) {
       this.pickups = new RoomPickups(this);
       this.pickups.onCollect = (pid) => {
-        const team = this.players.getPlayer(pid)?.team;
+        const p = this.players.getPlayer(pid);
+        if (!p) return;
+        // Back the collector's next heal claim — the gem IS the heal.
+        p.healCredit += 25;
+        const team = p.team;
         if (team === 'alpha' || team === 'bravo') this.score(team);
       };
     }

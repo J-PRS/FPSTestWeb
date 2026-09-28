@@ -370,14 +370,23 @@ export class CombatHandler {
     this.applyHit('environment', playerId, damage, result, 'Player hit');
   }
 
-  // Client-claimed heal (nugget pickups) — self-only, hard-capped per call
-  // so it can't be spammed into invincibility. No broadcast: health rides
-  // the next tickUpdate; forceSend makes sure it isn't delta-suppressed.
+  // Client-claimed heal — self-only. Team-mode rooms require credit the
+  // server granted on a gem touch; elsewhere the claim stays free-form
+  // (local nuggets in non-team rooms have no server backing). No
+  // broadcast: health rides the next tickUpdate; forceSend makes sure
+  // it isn't delta-suppressed.
   handleHeal(playerId: string, msg: Extract<ClientMessage, { type: 'heal' }>): void {
     const player = this.playerManager.getPlayer(playerId);
     if (!player || player.isDead) return;
     const heal = Math.min(25, Math.max(1, Math.round(msg.amount)));
-    player.health = Math.min(CONFIG.playerMaxHealth, player.health + heal);
+    if (this.teamMode) {
+      if (player.healCredit <= 0) return;
+      const applied = Math.min(heal, player.healCredit);
+      player.healCredit -= applied;
+      player.health = Math.min(CONFIG.playerMaxHealth, player.health + applied);
+    } else {
+      player.health = Math.min(CONFIG.playerMaxHealth, player.health + heal);
+    }
     player.forceSendUntil = Date.now() + FORCE_SEND_MS;
     logger.info('Player healed', { playerId, heal, health: player.health });
   }

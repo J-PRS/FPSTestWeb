@@ -62,4 +62,8 @@ export interface PlayerState {
   // no-ops on this player. Set on join/respawn; firing clears it —
   // shooting from inside your own shield is the standard trade.
   protectedUntil: number;
+  // Heal credit: team-mode rooms only accept heal claims backed by a
+  // server-observed gem touch (+25 per gem). Without it the self-heal
+  // claim (clamped 25/call) is a free-invincibility lever.
+  healCredit: number;
 }
