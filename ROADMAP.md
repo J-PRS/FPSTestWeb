@@ -240,9 +240,11 @@ surface. Detailed research lives in `_reports/`; this file is the current truth.
 
 ### Later / research needed
 - Client prediction + reconciliation for self (currently trust + correct).
-- Replay formalization — record.ts/replay.ts capture live wire streams and
-  re-decode them offline (regression + decode-cost benchmarks landed).
-  Remaining: replay through full client netHandlers, not just the decoder.
+- ~~Replay formalization~~ — DONE 2026-10-03: `netReplay.test.ts` replays a
+  real `.rec` capture (live duel room, fleet+server bots — hits, kills,
+  projectiles, tick frames) through actual `handleMessage`/`handleBinaryMessage`
+  headlessly; asserts remote roster + entity/HUD routing. Regression net for
+  "decodes fine, handler drops it". Fixture: `__tests__/fixtures/duel.rec`.
 - ~~`ServerSim` registry~~ — landed as `room.sims`; bots/flags tick through
   it. Deployable turrets server-side are the next sim candidate.
 - Voice/avatars/monetization — out of scope until core loops land.
