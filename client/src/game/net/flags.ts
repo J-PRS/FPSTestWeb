@@ -40,8 +40,31 @@ export function wireFlags(ctx: NetCtx): void {
     flagMeshes.set(team, g);
     return g;
   };
+  // Center-screen callouts on flag transitions — the Tribes "FLAG TAKEN"
+  // beat. Previous state decides what happened: →carried = grab,
+  // carried→home = capture, dropped→home = return/reset.
+  const prevState = new Map<string, string>();
+  const callout = (f: { team: 'alpha' | 'bravo'; state: string; carrier: string | null }) => {
+    const prev = prevState.get(f.team);
+    prevState.set(f.team, f.state);
+    if (prev === f.state || prev === undefined) return;
+    const mine = f.team === deps.world.localTeam;
+    const iAmCarrier = f.carrier === networkManager.getLocalPlayerId();
+    const frag = deps.fragMessages;
+    if (f.state === 'carried') {
+      if (iAmCarrier) frag.show('YOU HAVE THE FLAG!');
+      else frag.show(mine ? 'OUR FLAG TAKEN!' : 'ENEMY FLAG TAKEN!');
+    } else if (f.state === 'dropped') {
+      frag.show(mine ? 'OUR FLAG DROPPED' : 'ENEMY FLAG DROPPED');
+    } else if (f.state === 'home') {
+      if (prev === 'carried') frag.show(mine ? 'THEY SCORED!' : 'CAPTURED!');
+      else frag.show(mine ? 'FLAG RETURNED' : 'ENEMY FLAG RETURNED');
+    }
+  };
+
   networkManager.onFlagUpdate = (flags) => {
     for (const f of flags) {
+      callout(f);
       const g = ensureFlagMesh(f.team);
       g.position.set(f.pos.x, f.pos.y, f.pos.z);
       if (f.state === 'carried' && f.carrier) flagCarriers.set(f.team, f.carrier);
