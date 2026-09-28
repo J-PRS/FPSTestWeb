@@ -69,5 +69,5 @@
 - **Ops items needing JP's domain+VPS:** TURN server, CA cert for WebTransport — see `_docs/2026-09-28_deploy-netcode-v2.md`
 - **Post-processing fog pass** (medium complexity) — depth buffer → reconstruct position → apply sky-gradient fog per pixel. Eliminates all color sync issues permanently. See `_reports/fog-sky-blending-research.md` for details.
 - **w4 mortar palette** — authored albedo near-black; normalization lifts but it stays darkest. JP's call.
-- **Remote fire events for anim** — projectileSpawn drives muzzle flash/shoot pose already; richer (weapon type) could pick per-gun poses later.
+- ~~**Remote fire events for anim**~~ — DONE: `playerShot` relays hitscan/melee trigger-pulls with weaponType; observers get positional audio, recoil anim, weapon-tinted muzzle flash, LG beam flash.
 - **Remove deprecated files** — `server/` old Node.js server, `.deprecated`/`.old` files — user's call when to remove
