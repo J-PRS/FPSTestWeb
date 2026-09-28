@@ -370,6 +370,21 @@ export class GameServer {
     return n;
   }
 
+  /** Server-browser card: what a master list / LAN browser displays per
+   *  host. Cheap to poll — one row per room, no per-player data. */
+  getServerInfo() {
+    const uptimeS = Math.floor((Date.now() - this.ops.startedAt) / 1000);
+    return {
+      name: CONFIG.serverName,
+      region: CONFIG.serverRegion || undefined,
+      tickRate: CONFIG.tickRate,
+      maxPlayers: CONFIG.maxPlayers,
+      players: this.totalPlayers(),
+      uptimeS,
+      rooms: this.listRooms(),
+    };
+  }
+
   getHealthStatus(): { status: string; players: number; maxPlayers: number; tickRate: number } {
     return {
       status: 'running',

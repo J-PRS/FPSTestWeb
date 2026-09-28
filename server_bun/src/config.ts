@@ -60,6 +60,10 @@ export const CONFIG = {
   // Admin API bearer token for /admin/* (hot-reload, kick, end match).
   // Unset = admin endpoints disabled entirely — no accidental open admin.
   adminToken: envStr('FPS_ADMIN_TOKEN', ''),
+  // Server-browser identity — what a master list / LAN browser shows.
+  serverName: envStr('FPS_SERVER_NAME', 'kribes server'),
+  // Free-text label (e.g. 'eu', 'lan', 'jp-lan') — clients just display it.
+  serverRegion: envStr('FPS_SERVER_REGION', ''),
 
   rateLimits: {
     position: { maxCount: 30, windowMs: 1000 },
