@@ -12,6 +12,7 @@
 import type { Vec3 } from './types.ts';
 import type { Room } from './Room.ts';
 import { FLAG_PICKUP_R, FLAG_HOME_R, FLAG_RESET_S, TEAMS, type TeamId } from '../../shared/teams.ts';
+import { logger } from './logger.ts';
 
 export type FlagState = 'home' | 'carried' | 'dropped';
 
@@ -99,6 +100,7 @@ export class RoomFlags {
         const cdx = f.pos.x - ownBase.x, cdz = f.pos.z - ownBase.z;
         if (carrier.team !== f.team && ownFlag.state === 'home'
           && Math.sqrt(cdx * cdx + cdz * cdz) <= FLAG_HOME_R) {
+          logger.info('Flag captured', { room: this.room.name, flag: f.team, by: carrier.id });
           f.state = 'home';
           f.pos = { ...f.home };
           f.carrier = null;
@@ -123,10 +125,12 @@ export class RoomFlags {
       const t = this.nearestTouching(f);
       if (!t) continue;
       if (t.team === f.team && f.state === 'dropped') {
+        logger.info('Flag returned', { room: this.room.name, flag: f.team, by: t.id });
         f.state = 'home';
         f.pos = { ...f.home };
         this.dirty = true;
       } else if (t.team && t.team !== f.team) {
+        logger.info('Flag grabbed', { room: this.room.name, flag: f.team, by: t.id });
         f.state = 'carried';
         f.carrier = t.id;
         this.dirty = true;
