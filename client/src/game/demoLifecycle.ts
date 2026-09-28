@@ -68,12 +68,26 @@ export function createDemoLifecycle(deps: DemoLifecycleDeps) {
     playbackProjectiles,
     playbackProjectileById,
     playbackProjectileOrigin,
+    beams: [],
+    beamPool: [],
     get damageNumberManager() { return deps.damageNumberManager(); },
     get fragMessages() { return deps.fragMessages(); },
     get hud() { return deps.lazyHud(); },
   };
 
   function updatePlaybackProjectiles(dt: number): void {
+    // Fade playback rail beams — pooled alongside the projectiles that spawn them.
+    for (let i = playbackWorld.beams.length - 1; i >= 0; i--) {
+      const b = playbackWorld.beams[i];
+      b.life -= dt;
+      if (b.life <= 0) {
+        deps.lazyScene().remove(b.mesh);
+        playbackWorld.beamPool.push(b);
+        playbackWorld.beams.splice(i, 1);
+      } else {
+        b.mat.opacity = 0.85 * (b.life / b.maxLife);
+      }
+    }
     for (let i = playbackProjectiles.length - 1; i >= 0; i--) {
       const r = playbackProjectiles[i];
       r.update(dt, deps.lazyTerrain());
@@ -146,6 +160,9 @@ export function createDemoLifecycle(deps: DemoLifecycleDeps) {
     deps.world.aoeGizmos.length = 0;
     for (const d of deps.world.playerDebrisList) d.dispose();
     deps.world.playerDebrisList.length = 0;
+    for (const b of playbackWorld.beams) deps.lazyScene().remove(b.mesh);
+    playbackWorld.beamPool.push(...playbackWorld.beams);
+    playbackWorld.beams.length = 0;
   }
 
   // Snapshot existing alive balls into the demo recording — needed when recording

@@ -21,6 +21,16 @@ import { ChildLogger } from '../core/Logger.js';
 
 const logger = new ChildLogger('DemoPlayback');
 
+// A fading additive rod from→to — the playback-side twin of
+// EffectsManager.spawnBeam, kept local because playback has no
+// EffectsManager reference (it owns its own registries, not the live one).
+export interface PlaybackBeam {
+  mesh: THREE.Mesh;
+  mat: THREE.MeshBasicMaterial;
+  life: number;
+  maxLife: number;
+}
+
 // Shared mutable game state the reconstruction code needs. Arrays/maps are
 // live references — playback mutates them in place.
 export interface PlaybackWorld {
@@ -36,9 +46,36 @@ export interface PlaybackWorld {
   playbackProjectiles: Projectile[];
   playbackProjectileById: Map<number, Projectile>;
   playbackProjectileOrigin: Map<number, THREE.Vector3>;
+  beams: PlaybackBeam[];
+  beamPool: PlaybackBeam[];
   damageNumberManager: DamageNumberManager;
   fragMessages: FragMessages;
   hud: HUD;
+}
+
+const beamGeo = new THREE.CylinderGeometry(1, 1, 1, 6, 1, true);
+const _beamDir = new THREE.Vector3();
+const _beamUp = new THREE.Vector3(0, 1, 0);
+
+export function spawnPlaybackBeam(world: PlaybackWorld, from: THREE.Vector3, to: THREE.Vector3, colorHex = 0x99eeff): void {
+  _beamDir.subVectors(to, from);
+  const len = _beamDir.length();
+  if (len < 0.01) return;
+  let b = world.beamPool.pop();
+  if (!b) {
+    const mat = new THREE.MeshBasicMaterial({
+      transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
+    });
+    b = { mesh: new THREE.Mesh(beamGeo, mat), mat, life: 0, maxLife: 0 };
+  }
+  b.mesh.position.copy(from).addScaledVector(_beamDir, 0.5);
+  b.mesh.quaternion.setFromUnitVectors(_beamUp, _beamDir.normalize());
+  b.mesh.scale.set(0.14, len, 0.14);
+  b.mat.color.setHex(colorHex);
+  b.mat.opacity = 0.85;
+  b.life = b.maxLife = 0.35;
+  world.scene.add(b.mesh);
+  world.beams.push(b);
 }
 
 const FF_DT = 1 / 60;
@@ -157,10 +194,17 @@ function reconstructSeekProjectile(world: PlaybackWorld, ev: ProjectileEvent, de
 function spawnPlaybackProjectile(world: PlaybackWorld, ev: ProjectileEvent): Projectile {
   const origin = new THREE.Vector3(ev.posX, ev.posY, ev.posZ);
   const velocity = new THREE.Vector3(ev.velX, ev.velY, ev.velZ);
-  const r = new Projectile(world.scene, origin, new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 0, 0), getProjectileConfig(ev.weaponType) ?? ROCKET_CONFIG);
+  const cfg = getProjectileConfig(ev.weaponType) ?? ROCKET_CONFIG;
+  const r = new Projectile(world.scene, origin, new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 0, 0), cfg);
   r.isRemote = true;
   r.spawnedThisFrame = false;
   r.vel.copy(velocity);
+  // Ray-burst replicas discharge deterministically — same hook as the live
+  // wire path so replays paint the rail beam too.
+  if (cfg.rayBurst) {
+    const beamColor = cfg.glowColor;
+    r.onRayBurst = (from, to) => spawnPlaybackBeam(world, from, to, beamColor);
+  }
   world.playbackProjectiles.push(r);
   world.playbackProjectileById.set(ev.projectileId, r);
   world.playbackProjectileOrigin.set(ev.projectileId, origin.clone());

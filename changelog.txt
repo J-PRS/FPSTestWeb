@@ -1,3 +1,5 @@
+2026-10-03 - demo playback: railgun ray-burst beams render in replays (own pooled beam fx, onRayBurst hooked on playback projectile spawn)
+
 
 2026-09-30 13:45 - tests: pin melee AOE claim (no projectile, reach-validated) — the Sep-28 'Melee id=null' rejects predated the fix
 2026-10-02  Rubberband warn metric fixed: the bounce check compared predicted pos to the raw event point minus speed·age — assuming the leg kept flying straight, so a bounced ball (truth reversed direction) overcounted the gap up to 2× and flooded client_warning with thousands of lines. Now compares against truth advanced along the event's own velocity (pos + vel·age), and the bounce/stall threshold scales with approach speed (max(12, speed·0.6)) since a terminal ball legitimately overshoots a bounce tick. Warn block extracted to rubberbandCheck() — netBallSegment back under the complexity cap.
