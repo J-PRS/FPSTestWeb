@@ -1,3 +1,4 @@
+2026-09-26  netcode v2 seam: GameTransport.sendUnreliable lane; position frames route through it (degrades to WS on TCP)
 2026-09-26  tick fanout: per-recipient record list now reuses scratchOthers (zero alloc on the hot path); netcode v2 design doc + NetChannel seam in shared/
 2026-09-26  maps: henge (CTF valley bases w/ elevated catwalks, megalith ring + lintel caps mid, slab cover lanes)
 2026-09-26  Belt slot rework: 6 throwables (disc/grenade/cluster/javelin/sticky/impact) on one onBelt dispatch; cluster bomblet damage is server-side scatter
