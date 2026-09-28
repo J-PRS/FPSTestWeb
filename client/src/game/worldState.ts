@@ -6,6 +6,8 @@ import type { ScorchDecal } from '../effects/scorch.js';
 import type { Implosion } from '../effects/implosion.js';
 import type { AoeGizmo } from '../effects/aoeGizmo.js';
 import { createProjectileRegistry, type ProjectileRegistry } from './projectileRegistry.js';
+import { RemoteSet } from './net/RemoteSet.js';
+import type { RemotePlayerState } from '../networking/NetworkManager.js';
 
 /**
  * The shared mutable world: every entity collection the game modules
@@ -15,7 +17,9 @@ import { createProjectileRegistry, type ProjectileRegistry } from './projectileR
  * `world.projectiles` without main.ts shuttling each list through deps.
  */
 export interface WorldState {
-  remotePlayers: Map<string, RemotePlayer>;
+  /** Remote players — lifecycle (spawn/stale/prune) lives in RemoteSet;
+   *  hooks are wired by createRemotes once the deps exist. */
+  remotePlayers: RemoteSet<RemotePlayer, RemotePlayerState>;
   killCounts: Map<string, number>;
   projectiles: Projectile[];
   projectileRegistry: ProjectileRegistry;
@@ -44,7 +48,9 @@ export interface WorldState {
 
 export function createWorldState(): WorldState {
   return {
-    remotePlayers: new Map(),
+    // Stub hooks — real ones need scene/terrain/nm which don't exist at
+    // world-creation time; createRemotes replaces them before first use.
+    remotePlayers: new RemoteSet<RemotePlayer, RemotePlayerState>({ create: () => undefined, isLive: () => true }),
     killCounts: new Map(),
     projectiles: [],
     projectileRegistry: createProjectileRegistry(),
