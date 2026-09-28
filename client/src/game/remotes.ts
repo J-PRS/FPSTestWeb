@@ -11,6 +11,7 @@ import type { HealthBarSystem } from '../ui/HealthBarSystem.js';
 import type { HUD } from '../ui/hud.js';
 import type { WorldState } from './worldState.js';
 import { TEAM_COLORS } from '../../../shared/teams.js';
+import * as sfxWorld from '../core/sfx/world.js';
 
 // Hostiles always read red — team colors are for your own side only.
 const ENEMY_RED = 0xff3333;
@@ -46,6 +47,7 @@ export function createRemotes(deps: RemotesDeps) {
     onRemove: (id) => {
       deps.lazyHud().removePlayerIndicator(id);
       deps.lazyHealthBarSystem().removeBar(id);
+      sfxWorld.remoteMoveAudioGone(id);
     },
   };
 
@@ -167,14 +169,20 @@ export function createRemotes(deps: RemotesDeps) {
   // name marker from the extrapolated position.
   function tickRemoteCosmetics(playerId: string, remotePlayer: RemotePlayer, playerState: WirePlayerState): void {
     const hud = deps.lazyHud();
+    let skiing = false;
     if (!playerState.isDead && playerState.ski) {
       const v = remotePlayer.vel;
       const terrain = deps.lazyTerrain();
       const groundY = terrain.getHeight(remotePlayer.position.x, remotePlayer.position.z);
       if (v.x * v.x + v.z * v.z > 10 && remotePlayer.feetY - groundY < 0.8) {
+        skiing = true;
         deps.lazyEffects().spawnSkiDust(remotePlayer.position, v);
       }
     }
+    // Jet audio has no wire bit — a sustained powered climb (vel.y past
+    // jump apex) is the only honest tell, matching the remote animation.
+    const jetting = !playerState.isDead && remotePlayer.vel.y > 4.5;
+    sfxWorld.remoteMoveAudio(playerId, remotePlayer.position, remotePlayer.vel.length(), jetting, skiing);
     if (!playerState.isDead) {
       // Teammates read green, everything else stays enemy red — FFA and
       // teamless modes leave `team` undefined so nothing turns friendly.
@@ -202,6 +210,7 @@ export function createRemotes(deps: RemotesDeps) {
     if (inactive) {
       deps.lazyHud().removePlayerIndicator(playerId);
       deps.lazyHealthBarSystem().removeBar(playerId);
+      sfxWorld.remoteMoveAudioGone(playerId);
       return;
     }
 
@@ -218,7 +227,14 @@ export function createRemotes(deps: RemotesDeps) {
   function cleanupRemotePlayers(players: Map<string, import('../networking/NetworkManager.js').RemotePlayerState>): void {
     // `bot:` entries are locally driven (Nugget Wars) — the network roster
     // knows nothing about them; cleanup is owned by TeamBots.
-    deps.world.remotePlayers.prune((id) => id.startsWith('bot:') || players.has(id));
+    // 'dummy' is the ?dummy debug body — gameLoop ticks it from a closure,
+    // so pruning it would leave a disposed model animating forever.
+    deps.world.remotePlayers.prune(
+      (id) => id.startsWith('bot:') || id === 'dummy' || players.has(id),
+      // Bots/dummies keep their body across death+respawn — the death
+      // shrink must NOT reap them or they respawn invisible and off-board.
+      (id) => id.startsWith('bot:') || id === 'dummy',
+    );
   }
 
   // Scoreboard rows: local player first, then remotes sorted by frags desc
@@ -240,7 +256,10 @@ export function createRemotes(deps: RemotesDeps) {
     // they'd be invisible on the scoreboard otherwise.
     for (const [id, rp] of deps.world.remotePlayers) {
       if (nm.getPlayers().has(id)) continue;
-      remoteRows.push({ name: id.replace('bot:', ''), frags: deps.world.killCounts.get(id) ?? 0, score: deps.world.ffaScores.get(id) ?? null, ping: null, net: 'bot', self: false, dead: rp.isDead, team: undefined });
+      // GameBot carries a team field; FFA bots get a self-id pseudo-team,
+      // which must not count as a real team row.
+      const t = (rp as { team?: string }).team;
+      remoteRows.push({ name: id.replace('bot:', ''), frags: deps.world.killCounts.get(id) ?? 0, score: deps.world.ffaScores.get(id) ?? null, ping: null, net: 'bot', self: false, dead: rp.isDead, team: t === 'alpha' || t === 'bravo' ? t : undefined });
     }
     remoteRows.sort((a, b) => (b.score ?? b.frags) - (a.score ?? a.frags));
     hud.setScoreboardRows([...rows, ...remoteRows]);

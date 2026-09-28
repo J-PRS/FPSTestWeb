@@ -1,3 +1,4 @@
+2026-10-03 - remote jet/ski audio: positional worldLoop channel (re-aimed dist/pan/lowpass per frame), pooled per-remote loops driven off the ski-dust cosmetics tick; cloak/death silent; jet inferred from powered climb
 2026-10-03 - RoomMoveSim seq journal: reports compare vs sim state at their input seq (server-ahead replayed-to-now, client-ahead probed); transient count=1 clips demoted to INFO
 2026-10-03 - botmobility.md review: 87 windows, 100%% ski/air, 0 sheep/stuck warnings; spec.ts spectate-room holder probe
 2026-10-03 - match boundary beats: horn stinger + center banner on matchStart/matchEnd (VICTORY when you/your team wins)

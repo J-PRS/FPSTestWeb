@@ -17,6 +17,12 @@ export interface LoopHandle {
   stop(): void;
 }
 
+/** A persistent loop routed through the positional channel — caller
+ *  re-aims distance/pan per frame with setPos (moving remote players). */
+export interface PositionalLoop extends LoopHandle {
+  setPos(pos: THREE.Vector3): void;
+}
+
 const MAX_VOICES = 24;          // cap concurrent one-shots — beyond this, drop
 const WORLD_REF_DIST = 8;       // meters at which a positional sound is ~full
 const WORLD_MAX_DIST = 220;     // beyond this, don't spawn the node at all
@@ -197,6 +203,58 @@ export class AudioEngine {
     return {
       set: (v) => { if (alive) g.gain.setTargetAtTime(v, this.ctx!.currentTime, 0.08); },
       stop: () => { if (alive) { alive = false; src.stop(); src.disconnect(); g.disconnect(); } },
+    };
+  }
+
+  /** Positional loop: source → intensity gain → distance gain → lowpass →
+   *  pan → world bus. `set` drives intensity, `setPos` re-aims the spatial
+   *  chain per frame — same math as worldInput but updatable. */
+  worldLoop(kind: 'noise' | 'osc' | 'sample', arg: BiquadFilterType | OscillatorType | string, opt?: number): PositionalLoop | null {
+    if (!this.ctx) return null;
+    const c = this.ctx;
+    const inten = c.createGain(); inten.gain.value = 0;
+    const dist = c.createGain(); dist.gain.value = 0;
+    const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 20000;
+    const pan = c.createStereoPanner();
+    inten.connect(dist).connect(lp).connect(pan).connect(this.world);
+    let kill: () => void;
+    if (kind === 'sample') {
+      const buf = this.buffers.get(arg as string);
+      if (!buf) { inten.disconnect(); dist.disconnect(); lp.disconnect(); pan.disconnect(); return null; }
+      const src = c.createBufferSource();
+      src.buffer = buf; src.loop = true;
+      if (opt) src.playbackRate.value = opt;
+      src.connect(inten); src.start();
+      kill = () => src.stop();
+    } else if (kind === 'noise') {
+      if (!this.noiseBuf) { inten.disconnect(); dist.disconnect(); lp.disconnect(); pan.disconnect(); return null; }
+      const src = c.createBufferSource();
+      src.buffer = this.noiseBuf; src.loop = true;
+      const f = c.createBiquadFilter();
+      f.type = arg as BiquadFilterType; f.frequency.value = opt ?? 1000;
+      src.connect(f).connect(inten); src.start();
+      kill = () => { src.stop(); f.disconnect(); };
+    } else {
+      const o = c.createOscillator();
+      o.type = arg as OscillatorType; o.frequency.value = opt ?? 90;
+      o.connect(inten); o.start();
+      kill = () => o.stop();
+    }
+    const setPos = (pos: THREE.Vector3): void => {
+      const dx = pos.x - this.listenerPos.x;
+      const dy = pos.y - this.listenerPos.y;
+      const dz = pos.z - this.listenerPos.z;
+      const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      dist.gain.setTargetAtTime(d > WORLD_MAX_DIST ? 0 : 1 / (1 + d / WORLD_REF_DIST), c.currentTime, 0.08);
+      lp.frequency.setTargetAtTime(Math.max(800, 20000 / (1 + d / 60)), c.currentTime, 0.08);
+      pan.pan.setTargetAtTime(d > 1 ? Math.max(-1, Math.min(1,
+        (dx * this.listenerRight.x + dz * this.listenerRight.z) / d)) : 0, c.currentTime, 0.08);
+    };
+    let alive = true;
+    return {
+      set: (v) => { if (alive) inten.gain.setTargetAtTime(v, c.currentTime, 0.08); },
+      setPos,
+      stop: () => { if (alive) { alive = false; kill(); inten.disconnect(); dist.disconnect(); lp.disconnect(); pan.disconnect(); } },
     };
   }
 

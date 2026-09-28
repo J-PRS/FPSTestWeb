@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { audio } from '../audio.js';
-import type { LoopHandle } from '../audio.js';
+import type { LoopHandle, PositionalLoop } from '../audio.js';
 import { ctx, play, osc, sample, layer, noise } from './util.js';
 
 // ---------------------------------------------------------------------------
@@ -95,6 +95,49 @@ export function warpJump(pos: THREE.Vector3): void {
   noise(0.2, 0.55, g, 'highpass', 2800, 5000);
   osc('sawtooth', 280, 2400, 0.22, 0.45, g);
   osc('sine', 140, 40, 0.3, 0.35, g); // sub-thump under the crack
+}
+
+// ---------------------------------------------------------------------------
+// Remote player move audio — pooled positional loops so you HEAR a disc-
+// jockey spooling up behind you, not just see dust. One jet+ski channel
+// pair per remote, capped: beyond the cap only silent slots are evicted.
+// The wire carries ski but no jet bit — jetting is inferred from a powered
+// climb (vel.y past walking jump apex), same read as the remote animation.
+// Callers gate on cloak/death upstream, so a cloaked jetter stays silent.
+interface RemoteLoops { jet: PositionalLoop | null; ski: PositionalLoop | null; busy: boolean; }
+const remoteLoops = new Map<string, RemoteLoops>();
+const REMOTE_LOOP_CAP = 6;
+
+export function remoteMoveAudioGone(id: string): void {
+  const l = remoteLoops.get(id);
+  if (!l) return;
+  l.jet?.stop(); l.ski?.stop();
+  remoteLoops.delete(id);
+}
+
+function acquireRemoteLoops(id: string): RemoteLoops | null {
+  if (remoteLoops.size >= REMOTE_LOOP_CAP) {
+    for (const [k, v] of remoteLoops) {
+      if (!v.busy) { remoteMoveAudioGone(k); break; }
+    }
+    if (remoteLoops.size >= REMOTE_LOOP_CAP) return null;
+  }
+  const l: RemoteLoops = {
+    jet: audio.worldLoop('sample', 'jet_loop') ?? audio.worldLoop('osc', 'sawtooth', 90),
+    ski: audio.worldLoop('sample', 'ski_scrape', 1.3) ?? audio.worldLoop('noise', 'bandpass', 2400),
+    busy: false,
+  };
+  remoteLoops.set(id, l);
+  return l;
+}
+
+export function remoteMoveAudio(id: string, pos: THREE.Vector3, speed: number, jetting: boolean, skiing: boolean): void {
+  if (!audio.ready) return;
+  const l = remoteLoops.get(id) ?? ((jetting || skiing) ? acquireRemoteLoops(id) : null);
+  if (!l) return;
+  l.busy = jetting || skiing;
+  l.jet?.setPos(pos); l.jet?.set(jetting ? 0.45 : 0);
+  l.ski?.setPos(pos); l.ski?.set(skiing ? Math.min(0.18, speed / 90 * 0.18) : 0);
 }
 
 export function enemyCue(pos: THREE.Vector3, kind: 'pounce' | 'skitter' | 'splat' | 'dart' | 'zap' | 'launch' | 'die' | 'hit' | 'rustle' | 'squawk'): void {
