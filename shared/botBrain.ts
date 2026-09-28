@@ -131,6 +131,10 @@ export class BotBrain {
   private burstLeft = 0;
   private flinchT = 0;
   private flinchFrom: BotVec = { x: 0, y: 0, z: 0 };
+  // Revenge — after the recoil ends the bot pushes toward the attacker's
+  // position: ambushes get answered, not just absorbed.
+  private revengeT = 0;
+  private revengeFrom: BotVec = { x: 0, y: 0, z: 0 };
   private wanderWp: BotVec = { x: 0, y: 0, z: 0 };
   private wanderT = 0;
   private beltT = 4 + Math.random() * 4; // stagger first throws across the squad
@@ -180,6 +184,8 @@ export class BotBrain {
   takeHit(from: BotVec): void {
     this.flinchT = FLINCH_S;
     this.flinchFrom = { ...from };
+    this.revengeT = 2.5;
+    this.revengeFrom = { ...from };
   }
 
   think(dt: number, ctx: BrainCtx): BrainOut {
@@ -219,6 +225,7 @@ export class BotBrain {
     // detourT decays here, with the other timers — decrementing it inside
     // the dest block below would let the setting call's dt eat the window.
     this.detourT -= dt;
+    this.revengeT -= dt;
 
     // --- choose the step destination ---
     let dest: BotVec;
@@ -322,7 +329,11 @@ export class BotBrain {
   /** Idle-goal selection, in priority order: objective > pickup >
    *  heard fight > wander. Runs on the slow think cadence. */
   private pickGoal(ctx: BrainCtx, pos: BotVec): void {
-    if (ctx.objective) {
+    if (this.revengeT > 0) {
+      // Hit from somewhere unseen: push toward the shooter rather than
+      // continue a patrol — the flinch already spent the recoil.
+      this.goal = { ...this.revengeFrom };
+    } else if (ctx.objective) {
       this.goal = { ...ctx.objective };
     } else if (ctx.pickup) {
       this.goal = { ...ctx.pickup };
