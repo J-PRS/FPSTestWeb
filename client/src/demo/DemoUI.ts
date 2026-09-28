@@ -10,6 +10,7 @@ export interface DemoUICallbacks {
   onSave: () => void;
   onLoad: (file: File) => void;
   onRecordToggle: () => void;
+  onVideoToggle: () => void;
 }
 
 export class DemoUI {
@@ -23,6 +24,7 @@ export class DemoUI {
   private speedSelect: HTMLSelectElement;
   private loopBtn: HTMLButtonElement;
   private saveBtn: HTMLButtonElement;
+  private videoBtn!: HTMLButtonElement;
   private loadInput: HTMLInputElement;
   private statusLabel: HTMLSpanElement;
   private lastTimelineDuration = -1;
@@ -146,6 +148,13 @@ export class DemoUI {
     this.saveBtn.title = 'Save demo to file';
     this.saveBtn.onclick = () => this.callbacks?.onSave();
 
+    // MP4 export button — records the render canvas live during playback
+    this.videoBtn = document.createElement('button');
+    this.videoBtn.textContent = 'MP4';
+    this.videoBtn.style.cssText = this.btnStyle('#5a2a2a');
+    this.videoBtn.title = 'Record canvas to mp4/webm while playing';
+    this.videoBtn.onclick = () => this.callbacks?.onVideoToggle();
+
     // Load input (hidden file input)
     this.loadInput = document.createElement('input');
     this.loadInput.type = 'file';
@@ -176,6 +185,7 @@ export class DemoUI {
     this.container.appendChild(this.speedSelect);
     this.container.appendChild(this.loopBtn);
     this.container.appendChild(this.saveBtn);
+    this.container.appendChild(this.videoBtn);
     this.container.appendChild(loadBtn);
     this.container.appendChild(this.loadInput);
     this.container.appendChild(this.statusLabel);
@@ -206,6 +216,11 @@ export class DemoUI {
   }
 
   get isVisible(): boolean { return this.visible; }
+
+  setVideoRecording(on: boolean): void {
+    this.videoBtn.textContent = on ? '■' : 'MP4';
+    this.videoBtn.style.background = on ? '#a33' : '#5a2a2a';
+  }
 
   setPlaying(playing: boolean): void {
     this.playBtn.textContent = playing ? '⏸' : '▶';
