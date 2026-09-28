@@ -132,7 +132,11 @@ async function tryWebTransport(config: ConnectionConfig): Promise<GameTransport 
     const httpBase = config.url.replace(/^wss?:/, 'http' + (config.url.startsWith('wss') ? 's' : '') + ':').replace(/\/ws$/, '');
     const info = await (await fetch(`${httpBase}/wthash`)).json();
     if (!info?.enabled || !info.port || !info.sha256) return null;
-    const host = new URL(httpBase).hostname;
+    // Chrome resolves `localhost` to ::1 but the QUIC listener is IPv4 —
+    // normalized here (the pvptest adapter does the same) or loopback WT
+    // dies with ERR_CONNECTION_RESET before the handshake starts.
+    const rawHost = new URL(httpBase).hostname;
+    const host = rawHost === 'localhost' ? '127.0.0.1' : rawHost;
     const hashBytes = Uint8Array.from(atob(info.sha256), (c) => c.charCodeAt(0));
     const wt = new WebTransport(`https://${host}:${info.port}`, {
       serverCertificateHashes: [{ algorithm: 'sha-256', value: hashBytes }],
@@ -250,7 +254,14 @@ async function tryWebRTC(config: ConnectionConfig): Promise<GameTransport | null
         } catch { /* not ours */ }
       });
       signal.addEventListener('error', () => rej(new Error('rtc signal error')));
-      signal.addEventListener('open', () => signal.send(JSON.stringify({ type: 'offer', sdp })));
+      // The signal ws can already be OPEN here — it connected while we
+      // were awaiting createOffer+ICE gather, so 'open' never refires and
+      // the probe would sit out its 3s timeout. Send immediately when so.
+      if (signal.readyState === WebSocket.OPEN) {
+        signal.send(JSON.stringify({ type: 'offer', sdp }));
+      } else {
+        signal.addEventListener('open', () => signal.send(JSON.stringify({ type: 'offer', sdp })));
+      }
     });
     await pc.setRemoteDescription(answer);
     signal.close();
