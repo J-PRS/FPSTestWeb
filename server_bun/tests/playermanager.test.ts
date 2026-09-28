@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'bun:test';
 import { PlayerManager } from '../src/PlayerManager.ts';
+import { STATUS } from '../../shared/status.ts';
 
 describe('PlayerManager', () => {
   it('adds a player', () => {
@@ -30,12 +31,12 @@ describe('PlayerManager', () => {
   it('energy shield absorbs hits without touching health', () => {
     const pm = new PlayerManager();
     pm.addPlayer('alice'); pm.breakShield('alice');
-    pm.getPlayer('alice')!.shielded = 1;
+    pm.getPlayer('alice')!.status = STATUS.SHIELD;
     const result = pm.applyDamage('alice', 50);
     expect(result.killed).toBe(false);
     expect(result.newHealth).toBe(100);
     // Flag off → damage lands normally
-    pm.getPlayer('alice')!.shielded = 0;
+    pm.getPlayer('alice')!.status = 0;
     expect(pm.applyDamage('alice', 50).newHealth).toBe(50);
   });
 
@@ -45,18 +46,18 @@ describe('PlayerManager', () => {
     // Kill once to establish the flag is unset on death, then flag back on
     pm.applyDamage('alice', 100);
     const p = pm.getPlayer('alice')!;
-    p.shielded = 1;
+    p.status = STATUS.SHIELD;
     pm.respawnPlayer('alice');
-    expect(p.shielded).toBe(0);
+    expect(p.status & STATUS.SHIELD).toBe(0);
   });
 
   it('death clears the medkit flag', () => {
     const pm = new PlayerManager();
     pm.addPlayer('alice'); pm.breakShield('alice');
     const p = pm.getPlayer('alice')!;
-    p.mending = 1;
+    p.status = STATUS.MEND;
     pm.applyDamage('alice', 200);
-    expect(p.mending).toBe(0);
+    expect(p.status).toBe(0);
   });
 
   it('kills player when health reaches 0', () => {

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { STATUS } from '../../../shared/status.js';
 
 import type { ChildLogger } from '../core/Logger.js';
 import type { Terrain } from '../world/terrain.js';
@@ -146,10 +147,13 @@ export function createRemotes(deps: RemotesDeps) {
     // Wire cloak: hide model+gizmo+marker entirely — an enemy's HUD must
     // give no trace. Ski dust and indicators stop too (dust off an
     // invisible skier is a giveaway).
-    remotePlayer.setCloakHidden(!!playerState.cloaked);
-    remotePlayer.setShielded(!!playerState.shielded);
-    remotePlayer.setMending(!!playerState.mending);
-    if (playerState.cloaked) {
+    // Status bitmask → per-effect visuals. One bit = one row; the next
+    // toggle effect lands here, nowhere else in the netcode.
+    const status = playerState.status ?? 0;
+    remotePlayer.setCloakHidden(!!(status & STATUS.CLOAK));
+    remotePlayer.setShielded(!!(status & STATUS.SHIELD));
+    remotePlayer.setMending(!!(status & STATUS.MEND));
+    if (status & STATUS.CLOAK) {
       hud.removePlayerIndicator(playerId);
       deps.lazyHealthBarSystem().removeBar(playerId);
       return;

@@ -159,7 +159,7 @@ export function validateMessage(raw: unknown): ValidationResult<ClientMessage> {
         success: true,
         data: {
           type: 'inputMove',
-          input: { forward: i.forward, right: i.right, jump: i.jump, ski: i.ski },
+          input: { forward: i.forward, right: i.right, jump: i.jump, ski: i.ski, status: isFiniteNumber(i.status) ? i.status : 0 },
           rotation: rot.data,
         },
       };

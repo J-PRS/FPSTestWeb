@@ -47,9 +47,11 @@ export interface PlayerState {
   /** Server-driven filler — no socket, no grace period, no idle reap. */
   isBot?: boolean;
   skiing: number; // last reported ski input flag (0/1), from inputMove
-  cloaked: number; // last reported cloak flag (0/1), from inputMove
-  shielded: number; // energy-shield flag (0/1), from inputMove — damage soaks into their tank
-  mending: number; // medkit flag (0/1), from inputMove — server trickle-heals while up
+  // Status bitmask (shared/status.ts bits) from inputMove — the server
+  // relays it to remotes and tests bits where mechanics care (shield soaks
+  // damage, mend ticks health). Unknown bits pass through untouched, so
+  // client-only effects need zero server changes.
+  status: number;
   // Lag-comp rewind buffer: accepted position reports stamped at server
   // receive time. Hit validation rewinds the target to the shooter's view
   // (now - shooterPing) so a 100ms player shoots the ghost they saw, not

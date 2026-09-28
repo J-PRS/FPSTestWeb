@@ -4,6 +4,7 @@ import { JET_FORCE_UP, JET_FORCE_DIR, MAX_ENERGY, MAX_HEALTH, JET_DRAIN, JET_CHA
 
 import { Terrain } from '../world/terrain.js';
 import { PlayerSkills, SHIELD_DMG_PER_ENERGY } from './player/skills.js';
+import { STATUS } from '../../../shared/status.js';
 import { makeShieldBubble, ShieldBubble } from '../effects/shieldBubble.js';
 
 import { MovementController, MovementState } from './movement.js';
@@ -90,6 +91,13 @@ export class Player {
     if (this.mending === on) return;
     this.mending = on;
     this.onMend?.(on);
+  }
+  // All toggle states collapse into the wire status byte — one place
+  // computes it so a new channel never forgets its wire bit.
+  private statusBits(): number {
+    return (this.cloaked ? STATUS.CLOAK : 0)
+         | (this.shielded ? STATUS.SHIELD : 0)
+         | (this.mending ? STATUS.MEND : 0);
   }
   // Third-person bubble — lazily built so a non-shield slot costs nothing.
   private shieldBubble: ShieldBubble | null = null;
@@ -301,7 +309,7 @@ export class Player {
   onDeploy: (() => void) | null = null;
   onNetworkJump: ((pos: { x: number; y: number; z: number }) => void) | null = null;
   onNetworkJetpack: ((pos: { x: number; y: number; z: number }) => void) | null = null;
-  onNetworkInput: ((input: { forward: number; right: number; jump: number; ski: number; cloak?: number; shield?: number; mend?: number }, rotation: { yaw: number; pitch: number }) => void) | null = null;
+  onNetworkInput: ((input: { forward: number; right: number; jump: number; ski: number; status?: number }, rotation: { yaw: number; pitch: number }) => void) | null = null;
 
   constructor(terrain: Terrain, camera: THREE.PerspectiveCamera, scene: THREE.Scene) {
     this.terrain = terrain;
@@ -518,7 +526,7 @@ export class Player {
     // Send input to network for client-side prediction
     if (this.onNetworkInput) {
       this.onNetworkInput(
-        { forward: input.forward, right: input.right, jump: input.jumpHeld ? 1 : 0, ski: input.skiHeld ? 1 : 0, cloak: this.cloaked ? 1 : 0, shield: this.shielded ? 1 : 0, mend: this.mending ? 1 : 0 },
+        { forward: input.forward, right: input.right, jump: input.jumpHeld ? 1 : 0, ski: input.skiHeld ? 1 : 0, status: this.statusBits() },
         { yaw: this.yaw, pitch: this.pitch }
       );
     }
