@@ -55,9 +55,9 @@ export class Room {
   /** Server-driven filler players, populated from the map spec. */
   readonly bots: ServerBots;
   /** CTF flag authority — only when the mode has flags AND the map has bases. */
-  readonly flags: RoomFlags | null = null;
+  flags: RoomFlags | null = null;
   /** Server-owned nuggets — team modes drop a gem on each creature kill. */
-  readonly pickups: RoomPickups | null = null;
+  pickups: RoomPickups | null = null;
   /** Server-owned deployables — turrets/mines/stations/drones a `deploy`
    *  claim plants; caps + TTL + teardown live here. */
   readonly deployables: RoomDeployables;
@@ -120,6 +120,14 @@ export class Room {
     // Bots populate before humans join so team balancing puts humans on
     // the emptier side.
     if (this.spec.bots) this.bots.populate(this.spec.bots);
+    this.wireModeFeatures(field);
+    this.deployables = new RoomDeployables(this);
+    this.registerSims();
+  }
+
+  // Team bases → spawn anchors, kill-confirmed pickups, CTF flags — the
+  // per-mode feature set the spec + modeSpec select together.
+  private wireModeFeatures(field: Heightfield | null): void {
     const bases = this.spec.bases;
     if (this.modeSpec?.teams && bases?.alpha && bases?.bravo) {
       this.players.teamBases = { alpha: { ...bases.alpha }, bravo: { ...bases.bravo } };
@@ -145,9 +153,12 @@ export class Room {
       });
       this.flags = new RoomFlags(this, { alpha: snap(bases.alpha), bravo: snap(bases.bravo) });
     }
-    // The tick registry — GameServer steps every entry per tick; new
-    // server-side systems (deployables, generators) register here instead
-    // of editing the tick loop.
+  }
+
+  // The tick registry — GameServer steps every entry per tick; new
+  // server-side systems (deployables, generators) register here instead
+  // of editing the tick loop.
+  private registerSims(): void {
     this.sims.push({ tick: (dt) => this.bots.tick(dt) });
     if (this.flags) this.sims.push({ tick: (dt) => this.tickFlags(dt) });
     if (this.pickups) this.sims.push({ tick: (dt) => this.pickups!.tick(dt) });
@@ -155,7 +166,6 @@ export class Room {
       const arena = new RoomArena(this, this.spec.arena);
       this.sims.push({ tick: (dt) => arena.tick(dt) });
     }
-    this.deployables = new RoomDeployables(this);
     this.sims.push({ tick: (dt) => this.deployables.tick(dt) });
   }
 
@@ -386,6 +396,8 @@ export class Room {
     if (this.bots.count < want) this.bots.populate(want - this.bots.count);
     else if (this.bots.count > want) {
       let excess = this.bots.count - want;
+      // Snapshot first — removePlayerCompletely mutates the map we're walking.
+      // oxlint-disable-next-line no-useless-spread
       for (const p of [...this.players.getAllPlayers().values()]) {
         if (excess <= 0) break;
         if (!p.isBot) continue;
