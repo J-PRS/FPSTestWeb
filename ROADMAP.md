@@ -195,10 +195,12 @@ surface. Detailed research lives in `_reports/`; this file is the current truth.
   speed, airborne) not destinations; ServerBots drives RoomMoveSim shadows
   (faceYaw + ordered setInput + commit stepped state). Bots ski/jet for
   real, burn the shared energy tank, reseat on respawn via deadSet.
-  Phase 2 next: real projectiles — shared/projSim.ts + server ballistic
-  sim + projectileCreated/Destroyed wire msgs; botFire becomes hitscan
-  fallback only. Phase 3: belt+skills+energy intents (STATUS bits).
-  Phase 4: per-bot loadouts/roles + range-band weapon select.
+  Phase 2 done — RoomProjectiles (shared/projSim.ts swept ballistics)
+  gives bots real PlasmaGun shells with velocity lead; hits run through
+  botAttack + trusted serverBlast. botFire = creature path + fallback.
+  Phase 3 next: belt+skills+energy intents (STATUS bits, brain energy
+  gating via BrainCtx.energy). Phase 4: per-bot loadouts/roles +
+  range-band weapon select (Rocket past 40m, Chaingun inside 15m).
 - Netcode v2 (2026-09-28): GameTransport seam w/ three real tiers —
   WebTransport (QUIC datagrams, cert-pinned via /wthash) → WebRTC
   DataChannel (game=unreliable binary, ctrl=reliable JSON, /rtcs
