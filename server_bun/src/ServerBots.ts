@@ -76,6 +76,12 @@ export class ServerBots {
       } else if (q.isBot) continue;
       out.push({ id: q.id, pos: q.position, vel: q.velocity, alive: !q.isDead });
     }
+    // Creatures are huntable too — in nuggets rooms they're the whole
+    // objective (each kill drops the gem that scores), and shooting
+    // hunters off your back is correct behavior in every mode.
+    for (const b of this.room.ballSim.roster()) {
+      out.push({ id: `b:${b.id}`, pos: b.position, vel: b.velocity, alive: true });
+    }
     return out;
   }
 
@@ -83,6 +89,26 @@ export class ServerBots {
    *  distance roll decides damage, the visible bolt follows the aim error
    *  so a miss reads as a miss. */
   private fireAt(p: { id: string; position: Vec3 }, targetId: string, aim: Vec3): void {
+    // Creature targets route through the same claim funnel a client's
+    // creatureHit uses — plausibility check and all — so a bot kill drops
+    // its gem/FFA point identically.
+    if (targetId.startsWith('b:')) {
+      const ball = Number(targetId.slice(2));
+      const dxb = aim.x - p.position.x;
+      const dyb = aim.y - p.position.y;
+      const dzb = aim.z - p.position.z;
+      const lenb = Math.sqrt(dxb * dxb + dyb * dyb + dzb * dzb) || 1;
+      this.room.messages.botFire(
+        p.id, null,
+        { x: p.position.x, y: p.position.y + 1.4, z: p.position.z },
+        { x: (dxb / lenb) * BOLT_SPEED, y: (dyb / lenb) * BOLT_SPEED, z: (dzb / lenb) * BOLT_SPEED },
+        3, false,
+      );
+      if (Math.random() < Math.max(0.15, 0.6 - lenb / 200)) {
+        this.room.ballSim.handleHit(p.id, ball, 8);
+      }
+      return;
+    }
     const target = this.room.players.getPlayer(targetId);
     if (!target || target.isDead) return;
     const dx = aim.x - p.position.x;

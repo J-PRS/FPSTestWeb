@@ -1930,3 +1930,4 @@ GET /stats — lifetime leaderboard aggregated off the append-only match journal
 heal claims in team rooms now require server-granted credit (a gem touch backs +25) — free-form self-heal stays in ffa rooms where local nuggets are legit; kills the invincibility cheat lever
 PROTOCOL_VERSION 3->4 (bank message removed — stale clients force-reload instead of desyncing)
 net: ball prediction rides rate-corrected server clock; silent landings parked at contact; per-kind rubberband thresholds
+bots: server bots now hunt creatures (ballSim roster in enemies) — nuggets rooms score autonomously
