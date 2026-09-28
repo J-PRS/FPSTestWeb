@@ -213,6 +213,14 @@ surface. Detailed research lives in `_reports/`; this file is the current truth.
   at 2m/5s (2.5s for flag carriers) with hunting/carrying/pos — plus the
   root fix it caught: ski-held-at-standstill skipped ground physics in
   shared MoveSim, freezing bots (and could freeze a human) on hills.
+- Soak coverage complete (2026-10-03): every wire path now exercised
+  over real sockets — nuggets economy (3 bugs fixed: grounded gem drops,
+  huntCreatures target pass, kill→bank funnel), TDM quicksand (inverted
+  arena pushback fixed), CTF crossfire (real cap), DM duel, multi-room
+  isolation, reconnect/token reclaim, deployables lifecycle
+  (deployprobe.ts: spawn/cap/distance validation, live mine trip +
+  turretShot, leave teardown). Divergence noise floor: count=1 crest
+  clips only.
 - Netcode v2 (2026-09-28): GameTransport seam w/ three real tiers —
   WebTransport (QUIC datagrams, cert-pinned via /wthash) → WebRTC
   DataChannel (game=unreliable binary, ctrl=reliable JSON, /rtcs
