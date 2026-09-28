@@ -289,19 +289,27 @@ gameServer.setBunServer(server);
 // WebTransport tier — opt-in via env (FPS_WT_PORT + cert/key paths).
 // Shares GameServer through the socket adapter; failure here must never
 // stop the WS game, so all errors are logged-and-continue inside start().
-if (CONFIG.wtPort > 0 && CONFIG.wtCertPath && CONFIG.wtKeyPath) {
+if (CONFIG.wtPort > 0) {
   try {
-    const { readFileSync: rf } = await import('node:fs');
+    const { readFileSync: rf, existsSync } = await import('node:fs');
     const { createHash, X509Certificate } = await import('node:crypto');
-    const certPem = rf(CONFIG.wtCertPath, 'utf8');
+    // Dev convenience: a checked-in certs/dev.{crt,key} pair means "WT on"
+    // without env wiring — certs/ is dev-only self-signed anyway.
+    const certPath = CONFIG.wtCertPath || `${import.meta.dir}/../certs/dev.crt`;
+    const keyPath = CONFIG.wtKeyPath || `${import.meta.dir}/../certs/dev.key`;
+    if (!existsSync(certPath) || !existsSync(keyPath)) {
+      logger.warn('WebTransport disabled — no cert/key (env or certs/dev.*)', {});
+    } else {
+    const certPem = rf(certPath, 'utf8');
     // DER hash is what serverCertificateHashes expects — PEM is just the
     // base64 wrapper, so decode via X509Certificate to get the raw bytes.
     wtCertHash = createHash('sha256').update(new X509Certificate(certPem).raw).digest('base64');
     void wtServer.start({
       port: CONFIG.wtPort,
       certPem,
-      keyPem: rf(CONFIG.wtKeyPath, 'utf8'),
+      keyPem: rf(keyPath, 'utf8'),
     });
+    }
   } catch (e) {
     logger.warn('WebTransport disabled — cert/key unreadable', { error: (e as Error).message });
   }
