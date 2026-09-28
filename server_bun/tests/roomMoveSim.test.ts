@@ -106,4 +106,17 @@ describe('RoomMoveSim', () => {
     expect(peak).toBeGreaterThan(base);
     expect(peak).toBeLessThan(60);
   });
+
+  test('stale inputMove seqs are dropped — unordered transports can reorder', () => {
+    const m = new RoomMoveSim(flat);
+    m.track('p1', { x: 0, y: MOVEMENT_CONFIG.playerHeight + 0.5, z: 0 }, 0);
+    expect(m.setInput('p1', { forward: 1 }, 0, 5)).toBe(true);
+    // A replayed earlier event must not rewind the input state.
+    expect(m.setInput('p1', { forward: 0 }, 0, 3)).toBe(false);
+    for (let i = 0; i < 20; i++) m.tick(0.05);
+    const pos = m.simPos('p1')!;
+    expect(Math.abs(pos.x) + Math.abs(pos.z)).toBeGreaterThan(0.5);
+    // seq-less callers (old clients / tests) always pass.
+    expect(m.setInput('p1', { forward: 0 })).toBe(true);
+  });
 });
