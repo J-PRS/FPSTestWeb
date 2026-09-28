@@ -119,6 +119,11 @@ export class TeamBots {
     const terrain = deps0(this).terrain;
     const player = deps0(this).player;
     for (const bot of this.bots) {
+      // Local bots aren't in the wire roster, so remotes.ts never ticks
+      // them — tick() is what advances the snapshot interpolation and
+      // AnimationMixer onto the model. Without it think() moves the
+      // logical position but the rendered body stands frozen at spawn.
+      bot.tick(dt);
       if (bot.isDead) {
         bot.respawnAt -= dt;
         if (bot.respawnAt <= 0) {
