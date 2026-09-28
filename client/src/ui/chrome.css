@@ -1,0 +1,325 @@
+/* Page chrome — menu overlay, keybinds, loadout bar, cool-shots panel.
+   Imported once by main.ts. */
+    /* Rajdhani Bold — damage numbers / sci-fi numerals (15KB, local, SIL OFL) */
+@font-face {
+  font-family: 'Rajdhani';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/rajdhani-bold.woff2') format('woff2');
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #000; overflow: hidden; font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif; }
+canvas { display: block; }
+#overlay {
+  position: absolute; inset: 0;
+  display: none;
+  background: rgba(4,7,12,0.45);
+  color: #dde8f2;
+  z-index: 10;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+}
+#overlay-center {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 10px;
+  pointer-events: none;
+}
+/* Hide HUD while menu is open. Uses a body class — hud.show() sets an
+   inline display:block that would beat a plain selector, hence
+   !important. Covers HUD siblings too (health bars, frag messages). */
+body.menu-open #hud,
+body.menu-open #healthbar-container,
+body.menu-open #frag-msg { display: none !important; }
+#start-btn {
+  background: none; border: none;
+  font-family: inherit;
+  font-size: 1.6rem; font-weight: 700; letter-spacing: 0.3em;
+  color: #fff; text-transform: uppercase;
+  text-shadow: 0 0 20px rgba(58,167,255,0.5);
+  animation: resumePulse 1.8s ease-in-out infinite;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+@keyframes resumePulse {
+  0%, 100% { opacity: 0.65; }
+  50% { opacity: 1; }
+}
+#menu-side {
+  position: absolute; top: 0; right: 0; bottom: 0;
+  width: 280px;
+  background: rgba(8,11,16,0.75);
+  border-left: 1px solid rgba(255,255,255,0.07);
+  padding: 24px 18px;
+  cursor: default;
+  overflow-y: auto;
+}
+/* Keybind rows — click a chip to capture the next input */
+.keys-rows { display: flex; flex-direction: column; gap: 4px; }
+.keys-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 4px 8px;
+  font-size: 0.66rem; font-weight: 600; letter-spacing: 0.08em;
+  color: #cdd9e5; text-transform: uppercase;
+}
+.keys-chip {
+  min-width: 74px; padding: 5px 10px;
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.16);
+  border-radius: 5px;
+  color: #fff; font-family: inherit;
+  font-size: 0.62rem; font-weight: 700; letter-spacing: 0.1em;
+  text-align: center; cursor: pointer; text-transform: uppercase;
+  transition: background 0.12s, border-color 0.12s;
+}
+.keys-chip:hover { background: rgba(58,167,255,0.18); border-color: #3aa7ff; }
+.keys-chip.capturing {
+  background: rgba(58,167,255,0.3); border-color: #3aa7ff;
+  animation: resumePulse 1s ease-in-out infinite;
+}
+.keys-reset {
+  width: 100%; margin-top: 8px; padding: 7px 12px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.12); border-radius: 5px;
+  color: rgba(140,170,195,0.8); font-family: inherit;
+  font-size: 0.6rem; font-weight: 600; letter-spacing: 0.14em;
+  cursor: pointer;
+}
+.keys-reset:hover { background: rgba(255,90,90,0.15); color: #ffb0b0; }
+/* Central keybinds popup — opened from the side menu's KEYBINDS button */
+#keys-modal {
+  position: absolute; inset: 0;
+  display: none; align-items: center; justify-content: center;
+  background: rgba(4,7,12,0.55);
+}
+#keys-modal.open { display: flex; }
+#keys-modal .keys-box {
+  width: 560px; max-height: 80vh; overflow-y: auto;
+  background: rgba(10,14,20,0.96);
+  border: 1px solid rgba(58,167,255,0.3); border-radius: 8px;
+  padding: 18px 20px;
+  box-shadow: 0 12px 48px rgba(0,0,0,0.6);
+}
+#keys-modal .keys-head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 12px;
+}
+#keys-modal .keys-title {
+  font-size: 0.8rem; font-weight: 700; letter-spacing: 0.22em; color: #fff;
+}
+#keys-modal .keys-close {
+  background: none; border: none; color: rgba(140,170,195,0.7);
+  font-family: inherit; font-size: 0.9rem; cursor: pointer; padding: 2px 6px;
+}
+#keys-modal .keys-close:hover { color: #fff; }
+.keys-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 18px; }
+#overlay .menu-section {
+  font-size: 0.62rem; letter-spacing: 0.2em; font-weight: 600;
+  color: rgba(140,170,195,0.6); margin-bottom: 10px;
+}
+#overlay .btn-row { display: flex; flex-direction: column; gap: 6px; }
+#overlay .btn-row button {
+  padding: 9px 14px; text-align: left;
+  background: rgba(255,255,255,0.07);
+  color: #cdd9e5;
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  text-transform: uppercase;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+#overlay .btn-row button:hover { background: rgba(255,255,255,0.14); color: #fff; }
+#overlay .btn-row button.active {
+  border-color: #3aa7ff; color: #fff;
+  background: rgba(58,167,255,0.22);
+  box-shadow: 0 0 10px rgba(58,167,255,0.2);
+}
+#overlay .field-row {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; padding: 9px 14px;
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 6px;
+  font-size: 0.72rem; font-weight: 600;
+  letter-spacing: 0.1em; color: #cdd9e5;
+}
+#overlay .field-row input {
+  width: 72px; padding: 4px 8px;
+  background: rgba(0,0,0,0.35);
+  border: 1px solid rgba(255,255,255,0.18);
+  border-radius: 4px;
+  color: #fff; font-family: inherit; font-size: 0.8rem;
+  text-align: right; outline: none;
+  font-variant-numeric: tabular-nums;
+}
+#overlay .field-row input:focus { border-color: #3aa7ff; }
+#overlay .field-row input[type="range"] {
+  width: 110px; padding: 0; accent-color: #3aa7ff; text-align: inherit;
+  background: transparent; border: none;
+}
+#overlay .field-row select {
+  padding: 4px 8px;
+  background: rgba(0,0,0,0.35);
+  border: 1px solid rgba(255,255,255,0.18);
+  border-radius: 4px;
+  color: #fff; font-family: inherit; font-size: 0.72rem;
+  letter-spacing: 0.08em; outline: none; cursor: pointer;
+}
+#overlay .field-row select:focus { border-color: #3aa7ff; }
+#cool-shots-panel {
+  position: absolute; top: 0; left: 0; bottom: 0;
+  width: 280px;
+  background: rgba(8,11,16,0.75);
+  border-right: 1px solid rgba(255,255,255,0.07);
+  padding: 24px 18px;
+  overflow-y: auto;
+  color: #b8c8d8;
+  font-size: 0.8rem;
+  cursor: default;
+}
+#cool-shots-panel h2 {
+  font-size: 0.85rem; color: #fff; letter-spacing: 0.22em;
+  margin-bottom: 14px; font-weight: 700;
+}
+#cool-shots-panel .sub { font-size: 0.65rem; color: rgba(140,170,195,0.6); margin-bottom: 12px; letter-spacing: 0.08em; }
+/* Loadout picker — bottom-center strip inside the ESC overlay */
+#loadout-bar {
+  position: absolute; left: 50%; bottom: 26px;
+  transform: translateX(-50%);
+  display: flex; flex-direction: column; gap: 6px;
+  align-items: center;
+  cursor: default;
+}
+#loadout-bar .lo-row { display: flex; gap: 5px; align-items: center; }
+#loadout-bar .lo-label {
+  font-size: 0.55rem; letter-spacing: 0.2em; font-weight: 600;
+  color: rgba(140,170,195,0.55); width: 52px; text-align: right;
+  margin-right: 4px;
+}
+#loadout-bar .lo-chip {
+  padding: 6px 11px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 5px;
+  color: #cdd9e5; font-family: inherit;
+  font-size: 0.66rem; font-weight: 600; letter-spacing: 0.08em;
+  cursor: pointer; text-transform: uppercase;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+#loadout-bar .lo-chip:hover { background: rgba(58,167,255,0.15); color: #fff; }
+#loadout-bar .lo-chip.active {
+  background: rgba(58,167,255,0.25); border-color: #3aa7ff; color: #fff;
+  box-shadow: 0 0 12px rgba(58,167,255,0.25);
+}
+#loadout-bar .lo-chip .k {
+  color: rgba(140,170,195,0.65); margin-right: 6px; font-size: 0.58rem;
+}
+#loadout-bar .lo-chip.stub { opacity: 0.4; cursor: default; border-style: dashed; }
+#loadout-bar .lo-chip.stub:hover { background: rgba(255,255,255,0.06); color: #cdd9e5; }
+/* Custom dropups — chip face + option list opening upward (the bar sits
+   at the bottom edge). No native select chrome, stays in-game UI. */
+#loadout-bar .lo-drop {
+  position: relative; /* width set per-dropup by canvas-measured options */
+  display: flex; justify-content: space-between; align-items: center;
+  gap: 8px;
+}
+#loadout-bar .lo-drop .lo-caret { opacity: 0.5; font-size: 0.6rem; }
+#loadout-bar .lo-list {
+  display: none; position: absolute; bottom: calc(100% + 4px);
+  left: -1px; right: -1px; z-index: 10;
+  flex-direction: column;
+  background: rgba(13,20,32,0.97);
+  border: 1px solid rgba(58,167,255,0.35); border-radius: 5px;
+  overflow: hidden;
+  box-shadow: 0 -6px 24px rgba(0,0,0,0.5);
+}
+#loadout-bar .lo-drop.open .lo-list { display: flex; }
+#loadout-bar .lo-opt {
+  padding: 7px 11px; color: #cdd9e5;
+  font-size: 0.66rem; font-weight: 600; letter-spacing: 0.08em;
+  text-transform: uppercase; white-space: nowrap;
+}
+#loadout-bar .lo-opt:hover { background: rgba(58,167,255,0.18); color: #fff; }
+#loadout-bar .lo-opt.sel { color: #3aa7ff; }
+#cool-shots-top, #cool-shots-recent { display: flex; flex-direction: column; gap: 3px; }
+.cool-shot-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 6px 10px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid transparent;
+  border-left: 2px solid rgba(255,255,255,0.1);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+.cool-shot-item:hover { background: rgba(58,167,255,0.12); border-left-color: #3aa7ff; }
+.cool-shot-item.recent { border-left-color: #4caf6d; }
+.cool-shot-item.recent:hover { background: rgba(76,175,109,0.12); border-left-color: #6fcf8f; }
+.cool-shot-item .rank { font-size: 0.7rem; font-weight: 700; color: rgba(140,170,195,0.7); min-width: 16px; }
+.cool-shot-item .lifetime { font-size: 0.85rem; font-weight: 600; color: #fff; font-variant-numeric: tabular-nums; }
+.cool-shot-item .time-ago { font-size: 0.65rem; color: rgba(140,170,195,0.55); margin-left: auto; }
+.cool-shot-item.empty { color: rgba(140,170,195,0.4); cursor: default; text-align: center; justify-content: center; }
+.cool-shot-item.empty:hover { background: rgba(255,255,255,0.04); border-left-color: rgba(255,255,255,0.1); }
+.section-label { font-size: 0.62rem; color: rgba(140,170,195,0.6); letter-spacing: 0.2em; font-weight: 600; margin-bottom: 6px; margin-top: 18px; }
+.section-label:first-of-type { margin-top: 0; }
+
+/* Lobby panel — floats bottom-right, mirrors the ESC overlay palette */
+.lb-btn {
+  background: rgba(255,255,255,0.07); color: #cdd9e5;
+  border: 1px solid rgba(255,255,255,0.14); border-radius: 6px;
+  font-family: inherit; font-size: 0.72rem; font-weight: 600;
+  letter-spacing: 0.1em; cursor: pointer; text-transform: uppercase;
+  padding: 8px 10px;
+  transition: background 0.12s, color 0.12s;
+}
+.lb-btn:hover { background: rgba(58,167,255,0.18); color: #fff; }
+.lb-btn:disabled { opacity: 0.5; cursor: default; }
+.lb-open { position: fixed; right: 12px; bottom: 12px; z-index: 60; }
+.lb-panel {
+  position: fixed; right: 12px; bottom: 52px; z-index: 60; width: 300px;
+  background: rgba(8,11,16,0.75); border: 1px solid rgba(255,255,255,0.07);
+  color: #dde8f2; border-radius: 8px; padding: 14px; font-size: 0.72rem;
+}
+.lb-label {
+  font-size: 0.62rem; letter-spacing: 0.2em; font-weight: 600;
+  color: rgba(140,170,195,0.6); margin-bottom: 6px;
+}
+.lb-label + .lb-label, .lb-spaced { margin-top: 12px; }
+.lb-here { color: #6fcf8f; font-size: 0.62rem; margin-bottom: 8px; letter-spacing: 0.1em; }
+.lb-rows { max-height: 220px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+.lb-field {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; padding: 7px 10px;
+  background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 6px; font-size: 0.68rem; font-weight: 600;
+  letter-spacing: 0.1em; color: #cdd9e5;
+}
+.lb-input {
+  background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.18);
+  border-radius: 4px; color: #fff; font-family: inherit;
+  font-size: 0.72rem; padding: 5px 8px; outline: none; letter-spacing: 0.08em;
+}
+.lb-input:focus { border-color: #3aa7ff; }
+.lb-quick { display: flex; gap: 4px; margin-bottom: 8px; }
+.lb-quick .lb-btn { flex: 1; padding: 6px 0; text-align: center; }
+.lb-newrow { display: flex; gap: 6px; margin-top: 8px; }
+.lb-room {
+  display: block; width: 100%; text-align: left;
+  background: rgba(255,255,255,0.04); border: 1px solid transparent;
+  border-left: 2px solid rgba(255,255,255,0.1); border-radius: 4px;
+  color: #dde8f2; font: inherit; padding: 6px 10px; cursor: pointer;
+  font-size: 0.68rem; letter-spacing: 0.06em;
+  transition: background 0.12s, border-left-color 0.12s;
+}
+.lb-room:hover { background: rgba(58,167,255,0.12); border-left-color: #3aa7ff; }
+.lb-room.current { border-left-color: #6fcf8f; opacity: 0.9; }
+.lb-room.full { opacity: 0.45; }
+.lb-room:disabled { cursor: default; }
+.lb-room .meta { float: right; color: rgba(58,167,255,0.85); }

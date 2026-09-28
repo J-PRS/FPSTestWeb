@@ -223,19 +223,9 @@ export class HUD {
   setDeathOverlay(on: boolean): void {
     if (on && !this.deathOverlay) {
       const d = document.createElement('div');
-      d.style.cssText = `
-        position:absolute; inset:0; pointer-events:none; z-index:5;
-        background: radial-gradient(ellipse at center,
-          rgba(0,0,0,0) 40%, rgba(0,0,0,0.25) 70%, rgba(0,0,0,0.6) 100%);
-        backdrop-filter: grayscale(0.7) brightness(0.85);
-        -webkit-backdrop-filter: grayscale(0.7) brightness(0.85);
-      `;
+      d.id = 'death-overlay';
       const c = document.createElement('div');
-      c.style.cssText = `
-        position:absolute; left:50%; bottom:22%; transform:translateX(-50%);
-        color:#cfe8ff; font:700 26px/1 Rajdhani,sans-serif; letter-spacing:0.2em;
-        text-shadow:0 1px 4px #000; opacity:0.9;
-      `;
+      c.className = 'death-clock';
       d.appendChild(c);
       document.body.appendChild(d);
       this.deathOverlay = d;
@@ -267,11 +257,7 @@ export class HUD {
   setSpectatorHint(on: boolean): void {
     if (on && !this.spectateHint) {
       const d = document.createElement('div');
-      d.style.cssText = `
-        position:absolute; top:14px; left:50%; transform:translateX(-50%);
-        pointer-events:none; z-index:5; color:#cfe8ff; opacity:0.7;
-        font:600 13px/1 monospace; letter-spacing:0.15em; text-shadow:0 1px 3px #000;
-      `;
+      d.id = 'spectate-hint';
       d.textContent = 'SPECTATING';
       document.body.appendChild(d);
       this.spectateHint = d;
@@ -281,39 +267,33 @@ export class HUD {
     }
   }
 
-  // Cloak chrome: unlike spectate the combat HUD stays up — the CLOAKED
-  // marker + a cool edge vignette are the tell that you're invisible
-  // (the energy bar shows the drain).
-  private cloakHint: HTMLDivElement | null = null;
-  private cloakVignette: HTMLDivElement | null = null;
+  /* Status effects (cloak/shield/mend) share one chrome shape: a top-center
+     chip + a full-screen edge vignette. Colors/offsets live in hud.css —
+     these methods just flip elements on and off. */
+  private statusFx = new Map<string, { hint: HTMLDivElement; vig: HTMLDivElement }>();
 
-  setCloak(on: boolean): void {
-    if (on && !this.cloakHint) {
-      const v = document.createElement('div');
-      v.style.cssText = `
-        position:fixed; inset:0; pointer-events:none; z-index:4;
-        box-shadow: inset 0 0 22vmax rgba(90,120,255,0.5),
-                    inset 0 0 6vmax rgba(140,170,255,0.35);
-      `;
-      document.body.appendChild(v);
-      this.cloakVignette = v;
-      const d = document.createElement('div');
-      d.style.cssText = `
-        position:absolute; top:14px; left:50%; transform:translateX(-50%);
-        pointer-events:none; z-index:5; color:#b9c8ff; opacity:0.75;
-        font:600 13px/1 monospace; letter-spacing:0.2em; text-shadow:0 1px 3px #000;
-      `;
-      d.textContent = 'CLOAKED';
-      document.body.appendChild(d);
-      this.cloakHint = d;
-    } else if (!on && this.cloakHint) {
-      this.cloakHint.remove();
-      this.cloakHint = null;
-      this.cloakVignette?.remove();
-      this.cloakVignette = null;
+  private setStatusFx(kind: 'cloak' | 'shield' | 'mend', label: string, on: boolean): void {
+    const fx = this.statusFx.get(kind);
+    if (on && !fx) {
+      const vig = document.createElement('div');
+      vig.className = `status-vignette ${kind}`;
+      const hint = document.createElement('div');
+      hint.className = `status-hint ${kind}`;
+      hint.textContent = label;
+      document.body.append(vig, hint);
+      this.statusFx.set(kind, { hint, vig });
+    } else if (!on && fx) {
+      fx.hint.remove();
+      fx.vig.remove();
+      this.statusFx.delete(kind);
     }
   }
 
+  // Cloak reads as indigo, shield as cyan, mend as green — the energy bar
+  // shows the drain/soak underneath.
+  setCloak(on: boolean): void { this.setStatusFx('cloak', 'CLOAKED', on); }
+  setShield(on: boolean): void { this.setStatusFx('shield', 'SHIELDED', on); }
+  setMend(on: boolean): void { this.setStatusFx('mend', 'MENDING', on); }
   private fpsAccum = 0;
   private fpsFrames = 0;
   private fpsValue = 0;
@@ -373,64 +353,6 @@ export class HUD {
     }
   }
   private shieldVignetteReset = 0;
-
-  setShield(on: boolean): void {
-    if (on && !this.shieldHint) {
-      const d = document.createElement('div');
-      d.style.cssText = `
-        position:absolute; top:30px; left:50%; transform:translateX(-50%);
-        pointer-events:none; z-index:5; color:#9adcf9; opacity:0.8;
-        font:600 13px/1 monospace; letter-spacing:0.2em; text-shadow:0 1px 3px #000;
-      `;
-      d.textContent = 'SHIELDED';
-      document.body.appendChild(d);
-      this.shieldHint = d;
-      const v = document.createElement('div');
-      v.style.cssText = `
-        position:fixed; inset:0; pointer-events:none; z-index:4;
-        box-shadow: inset 0 0 20vmax rgba(80,190,255,0.4),
-                    inset 0 0 5vmax rgba(140,220,255,0.3);
-      `;
-      document.body.appendChild(v);
-      this.shieldVignette = v;
-    } else if (!on && this.shieldHint) {
-      this.shieldHint.remove();
-      this.shieldHint = null;
-      this.shieldVignette?.remove();
-      this.shieldVignette = null;
-    }
-  }
-  private shieldHint: HTMLDivElement | null = null;
-  private shieldVignette: HTMLDivElement | null = null;
-
-  setMend(on: boolean): void {
-    if (on && !this.mendHint) {
-      const d = document.createElement('div');
-      d.style.cssText = `
-        position:absolute; top:48px; left:50%; transform:translateX(-50%);
-        pointer-events:none; z-index:5; color:#8ff5ae; opacity:0.8;
-        font:600 13px/1 monospace; letter-spacing:0.2em; text-shadow:0 1px 3px #000;
-      `;
-      d.textContent = 'MENDING';
-      document.body.appendChild(d);
-      this.mendHint = d;
-      const v = document.createElement('div');
-      v.style.cssText = `
-        position:fixed; inset:0; pointer-events:none; z-index:4;
-        box-shadow: inset 0 0 18vmax rgba(80,230,140,0.35),
-                    inset 0 0 5vmax rgba(150,255,190,0.25);
-      `;
-      document.body.appendChild(v);
-      this.mendVignette = v;
-    } else if (!on && this.mendHint) {
-      this.mendHint.remove();
-      this.mendHint = null;
-      this.mendVignette?.remove();
-      this.mendVignette = null;
-    }
-  }
-  private mendHint: HTMLDivElement | null = null;
-  private mendVignette: HTMLDivElement | null = null;
 
   updateMinimap(targets: Targetable[], nuggets: Nugget[], pos: THREE.Vector3, yaw: number, birds?: THREE.Vector3[]): void {
     this.minimap.update(targets, nuggets, pos, yaw, birds);
