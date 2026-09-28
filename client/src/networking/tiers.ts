@@ -82,6 +82,8 @@ class WebTransportGameTransport implements GameTransport {
       const { done, value } = await reader.read();
       if (done) return;
       carry += this.decoder.decode(value, { stream: true });
+      // Server sending a never-terminated line would grow this forever.
+      if (carry.length > 65536) { this.disconnect(); return; }
       let nl: number;
       while ((nl = carry.indexOf('\n')) >= 0) {
         const line = carry.slice(0, nl);
