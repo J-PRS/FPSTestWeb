@@ -91,6 +91,8 @@ const STEP = 8;          // m — steering lookahead distance
 const SEP_RANGE = 7;     // m — personal space vs other bodies
 const MEM_MS = 4000;     // recently-visited ground repels for this long
 const MEM_RANGE = 12;    // m — memory trail influence radius
+const DEATH_MS = 30000;  // a death spot stays scary this long
+const DEATH_RANGE = 15;  // m — repel radius around each remembered death
 
 /** Heightfield LOS — march the eye→target line, fail where ground rises
  *  above it. pos.y is eye-height on the client and near-feet on the
@@ -139,6 +141,27 @@ export class BotBrain {
   private heading = { x: 1, z: 0 };
   private memory: { x: number; z: number; t: number }[] = [];
   private memT = 0;
+  // Death memory — where the host reported this body dying. Souring
+  // goals near a death spot is how map denial emerges: nobody scripts
+  // "that corner is dangerous", the squad just stops wandering back.
+  private deaths: { x: number; z: number; t: number }[] = [];
+
+  /** Host reports the bot's corpse spot on death. */
+  markDeath(pos: BotVec): void {
+    this.deaths.push({ x: pos.x, z: pos.z, t: Date.now() });
+    if (this.deaths.length > 8) this.deaths.shift();
+  }
+
+  /** Is p within the repel radius of a recent death? */
+  private nearDeath(p: { x: number; z: number }): boolean {
+    const now = Date.now();
+    for (const d of this.deaths) {
+      if (now - d.t > DEATH_MS) continue;
+      const dx = p.x - d.x, dz = p.z - d.z;
+      if (dx * dx + dz * dz < DEATH_RANGE * DEATH_RANGE) return true;
+    }
+    return false;
+  }
   // Personality scalars — ±20-30% per bot so a squad doesn't read as one
   // centipede: different preferred ranges, wander appetites, tempers.
   private readonly orbitFar = ORBIT_FAR * (0.85 + Math.random() * 0.3);
@@ -315,14 +338,22 @@ export class BotBrain {
       if (loudest && Math.random() < this.wanderlust * 0.5) this.goal = { ...loudest };
     } else if (this.wanderT <= 0 || distSq(pos, this.wanderWp) < 9) {
       this.wanderT = (3 + Math.random() * 4) / this.wanderlust;
-      const a = Math.random() * Math.PI * 2;
-      const r = (15 + Math.random() * 40) * this.wanderlust;
-      this.wanderWp = {
-        x: pos.x + Math.cos(a) * r,
-        y: ctx.groundY(pos.x + Math.cos(a) * r, pos.z + Math.sin(a) * r) + BOT_EYE,
-        z: pos.z + Math.sin(a) * r,
-      };
-      this.goal = { ...this.wanderWp };
+      // Roll a few candidate waypoints; the first one away from a death
+      // spot wins. Falling through keeps the last goal — a bot that died
+      // wandering simply keeps moving somewhere else.
+      for (let tries = 0; tries < 3; tries++) {
+        const a = Math.random() * Math.PI * 2;
+        const r = (15 + Math.random() * 40) * this.wanderlust;
+        const wp = { x: pos.x + Math.cos(a) * r, z: pos.z + Math.sin(a) * r };
+        if (this.nearDeath(wp)) continue;
+        this.wanderWp = {
+          x: wp.x,
+          y: ctx.groundY(wp.x, wp.z) + BOT_EYE,
+          z: wp.z,
+        };
+        this.goal = { ...this.wanderWp };
+        break;
+      }
     }
   }
 

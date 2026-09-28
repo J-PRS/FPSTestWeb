@@ -282,7 +282,13 @@ export class ServerBots {
     for (const [id, brain] of this.brains) {
       const p = this.room.players.getPlayer(id);
       if (!p) continue;
-      if (p.isDead) { this.deadSet.add(id); continue; }
+      if (p.isDead) {
+        // First sighting of this corpse — the brain keeps the spot as a
+        // death memory so its wander goals sour on kill zones.
+        if (!this.deadSet.has(id)) brain.markDeath(p.position);
+        this.deadSet.add(id);
+        continue;
+      }
       p.lastSeen = now; // bots never send positions — heartbeat manually
         // or the idle reaper would cull them on schedule
 
