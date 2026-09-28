@@ -72,7 +72,10 @@ export interface BrainOut {
   belt?: boolean;
 }
 
-export const BOT_EYE = 1.6;
+// Must equal EYE_OFFSET (shared/constants): GameBot.position IS the eye
+// point, and RemotePlayer renders feet at pos.y - EYE_OFFSET. At 1.6
+// every local bot's feet sat 0.2m inside the terrain.
+export const BOT_EYE = 1.8;
 export const BOT_FIRE_RANGE = 45;
 const THINK_S = 0.3;
 const ORBIT_FAR = 22;    // orbit the target inside this ring distance
@@ -468,10 +471,11 @@ export class BotBrain {
     // into speed. A bot that only jets on cliffs never gets dynamic.
     const hop = rise > 0.8 && rise <= 3;
     return {
-      // Ski to keep whatever momentum exists — downhill, airborne, or
-      // already moving. Held constantly so speed compounds into real
-      // skiing instead of decaying to a jog.
-      ski: rise < -0.3 || speed > 4 || airborne || hop,
+      // Tribes default: ski is held whenever the bot has somewhere to
+      // be. Momentum is life — a bot that only skis downhill reads as a
+      // pedestrian, which is exactly the sheep behavior the watchdog
+      // now flags. Friction/jets sort out the uphill cost.
+      ski: true,
       jet: (uphill || targetHigh || (hop && speed > 4)) && speed > 0.3 && tanked,
       // Uphill + near-stationary = hop it; autohop chains the rest.
       jump: uphill && speed < 3 && !airborne,

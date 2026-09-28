@@ -16,6 +16,7 @@
 import type { Vec3 } from './types.ts';
 import type { Room } from './Room.ts';
 import { hmHeight, type Heightfield } from '../../shared/heightfield.ts';
+import { EYE_OFFSET } from '../../shared/constants.ts';
 import { BotBrain, type BotEnemy, type BotVec } from '../../shared/botBrain.ts';
 import { logger } from './logger.ts';
 import { STATUS, CLIENT_STATUS_MASK } from '../../shared/status.ts';
@@ -55,6 +56,16 @@ export class ServerBots {
   /** Stuck watchdog — last-seen position + when it last moved. A bot that
    *  doesn't cover ground is a bug worth a log line, not silent scenery. */
   private watchdog = new Map<string, { x: number; z: number; since: number; warned: boolean }>();
+  /** Sheep detector — rolling window of mobility stats. A Tribes bot
+   *  that never skis and never leaves the ground isn't fighting, it's
+   *  grazing: warn on low ski/air fraction or walking-pace travel.
+   *  Only ticks where the brain pushes a destination count, so anchor
+   *  defenders holding a stand stay legitimately still. */
+  private sheep = new Map<string, { winStart: number; ticks: number; skiAir: number; dist: number; lx: number; lz: number }>();
+  private static readonly SHEEP_WIN_MS = 10000;
+  private static readonly SHEEP_MIN_TICKS = 60;
+  private static readonly SHEEP_SKIAIR = 0.5;
+  private static readonly SHEEP_SPEED = 4;
 
   constructor(room: Room, field: Heightfield | null) {
     this.room = room;
@@ -316,6 +327,7 @@ export class ServerBots {
     this.loadouts.delete(id);
     this.roles.delete(id);
     this.watchdog.delete(id);
+    this.sheep.delete(id);
     this.room.moveSim.untrack(id);
     this.room.removePlayerCompletely(id, 'botFill', (m, o) => logger.info(m, o));
   }
@@ -346,6 +358,40 @@ export class ServerBots {
         pos: { x: +p.position.x.toFixed(1), y: +p.position.y.toFixed(1), z: +p.position.z.toFixed(1) },
       });
     }
+  }
+
+  /** Rolling mobility audit. 'trying' = the brain has a destination this
+   *  tick — defenders parked on a stand don't accrue. Warns once per
+   *  10s window when a mobile bot stays flat-footed: under half its
+   *  travel ticks skiing/airborne, or averaging walking pace. */
+  private checkSheep(id: string, p: { position: Vec3 }, trying: boolean, skiAir: boolean, dtRef: number, now: number): void {
+    let s = this.sheep.get(id);
+    if (!s) {
+      this.sheep.set(id, { winStart: now, ticks: 0, skiAir: 0, dist: 0, lx: p.position.x, lz: p.position.z });
+      return;
+    }
+    const dx = p.position.x - s.lx, dz = p.position.z - s.lz;
+    s.lx = p.position.x; s.lz = p.position.z;
+    if (trying) { s.ticks++; s.dist += Math.hypot(dx, dz); if (skiAir) s.skiAir++; }
+    const winMs = now - s.winStart;
+    if (winMs < ServerBots.SHEEP_WIN_MS) return;
+    if (s.ticks >= ServerBots.SHEEP_MIN_TICKS) {
+      const frac = s.skiAir / s.ticks;
+      const avgSpeed = s.dist / (s.ticks * dtRef); // per-tick distance → m/s
+      const stats = {
+        room: this.room.name, bot: id,
+        skiAirPct: Math.round(frac * 100),
+        avgSpeed: +avgSpeed.toFixed(1),
+        covered: +s.dist.toFixed(1),
+      };
+      // Always-on record: healthy mobility is logged too so a regression
+      // back to flat-footed bots is visible in review, not just failures.
+      logger.info('Bot mobility', stats);
+      if (frac < ServerBots.SHEEP_SKIAIR || avgSpeed < ServerBots.SHEEP_SPEED) {
+        logger.warn('Bot sheeping', stats);
+      }
+    }
+    s.winStart = now; s.ticks = 0; s.skiAir = 0; s.dist = 0;
   }
 
   tick(dt: number): void {
@@ -425,6 +471,7 @@ export class ServerBots {
         } else {
           this.room.moveSim.setInput(id, { forward: 0, right: 0, jumpHeld: false, skiHeld: false, jetHeld: false }, p.status, this.seq++);
         }
+        this.checkSheep(id, p, dist >= 0.5, !!out.move?.ski || !sh.onGround, dt, now);
         p.position.x = sh.pos.x; p.position.y = sh.pos.y; p.position.z = sh.pos.z;
         p.velocity.x = sh.vel.x; p.velocity.y = sh.vel.y; p.velocity.z = sh.vel.z;
         // Ski bit rides the tick flag byte (bit 2) — drives remote dust.
@@ -437,8 +484,11 @@ export class ServerBots {
         p.velocity.x = nx * speed;
         p.velocity.z = nz * speed;
         const groundY = this.field ? hmHeight(this.field, p.position.x, p.position.z) : p.position.y;
-        const targetY = Math.max(groundY + 0.1, p.position.y - 9 * dt);
-        const hopping = p.position.y > groundY + 1.2;
+        // p.position is EYE-height (the wire convention — clients render
+        // feet at pos.y - EYE_OFFSET); groundY+0.1 parked the model 1.7m
+        // underground.
+        const targetY = Math.max(groundY + EYE_OFFSET, p.position.y - 9 * dt);
+        const hopping = p.position.y > groundY + EYE_OFFSET + 1.1;
         p.velocity.y = hopping ? p.velocity.y - 30 * dt : 0;
         p.position.x += p.velocity.x * dt;
         p.position.z += p.velocity.z * dt;

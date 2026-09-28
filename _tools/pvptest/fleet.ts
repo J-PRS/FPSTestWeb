@@ -19,6 +19,7 @@ const TIER = (process.argv.find(a => a.startsWith('--tier='))?.slice(7) ?? 'ws')
 
 import { encodePosition, decodeTickFrame, isWireFrame, WIRE_TICK } from '../../shared/wire.ts';
 import { openSocket, type BotSocket, type Tier } from './net.ts';
+import { getWeaponStats } from '../../shared/weapons';
 import { MoveSim } from '../../shared/movement.ts';
 import { hmHeight, hmNormal, type Heightfield } from '../../shared/heightfield.ts';
 import { readFileSync } from 'fs';
@@ -65,6 +66,13 @@ interface Bot {
   seq: number;
   sim?: MoveSim;
   yaw: number;
+  /** Honest combat: remotes seen on tick frames + one in-flight slug. */
+  remotes: Map<string, { x: number; y: number; z: number; vx: number; vy: number; vz: number; dead: boolean }>;
+  team?: string;
+  pending: { id?: string; targetId: string; firedAt: number; flyS: number; aim: { x: number; y: number; z: number } } | null;
+  fireAt: number;
+  rejects: number;
+  kills: number;
 }
 
 const bots: Bot[] = [];
@@ -78,6 +86,7 @@ async function spawnBot(room: string, name: string): Promise<void> {
     cz: (Math.random() - 0.5) * 200,
     tickFrames: 0, sends: 0, seq: 0,
     yaw: Math.random() * Math.PI * 2,
+    remotes: new Map(), pending: null, fireAt: 0, rejects: 0, kills: 0,
   };
   bots.push(bot);
   try {
@@ -86,8 +95,18 @@ async function spawnBot(room: string, name: string): Promise<void> {
     ws.onmessage = (ev) => {
       if (typeof ev.data === 'string') {
         const m = JSON.parse(ev.data);
-        if (m.type === 'gameState') {
+        if (m.type === 'projectileCreated' && m.ownerId === name && bot.pending && !bot.pending.id) {
+          bot.pending.id = m.projectileId;
+        } else if (m.type === 'shotRejected') {
+          bot.rejects++;
+          if (bot.rejects <= 5) console.log(`  ${name} shotRejected: ${m.reason}`);
+          if (bot.pending?.id) bot.pending = null;
+        } else if (m.type === 'playerKill' && m.shooterId === name) {
+          bot.kills++;
+          bot.pending = null;
+        } else if (m.type === 'gameState') {
           bot.joined = true; joins++;
+          bot.team = m.team;
           // Seed the local sim at the spawn the server assigned —
           // reports are only honest if we start where the server put us.
           const lp = m.localPlayerState;
@@ -112,7 +131,17 @@ async function spawnBot(room: string, name: string): Promise<void> {
         if (isWireFrame(u8) && u8[1] === WIRE_TICK) {
           bot.tickFrames++;
           const f = decodeTickFrame(u8);
-          if (f) totalTickFrames++;
+          if (f) {
+            totalTickFrames++;
+            for (const p of f.updates) {
+              if (p.playerId === name) continue;
+              bot.remotes.set(p.playerId, {
+                x: p.position.x, y: p.position.y, z: p.position.z,
+                vx: p.velocity.x, vy: p.velocity.y, vz: p.velocity.z,
+                dead: p.isDead,
+              });
+            }
+          }
         }
       }
     };
@@ -120,7 +149,8 @@ async function spawnBot(room: string, name: string): Promise<void> {
     ws.onclose = () => { if (!bot.joined) joinFails++; };
     // FLEET_SBOTS=N requests N server-side bots in the room (join.bots).
     const sbots = parseInt(process.env.FLEET_SBOTS ?? '0') || undefined;
-    ws.send(JSON.stringify({ type: 'join', playerId: name, room, transport: TIER, bots: sbots }));
+    const map = process.env.FLEET_MAP || undefined;
+    ws.send(JSON.stringify({ type: 'join', playerId: name, room, transport: TIER, bots: sbots, map }));
   } catch {
     joinFails++;
   }
@@ -176,14 +206,79 @@ const moveTimer = setInterval(() => {
   }
 }, 50);
 
+// Honest combat: honest bots lob real PlasmaGun bolts at the nearest
+// remote seen on tick frames — spawn the projectile (miss-branch shot),
+// land the hit claim after the true flight time, then destroy the shell.
+// Exercises the full claim pipeline (projectileCreated → validateHitClaim
+// → playerHit → kill credit) under fleet load.
+const FLEE_WID = 23; // WeaponType.PlasmaGun — fat bolt forgives lead error
+const fireTimer = setInterval(() => {
+  const speed = getWeaponStats(FLEE_WID).speed;
+  const now = Date.now();
+  for (const b of bots) {
+    if (!b.joined || !b.ws || b.ws.readyState !== 1 || !b.sim) continue;
+    // Tick records don't carry teams — a teamed bot can't tell friend
+    // from foe, so it holds fire (the friendly gate already proved itself
+    // by rejecting these as 'friendly fire'). Combat testing belongs to
+    // FFA rooms.
+    if (b.team) continue;
+    if (b.pending) {
+      // Land the claim once the bolt would have arrived.
+      if (b.pending.id && now - b.pending.firedAt >= b.pending.flyS * 1000) {
+        const t = b.remotes.get(b.pending.targetId);
+        const hit = t && !t.dead ? t : b.pending.aim;
+        b.ws.send(JSON.stringify({
+          type: 'shot', targetId: t && !t.dead ? b.pending.targetId : null,
+          projectileId: b.pending.id,
+          position: { x: hit.x, y: hit.y, z: hit.z },
+          airtime: (now - b.pending.firedAt) / 1000,
+          weaponType: FLEE_WID,
+        }));
+        b.ws.send(JSON.stringify({ type: 'projectileDestroy', projectileId: b.pending.id }));
+        b.pending = null;
+      }
+      continue;
+    }
+    if (now < b.fireAt) continue;
+    b.fireAt = now + 500 + Math.random() * 500;
+    // Nearest living remote within reach; lead by one flight time.
+    const s = b.sim.state;
+    let best: string | null = null, bd = 140 * 140, tp: { x: number; y: number; z: number; vx: number; vy: number; vz: number } | null = null;
+    for (const [id, r] of b.remotes) {
+      if (r.dead) continue;
+      const dx = r.x - s.pos.x, dz = r.z - s.pos.z, dy = r.y - s.pos.y;
+      const d2 = dx * dx + dy * dy + dz * dz;
+      if (d2 < bd) { bd = d2; best = id; tp = r; }
+    }
+    if (!best || !tp) continue;
+    const dist = Math.sqrt(bd);
+    const flyS = dist / speed;
+    const aim = { x: tp.x + tp.vx * flyS, y: tp.y + tp.vy * flyS, z: tp.z + tp.vz * flyS };
+    const mx = s.pos.x, my = s.pos.y + 1.5, mz = s.pos.z;
+    let dx = aim.x - mx, dy = aim.y - my, dz = aim.z - mz;
+    const dl = Math.hypot(dx, dy, dz) || 1;
+    dx /= dl; dy /= dl; dz /= dl;
+    b.ws.send(JSON.stringify({
+      type: 'shot', targetId: null, weaponType: FLEE_WID,
+      position: { x: mx, y: my, z: mz },
+      velocity: { x: dx * speed, y: dy * speed, z: dz * speed },
+    }));
+    b.pending = { targetId: best, firedAt: now, flyS, aim };
+  }
+}, 80);
+
 setTimeout(() => {
   clearInterval(moveTimer);
+  clearInterval(fireTimer);
   const joined = bots.filter(b => b.joined).length;
   console.log(`\n=== FLEET RESULTS ===`);
   console.log(`joined: ${joined}/${bots.length}  failed: ${joinFails}`);
   console.log(`tick frames received: ${totalTickFrames}  position sends: ${totalSends}`);
+  const kills = bots.reduce((n, b) => n + b.kills, 0);
+  const rejects = bots.reduce((n, b) => n + b.rejects, 0);
+  console.log(`combat: ${kills} kills, ${rejects} shot rejects`);
   for (const b of bots.slice(0, 3)) {
-    console.log(`  ${b.name}: ${b.tickFrames} frames, ${b.sends} sends`);
+    console.log(`  ${b.name}: ${b.tickFrames} frames, ${b.sends} sends, ${b.kills} kills, ${b.rejects} rejects`);
   }
   process.exit(joined === bots.length ? 0 : 1);
 }, SECONDS * 1000 + ROOMS * PER_ROOM * 40 + 2000);
