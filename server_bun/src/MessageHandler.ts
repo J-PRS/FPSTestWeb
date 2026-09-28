@@ -24,6 +24,8 @@ export interface RoomInfo {
   /** Static structures from the map spec — echoed on gameState so every
    *  client builds the same base compounds/cover. */
   structures?: { kind: 'box' | 'wall' | 'pillar' | 'ramp'; pos: { x: number; y: number; z: number }; size: { x: number; y: number; z: number }; rotY?: number; team?: 'alpha' | 'bravo' }[];
+  /** Arena dome from the map spec — center {x,z} + radius. */
+  arena?: { x: number; z: number; radius: number };
   /** Any kill — Room drops carried flags here. */
   onKill?: (targetId: string, shooterId: string) => void;
   /** Any damage event — Room flinches bot brains here. */
@@ -129,8 +131,8 @@ export class MessageHandler {
       team: player.team,
       scores: this.roomInfo.scores ? { ...this.roomInfo.scores } : undefined,
       ffaScores: this.roomInfo.ffaScores?.(),
-      map: this.roomInfo.bases || this.roomInfo.structures
-        ? { mode: this.roomInfo.mode || undefined, bases: this.roomInfo.bases, structures: this.roomInfo.structures }
+      map: this.roomInfo.bases || this.roomInfo.structures || this.roomInfo.arena
+        ? { mode: this.roomInfo.mode || undefined, bases: this.roomInfo.bases, structures: this.roomInfo.structures, arena: this.roomInfo.arena }
         : undefined,
       flags: this.roomInfo.flags?.(),
       pickups: this.roomInfo.pickups?.(),
@@ -178,8 +180,8 @@ export class MessageHandler {
       mode: this.roomInfo.mode || undefined,
       scores: this.roomInfo.scores ? { ...this.roomInfo.scores } : undefined,
       ffaScores: this.roomInfo.ffaScores?.(),
-      map: this.roomInfo.bases || this.roomInfo.structures
-        ? { mode: this.roomInfo.mode || undefined, bases: this.roomInfo.bases, structures: this.roomInfo.structures }
+      map: this.roomInfo.bases || this.roomInfo.structures || this.roomInfo.arena
+        ? { mode: this.roomInfo.mode || undefined, bases: this.roomInfo.bases, structures: this.roomInfo.structures, arena: this.roomInfo.arena }
         : undefined,
       flags: this.roomInfo.flags?.(),
       pickups: this.roomInfo.pickups?.(),

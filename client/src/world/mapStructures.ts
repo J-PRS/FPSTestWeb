@@ -24,6 +24,42 @@ const KIND_ROT: Record<StructureSpec['kind'], (m: THREE.Mesh, s: StructureSpec) 
 
 let built: THREE.Group | null = null;
 
+let dome: THREE.Mesh | null = null;
+
+/** Translucent dome marking the arena boundary (Quicksand-style). Non-
+ * blocking — visible geometry only; enforcement is a separate layer. */
+export function buildArenaDome(a: { x: number; z: number; radius: number }, groundY: number, scene: THREE.Scene): void {
+  if (dome) {
+    scene.remove(dome);
+    dome.geometry.dispose();
+    (dome.material as THREE.Material).dispose();
+    dome = null;
+  }
+  const mat = new THREE.MeshBasicMaterial({
+    color: 0x66ccff, transparent: true, opacity: 0,
+    side: THREE.BackSide, depthWrite: false,
+  });
+  dome = new THREE.Mesh(
+    new THREE.SphereGeometry(a.radius, 48, 24, 0, Math.PI * 2, 0, Math.PI / 2),
+    mat,
+  );
+  // Tribes-style: the barrier is invisible at range and fades in only near
+  // the shell — so both inside-approach and outside-approach measure
+  // distance to the shell surface, not the dome center.
+  dome.onBeforeRender = (_r, _s, cam) => {
+    const dx = cam.position.x - a.x;
+    const dy = cam.position.y - groundY;
+    const dz = cam.position.z - a.z;
+    const distToShell = Math.abs(Math.sqrt(dx * dx + dy * dy + dz * dz) - a.radius);
+    mat.opacity = Math.max(0, Math.min(0.35, (1 - distToShell / 80) * 0.35));
+    dome!.visible = mat.opacity > 0.004;
+  };
+  dome.position.set(a.x, groundY, a.z);
+  dome.matrixAutoUpdate = false;
+  dome.updateMatrix();
+  scene.add(dome);
+}
+
 export function buildStructures(list: StructureSpec[], scene: THREE.Scene): void {
   if (built) {
     scene.remove(built);
