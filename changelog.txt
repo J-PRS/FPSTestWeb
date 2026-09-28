@@ -1,3 +1,4 @@
+2026-09-26  totem.update -> static state table (complexity 28 -> ~8/handler); species state machine pattern now on 2 species
 2026-09-26  seeker.update refactored to static state-handler table (complexity 33 -> per-handler ~8); pilot for species state machines
 2026-09-26  perf audit — computeStateHash rolling FNV (no sort/string build); tick fanout per-tick reads hoisted
 2026-09-26  per-map ambient species caps — map spec ambient {species: max} overrides spawn gates; echoed via gameState/mapUpdate, applied through kit.capFor

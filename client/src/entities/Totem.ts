@@ -27,6 +27,9 @@ const _p = new THREE.Vector3();
 const _q = new THREE.Quaternion();
 const _s = new THREE.Vector3();
 
+type TotemState = 'materialize' | 'aim' | 'charge' | 'blinkOut' | 'blinkIn';
+interface TotemCtx { dt: number; dist: number; playerPos: THREE.Vector3; playerVel?: THREE.Vector3 }
+
 const PART_SHAFT = 0;
 const PART_CAP = 1;
 const PART_EYE = 2;      // glow slit quad near the top
@@ -124,7 +127,7 @@ export class Totem implements Targetable, SwarmSlotOwner {
   private flash = 0;
   private chargeGlow = 0;
 
-  private state: 'materialize' | 'aim' | 'charge' | 'blinkOut' | 'blinkIn' = 'materialize';
+  private state: TotemState = 'materialize';
   private stateTimer = TOTEM_MATERIALIZE;
   private chargeTimer = 0;
   private refire: number;
@@ -167,105 +170,104 @@ export class Totem implements Targetable, SwarmSlotOwner {
     this.foot.conform(this.pos.x, this.pos.z, this.pos.y, terrain);
   }
 
+  // Static state table + shared scratch ctx — see Seeker for the pattern.
+  private static readonly _ctx: TotemCtx = { dt: 0, dist: 0, playerPos: null as never };
+  private static readonly STATES: Record<TotemState, (t: Totem, c: TotemCtx) => void> = {
+    materialize(t, _c) {
+      const p = 1 - Math.max(0, t.stateTimer / TOTEM_MATERIALIZE);
+      t.bodyScale = 0.3 + p * 0.7;
+      t.eyeScale = 0.4 + p * 0.4;
+      t.eyeBright = p * 0.5;
+      if (t.stateTimer <= 0) {
+        t.state = 'aim';
+        t.bodyScale = 1;
+        t.eyeBright = 0.8;
+      }
+    },
+    aim(t, c) {
+      t.refire -= c.dt;
+      t.eyeBright = 0.8;
+      t.eyeScale = 1.1;
+      if (c.dist < TOTEM_MIN_RANGE ||
+          (t.shotsFired >= TOTEM_RELOCATE_HOPS) ||
+          (t.refire <= 0 && !t.lineClear(c.playerPos))) {
+        t.beginBlink(c.playerPos);
+        return;
+      }
+      if (t.refire <= 0 && c.dist < TOTEM_RANGE) {
+        t.state = 'charge';
+        const charge = t.uber ? UBER_TOTEM_CHARGE : TOTEM_CHARGE;
+        t.chargeTimer = charge;
+        if (t.uber) {
+          // PREDICTIVE LOCK — the beam locks where you WILL BE when it
+          // fires, not where you are: pos + vel × charge. Holding a
+          // strafe line gets you tagged; the only dodge is changing
+          // direction after the lock shows.
+          t.lockPoint.copy(c.playerPos)
+            .addScaledVector(c.playerVel ?? _zeroVel, charge);
+        } else {
+          t.lockPoint.copy(c.playerPos); // LOCK the line now — no more tracking
+        }
+        t.solveBeam();
+        t.beamOn = true;
+      }
+    },
+    charge(t, c) {
+      t.chargeTimer -= c.dt;
+      const charge = t.uber ? UBER_TOTEM_CHARGE : TOTEM_CHARGE;
+      const w0 = t.uber ? UBER_TOTEM_BEAM_WIDTH : 0.65;
+      const p = 1 - Math.max(0, t.chargeTimer / charge);
+      t.beamWidth = w0 - p * (w0 - 0.1);
+      t.beamOpacity = 0.3 + p * 0.55;
+      t.eyeBright = 0.8 + p * 0.2;
+      t.eyeScale = 1.1 + p * 1.4;
+      t.chargeGlow = p * 0.5; // violet charge bleed on the shaft
+      if (t.chargeTimer <= 0) {
+        t.fireBeam(c.playerPos);
+        t.eyeScale = 1.1;
+        t.chargeGlow = 0;
+        t.state = 'aim';
+        t.refire = TOTEM_REFIRE;
+        t.shotsFired++;
+      }
+    },
+    blinkOut(t, _c) {
+      t.bodyScale = Math.max(0, t.stateTimer / 0.25);
+      if (t.stateTimer <= 0) {
+        t.pos.copy(t.blinkTarget);
+        t.pos.y = t._terrain.getHeight(t.pos.x, t.pos.z);
+        t.bodyScale = 0;
+        t.foot!.mesh.visible = false;
+        t.state = 'blinkIn';
+        t.stateTimer = 0.3;
+      }
+    },
+    blinkIn(t, _c) {
+      // Shimmer column stands at the arrival spot before the body appears
+      t.shimmerOn = true;
+      t.shimmerPulse = 0.7 * Math.abs(Math.sin(t.stateTimer * 20));
+      if (t.stateTimer <= 0) {
+        t.shimmerOn = false;
+        t.bodyScale = 1;
+        t.foot!.conform(t.pos.x, t.pos.z, t.pos.y, t._terrain);
+        t.foot!.mesh.visible = true;
+        t.state = 'materialize';
+        t.stateTimer = TOTEM_MATERIALIZE;
+        t.shotsFired = 0;
+        t.onBlink?.(t.pos);
+      }
+    },
+  };
+
   update(dt: number, terrain: Terrain, playerPos: THREE.Vector3, playerVel?: THREE.Vector3): void {
     if (this.dead) return;
     if (this.flash > 0) this.flash -= dt;
 
     this.stateTimer -= dt;
     const dist = this.pos.distanceTo(playerPos);
-
-    switch (this.state) {
-      case 'materialize': {
-        const t = 1 - Math.max(0, this.stateTimer / TOTEM_MATERIALIZE);
-        this.bodyScale = 0.3 + t * 0.7;
-        this.eyeScale = 0.4 + t * 0.4;
-        this.eyeBright = t * 0.5;
-        if (this.stateTimer <= 0) {
-          this.state = 'aim';
-          this.bodyScale = 1;
-          this.eyeBright = 0.8;
-        }
-        break;
-      }
-      case 'aim': {
-        this.refire -= dt;
-        this.eyeBright = 0.8;
-        this.eyeScale = 1.1;
-        if (dist < TOTEM_MIN_RANGE ||
-            (this.shotsFired >= TOTEM_RELOCATE_HOPS) ||
-            (this.refire <= 0 && !this.lineClear(playerPos))) {
-          this.beginBlink(playerPos);
-          break;
-        }
-        if (this.refire <= 0 && dist < TOTEM_RANGE) {
-          this.state = 'charge';
-          const charge = this.uber ? UBER_TOTEM_CHARGE : TOTEM_CHARGE;
-          this.chargeTimer = charge;
-          if (this.uber) {
-            // PREDICTIVE LOCK — the beam locks where you WILL BE when it
-            // fires, not where you are: pos + vel × charge. Holding a
-            // strafe line gets you tagged; the only dodge is changing
-            // direction after the lock shows.
-            this.lockPoint.copy(playerPos)
-              .addScaledVector(playerVel ?? _zeroVel, charge);
-          } else {
-            this.lockPoint.copy(playerPos); // LOCK the line now — no more tracking
-          }
-          this.solveBeam();
-          this.beamOn = true;
-        }
-        break;
-      }
-      case 'charge': {
-        this.chargeTimer -= dt;
-        const charge = this.uber ? UBER_TOTEM_CHARGE : TOTEM_CHARGE;
-        const w0 = this.uber ? UBER_TOTEM_BEAM_WIDTH : 0.65;
-        const t = 1 - Math.max(0, this.chargeTimer / charge);
-        this.beamWidth = w0 - t * (w0 - 0.1);
-        this.beamOpacity = 0.3 + t * 0.55;
-        this.eyeBright = 0.8 + t * 0.2;
-        this.eyeScale = 1.1 + t * 1.4;
-        this.chargeGlow = t * 0.5; // violet charge bleed on the shaft
-        if (this.chargeTimer <= 0) {
-          this.fireBeam(playerPos);
-          this.eyeScale = 1.1;
-          this.chargeGlow = 0;
-          this.state = 'aim';
-          this.refire = TOTEM_REFIRE;
-          this.shotsFired++;
-        }
-        break;
-      }
-      case 'blinkOut': {
-        const t = Math.max(0, this.stateTimer / 0.25);
-        this.bodyScale = t;
-        if (this.stateTimer <= 0) {
-          this.pos.copy(this.blinkTarget);
-          this.pos.y = this._terrain.getHeight(this.pos.x, this.pos.z);
-          this.bodyScale = 0;
-          this.foot!.mesh.visible = false;
-          this.state = 'blinkIn';
-          this.stateTimer = 0.3;
-        }
-        break;
-      }
-      case 'blinkIn': {
-        // Shimmer column stands at the arrival spot before the body appears
-        this.shimmerOn = true;
-        this.shimmerPulse = 0.7 * Math.abs(Math.sin(this.stateTimer * 20));
-        if (this.stateTimer <= 0) {
-          this.shimmerOn = false;
-          this.bodyScale = 1;
-          this.foot!.conform(this.pos.x, this.pos.z, this.pos.y, this._terrain);
-          this.foot!.mesh.visible = true;
-          this.state = 'materialize';
-          this.stateTimer = TOTEM_MATERIALIZE;
-          this.shotsFired = 0;
-          this.onBlink?.(this.pos);
-        }
-        break;
-      }
-    }
+    const ctx = Totem._ctx;
+    ctx.dt = dt; ctx.dist = dist; ctx.playerPos = playerPos; ctx.playerVel = playerVel;
+    Totem.STATES[this.state](this, ctx);
 
     // Beam afterglow — the fired rail flash decays out
     if (this.beamFade > 0) {
