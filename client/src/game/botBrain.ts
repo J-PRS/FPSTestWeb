@@ -66,6 +66,8 @@ export class GameBot extends RemotePlayer {
     nugget: Nugget | null;
     /** CTF: overrides nugget/roam — the flag or the home base. */
     objective?: THREE.Vector3 | null;
+    /** Nearby bodies for the steering separation sense. */
+    others?: THREE.Vector3[];
   }): { targetId: string; aim: THREE.Vector3 } | null {
     const pos = this.position;
     const out = this.brain.think(dt, {
@@ -74,6 +76,7 @@ export class GameBot extends RemotePlayer {
       objective: ctx.objective ?? undefined,
       pickup: ctx.nugget?.pos,
       groundY: (x, z) => ctx.terrain.getHeight(x, z),
+      others: ctx.others,
       now: performance.now(),
     });
     const dest = out.dest;

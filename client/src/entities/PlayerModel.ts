@@ -327,6 +327,15 @@ export class PlayerModel {
     // Collider gizmo is a child of the model, so it moves with it automatically
   }
 
+  /** Where the rendered body actually is (feet) — null before the GLB
+   *  loads. The bot watchdog diffs this against the logical position to
+   *  catch a stalled tick/interpolation path. */
+  getModelPosition(out: THREE.Vector3): boolean {
+    if (!this.model) return false;
+    out.copy(this.model.position);
+    return true;
+  }
+
   setRotation(yaw: number, pitch: number, roll: number = 0): void {
     if (this.model) {
       this.model.rotation.y = yaw;

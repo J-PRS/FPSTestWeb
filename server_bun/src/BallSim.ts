@@ -242,14 +242,29 @@ export class BallSim {
    *  anticheat-phase concern; a bogus claim costs a shoved ball, not state. */
   handleHit(playerId: string, id: number, damage: number, kx?: number, ky?: number, kz?: number): void {
     const b = this.balls.get(id);
-    if (!b || b.dead || !this.field) return;
+    if (!b || b.dead || !this.field) {
+      logger.warn('creatureHit dropped: unknown ball', { playerId, id, known: this.balls.size, dead: !!b?.dead, field: !!this.field });
+      return;
+    }
     const claimer = this.players.getPlayer(playerId);
-    if (!claimer) return;
+    if (!claimer) {
+      logger.warn('creatureHit dropped: no claimer', { playerId });
+      return;
+    }
     // Loose plausibility: claimer within engagement envelope of the ball
     const dx = claimer.position.x - b.x;
     const dy = claimer.position.y - b.y;
     const dz = claimer.position.z - b.z;
-    if (dx * dx + dy * dy + dz * dz > 600 * 600) return;
+    const d2 = dx * dx + dy * dy + dz * dz;
+    if (d2 > 600 * 600) {
+      logger.warn('creatureHit dropped: out of range', {
+        playerId, id, dist: Math.round(Math.sqrt(d2)),
+        claimerPos: { x: Math.round(claimer.position.x), y: Math.round(claimer.position.y), z: Math.round(claimer.position.z) },
+        ballPos: { x: Math.round(b.x), y: Math.round(b.y), z: Math.round(b.z) },
+        claimerDead: claimer.isDead,
+      });
+      return;
+    }
 
     const dmg = Math.max(1, Math.min(300, damage));
     let ix = 0, iy = 0, iz = 0;

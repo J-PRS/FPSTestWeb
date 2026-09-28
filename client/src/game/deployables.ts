@@ -255,6 +255,79 @@ export class Deployables {
     }
     this.deps.lazyEffects().spawnMoveDust(pod.pos, this._zeroVel, 10, 0.6);
     sfx.land(impact);
+    this.deps.lazyNetworkManager().sendDeploy(pod.kind, pod.pos);
+  }
+
+  // --- Remote deployables -------------------------------------------------
+  // Server-owned items other players planted. Pure visuals — targeting and
+  // damage run on the server (turretShot broadcasts paint the rockets).
+  private remote = new Map<number, Item>();
+  /** Server id → item for our OWN plants — deploySpawn echoes back to the
+   *  owner, letting server-driven events (turretShot) find the visual. */
+  private byId = new Map<number, Item>();
+
+  /** deploySpawn echo for a plant we already rendered locally. */
+  ackLocal(id: number): void {
+    const live = this.items.filter(i => !i.dead);
+    const newest = live[live.length - 1];
+    if (newest) this.byId.set(id, newest);
+  }
+
+  remoteSpawn(id: number, _owner: string, kind: DeployKind, pos: { x: number; y: number; z: number }): void {
+    if (this.remote.has(id)) return;
+    const terrain = this.deps.lazyTerrain();
+    const at = new THREE.Vector3(pos.x, pos.y, pos.z);
+    let item: Item;
+    if (kind === 'turret') {
+      const t = new DeployTurret(this.deps.scene, terrain, at);
+      t.unfoldDone();
+      item = {
+        kind, candId: `rdep:${id}`, pos: t.pos, dead: false,
+        hurt: () => {}, // server owns its lifetime — deployGone removes it
+        // Remote sentries still scan and aim — pure cosmetics, no firing.
+        update: (dt) => void t.update(dt, this._enemies),
+        dispose: () => t.dispose(this.deps.scene),
+      };
+    } else {
+      const group = new THREE.Group();
+      const m = new THREE.Mesh(
+        new THREE.SphereGeometry(kind === 'mine' ? 0.3 : 0.5, 8, 6),
+        new THREE.MeshLambertMaterial({ color: kind === 'mine' ? 0x8a5a2a : 0x4a5560 }));
+      group.add(m);
+      group.position.copy(at);
+      group.position.y = terrain.getHeight(at.x, at.z);
+      this.deps.scene.add(group);
+      item = { kind, candId: `rdep:${id}`, pos: group.position, dead: false, hurt: () => {}, update: () => {}, dispose: () => this.deps.scene.remove(group) };
+    }
+    this.remote.set(id, item);
+    this.byId.set(id, item);
+  }
+
+  remoteRemove(id: number): void {
+    this.byId.delete(id);
+    const item = this.remote.get(id);
+    if (!item) return;
+    this.remote.delete(id);
+    item.dispose();
+  }
+
+  remoteIds(): ReadonlySet<number> {
+    return new Set(this.remote.keys());
+  }
+
+  /** Server announced a sentry shot — paint the rocket it represents so
+   *  the defender sees the incoming, not just the health loss. */
+  remoteTurretShot(id: number, targetId: string): void {
+    const item = this.byId.get(id);
+    if (!item) return;
+    const t = this.deps.lazyNetworkManager().getPlayers().get(targetId);
+    const tp = targetId === this.deps.lazyNetworkManager().getLocalPlayerId()
+      ? this.deps.lazyPlayer().pos
+      : t?.position;
+    if (!tp) return;
+    const target = { pos: new THREE.Vector3(tp.x, tp.y, tp.z), vel: new THREE.Vector3(), alive: true };
+    this.spawnRocket(item.pos.clone().add(new THREE.Vector3(0, 1.4, 0)), target);
+    sfx.shotAt(item.pos, WeaponType.RocketLauncher);
   }
 
   private adoptTurret(t: DeployTurret): void {
@@ -535,6 +608,7 @@ export class Deployables {
 
   update(dt: number): void {
     for (const i of this.items) if (!i.dead) i.update(dt);
+    for (const i of this.remote.values()) i.update(dt);
     for (let i = this.pods.length - 1; i >= 0; i--) {
       const pod = this.pods[i]!;
       this.updatePod(pod, dt);
@@ -560,6 +634,8 @@ export class Deployables {
   }
 
   dispose(): void {
+    for (const i of this.remote.values()) i.dispose();
+    this.remote.clear();
     for (const r of this.rockets) this.deps.scene.remove(r.group);
     this.rockets.length = 0;
   }

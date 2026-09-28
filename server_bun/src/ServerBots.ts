@@ -93,6 +93,17 @@ export class ServerBots {
     return out;
   }
 
+  /** Positions of every other live player — the brain's separation
+   *  sense, so a squad spreads instead of stacking on one slot. */
+  private othersOf(p: { id: string }): Vec3[] {
+    const out: Vec3[] = [];
+    for (const q of this.room.players.getAllPlayers().values()) {
+      if (q.id === p.id || q.isDead) continue;
+      out.push(q.position);
+    }
+    return out;
+  }
+
   /** Translate the brain's fire command into the wire broadcast — the
    *  distance roll decides damage, the visible bolt follows the aim error
    *  so a miss reads as a miss. */
@@ -208,6 +219,7 @@ export class ServerBots {
         // which is what keeps a bot-filled match's scoreboard moving.
         pickup: this.room.pickups?.nearest(p.position) ?? undefined,
         groundY: (x, z) => (this.field ? hmHeight(this.field, x, z) : p.position.y),
+        others: this.othersOf(p),
         now,
       });
       if (out.fire) this.fireAt(p, out.fire.targetId, out.fire.aim);

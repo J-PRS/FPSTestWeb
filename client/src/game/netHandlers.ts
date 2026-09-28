@@ -26,6 +26,7 @@ import { wireFlags } from './net/flags.js';
 import { wirePickups } from './net/pickups.js';
 import { wirePlayers } from './net/players.js';
 import { wireProjectiles } from './net/projectiles.js';
+import { wireDeployables } from './net/deployables.js';
 import { wireWorld } from './net/world.js';
 
 export interface NetDeps {
@@ -79,6 +80,7 @@ export function wireNetworkHandlers(deps: NetDeps): void {
   wirePickups(ctx);
   wirePlayers(ctx);
   wireProjectiles(ctx);
+  wireDeployables(ctx);
   wireWorld(ctx);
 
   // Lobby browser — corner button lists the server's live rooms; joining

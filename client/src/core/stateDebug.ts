@@ -16,6 +16,10 @@ export interface StateDebugContext {
   remotePlayers: Map<string, RemotePlayer>;
   projectiles: Projectile[];
   getLastSentPos(): { x: number; y: number; z: number };
+  /** Match state — mode/team/scores/playback, for the diagnostics dump. */
+  world?: { mode?: string; localTeam?: string; teamScores?: { alpha: number; bravo: number } | null; ffaScores?: Map<string, number>; matchEndsAt?: number | null; playbackMode?: boolean };
+  /** Offline bot referee — bot roster/teams for the diagnostics dump. */
+  teamBots?: () => { bots: { playerId: string; team: string; isDead: boolean; position: { x: number; y: number; z: number }; botHp?: number }[]; teamOf: Map<string, string>; over: string | null; scores: { alpha: number; bravo: number }; ffaScores: Map<string, number> } | null;
   logger: ChildLogger;
 }
 
@@ -256,21 +260,48 @@ export function wireStateDebug(ctx: StateDebugContext): void {
   Logger.setDiagnostics(() => {
     const nm = ctx.networkManager;
     const p = ctx.getPlayer();
+    const w = ctx.world;
     const fmt = (v: { x: number; y: number; z: number }) =>
       `(${v.x.toFixed(1)},${v.y.toFixed(1)},${v.z.toFixed(1)})`;
-    const remotes = [...nm.getPlayers().entries()].map(([id, ps]) =>
-      `${id.slice(0, 16)} dead=${ps.isDead} hp=${ps.health} ping=${ps.ping ?? '?'} pos=${fmt(ps.position)}`
-    );
-    return [
+    const wire = nm.getPlayers();
+    const lines: string[] = [
       `localId: ${nm.getLocalPlayerId()}`,
-      `connected: ${nm.isConnected()} ping: ${nm.getPing()}ms loss: ${nm.getPacketLoss()}% jitter: ${nm.getJitter()}ms`,
+      `connected: ${nm.isConnected()} tier: ${nm.getTransportTier() ?? '-'} ping: ${nm.getPing()}ms loss: ${nm.getPacketLoss()}% jitter: ${nm.getJitter()}ms`,
       `local: dead=${p.isDead} hp=${p.health} pos=${fmt(p.pos)} vel=${fmt(p.vel)} yaw=${p.yaw.toFixed(2)} pitch=${p.pitch.toFixed(2)} onGround=${p.onGround}`,
       `lastSentPos: ${fmt(ctx.getLastSentPos())}`,
-      `remotes: ${ctx.remotePlayers.size} rendered / ${nm.getPlayers().size} known`,
-      ...remotes.map(r => `  remote ${r}`),
+    ];
+    if (w) {
+      const clock = w.matchEndsAt ? ` endsIn=${Math.max(0, Math.ceil((w.matchEndsAt - Date.now()) / 1000))}s` : '';
+      lines.push(`mode: ${w.mode ?? '(none)'} localTeam: ${w.localTeam ?? '-'}${w.playbackMode ? ' PLAYBACK' : ''}${clock}`);
+      if (w.teamScores) lines.push(`teamScores: alpha=${w.teamScores.alpha} bravo=${w.teamScores.bravo}`);
+      if (w.ffaScores?.size) lines.push(`ffaScores: ${[...w.ffaScores.entries()].map(([id, s]) => `${id.replace('bot:', '')}=${s}`).join(' ')}`);
+    }
+    lines.push(`remotes: ${ctx.remotePlayers.size} rendered / ${wire.size} known`);
+    for (const [id, ps] of wire) {
+      const rp = ctx.remotePlayers.get(id);
+      const renderD = rp ? Math.hypot(rp.position.x - ps.position.x, rp.position.y - ps.position.y, rp.position.z - ps.position.z) : -1;
+      lines.push(`  wire ${id.slice(0, 20)} team=${ps.team ?? '-'} dead=${ps.isDead} hp=${ps.health} ping=${ps.ping ?? '?'} pos=${fmt(ps.position)}${rp ? ` renderΔ=${renderD.toFixed(1)}m` : ' NOT-RENDERED'}`);
+    }
+    // Rendered but absent from the wire roster — local bots, dummies,
+    // stale ghosts the roster never told us about.
+    for (const [id, rp] of ctx.remotePlayers) {
+      if (wire.has(id)) continue;
+      const team = (rp as { team?: string }).team;
+      lines.push(`  local ${id.slice(0, 20)} team=${team ?? '-'} dead=${rp.isDead} pos=${fmt(rp.position)}`);
+    }
+    const tb = ctx.teamBots?.();
+    if (tb) {
+      const alive = tb.bots.filter(b => !b.isDead).length;
+      lines.push(`teamBots: ${alive}/${tb.bots.length} alive over=${tb.over ?? '-'} score=${tb.scores.alpha}:${tb.scores.bravo} localTeam=${tb.teamOf.get('local') ?? '-'}`);
+      for (const b of tb.bots) {
+        lines.push(`  bot ${b.playerId.replace('bot:', '')} team=${b.team} dead=${b.isDead} hp=${b.botHp ?? '?'} pos=${fmt(b.position)}`);
+      }
+    }
+    lines.push(
       `projectiles: ${ctx.projectiles.length} live`,
       `uptime: ${(performance.now() / 1000).toFixed(0)}s`,
-    ];
+    );
+    return lines;
   });
 
   exposeDebugWindowFunctions(ctx);

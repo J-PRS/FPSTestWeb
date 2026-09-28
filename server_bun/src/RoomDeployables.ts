@@ -23,7 +23,15 @@ interface Deployed {
   kind: DeployKind;
   pos: Vec3;
   ttl: number;
+  fireCd: number;
 }
+
+// Sentry combat envelope — mirrors the client DeployTurret constants so
+// the server sim and the visual agree on what the gun can reach.
+const TURRET_RANGE = 42;
+const TURRET_FIRE_INTERVAL = 1.25;
+const TURRET_DAMAGE = 14;
+const TURRET_UNFOLD_S = 0.45;
 
 export class RoomDeployables {
   private items = new Map<number, Deployed>();
@@ -48,7 +56,7 @@ export class RoomDeployables {
       this.remove(owned[0]!.id);
     }
     const id = this.nextId++;
-    this.items.set(id, { id, owner: playerId, kind: k, pos: { ...pos }, ttl: TTL_S[k] });
+    this.items.set(id, { id, owner: playerId, kind: k, pos: { ...pos }, ttl: TTL_S[k], fireCd: TURRET_UNFOLD_S + Math.random() * 0.4 });
     this.room.broadcast({ type: 'deploySpawn', id, owner: playerId, kind: k, pos: { ...pos }, team: player.team } as ServerMessage);
   }
 
@@ -77,7 +85,32 @@ export class RoomDeployables {
     if (this.items.size === 0) return;
     for (const d of [...this.items.values()]) {
       d.ttl -= dt;
-      if (d.ttl <= 0) this.remove(d.id);
+      if (d.ttl <= 0) { this.remove(d.id); continue; }
+      if (d.kind === 'turret') this.tickTurret(d, dt);
     }
+  }
+
+  /** Server-side sentry fire: nearest hostile player in the envelope gets
+   *  a bolt every TURRET_FIRE_INTERVAL. Damage rides the shared funnel so
+   *  kill credit, spawn protection and respawn all behave — the client
+   *  visual layer shows the matching rocket via the turretShot broadcast. */
+  private tickTurret(d: Deployed, dt: number): void {
+    d.fireCd -= dt;
+    if (d.fireCd > 0) return;
+    const owner = this.room.players.getPlayer(d.owner);
+    let target: string | null = null;
+    let bestD2 = TURRET_RANGE * TURRET_RANGE;
+    for (const [pid, p] of this.room.players.getAllPlayers()) {
+      if (p.isDead || pid === d.owner) continue;
+      if (owner?.team && p.team === owner.team) continue;
+      if (p.protectedUntil > Date.now()) continue;
+      const dx = p.position.x - d.pos.x, dy = p.position.y - d.pos.y, dz = p.position.z - d.pos.z;
+      const d2 = dx * dx + dy * dy + dz * dz;
+      if (d2 < bestD2) { bestD2 = d2; target = pid; }
+    }
+    if (!target) { d.fireCd = Math.min(d.fireCd + 0.15, 0.15); return; } // idle scan: cheap re-check
+    d.fireCd = TURRET_FIRE_INTERVAL;
+    this.room.broadcast({ type: 'turretShot', id: d.id, owner: d.owner, targetId: target } as ServerMessage);
+    this.room.messages.turretAttack(d.owner, target, TURRET_DAMAGE);
   }
 }

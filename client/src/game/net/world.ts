@@ -10,6 +10,7 @@ import type { GameStatePlayer, LocalPlayerState } from '../../../../shared/proto
 import type { NetworkManager } from '../../networking/NetworkManager.js';
 import type { NetCtx } from './ctx.js';
 import { loadHeightfieldBin } from '../../world/heightmap.js';
+import { reconcileDeployables } from './deployables.js';
 import { resolveServerEndpoints } from '../../networking/endpoints.js';
 
 export function wireWorld(ctx: NetCtx): void {
@@ -50,7 +51,7 @@ export function wireWorld(ctx: NetCtx): void {
   };
 
   // Initial connection and reconnection — full roster + local restore.
-  networkManager.onGameState = (players: GameStatePlayer[], localPlayerState: LocalPlayerState | undefined, roomInfo?: { room?: string; mode?: string; team?: 'alpha' | 'bravo'; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number>; pickups?: { id: number; pos: { x: number; y: number; z: number }; kind?: import('../../../../shared/pickups.js').PickupKind }[]; flags?: { team: 'alpha' | 'bravo'; pos: { x: number; y: number; z: number }; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]; matchEndsAt?: number; respawnMs?: number; map?: { mode?: string; bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } }; structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number }; ambient?: Record<string, number>; terrain?: string } }) => {
+  networkManager.onGameState = (players: GameStatePlayer[], localPlayerState: LocalPlayerState | undefined, roomInfo?: { room?: string; mode?: string; team?: 'alpha' | 'bravo'; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number>; pickups?: { id: number; pos: { x: number; y: number; z: number }; kind?: import('../../../../shared/pickups.js').PickupKind }[]; flags?: { team: 'alpha' | 'bravo'; pos: { x: number; y: number; z: number }; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]; matchEndsAt?: number; respawnMs?: number; deployables?: { id: number; owner: string; kind: 'turret' | 'mine' | 'station' | 'drone'; pos: { x: number; y: number; z: number } }[]; map?: { mode?: string; bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } }; structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number }; ambient?: Record<string, number>; terrain?: string } }) => {
     logger.debug(`gameState received, players: ${players.length}`);
     applyRoomInfo(ctx, players.length, roomInfo);
     if (localPlayerState) restoreLocalPlayer(ctx, localPlayerState);
@@ -74,6 +75,7 @@ function applyRoomInfo(ctx: NetCtx, playerCount: number, roomInfo?: Parameters<N
   // pickupGone we missed while disconnected.
   ctx.reconcilePickups(new Set((roomInfo.pickups ?? []).map(p => p.id)));
   for (const p of roomInfo.pickups ?? []) ctx.addPickup(p.id, p.pos, p.kind ?? 'gem');
+  reconcileDeployables(ctx, roomInfo.deployables);
   applyMapSnapshot(ctx, roomInfo.map);
   // Flags mid-flight when we joined — same path as a flagUpdate broadcast.
   if (roomInfo.flags?.length) networkManager.onFlagUpdate?.(roomInfo.flags);

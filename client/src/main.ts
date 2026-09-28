@@ -275,6 +275,10 @@ async function init(): Promise<void> {
   const classicMode = mode === 'classic';
   if (classicMode) setBallEnrage(false);
   if (mode === 'nuggets' || mode === 'ctf' || mode === 'dm') {
+    // Offline team modes still need world.localTeam — it's the friend/foe
+    // reference for HUD indicators/tints and is normally set from
+    // roomInfo.team, which never arrives without a server.
+    if (mode !== 'dm') world.localTeam = 'alpha';
     teamBots = new TeamBots(
       {
         lazyPlayer: () => player,
@@ -540,6 +544,8 @@ init().then(async () => {
       remotePlayers: world.remotePlayers,
       projectiles: world.projectiles,
       getLastSentPos: remotes.getLastSentPos,
+      world,
+      teamBots: () => teamBots,
       logger,
     });
   }
