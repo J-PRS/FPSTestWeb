@@ -20,6 +20,18 @@ import { BotBrain, type BotEnemy, type BotVec } from '../../shared/botBrain.ts';
 import { logger } from './logger.ts';
 import { STATUS, CLIENT_STATUS_MASK } from '../../shared/status.ts';
 import { WeaponType, getWeaponStats } from '../../shared/weapons.ts';
+import type { PerkId } from '../../shared/perks.ts';
+
+/** A bot's kit — weapon picked by engagement range, perk set at spawn so
+ *  maxHealth and the move shadow's jet economy match a real loadout. */
+interface BotLoadout { perk: PerkId; near: WeaponType; mid: WeaponType; far: WeaponType; }
+const NEAR_M = 15, FAR_M = 40;
+const BOT_LOADOUTS: BotLoadout[] = [
+  { perk: 'featherjets', near: WeaponType.Chaingun, mid: WeaponType.PlasmaGun, far: WeaponType.Rocket }, // chaser
+  { perk: 'bombardier',  near: WeaponType.Chaingun, mid: WeaponType.Disc,      far: WeaponType.Rocket }, // siege
+  { perk: 'plated',      near: WeaponType.Chaingun, mid: WeaponType.PlasmaGun, far: WeaponType.Disc },   // anchor
+  { perk: 'overcharge',  near: WeaponType.Chaingun, mid: WeaponType.Disc,      far: WeaponType.Rocket }, // skirmisher
+];
 
 const SPEED = 14;          // m/s ground move
 const BOLT_SPEED = 60;     // m/s visual bolt + hitscan travel is instant
@@ -31,6 +43,7 @@ const isSuper = (id: string) => SUPERBOT !== '' && id.includes(SUPERBOT);
 
 export class ServerBots {
   private brains = new Map<string, BotBrain>();
+  private loadouts = new Map<string, BotLoadout>();
   /** Bots we saw dead — respawn transition resyncs the move shadow. */
   private deadSet = new Set<string>();
   /** inputMove ordering key — the shadow drops non-increasing seqs. */
@@ -52,7 +65,9 @@ export class ServerBots {
   populate(n: number): void {
     for (let i = 0; i < n; i++) {
       const id = `BOT-${this.room.name}${this.nextIdx++}`;
-      const p = this.room.players.addPlayer(id);
+      const loadout = BOT_LOADOUTS[(this.nextIdx - 2 + BOT_LOADOUTS.length) % BOT_LOADOUTS.length];
+      const p = this.room.players.addPlayer(id, undefined, loadout.perk);
+      this.loadouts.set(id, loadout);
       p.isBot = true;
       if (isSuper(id)) p.health = 400; // superbot tanks a beating
       p.lastSeen = Date.now();
@@ -80,6 +95,7 @@ export class ServerBots {
   /** Prune a bot that was fully removed (room teardown / test hooks). */
   untrack(playerId: string): void {
     this.brains.delete(playerId);
+    this.loadouts.delete(playerId);
     this.room.moveSim.untrack(playerId);
   }
 
@@ -142,27 +158,30 @@ export class ServerBots {
     }
     const target = this.room.players.getPlayer(targetId);
     if (!target || target.isDead) return;
-    const stats = getWeaponStats(WeaponType.PlasmaGun);
     const muzzle = { x: p.position.x, y: p.position.y + 1.4, z: p.position.z };
-    // Lead the target by its velocity over the shell's flight time —
-    // without it every bolt lands behind a skiing player forever.
     const dx0 = aim.x - muzzle.x, dy0 = aim.y - muzzle.y, dz0 = aim.z - muzzle.z;
     const dist = Math.sqrt(dx0 * dx0 + dy0 * dy0 + dz0 * dz0) || 1;
+    // Range-band weapon select — same judgment a player makes: hitscan
+    // up close, the loadout's primary mid-band, rockets at standoff.
+    const lo = this.loadouts.get(p.id) ?? BOT_LOADOUTS[0];
+    const wt = dist < NEAR_M ? lo.near : dist > FAR_M ? lo.far : lo.mid;
+    const stats = getWeaponStats(wt);
+    // Lead the target by its velocity over the shell's flight time —
+    // without it every bolt lands behind a skiing player forever.
     const lead = isSuper(p.id) ? dist / stats.speed : (dist / stats.speed) * 0.8;
     const ax = aim.x + target.velocity.x * lead - muzzle.x;
     const ay = aim.y + target.velocity.y * lead - muzzle.y;
     const az = aim.z + target.velocity.z * lead - muzzle.z;
     const alen = Math.sqrt(ax * ax + ay * ay + az * az) || 1;
     const dir = { x: ax / alen, y: ay / alen, z: az / alen };
-    const spawnPos = { x: p.position.x, y: p.position.y + 1.4, z: p.position.z };
-    if (!this.room.projectiles.spawn(p.id, WeaponType.PlasmaGun, spawnPos, dir, p.velocity)) {
-      // Spawn refused (owner gone / hitscan stat line) — rolled-tracer
-      // fallback keeps the bot armed rather than silently disarmed.
+    if (!this.room.projectiles.spawn(p.id, wt, muzzle, dir, p.velocity)) {
+      // Spawn refused (owner gone / hitscan stat line like Chaingun) —
+      // rolled-tracer fallback keeps the bot armed rather than disarmed.
       const hit = isSuper(p.id) || Math.random() < Math.max(0.15, 0.6 - dist / 200);
       this.room.messages.botFire(
         p.id, hit ? targetId : null, muzzle,
         { x: dir.x * BOLT_SPEED, y: dir.y * BOLT_SPEED, z: dir.z * BOLT_SPEED },
-        3, hit,
+        wt, hit,
       );
     }
   }
@@ -249,6 +268,7 @@ export class ServerBots {
 
   private retire(id: string): void {
     this.brains.delete(id);
+    this.loadouts.delete(id);
     this.room.moveSim.untrack(id);
     this.room.removePlayerCompletely(id, 'botFill', (m, o) => logger.info(m, o));
   }

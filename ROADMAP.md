@@ -202,8 +202,10 @@ surface. Detailed research lives in `_reports/`; this file is the current truth.
   gate jets on energy, claim real STATUS bits (MEND hurt/unpressured,
   SHIELD in a fight) through CLIENT_STATUS_MASK, and lob Grenade shells
   on a ~9s cooldown in mid-range hunts.
-  Phase 4 next: per-bot loadouts/roles + range-band weapon select
-  (Rocket past 40m, Chaingun inside 15m).
+  Phase 4 done — per-bot loadouts at spawn: a perk (featherjets/
+  bombardier/plated/overcharge — maxHealth + jet economy as-declared)
+  plus a range-band weapon table: Chaingun <15m, primary mid, Rocket
+  >40m. All four phases complete: bots are virtual clients end to end.
 - Netcode v2 (2026-09-28): GameTransport seam w/ three real tiers —
   WebTransport (QUIC datagrams, cert-pinned via /wthash) → WebRTC
   DataChannel (game=unreliable binary, ctrl=reliable JSON, /rtcs

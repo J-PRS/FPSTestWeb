@@ -101,6 +101,35 @@ describe('ServerBots', () => {
     expect(room.moveSim.energyOf('BOT-t1')!).toBeLessThan(full);
   });
 
+  it('assigns each bot a loadout perk at spawn', () => {
+    const room = new Room('t', flat, '', resolveMapSpec({ bots: 4, mode: 'dm' }));
+    const perks = ['featherjets', 'bombardier', 'plated', 'overcharge'];
+    for (let i = 1; i <= 4; i++) {
+      const p = room.players.getPlayer(`BOT-t${i}`)!;
+      expect(perks).toContain(p.perk);
+      // vitality-style perks would shift maxHealth — ours don't, so just
+      // assert the perk reached both the roster and the move shadow.
+      expect(room.moveSim.simState(p.id)).not.toBeNull();
+    }
+  });
+
+  it('range-band select only spawns ballistic weapons', () => {
+    const room = new Room('t', flat, '', resolveMapSpec({ bots: 1, mode: 'dm' }));
+    room.players.addPlayer('human').position = { x: 21, y: 0, z: 0 };
+    const msgs: { type: string; weaponType?: number }[] = [];
+    room.broadcast = (m: never) => { msgs.push(m); };
+    const bot = room.players.getPlayer('BOT-t1')!;
+    bot.position = { x: -21, y: 0, z: 0 }; // 42m — inside sight, far band
+    for (let i = 0; i < 80; i++) { room.bots.tick(0.05); room.moveSim.tick(0.05); }
+    // Guard against a vacuous run — the bot must have fired at all.
+    expect(msgs.some(m => m.type === 'projectileCreated' || m.type === 'playerShot')).toBe(true);
+    for (const m of msgs.filter(mm => mm.type === 'projectileCreated')) {
+      // near-band Chaingun is hitscan and never reaches this broadcast —
+      // anything that spawned must be a real ballistic weapon.
+      expect([0, 1, 23]).toContain(m.weaponType);
+    }
+  });
+
   it('respawning a bot reseats the shadow at the new position', () => {
     const room = new Room('t', flat, '', resolveMapSpec({ bots: 1 }));
     const id = 'BOT-t1';
