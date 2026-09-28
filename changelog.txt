@@ -1957,3 +1957,4 @@ server: RoomDeployables sim — 'deploy' claims plant server-owned turret/mine/s
 - demo format v3: room/mode/playerName header, roster + remoteFrames sections; MP demos record remote players (20Hz via RemotePlayer replicas on playback) and server-ball lifecycle events; playbackMode flag freezes the live wire (no position sends, corrections, live balls/projectiles) during replay; clip export frameNumber wrap + id-0 event guards + seek/remote replica snap fixes
 - roadmap: demo v3 status line (MP recording + playbackMode isolation)
 - demo controls hardening: cool-shot play now closes menu + grabs pointer lock; file-loaded clips fire onPlaybackStart (playbackMode was skipped); ESC-stop hides control bar; reverse-wrap settles like end-of-playback; paused seek snaps remote replicas
+- added .agents/skills/headless-game-testing (puppeteer-core recipe for locked-desktop E2E: pointer-lock stub, __test hook, 7x headless slowdown, hit-aiming)
