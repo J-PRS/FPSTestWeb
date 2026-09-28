@@ -1,6 +1,7 @@
 {
   "mode": "ctf",
   "bots": 8,
+  "terrain": "test.bin",
   "bases": {
     "alpha": { "x": -100, "y": 0, "z": -40 },
     "bravo": { "x": 100,  "y": 0, "z": 40 }

@@ -63,11 +63,27 @@ export class RoomMoveSim {
   private static readonly AUTHORITY_DIVERGENCE_M = 1.5;
   private static readonly CORRECT_MS = 400;
   private static readonly AUTHORITY_CORRECT_MS = 100;
-  readonly authoritative: boolean;
+  authoritative: boolean;
+  private wantsAuthority: boolean;
 
   constructor(field: Heightfield | null, authoritative = false) {
+    this.wantsAuthority = authoritative;
     this.surface = field ? new FieldSurface(field) : null;
     this.authoritative = authoritative && !!field;
+  }
+
+  /** Late-arriving terrain (map spec named a .bin loaded async): attach it
+   *  and honor the authority flag that was waiting on a field. Existing
+   *  shadows keep their sims — the surface object they read is per-sim,
+   *  so re-track to pick the new field up. */
+  attachField(field: Heightfield): void {
+    this.surface = new FieldSurface(field);
+    this.authoritative = this.wantsAuthority;
+    for (const [, sh] of this.shadows) {
+      const old = sh.sim;
+      sh.sim = new MoveSim(this.surface, old.state);
+      Object.assign(sh.sim.input, old.input);
+    }
   }
 
   private get divergenceM(): number {

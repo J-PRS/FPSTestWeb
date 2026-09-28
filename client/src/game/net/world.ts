@@ -9,6 +9,8 @@ import { Ball } from '../../entities/balls.js';
 import type { GameStatePlayer, LocalPlayerState } from '../../../../shared/protocol.js';
 import type { NetworkManager } from '../../networking/NetworkManager.js';
 import type { NetCtx } from './ctx.js';
+import { loadHeightfieldBin } from '../../world/heightmap.js';
+import { resolveServerEndpoints } from '../../networking/endpoints.js';
 
 export function wireWorld(ctx: NetCtx): void {
   const { deps, networkManager, chat } = ctx;
@@ -43,11 +45,12 @@ export function wireWorld(ctx: NetCtx): void {
     } else {
       clearArenaDome(deps.lazyScene());
     }
+    if (map.terrain) void applyTerrain(ctx, map.terrain);
     chat.add(null, 'map updated by admin');
   };
 
   // Initial connection and reconnection — full roster + local restore.
-  networkManager.onGameState = (players: GameStatePlayer[], localPlayerState: LocalPlayerState | undefined, roomInfo?: { room?: string; mode?: string; team?: 'alpha' | 'bravo'; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number>; pickups?: { id: number; pos: { x: number; y: number; z: number }; kind?: import('../../../../shared/pickups.js').PickupKind }[]; flags?: { team: 'alpha' | 'bravo'; pos: { x: number; y: number; z: number }; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]; matchEndsAt?: number; respawnMs?: number; map?: { mode?: string; bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } }; structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number }; ambient?: Record<string, number> } }) => {
+  networkManager.onGameState = (players: GameStatePlayer[], localPlayerState: LocalPlayerState | undefined, roomInfo?: { room?: string; mode?: string; team?: 'alpha' | 'bravo'; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number>; pickups?: { id: number; pos: { x: number; y: number; z: number }; kind?: import('../../../../shared/pickups.js').PickupKind }[]; flags?: { team: 'alpha' | 'bravo'; pos: { x: number; y: number; z: number }; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]; matchEndsAt?: number; respawnMs?: number; map?: { mode?: string; bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } }; structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number }; ambient?: Record<string, number>; terrain?: string } }) => {
     logger.debug(`gameState received, players: ${players.length}`);
     applyRoomInfo(ctx, players.length, roomInfo);
     if (localPlayerState) restoreLocalPlayer(ctx, localPlayerState);
@@ -99,7 +102,7 @@ function announceRoom(ctx: NetCtx, playerCount: number, roomInfo?: RoomInfo): vo
   }
 }
 
-type MapSnapshot = { structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number }; ambient?: Record<string, number> };
+type MapSnapshot = { structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number }; ambient?: Record<string, number>; terrain?: string };
 
 /** Structures, dome, and per-map species caps — shared by gameState's
  *  join path; mapUpdate handles the same rebuild itself since it always
@@ -116,6 +119,30 @@ function applyMapSnapshot(ctx: NetCtx, map?: MapSnapshot): void {
     buildArenaDome(map.arena, deps.lazyTerrain().getHeight(map.arena.x, map.arena.z), deps.lazyScene());
   }
   setAmbientCaps(map?.ambient);
+  if (map?.terrain) void applyTerrain(ctx, map.terrain);
+}
+
+/** Fetch the room's heightfield and swap the live terrain over to it.
+ *  Serializes concurrent loads — a mapUpdate racing a re-join can't
+ *  finish out of order and leave the older field resident. */
+let terrainSwap: Promise<void> = Promise.resolve();
+let terrainActive: string | null = null;
+async function applyTerrain(ctx: NetCtx, file: string): Promise<void> {
+  if (terrainActive === file) return;
+  const { deps } = ctx;
+  terrainSwap = terrainSwap.then(async () => {
+    if (terrainActive === file) return;
+    try {
+      const { httpUrl } = await resolveServerEndpoints();
+      await loadHeightfieldBin(`${httpUrl}/maps/${file}`);
+      deps.lazyTerrain().reloadHeightmap();
+      terrainActive = file;
+      deps.logger.info(`Terrain swapped to maps/${file}`);
+    } catch (e) {
+      deps.logger.warn(`Terrain load failed for maps/${file}: ${(e as Error).message}`);
+    }
+  });
+  return terrainSwap;
 }
 
 /** Local-player half of gameState — position/rotation/health restore on

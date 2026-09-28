@@ -107,6 +107,7 @@ export class Room {
         structures: this.spec.structures,
         arena: this.spec.arena,
         ambient: this.spec.ambient,
+        terrain: this.spec.terrain,
         onKill: (pid, shooter) => this.onKill(pid, shooter),
         onHit: (pid, shooter) => this.bots.flinch(pid, shooter),
         flags: () => this.flags?.snapshot() ?? [],
@@ -447,12 +448,14 @@ export class Room {
     this.ballSim.colliders = structureColliders(spec.structures);
     if (spec.balls) this.ballSim.population = spec.balls;
     if (spec.ballMix) this.ballSim.ballMix = spec.ballMix;
-    this.messages.setMap(spec.bases, spec.structures, spec.arena, spec.ambient);
+    this.messages.setMap(spec.bases, spec.structures, spec.arena, spec.ambient, spec.terrain);
     this.broadcast({
       type: 'mapUpdate',
       bases: spec.bases,
       structures: spec.structures,
       arena: spec.arena ?? null,
+      ambient: spec.ambient,
+      terrain: spec.terrain,
     });
     // Top up / retire bots toward the new spec count.
     const want = spec.bots ?? 0;

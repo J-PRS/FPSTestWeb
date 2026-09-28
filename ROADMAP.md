@@ -159,7 +159,17 @@ surface. Detailed research lives in `_reports/`; this file is the current truth.
   composition roots — cohesive, not complex).
 - Maps (2026-09-26): crossfire (CTF, diagonal axis + mid plateau),
   slagheap (FFA dome bowl, ramps as ski lanes), pit (45m duel ring).
-  All pure spec-JSON — structures + arena + spawns, no heightmaps.
+  Spec-JSON structures + arena + spawns — heightmaps now wired
+  end-to-end (see below).
+- Terrain pipeline (2026-10-01): spec.terrain names maps/<file>.bin →
+  room's BallSim AND RoomMoveSim attach it (moveSim.attachField honors
+  deferred authority) → gameState map.terrain + mapUpdate carry it →
+  GET /maps/<file>.bin serves the bytes → client loadHeightfieldBin +
+  Terrain.reloadHeightmap hot-swaps the field mid-session. Both ends
+  sample the identical bytes — prediction and server truth agree.
+  Authoring: _tools/mapbake/png2bin.js (PNG→bin via headless Chrome;
+  verified byte-identical to server_bun/heightmap.bin). maps/test.bin
+  = the boot field; henge.json is the first spec using it.
 - Netcode v2 (2026-09-28): GameTransport seam w/ three real tiers —
   WebTransport (QUIC datagrams, cert-pinned via /wthash) → WebRTC
   DataChannel (game=unreliable binary, ctrl=reliable JSON, /rtcs
