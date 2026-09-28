@@ -219,8 +219,13 @@ surface. Detailed research lives in `_reports/`; this file is the current truth.
   arena pushback fixed), CTF crossfire (real cap), DM duel, multi-room
   isolation, reconnect/token reclaim, deployables lifecycle
   (deployprobe.ts: spawn/cap/distance validation, live mine trip +
-  turretShot, leave teardown). Divergence noise floor: count=1 crest
-  clips only.
+  turretShot, leave teardown). + Full HTTP/API surface (apisoak.ts:
+  all GET routes, /join gate, spectate join, admin 401/200 gate,
+  end→matchEnd→/matches journal, kick→socket close, /client-log),
+  P2P rtc relay (rtcrelay.ts: roles, shuttle, 1008 cap, peer-left),
+  demo endpoints (demosoak.ts: v3 header craft, accept/reject,
+  traversal 404, byte-identical round-trip). Divergence noise floor:
+  count=1 crest clips only.
 - Netcode v2 (2026-09-28): GameTransport seam w/ three real tiers —
   WebTransport (QUIC datagrams, cert-pinned via /wthash) → WebRTC
   DataChannel (game=unreliable binary, ctrl=reliable JSON, /rtcs
