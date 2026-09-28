@@ -38,7 +38,6 @@ export class Player {
   onGround = false;
   energy = MAX_ENERGY;
   /** Nugget pickup: free jetting for a few seconds (refresh, not stack). */
-  jetBoostTimer = 0;
   fireTimer = 0.0;
   discTimer = 0.0;
   grenadeTimer = 0.0;
@@ -544,14 +543,13 @@ export class Player {
     this.onGround = moveState.onGround;
 
     // Jetpack (separate from movement controller, applied after physics sync)
-    if (this.jetBoostTimer > 0) this.jetBoostTimer -= dt;
-    const isJetting = this.input.jetPending && (this.energy > 0 || this.jetBoostTimer > 0);
+    const isJetting = this.input.jetPending && this.energy > 0;
     this.jetting = isJetting;
     if (isJetting) {
       this.vel.y += JET_FORCE_UP * dt;
       this.vel.x += input.moveX * JET_FORCE_DIR * dt;
       this.vel.z += input.moveZ * JET_FORCE_DIR * dt;
-      if (this.jetBoostTimer <= 0) this.energy -= JET_DRAIN * this.mods.jetDrain * dt;
+      this.energy -= JET_DRAIN * this.mods.jetDrain * dt;
       this.onGround = false; // Force off ground if jetting
     }
 
@@ -741,10 +739,10 @@ export class Player {
     this.movement.setState({ pos: this.pos, vel: this.vel, yaw: this.yaw, pitch: this.pitch, onGround: this.onGround });
   }
 
-  /** Nugget pickup: refill the tank + free jetting for 5s (refresh only). */
+  /** Nugget pickup: half the tank back, no free-jet window — unlimited
+   *  energy made the toggle skills (cloak/shield/mend) effectively free. */
   grantJetBoost(): void {
-    this.energy = MAX_ENERGY;
-    this.jetBoostTimer = 5;
+    this.energy = Math.min(MAX_ENERGY, this.energy + MAX_ENERGY * 0.5);
   }
 
   /** Nugget pickup: restore a chunk of health, capped at max. */

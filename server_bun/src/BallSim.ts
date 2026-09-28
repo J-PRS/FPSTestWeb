@@ -270,14 +270,14 @@ export class BallSim {
 
   /** Kill notification for the room's scoreboard (DM creature points,
    *  team-mode nugget drops) — carries the corpse position. */
-  onKilled: ((by: string, pos: Vec3) => void) | null = null;
+  onKilled: ((by: string, pos: Vec3, variant: number) => void) | null = null;
 
   private kill(b: SimBall, by?: string): void {
     b.dead = true;
     this.balls.delete(b.id);
     const pos = { x: b.x, y: b.y, z: b.z };
     this.broadcast({ type: 'ballDie', id: b.id, position: pos, by: by ?? null });
-    if (by) this.onKilled?.(by, pos);
+    if (by) this.onKilled?.(by, pos, b.variant);
     // Elite splitter: two child balls at the corpse
     if (b.variant === 3) {
       for (let i = 0; i < 2; i++) {

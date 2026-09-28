@@ -190,9 +190,8 @@ export class PlayerSkills {
   }
 
   // ---- Cloak ----
-  // Toggle on Q. The drain is unconditional (drainEnergy ignores
-  // jetBoostTimer — a nugget's free-jet seconds don't make invisibility
-  // free) and regen is suppressed on the Player side while cloaked.
+  // Toggle on Q. The drain is unconditional and regen is suppressed on
+  // the Player side while cloaked.
 
   private toggleCloak(): void {
     if (this.cloaked) { this.setCloak(false); return; }
