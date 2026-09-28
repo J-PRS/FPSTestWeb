@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "bun --watch src/server.ts",
+    "dev": "bun dev-watch.ts",
     "start": "bun src/server.ts",
     "test": "bun test"
   },
