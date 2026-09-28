@@ -132,6 +132,52 @@ const server = Bun.serve<WebSocketData>({
       });
     }
 
+    // ---- Admin API --------------------------------------------------
+    // Bearer-token guarded (FPS_ADMIN_TOKEN). Unset = closed entirely.
+    //   POST /admin/reload?room=X     re-read maps/X.json into the live room
+    //   POST /admin/kick?player=X     boot a player
+    //   POST /admin/end?room=X        force-end the match (leader wins)
+    //   GET  /admin/rooms             detailed live dump
+    if (url.pathname.startsWith('/admin/')) {
+      const want = CONFIG.adminToken;
+      if (!want) return corsResponse('admin disabled (FPS_ADMIN_TOKEN unset)', { status: 403 });
+      const got = req.headers.get('authorization')?.replace(/^bearer\s+/i, '');
+      if (got !== want) return corsResponse('unauthorized', { status: 401 });
+
+      if (url.pathname === '/admin/rooms' && req.method === 'GET') {
+        return corsResponse(JSON.stringify(gameServer.listRooms()), {
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (req.method !== 'POST') return corsResponse('POST only', { status: 405 });
+
+      if (url.pathname === '/admin/reload') {
+        const room = url.searchParams.get('room') ?? '';
+        const r = gameServer.reloadRoom(room);
+        return corsResponse(JSON.stringify({ ok: r === 'ok', result: r }), {
+          status: r === 'ok' ? 200 : 404,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (url.pathname === '/admin/kick') {
+        const player = url.searchParams.get('player') ?? '';
+        const ok = gameServer.kickPlayer(player);
+        return corsResponse(JSON.stringify({ ok }), {
+          status: ok ? 200 : 404,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (url.pathname === '/admin/end') {
+        const room = url.searchParams.get('room') ?? '';
+        const r = gameServer.forceEndMatch(room);
+        return corsResponse(JSON.stringify({ ok: r === 'ok', result: r }), {
+          status: r === 'ok' ? 200 : 404,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return corsResponse('Unknown admin route', { status: 404 });
+    }
+
     // Demo upload: POST /demos/upload
     if (url.pathname === '/demos/upload' && req.method === 'POST') {
       try {

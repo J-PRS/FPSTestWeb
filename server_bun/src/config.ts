@@ -57,6 +57,9 @@ export const CONFIG = {
   // FPS_SECRET to keep identities valid across restarts; unset = random
   // per boot (fine for dev, tokens die with the process).
   identitySecret: envStr('FPS_SECRET', ''),
+  // Admin API bearer token for /admin/* (hot-reload, kick, end match).
+  // Unset = admin endpoints disabled entirely — no accidental open admin.
+  adminToken: envStr('FPS_ADMIN_TOKEN', ''),
 
   rateLimits: {
     position: { maxCount: 30, windowMs: 1000 },

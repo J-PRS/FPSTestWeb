@@ -75,6 +75,19 @@ export class MessageHandler {
     this.ballSim = sim;
   }
 
+  /** Admin hot-reload — re-point the map echo fields so the next gameState
+   *  (joiners/spectators) carries the new layout. In-room clients get the
+   *  matching `mapUpdate` broadcast from Room.applySpec. */
+  setMap(
+    bases: RoomInfo['bases'],
+    structures: RoomInfo['structures'],
+    arena: RoomInfo['arena'],
+  ): void {
+    this.roomInfo.bases = bases;
+    this.roomInfo.structures = structures;
+    this.roomInfo.arena = arena;
+  }
+
   /** Server-bot fire: broadcast the visible bolt, then apply the hitscan
    *  outcome through combat's shared funnel. */
   botFire(shooterId: string, targetId: string | null, position: Vec3, velocity: Vec3, weaponType: number, hit: boolean): void {

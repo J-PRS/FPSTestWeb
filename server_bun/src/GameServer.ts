@@ -332,6 +332,38 @@ export class GameServer {
     }));
   }
 
+  // ---- Admin API ----------------------------------------------------
+
+  /** Re-read maps/<name>.json and hot-swap it into the live room. The
+   *  room keeps its mode (locked at creation) and roster; only the
+   *  layout — spawns, structures, arena, ball mix, bot fill — reloads. */
+  reloadRoom(name: string): 'ok' | 'no-room' | 'no-spec' {
+    const room = this.rooms.get(name);
+    if (!room) return 'no-room';
+    const spec = this.loadMapSpec(name);
+    if (!spec) return 'no-spec';
+    room.applySpec(spec);
+    logger.info('Room spec reloaded', { room: name });
+    return 'ok';
+  }
+
+  /** Boot a player out of their room — the wire sees a normal playerLeft. */
+  kickPlayer(playerId: string): boolean {
+    const room = this.roomOfPlayer(playerId);
+    if (!room) return false;
+    room.socketOf(playerId)?.close(1000, 'kicked');
+    room.removePlayerCompletely(playerId, 'adminKick', (m, o) => logger.info(m, o));
+    logger.info('Player kicked', { playerId });
+    return true;
+  }
+
+  /** End the room's current match with the standing leader (or draw). */
+  forceEndMatch(roomName: string): 'ok' | 'no-room' | 'no-mode' {
+    const room = this.rooms.get(roomName);
+    if (!room) return 'no-room';
+    return room.forceEndMatch() ? 'ok' : 'no-mode';
+  }
+
   private totalPlayers(): number {
     let n = 0;
     for (const room of this.rooms.values()) n += room.playerCount();

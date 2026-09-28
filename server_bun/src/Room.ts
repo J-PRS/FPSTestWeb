@@ -47,7 +47,7 @@ export class Room {
   readonly lastSentPositions = new Map<string, { x: number; y: number; z: number; vx: number; vy: number; vz: number; yaw: number; pitch: number; hp: number; dead: boolean; ski: number; t: number }>();
   tickSeq = 0;
 
-  readonly spec: MapSpec;
+  spec: MapSpec; // mutable — admin hot-reload rewrites it live
   // Server-owned match scoreboard — only populated in team modes.
   readonly modeSpec: ModeSpec | null;
   readonly scores: TeamScores = makeScores();
@@ -240,6 +240,24 @@ export class Room {
   /** Match resolution — every end path (score cap, flag cap, clock horn)
    *  funnels through here: broadcast, journal, field reset, matchStart.
    *  'draw' is a legal winner (tied clock). */
+  /** Admin force-end: resolve with the current leader (or draw) and run
+   *  the normal reset funnel. No-op in rooms without a mode. */
+  forceEndMatch(): boolean {
+    if (!this.modeSpec) return false;
+    let w = 'draw';
+    if (this.modeSpec.teams) {
+      w = this.scores.alpha === this.scores.bravo ? 'draw'
+        : this.scores.alpha > this.scores.bravo ? 'alpha' : 'bravo';
+    } else {
+      let best = -Infinity;
+      for (const [id, s] of this.ffaScores) {
+        if (s > best) { best = s; w = id; }
+      }
+    }
+    this.endMatch(w);
+    return true;
+  }
+
   private endMatch(w: string): void {
     const spec = this.modeSpec!;
     const scores = spec.teams ? { ...this.scores } : Object.fromEntries(this.ffaScores);
@@ -327,6 +345,39 @@ export class Room {
    *  this way). */
   assignTeam(player: PlayerState): void {
     player.team ??= this.nextTeam();
+  }
+
+  /** Admin hot-reload: swap in a re-read map spec without restarting the
+   *  room. Mode stays locked (a mode change mid-match would invalidate
+   *  scores/teams) — everything layout-side applies live: spawn points,
+   *  structures, arena, ball mix/population, bot fill. Clients get a
+   *  mapUpdate broadcast to rebuild their geometry. */
+  applySpec(spec: MapSpec): void {
+    this.spec = spec;
+    if (spec.spawns) this.players.spawnPoints = spec.spawns;
+    this.ballSim.colliders = structureColliders(spec.structures);
+    if (spec.balls) this.ballSim.population = spec.balls;
+    if (spec.ballMix) this.ballSim.ballMix = spec.ballMix;
+    this.messages.setMap(spec.bases, spec.structures, spec.arena);
+    this.broadcast({
+      type: 'mapUpdate',
+      bases: spec.bases,
+      structures: spec.structures,
+      arena: spec.arena ?? null,
+    });
+    // Top up / retire bots toward the new spec count.
+    const want = spec.bots ?? 0;
+    if (this.bots.count < want) this.bots.populate(want - this.bots.count);
+    else if (this.bots.count > want) {
+      let excess = this.bots.count - want;
+      for (const p of [...this.players.getAllPlayers().values()]) {
+        if (excess <= 0) break;
+        if (!p.isBot) continue;
+        this.bots.untrack(p.id);
+        this.removePlayerCompletely(p.id, 'adminReload', () => {});
+        excess--;
+      }
+    }
   }
 
   dispose(): void {

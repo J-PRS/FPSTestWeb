@@ -113,7 +113,10 @@ export type ServerMessage =
   | { type: 'ffaScore'; scores: Record<string, number>; winAt: number }
   | { type: 'ffaMatchEnd'; winner: string; scores: Record<string, number> }
   | { type: 'matchEnd'; winner: 'alpha' | 'bravo' | 'draw'; scores: { alpha: number; bravo: number } }
-  | { type: 'matchStart'; mode: string; scores: { alpha: number; bravo: number } };
+  | { type: 'matchStart'; mode: string; scores: { alpha: number; bravo: number } }
+  // Admin hot-reload: the room's map spec changed — clients rebuild
+  // structures/dome from this instead of re-joining for a gameState.
+  | { type: 'mapUpdate'; bases?: { alpha?: Vec3; bravo?: Vec3 }; structures?: { kind: 'box' | 'wall' | 'pillar' | 'ramp'; pos: Vec3; size: Vec3; rotY?: number; team?: 'alpha' | 'bravo' }[]; arena?: { x: number; z: number; radius: number } | null };
 
 export interface GameStatePlayer {
   id: string;
