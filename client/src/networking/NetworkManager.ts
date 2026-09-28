@@ -33,6 +33,8 @@ export class NetworkManager {
   private localPlayerId: string;
   private sessionToken: string | null;
   private connected: boolean = false;
+  /** Loadout perk, announced at join so the server can enforce resist/heal. */
+  joinPerk: (() => string) | null = null;
   /** REMOTE players only — local player is never stored here */
   private players: Map<string, RemotePlayerState> = new Map();
   public onPlayerHit: ((shooterId: string, targetId: string, damage: number, health: number) => void) | null = null;
@@ -123,6 +125,7 @@ export class NetworkManager {
               token: this.sessionToken ?? undefined,
               room: urlParams.room ?? undefined,
               mode: urlParams.mode ?? undefined,
+              perk: this.joinPerk?.(),
             });
             this.connected = true;
             this.hasLoggedConnectionError = false;

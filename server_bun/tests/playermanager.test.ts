@@ -60,6 +60,15 @@ describe('PlayerManager', () => {
     expect(p.status).toBe(0);
   });
 
+  it('plated perk resists damage, vitality raises the health cap', () => {
+    const pm = new PlayerManager();
+    pm.addPlayer('tank', undefined, 'plated');
+    pm.addPlayer('tough', undefined, 'vitality');
+    pm.breakShield('tank'); pm.breakShield('tough');
+    expect(pm.applyDamage('tank', 40).newHealth).toBe(70);  // 25% resist
+    expect(pm.getPlayer('tough')!.health).toBe(150);        // 100 + 50
+  });
+
   it('kills player when health reaches 0', () => {
     const pm = new PlayerManager();
     pm.addPlayer('alice'); pm.breakShield('alice');

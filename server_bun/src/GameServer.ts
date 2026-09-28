@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import type { Heightfield } from '../../shared/heightfield.ts';
 import { isWireFrame, decodePosition, encodeTickPlayer, encodeTickFrame } from '../../shared/wire.ts';
 import { STATUS } from '../../shared/status.ts';
+import { isPerkId, perkMods } from '../../shared/perks.ts';
 import { createHmac, randomBytes } from 'node:crypto';
 import { readFileSync, appendFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -567,7 +568,7 @@ export class GameServer {
     ws.data.playerId = playerId;
     const sessionToken = idToken;
     room.sessionTokens.set(playerId, sessionToken);
-    room.players.addPlayer(playerId, room.nextTeam());
+    room.players.addPlayer(playerId, room.nextTeam(), isPerkId(handshake.perk) ? handshake.perk : 'none');
     this.playerRoom.set(playerId, room);
     room.connections.register(playerId, ws);
     room.messages.handleHandshake(playerId, sessionToken);
@@ -721,11 +722,13 @@ export class GameServer {
         // while the state hash still counts them. Gated on THAT player's
         // lastSent, not a shared clock — a single shared timestamp meant
         // only the first stale player in map order ever heartbeat.
-        // Medkit channel: server owns health, so the flag drives the heal.
-        // The client burns energy and drops the flag when the tank is dry —
-        // a mending player's health ticks up one slice per tick.
-        if ((p.status & STATUS.MEND) && !p.isDead && p.health < CONFIG.playerMaxHealth) {
-          p.health = Math.min(CONFIG.playerMaxHealth, p.health + MEND_HP_PER_TICK);
+        // Health channels the server owns: medkit channel (flag) and
+        // regenerator perk (passive). Both cap at the player's perk max.
+        if (!p.isDead && p.health < p.maxHealth) {
+          let heal = 0;
+          if (p.status & STATUS.MEND) heal += MEND_HP_PER_TICK;
+          heal += perkMods(p.perk).regen / CONFIG.tickRate;
+          if (heal > 0) p.health = Math.min(p.maxHealth, p.health + heal);
         }
         const isStale = silenceMs > 5000;
         const forceSend = now < p.forceSendUntil;

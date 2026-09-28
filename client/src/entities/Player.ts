@@ -5,6 +5,7 @@ import { JET_FORCE_UP, JET_FORCE_DIR, MAX_ENERGY, MAX_HEALTH, JET_DRAIN, JET_CHA
 import { Terrain } from '../world/terrain.js';
 import { PlayerSkills, SHIELD_DMG_PER_ENERGY } from './player/skills.js';
 import { STATUS } from '../../../shared/status.js';
+import { perkMods, PERK_ORDER, type PerkId } from '../../../shared/perks.js';
 import { makeShieldBubble, ShieldBubble } from '../effects/shieldBubble.js';
 
 import { MovementController, MovementState } from './movement.js';
@@ -45,6 +46,11 @@ export class Player {
   // physically lowered, shooting mid-throw would fire through the hip.
   throwLockT = 0;
   health = 100;
+  /** Passive loadout pick — mods from shared/perks.ts; announced at join. */
+  perk: PerkId = (PERK_ORDER as string[]).includes(settings.get('fps-perk')) ? settings.get('fps-perk') as PerkId : 'none';
+  get mods() { return perkMods(this.perk); }
+  get maxHealth(): number { return MAX_HEALTH + this.mods.maxHealth; }
+  setPerk(p: PerkId): void { this.perk = p; settings.set('fps-perk', p); }
   kills = 0;
   isDead = false;
   /** Verb phrase for the death message ("devoured by a crawler") — set by
@@ -359,7 +365,7 @@ export class Player {
       emitCloak: (on) => this.setCloaked(on),
       emitShield: (on) => this.setShielded(on),
       emitMend: (on) => this.setMending(on),
-      healSelf: (hp) => { this.health = Math.min(MAX_HEALTH, this.health + hp); },
+      healSelf: (hp) => { this.health = Math.min(this.maxHealth, this.health + hp); },
       netHeals: () => this.serverOwnsHealth?.() ?? false,
       shieldAbsorb: (dmg) => { this.energy = Math.max(0, this.energy - dmg); if (this.energy <= 0) this.setShielded(false); },
       energy: () => this.energy,
@@ -545,7 +551,7 @@ export class Player {
       this.vel.y += JET_FORCE_UP * dt;
       this.vel.x += input.moveX * JET_FORCE_DIR * dt;
       this.vel.z += input.moveZ * JET_FORCE_DIR * dt;
-      if (this.jetBoostTimer <= 0) this.energy -= JET_DRAIN * dt;
+      if (this.jetBoostTimer <= 0) this.energy -= JET_DRAIN * this.mods.jetDrain * dt;
       this.onGround = false; // Force off ground if jetting
     }
 
@@ -554,7 +560,13 @@ export class Player {
     // Regen also pauses while cloaked — invisibility and jets compete
     // for the same tank, never fill it together.
     if (!isJetting && !this.cloaked && !this.shielded && !this.mending) {
-      this.energy = Math.min(MAX_ENERGY, this.energy + JET_CHARGE * dt);
+      this.energy = Math.min(MAX_ENERGY, this.energy + JET_CHARGE * this.mods.jetRegen * this.mods.energyRegen * dt);
+    }
+
+    // Regenerator perk — MP regenerates in the server tick; offline we
+    // tick it here so the perk works without a connection.
+    if (this.mods.regen > 0 && !(this.serverOwnsHealth?.() ?? false) && !this.isDead) {
+      this.health = Math.min(this.maxHealth, this.health + this.mods.regen * dt);
     }
 
     // ---- All visual/event spawns below use the final post-physics position ----
@@ -737,7 +749,7 @@ export class Player {
 
   /** Nugget pickup: restore a chunk of health, capped at max. */
   heal(fraction: number): void {
-    this.health = Math.min(MAX_HEALTH, this.health + MAX_HEALTH * fraction);
+    this.health = Math.min(this.maxHealth, this.health + this.maxHealth * fraction);
   }
 
   applyKnockback(from: THREE.Vector3, force: number): void {

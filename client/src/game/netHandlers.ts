@@ -454,7 +454,7 @@ export function wireNetworkHandlers(deps: NetDeps): void {
       logger.info(`Local player respawned at ${JSON.stringify(position)}`);
       const player = deps.lazyPlayer();
       player.isDead = false;
-      player.health = 100;
+      player.health = player.maxHealth;
       player.lastDamageSource = ''; // stale attribution shouldn't survive a life
       player.vel.set(0, 0, 0);
       player.pos.set(position.x, position.y, position.z);

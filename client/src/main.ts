@@ -284,7 +284,7 @@ async function init(): Promise<void> {
     fragMessages.show(`YOU DIED\n${source}`);
     setTimeout(() => {
       player.isDead = false;
-      player.health = 100;
+      player.health = player.maxHealth;
       player.lastDamageSource = '';
       player.vel.set(0, 0, 0);
       const a = Math.random() * Math.PI * 2;
@@ -368,7 +368,7 @@ async function init(): Promise<void> {
   // applies (40 max env hit, 25 max heal) so offline can't cheat easier.
   networkManager.localAuthority = {
     envDamage: (amount) => {
-      const dmg = Math.min(40, Math.max(1, Math.round(amount)));
+      const dmg = Math.min(40, Math.max(1, Math.round(amount * (1 - player.mods.damageResist))));
       if (player.isDead) return;
       player.health = Math.max(0, player.health - dmg);
       player.lastDamageSource = 'the wilderness';
@@ -471,6 +471,7 @@ async function init(): Promise<void> {
   const serverUrl = (await serverEndpoints).wsUrl;
   await connectServer({ serverUrl, classicMode, networkManager, logger, fragMessages, profiler });
   player.serverOwnsHealth = () => networkManager.isConnected();
+  networkManager.joinPerk = () => player.perk;
 
   // Initial balls
   for (let i = 0; i < 8; i++) entities.spawnBall();
