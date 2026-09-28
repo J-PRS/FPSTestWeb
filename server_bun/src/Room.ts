@@ -116,11 +116,12 @@ export class Room {
     }
     if (this.modeSpec?.teams) {
       this.pickups = new RoomPickups(this);
-      this.pickups.onCollect = (pid) => {
+      this.pickups.onCollect = (pid, kind) => {
         const p = this.players.getPlayer(pid);
         if (!p) return;
-        // Back the collector's next heal claim — the gem IS the heal.
-        p.healCredit += 25;
+        // Gems back the collector's next heal claim; kill-confirmed tags
+        // are pure score — no resource bundled into the same pickup.
+        if (kind === 'gem') p.healCredit += 25;
         const team = p.team;
         if (team === 'alpha' || team === 'bravo') this.score(team);
       };
@@ -265,7 +266,13 @@ export class Room {
     const shooter = this.players.getPlayer(shooterId);
     if (!spec || !shooter || spec.ptsPlayerKill <= 0) return;
     if (spec.ffa) this.awardFfa(shooterId, spec.ptsPlayerKill);
-    else if (shooter.team) this.score(shooter.team, spec.ptsPlayerKill);
+    else if (shooter.team) {
+      this.score(shooter.team, spec.ptsPlayerKill);
+      // Kill-confirmed mode (tdm): the corpse drops a tag that ANY team
+      // can pick up for another point — deny by grabbing it first.
+      const t = this.players.getPlayer(targetId);
+      if (this.mode === 'tdm' && t) this.pickups?.spawn(t.position, 'tag');
+    }
   }
 
   /** Team point from a server-observed objective (flag cap, gem touch). */

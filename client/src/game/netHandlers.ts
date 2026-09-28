@@ -129,28 +129,39 @@ export function wireNetworkHandlers(deps: NetDeps): void {
   // Server-owned nugget pickups — creature kills in team rooms drop a gem
   // anyone on a team can touch to bank a point. Dumb renderer; all rules
   // (radius, TTL, team credit) live in RoomPickups server-side.
-  const pickupMeshes = new Map<number, THREE.Mesh>();
-  const pickupGeo = new THREE.OctahedronGeometry(0.5);
-  const pickupMat = new THREE.MeshBasicMaterial({ color: 0xffcc44 });
-  const addPickup = (id: number, pos: { x: number; y: number; z: number }) => {
+  const pickupMeshes = new Map<number, { mesh: THREE.Mesh; kind: 'gem' | 'tag' }>();
+  const pickupGeos = {
+    gem: new THREE.OctahedronGeometry(0.5),
+    // Dog tag — flat plate reads as "kill token", not loot.
+    tag: new THREE.BoxGeometry(0.7, 0.14, 0.45),
+  };
+  const pickupMats = {
+    gem: new THREE.MeshBasicMaterial({ color: 0xffcc44 }),
+    tag: new THREE.MeshBasicMaterial({ color: 0xff3355 }),
+  };
+  const addPickup = (id: number, pos: { x: number; y: number; z: number }, kind: 'gem' | 'tag' = 'gem') => {
     if (pickupMeshes.has(id)) return;
-    const m = new THREE.Mesh(pickupGeo, pickupMat);
+    const m = new THREE.Mesh(pickupGeos[kind], pickupMats[kind]);
     m.position.set(pos.x, pos.y + 0.8, pos.z);
     deps.lazyScene().add(m);
-    pickupMeshes.set(id, m);
+    pickupMeshes.set(id, { mesh: m, kind });
   };
-  networkManager.onPickupSpawn = (id, pos) => addPickup(id, pos);
+  networkManager.onPickupSpawn = (id, pos, kind) => addPickup(id, pos, kind ?? 'gem');
   networkManager.onPickupGone = (id, by) => {
-    const m = pickupMeshes.get(id);
-    if (m) { deps.lazyScene().remove(m); pickupMeshes.delete(id); }
+    const e = pickupMeshes.get(id);
+    if (e) { deps.lazyScene().remove(e.mesh); pickupMeshes.delete(id); }
     if (by === nm().getLocalPlayerId()) {
-      // Server-verified collect — grant the same reward local nuggets
-      // give offline (heal + jet boost), since MP drops no local loot.
-      const p = deps.lazyPlayer();
-      p.heal(0.2);
-      p.grantJetBoost();
-      nm().sendHeal(20);
-      chat.add(null, 'nugget banked +1');
+      if (e?.kind === 'tag') {
+        chat.add(null, 'tag confirmed +1');
+      } else {
+        // Server-verified collect — grant the same reward local nuggets
+        // give offline (heal + jet boost), since MP drops no local loot.
+        const p = deps.lazyPlayer();
+        p.heal(0.2);
+        p.grantJetBoost();
+        nm().sendHeal(20);
+        chat.add(null, 'nugget banked +1');
+      }
     }
   };
 
@@ -469,7 +480,7 @@ export function wireNetworkHandlers(deps: NetDeps): void {
   };
 
   // Register gameState handler (for initial connection and reconnection)
-  networkManager.onGameState = (players: GameStatePlayer[], localPlayerState: LocalPlayerState | undefined, roomInfo?: { room?: string; mode?: string; team?: 'alpha' | 'bravo'; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number>; pickups?: { id: number; pos: { x: number; y: number; z: number } }[]; flags?: { team: 'alpha' | 'bravo'; pos: { x: number; y: number; z: number }; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]; matchEndsAt?: number; map?: { mode?: string; bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } }; structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number } } }) => {
+  networkManager.onGameState = (players: GameStatePlayer[], localPlayerState: LocalPlayerState | undefined, roomInfo?: { room?: string; mode?: string; team?: 'alpha' | 'bravo'; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number>; pickups?: { id: number; pos: { x: number; y: number; z: number }; kind?: 'gem' | 'tag' }[]; flags?: { team: 'alpha' | 'bravo'; pos: { x: number; y: number; z: number }; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]; matchEndsAt?: number; map?: { mode?: string; bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } }; structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number } } }) => {
     logger.debug(`gameState received, players: ${players.length}`);
     deps.world.mode = roomInfo?.mode;
     deps.world.localTeam = roomInfo?.team;
@@ -490,7 +501,7 @@ export function wireNetworkHandlers(deps: NetDeps): void {
       chat.add(null, `dm board — ${top.map(([id, s]) => `${id} ${s}`).join(' / ')}`);
     }
     // Pickups still lying on the field when we (re)joined.
-    for (const p of roomInfo?.pickups ?? []) addPickup(p.id, p.pos);
+    for (const p of roomInfo?.pickups ?? []) addPickup(p.id, p.pos, p.kind ?? 'gem');
     if (roomInfo?.map?.structures?.length) buildStructures(roomInfo.map.structures, deps.lazyScene());
     if (roomInfo?.map?.arena) {
       const a = roomInfo.map.arena;

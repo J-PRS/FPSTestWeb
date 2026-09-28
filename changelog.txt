@@ -1937,3 +1937,4 @@ hud: Tab scoreboard — team-grouped sections, PTS column, sorted by score/frags
 maps: structures[] spec field + raindance.json CTF map (henge midfield, team bases)
 netplay: friend/foe gizmo tint — teammates team-colored, enemies always red
 tdm mode + quicksand map (dome arena, lip spawns, center tower); dome fades in near shell
+tdm: kill drops a tag pickup — any team banks it for a pt (kill-confirmed)
