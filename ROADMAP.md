@@ -84,7 +84,8 @@ surface. Detailed research lives in `_reports/`; this file is the current truth.
    matchStart broadcast, match journal → logs/matches.jsonl + /matches.
    Server-owned nugget pickups landed: creature kills drop gems
    (RoomPickups, touch-to-bank, TTL 30s) — 'nuggets' scoring is now
-   fully server-observed; {type:'bank'} claim kept for back-compat.
+   fully server-observed — the {type:'bank'} claim message was removed
+   end-to-end (protocol, validation, handler, client sender).
    CTF classic rule: own flag must be home to cap; carrier disconnect
    drops the flag.
 

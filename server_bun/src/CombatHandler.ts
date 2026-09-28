@@ -57,7 +57,17 @@ export class CombatHandler {
     private sendToPlayer: SendToPlayerFn,
     private onKill?: (targetId: string, shooterId: string) => void,
     private onHit?: (targetId: string, shooterId: string) => void,
+    // Team-mode rooms block damage between teammates (knockback still
+    // applies — boosting off a teammate's splash is intentional).
+    private teamMode = false,
   ) {}
+
+  private friendly(shooterId: string, targetId: string): boolean {
+    if (!this.teamMode || shooterId === targetId) return false; // self-splash = rocket jumps
+    const s = this.playerManager.getPlayer(shooterId);
+    const t = this.playerManager.getPlayer(targetId);
+    return !!(s?.team && t?.team && s.team === t.team);
+  }
 
   /** Drop live projectiles when a player is fully removed (grace timeout /
    *  idle reap) — NOT on socket close, so a rejoining player keeps theirs. */
@@ -100,6 +110,8 @@ export class CombatHandler {
       // Dead targets are untouchable — without this, corpse hits still
       // broadcast playerHit and can stack phantom damage past respawn.
       if (target.isDead) return;
+      // Friendly fire: no damage (and no playerHit) between teammates.
+      if (this.friendly(playerId, targetId)) return;
 
       // Hit claims must name the projectile that landed them. The claimed
       // id may be null if the hit raced the server's projectileCreated —
@@ -337,9 +349,12 @@ export class CombatHandler {
           pull: pull || undefined,
         });
 
-        const result = this.playerManager.applyDamage(targetId, damage);
-
-        this.applyHit(playerId, targetId, damage, result, `Player ${logLabel} hit`, { dist: +dist.toFixed(2) });
+        // Splash still displaces teammates (jump-boost assists); it just
+        // never deals damage to them in team rooms.
+        if (!this.friendly(playerId, targetId)) {
+          const result = this.playerManager.applyDamage(targetId, damage);
+          this.applyHit(playerId, targetId, damage, result, `Player ${logLabel} hit`, { dist: +dist.toFixed(2) });
+        }
       }
     }
   }
@@ -395,6 +410,7 @@ export class CombatHandler {
     const shooter = this.playerManager.getPlayer(shooterId);
     const target = this.playerManager.getPlayer(targetId);
     if (!shooter || shooter.isDead || !target || target.isDead) return;
+    if (this.friendly(shooterId, targetId)) return;
     const damage = getWeaponStats(weaponType).directDamage;
     const result = this.playerManager.applyDamage(targetId, damage);
     target.forceSendUntil = Date.now() + FORCE_SEND_MS;

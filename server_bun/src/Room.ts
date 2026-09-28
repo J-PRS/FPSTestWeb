@@ -82,6 +82,7 @@ export class Room {
         room: name,
         mode: this.mode,
         scores: this.scores,
+        teams: this.modeSpec?.teams,
         winAt: this.modeSpec?.winAt,
         ffaScores: () => Object.fromEntries(this.ffaScores),
         bases: this.spec.bases,
