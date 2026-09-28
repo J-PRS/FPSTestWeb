@@ -96,6 +96,14 @@ const server = Bun.serve<WebSocketData>({
       });
     }
 
+    // Server-browser card: GET /serverinfo — identity + occupancy for a
+    // master list or LAN browser. Ping is measured by the client's RTT.
+    if (url.pathname === '/serverinfo') {
+      return corsResponse(JSON.stringify(gameServer.getServerInfo()), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
     // Lobby browse: GET /rooms — live matches with occupancy.
     if (url.pathname === '/rooms') {
       return corsResponse(JSON.stringify(gameServer.listRooms()), {
