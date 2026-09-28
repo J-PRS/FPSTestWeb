@@ -57,6 +57,9 @@ export class BallSim {
   private resyncAcc = new Map<number, number>();
   private broadcast: (msg: ServerMessage) => void;
   private broadcastBinary: (data: Uint8Array) => void;
+  /** Reliable lane for segments — a lost resync stamp makes every client
+   *  extrapolate a stale leg for ~1.2s (the rubberband storm). */
+  private broadcastBinaryReliable: (data: Uint8Array) => void;
   private players: PlayerManager;
   private timer: ReturnType<typeof setInterval> | null = null;
   private simTime = 0; // monotonic sim clock — stamped on every event so clients measure TRUE age, not ping guesses
@@ -74,10 +77,12 @@ export class BallSim {
    *  balls ricochet off walls/pillars. Empty on structureless maps. */
   colliders: readonly StructureCollider[] = [];
 
-  constructor(players: PlayerManager, broadcast: (msg: ServerMessage) => void, broadcastBinary?: (data: Uint8Array) => void) {
+  constructor(players: PlayerManager, broadcast: (msg: ServerMessage) => void, broadcastBinary?: (data: Uint8Array) => void,
+              broadcastBinaryReliable?: (data: Uint8Array) => void) {
     this.players = players;
     this.broadcast = broadcast;
     this.broadcastBinary = broadcastBinary ?? (() => {});
+    this.broadcastBinaryReliable = broadcastBinaryReliable ?? this.broadcastBinary;
   }
 
   /** Load heightmap from disk and start the tick loop. */
@@ -99,6 +104,9 @@ export class BallSim {
    *  share one parsed field rather than re-reading the file each. */
   attachField(field: Heightfield): void {
     this.field = field;
+    // Re-attach on map rotation: clear the old loop or each swap adds
+    // another interval and the sim ticks N× real time.
+    if (this.timer) clearInterval(this.timer);
     this.timer = setInterval(() => this.tick(), TICK_DT * 1000);
     this.lastTickAt = performance.now();
     logger.info('BallSim started', { heightmap: `${field.size}x${field.size}`, fp: hmFingerprint(field) });
@@ -224,8 +232,9 @@ export class BallSim {
     this.snapTarget(b); // segment boundary = aim refresh; clients get the same point
     // Binary — segments are the highest-rate message (~10/s per ball of
     // bounces + heartbeats); ~50B vs ~160B JSON, and no per-client
-    // JSON.stringify.
-    this.broadcastBinary(encodeBallSegment({
+    // JSON.stringify. Reliable lane: a dropped stamp costs ~1.2s of blind
+    // extrapolation — the rubberband storm seen at 100% datagram loss.
+    this.broadcastBinaryReliable(encodeBallSegment({
       id: b.id, kind,
       position: { x: b.x, y: b.y, z: b.z },
       velocity: { x: b.vx, y: b.vy, z: b.vz },
@@ -242,8 +251,14 @@ export class BallSim {
    *  anticheat-phase concern; a bogus claim costs a shoved ball, not state. */
   handleHit(playerId: string, id: number, damage: number, kx?: number, ky?: number, kz?: number): void {
     const b = this.balls.get(id);
-    if (!b || b.dead || !this.field) {
-      logger.warn('creatureHit dropped: unknown ball', { playerId, id, known: this.balls.size, dead: !!b?.dead, field: !!this.field });
+    // A claim on a just-killed ball is the normal aim→claim race — the
+    // corpse still rendered when the shot was fired. Debug, not warn.
+    if (b?.dead) {
+      logger.debug('creatureHit on dead ball (aim/claim race)', { playerId, id });
+      return;
+    }
+    if (!b || !this.field) {
+      logger.warn('creatureHit dropped: unknown ball', { playerId, id, known: this.balls.size, field: !!this.field });
       return;
     }
     const claimer = this.players.getPlayer(playerId);
