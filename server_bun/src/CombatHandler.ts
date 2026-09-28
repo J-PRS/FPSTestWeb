@@ -437,6 +437,19 @@ export class CombatHandler {
    *  shooter, so this goes straight to damage. Distance/hit-chance live in
    *  ServerBots; this just runs the shared outcome funnel so bot kills,
    *  knockback bookkeeping and respawns match player-caused ones. */
+  /** Server-owned sentry hit — owner is the shooter for scoring/friendly
+   *  checks, but the sim drives the trigger, not a client claim. */
+  turretAttack(ownerId: string, targetId: string, damage: number): void {
+    const owner = this.playerManager.getPlayer(ownerId);
+    const target = this.playerManager.getPlayer(targetId);
+    if (!target || target.isDead) return;
+    if (this.friendly(ownerId, targetId)) return;
+    const dmg = damage * (owner ? this.ddMult(owner) : 1);
+    const result = this.playerManager.applyDamage(targetId, dmg);
+    target.forceSendUntil = Date.now() + FORCE_SEND_MS;
+    this.applyHit(ownerId, targetId, dmg, result, 'Turret hit');
+  }
+
   botAttack(shooterId: string, targetId: string, weaponType: number): void {
     const shooter = this.playerManager.getPlayer(shooterId);
     const target = this.playerManager.getPlayer(targetId);

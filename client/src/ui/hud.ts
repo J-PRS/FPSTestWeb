@@ -544,8 +544,8 @@ export class HUD {
     }
   }
 
-  updatePlayerIndicator(playerId: string, position: { x: number; y: number; z: number }, camera: THREE.Camera, isDead: boolean = false): void {
-    this.indicators.update(playerId, position, camera, isDead);
+  updatePlayerIndicator(playerId: string, position: { x: number; y: number; z: number }, camera: THREE.Camera, isDead: boolean = false, friendly = false): void {
+    this.indicators.update(playerId, position, camera, isDead, friendly);
   }
 
   removePlayerIndicator(playerId: string): void {

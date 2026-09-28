@@ -168,8 +168,15 @@ surface. Detailed research lives in `_reports/`; this file is the current truth.
   Terrain.reloadHeightmap hot-swaps the field mid-session. Both ends
   sample the identical bytes — prediction and server truth agree.
   Authoring: _tools/mapbake/png2bin.js (PNG→bin via headless Chrome;
-  verified byte-identical to server_bun/heightmap.bin). maps/test.bin
-  = the boot field; henge.json is the first spec using it.
+  verified byte-identical to server_bun/heightmap.bin) and genfield.js
+  (procedural tileable noise + flat pads at authored spawn/base coords).
+  Every spec now ships its own maps/<name>.bin — pads ~1.5m, hills ≤45m.
+- Bot pathing lite (2026-10-01): shared/botBrain.ts contour-slide +
+  stuck-break detour — slope probes deflect >6m/4m climbs sideways, no
+  progress in 1.5s → perpendicular sidestep. 3 vitest cases.
+- Kill feed (2026-10-01): HUD rows "shooter [Weapon] ▸ target" on every
+  playerKill (weapon threaded through applyHit/processAOE end-to-end),
+  6-row cap, timed fade, gold edge on own frags, red on own death.
 - Netcode v2 (2026-09-28): GameTransport seam w/ three real tiers —
   WebTransport (QUIC datagrams, cert-pinned via /wthash) → WebRTC
   DataChannel (game=unreliable binary, ctrl=reliable JSON, /rtcs

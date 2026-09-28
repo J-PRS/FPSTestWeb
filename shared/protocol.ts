@@ -129,6 +129,9 @@ export type ServerMessage =
   | { type: 'pickupSpawn'; id: number; pos: Vec3; kind?: PickupKind }
   | { type: 'deploySpawn'; id: number; owner: string; kind: 'turret' | 'mine' | 'station' | 'drone'; pos: Vec3; team?: 'alpha' | 'bravo' }
   | { type: 'deployGone'; id: number }
+  // Server-owned sentry fired at a player — clients render the rocket
+  // visual; damage itself arrives through playerHit like everything else.
+  | { type: 'turretShot'; id: number; owner: string; targetId: string }
   | { type: 'pickupGone'; id: number; by: string | null }
   | { type: 'teamScore'; scores: { alpha: number; bravo: number }; winAt: number }
   | { type: 'ffaScore'; scores: Record<string, number>; winAt: number }

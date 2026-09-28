@@ -115,21 +115,65 @@ glGrip.rotation.x = 0.3;
 gl.add(glGrip);
 gl.visible = false;
 
-// Sticky launcher: stubby drum-fed glue gun — fat barrel, glowing pink
-// reservoir so the silhouette reads "sticky" at a glance
+// Sticky launcher: T2's bomb mortar — a fat launch tube feeding from a
+// horizontal bomb drum under the breech, latching spike at the muzzle.
+// The "sticky" read is a row of live ordnance in the drum window, not a
+// bubble on top — the old glowing pink ball looked like a toy hopper.
 const sticky = new THREE.Group();
-sticky.add(mkTube(0.12, 0.13, 0.26, -0.18, bodyMat));
-sticky.add(mkTube(0.14, 0.14, 0.06, -0.34, darkMat)); // muzzle collar
-sticky.add(mkBore(0.1, -0.371));
-const stickyTankMat = new THREE.MeshStandardMaterial({ color: 0xdd44cc, roughness: 0.3, metalness: 0.1, emissive: 0x661155 });
-const stickyTank = new THREE.Mesh(new THREE.SphereGeometry(0.09, 10, 8), stickyTankMat);
-stickyTank.position.set(0, 0.12, 0.02);
-sticky.add(stickyTank);
-const stickyRecv = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.16, 0.22), bodyMat);
-stickyRecv.position.set(0, -0.02, 0.1);
+sticky.add(mkTube(0.125, 0.135, 0.34, -0.14, bodyMat)); // launch tube — longer, heavier
+sticky.add(mkTube(0.15, 0.145, 0.07, -0.34, darkMat)); // muzzle collar
+sticky.add(mkBore(0.105, -0.376));
+// Latching spike protruding past the bore — the glue tip the bombs get
+// skewered on. THE silhouette detail that separates it from a GL clone.
+const spike = new THREE.Mesh(new THREE.ConeGeometry(0.022, 0.1, 6), darkMat);
+spike.rotation.x = -Math.PI / 2;
+spike.position.set(0, 0.1, -0.4);
+sticky.add(spike);
+const spikeBase = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.06, 0.06), darkMat);
+spikeBase.position.set(0, 0.1, -0.35);
+sticky.add(spikeBase);
+// Bomb drum under the barrel — axis across the gun, half-buried in the
+// receiver like the GL drum but set LOW so it reads slung, not fat.
+const stickyDrum = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.16, 10), darkMat);
+stickyDrum.rotation.z = Math.PI / 2;
+stickyDrum.position.set(0, -0.11, -0.06);
+sticky.add(stickyDrum);
+// Chambered bombs peeking through the drum's front face — five dark
+// shells ringed around the hub, each with a fuse nub. Visible ordnance =
+// the "sticky bombs loaded" read at viewmodel distance.
+const bombMat = new THREE.MeshLambertMaterial({ color: 0x1e2226, emissive: 0x0a0c0e });
+const fuseMat = new THREE.MeshBasicMaterial({ color: 0xffaa22 }); // amber fuse glow — hazard, not candy
+for (let i = 0; i < 5; i++) {
+  const a = (i / 5) * Math.PI * 2;
+  const bomb = new THREE.Mesh(new THREE.SphereGeometry(0.038, 8, 6), bombMat);
+  bomb.position.set(0.081, -0.11 + Math.sin(a) * 0.075, -0.06 + Math.cos(a) * 0.075);
+  sticky.add(bomb);
+  const fuse = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.012, 0.03), fuseMat);
+  fuse.position.copy(bomb.position);
+  fuse.position.x += 0.038;
+  sticky.add(fuse);
+}
+// Drum hub pin
+const stickyHub = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.19, 8), bodyMat);
+stickyHub.rotation.z = Math.PI / 2;
+stickyHub.position.copy(stickyDrum.position);
+sticky.add(stickyHub);
+// Receiver — taller slab behind the drum, carries the launcher's bulk
+const stickyRecv = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.17, 0.2), bodyMat);
+stickyRecv.position.set(0, -0.01, 0.14);
 sticky.add(stickyRecv);
+// Warning stripe across the receiver flank — ordnance hardware marking,
+// not decoration. Same trick as the shotgun's red shells.
+const warnMat = new THREE.MeshLambertMaterial({ color: 0xcc8818, emissive: 0x301f04 });
+const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.152, 0.03, 0.14), warnMat);
+stripe.position.set(0, 0.03, 0.14);
+sticky.add(stripe);
+// Rear stock plate + grip — matches the GL's stance so the family reads
+const stickyStock = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.1, 0.16), darkMat);
+stickyStock.position.set(0, -0.04, 0.3);
+sticky.add(stickyStock);
 const stickyGrip = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.1, 0.06), darkMat);
-stickyGrip.position.set(0, -0.16, 0.02);
+stickyGrip.position.set(0, -0.14, 0.06);
 stickyGrip.rotation.x = 0.3;
 sticky.add(stickyGrip);
 sticky.visible = false;

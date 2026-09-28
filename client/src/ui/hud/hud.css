@@ -154,6 +154,14 @@
   box-shadow: 0 0 8px rgba(255, 68, 68, 0.8);
   transition: opacity 0.1s;
 }
+.player-indicator.friendly {
+  background: #4d4;
+  box-shadow: 0 0 8px rgba(68, 221, 68, 0.8);
+}
+.player-indicator.friendly.offscreen {
+  background: transparent;
+  border-color: #0d0;
+}
 .player-indicator-offscreen {
   width: 12px !important;
   height: 12px !important;

@@ -141,6 +141,12 @@ export class MessageHandler {
 
   private handlers: Record<string, (playerId: string, msg: ClientMessage) => void> = {};
 
+  /** Server-sim entry point — deployable sentries fire through the same
+   *  outcome funnel as player/bot damage. */
+  turretAttack(ownerId: string, targetId: string, damage: number): void {
+    this.combat.turretAttack(ownerId, targetId, damage);
+  }
+
   setBallSim(sim: BallSim): void {
     this.ballSim = sim;
   }

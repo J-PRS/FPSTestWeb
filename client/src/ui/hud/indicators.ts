@@ -23,7 +23,7 @@ export class PlayerIndicators {
     this.container = container;
   }
 
-  update(playerId: string, position: { x: number; y: number; z: number }, camera: THREE.Camera, isDead = false): void {
+  update(playerId: string, position: { x: number; y: number; z: number }, camera: THREE.Camera, isDead = false, friendly = false): void {
     let indicator = this.indicators.get(playerId);
     if (!indicator) {
       indicator = document.createElement('div');
@@ -32,6 +32,7 @@ export class PlayerIndicators {
       this.indicators.set(playerId, indicator);
       logger.debug('INDICATOR CREATED', { playerId, total: this.indicators.size });
     }
+    indicator.classList.toggle('friendly', friendly);
 
     if (isDead) {
       indicator.classList.add('hidden');

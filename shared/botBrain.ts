@@ -30,6 +30,10 @@ export interface BrainCtx {
   pickup?: BotVec | null;
   /** Terrain height at x,z — wander waypoints clamp to ground. */
   groundY: (x: number, z: number) => number;
+  /** Nearby bodies (allies, the local player, self ok — skipped by
+   *  distance) for the separation sense. Optional; steering works
+   *  without it. */
+  others?: BotVec[];
   /** Wall/sim time in ms — brain cooldowns key off this, not frames. */
   now: number;
 }
@@ -49,6 +53,15 @@ const ORBIT_TOO_CLOSE = 12;
 const STALE_MS = 1200;   // last-seen older than this = stop firing blind
 const FLINCH_S = 0.4;
 const FLINCH_DIST = 8;
+
+// --- context steering senses ---
+const SLOTS = 16;        // directions sampled around the circle
+const PROBE_A = 4;       // m — near slope probe
+const PROBE_B = 9;       // m — far probe catches ridgelines early
+const STEP = 8;          // m — steering lookahead distance
+const SEP_RANGE = 7;     // m — personal space vs other bodies
+const MEM_MS = 4000;     // recently-visited ground repels for this long
+const MEM_RANGE = 12;    // m — memory trail influence radius
 
 export class BotBrain {
   /** Set the spawn point as the initial goal. */
@@ -73,6 +86,9 @@ export class BotBrain {
   private progressT = 0;
   private detour: BotVec | null = null;
   private detourT = 0;
+  private heading = { x: 1, z: 0 };
+  private memory: { x: number; z: number; t: number }[] = [];
+  private memT = 0;
 
   /** Getting shot makes the bot recoil — call from the damage funnel. */
   takeHit(from: BotVec): void {
@@ -145,26 +161,8 @@ export class BotBrain {
       dest = this.goal;
     }
 
-    // --- pathing lite: walls and steep faces ---
-    // Contour slide — if the step ahead climbs >6m in 4m (~56°+), blend
-    // along the flatter slope instead of stalling on the wall.
-    const sx = dest.x - pos.x, sz = dest.z - pos.z;
-    const sl = Math.hypot(sx, sz);
-    if (sl > 0.5) {
-      const g0 = ctx.groundY(pos.x, pos.z);
-      const rise = ctx.groundY(pos.x + (sx / sl) * 4, pos.z + (sz / sl) * 4) - g0;
-      if (rise > 6) {
-        const px = -(sz / sl), pz = sx / sl;
-        const l = Math.abs(ctx.groundY(pos.x + px * 4, pos.z + pz * 4) - g0);
-        const r = Math.abs(ctx.groundY(pos.x - px * 4, pos.z - pz * 4) - g0);
-        const s = l <= r ? 1 : -1;
-        dest = {
-          x: pos.x + px * s * 4 + (sx / sl) * 1.5,
-          y: pos.y,
-          z: pos.z + pz * s * 4 + (sz / sl) * 1.5,
-        };
-      }
-    }
+    // --- context steering: senses score every direction ---
+    dest = this.steer(dt, ctx, pos, dest);
 
     // Stuck break — no progress for 1.5s means the straight line is
     // blocked (structure, cliff, another bot). Sidestep perpendicular to
@@ -209,6 +207,89 @@ export class BotBrain {
     }
 
     return { dest, fire };
+  }
+
+  /** Context steering — every direction is scored instead of testing
+   *  just the goal line. Interest comes from goal alignment and current
+   *  heading (momentum); danger comes from slope probes, bodies in the
+   *  way, and recently-visited ground (the memory trail, which is what
+   *  lets a bot escape a local minimum instead of orbitting it).
+   *  Danger masks interest; the best surviving slot wins, and the result
+   *  is blended with the last heading so 22.5° slot granularity never
+   *  shows as jitter. */
+  private steer(dt: number, ctx: BrainCtx, pos: BotVec, dest: BotVec): BotVec {
+    let gx = dest.x - pos.x, gz = dest.z - pos.z;
+    const gd = Math.hypot(gx, gz);
+    if (gd < 0.5) return dest;
+    gx /= gd; gz /= gd;
+    const g0 = ctx.groundY(pos.x, pos.z);
+    const now = ctx.now;
+
+    // Lay the trail, then drop crumbs that are stale or out of range.
+    this.memT -= dt;
+    if (this.memT <= 0) {
+      this.memT = 0.4;
+      this.memory.push({ x: pos.x, z: pos.z, t: now });
+      if (this.memory.length > 24) this.memory.shift();
+    }
+    this.memory = this.memory.filter(
+      (m) => now - m.t < MEM_MS && (m.x - pos.x) ** 2 + (m.z - pos.z) ** 2 < MEM_RANGE * MEM_RANGE,
+    );
+
+    let bestX = gx, bestZ = gz, bestScore = -1;
+    let safeX = gx, safeZ = gz, safeDanger = 2;
+    for (let i = 0; i < SLOTS; i++) {
+      const a = (i / SLOTS) * Math.PI * 2;
+      const dx = Math.cos(a), dz = Math.sin(a);
+
+      const align = dx * gx + dz * gz;
+      let interest = Math.max(0, align);
+      interest *= interest; // sharpen: prefer near-goal arcs over drift
+      interest += 0.25 * Math.max(0, dx * this.heading.x + dz * this.heading.z);
+
+      let danger = 0;
+      const riseA = ctx.groundY(pos.x + dx * PROBE_A, pos.z + dz * PROBE_A) - g0;
+      const riseB = ctx.groundY(pos.x + dx * PROBE_B, pos.z + dz * PROBE_B) - g0;
+      const slope = Math.max(riseA / PROBE_A, riseB / PROBE_B);
+      if (slope > 0.45) danger = Math.min(1, danger + (slope - 0.45) * 2);
+      if (riseA < -12) danger = Math.min(1, danger + 0.5); // sheer drop
+
+      if (ctx.others) {
+        for (const o of ctx.others) {
+          const ox = o.x - pos.x, oz = o.z - pos.z;
+          const od = Math.hypot(ox, oz);
+          if (od > SEP_RANGE || od < 0.01) continue;
+          const toward = dx * (ox / od) + dz * (oz / od);
+          if (toward > 0.5) danger = Math.min(1, danger + toward * (1 - od / SEP_RANGE));
+        }
+      }
+      for (const m of this.memory) {
+        const mx = m.x - pos.x, mz = m.z - pos.z;
+        const md = Math.hypot(mx, mz);
+        if (md > MEM_RANGE || md < 0.5) continue;
+        const toward = dx * (mx / md) + dz * (mz / md);
+        if (toward > 0.5) {
+          danger = Math.min(1, danger + toward * 0.2 * (1 - md / MEM_RANGE) * (1 - (now - m.t) / MEM_MS));
+        }
+      }
+
+      const score = interest * (1 - danger);
+      if (score > bestScore) { bestScore = score; bestX = dx; bestZ = dz; }
+      if (danger < safeDanger) { safeDanger = danger; safeX = dx; safeZ = dz; }
+    }
+
+    // Every slot masked → take the least-dangerous one; a standstill is
+    // worse than a sideways shuffle.
+    if (bestScore <= 0.001) { bestX = safeX; bestZ = safeZ; }
+
+    // Blend with the previous heading — smooths slot-to-slot jitter while
+    // the momentum term above keeps real turns responsive.
+    const mx = bestX * 0.7 + this.heading.x * 0.3;
+    const mz = bestZ * 0.7 + this.heading.z * 0.3;
+    const ml = Math.hypot(mx, mz) || 1;
+    this.heading.x = mx / ml; this.heading.z = mz / ml;
+    const step = Math.min(gd, STEP);
+    return { x: pos.x + this.heading.x * step, y: pos.y, z: pos.z + this.heading.z * step };
   }
 }
 

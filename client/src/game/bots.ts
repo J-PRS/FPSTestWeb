@@ -118,6 +118,11 @@ export class TeamBots {
   update(dt: number): void {
     const terrain = deps0(this).terrain;
     const player = deps0(this).player;
+    // Separation sense — every live body the steerer should keep space
+    // from. A bot's own position reads as dist 0 and is skipped inside.
+    const others: THREE.Vector3[] = [];
+    for (const b of this.bots) if (!b.isDead) others.push(b.position);
+    others.push(player.pos);
     for (const bot of this.bots) {
       // Local bots aren't in the wire roster, so remotes.ts never ticks
       // them — tick() is what advances the snapshot interpolation and
@@ -144,10 +149,12 @@ export class TeamBots {
         enemies,
         nugget: this.spec.flags ? null : this.hooks.nearestNugget(bot.position, 60),
         objective: this.ctf?.objectiveFor(bot) ?? null,
+        others,
       });
       if (shot && !this.over) this.resolveShot(bot, shot.targetId, shot.aim); // ceasefire while the banner's up
     }
     if (this.spec.flags) this.ctf?.update(dt);
+    this.watchdog(dt);
     if (!this.over) {
       const w = this.checkWin();
       if (w) {
@@ -162,6 +169,67 @@ export class TeamBots {
   }
 
   private overAt = 0;
+
+  // ---- Watchdog ----
+  // Bots failing silently is the recurring bug class (tick dropped, brains
+  // wedged). Every 4s we diff each bot's LOGICAL position against where
+  // the rendered model actually is:
+  //   - logic moved but model didn't → tick/interp stall (frozen statue)
+  //   - NOTHING moved, all alive bots → brains aren't running at all
+  // Warns once per episode per bot (recovers → re-arms). Match-over and
+  // all-dead windows are legit stillness, not failures.
+  private watchdogT = 0;
+  private readonly wdLogic = new Map<string, THREE.Vector3>();
+  private readonly wdRender = new Map<string, THREE.Vector3>();
+  private readonly wdStalled = new Set<string>();
+  private wdIdleWindows = 0;
+  private static readonly WD_DT = 4;
+
+  private watchdog(dt: number): void {
+    this.watchdogT += dt;
+    if (this.watchdogT < TeamBots.WD_DT) return;
+    this.watchdogT = 0;
+    const log = this.deps.logger;
+    let alive = 0, moved = 0;
+    for (const bot of this.bots) {
+      if (bot.isDead) continue;
+      alive++;
+      const prev = this.wdLogic.get(bot.playerId);
+      const logicD = prev ? prev.distanceTo(bot.position) : 99;
+      if (prev) prev.copy(bot.position); else this.wdLogic.set(bot.playerId, bot.position.clone());
+      if (logicD > 0.05) moved++;
+
+      // Render-side check — model position vs its own last sample. Feet
+      // sit EYE below the logical pos; we only need the delta.
+      const rp = this.wdRender.get(bot.playerId);
+      const have = bot.model.getModelPosition(_wdPos);
+      if (have) {
+        if (rp) {
+          const renderD = rp.distanceTo(_wdPos);
+          rp.copy(_wdPos);
+          if (logicD > 1.5 && renderD < 0.2 && !this.wdStalled.has(bot.playerId)) {
+            this.wdStalled.add(bot.playerId);
+            log.warn(`bot ${bot.playerId} render stalled — logic moved ${logicD.toFixed(1)}m, model moved ${renderD.toFixed(2)}m (tick/interp not running)`);
+          } else if (renderD > 0.5 && this.wdStalled.has(bot.playerId)) {
+            this.wdStalled.delete(bot.playerId);
+            log.info(`bot ${bot.playerId} render recovered`);
+          }
+        } else {
+          this.wdRender.set(bot.playerId, _wdPos.clone());
+        }
+      }
+    }
+    // Whole-squad freeze: brains not producing movement at all. Requires
+    // two consecutive dead windows (a single quiet 4s can be legitimate).
+    if (alive > 0 && moved === 0 && !this.over) {
+      if (++this.wdIdleWindows >= 2) {
+        log.warn(`all ${alive} bots idle for ${(TeamBots.WD_DT * this.wdIdleWindows).toFixed(0)}s — brains not ticking?`);
+        this.wdIdleWindows = 0; // re-arm the counter, not the warning state
+      }
+    } else {
+      this.wdIdleWindows = 0;
+    }
+  }
 
   private winText(w: string): string {
     if (!this.spec.ffa) return `${TEAM_LABEL[w as TeamId]} WINS — ${this.scores.alpha}:${this.scores.bravo}`;
@@ -403,6 +471,7 @@ export class TeamBots {
 const _touchers: [string, THREE.Vector3][] = [];
 const _enemies: { id: string; pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean }[] = [];
 const _collectors: { id: string; pos: THREE.Vector3; alive: boolean }[] = [];
+const _wdPos = new THREE.Vector3();
 const BOLT_MAT = new THREE.LineBasicMaterial({ color: 0xffe08a, transparent: true, opacity: 0.9 });
 
 // Small accessor so update() reads deps once per frame.

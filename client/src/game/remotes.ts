@@ -116,8 +116,15 @@ export function createRemotes(deps: RemotesDeps) {
     const cam = deps.lazyCamera();
     for (const [id, rp] of deps.world.remotePlayers) {
       if (players.has(id)) continue;
-      if (rp.isDead) hud.removePlayerIndicator(id);
-      else hud.updatePlayerIndicator(id, rp.position, cam, false);
+      if (rp.isDead) {
+        hud.removePlayerIndicator(id);
+      } else {
+        // GameBot carries `team` ('alpha'/'bravo', own id in FFA) — plain
+        // RemotePlayers have none and stay enemy red.
+        const friendly = (rp as { team?: string }).team === deps.world.localTeam
+          && (rp as { team?: string }).team !== undefined;
+        hud.updatePlayerIndicator(id, rp.position, cam, false, friendly);
+      }
     }
     cleanupRemotePlayers(players);
 
@@ -169,7 +176,10 @@ export function createRemotes(deps: RemotesDeps) {
       }
     }
     if (!playerState.isDead) {
-      hud.updatePlayerIndicator(playerId, remotePlayer.position, deps.lazyCamera(), false);
+      // Teammates read green, everything else stays enemy red — FFA and
+      // teamless modes leave `team` undefined so nothing turns friendly.
+      const friendly = !!playerState.team && playerState.team === deps.world.localTeam;
+      hud.updatePlayerIndicator(playerId, remotePlayer.position, deps.lazyCamera(), false, friendly);
     } else {
       hud.removePlayerIndicator(playerId);
     }
