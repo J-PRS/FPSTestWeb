@@ -15,6 +15,8 @@ export interface RoomInfo {
   mode: string;
   /** Live scoreboard object (mutated by Room.score) — echoed into gameState. */
   scores?: { alpha: number; bravo: number };
+  /** Team-mode room → friendly fire is blocked at the damage funnel. */
+  teams?: boolean;
   winAt?: number;
   /** Objective anchors from the map spec — echoed on gameState so clients
    *  place flags/bases where the map says, not where the URL guessed. */
@@ -61,7 +63,7 @@ export class MessageHandler {
     this.broadcast = broadcast;
     this.sendToPlayer = sendToPlayer;
     if (roomInfo) this.roomInfo = roomInfo;
-    this.combat = new CombatHandler(playerManager, broadcast, sendToPlayer, roomInfo?.onKill, roomInfo?.onHit);
+    this.combat = new CombatHandler(playerManager, broadcast, sendToPlayer, roomInfo?.onKill, roomInfo?.onHit, roomInfo?.teams ?? false);
   }
 
   setBallSim(sim: BallSim): void {
