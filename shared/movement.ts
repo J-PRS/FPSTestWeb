@@ -22,11 +22,24 @@ export const MOVEMENT_CONFIG = {
   // skier counts as grounded a little higher off the surface.
   skiTargetDistance: 0.5,
   playerHeight: 1.8,
-  // Jetpack thrust. Energy economy lives outside the sim (client: HUD +
-  // skill spends; server: not modelled) — the sim only needs "thrust
-  // while held" so reported jet trajectories don't read as divergence.
+  // Jetpack thrust. The kinematics live in the sim; the energy economy
+  // is modelled by the server shadow (RoomMoveSim) so a client can't
+  // claim more jet than the tank allows — numbers mirror the client's
+  // skills.ts economy.
   jetForceUp: 35.0,
   jetForceDir: 10.0,
+} as const;
+
+/** Jet/skill energy economy — the authoritative copy for the server
+ *  shadow; client skills.ts holds the same numbers for local HUD. */
+export const ENERGY = {
+  max: 60,
+  jetDrain: 15,      // per second while thrusting
+  jetCharge: 8,      // per second while grounded-and-idle
+  cloakCost: 20, cloakDrain: 5,
+  shieldCost: 20, shieldDrain: 5,
+  mendCost: 20, mendDrain: 15,
+  shieldDmgPerEnergy: 10, // absorbed damage burns this much of a point
 } as const;
 
 export interface Vec3Like { x: number; y: number; z: number }

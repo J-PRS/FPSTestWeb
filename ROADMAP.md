@@ -68,6 +68,11 @@ surface. Detailed research lives in `_reports/`; this file is the current truth.
    (witness→judge; 400ms throttle; sim keeps its own truth, no resync-
    ping-pong). Jetpack thrust is inside the sim (inputMove 'jet' bit) so
    jetting doesn't false-positive; knockback impulses feed the shadow.
+   The shadow now models the energy economy too (shared/movement.ts
+   ENERGY table = client skills.ts source): jet drain/regen honor the
+   declared perk (featherjets/overcharge), cloak/shield/mend antes and
+   per-sec drains ride the inputMove status bits, shield soak and gem
+   refills burn/refill the same tank — infinite-jet claims get gated.
    Remaining: true input-only reporting + seq-anchored replay (client
    already blends/snaps corrections — see net/players.ts).
 3. ~~Map format~~ — landed: `maps/<room>.json` (mode, ball population,

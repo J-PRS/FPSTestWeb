@@ -27,6 +27,7 @@ import { RoomDeployables } from './RoomDeployables.ts';
 import type { PlayerState, Vec3 } from './types.ts';
 import type { ServerMessage } from '../../shared/protocol.ts';
 import { POWERUP, rollCreatureDrop, type PowerupKind } from '../../shared/pickups.ts';
+import { ENERGY } from '../../shared/movement.ts';
 import type { ServerWebSocket } from 'bun';
 import type { WebSocketData } from './types.ts';
 
@@ -109,19 +110,22 @@ export class Room {
         onDeploy: (pid, kind, pos) => this.deployables.handleDeploy(pid, kind, pos),
         deployables: () => this.deployables.snapshot(),
         matchEndsAt: () => this.matchEndsAt,
-        moveInput: (pid, i) => this.moveSim.setInput(pid, {
+        moveInput: (pid, i, status) => this.moveSim.setInput(pid, {
           forward: i.forward, right: i.right,
           jumpPressed: !!i.jump, jumpHeld: !!i.jump, skiHeld: !!i.ski,
           jetHeld: !!i.jet,
-        }),
+        }, status),
         moveReport: (pid, pos, yaw, vel) => this.moveSim.reconcile(pid, pos, yaw, vel),
         moveImpulse: (pid, dv) => this.moveSim.applyImpulse(pid, dv),
         moveResync: (pid, pos, yaw) => this.moveSim.resync(pid, pos, yaw),
-        moveTrack: (pid, pos, yaw) => this.moveSim.track(pid, pos, yaw),
+        moveTrack: (pid, pos, yaw) => this.moveSim.track(pid, pos, yaw, this.players.getPlayer(pid)?.perk),
         moveUntrack: (pid) => this.moveSim.untrack(pid),
       },
     );
     this.moveSim = new RoomMoveSim(field);
+    // Shield soak burns the same tank the jet model owns — without this
+    // a shielded player under fire runs the sim tank ahead of the real one.
+    this.players.energyBurn = (pid, n) => this.moveSim.drainEnergy(pid, n);
     this.ballSim = new BallSim(
       this.players,
       (msg) => this.connections.broadcast(msg),
@@ -157,7 +161,12 @@ export class Room {
       if (kind === 'gem' || kind === 'tag') {
         // Gems back the collector's next heal claim; kill-confirmed tags
         // are pure score — no resource bundled into the same pickup.
-        if (kind === 'gem') p.healCredit += 25;
+        if (kind === 'gem') {
+          p.healCredit += 25;
+          // Client refills half the energy tank on a gem — the shadow
+          // must too or the next jet run diverges for honest reasons.
+          this.moveSim.grantEnergy(pid, ENERGY.max * 0.5);
+        }
         const team = p.team;
         if (team === 'alpha' || team === 'bravo') this.score(team);
         return;
