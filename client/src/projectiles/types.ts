@@ -57,6 +57,7 @@ export interface ProjectileConfig {
   bounceFriction?: number; // tangential velocity kept per bounce
   maxBounces?: number; // die on the Nth terrain hit (flak shards); undefined = bounce until fuse
   armTime?: number; // T2 mortar arming delay: contacts before this age BOUNCE, after it they detonate
+  sticks?: boolean; // sticky launcher: on contact the bomb freezes in place and waits out its fuse; a detonation cooks off sibling sticks in radius
   wakeVisual?: boolean; // turbulent wake particles marking the growing proxy hitbox (off by default — tuning pending)
 }
 

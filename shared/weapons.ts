@@ -28,6 +28,7 @@ export enum WeaponType {
   RocketLauncher = 15, // classic RPG: slow straight-flying missile, big boom, rocket-jump friendly
   Pistol = 16,        // hold-out sidearm (G): quick semi-auto slug, no splash
   Revolver = 17,      // hold-out sidearm (T): slow hand-cannon slug, no splash
+  Sticky = 18,        // sticky launcher: lobbed bomb that glues to surface/player, 3s fuse, chain-detonates
 }
 
 export interface WeaponStats {
@@ -324,6 +325,25 @@ export const WEAPONS: Record<number, WeaponStats> = {
     hitMax: 0.5,
     hitGrow: 0.1,
     maxLifetime: 0.5,
+  },
+  [WeaponType.Sticky]: {
+    // Sticky launcher (T2): glue bomb — sticks where it lands, pops on a
+    // 3s fuse. The CHAIN is the weapon: a detonation cooks every other
+    // live sticky in its radius, and at 0.8s cadence a player can stack 3
+    // before the first fuse pops — so a cluster is one triple-strength
+    // overlapping blast, not three weak pops.
+    directDamage: 45,
+    aoeDamage: 35,
+    aoeRadius: 11.0,
+    knockbackForce: 50.0,
+    forceMode: 'push',
+    speed: 55.0,
+    gravity: -28.0,
+    bodyRadius: 0.3,
+    hitMin: 0.0,
+    hitMax: 2.0, // sticks sit still — the blast is the reach, not the wake
+    hitGrow: 0.5,
+    maxLifetime: 3.0, // THE fuse — 0.8s rate ⇒ ~3 bombs live per shooter
   },
   [WeaponType.Slam]: {
     // Not a projectile — the Q-skill lands as a ground AOE. Ballistic
