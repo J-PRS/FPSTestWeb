@@ -9,7 +9,7 @@ import { Ball } from '../../entities/balls.js';
 import type { GameStatePlayer, LocalPlayerState } from '../../../../shared/protocol.js';
 import type { NetworkManager } from '../../networking/NetworkManager.js';
 import type { NetCtx } from './ctx.js';
-import { loadHeightfieldBin } from '../../world/heightmap.js';
+import { loadHeightfieldBin, loadHeightmap } from '../../world/heightmap.js';
 import { reconcileDeployables } from './deployables.js';
 import { resolveServerEndpoints } from '../../networking/endpoints.js';
 
@@ -64,11 +64,8 @@ function applyRoomInfo(ctx: NetCtx, playerCount: number, roomInfo?: Parameters<N
   const { deps, networkManager } = ctx;
   if (!roomInfo) return;
   deps.world.mode = roomInfo.mode;
-  deps.world.localTeam = roomInfo.team;
-  if (roomInfo.scores) deps.world.teamScores = roomInfo.scores;
-  if (roomInfo.matchEndsAt) deps.world.matchEndsAt = roomInfo.matchEndsAt;
+  applyMatchMeta(ctx, roomInfo);
   if (roomInfo.respawnMs) deps.world.respawnMs = roomInfo.respawnMs;
-  if (roomInfo.ffaScores) deps.world.ffaScores = new Map(Object.entries(roomInfo.ffaScores));
   announceRoom(ctx, playerCount, roomInfo);
   // Pickups still lying on the field when we (re)joined — the roster is
   // authoritative both ways: spawn what's there, drop ghosts whose
@@ -78,10 +75,31 @@ function applyRoomInfo(ctx: NetCtx, playerCount: number, roomInfo?: Parameters<N
   reconcileDeployables(ctx, roomInfo.deployables);
   applyMapSnapshot(ctx, roomInfo.map);
   // Flags mid-flight when we joined — same path as a flagUpdate broadcast.
-  if (roomInfo.flags?.length) networkManager.onFlagUpdate?.(roomInfo.flags);
+  // An empty/absent list on a room hop must also clear the old room's
+  // banners and HUD chips, so fire it either way.
+  networkManager.onFlagUpdate?.(roomInfo.flags ?? []);
 }
 
 type RoomInfo = Parameters<NonNullable<NetworkManager['onGameState']>>[2];
+
+/** Match meta (team/scores/clock/board) — a room-scoped gameState is
+ *  authoritative, so a hop that drops them clears rather than leaves the
+ *  old match's residue. The `room` gate keeps offline modes (TeamBots
+ *  localTeam) untouched: only the server sends a room name. */
+function applyMatchMeta(ctx: NetCtx, roomInfo: RoomInfo): void {
+  const { deps } = ctx;
+  if (roomInfo?.room !== undefined) {
+    deps.world.localTeam = roomInfo.team;
+    deps.world.teamScores = roomInfo.scores ?? null;
+    deps.world.ffaScores = new Map(Object.entries(roomInfo.ffaScores ?? {}));
+    deps.world.matchEndsAt = roomInfo.matchEndsAt ?? null;
+    return;
+  }
+  if (roomInfo?.team !== undefined) deps.world.localTeam = roomInfo.team;
+  if (roomInfo?.scores) deps.world.teamScores = roomInfo.scores;
+  if (roomInfo?.matchEndsAt) deps.world.matchEndsAt = roomInfo.matchEndsAt;
+  if (roomInfo?.ffaScores) deps.world.ffaScores = new Map(Object.entries(roomInfo.ffaScores));
+}
 
 /** Chat lines summarizing what we just joined — clock, room, team, board. */
 function announceRoom(ctx: NetCtx, playerCount: number, roomInfo?: RoomInfo): void {
@@ -108,20 +126,22 @@ type MapSnapshot = { structures?: StructureSpec[]; arena?: { x: number; z: numbe
 
 /** Structures, dome, and per-map species caps — shared by gameState's
  *  join path; mapUpdate handles the same rebuild itself since it always
- *  knows a spec exists. */
+ *  knows a spec exists. Clears rather than skips on absence: a room hop
+ *  re-runs gameState, and the old room's geometry must not survive. */
 function applyMapSnapshot(ctx: NetCtx, map?: MapSnapshot): void {
   const { deps } = ctx;
-  if (map?.structures?.length) {
-    buildStructures(map.structures, deps.lazyScene());
-    // Same collider list the server sims against — ball prediction
-    // ricochets off structures identically instead of phasing through.
-    Ball.colliders = structureColliders(map.structures);
-  }
+  buildStructures(map?.structures ?? [], deps.lazyScene());
+  // Same collider list the server sims against — ball prediction
+  // ricochets off structures identically instead of phasing through.
+  Ball.colliders = structureColliders(map?.structures);
   if (map?.arena) {
     buildArenaDome(map.arena, deps.lazyTerrain().getHeight(map.arena.x, map.arena.z), deps.lazyScene());
+  } else {
+    clearArenaDome(deps.lazyScene());
   }
   setAmbientCaps(map?.ambient);
   if (map?.terrain) void applyTerrain(ctx, map.terrain);
+  else void applyTerrain(ctx, null);
 }
 
 /** Fetch the room's heightfield and swap the live terrain over to it.
@@ -129,14 +149,21 @@ function applyMapSnapshot(ctx: NetCtx, map?: MapSnapshot): void {
  *  finish out of order and leave the older field resident. */
 let terrainSwap: Promise<void> = Promise.resolve();
 let terrainActive: string | null = null;
-async function applyTerrain(ctx: NetCtx, file: string): Promise<void> {
+// Rooms without a spec terrain reset to the boot field — the PNG the
+// session loaded at startup.
+const BOOT_HEIGHTMAP = '/assets/heightmaps/test_vertex.png';
+async function applyTerrain(ctx: NetCtx, file: string | null): Promise<void> {
   if (terrainActive === file) return;
   const { deps } = ctx;
   terrainSwap = terrainSwap.then(async () => {
     if (terrainActive === file) return;
     try {
-      const { httpUrl } = await resolveServerEndpoints();
-      await loadHeightfieldBin(`${httpUrl}/maps/${file}`);
+      if (file) {
+        const { httpUrl } = await resolveServerEndpoints();
+        await loadHeightfieldBin(`${httpUrl}/maps/${file}`);
+      } else {
+        await loadHeightmap(BOOT_HEIGHTMAP);
+      }
       deps.lazyTerrain().reloadHeightmap();
       // Ball.field captured the previous heightfield OBJECT — hmData is
       // swapped, not mutated, so the sim would keep predicting bounces on

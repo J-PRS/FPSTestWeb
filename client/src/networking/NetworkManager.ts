@@ -6,6 +6,7 @@ import { PROTOCOL_VERSION } from '../../../shared/protocol.js';
 import { TieredTransport } from './tiers.js';
 import type { GameTransport, TransportFactory } from './transport.js';
 import { NetTelemetry } from './netTelemetry.js';
+import { WeaponType } from '../../../shared/weapons.js';
 import { urlParams } from '../core/params.js';
 
 const logger = new ChildLogger('NetworkManager');
@@ -252,6 +253,14 @@ export class NetworkManager {
     deployGone: (data) => this.onDeployGone?.(data.id),
     turretShot: (data) => this.onTurretShot?.(data.id, data.owner, data.targetId),
     mineBoom: (data) => this.onMineBoom?.(data.id, data.pos),
+    // Server refused a hit claim — worth surfacing: a healthy client
+    // should basically never see this, so it's a desync tell.
+    shotRejected: (data) => logger.error(`shot rejected — predicted damage never applied`, {
+      reason: data.reason,
+      targetId: data.targetId,
+      weapon: data.weaponType !== undefined ? WeaponType[data.weaponType] ?? data.weaponType : undefined,
+      pingMs: this.telemetry.ping,
+    }),
   };
 
   private handleGameState(data: Extract<ServerMessage, { type: 'gameState' }>): void {
@@ -584,6 +593,16 @@ export class NetworkManager {
 
   sendChat(text: string): void {
     this.send({ type: 'chat', text });
+  }
+
+  /** Mid-match room hop — the server re-seats this session and answers
+   *  with a fresh gameState, which the normal (re)connect path rebuilds
+   *  from. Returns false when there's no live socket (caller falls back
+   *  to a reload join). */
+  switchRoom(room: string, map?: string, bots?: number): boolean {
+    if (!this.isConnected()) return false;
+    this.send({ type: 'switchRoom', room, map, bots });
+    return true;
   }
 
 

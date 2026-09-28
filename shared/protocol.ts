@@ -62,7 +62,12 @@ export type ClientMessage =
   // by weapon force itself). See server_bun/src/BallSim.ts.
   | { type: 'creatureHit'; id: number; damage: number; kx?: number; ky?: number; kz?: number }
   | { type: 'deploy'; kind: 'turret' | 'mine' | 'station' | 'drone'; position: Vec3 }
-  | { type: 'snapshotRequest' };
+  | { type: 'snapshotRequest' }
+  // Mid-match room hop over the live socket — the server re-seats the
+  // session in the target room and answers with a fresh gameState, which
+  // the client's existing reconnect path rebuilds from. Same creation
+  // hints as join; room absent = 'default'.
+  | { type: 'switchRoom'; room?: string; mode?: string; map?: string; bots?: number };
 
 export interface TickUpdatePlayer {
   playerId: string;
@@ -136,6 +141,10 @@ export type ServerMessage =
   // arrives through playerHit/knockback like everything else.
   | { type: 'mineBoom'; id: number; owner: string; pos: Vec3 }
   | { type: 'pickupGone'; id: number; by: string | null }
+  // Combat claim refused — the shooter's predicted damage never happened.
+  // Sent ONLY to the shooter so the client can log why a landed shot did
+  // nothing (stale projectile, dead/friendly target, implausible claim).
+  | { type: 'shotRejected'; reason: string; targetId?: string; weaponType?: number }
   | { type: 'teamScore'; scores: { alpha: number; bravo: number }; winAt: number }
   | { type: 'ffaScore'; scores: Record<string, number>; winAt: number }
   | { type: 'ffaMatchEnd'; winner: string; scores: Record<string, number> }

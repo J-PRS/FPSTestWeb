@@ -61,6 +61,13 @@ export class SessionManager {
     return createHmac('sha256', this.identitySecret).update(playerId).digest('base64url');
   }
 
+  /** Deterministic per-id token — a mid-match room switch re-seats the
+   *  session in the new room, which needs the same token so a later
+   *  disconnect+reclaim there still authenticates. */
+  tokenFor(playerId: string): string {
+    return this.identityToken(playerId);
+  }
+
   handle(ws: ServerWebSocket<WebSocketData>, raw: unknown): void {
     if (typeof raw !== 'object' || raw === null) {
       ws.close(1008, 'Invalid handshake');

@@ -213,6 +213,17 @@ const VALIDATORS: Record<string, (obj: Record<string, unknown>) => ValidationRes
     return { success: true, data: { type: 'snapshotRequest' } };
   },
 
+  // Same name/map/mode grammar as the join handshake — a bad name just
+  // lands you in 'default', never a rejection.
+  switchRoom: (obj) => {
+    const word = (v: unknown) =>
+      typeof v === 'string' && /^[\w-]{1,32}$/.test(v) ? v : undefined;
+    const bots = isFiniteNumber(obj.bots)
+      ? Math.max(0, Math.min(24, Math.floor(obj.bots as number)))
+      : undefined;
+    return { success: true, data: { type: 'switchRoom', room: word(obj.room), map: word(obj.map), mode: word(obj.mode), bots } };
+  },
+
   // Relay-only content: length cap is the whole validation — the server
   // never interprets the text, clients render it escaped (textContent).
   chat: (obj) => {

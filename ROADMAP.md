@@ -60,8 +60,9 @@ surface. Detailed research lives in `_reports/`; this file is the current truth.
    winAt now shown per row), joins via ?room=NAME reload, create-room
    input, NUGGETS/CTF/DM quick-play buttons → `GET /join?mode=` picks
    the emptiest live match or spins `<mode>-N` (ad-hoc names inherit
-   maps/<mode>.json). Next polish: show own room + mode in the panel,
-   mid-match room switching without reload.
+   maps/<mode>.json). Own room + mode shown in the panel; mid-match
+   room switching is in-place now (switchRoom message → fresh gameState
+   rebuild, URL stays shareable, reload is the offline fallback).
 2. **Movement re-sim** — LANDED (judge mode): shared/movement.ts MoveSim
    drives client physics AND a per-player server shadow (RoomMoveSim) fed
    by inputMove. Divergence >8m now sends a real correction to the client

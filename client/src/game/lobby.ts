@@ -2,9 +2,10 @@
  * Lobby — room browser as a self-contained DOM module (chat.ts pattern:
  * own elements, own key routing, textContent-only).
  *
- * Joining a room is a reload with ?room=NAME because room membership is
- * fixed at connect time — the URL stays shareable, which is the whole
- * point of rooms. Mode is inherited from the room, not the URL.
+ * Joining a room first tries an in-place hop — the server's switchRoom
+ * re-seats the live session and answers with a fresh gameState the normal
+ * reconnect path rebuilds from. Offline/degraded clients fall back to the
+ * ?room=NAME reload, which stays the shareable link either way.
  */
 
 import { settings } from '../core/settings.js';
@@ -37,6 +38,10 @@ export interface LobbyDeps {
   /** GET /join?mode&map&bots — server picks the emptiest live match
    *  fitting the request (or spins a fresh room from the map spec). */
   quickJoin(mode: string, map?: string, bots?: number): Promise<{ room: string }>;
+  /** In-place room hop over the live socket — false when there's no
+   *  connection (caller reloads instead). map/bots are creation hints for
+   *  a room that doesn't exist yet. */
+  switchRoom?(name: string, map?: string, bots?: number): boolean;
 }
 
 const POLL_MS = 3000;
@@ -254,6 +259,8 @@ export class Lobby {
     }
     // Default lobby first — it's the immortal room.
     rooms.sort((a, b) => (a.name === 'default' ? -1 : b.name === 'default' ? 1 : a.name.localeCompare(b.name)));
+    const cur = rooms.find((r) => r.name === this.currentRoom());
+    this.here.textContent = `IN: ${this.currentRoom().toUpperCase()}${cur?.mode ? ` · ${cur.mode.toUpperCase()}` : ''}`;
     for (const r of rooms) this.addRow(r);
   }
 
@@ -281,6 +288,17 @@ export class Lobby {
   private join(name: string, map?: string, bots?: number): void {
     // Already there — a reload would boot us into the same seat anyway.
     if (name === this.currentRoom()) return;
+    // Live socket: hop in place — the gameState rebuild does the rest.
+    // Keep the URL honest so refresh/share still lands in this room.
+    if (this.deps.switchRoom?.(name, map, bots)) {
+      const q = new URLSearchParams(location.search);
+      if (name === 'default') q.delete('room');
+      else q.set('room', name);
+      if (map) q.set('map', map); else q.delete('map');
+      if (bots !== undefined) q.set('bots', String(bots)); else q.delete('bots');
+      history.replaceState(null, '', `${location.pathname}?${q.toString()}`);
+      return;
+    }
     const q = new URLSearchParams(location.search);
     if (name === 'default') q.delete('room');
     else q.set('room', name);

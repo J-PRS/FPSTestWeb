@@ -104,5 +104,6 @@ export function wireNetworkHandlers(deps: NetDeps): void {
       if (!res.ok) throw new Error(`join ${res.status}`);
       return res.json() as Promise<{ room: string }>;
     },
+    switchRoom: (name, map, bots) => networkManager.switchRoom(name, map, bots),
   }));
 }

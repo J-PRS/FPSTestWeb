@@ -162,6 +162,7 @@ export class GameServer {
       room = new Room(name, this.field, mode, spec, CONFIG.moveAuthority);
       room.onMatchEnd = (rec) => this.recordMatchEnd(rec);
       room.onRotate = () => this.nextRotationSpec(room);
+      room.onTerrain = (s) => this.attachTerrain(room, s);
       if (spec?.terrain) this.attachTerrain(room, spec);
       this.rooms.set(name, room);
       logger.info('Room created', { room: name, mode: room.mode });
@@ -172,13 +173,16 @@ export class GameServer {
   /** Attach a spec's terrain to every room sim that sweeps it — missing
    *  one means two systems disagree about where the ground is. */
   private attachTerrain(room: Room, spec: MapSpec): void {
-    if (!spec.terrain) return;
     const roomName = room.name;
-    this.loadField(spec.terrain).then(f => {
+    // No spec.terrain → the room plays on the default field. Rotation can
+    // land on a terrain-less map after a terrain one, so reverting matters.
+    const target = spec.terrain ? this.loadField(spec.terrain) : Promise.resolve(this.field);
+    target.then(f => {
       if (!f || this.rooms.get(roomName) !== room) return;
       room.ballSim.attachField(f);
       room.moveSim.attachField(f);
       room.projectiles.attachField(f);
+      logger.info('Room terrain attached', { room: roomName, terrain: spec.terrain ?? 'default' });
     });
   }
 
@@ -306,7 +310,7 @@ export class GameServer {
     }, 15000).unref?.();
   }
 
-  onMessage(ws: ServerWebSocket<WebSocketData>, message: string | ArrayBuffer): void {
+  onMessage(ws: ServerWebSocket<WebSocketData>, message: string | ArrayBuffer | Uint8Array): void {
     // Binary hot path: [0x54] magic frames skip JSON entirely.
     // Currently only `position` (28B, replaces a ~140B JSON message at 20Hz).
     if (typeof message !== 'string') {
@@ -342,7 +346,67 @@ export class GameServer {
       return;
     }
 
+    // A room hop crosses room ownership — handle it at the dispatcher, not
+    // inside one room's MessageHandler.
+    const probe = raw as { type?: string };
+    if (probe.type === 'switchRoom') {
+      this.switchRoom(ws, existingPlayerId, raw);
+      return;
+    }
+
     this.handleGameMessage(room, existingPlayerId, raw);
+  }
+
+  // Switch-spam guard: reseating a session tears down/rebuilds a player
+  // record plus two broadcasts — cheap per hop, but a 20Hz spammer would
+  // churn two rooms' rosters for free. A short cooldown is plenty.
+  private switchCooldowns = new Map<string, number>();
+  private static readonly SWITCH_COOLDOWN_MS = 1500;
+
+  /** Mid-match room hop: same socket, new membership. Reuses the leave
+   *  teardown + SessionManager's join tail — the fresh gameState the new
+   *  room emits drives the client's existing (re)connect rebuild, so the
+   *  wire needs no new shape. */
+  private switchRoom(ws: ServerWebSocket<WebSocketData>, playerId: string, raw: unknown): void {
+    const now = Date.now();
+    const last = this.switchCooldowns.get(playerId) ?? 0;
+    if (now - last < GameServer.SWITCH_COOLDOWN_MS) return;
+    this.switchCooldowns.set(playerId, now);
+
+    const msg = raw as { room?: string; map?: string; mode?: string; bots?: number };
+    const word = (v: unknown) => typeof v === 'string' && /^[\w-]{1,32}$/.test(v) ? v : undefined;
+    const target = word(msg.room) ?? 'default';
+    const from = this.roomOfPlayer(playerId);
+    if (!from) return;
+    if (from.name === target) return; // already seated — no-op, not an error
+
+    const to = this.roomFor(target, word(msg.mode) ?? '', word(msg.map) ?? '',
+      typeof msg.bots === 'number' && Number.isFinite(msg.bots) ? Math.max(0, Math.min(24, Math.floor(msg.bots))) : undefined);
+    if (to.playerCount() >= CONFIG.maxPlayers ||
+        (CONFIG.globalMaxPlayers > 0 && this.totalPlayers() >= CONFIG.globalMaxPlayers)) {
+      from.connections.sendToPlayer(playerId, { type: 'matchNotice', text: `${target} is full` });
+      return;
+    }
+
+    // The kit rides with the player — the hop isn't a loadout reset.
+    const perk = from.players.getPlayer(playerId)?.perk ?? 'none';
+    const transport = from.players.getPlayer(playerId)?.transport;
+
+    // Leave teardown: the disconnect path minus the grace window.
+    from.connections.unregister(playerId);
+    from.rateLimiter.removePlayer(playerId);
+    from.messages.onPlayerDisconnected(playerId);
+    this.removePlayerCompletely(from, playerId, 'roomSwitch');
+
+    // Join tail — identical to SessionManager's accept path.
+    const sessionToken = this.sessions.tokenFor(playerId);
+    to.sessionTokens.set(playerId, sessionToken);
+    const joined = to.players.addPlayer(playerId, to.nextTeam(), perk);
+    if (transport) joined.transport = transport;
+    this.playerRoom.set(playerId, to);
+    to.connections.register(playerId, ws);
+    to.messages.handleHandshake(playerId, sessionToken);
+    logger.info('Player switched rooms', { playerId, from: from.name, to: to.name });
   }
 
   private reconnectGraceMs = CONFIG.reconnectGraceMs; // Grace period for F5 reconnect

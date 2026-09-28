@@ -4,6 +4,8 @@
 import * as THREE from 'three';
 import type { NetCtx } from './ctx.js';
 
+const _flagMarker = new THREE.Vector3();
+
 export function wireFlags(ctx: NetCtx): void {
   const { deps, networkManager } = ctx;
 
@@ -25,16 +27,22 @@ export function wireFlags(ctx: NetCtx): void {
       new THREE.MeshBasicMaterial({ color: team === 'alpha' ? 0x55aaff : 0xff8855 }));
     banner.position.set(0.55, 3.4, 0);
     g.add(pole, banner);
-    g.onBeforeRender = () => {
+    g.onBeforeRender = (_renderer, _scene, camera) => {
       const carrier = flagCarriers.get(team);
-      if (!carrier) return;
-      if (carrier === networkManager.getLocalPlayerId()) {
-        g.position.copy(deps.lazyPlayer().pos);
-      } else {
-        const rp = deps.world.remotePlayers.get(carrier);
-        if (rp) g.position.copy(rp.pos);
+      if (carrier) {
+        if (carrier === networkManager.getLocalPlayerId()) {
+          g.position.copy(deps.lazyPlayer().pos);
+        } else {
+          const rp = deps.world.remotePlayers.get(carrier);
+          if (rp) g.position.copy(rp.pos);
+        }
+        g.position.y += 0.4; // ride the shoulders, not the boots
       }
-      g.position.y += 0.4; // ride the shoulders, not the boots
+      // Flag marker — the through-terrain diamond. DOM overlay, so this is
+      // legal inside the render callback (position is final by now).
+      // The indicator path adds +1.0 for a player capsule; the flag wants
+      // its diamond at the pole tip (~4m), so lift the anchor 3.4 more.
+      deps.lazyHud().updateFlagIndicator(`flag:${team}`, _flagMarker.set(g.position.x, g.position.y + 3.4, g.position.z), camera, team);
     };
     deps.lazyScene().add(g);
     flagMeshes.set(team, g);
@@ -63,6 +71,18 @@ export function wireFlags(ctx: NetCtx): void {
   };
 
   networkManager.onFlagUpdate = (flags) => {
+    // An empty roster (room hop out of a CTF match, or gameState with no
+    // flags) tears the meshes and HUD diamonds down.
+    const live = new Set(flags.map(f => f.team));
+    for (const team of flagMeshes.keys()) { // Map delete-during-iterate is safe
+      if (live.has(team as 'alpha' | 'bravo')) continue;
+      deps.lazyScene().remove(flagMeshes.get(team)!);
+      flagMeshes.delete(team);
+      flagCarriers.delete(team);
+      prevState.delete(team);
+      deps.lazyHud().removePlayerIndicator(`flag:${team}`);
+      delete deps.world.flagStates[team as 'alpha' | 'bravo'];
+    }
     for (const f of flags) {
       callout(f);
       const g = ensureFlagMesh(f.team);
