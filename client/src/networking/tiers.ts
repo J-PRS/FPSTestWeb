@@ -152,18 +152,29 @@ class ServerRtcTransport implements GameTransport {
   private open = false;
   // `pc` is kept so a losing probe can be fully torn down — closing only
   // the datachannel leaves the ICE/DTLS machinery running server-side.
-  constructor(private dc: RTCDataChannel, private config: ConnectionConfig, private pc?: RTCPeerConnection) {
+  constructor(
+    private dc: RTCDataChannel,
+    private config: ConnectionConfig,
+    private pc?: RTCPeerConnection,
+    // Reliable control channel for JSON events — the 'game' channel is
+    // unordered+unreliable so join/claims sent over it could be lost.
+    private ctrl?: RTCDataChannel,
+  ) {
     dc.binaryType = 'arraybuffer';
     dc.addEventListener('message', (ev) => {
       const data = ev.data;
-      if (typeof data === 'string') {
+      if (data instanceof ArrayBuffer) config.onBinaryMessage?.(new Uint8Array(data));
+      else if (typeof data === 'string') {
         try { config.onMessage?.(JSON.parse(data)); } catch { /* malformed */ }
-      } else if (data instanceof ArrayBuffer) {
-        config.onBinaryMessage?.(new Uint8Array(data));
       }
     });
     dc.addEventListener('open', () => { this.open = true; config.onConnect?.(); });
     dc.addEventListener('close', () => { this.open = false; config.onDisconnect?.(1000, 'rtc closed'); });
+    ctrl?.addEventListener('message', (ev) => {
+      if (typeof ev.data === 'string') {
+        try { config.onMessage?.(JSON.parse(ev.data)); } catch { /* malformed */ }
+      }
+    });
   }
   connect(): void {
     if (this.dc.readyState === 'open') {
@@ -172,14 +183,23 @@ class ServerRtcTransport implements GameTransport {
     }
   }
   send(data: string | Uint8Array): boolean {
-    if (!this.open || this.dc.readyState !== 'open') return false;
+    if (!this.open) return false;
+    if (this.ctrl?.readyState === 'open') {
+      if (typeof data === 'string') this.ctrl.send(data);
+      else this.ctrl.send(new Uint8Array(data));
+      return true;
+    }
+    if (this.dc.readyState !== 'open') return false;
     if (typeof data === 'string') this.dc.send(data);
     else this.dc.send(new Uint8Array(data));
     return true;
   }
-  // The game datachannel is created unordered+unreliable — every send rides
-  // the UDP lane. JSON events lose ordering here; that's acceptable for this
-  // tier (position state is the high-rate traffic; events tolerate it).
+  sendUnreliable(data: string | Uint8Array): boolean {
+    if (this.dc.readyState !== 'open') return this.send(data);
+    if (typeof data === 'string') this.dc.send(data);
+    else this.dc.send(new Uint8Array(data));
+    return true;
+  }
   connected(): boolean { return this.open && this.dc.readyState === 'open'; }
   disconnect(): void {
     this.open = false;
@@ -193,6 +213,7 @@ async function tryWebRTC(config: ConnectionConfig): Promise<GameTransport | null
   try {
     const pc = new RTCPeerConnection();
     const dc = pc.createDataChannel('game', { ordered: false, maxRetransmits: 0 });
+    const ctrl = pc.createDataChannel('ctrl'); // reliable+ordered — join, claims, events
     // Signal over the dedicated /rtcs socket — one offer in, one answer out.
     // The offer is sent only after ICE gathering completes so candidates
     // are embedded in the SDP (non-trickle — the server doesn't accept
@@ -222,7 +243,7 @@ async function tryWebRTC(config: ConnectionConfig): Promise<GameTransport | null
     });
     await pc.setRemoteDescription(answer);
     signal.close();
-    return new ServerRtcTransport(dc, config, pc);
+    return new ServerRtcTransport(dc, config, pc, ctrl);
   } catch {
     return null;
   }

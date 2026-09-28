@@ -47,20 +47,42 @@ async function loadNd(): Promise<NdModule | null> {
  * log), so an adapter is enough — the whole game pipeline (join handshake,
  * binary position frames, tick fanout) flows over SCTP without knowing it.
  */
+type DataChannelLabeled = DataChannelLike & { getLabel?(): string; label?: string };
+
 class RtcSocketAdapter {
   readonly data: WebSocketData = { playerId: '', connectedAt: Date.now() };
   readonly remoteAddress = 'webrtc';
-  constructor(private dc: DataChannelLike) {}
-  get readyState(): number { return this.dc.isOpen() ? 1 : 3; }
+  // Two lanes per peer: 'game' (unordered/unreliable — ticks, positions)
+  // and 'ctrl' (ordered/reliable — join, claims, events). Reliable traffic
+  // on the lossy channel would silently drop a join; unreliable on ctrl
+  // would retransmit stale frames, so the lanes must not share.
+  private game: DataChannelLike | null = null;
+  private ctrl: DataChannelLike | null = null;
+
+  attach(dc: DataChannelLabeled): void {
+    const label = dc.getLabel?.() ?? dc.label;
+    if (label === 'ctrl') this.ctrl = dc;
+    else this.game = dc; // 'game' or unlabeled → the fast lane
+  }
+  get readyState(): number { return this.game?.isOpen() || this.ctrl?.isOpen() ? 1 : 3; }
   send(msg: string | Uint8Array): number {
-    if (!this.dc.isOpen()) return 0;
-    if (typeof msg === 'string') this.dc.sendMessage(msg);
-    else this.dc.sendMessageBinary(new Uint8Array(msg));
+    const dc = this.ctrl ?? this.game;
+    if (!dc?.isOpen()) return 0;
+    if (typeof msg === 'string') dc.sendMessage(msg);
+    else dc.sendMessageBinary(new Uint8Array(msg));
+    return typeof msg === 'string' ? msg.length : msg.byteLength;
+  }
+  sendUnreliable(msg: string | Uint8Array): number {
+    const dc = this.game ?? this.ctrl;
+    if (!dc?.isOpen()) return 0;
+    if (typeof msg === 'string') dc.sendMessage(msg);
+    else dc.sendMessageBinary(new Uint8Array(msg));
     return typeof msg === 'string' ? msg.length : msg.byteLength;
   }
   close(code = 1000, reason = ''): void {
     logger.debug('RTC socket close', { code, reason });
-    try { this.dc.close(); } catch { /* already gone */ }
+    try { this.game?.close(); } catch { /* already gone */ }
+    try { this.ctrl?.close(); } catch { /* already gone */ }
   }
 }
 
@@ -102,15 +124,20 @@ export class RtcServer {
     const pc = new nd.PeerConnection('srv', { iceServers: [] });
     this.peers.set(ws, pc);
 
+    const adapter = new RtcSocketAdapter();
+    const sock = adapter as unknown as ServerWebSocket<WebSocketData>;
+    let opened = false;
     pc.onDataChannel((dc) => {
-      const adapter = new RtcSocketAdapter(dc);
+      adapter.attach(dc as DataChannelLabeled);
       this.adapterOf.set(dc, adapter);
-      const sock = adapter as unknown as ServerWebSocket<WebSocketData>;
-      dc.onOpen(() => this.game.onOpen(sock));
       dc.onMessage((msg) => this.game.onMessage(sock, msg instanceof Uint8Array ? msg : String(msg)));
+      dc.onOpen(() => {
+        // game.onOpen once — whichever channel opens first starts the session
+        if (!opened) { opened = true; this.game.onOpen(sock); }
+      });
       dc.onClosed(() => {
         this.adapterOf.delete(dc);
-        this.game.onClose(sock);
+        if (adapter.readyState !== 1) this.game.onClose(sock);
       });
     });
     pc.onGatheringStateChange((state) => {
