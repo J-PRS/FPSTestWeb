@@ -1,7 +1,14 @@
 // Demo system data types - binary-efficient structures for recording/replay
 
 export const DEMO_MAGIC = 0x44; // 'D'
-export const DEMO_FORMAT_VERSION = 2;
+export const DEMO_FORMAT_VERSION = 3;
+
+// Remote-frame flag bitmasks
+export const RemoteFrameFlags = {
+  None: 0,
+  Dead: 1 << 0,
+  Ski: 1 << 1,
+} as const;
 
 // Input flag bitmasks
 export const InputFlags = {
@@ -91,6 +98,27 @@ export interface DemoHeader {
   startYaw: number; startPitch: number;
   startVelX: number; startVelY: number; startVelZ: number;
   projectileLifetime: number;   // float32 — airtime of the cool shot (0 for full recordings)
+  // v3: match context — a demo recorded on quicksand replayed on raindance
+  // reconstructs nonsense; carrying the room/mode makes clips self-describing
+  // and lets the UI flag wrong-map playback before it happens.
+  room: string;               // variable length string
+  mode: string;               // variable length string
+  playerName: string;         // variable length string
+}
+
+// v3: every other player in the room, sampled at ~20Hz so an MP demo isn't
+// an empty battlefield. The roster table dedupes names out of the hot stream.
+export interface DemoRosterEntry {
+  name: string;               // variable length string (the wire player id)
+}
+
+export interface RemoteFrame {
+  timestamp: number;          // float32
+  rosterIdx: number;          // uint16 — index into roster
+  posX: number; posY: number; posZ: number;
+  velX: number; velY: number; velZ: number;
+  yaw: number; pitch: number;
+  flags: number;              // uint8 — RemoteFrameFlags
 }
 
 export interface DemoFile {
@@ -98,6 +126,8 @@ export interface DemoFile {
   frames: DemoFrame[];
   projectileEvents: ProjectileEvent[];
   targetEvents: TargetEvent[];
+  roster: DemoRosterEntry[];       // empty on v1/v2 files
+  remoteFrames: RemoteFrame[];     // empty on v1/v2 files
 }
 
 export interface DemoClip {
@@ -137,5 +167,8 @@ export function createHeader(): DemoHeader {
     startYaw: 0, startPitch: 0,
     startVelX: 0, startVelY: 0, startVelZ: 0,
     projectileLifetime: 0,
+    room: '',
+    mode: '',
+    playerName: '',
   };
 }

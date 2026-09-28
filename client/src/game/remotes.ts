@@ -54,6 +54,13 @@ export function createRemotes(deps: RemotesDeps) {
   function networkTick(dt: number): void {
     const nm = deps.lazyNetworkManager();
     const player = deps.lazyPlayer();
+    // Demo playback drives player.pos from recorded frames — sending them
+    // would look like teleport spam to the server, and live remote ticks
+    // would mix the real match into the replay scene.
+    if (deps.world.playbackMode) {
+      player.pendingTeleport = false; // don't queue a stale teleport for later
+      return;
+    }
     lastSentPos.x = player.pos.x;
     lastSentPos.y = player.pos.y;
     lastSentPos.z = player.pos.z;

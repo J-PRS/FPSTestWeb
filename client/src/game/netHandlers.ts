@@ -161,8 +161,12 @@ export function wireNetworkHandlers(deps: NetDeps): void {
     deps.lazyScene().add(m);
     pickupMeshes.set(id, { mesh: m, kind });
   };
-  networkManager.onPickupSpawn = (id, pos, kind) => addPickup(id, pos, kind ?? 'gem');
+  networkManager.onPickupSpawn = (id, pos, kind) => {
+    if (deps.world.playbackMode) return; // live match gems don't belong in the replay
+    addPickup(id, pos, kind ?? 'gem');
+  };
   networkManager.onPickupGone = (id, by) => {
+    if (deps.world.playbackMode) return;
     const e = pickupMeshes.get(id);
     if (e) { deps.lazyScene().remove(e.mesh); pickupMeshes.delete(id); }
     if (by === nm().getLocalPlayerId()) {
@@ -205,6 +209,7 @@ export function wireNetworkHandlers(deps: NetDeps): void {
 
   // Register player hit handler (non-lethal hits)
   networkManager.onPlayerHit = (shooterId: string, targetId: string, damage: number, health: number) => {
+    if (deps.world.playbackMode) return;
     // Check if local player was hit
     if (targetId === nm().getLocalPlayerId()) {
       deps.lazyPlayer().health = health;
@@ -223,6 +228,7 @@ export function wireNetworkHandlers(deps: NetDeps): void {
 
   // Register knockback handler — server tells us to apply knockback/pull to our local player
   networkManager.onKnockback = (position: { x: number; y: number; z: number }, force: number, pull?: boolean) => {
+    if (deps.world.playbackMode) return; // replay owns the camera's body
     const from = new THREE.Vector3(position.x, position.y, position.z);
     const player = deps.lazyPlayer();
     if (pull) {
@@ -238,6 +244,9 @@ export function wireNetworkHandlers(deps: NetDeps): void {
   //  <5m          → blend halfway toward server state (soft nudge)
   //  ≥5m          → hard snap: genuine desync, take the server state
   networkManager.onCorrection = (_seq: number, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }) => {
+    // During demo playback corrections fire constantly (recorded positions
+    // desync from what the server last accepted) and would warp the replay.
+    if (deps.world.playbackMode) return;
     const player = deps.lazyPlayer();
     const dx = player.pos.x - position.x, dy = player.pos.y - position.y, dz = player.pos.z - position.z;
     const err = Math.sqrt(dx * dx + dy * dy + dz * dz);
@@ -274,6 +283,7 @@ export function wireNetworkHandlers(deps: NetDeps): void {
 
   // Register player kill handler (lethal kills)
   networkManager.onPlayerKill = (shooterId: string, targetId: string) => {
+    if (deps.world.playbackMode) return;
     deps.world.killCounts.set(shooterId, (deps.world.killCounts.get(shooterId) ?? 0) + 1);
     // Check if local player was killed
     if (targetId === nm().getLocalPlayerId()) {
@@ -369,6 +379,7 @@ export function wireNetworkHandlers(deps: NetDeps): void {
   const remoteProjectiles = new Map<string, Projectile>();
 
   networkManager.onProjectileCreated = (projectileId: string, ownerId: string, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }, weaponType?: number) => {
+    if (deps.world.playbackMode) return; // live shots don't belong in the replay
     // For own projectiles: link the pending local projectile to this server ID
     if (ownerId === nm().getLocalPlayerId()) {
       const localProjectile = deps.world.projectileRegistry.pending.shift();
@@ -402,6 +413,7 @@ export function wireNetworkHandlers(deps: NetDeps): void {
   };
 
   networkManager.onProjectileDestroyed = (projectileId: string) => {
+    if (deps.world.playbackMode) return;
     // Kill remote projectile (explode so trail particles fade out naturally).
     // Delete the map entry now — the visual fade lives on world.projectiles,
     // not this map; keeping dead entries leaks one record per shot ever fired.
@@ -426,6 +438,7 @@ export function wireNetworkHandlers(deps: NetDeps): void {
 
   // Register player respawn handler
   networkManager.onPlayerRespawn = (playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }) => {
+    if (deps.world.playbackMode) return;
     // Check if local player respawned
     if (playerId === nm().getLocalPlayerId()) {
       logger.info(`Local player respawned at ${JSON.stringify(position)}`);
@@ -463,15 +476,26 @@ export function wireNetworkHandlers(deps: NetDeps): void {
 
   // ---- Server-owned creatures (balls) ------------------------------------
   // Events only — the client replays the shared sim between segments.
-  networkManager.onBallSpawn = (data) => deps.entities().netBallSpawn(data);
-  networkManager.onBallSegment = (data) => deps.entities().netBallSegment(data);
-  networkManager.onBallDie = (data) => deps.entities().netBallDie(data);
+  networkManager.onBallSpawn = (data) => {
+    if (deps.world.playbackMode) return;
+    deps.entities().netBallSpawn(data);
+  };
+  networkManager.onBallSegment = (data) => {
+    if (deps.world.playbackMode) return;
+    deps.entities().netBallSegment(data);
+  };
+  networkManager.onBallDie = (data) => {
+    if (deps.world.playbackMode) return;
+    deps.entities().netBallDie(data);
+  };
   networkManager.onBallRoster = (data) => {
+    if (deps.world.playbackMode) return;
     for (const b of data.balls) deps.entities().netBallSpawn(b);
   };
 
   // Register playerJoined handler (for new players joining after initial connection)
   networkManager.onPlayerJoined = (playerId: string, position: { x: number; y: number; z: number }, _rotation: { yaw: number; pitch: number }) => {
+    if (deps.world.playbackMode) return;
     // Safety: server excludes self from playerJoined broadcast, but guard anyway
     if (playerId === nm().getLocalPlayerId()) return;
     const playerData = nm().getPlayers().get(playerId);

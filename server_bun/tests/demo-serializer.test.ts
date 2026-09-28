@@ -36,6 +36,9 @@ function makeDemoFile(): DemoFile {
   header.startPosY = 20.0;
   header.startPosZ = -5.3;
   header.projectileLifetime = 3.5;
+  header.room = 'quicksand';
+  header.mode = 'tdm';
+  header.playerName = 'JP';
 
   const projectileEvents = [
     {
@@ -78,7 +81,23 @@ function makeDemoFile(): DemoFile {
     },
   ];
 
-  return { header, frames, projectileEvents, targetEvents };
+  const roster = [{ name: 'bot-1' }, { name: 'bot-2' }];
+  const remoteFrames = [
+    {
+      timestamp: 0.1, rosterIdx: 0,
+      posX: 1, posY: 2, posZ: 3,
+      velX: 4, velY: 5, velZ: 6,
+      yaw: 0.5, pitch: -0.2, flags: 0,
+    },
+    {
+      timestamp: 0.15, rosterIdx: 1,
+      posX: 7, posY: 8, posZ: 9,
+      velX: -1, velY: 0, velZ: 1,
+      yaw: 1.5, pitch: 0.1, flags: 2,
+    },
+  ];
+
+  return { header, frames, projectileEvents, targetEvents, roster, remoteFrames };
 }
 
 describe('DemoSerializer round-trip', () => {
@@ -138,6 +157,25 @@ describe('DemoSerializer round-trip', () => {
     expect(te0.targetId).toBe(42);
     expect(te0.targetType).toBe(3);
     expect(te0.health).toBeCloseTo(100, 4);
+
+    // v3 context + roster + remote frames
+    expect(restored.header.room).toBe('quicksand');
+    expect(restored.header.mode).toBe('tdm');
+    expect(restored.header.playerName).toBe('JP');
+    expect(restored.roster.length).toBe(2);
+    expect(restored.roster[1]!.name).toBe('bot-2');
+    expect(restored.remoteFrames.length).toBe(2);
+    const rf1 = restored.remoteFrames[1]!;
+    expect(rf1.rosterIdx).toBe(1);
+    expect(rf1.posX).toBeCloseTo(7, 4);
+    expect(rf1.flags).toBe(2);
+  });
+
+  it('rejects a remote frame referencing a missing roster index', () => {
+    const original = makeDemoFile();
+    original.remoteFrames[0]!.rosterIdx = 9; // roster only has 2
+    const buffer = DemoSerializer.serialize(original);
+    expect(() => DemoSerializer.deserialize(buffer)).toThrow(/roster idx/);
   });
 
   it('rejects bad magic', () => {
@@ -180,6 +218,8 @@ describe('DemoSerializer round-trip', () => {
       frames: [],
       projectileEvents: [],
       targetEvents: [],
+      roster: [],
+      remoteFrames: [],
     };
     const buffer = DemoSerializer.serialize(data);
     const restored = DemoSerializer.deserialize(buffer);

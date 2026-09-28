@@ -42,7 +42,7 @@ export interface RoomInfo {
   /** Deploy claim sink — Room.deployables.handleDeploy. */
   onDeploy?: (playerId: string, kind: string, pos: Vec3) => void;
   /** Live deployables for gameState joins — RoomDeployables.snapshot. */
-  deployables?: () => { id: number; owner: string; kind: string; pos: Vec3 }[];
+  deployables?: () => { id: number; owner: string; kind: 'turret' | 'mine' | 'station' | 'drone'; pos: Vec3 }[];
 }
 
 export class MessageHandler {
