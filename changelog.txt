@@ -1,3 +1,5 @@
+2026-10-03 - reconnect path soaked over real sockets: new _tools/pvptest/reconnect.ts — grace-token reclaim restores the same identity with a clean roster (no dupes); wrong token rejected with 1008; live connected ids reject steals even WITH the token (duplicate-id gate — by design)
+
 2026-10-03 - nuggets bots farm: brains get huntCreatures (nuggets rooms) — creatures preferred at <=65m when no player threatens within 55m (bigger, slower prey at plink range); before, creatures were never worth hunting so the gem economy starved. /metrics rooms now report scores + pickups-on-floor for live observability
 
 2026-10-03 - nuggets economy was dead: creature kills dropped gems at corpse altitude (creatures fly ~100m up) where the dy<=6 pickup grab can never reach — drops now ground at terrain height; Room keeps its heightfield (GameServer refreshes it on attach/rotation); live sim: 4 kills, gems grounded, first point banked
