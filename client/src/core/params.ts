@@ -31,6 +31,10 @@ export const urlParams = {
   /** ?room=NAME — match room on the server (default: 'default'). Lets two
    *  matches coexist on one server; share the URL to share the room. */
   room: qp.get('room'),
+  /** ?map=/?bots= — spec hints the join message forwards so a fresh
+   *  server-side room rebuilds from the right maps/<X>.json. */
+  map: qp.get('map'),
+  bots: qp.get('bots') ? Number(qp.get('bots')) : undefined,
   /** ?net=wt|rtc — probe that transport tier before falling back to
    *  WebSocket (netcode v2; the UDP tiers are stubbed until server halves
    *  exist). Absent param = straight WS, today's behavior. */

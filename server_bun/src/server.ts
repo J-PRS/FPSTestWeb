@@ -49,13 +49,20 @@ const ROUTES: Record<string, (url: URL) => Response | Promise<Response>> = {
   '/matches': () => json(gameServer.listMatches()),
   // Lifetime per-player aggregates off the match journal.
   '/stats': async () => json(await gameServer.getStats()),
-  // Quick-join: /join?mode=ctf → emptiest live match of a mode.
+  // Map list for the menu's match setup — name + mode + default bots.
+  '/maps': () => json(gameServer.listMaps()),
+  // Quick-join: /join?mode=ctf&map=raindance&bots=6 → emptiest live
+  // match fitting the request (or a fresh room built from that spec).
   '/join': (url) => {
     const mode = url.searchParams.get('mode') ?? '';
-    if (!/^[a-z0-9_-]{0,16}$/.test(mode)) {
-      return corsResponse('Bad mode', { status: 400 });
+    const map = url.searchParams.get('map') ?? '';
+    const botsRaw = url.searchParams.get('bots');
+    const bots = botsRaw === null ? undefined
+      : Math.max(0, Math.min(24, Math.floor(Number(botsRaw) || 0)));
+    if (!/^[a-z0-9_-]{0,16}$/.test(mode) || !/^[a-z0-9_-]{0,32}$/.test(map)) {
+      return corsResponse('Bad mode/map', { status: 400 });
     }
-    const room = gameServer.quickRoom(mode);
+    const room = gameServer.quickRoom(mode, map, bots);
     return json({ room: room.name, mode: room.mode });
   },
   // WebTransport discovery: browser clients pin self-signed certs via

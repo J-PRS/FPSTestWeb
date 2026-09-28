@@ -88,8 +88,16 @@ export function wireNetworkHandlers(deps: NetDeps): void {
       if (!res.ok) throw new Error(`rooms ${res.status}`);
       return res.json() as Promise<import('./lobby.js').RoomRow[]>;
     },
-    quickJoin: async (mode) => {
-      const res = await fetch(`${httpUrl}/join?mode=${encodeURIComponent(mode)}`);
+    listMaps: async () => {
+      const res = await fetch(`${httpUrl}/maps`);
+      if (!res.ok) throw new Error(`maps ${res.status}`);
+      return res.json() as Promise<import('./lobby.js').MapRow[]>;
+    },
+    quickJoin: async (mode, map, bots) => {
+      const q = new URLSearchParams({ mode });
+      if (map) q.set('map', map);
+      if (bots !== undefined) q.set('bots', String(bots));
+      const res = await fetch(`${httpUrl}/join?${q}`);
       if (!res.ok) throw new Error(`join ${res.status}`);
       return res.json() as Promise<{ room: string }>;
     },
