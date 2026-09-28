@@ -21,6 +21,12 @@ describe('Combat noise ring', () => {
     expect(room.noisesNear({ x: 100, y: 0, z: 0 }, 10).length).toBe(0);
   });
 
+  it('playerShot relays (hitscan fire) leave noise at the stamped muzzle', () => {
+    const room = mkRoom();
+    room.broadcast({ type: 'playerShot', id: 'p1', pos: { x: 0, y: 1, z: 20 } } as ServerMessage);
+    expect(room.noisesNear({ x: 0, y: 0, z: 25 }, 10).length).toBe(1);
+  });
+
   it('non-position broadcasts make no noise', () => {
     const room = mkRoom();
     room.broadcast({ type: 'matchNotice', text: 'x' } as ServerMessage);
