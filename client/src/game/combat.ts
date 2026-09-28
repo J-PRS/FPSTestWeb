@@ -13,7 +13,7 @@ import { AoeGizmo } from '../effects/aoeGizmo.js';
 import { Implosion } from '../effects/implosion.js';
 import { ScorchDecal } from '../effects/scorch.js';
 import { Projectile, type SweepObstacle } from '../projectiles/Projectile.js';
-import { computeAccuracy } from '../projectiles/index.js';
+import { computeAccuracy, BOMBLET_CONFIG } from '../projectiles/index.js';
 import type { FragMessages } from '../ui/FragMessages.js';
 import * as sfx from '../core/sfx.js';
 import type { HealthBarSystem } from '../ui/HealthBarSystem.js';
@@ -78,18 +78,9 @@ const BOLT_CHAIN_PASSES = 3;       // bounded worklist — a chain can't run awa
 const CHAIN_WINDOW = CHAINGUN_RATE * 1.5;
 const CHAIN_RAMP_CAP = 8;
 
-// Flak spread basis — rebuilt per shot, never retained
-const _flakRight = new THREE.Vector3();
-const _flakUp = new THREE.Vector3();
-const _flakUp0 = new THREE.Vector3(0, 1, 0);
-const _flakDir = new THREE.Vector3();
 const _debrisDir = new THREE.Vector3();
-// Lightning beam scratch
-const _lgO = new THREE.Vector3();   // eye position — the honest ray
-const _lgD = new THREE.Vector3();
-const _lgP = new THREE.Vector3();   // terrain march point
-const _lgTo = new THREE.Vector3();
-const _lgTo2 = new THREE.Vector3(); // chain-pick scratch
+const _bombDir = new THREE.Vector3(); // cluster bomblet scatter
+const _bombVel = new THREE.Vector3();
 
 // ?debug — show the real gameplay blast radius as a wireframe sphere on
 // every detonation (the dome VFX is only 80% of it by design)
@@ -136,7 +127,7 @@ export function createCombat(deps: CombatDeps) {
   // They only need deps — their destruction/blast callbacks hoist-resolve.
   const fire = createFire(deps, { onTargetDestroyed, applyForceToRemotes });
   const {
-    onFire, onDisc, onGrenade, onDiscLauncher, onChaingun, onMortar, onGrenadeLauncher,
+    onFire, onBelt, onDiscLauncher, onChaingun, onMortar, onGrenadeLauncher,
     onFlak, onPlasma, onRailgun, onShotgun, onCannon, onRocketLauncher,
     onPistol, onRevolver,
   } = fire;
@@ -334,6 +325,7 @@ export function createCombat(deps: CombatDeps) {
 
     spawnImpactEffect(p);
     recordProjectileHit(p);
+    if (p.config.cluster) spawnClusterBomblets(p);
 
     if (p.hitBall) handleBallHit(p, p.hitBall);
     if (p.hitPlayerId) handlePlayerHit(p, p.hitPlayerId);
@@ -371,7 +363,12 @@ export function createCombat(deps: CombatDeps) {
     // Canonical launchers bloom on a direct hit — the blast reach AND its
     // VFX dome grow together so the visual never lies about the damage area
     const bloom = p.directHit ? directHitAoeBonus(weaponType) : 1;
-    const sendAOE = (pos: { x: number; y: number; z: number }, targetId: string | null) =>
+    // Untracked client-local children (cluster bomblets) skip the claim —
+    // their damage is the server's WeaponStats.cluster scatter, so a claim
+    // would just bounce off projectile resolution.
+    const sendAOE = p.config.needsServerTracking === false
+      ? () => {}
+      : (pos: { x: number; y: number; z: number }, targetId: string | null) =>
       networkManager.sendAOEShot({
         position: pos, weaponType, excludeTargetId: targetId,
         projectileId: p.serverProjectileId ?? null, airtime: p.hitAge ?? p.age,
@@ -394,6 +391,27 @@ export function createCombat(deps: CombatDeps) {
       vfxRadius: p.explosionRadius * bloom, // VFX dome grows with the damage area
       weaponType,
     });
+  }
+
+  // Cluster pop: scatter bomblets in an upward cone — VISUAL only. Damage
+  // comes from the server's WeaponStats.cluster scatter on the carrier's
+  // validated blast; client-side pops never claim (untracked projectile).
+  function spawnClusterBomblets(p: Projectile): void {
+    const { count, spread, fuse } = p.config.cluster!;
+    const at = p.hitPointValid ? p.hitPoint : p.pos;
+    for (let i = 0; i < count; i++) {
+      const yaw = Math.random() * Math.PI * 2;
+      const tilt = Math.random() * spread; // 0..spread off straight-up
+      _bombDir.set(Math.sin(yaw) * Math.sin(tilt), Math.cos(tilt), Math.cos(yaw) * Math.sin(tilt));
+      // Per-instance config clone only carries the jittered fuse —
+      // 5 allocations per cluster pop, not a hot path.
+      const cfg = { ...BOMBLET_CONFIG, maxLifetime: fuse * (0.6 + Math.random() * 0.8) };
+      // Bomblet speed lives in the "playerVel" ctor arg: config.speed is 0 and
+      // the ctor adds half the inherit term, so dir × (s × 2) nets dir × s.
+      _bombVel.copy(_bombDir).multiplyScalar((9 + Math.random() * 6) * 2);
+      const b = new Projectile(deps.lazyScene(), at, _bombDir, _bombVel, cfg);
+      deps.world.projectiles.push(b);
+    }
   }
 
   // Demo recording + cool-shot logging for any hit (terrain, ball, or player)
@@ -529,7 +547,7 @@ export function createCombat(deps: CombatDeps) {
   }
 
   return {
-    onFire, onDisc, onGrenade, onDiscLauncher, onChaingun, onMortar, onGrenadeLauncher, onFlak, onPlasma, onRailgun, onShotgun, onCannon, onRocketLauncher, onPistol, onRevolver,
+    onFire, onBelt, onDiscLauncher, onChaingun, onMortar, onGrenadeLauncher, onFlak, onPlasma, onRailgun, onShotgun, onCannon, onRocketLauncher, onPistol, onRevolver,
     onMelee: fire.onMelee,
     onLightning: lightning,
     slam,

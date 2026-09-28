@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-import { JET_FORCE_UP, JET_FORCE_DIR, MAX_ENERGY, MAX_HEALTH, JET_DRAIN, JET_CHARGE, FIRE_RATE, DISC_RATE, GRENADE_RATE, CHAINGUN_RATE, MORTAR_RATE, GL_RATE, FLAK_RATE, PLASMA_RATE, RAILGUN_RATE, LG_RATE, SHOTGUN_RATE, CANNON_RATE, RKT_RATE, PISTOL_RATE, REVOLVER_RATE, STICKY_RATE, MELEE_COOLDOWN, MELEE_LUNGE } from '../core/config.js';
+import { JET_FORCE_UP, JET_FORCE_DIR, MAX_ENERGY, MAX_HEALTH, JET_DRAIN, JET_CHARGE, FIRE_RATE, DISC_RATE, CHAINGUN_RATE, MORTAR_RATE, GL_RATE, FLAK_RATE, PLASMA_RATE, RAILGUN_RATE, LG_RATE, SHOTGUN_RATE, CANNON_RATE, RKT_RATE, PISTOL_RATE, REVOLVER_RATE, STICKY_RATE, MELEE_COOLDOWN, MELEE_LUNGE } from '../core/config.js';
 
 import { Terrain } from '../world/terrain.js';
 import { PlayerSkills, SHIELD_DMG_PER_ENERGY } from './player/skills.js';
@@ -29,6 +29,11 @@ export interface FireEvent {
 export type SkillId = 'bounce' | 'blink' | 'dash' | 'slam' | 'warp' | 'cloak' | 'shield' | 'medkit';
 export const SKILL_ORDER: SkillId[] = ['bounce', 'blink', 'dash', 'slam', 'warp', 'cloak', 'shield', 'medkit'];
 
+// Belt loadout slot — one throwable on the belt key; fire.ts maps each id
+// to its projectile config. Order is the loadout-menu order.
+export const BELT_ITEMS = ['disc', 'grenade', 'cluster', 'javelin', 'sticky', 'impact'] as const;
+export type BeltItem = typeof BELT_ITEMS[number];
+
 export class Player {
   pos = new THREE.Vector3();
   vel = new THREE.Vector3();
@@ -39,8 +44,7 @@ export class Player {
   energy = MAX_ENERGY;
   /** Nugget pickup: free jetting for a few seconds (refresh, not stack). */
   fireTimer = 0.0;
-  discTimer = 0.0;
-  grenadeTimer = 0.0;
+  beltTimer = 0.0;
   // Primary fire is locked while the belt-throw anim plays — the weapon is
   // physically lowered, shooting mid-throw would fire through the hip.
   throwLockT = 0;
@@ -204,8 +208,9 @@ export class Player {
   // weapon id (index into WEAPON_RATES / viewmodel order). ESC menu assigns.
   loadout: number[] = Player.parseLoadout(settings.get('fps-loadout'));
   static readonly LOADOUT_SLOTS = 4;
-  // Belt: one throwable equipped, F throws it. ESC menu picks.
-  beltItem: 'disc' | 'grenade' = settings.get('fps-belt') === 'grenade' ? 'grenade' : 'disc';
+  // Belt: one throwable equipped, the belt key throws it. ESC menu picks.
+  beltItem: BeltItem = (BELT_ITEMS as readonly string[]).includes(settings.get('fps-belt'))
+    ? settings.get('fps-belt') as BeltItem : 'disc';
   // Sidearm: one hold-out weapon — the sidearm key pulls it while held.
   // wid is slot-space (WEAPON_RATES index): pistol 12, revolver 13, shotgun 9.
   // (sticky launcher sits at wid 14 — primary loadout, not a hold-out.)
@@ -244,7 +249,7 @@ export class Player {
     }
   }
 
-  setBeltItem(item: 'disc' | 'grenade'): void {
+  setBeltItem(item: BeltItem): void {
     this.beltItem = item;
     settings.set('fps-belt', item);
   }
@@ -293,8 +298,7 @@ export class Player {
   onWarpTick: ((pos: THREE.Vector3) => void) | null = null; // trail emitter while beacon flies
   onWarp: ((from: THREE.Vector3, to: THREE.Vector3) => void) | null = null; // the warp itself
   onSlam: ((pos: THREE.Vector3, impactSpeed: number) => void) | null = null;  // fires on slam impact — speed scales the blast
-  onDisc: ((e: FireEvent) => void) | null = null;
-  onGrenade: ((e: FireEvent) => void) | null = null;
+  onBelt: ((e: FireEvent, item: BeltItem) => void) | null = null;
   onDiscLauncher: ((e: FireEvent) => void) | null = null;
   onChaingun: ((e: FireEvent) => void) | null = null;
   onMortar: ((e: FireEvent) => void) | null = null;
@@ -375,7 +379,6 @@ export class Player {
     this.input = new PlayerInput({
       isSpectating: () => this.spectating,
       toggleSpectator: () => this.toggleSpectator(),
-      beltItem: () => this.beltItem,
       melee: () => this.tryMelee(),
       toggleCamera: () => {
         this.thirdPerson = !this.thirdPerson;
@@ -440,7 +443,7 @@ export class Player {
     return new THREE.Vector2(-Math.cos(this.yaw), Math.sin(this.yaw));
   }
 
-  getInputState(): { forward: number; right: number; jumpPressed: boolean; jumpHeld: boolean; skiHeld: boolean; firePressed: boolean; jetHeld: boolean; discHeld: boolean; grenadeHeld: boolean } {
+  getInputState(): { forward: number; right: number; jumpPressed: boolean; jumpHeld: boolean; skiHeld: boolean; firePressed: boolean; jetHeld: boolean; beltHeld: boolean } {
     const keys = this.input.keys;
     let forward = 0, right = 0;
     if (isDown(keys, 'forward') || keys['ArrowUp'])    forward += 1;
@@ -459,8 +462,7 @@ export class Player {
       skiHeld: isDown(keys, 'ski'),
       firePressed: this.input.firePending,
       jetHeld: this.input.jetPending,
-      discHeld: this.input.discHeld,
-      grenadeHeld: this.input.grenadeHeld
+      beltHeld: this.input.beltHeld,
     };
   }
 
@@ -488,8 +490,7 @@ export class Player {
     }
 
     this.fireTimer = Math.max(0, this.fireTimer - dt);
-    this.discTimer = Math.max(0, this.discTimer - dt);
-    this.grenadeTimer = Math.max(0, this.grenadeTimer - dt);
+    this.beltTimer = Math.max(0, this.beltTimer - dt);
     this.throwLockT = Math.max(0, this.throwLockT - dt);
     this.secondaryDrawT = Math.max(0, this.secondaryDrawT - dt);
     this.meleeCooldown = Math.max(0, this.meleeCooldown - dt);
@@ -663,18 +664,11 @@ export class Player {
     }
     this.input.firePending = false;
 
-    // Disc (C key) - belt throw, hold to fire
-    if (this.input.discHeld && this.discTimer <= 0) {
-      this.discTimer = DISC_RATE;
+    // Belt item (C key) — the equipped throw; hold to repeat
+    if (this.input.beltHeld && this.beltTimer <= 0) {
+      this.beltTimer = DISC_RATE;
       this.throwLockT = THROW_TOTAL;
-      this.onDisc?.({ origin: this.pos.clone(), dir: this.getAimDir(), playerVel: this.vel.clone() });
-    }
-
-    // Grenade (F key) - belt throw, hold to fire
-    if (this.input.grenadeHeld && this.grenadeTimer <= 0) {
-      this.grenadeTimer = GRENADE_RATE;
-      this.throwLockT = THROW_TOTAL;
-      this.onGrenade?.({ origin: this.pos.clone(), dir: this.getAimDir(), playerVel: this.vel.clone() });
+      this.onBelt?.({ origin: this.pos.clone(), dir: this.getAimDir(), playerVel: this.vel.clone() }, this.beltItem);
     }
   }
 

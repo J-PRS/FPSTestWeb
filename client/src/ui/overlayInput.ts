@@ -1,6 +1,6 @@
 import type { ChildLogger } from '../core/Logger.js';
 import type { DemoManager } from '../demo/index.js';
-import { SKILL_ORDER, Player, type SkillId } from '../entities/Player.js';
+import { SKILL_ORDER, Player, type SkillId, BELT_ITEMS, type BeltItem } from '../entities/Player.js';
 import { PERKS, PERK_ORDER, type PerkId } from '../../../shared/perks.js';
 import type { HUD } from './hud.js';
 import { SLOT_WEAPONS } from '../projectiles/index.js';
@@ -52,6 +52,11 @@ export function wireOverlayInput(deps: OverlayInputDeps) {
     for (const o of options) w = Math.max(w, measureCtx.measureText(o.label.toUpperCase()).width);
     return Math.ceil(w) + 11 * 2 + 8 + 12; // padding + gap + caret
   }
+
+  const BELT_LABELS: Record<BeltItem, string> = {
+    disc: 'Disc', grenade: 'Grenade', cluster: 'Cluster Bomb',
+    javelin: 'Javelin', sticky: 'Sticky Bomb', impact: 'Impact Grenade',
+  };
 
   function mkDrop(
     options: { v: string; label: string }[],
@@ -132,8 +137,8 @@ export function wireOverlayInput(deps: OverlayInputDeps) {
     beltLabel.className = 'lo-label';
     beltRow.appendChild(beltLabel);
     beltDrop = mkDrop(
-      [{ v: 'disc', label: 'Disc' }, { v: 'grenade', label: 'Grenade' }],
-      (v) => deps.lazyPlayer().setBeltItem(v as 'disc' | 'grenade'),
+      BELT_ITEMS.map((b) => ({ v: b, label: BELT_LABELS[b] })),
+      (v) => deps.lazyPlayer().setBeltItem(v as BeltItem),
     );
     beltRow.appendChild(beltDrop.el);
     loadoutBar.appendChild(beltRow);
