@@ -109,13 +109,14 @@ export class TickLoop {
   }
 
   private startTickBroadcast(): void {
+    const tickMs = 1000 / CONFIG.tickRate;
     this.tickTimer = setInterval(() => {
       const now0 = Date.now();
-      // Tick lag: how late this interval fired vs the nominal 50ms cadence.
+      // Tick lag: how late this interval fired vs the nominal cadence.
       // Sustained lag = sim clock drifts behind wall time — the skew that
       // pushes client ball replays ahead of authority.
       if (this.ops.lastTickAt > 0) {
-        const lag = now0 - this.ops.lastTickAt - 50;
+        const lag = now0 - this.ops.lastTickAt - tickMs;
         this.ops.tickLagMsSum += lag;
         this.ops.tickLagSamples++;
         if (lag > this.ops.tickLagMsMax) this.ops.tickLagMsMax = lag;
@@ -143,7 +144,7 @@ export class TickLoop {
         if (players.size === 0) continue;
         this.tickRoom(room, players, now0);
       }
-    }, 50); // 20Hz tick broadcast
+    }, tickMs);
   }
 
   private stopTickBroadcast(): void {

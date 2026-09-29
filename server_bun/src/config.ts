@@ -21,7 +21,9 @@ function envStr(name: string, fallback: string): string {
 
 export const CONFIG = {
   port: envNum('FPS_PORT', 8000),
-  tickRate: envNum('FPS_TICK_HZ', 30),
+  // Server loop cadence — drives the broadcast interval AND per-tick
+  // heal divisors. Default 20Hz matches the hardcoded historical loop.
+  tickRate: envNum('FPS_TICK_HZ', 20),
   maxPlayers: envNum('FPS_MAX_PLAYERS', 32),
   // Whole-server cap across ALL rooms — rooms share one process/core, so
   // a per-room limit alone can't bound real load. 0 = unlimited.

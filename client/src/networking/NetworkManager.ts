@@ -115,7 +115,8 @@ export class NetworkManager {
   public onRemoteTeleport: ((playerId: string, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }) => void) | null = null;
   private lastPositionSendTime: number = 0;
   private readonly POSITION_SEND_INTERVAL = 50; // 20Hz — extrapolation covers the gap
-  private readonly telemetry = new NetTelemetry(this.POSITION_SEND_INTERVAL);
+  // Tick ARRIVAL cadence is the server loop's 50ms interval (20Hz).
+  private readonly telemetry = new NetTelemetry(50);
   private hasLoggedConnectionError: boolean = false;
 
   // --- Client-side prediction: sequence tracking + state history ---

@@ -1,3 +1,7 @@
+2026-10-03 - Heal-rate fix: CONFIG.tickRate claimed 30 but the loop ran
+    at 20Hz — every hp/s-based heal (mend, regen perk, regen powerup)
+    delivered ~66% of its rate. tickRate now defaults to 20 and drives
+    the interval itself (tickMs), so cadence and divisors can't drift.
 2026-10-03 - yourHealth echo regression test: mending player gets a
     throttled echo (1 per 500ms), full-health never echoes — locks in
     the health-desync fix (healthEcho.test.ts).
