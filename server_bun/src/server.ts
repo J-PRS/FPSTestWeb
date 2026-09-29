@@ -1,6 +1,7 @@
 import { CONFIG } from './config.ts';
 import { GameServer } from './GameServer.ts';
 import { weaponStats } from './weaponStats.ts';
+import { WEAPONSTATS_PAGE } from './weaponstatsPage.ts';
 import { logger } from './logger.ts';
 import type { WebSocketData } from './types.ts';
 import { DemoStorage } from './DemoStorage.ts';
@@ -53,6 +54,8 @@ const ROUTES: Record<string, (url: URL) => Response | Promise<Response>> = {
   // Balance telemetry — per-mode damage/hits/kills by weapon source,
   // bot-authored share split out (also journaled to weaponstats.jsonl).
   '/weaponstats': () => json(weaponStats.snapshot()),
+  // Readable dashboard over the same ledger — tables, bars, funnel pcts.
+  '/weaponstats.html': () => corsResponse(WEAPONSTATS_PAGE, { headers: { 'Content-Type': 'text/html; charset=utf-8' } }),
   // Map list for the menu's match setup — name + mode + default bots.
   '/maps': () => json(gameServer.listMaps()),
   // Quick-join: /join?mode=ctf&map=raindance&bots=6 → emptiest live
