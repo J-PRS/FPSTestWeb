@@ -258,7 +258,12 @@ export class BallSim {
       return;
     }
     if (!b || !this.field) {
-      logger.warn('creatureHit dropped: unknown ball', { playerId, id, known: this.balls.size, field: !!this.field });
+      // Same race as the dead-ball path above: the ball was culled (kill,
+      // TTL, roster swap) between the shot and this claim — the client
+      // genuinely saw it live. Warn only when there IS no field, which
+      // means the claim arrived before spec terrain attached — a real bug.
+      const lvl = this.field ? 'debug' : 'warn';
+      logger[lvl]('creatureHit dropped: unknown ball', { playerId, id, known: this.balls.size, field: !!this.field });
       return;
     }
     const claimer = this.players.getPlayer(playerId);
