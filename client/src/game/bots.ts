@@ -5,6 +5,7 @@ import type { Nugget } from '../entities/Nugget.js';
 import type { Targetable } from '../entities/balls.js';
 import type { GameContext } from './context.js';
 import { TEAM_COLORS, TEAM_LABEL, MODES, bank, makeScores, type TeamId, type TeamScores, type ModeId } from '../../../shared/teams.js';
+import { PlayerDebris } from '../effects/debris.js';
 import { CtfFlags } from './ctfFlags.js';
 import * as sfx from '../core/sfx.js';
 
@@ -28,6 +29,7 @@ const BOT_NAMES = ['VEKTOR', 'SLATE', 'MARA', 'DUNE', 'PICO', 'RANCHO', 'OZONE',
 
 export interface BotsDeps extends GameContext {
   lazyScene(): THREE.Scene;
+  lazyCamera(): THREE.Camera;
   lazyHealthBarSystem(): { spawn(id: string, dmg: number, hp: number): void };
   /** Live creature list — bots fight these too. */
   targets: Targetable[];
@@ -38,8 +40,11 @@ interface BotHooks {
   dropNuggets(pos: THREE.Vector3, n: number, inheritVel: THREE.Vector3): void;
   /** Local player died to a bot — mirrors netHandlers' kill path. */
   localPlayerKilled(killerName: string): void;
-  /** A bot collected a nugget — heal/visual for parity with the player path. */
+  /** Match announcements — win banners, NEW MATCH, flag grabs. Center-screen. */
   remoteKillFeed(text: string): void;
+  /** A kill happened — CS-style killfeed row in the corner, not the
+   *  center banner (that's reserved for YOUR frags/deaths). */
+  killFeed(shooter: string, victim: string, localIsShooter: boolean, localIsVictim: boolean): void;
   /** Find nearest nugget to a position. */
   nearestNugget(pos: THREE.Vector3, maxDist: number): Nugget | null;
   /** Nearest hostile creature (targets list entry) for a bot to fight. */
@@ -63,7 +68,7 @@ export class TeamBots {
   constructor(
     readonly deps: BotsDeps,
     private hooks: BotHooks,
-    playerTeam: string,
+    private playerTeam: string,
     counts: { alpha: number; bravo: number },
     private mode: ModeId,
   ) {
@@ -83,6 +88,9 @@ export class TeamBots {
         spawn.y = terrain.getHeight(spawn.x, spawn.z) + EYE;
         const name = ffa ? BOT_NAMES[ni++ % BOT_NAMES.length] : `${BOT_NAMES[ni++ % BOT_NAMES.length]}-${team === 'alpha' ? 'A' : 'B'}`;
         const bot = new GameBot(scene, name, team === 'alpha' ? 'alpha' : 'bravo', spawn, terrain);
+        // Tier mix mirrors the server roster: ~1 light, ~1 heavy per
+        // squad, mediums filling — enough for silhouettes to read.
+        bot.setBotClass(ni % 4 === 1 ? 'light' : ni % 4 === 3 ? 'heavy' : 'medium');
         if (ffa) {
           // FFA pseudo-team = own id — everyone is everyone else's enemy.
           bot.team = bot.playerId;
@@ -116,8 +124,8 @@ export class TeamBots {
 
   /** Per-frame: brains, fire resolution, respawns, win check. */
   update(dt: number): void {
-    const terrain = deps0(this).terrain;
-    const player = deps0(this).player;
+    const terrain = deps0(this).lazyTerrain();
+    const player = deps0(this).lazyPlayer();
     // Separation sense — every live body the steerer should keep space
     // from. A bot's own position reads as dist 0 and is skipped inside.
     const others: THREE.Vector3[] = [];
@@ -136,7 +144,7 @@ export class TeamBots {
           const sp = new THREE.Vector3(player.pos.x + Math.cos(a) * 50, 0, player.pos.z + Math.sin(a) * 50);
           sp.y = terrain.getHeight(sp.x, sp.z) + EYE;
           bot.respawn({ x: sp.x, y: sp.y, z: sp.z });
-          bot.botHp = BOT_HP;
+          bot.botHp = bot.botMaxHp;
           bot.show();
           bot.setGizmoColor(bot.team === 'ffa' ? 0xcc66ff : TEAM_COLORS[bot.team as TeamId]);
         }
@@ -153,8 +161,23 @@ export class TeamBots {
       });
       if (shot && !this.over) this.resolveShot(bot, shot.targetId, shot.aim); // ceasefire while the banner's up
     }
-    if (this.spec.flags) this.ctf?.update(dt);
+    if (this.spec.flags) {
+      this.ctf?.update(dt);
+      // Flag markers ride the player-indicator overlay — a DOM element
+      // projects through terrain, which is the entire point.
+      if (this.ctf) {
+        const cam = this.deps.lazyCamera();
+        for (const m of this.ctf.markers()) {
+          // +3.4 → the indicator's own +1.0 puts the diamond at the 4m
+          // pole tip instead of at the base's feet.
+          m.pos.y += 3.4;
+          this.deps.lazyHud().updateFlagIndicator(`flag:${m.team}`, m.pos, cam, m.team);
+          m.pos.y -= 3.4;
+        }
+      }
+    }
     this.watchdog(dt);
+    this.syncLocalTeam();
     if (!this.over) {
       const w = this.checkWin();
       if (w) {
@@ -170,6 +193,46 @@ export class TeamBots {
 
   private overAt = 0;
 
+  /** The player's live team is world.localTeam — a connected room can
+   *  re-seat you on bravo after the boot-time alpha. teamOf must follow
+   *  or the bots' friend/foe reads the WRONG side of the scoreboard.
+   *  And if the flip lands you on the 5-bot side, a bot crosses over:
+   *  the match is authored as you+4 vs 5 either way. */
+  private syncLocalTeam(): void {
+    if (this.spec.ffa) return;
+    let lt = this.deps.world.localTeam;
+    if (lt !== 'alpha' && lt !== 'bravo') {
+      // A teamless/quiet wire (offline, or a mode-less room) has no say —
+      // the local squad owns the team frame. Re-assert it or every
+      // friendly check (indicators, tint, scoreboard) reads all-red.
+      const own = this.teamOf.get('local');
+      if (own !== 'alpha' && own !== 'bravo') return;
+      this.deps.world.localTeam = own;
+      lt = own;
+    }
+    if (this.teamOf.get('local') === lt) return;
+    this.teamOf.set('local', lt);
+    const other: TeamId = lt === 'alpha' ? 'bravo' : 'alpha';
+    const wantAllies = Math.floor(this.bots.length / 2);
+    while (this.bots.filter(b => b.team === lt).length > wantAllies) {
+      const b = this.bots.find(x => x.team === lt);
+      if (!b) break;
+      // Jersey swap — rename the id so the scoreboard's -A/-B suffix
+      // stays truthful, then re-key every roster that holds it.
+      const oldId = b.playerId;
+      const newId = oldId.replace(/-[AB]$/, `-${other === 'alpha' ? 'A' : 'B'}`);
+      if (newId !== oldId) {
+        this.deps.world.remotePlayers.rename(oldId, newId);
+        this.teamOf.delete(oldId);
+        b.playerId = newId;
+      }
+      b.team = other;
+      this.teamOf.set(b.playerId, other);
+      b.setGizmoColor(TEAM_COLORS[other]);
+      this.hooks.killFeed(other === 'alpha' ? 'ALPHA' : 'BRAVO', `${b.playerId.replace('bot:', '')} defects`, false, false);
+    }
+  }
+
   // ---- Watchdog ----
   // Bots failing silently is the recurring bug class (tick dropped, brains
   // wedged). Every 4s we diff each bot's LOGICAL position against where
@@ -182,22 +245,53 @@ export class TeamBots {
   private readonly wdLogic = new Map<string, THREE.Vector3>();
   private readonly wdRender = new Map<string, THREE.Vector3>();
   private readonly wdStalled = new Set<string>();
+  // Displacement anchor — where the bot stood ~10s ago. A bot stuck in a
+  // corner keeps producing 4s motion deltas (jiggle, repulsion pushback),
+  // so the stall test is NET displacement over a longer window: pacing in
+  // a 3m circle cancels out, real travel doesn't.
+  private readonly wdAnchor = new Map<string, { p: THREE.Vector3; t: number }>();
+  private readonly wdStuck = new Set<string>();
   private wdIdleWindows = 0;
   private static readonly WD_DT = 4;
+  private static readonly WD_STUCK_T = 10; // seconds per displacement window
+  private static readonly WD_STUCK_D = 10; // meters of net travel expected
 
   private watchdog(dt: number): void {
     this.watchdogT += dt;
     if (this.watchdogT < TeamBots.WD_DT) return;
     this.watchdogT = 0;
     const log = this.deps.logger;
-    let alive = 0, moved = 0;
+    let alive = 0, stuckNow = 0, stuckEval = 0;
     for (const bot of this.bots) {
       if (bot.isDead) continue;
       alive++;
       const prev = this.wdLogic.get(bot.playerId);
       const logicD = prev ? prev.distanceTo(bot.position) : 99;
       if (prev) prev.copy(bot.position); else this.wdLogic.set(bot.playerId, bot.position.clone());
-      if (logicD > 0.05) moved++;
+
+      // Displacement check — every WD_STUCK_T seconds compare against the
+      // anchor, then re-anchor at the current spot.
+      const a = this.wdAnchor.get(bot.playerId);
+      if (!a) {
+        this.wdAnchor.set(bot.playerId, { p: bot.position.clone(), t: 0 });
+      } else {
+        a.t += TeamBots.WD_DT;
+        if (a.t >= TeamBots.WD_STUCK_T) {
+          stuckEval++;
+          const disp = a.p.distanceTo(bot.position);
+          a.p.copy(bot.position);
+          a.t = 0;
+          if (disp < TeamBots.WD_STUCK_D && !this.over) {
+            stuckNow++;
+            if (!this.wdStuck.has(bot.playerId)) {
+              this.wdStuck.add(bot.playerId);
+              log.warn(`bot ${bot.playerId} stuck — only ${disp.toFixed(1)}m net travel in ${TeamBots.WD_STUCK_T}s (wedged or brain loop?)`);
+            }
+          } else if (this.wdStuck.delete(bot.playerId)) {
+            log.info(`bot ${bot.playerId} unstuck — ${disp.toFixed(1)}m net travel`);
+          }
+        }
+      }
 
       // Render-side check — model position vs its own last sample. Feet
       // sit EYE below the logical pos; we only need the delta.
@@ -219,11 +313,12 @@ export class TeamBots {
         }
       }
     }
-    // Whole-squad freeze: brains not producing movement at all. Requires
-    // two consecutive dead windows (a single quiet 4s can be legitimate).
-    if (alive > 0 && moved === 0 && !this.over) {
+    // Whole-squad freeze: every bot that finished a displacement window
+    // this tick came up stuck. Two consecutive all-stuck ticks = brains
+    // aren't producing travel at all (not just one wedged path).
+    if (stuckEval > 0 && stuckNow === stuckEval && stuckEval >= Math.max(1, alive >> 1) && !this.over) {
       if (++this.wdIdleWindows >= 2) {
-        log.warn(`all ${alive} bots idle for ${(TeamBots.WD_DT * this.wdIdleWindows).toFixed(0)}s — brains not ticking?`);
+        log.warn(`all ${alive} bots pinned — <${TeamBots.WD_STUCK_D}m net travel per ${TeamBots.WD_STUCK_T}s window (brains not ticking?)`);
         this.wdIdleWindows = 0; // re-arm the counter, not the warning state
       }
     } else {
@@ -250,7 +345,7 @@ export class TeamBots {
       const sp = new THREE.Vector3(player.pos.x + Math.cos(a) * r, 0, player.pos.z + Math.sin(a) * r);
       sp.y = terrain.getHeight(sp.x, sp.z) + EYE;
       bot.respawn({ x: sp.x, y: sp.y, z: sp.z });
-      bot.botHp = BOT_HP;
+      bot.botHp = bot.botMaxHp;
       bot.carryingFlag = false;
       bot.show();
     }
@@ -328,6 +423,7 @@ export class TeamBots {
           this.deps.world.killCounts.set(bot.playerId, (this.deps.world.killCounts.get(bot.playerId) ?? 0) + 1);
           this.creditKill(bot.playerId, false);
           this.localDied();
+          this.hooks.killFeed(bot.playerId.replace('bot:', ''), 'YOU', false, true);
           this.hooks.localPlayerKilled(bot.playerId.replace('bot:', ''));
         }
       }
@@ -352,19 +448,32 @@ export class TeamBots {
   hit(playerId: string, dmg: number, fromPos: THREE.Vector3, attackerId = 'local'): boolean {
     const rp = this.deps.world.remotePlayers.get(playerId);
     if (!(rp instanceof GameBot)) return false;
-    this.deps.lazyHealthBarSystem().spawn(playerId, dmg, rp.botHp);
-    if (rp.takeDamageLocal(dmg, fromPos)) this.botKilled(attackerId, rp);
+    const died = rp.takeDamageLocal(dmg, fromPos);
+    this.deps.lazyHealthBarSystem().spawn(playerId, dmg, died ? 0 : rp.botHp);
+    if (died) this.botKilled(attackerId, rp);
     return true;
   }
 
   private botKilled(killerId: string, bot: GameBot): void {
+    // Same shatter as wire remotes — the corpse pops into team-colored
+    // shards instead of just shrinking away.
+    const t = bot.team;
+    let parts: { geo: THREE.BufferGeometry; pos: THREE.Vector3 }[] | undefined;
+    try { parts = bot.model.deathParts() ?? undefined; }
+    catch { /* fall through to generic shards */ }
+    this.deps.world.playerDebrisList.push(new PlayerDebris(
+      this.deps.lazyScene(), this.deps.lazyTerrain(),
+      bot.position.x, bot.position.y + 1.0, bot.position.z,
+      new THREE.Color(t === 'alpha' || t === 'bravo' ? TEAM_COLORS[t] : 0xcc66ff),
+      { inheritVel: bot.vel, parts },
+    ));
     // Kills drop nuggets — bots feed the economy like everything else.
     if (!this.spec.ffa) this.hooks.dropNuggets(bot.position, 3, bot.vel);
     this.deps.world.killCounts.set(killerId, (this.deps.world.killCounts.get(killerId) ?? 0) + 1);
     this.creditKill(killerId, false);
     this.dropCarriedFlag(bot.playerId, bot.position);
     const kn = killerId === 'local' ? 'YOU' : killerId.replace('bot:', '');
-    this.hooks.remoteKillFeed(`${kn} fragged ${bot.playerId.replace('bot:', '')}`);
+    this.hooks.killFeed(kn, bot.playerId.replace('bot:', ''), killerId === 'local', false);
     if (killerId === 'local') sfx.killConfirm();
   }
 
@@ -475,4 +584,4 @@ const _wdPos = new THREE.Vector3();
 const BOLT_MAT = new THREE.LineBasicMaterial({ color: 0xffe08a, transparent: true, opacity: 0.9 });
 
 // Small accessor so update() reads deps once per frame.
-function deps0(m: TeamBots) { return { terrain: m.deps.lazyTerrain(), player: m.deps.lazyPlayer() }; }
+function deps0(m: TeamBots) { return m.deps; }

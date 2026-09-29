@@ -6,6 +6,7 @@ import type { Terrain } from '../world/terrain.js';
 import type { Nugget } from '../entities/Nugget.js';
 import { TEAM_COLORS, type TeamId } from '../../../shared/teams.js';
 import { BotBrain, BOT_EYE } from '../../../shared/botBrain.js';
+import { CLASS_STATS } from '../../../shared/botClasses.js';
 
 /**
  * GameBot — an in-world fake player. A GameBot is a RemotePlayer registered
@@ -29,6 +30,19 @@ export class GameBot extends RemotePlayer {
   /** 'alpha'/'bravo' in team modes; the bot's own playerId in FFA. */
   team: string;
   botHp = BOT_HP;
+  /** Armor tier — offline bots don't run the shared sim, so class lands
+   *  as a flat speed multiplier + HP cap + silhouette scale. */
+  armorClass: 'light' | 'medium' | 'heavy' = 'medium';
+  private classSpeed = 1;
+  botMaxHp = BOT_HP;
+  setBotClass(cls: 'light' | 'medium' | 'heavy'): void {
+    this.armorClass = cls;
+    const st = CLASS_STATS[cls];
+    this.classSpeed = st.speedScale;
+    this.botMaxHp = BOT_HP + st.maxHealth;
+    this.botHp = Math.min(this.botMaxHp, this.botHp + Math.max(0, this.botMaxHp - BOT_HP));
+    this.setClass(cls); // silhouette
+  }
   respawnAt = 0;
   /** CTF: carrying the enemy flag home — objective overrides roam. */
   carryingFlag = false;
@@ -88,7 +102,7 @@ export class GameBot extends RemotePlayer {
     _move.set(dest.x - pos.x, 0, dest.z - pos.z);
     const md = _move.length();
     if (md > 0.5) {
-      _move.multiplyScalar(BOT_SPEED / md);
+      _move.multiplyScalar(BOT_SPEED * this.classSpeed / md);
       this.botVel.x += (_move.x - this.botVel.x) * Math.min(1, dt * 6);
       this.botVel.z += (_move.z - this.botVel.z) * Math.min(1, dt * 6);
     } else {
