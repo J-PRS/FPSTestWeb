@@ -599,6 +599,15 @@ export class Room {
     }
     this.messages.onPlayerRemoved(playerId);
     this.sessionTokens.delete(playerId);
+    // A pending grace timer is part of the player's teardown: kick/room
+    // hop/admin removal during the window would otherwise leave a zombie
+    // timer that re-runs this whole funnel later (double playerLeft,
+    // double leaves count — or worse, tearing down a rejoined player).
+    const pendingGrace = this.disconnected.get(playerId);
+    if (pendingGrace) {
+      clearTimeout(pendingGrace.timeout);
+      this.disconnected.delete(playerId);
+    }
     this.lastSentPositions.delete(playerId);
     this.connections.broadcast({ type: 'playerLeft', playerId });
     this.rebalanceTeams();

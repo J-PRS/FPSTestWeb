@@ -31,7 +31,7 @@ describe('ghost records', () => {
     const ghostId = 'ghost';
     let ghostMentions = 0;
     room.connections.sendBinaryToPlayer = (_id, data) => {
-      const s = new TextDecoder().decode(data, { ignoreBOM: true });
+      const s = new TextDecoder().decode(data);
       if (s.includes(ghostId)) ghostMentions++;
     };
     loop.tickRoomNow(room, Date.now() + 50);

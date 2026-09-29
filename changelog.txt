@@ -1,3 +1,4 @@
+2026-09-29 - Disarm the grace timer on removal: kick/switch/admin teardown during the grace window left a zombie timer that re-ran removePlayerCompletely (double playerLeft, double leaves count, could tear down a rejoined id).
 2026-09-29 - Reject stale-seq position reports in updatePosition: a reordered or replayed packet could pass plausible() and teleport the player backward.
 2026-09-29 - Cap tick-frame send backlog: sockets over 256KB queued drop tick frames instead of growing memory; getBufferedAmount exposed on RTC/WT adapters; reliable traffic still queues.
 2026-09-29 - Pin the REGEN/DD suppression case: a buffed record must still suppress while a client-side flag change still forces a send.
