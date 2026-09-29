@@ -283,7 +283,8 @@ export function createGameLoop(deps: GameLoopDeps) {
     const terrain = deps.lazyTerrain();
 
     hud.update(dt, player, networkManager.getPing(), networkManager.getPacketLoss(), networkManager.getJitter());
-    hud.setEntityCounts(censusEntities(entities));
+    // Entity-count text is a slow-moving counter — 10Hz is plenty.
+    budget.sweep('census', 100, () => hud.setEntityCounts(censusEntities(entities)));
     hud.setNuggets(entities.getNuggetsCollected());
     hud.setTimer(deps.waveDirector().elapsed);
     hud.setMatchStatus(
@@ -291,19 +292,22 @@ export function createGameLoop(deps: GameLoopDeps) {
       deps.world.flagStates,
     );
     hud.updateDeathCountdown(deps.world.respawnMs);
-    deps.ambientBirds.positions(_birdPosBuf);
-    // Player/bot blips — same friend-or-foe rule as the overhead markers:
-    // wire team (or GameBot.team) matching localTeam = green, else red.
-    // Dead and cloaked riders are dropped — no corpse pings, no cloak leak.
-    _mapBlips.length = 0;
-    const wirePlayers = networkManager.getPlayers();
-    for (const [id, rp] of deps.world.remotePlayers) {
-      if (rp.isDead || rp.isCloakHidden) continue;
-      const team = (rp as { team?: string }).team ?? wirePlayers.get(id)?.team;
-      _mapBlips.push({ x: rp.position.x, z: rp.position.z, friendly: !!team && team === deps.world.localTeam });
-    }
-    budget.sweep('minimap', 40, () =>
-      hud.updateMinimap(entities.targets, entities.nuggets, player.pos, player.yaw, _birdPosBuf, _mapBlips));
+    budget.sweep('minimap', 40, () => {
+      // Both buffers exist only to feed updateMinimap — build them inside
+      // the sweep so they refresh on the same cadence.
+      deps.ambientBirds.positions(_birdPosBuf);
+      // Player/bot blips — same friend-or-foe rule as the overhead markers:
+      // wire team (or GameBot.team) matching localTeam = green, else red.
+      // Dead and cloaked riders are dropped — no corpse pings, no cloak leak.
+      _mapBlips.length = 0;
+      const wirePlayers = networkManager.getPlayers();
+      for (const [id, rp] of deps.world.remotePlayers) {
+        if (rp.isDead || rp.isCloakHidden) continue;
+        const team = (rp as { team?: string }).team ?? wirePlayers.get(id)?.team;
+        _mapBlips.push({ x: rp.position.x, z: rp.position.z, friendly: !!team && team === deps.world.localTeam });
+      }
+      hud.updateMinimap(entities.targets, entities.nuggets, player.pos, player.yaw, _birdPosBuf, _mapBlips);
+    });
 
     viewModel.group.visible = !demoManager?.isPlaying && !player.isDead && !player.thirdPerson && !player.isSpectating;
     const yawDelta = Math.atan2(Math.sin(player.yaw - lastPlayerYaw), Math.cos(player.yaw - lastPlayerYaw));
