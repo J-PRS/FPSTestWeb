@@ -453,6 +453,36 @@ solve when a check can possibly matter, skip provably-dead ticks; plus
 - Don't touch JP's in-flight client files (check `git status` before edits;
   the file list drifts — speciesKit/context/main/etc. have been hot).
 
+## Simplification plan (long-term, 2026-10-03)
+
+Complexity is the enemy now that the feature surface is wide. Long-term
+simplification targets, ranked by leverage:
+
+1. **Data tables over bespoke code.** Proven: MELEE_SPECIES (one row adds a
+   species to server sim + wire + client replay), MODEL_BUILDERS (weaponsGeo
+   16 builders), edge-tier tables. Next: merge species sims' per-family
+   bits into one `SPECIES` table keyed by id (stats, hop/roll/fly mode,
+   telegraph, fuse, bite) so a new creature is data, not a class.
+2. **One entity lifecycle.** Spawn/tick/despawn/serialize now lives in
+   per-type managers (balls, creatures, projectiles, deployables, remotes).
+   `room.sims` is the registry core — finish it: every tickable registers
+   {tick(dt), serialize(), deserialize()} so join/reset/save are one loop
+   instead of per-type plumbing.
+3. **Table-driven wire dispatch.** Client handleMessage switch + server
+   handlers grow a case per message type; move to a `WIRE` table mapping
+   type -> {validate, handler, rateLimit} so adding a message is one row
+   and the validation surface is auditable in one file.
+4. **Options objects at boundaries.** Constructor/param lists already
+   migrated (debris pos, NetSeg, bind* pending); rule: >4 params must be
+   an options object. Prevents the 17 max-params sites from re-growing.
+5. **Harness as the spec.** Scenario files ARE the behavior spec now
+   (~45 files); keep them small-per-file with shared harness helpers so
+   new features land with a scenario, not a soak.
+6. **Enforced ceilings.** oxlint rules (120-line fns, c15, depth 4, 6
+   params) stay the gate; add a file-size watch (~900 lines) to flag the
+   next Player.ts/CombatHandler.ts before it needs a burn-down.
+
+
 ## Working agreements (from JP, painful lessons)
 - Verify myself via the E2E harness — never ask JP to confirm a fix.
 - Watch `logs/client.log` (POST /client-log) for real client evidence.
