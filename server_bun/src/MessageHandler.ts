@@ -273,8 +273,14 @@ export class MessageHandler {
   }
 
   /** Drop live projectiles when a player is fully removed (grace timeout /
-   *  idle reap) — NOT on socket close, so a rejoining player keeps theirs. */
+   *  idle reap) — NOT on socket close, so a rejoining player keeps theirs.
+   *  Warn keys are cleared here too: a room hop is a removal without a
+   *  disconnect, and the hopper's ${id}:* keys would otherwise sit in the
+   *  old room's map for its life. */
   onPlayerRemoved(playerId: string): void {
+    for (const key of this.rateLimitWarnings.keys()) {
+      if (key.startsWith(`${playerId}:`)) this.rateLimitWarnings.delete(key);
+    }
     this.combat.onPlayerRemoved(playerId);
   }
 
