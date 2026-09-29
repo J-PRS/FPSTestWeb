@@ -219,6 +219,10 @@ solve when a check can possibly matter, skip provably-dead ticks; plus
    ballSim predictive terrain probes (3c12a28): parabola-scheduled gy
    sampling — resample at ~60% of predicted impact, on ~2m horizontal
    drift, or any velocity discontinuity; deterministic, bounded clip.
+   Deployable predation (3398ff0): CreatureSim extraTargets/targetPos
+   surfaces RoomDeployables as `dep:N` candidates — bites drain the same
+   hp pool the blast sweep does, so wildlife raze a stand on dedicated
+   rooms exactly like the offline kit (depGnaw scenario proves it).
    `terrain` ref landed: maps/<file>.bin
    heightfields per room (lazy, cached, shared). Shared brain landed:
    shared/botBrain.ts drives offline GameBots AND server bots — one
