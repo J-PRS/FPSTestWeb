@@ -40,6 +40,7 @@ export interface PlayerState {
   lastValidVelocity: Vec3;
   lastValidRotation: Rotation;
   hasReceivedPosition: boolean;
+  joinAnnounced: boolean; // playerJoined broadcast fires once, at first report
   // Anti-cheat position tracking — updated on EVERY position message (even
   // rejected ones) so speed checks always compare consecutive reports
   lastPosCheckTime: number;

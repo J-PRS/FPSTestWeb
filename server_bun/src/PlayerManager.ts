@@ -55,6 +55,7 @@ export class PlayerManager {
       lastValidVelocity: { x: 0, y: 0, z: 0 },
       lastValidRotation: { yaw: 0, pitch: 0 },
       hasReceivedPosition: false,
+      joinAnnounced: false,
       lastPosCheckTime: 0,
       lastPosCheckPos: { ...spawn },
       consecutiveRejects: 0,

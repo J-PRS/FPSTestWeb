@@ -1,3 +1,4 @@
+2026-09-29 - playerJoined broadcast now waits for the first position report: handshake used to announce every joiner immediately, so a menu/lobby sitter who never reported spawned a frozen ghost mesh at the spawn default on every peer screen (same ghost class as the tick-record fix, different path).
 2026-09-29 - suppression yaw comparison now uses shortest-arc wrap math: raw |yaw-lastSent| read a 6.27→0.01 crossing as a huge turn, permanently defeating suppression for spinners.
 2026-09-29 - server bots now feed their rewind history in the think loop: bots never send position reports, so target.history stayed at the spawn seed and lag-comp hit validation rewound them to the wrong place — legit shots at moving bots could be rejected.
 2026-09-29 - idle reap now runs before the ghost check in skipRecord: a menu/lobby player whose socket died was never reaped (hasReceivedPosition=false short-circuited first), leaving unreported ghosts in the roster forever.

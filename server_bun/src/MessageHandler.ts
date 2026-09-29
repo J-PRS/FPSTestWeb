@@ -345,20 +345,36 @@ export class MessageHandler {
       this.sendToPlayer(playerId, { type: 'crawlRoster', crawlers: this.creatureSim.roster() });
     }
 
-    // Grace reconnects never emitted a playerLeft — peers still have this
-    // player on their roster, so re-announcing playerJoined is pure spam.
-    if (!isReconnect) {
-      this.broadcast({
-        type: 'playerJoined',
-        playerId: player.id,
-        internalId: player.internalId,
-        position: player.position,
-        rotation: player.rotation,
-        team: player.team,
-        transport: player.transport,
-        armorClass: player.armorClass,
-      }, playerId);
+    // The playerJoined announce waits for the first position report —
+    // a menu/lobby sitter who never reports would otherwise spawn a
+    // frozen ghost mesh at the spawn default on every peer's screen.
+    // announceIfInWorld() fires it from handlePosition/handleTeleport.
+    // Grace reconnects never emitted a playerLeft, so rejoins skip it
+    // regardless (peers still carry the roster entry).
+    if (!isReconnect && player.hasReceivedPosition) {
+      this.announceIfInWorld(player);
     }
+  }
+
+  /** Broadcast the playerJoined announce once — gates on the flag so a
+   *  player reports for a while, then a second path can't re-announce. */
+  private announceIfInWorld(player: PlayerState): void {
+    if (player.joinAnnounced) return;
+    player.joinAnnounced = true;
+    this.announceJoin(player);
+  }
+
+  private announceJoin(player: PlayerState): void {
+    this.broadcast({
+      type: 'playerJoined',
+      playerId: player.id,
+      internalId: player.internalId,
+      position: player.position,
+      rotation: player.rotation,
+      team: player.team,
+      transport: player.transport,
+      armorClass: player.armorClass,
+    }, player.id);
   }
 
   /** Spectator join — no player record, so everyone is "others", there's
@@ -442,6 +458,7 @@ export class MessageHandler {
       player.lastSeen = now;
       if (msg.seq !== undefined && msg.seq > player.lastSeq) player.lastSeq = msg.seq;
       player.hasReceivedPosition = true;
+      this.announceIfInWorld(player);
       if (msg.ping !== undefined) player.ping = Math.max(1, msg.ping);
       this.pushHistory(player, now); // player.position is sim truth
       return;
@@ -455,6 +472,7 @@ export class MessageHandler {
     // the client's own report stays truth (as updatePosition applies).
     this.playerManager.updatePosition(playerId, msg.position, msg.rotation, msg.velocity, msg.seq);
     player.hasReceivedPosition = true;
+    this.announceIfInWorld(player);
     if (msg.ping !== undefined) player.ping = Math.max(1, msg.ping);
     this.pushHistory(player, now);
     // Don't broadcast immediately — batched in tickUpdate
@@ -561,6 +579,7 @@ export class MessageHandler {
     player.lastValidVelocity = { ...msg.velocity };
     player.lastValidRotation = { ...msg.rotation };
     player.hasReceivedPosition = true;
+    this.announceIfInWorld(player);
     this.roomInfo.moveResync?.(playerId, msg.position, msg.rotation.yaw);
     // Pre-warp samples are a different location entirely — keeping them
     // lets lag-comp rewind land the shooter/target back at the corpse.
