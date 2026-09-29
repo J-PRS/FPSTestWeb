@@ -30,7 +30,9 @@ import { roleObjective, ROLE_PRIORITY, type BotRole } from '../../shared/flagGoa
  *  maxHealth and the move shadow's jet economy match a real loadout. */
 interface BotLoadout { perk: PerkId; near: WeaponType; mid: WeaponType; far: WeaponType; belt: WeaponType; side: WeaponType }
 const NEAR_M = 15, FAR_M = 40;
-const MELEE_M = 3.0;    // fist reach — inside this a punch beats any gun
+const MELEE_M = 4.5;    // fist reach — brains press inside CLOSE_PRESS_M
+// and two capsule bodies hover ~1-2m apart, so the honest closest gap in a
+// chase sits ~4m; 3.0 never opened in soak ledgers (0 w10 rows).
 const SIDEARM_M = 8.0;  // knife range: the hold-out draw is faster than tracking a long gun
 const BOT_LOADOUTS: BotLoadout[] = [
   { perk: 'featherjets', near: WeaponType.Chaingun, mid: WeaponType.PlasmaGun, far: WeaponType.Rocket,        belt: WeaponType.Grenade,       side: WeaponType.Pistol   }, // chaser
@@ -215,11 +217,14 @@ export class ServerBots {
     const muzzle = { x: p.position.x, y: p.position.y + 1.4, z: p.position.z };
     const dx0 = aim.x - muzzle.x, dy0 = aim.y - muzzle.y, dz0 = aim.z - muzzle.z;
     const dist = Math.sqrt(dx0 * dx0 + dy0 * dy0 + dz0 * dz0) || 1;
+    const distXZ = Math.sqrt(dx0 * dx0 + dz0 * dz0);
     // Range-band weapon select — same judgment a player makes: a fist
     // inside 3m, the hold-out in knife range, hitscan close, the loadout's
-    // mid-band primary, rockets at standoff.
+    // mid-band primary, rockets at standoff. The fist check rides planar
+    // distance: muzzle sits +1.4y over feet, so a flat 3m gap already reads
+    // 3.3m+ in 3D and the band could never open.
     const lo = this.loadouts.get(p.id) ?? BOT_LOADOUTS[0]!;
-    const wt = dist < MELEE_M ? WeaponType.Melee
+    const wt = distXZ < MELEE_M ? WeaponType.Melee
       : dist < SIDEARM_M ? lo.side : dist < NEAR_M ? lo.near : dist > FAR_M ? lo.far : lo.mid;
     if (wt === WeaponType.Melee) {
       // The punch IS the player's swing — combat funnels it identically,

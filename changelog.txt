@@ -1,3 +1,4 @@
+2026-10-01 - Bot melee actually fires now: band gate measured muzzle->aim in 3D (+1.4y bias made 3m unreachable, now planar 4.5m) and botAttack read directDamage which is 0 for Melee (falls back to aoeDamage 55) - ledger shows w10 11 hits/572dmg/1 kill in pit soak
 2026-10-01 - endpoints: ?server=localhost:PORT and LAN IPs were rewritten as wss://*.trycloudflare.com and failed silently - LAN/plain hosts now resolve ws/http so direct-IP games work
 2026-10-01 - Boot-crash beacon: window error/unhandledrejection hooks now arm at Logger module load (was inside initShipping - pre-server crashes died silently) and beacon the queue to /client-log resolved like endpoints.ts
 2026-10-01 - Loadout bar crash: wireOverlayInput ran before Player init - eager armorClass read killed client boot (black screen); lazy default + class-change re-filter

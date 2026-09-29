@@ -709,7 +709,10 @@ export class CombatHandler {
     const target = this.playerManager.getPlayer(targetId);
     if (!shooter || shooter.isDead || !target || target.isDead) return;
     if (this.friendly(shooterId, targetId)) return;
-    const damage = getWeaponStats(weaponType).directDamage * perkMods(shooter.perk).directDamage * this.ddMult(shooter);
+    // Melee carries its damage on the aoe line (instant cone, directDamage 0)
+    // — falling back to it keeps bot punches non-zero.
+    const stats = getWeaponStats(weaponType);
+    const damage = (stats.directDamage || stats.aoeDamage) * perkMods(shooter.perk).directDamage * this.ddMult(shooter);
     const result = this.playerManager.applyDamage(targetId, damage);
     target.forceSendUntil = Date.now() + FORCE_SEND_MS;
     this.applyHit(shooterId, targetId, damage, result, 'Bot hit', undefined, weaponType);
