@@ -1,0 +1,19 @@
+{
+  "mode": "nuggets",
+  "balls": {
+    "base": 20,
+    "perPlayer": 4,
+    "max": 80
+  },
+  "terrain": "swarm.bin",
+  "bots": 6,
+  "ambient": {
+    "crawler": 40,
+    "scarab": 24,
+    "rakk": 12,
+    "gnat": 30,
+    "seeker": 6,
+    "strifer": 4
+  },
+  "_notes": "Species-mix proof map: ambient caps push a dense layered ecology (ground scarabs+crawlers under a gnat/rakk canopy). Same terrain as swarm so the difference is the population table, not the field."
+}

@@ -1,3 +1,4 @@
+2026-10-03 - maps/infestation.json: first species-mix map (nuggets room on swarm terrain, ambient caps crawler40/scarab24/rakk12/gnat30/seeker6/strifer4 + 6 bots) - verified ambient table reaches gameState.map.ambient live and feeds setAmbientCaps
 2026-10-01 - Bot melee actually fires now: band gate measured muzzle->aim in 3D (+1.4y bias made 3m unreachable, now planar 4.5m) and botAttack read directDamage which is 0 for Melee (falls back to aoeDamage 55) - ledger shows w10 11 hits/572dmg/1 kill in pit soak
 2026-10-01 - endpoints: ?server=localhost:PORT and LAN IPs were rewritten as wss://*.trycloudflare.com and failed silently - LAN/plain hosts now resolve ws/http so direct-IP games work
 2026-10-01 - Boot-crash beacon: window error/unhandledrejection hooks now arm at Logger module load (was inside initShipping - pre-server crashes died silently) and beacon the queue to /client-log resolved like endpoints.ts
