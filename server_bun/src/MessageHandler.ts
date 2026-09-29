@@ -282,6 +282,9 @@ export class MessageHandler {
       if (key.startsWith(`${playerId}:`)) this.rateLimitWarnings.delete(key);
     }
     this.combat.onPlayerRemoved(playerId);
+    // Removal paths that skip onPlayerDisconnected (kick, reap, admin
+    // reload, bot retire) must still free the moveSim shadow.
+    this.roomInfo.moveUntrack?.(playerId);
   }
 
   /** A reclaimed session may restore a dead player whose respawn timer was
