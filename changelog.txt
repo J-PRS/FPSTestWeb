@@ -1,3 +1,5 @@
+2026-10-03 - shotReject scenario: a forged hit claim (projectile geometrically unable to reach) is rejected privately to the shooter, zero damage applied.
+
 2026-10-03 - deployTtl + destroyClaim scenarios: turret expires on its 180s TTL -> deployGone; a rival's projectileDestroy claim is refused, only the owner retires a shell.
 
 2026-10-03 - spectatorJoin + edgeFanout scenarios: watchers get the world with no body (no playerJoined/localPlayerState); crawl edges reach near players every time, far players only the 4th-edge broadcast resync.
