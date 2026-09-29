@@ -73,10 +73,10 @@ describe('RoomProjectiles', () => {
     shooter.position = { x: 0, y: FLOOR + 1.4, z: 0 };
     target.position = { x: 30, y: FLOOR, z: 0 };
     const stats = getWeaponStats(WeaponType.RemoteRailgun);
-    // The beam inherits the shell's velocity line — gravity over rayDelay
-    // drags it down, so a slight upward lob lands level on the target.
+    // The beam inherits the shell's velocity line — flat flight now, so a
+    // throw aimed down 1.4m over the 30m gap lands level on the target.
     room.projectiles.spawn(shooter.id, WeaponType.RemoteRailgun,
-      { x: 0, y: FLOOR + 1.4, z: 0 }, { x: 1, y: 0.15, z: 0 }, { x: 0, y: 0, z: 0 });
+      { x: 0, y: FLOOR + 1.4, z: 0 }, { x: 1, y: -0.05, z: 0 }, { x: 0, y: 0, z: 0 });
     for (let i = 0; i < 20 && target.health === CONFIG.playerMaxHealth; i++) {
       room.projectiles.tick(0.05);
     }

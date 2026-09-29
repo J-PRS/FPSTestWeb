@@ -455,8 +455,8 @@ export const WEAPONS: Record<number, WeaponStats> = {
     aoeRadius: 7.0,
     knockbackForce: 35.0,
     forceMode: 'push',
-    speed: 55.0,
-    gravity: -28.0,
+    speed: 40.0,    // slower lob — a readable cap-to-discharge window
+    gravity: 0.0,   // flat flight: the ray tracks the throw line, not an arc
     bodyRadius: 0.3,
     hitMin: 0.0,
     hitMax: 0.6, // the slug is a small throw — its reach is the beam, not a wake
