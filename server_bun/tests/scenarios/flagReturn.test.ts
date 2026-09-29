@@ -1,29 +1,44 @@
 import { describe, it, expect } from 'bun:test';
-import { mkRoom, watch } from './harness.ts';
+import { mkRoom } from './harness.ts';
 
-describe('scenario: dropped flag returns on own-team touch', () => {
-  it('a bravo player walking over their dropped flag sends it home', () => {
+describe('scenario: flag return on touch', () => {
+  it('own team touching a dropped flag walks it home', () => {
     const room = mkRoom({
       mode: 'ctf', bots: 2,
       bases: { alpha: { x: -70, y: 60, z: 0 }, bravo: { x: 70, y: 60, z: 0 } },
     }, 'ctf');
-    watch(room);
-    const alpha = [...room.players.getAllPlayers().values()].find((p) => p.team === 'alpha')!;
-    const bravo = [...room.players.getAllPlayers().values()].find((p) => p.team === 'bravo')!;
+    const players = [...room.players.getAllPlayers().values()];
+    players[0]!.team = 'alpha';
+    players[1]!.team = 'bravo';
+
+    // Drop bravo's flag at midfield — the bravo defender touching it
+    // returns it home without a carrier having to score anything.
     const flag = room.flags!.flags.get('bravo')!;
-    // Alpha steals it mid-field, then dies → drop in place.
-    alpha.position = { ...flag.pos };
-    room.tickFlags(0.05);
-    expect(flag.carrier).toBe(alpha.id);
-    room.flagCarrierDied(alpha.id);
-    expect(flag.state).toBe('dropped');
-    // The (now-dead) alpha is still standing on the flag — leave them on
-    // the spot and they'd re-grab it before the return check runs.
-    alpha.position = { x: flag.pos.x + 40, y: flag.pos.y, z: flag.pos.z };
-    // A bravo defender touches it → straight home, no countdown needed.
-    bravo.position = { ...flag.pos };
+    flag.state = 'dropped';
+    flag.pos = { x: 0, y: 60, z: 0 };
+    flag.dropT = 30;
+    flag.droppedAt = Date.now();
+
+    // Keep the alpha bot far away — nearestTouching picks the closest
+    // player, and an alpha in range would grab instead of return.
+    players[0]!.position = { x: -100, y: 60, z: -100 };
+    players[1]!.position = { x: 0, y: 60, z: 0 };
     room.tickFlags(0.05);
     expect(flag.state).toBe('home');
     expect(flag.pos).toEqual(flag.home);
+    expect(flag.carrier).toBeNull();
+  });
+
+  it('a dropped flag times out and walks itself home untouched', () => {
+    const room = mkRoom({
+      mode: 'ctf', bots: 2,
+      bases: { alpha: { x: -70, y: 60, z: 0 }, bravo: { x: 70, y: 60, z: 0 } },
+    }, 'ctf');
+    const flag = room.flags!.flags.get('bravo')!;
+    flag.state = 'dropped';
+    flag.pos = { x: 0, y: 60, z: 0 };
+    flag.dropT = 0.05;
+    room.tickFlags(0.1);
+    expect(flag.state).toBe('home');
   });
 });

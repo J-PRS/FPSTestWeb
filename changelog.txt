@@ -1,3 +1,5 @@
+2026-10-03 - Scenario suite +2 (meleeAoe, flagReturn): melee band accept/reject through the funnel, dropped-flag return-on-touch + timeout self-return.
+
 2026-10-03 - Scenario suite +1 (deployClaims): deploy claims broadcast deploySpawn in-radius, dropped past 40m, per-kind cap recycles oldest under a 4/s rate gate, unknown kind + dead claimer dropped.
 
 2026-10-03 - Scenario suite +2 (authorityCorrection, leaveCleanup) + real bug found: rebalanceTeams matched bot ids with startsWith('bot') but production ids are 'BOT-' (uppercase) so rebalance NEVER fired — now uses the real p.isBot flag. Harness mkRoom gains a moveAuthority param.
