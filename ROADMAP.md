@@ -54,6 +54,20 @@ surface. Detailed research lives in `_reports/`; this file is the current truth.
   box's baseline setInterval drift, not load), max 36ms, 0 rejected.
   Second BallSim spun up cleanly per room. `GET /rooms` lobby listing
   + bot `--room=` flag for split-fleet tests.
+- Scenario test suite (2026-10-03): `tests/scenarios/*.test.ts` — one
+  file per staged interaction (duel, creature bite, baneling detonate,
+  flag cap/return, projectile hit + spawn-protection, FFA kill score,
+  gem bank, turret fire + wall-LOS, mine boom, respawn, friendly-fire,
+  totem beam, multi-species mix) over a shared `harness.ts`
+  (flat field, mkRoom, pin = resync+protectedUntil=0, deterministic
+  step() for CreatureSim, broadcast watch). Already paid off: caught
+  CreatureSim-never-ticked-in-tests, the sendTo/broadcast tap split,
+  and a real gameplay bug (banelings orbited ~10m and could never
+  reach fuse range — fixed with terminal homing inside 12m + FUSE_D2
+  4.2²). Sim-time ≠ wall-clock is the standing trap: protection/timers
+  never lapse in fast tests.
+- Agent docs (2026-10-03): AGENTS.md (verify commands, invariants,
+  boundaries) + .devin/rules/{netcode,testing,determinism-perf}.md.
 
 ### Perf review 2026-10-01 — heaviest paths, ranked plan
 
