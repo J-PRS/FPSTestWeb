@@ -46,7 +46,12 @@ for (let z = 0; z < N; z++) {
     const wx = (u - 0.5) * WORLD, wz = (v - 0.5) * WORLD;
     let flat = 0;
     for (const [fx, fz, r] of flats) {
-      const d = Math.hypot(wx - fx, wz - fz);
+      // Toroidal distance — a pad near the seam wraps to the other side,
+      // so edge-of-world bases get flat ground on BOTH sides of the wrap.
+      const d = Math.hypot(
+        Math.min(Math.abs(wx - fx), WORLD - Math.abs(wx - fx)),
+        Math.min(Math.abs(wz - fz), WORLD - Math.abs(wz - fz)),
+      );
       flat = Math.max(flat, Math.min(1, Math.max(0, 1 - d / (r * 2))));
     }
     // Specs author bases/spawns at y≈0 absolute — pads hug the valley
