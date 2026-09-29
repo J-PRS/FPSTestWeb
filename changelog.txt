@@ -1,3 +1,5 @@
+2026-10-03 - Scenario suite +1 (deployClaims): deploy claims broadcast deploySpawn in-radius, dropped past 40m, per-kind cap recycles oldest under a 4/s rate gate, unknown kind + dead claimer dropped.
+
 2026-10-03 - Scenario suite +2 (authorityCorrection, leaveCleanup) + real bug found: rebalanceTeams matched bot ids with startsWith('bot') but production ids are 'BOT-' (uppercase) so rebalance NEVER fired — now uses the real p.isBot flag. Harness mkRoom gains a moveAuthority param.
 
 2026-10-03 - Scenario suite +8: presence relays (sender-exclusion at the socket level, dead-suppressed, chat echo), declared teleport (anchor reseat + rewind clear + snap relay), inputMove seq gate (stale packets can't resurrect status/ski), per-type rate limits (chat 4/s, teleport 3/s flood-safe), class/perk bank-on-respawn, ping/pong + private snapshot, environmentDamage clamp + funnel, dead-sender gate. New harness idiom: fake-ws register() to prove per-connection delivery/exclusion. Fix found by tests: inputMove had no isDead gate — a dead client could still latch status bits and drive its shadow sim.
