@@ -463,6 +463,9 @@ export class ServerBots {
       }
       if (out.fire) this.fireAt(p, out.fire.targetId, out.fire.aim);
       if (out.belt) this.throwBelt(p);
+      // Deploy claims run the same handleDeploy a human's message does —
+      // kind, plant distance, and per-player cap are all re-validated.
+      if (out.deploy) this.room.deployables.handleDeploy(id, out.deploy.kind, out.deploy.pos);
 
       const dx = out.dest.x - p.position.x;
       const dz = out.dest.z - p.position.z;

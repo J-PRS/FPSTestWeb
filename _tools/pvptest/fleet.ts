@@ -323,7 +323,9 @@ const fireTimer = setInterval(() => {
         const td = t && !t.dead
           ? Math.hypot(t.x - end.x, t.y - end.y, t.z - end.z) : Infinity;
         b.ws.send(JSON.stringify({
-          type: 'shot', targetId: td <= 6 ? p.targetId : null,
+          // Attach targetId only inside the server's 2m legal radius —
+          // wider tolerances just farm shotRejected spam.
+          type: 'shot', targetId: td <= 1.5 ? p.targetId : null,
           projectileId: p.id,
           position: end,
           airtime: (now - p.firedAt) / 1000,

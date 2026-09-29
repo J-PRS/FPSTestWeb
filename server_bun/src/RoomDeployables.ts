@@ -9,6 +9,7 @@
 import type { Vec3 } from './types.ts';
 import type { Room } from './Room.ts';
 import type { ServerMessage } from '../../shared/protocol.ts';
+import { logger } from './logger.ts';
 
 export type DeployKind = 'turret' | 'mine' | 'station' | 'drone';
 const KINDS = new Set<DeployKind>(['turret', 'mine', 'station', 'drone']);
@@ -76,6 +77,7 @@ export class RoomDeployables {
       : k === 'mine' ? MINE_ARM_S
       : k === 'station' ? STATION_HEAL_CD : 0;
     this.items.set(id, { id, owner: playerId, kind: k, pos: { ...pos }, ttl: TTL_S[k], fireCd: armDelay });
+    logger.info('Deploy placed', { owner: playerId, kind: k, x: +pos.x.toFixed(1), y: +pos.y.toFixed(1), z: +pos.z.toFixed(1) });
     this.room.broadcast({ type: 'deploySpawn', id, owner: playerId, kind: k, pos: { ...pos }, team: player.team } as ServerMessage);
   }
 

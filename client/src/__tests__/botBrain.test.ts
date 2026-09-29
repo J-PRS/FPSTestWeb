@@ -139,6 +139,39 @@ describe('BotBrain senses', () => {
     }
   });
 
+  it('a builder parked at a defensive anchor plants a deployable', () => {
+    // random=0.0 forces builder=true and the turret roll; cooldown elapses
+    // on the first think past the initial stagger.
+    const roll = vi.spyOn(Math, 'random').mockReturnValue(0.0);
+    try {
+      const b = new BotBrain({ x: 0, y: 1.6, z: 0 });
+      const pos = { x: 0, y: 1.6, z: 0 };
+      const objective = { x: 3, y: 0, z: 0 }; // parked on the stand
+      const out = b.think(40, ctx(pos, flat, { objective, now: 0 }));
+      expect(out.deploy).toBeDefined();
+      expect(['turret', 'mine', 'station']).toContain(out.deploy!.kind);
+      expect(Math.hypot(out.deploy!.pos.x - pos.x, out.deploy!.pos.z - pos.z)).toBeLessThanOrEqual(11);
+    } finally {
+      roll.mockRestore();
+    }
+  });
+
+  it('a builder fighting on the stand never plants mid-duel', () => {
+    const roll = vi.spyOn(Math, 'random').mockReturnValue(0.0);
+    try {
+      const b = new BotBrain({ x: 0, y: 1.6, z: 0 });
+      const pos = { x: 0, y: 1.6, z: 0 };
+      const out = b.think(40, ctx(pos, flat, {
+        objective: { x: 3, y: 0, z: 0 },
+        enemies: enemy(20, 0),
+        now: 0,
+      }));
+      expect(out.deploy).toBeUndefined();
+    } finally {
+      roll.mockRestore();
+    }
+  });
+
   it('a hero bot pushes into the fight even while hurt', () => {
     // Force the hero roll on — the rising edge of hurt arms hero mode.
     const roll = vi.spyOn(Math, 'random').mockReturnValue(0.0);

@@ -74,6 +74,9 @@ export interface BrainOut {
   status?: number;
   /** Belt throw this step (grenade arc at the hunt target). */
   belt?: boolean;
+  /** Deployable claim this step (turret/mine/station) — the same shape a
+   *  human's deploy message carries; the host validates + caps it. */
+  deploy?: { kind: string; pos: BotVec };
 }
 
 // Must equal EYE_OFFSET (shared/constants): GameBot.position IS the eye
@@ -171,6 +174,13 @@ export class BotBrain {
   private deaths: { x: number; z: number; t: number }[] = [];
   private heroT = 0;      // hero-mode seconds remaining
   private hurtLatch = false; // rising-edge detector for the hero roll
+  // Deploy intent — only some bots are builders, so a stand gets a couple
+  // of sentries rather than a turret farm. Arriving at a defensive anchor
+  // (objective in reach, nobody shooting) is the whole trigger: the
+  // emplacement emerges from "a defender with time on their hands",
+  // not a scripted base layout.
+  private deployT = 8 + Math.random() * 25;
+  private readonly builder = Math.random() < 0.45;
 
   /** Host reports the bot's corpse spot on death. */
   markDeath(pos: BotVec): void {
@@ -372,7 +382,30 @@ export class BotBrain {
       if (d > 10 && d < 35) { belt = true; this.beltT = 9; }
     }
 
-    return { dest, move: this.moveHints(ctx, pos, dest), fire, status: this.statusIntent(ctx), belt };
+    // --- deploy: a quiet defender with hands free fortifies the stand ---
+    this.deployT -= dt;
+    let deploy: BrainOut['deploy'];
+    // Planting while a fight rages on the stand is suicide, but a defender
+    // watching a duel across the field still has hands free — the gate is
+    // "nobody close enough to interrupt", not "nobody visible at all"
+    // (a busy room never goes fully quiet, which starved the sense).
+    const handsFree = !this.hunt || dist3(pos, this.hunt.pos) > 25;
+    if (this.builder && this.deployT <= 0 && handsFree && !fearing && ctx.objective) {
+      const od = dist3(pos, ctx.objective);
+      if (od < 15) {
+        this.deployT = 28 + Math.random() * 20;
+        // A hurting builder drops a station first (it heals the squad);
+        // otherwise the stand gets guns or a minefield by temperament.
+        const kind: string = (ctx.healthFrac ?? 1) < 0.6 ? 'station'
+          : Math.random() < 0.65 ? 'turret' : 'mine';
+        const a = Math.random() * Math.PI * 2;
+        const r = 4 + Math.random() * 6;
+        const px = pos.x + Math.cos(a) * r, pz = pos.z + Math.sin(a) * r;
+        deploy = { kind, pos: { x: px, y: ctx.groundY(px, pz), z: pz } };
+      }
+    }
+
+    return { dest, move: this.moveHints(ctx, pos, dest), fire, status: this.statusIntent(ctx), belt, deploy };
   }
 
   /** Sidestep the nearest closing shell — a perpendicular step dodges a
