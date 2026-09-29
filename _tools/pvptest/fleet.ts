@@ -71,7 +71,8 @@ interface Bot {
   /** Honest combat: remotes seen on tick frames + one in-flight slug. */
   remotes: Map<string, { x: number; y: number; z: number; vx: number; vy: number; vz: number; dead: boolean }>;
   team?: string;
-  pending: { id?: string; targetId: string; firedAt: number; flyS: number; aim: { x: number; y: number; z: number } } | null;
+  pending: { id?: string; targetId: string; firedAt: number; flyS: number;
+    muzzle: { x: number; y: number; z: number }; dir: { x: number; y: number; z: number } } | null;
   fireAt: number;
   rejects: number;
   kills: number;
@@ -309,13 +310,23 @@ const fireTimer = setInterval(() => {
     if (b.pending) {
       // Land the claim once the bolt would have arrived.
       if (b.pending.id && now - b.pending.firedAt >= b.pending.flyS * 1000) {
-        const t = b.remotes.get(b.pending.targetId);
-        const hit = t && !t.dead ? t : b.pending.aim;
+        // Claim where the BOLT is (muzzle + dir·speed·flyS), not where the
+        // target is now — a skier can drag its live position hundreds of
+        // meters off the trajectory, which reads as an impossible claim.
+        const p = b.pending;
+        const end = {
+          x: p.muzzle.x + p.dir.x * speed * p.flyS,
+          y: p.muzzle.y + p.dir.y * speed * p.flyS,
+          z: p.muzzle.z + p.dir.z * speed * p.flyS,
+        };
+        const t = b.remotes.get(p.targetId);
+        const td = t && !t.dead
+          ? Math.hypot(t.x - end.x, t.y - end.y, t.z - end.z) : Infinity;
         b.ws.send(JSON.stringify({
-          type: 'shot', targetId: t && !t.dead ? b.pending.targetId : null,
-          projectileId: b.pending.id,
-          position: { x: hit.x, y: hit.y, z: hit.z },
-          airtime: (now - b.pending.firedAt) / 1000,
+          type: 'shot', targetId: td <= 6 ? p.targetId : null,
+          projectileId: p.id,
+          position: end,
+          airtime: (now - p.firedAt) / 1000,
           weaponType: FLEE_WID,
         }));
         b.ws.send(JSON.stringify({ type: 'projectileDestroy', projectileId: b.pending.id }));
@@ -347,7 +358,8 @@ const fireTimer = setInterval(() => {
       position: { x: mx, y: my, z: mz },
       velocity: { x: dx * speed, y: dy * speed, z: dz * speed },
     }));
-    b.pending = { targetId: best, firedAt: now, flyS, aim };
+    b.pending = { targetId: best, firedAt: now, flyS,
+      muzzle: { x: mx, y: my, z: mz }, dir: { x: dx, y: dy, z: dz } };
   }
 }, 80);
 
