@@ -67,6 +67,93 @@ const REMOTE_FRAME_SIZE = 39;
 //       (player names) and remoteFrames sections after targetEvents
 // ---------------------------------------------------------------------------
 
+function writeFrames(view: DataView, offset: number, frames: DemoFile['frames']): number {
+  view.setUint32(offset, frames.length, true); offset += 4;
+  for (const f of frames) {
+    view.setUint16(offset, f.frameNumber, true); offset += 2;
+    view.setFloat32(offset, f.timestamp, true); offset += 4;
+    view.setFloat32(offset, f.posX, true); offset += 4;
+    view.setFloat32(offset, f.posY, true); offset += 4;
+    view.setFloat32(offset, f.posZ, true); offset += 4;
+    view.setFloat32(offset, f.velX, true); offset += 4;
+    view.setFloat32(offset, f.velY, true); offset += 4;
+    view.setFloat32(offset, f.velZ, true); offset += 4;
+    view.setFloat32(offset, f.yaw, true); offset += 4;
+    view.setFloat32(offset, f.pitch, true); offset += 4;
+    view.setUint8(offset++, f.inputFlags);
+    view.setInt16(offset, f.mouseDeltaX, true); offset += 2;
+    view.setInt16(offset, f.mouseDeltaY, true); offset += 2;
+    view.setUint8(offset++, f.jetpackFlags);
+    view.setFloat32(offset, f.jetpackFuel, true); offset += 4;
+  }
+  return offset;
+}
+
+function writeProjEvents(view: DataView, offset: number, events: DemoFile['projectileEvents']): number {
+  view.setUint32(offset, events.length, true); offset += 4;
+  for (const e of events) {
+    view.setUint8(offset++, e.eventType);
+    view.setFloat32(offset, e.timestamp, true); offset += 4;
+    view.setFloat32(offset, e.posX, true); offset += 4;
+    view.setFloat32(offset, e.posY, true); offset += 4;
+    view.setFloat32(offset, e.posZ, true); offset += 4;
+    view.setFloat32(offset, e.velX, true); offset += 4;
+    view.setFloat32(offset, e.velY, true); offset += 4;
+    view.setFloat32(offset, e.velZ, true); offset += 4;
+    view.setUint16(offset, e.projectileId, true); offset += 2;
+    view.setUint8(offset++, e.weaponType);
+    view.setFloat32(offset, e.surfaceNormalX, true); offset += 4;
+    view.setFloat32(offset, e.surfaceNormalY, true); offset += 4;
+    view.setFloat32(offset, e.surfaceNormalZ, true); offset += 4;
+    view.setUint16(offset, e.targetId, true); offset += 2;
+    view.setUint8(offset++, e.hasPeakPosition ? 1 : 0);
+    view.setFloat32(offset, e.peakPosX, true); offset += 4;
+    view.setFloat32(offset, e.peakPosY, true); offset += 4;
+    view.setFloat32(offset, e.peakPosZ, true); offset += 4;
+  }
+  return offset;
+}
+
+function writeTargetEvents(view: DataView, offset: number, events: DemoFile['targetEvents']): number {
+  view.setUint32(offset, events.length, true); offset += 4;
+  for (const e of events) {
+    view.setUint8(offset++, e.eventType);
+    view.setFloat32(offset, e.timestamp, true); offset += 4;
+    view.setFloat32(offset, e.posX, true); offset += 4;
+    view.setFloat32(offset, e.posY, true); offset += 4;
+    view.setFloat32(offset, e.posZ, true); offset += 4;
+    view.setFloat32(offset, e.velX, true); offset += 4;
+    view.setFloat32(offset, e.velY, true); offset += 4;
+    view.setFloat32(offset, e.velZ, true); offset += 4;
+    view.setUint16(offset, e.targetId, true); offset += 2;
+    view.setUint8(offset++, e.targetType);
+    view.setFloat32(offset, e.health, true); offset += 4;
+    view.setUint8(offset++, e.hasPeakPosition ? 1 : 0);
+    view.setFloat32(offset, e.peakPosX, true); offset += 4;
+    view.setFloat32(offset, e.peakPosY, true); offset += 4;
+    view.setFloat32(offset, e.peakPosZ, true); offset += 4;
+  }
+  return offset;
+}
+
+function writeRemoteFrames(view: DataView, offset: number, frames: DemoFile['remoteFrames']): number {
+  view.setUint32(offset, frames.length, true); offset += 4;
+  for (const f of frames) {
+    view.setFloat32(offset, f.timestamp, true); offset += 4;
+    view.setUint16(offset, f.rosterIdx, true); offset += 2;
+    view.setFloat32(offset, f.posX, true); offset += 4;
+    view.setFloat32(offset, f.posY, true); offset += 4;
+    view.setFloat32(offset, f.posZ, true); offset += 4;
+    view.setFloat32(offset, f.velX, true); offset += 4;
+    view.setFloat32(offset, f.velY, true); offset += 4;
+    view.setFloat32(offset, f.velZ, true); offset += 4;
+    view.setFloat32(offset, f.yaw, true); offset += 4;
+    view.setFloat32(offset, f.pitch, true); offset += 4;
+    view.setUint8(offset++, f.flags);
+  }
+  return offset;
+}
+
 export namespace DemoSerializer {
 
   export function serialize(data: DemoFile): ArrayBuffer {
@@ -115,68 +202,11 @@ export namespace DemoSerializer {
     offset = writeString(view, offset, data.header.mode);
     offset = writeString(view, offset, data.header.playerName);
 
-    // Frames
-    view.setUint32(offset, data.frames.length, true); offset += 4;
-    for (const f of data.frames) {
-      view.setUint16(offset, f.frameNumber, true); offset += 2;
-      view.setFloat32(offset, f.timestamp, true); offset += 4;
-      view.setFloat32(offset, f.posX, true); offset += 4;
-      view.setFloat32(offset, f.posY, true); offset += 4;
-      view.setFloat32(offset, f.posZ, true); offset += 4;
-      view.setFloat32(offset, f.velX, true); offset += 4;
-      view.setFloat32(offset, f.velY, true); offset += 4;
-      view.setFloat32(offset, f.velZ, true); offset += 4;
-      view.setFloat32(offset, f.yaw, true); offset += 4;
-      view.setFloat32(offset, f.pitch, true); offset += 4;
-      view.setUint8(offset++, f.inputFlags);
-      view.setInt16(offset, f.mouseDeltaX, true); offset += 2;
-      view.setInt16(offset, f.mouseDeltaY, true); offset += 2;
-      view.setUint8(offset++, f.jetpackFlags);
-      view.setFloat32(offset, f.jetpackFuel, true); offset += 4;
-    }
+    offset = writeFrames(view, offset, data.frames);
 
-    // Projectile events
-    view.setUint32(offset, data.projectileEvents.length, true); offset += 4;
-    for (const e of data.projectileEvents) {
-      view.setUint8(offset++, e.eventType);
-      view.setFloat32(offset, e.timestamp, true); offset += 4;
-      view.setFloat32(offset, e.posX, true); offset += 4;
-      view.setFloat32(offset, e.posY, true); offset += 4;
-      view.setFloat32(offset, e.posZ, true); offset += 4;
-      view.setFloat32(offset, e.velX, true); offset += 4;
-      view.setFloat32(offset, e.velY, true); offset += 4;
-      view.setFloat32(offset, e.velZ, true); offset += 4;
-      view.setUint16(offset, e.projectileId, true); offset += 2;
-      view.setUint8(offset++, e.weaponType);
-      view.setFloat32(offset, e.surfaceNormalX, true); offset += 4;
-      view.setFloat32(offset, e.surfaceNormalY, true); offset += 4;
-      view.setFloat32(offset, e.surfaceNormalZ, true); offset += 4;
-      view.setUint16(offset, e.targetId, true); offset += 2;
-      view.setUint8(offset++, e.hasPeakPosition ? 1 : 0);
-      view.setFloat32(offset, e.peakPosX, true); offset += 4;
-      view.setFloat32(offset, e.peakPosY, true); offset += 4;
-      view.setFloat32(offset, e.peakPosZ, true); offset += 4;
-    }
+    offset = writeProjEvents(view, offset, data.projectileEvents);
 
-    // Target events
-    view.setUint32(offset, data.targetEvents.length, true); offset += 4;
-    for (const e of data.targetEvents) {
-      view.setUint8(offset++, e.eventType);
-      view.setFloat32(offset, e.timestamp, true); offset += 4;
-      view.setFloat32(offset, e.posX, true); offset += 4;
-      view.setFloat32(offset, e.posY, true); offset += 4;
-      view.setFloat32(offset, e.posZ, true); offset += 4;
-      view.setFloat32(offset, e.velX, true); offset += 4;
-      view.setFloat32(offset, e.velY, true); offset += 4;
-      view.setFloat32(offset, e.velZ, true); offset += 4;
-      view.setUint16(offset, e.targetId, true); offset += 2;
-      view.setUint8(offset++, e.targetType);
-      view.setFloat32(offset, e.health, true); offset += 4;
-      view.setUint8(offset++, e.hasPeakPosition ? 1 : 0);
-      view.setFloat32(offset, e.peakPosX, true); offset += 4;
-      view.setFloat32(offset, e.peakPosY, true); offset += 4;
-      view.setFloat32(offset, e.peakPosZ, true); offset += 4;
-    }
+    offset = writeTargetEvents(view, offset, data.targetEvents);
 
     // Roster (u16 count + names)
     view.setUint16(offset, data.roster.length, true); offset += 2;
@@ -184,21 +214,7 @@ export namespace DemoSerializer {
       offset = writeString(view, offset, entry.name);
     }
 
-    // Remote frames
-    view.setUint32(offset, data.remoteFrames.length, true); offset += 4;
-    for (const f of data.remoteFrames) {
-      view.setFloat32(offset, f.timestamp, true); offset += 4;
-      view.setUint16(offset, f.rosterIdx, true); offset += 2;
-      view.setFloat32(offset, f.posX, true); offset += 4;
-      view.setFloat32(offset, f.posY, true); offset += 4;
-      view.setFloat32(offset, f.posZ, true); offset += 4;
-      view.setFloat32(offset, f.velX, true); offset += 4;
-      view.setFloat32(offset, f.velY, true); offset += 4;
-      view.setFloat32(offset, f.velZ, true); offset += 4;
-      view.setFloat32(offset, f.yaw, true); offset += 4;
-      view.setFloat32(offset, f.pitch, true); offset += 4;
-      view.setUint8(offset++, f.flags);
-    }
+    offset = writeRemoteFrames(view, offset, data.remoteFrames);
 
     // Compute and write checksum over everything after the checksum field
     const checksumOffset = 1 + 4 + 2 + gameVersionBytes.length + 8 + 4 + 4 + 4 + 4;

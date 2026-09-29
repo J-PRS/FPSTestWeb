@@ -15,18 +15,18 @@ export interface DemoUICallbacks {
 
 export class DemoUI {
   private container: HTMLDivElement;
-  private timeline: HTMLInputElement;
-  private timelineWrap: HTMLDivElement;
-  private markerOverlay: HTMLDivElement;
-  private timeLabel: HTMLSpanElement;
-  private playBtn: HTMLButtonElement;
-  private stopBtn: HTMLButtonElement;
-  private speedSelect: HTMLSelectElement;
-  private loopBtn: HTMLButtonElement;
-  private saveBtn: HTMLButtonElement;
+  private timeline!: HTMLInputElement;
+  private timelineWrap!: HTMLDivElement;
+  private markerOverlay!: HTMLDivElement;
+  private timeLabel!: HTMLSpanElement;
+  private playBtn!: HTMLButtonElement;
+  private stopBtn!: HTMLButtonElement;
+  private speedSelect!: HTMLSelectElement;
+  private loopBtn!: HTMLButtonElement;
+  private saveBtn!: HTMLButtonElement;
   private videoBtn!: HTMLButtonElement;
-  private loadInput: HTMLInputElement;
-  private statusLabel: HTMLSpanElement;
+  private loadInput!: HTMLInputElement;
+  private statusLabel!: HTMLSpanElement;
   private lastTimelineDuration = -1;
 
   private callbacks: DemoUICallbacks | null = null;
@@ -58,113 +58,14 @@ export class DemoUI {
     this.stopBtn.title = 'Stop';
     this.stopBtn.addEventListener('click', () => this.callbacks?.onStop());
 
-    // Timeline slider — wrapped in a relative container for marker overlay.
-    // The native range thumb has a half-thumb inset on each side, so the marker
-    // overlay must be inset to match (see THUMB_WIDTH / markerOverlay below).
-    const THUMB_WIDTH = 14; // px — must match the thumb size in the injected CSS
-    this.timeline = document.createElement('input');
-    this.timeline.type = 'range';
-    this.timeline.min = '0';
-    this.timeline.max = '100';
-    this.timeline.value = '0';
-    this.timeline.step = '0.01';
-    this.timeline.style.cssText = `
-      width: 200px; cursor: pointer; margin: 0;
-      -webkit-appearance: none; appearance: none;
-      height: 6px; background: #333; border-radius: 3px; outline: none;
-    `;
-    this.timeline.addEventListener('input', () => {
-      const time = parseFloat(this.timeline.value);
-      this.callbacks?.onSeek(time);
-    });
-
-    // Inject thumb styling (pseudo-elements can't be set via inline styles)
-    if (!document.getElementById('demo-ui-slider-style')) {
-      const style = document.createElement('style');
-      style.id = 'demo-ui-slider-style';
-      style.textContent = `
-        #demo-ui input[type=range]::-webkit-slider-thumb {
-          -webkit-appearance: none; appearance: none;
-          width: ${THUMB_WIDTH}px; height: ${THUMB_WIDTH}px;
-          border-radius: 50%; background: #4488ff; cursor: pointer;
-          border: 1px solid #2a5a9a;
-        }
-        #demo-ui input[type=range]::-moz-range-thumb {
-          width: ${THUMB_WIDTH}px; height: ${THUMB_WIDTH}px;
-          border-radius: 50%; background: #4488ff; cursor: pointer;
-          border: 1px solid #2a5a9a;
-        }
-      `;
-      document.head.appendChild(style);
-    }
-
-    // Marker overlay — inset by half the thumb width on each side so that
-    // left: pct% aligns with the thumb's center position at the same value.
-    this.markerOverlay = document.createElement('div');
-    const halfThumb = THUMB_WIDTH / 2;
-    this.markerOverlay.style.cssText = `
-      position: absolute; top: 0; bottom: 0;
-      left: ${halfThumb}px; right: ${halfThumb}px;
-      pointer-events: none; overflow: hidden;
-    `;
-
-    this.timelineWrap = document.createElement('div');
-    this.timelineWrap.style.cssText = 'position: relative; width: 200px; height: 20px; display: flex; align-items: center;';
-    this.timelineWrap.appendChild(this.timeline);
-    this.timelineWrap.appendChild(this.markerOverlay);
+    this.initTimeline();
 
     // Time label
     this.timeLabel = document.createElement('span');
     this.timeLabel.textContent = '0.0 / 0.0s';
     this.timeLabel.style.cssText = 'min-width: 100px; text-align: center;';
 
-    // Speed selector
-    this.speedSelect = document.createElement('select');
-    this.speedSelect.style.cssText = 'background: #222; color: #fff; border: 1px solid #555; border-radius: 4px; padding: 2px 4px; font-family: monospace;';
-    for (const speed of [0.25, 0.5, 1.0, 2.0, 4.0]) {
-      const opt = document.createElement('option');
-      opt.value = String(speed);
-      opt.textContent = `${speed}x`;
-      this.speedSelect.appendChild(opt);
-    }
-    this.speedSelect.value = '1';
-    this.speedSelect.addEventListener('change', () => {
-      this.callbacks?.onSpeedChange(parseFloat(this.speedSelect.value));
-    });
-
-    // Loop button
-    this.loopBtn = document.createElement('button');
-    this.loopBtn.textContent = '↻';
-    this.loopBtn.style.cssText = this.btnStyle('#333');
-    this.loopBtn.title = 'Loop';
-    this.loopBtn.addEventListener('click', () => {
-      this.callbacks?.onLoop(!this.loopBtn.classList.contains('active'));
-    });
-
-    // Save button
-    this.saveBtn = document.createElement('button');
-    this.saveBtn.textContent = 'Save';
-    this.saveBtn.style.cssText = this.btnStyle('#2a5a2a');
-    this.saveBtn.title = 'Save demo to file';
-    this.saveBtn.addEventListener('click', () => this.callbacks?.onSave());
-
-    // MP4 export button — records the render canvas live during playback
-    this.videoBtn = document.createElement('button');
-    this.videoBtn.textContent = 'MP4';
-    this.videoBtn.style.cssText = this.btnStyle('#5a2a2a');
-    this.videoBtn.title = 'Record canvas to mp4/webm while playing';
-    this.videoBtn.addEventListener('click', () => this.callbacks?.onVideoToggle());
-
-    // Load input (hidden file input)
-    this.loadInput = document.createElement('input');
-    this.loadInput.type = 'file';
-    this.loadInput.accept = '.demo';
-    this.loadInput.style.display = 'none';
-    this.loadInput.addEventListener('change', () => {
-      if (this.loadInput.files && this.loadInput.files[0]) {
-        this.callbacks?.onLoad(this.loadInput.files[0]);
-      }
-    });
+    this.initControls();
 
     // Load button (triggers file input)
     const loadBtn = document.createElement('button');
@@ -191,6 +92,113 @@ export class DemoUI {
     this.container.appendChild(this.statusLabel);
 
     document.body.appendChild(this.container);
+  }
+
+  private initTimeline(): void {
+// Timeline slider — wrapped in a relative container for marker overlay.
+// The native range thumb has a half-thumb inset on each side, so the marker
+// overlay must be inset to match (see THUMB_WIDTH / markerOverlay below).
+const THUMB_WIDTH = 14; // px — must match the thumb size in the injected CSS
+this.timeline = document.createElement('input');
+this.timeline.type = 'range';
+this.timeline.min = '0';
+this.timeline.max = '100';
+this.timeline.value = '0';
+this.timeline.step = '0.01';
+this.timeline.style.cssText = `
+  width: 200px; cursor: pointer; margin: 0;
+  -webkit-appearance: none; appearance: none;
+  height: 6px; background: #333; border-radius: 3px; outline: none;
+`;
+this.timeline.addEventListener('input', () => {
+  const time = parseFloat(this.timeline.value);
+  this.callbacks?.onSeek(time);
+});
+
+// Inject thumb styling (pseudo-elements can't be set via inline styles)
+if (!document.getElementById('demo-ui-slider-style')) {
+  const style = document.createElement('style');
+  style.id = 'demo-ui-slider-style';
+  style.textContent = `
+    #demo-ui input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none; appearance: none;
+      width: ${THUMB_WIDTH}px; height: ${THUMB_WIDTH}px;
+      border-radius: 50%; background: #4488ff; cursor: pointer;
+      border: 1px solid #2a5a9a;
+    }
+    #demo-ui input[type=range]::-moz-range-thumb {
+      width: ${THUMB_WIDTH}px; height: ${THUMB_WIDTH}px;
+      border-radius: 50%; background: #4488ff; cursor: pointer;
+      border: 1px solid #2a5a9a;
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+// Marker overlay — inset by half the thumb width on each side so that
+// left: pct% aligns with the thumb's center position at the same value.
+this.markerOverlay = document.createElement('div');
+const halfThumb = THUMB_WIDTH / 2;
+this.markerOverlay.style.cssText = `
+  position: absolute; top: 0; bottom: 0;
+  left: ${halfThumb}px; right: ${halfThumb}px;
+  pointer-events: none; overflow: hidden;
+`;
+
+this.timelineWrap = document.createElement('div');
+this.timelineWrap.style.cssText = 'position: relative; width: 200px; height: 20px; display: flex; align-items: center;';
+this.timelineWrap.appendChild(this.timeline);
+this.timelineWrap.appendChild(this.markerOverlay);
+  }
+
+  private initControls(): void {
+// Speed selector
+this.speedSelect = document.createElement('select');
+this.speedSelect.style.cssText = 'background: #222; color: #fff; border: 1px solid #555; border-radius: 4px; padding: 2px 4px; font-family: monospace;';
+for (const speed of [0.25, 0.5, 1.0, 2.0, 4.0]) {
+  const opt = document.createElement('option');
+  opt.value = String(speed);
+  opt.textContent = `${speed}x`;
+  this.speedSelect.appendChild(opt);
+}
+this.speedSelect.value = '1';
+this.speedSelect.addEventListener('change', () => {
+  this.callbacks?.onSpeedChange(parseFloat(this.speedSelect.value));
+});
+
+// Loop button
+this.loopBtn = document.createElement('button');
+this.loopBtn.textContent = '↻';
+this.loopBtn.style.cssText = this.btnStyle('#333');
+this.loopBtn.title = 'Loop';
+this.loopBtn.addEventListener('click', () => {
+  this.callbacks?.onLoop(!this.loopBtn.classList.contains('active'));
+});
+
+// Save button
+this.saveBtn = document.createElement('button');
+this.saveBtn.textContent = 'Save';
+this.saveBtn.style.cssText = this.btnStyle('#2a5a2a');
+this.saveBtn.title = 'Save demo to file';
+this.saveBtn.addEventListener('click', () => this.callbacks?.onSave());
+
+// MP4 export button — records the render canvas live during playback
+this.videoBtn = document.createElement('button');
+this.videoBtn.textContent = 'MP4';
+this.videoBtn.style.cssText = this.btnStyle('#5a2a2a');
+this.videoBtn.title = 'Record canvas to mp4/webm while playing';
+this.videoBtn.addEventListener('click', () => this.callbacks?.onVideoToggle());
+
+// Load input (hidden file input)
+this.loadInput = document.createElement('input');
+this.loadInput.type = 'file';
+this.loadInput.accept = '.demo';
+this.loadInput.style.display = 'none';
+this.loadInput.addEventListener('change', () => {
+  if (this.loadInput.files && this.loadInput.files[0]) {
+    this.callbacks?.onLoad(this.loadInput.files[0]);
+  }
+});
   }
 
   private btnStyle(bgColor: string): string {

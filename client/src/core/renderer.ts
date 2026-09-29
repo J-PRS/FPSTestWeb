@@ -35,76 +35,73 @@ export interface RendererSetup {
   resize: (width: number, height: number) => void;
 }
 
-export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Scene): RendererSetup {
-  // Pixel mode: 0 = off, 1 = hard 4x4, 2 = medium 2x2, 3 = xBR-smooth
-  // upscale, 4 = hard + Bayer-ordered dither (composer path),
-  // 5 = true CPU Floyd–Steinberg on the low-res buffer
+interface RenderModes { pixelMode: number; postproEnabled: boolean; bloomEnabled: boolean }
+
+const PX_MODES: Record<string, number> = {
+  off: 0, hard: 1, medium: 2, smooth: 3, on: 3, dither: 4, dithered: 4, fs: 5, floyd: 5,
+};
+
+const PIXEL_LABELS = ['PIXELATION: OFF', 'PIXELATION: HARD', 'PIXELATION: MEDIUM',
+  'PIXELATION: SMOOTH', 'PIXELATION: DITHERED', 'PIXELATION: FLOYD'];
+const pixelLabel = (m: number): string => PIXEL_LABELS[m] ?? PIXEL_LABELS[0]!;
+
+// Pixel mode: 0 = off, 1 = hard 4x4, 2 = medium 2x2, 3 = xBR-smooth
+// upscale, 4 = hard + Bayer-ordered dither (composer path),
+// 5 = true CPU Floyd-Steinberg on the low-res buffer
+function resolveModes(): RenderModes {
   let pixelMode = settings.get('fps-pixelated');
   // All post-processing defaults OFF — the scene reads cleanest raw.
   // Opt in via localStorage or ?postpro=on / ?bloom=on.
   let postproEnabled = settings.get('fps-postpro');
   let bloomEnabled = settings.get('fps-bloom');
   // URL overrides for headless screenshots/testing
-  {
-    const px = urlParams.get('pixelated');
-    if (px === 'off') pixelMode = 0;
-    if (px === 'hard') pixelMode = 1;
-    if (px === 'medium') pixelMode = 2;
-    if (px === 'smooth' || px === 'on') pixelMode = 3;
-    if (px === 'dither' || px === 'dithered') pixelMode = 4;
-    if (px === 'fs' || px === 'floyd') pixelMode = 5;
-    const pp = urlParams.get('postpro');
-    if (pp === 'off') postproEnabled = false;
-    if (pp === 'on') postproEnabled = true;
-    const bm = urlParams.get('bloom');
-    if (bm === 'off') bloomEnabled = false;
-    if (bm === 'on') bloomEnabled = true;
-    // Pixelated is the cheap path: stored bloom/postpro don't re-engage
-    // under it (hard mode has no composer at all); URL params may opt in.
-    if (pixelMode > 0 && pp === null && bm === null) {
-      postproEnabled = false;
-      bloomEnabled = false;
-    }
+  const px = urlParams.get('pixelated');
+  if (px !== null && px in PX_MODES) pixelMode = PX_MODES[px]!;
+  const pp = urlParams.get('postpro');
+  if (pp !== null) postproEnabled = pp === 'on';
+  const bm = urlParams.get('bloom');
+  if (bm !== null) bloomEnabled = bm === 'on';
+  // Pixelated is the cheap path: stored bloom/postpro don't re-engage
+  // under it (hard mode has no composer at all); URL params may opt in.
+  if (pixelMode > 0 && pp === null && bm === null) {
+    postproEnabled = false;
+    bloomEnabled = false;
+  }
+  return { pixelMode, postproEnabled, bloomEnabled };
+}
+
+const FS_LEVELS = 6; // per-channel quantization — 4 was chroma-noise soup
+
+// ---- Floyd-Steinberg mode (5): real CPU error diffusion ----
+// GL canvas renders at hard-mode scale but stays hidden; each frame we
+// readPixels → F-S quantize in JS → putImageData to this 2D canvas which
+// CSS upscales. Costs a few ms + one pipeline stall per frame — that's
+// the experiment.
+function makeFloydEngine(renderer: THREE.WebGLRenderer) {
+  const canvasEl = document.createElement('canvas');
+  const ctx2d = canvasEl.getContext('2d')!;
+  let buf: Uint8ClampedArray | null = null;
+  let img: ImageData | null = null;
+  let errA = new Float32Array(0);
+  let errB = new Float32Array(0);
+
+  function alloc(w: number, h: number): void {
+    buf = new Uint8ClampedArray(w * h * 4);
+    img = ctx2d.createImageData(w, h);
+    errA = new Float32Array((w + 2) * 3);
+    errB = new Float32Array((w + 2) * 3);
   }
 
-  const renderer = new THREE.WebGLRenderer({ antialias: false });
-
-  // ---- Floyd–Steinberg mode (5): real CPU error diffusion ----
-  // GL canvas renders at hard-mode scale but stays hidden; each frame we
-  // readPixels → F-S quantize in JS → putImageData to this 2D canvas which
-  // CSS upscales. Costs a few ms + one pipeline stall per frame — that's
-  // the experiment.
-  const fsCanvas = document.createElement('canvas');
-  const fsCtx = fsCanvas.getContext('2d')!;
-  fsCanvas.style.cssText =
-    'position:absolute;inset:0;width:100%;height:100%;image-rendering:pixelated;display:none;pointer-events:none;z-index:1';
-  document.body.appendChild(fsCanvas);
-  let fsBuf: Uint8ClampedArray | null = null; // readPixels target
-  let fsImg: ImageData | null = null;         // putImageData source
-  let fsErrA = new Float32Array(0);           // current-row error, RGB interleaved
-  let fsErrB = new Float32Array(0);           // next-row error
-  const FS_LEVELS = 6; // per-channel quantization — 4 was chroma-noise soup
-  let fsOverlay: (() => void) | null = null; // viewmodel pass, injected by gameLoop
-
-  function fsAlloc(w: number, h: number): void {
-    fsBuf = new Uint8ClampedArray(w * h * 4);
-    fsImg = fsCtx.createImageData(w, h);
-    fsErrA = new Float32Array((w + 2) * 3);
-    fsErrB = new Float32Array((w + 2) * 3);
-  }
-
-  function fsRender(): void {
-    renderer.render(scene, camera);
-    fsOverlay?.(); // viewmodel renders onto the hidden GL canvas pre-readback
-    const w = fsCanvas.width, h = fsCanvas.height;
-    if (!w || !h || !fsBuf || !fsImg) return;
+  function quantize(): void {
+    const w = canvasEl.width, h = canvasEl.height;
+    if (!w || !h || !buf || !img) return;
     const gl = renderer.getContext();
-    gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, fsBuf);
-    const src = fsBuf, dst = fsImg.data, step = 255 / (FS_LEVELS - 1);
+    gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, buf);
+    const src = buf, dst = img.data, step = 255 / (FS_LEVELS - 1);
     for (let y = 0; y < h; y++) {
       const srcRow = (h - 1 - y) * w * 4; // GL rows are bottom-up — flip here
       const dstRow = y * w * 4;
-      const cur = fsErrA; fsErrA = fsErrB; fsErrB = cur; fsErrB.fill(0);
+      const cur = errA; errA = errB; errB = cur; errB.fill(0);
       // Serpentine: alternate scan direction per row — pure raster order
       // smears error one way and leaves diagonal worm artifacts
       const fwd = (y & 1) === 0;
@@ -113,105 +110,28 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
         const si = srcRow + x * 4, di = dstRow + x * 4, ei = x * 3;
         const ahead = fwd ? 3 : -3, behind = -ahead;
         for (let c = 0; c < 3; c++) {
-          const v = src[si + c] + fsErrA[ei + c];
+          const v = src[si + c] + errA[ei + c];
           const q = v < 0 ? 0 : v > 255 ? 255 : Math.round(v / step) * step;
           const e = v - q;
-          fsErrA[ei + ahead + c] += e * 0.4375;    // ahead:      7/16
-          fsErrB[ei + c]         += e * 0.3125;    // down:       5/16
-          fsErrB[ei + ahead + c] += e * 0.0625;    // down-ahead: 1/16
-          fsErrB[ei + behind + c] += e * 0.1875;   // down-back:  3/16
+          errA[ei + ahead + c] += e * 0.4375;
+          errB[ei + c]         += e * 0.3125;
+          errB[ei + ahead + c] += e * 0.0625;
+          errB[ei + behind + c] += e * 0.1875;
           dst[di + c] = q;
         }
         dst[di + 3] = 255;
       }
     }
-    fsCtx.putImageData(fsImg, 0, 0);
+    ctx2d.putImageData(img, 0, 0);
   }
 
-  function getPixelRatio(): number {
-    return pixelMode > 0 ? 1 : Math.min(window.devicePixelRatio, 2);
-  }
+  return { canvasEl, alloc, quantize };
+}
 
-  // Pixel factor by mode: hard = 4x4 blocks, medium = 2x2, smooth renders
-  // at the hard scale so the xBR pass has real chunky texels to work with.
-  function pixelFactor(): number {
-    if (pixelMode === 1 || pixelMode === 5) return PIXEL_SCALE;
-    if (pixelMode === 2) return PIXEL_SCALE / 2;
-    return 1;
-  }
-
-  function pixelLabel(): string {
-    return pixelMode === 0 ? 'PIXELATION: OFF' : pixelMode === 1 ? 'PIXELATION: HARD'
-      : pixelMode === 2 ? 'PIXELATION: MEDIUM' : pixelMode === 3 ? 'PIXELATION: SMOOTH'
-      : pixelMode === 4 ? 'PIXELATION: DITHERED' : 'PIXELATION: FLOYD';
-  }
-
-  function updateRendererSize(): void {
-    if (pixelMode === 1 || pixelMode === 2 || pixelMode === 5) {
-      // Hard/medium never touch the composer: render straight into a
-      // low-res canvas and let CSS upscale it — colors are identical to
-      // direct rendering by construction, and it's the cheapest path.
-      // Floyd (5) uses the same low-res GL render; the fsCanvas sits on
-      // top showing the dithered output. GL canvas MUST stay visible —
-      // pointer lock targets it, and a display:none element can't lock.
-      // fsCanvas is pointer-events:none so clicks fall through.
-      const f = pixelFactor();
-      renderer.setPixelRatio(1);
-      renderer.setSize(Math.floor(window.innerWidth / f),
-        Math.floor(window.innerHeight / f), false);
-      renderer.domElement.style.imageRendering = 'pixelated';
-      renderer.domElement.style.width = '100%';
-      renderer.domElement.style.height = '100%';
-      fsCanvas.style.display = pixelMode === 5 ? 'block' : 'none';
-      if (pixelMode === 5) {
-        fsCanvas.width = renderer.domElement.width;
-        fsCanvas.height = renderer.domElement.height;
-        fsAlloc(fsCanvas.width, fsCanvas.height);
-      }
-      return;
-    }
-    fsCanvas.style.display = 'none';
-    // Canvas stays full-res — in smooth mode only the composer buffers
-    // drop to 1/PIXEL_SCALE and the upscale pass reconstructs to screen.
-    renderer.setPixelRatio(getPixelRatio());
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.domElement.style.imageRendering = 'auto';
-    renderer.domElement.style.width = '100%';
-    renderer.domElement.style.height = '100%';
-  }
-
-  updateRendererSize();
-  renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFShadowMap;
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = TONE_MAPPING_EXPOSURE;
-  document.body.appendChild(renderer.domElement);
-
-  // Initialize button text from localStorage
-  const pixelToggleBtn = document.getElementById('pixel-toggle')! as HTMLButtonElement;
-  pixelToggleBtn.textContent = pixelLabel();
-
-  const bloomToggleBtn = document.getElementById('bloom-toggle')! as HTMLButtonElement;
-  bloomToggleBtn.textContent = bloomEnabled ? 'BLOOM: ON' : 'BLOOM: OFF';
-
-  const postproToggleBtn = document.getElementById('postpro-toggle')! as HTMLButtonElement;
-  postproToggleBtn.textContent = postproEnabled ? 'POST-PROCESSING: ON' : 'POST-PROCESSING: OFF';
-
-  // Whole-scene bloom gated by a luminance threshold: emitters (trails,
-  // explosions, nuggets) push the brightest colors, the lit terrain and sky
-  // stay under it, so bloom never washes the frame. (A second composer and
-  // SelectiveBloomEffect both proved fragile here — keep the simple one.)
-  const bloomEffect = new BloomEffect({
-    mipmapBlur: true,
-    luminanceThreshold: 0.9,
-    intensity: 1.5,
-    radius: 0.6,
-  });
-
-  // xBR-lite upscaler for SMOOTH pixelated mode: the scene renders at
-  // 1/PIXEL_SCALE, then flat texel interiors sample nearest (crisp pixels)
-  // while detected edges get diagonal-aware blending — xBR philosophy.
-  const upscaleEffect = new Effect('EdgeUpscale', /* glsl */ `
+// xBR-lite upscaler for SMOOTH pixelated mode: the scene renders at
+// 1/PIXEL_SCALE, then flat texel interiors sample nearest (crisp pixels)
+// while detected edges get diagonal-aware blending — xBR philosophy.
+const UPSCALE_GLSL = /* glsl */ `
     uniform vec2 lowTexel; // 1/low-res-buffer size
     uniform float mode;  // 0 = nearest (hard pixels), 1 = edge-aware
     // Luma-weighted distance — unweighted RGB treats a blue↔red edge the
@@ -291,21 +211,15 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
         outputColor = vec4(mix(mix(bilin, card, 0.65), diag, conf), 1.0);
       }
     }
-  `, {
-    blendFunction: BlendFunction.NORMAL,
-    uniforms: new Map<string, THREE.Uniform>([
-      ['lowTexel', new THREE.Uniform(new THREE.Vector2(1, 1))],
-      ['mode', new THREE.Uniform(1)],
-    ]),
-  });
+  `;
 
-  // Tone-map pass — renders to a composer target DON'T apply tone mapping
-  // (three only applies ACES when rendering straight to canvas), so without
-  // this the whole composer path outputs a brighter, desaturated grade:
-  // "bloom breaks the colors". Replicates three's exact ACESFilmic curve
-  // (RRTAndODTFit + ACES matrices) with our 0.4 exposure baked in, so the
-  // composer output is pixel-identical in grading to direct rendering.
-  const acesGradeEffect = new Effect('ACESGrade', /* glsl */ `
+// Tone-map pass — renders to a composer target DON'T apply tone mapping
+// (three only applies ACES when rendering straight to canvas), so without
+// this the whole composer path outputs a brighter, desaturated grade:
+// "bloom breaks the colors". Replicates three's exact ACESFilmic curve
+// (RRTAndODTFit + ACES matrices) with our 0.4 exposure baked in, so the
+// composer output is pixel-identical in grading to direct rendering.
+const ACES_GLSL = /* glsl */ `
     vec3 rrtOdtFit(vec3 v) {
       vec3 a = v * (v + 0.0245786) - 0.000090537;
       vec3 b = v * (0.983729 * v + 0.4329510) + 0.238081;
@@ -326,7 +240,49 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
       c = clamp(ACESOutput * c, 0.0, 1.0);
       outputColor = vec4(c, inputColor.a);
     }
-  `);
+  `;
+
+// Low-res sizing for hard/medium/floyd modes. Returns true when the mode
+// renders into a shrunken GL canvas (caller handles FS buffer alloc).
+// GL canvas MUST stay visible — pointer lock targets it, and a
+// display:none element can't lock; fsCanvas is pointer-events:none.
+function applyPixelSize(renderer: THREE.WebGLRenderer,
+    fsCanvas: HTMLCanvasElement, pixelMode: number): boolean {
+  fsCanvas.style.display = pixelMode === 5 ? 'block' : 'none';
+  if (pixelMode !== 1 && pixelMode !== 2 && pixelMode !== 5) return false;
+  const f = pixelMode === 2 ? PIXEL_SCALE / 2 : PIXEL_SCALE;
+  renderer.setPixelRatio(1);
+  renderer.setSize(Math.floor(window.innerWidth / f),
+    Math.floor(window.innerHeight / f), false);
+  renderer.domElement.style.imageRendering = 'pixelated';
+  renderer.domElement.style.width = '100%';
+  renderer.domElement.style.height = '100%';
+  return true;
+}
+
+// Whole-scene bloom gated by a luminance threshold: emitters (trails,
+// explosions, nuggets) push the brightest colors, the lit terrain and sky
+// stay under it, so bloom never washes the frame. (A second composer and
+// SelectiveBloomEffect both proved fragile here — keep the simple one.)
+function makeComposer(renderer: THREE.WebGLRenderer, scene: THREE.Scene,
+    camera: THREE.PerspectiveCamera, bloomEnabled: boolean,
+    postproEnabled: boolean, pixelMode: number) {
+  const bloomEffect = new BloomEffect({
+    mipmapBlur: true,
+    luminanceThreshold: 0.9,
+    intensity: 1.5,
+    radius: 0.6,
+  });
+
+  const upscaleEffect = new Effect('EdgeUpscale', UPSCALE_GLSL, {
+    blendFunction: BlendFunction.NORMAL,
+    uniforms: new Map<string, THREE.Uniform>([
+      ['lowTexel', new THREE.Uniform(new THREE.Vector2(1, 1))],
+      ['mode', new THREE.Uniform(1)],
+    ]),
+  });
+
+  const acesGradeEffect = new Effect('ACESGrade', ACES_GLSL);
 
   const composer = new EffectComposer(renderer, {
     frameBufferType: THREE.HalfFloatType,
@@ -357,6 +313,77 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
   upscalePass.enabled = pixelMode === 3 || pixelMode === 4;
   upscaleEffect.uniforms.get('mode')!.value = pixelMode === 4 ? 2 : 1;
 
+  return { composer, bloomMergePass, contrastPass, upscalePass, upscaleEffect };
+}
+
+function wireToggleButtons(px: HTMLButtonElement, bm: HTMLButtonElement,
+    pp: HTMLButtonElement, onPx: () => void, onBm: () => void, onPp: () => void): void {
+  px.addEventListener('click', onPx);
+  bm.addEventListener('click', onBm);
+  pp.addEventListener('click', onPp);
+}
+
+export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Scene): RendererSetup {
+  const modes = resolveModes();
+  let pixelMode = modes.pixelMode;
+  let postproEnabled = modes.postproEnabled;
+  let bloomEnabled = modes.bloomEnabled;
+
+  const renderer = new THREE.WebGLRenderer({ antialias: false });
+
+  const fs = makeFloydEngine(renderer);
+  const fsCanvas = fs.canvasEl;
+  fsCanvas.style.cssText =
+    'position:absolute;inset:0;width:100%;height:100%;image-rendering:pixelated;display:none;pointer-events:none;z-index:1';
+  document.body.appendChild(fsCanvas);
+  let fsOverlay: (() => void) | null = null; // viewmodel pass, injected by gameLoop
+
+  function getPixelRatio(): number {
+    return pixelMode > 0 ? 1 : Math.min(window.devicePixelRatio, 2);
+  }
+
+  function updateRendererSize(): void {
+    // Hard/medium never touch the composer: render straight into a low-res
+    // canvas and let CSS upscale it — colors are identical to direct
+    // rendering by construction, and it's the cheapest path. Floyd (5)
+    // uses the same low-res GL render with fsCanvas on top.
+    if (applyPixelSize(renderer, fsCanvas, pixelMode)) {
+      if (pixelMode === 5) {
+        fsCanvas.width = renderer.domElement.width;
+        fsCanvas.height = renderer.domElement.height;
+        fs.alloc(fsCanvas.width, fsCanvas.height);
+      }
+      return;
+    }
+    // Canvas stays full-res — in smooth mode only the composer buffers
+    // drop to 1/PIXEL_SCALE and the upscale pass reconstructs to screen.
+    renderer.setPixelRatio(getPixelRatio());
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.domElement.style.imageRendering = 'auto';
+    renderer.domElement.style.width = '100%';
+    renderer.domElement.style.height = '100%';
+  }
+
+  updateRendererSize();
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFShadowMap;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = TONE_MAPPING_EXPOSURE;
+  document.body.appendChild(renderer.domElement);
+
+  // Initialize button text from localStorage
+  const pixelToggleBtn = document.getElementById('pixel-toggle')! as HTMLButtonElement;
+  pixelToggleBtn.textContent = pixelLabel(pixelMode);
+
+  const bloomToggleBtn = document.getElementById('bloom-toggle')! as HTMLButtonElement;
+  bloomToggleBtn.textContent = bloomEnabled ? 'BLOOM: ON' : 'BLOOM: OFF';
+
+  const postproToggleBtn = document.getElementById('postpro-toggle')! as HTMLButtonElement;
+  postproToggleBtn.textContent = postproEnabled ? 'POST-PROCESSING: ON' : 'POST-PROCESSING: OFF';
+
+  const cc = makeComposer(renderer, scene, camera, bloomEnabled, postproEnabled, pixelMode);
+  const { composer, bloomMergePass, contrastPass, upscalePass, upscaleEffect } = cc;
+
   // composer.setSize() also resizes the canvas — so always set buffers first,
   // then restore the canvas to full res. Pixelated = low-res buffers upscaled
   // by the final pass; the canvas itself never shrinks.
@@ -374,7 +401,12 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
   applyBufferSizes();
 
   function render(dt?: number): void {
-    if (pixelMode === 5) { fsRender(); return; }
+    if (pixelMode === 5) {
+      renderer.render(scene, camera);
+      fsOverlay?.(); // viewmodel renders onto the hidden GL canvas pre-readback
+      fs.quantize();
+      return;
+    }
     composer.render(dt);
   }
 
@@ -391,7 +423,7 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
     }
     updateRendererSize();
     applyBufferSizes();
-    pixelToggleBtn.textContent = pixelLabel();
+    pixelToggleBtn.textContent = pixelLabel(pixelMode);
   }
 
   function setPostProcessingEnabled(enabled: boolean): void {
@@ -421,18 +453,10 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
     applyBufferSizes();
   });
 
-  // Setup button event listeners
-  pixelToggleBtn.addEventListener('click', () => {
-    setPixelated((pixelMode + 1) % 6);
-  });
-
-  bloomToggleBtn.addEventListener('click', () => {
-    setBloomEnabled(!bloomEnabled);
-  });
-
-  postproToggleBtn.addEventListener('click', () => {
-    setPostProcessingEnabled(!postproEnabled);
-  });
+  wireToggleButtons(pixelToggleBtn, bloomToggleBtn, postproToggleBtn,
+    () => setPixelated((pixelMode + 1) % 6),
+    () => setBloomEnabled(!bloomEnabled),
+    () => setPostProcessingEnabled(!postproEnabled));
 
   return {
     renderer,
