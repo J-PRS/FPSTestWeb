@@ -1,3 +1,5 @@
+2026-10-03 - droneDies scenario: escort drone retires on owner death (deployGone).
+
 2026-10-03 - flagTimeout scenario: an unrecovered dropped flag teleports home on the FLAG_RESET_S clock.
 
 2026-10-03 - tierLock scenario: medium-armor mortar claims are refused (class-locked weapon); same claim as heavy registers the shell.
