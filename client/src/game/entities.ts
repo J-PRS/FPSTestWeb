@@ -138,7 +138,7 @@ export function createEntities(deps: EntitiesDeps) {
   // the stamped-sim-time clock) lives in game/netBalls.ts.
   const netBalls = createNetBalls(deps, { balls, targets, nuggets }, logger);
   const { serverBalls, netBallSpawn, netBallSegment, netBallDie, netBallRoster, netTargetPosFor } = netBalls;
-  const netCrawlers = createNetCrawlers(deps, { crawlers, scarabs, rakks, rollers, targets });
+  const netCrawlers = createNetCrawlers(deps, { crawlers, scarabs, rakks, rollers, gnats, targets });
   const { netCrawlSpawn, netCrawlEvt, netCrawlDie, netCrawlRoster } = netCrawlers;
 
   // ---- Balls ----

@@ -4,12 +4,14 @@ import { nextTargetId } from './targetIds.js';
 import {
   GNAT_RADIUS, GNAT_HEALTH, GNAT_SPEED, GNAT_DART_SPEED,
   GNAT_ORBIT_R, GNAT_NIP_DIST, GNAT_NIP_CD, GNAT_FLOCK_CD,
-  GNAT_STUN,
+  GNAT_STUN, MELEE_FAVOR,
 } from '../core/config.js';
 import { Terrain } from '../world/terrain.js';
 import type { Targetable } from './balls.js';
 import { allocSlots, freeSlots, getSwarm, getShadows } from './swarms.js';
 import type { SwarmPart, SwarmSlotOwner } from './swarm.js';
+import type { SimFlyer } from '../../../shared/creatureSim.js';
+import { bindNetFlyer, applyNetEdgeFlyer, updateNetFlyer, claimDamageMelee } from '../game/netMelee.js';
 
 const _dir = new THREE.Vector3();
 const _scratch = new THREE.Vector3();
@@ -71,7 +73,7 @@ export class Gnat implements Targetable, SwarmSlotOwner {
     center: new THREE.Vector3(), nipGate: 0,
   };
 
-  readonly id: number;
+  id: number; // bindNet re-stamps into the net id namespace post-construction
   readonly variant = 0;
   readonly uber: boolean;
 
@@ -93,7 +95,7 @@ export class Gnat implements Targetable, SwarmSlotOwner {
   private hasSlots = false;
 
   private animT = Math.random() * 10;
-  private yaw = 0;
+  yaw = 0; // net replay writes this — drives the body part orientation
   private flash = 0;
   private nipCd = Math.random() * GNAT_NIP_CD; // desync the cloud's darts
   private stunTimer = 0;
@@ -107,6 +109,33 @@ export class Gnat implements Targetable, SwarmSlotOwner {
   private altOff = (Math.random() - 0.5) * 3;
 
   onNip?: (gnat: Gnat) => void;
+
+  /** netDriven = server-authoritative replay — same contract as Rakk. */
+  netDriven = false;
+  netId = 0;
+  sim: SimFlyer | null = null;
+  netAcc = 0;
+  static hitClaim: ((netId: number, damage: number) => void) | null = null;
+
+  bindNet(id: number, seed: number, pos: THREE.Vector3, vel: { x: number; y: number; z: number }, _state: SimFlyer['state'], uber: boolean, species = 'gnat'): void {
+    this.netDriven = true;
+    this.netId = id;
+    this.id = 0x50000000 + id;
+    bindNetFlyer(this, id, seed, species, pos, vel, _state, uber);
+  }
+
+  applyNetEdge(m: { position: { x: number; y: number; z: number }; velocity: { x: number; y: number; z: number }; kind: string; targetId: string | null; tp?: { x: number; y: number; z: number } | null }): void {
+    applyNetEdgeFlyer(this, m);
+    if (m.kind === 'pounce') this.state = 'dart';
+  }
+
+  private updateNet(dt: number, terrain: Terrain): void {
+    updateNetFlyer(this, dt, terrain);
+    this.animT += dt;
+    if (this.flash > 0) this.flash -= dt;
+    if (this.vel.lengthSq() > 1) this.yaw = Math.atan2(this.vel.x, this.vel.z);
+    this.writeInstances();
+  }
 
   get disposed(): boolean { return this.dead; }
 
@@ -136,6 +165,7 @@ export class Gnat implements Targetable, SwarmSlotOwner {
 
   update(dt: number, terrain: Terrain, playerPos: THREE.Vector3): void {
     if (this.dead) return;
+    if (this.netDriven && this.sim) { this.updateNet(dt, terrain); return; }
     if (this.stunTimer > 0) this.stunTimer -= dt;
     if (this.flash > 0) this.flash -= dt;
     if (this.nipCd > 0) this.nipCd -= dt;
@@ -149,7 +179,7 @@ export class Gnat implements Targetable, SwarmSlotOwner {
       const d = _dir.length() || 0.001;
       _dir.multiplyScalar(1 / d);
       this.vel.copy(_dir).multiplyScalar(GNAT_DART_SPEED);
-      const nipD = this.uber ? GNAT_NIP_DIST * 2.2 : GNAT_NIP_DIST;
+      const nipD = (this.uber ? GNAT_NIP_DIST * 2.2 : GNAT_NIP_DIST) * MELEE_FAVOR;
       if (this.pos.distanceToSquared(playerPos) < nipD * nipD) {
         this.onNip?.(this);
         this.endDart();
@@ -207,7 +237,7 @@ export class Gnat implements Targetable, SwarmSlotOwner {
     this.vel.copy(_scratch).multiplyScalar(GNAT_SPEED * 1.5);
   }
 
-  private writeInstances(): void {
+  writeInstances(): void {
     if (!this.hasSlots) return;
     const swarm = getSwarm('gnat');
     if (!swarm) return;
@@ -239,6 +269,7 @@ export class Gnat implements Targetable, SwarmSlotOwner {
   }
 
   takeDamage(damage: number): boolean {
+    if (this.netDriven) return claimDamageMelee(this, damage, Gnat.hitClaim);
     this.health -= damage;
     this.flash = 0.15;
     if (this.health <= 0) { this.dead = true; return true; }
