@@ -1,3 +1,4 @@
+2026-09-26 - Light-defense role added: LD pursues flag thieves, HoF strictly planted (never chases, returns only flags dropped <25m of stand); role unlock order core->luxury capper@3/ldefense@4/hof@5/tech@6/infiltrator@7
 2026-09-26 - Infiltrator saboteur behavior: gear lob ignores goal proximity + 1.8s cadence (vs 3s objective lob) — wrecks whatever gear it can reach on approach
 2026-09-26 - Bot squad roles: capper/offense/hof/defense/technician/infiltrator, self-assigned and rebalanced per-team every 5s by squad need (specialists sticky, carriers never re-roled); technician pins builder trait; flagGoal per-role priorities verified live
 2026-09-26 - Directional jetting: whole-body lean pivots at sternum (pack mount), pitch/roll from facing-frame velocity, eased 7/s, remotes + local third-person; gear-lob siege cadence 8s->3s, first live Deploy destroyed verified

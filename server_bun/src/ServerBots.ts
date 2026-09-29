@@ -43,10 +43,12 @@ const SUPERBOT = process.env.FPS_SUPERBOT ?? '';
 const isSuper = (id: string) => SUPERBOT !== '' && id.includes(SUPERBOT);
 
 /** Tribes-flavored squad roles. capper runs the flag route, offense clears
- *  the stand / escorts, hof is Heavy-on-Flag (parks ON the stand), defense
- *  covers the home area, technician is defense that emplaces gear when
- *  parked, infiltrator cloaks deep and wrecks gear before grabbing. */
-type BotRole = 'capper' | 'offense' | 'hof' | 'defense' | 'technician' | 'infiltrator';
+ *  the stand / escorts, ldefense (light defense) holds home but chases the
+ *  thief the moment the flag moves, hof is Heavy-on-Flag (parks ON the
+ *  stand and never pursues), defense is a generic home guard, technician
+ *  is home defense that emplaces gear, infiltrator cloaks deep and wrecks
+ *  gear before grabbing. */
+type BotRole = 'capper' | 'offense' | 'ldefense' | 'hof' | 'defense' | 'technician' | 'infiltrator';
 
 export class ServerBots {
   private brains = new Map<string, BotBrain>();
@@ -323,9 +325,17 @@ export class ServerBots {
       ? { pos: enemy.pos, infiltrating: true } : null;
 
     switch (role) {
-      // HoF/technician/defense: home-side priorities — thief, dropped,
-      // then hold the stand ring in intercept range.
+      // HoF: planted on the stand, PERIOD — never chases a thief (that's
+      // what LD exists for). Only leaves the ring for a flag dropped in
+      // easy reach; anything else is someone else's job.
       case 'hof':
+        if (dropped && Math.hypot(dropped.x - own.home.x, dropped.z - own.home.z) < 25)
+          return { pos: dropped, infiltrating: false };
+        return homeward;
+
+      // Light defense / technician / generic defense: home-side
+      // priorities — thief, dropped, then hold home in intercept range.
+      case 'ldefense':
       case 'technician':
       case 'defense':
         if (thief) return { pos: thief.position, infiltrating: false };
@@ -385,9 +395,11 @@ export class ServerBots {
     }
     // Desired role counts by squad size — a duo can't afford specialists.
     const WANT: [BotRole, number][] = [
-      ['capper', 1], ['hof', 1], ['technician', 1], ['infiltrator', 1],
+      ['capper', 1], ['ldefense', 1], ['hof', 1], ['technician', 1], ['infiltrator', 1],
     ];
-    const MIN_SQUAD = [3, 4, 5, 6]; // squad sizes unlocking each WANT row
+    // Core before luxury: a 3-stack gets capper+LD, specialists only show
+    // once the lanes they free up are actually covered.
+    const MIN_SQUAD = [3, 4, 5, 6, 7]; // squad sizes unlocking each WANT row
     for (const ids of byTeam.values()) {
       // Never reassign a carrier — the flagGoal carrier check owns them.
       const free = ids.filter((id) => {
