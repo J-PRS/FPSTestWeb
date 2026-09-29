@@ -102,7 +102,11 @@ export const CONFIG = {
     // warp beacon can legally land hundreds of metres out. Legit cadence:
     // blink 1.2s cooldown is the tightest; warp 4s, respawn 3s+.
     teleport: { maxCount: 1, windowMs: 1100 },
-    heal: { maxCount: 10, windowMs: 1000 }, // nugget pickups
+    // Team rooms gate heal claims behind server-granted credit; non-team
+    // claims are free-form (local nuggets have no server backing), so the
+    // only bound there is rate — 3 per 2s caps invincibility-heals at
+    // ~37hp/s while leaving burst pickups legal.
+    heal: { maxCount: 3, windowMs: 2000 },
     creatureHit: { maxCount: 120, windowMs: 1000 }, // chaingun-rate hit claims vs server creatures
     deploy: { maxCount: 4, windowMs: 1000 }, // plants are deliberate, not per-frame
     chat: { maxCount: 4, windowMs: 1000 }, // human typing speed, generous
