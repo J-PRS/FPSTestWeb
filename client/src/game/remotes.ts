@@ -221,7 +221,7 @@ export function createRemotes(deps: RemotesDeps) {
 
     // tick() drives interpolation + dead reckoning and internally advances
     // the AnimationMixer — a second model.update here would 2x animations.
-    remotePlayer.tick(dt);
+    remotePlayer.tick(dt, deps.lazyCamera().position);
 
     if (!applyStatusVisuals(playerId, remotePlayer, playerState.status ?? 0)) return;
     applyTeamTint(playerId, remotePlayer, playerState.team);

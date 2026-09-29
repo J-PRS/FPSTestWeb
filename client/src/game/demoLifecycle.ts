@@ -282,7 +282,7 @@ export function createDemoLifecycle(deps: DemoLifecycleDeps) {
           playbackRemotes.set(s.rosterIdx, rp);
         }
         rp.update(pos, { yaw: s.yaw, pitch: s.pitch }, dt, 0, { x: s.velX, y: s.velY, z: s.velZ });
-        rp.tick(dt);
+        rp.tick(dt, deps.lazyCamera().position);
         rp.setStaleHidden((s.flags & RemoteFrameFlags.Dead) !== 0);
       }
       // Roster players absent at this time keep their replica but hidden —

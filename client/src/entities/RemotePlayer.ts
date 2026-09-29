@@ -217,13 +217,23 @@ export class RemotePlayer {
   }
 
   // Called every frame for smooth interpolation
-  tick(dt: number): void {
+  tick(dt: number, camPos?: THREE.Vector3): void {
+    if (camPos) {
+      const dx = this.position.x - camPos.x, dz = this.position.z - camPos.z;
+      this.camDistSq = dx * dx + dz * dz;
+    }
     if (this._isDead) {
       this.tickDead(dt);
       return;
     }
     this.tickAlive(dt);
   }
+
+  /** XZ distance² to the camera — gates the remote anim-LOD tiers below. */
+  private camDistSq = 0;
+  /** Accumulated dt the mixer still owes — far remotes animate in bursts
+   *  at a lower cadence instead of paying a full mixer step every frame. */
+  private animAcc = 0;
 
   // Death physics (ragdoll-like rigidbody) run every frame at the real dt so
   // bodies fall/tumble/shrink at full speed and smoothly. Moved here from
@@ -372,7 +382,23 @@ export class RemotePlayer {
       if (this._ddAura) this.ddAura.mesh.position.set(this.position.x, this.position.y - EYE_OFFSET + 1.0, this.position.z);
     }
     this.previousPosition.copy(this.position);
-    this._model.update(dt);
+    // Anim LOD — the mixer step is the dominant per-remote cost, so far
+    // bodies animate in coarser bursts (accumulated dt keeps playback
+    // speed correct) instead of a full mixer update every frame. State
+    // changes and oneshots still apply every frame; only playback ticks.
+    const animDt = this.camDistSq > 120 * 120 ? 1 / 15
+      : this.camDistSq > 60 * 60 ? 1 / 30
+      : 0;
+    if (animDt > 0) {
+      this.animAcc += dt;
+      if (this.animAcc >= animDt) {
+        this._model.update(this.animAcc);
+        this.animAcc = 0;
+      }
+    } else {
+      this.animAcc = 0;
+      this._model.update(dt);
+    }
   }
 
   // Damage flinch / shot recoil timers — drive the oneshot states in
