@@ -1,11 +1,11 @@
 import { describe, it, expect } from 'bun:test';
-import { mkRoom, step, pin, watch } from './harness.ts';
+import { mkRoom, step, pin, watch, twoPlayers } from './harness.ts';
 
 describe('scenario: turret unfold window', () => {
   it('a fresh turret holds fire until armed, then engages', () => {
     const room = mkRoom({ mode: 'tdm', bots: 2 });
     const w = watch(room);
-    const [a, b] = [...room.players.getAllPlayers().values()];
+    const [a, b] = twoPlayers(room);
     pin(room, a.id, { x: 40, y: 31, z: 0 });
     pin(room, b.id, { x: 50, y: 31, z: 0 });
     room.deployables.handleDeploy(a.id, 'turret', { x: 41, y: 31, z: 0 });

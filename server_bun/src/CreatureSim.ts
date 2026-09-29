@@ -32,7 +32,6 @@ const RETARGET_INTERVAL = CRAWLER_SIM.RETARGET_S;
 // Silence desyncs a wanderer just like a long-flying ball — force a
 // resync edge (same committed snapshot) every few seconds.
 const RESYNC_INTERVAL = 4.0;
-const CRAWLER_BITE_DAMAGE = 25;
 const _snap: SimVec = { x: 0, y: 0, z: 0 };
 // Distance-tiered send: committed edges only matter to players who can
 // see the crawler. Everyone still replays the same sim stream — far

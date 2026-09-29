@@ -1,12 +1,12 @@
 import { describe, it, expect } from 'bun:test';
 import { STATUS } from '../../../shared/status.ts';
-import { mkRoom, step, pin, watch } from './harness.ts';
+import { mkRoom, step, pin, watch, firstPlayer } from './harness.ts';
 
 describe('scenario: bots cannot aim a cloaked target', () => {
   it('an enemy bot engages, then loses the shot when the target cloaks', () => {
     const room = mkRoom({ mode: 'tdm', bots: 1 });
     const w = watch(room);
-    const [bot] = [...room.players.getAllPlayers().values()];
+    const bot = firstPlayer(room);
     // A non-bot victim — server brains stomp status each think.
     room.players.addPlayer('P1');
     const p = room.players.getPlayer('P1')!;

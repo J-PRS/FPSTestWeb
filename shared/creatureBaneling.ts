@@ -72,7 +72,7 @@ export function stepBaneling(
   dt: number,
   field: Heightfield,
   target: SimVec | null,
-  authoritative: boolean,
+  _authoritative: boolean,
   cols?: readonly StructureCollider[],
 ): CrawlerEvent | null {
   c.stunTimer = Math.max(0, c.stunTimer - dt);

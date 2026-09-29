@@ -85,7 +85,20 @@ class WtSocketAdapter {
       while ((nl = carry.indexOf('\n')) >= 0) {
         const line = carry.slice(0, nl);
         carry = carry.slice(nl + 1);
-        if (line) this.game.onMessage(this.asSocket(), line);
+        if (line) {
+        // Binary frames arrive base64-wrapped (see send) — decode before
+        // the game sees them so position claims keep their binary shape.
+        if (line.length > 8 && line.charCodeAt(0) === 123 && line.charCodeAt(9) === 98) {
+          try {
+            const m = JSON.parse(line) as { type?: string; d?: string };
+            if (m?.type === 'bin' && typeof m.d === 'string') {
+              this.game.onMessage(this.asSocket(), new Uint8Array(Buffer.from(m.d, 'base64')));
+              continue;
+            }
+          } catch { /* fall through to raw line */ }
+        }
+        this.game.onMessage(this.asSocket(), line);
+      }
       }
     }
     // Reliable stream ended while the session lives — the lane is dead,
@@ -104,7 +117,13 @@ class WtSocketAdapter {
 
   send(msg: string | Uint8Array): number {
     if (!this.open || !this.writer) return 0;
-    const bytes = typeof msg === 'string' ? this.encoder.encode(msg + '\n') : new Uint8Array(msg);
+    // The reliable stream is newline-delimited TEXT — raw binary has no
+    // '\n' and corrupts the framing (it glued onto the next JSON line and
+    // ate ballSpawn messages — creatures that existed but never spawned).
+    // Binary rides as base64 in a JSON envelope; the client unwraps it.
+    const line = typeof msg === 'string' ? msg
+      : `{"type":"bin","d":"${Buffer.from(msg).toString('base64')}"}`;
+    const bytes = this.encoder.encode(line + '\n');
     void this.writer.write(bytes).catch(() => {});
     return bytes.byteLength;
   }
@@ -115,7 +134,7 @@ class WtSocketAdapter {
     return data.byteLength;
   }
 
-  close(code = 1000, reason = ''): void {
+  close(_code = 1000, reason = ''): void {
     this.open = false;
     try { this.session.close({ closeCode: 0, reason }); } catch { /* gone */ }
   }

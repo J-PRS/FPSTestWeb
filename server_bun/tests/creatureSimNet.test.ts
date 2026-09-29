@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'bun:test';
 import { CreatureSim } from '../src/CreatureSim.ts';
 import { PlayerManager } from '../src/PlayerManager.ts';
-import { makeSimCrawler, makeSimFlyer, stepFlyer, commitTarget, isFlyerSpecies, makeSimRoller, stepRoller, isRollerSpecies, makeSimSlither, stepSlither, isSlitherSpecies, applySlitherDamage, makeSimBaneling, stepBaneling, isBanelingSpecies, MELEE_SPECIES, FLYER_SPECIES } from '../../shared/creatureSim.ts';
+import { makeSimCrawler, makeSimFlyer, stepFlyer, commitTarget, isFlyerSpecies, makeSimRoller, stepRoller, isRollerSpecies, makeSimSlither, stepSlither, isSlitherSpecies, applySlitherDamage, makeSimBaneling, stepBaneling, isBanelingSpecies, FLYER_SPECIES } from '../../shared/creatureSim.ts';
 import type { SimCrawler, SimFlyer, SimRoller, SimSlither, SimBaneling } from '../../shared/creatureSim.ts';
 import type { Heightfield } from '../../shared/heightfield.ts';
 import type { ServerMessage } from '../src/types.ts';
@@ -85,7 +85,7 @@ describe('distance-tiered edge fanout', () => {
 
 describe('brain buckets', () => {
   it('same-tick spawns stagger retargets across ticks, not in a spike', () => {
-    const { sim, sent, bcast } = makeRoom();
+    const { sim } = makeRoom();
     // Far enough that no crawler can aggro/windup — only retarget edges
     // land in this window.
     addPlayerAt(sim, 'p1', 5000, 0);

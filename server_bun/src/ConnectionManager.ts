@@ -45,6 +45,16 @@ export class ConnectionManager {
     });
   }
 
+  /** Correctness-critical binary (ball segments) — always the reliable
+   *  lane. A dropped segment is a resync the client free-runs blind for
+   *  ~1.2s, which is exactly the rubberband pattern; a dropped tick frame
+   *  is just interpolation noise. At ~50B × ~10/s per ball this is cheap. */
+  broadcastBinaryReliable(data: Uint8Array): void {
+    this.connections.forEach((ws) => {
+      if (ws.readyState === 1) ws.send(data);
+    });
+  }
+
   broadcast(msg: ServerMessage, excludePlayerId?: string): void {
     const data = JSON.stringify(msg);
     this.connections.forEach((ws, pid) => {

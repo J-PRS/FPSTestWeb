@@ -2,7 +2,7 @@ import { Room } from '../../src/Room.ts';
 import { resolveMapSpec, type MapSpec } from '../../../shared/mapSpec.ts';
 import type { Heightfield } from '../../../shared/heightfield.ts';
 import type { ServerMessage } from '../../../shared/protocol.ts';
-import type { Vec3 } from '../../../shared/types.ts';
+import type { PlayerState, Vec3 } from '../../src/types.ts';
 
 // Scenario-test harness — tiny staged arenas: spawn agents, pin them,
 // step fixed ticks, assert the outcome. Finer than a soak: a soak says
@@ -23,6 +23,19 @@ export function mkRoom(spec: Partial<MapSpec>, mode = '', seed = 1337): Room {
   room.creatureSim.rng = lcg(seed + 1);
   room.rng = lcg(seed + 2);
   return room;
+}
+
+/** Roster accessors that assert instead of returning `| undefined` —
+ *  index access under noUncheckedIndexedAccess would force `!` noise. */
+export function firstPlayer(room: Room): PlayerState {
+  const p = [...room.players.getAllPlayers().values()][0];
+  if (!p) throw new Error('firstPlayer: empty roster');
+  return p;
+}
+export function twoPlayers(room: Room): [PlayerState, PlayerState] {
+  const ps = [...room.players.getAllPlayers().values()];
+  if (ps.length < 2) throw new Error(`twoPlayers: expected 2, got ${ps.length}`);
+  return [ps[0]!, ps[1]!];
 }
 
 /** Step the whole room N sim-ticks. CreatureSim self-drives on a wall-clock

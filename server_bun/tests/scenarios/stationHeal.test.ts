@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'bun:test';
-import { mkRoom, step, pin } from './harness.ts';
+import { mkRoom, step, pin, firstPlayer } from './harness.ts';
 
 describe('scenario: resupply station heals', () => {
   it('a wounded teammate standing in the field regenerates', () => {
     const room = mkRoom({ mode: 'tdm', bots: 1 });
-    const [a] = [...room.players.getAllPlayers().values()];
+    const a = firstPlayer(room);
     // A non-bot patient — bot brains self-MEND, which would fake the result.
     room.players.addPlayer('P1');
     const b = room.players.getPlayer('P1')!;

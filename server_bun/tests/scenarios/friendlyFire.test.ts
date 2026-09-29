@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'bun:test';
 import { WeaponType } from '../../../shared/weapons.ts';
-import { mkRoom, step, pin } from './harness.ts';
+import { mkRoom, step, pin, twoPlayers } from './harness.ts';
 
 describe('scenario: friendly fire gate', () => {
   it("a teammate's bolt does no damage in a team room", () => {
@@ -8,8 +8,7 @@ describe('scenario: friendly fire gate', () => {
       mode: 'tdm', bots: 2,
       bases: { alpha: { x: -70, y: 60, z: 0 }, bravo: { x: 70, y: 60, z: 0 } },
     }, 'tdm');
-    const bots = [...room.players.getAllPlayers().values()];
-    const [shooter, target] = bots;
+    const [shooter, target] = twoPlayers(room);
     // Force both onto alpha — team assignment would split them 1/1.
     shooter.team = 'alpha'; target.team = 'alpha';
     pin(room, shooter.id, { x: 0, y: 32, z: 0 });

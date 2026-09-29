@@ -1,3 +1,5 @@
+2026-10-03 - Strict-tsc cleanup: harness firstPlayer/twoPlayers helpers kill the |undefined index noise across scenarios; unused vars/params purged (baneling _authoritative, dead CRAWLER_BITE_DAMAGE, dead imports).
+
 2026-10-03 - Room loot scatter seeded via room.rng; scenario: creature kill drops gems at corpse ground height.
 
 2026-10-03 - Deterministic scenario spawns: BallSim + CreatureSim take an injectable rng; harness mkRoom seeds both (lcg) so runs are reproducible — flake source removed at the root instead of retried around.

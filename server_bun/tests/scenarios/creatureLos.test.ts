@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test';
-import { mkRoom, step, pin } from './harness.ts';
+import { mkRoom, step, pin, firstPlayer } from './harness.ts';
 
 describe('scenario: creature wall-gate', () => {
   it('a walled-off bot is unreachable by melee species', () => {
@@ -15,7 +15,7 @@ describe('scenario: creature wall-gate', () => {
         { kind: 'wall', pos: { x: 40, y: 25, z: 8 }, size: { x: 14, y: 30, z: 1 } },
       ],
     });
-    const bot = [...room.players.getAllPlayers().values()][0];
+    const bot = firstPlayer(room);
     pin(room, bot.id, { x: 40, y: 31, z: 0 });
     const hp = bot.health;
     for (let i = 0; i < 600; i++) {

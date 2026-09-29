@@ -1,11 +1,11 @@
 import { describe, it, expect } from 'bun:test';
-import { mkRoom, step, pin, watch } from './harness.ts';
+import { mkRoom, step, pin, watch, firstPlayer } from './harness.ts';
 
 describe('scenario: wildlife raze a deployable', () => {
   it('creatures target dep: ids and gnaw a turret down', () => {
     const room = mkRoom({ creatures: { crawler: 4 }, bots: 1 });
     const w = watch(room);
-    const bot = [...room.players.getAllPlayers().values()][0];
+    const bot = firstPlayer(room);
     pin(room, bot.id, { x: 40, y: 31, z: 0 });
     room.deployables.handleDeploy(bot.id, 'turret', { x: 41, y: 31, z: 0 });
     expect(w.count('deploySpawn')).toBe(1);

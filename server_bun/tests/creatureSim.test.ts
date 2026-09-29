@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'bun:test';
 import {
-  makeSimCrawler, stepCrawler, applyCrawlerDamage, commitTarget, CRAWLER_SIM,
+  makeSimCrawler, stepCrawler, applyCrawlerDamage, commitTarget,
   clipMotion,
 } from '../../shared/creatureSim.ts';
 import { structureColliders } from '../../shared/ballSim.ts';

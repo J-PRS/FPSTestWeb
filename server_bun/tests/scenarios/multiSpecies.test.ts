@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test';
-import { mkRoom, step, pin } from './harness.ts';
+import { mkRoom, step, pin, firstPlayer } from './harness.ts';
 
 describe('scenario: multi-species room', () => {
   it('a mixed roster spawns and sims together without errors', () => {
@@ -7,7 +7,7 @@ describe('scenario: multi-species room', () => {
       creatures: { crawler: 4, scarab: 3, snake: 2, roller: 2, totem: 1 },
       bots: 1,
     });
-    const bot = [...room.players.getAllPlayers().values()][0];
+    const bot = firstPlayer(room);
     pin(room, bot.id, { x: 0, y: 31, z: 0 });
     for (let i = 0; i < 200; i++) {
       pin(room, bot.id, { x: 0, y: 31, z: 0 });

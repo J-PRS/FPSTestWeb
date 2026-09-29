@@ -1,11 +1,11 @@
 import { describe, it, expect } from 'bun:test';
-import { mkRoom, step, pin, watch } from './harness.ts';
+import { mkRoom, step, pin, watch, firstPlayer } from './harness.ts';
 
 describe('scenario: shot baneling pops anyway', () => {
   it('killing a baneling detonates it — the blast is the attack', () => {
     const room = mkRoom({ creatures: { baneling: 3 }, bots: 1 });
     const w = watch(room);
-    const bot = [...room.players.getAllPlayers().values()][0];
+    const bot = firstPlayer(room);
     bot.health = 500;
     // Let the drip-feed spawn the pack, then park the victim on one.
     step(room, 40);

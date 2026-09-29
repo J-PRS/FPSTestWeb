@@ -1,11 +1,11 @@
 import { describe, it, expect } from 'bun:test';
-import { mkRoom, step, pin, watch } from './harness.ts';
+import { mkRoom, step, pin, watch, twoPlayers } from './harness.ts';
 
 describe('scenario: escort drone plinks a hostile', () => {
   it('drone follows owner, acquires enemy, fires through the funnel', () => {
     const room = mkRoom({ mode: 'tdm', bots: 2 });
     const w = watch(room);
-    const [a, b] = [...room.players.getAllPlayers().values()];
+    const [a, b] = twoPlayers(room);
     // TDM assigns teams on join; an alpha+bravo pair is guaranteed hostile.
     pin(room, a.id, { x: 40, y: 31, z: 0 });
     pin(room, b.id, { x: 50, y: 31, z: 0 });
