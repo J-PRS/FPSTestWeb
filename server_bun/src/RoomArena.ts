@@ -48,5 +48,10 @@ export class RoomArena {
       this.room.moveSim.applyImpulse(p.id, { x: -dx * inv * PUSH_FORCE, y: PUSH_FORCE * 0.3, z: -dz * inv * PUSH_FORCE });
       this.outsideSince.set(p.id, now + PUSH_INTERVAL_S);
     }
+    // Gone players can't self-clean — they never appear in the iteration
+    // above, so a leaver's entry would sit in the map for the room's life.
+    for (const id of this.outsideSince.keys()) {
+      if (!this.room.players.getPlayer(id)) this.outsideSince.delete(id);
+    }
   }
 }

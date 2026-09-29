@@ -1,3 +1,4 @@
+2026-09-29 - Prune stale arena offenders: outsideSince is keyed by playerId but iterated only over live players, so a leaver's entry sat in the map for the room's life.
 2026-09-29 - Reseat quiet-bot shadows on respawn: the respawn resync sat below the silenced-skip, so a test-silenced bot that died kept a corpse-spot shadow and stale sheep meter forever.
 2026-09-29 - Disarm pending respawn on full removal: removal paths that skip onPlayerDisconnected (kick, room hop, admin reload) left a zombie respawn timer firing into a gone player.
 2026-09-29 - Disarm the grace timer on removal: kick/switch/admin teardown during the grace window left a zombie timer that re-ran removePlayerCompletely (double playerLeft, double leaves count, could tear down a rejoined id).
