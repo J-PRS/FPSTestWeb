@@ -155,6 +155,13 @@ export class GameServer {
     if (!room) {
       let spec = this.loadMapSpec(name);
       let src = spec ? name : '';
+      if (!spec) {
+        // Numbered ad-hoc rooms ('nugwar-3', 'ctf-2') inherit their base
+        // spec — a bare --room join must play the same rules quickRoom
+        // would, or numbered rooms silently run spec-less defaults.
+        const base = name.replace(/-\d+$/, '');
+        if (base !== name) { spec = this.loadMapSpec(base); src = spec ? base : ''; }
+      }
       if (!spec && map) { spec = this.loadMapSpec(map); src = map; }
       if (!spec) { spec = this.loadMapSpec(mode); src = spec ? mode : ''; }
       if (spec && bots !== undefined) spec = { ...spec, bots, botFill: bots };

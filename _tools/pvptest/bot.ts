@@ -44,11 +44,27 @@ const ENGAGE_RANGE = 60;      // start shooting inside this
 const ROCKET_SPEED = 120;     // shared/weapons Rocket.speed
 const FIRE_INTERVAL_MS = 1100;
 
-// Terrain for ground clamping — same bin the server loads.
+// Terrain for ground clamping — starts on the shared boot bin, then swaps
+// to the room's real field once gameState names it (map.terrain). Parking
+// on the wrong field reads as a permanent ~20m divergence to the judge —
+// the correction loop this probe itself is meant to measure.
 const hmBuf = readFileSync(path.join(__dirname, '../../server_bun/heightmap.bin'));
 const hmSize = Math.round(Math.sqrt(hmBuf.byteLength));
-const HM: Heightfield = { size: hmSize, data: new Uint8Array(hmBuf), stride: 1 };
+let HM: Heightfield = { size: hmSize, data: new Uint8Array(hmBuf), stride: 1 };
 const groundY = (x: number, z: number) => hmHeight(HM, x, z) + EYE_OFFSET;
+let terrainLoaded = '';
+async function loadTerrain(file: string): Promise<void> {
+  if (terrainLoaded === file) return;
+  terrainLoaded = file;
+  try {
+    // /ws → the http origin the map route lives on.
+    const base = WS_URL.replace(/^ws/, 'http').replace(/\/ws.*$/, '');
+    const res = await fetch(`${base}/maps/${file}`);
+    if (!res.ok) { terrainLoaded = ''; return; }
+    const buf = await res.arrayBuffer();
+    HM = { size: Math.round(Math.sqrt(buf.byteLength)), data: new Uint8Array(buf), stride: 1 };
+  } catch { terrainLoaded = ''; }
+}
 
 interface Other { pos: Vec3; vel: Vec3; health: number; dead: boolean; lastTick: number }
 type Vec3 = { x: number; y: number; z: number };
@@ -356,6 +372,13 @@ function handleJson(m: any) {
   switch (m.type) {
     case 'gameState':
       sessionToken = m.sessionToken ?? sessionToken;
+      if (m.map?.terrain) loadTerrain(m.map.terrain);
+      // Adopt the server-assigned spawn — claiming a made-up 0,60,0 reads
+      // as a divergence the judge has to correct (fleet already does this).
+      if (m.localPlayerState?.position) {
+        pos = { ...m.localPlayerState.position };
+        vel = { ...(m.localPlayerState.velocity ?? { x: 0, y: 0, z: 0 }) };
+      }
       break;
     case 'snapshot':
       snapListener?.(m);
