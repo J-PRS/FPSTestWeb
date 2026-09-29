@@ -204,7 +204,7 @@ export class PlayerVisuals {
 
   // Returns the new jumpAnimTimer (the one piece of player state the
   // animation owns — set back on the Player by the caller)
-  updateModelAnim(model: PlayerModel | null, pos: THREE.Vector3, yaw: number, pitch: number, jumpAnimTimer: number, speed: number, dt: number, onGround: boolean, jetting = false): number {
+  updateModelAnim(model: PlayerModel | null, pos: THREE.Vector3, yaw: number, pitch: number, jumpAnimTimer: number, speed: number, dt: number, onGround: boolean, jetting = false, vel?: THREE.Vector3): number {
     if (!model) return jumpAnimTimer;
     if (jumpAnimTimer > 0) {
       jumpAnimTimer = Math.max(0, jumpAnimTimer - dt);
@@ -218,6 +218,18 @@ export class PlayerVisuals {
         ? (jetting ? 'jet' : 'jump')
         : pickLocomotionAnim(model['currentState'] as AnimationState, speed);
     model.setAnimationState(animState);
+    // Same directional jet tilt remotes get — your own body is visible
+    // in third-person, so it should lean into the thrust too.
+    if (jetting && vel) {
+      const sin = Math.sin(yaw), cos = Math.cos(yaw);
+      const fwd = vel.x * sin + vel.z * cos;
+      const side = vel.x * cos - vel.z * sin;
+      model.setBodyLean(
+        Math.max(-0.45, Math.min(0.45, fwd * 0.022)),
+        Math.max(-0.4, Math.min(0.4, -side * 0.02)));
+    } else {
+      model.setBodyLean(0, 0);
+    }
     // pos is eye height — the model plants its feet 1.8m below
     model.setPosition(pos.x, pos.y - EYE_OFFSET, pos.z);
     model.setRotation(yaw, pitch);

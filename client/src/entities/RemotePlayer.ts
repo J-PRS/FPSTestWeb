@@ -326,6 +326,19 @@ export class RemotePlayer {
       this._model.setAnimationState(airborne
         ? (jetting ? 'jet' : 'jump')
         : pickLocomotionAnim(this._model.animationState, speed));
+      // Directional jetting: tilt the whole body toward horizontal
+      // velocity in the facing frame — pitch into forward thrust, roll
+      // into lateral strafe. Airborne-but-falling eases back to level.
+      if (jetting) {
+        const sin = Math.sin(this.rotation.yaw), cos = Math.cos(this.rotation.yaw);
+        const fwd = this.velocity.x * sin + this.velocity.z * cos;
+        const side = this.velocity.x * cos - this.velocity.z * sin;
+        this._model.setBodyLean(
+          Math.max(-0.45, Math.min(0.45, fwd * 0.022)),
+          Math.max(-0.4, Math.min(0.4, -side * 0.02)));
+      } else {
+        this._model.setBodyLean(0, 0);
+      }
     }
     if (this.shieldBubble) {
       this.shieldBubble.update(dt);

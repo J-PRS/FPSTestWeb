@@ -16,6 +16,16 @@ const _white = new THREE.Color(0xffffff);
 const _footW = new THREE.Vector3();
 const _footQ = new THREE.Quaternion();
 const _footPQ = new THREE.Quaternion();
+const _leanEul = new THREE.Euler();
+const _leanNo = new THREE.Quaternion();
+const _leanYes = new THREE.Quaternion();
+const _leanOff = new THREE.Vector3();
+const _leanA = new THREE.Vector3();
+const _leanB = new THREE.Vector3();
+// Jet-lean pivot: the pack thrusts from the sternum, so the body tilts
+// about that point and the legs swing — feet-pivot lean reads as a
+// cardboard cutout tipping over.
+const LEAN_PIVOT_Y = 1.3;
 
 export type AnimationState = 'idle' | 'walk' | 'run' | 'jump' | 'death' | 'ski' | 'hit' | 'shoot' | 'jet';
 
@@ -125,6 +135,12 @@ export class PlayerModel {
   // (the mixer skips bones whose track value didn't change).
   private aimBones: { bone: THREE.Object3D; factor: number; last: THREE.Quaternion }[] = [];
   private aimPitch = 0;
+  // Whole-body jet lean: targets set by the owner (RemotePlayer,
+  // PlayerVisuals) from velocity-in-facing-frame; damped toward them in
+  // update() so the tilt eases in/out instead of snapping per frame.
+  private leanP = 0; private leanR = 0;
+  private leanPT = 0; private leanRT = 0;
+  private lastRoll = 0;
   private handBone: THREE.Bone | null = null;
   private gun: THREE.Group | null = null;
   private gunBaseZ = 0;
@@ -700,6 +716,28 @@ export class PlayerModel {
     } else if (this.muzzleFlash && this.muzzleFlash.scale.x > 0) {
       this.muzzleFlash.scale.setScalar(0);
     }
+    // Jet lean: ease toward the target, then write the composed tilt
+    // on top of yaw/roll. setRotation may run before or after update,
+    // so rotation.z is rebuilt here from lastRoll + lean — never read
+    // the euler back, or the lean would double-apply.
+    if (this.model && (this.leanPT !== 0 || this.leanRT !== 0 || this.leanP !== 0 || this.leanR !== 0)) {
+      const k = 1 - Math.exp(-dt * 7);
+      this.leanP += (this.leanPT - this.leanP) * k;
+      this.leanR += (this.leanRT - this.leanR) * k;
+      if (Math.abs(this.leanP) < 1e-3 && this.leanPT === 0) this.leanP = 0;
+      if (Math.abs(this.leanR) < 1e-3 && this.leanRT === 0) this.leanR = 0;
+      this.model.rotation.x = this.leanP;
+      this.model.rotation.z = this.lastRoll + this.leanR;
+      // Pivot compensation: keep the sternum where the un-leaned pose
+      // would put it, so the tilt swings the legs instead of the chest.
+      const yaw = this.model.rotation.y;
+      _leanNo.setFromEuler(_leanEul.set(0, yaw, this.lastRoll, 'YXZ'));
+      _leanYes.setFromEuler(_leanEul.set(this.leanP, yaw, this.lastRoll + this.leanR, 'YXZ'));
+      _leanOff.set(0, LEAN_PIVOT_Y, 0);
+      _leanA.copy(_leanOff).applyQuaternion(_leanNo);
+      _leanB.copy(_leanOff).applyQuaternion(_leanYes);
+      this.model.position.add(_leanA.sub(_leanB));
+    }
     // Damage flash: emissive snaps toward white then decays back to each
     // material's own baseline (the gun keeps its 0x334455 glow).
     if (this.dmgFlash > 0) {
@@ -747,9 +785,22 @@ export class PlayerModel {
     return true;
   }
 
+  /** Directional body lean (jet thrust tilt): pitch = forward/back,
+   *  roll = sideways. Set every frame a jet is active; pass 0,0 to ease
+   *  back to level. Applied to the whole model so it composes with
+   *  whatever clip is playing — TA-style directional jetting reads from
+   *  body tilt, not a per-direction clip set (UAL has none). */
+  setBodyLean(pitch: number, roll: number): void {
+    this.leanPT = pitch;
+    this.leanRT = roll;
+  }
+
   setRotation(yaw: number, pitch: number, roll: number = 0): void {
     if (this.model) {
+      // YXZ so lean pitch/roll resolve in the yawed (facing) frame.
+      if (this.model.rotation.order !== 'YXZ') this.model.rotation.order = 'YXZ';
       this.model.rotation.y = yaw;
+      this.lastRoll = roll;
       this.model.rotation.z = roll;
       this.aimPitch = pitch;
       // Don't apply pitch to body — it's an aiming angle, not body orientation.

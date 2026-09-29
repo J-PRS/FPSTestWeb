@@ -526,7 +526,9 @@ export class ServerBots {
         const gear = ready ? this.hostileGear(p, goal?.pos ?? null) : null;
         if (gear) {
           this.lobAt(p, gear);
-          this.gearLobT.set(id, now + 8000);
+          // 3s keeps a siege going: ~1.5-2s grenade flight + reload beat.
+          // At 8s a turret effectively outlived the lobber's attention.
+          this.gearLobT.set(id, now + 3000);
           logger.debug('Gear lob', { id, x: +gear.x.toFixed(1), z: +gear.z.toFixed(1) });
         }
       }
