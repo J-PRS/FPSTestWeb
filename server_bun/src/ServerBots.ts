@@ -459,7 +459,17 @@ export class ServerBots {
       // Keep server-owned buff bits (REGEN/DD) — the brain only claims
       // the toggle skills a client could legitimately hold.
       if (out.status !== undefined) {
-        p.status = (p.status & ~CLIENT_STATUS_MASK) | (out.status & CLIENT_STATUS_MASK);
+        const claim = out.status & CLIENT_STATUS_MASK;
+        // Rising-edge skill activation — the only place a bot's mend/
+        // shield/cloak intent becomes visible in logs.
+        const rising = claim & ~(p.status & CLIENT_STATUS_MASK);
+        if (rising & (STATUS.MEND | STATUS.SHIELD | STATUS.CLOAK)) {
+          const names = ([
+            [STATUS.MEND, 'MEND'], [STATUS.SHIELD, 'SHIELD'], [STATUS.CLOAK, 'CLOAK'],
+          ] as const).filter(([bit]) => rising & bit).map(([, n]) => n);
+          logger.info('Bot skill on', { id, skill: names.join('+') });
+        }
+        p.status = (p.status & ~CLIENT_STATUS_MASK) | claim;
       }
       if (out.fire) this.fireAt(p, out.fire.targetId, out.fire.aim);
       if (out.belt) this.throwBelt(p);

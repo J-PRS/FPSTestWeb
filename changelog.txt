@@ -1,3 +1,4 @@
+2026-09-26 - Bot skill activations (mend/shield/cloak) now logged at rising edge - verified live (103 activations per 60s crossfire soak).
 2026-09-26 - Builders can plant patrol drones (drone joins turret/mine/station palette); weaponStats log dir works under vitest (import.meta.dir fallback) - p2pHost suite un-broken.
 2026-10-03 - telemetry slice 3: deployable placements per kind (kills-per-plant vs the Turret/Mine hit rows — deployable value) + dashboard section; TASKS.md synced (226/91 tests, telemetry + poseshot + log rotation)
 2026-10-03 - /weaponstats.html: readable balance dashboard on the server itself — weapon tables, duel TTK, kill-speed histograms + air share, death heat cells, flag timers, pickup funnel; fetches /weaponstats live
