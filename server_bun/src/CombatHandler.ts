@@ -8,6 +8,7 @@ import { POWERUP } from '../../shared/pickups.ts';
 import type { PlayerState } from './types.ts';
 import { CONFIG } from './config.ts';
 import { logger } from './logger.ts';
+import { weaponStats } from './weaponStats.ts';
 
 // Lag compensation: clamp self-reported ping to a sane rewind window —
 // unclamped, a forged 60s "ping" could rewind targets anywhere.
@@ -77,6 +78,8 @@ export class CombatHandler {
     /** Server-driven respawn is a declared discontinuity — reseat the
      *  shadow at the spawn or the corpse→spawn jump reads as divergence. */
     private moveResync?: (playerId: string, pos: Vec3, yaw: number) => void,
+    /** Room mode tag for balance telemetry ('ctf', 'nuggets', ...). */
+    private modeTag = '',
   ) {}
 
   /** Claim refused: server-side warn plus a shotRejected to the shooter so
@@ -632,6 +635,8 @@ export class CombatHandler {
 
   private applyHit(shooterId: string, targetId: string, damage: number, result: { killed: boolean; newHealth: number; newArmor: number }, hitLabel: string, extra?: Record<string, unknown>, weapon?: number): void {
     this.onHit?.(targetId, shooterId);
+    weaponStats.record(this.modeTag, weapon !== undefined ? `w${weapon}` : hitLabel,
+      damage, result.killed, shooterId.startsWith('BOT-'));
     if (!result.killed) {
       logger.info(hitLabel, { shooter: shooterId, target: targetId, damage, targetHealth: result.newHealth, ...extra });
       this.broadcast({ type: 'playerHit', shooterId, targetId, damage, health: result.newHealth, armor: result.newArmor });

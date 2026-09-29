@@ -16,6 +16,10 @@ const ROOMS = parseInt(process.argv[4] ?? '10');
 const PER_ROOM = parseInt(process.argv[5] ?? '10');
 const SECONDS = parseInt(process.argv[6] ?? '60');
 const TIER = (process.argv.find(a => a.startsWith('--tier='))?.slice(7) ?? 'ws') as Tier;
+// --drop=N: skip N% of position reports — simulates upstream packet loss.
+// The judge should converge through corrections, not flag divergence on
+// what is ordinary internet weather.
+const DROP_PCT = parseFloat(process.argv.find(a => a.startsWith('--drop='))?.slice(7) ?? '0');
 
 import { encodePosition, decodeTickFrame, isWireFrame, WIRE_TICK } from '../../shared/wire.ts';
 import { openSocket, type BotSocket, type Tier } from './net.ts';
@@ -270,9 +274,11 @@ const moveTimer = setInterval(() => {
       b.journal.push({ seq: b.seq, yaw: b.yaw });
       if (b.journal.length > 60) b.journal.splice(0, b.journal.length - 60);
       const s = b.sim.state;
-      (b.ws.sendUnreliable ?? b.ws.send).call(b.ws, encodePosition(
-        s.pos, { yaw: b.yaw, pitch: 0 }, s.vel, b.seq, 0, b.seq,
-      ));
+      if (Math.random() * 100 >= DROP_PCT) {
+        (b.ws.sendUnreliable ?? b.ws.send).call(b.ws, encodePosition(
+          s.pos, { yaw: b.yaw, pitch: 0 }, s.vel, b.seq, 0, b.seq,
+        ));
+      }
     } else {
       b.angle += dt * 1.2;
       const x = b.cx + Math.cos(b.angle) * 15;

@@ -1,5 +1,6 @@
 import { CONFIG } from './config.ts';
 import { GameServer } from './GameServer.ts';
+import { weaponStats } from './weaponStats.ts';
 import { logger } from './logger.ts';
 import type { WebSocketData } from './types.ts';
 import { DemoStorage } from './DemoStorage.ts';
@@ -49,6 +50,9 @@ const ROUTES: Record<string, (url: URL) => Response | Promise<Response>> = {
   '/matches': () => json(gameServer.listMatches()),
   // Lifetime per-player aggregates off the match journal.
   '/stats': async () => json(await gameServer.getStats()),
+  // Balance telemetry — per-mode damage/hits/kills by weapon source,
+  // bot-authored share split out (also journaled to weaponstats.jsonl).
+  '/weaponstats': () => json(weaponStats.snapshot()),
   // Map list for the menu's match setup — name + mode + default bots.
   '/maps': () => json(gameServer.listMaps()),
   // Quick-join: /join?mode=ctf&map=raindance&bots=6 → emptiest live

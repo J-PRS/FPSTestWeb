@@ -270,7 +270,11 @@ surface. Detailed research lives in `_reports/`; this file is the current truth.
   headlessly; asserts remote roster + entity/HUD routing. Regression net for
   "decodes fine, handler drops it". Fixture: `__tests__/fixtures/duel.rec`.
 - ~~`ServerSim` registry~~ — landed as `room.sims`; bots/flags tick through
-  it. Deployable turrets server-side are the next sim candidate.
+  it. ~~Deployable turrets server-side~~ — DONE 2026-10-03: bot deploy
+  intent landed (~45% of brains are builders; parked defenders plant
+  turret/mine/station through the legal handleDeploy path on a 28-48s
+  cooldown, hurting builders prefer stations; 'Deploy placed' INFO log
+  proves every plant). Live-verified: BOT-* owners planting on crossfire.
 - Voice/avatars/monetization — out of scope until core loops land.
 
 ## Non-goals
