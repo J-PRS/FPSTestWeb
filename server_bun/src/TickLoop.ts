@@ -150,6 +150,12 @@ export class TickLoop {
         // forever. A rejoining human wakes the room instantly.
         const audience = room.players.getHumanCount() > 0 || room.spectators.size > 0;
         room.ballSim.dormant = !audience;
+        // Same hibernation for creatures — the sim's own interval keeps
+        // ticking when nobody can see it, unlike the room tick it can't
+        // reach. An unwatched room simming spawns forever burns CPU
+        // (and silently grows the crawler population it later dumps on
+        // a rejoining player).
+        room.creatureSim.dormant = !audience;
         if (!audience) continue;
         const players = room.players.getAllPlayers();
         if (players.size === 0) continue;
