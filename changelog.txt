@@ -1,3 +1,5 @@
+2026-10-03 - Projectile.updateAlive split: stuck-bomb tick -> tickStuck(), remote-replica terrain lane -> tickRemote(). c31 -> clean, oxlint quiet.
+
 2026-10-03 - upsertRemotePlayer table-driven merge: 14 ?? chains -> ROSTER_FIELDS/ROSTER_DEFAULTS loop (patch > existing > default). c33 -> clean.
 
 2026-10-03 - overlayInput split: loadout-bar chip/dropup DOM extracted to ui/loadoutMenu.ts (wireLoadoutBar + buildRows + mkRow); overlayInput now only owns pointer-lock/key wiring. 301 -> 108 lines, oxlint quiet.

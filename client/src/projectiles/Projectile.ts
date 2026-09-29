@@ -213,33 +213,8 @@ export class Projectile {
     this.lastDt = dt;
     this.age += dt;
 
-    // Stuck bomb: planted on a surface, ticking down to fuse. No physics,
-    // no collision — only the timer matters. A bomb glued to a live mover
-    // RIDES it (world-space offset from contact) — freezing in place while
-    // the victim jets away reads as a miss, not a hit.
-    if (this.stuck) {
-      const anchor = this.stuckTo ? (this.stuckTo.dead ? null : this.stuckTo.pos)
-        : this.stuckPlayerId ? (this.stuckMap?.get(this.stuckPlayerId) ?? null)
-        : null;
-      if (this.stuckTo || this.stuckPlayerId) {
-        if (anchor) {
-          this.pos.copy(anchor).add(this.stuckOffset);
-          this.prevPos.copy(this.pos);
-          this.hitPoint.copy(this.pos); // blast follows the ride, not the contact point
-        } else {
-          // Victim died/despawned under the bomb — it lets go and falls.
-          this.stuck = false;
-          this.stuckTo = null;
-          this.stuckPlayerId = null;
-        }
-      }
-      if (this.stuck) {
-        if (this.config.maxLifetime && this.age >= this.config.maxLifetime) this.explode();
-        else this.updateMesh();
-        return;
-      }
-      // Dropped this frame — fall through into physics with zero velocity.
-    }
+    // Stuck bomb: planted on a surface, ticking down to fuse.
+    if (this.stuck && this.tickStuck()) return;
     // hitPoint is per-frame: a stale value from a previous bounce would
     // teleport the explosion back to the last terrain contact (the
     // "explosion in the wrong spot" bug on fuse/ball/player kills)
@@ -265,25 +240,10 @@ export class Projectile {
       this.pos.addScaledVector(_rayDir, this.config.rayBurst.range);
     }
 
-    // Remote (server-authoritative/demo) projectiles skip all collision.
-    // Exception: bouncing shells (GL) still bounce off terrain — the bounce
-    // is deterministic from spawn state, so it matches the shooter's arc
-    // and keeps remote shells from tunneling through the ground.
+    // Remote (server-authoritative/demo) replicas skip all collision —
+    // terrain-only behavior lives in tickRemote.
     if (this.isRemote) {
-      // A discharged beam still respects terrain — the sweep sets hitPoint
-      // so update() pops the slug at contact, not at the range cap.
-      if (this.rayFired) sweepTerrain(this, terrain);
-      if (this.canBounce && sweepTerrain(this, terrain) && !this.bounceOffTerrain(terrain)) {
-        this.explode(); // bounce budget/graze exhausted — die like a local shard
-        return;
-      }
-      if (!this.canBounce && this.config.armTime !== undefined && sweepTerrain(this, terrain)) {
-        this.explode(); // armed mortar shell touching terrain on a remote client
-        return;
-      }
-      // Remote stickies glue identically — the fuse clock is the shared
-      // truth, so both sides pop at the same age regardless of contact.
-      if (this.config.sticks && sweepTerrain(this, terrain)) this.stickAt(this.hitPoint);
+      if (this.tickRemote(terrain)) return;
     } else if (this.checkCollisions(terrain, balls, remotePlayers, obstacles)) {
       return; // exploded inside checkCollisions
     }
@@ -291,6 +251,53 @@ export class Projectile {
     this.updateMesh();
     this.trail.emitSegment();
     for (const r of this.ribbons) r.push(this.pos, this.vel);
+  }
+
+  // Stuck-bomb tick. No physics, no collision — only the fuse timer. A
+  // bomb glued to a live mover RIDES it (world-space offset from
+  // contact) — freezing in place while the victim jets away reads as a
+  // miss, not a hit. Returns true while still glued (caller returns).
+  private tickStuck(): boolean {
+    const anchor = this.stuckTo ? (this.stuckTo.dead ? null : this.stuckTo.pos)
+      : this.stuckPlayerId ? (this.stuckMap?.get(this.stuckPlayerId) ?? null)
+      : null;
+    if (this.stuckTo || this.stuckPlayerId) {
+      if (anchor) {
+        this.pos.copy(anchor).add(this.stuckOffset);
+        this.prevPos.copy(this.pos);
+        this.hitPoint.copy(this.pos); // blast follows the ride, not the contact point
+      } else {
+        // Victim died/despawned under the bomb — it lets go and falls.
+        this.stuck = false;
+        this.stuckTo = null;
+        this.stuckPlayerId = null;
+      }
+    }
+    if (!this.stuck) return false; // dropped — fall through into physics with zero velocity
+    if (this.config.maxLifetime && this.age >= this.config.maxLifetime) this.explode();
+    else this.updateMesh();
+    return true;
+  }
+
+  // Remote replica terrain handling. A replica never sweep-hits a target
+  // (server owns damage) but terrain is deterministic from spawn state:
+  // bounces match the shooter's arc, armed shells die on contact, remote
+  // stickies glue on the shared fuse clock. Returns true when the shell
+  // exploded this frame.
+  private tickRemote(terrain: Terrain): boolean {
+    // A discharged beam still respects terrain — the sweep sets hitPoint
+    // so update() pops the slug at contact, not at the range cap.
+    if (this.rayFired) sweepTerrain(this, terrain);
+    if (this.canBounce && sweepTerrain(this, terrain) && !this.bounceOffTerrain(terrain)) {
+      this.explode(); // bounce budget/graze exhausted — die like a local shard
+      return true;
+    }
+    if (!this.canBounce && this.config.armTime !== undefined && sweepTerrain(this, terrain)) {
+      this.explode(); // armed mortar shell touching terrain on a remote client
+      return true;
+    }
+    if (this.config.sticks && sweepTerrain(this, terrain)) this.stickAt(this.hitPoint);
+    return false;
   }
 
   // Runs all swept collision checks; returns true if the projectile hit
