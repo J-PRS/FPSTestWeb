@@ -68,7 +68,18 @@ async function rtcSocket(wsUrl: string): Promise<BotSocket> {
   let iceServers: { hostname: string; port: number; relayer?: boolean }[] = [];
   try {
     const cfg = await (await fetch(`${httpBase(wsUrl)}/rtcconfig`)).json();
-    if (Array.isArray(cfg?.iceServers)) iceServers = cfg.iceServers;
+    if (Array.isArray(cfg?.iceServers)) {
+      // /rtcconfig speaks RTCIceServer ({urls:'stun:host:port'}); libdatachannel
+      // wants {hostname,port} records — an untranslated object silently
+      // breaks pc creation before any signaling happens.
+      for (const e of cfg.iceServers) {
+        const urls = Array.isArray(e?.urls) ? e.urls : (e?.urls ? [e.urls] : []);
+        for (const u of urls) {
+          const m = typeof u === 'string' && u.match(/^(stun|turn)s?:\/\/([^:/]+):?(\d+)?/);
+          if (m) iceServers.push({ hostname: m[2]!, port: m[3] ? +m[3] : 3478, relayer: m[1]!.startsWith('turn') });
+        }
+      }
+    }
   } catch { /* no config — host candidates only, fine on LAN */ }
 
   const pc = new nd.PeerConnection('bot', { iceServers });
@@ -89,7 +100,9 @@ async function rtcSocket(wsUrl: string): Promise<BotSocket> {
 
   const answer = await new Promise<{ sdp: string }>((res, rej) => {
     const sig = new WebSocket(signalUrl);
-    const t = setTimeout(() => rej(new Error('rtc signal timeout')), 5000);
+    // Server-side ICE gathering (STUN) stretches the answer window — a
+    // short timeout would probe-fail exactly when srflx matters most.
+    const t = setTimeout(() => rej(new Error('rtc signal timeout')), 12000);
     sig.onmessage = (ev) => {
       const m = JSON.parse(String(ev.data));
       if (m.type === 'answer' && typeof m.sdp === 'string') { clearTimeout(t); sig.close(); res(m); }

@@ -4,32 +4,28 @@ import { logger } from './logger.ts';
 import { CONFIG } from './config.ts';
 import type { GameServer } from './GameServer.ts';
 
-// libdatachannel takes flat URL strings, not the RTCIceServer objects the
-// browser API uses — translate FPS_ICE_SERVERS once at import: entries may
-// be "stun:host:port" strings or {urls,username,credential} objects. An
-// empty list = host candidates only, fine for LAN/tunnel-less dev but no
-// srflx gathering — internet friends need STUN here to punch NAT.
-function serverIceUrls(): string[] {
+// node-datachannel's IceServer record is {hostname, port, relayer?}, not
+// the {urls:...} objects the browser API uses — translate FPS_ICE_SERVERS
+// once at import. An empty list = host candidates only, fine for LAN dev
+// but no srflx gathering — internet friends need STUN here to punch NAT.
+// (TURN creds aren't expressible in this record shape; a relay deploy
+// needs the env extended anyway.)
+function serverIce(): { hostname: string; port: number; relayer?: boolean }[] {
   try {
     const raw = CONFIG.iceServersJson ? JSON.parse(CONFIG.iceServersJson) : [];
     if (!Array.isArray(raw)) return [];
-    const out: string[] = [];
+    const out: { hostname: string; port: number; relayer?: boolean }[] = [];
     for (const e of raw) {
-      if (typeof e === 'string') { out.push(e); continue; }
-      const urls = Array.isArray(e?.urls) ? e.urls : (e?.urls ? [e.urls] : []);
+      const urls = typeof e === 'string' ? [e] : (Array.isArray(e?.urls) ? e.urls : (e?.urls ? [e.urls] : []));
       for (const u of urls) {
-        if (typeof u !== 'string') continue;
-        // TURN needs auth baked into the URL: turn:user:pass@host
-        if (u.startsWith('turn') && (e.username || e.credential)) {
-          const m = u.match(/^(turns?:)(.*)$/);
-          if (m) out.push(`${m[1]}${e.username ?? ''}:${e.credential ?? ''}@${m[2]}`);
-        } else out.push(u);
+        const m = typeof u === 'string' && u.match(/^(stun|turn)s?:\/\/([^:/]+):?(\d+)?/);
+        if (m) out.push({ hostname: m[2]!, port: m[3] ? +m[3] : 3478, relayer: m[1]!.startsWith('turn') });
       }
     }
     return out;
   } catch { return []; }
 }
-const SERVER_ICE = serverIceUrls();
+const SERVER_ICE = serverIce();
 
 // node-datachannel is a native (N-API) module — Bun loads it through the
 // node:module compatibility layer. If it ever fails to load, the whole
@@ -52,7 +48,7 @@ type PeerConnectionLike = {
   onGatheringStateChange(cb: (state: string) => void): void;
   close(): void;
 };
-type NdModule = { PeerConnection: new (name: string, cfg: { iceServers: string[] }) => PeerConnectionLike };
+type NdModule = { PeerConnection: new (name: string, cfg: { iceServers: { hostname: string; port: number; relayer?: boolean }[] }) => PeerConnectionLike };
 
 let ndc: NdModule | null = null;
 let ndcFailed = false;

@@ -300,7 +300,10 @@ async function tryWebRTC(config: ConnectionConfig): Promise<GameTransport | null
     }
     const sdp = conn.localDescription?.sdp ?? offer.sdp;
     const answer = await new Promise<RTCSessionDescriptionInit>((res, rej) => {
-      const timer = setTimeout(() => rej(new Error('rtc signal timeout')), 3000);
+      // Server gathers its own ICE (STUN) before answering — that window
+      // is seconds, so a LAN-era 3s timeout would always fall back to ws
+      // for internet peers. 10s covers a slow srflx gather.
+      const timer = setTimeout(() => rej(new Error('rtc signal timeout')), 10000);
       signal.addEventListener('message', (ev) => {
         try {
           const m = JSON.parse(ev.data);
