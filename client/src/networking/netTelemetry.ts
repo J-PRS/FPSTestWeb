@@ -50,6 +50,16 @@ export class NetTelemetry {
     return Math.min(100, Math.round((missed / expected) * 100));
   }
 
+  // A disconnect leaves lastTickAt stale — the reconnect gap would count
+  // as missed ticks and pin the loss meter for the whole 5s window.
+  reset(): void {
+    this.lastTickAt = 0;
+    this.firstTickAt = 0;
+    this.tickWindow.length = 0;
+    this.pingHistory.length = 0;
+    this.ping = 0;
+  }
+
   jitter(): number {
     if (this.pingHistory.length < 2) return 0;
     let sumDiff = 0;

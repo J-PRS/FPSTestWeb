@@ -191,6 +191,9 @@ export class NetworkManager {
             logger.info('Disconnected');
             this.connected = false;
             this.lastTickSeq = -1; // a reconnect starts a fresh seq space
+            // Same for the cadence metric — else the dead period counts as
+            // missed ticks and loss reads ~100% right after rejoining.
+            this.telemetry.reset();
             // Drop the wire roster — kept entries pass the liveness gate
             // on their stale ping, so their bodies freeze at the last
             // snapshot for the whole 60s stale window and their HUD dots
