@@ -62,6 +62,12 @@ function validateBody(obj: Record<string, unknown>): ValidationResult<{ position
   if (v.x * v.x + v.y * v.y + v.z * v.z > 1000 * 1000) {
     return { success: false, error: 'velocity magnitude out of range' };
   }
+  // Position is judge-mode truth — an unbounded coordinate becomes
+  // broadcast state and poisons lag-comp history, not just a reject.
+  const p = pos.data;
+  if (p.x * p.x + p.y * p.y + p.z * p.z > 8192 * 8192) {
+    return { success: false, error: 'position magnitude out of range' };
+  }
   return { success: true, data: { position: pos.data, rotation: rot.data, velocity: vel.data } };
 }
 

@@ -47,6 +47,11 @@ describe('P2PHost', () => {
   it('notifies the other peer on join and leave', () => {
     const a = new FakeLink(); const b = new FakeLink();
     join(host, a, 'A'); join(host, b, 'B');
+    // A join alone must not announce — that spawned ghost meshes at the
+    // spawn default for peers who never entered the world. The announce
+    // fires on B's first position report.
+    expect(a.lastJson('playerJoined')).toBeUndefined();
+    host.onData(b, encodePosition({ x: 1, y: 60, z: 1 }, { yaw: 0, pitch: 0 }, { x: 0, y: 0, z: 0 }, 1, 0));
     expect(a.lastJson('playerJoined')).toMatchObject({ playerId: 'B' });
     host.onClose(b);
     expect(a.lastJson('playerLeft')).toMatchObject({ playerId: 'B' });
@@ -109,6 +114,7 @@ describe('P2PHost', () => {
     host.onData(a, JSON.stringify({ type: 'nonexistent-type' }));
     const b = new FakeLink();
     join(host, b, 'B');
+    host.onData(b, encodePosition({ x: 1, y: 60, z: 1 }, { yaw: 0, pitch: 0 }, { x: 0, y: 0, z: 0 }, 1, 0));
     expect(a.lastJson('playerJoined')).toMatchObject({ playerId: 'B' });
   });
 });
