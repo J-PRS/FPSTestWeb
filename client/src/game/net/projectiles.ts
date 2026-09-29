@@ -15,6 +15,16 @@ export function wireProjectiles(ctx: NetCtx): void {
 
   const remoteProjectiles = new Map<string, Projectile>();
 
+  // Melee swings carry a fake velocity (it's a swing marker, not a shell)
+  // — painting the generic projectile would fly a rocket out of a fist.
+  const meleeFlash = (origin: THREE.Vector3, dirV: THREE.Vector3): void => {
+    const hit = origin.clone().addScaledVector(dirV.normalize(), MELEE_RANGE * 0.7);
+    deps.world.explosions.push(new Explosion(
+      deps.lazyScene(), hit, true, 0, deps.lazyTerrain(),
+      (getWeaponStats(WeaponType.Melee).aoeRadius * 0.7) / ROCKET_RADIUS, 0xaaddff,
+    ));
+  };
+
   networkManager.onProjectileCreated = (projectileId: string, ownerId: string, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }, weaponType?: number) => {
     if (deps.world.playbackMode) return; // live shots don't belong in the replay
     // For own projectiles: link the pending local projectile to this server ID
@@ -31,6 +41,12 @@ export function wireProjectiles(ctx: NetCtx): void {
     const vel = new THREE.Vector3(velocity.x, velocity.y, velocity.z);
     const origin = new THREE.Vector3(position.x, position.y, position.z);
     const dir = vel.clone().normalize();
+    if (weaponType === WeaponType.Melee) {
+      meleeFlash(origin, dir);
+      deps.world.remotePlayers.get(ownerId)?.fire(weaponType);
+      sfx.shotAt(origin, WeaponType.Melee);
+      return;
+    }
     const cfg = (weaponType !== undefined ? getProjectileConfig(weaponType) : undefined) ?? ROCKET_CONFIG;
     const remoteProjectile = new Projectile(deps.lazyScene(), origin, dir, new THREE.Vector3(0, 0, 0), cfg);
     remoteProjectile.vel.copy(vel); // override with exact server velocity
@@ -80,12 +96,7 @@ export function wireProjectiles(ctx: NetCtx): void {
     // Melee swing — same small impact flash the puncher sees at the
     // reach point, so observers read the whiff, not just hear a whoosh.
     if (dir && weaponType === WeaponType.Melee) {
-      const d = new THREE.Vector3(dir.x, dir.y, dir.z).normalize();
-      const hit = origin.clone().addScaledVector(d, MELEE_RANGE * 0.7);
-      deps.world.explosions.push(new Explosion(
-        deps.lazyScene(), hit, true, 0, deps.lazyTerrain(),
-        (getWeaponStats(WeaponType.Melee).aoeRadius * 0.7) / ROCKET_RADIUS, 0xaaddff,
-      ));
+      meleeFlash(origin, new THREE.Vector3(dir.x, dir.y, dir.z));
     }
   };
 
