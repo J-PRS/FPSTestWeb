@@ -8,6 +8,7 @@
  */
 import type { Vec3 } from './types.ts';
 import type { Room } from './Room.ts';
+import { logger } from './logger.ts';
 import type { PickupKind } from '../../shared/pickups.ts';
 
 const PICKUP_R = 2.2;   // planar grab radius, same feel as flag pickup
@@ -26,6 +27,7 @@ export class RoomPickups {
     if (this.pickups.size >= MAX_PICKUPS) return;
     const id = this.nextId++;
     this.pickups.set(id, { id, pos: { ...pos }, ttl: PICKUP_TTL_S, kind });
+    logger.debug('Pickup spawned', { room: this.room.name, kind, id });
     this.room.broadcast({ type: 'pickupSpawn', id, pos: { ...pos }, kind });
   }
 
@@ -78,6 +80,11 @@ export class RoomPickups {
         const dx = pl.position.x - p.pos.x, dz = pl.position.z - p.pos.z;
         if (dx * dx + dz * dz > PICKUP_R * PICKUP_R) continue;
         this.remove(p.id, pl.id);
+        // Score touches are the money line — log them so a soak can prove
+        // the kill→drop→touch→bank funnel end-to-end from the log alone.
+        if (p.kind === 'gem' || p.kind === 'tag') {
+          logger.info('Pickup banked', { room: this.room.name, kind: p.kind, by: pl.id });
+        }
         this.onCollect?.(pl.id, p.kind);
         break;
       }

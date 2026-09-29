@@ -26,6 +26,7 @@ import { RoomArena } from './RoomArena.ts';
 import { RoomDeployables } from './RoomDeployables.ts';
 import { RoomProjectiles } from './RoomProjectiles.ts';
 import type { PlayerState, Vec3 } from './types.ts';
+import { logger } from './logger.ts';
 import type { ServerMessage } from '../../shared/protocol.ts';
 import { POWERUP, rollCreatureDrop, type PowerupKind } from '../../shared/pickups.ts';
 import { ENERGY } from '../../shared/movement.ts';
@@ -247,6 +248,8 @@ export class Room {
    *  the killer directly; team modes drop a nugget at the corpse that
    *  anyone must touch to bank (kill-confirmed style scoring). */
   private creatureKill(by: string, pos: Vec3, variant = 0): void {
+    // The economy runs on kills — soak validation needs these visible.
+    logger.info('Creature killed', { room: this.name, by, variant });
     // Powerup drops roll in EVERY mode — the pickup does the granting.
     const powerup = rollCreatureDrop();
     // Creatures die mid-flight — the drop must land on the ground or the

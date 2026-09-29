@@ -1,3 +1,4 @@
+2026-10-03 - pickup logging: gem/tag banks log INFO, spawns log DEBUG, creature kills log INFO (soaks can now prove kill→drop→touch→bank from logs alone)
 2026-10-03 - bot watchdog: stand-and-shoot holds no longer trip 'Bot stuck' (brain exposes holding state; carriers still on short leash)
 2026-10-03 - move shadow: first position report seeds the sim (spawn-point guess no longer flags a ~25m phantom join divergence)
 2026-10-03 - netReplay: added crossfire.rec fixture (live CTF room — 1980 tick frames, deploySpawns, playerLeft) replayed through real netHandlers
