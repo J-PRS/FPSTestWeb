@@ -41,7 +41,7 @@ export function createRemotes(deps: RemotesDeps) {
   deps.world.remotePlayers.hooks = {
     create: (id, state) => {
       if (state.isDead) return undefined;
-      const rp = new RemotePlayer(deps.lazyScene(), id, state.position, deps.lazyTerrain());
+      const rp = new RemotePlayer(deps.lazyScene(), id, state.position, deps.lazyTerrain(), state.armorClass);
       rp.setClass(state.armorClass);
       return rp;
     },

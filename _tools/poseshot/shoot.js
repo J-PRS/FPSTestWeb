@@ -17,8 +17,12 @@ const OUT_ROOT = path.join(__dirname, '..', '..', 'screenshots');
   const page = await browser.newPage({ viewport: { width: 800, height: 800 } });
   page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
 
-  for (const [model, outDir] of [['mannequin', 'poses-man'], ['ual2', 'poses-ual2']]) {
-    await page.goto(`${BASE}?model=${model}`, { waitUntil: 'domcontentloaded' });
+  for (const [model, outDir, scale] of [
+    ['robot', 'poses-medium', '1'],
+    ['robot', 'poses-light', '0.92'],
+    ['knight', 'poses-heavy', '1.15'],
+  ]) {
+    await page.goto(`${BASE}?model=${model}&scale=${scale}`, { waitUntil: 'domcontentloaded' });
     await page.waitForFunction('window.__ready === true', { timeout: 20000 });
     const clips = await page.evaluate(() => window.__clips);
     console.log(model, clips.length, 'clips');
@@ -26,11 +30,11 @@ const OUT_ROOT = path.join(__dirname, '..', '..', 'screenshots');
     fs.mkdirSync(dir, { recursive: true });
     for (const clip of clips) {
       // one-shot clips read best mid-arc; let the page pick via t=0.4
-      await page.goto(`${BASE}?model=${model}&clip=${encodeURIComponent(clip)}&t=0.4`,
+      await page.goto(`${BASE}?model=${model}&scale=${scale}&clip=${encodeURIComponent(clip)}&t=0.4`,
         { waitUntil: 'domcontentloaded' });
       await page.waitForFunction('window.__ready === true', { timeout: 20000 });
       await page.waitForTimeout(250); // let one real frame hit the canvas
-      await page.screenshot({ path: path.join(dir, `${model === 'mannequin' ? 'UAL_' : 'UAL2_'}${clip}.png`) });
+      await page.screenshot({ path: path.join(dir, `${clip}.png`) });
       process.stdout.write(clip + ' ');
     }
     console.log('\ndone', outDir);

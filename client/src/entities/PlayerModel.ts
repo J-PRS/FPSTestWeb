@@ -42,9 +42,19 @@ const ANIM_NAMES: Record<AnimationState, [ual: string, fallback: string]> = {
   // Crouch_Fwd is a real tucked ski silhouette — knees bent, weight low —
   // a straight upgrade over Sitting-as-tuck.
   'ski':    ['UAL_Slide_Loop',        'Sitting'],
-  'jet':    ['UAL_NinjaJump_Idle_Loop', 'Jump'],
+  // Plain airborne hang — the NinjaJump tuck read too goofy for a jet
+  // burn; the sternum lean layer is what sells thrust direction.
+  'jet':    ['UAL_Jump_Loop',         'Jump'],
   'hit':    ['UAL_Hit_Chest',         'No'],
   'shoot':  ['UAL_Pistol_Shoot',      'Punch']
+};
+
+// KayKit knight rig — plays its own native clip names (76-clip combat set).
+// No retarget, no UAL aliasing; ski reads as the forward dodge-tuck.
+const KNIGHT_ANIMS: Record<AnimationState, string> = {
+  'idle': 'Idle', 'walk': 'Walking_A', 'run': 'Running_A',
+  'jump': 'Jump_Idle', 'death': 'Death_A', 'ski': 'Dodge_Forward',
+  'jet': 'Jump_Idle', 'hit': 'Hit_A', 'shoot': 'Throw',
 };
 
 // RobotExpressive bone → UAL source bone. RobotExpressive bones carry
@@ -83,7 +93,9 @@ const UAL2_BONE_MAP: Record<string, string> = {
 
 // Clips that must not LoopRepeat — a flinch or a fire that loops reads as a
 // twitch loop instead of a single reaction. Callers time-revert the state.
-const ONESHOT_CLIPS = new Set(['No', 'Punch', 'UAL_Pistol_Shoot', 'UAL_Hit_Chest', 'UAL_Hit_Head']);
+const ONESHOT_CLIPS = new Set(['No', 'Punch', 'UAL_Pistol_Shoot', 'UAL_Hit_Chest', 'UAL_Hit_Head',
+  // Knight-native singles — a Throw that loops reads as a seizure.
+  'Throw', 'Hit_A', 'Hit_B', 'Death_A', 'Death_B']);
 
 const normBone = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
 
@@ -258,10 +270,12 @@ export class PlayerModel {
   }
 
   /** 'robot' = RobotExpressive + retargeted UAL clips (backburner path).
-   *  'mannequin' = the UAL's own rig — clips play natively, no retarget. */
-  readonly variant: 'robot' | 'mannequin';
+   *  'mannequin' = the UAL's own rig — clips play natively, no retarget.
+   *  'knight' = KayKit CC0 knight — the heavy-class silhouette; native
+   *  clips, armored read at distance. */
+  readonly variant: 'robot' | 'mannequin' | 'knight';
 
-  constructor(scene: THREE.Scene, variant?: 'robot' | 'mannequin') {
+  constructor(scene: THREE.Scene, variant?: 'robot' | 'mannequin' | 'knight') {
     this.scene = scene;
     this.variant = variant ?? (urlParams.get('model') === 'mannequin' ? 'mannequin' : 'robot');
   }
@@ -269,10 +283,13 @@ export class PlayerModel {
   async load(): Promise<void> {
     const loader = new GLTFLoader();
     const mann = this.variant === 'mannequin';
+    const knight = this.variant === 'knight';
 
     return new Promise((resolve, reject) => {
       loader.load(
-        mann ? '/assets/models/mannequin.glb' : '/assets/models/RobotExpressive.glb',
+        knight ? '/assets/models/knight.glb'
+          : mann ? '/assets/models/mannequin.glb'
+          : '/assets/models/RobotExpressive.glb',
         (gltf) => {
           if (this._disposed) { resolve(); return; }
           this.model = gltf.scene;
@@ -310,12 +327,14 @@ export class PlayerModel {
             // bones are DEF-* (normBone-stripped compare).
             if ((child as THREE.Bone).isBone) {
               const nb = normBone(child.name);
-              if (child.name === 'Head' || nb === 'defhead') {
+              if (child.name === 'Head' || nb === 'defhead' || nb === 'head') {
                 this.aimBones.push({ bone: child, factor: 0.4, last: new THREE.Quaternion() });
-              } else if (child.name === 'Abdomen' || nb === 'defspine001') {
+              } else if (child.name === 'Abdomen' || nb === 'defspine001' || nb === 'spine') {
                 this.aimBones.push({ bone: child, factor: 0.6, last: new THREE.Quaternion() });
-              // GLTFLoader sanitizes names ('Palm2.R' -> 'Palm2R')
-              } else if ((child.name === 'Palm2R' || nb === 'defhandr') && !this.handBone) {
+              // GLTFLoader sanitizes names ('Palm2.R' -> 'Palm2R',
+              // 'handslot.r' -> 'handslotr'); the KayKit slot bone is the
+              // intended weapon mount so it leads the knight list.
+              } else if ((child.name === 'Palm2R' || nb === 'defhandr' || nb === 'handslotr' || nb === 'handr') && !this.handBone) {
                 this.handBone = child as THREE.Bone;
               }
               // Foot-snap rig for retargeted clips on the robot rig (UAL
@@ -338,9 +357,9 @@ export class PlayerModel {
           // Hitbox: radius 0.8 (width 1.6), height 2.0
           // Scale factor 0.5 matches width, but model is taller (2.4 vs 2.0)
           // RobotExpressive.glb origin is at feet (y=0), not center
-          this.model.scale.setScalar(mann ? 2.0 / size.y : 0.5); // mannequin: fit the 2m capsule — robot stays at its calibrated 0.5
+          this.model.scale.setScalar(mann || knight ? 2.0 / size.y : 0.5); // mannequin+knight: fit the 2m capsule — robot stays at its calibrated 0.5
           this.model.rotation.y = Math.PI; // Face forward
-          this.modelScale = mann ? 2.0 / size.y : 0.5;
+          this.modelScale = mann || knight ? 2.0 / size.y : 0.5;
 
           // Procedural gun in the right hand — follows every animation.
           if (this.handBone) {
@@ -397,7 +416,7 @@ export class PlayerModel {
           // clips natively — alias them under the UAL_ names the state map
           // prefers so ANIM_NAMES resolves without a retarget pass.
           gltf.animations.forEach((clip) => {
-            if (mann) {
+            if (mann || knight) {
               // Strip hip XZ root motion — the entity owns world position,
               // and loop clips (Crouch_Fwd etc.) otherwise translate the
               // mesh forward out from under the hitbox each cycle.
@@ -405,7 +424,7 @@ export class PlayerModel {
               for (const tr of clip.tracks) {
                 if (!tr.name.endsWith('.position')) continue;
                 const node = tr.name.slice(0, tr.name.indexOf('.'));
-                if (normBone(node) !== 'defhips' && normBone(node) !== 'root') continue;
+                if (normBone(node) !== 'defhips' && normBone(node) !== 'root' && normBone(node) !== 'hips') continue;
                 const v = tr.values;
                 for (let i = 3; i < v.length; i += 3) { v[i] = v[0]; v[i + 2] = v[2]; }
               }
@@ -426,8 +445,9 @@ export class PlayerModel {
           // Retargeted UAL clips arrive async — a native clip plays until
           // they land, then the current state re-resolves onto the better
           // clip. Cached globally so only the first model pays the bake.
-          // The mannequin binds UAL clips natively — no retarget at all.
-          if (!mann) this.retargetUAL();
+          // The mannequin binds UAL clips natively and the knight ships
+          // its own set — neither pays a retarget pass.
+          if (!mann && !knight) this.retargetUAL();
           
           this.scene.add(this.model);
           logger.debug('MODEL ADDED to scene', { children: this.scene.children.length });
@@ -529,6 +549,10 @@ export class PlayerModel {
   // Force animation switch without checking current state (for hysteresis)
   forceAnimationState(state: AnimationState): void {
     this.currentState = state;
+    if (this.variant === 'knight') {
+      this.playAnimation(KNIGHT_ANIMS[state]);
+      return;
+    }
     const [ual, fallback] = ANIM_NAMES[state];
     // Prefer the retargeted clip; fall back to the native emote until the
     // UAL bake lands (or forever if the retarget failed).
@@ -668,7 +692,7 @@ export class PlayerModel {
         this.animations.set(name, this.mixer.clipAction(clip));
       }
       // Re-resolve the current state onto the better clip if one landed.
-      const want = ANIM_NAMES[this.currentState][0];
+      const want = this.variant === 'knight' ? KNIGHT_ANIMS[this.currentState] : ANIM_NAMES[this.currentState][0];
       this.playAnimation(this.animations.has(want) ? want : (this.currentClipName ?? 'Idle'));
     }).catch(() => { /* load failure already logged; native clips remain */ });
   }

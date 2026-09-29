@@ -116,7 +116,7 @@ export class RemotePlayer {
     this._isSimulating = false;
   }
 
-  constructor(scene: THREE.Scene, playerId: string, startPos: { x: number; y: number; z: number }, terrain?: Terrain) {
+  constructor(scene: THREE.Scene, playerId: string, startPos: { x: number; y: number; z: number }, terrain?: Terrain, armorClass?: string) {
     this.instanceId = ++_remotePlayerInstanceCounter;
     this.scene = scene;
     this.playerId = playerId;
@@ -139,8 +139,9 @@ export class RemotePlayer {
     this.gizmo = new RemoteGizmo(scene, startPos);
     logger.debug(`GIZMO ADDED`, { playerId, instanceId: this.instanceId });
 
-    // Initialize player model
-    this._model = new PlayerModel(scene);
+    // Heavy armor wears the knight — a silhouette read at distance, not
+    // just a stat. Fixed at spawn (a mid-match class swap lands next join).
+    this._model = new PlayerModel(scene, armorClass === 'heavy' ? 'knight' : undefined);
     this.model.load().then(() => {
       this._loaded = true;
       this.applyClassScale();

@@ -39,14 +39,17 @@ scene.add(floor);
 const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.01, 100);
 
 const ual2 = q.get('model') === 'ual2';
-const url = ual2 ? '/assets/models/mannequin2.glb'
+const knight = q.get('model') === 'knight';
+const url = knight ? '/assets/models/knight.glb'
+  : ual2 ? '/assets/models/mannequin2.glb'
   : mann ? '/assets/models/mannequin.glb' : '/assets/models/RobotExpressive.glb';
 new GLTFLoader().load(url, (gltf) => {
   const model = gltf.scene;
   // Same world scale the game uses (robot 0.5, mannequin fit-2m).
   const box0 = new THREE.Box3().setFromObject(model);
   const size0 = box0.getSize(new THREE.Vector3());
-  model.scale.setScalar(mann || ual2 ? 2.0 / size0.y : 0.5);
+  const classScale = parseFloat(q.get('scale') ?? '1') || 1;
+  model.scale.setScalar((mann || ual2 || knight ? 2.0 / size0.y : 0.5) * classScale);
   model.rotation.y = Math.PI * 0.8; // 3/4 front — galleries read better than flat profile
   model.traverse((o) => { if ((o as THREE.SkinnedMesh).isSkinnedMesh) o.frustumCulled = false; });
   scene.add(model);

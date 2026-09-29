@@ -50,9 +50,13 @@ export class GameBot extends RemotePlayer {
   private brain: BotBrain;
   private botVel = new THREE.Vector3();
 
-  constructor(scene: THREE.Scene, name: string, team: TeamId | 'ffa', spawn: THREE.Vector3, terrain: Terrain) {
-    super(scene, `bot:${name}`, { x: spawn.x, y: spawn.y, z: spawn.z }, terrain);
+  constructor(scene: THREE.Scene, name: string, team: TeamId | 'ffa', spawn: THREE.Vector3, terrain: Terrain,
+              cls: 'light' | 'medium' | 'heavy' = 'medium') {
+    // Class must ride super() — the model variant (knight for heavy) is
+    // picked inside the RemotePlayer ctor before setBotClass could speak.
+    super(scene, `bot:${name}`, { x: spawn.x, y: spawn.y, z: spawn.z }, terrain, cls);
     this.team = team;
+    this.setBotClass(cls);
     this.brain = new BotBrain({ x: spawn.x, y: spawn.y, z: spawn.z });
     // Local authority: think() writes position/rotation directly — routing
     // them through update()→snapshot interp made tick() stomp pos with a
