@@ -279,6 +279,27 @@ export class CreatureSim {
     if (by) this.onKilled?.(by, pos);
   }
 
+  /** Drive the sim manually — tests and embedded hosts step it
+   *  deterministically instead of waiting on the wall-clock interval. */
+  step(dt: number): void {
+    if (!this.field || this.dormant) return;
+    this.tickAcc += dt;
+    this.tickAcc = Math.min(this.tickAcc, CreatureSim.TICK_CATCHUP_CAP);
+    if (this.tickAcc < TICK_DT) return;
+    const alive = this.alivePlayers();
+    if (alive.length === 0) { this.tickAcc = 0; return; }
+    for (const [species, cap] of Object.entries(this.pops)) {
+      if (cap > 0 && this.aliveCount(species) < cap) {
+        const near = alive[Math.floor(Math.random() * alive.length)]!.pos;
+        this.spawnCrawler(near, species);
+      }
+    }
+    while (this.tickAcc >= TICK_DT) {
+      this.tickAcc -= TICK_DT;
+      this.stepAll(alive);
+    }
+  }
+
   private tick(): void {
     if (!this.field || this.dormant) return;
     const now = performance.now();

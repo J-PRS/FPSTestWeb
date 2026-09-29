@@ -34,6 +34,7 @@ import { POWERUP, rollCreatureDrop, type PowerupKind } from '../../shared/pickup
 import { ENERGY } from '../../shared/movement.ts';
 import type { ServerWebSocket } from 'bun';
 import type { WebSocketData } from './types.ts';
+import { MatchClock, type MatchHost } from './roomMatch.ts';
 
 export class Room {
   readonly name: string;
@@ -156,7 +157,7 @@ export class Room {
         onDeploy: (pid, kind, pos) => this.deployables.handleDeploy(pid, kind, pos),
         deployBlast: (pos, damage, radius, shooter) => this.deployables.applyBlast(pos, damage, radius, shooter),
         deployables: () => this.deployables.snapshot(),
-        matchEndsAt: () => this.matchEndsAt,
+        matchEndsAt: () => this.matchClock.timeLeftMs() > 0 ? Date.now() + this.matchClock.timeLeftMs() : 0,
         moveInput: (pid, i, status, seq) => this.moveSim.setInput(pid, {
           forward: i.forward, right: i.right,
           jumpPressed: !!i.jump, jumpHeld: !!i.jump, skiHeld: !!i.ski,
@@ -189,6 +190,7 @@ export class Room {
       },
     );
     this.moveSim = new RoomMoveSim(field, this.moveAuthority);
+    this.matchClock = new MatchClock(this.matchHost());
     this.moveSim.attachStructures(this.spec.structures);
     // Shield soak burns the same tank the jet model owns — without this
     // a shielded player under fire runs the sim tank ahead of the real one.
@@ -359,105 +361,50 @@ export class Room {
     this.connections.sendToPlayer(p.id, buff);
   }
 
-  /** Match clock — the horn sounds when a mode's timeLimitS elapses.
-   *  Starts on the first human join (0 = not running), re-arms on every
-   *  matchStart. Called from the room tick; leader wins, tie is 'draw'. */
-  private matchEndsAt = 0;
-  private matchWarned = false; // 60s warning — once per match
-  private matchOvertime = false; // tied horn → next score wins
+  /** Match lifecycle — clock/leader/reset funnel lives in roomMatch.ts;
+   *  matchHost adapts Room's fields to the leaf interface it takes. */
+  readonly matchClock: MatchClock;
+  /** Built in the constructor — field-initializer order would read
+   *  mode/modeSpec before they're assigned. */
+  private matchHost(): MatchHost {
+    return {
+      room: this.name,
+      mode: this.mode,
+      modeSpec: this.modeSpec,
+      scores: this.scores,
+      ffaScores: this.ffaScores,
+      getHumanCount: () => this.players.getHumanCount(),
+      matchPlayers: () => this.matchPlayers(),
+      broadcast: (msg) => this.broadcast(msg),
+      endCleanup: () => {
+        this.flags?.reset();
+        this.pickups?.clear();
+        this.deployables.clearAll();
+        this.players.resetStats();
+      },
+      rotate: () => this.onRotate?.() ?? null,
+      applySpec: (s) => this.applySpec(s),
+      onMatchEnd: (r) => this.onMatchEnd?.(r),
+    };
+  }
 
   /** ms until the horn; 0 when the clock isn't armed. */
   matchTimeLeftMs(): number {
-    return this.matchEndsAt ? Math.max(0, this.matchEndsAt - Date.now()) : 0;
+    return this.matchClock.timeLeftMs();
   }
 
   checkMatchClock(now: number): void {
-    const spec = this.modeSpec;
-    if (!spec) return;
-    if (this.matchEndsAt === 0) {
-      if (this.players.getHumanCount() > 0) {
-        this.matchEndsAt = now + spec.timeLimitS * 1000;
-      }
-      return;
-    }
-    if (!this.matchWarned && this.matchEndsAt - now <= 60_000) {
-      this.matchWarned = true;
-      this.broadcast({ type: 'matchNotice', text: '60 seconds left' });
-    }
-    // In overtime the horn is already past — any lead ends it instantly.
-    if (this.matchOvertime) {
-      const w = this.leader();
-      if (w !== null) { this.endMatch(w); return; }
-    }
-    if (now < this.matchEndsAt) return;
-    const w = this.leader();
-    if (w === null) {
-      if (this.matchOvertime) { this.endMatch('draw'); return; } // OT window spent
-      this.matchOvertime = true;
-      this.matchEndsAt = now + 120_000; // OT cap: still tied → draw
-      this.broadcast({ type: 'matchNotice', text: 'OVERTIME — next score wins' });
-      return;
-    }
-    this.endMatch(w);
+    this.matchClock.tick(now);
   }
 
-  /** Current match leader: team id / playerId, or null when tied. */
-  private leader(): string | null {
-    const spec = this.modeSpec!;
-    if (spec.teams) {
-      return this.scores.alpha === this.scores.bravo ? null
-        : this.scores.alpha > this.scores.bravo ? 'alpha' : 'bravo';
-    }
-    let top: string | null = null, topPts = -1, tied = false;
-    for (const [id, pts] of this.ffaScores) {
-      if (pts > topPts) { top = id; topPts = pts; tied = false; }
-      else if (pts === topPts) tied = true;
-    }
-    return top && !tied ? top : null;
-  }
-
-  /** Match resolution — every end path (score cap, flag cap, clock horn)
-   *  funnels through here: broadcast, journal, field reset, matchStart.
-   *  'draw' is a legal winner (tied clock). */
   /** Admin force-end: resolve with the current leader (or draw) and run
    *  the normal reset funnel. No-op in rooms without a mode. */
   forceEndMatch(): boolean {
-    if (!this.modeSpec) return false;
-    let w = 'draw';
-    if (this.modeSpec.teams) {
-      w = this.scores.alpha === this.scores.bravo ? 'draw'
-        : this.scores.alpha > this.scores.bravo ? 'alpha' : 'bravo';
-    } else {
-      let best = -Infinity;
-      for (const [id, s] of this.ffaScores) {
-        if (s > best) { best = s; w = id; }
-      }
-    }
-    this.endMatch(w);
-    return true;
+    return this.matchClock.forceEnd();
   }
 
   private endMatch(w: string): void {
-    const spec = this.modeSpec!;
-    const scores = spec.teams ? { ...this.scores } : Object.fromEntries(this.ffaScores);
-    this.broadcast({ type: spec.teams ? 'matchEnd' : 'ffaMatchEnd', winner: w, scores } as ServerMessage);
-    this.onMatchEnd?.({ room: this.name, mode: this.mode, winner: w, scores, players: this.matchPlayers() });
-    this.scores.alpha = 0;
-    this.scores.bravo = 0;
-    this.ffaScores.clear();
-    this.flags?.reset();
-    this.pickups?.clear();
-    this.deployables.clearAll();
-    this.players.resetStats();
-    // Rotation comes between reset and matchStart so players spawn onto
-    // the NEW map (applySpec re-points spawnPoints) rather than eating
-    // one old-map spawn before mapUpdate lands.
-    const next = this.onRotate?.();
-    if (next) this.applySpec(next);
-    this.matchEndsAt = Date.now() + spec.timeLimitS * 1000;
-    this.matchWarned = false;
-    this.matchOvertime = false;
-    this.broadcast({ type: 'matchStart', mode: this.mode, scores: { ...this.scores } });
+    this.matchClock.end(w);
   }
 
   private awardFfa(id: string, n: number): void {

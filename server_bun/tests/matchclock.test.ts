@@ -58,22 +58,24 @@ describe('match clock', () => {
 
   test('60s warning fires once per match', () => {
     const room = new Room('w', null, '', resolveMapSpec({ mode: 'dm' }));
-    const priv = room as unknown as { matchEndsAt: number; matchWarned: boolean };
+    const priv = room.matchClock as unknown as { endsAt: number; warned: boolean };
+    const hornOf = () => priv.endsAt;
+    const warnedOf = () => priv.warned;
     const t0 = Date.now();
     room.players.addPlayer('h1');
     room.checkMatchClock(t0);
-    const horn = priv.matchEndsAt;
+    const horn = hornOf();
     room.checkMatchClock(horn - 59_000);
-    expect(priv.matchWarned).toBe(true);
-    priv.matchWarned = false; // re-arm check: only fires once
+    expect(warnedOf()).toBe(true);
+    priv.warned = false; // re-arm check: only fires once
     room.checkMatchClock(horn - 30_000);
-    expect(priv.matchWarned).toBe(true);
+    expect(warnedOf()).toBe(true);
     // match reset re-arms the warning for the next match (tied horn → OT,
     // so end it with a score before checking the flag)
     room.checkMatchClock(horn + 1);
     room.ffaScores.set('h1', 1);
     room.checkMatchClock(horn + 2);
-    expect(priv.matchWarned).toBe(false);
+    expect(warnedOf()).toBe(false);
   });
 
   test('ffa horn picks the top scorer; ties draw', () => {
