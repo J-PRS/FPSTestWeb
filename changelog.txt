@@ -1,3 +1,4 @@
+2026-10-03 - stateHash desync fixed: client hashed with djb2-over-string while server used FNV — could never match (0% match rate, every check spammed snapshot requests + DESYNC warns); shared/stateHash.ts owns one hasher both ends use, now genuinely order-insensitive (per-player FNV sums), pinned by tests
 2026-10-03 - bot jets: brains now jet for real — hills, high destinations, gentle-lip hops, and a momentum boost when plodding below 12 m/s (tank-aware: discretionary jets need >30 energy, escape/climb >15); mobility log gains airPct + jetPct so grounded-ski sheeping can no longer hide
 2026-10-03 - pvptest probe: full RX tally — every inbound msg type counted, shotRejected now visible, roster/economy/flag/deploy/map events tallied, unhandled types + unknown binary frames surfaced (no more blind spots)
 2026-10-03 - pvptest --balls: binary WIRE_BALLSEG frames now counted (probe no longer blind to real ball traffic — was JSON-lane only)

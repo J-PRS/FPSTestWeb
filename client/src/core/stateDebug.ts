@@ -3,6 +3,7 @@
 // (takeClientSnapshot / requestServerSnapshot / compareState / exportClientSnapshots).
 
 import Logger, { ChildLogger } from './Logger.js';
+import { computeStateHash } from '../../../shared/stateHash.js';
 import { StateSnapshot, type EntityState, type GameStateSnapshot } from './StateSnapshot.js';
 import type { SnapshotPlayer } from '../../../shared/protocol.js';
 import type { Player } from '../entities/Player.js';
@@ -66,14 +67,6 @@ function buildHashablePlayerMap(ctx: StateDebugContext): Map<string, { x: number
     });
   }
   return allPlayers;
-}
-
-function djb2Hex(input: string): string {
-  let hash = 5381;
-  for (let i = 0; i < input.length; i++) {
-    hash = ((hash << 5) + hash) + input.charCodeAt(i);
-  }
-  return (hash >>> 0).toString(16);
 }
 
 // Diff client-side player state against a server snapshot; returns significant diffs.
@@ -210,14 +203,11 @@ export function wireStateDebug(ctx: StateDebugContext): void {
 
     const allPlayers = buildHashablePlayerMap(ctx);
 
-    // Compute hash using same djb2 algorithm as server
-    const sortedIds = Array.from(allPlayers.keys()).sort();
-    const hashInput = sortedIds.map(id => {
-      const p = allPlayers.get(id)!;
-      return `${id}:${Math.round(p.x)},${Math.round(p.y)},${Math.round(p.z)}:${p.health}:${p.isDead ? 1 : 0}`;
-    }).join('|');
-
-    const localHashStr = djb2Hex(hashInput);
+    // shared/stateHash.ts owns the algorithm on both ends — an FNV over
+    // (id, rounded xyz, health, dead). The old client-side djb2 string
+    // hash could NEVER equal the server's FNV, so every check here was a
+    // phantom mismatch that spammed snapshot requests and desync warns.
+    const localHashStr = computeStateHash(allPlayers);
 
     if (localHashStr === serverHash) {
       logger.debug(`[StateHash] OK tick=${tick} hash=${serverHash} players=${playerCount}`);
@@ -225,7 +215,7 @@ export function wireStateDebug(ctx: StateDebugContext): void {
     }
 
     hashMismatchCount++;
-    logger.debug(`[StateHash] MISMATCH tick=${tick} server=${serverHash} client=${localHashStr} input=${hashInput}`);
+    logger.debug(`[StateHash] MISMATCH tick=${tick} server=${serverHash} client=${localHashStr}`);
     const now = Date.now();
 
     // Only do detailed snapshot comparison if enough time has passed

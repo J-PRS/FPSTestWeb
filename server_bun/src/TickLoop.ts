@@ -4,6 +4,7 @@ import { encodeTickPlayer, encodeTickFrame } from '../../shared/wire.ts';
 import { STATUS } from '../../shared/status.ts';
 import { perkMods } from '../../shared/perks.ts';
 import { POWERUP } from '../../shared/pickups.ts';
+import { computeStateHash } from '../../shared/stateHash.ts';
 import { logger } from './logger.ts';
 
 /** One encoded position update waiting for fanout — data is pre-encoded
@@ -277,7 +278,10 @@ export class TickLoop {
         if (r.force || seq % tier === 0) others.push(r.data);
         else this.metrics.recordsTierSkipped++;
       }
-      if (others.length === 0) continue;
+      // Always send — even an empty frame. The client's loss telemetry
+      // keys on tick-frame ARRIVAL cadence (a silent link reads as 100%
+      // loss), and ackSeq rides this frame: a quiet room would starve
+      // stateHistory pruning entirely. ~10B × 20Hz is free.
       const frame = encodeTickFrame(
         room.players.getLastSeq(recipientId),
         seq,
@@ -365,21 +369,12 @@ export class TickLoop {
   }
 
   private computeStateHash(room: Room): string {
-    // Rolling FNV over quantized state — no sort, no string join. Player
-    // ids hash first so membership changes can't alias. (Order-insensitive
-    // on purpose: iteration order can differ across a reconnect.)
-    let h = 0x811c9dc5;
+    // shared/stateHash.ts owns the algorithm — the client recomputes the
+    // same hash from its view, so both ends must stay on one definition.
+    const flat = new Map<string, { x: number; y: number; z: number; health: number; isDead: boolean }>();
     for (const [id, p] of room.players.getAllPlayers()) {
-      for (let i = 0; i < id.length; i++) {
-        h ^= id.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0;
-      }
-      for (const v of [
-        Math.round(p.position.x), Math.round(p.position.y), Math.round(p.position.z),
-        Math.round(p.health), p.isDead ? 1 : 0,
-      ]) {
-        h ^= v & 0xffff; h = Math.imul(h, 0x01000193) >>> 0;
-      }
+      flat.set(id, { x: p.position.x, y: p.position.y, z: p.position.z, health: p.health, isDead: p.isDead });
     }
-    return h.toString(16);
+    return computeStateHash(flat);
   }
 }
