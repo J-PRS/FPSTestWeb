@@ -22,6 +22,24 @@ const logger = new ChildLogger('NetTiers');
 /** Best-tier selection: ?net=wt|rtc|ws pins a single tier; otherwise WT and
  *  RTC probe in parallel and the better of whatever succeeded wins. WS is
  *  always the floor. */
+/** A config whose callbacks stay muted until `arm()` — lets a probe lose
+ *  the tier race and tear down silently instead of impersonating a drop
+ *  of the winning session. */
+function muteable(config: ConnectionConfig): { config: ConnectionConfig; arm(): void } {
+  let armed = false;
+  return {
+    arm() { armed = true; },
+    config: {
+      ...config,
+      onConnect: () => { if (armed) config.onConnect?.(); },
+      onDisconnect: (c, r) => { if (armed) config.onDisconnect?.(c, r); },
+      onError: (e) => { if (armed) config.onError?.(e); },
+      onMessage: (m) => { if (armed) config.onMessage?.(m); },
+      onBinaryMessage: (b) => { if (armed) config.onBinaryMessage?.(b); },
+    },
+  };
+}
+
 export async function connectGameTransport(config: ConnectionConfig): Promise<GameTransport> {
   const want = urlParams.net;
   if (want === 'ws') return new WebSocketConnection(config);
@@ -31,16 +49,22 @@ export async function connectGameTransport(config: ConnectionConfig): Promise<Ga
   const now = Date.now();
   const probeWt = now >= missUntil.wt;
   const probeRtc = now >= missUntil.rtc;
+  // Each candidate gets a muted wrapper — the tier probe disconnects the
+  // losers, and without this a loser's teardown would fire onDisconnect/
+  // onMessage as if the WINNING session dropped (or worse, deliver its
+  // frames twice). Callbacks go live only for the transport that wins.
+  const wtC = muteable(config);
+  const rtcC = muteable(config);
   const [wt, rtc] = await Promise.all([
-    probeWt ? tryWebTransport(config).catch(() => null) : null,
-    probeRtc ? tryWebRTC(config).catch(() => null) : null,
+    probeWt ? tryWebTransport(wtC.config).catch(() => null) : null,
+    probeRtc ? tryWebRTC(rtcC.config).catch(() => null) : null,
   ]);
   // Only an actual probe refreshes the miss window — a skipped probe must
   // not extend the cache or the tier never gets retried.
   if (probeWt && !wt) missUntil.wt = Date.now() + MISS_CACHE_MS;
   if (probeRtc && !rtc) missUntil.rtc = Date.now() + MISS_CACHE_MS;
-  if (wt) { void rtc?.disconnect(); logger.info('tier: WebTransport'); return wt; }
-  if (rtc) { logger.info('tier: WebRTC'); return rtc; }
+  if (wt) { wtC.arm(); void rtc?.disconnect(); logger.info('tier: WebTransport'); return wt; }
+  if (rtc) { rtcC.arm(); logger.info('tier: WebRTC'); return rtc; }
   logger.info('tier: WebSocket');
   return new WebSocketConnection(config);
 }
@@ -55,7 +79,6 @@ class WebTransportGameTransport implements GameTransport {
   readonly tier = 'wt' as const;
   private open = false;
   private writer: WritableStreamDefaultWriter<Uint8Array> | null = null;
-  private dgWriter: WritableStreamDefaultWriter<Uint8Array> | null = null;
   private preOpen: string[] = [];
   private encoder = new TextEncoder();
   private decoder = new TextDecoder();
@@ -69,7 +92,6 @@ class WebTransportGameTransport implements GameTransport {
       // Reliable JSON lane: one bidi stream, newline-delimited frames.
       const stream = await wt.createBidirectionalStream();
       this.writer = stream.writable.getWriter();
-      this.dgWriter = wt.datagrams.writable.getWriter();
       void this.pumpReliable(stream.readable.getReader());
       void this.pumpDatagrams(wt.datagrams.readable.getReader());
       for (const d of this.preOpen) void this.writer.write(this.encoder.encode(d + '\n')).catch(() => {});
@@ -142,13 +164,6 @@ class WebTransportGameTransport implements GameTransport {
     // A write can outlive the session — teardown rejects it; that's a
     // normal close, not an error.
     void this.writer.write(this.encoder.encode(payload + '\n')).catch(() => {});
-    return true;
-  }
-
-  sendUnreliable(data: string | Uint8Array): boolean {
-    if (!this.open || !this.dgWriter) return this.send(data);
-    const bytes = new Uint8Array(typeof data === 'string' ? this.encoder.encode(data) : data);
-    this.dgWriter.write(bytes).catch(() => {}); // UDP semantics: drop on backpressure
     return true;
   }
 
@@ -258,12 +273,6 @@ class ServerRtcTransport implements GameTransport {
     else this.dc.send(new Uint8Array(data));
     return true;
   }
-  sendUnreliable(data: string | Uint8Array): boolean {
-    if (this.dc.readyState !== 'open') return this.send(data);
-    if (typeof data === 'string') this.dc.send(data);
-    else this.dc.send(new Uint8Array(data));
-    return true;
-  }
   connected(): boolean { return this.open && this.dc.readyState === 'open'; }
   disconnect(): void {
     this.open = false;
@@ -348,6 +357,12 @@ export class TieredTransport implements GameTransport {
   private closed = false;
   private attempts = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Connect-attempt epoch — losing-tier probes and stale reconnect timers
+   *  fire callbacks too; only the CURRENT generation may re-arm a probe or
+   *  claim the inner slot, or a loser's teardown orphans a live session
+   *  (the connect storm: parallel sockets → "Player ID already connected"
+   *  → new id minted → another orphan, ad infinitum). */
+  private gen = 0;
   private static readonly BACKOFF_MS = 1000;
 
   constructor(private readonly config: ConnectionConfig) {}
@@ -356,6 +371,12 @@ export class TieredTransport implements GameTransport {
 
   connect(url?: string): void {
     this.url = url;
+    const gen = ++this.gen;
+    if (this.reconnectTimer) { clearTimeout(this.reconnectTimer); this.reconnectTimer = null; }
+    // A previous inner can still be alive here (its teardown raced the
+    // new attempt) — orphaning its socket is exactly the session leak
+    // that floods the server with parallel joins.
+    if (this.inner) { const old = this.inner; this.inner = null; old.disconnect(); }
     // Re-probe on each (re)connect: the previous best tier may be gone.
     // Inner transports see wrapped callbacks — a drop re-arms the probe
     // here, mirroring WebSocketConnection's own reconnect loop so a WT/RTC
@@ -363,6 +384,9 @@ export class TieredTransport implements GameTransport {
     const innerConfig: ConnectionConfig = {
       ...this.config,
       onDisconnect: (code, reason) => {
+        // Stale generation — a losing probe's teardown or a superseded
+        // attempt's timer. Forward nothing, schedule nothing.
+        if (gen !== this.gen) return;
         this.config.onDisconnect?.(code, reason);
         if (this.closed) return;
         // WebSocketConnection runs its own reconnect loop — reprobing here
@@ -371,22 +395,26 @@ export class TieredTransport implements GameTransport {
         if (this.attempts < (this.config.maxReconnectAttempts ?? Infinity)) {
           this.attempts++;
           this.reconnectTimer = setTimeout(() => {
-            if (!this.closed) this.connect(this.url);
+            if (!this.closed && this.gen === gen) this.connect(this.url);
           }, TieredTransport.BACKOFF_MS);
         }
       },
       onConnect: () => {
+        if (gen !== this.gen) return;
         this.attempts = 0;
         this.config.onConnect?.();
       },
+      onMessage: (data) => { if (gen === this.gen) this.config.onMessage?.(data); },
+      onBinaryMessage: (data) => { if (gen === this.gen) this.config.onBinaryMessage?.(data); },
     };
     void connectGameTransport(innerConfig).then((t) => {
-      if (this.closed) { t.disconnect(); return; }
+      if (this.closed || gen !== this.gen) { t.disconnect(); return; }
       this.inner = t;
       t.connect(url);
       for (const d of this.pending) t.send(d);
       this.pending.length = 0;
     }).catch((e) => {
+      if (gen !== this.gen) return;
       this.config.onError?.(e instanceof Error ? e : new Error(String(e)));
     });
   }
@@ -395,10 +423,6 @@ export class TieredTransport implements GameTransport {
     if (this.inner) return this.inner.send(data);
     this.pending.push(data);
     return false;
-  }
-
-  sendUnreliable(data: string | Uint8Array): boolean {
-    return this.inner?.sendUnreliable?.(data) ?? this.send(data);
   }
 
   connected(): boolean { return this.inner?.connected() ?? false; }

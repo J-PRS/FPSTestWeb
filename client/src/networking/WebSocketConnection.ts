@@ -219,12 +219,6 @@ export class WebSocketConnection {
     }
   }
 
-  /** TCP has no second lane — unreliable sends ride the same socket; the
-   *  NetChannel seam above documents the intended semantic for other tiers. */
-  sendUnreliable(data: string | Uint8Array): boolean {
-    return this.send(data);
-  }
-
   /**
    * Check if connected
    */
