@@ -263,7 +263,10 @@ surface. Detailed research lives in `_reports/`; this file is the current truth.
   O(1) index, room hibernation, global player cap (FPS_GLOBAL_MAX_PLAYERS).
 
 ### Later / research needed
-- Client prediction + reconciliation for self (currently trust + correct).
+- ~~Client prediction + reconciliation for self~~ — DONE: corrections rewind
+  the shared sim to server truth and replay the journaled input stream
+  (net/players.ts onCorrection + NetworkManager.inputsAfter); yaw/pitch stay
+  client-authoritative, <0.5m errors ignored, no-journal fallback snaps.
 - ~~Replay formalization~~ — DONE 2026-10-03: `netReplay.test.ts` replays a
   real `.rec` capture (live duel room, fleet+server bots — hits, kills,
   projectiles, tick frames) through actual `handleMessage`/`handleBinaryMessage`
