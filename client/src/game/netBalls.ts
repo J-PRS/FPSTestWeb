@@ -14,6 +14,19 @@ export interface NetBallsCtx {
   nuggets: Nugget[];
 }
 
+type Vec3Msg = { x: number; y: number; z: number };
+
+// Bounce carries approach overshoot proportional to speed — a
+// terminal-speed ball legitimately diverges tens of meters on a bounce
+// tick, so its floor scales with velocity. Lunge/teleport/spawn are
+// server-side RNG the predictor can't foresee; segment heartbeat is the
+// only kind where >4m is a real desync.
+function rubberbandWarnAt(kind: string, speed: number): number {
+  if (kind === 'lunge' || kind === 'teleport' || kind === 'spawn') return 40;
+  if (kind === 'bounce' || kind === 'stall') return Math.max(12, speed * 0.6);
+  return 4;
+}
+
 // ---- Server-owned balls (shared PvE) ---------------------------------
 // Connected = the server sims all ball flight; ballSpawn/ballSegment/
 // ballDie events drive netDriven Ball instances that replay the shared
@@ -70,7 +83,6 @@ export function createNetBalls(deps: EntitiesDeps, ctx: NetBallsCtx, logger: Chi
       : (id ? deps.world.remotePlayers.get(id)?.pos ?? null : null);
   }
 
-  type Vec3Msg = { x: number; y: number; z: number };
   function netBallSpawn(m: { id: number; variant: number; colorIdx: number; position: Vec3Msg; velocity: Vec3Msg; t?: number; enraged?: boolean; targetId?: string | null; tp?: Vec3Msg | null }): void {
     if (netBallById.has(m.id)) return;
     Ball.initNetMode();
@@ -129,15 +141,8 @@ export function createNetBalls(deps: EntitiesDeps, ctx: NetBallsCtx, logger: Chi
       m.position.z + m.velocity.z * age,
     );
     const err = _segPos.distanceTo(_truthPos);
-    // Bounce carries approach overshoot proportional to speed — a
-    // terminal-speed ball legitimately diverges tens of meters on a
-    // bounce tick, so its floor scales with velocity. Lunge/teleport are
-    // server-side RNG the predictor can't foresee; heartbeat/segment is
-    // the only kind where >4m is a real desync.
     const kind = m.kind ?? 'segment';
-    const warnAt = kind === 'lunge' || kind === 'teleport' || kind === 'spawn' ? 40
-      : kind === 'bounce' || kind === 'stall' ? Math.max(12, speed * 0.6) : 4;
-    if (err <= warnAt) {
+    if (err <= rubberbandWarnAt(kind, speed)) {
       if (err > 2) logger.debug(`ball #${m.id} segment correction ${err.toFixed(1)}m`);
       return;
     }
@@ -150,19 +155,23 @@ export function createNetBalls(deps: EntitiesDeps, ctx: NetBallsCtx, logger: Chi
     const sup = rbSuppressed.get(m.id) ?? 0;
     rbLastWarn.set(m.id, nowMs);
     rbSuppressed.delete(m.id);
-    // Terrain forensics: a bounce stamp lands at ground contact, so
-    // truth.y should sit ~radius above the field the sim bounced on.
-    // fieldH vs terrainH split "stale heightfield" from "integrator
-    // drift" — if they differ, Ball.field is a dead snapshot.
+    logger.warn(
+      `ball #${m.id} ${kind} rubberband ${err.toFixed(1)}m (age ${(age * 1000).toFixed(0)}ms) — prediction diverged${sup ? ` (×${sup + 1})` : ''}`,
+      rubberbandForensics(b, m));
+  }
+
+  // Terrain forensics: a bounce stamp lands at ground contact, so truth.y
+  // should sit ~radius above the field the sim bounced on. fieldH vs
+  // terrainH split "stale heightfield" from "integrator drift" — if they
+  // differ, Ball.field is a dead snapshot.
+  function rubberbandForensics(b: Ball, m: { position: Vec3Msg }) {
     const bf = Ball.netField;
-    const fieldH = bf ? hmHeight(bf, m.position.x, m.position.z) : NaN;
-    const terrainH = deps.lazyTerrain().getHeight(m.position.x, m.position.z);
     const diag = b.netDiag;
-    logger.warn(`ball #${m.id} ${kind} rubberband ${err.toFixed(1)}m (age ${(age * 1000).toFixed(0)}ms) — prediction diverged${sup ? ` (×${sup + 1})` : ''}`, {
+    return {
       pred: { x: +b.pos.x.toFixed(1), y: +b.pos.y.toFixed(1), z: +b.pos.z.toFixed(1) },
       truth: { x: +m.position.x.toFixed(1), y: +m.position.y.toFixed(1), z: +m.position.z.toFixed(1) },
-      fieldH: +fieldH.toFixed(1),
-      terrainH: +terrainH.toFixed(1),
+      fieldH: +(bf ? hmHeight(bf, m.position.x, m.position.z) : NaN).toFixed(1),
+      terrainH: +deps.lazyTerrain().getHeight(m.position.x, m.position.z).toFixed(1),
       fieldFp: bf ? hmFingerprint(bf) : 'none',
       // Regime forensics: simT>simNow = the catch-all free-ran ahead;
       // legAge pinned ~8 = inert leg extrapolating a stale anchor.
@@ -171,7 +180,7 @@ export function createNetBalls(deps: EntitiesDeps, ctx: NetBallsCtx, logger: Chi
       legT0: diag ? +diag.legT0.toFixed(2) : null,
       legAge: diag ? +diag.legAge.toFixed(2) : null,
       enraged: diag?.enraged ?? null,
-    });
+    };
   }
 
   function netBallSegment(m: { id: number; kind?: string; position: { x: number; y: number; z: number }; velocity: { x: number; y: number; z: number }; enraged: boolean; targetId: string | null; t?: number; et?: number; slowT?: number; damp?: boolean; tp?: Vec3Msg | null }): void {

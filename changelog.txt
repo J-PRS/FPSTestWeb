@@ -1,3 +1,5 @@
+2026-10-03 - netBalls rubberbandCheck split into warnAt/forensics helpers (c23 -> clean).
+
 2026-10-03 - netCrawlSpawn: instanceof chains -> SPECIES table (klass + registry list + default state) (c31 -> clean).
 
 2026-10-03 - hud.update split into tickVitals (health+ghost+armor), tickBuffs, tickDamageFx (c20 -> clean).
