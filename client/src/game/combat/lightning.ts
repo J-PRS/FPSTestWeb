@@ -122,7 +122,22 @@ export function createLightning(deps: CombatDeps, hooks: LightningHooks) {
 
     // Targets: ray-vs-sphere, nearest wins — tip lands on the SURFACE entry
     // point (exact aim), never magnetized to the center
-    let hitTarget: (typeof deps.targets)[number] | null = null;
+    const hitTarget = traceTargetHit(hitT);
+    hitT = _lgTraceT.t;
+    const hitPlayerId = tracePlayerHit(hitT);
+    hitT = _lgTraceT.t;
+
+    _lgHit.copy(_lgO).addScaledVector(_lgD, hitT);
+    return { hitT, hitTarget, hitPlayerId };
+  }
+
+  // Scratch out-param for the loops below — keeps each scan's "new tip"
+  // mutation out of the caller's locals.
+  const _lgTraceT = { t: 0 };
+
+  function traceTargetHit(hitT: number): (typeof deps.targets)[number] | null {
+    _lgTraceT.t = hitT;
+    let hit: (typeof deps.targets)[number] | null = null;
     for (const t of deps.targets) {
       if (t.dead) continue;
       _lgTo.copy(t.pos).sub(_lgO);
@@ -130,29 +145,36 @@ export function createLightning(deps: CombatDeps, hooks: LightningHooks) {
       // the feet-sphere misses a beam through the upper half entirely.
       if (t.capsuleTop) _lgTo.y += t.capsuleTop * 0.5;
       const proj = _lgTo.dot(_lgD);
-      if (proj < 0 || proj > hitT) continue;
-      const r = (t.hitRadius ?? t.radius) + 0.45; // beam is thin but not needle-thin
-      const perp2 = _lgTo.lengthSq() - proj * proj;
-      if (perp2 < r * r) {
-        const entry = proj - Math.sqrt(r * r - perp2); // surface, not center
-        if (entry < hitT) { hitT = Math.max(entry, 0); hitTarget = t; }
-      }
+      if (proj < 0 || proj > _lgTraceT.t) continue;
+      const entry = sphereEntry(_lgTraceT.t, (t.hitRadius ?? t.radius) + 0.45, proj);
+      if (entry !== null) { _lgTraceT.t = entry; hit = t; }
     }
+    return hit;
+  }
 
-    // Remote players: same ray test, slightly fat capsule
-    let hitPlayerId: string | null = null;
+  function tracePlayerHit(hitT: number): string | null {
+    _lgTraceT.t = hitT;
+    let hitId: string | null = null;
     for (const [pid, rp] of deps.world.remotePlayers) {
       if (rp.isDead) continue;
       _lgTo.copy(rp.position).sub(_lgO);
       _lgTo.y += 0.9; // capsule center is ~chest, not feet
       const proj = _lgTo.dot(_lgD);
-      if (proj < 0 || proj > hitT) continue;
-      const r = 1.0;
-      if (_lgTo.lengthSq() - proj * proj < r * r) { hitT = proj; hitPlayerId = pid; }
+      if (proj < 0 || proj > _lgTraceT.t) continue;
+      const entry = sphereEntry(_lgTraceT.t, 1.0, proj);
+      if (entry !== null) { _lgTraceT.t = entry; hitId = pid; }
     }
+    return hitId;
+  }
 
-    _lgHit.copy(_lgO).addScaledVector(_lgD, hitT);
-    return { hitT, hitTarget, hitPlayerId };
+  // Ray-vs-sphere entry distance along _lgD for the to-target vector in
+  // _lgTo; null when the ray misses or the sphere sits behind the tip.
+  // Beam is thin but not needle-thin — callers pad the radius.
+  function sphereEntry(hitT: number, r: number, proj: number): number | null {
+    const perp2 = _lgTo.lengthSq() - proj * proj;
+    if (perp2 >= r * r) return null;
+    const entry = proj - Math.sqrt(r * r - perp2); // surface, not center
+    return entry < hitT ? Math.max(entry, 0) : null;
   }
 
   // Per-frame beam visual refresh — called from gameLoop AFTER
@@ -223,18 +245,7 @@ export function createLightning(deps: CombatDeps, hooks: LightningHooks) {
 
     if (hitTarget) {
       hitTarget.applyKnockback(player.pos, stats.knockbackForce); // the pin
-      deps.lazyDamageNumbers().spawn(hitTarget.pos, stats.directDamage, '#8fdcff', cam);
-      // Charge: every tick pumped into this target banks toward its pop
-      const acc = (lgAcc.get(hitTarget.id) ?? 0) + stats.directDamage;
-      lgAcc.set(hitTarget.id, acc);
-      deps.reportTargetDamage?.(hitTarget, stats.directDamage);
-      if (hitTarget.takeDamage(stats.directDamage)) {
-        hooks.onTargetDestroyed(hitTarget, hitTarget.vel, WeaponType.Lightning);
-        lgPop(hitTarget.pos, acc);
-        lgAcc.delete(hitTarget.id);
-      } else if (!hitTarget.hideHealthBar) {
-        deps.lazyHealthBarSystem().spawnBall(hitTarget, stats.directDamage, hitTarget.health);
-      }
+      zapTarget(hitTarget, stats.directDamage, cam);
       deps.lazyHud().showHitMarker();
 
       // Chain fork: arc from the CONTACT POINT to the nearest OTHER enemy
@@ -242,19 +253,8 @@ export function createLightning(deps: CombatDeps, hooks: LightningHooks) {
       const chainT = pickChain(_lgHit, hitTarget);
       if (chainT) {
         lgBeam.fireChain(_lgHit, chainT.pos);
-        const cdmg = stats.directDamage * LG_CHAIN_DMG_SCALE;
         chainT.applyKnockback(hitTarget.pos, stats.knockbackForce * 0.6);
-        deps.lazyDamageNumbers().spawn(chainT.pos, cdmg, '#8fdcff', cam);
-        const cAcc = (lgAcc.get(chainT.id) ?? 0) + cdmg;
-        lgAcc.set(chainT.id, cAcc);
-        deps.reportTargetDamage?.(chainT, cdmg);
-        if (chainT.takeDamage(cdmg)) {
-          hooks.onTargetDestroyed(chainT, chainT.vel, WeaponType.Lightning);
-          lgPop(chainT.pos, cAcc);
-          lgAcc.delete(chainT.id);
-        } else if (!chainT.hideHealthBar) {
-          deps.lazyHealthBarSystem().spawnBall(chainT, cdmg, chainT.health);
-        }
+        zapTarget(chainT, stats.directDamage * LG_CHAIN_DMG_SCALE, cam);
       }
     }
 
@@ -269,6 +269,23 @@ export function createLightning(deps: CombatDeps, hooks: LightningHooks) {
         });
       }
       hooks.applyForceToRemotes(_lgHit, stats.aoeRadius, stats.knockbackForce, 'push', stats.aoeDamage, null);
+    }
+  }
+
+  // One beam tick of damage: number + health bar + bank toward the pop —
+  // every tick pumped into a target charges its burst. Shared by the
+  // primary strike and the chain fork.
+  function zapTarget(t: (typeof deps.targets)[number], dmg: number, cam: THREE.Camera): void {
+    deps.lazyDamageNumbers().spawn(t.pos, dmg, '#8fdcff', cam);
+    const acc = (lgAcc.get(t.id) ?? 0) + dmg;
+    lgAcc.set(t.id, acc);
+    deps.reportTargetDamage?.(t, dmg);
+    if (t.takeDamage(dmg)) {
+      hooks.onTargetDestroyed(t, t.vel, WeaponType.Lightning);
+      lgPop(t.pos, acc);
+      lgAcc.delete(t.id);
+    } else if (!t.hideHealthBar) {
+      deps.lazyHealthBarSystem().spawnBall(t, dmg, t.health);
     }
   }
 

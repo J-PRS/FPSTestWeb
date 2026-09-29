@@ -1,3 +1,5 @@
+2026-10-03 - lightning: lgTrace loops -> traceTargetHit/tracePlayerHit + sphereEntry; strike/chain damage -> zapTarget (c20/c18 -> clean).
+
 2026-10-03 - gameLoop simTick entity updates -> tickEntities (c16 -> clean).
 
 2026-10-03 - blastForce: BlastArgs object replaces 9/10-param signatures (max-params -> clean, depth5 flattened).
