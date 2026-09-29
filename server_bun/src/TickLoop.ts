@@ -208,6 +208,10 @@ export class TickLoop {
       // Grace-period entries are owned by their removal timeout — reaping
       // them here double-removes (double playerLeft broadcast).
       if (room.disconnected.has(playerId)) continue;
+      // A human who never sent a position isn't in-world yet (menu/lobby)
+      // — their record would render a frozen ghost at the spawn default.
+      // Bots are exempt: the sim writes their position without reports.
+      if (!p.isBot && !p.hasReceivedPosition) continue;
       const silenceMs = now - p.lastSeen;
       if (this.reapIdle(room, playerId, p, silenceMs)) continue;
       // Silent sockets (backgrounded tabs) get no regular updates — but a

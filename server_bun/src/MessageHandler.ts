@@ -313,7 +313,11 @@ export class MessageHandler {
     this.combat.ensureRespawnScheduled(playerId);
 
     const others = this.playerManager.getOtherPlayers(playerId);
-    const playersData = others.map((p) => this.playerManager.toGameStatePlayer(p));
+    // Humans that never reported a position aren't in-world yet — listing
+    // them spawns a frozen ghost mesh at the spawn default for the joiner.
+    const playersData = others
+      .filter((p) => p.isBot || p.hasReceivedPosition)
+      .map((p) => this.playerManager.toGameStatePlayer(p));
 
     this.sendToPlayer(playerId, {
       type: 'gameState',
@@ -362,6 +366,7 @@ export class MessageHandler {
    *  gets every broadcast + tick frame (sent to connections, not players). */
   handleSpectatorHandshake(playerId: string): void {
     const playersData = [...this.playerManager.getAllPlayers().values()]
+      .filter((p) => p.isBot || p.hasReceivedPosition)
       .map((p) => this.playerManager.toGameStatePlayer(p));
     this.sendToPlayer(playerId, {
       type: 'gameState',
