@@ -1,3 +1,5 @@
+2026-10-03 - Creature wall-gate scenario (pen proves melee can't clip through geometry); deployables.ts split - sentry homing rockets moved to deployRockets.ts (-145 lines).
+
 2026-10-03 - Scenario suite grew to 14 files (gem bank, turret fire+LOS, respawn, friendly-fire, mine); playerUal.ts extracted from PlayerModel
 2026-10-03 - AGENTS.md + .devin/rules (netcode, testing, determinism-perf) researched from agents.md convention + Devin docs; baneling detonate fixed (terminal homing + fuse radius) - 8/8 scenarios green
 2026-10-03 - Scenario test suite (tests/scenarios/: duel, creature bite, flag cap, projectile hit, spawn protection) + deterministic CreatureSim.step + MatchClock extracted from Room
