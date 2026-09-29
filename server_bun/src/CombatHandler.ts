@@ -22,6 +22,46 @@ const FORCE_SEND_MS = 900;
 type BroadcastFn = (msg: ServerMessage, excludePlayerId?: string) => void;
 type SendToPlayerFn = (playerId: string, msg: ServerMessage) => void;
 
+/** One blast's derived envelope — computed once per processAOE, shared
+ *  by every target the splash sweep touches. */
+interface BlastCtx {
+  shooterId: string;
+  ping: number;
+  pos: Vec3;
+  radius: number;
+  baseDamage: number;
+  impulse: number;
+  pull: boolean;
+  label: string;
+  weapon?: number;
+}
+
+/** Optional room wiring — mirrors the subset of RoomInfo combat needs. */
+export interface CombatDeps {
+  onKill?: (targetId: string, shooterId: string) => void;
+  onHit?: (targetId: string, shooterId: string) => void;
+  /** Team-mode rooms block damage between teammates (knockback still
+   *  applies — boosting off a teammate's splash is intentional). */
+  teams?: boolean;
+  /** Movement shadow sim — gets the same impulse deltas we apply to
+   *  target.velocity so a legit blast doesn't read as divergence. */
+  moveImpulse?: (playerId: string, dv: Vec3) => void;
+  /** Server-driven respawn is a declared discontinuity — reseat the
+   *  shadow at the spawn or the corpse→spawn jump reads as divergence. */
+  moveResync?: (playerId: string, pos: Vec3, yaw: number) => void;
+  /** Room mode tag for balance telemetry ('ctf', 'nuggets', ...). */
+  mode?: string;
+  /** Deployable blast sweep — Room.deployables.applyBlast. Absent on
+   *  rooms without structures (offline-style lobbies). */
+  deployBlast?: (pos: Vec3, damage: number, radius: number, shooterId: string) => void;
+  /** Room heartbeat counters — claims/rejects/applied damage tally here
+   *  so the periodic 'Room health' line shows the funnel at a glance. */
+  health?: Map<string, number>;
+  /** Nearest-creature distance for env-damage plausibility (melee-from-
+   *  afar flagging). Absent = no creature sim to check against. */
+  envRange?: (playerId: string) => number;
+}
+
 /**
  * Everything that can hurt a player: shot hit-claims, AOE blasts,
  * environmental damage, projectile tracking/destroy, and respawn timers.
@@ -52,32 +92,11 @@ export class CombatHandler {
     private playerManager: PlayerManager,
     private broadcast: BroadcastFn,
     private sendToPlayer: SendToPlayerFn,
-    private onKill?: (targetId: string, shooterId: string) => void,
-    private onHit?: (targetId: string, shooterId: string) => void,
-    // Team-mode rooms block damage between teammates (knockback still
-    // applies — boosting off a teammate's splash is intentional).
-    private teamMode = false,
-    /** Movement shadow sim — gets the same impulse deltas we apply to
-     *  target.velocity so a legit blast doesn't read as divergence. */
-    private moveImpulse?: (playerId: string, dv: Vec3) => void,
-    /** Server-driven respawn is a declared discontinuity — reseat the
-     *  shadow at the spawn or the corpse→spawn jump reads as divergence. */
-    private moveResync?: (playerId: string, pos: Vec3, yaw: number) => void,
-    /** Room mode tag for balance telemetry ('ctf', 'nuggets', ...). */
-    private modeTag = '',
-    /** Deployable blast sweep — Room.deployables.applyBlast. Absent on
-     *  rooms without structures (offline-style lobbies). */
-    private deployBlast?: (pos: Vec3, damage: number, radius: number, shooterId: string) => void,
-    /** Room heartbeat counters — claims/rejects/applied damage tally here
-     *  so the periodic 'Room health' line shows the funnel at a glance. */
-    private health?: Map<string, number>,
-    /** Nearest-creature distance for env-damage plausibility (melee-from-
-     *  afar flagging). Absent = no creature sim to check against. */
-    private envRange?: (playerId: string) => number,
+    private deps: CombatDeps = {},
   ) {}
 
   private hb(key: string, n = 1): void {
-    if (this.health) this.health.set(key, (this.health.get(key) ?? 0) + n);
+    if (this.deps.health) this.deps.health.set(key, (this.deps.health.get(key) ?? 0) + n);
   }
 
   /** Claim refused: server-side warn plus a shotRejected to the shooter so
@@ -93,7 +112,7 @@ export class CombatHandler {
   }
 
   private friendly(shooterId: string, targetId: string): boolean {
-    if (!this.teamMode || shooterId === targetId) return false; // self-splash = rocket jumps
+    if (!this.deps.teams || shooterId === targetId) return false; // self-splash = rocket jumps
     const s = this.playerManager.getPlayer(shooterId);
     const t = this.playerManager.getPlayer(targetId);
     return !!(s?.team && t?.team && s.team === t.team);
@@ -128,101 +147,110 @@ export class CombatHandler {
     }
     player.protectedUntil = 0; // firing breaks your own spawn shield
 
-    const { targetId } = msg;
-
-    if (targetId) {
-      // Reject self-damage — client should never send its own ID as targetId
-      if (targetId === playerId) {
-        this.reject(playerId, 'Shot', 'self-target');
-        return;
-      }
-
-      const target = this.playerManager.getPlayer(targetId);
-      if (!target) {
-        this.reject(playerId, 'Shot', 'unknown target', targetId, msg.weaponType);
-        return;
-      }
-      // Dead targets are untouchable — without this, corpse hits still
-      // broadcast playerHit and can stack phantom damage past respawn.
-      if (target.isDead) {
-        this.reject(playerId, 'Shot', 'target already dead', targetId, msg.weaponType);
-        return;
-      }
-      // Friendly fire: no damage (and no playerHit) between teammates.
-      if (this.friendly(playerId, targetId)) {
-        this.reject(playerId, 'Shot', 'friendly fire', targetId, msg.weaponType);
-        return;
-      }
-
-      // Hit claims must name the projectile that landed them. The claimed
-      // id may be null if the hit raced the server's projectileCreated —
-      // fall back to the shooter's most recent spawn of that weapon type.
-      const proj = this.ledger.resolve(playerId, msg.projectileId, msg.weaponType, 'shot');
-      if (!proj) {
-        this.reject(playerId, 'Shot', `no known projectile (id=${msg.projectileId ?? 'null'})`, targetId, msg.weaponType);
-        return;
-      }
-      if (msg.position === undefined || msg.airtime === undefined) {
-        this.reject(playerId, 'Shot', 'missing position/airtime', targetId, msg.weaponType);
-        return;
-      }
-      // Lag compensation: validate against where the target was when the
-      // shooter saw it (now - ping), not where it is now — otherwise a
-      // 100ms client aims at ghosts by design.
-      const verdict = validateHitClaim({
-        projectile: proj,
-        hitPos: msg.position,
-        targetPos: rewindPos(target, clampPing(player.ping)),
-        airtime: msg.airtime,
-        shooterVel: player.velocity,
-        now: Date.now(),
-        solids: this.solids,
-      });
-      if (!verdict.ok) {
-        this.reject(playerId, 'Shot', verdict.reason, targetId, msg.weaponType);
-        return;
-      }
-      const shotDamage = getWeaponStats(proj.weaponType).directDamage * perkMods(player.perk).directDamage * this.ddMult(player);
-      const result = this.playerManager.applyDamage(targetId, shotDamage);
-      // Full-rate tick updates for the hit window — the shooter's client is
-      // extrapolating this target's knockback and needs real positions to
-      // converge on (suppression would leave it predicting blind).
-      target.forceSendUntil = Date.now() + FORCE_SEND_MS;
-
-      this.applyHit(playerId, targetId, shotDamage, result, 'Player hit', undefined, proj.weaponType);
+    if (msg.targetId) {
+      this.hitClaim(playerId, player, msg, msg.targetId);
     } else {
-      logger.debug('Shot fired (miss)', { shooter: playerId });
-
-      if (msg.position && msg.velocity) {
-        // Spawn sanity: the claimed muzzle position must be near where the
-        // shooter was WHEN THEY FIRED — rewind by their ping (respawn,
-        // knockback and teleports all legitimately move the server-side
-        // position between "fire" and "claim arrives"), and the claimed
-        // velocity near a real launch speed — weapon cap 250 m/s plus
-        // inherited player velocity (≤300) plus slack. An uncapped claim
-        // would make the reach check in validateHitClaim tautological.
-        const shooterAt = rewindPos(player, clampPing(player.ping));
-        const odx = msg.position.x - shooterAt.x;
-        const ody = msg.position.y - shooterAt.y;
-        const odz = msg.position.z - shooterAt.z;
-        const vmag = Math.sqrt(
-          msg.velocity.x * msg.velocity.x + msg.velocity.y * msg.velocity.y + msg.velocity.z * msg.velocity.z,
-        );
-        if (odx * odx + ody * ody + odz * odz > 1600 || vmag > 600) {
-          this.reject(playerId, 'Shot', `implausible spawn (origin ${Math.sqrt(odx * odx + ody * ody + odz * odz).toFixed(0)}m off, v=${vmag.toFixed(0)})`, undefined, msg.weaponType);
-          return;
-        }
-        const projectileId = this.ledger.register(playerId, msg.weaponType ?? 0, msg.position, msg.velocity);
-        this.broadcast({
-          type: 'projectileCreated',
-          projectileId,
-          ownerId: playerId,
-          position: msg.position,
-          velocity: msg.velocity,
-          weaponType: msg.weaponType,
-        });
-      }
+      this.registerMiss(playerId, player, msg);
     }
+  }
+
+  /** A claim naming a target: every legality gate, then damage through
+   *  the shared outcome funnel. */
+  private hitClaim(playerId: string, player: PlayerState, msg: Extract<ClientMessage, { type: 'shot' }>, targetId: string): void {
+    // Reject self-damage — client should never send its own ID as targetId
+    if (targetId === playerId) {
+      this.reject(playerId, 'Shot', 'self-target');
+      return;
+    }
+
+    const target = this.playerManager.getPlayer(targetId);
+    if (!target) {
+      this.reject(playerId, 'Shot', 'unknown target', targetId, msg.weaponType);
+      return;
+    }
+    // Dead targets are untouchable — without this, corpse hits still
+    // broadcast playerHit and can stack phantom damage past respawn.
+    if (target.isDead) {
+      this.reject(playerId, 'Shot', 'target already dead', targetId, msg.weaponType);
+      return;
+    }
+    // Friendly fire: no damage (and no playerHit) between teammates.
+    if (this.friendly(playerId, targetId)) {
+      this.reject(playerId, 'Shot', 'friendly fire', targetId, msg.weaponType);
+      return;
+    }
+
+    // Hit claims must name the projectile that landed them. The claimed
+    // id may be null if the hit raced the server's projectileCreated —
+    // fall back to the shooter's most recent spawn of that weapon type.
+    const proj = this.ledger.resolve(playerId, msg.projectileId, msg.weaponType, 'shot');
+    if (!proj) {
+      this.reject(playerId, 'Shot', `no known projectile (id=${msg.projectileId ?? 'null'})`, targetId, msg.weaponType);
+      return;
+    }
+    if (msg.position === undefined || msg.airtime === undefined) {
+      this.reject(playerId, 'Shot', 'missing position/airtime', targetId, msg.weaponType);
+      return;
+    }
+    // Lag compensation: validate against where the target was when the
+    // shooter saw it (now - ping), not where it is now — otherwise a
+    // 100ms client aims at ghosts by design.
+    const verdict = validateHitClaim({
+      projectile: proj,
+      hitPos: msg.position,
+      targetPos: rewindPos(target, clampPing(player.ping)),
+      airtime: msg.airtime,
+      shooterVel: player.velocity,
+      now: Date.now(),
+      solids: this.solids,
+    });
+    if (!verdict.ok) {
+      this.reject(playerId, 'Shot', verdict.reason, targetId, msg.weaponType);
+      return;
+    }
+    const shotDamage = getWeaponStats(proj.weaponType).directDamage * perkMods(player.perk).directDamage * this.ddMult(player);
+    const result = this.playerManager.applyDamage(targetId, shotDamage);
+    // Full-rate tick updates for the hit window — the shooter's client is
+    // extrapolating this target's knockback and needs real positions to
+    // converge on (suppression would leave it predicting blind).
+    target.forceSendUntil = Date.now() + FORCE_SEND_MS;
+
+    this.applyHit(playerId, targetId, shotDamage, result, { label: 'Player hit', weapon: proj.weaponType });
+  }
+
+  /** A claim with no target: a miss. If it carries spawn coordinates it
+   *  also registers a tracked projectile observers can render. */
+  private registerMiss(playerId: string, player: PlayerState, msg: Extract<ClientMessage, { type: 'shot' }>): void {
+    logger.debug('Shot fired (miss)', { shooter: playerId });
+    if (!msg.position || !msg.velocity) return;
+
+    // Spawn sanity: the claimed muzzle position must be near where the
+    // shooter was WHEN THEY FIRED — rewind by their ping (respawn,
+    // knockback and teleports all legitimately move the server-side
+    // position between "fire" and "claim arrives"), and the claimed
+    // velocity near a real launch speed — weapon cap 250 m/s plus
+    // inherited player velocity (≤300) plus slack. An uncapped claim
+    // would make the reach check in validateHitClaim tautological.
+    const shooterAt = rewindPos(player, clampPing(player.ping));
+    const odx = msg.position.x - shooterAt.x;
+    const ody = msg.position.y - shooterAt.y;
+    const odz = msg.position.z - shooterAt.z;
+    const vmag = Math.sqrt(
+      msg.velocity.x * msg.velocity.x + msg.velocity.y * msg.velocity.y + msg.velocity.z * msg.velocity.z,
+    );
+    if (odx * odx + ody * ody + odz * odz > 1600 || vmag > 600) {
+      this.reject(playerId, 'Shot', `implausible spawn (origin ${Math.sqrt(odx * odx + ody * ody + odz * odz).toFixed(0)}m off, v=${vmag.toFixed(0)})`, undefined, msg.weaponType);
+      return;
+    }
+    const projectileId = this.ledger.register(playerId, msg.weaponType ?? 0, msg.position, msg.velocity);
+    this.broadcast({
+      type: 'projectileCreated',
+      projectileId,
+      ownerId: playerId,
+      position: msg.position,
+      velocity: msg.velocity,
+      weaponType: msg.weaponType,
+    });
   }
 
   /** Hitscan fire leaves no projectile for observers to see — relay a
@@ -255,71 +283,27 @@ export class CombatHandler {
     const stats = getWeaponStats(msg.weaponType);
 
     if (msg.weaponType === WeaponType.Melee) {
-      // The punch is a skill, not a projectile — same self-positioned
-      // contract as Slam, tightened to melee reach. No projectile to
-      // resolve, no airtime to check: the swing point just has to sit
-      // in front of the swinger.
-      const dx = player.position.x - msg.position.x;
-      const dy = player.position.y - msg.position.y;
-      const dz = player.position.z - msg.position.z;
-      const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-      if (dist > stats.aoeRadius + 10) {
-        this.reject(playerId, 'AOE', `melee ${dist.toFixed(0)}m from player`, undefined, msg.weaponType);
-        return;
-      }
-      this.processAOE(playerId, msg.position, msg.excludeTargetId, stats, msg.weaponType);
+      this.aoeMelee(playerId, player, msg, stats);
       return;
     }
 
     if (msg.weaponType === WeaponType.Slam) {
-      // Slam is a skill, not a projectile — the blast must land where the
-      // player is (they slam into the ground under themselves). Power is a
-      // client-reported impact-speed scaler; clamped to the same range the
-      // client uses so a forged value can't exceed a max-dive blast.
-      const dx = player.position.x - msg.position.x;
-      const dy = player.position.y - msg.position.y;
-      const dz = player.position.z - msg.position.z;
-      const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-      if (dist > stats.aoeRadius + 20) {
-        this.reject(playerId, 'AOE', `slam ${dist.toFixed(0)}m from player`, undefined, msg.weaponType);
-        return;
-      }
-      const power = msg.power !== undefined
-        ? Math.min(Math.max(msg.power, 0.2), 1.8)
-        : 1;
-      this.processAOE(playerId, msg.position, msg.excludeTargetId, {
-        ...stats,
-        aoeDamage: stats.aoeDamage * power,
-        aoeRadius: stats.aoeRadius * power,
-        knockbackForce: stats.knockbackForce * power,
-      }, msg.weaponType);
+      this.aoeSlam(playerId, player, msg, stats);
       return;
     }
 
     if (stats.speed <= 0) {
-      // Hitscan-class (Lightning beam): the claim names no projectile —
-      // same self-positioned contract as Melee/Slam, tightened to the
-      // beam's range. The tip also can't sit through a wall: the eye→tip
-      // ray must be clear of structures.
-      const eye = { x: player.position.x, y: player.position.y + 1.6, z: player.position.z };
-      const dx = eye.x - msg.position.x;
-      const dy = eye.y - msg.position.y;
-      const dz = eye.z - msg.position.z;
-      const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-      if (dist > 70) { // LG_RANGE 55 + lag slack
-        this.reject(playerId, 'AOE', `beam tip ${dist.toFixed(0)}m from eye`, undefined, msg.weaponType);
-        return;
-      }
-      if (this.solids.length && segSolidHit(eye, msg.position, this.solids, this.solidIndex ?? undefined)) {
-        this.reject(playerId, 'AOE', 'beam tip behind structure', undefined, msg.weaponType);
-        return;
-      }
-      this.processAOE(playerId, msg.position, msg.excludeTargetId, stats, msg.weaponType);
+      this.aoeBeam(playerId, player, msg, stats);
       return;
     }
 
-    // Projectile AOEs must name the tracked projectile that detonated —
-    // same fallback resolution as direct-hit claims (race vs projectileCreated).
+    this.aoeProjectile(playerId, player, msg, stats);
+  }
+
+  /** Projectile detonation claim: the blast must name the tracked shell
+   *  that popped (same fallback resolution as direct-hit claims — the
+   *  hit can race the server's projectileCreated). */
+  private aoeProjectile(playerId: string, player: PlayerState, msg: Extract<ClientMessage, { type: 'aoeShot' }>, stats: WeaponStats): void {
     const proj = this.ledger.resolve(playerId, msg.projectileId, msg.weaponType, 'aoe');
     if (!proj) {
       this.reject(playerId, 'AOE', `blast with no known projectile (id=${msg.projectileId ?? 'null'})`, undefined, msg.weaponType);
@@ -352,20 +336,81 @@ export class CombatHandler {
     this.processAOE(playerId, msg.position, msg.excludeTargetId,
       bloom === 1 ? stats : { ...stats, aoeRadius: stats.aoeRadius * bloom }, msg.weaponType);
 
-    // Cluster carrier: the carrier's blast is only the delivery pop — the
-    // real damage is `count` bomblet blasts scattered inside `radius`, each
-    // rolled with ClusterBomblet stats. Client bomblets are visual-only.
-    if (stats.cluster) {
-      const bomblet = getWeaponStats(WeaponType.ClusterBomblet);
-      for (let i = 0; i < stats.cluster.count; i++) {
-        const ang = Math.random() * Math.PI * 2;
-        const r = Math.random() * stats.cluster.radius;
-        this.processAOE(playerId, {
-          x: msg.position.x + Math.cos(ang) * r,
-          y: msg.position.y, // bomblets scatter on the blast plane
-          z: msg.position.z + Math.sin(ang) * r,
-        }, msg.excludeTargetId, bomblet, WeaponType.ClusterBomb);
-      }
+    if (stats.cluster) this.aoeCluster(playerId, msg, stats.cluster);
+  }
+
+  /** Swing distance to the player — self-positioned skills (melee, slam)
+   *  and the beam eye measure from different heights, so the caller picks
+   *  the reference point. */
+  private static distTo(from: Vec3, to: Vec3): number {
+    return Math.hypot(from.x - to.x, from.y - to.y, from.z - to.z);
+  }
+
+  /** The punch is a skill, not a projectile — same self-positioned
+   *  contract as Slam, tightened to melee reach. No projectile to
+   *  resolve, no airtime to check: the swing point just has to sit
+   *  in front of the swinger. */
+  private aoeMelee(playerId: string, player: PlayerState, msg: Extract<ClientMessage, { type: 'aoeShot' }>, stats: WeaponStats): void {
+    const dist = CombatHandler.distTo(player.position, msg.position);
+    if (dist > stats.aoeRadius + 10) {
+      this.reject(playerId, 'AOE', `melee ${dist.toFixed(0)}m from player`, undefined, msg.weaponType);
+      return;
+    }
+    this.processAOE(playerId, msg.position, msg.excludeTargetId, stats, msg.weaponType);
+  }
+
+  /** Slam is a skill, not a projectile — the blast must land where the
+   *  player is (they slam into the ground under themselves). Power is a
+   *  client-reported impact-speed scaler; clamped to the same range the
+   *  client uses so a forged value can't exceed a max-dive blast. */
+  private aoeSlam(playerId: string, player: PlayerState, msg: Extract<ClientMessage, { type: 'aoeShot' }>, stats: WeaponStats): void {
+    const dist = CombatHandler.distTo(player.position, msg.position);
+    if (dist > stats.aoeRadius + 20) {
+      this.reject(playerId, 'AOE', `slam ${dist.toFixed(0)}m from player`, undefined, msg.weaponType);
+      return;
+    }
+    const power = msg.power !== undefined
+      ? Math.min(Math.max(msg.power, 0.2), 1.8)
+      : 1;
+    this.processAOE(playerId, msg.position, msg.excludeTargetId, {
+      ...stats,
+      aoeDamage: stats.aoeDamage * power,
+      aoeRadius: stats.aoeRadius * power,
+      knockbackForce: stats.knockbackForce * power,
+    }, msg.weaponType);
+  }
+
+  /** Hitscan-class (Lightning beam): the claim names no projectile —
+   *  same self-positioned contract as Melee/Slam, tightened to the
+   *  beam's range. The tip also can't sit through a wall: the eye→tip
+   *  ray must be clear of structures. */
+  private aoeBeam(playerId: string, player: PlayerState, msg: Extract<ClientMessage, { type: 'aoeShot' }>, stats: WeaponStats): void {
+    const eye = { x: player.position.x, y: player.position.y + 1.6, z: player.position.z };
+    const dist = CombatHandler.distTo(eye, msg.position);
+    if (dist > 70) { // LG_RANGE 55 + lag slack
+      this.reject(playerId, 'AOE', `beam tip ${dist.toFixed(0)}m from eye`, undefined, msg.weaponType);
+      return;
+    }
+    if (this.solids.length && segSolidHit(eye, msg.position, this.solids, this.solidIndex ?? undefined)) {
+      this.reject(playerId, 'AOE', 'beam tip behind structure', undefined, msg.weaponType);
+      return;
+    }
+    this.processAOE(playerId, msg.position, msg.excludeTargetId, stats, msg.weaponType);
+  }
+
+  /** Cluster carrier: the carrier's blast is only the delivery pop — the
+   *  real damage is `count` bomblet blasts scattered inside `radius`, each
+   *  rolled with ClusterBomblet stats. Client bomblets are visual-only. */
+  private aoeCluster(playerId: string, msg: Extract<ClientMessage, { type: 'aoeShot' }>, cluster: { count: number; radius: number }): void {
+    const bomblet = getWeaponStats(WeaponType.ClusterBomblet);
+    for (let i = 0; i < cluster.count; i++) {
+      const ang = Math.random() * Math.PI * 2;
+      const r = Math.random() * cluster.radius;
+      this.processAOE(playerId, {
+        x: msg.position.x + Math.cos(ang) * r,
+        y: msg.position.y, // bomblets scatter on the blast plane
+        z: msg.position.z + Math.sin(ang) * r,
+      }, msg.excludeTargetId, bomblet, WeaponType.ClusterBomb);
     }
   }
 
@@ -395,67 +440,71 @@ export class CombatHandler {
     // Perk modifies the blast envelope, not the damage numbers — a
     // Sharpshooter's rocket lands tighter, not weaker.
     const radius = stats.aoeRadius * perkMods(player.perk).aoeRadius;
-    const baseDamage = stats.aoeDamage * this.ddMult(player);
-    const impulseForce = stats.knockbackForce;
-    const logLabel = pull ? 'disc AOE' : 'AOE';
+    const ctx: BlastCtx = {
+      shooterId: playerId, ping: player.ping, pos: position,
+      radius, baseDamage: stats.aoeDamage * this.ddMult(player),
+      impulse: stats.knockbackForce, pull,
+      label: pull ? 'disc AOE' : 'AOE', weapon,
+    };
 
     for (const [targetId, target] of this.playerManager.getAllPlayers()) {
       if (targetId === playerId) continue; // Don't damage self
       if (targetId === excludeTargetId) continue; // Skip direct hit target
       if (target.isDead) continue;
-
-      // Lag-comp the victim position the same as hitscan — a rocket
-      // that exploded on the shooter's screen should hit the ghost.
-      const tpos = rewindPos(target, clampPing(player.ping));
-      const tdx = tpos.x - position.x;
-      const tdy = tpos.y - position.y;
-      const tdz = tpos.z - position.z;
-      const dist = Math.sqrt(tdx * tdx + tdy * tdy + tdz * tdz);
-
-      if (dist <= radius) {
-        // Wall occlusion — a blast outside a structure doesn't splash
-        // targets inside it (and vice versa). Blasts can legitimately
-        // sit INSIDE geometry (shell popped at the face), so a contact
-        // at t≈0 is stepped past rather than counted.
-        if (this.solids.length && this.blastBlocked(position, tpos)) continue;
-
-        // shared/combat.ts — same formula the client predicts with
-        const damage = aoeDamage(baseDamage, dist, radius);
-        if (damage <= 0) continue;
-
-        const impulseMag = aoeImpulse(impulseForce, dist, radius) * KNOCKBACK_SCALE * perkMods(target.perk).knockbackTaken;
-        this.shove(targetId, target, tdx, tdy, tdz, dist, impulseMag, position, pull);
-
-        // Splash still displaces teammates (jump-boost assists); it just
-        // never deals damage to them in team rooms.
-        if (!this.friendly(playerId, targetId)) {
-          const result = this.playerManager.applyDamage(targetId, damage);
-          this.applyHit(playerId, targetId, damage, result, `Player ${logLabel} hit`, { dist: +dist.toFixed(2) }, weapon);
-        }
-      }
+      this.splashOne(ctx, targetId, target);
     }
 
     // Deployables in the blast envelope eat the same scaled splash —
     // sentries aren't immortal, you clear a stand with explosives.
-    this.deployBlast?.(position, baseDamage, radius, playerId);
+    this.deps.deployBlast?.(position, ctx.baseDamage, radius, playerId);
+  }
+
+  /** One target inside (or outside) a blast envelope: lag-comp position,
+   *  wall occlusion, scaled damage, knockback impulse, friendly gate. */
+  private splashOne(ctx: BlastCtx, targetId: string, target: PlayerState): void {
+    // Lag-comp the victim position the same as hitscan — a rocket
+    // that exploded on the shooter's screen should hit the ghost.
+    const tpos = rewindPos(target, clampPing(ctx.ping));
+    const tdx = tpos.x - ctx.pos.x;
+    const tdy = tpos.y - ctx.pos.y;
+    const tdz = tpos.z - ctx.pos.z;
+    const dist = Math.sqrt(tdx * tdx + tdy * tdy + tdz * tdz);
+    if (!Number.isFinite(dist) || dist > ctx.radius) return;
+
+    // Wall occlusion — a blast outside a structure doesn't splash
+    // targets inside it (and vice versa). Blasts can legitimately
+    // sit INSIDE geometry (shell popped at the face), so a contact
+    // at t≈0 is stepped past rather than counted.
+    if (this.solids.length && this.blastBlocked(ctx.pos, tpos)) return;
+
+    // shared/combat.ts — same formula the client predicts with
+    const damage = aoeDamage(ctx.baseDamage, dist, ctx.radius);
+    if (damage <= 0) return;
+
+    const impulseMag = aoeImpulse(ctx.impulse, dist, ctx.radius) * KNOCKBACK_SCALE * perkMods(target.perk).knockbackTaken;
+    this.shove(targetId, target, { x: tdx, y: tdy, z: tdz }, impulseMag, ctx.pos, ctx.pull);
+
+    // Splash still displaces teammates (jump-boost assists); it just
+    // never deals damage to them in team rooms.
+    if (this.friendly(ctx.shooterId, targetId)) return;
+    const result = this.playerManager.applyDamage(targetId, damage);
+    this.applyHit(ctx.shooterId, targetId, damage, result, { label: `Player ${ctx.label} hit`, extra: { dist: +dist.toFixed(2) }, weapon: ctx.weapon });
   }
 
   /** One blast shove: velocity impulse + knockback wire notify + the
    *  forceSend flag that makes the next position update authoritative.
-   *  `pull` reverses direction and flattens the up-vector (disc suck). */
-  private shove(
-    targetId: string, target: PlayerState,
-    dx: number, _dy: number, dz: number, dist: number,
-    impulseMag: number, pos: Vec3, pull: boolean,
-  ): void {
+   *  `offset` is target-from-blast; `pull` reverses direction and
+   *  flattens the up-vector (disc suck). */
+  private shove(targetId: string, target: PlayerState, offset: Vec3, impulseMag: number, pos: Vec3, pull: boolean): void {
+    const dist = Math.hypot(offset.x, offset.y, offset.z);
     if (dist <= 0) return;
     const dv: Vec3 = pull
-      ? { x: -(dx / dist) * impulseMag, y: 0.3 * impulseMag, z: -(dz / dist) * impulseMag }
-      : { x: (dx / dist) * impulseMag, y: 0.5 * impulseMag, z: (dz / dist) * impulseMag };
+      ? { x: -(offset.x / dist) * impulseMag, y: 0.3 * impulseMag, z: -(offset.z / dist) * impulseMag }
+      : { x: (offset.x / dist) * impulseMag, y: 0.5 * impulseMag, z: (offset.z / dist) * impulseMag };
     target.velocity.x += dv.x;
     target.velocity.y += dv.y;
     target.velocity.z += dv.z;
-    this.moveImpulse?.(targetId, dv);
+    this.deps.moveImpulse?.(targetId, dv);
     target.forceSendUntil = Date.now() + FORCE_SEND_MS;
     this.sendToPlayer(targetId, {
       type: 'knockback', targetId, position: pos, force: impulseMag,
@@ -481,7 +530,7 @@ export class CombatHandler {
     // nearby. Past ~15m there's no legal pounce — flag it in the
     // heartbeat + warn (damage still applies: this is a self-report, and
     // a bugged client shouldn't be silently maimed).
-    const range = this.envRange?.(playerId);
+    const range = this.deps.envRange?.(playerId);
     if (range !== undefined && range > 15) {
       this.hb('envdmg.far');
       logger.warn('Environment damage implausible: no creature near', { playerId, dist: Math.round(range) });
@@ -489,7 +538,7 @@ export class CombatHandler {
     const damage = Math.min(40, Math.max(1, Math.round(msg.amount)));
     const result = this.playerManager.applyDamage(playerId, damage);
     player.forceSendUntil = Date.now() + FORCE_SEND_MS;
-    this.applyHit('environment', playerId, damage, result, 'Player hit');
+    this.applyHit('environment', playerId, damage, result, { label: 'Player hit' });
   }
 
   // Client-claimed heal — self-only. Team-mode rooms require credit the
@@ -501,7 +550,7 @@ export class CombatHandler {
     const player = this.playerManager.getPlayer(playerId);
     if (!player || player.isDead) return;
     const heal = Math.min(25, Math.max(1, Math.round(msg.amount * perkMods(player.perk).healBoost)));
-    if (this.teamMode) {
+    if (this.deps.teams) {
       if (player.healCredit <= 0) return;
       const applied = Math.min(heal, player.healCredit);
       player.healCredit -= applied;
@@ -556,12 +605,12 @@ export class CombatHandler {
       // Falloff + shove from shared formulas — client predicts the same hit.
       const damage = targetId === ownerId ? 0 : aoeDamage(baseDamage, dist, radius);
       const impulseMag = aoeImpulse(knockback, dist, radius) * KNOCKBACK_SCALE * perkMods(target.perk).knockbackTaken;
-      this.shove(targetId, target, dx, dy, dz, dist, impulseMag, pos, false);
+      this.shove(targetId, target, { x: dx, y: dy, z: dz }, impulseMag, pos, false);
       // Owner eats the blast too — mines don't pick friends.
       if (!this.friendly(ownerId, targetId) && damage > 0) {
         const result = this.playerManager.applyDamage(targetId, damage);
         target.forceSendUntil = Date.now() + FORCE_SEND_MS;
-        this.applyHit(ownerId, targetId, damage, result, 'Mine hit', { dist: +dist.toFixed(2) });
+        this.applyHit(ownerId, targetId, damage, result, { label: 'Mine hit', extra: { dist: +dist.toFixed(2) } });
       }
     }
   }
@@ -583,7 +632,7 @@ export class CombatHandler {
     const dmg = damage * (owner ? this.ddMult(owner) : 1);
     const result = this.playerManager.applyDamage(targetId, dmg);
     target.forceSendUntil = Date.now() + FORCE_SEND_MS;
-    this.applyHit(ownerId, targetId, dmg, result, label, undefined, opts.weapon);
+    this.applyHit(ownerId, targetId, dmg, result, { label, weapon: opts.weapon });
   }
 
   /** Server-authored creature bite (CreatureSim). */
@@ -621,40 +670,53 @@ export class CombatHandler {
     return shooter.ddUntil > Date.now() ? POWERUP.ddMult : 1;
   }
 
-  private applyHit(shooterId: string, targetId: string, damage: number, result: { killed: boolean; newHealth: number; newArmor: number }, hitLabel: string, extra?: Record<string, unknown>, weapon?: number): void {
+  private applyHit(shooterId: string, targetId: string, damage: number, result: { killed: boolean; newHealth: number; newArmor: number }, opts: { label: string; extra?: Record<string, unknown>; weapon?: number }): void {
     this.hb('hit');
     this.hb('dmg', Math.round(damage));
     if (result.killed) this.hb('kill');
-    this.onHit?.(targetId, shooterId);
-    const src = weapon !== undefined ? `w${weapon}` : hitLabel;
-    weaponStats.record(this.modeTag, src, damage, result.killed, shooterId.startsWith('BOT-'));
-    if (result.killed) {
-      const victim = this.playerManager.getPlayer(targetId);
-      if (victim) weaponStats.recordDeath(this.modeTag, victim.position);
-      weaponStats.recordKillSpeed(this.modeTag,
-        this.playerManager.getPlayer(shooterId)?.velocity ?? null,
-        victim?.velocity ?? null);
-      // Duel engagement: first-hit→kill time per shooter+victim pair.
-      const duelKey = `${shooterId}|${targetId}`;
-      const started = this.duelStart.get(duelKey);
-      if (started !== undefined) weaponStats.recordTtk(this.modeTag, src, Date.now() - started);
-      this.duelStart.delete(duelKey);
-    } else {
-      this.duelStart.set(`${shooterId}|${targetId}`, this.duelStart.get(`${shooterId}|${targetId}`) ?? Date.now());
-      if (this.duelStart.size > 512) this.duelStart.clear(); // leak cap — entries die with their duels anyway
-    }
+    this.deps.onHit?.(targetId, shooterId);
+    const src = opts.weapon !== undefined ? `w${opts.weapon}` : opts.label;
+    this.noteHit(shooterId, targetId, src, damage, result.killed);
     if (!result.killed) {
-      logger.info(hitLabel, { shooter: shooterId, target: targetId, damage, targetHealth: result.newHealth, ...extra });
+      logger.info(opts.label, { shooter: shooterId, target: targetId, damage, targetHealth: result.newHealth, ...opts.extra });
       this.broadcast({ type: 'playerHit', shooterId, targetId, damage, health: result.newHealth, armor: result.newArmor });
       return;
     }
+    this.creditKill(shooterId, targetId, damage, opts.label, opts.extra, opts.weapon);
+  }
+
+  /** Telemetry + duel bookkeeping for one applied hit — weapon spread,
+   *  death spot, kill speed, and first-hit→kill TTK per pairing. */
+  private noteHit(shooterId: string, targetId: string, src: string, damage: number, killed: boolean): void {
+    const modeTag = this.deps.mode ?? '';
+    weaponStats.record(modeTag, src, damage, killed, shooterId.startsWith('BOT-'));
+    const duelKey = `${shooterId}|${targetId}`;
+    if (!killed) {
+      this.duelStart.set(duelKey, this.duelStart.get(duelKey) ?? Date.now());
+      if (this.duelStart.size > 512) this.duelStart.clear(); // leak cap — entries die with their duels anyway
+      return;
+    }
+    const victim = this.playerManager.getPlayer(targetId);
+    if (victim) weaponStats.recordDeath(modeTag, victim.position);
+    weaponStats.recordKillSpeed(modeTag,
+      this.playerManager.getPlayer(shooterId)?.velocity ?? null,
+      victim?.velocity ?? null);
+    // Duel engagement: first-hit→kill time per shooter+victim pair.
+    const started = this.duelStart.get(duelKey);
+    if (started !== undefined) weaponStats.recordTtk(modeTag, src, Date.now() - started);
+    this.duelStart.delete(duelKey);
+  }
+
+  /** The kill tail: score credit, kill broadcast, spree callouts, and the
+   *  respawn timer — every damage path converges here. */
+  private creditKill(shooterId: string, targetId: string, damage: number, hitLabel: string, extra?: Record<string, unknown>, weapon?: number): void {
     if (shooterId !== 'environment') this.playerManager.addKill(shooterId);
     logger.info(`${hitLabel} → kill`, { shooter: shooterId, target: targetId, damage, ...extra });
     const shooterStreak = shooterId === 'environment' ? undefined
       : (this.playerManager.getPlayer(shooterId)?.streak ?? 0) + 1;
     this.broadcast({ type: 'playerKill', shooterId, targetId, weapon, streak: shooterStreak });
     this.announceKill(shooterId, targetId);
-    this.onKill?.(targetId, shooterId);
+    this.deps.onKill?.(targetId, shooterId);
     this.scheduleRespawn(targetId);
   }
 
@@ -720,7 +782,7 @@ export class CombatHandler {
       if (!player) return;
 
       logger.info('Player respawned', { playerId, position: result.position });
-      this.moveResync?.(playerId, result.position, result.rotation.yaw);
+      this.deps.moveResync?.(playerId, result.position, result.rotation.yaw);
       // The respawn broadcast and the honest post-snap report are both in
       // flight — the client's snap to spawn (and any straggler reports
       // from the corpse spot) read as impossible speed/divergence against

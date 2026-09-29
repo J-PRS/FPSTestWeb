@@ -117,7 +117,17 @@ export class MessageHandler {
     this.broadcast = broadcast;
     this.sendToPlayer = sendToPlayer;
     if (roomInfo) this.roomInfo = roomInfo;
-    this.combat = new CombatHandler(playerManager, broadcast, sendToPlayer, roomInfo?.onKill, roomInfo?.onHit, roomInfo?.teams ?? false, roomInfo?.moveImpulse, roomInfo?.moveResync, roomInfo?.mode ?? '', roomInfo?.deployBlast, roomInfo?.health, roomInfo?.envRange);
+    this.combat = new CombatHandler(playerManager, broadcast, sendToPlayer, {
+      onKill: roomInfo?.onKill,
+      onHit: roomInfo?.onHit,
+      teams: roomInfo?.teams,
+      moveImpulse: roomInfo?.moveImpulse,
+      moveResync: roomInfo?.moveResync,
+      mode: roomInfo?.mode,
+      deployBlast: roomInfo?.deployBlast,
+      health: roomInfo?.health,
+      envRange: roomInfo?.envRange,
+    });
     this.attachStructures(roomInfo?.structures);
 
     // Per-type dispatch — a new message type is one table entry. Field

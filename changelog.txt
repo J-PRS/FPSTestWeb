@@ -1,3 +1,12 @@
+2026-10-03 - CombatHandler fully de-warned: handleShot → hitClaim /
+    registerMiss; handleAOEShot → aoeMelee / aoeSlam / aoeBeam /
+    aoeProjectile / aoeCluster dispatch; applyHit → noteHit (telemetry +
+    duel) / creditKill; processAOE's per-target splash → splashOne over
+    a BlastCtx envelope object. The 12-param DI constructor folded into
+    CombatDeps (fields mirror RoomInfo). shove/applyHit param lists
+    folded to option objects. One real fix caught by the suite: a NaN
+    rewind dist now fails closed like the old <= radius gate did
+    (inverted guard let NaN splash through).
 2026-10-03 - SessionManager.handle split: the join cascade now reads
     validate → throttle → joinSpec → reclaim → spectate → caps →
     claimIdentity → seat — each branch its own helper (reclaim,
