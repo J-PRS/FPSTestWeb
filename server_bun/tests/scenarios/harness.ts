@@ -10,8 +10,18 @@ import type { Vec3 } from '../../../shared/types.ts';
 
 export const flat: Heightfield = { size: 4, data: new Uint8Array(16).fill(60), stride: 1 };
 
-export function mkRoom(spec: Partial<MapSpec>, mode = ''): Room {
-  return new Room('t', flat, mode, resolveMapSpec(spec));
+/** Seeded host-side RNG (LCG) — scenario rooms get reproducible spawn
+ *  scatter/variant rolls instead of Math.random flake jitter. */
+export function lcg(seed = 42): () => number {
+  let s = seed >>> 0 || 1;
+  return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 0x100000000; };
+}
+
+export function mkRoom(spec: Partial<MapSpec>, mode = '', seed = 1337): Room {
+  const room = new Room('t', flat, mode, resolveMapSpec(spec));
+  room.ballSim.rng = lcg(seed);
+  room.creatureSim.rng = lcg(seed + 1);
+  return room;
 }
 
 /** Step the whole room N sim-ticks. CreatureSim self-drives on a wall-clock

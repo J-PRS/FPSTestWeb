@@ -89,6 +89,9 @@ export class CreatureSim {
     return n;
   }
 
+  /** Spawn/host-side randomness — tests inject a seeded fn so scenario
+   *  runs are reproducible; the per-creature LCG stays the wire seed. */
+  rng: () => number = Math.random;
   /** Bite delivery — Room wires this to the damage funnel. */
   onBite: ((crawler: SimBeing, targetId: string) => void) | null = null;
   /** Extra gnawables — Room injects deployable candidates (`dep:N` ids)
@@ -161,14 +164,14 @@ export class CreatureSim {
 
   private spawnCrawler(near: SimVec, species: string): SimBeing {
     const field = this.field!;
-    const ang = Math.random() * Math.PI * 2;
-    const dist = 40 + Math.random() * 50;
+    const ang = this.rng() * Math.PI * 2;
+    const dist = 40 + this.rng() * 50;
     const x = near.x + Math.cos(ang) * dist;
     const z = near.z + Math.sin(ang) * dist;
-    const seed = (Math.random() * 0xffffffff) >>> 0 || 1;
+    const seed = (this.rng() * 0xffffffff) >>> 0 || 1;
     const gy = hmHeight(field, x, z);
     const id = this.nextId++;
-    const uber = Math.random() < 0.05;
+    const uber = this.rng() < 0.05;
     const c: SimBeing = isFlyerSpecies(species)
       ? makeSimFlyer(id, x, gy, z, uber, seed, species)
       : isTotemSpecies(species)
@@ -300,7 +303,7 @@ export class CreatureSim {
     if (alive.length === 0) { this.tickAcc = 0; return; }
     for (const [species, cap] of Object.entries(this.pops)) {
       if (cap > 0 && this.aliveCount(species) < cap) {
-        const near = alive[Math.floor(Math.random() * alive.length)]!.pos;
+        const near = alive[Math.floor(this.rng() * alive.length)]!.pos;
         this.spawnCrawler(near, species);
       }
     }
@@ -324,7 +327,7 @@ export class CreatureSim {
     // Drip-feed each declared species toward its own spec cap.
     for (const [species, cap] of Object.entries(this.pops)) {
       if (cap > 0 && this.aliveCount(species) < cap) {
-        const near = alive[Math.floor(Math.random() * alive.length)]!.pos;
+        const near = alive[Math.floor(this.rng() * alive.length)]!.pos;
         this.spawnCrawler(near, species);
       }
     }

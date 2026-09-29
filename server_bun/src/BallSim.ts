@@ -43,9 +43,9 @@ const _snap: SimVec = { x: 0, y: 0, z: 0 }; // scratch — stepBall's target arg
 // 5% elite, otherwise weighted fodder sizes (v0 common, v1/v2 rare).
 // Weights are cumulative so a map spec can override the whole table.
 const DEFAULT_MIX: readonly number[] = [0.84, 0.07, 0.04, 0.05];
-function rollVariant(mix: readonly number[] = DEFAULT_MIX): BallVariant {
+function rollVariant(mix: readonly number[] = DEFAULT_MIX, rng: () => number = Math.random): BallVariant {
   const total = mix[0]! + mix[1]! + mix[2]! + mix[3]!;
-  let r = Math.random() * total;
+  let r = rng() * total;
   for (let i = 0; i < 4; i++) {
     r -= mix[i]!;
     if (r <= 0) return i as BallVariant;
@@ -110,6 +110,9 @@ export class BallSim {
   // No humans and no spectators watching → freeze the sim (cheap
   // hibernation for immortal rooms like 'default' that never dispose).
   dormant = false;
+  /** Spawn/host-side randomness — tests inject a seeded fn so scenario
+   *  runs are reproducible; the wire only carries resolved outcomes. */
+  rng: () => number = Math.random;
 
   /** Attach an already-loaded heightfield and start the tick loop — rooms
    *  share one parsed field rather than re-reading the file each. */
@@ -194,16 +197,16 @@ export class BallSim {
     } else {
       const cx = near ? near.x : 0;
       const cz = near ? near.z : 0;
-      const ang = Math.random() * Math.PI * 2;
-      const dist = 60 + Math.random() * 60;
+      const ang = this.rng() * Math.PI * 2;
+      const dist = 60 + this.rng() * 60;
       x = cx + Math.cos(ang) * dist;
       z = cz + Math.sin(ang) * dist;
     }
-    const y = posOverride ? posOverride.y : hmHeight(field, x, z) + 40 + Math.random() * 40;
-    const ang = Math.random() * Math.PI * 2;
-    const spd = Math.random() * 20;
+    const y = posOverride ? posOverride.y : hmHeight(field, x, z) + 40 + this.rng() * 40;
+    const ang = this.rng() * Math.PI * 2;
+    const spd = this.rng() * 20;
     const b = makeSimBall(
-      this.nextId++, variant, Math.floor(Math.random() * 8),
+      this.nextId++, variant, Math.floor(this.rng() * 8),
       x, y, z,
       Math.cos(ang) * spd, -2, Math.sin(ang) * spd,
     );
@@ -342,8 +345,8 @@ export class BallSim {
     if (b.variant === 3) {
       for (let i = 0; i < 2; i++) {
         const c = this.spawnBall(0, undefined, { x: b.x, y: b.y + 2, z: b.z });
-        const a = Math.random() * Math.PI * 2;
-        c.vx = Math.cos(a) * 15; c.vy = 14 + Math.random() * 6; c.vz = Math.sin(a) * 15;
+        const a = this.rng() * Math.PI * 2;
+        c.vx = Math.cos(a) * 15; c.vy = 14 + this.rng() * 6; c.vz = Math.sin(a) * 15;
         this.segment(c, 'spawn');
       }
     }
@@ -365,8 +368,8 @@ export class BallSim {
     const pop = this.population;
     const target = Math.min(pop.max, pop.base + Math.max(0, alive.length - 1) * pop.perPlayer);
     if (this.balls.size + this.pendingRespawns < target) {
-      const near = alive[Math.floor(Math.random() * alive.length)]!.pos;
-      this.spawnBall(rollVariant(this.ballMix), near);
+      const near = alive[Math.floor(this.rng() * alive.length)]!.pos;
+      this.spawnBall(rollVariant(this.ballMix, this.rng), near);
     }
 
     while (this.tickAcc >= TICK_DT) {
