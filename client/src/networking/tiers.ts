@@ -11,6 +11,7 @@
  */
 
 import type { ConnectionConfig } from './WebSocketConnection.js';
+import type { ServerMessage } from '../../../shared/protocol.js';
 import { WebSocketConnection } from './WebSocketConnection.js';
 import type { GameTransport } from './transport.js';
 import { ChildLogger } from '../core/Logger.js';
@@ -100,20 +101,23 @@ class WebTransportGameTransport implements GameTransport {
       while ((nl = carry.indexOf('\n')) >= 0) {
         const line = carry.slice(0, nl);
         carry = carry.slice(nl + 1);
-        if (line) try {
-          const m = JSON.parse(line);
-          // Server wraps reliable-binary frames in a JSON envelope — the
-          // stream is text-framed so raw bytes would corrupt it (this is
-          // how ball segments arrive on the wt tier).
-          if (m && m.type === 'bin' && typeof m.d === 'string') {
-            this.config.onBinaryMessage?.(Uint8Array.from(atob(m.d), (c) => c.charCodeAt(0)));
-          } else {
-            this.config.onMessage?.(m);
-          }
-        } catch { /* malformed */ }
-        }
+        if (line) this.dispatchLine(line);
+      }
       }
     } catch { /* stream reset on close — expected teardown */ }
+  }
+
+  // One complete JSON frame from the reliable stream. The server wraps
+  // reliable-binary frames in a JSON envelope — the stream is text-framed
+  // so raw bytes would corrupt it (how ball segments arrive on wt).
+  private dispatchLine(line: string): void {
+    let m: ServerMessage | { type: 'bin'; d: string };
+    try { m = JSON.parse(line); } catch { return; /* malformed */ }
+    if (m.type === 'bin' && typeof (m as { d?: string }).d === 'string') {
+      this.config.onBinaryMessage?.(Uint8Array.from(atob((m as { d: string }).d), (c) => c.charCodeAt(0)));
+    } else {
+      this.config.onMessage?.(m as ServerMessage);
+    }
   }
 
   private async pumpDatagrams(reader: ReadableStreamDefaultReader<Uint8Array>): Promise<void> {

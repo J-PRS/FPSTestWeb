@@ -1,3 +1,5 @@
+2026-10-03 - tiers.ts pumpReliable: per-line dispatch extracted (depth-6 -> clean); bin-envelope frames typed.
+
 2026-10-03 - main.ts init split: factory dep-bags -> makeEntities/makeCombat/makeDemoLifecycle/makeGameLoop, hooks -> wirePlayerStatusHooks/wireNetworkLocal, offline modes -> setupOfflineMode + killLocal. init 293 -> ~120; dead _blinkDir removed.
 
 2026-10-03 - Projectile.updateAlive split: stuck-bomb tick -> tickStuck(), remote-replica terrain lane -> tickRemote(). c31 -> clean, oxlint quiet.
