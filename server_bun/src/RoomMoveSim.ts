@@ -32,6 +32,9 @@ interface Shadow {
    *  the report reflects but the shadow hasn't consumed yet. */
   probe?: MoveSim;
   divergences: number;
+  /** Spawn seed is the server's guess — the first position report snaps the
+   *  sim to the client's actual landing spot instead of flagging it. */
+  seeded: boolean;
   /** Corrections throttle — a client fighting the snap reports divergent
    *  positions every tick; one correction per window is enough. */
   lastCorrection: number;
@@ -137,6 +140,10 @@ export class RoomMoveSim {
     const mods = perkMods(perk);
     this.shadows.set(playerId, {
       sim: new MoveSim(this.surface, state), divergences: 0, lastCorrection: 0,
+      // Spawn seed is the server's guess — the client's first position
+      // report is the authoritative landing spot (client picks its own
+      // spawn point); comparing would flag a phantom join divergence.
+      seeded: false,
       energy: ENERGY.max,
       jetDrain: mods.jetDrain, jetRegen: mods.jetRegen, energyRegen: mods.energyRegen,
       jetWanted: false, skillDrainPerSec: 0, skillSuppressRegen: false, lastStatus: 0,
@@ -215,6 +222,13 @@ export class RoomMoveSim {
     if (!sh) return null;
     const s = sh.sim.state;
     s.yaw = yaw; // facing is client truth — sim only needs it for input dir
+    if (!sh.seeded) {
+      sh.seeded = true;
+      s.pos = { x: pos.x, y: pos.y, z: pos.z };
+      s.onGround = true;
+      sh.seqStates.clear(); // pre-seed journal anchors the discarded guess
+      return null;
+    }
     if (vel) { s.vel.x = vel.x; s.vel.y = vel.y; s.vel.z = vel.z; }
     // The report's seq tells us how many input events the client had
     // consumed when it generated this position. If the shadow is behind
