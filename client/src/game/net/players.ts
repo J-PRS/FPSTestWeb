@@ -199,58 +199,60 @@ function onPlayerKill(ctx: NetCtx, streak: { v: number }, shooterId: string, tar
 
   const remotePlayer = deps.world.remotePlayers.get(targetId);
   if (remotePlayer) {
-    // Find matching explosion from this shooter
-    let explosionPos: THREE.Vector3 | undefined;
-    let explosionForce: number | undefined;
-    for (const exp of deps.explosionTracker.getRecentExplosions()) {
-      if (exp.shooterId === shooterId) {
-        explosionPos = exp.position;
-        explosionForce = exp.force;
-        break;
-      }
-    }
-
-    // Play death animation (ragdoll physics with explosion impulse)
-    remotePlayer.playDeath(explosionPos, explosionForce);
-
-    // Shatter like the creatures do: shards burst off the capsule shell,
-    // carry the blast direction through the body, and inherit whatever
-    // speed the corpse had. Team color when known, robot grey otherwise.
-    const centerY = remotePlayer.position.y + 1.0;
-    let impulseDir: THREE.Vector3 | undefined;
-    if (explosionPos) {
-      impulseDir = new THREE.Vector3(
-        remotePlayer.position.x - explosionPos.x,
-        centerY - explosionPos.y,
-        remotePlayer.position.z - explosionPos.z,
-      );
-      const l = impulseDir.length() || 1;
-      impulseDir.multiplyScalar(Math.min(1.5, (explosionForce ?? 10) / 15) / l);
-    }
-    const team = nm().getPlayers().get(targetId)?.team
-      ?? (remotePlayer as { team?: 'alpha' | 'bravo' }).team;
-    // Gibs are best-effort — a degenerate model must never take the kill
-    // handler down with it (generic chunks still spawn on null).
-    let parts: { geo: THREE.BufferGeometry; pos: THREE.Vector3 }[] | undefined;
-    try { parts = remotePlayer.model.deathParts() ?? undefined; }
-    catch { /* fall through to generic shards */ }
-    const debris = new PlayerDebris(
-      deps.lazyScene(), deps.lazyTerrain(),
-      remotePlayer.position.x, centerY, remotePlayer.position.z,
-      new THREE.Color(team ? TEAM_COLORS[team] : 0x8899aa),
-      { impulseDir, inheritVel: remotePlayer.vel, parts },
-    );
-    deps.world.playerDebrisList.push(debris);
-
-    // Hide the model immediately
-    remotePlayer.hide();
-
-    // Remove HUD indicator on kill
-    deps.lazyHud().removePlayerIndicator(targetId);
-    deps.lazyHealthBarSystem().removeBar(targetId);
-
+    gibVictim(ctx, shooterId, targetId, remotePlayer);
     logger.info(`Player ${targetId} killed by ${shooterId}`);
   }
+}
+
+/** Victim fx: ragdoll with the blast's impulse, capsule-shard gibs in the
+ *  team color, then hide the model and strip HUD markers. */
+function gibVictim(ctx: NetCtx, shooterId: string, targetId: string, remotePlayer: import('../../entities/RemotePlayer.js').RemotePlayer): void {
+  const { deps, nm } = ctx;
+  // Find matching explosion from this shooter
+  let explosionPos: THREE.Vector3 | undefined;
+  let explosionForce: number | undefined;
+  for (const exp of deps.explosionTracker.getRecentExplosions()) {
+    if (exp.shooterId === shooterId) {
+      explosionPos = exp.position;
+      explosionForce = exp.force;
+      break;
+    }
+  }
+
+  // Play death animation (ragdoll physics with explosion impulse)
+  remotePlayer.playDeath(explosionPos, explosionForce);
+
+  // Shatter like the creatures do: shards burst off the capsule shell,
+  // carry the blast direction through the body, and inherit whatever
+  // speed the corpse had. Team color when known, robot grey otherwise.
+  const centerY = remotePlayer.position.y + 1.0;
+  let impulseDir: THREE.Vector3 | undefined;
+  if (explosionPos) {
+    impulseDir = new THREE.Vector3(
+      remotePlayer.position.x - explosionPos.x,
+      centerY - explosionPos.y,
+      remotePlayer.position.z - explosionPos.z,
+    );
+    const l = impulseDir.length() || 1;
+    impulseDir.multiplyScalar(Math.min(1.5, (explosionForce ?? 10) / 15) / l);
+  }
+  const team = nm().getPlayers().get(targetId)?.team
+    ?? (remotePlayer as { team?: 'alpha' | 'bravo' }).team;
+  // Gibs are best-effort — a degenerate model must never take the kill
+  // handler down with it (generic chunks still spawn on null).
+  let parts: { geo: THREE.BufferGeometry; pos: THREE.Vector3 }[] | undefined;
+  try { parts = remotePlayer.model.deathParts() ?? undefined; }
+  catch { /* fall through to generic shards */ }
+  deps.world.playerDebrisList.push(new PlayerDebris(
+    deps.lazyScene(), deps.lazyTerrain(),
+    remotePlayer.position.x, centerY, remotePlayer.position.z,
+    new THREE.Color(team ? TEAM_COLORS[team] : 0x8899aa),
+    { impulseDir, inheritVel: remotePlayer.vel, parts },
+  ));
+
+  remotePlayer.hide();
+  deps.lazyHud().removePlayerIndicator(targetId);
+  deps.lazyHealthBarSystem().removeBar(targetId);
 }
 
 /** Updates, respawns, join/leave, movement events — the presence wire. */

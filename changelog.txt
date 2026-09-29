@@ -1,3 +1,5 @@
+2026-10-03 - onPlayerKill: gib/ragdoll victim fx extracted to gibVictim (c21 -> clean).
+
 2026-10-03 - netBalls rubberbandCheck split into warnAt/forensics helpers (c23 -> clean).
 
 2026-10-03 - netCrawlSpawn: instanceof chains -> SPECIES table (klass + registry list + default state) (c31 -> clean).
