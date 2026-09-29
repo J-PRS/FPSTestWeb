@@ -1,3 +1,8 @@
+2026-10-03 - TickLoop.buildRecords split: idle-reap and server-owned
+    heal channels extracted into reapIdle / tickServerHeals — the
+    per-player record loop now reads as reap → heal → stale-heartbeat →
+    suppress → encode. Clears the last complexity warning in the tick
+    hot path.
 2026-10-03 - First server_bun oxlint sweep: cleared all 4 errors
     (spreading map .values() before iterating was unnecessary — Map
     iteration survives deletes; useless ?? {} in a spread) plus the

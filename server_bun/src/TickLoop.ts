@@ -206,37 +206,14 @@ export class TickLoop {
       // them here double-removes (double playerLeft broadcast).
       if (room.disconnected.has(playerId)) continue;
       const silenceMs = now - p.lastSeen;
-      if (!p.isBot && silenceMs > TickLoop.IDLE_KICK_MS) {
-        const ws = room.socketOf(playerId);
-        if (ws && ws.readyState === 1) {
-          ws.close(1000, 'idle'); // triggers onClose → grace cleanup
-        } else {
-          this.onRemove(room, playerId, 'idle');
-        }
-        logger.info('Idle player removed', { playerId, silenceMs });
-        this.metrics.recordsIdleReaped++;
-        continue;
-      }
+      if (this.reapIdle(room, playerId, p, silenceMs)) continue;
       // Silent sockets (backgrounded tabs) get no regular updates — but a
       // low-rate heartbeat keeps clients' stored state (health, isDead)
       // converged; otherwise a stale player's fields desync permanently
       // while the state hash still counts them. Gated on THAT player's
       // lastSent, not a shared clock — a single shared timestamp meant
       // only the first stale player in map order ever heartbeat.
-      // Health channels the server owns: medkit channel (flag), regenerator
-      // perk (passive), regen powerup (timed). All cap at the perk max.
-      const heal = healPerTick(p, now);
-      if (heal > 0) {
-        p.health = Math.min(p.maxHealth, p.health + heal);
-        // Server-owned heals never reach the owner — self is excluded
-        // from tickUpdate — so without this echo their hp drifts from
-        // the server's until the next discrete event (the desync the
-        // state hash keeps flagging).
-        if (now - p.healthEchoAt >= 500) {
-          p.healthEchoAt = now;
-          room.connections.sendToPlayer(playerId, { type: 'yourHealth', health: p.health });
-        }
-      }
+      this.tickServerHeals(room, playerId, p, now);
       const isStale = silenceMs > 5000;
       const forceSend = now < p.forceSendUntil;
       const lastSent = room.lastSentPositions.get(playerId);
@@ -286,6 +263,37 @@ export class TickLoop {
       this.metrics.recordsBuilt++;
     }
     return records;
+  }
+
+  /** Human silence past IDLE_KICK_MS gets reaped — close the live socket
+   *  (onClose runs the grace path) or remove directly when it's already
+   *  dead. Returns true when the player was reaped. */
+  private reapIdle(room: Room, playerId: string, p: PlayerState, silenceMs: number): boolean {
+    if (p.isBot || silenceMs <= TickLoop.IDLE_KICK_MS) return false;
+    const ws = room.socketOf(playerId);
+    if (ws && ws.readyState === 1) {
+      ws.close(1000, 'idle'); // triggers onClose → grace cleanup
+    } else {
+      this.onRemove(room, playerId, 'idle');
+    }
+    logger.info('Idle player removed', { playerId, silenceMs });
+    this.metrics.recordsIdleReaped++;
+    return true;
+  }
+
+  /** Health channels the server owns: medkit channel (flag), regenerator
+   *  perk (passive), regen powerup (timed). All cap at the perk max.
+   *  Server-owned heals never reach the owner — self is excluded from
+   *  tickUpdate — so a low-rate yourHealth echo keeps their hp from
+   *  drifting until the next discrete event. */
+  private tickServerHeals(room: Room, playerId: string, p: PlayerState, now: number): void {
+    const heal = healPerTick(p, now);
+    if (heal <= 0) return;
+    p.health = Math.min(p.maxHealth, p.health + heal);
+    if (now - p.healthEchoAt >= 500) {
+      p.healthEchoAt = now;
+      room.connections.sendToPlayer(playerId, { type: 'yourHealth', health: p.health });
+    }
   }
 
   /** Suppression: if reported state still matches where the clients' dead
