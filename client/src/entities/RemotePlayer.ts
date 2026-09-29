@@ -117,7 +117,7 @@ export class RemotePlayer {
     this._isSimulating = false;
   }
 
-  constructor(scene: THREE.Scene, playerId: string, startPos: { x: number; y: number; z: number }, terrain?: Terrain, armorClass?: string) {
+  constructor(scene: THREE.Scene, playerId: string, startPos: { x: number; y: number; z: number }, terrain?: Terrain, _armorClass?: string) {
     this.instanceId = ++_remotePlayerInstanceCounter;
     this.scene = scene;
     this.playerId = playerId;

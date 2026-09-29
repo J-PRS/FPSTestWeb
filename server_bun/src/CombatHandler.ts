@@ -693,40 +693,43 @@ export class CombatHandler {
     }
   }
 
-  /** Server-authored creature bite (CreatureSim) — no shooter, no friendly
-   *  check: a crawler bites whoever it landed on regardless of team. */
-  crawlerAttack(targetId: string, damage: number): void {
+  /** Single-target server-authored hits (bot shots, sentry bolts, creature
+   *  bites) share one funnel: target liveness, optional friendly gate, dd
+   *  multiplier off the shooter, applyDamage + forceSend + applyHit.
+   *  'environment' = no shooter, no friendly check — a crawler bites
+   *  whoever it landed on. */
+  private serverHit(
+    ownerId: string, targetId: string, damage: number, label: string,
+    opts: { hb?: string; weapon?: number } = {},
+  ): void {
     const target = this.playerManager.getPlayer(targetId);
     if (!target || target.isDead) return;
-    this.hb('crawlbite');
-    const result = this.playerManager.applyDamage(targetId, damage);
-    target.forceSendUntil = Date.now() + FORCE_SEND_MS;
-    this.applyHit('environment', targetId, damage, result, 'Crawler bite');
-  }
-
-  turretAttack(ownerId: string, targetId: string, damage: number): void {
-    const owner = this.playerManager.getPlayer(ownerId);
-    const target = this.playerManager.getPlayer(targetId);
-    if (!target || target.isDead) return;
-    if (this.friendly(ownerId, targetId)) return;
+    if (ownerId !== 'environment' && this.friendly(ownerId, targetId)) return;
+    if (opts.hb) this.hb(opts.hb);
+    const owner = ownerId === 'environment' ? null : this.playerManager.getPlayer(ownerId);
     const dmg = damage * (owner ? this.ddMult(owner) : 1);
     const result = this.playerManager.applyDamage(targetId, dmg);
     target.forceSendUntil = Date.now() + FORCE_SEND_MS;
-    this.applyHit(ownerId, targetId, dmg, result, 'Turret hit');
+    this.applyHit(ownerId, targetId, dmg, result, label, undefined, opts.weapon);
+  }
+
+  /** Server-authored creature bite (CreatureSim). */
+  crawlerAttack(targetId: string, damage: number): void {
+    this.serverHit('environment', targetId, damage, 'Crawler bite', { hb: 'crawlbite' });
+  }
+
+  turretAttack(ownerId: string, targetId: string, damage: number): void {
+    this.serverHit(ownerId, targetId, damage, 'Turret hit');
   }
 
   botAttack(shooterId: string, targetId: string, weaponType: number): void {
     const shooter = this.playerManager.getPlayer(shooterId);
-    const target = this.playerManager.getPlayer(targetId);
-    if (!shooter || shooter.isDead || !target || target.isDead) return;
-    if (this.friendly(shooterId, targetId)) return;
+    if (!shooter || shooter.isDead) return;
     // Melee carries its damage on the aoe line (instant cone, directDamage 0)
     // — falling back to it keeps bot punches non-zero.
     const stats = getWeaponStats(weaponType);
-    const damage = (stats.directDamage || stats.aoeDamage) * perkMods(shooter.perk).directDamage * this.ddMult(shooter);
-    const result = this.playerManager.applyDamage(targetId, damage);
-    target.forceSendUntil = Date.now() + FORCE_SEND_MS;
-    this.applyHit(shooterId, targetId, damage, result, 'Bot hit', undefined, weaponType);
+    const damage = (stats.directDamage || stats.aoeDamage) * perkMods(shooter.perk).directDamage;
+    this.serverHit(shooterId, targetId, damage, 'Bot hit', { weapon: weaponType });
   }
 
   // Double-damage pickup: multiplies OUTGOING damage while the buff lasts.

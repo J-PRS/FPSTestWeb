@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-import { GameBot, BOT_HP, BOT_DMG, EYE } from './botBrain.js';
+import { GameBot, BOT_DMG, EYE } from './botBrain.js';
 import type { Nugget } from '../entities/Nugget.js';
 import type { Targetable } from '../entities/balls.js';
 import type { GameContext } from './context.js';
