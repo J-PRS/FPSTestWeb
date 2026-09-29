@@ -184,7 +184,11 @@ export class BotBrain {
   // emplacement emerges from "a defender with time on their hands",
   // not a scripted base layout.
   private deployT = 8 + Math.random() * 25;
-  private readonly builder = Math.random() < 0.45;
+  private builder = Math.random() < 0.45;
+
+  /** Hosts can pin the builder trait — a technician role shouldn't be
+   *  a dice roll away from never touching the deploy kit. */
+  setBuilder(v: boolean): void { this.builder = v; }
 
   /** Host reports the bot's corpse spot on death. */
   markDeath(pos: BotVec): void {

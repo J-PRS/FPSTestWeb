@@ -42,11 +42,19 @@ const BOLT_SPEED = 60;     // m/s visual bolt + hitscan travel is instant
 const SUPERBOT = process.env.FPS_SUPERBOT ?? '';
 const isSuper = (id: string) => SUPERBOT !== '' && id.includes(SUPERBOT);
 
+/** Tribes-flavored squad roles. capper runs the flag route, offense clears
+ *  the stand / escorts, hof is Heavy-on-Flag (parks ON the stand), defense
+ *  covers the home area, technician is defense that emplaces gear when
+ *  parked, infiltrator cloaks deep and wrecks gear before grabbing. */
+type BotRole = 'capper' | 'offense' | 'hof' | 'defense' | 'technician' | 'infiltrator';
+
 export class ServerBots {
   private brains = new Map<string, BotBrain>();
   private loadouts = new Map<string, BotLoadout>();
-  /** CTF role: plated anchors hold the stand, the rest press. */
-  private roles = new Map<string, 'offense' | 'defense'>();
+  /** Squad role — self-assigned and rebalanced by need (see
+   *  rebalanceRoles): nobody scripts positions, the squad just notices
+   *  a lane is empty and someone takes it. */
+  private roles = new Map<string, BotRole>();
   /** Bots we saw dead — respawn transition resyncs the move shadow. */
   private deadSet = new Set<string>();
   /** Next allowed sentry-clearing lob per bot — keeps gear suppression
@@ -95,7 +103,9 @@ export class ServerBots {
       this.loadouts.set(id, loadout);
       // CTF role from the loadout: plated anchors hold home, everyone else
       // presses. A whole team grabbing leaves the stand unguarded.
-      this.roles.set(id, loadout.perk === 'plated' ? 'defense' : 'offense');
+      // Seed roles from the loadout; the rebalancer shifts them as the
+      // match's needs change. Plated anchors start as HoF candidates.
+      this.roles.set(id, loadout.perk === 'plated' ? 'hof' : 'offense');
       p.isBot = true;
       if (isSuper(id)) p.health = 400; // superbot tanks a beating
       p.lastSeen = Date.now();
@@ -307,25 +317,107 @@ export class ServerBots {
     // Own flag dropped — anyone close enough touches it home; defenders
     // treat it as top priority, offenders only when it's convenient.
     const dropped = own.state === 'dropped' ? own.pos : null;
+    const enemyStand = enemy.state !== 'carried'
+      ? { pos: enemy.pos, infiltrating: true } : null;
 
-    if (role === 'defense') {
-      if (thief) return { pos: thief.position, infiltrating: false };
-      if (dropped) return { pos: dropped, infiltrating: false };
-      // Guard the stand — a defender parked on the stand ring stays in
-      // intercept range of anyone who comes for it.
-      return homeward;
-    }
+    switch (role) {
+      // HoF/technician/defense: home-side priorities — thief, dropped,
+      // then hold the stand ring in intercept range.
+      case 'hof':
+      case 'technician':
+      case 'defense':
+        if (thief) return { pos: thief.position, infiltrating: false };
+        if (dropped) return { pos: dropped, infiltrating: false };
+        return homeward;
 
-    // Carrier escort: a teammate has the enemy flag — bodyguard them home
-    // rather than crowd the now-empty enemy stand.
-    if (enemy.carrier) {
-      const escort = this.room.players.getPlayer(enemy.carrier);
-      if (escort && escort.team === me) return { pos: escort.position, infiltrating: false };
+      // Capper: the flag route is the job — chase a carrier teammate to
+      // escort, otherwise press the stand. Only a dropped own flag on the
+      // way home pulls it off-route.
+      case 'capper':
+        if (enemy.carrier) {
+          const escort = this.room.players.getPlayer(enemy.carrier);
+          if (escort && escort.team === me) return { pos: escort.position, infiltrating: false };
+        }
+        if (dropped) return { pos: dropped, infiltrating: false };
+        if (enemyStand) return enemyStand;
+        return homeward;
+
+      // Infiltrator: slips in cloaked to wreck gear / grab — infiltrating
+      // holds even at the stand so the cloak keeps covering the breach.
+      case 'infiltrator':
+        if (enemy.carrier) {
+          const escort = this.room.players.getPlayer(enemy.carrier);
+          if (escort && escort.team === me) return { pos: escort.position, infiltrating: false };
+        }
+        if (enemyStand) return enemyStand;
+        if (thief) return { pos: thief.position, infiltrating: false };
+        return homeward;
+
+      // Offense (light offense in Tribes terms): escort a carrier, punish
+      // a thief, else press the enemy stand to clear it for the capper.
+      default:
+        if (enemy.carrier) {
+          const escort = this.room.players.getPlayer(enemy.carrier);
+          if (escort && escort.team === me) return { pos: escort.position, infiltrating: false };
+        }
+        if (thief) return { pos: thief.position, infiltrating: false };
+        if (dropped) return { pos: dropped, infiltrating: false };
+        if (enemyStand) return enemyStand;
+        return homeward; // flag's moving — defend home
     }
-    if (thief) return { pos: thief.position, infiltrating: false };
-    if (dropped) return { pos: dropped, infiltrating: false };
-    if (enemy.state !== 'carried') return { pos: enemy.pos, infiltrating: true };
-    return homeward; // flag's moving — defend home
+  }
+
+  /** Rebalance squad roles ~every 5s. Needs are computed per team: a flag
+   *  mode wants a capper; a bigger squad earns a HoF anchor, a technician
+   *  and an infiltrator; the rest split offense/defense. Reassignment
+   *  skips carriers mid-run — the flagGoal carrier check owns them. */
+  private roleT = 0;
+  private rebalanceRoles(now: number): void {
+    if (!this.room.flags || now < this.roleT) return;
+    this.roleT = now + 5000;
+    const byTeam = new Map<string, string[]>();
+    for (const id of this.brains.keys()) {
+      const p = this.room.players.getPlayer(id);
+      if (!p?.team) continue;
+      (byTeam.get(p.team) ?? byTeam.set(p.team, []).get(p.team)!).push(id);
+    }
+    // Desired role counts by squad size — a duo can't afford specialists.
+    const WANT: [BotRole, number][] = [
+      ['capper', 1], ['hof', 1], ['technician', 1], ['infiltrator', 1],
+    ];
+    const MIN_SQUAD = [3, 4, 5, 6]; // squad sizes unlocking each WANT row
+    for (const ids of byTeam.values()) {
+      // Never reassign a carrier — the flagGoal carrier check owns them.
+      const free = ids.filter((id) => {
+        const p = this.room.players.getPlayer(id);
+        if (!p || p.isDead) return true; // corpses re-role freely on respawn
+        for (const f of this.room.flags!.flags.values()) {
+          if (f.carrier === id) return false;
+        }
+        return true;
+      });
+      // Specialists are sticky: donors only come from the generic pool
+      // (offense/defense), and a bot is consumed once per cycle — else the
+      // same body flip-flops capper→hof→technician on every pass.
+      const isSpecial = (id: string) => WANT.some(([r]) => this.roles.get(id) === r);
+      const donors = free.filter((id) => !isSpecial(id));
+      for (let i = 0; i < WANT.length; i++) {
+        const [want, need] = [WANT[i][0], WANT[i][1]];
+        if (ids.length < MIN_SQUAD[i]) break;
+        let have = 0;
+        for (const id of ids) if (this.roles.get(id) === want) have++;
+        while (have < need) {
+          const donor = donors.shift();
+          if (!donor) break;
+          this.roles.set(donor, want);
+          // Technician is the only role that promises the deploy kit —
+          // pin its builder trait instead of trusting the spawn roll.
+          if (want === 'technician') this.brains.get(donor)?.setBuilder(true);
+          logger.info('Bot role', { id: donor, role: want, room: this.room.name });
+          have++;
+        }
+      }
+    }
   }
 
   /** Getting shot makes the brain recoil — called from the combat funnel. */
@@ -339,6 +431,7 @@ export class ServerBots {
    *  holds `spec.botFill` total bodies. Retirees prefer a dead bot
    *  (popping a live one mid-fight reads as a vanish). */
   private maintain(now: number): void {
+    this.rebalanceRoles(now);
     const fill = this.room.spec.botFill;
     if (!fill || now < this.maintainAt) return;
     this.maintainAt = now + 1000;
