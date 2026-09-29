@@ -145,6 +145,10 @@ surface. Detailed research lives in `_reports/`; this file is the current truth.
   bot brains fold structureTop into groundY (walls read as raised
   terrain) and a 2-window stuck streak escalates to a jet escape.
   Soak: 0 stuck warns, 9 corrections, converging.
+  Projectile occlusion landed (8ba1bb3): segSolidHit sweeps yaw-OBBs;
+  server RoomProjectiles + client Projectile pop on walls (stickies
+  glue), ray-burst beams stop at faces, and hit/AOE claims validate
+  the ballistic arc can't pass through a structure to its end.
 - Weapon registry rework (2026-09-30): client/src/weapons.ts SLOT_DEFS is
   the single weapon table — index is the wid, each def carries
   weaponType/rate/config/kick/kind(auto|fan|beam). The four hand-aligned
