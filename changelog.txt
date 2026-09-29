@@ -1,3 +1,5 @@
+2026-10-03 - blastForce: BlastArgs object replaces 9/10-param signatures (max-params -> clean, depth5 flattened).
+
 2026-10-03 - ctfFlags.update split into tickCarried/tickTouch (c21 + depth5 -> clean).
 
 2026-10-03 - onPlayerKill: gib/ragdoll victim fx extracted to gibVictim (c21 -> clean).

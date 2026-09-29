@@ -172,7 +172,7 @@ export function createCombat(deps: CombatDeps) {
     // Record explosion for death impulse calculation
     deps.explosionTracker.addExplosion(pos, force, a.shooterId || deps.lazyNetworkManager().getLocalPlayerId());
 
-    applyExplosionForce(pos, radius, force, forceMode, a.falloffMultiplier, a.collisionMultiplier, a.forceMultiplier, aoeDamage, a.directHitTargetId ?? null, a.weaponType);
+    applyExplosionForce({ pos, radius, force, forceMode, falloffMultiplier: a.falloffMultiplier, collisionMultiplier: a.collisionMultiplier, forceMultiplier: a.forceMultiplier, aoeDamage, directHitTargetId: a.directHitTargetId ?? null, weaponType: a.weaponType });
 
     // AOE damage to remote players (server-side authority)
     const networkManager = deps.lazyNetworkManager();

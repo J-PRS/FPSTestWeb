@@ -26,19 +26,34 @@ interface Forceable {
 // rocket jump without it eating your health bar
 const SELF_AOE_DAMAGE_SCALE = 0.15;
 
+// Same LOS rule the server applies: a wall between blast and target
+// swallows the prediction — keeps the client from flashing knockback/
+// damage the funnel will never confirm (then resyncing it back).
+const solids = () => Projectile.solidColliders;
+
+// Splash damage-number color follows the weapon — getProjectileConfig
+// looks up by wire weaponType (the array order isn't the enum).
+function splashColor(weaponType?: number): string {
+  return getProjectileConfig(weaponType ?? 0)?.damageColor ?? '#ffcc66';
+}
+
+/** One blast: where it went off, how hard it shoves, what it deals. */
+export interface BlastArgs {
+  pos: THREE.Vector3;
+  radius: number;
+  force: number;
+  forceMode: 'push' | 'pull';
+  falloffMultiplier: number;
+  collisionMultiplier: number;
+  forceMultiplier: number;
+  aoeDamage: number;
+  directHitTargetId: string | null;
+  weaponType?: number;
+}
+
 export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
-  // Same LOS rule the server applies: a wall between blast and target
-  // swallows the prediction — keeps the client from flashing knockback/
-  // damage the funnel will never confirm (then resyncing it back).
-  const solids = () => Projectile.solidColliders;
   const occluded = (pos: THREE.Vector3, target: THREE.Vector3) =>
     solids().length > 0 && blastOccluded(pos, target, solids());
-
-  // Splash damage-number color follows the weapon — getProjectileConfig
-  // looks up by wire weaponType (the array order isn't the enum).
-  function splashColor(weaponType?: number): string {
-    return getProjectileConfig(weaponType ?? 0)?.damageColor ?? '#ffcc66';
-  }
 
   // Nuggets are light pickups — blast throws them at a boosted force so
   // explosions visibly scatter loot instead of it hovering through the blast
@@ -60,16 +75,10 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
   }
 
   function applyForceToBalls(
-    pos: THREE.Vector3,
-    radius: number,
-    force: number,
-    forceMode: 'push' | 'pull',
-    collisionMultiplier: number,
-    forceMultiplier: number,
-    aoeDamage: number,
-    applyTo: (t: Forceable, f: number) => void,
-    weaponType?: number
+    a: BlastArgs,
+    applyTo: (t: Forceable, f: number) => void
   ): void {
+    const { pos, radius, forceMode, collisionMultiplier, aoeDamage, weaponType } = a;
     for (const ball of deps.targets) {
       if (ball.dead) continue;
       const db = ball.pos.distanceTo(pos);
@@ -77,24 +86,20 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
       const threshold = forceMode === 'push'
         ? radius + br
         : radius * collisionMultiplier + br;
-      if (db < threshold && !occluded(pos, ball.pos)) {
-        applyTo(ball, force * forceMultiplier);
-        // Splash actually hurts enemies — falloff-scaled like players, with
-        // the same damage number + health bar feedback as direct hits
-        // (without it, splash damage was invisible and read as "no damage").
-        const dmg = aoeDamageOf(aoeDamage, db, radius);
-        if (dmg >= 1) {
-          deps.lazyDamageNumbers().spawn(ball.pos, dmg, splashColor(weaponType), deps.lazyCamera());
-          deps.reportTargetDamage?.(ball, dmg);
-          if (ball.takeDamage(dmg)) hooks.onTargetDestroyed(ball, ball.vel, weaponType);
-          else {
-            if (!ball.hideHealthBar) deps.lazyHealthBarSystem().spawnBall(ball, dmg, ball.health);
-            const dm = deps.lazyDemoManager();
-            if (dm?.isRecording) {
-              dm.recordTargetHit(ball.id, { x: ball.pos.x, y: ball.pos.y, z: ball.pos.z }, { x: ball.vel.x, y: ball.vel.y, z: ball.vel.z }, ball.variant, ball.health);
-            }
-          }
-        }
+      if (db >= threshold || occluded(pos, ball.pos)) continue;
+      applyTo(ball, a.force * a.forceMultiplier);
+      // Splash actually hurts enemies — falloff-scaled like players, with
+      // the same damage number + health bar feedback as direct hits
+      // (without it, splash damage was invisible and read as "no damage").
+      const dmg = aoeDamageOf(aoeDamage, db, radius);
+      if (dmg < 1) continue;
+      deps.lazyDamageNumbers().spawn(ball.pos, dmg, splashColor(weaponType), deps.lazyCamera());
+      deps.reportTargetDamage?.(ball, dmg);
+      if (ball.takeDamage(dmg)) { hooks.onTargetDestroyed(ball, ball.vel, weaponType); continue; }
+      if (!ball.hideHealthBar) deps.lazyHealthBarSystem().spawnBall(ball, dmg, ball.health);
+      const dm = deps.lazyDemoManager();
+      if (dm?.isRecording) {
+        dm.recordTargetHit(ball.id, { x: ball.pos.x, y: ball.pos.y, z: ball.pos.z }, { x: ball.vel.x, y: ball.vel.y, z: ball.vel.z }, ball.variant, ball.health);
       }
     }
   }
@@ -132,18 +137,8 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
   }
 
   // Apply push/pull force to local player, balls, and remote players
-  function applyExplosionForce(
-    pos: THREE.Vector3,
-    radius: number,
-    force: number,
-    forceMode: 'push' | 'pull',
-    falloffMultiplier: number,
-    collisionMultiplier: number,
-    forceMultiplier: number,
-    aoeDamage: number,
-    directHitTargetId: string | null,
-    weaponType?: number
-  ): void {
+  function applyExplosionForce(a: BlastArgs): void {
+    const { pos, radius, force, forceMode, falloffMultiplier, forceMultiplier, aoeDamage, directHitTargetId } = a;
     const falloffAt = (dist: number) => 1 - dist / (radius * falloffMultiplier);
     const applyTo = (t: Forceable, f: number) =>
       forceMode === 'push' ? t.applyKnockback(pos, f) : t.applyPull(pos, f);
@@ -177,7 +172,7 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
       }
     }
     const kbForce = force * KNOCKBACK_SCALE;
-    applyForceToBalls(pos, radius, kbForce, forceMode, collisionMultiplier, forceMultiplier, aoeDamage, applyTo, weaponType);
+    applyForceToBalls({ ...a, force: kbForce }, applyTo);
     applyForceToNuggets(pos, radius, kbForce, forceMode, forceMultiplier);
     applyForceToRemotes(pos, radius, force, forceMode, aoeDamage, directHitTargetId);
   }
