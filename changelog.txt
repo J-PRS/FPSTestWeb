@@ -1,3 +1,6 @@
+2026-10-03 - WtServer.acceptReliable split: per-line delivery
+    (base64 bin envelope unwrap + raw dispatch) extracted to
+    deliverLine — clears both max-depth warnings.
 2026-10-03 - CombatHandler fully de-warned: handleShot → hitClaim /
     registerMiss; handleAOEShot → aoeMelee / aoeSlam / aoeBeam /
     aoeProjectile / aoeCluster dispatch; applyHit → noteHit (telemetry +

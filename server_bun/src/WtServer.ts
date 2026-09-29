@@ -85,25 +85,28 @@ class WtSocketAdapter {
       while ((nl = carry.indexOf('\n')) >= 0) {
         const line = carry.slice(0, nl);
         carry = carry.slice(nl + 1);
-        if (line) {
-        // Binary frames arrive base64-wrapped (see send) — decode before
-        // the game sees them so position claims keep their binary shape.
-        if (line.length > 8 && line.charCodeAt(0) === 123 && line.charCodeAt(9) === 98) {
-          try {
-            const m = JSON.parse(line) as { type?: string; d?: string };
-            if (m?.type === 'bin' && typeof m.d === 'string') {
-              this.game.onMessage(this.asSocket(), new Uint8Array(Buffer.from(m.d, 'base64')));
-              continue;
-            }
-          } catch { /* fall through to raw line */ }
-        }
-        this.game.onMessage(this.asSocket(), line);
-      }
+        if (line) this.deliverLine(line);
       }
     }
     // Reliable stream ended while the session lives — the lane is dead,
     // treat the socket as closed rather than leaving a zombie.
     this.die();
+  }
+
+  /** One newline-delimited frame. Binary frames arrive base64-wrapped
+   *  (see send) — decode before the game sees them so position claims
+   *  keep their binary shape. */
+  private deliverLine(line: string): void {
+    if (line.length > 8 && line.charCodeAt(0) === 123 && line.charCodeAt(9) === 98) {
+      try {
+        const m = JSON.parse(line) as { type?: string; d?: string };
+        if (m?.type === 'bin' && typeof m.d === 'string') {
+          this.game.onMessage(this.asSocket(), new Uint8Array(Buffer.from(m.d, 'base64')));
+          return;
+        }
+      } catch { /* fall through to raw line */ }
+    }
+    this.game.onMessage(this.asSocket(), line);
   }
 
   private async pumpDatagrams(): Promise<void> {
