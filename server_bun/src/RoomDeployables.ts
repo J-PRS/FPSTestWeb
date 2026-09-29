@@ -12,6 +12,7 @@ import type { ServerMessage } from '../../shared/protocol.ts';
 import { logger } from './logger.ts';
 import { weaponStats } from './weaponStats.ts';
 import { aoeDamage } from '../../shared/combat.ts';
+import { segSolidHit } from '../../shared/solidWorld.ts';
 
 export type DeployKind = 'turret' | 'mine' | 'station' | 'drone';
 const KINDS = new Set<DeployKind>(['turret', 'mine', 'station', 'drone']);
@@ -164,7 +165,9 @@ export class RoomDeployables {
       if (p.protectedUntil > Date.now()) continue;
       const dx = p.position.x - d.pos.x, dy = p.position.y - d.pos.y, dz = p.position.z - d.pos.z;
       const d2 = dx * dx + dy * dy + dz * dz;
-      if (d2 < bestD2) { bestD2 = d2; target = pid; }
+      if (d2 >= bestD2) continue;
+      if (!this.losClear(d.pos, p.position)) continue;
+      bestD2 = d2; target = pid;
     }
     if (!target) { d.fireCd = 0.15; return; }
     d.fireCd = DRONE_FIRE_INTERVAL;
@@ -213,6 +216,18 @@ export class RoomDeployables {
     }
   }
 
+  /** Structure LOS for the gun scan — a sentry indoors shouldn't plink
+   *  players outside through the wall. Target at chest height. */
+  private losClear(from: Vec3, to: Vec3): boolean {
+    const cols = this.room.ballSim.colliders;
+    if (!cols.length) return true;
+    return !segSolidHit(
+      { x: from.x, y: from.y + 0.5, z: from.z },
+      { x: to.x, y: to.y + 1.0, z: to.z },
+      cols, this.room.ballSim.colliderIndex ?? undefined,
+    );
+  }
+
   /** Server-side sentry fire: nearest hostile player in the envelope gets
    *  a bolt every TURRET_FIRE_INTERVAL. Damage rides the shared funnel so
    *  kill credit, spawn protection and respawn all behave — the client
@@ -229,7 +244,9 @@ export class RoomDeployables {
       if (p.protectedUntil > Date.now()) continue;
       const dx = p.position.x - d.pos.x, dy = p.position.y - d.pos.y, dz = p.position.z - d.pos.z;
       const d2 = dx * dx + dy * dy + dz * dz;
-      if (d2 < bestD2) { bestD2 = d2; target = pid; }
+      if (d2 >= bestD2) continue;
+      if (!this.losClear(d.pos, p.position)) continue;
+      bestD2 = d2; target = pid;
     }
     if (!target) { d.fireCd = Math.min(d.fireCd + 0.15, 0.15); return; } // idle scan: cheap re-check
     d.fireCd = TURRET_FIRE_INTERVAL;
