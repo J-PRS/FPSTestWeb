@@ -44,7 +44,9 @@ export function recordSuppressed(p: SuppressablePlayer, lastSent: SuppressableSe
   const dy = p.position.y - ey;
   const dz = p.position.z - ez;
   const predErrSq = dx * dx + dy * dy + dz * dz;
-  const yawDiff = Math.abs(p.rotation.yaw - lastSent.yaw);
+  // Yaw wraps — a raw |a-b| reads a 6.27→0.01 crossing as a huge turn and
+  // permanently defeats suppression for spinners. Compare the shortest arc.
+  const yawDiff = Math.abs(((p.rotation.yaw - lastSent.yaw + Math.PI) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI) - Math.PI);
   const pitchDiff = Math.abs(p.rotation.pitch - lastSent.pitch);
   // State fields (health/death/ski/status) must never be eaten by the
   // position check — a flag change forces the record even when the
