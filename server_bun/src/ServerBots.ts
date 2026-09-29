@@ -34,6 +34,7 @@ const BOT_LOADOUTS: BotLoadout[] = [
   { perk: 'bombardier',  near: WeaponType.Chaingun, mid: WeaponType.Disc,      far: WeaponType.Rocket,        belt: WeaponType.RemoteRailgun }, // siege
   { perk: 'plated',      near: WeaponType.Chaingun, mid: WeaponType.PlasmaGun, far: WeaponType.Disc,          belt: WeaponType.Grenade },       // anchor
   { perk: 'overcharge',  near: WeaponType.Chaingun, mid: WeaponType.Disc,      far: WeaponType.Rocket,        belt: WeaponType.RemoteRailgun }, // skirmisher
+  { perk: 'vitality',    near: WeaponType.Chaingun, mid: WeaponType.Sprinkler, far: WeaponType.Rocket,        belt: WeaponType.Grenade },       // hose — area denial
 ];
 
 const SPEED = 14;          // m/s ground move

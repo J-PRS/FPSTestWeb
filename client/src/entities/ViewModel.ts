@@ -66,16 +66,22 @@ export class ViewModel {
   // Muzzle Z per weapon (model space) so the flash sits AT the bore,
   // not at a fixed offset that floats ahead of stubby barrels.
   private static readonly MUZZLE_Z: Record<number, number> = {
-    [WeaponType.Rocket]: -0.44, [WeaponType.Disc]: -0.46, [WeaponType.DiscPull]: -0.46, // just past the fork's prong tips
+    [WeaponType.Rocket]: -0.36, // flush bore face, just past the end plate [WeaponType.Disc]: -0.46, [WeaponType.DiscPull]: -0.46, // just past the fork's prong tips
     [WeaponType.Chaingun]: -0.55, // just past the barrel cluster tips [WeaponType.Mortar]: -0.28, [WeaponType.GrenadeLauncher]: -0.42,
-    [WeaponType.Flak]: -0.28, [WeaponType.PlasmaCannon]: -0.35, [WeaponType.PlasmaGun]: -0.26,
+    [WeaponType.Flak]: -0.28, [WeaponType.PlasmaCannon]: -0.35, [WeaponType.PlasmaGun]: -0.26, [WeaponType.Sprinkler]: -0.26,
     [WeaponType.Railgun]: -0.43,
     [WeaponType.Shotgun]: -0.41, [WeaponType.Cannon]: -0.53,
     [WeaponType.RocketLauncher]: -0.44, // just past the warhead tip
     [WeaponType.Lightning]: -0.42, // emitter ball at the prong tips
     [WeaponType.Sticky]: -0.40,
+    [WeaponType.Pistol]: -0.17,   // stubby barrel face
+    [WeaponType.Revolver]: -0.27, // long barrel + underlug tip
   };
   private chainBarrels: THREE.Group | null = null;
+  // Bore axis in the SPIN NODE's local space — procedural barrels run
+  // along -Z, but an adopted bake node carries Blender's export axes, so
+  // a blind rotation.z cartwheels the triad. Computed at adoption.
+  private spinAxis = new THREE.Vector3(0, 0, -1);
   private spinVel = 0;
   private static readonly SPIN_MAX = 40; // rad/s at full spin
   private activeWeapon = 0;
@@ -87,6 +93,7 @@ export class ViewModel {
   private kickX = 0;         // sideways kick — flak/melee shudder
   private kickRoll = 0;      // per-shot roll — alternating twist reads as torque
   private kickDecay = 12;    // per-weapon spring rate
+  private kickAmp = 1;       // per-weapon muzzle-rise multiplier
   private flashLifeScale = 1;
   private throwT = -1;
   private punchT = -1;
@@ -223,6 +230,28 @@ export class ViewModel {
           m.material = inBarrels && barrelMat ? barrelMat : bakedMat;
         });
         g.add(gltf.scene);
+        if (spinNode && spinNode.parent) {
+          // The bake node's origin isn't the cluster center — spinning it
+          // directly orbits the triad around one barrel. Wrap it in a pivot
+          // seated on the bore line (weapon-space x=0,y=0 at barrel z) and
+          // spin THAT. Matrix math runs after the reparent so matrixWorld
+          // already includes g's transform.
+          const boreCenter = new THREE.Vector3(0, 0, -0.28); // cluster z in weapon space
+          const parent = spinNode.parent;
+          parent.updateWorldMatrix(true, false);
+          g.updateWorldMatrix(true, false);
+          const parentInv = new THREE.Matrix4().copy(parent.matrixWorld).invert();
+          const pivot = new THREE.Group();
+          pivot.position.copy(boreCenter.applyMatrix4(
+            new THREE.Matrix4().copy(parentInv).multiply(g.matrixWorld)));
+          parent.add(pivot);
+          pivot.attach(spinNode);
+          // Bore dir (-Z in weapon space) into the pivot's local axes —
+          // the pivot is unrotated, so this is just parent-space.
+          this.spinAxis.set(0, 0, -1)
+            .transformDirection(new THREE.Matrix4().copy(parentInv).multiply(g.matrixWorld));
+          this.chainBarrels = pivot;
+        }
         // A bake landing mid-cloak must join the ghost set — otherwise the
         // weapon pops back opaque while you're invisible.
         if (this.ghostMats.length) {
@@ -243,30 +272,42 @@ export class ViewModel {
           for (const mesh of toShell) this.ghostifyMesh(mesh);
         }
         console.log(`[vm] w${wt} baked swap: removed ${swap.size} procedural meshes`);
-      } catch (e) { console.log(`[vm] w${wt} bake load failed:`, e); /* procedural+vertexAO stays */ }
+      } catch (e) {
+        // A missing bake is the normal case — no w{id}_baked.glb/ao.png
+        // shipped for this weapon, so the procedural+vertexAO mesh stays.
+        // 404s surface as ProgressEvent (ImageLoader) or "Not Found"/404
+        // Errors (FileLoader/fetch) — neither is worth a log line. Only a
+        // real parse/decode failure is.
+        const is404 = e instanceof ProgressEvent ||
+          (e instanceof Error && /404|not found|fetch/i.test(e.message));
+        if (!is404) console.log(`[vm] w${wt} bake load failed:`, e);
+      }
     }
   }
 
-  // Per-weapon fire feel: [decay, sideways jitter, flashColor, flashScale, flashLife]
+  // Per-weapon fire feel: [decay, sideways jitter, flashColor, flashScale, flashLife, rise]
   // Same spring everywhere — only the impulse shape changes per weapon,
   // the Quake approach: one damped oscillator, re-triggered per shot.
-  private static readonly KICK_TUNE: Record<number, [number, number, number, number, number]> = {
-    [WeaponType.Rocket]:          [12, 0.00, 0xffc866, 1.0, 1.0],   // classic straight-back
-    [WeaponType.Disc]:            [16, 0.04, 0x99ddff, 0.7, 0.7],   // snappy, short travel
-    [WeaponType.DiscPull]:        [16, 0.04, 0x99ddff, 0.7, 0.7],
-    [WeaponType.Chaingun]:        [18, 0.02, 0xffaa44, 0.6, 0.5],   // tiny buzz, no big flash
-    [WeaponType.Mortar]:          [7,  0.00, 0xffdd99, 1.6, 1.5],   // slow heavy drop-kick, big flash
-    [WeaponType.GrenadeLauncher]: [11, 0.03, 0xffc866, 0.8, 0.9],   // pump pop
-    [WeaponType.Flak]:            [10, 0.09, 0xffbb55, 1.3, 1.0],   // hard shove + sideways shudder
-    [WeaponType.PlasmaCannon]:          [15, 0.00, 0x44ffbb, 0.5, 0.6],   // light tap, green glow
-    [WeaponType.PlasmaGun]:       [14, 0.01, 0x66ccff, 0.35, 0.35], // repeater — small kick, cool flash
-    [WeaponType.Railgun]:         [18, 0.01, 0x77ccff, 1.1, 0.9],   // fast snap, cyan discharge
-    [WeaponType.Lightning]:       [16, 0.05, 0x8fdcff, 0.4, 0.4],   // per-tick hum — tiny flash, sideways jitter
-    [WeaponType.Cannon]:          [8,  0.02, 0xffaa55, 1.5, 1.3],   // heavy naval-gun thump, big warm flash
-    [WeaponType.RocketLauncher]:  [10, 0.03, 0xffcc77, 1.3, 1.1],   // launch shove, hot motor bloom
-    [WeaponType.Pistol]:          [22, 0.01, 0xffe0a0, 0.35, 0.4],  // snappy crack — tiny flash, quick settle
-    [WeaponType.Revolver]:        [8,  0.05, 0xffb060, 1.1, 0.8],   // hand-cannon bark — bigger bloom, heavy push
-    [WeaponType.Sticky]:          [13, 0.02, 0xff66dd, 0.8, 0.7],   // thoomp — tube launch, magenta spit
+  // `rise` scales muzzle-up pitch + back-thrust so weapons differ in
+  // character, not just shove depth (mortar heaves, pistol snaps).
+  private static readonly KICK_TUNE: Record<number, [number, number, number, number, number, number]> = {
+    [WeaponType.Rocket]:          [12, 0.00, 0xffc866, 1.0, 1.0, 1.0],  // classic straight-back
+    [WeaponType.Disc]:            [16, 0.04, 0x99ddff, 0.7, 0.7, 0.9],  // snappy, short travel
+    [WeaponType.DiscPull]:        [16, 0.04, 0x99ddff, 0.7, 0.7, 0.9],
+    [WeaponType.Chaingun]:        [18, 0.02, 0xffaa44, 0.6, 0.5, 0.5],  // tiny buzz, no big flash
+    [WeaponType.Mortar]:          [7,  0.00, 0xffdd99, 1.6, 1.5, 1.0],  // slow heavy heave, big flash
+    [WeaponType.GrenadeLauncher]: [11, 0.03, 0xffc866, 0.8, 0.9, 0.9],  // pump pop
+    [WeaponType.Flak]:            [10, 0.09, 0xffbb55, 1.3, 1.0, 1.1],  // hard shove + sideways shudder
+    [WeaponType.PlasmaCannon]:          [15, 0.00, 0x44ffbb, 0.5, 0.6, 0.7],  // light tap, green glow
+    [WeaponType.PlasmaGun]:       [14, 0.01, 0x66ccff, 0.35, 0.35, 0.5],// repeater — small kick, cool flash
+    [WeaponType.Sprinkler]:       [15, 0.02, 0xaaff66, 0.4, 0.4, 0.45],// hose — light wobble, lime flash
+    [WeaponType.Railgun]:         [18, 0.01, 0x77ccff, 1.1, 0.9, 1.2],  // fast snap, cyan discharge
+    [WeaponType.Lightning]:       [16, 0.05, 0x8fdcff, 0.4, 0.4, 0.4],  // per-tick hum — tiny flash, sideways jitter
+    [WeaponType.Cannon]:          [8,  0.02, 0xffaa55, 1.5, 1.3, 1.1],  // heavy naval-gun thump, big warm flash
+    [WeaponType.RocketLauncher]:  [10, 0.03, 0xffcc77, 1.3, 1.1, 1.2],  // launch shove, hot motor bloom
+    [WeaponType.Pistol]:          [22, 0.01, 0xffe0a0, 0.35, 0.4, 1.1], // snappy crack — muzzle flip, quick settle
+    [WeaponType.Revolver]:        [8,  0.05, 0xffb060, 1.1, 0.8, 1.3],  // hand-cannon bark — big muzzle flip
+    [WeaponType.Sticky]:          [13, 0.02, 0xff66dd, 0.8, 0.7, 0.9],  // thoomp — tube launch, magenta spit
   };
 
   kick(strength = 1): void {
@@ -274,8 +315,9 @@ export class ViewModel {
     // Velocity impulse, not a position set: rapid shots stack into a bigger
     // swing instead of re-triggering a flat one, and the spring below
     // overshoots rest so the gun snaps rather than slides.
-    this.kickVel += strength * 14;
+    this.kickVel += strength * 22;
     this.kickDecay = t[0];
+    this.kickAmp = t[5];
     this.kickX = (Math.random() - 0.5) * t[1];
     this.kickRoll = (Math.random() - 0.5) * t[1] * 4 + strength * 0.04;
     if (this.activeWeapon === WeaponType.Chaingun) {
@@ -478,9 +520,12 @@ export class ViewModel {
     const s = this.kickDecay * 2.2;
     this.kickVel += (-this.kickAmount * s * s - this.kickVel * 1.1 * s) * dt;
     this.kickAmount += this.kickVel * dt;
+    // Ceiling on travel — heavy weapons (mortar/cannon at strength ~2)
+    // slam into it instead of flying the gun off-screen.
+    if (this.kickAmount > 0.85) { this.kickAmount = 0.85; this.kickVel = Math.min(this.kickVel, 0); }
     this.kickX *= Math.exp(-dt * this.kickDecay * 1.4); // jitter settles faster than the shove
-    const kickZ = this.kickAmount * 0.36;
-    const kickY = this.kickAmount * 0.08;
+    const kickZ = this.kickAmount * 0.55;
+    const kickY = this.kickAmount * 0.12;
     const dip = this.updateThrowDip(dt);
     const switchDip = this.updateSwitchDip(dt);
     const punch = this.updatePunchDip(dt);
@@ -493,13 +538,15 @@ export class ViewModel {
     );
     // Snap fast to the kicked pose so the punch is actually visible
     this.group.position.lerp(target, Math.min(dt * 20, 1));
-    this.group.rotation.x = this.baseRotX + this.kickAmount * 0.28 + dip * THROW_DIP_ROT + switchDip * SWITCH_DIP_ROT + punch * PUNCH_ROT;
+    // Muzzle rise is the readable half of a kick — pitch up hard
+    // (×0.55, was 0.28 → ~10° at full strength, mortar/cannon more)
+    this.group.rotation.x = this.baseRotX + this.kickAmount * 0.7 * this.kickAmp + dip * THROW_DIP_ROT + switchDip * SWITCH_DIP_ROT + punch * PUNCH_ROT;
     this.group.rotation.z = this.baseRotZ + totalDip * THROW_DIP_ROLL + punch * PUNCH_ROLL
       + this.kickRoll * this.kickAmount;
 
     // Chaingun barrel spin — decays over ~0.7s after firing stops
     if (this.chainBarrels && this.spinVel > 0) {
-      this.chainBarrels.rotation.z += this.spinVel * dt;
+      this.chainBarrels.rotateOnAxis(this.spinAxis, this.spinVel * dt);
       this.spinVel *= Math.exp(-dt * 4);
       if (this.spinVel < 0.5) this.spinVel = 0;
     }

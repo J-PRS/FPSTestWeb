@@ -35,6 +35,7 @@ export enum WeaponType {
   ClusterBomblet = 22,// spawned by ClusterBomb detonation — never fired directly
   PlasmaGun = 23,     // Quake-style rapid plasma: fast cadence, mid-speed fat bolt
   RemoteRailgun = 24, // belt throw: slug discharges a hitscan rail mid-flight, pops at the hit point
+  Sprinkler = 25,     // plasma hose: rapid stream of arced bolts with cone spread
 }
 
 export interface WeaponStats {
@@ -386,7 +387,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     directDamage: 30,
     aoeDamage: 15,
     aoeRadius: 8.0,
-    knockbackForce: 35.0,
+    knockbackForce: 12.0, // the pop is only the delivery — the payload shoves
     forceMode: 'push',
     speed: 42.0,
     gravity: -28.0,
@@ -402,7 +403,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     directDamage: 15,
     aoeDamage: 12,
     aoeRadius: 6.0,
-    knockbackForce: 25.0,
+    knockbackForce: 7.0, // popcorn pop, not a launcher — 5 stacked ≈ a rocket's worth
     forceMode: 'push',
     speed: 0, // spawned mid-air by the carrier, never muzzle-fired
     gravity: -28.0,
@@ -463,6 +464,24 @@ export const WEAPONS: Record<number, WeaponStats> = {
     maxLifetime: 4.0, // intercept before discharge → plain impact pop
     rayDelay: 0.4,
     rayRange: 160.0,
+  },
+  [WeaponType.Sprinkler]: {
+    // Sprinkler: plasma-gun cadence (~9/s ≈ 108dps on paper) but every bolt
+    // arcs at half-mortar gravity inside a slight cone — mid-range area
+    // denial, not a dueling laser. Lower direct damage + tiny pop so the
+    // stream rewards saturation over precision.
+    directDamage: 12,
+    aoeDamage: 5,
+    aoeRadius: 3.0,
+    knockbackForce: 9.0,
+    forceMode: 'push',
+    speed: 120.0,    // slower than plasma's 160 — an arc needs airtime to read
+    gravity: -14.0,  // half-mortar drop: lobs over lips, still usable flat
+    bodyRadius: 0.3,
+    hitMin: 0.0,
+    hitMax: 1.2,
+    hitGrow: 0.3,
+    maxLifetime: 3.0, // arcs need hang time — ~1.9s to reach a 60m lob
   },
   [WeaponType.Slam]: {
     // Not a projectile — the Q-skill lands as a ground AOE. Ballistic

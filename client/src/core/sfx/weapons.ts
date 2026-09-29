@@ -78,6 +78,14 @@ const SHOT_LAYERS: Partial<Record<number, [name: string, gain: number, rate?: nu
     ['punch', 0.55, 0.9, 1800, 0.1],
     ['hg_clang', 0.3, 1.5, undefined, 0.18],
   ],
+  // Sticky launcher: pneumatic THOOMP — a pressurized tube cough, not a
+  // powder crack. Soft lowpassed thud body + punch transient + a short
+  // air hiss tail as the charge vents. Wet, not explosive.
+  [WeaponType.Sticky]: [
+    ['thud_big', 0.9, 0.65, 500, 0.2],
+    ['punch', 0.45, 0.9, 1500, 0.08],
+    ['hg_tick', 0.3, 0.6, 1200, 0.18, 0.04], // venting hiss, slightly delayed
+  ],
   [WeaponType.Chaingun]: [
     ['shot_chaingun', 0.75, 1.15, undefined, 0.08],
     ['punch', 0.35, 0.7, 700, 0.06],
@@ -100,6 +108,9 @@ const SHOT_SAMPLES: Partial<Record<number, [string, number, number?]>> = {
   // Plasma gun bolt — reuse the plasma shot but pitched up + quieter;
   // at ~8/s a fat sample would smear into a hum.
   [WeaponType.PlasmaGun]:       ['shot_plasma', 0.4, 1.6],
+  // Sprinkler — plasma sample pitched higher and quieter still; at ~9/s
+  // anything fatter drones into a hum.
+  [WeaponType.Sprinkler]:       ['shot_plasma', 0.32, 2.0],
   [WeaponType.Railgun]:         ['shot_energy', 1.0],
 };
 
@@ -146,6 +157,13 @@ function shootInto(g: GainNode, weaponType: number): void {
       const j = 1 + (Math.random() - 0.5) * 0.3;
       osc('sawtooth', 2800 * j, 900 * j, 0.07, 0.13, g);
       osc('sine', 3800 * j, 1400, 0.05, 0.07, g);
+      break;
+    }
+    case WeaponType.Sprinkler:   {
+      // Watery zap — brighter carrier, extra jitter so the hose never phases
+      const j = 1 + (Math.random() - 0.5) * 0.4;
+      osc('sawtooth', 3200 * j, 1100 * j, 0.06, 0.11, g);
+      osc('sine', 4400 * j, 1700, 0.04, 0.06, g);
       break;
     }
     case WeaponType.Railgun:   osc('sawtooth', 2600, 200, 0.22, 0.25, g); noise(0.15, 0.2, g, 'highpass', 4000, 6000); break;

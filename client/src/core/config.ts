@@ -71,6 +71,8 @@ export const FLAK_BOUNCE_FRICTION = 0.8;
 export const PLASMA_RATE = 0.28; // ~3.5 rps
 // Plasma gun — Quake-style rapid bolts, cadence just under chaingun
 export const PLASMAGUN_RATE = 0.13; // ~7.7 rps
+export const SPRINKLER_RATE = 0.11; // ~9/s stream — saturation over precision
+export const SPRINKLER_SPREAD = 0.05; // per-shot cone jitter (dir-offset units, flak-scale)
 export const RAILGUN_RATE = 1.5; // Quake railgun cadence
 export const SHOTGUN_RATE = 0.7; // pump cadence — punchy per shot, not spam
 export const CANNON_RATE = 0.55; // Serious Sam cadence — satisfying thump-thump
@@ -146,6 +148,13 @@ export const SCARAB_HEALTH = 20;          // one chaingun burst, a rocket takes 
 export const SCARAB_SPEED = 12.0;         // fast ground skitter — they close distance NOW
 export const SCARAB_ZIGZAG = 5.0;         // lateral weave amplitude (m/s) — hard to track
 export const SCARAB_AGGRO_DIST = 90.0;    // pack descends from far
+// Player-favor reach: every creature contact trigger uses the visual
+// distance × this. Enemy melee landing at exactly its apparent reach reads
+// as unfair; landing at 85% of it produces "oh I dodged that" moments —
+// the player escapes hits that LOOKED like they should connect. Only the
+// trigger shrinks — visuals, windups and the reach audit stay honest.
+export const MELEE_FAVOR = 0.85;
+
 export const SCARAB_BITE_DIST = 1.4;      // contact nibble reach
 export const SCARAB_BITE_DAMAGE = 4;      // chip damage — dangerous ONLY in a swarm
 export const SCARAB_BITE_FORCE = 3;

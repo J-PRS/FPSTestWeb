@@ -8,6 +8,7 @@ export { GL_CONFIG } from './glConfig.js';
 export { FLAK_CONFIG } from './flakConfig.js';
 export { PLASMA_CONFIG } from './plasmaConfig.js';
 export { PLASMAGUN_CONFIG } from './plasmagunConfig.js';
+export { SPRINKLER_CONFIG } from './sprinklerConfig.js';
 export { REMOTE_RAILGUN_CONFIG } from './remotergunConfig.js';
 export { RAILGUN_CONFIG } from './railgunConfig.js';
 export { LIGHTNING_CONFIG } from './lightningConfig.js';
@@ -28,6 +29,7 @@ import { GL_CONFIG } from './glConfig.js';
 import { FLAK_CONFIG } from './flakConfig.js';
 import { PLASMA_CONFIG } from './plasmaConfig.js';
 import { PLASMAGUN_CONFIG } from './plasmagunConfig.js';
+import { SPRINKLER_CONFIG } from './sprinklerConfig.js';
 import { REMOTE_RAILGUN_CONFIG } from './remotergunConfig.js';
 import { RAILGUN_CONFIG } from './railgunConfig.js';
 import { LIGHTNING_CONFIG } from './lightningConfig.js';
@@ -43,7 +45,7 @@ import { ACCURACY_MAX, ACCURACY_NORMALIZATION } from '../core/config.js';
 
 import type { ProjectileConfig } from './types.js';
 
-export const WEAPON_CONFIGS: ProjectileConfig[] = [ROCKET_CONFIG, DISC_CONFIG, GRENADE_CONFIG, CHAINGUN_CONFIG, MORTAR_CONFIG, GL_CONFIG, FLAK_CONFIG, PLASMA_CONFIG, RAILGUN_CONFIG, BELT_DISC_CONFIG, LIGHTNING_CONFIG, SHOTGUN_CONFIG, CANNON_CONFIG, RKT_CONFIG, PISTOL_CONFIG, REVOLVER_CONFIG, STICKY_CONFIG, CLUSTER_CONFIG, BOMBLET_CONFIG, JAVELIN_CONFIG, IMPACT_CONFIG, PLASMAGUN_CONFIG, REMOTE_RAILGUN_CONFIG];
+export const WEAPON_CONFIGS: ProjectileConfig[] = [ROCKET_CONFIG, DISC_CONFIG, GRENADE_CONFIG, CHAINGUN_CONFIG, MORTAR_CONFIG, GL_CONFIG, FLAK_CONFIG, PLASMA_CONFIG, RAILGUN_CONFIG, BELT_DISC_CONFIG, LIGHTNING_CONFIG, SHOTGUN_CONFIG, CANNON_CONFIG, RKT_CONFIG, PISTOL_CONFIG, REVOLVER_CONFIG, STICKY_CONFIG, CLUSTER_CONFIG, BOMBLET_CONFIG, JAVELIN_CONFIG, IMPACT_CONFIG, PLASMAGUN_CONFIG, REMOTE_RAILGUN_CONFIG, SPRINKLER_CONFIG];
 
 // Slot order lives in ../weapons.ts (SLOT_DEFS) — index IS the wid there.
 // WEAPON_CONFIGS stays weaponType-keyed (find-by-id) and includes belt items.

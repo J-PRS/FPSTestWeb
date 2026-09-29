@@ -144,8 +144,22 @@ export function createFire(deps: CombatDeps, hooks: FireHooks) {
   // its own tick/raycast loop.
   function fireWeapon(def: WeaponDef, e: FireArgs): void {
     deps.lazyViewModel()?.kick(def.kick);
-    if (def.pellets) spawnFan(def.config, e, def.pellets.count, def.pellets.spread);
-    else spawnProjectile(def.config, e);
+    if (def.pellets) { spawnFan(def.config, e, def.pellets.count, def.pellets.spread); return; }
+    if (def.spread) {
+      // Stream jitter: a random cone offset per bolt — same basis math as
+      // the fan but a single drifting shot, so the volley reads as a hose.
+      _flakRight.crossVectors(e.dir, _flakUp0);
+      if (_flakRight.lengthSq() < 1e-8) _flakRight.set(1, 0, 0); else _flakRight.normalize();
+      _flakUp.crossVectors(_flakRight, e.dir);
+      const a = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * def.spread;
+      _flakDir.copy(e.dir)
+        .addScaledVector(_flakRight, Math.cos(a) * r)
+        .addScaledVector(_flakUp, Math.sin(a) * r)
+        .normalize();
+      spawnProjectile(def.config, { origin: e.origin, dir: _flakDir.clone(), playerVel: e.playerVel });
+      return;
+    }
+    spawnProjectile(def.config, e);
   }
 
   // Melee sweep — the arc check happens around a point pushed forward

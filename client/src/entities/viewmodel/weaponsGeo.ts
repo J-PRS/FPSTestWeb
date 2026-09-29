@@ -37,19 +37,33 @@ const mkBore = (r: number, z: number) => {
 // rail split by a notch, boxy rear receiver. Not tapered; the wedge in
 // the ref is perspective.
 const rocket = new THREE.Group();
-rocket.add(mkTube(0.125, 0.125, 0.5, -0.08, bodyMat)); // main slab barrel
-rocket.add(mkTube(0.145, 0.145, 0.14, -0.36, darkMat)); // muzzle shroud
-rocket.add(mkBore(0.11, -0.431));
+// Equal-width slab all the way to the face — the ref has NO stepped
+// shroud; the front is flush with the body. End plate is a thin flush
+// ring so the muzzle reads as a bore in a flat face, not a fattened tip.
+rocket.add(mkTube(0.125, 0.125, 0.52, -0.06, bodyMat)); // main slab barrel
+const rFace = new THREE.Mesh(new THREE.CylinderGeometry(0.126, 0.126, 0.03, 8), darkMat);
+rFace.rotation.x = Math.PI / 2;
+rFace.position.z = -0.335;
+rocket.add(rFace);
+rocket.add(mkBore(0.11, -0.351));
 const rRecv = new THREE.Mesh(new THREE.BoxGeometry(0.19, 0.21, 0.2), darkMat);
 rRecv.position.set(0, 0.01, 0.22);
 rocket.add(rRecv);
-// top rail with the notch: two runs separated by a gap near the receiver
-const railF = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.035, 0.3), darkMat);
-railF.position.set(0, 0.135, -0.16);
-rocket.add(railF);
-const railR = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.045, 0.1), darkMat);
-railR.position.set(0, 0.14, 0.1);
-rocket.add(railR);
+// Deep top channel — the ref's rail reads as a TRENCH cut into the
+// slab: tall side walls, not a thin strip. Long front run, notch gap,
+// then a taller rear block where the channel ends in a step.
+for (const side of [-1, 1]) {
+  const wallF = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.075, 0.28), darkMat);
+  wallF.position.set(side * 0.045, 0.13, -0.14);
+  rocket.add(wallF);
+  const wallR = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.09, 0.1), darkMat);
+  wallR.position.set(side * 0.045, 0.145, 0.09);
+  rocket.add(wallR);
+}
+// Channel floor — recessed, keeps the trench readable from behind
+const channelFloor = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.015, 0.42), darkMat);
+channelFloor.position.set(0, 0.095, -0.05);
+rocket.add(channelFloor);
 
 // Weapon 1 — disc launcher (T1/T2 spinfusor DNA, not a copy): the
 // silhouette is a FORK — two flat mag rails sandwiching a vertical disc
@@ -144,12 +158,20 @@ chain.add(chainBelly);
 const chainBelly2 = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.05, 0.3), darkMat);
 chainBelly2.position.set(0, -0.15, 0.05);
 chain.add(chainBelly2);
-// Front collar — the ring the barrels exit through. Slightly wider than
-// the cluster so the plate frames them.
+// Front collar — the bearing plate the barrels exit through. A gatling
+// collar SPINS with the cluster, so it lives in chainBarrels. A symmetric
+// ring's rotation is invisible though — the bolt studs on its face are
+// what sell the spin.
 const chainCollar = new THREE.Mesh(new THREE.CylinderGeometry(0.115, 0.115, 0.04, 8), darkMat);
 chainCollar.rotation.x = Math.PI / 2;
 chainCollar.position.z = -0.27;
-chain.add(chainCollar);
+chainBarrels.add(chainCollar);
+for (let i = 0; i < 3; i++) {
+  const a = (i / 3) * Math.PI * 2;
+  const stud = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.03, 0.03), bodyMat);
+  stud.position.set(Math.cos(a) * 0.105, Math.sin(a) * 0.105, -0.28);
+  chainBarrels.add(stud);
+}
 // Bore face behind the collar ring so the muzzle doesn't read hollow
 chain.add(mkBore(0.1, -0.25));
 // Rear receiver block + top rail to match the family
@@ -166,12 +188,48 @@ chainGrip.rotation.x = 0.3;
 chain.add(chainGrip);
 chain.visible = false;
 
-// Weapon 3 — mortar: fat short tube with a wide muzzle + rear base
+// Weapon 3 — mortar: an artillery piece, not a pipe. The reads: FAT
+// bore tube, base plate under the breech, bipod struts on the fore-end,
+// a shell hopper on the flank with finned bomb tips peeking out.
 const mortar = new THREE.Group();
-mortar.add(mkTube(0.19, 0.16, 0.42, -0.02, darkMat));
+mortar.add(mkTube(0.19, 0.16, 0.42, -0.02, darkMat)); // main bore tube
 mortar.add(mkTube(0.22, 0.20, 0.1, -0.22, bodyMat)); // flared muzzle
 mortar.add(mkBore(0.17, -0.271));
-mortar.add(mkTube(0.1, 0.14, 0.14, 0.2, darkMat)); // breech
+// Breech block + base plate — the mortar's tell: a flat plate the tube
+// seats on, like it's meant to be slammed down
+mortar.add(mkTube(0.1, 0.14, 0.14, 0.2, darkMat));
+const mBase = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.04, 0.24), bodyMat);
+mBase.position.set(0, -0.17, 0.2);
+mortar.add(mBase);
+// Bipod struts — angled legs off the mid-tube, the "crew-served" read
+for (const side of [-1, 1]) {
+  const leg = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.22, 0.05), darkMat);
+  leg.position.set(side * 0.14, -0.14, -0.1);
+  leg.rotation.z = -side * 0.5;
+  mortar.add(leg);
+  const foot = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.03, 0.08), darkMat);
+  foot.position.set(side * 0.2, -0.24, -0.1);
+  mortar.add(foot);
+}
+// Shell hopper on the left flank — a rack of finned bombs, tips
+// visible above the tube. Live ordnance = the mortar read.
+const finMat = new THREE.MeshLambertMaterial({ color: 0x5a4a28, emissive: 0x181205 });
+for (let i = 0; i < 3; i++) {
+  const shell = mkTube(0.035, 0.035, 0.16, -0.05 + i * 0.09, bodyMat);
+  shell.position.set(-0.15, -0.02, shell.position.z);
+  mortar.add(shell);
+  // Fin cross at the shell's tail
+  const finV = new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.07, 0.06), finMat);
+  finV.position.set(-0.15, -0.02, -0.05 + i * 0.09 + 0.09);
+  mortar.add(finV);
+  const finH = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.01, 0.06), finMat);
+  finH.position.set(-0.15, -0.02, -0.05 + i * 0.09 + 0.09);
+  mortar.add(finH);
+}
+// Front sight post on the muzzle ring
+const mSight = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.05, 0.025), darkMat);
+mSight.position.set(0, 0.22, -0.22);
+mortar.add(mSight);
 mortar.visible = false;
 
 // Weapon 4 — grenade launcher: MGL-style revolver — fat drum slung
@@ -188,6 +246,23 @@ const drumHub = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.2, 8),
 drumHub.rotation.z = Math.PI / 2;
 drumHub.position.copy(drum.position);
 gl.add(drumHub);
+// Six chamber bores ringed around the drum face — the revolver read.
+// Solid drum looked like a wheel; dark mouths with brass rims sell
+// "six 40mm chambers" at viewmodel distance.
+const chamberRimMat = new THREE.MeshLambertMaterial({ color: 0x8a7a4a, emissive: 0x1a1408 });
+for (let i = 0; i < 6; i++) {
+  const a = (i / 6) * Math.PI * 2;
+  const cy = -0.09 + Math.sin(a) * 0.105;
+  const cz = -0.08 + Math.cos(a) * 0.105;
+  const mouth = new THREE.Mesh(new THREE.CircleGeometry(0.032, 10), boreMat);
+  mouth.position.set(0.086, cy, cz);
+  mouth.rotation.y = Math.PI / 2;
+  gl.add(mouth);
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(0.036, 0.008, 6, 10), chamberRimMat);
+  rim.position.set(0.085, cy, cz);
+  rim.rotation.y = Math.PI / 2;
+  gl.add(rim);
+}
 const glRecv = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.18, 0.2), bodyMat);
 glRecv.position.set(0, -0.02, 0.12);
 gl.add(glRecv);
@@ -263,11 +338,21 @@ stickyGrip.rotation.x = 0.3;
 sticky.add(stickyGrip);
 sticky.visible = false;
 
-// Weapon 5 — flak cannon: wide boxy breech + short ribbed barrel
+// Weapon 5 — flak cannon: UT's chunky front-loader. Wide ribbed barrel
+// with a DEEP flared bore, breech box with the top grill, and the tell
+// UT players know: a break-open loading slot with shells in a clip.
 const flak = new THREE.Group();
 flak.add(mkTube(0.17, 0.15, 0.3, -0.08, bodyMat));
+// Ribbed barrel — two pinch ribs along the tube, not just the ring
+for (let i = 0; i < 2; i++) {
+  flak.add(mkTube(0.175, 0.175, 0.025, -0.14 + i * 0.09, darkMat));
+}
 flak.add(mkTube(0.19, 0.19, 0.06, -0.24, darkMat)); // muzzle ring
-flak.add(mkBore(0.15, -0.271));
+// Deep flared bore — flak throws a shell, not a slug: the muzzle is a
+// bell with a visible dark throat, wider than the old flat disc read
+flak.add(mkBore(0.155, -0.271));
+const flakThroat = mkTube(0.155, 0.12, 0.05, -0.24, boreMat);
+flak.add(flakThroat);
 const flakBox = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.2, 0.3), darkMat);
 flakBox.position.set(0, 0, 0.16);
 flak.add(flakBox);
@@ -277,6 +362,23 @@ for (let i = 0; i < 3; i++) {
   vent.position.set(0, 0.11, 0.08 + i * 0.08);
   flak.add(vent);
 }
+// Loading slot on the right flank — the break-open port
+const loadSlot = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.09, 0.16), boreMat);
+loadSlot.position.set(0.105, 0.02, 0.14);
+flak.add(loadSlot);
+// Shell clip beside the port — three stubby brass rounds nose-up
+const flakShellMat = new THREE.MeshLambertMaterial({ color: 0xa86a20, emissive: 0x241503 });
+for (let i = 0; i < 3; i++) {
+  const round = mkTube(0.028, 0.028, 0.05, 0, flakShellMat);
+  round.rotation.z = 0; // axis already across? keep vertical stack look
+  round.position.set(0.115, -0.03, 0.08 + i * 0.06);
+  flak.add(round);
+}
+// Grip
+const flakGrip = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.12, 0.06), darkMat);
+flakGrip.position.set(0, -0.15, 0.18);
+flakGrip.rotation.x = 0.3;
+flak.add(flakGrip);
 flak.visible = false;
 
 // Weapon 6 — plasma cannon: a fat energy projector, not a tube — heavy
@@ -548,6 +650,25 @@ pistol.add(mkTube(0.03, 0.03, 0.16, -0.08, darkMat)); // barrel
 const slide = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.07, 0.24), bodyMat);
 slide.position.set(0, 0.02, -0.05);
 pistol.add(slide);
+// Frame under the slide — the slide alone floats; a lower rail ties it
+// to the grip like a real autopistol
+const pFrame = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.045, 0.18), darkMat);
+pFrame.position.set(0, -0.035, -0.04);
+pistol.add(pFrame);
+// Slide serrations at the rear — the ribbing that says "this part moves"
+for (let i = 0; i < 4; i++) {
+  const serr = new THREE.Mesh(new THREE.BoxGeometry(0.074, 0.05, 0.012), darkMat);
+  serr.position.set(0, 0.02, 0.02 + i * 0.022);
+  pistol.add(serr);
+}
+// Ejection port notch on the slide's right side
+const pPort = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.025, 0.07), darkMat);
+pPort.position.set(0.032, 0.05, -0.04);
+pistol.add(pPort);
+// Trigger guard — a thin U under the frame
+const pGuard = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.012, 0.07), darkMat);
+pGuard.position.set(0, -0.075, -0.02);
+pistol.add(pGuard);
 const pGrip = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.15, 0.08), darkMat);
 pGrip.position.set(0, -0.09, 0.06);
 pGrip.rotation.x = 0.35;
@@ -555,18 +676,39 @@ pistol.add(pGrip);
 const pSight = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.03, 0.02), darkMat);
 pSight.position.set(0, 0.07, -0.15);
 pistol.add(pSight);
+// Rear sight notch so the sight line reads front-to-back
+const pRear = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.025, 0.02), darkMat);
+pRear.position.set(0, 0.065, 0.06);
+pistol.add(pRear);
 pistol.visible = false;
 
 // Revolver: long barrel + big cylinder + hammer — the hand-cannon profile.
 const revolver = new THREE.Group();
 revolver.add(mkTube(0.032, 0.032, 0.24, -0.14, darkMat)); // long barrel
+// Underlug — the rib under the barrel that makes it read heavy-frame,
+// not derringer
+const underlug = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.03, 0.22), darkMat);
+underlug.position.set(0, -0.045, -0.12);
+revolver.add(underlug);
 const cyl = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.08, 8), bodyMat);
 cyl.rotation.z = Math.PI / 2;
 cyl.position.set(0, 0, 0.02);
 revolver.add(cyl);
+// Fluted cylinder — grooves along each chamber so the drum reads as
+// chambers, not a washer
+for (let i = 0; i < 6; i++) {
+  const a = (i / 6) * Math.PI * 2;
+  const flute = new THREE.Mesh(new THREE.BoxGeometry(0.085, 0.012, 0.018), darkMat);
+  flute.position.set(0, Math.sin(a) * 0.055, 0.02 + Math.cos(a) * 0.055);
+  revolver.add(flute);
+}
 const frame = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.045, 0.15), bodyMat);
 frame.position.set(0, 0.045, -0.06);
 revolver.add(frame);
+// Topstrap over the cylinder — closes the frame silhouette
+const topstrap = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.03, 0.12), bodyMat);
+topstrap.position.set(0, 0.05, 0.02);
+revolver.add(topstrap);
 const rGrip = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.14, 0.08), darkMat);
 rGrip.position.set(0, -0.09, 0.09);
 rGrip.rotation.x = 0.45;
@@ -574,6 +716,10 @@ revolver.add(rGrip);
 const hammer = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.05, 0.025), darkMat);
 hammer.position.set(0, 0.05, 0.1);
 revolver.add(hammer);
+// Front sight blade at the muzzle
+const rSight = new THREE.Mesh(new THREE.BoxGeometry(0.015, 0.04, 0.015), darkMat);
+rSight.position.set(0, 0.055, -0.24);
+revolver.add(rSight);
 revolver.visible = false;
 
 // Map is keyed by WeaponType, never positionally — Grenade/Slam/Melee
@@ -588,6 +734,7 @@ const models: [number, THREE.Group][] = [
   [WeaponType.Flak, flak],
   [WeaponType.PlasmaCannon, plasma],
   [WeaponType.PlasmaGun, plasmagun],
+  [WeaponType.Sprinkler, plasmagun], // same receiver, different bolt payload
   [WeaponType.Railgun, rail],
   [WeaponType.Lightning, lg],
   [WeaponType.Shotgun, sg],

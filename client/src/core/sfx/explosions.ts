@@ -29,6 +29,9 @@ const BOOM_SAMPLES: Partial<Record<number, [string, number, number?, number?, nu
   // Rapid bolt pop — bright and small; a chain of these shouldn't stack
   // into a roar, so it stays thin and pitched up.
   [WeaponType.PlasmaGun]: [['explosion_small', 0.35, 1.7], ['sparks', 0.25, 1.4, undefined, 0.25]],
+  // Sprinkler plip — even thinner than the plasma pop; ~9/s of these must
+  // read as rain, not gunfire.
+  [WeaponType.Sprinkler]: [['explosion_small', 0.28, 2.1], ['sparks', 0.2, 1.8, undefined, 0.2]],
   [WeaponType.Railgun]: [['shot_energy', 0.7, 0.8], ['explosion_small', 0.6, 1.4]],
   // Remote railgun pop: the capacitor dumping — zap forward, blast behind.
   [WeaponType.RemoteRailgun]: [['shot_energy', 0.8, 0.8], ['explosion_small', 0.7, 1.1], ['sparks', 0.5, 1.0, undefined, 0.3]],
