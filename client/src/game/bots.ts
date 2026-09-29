@@ -6,6 +6,7 @@ import type { Targetable } from '../entities/balls.js';
 import type { GameContext } from './context.js';
 import { TEAM_COLORS, TEAM_LABEL, MODES, bank, makeScores, type TeamId, type TeamScores, type ModeId } from '../../../shared/teams.js';
 import { PlayerDebris } from '../effects/debris.js';
+import { MELEE_RANGE, MELEE_DAMAGE } from '../core/config.js';
 import { CtfFlags } from './ctfFlags.js';
 import * as sfx from '../core/sfx.js';
 
@@ -404,18 +405,20 @@ export class TeamBots {
   }
 
   /** Resolve a bot's bolt: instant claim with the aim point — the same
-   *  legal-claim funnel pvptest bots use, minus the network. */
+   *  legal-claim funnel pvptest bots use, minus the network. Inside fist
+   *  range the bot punches instead — a fist lands flat 60, no bolt streak. */
   private resolveShot(bot: GameBot, targetId: string, aim: THREE.Vector3): void {
-    // A glowing bolt streak: cheap pooled line.
-    this.spawnBolt(bot.position, aim);
-    const dmg = BOT_DMG;
+    const melee = bot.position.distanceTo(aim) <= MELEE_RANGE;
+    if (!melee) this.spawnBolt(bot.position, aim); // cheap pooled tracer
+    const dmg = melee ? MELEE_DAMAGE : BOT_DMG;
+    const src = `${bot.playerId.replace('bot:', '')} ${melee ? 'fist' : 'bolt'}`;
 
     if (targetId === 'local') {
       const p = this.deps.lazyPlayer();
       if (!p.isDead && aim.distanceTo(p.pos) < 1.6) {
         p.health = Math.max(0, p.health - dmg);
-        p.lastDamageSource = `${bot.playerId.replace('bot:', '')} bolt`;
-        p.applyKnockback(bot.position, 4);
+        p.lastDamageSource = src;
+        p.applyKnockback(bot.position, melee ? 6 : 4);
         this.deps.lazyHud().showDamage(bot.position, dmg);
         sfx.playerHurt();
         if (p.health <= 0) {
