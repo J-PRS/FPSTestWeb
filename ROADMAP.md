@@ -100,7 +100,10 @@ surface. Detailed research lives in `_reports/`; this file is the current truth.
    bot flag grabs over the wire. `botFill` spec keeps a room at N total
    bodies — spawns/retires bots as humans come and go (dead bots retire
    first); `teamUpdate` wire msg + bot-only rebalancing on leaver skew.
-   Next extensions: species mix. `terrain` ref landed: maps/<file>.bin
+   `ambient` species mix landed (43ea91b): per-species cap table flows
+   spec → gameState/mapUpdate → setAmbientCaps; maps/infestation.json is
+   the proof (crawler40/scarab24/rakk12/gnat30 layered ecology).
+   `terrain` ref landed: maps/<file>.bin
    heightfields per room (lazy, cached, shared). Shared brain landed:
    shared/botBrain.ts drives offline GameBots AND server bots — one
    personality, both runtimes.
