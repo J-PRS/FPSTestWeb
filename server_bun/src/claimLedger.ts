@@ -77,45 +77,62 @@ export class ClaimLedger {
     weaponType: number | undefined,
     claim: 'shot' | 'aoe',
   ): TrackedProjectile | undefined {
-    const take = (rec: SpentRecord) => {
-      if (claim === 'shot' ? rec.shot : rec.aoe) return undefined;
-      if (claim === 'shot') rec.shot = true; else rec.aoe = true;
-      return rec.proj;
-    };
-    if (projectileId) {
-      const live = this.projectiles.get(projectileId);
-      if (live) {
-        if (live.ownerId !== playerId) return undefined;
-        this.projectiles.delete(projectileId);
-        const rec: SpentRecord = { proj: live, shot: false, aoe: false, at: Date.now() };
-        this.spent.set(projectileId, rec);
-        this.sweepSpent();
-        return take(rec);
-      }
-      const rec = this.spent.get(projectileId);
-      if (rec && rec.proj.ownerId === playerId && Date.now() - rec.at < 5000) {
-        return take(rec);
-      }
-      return undefined;
+    return projectileId
+      ? this.resolveById(playerId, projectileId, claim)
+      : this.resolveLatest(playerId, weaponType, claim);
+  }
+
+  /** A tombstone fuels one claim of each kind — a rocket's direct `shot`
+   *  AND its blast `aoeShot` name the same id; consume-per-kind or the
+   *  second claim bounces (or a cheater double-dips one shell twice). */
+  private take(rec: SpentRecord, claim: 'shot' | 'aoe'): TrackedProjectile | undefined {
+    if (claim === 'shot' ? rec.shot : rec.aoe) return undefined;
+    if (claim === 'shot') rec.shot = true; else rec.aoe = true;
+    return rec.proj;
+  }
+
+  private resolveById(playerId: string, projectileId: string, claim: 'shot' | 'aoe'): TrackedProjectile | undefined {
+    const live = this.projectiles.get(projectileId);
+    if (live) {
+      if (live.ownerId !== playerId) return undefined;
+      this.projectiles.delete(projectileId);
+      const rec: SpentRecord = { proj: live, shot: false, aoe: false, at: Date.now() };
+      this.spent.set(projectileId, rec);
+      this.sweepSpent();
+      return this.take(rec, claim);
     }
-    // Null-id fallback (claim outraced projectileCreated): latest projectile
-    // the shooter owns, of the claimed type — live first, then spent.
+    const rec = this.spent.get(projectileId);
+    if (rec && rec.proj.ownerId === playerId && Date.now() - rec.at < 5000) {
+      return this.take(rec, claim);
+    }
+    return undefined;
+  }
+
+  /** Null-id fallback (claim outraced projectileCreated): the shooter's
+   *  latest projectile of the claimed type — live first, then spent.
+   *  Every matching live shell is tombstoned, not just the resolved one:
+   *  with an unordered transport there's no telling which shell a claim
+   *  means, and leaving siblings live would let each claim mint hits off
+   *  a projectile that already detonated. */
+  private resolveLatest(playerId: string, weaponType: number | undefined, claim: 'shot' | 'aoe'): TrackedProjectile | undefined {
     let latest: SpentRecord | undefined;
     for (const [id, proj] of this.projectiles) {
-      if (proj.ownerId !== playerId) continue;
-      if (weaponType !== undefined && proj.weaponType !== weaponType) continue;
+      if (!this.matches(proj, playerId, weaponType)) continue;
       this.projectiles.delete(id);
       latest = { proj, shot: false, aoe: false, at: Date.now() };
       this.spent.set(id, latest);
     }
-    if (latest) return take(latest);
+    if (latest) return this.take(latest, claim);
     for (const rec of this.spent.values()) {
-      if (rec.proj.ownerId !== playerId) continue;
-      if (weaponType !== undefined && rec.proj.weaponType !== weaponType) continue;
+      if (!this.matches(rec.proj, playerId, weaponType)) continue;
       if (Date.now() - rec.at >= 5000) continue;
       latest = rec;
     }
-    return latest ? take(latest) : undefined;
+    return latest ? this.take(latest, claim) : undefined;
+  }
+
+  private matches(proj: TrackedProjectile, playerId: string, weaponType: number | undefined): boolean {
+    return proj.ownerId === playerId && (weaponType === undefined || proj.weaponType === weaponType);
   }
 
   /** Who owns an id, live or spent — callers check this BEFORE destroy. */

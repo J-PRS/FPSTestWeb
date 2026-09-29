@@ -1,3 +1,7 @@
+2026-10-03 - claimLedger.resolve split into resolveById / resolveLatest
+    / take / matches — the claim path now reads id-present vs id-raced
+    upfront, and the tombstone consume-per-kind rule is documented on
+    `take`. No behavior change.
 2026-10-03 - RoomFlags.tick split into tickCarried / tickDropped /
     tickTouch — the flag rule pass now reads as one state dispatch per
     flag instead of three interleaved state machines.
