@@ -176,67 +176,71 @@ export class Rakk implements Targetable, SwarmSlotOwner {
     this.stateTimer -= dt;
 
     switch (this.state) {
-      case 'orbit': {
-        this.orbitPhase += dt * (RAKK_SPEED / RAKK_ORBIT_R) * this.orbitDir;
-        _dir.set(
-          playerPos.x + Math.cos(this.orbitPhase) * RAKK_ORBIT_R,
-          terrain.getHeight(playerPos.x, playerPos.z) + RAKK_ORBIT_ALT + Math.sin(this.animT * 0.8) * 2,
-          playerPos.z + Math.sin(this.orbitPhase) * RAKK_ORBIT_R,
-        );
-        this.steerToward(_dir, RAKK_SPEED, dt);
-        if (Math.random() < dt * 0.08) this.orbitDir *= -1;
-
-        if (this.stateTimer <= 0 && Rakk.attackHeldBy === null) {
-          Rakk.attackHeldBy = this.id;
-          this.state = 'dive';
-          this.stateTimer = 1.5;
-          this.diveTarget.copy(playerPos);
-          this.onDive?.(this);
-        }
-        break;
-      }
-      case 'dive': {
-        this.steerToward(this.diveTarget, RAKK_DIVE_SPEED, dt);
-        const clawD = RAKK_CLAW_DIST * MELEE_FAVOR;
-        const hit = this.pos.distanceToSquared(playerPos) < clawD * clawD;
-        const passed = this.stateTimer <= 0 || this.pos.distanceToSquared(this.diveTarget) < 4;
-        if (hit) {
-          this.onClawHit?.(this);
-          this.releaseToken();
-          this.beginClimb();
-        } else if (passed) {
-          this.releaseToken();
-          this.beginClimb();
-        }
-        break;
-      }
-      case 'climb': {
-        const targetY = terrain.getHeight(this.pos.x, this.pos.z) + RAKK_ORBIT_ALT;
-        this.vel.y += ((targetY - this.pos.y) * 2.5 - this.vel.y) * Math.min(1, 3 * dt);
-        this.capSpeed(RAKK_SPEED * 0.6);
-        if (this.stateTimer <= 0) {
-          this.state = 'orbit';
-          this.stateTimer = RAKK_DIVE_CD_MIN + Math.random() * (RAKK_DIVE_CD_MAX - RAKK_DIVE_CD_MIN);
-        }
-        break;
-      }
+      case 'orbit': this.tickOrbit(dt, terrain, playerPos); break;
+      case 'dive':  this.tickDive(dt, playerPos); break;
+      case 'climb': this.tickClimb(dt, terrain); break;
     }
 
     this.pos.addScaledVector(this.vel, dt);
     const gy = terrain.getHeight(this.pos.x, this.pos.z);
     if (this.pos.y < gy + 1.0) this.pos.y = gy + 1.0;
-
-    if (this.vel.lengthSq() > 1) {
-      const targetYaw = Math.atan2(this.vel.x, this.vel.z);
-      let dy = targetYaw - this.yaw;
-      while (dy > Math.PI) dy -= Math.PI * 2;
-      while (dy < -Math.PI) dy += Math.PI * 2;
-      this.yaw += dy * Math.min(1, 4 * dt);
-      this.roll = -dy * 0.5;
-      this.pitch = THREE.MathUtils.clamp(-this.vel.y * 0.05, -0.7, 0.5);
-    }
+    this.faceVelocity(dt);
 
     this.writeInstances();
+  }
+
+  private tickOrbit(dt: number, terrain: Terrain, playerPos: THREE.Vector3): void {
+    this.orbitPhase += dt * (RAKK_SPEED / RAKK_ORBIT_R) * this.orbitDir;
+    _dir.set(
+      playerPos.x + Math.cos(this.orbitPhase) * RAKK_ORBIT_R,
+      terrain.getHeight(playerPos.x, playerPos.z) + RAKK_ORBIT_ALT + Math.sin(this.animT * 0.8) * 2,
+      playerPos.z + Math.sin(this.orbitPhase) * RAKK_ORBIT_R,
+    );
+    this.steerToward(_dir, RAKK_SPEED, dt);
+    if (Math.random() < dt * 0.08) this.orbitDir *= -1;
+
+    if (this.stateTimer <= 0 && Rakk.attackHeldBy === null) {
+      Rakk.attackHeldBy = this.id;
+      this.state = 'dive';
+      this.stateTimer = 1.5;
+      this.diveTarget.copy(playerPos);
+      this.onDive?.(this);
+    }
+  }
+
+  private tickDive(dt: number, playerPos: THREE.Vector3): void {
+    this.steerToward(this.diveTarget, RAKK_DIVE_SPEED, dt);
+    const clawD = RAKK_CLAW_DIST * MELEE_FAVOR;
+    const hit = this.pos.distanceToSquared(playerPos) < clawD * clawD;
+    const passed = this.stateTimer <= 0 || this.pos.distanceToSquared(this.diveTarget) < 4;
+    if (hit) this.onClawHit?.(this);
+    if (hit || passed) {
+      this.releaseToken();
+      this.beginClimb();
+    }
+  }
+
+  private tickClimb(dt: number, terrain: Terrain): void {
+    const targetY = terrain.getHeight(this.pos.x, this.pos.z) + RAKK_ORBIT_ALT;
+    this.vel.y += ((targetY - this.pos.y) * 2.5 - this.vel.y) * Math.min(1, 3 * dt);
+    this.capSpeed(RAKK_SPEED * 0.6);
+    if (this.stateTimer <= 0) {
+      this.state = 'orbit';
+      this.stateTimer = RAKK_DIVE_CD_MIN + Math.random() * (RAKK_DIVE_CD_MAX - RAKK_DIVE_CD_MIN);
+    }
+  }
+
+  // Banked flight read: yaw eases to velocity, roll counters it, pitch
+  // rides vertical speed — the sell that it's flying, not sliding.
+  private faceVelocity(dt: number): void {
+    if (this.vel.lengthSq() <= 1) return;
+    const targetYaw = Math.atan2(this.vel.x, this.vel.z);
+    let dy = targetYaw - this.yaw;
+    while (dy > Math.PI) dy -= Math.PI * 2;
+    while (dy < -Math.PI) dy += Math.PI * 2;
+    this.yaw += dy * Math.min(1, 4 * dt);
+    this.roll = -dy * 0.5;
+    this.pitch = THREE.MathUtils.clamp(-this.vel.y * 0.05, -0.7, 0.5);
   }
 
   writeInstances(_terrain?: Terrain): void {
@@ -268,13 +272,10 @@ export class Rakk implements Targetable, SwarmSlotOwner {
       swarm.setColor(PART_EAR, slot * EARS_PER + i, cr, cg, cb);
     }
 
+    const flap = this.wingbeat();
     // Membrane wings — attached at the flank, swept back. Orbit flap is a
     // deep rowing beat (bats row, birds flap); dive folds them into a dart.
-    const dive = this.state === 'dive';
-    const flapAmp = dive ? 0.12 : this.state === 'climb' ? 1.0 : 0.55;
-    const flapRate = dive ? 3 : this.state === 'climb' ? 13 : 6;
-    const flap = Math.sin(this.animT * flapRate) * flapAmp;
-    const fold = dive ? 0.9 : 0;
+    const fold = this.state === 'dive' ? 0.9 : 0;
     for (let i = 0; i < WINGS_PER; i++) {
       const side = i === 0 ? -1 : 1;
       _e.set(0, -side * (0.45 + fold * 0.5), side * (0.15 + flap + fold));
@@ -300,6 +301,14 @@ export class Rakk implements Targetable, SwarmSlotOwner {
     }
 
     getShadows()?.set(this, this.pos, r * 1.6, 0.28);
+  }
+
+  // Flap amplitude+rate by state — dive folds the wings, climb rows hard.
+  private wingbeat(): number {
+    const dive = this.state === 'dive';
+    const flapAmp = dive ? 0.12 : this.state === 'climb' ? 1.0 : 0.55;
+    const flapRate = dive ? 3 : this.state === 'climb' ? 13 : 6;
+    return Math.sin(this.animT * flapRate) * flapAmp;
   }
 
   private steerToward(target: THREE.Vector3, speed: number, dt: number): void {

@@ -173,50 +173,9 @@ export class Gnat implements Targetable, SwarmSlotOwner {
     this.animT += dt;
 
     if (this.state === 'dart') {
-      // Committed nip — a straight dart at the locked target, hit or miss
-      this.dartT -= dt;
-      _dir.copy(this.dartTarget).sub(this.pos);
-      const d = _dir.length() || 0.001;
-      _dir.multiplyScalar(1 / d);
-      this.vel.copy(_dir).multiplyScalar(GNAT_DART_SPEED);
-      const nipD = (this.uber ? GNAT_NIP_DIST * 2.2 : GNAT_NIP_DIST) * MELEE_FAVOR;
-      if (this.pos.distanceToSquared(playerPos) < nipD * nipD) {
-        this.onNip?.(this);
-        this.endDart();
-      } else if (this.dartT <= 0 || d < 1.0) {
-        this.endDart();
-      }
+      this.tickDart(dt, playerPos);
     } else {
-      // Cloud life: orbit a ring around the moving center + noise jitter.
-      // The center itself chases the player loosely (entities moves it).
-      this.orbitPhase += dt * (GNAT_SPEED / this.orbitR) * this.orbitDir;
-      _cloudCenter.copy(this.cloud.center);
-      _dir.set(
-        _cloudCenter.x + Math.cos(this.orbitPhase) * this.orbitR,
-        _cloudCenter.y + this.altOff + Math.sin(this.animT * 1.9) * 0.8,
-        _cloudCenter.z + Math.sin(this.orbitPhase) * this.orbitR,
-      );
-      // Spring toward the orbit point + a buzz jitter — gnats never glide
-      _scratch.subVectors(_dir, this.pos).multiplyScalar(6);
-      _scratch.x += Math.sin(this.animT * 13.7) * 4;
-      _scratch.y += Math.sin(this.animT * 17.3) * 3;
-      _scratch.z += Math.cos(this.animT * 11.1) * 4;
-      this.vel.lerp(_scratch, Math.min(1, dt * 4));
-      // Clamp to gnat speed — the spring can spike when the center teleports
-      const s = this.vel.length();
-      if (s > GNAT_SPEED * 2) this.vel.multiplyScalar(GNAT_SPEED * 2 / s);
-
-      // The nip urge — own cooldown AND a cloud-wide gate so the swarm
-      // doesn't dump eight darts in the same second
-      if (this.nipCd <= 0 && this.cloud.nipGate <= 0
-          && this.pos.distanceToSquared(playerPos) < 30 * 30) {
-        this.state = 'dart';
-        this.dartT = this.uber ? 1.4 : 0.8; // queen commits longer — still capped, never a pursuit
-        this.dartTarget.copy(playerPos); // locked on commit — juking works
-        this.dartTarget.y += 1.2;
-        this.nipCd = GNAT_NIP_CD * (0.8 + Math.random() * 0.5);
-        this.cloud.nipGate = GNAT_FLOCK_CD;
-      }
+      this.tickCloud(dt, playerPos);
     }
 
     this.pos.addScaledVector(this.vel, dt);
@@ -227,6 +186,55 @@ export class Gnat implements Targetable, SwarmSlotOwner {
       this.yaw = Math.atan2(this.vel.x, this.vel.z);
     }
     this.writeInstances();
+  }
+
+  // Committed nip — a straight dart at the locked target, hit or miss
+  private tickDart(dt: number, playerPos: THREE.Vector3): void {
+    this.dartT -= dt;
+    _dir.copy(this.dartTarget).sub(this.pos);
+    const d = _dir.length() || 0.001;
+    _dir.multiplyScalar(1 / d);
+    this.vel.copy(_dir).multiplyScalar(GNAT_DART_SPEED);
+    const nipD = (this.uber ? GNAT_NIP_DIST * 2.2 : GNAT_NIP_DIST) * MELEE_FAVOR;
+    if (this.pos.distanceToSquared(playerPos) < nipD * nipD) {
+      this.onNip?.(this);
+      this.endDart();
+    } else if (this.dartT <= 0 || d < 1.0) {
+      this.endDart();
+    }
+  }
+
+  // Cloud life: orbit a ring around the moving center + noise jitter.
+  // The center itself chases the player loosely (entities moves it).
+  private tickCloud(dt: number, playerPos: THREE.Vector3): void {
+    this.orbitPhase += dt * (GNAT_SPEED / this.orbitR) * this.orbitDir;
+    _cloudCenter.copy(this.cloud.center);
+    _dir.set(
+      _cloudCenter.x + Math.cos(this.orbitPhase) * this.orbitR,
+      _cloudCenter.y + this.altOff + Math.sin(this.animT * 1.9) * 0.8,
+      _cloudCenter.z + Math.sin(this.orbitPhase) * this.orbitR,
+    );
+    // Spring toward the orbit point + a buzz jitter — gnats never glide
+    _scratch.subVectors(_dir, this.pos).multiplyScalar(6);
+    _scratch.x += Math.sin(this.animT * 13.7) * 4;
+    _scratch.y += Math.sin(this.animT * 17.3) * 3;
+    _scratch.z += Math.cos(this.animT * 11.1) * 4;
+    this.vel.lerp(_scratch, Math.min(1, dt * 4));
+    // Clamp to gnat speed — the spring can spike when the center teleports
+    const s = this.vel.length();
+    if (s > GNAT_SPEED * 2) this.vel.multiplyScalar(GNAT_SPEED * 2 / s);
+
+    // The nip urge — own cooldown AND a cloud-wide gate so the swarm
+    // doesn't dump eight darts in the same second
+    if (this.nipCd <= 0 && this.cloud.nipGate <= 0
+        && this.pos.distanceToSquared(playerPos) < 30 * 30) {
+      this.state = 'dart';
+      this.dartT = this.uber ? 1.4 : 0.8; // queen commits longer — still capped, never a pursuit
+      this.dartTarget.copy(playerPos); // locked on commit — juking works
+      this.dartTarget.y += 1.2;
+      this.nipCd = GNAT_NIP_CD * (0.8 + Math.random() * 0.5);
+      this.cloud.nipGate = GNAT_FLOCK_CD;
+    }
   }
 
   private endDart(): void {

@@ -1,3 +1,5 @@
+2026-10-03 - Rakk.ts: update -> tickOrbit/tickDive/tickClimb/faceVelocity + wingbeat() (c22+c16 -> clean). Gnat.ts: update -> tickDart/tickCloud (c22 -> clean).
+
 2026-10-03 - Crawler.ts: update -> stepBody/faceTarget helpers; writeInstances -> writeLegs/writeFangs/writeEyes (c25+c17 -> clean).
 
 2026-10-03 - netMelee.ts: 5 per-family bind/applyEdge/update triples -> generic bindNetSim/applyNetEdgeSim/updateNetSim over NetSimState; NetBindArgs options object; bindNet signatures unified (8 max-params sites gone); netCrawlers spawn cast removed.
