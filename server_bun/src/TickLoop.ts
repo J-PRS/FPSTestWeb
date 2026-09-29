@@ -1,7 +1,7 @@
 import { CONFIG } from './config.ts';
 import type { Room } from './Room.ts';
 import { encodeTickPlayer, encodeTickFrame } from '../../shared/wire.ts';
-import { STATUS } from '../../shared/status.ts';
+import { STATUS, CLIENT_STATUS_MASK } from '../../shared/status.ts';
 import { perkMods } from '../../shared/perks.ts';
 import { POWERUP } from '../../shared/pickups.ts';
 import { computeStateHash } from '../../shared/stateHash.ts';
@@ -51,7 +51,10 @@ export function recordSuppressed(p: SuppressablePlayer, lastSent: SuppressableSe
   // State fields (health/death/ski/status) must never be eaten by the
   // position check — a flag change forces the record even when the
   // player hasn't moved.
-  const stateChanged = p.health !== lastSent.hp || p.isDead !== lastSent.dead || p.skiing !== lastSent.ski || p.status !== lastSent.status
+  // lastSent.status is the wire value — REGEN/DD bits OR'd in at send time —
+  // so mask it back to client bits before comparing or a buff defeats
+  // suppression for its whole duration.
+  const stateChanged = p.health !== lastSent.hp || p.isDead !== lastSent.dead || p.skiing !== lastSent.ski || p.status !== (lastSent.status & CLIENT_STATUS_MASK)
     // Sheep isn't a player field — it lives on the bot driver — so the
     // suppression check reads it off the record args (0 for humans).
     || sheep !== lastSent.sheep;

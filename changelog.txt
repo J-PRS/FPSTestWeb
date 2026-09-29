@@ -1,3 +1,4 @@
+2026-09-29 - Fix suppression leak for buffed players: lastSent.status carries the OR'd REGEN/DD wire bits, so mask it to client bits before comparing or a regen/DD window broadcast every tick for its whole duration.
 2026-09-29 - suppression test pins the yaw-wrap case: lastSent yaw 0 vs live yaw 2pi is a ~0.003 rad turn and must suppress.
 2026-09-29 - playerJoined broadcast now waits for the first position report: handshake used to announce every joiner immediately, so a menu/lobby sitter who never reported spawned a frozen ghost mesh at the spawn default on every peer screen (same ghost class as the tick-record fix, different path).
 2026-09-29 - suppression yaw comparison now uses shortest-arc wrap math: raw |yaw-lastSent| read a 6.27→0.01 crossing as a huge turn, permanently defeating suppression for spinners.
