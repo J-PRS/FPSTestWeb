@@ -6,8 +6,8 @@ import { DemoStorage } from './DemoStorage.ts';
 import { RtcRelay } from './RtcRelay.ts';
 import { RtcServer } from './RtcServer.ts';
 import { WtServer } from './WtServer.ts';
-import { join } from 'node:path';
-import { appendFileSync, mkdirSync } from 'node:fs';
+import { join, basename, extname } from 'node:path';
+import { appendFileSync, mkdirSync, existsSync, statSync, renameSync, readdirSync } from 'node:fs';
 
 const gameServer = new GameServer();
 const demoStorage = new DemoStorage(join(import.meta.dir, '..', 'demos'));
@@ -185,6 +185,31 @@ ROUTES['/demos'] = async () => {
 };
 
 const LOGS_DIR = join(import.meta.dir, '..', '..', 'logs');
+
+// Log rotation — the previous run's logs move to logs/OLD/<name>_<mtime
+// -ts>.<ext> at boot so each file always reflects the build that produced
+// it (JP's manual timestamp convention, automated). Best-effort only.
+function rotateLogs(): void {
+  const stamp = (t: Date) => {
+    const p = (n: number) => String(n).padStart(2, '0');
+    return `${t.getFullYear()}_${p(t.getMonth() + 1)}_${p(t.getDate())}-${p(t.getHours())}_${p(t.getMinutes())}_${p(t.getSeconds())}`;
+  };
+  const rotate = (p: string) => {
+    try {
+      if (!existsSync(p) || statSync(p).size === 0) return;
+      const dst = join(LOGS_DIR, 'OLD', `${basename(p, extname(p))}_${stamp(statSync(p).mtime)}${extname(p)}`);
+      renameSync(p, dst);
+    } catch { /* rotation must never block boot */ }
+  };
+  try {
+    mkdirSync(join(LOGS_DIR, 'OLD'), { recursive: true });
+    for (const f of readdirSync(LOGS_DIR)) {
+      if (/\.(log|jsonl)$/.test(f)) rotate(join(LOGS_DIR, f));
+    }
+    rotate(join(import.meta.dir, '..', 'logs', 'server.log'));
+  } catch { /* same */ }
+}
+rotateLogs();
 
 // Client log shipping: POST /client-log — appended to logs/client.log.
 // Bodies are plain text lines (WARN/ERROR only by client convention).
