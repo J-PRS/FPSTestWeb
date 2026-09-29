@@ -1,3 +1,4 @@
+2026-09-29 - Drop the flag on a rebalanced carrier: rebalanceTeams can flip a bot flag-carrier onto the flag's own team, which froze the flag in 'carried' forever (tickCarried requires carrier.team !== flag.team and the new own-team can't grab or return it).
 2026-09-29 - Funnel bot cleanup through untrack: retire skipped classes/gearLobT/deadSet/quiet/watchdog, untrack skipped the rest; removePlayerCompletely now untracks bots on every path so a brain can't stay keyed on a gone player.
 2026-09-29 - Sweep playerId-keyed bookkeeping leaks: rateLimiter buckets now die in the removal funnel (kick/idle-reap/bot-retire paths never hit onClose), CombatHandler's fire-throttle map clears on disconnect, and switchCooldowns gets a 1024 cap since hopper entries must outlive their player.
 2026-09-29 - Clear rate-limit warn keys on full removal: a room hop is removal without disconnect, so the hopper's ${id}:* keys sat in the old room's map for its life.

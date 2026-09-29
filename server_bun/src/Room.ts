@@ -638,6 +638,10 @@ export class Room {
     for (const p of this.players.getAllPlayers().values()) {
       if (counts[big] - counts[small] < 2) break;
       if (p.team !== big || !p.isBot) continue;
+      // A flipped carrier would hold the flag in 'carried' forever —
+      // tickCarried requires carrier.team !== flag.team, and the bot's
+      // new own-team can't grab or return it. Drop it at their feet.
+      this.flagCarrierDied(p.id);
       this.players.setTeam(p.id, small);
       this.broadcast({ type: 'teamUpdate', playerId: p.id, team: small });
       counts[big]--;
