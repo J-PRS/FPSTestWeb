@@ -20,7 +20,7 @@ const OUT_ROOT = path.join(__dirname, '..', '..', 'screenshots');
   for (const [model, outDir, scale] of [
     ['mannequin', 'poses-medium', '1'],
     ['mannequin', 'poses-light', '0.92'],
-    ['knight', 'poses-heavy', '1.15'],
+    ['mannequin', 'poses-heavy', '1.15'],
   ]) {
     await page.goto(`${BASE}?model=${model}&scale=${scale}`, { waitUntil: 'domcontentloaded' });
     await page.waitForFunction('window.__ready === true', { timeout: 20000 });
