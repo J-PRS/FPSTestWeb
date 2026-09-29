@@ -294,6 +294,9 @@ export function wireStateDebug(ctx: StateDebugContext): void {
           checks: hashCheckCount,
           mismatches: hashMismatchCount,
           matchRate: `${((1 - hashMismatchCount / hashCheckCount) * 100).toFixed(1)}%`,
+          // The last few health events often name the culprit directly —
+          // a kill with no respawn following, a hit that never landed.
+          recentEvents: networkManager.recentEvents().slice(-8),
         });
       } else {
         logger.info(`[StateHash] Hash mismatch tick=${tick} but positions within tolerance (network lag)`);

@@ -223,11 +223,24 @@ export class NetworkManager {
     (this.ws.sendUnreliable ?? this.ws.send).call(this.ws, data);
   }
 
+  /** Ring of recent health-affecting events — read by the desync dump so a
+   *  hash mismatch says WHICH event diverged, not just that one did. */
+  private readonly recentHealthEvents: { type: string; t: number; detail: string }[] = [];
+  private static readonly HEALTH_EVENT_TYPES = new Set(['playerHit', 'playerKill', 'playerRespawn', 'buff', 'heal']);
+  recentEvents(): readonly { type: string; t: number; detail: string }[] {
+    return this.recentHealthEvents;
+  }
+
   private handleMessage(data: ServerMessage): void {
     // Capture the server-issued session token for future reconnects
     if (data?.type === 'gameState' && typeof data.sessionToken === 'string') {
       this.sessionToken = data.sessionToken;
       localStorage.setItem('fps-session-token', data.sessionToken);
+    }
+    if (NetworkManager.HEALTH_EVENT_TYPES.has(data.type)) {
+      if (this.recentHealthEvents.length >= 24) this.recentHealthEvents.shift();
+      const d = data as Record<string, unknown>;
+      this.recentHealthEvents.push({ type: data.type, t: Date.now(), detail: `${d.shooterId ?? d.playerId ?? ''}→${d.targetId ?? ''} ${d.damage ?? ''}` });
     }
     // Avoid JSON.stringify on every message — tickUpdate arrives at 20Hz
     const handler = this.handlers[data.type] as ((d: ServerMessage) => void) | undefined;
