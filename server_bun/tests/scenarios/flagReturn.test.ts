@@ -24,7 +24,7 @@ describe('scenario: flag return on touch', () => {
     players[0]!.position = { x: -100, y: 60, z: -100 };
     players[1]!.position = { x: 0, y: 60, z: 0 };
     room.tickFlags(0.05);
-    expect(flag.state).toBe('home');
+    expect(flag.state as string).toBe('home');
     expect(flag.pos).toEqual(flag.home);
     expect(flag.carrier).toBeNull();
   });
@@ -39,6 +39,6 @@ describe('scenario: flag return on touch', () => {
     flag.pos = { x: 0, y: 60, z: 0 };
     flag.dropT = 0.05;
     room.tickFlags(0.1);
-    expect(flag.state).toBe('home');
+    expect(flag.state as string).toBe('home');
   });
 });

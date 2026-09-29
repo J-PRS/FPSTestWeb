@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test';
-import { mkRoom, pin, freeze, twoPlayers, step } from './harness.ts';
+import { mkRoom, pin, twoPlayers, step } from './harness.ts';
 
 describe('scenario: dead-sender gate', () => {
   it('shots, teleports, and input from a dead player are all dropped', () => {
@@ -21,7 +21,7 @@ describe('scenario: dead-sender gate', () => {
     room.moveSim.track(a.id, a.position, 0, a.perk);
     room.messages.handleMessage(a.id, {
       type: 'inputMove', seq: 1,
-      input: { forward: 1, right: 0, jump: 0, ski: 1, jet: 0, status: 4 },
+      input: { forward: 1, right: 0, jump: 0, ski: 1, jet: 0, status: 4 }, rotation: { yaw: 0, pitch: 0 },
     });
     step(room, 10);
 

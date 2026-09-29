@@ -6,6 +6,24 @@ import { perkMods } from '../../shared/perks.ts';
 import { POWERUP } from '../../shared/pickups.ts';
 import { computeStateHash } from '../../shared/stateHash.ts';
 import { logger } from './logger.ts';
+import type { PlayerState } from './types.ts';
+
+// Medkit: hp restored per broadcast tick while the mending flag is up.
+// 12 hp/s at the room's tick rate — a field patch, not a fountain.
+const MEND_HP_PER_TICK = 12 / CONFIG.tickRate;
+
+/** Server-owned heal channels for one broadcast tick: medkit channel,
+ *  regenerator perk, regen powerup — all cap at the perk max (the caller
+ *  applies the clamp). Exported for scenario tests; the loop itself
+ *  stays identical. */
+
+export function healPerTick(p: Pick<PlayerState, 'isDead' | 'health' | 'maxHealth' | 'status' | 'regenUntil' | 'perk'>, now: number): number {
+  if (p.isDead || p.health >= p.maxHealth) return 0;
+  let heal = perkMods(p.perk).regen / CONFIG.tickRate;
+  if (p.status & STATUS.MEND) heal += MEND_HP_PER_TICK;
+  if (now < p.regenUntil) heal += POWERUP.regenHpPerSec / CONFIG.tickRate;
+  return heal;
+}
 
 /** One encoded position update waiting for fanout — data is pre-encoded
  *  once so per-recipient sends are buffer concatenation, not re-serialization. */
@@ -45,9 +63,6 @@ export class TickLoop {
   // a fresh Uint8Array[] per recipient was the biggest GC churn source.
   private readonly scratchOthers: Uint8Array[] = [];
 
-  // Medkit: hp restored per broadcast tick while the mending flag is up.
-  // 12 hp/s at the room's tick rate — a field patch, not a fountain.
-  private static readonly MEND_HP_PER_TICK = 12 / CONFIG.tickRate;
   private static readonly IDLE_KICK_MS = CONFIG.idleKickMs; // silent >60s → remove
 
   constructor(
@@ -167,13 +182,8 @@ export class TickLoop {
       // only the first stale player in map order ever heartbeat.
       // Health channels the server owns: medkit channel (flag), regenerator
       // perk (passive), regen powerup (timed). All cap at the perk max.
-      if (!p.isDead && p.health < p.maxHealth) {
-        let heal = 0;
-        if (p.status & STATUS.MEND) heal += TickLoop.MEND_HP_PER_TICK;
-        if (now < p.regenUntil) heal += POWERUP.regenHpPerSec / CONFIG.tickRate;
-        heal += perkMods(p.perk).regen / CONFIG.tickRate;
-        if (heal > 0) p.health = Math.min(p.maxHealth, p.health + heal);
-      }
+      const heal = healPerTick(p, now);
+      if (heal > 0) p.health = Math.min(p.maxHealth, p.health + heal);
       const isStale = silenceMs > 5000;
       const forceSend = now < p.forceSendUntil;
       const lastSent = room.lastSentPositions.get(playerId);

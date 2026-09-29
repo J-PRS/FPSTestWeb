@@ -12,7 +12,7 @@ describe('scenario: skill energy on the shadow sim', () => {
 
     room.messages.handleMessage(p.id, {
       type: 'inputMove', seq: 1,
-      input: { forward: 0, right: 0, jump: 0, ski: 0, jet: 0, status: 4 /* CLOAK */ },
+      input: { forward: 0, right: 0, jump: 0, ski: 0, jet: 0, status: 4 /* CLOAK */ }, rotation: { yaw: 0, pitch: 0 },
     });
     // Rising edge pays the ante immediately — a fresh claim can't be free.
     expect(room.moveSim.energyOf(p.id)!).toBe(ENERGY.max - ENERGY.cloakCost);
@@ -26,7 +26,7 @@ describe('scenario: skill energy on the shadow sim', () => {
     // Drop the bit: drain stops and the tank refills.
     room.messages.handleMessage(p.id, {
       type: 'inputMove', seq: 2,
-      input: { forward: 0, right: 0, jump: 0, ski: 0, jet: 0, status: 0 },
+      input: { forward: 0, right: 0, jump: 0, ski: 0, jet: 0, status: 0 }, rotation: { yaw: 0, pitch: 0 },
     });
     const before = room.moveSim.energyOf(p.id)!;
     room.moveSim.tick(1.0);
@@ -41,7 +41,7 @@ describe('scenario: skill energy on the shadow sim', () => {
     room.moveSim.drainEnergy(p.id, ENERGY.max - 5); // near-empty tank
     room.messages.handleMessage(p.id, {
       type: 'inputMove', seq: 1,
-      input: { forward: 0, right: 0, jump: 0, ski: 0, jet: 0, status: 4 },
+      input: { forward: 0, right: 0, jump: 0, ski: 0, jet: 0, status: 4 }, rotation: { yaw: 0, pitch: 0 },
     });
     expect(room.moveSim.energyOf(p.id)).toBe(0); // ante floored at zero, never negative
   });

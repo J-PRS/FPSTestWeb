@@ -1,0 +1,48 @@
+import { describe, it, expect } from 'bun:test';
+import { mkRoom, pin, firstPlayer } from './harness.ts';
+import { healPerTick } from '../../src/TickLoop.ts';
+import { STATUS } from '../../../shared/status.ts';
+import { POWERUP } from '../../../shared/pickups.ts';
+import { perkMods } from '../../../shared/perks.ts';
+import { CONFIG } from '../../src/config.ts';
+
+// The tick-loop heal stack: mend flag + regen powerup + regenerator perk,
+// all server-owned, all capped at maxHealth.
+describe('scenario: server-owned heal channels', () => {
+  it('mend flag heals per tick, dead and full health get nothing', () => {
+    const room = mkRoom({ bots: 1 });
+    const p = firstPlayer(room);
+    pin(room, p.id, { x: 0, y: 31, z: 0 });
+    p.health = 50;
+    p.status = STATUS.MEND;
+    const heal = healPerTick(p, Date.now());
+    expect(heal).toBeCloseTo(12 / CONFIG.tickRate, 8);
+
+    p.isDead = true;
+    expect(healPerTick(p, Date.now())).toBe(0);
+    p.isDead = false;
+    p.health = p.maxHealth;
+    expect(healPerTick(p, Date.now())).toBe(0);
+  });
+
+  it('regen powerup heals only inside its window; perk regen stacks', () => {
+    const room = mkRoom({ bots: 1 });
+    const p = firstPlayer(room);
+    p.health = 10;
+    p.status = 0;
+    const now = Date.now();
+    p.regenUntil = now + 30_000;
+    expect(healPerTick(p, now)).toBeCloseTo(POWERUP.regenHpPerSec / CONFIG.tickRate, 8);
+
+    // Expired window — nothing.
+    p.regenUntil = now - 1;
+    expect(healPerTick(p, now)).toBeCloseTo(perkMods(p.perk).regen / CONFIG.tickRate, 8);
+
+    // Regenerator perk adds its passive rate on top of the powerup.
+    p.perk = 'regenerator';
+    p.regenUntil = now + 30_000;
+    expect(healPerTick(p, now)).toBeCloseTo(
+      (POWERUP.regenHpPerSec + perkMods('regenerator').regen) / CONFIG.tickRate, 8,
+    );
+  });
+});

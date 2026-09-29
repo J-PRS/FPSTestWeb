@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test';
-import { mkRoom, firstPlayer, twoPlayers, watch } from './harness.ts';
+import { mkRoom, twoPlayers, watch } from './harness.ts';
 
 describe('scenario: player departure cleanup', () => {
   it('a carrier leaving drops their flag exactly like dying with it', () => {
