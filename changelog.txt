@@ -1,3 +1,5 @@
+2026-10-03 - flagTimeout scenario: an unrecovered dropped flag teleports home on the FLAG_RESET_S clock.
+
 2026-10-03 - tierLock scenario: medium-armor mortar claims are refused (class-locked weapon); same claim as heavy registers the shell.
 
 2026-10-03 - aoeReject scenario: aoeShot claiming a blast that names no tracked projectile is rejected privately, zero splash damage; soak re-verified live (apisoak + 5-client fleet on infestation, all PASS).
