@@ -1,3 +1,5 @@
+2026-10-03 - 3 more scenarios: baneling shot-death detonation (kill -> blast funnel), station heal field (isolated from bot MEND via non-bot patient), deploy rules (remote-arms cap recycle + 40m plant reject).
+
 2026-10-03 - Scenario: cloak breaks creature aggro (committed retarget -> cloak -> zero bite lies). Harness note: server brains stomp status each think, so cloak tests need a non-bot player.
 
 2026-10-03 - Scenario: escort drone follow+acquire+fire chain proven (turretShot edges, damage lands). TASKS.md refresh. sort warnings documented as intentional (no toSorted in lib target).
