@@ -18,6 +18,15 @@ const SHEEP_SPEED = 4;
 interface StuckState { x: number; z: number; since: number; warned: boolean }
 interface SheepState { winStart: number; ticks: number; skiAir: number; air: number; jet: number; dist: number; lx: number; lz: number }
 
+/** One tick of mobility evidence for checkSheep. */
+export interface MobilitySample {
+  trying: boolean;
+  ski: boolean;
+  airborne: boolean;
+  jetting: boolean;
+  dt: number;
+}
+
 /**
  * Bot mobility watchdog — two alarms that catch "sheepish" behavior in
  * logs rather than in playtests: a stuck warn when an alive bot covers
@@ -68,7 +77,7 @@ export class BotWatchdog {
    *  window when a mobile bot stays flat-footed: under half of its
    *  travel ticks skiing/airborne, or averaging walking pace. Healthy
    *  mobility is logged too, so a regression is visible not just failures. */
-  checkSheep(id: string, pos: Vec3, trying: boolean, ski: boolean, airborne: boolean, jetting: boolean, dtRef: number, now: number): void {
+  checkSheep(id: string, pos: Vec3, m: MobilitySample, now: number): void {
     let s = this.sheep.get(id);
     if (!s) {
       this.sheep.set(id, { winStart: now, ticks: 0, skiAir: 0, air: 0, jet: 0, dist: 0, lx: pos.x, lz: pos.z });
@@ -76,19 +85,19 @@ export class BotWatchdog {
     }
     const dx = pos.x - s.lx, dz = pos.z - s.lz;
     s.lx = pos.x; s.lz = pos.z;
-    if (trying) {
+    if (m.trying) {
       s.ticks++; s.dist += Math.hypot(dx, dz);
-      if (ski || airborne) s.skiAir++;
+      if (m.ski || m.airborne) s.skiAir++;
       // airPct is the honest "dynamic Tribes bot" number — skiHeld on the
       // ground counts as ski, but only real altitude counts as air.
-      if (airborne) s.air++;
-      if (jetting) s.jet++;
+      if (m.airborne) s.air++;
+      if (m.jetting) s.jet++;
     }
     const winMs = now - s.winStart;
     if (winMs < SHEEP_WIN_MS) return;
     if (s.ticks >= SHEEP_MIN_TICKS) {
       const frac = s.skiAir / s.ticks;
-      const avgSpeed = s.dist / (s.ticks * dtRef); // per-tick distance → m/s
+      const avgSpeed = s.dist / (s.ticks * m.dt); // per-tick distance → m/s
       const stats = {
         room: this.roomName, bot: id,
         skiAirPct: Math.round(frac * 100),

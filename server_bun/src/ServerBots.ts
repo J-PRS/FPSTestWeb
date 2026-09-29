@@ -25,7 +25,7 @@ import { GRAVITY } from '../../shared/movement.ts';
 import type { PerkId } from '../../shared/perks.ts';
 import { CLASS_STATS, type ArmorClass } from '../../shared/botClasses.ts';
 import { roleObjective, ROLE_PRIORITY, type BotRole } from '../../shared/flagGoals.ts';
-import { BotWatchdog } from './botWatchdog.ts';
+import { BotWatchdog, type MobilitySample } from './botWatchdog.ts';
 
 /** A bot's kit — weapon picked by engagement range, perk set at spawn so
  *  maxHealth and the move shadow's jet economy match a real loadout. */
@@ -497,8 +497,8 @@ export class ServerBots {
     this.watchdog.checkStuck(id, p.position, brain, carrying, now);
   }
 
-  private checkSheep(id: string, p: { position: Vec3 }, trying: boolean, ski: boolean, airborne: boolean, jetting: boolean, dtRef: number, now: number): void {
-    this.watchdog.checkSheep(id, p.position, trying, ski, airborne, jetting, dtRef, now);
+  private checkSheep(id: string, p: { position: Vec3 }, m: MobilitySample, now: number): void {
+    this.watchdog.checkSheep(id, p.position, m, now);
   }
 
   /** The meter the tick stream publishes — 0 for non-bots. */
@@ -522,14 +522,14 @@ export class ServerBots {
    *  doing Tribes things (covering ground, airborne, jetting). At 100
    *  the bot gets yeeted: an impulse launch plus pinned jets, so the
    *  penalty for sheepish play IS the cure. */
-  private checkSheepMeter(id: string, p: { position: Vec3; velocity: Vec3 }, out: BrainOut, airborne: boolean, hasDest: boolean, dt: number, now: number): void {
+  private checkSheepMeter(id: string, p: { position: Vec3; velocity: Vec3 }, m: { out: BrainOut; airborne: boolean; hasDest: boolean; dt: number }, now: number): void {
     const speedXZ = Math.hypot(p.velocity.x, p.velocity.z);
-    const jetting = !!out.move?.jet || (this.yeetUntil.get(id) ?? 0) > now;
-    const tribesing = speedXZ > 8 || airborne || jetting;
+    const jetting = !!m.out.move?.jet || (this.yeetUntil.get(id) ?? 0) > now;
+    const tribesing = speedXZ > 8 || m.airborne || jetting;
     const prev = this.sheepMeter.get(id) ?? 0;
-    let meter = prev + dt * (tribesing
+    let meter = prev + m.dt * (tribesing
       ? -(8 + speedXZ * 0.5 + (jetting ? 12 : 0))
-      : hasDest ? 6 : 14);
+      : m.hasDest ? 6 : 14);
     if (meter >= 100) {
       const yaw = Math.random() * Math.PI * 2;
       this.room.moveSim.applyImpulse(id, { x: Math.cos(yaw) * 12, y: 18, z: Math.sin(yaw) * 12 });
@@ -673,8 +673,8 @@ export class ServerBots {
         } else {
           this.room.moveSim.setInput(id, { forward: 0, right: 0, jumpHeld: false, skiHeld: false, jetHeld: false }, p.status, this.seq++);
         }
-        this.checkSheep(id, p, dist >= 0.5, !!out.move?.ski, !sh.onGround, !!out.move?.jet, dt, now);
-        this.checkSheepMeter(id, p, out, !sh.onGround, dist >= 0.5, dt, now);
+        this.checkSheep(id, p, { trying: dist >= 0.5, ski: !!out.move?.ski, airborne: !sh.onGround, jetting: !!out.move?.jet, dt }, now);
+        this.checkSheepMeter(id, p, { out, airborne: !sh.onGround, hasDest: dist >= 0.5, dt }, now);
         p.position.x = sh.pos.x; p.position.y = sh.pos.y; p.position.z = sh.pos.z;
         p.velocity.x = sh.vel.x; p.velocity.y = sh.vel.y; p.velocity.z = sh.vel.z;
         // Ski bit rides the tick flag byte (bit 2) — drives remote dust.

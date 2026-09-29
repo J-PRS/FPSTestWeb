@@ -1,3 +1,7 @@
+2026-10-03 - Watchdog call signatures folded: checkSheep takes a
+    MobilitySample (trying/ski/airborne/jetting/dt) and
+    checkSheepMeter a sample object — clears both max-params
+    warnings at the ServerBots boundary.
 2026-10-03 - WtServer.acceptReliable split: per-line delivery
     (base64 bin envelope unwrap + raw dispatch) extracted to
     deliverLine — clears both max-depth warnings.
