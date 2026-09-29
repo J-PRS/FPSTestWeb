@@ -164,7 +164,9 @@ export function wireOverlayInput(deps: OverlayInputDeps) {
     const weaponOptsFor = (cls: string) => SLOT_DEFS
       .map((def, wid) => ({ v: String(wid), label: def.config.displayName, sidearm: !!def.sidearm }))
       .filter((o) => !o.sidearm && (cls === 'heavy' || !heavyOnly.has(o.v)));
-    const weaponOpts = weaponOptsFor(deps.lazyPlayer().armorClass);
+    // The bar can be wired before Player exists — pick the safe default and
+    // let the class-change callback + refreshLoadout re-filter for real.
+    const weaponOpts = weaponOptsFor(deps.lazyPlayer()?.armorClass ?? 'medium');
     for (let i = 0; i < Player.LOADOUT_SLOTS; i++) {
       const row = document.createElement('div');
       row.className = 'lo-row';
