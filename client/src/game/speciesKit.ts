@@ -39,6 +39,20 @@ export interface DeployableRef {
 // which only reaches the player; gnaw is the deployable-specific path.
 const DEP_GNAW_DPS = 10;
 
+// Rare uber roll — ambient (no-pos) spawns only. Event/demo/director
+// spawns pass an explicit pos and never surprise-upgrade unless asked.
+const rollUber = (): boolean => Math.random() < UBER_CHANCE;
+
+// Living-population check — every species spawn gate filters out dead
+// members; counting in-place avoids a temp array per spawn attempt.
+function atCap<T extends { dead: boolean }>(list: T[], max: number): boolean {
+  let n = 0;
+  for (const e of list) {
+    if (!e.dead && ++n >= max) return true;
+  }
+  return false;
+}
+
 export function createSpeciesKit(deps: EntitiesDeps, targets: Targetable[], deployables?: () => DeployableRef | null) {
   const { scene, logger } = deps;
 
@@ -167,6 +181,18 @@ export function createSpeciesKit(deps: EntitiesDeps, targets: Targetable[], depl
     const frame = Math.floor(performance.now() / 16);
     if (frame === _candFrame) return _candList;
     _candFrame = frame;
+    syncLocalCandidate();
+    syncRemoteCandidates();
+    pruneCandidates();
+    _candList.length = 0;
+    for (const cand of _candMap.values()) _candList.push(cand);
+    // Deployables are chewable scenery — a planted turret draws aggro like
+    // a player, which is what makes base defense matter.
+    for (const cand of deployables?.()?.candidates() ?? []) _candList.push(cand);
+    return _candList;
+  }
+
+  function syncLocalCandidate(): void {
     const p = deps.lazyPlayer();
     let c = _candMap.get('local');
     if (!c) {
@@ -175,6 +201,9 @@ export function createSpeciesKit(deps: EntitiesDeps, targets: Targetable[], depl
     }
     // Spectating = dev observer noclip — you're not prey, you're a camera.
     c.alive = !p.isDead && !p.isCloaked && !p.isSpectating;
+  }
+
+  function syncRemoteCandidates(): void {
     const now = Date.now();
     for (const [id, r] of deps.world.remotePlayers) {
       let rc = _candMap.get(id);
@@ -189,17 +218,13 @@ export function createSpeciesKit(deps: EntitiesDeps, targets: Targetable[], depl
       // position update = not a valid target; the AI wanders instead.
       rc.alive = !r.isDead && (now - r.lastUpdateTime < 2000);
     }
-    if (_candMap.size > deps.world.remotePlayers.size + 1) {
-      for (const id of _candMap.keys()) {
-        if (id !== 'local' && !deps.world.remotePlayers.has(id)) _candMap.delete(id);
-      }
+  }
+
+  function pruneCandidates(): void {
+    if (_candMap.size <= deps.world.remotePlayers.size + 1) return;
+    for (const id of _candMap.keys()) {
+      if (id !== 'local' && !deps.world.remotePlayers.has(id)) _candMap.delete(id);
     }
-    _candList.length = 0;
-    for (const c of _candMap.values()) _candList.push(c);
-    // Deployables are chewable scenery — a planted turret draws aggro like
-    // a player, which is what makes base defense matter.
-    for (const c of deployables?.()?.candidates() ?? []) _candList.push(c);
-    return _candList;
   }
 
   // Post-kill wander: with nobody alive to hate, a shared phantom made every
@@ -434,29 +459,35 @@ export function createSpeciesKit(deps: EntitiesDeps, targets: Targetable[], depl
     const playerPos = deps.lazyPlayer().pos;
     for (let i = s.list.length - 1; i >= 0; i--) {
       const e = s.list[i]!;
-      const dSq = e.pos.distanceToSquared(playerPos);
-      let tickDt = dt;
-      if (dSq > AI_LOD_FAR_SQ) {
-        const acc = (lodAcc.get(e) ?? lodPhase(e, AI_LOD_FAR_DT)) + dt;
-        if (acc >= AI_LOD_FAR_DT) { lodAcc.set(e, 0); tickDt = acc; } else { lodAcc.set(e, acc); tickDt = 0; }
-      } else if (dSq > AI_LOD_MID_SQ) {
-        const acc = (lodAcc.get(e) ?? lodPhase(e, AI_LOD_MID_DT)) + dt;
-        if (acc >= AI_LOD_MID_DT) { lodAcc.set(e, 0); tickDt = acc; } else { lodAcc.set(e, acc); tickDt = 0; }
-      }
+      const tickDt = lodTick(e, e.pos.distanceToSquared(playerPos), dt);
       if (tickDt > 0) s.tick(e, tickDt);
-      // Gnaw: a creature committed to a deployable and standing on it chews
-      // it down — reach envelope is generous since bite anim reach varies.
-      const bt = targetReg.for(e).target;
-      if (bt && bt.id.startsWith('dep:') && tickDt > 0) {
-        const rr = e.radius + 2.5;
-        if (e.pos.distanceToSquared(bt.pos) < rr * rr) deployables?.()?.hurt(bt.id, DEP_GNAW_DPS * tickDt);
-      }
+      tickGnaw(e, tickDt);
       if (e.dead) {
         lodAcc.delete(e);
         e.dispose();
         removeTarget(s.list, i, e);
       }
     }
+  }
+
+  // Accumulated LOD dt for one entity this frame — 0 = skip the tick.
+  function lodTick(e: Targetable, dSq: number, dt: number): number {
+    const tier = dSq > AI_LOD_FAR_SQ ? AI_LOD_FAR_DT : dSq > AI_LOD_MID_SQ ? AI_LOD_MID_DT : 0;
+    if (!tier) return dt;
+    const acc = (lodAcc.get(e) ?? lodPhase(e, tier)) + dt;
+    if (acc < tier) { lodAcc.set(e, acc); return 0; }
+    lodAcc.set(e, 0);
+    return acc;
+  }
+
+  // Gnaw: a creature committed to a deployable and standing on it chews
+  // it down — reach envelope is generous since bite anim reach varies.
+  function tickGnaw(e: Targetable & { radius: number }, tickDt: number): void {
+    if (tickDt <= 0) return;
+    const bt = targetReg.for(e).target;
+    if (!bt || !bt.id.startsWith('dep:')) return;
+    const rr = e.radius + 2.5;
+    if (e.pos.distanceToSquared(bt.pos) < rr * rr) deployables?.()?.hurt(bt.id, DEP_GNAW_DPS * tickDt);
   }
 
   // Ground species slide up out of the dirt instead of popping into existence.
@@ -469,19 +500,7 @@ export function createSpeciesKit(deps: EntitiesDeps, targets: Targetable[], depl
     deps.lazyEffects().spawnJumpDust(e.pos);
   }
 
-  // Rare uber roll — ambient (no-pos) spawns only. Event/demo/director
-  // spawns pass an explicit pos and never surprise-upgrade unless asked.
-  const rollUber = (): boolean => Math.random() < UBER_CHANCE;
-
-  // Living-population check — every species spawn gate filters out dead
-  // members; counting in-place avoids a temp array per spawn attempt.
-  function atCap<T extends { dead: boolean }>(list: T[], max: number): boolean {
-    let n = 0;
-    for (const e of list) {
-      if (!e.dead && ++n >= max) return true;
-    }
-    return false;
-  }
+  // rollUber + atCap live at module scope — no closure state needed.
 
   // Ground dust: distance-based emission, so faster movers naturally puff
   // more and a standing creature puffs nothing. SpawnMoveDust scales the
