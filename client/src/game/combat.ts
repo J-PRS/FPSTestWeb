@@ -463,7 +463,7 @@ export function createCombat(deps: CombatDeps) {
     if (impulse) _debrisDir.copy(impulse).normalize(); else _debrisDir.set(0, 0.5, 0);
     if (!burstGibs(ball as unknown as SwarmSlotOwner, ball.pos, _debrisDir, ball.vel)) {
       deps.world.debrisList.push(new BallDebris(
-        deps.lazyScene(), deps.lazyTerrain(), ball.pos.x, ball.pos.y, ball.pos.z,
+        deps.lazyScene(), deps.lazyTerrain(), ball.pos,
         ball.color, ball.scale,
         { bodyRadius: ball.radius, impulseDir: _debrisDir, inheritVel: ball.vel, kind: ball.debrisKind, shardGeos: ball.debrisGeos },
       ));

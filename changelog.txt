@@ -1,3 +1,5 @@
+2026-10-03 - debris.ts: constructor c34 -> spawnShards + module pickShardGeo/shardLaunch; px,py,pz -> Vec3Like pos (max-params).
+
 2026-10-03 - Player.ts: update -> tickTimers/stepMovement/tickEnergy + emitMoveEvents -> emitJetpack/emitSkiDust/emitFootDust (c32+c22 -> clean).
 
 2026-10-03 - balls.ts: update split -> tickNetSim/tickNetInert/stepNetLeg/tickRenderPos/tickEnrage/tickStallBreaker/tickTrails (c61->clean); applyNetSegment -> NetSeg options object (14 params); handleGroundBounce -> tryEnrageLunge/chaseIfFar.

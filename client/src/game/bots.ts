@@ -483,7 +483,7 @@ export class TeamBots {
     catch { /* fall through to generic shards */ }
     this.deps.world.playerDebrisList.push(new PlayerDebris(
       this.deps.lazyScene(), this.deps.lazyTerrain(),
-      bot.position.x, bot.position.y + 1.0, bot.position.z,
+      { x: bot.position.x, y: bot.position.y + 1.0, z: bot.position.z },
       new THREE.Color(t === 'alpha' || t === 'bravo' ? TEAM_COLORS[t] : 0xcc66ff),
       { inheritVel: bot.vel, parts },
     ));

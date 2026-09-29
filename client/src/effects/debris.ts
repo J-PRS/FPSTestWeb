@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-import { GRAVITY, BOUNCE_Y, FRICTION_XZ, SHRINK_DUR, GREY_DUR, BASE_SPEED, EXTRA_SPEED, LIFE_BASE, LIFE_RAND } from '../core/config.js';
+import { GRAVITY, BOUNCE_Y, FRICTION_XZ, SHRINK_DUR, GREY_DUR, BASE_SPEED, EXTRA_SPEED, LIFE_BASE, LIFE_RAND, PLAYER_RADIUS } from '../core/config.js';
 
 import { Terrain } from '../world/terrain.js';
 
@@ -56,6 +56,94 @@ interface DebrisOptions {
   /** Real fragments of the dying body (tumbleweed twigs) — shards use
    *  these geometries so the burst is made of the thing that died. */
   shardGeos?: THREE.BufferGeometry[];
+  /** Posed body parts — one shard per part, spawned AT its world
+   *  centroid (pos is absolute, px/py/pz only seed the outward burst
+   *  direction). Owned geometries: disposed when the shard dies. */
+  parts?: { geo: THREE.BufferGeometry; pos: THREE.Vector3 }[];
+}
+
+type DebrisPart = NonNullable<DebrisOptions['parts']>[number];
+type Vec3Like = { x: number; y: number; z: number };
+
+function pickShardGeo(part: DebrisPart | undefined, opts: DebrisOptions, sw: number, sh: number, sd: number): THREE.BufferGeometry {
+  if (part) return part.geo;
+  if (opts.shardGeos?.length) {
+    return opts.shardGeos[Math.floor(Math.random() * opts.shardGeos.length)]!;
+  }
+  if (opts.kind === 'brush') {
+    // Splintered twig — thin tapered stick, random length
+    return new THREE.CylinderGeometry(0.008, 0.014, 0.2 + Math.random() * 0.35, 3);
+  }
+  if (opts.kind === 'goo') {
+    // Splat blob — organic pop into droplets
+    return new THREE.SphereGeometry(0.05 + Math.random() * 0.1, 5, 4);
+  }
+  const geoType = Math.random();
+  const m = Math.max(sw, sh, sd);
+  const geo = geoType < 0.4 ? new THREE.TetrahedronGeometry(m, 0)
+    : geoType < 0.7 ? new THREE.DodecahedronGeometry(m, 0)
+    : new THREE.IcosahedronGeometry(m, 0);
+  geo.scale(sw / m, sh / m, sd / m);
+  return geo;
+}
+
+// Shard origin offset (o) + launch velocity (vel) for the three spawn
+// modes: posed body part, shell-sampled burst, or plain spread cone.
+function shardLaunch(part: DebrisPart | undefined, opts: DebrisOptions, px: number, py: number, pz: number):
+  { o: THREE.Vector3; vel: THREE.Vector3 } {
+  if (part) {
+    // Body part: spawn at its own centroid, fly outward from the
+    // burst center along the part's offset (a head pops UP off the
+    // neck, an arm goes sideways — dismemberment, not shrapnel).
+    const o = new THREE.Vector3(part.pos.x - px, part.pos.y - py, part.pos.z - pz);
+    const l = Math.hypot(o.x, o.y, o.z);
+    const dx = l > 0.01 ? o.x / l : Math.random() * 2 - 1;
+    const dy = l > 0.01 ? o.y / l : Math.random() * 0.5 + 0.5;
+    const dz = l > 0.01 ? o.z / l : Math.random() * 2 - 1;
+    const spd = (BASE_SPEED * 0.6) + Math.random() * EXTRA_SPEED * 0.6;
+    const vel = new THREE.Vector3(dx * spd, dy * spd + 1.5, dz * spd);
+    if (opts.impulseDir) vel.addScaledVector(opts.impulseDir, 6);
+    if (opts.inheritVel) vel.addScaledVector(opts.inheritVel, 0.7);
+    return { o, vel };
+  }
+  if (opts.shellRadius) {
+    // Surface-sampled: random unit direction, shard sits ON the shell
+    // (0.55–0.95R so pieces overlap — no gaps in the first frame) and
+    // flies along that normal — the body bursts outward, not just apart.
+    const dx = Math.random() * 2 - 1;
+    const dy = Math.random() * 2 - 1;
+    const dz = Math.random() * 2 - 1;
+    const len = Math.hypot(dx, dy, dz) || 1;
+    const ndx = dx / len, ndy = dy / len, ndz = dz / len;
+    const r = opts.shellRadius * (0.55 + Math.random() * 0.4);
+    const o = new THREE.Vector3(ndx * r, ndy * r, ndz * r);
+    // Speed gradient: shards on the far side (aligned with the shot)
+    // fly fastest — the burst wave travels THROUGH the body.
+    let spd = BASE_SPEED + Math.random() * EXTRA_SPEED;
+    if (opts.impulseDir) {
+      const align = ndx * opts.impulseDir.x + ndy * opts.impulseDir.y + ndz * opts.impulseDir.z;
+      spd *= 1 + Math.max(0, align) * 0.9;
+    }
+    const vel = new THREE.Vector3(ndx * spd, ndy * spd + 1.5, ndz * spd);
+    // ~40% of the shot's push carried through the shards
+    if (opts.impulseDir) vel.addScaledVector(opts.impulseDir, 6);
+    if (opts.inheritVel) vel.addScaledVector(opts.inheritVel, 0.7);
+    return { o, vel };
+  }
+  const o = new THREE.Vector3(
+    (Math.random() - 0.5) * opts.spreadX,
+    (Math.random() - 0.5) * opts.spreadY,
+    (Math.random() - 0.5) * opts.spreadZ);
+  const ang = Math.random() * Math.PI * 2;
+  const elv = Math.random() * Math.PI * 0.65;
+  const spd = BASE_SPEED + Math.random() * EXTRA_SPEED;
+  return {
+    o,
+    vel: new THREE.Vector3(
+      Math.cos(elv) * Math.cos(ang) * spd,
+      Math.sin(elv) * spd + 2.0,
+      Math.cos(elv) * Math.sin(ang) * spd),
+  };
 }
 
 // Generic tumbling-shard debris burst. BallDebris/PlayerDebris are just
@@ -76,9 +164,10 @@ export class Debris {
 
   constructor(
     scene: THREE.Scene, terrain: Terrain,
-    px: number, py: number, pz: number,
+    pos: Vec3Like,
     color: THREE.Color, opts: DebrisOptions
   ) {
+    const { x: px, y: py, z: pz } = pos;
     this.scene   = scene;
     this.terrain = terrain;
 
@@ -94,31 +183,17 @@ export class Debris {
       scene.add(this.ghost);
     }
 
-    for (let i = 0; i < opts.count; i++) {
+    this.spawnShards(px, py, pz, color, opts);
+  }
+
+  private spawnShards(px: number, py: number, pz: number, color: THREE.Color, opts: DebrisOptions): void {
+    const count = opts.parts?.length ?? opts.count;
+    for (let i = 0; i < count; i++) {
       const sw = 0.25 + Math.random() * 0.55;
       const sh = 0.18 + Math.random() * 0.45;
       const sd = 0.20 + Math.random() * 0.50;
-
-      let geo: THREE.BufferGeometry;
-      if (opts.shardGeos?.length) {
-        geo = opts.shardGeos[Math.floor(Math.random() * opts.shardGeos.length)]!;
-      } else if (opts.kind === 'brush') {
-        // Splintered twig — thin tapered stick, random length
-        geo = new THREE.CylinderGeometry(0.008, 0.014, 0.2 + Math.random() * 0.35, 3);
-      } else if (opts.kind === 'goo') {
-        // Splat blob — organic pop into droplets
-        geo = new THREE.SphereGeometry(0.05 + Math.random() * 0.1, 5, 4);
-      } else {
-      const geoType = Math.random();
-      if (geoType < 0.4) {
-        geo = new THREE.TetrahedronGeometry(Math.max(sw, sh, sd), 0);
-      } else if (geoType < 0.7) {
-        geo = new THREE.DodecahedronGeometry(Math.max(sw, sh, sd), 0);
-      } else {
-        geo = new THREE.IcosahedronGeometry(Math.max(sw, sh, sd), 0);
-      }
-      geo.scale(sw / Math.max(sw, sh, sd), sh / Math.max(sw, sh, sd), sd / Math.max(sw, sh, sd));
-      }
+      const part = opts.parts?.[i];
+      const geo = pickShardGeo(part, opts, sw, sh, sd);
 
       const v   = 0.75 + Math.random() * 0.25;
       const cr  = color.r * v;
@@ -127,62 +202,25 @@ export class Debris {
       const mat = new THREE.MeshLambertMaterial({ color: new THREE.Color(cr, cg, cb) });
       const mesh = new THREE.Mesh(geo, mat);
 
-      let ox: number, oy: number, oz: number;
-      let vx: number, vy: number, vz: number;
-      if (opts.shellRadius) {
-        // Surface-sampled: random unit direction, shard sits ON the shell
-        // (0.55–0.95R so pieces overlap — no gaps in the first frame) and
-        // flies along that normal — the body bursts outward, not just apart.
-        const dx = Math.random() * 2 - 1;
-        const dz = Math.random() * 2 - 1;
-        const dy = Math.random() * 2 - 1;
-        const len = Math.hypot(dx, dy, dz) || 1;
-        const ndx = dx / len, ndy = dy / len, ndz = dz / len;
-        const r = opts.shellRadius * (0.55 + Math.random() * 0.4);
-        ox = ndx * r; oy = ndy * r; oz = ndz * r;
-        // Speed gradient: shards on the far side (aligned with the shot)
-        // fly fastest — the burst wave travels THROUGH the body.
-        let spd = BASE_SPEED + Math.random() * EXTRA_SPEED;
-        if (opts.impulseDir) {
-          const align = ndx * opts.impulseDir.x + ndy * opts.impulseDir.y + ndz * opts.impulseDir.z;
-          spd *= 1 + Math.max(0, align) * 0.9;
-        }
-        vx = ndx * spd; vy = ndy * spd + 1.5; vz = ndz * spd;
-        if (opts.impulseDir) {
-          // ~40% of the shot's push carried through the shards
-          vx += opts.impulseDir.x * 6; vy += opts.impulseDir.y * 6; vz += opts.impulseDir.z * 6;
-        }
-        if (opts.inheritVel) {
-          vx += opts.inheritVel.x * 0.7; vy += opts.inheritVel.y * 0.7; vz += opts.inheritVel.z * 0.7;
-        }
-      } else {
-        ox = (Math.random() - 0.5) * opts.spreadX;
-        oy = (Math.random() - 0.5) * opts.spreadY;
-        oz = (Math.random() - 0.5) * opts.spreadZ;
-        const ang  = Math.random() * Math.PI * 2;
-        const elv  = Math.random() * Math.PI * 0.65;
-        const spd  = BASE_SPEED + Math.random() * EXTRA_SPEED;
-        vx = Math.cos(elv) * Math.cos(ang) * spd;
-        vy = Math.sin(elv) * spd + 2.0;
-        vz = Math.cos(elv) * Math.sin(ang) * spd;
-      }
-      mesh.position.set(px + ox, py + oy, pz + oz);
+      const { o, vel } = shardLaunch(part, opts, px, py, pz);
+      mesh.position.set(px + o.x, py + o.y, pz + o.z);
       mesh.castShadow = false;
-      scene.add(mesh);
+      this.scene.add(mesh);
 
       const sharedGeo = !!opts.shardGeos?.length;
       const tumble = 4.0 + Math.random() * 8.0;
 
       this.shards.push({
         mesh, mat,
-        x: px + ox, y: py + oy, z: pz + oz,
-        vx, vy, vz,
+        x: px + o.x, y: py + o.y, z: pz + o.z,
+        vx: vel.x, vy: vel.y, vz: vel.z,
         rx: (Math.random() - 0.5) * 2 * tumble,
         ry: (Math.random() - 0.5) * 2 * tumble,
         rz: (Math.random() - 0.5) * 2 * tumble,
         life: (opts.kind === 'brush' ? 0.7 : 1) * (LIFE_BASE + Math.random() * LIFE_RAND),
         elapsed: 0,
-        radius: sharedGeo ? (geo.boundingSphere?.radius ?? 0.3) * 0.5
+        radius: part ? (geo.boundingSphere?.radius ?? 0.3) * 0.35
+          : sharedGeo ? (geo.boundingSphere?.radius ?? 0.3) * 0.5
           : opts.kind === 'brush' ? 0.08 : opts.kind === 'goo' ? 0.06 : Math.max(sw, sh, sd),
         landed: false, landedAt: 0,
         cr, cg, cb, dead: false,
@@ -354,12 +392,12 @@ const BALL_CHUNK_COUNT = 14;
 export class BallDebris extends Debris {
   constructor(
     scene: THREE.Scene, terrain: Terrain,
-    px: number, py: number, pz: number,
+    pos: Vec3Like,
     color: THREE.Color, scale: number = 1.0,
     opts?: { bodyRadius?: number; impulseDir?: THREE.Vector3; inheritVel?: THREE.Vector3; kind?: 'rock' | 'brush' | 'goo'; shardGeos?: THREE.BufferGeometry[] }
   ) {
     const spread = 0.6 * scale;
-    super(scene, terrain, px, py, pz, color, {
+    super(scene, terrain, pos, color, {
       count: Math.floor(BALL_CHUNK_COUNT * scale),
       spreadX: spread, spreadY: spread, spreadZ: spread,
       shellRadius: opts?.bodyRadius,
@@ -376,12 +414,21 @@ const PLAYER_CHUNK_COUNT = 20; // More chunks for players
 export class PlayerDebris extends Debris {
   constructor(
     scene: THREE.Scene, terrain: Terrain,
-    px: number, py: number, pz: number,
-    color: THREE.Color = new THREE.Color(0x4444ff) // Default player blue
+    pos: Vec3Like,
+    color: THREE.Color = new THREE.Color(0x4444ff), // Default player blue
+    opts?: { impulseDir?: THREE.Vector3; inheritVel?: THREE.Vector3; parts?: { geo: THREE.BufferGeometry; pos: THREE.Vector3 }[] }
   ) {
-    super(scene, terrain, px, py, pz, color, {
+    // shellRadius lifts this from "box of chunks" to "the body bursts":
+    // shards start ON the capsule silhouette and fly along their own
+    // normals, impulseDir carries the shot through them, inheritVel keeps
+    // the dead skier's momentum — the same trio that sells ball deaths.
+    super(scene, terrain, pos, color, {
       count: PLAYER_CHUNK_COUNT,
       spreadX: 0.8, spreadY: 1.0, spreadZ: 0.8, // larger/taller spread for players
+      shellRadius: PLAYER_RADIUS,
+      impulseDir: opts?.impulseDir,
+      inheritVel: opts?.inheritVel,
+      parts: opts?.parts,
     });
   }
 }

@@ -245,7 +245,7 @@ function gibVictim(ctx: NetCtx, shooterId: string, targetId: string, remotePlaye
   catch { /* fall through to generic shards */ }
   deps.world.playerDebrisList.push(new PlayerDebris(
     deps.lazyScene(), deps.lazyTerrain(),
-    remotePlayer.position.x, centerY, remotePlayer.position.z,
+    { x: remotePlayer.position.x, y: centerY, z: remotePlayer.position.z },
     new THREE.Color(team ? TEAM_COLORS[team] : 0x8899aa),
     { impulseDir, inheritVel: remotePlayer.vel, parts },
   ));
