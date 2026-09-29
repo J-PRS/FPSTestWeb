@@ -540,27 +540,8 @@ export class CombatHandler {
         const damage = aoeDamage(baseDamage, dist, radius);
         if (damage <= 0) continue;
 
-        // Apply impulse to target velocity (server-authoritative)
         const impulseMag = aoeImpulse(impulseForce, dist, radius) * KNOCKBACK_SCALE * perkMods(target.perk).knockbackTaken;
-        if (dist > 0) {
-          const dv: Vec3 = pull
-            ? { x: -(dx / dist) * impulseMag, y: 0.3 * impulseMag, z: -(dz / dist) * impulseMag }
-            : { x: (dx / dist) * impulseMag, y: 0.5 * impulseMag, z: (dz / dist) * impulseMag };
-          target.velocity.x += dv.x;
-          target.velocity.y += dv.y;
-          target.velocity.z += dv.z;
-          this.moveImpulse?.(targetId, dv);
-        }
-
-        // Notify the target player to apply impulse to their local player
-        target.forceSendUntil = Date.now() + FORCE_SEND_MS;
-        this.sendToPlayer(targetId, {
-          type: 'knockback',
-          targetId,
-          position,
-          force: impulseMag,
-          pull: pull || undefined,
-        });
+        this.shove(targetId, target, dx, dy, dz, dist, impulseMag, position, pull);
 
         // Splash still displaces teammates (jump-boost assists); it just
         // never deals damage to them in team rooms.
@@ -574,6 +555,29 @@ export class CombatHandler {
     // Deployables in the blast envelope eat the same scaled splash —
     // sentries aren't immortal, you clear a stand with explosives.
     this.deployBlast?.(position, baseDamage, radius, playerId);
+  }
+
+  /** One blast shove: velocity impulse + knockback wire notify + the
+   *  forceSend flag that makes the next position update authoritative.
+   *  `pull` reverses direction and flattens the up-vector (disc suck). */
+  private shove(
+    targetId: string, target: PlayerState,
+    dx: number, _dy: number, dz: number, dist: number,
+    impulseMag: number, pos: Vec3, pull: boolean,
+  ): void {
+    if (dist <= 0) return;
+    const dv: Vec3 = pull
+      ? { x: -(dx / dist) * impulseMag, y: 0.3 * impulseMag, z: -(dz / dist) * impulseMag }
+      : { x: (dx / dist) * impulseMag, y: 0.5 * impulseMag, z: (dz / dist) * impulseMag };
+    target.velocity.x += dv.x;
+    target.velocity.y += dv.y;
+    target.velocity.z += dv.z;
+    this.moveImpulse?.(targetId, dv);
+    target.forceSendUntil = Date.now() + FORCE_SEND_MS;
+    this.sendToPlayer(targetId, {
+      type: 'knockback', targetId, position: pos, force: impulseMag,
+      pull: pull || undefined,
+    });
   }
 
   /** True when a wall stands between blast point and target chest.
@@ -681,15 +685,7 @@ export class CombatHandler {
       // Falloff + shove from shared formulas — client predicts the same hit.
       const damage = targetId === ownerId ? 0 : aoeDamage(baseDamage, dist, radius);
       const impulseMag = aoeImpulse(knockback, dist, radius) * KNOCKBACK_SCALE * perkMods(target.perk).knockbackTaken;
-      if (dist > 0) {
-        const dv: Vec3 = { x: (dx / dist) * impulseMag, y: 0.5 * impulseMag, z: (dz / dist) * impulseMag };
-        target.velocity.x += dv.x;
-        target.velocity.y += dv.y;
-        target.velocity.z += dv.z;
-        this.moveImpulse?.(targetId, dv);
-        target.forceSendUntil = Date.now() + FORCE_SEND_MS;
-        this.sendToPlayer(targetId, { type: 'knockback', targetId, position: pos, force: impulseMag });
-      }
+      this.shove(targetId, target, dx, dy, dz, dist, impulseMag, pos, false);
       // Owner eats the blast too — mines don't pick friends.
       if (!this.friendly(ownerId, targetId) && damage > 0) {
         const result = this.playerManager.applyDamage(targetId, damage);
