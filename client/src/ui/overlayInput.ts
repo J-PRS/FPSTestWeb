@@ -18,7 +18,7 @@ export interface OverlayInputDeps {
   lazyPlayer: () => Player;
   /** Online only — class picks get announced so the server banks the
    *  same tier swap for respawn. Absent offline. */
-  lazyNetworkManager?: () => { sendClassUpdate(armorClass: string): void } | null;
+  lazyNetworkManager?: () => { sendClassUpdate(armorClass: string): void; sendPerkUpdate(perk: string): void } | null;
 }
 
 // Overlay / pointer-lock / global key handling: ESC menu flow (Krunker-style —
@@ -234,7 +234,10 @@ export function wireOverlayInput(deps: OverlayInputDeps) {
     perkRow.appendChild(perkLabel);
     perkDrop = mkDrop(
       PERK_ORDER.map((p) => ({ v: p, label: PERKS[p].name })),
-      (v) => deps.lazyPlayer().setPerk(v as PerkId),
+      (v) => {
+        deps.lazyPlayer().setPerk(v as PerkId);
+        deps.lazyNetworkManager?.()?.sendPerkUpdate(v);
+      },
     );
     perkRow.appendChild(perkDrop.el);
     loadoutBar.appendChild(perkRow);

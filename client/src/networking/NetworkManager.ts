@@ -591,6 +591,12 @@ export class NetworkManager {
     this.send({ type: 'classUpdate', armorClass });
   }
 
+  /** Perk pick mid-match — same respawn-bank rule as the class pick. */
+  sendPerkUpdate(perk: string): void {
+    if (!this.connected) return;
+    this.send({ type: 'perkUpdate', perk });
+  }
+
   /** Offline authority — when there's no server, damage/heal claims apply
    *  locally through this hook instead of being dropped on the floor. */
   localAuthority: { envDamage(amount: number): void; heal(amount: number): void } | null = null;

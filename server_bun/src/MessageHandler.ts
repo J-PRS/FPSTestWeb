@@ -164,6 +164,10 @@ export class MessageHandler {
         const p = this.playerManager.getPlayer(id);
         if (p) p.pendingClass = (m as Extract<ClientMessage, { type: 'classUpdate' }>).armorClass as 'light' | 'medium' | 'heavy';
       },
+      perkUpdate: (id, m) => {
+        const p = this.playerManager.getPlayer(id);
+        if (p) p.pendingPerk = (m as Extract<ClientMessage, { type: 'perkUpdate' }>).perk;
+      },
     };
   }
 

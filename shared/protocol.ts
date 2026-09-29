@@ -71,6 +71,9 @@ export type ClientMessage =
   // next respawn (Tribes rule: no instant tier swap mid-life, it'd be a
   // heal exploit and a desync lever).
   | { type: 'classUpdate'; armorClass: string }
+  // Same rule for the passive pick — banked at respawn so mods (HP,
+  // energy, speed) never flip mid-life under the server's nose.
+  | { type: 'perkUpdate'; perk: string }
   // Mid-match room hop over the live socket — the server re-seats the
   // session in the target room and answers with a fresh gameState, which
   // the client's existing reconnect path rebuilds from. Same creation

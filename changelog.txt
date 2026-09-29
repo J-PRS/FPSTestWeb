@@ -1,3 +1,4 @@
+2026-10-01 - Mid-match perk swaps now bank at respawn: new perkUpdate wire msg + pendingPerk (mirrors classUpdate); client applies via appliedPerk at resetLifeState so HP/energy/speed mods never flip mid-life
 2026-10-01 - Projectile gravity is now a boolean toggle: every arced weapon falls at the shared world GRAVITY (-28); custom per-weapon fudge values (-6 javelin, -14 sprinkler, -16.8 flak) removed
 2026-10-01 - Heavy class drops chibi knight: all tiers wear the UAL mannequin, class reads via shared CLASS_MODEL_SCALE (0.92/1.0/1.15); local tier swap rescales instead of rebuilding the model
 2026-10-01 - RemoteRailgun slug: gravity removed, speed 55->40 - discharge ray now tracks the flat throw line instead of curving down mid-flight

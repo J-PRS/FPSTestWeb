@@ -239,6 +239,14 @@ export class PlayerManager {
     }
     player.pendingClass = undefined;
 
+    // Banked perkUpdate — same respawn rule: the perk's HP pool, regen,
+    // and jet economy re-derive here, never mid-life.
+    if (player.pendingPerk && player.pendingPerk !== player.perk) {
+      player.perk = player.pendingPerk;
+      player.maxHealth = CONFIG.playerMaxHealth + perkMods(player.perk).maxHealth + CLASS_STATS[player.armorClass as keyof typeof CLASS_STATS].maxHealth;
+    }
+    player.pendingPerk = undefined;
+
     const spawn = this.pickSpawnPoint(playerId, player.team);
     player.position = { ...spawn };
     player.rotation = { yaw: 0, pitch: 0 };

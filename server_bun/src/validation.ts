@@ -1,4 +1,5 @@
 import { CONFIG } from './config.ts';
+import { isPerkId } from '../../shared/perks.ts';
 import type { ClientMessage, Vec3, Rotation } from './types.ts';
 
 export type ValidationResult<T> =
@@ -233,6 +234,13 @@ const VALIDATORS: Record<string, (obj: Record<string, unknown>) => ValidationRes
       return { success: false, error: 'armorClass must be light|medium|heavy' };
     }
     return { success: true, data: { type: 'classUpdate', armorClass: c } };
+  },
+
+  perkUpdate: (obj) => {
+    if (!isPerkId(obj.perk)) {
+      return { success: false, error: 'perk must be a known PerkId' };
+    }
+    return { success: true, data: { type: 'perkUpdate', perk: obj.perk } };
   },
 
   // Same name/map/mode grammar as the join handshake — a bad name just

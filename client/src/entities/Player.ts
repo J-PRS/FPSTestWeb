@@ -58,8 +58,12 @@ export class Player {
   /** Timed powerup expiries (server epoch ms — same clock offset the
    *  buff message `until` arrives on; we just compare against Date.now). */
   buffUntil = { regen: 0, dd: 0 };
-  /** Passive loadout pick — mods from shared/perks.ts; announced at join. */
+  /** Passive loadout pick — mods from shared/perks.ts; announced at join.
+   *  This is the PICKED intent; `appliedPerk` is what the sim reads. */
   perk: PerkId = (PERK_ORDER as string[]).includes(settings.get('fps-perk')) ? settings.get('fps-perk') as PerkId : 'none';
+  /** The perk actually in effect — diverges from `perk` between a
+   *  mid-match pick and the respawn that banks it (same rule as class). */
+  appliedPerk: PerkId = 'none';
   /** The tier you PICKED — drives the join handshake + the loadout
    *  filter. The sim/body wear `appliedClass` until the pick banks. */
   armorClass: ArmorClass = (['light','medium','heavy'] as string[]).includes(settings.get('fps-class')) ? settings.get('fps-class') as ArmorClass : 'medium';
@@ -67,7 +71,7 @@ export class Player {
    *  mid-match pick and the respawn that applies it — swapping speed/HP
    *  mid-life would desync the shadow and hand out free heals. */
   appliedClass: ArmorClass = 'medium';
-  get mods() { return perkMods(this.perk); }
+  get mods() { return perkMods(this.appliedPerk); }
   get maxHealth(): number { return MAX_HEALTH + this.mods.maxHealth + CLASS_STATS[this.appliedClass].maxHealth; }
   setPerk(p: PerkId): void { this.perk = p; settings.set('fps-perk', p); }
   /** Tier-restricted ordnance — the heavy's exclusive arsenal, same as
@@ -99,11 +103,18 @@ export class Player {
     // different model, so a tier swap is a rescale, not a rebuild.
     this.model?.setScale(CLASS_MODEL_SCALE[c]);
   }
+
+  /** Respawn-time perk application — the picked perk banks here so its
+   *  HP/energy/speed mods never flip mid-life under the server's nose. */
+  applyPendingPerk(): void {
+    if (this.appliedPerk !== this.perk) this.appliedPerk = this.perk;
+  }
   /** New-life state reset — shared by the wire respawn path and the
    *  offline killLocal respawn so neither forgets a field (a stale buff
    *  or lastDamageSource leaking into the next life already happened). */
   resetLifeState(): void {
     this.isDead = false;
+    this.applyPendingPerk(); // banked perk lands first — maxHealth reads it
     this.applyPendingClass(); // banked tier swap lands on the new life
     this.health = this.maxHealth;
     this.armor = 0;
@@ -388,6 +399,7 @@ export class Player {
     };
     this.movement = new MovementController(terrain, movementState);
     this.appliedClass = this.armorClass;
+    this.appliedPerk = this.perk;
     this.movement.setSpeedScale(CLASS_STATS[this.appliedClass].speedScale);
 
     // Your third-person body is the mannequin at your tier's silhouette
