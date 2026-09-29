@@ -39,6 +39,25 @@ describe('RoomMoveSim', () => {
     expect(m.simPos('p1')).toEqual({ x: 50, y: 60, z: 50 });
   });
 
+  test('pre-resync reports (stale epoch seqs) never flag divergence', async () => {
+    const m = new RoomMoveSim(flat, true);
+    m.track('p1', { x: 0, y: 0, z: 0 }, 0);
+    for (let i = 0; i < 10; i++) m.tick(0.05);
+    m.reconcile('p1', { x: 0, y: 0, z: 0 }, 0); // seed
+    for (let s = 1; s <= 5; s++) m.setInput('p1', { forward: 1 }, 0, s);
+    // Server respawns the player 100m away — the journal is cleared.
+    m.resync('p1', { x: 100, y: 0, z: 100 }, 0);
+    // A report still in flight from the corpse position (stamped seq 4,
+    // at/below the resync seq) must not read as a blow-through.
+    expect(m.reconcile('p1', { x: 0, y: 0, z: 0 }, 0, undefined, 4)).toBeNull();
+    // A NEW-epoch report is also muted inside the 1-RTT respawn grace —
+    // the client hasn't seen its respawn yet and honestly reports the
+    // corpse spot. Past the window it must flag again.
+    expect(m.reconcile('p1', { x: 0, y: 0, z: 0 }, 0, undefined, 6)).toBeNull();
+    await new Promise((r) => setTimeout(r, 520));
+    expect(m.reconcile('p1', { x: 0, y: 0, z: 0 }, 0, undefined, 7)).not.toBeNull();
+  });
+
   test('untrack drops the shadow; null field is a no-op', () => {
     const m = new RoomMoveSim(flat);
     m.track('p1', { x: 0, y: 0, z: 0 }, 0);

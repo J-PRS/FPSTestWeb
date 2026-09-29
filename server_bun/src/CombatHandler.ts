@@ -83,7 +83,10 @@ export class CombatHandler {
    *  their client can log WHY predicted damage never happened. */
   private reject(playerId: string, kind: string, reason: string, targetId?: string, weaponType?: number): void {
     logger.warn(`${kind} rejected: ${playerId}${targetId ? ` → ${targetId}` : ''}: ${reason}`);
-    this.sendToPlayer(playerId, { type: 'shotRejected', reason: `${kind}: ${reason}`, targetId, weaponType });
+    // Rejected claims can leave predicted self-damage stuck client-side —
+    // ship our health value so the shooter resyncs instead of drifting.
+    const health = this.playerManager.getPlayer(playerId)?.health;
+    this.sendToPlayer(playerId, { type: 'shotRejected', reason: `${kind}: ${reason}`, targetId, weaponType, health });
   }
 
   private friendly(shooterId: string, targetId: string): boolean {
@@ -707,6 +710,11 @@ export class CombatHandler {
 
       logger.info('Player respawned', { playerId, position: result.position });
       this.moveResync?.(playerId, result.position, result.rotation.yaw);
+      // The respawn broadcast and the honest post-snap report are both in
+      // flight — the client's snap to spawn (and any straggler reports
+      // from the corpse spot) read as impossible speed/divergence against
+      // the reseated anchors. Same drain window a correction gets.
+      player.correctionGraceUntil = Date.now() + 500;
 
       this.broadcast({
         type: 'playerRespawn',

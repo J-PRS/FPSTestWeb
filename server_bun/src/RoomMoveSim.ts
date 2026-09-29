@@ -66,6 +66,16 @@ interface Shadow {
   seqStates: Map<number, { st: MoveState; tick: number }>;
   /** Number of 1/30 sim quanta the shadow has integrated. */
   simTicks: number;
+  /** Input seq consumed at the last resync() — reports stamped at or below
+   *  it are provably pre-respawn/pre-teleport traffic still in flight; the
+   *  journal was cleared so they have no anchor to compare against and
+   *  would read the discarded trajectory as a blow-through divergence. */
+  resyncSeq: number;
+  /** Wall time of the last resync(). Reports for ~1 RTT after it are
+   *  causally pre-respawn — the respawn message is still in flight to
+   *  them so they honestly report the corpse position with fresh seqs
+   *  the stale-epoch check can't catch. */
+  resyncAt: number;
   /** Tick substeps accumulate in the client's 1/30 quantum so the shadow
    *  integrates identically to the client sim despite the 50ms room tick. */
   acc: number;
@@ -147,7 +157,7 @@ export class RoomMoveSim {
       energy: ENERGY.max,
       jetDrain: mods.jetDrain, jetRegen: mods.jetRegen, energyRegen: mods.energyRegen,
       jetWanted: false, skillDrainPerSec: 0, skillSuppressRegen: false, lastStatus: 0,
-      lastInputSeq: 0, acc: 0, seqStates: new Map(), simTicks: 0,
+      lastInputSeq: 0, acc: 0, seqStates: new Map(), simTicks: 0, resyncSeq: -1, resyncAt: 0,
     });
   }
 
@@ -230,6 +240,11 @@ export class RoomMoveSim {
       return null;
     }
     if (vel) { s.vel.x = vel.x; s.vel.y = vel.y; s.vel.z = vel.z; }
+    // Stale-epoch reports: the client sent this before it saw the respawn/
+    // teleport that reseated the shadow. Judging it against the new anchor
+    // flags a phantom blow-through (a guaranteed ~100m spike per respawn).
+    if (reportInputSeq !== undefined && reportInputSeq <= sh.resyncSeq) return null;
+    if (Date.now() - sh.resyncAt < 500) return null;
     // The report's seq tells us how many input events the client had
     // consumed when it generated this position. If the shadow is behind
     // (inputs still in flight), the client is legitimately ahead by up
@@ -314,6 +329,9 @@ export class RoomMoveSim {
     // Journal anchors pre-teleport positions — the discarded trajectory
     // would swallow fresh reports' divergence checks.
     sh.seqStates.clear();
+    sh.resyncSeq = sh.lastInputSeq;
+    sh.resyncAt = Date.now();
+    sh.divergences = 0; // new trajectory — don't carry old accumulation
   }
 
   tick(dt: number): void {
