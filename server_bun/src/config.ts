@@ -98,8 +98,10 @@ export const CONFIG = {
     projectileDestroy: { maxCount: 30, windowMs: 1000 },
     environmentDamage: { maxCount: 10, windowMs: 1000 }, // crawler pounces etc.
     // teleport skips plausibility checks by design (declared warp), so the
-    // only defense is rate: legit uses are respawn + blink, a few per minute
-    teleport: { maxCount: 3, windowMs: 1000 },
+    // only defense is rate — a distance bound is impossible since a thrown
+    // warp beacon can legally land hundreds of metres out. Legit cadence:
+    // blink 1.2s cooldown is the tightest; warp 4s, respawn 3s+.
+    teleport: { maxCount: 1, windowMs: 1100 },
     heal: { maxCount: 10, windowMs: 1000 }, // nugget pickups
     creatureHit: { maxCount: 120, windowMs: 1000 }, // chaingun-rate hit claims vs server creatures
     deploy: { maxCount: 4, windowMs: 1000 }, // plants are deliberate, not per-frame

@@ -21,13 +21,11 @@ describe('scenario: per-type rate limits', () => {
   it('rate-limited messages fall through to no handler work at all', () => {
     const room = mkRoom({ bots: 1 });
     const p = firstPlayer(room);
-    // teleport cap is 3/s (declared warps are rare); a flood must not
-    // reseat the anchor after the cap trips.
-    for (let i = 0; i < 3; i++) {
-      room.messages.handleMessage(p.id, { type: 'teleport', position: { x: i, y: 31, z: 0 }, velocity: { x: 0, y: 0, z: 0 }, rotation: { yaw: 0, pitch: 0 } });
-    }
-    expect(p.lastValidPosition!.x).toBe(2);
+    // teleport cap is 1/1.1s (blink is the tightest legit cooldown);
+    // a flood must not reseat the anchor after the cap trips.
+    room.messages.handleMessage(p.id, { type: 'teleport', position: { x: 1, y: 31, z: 0 }, velocity: { x: 0, y: 0, z: 0 }, rotation: { yaw: 0, pitch: 0 } });
+    expect(p.lastValidPosition!.x).toBe(1);
     room.messages.handleMessage(p.id, { type: 'teleport', position: { x: 99, y: 31, z: 0 }, velocity: { x: 0, y: 0, z: 0 }, rotation: { yaw: 0, pitch: 0 } });
-    expect(p.lastValidPosition!.x).toBe(2); // dropped entirely
+    expect(p.lastValidPosition!.x).toBe(1); // dropped entirely
   });
 });
