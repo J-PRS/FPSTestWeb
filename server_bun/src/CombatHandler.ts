@@ -87,11 +87,23 @@ export class CombatHandler {
     /** Deployable blast sweep — Room.deployables.applyBlast. Absent on
      *  rooms without structures (offline-style lobbies). */
     private deployBlast?: (pos: Vec3, damage: number, radius: number, shooterId: string) => void,
+    /** Room heartbeat counters — claims/rejects/applied damage tally here
+     *  so the periodic 'Room health' line shows the funnel at a glance. */
+    private health?: Map<string, number>,
+    /** Nearest-creature distance for env-damage plausibility (melee-from-
+     *  afar flagging). Absent = no creature sim to check against. */
+    private envRange?: (playerId: string) => number,
   ) {}
+
+  private hb(key: string, n = 1): void {
+    if (this.health) this.health.set(key, (this.health.get(key) ?? 0) + n);
+  }
 
   /** Claim refused: server-side warn plus a shotRejected to the shooter so
    *  their client can log WHY predicted damage never happened. */
   private reject(playerId: string, kind: string, reason: string, targetId?: string, weaponType?: number): void {
+    this.hb('rej');
+    this.hb(`rej.${kind}`);
     logger.warn(`${kind} rejected: ${playerId}${targetId ? ` → ${targetId}` : ''}: ${reason}`);
     // Rejected claims can leave predicted self-damage stuck client-side —
     // ship our health value so the shooter resyncs instead of drifting.
@@ -131,6 +143,7 @@ export class CombatHandler {
   handleShot(playerId: string, msg: Extract<ClientMessage, { type: 'shot' }>): void {
     const player = this.playerManager.getPlayer(playerId);
     if (!player || player.isDead) return;
+    this.hb('shot');
     // Tier-locked ordnance — the menu filter is client-side convenience;
     // this is the real boundary for doctored clients.
     if (msg.weaponType !== undefined && HEAVY_ONLY_WEAPONS.has(msg.weaponType) && player.armorClass !== 'heavy') {
@@ -338,6 +351,7 @@ export class CombatHandler {
   handleAOEShot(playerId: string, msg: Extract<ClientMessage, { type: 'aoeShot' }>): void {
     const player = this.playerManager.getPlayer(playerId);
     if (!player || player.isDead) return;
+    this.hb('aoe');
     if (msg.weaponType !== undefined && HEAVY_ONLY_WEAPONS.has(msg.weaponType) && player.armorClass !== 'heavy') {
       this.reject(playerId, 'AOE', 'class-locked weapon', undefined, msg.weaponType);
       return;
@@ -526,6 +540,16 @@ export class CombatHandler {
   handleEnvironmentDamage(playerId: string, msg: Extract<ClientMessage, { type: 'environmentDamage' }>): void {
     const player = this.playerManager.getPlayer(playerId);
     if (!player || player.isDead) return;
+    this.hb('envdmg');
+    // Melee-from-afar check: creature contact damage needs a creature
+    // nearby. Past ~15m there's no legal pounce — flag it in the
+    // heartbeat + warn (damage still applies: this is a self-report, and
+    // a bugged client shouldn't be silently maimed).
+    const range = this.envRange?.(playerId);
+    if (range !== undefined && range > 15) {
+      this.hb('envdmg.far');
+      logger.warn('Environment damage implausible: no creature near', { playerId, dist: Math.round(range) });
+    }
     const damage = Math.min(40, Math.max(1, Math.round(msg.amount)));
     const result = this.playerManager.applyDamage(playerId, damage);
     player.forceSendUntil = Date.now() + FORCE_SEND_MS;
@@ -655,6 +679,9 @@ export class CombatHandler {
   }
 
   private applyHit(shooterId: string, targetId: string, damage: number, result: { killed: boolean; newHealth: number; newArmor: number }, hitLabel: string, extra?: Record<string, unknown>, weapon?: number): void {
+    this.hb('hit');
+    this.hb('dmg', Math.round(damage));
+    if (result.killed) this.hb('kill');
     this.onHit?.(targetId, shooterId);
     const src = weapon !== undefined ? `w${weapon}` : hitLabel;
     weaponStats.record(this.modeTag, src, damage, result.killed, shooterId.startsWith('BOT-'));

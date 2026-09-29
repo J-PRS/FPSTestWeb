@@ -17,7 +17,7 @@ function addAt(room: Room, id: string, team: 'alpha' | 'bravo' | undefined, x: n
 // botFire(hit=true) routes straight into CombatHandler.botAttack — the same
 // damage funnel shot/aoeShot claims end in, without needing a projectile.
 const hit = (room: Room, shooter: string, target: string) =>
-  room.messages.botFire(shooter, target, { x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 0 }, WeaponType.Bolt, true);
+  room.messages.botFire(shooter, target, { x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 0 }, WeaponType.Chaingun, true);
 
 describe('friendly fire', () => {
   it('team rooms block damage between teammates', () => {

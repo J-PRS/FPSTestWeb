@@ -4,8 +4,8 @@ import { MOVEMENT_CONFIG } from '../../shared/movement.ts';
 import { STATUS } from '../../shared/status.ts';
 import type { Heightfield } from '../../shared/heightfield.ts';
 
-const flat: Heightfield = { width: 2, height: 2, data: new Uint8Array(4) };
-const slopey: Heightfield = { width: 4, height: 4, data: new Uint8Array(16).fill(128) };
+const flat: Heightfield = { size: 2, data: new Uint8Array(4), stride: 1 };
+const slopey: Heightfield = { size: 4, data: new Uint8Array(16).fill(128), stride: 1 };
 
 describe('RoomMoveSim', () => {
   test('tracks, ticks, and follows a forward input', () => {

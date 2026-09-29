@@ -227,6 +227,7 @@ export class GameServer {
     if (!list.length) return null;
     for (let i = 0; i < list.length; i++) {
       const name = list[this.rotationIdx++ % list.length];
+      if (name === undefined) continue;
       const spec = this.loadMapSpec(name);
       if (!spec || (spec.mode && room.mode && spec.mode !== room.mode)) continue;
       this.rotationIdx %= list.length;

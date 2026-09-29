@@ -5,7 +5,7 @@ import { WEAPONS, WeaponType } from '../../shared/weapons.ts';
 // design's ~3-live-bombs window only holds if fuse/rate stay aligned, and
 // the chain blast needs a real aoeRadius — pin the contract.
 describe('sticky launcher stats', () => {
-  const s = WEAPONS[WeaponType.Sticky];
+  const s = WEAPONS[WeaponType.Sticky]!;
 
   it('exists in the weapon table', () => {
     expect(s).toBeDefined();

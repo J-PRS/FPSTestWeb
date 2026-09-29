@@ -23,7 +23,8 @@ describe('computeStateHash', () => {
   });
 
   test('distinguishes state changes it claims to watch', () => {
-    const base = [['p', { x: 0, y: 0, z: 0, health: 50, isDead: false }]] as const;
+    const base: [string, { x: number; y: number; z: number; health: number; isDead: boolean }][] =
+      [['p', { x: 0, y: 0, z: 0, health: 50, isDead: false }]];
     const h = computeStateHash(base);
     expect(computeStateHash([['p', { x: 1, y: 0, z: 0, health: 50, isDead: false }]])).not.toBe(h);
     expect(computeStateHash([['p', { x: 0, y: 0, z: 0, health: 49, isDead: false }]])).not.toBe(h);

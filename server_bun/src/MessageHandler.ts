@@ -7,6 +7,7 @@ import { PROTOCOL_VERSION } from '../../shared/protocol.ts';
 import { CLIENT_STATUS_MASK } from '../../shared/status.ts';
 import { CONFIG } from './config.ts';
 import type { BallSim } from './BallSim.ts';
+import type { PickupKind } from '../../shared/pickups.ts';
 
 type BroadcastFn = (msg: ServerMessage, excludePlayerId?: string) => void;
 type SendToPlayerFn = (playerId: string, msg: ServerMessage) => void;
@@ -42,7 +43,7 @@ export interface RoomInfo {
   /** Flag snapshot supplier for gameState joins — RoomFlags.snapshot. */
   flags?: () => { team: 'alpha' | 'bravo'; pos: Vec3; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[];
   /** Live pickups for gameState joins — RoomPickups.snapshot. */
-  pickups?: () => { id: number; pos: Vec3; kind: 'gem' | 'tag' }[];
+  pickups?: () => { id: number; pos: Vec3; kind: PickupKind }[];
   /** Match-clock deadline (epoch ms) for gameState joins — Room.matchEndsAt.
    *  0 means "not armed yet" (no humans have joined). */
   matchEndsAt?: () => number;
@@ -66,6 +67,12 @@ export interface RoomInfo {
   /** When set, the sim is truth: position reports degrade to aim/ping/
    *  liveness hints and never write player.position. */
   moveAuthority?: () => boolean;
+  /** Room heartbeat counters — every validation/damage funnel bumps its
+   *  own tags; Room.healthTick flushes the map on a timer. */
+  health?: Map<string, number>;
+  /** Distance from a player to the nearest live creature — env-damage
+   *  claims far past melee range get flagged, not silently eaten. */
+  envRange?: (playerId: string) => number;
   /** Live deployables for gameState joins — RoomDeployables.snapshot. */
   deployables?: () => { id: number; owner: string; kind: 'turret' | 'mine' | 'station' | 'drone'; pos: Vec3 }[];
 }
@@ -85,6 +92,15 @@ export class MessageHandler {
 
   private roomInfo: RoomInfo = { room: 'default', mode: '' };
 
+  private hb(key: string, n = 1): void {
+    const h = this.roomInfo.health;
+    if (h) h.set(key, (h.get(key) ?? 0) + n);
+  }
+  private hbMax(key: string, v: number): void {
+    const h = this.roomInfo.health;
+    if (h && v > (h.get(key) ?? 0)) h.set(key, Math.round(v * 10) / 10);
+  }
+
   constructor(
     playerManager: PlayerManager,
     rateLimiter: RateLimiter,
@@ -97,7 +113,7 @@ export class MessageHandler {
     this.broadcast = broadcast;
     this.sendToPlayer = sendToPlayer;
     if (roomInfo) this.roomInfo = roomInfo;
-    this.combat = new CombatHandler(playerManager, broadcast, sendToPlayer, roomInfo?.onKill, roomInfo?.onHit, roomInfo?.teams ?? false, roomInfo?.moveImpulse, roomInfo?.moveResync, roomInfo?.mode ?? '', roomInfo?.deployBlast);
+    this.combat = new CombatHandler(playerManager, broadcast, sendToPlayer, roomInfo?.onKill, roomInfo?.onHit, roomInfo?.teams ?? false, roomInfo?.moveImpulse, roomInfo?.moveResync, roomInfo?.mode ?? '', roomInfo?.deployBlast, roomInfo?.health, roomInfo?.envRange);
 
     // Per-type dispatch — a new message type is one table entry. Field
     // order: handlers need this.combat, so the table is built last.
@@ -138,7 +154,7 @@ export class MessageHandler {
         // without it a non-moving client could still go "stale"
         this.sendToPlayer(id, { type: 'pong', timestamp: (m as Extract<ClientMessage, { type: 'ping' }>).timestamp });
       },
-      snapshotRequest: (id) => this.handleSnapshotRequest(id),
+      snapshotRequest: (id) => { this.hb('snapreq'); this.handleSnapshotRequest(id); },
     };
   }
 
@@ -318,6 +334,7 @@ export class MessageHandler {
       const warnKey = `${playerId}:${msg.type}`;
       const now = Date.now();
       const lastWarn = this.rateLimitWarnings.get(warnKey);
+      this.hb('ratelimit');
       if (!lastWarn || now - lastWarn > this.RATE_WARN_COOLDOWN_MS) {
         this.rateLimitWarnings.set(warnKey, now);
         logger.warn(`Rate limit exceeded`, { playerId, messageType: msg.type });
@@ -327,6 +344,7 @@ export class MessageHandler {
 
     const handler = this.handlers[msg.type];
     if (!handler) {
+      this.hb('unhandled');
       logger.warn(`Unhandled message type`, { playerId, type: (msg as { type: string }).type });
       return;
     }
@@ -367,6 +385,8 @@ export class MessageHandler {
       const grace = now < player.correctionGraceUntil;
       if (!grace && dt <= 0.5 && (dist > 50 || speed > 300)) {
         player.consecutiveRejects++;
+        this.hb('posrej');
+        this.hbMax('posrejSpeed', speed);
         logger.warn(`Position rejected: ${playerId} moved ${dist.toFixed(1)}m in ${dt.toFixed(3)}s (${speed.toFixed(0)} m/s)`);
         // Send correction on the first reject of a streak only — no flood
         if (player.consecutiveRejects === 1) {
@@ -397,6 +417,7 @@ export class MessageHandler {
         // correction packet): force-accept after 10 rejects to resync
         // instead of warping the player forever.
         if (player.consecutiveRejects > 10) {
+          this.hb('posforce');
           logger.warn(`Position force-accepted: ${playerId} after ${player.consecutiveRejects} rejects (resync)`);
           player.consecutiveRejects = 0;
         } else {

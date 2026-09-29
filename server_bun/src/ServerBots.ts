@@ -110,7 +110,7 @@ export class ServerBots {
   populate(n: number): void {
     for (let i = 0; i < n; i++) {
       const id = `BOT-${this.room.name}${this.nextIdx++}`;
-      const loadout = BOT_LOADOUTS[(this.nextIdx - 2 + BOT_LOADOUTS.length) % BOT_LOADOUTS.length];
+      const loadout = BOT_LOADOUTS[(this.nextIdx - 2 + BOT_LOADOUTS.length) % BOT_LOADOUTS.length]!;
       const p = this.room.players.addPlayer(id, undefined, loadout.perk);
       this.loadouts.set(id, loadout);
       // CTF role from the loadout: plated anchors hold home, everyone else
@@ -216,7 +216,7 @@ export class ServerBots {
     const dist = Math.sqrt(dx0 * dx0 + dy0 * dy0 + dz0 * dz0) || 1;
     // Range-band weapon select — same judgment a player makes: hitscan
     // up close, the loadout's primary mid-band, rockets at standoff.
-    const lo = this.loadouts.get(p.id) ?? BOT_LOADOUTS[0];
+    const lo = this.loadouts.get(p.id) ?? BOT_LOADOUTS[0]!;
     const wt = dist < NEAR_M ? lo.near : dist > FAR_M ? lo.far : lo.mid;
     const stats = getWeaponStats(wt);
     // Lead the target by its velocity over the shell's flight time —
@@ -450,8 +450,8 @@ export class ServerBots {
       const isSpecial = (id: string) => WANT.some(([r]) => this.roles.get(id) === r);
       const donors = free.filter((id) => !isSpecial(id));
       for (let i = 0; i < WANT.length; i++) {
-        const [want, need] = [WANT[i][0], WANT[i][1]];
-        if (ids.length < MIN_SQUAD[i]) break;
+        const [want, need] = WANT[i]!;
+        if (ids.length < MIN_SQUAD[i]!) break;
         let have = 0;
         for (const id of ids) if (this.roles.get(id) === want) have++;
         while (have < need) {

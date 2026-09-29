@@ -102,6 +102,9 @@ export class RoomMoveSim {
   private static readonly AUTHORITY_CORRECT_MS = 100;
   authoritative: boolean;
   private wantsAuthority: boolean;
+  /** Room heartbeat map — the judge counts corrections + worst gap here
+   *  so 'Room health' lines show rubberbanding pressure, not just logs. */
+  health?: Map<string, number>;
 
   constructor(field: Heightfield | null, authoritative = false) {
     this.wantsAuthority = authoritative;
@@ -267,6 +270,10 @@ export class RoomMoveSim {
     if (dist <= tol) return null;
 
     sh.divergences++;
+    if (this.health) {
+      this.health.set('diverge', (this.health.get('diverge') ?? 0) + 1);
+      if (dist > (this.health.get('gapMax') ?? 0)) this.health.set('gapMax', Math.round(dist * 10) / 10);
+    }
     // A single just-over-tolerance clip is a crest-lip contact-timing
     // gap — the next correction converges it, count never accumulates.
     // WARN only on repeats or blow-throughs; count=1 marginal clips are

@@ -126,7 +126,7 @@ describe('ServerBots', () => {
     for (const m of msgs.filter(mm => mm.type === 'projectileCreated')) {
       // near-band Chaingun is hitscan and never reaches this broadcast —
       // anything that spawned must be a real ballistic weapon.
-      expect([0, 1, 23]).toContain(m.weaponType);
+      expect([0, 1, 23]).toContain(m.weaponType!);
     }
   });
 

@@ -54,6 +54,25 @@ export class Room {
   readonly lastSentPositions = new Map<string, { x: number; y: number; z: number; vx: number; vy: number; vz: number; yaw: number; pitch: number; hp: number; dead: boolean; ski: number; status: number; t: number }>();
   tickSeq = 0;
 
+  /** Rolling health counters for the room heartbeat — every subsystem
+   *  bumps tagged keys (shot claims, rejects, corrections, desyncs,
+   *  implausible damage) and healthTick flushes them to one INFO line
+   *  every ~15s so a soak log answers "did anything weird happen" at a
+   *  glance instead of needing per-event archaeology. */
+  readonly health = new Map<string, number>();
+  healthBump(key: string, n = 1): void {
+    this.health.set(key, (this.health.get(key) ?? 0) + n);
+  }
+  private healthTimer = 0;
+  private healthTick(dt: number): void {
+    this.healthTimer += dt;
+    if (this.healthTimer < 15) return;
+    this.healthTimer = 0;
+    if (!this.health.size) return;
+    logger.info('Room health', { room: this.name, humans: this.players.getHumanCount(), ...Object.fromEntries(this.health) });
+    this.health.clear();
+  }
+
   spec: MapSpec; // mutable — admin hot-reload rewrites it live
   // Server-owned match scoreboard — only populated in team modes.
   readonly modeSpec: ModeSpec | null;
@@ -153,6 +172,11 @@ export class Room {
         },
         moveUntrack: (pid) => this.moveSim.untrack(pid),
         moveAuthority: () => this.moveAuthority,
+        health: this.health,
+        envRange: (pid) => {
+          const p = this.players.getPlayer(pid);
+          return p ? this.ballSim.nearestBallDist(p.position.x, p.position.y, p.position.z) : Infinity;
+        },
       },
     );
     this.moveSim = new RoomMoveSim(field, this.moveAuthority);
@@ -233,6 +257,8 @@ export class Room {
     this.sims.push({ tick: (dt) => this.deployables.tick(dt) });
     this.sims.push({ tick: (dt) => this.projectiles.tick(dt) });
     this.sims.push({ tick: (dt) => this.moveSim.tick(dt) });
+    this.sims.push({ tick: (dt) => this.healthTick(dt) });
+    this.moveSim.health = this.health;
   }
 
   /** Flag tick — called from GameServer's room tick. Captures feed the
@@ -465,7 +491,7 @@ export class Room {
    *  reports them here so bots hear explosions as well as muzzle fire. */
   pushNoise(pos: Vec3): void {
     const now = Date.now();
-    while (this.noises.length && now - this.noises[0].at > Room.NOISE_TTL) this.noises.shift();
+    while (this.noises.length && now - this.noises[0]!.at > Room.NOISE_TTL) this.noises.shift();
     this.noises.push({ pos: { ...pos }, at: now });
     if (this.noises.length > Room.NOISE_MAX) this.noises.shift();
   }

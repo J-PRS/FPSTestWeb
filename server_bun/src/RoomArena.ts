@@ -21,7 +21,7 @@ export class RoomArena {
     private arena: { x: number; z: number; radius: number },
   ) {}
 
-  tick(dt: number): void {
+  tick(_dt: number): void {
     const { x: cx, z: cz, radius: r } = this.arena;
     const now = Date.now() / 1000;
     for (const p of this.room.players.getAllPlayers().values()) {

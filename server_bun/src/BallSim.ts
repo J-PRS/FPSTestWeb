@@ -247,6 +247,18 @@ export class BallSim {
     }));
   }
 
+  /** Distance to the nearest live ball — env-damage plausibility wants to
+   *  know whether a melee claim has any creature near it. */
+  nearestBallDist(x: number, y: number, z: number): number {
+    let best = Infinity;
+    for (const b of this.balls.values()) {
+      if (b.dead) continue;
+      const d = Math.hypot(x - b.x, y - b.y, z - b.z);
+      if (d < best) best = d;
+    }
+    return best;
+  }
+
   /** creatureHit claim. Lenient sanity clamps only — real validation is an
    *  anticheat-phase concern; a bogus claim costs a shoved ball, not state. */
   handleHit(playerId: string, id: number, damage: number, kx?: number, ky?: number, kz?: number): void {
