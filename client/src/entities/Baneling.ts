@@ -12,8 +12,8 @@ import type { Targetable } from './balls.js';
 import { allocSlots, freeSlots, getSwarm, getShadows } from './swarms.js';
 import type { SwarmPart, SwarmSlotOwner } from './swarm.js';
 import { getGlowTexture } from '../effects/glowTexture.js';
-import type { SimBaneling } from '../../../shared/creatureSim.js';
-import { bindNetBaneling, applyNetEdgeBaneling, updateNetBaneling, claimDamageMelee } from '../game/netMelee.js';
+import { type SimBaneling, makeSimBaneling, stepBaneling } from '../../../shared/creatureSim.js';
+import { bindNetSim, applyNetEdgeSim, updateNetSim, claimDamageMelee, type NetBindArgs } from '../game/netMelee.js';
 
 const _dir = new THREE.Vector3();
 const _axis = new THREE.Vector3();
@@ -82,19 +82,19 @@ export class Baneling implements Targetable, SwarmSlotOwner {
   sim: SimBaneling | null = null;
   static hitClaim: ((netId: number, damage: number) => void) | null = null;
 
-  bindNet(id: number, seed: number, pos: THREE.Vector3, vel: { x: number; y: number; z: number }, _state: string, uber: boolean, species = 'baneling'): void {
+  bindNet(b: NetBindArgs): void {
     this.netDriven = true;
-    this.netId = id;
-    bindNetBaneling(this, id, seed, species, pos, vel, _state, uber);
+    this.netId = b.id;
+    bindNetSim(this, makeSimBaneling, b);
     (this as { blastRadius: number }).blastRadius = this.sim!.blastRadius;
   }
 
   applyNetEdge(m: { position: { x: number; y: number; z: number }; velocity: { x: number; y: number; z: number }; kind: string; targetId: string | null; tp?: { x: number; y: number; z: number } | null }): void {
-    applyNetEdgeBaneling(this, m);
+    applyNetEdgeSim(this, m);
   }
 
   private updateNet(dt: number, terrain: Terrain, playerPos: THREE.Vector3): void {
-    updateNetBaneling(this, dt, terrain);
+    updateNetSim(this, dt, terrain, stepBaneling);
     const s = this.sim!;
     // Dressing mirrors the local path: roll spin from velocity, glow from
     // urgency — measured to the committed snapshot, not the live player,

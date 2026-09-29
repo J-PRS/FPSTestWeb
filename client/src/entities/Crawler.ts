@@ -10,9 +10,8 @@ import {
   EMERGE_DUR, MELEE_FAVOR,
 } from '../core/config.js';
 import { Terrain } from '../world/terrain.js';
-import { getHeightfield } from '../world/terrain.js';
-import { type SimCrawler } from '../../../shared/creatureSim.js';
-import { bindNetMelee, applyNetEdgeMelee, updateNetMelee, claimDamageMelee } from '../game/netMelee.js';
+import { type SimCrawler, makeSimCrawler, stepCrawler } from '../../../shared/creatureSim.js';
+import { bindNetSim, applyNetEdgeSim, updateNetSim, claimDamageMelee, type NetBindArgs } from '../game/netMelee.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { Targetable } from './balls.js';
 import { allocSlots, freeSlots, getSwarm, getShadows } from './swarms.js';
@@ -171,16 +170,16 @@ export class Crawler implements Targetable, SwarmSlotOwner {
 
   /** Server-owned crawler: seed the shared sim from the wire state so the
    *  hop replay (RNG stream included) matches every other client. */
-  bindNet(id: number, seed: number, pos: THREE.Vector3, vel: { x: number; y: number; z: number }, state: SimCrawler['state'], uber: boolean, species = 'crawler'): void {
+  bindNet(b: NetBindArgs): void {
     this.netDriven = true;
-    this.netId = id;
-    this.id = 0x50000000 + id; // net namespace — can't collide with local targetIds
-    bindNetMelee(this, id, seed, species, pos, vel, state, uber);
+    this.netId = b.id;
+    this.id = 0x50000000 + b.id; // net namespace — can't collide with local targetIds
+    bindNetSim(this, makeSimCrawler, b);
   }
 
   /** A wire edge — apply the committed state the authority stepped into. */
   applyNetEdge(m: { position: { x: number; y: number; z: number }; velocity: { x: number; y: number; z: number }; kind: string; targetId: string | null; tp?: { x: number; y: number; z: number } | null }): void {
-    applyNetEdgeMelee(this, m);
+    applyNetEdgeSim(this, m);
     if (this.sim) this.state = this.sim.state;
   }
 
@@ -417,7 +416,7 @@ export class Crawler implements Targetable, SwarmSlotOwner {
    *  crawler-only telegraphs (windup squash/glow) sit on top. */
   private updateNet(dt: number, terrain: Terrain): void {
     const s = this.sim!;
-    updateNetMelee(this, dt, terrain);
+    updateNetSim(this, dt, terrain, stepCrawler, { grounded: true });
     this.state = s.state;
     if (s.state === 'windup') {
       const t = 1 - s.windupTimer / CRAWLER_WINDUP;

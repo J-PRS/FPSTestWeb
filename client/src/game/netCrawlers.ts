@@ -89,11 +89,7 @@ export function createNetCrawlers(deps: EntitiesDeps, ctx: NetCrawlersCtx) {
     const sp = SPECIES[m.species ?? 'crawler'] ?? SPECIES.crawler!;
     const pos = new THREE.Vector3(m.position.x, m.position.y, m.position.z);
     const c = new sp.Klass(deps.scene, deps.lazyTerrain(), pos, m.uber) as NetBeing;
-    // Each class narrows `state` to its sim's enum; through the union the
-    // overloads don't merge, so bind through the shared (string) shape.
-    type BindNetArgs = [id: number, seed: number, pos: THREE.Vector3, vel: { x: number; y: number; z: number }, state: string, uber: boolean, species?: string];
-    const bindNet = c.bindNet as (...a: BindNetArgs) => void;
-    bindNet.call(c, m.id, m.seed, pos, ZERO_VEL, m.state ?? sp.state, m.uber, m.species ?? speciesOf(c));
+    c.bindNet({ id: m.id, seed: m.seed, pos, vel: ZERO_VEL, state: m.state ?? sp.state, uber: m.uber, species: m.species ?? speciesOf(c) });
     if (m.targetId && m.tp) {
       c.applyNetEdge({ position: m.position, velocity: ZERO_VEL, kind: 'retarget', targetId: m.targetId, tp: m.tp });
     }

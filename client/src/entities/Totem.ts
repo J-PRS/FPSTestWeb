@@ -10,8 +10,8 @@ import {
   UBER_TOTEM_CHARGE, UBER_TOTEM_HIT_RADIUS, UBER_TOTEM_BEAM_WIDTH,
 } from '../core/config.js';
 import { Terrain } from '../world/terrain.js';
-import { bindNetTotem, applyNetEdgeTotem, updateNetTotem, claimDamageMelee } from '../game/netMelee.js';
-import type { SimTotem } from '../../../shared/creatureSim.js';
+import { bindNetTotem, applyNetEdgeTotem, updateNetTotem, claimDamageMelee, type NetBindArgs } from '../game/netMelee.js';
+import { type SimTotem, makeSimTotem, stepTotem } from '../../../shared/creatureSim.js';
 import type { Targetable } from './balls.js';
 import { allocSlots, freeSlots, getSwarm, getShadows } from './swarms.js';
 import type { SwarmPart, SwarmSlotOwner } from './swarm.js';
@@ -154,10 +154,11 @@ export class Totem implements Targetable, SwarmSlotOwner {
   netAcc = 0;
   static hitClaim: ((netId: number, damage: number) => void) | null = null;
 
-  bindNet(id: number, seed: number, pos: THREE.Vector3, _vel: { x: number; y: number; z: number }, state: string, uber: boolean): void {
+  bindNet(b: NetBindArgs): void {
+    const pos = b.pos;
     this.netDriven = true;
-    this.netId = id;
-    bindNetTotem(this, id, seed, 'totem', pos, _vel, state, uber);
+    this.netId = b.id;
+    bindNetTotem(this, b, makeSimTotem);
     this.pos.copy(this.sim ? new THREE.Vector3(this.sim.x, this.sim.y, this.sim.z) : pos);
     this.health = this.maxHealth = this.sim?.health ?? this.health;
     this.state = this.sim?.state === 'blinkOut' ? 'blinkOut' : 'aim';
@@ -347,7 +348,7 @@ export class Totem implements Targetable, SwarmSlotOwner {
     if (!s) return;
     if (this.flash > 0) this.flash -= dt;
     const prevState = s.state;
-    updateNetTotem(this, dt, terrain);
+    updateNetTotem(this, dt, terrain, stepTotem);
 
     // Mirror sim state → visual fields
     this.state = s.state === 'aim' ? 'aim' : (s.state as TotemState);

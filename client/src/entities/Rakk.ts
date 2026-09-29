@@ -12,8 +12,8 @@ import type { Targetable } from './balls.js';
 import { allocSlots, freeSlots, getSwarm, getShadows } from './swarms.js';
 import type { SwarmPart, SwarmSlotOwner } from './swarm.js';
 import { getGlowTexture } from '../effects/glowTexture.js';
-import type { SimFlyer } from '../../../shared/creatureSim.js';
-import { bindNetFlyer, applyNetEdgeFlyer, updateNetFlyer, claimDamageMelee } from '../game/netMelee.js';
+import { type SimFlyer, makeSimFlyer, stepFlyer } from '../../../shared/creatureSim.js';
+import { bindNetSim, applyNetEdgeSim, updateNetSim, claimDamageMelee, type NetBindArgs } from '../game/netMelee.js';
 
 const _dir = new THREE.Vector3();
 const _scratch = new THREE.Vector3();
@@ -119,16 +119,16 @@ export class Rakk implements Targetable, SwarmSlotOwner {
   netAcc = 0;
   static hitClaim: ((netId: number, damage: number) => void) | null = null;
 
-  bindNet(id: number, seed: number, pos: THREE.Vector3, vel: { x: number; y: number; z: number }, state: SimFlyer['state'], uber: boolean, species = 'rakk'): void {
+  bindNet(b: NetBindArgs): void {
     this.netDriven = true;
-    this.netId = id;
-    this.id = 0x50000000 + id;
-    bindNetFlyer(this, id, seed, species, pos, vel, state, uber);
-    this.state = state === 'windup' ? 'dive' : state === 'orbit' ? 'orbit' : 'climb';
+    this.netId = b.id;
+    this.id = 0x50000000 + b.id;
+    bindNetSim(this, makeSimFlyer, b);
+    this.state = b.state === 'windup' ? 'dive' : b.state === 'orbit' ? 'orbit' : 'climb';
   }
 
   applyNetEdge(m: { position: { x: number; y: number; z: number }; velocity: { x: number; y: number; z: number }; kind: string; targetId: string | null; tp?: { x: number; y: number; z: number } | null }): void {
-    applyNetEdgeFlyer(this, m);
+    applyNetEdgeSim(this, m);
     if (!this.sim) return;
     const s = this.sim.state;
     // The fold telegraph isn't a Rakk display state — folded wings read
@@ -138,7 +138,7 @@ export class Rakk implements Targetable, SwarmSlotOwner {
   }
 
   private updateNet(dt: number, terrain: Terrain): void {
-    updateNetFlyer(this, dt, terrain);
+    updateNetSim(this, dt, terrain, stepFlyer);
     if (this.flash > 0) this.flash -= dt;
     this.animT += dt;
     // Pitch/roll dressing the replay can't supply — bank into the vel.

@@ -12,8 +12,8 @@ import type { Targetable } from './balls.js';
 import { allocSlots, freeSlots, getSwarm, getShadows } from './swarms.js';
 import type { SwarmPart, SwarmSlotOwner } from './swarm.js';
 import { getGlowTexture } from '../effects/glowTexture.js';
-import type { SimSlither } from '../../../shared/creatureSim.js';
-import { bindNetSlither, applyNetEdgeSlither, updateNetSlither, claimDamageMelee } from '../game/netMelee.js';
+import { type SimSlither, makeSimSlither, stepSlither } from '../../../shared/creatureSim.js';
+import { bindNetSim, applyNetEdgeSim, updateNetSim, claimDamageMelee, type NetBindArgs } from '../game/netMelee.js';
 
 const _dir = new THREE.Vector3();
 const _root = new THREE.Matrix4();
@@ -110,15 +110,15 @@ export class Snake implements Targetable, SwarmSlotOwner {
   netAcc = 0;
   static hitClaim: ((netId: number, damage: number) => void) | null = null;
 
-  bindNet(id: number, seed: number, pos: THREE.Vector3, vel: { x: number; y: number; z: number }, _state: string, uber: boolean, species = 'snake'): void {
+  bindNet(b: NetBindArgs): void {
     this.netDriven = true;
-    this.netId = id;
-    this.id = 0x50000000 + id;
-    bindNetSlither(this, id, seed, species, pos, vel, _state, uber);
+    this.netId = b.id;
+    this.id = 0x50000000 + b.id;
+    bindNetSim(this, makeSimSlither, b);
   }
 
   applyNetEdge(m: { position: { x: number; y: number; z: number }; velocity: { x: number; y: number; z: number }; kind: string; targetId: string | null; tp?: { x: number; y: number; z: number } | null }): void {
-    applyNetEdgeSlither(this, m);
+    applyNetEdgeSim(this, m);
     if (m.kind === 'bite') this.onStrike?.(this);
   }
 
@@ -132,7 +132,7 @@ export class Snake implements Targetable, SwarmSlotOwner {
     this.animT += dt; // wave phase — free-running like the sim's
     this.groundY = this.pos.y - this.radius;
     if (this.flash > 0) this.flash -= dt;
-    updateNetSlither(this, dt, terrain);
+    updateNetSim(this, dt, terrain, stepSlither);
   }
 
   get disposed(): boolean { return this.dead; }

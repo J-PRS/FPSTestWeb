@@ -13,8 +13,8 @@ import type { Targetable } from './balls.js';
 import { allocSlots, freeSlots, getSwarm, getShadows } from './swarms.js';
 import type { SwarmPart, SwarmSlotOwner } from './swarm.js';
 import { getGlowTexture } from '../effects/glowTexture.js';
-import { type SimCrawler } from '../../../shared/creatureSim.js';
-import { bindNetMelee, applyNetEdgeMelee, updateNetMelee, claimDamageMelee } from '../game/netMelee.js';
+import { type SimCrawler, makeSimCrawler, stepCrawler } from '../../../shared/creatureSim.js';
+import { bindNetSim, applyNetEdgeSim, updateNetSim, claimDamageMelee, type NetBindArgs } from '../game/netMelee.js';
 
 const _dir = new THREE.Vector3();
 const _UP = new THREE.Vector3(0, 1, 0);
@@ -125,15 +125,15 @@ export class Scarab implements Targetable, SwarmSlotOwner {
   netAcc = 0;
   static hitClaim: ((netId: number, damage: number) => void) | null = null;
 
-  bindNet(id: number, seed: number, pos: THREE.Vector3, vel: { x: number; y: number; z: number }, state: SimCrawler['state'], uber: boolean, species = 'scarab'): void {
+  bindNet(b: NetBindArgs): void {
     this.netDriven = true;
-    this.netId = id;
-    this.id = 0x50000000 + id;
-    bindNetMelee(this, id, seed, species, pos, vel, state, uber);
+    this.netId = b.id;
+    this.id = 0x50000000 + b.id;
+    bindNetSim(this, makeSimCrawler, b);
   }
 
   applyNetEdge(m: { position: { x: number; y: number; z: number }; velocity: { x: number; y: number; z: number }; targetId: string | null; tp?: { x: number; y: number; z: number } | null }): void {
-    applyNetEdgeMelee(this, m);
+    applyNetEdgeSim(this, m);
   }
 
   // Burrow-in state (set by spawn) — slides up out of the ground on emerge
@@ -167,7 +167,7 @@ export class Scarab implements Targetable, SwarmSlotOwner {
   update(dt: number, terrain: Terrain, playerPos: THREE.Vector3): void {
     if (this.dead) return;
     if (this.netDriven && this.sim) {
-      updateNetMelee(this, dt, terrain);
+      updateNetSim(this, dt, terrain, stepCrawler, { grounded: true });
       if (this.flash > 0) this.flash -= dt;
       this.animT += dt;
       return;

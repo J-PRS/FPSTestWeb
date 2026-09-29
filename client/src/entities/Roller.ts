@@ -11,8 +11,8 @@ import { Terrain } from '../world/terrain.js';
 import type { Targetable } from './balls.js';
 import { allocSlots, freeSlots, getSwarm, getShadows } from './swarms.js';
 import type { SwarmPart, SwarmSlotOwner } from './swarm.js';
-import type { SimRoller } from '../../../shared/creatureSim.js';
-import { bindNetRoller, applyNetEdgeRoller, updateNetRoller, claimDamageMelee } from '../game/netMelee.js';
+import { type SimRoller, makeSimRoller, stepRoller } from '../../../shared/creatureSim.js';
+import { bindNetSim, applyNetEdgeSim, updateNetSim, claimDamageMelee, type NetBindArgs } from '../game/netMelee.js';
 
 const _dir = new THREE.Vector3();
 const _axis = new THREE.Vector3();
@@ -97,19 +97,19 @@ export class Roller implements Targetable, SwarmSlotOwner {
   yaw = 0; // net replay writes this; display rolls on rollQuat instead
   static hitClaim: ((netId: number, damage: number) => void) | null = null;
 
-  bindNet(id: number, seed: number, pos: THREE.Vector3, vel: { x: number; y: number; z: number }, _state: string, uber: boolean, species = 'roller'): void {
+  bindNet(b: NetBindArgs): void {
     this.netDriven = true;
-    this.netId = id;
-    this.id = 0x50000000 + id;
-    bindNetRoller(this, id, seed, species, pos, vel, _state, uber);
+    this.netId = b.id;
+    this.id = 0x50000000 + b.id;
+    bindNetSim(this, makeSimRoller, b);
   }
 
   applyNetEdge(m: { position: { x: number; y: number; z: number }; velocity: { x: number; y: number; z: number }; kind: string; targetId: string | null; tp?: { x: number; y: number; z: number } | null }): void {
-    applyNetEdgeRoller(this, m);
+    applyNetEdgeSim(this, m);
   }
 
   private updateNet(dt: number, terrain: Terrain): void {
-    updateNetRoller(this, dt, terrain);
+    updateNetSim(this, dt, terrain, stepRoller);
     if (this.flash > 0) this.flash -= dt;
     // Roll rotation is client dressing — the sim carries pos/vel only.
     const hSpeed = Math.hypot(this.vel.x, this.vel.z);
