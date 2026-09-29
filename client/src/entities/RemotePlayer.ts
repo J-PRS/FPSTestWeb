@@ -345,42 +345,9 @@ export class RemotePlayer {
       this.shootT -= dt;
       if (this.shootT > 0) this._model.setAnimationState('shoot');
     } else {
-      // Powered climb reads as jetting (same inference the jet audio makes)
-      // — a plain airborne fall keeps the jump loop.
-      const jetting = airborne && this.velocity.y > 3;
-      this._model.setAnimationState(airborne
-        ? (jetting ? 'jet' : 'jump')
-        : pickLocomotionAnim(this._model.animationState, speed));
-      // Directional jetting: tilt the whole body toward horizontal
-      // velocity in the facing frame — pitch into forward thrust, roll
-      // into lateral strafe. Airborne-but-falling eases back to level.
-      if (jetting) {
-        const sin = Math.sin(this.rotation.yaw), cos = Math.cos(this.rotation.yaw);
-        const fwd = this.velocity.x * sin + this.velocity.z * cos;
-        const side = this.velocity.x * cos - this.velocity.z * sin;
-        this._model.setBodyLean(
-          Math.max(-0.45, Math.min(0.45, fwd * 0.022)),
-          Math.max(-0.4, Math.min(0.4, -side * 0.02)));
-      } else {
-        this._model.setBodyLean(0, 0);
-      }
+      this.tickAnimState(dt, speed, airborne);
     }
-    if (this.shieldBubble) {
-      this.shieldBubble.update(dt);
-      if (this._shielded) this.shieldBubble.mesh.position.set(this.position.x, this.position.y - EYE_OFFSET + 1.1, this.position.z);
-    }
-    if (this.mendAura) {
-      this.mendAura.update(dt);
-      if (this._mending) this.mendAura.mesh.position.set(this.position.x, this.position.y - EYE_OFFSET + 1.0, this.position.z);
-    }
-    if (this.regenAura) {
-      this.regenAura.update(dt);
-      if (this._regenAura) this.regenAura.mesh.position.set(this.position.x, this.position.y - EYE_OFFSET + 1.0, this.position.z);
-    }
-    if (this.ddAura) {
-      this.ddAura.update(dt);
-      if (this._ddAura) this.ddAura.mesh.position.set(this.position.x, this.position.y - EYE_OFFSET + 1.0, this.position.z);
-    }
+    this.tickAuras(dt);
     this.previousPosition.copy(this.position);
     // Anim LOD — the mixer step is the dominant per-remote cost, so far
     // bodies animate in coarser bursts (accumulated dt keeps playback
@@ -398,6 +365,44 @@ export class RemotePlayer {
     } else {
       this.animAcc = 0;
       this._model.update(dt);
+    }
+  }
+
+  // Powered climb reads as jetting (same inference the jet audio makes) —
+  // a plain airborne fall keeps the jump loop. Directional jetting tilts
+  // the whole body toward horizontal velocity in the facing frame: pitch
+  // into forward thrust, roll into lateral strafe.
+  private tickAnimState(dt: number, speed: number, airborne: boolean): void {
+    const jetting = airborne && this.velocity.y > 3;
+    this._model.setAnimationState(airborne
+      ? (jetting ? 'jet' : 'jump')
+      : pickLocomotionAnim(this._model.animationState, speed));
+    if (!jetting) { this._model.setBodyLean(0, 0); return; }
+    const sin = Math.sin(this.rotation.yaw), cos = Math.cos(this.rotation.yaw);
+    const fwd = this.velocity.x * sin + this.velocity.z * cos;
+    const side = this.velocity.x * cos - this.velocity.z * sin;
+    this._model.setBodyLean(
+      Math.max(-0.45, Math.min(0.45, fwd * 0.022)),
+      Math.max(-0.4, Math.min(0.4, -side * 0.02)));
+  }
+
+  private tickAuras(dt: number): void {
+    const y = this.position.y - EYE_OFFSET;
+    if (this.shieldBubble) {
+      this.shieldBubble.update(dt);
+      if (this._shielded) this.shieldBubble.mesh.position.set(this.position.x, y + 1.1, this.position.z);
+    }
+    if (this.mendAura) {
+      this.mendAura.update(dt);
+      if (this._mending) this.mendAura.mesh.position.set(this.position.x, y + 1.0, this.position.z);
+    }
+    if (this.regenAura) {
+      this.regenAura.update(dt);
+      if (this._regenAura) this.regenAura.mesh.position.set(this.position.x, y + 1.0, this.position.z);
+    }
+    if (this.ddAura) {
+      this.ddAura.update(dt);
+      if (this._ddAura) this.ddAura.mesh.position.set(this.position.x, y + 1.0, this.position.z);
     }
   }
 
