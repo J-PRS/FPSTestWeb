@@ -12,12 +12,13 @@
  */
 import { type Heightfield, hmHeight } from '../../shared/heightfield.ts';
 import {
-  type SimCrawler, type SimFlyer, type SimRoller, type SimSlither, type SimBaneling, type CrawlerEvent,
+  type SimCrawler, type SimFlyer, type SimRoller, type SimSlither, type SimBaneling, type SimTotem, type CrawlerEvent,
   makeSimCrawler, stepCrawler, applyCrawlerDamage, commitTarget,
   isFlyerSpecies, makeSimFlyer, stepFlyer, applyFlyerDamage,
   isRollerSpecies, makeSimRoller, stepRoller, applyRollerDamage,
   isSlitherSpecies, makeSimSlither, stepSlither, applySlitherDamage,
   isBanelingSpecies, makeSimBaneling, stepBaneling, applyBanelingDamage,
+  isTotemSpecies, makeSimTotem, stepTotem, applyTotemDamage, totemFireTargets,
   CRAWLER_SIM,
 } from '../../shared/creatureSim.ts';
 import type { SimVec } from '../../shared/ballSim.ts';
@@ -50,14 +51,15 @@ const FAR_SKIP = 4;
 // buckets.
 const BRAIN_BUCKETS = 8;
 
-/** Hop + flyer + roller families share every wire field — the union
- *  only matters at step/damage dispatch, discriminated by family-only
- *  fields (`orbitPhase` = flyer, `hitCd` = roller). */
-type SimBeing = SimCrawler | SimFlyer | SimRoller | SimSlither | SimBaneling;
+/** Hop + flyer + roller + totem families share every wire field — the
+ *  union only matters at step/damage dispatch, discriminated by
+ *  family-only fields (`orbitPhase` = flyer, `hitCd` = roller). */
+type SimBeing = SimCrawler | SimFlyer | SimRoller | SimSlither | SimBaneling | SimTotem;
 const isFlyer = (c: SimBeing): c is SimFlyer => 'orbitPhase' in c;
 const isRoller = (c: SimBeing): c is SimRoller => 'hitCd' in c;
 const isSlither = (c: SimBeing): c is SimSlither => 'animT' in c;
 const isBaneling = (c: SimBeing): c is SimBaneling => 'age' in c;
+const isTotem = (c: SimBeing): c is SimTotem => 'lockDist' in c;
 
 export class CreatureSim {
   private field: Heightfield | null = null;
@@ -160,13 +162,15 @@ export class CreatureSim {
     const uber = Math.random() < 0.05;
     const c: SimBeing = isFlyerSpecies(species)
       ? makeSimFlyer(id, x, gy, z, uber, seed, species)
-      : isRollerSpecies(species)
-        ? makeSimRoller(id, x, gy, z, uber, seed, species)
-        : isSlitherSpecies(species)
-          ? makeSimSlither(id, x, gy, z, uber, seed, species)
-          : isBanelingSpecies(species)
-            ? makeSimBaneling(id, x, gy, z, uber, seed, species)
-            : makeSimCrawler(id, x, gy, z, uber, seed, species);
+      : isTotemSpecies(species)
+        ? makeSimTotem(id, x, gy, z, uber, seed, species)
+        : isRollerSpecies(species)
+          ? makeSimRoller(id, x, gy, z, uber, seed, species)
+          : isSlitherSpecies(species)
+            ? makeSimSlither(id, x, gy, z, uber, seed, species)
+            : isBanelingSpecies(species)
+              ? makeSimBaneling(id, x, gy, z, uber, seed, species)
+              : makeSimCrawler(id, x, gy, z, uber, seed, species);
     if (isFlyer(c)) c.y = gy + c.sp.ORBIT_ALT; // flyers enter at cruise alt
     if (isRoller(c)) c.y = gy + 1.6;           // rollers ride the surface
     if (isSlither(c)) c.y = gy + 0.5;          // belly on the dirt
@@ -203,11 +207,15 @@ export class CreatureSim {
     return c.tgtValid ? { x: c.tx, y: c.ty, z: c.tz } : null;
   }
 
-  private edge(c: SimBeing, kind: 'retarget' | 'windup' | 'pounce' | 'bite' | 'detonate'): void {
+  private edge(c: SimBeing, kind: 'retarget' | 'windup' | 'pounce' | 'bite' | 'detonate' | 'charge' | 'fire' | 'blink'): void {
     this.resyncAcc.set(c.id, 0);
     const msg: ServerMessage = {
       type: 'crawlEvt', id: c.id, kind,
-      position: { x: c.x, y: c.y, z: c.z },
+      // For 'blink' the position field carries the committed DESTINATION —
+      // a far client that missed the decision still teleports correctly.
+      position: kind === 'blink' && isTotem(c)
+        ? { x: c.blinkX, y: c.blinkY, z: c.blinkZ }
+        : { x: c.x, y: c.y, z: c.z },
       velocity: { x: c.vx, y: c.vy, z: c.vz },
       targetId: c.targetId, tp: this.targetSnap(c), t: this.simTime,
     };
@@ -244,13 +252,15 @@ export class CreatureSim {
     const dmg = Math.max(1, Math.min(300, damage));
     const dead = isFlyer(c)
       ? applyFlyerDamage(c, dmg)
-      : isRoller(c)
-        ? applyRollerDamage(c, dmg)
-        : isSlither(c)
-          ? applySlitherDamage(c, dmg)
-          : isBaneling(c)
-            ? applyBanelingDamage(c, dmg)
-            : applyCrawlerDamage(c, dmg);
+      : isTotem(c)
+        ? applyTotemDamage(c, dmg)
+        : isRoller(c)
+          ? applyRollerDamage(c, dmg)
+          : isSlither(c)
+            ? applySlitherDamage(c, dmg)
+            : isBaneling(c)
+              ? applyBanelingDamage(c, dmg)
+              : applyCrawlerDamage(c, dmg);
     if (dead) this.kill(c, playerId);
     // Stagger is a timer edge — the next hop decision diverges only if a
     // predictor skips it, and the resync heartbeat bounds that drift.
@@ -311,18 +321,32 @@ export class CreatureSim {
       const tgt = c.tgtValid ? _snap : null;
       const ev: CrawlerEvent | null = isFlyer(c)
         ? stepFlyer(c, TICK_DT, this.field!, tgt, true)
-        : isRoller(c)
-          ? stepRoller(c, TICK_DT, this.field!, tgt, true)
-          : isSlither(c)
-            ? stepSlither(c, TICK_DT, this.field!, tgt, true)
-            : isBaneling(c)
-              ? stepBaneling(c, TICK_DT, this.field!, tgt, true)
-              : stepCrawler(c, TICK_DT, this.field!, tgt, true);
+        : isTotem(c)
+          ? stepTotem(c, TICK_DT, this.field!, tgt, true)
+          : isRoller(c)
+            ? stepRoller(c, TICK_DT, this.field!, tgt, true)
+            : isSlither(c)
+              ? stepSlither(c, TICK_DT, this.field!, tgt, true)
+              : isBaneling(c)
+                ? stepBaneling(c, TICK_DT, this.field!, tgt, true)
+                : stepCrawler(c, TICK_DT, this.field!, tgt, true);
       if (ev === 'detonate') {
         this.kill(c);
         continue;
       }
-      if (ev === 'windup' || ev === 'pounce') {
+      if (ev === 'charge' || ev === 'blink' || (ev === 'land' && isTotem(c))) {
+        // 'land' doubles as the post-blink resync edge for totems — other
+        // families land every hop, so gating it to them would be spam.
+        this.edge(c, ev === 'land' ? 'retarget' : ev);
+      } else if (ev === 'fire' && isTotem(c)) {
+        // Authoritative hitscan: sweep LIVE players along the committed
+        // beam line — sidestepping after the lock shows is the dodge.
+        this.edge(c, 'fire');
+        for (const pid of totemFireTargets(c, alive)) {
+          this.onBite?.(c, pid);
+        }
+        c.pendingBite = false;
+      } else if (ev === 'windup' || ev === 'pounce') {
         this.edge(c, ev);
       } else if (ev === 'bite') {
         this.edge(c, 'bite');

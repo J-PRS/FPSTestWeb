@@ -14,7 +14,8 @@
     "roller": 3,
     "gnat": 10,
     "snake": 4,
-    "baneling": 4
+    "baneling": 4,
+    "totem": 3
   },
   "ambient": {
     "crawler": 40,

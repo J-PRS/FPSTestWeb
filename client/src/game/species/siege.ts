@@ -207,7 +207,7 @@ export function createSiegeSpecies({ deps, kit, targets }: SpeciesCtx) {
   // course. One at a time; the fat gold obelisk + wide death ray IS the tell.
   function spawnTotem(uber = false): void {
     if (deps.lazyDemoManager()?.isPlaying) return;
-    const cap = uber ? UBER_TOTEM_MAX : TOTEM_MAX;
+    const cap = uber ? UBER_TOTEM_MAX : capFor('totem', TOTEM_MAX);
     if (totems.filter(t => !t.dead && (!uber || t.uber)).length >= cap) return;
     const player = deps.lazyPlayer();
     const bolt = uber

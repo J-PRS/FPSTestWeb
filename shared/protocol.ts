@@ -149,7 +149,7 @@ export type ServerMessage =
   // the wire carries only edge events (retarget windup pounce bite die)
   // — predictors replay the identical hop stream in between.
   | { type: 'crawlSpawn'; id: number; position: Vec3; seed: number; uber: boolean; species: string; targetId?: string | null; tp?: Vec3 | null; t: number }
-  | { type: 'crawlEvt'; id: number; kind: 'retarget' | 'windup' | 'pounce' | 'bite' | 'detonate'; position: Vec3; velocity: Vec3; targetId: string | null; tp?: Vec3 | null; t: number }
+  | { type: 'crawlEvt'; id: number; kind: 'retarget' | 'windup' | 'pounce' | 'bite' | 'detonate' | 'charge' | 'fire' | 'blink'; position: Vec3; velocity: Vec3; targetId: string | null; tp?: Vec3 | null; t: number }
   | { type: 'crawlDie'; id: number; position: Vec3; by?: string | null }
   | { type: 'crawlRoster'; crawlers: { id: number; position: Vec3; velocity: Vec3; uber: boolean; seed: number; species: string; state: string; targetId: string | null; tp?: Vec3 | null; t: number }[] }
   // Roster for joiners/reconnects — current segment state of every live ball

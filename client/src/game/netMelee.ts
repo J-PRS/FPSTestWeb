@@ -2,7 +2,7 @@ import * as THREE from 'three';
 
 import { getHeightfield } from '../world/terrain.js';
 import { hmHeight } from '../../../shared/heightfield.js';
-import { type SimCrawler, type SimFlyer, type SimRoller, type SimSlither, type SimBaneling, stepCrawler, stepFlyer, stepRoller, stepSlither, stepBaneling, makeSimCrawler, makeSimFlyer, makeSimRoller, makeSimSlither, makeSimBaneling, commitTarget } from '../../../shared/creatureSim.js';
+import { type SimCrawler, type SimFlyer, type SimRoller, type SimSlither, type SimBaneling, type SimTotem, stepCrawler, stepFlyer, stepRoller, stepSlither, stepBaneling, stepTotem, makeSimCrawler, makeSimFlyer, makeSimRoller, makeSimSlither, makeSimBaneling, makeSimTotem, commitTarget } from '../../../shared/creatureSim.js';
 import type { Terrain } from '../world/terrain.js';
 
 /** The fields every netDriven melee species needs — duck-typed so each
@@ -318,6 +318,79 @@ export function updateNetBaneling(e: NetBanelingLike, dt: number, terrain: Terra
   e.pos.set(s.x, s.y, s.z);
   e.vel.set(s.vx, s.vy, s.vz);
   e.yaw = s.yaw;
+  e.health = s.health;
+  e.writeInstances(terrain);
+}
+
+// ---- Totem family ------------------------------------------------------
+// Stationary, so there's no motion to drift — the predictor only needs the
+// committed edges. 'charge' solves the beam identically on both sides
+// (terrain is static); 'fire' is a pure display edge (the discharge flash);
+// 'blink' commits the destination and the sim teleports on the same tick.
+
+export interface NetTotemLike {
+  pos: THREE.Vector3;
+  vel: THREE.Vector3;
+  yaw: number;
+  health: number;
+  dead: boolean;
+  sim: SimTotem | null;
+  netAcc: number;
+  /** Display hook for the beam discharge — 'fire' edges and the
+   *  predictor's own stepTotem 'fire' returns both land here. */
+  onSimFire(): void;
+  writeInstances(terrain: Terrain): void;
+}
+
+export function bindNetTotem(
+  e: NetTotemLike & { id: number },
+  id: number, seed: number, species: string,
+  pos: { x: number; y: number; z: number }, _vel: { x: number; y: number; z: number },
+  state: string, uber: boolean,
+): void {
+  e.sim = makeSimTotem(id, pos.x, pos.y, pos.z, uber, seed, species);
+  e.sim.state = (state === 'charge' || state === 'blinkOut' || state === 'blinkIn') ? state : 'aim';
+  e.pos.set(pos.x, pos.y, pos.z);
+  e.health = e.sim.health;
+}
+
+export function applyNetEdgeTotem(e: NetTotemLike, m: {
+  position: { x: number; y: number; z: number };
+  velocity: { x: number; y: number; z: number };
+  kind: string;
+  targetId: string | null; tp?: { x: number; y: number; z: number } | null;
+}): void {
+  const s = e.sim;
+  if (!s) return;
+  // 'blink' position = the committed DESTINATION, not the totem's pos —
+  // force the blink cycle so a client that missed the decision still
+  // teleports to the same perch.
+  if (m.kind === 'blink') {
+    s.blinkX = m.position.x; s.blinkY = m.position.y; s.blinkZ = m.position.z;
+    if (s.state !== 'blinkOut' && s.state !== 'blinkIn') {
+      s.state = 'blinkOut';
+      s.hopTimer = s.sp.BLINK_OUT_S;
+    }
+  }
+  if (m.kind === 'fire') e.onSimFire();
+  if (m.kind !== 'blink' && s.state !== 'blinkOut' && s.state !== 'blinkIn') {
+    s.x = m.position.x; s.y = m.position.y; s.z = m.position.z;
+    e.pos.set(s.x, s.y, s.z);
+  }
+  commitTarget(s, m.targetId, m.tp ?? null);
+}
+
+export function updateNetTotem(e: NetTotemLike, dt: number, terrain: Terrain): void {
+  const s = e.sim;
+  const field = getHeightfield();
+  if (!s || !field) return;
+  e.netAcc = Math.min(e.netAcc + dt, 0.5);
+  const tgt = s.tgtValid ? { x: s.tx, y: s.ty, z: s.tz } : null;
+  while (e.netAcc >= 0.05) {
+    e.netAcc -= 0.05;
+    if (stepTotem(s, 0.05, field, tgt, false) === 'fire') e.onSimFire();
+  }
+  e.pos.set(s.x, s.y, s.z);
   e.health = s.health;
   e.writeInstances(terrain);
 }
