@@ -112,6 +112,14 @@ surface. Detailed research lives in `_reports/`; this file is the current truth.
    every edge; far players + spectators ride every 4th as a resync beat.
    Rule going forward: `ambient` = client-side DECOR only; anything
    interactive must live under `creatures` / the server sim.
+   Flyer family landed (0275111): shared SimFlyer (orbit→windup→dive→
+   climb, seeded LCG + committed snapshots) reuses the same edge kinds —
+   windup=fold, pounce=dive launch, bite=claw contact. Rakk is the pilot
+   (server-authoritative on infestation, rakk:4); CreatureSim holds a
+   SimBeing union dispatched by family, FLYER_SPECIES stages the gnat
+   row. Port rule: each species family gets ONE shared sim core —
+   hop (crawler/scarab), fly (rakk/gnat), next = roll (Roller) and
+   slither (Snake) cores.
    `terrain` ref landed: maps/<file>.bin
    heightfields per room (lazy, cached, shared). Shared brain landed:
    shared/botBrain.ts drives offline GameBots AND server bots — one
