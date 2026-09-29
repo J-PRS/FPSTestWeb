@@ -206,6 +206,9 @@ export class TeamBots {
     const moving = speedXZ > 1;
     const delta = tribesing ? -(8 + speedXZ * 0.5 + (bot.yeetT > 0 ? 12 : 0)) : moving ? 6 : 14;
     bot.sheep = Math.max(0, Math.min(100, bot.sheep + delta * dt));
+    // ~2s trailing average for display — the raw meter jitters ±10/s
+    // around the fill/drain boundary, which reads as flicker.
+    bot.sheepShown += (bot.sheep - bot.sheepShown) * Math.min(1, dt * 0.5);
     if (bot.sheep >= 100) {
       bot.yeet();
       this.deps.logger.warn(`bot ${bot.playerId} yeeted — sheep meter hit 100`);
@@ -372,6 +375,7 @@ export class TeamBots {
     bot.respawn({ x: sp.x, y: sp.y, z: sp.z });
     bot.botHp = bot.botMaxHp;
     bot.sheep = 0; // fresh leash on the meter
+    bot.sheepShown = 0;
     bot.yeetT = 0;
     bot.show();
     bot.setGizmoColor(bot.team === 'ffa' ? 0xcc66ff : TEAM_COLORS[bot.team as TeamId]);

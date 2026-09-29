@@ -50,7 +50,10 @@ export class GameBot extends RemotePlayer {
   /** Sheep meter 0-100: fills while the bot moves like a pedestrian
    *  (walking or parked), drains while it's skiing/airborne/jetting.
    *  Owned by TeamBots; rendered on the scoreboard + head badge. */
+  /** Raw sheep factor + its smoothed display twin (badge/scoreboard read
+   *  sheepShown so the % doesn't flicker frame to frame). */
   sheep = 0;
+  sheepShown = 0;
   /** Jets pinned by a sheep yeet — countdown in seconds. */
   yeetT = 0;
 

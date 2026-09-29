@@ -108,7 +108,7 @@ export class PlayerIndicators {
         badge.className = 'sheep-badge';
         indicator.appendChild(badge);
       }
-      badge.textContent = `${sheep}`;
+      badge.textContent = `${Math.round(sheep)}`;
       badge.style.color = sheep >= 60 ? '#ff6b6b' : sheep >= 30 ? '#ffd166' : '#7ddf7d';
     } else if (badge) {
       badge.remove();

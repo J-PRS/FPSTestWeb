@@ -24,7 +24,7 @@ const paintFlagChip = (el: HTMLElement, st?: string) => {
 function sbRowEl(r: SbRow): HTMLTableRowElement {
   const tr = document.createElement('tr');
   tr.className = `${r.self ? 'self' : ''}${r.dead ? ' dead' : ''}${r.team ? ` sb-${r.team}` : ''}`;
-  for (const cell of [r.name, String(r.frags), r.score === null ? '—' : String(r.score), r.net ?? '—', r.ping === null ? '—' : String(Math.round(r.ping)), r.sheep == null ? '—' : `${r.sheep}%`]) {
+  for (const cell of [r.name, String(r.frags), r.score === null ? '—' : String(r.score), r.net ?? '—', r.ping === null ? '—' : String(Math.round(r.ping)), r.sheep == null ? '—' : `${Math.round(r.sheep)}%`]) {
     const td = document.createElement('td');
     td.textContent = cell;
     tr.appendChild(td);
