@@ -1,3 +1,4 @@
+2026-10-03 - telemetry slice 3: deployable placements per kind (kills-per-plant vs the Turret/Mine hit rows — deployable value) + dashboard section; TASKS.md synced (226/91 tests, telemetry + poseshot + log rotation)
 2026-10-03 - /weaponstats.html: readable balance dashboard on the server itself — weapon tables, duel TTK, kill-speed histograms + air share, death heat cells, flag timers, pickup funnel; fetches /weaponstats live
 2026-10-03 - telemetry slice 2: kill-moment speed bins (shooter+victim, 5 m/s buckets — is it a ski game or a foot-shooter) + pickup economy funnel (spawned/banked/decayed per kind per mode). Verified live on nugwar
 2026-10-03 - posedump.html page: one model + one clip on a white studio bg for review galleries (params model/clip/t). _tools/poseshot/shoot.js regenerates screenshots/poses + poses-man through it; gallery rebuilt

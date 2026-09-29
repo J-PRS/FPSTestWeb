@@ -78,6 +78,17 @@ fetch('/weaponstats').then(r=>r.json()).then(d=>{
     const fl=d.flags?.[mode];
     if(fl&&(fl.caps||fl.returns))
       h.push('<h3>flags</h3><table><tr><th>caps</th><th>avg hold s</th><th>returns</th><th>avg drop s</th></tr><tr><td>'+fl.caps+'</td><td>'+fmt(fl.caps?fl.holdMs/fl.caps/1000:0,1)+'</td><td>'+fl.returns+'</td><td>'+fmt(fl.returns?fl.dropMs/fl.returns/1000:0,1)+'</td></tr></table>');
+    // deployables — placements cross-read against 'X hit' damage rows
+    const dp=d.deploys?.[mode]||{};
+    if(Object.keys(dp).length){
+      const byMode=d.byMode[mode]||{};
+      h.push('<h3>deployables</h3><table><tr><th class="l">kind</th><th>placed</th><th>kills</th><th>kills/plant</th></tr>');
+      for(const [k,n] of Object.entries(dp)){
+        const kills=(byMode[k==='turret'?'Turret hit':k==='mine'?'Mine hit':'']?.kills)||0;
+        h.push('<tr><td class="l">'+esc(k)+'</td><td>'+n+'</td><td>'+kills+'</td><td>'+fmt(kills/n,2)+'</td></tr>');
+      }
+      h.push('</table>');
+    }
     // pickups
     const pk=d.pickups?.[mode]||{};
     if(Object.keys(pk).length){

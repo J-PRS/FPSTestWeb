@@ -63,6 +63,9 @@ class WeaponStats {
   private flags: { [mode: string]: FlagRow } = {};
   private speeds: { [mode: string]: SpeedRow } = {};
   private pickups: { [mode: string]: { [kind: string]: PickupRow } } = {};
+  // deployables: placements per kind — cross-read with the 'Turret hit' /
+  // 'Mine hit' damage rows for kills-per-placement (deployable value).
+  private deploys: { [mode: string]: { [kind: string]: number } } = {};
   private dirty = false;
 
   private row(mode: string, source: string): WeaponRow {
@@ -133,10 +136,17 @@ class WeaponStats {
     this.dirty = true;
   }
 
-  snapshot(): { byMode: RoomTable; deaths: typeof this.deaths; ttk: typeof this.ttk; flags: typeof this.flags; speeds: typeof this.speeds; pickups: typeof this.pickups } {
+  /** A deployable was placed (turret/mine/station/drone). */
+  recordDeploy(mode: string, kind: string): void {
+    const m = (this.deploys[mode] ??= {});
+    m[kind] = (m[kind] ?? 0) + 1;
+    this.dirty = true;
+  }
+
+  snapshot(): { byMode: RoomTable; deaths: typeof this.deaths; ttk: typeof this.ttk; flags: typeof this.flags; speeds: typeof this.speeds; pickups: typeof this.pickups; deploys: typeof this.deploys } {
     return JSON.parse(JSON.stringify({
       byMode: this.table, deaths: this.deaths, ttk: this.ttk, flags: this.flags,
-      speeds: this.speeds, pickups: this.pickups,
+      speeds: this.speeds, pickups: this.pickups, deploys: this.deploys,
     }));
   }
 
@@ -149,7 +159,7 @@ class WeaponStats {
       appendFileSync(STATS_FILE, JSON.stringify({
         ts: new Date().toISOString(), byMode: this.table,
         deaths: this.deaths, ttk: this.ttk, flags: this.flags,
-        speeds: this.speeds, pickups: this.pickups,
+        speeds: this.speeds, pickups: this.pickups, deploys: this.deploys,
       }) + '\n');
     } catch (e) {
       logger.warn('WeaponStats flush failed', e);

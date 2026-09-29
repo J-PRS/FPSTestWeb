@@ -48,7 +48,9 @@
   - Update changelog.txt after each task
   - Update architecture.txt for structural changes
   - Maintain TASKS.md for context
-- **Testing Requirements:** `bun test` in server_bun/ (213 tests); `npx vitest run` in client/ (77 tests); `_tools/pvptest/` live E2E (`fleet.ts` honest-bot swarm w/ journal replay + correction metrics, `--test*`/`--watch`/`--balls`), `record.ts`+`replay.ts` wire capture/replay
+- **Testing Requirements:** `bun test` in server_bun/ (226 tests); `npx vitest run` in client/ (91 tests); `_tools/pvptest/` live E2E (`fleet.ts` honest-bot swarm w/ journal replay + correction metrics + deploy claims + `--drop=N` loss sim, `--test*`/`--watch`/`--balls`/`--spec`), `record.ts`+`replay.ts` wire capture/replay, `netReplay.test.ts` headless replay through real netHandlers, `_tools/poseshot/shoot.js` anim pose gallery on white bg
+- **Balance telemetry:** `weaponStats` records per-mode weapon damage/kills (human/bot split), death heatmap (10m cells), duel TTK, flag lifecycle timers, kill-moment speed bins + air share, pickup funnel — `/weaponstats` JSON, `/weaponstats.html` dashboard, `logs/weaponstats.jsonl` rollup
+- **Log hygiene:** `logs/*.log|*.jsonl` auto-rotates to `logs/OLD/<name>_<mtime>.<ext>` at server boot
 - **Security Considerations:**
   - Server must be authoritative for movement
   - Rate limit critical messages
