@@ -37,7 +37,7 @@ const join = (mgr: SessionManager, ws: FakeWs, playerId: string, token?: string)
 
 describe('join guards', () => {
   it('throttles a join flood from one IP after 5/min', () => {
-    const room = mkRoom('flat', 'tdm');
+    const room = mkRoom({}, 'tdm');
     const { mgr } = mkSessions(room);
     for (let i = 0; i < 5; i++) join(mgr, fakeWs(), `flood${i}`);
     const sixth = fakeWs();
@@ -46,14 +46,14 @@ describe('join guards', () => {
   });
 
   it('exempts loopback from the throttle (dev fleets)', () => {
-    const room = mkRoom('flat', 'tdm');
+    const room = mkRoom({}, 'tdm');
     const { mgr } = mkSessions(room);
     for (let i = 0; i < 8; i++) join(mgr, fakeWs('127.0.0.1'), `local${i}`);
     expect(room.playerCount()).toBe(8);
   });
 
   it('rejects a second claim of the same playerId without the token', () => {
-    const room = mkRoom('flat', 'tdm');
+    const room = mkRoom({}, 'tdm');
     const { mgr } = mkSessions(room);
     const ws1 = fakeWs('10.1.1.1');
     join(mgr, ws1, 'victim'); // claims the id
@@ -65,7 +65,7 @@ describe('join guards', () => {
   });
 
   it('rejects malformed handshakes before any state change', () => {
-    const room = mkRoom('flat', 'tdm');
+    const room = mkRoom({}, 'tdm');
     const { mgr } = mkSessions(room);
     const bad = fakeWs();
     mgr.handle(bad as never, { type: 'notjoin' });

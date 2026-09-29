@@ -41,7 +41,7 @@ const join = (mgr: SessionManager, ws: FakeWs, playerId: string, token?: string)
 
 describe('grace reconnect', () => {
   it('reclaims the slot with the session token — state preserved', () => {
-    const room = mkRoom('flat', 'tdm');
+    const room = mkRoom({}, 'tdm');
     const { mgr, playerRoom } = mkSessions(room);
     const ws1 = fakeWs();
     join(mgr, ws1, 'p1');
@@ -63,7 +63,7 @@ describe('grace reconnect', () => {
   });
 
   it('rejects a reclaim with a wrong token', () => {
-    const room = mkRoom('flat', 'tdm');
+    const room = mkRoom({}, 'tdm');
     const { mgr } = mkSessions(room);
     join(mgr, fakeWs(), 'p1');
     room.disconnected.set('p1', { timeout: setTimeout(() => {}, 60_000) });
@@ -74,7 +74,7 @@ describe('grace reconnect', () => {
   });
 
   it('rejects a duplicate id while the original is connected', () => {
-    const room = mkRoom('flat', 'tdm');
+    const room = mkRoom({}, 'tdm');
     const { mgr } = mkSessions(room);
     join(mgr, fakeWs(), 'p1');
     const ws2 = fakeWs();
