@@ -813,7 +813,7 @@ export const TOTEM_SIM = {
   BLINK_IN_S: 1.1,       // arrival shimmer before the body exists
   BLINK_CD_MIN: 2.0,     // random 2–5s between blinks — no chain escapes
   BLINK_CD_VAR: 3.0,
-  EYE_HEIGHT: 3.9,       // beam origin, × body radius
+  EYE_HEIGHT: 3.9,       // beam origin per unit body radius (× c.radius)
   HIT_R2: 1.7,           // beam catch radius² vs a player on the line
   STAGGER_S: 1.1,        // damage pins the obelisk — it can't blink
 } as const;
@@ -846,6 +846,9 @@ export interface SimTotem extends Omit<SimCrawler, 'state' | 'sp'> {
   shotsFired: number;
   blinkCd: number;
   hitR2: number;
+  /** Body scale — the beam eye rides at EYE_HEIGHT·radius (the client
+   *  renders it there), so ubers muzzle higher than the base obelisk. */
+  radius: number;
   /** Locked beam — committed at charge start, both sides replay the same
    *  line. lockDist = terrain-clipped beam length. */
   lockDirX: number; lockDirY: number; lockDirZ: number;
@@ -878,6 +881,7 @@ export function makeSimTotem(
     targetId: null, tx: 0, ty: 0, tz: 0, tgtValid: false, pendingBite: false,
     shotsFired: 0, blinkCd: 0,
     hitR2: uber ? TOTEM_UBER.HIT_R2 : TOTEM_SIM.HIT_R2,
+    radius: uber ? 1.8 : 1.0, // UBER_TOTEM_RADIUS / TOTEM_RADIUS — config twins
     lockDirX: 0, lockDirY: 0, lockDirZ: 0, lockDist: 0,
     blinkX: x, blinkY: y, blinkZ: z,
   };
@@ -886,7 +890,7 @@ export function makeSimTotem(
 /** Terrain LOS along the eye→target line — same 10-sample march the
  *  client Totem uses (flat bolts, terrain grazing matters). */
 function totemLineClear(c: SimTotem, field: Heightfield, tx: number, ty: number, tz: number): boolean {
-  const sy = c.y + c.sp.EYE_HEIGHT;
+  const sy = c.y + c.sp.EYE_HEIGHT * c.radius;
   for (let i = 1; i <= 10; i++) {
     const t = i / 10;
     const x = c.x + (tx - c.x) * t;
@@ -901,7 +905,7 @@ function totemLineClear(c: SimTotem, field: Heightfield, tx: number, ty: number,
  *  terrain at 1m resolution. Deterministic — both sides get the same
  *  line, which is what makes 'fire' a pure display edge. */
 export function totemSolveBeam(c: SimTotem, field: Heightfield, lx: number, ly: number, lz: number): void {
-  const ex = c.x, ey = c.y + c.sp.EYE_HEIGHT, ez = c.z;
+  const ex = c.x, ey = c.y + c.sp.EYE_HEIGHT * c.radius, ez = c.z;
   let dx = lx - ex, dy = ly - ey, dz = lz - ez;
   const d = Math.sqrt(dx * dx + dy * dy + dz * dz) || 0.001;
   dx /= d; dy /= d; dz /= d;
@@ -917,7 +921,7 @@ export function totemSolveBeam(c: SimTotem, field: Heightfield, lx: number, ly: 
  *  runs this vs each player's LIVE position at the fire tick — dodging
  *  after the lock committed is the whole counterplay. */
 export function totemBeamHit(c: SimTotem, px: number, py: number, pz: number): boolean {
-  const ex = c.x, ey = c.y + c.sp.EYE_HEIGHT, ez = c.z;
+  const ex = c.x, ey = c.y + c.sp.EYE_HEIGHT * c.radius, ez = c.z;
   const rx = px - ex, ry = py - ey, rz = pz - ez;
   const proj = rx * c.lockDirX + ry * c.lockDirY + rz * c.lockDirZ;
   if (proj <= 0 || proj >= c.lockDist) return false;
