@@ -1,3 +1,7 @@
+2026-10-03 - switchRoom split: cooldown gate → switchThrottled,
+    capacity → roomFull, join tail → seatPlayer (shared with the
+    SessionManager accept path shape). Clears the last GameServer
+    complexity warning.
 2026-10-03 - GameServer.roomFor split: the spec-resolution chain
     (room name → numbered base → join map/mode fallback → bots override)
     extracted into specFor. Clears the complexity warning.

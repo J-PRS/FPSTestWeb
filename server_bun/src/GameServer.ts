@@ -395,10 +395,7 @@ export class GameServer {
    *  room emits drives the client's existing (re)connect rebuild, so the
    *  wire needs no new shape. */
   private switchRoom(ws: ServerWebSocket<WebSocketData>, playerId: string, raw: unknown): void {
-    const now = Date.now();
-    const last = this.switchCooldowns.get(playerId) ?? 0;
-    if (now - last < GameServer.SWITCH_COOLDOWN_MS) return;
-    this.switchCooldowns.set(playerId, now);
+    if (this.switchThrottled(playerId)) return;
 
     const msg = raw as { room?: string; map?: string; mode?: string; bots?: number };
     const target = word(msg.room) ?? 'default';
@@ -406,18 +403,16 @@ export class GameServer {
     if (!from) return;
     if (from.name === target) return; // already seated — no-op, not an error
 
-    const to = this.roomFor(target, word(msg.mode) ?? '', word(msg.map) ?? '',
-      typeof msg.bots === 'number' && Number.isFinite(msg.bots) ? Math.max(0, Math.min(24, Math.floor(msg.bots))) : undefined);
-    if (to.playerCount() >= CONFIG.maxPlayers ||
-        (CONFIG.globalMaxPlayers > 0 && this.totalPlayers() >= CONFIG.globalMaxPlayers)) {
+    const bots = typeof msg.bots === 'number' && Number.isFinite(msg.bots)
+      ? Math.max(0, Math.min(24, Math.floor(msg.bots))) : undefined;
+    const to = this.roomFor(target, word(msg.mode) ?? '', word(msg.map) ?? '', bots);
+    if (this.roomFull(to)) {
       from.connections.sendToPlayer(playerId, { type: 'matchNotice', text: `${target} is full` });
       return;
     }
 
     // The kit rides with the player — the hop isn't a loadout reset.
-    const perk = from.players.getPlayer(playerId)?.perk ?? 'none';
-    const armorClass = from.players.getPlayer(playerId)?.armorClass ?? 'medium';
-    const transport = from.players.getPlayer(playerId)?.transport;
+    const prev = from.players.getPlayer(playerId);
 
     // Leave teardown: the disconnect path minus the grace window.
     from.connections.unregister(playerId);
@@ -425,15 +420,32 @@ export class GameServer {
     from.messages.onPlayerDisconnected(playerId);
     this.removePlayerCompletely(from, playerId, 'roomSwitch');
 
-    // Join tail — identical to SessionManager's accept path.
-    const sessionToken = this.sessions.tokenFor(playerId);
-    to.sessionTokens.set(playerId, sessionToken);
-    const joined = to.players.addPlayer(playerId, to.nextTeam(), perk, armorClass);
-    if (transport) joined.transport = transport;
-    this.playerRoom.set(playerId, to);
-    to.connections.register(playerId, ws);
-    to.messages.handleHandshake(playerId, sessionToken);
+    this.seatPlayer(to, ws, playerId, prev?.perk ?? 'none', prev?.armorClass ?? 'medium', prev?.transport);
     logger.info('Player switched rooms', { playerId, from: from.name, to: to.name });
+  }
+
+  /** The join tail a room hop shares with SessionManager's accept path —
+   *  token, roster entry, socket registration, handshake replay. */
+  private seatPlayer(room: Room, ws: ServerWebSocket<WebSocketData>, playerId: string, perk: string, armorClass: string, transport?: 'wt' | 'rtc' | 'ws'): void {
+    const sessionToken = this.sessions.tokenFor(playerId);
+    room.sessionTokens.set(playerId, sessionToken);
+    const joined = room.players.addPlayer(playerId, room.nextTeam(), perk, armorClass);
+    if (transport) joined.transport = transport;
+    this.playerRoom.set(playerId, room);
+    room.connections.register(playerId, ws);
+    room.messages.handleHandshake(playerId, sessionToken);
+  }
+
+  private switchThrottled(playerId: string): boolean {
+    const now = Date.now();
+    if (now - (this.switchCooldowns.get(playerId) ?? 0) < GameServer.SWITCH_COOLDOWN_MS) return true;
+    this.switchCooldowns.set(playerId, now);
+    return false;
+  }
+
+  private roomFull(room: Room): boolean {
+    return room.playerCount() >= CONFIG.maxPlayers ||
+      (CONFIG.globalMaxPlayers > 0 && this.totalPlayers() >= CONFIG.globalMaxPlayers);
   }
 
   private reconnectGraceMs = CONFIG.reconnectGraceMs; // Grace period for F5 reconnect
