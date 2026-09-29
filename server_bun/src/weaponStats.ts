@@ -40,7 +40,10 @@ interface FlagRow { caps: number; holdMs: number; returns: number; dropMs: numbe
 // Tribes balance lives on movement; if kills only happen at low speed
 // the game is a foot-shooter, not a ski game.
 interface SpeedBins { [bucket: string]: number }
-interface SpeedRow { shooter: SpeedBins; victim: SpeedBins }
+// air counts proxy air-vs-ground kill share without terrain plumbing:
+// |vy| > 4 m/s at kill moment reads as airborne (a ski crest or jet
+// climb always carries vertical speed; walking never does).
+interface SpeedRow { shooter: SpeedBins; victim: SpeedBins; airShooter: number; airVictim: number }
 // pickups: economy funnel per pickup kind — spawned vs banked vs decayed.
 // A kind that mostly decays means drops outpace collectors (bots under-
 // farm, or the loot isn't worth the detour).
@@ -108,7 +111,7 @@ class WeaponStats {
 
   /** Kill-moment speeds (m/s) for shooter and victim, 5 m/s buckets. */
   recordKillSpeed(mode: string, shooterVel: { x: number; y: number; z: number } | null, victimVel: { x: number; y: number; z: number } | null): void {
-    const r = (this.speeds[mode] ??= { shooter: {}, victim: {} });
+    const r = (this.speeds[mode] ??= { shooter: {}, victim: {}, airShooter: 0, airVictim: 0 });
     const bin = (v: { x: number; y: number; z: number } | null): string => {
       if (!v) return 'unk';
       const s = Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
@@ -117,6 +120,8 @@ class WeaponStats {
     const sb = bin(shooterVel), vb = bin(victimVel);
     r.shooter[sb] = (r.shooter[sb] ?? 0) + 1;
     r.victim[vb] = (r.victim[vb] ?? 0) + 1;
+    if (shooterVel && Math.abs(shooterVel.y) > 4) r.airShooter++;
+    if (victimVel && Math.abs(victimVel.y) > 4) r.airVictim++;
     this.dirty = true;
   }
 
