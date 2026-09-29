@@ -1,3 +1,4 @@
+2026-09-29 - Reject stale-seq position reports in updatePosition: a reordered or replayed packet could pass plausible() and teleport the player backward.
 2026-09-29 - Cap tick-frame send backlog: sockets over 256KB queued drop tick frames instead of growing memory; getBufferedAmount exposed on RTC/WT adapters; reliable traffic still queues.
 2026-09-29 - Pin the REGEN/DD suppression case: a buffed record must still suppress while a client-side flag change still forces a send.
 2026-09-29 - Fix suppression leak for buffed players: lastSent.status carries the OR'd REGEN/DD wire bits, so mask it to client bits before comparing or a regen/DD window broadcast every tick for its whole duration.

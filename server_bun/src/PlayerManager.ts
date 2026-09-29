@@ -155,7 +155,10 @@ export class PlayerManager {
 
   updatePosition(playerId: string, position: Vec3, rotation: Rotation, velocity: Vec3, seq?: number): void {
     const player = this.players.get(playerId);
-    if (player) {
+    // A stale/reordered report must not regress position — all lanes are
+    // ordered now, but a replayed or duplicated packet would otherwise
+    // teleport the player backward through plausible() checks.
+    if (player && (seq === undefined || seq > player.lastSeq || player.lastSeq === 0)) {
       player.position = { ...position };
       player.rotation = { ...rotation };
       player.velocity = { ...velocity };
