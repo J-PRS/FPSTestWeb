@@ -118,7 +118,10 @@ export class MatchClock {
     host.endCleanup();
     const next = host.rotate();
     if (next) host.applySpec(next);
-    this.endsAt = Date.now() + spec.timeLimitS * 1000;
+    // Re-arm only with an audience: an empty room's clock should stay
+    // unarmed (endsAt=0) so the next joiner gets a fresh match instead
+    // of inheriting whatever an unwatched countdown burned down to.
+    this.endsAt = host.getHumanCount() > 0 ? Date.now() + spec.timeLimitS * 1000 : 0;
     this.warned = false;
     this.overtime = false;
     host.broadcast({ type: 'matchStart', mode: host.mode, scores: { ...host.scores } });
