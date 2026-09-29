@@ -102,7 +102,10 @@ export type ServerMessage =
   // Powerup grabbed — heal/armor/regen/dd buff applied to the collector.
   // `until` is server epoch ms for timed buffs; armor/health are absolute.
   | { type: 'buff'; kind: 'heal' | 'armor' | 'regen' | 'dd'; armor?: number; health?: number; until?: number }
-  | { type: 'playerKill'; shooterId: string; targetId: string; weapon?: number }
+  | { type: 'playerKill'; shooterId: string; targetId: string; weapon?: number;
+      /** Shooter's consecutive-kill count after this frag — kill feed can
+       *  render "🔥x5" without tracking streaks itself. */
+      streak?: number }
   | { type: 'knockback'; targetId: string; position: Vec3; force: number; pull?: boolean }
   | { type: 'playerRespawn'; playerId: string; internalId: string; position: Vec3; rotation: Rotation }
   | { type: 'jump'; playerId: string; position: Vec3 }

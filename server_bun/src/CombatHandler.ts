@@ -636,7 +636,9 @@ export class CombatHandler {
     }
     if (shooterId !== 'environment') this.playerManager.addKill(shooterId);
     logger.info(`${hitLabel} → kill`, { shooter: shooterId, target: targetId, damage, ...extra });
-    this.broadcast({ type: 'playerKill', shooterId, targetId, weapon });
+    const shooterStreak = shooterId === 'environment' ? undefined
+      : (this.playerManager.getPlayer(shooterId)?.streak ?? 0) + 1;
+    this.broadcast({ type: 'playerKill', shooterId, targetId, weapon, streak: shooterStreak });
     this.announceKill(shooterId, targetId);
     this.onKill?.(targetId, shooterId);
     this.scheduleRespawn(targetId);

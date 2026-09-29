@@ -213,11 +213,14 @@ describe('spree announcements', () => {
       t.protectedUntil = 0;
       combat.botAttack(shooter, target, 0);
     };
+    const kills = () => broadcasts
+      .map((b) => b.msg)
+      .filter((m): m is Extract<ServerMessage, { type: 'playerKill' }> => m.type === 'playerKill');
     const notices = () => broadcasts
       .map((b) => b.msg)
       .filter((m): m is Extract<ServerMessage, { type: 'matchNotice' }> => m.type === 'matchNotice')
       .map((m) => m.text);
-    return { players, combat, kill, notices };
+    return { players, combat, kill, notices, kills };
   };
 
   it('first blood fires exactly once per match', () => {
@@ -255,5 +258,16 @@ describe('spree announcements', () => {
     kill('a', 'b');
     expect(notices().some((t) => t.includes('a') && t.includes('b') && t.includes('ended'))).toBe(true);
     expect(players.getPlayer('b')!.streak).toBe(0);
+  });
+
+  it('playerKill carries the shooter streak for the kill feed', () => {
+    const { players, kill, kills } = killHarness();
+    players.addPlayer('a');
+    players.addPlayer('b');
+    for (let i = 0; i < 2; i++) {
+      players.getPlayer('b')!.isDead = false;
+      kill('a', 'b');
+    }
+    expect(kills().map((m) => m.streak)).toEqual([1, 2]);
   });
 });
