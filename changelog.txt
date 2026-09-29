@@ -1,3 +1,5 @@
+2026-10-03 - overlayInput split: loadout-bar chip/dropup DOM extracted to ui/loadoutMenu.ts (wireLoadoutBar + buildRows + mkRow); overlayInput now only owns pointer-lock/key wiring. 301 -> 108 lines, oxlint quiet.
+
 2026-10-03 - powerupGrab scenarios: heal pickup restores health + private buff notify; regen/dd set server-owned until-clocks (clients can't claim them).
 
 2026-10-03 - birds.ts refactor: 210-line update() split into seedFlock/roamKettles/tickAggro + per-mode dive/depart/loner/kettle helpers; shared flap/knockback/faceFlight tails deduped. c44 -> clean, oxlint quiet.
