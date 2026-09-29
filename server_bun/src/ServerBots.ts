@@ -601,8 +601,11 @@ export class ServerBots {
         // which is what keeps a bot-filled match's scoreboard moving.
         pickup: this.room.pickups?.nearest(p.position) ?? undefined,
         // Gem-economy rooms make hunting creatures the actual objective;
-        // elsewhere food is just a distraction and this stays unset.
-        huntCreatures: this.room.mode === 'nuggets',
+        // on any map that spawns real creatures they're threats worth
+        // shooting too. Structureless-free: pops is {} where spec doesn't
+        // declare `creatures`.
+        huntCreatures: this.room.mode === 'nuggets'
+          || Object.values(this.room.creatureSim.pops).some((cap) => cap > 0),
         // Structures read as raised ground — brains route around walls
         // and onto platforms instead of pushing into solid geometry.
         groundY: (x, z) => Math.max(
