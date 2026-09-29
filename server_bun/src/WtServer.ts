@@ -137,8 +137,11 @@ class WtSocketAdapter {
   }
 
   close(_code = 1000, reason = ''): void {
-    this.open = false;
     try { this.session.close({ closeCode: 0, reason }); } catch { /* gone */ }
+    // A locally-initiated close can't be assumed to re-enter through
+    // session.closed — without die() here, kicks/idle reaps never reach
+    // onClose and the player stays registered as a zombie forever.
+    this.die();
   }
 }
 
