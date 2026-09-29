@@ -6,6 +6,7 @@
 // the "decoder works but the handler dropped it" failure class.
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import recText from './fixtures/duel.rec?raw';
+import crossfireRec from './fixtures/crossfire.rec?raw';
 
 vi.mock('../core/sfx.js', () => ({ at: () => {}, shotAt: () => {}, init: () => {}, hitMarker: () => {}, playerHurt: () => {}, shieldHit: () => {}, killConfirm: () => {}, flagCue: () => {}, matchHorn: () => {} }));
 vi.mock('../entities/PlayerModel.js', () => ({
@@ -50,5 +51,16 @@ describe('netReplay — captured wire stream through real handlers', () => {
     expect(h.calls.entities).toContain('ballRoster');
     // kills/hits reached the HUD surface (22 playerHit + 2 playerKill in capture)
     expect(h.calls.hud.length).toBeGreaterThan(0);
+  });
+
+  it('replays the crossfire capture — ticks populate remotes, deploySpawns route', () => {
+    for (const ev of loadRec(crossfireRec)) {
+      if (ev.kind === 'json') feed(h.nm, JSON.parse(ev.payload));
+      else feedBin(h.nm, hexToBytes(ev.payload));
+    }
+    // 3 fleet bots + 4 server bots joined before the recorder did
+    expect(h.nm.getPlayers().size).toBeGreaterThan(0);
+    // 17 deploySpawn broadcasts in the window — replicas spawned
+    expect(h.calls.deployables.filter((c) => c.startsWith('spawn:')).length).toBeGreaterThan(0);
   });
 });
