@@ -555,6 +555,29 @@ export class Player {
       return;
     }
 
+    this.tickTimers(dt);
+
+    if (this.skills.updateBlink(dt)) return;
+
+    const input = this.readMoveInput();
+    this.stepMovement(dt, input);
+    const isJetting = this.tickEnergy(dt);
+
+    // ---- All visual/event spawns below use the final post-physics position ----
+
+    this.visuals.updateCamera(this.camera, this.terrain, this.pos, this.yaw, this.pitch, this.thirdPerson);
+    this.checkCameraSpinout(dt);
+    // Model visibility follows the toggle AND death (observer cam is ghost
+    // flight — your corpse shouldn't fly with you)
+    this.model?.setVisible(this.thirdPerson && !this.isDead && !this.cloaked);
+    this.visuals.updateFeetMarker(this.terrain, this.pos);
+    this.fireWeapons();
+    this.emitMoveEvents(isJetting, input.skiHeld, input.jumpHeld, dt);
+    this.visuals.updateShadowBlob(this.terrain, this.pos);
+    this.jumpAnimTimer = this.visuals.updateModelAnim(this.model, this.pos, this.yaw, this.pitch, this.jumpAnimTimer, this.getSpeed(), dt, this.onGround, isJetting, this.vel);
+  }
+
+  private tickTimers(dt: number): void {
     this.fireTimer = Math.max(0, this.fireTimer - dt);
     this.beltTimer = Math.max(0, this.beltTimer - dt);
     this.throwLockT = Math.max(0, this.throwLockT - dt);
@@ -569,11 +592,9 @@ export class Player {
       this.shieldBubble.update(dt);
       if (this.shielded) this.shieldBubble.mesh.position.set(this.pos.x, this.pos.y - 0.6, this.pos.z);
     }
+  }
 
-    if (this.skills.updateBlink(dt)) return;
-
-    const input = this.readMoveInput();
-
+  private stepMovement(dt: number, input: ReturnType<Player['readMoveInput']>): void {
     // Update movement controller with input and current yaw/pitch
     this.movement.setState({
       pos: this.pos,
@@ -611,21 +632,19 @@ export class Player {
     this.pos.copy(moveState.pos);
     this.vel.copy(moveState.vel);
     this.onGround = moveState.onGround;
+  }
 
-    // Jetpack thrust is inside the shared sim now (fed via jetHeld above,
-    // applied post-collision inside MoveSim.update) — here only the energy
-    // economy and the FX flag remain.
+  // Jetpack thrust is inside the shared sim (fed via jetHeld into
+  // stepMovement) — here only the energy economy and the FX flag remain.
+  // Tribes-style tank: drains while burning, recharges only when off the
+  // jet; cloak/shield/mend compete for the same tank, never fill it.
+  private tickEnergy(dt: number): boolean {
     const isJetting = this.input.jetPending && this.energy > 0;
     this.jetting = isJetting;
     if (isJetting) {
       this.energy -= JET_DRAIN * this.mods.jetDrain * dt;
       this.onGround = false;
     }
-
-    // Energy recharge — paused while jetting (Tribes-style: drain 12/s
-    // while burning, recharge 8/s only when off the jet)
-    // Regen also pauses while cloaked — invisibility and jets compete
-    // for the same tank, never fill it together.
     if (!isJetting && !this.cloaked && !this.shielded && !this.mending) {
       this.energy = Math.min(MAX_ENERGY, this.energy + JET_CHARGE * this.mods.jetRegen * this.mods.energyRegen * dt);
     }
@@ -635,19 +654,7 @@ export class Player {
     if (this.mods.regen > 0 && !(this.serverOwnsHealth?.() ?? false) && !this.isDead) {
       this.health = Math.min(this.maxHealth, this.health + this.mods.regen * dt);
     }
-
-    // ---- All visual/event spawns below use the final post-physics position ----
-
-    this.visuals.updateCamera(this.camera, this.terrain, this.pos, this.yaw, this.pitch, this.thirdPerson);
-    this.checkCameraSpinout(dt);
-    // Model visibility follows the toggle AND death (observer cam is ghost
-    // flight — your corpse shouldn't fly with you)
-    this.model?.setVisible(this.thirdPerson && !this.isDead && !this.cloaked);
-    this.visuals.updateFeetMarker(this.terrain, this.pos);
-    this.fireWeapons();
-    this.emitMoveEvents(isJetting, input.skiHeld, input.jumpHeld, dt);
-    this.visuals.updateShadowBlob(this.terrain, this.pos);
-    this.jumpAnimTimer = this.visuals.updateModelAnim(this.model, this.pos, this.yaw, this.pitch, this.jumpAnimTimer, this.getSpeed(), dt, this.onGround, isJetting, this.vel);
+    return isJetting;
   }
 
   // Spinout detector: a camera rotation jump >35° in a single frame is a
@@ -736,36 +743,9 @@ export class Player {
   private stepAcc = 0; // footstep-dust distance accumulator
 
   private emitMoveEvents(isJetting: boolean, skiHeld: boolean, jumpHeld: boolean, dt: number): void {
-    // Jetpack trail particles
-    if (isJetting && this.onJetpack) {
-      this.onJetpack(this.pos); // read-only use — no clone, runs every frame
-      // Send jetpack event to network (throttled to ~20/s)
-      const now = performance.now();
-      if (this.onNetworkJetpack && now - this._lastJetpackSend > 50) {
-        this._lastJetpackSend = now;
-        this.onNetworkJetpack({ x: this.pos.x, y: this.pos.y, z: this.pos.z });
-      }
-    }
-
-    // Ski dust particles (when space is held, on ground, and moving)
-    this.skiing = skiHeld && this.onGround && this.vel.lengthSq() > 10;
-    if (this.skiing && this.onSki) {
-      this.onSki(this.pos, this.vel); // read-only use — no clones, runs every frame
-    }
-
-    // Footstep dust — grounded, not skiing, actually moving. Distance-paced
-    // (~0.9m ≈ one puff per step) so a jog puffs at footfall cadence and
-    // standing still puffs nothing.
-    const wsp = Math.hypot(this.vel.x, this.vel.z);
-    if (this.onGround && !this.skiing && wsp > 1.5) {
-      this.stepAcc += wsp * dt;
-      if (this.stepAcc >= 0.9) {
-        this.stepAcc = 0;
-        this.onFootDust?.(this.pos, this.vel);
-      }
-    } else {
-      this.stepAcc = 0;
-    }
+    if (isJetting) this.emitJetpack();
+    this.emitSkiDust(skiHeld);
+    this.emitFootDust(dt);
 
     this.skills.postMove(this.wasOnGround, this.onGround, this.prevVelY);
 
@@ -784,6 +764,42 @@ export class Player {
       this.onNetworkJump?.({ x: this.pos.x, y: this.pos.y, z: this.pos.z });
     }
     this.wasOnGround = this.onGround;
+  }
+
+  // Jetpack trail particles — every frame while burning, plus a ~20/s
+  // throttled network event so remotes see the same plume.
+  private emitJetpack(): void {
+    if (!this.onJetpack) return;
+    this.onJetpack(this.pos); // read-only use — no clone, runs every frame
+    const now = performance.now();
+    if (this.onNetworkJetpack && now - this._lastJetpackSend > 50) {
+      this._lastJetpackSend = now;
+      this.onNetworkJetpack({ x: this.pos.x, y: this.pos.y, z: this.pos.z });
+    }
+  }
+
+  // Ski dust particles (when space is held, on ground, and moving)
+  private emitSkiDust(skiHeld: boolean): void {
+    this.skiing = skiHeld && this.onGround && this.vel.lengthSq() > 10;
+    if (this.skiing && this.onSki) {
+      this.onSki(this.pos, this.vel); // read-only use — no clones, runs every frame
+    }
+  }
+
+  // Footstep dust — grounded, not skiing, actually moving. Distance-paced
+  // (~0.9m ≈ one puff per step) so a jog puffs at footfall cadence and
+  // standing still puffs nothing.
+  private emitFootDust(dt: number): void {
+    const wsp = Math.hypot(this.vel.x, this.vel.z);
+    if (this.onGround && !this.skiing && wsp > 1.5) {
+      this.stepAcc += wsp * dt;
+      if (this.stepAcc >= 0.9) {
+        this.stepAcc = 0;
+        this.onFootDust?.(this.pos, this.vel);
+      }
+    } else {
+      this.stepAcc = 0;
+    }
   }
 
   // Every impulse path must push pos/vel back into the controller —
