@@ -1,3 +1,5 @@
+2026-10-03 - deployTargeting scenario: sentry turret never fires on teammates standing in range, every bolt lands on the hostile.
+
 2026-10-03 - shotReject scenario: a forged hit claim (projectile geometrically unable to reach) is rejected privately to the shooter, zero damage applied.
 
 2026-10-03 - deployTtl + destroyClaim scenarios: turret expires on its 180s TTL -> deployGone; a rival's projectileDestroy claim is refused, only the owner retires a shell.

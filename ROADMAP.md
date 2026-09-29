@@ -59,7 +59,10 @@ surface. Detailed research lives in `_reports/`; this file is the current truth.
   flag cap/return/drop, projectile hit + spawn-protection, FFA kill score,
   gem bank, turret fire + wall-LOS, creature wall-pen, mine boom, respawn,
   friendly-fire, totem beam, multi-species mix, roller/snake/gnat bite
-  chains) over a shared `harness.ts`
+  chains, joiner/spectator bootstrap, spawn shield, respawn state, ffa
+  score, ctf win funnel, tdm tag confirm, ambient-decor rule, arena push,
+  pickup decay, edge fanout, deploy TTL, destroy-claim ownership) over a
+  shared `harness.ts`
   (flat field, mkRoom, pin = resync+protectedUntil=0, deterministic
   step() for CreatureSim, broadcast watch). Already paid off: caught
   CreatureSim-never-ticked-in-tests, the sendTo/broadcast tap split,
