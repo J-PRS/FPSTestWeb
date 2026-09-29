@@ -102,9 +102,9 @@ describe('ray-burst discharge (remote railgun)', () => {
 
   it('detonates on a target inside the beam path', () => {
     const p = spawnRRG(new THREE.Vector3(0, 50, 0), new THREE.Vector3(1, 0, 0));
-    // Beam dir follows velocity — ~11 m/s of downward sag at discharge, so
-    // the beam line through (≈22, ≈47.8) crosses x=70 at y≈38.
-    const players = new Map<string, THREE.Vector3>([['p1', new THREE.Vector3(70, 38, 0)]]);
+    // Beam dir follows velocity — flat flight now, so the beam line stays
+    // level at y=50 and crosses x=70 on the throw axis.
+    const players = new Map<string, THREE.Vector3>([['p1', new THREE.Vector3(70, 50, 0)]]);
     const dt = 1 / 60;
     for (let t = 0; t < 2 && !p.exploded; t += dt) p.update(dt, flatTerrain, undefined, players);
     expect(p.hitPlayerId).toBe('p1');
