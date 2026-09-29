@@ -102,6 +102,20 @@ export class Player {
       this.model.load();
     }
   }
+  /** New-life state reset — shared by the wire respawn path and the
+   *  offline killLocal respawn so neither forgets a field (a stale buff
+   *  or lastDamageSource leaking into the next life already happened). */
+  resetLifeState(): void {
+    this.isDead = false;
+    this.applyPendingClass(); // banked tier swap lands on the new life
+    this.health = this.maxHealth;
+    this.armor = 0;
+    this.buffUntil.regen = 0;
+    this.buffUntil.dd = 0;
+    this.lastDamageSource = '';
+    this.vel.set(0, 0, 0);
+  }
+
   kills = 0;
   isDead = false;
   /** Verb phrase for the death message ("devoured by a crawler") — set by

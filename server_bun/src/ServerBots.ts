@@ -23,6 +23,7 @@ import { STATUS, CLIENT_STATUS_MASK } from '../../shared/status.ts';
 import { WeaponType, getWeaponStats } from '../../shared/weapons.ts';
 import type { PerkId } from '../../shared/perks.ts';
 import { CLASS_STATS, type ArmorClass } from '../../shared/botClasses.ts';
+import { roleObjective, ROLE_PRIORITY, type BotRole } from '../../shared/flagGoals.ts';
 
 /** A bot's kit — weapon picked by engagement range, perk set at spawn so
  *  maxHealth and the move shadow's jet economy match a real loadout. */
@@ -43,13 +44,9 @@ const BOLT_SPEED = 60;     // m/s visual bolt + hitscan travel is instant
 const SUPERBOT = process.env.FPS_SUPERBOT ?? '';
 const isSuper = (id: string) => SUPERBOT !== '' && id.includes(SUPERBOT);
 
-/** Tribes-flavored squad roles. capper runs the flag route, offense clears
- *  the stand / escorts, ldefense (light defense) holds home but chases the
- *  thief the moment the flag moves, hof is Heavy-on-Flag (parks ON the
- *  stand and never pursues), defense is a generic home guard, technician
- *  is home defense that emplaces gear, infiltrator cloaks deep and wrecks
- *  gear before grabbing. */
-type BotRole = 'capper' | 'offense' | 'ldefense' | 'hof' | 'defense' | 'technician' | 'infiltrator';
+/** Tribes-flavored squad roles — the type and the objective rules live in
+ *  shared/flagGoals.ts so offline CTF plays by the identical table. */
+
 
 /** Armor class follows the role — Tribes pacing lives on this: cappers
  *  and infiltrators fly light, HoF and technicians anchor heavy, the
@@ -330,65 +327,23 @@ export class ServerBots {
     // Own flag's carrier — chase the thief, not the base.
     const thief = own.state === 'carried' && own.carrier
       ? this.room.players.getPlayer(own.carrier) : null;
-    // Own flag dropped — anyone close enough touches it home; defenders
-    // treat it as top priority, offenders only when it's convenient.
+    // Own flag dropped — anyone close enough touches it home.
     const dropped = own.state === 'dropped' ? own.pos : null;
-    const enemyStand = enemy.state !== 'carried'
-      ? { pos: enemy.pos, infiltrating: true } : null;
+    const enemyStandPos = enemy.state !== 'carried' ? enemy.pos : null;
+    const escortP = enemy.carrier ? this.room.players.getPlayer(enemy.carrier) : null;
+    const escortPos = escortP && escortP.team === me ? escortP.position : null;
 
-    switch (role) {
-      // HoF: planted on the stand, PERIOD — never chases a thief (that's
-      // what LD exists for). Only leaves the ring for a flag dropped in
-      // easy reach; anything else is someone else's job.
-      case 'hof':
-        if (dropped && Math.hypot(dropped.x - own.home.x, dropped.z - own.home.z) < 25)
-          return { pos: dropped, infiltrating: false };
-        return homeward;
-
-      // Light defense / technician / generic defense: home-side
-      // priorities — thief, dropped, then hold home in intercept range.
-      case 'ldefense':
-      case 'technician':
-      case 'defense':
-        if (thief) return { pos: thief.position, infiltrating: false };
-        if (dropped) return { pos: dropped, infiltrating: false };
-        return homeward;
-
-      // Capper: the flag route is the job — chase a carrier teammate to
-      // escort, otherwise press the stand. Only a dropped own flag on the
-      // way home pulls it off-route.
-      case 'capper':
-        if (enemy.carrier) {
-          const escort = this.room.players.getPlayer(enemy.carrier);
-          if (escort && escort.team === me) return { pos: escort.position, infiltrating: false };
-        }
-        if (dropped) return { pos: dropped, infiltrating: false };
-        if (enemyStand) return enemyStand;
-        return homeward;
-
-      // Infiltrator: slips in cloaked to wreck gear / grab — infiltrating
-      // holds even at the stand so the cloak keeps covering the breach.
-      case 'infiltrator':
-        if (enemy.carrier) {
-          const escort = this.room.players.getPlayer(enemy.carrier);
-          if (escort && escort.team === me) return { pos: escort.position, infiltrating: false };
-        }
-        if (enemyStand) return enemyStand;
-        if (thief) return { pos: thief.position, infiltrating: false };
-        return homeward;
-
-      // Offense (light offense in Tribes terms): escort a carrier, punish
-      // a thief, else press the enemy stand to clear it for the capper.
-      default:
-        if (enemy.carrier) {
-          const escort = this.room.players.getPlayer(enemy.carrier);
-          if (escort && escort.team === me) return { pos: escort.position, infiltrating: false };
-        }
-        if (thief) return { pos: thief.position, infiltrating: false };
-        if (dropped) return { pos: dropped, infiltrating: false };
-        if (enemyStand) return enemyStand;
-        return homeward; // flag's moving — defend home
-    }
+    // One role table for both runtimes — shared/flagGoals.ts.
+    const pick = roleObjective(role, {
+      home: own.home,
+      thief: thief?.position ?? null,
+      dropped,
+      enemyStand: enemyStandPos,
+      escort: escortPos,
+    });
+    // Pressing the enemy stand is the infiltrate signal — the brain reads
+    // it as cloak intent on the approach.
+    return { pos: pick, infiltrating: pick === enemyStandPos && enemyStandPos !== null };
   }
 
   /** Apply the armor class to a live bot record: maxHealth shifts and
@@ -427,13 +382,10 @@ export class ServerBots {
       if (!p?.team) continue;
       (byTeam.get(p.team) ?? byTeam.set(p.team, []).get(p.team)!).push(id);
     }
-    // Desired role counts by squad size — a duo can't afford specialists.
-    const WANT: [BotRole, number][] = [
-      ['capper', 1], ['ldefense', 1], ['hof', 1], ['technician', 1], ['infiltrator', 1],
-    ];
-    // Core before luxury: a 3-stack gets capper+LD, specialists only show
+    // Core before luxury — shared ROLE_PRIORITY table (capper@3 …
+    // infiltrator@7): a 3-stack gets capper+LD, specialists only show
     // once the lanes they free up are actually covered.
-    const MIN_SQUAD = [3, 4, 5, 6, 7]; // squad sizes unlocking each WANT row
+    const WANT = ROLE_PRIORITY;
     for (const ids of byTeam.values()) {
       // Never reassign a carrier — the flagGoal carrier check owns them.
       const free = ids.filter((id) => {
@@ -447,11 +399,11 @@ export class ServerBots {
       // Specialists are sticky: donors only come from the generic pool
       // (offense/defense), and a bot is consumed once per cycle — else the
       // same body flip-flops capper→hof→technician on every pass.
-      const isSpecial = (id: string) => WANT.some(([r]) => this.roles.get(id) === r);
+      const isSpecial = (id: string) => WANT.some((w) => this.roles.get(id) === w.role);
       const donors = free.filter((id) => !isSpecial(id));
       for (let i = 0; i < WANT.length; i++) {
-        const [want, need] = WANT[i]!;
-        if (ids.length < MIN_SQUAD[i]!) break;
+        const { role: want, want: need, minSquad } = WANT[i]!;
+        if (ids.length < minSquad) break;
         let have = 0;
         for (const id of ids) if (this.roles.get(id) === want) have++;
         while (have < need) {

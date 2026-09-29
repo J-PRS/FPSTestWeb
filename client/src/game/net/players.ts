@@ -293,14 +293,7 @@ function wirePlayerLifecycle(ctx: NetCtx): void {
     if (playerId === nm().getLocalPlayerId()) {
       logger.info(`Local player respawned at ${JSON.stringify(position)}`);
       const player = deps.lazyPlayer();
-      player.isDead = false;
-      player.applyPendingClass(); // banked tier swap lands here, same beat the server applies it
-      player.health = player.maxHealth;
-      player.armor = 0;
-      player.buffUntil.regen = 0;
-      player.buffUntil.dd = 0;
-      player.lastDamageSource = ''; // stale attribution shouldn't survive a life
-      player.vel.set(0, 0, 0);
+      player.resetLifeState();
       player.pos.set(position.x, position.y, position.z);
       deps.setLastSentPos({ x: position.x, y: position.y, z: position.z });
       player.yaw = rotation.yaw;

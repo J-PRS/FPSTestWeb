@@ -140,15 +140,7 @@ export class TeamBots {
       bot.tick(dt);
       if (bot.isDead) {
         bot.respawnAt -= dt;
-        if (bot.respawnAt <= 0) {
-          const a = Math.random() * Math.PI * 2;
-          const sp = new THREE.Vector3(player.pos.x + Math.cos(a) * 50, 0, player.pos.z + Math.sin(a) * 50);
-          sp.y = terrain.getHeight(sp.x, sp.z) + EYE;
-          bot.respawn({ x: sp.x, y: sp.y, z: sp.z });
-          bot.botHp = bot.botMaxHp;
-          bot.show();
-          bot.setGizmoColor(bot.team === 'ffa' ? 0xcc66ff : TEAM_COLORS[bot.team as TeamId]);
-        }
+        if (bot.respawnAt <= 0) this.respawnBot(bot);
         continue;
       }
       this.tickBolts(dt);
@@ -333,22 +325,28 @@ export class TeamBots {
     return `${name} WINS the deathmatch — ${this.ffaScores.get(w)} pts`;
   }
 
+  /** Re-seat a dead bot on the spawn ring — shared by the respawn timer
+   *  and match reset (same spot-finding, hp, and gizmo re-tint). */
+  private respawnBot(bot: GameBot): void {
+    const player = this.deps.lazyPlayer();
+    const terrain = this.deps.lazyTerrain();
+    const a = Math.random() * Math.PI * 2;
+    const sp = new THREE.Vector3(player.pos.x + Math.cos(a) * 50, 0, player.pos.z + Math.sin(a) * 50);
+    sp.y = terrain.getHeight(sp.x, sp.z) + EYE;
+    bot.respawn({ x: sp.x, y: sp.y, z: sp.z });
+    bot.botHp = bot.botMaxHp;
+    bot.show();
+    bot.setGizmoColor(bot.team === 'ffa' ? 0xcc66ff : TEAM_COLORS[bot.team as TeamId]);
+  }
+
   /** Match over → wipe scores, respawn every bot, flags home. */
   private resetMatch(): void {
     this.over = null;
     this.scores.alpha = 0; this.scores.bravo = 0;
     for (const k of this.ffaScores.keys()) this.ffaScores.set(k, 0);
-    const player = this.deps.lazyPlayer();
-    const terrain = this.deps.lazyTerrain();
     for (const bot of this.bots) {
-      const a = Math.random() * Math.PI * 2;
-      const r = 20 + Math.random() * 40;
-      const sp = new THREE.Vector3(player.pos.x + Math.cos(a) * r, 0, player.pos.z + Math.sin(a) * r);
-      sp.y = terrain.getHeight(sp.x, sp.z) + EYE;
-      bot.respawn({ x: sp.x, y: sp.y, z: sp.z });
-      bot.botHp = bot.botMaxHp;
       bot.carryingFlag = false;
-      bot.show();
+      this.respawnBot(bot);
     }
     this.ctf?.reset();
     this.pushScore();

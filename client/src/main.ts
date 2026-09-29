@@ -254,11 +254,7 @@ async function init(): Promise<void> {
     hud.setDeathOverlay(true);
     fragMessages.show(`YOU DIED\n${source}`);
     setTimeout(() => {
-      player.isDead = false;
-      player.applyPendingClass(); // banked tier swap lands on the new life
-      player.health = player.maxHealth;
-      player.lastDamageSource = '';
-      player.vel.set(0, 0, 0);
+      player.resetLifeState();
       const a = Math.random() * Math.PI * 2;
       player.pos.set(Math.cos(a) * 40, terrain.getHeight(Math.cos(a) * 40, Math.sin(a) * 40) + 2, Math.sin(a) * 40);
       player.syncMovement();
