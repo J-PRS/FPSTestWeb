@@ -1,3 +1,4 @@
+2026-09-26 - Brain buckets: phased retarget/resync accumulators by entity id in BallSim + CreatureSim (same-tick spawn waves no longer dump every decision scan into one tick); serverHit() unified server-authored damage funnels; claimDamageMelee shared netDriven claim helper.
 2026-09-26 - creatureSim generalized to MELEE_SPECIES table (scarab ported server-authoritative), shared netMelee replay helper, distance-tier edge tests; soak clean (0 rejects, 0 streaks)
 2026-09-26 - Server-authoritative melee species (crawler pilot): shared creatureSim, crawl* wire events, client netDriven replay, infestation map creatures:8, distance-tiered edge fanout (near players every edge, far/spectators every 4th as resync beat)
 2026-10-03 - maps/infestation.json: first species-mix map (nuggets room on swarm terrain, ambient caps crawler40/scarab24/rakk12/gnat30/seeker6/strifer4 + 6 bots) - verified ambient table reaches gameState.map.ambient live and feeds setAmbientCaps

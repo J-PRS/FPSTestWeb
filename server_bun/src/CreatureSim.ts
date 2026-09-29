@@ -37,6 +37,14 @@ const _snap: SimVec = { x: 0, y: 0, z: 0 };
 // retarget rate).
 const NEAR_D2 = 80 * 80;
 const FAR_SKIP = 4;
+// Brain buckets: retarget/resync decision ticks are staggered across
+// BRAIN_BUCKETS phases keyed by creature id, so a pack that all spawned
+// on the same tick doesn't dump its O(players) scans + edge fanouts into
+// one frame. Classic amortized-AI trick — physics still steps every tick
+// (dt can't change without diverging predictors), only decisions
+// spread. Re-seeded on spawn so same-tick batches land in different
+// buckets.
+const BRAIN_BUCKETS = 8;
 
 export class CreatureSim {
   private field: Heightfield | null = null;
@@ -132,6 +140,10 @@ export class CreatureSim {
     const z = near.z + Math.sin(ang) * dist;
     const seed = (Math.random() * 0xffffffff) >>> 0 || 1;
     const c = makeSimCrawler(this.nextId++, x, hmHeight(field, x, z), z, Math.random() < 0.05, seed, species);
+    // Negative offset pushes this crawler's first retarget into its own
+    // bucket instead of the spawn tick — the spread survives every reset.
+    this.retargetAcc.set(c.id, -RETARGET_INTERVAL * ((c.id % BRAIN_BUCKETS) / BRAIN_BUCKETS));
+    this.resyncAcc.set(c.id, -RESYNC_INTERVAL * ((c.id % BRAIN_BUCKETS) / BRAIN_BUCKETS));
     c.targetId = this.nearestPlayer(c, this.alivePlayers())?.id ?? null;
     this.snapTarget(c);
     this.crawlers.set(c.id, c);

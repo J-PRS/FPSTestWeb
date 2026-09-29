@@ -82,6 +82,60 @@ describe('distance-tiered edge fanout', () => {
   });
 });
 
+describe('brain buckets', () => {
+  it('same-tick spawns stagger retargets across ticks, not in a spike', () => {
+    const { sim, sent, bcast } = makeRoom();
+    // Far enough that no crawler can aggro/windup — only retarget edges
+    // land in this window.
+    addPlayerAt(sim, 'p1', 5000, 0);
+    const priv = (sim as unknown as SimPrivate & {
+      stepAll(alive: { id: string; pos: { x: number; y: number; z: number } }[]): void;
+      retargetAcc: Map<number, number>;
+      resyncAcc: Map<number, number>;
+      field: object | null;
+    });
+    priv.field = { size: 1, data: new Uint8Array(1), stride: 1 };
+
+    // Plant 8 crawlers directly so they share the seeding logic —
+    // spawn() would need randomness; set the bucket the way it does.
+    const crawlers: SimCrawler[] = [];
+    for (let i = 0; i < 8; i++) {
+      const c = makeSimCrawler(100 + i, i * 5, 0, 0, false, 7 + i, 'crawler');
+      // Same seeding as spawnCrawler: negative offset phases this
+      // crawler's first retarget into its bucket (2.0–3.75s window).
+      priv.retargetAcc.set(c.id, -2 * ((c.id % 8) / 8));
+      priv.resyncAcc.set(c.id, -4 * ((c.id % 8) / 8));
+      priv.crawlers.set(c.id, c);
+      crawlers.push(c);
+    }
+
+    // Count edge() CALLS, not messages — a far player gets nothing
+    // delivered but the decision still ran.
+    const calls: { kind: string; tick: number }[] = [];
+    let tick = 0;
+    const origEdge = priv.edge.bind(priv);
+    priv.edge = (c: SimCrawler, kind: 'retarget' | 'windup' | 'pounce' | 'bite') => {
+      calls.push({ kind, tick });
+      origEdge(c, kind);
+    };
+
+    const alive = [{ id: 'p1', pos: { x: 5000, y: 0, z: 0 } }];
+    // 76 ticks = 3.8s — covers the staggered 2.0–3.75s first-retarget
+    // window without reaching any resync beat (4s+).
+    for (let t = 0; t < 76; t++) {
+      tick = t;
+      priv.stepAll(alive);
+    }
+    const retargets = calls.filter((c) => c.kind === 'retarget');
+    const perTick = new Map<number, number>();
+    for (const r of retargets) perTick.set(r.tick, (perTick.get(r.tick) ?? 0) + 1);
+    // Without buckets all 8 retargets land in one tick; with buckets they
+    // spread ~1 per tick across the interval.
+    expect(Math.max(...perTick.values())).toBeLessThanOrEqual(1);
+    expect(retargets.length).toBe(8);
+  });
+});
+
 describe('crawlerHit claim gates', () => {
   it('drops claims on unknown ids and out-of-range claimers', () => {
     const { sim } = makeRoom();

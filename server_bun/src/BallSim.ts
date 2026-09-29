@@ -33,6 +33,10 @@ const RETARGET_INTERVAL = 2.0;  // seconds between nearest-player re-evals
 // ~1.2s so the worst-case replay error is bounded by ~1.2s of drift, not
 // by however long the ball happens to stay airborne. 40 balls ≈ 2KB/s.
 const RESYNC_INTERVAL = 1.2;
+// Brain buckets — see CreatureSim: decision accumulators are phased by
+// ball id so a same-tick spawn wave doesn't dump every nearest-player
+// scan into one tick.
+const BRAIN_BUCKETS = 8;
 const _snap: SimVec = { x: 0, y: 0, z: 0 }; // scratch — stepBall's target arg
 
 // 5% elite, otherwise weighted fodder sizes (v0 common, v1/v2 rare).
@@ -198,6 +202,8 @@ export class BallSim {
     );
     b.targetId = this.nearestPlayer(b, this.alivePlayers())?.id ?? null;
     this.snapTarget(b);
+    this.retargetAcc.set(b.id, -RETARGET_INTERVAL * ((b.id % BRAIN_BUCKETS) / BRAIN_BUCKETS));
+    this.resyncAcc.set(b.id, -RESYNC_INTERVAL * ((b.id % BRAIN_BUCKETS) / BRAIN_BUCKETS));
     this.balls.set(b.id, b);
     this.broadcast({
       type: 'ballSpawn', id: b.id, variant: b.variant, colorIdx: b.colorIdx,
