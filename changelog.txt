@@ -1,3 +1,5 @@
+2026-10-03 - birds.ts refactor: 210-line update() split into seedFlock/roamKettles/tickAggro + per-mode dive/depart/loner/kettle helpers; shared flap/knockback/faceFlight tails deduped. c44 -> clean, oxlint quiet.
+
 2026-10-03 - droneDies scenario: escort drone retires on owner death (deployGone).
 
 2026-10-03 - flagTimeout scenario: an unrecovered dropped flag teleports home on the FLAG_RESET_S clock.

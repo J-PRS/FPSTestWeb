@@ -191,33 +191,60 @@ export class AmbientBirds {
   aggro(): void { this.aggroT = AGGRO_TIME; }
 
   update(dt: number, playerPos: THREE.Vector3, terrain: Terrain, playerDead = false): void {
-    // Seed both kettles on their roam rings
-    if (!this.seeded) {
-      this.seeded = true;
-      for (const k of this.kettles) {
-        k.center.set(
-          playerPos.x + Math.cos(k.roamAngle) * k.roamDist,
-          0,
-          playerPos.z + Math.sin(k.roamAngle) * k.roamDist,
+    this.seedFlock(playerPos, terrain);
+    this.roamKettles(dt, playerPos, terrain);
+    this.tickAggro(dt, playerPos, playerDead);
+
+    for (const b of this.birds) {
+      if (b.dead) continue;
+      b.flapPhase += dt * (7 + b.flapAmp * 6);
+      b.bobPhase += dt;
+
+      // Flap bursts: amp decays to glide, occasionally re-ignites
+      if (b.flapAmp > 0) b.flapAmp = Math.max(0, b.flapAmp - dt * 0.5);
+      if (Math.random() < dt * 0.25) b.flapAmp = 1; // burst ~every 4s avg
+      // Player buzzing a bird scatters it — flap hard
+      const pd = b.group.position.distanceToSquared(playerPos);
+      if (pd < 225) { b.flapAmp = 1; b.orbitR = Math.min(b.orbitR + dt * 6, 40); }
+
+      if (this.aggroT > 0 && !playerDead) { this.diveBird(b, dt, playerPos); continue; }
+      if (this.departT > 0) { this.departBird(b, dt); continue; }
+      this.churnMembership(b, dt);
+      this.flapWings(b);
+      if (b.kettle === -1) this.soarLoner(b, dt, playerPos, terrain);
+      else this.orbitKettle(b, dt);
+    }
+  }
+
+  /** Seed both kettles on their roam rings; loners somewhere on the
+   *  horizon ring, free-flying. */
+  private seedFlock(playerPos: THREE.Vector3, terrain: Terrain): void {
+    if (this.seeded) return;
+    this.seeded = true;
+    for (const k of this.kettles) {
+      k.center.set(
+        playerPos.x + Math.cos(k.roamAngle) * k.roamDist,
+        0,
+        playerPos.z + Math.sin(k.roamAngle) * k.roamDist,
+      );
+    }
+    for (const b of this.birds) {
+      if (b.kettle === -1) {
+        const a = Math.random() * Math.PI * 2, d = 180 + Math.random() * 200;
+        b.group.position.set(
+          playerPos.x + Math.cos(a) * d,
+          terrain.getHeight(playerPos.x + Math.cos(a) * d, playerPos.z + Math.sin(a) * d) + ALT_MIN + b.altOff,
+          playerPos.z + Math.sin(a) * d,
         );
-      }
-      // Loners seed somewhere on the horizon ring, free-flying
-      for (const b of this.birds) {
-        if (b.kettle === -1) {
-          const a = Math.random() * Math.PI * 2, d = 180 + Math.random() * 200;
-          b.group.position.set(
-            playerPos.x + Math.cos(a) * d,
-            terrain.getHeight(playerPos.x + Math.cos(a) * d, playerPos.z + Math.sin(a) * d) + ALT_MIN + b.altOff,
-            playerPos.z + Math.sin(a) * d,
-          );
-          b.heading = Math.random() * Math.PI * 2;
-        }
+        b.heading = Math.random() * Math.PI * 2;
       }
     }
+  }
 
-    // Each kettle roams: slow orbit around the player's general area plus a
-    // small figure-8 wander — birds drift past the horizon over time and
-    // the two groups approach from different bearings.
+  /** Each kettle roams: slow orbit around the player's general area plus a
+   *  small figure-8 wander — birds drift past the horizon over time and
+   *  the two groups approach from different bearings. */
+  private roamKettles(dt: number, playerPos: THREE.Vector3, terrain: Terrain): void {
     for (let ki = 0; ki < this.kettles.length; ki++) {
       const k = this.kettles[ki]!;
       k.roamAngle += dt * k.roamW;
@@ -254,9 +281,11 @@ export class AmbientBirds {
       k.center.z += (_target.z - k.center.z) * 0.15 * dt + Math.cos(k.wanderPhase * 0.7) * DRIFT * dt;
       k.center.y = terrain.getHeight(k.center.x, k.center.z) + ALT_MIN;
     }
+  }
 
-    // Aggro decay — calm down when the timer runs out or the corpse stops
-    // being interesting (dead players get their sky back immediately)
+  /** Aggro decay — calm down when the timer runs out or the corpse stops
+   *  being interesting (dead players get their sky back immediately). */
+  private tickAggro(dt: number, playerPos: THREE.Vector3, playerDead: boolean): void {
     if (this.aggroT > 0) {
       this.aggroT -= dt;
       if (playerDead) {
@@ -276,179 +305,172 @@ export class AmbientBirds {
       }
     }
     if (this.departT > 0) this.departT -= dt;
+  }
 
-    for (const b of this.birds) {
-      if (b.dead) continue;
-      b.flapPhase += dt * (7 + b.flapAmp * 6);
-      b.bobPhase += dt;
+  /** Shared wing pose from flapPhase/flapAmp — every flight mode ends here. */
+  private flapWings(b: Bird): void {
+    const flap = Math.sin(b.flapPhase) * (0.15 + b.flapAmp * 0.85) + 0.15;
+    b.wingL.rotation.z = flap;
+    b.wingR.rotation.z = -flap;
+  }
 
-      // Flap bursts: amp decays to glide, occasionally re-ignites
-      if (b.flapAmp > 0) b.flapAmp = Math.max(0, b.flapAmp - dt * 0.5);
-      if (Math.random() < dt * 0.25) b.flapAmp = 1; // burst ~every 4s avg
-      // Player buzzing a bird scatters it — flap hard
-      const pd = b.group.position.distanceToSquared(playerPos);
-      if (pd < 225) { b.flapAmp = 1; b.orbitR = Math.min(b.orbitR + dt * 6, 40); }
+  /** Vel-derived lookAt + banked turn — dive/depart share the pose. */
+  private faceFlight(b: Bird, bank: number): void {
+    _next.copy(b.group.position).add(b.vel);
+    b.group.lookAt(_next);
+    b.group.rotateZ(bank);
+  }
 
-      // --- DIVEBOMB: aggroed flock ignores all soaring logic ---
-      if (this.aggroT > 0 && !playerDead) {
-        const bp = b.group.position;
-        const prevX = bp.x, prevY = bp.y, prevZ = bp.z;
-        b.peckCd -= dt;
-        b.flapAmp = 1; // aggroed birds flap hard constantly — audible anger
-        if (b.pullUp > 0) {
-          // Climb back out between passes — keeps them off the ground and
-          // gives the dive a readable arc instead of a magnet-lock
-          b.pullUp -= dt;
-          bp.y += 22 * dt;
-          bp.x += Math.cos(b.heading) * b.speed * 0.6 * dt;
-          bp.z += Math.sin(b.heading) * b.speed * 0.6 * dt;
-        } else {
-          // Dive STRAIGHT at the player — a tiny per-bird lateral weave
-          // keeps each bird on its own line without breaking the "it's
-          // coming for ME" read.
-          b.orbitA += dt * 2.2;
-          _target.copy(playerPos);
-          _target.y += Math.sin(b.bobPhase * 1.7) * 1.2;
-          _next.copy(_target).sub(bp);
-          const d = _next.length();
-          // Weave: perpendicular sway, ±1.5m — breaks the single-file
-          // convergence while the dive still reads aimed at your face.
-          if (d > 0.01) {
-            _rep.set(-_next.z, 0, _next.x).normalize();
-            _next.addScaledVector(_rep, Math.sin(b.orbitA) * 1.5);
-          }
-          // Bird-vs-bird separation: gentle radial repulsion so parallel
-          // divers never merge into one silhouette.
-          for (const o of this.birds) {
-            if (o === b || o.dead) continue;
-            const d2 = bp.distanceToSquared(o.group.position);
-            if (d2 < SEP_R2 && d2 > 1e-4) {
-              _rep.copy(bp).sub(o.group.position);
-              _next.addScaledVector(_rep, 4 / Math.sqrt(d2));
-            }
-          }
-          if (d < PECK_RANGE && b.peckCd <= 0) {
-            this.onPeck?.(bp);
-            b.peckCd = PECK_CD;
-            b.pullUp = PULLUP_TIME;
-            b.heading = Math.random() * Math.PI * 2; // scatter out on a random bearing
-          } else if (_next.lengthSq() > 0.01) {
-            _next.normalize();
-            bp.addScaledVector(_next, DIVE_SPEED * dt);
-            b.heading = Math.atan2(_next.z, _next.x);
-          }
+  /** Kill knockback into position, decay the residue, re-derive vel. */
+  private knockAndTrack(b: Bird, dt: number, prevX: number, prevY: number, prevZ: number): void {
+    const bp = b.group.position;
+    bp.addScaledVector(b.kb, dt * 4);
+    b.kb.multiplyScalar(Math.exp(-dt * 3));
+    b.vel.set((bp.x - prevX) / dt, (bp.y - prevY) / dt, (bp.z - prevZ) / dt);
+  }
+
+  // --- DIVEBOMB: aggroed flock ignores all soaring logic ---
+  private diveBird(b: Bird, dt: number, playerPos: THREE.Vector3): void {
+    const bp = b.group.position;
+    const prevX = bp.x, prevY = bp.y, prevZ = bp.z;
+    b.peckCd -= dt;
+    b.flapAmp = 1; // aggroed birds flap hard constantly — audible anger
+    if (b.pullUp > 0) {
+      // Climb back out between passes — keeps them off the ground and
+      // gives the dive a readable arc instead of a magnet-lock
+      b.pullUp -= dt;
+      bp.y += 22 * dt;
+      bp.x += Math.cos(b.heading) * b.speed * 0.6 * dt;
+      bp.z += Math.sin(b.heading) * b.speed * 0.6 * dt;
+    } else {
+      // Dive STRAIGHT at the player — a tiny per-bird lateral weave
+      // keeps each bird on its own line without breaking the "it's
+      // coming for ME" read.
+      b.orbitA += dt * 2.2;
+      _target.copy(playerPos);
+      _target.y += Math.sin(b.bobPhase * 1.7) * 1.2;
+      _next.copy(_target).sub(bp);
+      const d = _next.length();
+      // Weave: perpendicular sway, ±1.5m — breaks the single-file
+      // convergence while the dive still reads aimed at your face.
+      if (d > 0.01) {
+        _rep.set(-_next.z, 0, _next.x).normalize();
+        _next.addScaledVector(_rep, Math.sin(b.orbitA) * 1.5);
+      }
+      // Bird-vs-bird separation: gentle radial repulsion so parallel
+      // divers never merge into one silhouette.
+      for (const o of this.birds) {
+        if (o === b || o.dead) continue;
+        const d2 = bp.distanceToSquared(o.group.position);
+        if (d2 < SEP_R2 && d2 > 1e-4) {
+          _rep.copy(bp).sub(o.group.position);
+          _next.addScaledVector(_rep, 4 / Math.sqrt(d2));
         }
-        // Knockback offset decays — blast-shoved birds slide back on target
-        bp.addScaledVector(b.kb, dt * 4);
-        b.kb.multiplyScalar(Math.exp(-dt * 3));
-        b.vel.set((bp.x - prevX) / dt, (bp.y - prevY) / dt, (bp.z - prevZ) / dt);
-        _next.copy(playerPos);
-        _next.y = bp.y; // look level-ish — a dive-bombing bird reads tilted via lookAt
-        _next.copy(bp).add(b.vel);
-        b.group.lookAt(_next);
-        b.group.rotateZ(-0.35);
-        const flap = Math.sin(b.flapPhase) * (0.15 + b.flapAmp * 0.85) + 0.15;
-        b.wingL.rotation.z = flap;
-        b.wingR.rotation.z = -flap;
-        continue;
       }
-
-      // --- DEPART: kill confirmed — scatter on outward headings, climbing ---
-      if (this.departT > 0) {
-        const bp = b.group.position;
-        const prevX = bp.x, prevY = bp.y, prevZ = bp.z;
-        b.flapAmp = 1; // hard flapping climb-out
-        b.heading += Math.sin(b.bobPhase * 0.6) * 0.4 * dt; // lazy drift, not a beeline
-        bp.x += Math.cos(b.heading) * b.speed * 1.4 * dt;
-        bp.z += Math.sin(b.heading) * b.speed * 1.4 * dt;
-        bp.y += 14 * dt; // regain soaring altitude as they leave
-        bp.addScaledVector(b.kb, dt * 4);
-        b.kb.multiplyScalar(Math.exp(-dt * 3));
-        b.vel.set((bp.x - prevX) / dt, (bp.y - prevY) / dt, (bp.z - prevZ) / dt);
-        _next.copy(bp).add(b.vel);
-        b.group.lookAt(_next);
-        b.group.rotateZ(-0.35);
-        const flap = Math.sin(b.flapPhase) * (0.15 + b.flapAmp * 0.85) + 0.15;
-        b.wingL.rotation.z = flap;
-        b.wingR.rotation.z = -flap;
-        continue;
+      if (d < PECK_RANGE && b.peckCd <= 0) {
+        this.onPeck?.(bp);
+        b.peckCd = PECK_CD;
+        b.pullUp = PULLUP_TIME;
+        b.heading = Math.random() * Math.PI * 2; // scatter out on a random bearing
+      } else if (_next.lengthSq() > 0.01) {
+        _next.normalize();
+        bp.addScaledVector(_next, DIVE_SPEED * dt);
+        b.heading = Math.atan2(_next.z, _next.x);
       }
-
-      // --- membership churn: birds detach from kettles, loners join them ---
-      if (b.kettle === -1) {
-        // A loner finding itself near a thermal circles down into it
-        if (Math.random() < dt * 0.03) {
-          let best = -1, bestD = Infinity;
-          for (let ki = 0; ki < this.kettles.length; ki++) {
-            const k = this.kettles[ki]!;
-            const dx = k.center.x - b.group.position.x;
-            const dz = k.center.z - b.group.position.z;
-            const d = dx * dx + dz * dz;
-            if (d < bestD) { bestD = d; best = ki; }
-          }
-          b.kettle = best;
-          b.orbitA = Math.atan2(b.group.position.z - this.kettles[best]!.center.z,
-                              b.group.position.x - this.kettles[best]!.center.x);
-          b.orbitR = 20 + Math.random() * 55;
-        }
-      } else if (Math.random() < dt * 0.015) {
-        // Peels off the thermal — becomes a loner heading out on its own.
-        // Heading starts along the orbit tangent so the departure is smooth.
-        b.heading = b.orbitA + (b.orbitW > 0 ? Math.PI / 2 : -Math.PI / 2);
-        b.kettle = -1;
-      }
-
-      const flap = Math.sin(b.flapPhase) * (0.15 + b.flapAmp * 0.85) + 0.15;
-      b.wingL.rotation.z = flap;
-      b.wingR.rotation.z = -flap;
-
-      if (b.kettle === -1) {
-        // --- loner: free flight in the 180–450m annulus around the player ---
-        const px = b.group.position.x, pz = b.group.position.z;
-        const dxP = px - playerPos.x, dzP = pz - playerPos.z;
-        const dP = Math.hypot(dxP, dzP);
-        // Gentle steering: too far → turn back toward the player; too close → away
-        if (dP > 450 || dP < 180) {
-          const want = Math.atan2(dzP, dxP) + (dP > 450 ? Math.PI : 0);
-          const diff = Math.atan2(Math.sin(want - b.heading), Math.cos(want - b.heading));
-          b.heading += diff * Math.min(1, dt * 0.8);
-        }
-        b.heading += Math.sin(b.bobPhase * 0.4) * 0.3 * dt; // lazy wander
-        const prevX = px, prevZ = pz;
-        b.group.position.x += Math.cos(b.heading) * b.speed * dt;
-        b.group.position.z += Math.sin(b.heading) * b.speed * dt;
-        const ground = terrain.getHeight(b.group.position.x, b.group.position.z);
-        const altTarget = ground + ALT_MIN + b.altOff + Math.sin(b.bobPhase * 0.5) * 8;
-        b.group.position.y += (altTarget - b.group.position.y) * Math.min(1, dt * 0.5);
-        // Face the way it's flying
-        _next.set(b.group.position.x + Math.cos(b.heading) * 50,
-                  b.group.position.y + (altTarget - b.group.position.y) * 0.5,
-                  b.group.position.z + Math.sin(b.heading) * 50);
-        b.group.lookAt(_next);
-        // Bank into whatever turn the steering is making this frame
-        const turn = Math.atan2(b.group.position.x - prevX, b.group.position.z - prevZ) - b.heading;
-        b.group.rotateZ(-0.15 - Math.max(-0.4, Math.min(0.4, turn * 2)));
-        continue;
-      }
-
-      const k = this.kettles[b.kettle]!;
-      b.orbitA += b.orbitW * dt;
-
-      // Orbit position — slight vertical bob rides the thermal
-      const px = k.center.x + Math.cos(b.orbitA) * b.orbitR;
-      const pz = k.center.z + Math.sin(b.orbitA) * b.orbitR;
-      const py = k.center.y + b.altOff + Math.sin(b.bobPhase * 0.6) * 1.5
-        + Math.sin(b.orbitA * 0.5) * 3; // slow spiral up/down
-
-      // Aim along the orbit tangent, bank into the turn
-      _next.set(
-        k.center.x + Math.cos(b.orbitA + 0.05) * b.orbitR,
-        py,
-        k.center.z + Math.sin(b.orbitA + 0.05) * b.orbitR,
-      );
-      b.group.position.set(px, py, pz);
-      b.group.lookAt(_next);
-      b.group.rotateZ(-0.25); // bank into the circle
     }
+    // Knockback offset decays — blast-shoved birds slide back on target
+    this.knockAndTrack(b, dt, prevX, prevY, prevZ);
+    this.faceFlight(b, -0.35);
+    this.flapWings(b);
+  }
+
+  // --- DEPART: kill confirmed — scatter on outward headings, climbing ---
+  private departBird(b: Bird, dt: number): void {
+    const bp = b.group.position;
+    const prevX = bp.x, prevY = bp.y, prevZ = bp.z;
+    b.flapAmp = 1; // hard flapping climb-out
+    b.heading += Math.sin(b.bobPhase * 0.6) * 0.4 * dt; // lazy drift, not a beeline
+    bp.x += Math.cos(b.heading) * b.speed * 1.4 * dt;
+    bp.z += Math.sin(b.heading) * b.speed * 1.4 * dt;
+    bp.y += 14 * dt; // regain soaring altitude as they leave
+    this.knockAndTrack(b, dt, prevX, prevY, prevZ);
+    this.faceFlight(b, -0.35);
+    this.flapWings(b);
+  }
+
+  /** Membership churn: birds detach from kettles, loners join them. */
+  private churnMembership(b: Bird, dt: number): void {
+    if (b.kettle === -1) {
+      // A loner finding itself near a thermal circles down into it
+      if (Math.random() < dt * 0.03) {
+        let best = -1, bestD = Infinity;
+        for (let ki = 0; ki < this.kettles.length; ki++) {
+          const k = this.kettles[ki]!;
+          const dx = k.center.x - b.group.position.x;
+          const dz = k.center.z - b.group.position.z;
+          const d = dx * dx + dz * dz;
+          if (d < bestD) { bestD = d; best = ki; }
+        }
+        b.kettle = best;
+        b.orbitA = Math.atan2(b.group.position.z - this.kettles[best]!.center.z,
+                            b.group.position.x - this.kettles[best]!.center.x);
+        b.orbitR = 20 + Math.random() * 55;
+      }
+    } else if (Math.random() < dt * 0.015) {
+      // Peels off the thermal — becomes a loner heading out on its own.
+      // Heading starts along the orbit tangent so the departure is smooth.
+      b.heading = b.orbitA + (b.orbitW > 0 ? Math.PI / 2 : -Math.PI / 2);
+      b.kettle = -1;
+    }
+  }
+
+  // --- loner: free flight in the 180–450m annulus around the player ---
+  private soarLoner(b: Bird, dt: number, playerPos: THREE.Vector3, terrain: Terrain): void {
+    const px = b.group.position.x, pz = b.group.position.z;
+    const dxP = px - playerPos.x, dzP = pz - playerPos.z;
+    const dP = Math.hypot(dxP, dzP);
+    // Gentle steering: too far → turn back toward the player; too close → away
+    if (dP > 450 || dP < 180) {
+      const want = Math.atan2(dzP, dxP) + (dP > 450 ? Math.PI : 0);
+      const diff = Math.atan2(Math.sin(want - b.heading), Math.cos(want - b.heading));
+      b.heading += diff * Math.min(1, dt * 0.8);
+    }
+    b.heading += Math.sin(b.bobPhase * 0.4) * 0.3 * dt; // lazy wander
+    const prevX = px, prevZ = pz;
+    b.group.position.x += Math.cos(b.heading) * b.speed * dt;
+    b.group.position.z += Math.sin(b.heading) * b.speed * dt;
+    const ground = terrain.getHeight(b.group.position.x, b.group.position.z);
+    const altTarget = ground + ALT_MIN + b.altOff + Math.sin(b.bobPhase * 0.5) * 8;
+    b.group.position.y += (altTarget - b.group.position.y) * Math.min(1, dt * 0.5);
+    // Face the way it's flying
+    _next.set(b.group.position.x + Math.cos(b.heading) * 50,
+              b.group.position.y + (altTarget - b.group.position.y) * 0.5,
+              b.group.position.z + Math.sin(b.heading) * 50);
+    b.group.lookAt(_next);
+    // Bank into whatever turn the steering is making this frame
+    const turn = Math.atan2(b.group.position.x - prevX, b.group.position.z - prevZ) - b.heading;
+    b.group.rotateZ(-0.15 - Math.max(-0.4, Math.min(0.4, turn * 2)));
+  }
+
+  /** Kettle bird: circle its thermal, banking into the orbit tangent. */
+  private orbitKettle(b: Bird, dt: number): void {
+    const k = this.kettles[b.kettle]!;
+    b.orbitA += b.orbitW * dt;
+
+    // Orbit position — slight vertical bob rides the thermal
+    const px = k.center.x + Math.cos(b.orbitA) * b.orbitR;
+    const pz = k.center.z + Math.sin(b.orbitA) * b.orbitR;
+    const py = k.center.y + b.altOff + Math.sin(b.bobPhase * 0.6) * 1.5
+      + Math.sin(b.orbitA * 0.5) * 3; // slow spiral up/down
+
+    // Aim along the orbit tangent, bank into the turn
+    _next.set(
+      k.center.x + Math.cos(b.orbitA + 0.05) * b.orbitR,
+      py,
+      k.center.z + Math.sin(b.orbitA + 0.05) * b.orbitR,
+    );
+    b.group.position.set(px, py, pz);
+    b.group.lookAt(_next);
+    b.group.rotateZ(-0.25); // bank into the circle
   }
 }
