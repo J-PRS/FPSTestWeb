@@ -1,3 +1,8 @@
+2026-10-03 - SessionManager.handle split: the join cascade now reads
+    validate → throttle → joinSpec → reclaim → spectate → caps →
+    claimIdentity → seat — each branch its own helper (reclaim,
+    spectate, claimIdentity, seat, joinSpec field parsing).
+    Behavior identical across every path.
 2026-10-03 - MessageHandler.handlePosition split: the plausibility
     check (consecutive-report speed gate, correction grace window,
     first-reject correction + anchor commit, >10 force-accept) extracted

@@ -97,74 +97,24 @@ export class SessionManager {
       return;
     }
 
-    const token = typeof handshake.token === 'string' ? handshake.token : undefined;
-    const roomName = typeof handshake.room === 'string' && SessionManager.ROOM_NAME_RE.test(handshake.room)
-      ? handshake.room
-      : 'default';
+    const { token, roomName, roomMode, joinMap, joinBots } = SessionManager.joinSpec(handshake);
 
     // A reclaim must land in the room the session was in — find by playerId
     // rather than trusting the claimed room (reconnecting to a different
     // room mid-grace would orphan the slot in the old room).
     const reclaimRoom = this.d.roomOfPlayer(playerId);
     if (reclaimRoom) {
-      const existingPlayer = reclaimRoom.players.getPlayer(playerId);
-      const disconnected = reclaimRoom.disconnected.get(playerId);
-      if (existingPlayer && disconnected) {
-        // Session reclaim requires the server-issued token — bare playerId
-        // knowledge must not be enough to steal a slot
-        if (token !== reclaimRoom.sessionTokens.get(playerId)) {
-          logger.warn('Reconnect rejected: bad session token', { playerId });
-          ws.close(1008, 'Invalid session token');
-          return;
-        }
-        // Cancel grace period removal, reconnect with existing state
-        clearTimeout(disconnected.timeout);
-        reclaimRoom.disconnected.delete(playerId);
-
-        ws.data.playerId = playerId;
-        reclaimRoom.connections.register(playerId, ws);
-        reclaimRoom.messages.handleHandshake(playerId, undefined, true);
-        // Disconnect cancelled any pending respawn — if they come back dead,
-        // re-arm it or the restored corpse stays dead forever
-        reclaimRoom.messages.onPlayerReconnected(playerId);
-
-        logger.info('Player reconnected within grace period, state restored', { playerId, room: reclaimRoom.name, health: existingPlayer.health, pos: existingPlayer.position });
-        return;
-      }
-
-      logger.warn('Duplicate playerId rejected', { playerId });
-      ws.close(1008, 'Player ID already connected');
+      this.reclaim(ws, reclaimRoom, playerId, token);
       return;
     }
 
-    const roomMode = typeof handshake.mode === 'string' && SessionManager.ROOM_NAME_RE.test(handshake.mode)
-      ? handshake.mode
-      : '';
-    // Map/bots hints ride the join so a disposed quick-join room rebuilds
-    // with the same spec — the room name alone doesn't carry it.
-    const joinMap = typeof handshake.map === 'string' && SessionManager.ROOM_NAME_RE.test(handshake.map)
-      ? handshake.map
-      : '';
-    const joinBots = typeof handshake.bots === 'number' && Number.isFinite(handshake.bots)
-      ? Math.max(0, Math.min(24, Math.floor(handshake.bots)))
-      : undefined;
     const room = this.d.roomFor(roomName, roomMode, joinMap, joinBots);
 
     // Watch-only join: `spectate: true` registers the socket for this
     // room's broadcasts + tick stream without spawning a player — no
     // roster entry, no team, no idle-reap, no slot in the match.
     if (handshake.spectate === true) {
-      if (room.spectators.size >= CONFIG.maxPlayers) {
-        ws.close(1013, 'Spectators full');
-        return;
-      }
-      ws.data.playerId = playerId;
-      room.spectators.add(playerId);
-      this.d.specRooms.set(playerId, room);
-      room.connections.register(playerId, ws);
-      room.messages.handleSpectatorHandshake(playerId);
-      this.d.ops.joins++;
-      logger.info('Spectator joined', { playerId, room: room.name });
+      this.spectate(ws, room, playerId);
       return;
     }
 
@@ -179,30 +129,105 @@ export class SessionManager {
 
     // Claimed identity: a taken name needs its HMAC token, or the claimer
     // and the claimant get rejected — no stealing by knowing the id.
-    const claimed = this.claimedIdentities.get(playerId);
     const idToken = this.identityToken(playerId);
-    if (claimed && claimed !== token) {
-      logger.warn('Join rejected: claimed playerId, bad token', { playerId });
+    if (!this.claimIdentity(playerId, token, idToken)) {
       ws.close(1008, 'Player ID claimed');
       return;
     }
-    if (!claimed) {
-      if (this.claimedIdentities.size >= SessionManager.MAX_IDENTITIES) {
-        // Map iterates insertion-ordered — dropping the first half evicts
-        // the stalest claims in one pass.
-        const it = this.claimedIdentities.keys();
-        for (let i = 0; i < SessionManager.MAX_IDENTITIES / 2; i++) {
-          const k = it.next().value;
-          if (k === undefined) break;
-          this.claimedIdentities.delete(k);
-        }
-      }
-      this.claimedIdentities.set(playerId, idToken);
-    }
 
     ws.data.playerId = playerId;
-    const sessionToken = idToken;
-    room.sessionTokens.set(playerId, sessionToken);
+    room.sessionTokens.set(playerId, idToken);
+    this.seat(ws, room, playerId, handshake, idToken);
+  }
+
+  /** Grace-period reclaim: the seat is still reserved — cancel the removal
+   *  timer and re-seat the socket, or reject on a bad token / live playerId. */
+  private reclaim(ws: ServerWebSocket<WebSocketData>, room: Room, playerId: string, token: string | undefined): void {
+    const existingPlayer = room.players.getPlayer(playerId);
+    const disconnected = room.disconnected.get(playerId);
+    if (!existingPlayer || !disconnected) {
+      logger.warn('Duplicate playerId rejected', { playerId });
+      ws.close(1008, 'Player ID already connected');
+      return;
+    }
+    // Session reclaim requires the server-issued token — bare playerId
+    // knowledge must not be enough to steal a slot
+    if (token !== room.sessionTokens.get(playerId)) {
+      logger.warn('Reconnect rejected: bad session token', { playerId });
+      ws.close(1008, 'Invalid session token');
+      return;
+    }
+    clearTimeout(disconnected.timeout);
+    room.disconnected.delete(playerId);
+
+    ws.data.playerId = playerId;
+    room.connections.register(playerId, ws);
+    room.messages.handleHandshake(playerId, undefined, true);
+    // Disconnect cancelled any pending respawn — if they come back dead,
+    // re-arm it or the restored corpse stays dead forever
+    room.messages.onPlayerReconnected(playerId);
+
+    logger.info('Player reconnected within grace period, state restored', { playerId, room: room.name, health: existingPlayer.health, pos: existingPlayer.position });
+  }
+
+  /** Spectator seating: broadcasts + tick stream only, no player slot. */
+  private spectate(ws: ServerWebSocket<WebSocketData>, room: Room, playerId: string): void {
+    if (room.spectators.size >= CONFIG.maxPlayers) {
+      ws.close(1013, 'Spectators full');
+      return;
+    }
+    ws.data.playerId = playerId;
+    room.spectators.add(playerId);
+    this.d.specRooms.set(playerId, room);
+    room.connections.register(playerId, ws);
+    room.messages.handleSpectatorHandshake(playerId);
+    this.d.ops.joins++;
+    logger.info('Spectator joined', { playerId, room: room.name });
+  }
+
+  /** Field extraction — untyped handshake object → typed join fields.
+   *  Map/bots hints ride the join so a disposed quick-join room rebuilds
+   *  with the same spec — the room name alone doesn't carry it. */
+  private static joinSpec(handshake: Record<string, unknown>): {
+    token: string | undefined; roomName: string; roomMode: string; joinMap: string; joinBots: number | undefined;
+  } {
+    const word = (v: unknown): string => typeof v === 'string' && SessionManager.ROOM_NAME_RE.test(v) ? v : '';
+    return {
+      token: typeof handshake.token === 'string' ? handshake.token : undefined,
+      roomName: word(handshake.room) || 'default',
+      roomMode: word(handshake.mode),
+      joinMap: word(handshake.map),
+      joinBots: typeof handshake.bots === 'number' && Number.isFinite(handshake.bots)
+        ? Math.max(0, Math.min(24, Math.floor(handshake.bots)))
+        : undefined,
+    };
+  }
+
+  /** A taken name needs its HMAC token — no stealing by knowing the id.
+   *  New claims evict the stalest half of the map when the cap hits
+   *  (insertion-ordered iteration = oldest first). */
+  private claimIdentity(playerId: string, token: string | undefined, idToken: string): boolean {
+    const claimed = this.claimedIdentities.get(playerId);
+    if (claimed) {
+      if (claimed === token) return true;
+      logger.warn('Join rejected: claimed playerId, bad token', { playerId });
+      return false;
+    }
+    if (this.claimedIdentities.size >= SessionManager.MAX_IDENTITIES) {
+      const it = this.claimedIdentities.keys();
+      for (let i = 0; i < SessionManager.MAX_IDENTITIES / 2; i++) {
+        const k = it.next().value;
+        if (k === undefined) break;
+        this.claimedIdentities.delete(k);
+      }
+    }
+    this.claimedIdentities.set(playerId, idToken);
+    return true;
+  }
+
+  /** The seat itself: player record, transport tag, indices, handshake
+   *  reply, and the join/tier counters. */
+  private seat(ws: ServerWebSocket<WebSocketData>, room: Room, playerId: string, handshake: Record<string, unknown>, sessionToken: string): void {
     const joinedPlayer = room.players.addPlayer(playerId, room.nextTeam(), isPerkId(handshake.perk) ? handshake.perk : 'none',
       typeof handshake.armorClass === 'string' ? handshake.armorClass : 'medium');
     if (handshake.transport === 'wt' || handshake.transport === 'rtc' || handshake.transport === 'ws') {
