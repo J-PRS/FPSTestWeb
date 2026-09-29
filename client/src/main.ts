@@ -100,7 +100,6 @@ let networkManager: NetworkManager;
 // All shared mutable entity collections live in world — see game/worldState.ts
 const world = createWorldState();
 const remotePlayers = world.remotePlayers;
-const _blinkDir = new THREE.Vector3(); // scratch for the blink FX handler
 let dummyUpdate: ((dt: number) => void) | null = null; // ?dummy debug hook
 let effects: EffectsManager;
 
@@ -156,113 +155,16 @@ async function init(): Promise<void> {
   vmSetup = createViewModelScene(camera.aspect);
   viewModel = vmSetup.viewModel;
 
-  entities = createEntities({
-    scene,
-    lazyTerrain: () => terrain,
-    camera,
-    lazyPlayer: () => player,
-    lazyEffects: () => effects,
-    lazyHud: () => hud,
-    lazyNetworkManager: () => networkManager,
-    lazyDemoManager: () => demoManager,
-    lazyViewModel: () => viewModel,
-    logger,
-    world,
-    updateBallsPlayback: (dt) => demoLifecycle.updateBallsPlayback(dt),
-    // Team mode sweeps gems toward whoever's nearest — set once bots spawn.
-    nuggetCollectors: () => teamBots?.collectors() ?? [],
-    onNuggetCollect: (id) => teamBots?.collect(id),
-    lazyCombat: () => combat,
-    deployEnemyBots: () => teamBots?.enemyBotsForLocal() ?? [],
-    deployDamageBot: (id, dmg, from) => teamBots?.hit(id, dmg, from, 'local') ?? false,
-  });
+  entities = makeEntities();
 
   // Hybrid wave director — scripted beats + a credit pool spent on an
   // unlocking roster. Lives beside entities, drives its spawn fns.
   waveDirector = createWaveDirector({ entities, lazyPlayer: () => player, lazyTerrain: () => terrain, logger });
 
-  combat = createCombat({
-    lazyScene: () => scene,
-    lazyTerrain: () => terrain,
-    lazyCamera: () => camera,
-    lazyPlayer: () => player,
-    lazyViewModel: () => viewModel,
-    lazyDemoManager: () => demoManager,
-    lazyNetworkManager: () => networkManager,
-    lazyEffects: () => effects,
-    lazyHud: () => hud,
-    lazyHealthBarSystem: () => healthBarSystem,
-    lazyDamageNumbers: () => damageNumberManager,
-    fragMessages,
-    inputTracking,
-    explosionTracker,
-    logger,
-    world,
-    turretBolts: () => entities.turretBolts(),
-    consumeBolt: (bolt) => entities.consumeBolt(bolt as Bolt),
-    cookBoltsNear: (pos, r) => entities.cookBoltsNear(pos, r),
-    reportTargetDamage: (t, dmg) => entities.reportTargetDamage(t, dmg),
-    botHit: (id, dmg, fromPos) => teamBots?.hit(id, dmg, fromPos) ?? false,
-    onCreatureKilled: () => teamBots?.creatureKilled('local'),
-    balls: entities.balls,
-    targets: entities.targets,
-    nuggets: entities.nuggets,
-  });
-  // Buzzards join the shootable world — they fly through the shared targets
-  // surface so projectiles/blasts hit them. One shot aggros the WHOLE flock
-  // into a dive-bomb: 200hp each, a peck that takes half a health bar.
-  // Don't shoot the wildlife.
-  entities.targets.push(...ambientBirds.targets);
-  ambientBirds.onPeck = (pos) => {
-    if (player.isDead) return;
-    player.lastDamageSource = 'pecked to death by a buzzard';
-    player.applyKnockback(pos, 18);
-    networkManager?.sendEnvironmentDamage(45);
-    hud?.showDamage(pos, 45);
-    sfx.playerHurt();
-  };
-
-  wirePlayerHooks({ player, combat, effects, viewModel, speedLines });
-  // Spectator fly: strip the combat HUD, leave only a "SPECTATING" hint
-  player.onSpectate = (on) => {
-    if (on) { hud.hide(); hud.setSpectatorHint(true); }
-    // Died mid-flight: the death path owns the HUD — don't resurface it
-    else { hud.setSpectatorHint(false); if (!player.isDead) hud.show(); }
-  };
-  player.onCloak = (on) => { hud.setCloak(on); viewModel.setGhost(on); };
-  // Shield: HUD chip + cyan vignette, viewmodel charge glow, synth cues.
-  player.onShield = (on) => {
-    hud.setShield(on);
-    viewModel.setShield(on);
-    if (on) sfx.shieldOn(); else sfx.shieldBreak();
-  };
-  player.onMend = (on) => {
-    hud.setMend(on);
-    viewModel.setMend(on);
-    if (on) sfx.mendOn(); else sfx.mendOff();
-  };
-  player.onDeploy = () => entities.deployables.deploy();
+  combat = makeCombat();
+  wirePlayerStatusHooks();
   profiler.markTime('playerCreated');
 
-  // Offline death path — the server's kill+respawn round-trip replicated
-  // locally. Shared by bot frags and creature/environment damage.
-  const killLocal = (source: string) => {
-    if (player.isDead) return;
-    player.isDead = true;
-    player.health = 0;
-    hud.hide();
-    hud.setDeathOverlay(true);
-    fragMessages.show(`YOU DIED\n${source}`);
-    setTimeout(() => {
-      player.resetLifeState();
-      const a = Math.random() * Math.PI * 2;
-      player.pos.set(Math.cos(a) * 40, terrain.getHeight(Math.cos(a) * 40, Math.sin(a) * 40) + 2, Math.sin(a) * 40);
-      player.syncMovement();
-      player.markTeleport();
-      hud.show();
-      hud.setDeathOverlay(false);
-    }, 3000);
-  };
   // ?mode=nuggets|ctf|dm — offline-vs-bots modes. Bots live in
   // world.remotePlayers so creatures hunt them and projectiles hit them
   // like real players.
@@ -271,62 +173,7 @@ async function init(): Promise<void> {
   // teleport back instead of raging (enrage was layered on top later)
   const classicMode = mode === 'classic';
   if (classicMode) setBallEnrage(false);
-  if (mode === 'nuggets' || mode === 'ctf' || mode === 'dm') {
-    // Offline team modes still need world.localTeam — it's the friend/foe
-    // reference for HUD indicators/tints and is normally set from
-    // roomInfo.team, which never arrives without a server.
-    if (mode !== 'dm') world.localTeam = 'alpha';
-    teamBots = new TeamBots(
-      {
-        lazyPlayer: () => player,
-        lazyTerrain: () => terrain,
-        lazyEffects: () => effects,
-        lazyHud: () => hud,
-        lazyHealthBarSystem: () => healthBarSystem,
-        lazyNetworkManager: () => networkManager,
-        lazyDemoManager: () => demoManager,
-        lazyScene: () => scene,
-        lazyCamera: () => camera,
-        logger,
-        world,
-        targets: entities.targets,
-      },
-      {
-        dropNuggets: (pos, n, vel) => entities.spawnNuggetsAt(pos, n, vel),
-        localPlayerKilled: (killerName) => killLocal(`fragged by ${killerName}`),
-        remoteKillFeed: (text) => fragMessages.show(text),
-        killFeed: (s, t, ls, lt) => hud.feedKill(s, t, ls, lt),
-        nearestNugget: (pos, maxDist) => {
-          let best: typeof entities.nuggets[0] | null = null;
-          let bd = maxDist * maxDist;
-          for (const n of entities.nuggets) {
-            if (n.collected || n.dead) continue;
-            const d = n.pos.distanceToSquared(pos);
-            if (d < bd) { bd = d; best = n; }
-          }
-          return best;
-        },
-        nearestCreature: (pos, maxDist) => {
-          let best = null;
-          let bd = maxDist * maxDist;
-          for (const t of entities.targets) {
-            if (t.dead || t.scoreless) continue;
-            const d = t.pos.distanceToSquared(pos);
-            if (d < bd) { bd = d; best = t; }
-          }
-          return best;
-        },
-        damageCreature: (id, dmg) => {
-          const t = entities.targets.find(x => x.id === id);
-          if (!t || t.dead) return false;
-          return combat.hitTargetLocal(t, dmg); // same pipeline as a projectile hit
-        },
-      },
-      'alpha',
-      mode === 'dm' ? { alpha: 5, bravo: 4 } : { alpha: 4, bravo: 5 },
-      mode,
-    );
-  }
+  if (mode) setupOfflineMode(mode);
 
   // ?yaw/?pitch/?dummy headless-screenshot hooks — see game/debugHooks.ts
   dummyUpdate = applyDebugHooks({ scene, player, terrain, remotePlayers, logger });
@@ -334,26 +181,7 @@ async function init(): Promise<void> {
   // Initialize networking — NetworkManager owns the WebSocket transport
   networkManager = new NetworkManager();
   profiler.markTime('networkInit');
-  player.onNetworkJump = (pos) => networkManager.sendJump(pos);
-  player.onNetworkJetpack = (pos) => networkManager.sendJetpack(pos);
-  player.onNetworkInput = (input, rotation) => networkManager.sendInputMove(input, rotation);
-
-  // No server? Damage/heal claims resolve here — same clamps the server
-  // applies (40 max env hit, 25 max heal) so offline can't cheat easier.
-  networkManager.localAuthority = {
-    envDamage: (amount) => {
-      const dmg = Math.min(40, Math.max(1, Math.round(amount * (1 - player.mods.damageResist))));
-      if (player.isDead) return;
-      player.health = Math.max(0, player.health - dmg);
-      player.lastDamageSource = 'the wilderness';
-      hud.showDamage(player.pos, dmg);
-      sfx.playerHurt();
-      if (player.health <= 0) { teamBots?.localDied(); killLocal('killed by the wilderness'); }
-    },
-    heal: (amount) => {
-      player.health = Math.min(100, player.health + Math.min(25, Math.max(1, Math.round(amount))));
-    },
-  };
+  wireNetworkLocal();
 
   // Initialize demo system with player/input data providers
   demoManager = new DemoManager();
@@ -371,29 +199,7 @@ async function init(): Promise<void> {
   });
 
   // Demo playback lifecycle: owns playback registries + all onPlayback* handlers
-  demoLifecycle = createDemoLifecycle({
-    lazyScene: () => scene,
-    lazyTerrain: () => terrain,
-    lazyCamera: () => camera,
-    lazyPlayer: () => player,
-    lazyDemoManager: () => demoManager,
-    damageNumberManager: () => damageNumberManager,
-    fragMessages: () => fragMessages,
-    lazyHud: () => hud,
-    balls: entities.balls,
-    targets: entities.targets,
-    crawlers: entities.crawlers,
-    turrets: entities.turrets,
-    rollers: entities.rollers,
-    seekers: entities.seekers,
-    overlords: entities.overlords,
-    mines: entities.mines,
-    totems: entities.totems,
-    rakks: entities.rakks,
-    world,
-    overlay,
-    rendererCanvas: renderer.domElement,
-  });
+  demoLifecycle = makeDemoLifecycle();
   demoLifecycle.wireDemoHandlers(demoManager, () => {
     demoLifecycle.snapshotExistingBallsForRecording(entities.recordBallKeyframes);
   });
@@ -448,8 +254,6 @@ async function init(): Promise<void> {
   const serverUrl = (await serverEndpoints).wsUrl;
   await connectServer({ serverUrl, classicMode, networkManager, logger, fragMessages, profiler });
   player.serverOwnsHealth = () => networkManager.isConnected();
-  networkManager.joinPerk = () => player.perk;
-  networkManager.joinClass = () => player.armorClass;
 
   // Initial balls
   for (let i = 0; i < 8; i++) entities.spawnBall();
@@ -460,7 +264,236 @@ async function init(): Promise<void> {
 
 
   // Frame loop — everything mutable is passed via deps getters
-  gameLoop = createGameLoop({
+  gameLoop = makeGameLoop();
+  profiler.markTime('initComplete');
+
+  profiler.printSummary();
+
+  gameLoop.start();
+}
+
+// Offline death path — the server's kill+respawn round-trip replicated
+// locally. Shared by bot frags and creature/environment damage.
+function killLocal(source: string): void {
+  if (player.isDead) return;
+  player.isDead = true;
+  player.health = 0;
+  hud.hide();
+  hud.setDeathOverlay(true);
+  fragMessages.show(`YOU DIED\n${source}`);
+  setTimeout(() => {
+    player.resetLifeState();
+    const a = Math.random() * Math.PI * 2;
+    player.pos.set(Math.cos(a) * 40, terrain.getHeight(Math.cos(a) * 40, Math.sin(a) * 40) + 2, Math.sin(a) * 40);
+    player.syncMovement();
+    player.markTeleport();
+    hud.show();
+    hud.setDeathOverlay(false);
+  }, 3000);
+}
+
+// ?mode=nuggets|ctf|dm offline-vs-bots roster — no server, so the TeamBots
+// sim drives both teams and world.localTeam marks the player's side
+// (normally roomInfo.team, which never arrives offline).
+function setupOfflineMode(mode: string): void {
+  if (mode !== 'nuggets' && mode !== 'ctf' && mode !== 'dm') return;
+  if (mode !== 'dm') world.localTeam = 'alpha';
+  teamBots = new TeamBots(
+    {
+      lazyPlayer: () => player,
+      lazyTerrain: () => terrain,
+      lazyEffects: () => effects,
+      lazyHud: () => hud,
+      lazyHealthBarSystem: () => healthBarSystem,
+      lazyNetworkManager: () => networkManager,
+      lazyDemoManager: () => demoManager,
+      lazyScene: () => scene,
+      lazyCamera: () => camera,
+      logger,
+      world,
+      targets: entities.targets,
+    },
+    {
+      dropNuggets: (pos, n, vel) => entities.spawnNuggetsAt(pos, n, vel),
+      localPlayerKilled: (killerName) => killLocal(`fragged by ${killerName}`),
+      remoteKillFeed: (text) => fragMessages.show(text),
+      killFeed: (s, t, ls, lt) => hud.feedKill(s, t, ls, lt),
+      nearestNugget: (pos, maxDist) => {
+        let best: typeof entities.nuggets[0] | null = null;
+        let bd = maxDist * maxDist;
+        for (const n of entities.nuggets) {
+          if (n.collected || n.dead) continue;
+          const d = n.pos.distanceToSquared(pos);
+          if (d < bd) { bd = d; best = n; }
+        }
+        return best;
+      },
+      nearestCreature: (pos, maxDist) => {
+        let best = null;
+        let bd = maxDist * maxDist;
+        for (const t of entities.targets) {
+          if (t.dead || t.scoreless) continue;
+          const d = t.pos.distanceToSquared(pos);
+          if (d < bd) { bd = d; best = t; }
+        }
+        return best;
+      },
+      damageCreature: (id, dmg) => {
+        const t = entities.targets.find(x => x.id === id);
+        if (!t || t.dead) return false;
+        return combat.hitTargetLocal(t, dmg); // same pipeline as a projectile hit
+      },
+    },
+    'alpha',
+    mode === 'dm' ? { alpha: 5, bravo: 4 } : { alpha: 4, bravo: 5 },
+    mode,
+  );
+}
+
+function makeEntities(): ReturnType<typeof createEntities> {
+  return createEntities({
+    scene,
+    lazyTerrain: () => terrain,
+    camera,
+    lazyPlayer: () => player,
+    lazyEffects: () => effects,
+    lazyHud: () => hud,
+    lazyNetworkManager: () => networkManager,
+    lazyDemoManager: () => demoManager,
+    lazyViewModel: () => viewModel,
+    logger,
+    world,
+    updateBallsPlayback: (dt) => demoLifecycle.updateBallsPlayback(dt),
+    // Team mode sweeps gems toward whoever's nearest — set once bots spawn.
+    nuggetCollectors: () => teamBots?.collectors() ?? [],
+    onNuggetCollect: (id) => teamBots?.collect(id),
+    lazyCombat: () => combat,
+    deployEnemyBots: () => teamBots?.enemyBotsForLocal() ?? [],
+    deployDamageBot: (id, dmg, from) => teamBots?.hit(id, dmg, from, 'local') ?? false,
+  });
+}
+
+function makeCombat(): ReturnType<typeof createCombat> {
+  return createCombat({
+    lazyScene: () => scene,
+    lazyTerrain: () => terrain,
+    lazyCamera: () => camera,
+    lazyPlayer: () => player,
+    lazyViewModel: () => viewModel,
+    lazyDemoManager: () => demoManager,
+    lazyNetworkManager: () => networkManager,
+    lazyEffects: () => effects,
+    lazyHud: () => hud,
+    lazyHealthBarSystem: () => healthBarSystem,
+    lazyDamageNumbers: () => damageNumberManager,
+    fragMessages,
+    inputTracking,
+    explosionTracker,
+    logger,
+    world,
+    turretBolts: () => entities.turretBolts(),
+    consumeBolt: (bolt) => entities.consumeBolt(bolt as Bolt),
+    cookBoltsNear: (pos, r) => entities.cookBoltsNear(pos, r),
+    reportTargetDamage: (t, dmg) => entities.reportTargetDamage(t, dmg),
+    botHit: (id, dmg, fromPos) => teamBots?.hit(id, dmg, fromPos) ?? false,
+    onCreatureKilled: () => teamBots?.creatureKilled('local'),
+    balls: entities.balls,
+    targets: entities.targets,
+    nuggets: entities.nuggets,
+  });
+}
+
+// Player→HUD/viewmodel status hooks + the wildlife truce table.
+function wirePlayerStatusHooks(): void {
+  // Buzzards join the shootable world — they fly through the shared targets
+  // surface so projectiles/blasts hit them. One shot aggros the WHOLE flock
+  // into a dive-bomb: 200hp each, a peck that takes half a health bar.
+  // Don't shoot the wildlife.
+  entities.targets.push(...ambientBirds.targets);
+  ambientBirds.onPeck = (pos) => {
+    if (player.isDead) return;
+    player.lastDamageSource = 'pecked to death by a buzzard';
+    player.applyKnockback(pos, 18);
+    networkManager?.sendEnvironmentDamage(45);
+    hud?.showDamage(pos, 45);
+    sfx.playerHurt();
+  };
+
+  wirePlayerHooks({ player, combat, effects, viewModel, speedLines });
+  // Spectator fly: strip the combat HUD, leave only a "SPECTATING" hint
+  player.onSpectate = (on) => {
+    if (on) { hud.hide(); hud.setSpectatorHint(true); }
+    // Died mid-flight: the death path owns the HUD — don't resurface it
+    else { hud.setSpectatorHint(false); if (!player.isDead) hud.show(); }
+  };
+  player.onCloak = (on) => { hud.setCloak(on); viewModel.setGhost(on); };
+  // Shield: HUD chip + cyan vignette, viewmodel charge glow, synth cues.
+  player.onShield = (on) => {
+    hud.setShield(on);
+    viewModel.setShield(on);
+    if (on) sfx.shieldOn(); else sfx.shieldBreak();
+  };
+  player.onMend = (on) => {
+    hud.setMend(on);
+    viewModel.setMend(on);
+    if (on) sfx.mendOn(); else sfx.mendOff();
+  };
+  player.onDeploy = () => entities.deployables.deploy();
+}
+
+// NetworkManager local wiring: movement sends, offline damage/heal
+// authority (same clamps the server applies so offline can't cheat
+// easier), and the join loadout announcement.
+function wireNetworkLocal(): void {
+  player.onNetworkJump = (pos) => networkManager.sendJump(pos);
+  player.onNetworkJetpack = (pos) => networkManager.sendJetpack(pos);
+  player.onNetworkInput = (input, rotation) => networkManager.sendInputMove(input, rotation);
+  networkManager.localAuthority = {
+    envDamage: (amount) => {
+      const dmg = Math.min(40, Math.max(1, Math.round(amount * (1 - player.mods.damageResist))));
+      if (player.isDead) return;
+      player.health = Math.max(0, player.health - dmg);
+      player.lastDamageSource = 'the wilderness';
+      hud.showDamage(player.pos, dmg);
+      sfx.playerHurt();
+      if (player.health <= 0) { teamBots?.localDied(); killLocal('killed by the wilderness'); }
+    },
+    heal: (amount) => {
+      player.health = Math.min(100, player.health + Math.min(25, Math.max(1, Math.round(amount))));
+    },
+  };
+  networkManager.joinPerk = () => player.perk;
+  networkManager.joinClass = () => player.armorClass;
+}
+
+function makeDemoLifecycle(): ReturnType<typeof createDemoLifecycle> {
+  return createDemoLifecycle({
+    lazyScene: () => scene,
+    lazyTerrain: () => terrain,
+    lazyCamera: () => camera,
+    lazyPlayer: () => player,
+    lazyDemoManager: () => demoManager,
+    damageNumberManager: () => damageNumberManager,
+    fragMessages: () => fragMessages,
+    lazyHud: () => hud,
+    balls: entities.balls,
+    targets: entities.targets,
+    crawlers: entities.crawlers,
+    turrets: entities.turrets,
+    rollers: entities.rollers,
+    seekers: entities.seekers,
+    overlords: entities.overlords,
+    mines: entities.mines,
+    totems: entities.totems,
+    rakks: entities.rakks,
+    world,
+    overlay,
+    rendererCanvas: renderer.domElement,
+  });
+}
+
+function makeGameLoop(): ReturnType<typeof createGameLoop> {
+  return createGameLoop({
     camera,
     sceneSetup,
     rendererSetup,
@@ -488,11 +521,6 @@ async function init(): Promise<void> {
     world,
     getDummyTick: () => dummyUpdate,
   });
-  profiler.markTime('initComplete');
-
-  profiler.printSummary();
-
-  gameLoop.start();
 }
 
 // ---- Overlay / pointer-lock / global keys ----

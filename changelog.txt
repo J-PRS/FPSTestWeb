@@ -1,3 +1,5 @@
+2026-10-03 - main.ts init split: factory dep-bags -> makeEntities/makeCombat/makeDemoLifecycle/makeGameLoop, hooks -> wirePlayerStatusHooks/wireNetworkLocal, offline modes -> setupOfflineMode + killLocal. init 293 -> ~120; dead _blinkDir removed.
+
 2026-10-03 - Projectile.updateAlive split: stuck-bomb tick -> tickStuck(), remote-replica terrain lane -> tickRemote(). c31 -> clean, oxlint quiet.
 
 2026-10-03 - upsertRemotePlayer table-driven merge: 14 ?? chains -> ROSTER_FIELDS/ROSTER_DEFAULTS loop (patch > existing > default). c33 -> clean.
