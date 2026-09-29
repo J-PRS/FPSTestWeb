@@ -388,62 +388,16 @@ export class HUD {
   }
   private shieldVignetteReset = 0;
 
-  updateMinimap(targets: Targetable[], nuggets: Nugget[], pos: THREE.Vector3, yaw: number, birds?: THREE.Vector3[]): void {
-    this.minimap.update(targets, nuggets, pos, yaw, birds);
+  updateMinimap(targets: Targetable[], nuggets: Nugget[], pos: THREE.Vector3, yaw: number, birds?: THREE.Vector3[], players?: Iterable<import('./minimap.js').MinimapPlayer>): void {
+    this.minimap.update(targets, nuggets, pos, yaw, birds, players);
   }
 
   update(dt: number, player: Player, ping: number = 0, packetLoss: number = 0, jitter: number = 0): void {
-    this.setText(this.health, 'health', String(player.health));
-    const healthPct = Math.round(player.health);
-    if (healthPct !== this.lastHealthPct) {
-      this.lastHealthPct = healthPct;
-      this.healthBar.style.width = `${healthPct}%`;
-      // Damage → ghost holds the old width and drains down; heal → snap
-      if (healthPct < this.ghostPct) {
-        this.ghostBar.style.left = `${healthPct}%`;
-        this.ghostBar.style.width = `${this.ghostPct - healthPct}%`;
-      } else {
-        this.ghostPct = healthPct;
-        this.ghostBar.style.width = '0%';
-      }
-    }
-    // Ghost drains toward the real fill at ~40%/s
-    if (this.ghostPct > healthPct) {
-      this.ghostPct = Math.max(healthPct, this.ghostPct - 40 * dt);
-      this.ghostBar.style.left = `${healthPct}%`;
-      this.ghostBar.style.width = `${this.ghostPct - healthPct}%`;
-    }
-
-    const armor = Math.round(player.armor);
-    if (armor !== this.lastArmor) {
-      this.lastArmor = armor;
-      this.setText(this.armor, 'armor', String(armor));
-      this.armorBar.style.width = `${armor}%`;
-    }
-    // Timed buffs — chips with seconds left; rebuilt only on change.
-    const now = Date.now();
-    const buffsKey = `${player.buffUntil.regen > now ? Math.ceil((player.buffUntil.regen - now) / 1000) : 0}|${player.buffUntil.dd > now ? Math.ceil((player.buffUntil.dd - now) / 1000) : 0}`;
-    if (buffsKey !== this.lastBuffsKey) {
-      this.lastBuffsKey = buffsKey;
-      const chips: string[] = [];
-      const [rs, ds] = buffsKey.split('|').map(Number);
-      if (rs > 0) chips.push(`<span class="buff regen">REGEN ${rs}s</span>`);
-      if (ds > 0) chips.push(`<span class="buff dd">2×DMG ${ds}s</span>`);
-      this.buffsRow.innerHTML = chips.join('');
-    }
-
+    this.tickVitals(dt, player);
+    this.tickBuffs(player);
     this.lastPlayerPos.copy(player.pos);
     this.lastPlayerYaw = player.yaw;
-
-    // Damage vignette decay (~0.7s to clear) + direction arc fade
-    if (this.dmgT > 0) {
-      this.dmgT = Math.max(0, this.dmgT - dt * 1.4);
-      this.dmgVignette.style.opacity = String(this.dmgT * 0.85);
-    }
-    if (this.dmgDirT > 0) {
-      this.dmgDirT = Math.max(0, this.dmgDirT - dt * 1.1);
-      this.dmgDir.style.opacity = String(this.dmgDirT);
-    }
+    this.tickDamageFx(dt);
 
     const nrg = Math.round(player.energy);
     this.setText(this.energy, 'energy', String(nrg));
@@ -482,6 +436,61 @@ export class HUD {
     this.updateScoreboard(dt);
   }
 
+  // Health text + bar with ghost-drain: damage leaves a trailing sliver
+  // that bleeds down at ~40%/s so a hit reads as loss, not a snap.
+  private tickVitals(dt: number, player: Player): void {
+    this.setText(this.health, 'health', String(player.health));
+    const healthPct = Math.round(player.health);
+    if (healthPct !== this.lastHealthPct) {
+      this.lastHealthPct = healthPct;
+      this.healthBar.style.width = `${healthPct}%`;
+      // Damage → ghost holds the old width and drains down; heal → snap
+      if (healthPct < this.ghostPct) {
+        this.ghostBar.style.left = `${healthPct}%`;
+        this.ghostBar.style.width = `${this.ghostPct - healthPct}%`;
+      } else {
+        this.ghostPct = healthPct;
+        this.ghostBar.style.width = '0%';
+      }
+    }
+    if (this.ghostPct > healthPct) {
+      this.ghostPct = Math.max(healthPct, this.ghostPct - 40 * dt);
+      this.ghostBar.style.left = `${healthPct}%`;
+      this.ghostBar.style.width = `${this.ghostPct - healthPct}%`;
+    }
+    const armor = Math.round(player.armor);
+    if (armor !== this.lastArmor) {
+      this.lastArmor = armor;
+      this.setText(this.armor, 'armor', String(armor));
+      this.armorBar.style.width = `${armor}%`;
+    }
+  }
+
+  // Timed buffs — chips with seconds left; rebuilt only on change.
+  private tickBuffs(player: Player): void {
+    const now = Date.now();
+    const buffsKey = `${player.buffUntil.regen > now ? Math.ceil((player.buffUntil.regen - now) / 1000) : 0}|${player.buffUntil.dd > now ? Math.ceil((player.buffUntil.dd - now) / 1000) : 0}`;
+    if (buffsKey === this.lastBuffsKey) return;
+    this.lastBuffsKey = buffsKey;
+    const chips: string[] = [];
+    const [rs, ds] = buffsKey.split('|').map(Number);
+    if (rs > 0) chips.push(`<span class="buff regen">REGEN ${rs}s</span>`);
+    if (ds > 0) chips.push(`<span class="buff dd">2×DMG ${ds}s</span>`);
+    this.buffsRow.innerHTML = chips.join('');
+  }
+
+  // Damage vignette decay (~0.7s to clear) + direction arc fade.
+  private tickDamageFx(dt: number): void {
+    if (this.dmgT > 0) {
+      this.dmgT = Math.max(0, this.dmgT - dt * 1.4);
+      this.dmgVignette.style.opacity = String(this.dmgT * 0.85);
+    }
+    if (this.dmgDirT > 0) {
+      this.dmgDirT = Math.max(0, this.dmgDirT - dt * 1.1);
+      this.dmgDir.style.opacity = String(this.dmgDirT);
+    }
+  }
+
   private updateFps(dt: number): void {
     this.fpsAccum += dt;
     this.fpsFrames++;
@@ -511,7 +520,7 @@ export class HUD {
       // strings; interpolating them raw is a stored-XSS hole in waiting.
       const mkRow = (r: typeof this.sbData[number]) => {
         const tr = document.createElement('tr');
-        tr.className = `${r.self ? 'self' : ''}${r.dead ? ' dead' : ''}`;
+        tr.className = `${r.self ? 'self' : ''}${r.dead ? ' dead' : ''}${r.team ? ` sb-${r.team}` : ''}`;
         for (const cell of [r.name, String(r.frags), r.score === null ? '—' : String(r.score), r.net ?? '—', r.ping === null ? '—' : String(Math.round(r.ping))]) {
           const td = document.createElement('td');
           td.textContent = cell;
@@ -546,6 +555,13 @@ export class HUD {
 
   updatePlayerIndicator(playerId: string, position: { x: number; y: number; z: number }, camera: THREE.Camera, isDead: boolean = false, friendly = false): void {
     this.indicators.update(playerId, position, camera, isDead, friendly);
+  }
+
+  /** CTF flag marker — same through-terrain DOM overlay as player dots,
+   *  styled as a team-colored diamond so it can't be mistaken for a player. */
+  updateFlagIndicator(id: string, position: { x: number; y: number; z: number },
+                      camera: THREE.Camera, team: 'alpha' | 'bravo'): void {
+    this.indicators.update(id, position, camera, false, false, `flag ${team}`);
   }
 
   removePlayerIndicator(playerId: string): void {
