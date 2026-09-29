@@ -1,3 +1,7 @@
+2026-10-03 - Client: bake probe also rejects text/html HEAD responses —
+    Vite SPA fallback can 200-on-HEAD for missing files. Verified live:
+    missing w23 bake returns 404 text/html, now skipped before fetch.
+
 2026-10-03 - Client: HEAD-probe bake URLs before loading — a missing GLB
     returns the dev-server 404 HTML page which fails PARSING, logging a
     fake error per load. Expected misses now never fetch; corrupt bakes

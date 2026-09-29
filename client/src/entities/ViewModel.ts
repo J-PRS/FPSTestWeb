@@ -103,6 +103,9 @@ export class ViewModel {
   private flashMesh: THREE.Mesh;
   private flashMesh2: THREE.Mesh;
   private flashMat: THREE.MeshBasicMaterial;
+  private flashLight: THREE.PointLight;
+  private flashBaseS = 1;
+  private flashBaseS2 = 1;
   private flashT = 0;
   private static readonly FLASH_LIFE = 0.07; // 1-2 frames feel; >0.15 reads as flamethrower
   private lastFrameYVel = 0;
@@ -132,6 +135,12 @@ export class ViewModel {
     this.flashMat = hf.flashMat;
     this.flashMesh = hf.flashMesh;
     this.flashMesh2 = hf.flashMesh2;
+    // Muzzle light — the half of a retro flash nobody draws: for ~60ms
+    // the shot actually LIGHTS the gun and hands. Parented to the quad so
+    // it inherits the per-weapon muzzle park and sway/kick for free.
+    this.flashLight = new THREE.PointLight(0xffffff, 0, 2.2, 2);
+    this.flashLight.visible = false;
+    this.flashMesh.add(this.flashLight);
 
     // Bottom-right, mostly centered — Quake guns sit low and fat
     this.group.scale.setScalar(0.8);
@@ -196,7 +205,10 @@ export class ViewModel {
         // real Error, indistinguishable from a corrupt bake. Probing keeps
         // expected misses from ever becoming fetch/parse noise.
         const probe = await fetch(`/weapons/w${wt}_baked.glb`, { method: 'HEAD' });
-        if (!probe.ok) { bakeVertexAO(g); continue; }
+        // Vite's SPA fallback can 200 a HEAD for a missing file — only a
+        // non-HTML body is a real bake.
+        const ct = probe.headers.get('content-type') ?? '';
+        if (!probe.ok || ct.includes('html')) { bakeVertexAO(g); continue; }
         await this.swapBaked(wt, g, loader, texLoader);
       } catch (e) {
         // Fetch missed → this weapon stays procedural, so bake its vertex
@@ -361,8 +373,14 @@ export class ViewModel {
     this.flashMesh2.visible = true;
     this.flashMesh.rotation.z = Math.random() * Math.PI * 2;
     const s = (0.85 + Math.random() * 0.3) * t[3];
+    this.flashBaseS = s;
+    this.flashBaseS2 = s * 0.7;
     this.flashMesh.scale.setScalar(s);
-    this.flashMesh2.scale.setScalar(s * 0.7);
+    this.flashMesh2.scale.setScalar(this.flashBaseS2);
+    // 60-100ms light pop — reads as "the shot lit the room", not a decal.
+    this.flashLight.color.setHex(t[2]);
+    this.flashLight.intensity = 5;
+    this.flashLight.visible = true;
   }
 
   /** Camera-space muzzle OFFSET of the active weapon (gun sway/kick/bob
@@ -582,12 +600,22 @@ export class ViewModel {
       if (this.spinVel < 0.5) this.spinVel = 0;
     }
 
-    // Flash decay — sqrt curve: bright spike, fast falloff
+    // Flash decay — sqrt curve: bright spike, fast falloff. The two quads
+    // grow/shrink in opposite directions (Effekseer's recipe — mirrored
+    // envelopes read as an event, identical ones read flat), and the
+    // muzzle light dies on the same curve.
     if (this.flashT > 0) {
       this.flashT -= dt;
       const k = Math.max(this.flashT / (ViewModel.FLASH_LIFE * this.flashLifeScale), 0);
       this.flashMat.opacity = Math.sqrt(k);
-      if (this.flashT <= 0) { this.flashMesh.visible = false; this.flashMesh2.visible = false; }
+      this.flashLight.intensity = 5 * k;
+      this.flashMesh.scale.setScalar(this.flashBaseS * (1 + (1 - k) * 0.9));
+      this.flashMesh2.scale.setScalar(this.flashBaseS2 * (0.4 + k * 0.6));
+      if (this.flashT <= 0) {
+        this.flashMesh.visible = false;
+        this.flashMesh2.visible = false;
+        this.flashLight.visible = false;
+      }
     }
 
     this.lastFrameYVel = playerVel.y;
