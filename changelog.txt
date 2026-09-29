@@ -1,3 +1,5 @@
+2026-10-03 - 3 more scenarios: joinerBootstrap (handshake echoes mode/scores/flags/rosters), spawnShield (protection window blocks then allows damage), respawnState (clean-life reset: status stripped, hp restored, no armor handout, protection re-armed).
+
 2026-10-03 - ambientDecor scenario locks the decor rule: ambient caps with a live player still spawn zero server creatures; only `creatures` is the shared channel.
 
 2026-10-03 - tdmTag scenario: kill through the real projectile funnel banks +1, corpse tag spawns at the dead spot, grabbing it banks the confirmation point.
