@@ -1,3 +1,5 @@
+2026-10-03 - Family bite scenarios: roller contact, snake lunge, gnat dive (all land bites on a parked bot); deployables rocket split.
+
 2026-10-03 - Creature wall-gate scenario (pen proves melee can't clip through geometry); deployables.ts split - sentry homing rockets moved to deployRockets.ts (-145 lines).
 
 2026-10-03 - Scenario suite grew to 14 files (gem bank, turret fire+LOS, respawn, friendly-fire, mine); playerUal.ts extracted from PlayerModel
