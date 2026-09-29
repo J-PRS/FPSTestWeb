@@ -18,8 +18,8 @@ const OUT_ROOT = path.join(__dirname, '..', '..', 'screenshots');
   page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
 
   for (const [model, outDir, scale] of [
-    ['robot', 'poses-medium', '1'],
-    ['robot', 'poses-light', '0.92'],
+    ['mannequin', 'poses-medium', '1'],
+    ['mannequin', 'poses-light', '0.92'],
     ['knight', 'poses-heavy', '1.15'],
   ]) {
     await page.goto(`${BASE}?model=${model}&scale=${scale}`, { waitUntil: 'domcontentloaded' });

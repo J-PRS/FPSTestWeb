@@ -139,9 +139,10 @@ export class RemotePlayer {
     this.gizmo = new RemoteGizmo(scene, startPos);
     logger.debug(`GIZMO ADDED`, { playerId, instanceId: this.instanceId });
 
-    // Heavy armor wears the knight — a silhouette read at distance, not
-    // just a stat. Fixed at spawn (a mid-match class swap lands next join).
-    this._model = new PlayerModel(scene, armorClass === 'heavy' ? 'knight' : undefined);
+    // Heavy armor wears the knight, everyone else the UAL mannequin —
+    // silhouette reads the class at distance. Fixed at spawn (a mid-match
+    // class swap lands next join).
+    this._model = new PlayerModel(scene, armorClass === 'heavy' ? 'knight' : 'mannequin');
     this.model.load().then(() => {
       this._loaded = true;
       this.applyClassScale();

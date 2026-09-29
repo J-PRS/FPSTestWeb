@@ -553,7 +553,13 @@ export class PlayerModel {
       this.playAnimation(KNIGHT_ANIMS[state]);
       return;
     }
+    // Mannequin ships the UAL1 set — no slide clip, so its ski rides the
+    // tucked Crouch_Fwd (the same pose ski used before UAL2 landed).
     const [ual, fallback] = ANIM_NAMES[state];
+    if (this.variant === 'mannequin' && state === 'ski') {
+      this.playAnimation(this.animations.has('UAL_Crouch_Fwd_Loop') ? 'UAL_Crouch_Fwd_Loop' : 'Crouch_Fwd_Loop');
+      return;
+    }
     // Prefer the retargeted clip; fall back to the native emote until the
     // UAL bake lands (or forever if the retarget failed).
     this.playAnimation(this.animations.has(ual) ? ual : fallback);

@@ -1,3 +1,4 @@
+2026-10-01 - Light/medium players (local third-person + remotes + offline bots) now default to the mannequin; mannequin ski rides Crouch_Fwd_Loop (no UAL2 slide clip in that pack)
 2026-10-01 - Heavy class wears the KayKit knight (CC0, 76 native clips): PlayerModel knight variant, remote/offline heavies spawn it, aim bones + handslot gun mount wired; jet anim swapped to plain jump hang; pose gallery gains LIGHT/MEDIUM/HEAVY tabs
 2026-10-01 - Heavy-class server bots shoulder the mortar as their standoff weapon (tier-locked ordnance makes the anchor class read distinct)
 2026-10-01 - Server enforces heavy-only ordnance: shot + aoeShot claims with Mortar/PlasmaCannon/RocketLauncher weaponType rejected for non-heavy players (HEAVY_ONLY_WEAPONS in shared/botClasses.ts)

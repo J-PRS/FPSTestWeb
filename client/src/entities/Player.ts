@@ -357,8 +357,9 @@ export class Player {
     this.movement = new MovementController(terrain, movementState);
     this.movement.setSpeedScale(CLASS_STATS[this.armorClass].speedScale);
 
-    // Initialize player model
-    this.model = new PlayerModel(scene);
+    // Your third-person body wears the class you picked — heavy gets the
+    // knight, everyone else the UAL mannequin (same rule remotes apply).
+    this.model = new PlayerModel(scene, this.armorClass === 'heavy' ? 'knight' : 'mannequin');
     this.visuals = new PlayerVisuals(scene);
 
     // Q-slot skills — reads pos/vel by ref and reaches the assignable on*
