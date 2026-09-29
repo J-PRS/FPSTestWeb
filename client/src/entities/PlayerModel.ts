@@ -98,6 +98,20 @@ const ONESHOT_CLIPS = new Set(['No', 'Punch', 'UAL_Pistol_Shoot', 'UAL_Hit_Chest
   // Knight-native singles — a fire/flinch that loops reads as a twitch.
   'Shoot_OneHanded', 'RecieveHit', 'Punch']);
 
+// Mannequin (DEF-* Rigify rig) → UAL2 source bones. GLTFLoader strips dots
+// from node names, so 'DEF-upper_arm.L' arrives as 'DEF-upper_armL'.
+const MANNEQUIN_UAL2_BONE_MAP: Record<string, string> = {
+  'DEF-hips': 'pelvis',
+  'DEF-spine001': 'spine01',
+  'DEF-spine003': 'spine03',
+  'DEF-neck': 'neck01',
+  'DEF-head': 'head',
+  'DEF-shoulderL': 'claviclel', 'DEF-upper_armL': 'upperarml', 'DEF-forearmL': 'lowerarml', 'DEF-handL': 'handl',
+  'DEF-shoulderR': 'clavicler', 'DEF-upper_armR': 'upperarmr', 'DEF-forearmR': 'lowerarmr', 'DEF-handR': 'handr',
+  'DEF-thighL': 'thighl', 'DEF-shinL': 'calfl',
+  'DEF-thighR': 'thighr', 'DEF-shinR': 'calfr',
+};
+
 const normBone = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
 
 
@@ -181,7 +195,10 @@ export class PlayerModel {
     srcHip: THREE.Object3D;
     clips: THREE.AnimationClip[];
   }[]> | null = null;
-  private static bakedClips: Map<string, THREE.AnimationClip> | null = null;
+  // Baked clips are keyed per variant — a retarget's output tracks are
+  // name-bound to the skeleton they were baked against, so robot clips
+  // can't serve the mannequin's DEF-* bones.
+  private static bakedByVariant = new Map<string, Map<string, THREE.AnimationClip>>();
   private currentClipName: string | null = null;
   private playingUAL = false;
   // Foot bones are IK targets detached from the leg chain — retargeted
@@ -447,6 +464,10 @@ export class PlayerModel {
           // clip. Cached globally so only the first model pays the bake.
           // The mannequin binds UAL clips natively and the knight ships
           // its own set — neither pays a retarget pass.
+          // Robot-only: its UAL2 retarget reads clean. The mannequin tried
+          // the same bake — UE bone-axis conventions (X-along-bone vs the
+          // Rigify Y-along) bake a face-down slide; its Crouch_Fwd tuck
+          // reads better, so it skips the pass. Knight is native-only.
           if (!mann && !knight) this.retargetUAL();
           
           this.scene.add(this.model);
@@ -553,8 +574,8 @@ export class PlayerModel {
       this.playAnimation(KNIGHT_ANIMS[state]);
       return;
     }
-    // Mannequin ships the UAL1 set — no slide clip, so its ski rides the
-    // tucked Crouch_Fwd (the same pose ski used before UAL2 landed).
+    // Mannequin has no native slide clip — ski rides the tucked Crouch_Fwd
+    // (the UAL2 retarget exists but bakes limb-axis artifacts on this rig).
     const [ual, fallback] = ANIM_NAMES[state];
     if (this.variant === 'mannequin' && state === 'ski') {
       this.playAnimation(this.animations.has('UAL_Crouch_Fwd_Loop') ? 'UAL_Crouch_Fwd_Loop' : 'Crouch_Fwd_Loop');
@@ -616,7 +637,8 @@ export class PlayerModel {
 
     PlayerModel.ualSource!.then(sources => {
       if (this._disposed || !this.mixer || !this.model) return;
-      if (!PlayerModel.bakedClips) {
+      const variantKey = this.variant;
+      if (!PlayerModel.bakedByVariant.has(variantKey)) {
         // Target: this model's skinned mesh + its full skeleton.
         let target: THREE.SkinnedMesh | undefined;
         this.model.traverse(o => { if (!target && (o as THREE.SkinnedMesh).isSkinnedMesh) target = o as THREE.SkinnedMesh; });
@@ -627,10 +649,13 @@ export class PlayerModel {
         const t0 = performance.now();
         const baked = new Map<string, THREE.AnimationClip>();
         for (const { spec, src, srcBones, srcByNorm, srcHip, clips } of sources) {
-          // names: target bone name → source bone name
+          // names: target bone name → source bone name. The mannequin maps
+          // its DEF-* bones onto the UE-style UAL2 rig instead of the
+          // robot's Rigify-side table.
+          const boneMap = variantKey === 'mannequin' ? MANNEQUIN_UAL2_BONE_MAP : spec.boneMap;
           const names: Record<string, string> = {};
           for (const b of target.skeleton.bones) {
-            const want = spec.boneMap[b.name];
+            const want = boneMap[b.name];
             const hit = want && srcByNorm.get(spec.prefix + want);
             if (hit) names[b.name] = hit.name;
           }
@@ -655,7 +680,10 @@ export class PlayerModel {
             // than the chibi robot's, and absolute copy bakes a constant
             // forward hunch into every clip. Delta-map the torso, keep limbs
             // absolute.
-            if (!/^(Hips|Abdomen|Torso_1|Neck|Head)$/.test(tName)) continue;
+            const TORSO = variantKey === 'mannequin'
+              ? /^DEF-(hips|spine001|spine003|neck|head)$/
+              : /^(Hips|Abdomen|Torso_1|Neck|Head)$/;
+            if (!TORSO.test(tName)) continue;
             const tb = target.skeleton.getBoneByName(tName);
             const sb = srcBones.find(b => b.name === sName);
             if (!tb || !sb) continue;
@@ -691,16 +719,16 @@ export class PlayerModel {
             baked.set(rt.name, rt);
           }
         }
-        logger.debug(`UAL retarget baked ${baked.size} clips in ${(performance.now() - t0).toFixed(0)}ms`);
-        PlayerModel.bakedClips = baked;
+        logger.debug(`UAL retarget baked ${baked.size} clips for ${variantKey} in ${(performance.now() - t0).toFixed(0)}ms`);
+        PlayerModel.bakedByVariant.set(variantKey, baked);
       }
-      for (const [name, clip] of PlayerModel.bakedClips) {
+      for (const [name, clip] of PlayerModel.bakedByVariant.get(variantKey)!) {
         this.animations.set(name, this.mixer.clipAction(clip));
       }
       // Re-resolve the current state onto the better clip if one landed.
       const want = this.variant === 'knight' ? KNIGHT_ANIMS[this.currentState] : ANIM_NAMES[this.currentState][0];
       this.playAnimation(this.animations.has(want) ? want : (this.currentClipName ?? 'Idle'));
-    }).catch(() => { /* load failure already logged; native clips remain */ });
+    }).catch((e) => { logger.warn('UAL bake failed for ' + this.variant, e); });
   }
 
   update(dt: number): void {

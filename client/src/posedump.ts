@@ -38,6 +38,39 @@ scene.add(floor);
 
 const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.01, 100);
 
+// pmodel mode drives the real PlayerModel (retarget bake included) — the
+// raw-clip path below can't show clips that only exist post-bake.
+//   /posedump.html?pmodel=mannequin&state=ski&t=0.5
+const pvariant = q.get('pmodel');
+if (pvariant) {
+  const { PlayerModel } = await import('./entities/PlayerModel.js');
+  const pm = new PlayerModel(scene, pvariant as 'robot' | 'mannequin' | 'knight');
+  await pm.load();
+  const wantState = q.get('state') ?? 'ski';
+  const poll = () => {
+    const model = pm.object3D;
+    const anims = (pm as unknown as { animations: Map<string, unknown> }).animations;
+    // Wait for the GLB AND the async retarget bake — natives fill the map
+    // first, so a bare size check would race past the bake every time.
+    const need = pvariant === 'mannequin' || pvariant === 'robot'
+      ? anims.has('UAL_Slide_Loop') : anims.size > 0;
+    if (!model || !anims || !need) { setTimeout(poll, 120); return; }
+    pm.forceAnimationState(wantState as never);
+    // Step the mixer a fixed phase so loops settle mid-cycle.
+    for (let i = 0; i < 30; i++) pm.update(1 / 60 * wantT * 4);
+    model.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(model);
+    const c = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3()).length();
+    const d = (size / 2) / Math.tan(camera.fov * Math.PI / 360) * 1.12;
+    camera.position.set(c.x + d * 0.55, c.y + size * 0.14, c.z + d);
+    camera.lookAt(c);
+    renderer.setAnimationLoop(() => { pm.update(1 / 60); renderer.render(scene, camera); });
+    (window as any).__clips = [...anims.keys()];
+    (window as any).__ready = true;
+  };
+  poll();
+} else {
 const ual2 = q.get('model') === 'ual2';
 const knight = q.get('model') === 'knight';
 const url = knight ? '/assets/models/knight.glb'
@@ -92,3 +125,4 @@ new GLTFLoader().load(url, (gltf) => {
     boot(gltf.animations);
   }
 });
+}
