@@ -2,6 +2,7 @@ import type { PlayerState, Vec3, Rotation, GameStatePlayer } from './types.ts';
 import { CONFIG } from './config.ts';
 import { STATUS } from '../../shared/status.ts';
 import { perkMods } from '../../shared/perks.ts';
+import { CLASS_STATS } from '../../shared/botClasses.ts';
 import { POWERUP } from '../../shared/pickups.ts';
 import { ENERGY } from '../../shared/movement.ts';
 
@@ -27,9 +28,10 @@ export class PlayerManager {
    *  applyDamage burns the move shadow's modeled tank. Room wires it. */
   energyBurn?: (playerId: string, energy: number) => void;
 
-  addPlayer(playerId: string, team?: 'alpha' | 'bravo', perk: string = 'none'): PlayerState {
+  addPlayer(playerId: string, team?: 'alpha' | 'bravo', perk: string = 'none', armorClass: string = 'medium'): PlayerState {
     const spawn = this.pickSpawnPoint(playerId, team);
-    const maxHealth = CONFIG.playerMaxHealth + perkMods(perk).maxHealth;
+    const cls = armorClass === 'light' || armorClass === 'heavy' ? armorClass : 'medium';
+    const maxHealth = CONFIG.playerMaxHealth + perkMods(perk).maxHealth + CLASS_STATS[cls].maxHealth;
 
     const player: PlayerState = {
       id: playerId,
@@ -39,6 +41,7 @@ export class PlayerManager {
       velocity: { x: 0, y: 0, z: 0 },
       health: maxHealth,
       perk,
+      armorClass: cls,
       maxHealth,
       isDead: false,
       team,

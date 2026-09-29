@@ -6,6 +6,7 @@ import { Terrain } from '../world/terrain.js';
 import { PlayerSkills, SHIELD_DMG_PER_ENERGY } from './player/skills.js';
 import { STATUS } from '../../../shared/status.js';
 import { perkMods, PERK_ORDER, type PerkId } from '../../../shared/perks.js';
+import { CLASS_STATS, type ArmorClass } from '../../../shared/botClasses.js';
 import { makeShieldBubble, ShieldBubble } from '../effects/shieldBubble.js';
 
 import { MovementController, MovementState } from './movement.js';
@@ -59,9 +60,17 @@ export class Player {
   buffUntil = { regen: 0, dd: 0 };
   /** Passive loadout pick — mods from shared/perks.ts; announced at join. */
   perk: PerkId = (PERK_ORDER as string[]).includes(settings.get('fps-perk')) ? settings.get('fps-perk') as PerkId : 'none';
+  /** Armor tier — heavier plate trades foot speed for hit points, same
+   *  table the server applies so the local sim and the shadow agree. */
+  armorClass: ArmorClass = (['light','medium','heavy'] as string[]).includes(settings.get('fps-class')) ? settings.get('fps-class') as ArmorClass : 'medium';
   get mods() { return perkMods(this.perk); }
-  get maxHealth(): number { return MAX_HEALTH + this.mods.maxHealth; }
+  get maxHealth(): number { return MAX_HEALTH + this.mods.maxHealth + CLASS_STATS[this.armorClass].maxHealth; }
   setPerk(p: PerkId): void { this.perk = p; settings.set('fps-perk', p); }
+  setArmorClass(c: ArmorClass): void {
+    this.armorClass = c;
+    settings.set('fps-class', c);
+    this.movement.setSpeedScale(CLASS_STATS[c].speedScale);
+  }
   kills = 0;
   isDead = false;
   /** Verb phrase for the death message ("devoured by a crawler") — set by
@@ -333,6 +342,7 @@ export class Player {
       onGround: this.onGround,
     };
     this.movement = new MovementController(terrain, movementState);
+    this.movement.setSpeedScale(CLASS_STATS[this.armorClass].speedScale);
 
     // Initialize player model
     this.model = new PlayerModel(scene);

@@ -64,7 +64,8 @@ export interface PlayerState {
   // client-only effects need zero server changes.
   status: number;
   perk: string;      // join-declared passive (shared/perks.ts) — 'none' default
-  maxHealth: number; // derived from perk at join; heal/spawn caps use this
+  armorClass: string; // join-declared armor tier (shared/botClasses.ts) — 'medium' default
+  maxHealth: number; // derived from perk+class at join; heal/spawn caps use this
   // Lag-comp rewind buffer: accepted position reports stamped at server
   // receive time. Hit validation rewinds the target to the shooter's view
   // (now - shooterPing) so a 100ms player shoots the ghost they saw, not

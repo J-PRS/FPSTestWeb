@@ -17,6 +17,7 @@ type Schema = {
   'fps-pack': string;         // DeployKind — 'turret' | 'mine' | 'station'
   'fps-skill': string;        // SkillId
   'fps-perk': string;         // PerkId
+  'fps-class': string;        // ArmorClass (light|medium|heavy)
   'fps-mode': string;         // '' | 'nuggets' | 'ctf' | 'dm' | 'classic'
   'fps-spawns': number;       // 1 = all-random creature spawns, no scripted beats
   'fps-debug': number;        // dev overlays / verbose combat logging
@@ -39,6 +40,7 @@ const DEFAULTS: Schema = {
   'fps-pack': 'turret',
   'fps-skill': 'bounce',
   'fps-perk': 'none',
+  'fps-class': 'medium',
   'fps-mode': '',
   'fps-spawns': 0,
   'fps-debug': 0,

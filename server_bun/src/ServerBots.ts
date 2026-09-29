@@ -22,6 +22,7 @@ import { logger } from './logger.ts';
 import { STATUS, CLIENT_STATUS_MASK } from '../../shared/status.ts';
 import { WeaponType, getWeaponStats } from '../../shared/weapons.ts';
 import type { PerkId } from '../../shared/perks.ts';
+import { CLASS_STATS, type ArmorClass } from '../../shared/botClasses.ts';
 
 /** A bot's kit — weapon picked by engagement range, perk set at spawn so
  *  maxHealth and the move shadow's jet economy match a real loadout. */
@@ -49,6 +50,15 @@ const isSuper = (id: string) => SUPERBOT !== '' && id.includes(SUPERBOT);
  *  is home defense that emplaces gear, infiltrator cloaks deep and wrecks
  *  gear before grabbing. */
 type BotRole = 'capper' | 'offense' | 'ldefense' | 'hof' | 'defense' | 'technician' | 'infiltrator';
+
+/** Armor class follows the role — Tribes pacing lives on this: cappers
+ *  and infiltrators fly light, HoF and technicians anchor heavy, the
+ *  fighting middle wears medium. */
+const ROLE_CLASS: Record<BotRole, ArmorClass> = {
+  capper: 'light', infiltrator: 'light',
+  offense: 'medium', ldefense: 'medium', defense: 'medium',
+  hof: 'heavy', technician: 'heavy',
+};
 
 export class ServerBots {
   private brains = new Map<string, BotBrain>();
@@ -108,6 +118,7 @@ export class ServerBots {
       // Seed roles from the loadout; the rebalancer shifts them as the
       // match's needs change. Plated anchors start as HoF candidates.
       this.roles.set(id, loadout.perk === 'plated' ? 'hof' : 'offense');
+      this.applyClass(p, ROLE_CLASS[this.roles.get(id)!]);
       p.isBot = true;
       if (isSuper(id)) p.health = 400; // superbot tanks a beating
       p.lastSeen = Date.now();
@@ -137,6 +148,7 @@ export class ServerBots {
     this.brains.delete(playerId);
     this.loadouts.delete(playerId);
     this.roles.delete(playerId);
+    this.classes.delete(playerId);
     this.room.moveSim.untrack(playerId);
   }
 
@@ -379,6 +391,22 @@ export class ServerBots {
     }
   }
 
+  /** Apply the armor class to a live bot record: maxHealth shifts and
+   *  current HP follows the delta (gaining plating grants the points,
+   *  dropping it just clamps). The move shadow's ground scale makes the
+   *  class legally different — a light capper really out-runs a heavy. */
+  private classes = new Map<string, ArmorClass>();
+  private applyClass(p: { id: string; maxHealth: number; health: number }, cls: ArmorClass): void {
+    const prev = this.classes.get(p.id);
+    if (prev === cls) return;
+    const base = p.maxHealth - (prev ? CLASS_STATS[prev].maxHealth : 0);
+    this.classes.set(p.id, cls);
+    const delta = base + CLASS_STATS[cls].maxHealth - p.maxHealth;
+    p.maxHealth += delta;
+    p.health = Math.min(p.maxHealth, p.health + Math.max(0, delta));
+    this.room.moveSim.setSpeedScale(p.id, CLASS_STATS[cls].speedScale);
+  }
+
   /** Rebalance squad roles ~every 5s. Needs are computed per team: a flag
    *  mode wants a capper; a bigger squad earns a HoF anchor, a technician
    *  and an infiltrator; the rest split offense/defense. Reassignment
@@ -424,6 +452,8 @@ export class ServerBots {
           const donor = donors.shift();
           if (!donor) break;
           this.roles.set(donor, want);
+          const donorP = this.room.players.getPlayer(donor);
+          if (donorP) this.applyClass(donorP, ROLE_CLASS[want]);
           // Technician is the only role that promises the deploy kit —
           // pin its builder trait instead of trusting the spawn roll.
           if (want === 'technician') this.brains.get(donor)?.setBuilder(true);

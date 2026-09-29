@@ -121,6 +121,7 @@ export class RoomMoveSim {
     for (const [pid, sh] of this.shadows) {
       const old = sh.sim;
       sh.sim = new MoveSim(this.surface, old.state);
+      sh.sim.speedScale = old.speedScale; // armor class survives the swap
       Object.assign(sh.sim.input, old.input);
       const pos = reportedPos?.(pid);
       if (pos) {
@@ -162,6 +163,12 @@ export class RoomMoveSim {
   }
 
   untrack(playerId: string): void { this.shadows.delete(playerId); }
+
+  /** Armor-class ground speed multiplier (server bots / future loadouts). */
+  setSpeedScale(playerId: string, scale: number): void {
+    const sh = this.shadows.get(playerId);
+    if (sh) sh.sim.speedScale = scale;
+  }
 
   /** inputMove → sim input. Rotation/yaw comes from position reports.
    *  `status` is the claimed toggle bits — used to model skill energy

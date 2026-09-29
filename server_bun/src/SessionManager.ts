@@ -203,7 +203,7 @@ export class SessionManager {
     ws.data.playerId = playerId;
     const sessionToken = idToken;
     room.sessionTokens.set(playerId, sessionToken);
-    const joinedPlayer = room.players.addPlayer(playerId, room.nextTeam(), isPerkId(handshake.perk) ? handshake.perk : 'none');
+    const joinedPlayer = room.players.addPlayer(playerId, room.nextTeam(), isPerkId(handshake.perk) ? handshake.perk : 'none', handshake.armorClass ?? 'medium');
     if (handshake.transport === 'wt' || handshake.transport === 'rtc' || handshake.transport === 'ws') {
       joinedPlayer.transport = handshake.transport;
     }

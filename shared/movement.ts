@@ -95,6 +95,11 @@ export class MoveSim {
     this.state = initial;
   }
 
+  /** Armor-class ground multiplier (light >1, heavy <1): scales ground
+   *  acceleration AND the walk cap. Ski momentum and jet thrust stay
+   *  untouched — a heavy still carries ski speed downhill like Tribes. */
+  speedScale = 1;
+
   setInput(input: Partial<MoveInput>): void { Object.assign(this.input, input); }
 
   setState(s: MoveState): void {
@@ -226,8 +231,9 @@ export class MoveSim {
       const sl = Math.hypot(sx, sz);
       if (sl > 0.0001) {
         sx /= sl; sz /= sl;
-        s.vel.x += sx * MOVEMENT_CONFIG.groundAccelerate * dt;
-        s.vel.z += sz * MOVEMENT_CONFIG.groundAccelerate * dt;
+        const acc = MOVEMENT_CONFIG.groundAccelerate * this.speedScale;
+        s.vel.x += sx * acc * dt;
+        s.vel.z += sz * acc * dt;
       }
     } else {
       const speed = Math.hypot(s.vel.x, s.vel.y, s.vel.z);
@@ -246,8 +252,9 @@ export class MoveSim {
     }
 
     const speed = Math.hypot(s.vel.x, s.vel.y, s.vel.z);
-    if (speed > MOVEMENT_CONFIG.maxVelocityGround) {
-      const k = MOVEMENT_CONFIG.maxVelocityGround / speed;
+    const maxGround = MOVEMENT_CONFIG.maxVelocityGround * this.speedScale;
+    if (speed > maxGround) {
+      const k = maxGround / speed;
       s.vel.x *= k; s.vel.y *= k; s.vel.z *= k;
     }
   }

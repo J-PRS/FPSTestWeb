@@ -28,7 +28,7 @@ export interface Rotation {
 export type ClientMessage =
   // room: optional match room — server validates [\w-]{1,32}, absent =
   // 'default'. mode: only honored when the join creates the room.
-  | { type: 'join'; playerId: string; token?: string; room?: string; mode?: string; perk?: string;
+  | { type: 'join'; playerId: string; token?: string; room?: string; mode?: string; perk?: string; armorClass?: string;
       /** map hint for room creation — /join-spawned rooms can be disposed
        *  and rebuilt before the first join lands, so the join carries the
        *  spec source too. bots overrides the spec's bot count. */
@@ -155,7 +155,11 @@ export type ServerMessage =
   // Combat claim refused — the shooter's predicted damage never happened.
   // Sent ONLY to the shooter so the client can log why a landed shot did
   // nothing (stale projectile, dead/friendly target, implausible claim).
-  | { type: 'shotRejected'; reason: string; targetId?: string; weaponType?: number }
+  | { type: 'shotRejected'; reason: string; targetId?: string; weaponType?: number;
+      /** Server-authoritative health — a rejected claim may have applied
+       *  predicted self-splash locally, so this lets the client resync
+       *  instead of running divergent health until the next real hit. */
+      health?: number }
   | { type: 'teamScore'; scores: { alpha: number; bravo: number }; winAt: number }
   | { type: 'ffaScore'; scores: Record<string, number>; winAt: number }
   | { type: 'ffaMatchEnd'; winner: string; scores: Record<string, number> }

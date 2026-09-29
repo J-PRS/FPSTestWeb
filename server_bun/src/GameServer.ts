@@ -403,6 +403,7 @@ export class GameServer {
 
     // The kit rides with the player — the hop isn't a loadout reset.
     const perk = from.players.getPlayer(playerId)?.perk ?? 'none';
+    const armorClass = from.players.getPlayer(playerId)?.armorClass ?? 'medium';
     const transport = from.players.getPlayer(playerId)?.transport;
 
     // Leave teardown: the disconnect path minus the grace window.
@@ -414,7 +415,7 @@ export class GameServer {
     // Join tail — identical to SessionManager's accept path.
     const sessionToken = this.sessions.tokenFor(playerId);
     to.sessionTokens.set(playerId, sessionToken);
-    const joined = to.players.addPlayer(playerId, to.nextTeam(), perk);
+    const joined = to.players.addPlayer(playerId, to.nextTeam(), perk, armorClass);
     if (transport) joined.transport = transport;
     this.playerRoom.set(playerId, to);
     to.connections.register(playerId, ws);

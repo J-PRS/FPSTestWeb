@@ -39,6 +39,9 @@ export class MovementController {
   }
 
   setInput(input: Partial<MovementInput>): void { this.sim.setInput(input); }
+  /** Armor-class ground speed — must match the server's shadow or every
+   *  ground move reads as a divergence. */
+  setSpeedScale(scale: number): void { this.sim.speedScale = scale; }
   getState(): MovementState { return this.state; }
   setState(newState: MovementState): void { this.sim.setState(newState); }
   update(dt: number): void { this.sim.update(dt); }

@@ -39,6 +39,7 @@ export class NetworkManager {
   private connected: boolean = false;
   /** Loadout perk, announced at join so the server can enforce resist/heal. */
   joinPerk: (() => string) | null = null;
+  joinClass: (() => string) | null = null;
   /** REMOTE players only — local player is never stored here */
   private players: Map<string, RemotePlayerState> = new Map();
   public onPlayerHit: ((shooterId: string, targetId: string, damage: number, health: number, armor?: number) => void) | null = null;
@@ -144,6 +145,7 @@ export class NetworkManager {
               map: urlParams.map ?? undefined,
               bots: urlParams.bots,
               perk: this.joinPerk?.(),
+              armorClass: this.joinClass?.(),
               transport: this.ws?.tier,
             });
             this.connected = true;

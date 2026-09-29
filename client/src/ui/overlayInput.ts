@@ -33,6 +33,7 @@ export function wireOverlayInput(deps: OverlayInputDeps) {
   let beltDrop: Drop | null = null;
   let skillDrop: Drop | null = null;
   let perkDrop: Drop | null = null;
+  let classDrop: Drop | null = null;
   let sidearmDrop: Drop | null = null;
   let packDrop: Drop | null = null;
   let beltLabel: HTMLElement | null = null;
@@ -118,6 +119,21 @@ export function wireOverlayInput(deps: OverlayInputDeps) {
 
 
   if (loadoutBar) {
+    // Armor class leads the bar — the Tribes loadout decision is tier
+    // first, then the weapons you carry in it.
+    const classRow = document.createElement('div');
+    classRow.className = 'lo-row';
+    const classLabel = document.createElement('span');
+    classLabel.className = 'lo-label';
+    classLabel.textContent = 'CLASS';
+    classRow.appendChild(classLabel);
+    classDrop = mkDrop(
+      [{ v: 'light', label: 'Light' }, { v: 'medium', label: 'Medium' }, { v: 'heavy', label: 'Heavy' }],
+      (v) => deps.lazyPlayer().setArmorClass(v as 'light' | 'medium' | 'heavy'),
+    );
+    classRow.appendChild(classDrop.el);
+    loadoutBar.appendChild(classRow);
+
     // Sidearms are chosen in their own row — a primary slot offering them
     // would let a loadout double-carry the hold-out tier.
     const weaponOpts = SLOT_DEFS
@@ -137,7 +153,7 @@ export function wireOverlayInput(deps: OverlayInputDeps) {
     }
 
     const beltRow = document.createElement('div');
-    beltRow.className = 'lo-row';
+    beltRow.className = 'lo-row lo-gap'; // separates weapon slots from equipment
     beltLabel = document.createElement('span');
     beltLabel.className = 'lo-label';
     beltRow.appendChild(beltLabel);
@@ -204,6 +220,7 @@ export function wireOverlayInput(deps: OverlayInputDeps) {
     beltDrop?.setValue(player.beltItem);
     skillDrop?.setValue(player.skill);
     perkDrop?.setValue(player.perk);
+    classDrop?.setValue(player.armorClass);
     sidearmDrop?.setValue(player.sidearm);
     packDrop?.setValue(player.packItem);
     if (beltLabel) beltLabel.textContent = `BELT (${codeLabel(codeFor('belt'))})`;

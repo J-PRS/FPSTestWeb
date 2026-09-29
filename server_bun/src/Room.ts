@@ -26,6 +26,7 @@ import { RoomArena } from './RoomArena.ts';
 import { RoomDeployables } from './RoomDeployables.ts';
 import { RoomProjectiles } from './RoomProjectiles.ts';
 import type { PlayerState, Vec3 } from './types.ts';
+import { CLASS_STATS } from '../../shared/botClasses.ts';
 import { logger } from './logger.ts';
 import type { ServerMessage } from '../../shared/protocol.ts';
 import { POWERUP, rollCreatureDrop, type PowerupKind } from '../../shared/pickups.ts';
@@ -132,6 +133,7 @@ export class Room {
         flags: () => this.flags?.snapshot() ?? [],
         pickups: () => this.pickups?.snapshot() ?? [],
         onDeploy: (pid, kind, pos) => this.deployables.handleDeploy(pid, kind, pos),
+        deployBlast: (pos, damage, radius, shooter) => this.deployables.applyBlast(pos, damage, radius, shooter),
         deployables: () => this.deployables.snapshot(),
         matchEndsAt: () => this.matchEndsAt,
         moveInput: (pid, i, status, seq) => this.moveSim.setInput(pid, {
@@ -142,7 +144,13 @@ export class Room {
         moveReport: (pid, pos, yaw, vel, inputSeq) => this.moveSim.reconcile(pid, pos, yaw, vel, inputSeq),
         moveImpulse: (pid, dv) => this.moveSim.applyImpulse(pid, dv),
         moveResync: (pid, pos, yaw) => this.moveSim.resync(pid, pos, yaw),
-        moveTrack: (pid, pos, yaw) => this.moveSim.track(pid, pos, yaw, this.players.getPlayer(pid)?.perk),
+        moveTrack: (pid, pos, yaw) => {
+          this.moveSim.track(pid, pos, yaw, this.players.getPlayer(pid)?.perk);
+          const cls = this.players.getPlayer(pid)?.armorClass;
+          if (cls === 'light' || cls === 'heavy') {
+            this.moveSim.setSpeedScale(pid, CLASS_STATS[cls].speedScale);
+          }
+        },
         moveUntrack: (pid) => this.moveSim.untrack(pid),
         moveAuthority: () => this.moveAuthority,
       },
