@@ -2,15 +2,19 @@ import * as THREE from 'three';
 
 import { Crawler } from '../entities/Crawler.js';
 import { Scarab } from '../entities/Scarab.js';
+import { Rakk } from '../entities/Rakk.js';
 import type { Targetable } from '../entities/balls.js';
-import type { SimCrawler } from '../../../shared/creatureSim.js';
+import type { SimCrawler, SimFlyer } from '../../../shared/creatureSim.js';
 import type { EntitiesDeps } from './entities.js';
 
 export interface NetCrawlersCtx {
   crawlers: Crawler[];
   scarabs: Scarab[];
+  rakks: Rakk[];
   targets: Targetable[];
 }
+
+type NetBeing = Crawler | Scarab | Rakk;
 
 // ---- Server-owned crawlers (melee PvE) --------------------------------
 // Connected rooms with a `creatures` map spec run the authoritative hop
@@ -19,34 +23,43 @@ export interface NetCrawlersCtx {
 // pattern as netBalls, minus the sim-clock estimation (hops are short
 // arcs; committed edges bound drift tightly enough without it).
 export function createNetCrawlers(deps: EntitiesDeps, ctx: NetCrawlersCtx) {
-  const { crawlers, scarabs, targets } = ctx;
-  const netCrawlerById = new Map<number, Crawler | Scarab>();
+  const { crawlers, scarabs, rakks, targets } = ctx;
+  const netCrawlerById = new Map<number, NetBeing>();
   const serverCreatures = (): boolean => deps.lazyNetworkManager()?.isConnected() ?? false;
 
   const claim = (netId: number, damage: number) =>
     deps.lazyNetworkManager()?.sendCrawlerHit(netId, damage);
   Crawler.hitClaim = claim;
   Scarab.hitClaim = claim;
+  Rakk.hitClaim = claim;
 
-  // species → entity class. Every hop-family species shares the same
-  // replay path (netMelee.ts); the class only decides the visuals.
-  const ENTITY_FOR: Record<string, typeof Crawler | typeof Scarab> = {
+  // species → entity class. Hop and flyer species share the same replay
+  // path (netMelee.ts); the class only decides the visuals.
+  const ENTITY_FOR: Record<string, typeof Crawler | typeof Scarab | typeof Rakk> = {
     crawler: Crawler,
     scarab: Scarab,
+    rakk: Rakk,
   };
 
   function netCrawlSpawn(m: { id: number; position: { x: number; y: number; z: number }; seed: number; uber: boolean; species?: string; targetId?: string | null; tp?: { x: number; y: number; z: number } | null; state?: string }): void {
     if (netCrawlerById.has(m.id)) return;
     const Klass = ENTITY_FOR[m.species ?? 'crawler'] ?? Crawler;
     const c = new Klass(deps.scene, deps.lazyTerrain(),
-      new THREE.Vector3(m.position.x, m.position.y, m.position.z), m.uber);
-    c.bindNet(m.id, m.seed, new THREE.Vector3(m.position.x, m.position.y, m.position.z),
-      { x: 0, y: 0, z: 0 }, (m.state as SimCrawler['state']) ?? 'wander', m.uber, m.species ?? 'crawler');
+      new THREE.Vector3(m.position.x, m.position.y, m.position.z), m.uber) as NetBeing;
+    if (c instanceof Rakk) {
+      c.bindNet(m.id, m.seed, new THREE.Vector3(m.position.x, m.position.y, m.position.z),
+        { x: 0, y: 0, z: 0 }, ((m.state as SimFlyer['state']) ?? 'orbit'), m.uber, m.species ?? 'rakk');
+    } else {
+      c.bindNet(m.id, m.seed, new THREE.Vector3(m.position.x, m.position.y, m.position.z),
+        { x: 0, y: 0, z: 0 }, ((m.state as SimCrawler['state']) ?? 'wander'), m.uber, m.species ?? 'crawler');
+    }
     if (m.targetId && m.tp) {
       c.applyNetEdge({ position: m.position, velocity: { x: 0, y: 0, z: 0 }, kind: 'retarget', targetId: m.targetId, tp: m.tp });
     }
     // Route into the species' own registry so its update pass ticks it.
-    if (c instanceof Scarab) scarabs.push(c); else crawlers.push(c);
+    if (c instanceof Rakk) rakks.push(c);
+    else if (c instanceof Scarab) scarabs.push(c);
+    else crawlers.push(c);
     targets.push(c);
     netCrawlerById.set(m.id, c);
   }
@@ -54,7 +67,7 @@ export function createNetCrawlers(deps: EntitiesDeps, ctx: NetCrawlersCtx) {
   function netCrawlEvt(m: { id: number; kind: 'retarget' | 'windup' | 'pounce' | 'bite'; position: { x: number; y: number; z: number }; velocity: { x: number; y: number; z: number }; targetId: string | null; tp?: { x: number; y: number; z: number } | null; t?: number }): void {
     const c = netCrawlerById.get(m.id);
     if (!c) return; // event raced ahead of spawn — roster/spawn covers it
-    if (m.kind === 'windup' && c.sim) c.sim.state = 'windup';
+    if (m.kind === 'windup' && c.sim) (c.sim as { state: string }).state = 'windup';
     c.applyNetEdge({ ...m, kind: m.kind });
   }
 

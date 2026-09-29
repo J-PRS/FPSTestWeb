@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'bun:test';
 import { CreatureSim } from '../src/CreatureSim.ts';
 import { PlayerManager } from '../src/PlayerManager.ts';
-import { makeSimCrawler, MELEE_SPECIES } from '../../shared/creatureSim.ts';
-import type { SimCrawler } from '../../shared/creatureSim.ts';
+import { makeSimCrawler, makeSimFlyer, stepFlyer, commitTarget, isFlyerSpecies, MELEE_SPECIES, FLYER_SPECIES } from '../../shared/creatureSim.ts';
+import type { SimCrawler, SimFlyer } from '../../shared/creatureSim.ts';
+import type { Heightfield } from '../../shared/heightfield.ts';
 import type { ServerMessage } from '../src/types.ts';
 
 // Private surface the tests poke at — the harness for edge-fanout
@@ -163,5 +164,65 @@ describe('crawlerHit claim gates', () => {
     sim.handleHit('shooter', c.id, 10);
     expect(c.health).toBe(c.maxHealth - 10);
     expect(c.stunTimer).toBeGreaterThan(0);
+  });
+});
+
+describe('flyer family (rakk)', () => {
+  const field: Heightfield = { size: 1, data: new Uint8Array(1), stride: 1 };
+
+  it('resolves per-species tunables + unknown species falls back to rakk', () => {
+    const rk = makeSimFlyer(1, 0, 50, 0, false, 42, 'rakk');
+    const gn = makeSimFlyer(2, 0, 50, 0, false, 42, 'gnat');
+    expect(rk.state).toBe('orbit');
+    expect(FLYER_SPECIES.gnat!.orbitR).toBeLessThan(FLYER_SPECIES.rakk!.orbitR ?? Infinity);
+    expect(gn.sp.ORBIT_SPEED).toBeGreaterThan(rk.sp.ORBIT_SPEED);
+    expect(isFlyerSpecies('rakk')).toBe(true);
+    expect(isFlyerSpecies('crawler')).toBe(false);
+  });
+
+  it('committed target drives the orbit→windup→dive→bite event chain', () => {
+    const f = makeSimFlyer(3, 0, 60, 0, false, 7, 'rakk');
+    commitTarget(f, 'prey', { x: 0, y: 50, z: 0 });
+    const events: string[] = [];
+    // 30s window — covers the seeded cooldown + a full attack cycle.
+    for (let i = 0; i < 600 && events.filter(e => e === 'bite').length === 0; i++) {
+      const ev = stepFlyer(f, 0.05, field, { x: 0, y: 50, z: 0 }, true);
+      if (ev) events.push(ev);
+    }
+    expect(events[0]).toBe('windup');
+    expect(events).toContain('pounce');
+    expect(events).toContain('bite');
+    // The dive reconnects above ground — the sim's orbit anchor keeps it aloft.
+    expect(f.y).toBeGreaterThanOrEqual(0.8);
+  });
+
+  it('authority and predictor replay the identical stream', () => {
+    const a = makeSimFlyer(4, 0, 60, 0, false, 99, 'rakk');
+    const p = makeSimFlyer(4, 0, 60, 0, false, 99, 'rakk');
+    commitTarget(a, 'prey', { x: 0, y: 50, z: 0 });
+    commitTarget(p, 'prey', { x: 0, y: 50, z: 0 });
+    for (let i = 0; i < 120; i++) {
+      stepFlyer(a, 0.05, field, { x: 0, y: 50, z: 0 }, true);
+      stepFlyer(p, 0.05, field, { x: 0, y: 50, z: 0 }, false);
+    }
+    expect(p.x).toBeCloseTo(a.x, 10);
+    expect(p.y).toBeCloseTo(a.y, 10);
+    expect(p.z).toBeCloseTo(a.z, 10);
+    expect(p.state).toBe(a.state);
+    expect(p.rng).toBe(a.rng);
+  });
+
+  it('server spawnCrawler dispatches flyer species to makeSimFlyer', () => {
+    const { sim } = makeRoom();
+    addPlayerAt(sim, 'p1', 0, 0);
+    const priv = sim as unknown as {
+      field: Heightfield | null;
+      spawnCrawler(near: { x: number; y: number; z: number }, species: string): SimFlyer;
+    };
+    priv.field = { size: 1, data: new Uint8Array(1), stride: 1 };
+    const f = priv.spawnCrawler({ x: 0, y: 0, z: 0 }, 'rakk');
+    expect('orbitPhase' in f).toBe(true);
+    expect(f.species).toBe('rakk');
+    expect(f.y).toBeGreaterThan(0); // spawns at cruise alt, not on the dirt
   });
 });

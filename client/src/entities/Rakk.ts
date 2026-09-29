@@ -5,13 +5,15 @@ import {
   RAKK_RADIUS, RAKK_HEALTH,
   RAKK_ORBIT_ALT, RAKK_ORBIT_R, RAKK_SPEED, RAKK_ACCEL,
   RAKK_DIVE_CD_MIN, RAKK_DIVE_CD_MAX, RAKK_DIVE_SPEED,
-  RAKK_CLAW_DIST, RAKK_CLIMB_T, RAKK_STUN,
+  RAKK_CLAW_DIST, RAKK_CLIMB_T, RAKK_STUN, MELEE_FAVOR,
 } from '../core/config.js';
 import { Terrain } from '../world/terrain.js';
 import type { Targetable } from './balls.js';
 import { allocSlots, freeSlots, getSwarm, getShadows } from './swarms.js';
 import type { SwarmPart, SwarmSlotOwner } from './swarm.js';
 import { getGlowTexture } from '../effects/glowTexture.js';
+import type { SimFlyer } from '../../../shared/creatureSim.js';
+import { bindNetFlyer, applyNetEdgeFlyer, updateNetFlyer, claimDamageMelee } from '../game/netMelee.js';
 
 const _dir = new THREE.Vector3();
 const _scratch = new THREE.Vector3();
@@ -74,7 +76,7 @@ export function rakkParts(): SwarmPart[] {
  */
 export class Rakk implements Targetable, SwarmSlotOwner {
   static attackHeldBy: number | null = null; // flock attack token — one diver at a time
-  readonly id: number;
+  id: number; // bindNet re-stamps into the net id namespace post-construction
   readonly variant = 0;
   readonly uber: boolean;
 
@@ -93,12 +95,12 @@ export class Rakk implements Targetable, SwarmSlotOwner {
   private hasSlots = false;
 
   private animT = Math.random() * 10;
-  private yaw = 0;
+  yaw = 0; // net replay writes this from the sim
   private pitch = 0;
   private roll = 0;
   private flash = 0;
 
-  private state: 'orbit' | 'dive' | 'climb' = 'orbit';
+  state: 'orbit' | 'dive' | 'climb' = 'orbit'; // public — net replay maps sim states onto it
   private stateTimer = RAKK_DIVE_CD_MIN + Math.random() * (RAKK_DIVE_CD_MAX - RAKK_DIVE_CD_MIN);
   private orbitPhase = Math.random() * Math.PI * 2;
   private orbitDir = Math.random() < 0.5 ? 1 : -1;
@@ -107,6 +109,42 @@ export class Rakk implements Targetable, SwarmSlotOwner {
 
   onClawHit?: (rakk: Rakk) => void;
   onDive?: (rakk: Rakk) => void;
+
+  /** netDriven = server-authoritative replay (same contract as Crawler):
+   *  the shared flyer sim runs the orbit/dive stream, edges snap state,
+   *  takeDamage sends a claim instead of trusting local health. */
+  netDriven = false;
+  netId = 0;
+  sim: SimFlyer | null = null;
+  netAcc = 0;
+  static hitClaim: ((netId: number, damage: number) => void) | null = null;
+
+  bindNet(id: number, seed: number, pos: THREE.Vector3, vel: { x: number; y: number; z: number }, state: SimFlyer['state'], uber: boolean, species = 'rakk'): void {
+    this.netDriven = true;
+    this.netId = id;
+    this.id = 0x50000000 + id;
+    bindNetFlyer(this, id, seed, species, pos, vel, state, uber);
+    this.state = state === 'windup' ? 'dive' : state === 'orbit' ? 'orbit' : 'climb';
+  }
+
+  applyNetEdge(m: { position: { x: number; y: number; z: number }; velocity: { x: number; y: number; z: number }; kind: string; targetId: string | null; tp?: { x: number; y: number; z: number } | null }): void {
+    applyNetEdgeFlyer(this, m);
+    if (!this.sim) return;
+    const s = this.sim.state;
+    // The fold telegraph isn't a Rakk display state — folded wings read
+    // as 'dive' either way, so windup maps onto it.
+    this.state = s === 'windup' ? 'dive' : s;
+    if (m.kind === 'pounce') this.onDive?.(this);
+  }
+
+  private updateNet(dt: number, terrain: Terrain): void {
+    updateNetFlyer(this, dt, terrain);
+    if (this.flash > 0) this.flash -= dt;
+    this.animT += dt;
+    // Pitch/roll dressing the replay can't supply — bank into the vel.
+    this.pitch = THREE.MathUtils.clamp(-this.vel.y * 0.05, -0.7, 0.5);
+    this.roll = 0;
+  }
 
   get disposed(): boolean { return this.dead; }
 
@@ -128,6 +166,10 @@ export class Rakk implements Targetable, SwarmSlotOwner {
 
   update(dt: number, terrain: Terrain, playerPos: THREE.Vector3): void {
     if (this.dead) return;
+    if (this.netDriven && this.sim) {
+      this.updateNet(dt, terrain);
+      return;
+    }
     if (this.stunTimer > 0) this.stunTimer -= dt;
     if (this.flash > 0) this.flash -= dt;
     this.animT += dt;
@@ -155,7 +197,8 @@ export class Rakk implements Targetable, SwarmSlotOwner {
       }
       case 'dive': {
         this.steerToward(this.diveTarget, RAKK_DIVE_SPEED, dt);
-        const hit = this.pos.distanceToSquared(playerPos) < RAKK_CLAW_DIST * RAKK_CLAW_DIST;
+        const clawD = RAKK_CLAW_DIST * MELEE_FAVOR;
+        const hit = this.pos.distanceToSquared(playerPos) < clawD * clawD;
         const passed = this.stateTimer <= 0 || this.pos.distanceToSquared(this.diveTarget) < 4;
         if (hit) {
           this.onClawHit?.(this);
@@ -196,7 +239,7 @@ export class Rakk implements Targetable, SwarmSlotOwner {
     this.writeInstances();
   }
 
-  private writeInstances(): void {
+  writeInstances(_terrain?: Terrain): void {
     if (!this.hasSlots) return;
     const swarm = getSwarm('rakk');
     if (!swarm) return;
@@ -284,6 +327,7 @@ export class Rakk implements Targetable, SwarmSlotOwner {
   }
 
   takeDamage(damage: number): boolean {
+    if (this.netDriven) return claimDamageMelee(this, damage, Rakk.hitClaim);
     this.health -= damage;
     this.flash = 0.15;
     if (this.health <= 0) { this.dead = true; this.releaseToken(); return true; }

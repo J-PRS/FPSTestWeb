@@ -9,7 +9,8 @@
   "bots": 6,
   "creatures": {
     "crawler": 6,
-    "scarab": 8
+    "scarab": 8,
+    "rakk": 4
   },
   "ambient": {
     "crawler": 40,

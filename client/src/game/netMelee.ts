@@ -2,7 +2,7 @@ import * as THREE from 'three';
 
 import { getHeightfield } from '../world/terrain.js';
 import { hmHeight } from '../../../shared/heightfield.js';
-import { type SimCrawler, stepCrawler, makeSimCrawler, commitTarget } from '../../../shared/creatureSim.js';
+import { type SimCrawler, type SimFlyer, stepCrawler, stepFlyer, makeSimCrawler, makeSimFlyer, commitTarget } from '../../../shared/creatureSim.js';
 import type { Terrain } from '../world/terrain.js';
 
 /** The fields every netDriven melee species needs — duck-typed so each
@@ -83,6 +83,66 @@ export function updateNetMelee(e: NetMeleeLike, dt: number, terrain: Terrain): v
   e.vel.set(s.vx, s.vy, s.vz);
   e.yaw = s.yaw;
   e.airborne = s.y > hmHeight(field, s.x, s.z) + 0.05;
+  e.health = s.health;
+  e.writeInstances(terrain);
+}
+
+// ---- Flyer family -----------------------------------------------------
+// Identical contract to the melee helpers — the flyer sim lives behind
+// the same edge protocol, so only the bind/replay calls differ.
+
+export interface NetFlyerLike {
+  pos: THREE.Vector3;
+  vel: THREE.Vector3;
+  yaw: number;
+  health: number;
+  dead: boolean;
+  sim: SimFlyer | null;
+  netAcc: number;
+  writeInstances(terrain: Terrain): void;
+}
+
+export function bindNetFlyer(
+  e: NetFlyerLike & { id: number },
+  id: number, seed: number, species: string,
+  pos: { x: number; y: number; z: number }, vel: { x: number; y: number; z: number },
+  state: SimFlyer['state'], _uber: boolean,
+): void {
+  e.sim = makeSimFlyer(id, pos.x, pos.y, pos.z, _uber, seed, species);
+  e.sim.state = state;
+  e.sim.vx = vel.x; e.sim.vy = vel.y; e.sim.vz = vel.z;
+  e.pos.set(pos.x, pos.y, pos.z);
+  e.vel.set(vel.x, vel.y, vel.z);
+  e.health = e.sim.health;
+}
+
+export function applyNetEdgeFlyer(e: NetFlyerLike, m: {
+  position: { x: number; y: number; z: number };
+  velocity: { x: number; y: number; z: number };
+  targetId: string | null; tp?: { x: number; y: number; z: number } | null;
+}): void {
+  const s = e.sim;
+  if (!s) return;
+  s.x = m.position.x; s.y = m.position.y; s.z = m.position.z;
+  s.vx = m.velocity.x; s.vy = m.velocity.y; s.vz = m.velocity.z;
+  commitTarget(s, m.targetId, m.tp ?? null);
+  e.pos.set(s.x, s.y, s.z);
+  e.vel.set(s.vx, s.vy, s.vz);
+}
+
+export function updateNetFlyer(e: NetFlyerLike, dt: number, terrain: Terrain): void {
+  const s = e.sim;
+  const field = getHeightfield();
+  if (!s || !field) return;
+  e.netAcc = Math.min(e.netAcc + dt, 0.5);
+  const tgt = s.tgtValid ? { x: s.tx, y: s.ty, z: s.tz } : null;
+  while (e.netAcc >= 0.05) {
+    e.netAcc -= 0.05;
+    stepFlyer(s, 0.05, field, tgt, false);
+  }
+  e.pos.set(s.x, s.y, s.z);
+  e.vel.set(s.vx, s.vy, s.vz);
+  e.yaw = s.yaw;
   e.health = s.health;
   e.writeInstances(terrain);
 }

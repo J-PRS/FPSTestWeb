@@ -12,8 +12,9 @@
  */
 import { type Heightfield, hmHeight } from '../../shared/heightfield.ts';
 import {
-  type SimCrawler, type CrawlerEvent,
+  type SimCrawler, type SimFlyer, type CrawlerEvent,
   makeSimCrawler, stepCrawler, applyCrawlerDamage, commitTarget,
+  isFlyerSpecies, makeSimFlyer, stepFlyer, applyFlyerDamage,
   CRAWLER_SIM,
 } from '../../shared/creatureSim.ts';
 import type { SimVec } from '../../shared/ballSim.ts';
@@ -46,9 +47,14 @@ const FAR_SKIP = 4;
 // buckets.
 const BRAIN_BUCKETS = 8;
 
+/** Hop + flyer families share every wire field — the union only matters
+ *  at step/damage dispatch, discriminated by the flyer's `orbitPhase`. */
+type SimBeing = SimCrawler | SimFlyer;
+const isFlyer = (c: SimBeing): c is SimFlyer => 'orbitPhase' in c;
+
 export class CreatureSim {
   private field: Heightfield | null = null;
-  private crawlers = new Map<number, SimCrawler>();
+  private crawlers = new Map<number, SimBeing>();
   private nextId = 1;
   private retargetAcc = new Map<number, number>();
   private resyncAcc = new Map<number, number>();
@@ -72,7 +78,7 @@ export class CreatureSim {
   }
 
   /** Bite delivery — Room wires this to the damage funnel. */
-  onBite: ((crawler: SimCrawler, targetId: string) => void) | null = null;
+  onBite: ((crawler: SimBeing, targetId: string) => void) | null = null;
   /** Kill feed / nugget drop hook — same shape as BallSim.onKilled. */
   onKilled: ((by: string, pos: Vec3) => void) | null = null;
 
@@ -122,7 +128,7 @@ export class CreatureSim {
     return out;
   }
 
-  private nearestPlayer(c: SimCrawler, alive: { id: string; pos: SimVec }[]): { id: string; pos: SimVec } | null {
+  private nearestPlayer(c: SimBeing, alive: { id: string; pos: SimVec }[]): { id: string; pos: SimVec } | null {
     let best: { id: string; pos: SimVec } | null = null;
     let bestD = Infinity;
     for (const p of alive) {
@@ -132,14 +138,18 @@ export class CreatureSim {
     return best;
   }
 
-  private spawnCrawler(near: SimVec, species: string): SimCrawler {
+  private spawnCrawler(near: SimVec, species: string): SimBeing {
     const field = this.field!;
     const ang = Math.random() * Math.PI * 2;
     const dist = 40 + Math.random() * 50;
     const x = near.x + Math.cos(ang) * dist;
     const z = near.z + Math.sin(ang) * dist;
     const seed = (Math.random() * 0xffffffff) >>> 0 || 1;
-    const c = makeSimCrawler(this.nextId++, x, hmHeight(field, x, z), z, Math.random() < 0.05, seed, species);
+    const gy = hmHeight(field, x, z);
+    const c = isFlyerSpecies(species)
+      ? makeSimFlyer(this.nextId++, x, gy, z, Math.random() < 0.05, seed, species)
+      : makeSimCrawler(this.nextId++, x, gy, z, Math.random() < 0.05, seed, species);
+    if (isFlyer(c)) c.y = gy + c.sp.ORBIT_ALT; // flyers enter at cruise alt
     // Negative offset pushes this crawler's first retarget into its own
     // bucket instead of the spawn tick — the spread survives every reset.
     this.retargetAcc.set(c.id, -RETARGET_INTERVAL * ((c.id % BRAIN_BUCKETS) / BRAIN_BUCKETS));
@@ -159,7 +169,7 @@ export class CreatureSim {
   /** Freeze the pounce/chase aim into the sim — same rationale as
    *  BallSim.snapTarget: both sides steer at THIS snapshot, not the
    *  moving player. */
-  private snapTarget(c: SimCrawler): void {
+  private snapTarget(c: SimBeing): void {
     const p = c.targetId ? this.players.getPlayer(c.targetId) : null;
     if (p && !p.isDead && !(p.status & STATUS.CLOAK)) {
       commitTarget(c, c.targetId, p.position);
@@ -168,11 +178,11 @@ export class CreatureSim {
     }
   }
 
-  private targetSnap(c: SimCrawler): Vec3 | null {
+  private targetSnap(c: SimBeing): Vec3 | null {
     return c.tgtValid ? { x: c.tx, y: c.ty, z: c.tz } : null;
   }
 
-  private edge(c: SimCrawler, kind: 'retarget' | 'windup' | 'pounce' | 'bite'): void {
+  private edge(c: SimBeing, kind: 'retarget' | 'windup' | 'pounce' | 'bite'): void {
     this.resyncAcc.set(c.id, 0);
     const msg: ServerMessage = {
       type: 'crawlEvt', id: c.id, kind,
@@ -210,14 +220,15 @@ export class CreatureSim {
       logger.warn('crawlerHit dropped: out of range', { playerId, id });
       return;
     }
-    if (applyCrawlerDamage(c, Math.max(1, Math.min(300, damage)))) {
+    const dmg = Math.max(1, Math.min(300, damage));
+    if (isFlyer(c) ? applyFlyerDamage(c, dmg) : applyCrawlerDamage(c, dmg)) {
       this.kill(c, playerId);
     }
     // Stagger is a timer edge — the next hop decision diverges only if a
     // predictor skips it, and the resync heartbeat bounds that drift.
   }
 
-  private kill(c: SimCrawler, by?: string): void {
+  private kill(c: SimBeing, by?: string): void {
     c.dead = true;
     this.crawlers.delete(c.id);
     const pos = { x: c.x, y: c.y, z: c.z };
@@ -267,7 +278,10 @@ export class CreatureSim {
       this.retargetAcc.set(c.id, ra);
 
       _snap.x = c.tx; _snap.y = c.ty; _snap.z = c.tz;
-      const ev: CrawlerEvent | null = stepCrawler(c, TICK_DT, this.field!, c.tgtValid ? _snap : null, true);
+      const tgt = c.tgtValid ? _snap : null;
+      const ev: CrawlerEvent | null = isFlyer(c)
+        ? stepFlyer(c, TICK_DT, this.field!, tgt, true)
+        : stepCrawler(c, TICK_DT, this.field!, tgt, true);
       if (ev === 'windup' || ev === 'pounce') {
         this.edge(c, ev);
       } else if (ev === 'bite') {
