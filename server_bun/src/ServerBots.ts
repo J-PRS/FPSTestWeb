@@ -348,6 +348,9 @@ export class ServerBots {
       return;
     }
     const carrying = this.room.flags?.snapshot().some(f => f.carrier === id) ?? false;
+    // Stand-and-shoot is a legal pick — park the timer while the brain is
+    // holding a combat spot or the warn is a false positive.
+    if (!carrying && brain.holding) { w.since = now; return; }
     const leash = carrying ? ServerBots.STUCK_MS_FLAG : ServerBots.STUCK_MS;
     if (!w.warned && now - w.since > leash) {
       w.warned = true;

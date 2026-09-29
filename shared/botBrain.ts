@@ -195,6 +195,9 @@ export class BotBrain {
   private readonly wanderlust = 0.7 + Math.random() * 0.6;
   private readonly temper = 0.7 + Math.random() * 0.6; // fire-cadence scale
   private fightPos: BotVec | null = null; // combat spot from the last replan
+  /** Last think resolved to stand-and-shoot — a legal hold, not a stall.
+   *  Hosts read this to keep stall/mobility watchdogs honest. */
+  holding = false;
 
   /** Current hunt target — the belt intent carries no aim of its own,
    *  so hosts resolve the throw's arc off this. */
@@ -273,6 +276,7 @@ export class BotBrain {
     this.revengeT -= dt;
 
     // --- choose the step destination ---
+    this.holding = false;
     let dest: BotVec;
     if (this.flinchT > 0) {
       this.flinchT -= dt;
@@ -302,6 +306,7 @@ export class BotBrain {
         // fightPos comes from the last replan tick — no pick yet (or the
         // pick was "hold") means stand and shoot.
         dest = this.fightPos ?? { ...pos };
+        this.holding = this.fightPos === null;
       }
     } else {
       dest = this.goal;
