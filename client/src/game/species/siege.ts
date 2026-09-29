@@ -214,6 +214,7 @@ export function createSiegeSpecies({ deps, kit, targets }: SpeciesCtx) {
     if (atCap(overlords, capFor('overlord', OVERLORD_MAX))) return;
     const u = uber ?? rollUber();
     const m = new Overlord(scene, deps.lazyTerrain(), ringPos(OVERLORD_SPAWN_MIN, OVERLORD_SPAWN_MAX), u);
+    deps.lazyEffects().spawnJumpDust(m.pos); // eruption dust — it lifts off out of the dirt
     m.onMineDrop = (overlord) => {
       spawnBaneling(overlord.pos); // drops to the terrain and immediately rolls
       if (overlord.uber) {

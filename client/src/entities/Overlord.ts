@@ -130,7 +130,10 @@ export class Overlord implements Targetable, SwarmSlotOwner {
       this.scale = 3.2; // bigger debris — and it pays out 3 nuggets
     }
     this.pos = pos.clone();
-    this.pos.y = terrain.getHeight(pos.x, pos.z) + OVERLORD_ALTITUDE;
+    // Spawn at ground level — steerLoiter's targetY pull lifts it to
+    // cruise altitude over the first seconds, so it erupts out of the
+    // dirt like the rest of the roster instead of popping in midair.
+    this.pos.y = terrain.getHeight(pos.x, pos.z) + 2;
     this.vel = new THREE.Vector3();
     this.hasSlots = allocSlots('overlord', this);
     if (!this.hasSlots) this.dead = true;
