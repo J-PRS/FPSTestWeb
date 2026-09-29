@@ -1,3 +1,6 @@
+2026-10-03 - yourHealth echo regression test: mending player gets a
+    throttled echo (1 per 500ms), full-health never echoes — locks in
+    the health-desync fix (healthEcho.test.ts).
 2026-10-03 - oxlint clean: zero warnings remain — split blastFx out of
     processProjectileExplosion, onModelLoaded out of the GLTF load
     callback, dropped an unused destructure in simTick.
