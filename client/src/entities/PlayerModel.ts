@@ -119,6 +119,8 @@ export class PlayerModel {
     const knight = this.variant === 'knight';
 
     return new Promise((resolve, reject) => {
+      let attempts = 0;
+      const attempt = () => {
       loader.load(
         knight ? '/assets/models/knight.glb'
           : mann ? '/assets/models/mannequin.glb'
@@ -214,10 +216,21 @@ export class PlayerModel {
           logger.debug(`Loading: ${(xhr.loaded / xhr.total * 100).toFixed(0)}%`);
         },
         (error) => {
+          // A dev-server restart (or any transient fetch failure) must not
+          // kill the model for the whole session — an invisible player is
+          // worse than a late one. Retry with backoff before giving up.
+          if (this._disposed) { resolve(); return; }
+          if (++attempts <= 4) {
+            logger.warn(`Model load failed, retry ${attempts}/4`, error);
+            setTimeout(attempt, 600 * attempts);
+            return;
+          }
           logger.error('Failed to load', error);
           reject(error);
         }
       );
+      };
+      attempt();
     });
   }
 

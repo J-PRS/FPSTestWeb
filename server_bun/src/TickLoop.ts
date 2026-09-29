@@ -25,6 +25,33 @@ export function healPerTick(p: Pick<PlayerState, 'isDead' | 'health' | 'maxHealt
   return heal;
 }
 
+interface SuppressablePlayer { position: { x: number; y: number; z: number }; rotation: { yaw: number; pitch: number }; health: number; isDead: boolean; skiing: number; status: number }
+interface SuppressableSent { x: number; y: number; z: number; vx: number; vy: number; vz: number; yaw: number; pitch: number; hp: number; dead: boolean; ski: number; status: number; t: number }
+
+/** Update suppression: if the player still sits where a dead-reckoning
+ *  client would extrapolate them (linear pos+vel from the last sent
+ *  record), the update carries no new information — skip it. Exported for
+ *  scenario tests; the loop itself stays identical. */
+export function recordSuppressed(p: SuppressablePlayer, lastSent: SuppressableSent, now: number): boolean {
+  const elapsed = (now - lastSent.t) / 1000;
+  const ex = lastSent.x + lastSent.vx * elapsed;
+  const ey = lastSent.y + lastSent.vy * elapsed;
+  const ez = lastSent.z + lastSent.vz * elapsed;
+  const dx = p.position.x - ex;
+  const dy = p.position.y - ey;
+  const dz = p.position.z - ez;
+  const predErrSq = dx * dx + dy * dy + dz * dz;
+  const yawDiff = Math.abs(p.rotation.yaw - lastSent.yaw);
+  const pitchDiff = Math.abs(p.rotation.pitch - lastSent.pitch);
+  // State fields (health/death/ski/status) must never be eaten by the
+  // position check — a flag change forces the record even when the
+  // player hasn't moved.
+  const stateChanged = p.health !== lastSent.hp || p.isDead !== lastSent.dead || p.skiing !== lastSent.ski || p.status !== lastSent.status;
+  // Idle players still heartbeat at 4Hz — a >300ms silence would trigger
+  // client-side dead reckoning on a stationary player.
+  return !stateChanged && predErrSq < 0.09 && yawDiff < 0.02 && pitchDiff < 0.03 && now - lastSent.t < 250;
+}
+
 /** One encoded position update waiting for fanout — data is pre-encoded
  *  once so per-recipient sends are buffer concatenation, not re-serialization. */
 export interface TickRecord {
@@ -239,26 +266,8 @@ export class TickLoop {
    *  pos+vel), the update carries no new information — skip it.
    *  Constant-velocity skiers extrapolate perfectly; error appears only on
    *  direction change, bounded by the tolerance. */
-  private isSuppressed(p: { position: { x: number; y: number; z: number }; rotation: { yaw: number; pitch: number }; health: number; isDead: boolean; skiing: number; status: number },
-                     lastSent: { x: number; y: number; z: number; vx: number; vy: number; vz: number; yaw: number; pitch: number; hp: number; dead: boolean; ski: number; status: number; t: number },
-                     now: number): boolean {
-    const elapsed = (now - lastSent.t) / 1000;
-    const ex = lastSent.x + lastSent.vx * elapsed;
-    const ey = lastSent.y + lastSent.vy * elapsed;
-    const ez = lastSent.z + lastSent.vz * elapsed;
-    const dx = p.position.x - ex;
-    const dy = p.position.y - ey;
-    const dz = p.position.z - ez;
-    const predErrSq = dx * dx + dy * dy + dz * dz;
-    const yawDiff = Math.abs(p.rotation.yaw - lastSent.yaw);
-    const pitchDiff = Math.abs(p.rotation.pitch - lastSent.pitch);
-    // State fields (health/death/ski/status) must never be eaten by the
-    // position check — a flag change forces the record even when the
-    // player hasn't moved.
-    const stateChanged = p.health !== lastSent.hp || p.isDead !== lastSent.dead || p.skiing !== lastSent.ski || p.status !== lastSent.status;
-    // Idle players still heartbeat at 4Hz — a >300ms silence would trigger
-    // client-side dead reckoning on a stationary player.
-    return !stateChanged && predErrSq < 0.09 && yawDiff < 0.02 && pitchDiff < 0.03 && now - lastSent.t < 250;
+  private isSuppressed(p: SuppressablePlayer, lastSent: SuppressableSent, now: number): boolean {
+    return recordSuppressed(p, lastSent, now);
   }
 
   /** Interest management: distance-tiered update rate per recipient.

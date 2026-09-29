@@ -1,3 +1,5 @@
+2026-10-03 - PlayerModel load retries 4x with backoff on fetch failure — dev-server restarts no longer leave invisible players for the session. recordSuppressed() extracted for tests.
+
 2026-10-03 - TickLoop heal stack extracted to healPerTick() (pure, testable) + regenHeal scenario (mend/powerup/perk channels, dead+full caps). tsc fixes across new scenario files (rotation field, flag narrowing, unused imports, private const).
 
 2026-10-03 - Scenario suite +2 (skillEnergy, slamClamp): cloak ante + held drain + regen suppression on the shadow sim, forged slam power clamps to the 1.8x ceiling.
