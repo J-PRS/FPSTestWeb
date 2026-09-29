@@ -39,6 +39,7 @@ type DataChannelLike = {
   onClosed(cb: () => void): void;
   isOpen(): boolean;
   close(): void;
+  bufferedAmount?(): number;
 };
 type PeerConnectionLike = {
   onDataChannel(cb: (dc: DataChannelLike) => void): void;
@@ -90,6 +91,7 @@ class RtcSocketAdapter {
     else this.game = dc; // 'game' or unlabeled → the fast lane
   }
   get readyState(): number { return this.game?.isOpen() || this.ctrl?.isOpen() ? 1 : 3; }
+  getBufferedAmount(): number { return (this.ctrl ?? this.game)?.bufferedAmount?.() ?? 0; }
   send(msg: string | Uint8Array): number {
     // Reliable lane always — see the lanes note above.
     const dc = this.ctrl ?? this.game;

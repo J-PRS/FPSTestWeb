@@ -2,6 +2,13 @@ import type { ServerWebSocket } from 'bun';
 import type { WebSocketData, ServerMessage } from './types.ts';
 import { logger } from './logger.ts';
 
+/** Tick frames are drop-safe (peers extrapolate), so a socket that can't
+ *  drain must not queue them unboundedly — a stalled connection otherwise
+ *  grows memory while the player sees a worse-than-lossy feed. Above this
+ *  backlog the frame is dropped before it hits the send queue. Only the
+ *  tick hot path is gated; reliable control/ball traffic still queues. */
+const MAX_TICK_BACKLOG = 256 * 1024;
+
 export class ConnectionManager {
   private connections: Map<string, ServerWebSocket<WebSocketData>> = new Map();
 
@@ -32,9 +39,10 @@ export class ConnectionManager {
    *  the frames anyway. Revisit if the QUIC lane proves reliable. */
   sendBinaryToPlayer(playerId: string, data: Uint8Array): void {
     const ws = this.connections.get(playerId);
-    if (ws && ws.readyState === 1) {
-      ws.send(data);
-    }
+    if (!ws || ws.readyState !== 1) return;
+    const buffered = (ws as unknown as { getBufferedAmount?(): number }).getBufferedAmount?.() ?? 0;
+    if (buffered > MAX_TICK_BACKLOG) return;
+    ws.send(data);
   }
 
   /** Correctness-critical binary (ball segments) — always the reliable

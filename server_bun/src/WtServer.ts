@@ -119,6 +119,10 @@ class WtSocketAdapter {
 
   get readyState(): number { return this.open ? 1 : 3; }
 
+  // desiredSize goes negative once the writable's internal queue is
+  // backlogged — report the negative magnitude as buffered bytes.
+  getBufferedAmount(): number { return Math.max(0, -(this.writer?.desiredSize ?? 0)); }
+
   send(msg: string | Uint8Array): number {
     if (!this.open || !this.writer) return 0;
     // The reliable stream is newline-delimited TEXT — raw binary has no
