@@ -1,3 +1,5 @@
+2026-10-03 - Scarab.update split into tickEmerge/steer (c25 -> clean).
+
 2026-10-03 - lightning: lgTrace loops -> traceTargetHit/tracePlayerHit + sphereEntry; strike/chain damage -> zapTarget (c20/c18 -> clean).
 
 2026-10-03 - gameLoop simTick entity updates -> tickEntities (c16 -> clean).

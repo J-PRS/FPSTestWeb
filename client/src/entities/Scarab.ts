@@ -172,9 +172,9 @@ export class Scarab implements Targetable, SwarmSlotOwner {
       this.animT += dt;
       return;
     }
-    if (this.stunTimer > 0) this.stunTimer -= dt;
-    if (this.flash > 0) this.flash -= dt;
-    if (this.biteCd > 0) this.biteCd -= dt;
+    this.stunTimer = Math.max(0, this.stunTimer - dt);
+    this.flash = Math.max(0, this.flash - dt);
+    this.biteCd = Math.max(0, this.biteCd - dt);
     this.animT += dt;
 
     const dx = playerPos.x - this.pos.x;
@@ -185,13 +185,7 @@ export class Scarab implements Targetable, SwarmSlotOwner {
     const dy = playerPos.y - this.pos.y;
     const biteSq = distSq + dy * dy;
 
-    if (this.emergeT > 0) {
-      this.emergeT -= dt;
-      const k = 1 - Math.max(0, this.emergeT) / EMERGE_DUR;
-      this.pos.y = terrain.getHeight(this.pos.x, this.pos.z) + this.radius - this.emergeDepth * (1 - k * k);
-      this.writeInstances(terrain);
-      return;
-    }
+    if (this.emergeT > 0) { this.tickEmerge(dt, terrain); return; }
 
     this.vel.y += GRAVITY * dt;
     this.pos.addScaledVector(this.vel, dt);
@@ -203,37 +197,7 @@ export class Scarab implements Targetable, SwarmSlotOwner {
       if (this.airborne) this.onLanded?.(this.pos);
       this.airborne = false;
       this.vel.y = 0;
-
-      if (this.stunTimer <= 0) {
-        // Dreadbeetle dash: every few seconds it locks a straight line and
-        // RAMS — no weave, just speed. The un-zigzagged charge IS the tell.
-        if (this.uber) {
-          this.dashCd -= dt;
-          if (this.dashT > 0) this.dashT -= dt;
-          else if (this.dashCd <= 0 && distSq < 45 * 45) {
-            this.dashT = 0.45;
-            this.dashCd = 3.5 + Math.random() * 1.5;
-          }
-        }
-        if (this.dashT > 0) {
-          const d = Math.sqrt(distSq) || 0.001;
-          this.vel.x = (dx / d) * SCARAB_SPEED * 2.6;
-          this.vel.z = (dz / d) * SCARAB_SPEED * 2.6;
-        } else if (distSq < SCARAB_AGGRO_DIST * SCARAB_AGGRO_DIST) {
-          // Beeline + zigzag — fast and erratic, the fodder dance
-          this.zigPhase += dt * 7;
-          const d = Math.sqrt(distSq) || 0.001;
-          const nx = dx / d, nz = dz / d;
-          const zig = Math.sin(this.zigPhase) * SCARAB_ZIGZAG;
-          this.vel.x = nx * SCARAB_SPEED - nz * zig;
-          this.vel.z = nz * SCARAB_SPEED + nx * zig;
-        } else {
-          // Idle scuttle — mill around slowly
-          this.vel.x *= Math.max(0, 1 - 3 * dt);
-          this.vel.z *= Math.max(0, 1 - 3 * dt);
-        }
-      }
-
+      this.steer(dt, dx, dz, distSq);
       const biteD = SCARAB_BITE_DIST * MELEE_FAVOR;
       if (biteSq < biteD * biteD && this.biteCd <= 0) {
         this.biteCd = SCARAB_BITE_CD;
@@ -245,6 +209,45 @@ export class Scarab implements Targetable, SwarmSlotOwner {
 
     if (this.vel.lengthSq() > 1) this.yaw = Math.atan2(this.vel.x, this.vel.z);
     this.writeInstances(terrain);
+  }
+
+  private tickEmerge(dt: number, terrain: Terrain): void {
+    this.emergeT -= dt;
+    const k = 1 - Math.max(0, this.emergeT) / EMERGE_DUR;
+    this.pos.y = terrain.getHeight(this.pos.x, this.pos.z) + this.radius - this.emergeDepth * (1 - k * k);
+    this.writeInstances(terrain);
+  }
+
+  // Ground locomotion: uber dash (a straight, fast, un-zigzagged RAM —
+  // the dash IS the tell), normal beeline+zigzag, or idle scuttle.
+  private steer(dt: number, dx: number, dz: number, distSq: number): void {
+    if (this.stunTimer > 0) return;
+    if (this.uber) {
+      this.dashCd -= dt;
+      if (this.dashT > 0) this.dashT -= dt;
+      else if (this.dashCd <= 0 && distSq < 45 * 45) {
+        this.dashT = 0.45;
+        this.dashCd = 3.5 + Math.random() * 1.5;
+      }
+    }
+    if (this.dashT > 0) {
+      const d = Math.sqrt(distSq) || 0.001;
+      this.vel.x = (dx / d) * SCARAB_SPEED * 2.6;
+      this.vel.z = (dz / d) * SCARAB_SPEED * 2.6;
+      return;
+    }
+    if (distSq < SCARAB_AGGRO_DIST * SCARAB_AGGRO_DIST) {
+      this.zigPhase += dt * 7;
+      const d = Math.sqrt(distSq) || 0.001;
+      const nx = dx / d, nz = dz / d;
+      const zig = Math.sin(this.zigPhase) * SCARAB_ZIGZAG;
+      this.vel.x = nx * SCARAB_SPEED - nz * zig;
+      this.vel.z = nz * SCARAB_SPEED + nx * zig;
+      return;
+    }
+    // Idle scuttle — mill around slowly
+    this.vel.x *= Math.max(0, 1 - 3 * dt);
+    this.vel.z *= Math.max(0, 1 - 3 * dt);
   }
 
   writeInstances(terrain: Terrain): void {
