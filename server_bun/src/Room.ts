@@ -56,7 +56,7 @@ export class Room {
   /** Watching sockets — no player record, get broadcasts + ticks. */
   readonly spectators = new Set<string>();
   readonly sessionTokens = new Map<string, string>();
-  readonly lastSentPositions = new Map<string, { x: number; y: number; z: number; vx: number; vy: number; vz: number; yaw: number; pitch: number; hp: number; dead: boolean; ski: number; status: number; t: number }>();
+  readonly lastSentPositions = new Map<string, { x: number; y: number; z: number; vx: number; vy: number; vz: number; yaw: number; pitch: number; hp: number; dead: boolean; ski: number; status: number; sheep: number; t: number }>();
   tickSeq = 0;
 
   /** Rolling health counters for the room heartbeat — every subsystem

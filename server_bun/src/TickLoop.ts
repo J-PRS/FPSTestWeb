@@ -29,13 +29,13 @@ export function healPerTick(p: Pick<PlayerState, 'isDead' | 'health' | 'maxHealt
 }
 
 interface SuppressablePlayer { position: { x: number; y: number; z: number }; rotation: { yaw: number; pitch: number }; health: number; isDead: boolean; skiing: number; status: number }
-interface SuppressableSent { x: number; y: number; z: number; vx: number; vy: number; vz: number; yaw: number; pitch: number; hp: number; dead: boolean; ski: number; status: number; t: number }
+interface SuppressableSent { x: number; y: number; z: number; vx: number; vy: number; vz: number; yaw: number; pitch: number; hp: number; dead: boolean; ski: number; status: number; sheep: number; t: number }
 
 /** Update suppression: if the player still sits where a dead-reckoning
  *  client would extrapolate them (linear pos+vel from the last sent
  *  record), the update carries no new information — skip it. Exported for
  *  scenario tests; the loop itself stays identical. */
-export function recordSuppressed(p: SuppressablePlayer, lastSent: SuppressableSent, now: number): boolean {
+export function recordSuppressed(p: SuppressablePlayer, lastSent: SuppressableSent, now: number, sheep = 0): boolean {
   const elapsed = (now - lastSent.t) / 1000;
   const ex = lastSent.x + lastSent.vx * elapsed;
   const ey = lastSent.y + lastSent.vy * elapsed;
@@ -49,7 +49,10 @@ export function recordSuppressed(p: SuppressablePlayer, lastSent: SuppressableSe
   // State fields (health/death/ski/status) must never be eaten by the
   // position check — a flag change forces the record even when the
   // player hasn't moved.
-  const stateChanged = p.health !== lastSent.hp || p.isDead !== lastSent.dead || p.skiing !== lastSent.ski || p.status !== lastSent.status;
+  const stateChanged = p.health !== lastSent.hp || p.isDead !== lastSent.dead || p.skiing !== lastSent.ski || p.status !== lastSent.status
+    // Sheep isn't a player field — it lives on the bot driver — so the
+    // suppression check reads it off the record args (0 for humans).
+    || sheep !== lastSent.sheep;
   // Idle players still heartbeat at 4Hz — a >300ms silence would trigger
   // client-side dead reckoning on a stationary player.
   return !stateChanged && predErrSq < 0.09 && yawDiff < 0.02 && pitchDiff < 0.03 && now - lastSent.t < 250;
@@ -218,7 +221,8 @@ export class TickLoop {
       const forceSend = now < p.forceSendUntil;
       const lastSent = room.lastSentPositions.get(playerId);
       if (isStale && lastSent && now - lastSent.t < 2000) continue;
-      if (lastSent && !forceSend && this.isSuppressed(p, lastSent, now)) {
+      const sheep = room.bots.sheepOf(playerId);
+      if (lastSent && !forceSend && this.isSuppressed(p, lastSent, now, sheep)) {
         this.metrics.recordsSuppressed++;
         continue; // Skip — within extrapolation tolerance
       }
@@ -226,7 +230,7 @@ export class TickLoop {
       // was the last steady-state alloc in this loop.
       let snap = lastSent;
       if (!snap) {
-        snap = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, yaw: 0, pitch: 0, hp: 0, dead: false, ski: 0, status: 0, t: 0 };
+        snap = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, yaw: 0, pitch: 0, hp: 0, dead: false, ski: 0, status: 0, sheep: 0, t: 0 };
         room.lastSentPositions.set(playerId, snap);
       }
       snap.x = p.position.x; snap.y = p.position.y; snap.z = p.position.z;
@@ -238,6 +242,7 @@ export class TickLoop {
       snap.status = p.status
         | (now < p.regenUntil ? STATUS.REGEN : 0)
         | (now < p.ddUntil ? STATUS.DD : 0);
+      snap.sheep = sheep;
       snap.t = now;
 
       records.push({
@@ -255,7 +260,7 @@ export class TickLoop {
           ping: p.ping > 0 ? p.ping : undefined,
           ski: p.skiing,
           status: snap.status,
-          sheep: room.bots.sheepOf(playerId),
+          sheep,
         }),
         pos: p.position,
         force: forceSend,
@@ -303,8 +308,8 @@ export class TickLoop {
    *  pos+vel), the update carries no new information — skip it.
    *  Constant-velocity skiers extrapolate perfectly; error appears only on
    *  direction change, bounded by the tolerance. */
-  private isSuppressed(p: SuppressablePlayer, lastSent: SuppressableSent, now: number): boolean {
-    return recordSuppressed(p, lastSent, now);
+  private isSuppressed(p: SuppressablePlayer, lastSent: SuppressableSent, now: number, sheep: number): boolean {
+    return recordSuppressed(p, lastSent, now, sheep);
   }
 
   /** Interest management: distance-tiered update rate per recipient.

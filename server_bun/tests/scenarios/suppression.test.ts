@@ -7,7 +7,7 @@ import { recordSuppressed } from '../../src/TickLoop.ts';
 
 const sent = {
   x: 0, y: 0, z: 0, vx: 10, vy: 0, vz: 0,
-  yaw: 1, pitch: 0, hp: 100, dead: false, ski: 0, status: 0, t: 1000,
+  yaw: 1, pitch: 0, hp: 100, dead: false, ski: 0, status: 0, sheep: 0, t: 1000,
 };
 const player = {
   position: { x: 0, y: 0, z: 0 },
