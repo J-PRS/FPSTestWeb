@@ -36,9 +36,11 @@ export class SessionManager {
   // map forever. Past the cap, evict oldest-first (insertion order).
   private static readonly MAX_IDENTITIES = 10_000;
 
-  // Join throttle: ip → sliding window counters. Entries age out with the
-  // window so the map self-cleans.
+  // Join throttle: ip → sliding window counters. Entries only reset when
+  // that same IP joins again — unique-IP floods would grow the map
+  // forever, so cap it like the other server-lifetime tables.
   private joinWindows = new Map<string, { count: number; start: number }>();
+  private static readonly MAX_JOIN_WINDOWS = 1024;
   private static readonly JOIN_LIMIT = 5;
   private static readonly JOIN_WINDOW_MS = 60_000;
 
@@ -53,6 +55,7 @@ export class SessionManager {
     if (!w || now - w.start >= SessionManager.JOIN_WINDOW_MS) {
       w = { count: 0, start: now };
       this.joinWindows.set(ip, w);
+      if (this.joinWindows.size > SessionManager.MAX_JOIN_WINDOWS) this.joinWindows.clear();
     }
     return ++w.count <= SessionManager.JOIN_LIMIT;
   }

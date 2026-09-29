@@ -1,3 +1,4 @@
+2026-09-29 - Cap joinWindows at 1024: throttle entries only reset when the same IP rejoins, so unique-IP join floods grew the map forever (its comment claimed self-cleaning).
 2026-09-29 - Hibernate CreatureSim with the ball sim: dormant existed and gates both step and interval tick, but nothing ever set it — an unwatched room kept spawning and integrating creatures forever, then dumped the grown population on a rejoining player.
 2026-09-29 - Drop the flag on a rebalanced carrier: rebalanceTeams can flip a bot flag-carrier onto the flag's own team, which froze the flag in 'carried' forever (tickCarried requires carrier.team !== flag.team and the new own-team can't grab or return it).
 2026-09-29 - Funnel bot cleanup through untrack: retire skipped classes/gearLobT/deadSet/quiet/watchdog, untrack skipped the rest; removePlayerCompletely now untracks bots on every path so a brain can't stay keyed on a gone player.
