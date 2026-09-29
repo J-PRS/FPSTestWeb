@@ -77,6 +77,9 @@ function applyStatusVisuals(deps: RemotesDeps, playerId: string, remotePlayer: R
 // name marker from the extrapolated position.
 function tickRemoteCosmetics(deps: RemotesDeps, playerId: string, remotePlayer: RemotePlayer, playerState: WirePlayerState): void {
   const hud = deps.lazyHud();
+  // The wire ski bit doubles as the animation claim — tuck when held,
+  // run when released, regardless of how much momentum remains.
+  remotePlayer.wireSki = !playerState.isDead && !!playerState.ski;
   let skiing = false;
   if (!playerState.isDead && playerState.ski) {
     const v = remotePlayer.vel;
@@ -95,7 +98,7 @@ function tickRemoteCosmetics(deps: RemotesDeps, playerId: string, remotePlayer: 
     // Teammates read green, everything else stays enemy red — FFA and
     // teamless modes leave `team` undefined so nothing turns friendly.
     const friendly = !!playerState.team && playerState.team === deps.world.localTeam;
-    hud.updatePlayerIndicator(playerId, remotePlayer.position, deps.lazyCamera(), false, friendly);
+    hud.updatePlayerIndicator(playerId, remotePlayer.position, deps.lazyCamera(), false, friendly, playerState.sheep);
   } else {
     hud.removePlayerIndicator(playerId);
   }
@@ -164,11 +167,11 @@ function updateScoreboard(deps: RemotesDeps): void {
   const ffa = deps.world.ffaScores;
   const rows = [{ name: localId, frags: deps.world.killCounts.get(localId) ?? 0, score: ffa.get(localId) ?? null, ping: nm.getPing(), net: nm.getTransportTier() ?? null, self: true, dead: deps.lazyPlayer().isDead, team: deps.world.localTeam }];
   // net is string|null — 'bot' rows carry a label, not a transport tier.
-  const remoteRows: { name: string; frags: number; score: number | null; ping: number | null; net: string | null; self: boolean; dead: boolean; team?: 'alpha' | 'bravo' }[] = [...nm.getPlayers().keys()]
+  const remoteRows: { name: string; frags: number; score: number | null; ping: number | null; net: string | null; self: boolean; dead: boolean; team?: 'alpha' | 'bravo'; sheep?: number | null }[] = [...nm.getPlayers().keys()]
     .filter(id => id !== localId && isRemoteActive(deps, id, nm.getPlayers()))
     .map(id => {
       const ps = nm.getPlayers().get(id);
-      return { name: id, frags: deps.world.killCounts.get(id) ?? 0, score: ffa.get(id) ?? null, ping: ps?.ping ?? null, net: ps?.transport ?? null, self: false, dead: ps?.isDead ?? false, team: ps?.team };
+      return { name: id, frags: deps.world.killCounts.get(id) ?? 0, score: ffa.get(id) ?? null, ping: ps?.ping ?? null, net: ps?.transport ?? null, self: false, dead: ps?.isDead ?? false, team: ps?.team, sheep: ps?.sheep ?? null };
     });
   // Offline bots live in world.remotePlayers, not the network roster —
   // they'd be invisible on the scoreboard otherwise.
@@ -188,6 +191,7 @@ export function createRemotes(deps: RemotesDeps) {
   let lastRemotePosLog = '';
   const lastTintOf = new Map<string, string>();
   let rosterPollT = 0;
+  let wasConnected = true;
 
   deps.world.remotePlayers.hooks = makeRemoteHooks(deps);
 
@@ -226,6 +230,14 @@ export function createRemotes(deps: RemotesDeps) {
       { yaw: player.yaw, pitch: player.pitch },
       { x: player.vel.x, y: player.vel.y, z: player.vel.z }
     );
+
+    // Connected → disconnected: the wire map is already cleared, so the
+    // prune below reaps the entities — but indicator ids that aren't
+    // entity-keyed (flag:alpha/bravo) have no owner to clean them.
+    // Sweep the whole overlay once on the transition or they freeze
+    // mid-screen for the life of the session.
+    if (wasConnected && !nm.isConnected()) deps.lazyHud().clearPlayerIndicators();
+    wasConnected = nm.isConnected();
 
     const players = nm.getPlayers();
     const previousRemoteCount = deps.world.remotePlayers.size;

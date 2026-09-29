@@ -50,6 +50,9 @@ export interface WireTickPlayer {
   ski: number;
   /** Status bitmask (STATUS_* bits from status.ts) — bits 4+. */
   status?: number;
+  /** Sheep meter 0-100, bots only — how pedestrian the server thinks
+   *  this bot is. Trailing byte; absent on older records. */
+  sheep?: number;
 }
 
 export function isWireFrame(u8: Uint8Array): boolean {
@@ -134,7 +137,7 @@ export function decodePosition(u8: Uint8Array): WirePosition | null {
 /** Pre-encode one player's record — done ONCE per tick, shared across recipients. */
 export function encodeTickPlayer(p: WireTickPlayer): Uint8Array {
   const id = ENC.encode(p.playerId);
-  const buf = new ArrayBuffer(1 + id.length + 12 + 6 + 2 + 2 + 1 + 1 + 1);
+  const buf = new ArrayBuffer(1 + id.length + 12 + 6 + 2 + 2 + 1 + 1 + 1 + 1);
   const u8 = new Uint8Array(buf);
   const d = new DataView(buf);
   let o = 0;
@@ -148,6 +151,9 @@ export function encodeTickPlayer(p: WireTickPlayer): Uint8Array {
   u8[o++] = Math.max(0, Math.min(255, Math.round(p.health)));
   u8[o++] = p.ping !== undefined ? Math.max(0, Math.min(255, Math.round(p.ping))) : 0;
   u8[o++] = (p.isDead ? 1 : 0) | (p.ski ? 2 : 0) | ((p.status ?? 0) & STATUS_MASK);
+  // Always present — records are concatenated without lengths, so an
+  // optional trailing byte would alias as the next record's idLen.
+  u8[o++] = Math.max(0, Math.min(100, Math.round(p.sheep ?? 0)));
   return new Uint8Array(buf, 0, o);
 }
 
@@ -184,7 +190,7 @@ export function decodeTickFrame(u8: Uint8Array): { ackSeq: number; tickSeq: numb
   for (let i = 0; i < count; i++) {
     if (o >= u8.length) return null;
     const idLen = u8[o++]!;
-    if (o + idLen + 22 > u8.length) return null;
+    if (o + idLen + 25 > u8.length) return null;
     const playerId = DEC.decode(u8.subarray(o, o + idLen)); o += idLen;
     const px = d.getFloat32(o, true); o += 4;
     const py = d.getFloat32(o, true); o += 4;
@@ -196,6 +202,7 @@ export function decodeTickFrame(u8: Uint8Array): { ackSeq: number; tickSeq: numb
     const health = u8[o++]!;
     const pingRaw = u8[o++]!;
     const flags = u8[o++]!;
+    const sheep = u8[o++]!;
     updates.push({
       playerId,
       position: { x: px, y: py, z: pz },
@@ -206,6 +213,7 @@ export function decodeTickFrame(u8: Uint8Array): { ackSeq: number; tickSeq: numb
       ping: pingRaw > 0 ? pingRaw : undefined,
       ski: (flags & 2) !== 0 ? 1 : 0,
       status: flags & STATUS_MASK,
+      sheep: sheep > 0 ? sheep : undefined,
     });
   }
   return { ackSeq, tickSeq, updates };

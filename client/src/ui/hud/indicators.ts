@@ -23,7 +23,8 @@ export class PlayerIndicators {
     this.container = container;
   }
 
-  update(playerId: string, position: { x: number; y: number; z: number }, camera: THREE.Camera, isDead = false, friendly = false, variant?: string): void {
+  update(playerId: string, position: { x: number; y: number; z: number }, camera: THREE.Camera, opts: { isDead?: boolean; friendly?: boolean; variant?: string; sheep?: number } = {}): void {
+    const { isDead = false, friendly = false, variant, sheep } = opts;
     let indicator = this.indicators.get(playerId);
     if (!indicator) {
       indicator = document.createElement('div');
@@ -34,6 +35,7 @@ export class PlayerIndicators {
     }
     indicator.classList.toggle('friendly', friendly);
     if (variant) for (const c of variant.split(' ')) indicator.classList.add(c);
+    this.updateSheepBadge(indicator, sheep);
 
     if (isDead) {
       indicator.classList.add('hidden');
@@ -93,6 +95,23 @@ export class PlayerIndicators {
       const dist = Math.min(halfWidth / Math.abs(Math.cos(angle)), halfHeight / Math.abs(Math.sin(angle)));
 
       this.setPos(indicator, centerX + Math.cos(angle) * dist, centerY + Math.sin(angle) * dist);
+    }
+  }
+
+  /** Sheep badge — the server's bot mobility meter, floated over the
+   *  head so a sheepish bot can be eyeballed, not just read in logs. */
+  private updateSheepBadge(indicator: HTMLElement, sheep: number | undefined): void {
+    let badge = indicator.firstElementChild as HTMLElement | null;
+    if (sheep !== undefined && sheep > 0) {
+      if (!badge) {
+        badge = document.createElement('span');
+        badge.className = 'sheep-badge';
+        indicator.appendChild(badge);
+      }
+      badge.textContent = `${sheep}`;
+      badge.style.color = sheep >= 60 ? '#ff6b6b' : sheep >= 30 ? '#ffd166' : '#7ddf7d';
+    } else if (badge) {
+      badge.remove();
     }
   }
 

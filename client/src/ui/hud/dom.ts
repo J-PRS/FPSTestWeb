@@ -78,7 +78,7 @@ export function createHudDom(): HudDom {
       <div id="killfeed"></div>
       <div id="scoreboard">
         <div class="sb-title">SCOREBOARD</div>
-        <table><thead><tr><th>PLAYER</th><th>FRAGS</th><th>PTS</th><th>NET</th><th>PING</th></tr></thead><tbody id="sb-rows"></tbody></table>
+        <table><thead><tr><th>PLAYER</th><th>FRAGS</th><th>PTS</th><th>NET</th><th>PING</th><th>SHEEP</th></tr></thead><tbody id="sb-rows"></tbody></table>
       </div>
     `;
     document.body.appendChild(el);

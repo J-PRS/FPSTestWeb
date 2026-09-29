@@ -8,7 +8,7 @@ import type { Nugget } from '../entities/Nugget.js';
 
 import { Player } from '../entities/Player.js';
 
-type SbRow = { name: string; frags: number; score: number | null; ping: number | null; net?: string | null; self: boolean; dead: boolean; team?: 'alpha' | 'bravo' };
+type SbRow = { name: string; frags: number; score: number | null; ping: number | null; net?: string | null; self: boolean; dead: boolean; team?: 'alpha' | 'bravo'; sheep?: number | null };
 
 const countSpan = (n: number) => `<span class="${n > 0 ? 'hot' : 'dim'}">${n}</span>`;
 
@@ -24,7 +24,7 @@ const paintFlagChip = (el: HTMLElement, st?: string) => {
 function sbRowEl(r: SbRow): HTMLTableRowElement {
   const tr = document.createElement('tr');
   tr.className = `${r.self ? 'self' : ''}${r.dead ? ' dead' : ''}${r.team ? ` sb-${r.team}` : ''}`;
-  for (const cell of [r.name, String(r.frags), r.score === null ? '—' : String(r.score), r.net ?? '—', r.ping === null ? '—' : String(Math.round(r.ping))]) {
+  for (const cell of [r.name, String(r.frags), r.score === null ? '—' : String(r.score), r.net ?? '—', r.ping === null ? '—' : String(Math.round(r.ping)), r.sheep == null ? '—' : `${r.sheep}%`]) {
     const td = document.createElement('td');
     td.textContent = cell;
     tr.appendChild(td);
@@ -230,7 +230,7 @@ export class HUD {
 
   get scoreboardVisible(): boolean { return this.sbVisible; }
 
-  setScoreboardRows(rows: { name: string; frags: number; score: number | null; ping: number | null; net?: string | null; self: boolean; dead: boolean; team?: 'alpha' | 'bravo' }[]): void {
+  setScoreboardRows(rows: { name: string; frags: number; score: number | null; ping: number | null; net?: string | null; self: boolean; dead: boolean; team?: 'alpha' | 'bravo'; sheep?: number | null }[]): void {
     this.sbData = rows;
   }
 
@@ -249,7 +249,7 @@ export class HUD {
   private sbRows: HTMLElement;
   private sbVisible = false;
   private sbRefresh = 0;
-  private sbData: { name: string; frags: number; score: number | null; ping: number | null; net?: string | null; self: boolean; dead: boolean; team?: 'alpha' | 'bravo' }[] = [];
+  private sbData: { name: string; frags: number; score: number | null; ping: number | null; net?: string | null; self: boolean; dead: boolean; team?: 'alpha' | 'bravo'; sheep?: number | null }[] = [];
 
   showHitMarker(): void {
     this.hitTimer = 0.12;
@@ -559,15 +559,15 @@ export class HUD {
     }
   }
 
-  updatePlayerIndicator(playerId: string, position: { x: number; y: number; z: number }, camera: THREE.Camera, isDead: boolean = false, friendly = false): void {
-    this.indicators.update(playerId, position, camera, isDead, friendly);
+  updatePlayerIndicator(playerId: string, position: { x: number; y: number; z: number }, camera: THREE.Camera, isDead: boolean = false, friendly = false, sheep?: number): void {
+    this.indicators.update(playerId, position, camera, { isDead, friendly, sheep });
   }
 
   /** CTF flag marker — same through-terrain DOM overlay as player dots,
    *  styled as a team-colored diamond so it can't be mistaken for a player. */
   updateFlagIndicator(id: string, position: { x: number; y: number; z: number },
                       camera: THREE.Camera, team: 'alpha' | 'bravo'): void {
-    this.indicators.update(id, position, camera, false, false, `flag ${team}`);
+    this.indicators.update(id, position, camera, { variant: `flag ${team}` });
   }
 
   removePlayerIndicator(playerId: string): void {

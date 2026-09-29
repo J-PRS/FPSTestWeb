@@ -1,3 +1,11 @@
+2026-10-03 - Sheep meter for server bots: pedestrian play (walking or
+    parked) fills a 0-100 meter that drains while the bot covers ground,
+    is airborne, or is jetting. At 100 the bot gets yeeted — a random
+    impulse launch plus pinned jets, so the penalty for sheepish play
+    IS the cure. Published on tickUpdate as a new trailing byte (0 for
+    humans), rendered as a % badge over the bot's head and a SHEEP
+    column on the scoreboard. 4 new scenario tests.
+
 2026-10-03 - Judge-mode corrections removed: shadow-sim divergence is an
     anti-cheat signal, never a snap — honest play drifts past
     tolerance on snapshot-vs-per-frame integration, and correcting

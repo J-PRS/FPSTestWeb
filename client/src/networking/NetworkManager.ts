@@ -13,7 +13,7 @@ const logger = new ChildLogger('NetworkManager');
 
 // Roster upsert fields + fresh-player defaults (optional fields default undefined).
 const ROSTER_FIELDS = ['internalId', 'position', 'rotation', 'velocity', 'isDead',
-  'health', 'ping', 'ski', 'status', 'team', 'transport', 'armorClass'] as const;
+  'health', 'ping', 'ski', 'status', 'team', 'transport', 'armorClass', 'sheep'] as const;
 const ROSTER_DEFAULTS: Partial<RemotePlayerState> = {
   internalId: '',
   position: { x: 0, y: 500, z: 0 },
@@ -40,6 +40,8 @@ export interface RemotePlayerState {
   transport?: 'wt' | 'rtc' | 'ws';
   /** Armor tier from playerJoined/gameState — remote model scale cue. */
   armorClass?: string;
+  /** Server-side sheep meter (bots only) — how pedestrian this bot is. */
+  sheep?: number;
 }
 
 /**
@@ -185,6 +187,11 @@ export class NetworkManager {
             logger.info('Disconnected');
             this.connected = false;
             this.lastTickSeq = -1; // a reconnect starts a fresh seq space
+            // Drop the wire roster — kept entries pass the liveness gate
+            // on their stale ping, so their bodies freeze at the last
+            // snapshot for the whole 60s stale window and their HUD dots
+            // freeze with them. gameState re-seeds the map on reconnect.
+            this.players.clear();
           },
           onError: (error) => {
             if (!this.hasLoggedConnectionError) {
@@ -365,6 +372,7 @@ export class NetworkManager {
         ping: u.ping,
         ski: u.ski,
         status: u.status,
+        sheep: u.sheep,
       });
       this.onPlayerUpdate?.(u.playerId, u.position, u.rotation, now, u.velocity);
     }

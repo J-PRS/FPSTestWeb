@@ -252,6 +252,7 @@ export class TickLoop {
           ping: p.ping > 0 ? p.ping : undefined,
           ski: p.skiing,
           status: snap.status,
+          sheep: room.bots.sheepOf(playerId),
         }),
         pos: p.position,
         force: forceSend,

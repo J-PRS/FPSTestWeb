@@ -158,6 +158,15 @@
   background: #4d4;
   box-shadow: 0 0 8px rgba(68, 221, 68, 0.8);
 }
+.player-indicator .sheep-badge {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translate(-50%, -4px);
+  font: 700 11px/1 monospace;
+  text-shadow: 0 0 4px #000;
+  white-space: nowrap;
+}
 .player-indicator.friendly.offscreen {
   background: transparent;
   border-color: #0d0;

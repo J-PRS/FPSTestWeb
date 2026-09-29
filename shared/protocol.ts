@@ -95,6 +95,8 @@ export interface TickUpdatePlayer {
   ski?: number;
   /** Status bitmask — STATUS_* bits (shared/status.ts). */
   status?: number;
+  /** Server-side sheep meter (bots only, 0-100). */
+  sheep?: number;
 }
 
 export type ServerMessage =
