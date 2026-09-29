@@ -420,6 +420,12 @@ export class GameServer {
 
     // The kit rides with the player — the hop isn't a loadout reset.
     const prev = from.players.getPlayer(playerId);
+    // Dead players can't hop — reseating runs addPlayer, which spawns
+    // alive, so a hop would dodge the whole respawn delay.
+    if (prev?.isDead) {
+      from.connections.sendToPlayer(playerId, { type: 'matchNotice', text: 'Respawning — hold on' });
+      return;
+    }
 
     // Leave teardown: the disconnect path minus the grace window.
     from.connections.unregister(playerId);
@@ -446,6 +452,8 @@ export class GameServer {
   private switchThrottled(playerId: string): boolean {
     const now = Date.now();
     if (now - (this.switchCooldowns.get(playerId) ?? 0) < GameServer.SWITCH_COOLDOWN_MS) return true;
+    // Mark on attempt — denied paths (room full, dead, no-op) stay
+    // throttled too or switchRoom name-spam churns roomFor unbounded.
     this.switchCooldowns.set(playerId, now);
     // Server-lifetime map: hoppers keep their entry past removal (the
     // cooldown must survive the hop), so cap growth like duelStart.

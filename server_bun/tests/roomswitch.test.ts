@@ -40,6 +40,18 @@ describe('switchRoom', () => {
     expect(gs2.room).toBe('dm-room');
   });
 
+  it('dead players cannot hop — that would dodge the respawn delay', () => {
+    gs = new GameServer();
+    const ws = fakeWs();
+    gs.onMessage(ws, JSON.stringify({ type: 'join', playerId: 'p1', room: 'a' }));
+    const rooms = (gs as unknown as { rooms: Map<string, { players: { getPlayer(id: string): { isDead: boolean } | undefined } }> }).rooms;
+    rooms.get('a')!.players.getPlayer('p1')!.isDead = true;
+    gs.onMessage(ws, JSON.stringify({ type: 'switchRoom', room: 'b' }));
+    expect(rooms.get('a')?.players.getPlayer('p1')).toBeTruthy();
+    expect(rooms.get('b')?.players.getPlayer('p1')).toBeUndefined();
+    expect(ws.sent.some((s: string) => s.includes('matchNotice'))).toBe(true);
+  });
+
   it('is a no-op for the current room', () => {
     gs = new GameServer();
     const ws = fakeWs();
