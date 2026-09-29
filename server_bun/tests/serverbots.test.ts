@@ -151,7 +151,7 @@ describe('ServerBots', () => {
     }));
     expect(room.flags).not.toBeNull();
     const flagGoal = (p: { id: string; team?: string; position: { x: number; y: number; z: number } }) =>
-      (room.bots as unknown as { flagGoal: (q: unknown) => { x: number; z: number } }).flagGoal(p);
+      (room.bots as unknown as { flagGoal: (q: unknown) => { pos: { x: number; z: number } } | null }).flagGoal(p)?.pos;
     const bots = [...(room.bots as unknown as { brains: Map<string, unknown> }).brains.keys()]
       .map((id) => room.players.getPlayer(id)!);
     const roles = (room.bots as unknown as { roles: Map<string, string> }).roles;

@@ -247,7 +247,7 @@ export class ServerBots {
    *  flag dropped → touch it home; a teammate carrying → escort them;
    *  enemy flag reachable → go grab it. Defenders invert it: their flag
    *  recovery/intercept outranks pressing the enemy stand. */
-  private flagGoal(p: { id: string; team?: string; position: Vec3 }): BotVec | null {
+  private flagGoal(p: { id: string; team?: string; position: Vec3 }): { pos: BotVec; infiltrating: boolean } | null {
     const flags = this.room.flags;
     if (!flags || !p.team) return null;
     const me = p.team as 'alpha' | 'bravo';
@@ -255,7 +255,8 @@ export class ServerBots {
     const enemy = flags.flags.get(enemyTeam);
     const own = flags.flags.get(me);
     if (!enemy || !own) return null;
-    if (enemy.carrier === p.id) return own.home;
+    const homeward = { pos: own.home, infiltrating: false };
+    if (enemy.carrier === p.id) return homeward;
     const role = this.roles.get(p.id) ?? 'offense';
 
     // Own flag's carrier — chase the thief, not the base.
@@ -266,23 +267,23 @@ export class ServerBots {
     const dropped = own.state === 'dropped' ? own.pos : null;
 
     if (role === 'defense') {
-      if (thief) return thief.position;
-      if (dropped) return dropped;
+      if (thief) return { pos: thief.position, infiltrating: false };
+      if (dropped) return { pos: dropped, infiltrating: false };
       // Guard the stand — a defender parked on the stand ring stays in
       // intercept range of anyone who comes for it.
-      return own.home;
+      return homeward;
     }
 
     // Carrier escort: a teammate has the enemy flag — bodyguard them home
     // rather than crowd the now-empty enemy stand.
     if (enemy.carrier) {
       const escort = this.room.players.getPlayer(enemy.carrier);
-      if (escort && escort.team === me) return escort.position;
+      if (escort && escort.team === me) return { pos: escort.position, infiltrating: false };
     }
-    if (thief) return thief.position;
-    if (dropped) return dropped;
-    if (enemy.state !== 'carried') return enemy.pos;
-    return own.home; // flag's moving — defend home
+    if (thief) return { pos: thief.position, infiltrating: false };
+    if (dropped) return { pos: dropped, infiltrating: false };
+    if (enemy.state !== 'carried') return { pos: enemy.pos, infiltrating: true };
+    return homeward; // flag's moving — defend home
   }
 
   /** Getting shot makes the brain recoil — called from the combat funnel. */
@@ -431,11 +432,13 @@ export class ServerBots {
         this.room.moveSim.resync(id, p.position, p.rotation.yaw);
       }
 
+      const goal = this.flagGoal(p);
       const out = brain.think(dt, {
         pos: p.position,
         vel: p.velocity,
         enemies: this.enemiesOf(p),
-        objective: this.flagGoal(p),
+        objective: goal?.pos ?? null,
+        infiltrating: goal?.infiltrating ?? false,
         // Team rooms drop nuggets on creature kills — bots farm them too,
         // which is what keeps a bot-filled match's scoreboard moving.
         pickup: this.room.pickups?.nearest(p.position) ?? undefined,

@@ -31,6 +31,10 @@ export interface BrainCtx {
   enemies: BotEnemy[];
   /** Objective anchor (CTF flag/base) — outranks pickup and wander. */
   objective?: BotVec | null;
+  /** The objective is an enemy-held position this bot is pressing —
+   *  CTF offense heading for the enemy stand. Lets the status sense
+   *  read the approach as an infiltration (cloak) rather than a roam. */
+  infiltrating?: boolean;
   /** Ground pickup to chase (nugget) — outranks wander. */
   pickup?: BotVec | null;
   /** Terrain height at x,z — wander waypoints clamp to ground. */
@@ -504,6 +508,10 @@ export class BotBrain {
     let status = 0;
     if (!fighting && hurt && ctx.energy >= ENERGY.mendCost + 10) status |= STATUS.MEND;
     else if (fighting && ctx.energy >= ENERGY.shieldCost + 15) status |= STATUS.SHIELD;
+    // Infiltration cloak: pressing an enemy stand unseen beats shielding
+    // through it — cloak only while the approach is still covert (no
+    // hunt target), so contact drops the veil the tick fighting starts.
+    else if (ctx.infiltrating && !fighting && ctx.energy >= ENERGY.cloakCost + 15) status |= STATUS.CLOAK;
     return status;
   }
 
