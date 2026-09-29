@@ -11,6 +11,18 @@ import { urlParams } from '../core/params.js';
 
 const logger = new ChildLogger('NetworkManager');
 
+// Roster upsert fields + fresh-player defaults (optional fields default undefined).
+const ROSTER_FIELDS = ['internalId', 'position', 'rotation', 'velocity', 'isDead',
+  'health', 'ping', 'ski', 'status', 'team', 'transport', 'armorClass'] as const;
+const ROSTER_DEFAULTS: Partial<RemotePlayerState> = {
+  internalId: '',
+  position: { x: 0, y: 500, z: 0 },
+  rotation: { yaw: 0, pitch: 0 },
+  velocity: { x: 0, y: 0, z: 0 },
+  isDead: false,
+  health: 100,
+};
+
 export interface RemotePlayerState {
   id: string;
   internalId: string;
@@ -342,26 +354,17 @@ export class NetworkManager {
     }
   }
 
-  // Upsert a remote player's roster entry, preserving fields the message doesn't carry
+  // Upsert a remote player's roster entry, preserving fields the message
+  // doesn't carry: merge order is patch → existing → default, so partial
+  // updates (hit = health only) never stomp unrelated roster state.
   private upsertRemotePlayer(playerId: string, patch: Partial<RemotePlayerState>): void {
     if (!playerId || playerId === this.localPlayerId) return;
     const existing = this.players.get(playerId);
-    this.players.set(playerId, {
-      ...existing,
-      id: playerId,
-      internalId: patch.internalId || existing?.internalId || '',
-      position: patch.position ?? existing?.position ?? { x: 0, y: 500, z: 0 },
-      rotation: patch.rotation ?? existing?.rotation ?? { yaw: 0, pitch: 0 },
-      velocity: patch.velocity ?? existing?.velocity ?? { x: 0, y: 0, z: 0 },
-      isDead: patch.isDead ?? existing?.isDead ?? false,
-      health: patch.health ?? existing?.health ?? 100,
-      ping: patch.ping ?? existing?.ping,
-      ski: patch.ski ?? existing?.ski,
-      status: patch.status ?? existing?.status,
-      team: patch.team ?? existing?.team,
-      transport: patch.transport ?? existing?.transport,
-      armorClass: patch.armorClass ?? existing?.armorClass,
-    });
+    const next = { ...existing, id: playerId } as RemotePlayerState;
+    for (const k of ROSTER_FIELDS) {
+      (next as unknown as Record<string, unknown>)[k] = patch[k] ?? existing?.[k] ?? ROSTER_DEFAULTS[k];
+    }
+    this.players.set(playerId, next);
   }
 
   private handlePlayerJoined(data: Extract<ServerMessage, { type: 'playerJoined' }>): void {
