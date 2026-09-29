@@ -107,7 +107,13 @@ export function clipMotion(
   if (!cols?.length) return false;
   const hit = segSolidHit({ x: px, y: py, z: pz }, { x: c.x, y: c.y, z: c.z }, cols);
   if (!hit) return false;
-  c.x = hit.x; c.y = hit.y; c.z = hit.z;
+  // Park a whisker OUTSIDE the face — on-boundary parking leaves the next
+  // leg starting inside the slab, where every step re-clips at t≈0 and
+  // the creature floats pinned against the wall mid-air.
+  const bt = Math.max(0, hit.t - 0.05);
+  c.x = px + (c.x - px) * bt;
+  c.y = py + (c.y - py) * bt;
+  c.z = pz + (c.z - pz) * bt;
   c.vx = 0; c.vy = 0; c.vz = 0;
   return true;
 }
