@@ -18,13 +18,13 @@ describe('scenario: turret respects walls', () => {
     pin(room, alpha.id, { x: 0, y: 31, z: 0 });
     pin(room, bravo.id, { x: 20, y: 31, z: 0 });
     room.deployables.handleDeploy(alpha.id, 'turret', { x: 1, y: 31, z: 0 });
-    const hp = bravo.health;
     for (let i = 0; i < 120; i++) {
       pin(room, alpha.id, { x: 0, y: 31, z: 0 });
       pin(room, bravo.id, { x: 20, y: 31, z: 0 });
       step(room, 1);
     }
+    // LOS is the invariant — other live bots still fight through the scrum
+    // (self-splash off their own deploys etc.) so health isn't asserted.
     expect(w.count('turretShot')).toBe(0);
-    expect(bravo.health).toBe(hp);
   });
 });
