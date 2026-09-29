@@ -38,42 +38,54 @@ scene.add(floor);
 
 const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.01, 100);
 
-const url = mann ? '/assets/models/mannequin.glb' : '/assets/models/RobotExpressive.glb';
+const ual2 = q.get('model') === 'ual2';
+const url = ual2 ? '/assets/models/mannequin2.glb'
+  : mann ? '/assets/models/mannequin.glb' : '/assets/models/RobotExpressive.glb';
 new GLTFLoader().load(url, (gltf) => {
   const model = gltf.scene;
   // Same world scale the game uses (robot 0.5, mannequin fit-2m).
   const box0 = new THREE.Box3().setFromObject(model);
   const size0 = box0.getSize(new THREE.Vector3());
-  model.scale.setScalar(mann ? 2.0 / size0.y : 0.5);
+  model.scale.setScalar(mann || ual2 ? 2.0 / size0.y : 0.5);
   model.rotation.y = Math.PI * 0.8; // 3/4 front — galleries read better than flat profile
   model.traverse((o) => { if ((o as THREE.SkinnedMesh).isSkinnedMesh) o.frustumCulled = false; });
   scene.add(model);
 
   const mixer = new THREE.AnimationMixer(model);
-  (window as any).__clips = gltf.animations.map(c => c.name);
+  const boot = (clips: THREE.AnimationClip[]) => {
+    (window as any).__clips = clips.map(c => c.name);
+    const clip = clips.find(c => c.name === wantClip) ?? clips[0];
+    if (clip) {
+      const action = mixer.clipAction(clip);
+      action.play();
+      // For one-shot clips sample mid-arc; loops grab a fixed phase.
+      const t = Math.min(clip.duration * wantT, clip.duration - 0.01);
+      mixer.update(Math.max(t, 0.001));
+    }
+    finish();
+  };
+  const finish = () => {
+    // Frame the posed model — bounds AFTER the pose is applied so death/jump
+    // clips don't get cropped.
+    model.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(model);
+    const c = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3()).length();
+    // Fit the bounding *diagonal* inside the 45° fov with margin — diagonal
+    // guarantees the widest clip arc stays in frame.
+    const d = (size / 2) / Math.tan(camera.fov * Math.PI / 360) * 1.12;
+    camera.position.set(c.x + d * 0.55, c.y + size * 0.14, c.z + d);
+    camera.lookAt(c);
 
-  const clip = gltf.animations.find(c => c.name === wantClip) ?? gltf.animations[0];
-  if (clip) {
-    const action = mixer.clipAction(clip);
-    action.play();
-    // For one-shot clips sample mid-arc; loops grab a fixed phase.
-    const t = Math.min(clip.duration * wantT, clip.duration - 0.01);
-    mixer.update(Math.max(t, 0.001));
+    renderer.setAnimationLoop(() => renderer.render(scene, camera));
+    renderer.render(scene, camera);
+    (window as any).__ready = true;
+  };
+  // UAL2's mannequin ships bone-identical but clip-less — its clips live in
+  // robot-anims2.glb, same UE-style rig, so they bind natively.
+  if (ual2) {
+    new GLTFLoader().load('/assets/models/robot-anims2.glb', (g) => boot(g.animations));
+  } else {
+    boot(gltf.animations);
   }
-
-  // Frame the posed model — bounds AFTER the pose is applied so death/jump
-  // clips don't get cropped.
-  model.updateMatrixWorld(true);
-  const box = new THREE.Box3().setFromObject(model);
-  const c = box.getCenter(new THREE.Vector3());
-  const size = box.getSize(new THREE.Vector3()).length();
-  // Fit the bounding *diagonal* inside the 45° fov with margin — diagonal
-  // guarantees the widest clip arc stays in frame.
-  const d = (size / 2) / Math.tan(camera.fov * Math.PI / 360) * 1.12;
-  camera.position.set(c.x + d * 0.55, c.y + size * 0.14, c.z + d);
-  camera.lookAt(c);
-
-  renderer.setAnimationLoop(() => renderer.render(scene, camera));
-  renderer.render(scene, camera);
-  (window as any).__ready = true;
 });

@@ -17,7 +17,7 @@ const _footW = new THREE.Vector3();
 const _footQ = new THREE.Quaternion();
 const _footPQ = new THREE.Quaternion();
 
-export type AnimationState = 'idle' | 'walk' | 'run' | 'jump' | 'death' | 'ski' | 'hit' | 'shoot';
+export type AnimationState = 'idle' | 'walk' | 'run' | 'jump' | 'death' | 'ski' | 'hit' | 'shoot' | 'jet';
 
 // Map our states to clip names. UAL_* clips are retargeted at load from the
 // Quaternius Universal Animation Library (CC0) — the robot's native set is
@@ -31,7 +31,8 @@ const ANIM_NAMES: Record<AnimationState, [ual: string, fallback: string]> = {
   'death':  ['UAL_Death01',           'Death'],
   // Crouch_Fwd is a real tucked ski silhouette — knees bent, weight low —
   // a straight upgrade over Sitting-as-tuck.
-  'ski':    ['UAL_Crouch_Fwd_Loop',   'Sitting'],
+  'ski':    ['UAL_Slide_Loop',        'Sitting'],
+  'jet':    ['UAL_NinjaJump_Idle_Loop', 'Jump'],
   'hit':    ['UAL_Hit_Chest',         'No'],
   'shoot':  ['UAL_Pistol_Shoot',      'Punch']
 };
@@ -54,6 +55,20 @@ const UAL_BONE_MAP: Record<string, string> = {
   UpperLegR: 'thighr', LowerLegR: 'shinr',
   // Foot.L/R are deliberately unmapped — they're IK-target bones detached
   // from the leg chain; feet get snapped to the shin tips procedurally.
+};
+
+// Same mapping against the UAL2 rig — v2 switched to UE-style bone names
+// (thigh_l, upperarm_l, spine_01..03) and 'pelvis' for hips.
+const UAL2_BONE_MAP: Record<string, string> = {
+  Hips: 'pelvis',
+  Abdomen: 'spine01',
+  Torso_1: 'spine03',
+  Neck: 'neck01',
+  Head: 'head',
+  ShoulderL: 'claviclel', UpperArmL: 'upperarml', LowerArmL: 'lowerarml', Palm2L: 'handl',
+  ShoulderR: 'clavicler', UpperArmR: 'upperarmr', LowerArmR: 'lowerarmr', Palm2R: 'handr',
+  UpperLegL: 'thighl', LowerLegL: 'calfl',
+  UpperLegR: 'thighr', LowerLegR: 'calfr',
 };
 
 // Clips that must not LoopRepeat — a flinch or a fire that loops reads as a
@@ -85,6 +100,7 @@ function makeFlashTexture(): THREE.CanvasTexture {
 export class PlayerModel {
   private scene: THREE.Scene;
   private model: THREE.Group | null = null;
+  private modelScale = 0.5;
   // Disposed before the GLB finishes loading (pruned remote, ?dummy reaped
   // by the roster cleanup): the async onLoad must not re-add the mesh or
   // repopulate animations — that zombie re-add was the invisible-model bug.
@@ -129,12 +145,13 @@ export class PlayerModel {
   // instance). Kept as two stages because a bake bound to one disposed
   // model must not poison the cache for everyone else.
   private static ualSource: Promise<{
+    spec: { url: string; boneMap: Record<string, string>; prefix: string; hip: string; exclude?: RegExp };
     src: THREE.Object3D;
     srcBones: THREE.Object3D[];
     srcByNorm: Map<string, THREE.Object3D>;
     srcHip: THREE.Object3D;
     clips: THREE.AnimationClip[];
-  }> | null = null;
+  }[]> | null = null;
   private static bakedClips: Map<string, THREE.AnimationClip> | null = null;
   private currentClipName: string | null = null;
   private playingUAL = false;
@@ -177,7 +194,7 @@ export class PlayerModel {
       const buckets = new Map<number, number[]>();
       for (let t = 0; t < triCount; t++) {
         const a = index ? index.getX(t * 3) : t * 3;
-        const b = index ? index.getX(t * 3 + 1) : t * 3 + 2;
+        const b = index ? index.getX(t * 3 + 1) : t * 3 + 1;
         const c = index ? index.getX(t * 3 + 2) : t * 3 + 2;
         const bone = domBone(a);
         const arr = buckets.get(bone) ?? buckets.set(bone, []).get(bone)!;
@@ -224,16 +241,22 @@ export class PlayerModel {
     return out;
   }
 
-  constructor(scene: THREE.Scene) {
+  /** 'robot' = RobotExpressive + retargeted UAL clips (backburner path).
+   *  'mannequin' = the UAL's own rig — clips play natively, no retarget. */
+  readonly variant: 'robot' | 'mannequin';
+
+  constructor(scene: THREE.Scene, variant?: 'robot' | 'mannequin') {
     this.scene = scene;
+    this.variant = variant ?? (urlParams.get('model') === 'mannequin' ? 'mannequin' : 'robot');
   }
 
   async load(): Promise<void> {
     const loader = new GLTFLoader();
-    
+    const mann = this.variant === 'mannequin';
+
     return new Promise((resolve, reject) => {
       loader.load(
-        '/assets/models/RobotExpressive.glb',
+        mann ? '/assets/models/mannequin.glb' : '/assets/models/RobotExpressive.glb',
         (gltf) => {
           if (this._disposed) { resolve(); return; }
           this.model = gltf.scene;
@@ -267,18 +290,21 @@ export class PlayerModel {
               }
             }
             // Grab aim/attachment bones — name-based since the model also has
-            // same-named plain nodes; only real Bones qualify
+            // same-named plain nodes; only real Bones qualify. Mannequin
+            // bones are DEF-* (normBone-stripped compare).
             if ((child as THREE.Bone).isBone) {
-              if (child.name === 'Head') {
+              const nb = normBone(child.name);
+              if (child.name === 'Head' || nb === 'defhead') {
                 this.aimBones.push({ bone: child, factor: 0.4, last: new THREE.Quaternion() });
-              } else if (child.name === 'Abdomen') {
+              } else if (child.name === 'Abdomen' || nb === 'defspine001') {
                 this.aimBones.push({ bone: child, factor: 0.6, last: new THREE.Quaternion() });
               // GLTFLoader sanitizes names ('Palm2.R' -> 'Palm2R')
-              } else if (child.name === 'Palm2R' && !this.handBone) {
+              } else if ((child.name === 'Palm2R' || nb === 'defhandr') && !this.handBone) {
                 this.handBone = child as THREE.Bone;
               }
-              // Foot-snap rig for retargeted clips (UAL doesn't drive the
-              // robot's IK foot bones — see footSnaps comment).
+              // Foot-snap rig for retargeted clips on the robot rig (UAL
+              // doesn't drive its IK foot bones). The mannequin's feet are
+              // real in-chain bones — nothing to snap.
               const grab = (want: string) => this.model!.getObjectByName(want);
               if (child.name === 'FootL' || child.name === 'FootR') {
                 const s = child.name === 'FootL' ? 'L' : 'R';
@@ -296,8 +322,9 @@ export class PlayerModel {
           // Hitbox: radius 0.8 (width 1.6), height 2.0
           // Scale factor 0.5 matches width, but model is taller (2.4 vs 2.0)
           // RobotExpressive.glb origin is at feet (y=0), not center
-          this.model.scale.setScalar(0.5);
+          this.model.scale.setScalar(mann ? 2.0 / size.y : 0.5); // mannequin: fit the 2m capsule — robot stays at its calibrated 0.5
           this.model.rotation.y = Math.PI; // Face forward
+          this.modelScale = mann ? 2.0 / size.y : 0.5;
 
           // Procedural gun in the right hand — follows every animation.
           if (this.handBone) {
@@ -318,7 +345,11 @@ export class PlayerModel {
             this.gunBaseZ = 0.05 / ws.x;
             this.gunKickZ = 0.15 / ws.x; // recoil distance in bone units
             this.gun.position.set(0, 0.05 / ws.x, this.gunBaseZ);
-            this.gun.rotation.y = Math.PI; // barrel points forward
+            // Robot palm bones: barrel forward = local -Z flipped by π yaw.
+            // UAL hand bones: barrel runs along the arm axis — +Y bone yaw
+            // (verified in the gun-probe rotation sweep).
+            if (mann) this.gun.rotation.y = Math.PI / 2; // verified via gun-probe gallery: barrel runs along the arm's aim axis
+            else this.gun.rotation.y = Math.PI;
 
             // Muzzle flash: additive sprite at the barrel tip, flashed on
             // fire() and faded in update(). Cheap (one sprite per remote),
@@ -346,10 +377,26 @@ export class PlayerModel {
           // Set up animation mixer
           this.mixer = new THREE.AnimationMixer(this.model);
           
-          // Store animations with mapping
+          // Store animations with mapping. Mannequin clips ARE the UAL
+          // clips natively — alias them under the UAL_ names the state map
+          // prefers so ANIM_NAMES resolves without a retarget pass.
           gltf.animations.forEach((clip) => {
+            if (mann) {
+              // Strip hip XZ root motion — the entity owns world position,
+              // and loop clips (Crouch_Fwd etc.) otherwise translate the
+              // mesh forward out from under the hitbox each cycle.
+              // Y stays: the crouch dip lives there.
+              for (const tr of clip.tracks) {
+                if (!tr.name.endsWith('.position')) continue;
+                const node = tr.name.slice(0, tr.name.indexOf('.'));
+                if (normBone(node) !== 'defhips' && normBone(node) !== 'root') continue;
+                const v = tr.values;
+                for (let i = 3; i < v.length; i += 3) { v[i] = v[0]; v[i + 2] = v[2]; }
+              }
+            }
             const action = this.mixer!.clipAction(clip);
             this.animations.set(clip.name, action);
+            if (mann) this.animations.set('UAL_' + clip.name, action);
           });
           
           logger.debug('Loaded animations:', Array.from(this.animations.keys()));
@@ -357,13 +404,14 @@ export class PlayerModel {
           this._loaded = true;
           // Start with whatever the last request was (remotes spawn mid-
           // load and ask for Running/Walking before the mixer exists).
-          this.playAnimation(this._queuedAnim ?? 'Idle');
+          this.playAnimation(this._queuedAnim ?? (mann ? 'UAL_Idle_Loop' : 'Idle'));
           this._queuedAnim = null;
 
           // Retargeted UAL clips arrive async — a native clip plays until
           // they land, then the current state re-resolves onto the better
           // clip. Cached globally so only the first model pays the bake.
-          this.retargetUAL();
+          // The mannequin binds UAL clips natively — no retarget at all.
+          if (!mann) this.retargetUAL();
           
           this.scene.add(this.model);
           logger.debug('MODEL ADDED to scene', { children: this.scene.children.length });
@@ -372,7 +420,7 @@ export class PlayerModel {
           // Uses same constants as collision detection — single source of truth in config.ts
           // CapsuleGeometry(radius, cylinderHeight, ...) — cylinderHeight excludes hemispheres
           // Model is scaled by 0.5, so divide by scale to get correct world size
-          const colliderGeo = new THREE.CapsuleGeometry(PLAYER_RADIUS / 0.5, CAPSULE_CYLINDER_HEIGHT / 0.5, 4, 16);
+          const colliderGeo = new THREE.CapsuleGeometry(PLAYER_RADIUS / this.modelScale, CAPSULE_CYLINDER_HEIGHT / this.modelScale, 4, 16);
           const colliderMat = new THREE.MeshBasicMaterial({
             color: 0x00ff00,
             wireframe: true,
@@ -384,7 +432,7 @@ export class PlayerModel {
           // Capsule center is at feet + CAPSULE_CENTER_Y (half PLAYER_HEIGHT)
           // Model origin is at feet, model is scaled by 0.5
           // So local y = CAPSULE_CENTER_Y / 0.5
-          this.colliderGizmo.position.y = CAPSULE_CENTER_Y / 0.5;
+          this.colliderGizmo.position.y = CAPSULE_CENTER_Y / this.modelScale;
           this.colliderGizmo.renderOrder = 999; // Render last (on top)
           // Hitbox visualization is a debug overlay — same flag as the
           // AOE blast wireframes (menu DEBUG toggle / ?debug).
@@ -479,31 +527,48 @@ export class PlayerModel {
    */
   private retargetUAL(): void {
     PlayerModel.ualSource ??= (async () => {
-      const gltf = await new GLTFLoader().loadAsync('/assets/models/robot-anims.glb');
-      const src = gltf.scene;
-      src.updateMatrixWorld(true);
-
-      // No meshes in the trimmed GLB — the joints arrive as plain
-      // Object3Ds. retargetClip only needs .skeleton.bones to iterate;
-      // hand it a duck-typed skeleton over the DEF-* hierarchy.
-      const srcBones: THREE.Object3D[] = [];
-      src.traverse(o => { if (normBone(o.name).startsWith('def')) srcBones.push(o); });
-      (src as unknown as { skeleton: object }).skeleton = {
-        bones: srcBones,
-        // PropertyBinding.findNode resolves track node names through this.
-        getBoneByName(n: string) { return srcBones.find(b => b.name === n); },
-      };
-      const srcByNorm = new Map(srcBones.map(b => [normBone(b.name), b]));
-      const srcHip = srcByNorm.get('defhips');
-      if (!srcHip) throw new Error('UAL rig missing DEF-hips');
-      return { src, srcBones, srcByNorm, srcHip, clips: gltf.animations };
+      // Two source packs on two rigs: UAL1 (DEF-* Rigify names) and UAL2
+      // (UE-style names — slide/ninja-jump live there). Each bakes with
+      // its own bone map; clips merge into one name-keyed cache.
+      interface UalSpec { url: string; boneMap: Record<string, string>; prefix: string; hip: string; exclude?: RegExp }
+      const specs: UalSpec[] = [
+        { url: '/assets/models/robot-anims.glb', boneMap: UAL_BONE_MAP, prefix: 'def', hip: 'defhips' },
+        { url: '/assets/models/robot-anims2.glb', boneMap: UAL2_BONE_MAP, prefix: '', hip: 'pelvis', exclude: /^(armature|mannequin|root)$/i },
+      ];
+      const sources: {
+        spec: UalSpec; src: THREE.Object3D; srcBones: THREE.Object3D[];
+        srcByNorm: Map<string, THREE.Object3D>; srcHip: THREE.Object3D;
+        clips: THREE.AnimationClip[];
+      }[] = [];
+      for (const spec of specs) {
+        const gltf = await new GLTFLoader().loadAsync(spec.url);
+        const src = gltf.scene;
+        src.updateMatrixWorld(true);
+        // No meshes in the trimmed GLBs — the joints arrive as plain
+        // Object3Ds. retargetClip only needs .skeleton.bones to iterate.
+        const srcBones: THREE.Object3D[] = [];
+        src.traverse(o => {
+          const n = normBone(o.name);
+          if (n.startsWith(spec.prefix) && (!spec.exclude || !spec.exclude.test(o.name))) srcBones.push(o);
+        });
+        (src as unknown as { skeleton: object }).skeleton = {
+          bones: srcBones,
+          // PropertyBinding.findNode resolves track node names through this.
+          getBoneByName(n: string) { return srcBones.find(b => b.name === n); },
+        };
+        const srcByNorm = new Map(srcBones.map(b => [normBone(b.name), b]));
+        const srcHip = srcByNorm.get(spec.hip);
+        if (!srcHip) throw new Error(`UAL rig missing hip ${spec.hip} in ${spec.url}`);
+        sources.push({ spec, src, srcBones, srcByNorm, srcHip, clips: gltf.animations });
+      }
+      return sources;
     })().catch(e => {
       logger.warn('UAL anims failed to load — native clips only', e);
       PlayerModel.ualSource = null; // let a later model retry (e.g. transient 404)
       return Promise.reject(e);
     });
 
-    PlayerModel.ualSource.then(({ src, srcBones, srcByNorm, srcHip, clips }) => {
+    PlayerModel.ualSource!.then(sources => {
       if (this._disposed || !this.mixer || !this.model) return;
       if (!PlayerModel.bakedClips) {
         // Target: this model's skinned mesh + its full skeleton.
@@ -513,73 +578,72 @@ export class PlayerModel {
         target.skeleton.pose();
         target.updateMatrixWorld(true);
 
-        // names: target bone name → source bone name
-        const names: Record<string, string> = {};
-        for (const b of target.skeleton.bones) {
-          const want = UAL_BONE_MAP[b.name];
-          const hit = want && srcByNorm.get('def' + want);
-          if (hit) names[b.name] = hit.name;
-        }
-
-        // Rest-pose correction — the load-bearing trick for mixed rigs.
-        // retarget copies the SOURCE bone's world rotation onto the target
-        // bone each frame, so any bind-pose difference (mannequin T-pose vs
-        // robot rest, differing bone axis conventions) bakes a constant
-        // tilt into every clip — the 'Jump_Loop face-down' artifact.
-        // localOffsets[b] = srcRest⁻¹ × tgtRest makes rest→rest and turns
-        // the animation into a DELTA applied on the robot's own skeleton.
-        const localOffsets: Record<string, THREE.Matrix4> = {};
-        const _m1 = new THREE.Matrix4();
-        const qs = new THREE.Quaternion();
-        const qt = new THREE.Quaternion();
-        logger.debug('UAL skeleton bones', target.skeleton.bones.map(b => b.name));
-        for (const [tName, sName] of Object.entries(names)) {
-          // Limb bones share the Blender Y-along-bone convention, so the
-          // absolute world-rotation copy is already correct for them — an
-          // offset would convert raises into tiny rest-relative deltas and
-          // flatten them. The TORSO chain (hips/abdomen/torso/neck/head) is
-          // different: the mannequin's spine rest pose leans differently
-          // than the chibi robot's, and absolute copy bakes a constant
-          // forward hunch into every clip. Delta-map the torso, keep limbs
-          // absolute.
-          if (!/^(Hips|Abdomen|Torso_1|Neck|Head)$/.test(tName)) continue;
-          const tb = target.skeleton.getBoneByName(tName);
-          const sb = srcBones.find(b => b.name === sName);
-          if (!tb || !sb) continue;
-          sb.getWorldQuaternion(qs).invert();
-          // Rest quat in SKELETON space — retarget runs with
-          // target.matrixWorld = identity, so the model group's own π yaw
-          // must be stripped, else it gets baked into every frame twice.
-          qt.setFromRotationMatrix(_m1.copy(this.model.matrixWorld).invert().multiply(tb.matrixWorld));
-          localOffsets[tName] = new THREE.Matrix4().makeRotationFromQuaternion(qs.clone().multiply(qt));
-        }
-
-        logger.debug('UAL offsets built', Object.keys(localOffsets));
-
-        // Hip translation scale: ratio of rest-pose hip offsets in each
-        // rig's local units (mannequin ~1.8m vs chibi robot proportions).
-        const tgtHip = target.skeleton.bones.find(b => names[b.name] === srcHip.name);
-        const scale = tgtHip && srcHip.position.lengthSq() > 0
-          ? tgtHip.position.length() / srcHip.position.length() : 1;
-
         const t0 = performance.now();
         const baked = new Map<string, THREE.AnimationClip>();
-        for (const clip of clips) {
-          const rt = SkeletonUtils.retargetClip(target, src, clip, {
-            names,
-            hip: srcHip.name,
-            scale,
-            fps: 30, // keep resampled tracks small — clips ship at 30 anyway
-            // Runtime-supported but missing from the .d.ts — per-target-bone
-            // offset matrices applied after the source world rotation.
-            localOffsets,
-          } as Parameters<typeof SkeletonUtils.retargetClip>[3]);
-          // retargetClip emits '.bones[Name].prop' tracks that only bind via
-          // a skeleton on the mixer root — our mixer roots at the model
-          // group, so rewrite to plain 'Name.prop' like native GLTF tracks.
-          for (const t of rt.tracks) t.name = t.name.replace(/^\.bones\[(.+)\]\./, '$1.');
-          rt.name = 'UAL_' + clip.name;
-          baked.set(rt.name, rt);
+        for (const { spec, src, srcBones, srcByNorm, srcHip, clips } of sources) {
+          // names: target bone name → source bone name
+          const names: Record<string, string> = {};
+          for (const b of target.skeleton.bones) {
+            const want = spec.boneMap[b.name];
+            const hit = want && srcByNorm.get(spec.prefix + want);
+            if (hit) names[b.name] = hit.name;
+          }
+
+          // Rest-pose correction — the load-bearing trick for mixed rigs.
+          // retarget copies the SOURCE bone's world rotation onto the target
+          // bone each frame, so any bind-pose difference (mannequin T-pose vs
+          // robot rest, differing bone axis conventions) bakes a constant
+          // tilt into every clip — the 'Jump_Loop face-down' artifact.
+          // localOffsets[b] = srcRest⁻¹ × tgtRest makes rest→rest and turns
+          // the animation into a DELTA applied on the robot's own skeleton.
+          const localOffsets: Record<string, THREE.Matrix4> = {};
+          const _m1 = new THREE.Matrix4();
+          const qs = new THREE.Quaternion();
+          const qt = new THREE.Quaternion();
+          for (const [tName, sName] of Object.entries(names)) {
+            // Limb bones share the Blender Y-along-bone convention, so the
+            // absolute world-rotation copy is already correct for them — an
+            // offset would convert raises into tiny rest-relative deltas and
+            // flatten them. The TORSO chain (hips/abdomen/torso/neck/head) is
+            // different: the mannequin's spine rest pose leans differently
+            // than the chibi robot's, and absolute copy bakes a constant
+            // forward hunch into every clip. Delta-map the torso, keep limbs
+            // absolute.
+            if (!/^(Hips|Abdomen|Torso_1|Neck|Head)$/.test(tName)) continue;
+            const tb = target.skeleton.getBoneByName(tName);
+            const sb = srcBones.find(b => b.name === sName);
+            if (!tb || !sb) continue;
+            sb.getWorldQuaternion(qs).invert();
+            // Rest quat in SKELETON space — retarget runs with
+            // target.matrixWorld = identity, so the model group's own π yaw
+            // must be stripped, else it gets baked into every frame twice.
+            qt.setFromRotationMatrix(_m1.copy(this.model.matrixWorld).invert().multiply(tb.matrixWorld));
+            localOffsets[tName] = new THREE.Matrix4().makeRotationFromQuaternion(qs.clone().multiply(qt));
+          }
+
+          // Hip translation scale: ratio of rest-pose hip offsets in each
+          // rig's local units (mannequin ~1.8m vs chibi robot proportions).
+          const tgtHip = target.skeleton.bones.find(b => names[b.name] === srcHip.name);
+          const scale = tgtHip && srcHip.position.lengthSq() > 0
+            ? tgtHip.position.length() / srcHip.position.length() : 1;
+
+          for (const clip of clips) {
+            const rt = SkeletonUtils.retargetClip(target, src, clip, {
+              names,
+              hip: srcHip.name,
+              scale,
+              fps: 30, // keep resampled tracks small — clips ship at 30 anyway
+              // Runtime-supported but missing from the .d.ts — per-target-bone
+              // offset matrices applied after the source world rotation.
+              localOffsets,
+            } as Parameters<typeof SkeletonUtils.retargetClip>[3]);
+            // retargetClip emits '.bones[Name].prop' tracks that only bind via
+            // a skeleton on the mixer root — our mixer roots at the model
+            // group, so rewrite to plain 'Name.prop' like native GLTF tracks.
+            for (const t of rt.tracks) t.name = t.name.replace(/^\.bones\[(.+)\]\./, '$1.');
+            rt.name = 'UAL_' + clip.name;
+            baked.set(rt.name, rt);
+          }
         }
         logger.debug(`UAL retarget baked ${baked.size} clips in ${(performance.now() - t0).toFixed(0)}ms`);
         PlayerModel.bakedClips = baked;

@@ -320,8 +320,11 @@ export class RemotePlayer {
       this.shootT -= dt;
       if (this.shootT > 0) this._model.setAnimationState('shoot');
     } else {
+      // Powered climb reads as jetting (same inference the jet audio makes)
+      // — a plain airborne fall keeps the jump loop.
+      const jetting = airborne && this.velocity.y > 3;
       this._model.setAnimationState(airborne
-        ? 'jump'
+        ? (jetting ? 'jet' : 'jump')
         : pickLocomotionAnim(this._model.animationState, speed));
     }
     if (this.shieldBubble) {

@@ -11,6 +11,7 @@ import type { Room } from './Room.ts';
 import type { ServerMessage } from '../../shared/protocol.ts';
 import { logger } from './logger.ts';
 import { weaponStats } from './weaponStats.ts';
+import { aoeDamage } from '../../shared/combat.ts';
 
 export type DeployKind = 'turret' | 'mine' | 'station' | 'drone';
 const KINDS = new Set<DeployKind>(['turret', 'mine', 'station', 'drone']);
@@ -26,7 +27,13 @@ interface Deployed {
   pos: Vec3;
   ttl: number;
   fireCd: number;
+  hp: number;
 }
+
+// Blast-only durability — splash damage clears a stand's defenses the
+// Tribes way (mortar/disc spam opens the approach). Hitscan has no
+// deployable collision, so these are AOE-sweep budgets, not bullet HP.
+const HP: Record<DeployKind, number> = { turret: 60, mine: 20, station: 80, drone: 40 };
 
 // Sentry combat envelope — mirrors the client DeployTurret constants so
 // the server sim and the visual agree on what the gun can reach.
@@ -77,7 +84,7 @@ export class RoomDeployables {
     const armDelay = k === 'turret' ? TURRET_UNFOLD_S + Math.random() * 0.4
       : k === 'mine' ? MINE_ARM_S
       : k === 'station' ? STATION_HEAL_CD : 0;
-    this.items.set(id, { id, owner: playerId, kind: k, pos: { ...pos }, ttl: TTL_S[k], fireCd: armDelay });
+    this.items.set(id, { id, owner: playerId, kind: k, pos: { ...pos }, ttl: TTL_S[k], fireCd: armDelay, hp: HP[k] });
     logger.info('Deploy placed', { owner: playerId, kind: k, x: +pos.x.toFixed(1), y: +pos.y.toFixed(1), z: +pos.z.toFixed(1) });
     weaponStats.recordDeploy(this.room.mode, k);
     this.room.broadcast({ type: 'deploySpawn', id, owner: playerId, kind: k, pos: { ...pos }, team: player.team } as ServerMessage);
@@ -102,6 +109,29 @@ export class RoomDeployables {
   private remove(id: number): void {
     if (!this.items.delete(id)) return;
     this.room.broadcast({ type: 'deployGone', id } as ServerMessage);
+  }
+
+  /** AOE blast sweep — every deployable inside the radius eats scaled
+   *  splash (same falloff curve as players). Own gear is not exempt:
+   *  a careless mortar wrecks your own turret too. */
+  applyBlast(center: Vec3, damage: number, radius: number, shooterId: string): void {
+    if (this.items.size === 0) return;
+    for (const d of [...this.items.values()]) {
+      const dx = d.pos.x - center.x, dy = d.pos.y - center.y, dz = d.pos.z - center.z;
+      const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      if (dist > radius) continue;
+      // Static gear can't dodge — a bolt landing inside the envelope does
+      // at least half its base splash, so clearing a stand costs a few
+      // well-placed lobs instead of a dozen grazed edges.
+      const dmg = Math.max(aoeDamage(damage, dist, radius), Math.round(damage * 0.5));
+      if (dmg <= 0) continue;
+      d.hp -= dmg;
+      logger.debug('Deploy hit', { kind: d.kind, dist: +dist.toFixed(1), dmg, hp: d.hp, by: shooterId });
+      if (d.hp <= 0) {
+        logger.info('Deploy destroyed', { id: d.id, kind: d.kind, owner: d.owner, by: shooterId });
+        this.remove(d.id);
+      }
+    }
   }
 
   tick(dt: number): void {

@@ -1,6 +1,12 @@
 {
   "compilerOptions": {
     "target": "ES2022",
+    // ESNext adds Map.getOrInsert/etc which RemoteSet (a Map subshape)
+    // doesn't implement — ES2023 keeps the Map surface it satisfies.
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    // server_bun modules reached via p2p/host.ts import node:* builtins;
+    // without 'node' the client's tsc run can't resolve them.
+    "types": ["node"],
     "module": "ESNext",
     "moduleResolution": "bundler",
     "strict": true,

@@ -47,6 +47,9 @@ export class NetworkManager {
   public onPlayerJump: ((playerId: string, position: { x: number; y: number; z: number }) => void) | null = null;
   public onPlayerJetpack: ((playerId: string, position: { x: number; y: number; z: number }) => void) | null = null;
   public onProjectileCreated: ((projectileId: string, ownerId: string, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }, weaponType?: number) => void) | null = null;
+  /** Server refused a claim — `health` is the authoritative resync value
+   *  (rejected predicted self-splash leaves client health divergent). */
+  public onShotRejected: ((reason: string, targetId: string | undefined, weaponType: number | undefined, health: number | undefined) => void) | null = null;
   public onPlayerShot: ((id: string, weaponType: number | undefined, pos: { x: number; y: number; z: number } | undefined, dir: { x: number; y: number; z: number } | undefined) => void) | null = null;
   public onProjectileDestroyed: ((projectileId: string) => void) | null = null;
   public onPlayerJoined: ((playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }) => void) | null = null;
@@ -257,12 +260,15 @@ export class NetworkManager {
     mineBoom: (data) => this.onMineBoom?.(data.id, data.pos),
     // Server refused a hit claim — worth surfacing: a healthy client
     // should basically never see this, so it's a desync tell.
-    shotRejected: (data) => logger.error(`shot rejected — predicted damage never applied`, {
-      reason: data.reason,
-      targetId: data.targetId,
-      weapon: data.weaponType !== undefined ? WeaponType[data.weaponType] ?? data.weaponType : undefined,
-      pingMs: this.telemetry.ping,
-    }),
+    shotRejected: (data) => {
+      logger.error(`shot rejected — predicted damage never applied`, {
+        reason: data.reason,
+        targetId: data.targetId,
+        weapon: data.weaponType !== undefined ? WeaponType[data.weaponType] ?? data.weaponType : undefined,
+        pingMs: this.telemetry.ping,
+      });
+      this.onShotRejected?.(data.reason, data.targetId, data.weaponType, data.health);
+    },
   };
 
   private handleGameState(data: Extract<ServerMessage, { type: 'gameState' }>): void {

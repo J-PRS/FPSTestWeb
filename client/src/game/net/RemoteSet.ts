@@ -46,13 +46,13 @@ export class RemoteSet<T extends RemoteEntity, S> {
   has(id: string): boolean { return this.entities.has(id); }
   set(id: string, ent: T): this { this.entities.set(id, ent); return this; } // Map-compatible return for structural assignability
   delete(id: string): boolean { return this.entities.delete(id); }
-  values(): IterableIterator<T> { return this.entities.values(); }
-  keys(): IterableIterator<string> { return this.entities.keys(); }
-  entries(): IterableIterator<[string, T]> { return this.entities.entries(); }
+  values(): MapIterator<T> { return this.entities.values(); }
+  keys(): MapIterator<string> { return this.entities.keys(); }
+  entries(): MapIterator<[string, T]> { return this.entities.entries(); }
   forEach(fn: (v: T, k: string, m: Map<string, T>) => void): void { this.entities.forEach(fn); }
   clear(): void { this.entities.clear(); }
   get [Symbol.toStringTag](): string { return 'RemoteSet'; }
-  [Symbol.iterator](): IterableIterator<[string, T]> { return this.entities[Symbol.iterator](); }
+  [Symbol.iterator](): MapIterator<[string, T]> { return this.entities[Symbol.iterator](); }
 
   /** Spawn-on-first-sight. Returns the entity (new or existing). */
   ensure(id: string, state: S): T | undefined {
@@ -95,12 +95,24 @@ export class RemoteSet<T extends RemoteEntity, S> {
     return true;
   }
 
+  /** Re-key an owner-managed entity (bot jersey swap). No dispose, no
+   *  hooks — it's the same body under a new name. */
+  rename(oldId: string, newId: string): void {
+    const ent = this.entities.get(oldId);
+    if (!ent) return;
+    this.entities.delete(oldId);
+    this.entities.set(newId, ent);
+  }
+
   /** Dispose every entity whose id is absent from the live roster, or
-   *  which finished its death-shrink (scale === 0). */
-  prune(liveIds: (id: string) => boolean): void {
+   *  which finished its death-shrink (scale === 0). Owner-managed bodies
+   *  (local bots, debug dummies) pass `shrinkExempt` — their owner reuses
+   *  the SAME entity on respawn, and a disposed/shrunk-reaped model would
+   *  leave an invisible attacker still thinking and shooting. */
+  prune(liveIds: (id: string) => boolean, shrinkExempt?: (id: string) => boolean): void {
     for (const [id, ent] of this.entities) {
       const gone = !liveIds(id);
-      const shrunkAway = ent.scale === 0;
+      const shrunkAway = ent.scale === 0 && !(shrinkExempt?.(id));
       if (!gone && !shrunkAway) continue;
       ent.dispose();
       this.entities.delete(id);

@@ -204,17 +204,19 @@ export class PlayerVisuals {
 
   // Returns the new jumpAnimTimer (the one piece of player state the
   // animation owns — set back on the Player by the caller)
-  updateModelAnim(model: PlayerModel | null, pos: THREE.Vector3, yaw: number, pitch: number, jumpAnimTimer: number, speed: number, dt: number, onGround: boolean): number {
+  updateModelAnim(model: PlayerModel | null, pos: THREE.Vector3, yaw: number, pitch: number, jumpAnimTimer: number, speed: number, dt: number, onGround: boolean, jetting = false): number {
     if (!model) return jumpAnimTimer;
     if (jumpAnimTimer > 0) {
       jumpAnimTimer = Math.max(0, jumpAnimTimer - dt);
     }
     // Airborne takes priority over locomotion — not just the jump
     // transition: sustained jetting/falling at speed reads as "run on
-    // air" under the pure speed pick.
-    const animState: AnimationState = jumpAnimTimer > 0 || !onGround
+    // air" under the pure speed pick. A powered climb gets the jet pose.
+    const animState: AnimationState = jumpAnimTimer > 0
       ? 'jump'
-      : pickLocomotionAnim(model['currentState'] as AnimationState, speed);
+      : !onGround
+        ? (jetting ? 'jet' : 'jump')
+        : pickLocomotionAnim(model['currentState'] as AnimationState, speed);
     model.setAnimationState(animState);
     // pos is eye height — the model plants its feet 1.8m below
     model.setPosition(pos.x, pos.y - EYE_OFFSET, pos.z);

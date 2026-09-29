@@ -205,7 +205,12 @@ export class Player {
   // message so the server reseats its plausibility anchor instead of
   // rejecting the jump as a speedhack (the >50m rubber-band loop).
   pendingTeleport = false;
-  markTeleport(): void { this.pendingTeleport = true; }
+  markTeleport(): void {
+    this.pendingTeleport = true;
+    // Declared snaps also re-arm the spinout detector — a respawn/skill
+    // teleport legitimately jumps the camera, which isn't a spinout.
+    this._camQuatValid = false;
+  }
 
   private scene: THREE.Scene;
   private prevVelY = 0;        // vel.y entering this frame — impact speed at grounding (post-update vel.y is already zeroed)
@@ -572,7 +577,7 @@ export class Player {
     this.fireWeapons();
     this.emitMoveEvents(isJetting, input.skiHeld, input.jumpHeld, dt);
     this.visuals.updateShadowBlob(this.terrain, this.pos);
-    this.jumpAnimTimer = this.visuals.updateModelAnim(this.model, this.pos, this.yaw, this.pitch, this.jumpAnimTimer, this.getSpeed(), dt, this.onGround);
+    this.jumpAnimTimer = this.visuals.updateModelAnim(this.model, this.pos, this.yaw, this.pitch, this.jumpAnimTimer, this.getSpeed(), dt, this.onGround, isJetting);
   }
 
   // Spinout detector: a camera rotation jump >35° in a single frame is a

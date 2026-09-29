@@ -147,7 +147,15 @@ class WeaponStats {
     this.dirty = true;
   }
 
-  snapshot(): { byMode: RoomTable; deaths: typeof this.deaths; ttk: typeof this.ttk; flags: typeof this.flags; speeds: typeof this.speeds; pickups: typeof this.pickups; deploys: typeof this.deploys } {
+  snapshot(): {
+    byMode: RoomTable;
+    deaths: { [mode: string]: { [cell: string]: number } };
+    ttk: { [mode: string]: { [source: string]: TtkRow } };
+    flags: { [mode: string]: FlagRow };
+    speeds: { [mode: string]: SpeedRow };
+    pickups: { [mode: string]: { [kind: string]: PickupRow } };
+    deploys: { [mode: string]: { [kind: string]: number } };
+  } {
     return JSON.parse(JSON.stringify({
       byMode: this.table, deaths: this.deaths, ttk: this.ttk, flags: this.flags,
       speeds: this.speeds, pickups: this.pickups, deploys: this.deploys,
@@ -172,7 +180,9 @@ class WeaponStats {
 
   start(): void {
     const t = setInterval(() => this.flush(), FLUSH_MS);
-    t.unref?.();
+    // Client tsc sees setInterval as the DOM overload (returns number) —
+    // unref exists on the Node/Bun timer but not that signature.
+    (t as unknown as { unref?: () => void }).unref?.();
   }
 }
 

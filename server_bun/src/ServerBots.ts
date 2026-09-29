@@ -49,6 +49,9 @@ export class ServerBots {
   private roles = new Map<string, 'offense' | 'defense'>();
   /** Bots we saw dead — respawn transition resyncs the move shadow. */
   private deadSet = new Set<string>();
+  /** Next allowed sentry-clearing lob per bot — keeps gear suppression
+   *  on a human cadence instead of a per-tick mortar stream. */
+  private gearLobT = new Map<string, number>();
   /** inputMove ordering key — the shadow drops non-increasing seqs. */
   private seq = 1;
   private readonly room: Room;
@@ -215,23 +218,62 @@ export class ServerBots {
   /** Belt throw — a lobbed grenade at the hunt's last-seen spot. Same
    *  spawn path as the plasma bolt: RoomProjectiles owns the flight. */
   private throwBelt(p: { id: string; position: Vec3; velocity: Vec3 }): void {
+    const hunt = this.room.players.getPlayer(this.lastHuntId(p.id) ?? '');
+    if (hunt) this.lobAt(p, hunt.position);
+  }
+
+  /** Lob the belt weapon at an explicit point — used for hunt targets
+   *  and for hostile emplacements blocking the bot's objective. */
+  private lobAt(p: { id: string; position: Vec3; velocity: Vec3 }, aim: Vec3): void {
     const wt = this.loadouts.get(p.id)?.belt ?? WeaponType.Grenade;
     const stats = getWeaponStats(wt);
     if (!stats || stats.speed <= 0) return;
-    const hunt = this.room.players.getPlayer(this.lastHuntId(p.id) ?? '');
-    const aim = hunt?.position;
-    if (!aim) return;
     const dx = aim.x - p.position.x, dz = aim.z - p.position.z;
     const d = Math.hypot(dx, dz) || 1;
-    // Grenade: lob the arc that lands ~d out. Remote railgun: throw
-    // nearly flat — the beam discharges along the velocity line, so a
-    // steep pitch aims the rail at the sky.
-    const pitch = stats.rayDelay ? 0.15 : Math.min(0.7, d / stats.speed);
-    const dir = { x: dx / d, y: pitch, z: dz / d };
+    // Ballistic lob: range = v²·sin(2θ)/|g| — solve θ for the target's
+    // distance instead of guessing a pitch, since the grenade's 13m
+    // splash can't cover a 15m overshoot. Rails stay flat.
+    let pitch: number;
+    if (stats.rayDelay) {
+      pitch = 0.15;
+    } else {
+      const g = Math.abs(stats.gravity) || 28;
+      const sin2t = Math.min(0.98, (d * g) / (stats.speed * stats.speed));
+      pitch = Math.asin(sin2t) / 2;
+    }
+    const dir = { x: dx / d, y: Math.tan(pitch), z: dz / d };
     const len = Math.hypot(dir.x, dir.y, dir.z);
+    // The throw inherits half the bot's velocity (see RoomProjectiles.spawn)
+    // — a skiing bot's 10+ m/s of carry still swings a 40 m/s toss off
+    // target, so aim the launch against it.
+    const vx = (dir.x / len) * stats.speed - p.velocity.x * 0.5;
+    const vy = (dir.y / len) * stats.speed - p.velocity.y * 0.5;
+    const vz = (dir.z / len) * stats.speed - p.velocity.z * 0.5;
+    const vl = Math.hypot(vx, vy, vz) || 1;
     this.room.projectiles.spawn(p.id, wt,
       { x: p.position.x, y: p.position.y + 1.4, z: p.position.z },
-      { x: dir.x / len, y: dir.y / len, z: dir.z / len }, p.velocity);
+      { x: vx / vl, y: vy / vl, z: vz / vl }, p.velocity);
+  }
+
+  /** Hostile emplacement the bot can legally see — a turret/mine/drone
+   *  owned by the other team, near the bot and near what it's after.
+   *  The stand's kill-zone is knowledge the room advertises anyway. */
+  private hostileGear(p: { id: string; team?: string; position: Vec3 }, goal: BotVec | null): Vec3 | null {
+    if (!goal) return null;
+    let best: Vec3 | null = null;
+    // Lob from the edge of turret sight (42m) — a bot that must first
+    // survive to 30m never gets the shot off.
+    let bestD = 40;
+    for (const d of this.room.deployables.snapshot()) {
+      if (d.kind === 'station') continue; // pads aren't a threat
+      const owner = this.room.players.getPlayer(d.owner);
+      if (p.team && owner?.team === p.team) continue;
+      if (!p.team && d.owner === p.id) continue;
+      const bd = Math.hypot(d.pos.x - p.position.x, d.pos.z - p.position.z);
+      const gd = Math.hypot(d.pos.x - goal.x, d.pos.z - goal.z);
+      if (bd < bestD && gd < 50) { bestD = bd; best = d.pos; }
+    }
+    return best;
   }
 
   /** The brain's current hunt target id — needed by throwBelt since the
@@ -476,6 +518,18 @@ export class ServerBots {
       }
       if (out.fire) this.fireAt(p, out.fire.targetId, out.fire.aim);
       if (out.belt) this.throwBelt(p);
+      // Sentry-clearing lob: hostile gear watching the objective gets a
+      // grenade on its own slow cadence — the same legal path humans use
+      // to soften a stand, not a wallhack aim-assist.
+      {
+        const ready = (this.gearLobT.get(id) ?? 0) <= now;
+        const gear = ready ? this.hostileGear(p, goal?.pos ?? null) : null;
+        if (gear) {
+          this.lobAt(p, gear);
+          this.gearLobT.set(id, now + 8000);
+          logger.debug('Gear lob', { id, x: +gear.x.toFixed(1), z: +gear.z.toFixed(1) });
+        }
+      }
       // Deploy claims run the same handleDeploy a human's message does —
       // kind, plant distance, and per-player cap are all re-validated.
       if (out.deploy) this.room.deployables.handleDeploy(id, out.deploy.kind, out.deploy.pos);
