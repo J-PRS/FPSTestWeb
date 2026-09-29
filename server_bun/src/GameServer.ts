@@ -151,26 +151,33 @@ export class GameServer {
     return [...agg.values()].toSorted((a, b) => b.wins - a.wins || b.kills - a.kills);
   }
 
+  /** Which map spec defines a fresh room: the room's own name, then the
+   *  base of a numbered ad-hoc name ('nugwar-3' → 'nugwar'), then the
+   *  join's explicit map/mode fallback. `bots` overrides whatever the
+   *  spec says — even with no named spec at all. */
+  private specFor(name: string, mode: string, map: string, bots?: number): { spec: MapSpec | undefined; src: string } {
+    let spec = this.loadMapSpec(name);
+    let src = spec ? name : '';
+    if (!spec) {
+      // Numbered ad-hoc rooms inherit their base spec — a bare --room
+      // join must play the same rules quickRoom would, or numbered rooms
+      // silently run spec-less defaults.
+      const base = name.replace(/-\d+$/, '');
+      if (base !== name) { spec = this.loadMapSpec(base); src = spec ? base : ''; }
+    }
+    if (!spec && map) { spec = this.loadMapSpec(map); src = map; }
+    if (!spec) { spec = this.loadMapSpec(mode); src = spec ? mode : ''; }
+    if (bots !== undefined) spec = { ...spec, bots, botFill: bots } as MapSpec;
+    return { spec, src };
+  }
+
   /** Resolve-or-create a room. Joins may name any room; 'default' is the
    *  unnamed lobby every existing client already lands in. `mode` is only
    *  honored at creation — the first joiner defines the match. */
   private roomFor(name: string, mode = '', map = '', bots?: number): Room {
     let room = this.rooms.get(name);
     if (!room) {
-      let spec = this.loadMapSpec(name);
-      let src = spec ? name : '';
-      if (!spec) {
-        // Numbered ad-hoc rooms ('nugwar-3', 'ctf-2') inherit their base
-        // spec — a bare --room join must play the same rules quickRoom
-        // would, or numbered rooms silently run spec-less defaults.
-        const base = name.replace(/-\d+$/, '');
-        if (base !== name) { spec = this.loadMapSpec(base); src = spec ? base : ''; }
-      }
-      if (!spec && map) { spec = this.loadMapSpec(map); src = map; }
-      if (!spec) { spec = this.loadMapSpec(mode); src = spec ? mode : ''; }
-      // bots applies even without a named spec — an ad-hoc --room join
-      // asking for bots expects them or the request silently no-ops.
-      if (bots !== undefined) spec = { ...spec, bots, botFill: bots } as MapSpec;
+      const { spec, src } = this.specFor(name, mode, map, bots);
       if (src) this.roomMapName.set(name, src);
       room = new Room(name, this.field, mode, spec, CONFIG.moveAuthority);
       // `room` is a mutable let — bind a const for the closures or TS

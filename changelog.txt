@@ -1,3 +1,6 @@
+2026-10-03 - GameServer.roomFor split: the spec-resolution chain
+    (room name → numbered base → join map/mode fallback → bots override)
+    extracted into specFor. Clears the complexity warning.
 2026-10-03 - capEcho.test.ts: covers the cap-out echo — crossing to
     maxHealth mid-cadence must echo, the echo carries the converged max,
     and post-cap ticks stay silent. Frozen bot (pin's thinking brain can
