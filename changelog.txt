@@ -1,3 +1,5 @@
+2026-10-03 - ctfWin scenario: brainless courier grabs the bravo flag, carries it home, and the legal 5th point runs the full matchEnd/reset/matchStart funnel.
+
 2026-10-03 - RoomArena ran on wall-clock; moved to sim-time accumulation so grace/pushback are test-steppable and pause-safe. New arenaPush scenario pins a brainless player outside the dome and asserts grace window, knockback pull msg, and the shadow sim walking back in.
 
 2026-10-03 - Strict-tsc cleanup: harness firstPlayer/twoPlayers helpers kill the |undefined index noise across scenarios; unused vars/params purged (baneling _authoritative, dead CRAWLER_BITE_DAMAGE, dead imports).
