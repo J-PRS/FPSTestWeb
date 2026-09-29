@@ -205,26 +205,10 @@ export class TickLoop {
   private buildRecords(room: Room, players: Players, now: number): TickRecord[] {
     const records: TickRecord[] = [];
     for (const [playerId, p] of players) {
-      // Grace-period entries are owned by their removal timeout — reaping
-      // them here double-removes (double playerLeft broadcast).
-      if (room.disconnected.has(playerId)) continue;
-      // A human who never sent a position isn't in-world yet (menu/lobby)
-      // — their record would render a frozen ghost at the spawn default.
-      // Bots are exempt: the sim writes their position without reports.
-      if (!p.isBot && !p.hasReceivedPosition) continue;
-      const silenceMs = now - p.lastSeen;
-      if (this.reapIdle(room, playerId, p, silenceMs)) continue;
-      // Silent sockets (backgrounded tabs) get no regular updates — but a
-      // low-rate heartbeat keeps clients' stored state (health, isDead)
-      // converged; otherwise a stale player's fields desync permanently
-      // while the state hash still counts them. Gated on THAT player's
-      // lastSent, not a shared clock — a single shared timestamp meant
-      // only the first stale player in map order ever heartbeat.
+      if (this.skipRecord(room, playerId, p, now)) continue;
       this.tickServerHeals(room, playerId, p, now);
-      const isStale = silenceMs > 5000;
       const forceSend = now < p.forceSendUntil;
       const lastSent = room.lastSentPositions.get(playerId);
-      if (isStale && lastSent && now - lastSent.t < 2000) continue;
       const sheep = room.bots.sheepOf(playerId);
       if (lastSent && !forceSend && this.isSuppressed(p, lastSent, now, sheep)) {
         this.metrics.recordsSuppressed++;
@@ -272,6 +256,24 @@ export class TickLoop {
       this.metrics.recordsBuilt++;
     }
     return records;
+  }
+
+  /** Every reason a player contributes no record this tick, in order:
+   *  grace entries (owned by their removal timeout — reaping here would
+   *  double playerLeft), humans that never reported (menu/lobby — their
+   *  record renders a frozen ghost at the spawn default; bots exempt since
+   *  the sim writes their position), idle reap, and the stale heartbeat —
+   *  silent sockets get a 0.5Hz record so clients' stored state (health,
+   *  isDead) still converges; gated on THAT player's lastSent, not a shared
+   *  clock — a shared timestamp meant only the first stale player in map
+   *  order ever heartbeat. */
+  private skipRecord(room: Room, playerId: string, p: PlayerState, now: number): boolean {
+    if (room.disconnected.has(playerId)) return true;
+    if (!p.isBot && !p.hasReceivedPosition) return true;
+    const silenceMs = now - p.lastSeen;
+    if (this.reapIdle(room, playerId, p, silenceMs)) return true;
+    const lastSent = room.lastSentPositions.get(playerId);
+    return silenceMs > 5000 && lastSent !== undefined && now - lastSent.t < 2000;
   }
 
   /** Human silence past IDLE_KICK_MS gets reaped — close the live socket
