@@ -34,6 +34,140 @@ export interface EntitiesDeps extends GameContext {
   deployDamageBot?: (playerId: string, dmg: number, fromPos: THREE.Vector3) => boolean;
 }
 
+interface BallFieldDeps {
+  deps: EntitiesDeps;
+  balls: Ball[];
+  targets: Targetable[];
+  classicMode: boolean;
+  serverBalls: () => boolean;
+  netTargetPosFor: (b: Ball) => THREE.Vector3;
+  aggroFor: Kit['aggroFor'];
+  kickDust: Kit['kickDust'];
+  removeTarget: Kit['removeTarget'];
+  atCap: Kit['atCap'];
+  pickVariant: () => 0 | 1 | 2 | 3;
+}
+type Kit = ReturnType<typeof createSpeciesKit>;
+
+// Owns the local (non-server) ball population: ambient spawns, elite
+// splits, demo keyframe + snapshot recording. Server-owned ball
+// replication lives in game/netBalls.ts — this field only runs the
+// offline/demo side and culls locals once a server roster arrives.
+function createBallField(f: BallFieldDeps) {
+  const { deps, balls, targets } = f;
+  const { scene, camera } = deps;
+  let ballTimer = 0;
+  let ballSnapshotTimer = 0;
+
+// Wire bounce/peak keyframe callbacks so demo clips replay this ball accurately
+function recordBallKeyframes(ball: Ball): void {
+  const dm = deps.lazyDemoManager();
+  if (!dm?.isRecording) return;
+  ball.onBounce = (pos, vel) => {
+    dm.recordTargetBounce(ball.id, { x: pos.x, y: pos.y, z: pos.z }, { x: vel.x, y: vel.y, z: vel.z }, ball.variant);
+  };
+  ball.onPeak = (pos, vel) => {
+    dm.recordTargetPeak(ball.id, { x: pos.x, y: pos.y, z: pos.z }, { x: vel.x, y: vel.y, z: vel.z }, ball.variant);
+  };
+}
+
+// ---- Balls ----
+function spawnBall(): void {
+  const dm = deps.lazyDemoManager();
+  if (dm?.isPlaying) return; // skip normal spawning during demo playback
+  if (f.serverBalls()) return; // connected: the server owns ball spawning
+  if (f.atCap(balls, BALL_MAX)) return;
+  // Classic mode is plain bouncy balls — no elites, no variants
+  spawnBallOfVariant(f.classicMode ? 0 : f.pickVariant());
+}
+
+// Shared spawn path — director events need to spawn specific variants
+function spawnBallOfVariant(variant: 0 | 1 | 2 | 3): Ball {
+  const dm = deps.lazyDemoManager();
+  const ball = new Ball(scene, deps.lazyTerrain(), variant);
+  balls.push(ball);
+  targets.push(ball);
+  if (ball.variant === 3) ball.onDeath = (t) => spawnSplitChildren(t);
+  if (dm?.isRecording) {
+    dm.recordTargetSpawned(ball.id, { x: ball.pos.x, y: ball.pos.y, z: ball.pos.z }, { x: ball.vel.x, y: ball.vel.y, z: ball.vel.z }, ball.variant);
+    recordBallKeyframes(ball);
+  }
+  return ball;
+}
+
+// Director-friendly spawn — an elite on demand (skips the cap: events
+// are authored moments, the population cap is for ambient trickle)
+function spawnEliteBall(): void {
+  if (deps.lazyDemoManager()?.isPlaying) return;
+  if (f.serverBalls()) return;
+  spawnBallOfVariant(3);
+}
+
+// Elite death: two variant-0 balls burst out of the corpse with divergent
+// velocities. Kill-it-close = you're suddenly fighting two balls point-blank;
+// kill-it-far = free loot. The decision IS the mechanic.
+function spawnSplitChildren(t: Targetable): void {
+  if (deps.lazyDemoManager()?.isPlaying) return;
+  if (f.serverBalls()) return;
+  const dm = deps.lazyDemoManager();
+  for (let k = 0; k < 2; k++) {
+    const child = new Ball(scene, deps.lazyTerrain(), 0);
+    const a = Math.random() * Math.PI * 2;
+    child.pos.copy(t.pos);
+    child.vel.set(Math.cos(a) * 14, 9 + Math.random() * 6, Math.sin(a) * 14);
+    balls.push(child);
+    targets.push(child);
+    if (dm?.isRecording) {
+      dm.recordTargetSpawned(child.id, { x: child.pos.x, y: child.pos.y, z: child.pos.z }, { x: child.vel.x, y: child.vel.y, z: child.vel.z }, child.variant);
+      recordBallKeyframes(child);
+    }
+  }
+}
+
+function updateBalls(dt: number): void {
+  const dm = deps.lazyDemoManager();
+  if (dm?.isPlaying) {
+    deps.updateBallsPlayback(dt);
+    return;
+  }
+
+  const netMode = f.serverBalls();
+  ballTimer += dt;
+  if (!netMode && ballTimer >= BALL_SPAWN_INTERVAL) {
+    ballTimer = 0;
+    spawnBall();
+  }
+
+  Ball.viewPos.copy(camera.position); // feeds billboarded ball ribbon trails
+  for (let i = balls.length - 1; i >= 0; i--) {
+    const b = balls[i]!;
+    if (netMode && !b.netDriven && !b.dead) b.netKill(); // cull pre-connect locals
+    b.update(dt, deps.lazyTerrain(), b.netDriven ? f.netTargetPosFor(b) : f.aggroFor(b, b.pos, dt, PROFILES.fodder));
+    f.kickDust(b, dt); // bounce frames puff — airborne frames don't
+    // Only remove ball when trails have fully faded out
+    if (b.disposed) f.removeTarget(balls, i, b);
+  }
+
+  recordBallSnapshots(dt);
+}
+
+// Periodic ball position snapshot for demo recording (every 0.5s)
+// This ensures clip snapshots for pre-existing balls are never stale
+function recordBallSnapshots(dt: number): void {
+  const dm = deps.lazyDemoManager();
+  if (!dm?.isRecording) return;
+  ballSnapshotTimer += dt;
+  if (ballSnapshotTimer < 0.5) return;
+  ballSnapshotTimer = 0;
+  for (const b of balls) {
+    if (!b.dead) {
+      dm.recordTargetPeak(b.id, { x: b.pos.x, y: b.pos.y, z: b.pos.z }, { x: b.vel.x, y: b.vel.y, z: b.vel.z }, b.variant);
+    }
+  }
+}
+
+  return { spawnBall, spawnEliteBall, updateBalls, recordBallKeyframes, spawnBallOfVariant };
+}
 // Owns every ambient-entity registry (balls/crawlers/turretters/rollers/
 // nuggets) plus their spawn timers, update passes, and demo keyframe
 // recording. `targets` is the shared projectile/blast surface — every
@@ -41,15 +175,12 @@ export interface EntitiesDeps extends GameContext {
 // game/species/*.ts; this file keeps balls/nuggets (they're networked
 // and demo-recorded) and orchestrates the rest.
 export function createEntities(deps: EntitiesDeps) {
-  const { scene, camera, logger } = deps;
+  const { scene, logger } = deps;
 
   const balls: Ball[] = [];
   const targets: Targetable[] = [];
   const nuggets: Nugget[] = [];
   let nuggetsCollected = 0;
-
-  let ballTimer = 0;
-  let ballSnapshotTimer = 0;
 
   // ?mode=classic — plain bounce-and-shoot: variant-0 balls only
   const CLASSIC_MODE = urlParams.isClassic;
@@ -81,6 +212,19 @@ export function createEntities(deps: EntitiesDeps) {
   const { gnats, seekers, rakks, strifers } = flyers;
   const { turrets, overlords, mines, banelings, totems } = siege;
   const { weeds } = ambient;
+
+  // Server-owned ball lifecycle (ballSpawn/ballSegment/ballDie handlers +
+  // the stamped-sim-time clock) lives in game/netBalls.ts.
+  const netBalls = createNetBalls(deps, { balls, targets, nuggets }, logger);
+  const { serverBalls, netBallSpawn, netBallSegment, netBallDie, netBallRoster, netTargetPosFor } = netBalls;
+  const netCrawlers = createNetCrawlers(deps, { crawlers, scarabs, rakks, rollers, gnats, snakes, banelings, totems, targets });
+  const { netCrawlSpawn, netCrawlEvt, netCrawlDie, netCrawlRoster } = netCrawlers;
+
+  const ballField = createBallField({
+    deps, balls, targets, classicMode: CLASSIC_MODE,
+    serverBalls, netTargetPosFor, aggroFor, kickDust, removeTarget, atCap, pickVariant,
+  });
+  const { spawnBall, spawnEliteBall, updateBalls, recordBallKeyframes } = ballField;
 
   // ---- Nuggets (pickup gems dropped by destroyed targets) ----
   function updateNuggets(dt: number): void {
@@ -118,120 +262,6 @@ export function createEntities(deps: EntitiesDeps) {
       if (n.dead) {
         n.dispose();
         nuggets.splice(i, 1);
-      }
-    }
-  }
-
-  // Wire bounce/peak keyframe callbacks so demo clips replay this ball accurately
-  function recordBallKeyframes(ball: Ball): void {
-    const dm = deps.lazyDemoManager();
-    if (!dm?.isRecording) return;
-    ball.onBounce = (pos, vel) => {
-      dm.recordTargetBounce(ball.id, { x: pos.x, y: pos.y, z: pos.z }, { x: vel.x, y: vel.y, z: vel.z }, ball.variant);
-    };
-    ball.onPeak = (pos, vel) => {
-      dm.recordTargetPeak(ball.id, { x: pos.x, y: pos.y, z: pos.z }, { x: vel.x, y: vel.y, z: vel.z }, ball.variant);
-    };
-  }
-
-  // Server-owned ball lifecycle (ballSpawn/ballSegment/ballDie handlers +
-  // the stamped-sim-time clock) lives in game/netBalls.ts.
-  const netBalls = createNetBalls(deps, { balls, targets, nuggets }, logger);
-  const { serverBalls, netBallSpawn, netBallSegment, netBallDie, netBallRoster, netTargetPosFor } = netBalls;
-  const netCrawlers = createNetCrawlers(deps, { crawlers, scarabs, rakks, rollers, gnats, snakes, banelings, totems, targets });
-  const { netCrawlSpawn, netCrawlEvt, netCrawlDie, netCrawlRoster } = netCrawlers;
-
-  // ---- Balls ----
-  function spawnBall(): void {
-    const dm = deps.lazyDemoManager();
-    if (dm?.isPlaying) return; // skip normal spawning during demo playback
-    if (serverBalls()) return; // connected: the server owns ball spawning
-    if (atCap(balls, BALL_MAX)) return;
-    // Classic mode is plain bouncy balls — no elites, no variants
-    spawnBallOfVariant(CLASSIC_MODE ? 0 : pickVariant());
-  }
-
-  // Shared spawn path — director events need to spawn specific variants
-  function spawnBallOfVariant(variant: 0 | 1 | 2 | 3): Ball {
-    const dm = deps.lazyDemoManager();
-    const ball = new Ball(scene, deps.lazyTerrain(), variant);
-    balls.push(ball);
-    targets.push(ball);
-    if (ball.variant === 3) ball.onDeath = (t) => spawnSplitChildren(t);
-    if (dm?.isRecording) {
-      dm.recordTargetSpawned(ball.id, { x: ball.pos.x, y: ball.pos.y, z: ball.pos.z }, { x: ball.vel.x, y: ball.vel.y, z: ball.vel.z }, ball.variant);
-      recordBallKeyframes(ball);
-    }
-    return ball;
-  }
-
-  // Director-friendly spawn — an elite on demand (skips the cap: events
-  // are authored moments, the population cap is for ambient trickle)
-  function spawnEliteBall(): void {
-    if (deps.lazyDemoManager()?.isPlaying) return;
-    if (serverBalls()) return;
-    spawnBallOfVariant(3);
-  }
-
-  // Elite death: two variant-0 balls burst out of the corpse with divergent
-  // velocities. Kill-it-close = you're suddenly fighting two balls point-blank;
-  // kill-it-far = free loot. The decision IS the mechanic.
-  function spawnSplitChildren(t: Targetable): void {
-    if (deps.lazyDemoManager()?.isPlaying) return;
-    if (serverBalls()) return;
-    const dm = deps.lazyDemoManager();
-    for (let k = 0; k < 2; k++) {
-      const child = new Ball(scene, deps.lazyTerrain(), 0);
-      const a = Math.random() * Math.PI * 2;
-      child.pos.copy(t.pos);
-      child.vel.set(Math.cos(a) * 14, 9 + Math.random() * 6, Math.sin(a) * 14);
-      balls.push(child);
-      targets.push(child);
-      if (dm?.isRecording) {
-        dm.recordTargetSpawned(child.id, { x: child.pos.x, y: child.pos.y, z: child.pos.z }, { x: child.vel.x, y: child.vel.y, z: child.vel.z }, child.variant);
-        recordBallKeyframes(child);
-      }
-    }
-  }
-
-  function updateBalls(dt: number): void {
-    const dm = deps.lazyDemoManager();
-    if (dm?.isPlaying) {
-      deps.updateBallsPlayback(dt);
-      return;
-    }
-
-    const netMode = serverBalls();
-    ballTimer += dt;
-    if (!netMode && ballTimer >= BALL_SPAWN_INTERVAL) {
-      ballTimer = 0;
-      spawnBall();
-    }
-
-    Ball.viewPos.copy(camera.position); // feeds billboarded ball ribbon trails
-    for (let i = balls.length - 1; i >= 0; i--) {
-      const b = balls[i]!;
-      if (netMode && !b.netDriven && !b.dead) b.netKill(); // cull pre-connect locals
-      b.update(dt, deps.lazyTerrain(), b.netDriven ? netTargetPosFor(b) : aggroFor(b, b.pos, dt, PROFILES.fodder));
-      kickDust(b, dt); // bounce frames puff — airborne frames don't
-      // Only remove ball when trails have fully faded out
-      if (b.disposed) removeTarget(balls, i, b);
-    }
-
-    recordBallSnapshots(dt);
-  }
-
-  // Periodic ball position snapshot for demo recording (every 0.5s)
-  // This ensures clip snapshots for pre-existing balls are never stale
-  function recordBallSnapshots(dt: number): void {
-    const dm = deps.lazyDemoManager();
-    if (!dm?.isRecording) return;
-    ballSnapshotTimer += dt;
-    if (ballSnapshotTimer < 0.5) return;
-    ballSnapshotTimer = 0;
-    for (const b of balls) {
-      if (!b.dead) {
-        dm.recordTargetPeak(b.id, { x: b.pos.x, y: b.pos.y, z: b.pos.z }, { x: b.vel.x, y: b.vel.y, z: b.vel.z }, b.variant);
       }
     }
   }
