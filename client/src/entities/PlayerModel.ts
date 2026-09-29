@@ -69,6 +69,7 @@ export class PlayerModel {
   private handBone: THREE.Bone | null = null;
   private gun: THREE.Group | null = null;
   private gunBaseZ = 0;
+  private gunBaseX = 0; // mannequin attach pitch — recoil adds on top
   private gunKickZ = 0;
   private recoil = 0;
   private muzzleFlash: THREE.Sprite | null = null;
@@ -84,6 +85,32 @@ export class PlayerModel {
   // the baked clip table into its own mixer once it resolves.
   private currentClipName: string | null = null;
   private playingUAL = false;
+  // Masked aim layer (mannequin): Pistol_Aim_* clips filtered to the
+  // spine/arms/head tracks, layered over whatever locomotion clip the legs
+  // are running — remotes always hold the weapon up, even mid-sprint. The
+  // aim clips cover ~±55° of pitch; the procedural aimBones pitch applies
+  // only the residual beyond that so extreme aim still lands.
+  private aimUp: THREE.AnimationAction | null = null;
+  private aimNeutral: THREE.AnimationAction | null = null;
+  private aimDown: THREE.AnimationAction | null = null;
+  private static readonly AIM_CLIP_RAD = 0.95; // pitch where Up/Down reaches full weight
+  // Clips the aim layer rides under: everything EXCEPT full-body oneshots
+  // (shoot/hit/death own the arms — the layer weights to 0 for them) and
+  // the Pistol_Aim_* sources themselves (they'd be stripped empty before
+  // buildAimLayer could mask them).
+  private static isLayeredClip(name: string): boolean {
+    return !name.includes('Aim') && !name.startsWith('Death') &&
+      !name.startsWith('Hit_') && name !== 'Pistol_Shoot';
+  }
+  // Arms only — spine/neck/head stay with the locomotion clip so the
+  // torso keeps its run-bob and sway (owning them froze the torso over
+  // running legs, which read as sliding). Aim pitch on the torso comes
+  // from the procedural aimBones pass instead.
+  private static readonly AIM_BONE_MASK = new Set([
+    'defshoulderl', 'defshoulderr',
+    'defupperarml', 'defupperarmr', 'defforearml', 'defforearmr',
+    'defhandl', 'defhandr',
+  ]);
   // Foot bones are IK targets detached from the leg chain — retargeted
   // clips leave them frozen mid-air. When a UAL clip plays, snap each foot
   // to its shin tip (the *_end leaf node follows the skinned leg).
@@ -127,89 +154,7 @@ export class PlayerModel {
           : '/assets/models/RobotExpressive.glb',
         (gltf) => {
           if (this._disposed) { resolve(); return; }
-          this.model = gltf.scene;
-          
-          // Log model bounding box for hitbox calibration
-          const box = new THREE.Box3().setFromObject(this.model);
-          const size = box.getSize(new THREE.Vector3());
-          const min = box.min;
-          const max = box.max;
-          logger.debug(`Model bounding box: size=(${size.x.toFixed(2)},${size.y.toFixed(2)},${size.z.toFixed(2)}) min=(${min.x.toFixed(2)},${min.y.toFixed(2)},${min.z.toFixed(2)}) max=(${max.x.toFixed(2)},${max.y.toFixed(2)},${max.z.toFixed(2)})`);
-          
-          // Enable shadow casting + grab aim/attachment bones
-          this.model.traverse((child) => this.prepareChild(child));
-          logger.debug(`Aim bones: ${this.aimBones.map(b => b.bone.name).join(', ') || 'NONE'} | hand: ${this.handBone?.name ?? 'NONE'}`);
-
-          // Scale and rotate to match our coordinate system
-          // Model bounding box at scale 1.0: x: 3.2, y: 4.8, z: 3.2
-          // At scale 0.5: x: 1.6, y: 2.4, z: 1.6
-          // Hitbox: radius 0.8 (width 1.6), height 2.0
-          // Scale factor 0.5 matches width, but model is taller (2.4 vs 2.0)
-          // RobotExpressive.glb origin is at feet (y=0), not center
-          this.model.scale.setScalar(mann || knight ? 2.0 / size.y : 0.5); // mannequin+knight: fit the 2m capsule — robot stays at its calibrated 0.5
-          this.model.rotation.y = Math.PI; // Face forward
-          this.modelScale = mann || knight ? 2.0 / size.y : 0.5;
-
-          // Procedural gun in the right hand — follows every animation.
-          if (this.handBone) this.attachGun(mann);
-          else logger.warn('GUN NOT ATTACHED — no hand bone found');
-          
-          // No Y offset needed — model origin is already at feet
-          
-          // Set up animation mixer
-          this.mixer = new THREE.AnimationMixer(this.model);
-          
-          // Store animations with mapping. Mannequin clips ARE the UAL
-          // clips natively — alias them under the UAL_ names the state map
-          // prefers so ANIM_NAMES resolves without a retarget pass.
-          for (const clip of gltf.animations) this.registerClip(clip, mann, knight);
-          
-          logger.debug('Loaded animations:', Array.from(this.animations.keys()));
-          
-          this._loaded = true;
-          // Start with whatever the last request was (remotes spawn mid-
-          // load and ask for Running/Walking before the mixer exists).
-          this.playAnimation(this._queuedAnim ?? (mann ? 'UAL_Idle_Loop' : 'Idle'));
-          this._queuedAnim = null;
-
-          // Retargeted UAL clips arrive async — a native clip plays until
-          // they land, then the current state re-resolves onto the better
-          // clip. Cached globally so only the first model pays the bake.
-          // The mannequin binds UAL clips natively and the knight ships
-          // its own set — neither pays a retarget pass.
-          // Robot-only: its UAL2 retarget reads clean. The mannequin tried
-          // the same bake — UE bone-axis conventions (X-along-bone vs the
-          // Rigify Y-along) bake a face-down slide; its Crouch_Fwd tuck
-          // reads better, so it skips the pass. Knight is native-only.
-          if (!mann && !knight) this.retargetUAL();
-          
-          this.scene.add(this.model);
-          logger.debug('MODEL ADDED to scene', { children: this.scene.children.length });
-
-          // Create collider gizmo (wireframe capsule for hitbox visualization)
-          // Uses same constants as collision detection — single source of truth in config.ts
-          // CapsuleGeometry(radius, cylinderHeight, ...) — cylinderHeight excludes hemispheres
-          // Model is scaled by 0.5, so divide by scale to get correct world size
-          const colliderGeo = new THREE.CapsuleGeometry(PLAYER_RADIUS / this.modelScale, CAPSULE_CYLINDER_HEIGHT / this.modelScale, 4, 16);
-          const colliderMat = new THREE.MeshBasicMaterial({
-            color: 0x00ff00,
-            wireframe: true,
-            transparent: true,
-            opacity: 0.3,
-            depthTest: false // Always render on top
-          });
-          this.colliderGizmo = new THREE.Mesh(colliderGeo, colliderMat);
-          // Capsule center is at feet + CAPSULE_CENTER_Y (half PLAYER_HEIGHT)
-          // Model origin is at feet, model is scaled by 0.5
-          // So local y = CAPSULE_CENTER_Y / 0.5
-          this.colliderGizmo.position.y = CAPSULE_CENTER_Y / this.modelScale;
-          this.colliderGizmo.renderOrder = 999; // Render last (on top)
-          // Hitbox visualization is a debug overlay — same flag as the
-          // AOE blast wireframes (menu DEBUG toggle / ?debug).
-          this.colliderGizmo.visible = urlParams.debug;
-          this.model.add(this.colliderGizmo); // Add as child of model so it moves with it
-          logger.debug('COLLIDER GIZMO ADDED to model', { children: this.scene.children.length });
-
+          this.onModelLoaded(gltf, mann, knight);
           resolve();
         },
         (xhr) => {
@@ -232,6 +177,92 @@ export class PlayerModel {
       };
       attempt();
     });
+  }
+
+  private onModelLoaded(gltf: { scene: THREE.Group; animations: THREE.AnimationClip[] }, mann: boolean, knight: boolean): void {
+    this.model = gltf.scene;
+
+    // Log model bounding box for hitbox calibration
+    const box = new THREE.Box3().setFromObject(this.model);
+    const size = box.getSize(new THREE.Vector3());
+    const min = box.min;
+    const max = box.max;
+    logger.debug(`Model bounding box: size=(${size.x.toFixed(2)},${size.y.toFixed(2)},${size.z.toFixed(2)}) min=(${min.x.toFixed(2)},${min.y.toFixed(2)},${min.z.toFixed(2)}) max=(${max.x.toFixed(2)},${max.y.toFixed(2)},${max.z.toFixed(2)})`);
+
+    // Enable shadow casting + grab aim/attachment bones
+    this.model.traverse((child) => this.prepareChild(child));
+    logger.debug(`Aim bones: ${this.aimBones.map(b => b.bone.name).join(', ') || 'NONE'} | hand: ${this.handBone?.name ?? 'NONE'}`);
+
+    // Scale and rotate to match our coordinate system
+    // Model bounding box at scale 1.0: x: 3.2, y: 4.8, z: 3.2
+    // At scale 0.5: x: 1.6, y: 2.4, z: 1.6
+    // Hitbox: radius 0.8 (width 1.6), height 2.0
+    // Scale factor 0.5 matches width, but model is taller (2.4 vs 2.0)
+    // RobotExpressive.glb origin is at feet (y=0), not center
+    this.model.scale.setScalar(mann || knight ? 2.0 / size.y : 0.5); // mannequin+knight: fit the 2m capsule — robot stays at its calibrated 0.5
+    this.model.rotation.y = Math.PI; // Face forward
+    this.modelScale = mann || knight ? 2.0 / size.y : 0.5;
+
+    // Procedural gun in the right hand — follows every animation.
+    if (this.handBone) this.attachGun(mann);
+    else logger.warn('GUN NOT ATTACHED — no hand bone found');
+
+    // No Y offset needed — model origin is already at feet
+
+    // Set up animation mixer
+    this.mixer = new THREE.AnimationMixer(this.model);
+
+    // Store animations with mapping. Mannequin clips ARE the UAL
+    // clips natively — alias them under the UAL_ names the state map
+    // prefers so ANIM_NAMES resolves without a retarget pass.
+    for (const clip of gltf.animations) this.registerClip(clip, mann, knight);
+    if (mann) this.buildAimLayer();
+
+    logger.debug('Loaded animations:', Array.from(this.animations.keys()));
+
+    this._loaded = true;
+    // Start with whatever the last request was (remotes spawn mid-
+    // load and ask for Running/Walking before the mixer exists).
+    this.playAnimation(this._queuedAnim ?? (mann ? 'UAL_Pistol_Idle_Loop' : 'Idle'));
+    this._queuedAnim = null;
+
+    // Retargeted UAL clips arrive async — a native clip plays until
+    // they land, then the current state re-resolves onto the better
+    // clip. Cached globally so only the first model pays the bake.
+    // The mannequin binds UAL clips natively and the knight ships
+    // its own set — neither pays a retarget pass.
+    // Robot-only: its UAL2 retarget reads clean. The mannequin tried
+    // the same bake — UE bone-axis conventions (X-along-bone vs the
+    // Rigify Y-along) bake a face-down slide; its Crouch_Fwd tuck
+    // reads better, so it skips the pass. Knight is native-only.
+    if (!mann && !knight) this.retargetUAL();
+
+    this.scene.add(this.model);
+    logger.debug('MODEL ADDED to scene', { children: this.scene.children.length });
+
+    // Create collider gizmo (wireframe capsule for hitbox visualization)
+    // Uses same constants as collision detection — single source of truth in config.ts
+    // CapsuleGeometry(radius, cylinderHeight, ...) — cylinderHeight excludes hemispheres
+    // Model is scaled by 0.5, so divide by scale to get correct world size
+    const colliderGeo = new THREE.CapsuleGeometry(PLAYER_RADIUS / this.modelScale, CAPSULE_CYLINDER_HEIGHT / this.modelScale, 4, 16);
+    const colliderMat = new THREE.MeshBasicMaterial({
+      color: 0x00ff00,
+      wireframe: true,
+      transparent: true,
+      opacity: 0.3,
+      depthTest: false // Always render on top
+    });
+    this.colliderGizmo = new THREE.Mesh(colliderGeo, colliderMat);
+    // Capsule center is at feet + CAPSULE_CENTER_Y (half PLAYER_HEIGHT)
+    // Model origin is at feet, model is scaled by 0.5
+    // So local y = CAPSULE_CENTER_Y / 0.5
+    this.colliderGizmo.position.y = CAPSULE_CENTER_Y / this.modelScale;
+    this.colliderGizmo.renderOrder = 999; // Render last (on top)
+    // Hitbox visualization is a debug overlay — same flag as the
+    // AOE blast wireframes (menu DEBUG toggle / ?debug).
+    this.colliderGizmo.visible = urlParams.debug;
+    this.model.add(this.colliderGizmo); // Add as child of model so it moves with it
+    logger.debug('COLLIDER GIZMO ADDED to model', { children: this.scene.children.length });
   }
 
   // Per-node load prep: mesh shadows/frustum fix + flash material capture,
@@ -308,9 +339,10 @@ export class PlayerModel {
     this.gunKickZ = 0.15 / ws.x; // recoil distance in bone units
     this.gun.position.set(0, 0.05 / ws.x, this.gunBaseZ);
     // Robot palm bones: barrel forward = local -Z flipped by π yaw.
-    // UAL hand bones: barrel runs along the arm axis — +Y bone yaw
-    // (verified in the gun-probe rotation sweep).
-    if (mann) this.gun.rotation.y = Math.PI / 2; // verified via gun-probe gallery: barrel runs along the arm's aim axis
+    // UAL hand bones (measured via gun-math probe under the live aim
+    // pose): barrel -X on plain yaw is the sideways look. X-90 sends the
+    // barrel forward along the aim axis; Z180 rolls the top rail back up.
+    if (mann) { this.gun.rotation.set(Math.PI / 2, 0, 0); this.gunBaseX = Math.PI / 2; }
     else this.gun.rotation.y = Math.PI;
 
     // Muzzle flash: additive sprite at the barrel tip, flashed on
@@ -344,10 +376,43 @@ export class PlayerModel {
         const v = tr.values;
         for (let i = 3; i < v.length; i += 3) { v[i] = v[0]; v[i + 2] = v[2]; }
       }
+      // Mannequin: strip the masked arm tracks from looping clips so the
+      // aim layer owns the weapon hold outright — otherwise locomotion
+      // and the aim layer blend 50/50 and the gun ends up parked on the
+      // shoulder. Spine/neck/head stay so the torso keeps its run-bob. Full-body oneshots (shoot/hit/death)
+      // keep every track; the aim layer drops to weight 0 while they run.
+      if (mann && PlayerModel.isLayeredClip(clip.name)) {
+        clip.tracks = clip.tracks.filter(t =>
+          !PlayerModel.AIM_BONE_MASK.has(normBone(t.name.slice(0, t.name.indexOf('.')))));
+      }
     }
     const action = this.mixer!.clipAction(clip);
     this.animations.set(clip.name, action);
     if (mann) this.animations.set('UAL_' + clip.name, action);
+  }
+
+  /** Build the masked aim layer: Pistol_Aim_* clips filtered down to
+   *  the arm chain so they pose the weapon hold over any locomotion clip. LoopOnce+clamp — they are static poses, so they
+   *  play once and hold at full weight set per frame from aimPitch. */
+  private buildAimLayer(): void {
+    const mk = (name: string): THREE.AnimationAction | null => {
+      const src = this.animations.get(name)?.getClip();
+      if (!src) return null;
+      const tracks = src.tracks.filter(t =>
+        PlayerModel.AIM_BONE_MASK.has(normBone(t.name.slice(0, t.name.indexOf('.')))));
+      if (!tracks.length) return null;
+      const clip = new THREE.AnimationClip(name + '.aim', src.duration, tracks);
+      const a = this.mixer!.clipAction(clip);
+      a.setLoop(THREE.LoopOnce, 1);
+      a.clampWhenFinished = true;
+      a.setEffectiveWeight(0);
+      a.play();
+      return a;
+    };
+    this.aimUp = mk('Pistol_Aim_Up') ?? mk('UAL_Pistol_Aim_Up');
+    this.aimNeutral = mk('Pistol_Aim_Neutral') ?? mk('UAL_Pistol_Aim_Neutral');
+    this.aimDown = mk('Pistol_Aim_Down') ?? mk('UAL_Pistol_Aim_Down');
+    if (!this.aimNeutral) logger.debug('Aim layer unavailable — no Pistol_Aim clips');
   }
 
   playAnimation(name: string): void {
@@ -414,12 +479,20 @@ export class PlayerModel {
       this.playAnimation(KNIGHT_ANIMS[state]);
       return;
     }
-    // Mannequin has no native slide clip — ski rides the tucked Crouch_Fwd
-    // (the UAL2 retarget exists but bakes limb-axis artifacts on this rig).
     const [ual, fallback] = ANIM_NAMES[state];
-    if (this.variant === 'mannequin' && state === 'ski') {
-      this.playAnimation(this.animations.has('UAL_Crouch_Fwd_Loop') ? 'UAL_Crouch_Fwd_Loop' : 'Crouch_Fwd_Loop');
-      return;
+    if (this.variant === 'mannequin') {
+      // Mannequin has no native slide clip — ski rides the tucked Crouch_Fwd
+      // (the UAL2 retarget exists but bakes limb-axis artifacts on this rig).
+      if (state === 'ski') {
+        this.playAnimation(this.animations.has('UAL_Crouch_Fwd_Loop') ? 'UAL_Crouch_Fwd_Loop' : 'Crouch_Fwd_Loop');
+        return;
+      }
+      // Default stance is armed — the relaxed Idle_Loop dangles the gun at
+      // the thigh; Pistol_Idle holds it raised and reads as "in combat".
+      if (state === 'idle' && this.animations.has('UAL_Pistol_Idle_Loop')) {
+        this.playAnimation('UAL_Pistol_Idle_Loop');
+        return;
+      }
     }
     // Prefer the retargeted clip; fall back to the native emote until the
     // UAL bake lands (or forever if the retarget failed).
@@ -452,12 +525,27 @@ export class PlayerModel {
     for (const ab of this.aimBones) {
       ab.bone.quaternion.multiply(_pitchQuat.copy(ab.last).invert());
     }
+    // Masked aim layer — weights must land BEFORE mixer.update samples the
+    // pose. Suppressed while a full-body oneshot (shoot/hit/death) owns the
+    // arms so it doesn't fight the reaction pose.
+    let procPitch = this.aimPitch;
+    if (this.aimNeutral) {
+      const t = Math.max(-1, Math.min(1, this.aimPitch / PlayerModel.AIM_CLIP_RAD));
+      const oneshot = !!this.currentAction?.isRunning() &&
+        (!!this.currentClipName && (ONESHOT_CLIPS.has(this.currentClipName) || this.currentClipName === 'UAL_Death01'));
+      const w = oneshot ? 0 : 1;
+      this.aimNeutral.setEffectiveWeight((1 - Math.abs(t)) * w);
+      this.aimUp?.setEffectiveWeight(Math.max(0, t) * w);
+      this.aimDown?.setEffectiveWeight(Math.max(0, -t) * w);
+      // The clips cover ±AIM_CLIP_RAD; procedural pitch tops up the rest.
+      procPitch = this.aimPitch - t * PlayerModel.AIM_CLIP_RAD;
+    }
     if (this.mixer) {
       this.mixer.update(dt);
     }
     for (const ab of this.aimBones) {
       // Negative X tilts up for positive pitch (looking up)
-      ab.last.setFromAxisAngle(X_AXIS, -this.aimPitch * ab.factor);
+      ab.last.setFromAxisAngle(X_AXIS, -procPitch * ab.factor);
       ab.bone.quaternion.multiply(ab.last);
     }
     this.snapFeetToShins();
@@ -487,7 +575,7 @@ export class PlayerModel {
       this.recoil = Math.max(0, this.recoil - dt * 7);
       const k = this.recoil * this.recoil; // snappy attack, soft release
       this.gun.position.z = this.gunBaseZ - k * this.gunKickZ;
-      this.gun.rotation.x = -k * 0.45;
+      this.gun.rotation.x = this.gunBaseX - k * 0.45;
     }
     if (this.muzzleFlash && this.flashTTL > 0) {
       this.flashTTL = Math.max(0, this.flashTTL - dt);

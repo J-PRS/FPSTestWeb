@@ -13,7 +13,7 @@ import { AoeGizmo } from '../effects/aoeGizmo.js';
 import { Implosion } from '../effects/implosion.js';
 import { ScorchDecal } from '../effects/scorch.js';
 import { Projectile, type SweepObstacle } from '../projectiles/Projectile.js';
-import { computeAccuracy, BOMBLET_CONFIG } from '../projectiles/index.js';
+import { computeAccuracy, BOMBLET_CONFIG, getProjectileConfig } from '../projectiles/index.js';
 import type { FragMessages } from '../ui/FragMessages.js';
 import * as sfx from '../core/sfx.js';
 import type { HealthBarSystem } from '../ui/HealthBarSystem.js';
@@ -113,6 +113,8 @@ export interface ExplosionArgs {
   explosionTint?: string | number;
   /** Decoupled from gameplay `radius` — damage covers the shock ring. */
   vfxRadius?: number;
+  /** Impact VFX override ('splash') — resolved from weaponType when unset. */
+  vfx?: 'splash';
   /** Kill attribution — railgun refunds its cooldown. */
   weaponType?: number;
 }
@@ -127,14 +129,17 @@ interface CombatCtx {
 // ---- Projectile explosion processing (push or pull based on config) ----
 // VFX radius is decoupled from gameplay radius — aoeRadius intentionally
 // exceeds the visual dome so damage covers the shock ring, not just the dome.
-function processProjectileExplosion(c: CombatCtx, a: ExplosionArgs): void {
+// Blast presentation layer: explosion/implosion entity, positional audio,
+// screenshake, and the terrain scorch decal. All visuals, no gameplay.
+function blastFx(c: CombatCtx, a: ExplosionArgs): void {
   const deps = c.deps;
-  const { pos, radius, force, forceMode, aoeDamage } = a;
+  const { pos, radius, forceMode } = a;
   const directHit = a.directHit ?? false;
   const vfx = a.vfxRadius ?? radius;
-  // Explosion/implosion visual + scorch decal on the terrain below the blast
+  // Impact VFX variant — config-driven (sprinkler splashes, doesn't burn)
+  const vfxKind = a.vfx ?? (a.weaponType !== undefined ? getProjectileConfig(a.weaponType)?.vfx : undefined);
   if (forceMode === 'push') {
-    deps.world.explosions.push(new Explosion(deps.lazyScene(), pos, directHit, a.age ?? 0, deps.lazyTerrain(), vfx / ROCKET_RADIUS, a.explosionTint));
+    deps.world.explosions.push(new Explosion(deps.lazyScene(), pos, directHit, a.age ?? 0, deps.lazyTerrain(), vfx / ROCKET_RADIUS, a.explosionTint, vfxKind));
     sfx.explosionAt(pos, directHit, a.weaponType);
     screenShake.blast(pos, vfx, deps.lazyPlayer().pos);
   } else {
@@ -143,14 +148,21 @@ function processProjectileExplosion(c: CombatCtx, a: ExplosionArgs): void {
     screenShake.blast(pos, vfx * 0.5, deps.lazyPlayer().pos);
   }
   // Scorch only when the blast is near the ground — a midair hit would
-  // otherwise paint a phantom mark on terrain far below.
-  if (pos.y - deps.lazyTerrain().getHeight(pos.x, pos.z) <= vfx) {
+  // otherwise paint a phantom mark on terrain far below. Water doesn't
+  // scorch: splash blasts skip the decal entirely.
+  if (vfxKind !== 'splash' && pos.y - deps.lazyTerrain().getHeight(pos.x, pos.z) <= vfx) {
     if (deps.world.scorches.length >= SCORCH_MAX) {
       deps.world.scorches.shift()!.dispose();
     }
     deps.world.scorches.push(new ScorchDecal(deps.lazyScene(), deps.lazyTerrain(), pos, vfx * 0.6));
   }
   if (AOE_DEBUG) deps.world.aoeGizmos.push(new AoeGizmo(deps.lazyScene(), pos, radius));
+}
+
+function processProjectileExplosion(c: CombatCtx, a: ExplosionArgs): void {
+  const deps = c.deps;
+  const { pos, radius, force, forceMode, aoeDamage } = a;
+  blastFx(c, a);
 
   // Record explosion for death impulse calculation
   deps.explosionTracker.addExplosion(pos, force, a.shooterId || deps.lazyNetworkManager().getLocalPlayerId());
@@ -213,8 +225,12 @@ function prunePendingShots(c: CombatCtx): void {
 function collectBoltIntercept(c: CombatCtx, p: Projectile): void {
   const deps = c.deps;
   if (!p.hitBolt || !deps.consumeBolt) return;
+  const bolt = p.hitBolt;
+  // Consume once — an exploded projectile lives on until its trail fades,
+  // and an uncleared hitBolt would re-fire the mega blast every frame.
+  p.hitBolt = null;
   const at = p.hitPointValid ? p.hitPoint : p.pos;
-  deps.consumeBolt(p.hitBolt);
+  deps.consumeBolt(bolt);
   boltCookoff(c, at);
   if (!deps.cookBoltsNear) return;
   let frontier = deps.cookBoltsNear(at, BOLT_CHAIN_RADIUS);
@@ -333,7 +349,7 @@ function spawnVisualOnly(c: CombatCtx, p: Projectile): void {
     if (!p.hitBall && !p.hitPlayerId) deps.lazyEffects().spawnBulletMark(pos);
     return;
   }
-  deps.world.explosions.push(new Explosion(deps.lazyScene(), pos, p.directHit, p.age, deps.lazyTerrain(), p.explosionRadius / ROCKET_RADIUS, p.config.damageColor));
+  deps.world.explosions.push(new Explosion(deps.lazyScene(), pos, p.directHit, p.age, deps.lazyTerrain(), p.explosionRadius / ROCKET_RADIUS, p.config.damageColor, p.config.vfx));
   sfx.explosionAt(pos, p.directHit);
 }
 

@@ -196,14 +196,18 @@ function syncFog(deps: GameLoopDeps, terrain: Terrain): void {
 /** Stage 1 — world sim: player, terrain, entities, wave director,
  *  projectiles. Returns demoPaused for the later stages. */
 interface TickFrame { dt: number; player: Player; networkManager: NetworkManager; demoManager: DemoManager | null }
+const fmtBps = (b: number) => b >= 1048576 ? `${(b / 1048576).toFixed(1)}MB/s` : b >= 1024 ? `${(b / 1024).toFixed(1)}KB/s` : `${Math.round(b)}B/s`;
 function simTick(deps: GameLoopDeps, perf: ReturnType<typeof createPerfHud>, f: TickFrame, terrain: Terrain): boolean {
-  const { dt, player, networkManager, demoManager } = f;
+  const { dt, player, demoManager } = f;
   player.update(dt);
   terrain.update(player.pos.x, player.pos.z);
   syncFog(deps, terrain);
 
-  // Position send even when hidden — the server needs liveness.
-  if (networkManager.isConnected() && !player.isDead && !demoManager?.isPlaying) {
+  // Position send even when hidden — the server needs liveness. Runs
+  // unconditionally: sends no-op while disconnected (ws?.connected()
+  // guards inside), but gating the whole tick on the socket froze every
+  // remote/bot indicator mid-screen for the life of a flap.
+  if (!player.isDead && !demoManager?.isPlaying) {
     deps.remotes().networkTick(dt);
   }
   perf.mark('player');
@@ -404,7 +408,11 @@ export function createGameLoop(deps: GameLoopDeps) {
     perf.mark('hud');
 
     renderFrame(fxDt); // damage numbers ride fxDt — same hidden-tab decay fix
-    perf.end(deps.rendererSetup.renderer, () => `tgt ${deps.entities.targets.length} rem ${deps.world.remotePlayers.size}`);
+    perf.end(deps.rendererSetup.renderer, () => {
+      const bw = deps.lazyNetworkManager().bandwidth();
+      return `tgt ${deps.entities.targets.length} rem ${deps.world.remotePlayers.size}\n` +
+        `net ↑${fmtBps(bw.up)} ↓${fmtBps(bw.down)}`;
+    });
   }
 
   function renderFrame(dt: number): void {
