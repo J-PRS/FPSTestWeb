@@ -29,6 +29,14 @@ const RETARGET_INTERVAL = CRAWLER_SIM.RETARGET_S;
 const RESYNC_INTERVAL = 4.0;
 const CRAWLER_BITE_DAMAGE = 25;
 const _snap: SimVec = { x: 0, y: 0, z: 0 };
+// Distance-tiered send: committed edges only matter to players who can
+// see the crawler. Everyone still replays the same sim stream — far
+// clients just ride an older committed snapshot longer, which is safe
+// because the sim only diverges at decisions and retargets are the
+// decisions. NEAR = full fidelity; FAR = every 4th edge (~8s cadence at
+// retarget rate).
+const NEAR_D2 = 80 * 80;
+const FAR_SKIP = 4;
 
 export class CreatureSim {
   private field: Heightfield | null = null;
@@ -37,6 +45,8 @@ export class CreatureSim {
   private retargetAcc = new Map<number, number>();
   private resyncAcc = new Map<number, number>();
   private broadcast: (msg: ServerMessage) => void;
+  private sendTo: ((playerId: string, msg: ServerMessage) => void) | null = null;
+  private edgeSeq = new Map<number, number>();
   private players: PlayerManager;
   private timer: ReturnType<typeof setInterval> | null = null;
   private simTime = 0;
@@ -54,9 +64,10 @@ export class CreatureSim {
 
   dormant = false;
 
-  constructor(players: PlayerManager, broadcast: (msg: ServerMessage) => void) {
+  constructor(players: PlayerManager, broadcast: (msg: ServerMessage) => void, sendTo?: (playerId: string, msg: ServerMessage) => void) {
     this.players = players;
     this.broadcast = broadcast;
+    this.sendTo = sendTo ?? null;
   }
 
   attachField(field: Heightfield): void {
@@ -144,12 +155,24 @@ export class CreatureSim {
 
   private edge(c: SimCrawler, kind: 'retarget' | 'windup' | 'pounce' | 'bite'): void {
     this.resyncAcc.set(c.id, 0);
-    this.broadcast({
+    const msg: ServerMessage = {
       type: 'crawlEvt', id: c.id, kind,
       position: { x: c.x, y: c.y, z: c.z },
       velocity: { x: c.vx, y: c.vy, z: c.vz },
       targetId: c.targetId, tp: this.targetSnap(c), t: this.simTime,
-    });
+    };
+    if (!this.sendTo) { this.broadcast(msg); return; }
+    const n = (this.edgeSeq.get(c.id) ?? 0) + 1;
+    this.edgeSeq.set(c.id, n);
+    // The every-4th edge doubles as the resync: broadcast it so far
+    // players AND watchers (no player record → unreachable via sendTo)
+    // ride the same cadence; near players get every edge on top.
+    if (n % FAR_SKIP === 0) { this.broadcast(msg); return; }
+    for (const [pid, p] of this.players.getAllPlayers()) {
+      const d2 = (p.position.x - c.x) ** 2 + (p.position.z - c.z) ** 2;
+      if (d2 > NEAR_D2) continue;
+      this.sendTo(pid, msg);
+    }
   }
 
   /** crawlerHit claim — mirrors BallSim.handleHit (lenient clamps, the

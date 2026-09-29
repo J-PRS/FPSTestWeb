@@ -209,7 +209,11 @@ export class Room {
     // Server-authoritative melee species — the crawl* wire events are the
     // state-edge stream (retarget/windup/pounce/bite/die); clients replay
     // the seeded hop sim between them.
-    this.creatureSim = new CreatureSim(this.players, (msg) => this.connections.broadcast(msg));
+    this.creatureSim = new CreatureSim(
+      this.players,
+      (msg) => this.connections.broadcast(msg),
+      (pid, msg) => this.connections.sendToPlayer(pid, msg),
+    );
     this.creatureSim.pop = this.spec.creatures?.crawler ?? 0;
     this.creatureSim.onBite = (_c, targetId) => this.messages.crawlerBite(targetId, 25);
     this.creatureSim.onKilled = (by, pos) => this.creatureKill(by, pos, 0);

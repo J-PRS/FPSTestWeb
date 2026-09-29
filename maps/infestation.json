@@ -7,6 +7,9 @@
   },
   "terrain": "swarm.bin",
   "bots": 6,
+  "creatures": {
+    "crawler": 8
+  },
   "ambient": {
     "crawler": 40,
     "scarab": 24,
