@@ -246,6 +246,11 @@ export function createGameLoop(deps: GameLoopDeps) {
     const demoPaused = tickDemo(dt);
     if (demoPaused) return true;
 
+    tickEntities(dt, demoManager?.isPlaying ?? false);
+    return false;
+  }
+
+  function tickEntities(dt: number, demoPlaying: boolean): void {
     const entities = deps.entities;
     entities.updateBalls(dt);
     perf.mark('balls');
@@ -256,14 +261,13 @@ export function createGameLoop(deps: GameLoopDeps) {
       entities.updateDeployables(dt);
     }
     perf.mark('species');
-    if (!demoManager?.isPlaying) deps.waveDirector().update(dt);
-    if (!demoManager?.isPlaying) entities.updateNuggets(dt);
+    if (!demoPlaying) deps.waveDirector().update(dt);
+    if (!demoPlaying) entities.updateNuggets(dt);
     deps.teamBots?.()?.update(dt);
     perf.mark('bots');
-    if (!demoManager?.isPlaying) deps.combat()?.updateProjectiles(dt);
+    if (!demoPlaying) deps.combat()?.updateProjectiles(dt);
     deps.demoLifecycle().updatePlaybackProjectiles(dt);
     perf.mark('proj');
-    return false;
   }
 
   /** Stage 2 — transient VFX on wall-clock fxDt so they decay while the
