@@ -39,6 +39,22 @@ describe('ghost records', () => {
     expect(sent.length).toBeGreaterThanOrEqual(0); // frames did flow above
   });
 
+  it('an idle ghost is still reaped — ghost check must not swallow the reap', () => {
+    const room = mkRoom({ bots: 0 });
+    room.players.addPlayer('staleGhost');
+    const p = room.players.getPlayer('staleGhost');
+    if (!p) throw new Error('no staleGhost');
+    // Silenced far past the idle-kick window with NO position report —
+    // hasReceivedPosition=false would normally short-circuit skipRecord.
+    p.lastSeen = Date.now() - 120_000;
+    // tickRoomNow's onRemove is normally GameServer.removePlayerCompletely —
+    // assert the reap was delegated rather than checking the roster.
+    let reaped = '';
+    const loop = new TickLoop(new Map([['t', room]]), { tickLagMsMax: 0, tickLagMsSum: 0, tickLagSamples: 0, lastTickAt: 0 }, (_room, id, reason) => { reaped = `${id}:${reason}`; });
+    loop.tickRoomNow(room, Date.now());
+    expect(reaped).toBe('staleGhost:idle');
+  });
+
   it('the same human appears once it reports a position', () => {
     const room = mkRoom({ bots: 0 });
     room.players.addPlayer('late');

@@ -260,18 +260,22 @@ export class TickLoop {
 
   /** Every reason a player contributes no record this tick, in order:
    *  grace entries (owned by their removal timeout — reaping here would
-   *  double playerLeft), humans that never reported (menu/lobby — their
-   *  record renders a frozen ghost at the spawn default; bots exempt since
-   *  the sim writes their position), idle reap, and the stale heartbeat —
+   *  double playerLeft), idle reap (before the ghost check or unreported
+   *  dead sockets linger forever), humans that never reported (menu/lobby —
+   *  their record renders a frozen ghost at the spawn default; bots exempt
+   *  since the sim writes their position), and the stale heartbeat —
    *  silent sockets get a 0.5Hz record so clients' stored state (health,
    *  isDead) still converges; gated on THAT player's lastSent, not a shared
    *  clock — a shared timestamp meant only the first stale player in map
    *  order ever heartbeat. */
   private skipRecord(room: Room, playerId: string, p: PlayerState, now: number): boolean {
     if (room.disconnected.has(playerId)) return true;
-    if (!p.isBot && !p.hasReceivedPosition) return true;
     const silenceMs = now - p.lastSeen;
+    // Idle reap FIRST: a menu-sitter's dead socket must still be collected
+    // — checking hasReceivedPosition before this left unreported ghosts
+    // sitting in the roster forever.
     if (this.reapIdle(room, playerId, p, silenceMs)) return true;
+    if (!p.isBot && !p.hasReceivedPosition) return true;
     const lastSent = room.lastSentPositions.get(playerId);
     return silenceMs > 5000 && lastSent !== undefined && now - lastSent.t < 2000;
   }
