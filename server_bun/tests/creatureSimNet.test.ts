@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'bun:test';
 import { CreatureSim } from '../src/CreatureSim.ts';
 import { PlayerManager } from '../src/PlayerManager.ts';
-import { makeSimCrawler, makeSimFlyer, stepFlyer, commitTarget, isFlyerSpecies, makeSimRoller, stepRoller, isRollerSpecies, MELEE_SPECIES, FLYER_SPECIES } from '../../shared/creatureSim.ts';
-import type { SimCrawler, SimFlyer, SimRoller } from '../../shared/creatureSim.ts';
+import { makeSimCrawler, makeSimFlyer, stepFlyer, commitTarget, isFlyerSpecies, makeSimRoller, stepRoller, isRollerSpecies, makeSimSlither, stepSlither, isSlitherSpecies, applySlitherDamage, MELEE_SPECIES, FLYER_SPECIES } from '../../shared/creatureSim.ts';
+import type { SimCrawler, SimFlyer, SimRoller, SimSlither } from '../../shared/creatureSim.ts';
 import type { Heightfield } from '../../shared/heightfield.ts';
 import type { ServerMessage } from '../src/types.ts';
 
@@ -281,5 +281,65 @@ describe('roller family', () => {
     const r = priv.spawnCrawler({ x: 0, y: 0, z: 0 }, 'roller');
     expect('hitCd' in r).toBe(true);
     expect(r.species).toBe('roller');
+  });
+});
+
+describe('slither family (snake)', () => {
+  const field: Heightfield = { size: 1, data: new Uint8Array(1), stride: 1 };
+  const tgt = { x: 8, y: 0.5, z: 0 };
+
+  it('committed target → slither → windup → pounce → bite chain', () => {
+    const s = makeSimSlither(9, 0, 0.5, 0, false, 21, 'snake');
+    commitTarget(s, 'prey', tgt);
+    s.strikeCd = 0;
+    const events: string[] = [];
+    for (let i = 0; i < 120 && events.length < 3; i++) {
+      const ev = stepSlither(s, 0.05, field, tgt, true);
+      if (ev) events.push(ev);
+    }
+    // Coil telegraph → lunge launch → contact bite, in order.
+    expect(events[0]).toBe('windup');
+    expect(events[1]).toBe('pounce');
+    expect(events[2]).toBe('bite');
+    expect(isSlitherSpecies('snake')).toBe(true);
+    expect(isSlitherSpecies('crawler')).toBe(false);
+  });
+
+  it('a hit during windup/lunge breaks the strike', () => {
+    const s = makeSimSlither(10, 0, 0.5, 0, false, 21, 'snake');
+    commitTarget(s, 'prey', tgt);
+    s.strikeCd = 0;
+    for (let i = 0; i < 40 && s.state !== 'windup'; i++) stepSlither(s, 0.05, field, tgt, true);
+    expect(s.state).toBe('windup');
+    applySlitherDamage(s, 5);
+    expect(s.state).toBe('slither'); // strike broken, not bit through it
+  });
+
+  it('authority and predictor replay identically', () => {
+    const a = makeSimSlither(11, 0, 0.5, 0, false, 33, 'snake');
+    const p = makeSimSlither(11, 0, 0.5, 0, false, 33, 'snake');
+    commitTarget(a, 'prey', tgt);
+    commitTarget(p, 'prey', tgt);
+    for (let i = 0; i < 150; i++) {
+      stepSlither(a, 0.05, field, tgt, true);
+      stepSlither(p, 0.05, field, tgt, false);
+      expect(p.x).toBeCloseTo(a.x, 10);
+      expect(p.z).toBeCloseTo(a.z, 10);
+      expect(p.state).toBe(a.state);
+      expect(p.animT).toBeCloseTo(a.animT, 10);
+    }
+  });
+
+  it('server spawnCrawler dispatches snake to makeSimSlither', () => {
+    const { sim } = makeRoom();
+    addPlayerAt(sim, 'p1', 0, 0);
+    const priv = sim as unknown as {
+      field: Heightfield | null;
+      spawnCrawler(near: { x: number; y: number; z: number }, species: string): SimSlither;
+    };
+    priv.field = { size: 1, data: new Uint8Array(1), stride: 1 };
+    const s = priv.spawnCrawler({ x: 0, y: 0, z: 0 }, 'snake');
+    expect('animT' in s).toBe(true);
+    expect(s.species).toBe('snake');
   });
 });

@@ -116,10 +116,16 @@ surface. Detailed research lives in `_reports/`; this file is the current truth.
    climb, seeded LCG + committed snapshots) reuses the same edge kinds —
    windup=fold, pounce=dive launch, bite=claw contact. Rakk is the pilot
    (server-authoritative on infestation, rakk:4); CreatureSim holds a
-   SimBeing union dispatched by family, FLYER_SPECIES stages the gnat
-   row. Port rule: each species family gets ONE shared sim core —
-   hop (crawler/scarab), fly (rakk/gnat), next = roll (Roller) and
-   slither (Snake) cores.
+   SimBeing union dispatched by family. Roll family landed (6e8b01b):
+   SimRoller — continuous XZ steer at committed snapshot + contact bite;
+   no telegraphs, bite-only edges. Gnat closed the flyer family
+   (2687bc7): dart maps onto dive, seeded cooldown replaces the flock
+   nipGate. Five species server-owned on infestation (crawler:6,
+   scarab:8, rakk:4, roller:3, gnat:10) — verified on the wire.
+   Remaining: slither (Snake), stationary (Totem), kamikaze (Baneling).
+   ballSim predictive terrain probes (3c12a28): parabola-scheduled gy
+   sampling — resample at ~60% of predicted impact, on ~2m horizontal
+   drift, or any velocity discontinuity; deterministic, bounded clip.
    `terrain` ref landed: maps/<file>.bin
    heightfields per room (lazy, cached, shared). Shared brain landed:
    shared/botBrain.ts drives offline GameBots AND server bots — one

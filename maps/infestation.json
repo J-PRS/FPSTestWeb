@@ -12,7 +12,8 @@
     "scarab": 8,
     "rakk": 4,
     "roller": 3,
-    "gnat": 10
+    "gnat": 10,
+    "snake": 4
   },
   "ambient": {
     "crawler": 40,

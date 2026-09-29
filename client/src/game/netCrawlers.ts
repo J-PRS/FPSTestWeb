@@ -5,6 +5,7 @@ import { Scarab } from '../entities/Scarab.js';
 import { Rakk } from '../entities/Rakk.js';
 import { Roller } from '../entities/Roller.js';
 import { Gnat } from '../entities/Gnat.js';
+import { Snake } from '../entities/Snake.js';
 import type { Targetable } from '../entities/balls.js';
 import type { SimCrawler, SimFlyer } from '../../../shared/creatureSim.js';
 import type { EntitiesDeps } from './entities.js';
@@ -15,10 +16,11 @@ export interface NetCrawlersCtx {
   rakks: Rakk[];
   rollers: Roller[];
   gnats: Gnat[];
+  snakes: Snake[];
   targets: Targetable[];
 }
 
-type NetBeing = Crawler | Scarab | Rakk | Roller | Gnat;
+type NetBeing = Crawler | Scarab | Rakk | Roller | Gnat | Snake;
 
 // ---- Server-owned crawlers (melee PvE) --------------------------------
 // Connected rooms with a `creatures` map spec run the authoritative hop
@@ -27,7 +29,7 @@ type NetBeing = Crawler | Scarab | Rakk | Roller | Gnat;
 // pattern as netBalls, minus the sim-clock estimation (hops are short
 // arcs; committed edges bound drift tightly enough without it).
 export function createNetCrawlers(deps: EntitiesDeps, ctx: NetCrawlersCtx) {
-  const { crawlers, scarabs, rakks, rollers, gnats, targets } = ctx;
+  const { crawlers, scarabs, rakks, rollers, gnats, snakes, targets } = ctx;
   const netCrawlerById = new Map<number, NetBeing>();
   const serverCreatures = (): boolean => deps.lazyNetworkManager()?.isConnected() ?? false;
 
@@ -38,15 +40,17 @@ export function createNetCrawlers(deps: EntitiesDeps, ctx: NetCrawlersCtx) {
   Rakk.hitClaim = claim;
   Roller.hitClaim = claim;
   Gnat.hitClaim = claim;
+  Snake.hitClaim = claim;
 
   // species → entity class. Hop, flyer and roller species share the same
   // replay path (netMelee.ts); the class only decides the visuals.
-  const ENTITY_FOR: Record<string, typeof Crawler | typeof Scarab | typeof Rakk | typeof Roller | typeof Gnat> = {
+  const ENTITY_FOR: Record<string, typeof Crawler | typeof Scarab | typeof Rakk | typeof Roller | typeof Gnat | typeof Snake> = {
     crawler: Crawler,
     scarab: Scarab,
     rakk: Rakk,
     roller: Roller,
     gnat: Gnat,
+    snake: Snake,
   };
 
   function netCrawlSpawn(m: { id: number; position: { x: number; y: number; z: number }; seed: number; uber: boolean; species?: string; targetId?: string | null; tp?: { x: number; y: number; z: number } | null; state?: string }): void {
@@ -60,6 +64,9 @@ export function createNetCrawlers(deps: EntitiesDeps, ctx: NetCrawlersCtx) {
     } else if (c instanceof Roller) {
       c.bindNet(m.id, m.seed, new THREE.Vector3(m.position.x, m.position.y, m.position.z),
         { x: 0, y: 0, z: 0 }, m.state ?? 'roll', m.uber, m.species ?? 'roller');
+    } else if (c instanceof Snake) {
+      c.bindNet(m.id, m.seed, new THREE.Vector3(m.position.x, m.position.y, m.position.z),
+        { x: 0, y: 0, z: 0 }, m.state ?? 'slither', m.uber, m.species ?? 'snake');
     } else {
       c.bindNet(m.id, m.seed, new THREE.Vector3(m.position.x, m.position.y, m.position.z),
         { x: 0, y: 0, z: 0 }, ((m.state as SimCrawler['state']) ?? 'wander'), m.uber, m.species ?? 'crawler');
@@ -70,6 +77,7 @@ export function createNetCrawlers(deps: EntitiesDeps, ctx: NetCrawlersCtx) {
     // Route into the species' own registry so its update pass ticks it.
     if (c instanceof Rakk) rakks.push(c);
     else if (c instanceof Gnat) gnats.push(c);
+    else if (c instanceof Snake) snakes.push(c);
     else if (c instanceof Roller) rollers.push(c);
     else if (c instanceof Scarab) scarabs.push(c);
     else crawlers.push(c);

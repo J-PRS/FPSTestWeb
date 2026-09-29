@@ -5,13 +5,15 @@ import {
   SNAKE_RADIUS, SNAKE_HEALTH, SNAKE_SPEED,
   SNAKE_AGGRO_DIST, SNAKE_STRIKE_DIST, SNAKE_STRIKE_CD,
   SNAKE_WINDUP, SNAKE_LUNGE_TIME, SNAKE_LUNGE_SPEED, SNAKE_BITE_DIST,
-  EMERGE_DUR,
+  EMERGE_DUR, MELEE_FAVOR,
 } from '../core/config.js';
 import { Terrain } from '../world/terrain.js';
 import type { Targetable } from './balls.js';
 import { allocSlots, freeSlots, getSwarm, getShadows } from './swarms.js';
 import type { SwarmPart, SwarmSlotOwner } from './swarm.js';
 import { getGlowTexture } from '../effects/glowTexture.js';
+import type { SimSlither } from '../../../shared/creatureSim.js';
+import { bindNetSlither, applyNetEdgeSlither, updateNetSlither, claimDamageMelee } from '../game/netMelee.js';
 
 const _dir = new THREE.Vector3();
 const _root = new THREE.Matrix4();
@@ -65,7 +67,7 @@ export function snakeParts(): SwarmPart[] {
  * counterplay. Renders into the shared snake swarm — owns no meshes.
  */
 export class Snake implements Targetable, SwarmSlotOwner {
-  readonly id: number;
+  id: number; // bindNet re-stamps into the net id namespace post-construction
   readonly variant = 0;
   readonly uber: boolean;
 
@@ -85,7 +87,7 @@ export class Snake implements Targetable, SwarmSlotOwner {
   private hasSlots = false;
 
   private animT = Math.random() * 10;
-  private yaw = 0;
+  yaw = 0; // net replay writes this — drives the segment wave orientation
   private flash = 0;
   private strikeCd = 0;
   private stunTimer = 0;
@@ -100,6 +102,38 @@ export class Snake implements Targetable, SwarmSlotOwner {
   emergeRestY = 0;
 
   onStrike?: (snake: Snake) => void;
+
+  /** netDriven = server-authoritative replay — same contract as Crawler. */
+  netDriven = false;
+  netId = 0;
+  sim: SimSlither | null = null;
+  netAcc = 0;
+  static hitClaim: ((netId: number, damage: number) => void) | null = null;
+
+  bindNet(id: number, seed: number, pos: THREE.Vector3, vel: { x: number; y: number; z: number }, _state: string, uber: boolean, species = 'snake'): void {
+    this.netDriven = true;
+    this.netId = id;
+    this.id = 0x50000000 + id;
+    bindNetSlither(this, id, seed, species, pos, vel, _state, uber);
+  }
+
+  applyNetEdge(m: { position: { x: number; y: number; z: number }; velocity: { x: number; y: number; z: number }; kind: string; targetId: string | null; tp?: { x: number; y: number; z: number } | null }): void {
+    applyNetEdgeSlither(this, m);
+    if (m.kind === 'bite') this.onStrike?.(this);
+  }
+
+  private updateNet(dt: number, terrain: Terrain): void {
+    const s = this.sim;
+    if (!s) return;
+    // Mirror the sim's strike states into the render-pose fields FIRST —
+    // updateNetSlither's writeInstances reads them for the S-wave/coil.
+    this.windup = s.state === 'windup' ? 1 : 0;
+    this.lunge = s.state === 'lunge' ? 1 : 0;
+    this.animT += dt; // wave phase — free-running like the sim's
+    this.groundY = this.pos.y - this.radius;
+    if (this.flash > 0) this.flash -= dt;
+    updateNetSlither(this, dt, terrain);
+  }
 
   get disposed(): boolean { return this.dead; }
 
@@ -120,6 +154,7 @@ export class Snake implements Targetable, SwarmSlotOwner {
 
   update(dt: number, terrain: Terrain, playerPos: THREE.Vector3): void {
     if (this.dead) return;
+    if (this.netDriven && this.sim) { this.updateNet(dt, terrain); return; }
     if (this.stunTimer > 0) this.stunTimer -= dt;
     if (this.flash > 0) this.flash -= dt;
     if (this.strikeCd > 0) this.strikeCd -= dt;
@@ -175,7 +210,8 @@ export class Snake implements Targetable, SwarmSlotOwner {
     this.pos.y = this.groundY + this.radius;
 
     // Bite connects only during the lunge, only on real 3D contact.
-    if (this.lunge > 0 && hitSq < SNAKE_BITE_DIST * SNAKE_BITE_DIST) {
+    const biteD = SNAKE_BITE_DIST * MELEE_FAVOR;
+    if (this.lunge > 0 && hitSq < biteD * biteD) {
       this.lunge = 0; // one bite per lunge — it's a strike, not a grinder
       this.onStrike?.(this);
     }
@@ -193,7 +229,7 @@ export class Snake implements Targetable, SwarmSlotOwner {
 
   private groundY = 0; // terrain height at center — segment heights are deltas
 
-  private writeInstances(terrain: Terrain): void {
+  writeInstances(terrain: Terrain): void {
     if (!this.hasSlots) return;
     const swarm = getSwarm('snake');
     if (!swarm) return;
@@ -259,6 +295,7 @@ export class Snake implements Targetable, SwarmSlotOwner {
   }
 
   takeDamage(damage: number): boolean {
+    if (this.netDriven) return claimDamageMelee(this, damage, Snake.hitClaim);
     this.health -= damage;
     this.flash = 0.15;
     if (this.health <= 0) {

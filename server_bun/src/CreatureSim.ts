@@ -12,10 +12,11 @@
  */
 import { type Heightfield, hmHeight } from '../../shared/heightfield.ts';
 import {
-  type SimCrawler, type SimFlyer, type SimRoller, type CrawlerEvent,
+  type SimCrawler, type SimFlyer, type SimRoller, type SimSlither, type CrawlerEvent,
   makeSimCrawler, stepCrawler, applyCrawlerDamage, commitTarget,
   isFlyerSpecies, makeSimFlyer, stepFlyer, applyFlyerDamage,
   isRollerSpecies, makeSimRoller, stepRoller, applyRollerDamage,
+  isSlitherSpecies, makeSimSlither, stepSlither, applySlitherDamage,
   CRAWLER_SIM,
 } from '../../shared/creatureSim.ts';
 import type { SimVec } from '../../shared/ballSim.ts';
@@ -51,9 +52,10 @@ const BRAIN_BUCKETS = 8;
 /** Hop + flyer + roller families share every wire field — the union
  *  only matters at step/damage dispatch, discriminated by family-only
  *  fields (`orbitPhase` = flyer, `hitCd` = roller). */
-type SimBeing = SimCrawler | SimFlyer | SimRoller;
+type SimBeing = SimCrawler | SimFlyer | SimRoller | SimSlither;
 const isFlyer = (c: SimBeing): c is SimFlyer => 'orbitPhase' in c;
 const isRoller = (c: SimBeing): c is SimRoller => 'hitCd' in c;
+const isSlither = (c: SimBeing): c is SimSlither => 'animT' in c;
 
 export class CreatureSim {
   private field: Heightfield | null = null;
@@ -155,9 +157,12 @@ export class CreatureSim {
       ? makeSimFlyer(id, x, gy, z, uber, seed, species)
       : isRollerSpecies(species)
         ? makeSimRoller(id, x, gy, z, uber, seed, species)
-        : makeSimCrawler(id, x, gy, z, uber, seed, species);
+        : isSlitherSpecies(species)
+          ? makeSimSlither(id, x, gy, z, uber, seed, species)
+          : makeSimCrawler(id, x, gy, z, uber, seed, species);
     if (isFlyer(c)) c.y = gy + c.sp.ORBIT_ALT; // flyers enter at cruise alt
     if (isRoller(c)) c.y = gy + 1.6;           // rollers ride the surface
+    if (isSlither(c)) c.y = gy + 0.5;          // belly on the dirt
     // Negative offset pushes this crawler's first retarget into its own
     // bucket instead of the spawn tick — the spread survives every reset.
     this.retargetAcc.set(c.id, -RETARGET_INTERVAL * ((c.id % BRAIN_BUCKETS) / BRAIN_BUCKETS));
@@ -233,7 +238,9 @@ export class CreatureSim {
       ? applyFlyerDamage(c, dmg)
       : isRoller(c)
         ? applyRollerDamage(c, dmg)
-        : applyCrawlerDamage(c, dmg);
+        : isSlither(c)
+          ? applySlitherDamage(c, dmg)
+          : applyCrawlerDamage(c, dmg);
     if (dead) this.kill(c, playerId);
     // Stagger is a timer edge — the next hop decision diverges only if a
     // predictor skips it, and the resync heartbeat bounds that drift.
@@ -294,7 +301,9 @@ export class CreatureSim {
         ? stepFlyer(c, TICK_DT, this.field!, tgt, true)
         : isRoller(c)
           ? stepRoller(c, TICK_DT, this.field!, tgt, true)
-          : stepCrawler(c, TICK_DT, this.field!, tgt, true);
+          : isSlither(c)
+            ? stepSlither(c, TICK_DT, this.field!, tgt, true)
+            : stepCrawler(c, TICK_DT, this.field!, tgt, true);
       if (ev === 'windup' || ev === 'pounce') {
         this.edge(c, ev);
       } else if (ev === 'bite') {
