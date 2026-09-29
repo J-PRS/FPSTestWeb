@@ -28,14 +28,16 @@ import { roleObjective, ROLE_PRIORITY, type BotRole } from '../../shared/flagGoa
 
 /** A bot's kit — weapon picked by engagement range, perk set at spawn so
  *  maxHealth and the move shadow's jet economy match a real loadout. */
-interface BotLoadout { perk: PerkId; near: WeaponType; mid: WeaponType; far: WeaponType; belt: WeaponType; }
+interface BotLoadout { perk: PerkId; near: WeaponType; mid: WeaponType; far: WeaponType; belt: WeaponType; side: WeaponType }
 const NEAR_M = 15, FAR_M = 40;
+const MELEE_M = 3.0;    // fist reach — inside this a punch beats any gun
+const SIDEARM_M = 8.0;  // knife range: the hold-out draw is faster than tracking a long gun
 const BOT_LOADOUTS: BotLoadout[] = [
-  { perk: 'featherjets', near: WeaponType.Chaingun, mid: WeaponType.PlasmaGun, far: WeaponType.Rocket,        belt: WeaponType.Grenade },       // chaser
-  { perk: 'bombardier',  near: WeaponType.Chaingun, mid: WeaponType.Disc,      far: WeaponType.Rocket,        belt: WeaponType.RemoteRailgun }, // siege
-  { perk: 'plated',      near: WeaponType.Chaingun, mid: WeaponType.PlasmaGun, far: WeaponType.Disc,          belt: WeaponType.Grenade },       // anchor
-  { perk: 'overcharge',  near: WeaponType.Chaingun, mid: WeaponType.Disc,      far: WeaponType.Rocket,        belt: WeaponType.RemoteRailgun }, // skirmisher
-  { perk: 'vitality',    near: WeaponType.Chaingun, mid: WeaponType.Sprinkler, far: WeaponType.Rocket,        belt: WeaponType.Grenade },       // hose — area denial
+  { perk: 'featherjets', near: WeaponType.Chaingun, mid: WeaponType.PlasmaGun, far: WeaponType.Rocket,        belt: WeaponType.Grenade,       side: WeaponType.Pistol   }, // chaser
+  { perk: 'bombardier',  near: WeaponType.Chaingun, mid: WeaponType.Disc,      far: WeaponType.Rocket,        belt: WeaponType.RemoteRailgun, side: WeaponType.Pistol   }, // siege
+  { perk: 'plated',      near: WeaponType.Chaingun, mid: WeaponType.PlasmaGun, far: WeaponType.Disc,          belt: WeaponType.Grenade,       side: WeaponType.Revolver }, // anchor
+  { perk: 'overcharge',  near: WeaponType.Chaingun, mid: WeaponType.Disc,      far: WeaponType.Rocket,        belt: WeaponType.RemoteRailgun, side: WeaponType.Pistol   }, // skirmisher
+  { perk: 'vitality',    near: WeaponType.Chaingun, mid: WeaponType.Sprinkler, far: WeaponType.Rocket,        belt: WeaponType.Grenade,       side: WeaponType.Pistol   }, // hose — area denial
 ];
 
 const SPEED = 14;          // m/s ground move
@@ -213,10 +215,22 @@ export class ServerBots {
     const muzzle = { x: p.position.x, y: p.position.y + 1.4, z: p.position.z };
     const dx0 = aim.x - muzzle.x, dy0 = aim.y - muzzle.y, dz0 = aim.z - muzzle.z;
     const dist = Math.sqrt(dx0 * dx0 + dy0 * dy0 + dz0 * dz0) || 1;
-    // Range-band weapon select — same judgment a player makes: hitscan
-    // up close, the loadout's primary mid-band, rockets at standoff.
+    // Range-band weapon select — same judgment a player makes: a fist
+    // inside 3m, the hold-out in knife range, hitscan close, the loadout's
+    // mid-band primary, rockets at standoff.
     const lo = this.loadouts.get(p.id) ?? BOT_LOADOUTS[0]!;
-    const wt = dist < NEAR_M ? lo.near : dist > FAR_M ? lo.far : lo.mid;
+    const wt = dist < MELEE_M ? WeaponType.Melee
+      : dist < SIDEARM_M ? lo.side : dist < NEAR_M ? lo.near : dist > FAR_M ? lo.far : lo.mid;
+    if (wt === WeaponType.Melee) {
+      // The punch IS the player's swing — combat funnels it identically,
+      // and the broadcast swing lets observers see the melee. Speed is 0
+      // on the stat line so the visual uses the raw aim, not the led dir.
+      this.room.messages.botAttack(p.id, targetId, WeaponType.Melee);
+      this.room.messages.botFire(p.id, null, muzzle,
+        { x: (dx0 / dist) * BOLT_SPEED, y: (dy0 / dist) * BOLT_SPEED, z: (dz0 / dist) * BOLT_SPEED },
+        WeaponType.Melee, true);
+      return;
+    }
     const stats = getWeaponStats(wt);
     // Lead the target by its velocity over the shell's flight time —
     // without it every bolt lands behind a skiing player forever.
