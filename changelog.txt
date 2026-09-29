@@ -1,3 +1,4 @@
+2026-10-03 - Tribes-style map compounds: mapgen emits flag pedestal + main base shell + watch tower + annex + cover on sampled ground; new maps stonekeep (henge.bin) + bastion (slagheap.bin), added to rotation
 2026-10-01 - Room health heartbeat: per-room 15s INFO line tallying shot/aoe claims, rejects, applied hits+dmg+kills, divergences+worst gap, posrejects, snapreqs, ratelimits, envdmg + melee-from-afar flag; envDamage plausibility vs nearest creature; server tsc gate green (latent strictness debt fixed)
 2026-10-01 - Heavy model swap: chibi KayKit knight -> Quaternius Knight_Male (CC0, real proportions, same RobotExpressive bone names; native Idle/Walk/Run/Jump/Death/Roll/Shoot_OneHanded clips)
 2026-10-01 - Light/medium players (local third-person + remotes + offline bots) now default to the mannequin; mannequin ski rides Crouch_Fwd_Loop (no UAL2 slide clip in that pack)
