@@ -25,13 +25,15 @@ export class ConnectionManager {
     }
   }
 
-  /** Binary hot-path frames (tickUpdate) — no JSON.stringify.
-   *  Transports that expose `sendUnreliable` (WT datagram lane) use it;
-   *  plain WS has no UDP lane so everything rides the same stream. */
+  /** Binary hot-path frames (tickUpdate) — no JSON.stringify. Rides the
+   *  reliable lane on every transport: measured WT datagram loss on
+   *  loopback was ~47%, which played as remote stutter + a bogus loss
+   *  reading, and the datagram lane buys nothing when it's dropping half
+   *  the frames anyway. Revisit if the QUIC lane proves reliable. */
   sendBinaryToPlayer(playerId: string, data: Uint8Array): void {
-    const ws = this.connections.get(playerId) as (ServerWebSocket<WebSocketData> & { sendUnreliable?(d: Uint8Array): number }) | undefined;
+    const ws = this.connections.get(playerId);
     if (ws && ws.readyState === 1) {
-      (ws.sendUnreliable ?? ws.send).call(ws, data);
+      ws.send(data);
     }
   }
 

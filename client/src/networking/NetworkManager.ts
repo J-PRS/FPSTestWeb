@@ -215,12 +215,15 @@ export class NetworkManager {
     this.ws.send(JSON.stringify(msg));
   }
 
-  /** Outbound binary frame — pre-encoded by shared/wire.ts. Position state
-   *  is volatile: only the newest matters, so it rides the unreliable lane
-   *  (on TCP this degrades to the same socket — no behavior change). */
+  /** Outbound binary frame — pre-encoded by shared/wire.ts. Position input
+   *  rides the RELIABLE lane: the move judge sims from every claim, so a
+   *  dropped datagram starves the authority sim and earns a correction —
+   *  measured ~47% WT datagram loss on loopback, which played as warping.
+   *  Stale claims self-reject by seq, so reliability costs nothing.
+   *  (WS/RTC already degraded to reliable — only WT changed behavior.) */
   private sendBinary(data: Uint8Array): void {
     if (!this.ws?.connected()) return;
-    (this.ws.sendUnreliable ?? this.ws.send).call(this.ws, data);
+    this.ws.send(data);
   }
 
   /** Ring of recent health-affecting events — read by the desync dump so a

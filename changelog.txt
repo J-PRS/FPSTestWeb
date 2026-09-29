@@ -1,3 +1,8 @@
+2026-10-03 - WT datagram lane measured ~47% drop on loopback: position
+    claims starved the move judge (constant corrections = warping)
+    and tick frames stuttered remotes. Both directions now ride the
+    reliable lane — WS/RTC already did.
+
 2026-10-03 - Melee whiff warn: only logs when the target was moving
     under 30m/s — ski-speed whiffs are earned dodges, not bugs
     (demoted to debug).
