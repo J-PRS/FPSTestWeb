@@ -88,18 +88,21 @@ export function createSpeciesKit(deps: EntitiesDeps, targets: Targetable[], depl
       // warning shot: you get a beat to react before contact damage starts.
       if (brain.engagedT < ENGAGE_GRACE) return false;
     }
-    // Reach audit — melee callers pass their contact reach. A hit landing
-    // from beyond it means the trigger measured the wrong distance (the
-    // old XZ-only checks tagged airborne players). WARN ships to the file
-    // log so the next phantom-hit report has data attached.
+    // Reach gate — melee callers pass their contact reach. A hit landing
+    // from beyond it is a phantom: triggers fire against the brain's
+    // lastSeen snapshot (refreshed on eval ticks, up to ~2.5s stale), so a
+    // fast-skating player takes damage where they WERE, not where they
+    // ARE. The creature still bites — it just bites your ghost. Whiff it:
+    // "oh shit I dodged that" moments are earned by being somewhere else.
     if (reach !== undefined) {
       const d = fromPos.distanceTo(p.pos);
       if (d > reach) {
-        logger.warn(`melee hit beyond reach: ${deathText}`, {
+        logger.warn(`melee whiff beyond reach: ${deathText}`, {
           dist: +d.toFixed(2), reach: +reach.toFixed(2),
           from: { x: +fromPos.x.toFixed(1), y: +fromPos.y.toFixed(1), z: +fromPos.z.toFixed(1) },
           player: { x: +p.pos.x.toFixed(1), y: +p.pos.y.toFixed(1), z: +p.pos.z.toFixed(1) },
         });
+        return false;
       }
     }
     p.lastDamageSource = deathText;
@@ -410,6 +413,11 @@ export function createSpeciesKit(deps: EntitiesDeps, targets: Targetable[], depl
   const AI_LOD_FAR_SQ = 300 * 300;
   const AI_LOD_MID_DT = 1 / 20;
   const AI_LOD_FAR_DT = 1 / 5;
+  // Bucket phase — accumulators start pre-charged by id%8 so a wave of
+  // entities entering a band together doesn't all tick on the same frame
+  // (the server sims stagger the same way).
+  const LOD_BUCKETS = 8;
+  const lodPhase = (e: Targetable, tier: number) => tier * (((e.id ?? 0) % LOD_BUCKETS) / LOD_BUCKETS);
   const lodAcc = new WeakMap<Targetable, number>();
 
   function updateSpecies<T extends Targetable & { dispose(): void }>(s: Species<T>, dt: number): void {
@@ -429,10 +437,10 @@ export function createSpeciesKit(deps: EntitiesDeps, targets: Targetable[], depl
       const dSq = e.pos.distanceToSquared(playerPos);
       let tickDt = dt;
       if (dSq > AI_LOD_FAR_SQ) {
-        const acc = (lodAcc.get(e) ?? 0) + dt;
+        const acc = (lodAcc.get(e) ?? lodPhase(e, AI_LOD_FAR_DT)) + dt;
         if (acc >= AI_LOD_FAR_DT) { lodAcc.set(e, 0); tickDt = acc; } else { lodAcc.set(e, acc); tickDt = 0; }
       } else if (dSq > AI_LOD_MID_SQ) {
-        const acc = (lodAcc.get(e) ?? 0) + dt;
+        const acc = (lodAcc.get(e) ?? lodPhase(e, AI_LOD_MID_DT)) + dt;
         if (acc >= AI_LOD_MID_DT) { lodAcc.set(e, 0); tickDt = acc; } else { lodAcc.set(e, acc); tickDt = 0; }
       }
       if (tickDt > 0) s.tick(e, tickDt);
