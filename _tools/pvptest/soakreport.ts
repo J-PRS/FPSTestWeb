@@ -58,7 +58,7 @@ await new Promise(r => setTimeout(r, 1500));
 // below for the machine line anyway.
 const fleet = Bun.spawn(
   ['bun', 'fleet.ts', `ws://localhost:${PORT}/ws`, 'soak', ROOMS, PER_ROOM, SECONDS, ...EXTRA],
-  { cwd: import.meta.dir, env: { ...process.env, FLEET_SBOTS: SBOTS }, stdout: 'pipe', stderr: 'inherit' },
+  { cwd: import.meta.dir, env: { ...process.env, FLEET_SBOTS: SBOTS, FLEET_MAP: MAP }, stdout: 'pipe', stderr: 'inherit' },
 );
 const fleetOut = await new Response(fleet.stdout).text();
 process.stdout.write(fleetOut);
@@ -81,6 +81,8 @@ const report: string[] = [];
   const diverge = count(/divergence/i);
   const shotRejects = lines.filter(l => /Shot rejected|shotRejected/i.test(l) && !/already dead/i.test(l)).length;
   const deploys = count(/Deploy placed/i);
+  const botsSpawned = count(/Bots spawned/i);
+  const mobilityLines = count(/Bot mobility/i);
   const lagMatch = [...log.matchAll(/tick lag avg ([\d.]+)ms.*max ([\d.]+)ms/g)].pop();
 
   report.push(`\n=== SERVER LOG AUDIT (saved → ${logDir}/soak_server.log) ===`);
@@ -90,10 +92,11 @@ const report: string[] = [];
   for (const e of errors) report.push(`    ${e.trim()}`);
   report.push(`  position rejects: ${posRejects}   divergence notices: ${diverge}   shot rejects logged: ${shotRejects}`);
   report.push(`  deploys placed: ${deploys}`);
+  report.push(`  server bots: ${botsSpawned} spawn lines, ${mobilityLines} mobility reports${parseInt(SBOTS) > 0 && mobilityLines === 0 ? '  ← EXPECTED MOBILITY, GOT NONE' : ''}`);
   if (lagMatch) report.push(`  tick cost: avg ${lagMatch[1]}ms, max ${lagMatch[2]}ms (50ms budget)`);
   if (mobility.length) { report.push(`  mobility lines (tail):`); for (const m of mobility) report.push(`    ${m.trim()}`); }
 }
 for (const l of report) console.log(l);
-const fails = report.filter(l => /errors: [1-9]|position rejects: [1-9]/.test(l)).length;
+const fails = report.filter(l => /errors: [1-9]|position rejects: [1-9]|GOT NONE/.test(l)).length;
 console.log(`\nVERDICT: ${fleetCode === 0 && fails === 0 ? 'CLEAN' : 'ISSUES — see above'} (fleet exit ${fleetCode})`);
 process.exit(fleetCode === 0 && fails === 0 ? 0 : 1);

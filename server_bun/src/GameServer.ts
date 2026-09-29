@@ -164,7 +164,9 @@ export class GameServer {
       }
       if (!spec && map) { spec = this.loadMapSpec(map); src = map; }
       if (!spec) { spec = this.loadMapSpec(mode); src = spec ? mode : ''; }
-      if (spec && bots !== undefined) spec = { ...spec, bots, botFill: bots };
+      // bots applies even without a named spec — an ad-hoc --room join
+      // asking for bots expects them or the request silently no-ops.
+      if (bots !== undefined) spec = { ...(spec ?? {}), bots, botFill: bots } as MapSpec;
       if (src) this.roomMapName.set(name, src);
       room = new Room(name, this.field, mode, spec, CONFIG.moveAuthority);
       // `room` is a mutable let — bind a const for the closures or TS
