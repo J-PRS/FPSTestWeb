@@ -8,6 +8,31 @@ import type { Nugget } from '../entities/Nugget.js';
 
 import { Player } from '../entities/Player.js';
 
+type SbRow = { name: string; frags: number; score: number | null; ping: number | null; net?: string | null; self: boolean; dead: boolean; team?: 'alpha' | 'bravo' };
+
+const countSpan = (n: number) => `<span class="${n > 0 ? 'hot' : 'dim'}">${n}</span>`;
+
+const paintFlagChip = (el: HTMLElement, st?: string) => {
+  el.style.display = st ? '' : 'none';
+  if (!st) return;
+  el.textContent = st === 'home' ? '⚑' : st === 'carried' ? '⚑ TAKEN' : '⚑ LOOSE';
+  el.classList.toggle('taken', st !== 'home');
+};
+
+// textContent, not innerHTML — display names will be player-chosen
+// strings; interpolating them raw is a stored-XSS hole in waiting.
+function sbRowEl(r: SbRow): HTMLTableRowElement {
+  const tr = document.createElement('tr');
+  tr.className = `${r.self ? 'self' : ''}${r.dead ? ' dead' : ''}${r.team ? ` sb-${r.team}` : ''}`;
+  for (const cell of [r.name, String(r.frags), r.score === null ? '—' : String(r.score), r.net ?? '—', r.ping === null ? '—' : String(Math.round(r.ping))]) {
+    const td = document.createElement('td');
+    td.textContent = cell;
+    tr.appendChild(td);
+  }
+  return tr;
+}
+
+
 export class HUD {
   private el: HTMLDivElement;
   private health: HTMLSpanElement;
@@ -146,12 +171,11 @@ export class HUD {
     const key = `${c.balls}|${c.elites}|${c.crawlers}|${c.scarabs}|${c.grubs}|${c.snakes}|${c.gnats}|${c.seekers}|${c.rakks}|${c.rollers}|${c.turrets}|${c.overlords}|${c.totems}|${c.mines}|${c.targets}|${c.projectiles}|${c.fx}`;
     if (key === this.lastCountsKey) return;
     this.lastCountsKey = key;
-    const num = (n: number) => `<span class="${n > 0 ? 'hot' : 'dim'}">${n}</span>`;
     this.ballCountEl.innerHTML =
-      `<span class="dim">balls</span> ${num(c.balls)}${c.elites ? ` <span class="dim">+elite</span> ${num(c.elites)}` : ''}` +
-      ` <span class="dim">tgt</span> ${num(c.targets)} <span class="dim">fodder</span> ${num(fodder)} <span class="dim">(scr ${c.scarabs} grb ${c.grubs} gnt ${c.gnats})</span>\n` +
-      `<span class="dim">hunt</span> ${num(hunters)} <span class="dim">(crw ${c.crawlers} snk ${c.snakes} sek ${c.seekers} rak ${c.rakks} bld ${c.rollers})</span>\n` +
-      `<span class="dim">siege</span> ${num(siegers)} <span class="dim">(tur ${c.turrets} ovl ${c.overlords} tot ${c.totems}) mine ${c.mines} · proj ${c.projectiles} fx ${c.fx}</span>`;
+      `<span class="dim">balls</span> ${countSpan(c.balls)}${c.elites ? ` <span class="dim">+elite</span> ${countSpan(c.elites)}` : ''}` +
+      ` <span class="dim">tgt</span> ${countSpan(c.targets)} <span class="dim">fodder</span> ${countSpan(fodder)} <span class="dim">(scr ${c.scarabs} grb ${c.grubs} gnt ${c.gnats})</span>\n` +
+      `<span class="dim">hunt</span> ${countSpan(hunters)} <span class="dim">(crw ${c.crawlers} snk ${c.snakes} sek ${c.seekers} rak ${c.rakks} bld ${c.rollers})</span>\n` +
+      `<span class="dim">siege</span> ${countSpan(siegers)} <span class="dim">(tur ${c.turrets} ovl ${c.overlords} tot ${c.totems}) mine ${c.mines} · proj ${c.projectiles} fx ${c.fx}</span>`;
   }
   private lastCountsKey = '';
 
@@ -188,14 +212,8 @@ export class HUD {
     const key = `${flags.alpha ?? ''}|${flags.bravo ?? ''}`;
     if (key !== this.lastFlagsKey) {
       this.lastFlagsKey = key;
-      const paint = (el: HTMLElement, st?: string) => {
-        el.style.display = st ? '' : 'none';
-        if (!st) return;
-        el.textContent = st === 'home' ? '⚑' : st === 'carried' ? '⚑ TAKEN' : '⚑ LOOSE';
-        el.classList.toggle('taken', st !== 'home');
-      };
-      paint(this.flagA, flags.alpha);
-      paint(this.flagB, flags.bravo);
+      paintFlagChip(this.flagA, flags.alpha);
+      paintFlagChip(this.flagB, flags.bravo);
     }
   }
 
@@ -516,27 +534,15 @@ export class HUD {
     this.sbRefresh -= dt;
     if (this.sbRefresh <= 0) {
       this.sbRefresh = 0.25;
-      // textContent, not innerHTML — display names will be player-chosen
-      // strings; interpolating them raw is a stored-XSS hole in waiting.
-      const mkRow = (r: typeof this.sbData[number]) => {
-        const tr = document.createElement('tr');
-        tr.className = `${r.self ? 'self' : ''}${r.dead ? ' dead' : ''}${r.team ? ` sb-${r.team}` : ''}`;
-        for (const cell of [r.name, String(r.frags), r.score === null ? '—' : String(r.score), r.net ?? '—', r.ping === null ? '—' : String(Math.round(r.ping))]) {
-          const td = document.createElement('td');
-          td.textContent = cell;
-          tr.appendChild(td);
-        }
-        return tr;
-      };
       // Any row carrying a team → split into sections; otherwise flat FFA.
       const hasTeams = this.sbData.some(r => r.team);
       if (!hasTeams) {
-        this.sbRows.replaceChildren(...this.sbData.map(mkRow));
+        this.sbRows.replaceChildren(...this.sbData.map(sbRowEl));
         return;
       }
       const kids: HTMLElement[] = [];
       for (const team of ['alpha', 'bravo'] as const) {
-        const trs = this.sbData.filter(r => r.team === team).map(mkRow);
+        const trs = this.sbData.filter(r => r.team === team).map(sbRowEl);
         if (!trs.length) continue;
         const th = document.createElement('tr');
         th.className = `sb-team ${team}`;
@@ -548,7 +554,7 @@ export class HUD {
       }
       // Teamless stragglers (spectators, unteamed) under their own header.
       const rest = this.sbData.filter(r => !r.team);
-      if (rest.length) kids.push(...rest.map(mkRow));
+      if (rest.length) kids.push(...rest.map(sbRowEl));
       this.sbRows.replaceChildren(...kids);
     }
   }

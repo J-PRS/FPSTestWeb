@@ -58,11 +58,11 @@ function btn(text: string): HTMLButtonElement {
   return b;
 }
 
-function field(label: string): HTMLDivElement {
+function field(text: string): HTMLDivElement {
   const row = document.createElement('div');
   row.className = 'lb-field';
   const span = document.createElement('span');
-  span.textContent = label;
+  span.textContent = text;
   row.appendChild(span);
   return row;
 }
@@ -91,7 +91,7 @@ export class Lobby {
     // a floating HUD button during gameplay was HUD clutter. The panel
     // mounts inside #overlay so menu-close takes it down too.
     const openBtn = document.getElementById('lobby-open');
-    if (openBtn) openBtn.onclick = () => this.toggle();
+    if (openBtn) openBtn.addEventListener('click', () => this.toggle());
 
     this.panel = document.createElement('div');
     this.panel.className = 'lb-panel';
@@ -120,11 +120,11 @@ export class Lobby {
     this.botsInput.placeholder = 'map default';
     this.botsInput.className = 'lb-input';
     this.botsInput.style.cssText = 'width:110px;text-align:right;';
-    this.botsInput.onkeydown = (e) => e.stopPropagation();
+    this.botsInput.addEventListener('keydown', (e) => e.stopPropagation());
     botsRow.appendChild(this.botsInput);
     const hostBtn = btn('PLAY');
     hostBtn.style.cssText = 'width:100%;margin-top:6px;border-color:rgba(58,167,255,0.4);';
-    hostBtn.onclick = async () => {
+    hostBtn.addEventListener('click', async () => {
       hostBtn.disabled = true;
       try {
         const map = this.mapSelect.value;
@@ -132,18 +132,18 @@ export class Lobby {
         const bots = this.botsInput.value === '' ? undefined : Math.max(0, Math.min(24, Number(this.botsInput.value) || 0));
         this.join((await this.deps.quickJoin(mode, map || undefined, bots)).room, map || undefined, bots);
       } catch { hostBtn.disabled = false; }
-    };
+    });
 
     const quickLbl = label('QUICK JOIN');
     const quick = document.createElement('div');
     quick.className = 'lb-quick';
     for (const mode of ['nuggets', 'ctf', 'dm', 'tdm']) {
       const b = btn(mode.toUpperCase());
-      b.onclick = async () => {
+      b.addEventListener('click', async () => {
         b.disabled = true;
         try { this.join((await this.deps.quickJoin(mode)).room); }
         catch { b.disabled = false; }
-      };
+      });
       quick.appendChild(b);
     }
 
@@ -163,12 +163,12 @@ export class Lobby {
       const bots = this.botsInput.value === '' ? undefined : Math.max(0, Math.min(24, Number(this.botsInput.value) || 0));
       this.join(v, map, bots);
     };
-    input.onkeydown = (e) => {
+    input.addEventListener('keydown', (e) => {
       e.stopPropagation();
       if (e.key === 'Enter') named();
-    };
+    });
     const create = btn('JOIN');
-    create.onclick = named;
+    create.addEventListener('click', named);
     newWrap.append(input, create);
 
     // Server + P2P — the URL params ?server=/​?p2p= still work for links,
@@ -180,9 +180,9 @@ export class Lobby {
     srvIn.value = settings.get('fps-server');
     srvIn.className = 'lb-input';
     srvIn.style.cssText = 'flex:1;margin:0 6px;';
-    srvIn.onkeydown = (e) => e.stopPropagation();
+    srvIn.addEventListener('keydown', (e) => e.stopPropagation());
     const srvBtn = btn('GO');
-    srvBtn.onclick = () => { settings.set('fps-server', srvIn.value.trim()); location.reload(); };
+    srvBtn.addEventListener('click', () => { settings.set('fps-server', srvIn.value.trim()); location.reload(); });
     srvRow.append(srvIn, srvBtn);
 
     const p2pRow = field('P2P DUEL');
@@ -194,22 +194,22 @@ export class Lobby {
     p2pIn.value = savedP2p.includes(':') ? savedP2p.slice(savedP2p.indexOf(':') + 1) : '';
     p2pIn.className = 'lb-input';
     p2pIn.style.cssText = 'flex:1;min-width:0;';
-    p2pIn.onkeydown = (e) => e.stopPropagation();
+    p2pIn.addEventListener('keydown', (e) => e.stopPropagation());
     p2pRow.appendChild(p2pIn);
     // Role buttons get their own row — inline flex-wrap left OFF stranded alone.
     const p2pBtns = document.createElement('div');
     p2pBtns.className = 'lb-quick';
     for (const role of ['host', 'join'] as const) {
       const b = btn(role.toUpperCase());
-      b.onclick = () => {
+      b.addEventListener('click', () => {
         const code = p2pIn.value.trim() || 'duel';
         settings.set('fps-p2p', `${role}:${code}`);
         location.reload();
-      };
+      });
       p2pBtns.appendChild(b);
     }
     const p2pOff = btn('OFF');
-    p2pOff.onclick = () => { settings.set('fps-p2p', ''); location.reload(); };
+    p2pOff.addEventListener('click', () => { settings.set('fps-p2p', ''); location.reload(); });
     p2pBtns.appendChild(p2pOff);
 
     this.panel.append(head, this.here, this.rows, hostLbl, mapRow, botsRow, hostBtn, quickLbl, quick, newWrap, connLbl, srvRow, p2pRow, p2pBtns);
@@ -299,7 +299,7 @@ export class Lobby {
     const clock = r.timeLeftMs ? ` ${Math.ceil(r.timeLeftMs / 60000)}m` : '';
     meta.textContent = `${r.mode ? r.mode + ' ' : ''}${r.map ? r.map + ' ' : ''}${r.players}/${r.maxPlayers}${scoreTxt}${r.winAt ? ` →${r.winAt}` : ''}${clock}`;
     row.append(name, meta);
-    row.onclick = () => this.join(r.name);
+    row.addEventListener('click', () => this.join(r.name));
     this.rows.appendChild(row);
   }
 
