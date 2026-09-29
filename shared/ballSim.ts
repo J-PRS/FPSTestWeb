@@ -126,12 +126,15 @@ export function structureColliders(list: readonly StructureSpec[] | undefined): 
 }
 
 const _cn = { x: 0, y: 0, z: 0 }; // scratch — contact normal
+const _colCands: StructureCollider[] = [];
 
 /** Sphere vs yaw-OBB: push the ball out along the least-penetration axis
  *  and reflect velocity off the contact normal. Returns true on contact.
  *  Deterministic and RNG-free, so predictors replay the identical bounce. */
-function collideStructures(b: SimBall, colliders: readonly StructureCollider[]): boolean {
-  for (const c of colliders) {
+function collideStructures(b: SimBall, colliders: readonly StructureCollider[], index?: { queryPoint(x: number, z: number, pad: number, out: StructureCollider[]): void }): boolean {
+  let cands: readonly StructureCollider[] = colliders;
+  if (index) { _colCands.length = 0; index.queryPoint(b.x, b.z, b.radius + 0.5, _colCands); cands = _colCands; }
+  for (const c of cands) {
     const dx = b.x - c.cx, dy = b.y - c.cy, dz = b.z - c.cz;
     // cheap broadphase — skip pieces nowhere near this ball
     const rr = Math.max(c.hx, c.hz) + b.radius + 0.5;
@@ -187,6 +190,7 @@ export function stepBall(
   target: SimVec | null,
   authoritative: boolean,
   colliders?: readonly StructureCollider[],
+  colliderIndex?: { queryPoint(x: number, z: number, pad: number, out: StructureCollider[]): void },
 ): SegmentKind | null {
   b.vy += BALL_GRAVITY * dt;
   b.x += b.vx * dt;
@@ -229,7 +233,7 @@ export function stepBall(
 
   // Structures before terrain — a ball inside a wall would otherwise
   // terrain-resolve first and stay embedded.
-  if (colliders && collideStructures(b, colliders)) return 'bounce';
+  if (colliders && collideStructures(b, colliders, colliderIndex)) return 'bounce';
 
   // Ground contact → reflect. Mirrors handleGroundBounce: only a bounce
   // while moving INTO the surface counts.

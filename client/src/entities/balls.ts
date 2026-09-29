@@ -5,6 +5,7 @@ import { GRAVITY, BALL_MAX_DIST, BALL_TELE_MIN, BALL_TELE_MAX, BALL_TELE_HEIGHT,
 
 import { Terrain, getHeightfield } from '../world/terrain.js';
 import { makeSimBall, stepBall, BALL_OVERSPEED, BALL_MIN_SPEED, BALL_REST_SPEED, BALL_STALL_TIME, type SimBall, type StructureCollider } from '../../../shared/ballSim.js';
+import { ColliderIndex } from '../../../shared/solidWorld.js';
 import { type Heightfield, hmHeight, hmFingerprint } from '../../../shared/heightfield.js';
 import { RibbonTrail } from '../projectiles/RibbonTrail.js';
 import { ChildLogger } from '../core/Logger.js';
@@ -211,6 +212,7 @@ export class Ball {
   /** Map-structure colliders from gameState — prediction ricochets off
    *  walls/pillars identically to the server. Set by netHandlers. */
   static colliders: readonly StructureCollider[] = [];
+  static colliderIndex: ColliderIndex | null = null;
   /** Sim-time the ball's pos is evaluated at — server grid multiples of
    *  0.05. Steps fire only while the next cell is behind the server clock
    *  estimate: free-running ahead is what bounced early and snapped back. */
@@ -336,7 +338,7 @@ export class Ball {
           this.simT += 0.05;
           s.x = this.pos.x; s.y = this.pos.y; s.z = this.pos.z;
           s.vx = this.vel.x; s.vy = this.vel.y; s.vz = this.vel.z;
-          stepBall(s, 0.05, Ball.field, tgt, false, Ball.colliders);
+          stepBall(s, 0.05, Ball.field, tgt, false, Ball.colliders, Ball.colliderIndex ?? undefined);
           this.pos.set(s.x, s.y, s.z);
           this.vel.set(s.vx, s.vy, s.vz);
         }
@@ -347,7 +349,7 @@ export class Ball {
             this.simT += 0.05;
             s.x = this.pos.x; s.y = this.pos.y; s.z = this.pos.z;
             s.vx = this.vel.x; s.vy = this.vel.y; s.vz = this.vel.z;
-            stepBall(s, 0.05, Ball.field, tgt, false, Ball.colliders);
+            stepBall(s, 0.05, Ball.field, tgt, false, Ball.colliders, Ball.colliderIndex ?? undefined);
             this.pos.set(s.x, s.y, s.z);
             this.vel.set(s.vx, s.vy, s.vz);
           }

@@ -12,7 +12,7 @@ import { RibbonTrail } from './RibbonTrail.js';
 import { ProjectileTrail } from './trailParticles.js';
 import { buildProjectileMeshes, updateProjectileMesh } from './visuals.js';
 import { sweepTerrain, sweepBall, sweepPlayer, sweepObstacle } from './sweep.js';
-import { segSolidHit } from '../../../shared/solidWorld.js';
+import { segSolidHit, ColliderIndex } from '../../../shared/solidWorld.js';
 import type { StructureCollider } from '../../../shared/ballSim.js';
 
 // Shared projectile geometries — dispose() never frees them, so reuse across shots
@@ -123,6 +123,7 @@ export class Projectile {
   /** Map-structure colliders — set once per map load alongside
    *  Ball.colliders so shells and balls bounce off the same geometry. */
   static solidColliders: readonly StructureCollider[] = [];
+  static solidIndex: ColliderIndex | null = null;
 
   get explosionRadius(): number { return this.config.explosionRadius; }
   get force(): number { return this.config.force; }
@@ -310,7 +311,7 @@ export class Projectile {
     // Map structures next — walls stop shells like terrain does; without
     // this a mortar splashes the generator room straight through the roof.
     if (Projectile.solidColliders.length) {
-      const hit = segSolidHit(this.prevPos, this.pos, Projectile.solidColliders);
+      const hit = segSolidHit(this.prevPos, this.pos, Projectile.solidColliders, Projectile.solidIndex ?? undefined);
       if (hit) {
         this.hitAt(hit.x, hit.y, hit.z, hit.t);
         if (this.config.sticks) {

@@ -11,7 +11,7 @@ import { logger } from './logger.ts';
 import { weaponStats } from './weaponStats.ts';
 import { HEAVY_ONLY_WEAPONS } from '../../shared/botClasses.ts';
 import type { StructureCollider } from '../../shared/ballSim.ts';
-import { segSolidHit, blastOccluded } from '../../shared/solidWorld.ts';
+import { segSolidHit, blastOccluded, ColliderIndex } from '../../shared/solidWorld.ts';
 
 // Lag compensation: clamp self-reported ping to a sane rewind window —
 // unclamped, a forged 60s "ping" could rewind targets anywhere.
@@ -70,7 +70,13 @@ export class CombatHandler {
   private duelStart = new Map<string, number>();
   /** Map-structure colliders — claim validation rejects flights that
    *  would have to pass through a wall to reach their end point. */
-  solids: readonly StructureCollider[] = [];
+  private _solids: readonly StructureCollider[] = [];
+  private solidIndex: ColliderIndex | null = null;
+  get solids(): readonly StructureCollider[] { return this._solids; }
+  set solids(list: readonly StructureCollider[]) {
+    this._solids = list;
+    this.solidIndex = list.length ? new ColliderIndex(list) : null;
+  }
 
   constructor(
     private playerManager: PlayerManager,
@@ -421,7 +427,7 @@ export class CombatHandler {
         this.reject(playerId, 'AOE', `beam tip ${dist.toFixed(0)}m from eye`, undefined, msg.weaponType);
         return;
       }
-      if (this.solids.length && segSolidHit(eye, msg.position, this.solids)) {
+      if (this.solids.length && segSolidHit(eye, msg.position, this.solids, this.solidIndex ?? undefined)) {
         this.reject(playerId, 'AOE', 'beam tip behind structure', undefined, msg.weaponType);
         return;
       }
@@ -575,7 +581,7 @@ export class CombatHandler {
    *  kissed a face) — step 0.4m past each t=0 contact, up to 3 hops,
    *  before concluding the target is really occluded. */
   private blastBlocked(from: Vec3, toEye: Vec3): boolean {
-    return blastOccluded(from, toEye, this.solids);
+    return blastOccluded(from, toEye, this.solids, this.solidIndex ?? undefined);
   }
 
   // Client-reported environmental damage (crawler pounces, etc.) — self-only,

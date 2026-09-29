@@ -19,6 +19,7 @@ import {
   type SimBall, type SimVec, type BallVariant, type SegmentKind,
   makeSimBall, stepBall, applySimDamage, type StructureCollider,
 } from '../../shared/ballSim.ts';
+import { ColliderIndex } from '../../shared/solidWorld.ts';
 import type { PlayerManager } from './PlayerManager.ts';
 import type { ServerMessage, Vec3 } from './types.ts';
 import { encodeBallSegment } from '../../shared/wire.ts';
@@ -79,7 +80,13 @@ export class BallSim {
   ballMix: readonly number[] = DEFAULT_MIX;
   /** Map-structure colliders — set from the room spec at construction;
    *  balls ricochet off walls/pillars. Empty on structureless maps. */
-  colliders: readonly StructureCollider[] = [];
+  private _colliders: readonly StructureCollider[] = [];
+  colliderIndex: ColliderIndex | null = null;
+  get colliders(): readonly StructureCollider[] { return this._colliders; }
+  set colliders(list: readonly StructureCollider[]) {
+    this._colliders = list;
+    this.colliderIndex = list.length ? new ColliderIndex(list) : null;
+  }
 
   constructor(players: PlayerManager, broadcast: (msg: ServerMessage) => void, broadcastBinary?: (data: Uint8Array) => void,
               broadcastBinaryReliable?: (data: Uint8Array) => void) {
@@ -393,7 +400,7 @@ export class BallSim {
       // Pull/lunge aim comes from the snapshot last emitted on a segment —
       // predictors replay the identical input, not the live player pos.
       _snap.x = b.tx; _snap.y = b.ty; _snap.z = b.tz;
-      const kind = stepBall(b, TICK_DT, this.field!, b.tgtValid ? _snap : null, true, this.colliders);
+      const kind = stepBall(b, TICK_DT, this.field!, b.tgtValid ? _snap : null, true, this.colliders, this.colliderIndex ?? undefined);
       if (kind) {
         this.segment(b, kind);
       } else {

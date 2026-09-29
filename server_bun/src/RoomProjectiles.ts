@@ -18,7 +18,7 @@
  * line (dischargeRay) so remote railgun blasts land where the beam hit.
  */
 import { projStep, segFieldHit, segPointDist, segPointT, type SimProjectile } from '../../shared/projSim.ts';
-import { segSolidHit } from '../../shared/solidWorld.ts';
+import { segSolidHit, ColliderIndex } from '../../shared/solidWorld.ts';
 import { structureColliders, type StructureCollider } from '../../shared/ballSim.ts';
 import type { StructureSpec } from '../../shared/mapSpec.ts';
 import { HM_DIVISOR, HM_HEIGHT_SCALE, type Heightfield } from '../../shared/heightfield.ts';
@@ -78,6 +78,7 @@ export class RoomProjectiles {
   /** Solid map geometry — shells pop on walls like they do on terrain,
    *  so a mortar can't splash through the base roof. */
   private solids: readonly StructureCollider[] = [];
+  private solidIndex: ColliderIndex | null = null;
   private projs = new Map<string, LiveProj>();
   private nextId = 1;
 
@@ -107,6 +108,7 @@ export class RoomProjectiles {
    *  admin reload both refresh them. */
   attachStructures(list: readonly StructureSpec[] | undefined): void {
     this.solids = structureColliders(list);
+    this.solidIndex = this.solids.length ? new ColliderIndex(this.solids) : null;
   }
 
   /** Fire a real projectile. `dir` is normalized; muzzle velocity = dir*speed
@@ -172,7 +174,7 @@ export class RoomProjectiles {
     // Wall sweep before the player check — a shell that clips a face
     // detonates there instead of phasing through to someone inside.
     if (this.solids.length) {
-      const hit = segSolidHit(from, p.pos, this.solids);
+      const hit = segSolidHit(from, p.pos, this.solids, this.solidIndex ?? undefined);
       if (hit) { this.detonate(proj, hit); return true; }
     }
     // Player sweep — same legal radius the hit-claim validator allows:
@@ -217,7 +219,7 @@ export class RoomProjectiles {
       if (th) bestT = segPointT(p.pos, end, th);
     }
     if (this.solids.length) {
-      const sh = segSolidHit(p.pos, end, this.solids);
+      const sh = segSolidHit(p.pos, end, this.solids, this.solidIndex ?? undefined);
       if (sh) bestT = Math.min(bestT, segPointT(p.pos, end, sh));
     }
     const midX = (p.pos.x + end.x) / 2, midY = (p.pos.y + end.y) / 2, midZ = (p.pos.z + end.z) / 2;

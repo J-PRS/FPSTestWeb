@@ -1,3 +1,4 @@
+2026-10-01 - ColliderIndex: uniform XZ grid over structure colliders shared by move sims, projectile sweeps, blast occlusion, ball bounces - prunes only, order deterministic across authority/predictor
 2026-10-01 - projectile collision optimization: parabola-scheduled terrain sweeps vs field max-height (zero-miss bound), sphere-reject early-outs in server player sweep and all client sweep fns (ball/player/obstacle); capsule extent covered; 2 new correctness tests; 276 bun + 93 vitest green
 2026-09-29 - creatureSim: kamikaze family - SimBaneling (fuse/life detonate edge -> server AOE blast), netDriven Baneling client replay, baneling:4 on infestation; 5 new tests, verified live
 2026-09-29 - creatureSim families: SimRoller netDriven (roll core) + gnat via SimFlyer; ballSim predictive terrain probes (parabola-scheduled gy sampling)

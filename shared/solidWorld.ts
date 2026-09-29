@@ -2,6 +2,59 @@ import { structureColliders, type StructureCollider } from './ballSim.ts';
 import { MOVEMENT_CONFIG, type MoveState as MS } from './movement.ts';
 import type { StructureSpec } from './mapSpec.ts';
 
+/** Uniform XZ grid over the static collider set — built once per map,
+ *  queried every move-sim tick, projectile sweep, and blast occlusion.
+ *  Each box registers into every cell its padded XZ AABB covers; queries
+ *  visit cells in the segment's footprint and stamp visited boxes so a
+ *  box spanning several cells is tested once. Prunes only — every test
+ *  the linear scan would run still runs. */
+export class ColliderIndex {
+  private readonly cell: number;
+  private readonly cells = new Map<number, number[]>();
+  private readonly stamp: Int32Array;
+  private queryId = 0;
+
+  constructor(private readonly cols: readonly StructureCollider[], cell = 16) {
+    this.cell = cell;
+    this.stamp = new Int32Array(cols.length);
+    for (let i = 0; i < cols.length; i++) {
+      const c = cols[i]!;
+      // Rotated XZ extents: yaw spreads hx/hz across both axes.
+      const ex = Math.abs(c.hx * c.cos) + Math.abs(c.hz * c.sin);
+      const ez = Math.abs(c.hx * c.sin) + Math.abs(c.hz * c.cos);
+      const x0 = Math.floor((c.cx - ex - 1) / cell), x1 = Math.floor((c.cx + ex + 1) / cell);
+      const z0 = Math.floor((c.cz - ez - 1) / cell), z1 = Math.floor((c.cz + ez + 1) / cell);
+      for (let x = x0; x <= x1; x++) for (let z = z0; z <= z1; z++) {
+        const key = x * 4096 + z;
+        let list = this.cells.get(key);
+        if (!list) this.cells.set(key, list = []);
+        list.push(i);
+      }
+    }
+  }
+
+  /** Colliders whose XZ footprint a `pad`-expanded segment could touch —
+   *  deduplicated, appended to `out` (scratch-passed, no alloc). */
+  querySegment(ax: number, az: number, bx: number, bz: number, pad: number, out: StructureCollider[]): void {
+    const id = ++this.queryId;
+    const x0 = Math.floor((Math.min(ax, bx) - pad) / this.cell), x1 = Math.floor((Math.max(ax, bx) + pad) / this.cell);
+    const z0 = Math.floor((Math.min(az, bz) - pad) / this.cell), z1 = Math.floor((Math.max(az, bz) + pad) / this.cell);
+    for (let x = x0; x <= x1; x++) for (let z = z0; z <= z1; z++) {
+      const list = this.cells.get(x * 4096 + z);
+      if (!list) continue;
+      for (const i of list) {
+        if (this.stamp[i] === id) continue;
+        this.stamp[i] = id;
+        out.push(this.cols[i]!);
+      }
+    }
+  }
+
+  queryPoint(x: number, z: number, pad: number, out: StructureCollider[]): void {
+    this.querySegment(x, z, x, z, pad, out);
+  }
+}
+
 /**
  * Solid-structure layer — turns the renderer's cover boxes into real
  * collision the move sim shares on both ends: top faces are walkable
@@ -15,6 +68,8 @@ import type { StructureSpec } from './mapSpec.ts';
 const STEP_UP = 0.55;   // ledges under this step onto floors like stairs
 const SKIN = 0.02;      // push-out separation so contacts don't chatter
 
+const _segCands: StructureCollider[] = [];
+
 /** Swept segment vs the structure set — earliest entry point of a ray
  *  (shell path, LOS probe) into any yaw-OBB, or null. Slab test per
  *  collider in its local frame; returns the world-space hit point. */
@@ -22,10 +77,18 @@ export function segSolidHit(
   from: { x: number; y: number; z: number },
   to: { x: number; y: number; z: number },
   cols: readonly StructureCollider[],
+  index?: ColliderIndex,
 ): { x: number; y: number; z: number; t: number } | null {
   const dx = to.x - from.x, dy = to.y - from.y, dz = to.z - from.z;
+  const segLen = Math.hypot(dx, dz);
+  let cands: readonly StructureCollider[] = cols;
+  if (index) {
+    _segCands.length = 0;
+    index.querySegment(from.x, from.z, to.x, to.z, segLen + 2, _segCands);
+    cands = _segCands;
+  }
   let bestT = Infinity;
-  for (const c of cols) {
+  for (const c of cands) {
     const ox = from.x - c.cx, oz = from.z - c.cz;
     // Broadphase — skip boxes the segment can't approach.
     const rr = Math.max(c.hx, c.hz) + Math.hypot(dx, dz) + 1;
@@ -53,7 +116,11 @@ export function segSolidHit(
 }
 
 export class SolidWorld {
-  constructor(readonly cols: readonly StructureCollider[]) {}
+  private readonly index: ColliderIndex;
+  private readonly cands: StructureCollider[] = [];
+  constructor(readonly cols: readonly StructureCollider[]) {
+    this.index = new ColliderIndex(cols);
+  }
   static fromSpecs(list: readonly StructureSpec[] | undefined): SolidWorld {
     return new SolidWorld(structureColliders(list));
   }
@@ -61,8 +128,11 @@ export class SolidWorld {
   /** Highest structure top face under (x,z) within the footprint —
    *  -Infinity when no piece covers that point. */
   topAt(x: number, z: number): number {
+    const cands = this.cands;
+    cands.length = 0;
+    this.index.queryPoint(x, z, 2, cands);
     let top = -Infinity;
-    for (const c of this.cols) {
+    for (const c of cands) {
       const dx = x - c.cx, dz = z - c.cz;
       if (Math.abs(dx) > c.hx + Math.abs(c.sin) * 2 + 1 && Math.abs(dz) > c.hz + Math.abs(c.cos) * 2 + 1) continue;
       const lx = dx * c.cos + dz * c.sin;
@@ -80,7 +150,10 @@ export class SolidWorld {
   resolveBody(s: MS): void {
     const r = 0.45;
     const feet = s.pos.y - MOVEMENT_CONFIG.playerHeight;
-    for (const c of this.cols) {
+    const cands = this.cands;
+    cands.length = 0;
+    this.index.queryPoint(s.pos.x, s.pos.z, r + 1, cands);
+    for (const c of cands) {
       const dx = s.pos.x - c.cx, dz = s.pos.z - c.cz;
       const rr = Math.max(c.hx, c.hz) + r + 1;
       if (dx * dx + dz * dz > rr * rr) continue;
@@ -131,6 +204,7 @@ export function blastOccluded(
   blastPos: { x: number; y: number; z: number },
   targetPos: { x: number; y: number; z: number },
   cols: readonly StructureCollider[],
+  index?: ColliderIndex,
 ): boolean {
   const to = { x: targetPos.x, y: targetPos.y + 1.0, z: targetPos.z };
   let sx = blastPos.x, sy = blastPos.y, sz = blastPos.z;
@@ -138,7 +212,7 @@ export function blastOccluded(
     const dx = to.x - sx, dy = to.y - sy, dz = to.z - sz;
     const d = Math.hypot(dx, dy, dz);
     if (d < 0.5) return false;
-    const hit = segSolidHit({ x: sx, y: sy, z: sz }, to, cols);
+    const hit = segSolidHit({ x: sx, y: sy, z: sz }, to, cols, index);
     if (!hit) return false;
     if (hit.t > 0.001) return true;
     const step = 0.4 / d;
