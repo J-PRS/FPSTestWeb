@@ -45,7 +45,7 @@ new GLTFLoader().load(url, (gltf) => {
   const box0 = new THREE.Box3().setFromObject(model);
   const size0 = box0.getSize(new THREE.Vector3());
   model.scale.setScalar(mann ? 2.0 / size0.y : 0.5);
-  model.rotation.y = Math.PI;
+  model.rotation.y = Math.PI * 0.8; // 3/4 front — galleries read better than flat profile
   model.traverse((o) => { if ((o as THREE.SkinnedMesh).isSkinnedMesh) o.frustumCulled = false; });
   scene.add(model);
 
@@ -67,7 +67,9 @@ new GLTFLoader().load(url, (gltf) => {
   const box = new THREE.Box3().setFromObject(model);
   const c = box.getCenter(new THREE.Vector3());
   const size = box.getSize(new THREE.Vector3()).length();
-  const d = size * 0.62;
+  // Fit the bounding *diagonal* inside the 45° fov with margin — diagonal
+  // guarantees the widest clip arc stays in frame.
+  const d = (size / 2) / Math.tan(camera.fov * Math.PI / 360) * 1.12;
   camera.position.set(c.x + d * 0.55, c.y + size * 0.14, c.z + d);
   camera.lookAt(c);
 
