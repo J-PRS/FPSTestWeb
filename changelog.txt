@@ -1,3 +1,5 @@
+2026-10-03 - Scenario suite +2 (skillEnergy, slamClamp): cloak ante + held drain + regen suppression on the shadow sim, forged slam power clamps to the 1.8x ceiling.
+
 2026-10-03 - Scenario suite +1 (shotFired): cosmetic fire relay excludes the shooter, 50ms throttle, dead-suppressed.
 
 2026-10-03 - Scenario suite +2 (meleeAoe, flagReturn): melee band accept/reject through the funnel, dropped-flag return-on-touch + timeout self-return.
