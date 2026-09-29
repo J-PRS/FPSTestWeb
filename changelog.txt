@@ -1,3 +1,4 @@
+2026-10-03 - refactor: PlayerModel clip/bone tables extracted to entities/playerClips.ts - 856->748 lines
 2026-10-03 - refactor: PlayerModel gibs block extracted to entities/playerGibs.ts - 926->856 lines
 2026-10-03 - server: turret/drone target scans gate on structure LOS - sentries no longer plink through walls
 2026-10-03 - creatureSim: all mobile families clip move legs against structure walls (clipMotion) - no more ghosting through buildings server + predictor
