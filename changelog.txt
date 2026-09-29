@@ -1,3 +1,5 @@
+2026-10-03 - Scenario suite +1 (healCredit): team-room heal claims gate on gem credit, claim clamps to the bank, non-team rooms heal free-form.
+
 2026-10-03 - Scenario suite +3: suppression (dead-reckon tolerances + state-change bypass + 250ms heartbeat), reconnect (grace reclaim w/ session token, bad-token + duplicate rejects), joinGuard (IP flood throttle, loopback exempt, claimed-id + malformed rejects).
 
 2026-10-03 - PlayerModel load retries 4x with backoff on fetch failure — dev-server restarts no longer leave invisible players for the session. recordSuppressed() extracted for tests.
