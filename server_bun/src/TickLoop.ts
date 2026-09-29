@@ -153,6 +153,13 @@ export class TickLoop {
     }
   }
 
+  /** Test seam: run one room tick synchronously (prod path goes through
+   *  startTickBroadcast's interval). Public so scenario tests can drive
+   *  ticks deterministically — tick bodies stay identical. */
+  tickRoomNow(room: Room, now0 = Date.now()): void {
+    this.tickRoom(room, room.players.getAllPlayers(), now0);
+  }
+
   private tickRoom(room: Room, players: Players, now0: number): void {
     // Server sims move first — bot/flag writes land in this tick's records.
     for (const sim of room.sims) sim.tick(0.05);
