@@ -1,3 +1,4 @@
+2026-09-26 - chatprobe: two-bot chat relay probe verifies the chat wire path live (validation -> broadcast -> delivery).
 2026-09-26 - Infiltration cloak: CTF offense bots cloak while pressing the enemy stand (no hunt target, tank >= cloakCost+15), veil drops on contact - verified live (67 cloak activations per soak).
 2026-09-26 - Bot skill activations (mend/shield/cloak) now logged at rising edge - verified live (103 activations per 60s crossfire soak).
 2026-09-26 - Builders can plant patrol drones (drone joins turret/mine/station palette); weaponStats log dir works under vitest (import.meta.dir fallback) - p2pHost suite un-broken.
