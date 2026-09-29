@@ -1,3 +1,5 @@
+2026-10-03 - Scoped AGENTS.md for server_bun/ + client/ (lazy per-directory loading; gates, maps, rules of the road). Research: .devin/rules/* confirmed preferred location, 32KiB budget is ample.
+
 2026-10-03 - Scenario: bots lose aim on a cloaked target (engage proven first, then zero hits under cloak).
 
 2026-10-03 - 2 more scenarios: turret unfold window (silent arm then engages) and match-end reset funnel (winAt -> matchEnd -> scores zeroed -> matchStart).
