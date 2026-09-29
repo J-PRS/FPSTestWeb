@@ -196,24 +196,25 @@ const LOGS_DIR = join(import.meta.dir, '..', '..', 'logs');
 // Log rotation — the previous run's logs move to logs/OLD/<name>_<mtime
 // -ts>.<ext> at boot so each file always reflects the build that produced
 // it (JP's manual timestamp convention, automated). Best-effort only.
+const p2 = (n: number) => String(n).padStart(2, '0');
+const logStamp = (t: Date) =>
+  `${t.getFullYear()}_${p2(t.getMonth() + 1)}_${p2(t.getDate())}-${p2(t.getHours())}_${p2(t.getMinutes())}_${p2(t.getSeconds())}`;
+
+const rotateLog = (p: string): void => {
+  try {
+    if (!existsSync(p) || statSync(p).size === 0) return;
+    const dst = join(LOGS_DIR, 'OLD', `${basename(p, extname(p))}_${logStamp(statSync(p).mtime)}${extname(p)}`);
+    renameSync(p, dst);
+  } catch { /* rotation must never block boot */ }
+};
+
 function rotateLogs(): void {
-  const stamp = (t: Date) => {
-    const p = (n: number) => String(n).padStart(2, '0');
-    return `${t.getFullYear()}_${p(t.getMonth() + 1)}_${p(t.getDate())}-${p(t.getHours())}_${p(t.getMinutes())}_${p(t.getSeconds())}`;
-  };
-  const rotate = (p: string) => {
-    try {
-      if (!existsSync(p) || statSync(p).size === 0) return;
-      const dst = join(LOGS_DIR, 'OLD', `${basename(p, extname(p))}_${stamp(statSync(p).mtime)}${extname(p)}`);
-      renameSync(p, dst);
-    } catch { /* rotation must never block boot */ }
-  };
   try {
     mkdirSync(join(LOGS_DIR, 'OLD'), { recursive: true });
     for (const f of readdirSync(LOGS_DIR)) {
-      if (/\.(log|jsonl)$/.test(f)) rotate(join(LOGS_DIR, f));
+      if (/\.(log|jsonl)$/.test(f)) rotateLog(join(LOGS_DIR, f));
     }
-    rotate(join(import.meta.dir, '..', 'logs', 'server.log'));
+    rotateLog(join(import.meta.dir, '..', 'logs', 'server.log'));
   } catch { /* same */ }
 }
 rotateLogs();
@@ -334,13 +335,13 @@ gameServer.setBunServer(server);
 // stop the WS game, so all errors are logged-and-continue inside start().
 if (CONFIG.wtPort > 0) {
   try {
-    const { readFileSync: rf, existsSync } = await import('node:fs');
+    const { readFileSync: rf, existsSync: fileExists } = await import('node:fs');
     const { createHash, X509Certificate } = await import('node:crypto');
     // Dev convenience: a checked-in certs/dev.{crt,key} pair means "WT on"
     // without env wiring — certs/ is dev-only self-signed anyway.
     const certPath = CONFIG.wtCertPath || `${import.meta.dir}/../certs/dev.crt`;
     const keyPath = CONFIG.wtKeyPath || `${import.meta.dir}/../certs/dev.key`;
-    if (!existsSync(certPath) || !existsSync(keyPath)) {
+    if (!fileExists(certPath) || !fileExists(keyPath)) {
       logger.warn('WebTransport disabled — no cert/key (env or certs/dev.*)', {});
     } else {
     const certPem = rf(certPath, 'utf8');

@@ -94,7 +94,8 @@ export class RoomDeployables {
   /** Owner death clears their field — no orphaned turrets farming kills
    *  for a corpse. Match reset and player leave use the same path. */
   clearOwner(ownerId: string): void {
-    for (const d of [...this.items.values()]) {
+    // Map iteration survives deletes — no snapshot needed.
+    for (const d of this.items.values()) {
       if (d.owner === ownerId) this.remove(d.id);
     }
   }
@@ -142,7 +143,7 @@ export class RoomDeployables {
    *  a careless mortar wrecks your own turret too. */
   applyBlast(center: Vec3, damage: number, radius: number, shooterId: string): void {
     if (this.items.size === 0) return;
-    for (const d of [...this.items.values()]) {
+    for (const d of this.items.values()) {
       const dx = d.pos.x - center.x, dy = d.pos.y - center.y, dz = d.pos.z - center.z;
       const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
       if (dist > radius) continue;
@@ -162,7 +163,7 @@ export class RoomDeployables {
 
   tick(dt: number): void {
     if (this.items.size === 0) return;
-    for (const d of [...this.items.values()]) {
+    for (const d of this.items.values()) {
       d.ttl -= dt;
       if (d.ttl <= 0) { this.remove(d.id); continue; }
       if (d.kind === 'turret') this.tickTurret(d, dt);

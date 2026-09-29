@@ -56,6 +56,12 @@ interface PickupRow { spawned: number; banked: number; decayed: number }
 const CELL = 10;
 const SPEED_BIN = 5;
 
+const speedBin = (v: { x: number; y: number; z: number } | null): string => {
+  if (!v) return 'unk';
+  const s = Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
+  return String(Math.floor(s / SPEED_BIN) * SPEED_BIN);
+};
+
 const FLUSH_MS = 60_000;
 const LOGS_DIR = join(HERE, '..', '..', 'logs');
 const STATS_FILE = join(LOGS_DIR, 'weaponstats.jsonl');
@@ -119,12 +125,7 @@ class WeaponStats {
   /** Kill-moment speeds (m/s) for shooter and victim, 5 m/s buckets. */
   recordKillSpeed(mode: string, shooterVel: { x: number; y: number; z: number } | null, victimVel: { x: number; y: number; z: number } | null): void {
     const r = (this.speeds[mode] ??= { shooter: {}, victim: {}, airShooter: 0, airVictim: 0 });
-    const bin = (v: { x: number; y: number; z: number } | null): string => {
-      if (!v) return 'unk';
-      const s = Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
-      return String(Math.floor(s / SPEED_BIN) * SPEED_BIN);
-    };
-    const sb = bin(shooterVel), vb = bin(victimVel);
+    const sb = speedBin(shooterVel), vb = speedBin(victimVel);
     r.shooter[sb] = (r.shooter[sb] ?? 0) + 1;
     r.victim[vb] = (r.victim[vb] ?? 0) + 1;
     if (shooterVel && Math.abs(shooterVel.y) > 4) r.airShooter++;

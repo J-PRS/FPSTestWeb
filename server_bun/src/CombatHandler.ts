@@ -407,10 +407,10 @@ export class CombatHandler {
       // Lag-comp the victim position the same as hitscan — a rocket
       // that exploded on the shooter's screen should hit the ghost.
       const tpos = rewindPos(target, clampPing(player.ping));
-      const dx = tpos.x - position.x;
-      const dy = tpos.y - position.y;
-      const dz = tpos.z - position.z;
-      const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      const tdx = tpos.x - position.x;
+      const tdy = tpos.y - position.y;
+      const tdz = tpos.z - position.z;
+      const dist = Math.sqrt(tdx * tdx + tdy * tdy + tdz * tdz);
 
       if (dist <= radius) {
         // Wall occlusion — a blast outside a structure doesn't splash
@@ -424,7 +424,7 @@ export class CombatHandler {
         if (damage <= 0) continue;
 
         const impulseMag = aoeImpulse(impulseForce, dist, radius) * KNOCKBACK_SCALE * perkMods(target.perk).knockbackTaken;
-        this.shove(targetId, target, dx, dy, dz, dist, impulseMag, position, pull);
+        this.shove(targetId, target, tdx, tdy, tdz, dist, impulseMag, position, pull);
 
         // Splash still displaces teammates (jump-boost assists); it just
         // never deals damage to them in team rooms.

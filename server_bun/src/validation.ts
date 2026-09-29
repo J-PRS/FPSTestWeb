@@ -10,6 +10,10 @@ function isFiniteNumber(n: unknown): n is number {
   return typeof n === 'number' && Number.isFinite(n);
 }
 
+// Room/map/mode name grammar — shared by the join handshake and switchRoom.
+const word = (v: unknown): string | undefined =>
+  typeof v === 'string' && /^[\w-]{1,32}$/.test(v) ? v : undefined;
+
 function validateVec3(value: unknown): ValidationResult<Vec3> {
   if (typeof value !== 'object' || value === null) {
     return { success: false, error: 'Expected object' };
@@ -246,8 +250,6 @@ const VALIDATORS: Record<string, (obj: Record<string, unknown>) => ValidationRes
   // Same name/map/mode grammar as the join handshake — a bad name just
   // lands you in 'default', never a rejection.
   switchRoom: (obj) => {
-    const word = (v: unknown) =>
-      typeof v === 'string' && /^[\w-]{1,32}$/.test(v) ? v : undefined;
     const bots = isFiniteNumber(obj.bots)
       ? Math.max(0, Math.min(24, Math.floor(obj.bots as number)))
       : undefined;

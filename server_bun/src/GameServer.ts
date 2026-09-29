@@ -14,6 +14,10 @@ import { readFileSync, appendFileSync, mkdirSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { type MapSpec, resolveMapSpec } from '../../shared/mapSpec.ts';
 
+// Room/map/mode name grammar — bad values fall through to 'default'.
+const word = (v: unknown): string | undefined =>
+  typeof v === 'string' && /^[\w-]{1,32}$/.test(v) ? v : undefined;
+
 export class GameServer {
   // One match's state per room — players land in 'default' unless the join
   // handshake names a room. Everything per-match (players, sockets, ball
@@ -144,7 +148,7 @@ export class GameServer {
         }
       }
     } catch { /* no journal yet — empty leaderboard */ }
-    return [...agg.values()].sort((a, b) => b.wins - a.wins || b.kills - a.kills);
+    return [...agg.values()].toSorted((a, b) => b.wins - a.wins || b.kills - a.kills);
   }
 
   /** Resolve-or-create a room. Joins may name any room; 'default' is the
@@ -166,7 +170,7 @@ export class GameServer {
       if (!spec) { spec = this.loadMapSpec(mode); src = spec ? mode : ''; }
       // bots applies even without a named spec — an ad-hoc --room join
       // asking for bots expects them or the request silently no-ops.
-      if (bots !== undefined) spec = { ...(spec ?? {}), bots, botFill: bots } as MapSpec;
+      if (bots !== undefined) spec = { ...spec, bots, botFill: bots } as MapSpec;
       if (src) this.roomMapName.set(name, src);
       room = new Room(name, this.field, mode, spec, CONFIG.moveAuthority);
       // `room` is a mutable let — bind a const for the closures or TS
@@ -297,7 +301,7 @@ export class GameServer {
             bots: spec?.bots ?? spec?.botFill ?? 0,
           };
         })
-        .sort((a, b) => a.name.localeCompare(b.name));
+        .toSorted((a, b) => a.name.localeCompare(b.name));
     } catch {
       return [];
     }
@@ -390,7 +394,6 @@ export class GameServer {
     this.switchCooldowns.set(playerId, now);
 
     const msg = raw as { room?: string; map?: string; mode?: string; bots?: number };
-    const word = (v: unknown) => typeof v === 'string' && /^[\w-]{1,32}$/.test(v) ? v : undefined;
     const target = word(msg.room) ?? 'default';
     const from = this.roomOfPlayer(playerId);
     if (!from) return;
@@ -475,7 +478,7 @@ export class GameServer {
       // Live match state so the lobby row shows more than occupancy.
       scores: r.modeSpec?.teams ? { ...r.scores } : undefined,
       ffaLeader: r.modeSpec?.ffa
-        ? [...r.ffaScores.entries()].sort((a, b) => b[1] - a[1])[0]
+        ? [...r.ffaScores.entries()].toSorted((a, b) => b[1] - a[1])[0]
         : undefined,
       winAt: r.modeSpec?.winAt,
       // Lobby countdown — ms until the horn; omitted when the clock isn't armed.

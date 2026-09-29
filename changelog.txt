@@ -1,3 +1,9 @@
+2026-10-03 - First server_bun oxlint sweep: cleared all 4 errors
+    (spreading map .values() before iterating was unnecessary — Map
+    iteration survives deletes; useless ?? {} in a spread) plus the
+    trivial warnings — sort→toSorted, no-shadow renames, and hoisting
+    seven scope-free helper fns to module level. Remaining warnings
+    are all complexity/max-params refactor items.
 2026-10-03 - Heal-rate fix: CONFIG.tickRate claimed 30 but the loop ran
     at 20Hz — every hp/s-based heal (mend, regen perk, regen powerup)
     delivered ~66% of its rate. tickRate now defaults to 20 and drives

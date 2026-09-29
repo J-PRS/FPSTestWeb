@@ -147,6 +147,8 @@ class WtSocketAdapter {
  * can pin `serverCertificateHashes`. Disabled when FPS_WT_PORT / cert env
  * are unset or the native addon won't load.
  */
+const swallow = (err: unknown): boolean => String(err).includes('E_SESSION_CLOSED');
+
 export class WtServer {
   private static sessionCloseGuardInstalled = false;
   private server: { close(): Promise<void> } | null = null;
@@ -174,7 +176,6 @@ export class WtServer {
       // known-benign code at the boundary. Anything else still crashes.
       if (!WtServer.sessionCloseGuardInstalled) {
         WtServer.sessionCloseGuardInstalled = true;
-        const swallow = (err: unknown) => String(err).includes('E_SESSION_CLOSED');
         process.on('unhandledRejection', (err) => { if (!swallow(err)) throw err; });
         // The addon also throws E_SESSION_CLOSED synchronously inside
         // stream-start callbacks — that lands as uncaughtException, not a
