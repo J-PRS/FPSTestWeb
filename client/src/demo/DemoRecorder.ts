@@ -44,6 +44,12 @@ export interface DemoContext {
   room: string; mode: string; playerName: string;
 }
 
+// Zeroed frame — lets the start-of-clip header read a missing first
+// frame as all-zero fields without a chain of ?? fallbacks.
+const DEMO_ZERO_FRAME = {
+  posX: 0, posY: 0, posZ: 0, yaw: 0, pitch: 0, velX: 0, velY: 0, velZ: 0,
+} as DemoFrame;
+
 export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecorder {
   private frameBuffer: CircularBuffer<DemoFrame>;
   private projectileEvents: ProjectileEvent[] = [];
@@ -342,15 +348,16 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
   }
 
   private static startFrame(first: DemoFrame | null) {
+    const f = first ?? DEMO_ZERO_FRAME;
     return {
-      startPosX: first?.posX ?? 0,
-      startPosY: first?.posY ?? 0,
-      startPosZ: first?.posZ ?? 0,
-      startYaw: first?.yaw ?? 0,
-      startPitch: first?.pitch ?? 0,
-      startVelX: first?.velX ?? 0,
-      startVelY: first?.velY ?? 0,
-      startVelZ: first?.velZ ?? 0,
+      startPosX: f.posX,
+      startPosY: f.posY,
+      startPosZ: f.posZ,
+      startYaw: f.yaw,
+      startPitch: f.pitch,
+      startVelX: f.velX,
+      startVelY: f.velY,
+      startVelZ: f.velZ,
     };
   }
 
