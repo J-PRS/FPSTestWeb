@@ -64,11 +64,14 @@ Server tick (20Hz, measured ~11ms/50ms under 16p+80b+creatures):
    structure broadphase is linear-in-colliders. → spatial hash the OBB
    set once per map (cell ~8m); resolveBody + segSolidHit then test ~4
    cells not N. Same index shared by solidWorld/projectiles/blasts.
+   LANDED (e6f63d0): ColliderIndex XZ grid shared by move sims, ball
+   bounces, projectile sweeps, blast occlusion — server + client.
 2. **Bot senses** — losClear() marches heightfield every 3m per enemy
    candidate at 3Hz/bot, plus pickFightPos re-scores rings (LOS ×
    candidates × other-enemies). Bounded already (3Hz, mem). → per-bot
    stagger exists; next lever: LOS memo per (bot,enemy) pair valid ~1s,
    and early range-reject before marching (already by dist).
+   LANDED (195af85): losClear memoized on 1.5m-quantized endpoints, 0.8s TTL.
 3. **fanoutRecords** — O(P²) distance sq per tick; fine at 16p, quadratic
    at 64p. → cheap win available: bucket players into coarse cells once
    per tick, tier by cell not per-pair. Only needed past ~32/room.
@@ -78,6 +81,7 @@ Server tick (20Hz, measured ~11ms/50ms under 16p+80b+creatures):
 5. **RoomProjectiles** — sphere rejects landed (e0df0e3). Remaining:
    getWeaponStats lookup per proj per tick (map hit) — could cache stats
    on LiveProj. Micro.
+   LANDED (195af85): stats resolved once at spawn, stored on LiveProj.
 6. **TickLoop buildRecords** — already alloc-free (in-place snapshot).
    encodeTickPlayer per unsuppressed player per tick — unavoidable.
 
@@ -88,6 +92,8 @@ Client frame (SwiftShader distorts; phase marks exist):
    frame; anim mixer cost scales with bone count. → throttle anim to
    distance tiers (update far remotes at 15Hz, skip off-screen), same
    trick as species LOD. Worth real fps in big fights.
+   LANDED (0728b5f): far remotes burst-tick the mixer at 15/30Hz,
+   accumulated dt keeps playback speed correct.
 3. **Terrain getHeight calls** — species ground clamps, projectile
    samples, LOS probes, bot brains all re-evaluate bilinear lookups.
    → cheap win: per-frame memo cache (x,z)→h at ~0.5m cell granularity.
