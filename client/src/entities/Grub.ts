@@ -4,7 +4,7 @@ import { nextTargetId } from './targetIds.js';
 import {
   GRUB_RADIUS, GRUB_HEALTH, GRUB_SPEED,
   GRUB_AGGRO_DIST, GRUB_BITE_DIST, GRUB_BITE_CD, GRUB_STUN,
-  EMERGE_DUR,
+  EMERGE_DUR, MELEE_FAVOR,
 } from '../core/config.js';
 import { Terrain } from '../world/terrain.js';
 import type { Targetable } from './balls.js';
@@ -153,18 +153,19 @@ export class Grub implements Targetable, SwarmSlotOwner {
     this.groundY = terrain.getHeight(this.pos.x, this.pos.z);
     this.pos.y = this.groundY + this.radius;
 
-    if (biteSq < GRUB_BITE_DIST * GRUB_BITE_DIST && this.biteCd <= 0) {
+    const biteD = GRUB_BITE_DIST * MELEE_FAVOR;
+    if (biteSq < biteD * biteD && this.biteCd <= 0) {
       this.biteCd = GRUB_BITE_CD;
       this.onBite?.(this);
     }
 
     if (this.vel.lengthSq() > 0.1) {
       const want = Math.atan2(this.vel.x, this.vel.z);
-      let dy = want - this.yaw;
-      while (dy > Math.PI) dy -= Math.PI * 2;
-      while (dy < -Math.PI) dy += Math.PI * 2;
-      this.yaw += dy * Math.min(1, 3 * dt); // sluggish turn — it oozes around
-      this.yawVel += (dy - this.yawVel) * Math.min(1, 4 * dt);
+      let dyaw = want - this.yaw;
+      while (dyaw > Math.PI) dyaw -= Math.PI * 2;
+      while (dyaw < -Math.PI) dyaw += Math.PI * 2;
+      this.yaw += dyaw * Math.min(1, 3 * dt); // sluggish turn — it oozes around
+      this.yawVel += (dyaw - this.yawVel) * Math.min(1, 4 * dt);
     } else {
       this.yawVel *= Math.max(0, 1 - 4 * dt); // straighten out when still
     }

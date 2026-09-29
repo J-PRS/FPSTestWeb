@@ -49,6 +49,7 @@ export class PlayerInput {
   invertY = settings.get('fps-invert-y');
   sensitivity = settings.get('fps-sens');
   private wheelAcc = 0; // accumulates deltaY for smooth-scroll mice
+  private lockDeltaStale = false; // swallow first delta after pointer lock
 
   constructor(private h: PlayerInputHandlers) {
     this.bindInput();
@@ -64,26 +65,35 @@ export class PlayerInput {
     this.beltHeld = false;
   }
 
+  private onKeyDown(e: KeyboardEvent): void {
+    const h = this.h;
+    if (this.frozen) return;
+    this.keys[e.code] = true;
+    if (matchCode('spectate', e.code) && !e.repeat) h.toggleSpectator();
+    // Spectating: only the spectate toggle and raw movement keys (tracked
+    // above for the fly cam) respond — no weapons, skills, camera flips
+    if (h.isSpectating()) return;
+    if (matchCode('sidearm', e.code)) h.secondaryDown(h.sidearmWid());
+    if (matchCode('jump', e.code)) this.jumpHeld = true;
+    if (matchCode('belt', e.code)) this.beltHeld = true;
+    if (matchCode('melee', e.code)) h.melee();
+    if (matchCode('camera', e.code)) h.toggleCamera();
+    if (matchCode('skill', e.code) && !e.repeat) h.skillPress();
+    if (matchCode('deploy', e.code) && !e.repeat) h.deploy();
+    const slot = this.slotForCode(e.code);
+    if (slot >= 0) h.selectSlot(slot);
+  }
+
+  private slotForCode(code: string): number {
+    for (let i = 0; i < LOADOUT_SLOTS; i++) {
+      if (matchCode(`slot${i}` as BindAction, code)) return i;
+    }
+    return -1;
+  }
+
   private bindInput(): void {
     const h = this.h;
-    document.addEventListener('keydown', (e) => {
-      if (this.frozen) return;
-      this.keys[e.code] = true;
-      if (matchCode('spectate', e.code) && !e.repeat) h.toggleSpectator();
-      // Spectating: only the spectate toggle and raw movement keys (tracked
-      // above for the fly cam) respond — no weapons, skills, camera flips
-      if (h.isSpectating()) return;
-      if (matchCode('sidearm', e.code)) h.secondaryDown(h.sidearmWid());
-      if (matchCode('jump', e.code)) this.jumpHeld = true;
-      if (matchCode('belt', e.code)) this.beltHeld = true;
-      if (matchCode('melee', e.code)) h.melee();
-      if (matchCode('camera', e.code)) h.toggleCamera();
-      if (matchCode('skill', e.code) && !e.repeat) h.skillPress();
-      if (matchCode('deploy', e.code) && !e.repeat) h.deploy();
-      for (let i = 0; i < LOADOUT_SLOTS; i++) {
-        if (matchCode(`slot${i}` as BindAction, e.code)) h.selectSlot(i);
-      }
-    });
+    document.addEventListener('keydown', (e) => this.onKeyDown(e));
     // Mouse wheel cycles weapons (down = next, up = previous). Accumulate
     // deltaY so smooth-scroll/trackpads switch once per gesture, not per tick.
     document.addEventListener('wheel', (e) => {
@@ -127,10 +137,19 @@ export class PlayerInput {
       if (matchCode('belt', `Mouse${e.button}`)) this.beltHeld = false;
     });
     document.addEventListener('contextmenu', (e) => e.preventDefault());
+    // Chrome's pointer-lock quirk: the first mousemove after lock carries
+    // a delta from the old cursor position — up to a full screen of phantom
+    // movement in one event (~50-80° spinout warns). Swallow that event and
+    // clamp per-event deltas: a real violent flick is <100px anyway.
+    document.addEventListener('pointerlockchange', () => {
+      if (document.pointerLockElement) this.lockDeltaStale = true;
+    });
     document.addEventListener('mousemove', (e) => {
-      if (document.pointerLockElement && !this.frozen) {
-        h.look(e.movementX, e.movementY);
-      }
+      if (!document.pointerLockElement || this.frozen) return;
+      if (this.lockDeltaStale) { this.lockDeltaStale = false; return; }
+      const mx = Math.max(-800, Math.min(800, e.movementX));
+      const my = Math.max(-800, Math.min(800, e.movementY));
+      h.look(mx, my);
     });
   }
 

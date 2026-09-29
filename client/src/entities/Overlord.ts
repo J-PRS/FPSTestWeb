@@ -149,6 +149,16 @@ export class Overlord implements Targetable, SwarmSlotOwner {
     _dir.y = 0;
     const d = _dir.length() || 0.001;
     _dir.multiplyScalar(1 / d);
+    this.steerLoiter(dt, terrain, d);
+    if (Math.random() < dt * 0.1) this.strafeDir *= -1;
+
+    this.tickDrops(dt, playerPos);
+    this.faceTarget(dt, playerPos, d);
+
+    this.writeInstances();
+  }
+
+  private steerLoiter(dt: number, terrain: Terrain, d: number): void {
     const ringErr = d - OVERLORD_LOITER_DIST;
     _scratch.set(-_dir.z * this.strafeDir, 0, _dir.x * this.strafeDir);
     if (this.stunTimer <= 0) {
@@ -163,33 +173,31 @@ export class Overlord implements Targetable, SwarmSlotOwner {
     this.pos.addScaledVector(this.vel, dt);
     const gy = terrain.getHeight(this.pos.x, this.pos.z);
     if (this.pos.y < gy + 2) this.pos.y = gy + 2;
+  }
 
-    if (Math.random() < dt * 0.1) this.strafeDir *= -1;
-
+  private tickDrops(dt: number, playerPos: THREE.Vector3): void {
     this.dropTimer -= dt;
-    const distToPlayer = this.pos.distanceTo(playerPos);
-    if (this.dropTimer <= 0 && distToPlayer < OVERLORD_DROP_RANGE) {
+    if (this.dropTimer <= 0 && this.pos.distanceTo(playerPos) < OVERLORD_DROP_RANGE) {
       this.dropTimer = this.dropInterval;
       this.onMineDrop?.(this);
       this.dropGlow = 0.35; // belly flash tells the drop happened
     }
+  }
 
-    // Face the TARGET, not drift direction — it ring-strafes sideways, and
-    // yawing to velocity put the eyes on its flanks. A gasbag looming at
-    // you while sliding sideways is creepier anyway. Bank still follows
-    // the turn so it doesn't look rail-mounted.
-    if (d > 0.5) {
-      const targetYaw = Math.atan2(playerPos.x - this.pos.x, playerPos.z - this.pos.z);
-      let dy = targetYaw - this.yaw;
-      while (dy > Math.PI) dy -= Math.PI * 2;
-      while (dy < -Math.PI) dy += Math.PI * 2;
-      this.yaw += dy * Math.min(1, 2 * dt);
-      this.roll = -dy * 0.3;
-      // Hitbox capsule follows the actual visual heading
-      this.capsuleEnd.set(Math.sin(this.yaw), 0, Math.cos(this.yaw)).multiplyScalar(1.3);
-    }
-
-    this.writeInstances();
+  // Face the TARGET, not drift direction — it ring-strafes sideways, and
+  // yawing to velocity put the eyes on its flanks. A gasbag looming at
+  // you while sliding sideways is creepier anyway. Bank still follows
+  // the turn so it doesn't look rail-mounted.
+  private faceTarget(dt: number, playerPos: THREE.Vector3, d: number): void {
+    if (d <= 0.5) return;
+    const targetYaw = Math.atan2(playerPos.x - this.pos.x, playerPos.z - this.pos.z);
+    let dy = targetYaw - this.yaw;
+    while (dy > Math.PI) dy -= Math.PI * 2;
+    while (dy < -Math.PI) dy += Math.PI * 2;
+    this.yaw += dy * Math.min(1, 2 * dt);
+    this.roll = -dy * 0.3;
+    // Hitbox capsule follows the actual visual heading
+    this.capsuleEnd.set(Math.sin(this.yaw), 0, Math.cos(this.yaw)).multiplyScalar(1.3);
   }
 
   private writeInstances(): void {

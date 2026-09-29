@@ -1,3 +1,5 @@
+2026-10-03 - Overlord.ts: update -> steerLoiter/tickDrops/faceTarget (c16 -> clean). Grub.ts dy->dyaw. input.ts keydown -> onKeyDown + slotForCode (c16 -> clean).
+
 2026-10-03 - Rakk.ts: update -> tickOrbit/tickDive/tickClimb/faceVelocity + wingbeat() (c22+c16 -> clean). Gnat.ts: update -> tickDart/tickCloud (c22 -> clean).
 
 2026-10-03 - Crawler.ts: update -> stepBody/faceTarget helpers; writeInstances -> writeLegs/writeFangs/writeEyes (c25+c17 -> clean).
