@@ -12,7 +12,7 @@ import {
 import { Terrain } from '../world/terrain.js';
 import { getHeightfield } from '../world/terrain.js';
 import { type SimCrawler } from '../../../shared/creatureSim.js';
-import { bindNetMelee, applyNetEdgeMelee, updateNetMelee } from '../game/netMelee.js';
+import { bindNetMelee, applyNetEdgeMelee, updateNetMelee, claimDamageMelee } from '../game/netMelee.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { Targetable } from './balls.js';
 import { allocSlots, freeSlots, getSwarm, getShadows } from './swarms.js';
@@ -434,10 +434,8 @@ export class Crawler implements Targetable, SwarmSlotOwner {
 
   takeDamage(damage: number): boolean {
     if (this.netDriven) {
-      // Claim, don't kill — the server's crawlDie ends it for everyone.
       this.flash = 0.15;
-      Crawler.hitClaim?.(this.netId, damage);
-      return false;
+      return claimDamageMelee(this, damage, Crawler.hitClaim);
     }
     this.health -= damage;
     this.flash = 0.15;

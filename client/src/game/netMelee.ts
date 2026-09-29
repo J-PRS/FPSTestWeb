@@ -52,6 +52,19 @@ export function applyNetEdgeMelee(e: NetMeleeLike, m: {
   e.vel.set(s.vx, s.vy, s.vz);
 }
 
+/** netDriven takeDamage — a claim, never a kill: the authority's crawlDie
+ *  decides. Returns true from the caller's takeDamage contract meaning
+ *  "handled, not dead" (the flash telegraph is the only local effect the
+ *  species class adds). */
+export function claimDamageMelee(
+  e: { netId: number },
+  damage: number,
+  claim: ((netId: number, damage: number) => void) | null,
+): boolean {
+  claim?.(e.netId, damage);
+  return false;
+}
+
 /** Replay the shared sim on the 50ms grid and mirror its state into the
  *  entity's visual fields. Callers add their species-specific telegraphs
  *  (squash/glow/dash cues) on top — the state machine is the display's

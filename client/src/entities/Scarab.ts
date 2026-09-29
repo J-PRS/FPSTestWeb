@@ -14,7 +14,7 @@ import { allocSlots, freeSlots, getSwarm, getShadows } from './swarms.js';
 import type { SwarmPart, SwarmSlotOwner } from './swarm.js';
 import { getGlowTexture } from '../effects/glowTexture.js';
 import { type SimCrawler } from '../../../shared/creatureSim.js';
-import { bindNetMelee, applyNetEdgeMelee, updateNetMelee } from '../game/netMelee.js';
+import { bindNetMelee, applyNetEdgeMelee, updateNetMelee, claimDamageMelee } from '../game/netMelee.js';
 
 const _dir = new THREE.Vector3();
 const _UP = new THREE.Vector3(0, 1, 0);
@@ -303,8 +303,7 @@ export class Scarab implements Targetable, SwarmSlotOwner {
   takeDamage(damage: number): boolean {
     if (this.netDriven) {
       this.flash = 0.15;
-      Scarab.hitClaim?.(this.netId, damage);
-      return false;
+      return claimDamageMelee(this, damage, Scarab.hitClaim);
     }
     this.health -= damage;
     this.flash = 0.15;
