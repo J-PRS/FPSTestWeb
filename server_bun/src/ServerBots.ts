@@ -401,6 +401,12 @@ export class ServerBots {
     if (prev === cls) return;
     const base = p.maxHealth - (prev ? CLASS_STATS[prev].maxHealth : 0);
     this.classes.set(p.id, cls);
+    // Heavies shoulder the mortar — tier-locked ordnance is what makes the
+    // class read as an anchor instead of just a slower medium.
+    if (cls === 'heavy') {
+      const lo = this.loadouts.get(p.id);
+      if (lo && lo.far !== WeaponType.Mortar) this.loadouts.set(p.id, { ...lo, far: WeaponType.Mortar });
+    }
     const delta = base + CLASS_STATS[cls].maxHealth - p.maxHealth;
     p.maxHealth += delta;
     p.health = Math.min(p.maxHealth, p.health + Math.max(0, delta));
