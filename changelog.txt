@@ -1,3 +1,5 @@
+2026-10-03 - netCrawlSpawn: instanceof chains -> SPECIES table (klass + registry list + default state) (c31 -> clean).
+
 2026-10-03 - hud.update split into tickVitals (health+ghost+armor), tickBuffs, tickDamageFx (c20 -> clean).
 
 2026-10-03 - speciesKit: updateSpecies LOD/gnaw -> lodTick/tickGnaw helpers (c20 -> clean); candidates sync/prune helpers; rollUber/atCap moved to module scope; shadowed loop vars renamed.

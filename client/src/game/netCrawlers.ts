@@ -9,7 +9,6 @@ import { Snake } from '../entities/Snake.js';
 import { Baneling } from '../entities/Baneling.js';
 import { Totem } from '../entities/Totem.js';
 import type { Targetable } from '../entities/balls.js';
-import type { SimCrawler, SimFlyer } from '../../../shared/creatureSim.js';
 import type { EntitiesDeps } from './entities.js';
 import { Explosion } from '../effects/explosion.js';
 import * as sfx from '../core/sfx.js';
@@ -29,6 +28,18 @@ export interface NetCrawlersCtx {
 }
 
 type NetBeing = Crawler | Scarab | Rakk | Roller | Gnat | Snake | Baneling | Totem;
+
+// Fallback species name when the wire omits one (older servers).
+function speciesOf(c: NetBeing): string {
+  if (c instanceof Rakk) return 'rakk';
+  if (c instanceof Gnat) return 'gnat';
+  if (c instanceof Roller) return 'roller';
+  if (c instanceof Snake) return 'snake';
+  if (c instanceof Baneling) return 'baneling';
+  if (c instanceof Scarab) return 'scarab';
+  if (c instanceof Totem) return 'totem';
+  return 'crawler';
+}
 
 // ---- Server-owned crawlers (melee PvE) --------------------------------
 // Connected rooms with a `creatures` map spec run the authoritative hop
@@ -52,55 +63,41 @@ export function createNetCrawlers(deps: EntitiesDeps, ctx: NetCrawlersCtx) {
   Baneling.hitClaim = claim;
   Totem.hitClaim = claim;
 
-  // species → entity class. Hop, flyer and roller species share the same
-  // replay path (netMelee.ts); the class only decides the visuals.
-  const ENTITY_FOR: Record<string, typeof Crawler | typeof Scarab | typeof Rakk | typeof Roller | typeof Gnat | typeof Snake | typeof Baneling | typeof Totem> = {
-    crawler: Crawler,
-    scarab: Scarab,
-    rakk: Rakk,
-    roller: Roller,
-    gnat: Gnat,
-    snake: Snake,
-    baneling: Baneling,
-    totem: Totem,
+  // species → class + home registry + the default sim state it spawns in.
+  // Hop, flyer and roller species share the same replay path (netMelee.ts);
+  // the class only decides the visuals. bindNet's signature is uniform
+  // across classes, so the whole spawn path is one table lookup.
+  interface SpeciesEntry {
+    Klass: typeof Crawler | typeof Scarab | typeof Rakk | typeof Roller | typeof Gnat | typeof Snake | typeof Baneling | typeof Totem;
+    list: NetBeing[];
+    state: string;
+  }
+  const ZERO_VEL = { x: 0, y: 0, z: 0 };
+  const SPECIES: Record<string, SpeciesEntry> = {
+    crawler:  { Klass: Crawler,  list: crawlers,  state: 'wander'  },
+    scarab:   { Klass: Scarab,   list: scarabs,   state: 'wander'  },
+    rakk:     { Klass: Rakk,     list: rakks,     state: 'orbit'   },
+    roller:   { Klass: Roller,   list: rollers,   state: 'roll'    },
+    gnat:     { Klass: Gnat,     list: gnats,     state: 'orbit'   },
+    snake:    { Klass: Snake,    list: snakes,    state: 'slither' },
+    baneling: { Klass: Baneling, list: banelings, state: 'chase'   },
+    totem:    { Klass: Totem,    list: totems,    state: 'aim'     },
   };
 
   function netCrawlSpawn(m: { id: number; position: { x: number; y: number; z: number }; seed: number; uber: boolean; species?: string; targetId?: string | null; tp?: { x: number; y: number; z: number } | null; state?: string }): void {
     if (netCrawlerById.has(m.id)) return;
-    const Klass = ENTITY_FOR[m.species ?? 'crawler'] ?? Crawler;
-    const c = new Klass(deps.scene, deps.lazyTerrain(),
-      new THREE.Vector3(m.position.x, m.position.y, m.position.z), m.uber) as NetBeing;
-    if (c instanceof Rakk || c instanceof Gnat) {
-      c.bindNet(m.id, m.seed, new THREE.Vector3(m.position.x, m.position.y, m.position.z),
-        { x: 0, y: 0, z: 0 }, ((m.state as SimFlyer['state']) ?? 'orbit'), m.uber, m.species ?? (c instanceof Gnat ? 'gnat' : 'rakk'));
-    } else if (c instanceof Roller) {
-      c.bindNet(m.id, m.seed, new THREE.Vector3(m.position.x, m.position.y, m.position.z),
-        { x: 0, y: 0, z: 0 }, m.state ?? 'roll', m.uber, m.species ?? 'roller');
-    } else if (c instanceof Snake) {
-      c.bindNet(m.id, m.seed, new THREE.Vector3(m.position.x, m.position.y, m.position.z),
-        { x: 0, y: 0, z: 0 }, m.state ?? 'slither', m.uber, m.species ?? 'snake');
-    } else if (c instanceof Baneling) {
-      c.bindNet(m.id, m.seed, new THREE.Vector3(m.position.x, m.position.y, m.position.z),
-        { x: 0, y: 0, z: 0 }, m.state ?? 'chase', m.uber, m.species ?? 'baneling');
-    } else if (c instanceof Totem) {
-      c.bindNet(m.id, m.seed, new THREE.Vector3(m.position.x, m.position.y, m.position.z),
-        { x: 0, y: 0, z: 0 }, m.state ?? 'aim', m.uber);
-    } else {
-      c.bindNet(m.id, m.seed, new THREE.Vector3(m.position.x, m.position.y, m.position.z),
-        { x: 0, y: 0, z: 0 }, ((m.state as SimCrawler['state']) ?? 'wander'), m.uber, m.species ?? 'crawler');
-    }
+    const sp = SPECIES[m.species ?? 'crawler'] ?? SPECIES.crawler!;
+    const pos = new THREE.Vector3(m.position.x, m.position.y, m.position.z);
+    const c = new sp.Klass(deps.scene, deps.lazyTerrain(), pos, m.uber) as NetBeing;
+    // Each class narrows `state` to its sim's enum; through the union the
+    // overloads don't merge, so bind through the shared (string) shape.
+    type BindNetArgs = [id: number, seed: number, pos: THREE.Vector3, vel: { x: number; y: number; z: number }, state: string, uber: boolean, species?: string];
+    const bindNet = c.bindNet as (...a: BindNetArgs) => void;
+    bindNet.call(c, m.id, m.seed, pos, ZERO_VEL, m.state ?? sp.state, m.uber, m.species ?? speciesOf(c));
     if (m.targetId && m.tp) {
-      c.applyNetEdge({ position: m.position, velocity: { x: 0, y: 0, z: 0 }, kind: 'retarget', targetId: m.targetId, tp: m.tp });
+      c.applyNetEdge({ position: m.position, velocity: ZERO_VEL, kind: 'retarget', targetId: m.targetId, tp: m.tp });
     }
-    // Route into the species' own registry so its update pass ticks it.
-    if (c instanceof Rakk) rakks.push(c);
-    else if (c instanceof Gnat) gnats.push(c);
-    else if (c instanceof Snake) snakes.push(c);
-    else if (c instanceof Baneling) banelings.push(c);
-    else if (c instanceof Roller) rollers.push(c);
-    else if (c instanceof Scarab) scarabs.push(c);
-    else if (c instanceof Totem) totems.push(c);
-    else crawlers.push(c);
+    sp.list.push(c);
     targets.push(c);
     netCrawlerById.set(m.id, c);
   }
