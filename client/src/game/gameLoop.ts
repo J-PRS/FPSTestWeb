@@ -84,10 +84,251 @@ export interface GameLoopDeps {
 
 // The frame loop + render pass. Everything mutable it touches comes in via
 // deps so main.ts stays a pure wiring file.
+interface LoopState {
+  lastYaw: number;
+  lastPitch: number;
+  lowFpsFrames: number;
+  lowFpsAccum: number;
+  lastFpsDump: number;
+  fxCursor: number;
+  fxJobs: (() => void)[];
+}
+
+// FPS watchdog — sustained <40fps for >10 consecutive frames fires a
+// one-shot stats dump (ships to logs/client.log via the WARN+ pipeline),
+// throttled to once per 10s. Uses rawElapsed, not clamped dt, and skips
+// hidden tabs (rAF throttling ≠ real perf).
+function fpsWatchdog(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof createFrameBudget>, perf: ReturnType<typeof createPerfHud>, rawElapsed: number, now: number): void {
+  if (document.hidden || rawElapsed <= 0) return;
+  if (1 / rawElapsed < 40) { st.lowFpsFrames++; st.lowFpsAccum += rawElapsed; }
+  else { st.lowFpsFrames = 0; st.lowFpsAccum = 0; }
+  if (st.lowFpsFrames > 10 && now - st.lastFpsDump > 10_000) {
+    st.lastFpsDump = now;
+    const player = deps.lazyPlayer();
+    const nm = deps.lazyNetworkManager();
+    const info = deps.rendererSetup.renderer.info;
+    const entities = deps.entities;
+    Logger.warn('LOW FPS sustained — perf dump', {
+      avgFps: Math.round(st.lowFpsFrames / st.lowFpsAccum),
+      frames: st.lowFpsFrames,
+      pos: { x: +player.pos.x.toFixed(1), y: +player.pos.y.toFixed(1), z: +player.pos.z.toFixed(1) },
+      speed: +player.vel.length().toFixed(1),
+      dead: player.isDead,
+      demo: deps.lazyDemoManager()?.isPlaying ?? false,
+      targets: entities.targets.length,
+      balls: entities.balls.filter(b => !b.dead && !b.disposed).length,
+      nuggets: entities.nuggets.length,
+      remotes: deps.world.remotePlayers.size,
+      projectiles: deps.world.projectiles.length,
+      explosions: deps.world.explosions.length,
+      debris: deps.world.debrisList.length + deps.world.playerDebrisList.length,
+      scorches: deps.world.scorches.length,
+      drawCalls: info.render.calls,
+      triangles: info.render.triangles,
+      geometries: info.memory.geometries,
+      textures: info.memory.textures,
+      phases: perf.snapshot(),
+      budget: budget.stats(),
+      ping: nm?.getPing?.(),
+      packetLoss: nm?.getPacketLoss?.(),
+      heapMB: (performance as { memory?: { usedJSHeapSize: number } }).memory
+        ? Math.round((performance as { memory?: { usedJSHeapSize: number } }).memory!.usedJSHeapSize / 1048576)
+        : undefined,
+    });
+    st.lowFpsFrames = 0; st.lowFpsAccum = 0;
+  }
+}
+
+// Demo bookkeeping: update recorder/player, freeze input during playback.
+// Returns whether demo playback is currently paused.
+function tickDemo(deps: GameLoopDeps, dt: number): boolean {
+  const demoManager = deps.lazyDemoManager();
+  const player = deps.lazyPlayer();
+  if (demoManager) demoManager.update(dt); // zero-overhead when idle
+  const shouldFreeze = demoManager?.isPlaying ?? false;
+  if (shouldFreeze && !player.inputFrozen) player.freezeInput();
+  else if (!shouldFreeze && player.inputFrozen) player.unfreezeInput();
+  return demoManager?.isPaused ?? false;
+}
+
+// Species census for the bottom-left debug readout — in-place count,
+// no per-frame filter arrays.
+function censusEntities(deps: GameLoopDeps, entities: ReturnType<typeof createEntities>) {
+  let balls = 0, elites = 0;
+  for (const b of entities.balls) {
+    if (b.dead || b.disposed) continue;
+    if (b.variant === 3) elites++; else balls++;
+  }
+  return {
+    balls, elites,
+    crawlers: _aliveCount(entities.crawlers),
+    scarabs: _aliveCount(entities.scarabs),
+    grubs: _aliveCount(entities.grubs),
+    snakes: _aliveCount(entities.snakes),
+    gnats: _aliveCount(entities.gnats),
+    seekers: _aliveCount(entities.seekers),
+    rakks: _aliveCount(entities.rakks),
+    rollers: _aliveCount(entities.rollers),
+    turrets: _aliveCount(entities.turrets),
+    overlords: _aliveCount(entities.overlords),
+    totems: _aliveCount(entities.totems),
+    mines: _aliveCount(entities.mines),
+    targets: _aliveCount(entities.targets),
+    projectiles: deps.world.projectiles.length,
+    fx: deps.world.debrisList.length + deps.world.explosions.length
+      + deps.world.implosions.length + deps.world.scorches.length,
+  };
+}
+
+// Fog uniforms ride the terrain shader — must sync every frame. Fog color
+// follows the sun: looking sunward warms the haze, away cools it; the sky
+// horizon uniform takes the same tint so fogged ground stays seamless.
+function syncFog(deps: GameLoopDeps, terrain: Terrain): void {
+  const fog = deps.sceneSetup.scene.fog;
+  if (!(fog instanceof THREE.Fog)) return;
+  _sunDir.copy(deps.sceneSetup.sun.position).normalize();
+  const tinted = updateDirectionalFog(fog, deps.camera, _sunDir);
+  fog.color.copy(tinted);
+  deps.sceneSetup.atmosphericSky.setFogColor(tinted);
+  terrain.updateFog(fog.color, fog.near, fog.far);
+}
+
+/** Stage 1 — world sim: player, terrain, entities, wave director,
+ *  projectiles. Returns demoPaused for the later stages. */
+interface TickFrame { dt: number; player: Player; networkManager: NetworkManager; demoManager: DemoManager | null }
+function simTick(deps: GameLoopDeps, perf: ReturnType<typeof createPerfHud>, f: TickFrame, terrain: Terrain): boolean {
+  const { dt, player, networkManager, demoManager } = f;
+  player.update(dt);
+  terrain.update(player.pos.x, player.pos.z);
+  syncFog(deps, terrain);
+
+  // Position send even when hidden — the server needs liveness.
+  if (networkManager.isConnected() && !player.isDead && !demoManager?.isPlaying) {
+    deps.remotes().networkTick(dt);
+  }
+  perf.mark('player');
+
+  const demoPaused = tickDemo(deps, dt);
+  if (demoPaused) return true;
+
+  tickEntities(deps, perf, dt, demoManager?.isPlaying ?? false);
+  return false;
+}
+
+function tickEntities(deps: GameLoopDeps, perf: ReturnType<typeof createPerfHud>, dt: number, demoPlaying: boolean): void {
+  const entities = deps.entities;
+  entities.updateBalls(dt);
+  perf.mark('balls');
+  // ?mode=classic — balls are the whole roster, every other species'
+  // tick is skipped (they self-spawn ambiently, so ticking = populating)
+  if (!CLASSIC_MODE) {
+    entities.updateSpeciesAll(dt);
+    entities.updateDeployables(dt);
+  }
+  perf.mark('species');
+  if (!demoPlaying) deps.waveDirector().update(dt);
+  if (!demoPlaying) entities.updateNuggets(dt);
+  deps.teamBots?.()?.update(dt);
+  perf.mark('bots');
+  if (!demoPlaying) deps.combat()?.updateProjectiles(dt);
+  deps.demoLifecycle().updatePlaybackProjectiles(dt);
+  perf.mark('proj');
+}
+
+/** Stage 2 — transient VFX on wall-clock fxDt so they decay while the
+ *  tab is hidden instead of stacking into an overdraw bomb. Profiled the
+ *  hottest stage under fire (~5ms in a debris storm): the list updates
+ *  run as budgeted jobs under an ms cap, rotated each frame so sustained
+ *  load starves every list evenly instead of tail-dropping the last two.
+ *  Skipped frames are absorbed by the dt-based decay. */
+const FX_MS_CAP = 1.2;
+function fxTick(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof createFrameBudget>, fxDt: number): void {
+  st.fxJobs.length = 0;
+  st.fxJobs.push(
+    () => deps.lazyEffects().update(fxDt),
+    () => updateDeadList(deps.world.debrisList, fxDt),
+    () => updateDeadList(deps.world.playerDebrisList, fxDt),
+    () => updateGibs(fxDt),
+    () => updateDeadList(deps.world.scorches, fxDt),
+    () => updateDeadList(deps.world.explosions, fxDt),
+    () => updateDeadList(deps.world.implosions, fxDt),
+    () => updateDeadList(deps.world.aoeGizmos, fxDt),
+  );
+  if (st.fxCursor > 0) st.fxJobs.push(...st.fxJobs.splice(0, st.fxCursor));
+  st.fxCursor = (st.fxCursor + 1) % st.fxJobs.length;
+  budget.each('fxdecay', st.fxJobs, FX_MS_CAP, (job) => job());
+  // Deferred lists resume on their own next frame — nothing carries over.
+  st.fxJobs.length = 0;
+}
+
+/** Stage 3 — HUD + viewmodel + ambient/atmosphere, then render. */
+function hudTick(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof createFrameBudget>, perf: ReturnType<typeof createPerfHud>, f: TickFrame, fxDt: number): void {
+  const { dt, player, networkManager, demoManager } = f;
+  const { camera, sceneSetup, entities } = deps;
+  const hud = deps.lazyHud();
+  const viewModel = deps.lazyViewModel();
+  const terrain = deps.lazyTerrain();
+
+  hud.update(dt, player, networkManager.getPing(), networkManager.getPacketLoss(), networkManager.getJitter());
+  // Entity-count text is a slow-moving counter — 10Hz is plenty.
+  budget.sweep('census', 100, () => hud.setEntityCounts(censusEntities(deps, entities)));
+  hud.setNuggets(entities.getNuggetsCollected());
+  hud.setTimer(deps.waveDirector().elapsed);
+  hud.setMatchStatus(
+    deps.world.matchEndsAt ? deps.world.matchEndsAt - Date.now() : null,
+    deps.world.flagStates,
+  );
+  hud.updateDeathCountdown(deps.world.respawnMs);
+  budget.sweep('minimap', 40, () => {
+    // Both buffers exist only to feed updateMinimap — build them inside
+    // the sweep so they refresh on the same cadence.
+    deps.ambientBirds.positions(_birdPosBuf);
+    // Player/bot blips — same friend-or-foe rule as the overhead markers:
+    // wire team (or GameBot.team) matching localTeam = green, else red.
+    // Dead and cloaked riders are dropped — no corpse pings, no cloak leak.
+    _mapBlips.length = 0;
+    const wirePlayers = networkManager.getPlayers();
+    for (const [id, rp] of deps.world.remotePlayers) {
+      if (rp.isDead || rp.isCloakHidden) continue;
+      const team = (rp as { team?: string }).team ?? wirePlayers.get(id)?.team;
+      _mapBlips.push({ x: rp.position.x, z: rp.position.z, friendly: !!team && team === deps.world.localTeam });
+    }
+    hud.updateMinimap(entities.targets, entities.nuggets, player.pos, player.yaw, _birdPosBuf, _mapBlips);
+  });
+
+  viewModel.group.visible = !demoManager?.isPlaying && !player.isDead && !player.thirdPerson && !player.isSpectating;
+  const yawDelta = Math.atan2(Math.sin(player.yaw - st.lastYaw), Math.cos(player.yaw - st.lastYaw));
+  viewModel.update(dt, yawDelta, player.pitch - st.lastPitch, player.vel, camera);
+  st.lastYaw = player.yaw;
+  st.lastPitch = player.pitch;
+  perf.mark('viewmodel');
+  deps.lazyHealthBarSystem().update(dt, networkManager.getPlayers(), deps.world.remotePlayers, entities.balls);
+  perf.mark('healthbars');
+
+  // Peripheral speed lines along the true velocity vector; demo-suppressed.
+  deps.speedLines.update(fxDt, camera.position, demoManager?.isPlaying ? _zeroVel : player.vel);
+
+  for (const layer of deps.ambientLayers) layer.update(fxDt, camera.position, terrain);
+  deps.groundMist().update(fxDt, camera.position);
+  deps.ambientBirds.update(fxDt, player.pos, terrain, player.isDead);
+  perf.mark('ambient');
+
+  sceneSetup.update(dt);
+  sceneSetup.atmosphericSky.followCamera(camera.position);
+
+  // Shake composes after player.update's camera write; the LG beam weld
+  // is last — it needs the swayed viewmodel AND the post-shake camera or
+  // fast moves leave the bolt a frame stale.
+  screenShake.update(dt, camera);
+  deps.combat()?.updateBeamVisual();
+  sfxAudio.updateAudio(dt, player, camera);
+  perf.mark('scene');
+}
+
+
 export function createGameLoop(deps: GameLoopDeps) {
   let lastTime = 0;
-  let lastPlayerYaw = 0;
-  let lastPlayerPitch = 0;
+  const st: LoopState = { lastYaw: 0, lastPitch: 0, lowFpsFrames: 0, lowFpsAccum: 0, lastFpsDump: 0, fxCursor: 0, fxJobs: [] };
 
   // stats.js perf panels — FPS/MS/MB in a row along the bottom-right,
   // toggled with ` (backquote). stats.js only renders one panel per
@@ -128,246 +369,13 @@ export function createGameLoop(deps: GameLoopDeps) {
     }
   });
 
-  // FPS watchdog — sustained <40fps for >10 consecutive frames fires a
-  // one-shot stats dump (ships to logs/client.log via the WARN+ pipeline),
-  // throttled to once per 10s. Uses rawElapsed, not clamped dt, and skips
-  // hidden tabs (rAF throttling ≠ real perf).
-  let lowFpsFrames = 0;
-  let lowFpsAccum = 0;
-  let lastFpsDump = 0;
-  function fpsWatchdog(rawElapsed: number, now: number): void {
-    if (document.hidden || rawElapsed <= 0) return;
-    if (1 / rawElapsed < 40) { lowFpsFrames++; lowFpsAccum += rawElapsed; }
-    else { lowFpsFrames = 0; lowFpsAccum = 0; }
-    if (lowFpsFrames > 10 && now - lastFpsDump > 10_000) {
-      lastFpsDump = now;
-      const player = deps.lazyPlayer();
-      const nm = deps.lazyNetworkManager();
-      const info = deps.rendererSetup.renderer.info;
-      const entities = deps.entities;
-      Logger.warn('LOW FPS sustained — perf dump', {
-        avgFps: Math.round(lowFpsFrames / lowFpsAccum),
-        frames: lowFpsFrames,
-        pos: { x: +player.pos.x.toFixed(1), y: +player.pos.y.toFixed(1), z: +player.pos.z.toFixed(1) },
-        speed: +player.vel.length().toFixed(1),
-        dead: player.isDead,
-        demo: deps.lazyDemoManager()?.isPlaying ?? false,
-        targets: entities.targets.length,
-        balls: entities.balls.filter(b => !b.dead && !b.disposed).length,
-        nuggets: entities.nuggets.length,
-        remotes: deps.world.remotePlayers.size,
-        projectiles: deps.world.projectiles.length,
-        explosions: deps.world.explosions.length,
-        debris: deps.world.debrisList.length + deps.world.playerDebrisList.length,
-        scorches: deps.world.scorches.length,
-        drawCalls: info.render.calls,
-        triangles: info.render.triangles,
-        geometries: info.memory.geometries,
-        textures: info.memory.textures,
-        phases: perf.snapshot(),
-        budget: budget.stats(),
-        ping: nm?.getPing?.(),
-        packetLoss: nm?.getPacketLoss?.(),
-        heapMB: (performance as { memory?: { usedJSHeapSize: number } }).memory
-          ? Math.round((performance as { memory?: { usedJSHeapSize: number } }).memory!.usedJSHeapSize / 1048576)
-          : undefined,
-      });
-      lowFpsFrames = 0; lowFpsAccum = 0;
-    }
-  }
-
-  // Demo bookkeeping: update recorder/player, freeze input during playback.
-  // Returns whether demo playback is currently paused.
-  function tickDemo(dt: number): boolean {
-    const demoManager = deps.lazyDemoManager();
-    const player = deps.lazyPlayer();
-    if (demoManager) demoManager.update(dt); // zero-overhead when idle
-    const shouldFreeze = demoManager?.isPlaying ?? false;
-    if (shouldFreeze && !player.inputFrozen) player.freezeInput();
-    else if (!shouldFreeze && player.inputFrozen) player.unfreezeInput();
-    return demoManager?.isPaused ?? false;
-  }
-
-  // Species census for the bottom-left debug readout — in-place count,
-  // no per-frame filter arrays.
-  function censusEntities(entities: ReturnType<typeof createEntities>) {
-    let balls = 0, elites = 0;
-    for (const b of entities.balls) {
-      if (b.dead || b.disposed) continue;
-      if (b.variant === 3) elites++; else balls++;
-    }
-    return {
-      balls, elites,
-      crawlers: _aliveCount(entities.crawlers),
-      scarabs: _aliveCount(entities.scarabs),
-      grubs: _aliveCount(entities.grubs),
-      snakes: _aliveCount(entities.snakes),
-      gnats: _aliveCount(entities.gnats),
-      seekers: _aliveCount(entities.seekers),
-      rakks: _aliveCount(entities.rakks),
-      rollers: _aliveCount(entities.rollers),
-      turrets: _aliveCount(entities.turrets),
-      overlords: _aliveCount(entities.overlords),
-      totems: _aliveCount(entities.totems),
-      mines: _aliveCount(entities.mines),
-      targets: _aliveCount(entities.targets),
-      projectiles: deps.world.projectiles.length,
-      fx: deps.world.debrisList.length + deps.world.explosions.length
-        + deps.world.implosions.length + deps.world.scorches.length,
-    };
-  }
-
-  // Fog uniforms ride the terrain shader — must sync every frame. Fog color
-  // follows the sun: looking sunward warms the haze, away cools it; the sky
-  // horizon uniform takes the same tint so fogged ground stays seamless.
-  function syncFog(terrain: Terrain): void {
-    const fog = deps.sceneSetup.scene.fog;
-    if (!(fog instanceof THREE.Fog)) return;
-    _sunDir.copy(deps.sceneSetup.sun.position).normalize();
-    const tinted = updateDirectionalFog(fog, deps.camera, _sunDir);
-    fog.color.copy(tinted);
-    deps.sceneSetup.atmosphericSky.setFogColor(tinted);
-    terrain.updateFog(fog.color, fog.near, fog.far);
-  }
-
-  /** Stage 1 — world sim: player, terrain, entities, wave director,
-   *  projectiles. Returns demoPaused for the later stages. */
-  function simTick(dt: number, player: Player, terrain: Terrain, networkManager: NetworkManager, demoManager: DemoManager | null): boolean {
-    player.update(dt);
-    terrain.update(player.pos.x, player.pos.z);
-    syncFog(terrain);
-
-    // Position send even when hidden — the server needs liveness.
-    if (networkManager.isConnected() && !player.isDead && !demoManager?.isPlaying) {
-      deps.remotes().networkTick(dt);
-    }
-    perf.mark('player');
-
-    const demoPaused = tickDemo(dt);
-    if (demoPaused) return true;
-
-    tickEntities(dt, demoManager?.isPlaying ?? false);
-    return false;
-  }
-
-  function tickEntities(dt: number, demoPlaying: boolean): void {
-    const entities = deps.entities;
-    entities.updateBalls(dt);
-    perf.mark('balls');
-    // ?mode=classic — balls are the whole roster, every other species'
-    // tick is skipped (they self-spawn ambiently, so ticking = populating)
-    if (!CLASSIC_MODE) {
-      entities.updateSpeciesAll(dt);
-      entities.updateDeployables(dt);
-    }
-    perf.mark('species');
-    if (!demoPlaying) deps.waveDirector().update(dt);
-    if (!demoPlaying) entities.updateNuggets(dt);
-    deps.teamBots?.()?.update(dt);
-    perf.mark('bots');
-    if (!demoPlaying) deps.combat()?.updateProjectiles(dt);
-    deps.demoLifecycle().updatePlaybackProjectiles(dt);
-    perf.mark('proj');
-  }
-
-  /** Stage 2 — transient VFX on wall-clock fxDt so they decay while the
-   *  tab is hidden instead of stacking into an overdraw bomb. Profiled the
-   *  hottest stage under fire (~5ms in a debris storm): the list updates
-   *  run as budgeted jobs under an ms cap, rotated each frame so sustained
-   *  load starves every list evenly instead of tail-dropping the last two.
-   *  Skipped frames are absorbed by the dt-based decay. */
-  const FX_MS_CAP = 1.2;
-  const _fxJobs: (() => void)[] = [];
-  let _fxCursor = 0;
-  function fxTick(fxDt: number): void {
-    _fxJobs.length = 0;
-    _fxJobs.push(
-      () => deps.lazyEffects().update(fxDt),
-      () => updateDeadList(deps.world.debrisList, fxDt),
-      () => updateDeadList(deps.world.playerDebrisList, fxDt),
-      () => updateGibs(fxDt),
-      () => updateDeadList(deps.world.scorches, fxDt),
-      () => updateDeadList(deps.world.explosions, fxDt),
-      () => updateDeadList(deps.world.implosions, fxDt),
-      () => updateDeadList(deps.world.aoeGizmos, fxDt),
-    );
-    if (_fxCursor > 0) _fxJobs.push(..._fxJobs.splice(0, _fxCursor));
-    _fxCursor = (_fxCursor + 1) % _fxJobs.length;
-    budget.each('fxdecay', _fxJobs, FX_MS_CAP, (job) => job());
-    // Deferred lists resume on their own next frame — nothing carries over.
-    _fxJobs.length = 0;
-  }
-
-  /** Stage 3 — HUD + viewmodel + ambient/atmosphere, then render. */
-  function hudTick(dt: number, fxDt: number, player: Player, networkManager: NetworkManager, demoManager: DemoManager | null): void {
-    const { camera, sceneSetup, entities } = deps;
-    const hud = deps.lazyHud();
-    const viewModel = deps.lazyViewModel();
-    const terrain = deps.lazyTerrain();
-
-    hud.update(dt, player, networkManager.getPing(), networkManager.getPacketLoss(), networkManager.getJitter());
-    // Entity-count text is a slow-moving counter — 10Hz is plenty.
-    budget.sweep('census', 100, () => hud.setEntityCounts(censusEntities(entities)));
-    hud.setNuggets(entities.getNuggetsCollected());
-    hud.setTimer(deps.waveDirector().elapsed);
-    hud.setMatchStatus(
-      deps.world.matchEndsAt ? deps.world.matchEndsAt - Date.now() : null,
-      deps.world.flagStates,
-    );
-    hud.updateDeathCountdown(deps.world.respawnMs);
-    budget.sweep('minimap', 40, () => {
-      // Both buffers exist only to feed updateMinimap — build them inside
-      // the sweep so they refresh on the same cadence.
-      deps.ambientBirds.positions(_birdPosBuf);
-      // Player/bot blips — same friend-or-foe rule as the overhead markers:
-      // wire team (or GameBot.team) matching localTeam = green, else red.
-      // Dead and cloaked riders are dropped — no corpse pings, no cloak leak.
-      _mapBlips.length = 0;
-      const wirePlayers = networkManager.getPlayers();
-      for (const [id, rp] of deps.world.remotePlayers) {
-        if (rp.isDead || rp.isCloakHidden) continue;
-        const team = (rp as { team?: string }).team ?? wirePlayers.get(id)?.team;
-        _mapBlips.push({ x: rp.position.x, z: rp.position.z, friendly: !!team && team === deps.world.localTeam });
-      }
-      hud.updateMinimap(entities.targets, entities.nuggets, player.pos, player.yaw, _birdPosBuf, _mapBlips);
-    });
-
-    viewModel.group.visible = !demoManager?.isPlaying && !player.isDead && !player.thirdPerson && !player.isSpectating;
-    const yawDelta = Math.atan2(Math.sin(player.yaw - lastPlayerYaw), Math.cos(player.yaw - lastPlayerYaw));
-    viewModel.update(dt, yawDelta, player.pitch - lastPlayerPitch, player.vel, camera);
-    lastPlayerYaw = player.yaw;
-    lastPlayerPitch = player.pitch;
-    perf.mark('viewmodel');
-    deps.lazyHealthBarSystem().update(dt, networkManager.getPlayers(), deps.world.remotePlayers, entities.balls);
-    perf.mark('healthbars');
-
-    // Peripheral speed lines along the true velocity vector; demo-suppressed.
-    deps.speedLines.update(fxDt, camera.position, demoManager?.isPlaying ? _zeroVel : player.vel);
-
-    for (const layer of deps.ambientLayers) layer.update(fxDt, camera.position, terrain);
-    deps.groundMist().update(fxDt, camera.position);
-    deps.ambientBirds.update(fxDt, player.pos, terrain, player.isDead);
-    perf.mark('ambient');
-
-    sceneSetup.update(dt);
-    sceneSetup.atmosphericSky.followCamera(camera.position);
-
-    // Shake composes after player.update's camera write; the LG beam weld
-    // is last — it needs the swayed viewmodel AND the post-shake camera or
-    // fast moves leave the bolt a frame stale.
-    screenShake.update(dt, camera);
-    deps.combat()?.updateBeamVisual();
-    sfxAudio.updateAudio(dt, player, camera);
-    perf.mark('scene');
-  }
-
   function loop(time: number): void {
     requestAnimationFrame(loop);
     for (const s of statsPanels) s.update();
     const rawElapsed = (time - lastTime) / 1000;
     const dt = Math.min(rawElapsed, MAX_DELTA_TIME);
     lastTime = time;
-    fpsWatchdog(rawElapsed, time);
+    fpsWatchdog(deps, st, budget, perf, rawElapsed, time);
     perf.begin();
 
     // Hidden tabs get ~1 rAF/sec — dt clamps to 0.05 so game logic runs in
@@ -381,8 +389,9 @@ export function createGameLoop(deps: GameLoopDeps) {
     const networkManager = deps.lazyNetworkManager();
     const demoManager = deps.lazyDemoManager();
 
-    const demoPaused = simTick(dt, player, terrain, networkManager, demoManager);
-    if (!demoPaused) fxTick(fxDt);
+    const frame: TickFrame = { dt, player, networkManager, demoManager };
+    const demoPaused = simTick(deps, perf, frame, terrain);
+    if (!demoPaused) fxTick(deps, st, budget, fxDt);
     perf.mark('fx');
     deps.remotes().updateScoreboard();
 
@@ -391,7 +400,7 @@ export function createGameLoop(deps: GameLoopDeps) {
     const dummyTick = deps.getDummyTick();
     if (dummy && dummyTick) { dummyTick(dt); dummy.tick(dt); }
 
-    hudTick(dt, fxDt, player, networkManager, demoManager);
+    hudTick(deps, st, budget, perf, frame, fxDt);
     perf.mark('hud');
 
     renderFrame(fxDt); // damage numbers ride fxDt — same hidden-tab decay fix
