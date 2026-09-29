@@ -103,6 +103,15 @@ surface. Detailed research lives in `_reports/`; this file is the current truth.
    `ambient` species mix landed (43ea91b): per-species cap table flows
    spec → gameState/mapUpdate → setAmbientCaps; maps/infestation.json is
    the proof (crawler40/scarab24/rakk12/gnat30 layered ecology).
+   Server-authoritative species landed (e0be55b/eeb408f): `creatures`
+   spec field → shared/creatureSim.ts deterministic melee sim (crawler
+   pilot) replicated exactly like balls — wire carries only committed
+   edges (spawn/retarget/windup/pounce/bite/die + target snapshot, seeded
+   LCG), clients replay the identical hop stream between edges in
+   netDriven Crawler instances. Distance-tiered fanout: players <80m get
+   every edge; far players + spectators ride every 4th as a resync beat.
+   Rule going forward: `ambient` = client-side DECOR only; anything
+   interactive must live under `creatures` / the server sim.
    `terrain` ref landed: maps/<file>.bin
    heightfields per room (lazy, cached, shared). Shared brain landed:
    shared/botBrain.ts drives offline GameBots AND server bots — one
