@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'bun:test';
 import { CreatureSim } from '../src/CreatureSim.ts';
 import { PlayerManager } from '../src/PlayerManager.ts';
-import { makeSimCrawler, makeSimFlyer, stepFlyer, commitTarget, isFlyerSpecies, makeSimRoller, stepRoller, isRollerSpecies, makeSimSlither, stepSlither, isSlitherSpecies, applySlitherDamage, MELEE_SPECIES, FLYER_SPECIES } from '../../shared/creatureSim.ts';
-import type { SimCrawler, SimFlyer, SimRoller, SimSlither } from '../../shared/creatureSim.ts';
+import { makeSimCrawler, makeSimFlyer, stepFlyer, commitTarget, isFlyerSpecies, makeSimRoller, stepRoller, isRollerSpecies, makeSimSlither, stepSlither, isSlitherSpecies, applySlitherDamage, makeSimBaneling, stepBaneling, isBanelingSpecies, MELEE_SPECIES, FLYER_SPECIES } from '../../shared/creatureSim.ts';
+import type { SimCrawler, SimFlyer, SimRoller, SimSlither, SimBaneling } from '../../shared/creatureSim.ts';
 import type { Heightfield } from '../../shared/heightfield.ts';
 import type { ServerMessage } from '../src/types.ts';
 
@@ -341,5 +341,78 @@ describe('slither family (snake)', () => {
     const s = priv.spawnCrawler({ x: 0, y: 0, z: 0 }, 'snake');
     expect('animT' in s).toBe(true);
     expect(s.species).toBe('snake');
+  });
+});
+
+describe('kamikaze family (baneling)', () => {
+  const field: Heightfield = { size: 1, data: new Uint8Array(1), stride: 1 };
+
+  it('proximity fuse emits detonate and kills the sac', () => {
+    const b = makeSimBaneling(12, 0, 0.7, 0, false, 5, 'baneling');
+    commitTarget(b, 'prey', { x: 30, y: 0.7, z: 0 });
+    let ev: string | null = null;
+    for (let i = 0; i < 600 && !ev; i++) {
+      ev = stepBaneling(b, 0.05, field, { x: 30, y: 0.7, z: 0 }, true);
+    }
+    expect(ev).toBe('detonate');
+    expect(b.dead).toBe(true);
+    expect(b.x).toBeGreaterThan(10); // actually ran the fuse in
+    expect(isBanelingSpecies('baneling')).toBe(true);
+    expect(isBanelingSpecies('roller')).toBe(false);
+  });
+
+  it('life clock pops it even with no target', () => {
+    const b = makeSimBaneling(13, 0, 0.7, 0, false, 5, 'baneling');
+    b.age = 24.99;
+    expect(stepBaneling(b, 0.05, field, null, true)).toBe('detonate');
+    expect(b.dead).toBe(true);
+  });
+
+  it('a lethal hit detonates it — blast hook + die edge both fire', () => {
+    const { sim, sent, bcast } = makeRoom();
+    const booms: number[] = [];
+    sim.onDetonate = (b) => { booms.push(b.id); };
+    addPlayerAt(sim, 'shooter', 1, 0);
+    const priv = sim as unknown as {
+      field: Heightfield | null;
+      crawlers: Map<number, SimBaneling>;
+    };
+    priv.field = field;
+    const b = makeSimBaneling(14, 0, 0.7, 0, false, 5, 'baneling');
+    priv.crawlers.set(b.id, b);
+    sim.handleHit('shooter', b.id, 999);
+    expect(booms).toEqual([14]);
+    // The detonate edge rides the near-player sendTo tier; crawlDie is
+    // the broadcast sweep — both channels carry part of the pop.
+    expect(sent.filter(s => s.kind === 'detonate').length).toBe(1);
+    expect(bcast.map(m => m.type)).toContain('crawlDie');
+  });
+
+  it('authority and predictor replay the identical chase', () => {
+    const a = makeSimBaneling(15, 0, 0.7, 0, false, 77, 'baneling');
+    const p = makeSimBaneling(15, 0, 0.7, 0, false, 77, 'baneling');
+    commitTarget(a, 'prey', { x: 400, y: 0.7, z: 300 });
+    commitTarget(p, 'prey', { x: 400, y: 0.7, z: 300 });
+    for (let i = 0; i < 100; i++) {
+      stepBaneling(a, 0.05, field, { x: 400, y: 0.7, z: 300 }, true);
+      stepBaneling(p, 0.05, field, { x: 400, y: 0.7, z: 300 }, false);
+    }
+    expect(p.x).toBeCloseTo(a.x, 10);
+    expect(p.z).toBeCloseTo(a.z, 10);
+    expect(p.age).toBeCloseTo(a.age, 10);
+  });
+
+  it('server spawnCrawler dispatches baneling to makeSimBaneling', () => {
+    const { sim } = makeRoom();
+    addPlayerAt(sim, 'p1', 0, 0);
+    const priv = sim as unknown as {
+      field: Heightfield | null;
+      spawnCrawler(near: { x: number; y: number; z: number }, species: string): SimBaneling;
+    };
+    priv.field = { size: 1, data: new Uint8Array(1), stride: 1 };
+    const b = priv.spawnCrawler({ x: 0, y: 0, z: 0 }, 'baneling');
+    expect('age' in b).toBe(true);
+    expect(b.species).toBe('baneling');
+    expect(b.blastRadius).toBeGreaterThan(0);
   });
 });

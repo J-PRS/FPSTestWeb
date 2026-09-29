@@ -122,7 +122,14 @@ surface. Detailed research lives in `_reports/`; this file is the current truth.
    (2687bc7): dart maps onto dive, seeded cooldown replaces the flock
    nipGate. Five species server-owned on infestation (crawler:6,
    scarab:8, rakk:4, roller:3, gnat:10) — verified on the wire.
-   Remaining: slither (Snake), stationary (Totem), kamikaze (Baneling).
+   Slither landed (f540aa7): SimSlither coil→lunge→bite chain. Kamikaze
+   landed: SimBaneling — roller chassis, fuse/life clock emits the new
+   'detonate' edge, Room maps it to the AOE funnel (mineBlast) + noise
+   so bots hear the pop; shot-deaths detonate too. Seven species
+   server-owned on infestation (crawler:6, scarab:8, rakk:4, roller:3,
+   gnat:10, snake:4, baneling:4) — verified live (detonate edge seen).
+   Remaining: stationary (Totem) — needs a ranged/beam damage channel,
+   the only family that isn't melee-contact shaped.
    ballSim predictive terrain probes (3c12a28): parabola-scheduled gy
    sampling — resample at ~60% of predicted impact, on ~2m horizontal
    drift, or any velocity discontinuity; deterministic, bounded clip.

@@ -12,11 +12,12 @@
  */
 import { type Heightfield, hmHeight } from '../../shared/heightfield.ts';
 import {
-  type SimCrawler, type SimFlyer, type SimRoller, type SimSlither, type CrawlerEvent,
+  type SimCrawler, type SimFlyer, type SimRoller, type SimSlither, type SimBaneling, type CrawlerEvent,
   makeSimCrawler, stepCrawler, applyCrawlerDamage, commitTarget,
   isFlyerSpecies, makeSimFlyer, stepFlyer, applyFlyerDamage,
   isRollerSpecies, makeSimRoller, stepRoller, applyRollerDamage,
   isSlitherSpecies, makeSimSlither, stepSlither, applySlitherDamage,
+  isBanelingSpecies, makeSimBaneling, stepBaneling, applyBanelingDamage,
   CRAWLER_SIM,
 } from '../../shared/creatureSim.ts';
 import type { SimVec } from '../../shared/ballSim.ts';
@@ -52,10 +53,11 @@ const BRAIN_BUCKETS = 8;
 /** Hop + flyer + roller families share every wire field — the union
  *  only matters at step/damage dispatch, discriminated by family-only
  *  fields (`orbitPhase` = flyer, `hitCd` = roller). */
-type SimBeing = SimCrawler | SimFlyer | SimRoller | SimSlither;
+type SimBeing = SimCrawler | SimFlyer | SimRoller | SimSlither | SimBaneling;
 const isFlyer = (c: SimBeing): c is SimFlyer => 'orbitPhase' in c;
 const isRoller = (c: SimBeing): c is SimRoller => 'hitCd' in c;
 const isSlither = (c: SimBeing): c is SimSlither => 'animT' in c;
+const isBaneling = (c: SimBeing): c is SimBaneling => 'age' in c;
 
 export class CreatureSim {
   private field: Heightfield | null = null;
@@ -84,6 +86,9 @@ export class CreatureSim {
 
   /** Bite delivery — Room wires this to the damage funnel. */
   onBite: ((crawler: SimBeing, targetId: string) => void) | null = null;
+  /** Kamikaze pop — Room wires this to the AOE funnel. Fires whenever a
+   *  baneling dies, fuse or bullet — the pop IS the attack. */
+  onDetonate: ((baneling: SimBaneling) => void) | null = null;
   /** Kill feed / nugget drop hook — same shape as BallSim.onKilled. */
   onKilled: ((by: string, pos: Vec3) => void) | null = null;
 
@@ -159,10 +164,13 @@ export class CreatureSim {
         ? makeSimRoller(id, x, gy, z, uber, seed, species)
         : isSlitherSpecies(species)
           ? makeSimSlither(id, x, gy, z, uber, seed, species)
-          : makeSimCrawler(id, x, gy, z, uber, seed, species);
+          : isBanelingSpecies(species)
+            ? makeSimBaneling(id, x, gy, z, uber, seed, species)
+            : makeSimCrawler(id, x, gy, z, uber, seed, species);
     if (isFlyer(c)) c.y = gy + c.sp.ORBIT_ALT; // flyers enter at cruise alt
     if (isRoller(c)) c.y = gy + 1.6;           // rollers ride the surface
     if (isSlither(c)) c.y = gy + 0.5;          // belly on the dirt
+    if (isBaneling(c)) c.y = gy + 0.7;         // sac skims low
     // Negative offset pushes this crawler's first retarget into its own
     // bucket instead of the spawn tick — the spread survives every reset.
     this.retargetAcc.set(c.id, -RETARGET_INTERVAL * ((c.id % BRAIN_BUCKETS) / BRAIN_BUCKETS));
@@ -195,7 +203,7 @@ export class CreatureSim {
     return c.tgtValid ? { x: c.tx, y: c.ty, z: c.tz } : null;
   }
 
-  private edge(c: SimBeing, kind: 'retarget' | 'windup' | 'pounce' | 'bite'): void {
+  private edge(c: SimBeing, kind: 'retarget' | 'windup' | 'pounce' | 'bite' | 'detonate'): void {
     this.resyncAcc.set(c.id, 0);
     const msg: ServerMessage = {
       type: 'crawlEvt', id: c.id, kind,
@@ -240,7 +248,9 @@ export class CreatureSim {
         ? applyRollerDamage(c, dmg)
         : isSlither(c)
           ? applySlitherDamage(c, dmg)
-          : applyCrawlerDamage(c, dmg);
+          : isBaneling(c)
+            ? applyBanelingDamage(c, dmg)
+            : applyCrawlerDamage(c, dmg);
     if (dead) this.kill(c, playerId);
     // Stagger is a timer edge — the next hop decision diverges only if a
     // predictor skips it, and the resync heartbeat bounds that drift.
@@ -249,6 +259,8 @@ export class CreatureSim {
   private kill(c: SimBeing, by?: string): void {
     c.dead = true;
     this.crawlers.delete(c.id);
+    // A baneling dies by popping — shot or fuse, the blast is the point.
+    if (isBaneling(c)) { this.edge(c, 'detonate'); this.onDetonate?.(c); }
     const pos = { x: c.x, y: c.y, z: c.z };
     this.broadcast({ type: 'crawlDie', id: c.id, position: pos, by: by ?? null });
     if (by) this.onKilled?.(by, pos);
@@ -303,7 +315,13 @@ export class CreatureSim {
           ? stepRoller(c, TICK_DT, this.field!, tgt, true)
           : isSlither(c)
             ? stepSlither(c, TICK_DT, this.field!, tgt, true)
-            : stepCrawler(c, TICK_DT, this.field!, tgt, true);
+            : isBaneling(c)
+              ? stepBaneling(c, TICK_DT, this.field!, tgt, true)
+              : stepCrawler(c, TICK_DT, this.field!, tgt, true);
+      if (ev === 'detonate') {
+        this.kill(c);
+        continue;
+      }
       if (ev === 'windup' || ev === 'pounce') {
         this.edge(c, ev);
       } else if (ev === 'bite') {

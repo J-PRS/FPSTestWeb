@@ -216,6 +216,11 @@ export class Room {
     );
     this.creatureSim.pops = this.spec.creatures ?? {};
     this.creatureSim.onBite = (c, targetId) => this.messages.crawlerBite(targetId, c.biteDamage);
+    this.creatureSim.onDetonate = (b) => {
+      const pos = { x: b.x, y: b.y, z: b.z };
+      this.messages.mineBlast('environment', pos, b.biteDamage, b.blastRadius, 14);
+      this.pushNoise(pos); // bots hear the pop like any other blast
+    };
     this.creatureSim.onKilled = (by, pos) => this.creatureKill(by, pos, 0);
     this.messages.setCreatureSim(this.creatureSim);
     if (field) this.creatureSim.attachField(field);

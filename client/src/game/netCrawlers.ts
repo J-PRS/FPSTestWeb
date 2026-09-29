@@ -6,9 +6,14 @@ import { Rakk } from '../entities/Rakk.js';
 import { Roller } from '../entities/Roller.js';
 import { Gnat } from '../entities/Gnat.js';
 import { Snake } from '../entities/Snake.js';
+import { Baneling } from '../entities/Baneling.js';
 import type { Targetable } from '../entities/balls.js';
 import type { SimCrawler, SimFlyer } from '../../../shared/creatureSim.js';
 import type { EntitiesDeps } from './entities.js';
+import { Explosion } from '../effects/explosion.js';
+import * as sfx from '../core/sfx.js';
+import { screenShake } from '../effects/screenShake.js';
+import { ROCKET_RADIUS } from '../core/config.js';
 
 export interface NetCrawlersCtx {
   crawlers: Crawler[];
@@ -17,10 +22,11 @@ export interface NetCrawlersCtx {
   rollers: Roller[];
   gnats: Gnat[];
   snakes: Snake[];
+  banelings: Baneling[];
   targets: Targetable[];
 }
 
-type NetBeing = Crawler | Scarab | Rakk | Roller | Gnat | Snake;
+type NetBeing = Crawler | Scarab | Rakk | Roller | Gnat | Snake | Baneling;
 
 // ---- Server-owned crawlers (melee PvE) --------------------------------
 // Connected rooms with a `creatures` map spec run the authoritative hop
@@ -29,7 +35,7 @@ type NetBeing = Crawler | Scarab | Rakk | Roller | Gnat | Snake;
 // pattern as netBalls, minus the sim-clock estimation (hops are short
 // arcs; committed edges bound drift tightly enough without it).
 export function createNetCrawlers(deps: EntitiesDeps, ctx: NetCrawlersCtx) {
-  const { crawlers, scarabs, rakks, rollers, gnats, snakes, targets } = ctx;
+  const { crawlers, scarabs, rakks, rollers, gnats, snakes, banelings, targets } = ctx;
   const netCrawlerById = new Map<number, NetBeing>();
   const serverCreatures = (): boolean => deps.lazyNetworkManager()?.isConnected() ?? false;
 
@@ -41,16 +47,18 @@ export function createNetCrawlers(deps: EntitiesDeps, ctx: NetCrawlersCtx) {
   Roller.hitClaim = claim;
   Gnat.hitClaim = claim;
   Snake.hitClaim = claim;
+  Baneling.hitClaim = claim;
 
   // species → entity class. Hop, flyer and roller species share the same
   // replay path (netMelee.ts); the class only decides the visuals.
-  const ENTITY_FOR: Record<string, typeof Crawler | typeof Scarab | typeof Rakk | typeof Roller | typeof Gnat | typeof Snake> = {
+  const ENTITY_FOR: Record<string, typeof Crawler | typeof Scarab | typeof Rakk | typeof Roller | typeof Gnat | typeof Snake | typeof Baneling> = {
     crawler: Crawler,
     scarab: Scarab,
     rakk: Rakk,
     roller: Roller,
     gnat: Gnat,
     snake: Snake,
+    baneling: Baneling,
   };
 
   function netCrawlSpawn(m: { id: number; position: { x: number; y: number; z: number }; seed: number; uber: boolean; species?: string; targetId?: string | null; tp?: { x: number; y: number; z: number } | null; state?: string }): void {
@@ -67,6 +75,9 @@ export function createNetCrawlers(deps: EntitiesDeps, ctx: NetCrawlersCtx) {
     } else if (c instanceof Snake) {
       c.bindNet(m.id, m.seed, new THREE.Vector3(m.position.x, m.position.y, m.position.z),
         { x: 0, y: 0, z: 0 }, m.state ?? 'slither', m.uber, m.species ?? 'snake');
+    } else if (c instanceof Baneling) {
+      c.bindNet(m.id, m.seed, new THREE.Vector3(m.position.x, m.position.y, m.position.z),
+        { x: 0, y: 0, z: 0 }, m.state ?? 'chase', m.uber, m.species ?? 'baneling');
     } else {
       c.bindNet(m.id, m.seed, new THREE.Vector3(m.position.x, m.position.y, m.position.z),
         { x: 0, y: 0, z: 0 }, ((m.state as SimCrawler['state']) ?? 'wander'), m.uber, m.species ?? 'crawler');
@@ -78,6 +89,7 @@ export function createNetCrawlers(deps: EntitiesDeps, ctx: NetCrawlersCtx) {
     if (c instanceof Rakk) rakks.push(c);
     else if (c instanceof Gnat) gnats.push(c);
     else if (c instanceof Snake) snakes.push(c);
+    else if (c instanceof Baneling) banelings.push(c);
     else if (c instanceof Roller) rollers.push(c);
     else if (c instanceof Scarab) scarabs.push(c);
     else crawlers.push(c);
@@ -85,11 +97,19 @@ export function createNetCrawlers(deps: EntitiesDeps, ctx: NetCrawlersCtx) {
     netCrawlerById.set(m.id, c);
   }
 
-  function netCrawlEvt(m: { id: number; kind: 'retarget' | 'windup' | 'pounce' | 'bite'; position: { x: number; y: number; z: number }; velocity: { x: number; y: number; z: number }; targetId: string | null; tp?: { x: number; y: number; z: number } | null; t?: number }): void {
+  function netCrawlEvt(m: { id: number; kind: 'retarget' | 'windup' | 'pounce' | 'bite' | 'detonate'; position: { x: number; y: number; z: number }; velocity: { x: number; y: number; z: number }; targetId: string | null; tp?: { x: number; y: number; z: number } | null; t?: number }): void {
     const c = netCrawlerById.get(m.id);
     if (!c) return; // event raced ahead of spawn — roster/spawn covers it
     if (m.kind === 'windup' && c.sim) (c.sim as { state: string }).state = 'windup';
     c.applyNetEdge({ ...m, kind: m.kind });
+    if (m.kind === 'detonate' && c instanceof Baneling) {
+      // The pop is an fx edge only — the server's blast funnel already
+      // dealt the damage; crawlDie sweeps the entity right behind it.
+      const pos = new THREE.Vector3(m.position.x, m.position.y, m.position.z);
+      deps.world.explosions.push(new Explosion(deps.scene, pos, false, 0, deps.lazyTerrain(), c.blastRadius / ROCKET_RADIUS, 0x77ff44));
+      sfx.explosionAt(pos, true);
+      screenShake.blast(pos, c.uber ? 3.5 : 2.0, deps.camera.position);
+    }
   }
 
   function netCrawlDie(m: { id: number; position: { x: number; y: number; z: number }; by?: string | null }): void {

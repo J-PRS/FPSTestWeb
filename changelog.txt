@@ -1,3 +1,4 @@
+2026-09-29 - creatureSim: kamikaze family - SimBaneling (fuse/life detonate edge -> server AOE blast), netDriven Baneling client replay, baneling:4 on infestation; 5 new tests, verified live
 2026-09-29 - creatureSim families: SimRoller netDriven (roll core) + gnat via SimFlyer; ballSim predictive terrain probes (parabola-scheduled gy sampling)
 2026-09-30 - Flyer species port: shared SimFlyer (orbit->windup->dive->climb, seeded LCG + committed snapshots); rakk goes server-authoritative via crawl* edges; gnat row staged; infestation map adds rakk:4; 4 new flyer tests.
 2026-09-26 - Frame profiler split (balls/species/bots/proj marks feed LOW-FPS dumps + backquote HUD); FrameBudget scheduler (each=ms-quota chunking, sweep=name-phased periodic jobs) with minimap/census pilots; brain buckets stagger decision accumulators by entity id in BallSim + CreatureSim + client species LOD; serverHit() unified damage funnels; bots fight creatures on any map with creature pops.

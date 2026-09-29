@@ -12,6 +12,8 @@ import type { Targetable } from './balls.js';
 import { allocSlots, freeSlots, getSwarm, getShadows } from './swarms.js';
 import type { SwarmPart, SwarmSlotOwner } from './swarm.js';
 import { getGlowTexture } from '../effects/glowTexture.js';
+import type { SimBaneling } from '../../../shared/creatureSim.js';
+import { bindNetBaneling, applyNetEdgeBaneling, updateNetBaneling, claimDamageMelee } from '../game/netMelee.js';
 
 const _dir = new THREE.Vector3();
 const _axis = new THREE.Vector3();
@@ -60,6 +62,7 @@ export class Baneling implements Targetable, SwarmSlotOwner {
 
   pos: THREE.Vector3;
   vel: THREE.Vector3;
+  yaw = 0; // heading — visual facing, sim-driven when netDriven
   dead = false;
   health: number;
   maxHealth: number;
@@ -71,6 +74,44 @@ export class Baneling implements Targetable, SwarmSlotOwner {
   swarmSlot = -1;
   shadowSlot = -1;
   private hasSlots = false;
+
+  /** netDriven = server-authoritative replay — same contract as Roller. */
+  netDriven = false;
+  netAcc = 0;
+  netId = 0;
+  sim: SimBaneling | null = null;
+  static hitClaim: ((netId: number, damage: number) => void) | null = null;
+
+  bindNet(id: number, seed: number, pos: THREE.Vector3, vel: { x: number; y: number; z: number }, _state: string, uber: boolean, species = 'baneling'): void {
+    this.netDriven = true;
+    this.netId = id;
+    bindNetBaneling(this, id, seed, species, pos, vel, _state, uber);
+    (this as { blastRadius: number }).blastRadius = this.sim!.blastRadius;
+  }
+
+  applyNetEdge(m: { position: { x: number; y: number; z: number }; velocity: { x: number; y: number; z: number }; kind: string; targetId: string | null; tp?: { x: number; y: number; z: number } | null }): void {
+    applyNetEdgeBaneling(this, m);
+  }
+
+  private updateNet(dt: number, terrain: Terrain, playerPos: THREE.Vector3): void {
+    updateNetBaneling(this, dt, terrain);
+    const s = this.sim!;
+    // Dressing mirrors the local path: roll spin from velocity, glow from
+    // urgency — measured to the committed snapshot, not the live player,
+    // so the tell matches what the authority is fusing on.
+    const hSpeed = Math.hypot(s.vx, s.vz);
+    if (hSpeed > 0.1) {
+      _axis.set(s.vz, 0, -s.vx).normalize();
+      _dq.setFromAxisAngle(_axis, (hSpeed * dt) / this.radius);
+      this.rollQuat.premultiply(_dq);
+    }
+    const dist = s.tgtValid
+      ? Math.hypot(s.tx - s.x, s.ty - s.y, s.tz - s.z)
+      : this.pos.distanceTo(playerPos);
+    const urgency = 1 - Math.min(1, dist / (BANELING_FUSE_DIST * 6));
+    const p = (Math.sin(s.age * 10) + 1) / 2;
+    this.glowPulse = 0.4 + p * (0.3 + urgency * 0.5) + urgency * 0.3;
+  }
 
   private rollQuat = new THREE.Quaternion();
   private flash = 0;
@@ -109,6 +150,10 @@ export class Baneling implements Targetable, SwarmSlotOwner {
 
   update(dt: number, terrain: Terrain, playerPos: THREE.Vector3): void {
     if (this.dead) return;
+    if (this.netDriven && this.sim) {
+      this.updateNet(dt, terrain, playerPos);
+      return;
+    }
     if (this.flash > 0) this.flash -= dt;
     this.age += dt;
 
@@ -162,12 +207,19 @@ export class Baneling implements Targetable, SwarmSlotOwner {
     }
 
     if (!this.hasSlots) return;
+    this.writeInstances(terrain);
+  }
+
+  /** Instance + shadow writes — extracted so the netDriven replay path
+   *  (which drives pos/vel from the shared sim) shares one render path. */
+  writeInstances(_terrain: Terrain): void {
     const swarm = getSwarm('baneling');
     if (!swarm) return;
     const slot = this.swarmSlot;
     const r = this.radius;
+    const swell = Math.max(0, this.glowPulse - 0.4) * 0.15; // urgency folded into the pulse
 
-    _s.setScalar(r * (1 + urgency * 0.15)); // subtle swell on approach
+    _s.setScalar(r * (1 + swell)); // subtle swell on approach
     _m.compose(this.pos, this.rollQuat, _s);
     swarm.setMatrix(PART_BODY, slot, _m);
     const fr = this.flash > 0 ? 4 : 1;
@@ -177,7 +229,7 @@ export class Baneling implements Targetable, SwarmSlotOwner {
       this.color.b * fr + this.glowPulse * 0.2);
 
     // Glow quad riding the sac top
-    const gs = 0.9 + p * 0.5;
+    const gs = 0.9 + this.glowPulse * 0.5;
     _local.compose(_p.set(0, 0.6, 0), _q.identity(), _s.setScalar(gs));
     _world.multiplyMatrices(_m, _local);
     swarm.setMatrix(PART_GLOW, slot, _world);
@@ -186,7 +238,10 @@ export class Baneling implements Targetable, SwarmSlotOwner {
     getShadows()?.set(this, this.pos, r * 1.05, 0.4);
   }
 
-  takeDamage(): boolean {
+  takeDamage(damage = 1): boolean {
+    // netDriven is a claim, never a pop — the authority's detonate edge
+    // + crawlDie decide, so a client can't fake-explode a sac.
+    if (this.netDriven) return claimDamageMelee(this, damage, Baneling.hitClaim);
     // Shooting it pops it — that IS the counterplay
     this.detonate();
     return true;

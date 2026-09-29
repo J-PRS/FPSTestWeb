@@ -116,7 +116,7 @@ export function makeSimCrawler(
   };
 }
 
-export type CrawlerEvent = 'windup' | 'pounce' | 'bite' | 'land' | 'stagger';
+export type CrawlerEvent = 'windup' | 'pounce' | 'bite' | 'land' | 'stagger' | 'detonate';
 
 /** Commit a target snapshot — called by the authority every RETARGET_S
  *  (broadcast as the `retarget` event) and by predictors when that event
@@ -673,6 +673,115 @@ export function applySlitherDamage(c: SimSlither, damage: number): boolean {
   c.stunTimer = Math.max(c.stunTimer, c.sp.STUN_S);
   // A hit breaks the strike — matches the client's applyKnockback.
   if (c.state === 'windup' || c.state === 'lunge') { c.state = 'slither'; c.hopTimer = 0; }
+  if (c.health <= 0) { c.dead = true; return true; }
+  return false;
+}
+
+// ---- Kamikaze family ---------------------------------------------------
+// The sac: roller chassis, but the pop IS the attack. No bite cooldown —
+// a fuse (3D proximity) or a lifetime clock emits 'detonate', the one new
+// edge kind on the wire, and the authority maps it to an AOE blast +
+// crawlDie. Shooting it pops it the same way, which is the counterplay.
+
+export const BANELING_SIM = {
+  ACCEL: 22.0,
+  TOPSPEED: 20.0,
+  AGGRO_D2: 140 * 140,   // born homing — a wide chase envelope
+  FUSE_D2: 2.6 * 2.6,    // 3D proximity pop
+  LIFE_S: 25.0,          // self-detonates eventually
+  STUN_S: 0.3,           // a hit staggers the fuse run
+} as const;
+
+export const BANELING_SPECIES: Record<string, {
+  speed: number;
+  health: number;
+  bite: number;         // blast damage at zero distance
+  blast: number;        // blast radius
+}> = {
+  baneling: { speed: 1.0, health: 15, bite: 18, blast: 5.0 },
+};
+
+export type BanelingState = 'chase';
+
+type BanelingTunables = { readonly [K in keyof typeof BANELING_SIM]: number };
+
+export interface SimBaneling extends Omit<SimCrawler, 'state' | 'sp'> {
+  state: BanelingState;
+  sp: BanelingTunables;
+  age: number;          // fuse life clock — deterministic, drives the pop
+  blastRadius: number;  // authority reads this for the AOE sweep
+}
+
+export function isBanelingSpecies(species: string): boolean {
+  return BANELING_SPECIES[species] !== undefined;
+}
+
+export function makeSimBaneling(
+  id: number, x: number, y: number, z: number,
+  uber: boolean, seed: number, species = 'baneling',
+): SimBaneling {
+  const row = BANELING_SPECIES[species] ?? BANELING_SPECIES.baneling!;
+  const health = uber ? row.health * 4 : row.health;
+  const sp: BanelingTunables = {
+    ...BANELING_SIM,
+    TOPSPEED: BANELING_SIM.TOPSPEED * row.speed,
+    ACCEL: BANELING_SIM.ACCEL * row.speed,
+  };
+  return {
+    id, species, biteDamage: uber ? row.bite * 2 : row.bite, sp,
+    x, y, z, vx: 0, vy: 0, vz: 0, yaw: 0,
+    state: 'chase', hopTimer: 0, windupTimer: 0, stunTimer: 0,
+    wanderYaw: (seed % 628) / 100, health, maxHealth: health,
+    uber, dead: false, rng: seed >>> 0 || 1,
+    targetId: null, tx: 0, ty: 0, tz: 0, tgtValid: false, pendingBite: false,
+    age: 0, blastRadius: uber ? row.blast * 1.7 : row.blast,
+  };
+}
+
+export function stepBaneling(
+  c: SimBaneling,
+  dt: number,
+  field: Heightfield,
+  target: SimVec | null,
+  authoritative: boolean,
+): CrawlerEvent | null {
+  c.stunTimer = Math.max(0, c.stunTimer - dt);
+  c.age += dt;
+
+  const dx = target ? target.x - c.x : 0;
+  const dz = target ? target.z - c.z : 0;
+  const distSq = dx * dx + dz * dz;
+
+  if (c.stunTimer <= 0 && target && distSq > 0.01) {
+    const aggro = distSq < c.sp.AGGRO_D2;
+    const d = Math.sqrt(distSq);
+    const k = c.sp.ACCEL * (aggro ? 1 : 0.2) * dt;
+    c.vx += (dx / d) * k;
+    c.vz += (dz / d) * k;
+  }
+
+  const hSpeed = Math.hypot(c.vx, c.vz);
+  if (hSpeed > c.sp.TOPSPEED) {
+    const s = c.sp.TOPSPEED / hSpeed;
+    c.vx *= s; c.vz *= s;
+  }
+
+  c.x += c.vx * dt;
+  c.z += c.vz * dt;
+  c.y = hmHeight(field, c.x, c.z) + 0.7; // small sac, low ride
+  if (hSpeed > 0.5) c.yaw = Math.atan2(c.vx, c.vz);
+
+  if (target) {
+    const d3 = (target.x - c.x) ** 2 + (target.y - c.y) ** 2 + (target.z - c.z) ** 2;
+    if (d3 < c.sp.FUSE_D2) { c.dead = true; return 'detonate'; }
+  }
+  if (c.age >= c.sp.LIFE_S) { c.dead = true; return 'detonate'; }
+  return null;
+}
+
+export function applyBanelingDamage(c: SimBaneling, damage: number): boolean {
+  c.health -= damage;
+  c.stunTimer = Math.max(c.stunTimer, c.sp.STUN_S);
   if (c.health <= 0) { c.dead = true; return true; }
   return false;
 }
