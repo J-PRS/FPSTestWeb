@@ -175,14 +175,40 @@ class Logger {
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'hidden') this.flushShipping(true);
     });
-    // Uncaught errors/rejections are exactly what never reach a log line —
-    // capture them so remote bug reports come with the stack attached.
+  }
+
+  // Uncaught errors install at module load, not at ship-time: a boot crash
+  // before initShipping still reaches the queue and flushes once the
+  // endpoint resolves (or stays in the local buffer if it never does).
+  private static errorHooksInstalled = false;
+  static installErrorHooks(): void {
+    if (this.errorHooksInstalled) return;
+    this.errorHooksInstalled = true;
     window.addEventListener('error', (e) => {
       this.error(`UNCAUGHT ${e.message}`, { file: e.filename, line: e.lineno, stack: (e.error as Error)?.stack });
+      this.flushBootCrash();
     });
     window.addEventListener('unhandledrejection', (e) => {
       this.error('UNHANDLED REJECTION', { reason: String(e.reason), stack: (e.reason as Error)?.stack });
+      this.flushBootCrash();
     });
+  }
+
+  // A crash before initShipping would otherwise die in the queue — the server
+  // never sees the one log line that explains a black-screen boot. Resolve the
+  // endpoint the same way connectServer does (?server= → tunnel wss/https,
+  // else same-host:8000) and beacon the queue immediately.
+  private static flushBootCrash(): void {
+    if (this.shipUrl || this.shipQueue.length === 0) return;
+    const qp = new URLSearchParams(window.location.search);
+    let host = qp.get('server')?.trim() ?? '';
+    if (host && !host.includes('.')) host = `${host}.trycloudflare.com`;
+    const url = host ? `https://${host}/client-log` : `http://${window.location.hostname || 'localhost'}:8000/client-log`;
+    const body = this.shipQueue.splice(0, this.shipQueue.length).join('\n') + '\n';
+    try {
+      if (navigator.sendBeacon) navigator.sendBeacon(url, body);
+      else void fetch(url, { method: 'POST', body, keepalive: true }).catch(() => {});
+    } catch { /* shipping must never break the game */ }
   }
 
   private static flushShipping(beacon = false): void {
@@ -319,5 +345,9 @@ if (typeof window !== 'undefined') {
 
   console.log('Client logging initialized. Call exportClientLogs() to download logs, Alt+Q to copy.');
 }
+
+// Module-load install — importing Logger anywhere (main.ts imports it first)
+// arms the hooks before boot-time crashes can happen.
+Logger.installErrorHooks();
 
 export default Logger;
