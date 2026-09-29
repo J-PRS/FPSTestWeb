@@ -1,3 +1,8 @@
+2026-10-03 - Judge-mode corrections removed: shadow-sim divergence is an
+    anti-cheat signal, never a snap — honest play drifts past
+    tolerance on snapshot-vs-per-frame integration, and correcting
+    on it WAS the warp. Authority mode unchanged.
+
 2026-10-03 - WT datagram lane measured ~47% drop on loopback: position
     claims starved the move judge (constant corrections = warping)
     and tick frames stuttered remotes. Both directions now ride the

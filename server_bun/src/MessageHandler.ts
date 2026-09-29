@@ -504,23 +504,12 @@ export class MessageHandler {
       return;
     }
 
-    if (simTruth) {
-      // Sim judge mode: the trajectory is impossible given this player's
-      // inputs + the terrain — correct the client to the sim's state.
-      // Reseat the plausibility anchor the same way a rejected position
-      // does, or the post-snap report reads as one giant jump.
-      this.sendToPlayer(playerId, {
-        type: 'correction',
-        seq: msg.seq ?? 0,
-        inputSeq: simTruth.inputSeq,
-        grounded: simTruth.onGround,
-        position: simTruth.pos,
-        velocity: simTruth.vel,
-        rotation: msg.rotation,
-      });
-      player.lastPosCheckPos = { ...simTruth.pos };
-      player.correctionGraceUntil = now + 500;
-    }
+    // Judge mode: divergence is an anti-cheat SIGNAL, never a correction.
+    // The shadow sim replays snapshot inputs at fixed ticks while the
+    // client integrates per-frame — honest play drifts past tolerance
+    // routinely, and snapping the client on sim drift IS the warp
+    // players feel. reconcile() still counts divergences for kicks;
+    // the client's own report stays truth (as updatePosition applies).
     this.playerManager.updatePosition(playerId, msg.position, msg.rotation, msg.velocity, msg.seq);
     player.hasReceivedPosition = true;
     if (msg.ping !== undefined) player.ping = msg.ping;
