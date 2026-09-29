@@ -1,3 +1,8 @@
+2026-10-03 - yourHealth echo on cap-out: the tick a heal channel tops
+    off maxHealth now echoes unconditionally — previously the final
+    converged hp could sit unechoed inside the 500ms cadence window
+    until the next discrete event (residual desync after the echo fix).
+    healPerTick already returns 0 at max, so no per-tick spam.
 2026-10-03 - TickLoop.buildRecords split: idle-reap and server-owned
     heal channels extracted into reapIdle / tickServerHeals — the
     per-player record loop now reads as reap → heal → stale-heartbeat →

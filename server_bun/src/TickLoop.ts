@@ -290,7 +290,9 @@ export class TickLoop {
     const heal = healPerTick(p, now);
     if (heal <= 0) return;
     p.health = Math.min(p.maxHealth, p.health + heal);
-    if (now - p.healthEchoAt >= 500) {
+    // Capping out always echoes — the channel ends here, so the final
+    // converged hp would otherwise wait on the next discrete event.
+    if (now - p.healthEchoAt >= 500 || p.health >= p.maxHealth) {
       p.healthEchoAt = now;
       room.connections.sendToPlayer(playerId, { type: 'yourHealth', health: p.health });
     }
