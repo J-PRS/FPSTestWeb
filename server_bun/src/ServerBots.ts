@@ -710,18 +710,21 @@ export class ServerBots {
       p.lastSeen = now; // bots never send positions — heartbeat manually
         // or the idle reaper would cull them on schedule
 
-      // Test-silenced: heartbeat and shadow upkeep still run — only the
-      // think/fire/move pipeline is skipped.
-      if (this.quiet.has(id)) continue;
-
       // Respawn moved the body — reseat the shadow or the sim keeps
       // integrating from the corpse spot and every tick diverges.
+      // Liveness upkeep like the heartbeat: must run before the quiet
+      // skip or a silenced bot that dies and respawns keeps a stale
+      // deadSet entry + corpse-spot shadow forever.
       const wasDead = this.deadSet.has(id);
       if (!p.isDead && wasDead) {
         this.deadSet.delete(id);
         this.sheepMeter.delete(id); // respawn is a fresh leash
         this.room.moveSim.resync(id, p.position, p.rotation.yaw);
       }
+
+      // Test-silenced: heartbeat and shadow upkeep still run — only the
+      // think/fire/move pipeline is skipped.
+      if (this.quiet.has(id)) continue;
 
       const goal = this.flagGoal(p);
       const out = brain.think(dt, this.senses(id, p, goal, now));
