@@ -152,50 +152,56 @@ export class CtfFlags {
   }
 
   update(dt: number): void {
-    const ctx = this.ctx;
     this.rebalanceRoles(performance.now());
     for (const [team, f] of this.flags) {
-      if (f.state === 'carried') {
-        const cp = f.carrier ? ctx.carrierPos(f.carrier) : null;
-        if (!cp) { f.carrier = null; f.state = 'dropped'; f.dropT = FLAG_RESET_S; continue; }
-        f.pos.set(cp.x, cp.y + 1.2, cp.z); // rides above the carrier's head
-        // Capture: carrier inside own base ring (flag is the ENEMY's flag
-        // owned by the carrier's opposing team — carrier's own base hosts it)
-        const carrierTeam = ctx.teamOf(f.carrier!) as TeamId;
-        if (carrierTeam !== team) {
-          const ownBase = this.flags.get(carrierTeam)!;
-          if (ownBase.state === 'home' && cp.distanceTo(ownBase.home) < FLAG_HOME_R) {
-            bank(ctx.scores, carrierTeam);
-            ctx.onCapture(carrierTeam);
-            ctx.onFeed(`${f.carrier === 'local' ? 'YOU' : f.carrier!.replace('bot:', '')} captured the ${TEAM_LABEL[team]} flag!`);
-            if (f.carrier === 'local') sfx.pickup();
-            const bot = ctx.bots.find(b => b.playerId === f.carrier);
-            if (bot) bot.carryingFlag = false;
-            f.carrier = null; f.state = 'home'; f.pos.copy(f.home);
-          }
-        }
-      } else if (f.state === 'dropped') {
+      if (f.state === 'carried') this.tickCarried(team, f);
+      else if (f.state === 'dropped') {
         f.dropT -= dt;
         if (f.dropT <= 0) { f.state = 'home'; f.pos.copy(f.home); }
       }
       // Touch rules: enemy team grabs it, own team returns a dropped flag.
       if (f.state === 'carried') { f.mesh.position.copy(f.pos); continue; }
-      for (const [id, tp] of ctx.touchers()) {
-        const tTeam = ctx.teamOf(id);
-        if (tp.distanceTo(f.pos) > FLAG_PICKUP_R) continue;
-        if (f.state === 'dropped' && tTeam === team) {
-          f.state = 'home'; f.pos.copy(f.home); // returned on touch
-          break;
-        }
-        if (tTeam !== team) {
-          f.state = 'carried'; f.carrier = id;
-          const bot = ctx.bots.find(b => b.playerId === id);
-          if (bot) bot.carryingFlag = true;
-          ctx.onFeed(`${id === 'local' ? 'YOU' : id.replace('bot:', '')} took the ${TEAM_LABEL[team]} flag!`);
-          break;
-        }
-      }
+      this.tickTouch(team, f);
       f.mesh.position.copy(f.pos);
+    }
+  }
+
+  // Carried flag rides the carrier; scoring the cap requires the carrier's
+  // own flag home — the standoff rule that makes flag-defense matter.
+  private tickCarried(team: TeamId, f: Flag): void {
+    const ctx = this.ctx;
+    const cp = f.carrier ? ctx.carrierPos(f.carrier) : null;
+    if (!cp) { f.carrier = null; f.state = 'dropped'; f.dropT = FLAG_RESET_S; return; }
+    f.pos.set(cp.x, cp.y + 1.2, cp.z); // rides above the carrier's head
+    const carrierTeam = ctx.teamOf(f.carrier!) as TeamId;
+    if (carrierTeam === team) return;
+    const ownBase = this.flags.get(carrierTeam)!;
+    if (ownBase.state !== 'home' || cp.distanceTo(ownBase.home) >= FLAG_HOME_R) return;
+    bank(ctx.scores, carrierTeam);
+    ctx.onCapture(carrierTeam);
+    ctx.onFeed(`${f.carrier === 'local' ? 'YOU' : f.carrier!.replace('bot:', '')} captured the ${TEAM_LABEL[team]} flag!`);
+    if (f.carrier === 'local') sfx.pickup();
+    const bot = ctx.bots.find(b => b.playerId === f.carrier);
+    if (bot) bot.carryingFlag = false;
+    f.carrier = null; f.state = 'home'; f.pos.copy(f.home);
+  }
+
+  private tickTouch(team: TeamId, f: Flag): void {
+    const ctx = this.ctx;
+    for (const [id, tp] of ctx.touchers()) {
+      const tTeam = ctx.teamOf(id);
+      if (tp.distanceTo(f.pos) > FLAG_PICKUP_R) continue;
+      if (f.state === 'dropped' && tTeam === team) {
+        f.state = 'home'; f.pos.copy(f.home); // returned on touch
+        return;
+      }
+      if (tTeam !== team) {
+        f.state = 'carried'; f.carrier = id;
+        const bot = ctx.bots.find(b => b.playerId === id);
+        if (bot) bot.carryingFlag = true;
+        ctx.onFeed(`${id === 'local' ? 'YOU' : id.replace('bot:', '')} took the ${TEAM_LABEL[team]} flag!`);
+        return;
+      }
     }
   }
 }

@@ -1,3 +1,5 @@
+2026-10-03 - ctfFlags.update split into tickCarried/tickTouch (c21 + depth5 -> clean).
+
 2026-10-03 - onPlayerKill: gib/ragdoll victim fx extracted to gibVictim (c21 -> clean).
 
 2026-10-03 - netBalls rubberbandCheck split into warnAt/forensics helpers (c23 -> clean).
