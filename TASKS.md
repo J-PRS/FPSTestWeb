@@ -60,6 +60,12 @@
 - **Objective:** Continuous overhaul toward Tribes-scale MP (see ROADMAP.md — the living plan). Now landed: multi-room match model (maps/<room>.json: mode/balls/spawns/bases/bots/botFill/ballMix/terrain), server-owned teams+score+CTF flags+nugget pickups+DM frags, match clock w/ OT, match journal→/matches, lobby picker + /join quick-play, server bots w/ shared brain, join throttle + identity cap, wire record/replay harness — plus: bots-as-legal-players (shared MoveSim + BrainCtx senses, energy economy, real projectiles via RoomProjectiles), per-map heightfield pipeline (maps/*.bin → sims + client terrain hot-swap), map rotation, TDM kill-confirmed, server-owned deployables (turret/mine/station/drone), kill feed w/ weapon attribution, RemoteSet entity lifecycle, GameServer → TickLoop + SessionManager split, input-replay corrections + seq-anchored divergence probe + correction grace window.
 
 ## Recently Completed
+- **Full bot kit:** sidearm band (Pistol/Revolver hold-out inside 8m) + melee punch inside 3m via the same combat funnel + broadcast swing — mains/sidearm/melee/belt/deployables/skills/perks/classes all legal paths
+- **Perk swaps bank at respawn:** `perkUpdate` wire + `pendingPerk`/`appliedPerk` — mirrors the classUpdate respawn-bank so HP/energy caps can't desync mid-life
+- **Gravity is a boolean:** `WeaponStats.gravity: true/false` vs world GRAVITY (-28) — no per-weapon fudge factors; all configs/client+server paths normalize
+- **Sprinkler (wid 25):** plasma-cadence arced bolt hose, per-shot cone jitter, lime trail — full checklist wired
+- **Class silhouettes:** all tiers wear UAL mannequin at CLASS_MODEL_SCALE 0.92/1.0/1.15; chibi knight dropped from gameplay cast
+- **RemoteRailgun flat flight:** speed 40, gravity off — discharge ray tracks the throw line instead of sagging mid-flight
 - **Validation arc (standing priority):** live fleet runs clean — 0 shot rejects, 0 sheep/stuck warns, server bots 100% ski/air; residual divergence class reduced to transient ~10m clips at contact events (self-correcting, non-accumulating)
 - **Fleet honesty:** test bots replicate real client behavior — 30Hz sim cadence, correction snaps + journaled-input replay, knockback impulses, respawn reseat, correction metrics (count + worst pre-snap gap)
 - **Known residual:** authority mode (`FPS_MOVE_AUTHORITY=1`) shows a steady ~2m phase-lag divergence on the synthetic fleet — report-vs-shadow tick offset; corrections bound it. Real clients converge via journal replay.
