@@ -135,10 +135,14 @@ export function wireOverlayInput(deps: OverlayInputDeps) {
     loadoutBar.appendChild(classRow);
 
     // Sidearms are chosen in their own row — a primary slot offering them
-    // would let a loadout double-carry the hold-out tier.
+    // would let a loadout double-carry the hold-out tier. Heavy-only
+    // ordnance hides when a lighter tier is picked (setArmorClass also
+    // unshoulders whatever was equipped).
+    const heavyOnly = Player.HEAVY_ONLY.map(String);
+    const cls = deps.lazyPlayer().armorClass;
     const weaponOpts = SLOT_DEFS
       .map((def, wid) => ({ v: String(wid), label: def.config.displayName, sidearm: !!def.sidearm }))
-      .filter((o) => !o.sidearm);
+      .filter((o) => !o.sidearm && (cls === 'heavy' || !heavyOnly.includes(o.v)));
     for (let i = 0; i < Player.LOADOUT_SLOTS; i++) {
       const row = document.createElement('div');
       row.className = 'lo-row';

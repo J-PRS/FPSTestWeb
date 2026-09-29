@@ -66,10 +66,20 @@ export class Player {
   get mods() { return perkMods(this.perk); }
   get maxHealth(): number { return MAX_HEALTH + this.mods.maxHealth + CLASS_STATS[this.armorClass].maxHealth; }
   setPerk(p: PerkId): void { this.perk = p; settings.set('fps-perk', p); }
+  /** Tier-restricted ordnance — the heavy's exclusive arsenal, same as
+   *  TA where lights can't shoulder a mortar. Indexed SLOT_DEFS ids. */
+  static readonly HEAVY_ONLY: readonly number[] = [3, 6, 11]; // Mortar, PlasmaCannon, RocketLauncher
   setArmorClass(c: ArmorClass): void {
     this.armorClass = c;
     settings.set('fps-class', c);
     this.movement.setSpeedScale(CLASS_STATS[c].speedScale);
+    // Dropping down a tier unshoulders restricted ordnance — swap each
+    // gated slot for the chaingun so no slot ends up empty.
+    if (c !== 'heavy') {
+      for (let i = 0; i < this.loadout.length; i++) {
+        if (Player.HEAVY_ONLY.includes(this.loadout[i])) this.setLoadoutSlot(i, 2);
+      }
+    }
   }
   kills = 0;
   isDead = false;
@@ -260,6 +270,9 @@ export class Player {
   }
 
   setLoadoutSlot(slot: number, weaponId: number): void {
+    // Heavy-only ordnance bounces off lighter armor — the menu filters it
+    // out, this is the belt line for stale loadouts/console picks.
+    if (this.armorClass !== 'heavy' && Player.HEAVY_ONLY.includes(weaponId)) return;
     // Picking a weapon that's already equipped elsewhere swaps the slots
     // instead of duplicating it — standard loadout-menu behavior.
     const other = this.loadout.indexOf(weaponId);

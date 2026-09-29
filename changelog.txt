@@ -1,3 +1,4 @@
+2026-10-01 - Class weapon gate: Mortar/PlasmaCannon/RocketLauncher are heavy-only; lighter tiers unshoulder them to Chaingun on class swap, loadout menu hides them, setLoadoutSlot rejects stale picks
 2026-10-01 - Offline bots wear classes: GameBot class multiplier on speed+HP cap, squad tier mix, respawn restores class HP
 2026-10-01 - Armor class on the wire: playerJoined/gameState carry armorClass, remote models scale by tier (heavy 1.15x, light 0.92x) composing with each model fit scale
 2026-10-01 - Armor classes (light/medium/heavy): shared/botClasses table, per-class speedScale in MoveSim, bots wear class by role (cappers light, HoF/tech heavy), players pick CLASS in the loadout bar (join.armorClass -> server maxHealth+speed), fps-class persisted
