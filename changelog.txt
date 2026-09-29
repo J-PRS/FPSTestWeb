@@ -1,3 +1,6 @@
+2026-10-03 - refactor: CombatHandler blast knockback deduped into shove() helper
+2026-10-03 - refactor: creatureSim.ts split into per-family modules (creatureCore/Flyer/Roller/Slither/Baneling/Totem) behind a facade - 1113->15 lines, zero consumer changes
+2026-10-03 - refactor: ball trail-dot FX extracted to entities/ballTrails.ts (BallTrailDots) - balls.ts 937->811
 2026-10-03 - refactor: PlayerModel clip/bone tables extracted to entities/playerClips.ts - 856->748 lines
 2026-10-03 - refactor: PlayerModel gibs block extracted to entities/playerGibs.ts - 926->856 lines
 2026-10-03 - server: turret/drone target scans gate on structure LOS - sentries no longer plink through walls
