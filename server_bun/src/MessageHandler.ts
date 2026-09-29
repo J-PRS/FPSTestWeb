@@ -499,7 +499,7 @@ export class MessageHandler {
       player.lastSeen = now;
       if (msg.seq !== undefined && msg.seq > player.lastSeq) player.lastSeq = msg.seq;
       player.hasReceivedPosition = true;
-      if (msg.ping !== undefined) player.ping = msg.ping;
+      if (msg.ping !== undefined) player.ping = Math.max(1, msg.ping);
       this.pushHistory(player, now); // player.position is sim truth
       return;
     }
@@ -512,7 +512,7 @@ export class MessageHandler {
     // the client's own report stays truth (as updatePosition applies).
     this.playerManager.updatePosition(playerId, msg.position, msg.rotation, msg.velocity, msg.seq);
     player.hasReceivedPosition = true;
-    if (msg.ping !== undefined) player.ping = msg.ping;
+    if (msg.ping !== undefined) player.ping = Math.max(1, msg.ping);
     this.pushHistory(player, now);
     // Don't broadcast immediately — batched in tickUpdate
   }

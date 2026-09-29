@@ -1,3 +1,11 @@
+2026-10-03 - Ghost-cull fix: a self-reported ping of 0ms (loopback/LAN)
+    was stored verbatim, and 'ping > 0' is the wire's liveness signal —
+    real clients on the same box were culled as dead sockets and froze
+    at spawn. Reported ping now floors at 1ms so 0 only ever means
+    'never reported'.
+2026-10-03 - mineBoom test flake: pinned bots still thought — they
+    wandered out of the blast or picked up a shield mid-test. Switched
+    to freeze() (pin + silenced brain).
 2026-10-03 - Spawn-snap spinout false positive: restoreLocalPlayer never
     declared its discontinuity, so the join reseat tripped the camera
     watchdog (~120°/frame warn on connect) and the first pos report
