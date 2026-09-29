@@ -122,6 +122,10 @@ export class CombatHandler {
    *  idle reap) — NOT on socket close, so a rejoining player keeps theirs. */
   onPlayerRemoved(playerId: string): void {
     this.ledger.removePlayer(playerId);
+    // A pending respawn is part of the player's teardown too — removal
+    // paths that skip onPlayerDisconnected (kick, room hop, admin reload)
+    // would otherwise leave a zombie timer firing into a gone player.
+    this.onPlayerDisconnected(playerId);
   }
 
   /** Cancel a pending respawn on disconnect — the player might rejoin during

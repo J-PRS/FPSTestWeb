@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'bun:test';
 import { mkRoom, watch } from './harness.ts';
+import { PlayerManager } from '../../src/PlayerManager.ts';
+import { CombatHandler } from '../../src/CombatHandler.ts';
 
 // A kicked/switched player mid-grace used to leave the grace timer
 // armed: when it fired, removePlayerCompletely ran a SECOND time —
@@ -37,5 +39,22 @@ describe('scenario: grace timer teardown', () => {
     await new Promise((r) => setTimeout(r, 30));
     expect(room.players.getPlayer(a.id)).toBeUndefined();
     expect(w.count('playerLeft')).toBe(1);
+  });
+
+  it('full removal also disarms a pending respawn — same zombie class', () => {
+    const pm = new PlayerManager();
+    const combat = new CombatHandler(pm, () => {}, () => {});
+    pm.addPlayer('p1'); pm.breakShield('p1');
+    // Kill through the env-damage funnel so scheduleRespawn arms.
+    for (let i = 0; i < 3; i++) {
+      combat.handleEnvironmentDamage('p1', { type: 'environmentDamage', amount: 40 });
+    }
+    expect(pm.getPlayer('p1')!.isDead).toBe(true);
+    const timers = (combat as unknown as {
+      respawnTimers: Map<string, ReturnType<typeof setTimeout>>;
+    }).respawnTimers;
+    expect(timers.has('p1')).toBe(true);
+    combat.onPlayerRemoved('p1');
+    expect(timers.has('p1')).toBe(false);
   });
 });
