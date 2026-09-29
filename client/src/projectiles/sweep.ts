@@ -94,6 +94,25 @@ function segmentSphereReject(p: SweepHost, cx: number, cy: number, cz: number, r
   return dx * dx + dy * dy + dz * dz > margin * margin;
 }
 
+// Distance vector from a sample point to the target's closest point.
+// Capsule targets: distance to a segment, not a point.
+//  capsuleTop (Totem) — vertical, feet to feet+height
+//  capsuleEnd (Overlord) — centered, pos ± heading-aligned half-extent
+const _delta = new THREE.Vector3();
+function targetDelta(ball: Targetable, sx: number, sy: number, sz: number): THREE.Vector3 {
+  const o = _delta;
+  if (ball.capsuleEnd) {
+    const e = ball.capsuleEnd;
+    const eLen2 = e.lengthSq() || 1;
+    const proj = Math.max(-1, Math.min(1,
+      ((sx - ball.pos.x) * e.x + (sy - ball.pos.y) * e.y + (sz - ball.pos.z) * e.z) / eLen2));
+    return o.set(sx - (ball.pos.x + e.x * proj), sy - (ball.pos.y + e.y * proj), sz - (ball.pos.z + e.z * proj));
+  }
+  const capTop = ball.capsuleTop ? ball.pos.y + ball.capsuleTop : ball.pos.y;
+  const cy = Math.max(ball.pos.y, Math.min(capTop, sy));
+  return o.set(sx - ball.pos.x, sy - cy, sz - ball.pos.z);
+}
+
 // Swept sphere vs ball — checks core (direct) then expanding (wake) hitbox
 export function sweepBall(p: SweepHost, ball: Targetable): boolean {
   const STEP = 0.1; // smaller step for precise core hit detection
@@ -117,24 +136,8 @@ export function sweepBall(p: SweepHost, ball: Targetable): boolean {
     const sx = p.prevPos.x + dx * t;
     const sy = p.prevPos.y + dy * t;
     const sz = p.prevPos.z + dz * t;
-    // Capsule targets: distance to a segment, not a point.
-    //  capsuleTop (Totem) — vertical, feet to feet+height
-    //  capsuleEnd (Overlord) — centered, pos ± heading-aligned half-extent
-    let ex: number, ey: number, ez: number;
-    if (ball.capsuleEnd) {
-      const e = ball.capsuleEnd;
-      const eLen2 = e.lengthSq() || 1;
-      const proj = Math.max(-1, Math.min(1,
-        ((sx - ball.pos.x) * e.x + (sy - ball.pos.y) * e.y + (sz - ball.pos.z) * e.z) / eLen2));
-      ex = sx - (ball.pos.x + e.x * proj);
-      ey = sy - (ball.pos.y + e.y * proj);
-      ez = sz - (ball.pos.z + e.z * proj);
-    } else {
-      const capTop = ball.capsuleTop ? ball.pos.y + ball.capsuleTop : ball.pos.y;
-      const cy = Math.max(ball.pos.y, Math.min(capTop, sy));
-      ex = sx - ball.pos.x; ey = sy - cy; ez = sz - ball.pos.z;
-    }
-    const d2 = ex * ex + ey * ey + ez * ez;
+    const e = targetDelta(ball, sx, sy, sz);
+    const d2 = e.x * e.x + e.y * e.y + e.z * e.z;
     const d = Math.sqrt(d2);
     if (d < minDist) minDist = d;
 
