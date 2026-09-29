@@ -268,8 +268,8 @@ export class ServerBots {
   /** Hostile emplacement the bot can legally see — a turret/mine/drone
    *  owned by the other team, near the bot and near what it's after.
    *  The stand's kill-zone is knowledge the room advertises anyway. */
-  private hostileGear(p: { id: string; team?: string; position: Vec3 }, goal: BotVec | null): Vec3 | null {
-    if (!goal) return null;
+  private hostileGear(p: { id: string; team?: string; position: Vec3 }, goal: BotVec | null, sabotage = false): Vec3 | null {
+    if (!goal && !sabotage) return null;
     let best: Vec3 | null = null;
     // Lob from the edge of turret sight (42m) — a bot that must first
     // survive to 30m never gets the shot off.
@@ -280,8 +280,10 @@ export class ServerBots {
       if (p.team && owner?.team === p.team) continue;
       if (!p.team && d.owner === p.id) continue;
       const bd = Math.hypot(d.pos.x - p.position.x, d.pos.z - p.position.z);
-      const gd = Math.hypot(d.pos.x - goal.x, d.pos.z - goal.z);
-      if (bd < bestD && gd < 50) { bestD = bd; best = d.pos; }
+      // A saboteur wrecks whatever gear it can reach — goal proximity
+      // only gates the objective-driven lobbers.
+      const gd = goal ? Math.hypot(d.pos.x - goal.x, d.pos.z - goal.z) : 0;
+      if (bd < bestD && (sabotage || gd < 50)) { bestD = bd; best = d.pos; }
     }
     return best;
   }
@@ -615,13 +617,15 @@ export class ServerBots {
       // grenade on its own slow cadence — the same legal path humans use
       // to soften a stand, not a wallhack aim-assist.
       {
+        const saboteur = this.roles.get(id) === 'infiltrator';
         const ready = (this.gearLobT.get(id) ?? 0) <= now;
-        const gear = ready ? this.hostileGear(p, goal?.pos ?? null) : null;
+        const gear = ready ? this.hostileGear(p, goal?.pos ?? null, saboteur) : null;
         if (gear) {
           this.lobAt(p, gear);
           // 3s keeps a siege going: ~1.5-2s grenade flight + reload beat.
           // At 8s a turret effectively outlived the lobber's attention.
-          this.gearLobT.set(id, now + 3000);
+          // A saboteur pushes harder — wrecking gear IS its objective.
+          this.gearLobT.set(id, now + (saboteur ? 1800 : 3000));
           logger.debug('Gear lob', { id, x: +gear.x.toFixed(1), z: +gear.z.toFixed(1) });
         }
       }

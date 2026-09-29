@@ -1,3 +1,4 @@
+2026-09-26 - Infiltrator saboteur behavior: gear lob ignores goal proximity + 1.8s cadence (vs 3s objective lob) — wrecks whatever gear it can reach on approach
 2026-09-26 - Bot squad roles: capper/offense/hof/defense/technician/infiltrator, self-assigned and rebalanced per-team every 5s by squad need (specialists sticky, carriers never re-roled); technician pins builder trait; flagGoal per-role priorities verified live
 2026-09-26 - Directional jetting: whole-body lean pivots at sternum (pack mount), pitch/roll from facing-frame velocity, eased 7/s, remotes + local third-person; gear-lob siege cadence 8s->3s, first live Deploy destroyed verified
 2026-09-26 - UAL2 CC0 anim set (ski slide, jet idle, throw, knockback) retargeted onto robot + mannequin2 via UE bone map; posedump ual2 mode; gallery 3-col tap-zoom-swipe, legacy shots moved out of served tree; client tsc node types + ES2023 lib fixes (RemoteSet MapIterator); itch playwright grabber _tools/ualgrab
