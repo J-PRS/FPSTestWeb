@@ -18,7 +18,7 @@ import { Mine } from '../entities/Mine.js';
 import { DeployStation } from '../entities/DeployStation.js';
 import { DeployDrone } from '../entities/DeployDrone.js';
 import { Explosion } from '../effects/explosion.js';
-import { getGlowTexture } from '../effects/glowTexture.js';
+import { DeployRockets } from './deployRockets.js';
 import { screenShake } from '../effects/screenShake.js';
 import * as sfx from '../core/sfx.js';
 import { GRAVITY, MAX_ENERGY, MINE_DAMAGE_MAX, ROCKET_RADIUS } from '../core/config.js';
@@ -37,36 +37,8 @@ export const DEPLOY_DEFS: { kind: DeployKind; label: string; max: number }[] = [
   { kind: 'drone',   label: 'DRONE',    max: 1 },
 ];
 
-// Sentry mini-rockets: slower cadence than the old hitscan snap, but the
-// round is a real flying body — mild homing, a smoke trail, and a proper
-// little blast on contact. Roughly the same DPS, MUCH better read.
-const ROCKET_SPEED = 46;  // m/s cruise
-const ROCKET_TURN = 4.5;  // rad/s homing authority — leads, doesn't snap
-const ROCKET_TTL = 4;
-const ROCKET_FUSE = 1.7;  // proximity detonation distance to the target
-const ROCKET_AOE = 3.2;
-const ROCKET_DMG = 30;    // center-of-blast damage
-
-const _geoRktBody = new THREE.CylinderGeometry(0.045, 0.065, 0.32, 6);
-const _geoRktNose = new THREE.ConeGeometry(0.045, 0.14, 6);
-const _rktBodyMat = new THREE.MeshLambertMaterial({ color: 0x5a616b });
-const _rktNoseMat = new THREE.MeshBasicMaterial({ color: 0xffcc66 });
-const _rktGlowMat = new THREE.SpriteMaterial({
-  map: getGlowTexture(), color: 0xff9944, transparent: true,
-  blending: THREE.AdditiveBlending, depthWrite: false,
-});
-const _FWD = new THREE.Vector3(0, 0, 1);
-
-interface Rocket {
-  pos: THREE.Vector3;
-  vel: THREE.Vector3;
-  target: { pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean } | null;
-  ttl: number;
-  puff: number;
-  dmgScale: number;
-  group: THREE.Group;
-}
-
+// Sentry mini-rockets live in deployRockets.ts — a real flying body with
+// mild homing, smoke trail, and a blast on contact.
 const DEPLOY_SLOPE = 0.75; // normal.y floor — can't plant on cliffs
 const POD_SPEED = 30;      // throw velocity along the crosshair
 const POD_INHERIT = 0.6;   // fraction of player velocity carried into the toss
@@ -117,7 +89,9 @@ export class Deployables {
   private readonly _candList: TargetCandidate[] = [];
   private readonly _enemies: { pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean }[] = [];
 
-  constructor(private deps: DeployDeps) {}
+  constructor(private deps: DeployDeps) {
+    this.rockets = new DeployRockets(deps);
+  }
 
   /** Pack item is a loadout choice (ESC menu), not a cycle — X throws
    *  whatever you packed. */
@@ -333,8 +307,11 @@ export class Deployables {
       ? this.deps.lazyPlayer().pos
       : t?.position;
     if (!tp) return;
-    const target = { pos: new THREE.Vector3(tp.x, tp.y, tp.z), vel: new THREE.Vector3(), alive: true };
-    this.spawnRocket(item.pos.clone().add(new THREE.Vector3(0, 1.4, 0)), target);
+    // Positions are feet — home at capsule center or the rocket slams
+    // terrain at the target's toes (the damage lands regardless, so the
+    // visual was reading as "sentry shoots the ground").
+    const target = { pos: new THREE.Vector3(tp.x, tp.y + 1.0, tp.z), vel: new THREE.Vector3(), alive: true };
+    this.rockets.spawn(item.pos.clone().add(new THREE.Vector3(0, 1.4, 0)), target);
     sfx.shotAt(item.pos, WeaponType.RocketLauncher);
   }
 
@@ -361,7 +338,7 @@ export class Deployables {
         }
         const shot = t.update(dt, this._enemies);
         if (!shot) return;
-        this.spawnRocket(shot.muzzle, shot.target);
+        this.rockets.spawn(shot.muzzle, shot.target);
         sfx.shotAt(shot.muzzle, WeaponType.RocketLauncher); // thump + whoosh
       },
       dispose: () => t.dispose(this.deps.scene),
@@ -372,117 +349,8 @@ export class Deployables {
     this.items.push(item);
   }
 
-  // --- Sentry mini-rockets -------------------------------------------
-  // A friendly rocket that homes on the turret's target entry (a creature
-  // Targetable or an enemy bot) and detonates on proximity/terrain/TTL.
-  // AoE lands on creatures and enemy bots — never on the owner or the
-  // deployables themselves (not in entities.targets, by design).
-
-  private rockets: Rocket[] = [];
-  private _rktDir = new THREE.Vector3();
-  private _rktAim = new THREE.Vector3();
-
-  private spawnRocket(muzzle: THREE.Vector3, target: { pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean }, dmgScale = 1): void {
-    const group = new THREE.Group();
-    const body = new THREE.Mesh(_geoRktBody, _rktBodyMat);
-    body.rotation.x = Math.PI / 2; // cylinder axis → +Z (flight dir)
-    const nose = new THREE.Mesh(_geoRktNose, _rktNoseMat);
-    nose.rotation.x = Math.PI / 2;
-    nose.position.z = 0.22;
-    const glow = new THREE.Sprite(_rktGlowMat);
-    glow.scale.setScalar(0.5);
-    glow.position.z = -0.2;
-    group.add(body, nose, glow);
-
-    const r: Rocket = {
-      pos: muzzle.clone(),
-      vel: new THREE.Vector3(),
-      target, ttl: ROCKET_TTL, puff: 0, dmgScale, group,
-    };
-    if (!target) { // fired with no live target — lob up-forward, no homing
-      const yaw = this.deps.lazyPlayer().yaw;
-      r.vel.set(Math.sin(yaw), 0.3, Math.cos(yaw)).normalize().multiplyScalar(ROCKET_SPEED);
-      group.position.copy(muzzle);
-      this.deps.scene.add(group);
-      this.rockets.push(r);
-      return;
-    }
-    // Initial aim: lead the target by time-of-flight, center-mass.
-    this._rktAim.copy(target.pos);
-    this._rktAim.y += 0.5;
-    this._rktAim.addScaledVector(target.vel, Math.min(1.2, this._rktAim.distanceTo(muzzle) / ROCKET_SPEED));
-    this._rktAim.sub(muzzle).normalize();
-    r.vel.copy(this._rktAim).multiplyScalar(ROCKET_SPEED);
-    group.position.copy(muzzle);
-    group.lookAt(this._rktAim.add(muzzle));
-    this.deps.scene.add(group);
-    this.rockets.push(r);
-  }
-
-  private updateRocket(r: Rocket, dt: number): void {
-    r.ttl -= dt;
-    const terrain = this.deps.lazyTerrain();
-
-    // Homing: steer the velocity vector toward the (lead-compensated)
-    // target with a hard turn cap — a missile that curves, not teleports.
-    if (r.target?.alive) {
-      this._rktAim.copy(r.target.pos);
-      this._rktAim.y += 0.5;
-      this._rktAim.addScaledVector(r.target.vel, Math.min(1.2, this._rktAim.distanceTo(r.pos) / ROCKET_SPEED));
-      this._rktAim.sub(r.pos).normalize();
-      this._rktDir.copy(r.vel).normalize();
-      const angle = this._rktDir.angleTo(this._rktAim);
-      if (angle > 1e-4) {
-        this._rktDir.lerp(this._rktAim, Math.min(1, ROCKET_TURN * dt / angle)).normalize();
-        r.vel.copy(this._rktDir).multiplyScalar(ROCKET_SPEED);
-      }
-      if (r.pos.distanceToSquared(r.target.pos) < ROCKET_FUSE * ROCKET_FUSE) {
-        this.detonateRocket(r);
-        return;
-      }
-    }
-
-    r.pos.addScaledVector(r.vel, dt);
-    r.group.position.copy(r.pos);
-    this._rktDir.copy(r.vel).normalize();
-    r.group.quaternion.setFromUnitVectors(_FWD, this._rktDir);
-
-    // Motor smoke — one puff every ~50ms sells the burn without a particle
-    // system per rocket.
-    r.puff -= dt;
-    if (r.puff <= 0) {
-      r.puff = 0.05;
-      this.deps.lazyEffects().spawnMoveDust(r.pos, this._zeroVel, 1, 0.12);
-    }
-
-    if (r.ttl <= 0 || r.pos.y < terrain.getHeight(r.pos.x, r.pos.z)) {
-      this.detonateRocket(r);
-    }
-  }
-
-  private detonateRocket(r: Rocket): void {
-    r.ttl = 0;
-    this.deps.world.explosions.push(new Explosion(
-      this.deps.scene, r.pos, false, 0, this.deps.lazyTerrain(), 0.5, 0xffaa44));
-    sfx.explosionAt(r.pos, false);
-    for (const c of this.deps.targets) {
-      if (c.dead || c.scoreless) continue;
-      const d = c.pos.distanceTo(r.pos);
-      if (d < ROCKET_AOE) {
-        const dmg = Math.round(ROCKET_DMG * r.dmgScale * (1 - d / ROCKET_AOE));
-        if (dmg > 0) this.deps.lazyCombat()?.hitTargetLocal(c, dmg);
-      }
-    }
-    for (const b of this.deps.enemyBots?.() ?? []) {
-      if (!b.alive) continue;
-      const d = b.pos.distanceTo(r.pos);
-      if (d < ROCKET_AOE) {
-        const dmg = Math.round(ROCKET_DMG * r.dmgScale * (1 - d / ROCKET_AOE));
-        if (dmg > 0) this.deps.damageBot?.(b.playerId, dmg, r.pos);
-      }
-    }
-    this.deps.scene.remove(r.group);
-  }
+  // Sentry mini-rockets — see deployRockets.ts.
+  private readonly rockets: DeployRockets;
 
   /** Escort drone — follows the owner's head, plinks enemies with weaker
    *  mini-rockets (60% sentry damage). Same dep: targeting rules. */
@@ -503,7 +371,7 @@ export class Deployables {
         }
         const shot = d.update(dt, p.pos, p.yaw, this._enemies);
         if (!shot) return;
-        this.spawnRocket(shot.muzzle, shot.target, 0.6);
+        this.rockets.spawn(shot.muzzle, shot.target, 0.6);
         sfx.shotAt(shot.muzzle, WeaponType.RocketLauncher);
       },
       dispose: () => d.dispose(this.deps.scene),
@@ -638,20 +506,12 @@ export class Deployables {
     for (let i = this.items.length - 1; i >= 0; i--) {
       if (this.items[i]!.dead) { this.items[i]!.dispose(); this.items.splice(i, 1); }
     }
-    for (let i = this.rockets.length - 1; i >= 0; i--) {
-      const r = this.rockets[i]!;
-      this.updateRocket(r, dt);
-      if (r.ttl <= 0) {
-        this.deps.scene.remove(r.group); // detonate already removed; ttl cut is the safety
-        this.rockets.splice(i, 1);
-      }
-    }
+    this.rockets.update(dt);
   }
 
   dispose(): void {
     for (const i of this.remote.values()) i.dispose();
     this.remote.clear();
-    for (const r of this.rockets) this.deps.scene.remove(r.group);
-    this.rockets.length = 0;
+    this.rockets.dispose();
   }
 }
