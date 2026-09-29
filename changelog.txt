@@ -1,3 +1,4 @@
+2026-10-03 - fleet harness surfaces matchNotice lines + streak on kill rows
 2026-10-03 - playerKill carries shooter streak (wire field, feed-ready); streak announcements tests pin first-blood/spree/ender ordering
 2026-10-03 - kill streaks: first blood + spree tiers (spree/rampage/dominating/unstoppable/godlike) + streak-ender callouts via matchNotice; streak lives on PlayerState, wiped at match reset
 2026-10-03 - directional sun-aware fog: scene fog + sky horizon + terrain tint warm when the camera faces the sun, cool away (camera-facing Mie stand-in, no post-pass needed)

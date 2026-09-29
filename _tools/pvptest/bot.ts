@@ -85,6 +85,7 @@ const ballSegStats = {
 const ballClock = { t: -1, at: 0 }; // newest simTime stamp + local arrival ms
 const pendingShots: { id: string | null; target: string; at: number; airtime: number; aimPos: Vec3 }[] = [];
 const killsOf = new Map<string, number>();
+const notices: string[] = [];
 
 const t0 = Date.now();
 const log = (...a: unknown[]) => console.log(`[+${((Date.now() - t0) / 1000).toFixed(1)}s ${NAME}]`, ...a);
@@ -341,8 +342,12 @@ function handleJson(m: any) {
       break;
     case 'playerKill':
       killsOf.set(m.targetId, (killsOf.get(m.targetId) ?? 0) + 1);
-      log(`KILL ${m.shooterId} → ${m.targetId}`);
+      log(`KILL ${m.shooterId} → ${m.targetId}${m.streak ? ` (streak ${m.streak})` : ''}`);
       if (m.targetId === NAME) dead = true;
+      break;
+    case 'matchNotice':
+      notices.push(m.text);
+      log(`NOTICE ${m.text}`);
       break;
     case 'playerRespawn':
       if (m.playerId === NAME) {
