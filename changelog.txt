@@ -1,3 +1,6 @@
+2026-10-03 - RoomFlags.tick split into tickCarried / tickDropped /
+    tickTouch — the flag rule pass now reads as one state dispatch per
+    flag instead of three interleaved state machines.
 2026-10-03 - pickSpawnPoint split + teammate-scoring fix: the
     enemy-clearance scan extracted to foeClearance. Fix: teammates were
     only exempt from threat scoring when a team base existed — without

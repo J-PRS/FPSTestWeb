@@ -85,73 +85,12 @@ export class RoomFlags {
 
     for (const f of this.flags.values()) {
       if (f.state === 'carried') {
-        const carrier = f.carrier ? this.room.players.getPlayer(f.carrier) : undefined;
-        // Carrier vanished (disconnect reap, room teardown) or died on a
-        // path that skipped the funnel: drop on the spot — refresh pos from
-        // the corpse when it's still around, or the flag would teleport
-        // back to wherever it was last tracked.
-        if (!carrier || carrier.isDead) {
-          if (carrier) f.pos = { ...carrier.position };
-          f.state = 'dropped';
-          f.carrier = null;
-          f.dropT = FLAG_RESET_S;
-          this.dirty = true;
-          continue;
-        }
-        f.pos = { ...carrier.position }; // truth for the capture check below —
-        // but NOT broadcast: clients pin a carried flag to the carrier's
-        // rendered position, so we only send flagUpdate on transitions.
-        // Saves a 20Hz stream per carried flag for zero visible difference.
-        // Reaching own base ring with the enemy flag scores — but only
-        // while your own flag is home; classic CTF, otherwise a team
-        // could cap while its flag sits in enemy hands.
-        const ownFlag = this.flags.get(carrier.team as TeamId)!;
-        const ownBase = ownFlag.home;
-        const cdx = f.pos.x - ownBase.x, cdz = f.pos.z - ownBase.z;
-        if (carrier.team !== f.team && ownFlag.state === 'home'
-          && Math.sqrt(cdx * cdx + cdz * cdz) <= FLAG_HOME_R) {
-          logger.info('Flag captured', { room: this.room.name, flag: f.team, by: carrier.id });
-          if (f.carriedAt) weaponStats.recordFlag(this.room.mode, 'cap', Date.now() - f.carriedAt);
-          f.state = 'home';
-          f.pos = { ...f.home };
-          f.carrier = null;
-          f.carriedAt = 0;
-          captureBy = carrier.team as TeamId;
-          this.dirty = true;
-        }
+        captureBy = this.tickCarried(f) ?? captureBy;
         continue;
       }
-
-      if (f.state === 'dropped') {
-        f.dropT -= dt;
-        if (f.dropT <= 0) {
-          if (f.droppedAt) weaponStats.recordFlag(this.room.mode, 'return', Date.now() - f.droppedAt);
-          f.state = 'home';
-          f.pos = { ...f.home };
-          f.droppedAt = 0;
-          this.dirty = true;
-          continue;
-        }
-      }
-
-      // Touch rules: enemy within pickup radius grabs a home/dropped flag;
-      // own team touching a dropped flag sends it home.
-      const t = this.nearestTouching(f);
-      if (!t) continue;
-      if (t.team === f.team && f.state === 'dropped') {
-        logger.info('Flag returned', { room: this.room.name, flag: f.team, by: t.id });
-        if (f.droppedAt) weaponStats.recordFlag(this.room.mode, 'return', Date.now() - f.droppedAt);
-        f.state = 'home';
-        f.pos = { ...f.home };
-        f.droppedAt = 0;
-        this.dirty = true;
-      } else if (t.team && t.team !== f.team) {
-        logger.info('Flag grabbed', { room: this.room.name, flag: f.team, by: t.id });
-        f.state = 'carried';
-        f.carrier = t.id;
-        f.carriedAt = Date.now();
-        this.dirty = true;
-      }
+      if (f.state === 'dropped') this.tickDropped(f, dt);
+      if (f.state !== 'dropped' && f.state !== 'home') continue;
+      this.tickTouch(f);
     }
 
     if (this.dirty) {
@@ -159,6 +98,74 @@ export class RoomFlags {
       this.room.broadcast({ type: 'flagUpdate', flags: this.snapshot() });
     }
     return captureBy;
+  }
+
+  /** Carried flag: rides the carrier (tracked for capture checks, never
+   *  broadcast — clients pin it to the carrier's rendered position, so a
+   *  20Hz pos stream would buy zero visible difference). A vanished or
+   *  dead carrier drops it on the spot; reaching the own-base ring with
+   *  own flag home scores. Returns the capturing team, if any. */
+  private tickCarried(f: RoomFlag): TeamId | null {
+    const carrier = f.carrier ? this.room.players.getPlayer(f.carrier) : undefined;
+    if (!carrier || carrier.isDead) {
+      // Refresh pos from the corpse when it's still around — otherwise
+      // the flag teleports to wherever it was last tracked.
+      if (carrier) f.pos = { ...carrier.position };
+      f.state = 'dropped';
+      f.carrier = null;
+      f.dropT = FLAG_RESET_S;
+      this.dirty = true;
+      return null;
+    }
+    f.pos = { ...carrier.position };
+    // Classic CTF: the cap only counts while your own flag is home —
+    // otherwise a team could score with its flag in enemy hands.
+    const ownFlag = this.flags.get(carrier.team as TeamId)!;
+    const cdx = f.pos.x - ownFlag.home.x, cdz = f.pos.z - ownFlag.home.z;
+    if (carrier.team !== f.team && ownFlag.state === 'home'
+      && Math.hypot(cdx, cdz) <= FLAG_HOME_R) {
+      logger.info('Flag captured', { room: this.room.name, flag: f.team, by: carrier.id });
+      if (f.carriedAt) weaponStats.recordFlag(this.room.mode, 'cap', Date.now() - f.carriedAt);
+      f.state = 'home';
+      f.pos = { ...f.home };
+      f.carrier = null;
+      f.carriedAt = 0;
+      this.dirty = true;
+      return carrier.team as TeamId;
+    }
+    return null;
+  }
+
+  /** Dropped flag countdown — time-out sends it home. */
+  private tickDropped(f: RoomFlag, dt: number): void {
+    f.dropT -= dt;
+    if (f.dropT > 0) return;
+    if (f.droppedAt) weaponStats.recordFlag(this.room.mode, 'return', Date.now() - f.droppedAt);
+    f.state = 'home';
+    f.pos = { ...f.home };
+    f.droppedAt = 0;
+    this.dirty = true;
+  }
+
+  /** Touch rules: an enemy inside pickup radius grabs a home/dropped
+   *  flag; own team touching a dropped flag sends it home. */
+  private tickTouch(f: RoomFlag): void {
+    const t = this.nearestTouching(f);
+    if (!t) return;
+    if (t.team === f.team && f.state === 'dropped') {
+      logger.info('Flag returned', { room: this.room.name, flag: f.team, by: t.id });
+      if (f.droppedAt) weaponStats.recordFlag(this.room.mode, 'return', Date.now() - f.droppedAt);
+      f.state = 'home';
+      f.pos = { ...f.home };
+      f.droppedAt = 0;
+      this.dirty = true;
+    } else if (t.team && t.team !== f.team) {
+      logger.info('Flag grabbed', { room: this.room.name, flag: f.team, by: t.id });
+      f.state = 'carried';
+      f.carrier = t.id;
+      f.carriedAt = Date.now();
+      this.dirty = true;
+    }
   }
 
   private nearestTouching(f: RoomFlag): { id: string; team?: string } | null {
