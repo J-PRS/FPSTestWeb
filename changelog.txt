@@ -1,3 +1,5 @@
+2026-10-03 - flagDrop scenario caught a stale-position flag drop: the tickFlags dead-detector dropped a carried flag without refreshing pos (flag 'teleported' to last tracked spot). Fixed to drop at the corpse. Gnat scenario de-flaked (follow the patrol anchor).
+
 2026-10-03 - Family bite scenarios: roller contact, snake lunge, gnat dive (all land bites on a parked bot); deployables rocket split.
 
 2026-10-03 - Creature wall-gate scenario (pen proves melee can't clip through geometry); deployables.ts split - sentry homing rockets moved to deployRockets.ts (-145 lines).

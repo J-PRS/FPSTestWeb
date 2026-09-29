@@ -86,8 +86,12 @@ export class RoomFlags {
     for (const f of this.flags.values()) {
       if (f.state === 'carried') {
         const carrier = f.carrier ? this.room.players.getPlayer(f.carrier) : undefined;
-        // Carrier vanished (disconnect reap, room teardown): drop on the spot.
+        // Carrier vanished (disconnect reap, room teardown) or died on a
+        // path that skipped the funnel: drop on the spot — refresh pos from
+        // the corpse when it's still around, or the flag would teleport
+        // back to wherever it was last tracked.
         if (!carrier || carrier.isDead) {
+          if (carrier) f.pos = { ...carrier.position };
           f.state = 'dropped';
           f.carrier = null;
           f.dropT = FLAG_RESET_S;

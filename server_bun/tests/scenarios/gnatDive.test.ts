@@ -8,11 +8,17 @@ describe('scenario: gnat dives a player', () => {
     const bot = room.players.getPlayer('BOT-t1')!;
     bot.health = 500;
     room.creatureSim.step(0.05);
-    const gnat = room.creatureSim.roster()[0]!;
-    // Flyers dive from overhead orbit — park under the gnat's patrol
-    // anchor; the windup→dive→bite chain is under test.
-    bot.position = { x: gnat.position.x + 5, y: gnat.position.y, z: gnat.position.z };
-    for (let i = 0; i < 600; i++) room.creatureSim.step(0.05); // ~30s
+    const gnatId = room.creatureSim.roster()[0]!.id;
+    // Flyers dive from overhead orbit — keep the bot pinned under the
+    // gnat's patrol anchor or the dart cycle can drift out of range and
+    // the check flakes on sim-seed luck. Roster returns snapshots, so the
+    // position is re-read every step.
+    for (let i = 0; i < 1200; i++) {
+      const gnat = room.creatureSim.roster().find(c => c.id === gnatId);
+      if (!gnat) break;
+      bot.position = { x: gnat.position.x + 2, y: gnat.position.y, z: gnat.position.z };
+      room.creatureSim.step(0.05);
+    }
     expect(w.count('crawlEvt', 'bite')).toBeGreaterThan(0);
     const bite = w.msgs.find((m) => m.type === 'crawlEvt' && (m as { kind?: string }).kind === 'bite')!;
     expect((bite as { targetId?: string }).targetId).toBe(bot.id);
