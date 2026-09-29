@@ -214,8 +214,8 @@ export class Room {
       (msg) => this.connections.broadcast(msg),
       (pid, msg) => this.connections.sendToPlayer(pid, msg),
     );
-    this.creatureSim.pop = this.spec.creatures?.crawler ?? 0;
-    this.creatureSim.onBite = (_c, targetId) => this.messages.crawlerBite(targetId, 25);
+    this.creatureSim.pops = this.spec.creatures ?? {};
+    this.creatureSim.onBite = (c, targetId) => this.messages.crawlerBite(targetId, c.biteDamage);
     this.creatureSim.onKilled = (by, pos) => this.creatureKill(by, pos, 0);
     this.messages.setCreatureSim(this.creatureSim);
     if (field) this.creatureSim.attachField(field);
@@ -580,7 +580,7 @@ export class Room {
     this.projectiles.attachStructures(spec.structures);
     if (spec.balls) this.ballSim.population = spec.balls;
     if (spec.ballMix) this.ballSim.ballMix = spec.ballMix;
-    this.creatureSim.pop = spec.creatures?.crawler ?? 0;
+    this.creatureSim.pops = spec.creatures ?? {};
     this.messages.setMap(spec.bases, spec.structures, spec.arena, spec.ambient, spec.terrain);
     this.broadcast({
       type: 'mapUpdate',

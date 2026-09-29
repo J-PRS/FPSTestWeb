@@ -5,7 +5,7 @@ import {
   GRAVITY,
   SCARAB_RADIUS, SCARAB_HEALTH, SCARAB_SPEED, SCARAB_ZIGZAG,
   SCARAB_AGGRO_DIST, SCARAB_BITE_DIST, SCARAB_BITE_CD, SCARAB_STUN,
-  EMERGE_DUR,
+  EMERGE_DUR, MELEE_FAVOR,
 } from '../core/config.js';
 import { Terrain } from '../world/terrain.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
@@ -13,6 +13,8 @@ import type { Targetable } from './balls.js';
 import { allocSlots, freeSlots, getSwarm, getShadows } from './swarms.js';
 import type { SwarmPart, SwarmSlotOwner } from './swarm.js';
 import { getGlowTexture } from '../effects/glowTexture.js';
+import { type SimCrawler } from '../../../shared/creatureSim.js';
+import { bindNetMelee, applyNetEdgeMelee, updateNetMelee } from '../game/netMelee.js';
 
 const _dir = new THREE.Vector3();
 const _UP = new THREE.Vector3(0, 1, 0);
@@ -83,7 +85,7 @@ export function scarabParts(): SwarmPart[] {
  * only as a crowd. Renders into the shared scarab swarm — owns no meshes.
  */
 export class Scarab implements Targetable, SwarmSlotOwner {
-  readonly id: number;
+  id: number; // bindNet re-stamps into the net id namespace post-construction
   readonly variant = 0;
   readonly uber: boolean;
 
@@ -109,11 +111,30 @@ export class Scarab implements Targetable, SwarmSlotOwner {
   private hasSlots = false;
 
   private animT = Math.random() * 10;
-  private yaw = 0;
+  yaw = 0; // net replay writes this from the sim
   private flash = 0;
   private biteCd = 0;
   private stunTimer = 0;
   private zigPhase = Math.random() * Math.PI * 2;
+
+  /** netDriven = server-authoritative replay (shared hop sim) — see
+   *  Crawler.bindNet; offline instances leave it false. */
+  netDriven = false;
+  netId = 0;
+  sim: SimCrawler | null = null;
+  netAcc = 0;
+  static hitClaim: ((netId: number, damage: number) => void) | null = null;
+
+  bindNet(id: number, seed: number, pos: THREE.Vector3, vel: { x: number; y: number; z: number }, state: SimCrawler['state'], uber: boolean, species = 'scarab'): void {
+    this.netDriven = true;
+    this.netId = id;
+    this.id = 0x50000000 + id;
+    bindNetMelee(this, id, seed, species, pos, vel, state, uber);
+  }
+
+  applyNetEdge(m: { position: { x: number; y: number; z: number }; velocity: { x: number; y: number; z: number }; targetId: string | null; tp?: { x: number; y: number; z: number } | null }): void {
+    applyNetEdgeMelee(this, m);
+  }
 
   // Burrow-in state (set by spawn) — slides up out of the ground on emerge
   emergeT = 0;
@@ -122,7 +143,7 @@ export class Scarab implements Targetable, SwarmSlotOwner {
 
   onBite?: (scarab: Scarab) => void;
   onLanded?: (pos: THREE.Vector3) => void;
-  private airborne = false;
+  airborne = false; // net replay writes this from the sim
 
   get disposed(): boolean { return this.dead; }
 
@@ -145,6 +166,12 @@ export class Scarab implements Targetable, SwarmSlotOwner {
 
   update(dt: number, terrain: Terrain, playerPos: THREE.Vector3): void {
     if (this.dead) return;
+    if (this.netDriven && this.sim) {
+      updateNetMelee(this, dt, terrain);
+      if (this.flash > 0) this.flash -= dt;
+      this.animT += dt;
+      return;
+    }
     if (this.stunTimer > 0) this.stunTimer -= dt;
     if (this.flash > 0) this.flash -= dt;
     if (this.biteCd > 0) this.biteCd -= dt;
@@ -207,7 +234,8 @@ export class Scarab implements Targetable, SwarmSlotOwner {
         }
       }
 
-      if (biteSq < SCARAB_BITE_DIST * SCARAB_BITE_DIST && this.biteCd <= 0) {
+      const biteD = SCARAB_BITE_DIST * MELEE_FAVOR;
+      if (biteSq < biteD * biteD && this.biteCd <= 0) {
         this.biteCd = SCARAB_BITE_CD;
         this.onBite?.(this);
       }
@@ -219,7 +247,7 @@ export class Scarab implements Targetable, SwarmSlotOwner {
     this.writeInstances(terrain);
   }
 
-  private writeInstances(terrain: Terrain): void {
+  writeInstances(terrain: Terrain): void {
     if (!this.hasSlots) return;
     const swarm = getSwarm('scarab');
     if (!swarm) return;
@@ -273,6 +301,11 @@ export class Scarab implements Targetable, SwarmSlotOwner {
   }
 
   takeDamage(damage: number): boolean {
+    if (this.netDriven) {
+      this.flash = 0.15;
+      Scarab.hitClaim?.(this.netId, damage);
+      return false;
+    }
     this.health -= damage;
     this.flash = 0.15;
     if (this.health <= 0) { this.dead = true; return true; }

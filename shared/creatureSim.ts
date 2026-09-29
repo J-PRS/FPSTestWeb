@@ -37,10 +37,30 @@ export const CRAWLER_SIM = {
   STUN_S: 0.5,          // blast knockback suppresses hopping this long
 } as const;
 
+type SimTunables = { readonly [K in keyof typeof CRAWLER_SIM]: number };
+
+/** Hop-family species share the whole state machine — they differ only in
+ *  the numbers. A table beats subclassing because the wire just carries
+ *  the species NAME and both sides resolve the same row. `spd`/`hp`/
+ *  `bite` scale or override the crawler baseline. */
+export const MELEE_SPECIES: Record<string, {
+  speed: number;        // multiplier on HOP_SPEED
+  health: number;       // base (uber still ×~3.4)
+  bite: number;         // pounce-contact damage
+  aggro?: number;       // flat overrides for species that sense differently
+  pounceD?: number;
+}> = {
+  crawler: { speed: 1.0, health: 70, bite: 25 },
+  scarab:  { speed: 1.35, health: 40, bite: 15, aggro: 55 * 55, pounceD: 20 * 20 },
+};
+
 export type CrawlerState = 'wander' | 'chase' | 'windup';
 
 export interface SimCrawler {
   id: number;
+  species: string;      // key into MELEE_SPECIES — travels on the wire
+  biteDamage: number;
+  sp: SimTunables;      // resolved per-species constants
   x: number; y: number; z: number;
   vx: number; vy: number; vz: number;
   yaw: number;          // last horizontal facing — display lerp target
@@ -76,11 +96,19 @@ function crand(c: SimCrawler): number {
 
 export function makeSimCrawler(
   id: number, x: number, y: number, z: number,
-  uber: boolean, seed: number,
+  uber: boolean, seed: number, species = 'crawler',
 ): SimCrawler {
-  const health = uber ? 240 : 70;
+  const row = MELEE_SPECIES[species] ?? MELEE_SPECIES.crawler!;
+  const health = uber ? row.health * 3.4 : row.health;
+  const sp: SimTunables = {
+    ...CRAWLER_SIM,
+    HOP_SPEED: CRAWLER_SIM.HOP_SPEED * row.speed,
+    AGGRO_D2: row.aggro ?? CRAWLER_SIM.AGGRO_D2,
+    POUNCE_D2: row.pounceD ?? CRAWLER_SIM.POUNCE_D2,
+  };
   return {
-    id, x, y, z, vx: 0, vy: 0, vz: 0, yaw: 0,
+    id, species, biteDamage: row.bite, sp,
+    x, y, z, vx: 0, vy: 0, vz: 0, yaw: 0,
     state: 'wander', hopTimer: 0.5, windupTimer: 0, stunTimer: 0,
     wanderYaw: (seed % 628) / 100, health, maxHealth: health,
     uber, dead: false, rng: seed >>> 0 || 1,
@@ -111,7 +139,7 @@ export function stepCrawler(
   c.stunTimer = Math.max(0, c.stunTimer - dt);
 
   // --- ballistic leg ---
-  c.vy += CRAWLER_SIM.GRAVITY * dt;
+  c.vy += c.sp.GRAVITY * dt;
   c.x += c.vx * dt; c.y += c.vy * dt; c.z += c.vz * dt;
   const gy = hmHeight(field, c.x, c.z);
   const airborne = c.y > gy + 0.05;
@@ -130,10 +158,10 @@ export function stepCrawler(
       if (target) {
         const dx = target.x - c.x, dz = target.z - c.z;
         const pd = Math.sqrt(dx * dx + dz * dz) || 0.001;
-        const t = Math.max(0.15, pd / CRAWLER_SIM.POUNCE_SPEED);
-        c.vx = (dx / pd) * CRAWLER_SIM.POUNCE_SPEED;
-        c.vz = (dz / pd) * CRAWLER_SIM.POUNCE_SPEED;
-        c.vy = (target.y - c.y + 0.5 * Math.abs(CRAWLER_SIM.GRAVITY) * t * t) / t;
+        const t = Math.max(0.15, pd / c.sp.POUNCE_SPEED);
+        c.vx = (dx / pd) * c.sp.POUNCE_SPEED;
+        c.vz = (dz / pd) * c.sp.POUNCE_SPEED;
+        c.vy = (target.y - c.y + 0.5 * Math.abs(c.sp.GRAVITY) * t * t) / t;
         return 'pounce';
       }
     }
@@ -145,7 +173,7 @@ export function stepCrawler(
   // bookkeeping (the predictor still needs 'bite' for the lunge anim). */
   if (target && c.tgtValid) {
     const dx = target.x - c.x, dz = target.z - c.z;
-    if (dx * dx + dz * dz < CRAWLER_SIM.POUNCE_HIT_D2) {
+    if (dx * dx + dz * dz < c.sp.POUNCE_HIT_D2) {
       if (authoritative) c.pendingBite = true;
       return 'bite';
     }
@@ -155,9 +183,9 @@ export function stepCrawler(
     ? (target.x - c.x) ** 2 + (target.z - c.z) ** 2
     : Infinity;
 
-  if (target && distSq < CRAWLER_SIM.POUNCE_D2) {
+  if (target && distSq < c.sp.POUNCE_D2) {
     c.state = 'windup';
-    c.windupTimer = CRAWLER_SIM.WINDUP_S;
+    c.windupTimer = c.sp.WINDUP_S;
     return 'windup';
   }
 
@@ -165,21 +193,21 @@ export function stepCrawler(
 
   c.hopTimer -= dt;
   if (c.hopTimer > 0) return null;
-  c.hopTimer = CRAWLER_SIM.HOP_REST_MIN + crand(c) * CRAWLER_SIM.HOP_REST_VAR;
+  c.hopTimer = c.sp.HOP_REST_MIN + crand(c) * c.sp.HOP_REST_VAR;
 
-  if (target && distSq < CRAWLER_SIM.AGGRO_D2) {
+  if (target && distSq < c.sp.AGGRO_D2) {
     c.state = 'chase';
     const d = Math.sqrt(distSq) || 0.001;
-    c.vx = ((target.x - c.x) / d) * CRAWLER_SIM.HOP_SPEED;
-    c.vz = ((target.z - c.z) / d) * CRAWLER_SIM.HOP_SPEED;
-    c.vy = CRAWLER_SIM.HOP_UP;
+    c.vx = ((target.x - c.x) / d) * c.sp.HOP_SPEED;
+    c.vz = ((target.z - c.z) / d) * c.sp.HOP_SPEED;
+    c.vy = c.sp.HOP_UP;
     c.yaw = Math.atan2(c.vx, c.vz);
   } else {
     c.state = 'wander';
     if (crand(c) < 0.4) c.wanderYaw += (crand(c) - 0.5) * 2;
-    c.vx = Math.sin(c.wanderYaw) * CRAWLER_SIM.HOP_SPEED * 0.35;
-    c.vz = Math.cos(c.wanderYaw) * CRAWLER_SIM.HOP_SPEED * 0.35;
-    c.vy = CRAWLER_SIM.HOP_UP * 0.8;
+    c.vx = Math.sin(c.wanderYaw) * c.sp.HOP_SPEED * 0.35;
+    c.vz = Math.cos(c.wanderYaw) * c.sp.HOP_SPEED * 0.35;
+    c.vy = c.sp.HOP_UP * 0.8;
     c.yaw = c.wanderYaw;
   }
   return 'land'; // hop launch — clients use it for dust/anim edge
@@ -188,7 +216,7 @@ export function stepCrawler(
 /** Server-side hit application — knockback staggers the hop clock. */
 export function applyCrawlerDamage(c: SimCrawler, damage: number): boolean {
   c.health -= damage;
-  c.stunTimer = Math.max(c.stunTimer, CRAWLER_SIM.STUN_S);
+  c.stunTimer = Math.max(c.stunTimer, c.sp.STUN_S);
   if (c.health <= 0) { c.dead = true; return true; }
   return false;
 }

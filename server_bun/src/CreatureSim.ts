@@ -54,8 +54,14 @@ export class CreatureSim {
   private tickAcc = 0;
   private static readonly TICK_CATCHUP_CAP = 0.25;
 
-  /** Max live crawlers for this room — map spec `creatures.crawler`. */
-  pop = 0;
+  /** Max live count per melee species — map spec `creatures`. */
+  pops: Record<string, number> = {};
+
+  private aliveCount(species: string): number {
+    let n = 0;
+    for (const c of this.crawlers.values()) if (!c.dead && c.species === species) n++;
+    return n;
+  }
 
   /** Bite delivery — Room wires this to the damage funnel. */
   onBite: ((crawler: SimCrawler, targetId: string) => void) | null = null;
@@ -85,7 +91,7 @@ export class CreatureSim {
 
   get count(): number { return this.crawlers.size; }
 
-  roster(): { id: number; position: Vec3; velocity: Vec3; uber: boolean; seed: number; state: string; targetId: string | null; tp: Vec3 | null; t: number }[] {
+  roster(): { id: number; position: Vec3; velocity: Vec3; uber: boolean; seed: number; species: string; state: string; targetId: string | null; tp: Vec3 | null; t: number }[] {
     const out = [];
     for (const c of this.crawlers.values()) {
       if (c.dead) continue;
@@ -93,7 +99,7 @@ export class CreatureSim {
         id: c.id,
         position: { x: c.x, y: c.y, z: c.z },
         velocity: { x: c.vx, y: c.vy, z: c.vz },
-        uber: c.uber, seed: c.rng, state: c.state,
+        uber: c.uber, seed: c.rng, species: c.species, state: c.state,
         targetId: c.targetId, tp: this.targetSnap(c), t: this.simTime,
       });
     }
@@ -118,20 +124,21 @@ export class CreatureSim {
     return best;
   }
 
-  private spawnCrawler(near: SimVec): SimCrawler {
+  private spawnCrawler(near: SimVec, species: string): SimCrawler {
     const field = this.field!;
     const ang = Math.random() * Math.PI * 2;
     const dist = 40 + Math.random() * 50;
     const x = near.x + Math.cos(ang) * dist;
     const z = near.z + Math.sin(ang) * dist;
     const seed = (Math.random() * 0xffffffff) >>> 0 || 1;
-    const c = makeSimCrawler(this.nextId++, x, hmHeight(field, x, z), z, Math.random() < 0.05, seed);
+    const c = makeSimCrawler(this.nextId++, x, hmHeight(field, x, z), z, Math.random() < 0.05, seed, species);
     c.targetId = this.nearestPlayer(c, this.alivePlayers())?.id ?? null;
     this.snapTarget(c);
     this.crawlers.set(c.id, c);
     this.broadcast({
       type: 'crawlSpawn', id: c.id, position: { x: c.x, y: c.y, z: c.z },
-      seed, uber: c.uber, targetId: c.targetId, tp: this.targetSnap(c),
+      seed, uber: c.uber, species: c.species,
+      targetId: c.targetId, tp: this.targetSnap(c),
       t: this.simTime,
     });
     return c;
@@ -207,7 +214,7 @@ export class CreatureSim {
   }
 
   private tick(): void {
-    if (!this.field || this.dormant || this.pop <= 0) return;
+    if (!this.field || this.dormant) return;
     const now = performance.now();
     this.tickAcc += Math.min(now - this.lastTickAt, 1000) / 1000;
     this.lastTickAt = now;
@@ -217,10 +224,12 @@ export class CreatureSim {
     const alive = this.alivePlayers();
     if (alive.length === 0) { this.tickAcc = 0; return; }
 
-    // Drip-feed population toward the spec cap.
-    if (this.crawlers.size < this.pop) {
-      const near = alive[Math.floor(Math.random() * alive.length)]!.pos;
-      this.spawnCrawler(near);
+    // Drip-feed each declared species toward its own spec cap.
+    for (const [species, cap] of Object.entries(this.pops)) {
+      if (cap > 0 && this.aliveCount(species) < cap) {
+        const near = alive[Math.floor(Math.random() * alive.length)]!.pos;
+        this.spawnCrawler(near, species);
+      }
     }
 
     while (this.tickAcc >= TICK_DT) {

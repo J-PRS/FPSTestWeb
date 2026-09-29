@@ -11,7 +11,8 @@ import {
 } from '../core/config.js';
 import { Terrain } from '../world/terrain.js';
 import { getHeightfield } from '../world/terrain.js';
-import { type SimCrawler, stepCrawler, makeSimCrawler, commitTarget } from '../../../shared/creatureSim.js';
+import { type SimCrawler } from '../../../shared/creatureSim.js';
+import { bindNetMelee, applyNetEdgeMelee, updateNetMelee } from '../game/netMelee.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { Targetable } from './balls.js';
 import { allocSlots, freeSlots, getSwarm, getShadows } from './swarms.js';
@@ -142,7 +143,7 @@ export class Crawler implements Targetable, SwarmSlotOwner {
   private hasSlots = false;
 
   private animT = Math.random() * 10;
-  private yaw = 0;
+  yaw = 0; // net replay writes this from the sim
   private squash = 1; // 1 = normal, <1 crouched (windup telegraph)
   private glow = 0;   // emissive heat 0..1 — instanceColor >1 fakes the ramp
   private flash = 0;  // damage white-flash decay
@@ -152,7 +153,7 @@ export class Crawler implements Targetable, SwarmSlotOwner {
   private windupTimer = 0;
   private stunTimer = 0;
   private wanderYaw = Math.random() * Math.PI * 2;
-  private airborne = true;
+  airborne = true; // net replay writes this from the sim
   private pounceAirborne = false;
   // Burrow-in state (set by spawn) — slides up out of the ground on emerge
   emergeT = 0;
@@ -165,33 +166,22 @@ export class Crawler implements Targetable, SwarmSlotOwner {
   netDriven = false;
   netId = 0;
   sim: SimCrawler | null = null;
-  private netAcc = 0;
+  netAcc = 0;
   static hitClaim: ((netId: number, damage: number) => void) | null = null;
 
   /** Server-owned crawler: seed the shared sim from the wire state so the
    *  hop replay (RNG stream included) matches every other client. */
-  bindNet(id: number, seed: number, pos: THREE.Vector3, vel: { x: number; y: number; z: number }, state: SimCrawler['state'], uber: boolean): void {
+  bindNet(id: number, seed: number, pos: THREE.Vector3, vel: { x: number; y: number; z: number }, state: SimCrawler['state'], uber: boolean, species = 'crawler'): void {
     this.netDriven = true;
     this.netId = id;
     this.id = 0x50000000 + id; // net namespace — can't collide with local targetIds
-    this.pos.copy(pos);
-    this.vel.set(vel.x, vel.y, vel.z);
-    this.sim = makeSimCrawler(id, pos.x, pos.y, pos.z, uber, seed);
-    this.sim.state = state;
-    this.sim.vx = vel.x; this.sim.vy = vel.y; this.sim.vz = vel.z;
-    this.airborne = vel.y !== 0 || pos.y > 0.5;
+    bindNetMelee(this, id, seed, species, pos, vel, state, uber);
   }
 
   /** A wire edge — apply the committed state the authority stepped into. */
   applyNetEdge(m: { position: { x: number; y: number; z: number }; velocity: { x: number; y: number; z: number }; kind: string; targetId: string | null; tp?: { x: number; y: number; z: number } | null }): void {
-    const s = this.sim;
-    if (!s) return;
-    s.x = m.position.x; s.y = m.position.y; s.z = m.position.z;
-    s.vx = m.velocity.x; s.vy = m.velocity.y; s.vz = m.velocity.z;
-    commitTarget(s, m.targetId, m.tp ?? null);
-    this.pos.set(s.x, s.y, s.z);
-    this.vel.set(s.vx, s.vy, s.vz);
-    this.state = s.state;
+    applyNetEdgeMelee(this, m);
+    if (this.sim) this.state = this.sim.state;
   }
 
   onPounceHit?: (crawler: Crawler) => void;
@@ -285,7 +275,7 @@ export class Crawler implements Targetable, SwarmSlotOwner {
     this.writeInstances(terrain);
   }
 
-  private writeInstances(terrain: Terrain): void {
+  writeInstances(terrain: Terrain): void {
     if (!this.hasSlots) return;
     const swarm = getSwarm('crawler');
     if (!swarm) return;
@@ -423,27 +413,12 @@ export class Crawler implements Targetable, SwarmSlotOwner {
     this.glow = 0.6;
   }
 
-  /** netDriven leg — replay the shared sim on the 50ms grid, let the
-   *  visual state fall out of it. committed target snapshot only (the
-   *  live player pos would diverge the hop aim). */
+  /** netDriven leg — the shared replay writes pos/vel/yaw/health; the
+   *  crawler-only telegraphs (windup squash/glow) sit on top. */
   private updateNet(dt: number, terrain: Terrain): void {
     const s = this.sim!;
-    const field = getHeightfield();
-    if (field) {
-      this.netAcc = Math.min(this.netAcc + dt, 0.5);
-      const tgt = s.tgtValid ? { x: s.tx, y: s.ty, z: s.tz } : null;
-      while (this.netAcc >= 0.05) {
-        this.netAcc -= 0.05;
-        stepCrawler(s, 0.05, field, tgt, false);
-      }
-      this.pos.set(s.x, s.y, s.z);
-      this.vel.set(s.vx, s.vy, s.vz);
-      this.state = s.state;
-      this.yaw = s.yaw;
-      this.airborne = s.y > (field ? s.y : 0) + 0.05;
-      this.health = s.health;
-    }
-    // Windup telegraph: sim owns the timer, we mirror the squash/glow.
+    updateNetMelee(this, dt, terrain);
+    this.state = s.state;
     if (s.state === 'windup') {
       const t = 1 - s.windupTimer / CRAWLER_WINDUP;
       this.squash = 1 - Math.max(0, t) * 0.4;
