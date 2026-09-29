@@ -150,6 +150,60 @@ describe('projectile claim ordering', () => {
   });
 });
 
+describe('hitscan AOE claims (lightning beam)', () => {
+  // Speed-0 weapons track no server projectile — their blast claims
+  // validate against eye→tip reach and wall occlusion instead.
+  it('a beam tip within range applies splash damage', () => {
+    const { players, combat, sentTo } = harness();
+    const p1 = players.addPlayer('p1');
+    p1.position = { x: 0, y: 10, z: 0 };
+    const target = players.addPlayer('p2');
+    target.position = { x: 0, y: 10, z: -10.5 }; // inside the 1.6m shaft of a tip at -10
+    target.protectedUntil = 0;
+
+    combat.handleAOEShot('p1', {
+      type: 'aoeShot',
+      position: { x: 0, y: 11, z: -10 },
+      weaponType: WeaponType.Lightning,
+    });
+
+    expect(rejections(sentTo, 'p1')).toEqual([]);
+    expect(target.health).toBeLessThan(target.maxHealth);
+  });
+
+  it('a tip beyond the beam range rejects', () => {
+    const { players, combat, sentTo } = harness();
+    const p1 = players.addPlayer('p1');
+    p1.position = { x: 0, y: 10, z: 0 };
+
+    combat.handleAOEShot('p1', {
+      type: 'aoeShot',
+      position: { x: 0, y: 11, z: -80 },
+      weaponType: WeaponType.Lightning,
+    });
+
+    expect(rejections(sentTo, 'p1').length).toBe(1);
+  });
+
+  it('a tip behind a wall rejects — beams cannot pierce structures', async () => {
+    const { structureColliders } = await import('../../shared/ballSim.ts');
+    const { players, combat, sentTo } = harness();
+    const p1 = players.addPlayer('p1');
+    p1.position = { x: 0, y: 10, z: 0 };
+    combat.solids = structureColliders([
+      { kind: 'wall', pos: { x: 0, y: 10, z: -5 }, size: { x: 20, y: 5, z: 1 } },
+    ]);
+
+    combat.handleAOEShot('p1', {
+      type: 'aoeShot',
+      position: { x: 0, y: 11, z: -10 },
+      weaponType: WeaponType.Lightning,
+    });
+
+    expect(rejections(sentTo, 'p1').length).toBe(1);
+  });
+});
+
 describe('shotFired relay', () => {
   const shotHarness = () => {
     const players = new PlayerManager();

@@ -1,3 +1,4 @@
+2026-10-03 - Hitscan AOE tests pinned: in-range tip damages, >70m tip rejects, wall-occluded tip rejects
 2026-10-03 - Lightning gun: server-side hitscan AOE path (was silently rejected as 'no known projectile') + beam ray occluded by structures client+server
 2026-10-03 - genfield --craters stamp (bucket-profile bowl) + maps/underhold.bin: new underhold map with a roofed-crater bunker base (T2-style shell-in-depression underground)
 2026-10-03 - AOE blast damage occluded by structures: splash no longer damages players through walls (blast-inside-wall edge case stepped past)
