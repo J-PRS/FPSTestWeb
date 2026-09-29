@@ -1,0 +1,84 @@
+import { describe, expect, it } from 'bun:test';
+import { SessionManager } from '../../src/SessionManager.ts';
+import { mkRoom } from './harness.ts';
+
+// Reconnect (F5) flow: a dropped socket starts a grace period instead of
+// killing the session; a rejoin with the right token reclaims the slot —
+// same health, same position, respawn re-armed. Wrong token or a claimed
+// id is rejected. Covers the gap the soak notes flagged.
+
+function fakeWs() {
+  return {
+    remoteAddress: '10.0.0.1',
+    data: {} as { playerId?: string },
+    closed: [] as { code: number; reason: string }[],
+    sent: [] as unknown[],
+    send(d: string | ArrayBuffer) { this.sent.push(JSON.parse(typeof d === 'string' ? d : new TextDecoder().decode(d))); },
+    close(code: number, reason: string) { this.closed.push({ code, reason }); },
+  };
+}
+type FakeWs = ReturnType<typeof fakeWs>;
+
+function mkSessions(room: ReturnType<typeof mkRoom>) {
+  const rooms = new Map([[room.name, room]]);
+  const playerRoom = new Map<string, typeof room>();
+  const specRooms = new Map<string, typeof room>();
+  const ops = { joins: 0, tierWs: 0, tierWt: 0, tierRtc: 0, tierOther: 0 };
+  return {
+    mgr: new SessionManager({
+      rooms, playerRoom, specRooms,
+      roomFor: () => room,
+      roomOfPlayer: (id) => rooms.has(room.name) && room.players.getPlayer(id) ? room : undefined,
+      totalPlayers: () => playerRoom.size,
+      ops,
+    }),
+    playerRoom, ops,
+  };
+}
+
+const join = (mgr: SessionManager, ws: FakeWs, playerId: string, token?: string) =>
+  mgr.handle(ws as never, { type: 'join', playerId, room: 't', token });
+
+describe('grace reconnect', () => {
+  it('reclaims the slot with the session token — state preserved', () => {
+    const room = mkRoom('flat', 'tdm');
+    const { mgr, playerRoom } = mkSessions(room);
+    const ws1 = fakeWs();
+    join(mgr, ws1, 'p1');
+    const p = room.players.getPlayer('p1')!;
+    p.health = 42;
+    p.position.x = 7;
+    // Socket drops → grace bookkeeping (mirrors GameServer.onClose).
+    room.disconnected.set('p1', { timeout: setTimeout(() => {}, 60_000) });
+
+    const ws2 = fakeWs();
+    join(mgr, ws2, 'p1', room.sessionTokens.get('p1'));
+    expect(ws2.closed.length).toBe(0);
+    expect(room.disconnected.has('p1')).toBe(false); // grace cancelled
+    expect(room.players.getPlayer('p1')!.health).toBe(42); // state kept
+    expect(room.players.getPlayer('p1')!.position.x).toBe(7);
+    // Reclaim re-seats the existing playerRoom mapping rather than
+    // re-registering — the entry stays, the room is unchanged.
+    expect(playerRoom.get('p1')).toBe(room);
+  });
+
+  it('rejects a reclaim with a wrong token', () => {
+    const room = mkRoom('flat', 'tdm');
+    const { mgr } = mkSessions(room);
+    join(mgr, fakeWs(), 'p1');
+    room.disconnected.set('p1', { timeout: setTimeout(() => {}, 60_000) });
+    const ws2 = fakeWs();
+    join(mgr, ws2, 'p1', 'forged');
+    expect(ws2.closed[0]?.reason).toBe('Invalid session token');
+    expect(room.disconnected.has('p1')).toBe(true); // slot still held for owner
+  });
+
+  it('rejects a duplicate id while the original is connected', () => {
+    const room = mkRoom('flat', 'tdm');
+    const { mgr } = mkSessions(room);
+    join(mgr, fakeWs(), 'p1');
+    const ws2 = fakeWs();
+    join(mgr, ws2, 'p1'); // no grace entry → plain duplicate
+    expect(ws2.closed[0]?.reason).toBe('Player ID already connected');
+  });
+});
