@@ -395,9 +395,12 @@ export class BotBrain {
       if (od < 15) {
         this.deployT = 28 + Math.random() * 20;
         // A hurting builder drops a station first (it heals the squad);
-        // otherwise the stand gets guns or a minefield by temperament.
+        // otherwise the stand gets guns, a minefield, or a patrol drone
+        // by temperament — drones roam the stand's perimeter so they're
+        // the pick when the anchor is already watched.
+        const roll = Math.random();
         const kind: string = (ctx.healthFrac ?? 1) < 0.6 ? 'station'
-          : Math.random() < 0.65 ? 'turret' : 'mine';
+          : roll < 0.55 ? 'turret' : roll < 0.85 ? 'mine' : 'drone';
         const a = Math.random() * Math.PI * 2;
         const r = 4 + Math.random() * 6;
         const px = pos.x + Math.cos(a) * r, pz = pos.z + Math.sin(a) * r;

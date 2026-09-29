@@ -11,8 +11,12 @@
  * survives restarts, the same convention as matches.jsonl.
  */
 import { appendFileSync, mkdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { logger } from './logger.ts';
+
+// import.meta.dir is Bun-only — the vitest suite imports this module too.
+const HERE = (import.meta as { dir?: string }).dir ?? dirname(fileURLToPath(import.meta.url));
 
 export interface WeaponRow {
   hits: number;
@@ -53,7 +57,7 @@ const CELL = 10;
 const SPEED_BIN = 5;
 
 const FLUSH_MS = 60_000;
-const LOGS_DIR = join(import.meta.dir, '..', '..', 'logs');
+const LOGS_DIR = join(HERE, '..', '..', 'logs');
 const STATS_FILE = join(LOGS_DIR, 'weaponstats.jsonl');
 
 class WeaponStats {
