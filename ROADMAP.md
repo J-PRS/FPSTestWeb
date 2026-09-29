@@ -184,8 +184,14 @@ solve when a check can possibly matter, skip provably-dead ticks; plus
    so bots hear the pop; shot-deaths detonate too. Seven species
    server-owned on infestation (crawler:6, scarab:8, rakk:4, roller:3,
    gnat:10, snake:4, baneling:4) — verified live (detonate edge seen).
-   Remaining: stationary (Totem) — needs a ranged/beam damage channel,
-   the only family that isn't melee-contact shaped.
+   Totem landed (e8e6324): SimTotem aim→charge→fire / blink cycle — the
+   beam LOCKS a committed point (target snapshot + terrain clip, solved
+   identically on both ends), 'fire' is display-only while the authority
+   sweeps live players along the line (totemFireTargets); 'blink' edges
+   carry the DESTINATION so a far client that missed the decision still
+   teleports. Eight species server-owned on infestation (+totem:3).
+   Every species family now has a server-authoritative core — the
+   remaining ports are new species data, not new plumbing.
    ballSim predictive terrain probes (3c12a28): parabola-scheduled gy
    sampling — resample at ~60% of predicted impact, on ~2m horizontal
    drift, or any velocity discontinuity; deterministic, bounded clip.
