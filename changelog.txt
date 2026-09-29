@@ -1,3 +1,7 @@
+2026-10-03 - Melee whiff warn: only logs when the target was moving
+    under 30m/s — ski-speed whiffs are earned dodges, not bugs
+    (demoted to debug).
+
 2026-10-03 - Overlord: spawns at ground level and lifts off to cruise
     altitude (steerLoiter targetY pull) + eruption dust, instead of
     popping into existence at 11m.

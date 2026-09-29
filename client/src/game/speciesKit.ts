@@ -119,7 +119,12 @@ class SpeciesKitImpl {
     if (reach !== undefined) {
       const d = fromPos.distanceTo(p.pos);
       if (d > reach) {
-        this.deps.logger.warn(`melee whiff beyond reach: ${deathText}`, {
+        // Ski-speed whiffs are earned dodges, not bugs — the strike fired on
+        // a lastSeen snapshot and a fast mover is already gone. Only a whiff
+        // against a slow/stationary player means the reach math lied.
+        const moving = p.vel.lengthSq() > 30 * 30;
+        const log = moving ? this.deps.logger.debug : this.deps.logger.warn;
+        log.call(this.deps.logger, `melee whiff beyond reach: ${deathText}`, {
           dist: +d.toFixed(2), reach: +reach.toFixed(2),
           from: { x: +fromPos.x.toFixed(1), y: +fromPos.y.toFixed(1), z: +fromPos.z.toFixed(1) },
           player: { x: +p.pos.x.toFixed(1), y: +p.pos.y.toFixed(1), z: +p.pos.z.toFixed(1) },
