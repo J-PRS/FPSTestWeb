@@ -7,9 +7,11 @@ import {
   CRAWLER_AGGRO_DIST, CRAWLER_POUNCE_DIST, CRAWLER_WINDUP,
   CRAWLER_HOP_SPEED, CRAWLER_HOP_UP, CRAWLER_POUNCE_SPEED,
   CRAWLER_STUN,
-  EMERGE_DUR,
+  EMERGE_DUR, MELEE_FAVOR,
 } from '../core/config.js';
 import { Terrain } from '../world/terrain.js';
+import { getHeightfield } from '../world/terrain.js';
+import { type SimCrawler, stepCrawler, makeSimCrawler, commitTarget } from '../../../shared/creatureSim.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { Targetable } from './balls.js';
 import { allocSlots, freeSlots, getSwarm, getShadows } from './swarms.js';
@@ -120,7 +122,7 @@ export function crawlerParts(): SwarmPart[] {
  * Renders into the shared crawler swarm — owns no meshes.
  */
 export class Crawler implements Targetable, SwarmSlotOwner {
-  readonly id: number;
+  id: number; // bindNet re-stamps into the net id namespace post-construction
   readonly variant = 0;
   readonly uber: boolean;
 
@@ -157,6 +159,41 @@ export class Crawler implements Targetable, SwarmSlotOwner {
   emergeDepth = 0;
   emergeRestY = 0;
 
+  /** netDriven = server-authoritative replay: the shared sim runs the
+   *  hop stream, crawlEvt edges snap state. TakeDamage sends a claim
+   *  instead of trusting local health. */
+  netDriven = false;
+  netId = 0;
+  sim: SimCrawler | null = null;
+  private netAcc = 0;
+  static hitClaim: ((netId: number, damage: number) => void) | null = null;
+
+  /** Server-owned crawler: seed the shared sim from the wire state so the
+   *  hop replay (RNG stream included) matches every other client. */
+  bindNet(id: number, seed: number, pos: THREE.Vector3, vel: { x: number; y: number; z: number }, state: SimCrawler['state'], uber: boolean): void {
+    this.netDriven = true;
+    this.netId = id;
+    this.id = 0x50000000 + id; // net namespace — can't collide with local targetIds
+    this.pos.copy(pos);
+    this.vel.set(vel.x, vel.y, vel.z);
+    this.sim = makeSimCrawler(id, pos.x, pos.y, pos.z, uber, seed);
+    this.sim.state = state;
+    this.sim.vx = vel.x; this.sim.vy = vel.y; this.sim.vz = vel.z;
+    this.airborne = vel.y !== 0 || pos.y > 0.5;
+  }
+
+  /** A wire edge — apply the committed state the authority stepped into. */
+  applyNetEdge(m: { position: { x: number; y: number; z: number }; velocity: { x: number; y: number; z: number }; kind: string; targetId: string | null; tp?: { x: number; y: number; z: number } | null }): void {
+    const s = this.sim;
+    if (!s) return;
+    s.x = m.position.x; s.y = m.position.y; s.z = m.position.z;
+    s.vx = m.velocity.x; s.vy = m.velocity.y; s.vz = m.velocity.z;
+    commitTarget(s, m.targetId, m.tp ?? null);
+    this.pos.set(s.x, s.y, s.z);
+    this.vel.set(s.vx, s.vy, s.vz);
+    this.state = s.state;
+  }
+
   onPounceHit?: (crawler: Crawler) => void;
   onLanded?: (pos: THREE.Vector3) => void;
   // Uber = matriarch: births a scarab every few seconds while she lives —
@@ -183,6 +220,10 @@ export class Crawler implements Targetable, SwarmSlotOwner {
 
   update(dt: number, terrain: Terrain, playerPos: THREE.Vector3): void {
     if (this.dead) return;
+    if (this.netDriven && this.sim) {
+      this.updateNet(dt, terrain);
+      return;
+    }
     if (this.stunTimer > 0) this.stunTimer -= dt;
     if (this.flash > 0) this.flash -= dt;
     if (this.glow > 0 && this.state !== 'windup') this.glow -= dt * 2.5;
@@ -223,12 +264,12 @@ export class Crawler implements Targetable, SwarmSlotOwner {
       this.vel.set(0, 0, 0);
       if (this.pounceAirborne) {
         this.pounceAirborne = false;
-        if (this.pos.distanceToSquared(playerPos) < 6.25) this.onPounceHit?.(this);
+        if (this.pos.distanceToSquared(playerPos) < 6.25 * MELEE_FAVOR * MELEE_FAVOR) this.onPounceHit?.(this);
       }
       this.groundThink(dt, terrain, playerPos, distSq);
     } else {
       this.airborne = true;
-      if (this.pounceAirborne && this.pos.distanceToSquared(playerPos) < 4) {
+      if (this.pounceAirborne && this.pos.distanceToSquared(playerPos) < 4 * MELEE_FAVOR * MELEE_FAVOR) {
         this.pounceAirborne = false;
         this.onPounceHit?.(this);
       }
@@ -382,7 +423,47 @@ export class Crawler implements Targetable, SwarmSlotOwner {
     this.glow = 0.6;
   }
 
+  /** netDriven leg — replay the shared sim on the 50ms grid, let the
+   *  visual state fall out of it. committed target snapshot only (the
+   *  live player pos would diverge the hop aim). */
+  private updateNet(dt: number, terrain: Terrain): void {
+    const s = this.sim!;
+    const field = getHeightfield();
+    if (field) {
+      this.netAcc = Math.min(this.netAcc + dt, 0.5);
+      const tgt = s.tgtValid ? { x: s.tx, y: s.ty, z: s.tz } : null;
+      while (this.netAcc >= 0.05) {
+        this.netAcc -= 0.05;
+        stepCrawler(s, 0.05, field, tgt, false);
+      }
+      this.pos.set(s.x, s.y, s.z);
+      this.vel.set(s.vx, s.vy, s.vz);
+      this.state = s.state;
+      this.yaw = s.yaw;
+      this.airborne = s.y > (field ? s.y : 0) + 0.05;
+      this.health = s.health;
+    }
+    // Windup telegraph: sim owns the timer, we mirror the squash/glow.
+    if (s.state === 'windup') {
+      const t = 1 - s.windupTimer / CRAWLER_WINDUP;
+      this.squash = 1 - Math.max(0, t) * 0.4;
+      this.glow = Math.max(0, t) * 0.6;
+    } else {
+      this.squash = 1;
+      if (this.glow > 0) this.glow -= dt * 2.5;
+    }
+    if (this.flash > 0) this.flash -= dt;
+    this.animT += dt;
+    this.writeInstances(terrain);
+  }
+
   takeDamage(damage: number): boolean {
+    if (this.netDriven) {
+      // Claim, don't kill — the server's crawlDie ends it for everyone.
+      this.flash = 0.15;
+      Crawler.hitClaim?.(this.netId, damage);
+      return false;
+    }
     this.health -= damage;
     this.flash = 0.15;
     if (this.health <= 0) { this.dead = true; return true; }

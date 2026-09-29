@@ -37,6 +37,25 @@ export function wireWorld(ctx: NetCtx): void {
     deps.entities().netBallRoster(data);
   };
 
+  // Server-owned melee species — crawl* events drive netDriven Crawler
+  // instances replaying shared/creatureSim.ts (see game/netCrawlers.ts).
+  networkManager.onCrawlSpawn = (data) => {
+    if (deps.world.playbackMode) return;
+    deps.entities().netCrawlSpawn(data);
+  };
+  networkManager.onCrawlEvt = (data) => {
+    if (deps.world.playbackMode) return;
+    deps.entities().netCrawlEvt(data);
+  };
+  networkManager.onCrawlDie = (data) => {
+    if (deps.world.playbackMode) return;
+    deps.entities().netCrawlDie(data);
+  };
+  networkManager.onCrawlRoster = (data) => {
+    if (deps.world.playbackMode) return;
+    deps.entities().netCrawlRoster(data);
+  };
+
   // Admin hot-reload — the room's map spec changed mid-match. Rebuild the
   // static geometry exactly like the join path does from gameState.
   networkManager.onMapUpdate = (map) => {

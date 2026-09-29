@@ -65,6 +65,9 @@ export type ClientMessage =
   // normalized knockback direction the shot imparted (server scales it
   // by weapon force itself). See server_bun/src/BallSim.ts.
   | { type: 'creatureHit'; id: number; damage: number; kx?: number; ky?: number; kz?: number }
+  // Same claim, but on a melee-species crawler — separate channel because
+  // the two id namespaces don't overlap (crawl ids live in CreatureSim).
+  | { type: 'crawlerHit'; id: number; damage: number; kx?: number; ky?: number; kz?: number }
   | { type: 'deploy'; kind: 'turret' | 'mine' | 'station' | 'drone'; position: Vec3 }
   | { type: 'snapshotRequest' }
   // Loadout class picked mid-match — stored as pending and applied on the
@@ -141,6 +144,14 @@ export type ServerMessage =
   | { type: 'ballSpawn'; id: number; variant: number; colorIdx: number; position: Vec3; velocity: Vec3; targetId?: string | null; tp?: Vec3 | null; t: number }
   | { type: 'ballSegment'; id: number; position: Vec3; velocity: Vec3; enraged: boolean; targetId: string | null; kind: string; t: number; et?: number; slowT?: number; damp?: boolean; tp?: Vec3 | null }
   | { type: 'ballDie'; id: number; position: Vec3; by?: string | null }
+  // Server-owned melee species (creatureSim.ts). Same idea as balls but
+  // hop-driven: wander/chase/windup are RNG-seeded and deterministic, so
+  // the wire carries only edge events (retarget windup pounce bite die)
+  // — predictors replay the identical hop stream in between.
+  | { type: 'crawlSpawn'; id: number; position: Vec3; seed: number; uber: boolean; targetId?: string | null; tp?: Vec3 | null; t: number }
+  | { type: 'crawlEvt'; id: number; kind: 'retarget' | 'windup' | 'pounce' | 'bite'; position: Vec3; velocity: Vec3; targetId: string | null; tp?: Vec3 | null; t: number }
+  | { type: 'crawlDie'; id: number; position: Vec3; by?: string | null }
+  | { type: 'crawlRoster'; crawlers: { id: number; position: Vec3; velocity: Vec3; uber: boolean; seed: number; state: string; targetId: string | null; tp?: Vec3 | null; t: number }[] }
   // Roster for joiners/reconnects — current segment state of every live ball
   | { type: 'ballRoster'; balls: { id: number; variant: number; colorIdx: number; position: Vec3; velocity: Vec3; enraged: boolean; targetId: string | null; tp?: Vec3 | null; t: number }[] }
   | { type: 'pong'; timestamp: number }

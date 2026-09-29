@@ -693,6 +693,17 @@ export class CombatHandler {
     }
   }
 
+  /** Server-authored creature bite (CreatureSim) — no shooter, no friendly
+   *  check: a crawler bites whoever it landed on regardless of team. */
+  crawlerAttack(targetId: string, damage: number): void {
+    const target = this.playerManager.getPlayer(targetId);
+    if (!target || target.isDead) return;
+    this.hb('crawlbite');
+    const result = this.playerManager.applyDamage(targetId, damage);
+    target.forceSendUntil = Date.now() + FORCE_SEND_MS;
+    this.applyHit('environment', targetId, damage, result, 'Crawler bite');
+  }
+
   turretAttack(ownerId: string, targetId: string, damage: number): void {
     const owner = this.playerManager.getPlayer(ownerId);
     const target = this.playerManager.getPlayer(targetId);

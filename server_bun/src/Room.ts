@@ -14,6 +14,7 @@ import { ConnectionManager } from './ConnectionManager.ts';
 import { RateLimiter } from './RateLimiter.ts';
 import { MessageHandler } from './MessageHandler.ts';
 import { BallSim } from './BallSim.ts';
+import { CreatureSim } from './CreatureSim.ts';
 import { structureColliders } from '../../shared/ballSim.ts';
 import { hmHeight, type Heightfield } from '../../shared/heightfield.ts';
 import { RoomMoveSim } from './RoomMoveSim.ts';
@@ -44,6 +45,7 @@ export class Room {
   readonly rateLimiter = new RateLimiter();
   readonly messages: MessageHandler;
   readonly ballSim: BallSim;
+  readonly creatureSim: CreatureSim;
 
   // Per-room session bookkeeping (was global — a grace-period slot belongs
   // to the match it was in, not the whole server).
@@ -204,6 +206,15 @@ export class Room {
     if (this.spec.spawns) this.players.spawnPoints = this.spec.spawns;
     this.messages.setBallSim(this.ballSim);
     if (field) this.ballSim.attachField(field);
+    // Server-authoritative melee species — the crawl* wire events are the
+    // state-edge stream (retarget/windup/pounce/bite/die); clients replay
+    // the seeded hop sim between them.
+    this.creatureSim = new CreatureSim(this.players, (msg) => this.connections.broadcast(msg));
+    this.creatureSim.pop = this.spec.creatures?.crawler ?? 0;
+    this.creatureSim.onBite = (_c, targetId) => this.messages.crawlerBite(targetId, 25);
+    this.creatureSim.onKilled = (by, pos) => this.creatureKill(by, pos, 0);
+    this.messages.setCreatureSim(this.creatureSim);
+    if (field) this.creatureSim.attachField(field);
     this.bots = new ServerBots(this, field);
     // Bots populate before humans join so team balancing puts humans on
     // the emptier side.
@@ -565,6 +576,7 @@ export class Room {
     this.projectiles.attachStructures(spec.structures);
     if (spec.balls) this.ballSim.population = spec.balls;
     if (spec.ballMix) this.ballSim.ballMix = spec.ballMix;
+    this.creatureSim.pop = spec.creatures?.crawler ?? 0;
     this.messages.setMap(spec.bases, spec.structures, spec.arena, spec.ambient, spec.terrain);
     this.broadcast({
       type: 'mapUpdate',
@@ -597,6 +609,7 @@ export class Room {
 
   dispose(): void {
     this.ballSim.stop();
+    this.creatureSim.stop();
   }
 
   /** Full teardown — every store moves together or a slot/token leaks. */

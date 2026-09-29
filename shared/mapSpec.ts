@@ -48,8 +48,14 @@ export interface MapSpec {
   arena?: { x: number; z: number; radius: number };
   /** Ambient species population overrides — { crawler: 0 } silences a
    *  species, { overlord: 4 } makes a boss map. Keys are species names
-   *  ('crawler','seeker','rakk','strifer','gnat',...); absent = defaults. */
+   *  ('crawler','seeker','rakk','strifer','gnat',...); absent = defaults.
+   *  These are client-side ambience — they don't deal damage or sync. */
   ambient?: Record<string, number>;
+  /** Server-authoritative creature population — { crawler: 6 } spawns
+   *  real, replicated, damage-dealing/killable melee species via
+   *  CreatureSim (shared/creatureSim.ts). Distinct from `ambient` which
+   *  is client-side dressing only. */
+  creatures?: Record<string, number>;
 }
 
 export interface StructureSpec {
@@ -122,6 +128,7 @@ export function resolveMapSpec(raw: unknown): MapSpec {
     structures: parseStructures((src as { structures?: unknown }).structures),
     arena: parseArena((src as { arena?: unknown }).arena),
     ambient: parseAmbient((src as { ambient?: unknown }).ambient),
+    creatures: parseAmbient((src as { creatures?: unknown }).creatures),
   };
 }
 

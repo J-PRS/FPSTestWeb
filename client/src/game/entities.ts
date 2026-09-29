@@ -4,6 +4,7 @@ import { BALL_SPAWN_INTERVAL, BALL_MAX } from '../core/config.js';
 import { urlParams } from '../core/params.js';
 import * as sfx from '../core/sfx.js';
 import { createNetBalls } from './netBalls.js';
+import { createNetCrawlers } from './netCrawlers.js';
 import { createSpeciesKit } from './speciesKit.js';
 import { PROFILES } from './targeting.js';
 import { Ball, pickVariant, type Targetable } from '../entities/balls.js';
@@ -137,6 +138,8 @@ export function createEntities(deps: EntitiesDeps) {
   // the stamped-sim-time clock) lives in game/netBalls.ts.
   const netBalls = createNetBalls(deps, { balls, targets, nuggets }, logger);
   const { serverBalls, netBallSpawn, netBallSegment, netBallDie, netBallRoster, netTargetPosFor } = netBalls;
+  const netCrawlers = createNetCrawlers(deps, { crawlers, targets });
+  const { netCrawlSpawn, netCrawlEvt, netCrawlDie, netCrawlRoster } = netCrawlers;
 
   // ---- Balls ----
   function spawnBall(): void {
@@ -255,6 +258,7 @@ export function createEntities(deps: EntitiesDeps) {
     deployables,
     updateDeployables: (dt: number) => deployables.update(dt),
     netBallSpawn, netBallSegment, netBallDie, netBallRoster,
+    netCrawlSpawn, netCrawlEvt, netCrawlDie, netCrawlRoster,
     updateBalls,
     updateCrawlers: melee.updateCrawlers, updateScarabs: melee.updateScarabs,
     updateGrubs: melee.updateGrubs, updateSnakes: melee.updateSnakes,

@@ -7,6 +7,7 @@ import { PROTOCOL_VERSION } from '../../shared/protocol.ts';
 import { CLIENT_STATUS_MASK } from '../../shared/status.ts';
 import { CONFIG } from './config.ts';
 import type { BallSim } from './BallSim.ts';
+import type { CreatureSim } from './CreatureSim.ts';
 import { structureColliders } from '../../shared/ballSim.ts';
 import type { PickupKind } from '../../shared/pickups.ts';
 
@@ -88,6 +89,8 @@ export class MessageHandler {
   // Server-owned creatures (balls). Optional — a missing/unloadable
   // heightmap must not take down the whole game server.
   private ballSim: BallSim | null = null;
+  // Server-owned melee species (crawlers) — same pattern as ballSim.
+  private creatureSim: CreatureSim | null = null;
   private rateLimitWarnings: Map<string, number> = new Map();
   private readonly RATE_WARN_COOLDOWN_MS = 5000;
 
@@ -134,6 +137,10 @@ export class MessageHandler {
       creatureHit: (id, m) => {
         const h = m as Extract<ClientMessage, { type: 'creatureHit' }>;
         this.ballSim?.handleHit(id, h.id, h.damage, h.kx, h.ky, h.kz);
+      },
+      crawlerHit: (id, m) => {
+        const h = m as Extract<ClientMessage, { type: 'crawlerHit' }>;
+        this.creatureSim?.handleHit(id, h.id, h.damage);
       },
       inputMove: (id, m) => {
         const p = this.playerManager.getPlayer(id);
@@ -185,6 +192,14 @@ export class MessageHandler {
 
   setBallSim(sim: BallSim): void {
     this.ballSim = sim;
+  }
+
+  setCreatureSim(sim: CreatureSim): void {
+    this.creatureSim = sim;
+  }
+
+  crawlerBite(targetId: string, damage: number): void {
+    this.combat.crawlerAttack(targetId, damage);
   }
 
   /** Admin hot-reload — re-point the map echo fields so the next gameState
@@ -312,6 +327,9 @@ export class MessageHandler {
     if (this.ballSim) {
       this.sendToPlayer(playerId, { type: 'ballRoster', balls: this.ballSim.roster() });
     }
+    if (this.creatureSim) {
+      this.sendToPlayer(playerId, { type: 'crawlRoster', crawlers: this.creatureSim.roster() });
+    }
 
     // Grace reconnects never emitted a playerLeft — peers still have this
     // player on their roster, so re-announcing playerJoined is pure spam.
@@ -343,6 +361,9 @@ export class MessageHandler {
     });
     if (this.ballSim) {
       this.sendToPlayer(playerId, { type: 'ballRoster', balls: this.ballSim.roster() });
+    }
+    if (this.creatureSim) {
+      this.sendToPlayer(playerId, { type: 'crawlRoster', crawlers: this.creatureSim.roster() });
     }
   }
 

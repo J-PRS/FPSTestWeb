@@ -91,6 +91,10 @@ export class NetworkManager {
   public onBallSegment: ((data: Extract<ServerMessage, { type: 'ballSegment' }>) => void) | null = null;
   public onBallDie: ((data: Extract<ServerMessage, { type: 'ballDie' }>) => void) | null = null;
   public onBallRoster: ((data: Extract<ServerMessage, { type: 'ballRoster' }>) => void) | null = null;
+  public onCrawlSpawn: ((data: Extract<ServerMessage, { type: 'crawlSpawn' }>) => void) | null = null;
+  public onCrawlEvt: ((data: Extract<ServerMessage, { type: 'crawlEvt' }>) => void) | null = null;
+  public onCrawlDie: ((data: Extract<ServerMessage, { type: 'crawlDie' }>) => void) | null = null;
+  public onCrawlRoster: ((data: Extract<ServerMessage, { type: 'crawlRoster' }>) => void) | null = null;
   public onRemoteTeleport: ((playerId: string, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }) => void) | null = null;
   private lastPositionSendTime: number = 0;
   private readonly POSITION_SEND_INTERVAL = 50; // 20Hz — extrapolation covers the gap
@@ -246,6 +250,10 @@ export class NetworkManager {
     ballSegment: (data) => this.onBallSegment?.(data),
     ballDie: (data) => this.onBallDie?.(data),
     ballRoster: (data) => this.onBallRoster?.(data),
+    crawlSpawn: (data) => this.onCrawlSpawn?.(data),
+    crawlEvt: (data) => this.onCrawlEvt?.(data),
+    crawlDie: (data) => this.onCrawlDie?.(data),
+    crawlRoster: (data) => this.onCrawlRoster?.(data),
     pong: (data) => this.handlePong(data.timestamp),
     chat: (data) => this.onChat?.(data.playerId, data.text),
     flagUpdate: (data) => this.onFlagUpdate?.(data.flags),
@@ -617,6 +625,10 @@ export class NetworkManager {
   /** Hit claim on a server-owned creature (netDriven ball). kx/ky/kz is the
    *  impulse the shot imparted — server clamps magnitude and rebroadcasts
    *  the new segment so every client sees the same shove. */
+  sendCrawlerHit(id: number, damage: number, kx?: number, ky?: number, kz?: number): void {
+    this.send({ type: 'crawlerHit', id, damage, kx, ky, kz });
+  }
+
   sendCreatureHit(id: number, damage: number, kx?: number, ky?: number, kz?: number): void {
     this.send({ type: 'creatureHit', id, damage, kx, ky, kz });
   }
