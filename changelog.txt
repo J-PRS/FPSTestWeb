@@ -1,3 +1,9 @@
+2026-10-03 - MessageHandler.handlePosition split: the plausibility
+    check (consecutive-report speed gate, correction grace window,
+    first-reject correction + anchor commit, >10 force-accept) extracted
+    to plausible() — handlePosition now reads gate → shadow-sim →
+    authority-or-judge. Behavior identical (grace and broken-window
+    cases reset the reject streak exactly as before).
 2026-10-03 - RoomMoveSim.reconcile split: divergence bookkeeping
     (counter, health metrics, transient-vs-blow-through log gate)
     extracted to noteDivergence — the reconcile path now reads

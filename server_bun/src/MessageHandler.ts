@@ -1,4 +1,4 @@
-import type { ClientMessage, ServerMessage, SnapshotPlayer, Vec3 } from './types.ts';
+import type { ClientMessage, ServerMessage, SnapshotPlayer, Vec3, PlayerState } from './types.ts';
 import { PlayerManager } from './PlayerManager.ts';
 import { RateLimiter } from './RateLimiter.ts';
 import { CombatHandler } from './CombatHandler.ts';
@@ -396,80 +396,8 @@ export class MessageHandler {
     const player = this.playerManager.getPlayer(playerId);
     if (!player || player.isDead) return;
 
-    // Cheat prevention: position plausibility check.
-    // Compares CONSECUTIVE reports (lastPosCheck* updates even on reject),
-    // so a rejected position doesn't poison every subsequent check — the
-    // old version measured each new report against a stale accepted pos,
-    // spiralling into permanent rejection once a player got >threshold away.
     const now = Date.now();
-    const dt = Math.max((now - player.lastPosCheckTime) / 1000, 0.05); // floor: bursts of queued packets report ~1ms gaps
-    player.lastPosCheckTime = now;
-    if (player.hasReceivedPosition && player.lastPosCheckPos) {
-      const dx = msg.position.x - player.lastPosCheckPos.x;
-      const dy = msg.position.y - player.lastPosCheckPos.y;
-      const dz = msg.position.z - player.lastPosCheckPos.z;
-      const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-      const speed = dist / dt;
-      player.lastPosCheckPos = { ...msg.position };
-      // Reject only genuine impossibilities: >50m in one report, or speed
-      // beyond any legit combination of skiing + knockback + jetpack.
-      // The window has to be a REAL window — position reports stream at
-      // 20Hz, so dt > ~0.5s means the report chain broke (transport blip,
-      // hidden tab, transport switch), and the accumulated distance over
-      // a dead interval isn't speed evidence (34s gap → 589m at 17m/s
-      // used to reject). Reseat the anchor and resume measuring.
-      // A correction we just sent snaps the client's reports onto sim
-      // truth — but reports emitted before the packet landed still come
-      // from the old trajectory and would all read as impossible speed.
-      // Mute the check while those in-flight reports drain (grace covers
-      // ~2 RTTs of stragglers).
-      const grace = now < player.correctionGraceUntil;
-      if (!grace && dt <= 0.5 && (dist > 50 || speed > 300)) {
-        player.consecutiveRejects++;
-        this.hb('posrej');
-        this.hbMax('posrejSpeed', speed);
-        logger.warn(`Position rejected: ${playerId} moved ${dist.toFixed(1)}m in ${dt.toFixed(3)}s (${speed.toFixed(0)} m/s)`);
-        // Send correction on the first reject of a streak only — no flood
-        if (player.consecutiveRejects === 1) {
-          const validState = this.playerManager.getLastValidState(playerId);
-          if (validState) {
-            this.sendToPlayer(playerId, {
-              type: 'correction',
-              seq: validState.seq,
-              position: validState.position,
-              velocity: validState.velocity,
-              rotation: validState.rotation,
-            });
-            // COMMIT the anchor: reseat the check point AT the corrected
-            // position. We just told the client to teleport there — its
-            // post-snap report legitimately sits ~far from the rejected
-            // pos we recorded above, and without this reseat it is
-            // guaranteed-rejected, accumulates to the >10 force-accept,
-            // flips lastValid to the far anchor, and the next correction
-            // snaps the client BACK — the infinite ping-pong. One anchor,
-            // one commit: either the client lands at the correction
-            // (accepts immediately) or keeps fighting (rejects count up
-            // to the force-accept, which then sticks).
-            player.lastPosCheckPos = { ...validState.position };
-            player.correctionGraceUntil = now + 500;
-          }
-        }
-        // Client persisting past corrections (disputed knockback, lost
-        // correction packet): force-accept after 10 rejects to resync
-        // instead of warping the player forever.
-        if (player.consecutiveRejects > 10) {
-          this.hb('posforce');
-          logger.warn(`Position force-accepted: ${playerId} after ${player.consecutiveRejects} rejects (resync)`);
-          player.consecutiveRejects = 0;
-        } else {
-          return;
-        }
-      } else {
-        player.consecutiveRejects = 0;
-      }
-    } else {
-      player.lastPosCheckPos = { ...msg.position };
-    }
+    if (!this.plausible(playerId, player, msg, now)) return;
 
     // inputSeq (not the frame seq) anchors the probe: it's the count of
     // inputMove events the client had consumed when it took this snapshot.
@@ -515,6 +443,82 @@ export class MessageHandler {
     if (msg.ping !== undefined) player.ping = Math.max(1, msg.ping);
     this.pushHistory(player, now);
     // Don't broadcast immediately — batched in tickUpdate
+  }
+
+  /** Cheat prevention: position plausibility. Compares CONSECUTIVE reports
+   *  (lastPosCheck* updates even on reject), so a rejected position
+   *  doesn't poison every subsequent check — the old version measured
+   *  each new report against a stale accepted pos, spiralling into
+   *  permanent rejection once a player got >threshold away.
+   *  Returns false when the report is rejected (still counting up the
+   *  force-accept streak); true accepts, including the >10 force-accept
+   *  resync for a client persisting past corrections. */
+  private plausible(playerId: string, player: PlayerState, msg: Extract<ClientMessage, { type: 'position' }>, now: number): boolean {
+    const dt = Math.max((now - player.lastPosCheckTime) / 1000, 0.05); // floor: bursts of queued packets report ~1ms gaps
+    player.lastPosCheckTime = now;
+    if (!player.hasReceivedPosition || !player.lastPosCheckPos) {
+      player.lastPosCheckPos = { ...msg.position };
+      return true;
+    }
+    const dx = msg.position.x - player.lastPosCheckPos.x;
+    const dy = msg.position.y - player.lastPosCheckPos.y;
+    const dz = msg.position.z - player.lastPosCheckPos.z;
+    const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    const speed = dist / dt;
+    player.lastPosCheckPos = { ...msg.position };
+    // Reject only genuine impossibilities: >50m in one report, or speed
+    // beyond any legit combination of skiing + knockback + jetpack.
+    // The window has to be a REAL window — position reports stream at
+    // 20Hz, so dt > ~0.5s means the report chain broke (transport blip,
+    // hidden tab, transport switch), and the accumulated distance over
+    // a dead interval isn't speed evidence (34s gap → 589m at 17m/s
+    // used to reject). Reseat the anchor and resume measuring.
+    // A correction we just sent snaps the client's reports onto sim
+    // truth — but reports emitted before the packet landed still come
+    // from the old trajectory and would all read as impossible speed.
+    // Mute the check while those in-flight reports drain (grace covers
+    // ~2 RTTs of stragglers).
+    if (now < player.correctionGraceUntil || dt > 0.5 || (dist <= 50 && speed <= 300)) {
+      player.consecutiveRejects = 0;
+      return true;
+    }
+    player.consecutiveRejects++;
+    this.hb('posrej');
+    this.hbMax('posrejSpeed', speed);
+    logger.warn(`Position rejected: ${playerId} moved ${dist.toFixed(1)}m in ${dt.toFixed(3)}s (${speed.toFixed(0)} m/s)`);
+    // Send correction on the first reject of a streak only — no flood
+    if (player.consecutiveRejects === 1) {
+      const validState = this.playerManager.getLastValidState(playerId);
+      if (validState) {
+        this.sendToPlayer(playerId, {
+          type: 'correction',
+          seq: validState.seq,
+          position: validState.position,
+          velocity: validState.velocity,
+          rotation: validState.rotation,
+        });
+        // COMMIT the anchor: reseat the check point AT the corrected
+        // position. We just told the client to teleport there — its
+        // post-snap report legitimately sits ~far from the rejected
+        // pos we recorded above, and without this reseat it is
+        // guaranteed-rejected, accumulates to the >10 force-accept,
+        // flips lastValid to the far anchor, and the next correction
+        // snaps the client BACK — the infinite ping-pong. One anchor,
+        // one commit: either the client lands at the correction
+        // (accepts immediately) or keeps fighting (rejects count up
+        // to the force-accept, which then sticks).
+        player.lastPosCheckPos = { ...validState.position };
+        player.correctionGraceUntil = now + 500;
+      }
+    }
+    // Client persisting past corrections (disputed knockback, lost
+    // correction packet): force-accept after 10 rejects to resync
+    // instead of warping the player forever.
+    if (player.consecutiveRejects <= 10) return false;
+    this.hb('posforce');
+    logger.warn(`Position force-accepted: ${playerId} after ${player.consecutiveRejects} rejects (resync)`);
+    player.consecutiveRejects = 0;
+    return true;
   }
 
   private static readonly HISTORY_MS = 400; // rewind window for lag comp
