@@ -76,7 +76,8 @@ export class Explosion {
 
   // sizeScale normalizes blast size to weapon radius (rocket = 1.0):
   // a mortar's 14m blast shouldn't render like a 6m rocket.
-  constructor(scene: THREE.Scene, pos: THREE.Vector3, directHit: boolean = false, age: number = 0, terrain?: Terrain, sizeScale: number = 1.0, tint?: string | number) {
+  constructor(scene: THREE.Scene, pos: THREE.Vector3, directHit: boolean = false, age: number = 0, ...opts: [terrain?: Terrain, sizeScale?: number, tint?: string | number]) {
+    const [terrain, sizeScale = 1.0, tint] = opts;
     this.scene = scene;
     this.ox = pos.x; this.oy = pos.y; this.oz = pos.z;
     if (tint !== undefined) {
@@ -198,14 +199,14 @@ export class Explosion {
       const size = (l.sizeMin + Math.random() * l.sizeVar) * l.sizeBoost;
       if (l.planar) {
         this.spawn(pos,
-          spd * Math.sin(ang) + (Math.random() - 0.5), l.vy + Math.random() * 4, spd * Math.cos(ang) + (Math.random() - 0.5),
-          life, size, l.gravity, l.r1, g1, l.b1, l.r2, l.g2, l.b2, l.kind);
+          [spd * Math.sin(ang) + (Math.random() - 0.5), l.vy + Math.random() * 4, spd * Math.cos(ang) + (Math.random() - 0.5)],
+          [life, size, l.gravity], [l.r1, g1, l.b1], [l.r2, l.g2, l.b2], l.kind);
       } else {
         const elv = (Math.random() - l.elvBase) * l.elvSpan;
         const v = spd * l.spdBoost;
         this.spawn(pos,
-          v * Math.cos(elv) * Math.sin(ang), v * Math.sin(elv) + l.vy, v * Math.cos(elv) * Math.cos(ang),
-          life, size, l.gravity, l.r1, g1, l.b1, l.r2, l.g2, l.b2, l.kind);
+          [v * Math.cos(elv) * Math.sin(ang), v * Math.sin(elv) + l.vy, v * Math.cos(elv) * Math.cos(ang)],
+          [life, size, l.gravity], [l.r1, g1, l.b1], [l.r2, l.g2, l.b2], l.kind);
       }
     }
   }
@@ -280,9 +281,9 @@ export class Explosion {
       const elv = (Math.random() - 0.5) * Math.PI;
       const spd = 20 + Math.random() * 50;
       this.spawn(pos,
-        spd*Math.cos(elv)*Math.sin(ang), spd*Math.sin(elv)+10, spd*Math.cos(elv)*Math.cos(ang),
-        0.6 + Math.random()*0.4, 0.5 + Math.random()*0.3, -25,
-        0.6, 0.8, 1.0,  0.2, 0.4, 0.8, 'glow');
+        [spd*Math.cos(elv)*Math.sin(ang), spd*Math.sin(elv)+10, spd*Math.cos(elv)*Math.cos(ang)],
+        [0.6 + Math.random()*0.4, 0.5 + Math.random()*0.3, -25],
+        [0.6, 0.8, 1.0], [0.2, 0.4, 0.8], 'glow');
     }
 
     // Layer 7: Blue energy burst — identifies direct hits by color
@@ -291,9 +292,9 @@ export class Explosion {
       const elv = (Math.random() - 0.5) * Math.PI;
       const spd = 12 + Math.random() * 35;
       this.spawn(pos,
-        spd*Math.cos(elv)*Math.sin(ang), spd*Math.sin(elv)+8, spd*Math.cos(elv)*Math.cos(ang),
-        0.5 + Math.random()*0.4, 0.3 + Math.random()*0.25, -10,
-        0.0, 0.3, 1.0,  0.0, 0.0, 0.4, 'glow');
+        [spd*Math.cos(elv)*Math.sin(ang), spd*Math.sin(elv)+8, spd*Math.cos(elv)*Math.cos(ang)],
+        [0.5 + Math.random()*0.4, 0.3 + Math.random()*0.25, -10],
+        [0.0, 0.3, 1.0], [0.0, 0.0, 0.4], 'glow');
     }
 
     // Layers 8+9: Shockwave spheres — white expanding sphere, then blue
@@ -415,10 +416,10 @@ export class Explosion {
 
   private spawn(
     pos: THREE.Vector3,
-    vx: number, vy: number, vz: number,
-    life: number, sz: number, gravity: number,
-    r1: number, g1: number, b1: number,
-    r2: number, g2: number, b2: number,
+    [vx, vy, vz]: [number, number, number],
+    [life, sz, gravity]: [number, number, number],
+    [r1, g1, b1]: [number, number, number],
+    [r2, g2, b2]: [number, number, number],
     kind: 'glow' | 'solid' | 'smoke'
   ): void {
     if (this.hasTint && kind === 'glow') {

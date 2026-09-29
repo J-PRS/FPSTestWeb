@@ -186,9 +186,9 @@ export class RemotePlayer {
     // adapts the render delay (see remoteSnapshots.ts)
     this.net.push(
       this.lastServerUpdateMs,
-      targetPosition.x, targetPosition.y, targetPosition.z,
-      targetRotation.yaw, targetRotation.pitch,
-      serverVelocity?.x ?? 0, serverVelocity?.y ?? 0, serverVelocity?.z ?? 0,
+      targetPosition,
+      targetRotation,
+      serverVelocity ?? { x: 0, y: 0, z: 0 },
     );
 
     // Store server-reported velocity for extrapolation

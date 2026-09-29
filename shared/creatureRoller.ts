@@ -42,9 +42,9 @@ export function isRollerSpecies(species: string): boolean {
 }
 
 export function makeSimRoller(
-  id: number, x: number, y: number, z: number,
-  uber: boolean, seed: number, species = 'roller',
+  id: number, pos: SimVec, uber: boolean, seed: number, species = 'roller',
 ): SimRoller {
+  const { x, y, z } = pos;
   const row = ROLLER_SPECIES[species] ?? ROLLER_SPECIES.roller!;
   const health = uber ? row.health * 3.4 : row.health;
   const sp: RollerTunables = {

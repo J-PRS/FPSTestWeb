@@ -43,9 +43,9 @@ export class SnapshotBuffer {
   /** Push a server update; returns the arrival gap in ms (0 = first sample). */
   push(
     t: number,
-    x: number, y: number, z: number,
-    yaw: number, pitch: number,
-    vx: number, vy: number, vz: number,
+    pos: { x: number; y: number; z: number },
+    rot: { yaw: number; pitch: number },
+    vel: { x: number; y: number; z: number },
   ): number {
     const prev = this.snapshots.length ? this.snapshots[this.snapshots.length - 1]!.t : 0;
     const gap = prev > 0 ? t - prev : 0;
@@ -59,9 +59,9 @@ export class SnapshotBuffer {
     }
 
     const snap = this.pool.pop() ?? { t: 0, x: 0, y: 0, z: 0, yaw: 0, pitch: 0, vx: 0, vy: 0, vz: 0 };
-    snap.t = t; snap.x = x; snap.y = y; snap.z = z;
-    snap.yaw = yaw; snap.pitch = pitch;
-    snap.vx = vx; snap.vy = vy; snap.vz = vz;
+    snap.t = t; snap.x = pos.x; snap.y = pos.y; snap.z = pos.z;
+    snap.yaw = rot.yaw; snap.pitch = rot.pitch;
+    snap.vx = vel.x; snap.vy = vel.y; snap.vz = vel.z;
     this.snapshots.push(snap);
 
     const cutoff = t - SnapshotBuffer.RETAIN_MS;

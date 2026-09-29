@@ -29,8 +29,8 @@ function run(c: ReturnType<typeof makeSimCrawler>, target: { x: number; y: numbe
 
 describe('creatureSim determinism', () => {
   it('authority and predictor replay identically for the same seed', () => {
-    const a = makeSimCrawler(1, 0, 0, 0, false, 12345);
-    const b = makeSimCrawler(1, 0, 0, 0, false, 12345);
+    const a = makeSimCrawler(1, { x: 0, y: 0, z: 0 }, false, 12345);
+    const b = makeSimCrawler(1, { x: 0, y: 0, z: 0 }, false, 12345);
     committed(a); committed(b);
     run(a, TARGET, 600);
     run(b, TARGET, 600, false);
@@ -42,7 +42,7 @@ describe('creatureSim determinism', () => {
   });
 
   it('wanders when there is no target', () => {
-    const c = makeSimCrawler(1, 0, 0, 0, false, 7);
+    const c = makeSimCrawler(1, { x: 0, y: 0, z: 0 }, false, 7);
     const events = run(c, null, 600);
     expect(c.state).toBe('wander');
     expect(events).not.toContain('windup');
@@ -52,7 +52,7 @@ describe('creatureSim determinism', () => {
   });
 
   it('chases, windups and pounces at a committed target', () => {
-    const c = makeSimCrawler(1, 0, 0, 0, false, 42);
+    const c = makeSimCrawler(1, { x: 0, y: 0, z: 0 }, false, 42);
     committed(c);
     const events = run(c, TARGET, 1800); // 60s
     expect(events).toContain('windup');
@@ -62,8 +62,8 @@ describe('creatureSim determinism', () => {
   });
 
   it('bite flag is authority-only', () => {
-    const a = makeSimCrawler(1, 0, 0, 0, false, 42);
-    const b = makeSimCrawler(1, 0, 0, 0, false, 42);
+    const a = makeSimCrawler(1, { x: 0, y: 0, z: 0 }, false, 42);
+    const b = makeSimCrawler(1, { x: 0, y: 0, z: 0 }, false, 42);
     committed(a); committed(b);
     run(a, TARGET, 1800);
     run(b, TARGET, 1800, false);
@@ -72,7 +72,7 @@ describe('creatureSim determinism', () => {
   });
 
   it('damage kills and staggers', () => {
-    const c = makeSimCrawler(1, 0, 0, 0, false, 1);
+    const c = makeSimCrawler(1, { x: 0, y: 0, z: 0 }, false, 1);
     expect(applyCrawlerDamage(c, 69)).toBe(false);
     expect(c.stunTimer).toBeGreaterThan(0);
     expect(applyCrawlerDamage(c, 1)).toBe(true);
@@ -80,7 +80,7 @@ describe('creatureSim determinism', () => {
   });
 
   it('hops consume the shared RNG stream, not Math.random', () => {
-    const c = makeSimCrawler(1, 0, 0, 0, false, 99);
+    const c = makeSimCrawler(1, { x: 0, y: 0, z: 0 }, false, 99);
     const rng0 = c.rng;
     run(c, null, 300);
     expect(c.rng).not.toBe(rng0); // consumed — replay needs the same stream
@@ -89,7 +89,7 @@ describe('creatureSim determinism', () => {
   it('a hop into a wall stops at the face instead of tunneling', () => {
     // Wall face at x=9 — a chase hop aimed straight at it must not pass.
     const wall = structureColliders([{ kind: 'wall', pos: { x: 10, y: 0, z: 10 }, size: { x: 2, y: 20, z: 20 } }]);
-    const c = makeSimCrawler(1, 0, 0, 0, false, 7);
+    const c = makeSimCrawler(1, { x: 0, y: 0, z: 0 }, false, 7);
     commitTarget(c, 'p1', { x: 20, y: 0, z: 10 });
     c.x = 0; c.z = 10; c.state = 'chase';
     for (let i = 0; i < 120; i++) stepCrawler(c, DT, FLAT, { x: 20, y: 0, z: 10 }, false, wall);
@@ -97,7 +97,7 @@ describe('creatureSim determinism', () => {
   });
 
   it('the same hop crosses cleanly when the collider list is empty', () => {
-    const c = makeSimCrawler(1, 0, 0, 0, false, 7);
+    const c = makeSimCrawler(1, { x: 0, y: 0, z: 0 }, false, 7);
     commitTarget(c, 'p1', { x: 20, y: 0, z: 10 });
     c.x = 0; c.z = 10; c.state = 'chase';
     for (let i = 0; i < 120; i++) stepCrawler(c, DT, FLAT, { x: 20, y: 0, z: 10 }, false, []);

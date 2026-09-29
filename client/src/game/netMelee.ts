@@ -46,7 +46,7 @@ export interface NetBindArgs {
 }
 
 export type MakeSim<S extends NetSimState> =
-  (id: number, x: number, y: number, z: number, uber: boolean, seed: number, species: string) => S;
+  (id: number, pos: SimVec, uber: boolean, seed: number, species: string) => S;
 export type StepSim<S extends NetSimState> =
   (s: S, dt: number, field: Heightfield, target: SimVec | null, authoritative: boolean,
    colliders?: readonly StructureCollider[]) => unknown;
@@ -65,7 +65,7 @@ export interface NetEdgeMsg {
 export function bindNetSim<S extends NetSimState>(
   e: NetDrivenLike<S>, make: MakeSim<S>, b: NetBindArgs,
 ): void {
-  e.sim = make(b.id, b.pos.x, b.pos.y, b.pos.z, b.uber, b.seed, b.species);
+  e.sim = make(b.id, b.pos, b.uber, b.seed, b.species);
   e.sim.state = b.state as S['state'];
   e.sim.vx = b.vel.x; e.sim.vy = b.vel.y; e.sim.vz = b.vel.z;
   e.pos.set(b.pos.x, b.pos.y, b.pos.z);
@@ -146,7 +146,7 @@ export interface NetTotemLike {
 }
 
 export function bindNetTotem(e: NetTotemLike, b: NetBindArgs, make: MakeSim<SimTotem>): void {
-  e.sim = make(b.id, b.pos.x, b.pos.y, b.pos.z, b.uber, b.seed, b.species);
+  e.sim = make(b.id, b.pos, b.uber, b.seed, b.species);
   e.sim.state = (b.state === 'charge' || b.state === 'blinkOut' || b.state === 'blinkIn') ? b.state : 'aim';
   e.pos.set(b.pos.x, b.pos.y, b.pos.z);
   e.health = e.sim.health;

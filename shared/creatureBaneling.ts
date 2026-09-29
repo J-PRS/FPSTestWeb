@@ -46,9 +46,9 @@ export function isBanelingSpecies(species: string): boolean {
 }
 
 export function makeSimBaneling(
-  id: number, x: number, y: number, z: number,
-  uber: boolean, seed: number, species = 'baneling',
+  id: number, pos: SimVec, uber: boolean, seed: number, species = 'baneling',
 ): SimBaneling {
+  const { x, y, z } = pos;
   const row = BANELING_SPECIES[species] ?? BANELING_SPECIES.baneling!;
   const health = uber ? row.health * 4 : row.health;
   const sp: BanelingTunables = {

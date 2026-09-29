@@ -71,9 +71,9 @@ export class Implosion {
       const elv = (Math.random() - 0.5) * Math.PI;
       const dist = 4 + Math.random() * 3;
       const spd = 25 + Math.random() * 15;
-      this.spawn(pos, dist, ang, elv, spd,
-        0.25 + Math.random()*0.15, 1.0 + Math.random()*0.4, 0.5,
-        0.8, 1.0, 1.0,  0.0, 0.5, 1.0, true, true);
+      this.spawn(pos, [dist, ang, elv, spd],
+        [0.25 + Math.random()*0.15, 1.0 + Math.random()*0.4, 0.5],
+        [0.8, 1.0, 1.0], [0.0, 0.5, 1.0], [true, true]);
     }
 
     // Layer 2: Inner ring - bright blue, medium inward with spiral
@@ -82,9 +82,9 @@ export class Implosion {
       const elv = (Math.random() - 0.5) * Math.PI;
       const dist = 2.5 + Math.random() * 2;
       const spd = 18 + Math.random() * 10;
-      this.spawn(pos, dist, ang, elv, spd,
-        0.30 + Math.random()*0.20, 0.9 + Math.random()*0.4, 0.5,
-        0.5, 0.8, 1.0,  0.0, 0.4, 0.8, true, true);
+      this.spawn(pos, [dist, ang, elv, spd],
+        [0.30 + Math.random()*0.20, 0.9 + Math.random()*0.4, 0.5],
+        [0.5, 0.8, 1.0], [0.0, 0.4, 0.8], [true, true]);
     }
 
     // Layer 3: Core flash - white, very fast inward with spiral
@@ -93,9 +93,9 @@ export class Implosion {
       const elv = (Math.random() - 0.5) * Math.PI;
       const dist = 1.5 + Math.random() * 1;
       const spd = 35 + Math.random() * 20;
-      this.spawn(pos, dist, ang, elv, spd,
-        0.12 + Math.random()*0.08, 0.8 + Math.random()*0.3, 0.5,
-        1.0, 1.0, 1.0,  0.8, 0.9, 1.0, true, true);
+      this.spawn(pos, [dist, ang, elv, spd],
+        [0.12 + Math.random()*0.08, 0.8 + Math.random()*0.3, 0.5],
+        [1.0, 1.0, 1.0], [0.8, 0.9, 1.0], [true, true]);
     }
 
     // Layer 4: Debris - solid chunks, inward
@@ -104,9 +104,9 @@ export class Implosion {
       const elv = (Math.random() - 0.5) * Math.PI;
       const dist = 3 + Math.random() * 2.5;
       const spd = 15 + Math.random() * 12;
-      this.spawn(pos, dist, ang, elv, spd,
-        0.20 + Math.random()*0.15, 0.6 + Math.random()*0.2, 0.3,
-        0.3, 0.6, 0.5,  0.0, 0.2, 0.3, false);
+      this.spawn(pos, [dist, ang, elv, spd],
+        [0.20 + Math.random()*0.15, 0.6 + Math.random()*0.2, 0.3],
+        [0.3, 0.6, 0.5], [0.0, 0.2, 0.3], [false]);
     }
 
     // Layer 5: Shockwave - expanding cyan sphere
@@ -238,17 +238,11 @@ export class Implosion {
 
   private spawn(
     pos: THREE.Vector3,
-    startDist: number,
-    ang: number,
-    elv: number,
-    speed: number,
-    life: number,
-    size: number,
-    gravity: number,
-    r1: number, g1: number, b1: number,
-    r2: number, g2: number, b2: number,
-    additive: boolean,
-    spiral: boolean = false
+    [startDist, ang, elv, speed]: [number, number, number, number],
+    [life, size, gravity]: [number, number, number],
+    [r1, g1, b1]: [number, number, number],
+    [r2, g2, b2]: [number, number, number],
+    [additive, spiral = false]: [boolean, boolean?]
   ): void {
     // Start at outer radius
     const sx = pos.x + startDist * Math.cos(elv) * Math.sin(ang);

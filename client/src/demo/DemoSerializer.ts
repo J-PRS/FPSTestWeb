@@ -67,9 +67,9 @@ const REMOTE_FRAME_SIZE = 39;
 //       (player names) and remoteFrames sections after targetEvents
 // ---------------------------------------------------------------------------
 
-export class DemoSerializer {
+export namespace DemoSerializer {
 
-  static serialize(data: DemoFile): ArrayBuffer {
+  export function serialize(data: DemoFile): ArrayBuffer {
     // Calculate total size
     const headerSize = 1 + 4 + 2 + 0 + 8 + 4 + 4 + 4 + 4 + 4 + 2 + 0 + 12 + 8 + 12 + 4 + 2 + 0 + 2 + 0 + 2 + 0; // fixed + 5 strings + projectileLifetime
     const gameVersionBytes = new TextEncoder().encode(data.header.gameVersion);
@@ -209,7 +209,7 @@ export class DemoSerializer {
     return buffer;
   }
 
-  static deserialize(buffer: ArrayBuffer): DemoFile {
+  export function deserialize(buffer: ArrayBuffer): DemoFile {
     const r = new Reader(buffer);
     const header = readDemoHeader(r, buffer);
     const frames = readFrames(r);
@@ -222,8 +222,8 @@ export class DemoSerializer {
   }
 
   // Serialize to Blob for file download
-  static toBlob(data: DemoFile): Blob {
-    const buffer = this.serialize(data);
+  export function toBlob(data: DemoFile): Blob {
+    const buffer = serialize(data);
     return new Blob([buffer], { type: 'application/octet-stream' });
   }
 }

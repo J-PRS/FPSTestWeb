@@ -78,14 +78,14 @@ function stepUntil(p: Projectile, cond: () => boolean, maxSeconds = 10): void {
   for (let t = 0; t < maxSeconds && !cond(); t += dt) p.update(dt, flatTerrain);
 }
 
-describe('ray-burst discharge (remote railgun)', () => {
-  function spawnRRG(origin: THREE.Vector3, dir: THREE.Vector3): Projectile {
-    const scene = new THREE.Scene();
-    const p = new Projectile(scene, origin, dir, new THREE.Vector3(), REMOTE_RAILGUN_CONFIG);
-    p.spawnedThisFrame = false;
-    return p;
-  }
+function spawnRRG(origin: THREE.Vector3, dir: THREE.Vector3): Projectile {
+  const scene = new THREE.Scene();
+  const p = new Projectile(scene, origin, dir, new THREE.Vector3(), REMOTE_RAILGUN_CONFIG);
+  p.spawnedThisFrame = false;
+  return p;
+}
 
+describe('ray-burst discharge (remote railgun)', () => {
   it('discharges the beam at rayDelay and dies at the hit/range endpoint', () => {
     const p = spawnRRG(new THREE.Vector3(0, 50, 0), new THREE.Vector3(1, 0, 0));
     let beam: { from: THREE.Vector3; to: THREE.Vector3 } | null = null;

@@ -140,9 +140,7 @@ function announceRoom(ctx: NetCtx, playerCount: number, roomInfo?: RoomInfo): vo
     chat.add(null, `you are on ${roomInfo.team.toUpperCase()}${roomInfo.scores ? ` — ALPHA ${roomInfo.scores.alpha} : BRAVO ${roomInfo.scores.bravo}` : ''}`);
   }
   if (roomInfo?.ffaScores && Object.keys(roomInfo.ffaScores).length) {
-    // Sort mutates the (already fresh) entries array — toSorted isn't in
-    // this tsconfig's lib target, so the unicorn suggestion can't apply.
-    const top = Object.entries(roomInfo.ffaScores).sort((a, b) => b[1] - a[1]).slice(0, 3);
+    const top = Object.entries(roomInfo.ffaScores).toSorted((a, b) => b[1] - a[1]).slice(0, 3);
     chat.add(null, `dm board — ${top.map(([id, s]) => `${id} ${s}`).join(' / ')}`);
   }
 }

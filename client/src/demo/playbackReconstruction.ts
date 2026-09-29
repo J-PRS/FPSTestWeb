@@ -220,7 +220,8 @@ function spawnPlaybackProjectile(world: PlaybackWorld, ev: ProjectileEvent): Pro
 const PLAYBACK_HARD_SNAP_DIST = 1.5; // meters — large desync -> hard snap
 const PLAYBACK_SMOOTH_FACTOR = 0.25; // per-event gentle correction for small drift
 
-function smoothSnapBall(ball: Ball, ex: number, ey: number, ez: number, evx: number, evy: number, evz: number): void {
+function smoothSnapBall(ball: Ball, ...rest: [ex: number, ey: number, ez: number, evx: number, evy: number, evz: number]): void {
+  const [ex, ey, ez, evx, evy, evz] = rest;
   const dx = ball.pos.x - ex, dy = ball.pos.y - ey, dz = ball.pos.z - ez;
   const drift = Math.sqrt(dx * dx + dy * dy + dz * dz);
   if (drift >= PLAYBACK_HARD_SNAP_DIST) {

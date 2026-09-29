@@ -38,7 +38,8 @@ export function osc(type: OscillatorType, f0: number, f1: number, dur: number,
  *  delivered it yet — caller falls back to the synth version. Rate is
  *  jittered slightly per call so repeats never sound machine-gunned. */
 export function sample(name: string, dest: AudioNode, gain = 1, rate = 1,
-    lpf?: number, cutAfter?: number, delay = 0): boolean {
+    ...opts: [lpf?: number, cutAfter?: number, delay?: number]): boolean {
+  const [lpf, cutAfter, delay = 0] = opts;
   const c = ctx();
   const buf = audio.sample(name);
   if (!c || !buf) return false;
@@ -93,7 +94,9 @@ export function layer(dest: AudioNode,
 }
 
 export function noise(dur: number, peak: number, dest: AudioNode,
-  filtType: BiquadFilterType = 'bandpass', f0 = 800, f1 = 200, q = 1): void {
+  filtType: BiquadFilterType = 'bandpass',
+  ...sweep: [f0?: number, f1?: number, q?: number]): void {
+  const [f0 = 800, f1 = 200, q = 1] = sweep;
   const c = ctx()!;
   const nb = audio.noise;
   if (!nb) return;

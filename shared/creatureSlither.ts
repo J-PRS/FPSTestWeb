@@ -48,9 +48,9 @@ export function isSlitherSpecies(species: string): boolean {
 }
 
 export function makeSimSlither(
-  id: number, x: number, y: number, z: number,
-  uber: boolean, seed: number, species = 'snake',
+  id: number, pos: SimVec, uber: boolean, seed: number, species = 'snake',
 ): SimSlither {
+  const { x, y, z } = pos;
   const row = SLITHER_SPECIES[species] ?? SLITHER_SPECIES.snake!;
   const health = uber ? row.health * 4 : row.health;
   const sp: SlitherTunables = {

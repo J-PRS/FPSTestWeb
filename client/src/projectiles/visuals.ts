@@ -121,9 +121,9 @@ const _tumbleAxis = new THREE.Vector3();
 export function updateProjectileMesh(
   mesh: THREE.Mesh, glowMesh: THREE.Mesh | null,
   pos: THREE.Vector3, vel: THREE.Vector3, config: ProjectileConfig,
-  age: number, hitRadius: number,
-  tumble: { x: number; y: number; z: number }, dt: number,
+  ...rest: [age: number, hitRadius: number, tumble: { x: number; y: number; z: number }, dt: number]
 ): void {
+  const [age, hitRadius, tumble, dt] = rest;
   mesh.position.copy(pos);
   if (glowMesh) {
     glowMesh.position.copy(pos);

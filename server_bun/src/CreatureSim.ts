@@ -172,16 +172,16 @@ export class CreatureSim {
     const id = this.nextId++;
     const uber = this.rng() < 0.05;
     const c: SimBeing = isFlyerSpecies(species)
-      ? makeSimFlyer(id, x, gy, z, uber, seed, species)
+      ? makeSimFlyer(id, { x, y: gy, z }, uber, seed, species)
       : isTotemSpecies(species)
-        ? makeSimTotem(id, x, gy, z, uber, seed, species)
+        ? makeSimTotem(id, { x, y: gy, z }, uber, seed, species)
         : isRollerSpecies(species)
-          ? makeSimRoller(id, x, gy, z, uber, seed, species)
+          ? makeSimRoller(id, { x, y: gy, z }, uber, seed, species)
           : isSlitherSpecies(species)
-            ? makeSimSlither(id, x, gy, z, uber, seed, species)
+            ? makeSimSlither(id, { x, y: gy, z }, uber, seed, species)
             : isBanelingSpecies(species)
-              ? makeSimBaneling(id, x, gy, z, uber, seed, species)
-              : makeSimCrawler(id, x, gy, z, uber, seed, species);
+              ? makeSimBaneling(id, { x, y: gy, z }, uber, seed, species)
+              : makeSimCrawler(id, { x, y: gy, z }, uber, seed, species);
     if (isFlyer(c)) c.y = gy + c.sp.ORBIT_ALT; // flyers enter at cruise alt
     if (isRoller(c)) c.y = gy + 1.6;           // rollers ride the surface
     if (isSlither(c)) c.y = gy + 0.5;          // belly on the dirt

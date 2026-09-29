@@ -81,9 +81,9 @@ export function isTotemSpecies(species: string): boolean {
 }
 
 export function makeSimTotem(
-  id: number, x: number, y: number, z: number,
-  uber: boolean, seed: number, species = 'totem',
+  id: number, pos: SimVec, uber: boolean, seed: number, species = 'totem',
 ): SimTotem {
+  const { x, y, z } = pos;
   const row = TOTEM_SPECIES[species] ?? TOTEM_SPECIES.totem!;
   const health = uber ? row.health * 2.5 : row.health;
   const sp: TotemTunables = {

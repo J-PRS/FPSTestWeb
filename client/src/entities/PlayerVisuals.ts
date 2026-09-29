@@ -144,7 +144,8 @@ export class PlayerVisuals {
   // plus noclip flight (WASD + Space to rise, Shift to sink) until the
   // server respawns you. No forced camera motion, so zero sim-sickness
   // risk; the player drives the view like T1's observer/Tab mode.
-  updateObserverCam(dt: number, camera: THREE.PerspectiveCamera, terrain: Terrain, pos: THREE.Vector3, vel: THREE.Vector3, yaw: number, pitch: number, input: { forward: number; right: number; jumpHeld: boolean; shiftDown: boolean }): void {
+  updateObserverCam(dt: number, camera: THREE.PerspectiveCamera, terrain: Terrain, pos: THREE.Vector3, ...rest: [vel: THREE.Vector3, yaw: number, pitch: number, input: { forward: number; right: number; jumpHeld: boolean; shiftDown: boolean }]): void {
+    const [vel, yaw, pitch, input] = rest;
     const OBSERVER_SPEED = 40; // m/s ghost-flight
     const fwd = new THREE.Vector3(
       Math.cos(pitch) * Math.sin(yaw),
@@ -204,7 +205,9 @@ export class PlayerVisuals {
 
   // Returns the new jumpAnimTimer (the one piece of player state the
   // animation owns — set back on the Player by the caller)
-  updateModelAnim(model: PlayerModel | null, pos: THREE.Vector3, yaw: number, pitch: number, jumpAnimTimer: number, speed: number, dt: number, onGround: boolean, jetting = false, vel?: THREE.Vector3): number {
+  updateModelAnim(model: PlayerModel | null, pos: THREE.Vector3, ...rest: [yaw: number, pitch: number, jumpAnimTimer: number, speed: number, dt: number, onGround: boolean, jetting?: boolean, vel?: THREE.Vector3]): number {
+    const [yaw, pitch, jumpAnimTimer0, speed, dt, onGround, jetting = false, vel] = rest;
+    let jumpAnimTimer = jumpAnimTimer0;
     if (!model) return jumpAnimTimer;
     if (jumpAnimTimer > 0) {
       jumpAnimTimer = Math.max(0, jumpAnimTimer - dt);

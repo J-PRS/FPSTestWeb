@@ -31,8 +31,8 @@ function addPlayerAt(sim: CreatureSim, id: string, x: number, z: number): void {
 
 describe('MELEE_SPECIES table', () => {
   it('resolves per-species stats — scarab is faster, weaker, cheaper bite', () => {
-    const cr = makeSimCrawler(1, 0, 0, 0, false, 42, 'crawler');
-    const sc = makeSimCrawler(2, 0, 0, 0, false, 42, 'scarab');
+    const cr = makeSimCrawler(1, { x: 0, y: 0, z: 0 }, false, 42, 'crawler');
+    const sc = makeSimCrawler(2, { x: 0, y: 0, z: 0 }, false, 42, 'scarab');
     expect(cr.species).toBe('crawler');
     expect(sc.species).toBe('scarab');
     expect(sc.sp.HOP_SPEED).toBeGreaterThan(cr.sp.HOP_SPEED);
@@ -42,8 +42,8 @@ describe('MELEE_SPECIES table', () => {
   });
 
   it('unknown species falls back to crawler tunables', () => {
-    const w = makeSimCrawler(3, 0, 0, 0, false, 7, 'bogstandard');
-    expect(w.sp.HOP_SPEED).toBeCloseTo(makeSimCrawler(4, 0, 0, 0, false, 7, 'crawler').sp.HOP_SPEED);
+    const w = makeSimCrawler(3, { x: 0, y: 0, z: 0 }, false, 7, 'bogstandard');
+    expect(w.sp.HOP_SPEED).toBeCloseTo(makeSimCrawler(4, { x: 0, y: 0, z: 0 }, false, 7, 'crawler').sp.HOP_SPEED);
   });
 });
 
@@ -51,7 +51,7 @@ describe('distance-tiered edge fanout', () => {
   const priv = (s: CreatureSim) => s as unknown as SimPrivate;
 
   function crawlerAt(x: number, z: number): SimCrawler {
-    const c = makeSimCrawler(9, x, 0, z, false, 11, 'crawler');
+    const c = makeSimCrawler(9, { x: x, y: 0, z: z }, false, 11, 'crawler');
     return c;
   }
 
@@ -101,7 +101,7 @@ describe('brain buckets', () => {
     // spawn() would need randomness; set the bucket the way it does.
     const crawlers: SimCrawler[] = [];
     for (let i = 0; i < 8; i++) {
-      const c = makeSimCrawler(100 + i, i * 5, 0, 0, false, 7 + i, 'crawler');
+      const c = makeSimCrawler(100 + i, { x: i * 5, y: 0, z: 0 }, false, 7 + i, 'crawler');
       // Same seeding as spawnCrawler: negative offset phases this
       // crawler's first retarget into its bucket (2.0–3.75s window).
       priv.retargetAcc.set(c.id, -2 * ((c.id % 8) / 8));
@@ -141,7 +141,7 @@ describe('crawlerHit claim gates', () => {
   it('drops claims on unknown ids and out-of-range claimers', () => {
     const { sim } = makeRoom();
     const pm = (sim as unknown as { players: PlayerManager }).players;
-    const c = makeSimCrawler(5, 0, 0, 0, false, 3, 'crawler');
+    const c = makeSimCrawler(5, { x: 0, y: 0, z: 0 }, false, 3, 'crawler');
     (sim as unknown as SimPrivate).crawlers.set(c.id, c);
     (sim as unknown as { field: object }).field = { size: 1, data: new Uint8Array(1), stride: 1 };
 
@@ -157,7 +157,7 @@ describe('crawlerHit claim gates', () => {
 
   it('legal claim applies damage + stun', () => {
     const { sim } = makeRoom();
-    const c = makeSimCrawler(6, 0, 0, 0, false, 3, 'scarab');
+    const c = makeSimCrawler(6, { x: 0, y: 0, z: 0 }, false, 3, 'scarab');
     (sim as unknown as SimPrivate).crawlers.set(c.id, c);
     (sim as unknown as { field: object }).field = { size: 1, data: new Uint8Array(1), stride: 1 };
     addPlayerAt(sim, 'shooter', 1, 0);
@@ -171,8 +171,8 @@ describe('flyer family (rakk)', () => {
   const field: Heightfield = { size: 1, data: new Uint8Array(1), stride: 1 };
 
   it('resolves per-species tunables + unknown species falls back to rakk', () => {
-    const rk = makeSimFlyer(1, 0, 50, 0, false, 42, 'rakk');
-    const gn = makeSimFlyer(2, 0, 50, 0, false, 42, 'gnat');
+    const rk = makeSimFlyer(1, { x: 0, y: 50, z: 0 }, false, 42, 'rakk');
+    const gn = makeSimFlyer(2, { x: 0, y: 50, z: 0 }, false, 42, 'gnat');
     expect(rk.state).toBe('orbit');
     expect(FLYER_SPECIES.gnat!.orbitR).toBeLessThan(FLYER_SPECIES.rakk!.orbitR ?? Infinity);
     expect(gn.sp.ORBIT_SPEED).toBeGreaterThan(rk.sp.ORBIT_SPEED);
@@ -181,7 +181,7 @@ describe('flyer family (rakk)', () => {
   });
 
   it('committed target drives the orbit→windup→dive→bite event chain', () => {
-    const f = makeSimFlyer(3, 0, 60, 0, false, 7, 'rakk');
+    const f = makeSimFlyer(3, { x: 0, y: 60, z: 0 }, false, 7, 'rakk');
     commitTarget(f, 'prey', { x: 0, y: 50, z: 0 });
     const events: string[] = [];
     // 30s window — covers the seeded cooldown + a full attack cycle.
@@ -197,8 +197,8 @@ describe('flyer family (rakk)', () => {
   });
 
   it('authority and predictor replay the identical stream', () => {
-    const a = makeSimFlyer(4, 0, 60, 0, false, 99, 'rakk');
-    const p = makeSimFlyer(4, 0, 60, 0, false, 99, 'rakk');
+    const a = makeSimFlyer(4, { x: 0, y: 60, z: 0 }, false, 99, 'rakk');
+    const p = makeSimFlyer(4, { x: 0, y: 60, z: 0 }, false, 99, 'rakk');
     commitTarget(a, 'prey', { x: 0, y: 50, z: 0 });
     commitTarget(p, 'prey', { x: 0, y: 50, z: 0 });
     for (let i = 0; i < 120; i++) {
@@ -231,7 +231,7 @@ describe('roller family', () => {
   const field: Heightfield = { size: 1, data: new Uint8Array(1), stride: 1 };
 
   it('rolls at the committed snapshot and bites on contact', () => {
-    const r = makeSimRoller(5, 0, 0, 0, false, 11, 'roller');
+    const r = makeSimRoller(5, { x: 0, y: 0, z: 0 }, false, 11, 'roller');
     commitTarget(r, 'prey', { x: 20, y: 1.6, z: 0 });
     const events: string[] = [];
     for (let i = 0; i < 400 && events.length === 0; i++) {
@@ -245,7 +245,7 @@ describe('roller family', () => {
   });
 
   it('bite cooldown stops contact multi-ticking', () => {
-    const r = makeSimRoller(6, 0, 0, 0, false, 11, 'roller');
+    const r = makeSimRoller(6, { x: 0, y: 0, z: 0 }, false, 11, 'roller');
     commitTarget(r, 'prey', { x: 1, y: 1.6, z: 0 });
     const tgt = { x: 1, y: 1.6, z: 0 };
     let bites = 0;
@@ -258,8 +258,8 @@ describe('roller family', () => {
   });
 
   it('authority and predictor replay identically', () => {
-    const a = makeSimRoller(7, 0, 0, 0, false, 55, 'roller');
-    const p = makeSimRoller(7, 0, 0, 0, false, 55, 'roller');
+    const a = makeSimRoller(7, { x: 0, y: 0, z: 0 }, false, 55, 'roller');
+    const p = makeSimRoller(7, { x: 0, y: 0, z: 0 }, false, 55, 'roller');
     commitTarget(a, 'prey', { x: 30, y: 1.6, z: 10 });
     commitTarget(p, 'prey', { x: 30, y: 1.6, z: 10 });
     for (let i = 0; i < 100; i++) {
@@ -289,7 +289,7 @@ describe('slither family (snake)', () => {
   const tgt = { x: 8, y: 0.5, z: 0 };
 
   it('committed target → slither → windup → pounce → bite chain', () => {
-    const s = makeSimSlither(9, 0, 0.5, 0, false, 21, 'snake');
+    const s = makeSimSlither(9, { x: 0, y: 0.5, z: 0 }, false, 21, 'snake');
     commitTarget(s, 'prey', tgt);
     s.strikeCd = 0;
     const events: string[] = [];
@@ -306,7 +306,7 @@ describe('slither family (snake)', () => {
   });
 
   it('a hit during windup/lunge breaks the strike', () => {
-    const s = makeSimSlither(10, 0, 0.5, 0, false, 21, 'snake');
+    const s = makeSimSlither(10, { x: 0, y: 0.5, z: 0 }, false, 21, 'snake');
     commitTarget(s, 'prey', tgt);
     s.strikeCd = 0;
     for (let i = 0; i < 40 && s.state !== 'windup'; i++) stepSlither(s, 0.05, field, tgt, true);
@@ -316,8 +316,8 @@ describe('slither family (snake)', () => {
   });
 
   it('authority and predictor replay identically', () => {
-    const a = makeSimSlither(11, 0, 0.5, 0, false, 33, 'snake');
-    const p = makeSimSlither(11, 0, 0.5, 0, false, 33, 'snake');
+    const a = makeSimSlither(11, { x: 0, y: 0.5, z: 0 }, false, 33, 'snake');
+    const p = makeSimSlither(11, { x: 0, y: 0.5, z: 0 }, false, 33, 'snake');
     commitTarget(a, 'prey', tgt);
     commitTarget(p, 'prey', tgt);
     for (let i = 0; i < 150; i++) {
@@ -348,7 +348,7 @@ describe('kamikaze family (baneling)', () => {
   const field: Heightfield = { size: 1, data: new Uint8Array(1), stride: 1 };
 
   it('proximity fuse emits detonate and kills the sac', () => {
-    const b = makeSimBaneling(12, 0, 0.7, 0, false, 5, 'baneling');
+    const b = makeSimBaneling(12, { x: 0, y: 0.7, z: 0 }, false, 5, 'baneling');
     commitTarget(b, 'prey', { x: 30, y: 0.7, z: 0 });
     let ev: string | null = null;
     for (let i = 0; i < 600 && !ev; i++) {
@@ -362,7 +362,7 @@ describe('kamikaze family (baneling)', () => {
   });
 
   it('life clock pops it even with no target', () => {
-    const b = makeSimBaneling(13, 0, 0.7, 0, false, 5, 'baneling');
+    const b = makeSimBaneling(13, { x: 0, y: 0.7, z: 0 }, false, 5, 'baneling');
     b.age = 24.99;
     expect(stepBaneling(b, 0.05, field, null, true)).toBe('detonate');
     expect(b.dead).toBe(true);
@@ -378,7 +378,7 @@ describe('kamikaze family (baneling)', () => {
       crawlers: Map<number, SimBaneling>;
     };
     priv.field = field;
-    const b = makeSimBaneling(14, 0, 0.7, 0, false, 5, 'baneling');
+    const b = makeSimBaneling(14, { x: 0, y: 0.7, z: 0 }, false, 5, 'baneling');
     priv.crawlers.set(b.id, b);
     sim.handleHit('shooter', b.id, 999);
     expect(booms).toEqual([14]);
@@ -389,8 +389,8 @@ describe('kamikaze family (baneling)', () => {
   });
 
   it('authority and predictor replay the identical chase', () => {
-    const a = makeSimBaneling(15, 0, 0.7, 0, false, 77, 'baneling');
-    const p = makeSimBaneling(15, 0, 0.7, 0, false, 77, 'baneling');
+    const a = makeSimBaneling(15, { x: 0, y: 0.7, z: 0 }, false, 77, 'baneling');
+    const p = makeSimBaneling(15, { x: 0, y: 0.7, z: 0 }, false, 77, 'baneling');
     commitTarget(a, 'prey', { x: 400, y: 0.7, z: 300 });
     commitTarget(p, 'prey', { x: 400, y: 0.7, z: 300 });
     for (let i = 0; i < 100; i++) {

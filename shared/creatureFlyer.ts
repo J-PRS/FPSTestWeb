@@ -62,9 +62,9 @@ export function isFlyerSpecies(species: string): boolean {
 }
 
 export function makeSimFlyer(
-  id: number, x: number, y: number, z: number,
-  uber: boolean, seed: number, species = 'rakk',
+  id: number, pos: SimVec, uber: boolean, seed: number, species = 'rakk',
 ): SimFlyer {
+  const { x, y, z } = pos;
   const row = FLYER_SPECIES[species] ?? FLYER_SPECIES.rakk!;
   const health = uber ? row.health * 3.4 : row.health;
   const sp: FlyerTunables = {

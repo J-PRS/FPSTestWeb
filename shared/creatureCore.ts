@@ -120,9 +120,9 @@ export function clipMotion(
 }
 
 export function makeSimCrawler(
-  id: number, x: number, y: number, z: number,
-  uber: boolean, seed: number, species = 'crawler',
+  id: number, pos: SimVec, uber: boolean, seed: number, species = 'crawler',
 ): SimCrawler {
+  const { x, y, z } = pos;
   const row = MELEE_SPECIES[species] ?? MELEE_SPECIES.crawler!;
   const health = uber ? row.health * 3.4 : row.health;
   const sp: SimTunables = {

@@ -19,16 +19,21 @@ export class TerrainRing {
   private ghostMesh: THREE.Mesh;
   private elapsed = 0;
 
+  private terrain?: Terrain;
+  private baseOpacity: number;
+  private ghostOpacity: number;
+
   constructor(
     private scene: THREE.Scene,
     private center: THREE.Vector3,
     private color: number,
     private life: number,
     private maxRadius: number,
-    private terrain?: Terrain,
-    private baseOpacity = 0.8,
-    private ghostOpacity = 0.35
-  ) {
+    ...opts: [terrain?: Terrain, baseOpacity?: number, ghostOpacity?: number]) {
+    const [terrain, baseOpacity = 0.8, ghostOpacity = 0.35] = opts;
+    this.terrain = terrain;
+    this.baseOpacity = baseOpacity;
+    this.ghostOpacity = ghostOpacity;
     const pos = new Float32Array((SEGS + 1) * 2 * 3);
     this.posAttr = new THREE.BufferAttribute(pos, 3);
     this.posAttr.setUsage(THREE.DynamicDrawUsage);

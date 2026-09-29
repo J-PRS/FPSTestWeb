@@ -18,8 +18,8 @@ describe('SnapshotBuffer', () => {
     const buf = new SnapshotBuffer();
     const now = Date.now();
     // Two snaps straddling now-100ms (the default interp delay)
-    buf.push(now - 150, 0, 0, 0, 0, 0, 10, 0, 0);
-    buf.push(now - 50, 1, 0, 0, 0, 0, 10, 0, 0);
+    buf.push(now - 150, {x:0,y:0,z:0}, {yaw:0,pitch:0}, {x:10,y:0,z:0});
+    buf.push(now - 50, {x:1,y:0,z:0}, {yaw:0,pitch:0}, {x:10,y:0,z:0});
     const { pos } = sample(buf);
     // RenderTime sits midway between the snaps -> ~0.5, never at the ends
     expect(pos.x).toBeGreaterThan(0.3);
@@ -29,8 +29,8 @@ describe('SnapshotBuffer', () => {
   it('extrapolates bounded past the newest snapshot instead of freezing', () => {
     const buf = new SnapshotBuffer();
     const now = Date.now();
-    buf.push(now - 400, 0, 0, 0, 0, 0, 10, 0, 0);
-    buf.push(now - 200, 1, 0, 0, 0, 0, 10, 0, 0);
+    buf.push(now - 400, {x:0,y:0,z:0}, {yaw:0,pitch:0}, {x:10,y:0,z:0});
+    buf.push(now - 200, {x:1,y:0,z:0}, {yaw:0,pitch:0}, {x:10,y:0,z:0});
     // renderTime is ~100ms past the newest snap -> extrapolates vx*~0.1 = +1m
     // (the jitter-adaptive delay absorbs a few ms — assert the band, not a point)
     const { pos } = sample(buf);
@@ -41,7 +41,7 @@ describe('SnapshotBuffer', () => {
   it('caps extrapolation at MAX_EXTRAPOLATE no matter how stale', () => {
     const buf = new SnapshotBuffer();
     const now = Date.now();
-    buf.push(now - 5000, 0, 0, 0, 0, 0, 10, 0, 0);
+    buf.push(now - 5000, {x:0,y:0,z:0}, {yaw:0,pitch:0}, {x:10,y:0,z:0});
     const { pos } = sample(buf);
     // 0.25s cap × vx=10 → exactly 2.5, not 50
     expect(pos.x).toBeCloseTo(2.5, 1);
@@ -58,12 +58,12 @@ describe('SnapshotBuffer', () => {
   it('recycles snapshots on clear without losing state', () => {
     const buf = new SnapshotBuffer();
     const now = Date.now();
-    buf.push(now - 150, 1, 2, 3, 0, 0, 0, 0, 0);
+    buf.push(now - 150, {x:1,y:2,z:3}, {yaw:0,pitch:0}, {x:0,y:0,z:0});
     buf.clear();
     expect(buf.size).toBe(0);
     // Push again — pool reuse must not corrupt new data
-    buf.push(now - 150, 4, 5, 6, 0, 0, 0, 0, 0);
-    buf.push(now - 50, 7, 5, 6, 0, 0, 0, 0, 0);
+    buf.push(now - 150, {x:4,y:5,z:6}, {yaw:0,pitch:0}, {x:0,y:0,z:0});
+    buf.push(now - 50, {x:7,y:5,z:6}, {yaw:0,pitch:0}, {x:0,y:0,z:0});
     const { pos } = sample(buf);
     expect(pos.x).toBeGreaterThan(4);
     expect(pos.x).toBeLessThan(7);
@@ -74,8 +74,8 @@ describe('SnapshotBuffer', () => {
     const now = Date.now();
     // Snap pair wrapping through PI: -3.0 → +3.0 should pass through ±PI,
     // not swing backward through 0
-    buf.push(now - 150, 0, 0, 0, -3.0, 0, 0, 0, 0);
-    buf.push(now - 50, 0, 0, 0, 3.0, 0, 0, 0, 0);
+    buf.push(now - 150, {x:0,y:0,z:0}, {yaw:-3.0,pitch:0}, {x:0,y:0,z:0});
+    buf.push(now - 50, {x:0,y:0,z:0}, {yaw:3.0,pitch:0}, {x:0,y:0,z:0});
     const { rot } = sample(buf);
     expect(Math.abs(rot.yaw)).toBeGreaterThan(2.9);
   });
