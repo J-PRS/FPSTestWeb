@@ -30,212 +30,245 @@ export interface LightningHooks {
   applyForceToRemotes: (pos: THREE.Vector3, radius: number, force: number, forceMode: 'push' | 'pull', aoeDamage: number, directHitTargetId: string | null) => void;
 }
 
+interface LgState {
+  beam: LightningBeam | null;
+  lastFire: number;
+  sizzleAt: number;
+  beamTo: THREE.Vector3;
+  acc: Map<number, number>;
+}
+const _traceT = { t: 0 };
+
+// Beam start: the muzzle node's actual rendered pixel, unprojected into
+// world space through the main camera — FOV difference between the
+// viewmodel pass (55) and world pass (90) means a raw view-space offset
+// lands on the wrong ray, which read as the bolt lagging the gun.
+function lgAnchorLive(deps: CombatDeps, cam: THREE.Camera, out: THREE.Vector3): void {
+  if (!deps.lazyViewModel()?.muzzleAnchorWorld(WeaponType.Lightning, cam, out)) {
+    lgMuzzleAnchor(cam, out); // fixed-offset fallback until the node exists
+  }
+}
+
+// Chain pick — nearest OTHER live enemy within range of a contact point.
+// Shared by the damage tick and the per-frame visual refresh so the arc
+// and the damage always describe the same fork.
+function pickChain(deps: CombatDeps, from: THREE.Vector3, exclude: (typeof deps.targets)[number]): (typeof deps.targets)[number] | null {
+  let best: (typeof deps.targets)[number] | null = null;
+  let bestD2 = LG_CHAIN_RANGE * LG_CHAIN_RANGE;
+  const cam = deps.lazyCamera();
+  cam.getWorldDirection(_lgTo);
+  for (const t of deps.targets) {
+    if (t.dead || t === exclude) continue;
+    // Front hemisphere only — a bolt can't arc backward through you,
+    // and a fork to an enemy beside/behind draws a giant fan ACROSS
+    // the view that reads as "the beam detached" (it did, sorta)
+    _lgTo2.copy(t.pos).sub(cam.position);
+    if (_lgTo2.dot(_lgTo) <= 0) continue;
+    // Fork must continue FORWARD-ish along the bolt — a perpendicular
+    // hop (bird overhead, enemy beside the contact) draws an arc into
+    // the sky that reads as the beam detaching, not a chain
+    _lgTo2.copy(t.pos).sub(from);
+    if (_lgTo2.dot(_lgD) < _lgTo2.length() * 0.35) continue;
+    const d2 = t.pos.distanceToSquared(from);
+    if (d2 < bestD2) { bestD2 = d2; best = t; }
+  }
+  return best;
+}
+
+// Death-burst: the corpse pops for the charge it banked. Damage AND
+// radius scale with overcharge, capped — a tick-killed ball still pops
+// small, a beamed-out overlord goes off like a barrel.
+function lgPop(deps: CombatDeps, hooks: LightningHooks, pos: THREE.Vector3, acc: number): void {
+  const dmg = Math.min(acc, LG_POP_DMG_CAP);
+  const radius = Math.min(LG_POP_RADIUS_MIN + acc * 0.12, LG_POP_RADIUS_MAX);
+  hooks.processExplosion({
+    pos, radius, force: 30, forceMode: 'push', aoeDamage: dmg,
+    falloffMultiplier: 1, collisionMultiplier: 1, forceMultiplier: 1,
+    // Server sees a normal Lightning blast for remote-player prediction;
+    // the scaled damage is the PvE fantasy side (enemies are client-run)
+    sendAOE: (p, targetId) => deps.lazyNetworkManager()?.sendAOEShot({ position: p, weaponType: WeaponType.Lightning, excludeTargetId: targetId }),
+    explosionTint: 0x8fdcff, vfxRadius: radius * 0.8, weaponType: WeaponType.Lightning,
+  });
+}
+
+// Shared ray: eye + current camera forward → terrain march + nearest
+// sphere hit. Both the damage tick AND the per-frame visual refresh run
+// this — a stale tip between ticks is what detached the bolt on strafes.
+function lgTrace(deps: CombatDeps, cam: THREE.Camera, traceT: { t: number }): {
+  hitT: number;
+  hitTarget: (typeof deps.targets)[number] | null;
+  hitPlayerId: string | null;
+} {
+  _lgO.copy(cam.position);
+  cam.getWorldDirection(_lgD);
+
+  // Terrain: march the ray in 1.5m steps until it goes under the heightmap
+  let hitT = LG_RANGE;
+  for (let d = 1.5; d <= LG_RANGE; d += 1.5) {
+    _lgP.copy(_lgO).addScaledVector(_lgD, d);
+    if (_lgP.y < deps.lazyTerrain().getHeight(_lgP.x, _lgP.z)) { hitT = d; break; }
+  }
+
+  // Structures: the beam stops at walls — a bolt that could pierce a
+  // base would splash targets inside it (server rejects those claims).
+  if (Projectile.solidColliders.length) {
+    _lgP.copy(_lgO).addScaledVector(_lgD, hitT);
+    const sh = segSolidHit(_lgO, _lgP, Projectile.solidColliders);
+    if (sh) hitT *= sh.t; // entry as a fraction of the current reach
+  }
+
+  // Targets: ray-vs-sphere, nearest wins — tip lands on the SURFACE entry
+  // point (exact aim), never magnetized to the center
+  const hitTarget = traceTargetHit(deps, hitT, traceT);
+  hitT = traceT.t;
+  const hitPlayerId = tracePlayerHit(deps, hitT, traceT);
+  hitT = traceT.t;
+
+  _lgHit.copy(_lgO).addScaledVector(_lgD, hitT);
+  return { hitT, hitTarget, hitPlayerId };
+}
+
+
+function traceTargetHit(deps: CombatDeps, hitT: number, traceT: { t: number }): (typeof deps.targets)[number] | null {
+  traceT.t = hitT;
+  let hit: (typeof deps.targets)[number] | null = null;
+  for (const t of deps.targets) {
+    if (t.dead) continue;
+    _lgTo.copy(t.pos).sub(_lgO);
+    // Capsule bodies (totem): aim the test at the shaft's midpoint —
+    // the feet-sphere misses a beam through the upper half entirely.
+    if (t.capsuleTop) _lgTo.y += t.capsuleTop * 0.5;
+    const proj = _lgTo.dot(_lgD);
+    if (proj < 0 || proj > traceT.t) continue;
+    const entry = sphereEntry(traceT.t, (t.hitRadius ?? t.radius) + 0.45, proj);
+    if (entry !== null) { traceT.t = entry; hit = t; }
+  }
+  return hit;
+}
+
+function tracePlayerHit(deps: CombatDeps, hitT: number, traceT: { t: number }): string | null {
+  traceT.t = hitT;
+  let hitId: string | null = null;
+  for (const [pid, rp] of deps.world.remotePlayers) {
+    if (rp.isDead) continue;
+    _lgTo.copy(rp.position).sub(_lgO);
+    _lgTo.y += 0.9; // capsule center is ~chest, not feet
+    const proj = _lgTo.dot(_lgD);
+    if (proj < 0 || proj > traceT.t) continue;
+    const entry = sphereEntry(traceT.t, 1.0, proj);
+    if (entry !== null) { traceT.t = entry; hitId = pid; }
+  }
+  return hitId;
+}
+
+// Ray-vs-sphere entry distance along _lgD for the to-target vector in
+// _lgTo; null when the ray misses or the sphere sits behind the tip.
+// Beam is thin but not needle-thin — callers pad the radius.
+function sphereEntry(hitT: number, r: number, proj: number): number | null {
+  const perp2 = _lgTo.lengthSq() - proj * proj;
+  if (perp2 >= r * r) return null;
+  const entry = proj - Math.sqrt(r * r - perp2); // surface, not center
+  return entry < hitT ? Math.max(entry, 0) : null;
+}
+
+// Per-frame beam visual refresh — called from gameLoop AFTER
+// viewModel.update so the muzzle node's swayed transform is THIS frame's,
+// not one stale. Beam start = the viewmodel emitter's real position
+// rotated into world space (vmScene shares the camera quaternion about
+// the eye) — the bolt is welded to the rendered gun, sway and all.
+function updateBeamVisual(deps: CombatDeps, lg: LgState): void {
+  if (!lg.beam || lg.lastFire <= 0 || performance.now() - lg.lastFire > 90) return;
+  const cam = deps.lazyCamera();
+  lgAnchorLive(deps, cam, _lgMuzzle);
+  // Re-trace EVERY FRAME — the 44ms tick tip goes ~1.7m stale during a
+  // strafe, and a live trace tracks the enemy's surface as it moves.
+  // Damage stays per-tick; this is purely welding the visual.
+  const { hitT, hitTarget } = lgTrace(deps, cam, _traceT); // refreshes _lgHit at the live camera
+  lg.beamTo.copy(_lgHit);
+  if (hitTarget) {
+    const chain = pickChain(deps, _lgHit, hitTarget);
+    if (chain) lg.beam.fireChain(_lgHit, chain.pos); else lg.beam.clearChain();
+  } else {
+    lg.beam.clearChain();
+  }
+  lg.beam.fire(_lgMuzzle, lg.beamTo, cam.position, hitT < LG_RANGE);
+}
+
+// Beam fades ~80ms after the last tick — driven from updateProjectiles.
+function tickBeam(lg: LgState, dt: number): void {
+  if (!lg.beam) return;
+  lg.beam.update(dt);
+  const lgAge = performance.now() - lg.lastFire;
+  if (lg.lastFire > 0 && lgAge > 90) {
+    sfx.beamLoopStop(); // trigger dropped — ramp the hum out
+    lg.lastFire = 0;
+    lg.beam.clearChain();
+  }
+  // NOTE: beam weld lives in updateBeamVisual, called post-viewModel
+  // update from gameLoop — the muzzle node is stale here.
+}
+
+// One beam tick of damage: number + health bar + bank toward the pop —
+// every tick pumped into a target charges its burst. Shared by the
+// primary strike and the chain fork.
+function zapTarget(deps: CombatDeps, hooks: LightningHooks, lg: LgState,
+    t: (typeof deps.targets)[number], dmg: number, cam: THREE.Camera): void {
+  deps.lazyDamageNumbers().spawn(t.pos, dmg, '#8fdcff', cam);
+  const acc = (lg.acc.get(t.id) ?? 0) + dmg;
+  lg.acc.set(t.id, acc);
+  deps.reportTargetDamage?.(t, dmg);
+  if (t.takeDamage(dmg)) {
+    hooks.onTargetDestroyed(t, t.vel, WeaponType.Lightning);
+    lgPop(deps, hooks, t.pos, acc);
+    lg.acc.delete(t.id);
+  } else if (!t.hideHealthBar) {
+    deps.lazyHealthBarSystem().spawnBall(t, dmg, t.health);
+  }
+}
+
 // Lightning gun: honest hitscan — raycast from the eye every tick (~44ms),
 // beam VFX shows exactly where damage lands (truelightning, no smooth fake
 // shaft). Enemies take directDamage per tick with a steady pin shove; remote
 // players go through the aoeShot server-claim path at the hit point.
 export function createLightning(deps: CombatDeps, hooks: LightningHooks) {
-  let lgBeam: LightningBeam | null = null;
-  let lgLastFire = 0;
-  let lgSizzleAt = 0; // throttle the connect sizzle — one crackle per ~6 ticks
-  const lgBeamTo = new THREE.Vector3(); // beam tip — follows the target between ticks
-  // Beam charge per target — damage dealt this run, detonated on the kill.
-  const lgAcc = new Map<number, number>();
+  const lg: LgState = {
+    beam: null,
+    lastFire: 0,
+    sizzleAt: 0, // throttle the connect sizzle — one crackle per ~6 ticks
+    beamTo: new THREE.Vector3(), // beam tip — follows the target between ticks
+    acc: new Map(), // beam charge per target — detonated on the kill
+  };
 
   // Beam start: the muzzle node's actual rendered pixel, unprojected into
   // world space through the main camera — FOV difference between the
   // viewmodel pass (55) and world pass (90) means a raw view-space offset
   // lands on the wrong ray, which read as the bolt lagging the gun.
-  function lgAnchorLive(cam: THREE.Camera, out: THREE.Vector3): void {
-    if (!deps.lazyViewModel()?.muzzleAnchorWorld(WeaponType.Lightning, cam, out)) {
-      lgMuzzleAnchor(cam, out); // fixed-offset fallback until the node exists
-    }
-  }
 
-  // Chain pick — nearest OTHER live enemy within range of a contact point.
-  // Shared by the damage tick and the per-frame visual refresh so the arc
-  // and the damage always describe the same fork.
-  function pickChain(from: THREE.Vector3, exclude: (typeof deps.targets)[number]): (typeof deps.targets)[number] | null {
-    let best: (typeof deps.targets)[number] | null = null;
-    let bestD2 = LG_CHAIN_RANGE * LG_CHAIN_RANGE;
-    const cam = deps.lazyCamera();
-    cam.getWorldDirection(_lgTo);
-    for (const t of deps.targets) {
-      if (t.dead || t === exclude) continue;
-      // Front hemisphere only — a bolt can't arc backward through you,
-      // and a fork to an enemy beside/behind draws a giant fan ACROSS
-      // the view that reads as "the beam detached" (it did, sorta)
-      _lgTo2.copy(t.pos).sub(cam.position);
-      if (_lgTo2.dot(_lgTo) <= 0) continue;
-      // Fork must continue FORWARD-ish along the bolt — a perpendicular
-      // hop (bird overhead, enemy beside the contact) draws an arc into
-      // the sky that reads as the beam detaching, not a chain
-      _lgTo2.copy(t.pos).sub(from);
-      if (_lgTo2.dot(_lgD) < _lgTo2.length() * 0.35) continue;
-      const d2 = t.pos.distanceToSquared(from);
-      if (d2 < bestD2) { bestD2 = d2; best = t; }
-    }
-    return best;
-  }
-
-  // Death-burst: the corpse pops for the charge it banked. Damage AND
-  // radius scale with overcharge, capped — a tick-killed ball still pops
-  // small, a beamed-out overlord goes off like a barrel.
-  function lgPop(pos: THREE.Vector3, acc: number): void {
-    const dmg = Math.min(acc, LG_POP_DMG_CAP);
-    const radius = Math.min(LG_POP_RADIUS_MIN + acc * 0.12, LG_POP_RADIUS_MAX);
-    hooks.processExplosion({
-      pos, radius, force: 30, forceMode: 'push', aoeDamage: dmg,
-      falloffMultiplier: 1, collisionMultiplier: 1, forceMultiplier: 1,
-      // Server sees a normal Lightning blast for remote-player prediction;
-      // the scaled damage is the PvE fantasy side (enemies are client-run)
-      sendAOE: (p, targetId) => deps.lazyNetworkManager()?.sendAOEShot({ position: p, weaponType: WeaponType.Lightning, excludeTargetId: targetId }),
-      explosionTint: 0x8fdcff, vfxRadius: radius * 0.8, weaponType: WeaponType.Lightning,
-    });
-  }
-
-  // Shared ray: eye + current camera forward → terrain march + nearest
-  // sphere hit. Both the damage tick AND the per-frame visual refresh run
-  // this — a stale tip between ticks is what detached the bolt on strafes.
-  function lgTrace(cam: THREE.Camera): {
-    hitT: number;
-    hitTarget: (typeof deps.targets)[number] | null;
-    hitPlayerId: string | null;
-  } {
-    _lgO.copy(cam.position);
-    cam.getWorldDirection(_lgD);
-
-    // Terrain: march the ray in 1.5m steps until it goes under the heightmap
-    let hitT = LG_RANGE;
-    for (let d = 1.5; d <= LG_RANGE; d += 1.5) {
-      _lgP.copy(_lgO).addScaledVector(_lgD, d);
-      if (_lgP.y < deps.lazyTerrain().getHeight(_lgP.x, _lgP.z)) { hitT = d; break; }
-    }
-
-    // Structures: the beam stops at walls — a bolt that could pierce a
-    // base would splash targets inside it (server rejects those claims).
-    if (Projectile.solidColliders.length) {
-      _lgP.copy(_lgO).addScaledVector(_lgD, hitT);
-      const sh = segSolidHit(_lgO, _lgP, Projectile.solidColliders);
-      if (sh) hitT *= sh.t; // entry as a fraction of the current reach
-    }
-
-    // Targets: ray-vs-sphere, nearest wins — tip lands on the SURFACE entry
-    // point (exact aim), never magnetized to the center
-    const hitTarget = traceTargetHit(hitT);
-    hitT = _lgTraceT.t;
-    const hitPlayerId = tracePlayerHit(hitT);
-    hitT = _lgTraceT.t;
-
-    _lgHit.copy(_lgO).addScaledVector(_lgD, hitT);
-    return { hitT, hitTarget, hitPlayerId };
-  }
-
-  // Scratch out-param for the loops below — keeps each scan's "new tip"
-  // mutation out of the caller's locals.
-  const _lgTraceT = { t: 0 };
-
-  function traceTargetHit(hitT: number): (typeof deps.targets)[number] | null {
-    _lgTraceT.t = hitT;
-    let hit: (typeof deps.targets)[number] | null = null;
-    for (const t of deps.targets) {
-      if (t.dead) continue;
-      _lgTo.copy(t.pos).sub(_lgO);
-      // Capsule bodies (totem): aim the test at the shaft's midpoint —
-      // the feet-sphere misses a beam through the upper half entirely.
-      if (t.capsuleTop) _lgTo.y += t.capsuleTop * 0.5;
-      const proj = _lgTo.dot(_lgD);
-      if (proj < 0 || proj > _lgTraceT.t) continue;
-      const entry = sphereEntry(_lgTraceT.t, (t.hitRadius ?? t.radius) + 0.45, proj);
-      if (entry !== null) { _lgTraceT.t = entry; hit = t; }
-    }
-    return hit;
-  }
-
-  function tracePlayerHit(hitT: number): string | null {
-    _lgTraceT.t = hitT;
-    let hitId: string | null = null;
-    for (const [pid, rp] of deps.world.remotePlayers) {
-      if (rp.isDead) continue;
-      _lgTo.copy(rp.position).sub(_lgO);
-      _lgTo.y += 0.9; // capsule center is ~chest, not feet
-      const proj = _lgTo.dot(_lgD);
-      if (proj < 0 || proj > _lgTraceT.t) continue;
-      const entry = sphereEntry(_lgTraceT.t, 1.0, proj);
-      if (entry !== null) { _lgTraceT.t = entry; hitId = pid; }
-    }
-    return hitId;
-  }
-
-  // Ray-vs-sphere entry distance along _lgD for the to-target vector in
-  // _lgTo; null when the ray misses or the sphere sits behind the tip.
-  // Beam is thin but not needle-thin — callers pad the radius.
-  function sphereEntry(hitT: number, r: number, proj: number): number | null {
-    const perp2 = _lgTo.lengthSq() - proj * proj;
-    if (perp2 >= r * r) return null;
-    const entry = proj - Math.sqrt(r * r - perp2); // surface, not center
-    return entry < hitT ? Math.max(entry, 0) : null;
-  }
-
-  // Per-frame beam visual refresh — called from gameLoop AFTER
-  // viewModel.update so the muzzle node's swayed transform is THIS frame's,
-  // not one stale. Beam start = the viewmodel emitter's real position
-  // rotated into world space (vmScene shares the camera quaternion about
-  // the eye) — the bolt is welded to the rendered gun, sway and all.
-  function updateBeamVisual(): void {
-    if (!lgBeam || lgLastFire <= 0 || performance.now() - lgLastFire > 90) return;
-    const cam = deps.lazyCamera();
-    lgAnchorLive(cam, _lgMuzzle);
-    // Re-trace EVERY FRAME — the 44ms tick tip goes ~1.7m stale during a
-    // strafe, and a live trace tracks the enemy's surface as it moves.
-    // Damage stays per-tick; this is purely welding the visual.
-    const { hitT, hitTarget } = lgTrace(cam); // refreshes _lgHit at the live camera
-    lgBeamTo.copy(_lgHit);
-    if (hitTarget) {
-      const chain = pickChain(_lgHit, hitTarget);
-      if (chain) lgBeam.fireChain(_lgHit, chain.pos); else lgBeam.clearChain();
-    } else {
-      lgBeam.clearChain();
-    }
-    lgBeam.fire(_lgMuzzle, lgBeamTo, cam.position, hitT < LG_RANGE);
-  }
-
-  // Beam fades ~80ms after the last tick — driven from updateProjectiles.
-  function tickBeam(dt: number): void {
-    if (!lgBeam) return;
-    lgBeam.update(dt);
-    const lgAge = performance.now() - lgLastFire;
-    if (lgLastFire > 0 && lgAge > 90) {
-      sfx.beamLoopStop(); // trigger dropped — ramp the hum out
-      lgLastFire = 0;
-      lgBeam.clearChain();
-    }
-    // NOTE: beam weld lives in updateBeamVisual, called post-viewModel
-    // update from gameLoop — the muzzle node is stale here.
-  }
-
+  // One beam tick of damage: number + health bar + bank toward the pop —
+  // every tick pumped into a target charges its burst. Shared by the
+  // primary strike and the chain fork.
   function lightning(_e: FireArgs): void {
     const cam = deps.lazyCamera();
     const player = deps.lazyPlayer();
     const stats = getWeaponStats(WeaponType.Lightning);
-    if (!lgBeam) lgBeam = new LightningBeam(deps.lazyScene());
+    if (!lg.beam) lg.beam = new LightningBeam(deps.lazyScene());
 
-    const { hitT, hitTarget, hitPlayerId } = lgTrace(cam);
+    const { hitT, hitTarget, hitPlayerId } = lgTrace(deps, cam, _traceT);
 
-    lgBeamTo.copy(_lgHit); // tip = exact aim point on the surface, no snap
+    lg.beamTo.copy(_lgHit); // tip = exact aim point on the surface, no snap
     const lgNow = performance.now();
-    lgLastFire = lgNow;
+    lg.lastFire = lgNow;
     sfx.beamLoop(); // continuous drone — keepalive per tick
     // Connect sizzle — beam frying SOMETHING sounds different than beaming
     // air: positional crackle at the contact, throttled so 22t/s doesn't smear
-    if ((hitTarget || hitPlayerId) && lgNow - lgSizzleAt > 160) {
-      lgSizzleAt = lgNow;
+    if ((hitTarget || hitPlayerId) && lgNow - lg.sizzleAt > 160) {
+      lg.sizzleAt = lgNow;
       sfx.lgSizzle(_lgHit);
     }
 
     // Same anchor as the per-frame refresh — one function, no drift.
-    lgAnchorLive(cam, _lgMuzzle);
-    lgBeam.fire(_lgMuzzle, _lgHit, _lgO, hitT < LG_RANGE);
+    lgAnchorLive(deps, cam, _lgMuzzle);
+    lg.beam.fire(_lgMuzzle, _lgHit, _lgO, hitT < LG_RANGE);
 
     deps.lazyViewModel()?.kick(0.22); // per-tick hum — stacks into a buzz
     // Contact sparks only when the bolt actually lands on something —
@@ -245,16 +278,16 @@ export function createLightning(deps: CombatDeps, hooks: LightningHooks) {
 
     if (hitTarget) {
       hitTarget.applyKnockback(player.pos, stats.knockbackForce); // the pin
-      zapTarget(hitTarget, stats.directDamage, cam);
+      zapTarget(deps, hooks, lg, hitTarget, stats.directDamage, cam);
       deps.lazyHud().showHitMarker();
 
       // Chain fork: arc from the CONTACT POINT to the nearest OTHER enemy
       // in range — half damage, but it banks its own pop charge too
-      const chainT = pickChain(_lgHit, hitTarget);
+      const chainT = pickChain(deps, _lgHit, hitTarget);
       if (chainT) {
-        lgBeam.fireChain(_lgHit, chainT.pos);
+        lg.beam.fireChain(_lgHit, chainT.pos);
         chainT.applyKnockback(hitTarget.pos, stats.knockbackForce * 0.6);
-        zapTarget(chainT, stats.directDamage * LG_CHAIN_DMG_SCALE, cam);
+        zapTarget(deps, hooks, lg, chainT, stats.directDamage * LG_CHAIN_DMG_SCALE, cam);
       }
     }
 
@@ -272,22 +305,6 @@ export function createLightning(deps: CombatDeps, hooks: LightningHooks) {
     }
   }
 
-  // One beam tick of damage: number + health bar + bank toward the pop —
-  // every tick pumped into a target charges its burst. Shared by the
-  // primary strike and the chain fork.
-  function zapTarget(t: (typeof deps.targets)[number], dmg: number, cam: THREE.Camera): void {
-    deps.lazyDamageNumbers().spawn(t.pos, dmg, '#8fdcff', cam);
-    const acc = (lgAcc.get(t.id) ?? 0) + dmg;
-    lgAcc.set(t.id, acc);
-    deps.reportTargetDamage?.(t, dmg);
-    if (t.takeDamage(dmg)) {
-      hooks.onTargetDestroyed(t, t.vel, WeaponType.Lightning);
-      lgPop(t.pos, acc);
-      lgAcc.delete(t.id);
-    } else if (!t.hideHealthBar) {
-      deps.lazyHealthBarSystem().spawnBall(t, dmg, t.health);
-    }
-  }
 
-  return { lightning, updateBeamVisual, tickBeam };
+  return { lightning, updateBeamVisual: () => updateBeamVisual(deps, lg), tickBeam: (dt: number) => tickBeam(lg, dt) };
 }
