@@ -218,7 +218,16 @@ export class Room {
     );
     this.creatureSim.pops = this.spec.creatures ?? {};
     this.creatureSim.colliders = this.ballSim.colliders;
-    this.creatureSim.onBite = (c, targetId) => this.messages.crawlerBite(targetId, c.biteDamage, c.species, { x: c.x, y: c.y, z: c.z });
+    this.creatureSim.onBite = (c, targetId) => {
+      // dep:N ids are deployables — gnaw their hp, not a player.
+      if (targetId.startsWith('dep:')) {
+        this.deployables.gnaw(targetId, c.biteDamage);
+        return;
+      }
+      this.messages.crawlerBite(targetId, c.biteDamage, c.species, { x: c.x, y: c.y, z: c.z });
+    };
+    this.creatureSim.extraTargets = () => this.deployables.creatureTargets();
+    this.creatureSim.targetPos = (id) => id.startsWith('dep:') ? this.deployables.posOf(id) : null;
     this.creatureSim.onDetonate = (b) => {
       const pos = { x: b.x, y: b.y, z: b.z };
       this.messages.mineBlast('environment', pos, b.biteDamage, b.blastRadius, 14);

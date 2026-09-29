@@ -91,6 +91,11 @@ export class CreatureSim {
 
   /** Bite delivery — Room wires this to the damage funnel. */
   onBite: ((crawler: SimBeing, targetId: string) => void) | null = null;
+  /** Extra gnawables — Room injects deployable candidates (`dep:N` ids)
+   *  so wildlife can raze a stand like the offline kit does. */
+  extraTargets: (() => { id: string; pos: SimVec }[]) | null = null;
+  /** Resolve a non-player target id → live position for target commits. */
+  targetPos: ((id: string) => SimVec | null) | null = null;
   /** Kamikaze pop — Room wires this to the AOE funnel. Fires whenever a
    *  baneling dies, fuse or bullet — the pop IS the attack. */
   onDetonate: ((baneling: SimBaneling) => void) | null = null;
@@ -140,6 +145,7 @@ export class CreatureSim {
     for (const [id, p] of this.players.getAllPlayers()) {
       if (!p.isDead && !(p.status & STATUS.CLOAK)) out.push({ id, pos: p.position });
     }
+    if (this.extraTargets) out.push(...this.extraTargets());
     return out;
   }
 
@@ -201,6 +207,10 @@ export class CreatureSim {
     const p = c.targetId ? this.players.getPlayer(c.targetId) : null;
     if (p && !p.isDead && !(p.status & STATUS.CLOAK)) {
       commitTarget(c, c.targetId, p.position);
+    } else if (c.targetId && this.targetPos) {
+      const tp = this.targetPos(c.targetId);
+      if (tp) { commitTarget(c, c.targetId, tp); return; }
+      commitTarget(c, null, null);
     } else {
       commitTarget(c, null, null);
     }

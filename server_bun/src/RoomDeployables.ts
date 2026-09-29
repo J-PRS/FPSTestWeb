@@ -107,6 +107,31 @@ export class RoomDeployables {
     return [...this.items.values()].map((d) => ({ id: d.id, owner: d.owner, kind: d.kind, pos: { ...d.pos } }));
   }
 
+  /** Creature-sim candidates — `dep:N` ids mirror the client species
+   *  targeting table so wildlife raze stands on dedicated rooms too. */
+  creatureTargets(): { id: string; pos: Vec3 }[] {
+    const out: { id: string; pos: Vec3 }[] = [];
+    for (const d of this.items.values()) out.push({ id: `dep:${d.id}`, pos: d.pos });
+    return out;
+  }
+
+  posOf(depId: string): Vec3 | null {
+    const d = this.items.get(+depId.slice(4));
+    return d ? d.pos : null;
+  }
+
+  /** A creature's bite lands on a deployable — same durability pool the
+   *  blast sweep drains, so gnawing and shelling clear gear alike. */
+  gnaw(depId: string, dmg: number): void {
+    const d = this.items.get(+depId.slice(4));
+    if (!d) return;
+    d.hp -= dmg;
+    if (d.hp <= 0) {
+      logger.info('Deploy destroyed', { id: d.id, kind: d.kind, owner: d.owner, by: 'creature' });
+      this.remove(d.id);
+    }
+  }
+
   private remove(id: number): void {
     if (!this.items.delete(id)) return;
     this.room.broadcast({ type: 'deployGone', id } as ServerMessage);
