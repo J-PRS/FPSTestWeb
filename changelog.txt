@@ -1,3 +1,5 @@
+2026-10-03 - ambientDecor scenario locks the decor rule: ambient caps with a live player still spawn zero server creatures; only `creatures` is the shared channel.
+
 2026-10-03 - tdmTag scenario: kill through the real projectile funnel banks +1, corpse tag spawns at the dead spot, grabbing it banks the confirmation point.
 
 2026-10-03 - ctfWin scenario: brainless courier grabs the bravo flag, carries it home, and the legal 5th point runs the full matchEnd/reset/matchStart funnel.
