@@ -6,6 +6,7 @@ import { Terrain } from '../world/terrain.js';
 import { ChildLogger } from '../core/Logger.js';
 
 import { PlayerModel } from './PlayerModel.js';
+import { CLASS_MODEL_SCALE } from '../../../shared/botClasses.js';
 import { pickLocomotionAnim } from './locomotionAnim.js';
 import { SnapshotBuffer } from './remoteSnapshots.js';
 import { RemoteGizmo } from './remoteGizmo.js';
@@ -100,7 +101,7 @@ export class RemotePlayer {
    *  post-load because the GLB path sets its own fit scale. */
   private _classScale = 1;
   setClass(cls?: string): void {
-    this._classScale = cls === 'heavy' ? 1.15 : cls === 'light' ? 0.92 : 1;
+    this._classScale = cls === 'heavy' ? CLASS_MODEL_SCALE.heavy : cls === 'light' ? CLASS_MODEL_SCALE.light : 1;
     if (this._loaded) this.applyClassScale();
   }
   private applyClassScale(): void {
@@ -139,10 +140,10 @@ export class RemotePlayer {
     this.gizmo = new RemoteGizmo(scene, startPos);
     logger.debug(`GIZMO ADDED`, { playerId, instanceId: this.instanceId });
 
-    // Heavy armor wears the knight, everyone else the UAL mannequin —
-    // silhouette reads the class at distance. Fixed at spawn (a mid-match
-    // class swap lands next join).
-    this._model = new PlayerModel(scene, armorClass === 'heavy' ? 'knight' : 'mannequin');
+    // Everyone wears the UAL mannequin — the class reads through the
+    // 1.15/0.92 silhouette scale (a chibi knight read as a different game).
+    // Fixed at spawn (a mid-match class swap lands next join).
+    this._model = new PlayerModel(scene, 'mannequin');
     this.model.load().then(() => {
       this._loaded = true;
       this.applyClassScale();

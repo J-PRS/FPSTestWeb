@@ -6,7 +6,7 @@ import { Terrain } from '../world/terrain.js';
 import { PlayerSkills, SHIELD_DMG_PER_ENERGY } from './player/skills.js';
 import { STATUS } from '../../../shared/status.js';
 import { perkMods, PERK_ORDER, type PerkId } from '../../../shared/perks.js';
-import { CLASS_STATS, type ArmorClass } from '../../../shared/botClasses.js';
+import { CLASS_STATS, CLASS_MODEL_SCALE, type ArmorClass } from '../../../shared/botClasses.js';
 import { makeShieldBubble, ShieldBubble } from '../effects/shieldBubble.js';
 
 import { MovementController, MovementState } from './movement.js';
@@ -86,7 +86,6 @@ export class Player {
   applyPendingClass(): void {
     const c = this.armorClass;
     if (this.appliedClass === c) return;
-    const wasHeavy = this.appliedClass === 'heavy';
     this.appliedClass = c;
     this.movement.setSpeedScale(CLASS_STATS[c].speedScale);
     // Dropping down a tier unshoulders restricted ordnance — swap each
@@ -96,11 +95,9 @@ export class Player {
         if (Player.HEAVY_ONLY.includes(this.loadout[i])) this.setLoadoutSlot(i, 2);
       }
     }
-    if ((c === 'heavy') !== wasHeavy) {
-      this.model?.dispose();
-      this.model = new PlayerModel(this.scene, c === 'heavy' ? 'knight' : 'mannequin');
-      this.model.load();
-    }
+    // One cast for all tiers — the class reads as a scale bump, not a
+    // different model, so a tier swap is a rescale, not a rebuild.
+    this.model?.setScale(CLASS_MODEL_SCALE[c]);
   }
   /** New-life state reset — shared by the wire respawn path and the
    *  offline killLocal respawn so neither forgets a field (a stale buff
@@ -393,9 +390,9 @@ export class Player {
     this.appliedClass = this.armorClass;
     this.movement.setSpeedScale(CLASS_STATS[this.appliedClass].speedScale);
 
-    // Your third-person body wears the class you picked — heavy gets the
-    // knight, everyone else the UAL mannequin (same rule remotes apply).
-    this.model = new PlayerModel(scene, this.appliedClass === 'heavy' ? 'knight' : 'mannequin');
+    // Your third-person body is the mannequin at your tier's silhouette
+    // scale — the same read remotes get (one cast, class reads as bulk).
+    this.model = new PlayerModel(scene, 'mannequin');
     this.visuals = new PlayerVisuals(scene);
 
     // Q-slot skills — reads pos/vel by ref and reaches the assignable on*
@@ -485,6 +482,7 @@ export class Player {
   async loadModel(): Promise<void> {
     if (this.model) {
       await this.model.load();
+      this.model.setScale(CLASS_MODEL_SCALE[this.appliedClass]);
       // Hide model for first-person view
       this.model.setVisible(false);
       // Hide collider gizmo for local player (only show for remote players)

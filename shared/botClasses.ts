@@ -12,6 +12,13 @@ export interface ClassStats { maxHealth: number; speedScale: number }
  *  the loadout menu filter is a convenience, not a boundary. */
 export const HEAVY_ONLY_WEAPONS: ReadonlySet<number> = new Set([4, 7, 15]);
 
+/** Silhouette bump per tier — one cast (mannequin), class reads as bulk:
+ *  heavy a 15% taller/broader frame, light a leaner one. Shared so remotes
+ *  and the local body agree. */
+export const CLASS_MODEL_SCALE: Record<ArmorClass, number> = {
+  light: 0.92, medium: 1.0, heavy: 1.15,
+};
+
 export const CLASS_STATS: Record<ArmorClass, ClassStats> = {
   light:  { maxHealth: -25, speedScale: 1.18 },
   medium: { maxHealth: 0,   speedScale: 1.0 },
