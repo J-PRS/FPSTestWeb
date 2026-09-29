@@ -643,6 +643,9 @@ export class CombatHandler {
     if (result.killed) {
       const victim = this.playerManager.getPlayer(targetId);
       if (victim) weaponStats.recordDeath(this.modeTag, victim.position);
+      weaponStats.recordKillSpeed(this.modeTag,
+        this.playerManager.getPlayer(shooterId)?.velocity ?? null,
+        victim?.velocity ?? null);
       // Duel engagement: first-hit→kill time per shooter+victim pair.
       const duelKey = `${shooterId}|${targetId}`;
       const started = this.duelStart.get(duelKey);

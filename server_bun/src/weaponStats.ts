@@ -36,8 +36,18 @@ interface RoomTable { [mode: string]: ModeTable }
 //   "do flags die on the stand or never reach midfield".
 interface TtkRow { n: number; totalMs: number }
 interface FlagRow { caps: number; holdMs: number; returns: number; dropMs: number }
+// speeds: kill moments binned to 5 m/s buckets for shooter and victim —
+// Tribes balance lives on movement; if kills only happen at low speed
+// the game is a foot-shooter, not a ski game.
+interface SpeedBins { [bucket: string]: number }
+interface SpeedRow { shooter: SpeedBins; victim: SpeedBins }
+// pickups: economy funnel per pickup kind — spawned vs banked vs decayed.
+// A kind that mostly decays means drops outpace collectors (bots under-
+// farm, or the loot isn't worth the detour).
+interface PickupRow { spawned: number; banked: number; decayed: number }
 
 const CELL = 10;
+const SPEED_BIN = 5;
 
 const FLUSH_MS = 60_000;
 const LOGS_DIR = join(import.meta.dir, '..', '..', 'logs');
@@ -48,6 +58,8 @@ class WeaponStats {
   private deaths: { [mode: string]: { [cell: string]: number } } = {};
   private ttk: { [mode: string]: { [source: string]: TtkRow } } = {};
   private flags: { [mode: string]: FlagRow } = {};
+  private speeds: { [mode: string]: SpeedRow } = {};
+  private pickups: { [mode: string]: { [kind: string]: PickupRow } } = {};
   private dirty = false;
 
   private row(mode: string, source: string): WeaponRow {
@@ -94,9 +106,32 @@ class WeaponStats {
     this.dirty = true;
   }
 
-  snapshot(): { byMode: RoomTable; deaths: typeof this.deaths; ttk: typeof this.ttk; flags: typeof this.flags } {
+  /** Kill-moment speeds (m/s) for shooter and victim, 5 m/s buckets. */
+  recordKillSpeed(mode: string, shooterVel: { x: number; y: number; z: number } | null, victimVel: { x: number; y: number; z: number } | null): void {
+    const r = (this.speeds[mode] ??= { shooter: {}, victim: {} });
+    const bin = (v: { x: number; y: number; z: number } | null): string => {
+      if (!v) return 'unk';
+      const s = Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
+      return String(Math.floor(s / SPEED_BIN) * SPEED_BIN);
+    };
+    const sb = bin(shooterVel), vb = bin(victimVel);
+    r.shooter[sb] = (r.shooter[sb] ?? 0) + 1;
+    r.victim[vb] = (r.victim[vb] ?? 0) + 1;
+    this.dirty = true;
+  }
+
+  /** Pickup economy: 'spawned' at drop, 'banked' on collect, 'decayed' on TTL. */
+  recordPickup(mode: string, kind: string, event: 'spawned' | 'banked' | 'decayed'): void {
+    const m = (this.pickups[mode] ??= {});
+    const r = (m[kind] ??= { spawned: 0, banked: 0, decayed: 0 });
+    r[event]++;
+    this.dirty = true;
+  }
+
+  snapshot(): { byMode: RoomTable; deaths: typeof this.deaths; ttk: typeof this.ttk; flags: typeof this.flags; speeds: typeof this.speeds; pickups: typeof this.pickups } {
     return JSON.parse(JSON.stringify({
       byMode: this.table, deaths: this.deaths, ttk: this.ttk, flags: this.flags,
+      speeds: this.speeds, pickups: this.pickups,
     }));
   }
 
@@ -109,6 +144,7 @@ class WeaponStats {
       appendFileSync(STATS_FILE, JSON.stringify({
         ts: new Date().toISOString(), byMode: this.table,
         deaths: this.deaths, ttk: this.ttk, flags: this.flags,
+        speeds: this.speeds, pickups: this.pickups,
       }) + '\n');
     } catch (e) {
       logger.warn('WeaponStats flush failed', e);
