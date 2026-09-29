@@ -131,6 +131,15 @@ surface. Detailed research lives in `_reports/`; this file is the current truth.
   identical server + client prediction), arena domes fade in <80m.
 - Admin API (FPS_ADMIN_TOKEN): /admin/reload hot-swaps a live room's
   map spec + mapUpdate broadcast, /admin/kick, /admin/end, /admin/rooms.
+- Tribes-style base compounds (2026-10-03): _tools/mapgen/gen.py emits
+  a proper T1/T2-ish compound per base — flag pedestal + cover walls +
+  approach ramp, main base shell (wall segments w/ doorway gap, slab
+  roof, gen-room divider), 24m watch tower w/ crow's-nest platform +
+  parapet, annex hut, scattered midfield cover — pos.y sampled from the
+  map's own heightfield per piece (terrain isn't flat anywhere). New
+  maps stonekeep (henge.bin) + bastion (slagheap.bin) in rotation.
+  NOTE: structures are still cover-only, no player collision — towers
+  are perches you can't stand on yet. That's the next map layer.
 - Weapon registry rework (2026-09-30): client/src/weapons.ts SLOT_DEFS is
   the single weapon table — index is the wid, each def carries
   weaponType/rate/config/kick/kind(auto|fan|beam). The four hand-aligned
