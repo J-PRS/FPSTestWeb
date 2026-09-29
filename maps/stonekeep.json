@@ -825,5 +825,11 @@
         "z": 5.581091279163957
       }
     }
-  ]
+  ],
+  "creatures": {
+    "snake": 3,
+    "roller": 3,
+    "totem": 1
+  },
+  "_creatures_notes": "Light neutral wildlife: snakes in the approach gullies, rollers crossing midfield, a lone totem watching the plateau. Hazards, not the match — flag runs stay primary."
 }

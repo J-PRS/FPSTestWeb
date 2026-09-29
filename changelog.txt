@@ -1,3 +1,5 @@
+2026-10-03 - stonekeep joins crossfire with a light server-owned creature pack (snake/roller/totem) - wildlife pressure on the main CTF maps, hazards not the match.
+
 2026-10-03 - bots.ts watchdog split: wdCheckDisplacement/wdCheckRender helpers clear the complexity+depth warnings.
 
 2026-10-03 - flagDrop scenario caught a stale-position flag drop: the tickFlags dead-detector dropped a carried flag without refreshing pos (flag 'teleported' to last tracked spot). Fixed to drop at the corpse. Gnat scenario de-flaked (follow the patrol anchor).
