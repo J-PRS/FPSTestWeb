@@ -265,47 +265,11 @@ export class TeamBots {
 
       // Displacement check — every WD_STUCK_T seconds compare against the
       // anchor, then re-anchor at the current spot.
-      const a = this.wdAnchor.get(bot.playerId);
-      if (!a) {
-        this.wdAnchor.set(bot.playerId, { p: bot.position.clone(), t: 0 });
-      } else {
-        a.t += TeamBots.WD_DT;
-        if (a.t >= TeamBots.WD_STUCK_T) {
-          stuckEval++;
-          const disp = a.p.distanceTo(bot.position);
-          a.p.copy(bot.position);
-          a.t = 0;
-          if (disp < TeamBots.WD_STUCK_D && !this.over) {
-            stuckNow++;
-            if (!this.wdStuck.has(bot.playerId)) {
-              this.wdStuck.add(bot.playerId);
-              log.warn(`bot ${bot.playerId} stuck — only ${disp.toFixed(1)}m net travel in ${TeamBots.WD_STUCK_T}s (wedged or brain loop?)`);
-            }
-          } else if (this.wdStuck.delete(bot.playerId)) {
-            log.info(`bot ${bot.playerId} unstuck — ${disp.toFixed(1)}m net travel`);
-          }
-        }
-      }
+      const evald = this.wdCheckDisplacement(bot);
+      if (evald === 'stuck') { stuckEval++; stuckNow++; }
+      else if (evald === 'ok') stuckEval++;
 
-      // Render-side check — model position vs its own last sample. Feet
-      // sit EYE below the logical pos; we only need the delta.
-      const rp = this.wdRender.get(bot.playerId);
-      const have = bot.model.getModelPosition(_wdPos);
-      if (have) {
-        if (rp) {
-          const renderD = rp.distanceTo(_wdPos);
-          rp.copy(_wdPos);
-          if (logicD > 1.5 && renderD < 0.2 && !this.wdStalled.has(bot.playerId)) {
-            this.wdStalled.add(bot.playerId);
-            log.warn(`bot ${bot.playerId} render stalled — logic moved ${logicD.toFixed(1)}m, model moved ${renderD.toFixed(2)}m (tick/interp not running)`);
-          } else if (renderD > 0.5 && this.wdStalled.has(bot.playerId)) {
-            this.wdStalled.delete(bot.playerId);
-            log.info(`bot ${bot.playerId} render recovered`);
-          }
-        } else {
-          this.wdRender.set(bot.playerId, _wdPos.clone());
-        }
-      }
+      this.wdCheckRender(bot, logicD);
     }
     // Whole-squad freeze: every bot that finished a displacement window
     // this tick came up stuck. Two consecutive all-stuck ticks = brains
@@ -317,6 +281,52 @@ export class TeamBots {
       }
     } else {
       this.wdIdleWindows = 0;
+    }
+  }
+
+  /** One displacement-window verdict for the watchdog: 'stuck' | 'ok' when
+   *  a window just closed, 'pending' while still accumulating. */
+  private wdCheckDisplacement(bot: GameBot): 'stuck' | 'ok' | 'pending' {
+    const a = this.wdAnchor.get(bot.playerId);
+    if (!a) {
+      this.wdAnchor.set(bot.playerId, { p: bot.position.clone(), t: 0 });
+      return 'pending';
+    }
+    a.t += TeamBots.WD_DT;
+    if (a.t < TeamBots.WD_STUCK_T) return 'pending';
+    const disp = a.p.distanceTo(bot.position);
+    a.p.copy(bot.position);
+    a.t = 0;
+    if (disp < TeamBots.WD_STUCK_D && !this.over) {
+      if (!this.wdStuck.has(bot.playerId)) {
+        this.wdStuck.add(bot.playerId);
+        this.deps.logger.warn(`bot ${bot.playerId} stuck — only ${disp.toFixed(1)}m net travel in ${TeamBots.WD_STUCK_T}s (wedged or brain loop?)`);
+      }
+      return 'stuck';
+    }
+    if (this.wdStuck.delete(bot.playerId)) {
+      this.deps.logger.info(`bot ${bot.playerId} unstuck — ${disp.toFixed(1)}m net travel`);
+    }
+    return 'ok';
+  }
+
+  /** Render-side watchdog leg — model position vs its own last sample.
+   *  Feet sit EYE below the logical pos; we only need the delta. */
+  private wdCheckRender(bot: GameBot, logicD: number): void {
+    const have = bot.model.getModelPosition(_wdPos);
+    if (!have) return;
+    const rp = this.wdRender.get(bot.playerId);
+    if (!rp) {
+      this.wdRender.set(bot.playerId, _wdPos.clone());
+      return;
+    }
+    const renderD = rp.distanceTo(_wdPos);
+    rp.copy(_wdPos);
+    if (logicD > 1.5 && renderD < 0.2 && !this.wdStalled.has(bot.playerId)) {
+      this.wdStalled.add(bot.playerId);
+      this.deps.logger.warn(`bot ${bot.playerId} render stalled — logic moved ${logicD.toFixed(1)}m, model moved ${renderD.toFixed(2)}m (tick/interp not running)`);
+    } else if (renderD > 0.5 && this.wdStalled.delete(bot.playerId)) {
+      this.deps.logger.info(`bot ${bot.playerId} render recovered`);
     }
   }
 
