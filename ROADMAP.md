@@ -306,6 +306,15 @@ surface. Detailed research lives in `_reports/`; this file is the current truth.
 - Perf pass (2026-09-26): computeStateHash rolling-FNV (no sort/strings),
   tick fanout hoists, in-place snapshots, 2Hz roster polling, playerId→room
   O(1) index, room hibernation, global player cap (FPS_GLOBAL_MAX_PLAYERS).
+- Frame profiler + budget scheduler (2026-09-26): perfHud marks now split
+  the sim (balls/species/bots/proj) so LOW-FPS dumps name the guilty
+  subsystem. `core/frameBudget.ts` generalizes the bucket pattern —
+  each() chunks queue work under a ms quota across frames, sweep() runs
+  periodic jobs phased by name hash. Brain buckets stagger decision
+  accumulators by id%8 in BallSim/CreatureSim + client species LOD —
+  same-tick spawns no longer spike one frame. Pilots: minimap 25Hz,
+  census 10Hz. Opt-in rule: physics/hit-feedback stay per-frame;
+  expensive non-subtle work budgets.
 
 ### Later / research needed
 - ~~Client prediction + reconciliation for self~~ — DONE: corrections rewind
