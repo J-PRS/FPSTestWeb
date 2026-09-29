@@ -144,7 +144,9 @@ export class ServerBots {
     return this.brains.size;
   }
 
-  /** Prune a bot that was fully removed (room teardown / test hooks). */
+  /** Prune a bot that was fully removed (room teardown / test hooks).
+   *  EVERY keyed structure dies here — retire and teardown both funnel
+   *  through, so a bot id must not outlive its roster entry in any map. */
   untrack(playerId: string): void {
     this.brains.delete(playerId);
     this.loadouts.delete(playerId);
@@ -152,6 +154,10 @@ export class ServerBots {
     this.classes.delete(playerId);
     this.sheepMeter.delete(playerId);
     this.yeetUntil.delete(playerId);
+    this.gearLobT.delete(playerId);
+    this.deadSet.delete(playerId);
+    this.quiet.delete(playerId);
+    this.watchdog.remove(playerId);
     this.room.moveSim.untrack(playerId);
   }
 
@@ -487,13 +493,7 @@ export class ServerBots {
   }
 
   private retire(id: string): void {
-    this.brains.delete(id);
-    this.loadouts.delete(id);
-    this.roles.delete(id);
-    this.sheepMeter.delete(id);
-    this.yeetUntil.delete(id);
-    this.watchdog.remove(id);
-    this.room.moveSim.untrack(id);
+    this.untrack(id);
     this.room.removePlayerCompletely(id, 'botFill', (m, o) => logger.info(m, o));
   }
 

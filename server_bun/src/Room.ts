@@ -575,7 +575,6 @@ export class Room {
       for (const p of [...this.players.getAllPlayers().values()]) {
         if (excess <= 0) break;
         if (!p.isBot) continue;
-        this.bots.untrack(p.id);
         this.removePlayerCompletely(p.id, 'adminReload', () => {});
         excess--;
       }
@@ -589,6 +588,12 @@ export class Room {
 
   /** Full teardown — every store moves together or a slot/token leaks. */
   removePlayerCompletely(playerId: string, reason: string, log: (m: string, o?: object) => void): void {
+    // Bot cleanup funnels here too — callers other than retire/adminReload
+    // (idle reap on a hibernating room, future teardown paths) used to
+    // leave the brain keyed on a gone player forever. Idempotent: retire
+    // already untracked before reaching this.
+    const wasBot = this.players.getPlayer(playerId)?.isBot;
+    if (wasBot) this.bots.untrack(playerId);
     // A carrier leaving drops the flag — same rule as dying with it.
     this.flagCarrierDied(playerId);
     this.deployables.clearOwner(playerId);
