@@ -151,7 +151,6 @@ export class Room {
     this.ballSim = new BallSim(
       this.players,
       (msg) => this.connections.broadcast(msg),
-      (data) => this.connections.broadcastBinary(data),
       (data) => this.connections.broadcastBinaryReliable(data),
     );
     if (this.spec.balls) this.ballSim.population = this.spec.balls;

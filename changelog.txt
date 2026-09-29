@@ -1,3 +1,8 @@
+2026-10-03 - Dead unreliable lanes removed: nothing called the lossy
+    lane after the reliable-lane migration, but it lingered as a
+    fallback anyone could rediscover (RTC ball segments still rode it —
+    the 33% loss readout). broadcastBinary/sendUnreliable deleted on
+    the server; 'game' datachannel stays only as a pre-ctrl fallback.
 2026-10-03 - Move-cheat kick wired: three >60m divergences inside 60s
     fires RoomMoveSim.onCheat, which GameServer routes to kickPlayer.
     Honest ~15m judge-mode drift can never reach the threshold —

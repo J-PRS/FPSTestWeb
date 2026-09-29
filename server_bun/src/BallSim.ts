@@ -61,7 +61,7 @@ export class BallSim {
   private retargetAcc = new Map<number, number>();
   private resyncAcc = new Map<number, number>();
   private broadcast: (msg: ServerMessage) => void;
-  private broadcastBinary: (data: Uint8Array) => void;
+
   /** Reliable lane for segments — a lost resync stamp makes every client
    *  extrapolate a stale leg for ~1.2s (the rubberband storm). */
   private broadcastBinaryReliable: (data: Uint8Array) => void;
@@ -88,12 +88,11 @@ export class BallSim {
     this.colliderIndex = list.length ? new ColliderIndex(list) : null;
   }
 
-  constructor(players: PlayerManager, broadcast: (msg: ServerMessage) => void, broadcastBinary?: (data: Uint8Array) => void,
+  constructor(players: PlayerManager, broadcast: (msg: ServerMessage) => void,
               broadcastBinaryReliable?: (data: Uint8Array) => void) {
     this.players = players;
     this.broadcast = broadcast;
-    this.broadcastBinary = broadcastBinary ?? (() => {});
-    this.broadcastBinaryReliable = broadcastBinaryReliable ?? this.broadcastBinary;
+    this.broadcastBinaryReliable = broadcastBinaryReliable ?? (() => {});
   }
 
   /** Load heightmap from disk and start the tick loop. */

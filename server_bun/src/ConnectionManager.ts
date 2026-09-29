@@ -37,16 +37,6 @@ export class ConnectionManager {
     }
   }
 
-  /** High-rate binary broadcasts (ball segments) — encode once, send raw. */
-  broadcastBinary(data: Uint8Array): void {
-    this.connections.forEach((ws) => {
-      if (ws.readyState === 1) {
-        const w = ws as ServerWebSocket<WebSocketData> & { sendUnreliable?(d: Uint8Array): number };
-        (w.sendUnreliable ?? w.send).call(w, data);
-      }
-    });
-  }
-
   /** Correctness-critical binary (ball segments) — always the reliable
    *  lane. A dropped segment is a resync the client free-runs blind for
    *  ~1.2s, which is exactly the rubberband pattern; a dropped tick frame

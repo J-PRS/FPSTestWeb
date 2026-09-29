@@ -30,9 +30,10 @@ type WtModule = {
 
 /**
  * Socket adapter: a WT session's first bidi stream carries the reliable
- * JSON lane (newline-delimited, matching the client transport), datagrams
- * carry the binary position frames. Presents the ServerWebSocket shape
- * GameServer uses — send/close/readyState/data.
+ * JSON lane (newline-delimited, matching the client transport) — ALL
+ * outbound traffic rides it: measured datagram loss on loopback was
+ * ~47%, so the unreliable lane buys nothing. Presents the
+ * ServerWebSocket shape GameServer uses — send/close/readyState/data.
  */
 class WtSocketAdapter {
   readonly data: WebSocketData = { playerId: '', connectedAt: Date.now() };
@@ -129,12 +130,6 @@ class WtSocketAdapter {
     const bytes = this.encoder.encode(line + '\n');
     void this.writer.write(bytes).catch(() => {});
     return bytes.byteLength;
-  }
-
-  sendUnreliable(data: Uint8Array): number {
-    if (!this.open) return 0;
-    void this.session.sendDatagram(data).catch(() => {});
-    return data.byteLength;
   }
 
   close(_code = 1000, reason = ''): void {

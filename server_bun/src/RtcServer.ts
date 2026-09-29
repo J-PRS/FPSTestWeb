@@ -76,10 +76,11 @@ type DataChannelLabeled = DataChannelLike & { getLabel?(): string; label?: strin
 class RtcSocketAdapter {
   readonly data: WebSocketData = { playerId: '', connectedAt: Date.now() };
   readonly remoteAddress = 'webrtc';
-  // Two lanes per peer: 'game' (unordered/unreliable — ticks, positions)
-  // and 'ctrl' (ordered/reliable — join, claims, events). Reliable traffic
-  // on the lossy channel would silently drop a join; unreliable on ctrl
-  // would retransmit stale frames, so the lanes must not share.
+  // Two lanes per peer: 'game' (unordered/unreliable) and 'ctrl'
+  // (ordered/reliable). All game traffic rides send() → ctrl: a 33%
+  // measured drop rate on the game lane made unreliable sends strictly
+  // worse than reliable, so nothing calls it — game stays only as the
+  // fallback socket until ctrl opens.
   private game: DataChannelLike | null = null;
   private ctrl: DataChannelLike | null = null;
 
@@ -90,14 +91,8 @@ class RtcSocketAdapter {
   }
   get readyState(): number { return this.game?.isOpen() || this.ctrl?.isOpen() ? 1 : 3; }
   send(msg: string | Uint8Array): number {
+    // Reliable lane always — see the lanes note above.
     const dc = this.ctrl ?? this.game;
-    if (!dc?.isOpen()) return 0;
-    if (typeof msg === 'string') dc.sendMessage(msg);
-    else dc.sendMessageBinary(new Uint8Array(msg));
-    return typeof msg === 'string' ? msg.length : msg.byteLength;
-  }
-  sendUnreliable(msg: string | Uint8Array): number {
-    const dc = this.game ?? this.ctrl;
     if (!dc?.isOpen()) return 0;
     if (typeof msg === 'string') dc.sendMessage(msg);
     else dc.sendMessageBinary(new Uint8Array(msg));
