@@ -1,2 +1,3 @@
+2026-10-03 - observability: creature bites log the species (Totem bite, Snake bite, ...) not generic Crawler bite
 2026-10-03 - creatureSim: totem beam eye rides body radius (uber obelisks muzzle at 7m like the client renders) - shared SimTotem.radius
 2026-10-01 - creatureSim: totem family (last species core) - SimTotem aim/charge/fire/blink state machine, committed beam solve + blink destination edges, server-resolved hitscan vs live positions, netDriven client Totem; every family now server-authoritative

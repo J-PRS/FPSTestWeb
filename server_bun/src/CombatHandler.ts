@@ -720,8 +720,9 @@ export class CombatHandler {
   }
 
   /** Server-authored creature bite (CreatureSim). */
-  crawlerAttack(targetId: string, damage: number): void {
-    this.serverHit('environment', targetId, damage, 'Crawler bite', { hb: 'crawlbite' });
+  crawlerAttack(targetId: string, damage: number, species = 'crawler'): void {
+    const label = `${species[0]!.toUpperCase()}${species.slice(1)} bite`;
+    this.serverHit('environment', targetId, damage, label, { hb: 'crawlbite' });
   }
 
   turretAttack(ownerId: string, targetId: string, damage: number): void {

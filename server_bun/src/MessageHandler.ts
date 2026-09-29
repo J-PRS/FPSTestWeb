@@ -198,8 +198,8 @@ export class MessageHandler {
     this.creatureSim = sim;
   }
 
-  crawlerBite(targetId: string, damage: number): void {
-    this.combat.crawlerAttack(targetId, damage);
+  crawlerBite(targetId: string, damage: number, species?: string): void {
+    this.combat.crawlerAttack(targetId, damage, species);
   }
 
   /** Admin hot-reload — re-point the map echo fields so the next gameState
