@@ -78,15 +78,30 @@ class WeaponStats {
   private deploys: { [mode: string]: { [kind: string]: number } } = {};
   private dirty = false;
 
+  // Mode names are client-chosen (any word() on join/switchRoom), so
+  // every per-mode table shares one cap — a spammer minting unique mode
+  // names would otherwise grow these maps (and the jsonl) forever.
+  private static readonly MAX_MODES = 64;
+  private modeOk(mode: string): boolean {
+    if (this.table[mode]) return true;
+    if (Object.keys(this.table).length >= WeaponStats.MAX_MODES) return false;
+    this.table[mode] = {}; // admit — one slot covers every per-mode map
+    return true;
+  }
+
+  private static readonly MAX_SOURCES = 64;
   private row(mode: string, source: string): WeaponRow {
     const m = (this.table[mode] ??= {});
-    return (m[source] ??= { hits: 0, damage: 0, kills: 0, botDamage: 0, botKills: 0 });
+    // Source keys are 'w<client-claimed weaponType>' — arbitrary numbers
+    // mint arbitrary keys, so overflow folds into a shared 'other' row.
+    const key = source in m || Object.keys(m).length < WeaponStats.MAX_SOURCES ? source : 'other';
+    return (m[key] ??= { hits: 0, damage: 0, kills: 0, botDamage: 0, botKills: 0 });
   }
 
   /** Feed one credited hit. `source` is `w<weaponType>` or a label for
    *  non-weapon damage ('Turret hit', 'Mine hit', 'environment'). */
   record(mode: string, source: string, damage: number, killed: boolean, botShooter: boolean): void {
-    if (damage <= 0) return;
+    if (damage <= 0 || !this.modeOk(mode)) return;
     const r = this.row(mode, source);
     r.hits++;
     r.damage += damage;
@@ -100,22 +115,29 @@ class WeaponStats {
 
   /** A kill location, binned to a CELL-meter grid cell. */
   recordDeath(mode: string, pos: { x: number; z: number }): void {
+    if (!this.modeOk(mode)) return;
     const m = (this.deaths[mode] ??= {});
-    const cell = `${Math.round(pos.x / CELL)},${Math.round(pos.z / CELL)}`;
+    // Cell coords derive from client position claims — unbounded
+    // magnitude mints unbounded cells, so overflow folds into 'far'.
+    const raw = `${Math.round(pos.x / CELL)},${Math.round(pos.z / CELL)}`;
+    const cell = raw in m || Object.keys(m).length < 512 ? raw : 'far';
     m[cell] = (m[cell] ?? 0) + 1;
     this.dirty = true;
   }
 
   /** Engagement time for a finished duel (ms, first-hit → kill). */
   recordTtk(mode: string, source: string, ms: number): void {
+    if (!this.modeOk(mode)) return;
     const m = (this.ttk[mode] ??= {});
-    const r = (m[source] ??= { n: 0, totalMs: 0 });
+    const key = source in m || Object.keys(m).length < WeaponStats.MAX_SOURCES ? source : 'other';
+    const r = (m[key] ??= { n: 0, totalMs: 0 });
     r.n++; r.totalMs += ms;
     this.dirty = true;
   }
 
   /** Flag lifecycle: 'cap' adds holdMs (pickup→cap), 'return' dropMs. */
   recordFlag(mode: string, kind: 'cap' | 'return', ms: number): void {
+    if (!this.modeOk(mode)) return;
     const r = (this.flags[mode] ??= { caps: 0, holdMs: 0, returns: 0, dropMs: 0 });
     if (kind === 'cap') { r.caps++; r.holdMs += ms; }
     else { r.returns++; r.dropMs += ms; }
@@ -124,6 +146,7 @@ class WeaponStats {
 
   /** Kill-moment speeds (m/s) for shooter and victim, 5 m/s buckets. */
   recordKillSpeed(mode: string, shooterVel: { x: number; y: number; z: number } | null, victimVel: { x: number; y: number; z: number } | null): void {
+    if (!this.modeOk(mode)) return;
     const r = (this.speeds[mode] ??= { shooter: {}, victim: {}, airShooter: 0, airVictim: 0 });
     const sb = speedBin(shooterVel), vb = speedBin(victimVel);
     r.shooter[sb] = (r.shooter[sb] ?? 0) + 1;
@@ -135,6 +158,7 @@ class WeaponStats {
 
   /** Pickup economy: 'spawned' at drop, 'banked' on collect, 'decayed' on TTL. */
   recordPickup(mode: string, kind: string, event: 'spawned' | 'banked' | 'decayed'): void {
+    if (!this.modeOk(mode)) return;
     const m = (this.pickups[mode] ??= {});
     const r = (m[kind] ??= { spawned: 0, banked: 0, decayed: 0 });
     r[event]++;
@@ -143,6 +167,7 @@ class WeaponStats {
 
   /** A deployable was placed (turret/mine/station/drone). */
   recordDeploy(mode: string, kind: string): void {
+    if (!this.modeOk(mode)) return;
     const m = (this.deploys[mode] ??= {});
     m[kind] = (m[kind] ?? 0) + 1;
     this.dirty = true;

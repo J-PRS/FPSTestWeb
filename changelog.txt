@@ -1,3 +1,4 @@
+2026-09-29 - Cap weaponStats key cardinality: mode names (join/switchRoom word), 'w<weaponType>' sources, and death-cell coords are all client-shaped — each minted unbounded map keys in memory and in the jsonl rollup forever. Modes cap at 64, sources fold to 'other', cells fold to 'far'.
 2026-09-29 - Bound free-form heal claims: team rooms gate heals behind server credit, but non-team rooms accept any claim — 25hp at 10/s was a standing invincibility cheat. Heal bucket now 3 per 2s (~37hp/s ceiling, real DPS still out-damages it).
 2026-09-29 - Block room hops while dead: reseating runs addPlayer, which spawns alive — a dead player could dodge the entire respawn delay by switching rooms.
 2026-09-29 - Run teardown on locally-initiated WT socket closes: close() set open=false before the session could signal closed, so die() early-returned and game.onClose never ran — kicked/idle-reaped/spectator-evicted WebTransport players stayed registered as zombies forever.
