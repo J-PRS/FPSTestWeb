@@ -9,6 +9,7 @@ TABS = [
     ('light',  'poses-light',  'poses-light'),
     ('medium', 'poses-medium', 'poses-medium'),
     ('heavy',  'poses-heavy',  'poses-heavy'),
+    ('live',   'live',        'live'),
 ]
 # Legacy reference sets stay below the tabs, collapsed.
 LEGACY = [
