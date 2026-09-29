@@ -138,8 +138,13 @@ surface. Detailed research lives in `_reports/`; this file is the current truth.
   parapet, annex hut, scattered midfield cover — pos.y sampled from the
   map's own heightfield per piece (terrain isn't flat anywhere). New
   maps stonekeep (henge.bin) + bastion (slagheap.bin) in rotation.
-  NOTE: structures are still cover-only, no player collision — towers
-  are perches you can't stand on yet. That's the next map layer.
+  Solid layer landed (259c617): shared/solidWorld.ts resolves capsule-
+  vs-OBB inside MoveSim — tops are floors (getHeight reports them),
+  walls push out laterally below a 0.55m step-up, undersides act as
+  ceilings. Server FieldSurface + client TerrainSurface share it;
+  bot brains fold structureTop into groundY (walls read as raised
+  terrain) and a 2-window stuck streak escalates to a jet escape.
+  Soak: 0 stuck warns, 9 corrections, converging.
 - Weapon registry rework (2026-09-30): client/src/weapons.ts SLOT_DEFS is
   the single weapon table — index is the wid, each def carries
   weaponType/rate/config/kick/kind(auto|fan|beam). The four hand-aligned
