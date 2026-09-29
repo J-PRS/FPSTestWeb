@@ -1,3 +1,5 @@
+2026-10-03 - AGENTS.md + .devin/rules (netcode, testing, determinism-perf) researched from agents.md convention + Devin docs; baneling detonate fixed (terminal homing + fuse radius) - 8/8 scenarios green
+2026-10-03 - Scenario test suite (tests/scenarios/: duel, creature bite, flag cap, projectile hit, spawn protection) + deterministic CreatureSim.step + MatchClock extracted from Room
 2026-10-03 - refactor: CombatHandler blast knockback deduped into shove() helper
 2026-10-03 - refactor: creatureSim.ts split into per-family modules (creatureCore/Flyer/Roller/Slither/Baneling/Totem) behind a facade - 1113->15 lines, zero consumer changes
 2026-10-03 - refactor: ball trail-dot FX extracted to entities/ballTrails.ts (BallTrailDots) - balls.ts 937->811

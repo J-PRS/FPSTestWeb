@@ -14,7 +14,9 @@ export const BANELING_SIM = {
   ACCEL: 22.0,
   TOPSPEED: 20.0,
   AGGRO_D2: 140 * 140,   // born homing — a wide chase envelope
-  FUSE_D2: 2.6 * 2.6,    // 3D proximity pop
+  // Player capsule + sac radius stop it ~3m out via clipMotion — the fuse
+  // must cover contact distance, else it orbits the body and never pops.
+  FUSE_D2: 4.2 * 4.2,    // 3D proximity pop (includes body radii)
   LIFE_S: 25.0,          // self-detonates eventually
   STUN_S: 0.3,           // a hit staggers the fuse run
 } as const;
@@ -86,6 +88,16 @@ export function stepBaneling(
     const k = c.sp.ACCEL * (aggro ? 1 : 0.2) * dt;
     c.vx += (dx / d) * k;
     c.vz += (dz / d) * k;
+    // Terminal homing: inside the last stretch, bleed sideways speed so the
+    // sac settles onto the target instead of orbiting it at TOPSPEED and
+    // never entering fuse range.
+    if (aggro && d < 12) {
+      const drag = Math.min(1, 6 * dt);
+      c.vx *= 1 - drag;
+      c.vz *= 1 - drag;
+      const s = Math.min(c.sp.TOPSPEED, d * 4 + 1);
+      if (d > 0.01) { c.vx += (dx / d) * s; c.vz += (dz / d) * s; }
+    }
   }
 
   const hSpeed = Math.hypot(c.vx, c.vz);
