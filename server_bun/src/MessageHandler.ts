@@ -144,7 +144,7 @@ export class MessageHandler {
       },
       inputMove: (id, m) => {
         const p = this.playerManager.getPlayer(id);
-        if (!p) return;
+        if (!p || p.isDead) return;
         const msg = m as Extract<ClientMessage, { type: 'inputMove' }>;
         const i = msg.input;
         // Stale input events (reordered datagrams) must not touch skiing/
