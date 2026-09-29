@@ -1,3 +1,7 @@
+2026-10-03 - RoomMoveSim.reconcile split: divergence bookkeeping
+    (counter, health metrics, transient-vs-blow-through log gate)
+    extracted to noteDivergence — the reconcile path now reads
+    seed → stale-epoch → anchored compare → tolerance → correct.
 2026-10-03 - server.ts fetch routing: the three websocket endpoints
     shared an upgrade idiom — extracted to wsUpgrade (undefined on
     success, 400 on refusal). Clears the fetch complexity warning.

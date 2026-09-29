@@ -90,8 +90,8 @@ interface Shadow {
    *  them so they honestly report the corpse position with fresh seqs
    *  the stale-epoch check can't catch. */
   resyncAt: number;
-  /** Tick substeps accumulate in the client's 1/30 quantum so the shadow
-   *  integrates identically to the client sim despite the 50ms room tick. */
+  /** Step-count residue — simTicks counts MoveSim.STEP quanta; the
+   *  fraction of a step dt didn't complete carries into the next tick. */
   acc: number;
 }
 
@@ -300,19 +300,7 @@ export class RoomMoveSim {
     const tol = this.divergenceM * (1 + speed / RoomMoveSim.SPEED_TOL_REF);
     if (dist <= tol) return null;
 
-    sh.divergences++;
-    if (this.health) {
-      this.health.set('diverge', (this.health.get('diverge') ?? 0) + 1);
-      if (dist > (this.health.get('gapMax') ?? 0)) this.health.set('gapMax', Math.round(dist * 10) / 10);
-    }
-    // A single just-over-tolerance clip is a crest-lip contact-timing
-    // gap — the next correction converges it, count never accumulates.
-    // WARN only on repeats or blow-throughs; count=1 marginal clips are
-    // the known noise floor and stay INFO for later review.
-    const transient = dist < tol * 1.5;
-    if (sh.divergences === 1 || sh.divergences % 20 === 0) {
-      logger[transient ? 'info' : 'warn']('Move sim divergence', { playerId, dist: dist.toFixed(1), tol: tol.toFixed(1), count: sh.divergences });
-    }
+    this.noteDivergence(sh, playerId, pos, reportInputSeq, dist, tol);
     const now = Date.now();
     if (now - sh.lastCorrection < this.correctMs) return null;
     sh.lastCorrection = now;
@@ -328,6 +316,29 @@ export class RoomMoveSim {
       inputSeq: sh.lastInputSeq,
     };
     return truth;
+  }
+
+  /** Divergence bookkeeping — counter for future kicks, health metrics,
+   *  and the log gate: a single just-over-tolerance clip is a crest-lip
+   *  contact-timing gap (the next correction converges it), so WARN only
+   *  on repeats or blow-throughs; count=1 marginal clips are the known
+   *  noise floor and stay INFO for later review. */
+  private noteDivergence(sh: Shadow, playerId: string, pos: Vec3Like, reportInputSeq: number | undefined, dist: number, tol: number): void {
+    sh.divergences++;
+    if (this.health) {
+      this.health.set('diverge', (this.health.get('diverge') ?? 0) + 1);
+      if (dist > (this.health.get('gapMax') ?? 0)) this.health.set('gapMax', Math.round(dist * 10) / 10);
+    }
+    const transient = dist < tol * 1.5;
+    if (sh.divergences !== 1 && sh.divergences % 20 !== 0) return;
+    const s = sh.sim.state;
+    logger[transient ? 'info' : 'warn']('Move sim divergence', {
+      playerId, dist: dist.toFixed(1), tol: tol.toFixed(1), count: sh.divergences,
+      simTicks: sh.simTicks, inSeq: sh.lastInputSeq, repSeq: reportInputSeq,
+      inp: `${sh.sim.input.forward},${sh.sim.input.right},${sh.sim.input.skiHeld ? 1 : 0},${sh.sim.input.jetHeld ? 1 : 0}`,
+      simPos: `${s.pos.x.toFixed(1)},${s.pos.y.toFixed(1)},${s.pos.z.toFixed(1)}`,
+      repPos: `${pos.x.toFixed(1)},${pos.y.toFixed(1)},${pos.z.toFixed(1)}`,
+    });
   }
 
   /** Pick the sim state a seq-stamped report should be compared against.
@@ -351,7 +362,7 @@ export class RoomMoveSim {
     const probe = (sh.probe ??= new MoveSim(this.surface!, from));
     probe.setState(from);
     Object.assign(probe.input, sh.sim.input);
-    for (let i = 0, n = Math.min(steps, 8); i < n; i++) probe.update(1 / 30);
+    for (let i = 0, n = Math.min(steps, 16); i < n; i++) probe.update(MoveSim.STEP);
     return probe.state;
   }
 
@@ -392,15 +403,14 @@ export class RoomMoveSim {
       }
       sh.energy = Math.max(0, sh.energy);
       sh.sim.setInput({ jetHeld: jetting });
-      // Integrate in the client's 1/30 quanta — the room tick is 50ms, and
-      // a single 50ms step resolves ski/ground contact differently than
-      // the client's 33ms steps, producing a permanent ~2m divergence.
+      // MoveSim.update() sub-steps internally at its own 1/60 quantum —
+      // feed it the raw tick delta. Count consumed steps ourselves for
+      // the seq-anchored journal (simTicks is in STEP quanta).
+      sh.sim.update(dt);
       sh.acc += dt;
-      while (sh.acc >= 1 / 30) {
-        sh.acc -= 1 / 30;
-        sh.sim.update(1 / 30);
-        sh.simTicks++;
-      }
+      const steps = Math.floor(sh.acc / MoveSim.STEP);
+      sh.acc -= steps * MoveSim.STEP;
+      sh.simTicks += steps;
     }
   }
 
