@@ -180,6 +180,7 @@ export class Room {
       },
     );
     this.moveSim = new RoomMoveSim(field, this.moveAuthority);
+    this.moveSim.attachStructures(this.spec.structures);
     // Shield soak burns the same tank the jet model owns — without this
     // a shielded player under fire runs the sim tank ahead of the real one.
     this.players.energyBurn = (pid, n) => this.moveSim.drainEnergy(pid, n);
@@ -552,6 +553,7 @@ export class Room {
     this.spec = spec;
     if (spec.spawns) this.players.spawnPoints = spec.spawns;
     this.ballSim.colliders = structureColliders(spec.structures);
+    this.moveSim.attachStructures(spec.structures);
     if (spec.balls) this.ballSim.population = spec.balls;
     if (spec.ballMix) this.ballSim.ballMix = spec.ballMix;
     this.messages.setMap(spec.bases, spec.structures, spec.arena, spec.ambient, spec.terrain);

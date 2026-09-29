@@ -630,7 +630,12 @@ export class ServerBots {
         // Gem-economy rooms make hunting creatures the actual objective;
         // elsewhere food is just a distraction and this stays unset.
         huntCreatures: this.room.mode === 'nuggets',
-        groundY: (x, z) => (this.field ? hmHeight(this.field, x, z) : p.position.y),
+        // Structures read as raised ground — brains route around walls
+        // and onto platforms instead of pushing into solid geometry.
+        groundY: (x, z) => Math.max(
+          this.field ? hmHeight(this.field, x, z) : p.position.y,
+          this.room.moveSim.structureTop(x, z),
+        ),
         others: this.othersOf(p),
         // The shadow tank is the truth — brains read it to gate jets,
         // shields, mends. Null field → undefined → full-tank behavior.
@@ -715,7 +720,10 @@ export class ServerBots {
         const speed = isSuper(id) ? SPEED * 3 : SPEED;
         p.velocity.x = nx * speed;
         p.velocity.z = nz * speed;
-        const groundY = this.field ? hmHeight(this.field, p.position.x, p.position.z) : p.position.y;
+        const groundY = Math.max(
+          this.field ? hmHeight(this.field, p.position.x, p.position.z) : p.position.y,
+          this.room.moveSim.structureTop(p.position.x, p.position.z),
+        );
         // p.position is EYE-height (the wire convention — clients render
         // feet at pos.y - EYE_OFFSET); groundY+0.1 parked the model 1.7m
         // underground.

@@ -2,6 +2,8 @@ import { MoveSim, ENERGY, type MoveInput, type MoveState, type Vec3Like } from '
 import { STATUS } from '../../shared/status.ts';
 import { perkMods } from '../../shared/perks.ts';
 import { hmHeight, hmNormal, type Heightfield } from '../../shared/heightfield.ts';
+import { SolidWorld } from '../../shared/solidWorld.ts';
+import type { StructureSpec } from '../../shared/mapSpec.ts';
 import { logger } from './logger.ts';
 
 /**
@@ -18,12 +20,24 @@ import { logger } from './logger.ts';
  * divergence is logged so it can feed kicks later.
  */
 class FieldSurface {
+  /** Map structures layered over the terrain — getHeight reports their
+   *  top faces as floor, resolveBody handles walls/ceilings. Lives on
+   *  the surface object so existing sims pick up late attach transparently. */
+  solid: SolidWorld | null = null;
+
   constructor(private f: Heightfield) {}
-  getHeight(x: number, z: number): number { return hmHeight(this.f, x, z); }
+  getHeight(x: number, z: number): number {
+    const g = hmHeight(this.f, x, z);
+    const t = this.solid?.topAt(x, z) ?? -Infinity;
+    return t > g ? t : g;
+  }
   getNormal(x: number, z: number, out: Vec3Like): Vec3Like {
+    const t = this.solid?.topAt(x, z) ?? -Infinity;
+    if (t > hmHeight(this.f, x, z)) { out.x = 0; out.y = 1; out.z = 0; return out; }
     hmNormal(this.f, x, z, out as { x: number; y: number; z: number });
     return out;
   }
+  resolveBody(s: MoveState): void { this.solid?.resolveBody(s); }
 }
 
 interface Shadow {
@@ -83,6 +97,9 @@ interface Shadow {
 
 export class RoomMoveSim {
   private surface: FieldSurface | null;
+  /** Structures held independently of the surface — they can arrive
+   *  before OR after the heightfield, and either order must work. */
+  private solid: SolidWorld | null = null;
   private shadows = new Map<string, Shadow>();
   // Judge mode tolerates prediction noise; authority mode is truth — the
   // client needs tight, frequent acks or its prediction drifts for real.
@@ -120,6 +137,7 @@ export class RoomMoveSim {
    *  the join window would otherwise surface as a one-off divergence. */
   attachField(field: Heightfield, reportedPos?: (playerId: string) => Vec3Like | undefined): void {
     this.surface = new FieldSurface(field);
+    this.surface.solid = this.solid;
     this.authoritative = this.wantsAuthority;
     for (const [pid, sh] of this.shadows) {
       const old = sh.sim;
@@ -141,6 +159,19 @@ export class RoomMoveSim {
   }
   private get correctMs(): number {
     return this.authoritative ? RoomMoveSim.AUTHORITY_CORRECT_MS : RoomMoveSim.CORRECT_MS;
+  }
+
+  /** Map structures layered over the field — solid walls and walkable
+   *  tops for every sim already tracking (the surface object is shared). */
+  attachStructures(list: readonly StructureSpec[] | undefined): void {
+    this.solid = list?.length ? SolidWorld.fromSpecs(list) : null;
+    if (this.surface) this.surface.solid = this.solid;
+  }
+
+  /** Structure top face under (x,z), -Infinity when none — bot brains
+   *  fold this into their ground model so walls read as raised terrain. */
+  structureTop(x: number, z: number): number {
+    return this.solid?.topAt(x, z) ?? -Infinity;
   }
 
   /** Call on join/spawn — seeds the sim at the reported spot. */

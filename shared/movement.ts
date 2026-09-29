@@ -65,6 +65,10 @@ export interface MoveInput {
 export interface MoveSurface {
   getHeight(x: number, z: number): number;
   getNormal(x: number, z: number, out: Vec3Like): Vec3Like;
+  /** Solid-layer push-out (map structures): surfaces that layer boxes
+   *  over terrain resolve wall/ceiling contact here, before the floor
+   *  clamp. Plain heightfield surfaces leave it undefined. */
+  resolveBody?(s: MoveState): void;
 }
 
 export const GRAVITY = -28.0;
@@ -261,6 +265,9 @@ export class MoveSim {
 
   private collideTerrain(): void {
     const s = this.state;
+    // Solid layers push the capsule out of walls/ceilings first — the
+    // floor clamp below only owns top faces.
+    this.surface.resolveBody?.(s);
     const groundY = this.surface.getHeight(s.pos.x, s.pos.z) + MOVEMENT_CONFIG.playerHeight;
     const dist = s.pos.y - groundY;
 

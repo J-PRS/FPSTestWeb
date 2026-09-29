@@ -33,7 +33,7 @@ export function makeDeps() {
     absorbShieldDamage() {}, applyPull() {}, applyKnockback() {},
     heal() {}, grantJetBoost() {}, syncMovement() {},
     movement: {
-      setState() {}, setInput() {}, update() {},
+      setState() {}, setInput() {}, update() {}, setStructures() {},
       getState: () => ({ pos: new THREE.Vector3(), vel: new THREE.Vector3(), onGround: true }),
     },
   };

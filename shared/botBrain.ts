@@ -169,6 +169,10 @@ export class BotBrain {
   private progressT = 0;
   private detour: BotVec | null = null;
   private detourT = 0;
+  /** Consecutive no-progress windows — a sidestep that also fails means
+   *  a wall pocket, so the streak escalates to a jet escape burst. */
+  private stuckStreak = 0;
+  private escapeJetT = 0;
   private heading = { x: 1, z: 0 };
   private memory: { x: number; z: number; t: number }[] = [];
   private memT = 0;
@@ -291,6 +295,7 @@ export class BotBrain {
     // detourT decays here, with the other timers — decrementing it inside
     // the dest block below would let the setting call's dt eat the window.
     this.detourT -= dt;
+    this.escapeJetT -= dt;
     this.revengeT -= dt;
 
     // --- choose the step destination ---
@@ -340,13 +345,21 @@ export class BotBrain {
     this.progressT += dt;
     if (this.progressT >= 1.5) {
       this.progressT = 0;
-      if (distSq(pos, this.progressPos) < 2.25 && this.detourT <= 0) {
-        const gx = this.goal.x - pos.x, gz = this.goal.z - pos.z;
-        const gl = Math.hypot(gx, gz) || 1;
-        const side = Math.random() < 0.5 ? -1 : 1;
-        const dx = (-gz / gl) * side * 14, dz = (gx / gl) * side * 14;
-        this.detour = { x: pos.x + dx, y: ctx.groundY(pos.x + dx, pos.z + dz) + BOT_EYE, z: pos.z + dz };
-        this.detourT = 1.2;
+      if (distSq(pos, this.progressPos) < 2.25) {
+        this.stuckStreak++;
+        if (this.detourT <= 0) {
+          const gx = this.goal.x - pos.x, gz = this.goal.z - pos.z;
+          const gl = Math.hypot(gx, gz) || 1;
+          const side = Math.random() < 0.5 ? -1 : 1;
+          const dx = (-gz / gl) * side * 14, dz = (gx / gl) * side * 14;
+          this.detour = { x: pos.x + dx, y: ctx.groundY(pos.x + dx, pos.z + dz) + BOT_EYE, z: pos.z + dz };
+          this.detourT = 1.2;
+        }
+        // Pinned through a detour = a wall pocket every sideways probe
+        // is a face — thrust up and over is the legal way out.
+        if (this.stuckStreak >= 2) this.escapeJetT = Math.max(this.escapeJetT, 1.1);
+      } else {
+        this.stuckStreak = 0;
       }
       this.progressPos = { ...pos };
     }
@@ -557,7 +570,7 @@ export class BotBrain {
       // pedestrian, which is exactly the sheep behavior the watchdog
       // now flags. Friction/jets sort out the uphill cost.
       ski: true,
-      jet: (uphill || targetHigh || destHigh || hop || boost) && tanked,
+      jet: (uphill || targetHigh || destHigh || hop || boost || this.escapeJetT > 0) && tanked,
       // Uphill + near-stationary = hop it; autohop chains the rest.
       jump: uphill && speed < 3 && !airborne,
     };

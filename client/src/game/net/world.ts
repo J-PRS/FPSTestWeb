@@ -41,6 +41,7 @@ export function wireWorld(ctx: NetCtx): void {
   networkManager.onMapUpdate = (map) => {
     buildStructures(map.structures ?? [], deps.lazyScene());
     Ball.colliders = structureColliders(map.structures);
+    deps.lazyPlayer().movement.setStructures(map.structures);
     if (map.arena) {
       buildArenaDome(map.arena, deps.lazyTerrain().getHeight(map.arena.x, map.arena.z), deps.lazyScene());
     } else {
@@ -134,6 +135,9 @@ function applyMapSnapshot(ctx: NetCtx, map?: MapSnapshot): void {
   // Same collider list the server sims against — ball prediction
   // ricochets off structures identically instead of phasing through.
   Ball.colliders = structureColliders(map?.structures);
+  // Player collision — the move sim's solid layer must hold the same
+  // pieces or every wall contact reads as a divergence.
+  deps.lazyPlayer().movement.setStructures(map?.structures);
   if (map?.arena) {
     buildArenaDome(map.arena, deps.lazyTerrain().getHeight(map.arena.x, map.arena.z), deps.lazyScene());
   } else {
