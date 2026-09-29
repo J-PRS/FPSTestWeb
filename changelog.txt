@@ -1,3 +1,10 @@
+2026-10-03 - ServerBots de-warned: tick split into senses (the brain's
+    sensorium), applyStatus (client-bit claim), firePhase (trigger,
+    belt, gear lob, deploy), driveMove (legal sim-input path) and
+    legacyMove (fieldless fallback). fireAt → fireAtBall +
+    fireFallback; flagGoal situation table + escortSpot;
+    rebalanceRoles → rebalanceTeam. All oxlint warnings cleared
+    in the file.
 2026-10-03 - Watchdog call signatures folded: checkSheep takes a
     MobilitySample (trying/ski/airborne/jetting/dt) and
     checkSheepMeter a sample object — clears both max-params

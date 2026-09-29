@@ -17,11 +17,11 @@ import type { Vec3 } from './types.ts';
 import type { Room } from './Room.ts';
 import { hmHeight, type Heightfield } from '../../shared/heightfield.ts';
 import { EYE_OFFSET } from '../../shared/constants.ts';
-import { BotBrain, type BotEnemy, type BotVec, type BrainOut } from '../../shared/botBrain.ts';
+import { BotBrain, type BotEnemy, type BotVec, type BrainCtx, type BrainOut } from '../../shared/botBrain.ts';
 import { logger } from './logger.ts';
 import { STATUS, CLIENT_STATUS_MASK } from '../../shared/status.ts';
 import { WeaponType, getWeaponStats } from '../../shared/weapons.ts';
-import { GRAVITY } from '../../shared/movement.ts';
+import { GRAVITY, type MoveState } from '../../shared/movement.ts';
 import type { PerkId } from '../../shared/perks.ts';
 import { CLASS_STATS, type ArmorClass } from '../../shared/botClasses.ts';
 import { roleObjective, ROLE_PRIORITY, type BotRole } from '../../shared/flagGoals.ts';
@@ -192,24 +192,8 @@ export class ServerBots {
    *  distance roll decides damage, the visible bolt follows the aim error
    *  so a miss reads as a miss. */
   private fireAt(p: { id: string; position: Vec3; velocity: Vec3 }, targetId: string, aim: Vec3): void {
-    // Creature targets route through the same claim funnel a client's
-    // creatureHit uses — plausibility check and all — so a bot kill drops
-    // its gem/FFA point identically.
     if (targetId.startsWith('b:')) {
-      const ball = Number(targetId.slice(2));
-      const dxb = aim.x - p.position.x;
-      const dyb = aim.y - p.position.y;
-      const dzb = aim.z - p.position.z;
-      const lenb = Math.sqrt(dxb * dxb + dyb * dyb + dzb * dzb) || 1;
-      this.room.messages.botFire(
-        p.id, null,
-        { x: p.position.x, y: p.position.y + 1.4, z: p.position.z },
-        { x: (dxb / lenb) * BOLT_SPEED, y: (dyb / lenb) * BOLT_SPEED, z: (dzb / lenb) * BOLT_SPEED },
-        3, false,
-      );
-      if (isSuper(p.id) || Math.random() < Math.max(0.15, 0.6 - lenb / 200)) {
-        this.room.ballSim.handleHit(p.id, ball, isSuper(p.id) ? 30 : 8);
-      }
+      this.fireAtBall(p, Number(targetId.slice(2)), aim);
       return;
     }
     const target = this.room.players.getPlayer(targetId);
@@ -246,15 +230,38 @@ export class ServerBots {
     const alen = Math.sqrt(ax * ax + ay * ay + az * az) || 1;
     const dir = { x: ax / alen, y: ay / alen, z: az / alen };
     if (!this.room.projectiles.spawn(p.id, wt, muzzle, dir, p.velocity)) {
-      // Spawn refused (owner gone / hitscan stat line like Chaingun) —
-      // rolled-tracer fallback keeps the bot armed rather than disarmed.
-      const hit = isSuper(p.id) || Math.random() < Math.max(0.15, 0.6 - dist / 200);
-      this.room.messages.botFire(
-        p.id, hit ? targetId : null, muzzle,
-        { x: dir.x * BOLT_SPEED, y: dir.y * BOLT_SPEED, z: dir.z * BOLT_SPEED },
-        wt, hit,
-      );
+      this.fireFallback(p.id, targetId, muzzle, dir, wt, dist);
     }
+  }
+
+  /** Creature targets route through the same claim funnel a client's
+   *  creatureHit uses — plausibility check and all — so a bot kill drops
+   *  its gem/FFA point identically. */
+  private fireAtBall(p: { id: string; position: Vec3 }, ball: number, aim: Vec3): void {
+    const dxb = aim.x - p.position.x;
+    const dyb = aim.y - p.position.y;
+    const dzb = aim.z - p.position.z;
+    const lenb = Math.sqrt(dxb * dxb + dyb * dyb + dzb * dzb) || 1;
+    this.room.messages.botFire(
+      p.id, null,
+      { x: p.position.x, y: p.position.y + 1.4, z: p.position.z },
+      { x: (dxb / lenb) * BOLT_SPEED, y: (dyb / lenb) * BOLT_SPEED, z: (dzb / lenb) * BOLT_SPEED },
+      3, false,
+    );
+    if (isSuper(p.id) || Math.random() < Math.max(0.15, 0.6 - lenb / 200)) {
+      this.room.ballSim.handleHit(p.id, ball, isSuper(p.id) ? 30 : 8);
+    }
+  }
+
+  /** Spawn refused (owner gone / hitscan stat line like Chaingun) —
+   *  rolled-tracer fallback keeps the bot armed rather than disarmed. */
+  private fireFallback(id: string, targetId: string, muzzle: Vec3, dir: Vec3, wt: number, dist: number): void {
+    const hit = isSuper(id) || Math.random() < Math.max(0.15, 0.6 - dist / 200);
+    this.room.messages.botFire(
+      id, hit ? targetId : null, muzzle,
+      { x: dir.x * BOLT_SPEED, y: dir.y * BOLT_SPEED, z: dir.z * BOLT_SPEED },
+      wt, hit,
+    );
   }
 
   /** Belt throw — a lobbed grenade at the hunt's last-seen spot. Same
@@ -337,34 +344,33 @@ export class ServerBots {
     const flags = this.room.flags;
     if (!flags || !p.team) return null;
     const me = p.team as 'alpha' | 'bravo';
-    const enemyTeam = me === 'alpha' ? 'bravo' : 'alpha';
-    const enemy = flags.flags.get(enemyTeam);
+    const enemy = flags.flags.get(me === 'alpha' ? 'bravo' : 'alpha');
     const own = flags.flags.get(me);
     if (!enemy || !own) return null;
-    const homeward = { pos: own.home, infiltrating: false };
-    if (enemy.carrier === p.id) return homeward;
-    const role = this.roles.get(p.id) ?? 'offense';
+    if (enemy.carrier === p.id) return { pos: own.home, infiltrating: false };
 
-    // Own flag's carrier — chase the thief, not the base.
-    const thief = own.state === 'carried' && own.carrier
-      ? this.room.players.getPlayer(own.carrier) : null;
-    // Own flag dropped — anyone close enough touches it home.
-    const dropped = own.state === 'dropped' ? own.pos : null;
-    const enemyStandPos = enemy.state !== 'carried' ? enemy.pos : null;
-    const escortP = enemy.carrier ? this.room.players.getPlayer(enemy.carrier) : null;
-    const escortPos = escortP && escortP.team === me ? escortP.position : null;
-
+    const enemyStand = enemy.state !== 'carried' ? enemy.pos : null;
     // One role table for both runtimes — shared/flagGoals.ts.
-    const pick = roleObjective(role, {
+    const pick = roleObjective(this.roles.get(p.id) ?? 'offense', {
       home: own.home,
-      thief: thief?.position ?? null,
-      dropped,
-      enemyStand: enemyStandPos,
-      escort: escortPos,
+      // Own flag's carrier — chase the thief, not the base.
+      thief: own.state === 'carried' && own.carrier
+        ? this.room.players.getPlayer(own.carrier)?.position ?? null : null,
+      // Own flag dropped — anyone close enough touches it home.
+      dropped: own.state === 'dropped' ? own.pos : null,
+      enemyStand,
+      escort: this.escortSpot(enemy.carrier, me),
     });
     // Pressing the enemy stand is the infiltrate signal — the brain reads
     // it as cloak intent on the approach.
-    return { pos: pick, infiltrating: pick === enemyStandPos && enemyStandPos !== null };
+    return { pos: pick, infiltrating: pick === enemyStand && enemyStand !== null };
+  }
+
+  /** A teammate carrying the enemy flag is the escort point — the
+   *  carrier's position is already on the wire, no wallhack needed. */
+  private escortSpot(carrier: string | null | undefined, me: 'alpha' | 'bravo'): Vec3 | null {
+    const escortP = carrier ? this.room.players.getPlayer(carrier) : null;
+    return escortP && escortP.team === me ? escortP.position : null;
   }
 
   /** Apply the armor class to a live bot record: maxHealth shifts and
@@ -403,42 +409,41 @@ export class ServerBots {
       if (!p?.team) continue;
       (byTeam.get(p.team) ?? byTeam.set(p.team, []).get(p.team)!).push(id);
     }
-    // Core before luxury — shared ROLE_PRIORITY table (capper@3 …
-    // infiltrator@7): a 3-stack gets capper+LD, specialists only show
-    // once the lanes they free up are actually covered.
-    const WANT = ROLE_PRIORITY;
-    for (const ids of byTeam.values()) {
-      // Never reassign a carrier — the flagGoal carrier check owns them.
-      const free = ids.filter((id) => {
-        const p = this.room.players.getPlayer(id);
-        if (!p || p.isDead) return true; // corpses re-role freely on respawn
-        for (const f of this.room.flags!.flags.values()) {
-          if (f.carrier === id) return false;
-        }
-        return true;
-      });
-      // Specialists are sticky: donors only come from the generic pool
-      // (offense/defense), and a bot is consumed once per cycle — else the
-      // same body flip-flops capper→hof→technician on every pass.
-      const isSpecial = (id: string) => WANT.some((w) => this.roles.get(id) === w.role);
-      const donors = free.filter((id) => !isSpecial(id));
-      for (let i = 0; i < WANT.length; i++) {
-        const { role: want, want: need, minSquad } = WANT[i]!;
-        if (ids.length < minSquad) break;
-        let have = 0;
-        for (const id of ids) if (this.roles.get(id) === want) have++;
-        while (have < need) {
-          const donor = donors.shift();
-          if (!donor) break;
-          this.roles.set(donor, want);
-          const donorP = this.room.players.getPlayer(donor);
-          if (donorP) this.applyClass(donorP, ROLE_CLASS[want]);
-          // Technician is the only role that promises the deploy kit —
-          // pin its builder trait instead of trusting the spawn roll.
-          if (want === 'technician') this.brains.get(donor)?.setBuilder(true);
-          logger.info('Bot role', { id: donor, role: want, room: this.room.name });
-          have++;
-        }
+    for (const ids of byTeam.values()) this.rebalanceTeam(ids);
+  }
+
+  /** One team's role fill: walk ROLE_PRIORITY (capper@3 … infiltrator@7)
+   *  so a 3-stack gets capper+LD and specialists only show once the
+   *  lanes they free up are actually covered. */
+  private rebalanceTeam(ids: string[]): void {
+    // Never reassign a carrier — the flagGoal carrier check owns them.
+    const free = ids.filter((id) => {
+      const p = this.room.players.getPlayer(id);
+      if (!p || p.isDead) return true; // corpses re-role freely on respawn
+      for (const f of this.room.flags!.flags.values()) {
+        if (f.carrier === id) return false;
+      }
+      return true;
+    });
+    // Specialists are sticky: donors only come from the generic pool
+    // (offense/defense), and a bot is consumed once per cycle — else the
+    // same body flip-flops capper→hof→technician on every pass.
+    const donors = free.filter((id) => !ROLE_PRIORITY.some((w) => this.roles.get(id) === w.role));
+    for (const { role: want, want: need, minSquad } of ROLE_PRIORITY) {
+      if (ids.length < minSquad) break;
+      let have = 0;
+      for (const id of ids) if (this.roles.get(id) === want) have++;
+      while (have < need) {
+        const donor = donors.shift();
+        if (!donor) break;
+        this.roles.set(donor, want);
+        const donorP = this.room.players.getPlayer(donor);
+        if (donorP) this.applyClass(donorP, ROLE_CLASS[want]);
+        // Technician is the only role that promises the deploy kit —
+        // pin its builder trait instead of trusting the spawn roll.
+        if (want === 'technician') this.brains.get(donor)?.setBuilder(true);
+        logger.info('Bot role', { id: donor, role: want, room: this.room.name });
+        have++;
       }
     }
   }
@@ -499,6 +504,150 @@ export class ServerBots {
 
   private checkSheep(id: string, p: { position: Vec3 }, m: MobilitySample, now: number): void {
     this.watchdog.checkSheep(id, p.position, m, now);
+  }
+
+  /** The brain's sensorium for one tick — every channel a legal client
+   *  could read from the wire (positions, pickups, inbound shells,
+   *  noises, wall occlusion, the move shadow's honest energy tank). */
+  private senses(id: string, p: { id: string; team?: string; position: Vec3; velocity: Vec3; health: number; maxHealth: number }, goal: { pos: BotVec; infiltrating: boolean } | null, now: number): BrainCtx {
+    return {
+      pos: p.position,
+      vel: p.velocity,
+      enemies: this.enemiesOf(p),
+      objective: goal?.pos ?? null,
+      infiltrating: goal?.infiltrating ?? false,
+      // Team rooms drop nuggets on creature kills — bots farm them too,
+      // which is what keeps a bot-filled match's scoreboard moving.
+      pickup: this.room.pickups?.nearest(p.position) ?? undefined,
+      // Gem-economy rooms make hunting creatures the actual objective;
+      // on any map that spawns real creatures they're threats worth
+      // shooting too. Structureless-free: pops is {} where spec doesn't
+      // declare `creatures`.
+      huntCreatures: this.room.mode === 'nuggets'
+        || Object.values(this.room.creatureSim.pops).some((cap) => cap > 0),
+      // Structures read as raised ground — brains route around walls
+      // and onto platforms instead of pushing into solid geometry.
+      groundY: (x, z) => Math.max(
+        this.field ? hmHeight(this.field, x, z) : p.position.y,
+        this.room.moveSim.structureTop(x, z),
+      ),
+      others: this.othersOf(p),
+      // Wall occlusion for the LOS sense — bots stop wasting ammo on
+      // targets behind structures they'd never see through anyway.
+      solids: this.room.ballSim.colliders,
+      solidIndex: this.room.ballSim.colliderIndex,
+      // The shadow tank is the truth — brains read it to gate jets,
+      // shields, mends. Null field → undefined → full-tank behavior.
+      energy: this.room.moveSim.energyOf(id) ?? undefined,
+      healthFrac: p.maxHealth > 0 ? p.health / p.maxHealth : 1,
+      // Inbound shells feed the dodge sense — bots sidestep rockets
+      // like a human reading the arc instead of eating every volley.
+      threats: this.room.projectiles.incomingNear(p.position, 12),
+      sounds: this.room.noisesNear(p.position, 50),
+      now,
+    };
+  }
+
+  /** The brain's status intent IS the player's claim — same rising-edge
+   *  antes + drains the human path models, applied via setInput below.
+   *  Keep server-owned buff bits (REGEN/DD) — the brain only claims
+   *  the toggle skills a client could legitimately hold. */
+  private applyStatus(id: string, p: { status: number }, out: BrainOut): void {
+    if (out.status === undefined) return;
+    const claim = out.status & CLIENT_STATUS_MASK;
+    // Rising-edge skill activation — the only place a bot's mend/
+    // shield/cloak intent becomes visible in logs.
+    const rising = claim & ~(p.status & CLIENT_STATUS_MASK);
+    if (rising & (STATUS.MEND | STATUS.SHIELD | STATUS.CLOAK)) {
+      const names = ([
+        [STATUS.MEND, 'MEND'], [STATUS.SHIELD, 'SHIELD'], [STATUS.CLOAK, 'CLOAK'],
+      ] as const).filter(([bit]) => rising & bit).map(([, n]) => n);
+      logger.info('Bot skill on', { id, skill: names.join('+') });
+    }
+    p.status = (p.status & ~CLIENT_STATUS_MASK) | claim;
+  }
+
+  /** Everything the brain asked to shoot or plant this tick — primary
+   *  trigger, belt throw, sentry-clearing lob on its slow cadence, and
+   *  deploy claims re-validated through the human message path. */
+  private firePhase(id: string, p: { id: string; position: Vec3; velocity: Vec3; team?: string }, out: BrainOut, goal: { pos: BotVec } | null, now: number): void {
+    if (out.fire) this.fireAt(p, out.fire.targetId, out.fire.aim);
+    if (out.belt) this.throwBelt(p);
+    // Sentry-clearing lob: hostile gear watching the objective gets a
+    // grenade on its own slow cadence — the same legal path humans use
+    // to soften a stand, not a wallhack aim-assist.
+    const saboteur = this.roles.get(id) === 'infiltrator';
+    const ready = (this.gearLobT.get(id) ?? 0) <= now;
+    const gear = ready ? this.hostileGear(p, goal?.pos ?? null, saboteur) : null;
+    if (gear) {
+      this.lobAt(p, gear);
+      // 3s keeps a siege going: ~1.5-2s grenade flight + reload beat.
+      // At 8s a turret effectively outlived the lobber's attention.
+      // A saboteur pushes harder — wrecking gear IS its objective.
+      this.gearLobT.set(id, now + (saboteur ? 1800 : 3000));
+      logger.debug('Gear lob', { id, x: +gear.x.toFixed(1), z: +gear.z.toFixed(1) });
+    }
+    // Deploy claims run the same handleDeploy a human's message does —
+    // kind, plant distance, and per-player cap are all re-validated.
+    if (out.deploy) this.room.deployables.handleDeploy(id, out.deploy.kind, out.deploy.pos);
+  }
+
+  /** Legal path: convert the brain's destination into human inputs
+   *  (heading → yaw, walk = forward key) and let the sim integrate.
+   *  Commit happens on the NEXT tick — sims[] order puts moveSim.tick
+   *  after bots.tick, so this reads the fresh post-step state. */
+  private driveMove(id: string, p: { position: Vec3; velocity: Vec3; rotation: { yaw: number }; status: number; skiing: number }, out: BrainOut, sh: MoveState, dt: number, now: number): void {
+    const dx = out.dest.x - p.position.x;
+    const dz = out.dest.z - p.position.z;
+    const dist = Math.sqrt(dx * dx + dz * dz);
+    if (dist >= 0.5) {
+      const yaw = Math.atan2(dx, dz);
+      this.room.moveSim.faceYaw(id, yaw);
+      p.rotation.yaw = yaw;
+      this.room.moveSim.setInput(id, {
+        forward: 1, right: 0,
+        jumpPressed: !!out.move?.jump, jumpHeld: !!out.move?.jump,
+        skiHeld: !!out.move?.ski,
+        jetHeld: !!out.move?.jet || (this.yeetUntil.get(id) ?? 0) > now,
+      }, p.status, this.seq++);
+    } else {
+      this.room.moveSim.setInput(id, { forward: 0, right: 0, jumpHeld: false, skiHeld: false, jetHeld: false }, p.status, this.seq++);
+    }
+    this.checkSheep(id, p, { trying: dist >= 0.5, ski: !!out.move?.ski, airborne: !sh.onGround, jetting: !!out.move?.jet, dt }, now);
+    this.checkSheepMeter(id, p, { out, airborne: !sh.onGround, hasDest: dist >= 0.5, dt }, now);
+    p.position.x = sh.pos.x; p.position.y = sh.pos.y; p.position.z = sh.pos.z;
+    p.velocity.x = sh.vel.x; p.velocity.y = sh.vel.y; p.velocity.z = sh.vel.z;
+    // Ski bit rides the tick flag byte (bit 2) — drives remote dust.
+    p.skiing = out.move?.ski ? 1 : 0;
+  }
+
+  /** No heightfield → no shadow → legacy direct-write fallback.
+   *  Returns true when the parked case already finished the tick. */
+  private legacyMove(id: string, p: { position: Vec3; velocity: Vec3; rotation: { yaw: number }; lastSeq: number }, dest: Vec3, dt: number): boolean {
+    const dx = dest.x - p.position.x;
+    const dz = dest.z - p.position.z;
+    const dist = Math.sqrt(dx * dx + dz * dz);
+    if (dist < 0.5) { p.velocity.x = 0; p.velocity.z = 0; p.lastSeq++; return true; }
+    const nx = dx / dist, nz = dz / dist;
+    const speed = isSuper(id) ? SPEED * 3 : SPEED;
+    p.velocity.x = nx * speed;
+    p.velocity.z = nz * speed;
+    const groundY = Math.max(
+      this.field ? hmHeight(this.field, p.position.x, p.position.z) : p.position.y,
+      this.room.moveSim.structureTop(p.position.x, p.position.z),
+    );
+    // p.position is EYE-height (the wire convention — clients render
+    // feet at pos.y - EYE_OFFSET); groundY+0.1 parked the model 1.7m
+    // underground.
+    const targetY = Math.max(groundY + EYE_OFFSET, p.position.y - 9 * dt);
+    const hopping = p.position.y > groundY + EYE_OFFSET + 1.1;
+    p.velocity.y = hopping ? p.velocity.y - 30 * dt : 0;
+    p.position.x += p.velocity.x * dt;
+    p.position.z += p.velocity.z * dt;
+    p.position.y += p.velocity.y * dt;
+    if (p.position.y < targetY) { p.position.y = targetY; p.velocity.y = 0; }
+    p.rotation.yaw = Math.atan2(nx, nz);
+    return false;
   }
 
   /** The meter the tick stream publishes — 0 for non-bots. */
@@ -575,133 +724,13 @@ export class ServerBots {
       }
 
       const goal = this.flagGoal(p);
-      const out = brain.think(dt, {
-        pos: p.position,
-        vel: p.velocity,
-        enemies: this.enemiesOf(p),
-        objective: goal?.pos ?? null,
-        infiltrating: goal?.infiltrating ?? false,
-        // Team rooms drop nuggets on creature kills — bots farm them too,
-        // which is what keeps a bot-filled match's scoreboard moving.
-        pickup: this.room.pickups?.nearest(p.position) ?? undefined,
-        // Gem-economy rooms make hunting creatures the actual objective;
-        // on any map that spawns real creatures they're threats worth
-        // shooting too. Structureless-free: pops is {} where spec doesn't
-        // declare `creatures`.
-        huntCreatures: this.room.mode === 'nuggets'
-          || Object.values(this.room.creatureSim.pops).some((cap) => cap > 0),
-        // Structures read as raised ground — brains route around walls
-        // and onto platforms instead of pushing into solid geometry.
-        groundY: (x, z) => Math.max(
-          this.field ? hmHeight(this.field, x, z) : p.position.y,
-          this.room.moveSim.structureTop(x, z),
-        ),
-        others: this.othersOf(p),
-        // Wall occlusion for the LOS sense — bots stop wasting ammo on
-        // targets behind structures they'd never see through anyway.
-        solids: this.room.ballSim.colliders,
-        solidIndex: this.room.ballSim.colliderIndex,
-        // The shadow tank is the truth — brains read it to gate jets,
-        // shields, mends. Null field → undefined → full-tank behavior.
-        energy: this.room.moveSim.energyOf(id) ?? undefined,
-        healthFrac: p.maxHealth > 0 ? p.health / p.maxHealth : 1,
-        // Inbound shells feed the dodge sense — bots sidestep rockets
-        // like a human reading the arc instead of eating every volley.
-        threats: this.room.projectiles.incomingNear(p.position, 12),
-        sounds: this.room.noisesNear(p.position, 50),
-        now,
-      });
-      // The brain's status intent IS the player's claim — same rising-edge
-      // antes + drains the human path models, applied via setInput below.
-      // Keep server-owned buff bits (REGEN/DD) — the brain only claims
-      // the toggle skills a client could legitimately hold.
-      if (out.status !== undefined) {
-        const claim = out.status & CLIENT_STATUS_MASK;
-        // Rising-edge skill activation — the only place a bot's mend/
-        // shield/cloak intent becomes visible in logs.
-        const rising = claim & ~(p.status & CLIENT_STATUS_MASK);
-        if (rising & (STATUS.MEND | STATUS.SHIELD | STATUS.CLOAK)) {
-          const names = ([
-            [STATUS.MEND, 'MEND'], [STATUS.SHIELD, 'SHIELD'], [STATUS.CLOAK, 'CLOAK'],
-          ] as const).filter(([bit]) => rising & bit).map(([, n]) => n);
-          logger.info('Bot skill on', { id, skill: names.join('+') });
-        }
-        p.status = (p.status & ~CLIENT_STATUS_MASK) | claim;
-      }
-      if (out.fire) this.fireAt(p, out.fire.targetId, out.fire.aim);
-      if (out.belt) this.throwBelt(p);
-      // Sentry-clearing lob: hostile gear watching the objective gets a
-      // grenade on its own slow cadence — the same legal path humans use
-      // to soften a stand, not a wallhack aim-assist.
-      {
-        const saboteur = this.roles.get(id) === 'infiltrator';
-        const ready = (this.gearLobT.get(id) ?? 0) <= now;
-        const gear = ready ? this.hostileGear(p, goal?.pos ?? null, saboteur) : null;
-        if (gear) {
-          this.lobAt(p, gear);
-          // 3s keeps a siege going: ~1.5-2s grenade flight + reload beat.
-          // At 8s a turret effectively outlived the lobber's attention.
-          // A saboteur pushes harder — wrecking gear IS its objective.
-          this.gearLobT.set(id, now + (saboteur ? 1800 : 3000));
-          logger.debug('Gear lob', { id, x: +gear.x.toFixed(1), z: +gear.z.toFixed(1) });
-        }
-      }
-      // Deploy claims run the same handleDeploy a human's message does —
-      // kind, plant distance, and per-player cap are all re-validated.
-      if (out.deploy) this.room.deployables.handleDeploy(id, out.deploy.kind, out.deploy.pos);
-
-      const dx = out.dest.x - p.position.x;
-      const dz = out.dest.z - p.position.z;
-      const dist = Math.sqrt(dx * dx + dz * dz);
+      const out = brain.think(dt, this.senses(id, p, goal, now));
+      this.applyStatus(id, p, out);
+      this.firePhase(id, p, out, goal, now);
 
       const sh = this.room.moveSim.simState(id);
-      if (sh) {
-        // Legal path: convert the brain's destination into human inputs
-        // (heading → yaw, walk = forward key) and let the sim integrate.
-        // Commit happens on the NEXT tick — sims[] order puts moveSim.tick
-        // after bots.tick, so this reads the fresh post-step state.
-        if (dist >= 0.5) {
-          const yaw = Math.atan2(dx, dz);
-          this.room.moveSim.faceYaw(id, yaw);
-          p.rotation.yaw = yaw;
-          this.room.moveSim.setInput(id, {
-            forward: 1, right: 0,
-            jumpPressed: !!out.move?.jump, jumpHeld: !!out.move?.jump,
-            skiHeld: !!out.move?.ski,
-            jetHeld: !!out.move?.jet || (this.yeetUntil.get(id) ?? 0) > now,
-          }, p.status, this.seq++);
-        } else {
-          this.room.moveSim.setInput(id, { forward: 0, right: 0, jumpHeld: false, skiHeld: false, jetHeld: false }, p.status, this.seq++);
-        }
-        this.checkSheep(id, p, { trying: dist >= 0.5, ski: !!out.move?.ski, airborne: !sh.onGround, jetting: !!out.move?.jet, dt }, now);
-        this.checkSheepMeter(id, p, { out, airborne: !sh.onGround, hasDest: dist >= 0.5, dt }, now);
-        p.position.x = sh.pos.x; p.position.y = sh.pos.y; p.position.z = sh.pos.z;
-        p.velocity.x = sh.vel.x; p.velocity.y = sh.vel.y; p.velocity.z = sh.vel.z;
-        // Ski bit rides the tick flag byte (bit 2) — drives remote dust.
-        p.skiing = out.move?.ski ? 1 : 0;
-      } else {
-        // No heightfield → no shadow → legacy direct-write fallback.
-        if (dist < 0.5) { p.velocity.x = 0; p.velocity.z = 0; p.lastSeq++; continue; }
-        const nx = dx / dist, nz = dz / dist;
-        const speed = isSuper(id) ? SPEED * 3 : SPEED;
-        p.velocity.x = nx * speed;
-        p.velocity.z = nz * speed;
-        const groundY = Math.max(
-          this.field ? hmHeight(this.field, p.position.x, p.position.z) : p.position.y,
-          this.room.moveSim.structureTop(p.position.x, p.position.z),
-        );
-        // p.position is EYE-height (the wire convention — clients render
-        // feet at pos.y - EYE_OFFSET); groundY+0.1 parked the model 1.7m
-        // underground.
-        const targetY = Math.max(groundY + EYE_OFFSET, p.position.y - 9 * dt);
-        const hopping = p.position.y > groundY + EYE_OFFSET + 1.1;
-        p.velocity.y = hopping ? p.velocity.y - 30 * dt : 0;
-        p.position.x += p.velocity.x * dt;
-        p.position.z += p.velocity.z * dt;
-        p.position.y += p.velocity.y * dt;
-        if (p.position.y < targetY) { p.position.y = targetY; p.velocity.y = 0; }
-        p.rotation.yaw = Math.atan2(nx, nz);
-      }
+      if (sh) this.driveMove(id, p, out, sh, dt, now);
+      else if (this.legacyMove(id, p, out.dest, dt)) continue;
 
       this.checkStuck(id, p, brain, now);
 
