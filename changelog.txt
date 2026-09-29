@@ -1,3 +1,8 @@
+2026-10-03 - CreatureSim.stepAll split: retargetDue (cadence gate),
+    cloakGhost (confused-hunter ghost anchor), stepBody (family
+    dispatch), routeEvent + bite (edge streaming vs authoritative
+    hits vs resync bookkeeping). Server lint is now fully clean —
+    zero oxlint warnings remain in server_bun/src.
 2026-10-03 - ServerBots de-warned: tick split into senses (the brain's
     sensorium), applyStatus (client-bit claim), firePhase (trigger,
     belt, gear lob, deploy), driveMove (legal sim-input path) and

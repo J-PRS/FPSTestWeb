@@ -355,97 +355,109 @@ export class CreatureSim {
     this.simTime += TICK_DT;
     for (const c of this.crawlers.values()) {
       if (c.dead) continue;
-
-      const ra = (this.retargetAcc.get(c.id) ?? 0) + TICK_DT;
-      if (ra >= RETARGET_INTERVAL) {
-        this.retargetAcc.set(c.id, 0);
-        const t = this.nearestPlayer(c, alive);
-        if (t) {
-          c.targetId = t.id;
-          this.confuseGhosts.delete(c.id);
-          this.snapTarget(c);
-        } else {
-          const prev = c.targetId ? this.players.getPlayer(c.targetId) : null;
-          const prevHiding = !!prev && !prev.isDead && !!(prev.status & STATUS.CLOAK);
-          // Cloak breaks the lock, not the scent: anchor a ghost on the
-          // last sighting and keep committing wobble points around it —
-          // the creature reads as searching confused instead of snapping
-          // a U-turn. Ghosts ride the committed snapshot so server +
-          // clients stay deterministic.
-          if (prevHiding && c.tgtValid) {
-            const g = this.confuseGhosts.get(c.id);
-            this.confuseGhosts.set(c.id, g
-              ? { ...g, until: this.simTime + CONFUSE_TTL }
-              : { x: c.tx, y: c.ty, z: c.tz, until: this.simTime + CONFUSE_TTL });
-          }
-          const g = this.confuseGhosts.get(c.id);
-          if (c.tgtValid && g && g.until > this.simTime) {
-            const a = this.simTime * 0.9 + (c.id * 131) % 977;
-            commitTarget(c, c.targetId, {
-              x: g.x + Math.cos(a) * CONFUSE_DRIFT_R,
-              y: g.y,
-              z: g.z + Math.sin(a) * CONFUSE_DRIFT_R,
-            });
-          } else {
-            this.confuseGhosts.delete(c.id);
-            c.targetId = null;
-            this.snapTarget(c);
-          }
-        }
-        this.edge(c, 'retarget');
-        continue;
-      }
-      this.retargetAcc.set(c.id, ra);
-
+      // A due retarget consumes the whole tick step for this creature —
+      // it re-aims first, moves next tick.
+      if (this.retargetDue(c, alive)) { this.edge(c, 'retarget'); continue; }
       _snap.x = c.tx; _snap.y = c.ty; _snap.z = c.tz;
-      const tgt = c.tgtValid ? _snap : null;
-      const ev: CrawlerEvent | null = isFlyer(c)
-        ? stepFlyer(c, TICK_DT, this.field!, tgt, true, this.colliders)
-        : isTotem(c)
-          ? stepTotem(c, TICK_DT, this.field!, tgt, true, this.colliders)
-          : isRoller(c)
-            ? stepRoller(c, TICK_DT, this.field!, tgt, true, this.colliders)
-            : isSlither(c)
-              ? stepSlither(c, TICK_DT, this.field!, tgt, true, this.colliders)
-              : isBaneling(c)
-                ? stepBaneling(c, TICK_DT, this.field!, tgt, true, this.colliders)
-                : stepCrawler(c, TICK_DT, this.field!, tgt, true, this.colliders);
-      if (ev === 'detonate') {
-        this.kill(c);
-        continue;
-      }
-      if (ev === 'charge' || ev === 'blink' || (ev === 'land' && isTotem(c))) {
-        // 'land' doubles as the post-blink resync edge for totems — other
-        // families land every hop, so gating it to them would be spam.
-        this.edge(c, ev === 'land' ? 'retarget' : ev);
-      } else if (ev === 'fire' && isTotem(c)) {
-        // Authoritative hitscan: sweep LIVE players along the committed
-        // beam line — sidestepping after the lock shows is the dodge.
-        this.edge(c, 'fire');
-        for (const pid of totemFireTargets(c, alive)) {
-          this.onBite?.(c, pid);
-        }
-        c.pendingBite = false;
-      } else if (ev === 'windup' || ev === 'pounce') {
-        this.edge(c, ev);
-      } else if (ev === 'bite') {
-        this.edge(c, 'bite');
-        if (c.pendingBite && c.targetId) {
-          // The bite commits against the SNAPSHOT (ghost) — only live
-          // players still physically next to the creature can actually be
-          // bitten. Without this a confused hunter pouncing a stale
-          // sighting damages a cloaked player across the map.
-          const live = this.players.getPlayer(c.targetId);
-          const near = live && !live.isDead
-            && (live.position.x - c.x) ** 2 + (live.position.y - c.y) ** 2 + (live.position.z - c.z) ** 2 < 8 * 8;
-          if (near) this.onBite?.(c, c.targetId);
-          c.pendingBite = false;
-        }
-      } else {
-        const rs = (this.resyncAcc.get(c.id) ?? 0) + TICK_DT;
-        if (rs >= RESYNC_INTERVAL) this.edge(c, 'retarget');
-        else this.resyncAcc.set(c.id, rs);
-      }
+      const ev = this.stepBody(c, c.tgtValid ? _snap : null);
+      if (ev === 'detonate') { this.kill(c); continue; }
+      this.routeEvent(c, ev, alive);
     }
+  }
+
+  /** Retarget bookkeeping. Returns true when this tick's step was spent
+   *  re-aiming — including the cloak-ghost detour where a creature keeps
+   *  hunting the last sighting instead of snapping a U-turn. */
+  private retargetDue(c: SimBeing, alive: { id: string; pos: SimVec }[]): boolean {
+    const ra = (this.retargetAcc.get(c.id) ?? 0) + TICK_DT;
+    if (ra < RETARGET_INTERVAL) { this.retargetAcc.set(c.id, ra); return false; }
+    this.retargetAcc.set(c.id, 0);
+    const t = this.nearestPlayer(c, alive);
+    if (t) {
+      c.targetId = t.id;
+      this.confuseGhosts.delete(c.id);
+      this.snapTarget(c);
+      return true;
+    }
+    this.cloakGhost(c);
+    return true;
+  }
+
+  /** No visible target: keep hunting a cloaked player's last sighting as
+   *  a drifting "ghost" point, else clear the lock entirely. Cloak
+   *  breaks the lock, not the scent — the creature reads as searching
+   *  confused, and the committed snapshot keeps server + clients
+   *  deterministic. */
+  private cloakGhost(c: SimBeing): void {
+    const prev = c.targetId ? this.players.getPlayer(c.targetId) : null;
+    if (prev && !prev.isDead && (prev.status & STATUS.CLOAK) && c.tgtValid) {
+      const g = this.confuseGhosts.get(c.id);
+      this.confuseGhosts.set(c.id, g
+        ? { ...g, until: this.simTime + CONFUSE_TTL }
+        : { x: c.tx, y: c.ty, z: c.tz, until: this.simTime + CONFUSE_TTL });
+    }
+    const g = this.confuseGhosts.get(c.id);
+    if (c.tgtValid && g && g.until > this.simTime) {
+      const a = this.simTime * 0.9 + (c.id * 131) % 977;
+      commitTarget(c, c.targetId, {
+        x: g.x + Math.cos(a) * CONFUSE_DRIFT_R,
+        y: g.y,
+        z: g.z + Math.sin(a) * CONFUSE_DRIFT_R,
+      });
+      return;
+    }
+    this.confuseGhosts.delete(c.id);
+    c.targetId = null;
+    this.snapTarget(c);
+  }
+
+  /** One deterministic step — the family picks its own step routine. */
+  private stepBody(c: SimBeing, tgt: SimVec | null): CrawlerEvent | null {
+    const f = this.field!;
+    if (isFlyer(c)) return stepFlyer(c, TICK_DT, f, tgt, true, this.colliders);
+    if (isTotem(c)) return stepTotem(c, TICK_DT, f, tgt, true, this.colliders);
+    if (isRoller(c)) return stepRoller(c, TICK_DT, f, tgt, true, this.colliders);
+    if (isSlither(c)) return stepSlither(c, TICK_DT, f, tgt, true, this.colliders);
+    if (isBaneling(c)) return stepBaneling(c, TICK_DT, f, tgt, true, this.colliders);
+    return stepCrawler(c, TICK_DT, f, tgt, true, this.colliders);
+  }
+
+  /** What the step left behind — an edge to stream, an authoritative
+   *  hit to land, or just resync bookkeeping. */
+  private routeEvent(c: SimBeing, ev: CrawlerEvent | null, alive: { id: string; pos: SimVec }[]): void {
+    if (ev === 'charge' || ev === 'blink' || (ev === 'land' && isTotem(c))) {
+      // 'land' doubles as the post-blink resync edge for totems — other
+      // families land every hop, so gating it to them would be spam.
+      this.edge(c, ev === 'land' ? 'retarget' : ev);
+      return;
+    }
+    if (ev === 'fire' && isTotem(c)) {
+      // Authoritative hitscan: sweep LIVE players along the committed
+      // beam line — sidestepping after the lock shows is the dodge.
+      this.edge(c, 'fire');
+      for (const pid of totemFireTargets(c, alive)) {
+        this.onBite?.(c, pid);
+      }
+      c.pendingBite = false;
+      return;
+    }
+    if (ev === 'windup' || ev === 'pounce') { this.edge(c, ev); return; }
+    if (ev === 'bite') { this.bite(c); return; }
+    const rs = (this.resyncAcc.get(c.id) ?? 0) + TICK_DT;
+    if (rs >= RESYNC_INTERVAL) this.edge(c, 'retarget');
+    else this.resyncAcc.set(c.id, rs);
+  }
+
+  /** A pending bite lands only if the committed target is still
+   *  physically next to the creature — without this a confused hunter
+   *  pouncing a stale sighting damages a cloaked player across the map. */
+  private bite(c: SimBeing): void {
+    this.edge(c, 'bite');
+    if (!c.pendingBite || !c.targetId) return;
+    const live = this.players.getPlayer(c.targetId);
+    const near = live && !live.isDead
+      && (live.position.x - c.x) ** 2 + (live.position.y - c.y) ** 2 + (live.position.z - c.z) ** 2 < 8 * 8;
+    if (near) this.onBite?.(c, c.targetId);
+    c.pendingBite = false;
   }
 }
