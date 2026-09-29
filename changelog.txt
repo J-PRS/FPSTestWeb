@@ -1,3 +1,6 @@
+2026-10-03 - server.ts fetch routing: the three websocket endpoints
+    shared an upgrade idiom — extracted to wsUpgrade (undefined on
+    success, 400 on refusal). Clears the fetch complexity warning.
 2026-10-03 - Room ctor split: the 60-line MessageHandler wiring object
     extracted to handlerInfo (same lazy-callback pattern as matchHost —
     moveSim/matchClock/ballSim are built after `messages`). Clears the

@@ -33,6 +33,13 @@ function corsResponse(body: BodyInit | null, init?: ResponseInit): Response {
   return new Response(body, { ...init, headers });
 }
 
+// The three websocket endpoints share one upgrade shape — undefined on
+// success (Bun owns the socket), 400 Response on refusal.
+function wsUpgrade(srv: { upgrade(req: Request, opts: { data: WebSocketData }): boolean }, req: Request, data: WebSocketData): Response | undefined {
+  if (srv.upgrade(req, { data })) return undefined;
+  return new Response('Upgrade failed', { status: 400 });
+}
+
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 const json = (data: unknown, init?: ResponseInit) =>
   corsResponse(JSON.stringify(data), { ...init, headers: JSON_HEADERS });
@@ -288,10 +295,7 @@ const server = Bun.serve<WebSocketData>({
     }
 
     if (url.pathname === '/ws') {
-      if (srv.upgrade(req, { data: { playerId: '', connectedAt: Date.now() } })) {
-        return;
-      }
-      return new Response('Upgrade failed', { status: 400 });
+      return wsUpgrade(srv, req, { playerId: '', connectedAt: Date.now() });
     }
 
     // P2P signalling: /rtc?room=CODE — two sockets per room, opaque relay.
@@ -300,19 +304,13 @@ const server = Bun.serve<WebSocketData>({
       if (!/^[a-zA-Z0-9_-]{1,32}$/.test(room)) {
         return new Response('Bad room', { status: 400 });
       }
-      if (srv.upgrade(req, { data: { playerId: '', connectedAt: Date.now(), rtc: true, room } })) {
-        return;
-      }
-      return new Response('Upgrade failed', { status: 400 });
+      return wsUpgrade(srv, req, { playerId: '', connectedAt: Date.now(), rtc: true, room });
     }
 
     // Server-peer WebRTC signalling: /rtcs — one shot offer/answer, then
     // the DataChannel becomes the game socket.
     if (url.pathname === '/rtcs') {
-      if (srv.upgrade(req, { data: { playerId: '', connectedAt: Date.now(), rtcs: true } })) {
-        return;
-      }
-      return new Response('Upgrade failed', { status: 400 });
+      return wsUpgrade(srv, req, { playerId: '', connectedAt: Date.now(), rtcs: true });
     }
 
     const route = ROUTES[url.pathname];
