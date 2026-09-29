@@ -1,3 +1,8 @@
+2026-10-03 - Loss metric fix: an all-suppressed tick shipped NO frame —
+    the "always send an empty frame" design lived inside fanoutRecords,
+    which the caller gated on records existing. A quiet room (players
+    idle/stale) went silent and read as ~94% packet loss; ackSeq also
+    starved. fanoutRecords now runs every tick regardless.
 2026-10-03 - Health desync fix: server-owned heals (regen perk, mend
     channel, regen powerup) ticked hp up in the sim but never told the
     owner — self is excluded from tickUpdate — so client vs server hp

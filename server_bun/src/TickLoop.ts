@@ -175,7 +175,12 @@ export class TickLoop {
     room.tickSeq++;
     this.metrics.ticks++;
 
-    if (records.length > 0) this.fanoutRecords(room, players, records);
+    // Unconditional — even an all-suppressed tick must ship an empty
+    // frame. The client's loss metric reads arrival CADENCE (a silent
+    // stream is ~100% loss) and ackSeq rides every frame, so skipping
+    // quiet ticks both lies about link health and starves stateHistory
+    // pruning.
+    this.fanoutRecords(room, players, records);
 
     this.rollupMetrics(now0, players.size);
   }
