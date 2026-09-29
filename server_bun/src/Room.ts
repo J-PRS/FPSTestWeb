@@ -204,6 +204,7 @@ export class Room {
     this.wireModeFeatures(field);
     this.deployables = new RoomDeployables(this);
     this.projectiles = new RoomProjectiles(this, field);
+    this.projectiles.attachStructures(this.spec.structures);
     this.registerSims();
   }
 
@@ -554,6 +555,7 @@ export class Room {
     if (spec.spawns) this.players.spawnPoints = spec.spawns;
     this.ballSim.colliders = structureColliders(spec.structures);
     this.moveSim.attachStructures(spec.structures);
+    this.projectiles.attachStructures(spec.structures);
     if (spec.balls) this.ballSim.population = spec.balls;
     if (spec.ballMix) this.ballSim.ballMix = spec.ballMix;
     this.messages.setMap(spec.bases, spec.structures, spec.arena, spec.ambient, spec.terrain);

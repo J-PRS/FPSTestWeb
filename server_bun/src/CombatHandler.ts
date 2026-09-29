@@ -10,6 +10,7 @@ import { CONFIG } from './config.ts';
 import { logger } from './logger.ts';
 import { weaponStats } from './weaponStats.ts';
 import { HEAVY_ONLY_WEAPONS } from '../../shared/botClasses.ts';
+import type { StructureCollider } from '../../shared/ballSim.ts';
 
 // Lag compensation: clamp self-reported ping to a sane rewind window —
 // unclamped, a forged 60s "ping" could rewind targets anywhere.
@@ -66,6 +67,9 @@ export class CombatHandler {
   /** First-hit timestamps per shooter|victim pair — kill-side applies it
    *  as the engagement time (TTK), hit-side only refreshes it. */
   private duelStart = new Map<string, number>();
+  /** Map-structure colliders — claim validation rejects flights that
+   *  would have to pass through a wall to reach their end point. */
+  solids: readonly StructureCollider[] = [];
 
   constructor(
     private playerManager: PlayerManager,
@@ -200,6 +204,7 @@ export class CombatHandler {
         airtime: msg.airtime,
         shooterVel: player.velocity,
         now: Date.now(),
+        solids: this.solids,
       });
       if (!verdict.ok) {
         this.reject(playerId, 'Shot', verdict.reason, targetId, msg.weaponType);
@@ -418,6 +423,7 @@ export class CombatHandler {
       airtime: msg.airtime,
       shooterVel: player.velocity,
       now: Date.now(),
+      solids: this.solids,
     });
     if (!verdict.ok) {
       this.reject(playerId, 'AOE', verdict.reason, undefined, msg.weaponType);

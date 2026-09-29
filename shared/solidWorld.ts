@@ -15,6 +15,43 @@ import type { StructureSpec } from './mapSpec.ts';
 const STEP_UP = 0.55;   // ledges under this step onto floors like stairs
 const SKIN = 0.02;      // push-out separation so contacts don't chatter
 
+/** Swept segment vs the structure set — earliest entry point of a ray
+ *  (shell path, LOS probe) into any yaw-OBB, or null. Slab test per
+ *  collider in its local frame; returns the world-space hit point. */
+export function segSolidHit(
+  from: { x: number; y: number; z: number },
+  to: { x: number; y: number; z: number },
+  cols: readonly StructureCollider[],
+): { x: number; y: number; z: number; t: number } | null {
+  const dx = to.x - from.x, dy = to.y - from.y, dz = to.z - from.z;
+  let bestT = Infinity;
+  for (const c of cols) {
+    const ox = from.x - c.cx, oz = from.z - c.cz;
+    // Broadphase — skip boxes the segment can't approach.
+    const rr = Math.max(c.hx, c.hz) + Math.hypot(dx, dz) + 1;
+    if (ox * ox + oz * oz > rr * rr && (dx * ox + dz * oz) >= 0) continue;
+    // Local frame: rotate origin + direction into the box's yaw space.
+    const lx = ox * c.cos + oz * c.sin;
+    const lz = -ox * c.sin + oz * c.cos;
+    const ldx = dx * c.cos + dz * c.sin;
+    const ldz = -dx * c.sin + dz * c.cos;
+    // Slab test on all three axes.
+    let tmin = 0, tmax = 1;
+    let ok = true;
+    for (const [o, d, h] of [[lx, ldx, c.hx], [from.y - c.cy, dy, c.hy], [lz, ldz, c.hz]] as const) {
+      if (Math.abs(d) < 1e-9) { if (Math.abs(o) > h) { ok = false; break; } continue; }
+      let t0 = (-h - o) / d, t1 = (h - o) / d;
+      if (t0 > t1) { const t = t0; t0 = t1; t1 = t; }
+      tmin = Math.max(tmin, t0); tmax = Math.min(tmax, t1);
+      if (tmin > tmax) { ok = false; break; }
+    }
+    if (!ok || tmin >= bestT) continue;
+    bestT = tmin;
+  }
+  if (bestT === Infinity) return null;
+  return { x: from.x + dx * bestT, y: from.y + dy * bestT, z: from.z + dz * bestT, t: bestT };
+}
+
 export class SolidWorld {
   constructor(readonly cols: readonly StructureCollider[]) {}
   static fromSpecs(list: readonly StructureSpec[] | undefined): SolidWorld {

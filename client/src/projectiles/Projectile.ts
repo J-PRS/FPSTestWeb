@@ -12,6 +12,8 @@ import { RibbonTrail } from './RibbonTrail.js';
 import { ProjectileTrail } from './trailParticles.js';
 import { buildProjectileMeshes, updateProjectileMesh } from './visuals.js';
 import { sweepTerrain, sweepBall, sweepPlayer, sweepObstacle } from './sweep.js';
+import { segSolidHit } from '../../../shared/solidWorld.js';
+import type { StructureCollider } from '../../../shared/ballSim.js';
 
 // Shared projectile geometries — dispose() never frees them, so reuse across shots
 const _tNormal = new THREE.Vector3();
@@ -118,6 +120,10 @@ export class Projectile {
     return hitRadiusAt(this.config.weaponType, this.age);
   }
 
+  /** Map-structure colliders — set once per map load alongside
+   *  Ball.colliders so shells and balls bounce off the same geometry. */
+  static solidColliders: readonly StructureCollider[] = [];
+
   get explosionRadius(): number { return this.config.explosionRadius; }
   get force(): number { return this.config.force; }
   get forceMode(): 'push' | 'pull' { return this.config.forceMode; }
@@ -207,11 +213,31 @@ export class Projectile {
     this.age += dt;
 
     // Stuck bomb: planted on a surface, ticking down to fuse. No physics,
-    // no collision — only the timer matters.
+    // no collision — only the timer matters. A bomb glued to a live mover
+    // RIDES it (world-space offset from contact) — freezing in place while
+    // the victim jets away reads as a miss, not a hit.
     if (this.stuck) {
-      if (this.config.maxLifetime && this.age >= this.config.maxLifetime) this.explode();
-      else this.updateMesh();
-      return;
+      const anchor = this.stuckTo ? (this.stuckTo.dead ? null : this.stuckTo.pos)
+        : this.stuckPlayerId ? (this.stuckMap?.get(this.stuckPlayerId) ?? null)
+        : null;
+      if (this.stuckTo || this.stuckPlayerId) {
+        if (anchor) {
+          this.pos.copy(anchor).add(this.stuckOffset);
+          this.prevPos.copy(this.pos);
+          this.hitPoint.copy(this.pos); // blast follows the ride, not the contact point
+        } else {
+          // Victim died/despawned under the bomb — it lets go and falls.
+          this.stuck = false;
+          this.stuckTo = null;
+          this.stuckPlayerId = null;
+        }
+      }
+      if (this.stuck) {
+        if (this.config.maxLifetime && this.age >= this.config.maxLifetime) this.explode();
+        else this.updateMesh();
+        return;
+      }
+      // Dropped this frame — fall through into physics with zero velocity.
     }
     // hitPoint is per-frame: a stale value from a previous bounce would
     // teleport the explosion back to the last terrain contact (the
@@ -280,6 +306,20 @@ export class Projectile {
       }
       this.explode();
       return true;
+    }
+    // Map structures next — walls stop shells like terrain does; without
+    // this a mortar splashes the generator room straight through the roof.
+    if (Projectile.solidColliders.length) {
+      const hit = segSolidHit(this.prevPos, this.pos, Projectile.solidColliders);
+      if (hit) {
+        this.hitAt(hit.x, hit.y, hit.z, hit.t);
+        if (this.config.sticks) {
+          this.stickAt(this.hitPoint);
+          return true;
+        }
+        this.explode();
+        return true;
+      }
     }
     // Obstacles (turret bolts) before targets: an interception is the
     // earliest contact worth reporting — the blast usually takes the
@@ -377,10 +417,9 @@ export class Projectile {
         this.recordHit(this.minHitDist - ball.radius);
         this.hitBall = ball;
         if (this.config.sticks) {
-          // Glued to the target's contact point — fuse keeps burning and
-          // the blast catches it. (Tracking a moving ball mid-stick is
-          // wasted fidelity; it won't outrun 11m of splash.)
-          this.stickAt(this.hitPoint);
+          // Glued to a live victim — it rides the target at the contact
+          // offset until the fuse pops it on top of them.
+          this.stickAt(this.hitPoint, ball);
           return true;
         }
         this.explode();
@@ -397,7 +436,7 @@ export class Projectile {
         this.recordHit(this.minHitDist - PLAYER_RADIUS);
         this.hitPlayerId = playerId;
         if (this.config.sticks) {
-          this.stickAt(this.hitPoint);
+          this.stickAt(this.hitPoint, undefined, playerId, remotePlayers);
           return true;
         }
         this.explode();
@@ -453,13 +492,26 @@ export class Projectile {
     this.projectileRemoved = true;
   }
 
+  // Stick attachment: a bomb glued to a victim rides it at a fixed
+  // world-space offset (no victim-local frame — fine for spheres/capsules).
+  private stuckTo: Targetable | null = null;
+  private stuckPlayerId: string | null = null;
+  private stuckMap: Map<string, THREE.Vector3> | null = null;
+  private readonly stuckOffset = new THREE.Vector3();
+
   /** Plant the bomb at a contact point — motion and sweeps stop, the
-   *  fuse doesn't. */
-  private stickAt(p: THREE.Vector3): void {
+   *  fuse doesn't. With a victim it tracks; without one it just hangs. */
+  private stickAt(p: THREE.Vector3, ball?: Targetable, playerId?: string,
+                  remotePlayers?: Map<string, THREE.Vector3>): void {
     this.stuck = true;
     this.pos.copy(p);
     this.prevPos.copy(p);
     this.vel.set(0, 0, 0);
+    this.stuckTo = ball ?? null;
+    this.stuckPlayerId = playerId ?? null;
+    this.stuckMap = remotePlayers ?? null;
+    const anchor = ball ? ball.pos : (playerId && remotePlayers?.get(playerId));
+    if (anchor) this.stuckOffset.copy(p).sub(anchor);
     this.updateMesh();
   }
 

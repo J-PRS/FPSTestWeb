@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { SolidWorld } from '../../shared/solidWorld.ts';
+import { SolidWorld, segSolidHit } from '../../shared/solidWorld.ts';
+import { structureColliders } from '../../shared/ballSim.ts';
 import { MoveSim, MOVEMENT_CONFIG, type MoveState } from '../../shared/movement.ts';
 import type { StructureSpec } from '../../shared/mapSpec.ts';
 import type { Vec3Like } from '../../shared/movement.ts';
@@ -94,5 +95,38 @@ describe('SolidWorld', () => {
     const s = simAt(10, 0.5 + H, 0); // feet at 0.5 — above top(0.4)-step(0.55)? 0.5 > -0.15 ✓ floor
     w.resolveBody(s);
     expect(s.pos.x).toBe(10); // no push-out
+  });
+});
+
+describe('segSolidHit', () => {
+  const cols = structureColliders(wall);
+
+  test('a segment into the wall face reports the entry point', () => {
+    const hit = segSolidHit({ x: 0, y: 3, z: 0 }, { x: 20, y: 3, z: 0 }, cols);
+    expect(hit).not.toBeNull();
+    expect(hit!.x).toBeCloseTo(9.5, 1); // face plane at x = 10 - 0.5
+    expect(hit!.t).toBeGreaterThan(0);
+    expect(hit!.t).toBeLessThan(1);
+  });
+
+  test('a segment clear of the wall misses', () => {
+    expect(segSolidHit({ x: 0, y: 3, z: 8 }, { x: 20, y: 3, z: 8 }, cols)).toBeNull(); // past z extent
+    expect(segSolidHit({ x: 0, y: 8, z: 0 }, { x: 20, y: 8, z: 0 }, cols)).toBeNull(); // over the 6m top
+  });
+
+  test('a segment starting inside reports entry at t=0', () => {
+    const hit = segSolidHit({ x: 10, y: 3, z: 0 }, { x: 20, y: 3, z: 0 }, cols);
+    expect(hit).not.toBeNull();
+    expect(hit!.t).toBe(0);
+  });
+
+  test('yaw-rotated walls still occlude along their real face', () => {
+    const rotated = structureColliders([
+      { kind: 'wall', pos: { x: 0, y: 0, z: 0 }, size: { x: 20, y: 6, z: 1 }, rotY: Math.PI / 4 },
+    ]);
+    // Ray along +x at z≈3 should cross the 45° wall's broad face.
+    const hit = segSolidHit({ x: -10, y: 3, z: 3 }, { x: 10, y: 3, z: 3 }, rotated);
+    expect(hit).not.toBeNull();
+    expect(Math.abs(hit!.x)).toBeLessThan(8); // entry before the wall centerline
   });
 });

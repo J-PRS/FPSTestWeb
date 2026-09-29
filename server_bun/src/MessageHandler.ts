@@ -7,6 +7,7 @@ import { PROTOCOL_VERSION } from '../../shared/protocol.ts';
 import { CLIENT_STATUS_MASK } from '../../shared/status.ts';
 import { CONFIG } from './config.ts';
 import type { BallSim } from './BallSim.ts';
+import { structureColliders } from '../../shared/ballSim.ts';
 import type { PickupKind } from '../../shared/pickups.ts';
 
 type BroadcastFn = (msg: ServerMessage, excludePlayerId?: string) => void;
@@ -114,6 +115,7 @@ export class MessageHandler {
     this.sendToPlayer = sendToPlayer;
     if (roomInfo) this.roomInfo = roomInfo;
     this.combat = new CombatHandler(playerManager, broadcast, sendToPlayer, roomInfo?.onKill, roomInfo?.onHit, roomInfo?.teams ?? false, roomInfo?.moveImpulse, roomInfo?.moveResync, roomInfo?.mode ?? '', roomInfo?.deployBlast, roomInfo?.health, roomInfo?.envRange);
+    this.attachStructures(roomInfo?.structures);
 
     // Per-type dispatch — a new message type is one table entry. Field
     // order: handlers need this.combat, so the table is built last.
@@ -189,6 +191,13 @@ export class MessageHandler {
     this.roomInfo.arena = arena;
     this.roomInfo.ambient = ambient;
     this.roomInfo.terrain = terrain;
+    this.attachStructures(structures);
+  }
+
+  /** Rebuild the collider set claim validation occludes against —
+   *  ctor and admin hot-reload both come through here. */
+  attachStructures(list: RoomInfo['structures']): void {
+    this.combat.solids = structureColliders(list);
   }
 
   /** Server-bot fire: broadcast the visible bolt, then apply the hitscan

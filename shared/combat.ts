@@ -8,6 +8,8 @@
  */
 
 import { getWeaponStats } from './weapons.js';
+import { segSolidHit } from './solidWorld.js';
+import type { StructureCollider } from './ballSim.js';
 import {
   PLAYER_RADIUS,
   EYE_OFFSET,
@@ -31,6 +33,12 @@ export function aoeFalloff(dist: number, radius: number): number {
 export function aoeDamage(amount: number, dist: number, radius: number): number {
   return Math.round(amount * aoeFalloff(dist, radius));
 }
+
+/** Global knockback dial — applied at the call sites, not inside
+ *  aoeImpulse, so the falloff math stays pure/testable. 3.0 sent rocket
+ *  jumps into orbit (and Slam stacked power on top → ~300 m/s launches);
+ *  pulled back to 1.0 — keep the constant as the single tuning point. */
+export const KNOCKBACK_SCALE = 1.0;
 
 export function aoeImpulse(force: number, dist: number, radius: number): number {
   return force * aoeFalloff(dist, radius);
@@ -104,6 +112,9 @@ function checkFlightLegality(args: {
   airtime: number;
   shooterVel: Vec3Like;
   now: number;
+  /** Map-structure colliders — when present, the claimed flight must
+   *  not pass through a wall to reach its end point. */
+  solids?: readonly StructureCollider[];
 }): HitClaimVerdict {
   const { projectile, endPos, shooterVel, now } = args;
   let { airtime } = args;
@@ -141,6 +152,26 @@ function checkFlightLegality(args: {
     return { ok: false, reason: `end ${claimedReach.toFixed(1)}m beyond reach ${maxReach.toFixed(1)}m` };
   }
 
+  // Wall occlusion: sample the ballistic arc — a shell that would have
+  // struck a face before its claimed end can't honestly get there.
+  if (args.solids?.length) {
+    const STEPS = 16;
+    const g = stats.gravity;
+    let px = projectile.origin.x, py = projectile.origin.y, pz = projectile.origin.z;
+    for (let i = 1; i <= STEPS; i++) {
+      const t = (airtime * i) / STEPS;
+      const nx = projectile.origin.x + projectile.velocity.x * t;
+      const ny = projectile.origin.y + projectile.velocity.y * t + 0.5 * g * t * t;
+      const nz = projectile.origin.z + projectile.velocity.z * t;
+      if (t > 0.03) { // muzzle grace — a spawn point may hug a doorway lip
+        if (segSolidHit({ x: px, y: py, z: pz }, { x: nx, y: ny, z: nz }, args.solids)) {
+          return { ok: false, reason: `flight blocked by structure at ~${t.toFixed(2)}s` };
+        }
+      }
+      px = nx; py = ny; pz = nz;
+    }
+  }
+
   return { ok: true, airtime };
 }
 
@@ -153,9 +184,10 @@ export function validateHitClaim(args: {
   /** Shooter's last-known velocity (for the inherited-velocity allowance) */
   shooterVel: Vec3Like;
   now: number;
+  solids?: readonly StructureCollider[];
 }): HitClaimVerdict {
   const { projectile, hitPos, targetPos, shooterVel, now, airtime } = args;
-  const flight = checkFlightLegality({ projectile, endPos: hitPos, airtime, shooterVel, now });
+  const flight = checkFlightLegality({ projectile, endPos: hitPos, airtime, shooterVel, now, solids: args.solids });
   if (!flight.ok) return flight;
 
   // Target proximity: hitPos must be within the legal hit radius at that
@@ -181,7 +213,8 @@ export function validateAoeClaim(args: {
   airtime: number;
   shooterVel: Vec3Like;
   now: number;
+  solids?: readonly StructureCollider[];
 }): HitClaimVerdict {
   const { projectile, blastPos, shooterVel, now, airtime } = args;
-  return checkFlightLegality({ projectile, endPos: blastPos, airtime, shooterVel, now });
+  return checkFlightLegality({ projectile, endPos: blastPos, airtime, shooterVel, now, solids: args.solids });
 }
