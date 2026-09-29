@@ -28,7 +28,7 @@ export function wireOverlayInput(deps: OverlayInputDeps) {
   // Custom dropups, not <select> — a native popup is OS chrome and breaks
   // the game-menu illusion. Chip face + styled option list opening upward.
   const loadoutBar = document.getElementById('loadout-bar');
-  interface Drop { el: HTMLElement; setValue(v: string): void; }
+  interface Drop { el: HTMLElement; setValue(v: string): void; setOptions?(o: { v: string; label: string }[]): void; }
   const slotDrops: Drop[] = [];
   let beltDrop: Drop | null = null;
   let skillDrop: Drop | null = null;
@@ -61,12 +61,11 @@ export function wireOverlayInput(deps: OverlayInputDeps) {
   };
 
   function mkDrop(
-    options: { v: string; label: string }[],
+    initialOptions: { v: string; label: string }[],
     onPick: (v: string) => void,
   ): Drop {
     const el = document.createElement('div');
     el.className = 'lo-chip lo-drop';
-    el.style.minWidth = `${dropWidth(options)}px`;
     const face = document.createElement('span');
     el.appendChild(face);
     const caret = document.createElement('span');
@@ -75,21 +74,28 @@ export function wireOverlayInput(deps: OverlayInputDeps) {
     el.appendChild(caret);
     const list = document.createElement('div');
     list.className = 'lo-list';
-    for (const o of options) {
-      const it = document.createElement('div');
-      it.className = 'lo-opt';
-      it.textContent = o.label;
-      it.dataset.v = o.v;
-      it.addEventListener('click', (e) => {
-        e.stopPropagation();
-        onPick(o.v);
-        el.classList.remove('open');
-        openDrop = null;
-        refreshLoadout();
-      });
-      list.appendChild(it);
-    }
     el.appendChild(list);
+    let options = initialOptions;
+    let currentV = '';
+    const rebuild = () => {
+      el.style.minWidth = `${dropWidth(options)}px`;
+      list.innerHTML = '';
+      for (const o of options) {
+        const it = document.createElement('div');
+        it.className = 'lo-opt';
+        it.textContent = o.label;
+        it.dataset.v = o.v;
+        it.addEventListener('click', (e) => {
+          e.stopPropagation();
+          onPick(o.v);
+          el.classList.remove('open');
+          openDrop = null;
+          refreshLoadout();
+        });
+        list.appendChild(it);
+      }
+    };
+    rebuild();
     el.addEventListener('click', (e) => {
       e.stopPropagation();
       const was = el.classList.contains('open');
@@ -100,9 +106,16 @@ export function wireOverlayInput(deps: OverlayInputDeps) {
     return {
       el,
       setValue(v) {
+        currentV = v;
         face.textContent = options.find((o) => o.v === v)?.label ?? v;
         list.querySelectorAll<HTMLElement>('.lo-opt').forEach((o) =>
           o.classList.toggle('sel', o.dataset.v === v));
+      },
+      setOptions(next) {
+        options = next;
+        rebuild();
+        // The equipped value may have survived the filter — re-face it.
+        this.setValue(currentV);
       },
     };
   }
@@ -129,7 +142,12 @@ export function wireOverlayInput(deps: OverlayInputDeps) {
     classRow.appendChild(classLabel);
     classDrop = mkDrop(
       [{ v: 'light', label: 'Light' }, { v: 'medium', label: 'Medium' }, { v: 'heavy', label: 'Heavy' }],
-      (v) => deps.lazyPlayer().setArmorClass(v as 'light' | 'medium' | 'heavy'),
+      (v) => {
+        deps.lazyPlayer().setArmorClass(v as 'light' | 'medium' | 'heavy');
+        // Class change re-filters the weapon drops on the spot — heavy
+        // ordnance shows/hides without closing the menu.
+        for (const d of slotDrops) d.setOptions?.(weaponOptsFor(v));
+      },
     );
     classRow.appendChild(classDrop.el);
     loadoutBar.appendChild(classRow);
@@ -138,11 +156,11 @@ export function wireOverlayInput(deps: OverlayInputDeps) {
     // would let a loadout double-carry the hold-out tier. Heavy-only
     // ordnance hides when a lighter tier is picked (setArmorClass also
     // unshoulders whatever was equipped).
-    const heavyOnly = Player.HEAVY_ONLY.map(String);
-    const cls = deps.lazyPlayer().armorClass;
-    const weaponOpts = SLOT_DEFS
+    const heavyOnly = new Set(Player.HEAVY_ONLY.map(String));
+    const weaponOptsFor = (cls: string) => SLOT_DEFS
       .map((def, wid) => ({ v: String(wid), label: def.config.displayName, sidearm: !!def.sidearm }))
-      .filter((o) => !o.sidearm && (cls === 'heavy' || !heavyOnly.includes(o.v)));
+      .filter((o) => !o.sidearm && (cls === 'heavy' || !heavyOnly.has(o.v)));
+    const weaponOpts = weaponOptsFor(deps.lazyPlayer().armorClass);
     for (let i = 0; i < Player.LOADOUT_SLOTS; i++) {
       const row = document.createElement('div');
       row.className = 'lo-row';
