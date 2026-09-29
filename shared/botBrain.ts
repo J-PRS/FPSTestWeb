@@ -122,12 +122,44 @@ const MEM_RANGE = 12;    // m — memory trail influence radius
 const DEATH_MS = 30000;  // a death spot stays scary this long
 const DEATH_RANGE = 15;  // m — repel radius around each remembered death
 
+// LOS memo — the march is per-(bot,enemy) the single priciest sense, so
+// results cache on quantized endpoints (1.5m cells) with a short TTL.
+// Answers only change when an endpoint actually crosses a cell or the
+// entry ages out; terrain never changes mid-match.
+const LOS_CELL = 1.5;
+const LOS_TTL_MS = 800;
+const losMemo = new Map<number, { clear: boolean; until: number }>();
+
+function losKey(from: BotVec, to: BotVec): number {
+  const ax = Math.round(from.x / LOS_CELL) + 2048;
+  const az = Math.round(from.z / LOS_CELL) + 2048;
+  const bx = Math.round(to.x / LOS_CELL) + 2048;
+  const bz = Math.round(to.z / LOS_CELL) + 2048;
+  // 12 bits per axis: 4096-cell range ≈ 6km — covers any field span.
+  return ((ax * 4096 + az) * 4096 + bx) * 4096 + bz;
+}
+
+function losClear(ctx: BrainCtx, from: BotVec, to: BotVec): boolean {
+  const key = losKey(from, to);
+  const hit = losMemo.get(key);
+  if (hit && hit.until > ctx.now) return hit.clear;
+  const clear = losMarch(ctx, from, to);
+  // Bound the map — combat bots reuse a narrow band of cells, and stale
+  // entries self-expire anyway; sweep only when it balloons.
+  if (losMemo.size > 4096) {
+    for (const [k, v] of losMemo) if (v.until <= ctx.now) losMemo.delete(k);
+    if (losMemo.size > 4096) losMemo.clear();
+  }
+  losMemo.set(key, { clear, until: ctx.now + LOS_TTL_MS });
+  return clear;
+}
+
 /** Heightfield LOS — march the eye→target line, fail where ground rises
  *  above it. pos.y is eye-height on the client and near-feet on the
  *  server, so the eye point is whichever is higher of pos.y and
  *  ground+eye. Structures aren't modeled — callers don't hand them in —
  *  so this is "can I see over the terrain", not full occlusion. */
-function losClear(ctx: BrainCtx, from: BotVec, to: BotVec): boolean {
+function losMarch(ctx: BrainCtx, from: BotVec, to: BotVec): boolean {
   const dx = to.x - from.x, dz = to.z - from.z;
   const dist = Math.hypot(dx, dz);
   if (dist < 4) return true; // point-blank: probes are coarser than the gap

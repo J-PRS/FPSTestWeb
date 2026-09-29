@@ -1,3 +1,4 @@
+2026-10-01 - Perf round 2: bot LOS sense memoized on 1.5m-quantized endpoints (0.8s TTL); weapon stats resolved once per LiveProj at spawn
 2026-10-01 - Remote anim LOD: distant remotes tick their AnimationMixer at 15/30Hz bursts with accumulated dt - full rate under 60m, poses/oneshots still apply per-frame
 2026-10-01 - ColliderIndex: uniform XZ grid over structure colliders shared by move sims, projectile sweeps, blast occlusion, ball bounces - prunes only, order deterministic across authority/predictor
 2026-10-01 - projectile collision optimization: parabola-scheduled terrain sweeps vs field max-height (zero-miss bound), sphere-reject early-outs in server player sweep and all client sweep fns (ball/player/obstacle); capsule extent covered; 2 new correctness tests; 276 bun + 93 vitest green

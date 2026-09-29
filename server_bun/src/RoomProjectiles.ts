@@ -33,6 +33,9 @@ interface LiveProj {
   id: string;
   ownerId: string;
   weaponType: number;
+  /** Stats are weapon-table constants — resolved once at spawn instead of
+   *  re-looked-up every tick/discharge per projectile. */
+  stats: NonNullable<ReturnType<typeof getWeaponStats>>;
   p: SimProjectile;
   /** Age at which the parabola could first reach the terrain ceiling.
    *  Before it, segFieldHit is skipped — provably nothing below. */
@@ -128,7 +131,7 @@ export class RoomProjectiles {
     // Schedule the first age at which this arc could reach the terrain
     // ceiling; spawned inside it → sweep every tick as before.
     const terrainAt = this.field ? timeToCeiling(origin.y, vel.y, g, this.fieldMax + stats.bodyRadius) : 0;
-    this.projs.set(id, { id, ownerId, weaponType, p: { pos: { ...origin }, vel, age: 0 }, terrainAt });
+    this.projs.set(id, { id, ownerId, weaponType, stats, p: { pos: { ...origin }, vel, age: 0 }, terrainAt });
     this.room.broadcast({
       type: 'projectileCreated', projectileId: id, ownerId,
       position: { ...origin }, velocity: vel, weaponType,
@@ -139,7 +142,7 @@ export class RoomProjectiles {
   tick(dt: number): void {
     // Map iterators tolerate mid-loop delete (detonate) — no snapshot.
     for (const proj of this.projs.values()) {
-      const stats = getWeaponStats(proj.weaponType);
+      const stats = proj.stats;
       const p = proj.p;
       const prevAge = p.age;
       const from = projStep(p, dt, stats.gravity ? GRAVITY : 0);
@@ -211,7 +214,7 @@ export class RoomProjectiles {
       y: p.pos.y + (p.vel.y / speed) * range,
       z: p.pos.z + (p.vel.z / speed) * range,
     };
-    const reach = PLAYER_RADIUS + getWeaponStats(proj.weaponType).bodyRadius;
+    const reach = PLAYER_RADIUS + proj.stats.bodyRadius;
     // Track the earliest contact as a segment parameter [0..1].
     let bestT = 1, hitId: string | null = null;
     if (this.field) {
