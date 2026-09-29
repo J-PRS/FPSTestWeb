@@ -219,6 +219,15 @@ surface. Detailed research lives in `_reports/`; this file is the current truth.
   at 2m/5s (2.5s for flag carriers) with hunting/carrying/pos — plus the
   root fix it caught: ski-held-at-standstill skipped ground physics in
   shared MoveSim, freezing bots (and could freeze a human) on hills.
+- Room health heartbeat (2026-10-01): every room flushes a 15s INFO line
+  `Room health {humans, shot, aoe, hit, dmg, kill, rej, rej.Shot, rej.AOE,
+  diverge, gapMax, posrej, posrejSpeed, posforce, snapreq, ratelimit,
+  unhandled, envdmg, envdmg.far}` — rubberbanding pressure, rejected claims,
+  damage funnel and desync traffic readable at a glance without per-event
+  archaeology. Environment-damage claims now get a melee-range plausibility
+  flag (nearest live creature >15m = 'envdmg.far' + warn; damage still
+  applies — a bugged client shouldn't be silently maimed). Server tsc gate
+  green for the first time (latent strictness debt in src+tests fixed).
 - Soak coverage complete (2026-10-03): every wire path now exercised
   over real sockets — nuggets economy (3 bugs fixed: grounded gem drops,
   huntCreatures target pass, kill→bank funnel), TDM quicksand (inverted
