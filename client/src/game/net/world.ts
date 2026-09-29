@@ -231,6 +231,10 @@ function restoreLocalPlayer(ctx: NetCtx, localPlayerState: LocalPlayerState): vo
   player.armor = localPlayerState.armor ?? 0;
   player.isDead = localPlayerState.isDead;
   player.syncMovement(); // reseat controller — restored pos/vel otherwise revert
+  // A join reseat is a declared discontinuity like any respawn — without
+  // it the first pos report can be judged a 50m+ jump, and the camera
+  // spinout watchdog flags the spawn snap as a 100°+/frame flick.
+  player.markTeleport();
 
   deps.lazyHud().setDeathOverlay(player.isDead);
   if (player.isDead) {

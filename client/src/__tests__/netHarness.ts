@@ -31,7 +31,7 @@ export function makeDeps() {
     health: 100, armor: 0, isDead: false, isShielded: false,
     buffUntil: { regen: 0, dd: 0 },
     absorbShieldDamage() {}, applyPull() {}, applyKnockback() {},
-    heal() {}, grantJetBoost() {}, syncMovement() {},
+    heal() {}, grantJetBoost() {}, syncMovement() {}, markTeleport() {},
     movement: {
       setState() {}, setInput() {}, update() {}, setStructures() {},
       getState: () => ({ pos: new THREE.Vector3(), vel: new THREE.Vector3(), onGround: true }),
