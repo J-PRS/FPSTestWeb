@@ -15,15 +15,19 @@ const GRACE_OUTSIDE_S = 1.5;   // brief spillover (knockback through it) before 
 
 export class RoomArena {
   private outsideSince = new Map<string, number>();
+  // Sim-time, not wall time: deterministic under test stepping AND a
+  // frozen/paused sim can't silently drain the grace window.
+  private t = 0;
 
   constructor(
     private room: Room,
     private arena: { x: number; z: number; radius: number },
   ) {}
 
-  tick(_dt: number): void {
+  tick(dt: number): void {
+    this.t += dt;
     const { x: cx, z: cz, radius: r } = this.arena;
-    const now = Date.now() / 1000;
+    const now = this.t;
     for (const p of this.room.players.getAllPlayers().values()) {
       if (p.isDead) { this.outsideSince.delete(p.id); continue; }
       const dx = p.position.x - cx, dz = p.position.z - cz;
