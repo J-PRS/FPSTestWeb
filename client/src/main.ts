@@ -192,11 +192,12 @@ async function init(): Promise<void> {
   demoManager.setDataProviders(playerData, inputData);
 
   // Wire cool shots panel
-  new CoolShotsPanel({
+  const _coolShots = new CoolShotsPanel({
     demoManager,
     overlay,
     requestLock,
   });
+  void _coolShots;
 
   // Demo playback lifecycle: owns playback registries + all onPlayback* handlers
   demoLifecycle = makeDemoLifecycle();

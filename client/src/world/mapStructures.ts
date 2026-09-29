@@ -12,7 +12,7 @@ const TINTS = {
   bravo: 0x80483a,
 } as const;
 
-const KIND_ROT: Record<StructureSpec['kind'], (m: THREE.Mesh, s: StructureSpec) => void> = {
+const KIND_ROT: Record<StructureSpec['kind'], (m: THREE.Mesh, _s: StructureSpec) => void> = {
   box: () => {},
   wall: () => {},
   pillar: () => {},

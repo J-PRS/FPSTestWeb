@@ -316,7 +316,6 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
   // Extract all recorded data into a DemoFile
   buildDemoFile(description: string = ''): DemoFile {
     const frames = this.frameBuffer.extractAll();
-    const first = frames.length > 0 ? frames[0] : null;
 
     return {
       header: {
@@ -330,14 +329,7 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
         targetEventCount: this.targetEvents.length,
         checksum: 0,
         description,
-        startPosX: first?.posX ?? 0,
-        startPosY: first?.posY ?? 0,
-        startPosZ: first?.posZ ?? 0,
-        startYaw: first?.yaw ?? 0,
-        startPitch: first?.pitch ?? 0,
-        startVelX: first?.velX ?? 0,
-        startVelY: first?.velY ?? 0,
-        startVelZ: first?.velZ ?? 0,
+        ...DemoRecorder.startFrame(frames.length > 0 ? frames[0] : null),
         projectileLifetime: 0,
         ...this.context,
       },
@@ -346,6 +338,19 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
       targetEvents: [...this.targetEvents],
       roster: this.roster.map(r => ({ ...r })),
       remoteFrames: [...this.remoteFrames],
+    };
+  }
+
+  private static startFrame(first: DemoFrame | null) {
+    return {
+      startPosX: first?.posX ?? 0,
+      startPosY: first?.posY ?? 0,
+      startPosZ: first?.posZ ?? 0,
+      startYaw: first?.yaw ?? 0,
+      startPitch: first?.pitch ?? 0,
+      startVelX: first?.velX ?? 0,
+      startVelY: first?.velY ?? 0,
+      startVelZ: first?.velZ ?? 0,
     };
   }
 
@@ -382,13 +387,12 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
     // Renormalize timestamps to clip start. frameNumber wraps at 65536, so
     // a clip spanning the wrap would produce negative numbers — mod back.
     const first = frames[0];
-    const normFrames = frames.map(f => ({
-      ...f,
+    const normFrames = frames.map(f => Object.assign({}, f, {
       timestamp: f.timestamp - clipStart,
       frameNumber: (f.frameNumber - first.frameNumber + 65536) % 65536,
     }));
-    const normProj = projEvents.map(e => ({ ...e, timestamp: e.timestamp - clipStart }));
-    const normTgt = tgtEvents.map(e => ({ ...e, timestamp: e.timestamp - clipStart }));
+    const normProj = projEvents.map(e => Object.assign({}, e, { timestamp: e.timestamp - clipStart }));
+    const normTgt = tgtEvents.map(e => Object.assign({}, e, { timestamp: e.timestamp - clipStart }));
 
     return {
       header: {
@@ -430,11 +434,11 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
     );
     const out: RemoteFrame[] = [];
     for (const [, f] of lastBefore) {
-      out.push({ ...f, timestamp: clipStart });
+      out.push(Object.assign({}, f, { timestamp: clipStart }));
     }
     out.push(...inWindow);
     out.sort((a, b) => a.timestamp - b.timestamp);
-    return out.map(f => ({ ...f, timestamp: f.timestamp - clipStart }));
+    return out.map(f => Object.assign({}, f, { timestamp: f.timestamp - clipStart }));
   }
 
   // Projectile events in [clipStart, clipEnd], plus synthetic Fired events at

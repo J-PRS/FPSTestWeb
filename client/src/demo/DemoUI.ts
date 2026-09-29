@@ -49,14 +49,14 @@ export class DemoUI {
     this.playBtn.textContent = '▶';
     this.playBtn.style.cssText = this.btnStyle('#333');
     this.playBtn.title = 'Play/Pause';
-    this.playBtn.onclick = () => this.callbacks?.onPlayPause();
+    this.playBtn.addEventListener('click', () => this.callbacks?.onPlayPause());
 
     // Stop button
     this.stopBtn = document.createElement('button');
     this.stopBtn.textContent = '■';
     this.stopBtn.style.cssText = this.btnStyle('#333');
     this.stopBtn.title = 'Stop';
-    this.stopBtn.onclick = () => this.callbacks?.onStop();
+    this.stopBtn.addEventListener('click', () => this.callbacks?.onStop());
 
     // Timeline slider — wrapped in a relative container for marker overlay.
     // The native range thumb has a half-thumb inset on each side, so the marker
@@ -73,10 +73,10 @@ export class DemoUI {
       -webkit-appearance: none; appearance: none;
       height: 6px; background: #333; border-radius: 3px; outline: none;
     `;
-    this.timeline.oninput = () => {
+    this.timeline.addEventListener('input', () => {
       const time = parseFloat(this.timeline.value);
       this.callbacks?.onSeek(time);
-    };
+    });
 
     // Inject thumb styling (pseudo-elements can't be set via inline styles)
     if (!document.getElementById('demo-ui-slider-style')) {
@@ -128,50 +128,50 @@ export class DemoUI {
       this.speedSelect.appendChild(opt);
     }
     this.speedSelect.value = '1';
-    this.speedSelect.onchange = () => {
+    this.speedSelect.addEventListener('change', () => {
       this.callbacks?.onSpeedChange(parseFloat(this.speedSelect.value));
-    };
+    });
 
     // Loop button
     this.loopBtn = document.createElement('button');
     this.loopBtn.textContent = '↻';
     this.loopBtn.style.cssText = this.btnStyle('#333');
     this.loopBtn.title = 'Loop';
-    this.loopBtn.onclick = () => {
+    this.loopBtn.addEventListener('click', () => {
       this.callbacks?.onLoop(!this.loopBtn.classList.contains('active'));
-    };
+    });
 
     // Save button
     this.saveBtn = document.createElement('button');
     this.saveBtn.textContent = 'Save';
     this.saveBtn.style.cssText = this.btnStyle('#2a5a2a');
     this.saveBtn.title = 'Save demo to file';
-    this.saveBtn.onclick = () => this.callbacks?.onSave();
+    this.saveBtn.addEventListener('click', () => this.callbacks?.onSave());
 
     // MP4 export button — records the render canvas live during playback
     this.videoBtn = document.createElement('button');
     this.videoBtn.textContent = 'MP4';
     this.videoBtn.style.cssText = this.btnStyle('#5a2a2a');
     this.videoBtn.title = 'Record canvas to mp4/webm while playing';
-    this.videoBtn.onclick = () => this.callbacks?.onVideoToggle();
+    this.videoBtn.addEventListener('click', () => this.callbacks?.onVideoToggle());
 
     // Load input (hidden file input)
     this.loadInput = document.createElement('input');
     this.loadInput.type = 'file';
     this.loadInput.accept = '.demo';
     this.loadInput.style.display = 'none';
-    this.loadInput.onchange = () => {
+    this.loadInput.addEventListener('change', () => {
       if (this.loadInput.files && this.loadInput.files[0]) {
         this.callbacks?.onLoad(this.loadInput.files[0]);
       }
-    };
+    });
 
     // Load button (triggers file input)
     const loadBtn = document.createElement('button');
     loadBtn.textContent = 'Load';
     loadBtn.style.cssText = this.btnStyle('#2a3a5a');
     loadBtn.title = 'Load demo from file';
-    loadBtn.onclick = () => this.loadInput.click();
+    loadBtn.addEventListener('click', () => this.loadInput.click());
 
     // Status label
     this.statusLabel = document.createElement('span');

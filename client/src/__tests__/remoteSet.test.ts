@@ -93,7 +93,7 @@ describe('RemoteSet', () => {
   it('Map surface: iteration, forEach, values, clear', () => {
     const { set } = mkSet();
     set.ensure('a', { ping: 1 }); set.ensure('b', { ping: 1 });
-    expect([...set.keys()].sort()).toEqual(['a', 'b']);
+    expect([...set.keys()].toSorted()).toEqual(['a', 'b']);
     let n = 0;
     set.forEach(() => n++);
     expect(n).toBe(2);

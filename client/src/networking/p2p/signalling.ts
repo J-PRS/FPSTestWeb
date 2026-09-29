@@ -28,21 +28,21 @@ export function connectP2P(opts: { signalUrl: string; timeoutMs?: number }): Pro
 
     const newPc = (): RTCPeerConnection => {
       const p = new RTCPeerConnection(RTC_CONFIG);
-      p.onicecandidate = (e) => { if (e.candidate) send({ t: 'ice', ice: e.candidate.toJSON() }); };
-      p.onconnectionstatechange = () => {
+      p.addEventListener('icecandidate', (e) => { if (e.candidate) send({ t: 'ice', ice: e.candidate.toJSON() }); });
+      p.addEventListener('connectionstatechange', () => {
         if (p.connectionState === 'failed') fail(new Error('ICE failed — NAT unroutable'));
-      };
+      });
       return p;
     };
 
     const armChannel = (dc: RTCDataChannel) => {
-      dc.onopen = () => { clearTimeout(timeout); ws.close(); resolve(dc); };
+      dc.addEventListener('open', () => { clearTimeout(timeout); ws.close(); resolve(dc); });
     };
 
-    ws.onerror = () => fail(new Error('signalling socket failed'));
-    ws.onclose = (e) => { if (e.code === 1008) fail(new Error(`room rejected: ${e.reason}`)); };
+    ws.addEventListener('error', () => fail(new Error('signalling socket failed')));
+    ws.addEventListener('close', (e) => { if (e.code === 1008) fail(new Error(`room rejected: ${e.reason}`)); });
 
-    ws.onmessage = async (ev) => {
+    ws.addEventListener('message', async (ev) => {
       const msg = JSON.parse(ev.data as string) as SignalMsg;
       try {
         switch (msg.t) {
@@ -61,7 +61,7 @@ export function connectP2P(opts: { signalUrl: string; timeoutMs?: number }): Pro
           }
           case 'offer': {
             pc = newPc();
-            pc.ondatachannel = (e) => armChannel(e.channel);
+            pc.addEventListener('datachannel', (e) => armChannel(e.channel));
             await pc.setRemoteDescription({ type: 'offer', sdp: msg.sdp! });
             const answer = await pc.createAnswer();
             await pc.setLocalDescription(answer);
@@ -82,8 +82,8 @@ export function connectP2P(opts: { signalUrl: string; timeoutMs?: number }): Pro
         logger.error('signalling error', e);
         fail(e as Error);
       }
-    };
+    });
 
-    ws.onopen = () => logger.info(`signalling connected (host=${isHost})`);
+    ws.addEventListener('open', () => logger.info(`signalling connected (host=${isHost})`));
   });
 }

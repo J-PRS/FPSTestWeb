@@ -44,6 +44,10 @@ export interface WorldState {
   // wire must not mutate the scene (corrections/projectiles/live balls)
   // and we must not stream recorded camera motion to the server.
   playbackMode: boolean;
+  /** Self-knockback predictions — stamped when a local explosion already
+   *  shoved the player so the server's `knockback` echo (~RTT later)
+   *  doesn't apply the same blast twice. */
+  selfBlastStamps: { x: number; y: number; z: number; t: number }[];
 }
 
 export function createWorldState(): WorldState {
@@ -66,5 +70,6 @@ export function createWorldState(): WorldState {
     respawnMs: 3000,
     flagStates: {},
     playbackMode: false,
+    selfBlastStamps: [],
   };
 }

@@ -20,7 +20,6 @@ const SPARK_SPEED = 7;
 const _dir = new THREE.Vector3();
 const _side = new THREE.Vector3();
 const _up = new THREE.Vector3();
-const _p = new THREE.Vector3();
 const _segDir = new THREE.Vector3();
 
 // Perpendicular basis for a direction — picks the world axis LEAST aligned

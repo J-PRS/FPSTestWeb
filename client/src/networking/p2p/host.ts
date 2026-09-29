@@ -61,11 +61,11 @@ export class P2PHost {
       },
       close: () => { try { dc.close(); } catch { /* gone */ } },
     };
-    dc.onmessage = (ev) => {
+    dc.addEventListener('message', (ev) => {
       const data = ev.data;
       this.onData(link, data instanceof ArrayBuffer ? new Uint8Array(data) : data as string);
-    };
-    dc.onclose = () => this.onClose(link);
+    });
+    dc.addEventListener('close', () => this.onClose(link));
     logger.info('Guest DataChannel attached');
   }
 

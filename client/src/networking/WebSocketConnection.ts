@@ -54,7 +54,7 @@ export class WebSocketConnection {
       // Explicitly set binaryType to handle binary frames correctly
       this.ws.binaryType = 'arraybuffer';
 
-      this.ws.onopen = () => {
+      this.ws.addEventListener('open', () => {
         logger.info('WebSocket connected');
         this.isConnected = true;
         this.reconnectAttempts = 0;
@@ -69,9 +69,9 @@ export class WebSocketConnection {
         while (this.messageQueue.length > 0) {
           this.send(this.messageQueue.shift()!);
         }
-      };
+      });
 
-      this.ws.onclose = (event) => {
+      this.ws.addEventListener('close', (event) => {
         logger.info(`WebSocket disconnected: ${event.code} - ${event.reason}`);
         this.isConnected = false;
         
@@ -89,9 +89,9 @@ export class WebSocketConnection {
             this.connect();
           }, this.config.reconnectInterval);
         }
-      };
+      });
 
-      this.ws.onerror = (error) => {
+      this.ws.addEventListener('error', (error) => {
         if (!this.hasLoggedConnectionError) {
           logger.error('WebSocket error:', error);
           this.hasLoggedConnectionError = true;
@@ -99,9 +99,9 @@ export class WebSocketConnection {
         if (this.config.onError) {
           this.config.onError(new Error('WebSocket connection error'));
         }
-      };
+      });
 
-      this.ws.onmessage = (event) => {
+      this.ws.addEventListener('message', (event) => {
         try {
           const data = event.data;
           if (typeof data === 'string') {
@@ -113,7 +113,7 @@ export class WebSocketConnection {
           logger.error('Error processing message:', error);
           this.config.onError?.(error as Error);
         }
-      };
+      });
 
     } catch (error) {
       logger.error('Failed to create WebSocket:', error);

@@ -179,9 +179,9 @@ export class CoolShotManager {
 
   // Keep top 10 by lifetime + recent 10 by timestamp (may overlap)
   private trimList(): void {
-    this.coolShots.sort((a, b) => b.projectileLifetime - a.projectileLifetime);
+    this.coolShots.toSorted((a, b) => b.projectileLifetime - a.projectileLifetime);
     const topIds = new Set(this.coolShots.slice(0, 10).map(s => s.id));
-    const recentIds = new Set([...this.coolShots].sort((a, b) => b.timestamp - a.timestamp).slice(0, 10).map(s => s.id));
+    const recentIds = new Set([...this.coolShots].toSorted((a, b) => b.timestamp - a.timestamp).slice(0, 10).map(s => s.id));
     this.coolShots = this.coolShots.filter(s => topIds.has(s.id) || recentIds.has(s.id));
   }
 

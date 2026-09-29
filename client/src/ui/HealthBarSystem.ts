@@ -127,14 +127,14 @@ export class HealthBarSystem {
     for (const [playerId, bar] of this.bars) {
       const playerState = players.get(playerId);
       const rp = remotePlayers?.get(playerId);
-      const isDead = rp ? rp.isDead : (playerState?.isDead ?? true);
-
-      if (!playerState || isDead) {
+      // Local bots ('bot:', 'BOT-') have a rendered body but no wire-roster
+      // entry — a live rp is sufficient authority for the bar.
+      if ((!playerState && !rp) || rp?.isDead || playerState?.isDead) {
         this.removeBar(playerId);
         continue;
       }
 
-      const pos = rp ? rp.position : playerState.position;
+      const pos = rp ? rp.position : playerState!.position;
       const targetPos = _targetPos.set(pos.x, pos.y + PLAYER_HEIGHT + 0.3, pos.z);
       this.updateBar(bar, dt, targetPos, cameraPos, cameraDir, () => this.removeBar(playerId));
     }

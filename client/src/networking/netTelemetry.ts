@@ -12,6 +12,7 @@ export class NetTelemetry {
   ping = 0;
   private pingHistory: number[] = [];
   private lastTickAt = 0;
+  private firstTickAt = 0;
   private tickWindow: { t: number; missed: number }[] = [];
 
   constructor(private readonly expectedTickMs: number) {}
@@ -35,12 +36,16 @@ export class NetTelemetry {
       while (this.tickWindow.length && now - this.tickWindow[0]!.t > TICK_WINDOW_MS) this.tickWindow.shift();
     }
     this.lastTickAt = now;
+    if (this.firstTickAt === 0) this.firstTickAt = now;
   }
 
   packetLoss(now: number): number {
     if (this.lastTickAt === 0 || this.tickWindow.length === 0) return 0;
     const missed = this.tickWindow.reduce((s, w) => s + w.missed, 0);
-    const spanMs = Math.max(1, now - Math.min(now, this.tickWindow[0]!.t));
+    // Denominator is ticks since the FIRST tick ever (capped at the
+    // window), not since the first miss — a single early gap otherwise
+    // divides by a tiny span and pins the display at 100% for minutes.
+    const spanMs = Math.max(1, now - this.firstTickAt);
     const expected = Math.max(1, Math.round(Math.min(TICK_WINDOW_MS, spanMs) / this.expectedTickMs));
     return Math.min(100, Math.round((missed / expected) * 100));
   }

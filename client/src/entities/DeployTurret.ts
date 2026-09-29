@@ -135,9 +135,13 @@ export class DeployTurret {
     this.fireCd = FIRE_INTERVAL;
     this.flashT = 0.09;
 
-    // Launch point: the tube mouth in world space. The rocket owns lead
-    // and steering from here — the turret just picks WHO to shoot.
-    const muzzle = _v.copy(MUZZLE).applyQuaternion(this.head.getWorldQuaternion(new THREE.Quaternion())).add(this.pos).clone();
+    // Launch point: the tube mouth in world space. MUZZLE is local to the
+    // head pivot — go through its world matrix so the +1.4 mast height and
+    // the group's terrain tilt are both in the transform. (The old path
+    // rotated the offset but added `pos` at ground height — rockets
+    // spawned at the tripod's feet and ate the terrain check instantly.)
+    this.head.updateWorldMatrix(true, false);
+    const muzzle = _v.copy(MUZZLE).applyMatrix4(this.head.matrixWorld).clone();
     return { muzzle, target: best };
   }
 

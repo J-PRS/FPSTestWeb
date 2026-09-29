@@ -189,19 +189,26 @@ body.menu-open #frag-msg { display: none !important; }
   margin-bottom: 14px; font-weight: 700;
 }
 #cool-shots-panel .sub { font-size: 0.65rem; color: rgba(140,170,195,0.6); margin-bottom: 12px; letter-spacing: 0.08em; }
-/* Loadout picker — bottom-center strip inside the ESC overlay */
+/* Loadout picker — bottom-center strip inside the ESC overlay.
+   Cells are label-over-chip and the bar wraps as a row: weapons fill
+   the first line, belt/sidearm/pack/skill/perk flow after — a loadout
+   read, not a form column. */
 #loadout-bar {
   position: absolute; left: 50%; bottom: 26px;
   transform: translateX(-50%);
-  display: flex; flex-direction: column; gap: 6px;
-  align-items: center;
+  display: flex; flex-direction: row; flex-wrap: wrap;
+  justify-content: center; align-items: flex-end;
+  gap: 8px 14px; max-width: 760px;
   cursor: default;
 }
-#loadout-bar .lo-row { display: flex; gap: 5px; align-items: center; }
+#loadout-bar .lo-row { display: flex; flex-direction: column; gap: 3px; align-items: center; }
+#loadout-bar .lo-row.lo-gap {
+  margin-left: 10px; padding-left: 24px;
+  border-left: 1px solid rgba(255,255,255,0.1);
+}
 #loadout-bar .lo-label {
-  font-size: 0.55rem; letter-spacing: 0.2em; font-weight: 600;
-  color: rgba(140,170,195,0.55); width: 52px; text-align: right;
-  margin-right: 4px;
+  font-size: 0.52rem; letter-spacing: 0.2em; font-weight: 600;
+  color: rgba(140,170,195,0.55); text-align: center;
 }
 #loadout-bar .lo-chip {
   padding: 6px 11px;
@@ -281,11 +288,13 @@ body.menu-open #frag-msg { display: none !important; }
 }
 .lb-btn:hover { background: rgba(58,167,255,0.18); color: #fff; }
 .lb-btn:disabled { opacity: 0.5; cursor: default; }
-.lb-open { position: fixed; right: 12px; bottom: 12px; z-index: 60; }
 .lb-panel {
-  position: fixed; right: 12px; bottom: 52px; z-index: 60; width: 300px;
-  background: rgba(8,11,16,0.75); border: 1px solid rgba(255,255,255,0.07);
-  color: #dde8f2; border-radius: 8px; padding: 14px; font-size: 0.72rem;
+  /* Full-height column beside the menu — a translucent floating card
+   *  stacked over the menu column read as a z-fight smear; twin columns
+   *  share the edge cleanly and scroll internally instead of towering. */
+  position: fixed; top: 0; right: 296px; bottom: 0; z-index: 60; width: 300px;
+  background: rgba(8,11,16,0.92); border-left: 1px solid rgba(255,255,255,0.07);
+  color: #dde8f2; padding: 24px 18px; font-size: 0.72rem; overflow-y: auto;
 }
 .lb-label {
   font-size: 0.62rem; letter-spacing: 0.2em; font-weight: 600;
@@ -307,6 +316,10 @@ body.menu-open #frag-msg { display: none !important; }
   font-size: 0.72rem; padding: 5px 8px; outline: none; letter-spacing: 0.08em;
 }
 .lb-input:focus { border-color: #3aa7ff; }
+/* No spinners on numeric inputs, ever — they're fiddly at game-UI scale. */
+input[type=number]::-webkit-outer-spin-button,
+input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+input[type=number] { -moz-appearance: textfield; appearance: textfield; }
 .lb-quick { display: flex; gap: 4px; margin-bottom: 8px; }
 .lb-quick .lb-btn { flex: 1; padding: 6px 0; text-align: center; }
 .lb-newrow { display: flex; gap: 6px; margin-top: 8px; }

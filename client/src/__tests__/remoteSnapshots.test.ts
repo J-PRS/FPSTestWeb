@@ -6,8 +6,6 @@ import { SnapshotBuffer } from '../entities/remoteSnapshots.js';
 // newest one (that's jitter-chasing) and never stale past the buffer.
 
 const _pos = new THREE.Vector3();
-const _rot = { yaw: 0, pitch: 0 };
-
 function sample(buf: SnapshotBuffer, fallback = _pos): { pos: THREE.Vector3; rot: { yaw: number; pitch: number } } {
   const p = new THREE.Vector3();
   const r = { yaw: 0, pitch: 0 };

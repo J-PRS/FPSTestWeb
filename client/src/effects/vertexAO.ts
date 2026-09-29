@@ -15,7 +15,6 @@ const _n = new THREE.Vector3();
 const _p = new THREE.Vector3();
 const _tan = new THREE.Vector3();
 const _bitan = new THREE.Vector3();
-const _m = new THREE.Matrix4();
 
 const RAYS = 16;             // hemisphere samples per vertex — enough for soft AO
 const RAY_DIST_SCALE = 0.18; // occlusion range = bbox radius × this (crevice scale)

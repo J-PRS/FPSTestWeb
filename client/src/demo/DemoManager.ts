@@ -193,7 +193,7 @@ export class DemoManager {
       });
       return;
     }
-    const canvas = [...document.querySelectorAll('canvas')].sort((a, b) => b.width * b.height - a.width * a.height)[0];
+    const canvas = [...document.querySelectorAll('canvas')].toSorted((a, b) => b.width * b.height - a.width * a.height)[0];
     if (!canvas) { this.ui.setStatus('no canvas'); return; }
     this.video.setCanvas(canvas);
     if (this.video.start(60)) {

@@ -6,7 +6,7 @@ import {
   STRIFER_ORBIT_ALT, STRIFER_ORBIT_R, STRIFER_SPEED, STRIFER_ACCEL,
   STRIFER_REFIRE_MIN, STRIFER_REFIRE_MAX,
   STRIFER_BOLT_SPEED, STRIFER_BOLT_LIFE, STRIFER_BOLT_DIST,
-  STRIFER_HOVER_T, STRIFER_STUN,
+  STRIFER_HOVER_T, STRIFER_STUN, MELEE_FAVOR,
 } from '../core/config.js';
 import { Terrain } from '../world/terrain.js';
 import type { Targetable } from './balls.js';
@@ -224,7 +224,8 @@ export class Strifer implements Targetable, SwarmSlotOwner {
       const b = this.bolts[i]!;
       b.age += dt;
       b.pos.addScaledVector(b.vel, dt);
-      const hitPlayer = b.pos.distanceToSquared(playerPos) < STRIFER_BOLT_DIST * STRIFER_BOLT_DIST;
+      const boltD = STRIFER_BOLT_DIST * MELEE_FAVOR;
+      const hitPlayer = b.pos.distanceToSquared(playerPos) < boltD * boltD;
       if (hitPlayer) this.onBoltHit?.(this);
       if (hitPlayer || b.age > STRIFER_BOLT_LIFE || b.pos.y < terrain.getHeight(b.pos.x, b.pos.z)) {
         if (!hitPlayer) this.onBoltLand?.(b.pos);

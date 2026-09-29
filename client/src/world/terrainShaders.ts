@@ -28,7 +28,6 @@ export const terrainVert = /* glsl */`
   // The inner level's grid corner is at innerGridOrigin - innerHalfSize
   // (innerGridOrigin is the grid CENTER, not the corner)
   float sampleInnerHeight(vec2 worldXZ) {
-    if (innerHalfSize <= 0.0) return sampleHeightGPU(worldXZ);
     vec2 corner = innerGridOrigin - innerHalfSize;
     vec2 local = worldXZ - corner;
     vec2 cell = floor(local / innerSpacing);
@@ -38,7 +37,11 @@ export const terrainVert = /* glsl */`
     float h10 = sampleHeightGPU(p00 + vec2(innerSpacing, 0.0));
     float h01 = sampleHeightGPU(p00 + vec2(0.0, innerSpacing));
     float h11 = sampleHeightGPU(p00 + vec2(innerSpacing, innerSpacing));
-    return mix(mix(h00, h10, f.x), mix(h01, h11, f.x), f.y);
+    // Single exit — ANGLE's "uninitialized f_sampleInnerHeight" warn came
+    // from the early return leaving its generated return var unset.
+    float h = mix(mix(h00, h10, f.x), mix(h01, h11, f.x), f.y);
+    if (innerHalfSize <= 0.0) h = sampleHeightGPU(worldXZ);
+    return h;
   }
 
   // Morph heights near the inner boundary to match the finer level,

@@ -17,7 +17,7 @@ class FakeLink implements P2PLink {
     else this.bin.push(d);
   }
   close() { this.closed = true; }
-  lastJson(type: string) { return [...this.json].reverse().find(m => m.type === type); }
+  lastJson(type: string) { return [...this.json].toReversed().find(m => m.type === type); }
 }
 
 function join(host: P2PHost, link: FakeLink, id: string) {

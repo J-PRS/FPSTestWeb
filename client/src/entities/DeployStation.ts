@@ -149,8 +149,7 @@ export class DeployStation {
     for (let i = 0; i < posAttr.count; i++) {
       const x = posAttr.getX(i) * R;
       const z = posAttr.getY(i) * R; // plane Y becomes world Z after rotateX
-      posAttr.setXYZ(i, x, 0, z);
-      posAttr.setXYZ(i, x, this.terrain.getHeight(this.pos.x + x, this.pos.z + z) - this.pos.y + 0.12, z);
+      posAttr.setXYZ(i, x, this.terrain.getHeight(this.pos.x + x, this.pos.z + z) - this.pos.y + 0.18, z);
     }
     geo.computeVertexNormals();
     this.decal = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
@@ -161,8 +160,12 @@ export class DeployStation {
     this.decal.renderOrder = 2;
     this.scene.add(this.decal);
 
+    // FULL sphere centered on the pad — a hemisphere dome planted at
+    // pod height carves a bright rim through any slope it sits on. A
+    // sphere buries its lower half evenly on every side, so the visible
+    // cap conforms to ANY terrain with zero conforming logic.
     this.dome = new THREE.Mesh(
-      new THREE.SphereGeometry(R * 0.98, 28, 14, 0, Math.PI * 2, 0, Math.PI / 2),
+      new THREE.SphereGeometry(R * 0.98, 28, 20),
       new THREE.MeshBasicMaterial({
         color: 0x44eebb, transparent: true, opacity: 0.05,
         blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,

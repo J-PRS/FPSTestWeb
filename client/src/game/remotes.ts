@@ -109,7 +109,7 @@ export function createRemotes(deps: RemotesDeps) {
       rosterPollT = 0.5;
       const activeIds = Array.from(players.keys()).filter(id => id !== localPlayerId && isRemoteActive(id, players));
       deps.lazyHud().updatePlayerList([localPlayerId, ...activeIds], localPlayerId);
-      const rosterKey = [...players.keys()].filter(id => id !== localPlayerId).sort().join(',');
+      const rosterKey = [...players.keys()].filter(id => id !== localPlayerId).toSorted().join(',');
       if (rosterKey !== lastRemotePosLog) {
         lastRemotePosLog = rosterKey;
         deps.logger.info(`Remote roster: ${rosterKey || 'none'}`);
@@ -266,7 +266,7 @@ export function createRemotes(deps: RemotesDeps) {
       const t = (rp as { team?: string }).team;
       remoteRows.push({ name: id.replace('bot:', ''), frags: deps.world.killCounts.get(id) ?? 0, score: deps.world.ffaScores.get(id) ?? null, ping: null, net: 'bot', self: false, dead: rp.isDead, team: t === 'alpha' || t === 'bravo' ? t : undefined });
     }
-    remoteRows.sort((a, b) => (b.score ?? b.frags) - (a.score ?? a.frags));
+    remoteRows.toSorted((a, b) => (b.score ?? b.frags) - (a.score ?? a.frags));
     hud.setScoreboardRows([...rows, ...remoteRows]);
   }
 

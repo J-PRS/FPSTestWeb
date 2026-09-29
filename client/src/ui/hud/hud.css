@@ -80,9 +80,9 @@
 #ent-counts .dim { color: #777; }
 #ent-counts .hot { color: #fc8; font-weight: bold; }
 #hud-timer {
-  position: absolute; top: 14px; left: 50%;
-  transform: translateX(-50%);
-  font-size: 1.5rem; font-weight: bold; color: #ffd9a0;
+  /* Top-right stack under FPS — top-center belongs to the team score. */
+  position: absolute; top: 66px; right: 20px;
+  font-size: 1.1rem; font-weight: bold; color: #ffd9a0;
   font-variant-numeric: tabular-nums;
   text-shadow: 0 0 6px rgba(0,0,0,0.8), 1px 1px 0 #000;
 }
@@ -173,6 +173,30 @@
 .player-indicator.hidden {
   opacity: 0;
 }
+/* Flag markers — diamond silhouette, team color, always legible. */
+.player-indicator.flag {
+  border: 0;
+  border-radius: 0;
+  clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+  width: 14px;
+  height: 14px;
+}
+.player-indicator.flag.alpha {
+  background: #55aaff;
+  box-shadow: 0 0 10px rgba(85, 170, 255, 0.9);
+}
+.player-indicator.flag.bravo {
+  background: #ff8855;
+  box-shadow: 0 0 10px rgba(255, 136, 85, 0.9);
+}
+/* A flag offscreen stays a filled diamond — losing the flag's edge marker
+   is exactly the failure mode this element exists to prevent. */
+.player-indicator.flag.offscreen {
+  background: inherit;
+  border: 0;
+}
+.player-indicator.flag.offscreen.alpha { background: #55aaff; }
+.player-indicator.flag.offscreen.bravo { background: #ff8855; }
 #player-list {
   position: absolute; top: 14px; left: 20px;
   font-size: 0.75rem; color: #ccc; line-height: 1.7;
@@ -226,6 +250,9 @@
 }
 #scoreboard tr.sb-team.alpha td { color: #55aaff; }
 #scoreboard tr.sb-team.bravo td { color: #ff8855; }
+/* Name cell tinted by team — readable at a glance even flat-sorted. */
+#scoreboard tr.sb-alpha td:first-child { color: #7db8ff; }
+#scoreboard tr.sb-bravo td:first-child { color: #ff9a6a; }
 #team-score {
   position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
   display: none; font: 700 18px/1 monospace; letter-spacing: 0.08em;
