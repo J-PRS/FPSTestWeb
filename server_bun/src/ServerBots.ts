@@ -21,6 +21,7 @@ import { BotBrain, type BotEnemy, type BotVec } from '../../shared/botBrain.ts';
 import { logger } from './logger.ts';
 import { STATUS, CLIENT_STATUS_MASK } from '../../shared/status.ts';
 import { WeaponType, getWeaponStats } from '../../shared/weapons.ts';
+import { GRAVITY } from '../../shared/movement.ts';
 import type { PerkId } from '../../shared/perks.ts';
 import { CLASS_STATS, type ArmorClass } from '../../shared/botClasses.ts';
 import { roleObjective, ROLE_PRIORITY, type BotRole } from '../../shared/flagGoals.ts';
@@ -259,7 +260,7 @@ export class ServerBots {
     if (stats.rayDelay) {
       pitch = 0.15;
     } else {
-      const g = Math.abs(stats.gravity) || 28;
+      const g = Math.abs(GRAVITY);
       const sin2t = Math.min(0.98, (d * g) / (stats.speed * stats.speed));
       pitch = Math.asin(sin2t) / 2;
     }

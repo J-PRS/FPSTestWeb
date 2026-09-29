@@ -23,7 +23,7 @@ describe('sticky launcher stats', () => {
   });
 
   it('flies ballistically (gravity arc, no hitscan wake)', () => {
-    expect(s.gravity).toBeLessThan(0);
+    expect(s.gravity).toBe(true);
     expect(s.speed).toBeGreaterThan(20);
   });
 });

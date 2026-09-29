@@ -8,6 +8,7 @@
  */
 
 import { getWeaponStats } from './weapons.js';
+import { GRAVITY } from './movement.js';
 import { segSolidHit } from './solidWorld.js';
 import type { StructureCollider } from './ballSim.js';
 import {
@@ -143,7 +144,8 @@ function checkFlightLegality(args: {
   // once they pass the discharge delay — the beam's range is legal reach.
   const rayReach = (stats.rayRange !== undefined && stats.rayDelay !== undefined && airtime >= stats.rayDelay)
     ? stats.rayRange : 0;
-  const maxReach = speed * airtime + 0.5 * Math.abs(stats.gravity) * airtime * airtime + rayReach + REACH_MARGIN_M;
+  const gMag = stats.gravity ? Math.abs(GRAVITY) : 0;
+  const maxReach = speed * airtime + 0.5 * gMag * airtime * airtime + rayReach + REACH_MARGIN_M;
   const dx = endPos.x - projectile.origin.x;
   const dy = endPos.y - projectile.origin.y;
   const dz = endPos.z - projectile.origin.z;
@@ -156,7 +158,7 @@ function checkFlightLegality(args: {
   // struck a face before its claimed end can't honestly get there.
   if (args.solids?.length) {
     const STEPS = 16;
-    const g = stats.gravity;
+    const g = stats.gravity ? GRAVITY : 0;
     let px = projectile.origin.x, py = projectile.origin.y, pz = projectile.origin.z;
     for (let i = 1; i <= STEPS; i++) {
       const t = (airtime * i) / STEPS;

@@ -5,7 +5,7 @@ export interface ProjectileConfig {
   displayName: string;
   weaponType: number; // numeric ID for demo protocol (0=rocket, 1=disc)
   speed: number;
-  gravity: number; // 0 for no gravity, GRAVITY for arc
+  gravity: boolean; // world gravity bends the arc — never a custom value
   explosionRadius: number;
   force: number;
   forceMode: 'push' | 'pull';

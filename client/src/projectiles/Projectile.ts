@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-import { PLAYER_RADIUS } from '../core/config.js';
+import { PLAYER_RADIUS, GRAVITY } from '../core/config.js';
 import { hitRadiusAt } from '../../../shared/combat.js';
 
 import type { Targetable } from '../entities/balls.js';
@@ -243,7 +243,7 @@ export class Projectile {
     // teleport the explosion back to the last terrain contact (the
     // "explosion in the wrong spot" bug on fuse/ball/player kills)
     this.hitPointValid = false;
-    this.vel.y += this.config.gravity * dt;
+    if (this.config.gravity) this.vel.y += GRAVITY * dt;
     this.pos.addScaledVector(this.vel, dt);
 
     // Fuse: auto-explode if max lifetime is reached

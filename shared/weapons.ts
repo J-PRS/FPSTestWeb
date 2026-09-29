@@ -51,8 +51,9 @@ export interface WeaponStats {
   forceMode: 'push' | 'pull';
   /** Muzzle speed (m/s) — before 50% player-velocity inheritance */
   speed: number;
-  /** Ballistic gravity (m/s², negative) — 0 for flat trajectories */
-  gravity: number;
+  /** Whether world gravity (-28 m/s²) bends the trajectory — boolean by
+   *  design: physics is physics, per-weapon fudge factors read as fake. */
+  gravity: boolean;
   /** Core hitbox radius (m) — a hit inside this counts as direct */
   bodyRadius: number;
   /** Wake proxy hitbox floor (m) at spawn */
@@ -100,7 +101,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     knockbackForce: 28.0,
     forceMode: 'push',
     speed: 120.0,
-    gravity: -28.0,
+    gravity: true,
     bodyRadius: 0.18,
     hitMin: 0.0,
     hitMax: 8.0,
@@ -113,7 +114,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     knockbackForce: 25.0,
     forceMode: 'push', // launcher disc knocks back like everything else
     speed: 80.0,
-    gravity: 0,
+    gravity: false,
     bodyRadius: 0.5,
     hitMin: 0.3,
     hitMax: 8.0,
@@ -127,7 +128,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     knockbackForce: 25.0,
     forceMode: 'pull',
     speed: 80.0,
-    gravity: 0,
+    gravity: false,
     bodyRadius: 0.5,
     hitMin: 0.3,
     hitMax: 8.0,
@@ -140,7 +141,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     knockbackForce: 45.0,
     forceMode: 'push',
     speed: 40.0,
-    gravity: -28.0,
+    gravity: true,
     bodyRadius: 0.25,
     hitMin: 0.0,
     hitMax: 8.0,
@@ -154,7 +155,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     knockbackForce: 0,
     forceMode: 'push',
     speed: 250.0,
-    gravity: 0,
+    gravity: false,
     bodyRadius: 0.15,
     hitMin: 0.0,
     hitMax: 0.5, // tight proxy cap — slugs get a small wake, not the 8m shell drag
@@ -167,7 +168,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     knockbackForce: 55.0,
     forceMode: 'push',
     speed: 55.0,
-    gravity: -28.0,
+    gravity: true,
     bodyRadius: 0.3,
     hitMin: 0.0,
     hitMax: 2.0, // tight proxy — the big splash is the forgiving part, not the wake
@@ -181,7 +182,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     knockbackForce: 45.0,
     forceMode: 'push',
     speed: 55.0,
-    gravity: -28.0,
+    gravity: true,
     bodyRadius: 0.15,
     hitMin: 0.0,
     hitMax: 2.0, // tight proxy — bouncing shells shouldn't drag a huge wake
@@ -195,7 +196,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     knockbackForce: 0,
     forceMode: 'push',
     speed: 90.0,
-    gravity: -28.0 * 0.6, // chunks sag a bit — not a laser
+    gravity: true,
     bodyRadius: 0.12,
     hitMin: 0.0,
     hitMax: 2.0,
@@ -209,7 +210,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     knockbackForce: 20.0,
     forceMode: 'push',
     speed: 90.0,
-    gravity: 0,
+    gravity: false,
     bodyRadius: 0.2,
     hitMin: 0.0,
     hitMax: 2.0, // tight proxy — the fat bolt is already generous
@@ -225,7 +226,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     knockbackForce: 8.0,
     forceMode: 'push',
     speed: 160.0,   // slower than chain slugs (250), fast enough to lead lightly
-    gravity: 0,
+    gravity: false,
     bodyRadius: 0.32, // visibly chunky bolt — generous vs players
     hitMin: 0.0,
     hitMax: 1.2,
@@ -241,7 +242,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     knockbackForce: 35.0,
     forceMode: 'push',
     speed: 450.0,
-    gravity: 0,
+    gravity: false,
     bodyRadius: 0.18,
     hitMin: 0.0,
     hitMax: 0.5, // tight — a rail is precision, not a wake
@@ -257,7 +258,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     knockbackForce: 50.0,
     forceMode: 'push',
     speed: 0,
-    gravity: 0,
+    gravity: false,
     bodyRadius: 0,
     hitMin: 0,
     hitMax: 0,
@@ -273,7 +274,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     knockbackForce: 4, // the pin: a nudge per tick — it accrues at 22/s, keep it modest
     forceMode: 'push',
     speed: 0,
-    gravity: 0,
+    gravity: false,
     bodyRadius: 0,
     hitMin: 0,
     hitMax: 0,
@@ -289,7 +290,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     knockbackForce: 0,
     forceMode: 'push',
     speed: 300.0,
-    gravity: 0,
+    gravity: false,
     bodyRadius: 0.1,
     hitMin: 0.0,
     hitMax: 0.4,
@@ -306,7 +307,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     knockbackForce: 50.0,
     forceMode: 'push',
     speed: 72.0,    // faster than GL's 55 — it skips far between bounces
-    gravity: -28.0,
+    gravity: true,
     bodyRadius: 0.8, // HUGE — the comedy is the ball, not the damage
     hitMin: 0.0,
     hitMax: 2.0,    // proxy scaled to match the bigger ball
@@ -323,7 +324,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     knockbackForce: 55.0, // rocket-jump tier — the tool IS the movement
     forceMode: 'push',
     speed: 48.0,
-    gravity: 0,
+    gravity: false,
     bodyRadius: 0.35,
     hitMin: 0.0,
     hitMax: 2.5, // a fat warhead drags a real wake
@@ -339,7 +340,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     knockbackForce: 4.0,
     forceMode: 'push',
     speed: 220.0,
-    gravity: 0,
+    gravity: false,
     bodyRadius: 0.12,
     hitMin: 0.0,
     hitMax: 0.5,
@@ -354,7 +355,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     knockbackForce: 8.0,
     forceMode: 'push',
     speed: 260.0,
-    gravity: 0,
+    gravity: false,
     bodyRadius: 0.14,
     hitMin: 0.0,
     hitMax: 0.5,
@@ -373,7 +374,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     knockbackForce: 50.0,
     forceMode: 'push',
     speed: 55.0,
-    gravity: -28.0,
+    gravity: true,
     bodyRadius: 0.3,
     hitMin: 0.0,
     hitMax: 2.0, // sticks sit still — the blast is the reach, not the wake
@@ -390,7 +391,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     knockbackForce: 12.0, // the pop is only the delivery — the payload shoves
     forceMode: 'push',
     speed: 42.0,
-    gravity: -28.0,
+    gravity: true,
     bodyRadius: 0.3,
     hitMin: 0.0,
     hitMax: 8.0,
@@ -406,7 +407,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     knockbackForce: 7.0, // popcorn pop, not a launcher — 5 stacked ≈ a rocket's worth
     forceMode: 'push',
     speed: 0, // spawned mid-air by the carrier, never muzzle-fired
-    gravity: -28.0,
+    gravity: true,
     bodyRadius: 0.15,
     hitMin: 0.0,
     hitMax: 4.0,
@@ -422,7 +423,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     knockbackForce: 14.0,
     forceMode: 'push',
     speed: 95.0,
-    gravity: -6.0, // barely drops — a spear, not a lob
+    gravity: true,
     bodyRadius: 0.15,
     hitMin: 0.0,
     hitMax: 0.6,
@@ -439,7 +440,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     knockbackForce: 65.0, // biggest shove in the belt
     forceMode: 'push',
     speed: 55.0,
-    gravity: -14.0, // flies long before it sags
+    gravity: true,
     bodyRadius: 0.25,
     hitMin: 0.0,
     hitMax: 6.0,
@@ -456,7 +457,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     knockbackForce: 35.0,
     forceMode: 'push',
     speed: 40.0,    // slower lob — a readable cap-to-discharge window
-    gravity: 0.0,   // flat flight: the ray tracks the throw line, not an arc
+    gravity: false, // flat flight: the ray tracks the throw line
     bodyRadius: 0.3,
     hitMin: 0.0,
     hitMax: 0.6, // the slug is a small throw — its reach is the beam, not a wake
@@ -467,7 +468,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
   },
   [WeaponType.Sprinkler]: {
     // Sprinkler: plasma-gun cadence (~9/s ≈ 108dps on paper) but every bolt
-    // arcs at half-mortar gravity inside a slight cone — mid-range area
+    // arcs under world gravity inside a slight cone — mid-range area
     // denial, not a dueling laser. Lower direct damage + tiny pop so the
     // stream rewards saturation over precision.
     directDamage: 12,
@@ -476,7 +477,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     knockbackForce: 9.0,
     forceMode: 'push',
     speed: 120.0,    // slower than plasma's 160 — an arc needs airtime to read
-    gravity: -14.0,  // half-mortar drop: lobs over lips, still usable flat
+    gravity: true,
     bodyRadius: 0.3,
     hitMin: 0.0,
     hitMax: 1.2,
@@ -492,7 +493,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     knockbackForce: 40.0,
     forceMode: 'push',
     speed: 0,
-    gravity: 0,
+    gravity: false,
     bodyRadius: 0,
     hitMin: 0,
     hitMax: 0,

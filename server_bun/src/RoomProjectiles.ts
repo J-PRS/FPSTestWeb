@@ -24,6 +24,7 @@ import type { StructureSpec } from '../../shared/mapSpec.ts';
 import type { Heightfield } from '../../shared/heightfield.ts';
 import { PLAYER_RADIUS } from '../../shared/constants.ts';
 import { getWeaponStats } from '../../shared/weapons.ts';
+import { GRAVITY } from '../../shared/movement.ts';
 import { hitRadiusAt } from '../../shared/combat.ts';
 import type { Vec3 } from './types.ts';
 import type { Room } from './Room.ts';
@@ -95,7 +96,7 @@ export class RoomProjectiles {
       const stats = getWeaponStats(proj.weaponType);
       const p = proj.p;
       const prevAge = p.age;
-      const from = projStep(p, dt, stats.gravity);
+      const from = projStep(p, dt, stats.gravity ? GRAVITY : 0);
       const ttl = stats.maxLifetime ?? HARD_TTL_S;
       if (p.age >= ttl || p.pos.y < FLOOR_Y) { this.detonate(proj, { ...p.pos }); continue; }
 

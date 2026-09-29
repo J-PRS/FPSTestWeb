@@ -13,7 +13,7 @@ export const LIGHTNING_CONFIG: ProjectileConfig = {
   displayName: 'Lightning Gun',
   weaponType: WeaponType.Lightning,
   speed: 0,
-  gravity: 0,
+  gravity: false,
   explosionRadius: 0,
   force: S.knockbackForce,
   forceMode: 'push',
