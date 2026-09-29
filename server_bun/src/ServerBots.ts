@@ -613,6 +613,10 @@ export class ServerBots {
           this.room.moveSim.structureTop(x, z),
         ),
         others: this.othersOf(p),
+        // Wall occlusion for the LOS sense — bots stop wasting ammo on
+        // targets behind structures they'd never see through anyway.
+        solids: this.room.ballSim.colliders,
+        solidIndex: this.room.ballSim.colliderIndex,
         // The shadow tank is the truth — brains read it to gate jets,
         // shields, mends. Null field → undefined → full-tank behavior.
         energy: this.room.moveSim.energyOf(id) ?? undefined,

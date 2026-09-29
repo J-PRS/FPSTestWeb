@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 
 import { GRAVITY } from '../core/config.js';
+import { Projectile } from '../projectiles/Projectile.js';
 import { RemotePlayer } from '../entities/RemotePlayer.js';
 import type { Terrain } from '../world/terrain.js';
 import type { Nugget } from '../entities/Nugget.js';
@@ -98,6 +99,8 @@ export class GameBot extends RemotePlayer {
       objective: ctx.objective ?? undefined,
       pickup: ctx.nugget?.pos,
       groundY: (x, z) => ctx.terrain.getHeight(x, z),
+      solids: Projectile.solidColliders,
+      solidIndex: Projectile.solidIndex,
       others: ctx.others,
       now: performance.now(),
     });

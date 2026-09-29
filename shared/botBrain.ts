@@ -13,6 +13,8 @@
 
 import { STATUS } from './status.ts';
 import { ENERGY } from './movement.ts';
+import { type ColliderIndex, segSolidHit } from './solidWorld.ts';
+import type { StructureCollider } from './ballSim.ts';
 
 export interface BotVec { x: number; y: number; z: number }
 
@@ -62,6 +64,11 @@ export interface BrainCtx {
    *  creature targets (id prefix `b:`) — farming is the objective, and a
    *  human would do the same. Enemies still outrank food when close. */
   huntCreatures?: boolean;
+  /** Map-structure colliders for wall occlusion in LOS — hosts that model
+   *  solid structures pass them so bots don't stare into walls; hosts
+   *  without one fall back to terrain-only LOS like before. */
+  solids?: readonly StructureCollider[];
+  solidIndex?: ColliderIndex | null;
 }
 
 export interface BrainOut {
@@ -158,7 +165,8 @@ function losClear(ctx: BrainCtx, from: BotVec, to: BotVec): boolean {
  *  above it. pos.y is eye-height on the client and near-feet on the
  *  server, so the eye point is whichever is higher of pos.y and
  *  ground+eye. Structures aren't modeled — callers don't hand them in —
- *  so this is "can I see over the terrain", not full occlusion. */
+ *  so this is "can I see over the terrain", plus a wall test when the
+ *  host models structures — never full occlusion either way. */
 function losMarch(ctx: BrainCtx, from: BotVec, to: BotVec): boolean {
   const dx = to.x - from.x, dz = to.z - from.z;
   const dist = Math.hypot(dx, dz);
@@ -171,6 +179,9 @@ function losMarch(ctx: BrainCtx, from: BotVec, to: BotVec): boolean {
     const x = from.x + dx * t, z = from.z + dz * t;
     if (ctx.groundY(x, z) > y0 + (y1 - y0) * t + 0.5) return false;
   }
+  if (ctx.solids?.length &&
+      segSolidHit({ x: from.x, y: y0, z: from.z }, { x: to.x, y: y1, z: to.z },
+                  ctx.solids, ctx.solidIndex ?? undefined)) return false;
   return true;
 }
 

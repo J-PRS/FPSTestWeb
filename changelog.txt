@@ -1,3 +1,4 @@
+2026-10-03 - botBrain: LOS sense now tests structure walls (BrainCtx.solids) - bots stop firing into buildings server + client
 2026-10-03 - server: melee creature bites gated on structure LOS - a wall between creature and chest blocks the damage
 2026-10-03 - creatureSim: totem beams + LOS gate clip against map structures (segSolidHit) - no more firing through compound walls; server+predictor share the collider list
 2026-10-03 - crossfire: light server creatures (totem:2/snake:2/rakk:2) - second map exercising the creatures spec; hazards not the match
