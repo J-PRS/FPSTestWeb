@@ -1,3 +1,8 @@
+2026-10-03 - Startup: vertex AO bake deferred until bake-swap resolves —
+    weapons that load baked GLBs no longer pay 16 raycasts/vertex for AO
+    that is discarded on swap (~19 of 25 weapons). playerCreated drops
+    from ~1.8-4.6s to a fraction; export mode still bakes (dump needs it).
+
 2026-10-03 - Client: bake-load 404s no longer spam the log — expected
     missing bakes throw DOM Events (not just ProgressEvent), so the
     expected-miss check is now any non-Error + fetch/404 Error messages.

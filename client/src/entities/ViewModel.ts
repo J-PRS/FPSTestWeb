@@ -120,9 +120,11 @@ export class ViewModel {
     this.weapons = built.weapons;
     this.muzzleNodes = built.muzzleNodes;
     this.chainBarrels = built.chainBarrels;
-    // Bake vertex AO once — darkens bore interiors, part joints, crevices.
-    // Primitives have no UVs so this replaces texture AO entirely.
-    for (const g of this.weapons.values()) bakeVertexAO(g);
+    // Vertex AO is NOT baked here: the bake is 16 raycasts/vertex against an
+    // unindexed merged mesh (~1-4s across all weapons), and weapons that end
+    // up GLB-swapped discard the result entirely. loadBakedWeapons bakes AO
+    // only on weapons whose bake fetch misses — i.e. the ones that actually
+    // stay procedural.
     this.loadBakedWeapons();
 
     const hf = buildHandAndFlash(this.group);
@@ -176,8 +178,12 @@ export class ViewModel {
   private async loadBakedWeapons(): Promise<void> {
     // Export mode must serialize the PROCEDURAL meshes — if the baked swap
     // lands mid-export the GLB round-trips the stale bake and the pipeline
-    // can never pick up new geometry.
-    if (urlParams.has('export')) return;
+    // can never pick up new geometry. Still bake AO: the dump pipeline
+    // round-trips the procedural vertex colors into the GLB.
+    if (urlParams.has('export')) {
+      for (const g of this.weapons.values()) bakeVertexAO(g);
+      return;
+    }
     const loader = new GLTFLoader();
     const texLoader = new THREE.TextureLoader();
     const done = new Set<THREE.Group>();
@@ -187,6 +193,9 @@ export class ViewModel {
       try {
         await this.swapBaked(wt, g, loader, texLoader);
       } catch (e) {
+        // Fetch missed → this weapon stays procedural, so bake its vertex
+        // AO now (deferred from the ctor: swapped weapons would discard it).
+        bakeVertexAO(g);
         // A missing bake is the normal case — no w{id}_baked.glb/ao.png
         // shipped for this weapon, so the procedural+vertexAO mesh stays.
         // 404s surface as Event/ProgressEvent (ImageLoader) or "Not
@@ -316,7 +325,7 @@ export class ViewModel {
     [WeaponType.Flak]:            [10, 0.09, 0xffbb55, 1.3, 1.0, 1.1],  // hard shove + sideways shudder
     [WeaponType.PlasmaCannon]:          [15, 0.00, 0x44ffbb, 0.5, 0.6, 0.7],  // light tap, green glow
     [WeaponType.PlasmaGun]:       [14, 0.01, 0x66ccff, 0.35, 0.35, 0.5],// repeater — small kick, cool flash
-    [WeaponType.Sprinkler]:       [15, 0.02, 0xaaff66, 0.4, 0.4, 0.45],// hose — light wobble, lime flash
+    [WeaponType.Sprinkler]:       [15, 0.02, 0xaaff66, 0.55, 1.5, 0.45],// hose — light wobble; 105ms flash ~bridges the shot gap → lit nozzle
     [WeaponType.Railgun]:         [18, 0.01, 0x77ccff, 1.1, 0.9, 1.2],  // fast snap, cyan discharge
     [WeaponType.Lightning]:       [16, 0.05, 0x8fdcff, 0.4, 0.4, 0.4],  // per-tick hum — tiny flash, sideways jitter
     [WeaponType.Cannon]:          [8,  0.02, 0xffaa55, 1.5, 1.3, 1.1],  // heavy naval-gun thump, big warm flash
