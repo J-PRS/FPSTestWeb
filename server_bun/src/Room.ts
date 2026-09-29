@@ -599,6 +599,10 @@ export class Room {
     }
     this.messages.onPlayerRemoved(playerId);
     this.sessionTokens.delete(playerId);
+    // Removal-without-disconnect paths (kick, idle reap, bot retire)
+    // never hit the onClose cleanup — the limiter's per-player buckets
+    // would sit in this room's map for its life.
+    this.rateLimiter.removePlayer(playerId);
     // A pending grace timer is part of the player's teardown: kick/room
     // hop/admin removal during the window would otherwise leave a zombie
     // timer that re-runs this whole funnel later (double playerLeft,

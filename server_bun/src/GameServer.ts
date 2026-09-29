@@ -447,6 +447,9 @@ export class GameServer {
     const now = Date.now();
     if (now - (this.switchCooldowns.get(playerId) ?? 0) < GameServer.SWITCH_COOLDOWN_MS) return true;
     this.switchCooldowns.set(playerId, now);
+    // Server-lifetime map: hoppers keep their entry past removal (the
+    // cooldown must survive the hop), so cap growth like duelStart.
+    if (this.switchCooldowns.size > 1024) this.switchCooldowns.clear();
     return false;
   }
 

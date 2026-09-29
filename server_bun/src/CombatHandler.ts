@@ -137,6 +137,10 @@ export class CombatHandler {
       clearTimeout(pending);
       this.respawnTimers.delete(playerId);
     }
+    // Per-player fire-throttle state is per-connection like the room's
+    // warn keys — a leaver's entry otherwise sits in the map for the
+    // room's life.
+    this.lastFireNotify.delete(playerId);
   }
 
   handleShot(playerId: string, msg: Extract<ClientMessage, { type: 'shot' }>): void {
