@@ -294,7 +294,10 @@ async function tryWebRTC(config: ConnectionConfig): Promise<GameTransport | null
       .catch(() => []);
     pc = new RTCPeerConnection({ iceServers });
     const conn = pc;
-    const dc = conn.createDataChannel('game', { ordered: false, maxRetransmits: 0 });
+    // 'game' used to be unordered+unreliable, but the lossy lane measured
+    // ~33% drops and nothing calls sendUnreliable anymore — it's only the
+    // fallback until 'ctrl' opens, so make it reliable too.
+    const dc = conn.createDataChannel('game');
     const ctrl = conn.createDataChannel('ctrl'); // reliable+ordered — join, claims, events
     // Signal over the dedicated /rtcs socket — one offer in, one answer out.
     // The offer is sent only after ICE gathering completes so candidates
