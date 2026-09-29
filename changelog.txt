@@ -1,3 +1,5 @@
+2026-10-03 - bots.ts: tickBots extraction found tickBolts() over-integrating once per live bot per frame - hoisted to frame-rate. resolveShotOnLocal split; file is oxlint-clean.
+
 2026-10-03 - stonekeep joins crossfire with a light server-owned creature pack (snake/roller/totem) - wildlife pressure on the main CTF maps, hazards not the match.
 
 2026-10-03 - bots.ts watchdog split: wdCheckDisplacement/wdCheckRender helpers clear the complexity+depth warnings.

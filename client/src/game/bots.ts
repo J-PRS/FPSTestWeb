@@ -126,35 +126,13 @@ export class TeamBots {
 
   /** Per-frame: brains, fire resolution, respawns, win check. */
   update(dt: number): void {
-    const terrain = deps0(this).lazyTerrain();
     const player = deps0(this).lazyPlayer();
     // Separation sense — every live body the steerer should keep space
     // from. A bot's own position reads as dist 0 and is skipped inside.
     const others: THREE.Vector3[] = [];
     for (const b of this.bots) if (!b.isDead) others.push(b.position);
     others.push(player.pos);
-    for (const bot of this.bots) {
-      // Local bots aren't in the wire roster, so remotes.ts never ticks
-      // them — tick() is what advances the snapshot interpolation and
-      // AnimationMixer onto the model. Without it think() moves the
-      // logical position but the rendered body stands frozen at spawn.
-      bot.tick(dt);
-      if (bot.isDead) {
-        bot.respawnAt -= dt;
-        if (bot.respawnAt <= 0) this.respawnBot(bot);
-        continue;
-      }
-      this.tickBolts(dt);
-      const enemies = this.enemyList(bot);
-      const shot = bot.think(dt, {
-        terrain,
-        enemies,
-        nugget: this.spec.flags ? null : this.hooks.nearestNugget(bot.position, 60),
-        objective: this.ctf?.objectiveFor(bot) ?? null,
-        others,
-      });
-      if (shot && !this.over) this.resolveShot(bot, shot.targetId, shot.aim); // ceasefire while the banner's up
-    }
+    this.tickBots(dt, others);
     if (this.spec.flags) {
       this.ctf?.update(dt);
       // Flag markers ride the player-indicator overlay — a DOM element
@@ -186,6 +164,33 @@ export class TeamBots {
   }
 
   private overAt = 0;
+
+  /** Per-bot think pass — interp tick, respawn countdown, brain, fire. */
+  private tickBots(dt: number, others: THREE.Vector3[]): void {
+    const terrain = this.deps.lazyTerrain();
+    this.tickBolts(dt); // frame-rate, not per-bot — it was over-integrating in the loop
+    for (const bot of this.bots) {
+      // Local bots aren't in the wire roster, so remotes.ts never ticks
+      // them — tick() is what advances the snapshot interpolation and
+      // AnimationMixer onto the model. Without it think() moves the
+      // logical position but the rendered body stands frozen at spawn.
+      bot.tick(dt);
+      if (bot.isDead) {
+        bot.respawnAt -= dt;
+        if (bot.respawnAt <= 0) this.respawnBot(bot);
+        continue;
+      }
+      const enemies = this.enemyList(bot);
+      const shot = bot.think(dt, {
+        terrain,
+        enemies,
+        nugget: this.spec.flags ? null : this.hooks.nearestNugget(bot.position, 60),
+        objective: this.ctf?.objectiveFor(bot) ?? null,
+        others,
+      });
+      if (shot && !this.over) this.resolveShot(bot, shot.targetId, shot.aim); // ceasefire while the banner's up
+    }
+  }
 
   /** The player's live team is world.localTeam — a connected room can
    *  re-seat you on bravo after the boot-time alpha. teamOf must follow
@@ -424,21 +429,7 @@ export class TeamBots {
     const src = `${bot.playerId.replace('bot:', '')} ${melee ? 'fist' : 'bolt'}`;
 
     if (targetId === 'local') {
-      const p = this.deps.lazyPlayer();
-      if (!p.isDead && aim.distanceTo(p.pos) < 1.6) {
-        p.health = Math.max(0, p.health - dmg);
-        p.lastDamageSource = src;
-        p.applyKnockback(bot.position, melee ? 6 : 4);
-        this.deps.lazyHud().showDamage(bot.position, dmg);
-        sfx.playerHurt();
-        if (p.health <= 0) {
-          this.deps.world.killCounts.set(bot.playerId, (this.deps.world.killCounts.get(bot.playerId) ?? 0) + 1);
-          this.creditKill(bot.playerId, false);
-          this.localDied();
-          this.hooks.killFeed(bot.playerId.replace('bot:', ''), 'YOU', false, true);
-          this.hooks.localPlayerKilled(bot.playerId.replace('bot:', ''));
-        }
-      }
+      this.resolveShotOnLocal(bot, aim, dmg, melee, src);
       return;
     }
     if (targetId.startsWith('creature:')) {
@@ -453,6 +444,23 @@ export class TeamBots {
     if (rp instanceof GameBot && aim.distanceTo(rp.pos) < 1.6) {
       if (rp.takeDamageLocal(dmg, bot.position)) this.botKilled(bot.playerId, rp);
     }
+  }
+
+  /** Bot bolt lands on the local player — damage, knockback, death feed. */
+  private resolveShotOnLocal(bot: GameBot, aim: THREE.Vector3, dmg: number, melee: boolean, src: string): void {
+    const p = this.deps.lazyPlayer();
+    if (p.isDead || aim.distanceTo(p.pos) >= 1.6) return;
+    p.health = Math.max(0, p.health - dmg);
+    p.lastDamageSource = src;
+    p.applyKnockback(bot.position, melee ? 6 : 4);
+    this.deps.lazyHud().showDamage(bot.position, dmg);
+    sfx.playerHurt();
+    if (p.health > 0) return;
+    this.deps.world.killCounts.set(bot.playerId, (this.deps.world.killCounts.get(bot.playerId) ?? 0) + 1);
+    this.creditKill(bot.playerId, false);
+    this.localDied();
+    this.hooks.killFeed(bot.playerId.replace('bot:', ''), 'YOU', false, true);
+    this.hooks.localPlayerKilled(bot.playerId.replace('bot:', ''));
   }
 
   /** Player/explosion damage routed here when the victim is a bot —
