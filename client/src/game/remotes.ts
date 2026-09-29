@@ -180,7 +180,7 @@ function updateScoreboard(deps: RemotesDeps): void {
     // GameBot carries a team field; FFA bots get a self-id pseudo-team,
     // which must not count as a real team row.
     const t = (rp as { team?: string }).team;
-    remoteRows.push({ name: id.replace('bot:', ''), frags: deps.world.killCounts.get(id) ?? 0, score: deps.world.ffaScores.get(id) ?? null, ping: null, net: 'bot', self: false, dead: rp.isDead, team: t === 'alpha' || t === 'bravo' ? t : undefined });
+    remoteRows.push({ name: id.replace('bot:', ''), frags: deps.world.killCounts.get(id) ?? 0, score: deps.world.ffaScores.get(id) ?? null, ping: null, net: 'bot', self: false, dead: rp.isDead, team: t === 'alpha' || t === 'bravo' ? t : undefined, sheep: (rp as { sheep?: number }).sheep ?? null });
   }
   remoteRows.toSorted((a, b) => (b.score ?? b.frags) - (a.score ?? a.frags));
   hud.setScoreboardRows([...rows, ...remoteRows]);
@@ -274,7 +274,7 @@ export function createRemotes(deps: RemotesDeps) {
         // RemotePlayers have none and stay enemy red.
         const friendly = (rp as { team?: string }).team === deps.world.localTeam
           && (rp as { team?: string }).team !== undefined;
-        hud.updatePlayerIndicator(id, rp.position, cam, false, friendly);
+        hud.updatePlayerIndicator(id, rp.position, cam, false, friendly, (rp as { sheep?: number }).sheep);
       }
     }
     cleanupRemotePlayers(deps, players);

@@ -122,7 +122,7 @@ function pushBots(lines: string[], ctx: StateDebugContext): void {
   const alive = tb.bots.filter(b => !b.isDead).length;
   lines.push(`teamBots: ${alive}/${tb.bots.length} alive over=${tb.over ?? '-'} score=${tb.scores.alpha}:${tb.scores.bravo} localTeam=${tb.teamOf.get('local') ?? '-'}`);
   for (const b of tb.bots) {
-    lines.push(`  bot ${b.playerId.replace('bot:', '')} team=${b.team} dead=${b.isDead} hp=${b.botHp ?? '?'} pos=${fmt(b.position)}`);
+    lines.push(`  bot ${b.playerId.replace('bot:', '')} team=${b.team} dead=${b.isDead} hp=${b.botHp ?? '?'} sheep=${(b as { sheep?: number }).sheep ?? 0} pos=${fmt(b.position)}`);
   }
 }
 

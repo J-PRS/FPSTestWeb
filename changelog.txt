@@ -1,3 +1,10 @@
+2026-10-03 - Sheep meter client-side + real Tribes bots. The visible
+    skitter was GameBot ignoring the brain's move hints entirely — it
+    only walked. think() now consumes ski/jet/jump: skiing holds
+    momentum past run speed and converts downhill slope into velocity,
+    jet is real thrust. The sheep meter lives in TeamBots too (client
+    bots never ride tickUpdate), feeds the scoreboard SHEEP column and
+    the over-head badge, and Alt+Q prints each bot's live value.
 2026-10-03 - Sheep meter for server bots: pedestrian play (walking or
     parked) fills a 0-100 meter that drains while the bot covers ground,
     is airborne, or is jetting. At 100 the bot gets yeeted — a random

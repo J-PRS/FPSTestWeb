@@ -6,6 +6,7 @@ import type { Targetable } from '../entities/balls.js';
 import type { GameContext } from './context.js';
 import { TEAM_COLORS, TEAM_LABEL, MODES, bank, makeScores, type TeamId, type TeamScores, type ModeId } from '../../../shared/teams.js';
 import { PlayerDebris } from '../effects/debris.js';
+import type { Terrain } from '../world/terrain.js';
 import { MELEE_RANGE, MELEE_DAMAGE } from '../core/config.js';
 import { CtfFlags } from './ctfFlags.js';
 import * as sfx from '../core/sfx.js';
@@ -189,6 +190,25 @@ export class TeamBots {
         others,
       });
       if (shot && !this.over) this.resolveShot(bot, shot.targetId, shot.aim); // ceasefire while the banner's up
+      this.sheepTick(bot, dt, terrain);
+    }
+  }
+
+  /** Sheep meter accrual — fills while the bot moves like a pedestrian
+   *  (slow, grounded, or parked), drains while it's doing Tribes things
+   *  (covering ground, airborne, jetting). At 100 it gets yeeted: an
+   *  impulse launch that forces the behavior the meter wants. */
+  private sheepTick(bot: GameBot, dt: number, terrain: Terrain): void {
+    const v = bot.vel;
+    const speedXZ = Math.hypot(v.x, v.z);
+    const grounded = bot.pos.y - terrain.getHeight(bot.pos.x, bot.pos.z) < 2;
+    const tribesing = speedXZ > 8 || !grounded || bot.yeetT > 0;
+    const moving = speedXZ > 1;
+    const delta = tribesing ? -(8 + speedXZ * 0.5 + (bot.yeetT > 0 ? 12 : 0)) : moving ? 6 : 14;
+    bot.sheep = Math.max(0, Math.min(100, bot.sheep + delta * dt));
+    if (bot.sheep >= 100) {
+      bot.yeet();
+      this.deps.logger.warn(`bot ${bot.playerId} yeeted — sheep meter hit 100`);
     }
   }
 
@@ -351,6 +371,8 @@ export class TeamBots {
     sp.y = terrain.getHeight(sp.x, sp.z) + EYE;
     bot.respawn({ x: sp.x, y: sp.y, z: sp.z });
     bot.botHp = bot.botMaxHp;
+    bot.sheep = 0; // fresh leash on the meter
+    bot.yeetT = 0;
     bot.show();
     bot.setGizmoColor(bot.team === 'ffa' ? 0xcc66ff : TEAM_COLORS[bot.team as TeamId]);
   }
