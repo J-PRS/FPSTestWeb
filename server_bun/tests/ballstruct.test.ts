@@ -1,5 +1,6 @@
 import { test, expect, describe } from 'bun:test';
 import { makeSimBall, stepBall, structureColliders } from '../../shared/ballSim.ts';
+import { hmHeight } from '../../shared/heightfield.ts';
 import type { Heightfield } from '../../shared/heightfield.ts';
 
 // Flat, high field — the test exercises structure contact, not terrain.
@@ -51,5 +52,44 @@ describe('ball vs structure collision', () => {
     const b = ballAt(6, 20);
     for (let i = 0; i < 10; i++) stepBall(b, 0.05, FIELD, null, true, []);
     expect(b.x).toBeGreaterThan(6); // flew through where the wall would be
+  });
+});
+
+describe('terrain probe scheduler', () => {
+  // Half-raised field: the x=0 column is a 29m plateau, rest is flat.
+  // Near wx=0 hmHeight blends toward it — a rising slope, i.e. terrain
+  // that climbs INTO a flying ball's path.
+  const BUMP: Heightfield = {
+    size: 4,
+    data: new Uint8Array([60, 0, 0, 0, 60, 0, 0, 0, 60, 0, 0, 0, 60, 0, 0, 0]),
+    stride: 1,
+  };
+
+  test('a dropped ball still bounces — and the gate schedules ahead mid-flight', () => {
+    const b = makeSimBall(1, 0, 0, 0, 40, 0, 0, 0, 0);
+    const kinds: (string | null)[] = [];
+    let scheduledAhead = false;
+    for (let i = 0; i < 200 && !kinds.includes('bounce'); i++) {
+      kinds.push(stepBall(b, 0.05, FIELD, null, true));
+      if (b.gt > 0.05) scheduledAhead = true;
+    }
+    expect(kinds).toContain('bounce');
+    expect(scheduledAhead).toBe(true); // the gate actually skips probes in flight
+    expect(b.y).toBeGreaterThanOrEqual(b.radius - 0.01); // never buried
+  });
+
+  test('terrain rising into the flight path still collides — bounded undershoot', () => {
+    // Ball cruises at ~8m toward the plateau face; the drift trigger +
+    // early resample must catch the climb within a few ticks.
+    const b = makeSimBall(1, 0, 0, -60, 12, 0, 20, 0, 0);
+    let worst = 0;
+    let bounced = false;
+    for (let i = 0; i < 200 && !bounced; i++) {
+      if (stepBall(b, 0.05, BUMP, null, true) === 'bounce') bounced = true;
+      const clearance = b.y - b.radius - hmHeight(BUMP, b.x, b.z);
+      if (clearance < worst) worst = clearance;
+    }
+    expect(bounced).toBe(true);
+    expect(worst).toBeGreaterThan(-4); // clipped a bit, never tunneled through
   });
 });

@@ -194,6 +194,20 @@ export class Ball {
   /** Read-only for desync forensics (netBalls logs its fingerprint on
    *  rubberbands). Mutate via initNetMode only. */
   static get netField(): Heightfield | null { return Ball.field; }
+
+  /** Prediction-state snapshot for the rubberband warn — answers "which
+   *  regime diverged" in one line: simT≫simNow = free-ran past the clock
+   *  gate; inert legAge pinned at ~8 = stale anchor extrapolating blind. */
+  get netDiag(): { simT: number; simNow: number | null; legT0: number; legAge: number; enraged: boolean; tgtValid: boolean } | null {
+    if (!this.sim) return null;
+    const simNow = Ball.netSimNow?.() ?? null;
+    const legAge = simNow !== null && Number.isFinite(simNow) && this.legT0 >= 0
+      ? simNow - this.legT0 : -1;
+    return {
+      simT: this.simT, simNow, legT0: this.legT0, legAge,
+      enraged: this.sim.enraged, tgtValid: this.sim.tgtValid,
+    };
+  }
   /** Map-structure colliders from gameState — prediction ricochets off
    *  walls/pillars identically to the server. Set by netHandlers. */
   static colliders: readonly StructureCollider[] = [];
@@ -767,6 +781,10 @@ export class Ball {
       Ball.hitClaim?.(this.netId, damage, this._netImp.x, this._netImp.y, this._netImp.z);
       this._netImp.set(0, 0, 0);
       this.flashTimer = 0.15;
+      // Predicted health — the claim carries exactly this damage, so the
+      // floating bar can tick down NOW instead of one RTT late. Death is
+      // still the server's call; clamp at 0, never set `dead`.
+      this.health = Math.max(0, this.health - damage);
       return false;
     }
     this.health -= damage;
@@ -787,6 +805,13 @@ export class Ball {
     this.vel.addScaledVector(dir, force);
   }
 
+  /** Wire-ordering guard — stamps only move forward. A delayed or
+   *  reordered segment carries an OLD anchor; applying it rewinds legT0
+   *  and the next frames extrapolate a stale leg into a 100m rubberband. */
+  isStaleSegment(t: number | undefined): boolean {
+    return t !== undefined && t < this.simT;
+  }
+
   /** Authoritative resync — a segment event lands mid-flight: snap the sim
    *  (and the render) to server truth, then advance it by `lead` seconds
    *  (≈half RTT) because the event is already stale when it arrives —
@@ -804,8 +829,10 @@ export class Ball {
   ): void {
     const s = this.sim;
     if (!s) return;
+    if (this.isStaleSegment(simT)) return; // older stamp — never rewind
     s.x = px; s.y = py; s.z = pz;
     s.vx = vx; s.vy = vy; s.vz = vz;
+    s.gt = 0; // stamped arc — the cached terrain-probe schedule is stale
     s.enraged = enraged;
     // The timers ride the wire — resetting them here would restart the
     // server's 20s enrage countdown on every heartbeat and the client ball

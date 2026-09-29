@@ -74,6 +74,18 @@ export interface SimBall {
    *  live pos, the two arcs diverge ~100m per segment. */
   tx: number; ty: number; tz: number;
   tgtValid: boolean;
+  /** Terrain-probe scheduler: a ballistic ball's time-to-ground is
+   *  closed-form, so instead of probing the heightfield every tick each
+   *  ball carries a countdown — resample when it hits zero, when the
+   *  ball drifts ~2m horizontally (new terrain beneath it), or when it
+   *  reaches the last sampled ground plane. Velocity discontinuities
+   *  (bounce/launch/knockback) reset it — the prediction is stale by
+   *  definition there. Deterministic: both sides sample the identical
+   *  field at identical (x,z), so probes land on the same ticks. */
+  gt: number;    // sim-seconds until the next scheduled terrain probe
+  ggy: number;   // last sampled ground height under the ball
+  gx: number;    // position at that sample — drift trigger
+  gz: number;
 }
 
 const _n: SimVec = { x: 0, y: 0, z: 0 };
@@ -89,6 +101,7 @@ export function makeSimBall(id: number, variant: BallVariant, colorIdx: number, 
     enraged: false, enrageTimer: 0, slowTimer: 0, dampNextBounce: false,
     dead: false, targetId: null,
     tx: 0, ty: 0, tz: 0, tgtValid: false,
+    gt: 0, ggy: -Infinity, gx: x, gz: z,
   };
 }
 
@@ -220,8 +233,25 @@ export function stepBall(
 
   // Ground contact → reflect. Mirrors handleGroundBounce: only a bounce
   // while moving INTO the surface counts.
-  const gy = hmHeight(field, b.x, b.z);
-  if (b.y - b.radius > gy) return null;
+  b.gt -= dt;
+  const needSample = b.gt <= 0 ||
+    (b.x - b.gx) * (b.x - b.gx) + (b.z - b.gz) * (b.z - b.gz) > 4 ||
+    b.y - b.radius <= b.ggy;
+  if (!needSample) return null;
+  const gy = b.ggy = hmHeight(field, b.x, b.z);
+  b.gx = b.x; b.gz = b.z;
+  if (b.y - b.radius > gy) {
+    // Still airborne: solve the parabola's time-to-ground against the
+    // sampled plane and re-check at ~60% of it — terrain bumps get
+    // caught a few ticks early instead of clipping a whole schedule.
+    const alt = b.y - b.radius - gy;
+    const g = -BALL_GRAVITY;
+    const disc = b.vy * b.vy + 2 * g * alt;
+    const t = disc > 0 ? (b.vy + Math.sqrt(disc)) / g : 0;
+    b.gt = Math.min(0.5, Math.max(dt, t * 0.6));
+    return null;
+  }
+  b.gt = 0; // in contact — probe every tick until it's clearly airborne
   b.y = gy + b.radius;
   hmNormal(field, b.x, b.z, _n);
   const dot = b.vx * _n.x + b.vy * _n.y + b.vz * _n.z;
@@ -272,6 +302,7 @@ export function stepBall(
 }
 
 function launchAt(b: SimBall, target: SimVec, upFrac: number): void {
+  b.gt = 0; // new arc — the cached time-to-ground is stale
   const pdx = target.x - b.x;
   const pdz = target.z - b.z;
   const pd = Math.sqrt(pdx * pdx + pdz * pdz) || 0.001;
@@ -283,6 +314,7 @@ function launchAt(b: SimBall, target: SimVec, upFrac: number): void {
 }
 
 function dashAt(b: SimBall, target: SimVec): void {
+  b.gt = 0;
   const pdx = target.x - b.x;
   const pdz = target.z - b.z;
   const pd = Math.sqrt(pdx * pdx + pdz * pdz) || 0.001;
@@ -295,6 +327,7 @@ function dashAt(b: SimBall, target: SimVec): void {
 }
 
 function teleportNearTarget(b: SimBall, field: Heightfield, target: SimVec): SegmentKind {
+  b.gt = 0;
   const ang = Math.random() * Math.PI * 2;
   const dist = BALL_TELE_MIN + Math.random() * (BALL_TELE_MAX - BALL_TELE_MIN);
   b.x = target.x + Math.cos(ang) * dist;
@@ -318,6 +351,7 @@ function teleportNearTarget(b: SimBall, field: Heightfield, target: SimVec): Seg
  * carries the same push and the segment event propagates it. */
 export function applySimDamage(b: SimBall, damage: number, impX: number, impY: number, impZ: number): boolean {
   b.health -= damage;
+  b.gt = 0; // the impulse rewrote the arc
   b.vx += impX;
   b.vy += impY;
   b.vz += impZ;
