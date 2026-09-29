@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import { recordSuppressed } from '../../src/TickLoop.ts';
+import { STATUS } from '../../../shared/status.ts';
 
 // Update suppression is the bandwidth core: a player holding course is
 // skipped because clients already extrapolate them. These tests pin the
@@ -62,5 +63,17 @@ describe('recordSuppressed', () => {
     player.rotation.yaw = Math.PI * 2;
     expect(recordSuppressed(player, wrapped, 1100)).toBe(true);
     player.rotation.yaw = 1;
+  });
+
+  it('suppresses while a server-owned status bit is active', () => {
+    // lastSent.status on the wire carries REGEN/DD bits OR'd in at send
+    // time — comparing it raw against p.status would read a permanent
+    // "change" and defeat suppression for the buff's whole duration.
+    const buffed = { ...sent, status: STATUS.REGEN };
+    expect(recordSuppressed(player, buffed, 1100)).toBe(true);
+    // A real client-side flag change must still break suppression.
+    player.status = STATUS.MEND;
+    expect(recordSuppressed(player, buffed, 1100)).toBe(false);
+    player.status = 0;
   });
 });
