@@ -189,11 +189,12 @@ export class ViewModel {
       } catch (e) {
         // A missing bake is the normal case — no w{id}_baked.glb/ao.png
         // shipped for this weapon, so the procedural+vertexAO mesh stays.
-        // 404s surface as ProgressEvent (ImageLoader) or "Not Found"/404
-        // Errors (FileLoader/fetch) — neither is worth a log line. Only a
-        // real parse/decode failure is.
-        const is404 = e instanceof ProgressEvent ||
-          (e instanceof Error && /404|not found|fetch/i.test(e.message));
+        // 404s surface as Event/ProgressEvent (ImageLoader) or "Not
+        // Found"/404 Errors (FileLoader/fetch) — neither is worth a log
+        // line. Only a real parse/decode failure (an Error that doesn't
+        // name a missing file) is.
+        const is404 = !(e instanceof Error) ||
+          /404|not found|fetch/i.test(e.message);
         if (!is404) console.log(`[vm] w${wt} bake load failed:`, e);
       }
     }

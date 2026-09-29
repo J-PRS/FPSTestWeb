@@ -1,3 +1,7 @@
+2026-10-03 - Client: bake-load 404s no longer spam the log — expected
+    missing bakes throw DOM Events (not just ProgressEvent), so the
+    expected-miss check is now any non-Error + fetch/404 Error messages.
+
 2026-10-03 - Client: inline data-URI favicon in index.html — kills the
     automatic /favicon.ico 404 on every load.
 
