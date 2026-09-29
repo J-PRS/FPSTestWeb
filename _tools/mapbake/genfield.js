@@ -19,6 +19,9 @@ if (!out) { console.error('usage: genfield.js <out.bin> [--size=513] [--seed=7] 
 const N = Number(opts.size ?? 513);
 const seed = Number(opts.seed ?? 7);
 const flats = (opts.flats ?? '').split(';').filter(Boolean).map(s => s.split(',').map(Number));
+// Craters: x,z,r,depth — depress the field so a structure roof over the
+// bowl reads as an underground room without cutting the heightmap.
+const craters = (opts.craters ?? '').split(';').filter(Boolean).map(s => s.split(',').map(Number));
 const WORLD = 1500; // HM_WORLD_SCALE — one heightmap wraps the arena
 
 // Deterministic lattice hash → [0,1)
@@ -44,15 +47,24 @@ for (let z = 0; z < N; z++) {
     const u = x / N, v = z / N;
     let h = noise(u, v, 8, 0) * 0.5 + noise(u, v, 24, 1) * 0.3 + noise(u, v, 64, 2) * 0.2;
     const wx = (u - 0.5) * WORLD, wz = (v - 0.5) * WORLD;
+    // Toroidal distance helper — pads/craters near the seam wrap cleanly.
+    const tdist = (fx, fz) => Math.hypot(
+      Math.min(Math.abs(wx - fx), WORLD - Math.abs(wx - fx)),
+      Math.min(Math.abs(wz - fz), WORLD - Math.abs(wz - fz)),
+    );
+    // Craters dig the bowl — depth is in the same normalized units h
+    // uses (≈45m at 1.0). Bucket profile: full depth across the inner
+    // 2/3 (a flat floor a structure roof can span), easing to zero in
+    // the outer third so the rim still wraps with the noise.
+    let dig = 0;
+    for (const [cx, cz, r, depth] of craters) {
+      const d = tdist(cx, cz);
+      dig = Math.max(dig, (depth ?? 0.3) * Math.min(1, Math.max(0, (1 - d / r) * 3)));
+    }
+    h = Math.max(0, h - dig);
     let flat = 0;
     for (const [fx, fz, r] of flats) {
-      // Toroidal distance — a pad near the seam wraps to the other side,
-      // so edge-of-world bases get flat ground on BOTH sides of the wrap.
-      const d = Math.hypot(
-        Math.min(Math.abs(wx - fx), WORLD - Math.abs(wx - fx)),
-        Math.min(Math.abs(wz - fz), WORLD - Math.abs(wz - fz)),
-      );
-      flat = Math.max(flat, Math.min(1, Math.max(0, 1 - d / (r * 2))));
+      flat = Math.max(flat, Math.min(1, Math.max(0, 1 - tdist(fx, fz) / (r * 2))));
     }
     // Specs author bases/spawns at y≈0 absolute — pads hug the valley
     // floor (~0-3m) and hills top out around 45m so geometry stays visible.
