@@ -405,3 +405,121 @@ export function applyFlyerDamage(c: SimFlyer, damage: number): boolean {
   if (c.health <= 0) { c.dead = true; return true; }
   return false;
 }
+
+// ---- Roller family ----------------------------------------------------
+// The simplest family: a terrain-following boulder that steers at the
+// committed snapshot. No telegraphs — 'bite' is the only combat edge,
+// everything else is continuous roll the predictor replays on its own.
+
+export const ROLLER_SIM = {
+  ACCEL: 9.0,
+  TOPSPEED: 8.5,
+  AGGRO_D2: 90 * 90,   // beyond this it idles (drifts at 20% speed)
+  HIT_R: 2.4,          // contact-bite reach around its center
+  BITE_CD: 0.6,        // invuln window so one touch can't multi-tick
+  DOWNHILL_K: 0.04,    // gravity assist rolling downhill
+  STUN_S: 0.5,
+} as const;
+
+export const ROLLER_SPECIES: Record<string, {
+  speed: number;        // multiplier on TOPSPEED
+  health: number;
+  bite: number;
+}> = {
+  roller: { speed: 1.0, health: 120, bite: 30 },
+};
+
+export type RollerState = 'roll';
+
+type RollerTunables = { readonly [K in keyof typeof ROLLER_SIM]: number };
+
+export interface SimRoller extends Omit<SimCrawler, 'state' | 'sp'> {
+  state: RollerState;
+  sp: RollerTunables;
+  hitCd: number;        // contact invuln — deterministic cooldown
+}
+
+export function isRollerSpecies(species: string): boolean {
+  return ROLLER_SPECIES[species] !== undefined;
+}
+
+export function makeSimRoller(
+  id: number, x: number, y: number, z: number,
+  uber: boolean, seed: number, species = 'roller',
+): SimRoller {
+  const row = ROLLER_SPECIES[species] ?? ROLLER_SPECIES.roller!;
+  const health = uber ? row.health * 3.4 : row.health;
+  const sp: RollerTunables = {
+    ...ROLLER_SIM,
+    TOPSPEED: ROLLER_SIM.TOPSPEED * row.speed,
+  };
+  return {
+    id, species, biteDamage: row.bite, sp,
+    x, y, z, vx: 0, vy: 0, vz: 0, yaw: 0,
+    state: 'roll', hopTimer: 0, windupTimer: 0, stunTimer: 0,
+    wanderYaw: (seed % 628) / 100, health, maxHealth: health,
+    uber, dead: false, rng: seed >>> 0 || 1,
+    targetId: null, tx: 0, ty: 0, tz: 0, tgtValid: false, pendingBite: false,
+    hitCd: 0,
+  };
+}
+
+export function stepRoller(
+  c: SimRoller,
+  dt: number,
+  field: Heightfield,
+  target: SimVec | null,
+  authoritative: boolean,
+): CrawlerEvent | null {
+  c.stunTimer = Math.max(0, c.stunTimer - dt);
+  c.hitCd = Math.max(0, c.hitCd - dt);
+
+  const dx = target ? target.x - c.x : 0;
+  const dz = target ? target.z - c.z : 0;
+  const distSq = dx * dx + dz * dz;
+
+  if (c.stunTimer <= 0 && target && distSq > 0.01) {
+    const aggro = distSq < c.sp.AGGRO_D2;
+    const d = Math.sqrt(distSq);
+    const k = c.sp.ACCEL * (aggro ? 1 : 0.2) * dt;
+    c.vx += (dx / d) * k;
+    c.vz += (dz / d) * k;
+  }
+
+  const hSpeed = Math.hypot(c.vx, c.vz);
+  if (hSpeed > c.sp.TOPSPEED) {
+    const s = c.sp.TOPSPEED / hSpeed;
+    c.vx *= s; c.vz *= s;
+  }
+
+  const prevY = c.y;
+  c.x += c.vx * dt;
+  c.z += c.vz * dt;
+  const gy = hmHeight(field, c.x, c.z);
+  c.y = gy + 1.6; // rides the surface — radius baked into the constant
+  const drop = prevY - c.y;
+  if (drop > 0 && hSpeed > 0.1 && target && distSq > 0.01) {
+    const d = Math.sqrt(distSq);
+    const g = Math.min(drop / dt * c.sp.DOWNHILL_K, 4);
+    c.vx += (dx / d) * g * dt;
+    c.vz += (dz / d) * g * dt;
+  }
+  if (hSpeed > 0.5) c.yaw = Math.atan2(c.vx, c.vz);
+
+  if (target && c.hitCd <= 0) {
+    const d3 = (target.x - c.x) ** 2 + (target.y - c.y) ** 2 + (target.z - c.z) ** 2;
+    if (d3 < c.sp.HIT_R * c.sp.HIT_R) {
+      c.hitCd = c.sp.BITE_CD;
+      if (authoritative) c.pendingBite = true;
+      return 'bite';
+    }
+  }
+  return null;
+}
+
+export function applyRollerDamage(c: SimRoller, damage: number): boolean {
+  c.health -= damage;
+  c.stunTimer = Math.max(c.stunTimer, c.sp.STUN_S);
+  if (c.health <= 0) { c.dead = true; return true; }
+  return false;
+}

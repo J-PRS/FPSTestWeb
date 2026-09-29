@@ -12,9 +12,10 @@
  */
 import { type Heightfield, hmHeight } from '../../shared/heightfield.ts';
 import {
-  type SimCrawler, type SimFlyer, type CrawlerEvent,
+  type SimCrawler, type SimFlyer, type SimRoller, type CrawlerEvent,
   makeSimCrawler, stepCrawler, applyCrawlerDamage, commitTarget,
   isFlyerSpecies, makeSimFlyer, stepFlyer, applyFlyerDamage,
+  isRollerSpecies, makeSimRoller, stepRoller, applyRollerDamage,
   CRAWLER_SIM,
 } from '../../shared/creatureSim.ts';
 import type { SimVec } from '../../shared/ballSim.ts';
@@ -47,10 +48,12 @@ const FAR_SKIP = 4;
 // buckets.
 const BRAIN_BUCKETS = 8;
 
-/** Hop + flyer families share every wire field — the union only matters
- *  at step/damage dispatch, discriminated by the flyer's `orbitPhase`. */
-type SimBeing = SimCrawler | SimFlyer;
+/** Hop + flyer + roller families share every wire field — the union
+ *  only matters at step/damage dispatch, discriminated by family-only
+ *  fields (`orbitPhase` = flyer, `hitCd` = roller). */
+type SimBeing = SimCrawler | SimFlyer | SimRoller;
 const isFlyer = (c: SimBeing): c is SimFlyer => 'orbitPhase' in c;
+const isRoller = (c: SimBeing): c is SimRoller => 'hitCd' in c;
 
 export class CreatureSim {
   private field: Heightfield | null = null;
@@ -146,10 +149,15 @@ export class CreatureSim {
     const z = near.z + Math.sin(ang) * dist;
     const seed = (Math.random() * 0xffffffff) >>> 0 || 1;
     const gy = hmHeight(field, x, z);
-    const c = isFlyerSpecies(species)
-      ? makeSimFlyer(this.nextId++, x, gy, z, Math.random() < 0.05, seed, species)
-      : makeSimCrawler(this.nextId++, x, gy, z, Math.random() < 0.05, seed, species);
+    const id = this.nextId++;
+    const uber = Math.random() < 0.05;
+    const c: SimBeing = isFlyerSpecies(species)
+      ? makeSimFlyer(id, x, gy, z, uber, seed, species)
+      : isRollerSpecies(species)
+        ? makeSimRoller(id, x, gy, z, uber, seed, species)
+        : makeSimCrawler(id, x, gy, z, uber, seed, species);
     if (isFlyer(c)) c.y = gy + c.sp.ORBIT_ALT; // flyers enter at cruise alt
+    if (isRoller(c)) c.y = gy + 1.6;           // rollers ride the surface
     // Negative offset pushes this crawler's first retarget into its own
     // bucket instead of the spawn tick — the spread survives every reset.
     this.retargetAcc.set(c.id, -RETARGET_INTERVAL * ((c.id % BRAIN_BUCKETS) / BRAIN_BUCKETS));
@@ -221,9 +229,12 @@ export class CreatureSim {
       return;
     }
     const dmg = Math.max(1, Math.min(300, damage));
-    if (isFlyer(c) ? applyFlyerDamage(c, dmg) : applyCrawlerDamage(c, dmg)) {
-      this.kill(c, playerId);
-    }
+    const dead = isFlyer(c)
+      ? applyFlyerDamage(c, dmg)
+      : isRoller(c)
+        ? applyRollerDamage(c, dmg)
+        : applyCrawlerDamage(c, dmg);
+    if (dead) this.kill(c, playerId);
     // Stagger is a timer edge — the next hop decision diverges only if a
     // predictor skips it, and the resync heartbeat bounds that drift.
   }
@@ -281,7 +292,9 @@ export class CreatureSim {
       const tgt = c.tgtValid ? _snap : null;
       const ev: CrawlerEvent | null = isFlyer(c)
         ? stepFlyer(c, TICK_DT, this.field!, tgt, true)
-        : stepCrawler(c, TICK_DT, this.field!, tgt, true);
+        : isRoller(c)
+          ? stepRoller(c, TICK_DT, this.field!, tgt, true)
+          : stepCrawler(c, TICK_DT, this.field!, tgt, true);
       if (ev === 'windup' || ev === 'pounce') {
         this.edge(c, ev);
       } else if (ev === 'bite') {

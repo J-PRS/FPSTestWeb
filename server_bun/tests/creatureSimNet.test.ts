@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'bun:test';
 import { CreatureSim } from '../src/CreatureSim.ts';
 import { PlayerManager } from '../src/PlayerManager.ts';
-import { makeSimCrawler, makeSimFlyer, stepFlyer, commitTarget, isFlyerSpecies, MELEE_SPECIES, FLYER_SPECIES } from '../../shared/creatureSim.ts';
-import type { SimCrawler, SimFlyer } from '../../shared/creatureSim.ts';
+import { makeSimCrawler, makeSimFlyer, stepFlyer, commitTarget, isFlyerSpecies, makeSimRoller, stepRoller, isRollerSpecies, MELEE_SPECIES, FLYER_SPECIES } from '../../shared/creatureSim.ts';
+import type { SimCrawler, SimFlyer, SimRoller } from '../../shared/creatureSim.ts';
 import type { Heightfield } from '../../shared/heightfield.ts';
 import type { ServerMessage } from '../src/types.ts';
 
@@ -224,5 +224,62 @@ describe('flyer family (rakk)', () => {
     expect('orbitPhase' in f).toBe(true);
     expect(f.species).toBe('rakk');
     expect(f.y).toBeGreaterThan(0); // spawns at cruise alt, not on the dirt
+  });
+});
+
+describe('roller family', () => {
+  const field: Heightfield = { size: 1, data: new Uint8Array(1), stride: 1 };
+
+  it('rolls at the committed snapshot and bites on contact', () => {
+    const r = makeSimRoller(5, 0, 0, 0, false, 11, 'roller');
+    commitTarget(r, 'prey', { x: 20, y: 1.6, z: 0 });
+    const events: string[] = [];
+    for (let i = 0; i < 400 && events.length === 0; i++) {
+      const ev = stepRoller(r, 0.05, field, { x: 20, y: 1.6, z: 0 }, true);
+      if (ev) events.push(ev);
+    }
+    expect(events[0]).toBe('bite');
+    expect(r.x).toBeGreaterThan(5); // actually closed the distance
+    expect(isRollerSpecies('roller')).toBe(true);
+    expect(isRollerSpecies('crawler')).toBe(false);
+  });
+
+  it('bite cooldown stops contact multi-ticking', () => {
+    const r = makeSimRoller(6, 0, 0, 0, false, 11, 'roller');
+    commitTarget(r, 'prey', { x: 1, y: 1.6, z: 0 });
+    const tgt = { x: 1, y: 1.6, z: 0 };
+    let bites = 0;
+    for (let i = 0; i < 20; i++) { // 1s at melee range — cooldown gates re-bites
+      if (stepRoller(r, 0.05, field, tgt, true) === 'bite') bites++;
+      r.x = 1; r.y = 1.6; r.z = 0; // hold it on the target
+    }
+    expect(bites).toBeLessThanOrEqual(2);
+    expect(bites).toBeGreaterThanOrEqual(1);
+  });
+
+  it('authority and predictor replay identically', () => {
+    const a = makeSimRoller(7, 0, 0, 0, false, 55, 'roller');
+    const p = makeSimRoller(7, 0, 0, 0, false, 55, 'roller');
+    commitTarget(a, 'prey', { x: 30, y: 1.6, z: 10 });
+    commitTarget(p, 'prey', { x: 30, y: 1.6, z: 10 });
+    for (let i = 0; i < 100; i++) {
+      stepRoller(a, 0.05, field, { x: 30, y: 1.6, z: 10 }, true);
+      stepRoller(p, 0.05, field, { x: 30, y: 1.6, z: 10 }, false);
+    }
+    expect(p.x).toBeCloseTo(a.x, 10);
+    expect(p.z).toBeCloseTo(a.z, 10);
+  });
+
+  it('server spawnCrawler dispatches roller species to makeSimRoller', () => {
+    const { sim } = makeRoom();
+    addPlayerAt(sim, 'p1', 0, 0);
+    const priv = sim as unknown as {
+      field: Heightfield | null;
+      spawnCrawler(near: { x: number; y: number; z: number }, species: string): SimRoller;
+    };
+    priv.field = { size: 1, data: new Uint8Array(1), stride: 1 };
+    const r = priv.spawnCrawler({ x: 0, y: 0, z: 0 }, 'roller');
+    expect('hitCd' in r).toBe(true);
+    expect(r.species).toBe('roller');
   });
 });

@@ -10,7 +10,8 @@
   "creatures": {
     "crawler": 6,
     "scarab": 8,
-    "rakk": 4
+    "rakk": 4,
+    "roller": 3
   },
   "ambient": {
     "crawler": 40,
