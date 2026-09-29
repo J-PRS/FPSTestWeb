@@ -49,12 +49,13 @@ const ANIM_NAMES: Record<AnimationState, [ual: string, fallback: string]> = {
   'shoot':  ['UAL_Pistol_Shoot',      'Punch']
 };
 
-// KayKit knight rig — plays its own native clip names (76-clip combat set).
-// No retarget, no UAL aliasing; ski reads as the forward dodge-tuck.
+// Quaternius Knight_Male (CC0) — real-proportioned heavy silhouette on
+// the same bone names as the robot. Native clips, no retarget; the Roll
+// tuck doubles as the ski pose.
 const KNIGHT_ANIMS: Record<AnimationState, string> = {
-  'idle': 'Idle', 'walk': 'Walking_A', 'run': 'Running_A',
-  'jump': 'Jump_Idle', 'death': 'Death_A', 'ski': 'Dodge_Forward',
-  'jet': 'Jump_Idle', 'hit': 'Hit_A', 'shoot': 'Throw',
+  'idle': 'Idle', 'walk': 'Walk', 'run': 'Run',
+  'jump': 'Jump', 'death': 'Death', 'ski': 'Roll',
+  'jet': 'Jump', 'hit': 'RecieveHit', 'shoot': 'Shoot_OneHanded',
 };
 
 // RobotExpressive bone → UAL source bone. RobotExpressive bones carry
@@ -94,8 +95,8 @@ const UAL2_BONE_MAP: Record<string, string> = {
 // Clips that must not LoopRepeat — a flinch or a fire that loops reads as a
 // twitch loop instead of a single reaction. Callers time-revert the state.
 const ONESHOT_CLIPS = new Set(['No', 'Punch', 'UAL_Pistol_Shoot', 'UAL_Hit_Chest', 'UAL_Hit_Head',
-  // Knight-native singles — a Throw that loops reads as a seizure.
-  'Throw', 'Hit_A', 'Hit_B', 'Death_A', 'Death_B']);
+  // Knight-native singles — a fire/flinch that loops reads as a twitch.
+  'Shoot_OneHanded', 'RecieveHit', 'Punch']);
 
 const normBone = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
 
@@ -271,8 +272,8 @@ export class PlayerModel {
 
   /** 'robot' = RobotExpressive + retargeted UAL clips (backburner path).
    *  'mannequin' = the UAL's own rig — clips play natively, no retarget.
-   *  'knight' = KayKit CC0 knight — the heavy-class silhouette; native
-   *  clips, armored read at distance. */
+   *  'knight' = Quaternius Knight_Male — the heavy-class silhouette;
+   *  native clips, armored read at distance. */
   readonly variant: 'robot' | 'mannequin' | 'knight';
 
   constructor(scene: THREE.Scene, variant?: 'robot' | 'mannequin' | 'knight') {
@@ -331,10 +332,9 @@ export class PlayerModel {
                 this.aimBones.push({ bone: child, factor: 0.4, last: new THREE.Quaternion() });
               } else if (child.name === 'Abdomen' || nb === 'defspine001' || nb === 'spine') {
                 this.aimBones.push({ bone: child, factor: 0.6, last: new THREE.Quaternion() });
-              // GLTFLoader sanitizes names ('Palm2.R' -> 'Palm2R',
-              // 'handslot.r' -> 'handslotr'); the KayKit slot bone is the
-              // intended weapon mount so it leads the knight list.
-              } else if ((child.name === 'Palm2R' || nb === 'defhandr' || nb === 'handslotr' || nb === 'handr') && !this.handBone) {
+              // GLTFLoader sanitizes names ('Palm2.R' -> 'Palm2R'); the
+              // Quaternius rigs put the grip in FistR.
+              } else if ((child.name === 'Palm2R' || nb === 'defhandr' || nb === 'fistr') && !this.handBone) {
                 this.handBone = child as THREE.Bone;
               }
               // Foot-snap rig for retargeted clips on the robot rig (UAL
@@ -424,7 +424,7 @@ export class PlayerModel {
               for (const tr of clip.tracks) {
                 if (!tr.name.endsWith('.position')) continue;
                 const node = tr.name.slice(0, tr.name.indexOf('.'));
-                if (normBone(node) !== 'defhips' && normBone(node) !== 'root' && normBone(node) !== 'hips') continue;
+                if (normBone(node) !== 'defhips' && normBone(node) !== 'root' && normBone(node) !== 'hips' && normBone(node) !== 'bone') continue;
                 const v = tr.values;
                 for (let i = 3; i < v.length; i += 3) { v[i] = v[0]; v[i + 2] = v[2]; }
               }
