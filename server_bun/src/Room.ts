@@ -12,7 +12,7 @@
 import { PlayerManager } from './PlayerManager.ts';
 import { ConnectionManager } from './ConnectionManager.ts';
 import { RateLimiter } from './RateLimiter.ts';
-import { MessageHandler } from './MessageHandler.ts';
+import { MessageHandler, type RoomInfo } from './MessageHandler.ts';
 import { BallSim } from './BallSim.ts';
 import { CreatureSim } from './CreatureSim.ts';
 import { structureColliders } from '../../shared/ballSim.ts';
@@ -140,56 +140,7 @@ export class Room {
       this.rateLimiter,
       (msg, exclude) => this.connections.broadcast(msg, exclude),
       (pid, msg) => this.connections.sendToPlayer(pid, msg),
-      {
-        room: name,
-        mode: this.mode,
-        scores: this.scores,
-        teams: this.modeSpec?.teams,
-        winAt: this.modeSpec?.winAt,
-        ffaScores: () => Object.fromEntries(this.ffaScores),
-        bases: this.spec.bases,
-        structures: this.spec.structures,
-        arena: this.spec.arena,
-        ambient: this.spec.ambient,
-        terrain: this.spec.terrain,
-        onKill: (pid, shooter) => this.onKill(pid, shooter),
-        onHit: (pid, shooter) => this.bots.flinch(pid, shooter),
-        flags: () => this.flags?.snapshot() ?? [],
-        pickups: () => this.pickups?.snapshot() ?? [],
-        onDeploy: (pid, kind, pos) => this.deployables.handleDeploy(pid, kind, pos),
-        deployBlast: (pos, damage, radius, shooter) => this.deployables.applyBlast(pos, damage, radius, shooter),
-        deployables: () => this.deployables.snapshot(),
-        matchEndsAt: () => this.matchClock.timeLeftMs() > 0 ? Date.now() + this.matchClock.timeLeftMs() : 0,
-        moveInput: (pid, i, status, seq) => this.moveSim.setInput(pid, {
-          forward: i.forward, right: i.right,
-          jumpPressed: !!i.jump, jumpHeld: !!i.jump, skiHeld: !!i.ski,
-          jetHeld: !!i.jet,
-        }, status, seq),
-        moveReport: (pid, pos, yaw, vel, inputSeq) => this.moveSim.reconcile(pid, pos, yaw, vel, inputSeq),
-        moveImpulse: (pid, dv) => this.moveSim.applyImpulse(pid, dv),
-        moveResync: (pid, pos, yaw) => {
-          this.moveSim.resync(pid, pos, yaw);
-          // Resync re-anchors the shadow — also refresh the class speed
-          // scale so a respawn-applied tier swap propagates (moveTrack
-          // only re-reads it at handshake).
-          const cls = this.players.getPlayer(pid)?.armorClass;
-          this.moveSim.setSpeedScale(pid, CLASS_STATS[(cls as 'light' | 'medium' | 'heavy') ?? 'medium']?.speedScale ?? 1);
-        },
-        moveTrack: (pid, pos, yaw) => {
-          this.moveSim.track(pid, pos, yaw, this.players.getPlayer(pid)?.perk);
-          const cls = this.players.getPlayer(pid)?.armorClass;
-          if (cls === 'light' || cls === 'heavy') {
-            this.moveSim.setSpeedScale(pid, CLASS_STATS[cls].speedScale);
-          }
-        },
-        moveUntrack: (pid) => this.moveSim.untrack(pid),
-        moveAuthority: () => this.moveAuthority,
-        health: this.health,
-        envRange: (pid) => {
-          const p = this.players.getPlayer(pid);
-          return p ? this.ballSim.nearestBallDist(p.position.x, p.position.y, p.position.z) : Infinity;
-        },
-      },
+      this.handlerInfo(name),
     );
     this.moveSim = new RoomMoveSim(field, this.moveAuthority);
     this.matchClock = new MatchClock(this.matchHost());
@@ -375,6 +326,62 @@ export class Room {
   /** Match lifecycle — clock/leader/reset funnel lives in roomMatch.ts;
    *  matchHost adapts Room's fields to the leaf interface it takes. */
   readonly matchClock: MatchClock;
+  /** MessageHandler's room-facing surface — same lazy-callback pattern
+   *  as matchHost: moveSim/matchClock/ballSim are built after `messages`,
+   *  so every reference resolves at call time, not at construction. */
+  private handlerInfo(roomName: string): RoomInfo {
+    return {
+      room: roomName,
+      mode: this.mode,
+      scores: this.scores,
+      teams: this.modeSpec?.teams,
+      winAt: this.modeSpec?.winAt,
+      ffaScores: () => Object.fromEntries(this.ffaScores),
+      bases: this.spec.bases,
+      structures: this.spec.structures,
+      arena: this.spec.arena,
+      ambient: this.spec.ambient,
+      terrain: this.spec.terrain,
+      onKill: (pid, shooter) => this.onKill(pid, shooter),
+      onHit: (pid, shooter) => this.bots.flinch(pid, shooter),
+      flags: () => this.flags?.snapshot() ?? [],
+      pickups: () => this.pickups?.snapshot() ?? [],
+      onDeploy: (pid, kind, pos) => this.deployables.handleDeploy(pid, kind, pos),
+      deployBlast: (pos, damage, radius, shooter) => this.deployables.applyBlast(pos, damage, radius, shooter),
+      deployables: () => this.deployables.snapshot(),
+      matchEndsAt: () => this.matchClock.timeLeftMs() > 0 ? Date.now() + this.matchClock.timeLeftMs() : 0,
+      moveInput: (pid, i, status, seq) => this.moveSim.setInput(pid, {
+        forward: i.forward, right: i.right,
+        jumpPressed: !!i.jump, jumpHeld: !!i.jump, skiHeld: !!i.ski,
+        jetHeld: !!i.jet,
+      }, status, seq),
+      moveReport: (pid, pos, yaw, vel, inputSeq) => this.moveSim.reconcile(pid, pos, yaw, vel, inputSeq),
+      moveImpulse: (pid, dv) => this.moveSim.applyImpulse(pid, dv),
+      moveResync: (pid, pos, yaw) => {
+        this.moveSim.resync(pid, pos, yaw);
+        // Resync re-anchors the shadow — also refresh the class speed
+        // scale so a respawn-applied tier swap propagates (moveTrack
+        // only re-reads it at handshake).
+        const cls = this.players.getPlayer(pid)?.armorClass;
+        this.moveSim.setSpeedScale(pid, CLASS_STATS[(cls as 'light' | 'medium' | 'heavy') ?? 'medium']?.speedScale ?? 1);
+      },
+      moveTrack: (pid, pos, yaw) => {
+        this.moveSim.track(pid, pos, yaw, this.players.getPlayer(pid)?.perk);
+        const cls = this.players.getPlayer(pid)?.armorClass;
+        if (cls === 'light' || cls === 'heavy') {
+          this.moveSim.setSpeedScale(pid, CLASS_STATS[cls].speedScale);
+        }
+      },
+      moveUntrack: (pid) => this.moveSim.untrack(pid),
+      moveAuthority: () => this.moveAuthority,
+      health: this.health,
+      envRange: (pid) => {
+        const p = this.players.getPlayer(pid);
+        return p ? this.ballSim.nearestBallDist(p.position.x, p.position.y, p.position.z) : Infinity;
+      },
+    };
+  }
+
   /** Built in the constructor — field-initializer order would read
    *  mode/modeSpec before they're assigned. */
   private matchHost(): MatchHost {
