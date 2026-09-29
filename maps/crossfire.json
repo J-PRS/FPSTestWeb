@@ -363,5 +363,11 @@
       }
     }
   ],
-  "terrain": "crossfire.bin"
+  "terrain": "crossfire.bin",
+  "creatures": {
+    "totem": 2,
+    "snake": 2,
+    "rakk": 2
+  },
+  "_creatures_notes": "Light neutral wildlife: midfield totems guard the plateau approaches, snakes lurk the flag lanes, rakks circle the pillars. Thin enough that flag runs stay primary — creatures are hazards, not the match."
 }
