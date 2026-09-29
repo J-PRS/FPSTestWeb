@@ -1,3 +1,5 @@
+2026-10-03 - blastShove scenario: rocket blast knocks the victim's move shadow back (>1m for a 5m-miss rocket) + private knockback notify; harness note: simPos returns a live ref — snapshot before comparing.
+
 2026-10-03 - deployTargeting scenario: sentry turret never fires on teammates standing in range, every bolt lands on the hostile.
 
 2026-10-03 - shotReject scenario: a forged hit claim (projectile geometrically unable to reach) is rejected privately to the shooter, zero damage applied.
