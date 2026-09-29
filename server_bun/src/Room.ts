@@ -197,7 +197,7 @@ export class Room {
       (data) => this.connections.broadcastBinary(data),
       (data) => this.connections.broadcastBinaryReliable(data),
     );
-    this.ballSim.population = this.spec.balls;
+    if (this.spec.balls) this.ballSim.population = this.spec.balls;
     this.ballSim.onKilled = (by, pos, variant) => this.creatureKill(by, pos, variant);
     this.ballSim.colliders = structureColliders(this.spec.structures);
     if (this.spec.ballMix) this.ballSim.ballMix = this.spec.ballMix;
