@@ -1,17 +1,27 @@
 # Project Development Context
 
 ## Current State
-- **Project:** Browser-based multiplayer FPS (Tribes-inspired)
-- **Architecture:** Client (Three.js) + Bun WebSocket server
-- **Client:** Three.js rendering, custom atmospheric sky, terrain with height fog, demo recording/playback, cool shots panel
-- **Server:** `server_bun/` — Bun runtime, WebSockets, FastAPI-style HTTP routes for demo upload/download
-- **Networking:** Binary bit-packed messages (position, shot, jump, jetpack, ski, death), JSON join handshake
-- **Security:** Server validates hit claims against tracked projectiles (ownership, ballistic reach, legal wake radius at claimed airtime) — see `shared/combat.ts` `validateHitClaim`
+- **Project:** KRIBES — browser multiplayer FPS: Tribes gameplay, Krunker
+  performance/accessibility. Skiing, jetpacks, spinfusor, base assets.
+- **Architecture:** Client (Three.js) + Bun server (WS + WebTransport + WebRTC
+  DataChannel tiers, auto-probed) + `shared/` deterministic sims run on
+  BOTH ends (movement, ballistics, creature families, bot brains).
+- **Server-authoritative sims:** players (MoveSim shadow/judge/authority),
+  balls (BallSim segment events), creatures (CreatureSim edge stream —
+  crawler/scarab/roller/snake/baneling flyer's gnats rakk/totem families
+  all ported), flags, pickups, deployables, bots (virtual clients).
+- **Networking:** edges + committed snapshots, not position streams;
+  distance-tiered fanout; players are the only always-on stream (20Hz).
+  PROTOCOL_VERSION=4. `ROADMAP.md` is the living manifesto — read first.
+- **Testing:** `server_bun/tests/` ~300 bun tests incl. `tests/scenarios/`
+  one-file-per-staged-interaction suite (harness.ts); client vitest (93);
+  `_tools/pvptest/soakreport.ts` headless fleet+server audit.
 - **Recent Changes:**
-  - Hit claims now server-validated against tracked projectile trajectories (shared/combat.ts); PROTOCOL_VERSION=2; weapon stats single-sourced in shared/weapons.ts; dead constants purged from config.ts
-  - Additive blending on explosion particles (grenades/rockets no longer look dark)
-  - Right-click download on cool shot demo tiles in ESC menu
-  - Horizon/sky blending overhaul: sky sphere follows camera, 64x32 segments, height fog in terrain shader, hard fog cutoff at 200 units, unified fog color `0xbbd0e8` across scene.fog / scene.background / sky shader / terrain shader
+  - Server creatures raze deployables (`dep:N` targets + gnaw hp pool)
+  - Scenario suite grew to ~22 files; caught baneling-fuse, flag-drop,
+    and wall-clip classes of bugs
+  - bots.ts bolt sim hoisted out of per-bot loop (was over-integrating)
+  - Light wildlife packs on crossfire + stonekeep (PvPvE on real maps)
   - `scene.background` set to fog color (Three.js requirement for seamless horizon)
 
 ## Technical Context
@@ -35,7 +45,7 @@
   - `server_bun/src/GameServer.ts` — game logic, player management
   - `server_bun/src/DemoStorage.ts` — server-side demo file storage
 - **Integration Points:**
-  - Client ↔ Server via WebSocket (port 8080 default)
+  - Client ↔ Server via WS / WebTransport / RTC-DataChannel (auto-probe)
   - JSON join handshake, then binary bit-packed game messages
   - Demo files: local memory OR server upload via HTTP POST /demos
 - **Deprecated/Archive:**
@@ -48,7 +58,7 @@
   - Update changelog.txt after each task
   - Update architecture.txt for structural changes
   - Maintain TASKS.md for context
-- **Testing Requirements:** `bun test` in server_bun/ (226 tests); `npx vitest run` in client/ (91 tests); `_tools/pvptest/` live E2E (`fleet.ts` honest-bot swarm w/ journal replay + correction metrics + deploy claims + `--drop=N` loss sim, `--test*`/`--watch`/`--balls`/`--spec`), `record.ts`+`replay.ts` wire capture/replay, `netReplay.test.ts` headless replay through real netHandlers, `_tools/poseshot/shoot.js` anim pose gallery on white bg
+- **Testing Requirements:** `bun test` in server_bun/ (302 tests); `npx vitest run` in client/ (93 tests); `_tools/pvptest/` live E2E (`fleet.ts` honest-bot swarm w/ journal replay + correction metrics + deploy claims + `--drop=N` loss sim, `--test*`/`--watch`/`--balls`/`--spec`), `record.ts`+`replay.ts` wire capture/replay, `netReplay.test.ts` headless replay through real netHandlers, `_tools/poseshot/shoot.js` anim pose gallery on white bg
 - **Balance telemetry:** `weaponStats` records per-mode weapon damage/kills (human/bot split), death heatmap (10m cells), duel TTK, flag lifecycle timers, kill-moment speed bins + air share, pickup funnel — `/weaponstats` JSON, `/weaponstats.html` dashboard, `logs/weaponstats.jsonl` rollup
 - **Log hygiene:** `logs/*.log|*.jsonl` auto-rotates to `logs/OLD/<name>_<mtime>.<ext>` at server boot
 - **Security Considerations:**
@@ -60,6 +70,9 @@
 - **Objective:** Continuous overhaul toward Tribes-scale MP (see ROADMAP.md — the living plan). Now landed: multi-room match model (maps/<room>.json: mode/balls/spawns/bases/bots/botFill/ballMix/terrain), server-owned teams+score+CTF flags+nugget pickups+DM frags, match clock w/ OT, match journal→/matches, lobby picker + /join quick-play, server bots w/ shared brain, join throttle + identity cap, wire record/replay harness — plus: bots-as-legal-players (shared MoveSim + BrainCtx senses, energy economy, real projectiles via RoomProjectiles), per-map heightfield pipeline (maps/*.bin → sims + client terrain hot-swap), map rotation, TDM kill-confirmed, server-owned deployables (turret/mine/station/drone), kill feed w/ weapon attribution, RemoteSet entity lifecycle, GameServer → TickLoop + SessionManager split, input-replay corrections + seq-anchored divergence probe + correction grace window.
 
 ## Recently Completed
+- **Deployable predation:** server creatures target `dep:N` ids (CreatureSim extraTargets/targetPos), bites drain RoomDeployables hp; depGnaw scenario proves a turret gets eaten
+- **Deploy refactor:** sentry rockets extracted to deployRockets.ts; RoomMatch extracted from Room; CombatHandler claimLedger; ServerBots watchdog; bots.ts watchdog/tickBots/resolveShot splits
+- **All species families server-authoritative:** crawler/scarab/roller/snake/gnat/rakk/baneling/totem via shared sims + crawl* edges
 - **Species-mix map** (): maps/infestation.json proves the ambient-cap channel end-to-end (spec -> gameState.map.ambient -> setAmbientCaps); nuggets room, layered crawler/scarab/gnat/rakk/seeker/strifer ecology + 6 bots on swarm terrain
 - **Bot melee actually fires** (): band gate was 3D muzzle->aim (+1.4y made 3m unreachable, now planar 4.5m); botAttack read directDamage=0 for Melee (falls back to aoeDamage). Ledger: w10 11 hits/572dmg/1 kill in pit soak. Remote meleeFlash+swing path verified end-to-end.
 - **Full bot kit:** sidearm band (Pistol/Revolver hold-out inside 8m) + melee punch inside 3m via the same combat funnel + broadcast swing — mains/sidearm/melee/belt/deployables/skills/perks/classes all legal paths
