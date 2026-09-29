@@ -1,3 +1,5 @@
+2026-10-03 - spectatorJoin + edgeFanout scenarios: watchers get the world with no body (no playerJoined/localPlayerState); crawl edges reach near players every time, far players only the 4th-edge broadcast resync.
+
 2026-10-03 - mineFuse + pickupDecay scenarios: mine arms in 1s, detonates inside 3.2m through the AOE funnel, can't double-dip; decayed loot emits pickupGone by:null at the 30s TTL.
 
 2026-10-03 - ServerBots quiet-gate + harness freeze(): pinned-shot scenarios can silence brains so wander/cloak can't flake staged hits. Applied to spawnShield, ffaScore, tdmTag, friendlyFire.
