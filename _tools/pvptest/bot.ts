@@ -34,6 +34,7 @@ const IDLE = process.argv.includes('--idle'); // join then go silent — tests t
 const ROOM = process.argv.find(a => a.startsWith('--room='))?.slice(7);
 const WATCH = process.argv.includes('--watch'); // passive observer: log join/left cadence and per-peer tick freshness
 const BALLS = process.argv.includes('--balls'); // measure ballSegment cadence + event-age jitter
+const SPEC = process.argv.includes('--spec'); // spectate-only join: expect gameState + ticks, no roster entry
 const WS_URL = process.env.PVP_WS ?? 'ws://localhost:8000/ws';
 // --tier=wt|rtc|ws — ride a specific netcode-v2 transport instead of
 // WebSocket, so the fleet can exercise all three (net.ts adapters).
@@ -355,7 +356,7 @@ function connect(): Promise<void> {
       }
     };
       ws.onerror = () => reject(new Error(`${TIER} error`));
-      sendJson({ type: 'join', playerId: NAME, token: sessionToken, room: ROOM, transport: TIER });
+      sendJson({ type: 'join', playerId: NAME, token: sessionToken, room: ROOM, transport: TIER, spectate: SPEC || undefined });
     }).catch(reject);
     // RTC/WT session setup (gather → answer → channel open) eats several
     // seconds before the join can even leave.
@@ -577,6 +578,17 @@ async function main() {
         log(`  flapper ${id}: alive ${age}s`);
       }
       process.exit(0);
+    }
+    if (SPEC) {
+      // 20s watch: a spectator must get ticks + the world stream but must
+      // NOT appear in the roster or accrue a playerJoined for itself.
+      await new Promise((r) => setTimeout(r, 20_000));
+      check('spectator got gameState', (rxCounts.get('gameState') ?? 0) >= 1, `${rxCounts.get('gameState') ?? 0} received`);
+      check('spectator gets tick stream', tickStats.frames > 100, `${tickStats.frames} frames`);
+      check('spectator absent from roster', !others.has(NAME), others.has(NAME) ? 'self in roster!' : 'not a player');
+      log(`--- rx tally: ${rxReport()} ---`);
+      const fails = results.filter((r) => !r.ok).length;
+      process.exit(fails ? 1 : 0);
     }
     log('running (Ctrl+C to quit)');
     // Ctrl+C dumps the full RX tally — a long-running probe's value is the
