@@ -1,3 +1,5 @@
+2026-10-03 - weaponsGeo: buildWeaponMeshes -> per-weapon mk* builders + MODEL_BUILDERS table (c28 -> clean).
+
 2026-10-03 - ViewModel.loadBakedWeapons -> swapBaked + adoptChainSpin/seatChainPivot (c19 -> clean).
 
 2026-10-03 - RemotePlayer.updateAliveModel -> tickAnimState/tickAuras (c24 -> clean).

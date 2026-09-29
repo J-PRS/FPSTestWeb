@@ -11,14 +11,11 @@ export interface WeaponMeshes {
   chainBarrels: THREE.Group;
 }
 
-export function buildWeaponMeshes(parent: THREE.Group, muzzleZ: Record<number, number>): WeaponMeshes {
-  const weapons = new Map<number, THREE.Group>();
-  const muzzleNodes = new Map<number, THREE.Object3D>();
-  let chainBarrels: THREE.Group = new THREE.Group();
-
 const bodyMat = new THREE.MeshLambertMaterial({ color: 0x555a60, emissive: 0x1c1e20 });
 const darkMat = new THREE.MeshLambertMaterial({ color: 0x2a2d30, emissive: 0x0e0f10 });
 const boreMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+const shellMat = new THREE.MeshLambertMaterial({ color: 0xa8241a, emissive: 0x2a0604 });
+const brassMat = new THREE.MeshLambertMaterial({ color: 0xb08a3a, emissive: 0x241a08 });
 
 const mkTube = (r1: number, r2: number, len: number, z: number, mat: THREE.Material) => {
   const m = new THREE.Mesh(new THREE.CylinderGeometry(r1, r2, len, 8), mat);
@@ -36,6 +33,7 @@ const mkBore = (r: number, z: number) => {
 // JP's Unity ref — straight octagonal block, stepped muzzle shroud, top
 // rail split by a notch, boxy rear receiver. Not tapered; the wedge in
 // the ref is perspective.
+function mkRocket(): THREE.Group {
 const rocket = new THREE.Group();
 // Equal-width slab all the way to the face — the ref has NO stepped
 // shroud; the front is flush with the body. End plate is a thin flush
@@ -64,11 +62,14 @@ for (const side of [-1, 1]) {
 const channelFloor = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.015, 0.42), darkMat);
 channelFloor.position.set(0, 0.095, -0.05);
 rocket.add(channelFloor);
+return rocket;
+}
 
 // Weapon 1 — disc launcher (T1/T2 spinfusor DNA, not a copy): the
 // silhouette is a FORK — two flat mag rails sandwiching a vertical disc
 // you can see seated in the breach, glowing hub at the axle. No barrel
 // tube at all; the disc IS the weapon.
+function mkDisc(): THREE.Group {
 const disc = new THREE.Group();
 const discRailGeo = new THREE.BoxGeometry(0.035, 0.16, 0.52);
 for (const side of [-1, 1]) {
@@ -121,13 +122,16 @@ discGrip.position.set(0, -0.13, 0.14);
 discGrip.rotation.x = 0.35;
 disc.add(discGrip);
 disc.visible = false;
+return disc;
+}
 
 // Weapon 2 — chaingun: the ref reads as one long chamfered slab
 // swallowing the barrel cluster — barrels peek out the front of a heavy
 // shroud, dark recessed channel under the belly. Not three floating
 // sticks: the SHROUD is the gun.
+function mkChaingun(): { g: THREE.Group; barrels: THREE.Group } {
 const chain = new THREE.Group();
-chainBarrels = new THREE.Group();
+const chainBarrels = new THREE.Group();
 // The bake pipeline treats "barrels" as a kept-separate node — it's the
 // only viewmodel part that animates, so it can't fold into the merged mesh.
 chainBarrels.name = 'barrels';
@@ -187,10 +191,13 @@ chainGrip.position.set(0, -0.19, 0.18);
 chainGrip.rotation.x = 0.3;
 chain.add(chainGrip);
 chain.visible = false;
+return { g: chain, barrels: chainBarrels };
+}
 
 // Weapon 3 — mortar: an artillery piece, not a pipe. The reads: FAT
 // bore tube, base plate under the breech, bipod struts on the fore-end,
 // a shell hopper on the flank with finned bomb tips peeking out.
+function mkMortar(): THREE.Group {
 const mortar = new THREE.Group();
 mortar.add(mkTube(0.19, 0.16, 0.42, -0.02, darkMat)); // main bore tube
 mortar.add(mkTube(0.22, 0.20, 0.1, -0.22, bodyMat)); // flared muzzle
@@ -231,9 +238,12 @@ const mSight = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.05, 0.025), darkMat
 mSight.position.set(0, 0.22, -0.22);
 mortar.add(mSight);
 mortar.visible = false;
+return mortar;
+}
 
 // Weapon 4 — grenade launcher: MGL-style revolver — fat drum slung
 // under the barrel ahead of the receiver block, skeletal stock.
+function mkGrenadeLauncher(): THREE.Group {
 const gl = new THREE.Group();
 gl.add(mkTube(0.095, 0.105, 0.3, -0.2, bodyMat));  // barrel over the drum
 gl.add(mkTube(0.115, 0.115, 0.07, -0.36, darkMat)); // muzzle collar
@@ -274,11 +284,14 @@ glGrip.position.set(0, -0.16, 0.02);
 glGrip.rotation.x = 0.3;
 gl.add(glGrip);
 gl.visible = false;
+return gl;
+}
 
 // Sticky launcher: T2's bomb mortar — a fat launch tube feeding from a
 // horizontal bomb drum under the breech, latching spike at the muzzle.
 // The "sticky" read is a row of live ordnance in the drum window, not a
 // bubble on top — the old glowing pink ball looked like a toy hopper.
+function mkSticky(): THREE.Group {
 const sticky = new THREE.Group();
 sticky.add(mkTube(0.125, 0.135, 0.34, -0.14, bodyMat)); // launch tube — longer, heavier
 sticky.add(mkTube(0.15, 0.145, 0.07, -0.34, darkMat)); // muzzle collar
@@ -337,10 +350,13 @@ stickyGrip.position.set(0, -0.14, 0.06);
 stickyGrip.rotation.x = 0.3;
 sticky.add(stickyGrip);
 sticky.visible = false;
+return sticky;
+}
 
 // Weapon 5 — flak cannon: UT's chunky front-loader. Wide ribbed barrel
 // with a DEEP flared bore, breech box with the top grill, and the tell
 // UT players know: a break-open loading slot with shells in a clip.
+function mkFlak(): THREE.Group {
 const flak = new THREE.Group();
 flak.add(mkTube(0.17, 0.15, 0.3, -0.08, bodyMat));
 // Ribbed barrel — two pinch ribs along the tube, not just the ring
@@ -380,11 +396,14 @@ flakGrip.position.set(0, -0.15, 0.18);
 flakGrip.rotation.x = 0.3;
 flak.add(flakGrip);
 flak.visible = false;
+return flak;
+}
 
 // Weapon 6 — plasma cannon: a fat energy projector, not a tube — heavy
 // finned emitter head up front, glowing core slats behind it, capacitor
 // bottle under the receiver. T2's plasma gun reads BULKY — the emitter
 // dish is the widest thing on the model.
+function mkPlasmaCannon(): THREE.Group {
 const plasma = new THREE.Group();
 // Main body — shorter and much fatter than the old slim tube
 plasma.add(mkTube(0.115, 0.13, 0.3, 0.0, bodyMat));
@@ -452,10 +471,13 @@ plasmaGrip.position.set(0, -0.15, 0.14);
 plasmaGrip.rotation.x = 0.3;
 plasma.add(plasmaGrip);
 plasma.visible = false;
+return plasma;
+}
 
 // Weapon — plasma gun (Quake-style rapid bolts): shorter and squatter
 // than the cannon — three prongs around a hot blue emitter, reads as a
 // repeater, not a launcher.
+function mkPlasmaGun(): THREE.Group {
 const plasmagun = new THREE.Group();
 plasmagun.add(mkTube(0.11, 0.12, 0.34, -0.05, bodyMat));
 for (let i = 0; i < 3; i++) {
@@ -475,10 +497,13 @@ plasmagunGlow.rotation.x = Math.PI / 2;
 plasmagunGlow.position.z = -0.247;
 plasmagun.add(plasmagunGlow);
 plasmagun.visible = false;
+return plasmagun;
+}
 
 // Weapon 7 — railgun: Q3's fat coil-cannon. Thick central bore, a stack
 // of fat accelerator coils ribbing the barrel, glowing muzzle ring.
 // The silhouette reads "industrial capacitor bank", not sniper rifle.
+function mkRailgun(): THREE.Group {
 const rail = new THREE.Group();
 // Fat bore — the barrel itself is the chunk
 rail.add(mkTube(0.13, 0.14, 0.55, -0.08, bodyMat));
@@ -506,10 +531,13 @@ capDrum.rotation.x = Math.PI / 2;
 capDrum.position.set(0, -0.02, 0.22);
 rail.add(capDrum);
 rail.visible = false;
+return rail;
+}
 
 // Weapon 8 — lightning gun: Q3's tesla prod. Chunky insulated body, two
 // prongs converging on a glowing emitter ball — the arc jumps between
 // them, not out of a bore. Reads instantly different from the cannons.
+function mkLightningGun(): THREE.Group {
 const lg = new THREE.Group();
 lg.add(mkTube(0.12, 0.14, 0.42, 0.02, bodyMat)); // insulated body
 lg.add(mkTube(0.15, 0.15, 0.07, 0.2, darkMat));  // grip ring
@@ -532,10 +560,13 @@ for (let i = 0; i < 3; i++) {
   lg.add(mkTube(0.135, 0.135, 0.03, -0.06 + i * 0.1, darkMat));
 }
 lg.visible = false;
+return lg;
+}
 
 // Weapon 9 — shotgun: heavy pumpgun. Fat bore over a full-length shell
 // tube, chunky receiver, big ribbed pump — reads "combat shotgun" the
 // instant you see the paired under-barrel stack.
+function mkShotgun(): THREE.Group {
 const sg = new THREE.Group();
 sg.add(mkTube(0.115, 0.115, 0.6, -0.08, bodyMat));  // THICK barrel — bore sells it
 sg.add(mkTube(0.135, 0.135, 0.09, -0.36, darkMat)); // heavy muzzle collar
@@ -551,8 +582,7 @@ receiver.position.set(0, -0.01, 0.2);
 sg.add(receiver);
 // Side-saddle shells — three red hulls on the receiver flank. THE
 // shotgun read: nothing else in the arsenal carries colored shells.
-const shellMat = new THREE.MeshLambertMaterial({ color: 0xa8241a, emissive: 0x2a0604 });
-const brassMat = new THREE.MeshLambertMaterial({ color: 0xb08a3a, emissive: 0x241a08 });
+// (shellMat/brassMat hoisted to module scope — the RPG warhead shares them.)
 for (let i = 0; i < 3; i++) {
   const hull = mkTube(0.022, 0.022, 0.07, 0, shellMat);
   hull.position.set(-0.085, 0.03, 0.09 + i * 0.08); // a row along the flank
@@ -594,10 +624,13 @@ sgGrip.position.set(0, -0.12, 0.16);
 sgGrip.rotation.x = 0.3;
 sg.add(sgGrip);
 sg.visible = false;
+return sg;
+}
 
 // Weapon 10 — cannon: Serious Sam naval gun rebuilt per JP's Blender
 // ref — stacked bulged barrel sections separated by pinch rings, huge
 // bore, rounded breech ball.
+function mkCannon(): THREE.Group {
 const cn = new THREE.Group();
 let cz = 0.0; // running z, barrel extends toward -Z from breech
 const cnSeg = (r1: number, r2: number, len: number, mat: THREE.Material) => {
@@ -619,10 +652,13 @@ const cnBall = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 6), darkMat);
 cnBall.position.set(0, -0.02, 0.06);               // rounded breech ball
 cn.add(cnBall);
 cn.visible = false;
+return cn;
+}
 
 // Weapon 11 — rocket launcher: classic RPG profile. Long launch tube,
 // flared muzzle bell, conical warhead tip protruding past the tube
 // (loaded look = the RPG read), stubby exhaust cone at the rear.
+function mkRpg(): THREE.Group {
 const rpg = new THREE.Group();
 rpg.add(mkTube(0.11, 0.11, 0.62, -0.02, bodyMat));        // launch tube
 rpg.add(mkTube(0.16, 0.11, 0.12, -0.36, darkMat));        // muzzle bell flare
@@ -642,9 +678,12 @@ const rpgSight = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.08, 0.03), darkMat
 rpgSight.position.set(0, 0.14, -0.1);
 rpg.add(rpgSight);
 rpg.visible = false;
+return rpg;
+}
 
 // Sidearms — compact silhouettes so the hold-out swap reads instantly.
 // Pistol: slide + stubby barrel + raked grip.
+function mkPistol(): THREE.Group {
 const pistol = new THREE.Group();
 pistol.add(mkTube(0.03, 0.03, 0.16, -0.08, darkMat)); // barrel
 const slide = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.07, 0.24), bodyMat);
@@ -681,8 +720,11 @@ const pRear = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.025, 0.02), darkMat)
 pRear.position.set(0, 0.065, 0.06);
 pistol.add(pRear);
 pistol.visible = false;
+return pistol;
+}
 
 // Revolver: long barrel + big cylinder + hammer — the hand-cannon profile.
+function mkRevolver(): THREE.Group {
 const revolver = new THREE.Group();
 revolver.add(mkTube(0.032, 0.032, 0.24, -0.14, darkMat)); // long barrel
 // Underlug — the rib under the barrel that makes it read heavy-frame,
@@ -721,38 +763,52 @@ const rSight = new THREE.Mesh(new THREE.BoxGeometry(0.015, 0.04, 0.015), darkMat
 rSight.position.set(0, 0.055, -0.24);
 revolver.add(rSight);
 revolver.visible = false;
+return revolver;
+}
 
 // Map is keyed by WeaponType, never positionally — Grenade/Slam/Melee
 // have no gun model (belt throw / fist), so they map to nothing.
-const models: [number, THREE.Group][] = [
-  [WeaponType.Rocket, rocket],
-  [WeaponType.Disc, disc],
-  [WeaponType.DiscPull, disc],
-  [WeaponType.Chaingun, chain],
-  [WeaponType.Mortar, mortar],
-  [WeaponType.GrenadeLauncher, gl],
-  [WeaponType.Flak, flak],
-  [WeaponType.PlasmaCannon, plasma],
-  [WeaponType.PlasmaGun, plasmagun],
-  [WeaponType.Sprinkler, plasmagun], // same receiver, different bolt payload
-  [WeaponType.Railgun, rail],
-  [WeaponType.Lightning, lg],
-  [WeaponType.Shotgun, sg],
-  [WeaponType.Cannon, cn],
-  [WeaponType.RocketLauncher, rpg],
-  [WeaponType.Pistol, pistol],
-  [WeaponType.Revolver, revolver],
-  [WeaponType.Sticky, sticky],
+const MODEL_BUILDERS: [number, () => THREE.Group][] = [
+  [WeaponType.Rocket, mkRocket],
+  [WeaponType.Disc, mkDisc],
+  [WeaponType.GrenadeLauncher, mkGrenadeLauncher],
+  [WeaponType.Flak, mkFlak],
+  [WeaponType.Mortar, mkMortar],
+  [WeaponType.PlasmaCannon, mkPlasmaCannon],
+  [WeaponType.PlasmaGun, mkPlasmaGun],
+  [WeaponType.Sprinkler, mkPlasmaGun], // same receiver, different bolt payload
+  [WeaponType.Railgun, mkRailgun],
+  [WeaponType.Lightning, mkLightningGun],
+  [WeaponType.Shotgun, mkShotgun],
+  [WeaponType.Cannon, mkCannon],
+  [WeaponType.RocketLauncher, mkRpg],
+  [WeaponType.Pistol, mkPistol],
+  [WeaponType.Revolver, mkRevolver],
+  [WeaponType.Sticky, mkSticky],
 ];
-for (const [wt, g] of models) {
-  weapons.set(wt, g);
-  parent.add(g);
-  const mz = new THREE.Object3D();
-  mz.position.z = muzzleZ[wt] ?? -0.35;
-  g.add(mz);
-  muzzleNodes.set(wt, mz);
-}
-  return { weapons, muzzleNodes, chainBarrels };
+
+export function buildWeaponMeshes(parent: THREE.Group, muzzleZ: Record<number, number>): WeaponMeshes {
+  const weapons = new Map<number, THREE.Group>();
+  const muzzleNodes = new Map<number, THREE.Object3D>();
+  // Chaingun needs its barrels group back; DiscPull reuses the Disc group —
+  // neither can live in the plain builder table.
+  const chain = mkChaingun();
+  const models: [number, THREE.Group][] = MODEL_BUILDERS.map(([wt, mk]) => [wt, mk()]);
+  models.push([WeaponType.Chaingun, chain.g]);
+  for (const [wt, g] of models) {
+    weapons.set(wt, g);
+    parent.add(g);
+    const mz = new THREE.Object3D();
+    mz.position.z = muzzleZ[wt] ?? -0.35;
+    g.add(mz);
+    muzzleNodes.set(wt, mz);
+  }
+  weapons.set(WeaponType.DiscPull, weapons.get(WeaponType.Disc)!);
+  const pullMz = new THREE.Object3D();
+  pullMz.position.z = muzzleZ[WeaponType.DiscPull] ?? -0.35;
+  weapons.get(WeaponType.Disc)!.add(pullMz);
+  muzzleNodes.set(WeaponType.DiscPull, pullMz);
+  return { weapons, muzzleNodes, chainBarrels: chain.barrels };
 }
 
 export interface HandFlash {
