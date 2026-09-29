@@ -95,4 +95,8 @@ export interface PlayerState {
   armor: number;
   regenUntil: number;
   ddUntil: number;
+  /** Last time the owner was echoed their server-healed hp (yourHealth
+   *  throttle — healPerTick runs every tick, one echo per 500ms is enough
+   *  to keep the client's HUD and state-hash view converged). */
+  healthEchoAt: number;
 }

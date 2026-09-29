@@ -70,6 +70,15 @@ function wirePlayerCombat(ctx: NetCtx): void {
     if (!player.isDead) player.health = health;
   };
 
+  // Server-healed hp (regen perk, mend channel, regen powerup) — arrives
+  // at ~2Hz while a channel is live; adopt it wholesale, the server owns
+  // these sources so its value can only ever be right.
+  networkManager.onYourHealth = (health) => {
+    if (deps.world.playbackMode) return;
+    const player = deps.lazyPlayer();
+    if (!player.isDead) player.health = health;
+  };
+
   // Server tells us to apply knockback/pull to our local player
   networkManager.onKnockback = (position: { x: number; y: number; z: number }, force: number, pull?: boolean) => {
     if (deps.world.playbackMode) return; // replay owns the camera's body

@@ -84,6 +84,9 @@ export class NetworkManager {
   public onPickupSpawn: ((id: number, pos: { x: number; y: number; z: number }, kind?: PickupKind) => void) | null = null;
   /** Powerup applied to US — server-owned buffs (armor/heal/timed). */
   public onBuff: ((msg: { kind: 'heal' | 'armor' | 'regen' | 'dd'; armor?: number; health?: number; until?: number }) => void) | null = null;
+  /** Server-owned heal echo (regen/mend/powerup tick in the sim) — keeps
+   *  local hp converged between discrete hit events. */
+  public onYourHealth: ((health: number) => void) | null = null;
   public onPickupGone: ((id: number, by: string | null) => void) | null = null;
   public onFfaScore: ((scores: Record<string, number>, winAt: number) => void) | null = null;
   public onFfaMatchEnd: ((winner: string, scores: Record<string, number>) => void) | null = null;
@@ -219,7 +222,9 @@ export class NetworkManager {
   /** Outbound JSON event — typed against the shared protocol union. */
   private send(msg: ClientMessage): void {
     if (!this.ws?.connected()) return;
-    this.ws.send(JSON.stringify(msg));
+    const s = JSON.stringify(msg);
+    this.txBytes += s.length;
+    this.ws.send(s);
   }
 
   /** Outbound binary frame — pre-encoded by shared/wire.ts. Position input
@@ -230,7 +235,33 @@ export class NetworkManager {
    *  (WS/RTC already degraded to reliable — only WT changed behavior.) */
   private sendBinary(data: Uint8Array): void {
     if (!this.ws?.connected()) return;
+    this.txBytes += data.length;
     this.ws.send(data);
+  }
+
+  /** Byte counters → smoothed B/s pair, read by the backquote perf HUD.
+   *  tx is exact (we build the buffers); rx counts binary exactly and
+   *  approximates JSON events by re-stringify — they're sparse, so the
+   *  cost is nothing and the number is close enough for a debug readout. */
+  private txBytes = 0;
+  private rxBytes = 0;
+  private bwT = 0;
+  private bwLastTx = 0;
+  private bwLastRx = 0;
+  private bwUp = 0;
+  private bwDown = 0;
+  bandwidth(): { up: number; down: number } {
+    const now = performance.now();
+    if (this.bwT === 0) { this.bwT = now; return { up: 0, down: 0 }; }
+    const dt = (now - this.bwT) / 1000;
+    if (dt >= 0.5) {
+      this.bwUp = this.bwUp * 0.5 + ((this.txBytes - this.bwLastTx) / dt) * 0.5;
+      this.bwDown = this.bwDown * 0.5 + ((this.rxBytes - this.bwLastRx) / dt) * 0.5;
+      this.bwT = now;
+      this.bwLastTx = this.txBytes;
+      this.bwLastRx = this.rxBytes;
+    }
+    return { up: this.bwUp, down: this.bwDown };
   }
 
   /** Ring of recent health-affecting events — read by the desync dump so a
@@ -242,6 +273,7 @@ export class NetworkManager {
   }
 
   private handleMessage(data: ServerMessage): void {
+    this.rxBytes += JSON.stringify(data).length; // rx approximation — JSON events are sparse
     // Capture the server-issued session token for future reconnects
     if (data?.type === 'gameState' && typeof data.sessionToken === 'string') {
       this.sessionToken = data.sessionToken;
@@ -270,6 +302,7 @@ export class NetworkManager {
     playerRespawn: (data) => this.handlePlayerRespawn(data),
     playerHit: (data) => this.handlePlayerHit(data),
     buff: (data) => this.onBuff?.(data),
+    yourHealth: (data) => this.onYourHealth?.(data.health),
     playerKill: (data) => this.handlePlayerKill(data),
     knockback: (data) => this.onKnockback?.(data.position, data.force, data.pull),
     jump: (data) => this.onPlayerJump?.(data.playerId, data.position),
@@ -451,6 +484,7 @@ export class NetworkManager {
   }
 
   private handleBinaryMessage(data: Uint8Array): void {
+    this.rxBytes += data.length;
     if (!isWireFrame(data)) {
       logger.debug(`Received non-wire binary message: ${data.length} bytes`);
       return;

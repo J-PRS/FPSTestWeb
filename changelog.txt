@@ -1,3 +1,9 @@
+2026-10-03 - Health desync fix: server-owned heals (regen perk, mend
+    channel, regen powerup) ticked hp up in the sim but never told the
+    owner — self is excluded from tickUpdate — so client vs server hp
+    drifted until the next discrete hit (the state-hash DESYNC warn).
+    The tick loop now echoes `yourHealth` to the owner at ~2Hz while a
+    heal channel is live; the client adopts it wholesale.
 2026-10-03 - Sheep meter client-side + real Tribes bots. The visible
     skitter was GameBot ignoring the brain's move hints entirely — it
     only walked. think() now consumes ski/jet/jump: skiing holds

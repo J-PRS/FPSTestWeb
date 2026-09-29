@@ -172,6 +172,10 @@ export type ServerMessage =
   // arrives through playerHit/knockback like everything else.
   | { type: 'mineBoom'; id: number; owner: string; pos: Vec3 }
   | { type: 'pickupGone'; id: number; by: string | null }
+  // Server-owned heals (regen perk, mend channel, regen powerup) mutate
+  // health silently every tick — self is excluded from tickUpdate, so
+  // without this echo the owner's hp drifts until the next hit event.
+  | { type: 'yourHealth'; health: number }
   // Combat claim refused — the shooter's predicted damage never happened.
   // Sent ONLY to the shooter so the client can log why a landed shot did
   // nothing (stale projectile, dead/friendly target, implausible claim).

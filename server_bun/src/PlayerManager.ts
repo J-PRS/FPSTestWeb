@@ -69,6 +69,7 @@ export class PlayerManager {
       armor: 0,
       regenUntil: 0,
       ddUntil: 0,
+      healthEchoAt: 0,
     };
 
     this.players.set(playerId, player);

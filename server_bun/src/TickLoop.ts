@@ -210,7 +210,17 @@ export class TickLoop {
       // Health channels the server owns: medkit channel (flag), regenerator
       // perk (passive), regen powerup (timed). All cap at the perk max.
       const heal = healPerTick(p, now);
-      if (heal > 0) p.health = Math.min(p.maxHealth, p.health + heal);
+      if (heal > 0) {
+        p.health = Math.min(p.maxHealth, p.health + heal);
+        // Server-owned heals never reach the owner — self is excluded
+        // from tickUpdate — so without this echo their hp drifts from
+        // the server's until the next discrete event (the desync the
+        // state hash keeps flagging).
+        if (now - p.healthEchoAt >= 500) {
+          p.healthEchoAt = now;
+          room.connections.sendToPlayer(playerId, { type: 'yourHealth', health: p.health });
+        }
+      }
       const isStale = silenceMs > 5000;
       const forceSend = now < p.forceSendUntil;
       const lastSent = room.lastSentPositions.get(playerId);
