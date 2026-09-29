@@ -31,22 +31,22 @@ export interface GameStateSnapshot {
   hash: string;
 }
 
-export class StateSnapshot {
-  private static snapshotBuffer: GameStateSnapshot[] = [];
-  private static maxBufferSize = 50; // Keep last 50 snapshots
+export namespace StateSnapshot {
+  const snapshotBuffer: GameStateSnapshot[] = [];
+  const MAX_SNAPSHOTS = 50; // Keep last 50 snapshots
 
   /**
    * Compute a simple hash of the game state
    */
-  static computeHash(snapshot: Omit<GameStateSnapshot, 'hash'>): string {
-    const sortedPlayerIds = Array.from(snapshot.players.keys()).sort();
+  export function computeHash(snapshot: Omit<GameStateSnapshot, 'hash'>): string {
+    const sortedPlayerIds = Array.from(snapshot.players.keys()).toSorted();
     const playerData = sortedPlayerIds.map(id => {
       const player = snapshot.players.get(id)!;
       return `${id}:${player.position.x},${player.position.y},${player.position.z}:${player.health}:${player.isDead}`;
     }).join('|');
 
     const projectileData = snapshot.projectiles
-      .sort((a, b) => a.id.localeCompare(b.id))
+      .toSorted((a, b) => a.id.localeCompare(b.id))
       .map(p => `${p.id}:${p.ownerId}:${p.position.x},${p.position.y},${p.position.z}`)
       .join('|');
 
@@ -63,7 +63,7 @@ export class StateSnapshot {
   /**
    * Create a snapshot from current game state
    */
-  static create(
+  export function create(
     players: Map<string, Omit<EntityState, 'id'>>,
     projectiles: Map<string, ProjectileSnapshotEntry> | ProjectileSnapshotEntry[],
     source: 'server' | 'client'
@@ -100,7 +100,7 @@ export class StateSnapshot {
       projectiles: projectileData
     };
 
-    const hash = this.computeHash(snapshot);
+    const hash = computeHash(snapshot);
 
     return {
       ...snapshot,
@@ -111,29 +111,28 @@ export class StateSnapshot {
   /**
    * Save snapshot to buffer
    */
-  static save(snapshot: GameStateSnapshot): void {
-    this.snapshotBuffer.push(snapshot);
+  export function save(snapshot: GameStateSnapshot): void {
+    snapshotBuffer.push(snapshot);
     
     // Keep buffer size limited
-    if (this.snapshotBuffer.length > this.maxBufferSize) {
-      this.snapshotBuffer.shift();
+    if (snapshotBuffer.length > MAX_SNAPSHOTS) {
+      snapshotBuffer.shift();
     }
   }
 
   /**
    * Get all buffered snapshots
    */
-  static getSnapshots(): GameStateSnapshot[] {
-    return [...this.snapshotBuffer];
+  export function getSnapshots(): GameStateSnapshot[] {
+    return [...snapshotBuffer];
   }
 
   /**
    * Export snapshots as a downloadable file
    */
-  static exportSnapshots(): void {
+  export function exportSnapshots(): void {
     const data = {
-      snapshots: this.snapshotBuffer.map(s => ({
-        ...s,
+      snapshots: snapshotBuffer.map(s => Object.assign({}, s, {
         players: Array.from(s.players.entries())
       }))
     };
@@ -152,19 +151,19 @@ export class StateSnapshot {
   /**
    * Compare two snapshots and return differences
    */
-  static compare(snapshot1: GameStateSnapshot, snapshot2: GameStateSnapshot): {
+  export function compare(snapshot1: GameStateSnapshot, snapshot2: GameStateSnapshot): {
     hashMatch: boolean;
     playerDifferences: string[];
     projectileDifferences: string[];
   } {
     return {
       hashMatch: snapshot1.hash === snapshot2.hash,
-      playerDifferences: this.comparePlayers(snapshot1, snapshot2),
-      projectileDifferences: this.compareProjectiles(snapshot1, snapshot2),
+      playerDifferences: comparePlayers(snapshot1, snapshot2),
+      projectileDifferences: compareProjectiles(snapshot1, snapshot2),
     };
   }
 
-  private static comparePlayers(s1: GameStateSnapshot, s2: GameStateSnapshot): string[] {
+  function comparePlayers(s1: GameStateSnapshot, s2: GameStateSnapshot): string[] {
     const diffs: string[] = [];
     const allPlayerIds = new Set([...s1.players.keys(), ...s2.players.keys()]);
 
@@ -194,7 +193,7 @@ export class StateSnapshot {
     return diffs;
   }
 
-  private static compareProjectiles(s1: GameStateSnapshot, s2: GameStateSnapshot): string[] {
+  function compareProjectiles(s1: GameStateSnapshot, s2: GameStateSnapshot): string[] {
     const diffs: string[] = [];
     const p1Ids = new Set(s1.projectiles.map(p => p.id));
     const p2Ids = new Set(s2.projectiles.map(p => p.id));

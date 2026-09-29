@@ -10,67 +10,67 @@ export enum LogLevel {
   ERROR = 3
 }
 
-class Logger {
-  private static currentLevel: LogLevel = LogLevel.INFO;
+export namespace Logger {
+  let currentLevel: LogLevel = LogLevel.INFO;
   // Console output is WARN+ only — INFO/DEBUG still land in the Alt+Q buffer
-  private static consoleLevel: LogLevel = LogLevel.WARN;
-  private static context: string = '';
-  private static logBuffer: string[] = [];
-  private static maxBufferSize = 1000; // Keep last 1000 log entries
-  private static writingToConsole = false; // suppress console wrapper re-entry
+  let consoleLevel: LogLevel = LogLevel.WARN;
+  let currentTag: string = '';
+  let logBuffer: string[] = [];
+  let maxBufferSize = 1000; // Keep last 1000 log entries
+  let writingToConsole = false; // suppress console wrapper re-entry
 
   /**
    * Set the minimum log level (default: INFO)
    * Can be configured via environment variable LOG_LEVEL
    */
-  static setLogLevel(level: LogLevel): void {
-    this.currentLevel = level;
+  export function setLogLevel(level: LogLevel): void {
+    currentLevel = level;
   }
 
   /**
    * Set log level from string (for environment variable parsing)
    */
-  static setLogLevelFromString(levelStr: string): void {
+  export function setLogLevelFromString(levelStr: string): void {
     const level = levelStr.toUpperCase();
     switch (level) {
       case 'DEBUG':
-        this.currentLevel = LogLevel.DEBUG;
+        currentLevel = LogLevel.DEBUG;
         break;
       case 'INFO':
-        this.currentLevel = LogLevel.INFO;
+        currentLevel = LogLevel.INFO;
         break;
       case 'WARN':
-        this.currentLevel = LogLevel.WARN;
+        currentLevel = LogLevel.WARN;
         break;
       case 'ERROR':
-        this.currentLevel = LogLevel.ERROR;
+        currentLevel = LogLevel.ERROR;
         break;
       default:
         console.warn(`[Logger] Unknown log level: ${levelStr}, using INFO`);
-        this.currentLevel = LogLevel.INFO;
+        currentLevel = LogLevel.INFO;
     }
   }
 
   /**
    * Check if a log level should be output
    */
-  private static shouldLog(level: LogLevel): boolean {
-    return level >= this.currentLevel;
+  function shouldLog(level: LogLevel): boolean {
+    return level >= currentLevel;
   }
 
   /**
    * Core logging method
    */
-  private static log(level: LogLevel, message: string, context?: any): void {
-    if (!this.shouldLog(level)) return;
+  function log(level: LogLevel, message: string, context?: any): void {
+    if (!shouldLog(level)) return;
 
     const levelStr = LogLevel[level];
     const timestamp = new Date().toISOString();
-    const prefix = this.context ? `[${this.context}]` : '';
+    const prefix = currentTag ? `[${currentTag}]` : '';
     const fullMessage = `${timestamp} ${prefix} [${levelStr}] ${message}`;
 
-    if (level >= this.consoleLevel) {
-      this.writingToConsole = true;
+    if (level >= consoleLevel) {
+      writingToConsole = true;
       try {
         switch (level) {
           case LogLevel.DEBUG:
@@ -85,7 +85,7 @@ class Logger {
             break;
         }
       } finally {
-        this.writingToConsole = false;
+        writingToConsole = false;
       }
     }
 
@@ -93,28 +93,28 @@ class Logger {
     const logLine = context !== undefined 
       ? `${fullMessage} ${JSON.stringify(context)}`
       : fullMessage;
-    this.logBuffer.push(logLine);
+    logBuffer.push(logLine);
 
     // WARN+ also queues for server shipping — the on-disk client.log
-    if (level >= LogLevel.WARN) this.shipQueue.push(logLine);
+    if (level >= LogLevel.WARN) shipQueue.push(logLine);
     
     // Keep buffer size limited
-    if (this.logBuffer.length > this.maxBufferSize) {
-      this.logBuffer.shift();
+    if (logBuffer.length > maxBufferSize) {
+      logBuffer.shift();
     }
   }
 
   /** Register a diagnostics dump — prepended to Alt+Q/export output so bug
    *  reports carry live game state (isDead, connection, ids) not just logs. */
-  private static diagnosticsProvider: (() => string[]) | null = null;
-  static setDiagnostics(fn: () => string[]): void {
-    this.diagnosticsProvider = fn;
+  let diagnosticsProvider: (() => string[]) | null = null;
+  export function setDiagnostics(fn: () => string[]): void {
+    diagnosticsProvider = fn;
   }
 
-  private static buildHeader(): string[] {
+  function buildHeader(): string[] {
     const lines = [`=== DIAGNOSTICS @ ${new Date().toISOString()} ===`];
     try {
-      if (this.diagnosticsProvider) lines.push(...this.diagnosticsProvider());
+      if (diagnosticsProvider) lines.push(...diagnosticsProvider());
     } catch (e) {
       lines.push(`diagnostics threw: ${e}`);
     }
@@ -125,8 +125,8 @@ class Logger {
   /**
    * Export logs as a downloadable file
    */
-  static exportLogs(): void {
-    const logContent = [...this.buildHeader(), ...this.logBuffer].join('\n');
+  export function exportLogs(): void {
+    const logContent = [...buildHeader(), ...logBuffer].join('\n');
     const blob = new Blob([logContent], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -141,19 +141,19 @@ class Logger {
   /**
    * Get all buffered logs
    */
-  static getLogs(): string[] {
-    return [...this.logBuffer];
+  export function getLogs(): string[] {
+    return [...logBuffer];
   }
 
   /**
    * Copy the last `count` buffered lines to the clipboard (Alt+Q).
    * Keydown counts as a user gesture so navigator.clipboard is allowed.
    */
-  static async copyLogs(count = 300): Promise<number> {
-    const lines = [...this.buildHeader(), ...this.logBuffer.slice(-count)].join('\n');
+  export async function copyLogs(count = 300): Promise<number> {
+    const lines = [...buildHeader(), ...logBuffer.slice(-count)].join('\n');
     try {
       await navigator.clipboard.writeText(lines);
-      return this.logBuffer.slice(-count).length;
+      return logBuffer.slice(-count).length;
     } catch {
       // Clipboard unavailable (insecure context / denied) — fall back to console
       // (error so it bypasses the log/info console filter)
@@ -166,31 +166,31 @@ class Logger {
   // WARN/ERROR lines stream to POST <server>/client-log, which appends to
   // logs/client.log on disk. Batched every 5s; a sendBeacon on pagehide
   // catches the tail. No-op until initShipping is called with the URL.
-  private static shipQueue: string[] = [];
-  private static shipUrl = '';
+  let shipQueue: string[] = [];
+  let shipUrl = '';
 
-  static initShipping(httpUrl: string): void {
-    this.shipUrl = `${httpUrl.replace(/\/$/, '')}/client-log`;
-    setInterval(() => this.flushShipping(), 5000);
+  export function initShipping(httpUrl: string): void {
+    shipUrl = `${httpUrl.replace(/\/$/, '')}/client-log`;
+    setInterval(() => flushShipping(), 5000);
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'hidden') this.flushShipping(true);
+      if (document.visibilityState === 'hidden') flushShipping(true);
     });
   }
 
   // Uncaught errors install at module load, not at ship-time: a boot crash
   // before initShipping still reaches the queue and flushes once the
   // endpoint resolves (or stays in the local buffer if it never does).
-  private static errorHooksInstalled = false;
-  static installErrorHooks(): void {
-    if (this.errorHooksInstalled) return;
-    this.errorHooksInstalled = true;
+  let errorHooksInstalled = false;
+  export function installErrorHooks(): void {
+    if (errorHooksInstalled) return;
+    errorHooksInstalled = true;
     window.addEventListener('error', (e) => {
-      this.error(`UNCAUGHT ${e.message}`, { file: e.filename, line: e.lineno, stack: (e.error as Error)?.stack });
-      this.flushBootCrash();
+      error(`UNCAUGHT ${e.message}`, { file: e.filename, line: e.lineno, stack: (e.error as Error)?.stack });
+      flushBootCrash();
     });
     window.addEventListener('unhandledrejection', (e) => {
-      this.error('UNHANDLED REJECTION', { reason: String(e.reason), stack: (e.reason as Error)?.stack });
-      this.flushBootCrash();
+      error('UNHANDLED REJECTION', { reason: String(e.reason), stack: (e.reason as Error)?.stack });
+      flushBootCrash();
     });
   }
 
@@ -198,8 +198,8 @@ class Logger {
   // never sees the one log line that explains a black-screen boot. Resolve the
   // endpoint the same way connectServer does (?server= → tunnel wss/https,
   // else same-host:8000) and beacon the queue immediately.
-  private static flushBootCrash(): void {
-    if (this.shipUrl || this.shipQueue.length === 0) return;
+  function flushBootCrash(): void {
+    if (shipUrl || shipQueue.length === 0) return;
     const qp = new URLSearchParams(window.location.search);
     let host = qp.get('server')?.trim() ?? '';
     let url: string;
@@ -209,58 +209,58 @@ class Logger {
       if (host && !host.includes('.')) host = `${host}.trycloudflare.com`;
       url = host ? `https://${host}/client-log` : `http://${window.location.hostname || 'localhost'}:8000/client-log`;
     }
-    const body = this.shipQueue.splice(0, this.shipQueue.length).join('\n') + '\n';
+    const body = shipQueue.splice(0, shipQueue.length).join('\n') + '\n';
     try {
       if (navigator.sendBeacon) navigator.sendBeacon(url, body);
       else void fetch(url, { method: 'POST', body, keepalive: true }).catch(() => {});
     } catch { /* shipping must never break the game */ }
   }
 
-  private static flushShipping(beacon = false): void {
-    if (!this.shipUrl || this.shipQueue.length === 0) return;
-    const body = this.shipQueue.splice(0, this.shipQueue.length).join('\n') + '\n';
+  function flushShipping(beacon = false): void {
+    if (!shipUrl || shipQueue.length === 0) return;
+    const body = shipQueue.splice(0, shipQueue.length).join('\n') + '\n';
     try {
       if (beacon && navigator.sendBeacon) {
-        navigator.sendBeacon(this.shipUrl, body);
+        navigator.sendBeacon(shipUrl, body);
       } else {
-        void fetch(this.shipUrl, { method: 'POST', body, keepalive: true }).catch(() => {});
+        void fetch(shipUrl, { method: 'POST', body, keepalive: true }).catch(() => {});
       }
     } catch { /* shipping must never break the game */ }
   }
 
   /** Push a line from outside the logger (console wrapper) */
-  static pushRaw(line: string): void {
-    this.logBuffer.push(line);
-    if (this.logBuffer.length > this.maxBufferSize) this.logBuffer.shift();
-    if (line.includes('[WARN]') || line.includes('[ERROR]')) this.shipQueue.push(line);
+  export function pushRaw(line: string): void {
+    logBuffer.push(line);
+    if (logBuffer.length > maxBufferSize) logBuffer.shift();
+    if (line.includes('[WARN]') || line.includes('[ERROR]')) shipQueue.push(line);
   }
 
-  static get isWritingToConsole(): boolean {
-    return this.writingToConsole;
+  export function isWritingToConsole(): boolean {
+    return writingToConsole;
   }
 
-  static debug(message: string, context?: any): void {
-    this.log(LogLevel.DEBUG, message, context);
+  export function debug(message: string, context?: any): void {
+    log(LogLevel.DEBUG, message, context);
   }
 
-  static info(message: string, context?: any): void {
-    this.log(LogLevel.INFO, message, context);
+  export function info(message: string, context?: any): void {
+    log(LogLevel.INFO, message, context);
   }
 
-  static warn(message: string, context?: any): void {
-    this.log(LogLevel.WARN, message, context);
+  export function warn(message: string, context?: any): void {
+    log(LogLevel.WARN, message, context);
   }
 
-  static error(message: string, context?: any): void {
-    this.log(LogLevel.ERROR, message, context);
+  export function error(message: string, context?: any): void {
+    log(LogLevel.ERROR, message, context);
   }
 
   /** Log with a one-shot context tag (used by ChildLogger) */
-  static logTagged(level: LogLevel, tag: string, message: string, context?: any): void {
-    const prevContext = this.context;
-    this.context = tag;
-    this.log(level, message, context);
-    this.context = prevContext;
+  export function logTagged(level: LogLevel, tag: string, message: string, context?: any): void {
+    const prevTag = currentTag;
+    currentTag = tag;
+    log(level, message, context);
+    currentTag = prevTag;
   }
 }
 
@@ -271,19 +271,19 @@ export class ChildLogger {
   constructor(private context: string) {}
 
   debug(message: string, context?: any): void {
-    Logger.logTagged(LogLevel.DEBUG, this.context, message, context);
+    Logger.logTagged(LogLevel.DEBUG, context, message, context);
   }
 
   info(message: string, context?: any): void {
-    Logger.logTagged(LogLevel.INFO, this.context, message, context);
+    Logger.logTagged(LogLevel.INFO, context, message, context);
   }
 
   warn(message: string, context?: any): void {
-    Logger.logTagged(LogLevel.WARN, this.context, message, context);
+    Logger.logTagged(LogLevel.WARN, context, message, context);
   }
 
   error(message: string, context?: any): void {
-    Logger.logTagged(LogLevel.ERROR, this.context, message, context);
+    Logger.logTagged(LogLevel.ERROR, context, message, context);
   }
 }
 
@@ -300,20 +300,21 @@ if (viteEnv?.LOG_LEVEL) {
 }
 
 // Expose export function globally for manual export
+const fmtArgs = (args: unknown[]) =>
+  args.map(a => (typeof a === 'string' ? a : (() => { try { return JSON.stringify(a); } catch { return String(a); } })())).join(' ');
+
 if (typeof window !== 'undefined') {
   window.exportClientLogs = () => Logger.exportLogs();
 
   // Capture raw console.* calls that bypass the logger into the same buffer
   // (logger output is excluded via isWritingToConsole to avoid duplicates)
-  const fmt = (args: unknown[]) =>
-    args.map(a => (typeof a === 'string' ? a : (() => { try { return JSON.stringify(a); } catch { return String(a); } })())).join(' ');
   for (const m of ['log', 'info', 'warn', 'error'] as const) {
     const orig = console[m].bind(console);
     // log/info stay buffered for Alt+Q but don't hit the console — only
     // warn/error pass through (mirrors the Logger console filter)
     const passthrough = m === 'warn' || m === 'error';
     console[m] = (...args: unknown[]) => {
-      if (!Logger.isWritingToConsole) Logger.pushRaw(`${new Date().toISOString()} [${m.toUpperCase()}] ${fmt(args)}`);
+      if (!Logger.isWritingToConsole()) Logger.pushRaw(`${new Date().toISOString()} [${m.toUpperCase()}] ${fmtArgs(args)}`);
       if (passthrough) orig(...args);
     };
   }

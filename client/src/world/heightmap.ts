@@ -45,7 +45,7 @@ export function heightmapSize(): number { return hmSize; }
 export async function loadHeightmap(url: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const img = new Image();
-    img.onload = () => {
+    img.addEventListener('load', () => {
       const canvas = document.createElement('canvas');
       canvas.width = img.width;
       canvas.height = img.height;
@@ -58,8 +58,8 @@ export async function loadHeightmap(url: string): Promise<void> {
       ctx.drawImage(img, 0, 0);
       hmData = ctx.getImageData(0, 0, img.width, img.height).data; // RGBA
       resolve();
-    };
-    img.onerror = reject;
+    });
+    img.addEventListener('error', () => reject(new Error(`heightmap load failed: ${url}`)));
     img.src = url;
   });
 }

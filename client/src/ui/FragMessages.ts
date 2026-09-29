@@ -1,5 +1,7 @@
 import { FRAG_MESSAGE_DURATION, FRAG_MESSAGE_FADE } from '../core/config.js';
 
+const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+
 export class FragMessages {
   private scoreDiv: HTMLDivElement;
   private fadeTimer: ReturnType<typeof setTimeout> | undefined;
@@ -20,7 +22,6 @@ export class FragMessages {
   show(msg: string): void {
     // First line is the headline (YOU DIED / FRAGGED X) — big Rajdhani
     // slab; the rest reads as a smaller subtitle under it.
-    const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
     const [head, ...rest] = msg.split('\n');
     this.scoreDiv.innerHTML =
       `<div style="font-size:2.6rem;font-weight:700;color:#ff5544;letter-spacing:0.12em;text-shadow:0 0 18px rgba(255,60,40,0.55),1px 2px 4px #000">${esc(head ?? '')}</div>` +
@@ -43,7 +44,6 @@ export class FragMessages {
   ];
 
   showScore(msg: string, air = 0): void {
-    const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
     const tier = FragMessages.SCORE_TIERS.find(t => air >= t[0])!;
     const [head, ...rest] = msg.split('\n');
     this.scoreDiv.innerHTML =

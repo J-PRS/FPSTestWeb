@@ -51,15 +51,15 @@ export class CoolShotsPanel {
     const isRecent = Date.now() - shot.timestamp < 60000;
     item.className = isRecent ? 'cool-shot-item recent' : 'cool-shot-item';
     item.innerHTML = `<span class="rank">${rank}</span><span class="lifetime">${shot.projectileLifetime.toFixed(2)}s</span><span class="time-ago">${this.timeAgo(shot.timestamp)}</span>`;
-    item.onclick = () => {
+    item.addEventListener('click', () => {
       this.demoManager.playCoolShotById(shot.id);
       this.overlay.style.display = 'none';
       this.requestLock();
-    };
-    item.oncontextmenu = (e) => {
+    });
+    item.addEventListener('contextmenu', (e) => {
       e.preventDefault();
       this.demoManager.downloadCoolShotById(shot.id);
-    };
+    });
     container.appendChild(item);
   }
 
@@ -79,7 +79,7 @@ export class CoolShotsPanel {
     top10.forEach((shot, i) => this.renderShotItem(this.coolShotsTop, shot, i + 1));
 
     // Recent 10 by timestamp (most recent first)
-    const recent10 = [...shots].sort((a, b) => b.timestamp - a.timestamp).slice(0, 10);
+    const recent10 = shots.toSorted((a, b) => b.timestamp - a.timestamp).slice(0, 10);
     recent10.forEach((shot, i) => this.renderShotItem(this.coolShotsRecent, shot, i + 1));
   }
 }

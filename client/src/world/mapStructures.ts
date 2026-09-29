@@ -17,7 +17,7 @@ const KIND_ROT: Record<StructureSpec['kind'], (m: THREE.Mesh, _s: StructureSpec)
   wall: () => {},
   pillar: () => {},
   // Ramp = box pitched forward so its low lip touches the ground in -Z.
-  ramp: (m, s) => {
+  ramp: (m, _s) => {
     m.rotation.x = -Math.PI / 7;
   },
 };

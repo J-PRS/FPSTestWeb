@@ -58,16 +58,16 @@ export class DataChannelTransport implements GameTransport {
 
   constructor(private dc: RTCDataChannel, private config: ConnectionConfig) {
     dc.binaryType = 'arraybuffer';
-    dc.onmessage = (ev) => {
+    dc.addEventListener('message', (ev) => {
       const data = ev.data;
       if (typeof data === 'string') {
         try { this.config.onMessage?.(JSON.parse(data)); } catch (e) { logger.error('dc parse', e); }
       } else if (data instanceof ArrayBuffer) {
         this.config.onBinaryMessage?.(new Uint8Array(data));
       }
-    };
-    dc.onopen = () => { this.open = true; this.config.onConnect?.(); };
-    dc.onclose = () => { this.open = false; this.config.onDisconnect?.(1000, 'peer closed'); };
+    });
+    dc.addEventListener('open', () => { this.open = true; this.config.onConnect?.(); });
+    dc.addEventListener('close', () => { this.open = false; this.config.onDisconnect?.(1000, 'peer closed'); });
   }
 
   connect(): void {

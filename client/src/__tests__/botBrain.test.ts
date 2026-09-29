@@ -6,6 +6,12 @@ function ctx(pos: { x: number; y: number; z: number }, groundY: (x: number, z: n
   return { pos, enemies: [], groundY, now: 0, ...extra };
 }
 
+const wall = (x: number) => (x > 3 ? 20 : 0);
+const enemy = (x: number, z: number): BrainCtx['enemies'] => [
+  { id: 'e1', pos: { x, y: 1.6, z }, vel: { x: 0, y: 0, z: 0 }, alive: true },
+];
+const ridge = (x: number) => (x > 10 && x < 30 ? 30 : 0);
+
 describe('BotBrain pathing', () => {
   it('walks toward the goal on open ground', () => {
     const b = new BotBrain({ x: 0, y: 0, z: 0 });
@@ -19,7 +25,6 @@ describe('BotBrain pathing', () => {
   it('slides along the contour when the step climbs a wall', () => {
     const b = new BotBrain({ x: 0, y: 0, z: 0 });
     // Wall at x>3 — ground jumps 20m; the 4m-ahead probe lands on it
-    const wall = (x: number) => (x > 3 ? 20 : 0);
     const pos = { x: 0, y: 0, z: 0 };
     const out = b.think(0.4, ctx(pos, wall, { objective: { x: 100, y: 20, z: 0 } }));
     // Deflected perpendicular (|z| grows) rather than straight into the wall
@@ -40,9 +45,6 @@ describe('BotBrain pathing', () => {
 });
 
 describe('BotBrain senses', () => {
-  const enemy = (x: number, z: number): BrainCtx['enemies'] => [
-    { id: 'e1', pos: { x, y: 1.6, z }, vel: { x: 0, y: 0, z: 0 }, alive: true },
-  ];
 
   it('acquires and fires on a visible enemy', () => {
     const b = new BotBrain({ x: 0, y: 0, z: 0 });
@@ -56,7 +58,6 @@ describe('BotBrain senses', () => {
     const b = new BotBrain({ x: 0, y: 0, z: 0 });
     const pos = { x: 0, y: 1.6, z: 0 };
     // Ridge 30m tall spanning x∈(10,30) — the eye line eats it
-    const ridge = (x: number) => (x > 10 && x < 30 ? 30 : 0);
     const out = b.think(0.4, ctx(pos, ridge, { enemies: enemy(50, 0) }));
     expect(out.fire).toBeUndefined();
     // No hunt → no approach toward the target either

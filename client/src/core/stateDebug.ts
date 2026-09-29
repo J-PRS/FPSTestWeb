@@ -56,17 +56,74 @@ function buildHashablePlayerMap(ctx: StateDebugContext): Map<string, { x: number
 
   for (const [id, playerData] of ctx.networkManager.getPlayers()) {
     if (id === ctx.networkManager.getLocalPlayerId()) continue; // Skip local player
-    const rp = ctx.remotePlayers.get(id);
-    const storedPos = playerData?.position;
-    allPlayers.set(id, {
-      x: storedPos?.x ?? rp?.position.x ?? 0,
-      y: storedPos?.y ?? rp?.position.y ?? 0,
-      z: storedPos?.z ?? rp?.position.z ?? 0,
-      health: playerData?.health ?? 100,
-      isDead: playerData?.isDead ?? rp?.isDead ?? false,
-    });
+    allPlayers.set(id, hashableEntry(ctx.remotePlayers.get(id), playerData));
   }
   return allPlayers;
+}
+
+function hashableEntry(
+  rp: RemotePlayer | undefined,
+  playerData: { position?: { x: number; y: number; z: number }; health?: number; isDead?: boolean } | undefined,
+): { x: number; y: number; z: number; health: number; isDead: boolean } {
+  const p = playerData?.position ?? rp?.position ?? { x: 0, y: 0, z: 0 };
+  return {
+    x: p.x, y: p.y, z: p.z,
+    health: playerData?.health ?? 100,
+    isDead: playerData?.isDead ?? rp?.isDead ?? false,
+  };
+}
+
+const fmt = (v: { x: number; y: number; z: number }) =>
+  `(${v.x.toFixed(1)},${v.y.toFixed(1)},${v.z.toFixed(1)})`;
+
+function diagLines(ctx: StateDebugContext): string[] {
+  const nm = ctx.networkManager;
+  const p = ctx.getPlayer();
+  const wire = nm.getPlayers();
+  const lines: string[] = [
+    `localId: ${nm.getLocalPlayerId()}`,
+    `connected: ${nm.isConnected()} tier: ${nm.getTransportTier() ?? '-'} ping: ${nm.getPing()}ms loss: ${nm.getPacketLoss()}% jitter: ${nm.getJitter()}ms`,
+    `local: dead=${p.isDead} hp=${p.health} pos=${fmt(p.pos)} vel=${fmt(p.vel)} yaw=${p.yaw.toFixed(2)} pitch=${p.pitch.toFixed(2)} onGround=${p.onGround}`,
+    `lastSentPos: ${fmt(ctx.getLastSentPos())}`,
+  ];
+  pushWorld(lines, ctx.world);
+  lines.push(`remotes: ${ctx.remotePlayers.size} rendered / ${wire.size} known`);
+  for (const [id, ps] of wire) {
+    const rp = ctx.remotePlayers.get(id);
+    const renderD = rp ? Math.hypot(rp.position.x - ps.position.x, rp.position.y - ps.position.y, rp.position.z - ps.position.z) : -1;
+    lines.push(`  wire ${id.slice(0, 20)} team=${ps.team ?? '-'} dead=${ps.isDead} hp=${ps.health} ping=${ps.ping ?? '?'} pos=${fmt(ps.position)}${rp ? ` renderΔ=${renderD.toFixed(1)}m` : ' NOT-RENDERED'}`);
+  }
+  // Rendered but absent from the wire roster — local bots, dummies,
+  // stale ghosts the roster never told us about.
+  for (const [id, rp] of ctx.remotePlayers) {
+    if (wire.has(id)) continue;
+    const team = (rp as { team?: string }).team;
+    lines.push(`  local ${id.slice(0, 20)} team=${team ?? '-'} dead=${rp.isDead} pos=${fmt(rp.position)}`);
+  }
+  pushBots(lines, ctx);
+  lines.push(
+    `projectiles: ${ctx.projectiles.length} live`,
+    `uptime: ${(performance.now() / 1000).toFixed(0)}s`,
+  );
+  return lines;
+}
+
+function pushWorld(lines: string[], w: StateDebugContext['world']): void {
+  if (!w) return;
+  const clock = w.matchEndsAt ? ` endsIn=${Math.max(0, Math.ceil((w.matchEndsAt - Date.now()) / 1000))}s` : '';
+  lines.push(`mode: ${w.mode ?? '(none)'} localTeam: ${w.localTeam ?? '-'}${w.playbackMode ? ' PLAYBACK' : ''}${clock}`);
+  if (w.teamScores) lines.push(`teamScores: alpha=${w.teamScores.alpha} bravo=${w.teamScores.bravo}`);
+  if (w.ffaScores?.size) lines.push(`ffaScores: ${[...w.ffaScores.entries()].map(([id, s]) => `${id.replace('bot:', '')}=${s}`).join(' ')}`);
+}
+
+function pushBots(lines: string[], ctx: StateDebugContext): void {
+  const tb = ctx.teamBots?.();
+  if (!tb) return;
+  const alive = tb.bots.filter(b => !b.isDead).length;
+  lines.push(`teamBots: ${alive}/${tb.bots.length} alive over=${tb.over ?? '-'} score=${tb.scores.alpha}:${tb.scores.bravo} localTeam=${tb.teamOf.get('local') ?? '-'}`);
+  for (const b of tb.bots) {
+    lines.push(`  bot ${b.playerId.replace('bot:', '')} team=${b.team} dead=${b.isDead} hp=${b.botHp ?? '?'} pos=${fmt(b.position)}`);
+  }
 }
 
 // Diff client-side player state against a server snapshot; returns significant diffs.
@@ -247,52 +304,7 @@ export function wireStateDebug(ctx: StateDebugContext): void {
   // Alt+Q/export header — live game state for bug reports. Keyed toward
   // "why didn't X happen" questions: death/respawn state, connection health,
   // what the server thinks vs what we have.
-  Logger.setDiagnostics(() => {
-    const nm = ctx.networkManager;
-    const p = ctx.getPlayer();
-    const w = ctx.world;
-    const fmt = (v: { x: number; y: number; z: number }) =>
-      `(${v.x.toFixed(1)},${v.y.toFixed(1)},${v.z.toFixed(1)})`;
-    const wire = nm.getPlayers();
-    const lines: string[] = [
-      `localId: ${nm.getLocalPlayerId()}`,
-      `connected: ${nm.isConnected()} tier: ${nm.getTransportTier() ?? '-'} ping: ${nm.getPing()}ms loss: ${nm.getPacketLoss()}% jitter: ${nm.getJitter()}ms`,
-      `local: dead=${p.isDead} hp=${p.health} pos=${fmt(p.pos)} vel=${fmt(p.vel)} yaw=${p.yaw.toFixed(2)} pitch=${p.pitch.toFixed(2)} onGround=${p.onGround}`,
-      `lastSentPos: ${fmt(ctx.getLastSentPos())}`,
-    ];
-    if (w) {
-      const clock = w.matchEndsAt ? ` endsIn=${Math.max(0, Math.ceil((w.matchEndsAt - Date.now()) / 1000))}s` : '';
-      lines.push(`mode: ${w.mode ?? '(none)'} localTeam: ${w.localTeam ?? '-'}${w.playbackMode ? ' PLAYBACK' : ''}${clock}`);
-      if (w.teamScores) lines.push(`teamScores: alpha=${w.teamScores.alpha} bravo=${w.teamScores.bravo}`);
-      if (w.ffaScores?.size) lines.push(`ffaScores: ${[...w.ffaScores.entries()].map(([id, s]) => `${id.replace('bot:', '')}=${s}`).join(' ')}`);
-    }
-    lines.push(`remotes: ${ctx.remotePlayers.size} rendered / ${wire.size} known`);
-    for (const [id, ps] of wire) {
-      const rp = ctx.remotePlayers.get(id);
-      const renderD = rp ? Math.hypot(rp.position.x - ps.position.x, rp.position.y - ps.position.y, rp.position.z - ps.position.z) : -1;
-      lines.push(`  wire ${id.slice(0, 20)} team=${ps.team ?? '-'} dead=${ps.isDead} hp=${ps.health} ping=${ps.ping ?? '?'} pos=${fmt(ps.position)}${rp ? ` renderΔ=${renderD.toFixed(1)}m` : ' NOT-RENDERED'}`);
-    }
-    // Rendered but absent from the wire roster — local bots, dummies,
-    // stale ghosts the roster never told us about.
-    for (const [id, rp] of ctx.remotePlayers) {
-      if (wire.has(id)) continue;
-      const team = (rp as { team?: string }).team;
-      lines.push(`  local ${id.slice(0, 20)} team=${team ?? '-'} dead=${rp.isDead} pos=${fmt(rp.position)}`);
-    }
-    const tb = ctx.teamBots?.();
-    if (tb) {
-      const alive = tb.bots.filter(b => !b.isDead).length;
-      lines.push(`teamBots: ${alive}/${tb.bots.length} alive over=${tb.over ?? '-'} score=${tb.scores.alpha}:${tb.scores.bravo} localTeam=${tb.teamOf.get('local') ?? '-'}`);
-      for (const b of tb.bots) {
-        lines.push(`  bot ${b.playerId.replace('bot:', '')} team=${b.team} dead=${b.isDead} hp=${b.botHp ?? '?'} pos=${fmt(b.position)}`);
-      }
-    }
-    lines.push(
-      `projectiles: ${ctx.projectiles.length} live`,
-      `uptime: ${(performance.now() / 1000).toFixed(0)}s`,
-    );
-    return lines;
-  });
+  Logger.setDiagnostics(() => diagLines(ctx));
 
   exposeDebugWindowFunctions(ctx);
 }

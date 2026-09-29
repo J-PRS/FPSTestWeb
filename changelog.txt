@@ -1,3 +1,5 @@
+2026-10-03 - Lint burn-down round 4: Logger class -> namespace (isWritingToConsole now a fn, tag field renamed currentTag), StateSnapshot -> namespace, stateDebug diagnostics -> diagLines/pushWorld/pushBots + hashableEntry, FragMessages esc hoisted, p2p/transport + heightmap + CoolShotsPanel listeners, test helpers hoisted.
+
 2026-10-03 - Lint burn-down round 2: ws/p2p handlers -> addEventListener, DemoUI handlers -> addEventListener, .sort/.reverse -> toSorted/toReversed, map-spread -> Object.assign (DemoRecorder), unused scratches dropped, DemoPlayer lerp fns -> module scope, buildDemoFile start-state -> startFrame helper.
 
 2026-10-03 - Overlord.ts: update -> steerLoiter/tickDrops/faceTarget (c16 -> clean). Grub.ts dy->dyaw. input.ts keydown -> onKeyDown + slotForCode (c16 -> clean).
