@@ -31,10 +31,12 @@ import type { createWaveDirector } from './waveDirector.js';
 import type { WorldState } from './worldState.js';
 import Logger from '../core/Logger.js';
 import { createPerfHud } from '../core/perfHud.js';
+import { createFrameBudget } from '../core/frameBudget.js';
 
 const _zeroVel = new THREE.Vector3(); // shared zero for demo playback
 const _sunDir = new THREE.Vector3(); // scratch — directional fog sun lookup
 const _birdPosBuf: THREE.Vector3[] = []; // scratch — minimap debug blips
+const _mapBlips: import('../ui/minimap.js').MinimapPlayer[] = []; // scratch — minimap player/bot blips
 
 // ?mode=classic — solo bounce-and-shoot: balls only, no rage, no roster
 const CLASSIC_MODE = urlParams.isClassic;
@@ -100,7 +102,18 @@ export function createGameLoop(deps: GameLoopDeps) {
     return s;
   });
   const perf = createPerfHud();
+  // Frame-budget runner — ms-quota chunking + phased sweeps for work
+  // that's expensive but not frame-critical. First pilot: the minimap
+  // sweep at 25Hz (full-rate blip redraw was invisible anyway).
+  const budget = createFrameBudget();
   document.addEventListener('keydown', (e) => {
+    // Alt+W — hard reload escape hatch. F5 is flaky under pointer lock +
+    // dev HMR; this survives both (keydown still fires while locked).
+    if (e.altKey && e.code === 'KeyW') {
+      e.preventDefault();
+      location.reload();
+      return;
+    }
     if (e.code === 'Backquote') {
       e.preventDefault();
       const show = (statsPanels[0]!.dom as HTMLElement).style.display === 'none';
@@ -148,6 +161,7 @@ export function createGameLoop(deps: GameLoopDeps) {
         geometries: info.memory.geometries,
         textures: info.memory.textures,
         phases: perf.snapshot(),
+        budget: budget.stats(),
         ping: nm?.getPing?.(),
         packetLoss: nm?.getPacketLoss?.(),
         heapMB: (performance as { memory?: { usedJSHeapSize: number } }).memory
@@ -230,16 +244,18 @@ export function createGameLoop(deps: GameLoopDeps) {
 
     const entities = deps.entities;
     entities.updateBalls(dt);
+    perf.mark('balls');
     // ?mode=classic — balls are the whole roster, every other species'
     // tick is skipped (they self-spawn ambiently, so ticking = populating)
     if (!CLASSIC_MODE) {
       entities.updateSpeciesAll(dt);
       entities.updateDeployables(dt);
     }
+    perf.mark('species');
     if (!demoManager?.isPlaying) deps.waveDirector().update(dt);
     if (!demoManager?.isPlaying) entities.updateNuggets(dt);
     deps.teamBots?.()?.update(dt);
-    perf.mark('sim');
+    perf.mark('bots');
     if (!demoManager?.isPlaying) deps.combat()?.updateProjectiles(dt);
     deps.demoLifecycle().updatePlaybackProjectiles(dt);
     perf.mark('proj');
@@ -276,7 +292,18 @@ export function createGameLoop(deps: GameLoopDeps) {
     );
     hud.updateDeathCountdown(deps.world.respawnMs);
     deps.ambientBirds.positions(_birdPosBuf);
-    hud.updateMinimap(entities.targets, entities.nuggets, player.pos, player.yaw, _birdPosBuf);
+    // Player/bot blips — same friend-or-foe rule as the overhead markers:
+    // wire team (or GameBot.team) matching localTeam = green, else red.
+    // Dead and cloaked riders are dropped — no corpse pings, no cloak leak.
+    _mapBlips.length = 0;
+    const wirePlayers = networkManager.getPlayers();
+    for (const [id, rp] of deps.world.remotePlayers) {
+      if (rp.isDead || rp.isCloakHidden) continue;
+      const team = (rp as { team?: string }).team ?? wirePlayers.get(id)?.team;
+      _mapBlips.push({ x: rp.position.x, z: rp.position.z, friendly: !!team && team === deps.world.localTeam });
+    }
+    budget.sweep('minimap', 40, () =>
+      hud.updateMinimap(entities.targets, entities.nuggets, player.pos, player.yaw, _birdPosBuf, _mapBlips));
 
     viewModel.group.visible = !demoManager?.isPlaying && !player.isDead && !player.thirdPerson && !player.isSpectating;
     const yawDelta = Math.atan2(Math.sin(player.yaw - lastPlayerYaw), Math.cos(player.yaw - lastPlayerYaw));
