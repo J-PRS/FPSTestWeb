@@ -1,0 +1,36 @@
+import { describe, it, expect } from 'bun:test';
+import { mkRoom, freeze, watch, twoPlayers } from './harness.ts';
+import { WeaponType } from '../../../shared/weapons.ts';
+import type { ServerMessage } from '../../../shared/protocol.ts';
+
+describe('scenario: class-locked ordnance', () => {
+  it('a medium claiming a mortar shot is refused; the same claim as heavy goes through', () => {
+    const room = mkRoom({ bots: 2 }, 'dm');
+    const w = watch(room);
+    const [a] = twoPlayers(room);
+    freeze(room, a.id, { x: 0, y: 31, z: 0 });
+    const toA: ServerMessage[] = [];
+    const origSend = room.connections.sendToPlayer.bind(room.connections);
+    room.connections.sendToPlayer = (pid, m) => { if (pid === a.id) toA.push(m); else origSend(pid, m); };
+
+    const p = room.players.getPlayer(a.id)!;
+    p.armorClass = 'medium';
+    room.messages.handleMessage(a.id, {
+      type: 'shot', targetId: null,
+      position: { x: 1, y: 32, z: 0 },
+      velocity: { x: 30, y: 10, z: 0 },
+      weaponType: WeaponType.Mortar,
+    });
+    expect(toA.filter((m) => m.type === 'shotRejected').length).toBe(1);
+    expect(w.count('projectileCreated')).toBe(0);
+
+    p.armorClass = 'heavy';
+    room.messages.handleMessage(a.id, {
+      type: 'shot', targetId: null,
+      position: { x: 1, y: 32, z: 0 },
+      velocity: { x: 30, y: 10, z: 0 },
+      weaponType: WeaponType.Mortar,
+    });
+    expect(w.count('projectileCreated')).toBe(1);
+  });
+});
