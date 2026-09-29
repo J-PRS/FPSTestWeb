@@ -1,3 +1,7 @@
+2026-10-03 - capEcho.test.ts: covers the cap-out echo — crossing to
+    maxHealth mid-cadence must echo, the echo carries the converged max,
+    and post-cap ticks stay silent. Frozen bot (pin's thinking brain can
+    strip MEND before the heal tick — nondeterministic).
 2026-10-03 - yourHealth echo on cap-out: the tick a heal channel tops
     off maxHealth now echoes unconditionally — previously the final
     converged hp could sit unechoed inside the 500ms cadence window
