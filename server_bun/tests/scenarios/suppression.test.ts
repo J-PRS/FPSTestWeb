@@ -54,4 +54,13 @@ describe('recordSuppressed', () => {
     expect(recordSuppressed(player, sent, 1100)).toBe(false);
     player.rotation.pitch = 0;
   });
+
+  it('suppresses a yaw that crossed the wrap point', () => {
+    // lastSent yaw 0.0 vs live 6.2832 (~2π) is a ~0.003 rad turn, not a
+    // full circle — a raw delta would defeat suppression every wrap.
+    const wrapped = { ...sent, yaw: 0 };
+    player.rotation.yaw = Math.PI * 2;
+    expect(recordSuppressed(player, wrapped, 1100)).toBe(true);
+    player.rotation.yaw = 1;
+  });
 });

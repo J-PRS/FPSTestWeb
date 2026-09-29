@@ -1,3 +1,4 @@
+2026-09-29 - suppression test pins the yaw-wrap case: lastSent yaw 0 vs live yaw 2pi is a ~0.003 rad turn and must suppress.
 2026-09-29 - playerJoined broadcast now waits for the first position report: handshake used to announce every joiner immediately, so a menu/lobby sitter who never reported spawned a frozen ghost mesh at the spawn default on every peer screen (same ghost class as the tick-record fix, different path).
 2026-09-29 - suppression yaw comparison now uses shortest-arc wrap math: raw |yaw-lastSent| read a 6.27→0.01 crossing as a huge turn, permanently defeating suppression for spinners.
 2026-09-29 - server bots now feed their rewind history in the think loop: bots never send position reports, so target.history stayed at the spawn seed and lag-comp hit validation rewound them to the wrong place — legit shots at moving bots could be rejected.
