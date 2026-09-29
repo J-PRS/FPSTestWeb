@@ -1,3 +1,8 @@
+2026-10-03 - Bug fix: MODE=OFF ("solo") no longer joins the default server room.
+    The picker labels it solo but the connect path only skipped for classic,
+    so the server move-judge kept correcting solo players (warp spam).
+    Only ?room=/?p2p= now pulls a no-mode session online.
+
 2026-10-03 - Desync observability: NetworkManager keeps a ring of recent health-affecting events (hit/kill/respawn/buff/heal); the DESYNC dump now lists the last 8 so a mismatch names the diverging event.
 
 2026-10-03 - Scenario suite +1 (healCredit): team-room heal claims gate on gem credit, claim clamps to the bank, non-team rooms heal free-form.

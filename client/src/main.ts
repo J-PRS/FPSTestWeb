@@ -252,8 +252,13 @@ async function init(): Promise<void> {
   // Connect to server (non-blocking for offline mode). Classic is a solo
   // ruleset — connecting would hand ball ownership to the server sim,
   // which enrages and spawns the full roster behind your back.
+  // MODE=OFF is solo too: the picker labels it "(solo)", but the empty
+  // mode still joined the default room and the server's move judge kept
+  // correcting the player — the warp complaints. Only a ?room= link or a
+  // ?p2p= code pulls a no-mode session online.
+  const soloMode = !mode && !urlParams.room && !urlParams.p2p;
   const serverUrl = (await serverEndpoints).wsUrl;
-  await connectServer({ serverUrl, classicMode, networkManager, logger, fragMessages, profiler });
+  await connectServer({ serverUrl, classicMode: classicMode || soloMode, networkManager, logger, fragMessages, profiler });
   player.serverOwnsHealth = () => networkManager.isConnected();
 
   // Initial balls
