@@ -106,6 +106,10 @@ export function createGameLoop(deps: GameLoopDeps) {
   // that's expensive but not frame-critical. First pilot: the minimap
   // sweep at 25Hz (full-rate blip redraw was invisible anyway).
   const budget = createFrameBudget();
+  // window.__perf — live phase table for headless probes + manual reads;
+  // the watchdog dump uses the same data for shipped logs.
+  (window as unknown as { __perf: () => Record<string, number> }).__perf =
+    () => ({ ...perf.snapshot(), ...budget.stats() as unknown as Record<string, number> });
   document.addEventListener('keydown', (e) => {
     // Alt+W — hard reload escape hatch. F5 is flaky under pointer lock +
     // dev HMR; this survives both (keydown still fires while locked).
@@ -263,16 +267,31 @@ export function createGameLoop(deps: GameLoopDeps) {
   }
 
   /** Stage 2 — transient VFX on wall-clock fxDt so they decay while the
-   *  tab is hidden instead of stacking into an overdraw bomb. */
+   *  tab is hidden instead of stacking into an overdraw bomb. Profiled the
+   *  hottest stage under fire (~5ms in a debris storm): the list updates
+   *  run as budgeted jobs under an ms cap, rotated each frame so sustained
+   *  load starves every list evenly instead of tail-dropping the last two.
+   *  Skipped frames are absorbed by the dt-based decay. */
+  const FX_MS_CAP = 1.2;
+  const _fxJobs: (() => void)[] = [];
+  let _fxCursor = 0;
   function fxTick(fxDt: number): void {
-    deps.lazyEffects().update(fxDt);
-    updateDeadList(deps.world.debrisList, fxDt);
-    updateDeadList(deps.world.playerDebrisList, fxDt);
-    updateGibs(fxDt);
-    updateDeadList(deps.world.scorches, fxDt);
-    updateDeadList(deps.world.explosions, fxDt);
-    updateDeadList(deps.world.implosions, fxDt);
-    updateDeadList(deps.world.aoeGizmos, fxDt);
+    _fxJobs.length = 0;
+    _fxJobs.push(
+      () => deps.lazyEffects().update(fxDt),
+      () => updateDeadList(deps.world.debrisList, fxDt),
+      () => updateDeadList(deps.world.playerDebrisList, fxDt),
+      () => updateGibs(fxDt),
+      () => updateDeadList(deps.world.scorches, fxDt),
+      () => updateDeadList(deps.world.explosions, fxDt),
+      () => updateDeadList(deps.world.implosions, fxDt),
+      () => updateDeadList(deps.world.aoeGizmos, fxDt),
+    );
+    if (_fxCursor > 0) _fxJobs.push(..._fxJobs.splice(0, _fxCursor));
+    _fxCursor = (_fxCursor + 1) % _fxJobs.length;
+    budget.each('fxdecay', _fxJobs, FX_MS_CAP, (job) => job());
+    // Deferred lists resume on their own next frame — nothing carries over.
+    _fxJobs.length = 0;
   }
 
   /** Stage 3 — HUD + viewmodel + ambient/atmosphere, then render. */
@@ -314,7 +333,9 @@ export function createGameLoop(deps: GameLoopDeps) {
     viewModel.update(dt, yawDelta, player.pitch - lastPlayerPitch, player.vel, camera);
     lastPlayerYaw = player.yaw;
     lastPlayerPitch = player.pitch;
+    perf.mark('viewmodel');
     deps.lazyHealthBarSystem().update(dt, networkManager.getPlayers(), deps.world.remotePlayers, entities.balls);
+    perf.mark('healthbars');
 
     // Peripheral speed lines along the true velocity vector; demo-suppressed.
     deps.speedLines.update(fxDt, camera.position, demoManager?.isPlaying ? _zeroVel : player.vel);
@@ -322,6 +343,7 @@ export function createGameLoop(deps: GameLoopDeps) {
     for (const layer of deps.ambientLayers) layer.update(fxDt, camera.position, terrain);
     deps.groundMist().update(fxDt, camera.position);
     deps.ambientBirds.update(fxDt, player.pos, terrain, player.isDead);
+    perf.mark('ambient');
 
     sceneSetup.update(dt);
     sceneSetup.atmosphericSky.followCamera(camera.position);
@@ -332,6 +354,7 @@ export function createGameLoop(deps: GameLoopDeps) {
     screenShake.update(dt, camera);
     deps.combat()?.updateBeamVisual();
     sfxAudio.updateAudio(dt, player, camera);
+    perf.mark('scene');
   }
 
   function loop(time: number): void {
