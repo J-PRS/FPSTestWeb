@@ -25,6 +25,7 @@ import { GRAVITY } from '../../shared/movement.ts';
 import type { PerkId } from '../../shared/perks.ts';
 import { CLASS_STATS, type ArmorClass } from '../../shared/botClasses.ts';
 import { roleObjective, ROLE_PRIORITY, type BotRole } from '../../shared/flagGoals.ts';
+import { BotWatchdog } from './botWatchdog.ts';
 
 /** A bot's kit — weapon picked by engagement range, perk set at spawn so
  *  maxHealth and the move shadow's jet economy match a real loadout. */
@@ -79,33 +80,18 @@ export class ServerBots {
   private seq = 1;
   private readonly room: Room;
   private readonly field: Heightfield | null;
-  /** Stuck watchdog — last-seen position + when it last moved. A bot that
-   *  doesn't cover ground is a bug worth a log line, not silent scenery. */
-  private watchdog = new Map<string, { x: number; z: number; since: number; warned: boolean }>();
-  /** Sheep detector — rolling window of mobility stats. A Tribes bot
-   *  that never skis and never leaves the ground isn't fighting, it's
-   *  grazing: warn on low ski/air fraction or walking-pace travel.
-   *  Only ticks where the brain pushes a destination count, so anchor
-   *  defenders holding a stand stay legitimately still. */
-  private sheep = new Map<string, { winStart: number; ticks: number; skiAir: number; air: number; jet: number; dist: number; lx: number; lz: number }>();
-  private static readonly SHEEP_WIN_MS = 10000;
-  private static readonly SHEEP_MIN_TICKS = 60;
-  private static readonly SHEEP_SKIAIR = 0.5;
-  private static readonly SHEEP_SPEED = 4;
+  /** Mobility watchdog — stuck + sheep alarms live in botWatchdog.ts so
+   *  this file stays about driving bots, not auditing them. */
+  private watchdog: BotWatchdog;
 
   constructor(room: Room, field: Heightfield | null) {
     this.room = room;
     this.field = field;
+    this.watchdog = new BotWatchdog(room.name);
   }
 
   private nextIdx = 1;
   private maintainAt = 0;
-
-  // Warn when an alive bot hasn't moved ~2m in this window; flag carriers
-  // get the tighter leash since a parked carrier stalls the whole match.
-  private static STUCK_MS = 5000;
-  private static STUCK_MS_FLAG = 2500;
-  private static STUCK_DIST = 2;
 
   /** Spawn n bots — each is a real roster entry (playerJoined broadcasts)
    *  minus a socket. Call once at room creation, before human joins, so
@@ -485,84 +471,18 @@ export class ServerBots {
     this.brains.delete(id);
     this.loadouts.delete(id);
     this.roles.delete(id);
-    this.watchdog.delete(id);
-    this.sheep.delete(id);
+    this.watchdog.remove(id);
     this.room.moveSim.untrack(id);
     this.room.removePlayerCompletely(id, 'botFill', (m, o) => logger.info(m, o));
   }
 
-  /** Stuck watchdog: warn when an alive bot hasn't covered ~2m in a few
-   *  seconds (shorter leash for flag carriers — a parked carrier stalls
-   *  the match). Re-arms each time the bot actually moves, so the log
-   *  line marks the stall boundary rather than spamming every tick. */
   private checkStuck(id: string, p: { position: Vec3 }, brain: BotBrain, now: number): void {
-    let w = this.watchdog.get(id);
-    if (!w) {
-      this.watchdog.set(id, { x: p.position.x, z: p.position.z, since: now, warned: false });
-      return;
-    }
-    const dx = p.position.x - w.x, dz = p.position.z - w.z;
-    if (dx * dx + dz * dz >= ServerBots.STUCK_DIST * ServerBots.STUCK_DIST) {
-      w.x = p.position.x; w.z = p.position.z; w.since = now; w.warned = false;
-      return;
-    }
     const carrying = this.room.flags?.snapshot().some(f => f.carrier === id) ?? false;
-    // Stand-and-shoot is a legal pick — park the timer while the brain is
-    // holding a combat spot or the warn is a false positive.
-    if (!carrying && brain.holding) { w.since = now; return; }
-    const leash = carrying ? ServerBots.STUCK_MS_FLAG : ServerBots.STUCK_MS;
-    if (!w.warned && now - w.since > leash) {
-      w.warned = true;
-      logger.warn('Bot stuck', {
-        room: this.room.name, bot: id,
-        ms: now - w.since, carrying,
-        hunting: brain.currentHuntId !== null,
-        pos: { x: +p.position.x.toFixed(1), y: +p.position.y.toFixed(1), z: +p.position.z.toFixed(1) },
-      });
-    }
+    this.watchdog.checkStuck(id, p.position, brain, carrying, now);
   }
 
-  /** Rolling mobility audit. 'trying' = the brain has a destination this
-   *  tick — defenders parked on a stand don't accrue. Warns once per
-   *  10s window when a mobile bot stays flat-footed: under half its
-   *  travel ticks skiing/airborne, or averaging walking pace. */
   private checkSheep(id: string, p: { position: Vec3 }, trying: boolean, ski: boolean, airborne: boolean, jetting: boolean, dtRef: number, now: number): void {
-    let s = this.sheep.get(id);
-    if (!s) {
-      this.sheep.set(id, { winStart: now, ticks: 0, skiAir: 0, air: 0, jet: 0, dist: 0, lx: p.position.x, lz: p.position.z });
-      return;
-    }
-    const dx = p.position.x - s.lx, dz = p.position.z - s.lz;
-    s.lx = p.position.x; s.lz = p.position.z;
-    if (trying) {
-      s.ticks++; s.dist += Math.hypot(dx, dz);
-      if (ski || airborne) s.skiAir++;
-      // airPct is the honest "dynamic Tribes bot" number — skiHeld on the
-      // ground counts as ski, but only real altitude counts as air.
-      if (airborne) s.air++;
-      if (jetting) s.jet++;
-    }
-    const winMs = now - s.winStart;
-    if (winMs < ServerBots.SHEEP_WIN_MS) return;
-    if (s.ticks >= ServerBots.SHEEP_MIN_TICKS) {
-      const frac = s.skiAir / s.ticks;
-      const avgSpeed = s.dist / (s.ticks * dtRef); // per-tick distance → m/s
-      const stats = {
-        room: this.room.name, bot: id,
-        skiAirPct: Math.round(frac * 100),
-        airPct: Math.round((s.air / s.ticks) * 100),
-        jetPct: Math.round((s.jet / s.ticks) * 100),
-        avgSpeed: +avgSpeed.toFixed(1),
-        covered: +s.dist.toFixed(1),
-      };
-      // Always-on record: healthy mobility is logged too so a regression
-      // back to flat-footed bots is visible in review, not just failures.
-      logger.info('Bot mobility', stats);
-      if (frac < ServerBots.SHEEP_SKIAIR || avgSpeed < ServerBots.SHEEP_SPEED) {
-        logger.warn('Bot sheeping', stats);
-      }
-    }
-    s.winStart = now; s.ticks = 0; s.skiAir = 0; s.air = 0; s.jet = 0; s.dist = 0;
+    this.watchdog.checkSheep(id, p.position, trying, ski, airborne, jetting, dtRef, now);
   }
 
   tick(dt: number): void {
