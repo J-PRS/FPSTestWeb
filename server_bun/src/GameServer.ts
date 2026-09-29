@@ -184,6 +184,13 @@ export class GameServer {
       // widens them back to Room | undefined.
       const r = room;
       room.onMatchEnd = (rec) => this.recordMatchEnd(rec);
+      // Judge mode counts divergences instead of correcting — the kick
+      // only fires on repeated teleport-scale gaps honest drift can't
+      // reach (see RoomMoveSim.SEVERE_*).
+      room.moveSim.onCheat = (pid, dist) => {
+        logger.warn('Movement cheat detected', { playerId: pid, room: r.name, dist: +dist.toFixed(1) });
+        this.kickPlayer(pid);
+      };
       room.onRotate = () => this.nextRotationSpec(r);
       room.onTerrain = (s) => this.attachTerrain(r, s);
       if (spec?.terrain) this.attachTerrain(room, spec);

@@ -1,3 +1,7 @@
+2026-10-03 - Move-cheat kick wired: three >60m divergences inside 60s
+    fires RoomMoveSim.onCheat, which GameServer routes to kickPlayer.
+    Honest ~15m judge-mode drift can never reach the threshold —
+    the counter existed for kicks but nothing consumed it.
 2026-10-03 - CreatureSim.stepAll split: retargetDue (cadence gate),
     cloakGhost (confused-hunter ghost anchor), stepBody (family
     dispatch), routeEvent + bite (edge streaming vs authoritative

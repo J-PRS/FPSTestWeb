@@ -46,6 +46,12 @@ interface Shadow {
    *  the report reflects but the shadow hasn't consumed yet. */
   probe?: MoveSim;
   divergences: number;
+  /** Timestamps of teleport-scale divergences in the rolling window —
+   *  honest drift tops out ~15m, so repeated >SEVERE_M gaps mean a
+   *  client reporting positions its own inputs can't produce. */
+  severeT: number[];
+  /** Fired once — kick isn't retried every report while teardown runs. */
+  cheated: boolean;
   /** Spawn seed is the server's guess — the first position report snaps the
    *  sim to the client's actual landing spot instead of flagging it. */
   seeded: boolean;
@@ -122,6 +128,15 @@ export class RoomMoveSim {
   /** Room heartbeat map — the judge counts corrections + worst gap here
    *  so 'Room health' lines show rubberbanding pressure, not just logs. */
   health?: Map<string, number>;
+  /** Fires when a shadow accumulates SEVERE_N teleport-scale divergences
+   *  inside SEVERE_MS — the kick wiring lives at the Room level (this
+   *  sim only knows movement truth). */
+  onCheat?: (playerId: string, dist: number) => void;
+  /** Honest judge-mode drift measured ~15m on live traffic; a 60m gap
+   *  between report and input replay is teleport territory. */
+  private static readonly SEVERE_M = 60;
+  private static readonly SEVERE_N = 3;
+  private static readonly SEVERE_MS = 60_000;
 
   constructor(field: Heightfield | null, authoritative = false) {
     this.wantsAuthority = authoritative;
@@ -185,6 +200,7 @@ export class RoomMoveSim {
     const mods = perkMods(perk);
     this.shadows.set(playerId, {
       sim: new MoveSim(this.surface, state), divergences: 0, lastCorrection: 0,
+      severeT: [], cheated: false,
       // Spawn seed is the server's guess — the client's first position
       // report is the authoritative landing spot (client picks its own
       // spawn point); comparing would flag a phantom join divergence.
@@ -328,6 +344,15 @@ export class RoomMoveSim {
     if (this.health) {
       this.health.set('diverge', (this.health.get('diverge') ?? 0) + 1);
       if (dist > (this.health.get('gapMax') ?? 0)) this.health.set('gapMax', Math.round(dist * 10) / 10);
+    }
+    if (dist > RoomMoveSim.SEVERE_M && !sh.cheated) {
+      const now = Date.now();
+      sh.severeT = sh.severeT.filter((t) => now - t < RoomMoveSim.SEVERE_MS);
+      sh.severeT.push(now);
+      if (sh.severeT.length >= RoomMoveSim.SEVERE_N) {
+        sh.cheated = true;
+        this.onCheat?.(playerId, dist);
+      }
     }
     const transient = dist < tol * 1.5;
     if (sh.divergences !== 1 && sh.divergences % 20 !== 0) return;

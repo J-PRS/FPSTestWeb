@@ -32,6 +32,21 @@ describe('RoomMoveSim', () => {
     expect(m.reconcile('p1', { x: 100, y: 0, z: 0 }, 0)).toBeNull();
   });
 
+  test('repeated teleport-scale divergences fire the cheat hook once', () => {
+    const m = new RoomMoveSim(flat);
+    let flagged = 0;
+    m.onCheat = () => flagged++;
+    m.track('p1', { x: 0, y: 0, z: 0 }, 0);
+    m.reconcile('p1', { x: 1, y: 0, z: 0 }, 0); // seed
+    for (let i = 0; i < 5; i++) m.reconcile('p1', { x: 100 + i, y: 0, z: 0 }, 0);
+    expect(flagged).toBe(1);
+    // A drift-scale reporter (honest ~15m) never trips the window.
+    m.track('p2', { x: 0, y: 0, z: 0 }, 0);
+    m.reconcile('p2', { x: 1, y: 0, z: 0 }, 0);
+    for (let i = 0; i < 5; i++) m.reconcile('p2', { x: 20 + i * 3, y: 0, z: 0 }, 0);
+    expect(flagged).toBe(1);
+  });
+
   test('resync resets to the declared position', () => {
     const m = new RoomMoveSim(slopey);
     m.track('p1', { x: 0, y: 0, z: 0 }, 0);
