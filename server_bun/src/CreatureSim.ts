@@ -323,16 +323,16 @@ export class CreatureSim {
       _snap.x = c.tx; _snap.y = c.ty; _snap.z = c.tz;
       const tgt = c.tgtValid ? _snap : null;
       const ev: CrawlerEvent | null = isFlyer(c)
-        ? stepFlyer(c, TICK_DT, this.field!, tgt, true)
+        ? stepFlyer(c, TICK_DT, this.field!, tgt, true, this.colliders)
         : isTotem(c)
           ? stepTotem(c, TICK_DT, this.field!, tgt, true, this.colliders)
           : isRoller(c)
-            ? stepRoller(c, TICK_DT, this.field!, tgt, true)
+            ? stepRoller(c, TICK_DT, this.field!, tgt, true, this.colliders)
             : isSlither(c)
-              ? stepSlither(c, TICK_DT, this.field!, tgt, true)
+              ? stepSlither(c, TICK_DT, this.field!, tgt, true, this.colliders)
               : isBaneling(c)
-                ? stepBaneling(c, TICK_DT, this.field!, tgt, true)
-                : stepCrawler(c, TICK_DT, this.field!, tgt, true);
+                ? stepBaneling(c, TICK_DT, this.field!, tgt, true, this.colliders)
+                : stepCrawler(c, TICK_DT, this.field!, tgt, true, this.colliders);
       if (ev === 'detonate') {
         this.kill(c);
         continue;

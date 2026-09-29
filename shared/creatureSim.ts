@@ -95,6 +95,23 @@ function crand(c: { rng: number }): number {
   return c.rng / 4294967296;
 }
 
+/** Sweep the just-taken move leg against solid structures. On hit the
+ *  creature stops at the wall face with no velocity — the next step then
+ *  sees it as grounded/falling and picks a new leg. Deterministic on both
+ *  ends because both run the same test on the same collider list. */
+export function clipMotion(
+  c: { x: number; y: number; z: number; vx: number; vy: number; vz: number },
+  px: number, py: number, pz: number,
+  cols: readonly StructureCollider[] | undefined,
+): boolean {
+  if (!cols?.length) return false;
+  const hit = segSolidHit({ x: px, y: py, z: pz }, { x: c.x, y: c.y, z: c.z }, cols);
+  if (!hit) return false;
+  c.x = hit.x; c.y = hit.y; c.z = hit.z;
+  c.vx = 0; c.vy = 0; c.vz = 0;
+  return true;
+}
+
 export function makeSimCrawler(
   id: number, x: number, y: number, z: number,
   uber: boolean, seed: number, species = 'crawler',
@@ -139,12 +156,15 @@ export function stepCrawler(
   field: Heightfield,
   target: SimVec | null,
   authoritative: boolean,
+  cols?: readonly StructureCollider[],
 ): CrawlerEvent | null {
   c.stunTimer = Math.max(0, c.stunTimer - dt);
 
   // --- ballistic leg ---
+  const px = c.x, py = c.y, pz = c.z;
   c.vy += c.sp.GRAVITY * dt;
   c.x += c.vx * dt; c.y += c.vy * dt; c.z += c.vz * dt;
+  clipMotion(c, px, py, pz, cols);
   const gy = hmHeight(field, c.x, c.z);
   const airborne = c.y > gy + 0.05;
 
@@ -329,6 +349,7 @@ export function stepFlyer(
   field: Heightfield,
   target: SimVec | null,
   authoritative: boolean,
+  cols?: readonly StructureCollider[],
 ): CrawlerEvent | null {
   c.stunTimer = Math.max(0, c.stunTimer - dt);
   const ax = c.tgtValid ? c.tx : c.hx;
@@ -393,7 +414,9 @@ export function stepFlyer(
     }
   }
 
+  const px = c.x, py = c.y, pz = c.z;
   c.x += c.vx * dt; c.y += c.vy * dt; c.z += c.vz * dt;
+  clipMotion(c, px, py, pz, cols);
   const gy = hmHeight(field, c.x, c.z);
   if (c.y < gy + 0.8) c.y = gy + 0.8;
   if (c.vx * c.vx + c.vz * c.vz > 1) c.yaw = Math.atan2(c.vx, c.vz);
@@ -471,6 +494,7 @@ export function stepRoller(
   field: Heightfield,
   target: SimVec | null,
   authoritative: boolean,
+  cols?: readonly StructureCollider[],
 ): CrawlerEvent | null {
   c.stunTimer = Math.max(0, c.stunTimer - dt);
   c.hitCd = Math.max(0, c.hitCd - dt);
@@ -493,9 +517,10 @@ export function stepRoller(
     c.vx *= s; c.vz *= s;
   }
 
-  const prevY = c.y;
+  const prevY = c.y, px = c.x, pz = c.z;
   c.x += c.vx * dt;
   c.z += c.vz * dt;
+  if (clipMotion(c, px, c.y, pz, cols)) { c.hitCd = Math.max(c.hitCd, 0.3); }
   const gy = hmHeight(field, c.x, c.z);
   c.y = gy + 1.6; // rides the surface — radius baked into the constant
   const drop = prevY - c.y;
@@ -596,6 +621,7 @@ export function stepSlither(
   field: Heightfield,
   target: SimVec | null,
   authoritative: boolean,
+  cols?: readonly StructureCollider[],
 ): CrawlerEvent | null {
   c.stunTimer = Math.max(0, c.stunTimer - dt);
   c.strikeCd = Math.max(0, c.strikeCd - dt);
@@ -648,8 +674,10 @@ export function stepSlither(
     }
   }
 
+  const spx = c.x, spz = c.z;
   c.x += c.vx * dt;
   c.z += c.vz * dt;
+  clipMotion(c, spx, c.y, spz, cols);
   c.y = hmHeight(field, c.x, c.z) + 0.5; // belly rides the terrain
 
   if (c.state === 'lunge' && target && hitSq < c.sp.BITE_D2) {
@@ -745,6 +773,7 @@ export function stepBaneling(
   field: Heightfield,
   target: SimVec | null,
   authoritative: boolean,
+  cols?: readonly StructureCollider[],
 ): CrawlerEvent | null {
   c.stunTimer = Math.max(0, c.stunTimer - dt);
   c.age += dt;
@@ -767,8 +796,10 @@ export function stepBaneling(
     c.vx *= s; c.vz *= s;
   }
 
+  const bpx = c.x, bpz = c.z;
   c.x += c.vx * dt;
   c.z += c.vz * dt;
+  clipMotion(c, bpx, c.y, bpz, cols);
   c.y = hmHeight(field, c.x, c.z) + 0.7; // small sac, low ride
   if (hSpeed > 0.5) c.yaw = Math.atan2(c.vx, c.vz);
 

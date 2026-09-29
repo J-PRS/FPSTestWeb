@@ -78,7 +78,7 @@ export function updateNetMelee(e: NetMeleeLike, dt: number, terrain: Terrain): v
   const tgt = s.tgtValid ? { x: s.tx, y: s.ty, z: s.tz } : null;
   while (e.netAcc >= 0.05) {
     e.netAcc -= 0.05;
-    stepCrawler(s, 0.05, field, tgt, false);
+    stepCrawler(s, 0.05, field, tgt, false, Projectile.solidColliders);
   }
   e.pos.set(s.x, s.y, s.z);
   e.vel.set(s.vx, s.vy, s.vz);
@@ -139,7 +139,7 @@ export function updateNetFlyer(e: NetFlyerLike, dt: number, terrain: Terrain): v
   const tgt = s.tgtValid ? { x: s.tx, y: s.ty, z: s.tz } : null;
   while (e.netAcc >= 0.05) {
     e.netAcc -= 0.05;
-    stepFlyer(s, 0.05, field, tgt, false);
+    stepFlyer(s, 0.05, field, tgt, false, Projectile.solidColliders);
   }
   e.pos.set(s.x, s.y, s.z);
   e.vel.set(s.vx, s.vy, s.vz);
@@ -198,7 +198,7 @@ export function updateNetSlither(e: NetSlitherLike, dt: number, terrain: Terrain
   const tgt = s.tgtValid ? { x: s.tx, y: s.ty, z: s.tz } : null;
   while (e.netAcc >= 0.05) {
     e.netAcc -= 0.05;
-    stepSlither(s, 0.05, field, tgt, false);
+    stepSlither(s, 0.05, field, tgt, false, Projectile.solidColliders);
   }
   e.pos.set(s.x, s.y, s.z);
   e.vel.set(s.vx, s.vy, s.vz);
@@ -255,7 +255,7 @@ export function updateNetRoller(e: NetRollerLike, dt: number, terrain: Terrain):
   const tgt = s.tgtValid ? { x: s.tx, y: s.ty, z: s.tz } : null;
   while (e.netAcc >= 0.05) {
     e.netAcc -= 0.05;
-    stepRoller(s, 0.05, field, tgt, false);
+    stepRoller(s, 0.05, field, tgt, false, Projectile.solidColliders);
   }
   e.pos.set(s.x, s.y, s.z);
   e.vel.set(s.vx, s.vy, s.vz);
@@ -314,7 +314,7 @@ export function updateNetBaneling(e: NetBanelingLike, dt: number, terrain: Terra
   const tgt = s.tgtValid ? { x: s.tx, y: s.ty, z: s.tz } : null;
   while (e.netAcc >= 0.05) {
     e.netAcc -= 0.05;
-    stepBaneling(s, 0.05, field, tgt, false);
+    stepBaneling(s, 0.05, field, tgt, false, Projectile.solidColliders);
   }
   e.pos.set(s.x, s.y, s.z);
   e.vel.set(s.vx, s.vy, s.vz);
