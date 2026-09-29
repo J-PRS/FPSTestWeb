@@ -56,17 +56,98 @@ export class CtfFlags {
     }
   }
 
-  /** Where a flag-focused bot should run: carrying → own base; enemy flag
-   *  reachable → the flag; own flag dropped → touch it home. */
+  /** Flag positions for the HUD markers — DOM overlay, reads every frame. */
+  markers(): { team: TeamId; pos: THREE.Vector3 }[] {
+    const out: { team: TeamId; pos: THREE.Vector3 }[] = [];
+    for (const [team, f] of this.flags) out.push({ team, pos: f.pos });
+    return out;
+  }
+
+  // Offline roles — the same core→luxury ordering ServerBots uses, minus
+  // technician/infiltrator (the local objective channel only carries a
+  // position, so cloak/deploy intent has nothing to ride on). Without
+  // roles every bot read the same objective and the whole squad ran the
+  // same flag route — nobody held the stand.
+  private roles = new Map<string, 'capper' | 'ldefense' | 'hof' | 'offense' | 'defense'>();
+  private roleT = 0;
+
+  private rebalanceRoles(now: number): void {
+    if (now < this.roleT) return;
+    this.roleT = now + 5000;
+    const byTeam = new Map<TeamId, string[]>();
+    for (const b of this.ctx.bots) {
+      const t = b.team as TeamId;
+      if (t === 'alpha' || t === 'bravo') (byTeam.get(t) ?? byTeam.set(t, []).get(t)!).push(b.playerId);
+    }
+    const WANT: ['capper' | 'ldefense' | 'hof', number][] = [['capper', 1], ['ldefense', 1], ['hof', 1]];
+    const MIN_SQUAD = [3, 4, 5];
+    for (const ids of byTeam.values()) {
+      const free = ids.filter((id) => {
+        for (const f of this.flags.values()) if (f.carrier === id) return false;
+        return true;
+      });
+      // Specialists are sticky so nobody flip-flops between windows.
+      const cur = new Map<string, number>();
+      for (const id of free) {
+        const r = this.roles.get(id) ?? 'offense';
+        cur.set(r, (cur.get(r) ?? 0) + 1);
+      }
+      WANT.forEach(([role, want], i) => {
+        if (ids.length < MIN_SQUAD[i]) return;
+        while ((cur.get(role) ?? 0) < want) {
+          const donor = free.find((id) => {
+            const r = this.roles.get(id) ?? 'offense';
+            return r !== role && (cur.get(r) ?? (r === 'offense' ? 99 : 0)) > (r === 'offense' ? 1 : 1);
+          }) ?? free.find((id) => (this.roles.get(id) ?? 'offense') !== role);
+          if (!donor) return;
+          const dr = this.roles.get(donor) ?? 'offense';
+          cur.set(dr, (cur.get(dr) ?? 0) - 1);
+          this.roles.set(donor, role);
+          cur.set(role, (cur.get(role) ?? 0) + 1);
+        }
+      });
+      // Everyone not assigned a specialist slot is offense/defense by
+      // squad parity — the home side never empties completely.
+      let d = 0;
+      for (const id of free) {
+        if (!this.roles.has(id)) this.roles.set(id, d++ % 2 === 0 ? 'offense' : 'defense');
+      }
+    }
+  }
+
+  /** Where a flag-focused bot should run — role-aware mirror of
+   *  ServerBots.flagGoal: HoF holds the stand, LD chases the thief,
+   *  cappers press/escort, offense fills between. */
   objectiveFor(bot: GameBot): THREE.Vector3 | null {
     const enemyTeam: TeamId = bot.team === 'alpha' ? 'bravo' : 'alpha';
     const enemy = this.flags.get(enemyTeam);
     const own = this.flags.get(bot.team as TeamId);
     if (!enemy || !own) return null;
     if (bot.carryingFlag) return own.home;
-    if (own.state === 'dropped') return own.pos; // touch it to send it home
-    if (enemy.state !== 'carried') return enemy.pos;
-    return own.home; // enemy flag is moving — escort/intercept toward home
+    const role = this.roles.get(bot.playerId) ?? 'offense';
+    const thief = own.state === 'carried' && own.carrier ? this.ctx.carrierPos(own.carrier) : null;
+    const dropped = own.state === 'dropped' ? own.pos : null;
+    const enemyStand = enemy.state !== 'carried' ? enemy.pos : null;
+    const escortPos = enemy.carrier ? this.ctx.carrierPos(enemy.carrier) : null;
+    switch (role) {
+      case 'hof':
+        if (dropped && Math.hypot(dropped.x - own.home.x, dropped.z - own.home.z) < 25) return dropped;
+        return own.home;
+      case 'ldefense':
+      case 'defense':
+        if (thief) return thief;
+        if (dropped) return dropped;
+        return own.home;
+      case 'capper':
+        if (escortPos) return escortPos;
+        if (dropped) return dropped;
+        return enemyStand ?? own.home;
+      default:
+        if (escortPos) return escortPos;
+        if (thief) return thief;
+        if (dropped) return dropped;
+        return enemyStand ?? own.home;
+    }
   }
 
   dropCarried(carrierId: string, at: THREE.Vector3): void {
@@ -91,6 +172,7 @@ export class CtfFlags {
 
   update(dt: number): void {
     const ctx = this.ctx;
+    this.rebalanceRoles(performance.now());
     for (const [team, f] of this.flags) {
       if (f.state === 'carried') {
         const cp = f.carrier ? ctx.carrierPos(f.carrier) : null;
