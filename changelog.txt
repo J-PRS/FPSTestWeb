@@ -1,3 +1,5 @@
+2026-10-03 - Seeker.update -> settle helper; Snake.update -> tickEmerge/steer state machine (c16/c23 -> clean).
+
 2026-10-03 - Scarab.update split into tickEmerge/steer (c25 -> clean).
 
 2026-10-03 - lightning: lgTrace loops -> traceTargetHit/tracePlayerHit + sphereEntry; strike/chain damage -> zapTarget (c20/c18 -> clean).

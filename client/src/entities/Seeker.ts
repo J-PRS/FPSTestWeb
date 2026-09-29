@@ -5,7 +5,7 @@ import {
   SEEKER_RADIUS, SEEKER_HEALTH,
   SEEKER_AGGRO_DIST, SEEKER_HOVER, SEEKER_SPEED, SEEKER_ACCEL,
   SEEKER_DART_RANGE, SEEKER_DART_SPEED, SEEKER_DART_TELEGRAPH, SEEKER_DART_MAX,
-  SEEKER_STING_DIST, SEEKER_RECOVER, SEEKER_STUN,
+  SEEKER_STING_DIST, SEEKER_RECOVER, SEEKER_STUN, MELEE_FAVOR,
 } from '../core/config.js';
 import { Terrain } from '../world/terrain.js';
 import type { Targetable } from './balls.js';
@@ -212,13 +212,20 @@ export class Seeker implements Targetable, SwarmSlotOwner {
     ctx.dt = dt; ctx.distSq = distSq; ctx.playerPos = playerPos; ctx.playerVel = playerVel;
     Seeker.STATES[this.state](this, ctx);
 
-    if ((this.state === 'dart' || this.state === 'chase') && distSq < SEEKER_STING_DIST * SEEKER_STING_DIST) {
+    const stingD = SEEKER_STING_DIST * MELEE_FAVOR;
+    if ((this.state === 'dart' || this.state === 'chase') && distSq < stingD * stingD) {
       this.onSting?.(this);
       this.beginRecover();
     }
 
     this.pos.addScaledVector(this.vel, dt);
+    this.settle(dt, terrain);
+    this.writeInstances();
+  }
 
+  // Post-move settle: floor clamp + patrol hover, then face travel
+  // direction and bank into turns.
+  private settle(dt: number, terrain: Terrain): void {
     const gy = terrain.getHeight(this.pos.x, this.pos.z);
     const bob = Math.sin(this.animT * 3 + this.bobPhase) * 0.6;
     const minY = gy + (this.state === 'dart' ? 0.8 : 1.2);
@@ -228,7 +235,6 @@ export class Seeker implements Targetable, SwarmSlotOwner {
       this.pos.y += (targetY - this.pos.y) * Math.min(1, 2 * dt);
     }
 
-    // Face travel direction, bank into turns
     if (this.vel.lengthSq() > 1) {
       this.yaw = Math.atan2(this.vel.x, this.vel.z);
       this.pitch = THREE.MathUtils.clamp(-this.vel.y * 0.04, -0.6, 0.6);
@@ -239,8 +245,6 @@ export class Seeker implements Targetable, SwarmSlotOwner {
     if (this.state !== 'telegraph' && this.state !== 'dart') {
       this.eyeScale = (this.state === 'chase' ? 0.75 : 0.55) + 0.15 * Math.sin(this.animT * 5);
     }
-
-    this.writeInstances();
   }
 
   private writeInstances(): void {

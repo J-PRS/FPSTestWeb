@@ -166,44 +166,8 @@ export class Snake implements Targetable, SwarmSlotOwner {
     const dy = playerPos.y - this.pos.y;
     const hitSq = distSq + dy * dy; // true 3D — a viper can't lunge UP at a flyer
 
-    if (this.emergeT > 0) {
-      this.emergeT -= dt;
-      const k = 1 - Math.max(0, this.emergeT) / EMERGE_DUR;
-      this.groundY = terrain.getHeight(this.pos.x, this.pos.z);
-      this.pos.y = this.groundY + this.radius - this.emergeDepth * (1 - k * k);
-      this.writeInstances(terrain);
-      return;
-    }
-
-    if (this.windup > 0) {
-      // Coil: nearly stationary, rearing — the telegraph. Cancel nothing;
-      // if you run INTO a coiled snake you deserve the bite.
-      this.windup -= dt;
-      this.vel.set(0, 0, 0);
-      if (this.windup <= 0 && this.stunTimer <= 0) {
-        // Lunge — straight at where you are NOW, committed. Dodge = move.
-        const d = Math.sqrt(distSq) || 0.001;
-        this.vel.set((dx / d) * SNAKE_LUNGE_SPEED, 0, (dz / d) * SNAKE_LUNGE_SPEED);
-        this.lunge = SNAKE_LUNGE_TIME;
-        this.strikeCd = SNAKE_STRIKE_CD;
-      }
-    } else if (this.lunge > 0) {
-      this.lunge -= dt;
-    } else if (this.stunTimer <= 0 && distSq < SNAKE_AGGRO_DIST * SNAKE_AGGRO_DIST) {
-      // Serpentine approach — heading weaves around the target line; the
-      // render lays segments along the S so the whole body side-winds.
-      const wantYaw = Math.atan2(dx, dz);
-      const weave = Math.sin(this.animT * 7) * 0.5; // ±~29° serpentine
-      const wy = wantYaw + weave;
-      this.vel.set(Math.sin(wy) * SNAKE_SPEED, 0, Math.cos(wy) * SNAKE_SPEED);
-      // In strike range → coil and commit (only when facing roughly at you)
-      if (hitSq < SNAKE_STRIKE_DIST * SNAKE_STRIKE_DIST && this.strikeCd <= 0) {
-        this.windup = SNAKE_WINDUP;
-      }
-    } else {
-      this.vel.x *= Math.max(0, 1 - 4 * dt);
-      this.vel.z *= Math.max(0, 1 - 4 * dt);
-    }
+    if (this.emergeT > 0) { this.tickEmerge(dt, terrain); return; }
+    this.steer(dt, dx, dz, distSq, hitSq);
 
     this.pos.addScaledVector(this.vel, dt);
     this.groundY = terrain.getHeight(this.pos.x, this.pos.z);
@@ -225,6 +189,46 @@ export class Snake implements Targetable, SwarmSlotOwner {
     }
 
     this.writeInstances(terrain);
+  }
+
+  private tickEmerge(dt: number, terrain: Terrain): void {
+    this.emergeT -= dt;
+    const k = 1 - Math.max(0, this.emergeT) / EMERGE_DUR;
+    this.groundY = terrain.getHeight(this.pos.x, this.pos.z);
+    this.pos.y = this.groundY + this.radius - this.emergeDepth * (1 - k * k);
+    this.writeInstances(terrain);
+  }
+
+  // Locomotion states: coil telegraph → committed lunge → serpentine
+  // approach → idle decay. The committed lunge is the whole design: once
+  // it fires, dodge means MOVE, not sidestep-a-curve.
+  private steer(dt: number, dx: number, dz: number, distSq: number, hitSq: number): void {
+    if (this.windup > 0) {
+      // Coil: nearly stationary, rearing — the telegraph. Cancel nothing;
+      // if you run INTO a coiled snake you deserve the bite.
+      this.windup -= dt;
+      this.vel.set(0, 0, 0);
+      if (this.windup <= 0 && this.stunTimer <= 0) {
+        const d = Math.sqrt(distSq) || 0.001;
+        this.vel.set((dx / d) * SNAKE_LUNGE_SPEED, 0, (dz / d) * SNAKE_LUNGE_SPEED);
+        this.lunge = SNAKE_LUNGE_TIME;
+        this.strikeCd = SNAKE_STRIKE_CD;
+      }
+      return;
+    }
+    if (this.lunge > 0) { this.lunge -= dt; return; }
+    if (this.stunTimer <= 0 && distSq < SNAKE_AGGRO_DIST * SNAKE_AGGRO_DIST) {
+      // Serpentine approach — heading weaves around the target line; the
+      // render lays segments along the S so the whole body side-winds.
+      const wy = Math.atan2(dx, dz) + Math.sin(this.animT * 7) * 0.5;
+      this.vel.set(Math.sin(wy) * SNAKE_SPEED, 0, Math.cos(wy) * SNAKE_SPEED);
+      if (hitSq < SNAKE_STRIKE_DIST * SNAKE_STRIKE_DIST && this.strikeCd <= 0) {
+        this.windup = SNAKE_WINDUP;
+      }
+      return;
+    }
+    this.vel.x *= Math.max(0, 1 - 4 * dt);
+    this.vel.z *= Math.max(0, 1 - 4 * dt);
   }
 
   private groundY = 0; // terrain height at center — segment heights are deltas
