@@ -202,8 +202,13 @@ class Logger {
     if (this.shipUrl || this.shipQueue.length === 0) return;
     const qp = new URLSearchParams(window.location.search);
     let host = qp.get('server')?.trim() ?? '';
-    if (host && !host.includes('.')) host = `${host}.trycloudflare.com`;
-    const url = host ? `https://${host}/client-log` : `http://${window.location.hostname || 'localhost'}:8000/client-log`;
+    let url: string;
+    if (host && (/^(localhost|127\.|192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.|\[?::1)/.test(host) || host.includes(':'))) {
+      url = `http://${host.replace(/^https?:\/\//, '')}/client-log`;
+    } else {
+      if (host && !host.includes('.')) host = `${host}.trycloudflare.com`;
+      url = host ? `https://${host}/client-log` : `http://${window.location.hostname || 'localhost'}:8000/client-log`;
+    }
     const body = this.shipQueue.splice(0, this.shipQueue.length).join('\n') + '\n';
     try {
       if (navigator.sendBeacon) navigator.sendBeacon(url, body);

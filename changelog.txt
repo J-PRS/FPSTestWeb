@@ -1,3 +1,4 @@
+2026-10-01 - endpoints: ?server=localhost:PORT and LAN IPs were rewritten as wss://*.trycloudflare.com and failed silently - LAN/plain hosts now resolve ws/http so direct-IP games work
 2026-10-01 - Boot-crash beacon: window error/unhandledrejection hooks now arm at Logger module load (was inside initShipping - pre-server crashes died silently) and beacon the queue to /client-log resolved like endpoints.ts
 2026-10-01 - Loadout bar crash: wireOverlayInput ran before Player init - eager armorClass read killed client boot (black screen); lazy default + class-change re-filter
 2026-10-01 - RTC ICE shape fix: libdatachannel wants {hostname,port,relayer} records not {urls} objects - both server pc and fleet client were silently broken; + signal timeouts raised for the STUN gather window; rtc tier verified live 2/2 joins
