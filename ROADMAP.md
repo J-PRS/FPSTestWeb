@@ -55,6 +55,51 @@ surface. Detailed research lives in `_reports/`; this file is the current truth.
   Second BallSim spun up cleanly per room. `GET /rooms` lobby listing
   + bot `--room=` flag for split-fleet tests.
 
+### Perf review 2026-10-01 — heaviest paths, ranked plan
+
+Server tick (20Hz, measured ~11ms/50ms under 16p+80b+creatures):
+1. **MoveSim shadows** — every human runs a full client-physics sim per
+   tick (gravity, jet, ground clamp w/ hmHeight, resolveBody vs all
+   structure colliders). Biggest single-tick cost; legit work but
+   structure broadphase is linear-in-colliders. → spatial hash the OBB
+   set once per map (cell ~8m); resolveBody + segSolidHit then test ~4
+   cells not N. Same index shared by solidWorld/projectiles/blasts.
+2. **Bot senses** — losClear() marches heightfield every 3m per enemy
+   candidate at 3Hz/bot, plus pickFightPos re-scores rings (LOS ×
+   candidates × other-enemies). Bounded already (3Hz, mem). → per-bot
+   stagger exists; next lever: LOS memo per (bot,enemy) pair valid ~1s,
+   and early range-reject before marching (already by dist).
+3. **fanoutRecords** — O(P²) distance sq per tick; fine at 16p, quadratic
+   at 64p. → cheap win available: bucket players into coarse cells once
+   per tick, tier by cell not per-pair. Only needed past ~32/room.
+4. **BallSim + CreatureSim** — predictive terrain probes landed; creature
+   brains already id-bucketed. nearestPlayer scans are O(balls×players)
+   but planar-squared, ~80×20=1.6k muls/tick — trivial. Leave alone.
+5. **RoomProjectiles** — sphere rejects landed (e0df0e3). Remaining:
+   getWeaponStats lookup per proj per tick (map hit) — could cache stats
+   on LiveProj. Micro.
+6. **TickLoop buildRecords** — already alloc-free (in-place snapshot).
+   encodeTickPlayer per unsuppressed player per tick — unavoidable.
+
+Client frame (SwiftShader distorts; phase marks exist):
+1. **sweepBall sub-steps** — was the worst: 0.1m march × balls × shells.
+   Sphere-reject landed; residual cost only in actual near-miss cones.
+2. **RemotePlayer interpolation + PlayerModel anim** — per remote per
+   frame; anim mixer cost scales with bone count. → throttle anim to
+   distance tiers (update far remotes at 15Hz, skip off-screen), same
+   trick as species LOD. Worth real fps in big fights.
+3. **Terrain getHeight calls** — species ground clamps, projectile
+   samples, LOS probes, bot brains all re-evaluate bilinear lookups.
+   → cheap win: per-frame memo cache (x,z)→h at ~0.5m cell granularity.
+   Risk: none, heights are static within a map.
+4. **Census/healthbars/minimap** — already sweep-budgeted (9afdb5c).
+5. **Ribbon trails** — per-projectile vertex updates each frame; only
+   cosmetic, cheap enough. Skip.
+
+General principle now applied everywhere: *predictive scheduling* —
+solve when a check can possibly matter, skip provably-dead ticks; plus
+*sphere rejects* before exact solves. Both preserve exact outcomes.
+
 ### Next (audit priority order)
 1. ~~Lobby UI~~ — landed: LOBBY button polls /rooms (live scores +
    winAt now shown per row), joins via ?room=NAME reload, create-room
