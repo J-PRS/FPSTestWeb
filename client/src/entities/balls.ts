@@ -288,96 +288,40 @@ export class Ball {
 
     this.prevVelY = this.vel.y;
     if (this.netDriven && this.sim && Ball.field) {
-      const s = this.sim;
-      if (s.enraged && s.tgtValid) {
-        // Enrage pull curves the flight — must be stepped. Locked to the
-        // server's 50ms grid and gated on the stamped sim clock so the
-        // replay neither phase-shifts nor free-runs ahead of authority.
-        this.netAcc = Math.min(this.netAcc + dt, 0.5);
-        const tgt = Ball._simTarget;
-        tgt.x = s.tx; tgt.y = s.ty; tgt.z = s.tz;
-        const simNow = Ball.netSimNow?.() ?? Infinity;
-        while (this.netAcc >= 0.05 && this.simT + 0.05 <= simNow) {
-          this.netAcc -= 0.05;
-          this.simT += 0.05;
-          s.x = this.pos.x; s.y = this.pos.y; s.z = this.pos.z;
-          s.vx = this.vel.x; s.vy = this.vel.y; s.vz = this.vel.z;
-          stepBall(s, 0.05, Ball.field, tgt, false, Ball.colliders, Ball.colliderIndex ?? undefined);
-          this.pos.set(s.x, s.y, s.z);
-          this.vel.set(s.vx, s.vy, s.vz);
-        }
-        if (this.netAcc >= 0.5) {
-          // Clock-estimate stalls must never freeze the sim.
-          while (this.netAcc >= 0.05) {
-            this.netAcc -= 0.05;
-            this.simT += 0.05;
-            s.x = this.pos.x; s.y = this.pos.y; s.z = this.pos.z;
-            s.vx = this.vel.x; s.vy = this.vel.y; s.vz = this.vel.z;
-            stepBall(s, 0.05, Ball.field, tgt, false, Ball.colliders, Ball.colliderIndex ?? undefined);
-            this.pos.set(s.x, s.y, s.z);
-            this.vel.set(s.vx, s.vy, s.vz);
-          }
-        }
-      } else {
-        // Inert leg: gravity-only flight is EXACTLY solvable — stepping
-        // adds 20Hz quantization for zero benefit. The closed form matches
-        // the server's semi-implicit Euler bit-for-bit (the +T*dt/2 term
-        // is the velocity update Euler applies before the position one),
-        // so an arc flies pixel-smooth until the next bounce event lands.
-        // T comes off the (rate-corrected) server sim clock — a lagging
-        // tick loop never overshoots; wall-time fallback until seeded.
-        const simNow2 = Ball.netSimNow?.();
-        let T = this.legT0 >= 0 && simNow2 !== undefined && Number.isFinite(simNow2)
-          ? Math.min(Math.max(0, simNow2 - this.legT0), 8)
-          : (this.flightT = Math.min(this.flightT + dt, 8));
-        // Structures hit mid-leg: the server resolves sphere∩box in
-        // stepBall and stamps a bounce at contact — an analytic arc that
-        // ignores them sails through the wall and the stamp lands 50-150m
-        // off. March the leg for the earliest contact and park T there;
-        // the stamped segment arrives with the reflected velocity.
-        const tcS = firstStructureContact(s, T);
-        if (tcS < T) T = tcS;
-        this.pos.set(
-          s.x + s.vx * T,
-          s.y + s.vy * T + 0.5 * BALL_GRAVITY * (T * T + 0.05 * T),
-          s.z + s.vz * T,
-        );
-        this.vel.set(s.vx, s.vy + BALL_GRAVITY * T, s.vz);
-        // Terrain: the server parks sub-REST contacts silently — no
-        // segment is emitted — so a leg that touched down slow never
-        // ends in an event. Walking T back to first contact and parking
-        // keeps the prediction where authority actually left it (the
-        // stall pounce event re-wakes it ~2s later). Fast contacts DO
-        // produce a bounce event imminently — clamp, don't park.
-        const gy = Ball.field ? hmHeight(Ball.field, this.pos.x, this.pos.z) + s.radius : -Infinity;
-        if (this.pos.y < gy && Ball.field) {
-          let tc = T;
-          while (tc > 0.05) {
-            const tt = tc - 0.05;
-            const yy = s.y + s.vy * tt + 0.5 * BALL_GRAVITY * (tt * tt + 0.05 * tt);
-            if (yy > hmHeight(Ball.field, s.x + s.vx * tt, s.z + s.vz * tt) + s.radius) break;
-            tc = tt;
-          }
-          const spd = Math.hypot(s.vx, s.vy + BALL_GRAVITY * tc, s.vz);
-          if (spd < BALL_REST_SPEED) {
-            const cx = s.x + s.vx * tc, cz = s.z + s.vz * tc;
-            this.pos.set(cx, hmHeight(Ball.field, cx, cz) + s.radius, cz);
-            this.vel.set(0, 0, 0);
-          } else {
-            this.pos.y = gy;
-            if (this.vel.y < 0) this.vel.y = 0;
-          }
-        }
-      }
-      this.enraged = s.enraged;
-      this.enrageTimer = s.enrageTimer;
-      this.dampNextBounce = s.dampNextBounce;
-      if (s.dead && !this.dead) this.dead = true;
+      this.tickNetSim(dt);
     } else {
       this.vel.y += BALL_GRAVITY * dt;
       this.pos.addScaledVector(this.vel, dt);
     }
 
+    this.tickRenderPos(dt);
+
+    // Peak detection: vel.y crossed from positive to negative (apex of arc)
+    if (this.prevVelY > 0 && this.vel.y <= 0 && this.onPeak) {
+      this.onPeak(this.pos.clone(), this.vel.clone());
+    }
+
+    this.tickEnrage(dt, terrain, playerPos);
+
+    if (!this.netDriven) {
+      this.handleGroundBounce(terrain, playerPos);
+      this.tickStallBreaker(dt, playerPos);
+    }
+    getShadows()?.set(this, this._rpos, this.radius, 0.3);
+    this.writeInstance();
+
+    if (this.flashTimer > 0) {
+      this.flashTimer -= dt;
+      if (this.flashTimer <= 0) this.emissive.setRGB(0, 0, 0);
+    }
+
+    this.tickTrails(dt);
+  }
+
+  // Render position = sim pos + decaying correction offset; enraged legs
+  // additionally extrapolate over the sub-50ms remainder so the ball
+  // doesn't step at ~20fps. (Inert legs already integrate continuously.)
+  private tickRenderPos(dt: number): void {
     // Segment corrections drain back to zero — exp decay, ~0.2s time constant.
     if (this.renderOffset.lengthSq() > 0.0001) {
       this.renderOffset.multiplyScalar(Math.exp(-dt * 10));
@@ -385,24 +329,120 @@ export class Ball {
       this.renderOffset.set(0, 0, 0);
     }
     this._rpos.copy(this.pos).add(this.renderOffset);
-    if (this.netDriven && this.sim && this.sim.enraged && this.sim.tgtValid) {
-      // The stepped path only advances in 50ms quanta; the leftover netAcc
-      // is elapsed time the ball has visually "not moved" through.
-      // Extrapolate the render pos ballistically over it or the ball steps
-      // at ~20fps. (Inert legs already integrate continuously — skip.)
-      const rem = this.netAcc;
-      if (rem > 0) {
-        this._rpos.x += this.vel.x * rem;
-        this._rpos.y += this.vel.y * rem + 0.5 * BALL_GRAVITY * rem * rem;
-        this._rpos.z += this.vel.z * rem;
+    if (!(this.netDriven && this.sim && this.sim.enraged && this.sim.tgtValid)) return;
+    const rem = this.netAcc;
+    if (rem <= 0) return;
+    this._rpos.x += this.vel.x * rem;
+    this._rpos.y += this.vel.y * rem + 0.5 * BALL_GRAVITY * rem * rem;
+    this._rpos.z += this.vel.z * rem;
+  }
+
+  // Stall breaker — loitering under MIN_SPEED for STALL_TIME earns a free
+  // spring launch at the target (same skill as the enrage launch, fired
+  // on boredom instead of distance). Mirrors shared/ballSim.ts — a ball
+  // resting in a dip can't just sit there being scenery.
+  private tickStallBreaker(dt: number, playerPos: THREE.Vector3): void {
+    const sp = this.vel.length();
+    this.slowTimer = sp < BALL_MIN_SPEED ? this.slowTimer + dt : 0;
+    if (this.slowTimer < BALL_STALL_TIME) return;
+    this.slowTimer = 0;
+    this.launchAt(playerPos, Math.SQRT1_2);
+    this.dashFlash = 0.15;
+    this.trails.burst(8, this._rpos, this.radius, this.color);
+    this.onBounce?.(this.pos.clone(), this.vel.clone());
+  }
+
+  // Server-authoritative replay: enraged legs step the shared integrator
+  // on the server's 50ms grid; inert legs solve the parabola exactly.
+  private tickNetSim(dt: number): void {
+    const s = this.sim!;
+    if (s.enraged && s.tgtValid) {
+      // Enrage pull curves the flight — must be stepped. Locked to the
+      // server's 50ms grid and gated on the stamped sim clock so the
+      // replay neither phase-shifts nor free-runs ahead of authority.
+      this.netAcc = Math.min(this.netAcc + dt, 0.5);
+      const tgt = Ball._simTarget;
+      tgt.x = s.tx; tgt.y = s.ty; tgt.z = s.tz;
+      const simNow = Ball.netSimNow?.() ?? Infinity;
+      while (this.netAcc >= 0.05 && this.simT + 0.05 <= simNow) {
+        this.stepNetLeg(s, tgt);
       }
+      if (this.netAcc >= 0.5) {
+        // Clock-estimate stalls must never freeze the sim.
+        while (this.netAcc >= 0.05) this.stepNetLeg(s, tgt);
+      }
+    } else {
+      this.tickNetInert(dt, s);
     }
+    this.enraged = s.enraged;
+    this.enrageTimer = s.enrageTimer;
+    this.dampNextBounce = s.dampNextBounce;
+    if (s.dead && !this.dead) this.dead = true;
+  }
 
-    // Peak detection: vel.y crossed from positive to negative (apex of arc)
-    if (this.prevVelY > 0 && this.vel.y <= 0 && this.onPeak) {
-      this.onPeak(this.pos.clone(), this.vel.clone());
+  // Inert leg: gravity-only flight is EXACTLY solvable — stepping adds
+  // 20Hz quantization for zero benefit. The closed form matches the
+  // server's semi-implicit Euler bit-for-bit (the +T*dt/2 term is the
+  // velocity update Euler applies before the position one), so an arc
+  // flies pixel-smooth until the next bounce event lands. T comes off
+  // the (rate-corrected) server sim clock — a lagging tick loop never
+  // overshoots; wall-time fallback until seeded.
+  private tickNetInert(dt: number, s: SimBall): void {
+    const simNow2 = Ball.netSimNow?.();
+    let T = this.legT0 >= 0 && simNow2 !== undefined && Number.isFinite(simNow2)
+      ? Math.min(Math.max(0, simNow2 - this.legT0), 8)
+      : (this.flightT = Math.min(this.flightT + dt, 8));
+    // Structures hit mid-leg: the server resolves sphere∩box in
+    // stepBall and stamps a bounce at contact — an analytic arc that
+    // ignores them sails through the wall and the stamp lands 50-150m
+    // off. March the leg for the earliest contact and park T there;
+    // the stamped segment arrives with the reflected velocity.
+    const tcS = firstStructureContact(s, T);
+    if (tcS < T) T = tcS;
+    this.pos.set(
+      s.x + s.vx * T,
+      s.y + s.vy * T + 0.5 * BALL_GRAVITY * (T * T + 0.05 * T),
+      s.z + s.vz * T,
+    );
+    this.vel.set(s.vx, s.vy + BALL_GRAVITY * T, s.vz);
+    // Terrain: the server parks sub-REST contacts silently — no
+    // segment is emitted — so a leg that touched down slow never
+    // ends in an event. Walking T back to first contact and parking
+    // keeps the prediction where authority actually left it (the
+    // stall pounce event re-wakes it ~2s later). Fast contacts DO
+    // produce a bounce event imminently — clamp, don't park.
+    const gy = Ball.field ? hmHeight(Ball.field, this.pos.x, this.pos.z) + s.radius : -Infinity;
+    if (this.pos.y >= gy || !Ball.field) return;
+    let tc = T;
+    while (tc > 0.05) {
+      const tt = tc - 0.05;
+      const yy = s.y + s.vy * tt + 0.5 * BALL_GRAVITY * (tt * tt + 0.05 * tt);
+      if (yy > hmHeight(Ball.field, s.x + s.vx * tt, s.z + s.vz * tt) + s.radius) break;
+      tc = tt;
     }
+    const spd = Math.hypot(s.vx, s.vy + BALL_GRAVITY * tc, s.vz);
+    if (spd < BALL_REST_SPEED) {
+      const cx = s.x + s.vx * tc, cz = s.z + s.vz * tc;
+      this.pos.set(cx, hmHeight(Ball.field, cx, cz) + s.radius, cz);
+      this.vel.set(0, 0, 0);
+    } else {
+      this.pos.y = gy;
+      if (this.vel.y < 0) this.vel.y = 0;
+    }
+  }
 
+  private stepNetLeg(s: SimBall, tgt: { x: number; y: number; z: number }): void {
+    this.netAcc -= 0.05;
+    this.simT += 0.05;
+    s.x = this.pos.x; s.y = this.pos.y; s.z = this.pos.z;
+    s.vx = this.vel.x; s.vy = this.vel.y; s.vz = this.vel.z;
+    stepBall(s, 0.05, Ball.field!, tgt, false, Ball.colliders, Ball.colliderIndex ?? undefined);
+    this.pos.set(s.x, s.y, s.z);
+    this.vel.set(s.vx, s.vy, s.vz);
+  }
+
+  // Enrage pull + dash telegraph emissive + post-dash pop.
+  private tickEnrage(dt: number, terrain: Terrain, playerPos: THREE.Vector3): void {
     // Enraged balls are pulled toward the player — a linear accel, so they
     // still bounce and arc naturally instead of homing like missiles.
     // (netDriven: the shared stepper already applied this pull above.)
@@ -445,32 +485,9 @@ export class Ball {
       this.emissive.setRGB(1, 0.9, 0.7); // post-dash pop
       if (this.dashFlash <= 0 && this.enraged) this.emissive.setRGB(0.55, 0, 0);
     }
+  }
 
-    if (!this.netDriven) this.handleGroundBounce(terrain, playerPos);
-
-    // Stall breaker — loitering under MIN_SPEED for STALL_TIME earns a free
-    // spring launch at the target (same skill as the enrage launch, fired
-    // on boredom instead of distance). Mirrors shared/ballSim.ts — a ball
-    // resting in a dip can't just sit there being scenery.
-    if (!this.netDriven) {
-      const sp = this.vel.length();
-      this.slowTimer = sp < BALL_MIN_SPEED ? this.slowTimer + dt : 0;
-      if (this.slowTimer >= BALL_STALL_TIME) {
-        this.slowTimer = 0;
-        this.launchAt(playerPos, Math.SQRT1_2);
-        this.dashFlash = 0.15;
-        this.trails.burst(8, this._rpos, this.radius, this.color);
-        this.onBounce?.(this.pos.clone(), this.vel.clone());
-      }
-    }
-    getShadows()?.set(this, this._rpos, this.radius, 0.3);
-    this.writeInstance();
-
-    if (this.flashTimer > 0) {
-      this.flashTimer -= dt;
-      if (this.flashTimer <= 0) this.emissive.setRGB(0, 0, 0);
-    }
-
+  private tickTrails(dt: number): void {
     this.trails.emit(dt, this._rpos, this.vel, this.radius, this.enraged ? _enrageTint : this.color);
     this.trails.fade(dt);
     // Position discontinuity (teleport or playback keyframe snap) — cut the
@@ -519,22 +536,7 @@ export class Ball {
     // Enraged lunge: touching down within range launches at the player
     // instead of a normal bounce — velocity is REPLACED (clean readable dash,
     // not a bounce that adds up unpredictably)
-    if (this.enraged) {
-      const pdx = playerPos.x - this.pos.x;
-      const pdz = playerPos.z - this.pos.z;
-      const pd2 = pdx * pdx + pdz * pdz;
-      if (pd2 <= BALL_ENRAGE_DASH_DIST * BALL_ENRAGE_DASH_DIST) {
-        // Ballistic lunge — solve vy so the arc lands ON the player
-        this.dashAt(playerPos);
-        this.dashFlash = 0.15;
-        this.setEnraged(false); // lunge discharges the rage
-        this.dampNextBounce = true; // the landing bounce is deadened — no slingshot flyout
-        this.trails.burst(8, this._rpos, this.radius, this.color); // dust-burst at takeoff
-        this.lastBounceEnergy = 0;
-        this.onBounce?.(this.pos.clone(), this.vel.clone());
-        return;
-      }
-    }
+    if (this.enraged && this.tryEnrageLunge(playerPos)) return;
 
     // Calculate total mechanical energy at bounce: KE + PE
     // KE = 0.5 * v^2, PE = g * (global height above reference)
@@ -569,22 +571,40 @@ export class Ball {
 
     // Record bounce keyframe (after velocity reflection)
     this.onBounce?.(this.pos.clone(), this.vel.clone());
+    this.chaseIfFar(terrain, playerPos);
+  }
 
+  // Touchdown within dash range while enraged → ballistic lunge that
+  // discharges the rage. Returns true when the lunge consumed the bounce.
+  private tryEnrageLunge(playerPos: THREE.Vector3): boolean {
+    const pdx = playerPos.x - this.pos.x;
+    const pdz = playerPos.z - this.pos.z;
+    if (pdx * pdx + pdz * pdz > BALL_ENRAGE_DASH_DIST * BALL_ENRAGE_DASH_DIST) return false;
+    this.dashAt(playerPos);
+    this.dashFlash = 0.15;
+    this.setEnraged(false); // lunge discharges the rage
+    this.dampNextBounce = true; // the landing bounce is deadened — no slingshot flyout
+    this.trails.burst(8, this._rpos, this.radius, this.color); // dust-burst at takeoff
+    this.lastBounceEnergy = 0;
+    this.onBounce?.(this.pos.clone(), this.vel.clone());
+    return true;
+  }
+
+  // Bounced beyond engagement range: enrage + spring at the player when
+  // enabled, else teleport back into play.
+  private chaseIfFar(terrain: Terrain, playerPos: THREE.Vector3): void {
     const dx = this.pos.x - playerPos.x;
     const dz = this.pos.z - playerPos.z;
     if (dx * dx + dz * dz <= BALL_MAX_DIST * BALL_MAX_DIST) return;
-    if (BALL_ENRAGE_ENABLED) {
-      this.setEnraged(true);
-      // Spring at the player on enrage — 45° launch, same redirect physics
-      // as the ground lunge. Rage stays ON (this isn't the discharging dash,
-      // it's the opening move) until a real lunge lands or timeout hits.
-      this.launchAt(playerPos, Math.SQRT1_2);
-      this.dashFlash = 0.15;
-      this.trails.burst(8, this._rpos, this.radius, this.enraged ? _enrageTint : this.color);
-      this.onBounce?.(this.pos.clone(), this.vel.clone());
-    } else {
-      this.teleportNearPlayer(terrain, playerPos);
-    }
+    if (!BALL_ENRAGE_ENABLED) { this.teleportNearPlayer(terrain, playerPos); return; }
+    this.setEnraged(true);
+    // Spring at the player on enrage — 45° launch, same redirect physics
+    // as the ground lunge. Rage stays ON (this isn't the discharging dash,
+    // it's the opening move) until a real lunge lands or timeout hits.
+    this.launchAt(playerPos, Math.SQRT1_2);
+    this.dashFlash = 0.15;
+    this.trails.burst(8, this._rpos, this.radius, this.enraged ? _enrageTint : this.color);
+    this.onBounce?.(this.pos.clone(), this.vel.clone());
   }
 
   // Redirect velocity toward the player, preserving current speed (floored
@@ -701,33 +721,25 @@ export class Ball {
    *  (≈half RTT) because the event is already stale when it arrives —
    *  without this every bounce visibly rewinds the ball before re-flying.
    *  The >20m trail-cut already handles teleport discontinuities. */
-  applyNetSegment(
-    px: number, py: number, pz: number,
-    vx: number, vy: number, vz: number,
-    enraged: boolean, targetId: string | null,
-    lead = 0, targetPos?: THREE.Vector3 | null,
-    timers?: { et?: number; slowT?: number; damp?: boolean },
-    tp?: { x: number; y: number; z: number } | null,
-    simT?: number,
-    hard = false,
-  ): void {
+  applyNetSegment(seg: NetSeg): void {
     const s = this.sim;
     if (!s) return;
+    const simT = seg.simT;
     if (this.isStaleSegment(simT)) return; // older stamp — never rewind
-    s.x = px; s.y = py; s.z = pz;
-    s.vx = vx; s.vy = vy; s.vz = vz;
+    s.x = seg.px; s.y = seg.py; s.z = seg.pz;
+    s.vx = seg.vx; s.vy = seg.vy; s.vz = seg.vz;
     s.gt = 0; // stamped arc — the cached terrain-probe schedule is stale
-    s.enraged = enraged;
+    s.enraged = seg.enraged;
     // The timers ride the wire — resetting them here would restart the
     // server's 20s enrage countdown on every heartbeat and the client ball
     // would outlive enrages the authority already teleported out of.
-    s.enrageTimer = timers?.et ?? 0;
-    s.slowTimer = timers?.slowT ?? 0;
-    s.dampNextBounce = timers?.damp ?? false;
+    s.enrageTimer = seg.timers?.et ?? 0;
+    s.slowTimer = seg.timers?.slowT ?? 0;
+    s.dampNextBounce = seg.timers?.damp ?? false;
     // Aim snapshot — the server pulled toward THIS point, so we do too.
-    if (tp) { s.tx = tp.x; s.ty = tp.y; s.tz = tp.z; s.tgtValid = true; }
+    if (seg.tp) { s.tx = seg.tp.x; s.ty = seg.tp.y; s.tz = seg.tp.z; s.tgtValid = true; }
     else s.tgtValid = false;
-    this.netTargetId = targetId;
+    this.netTargetId = seg.targetId;
     // Do NOT step the lead age here: a partial-width step leaves the sim
     // cursor off the server's 0.05 grid permanently — every subsequent
     // prediction step is phase-shifted, bounce contacts resolve at
@@ -736,28 +748,32 @@ export class Ball {
     // update loop consumes whole cells only (sim stays exactly on-grid),
     // and the render path ballistically extrapolates the sub-step
     // remainder — which is all the lead was ever for.
-    this.netAcc = Math.min(lead, 0.5);
-    this.flightT = lead; // inert path flies on from the event's age — seamless handoff
+    this.netAcc = Math.min(seg.lead ?? 0, 0.5);
+    this.flightT = seg.lead ?? 0; // inert path flies on from the event's age — seamless handoff
     // The leg's flight clock anchors to the stamped sim time — update()
     // measures T as estSimNow−legT0 so server-clock drift can't skew it.
     this.legT0 = simT ?? -1; // unstamped event → wall-time fallback
     // Sim cursor anchors to the event's stamped grid time — the banked
     // lead is consumed by whole cells in update(), not stepped here.
     if (simT !== undefined) this.simT = simT;
-    // Carry the visible error into renderOffset: (old rendered pos) - (new
-    // truth). Prediction-vs-truth divergence is dominated by server-clock
-    // skew, not real desync — so every non-discontinuity correction blends
-    // (a 10m slide over 0.2s on a moving arc reads as nothing). Only
-    // teleport/spawn hard-snap: there continuity is impossible anyway.
+    this.blendSegCorrection(s, seg);
+  }
+
+  // Carry the visible error into renderOffset: (old rendered pos) - (new
+  // truth). Prediction-vs-truth divergence is dominated by server-clock
+  // skew, not real desync — so every non-discontinuity correction blends
+  // (a 10m slide over 0.2s on a moving arc reads as nothing). Only
+  // teleport/spawn hard-snap: there continuity is impossible anyway.
+  private blendSegCorrection(s: SimBall, seg: NetSeg): void {
     this._rpos.copy(this.pos).add(this.renderOffset);
     this._rpos.x -= s.x; this._rpos.y -= s.y; this._rpos.z -= s.z;
-    if (hard || this._rpos.lengthSq() > 3600) this.renderOffset.set(0, 0, 0);
+    if (seg.hard || this._rpos.lengthSq() > 3600) this.renderOffset.set(0, 0, 0);
     else this.renderOffset.copy(this._rpos);
     this.pos.set(s.x, s.y, s.z);
     this.vel.set(s.vx, s.vy, s.vz);
     this.enraged = s.enraged;
     this.enrageTimer = 0;
-    if (!enraged) this.emissive.setRGB(0, 0, 0);
+    if (!seg.enraged) this.emissive.setRGB(0, 0, 0);
   }
 
   /** Server said dead — the updateDead path fades trails as usual. */
@@ -770,6 +786,20 @@ export class Ball {
     this.trails.dispose();
     for (const r of this.ribbons) r.dispose(this.scene);
   }
+}
+
+// Segment event applied to a netDriven ball — server truth for the sim
+// anchor plus the ride-along state (timers, aim snapshot, stamped clock).
+export interface NetSeg {
+  px: number; py: number; pz: number;
+  vx: number; vy: number; vz: number;
+  enraged: boolean;
+  targetId: string | null;
+  lead?: number;
+  timers?: { et?: number; slowT?: number; damp?: boolean };
+  tp?: { x: number; y: number; z: number } | null;
+  simT?: number;
+  hard?: boolean;
 }
 
 /** Earliest analytic-time sphere∩OBB touch along a ballistic leg, marched

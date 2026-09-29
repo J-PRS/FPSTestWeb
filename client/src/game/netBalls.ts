@@ -105,13 +105,12 @@ export function createNetBalls(deps: EntitiesDeps, ctx: NetBallsCtx, logger: Chi
     // stamped state so the ball materializes where the server already is.
     // Always applies (even at ~0ms): it's the only path that seeds the
     // committed targetId + aim snapshot before the first segment lands.
-    ball.applyNetSegment(
-      m.position.x, m.position.y, m.position.z,
-      m.velocity.x, m.velocity.y, m.velocity.z,
-      m.enraged ?? false, m.targetId ?? null,
-      ballEventAge(m.t), targetPosForId(m.targetId),
-      undefined, m.tp, m.t,
-    );
+    ball.applyNetSegment({
+      px: m.position.x, py: m.position.y, pz: m.position.z,
+      vx: m.velocity.x, vy: m.velocity.y, vz: m.velocity.z,
+      enraged: m.enraged ?? false, targetId: m.targetId ?? null,
+      lead: ballEventAge(m.t), tp: m.tp, simT: m.t,
+    });
   }
 
   // Rubberband watch: how far our predicted replay was from the event's
@@ -195,14 +194,13 @@ export function createNetBalls(deps: EntitiesDeps, ctx: NetBallsCtx, logger: Chi
     }
     rubberbandCheck(b, m);
     const age = ballEventAge(m.t);
-    b.applyNetSegment(
-      m.position.x, m.position.y, m.position.z,
-      m.velocity.x, m.velocity.y, m.velocity.z,
-      m.enraged, m.targetId,
-      age, targetPosForId(m.targetId),
-      { et: m.et, slowT: m.slowT, damp: m.damp },
-      m.tp, m.t, m.kind === 'teleport' || m.kind === 'spawn',
-    );
+    b.applyNetSegment({
+      px: m.position.x, py: m.position.y, pz: m.position.z,
+      vx: m.velocity.x, vy: m.velocity.y, vz: m.velocity.z,
+      enraged: m.enraged, targetId: m.targetId,
+      lead: age, timers: { et: m.et, slowT: m.slowT, damp: m.damp },
+      tp: m.tp, simT: m.t, hard: m.kind === 'teleport' || m.kind === 'spawn',
+    });
     // Only real discontinuities are worth a demo keyframe — 'segment'
     // heartbeats would drown the event stream (dozens/sec fleet-wide).
     if (m.kind && m.kind !== 'segment') {

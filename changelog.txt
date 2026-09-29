@@ -1,3 +1,5 @@
+2026-10-03 - balls.ts: update split -> tickNetSim/tickNetInert/stepNetLeg/tickRenderPos/tickEnrage/tickStallBreaker/tickTrails (c61->clean); applyNetSegment -> NetSeg options object (14 params); handleGroundBounce -> tryEnrageLunge/chaseIfFar.
+
 2026-10-03 - weaponsGeo: buildWeaponMeshes -> per-weapon mk* builders + MODEL_BUILDERS table (c28 -> clean).
 
 2026-10-03 - ViewModel.loadBakedWeapons -> swapBaked + adoptChainSpin/seatChainPivot (c19 -> clean).
