@@ -15,6 +15,13 @@ const SIZE = 160;          // css px, square
 const RANGE = 150;         // world meters shown at the rim
 const RIM = SIZE / 2 - 6;  // dot-clamp radius in px
 
+/** A player/bot blip — resolved to friend-or-foe by the caller, which owns
+ *  team state. Coords are world xz. */
+export interface MinimapPlayer { x: number; z: number; friendly: boolean }
+
+// Per-frame transform basis the draw layers share — computed once in update.
+interface MapBasis { pos: THREE.Vector3; sin: number; cos: number; k: number; mid: number }
+
 export class Minimap {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
@@ -55,51 +62,20 @@ export class Minimap {
          background: rgba(8,12,18,0.55); pointer-events: none;`;
   }
 
-  update(targets: Targetable[], nuggets: Nugget[], pos: THREE.Vector3, yaw: number, birds?: THREE.Vector3[]): void {
+  update(targets: Targetable[], nuggets: Nugget[], pos: THREE.Vector3, yaw: number, birds?: THREE.Vector3[], players?: Iterable<MinimapPlayer>): void {
     const c = this.ctx;
     const mid = SIZE / 2;
     c.clearRect(0, 0, SIZE, SIZE);
 
     const sin = Math.sin(yaw), cos = Math.cos(yaw);
     const k = RIM / RANGE;
+    const t = { pos, sin, cos, k, mid };
 
     // Crosshair mode is threats-only — pickups and hazards aren't threats.
-    const m = this._map; // scratch — toMap fills it instead of allocating
-    if (!this.cross) {
-      // Nuggets under enemies — pickups shouldn't hide threats
-      for (const n of nuggets) {
-        this.toMap(n.pos.x - pos.x, n.pos.z - pos.z, sin, cos, k, mid);
-        c.fillStyle = 'rgba(255,213,74,0.9)';
-        c.fillRect(m[0] - 1, m[1] - 1, 2, 2);
-      }
-    }
-    for (const e of targets) {
-      if (e.dead) continue;
-      // Scoreless props (tumbleweeds, buzzards) aren't threats — don't ping
-      // radar. Buzzards still get their own debug rings below.
-      if (e.scoreless) continue;
-      // Crosshair mode is threats-only — but an enraged ball IS a threat
-      if (this.cross && e instanceof Ball && !e.isEnraged) continue;
-      this.toMap(e.pos.x - pos.x, e.pos.z - pos.z, sin, cos, k, mid);
-      // Enraged balls are actively hunting you — promote cyan hazard to
-      // red threat so an incoming dash pings radar like a real enemy.
-      c.fillStyle = e instanceof Ball && !e.isEnraged ? 'rgba(80,200,255,0.9)' : 'rgba(255,70,60,0.95)';
-      c.beginPath();
-      c.arc(m[0], m[1], 2.5, 0, Math.PI * 2);
-      c.fill();
-    }
-
-    // Debug: ambient buzzards — white hollow rings, unmistakably not enemies
-    if (birds) {
-      c.strokeStyle = 'rgba(240,240,255,0.8)';
-      c.lineWidth = 1;
-      for (const b of birds) {
-        this.toMap(b.x - pos.x, b.z - pos.z, sin, cos, k, mid);
-        c.beginPath();
-        c.arc(m[0], m[1], 2.5, 0, Math.PI * 2);
-        c.stroke();
-      }
-    }
+    if (!this.cross) this.drawNuggets(nuggets, t);
+    this.drawTargets(targets, t);
+    this.drawPlayers(players, t);
+    this.drawBirds(birds, t);
 
     // Center wedge = the player facing up (crosshair mode: the reticle
     // already occupies the center)
@@ -111,6 +87,68 @@ export class Minimap {
       c.lineTo(mid + 4, mid + 4);
       c.closePath();
       c.fill();
+    }
+  }
+
+  // Nuggets under enemies — pickups shouldn't hide threats.
+  private drawNuggets(nuggets: Nugget[], t: MapBasis): void {
+    const c = this.ctx, m = this._map;
+    for (const n of nuggets) {
+      this.toMap(n.pos.x - t.pos.x, n.pos.z - t.pos.z, t.sin, t.cos, t.k, t.mid);
+      c.fillStyle = 'rgba(255,213,74,0.9)';
+      c.fillRect(m[0] - 1, m[1] - 1, 2, 2);
+    }
+  }
+
+  private drawTargets(targets: Targetable[], t: MapBasis): void {
+    const c = this.ctx, m = this._map;
+    for (const e of targets) {
+      if (e.dead) continue;
+      // Scoreless props (tumbleweeds, buzzards) aren't threats — don't ping
+      // radar. Buzzards still get their own debug rings below.
+      if (e.scoreless) continue;
+      // Crosshair mode is threats-only — but an enraged ball IS a threat
+      if (this.cross && e instanceof Ball && !e.isEnraged) continue;
+      this.toMap(e.pos.x - t.pos.x, e.pos.z - t.pos.z, t.sin, t.cos, t.k, t.mid);
+      // Enraged balls are actively hunting you — promote cyan hazard to
+      // red threat so an incoming dash pings radar like a real enemy.
+      c.fillStyle = e instanceof Ball && !e.isEnraged ? 'rgba(80,200,255,0.9)' : 'rgba(255,70,60,0.95)';
+      c.beginPath();
+      c.arc(m[0], m[1], 2.5, 0, Math.PI * 2);
+      c.fill();
+    }
+  }
+
+  // Players and bots ride ON TOP of creature dots — a red threat dot the
+  // same size as a ball's reads as "creature", not "enemy". Marker colors
+  // match the overhead .player-indicator: enemy red / friendly green,
+  // white rim. 1.8px vs creatures' 2.5 so a stacked pair still separates.
+  private drawPlayers(players: Iterable<MinimapPlayer> | undefined, t: MapBasis): void {
+    if (!players) return;
+    const c = this.ctx, m = this._map;
+    c.lineWidth = 1;
+    for (const p of players) {
+      this.toMap(p.x - t.pos.x, p.z - t.pos.z, t.sin, t.cos, t.k, t.mid);
+      c.fillStyle = p.friendly ? 'rgba(68,221,68,0.95)' : 'rgba(255,68,68,0.95)';
+      c.strokeStyle = 'rgba(255,255,255,0.9)';
+      c.beginPath();
+      c.arc(m[0], m[1], 1.8, 0, Math.PI * 2);
+      c.fill();
+      c.stroke();
+    }
+  }
+
+  // Debug: ambient buzzards — white hollow rings, unmistakably not enemies
+  private drawBirds(birds: THREE.Vector3[] | undefined, t: MapBasis): void {
+    if (!birds) return;
+    const c = this.ctx, m = this._map;
+    c.strokeStyle = 'rgba(240,240,255,0.8)';
+    c.lineWidth = 1;
+    for (const b of birds) {
+      this.toMap(b.x - t.pos.x, b.z - t.pos.z, t.sin, t.cos, t.k, t.mid);
+      c.beginPath();
+      c.arc(m[0], m[1], 2.5, 0, Math.PI * 2);
+      c.stroke();
     }
   }
 

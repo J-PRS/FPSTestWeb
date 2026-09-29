@@ -1,3 +1,5 @@
+2026-10-03 - minimap.update split into per-layer draw helpers sharing a MapBasis (c17 -> clean).
+
 2026-10-03 - sweep.ts sweepBall: capsule closest-point math -> targetDelta() helper (c17 -> clean).
 
 2026-10-03 - tiers.ts pumpReliable: per-line dispatch extracted (depth-6 -> clean); bin-envelope frames typed.
