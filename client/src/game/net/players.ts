@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { REMOTE_PLAYER_FIXED_DT, DEBUG_LOG_SAMPLE_RATE } from '../../core/config.js';
 import * as sfx from '../../core/sfx.js';
 import { PlayerDebris } from '../../effects/debris.js';
+import { TEAM_COLORS } from '../../../../shared/teams.js';
 import type { NetCtx } from './ctx.js';
 
 export function wirePlayers(ctx: NetCtx): void {
@@ -60,9 +61,25 @@ function wirePlayerCombat(ctx: NetCtx): void {
     }
   };
 
+  // Rejected claim: a predicted self-blast that never happened server-side
+  // leaves our health low until the next real event. Adopt the server's
+  // value so state-hash health checks stop screaming desync.
+  networkManager.onShotRejected = (_reason, _targetId, _weaponType, health) => {
+    if (deps.world.playbackMode || health === undefined) return;
+    const player = deps.lazyPlayer();
+    if (!player.isDead) player.health = health;
+  };
+
   // Server tells us to apply knockback/pull to our local player
   networkManager.onKnockback = (position: { x: number; y: number; z: number }, force: number, pull?: boolean) => {
     if (deps.world.playbackMode) return; // replay owns the camera's body
+    // Already predicted this blast locally at detonation — the echo would
+    // double the shove. Consume the stamp and drop the message.
+    const stamps = deps.world.selfBlastStamps;
+    const now = performance.now();
+    const i = stamps.findIndex(s => now - s.t < 400 &&
+      Math.hypot(s.x - position.x, s.y - position.y, s.z - position.z) < 3);
+    if (i >= 0) { stamps.splice(i, 1); return; }
     const from = new THREE.Vector3(position.x, position.y, position.z);
     const player = deps.lazyPlayer();
     if (pull) {
@@ -196,8 +213,33 @@ function onPlayerKill(ctx: NetCtx, streak: { v: number }, shooterId: string, tar
     // Play death animation (ragdoll physics with explosion impulse)
     remotePlayer.playDeath(explosionPos, explosionForce);
 
-    // Spawn player debris at player center (position is feet, so add half height)
-    const debris = new PlayerDebris(deps.lazyScene(), deps.lazyTerrain(), remotePlayer.position.x, remotePlayer.position.y + 1.0, remotePlayer.position.z);
+    // Shatter like the creatures do: shards burst off the capsule shell,
+    // carry the blast direction through the body, and inherit whatever
+    // speed the corpse had. Team color when known, robot grey otherwise.
+    const centerY = remotePlayer.position.y + 1.0;
+    let impulseDir: THREE.Vector3 | undefined;
+    if (explosionPos) {
+      impulseDir = new THREE.Vector3(
+        remotePlayer.position.x - explosionPos.x,
+        centerY - explosionPos.y,
+        remotePlayer.position.z - explosionPos.z,
+      );
+      const l = impulseDir.length() || 1;
+      impulseDir.multiplyScalar(Math.min(1.5, (explosionForce ?? 10) / 15) / l);
+    }
+    const team = nm().getPlayers().get(targetId)?.team
+      ?? (remotePlayer as { team?: 'alpha' | 'bravo' }).team;
+    // Gibs are best-effort — a degenerate model must never take the kill
+    // handler down with it (generic chunks still spawn on null).
+    let parts: { geo: THREE.BufferGeometry; pos: THREE.Vector3 }[] | undefined;
+    try { parts = remotePlayer.model.deathParts() ?? undefined; }
+    catch { /* fall through to generic shards */ }
+    const debris = new PlayerDebris(
+      deps.lazyScene(), deps.lazyTerrain(),
+      remotePlayer.position.x, centerY, remotePlayer.position.z,
+      new THREE.Color(team ? TEAM_COLORS[team] : 0x8899aa),
+      { impulseDir, inheritVel: remotePlayer.vel, parts },
+    );
     deps.world.playerDebrisList.push(debris);
 
     // Hide the model immediately
@@ -245,13 +287,14 @@ function wirePlayerLifecycle(ctx: NetCtx): void {
     ensureRemotePlayer(playerId, position, 'onPlayerUpdate');
   };
 
-  networkManager.onPlayerRespawn = (playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }) => {
+  networkManager.onPlayerRespawn = (playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }, armorClass?: string) => {
     if (deps.world.playbackMode) return;
     // Check if local player respawned
     if (playerId === nm().getLocalPlayerId()) {
       logger.info(`Local player respawned at ${JSON.stringify(position)}`);
       const player = deps.lazyPlayer();
       player.isDead = false;
+      player.applyPendingClass(); // banked tier swap lands here, same beat the server applies it
       player.health = player.maxHealth;
       player.armor = 0;
       player.buffUntil.regen = 0;
@@ -274,6 +317,7 @@ function wirePlayerLifecycle(ctx: NetCtx): void {
     if (remotePlayer) {
       const playerData = nm().getPlayers().get(playerId);
       const internalId = playerData?.internalId || 'unknown';
+      if (armorClass) remotePlayer.setClass(armorClass); // respawn may carry a banked tier swap
       remotePlayer.respawn(position);
       logger.info(`Player ${playerId} (internalId: ${internalId}) respawned at ${JSON.stringify(position)}`);
     } else {

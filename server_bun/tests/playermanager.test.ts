@@ -110,6 +110,24 @@ describe('PlayerManager', () => {
     expect(player?.health).toBe(100);
   });
 
+  it('applies a banked classUpdate only on respawn', () => {
+    const pm = new PlayerManager();
+    pm.addPlayer('alice', undefined, 'none', 'medium');
+    pm.breakShield('alice');
+    const mediumHp = pm.getPlayer('alice')!.maxHealth;
+    // Mid-life the pick is banked, not applied — no free heal mid-fight.
+    pm.getPlayer('alice')!.pendingClass = 'heavy';
+    expect(pm.getPlayer('alice')!.armorClass).toBe('medium');
+    expect(pm.getPlayer('alice')!.maxHealth).toBe(mediumHp);
+    pm.applyDamage('alice', 100);
+    const result = pm.respawnPlayer('alice')!;
+    expect(result.armorClass).toBe('heavy');
+    const p = pm.getPlayer('alice')!;
+    expect(p.maxHealth).toBeGreaterThan(mediumHp);
+    expect(p.health).toBe(p.maxHealth);
+    expect(p.pendingClass).toBeUndefined();
+  });
+
   it('tracks kills', () => {
     const pm = new PlayerManager();
     pm.addPlayer('alice'); pm.breakShield('alice');

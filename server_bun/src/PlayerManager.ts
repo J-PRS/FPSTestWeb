@@ -225,9 +225,19 @@ export class PlayerManager {
     return { killed: false, newHealth: target.health, newArmor: target.armor };
   }
 
-  respawnPlayer(playerId: string): { position: Vec3; rotation: Rotation } | null {
+  respawnPlayer(playerId: string): { position: Vec3; rotation: Rotation; armorClass: string } | null {
     const player = this.players.get(playerId);
     if (!player) return null;
+
+    // Banked classUpdate — the tier swap takes effect at the new life so
+    // the sim scale and HP pool change at a declared discontinuity, never
+    // mid-life.
+    if (player.pendingClass && player.pendingClass !== player.armorClass) {
+      const cls = player.pendingClass;
+      player.armorClass = cls;
+      player.maxHealth = CONFIG.playerMaxHealth + perkMods(player.perk).maxHealth + CLASS_STATS[cls].maxHealth;
+    }
+    player.pendingClass = undefined;
 
     const spawn = this.pickSpawnPoint(playerId, player.team);
     player.position = { ...spawn };
@@ -254,7 +264,7 @@ export class PlayerManager {
     player.history.push({ t: Date.now(), x: spawn.x, y: spawn.y, z: spawn.z });
     player.protectedUntil = Date.now() + PlayerManager.SPAWN_PROTECT_MS;
 
-    return { position: { ...player.position }, rotation: { ...player.rotation } };
+    return { position: { ...player.position }, rotation: { ...player.rotation }, armorClass: player.armorClass };
   }
 
   /** Fresh match — wipe everyone's K/D so the journal records per-match

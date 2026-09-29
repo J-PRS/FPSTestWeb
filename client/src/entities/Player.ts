@@ -60,18 +60,34 @@ export class Player {
   buffUntil = { regen: 0, dd: 0 };
   /** Passive loadout pick — mods from shared/perks.ts; announced at join. */
   perk: PerkId = (PERK_ORDER as string[]).includes(settings.get('fps-perk')) ? settings.get('fps-perk') as PerkId : 'none';
-  /** Armor tier — heavier plate trades foot speed for hit points, same
-   *  table the server applies so the local sim and the shadow agree. */
+  /** The tier you PICKED — drives the join handshake + the loadout
+   *  filter. The sim/body wear `appliedClass` until the pick banks. */
   armorClass: ArmorClass = (['light','medium','heavy'] as string[]).includes(settings.get('fps-class')) ? settings.get('fps-class') as ArmorClass : 'medium';
+  /** The tier actually in effect. Diverges from armorClass between a
+   *  mid-match pick and the respawn that applies it — swapping speed/HP
+   *  mid-life would desync the shadow and hand out free heals. */
+  appliedClass: ArmorClass = 'medium';
   get mods() { return perkMods(this.perk); }
-  get maxHealth(): number { return MAX_HEALTH + this.mods.maxHealth + CLASS_STATS[this.armorClass].maxHealth; }
+  get maxHealth(): number { return MAX_HEALTH + this.mods.maxHealth + CLASS_STATS[this.appliedClass].maxHealth; }
   setPerk(p: PerkId): void { this.perk = p; settings.set('fps-perk', p); }
   /** Tier-restricted ordnance — the heavy's exclusive arsenal, same as
    *  TA where lights can't shoulder a mortar. Indexed SLOT_DEFS ids. */
   static readonly HEAVY_ONLY: readonly number[] = [3, 6, 11]; // Mortar, PlasmaCannon, RocketLauncher
+  /** Menu pick — records the intent; the swap lands at respawn via
+   *  applyPendingClass (the server banks the same pick through
+   *  classUpdate so both ends flip together). */
   setArmorClass(c: ArmorClass): void {
     this.armorClass = c;
     settings.set('fps-class', c);
+  }
+  /** Respawn-time tier application: speed scale, HP pool (via the
+   *  maxHealth getter), ordnance unshoulder, and the body model swap
+   *  when the silhouette tier flips. */
+  applyPendingClass(): void {
+    const c = this.armorClass;
+    if (this.appliedClass === c) return;
+    const wasHeavy = this.appliedClass === 'heavy';
+    this.appliedClass = c;
     this.movement.setSpeedScale(CLASS_STATS[c].speedScale);
     // Dropping down a tier unshoulders restricted ordnance — swap each
     // gated slot for the chaingun so no slot ends up empty.
@@ -79,6 +95,11 @@ export class Player {
       for (let i = 0; i < this.loadout.length; i++) {
         if (Player.HEAVY_ONLY.includes(this.loadout[i])) this.setLoadoutSlot(i, 2);
       }
+    }
+    if ((c === 'heavy') !== wasHeavy) {
+      this.model?.dispose();
+      this.model = new PlayerModel(this.scene, c === 'heavy' ? 'knight' : 'mannequin');
+      this.model.load();
     }
   }
   kills = 0;
@@ -355,11 +376,12 @@ export class Player {
       onGround: this.onGround,
     };
     this.movement = new MovementController(terrain, movementState);
-    this.movement.setSpeedScale(CLASS_STATS[this.armorClass].speedScale);
+    this.appliedClass = this.armorClass;
+    this.movement.setSpeedScale(CLASS_STATS[this.appliedClass].speedScale);
 
     // Your third-person body wears the class you picked — heavy gets the
     // knight, everyone else the UAL mannequin (same rule remotes apply).
-    this.model = new PlayerModel(scene, this.armorClass === 'heavy' ? 'knight' : 'mannequin');
+    this.model = new PlayerModel(scene, this.appliedClass === 'heavy' ? 'knight' : 'mannequin');
     this.visuals = new PlayerVisuals(scene);
 
     // Q-slot skills — reads pos/vel by ref and reaches the assignable on*

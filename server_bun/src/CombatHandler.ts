@@ -833,6 +833,9 @@ export class CombatHandler {
         internalId: player.internalId,
         position: result.position,
         rotation: result.rotation,
+        // A banked classUpdate may have just applied — remotes rebuild the
+        // silhouette off this rather than learning it on the next join.
+        armorClass: result.armorClass,
       });
     }, CONFIG.respawnDelayMs);
     this.respawnTimers.set(playerId, timer);

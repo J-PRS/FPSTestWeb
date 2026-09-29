@@ -122,7 +122,13 @@ surface. Detailed research lives in `_reports/`; this file is the current truth.
    team rooms need gem credit, teleport capped 3/s, PROTOCOL_VERSION=4.
    Ops: GET /stats lifetime leaderboard off matches.jsonl; match clock
    + overtime + draw resolution + 60s warning; spectate joins
-   (watch-only socket, full-rate ticks).
+   (watch-only socket, full-rate ticks). Respawn-gated class swaps
+   (2026-10-03): classUpdate banks the pick server-side, respawnPlayer
+   applies tier+maxHealth, shadow scale re-reads on resync, wire
+   playerRespawn carries armorClass for remote silhouette rebuild;
+   client mirrors via armorClass(chosen)/appliedClass(sim) split —
+   before, a mid-match pick desynced the sim permanently (local scale
+   changed, server's never did).
 - TDM mode: kill-confirmed scoring — frags +1 and drop a scoopable dog
   tag (either team banks it). Quicksand arena map: dome barrier,
   server-side RoomArena boundary pushback.

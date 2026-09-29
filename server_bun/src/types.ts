@@ -65,6 +65,9 @@ export interface PlayerState {
   status: number;
   perk: string;      // join-declared passive (shared/perks.ts) — 'none' default
   armorClass: string; // join-declared armor tier (shared/botClasses.ts) — 'medium' default
+  /** Mid-match classUpdate pick — applied on the next respawn, never
+   *  mid-life (an instant tier swap would be a free heal). */
+  pendingClass?: 'light' | 'medium' | 'heavy';
   maxHealth: number; // derived from perk+class at join; heal/spawn caps use this
   // Lag-comp rewind buffer: accepted position reports stamped at server
   // receive time. Hit validation rewinds the target to the shooter's view

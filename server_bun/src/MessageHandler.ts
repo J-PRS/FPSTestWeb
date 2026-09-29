@@ -157,6 +157,13 @@ export class MessageHandler {
         this.sendToPlayer(id, { type: 'pong', timestamp: (m as Extract<ClientMessage, { type: 'ping' }>).timestamp });
       },
       snapshotRequest: (id) => { this.hb('snapreq'); this.handleSnapshotRequest(id); },
+      // Tribes rule: the tier swap banks on the next respawn — applying
+      // it mid-life would be a free heal and flip the sim's speed scale
+      // without the shadow knowing.
+      classUpdate: (id, m) => {
+        const p = this.playerManager.getPlayer(id);
+        if (p) p.pendingClass = (m as Extract<ClientMessage, { type: 'classUpdate' }>).armorClass as 'light' | 'medium' | 'heavy';
+      },
     };
   }
 

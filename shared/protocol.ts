@@ -67,6 +67,10 @@ export type ClientMessage =
   | { type: 'creatureHit'; id: number; damage: number; kx?: number; ky?: number; kz?: number }
   | { type: 'deploy'; kind: 'turret' | 'mine' | 'station' | 'drone'; position: Vec3 }
   | { type: 'snapshotRequest' }
+  // Loadout class picked mid-match — stored as pending and applied on the
+  // next respawn (Tribes rule: no instant tier swap mid-life, it'd be a
+  // heal exploit and a desync lever).
+  | { type: 'classUpdate'; armorClass: string }
   // Mid-match room hop over the live socket — the server re-seats the
   // session in the target room and answers with a fresh gameState, which
   // the client's existing reconnect path rebuilds from. Same creation
@@ -107,7 +111,7 @@ export type ServerMessage =
        *  render "🔥x5" without tracking streaks itself. */
       streak?: number }
   | { type: 'knockback'; targetId: string; position: Vec3; force: number; pull?: boolean }
-  | { type: 'playerRespawn'; playerId: string; internalId: string; position: Vec3; rotation: Rotation }
+  | { type: 'playerRespawn'; playerId: string; internalId: string; position: Vec3; rotation: Rotation; armorClass?: string }
   | { type: 'jump'; playerId: string; position: Vec3 }
   | { type: 'jetpack'; playerId: string; position: Vec3 }
   | { type: 'projectileCreated'; projectileId: string; ownerId: string; position: Vec3; velocity: Vec3; weaponType?: number }

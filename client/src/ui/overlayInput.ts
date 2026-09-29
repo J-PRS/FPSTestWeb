@@ -16,6 +16,9 @@ export interface OverlayInputDeps {
   logger: ChildLogger;
   isGameStarted: () => boolean;
   lazyPlayer: () => Player;
+  /** Online only — class picks get announced so the server banks the
+   *  same tier swap for respawn. Absent offline. */
+  lazyNetworkManager?: () => { sendClassUpdate(armorClass: string): void } | null;
 }
 
 // Overlay / pointer-lock / global key handling: ESC menu flow (Krunker-style —
@@ -144,6 +147,7 @@ export function wireOverlayInput(deps: OverlayInputDeps) {
       [{ v: 'light', label: 'Light' }, { v: 'medium', label: 'Medium' }, { v: 'heavy', label: 'Heavy' }],
       (v) => {
         deps.lazyPlayer().setArmorClass(v as 'light' | 'medium' | 'heavy');
+        deps.lazyNetworkManager?.()?.sendClassUpdate(v);
         // Class change re-filters the weapon drops on the spot — heavy
         // ordnance shows/hides without closing the menu.
         for (const d of slotDrops) d.setOptions?.(weaponOptsFor(v));

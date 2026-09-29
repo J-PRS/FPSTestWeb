@@ -227,6 +227,14 @@ const VALIDATORS: Record<string, (obj: Record<string, unknown>) => ValidationRes
     return { success: true, data: { type: 'snapshotRequest' } };
   },
 
+  classUpdate: (obj) => {
+    const c = obj.armorClass;
+    if (c !== 'light' && c !== 'medium' && c !== 'heavy') {
+      return { success: false, error: 'armorClass must be light|medium|heavy' };
+    }
+    return { success: true, data: { type: 'classUpdate', armorClass: c } };
+  },
+
   // Same name/map/mode grammar as the join handshake — a bad name just
   // lands you in 'default', never a rejection.
   switchRoom: (obj) => {

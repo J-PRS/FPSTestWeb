@@ -255,6 +255,7 @@ async function init(): Promise<void> {
     fragMessages.show(`YOU DIED\n${source}`);
     setTimeout(() => {
       player.isDead = false;
+      player.applyPendingClass(); // banked tier swap lands on the new life
       player.health = player.maxHealth;
       player.lastDamageSource = '';
       player.vel.set(0, 0, 0);
@@ -289,6 +290,7 @@ async function init(): Promise<void> {
         lazyNetworkManager: () => networkManager,
         lazyDemoManager: () => demoManager,
         lazyScene: () => scene,
+        lazyCamera: () => camera,
         logger,
         world,
         targets: entities.targets,
@@ -297,6 +299,7 @@ async function init(): Promise<void> {
         dropNuggets: (pos, n, vel) => entities.spawnNuggetsAt(pos, n, vel),
         localPlayerKilled: (killerName) => killLocal(`fragged by ${killerName}`),
         remoteKillFeed: (text) => fragMessages.show(text),
+        killFeed: (s, t, ls, lt) => hud.feedKill(s, t, ls, lt),
         nearestNugget: (pos, maxDist) => {
           let best: typeof entities.nuggets[0] | null = null;
           let bd = maxDist * maxDist;
@@ -423,6 +426,9 @@ async function init(): Promise<void> {
   await player.loadModel();
   profiler.markTime('playerModelLoaded');
 
+
+
+
   // Register all server message handlers (hit/kill/respawn/projectiles/gameState)
   wireNetworkHandlers({
     lazyNetworkManager: () => networkManager,
@@ -447,6 +453,7 @@ async function init(): Promise<void> {
   await connectServer({ serverUrl, classicMode, networkManager, logger, fragMessages, profiler });
   player.serverOwnsHealth = () => networkManager.isConnected();
   networkManager.joinPerk = () => player.perk;
+  networkManager.joinClass = () => player.armorClass;
 
   // Initial balls
   for (let i = 0; i < 8; i++) entities.spawnBall();
@@ -504,6 +511,7 @@ const { requestLock } = wireOverlayInput({
   logger,
   isGameStarted: () => gameStarted,
   lazyPlayer: () => player,
+  lazyNetworkManager: () => networkManager,
 });
 
 // Stale-code badge (noreload dev mode): the vite plugin swallows reloads

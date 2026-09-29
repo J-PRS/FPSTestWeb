@@ -46,7 +46,7 @@ export class NetworkManager {
   private players: Map<string, RemotePlayerState> = new Map();
   public onPlayerHit: ((shooterId: string, targetId: string, damage: number, health: number, armor?: number) => void) | null = null;
   public onPlayerKill: ((shooterId: string, targetId: string, weapon?: number) => void) | null = null;
-  public onPlayerRespawn: ((playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }) => void) | null = null;
+  public onPlayerRespawn: ((playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }, armorClass?: string) => void) | null = null;
   public onPlayerJump: ((playerId: string, position: { x: number; y: number; z: number }) => void) | null = null;
   public onPlayerJetpack: ((playerId: string, position: { x: number; y: number; z: number }) => void) | null = null;
   public onProjectileCreated: ((projectileId: string, ownerId: string, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }, weaponType?: number) => void) | null = null;
@@ -393,7 +393,7 @@ export class NetworkManager {
         health: 100,
       });
     }
-    this.onPlayerRespawn?.(data.playerId, data.position, data.rotation);
+    this.onPlayerRespawn?.(data.playerId, data.position, data.rotation, data.armorClass);
   }
 
   private handlePlayerHit(data: Extract<ServerMessage, { type: 'playerHit' }>): void {
@@ -582,6 +582,13 @@ export class NetworkManager {
   sendDeploy(kind: 'turret' | 'mine' | 'station' | 'drone', position: { x: number; y: number; z: number }): void {
     if (!this.connected) return;
     this.send({ type: 'deploy', kind, position });
+  }
+
+  /** Loadout class pick mid-match — the server banks it for the next
+   *  respawn (same rule the client applies locally). */
+  sendClassUpdate(armorClass: string): void {
+    if (!this.connected) return;
+    this.send({ type: 'classUpdate', armorClass });
   }
 
   /** Offline authority — when there's no server, damage/heal claims apply
