@@ -720,7 +720,16 @@ export class CombatHandler {
   }
 
   /** Server-authored creature bite (CreatureSim). */
-  crawlerAttack(targetId: string, damage: number, species = 'crawler'): void {
+  crawlerAttack(targetId: string, damage: number, species = 'crawler', from?: { x: number; y: number; z: number }): void {
+    // A creature wedged inside/behind geometry can't bite through it —
+    // contact range is the sim's gate; the wall is ours.
+    if (from && this._solids.length) {
+      const target = this.playerManager.getPlayer(targetId);
+      if (target) {
+        const eye = { x: target.position.x, y: target.position.y + 1.0, z: target.position.z };
+        if (segSolidHit(from, eye, this._solids, this.solidIndex ?? undefined)) return;
+      }
+    }
     const label = `${species[0]!.toUpperCase()}${species.slice(1)} bite`;
     this.serverHit('environment', targetId, damage, label, { hb: 'crawlbite' });
   }
