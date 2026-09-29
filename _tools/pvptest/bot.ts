@@ -101,6 +101,13 @@ function recordBallSegment(id: number, t: number | undefined): void {
   }
   if ((t ?? -1) > ballClock.t) { ballClock.t = t!; ballClock.at = now; }
 }
+// Full RX accounting — every server message type tallied so soaks can see
+// what actually flowed. New protocol types land in unhandledRx instead of
+// vanishing silently.
+const rxCounts = new Map<string, number>();
+const unhandledRx = new Map<string, number>();
+let shotRejects = 0;
+const ecoStats = { pickups: 0, pickupGone: 0, flags: 0, deploys: 0, deployGone: 0, deployFires: 0, mapSwaps: 0, matchStarts: 0, rosterBalls: 0, remoteShots: 0, teamScores: new Map<string, number>() };
 const pendingShots: { id: string | null; target: string; at: number; airtime: number; aimPos: Vec3 }[] = [];
 const killsOf = new Map<string, number>();
 const notices: string[] = [];
@@ -304,9 +311,11 @@ function connect(): Promise<void> {
       } else {
         const u8 = ev.data instanceof Uint8Array ? ev.data : new Uint8Array(ev.data);
         if (isWireFrame(u8) && u8[1] === WIRE_BALLSEG) {
+          rxCounts.set('ballSegment', (rxCounts.get('ballSegment') ?? 0) + 1);
           const seg = decodeBallSegment(u8);
           if (seg) recordBallSegment(seg.id, seg.t);
         } else if (isWireFrame(u8) && u8[1] === WIRE_TICK) {
+          rxCounts.set('tickFrame', (rxCounts.get('tickFrame') ?? 0) + 1);
           const now = Date.now();
           if (tickStats.lastAt && !dead) {
             const gap = now - tickStats.lastAt;
@@ -324,6 +333,8 @@ function connect(): Promise<void> {
             o.lastTick = Date.now();
             others.set(u.playerId, o);
           }
+        } else if (isWireFrame(u8)) {
+          unhandledRx.set(`bin:0x${u8[1].toString(16)}`, (unhandledRx.get(`bin:0x${u8[1].toString(16)}`) ?? 0) + 1);
         }
       }
     };
@@ -336,7 +347,12 @@ function connect(): Promise<void> {
   });
 }
 
+function rxReport(): string {
+  const parts = [...rxCounts.entries()].sort((a, b) => b[1] - a[1]).map(([t, n]) => `${t}:${n}`);
+  return parts.join(' ');
+}
 function handleJson(m: any) {
+  rxCounts.set(m.type, (rxCounts.get(m.type) ?? 0) + 1);
   switch (m.type) {
     case 'gameState':
       sessionToken = m.sessionToken ?? sessionToken;
@@ -409,6 +425,26 @@ function handleJson(m: any) {
     }
     case 'ballSpawn': ballSegStats.spawns++; break;
     case 'ballDie': ballSegStats.dies++; break;
+    case 'ballRoster':
+      ecoStats.rosterBalls = (m.balls ?? []).length;
+      break;
+    case 'shotRejected':
+      shotRejects++;
+      // This is THE signal soaks exist to catch — a probe that can't see its
+      // own refusals validates nothing about the claim pipeline.
+      log(`SHOT REJECTED: ${m.reason ?? '?'}${m.weaponType !== undefined ? ` w=${m.weaponType}` : ''}`);
+      break;
+    case 'flagUpdate': ecoStats.flags++; break;
+    case 'teamScore': if (m.teamId !== undefined) ecoStats.teamScores.set(m.teamId, m.score ?? 0); break;
+    case 'pickupSpawn': ecoStats.pickups++; break;
+    case 'pickupGone': ecoStats.pickupGone++; break;
+    case 'deploySpawn': ecoStats.deploys++; break;
+    case 'deployGone': ecoStats.deployGone++; break;
+    case 'turretShot': case 'mineBoom': ecoStats.deployFires++; break;
+    case 'mapUpdate': ecoStats.mapSwaps++; log(`MAP UPDATE → ${JSON.stringify(m.map ?? m.terrain ?? '')}`); break;
+    case 'matchStart': ecoStats.matchStarts++; break;
+    case 'shotFired': case 'playerShot': ecoStats.remoteShots++; break;
+    case 'stateHash': break; // desync telemetry — informational, no reply owed
     case 'knockback':
       if (m.targetId === NAME) {
         knockbackCount++;
@@ -430,6 +466,9 @@ function handleJson(m: any) {
         const o = others.get(m.playerId);
         if (o) o.pos = { ...m.position };
       }
+      break;
+    default:
+      unhandledRx.set(m.type, (unhandledRx.get(m.type) ?? 0) + 1);
       break;
   }
 }
@@ -483,6 +522,9 @@ async function main() {
         log(`event age p50=${(a50 * 1000).toFixed(0)}ms p95=${(a95 * 1000).toFixed(0)}ms`);
       }
       check('ball segments flowing', ballSegStats.total > balls * 2, `${ballSegStats.total} events over 30s`);
+      log(`--- rx tally: ${rxReport()} ---`);
+      log(`rosterBalls=${ecoStats.rosterBalls} pickups=${ecoStats.pickups}/${ecoStats.pickupGone} flags=${ecoStats.flags} deploys=${ecoStats.deploys} mapSwaps=${ecoStats.mapSwaps} rejects=${shotRejects}`);
+      if (unhandledRx.size) log(`unhandled types: ${[...unhandledRx.entries()].map(([t, n]) => `${t}:${n}`).join(' ')}`);
       process.exit(0);
     }
     if (WATCH) {
@@ -514,6 +556,14 @@ async function main() {
       process.exit(0);
     }
     log('running (Ctrl+C to quit)');
+    // Ctrl+C dumps the full RX tally — a long-running probe's value is the
+    // whole-protocol picture, not just the one counter a flag asked for.
+    process.on('SIGINT', () => {
+      log(`--- rx tally: ${rxReport()} ---`);
+      if (shotRejects) log(`shotRejects: ${shotRejects}`);
+      if (unhandledRx.size) log(`unhandled types: ${[...unhandledRx.entries()].map(([t, n]) => `${t}:${n}`).join(' ')}`);
+      process.exit(0);
+    });
     return;
   }
 
