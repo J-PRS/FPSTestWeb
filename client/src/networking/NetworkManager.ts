@@ -26,6 +26,8 @@ export interface RemotePlayerState {
   team?: 'alpha' | 'bravo';
   /** Server-reported connect tier (join transport claim) — scoreboard NET. */
   transport?: 'wt' | 'rtc' | 'ws';
+  /** Armor tier from playerJoined/gameState — remote model scale cue. */
+  armorClass?: string;
 }
 
 /**
@@ -350,6 +352,7 @@ export class NetworkManager {
       status: patch.status ?? existing?.status,
       team: patch.team ?? existing?.team,
       transport: patch.transport ?? existing?.transport,
+      armorClass: patch.armorClass ?? existing?.armorClass,
     });
   }
 
@@ -367,6 +370,7 @@ export class NetworkManager {
       health: isNew ? 100 : undefined,
       team: data.team,
       transport: data.transport,
+      armorClass: data.armorClass,
     });
     if (isNew) this.onPlayerJoined?.(data.playerId, data.position, data.rotation);
   }

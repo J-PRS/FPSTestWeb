@@ -147,6 +147,7 @@ export class PlayerManager {
       status: player.status,
       team: player.team,
       transport: player.transport,
+      armorClass: player.armorClass,
     };
   }
 

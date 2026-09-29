@@ -96,6 +96,17 @@ export class RemotePlayer {
 
   // Hard-sync position + all interpolation/simulation state to `pos`
   // (used by the ?dummy debug hook — suppresses dead reckoning drift)
+  /** Armor-tier silhouette — heavy reads bulkier, light slimmer. Applied
+   *  post-load because the GLB path sets its own fit scale. */
+  private _classScale = 1;
+  setClass(cls?: string): void {
+    this._classScale = cls === 'heavy' ? 1.15 : cls === 'light' ? 0.92 : 1;
+    if (this._loaded) this.applyClassScale();
+  }
+  private applyClassScale(): void {
+    this._model.setScale(this._classScale);
+  }
+
   teleportTo(pos: THREE.Vector3): void {
     this.position.copy(pos);
     this.previousPosition.copy(pos);
@@ -132,6 +143,7 @@ export class RemotePlayer {
     this._model = new PlayerModel(scene);
     this.model.load().then(() => {
       this._loaded = true;
+      this.applyClassScale();
       this.model.setPosition(this.position.x, this.position.y - EYE_OFFSET, this.position.z);
       this._model.setRotation(this.rotation.yaw, this.rotation.pitch);
       // Show collider gizmo for remote players (unless already dead or stale-hidden)

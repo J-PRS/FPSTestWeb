@@ -48,6 +48,8 @@ export interface RoomInfo {
   matchEndsAt?: () => number;
   /** Deploy claim sink — Room.deployables.handleDeploy. */
   onDeploy?: (playerId: string, kind: string, pos: Vec3) => void;
+  /** AOE blast sink for deployables — Room.deployables.applyBlast. */
+  deployBlast?: (pos: Vec3, damage: number, radius: number, shooterId: string) => void;
   /** Shadow-move hooks — Room.moveSim. Position reports reconcile the
    *  sim; teleport/respawn resync it; inputMove feeds it. */
   /** Returns false when the event is stale (seq regression on an
@@ -95,7 +97,7 @@ export class MessageHandler {
     this.broadcast = broadcast;
     this.sendToPlayer = sendToPlayer;
     if (roomInfo) this.roomInfo = roomInfo;
-    this.combat = new CombatHandler(playerManager, broadcast, sendToPlayer, roomInfo?.onKill, roomInfo?.onHit, roomInfo?.teams ?? false, roomInfo?.moveImpulse, roomInfo?.moveResync, roomInfo?.mode ?? '');
+    this.combat = new CombatHandler(playerManager, broadcast, sendToPlayer, roomInfo?.onKill, roomInfo?.onHit, roomInfo?.teams ?? false, roomInfo?.moveImpulse, roomInfo?.moveResync, roomInfo?.mode ?? '', roomInfo?.deployBlast);
 
     // Per-type dispatch — a new message type is one table entry. Field
     // order: handlers need this.combat, so the table is built last.
@@ -286,6 +288,7 @@ export class MessageHandler {
         rotation: player.rotation,
         team: player.team,
         transport: player.transport,
+        armorClass: player.armorClass,
       }, playerId);
     }
   }

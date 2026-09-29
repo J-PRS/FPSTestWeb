@@ -838,7 +838,9 @@ export class PlayerModel {
 
   setScale(scale: number): void {
     if (this.model) {
-      this.model.scale.setScalar(0.5 * scale); // Base scale is 0.5
+      // Multiply the model's own fit scale (0.5 robot, 2.0/size.y mannequin)
+      // so the armor-class bump composes with whichever GLB loaded.
+      this.model.scale.setScalar((this.modelScale || 0.5) * scale);
     }
   }
 

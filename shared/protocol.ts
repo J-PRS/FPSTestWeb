@@ -91,7 +91,7 @@ export type ServerMessage =
   // room/mode: which match this state belongs to — set by the room's first
   // joiner, inherited by everyone after (join claims can't redefine it).
   | { type: 'gameState'; players: GameStatePlayer[]; localPlayerState?: LocalPlayerState; sessionToken?: string; protocolVersion?: number; room?: string; mode?: string; team?: 'alpha' | 'bravo'; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number>; map?: { mode?: string; bases?: { alpha?: Vec3; bravo?: Vec3 }; structures?: { kind: 'box' | 'wall' | 'pillar' | 'ramp'; pos: Vec3; size: Vec3; rotY?: number; team?: 'alpha' | 'bravo' }[]; arena?: { x: number; z: number; radius: number }; ambient?: Record<string, number> }; flags?: { team: 'alpha' | 'bravo'; pos: Vec3; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]; pickups?: { id: number; pos: Vec3; kind?: PickupKind }[]; deployables?: { id: number; owner: string; kind: 'turret' | 'mine' | 'station' | 'drone'; pos: Vec3 }[]; matchEndsAt?: number; respawnMs?: number }
-  | { type: 'playerJoined'; playerId: string; internalId: string; position: Vec3; rotation: Rotation; team?: 'alpha' | 'bravo'; transport?: 'wt' | 'rtc' | 'ws' }
+  | { type: 'playerJoined'; playerId: string; internalId: string; position: Vec3; rotation: Rotation; team?: 'alpha' | 'bravo'; transport?: 'wt' | 'rtc' | 'ws'; armorClass?: string }
   | { type: 'playerLeft'; playerId: string }
   // Team reassignment mid-match — team comes through playerJoined/gameState
   // otherwise; this is the only channel for a swap after join (bot rebalance).
@@ -182,6 +182,8 @@ export interface GameStatePlayer {
   team?: 'alpha' | 'bravo';
   /** Netcode-v2 tier this client connected on — scoreboard NET column. */
   transport?: 'wt' | 'rtc' | 'ws';
+  /** Armor tier — remote model renders bulkier (heavy) or slimmer (light). */
+  armorClass?: string;
 }
 
 export interface SnapshotPlayer {

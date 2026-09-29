@@ -39,7 +39,12 @@ export function createRemotes(deps: RemotesDeps) {
 
   // RemoteSet lifecycle hooks — world created the set before deps existed.
   deps.world.remotePlayers.hooks = {
-    create: (id, state) => state.isDead ? undefined : new RemotePlayer(deps.lazyScene(), id, state.position, deps.lazyTerrain()),
+    create: (id, state) => {
+      if (state.isDead) return undefined;
+      const rp = new RemotePlayer(deps.lazyScene(), id, state.position, deps.lazyTerrain());
+      rp.setClass(state.armorClass);
+      return rp;
+    },
     // Bots are hosted in the room sim — they never ping, so the
     // dead-socket gate can't apply to them or they render as ghosts.
     isLive: (id, state) => id.startsWith('BOT-') || state?.ping != null,
