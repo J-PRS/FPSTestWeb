@@ -8,6 +8,8 @@ import {
   LG_CHAIN_RANGE, LG_CHAIN_DMG_SCALE,
 } from '../../core/config.js';
 import { getWeaponStats, WeaponType } from '../../../../shared/weapons.js';
+import { segSolidHit } from '../../../../shared/solidWorld.js';
+import { Projectile } from '../../projectiles/Projectile.js';
 import type { CombatDeps, FireArgs, ExplosionArgs } from '../combat.js';
 import type { Targetable } from '../../entities/balls.js';
 
@@ -108,6 +110,14 @@ export function createLightning(deps: CombatDeps, hooks: LightningHooks) {
     for (let d = 1.5; d <= LG_RANGE; d += 1.5) {
       _lgP.copy(_lgO).addScaledVector(_lgD, d);
       if (_lgP.y < deps.lazyTerrain().getHeight(_lgP.x, _lgP.z)) { hitT = d; break; }
+    }
+
+    // Structures: the beam stops at walls — a bolt that could pierce a
+    // base would splash targets inside it (server rejects those claims).
+    if (Projectile.solidColliders.length) {
+      _lgP.copy(_lgO).addScaledVector(_lgD, hitT);
+      const sh = segSolidHit(_lgO, _lgP, Projectile.solidColliders);
+      if (sh) hitT *= sh.t; // entry as a fraction of the current reach
     }
 
     // Targets: ray-vs-sphere, nearest wins — tip lands on the SURFACE entry

@@ -407,6 +407,28 @@ export class CombatHandler {
       return;
     }
 
+    if (stats.speed <= 0) {
+      // Hitscan-class (Lightning beam): the claim names no projectile —
+      // same self-positioned contract as Melee/Slam, tightened to the
+      // beam's range. The tip also can't sit through a wall: the eye→tip
+      // ray must be clear of structures.
+      const eye = { x: player.position.x, y: player.position.y + 1.6, z: player.position.z };
+      const dx = eye.x - msg.position.x;
+      const dy = eye.y - msg.position.y;
+      const dz = eye.z - msg.position.z;
+      const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      if (dist > 70) { // LG_RANGE 55 + lag slack
+        this.reject(playerId, 'AOE', `beam tip ${dist.toFixed(0)}m from eye`, undefined, msg.weaponType);
+        return;
+      }
+      if (this.solids.length && segSolidHit(eye, msg.position, this.solids)) {
+        this.reject(playerId, 'AOE', 'beam tip behind structure', undefined, msg.weaponType);
+        return;
+      }
+      this.processAOE(playerId, msg.position, msg.excludeTargetId, stats, msg.weaponType);
+      return;
+    }
+
     // Projectile AOEs must name the tracked projectile that detonated —
     // same fallback resolution as direct-hit claims (race vs projectileCreated).
     const proj = this.resolveClaimedProjectile(playerId, msg.projectileId, msg.weaponType, 'aoe');
