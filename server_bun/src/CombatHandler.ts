@@ -9,6 +9,7 @@ import type { PlayerState } from './types.ts';
 import { CONFIG } from './config.ts';
 import { logger } from './logger.ts';
 import { weaponStats } from './weaponStats.ts';
+import { HEAVY_ONLY_WEAPONS } from '../../shared/botClasses.ts';
 
 // Lag compensation: clamp self-reported ping to a sane rewind window —
 // unclamped, a forged 60s "ping" could rewind targets anywhere.
@@ -83,6 +84,9 @@ export class CombatHandler {
     private moveResync?: (playerId: string, pos: Vec3, yaw: number) => void,
     /** Room mode tag for balance telemetry ('ctf', 'nuggets', ...). */
     private modeTag = '',
+    /** Deployable blast sweep — Room.deployables.applyBlast. Absent on
+     *  rooms without structures (offline-style lobbies). */
+    private deployBlast?: (pos: Vec3, damage: number, radius: number, shooterId: string) => void,
   ) {}
 
   /** Claim refused: server-side warn plus a shotRejected to the shooter so
@@ -127,6 +131,12 @@ export class CombatHandler {
   handleShot(playerId: string, msg: Extract<ClientMessage, { type: 'shot' }>): void {
     const player = this.playerManager.getPlayer(playerId);
     if (!player || player.isDead) return;
+    // Tier-locked ordnance — the menu filter is client-side convenience;
+    // this is the real boundary for doctored clients.
+    if (msg.weaponType !== undefined && HEAVY_ONLY_WEAPONS.has(msg.weaponType) && player.armorClass !== 'heavy') {
+      this.reject(playerId, 'Shot', 'class-locked weapon', undefined, msg.weaponType);
+      return;
+    }
     player.protectedUntil = 0; // firing breaks your own spawn shield
 
     const { targetId } = msg;
@@ -328,6 +338,10 @@ export class CombatHandler {
   handleAOEShot(playerId: string, msg: Extract<ClientMessage, { type: 'aoeShot' }>): void {
     const player = this.playerManager.getPlayer(playerId);
     if (!player || player.isDead) return;
+    if (msg.weaponType !== undefined && HEAVY_ONLY_WEAPONS.has(msg.weaponType) && player.armorClass !== 'heavy') {
+      this.reject(playerId, 'AOE', 'class-locked weapon', undefined, msg.weaponType);
+      return;
+    }
     player.protectedUntil = 0; // firing breaks your own spawn shield
     const stats = getWeaponStats(msg.weaponType);
 
@@ -501,6 +515,10 @@ export class CombatHandler {
         }
       }
     }
+
+    // Deployables in the blast envelope eat the same scaled splash —
+    // sentries aren't immortal, you clear a stand with explosives.
+    this.deployBlast?.(position, baseDamage, radius, playerId);
   }
 
   // Client-reported environmental damage (crawler pounces, etc.) — self-only,

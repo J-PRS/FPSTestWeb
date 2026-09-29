@@ -7,6 +7,11 @@ export type ArmorClass = 'light' | 'medium' | 'heavy';
 
 export interface ClassStats { maxHealth: number; speedScale: number }
 
+/** Tier-locked ordnance — WeaponType ids only heavies may fire (Mortar,
+ *  PlasmaCannon, RocketLauncher). Enforced server-side in CombatHandler;
+ *  the loadout menu filter is a convenience, not a boundary. */
+export const HEAVY_ONLY_WEAPONS: ReadonlySet<number> = new Set([4, 7, 15]);
+
 export const CLASS_STATS: Record<ArmorClass, ClassStats> = {
   light:  { maxHealth: -25, speedScale: 1.18 },
   medium: { maxHealth: 0,   speedScale: 1.0 },

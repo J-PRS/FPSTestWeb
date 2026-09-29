@@ -1,1 +1,2 @@
+2026-10-01 - Server enforces heavy-only ordnance: shot + aoeShot claims with Mortar/PlasmaCannon/RocketLauncher weaponType rejected for non-heavy players (HEAVY_ONLY_WEAPONS in shared/botClasses.ts)
 2026-10-01 - Loadout menu re-filters weapon drops live on class change (Drop.setOptions) so heavy ordnance shows/hides without reopening the menu
