@@ -11,7 +11,7 @@
  *   --orbit    strafe-orbit the nearest player instead of standing still
  *   --test     scripted E2E: run assertions, print PASS/FAIL lines, exit
  */
-import { encodePosition, decodeTickFrame, isWireFrame, WIRE_TICK } from '../../shared/wire.ts';
+import { encodePosition, decodeTickFrame, decodeBallSegment, isWireFrame, WIRE_TICK, WIRE_BALLSEG } from '../../shared/wire.ts';
 import { hmHeight, type Heightfield } from '../../shared/heightfield.ts';
 import { EYE_OFFSET } from '../../shared/constants.ts';
 import { WeaponType } from '../../shared/weapons.ts';
@@ -83,6 +83,24 @@ const ballSegStats = {
   lastByBall: new Map<number, { at: number; t: number }>(),
 };
 const ballClock = { t: -1, at: 0 }; // newest simTime stamp + local arrival ms
+/** Segment bookkeeping — JSON 'ballSegment' and binary WIRE_BALLSEG frames
+ *  both land here so --balls never misses the binary lane. */
+function recordBallSegment(id: number, t: number | undefined): void {
+  const now = Date.now();
+  const prev = ballSegStats.lastByBall.get(id);
+  if (prev) {
+    const gap = now - prev.at;
+    ballSegStats.gaps.push(gap);
+    if (gap > ballSegStats.maxGap) ballSegStats.maxGap = gap;
+  }
+  ballSegStats.lastByBall.set(id, { at: now, t: t ?? 0 });
+  ballSegStats.total++;
+  if (t !== undefined) {
+    const age = ballClock.t > 0 ? Math.max(0, ballClock.t + (now - ballClock.at) / 1000 - t) : 0;
+    ballSegStats.ages.push(age);
+  }
+  if ((t ?? -1) > ballClock.t) { ballClock.t = t!; ballClock.at = now; }
+}
 const pendingShots: { id: string | null; target: string; at: number; airtime: number; aimPos: Vec3 }[] = [];
 const killsOf = new Map<string, number>();
 const notices: string[] = [];
@@ -285,7 +303,10 @@ function connect(): Promise<void> {
         if (m.type === 'gameState') { connected = true; resolve(); }
       } else {
         const u8 = ev.data instanceof Uint8Array ? ev.data : new Uint8Array(ev.data);
-        if (isWireFrame(u8) && u8[1] === WIRE_TICK) {
+        if (isWireFrame(u8) && u8[1] === WIRE_BALLSEG) {
+          const seg = decodeBallSegment(u8);
+          if (seg) recordBallSegment(seg.id, seg.t);
+        } else if (isWireFrame(u8) && u8[1] === WIRE_TICK) {
           const now = Date.now();
           if (tickStats.lastAt && !dead) {
             const gap = now - tickStats.lastAt;
@@ -383,20 +404,7 @@ function handleJson(m: any) {
       projDestroyedListener?.(m.projectileId);
       break;
     case 'ballSegment': {
-      const now = Date.now();
-      const prev = ballSegStats.lastByBall.get(m.id);
-      if (prev) {
-        const gap = now - prev.at;
-        ballSegStats.gaps.push(gap);
-        if (gap > ballSegStats.maxGap) ballSegStats.maxGap = gap;
-      }
-      ballSegStats.lastByBall.set(m.id, { at: now, t: m.t ?? 0 });
-      ballSegStats.total++;
-      if (m.t !== undefined) {
-        const age = ballClock.t > 0 ? Math.max(0, ballClock.t + (now - ballClock.at) / 1000 - m.t) : 0;
-        ballSegStats.ages.push(age);
-      }
-      if ((m.t ?? -1) > ballClock.t) { ballClock.t = m.t; ballClock.at = now; }
+      recordBallSegment(m.id, m.t);
       break;
     }
     case 'ballSpawn': ballSegStats.spawns++; break;
