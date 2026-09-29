@@ -241,12 +241,21 @@ export class Crawler implements Targetable, SwarmSlotOwner {
       }
     }
 
+    this.stepBody(dt, terrain, playerPos, distSq);
+    this.faceTarget(dx, dz, distSq);
+
+    this.animT += dt;
+    this.writeInstances(terrain);
+  }
+
+  /** Ballistic hop integration + ground contact (pounce landing resolves
+   *  here — air hit and ground hit are different radii). */
+  private stepBody(dt: number, terrain: Terrain, playerPos: THREE.Vector3, distSq: number): void {
     this.vel.y += GRAVITY * dt;
     this.pos.addScaledVector(this.vel, dt);
 
     const gy = terrain.getHeight(this.pos.x, this.pos.z);
-    const onGround = this.pos.y - this.radius <= gy;
-    if (onGround) {
+    if (this.pos.y - this.radius <= gy) {
       this.pos.y = gy + this.radius;
       if (this.airborne) this.onLanded?.(this.pos);
       this.airborne = false;
@@ -263,15 +272,14 @@ export class Crawler implements Targetable, SwarmSlotOwner {
         this.onPounceHit?.(this);
       }
     }
+  }
 
+  private faceTarget(dx: number, dz: number, distSq: number): void {
     if (this.state === 'windup' && distSq > 0.01) {
       this.yaw = Math.atan2(dx, dz);
     } else if (this.vel.lengthSq() > 1) {
       this.yaw = Math.atan2(this.vel.x, this.vel.z);
     }
-
-    this.animT += dt;
-    this.writeInstances(terrain);
   }
 
   writeInstances(terrain: Terrain): void {
@@ -308,9 +316,17 @@ export class Crawler implements Targetable, SwarmSlotOwner {
     swarm.setMatrix(PART_HEAD, slot, _world);
     swarm.setColor(PART_HEAD, slot, this.color.r * 0.8 * fr, this.color.g * 0.8 * fr + heat * 0.08, this.color.b * 0.8 * fr);
 
-    // Eight legs, 4 pairs fanned thorax→abdomen. The leg geo is already
-    // bent (hip→knee→foot); instance yaw fans fore legs forward, rear legs
-    // back, and mirrors the left side. Wiggle = scuttle.
+    this.writeLegs(swarm, slot);
+    this.writeFangs(swarm, slot);
+    this.writeEyes(swarm, slot);
+
+    getShadows()?.set(this, this.pos, r * 1.1, 0.35);
+  }
+
+  // Eight legs, 4 pairs fanned thorax→abdomen. The leg geo is already
+  // bent (hip→knee→foot); instance yaw fans fore legs forward, rear legs
+  // back, and mirrors the left side. Wiggle = scuttle.
+  private writeLegs(swarm: NonNullable<ReturnType<typeof getSwarm>>, slot: number): void {
     const amp = this.airborne ? 0.08 : (this.state === 'wander' ? 0.25 : 0.55);
     for (let i = 0; i < LEGS_PER; i++) {
       const side = i % 2 === 0 ? -1 : 1;
@@ -327,8 +343,10 @@ export class Crawler implements Targetable, SwarmSlotOwner {
       // Legs darker than carapace — silhouette reads jointed, not blobbed
       swarm.setColor(PART_LEG, slot * LEGS_PER + i, this.color.r * 0.45, this.color.g * 0.45, this.color.b * 0.45);
     }
+  }
 
-    // Fangs: two forward-curved tusks framing the head
+  // Fangs: two forward-curved tusks framing the head
+  private writeFangs(swarm: NonNullable<ReturnType<typeof getSwarm>>, slot: number): void {
     for (let i = 0; i < FANGS_PER; i++) {
       const side = i === 0 ? -1 : 1;
       _e.set(2.4, 0, side * -0.25);
@@ -339,8 +357,10 @@ export class Crawler implements Targetable, SwarmSlotOwner {
       // Pale chitin — mandibles should catch the eye, not blend in
       swarm.setColor(PART_FANG, slot * FANGS_PER + i, 0.9, 0.8, 0.6);
     }
+  }
 
-    // Eyes: two additive quads on the head plate — widen during windup
+  // Eyes: two additive quads on the head plate — widen during windup
+  private writeEyes(swarm: NonNullable<ReturnType<typeof getSwarm>>, slot: number): void {
     const eyeS = (this.state === 'wander' ? 0.55 : this.state === 'windup' ? 0.9 : 0.75) * 0.55;
     for (let i = 0; i < EYES_PER; i++) {
       const side = i === 0 ? -1 : 1;
@@ -350,8 +370,6 @@ export class Crawler implements Targetable, SwarmSlotOwner {
       _world.multiplyMatrices(_root, _local);
       swarm.setMatrix(PART_EYE, slot * EYES_PER + i, _world);
     }
-
-    getShadows()?.set(this, this.pos, r * 1.1, 0.35);
   }
 
   private groundThink(dt: number, terrain: Terrain, playerPos: THREE.Vector3, distSq: number): void {
