@@ -310,17 +310,7 @@ export class PlayerManager {
     let bestScore = -Infinity;
 
     for (const spawn of points) {
-      let minFoeDist = Infinity;
-      for (const [id, p] of this.players) {
-        if (id === playerId || p.isDead) continue;
-        // Teammates near a spawn are safety, not a threat.
-        if (base && p.team && p.team === team) continue;
-        const dx = spawn.x - p.position.x;
-        const dz = spawn.z - p.position.z;
-        const dist = Math.sqrt(dx * dx + dz * dz);
-        if (dist < minFoeDist) minFoeDist = dist;
-      }
-      if (minFoeDist === Infinity) minFoeDist = 0;
+      const minFoeDist = this.foeClearance(spawn, playerId, team);
       const score = base
         ? minFoeDist - 2 * Math.hypot(spawn.x - base.x, spawn.z - base.z)
         : minFoeDist;
@@ -331,5 +321,19 @@ export class PlayerManager {
     }
 
     return best;
+  }
+
+  /** Distance to the nearest living non-teammate from a spawn point —
+   *  teammates near a spawn are safety, not a threat. Empty field scores
+   *  0 (a flat map, not a jackpot). */
+  private foeClearance(spawn: Vec3, playerId: string, team?: 'alpha' | 'bravo'): number {
+    let min = Infinity;
+    for (const [id, p] of this.players) {
+      if (id === playerId || p.isDead) continue;
+      if (team && p.team === team) continue;
+      const dist = Math.hypot(spawn.x - p.position.x, spawn.z - p.position.z);
+      if (dist < min) min = dist;
+    }
+    return min === Infinity ? 0 : min;
   }
 }

@@ -1,3 +1,7 @@
+2026-10-03 - pickSpawnPoint split + teammate-scoring fix: the
+    enemy-clearance scan extracted to foeClearance. Fix: teammates were
+    only exempt from threat scoring when a team base existed — without
+    teamBases, spawning near teammates scored WORSE (treated as foes).
 2026-10-03 - switchRoom split: cooldown gate → switchThrottled,
     capacity → roomFull, join tail → seatPlayer (shared with the
     SessionManager accept path shape). Clears the last GameServer
