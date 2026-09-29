@@ -83,6 +83,12 @@ surface. Detailed research lives in `_reports/`; this file is the current truth.
    Seq-anchored input replay landed (b7ac7d2): corrections carry the
    server's last consumed inputSeq; client rewinds the sim and replays
    journaled inputs — convergent corrections instead of blind blends.
+   Respawn epoch fix (2026-10-03): resync() stamps resyncSeq/resyncAt —
+   stale-epoch reports skipped outright, 500ms drain grace covers the
+   RTT where the client honestly reports the corpse spot; respawn sets
+   correctionGraceUntil so the snap-to-spawn no longer reads as a
+   speedhack reject. Authority mode soak-verified live (38 respawns,
+   0 rejects, worst pre-snap gap 3.1m).
 3. ~~Map format~~ — landed: `maps/<room>.json` (mode, ball population,
    spawn anchors, bases/objectives, bot count — all clamped with
    defaults; examples swarm/duel/nugwar/ctf). Server bots populate
@@ -219,7 +225,12 @@ surface. Detailed research lives in `_reports/`; this file is the current truth.
   arena pushback fixed), CTF crossfire (real cap), DM duel, multi-room
   isolation, reconnect/token reclaim, botFill (fillprobe.ts: retire/refill holds spec.botFill bodies across human join/leave), deployables lifecycle
   (deployprobe.ts: spawn/cap/distance validation, live mine trip +
-  turretShot, leave teardown). + Full HTTP/API surface (apisoak.ts:
+  turretShot, leave teardown). Numbered ad-hoc rooms inherit their base
+  spec (roomFor strips -N: nugwar-3 → nuggets mode/bots/terrain — was
+  silently spec-less); --spec probe validates spectate joins (gameState
+  + full tick stream, no roster entry); probe adopts server spawn +
+  room terrain so --park doesn't self-inflict correction storms.
+  + Full HTTP/API surface (apisoak.ts:
   all GET routes, /join gate, spectate join, admin 401/200 gate,
   end→matchEnd→/matches journal, kick→socket close, /client-log),
   P2P rtc relay (rtcrelay.ts: roles, shuttle, 1008 cap, peer-left),
