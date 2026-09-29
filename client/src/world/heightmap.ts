@@ -90,6 +90,10 @@ function sampleHeightmap(wx: number, wz: number): number {
   return h * HSCALE;
 }
 
+// No quantization memo here — a cell-keyed cache returns a neighbor's
+// height (up to ~slope×cell error), and this feeds prediction ground
+// clamps: a wrong clamp reads as sim divergence → corrections. The
+// bilinear itself is ~20 ops; the callers' sweep budgets are the lever.
 export function sampleHeight(wx: number, wz: number): number {
   if (hmData) return sampleHeightmap(wx, wz);
   return 0;

@@ -98,6 +98,11 @@ Client frame (SwiftShader distorts; phase marks exist):
    samples, LOS probes, bot brains all re-evaluate bilinear lookups.
    → cheap win: per-frame memo cache (x,z)→h at ~0.5m cell granularity.
    Risk: none, heights are static within a map.
+   REJECTED on correctness grounds (2026-10-01): a cell-keyed memo returns
+   a neighbor's height (slope×cell error), and getHeight feeds prediction
+   ground clamps — a wrong clamp = sim divergence → rubberband corrections.
+   The bilinear is already ~20 ops; LOS memo + LOD tiers took the callers'
+   volume instead.
 4. **Census/healthbars/minimap** — already sweep-budgeted (9afdb5c).
 5. **Ribbon trails** — per-projectile vertex updates each frame; only
    cosmetic, cheap enough. Skip.
