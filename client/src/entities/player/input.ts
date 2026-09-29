@@ -49,7 +49,7 @@ export class PlayerInput {
   invertY = settings.get('fps-invert-y');
   sensitivity = settings.get('fps-sens');
   private wheelAcc = 0; // accumulates deltaY for smooth-scroll mice
-  private lockDeltaStale = false; // swallow first delta after pointer lock
+  private lockSettleUntil = 0; // phantom-delta blackout right after pointer lock
 
   constructor(private h: PlayerInputHandlers) {
     this.bindInput();
@@ -137,16 +137,18 @@ export class PlayerInput {
       if (matchCode('belt', `Mouse${e.button}`)) this.beltHeld = false;
     });
     document.addEventListener('contextmenu', (e) => e.preventDefault());
-    // Chrome's pointer-lock quirk: the first mousemove after lock carries
-    // a delta from the old cursor position — up to a full screen of phantom
-    // movement in one event (~50-80° spinout warns). Swallow that event and
-    // clamp per-event deltas: a real violent flick is <100px anyway.
+    // Chrome's pointer-lock quirk: mousemoves queued before lock fire after
+    // it, each carrying a delta from the old cursor position — up to a full
+    // screen of phantom movement per event (~50-120° spinout warns). It isn't
+    // always a single event, so swallow everything for a short settle window
+    // rather than just the first one. Clamped per-event deltas stay: a real
+    // violent flick is <100px anyway.
     document.addEventListener('pointerlockchange', () => {
-      if (document.pointerLockElement) this.lockDeltaStale = true;
+      if (document.pointerLockElement) this.lockSettleUntil = performance.now() + 80;
     });
     document.addEventListener('mousemove', (e) => {
       if (!document.pointerLockElement || this.frozen) return;
-      if (this.lockDeltaStale) { this.lockDeltaStale = false; return; }
+      if (performance.now() < this.lockSettleUntil) return;
       const mx = Math.max(-800, Math.min(800, e.movementX));
       const my = Math.max(-800, Math.min(800, e.movementY));
       h.look(mx, my);
