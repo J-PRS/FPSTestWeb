@@ -11,6 +11,7 @@ import { logger } from './logger.ts';
 import { weaponStats } from './weaponStats.ts';
 import { HEAVY_ONLY_WEAPONS } from '../../shared/botClasses.ts';
 import type { StructureCollider } from '../../shared/ballSim.ts';
+import { segSolidHit } from '../../shared/solidWorld.ts';
 
 // Lag compensation: clamp self-reported ping to a sane rewind window —
 // unclamped, a forged 60s "ping" could rewind targets anywhere.
@@ -501,6 +502,12 @@ export class CombatHandler {
       const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
 
       if (dist <= radius) {
+        // Wall occlusion — a blast outside a structure doesn't splash
+        // targets inside it (and vice versa). Blasts can legitimately
+        // sit INSIDE geometry (shell popped at the face), so a contact
+        // at t≈0 is stepped past rather than counted.
+        if (this.solids.length && this.blastBlocked(position, tpos)) continue;
+
         // shared/combat.ts — same formula the client predicts with
         const damage = aoeDamage(baseDamage, dist, radius);
         if (damage <= 0) continue;
@@ -539,6 +546,26 @@ export class CombatHandler {
     // Deployables in the blast envelope eat the same scaled splash —
     // sentries aren't immortal, you clear a stand with explosives.
     this.deployBlast?.(position, baseDamage, radius, playerId);
+  }
+
+  /** True when a wall stands between blast point and target chest.
+   *  The blast point itself may sit inside geometry (a shell that just
+   *  kissed a face) — step 0.4m past each t=0 contact, up to 3 hops,
+   *  before concluding the target is really occluded. */
+  private blastBlocked(from: Vec3, toEye: Vec3): boolean {
+    const to = { x: toEye.x, y: toEye.y + 1.0, z: toEye.z };
+    let sx = from.x, sy = from.y, sz = from.z;
+    for (let hop = 0; hop < 3; hop++) {
+      const dx = to.x - sx, dy = to.y - sy, dz = to.z - sz;
+      const d = Math.hypot(dx, dy, dz);
+      if (d < 0.5) return false;
+      const hit = segSolidHit({ x: sx, y: sy, z: sz }, to, this.solids);
+      if (!hit) return false;
+      if (hit.t > 0.001) return true; // real wall between → blocked
+      const step = 0.4 / d;
+      sx += dx * step; sy += dy * step; sz += dz * step; // exit the piece we're inside
+    }
+    return false;
   }
 
   // Client-reported environmental damage (crawler pounces, etc.) — self-only,

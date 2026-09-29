@@ -1,3 +1,4 @@
+2026-10-03 - AOE blast damage occluded by structures: splash no longer damages players through walls (blast-inside-wall edge case stepped past)
 2026-10-03 - Projectiles collide with structures on both ends: server shells + client sims detonate on walls, claims claiming a flight through a wall are rejected
 2026-10-03 - genfield flat pads now toroidal (edge bases flatten both sides of the wrap); verified heightmap is seamless (wrap jump < interior jump)
 2026-10-03 - Solid structures: shared yaw-OBB layer (walkable tops, wall push-out, ceilings) in MoveSim on both ends; bot brains see structures as ground + stuck->jet escape
