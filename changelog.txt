@@ -1,3 +1,11 @@
+2026-10-03 - Creatures: cloak now CONFUSES the hunt instead of instantly
+    deaggroing — hunters keep circling a wobbling ghost of the last
+    sighting (deterministic committed snapshots), re-lock on decloak,
+    give up after ~7s if the trail stays cold. Fixed a real bug found
+    by the new test: ghost bites could still damage a cloaked player
+    across the map — bite delivery now requires the live player within
+    8m of the creature. Fully-cloaked rooms no longer freeze the sim.
+
 2026-10-03 - Client: bake probe also rejects text/html HEAD responses —
     Vite SPA fallback can 200-on-HEAD for missing files. Verified live:
     missing w23 bake returns 404 text/html, now skipped before fetch.

@@ -41,6 +41,10 @@ const _snap: SimVec = { x: 0, y: 0, z: 0 };
 // retarget rate).
 const NEAR_D2 = 80 * 80;
 const FAR_SKIP = 4;
+// Cloak confusion: seconds a creature keeps hunting its prey's last
+// sighting, and the radius the ghost target wanders.
+const CONFUSE_TTL = 7;
+const CONFUSE_DRIFT_R = 6;
 // Brain buckets: retarget/resync decision ticks are staggered across
 // BRAIN_BUCKETS phases keyed by creature id, so a pack that all spawned
 // on the same tick doesn't dump its O(players) scans + edge fanouts into
@@ -68,6 +72,8 @@ export class CreatureSim {
   private crawlers = new Map<number, SimBeing>();
   private nextId = 1;
   private retargetAcc = new Map<number, number>();
+  /** Confused hunt: the sighting the creature circles plus its expiry. */
+  private confuseGhosts = new Map<number, { x: number; y: number; z: number; until: number }>();
   private resyncAcc = new Map<number, number>();
   private broadcast: (msg: ServerMessage) => void;
   private sendTo: ((playerId: string, msg: ServerMessage) => void) | null = null;
@@ -284,6 +290,7 @@ export class CreatureSim {
   private kill(c: SimBeing, by?: string): void {
     c.dead = true;
     this.crawlers.delete(c.id);
+    this.confuseGhosts.delete(c.id);
     // A baneling dies by popping — shot or fuse, the blast is the point.
     if (isBaneling(c)) { this.edge(c, 'detonate'); this.onDetonate?.(c); }
     const pos = { x: c.x, y: c.y, z: c.z };
@@ -299,9 +306,9 @@ export class CreatureSim {
     this.tickAcc = Math.min(this.tickAcc, CreatureSim.TICK_CATCHUP_CAP);
     if (this.tickAcc < TICK_DT) return;
     const alive = this.alivePlayers();
-    if (alive.length === 0) { this.tickAcc = 0; return; }
+    if (alive.length === 0 && !this.anyTargeted()) { this.tickAcc = 0; return; }
     for (const [species, cap] of Object.entries(this.pops)) {
-      if (cap > 0 && this.aliveCount(species) < cap) {
+      if (cap > 0 && this.aliveCount(species) < cap && alive.length) {
         const near = alive[Math.floor(this.rng() * alive.length)]!.pos;
         this.spawnCrawler(near, species);
       }
@@ -310,6 +317,13 @@ export class CreatureSim {
       this.tickAcc -= TICK_DT;
       this.stepAll(alive);
     }
+  }
+
+  /** Any creature still holding a committed target — a fully-cloaked room
+   *  reports zero alive players but ghost-hunters must keep stepping. */
+  private anyTargeted(): boolean {
+    for (const c of this.crawlers.values()) if (!c.dead && c.tgtValid) return true;
+    return false;
   }
 
   private tick(): void {
@@ -321,11 +335,11 @@ export class CreatureSim {
     if (this.tickAcc < TICK_DT) return;
 
     const alive = this.alivePlayers();
-    if (alive.length === 0) { this.tickAcc = 0; return; }
+    if (alive.length === 0 && !this.anyTargeted()) { this.tickAcc = 0; return; }
 
     // Drip-feed each declared species toward its own spec cap.
     for (const [species, cap] of Object.entries(this.pops)) {
-      if (cap > 0 && this.aliveCount(species) < cap) {
+      if (cap > 0 && this.aliveCount(species) < cap && alive.length) {
         const near = alive[Math.floor(this.rng() * alive.length)]!.pos;
         this.spawnCrawler(near, species);
       }
@@ -346,8 +360,38 @@ export class CreatureSim {
       if (ra >= RETARGET_INTERVAL) {
         this.retargetAcc.set(c.id, 0);
         const t = this.nearestPlayer(c, alive);
-        c.targetId = t?.id ?? null;
-        this.snapTarget(c);
+        if (t) {
+          c.targetId = t.id;
+          this.confuseGhosts.delete(c.id);
+          this.snapTarget(c);
+        } else {
+          const prev = c.targetId ? this.players.getPlayer(c.targetId) : null;
+          const prevHiding = !!prev && !prev.isDead && !!(prev.status & STATUS.CLOAK);
+          // Cloak breaks the lock, not the scent: anchor a ghost on the
+          // last sighting and keep committing wobble points around it —
+          // the creature reads as searching confused instead of snapping
+          // a U-turn. Ghosts ride the committed snapshot so server +
+          // clients stay deterministic.
+          if (prevHiding && c.tgtValid) {
+            const g = this.confuseGhosts.get(c.id);
+            this.confuseGhosts.set(c.id, g
+              ? { ...g, until: this.simTime + CONFUSE_TTL }
+              : { x: c.tx, y: c.ty, z: c.tz, until: this.simTime + CONFUSE_TTL });
+          }
+          const g = this.confuseGhosts.get(c.id);
+          if (c.tgtValid && g && g.until > this.simTime) {
+            const a = this.simTime * 0.9 + (c.id * 131) % 977;
+            commitTarget(c, c.targetId, {
+              x: g.x + Math.cos(a) * CONFUSE_DRIFT_R,
+              y: g.y,
+              z: g.z + Math.sin(a) * CONFUSE_DRIFT_R,
+            });
+          } else {
+            this.confuseGhosts.delete(c.id);
+            c.targetId = null;
+            this.snapTarget(c);
+          }
+        }
         this.edge(c, 'retarget');
         continue;
       }
@@ -387,7 +431,14 @@ export class CreatureSim {
       } else if (ev === 'bite') {
         this.edge(c, 'bite');
         if (c.pendingBite && c.targetId) {
-          this.onBite?.(c, c.targetId);
+          // The bite commits against the SNAPSHOT (ghost) — only live
+          // players still physically next to the creature can actually be
+          // bitten. Without this a confused hunter pouncing a stale
+          // sighting damages a cloaked player across the map.
+          const live = this.players.getPlayer(c.targetId);
+          const near = live && !live.isDead
+            && (live.position.x - c.x) ** 2 + (live.position.y - c.y) ** 2 + (live.position.z - c.z) ** 2 < 8 * 8;
+          if (near) this.onBite?.(c, c.targetId);
           c.pendingBite = false;
         }
       } else {
