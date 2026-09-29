@@ -1,3 +1,6 @@
+2026-10-03 - oxlint clean: zero warnings remain — split blastFx out of
+    processProjectileExplosion, onModelLoaded out of the GLTF load
+    callback, dropped an unused destructure in simTick.
 2026-10-03 - Ghost-cull fix: a self-reported ping of 0ms (loopback/LAN)
     was stored verbatim, and 'ping > 0' is the wire's liveness signal —
     real clients on the same box were culled as dead sockets and froze
