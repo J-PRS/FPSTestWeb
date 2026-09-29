@@ -1,3 +1,4 @@
+2026-09-29 - server bots now feed their rewind history in the think loop: bots never send position reports, so target.history stayed at the spawn seed and lag-comp hit validation rewound them to the wrong place — legit shots at moving bots could be rejected.
 2026-09-29 - idle reap now runs before the ghost check in skipRecord: a menu/lobby player whose socket died was never reaped (hasReceivedPosition=false short-circuited first), leaving unreported ghosts in the roster forever.
 2026-09-29 - telemetry.reset() on disconnect: the cadence/loss metric kept lastTickAt across a rejoin, so the reconnect dead-time counted as missed ticks and loss read ~100% right after reconnecting.
 2026-09-29 - ghostRecords scenario test pins the menu/lobby ghost fix; skipRecord helper folds the four no-record gates (grace / unreported-human / idle reap / stale heartbeat) out of buildRecords, which had crossed the complexity cap.

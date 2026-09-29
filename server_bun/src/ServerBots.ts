@@ -737,6 +737,12 @@ export class ServerBots {
       p.lastValidPosition = { ...p.position };
       p.lastValidVelocity = { ...p.velocity };
       p.lastSeq++; // tick stream keys staleness off seq
+
+      // Bots never send positions, so nothing else feeds their rewind
+      // buffer — without samples, hit validation rewinds to the stale
+      // spawn seed and legit shots at moving bots get rejected.
+      p.history.push({ t: now, x: p.position.x, y: p.position.y, z: p.position.z });
+      while (p.history.length > 0 && p.history[0]!.t < now - 400) p.history.shift();
     }
   }
 }
