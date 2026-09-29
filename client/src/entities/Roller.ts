@@ -170,47 +170,9 @@ export class Roller implements Targetable, SwarmSlotOwner {
       this.pos.y = gy + this.radius - this.emergeDepth * (1 - k * k);
       this.vel.set(0, 0, 0);
     } else if (this.airborne) {
-      this.vel.y += GRAVITY * dt;
-      this.pos.addScaledVector(this.vel, dt);
-      if (this.pos.y - this.radius <= gy) {
-        this.pos.y = gy + this.radius;
-        this.airborne = false;
-        this.vel.x *= 0.4; this.vel.z *= 0.4;
-        this.vel.y = 0;
-        this.onLanded?.(this.pos);
-      }
+      this.tickAir(dt, terrain, gy);
     } else {
-      _dir.set(playerPos.x - this.pos.x, 0, playerPos.z - this.pos.z);
-      const dist = _dir.length();
-      if (dist > 0.01) {
-        _dir.divideScalar(dist);
-        this.vel.x += _dir.x * ROLLER_ACCEL * dt;
-        this.vel.z += _dir.z * ROLLER_ACCEL * dt;
-      }
-      const hSpeed = Math.hypot(this.vel.x, this.vel.z);
-      if (hSpeed > ROLLER_TOPSPEED) {
-        const s = ROLLER_TOPSPEED / hSpeed;
-        this.vel.x *= s; this.vel.z *= s;
-      }
-
-      const prevY = this.pos.y;
-      this.pos.x += this.vel.x * dt;
-      this.pos.z += this.vel.z * dt;
-      const newGy = terrain.getHeight(this.pos.x, this.pos.z);
-      this.pos.y = newGy + this.radius;
-      const drop = prevY - this.pos.y;
-      if (drop > 0 && hSpeed > 0.1) {
-        const g = -drop / (dt || 1);
-        this.vel.x += _dir.x * Math.min(g * 0.02, 4) * dt;
-        this.vel.z += _dir.z * Math.min(g * 0.02, 4) * dt;
-      }
-
-      // Ram check is 3D — `dist` is horizontal (steering); a boulder under
-      // a flying player used to connect through the air.
-      if (this.hitCooldown <= 0 && this.pos.distanceTo(playerPos) < this.radius + 1.0 * MELEE_FAVOR) {
-        this.hitCooldown = 0.6;
-        this.onHit?.(this);
-      }
+      this.tickGround(dt, terrain, playerPos);
     }
 
     // Roll rotation: axis = up × velocity, rate = speed / radius
@@ -222,6 +184,53 @@ export class Roller implements Targetable, SwarmSlotOwner {
     }
 
     this.writeInstances();
+  }
+
+  private tickAir(dt: number, terrain: Terrain, gy: number): void {
+    this.vel.y += GRAVITY * dt;
+    this.pos.addScaledVector(this.vel, dt);
+    if (this.pos.y - this.radius <= gy) {
+      this.pos.y = gy + this.radius;
+      this.airborne = false;
+      this.vel.x *= 0.4; this.vel.z *= 0.4;
+      this.vel.y = 0;
+      this.onLanded?.(this.pos);
+    }
+  }
+
+  // Surface steering: home on the player with a top-speed clamp, let
+  // downhill grade feed speed, and ram only on true 3D contact — `dist`
+  // is horizontal (steering); a boulder under a flying player used to
+  // connect through the air.
+  private tickGround(dt: number, terrain: Terrain, playerPos: THREE.Vector3): void {
+    _dir.set(playerPos.x - this.pos.x, 0, playerPos.z - this.pos.z);
+    const dist = _dir.length();
+    if (dist > 0.01) {
+      _dir.divideScalar(dist);
+      this.vel.x += _dir.x * ROLLER_ACCEL * dt;
+      this.vel.z += _dir.z * ROLLER_ACCEL * dt;
+    }
+    const hSpeed = Math.hypot(this.vel.x, this.vel.z);
+    if (hSpeed > ROLLER_TOPSPEED) {
+      const s = ROLLER_TOPSPEED / hSpeed;
+      this.vel.x *= s; this.vel.z *= s;
+    }
+
+    const prevY = this.pos.y;
+    this.pos.x += this.vel.x * dt;
+    this.pos.z += this.vel.z * dt;
+    this.pos.y = terrain.getHeight(this.pos.x, this.pos.z) + this.radius;
+    const drop = prevY - this.pos.y;
+    if (drop > 0 && hSpeed > 0.1) {
+      const g = -drop / (dt || 1);
+      this.vel.x += _dir.x * Math.min(g * 0.02, 4) * dt;
+      this.vel.z += _dir.z * Math.min(g * 0.02, 4) * dt;
+    }
+
+    if (this.hitCooldown <= 0 && this.pos.distanceTo(playerPos) < this.radius + 1.0 * MELEE_FAVOR) {
+      this.hitCooldown = 0.6;
+      this.onHit?.(this);
+    }
   }
 
   takeDamage(damage: number): boolean {

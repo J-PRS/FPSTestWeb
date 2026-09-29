@@ -1,3 +1,5 @@
+2026-10-03 - Roller.update split into tickAir/tickGround (c19 -> clean).
+
 2026-10-03 - Seeker.update -> settle helper; Snake.update -> tickEmerge/steer state machine (c16/c23 -> clean).
 
 2026-10-03 - Scarab.update split into tickEmerge/steer (c25 -> clean).
