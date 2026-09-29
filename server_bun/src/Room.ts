@@ -613,7 +613,7 @@ export class Room {
     if (counts[big] - counts[small] < 2) return;
     for (const p of this.players.getAllPlayers().values()) {
       if (counts[big] - counts[small] < 2) break;
-      if (p.team !== big || !p.id.startsWith('bot')) continue;
+      if (p.team !== big || !p.isBot) continue;
       this.players.setTeam(p.id, small);
       this.broadcast({ type: 'teamUpdate', playerId: p.id, team: small });
       counts[big]--;

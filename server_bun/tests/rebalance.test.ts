@@ -19,10 +19,10 @@ describe('team rebalance', () => {
   test('leaver skew → bots from the big side flip until diff < 2', () => {
     const room = new Room('rb', null, '', TEAM_SPEC);
     room.players.addPlayer('h1', 'alpha');
-    room.players.addPlayer('bot1', 'alpha');
-    room.players.addPlayer('bot2', 'alpha');
-    room.players.addPlayer('bot3', 'bravo');
-    room.removePlayerCompletely('bot3', 'test', noop);
+    for (const id of ['BOT-1', 'BOT-2', 'BOT-3'] as const) {
+      room.players.addPlayer(id, id === 'BOT-3' ? 'bravo' : 'alpha').isBot = true;
+    }
+    room.removePlayerCompletely('BOT-3', 'test', noop);
     // 3 alpha vs 0 bravo → one bot flips: 2 vs 1, diff 1 → stop
     const counts = room.players.teamCounts();
     expect(counts.alpha).toBe(2);
@@ -42,8 +42,8 @@ describe('team rebalance', () => {
 
   test('delta < 2 → no flips', () => {
     const room = new Room('rb3', null, '', TEAM_SPEC);
-    room.players.addPlayer('bot1', 'alpha');
-    room.players.addPlayer('bot2', 'alpha');
+    room.players.addPlayer('BOT-1', 'alpha').isBot = true;
+    room.players.addPlayer('BOT-2', 'alpha').isBot = true;
     room.players.addPlayer('b1', 'bravo');
     // removing a non-player or small skew shouldn't flip 2v1
     room.removePlayerCompletely('nobody', 'test', noop);

@@ -17,8 +17,8 @@ export function lcg(seed = 42): () => number {
   return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 0x100000000; };
 }
 
-export function mkRoom(spec: Partial<MapSpec>, mode = '', seed = 1337): Room {
-  const room = new Room('t', flat, mode, resolveMapSpec(spec));
+export function mkRoom(spec: Partial<MapSpec>, mode = '', seed = 1337, moveAuthority = false): Room {
+  const room = new Room('t', flat, mode, resolveMapSpec(spec), moveAuthority);
   room.ballSim.rng = lcg(seed);
   room.creatureSim.rng = lcg(seed + 1);
   room.rng = lcg(seed + 2);
