@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test';
-import { mkRoom, step, pin, freeze, watch, twoPlayers } from './harness.ts';
+import { mkRoom, step, freeze, watch, twoPlayers } from './harness.ts';
 
 describe('scenario: proximity mine', () => {
   it('arms after 1s; an enemy stepping inside 3.2m eats the blast and the mine is gone', () => {
