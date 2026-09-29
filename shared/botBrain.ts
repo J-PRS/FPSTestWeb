@@ -96,6 +96,7 @@ const THREAT_M = 55; // a player inside this radius always outranks farming
 const THINK_S = 0.3;
 const ORBIT_FAR = 22;    // orbit the target inside this ring distance
 const ORBIT_TOO_CLOSE = 12;
+const CLOSE_PRESS_M = 6; // inside this the orbit breaks — press to fist range
 const STALE_MS = 1200;   // last-seen older than this = stop firing blind
 const FLINCH_S = 0.4;
 const FLINCH_DIST = 8;
@@ -323,7 +324,10 @@ export class BotBrain {
         }
         if (ally && ad < 2500) { rx = (rx + ally.x) * 0.5; rz = (rz + ally.z) * 0.5; }
         dest = { x: rx, y: pos.y, z: rz };
-      } else if (d > this.orbitFar * (hero ? 0.7 : 1)) {
+      } else if (d < CLOSE_PRESS_M || d > this.orbitFar * (hero ? 0.7 : 1)) {
+        // Point-blank or outranged: press straight in either way — inside
+        // fist reach the press converts to the punch, outside it to the
+        // approach. Holding the orbit at 2m would stare down a barrel.
         dest = { ...t.pos };
       } else {
         // fightPos comes from the last replan tick — no pick yet (or the

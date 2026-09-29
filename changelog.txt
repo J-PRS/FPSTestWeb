@@ -1,3 +1,4 @@
+2026-10-01 - Brain close-press: hunt target inside 6m breaks the orbit so the melee band is actually reachable (was dead code at 22m orbit)
 2026-10-01 - Offline bot melee band: inside fist reach bots punch (flat 60, stronger shove, no tracer) instead of the generic bolt
 2026-10-01 - Bots get full kit: sidearm pick per loadout (Pistol/Revolver inside 8m knife range) + melee punch inside 3m through the same combat funnel + broadcast swing
 2026-10-01 - Mid-match perk swaps now bank at respawn: new perkUpdate wire msg + pendingPerk (mirrors classUpdate); client applies via appliedPerk at resetLifeState so HP/energy/speed mods never flip mid-life
