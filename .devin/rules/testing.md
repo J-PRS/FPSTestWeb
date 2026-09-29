@@ -23,6 +23,9 @@ globs:
 - Pin via `room.moveSim.resync` + position + `protectedUntil=0` — writing
   `position` alone is stomped by moveSim integration; brains roam to
   objectives on the first think otherwise.
+- Server-bot brains stomp `status` every think — a bot can't hold a manual
+  cloak/mend bit. Status-dependent scenarios (cloakSafety, botCloak,
+  stationHeal) use `room.players.addPlayer('P1')`, a brainless player.
 - Tests that fail are evidence: debug via the harness's `watch()` counters
   and one-off dbg tests, don't guess. A test failure that points at real
   behavior beats an adjusted expectation.
