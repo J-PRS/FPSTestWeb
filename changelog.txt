@@ -1,3 +1,5 @@
+2026-10-03 - Scenario: cloak breaks creature aggro (committed retarget -> cloak -> zero bite lies). Harness note: server brains stomp status each think, so cloak tests need a non-bot player.
+
 2026-10-03 - Scenario: escort drone follow+acquire+fire chain proven (turretShot edges, damage lands). TASKS.md refresh. sort warnings documented as intentional (no toSorted in lib target).
 
 2026-10-03 - Server creatures now raze deployables: CreatureSim extraTargets/targetPos surface, RoomDeployables dep:N candidates + gnaw hp path, bites route dep: ids. depGnaw scenario proves a turret gets eaten. Closes the offline-vs-server asymmetry where turrets were creature-immune.
