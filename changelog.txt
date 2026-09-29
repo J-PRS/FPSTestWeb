@@ -1,3 +1,4 @@
+2026-10-01 - projectile collision optimization: parabola-scheduled terrain sweeps vs field max-height (zero-miss bound), sphere-reject early-outs in server player sweep and all client sweep fns (ball/player/obstacle); capsule extent covered; 2 new correctness tests; 276 bun + 93 vitest green
 2026-09-29 - creatureSim: kamikaze family - SimBaneling (fuse/life detonate edge -> server AOE blast), netDriven Baneling client replay, baneling:4 on infestation; 5 new tests, verified live
 2026-09-29 - creatureSim families: SimRoller netDriven (roll core) + gnat via SimFlyer; ballSim predictive terrain probes (parabola-scheduled gy sampling)
 2026-09-30 - Flyer species port: shared SimFlyer (orbit->windup->dive->climb, seeded LCG + committed snapshots); rakk goes server-authoritative via crawl* edges; gnat row staged; infestation map adds rakk:4; 4 new flyer tests.

@@ -80,15 +80,33 @@ export function sweepTerrain(p: SweepHost, terrain: Terrain): boolean {
   return false;
 }
 
+/** Sphere-reject gate: can the swept segment come within `reach` of the
+ *  target's closest point? Compared against the segment's midpoint —
+ *  misses only when the target is provably outside, so no hit is ever
+ *  skipped that the full check would have caught. */
+function segmentSphereReject(p: SweepHost, cx: number, cy: number, cz: number, reach: number): boolean {
+  const midX = (p.pos.x + p.prevPos.x) / 2;
+  const midY = (p.pos.y + p.prevPos.y) / 2;
+  const midZ = (p.pos.z + p.prevPos.z) / 2;
+  const halfLen = p.pos.distanceTo(p.prevPos) / 2;
+  const dx = cx - midX, dy = cy - midY, dz = cz - midZ;
+  const margin = reach + halfLen;
+  return dx * dx + dy * dy + dz * dz > margin * margin;
+}
+
 // Swept sphere vs ball — checks core (direct) then expanding (wake) hitbox
 export function sweepBall(p: SweepHost, ball: Targetable): boolean {
   const STEP = 0.1; // smaller step for precise core hit detection
+  const tr = ball.hitRadius ?? ball.radius; // render ≠ hitbox on tapered bodies (totem)
+  // Capsule targets extend past pos (capsuleTop up, capsuleEnd along the
+  // heading) — the reject must cover the farthest reach point or it lies.
+  const capsuleExt = Math.max(ball.capsuleTop ?? 0, ball.capsuleEnd ? ball.capsuleEnd.length() : 0);
+  if (segmentSphereReject(p, ball.pos.x, ball.pos.y, ball.pos.z, tr + p.hitRadius + capsuleExt + 0.5)) return false;
   const dx = p.pos.x - p.prevPos.x;
   const dy = p.pos.y - p.prevPos.y;
   const dz = p.pos.z - p.prevPos.z;
   const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
   const steps = Math.max(1, Math.ceil(dist / STEP));
-  const tr = ball.hitRadius ?? ball.radius; // render ≠ hitbox on tapered bodies (totem)
   const coreThresh = tr + p.config.bodyRadius; // direct hit = body overlaps target
   const wakeThresh = tr + p.hitRadius; // expanding wake
   let minDist = Infinity;
@@ -156,6 +174,9 @@ export function sweepBall(p: SweepHost, ball: Targetable): boolean {
 // capsule center is at feet + CAPSULE_CENTER_Y
 export function sweepPlayer(p: SweepHost, playerPos: THREE.Vector3, playerId: string): boolean {
   const centerY = playerPos.y - EYE_OFFSET + CAPSULE_CENTER_Y;
+  // Same sphere reject; capsule half-height inflates the reach so a
+  // head/foot catch can't slip past the midpoint estimate.
+  if (segmentSphereReject(p, playerPos.x, centerY, playerPos.z, PLAYER_RADIUS + CAPSULE_HALF_HEIGHT + p.hitRadius + 0.5)) return false;
 
   const dx = p.pos.x - p.prevPos.x;
   const dy = p.pos.y - p.prevPos.y;
@@ -231,6 +252,9 @@ export function sweepPlayer(p: SweepHost, playerPos: THREE.Vector3, playerId: st
 // relative frame: R(t) = (P0 − B0) + (dP − dB)·t, minimize |R|² on [0,1].
 // No sampling steps — the closest-approach time is solved exactly.
 export function sweepObstacle(p: SweepHost, o: SweepObstacle): boolean {
+  // Obstacle also moved — reject on its current midpoint vs the shell's
+  // segment; its frame displacement is tiny next to the +0.5 slack.
+  if (segmentSphereReject(p, o.pos.x, o.pos.y, o.pos.z, p.config.bodyRadius + o.radius + 0.5)) return false;
   const dx = p.pos.x - p.prevPos.x;
   const dy = p.pos.y - p.prevPos.y;
   const dz = p.pos.z - p.prevPos.z;

@@ -101,6 +101,43 @@ describe('RoomProjectiles', () => {
     void shooter; void target; void room;
   });
 
+  it('terrain scheduling never skips a real hit — high arc still lands', () => {
+    const { room, shooter, target } = arena();
+    shooter.position = { x: 0, y: FLOOR, z: 0 };
+    target.position = { x: 25, y: FLOOR, z: 0 };
+    // Mortar-style lob: climbs far above the field ceiling (terrain sweep
+    // skipped for most of the flight), then descends into the ground at
+    // the target. If scheduling lied, the pop never happens.
+    // Spawn sits above the field ceiling (flat 60/255*125 ≈ 29.4m), so the
+    // parabola schedules terrainAt>0 and skips sweeps early in flight.
+    // ~7° lob at 55 m/s lands ~25m out — right on the target's feet.
+    room.projectiles.spawn(shooter.id, WeaponType.Mortar,
+      { x: 0, y: FLOOR + 1.4, z: 0 }, { x: 0.993, y: 0.117, z: 0 }, { x: 0, y: 0, z: 0 });
+    let flewTicks = 0;
+    for (let i = 0; i < 60 && target.health === CONFIG.playerMaxHealth; i++) {
+      room.projectiles.tick(0.05);
+      flewTicks++;
+    }
+    expect(target.health).toBeLessThan(CONFIG.playerMaxHealth);
+    expect(flewTicks).toBeGreaterThan(2); // actually flew, not instant pop
+  });
+
+  it('a slow-moving player closing in still gets hit', () => {
+    const { room, shooter, target } = arena();
+    shooter.position = { x: 0, y: FLOOR + 1.4, z: 0 };
+    // Target stands outside the initial capsule but sprints into the
+    // shell's path — the sphere reject must budget for his velocity.
+    target.position = { x: 22, y: FLOOR, z: 0 };
+    target.velocity = { x: -40, y: 0, z: 0 };
+    room.projectiles.spawn(shooter.id, WeaponType.PlasmaGun,
+      { x: 0, y: FLOOR + 1.4, z: 0 }, { x: 1, y: 0, z: 0 }, { x: 0, y: 0, z: 0 });
+    for (let i = 0; i < 10 && target.health === CONFIG.playerMaxHealth; i++) {
+      room.projectiles.tick(0.05);
+      target.position.x += target.velocity.x * 0.05;
+    }
+    expect(target.health).toBeLessThan(CONFIG.playerMaxHealth);
+  });
+
   it('hitscan weapons refuse a body — spawn returns null', () => {
     const { room, shooter } = arena();
     expect(room.projectiles.spawn(shooter.id, WeaponType.Slam,
