@@ -22,7 +22,14 @@ globs:
   the observable outcome (damage, roster state) when edges go tiered.
 - Pin via `room.moveSim.resync` + position + `protectedUntil=0` — writing
   `position` alone is stomped by moveSim integration; brains roam to
-  objectives on the first think otherwise.
+  objectives on the first think otherwise. `freeze()` = pin + silenced
+  brain (pinned bots still wander/cloak otherwise). `moveSim.simPos`
+  returns the live shadow position object — snapshot `{...pos}` before
+  comparing across a step, or the "before" mutates with the "after".
+  Kills must ride the projectile/damage funnel (`applyDamage` alone
+  bypasses `onKill` — no score, tag, or flag drop). Rejection feedback
+  (`shotRejected`, `knockback`) goes via `sendToPlayer` to the shooter/
+  victim — tap that channel, not `broadcast`.
 - Server-bot brains stomp `status` every think — a bot can't hold a manual
   cloak/mend bit. Status-dependent scenarios (cloakSafety, botCloak,
   stationHeal) use `room.players.addPlayer('P1')`, a brainless player.
