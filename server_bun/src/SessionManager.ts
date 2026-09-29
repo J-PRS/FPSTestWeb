@@ -138,6 +138,20 @@ export class SessionManager {
       return;
     }
 
+    // A spectator id is squatters' rights, not a claim: a real join with
+    // the same id must evict them or the message dispatcher keeps
+    // treating the new player as read-only (specRooms is keyed by id,
+    // not socket). Runs after claimIdentity — a rejected join shouldn't
+    // kick the innocent spectator.
+    const specRoom = this.d.specRooms.get(playerId);
+    if (specRoom) {
+      const specSock = specRoom.connections.getConnection(playerId);
+      specSock?.close(1008, 'id claimed by player');
+      specRoom.spectators.delete(playerId);
+      specRoom.connections.unregister(playerId);
+      this.d.specRooms.delete(playerId);
+    }
+
     ws.data.playerId = playerId;
     room.sessionTokens.set(playerId, idToken);
     this.seat(ws, room, playerId, handshake, idToken);
