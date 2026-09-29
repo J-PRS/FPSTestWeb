@@ -31,6 +31,95 @@ function rubberbandWarnAt(kind: string, speed: number): number {
 // Connected = the server sims all ball flight; ballSpawn/ballSegment/
 // ballDie events drive netDriven Ball instances that replay the shared
 // integrator. Offline = the classic local sim (see spawnBall in entities).
+// Server-sim clock: every ball event is stamped with the server's
+// monotonic sim time. Track the newest stamp + when it arrived to
+// estimate "server now" — event AGE = estNow − stamp measures TRUE
+// staleness including packet loss/retransmit delay, which ping÷2 can't
+// see (at 50% loss, events routinely arrive hundreds of ms late).
+function makeBallClock(getPing: () => number) {
+  // The server's sim clock is setInterval-driven — under load it ticks
+  // slower than wall time. Track the sim→wall RATE (Δstamp/Δarrival is
+  // an exact rate sample regardless of how events space out) so both the
+  // prediction gate and event-age extrapolation ride the server's clock,
+  // not ours. Without it we extrapolate legs too far and watch bounces
+  // early — the residual rubberband warns.
+  const clock = { t: -1, at: 0, rate: 1 };
+  function noteStamp(t: number): void {
+    const now = performance.now() / 1000;
+    if (t > clock.t) {
+      if (clock.t >= 0) {
+        const ds = t - clock.t, dw = now - clock.at;
+        if (ds > 0 && dw > 0.2) {
+          const r = Math.min(1.2, Math.max(0.5, ds / dw));
+          clock.rate += (r - clock.rate) * 0.2; // EMA
+        }
+      }
+      clock.t = t; clock.at = now;
+    }
+  }
+  function estSimNow(): number {
+    const now = performance.now() / 1000;
+    return clock.t < 0 ? Infinity : clock.t + (now - clock.at) * clock.rate;
+  }
+  function ballEventAge(t: number | undefined): number {
+    if (t === undefined) {
+      // Unstamped (shouldn't happen post-v3) — fall back to ½RTT.
+      return Math.min(0.2, getPing() / 2000);
+    }
+    noteStamp(t);
+    return Math.min(0.6, Math.max(0, estSimNow() - t));
+  }
+  return { noteStamp, estSimNow, ballEventAge };
+}
+
+function targetPosForId(deps: EntitiesDeps, id: string | null | undefined): THREE.Vector3 | null {
+  const nm = deps.lazyNetworkManager();
+  return id === nm?.getLocalPlayerId() ? deps.lazyPlayer().pos
+    : (id ? deps.world.remotePlayers.get(id)?.pos ?? null : null);
+}
+
+// Terrain forensics: a bounce stamp lands at ground contact, so truth.y
+// should sit ~radius above the field the sim bounced on. fieldH vs
+// terrainH split "stale heightfield" from "integrator drift" — if they
+// differ, Ball.field is a dead snapshot.
+function rubberbandForensics(deps: EntitiesDeps, b: Ball, m: { position: Vec3Msg }) {
+  const bf = Ball.netField;
+  const diag = b.netDiag;
+  return {
+    pred: { x: +b.pos.x.toFixed(1), y: +b.pos.y.toFixed(1), z: +b.pos.z.toFixed(1) },
+    truth: { x: +m.position.x.toFixed(1), y: +m.position.y.toFixed(1), z: +m.position.z.toFixed(1) },
+    fieldH: +(bf ? hmHeight(bf, m.position.x, m.position.z) : NaN).toFixed(1),
+    terrainH: +deps.lazyTerrain().getHeight(m.position.x, m.position.z).toFixed(1),
+    fieldFp: bf ? hmFingerprint(bf) : 'none',
+    // Regime forensics: simT>simNow = the catch-all free-ran ahead;
+    // legAge pinned ~8 = inert leg extrapolating a stale anchor.
+    simT: diag ? +diag.simT.toFixed(2) : null,
+    simNow: diag?.simNow ?? null,
+    legT0: diag ? +diag.legT0.toFixed(2) : null,
+    legAge: diag ? +diag.legAge.toFixed(2) : null,
+    enraged: diag?.enraged ?? null,
+  };
+}
+
+function netBallDie(deps: EntitiesDeps, netBallById: Map<number, Ball>,
+    m: { id: number; position: { x: number; y: number; z: number }; by?: string | null }): void {
+  const b = netBallById.get(m.id);
+  if (!b) return;
+  netBallById.delete(m.id);
+  const dm = deps.lazyDemoManager();
+  if (dm?.isRecording) {
+    dm.recordTargetDestroyed(m.id, m.position, b.variant, b.health);
+  }
+  b.netKill();
+  sfx.enemyCue(b.pos, 'die');
+  screenShake.blast(b.pos, 1.6, deps.lazyPlayer().pos);
+  if (m.by && m.by === deps.lazyNetworkManager()?.getLocalPlayerId()) {
+    // Our kill — in team rooms the server drops a gem at the corpse
+    // (pickupSpawn); collecting it is the score AND the reward.
+    deps.lazyPlayer().kills++;
+  }
+}
+
 export function createNetBalls(deps: EntitiesDeps, ctx: NetBallsCtx, logger: ChildLogger) {
   const { scene, balls, targets } = { scene: deps.scene, ...ctx };
   const netBallById = new Map<number, Ball>();
@@ -38,50 +127,9 @@ export function createNetBalls(deps: EntitiesDeps, ctx: NetBallsCtx, logger: Chi
   Ball.hitClaim = (netId, dmg, ix, iy, iz) =>
     deps.lazyNetworkManager()?.sendCreatureHit(netId, dmg, ix, iy, iz);
 
-  // Server-sim clock: every ball event is stamped with the server's
-  // monotonic sim time. Track the newest stamp + when it arrived to
-  // estimate "server now" — event AGE = estNow − stamp measures TRUE
-  // staleness including packet loss/retransmit delay, which ping÷2 can't
-  // see (at 50% loss, events routinely arrive hundreds of ms late).
-  const ballClock = { t: -1, at: 0, rate: 1 };
-  // The server's sim clock is setInterval-driven — under load it ticks
-  // slower than wall time. Track the sim→wall RATE (Δstamp/Δarrival is
-  // an exact rate sample regardless of how events space out) so both the
-  // prediction gate and event-age extrapolation ride the server's clock,
-  // not ours. Without it we extrapolate legs too far and watch bounces
-  // early — the residual rubberband warns.
-  function noteStamp(t: number): void {
-    const now = performance.now() / 1000;
-    if (t > ballClock.t) {
-      if (ballClock.t >= 0) {
-        const ds = t - ballClock.t, dw = now - ballClock.at;
-        if (ds > 0 && dw > 0.2) {
-          const r = Math.min(1.2, Math.max(0.5, ds / dw));
-          ballClock.rate += (r - ballClock.rate) * 0.2; // EMA
-        }
-      }
-      ballClock.t = t; ballClock.at = now;
-    }
-  }
-  function estSimNow(): number {
-    const now = performance.now() / 1000;
-    return ballClock.t < 0 ? Infinity : ballClock.t + (now - ballClock.at) * ballClock.rate;
-  }
+  const ballClock = makeBallClock(() => deps.lazyNetworkManager()?.getPing() ?? 0);
+  const { estSimNow, ballEventAge } = ballClock;
   Ball.netSimNow = estSimNow;
-  function ballEventAge(t: number | undefined): number {
-    if (t === undefined) {
-      // Unstamped (shouldn't happen post-v3) — fall back to ½RTT.
-      return Math.min(0.2, (deps.lazyNetworkManager()?.getPing() ?? 0) / 2000);
-    }
-    noteStamp(t);
-    return Math.min(0.6, Math.max(0, estSimNow() - t));
-  }
-
-  function targetPosForId(id: string | null | undefined): THREE.Vector3 | null {
-    const nm = deps.lazyNetworkManager();
-    return id === nm?.getLocalPlayerId() ? deps.lazyPlayer().pos
-      : (id ? deps.world.remotePlayers.get(id)?.pos ?? null : null);
-  }
 
   function netBallSpawn(m: { id: number; variant: number; colorIdx: number; position: Vec3Msg; velocity: Vec3Msg; t?: number; enraged?: boolean; targetId?: string | null; tp?: Vec3Msg | null }): void {
     if (netBallById.has(m.id)) return;
@@ -156,30 +204,7 @@ export function createNetBalls(deps: EntitiesDeps, ctx: NetBallsCtx, logger: Chi
     rbSuppressed.delete(m.id);
     logger.warn(
       `ball #${m.id} ${kind} rubberband ${err.toFixed(1)}m (age ${(age * 1000).toFixed(0)}ms) — prediction diverged${sup ? ` (×${sup + 1})` : ''}`,
-      rubberbandForensics(b, m));
-  }
-
-  // Terrain forensics: a bounce stamp lands at ground contact, so truth.y
-  // should sit ~radius above the field the sim bounced on. fieldH vs
-  // terrainH split "stale heightfield" from "integrator drift" — if they
-  // differ, Ball.field is a dead snapshot.
-  function rubberbandForensics(b: Ball, m: { position: Vec3Msg }) {
-    const bf = Ball.netField;
-    const diag = b.netDiag;
-    return {
-      pred: { x: +b.pos.x.toFixed(1), y: +b.pos.y.toFixed(1), z: +b.pos.z.toFixed(1) },
-      truth: { x: +m.position.x.toFixed(1), y: +m.position.y.toFixed(1), z: +m.position.z.toFixed(1) },
-      fieldH: +(bf ? hmHeight(bf, m.position.x, m.position.z) : NaN).toFixed(1),
-      terrainH: +deps.lazyTerrain().getHeight(m.position.x, m.position.z).toFixed(1),
-      fieldFp: bf ? hmFingerprint(bf) : 'none',
-      // Regime forensics: simT>simNow = the catch-all free-ran ahead;
-      // legAge pinned ~8 = inert leg extrapolating a stale anchor.
-      simT: diag ? +diag.simT.toFixed(2) : null,
-      simNow: diag?.simNow ?? null,
-      legT0: diag ? +diag.legT0.toFixed(2) : null,
-      legAge: diag ? +diag.legAge.toFixed(2) : null,
-      enraged: diag?.enraged ?? null,
-    };
+      rubberbandForensics(deps, b, m));
   }
 
   function netBallSegment(m: { id: number; kind?: string; position: { x: number; y: number; z: number }; velocity: { x: number; y: number; z: number }; enraged: boolean; targetId: string | null; t?: number; et?: number; slowT?: number; damp?: boolean; tp?: Vec3Msg | null }): void {
@@ -211,24 +236,6 @@ export function createNetBalls(deps: EntitiesDeps, ctx: NetBallsCtx, logger: Chi
     }
   }
 
-  function netBallDie(m: { id: number; position: { x: number; y: number; z: number }; by?: string | null }): void {
-    const b = netBallById.get(m.id);
-    if (!b) return;
-    netBallById.delete(m.id);
-    const dm = deps.lazyDemoManager();
-    if (dm?.isRecording) {
-      dm.recordTargetDestroyed(m.id, m.position, b.variant, b.health);
-    }
-    b.netKill();
-    sfx.enemyCue(b.pos, 'die');
-    screenShake.blast(b.pos, 1.6, deps.lazyPlayer().pos);
-    if (m.by && m.by === deps.lazyNetworkManager()?.getLocalPlayerId()) {
-      // Our kill — in team rooms the server drops a gem at the corpse
-      // (pickupSpawn); collecting it is the score AND the reward.
-      deps.lazyPlayer().kills++;
-    }
-  }
-
   // Roster is authoritative for membership, not just spawns: a ball that
   // died while we were reconnecting (or whose ballDie dropped on an
   // unreliable lane) would otherwise ghost forever — nothing else removes it.
@@ -247,11 +254,13 @@ export function createNetBalls(deps: EntitiesDeps, ctx: NetBallsCtx, logger: Chi
   function netTargetPosFor(b: Ball): THREE.Vector3 {
     const id = b.netTargetId;
     if (id) {
-      const p = targetPosForId(id);
+      const p = targetPosForId(deps, id);
       if (p) return p;
     }
     return b.pos; // no committed target — self pos means zero pull direction
   }
 
-  return { serverBalls, netBallSpawn, netBallSegment, netBallDie, netBallRoster, netTargetPosFor };
+  return { serverBalls, netBallSpawn, netBallSegment,
+    netBallDie: (m: { id: number; position: { x: number; y: number; z: number }; by?: string | null }) => netBallDie(deps, netBallById, m),
+    netBallRoster, netTargetPosFor };
 }
