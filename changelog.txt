@@ -1,3 +1,4 @@
+2026-10-03 - Blast LOS unified in shared/solidWorld.ts (blastOccluded); client predicted splash/knockback on players+creatures+self now occluded by walls like the server funnel
 2026-10-03 - Hitscan contract tests; per-variant UAL bake cache; posedump ?pmodel debug mode (mannequin UAL2 retarget evaluated + rejected: UE limb axes bake face-down)
 2026-10-03 - Hitscan AOE tests pinned: in-range tip damages, >70m tip rejects, wall-occluded tip rejects
 2026-10-03 - Lightning gun: server-side hitscan AOE path (was silently rejected as 'no known projectile') + beam ray occluded by structures client+server

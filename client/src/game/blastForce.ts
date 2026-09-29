@@ -5,7 +5,9 @@
 import * as THREE from 'three';
 
 import { getProjectileConfig } from '../projectiles/index.js';
-import { aoeImpulse, aoeDamage as aoeDamageOf } from '../../../shared/combat.js';
+import { Projectile } from '../projectiles/Projectile.js';
+import { aoeImpulse, aoeDamage as aoeDamageOf, KNOCKBACK_SCALE } from '../../../shared/combat.js';
+import { blastOccluded } from '../../../shared/solidWorld.js';
 import type { CombatDeps } from './combat.js';
 import type { Targetable } from '../entities/balls.js';
 import * as sfx from '../core/sfx.js';
@@ -25,6 +27,13 @@ interface Forceable {
 const SELF_AOE_DAMAGE_SCALE = 0.15;
 
 export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
+  // Same LOS rule the server applies: a wall between blast and target
+  // swallows the prediction — keeps the client from flashing knockback/
+  // damage the funnel will never confirm (then resyncing it back).
+  const solids = () => Projectile.solidColliders;
+  const occluded = (pos: THREE.Vector3, target: THREE.Vector3) =>
+    solids().length > 0 && blastOccluded(pos, target, solids());
+
   // Splash damage-number color follows the weapon — getProjectileConfig
   // looks up by wire weaponType (the array order isn't the enum).
   function splashColor(weaponType?: number): string {
@@ -68,7 +77,7 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
       const threshold = forceMode === 'push'
         ? radius + br
         : radius * collisionMultiplier + br;
-      if (db < threshold) {
+      if (db < threshold && !occluded(pos, ball.pos)) {
         applyTo(ball, force * forceMultiplier);
         // Splash actually hurts enemies — falloff-scaled like players, with
         // the same damage number + health bar feedback as direct hits
@@ -110,8 +119,9 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
       // predicts splash damage the server never applies, and the health bar
       // snaps back to full on the next authoritative update.)
       const dist = rp.position.distanceTo(pos);
-      const impulse = aoeImpulse(force, dist, radius);
+      const impulse = aoeImpulse(force, dist, radius) * KNOCKBACK_SCALE;
       if (impulse <= 0) continue;
+      if (occluded(pos, rp.position)) continue;
       rp.applyPredictedKnockback(pos, impulse, forceMode === 'pull');
       if (playerId === directHitTargetId) continue;
       deps.lazyHud().showHitMarker();
@@ -140,8 +150,14 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
 
     const player = deps.lazyPlayer();
     const dpx = player.pos.distanceTo(pos);
-    if (dpx < radius * falloffMultiplier) {
-      applyTo(player, force * falloffAt(dpx) * player.mods.knockbackTaken);
+    if (dpx < radius * falloffMultiplier && !occluded(pos, player.pos)) {
+      applyTo(player, force * KNOCKBACK_SCALE * falloffAt(dpx) * player.mods.knockbackTaken);
+      // Stamp the prediction — the server echoes this same shove back as a
+      // `knockback` message ~RTT later; net/players.ts consumes the stamp
+      // so the blast can't land twice.
+      const stamps = deps.world.selfBlastStamps;
+      stamps.push({ x: pos.x, y: pos.y, z: pos.z, t: performance.now() });
+      if (stamps.length > 8) stamps.shift();
       // Self-AOE damage: a tiny fraction of what an enemy would take at the
       // same distance — rocket jumps should be viable, not lethal. Faint
       // vignette only, no hurt sound (JP: the grunt is too much for this).
@@ -160,8 +176,9 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
         }
       }
     }
-    applyForceToBalls(pos, radius, force, forceMode, collisionMultiplier, forceMultiplier, aoeDamage, applyTo, weaponType);
-    applyForceToNuggets(pos, radius, force, forceMode, forceMultiplier);
+    const kbForce = force * KNOCKBACK_SCALE;
+    applyForceToBalls(pos, radius, kbForce, forceMode, collisionMultiplier, forceMultiplier, aoeDamage, applyTo, weaponType);
+    applyForceToNuggets(pos, radius, kbForce, forceMode, forceMultiplier);
     applyForceToRemotes(pos, radius, force, forceMode, aoeDamage, directHitTargetId);
   }
 

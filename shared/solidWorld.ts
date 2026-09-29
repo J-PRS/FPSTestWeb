@@ -121,3 +121,28 @@ export class SolidWorld {
     }
   }
 }
+
+/** Blast LOS check shared by the server's damage funnel and the client's
+ *  blast prediction: is the straight line blast→target chest blocked by a
+ *  structure? A blast point sitting INSIDE a collider (shell popped at a
+ *  wall face) reports t≈0 — step past those contacts rather than calling
+ *  every same-side target occluded. */
+export function blastOccluded(
+  blastPos: { x: number; y: number; z: number },
+  targetPos: { x: number; y: number; z: number },
+  cols: readonly StructureCollider[],
+): boolean {
+  const to = { x: targetPos.x, y: targetPos.y + 1.0, z: targetPos.z };
+  let sx = blastPos.x, sy = blastPos.y, sz = blastPos.z;
+  for (let hop = 0; hop < 3; hop++) {
+    const dx = to.x - sx, dy = to.y - sy, dz = to.z - sz;
+    const d = Math.hypot(dx, dy, dz);
+    if (d < 0.5) return false;
+    const hit = segSolidHit({ x: sx, y: sy, z: sz }, to, cols);
+    if (!hit) return false;
+    if (hit.t > 0.001) return true;
+    const step = 0.4 / d;
+    sx += dx * step; sy += dy * step; sz += dz * step;
+  }
+  return false;
+}

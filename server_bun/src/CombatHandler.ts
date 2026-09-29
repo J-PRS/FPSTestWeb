@@ -11,7 +11,7 @@ import { logger } from './logger.ts';
 import { weaponStats } from './weaponStats.ts';
 import { HEAVY_ONLY_WEAPONS } from '../../shared/botClasses.ts';
 import type { StructureCollider } from '../../shared/ballSim.ts';
-import { segSolidHit } from '../../shared/solidWorld.ts';
+import { segSolidHit, blastOccluded } from '../../shared/solidWorld.ts';
 
 // Lag compensation: clamp self-reported ping to a sane rewind window —
 // unclamped, a forged 60s "ping" could rewind targets anywhere.
@@ -575,19 +575,7 @@ export class CombatHandler {
    *  kissed a face) — step 0.4m past each t=0 contact, up to 3 hops,
    *  before concluding the target is really occluded. */
   private blastBlocked(from: Vec3, toEye: Vec3): boolean {
-    const to = { x: toEye.x, y: toEye.y + 1.0, z: toEye.z };
-    let sx = from.x, sy = from.y, sz = from.z;
-    for (let hop = 0; hop < 3; hop++) {
-      const dx = to.x - sx, dy = to.y - sy, dz = to.z - sz;
-      const d = Math.hypot(dx, dy, dz);
-      if (d < 0.5) return false;
-      const hit = segSolidHit({ x: sx, y: sy, z: sz }, to, this.solids);
-      if (!hit) return false;
-      if (hit.t > 0.001) return true; // real wall between → blocked
-      const step = 0.4 / d;
-      sx += dx * step; sy += dy * step; sz += dz * step; // exit the piece we're inside
-    }
-    return false;
+    return blastOccluded(from, toEye, this.solids);
   }
 
   // Client-reported environmental damage (crawler pounces, etc.) — self-only,
