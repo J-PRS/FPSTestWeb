@@ -134,53 +134,8 @@ export class PlayerModel {
           const max = box.max;
           logger.debug(`Model bounding box: size=(${size.x.toFixed(2)},${size.y.toFixed(2)},${size.z.toFixed(2)}) min=(${min.x.toFixed(2)},${min.y.toFixed(2)},${min.z.toFixed(2)}) max=(${max.x.toFixed(2)},${max.y.toFixed(2)},${max.z.toFixed(2)})`);
           
-          // Enable shadow casting
-          this.model.traverse((child) => {
-            if (child instanceof THREE.Mesh) {
-              child.castShadow = true;
-              child.receiveShadow = true;
-              // SkinnedMesh bind-pose bounds don't track bone-driven verts —
-              // wrong bounds get it frustum-culled when it shouldn't be
-              if ((child as THREE.SkinnedMesh).isSkinnedMesh) {
-                child.frustumCulled = false;
-              }
-              // Capture emissive materials for the damage flash — dedupe,
-              // a GLB often shares one material across several meshes.
-              const mats = Array.isArray(child.material) ? child.material : [child.material];
-              for (const m of mats) {
-                if ((m as THREE.MeshStandardMaterial).isMeshStandardMaterial
-                  && !this.flashMats.some(f => f.m === m)) {
-                  const sm = m as THREE.MeshStandardMaterial;
-                  this.flashMats.push({ m: sm, e: sm.emissive.clone(), i: sm.emissiveIntensity });
-                }
-              }
-            }
-            // Grab aim/attachment bones — name-based since the model also has
-            // same-named plain nodes; only real Bones qualify. Mannequin
-            // bones are DEF-* (normBone-stripped compare).
-            if ((child as THREE.Bone).isBone) {
-              const nb = normBone(child.name);
-              if (child.name === 'Head' || nb === 'defhead' || nb === 'head') {
-                this.aimBones.push({ bone: child, factor: 0.4, last: new THREE.Quaternion() });
-              } else if (child.name === 'Abdomen' || nb === 'defspine001' || nb === 'spine') {
-                this.aimBones.push({ bone: child, factor: 0.6, last: new THREE.Quaternion() });
-              // GLTFLoader sanitizes names ('Palm2.R' -> 'Palm2R'); the
-              // Quaternius rigs put the grip in FistR.
-              } else if ((child.name === 'Palm2R' || nb === 'defhandr' || nb === 'fistr') && !this.handBone) {
-                this.handBone = child as THREE.Bone;
-              }
-              // Foot-snap rig for retargeted clips on the robot rig (UAL
-              // doesn't drive its IK foot bones). The mannequin's feet are
-              // real in-chain bones — nothing to snap.
-              const grab = (want: string) => this.model!.getObjectByName(want);
-              if (child.name === 'FootL' || child.name === 'FootR') {
-                const s = child.name === 'FootL' ? 'L' : 'R';
-                const shin = grab(`LowerLeg${s}`);
-                const tip = grab(`LowerLeg${s}_end`);
-                if (shin && tip) this.footSnaps.push({ foot: child, shin, tip });
-              }
-            }
-          });
+          // Enable shadow casting + grab aim/attachment bones
+          this.model.traverse((child) => this.prepareChild(child));
           logger.debug(`Aim bones: ${this.aimBones.map(b => b.bone.name).join(', ') || 'NONE'} | hand: ${this.handBone?.name ?? 'NONE'}`);
 
           // Scale and rotate to match our coordinate system
@@ -194,50 +149,8 @@ export class PlayerModel {
           this.modelScale = mann || knight ? 2.0 / size.y : 0.5;
 
           // Procedural gun in the right hand — follows every animation.
-          if (this.handBone) {
-            const gunMat = new THREE.MeshStandardMaterial({ color: 0x2a2e33, roughness: 0.55, metalness: 0.6, emissive: 0x334455, emissiveIntensity: 0.8 });
-            this.gun = new THREE.Group();
-            const body = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.26, 0.9), gunMat);
-            body.position.z = 0.25;
-            const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.55), gunMat);
-            barrel.rotation.x = Math.PI / 2;
-            barrel.position.set(0, 0.05, 0.75);
-            this.gun.add(body, barrel);
-            // Measure bone world scale AFTER model.scale so the gun lands
-            // real-world size (bones carry the armature's ~100x scale)
-            this.model.updateMatrixWorld(true);
-            const ws = this.handBone.getWorldScale(new THREE.Vector3());
-            logger.debug(`GUN ATTACH`, { hand: this.handBone.name, worldScale: ws.x, aimBones: this.aimBones.length });
-            this.gun.scale.setScalar(0.7 / ws.x); // ~0.7m gun in world space
-            this.gunBaseZ = 0.05 / ws.x;
-            this.gunKickZ = 0.15 / ws.x; // recoil distance in bone units
-            this.gun.position.set(0, 0.05 / ws.x, this.gunBaseZ);
-            // Robot palm bones: barrel forward = local -Z flipped by π yaw.
-            // UAL hand bones: barrel runs along the arm axis — +Y bone yaw
-            // (verified in the gun-probe rotation sweep).
-            if (mann) this.gun.rotation.y = Math.PI / 2; // verified via gun-probe gallery: barrel runs along the arm's aim axis
-            else this.gun.rotation.y = Math.PI;
-
-            // Muzzle flash: additive sprite at the barrel tip, flashed on
-            // fire() and faded in update(). Cheap (one sprite per remote),
-            // blooms nicely at distance — this is what makes remote fire
-            // readable when tracking small targets in the sky.
-            const flashMat = new THREE.SpriteMaterial({
-              map: makeFlashTexture(),
-              color: 0xaad4ff,
-              blending: THREE.AdditiveBlending,
-              depthWrite: false,
-              transparent: true,
-            });
-            this.muzzleFlash = new THREE.Sprite(flashMat);
-            this.muzzleFlash.scale.setScalar(0); // hidden until fire()
-            this.muzzleFlash.position.set(0, 0.05, 1.0); // barrel tip (gun-local)
-            this.gun.add(this.muzzleFlash);
-
-            this.handBone.add(this.gun);
-          } else {
-            logger.warn('GUN NOT ATTACHED — no hand bone found');
-          }
+          if (this.handBone) this.attachGun(mann);
+          else logger.warn('GUN NOT ATTACHED — no hand bone found');
           
           // No Y offset needed — model origin is already at feet
           
@@ -247,24 +160,7 @@ export class PlayerModel {
           // Store animations with mapping. Mannequin clips ARE the UAL
           // clips natively — alias them under the UAL_ names the state map
           // prefers so ANIM_NAMES resolves without a retarget pass.
-          gltf.animations.forEach((clip) => {
-            if (mann || knight) {
-              // Strip hip XZ root motion — the entity owns world position,
-              // and loop clips (Crouch_Fwd etc.) otherwise translate the
-              // mesh forward out from under the hitbox each cycle.
-              // Y stays: the crouch dip lives there.
-              for (const tr of clip.tracks) {
-                if (!tr.name.endsWith('.position')) continue;
-                const node = tr.name.slice(0, tr.name.indexOf('.'));
-                if (normBone(node) !== 'defhips' && normBone(node) !== 'root' && normBone(node) !== 'hips' && normBone(node) !== 'bone') continue;
-                const v = tr.values;
-                for (let i = 3; i < v.length; i += 3) { v[i] = v[0]; v[i + 2] = v[2]; }
-              }
-            }
-            const action = this.mixer!.clipAction(clip);
-            this.animations.set(clip.name, action);
-            if (mann) this.animations.set('UAL_' + clip.name, action);
-          });
+          for (const clip of gltf.animations) this.registerClip(clip, mann, knight);
           
           logger.debug('Loaded animations:', Array.from(this.animations.keys()));
           
@@ -323,6 +219,122 @@ export class PlayerModel {
         }
       );
     });
+  }
+
+  // Per-node load prep: mesh shadows/frustum fix + flash material capture,
+  // then rig-bone capture (aim chain, hand grip, foot-snap helpers).
+  private prepareChild(child: THREE.Object3D): void {
+    if (child instanceof THREE.Mesh) this.prepareMesh(child);
+    if ((child as THREE.Bone).isBone) this.captureBone(child);
+  }
+
+  private prepareMesh(child: THREE.Mesh): void {
+      child.castShadow = true;
+      child.receiveShadow = true;
+      // SkinnedMesh bind-pose bounds don't track bone-driven verts —
+      // wrong bounds get it frustum-culled when it shouldn't be
+      if ((child as THREE.SkinnedMesh).isSkinnedMesh) {
+        child.frustumCulled = false;
+      }
+      // Capture emissive materials for the damage flash — dedupe,
+      // a GLB often shares one material across several meshes.
+      const mats = Array.isArray(child.material) ? child.material : [child.material];
+      for (const m of mats) {
+        if ((m as THREE.MeshStandardMaterial).isMeshStandardMaterial
+          && !this.flashMats.some(f => f.m === m)) {
+          const sm = m as THREE.MeshStandardMaterial;
+          this.flashMats.push({ m: sm, e: sm.emissive.clone(), i: sm.emissiveIntensity });
+        }
+      }
+    }
+
+  // Name-based since the model also has same-named plain nodes; only real
+  // Bones qualify. Mannequin bones are DEF-* (normBone-stripped compare).
+  private captureBone(child: THREE.Object3D): void {
+    const nb = normBone(child.name);
+    if (child.name === 'Head' || nb === 'defhead' || nb === 'head') {
+      this.aimBones.push({ bone: child, factor: 0.4, last: new THREE.Quaternion() });
+    } else if (child.name === 'Abdomen' || nb === 'defspine001' || nb === 'spine') {
+      this.aimBones.push({ bone: child, factor: 0.6, last: new THREE.Quaternion() });
+    // GLTFLoader sanitizes names ('Palm2.R' -> 'Palm2R'); the
+    // Quaternius rigs put the grip in FistR.
+    } else if ((child.name === 'Palm2R' || nb === 'defhandr' || nb === 'fistr') && !this.handBone) {
+      this.handBone = child as THREE.Bone;
+    }
+    // Foot-snap rig for retargeted clips on the robot rig (UAL
+    // doesn't drive its IK foot bones). The mannequin's feet are
+    // real in-chain bones — nothing to snap.
+    if (child.name === 'FootL' || child.name === 'FootR') this.captureFootBone(child);
+  }
+
+  private captureFootBone(child: THREE.Object3D): void {
+    const side = child.name === 'FootL' ? 'L' : 'R';
+    const shin = this.model!.getObjectByName(`LowerLeg${side}`);
+    const tip = this.model!.getObjectByName(`LowerLeg${side}_end`);
+    if (shin && tip) this.footSnaps.push({ foot: child, shin, tip });
+  }
+
+  // Procedural gun in the right hand — follows every animation.
+  private attachGun(mann: boolean): void {
+    const handBone = this.handBone!;
+    const gunMat = new THREE.MeshStandardMaterial({ color: 0x2a2e33, roughness: 0.55, metalness: 0.6, emissive: 0x334455, emissiveIntensity: 0.8 });
+    this.gun = new THREE.Group();
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.26, 0.9), gunMat);
+    body.position.z = 0.25;
+    const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.55), gunMat);
+    barrel.rotation.x = Math.PI / 2;
+    barrel.position.set(0, 0.05, 0.75);
+    this.gun.add(body, barrel);
+    // Measure bone world scale AFTER model.scale so the gun lands
+    // real-world size (bones carry the armature's ~100x scale)
+    this.model!.updateMatrixWorld(true);
+    const ws = handBone.getWorldScale(new THREE.Vector3());
+    logger.debug(`GUN ATTACH`, { hand: handBone.name, worldScale: ws.x, aimBones: this.aimBones.length });
+    this.gun.scale.setScalar(0.7 / ws.x); // ~0.7m gun in world space
+    this.gunBaseZ = 0.05 / ws.x;
+    this.gunKickZ = 0.15 / ws.x; // recoil distance in bone units
+    this.gun.position.set(0, 0.05 / ws.x, this.gunBaseZ);
+    // Robot palm bones: barrel forward = local -Z flipped by π yaw.
+    // UAL hand bones: barrel runs along the arm axis — +Y bone yaw
+    // (verified in the gun-probe rotation sweep).
+    if (mann) this.gun.rotation.y = Math.PI / 2; // verified via gun-probe gallery: barrel runs along the arm's aim axis
+    else this.gun.rotation.y = Math.PI;
+
+    // Muzzle flash: additive sprite at the barrel tip, flashed on
+    // fire() and faded in update(). Cheap (one sprite per remote),
+    // blooms nicely at distance — this is what makes remote fire
+    // readable when tracking small targets in the sky.
+    const flashMat = new THREE.SpriteMaterial({
+      map: makeFlashTexture(),
+      color: 0xaad4ff,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      transparent: true,
+    });
+    this.muzzleFlash = new THREE.Sprite(flashMat);
+    this.muzzleFlash.scale.setScalar(0); // hidden until fire()
+    this.muzzleFlash.position.set(0, 0.05, 1.0); // barrel tip (gun-local)
+    this.gun.add(this.muzzleFlash);
+
+    handBone.add(this.gun);
+  }
+
+  // Mannequin/knight clips need their hip XZ root motion stripped — the
+  // entity owns world position, and loop clips otherwise translate the
+  // mesh out from under the hitbox each cycle. Y stays (the crouch dip).
+  private registerClip(clip: THREE.AnimationClip, mann: boolean, knight: boolean): void {
+    if (mann || knight) {
+      for (const tr of clip.tracks) {
+        if (!tr.name.endsWith('.position')) continue;
+        const node = tr.name.slice(0, tr.name.indexOf('.'));
+        if (normBone(node) !== 'defhips' && normBone(node) !== 'root' && normBone(node) !== 'hips' && normBone(node) !== 'bone') continue;
+        const v = tr.values;
+        for (let i = 3; i < v.length; i += 3) { v[i] = v[0]; v[i + 2] = v[2]; }
+      }
+    }
+    const action = this.mixer!.clipAction(clip);
+    this.animations.set(clip.name, action);
+    if (mann) this.animations.set('UAL_' + clip.name, action);
   }
 
   playAnimation(name: string): void {
@@ -435,26 +447,35 @@ export class PlayerModel {
       ab.last.setFromAxisAngle(X_AXIS, -this.aimPitch * ab.factor);
       ab.bone.quaternion.multiply(ab.last);
     }
-    // Retargeted clips don't drive the robot's IK foot bones — pin each
-    // foot to its shin tip and give it the shin's orientation.
-    if (this.playingUAL && this.footSnaps.length) {
-      for (const fs of this.footSnaps) {
-        fs.tip.getWorldPosition(_footW); // forces fresh chain matrices
-        const parent = fs.foot.parent!;
-        fs.foot.position.copy(parent.worldToLocal(_footW));
-        fs.shin.getWorldQuaternion(_footQ);
-        parent.getWorldQuaternion(_footPQ).invert();
-        fs.foot.quaternion.copy(_footPQ.multiply(_footQ));
-      }
+    this.snapFeetToShins();
+    this.tickGunFx(dt);
+    this.tickJetLean(dt);
+    this.tickDamageFlash(dt);
+  }
+
+  // Retargeted clips don't drive the robot's IK foot bones — pin each
+  // foot to its shin tip and give it the shin's orientation.
+  private snapFeetToShins(): void {
+    if (!this.playingUAL || !this.footSnaps.length) return;
+    for (const fs of this.footSnaps) {
+      fs.tip.getWorldPosition(_footW); // forces fresh chain matrices
+      const parent = fs.foot.parent!;
+      fs.foot.position.copy(parent.worldToLocal(_footW));
+      fs.shin.getWorldQuaternion(_footQ);
+      parent.getWorldQuaternion(_footPQ).invert();
+      fs.foot.quaternion.copy(_footPQ.multiply(_footQ));
     }
-    // Recoil: exponential decay kick on the gun (position + muzzle flip)
+  }
+
+  // Recoil: exponential decay kick on the gun (position + muzzle flip);
+  // muzzle flash is a ~90ms pop decaying on the same curve.
+  private tickGunFx(dt: number): void {
     if (this.gun && this.recoil > 0) {
       this.recoil = Math.max(0, this.recoil - dt * 7);
       const k = this.recoil * this.recoil; // snappy attack, soft release
       this.gun.position.z = this.gunBaseZ - k * this.gunKickZ;
       this.gun.rotation.x = -k * 0.45;
     }
-    // Muzzle flash: ~90ms pop, decays with the recoil curve
     if (this.muzzleFlash && this.flashTTL > 0) {
       this.flashTTL = Math.max(0, this.flashTTL - dt);
       const f = this.flashTTL / 0.09;
@@ -463,37 +484,41 @@ export class PlayerModel {
     } else if (this.muzzleFlash && this.muzzleFlash.scale.x > 0) {
       this.muzzleFlash.scale.setScalar(0);
     }
-    // Jet lean: ease toward the target, then write the composed tilt
-    // on top of yaw/roll. setRotation may run before or after update,
-    // so rotation.z is rebuilt here from lastRoll + lean — never read
-    // the euler back, or the lean would double-apply.
-    if (this.model && (this.leanPT !== 0 || this.leanRT !== 0 || this.leanP !== 0 || this.leanR !== 0)) {
-      const k = 1 - Math.exp(-dt * 7);
-      this.leanP += (this.leanPT - this.leanP) * k;
-      this.leanR += (this.leanRT - this.leanR) * k;
-      if (Math.abs(this.leanP) < 1e-3 && this.leanPT === 0) this.leanP = 0;
-      if (Math.abs(this.leanR) < 1e-3 && this.leanRT === 0) this.leanR = 0;
-      this.model.rotation.x = this.leanP;
-      this.model.rotation.z = this.lastRoll + this.leanR;
-      // Pivot compensation: keep the sternum where the un-leaned pose
-      // would put it, so the tilt swings the legs instead of the chest.
-      const yaw = this.model.rotation.y;
-      _leanNo.setFromEuler(_leanEul.set(0, yaw, this.lastRoll, 'YXZ'));
-      _leanYes.setFromEuler(_leanEul.set(this.leanP, yaw, this.lastRoll + this.leanR, 'YXZ'));
-      _leanOff.set(0, LEAN_PIVOT_Y, 0);
-      _leanA.copy(_leanOff).applyQuaternion(_leanNo);
-      _leanB.copy(_leanOff).applyQuaternion(_leanYes);
-      this.model.position.add(_leanA.sub(_leanB));
-    }
-    // Damage flash: emissive snaps toward white then decays back to each
-    // material's own baseline (the gun keeps its 0x334455 glow).
-    if (this.dmgFlash > 0) {
-      this.dmgFlash = Math.max(0, this.dmgFlash - dt);
-      const k = this.dmgFlash / 0.15;
-      for (const f of this.flashMats) {
-        f.m.emissive.copy(f.e).lerp(_white, k);
-        f.m.emissiveIntensity = f.i + k * 2.5;
-      }
+  }
+
+  // Jet lean: ease toward the target, then write the composed tilt
+  // on top of yaw/roll. setRotation may run before or after update,
+  // so rotation.z is rebuilt here from lastRoll + lean — never read
+  // the euler back, or the lean would double-apply.
+  private tickJetLean(dt: number): void {
+    if (!this.model || (this.leanPT === 0 && this.leanRT === 0 && this.leanP === 0 && this.leanR === 0)) return;
+    const k = 1 - Math.exp(-dt * 7);
+    this.leanP += (this.leanPT - this.leanP) * k;
+    this.leanR += (this.leanRT - this.leanR) * k;
+    if (Math.abs(this.leanP) < 1e-3 && this.leanPT === 0) this.leanP = 0;
+    if (Math.abs(this.leanR) < 1e-3 && this.leanRT === 0) this.leanR = 0;
+    this.model.rotation.x = this.leanP;
+    this.model.rotation.z = this.lastRoll + this.leanR;
+    // Pivot compensation: keep the sternum where the un-leaned pose
+    // would put it, so the tilt swings the legs instead of the chest.
+    const yaw = this.model.rotation.y;
+    _leanNo.setFromEuler(_leanEul.set(0, yaw, this.lastRoll, 'YXZ'));
+    _leanYes.setFromEuler(_leanEul.set(this.leanP, yaw, this.lastRoll + this.leanR, 'YXZ'));
+    _leanOff.set(0, LEAN_PIVOT_Y, 0);
+    _leanA.copy(_leanOff).applyQuaternion(_leanNo);
+    _leanB.copy(_leanOff).applyQuaternion(_leanYes);
+    this.model.position.add(_leanA.sub(_leanB));
+  }
+
+  // Damage flash: emissive snaps toward white then decays back to each
+  // material's own baseline (the gun keeps its 0x334455 glow).
+  private tickDamageFlash(dt: number): void {
+    if (this.dmgFlash <= 0) return;
+    this.dmgFlash = Math.max(0, this.dmgFlash - dt);
+    const k = this.dmgFlash / 0.15;
+    for (const f of this.flashMats) {
+      f.m.emissive.copy(f.e).lerp(_white, k);
+      f.m.emissiveIntensity = f.i + k * 2.5;
     }
   }
 
