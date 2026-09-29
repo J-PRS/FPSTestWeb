@@ -1,3 +1,6 @@
+2026-10-03 - Client: inline data-URI favicon in index.html — kills the
+    automatic /favicon.ico 404 on every load.
+
 2026-10-03 - Bug fix: MODE=OFF ("solo") no longer joins the default server room.
     The picker labels it solo but the connect path only skipped for classic,
     so the server move-judge kept correcting solo players (warp spam).
