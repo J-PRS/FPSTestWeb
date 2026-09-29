@@ -11,6 +11,9 @@ import type { PlayerState } from './types.ts';
 // Medkit: hp restored per broadcast tick while the mending flag is up.
 // 12 hp/s at the room's tick rate — a field patch, not a fountain.
 const MEND_HP_PER_TICK = 12 / CONFIG.tickRate;
+/** Sim step per tick — must equal the broadcast interval or game time
+ *  drifts off wall-clock whenever FPS_TICK_HZ ≠ 20. */
+const TICK_DT = 1 / CONFIG.tickRate;
 
 /** Server-owned heal channels for one broadcast tick: medkit channel,
  *  regenerator perk, regen powerup — all cap at the perk max (the caller
@@ -163,7 +166,7 @@ export class TickLoop {
 
   private tickRoom(room: Room, players: Players, now0: number): void {
     // Server sims move first — bot/flag writes land in this tick's records.
-    for (const sim of room.sims) sim.tick(0.05);
+    for (const sim of room.sims) sim.tick(TICK_DT);
 
     // Authority mode: the shadow sim's output is the broadcast truth.
     // Reports only fed it aim/liveness hints — what every other player
