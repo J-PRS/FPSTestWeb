@@ -1,3 +1,4 @@
+2026-10-01 - RTC tier for internet friends: server PeerConnection now gathers srflx via FPS_ICE_SERVERS (was LAN host candidates only - could never punch NAT); TURN creds baked into URL form for libdatachannel
 2026-10-01 - Room crash fix: spec without a balls block no longer wipes BallSim population (constructor guarded like applySpec) - found by the cloudflared-tunnel soak
 2026-10-01 - Remote melee fix: botFire melee broadcast no longer spawns a rocket-config projectile - paints the punch impact flash + whoosh instead
 2026-10-01 - Brain close-press: hunt target inside 6m breaks the orbit so the melee band is actually reachable (was dead code at 22m orbit)

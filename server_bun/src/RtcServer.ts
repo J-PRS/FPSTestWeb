@@ -1,7 +1,35 @@
 import type { ServerWebSocket } from 'bun';
 import type { WebSocketData } from './types.ts';
 import { logger } from './logger.ts';
+import { CONFIG } from './config.ts';
 import type { GameServer } from './GameServer.ts';
+
+// libdatachannel takes flat URL strings, not the RTCIceServer objects the
+// browser API uses — translate FPS_ICE_SERVERS once at import: entries may
+// be "stun:host:port" strings or {urls,username,credential} objects. An
+// empty list = host candidates only, fine for LAN/tunnel-less dev but no
+// srflx gathering — internet friends need STUN here to punch NAT.
+function serverIceUrls(): string[] {
+  try {
+    const raw = CONFIG.iceServersJson ? JSON.parse(CONFIG.iceServersJson) : [];
+    if (!Array.isArray(raw)) return [];
+    const out: string[] = [];
+    for (const e of raw) {
+      if (typeof e === 'string') { out.push(e); continue; }
+      const urls = Array.isArray(e?.urls) ? e.urls : (e?.urls ? [e.urls] : []);
+      for (const u of urls) {
+        if (typeof u !== 'string') continue;
+        // TURN needs auth baked into the URL: turn:user:pass@host
+        if (u.startsWith('turn') && (e.username || e.credential)) {
+          const m = u.match(/^(turns?:)(.*)$/);
+          if (m) out.push(`${m[1]}${e.username ?? ''}:${e.credential ?? ''}@${m[2]}`);
+        } else out.push(u);
+      }
+    }
+    return out;
+  } catch { return []; }
+}
+const SERVER_ICE = serverIceUrls();
 
 // node-datachannel is a native (N-API) module — Bun loads it through the
 // node:module compatibility layer. If it ever fails to load, the whole
@@ -127,7 +155,9 @@ export class RtcServer {
   private async answerOffer(ws: ServerWebSocket<WebSocketData>, sdp: string): Promise<void> {
     const nd = await loadNd();
     if (!nd) { ws.close(1013, 'rtc unavailable'); return; }
-    const pc = new nd.PeerConnection('srv', { iceServers: [] });
+    // Same ICE list the client gets via /rtcconfig — without STUN here the
+    // server only emits LAN host candidates, unreachable across the internet.
+    const pc = new nd.PeerConnection('srv', { iceServers: SERVER_ICE });
     this.peers.set(ws, pc);
 
     const adapter = new RtcSocketAdapter();
