@@ -8,6 +8,7 @@ import { makeSimBall, stepBall, BALL_OVERSPEED, BALL_MIN_SPEED, BALL_REST_SPEED,
 import { ColliderIndex } from '../../../shared/solidWorld.js';
 import { type Heightfield, hmHeight, hmFingerprint } from '../../../shared/heightfield.js';
 import { RibbonTrail } from '../projectiles/RibbonTrail.js';
+import { BallTrailDots } from './ballTrails.js';
 import { ChildLogger } from '../core/Logger.js';
 import { allocSlots, freeSlots, getSwarm, getShadows, type SwarmPart } from './swarms.js';
 
@@ -15,18 +16,11 @@ const logger = new ChildLogger('Ball');
 
 const BALL_GRAVITY   = GRAVITY;
 const BOUNCE         = 1.0;
-const TRAIL_COUNT    = 14;
-const TRAIL_INTERVAL = 0.04;
-
-// scratch — trail dot spawn jitter
-const _spawn = new THREE.Vector3();
-const _scatter = new THREE.Vector3();
 const _m = new THREE.Matrix4();
 const _q = new THREE.Quaternion();
 const _s = new THREE.Vector3();
 const _c = new THREE.Color();
 const _enrageTint = new THREE.Color(1, 0.12, 0.08);
-const _white = new THREE.Color(1, 1, 1);
 
 // One shared geometry for every ball — radius baked in, per-ball scale lives
 // in the instance matrix.
@@ -55,36 +49,6 @@ const BALL_COLORS = [
   new THREE.Color(0.15, 0.9, 0.9),
   new THREE.Color(1.0, 0.5, 0.1),
 ];
-
-interface TrailDot {
-  halo: THREE.Sprite;
-  core: THREE.Sprite;
-  age: number;
-  life: number;    // per-dot random lifetime
-  haloSz: number;  // per-dot random base scales
-  coreSz: number;
-}
-
-// Shared radial-gradient sprite texture: hot center -> colored mid -> soft
-// transparent rim. Per-dot sprites tint it; additive blending accumulates
-// overlapping dots into the "bright core / soft halo" layered trail look.
-let _trailTex: THREE.Texture | null = null;
-function getTrailTex(): THREE.Texture {
-  if (!_trailTex) {
-    const S = 64, c = document.createElement('canvas');
-    c.width = c.height = S;
-    const ctx = c.getContext('2d')!;
-    const g = ctx.createRadialGradient(S/2, S/2, 0, S/2, S/2, S/2);
-    g.addColorStop(0,    'rgba(255,255,255,1)');
-    g.addColorStop(0.25, 'rgba(255,255,255,0.55)');
-    g.addColorStop(0.55, 'rgba(255,255,255,0.18)');
-    g.addColorStop(1,    'rgba(255,255,255,0)');
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, S, S);
-    _trailTex = new THREE.CanvasTexture(c);
-  }
-  return _trailTex;
-}
 
 // Anything a projectile can hit / an explosion can push: balls, crawlers.
 // combat.ts works against this surface — position, radius, damage, knockback.
@@ -154,10 +118,9 @@ export class Ball {
   private scene: THREE.Scene;
   scale: number;
   private emissive = new THREE.Color(0, 0, 0); // additive glow — folded into instanceColor
-  private trailDots: TrailDot[] = [];
+  private trails: BallTrailDots;
   private ribbons: RibbonTrail[];
   private _lastTrailPos = new THREE.Vector3();
-  private trailTimer = 0;
   private flashTimer = 0;
   private meshRemoved = false; // swarm slot freed; name kept — it gates dead-ball cleanup
   private _disposed = false;
@@ -270,6 +233,7 @@ export class Ball {
     const coreColor = this.color.clone().lerp(new THREE.Color(1, 1, 1), 0.7);
     // Scale color energy down — additive stacking made full-strength colors
     // eye-searing; these are emission intensities, not hues
+    this.trails = new BallTrailDots(scene);
     this.ribbons = [
       RibbonTrail.acquire(scene, this.color.clone().multiplyScalar(0.55).getHex(), this.radius * 1.2, 0.5, 0, true),
       RibbonTrail.acquire(scene, coreColor.multiplyScalar(0.7).getHex(), this.radius * 0.45, 0.4, 0, true),
@@ -495,7 +459,7 @@ export class Ball {
         this.slowTimer = 0;
         this.launchAt(playerPos, Math.SQRT1_2);
         this.dashFlash = 0.15;
-        for (let i = 0; i < 8; i++) this.spawnDot();
+        this.trails.burst(8, this._rpos, this.radius, this.color);
         this.onBounce?.(this.pos.clone(), this.vel.clone());
       }
     }
@@ -507,8 +471,8 @@ export class Ball {
       if (this.flashTimer <= 0) this.emissive.setRGB(0, 0, 0);
     }
 
-    this.emitTrailDot(dt);
-    this.fadeTrailDots(dt);
+    this.trails.emit(dt, this._rpos, this.vel, this.radius, this.enraged ? _enrageTint : this.color);
+    this.trails.fade(dt);
     // Position discontinuity (teleport or playback keyframe snap) — cut the
     // ribbons so they don't streak across the jump
     if (this._rpos.distanceToSquared(this._lastTrailPos) > 400) {
@@ -528,15 +492,11 @@ export class Ball {
       freeSlots('ball', this);
       this.meshRemoved = true;
     }
-    this.fadeTrailDots(dt);
+    this.trails.fade(dt);
     for (const r of this.ribbons) r.update(dt, Ball.viewPos);
-    if (this.trailDots.length === 0 && this.ribbons.every(r => r.done)) {
+    if (this.trails.size === 0 && this.ribbons.every(r => r.done)) {
       // Final cleanup — caller splices on `disposed` without dispose()
-      for (const d of this.dotPool) {
-        d.halo.material.dispose();
-        d.core.material.dispose();
-      }
-      this.dotPool = [];
+      this.trails.dispose();
       for (const r of this.ribbons) r.dispose(this.scene);
       this._disposed = true;
     }
@@ -569,7 +529,7 @@ export class Ball {
         this.dashFlash = 0.15;
         this.setEnraged(false); // lunge discharges the rage
         this.dampNextBounce = true; // the landing bounce is deadened — no slingshot flyout
-        for (let i = 0; i < 8; i++) this.spawnDot(); // dust-burst at takeoff
+        this.trails.burst(8, this._rpos, this.radius, this.color); // dust-burst at takeoff
         this.lastBounceEnergy = 0;
         this.onBounce?.(this.pos.clone(), this.vel.clone());
         return;
@@ -620,7 +580,7 @@ export class Ball {
       // it's the opening move) until a real lunge lands or timeout hits.
       this.launchAt(playerPos, Math.SQRT1_2);
       this.dashFlash = 0.15;
-      for (let i = 0; i < 8; i++) this.spawnDot();
+      this.trails.burst(8, this._rpos, this.radius, this.enraged ? _enrageTint : this.color);
       this.onBounce?.(this.pos.clone(), this.vel.clone());
     } else {
       this.teleportNearPlayer(terrain, playerPos);
@@ -688,84 +648,6 @@ export class Ball {
     this.lastBounceEnergy = 0;
     // Record teleport as a bounce keyframe too (position + velocity reset)
     this.onBounce?.(this.pos.clone(), this.vel.clone());
-  }
-
-  private emitTrailDot(dt: number): void {
-    this.trailTimer += dt;
-    if (this.trailTimer < TRAIL_INTERVAL) return;
-    this.trailTimer = 0;
-    if (this.vel.lengthSq() <= 0.5) return;
-    this.spawnDot();
-  }
-
-  // Two-layer sprite dot: tinted halo + near-white core. These complement
-  // the clean ribbon — scattered spawn inside a small sphere around the
-  // ball, random size and lifetime, so they read as chaotic sparkle.
-  // Sprites come from a per-ball pool — no create/dispose churn.
-  private spawnDot(): void {
-    const spawn = _spawn.copy(this._rpos).addScaledVector(_scatter.set(
-      Math.random() * 2 - 1, Math.random() * 2 - 1, Math.random() * 2 - 1,
-    ).normalize().multiplyScalar(Math.random() * this.radius * 0.6), 1);
-    const haloSz = this.radius * (1.8 + Math.random() * 2.0);
-    const coreSz = this.radius * (0.9 + Math.random() * 1.0);
-    const life = 0.35 + Math.random() * 0.85;
-    let d = this.dotPool.pop();
-    if (d) {
-      d.halo.position.copy(spawn);
-      d.core.position.copy(spawn);
-      this.scene.add(d.halo); this.scene.add(d.core);
-    } else {
-      const tex = getTrailTex();
-      const halo = new THREE.Sprite(new THREE.SpriteMaterial({
-        map: tex, color: this.color, transparent: true,
-        blending: THREE.AdditiveBlending, depthWrite: false,
-      }));
-      const core = new THREE.Sprite(new THREE.SpriteMaterial({
-        map: tex, color: this.color.clone().lerp(new THREE.Color(1, 1, 1), 0.65),
-        transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
-      }));
-      halo.position.copy(spawn); core.position.copy(spawn);
-      this.scene.add(halo); this.scene.add(core);
-      d = { halo, core, age: 0, life, haloSz, coreSz };
-    }
-    // Enraged balls bleed a red trail — the sparkle is the biggest
-    // on-screen tell, so it has to carry the hostility signal
-    const tint = this.enraged ? _enrageTint : this.color;
-    (d.halo.material as THREE.SpriteMaterial).color.copy(tint);
-    (d.core.material as THREE.SpriteMaterial).color.copy(tint).lerp(_white, 0.65);
-    d.halo.scale.setScalar(haloSz);
-    d.core.scale.setScalar(coreSz);
-    if (this.trailDots.length >= TRAIL_COUNT) {
-      this.removeDot(this.trailDots.shift()!);
-    }
-    d.age = 0; d.life = life; d.haloSz = haloSz; d.coreSz = coreSz;
-    this.trailDots.push(d);
-  }
-
-  private dotPool: TrailDot[] = [];
-
-  private removeDot(d: TrailDot): void {
-    this.scene.remove(d.halo);
-    this.scene.remove(d.core);
-    this.dotPool.push(d); // pooled — materials reused, nothing disposed
-  }
-
-  private fadeTrailDots(dt: number): void {
-    for (let i = this.trailDots.length - 1; i >= 0; i--) {
-      const d = this.trailDots[i];
-      d.age += dt;
-      if (d.age >= d.life) {
-        this.removeDot(d);
-        this.trailDots.splice(i, 1);
-      } else {
-        const t = 1.0 - d.age / d.life;
-        d.halo.material.opacity = t * 0.28;
-        d.core.material.opacity = t * 0.7;
-        // Shrink-out with per-dot base sizes
-        d.core.scale.setScalar(d.coreSz * (0.4 + 0.6 * t));
-        d.halo.scale.setScalar(d.haloSz * (0.7 + 0.3 * t));
-      }
-    }
   }
 
   hitTest(px: number, py: number, pz: number, extraRadius = 0): boolean {
@@ -885,15 +767,7 @@ export class Ball {
 
   dispose(): void {
     if (!this.meshRemoved) { freeSlots('ball', this); this.meshRemoved = true; }
-    for (const d of this.trailDots) {
-      this.removeDot(d);
-    }
-    this.trailDots = [];
-    for (const d of this.dotPool) {
-      d.halo.material.dispose();
-      d.core.material.dispose();
-    }
-    this.dotPool = [];
+    this.trails.dispose();
     for (const r of this.ribbons) r.dispose(this.scene);
   }
 }
