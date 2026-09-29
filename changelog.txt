@@ -1,3 +1,4 @@
+2026-10-03 - creatureSim: totem beams + LOS gate clip against map structures (segSolidHit) - no more firing through compound walls; server+predictor share the collider list
 2026-10-03 - crossfire: light server creatures (totem:2/snake:2/rakk:2) - second map exercising the creatures spec; hazards not the match
 2026-10-03 - observability: creature bites log the species (Totem bite, Snake bite, ...) not generic Crawler bite
 2026-10-03 - creatureSim: totem beam eye rides body radius (uber obelisks muzzle at 7m like the client renders) - shared SimTotem.radius

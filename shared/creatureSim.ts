@@ -20,7 +20,8 @@
  */
 
 import { type Heightfield, hmHeight } from './heightfield.js';
-import type { SimVec } from './ballSim.js';
+import type { SimVec, StructureCollider } from './ballSim.js';
+import { segSolidHit } from './solidWorld.js';
 
 export const CRAWLER_SIM = {
   GRAVITY: -28.0,
@@ -887,10 +888,19 @@ export function makeSimTotem(
   };
 }
 
-/** Terrain LOS along the eye→target line — same 10-sample march the
- *  client Totem uses (flat bolts, terrain grazing matters). */
-function totemLineClear(c: SimTotem, field: Heightfield, tx: number, ty: number, tz: number): boolean {
+/** Terrain + structure LOS along the eye→target line — same 10-sample
+ *  march the client Totem uses (flat bolts, terrain grazing matters),
+ *  plus a yaw-OBB sweep so a wall inside the compound blocks the lock. */
+function totemLineClear(
+  c: SimTotem, field: Heightfield,
+  tx: number, ty: number, tz: number,
+  cols?: readonly StructureCollider[],
+): boolean {
   const sy = c.y + c.sp.EYE_HEIGHT * c.radius;
+  if (cols?.length &&
+      segSolidHit({ x: c.x, y: sy, z: c.z }, { x: tx, y: ty, z: tz }, cols)) {
+    return false;
+  }
   for (let i = 1; i <= 10; i++) {
     const t = i / 10;
     const x = c.x + (tx - c.x) * t;
@@ -904,7 +914,11 @@ function totemLineClear(c: SimTotem, field: Heightfield, tx: number, ty: number,
 /** Solve the committed beam: direction eye→lockPoint, length clipped by
  *  terrain at 1m resolution. Deterministic — both sides get the same
  *  line, which is what makes 'fire' a pure display edge. */
-export function totemSolveBeam(c: SimTotem, field: Heightfield, lx: number, ly: number, lz: number): void {
+export function totemSolveBeam(
+  c: SimTotem, field: Heightfield,
+  lx: number, ly: number, lz: number,
+  cols?: readonly StructureCollider[],
+): void {
   const ex = c.x, ey = c.y + c.sp.EYE_HEIGHT * c.radius, ez = c.z;
   let dx = lx - ex, dy = ly - ey, dz = lz - ez;
   const d = Math.sqrt(dx * dx + dy * dy + dz * dz) || 0.001;
@@ -914,6 +928,16 @@ export function totemSolveBeam(c: SimTotem, field: Heightfield, lx: number, ly: 
   for (let t = 1; t <= c.sp.RANGE; t += 1) {
     const bx = ex + dx * t, by = ey + dy * t, bz = ez + dz * t;
     if (by < hmHeight(field, bx, bz)) { c.lockDist = t; break; }
+  }
+  // Structures clip the same line — a beam stopping at a face can't
+  // resolve a victim behind it either way, authority or predictor.
+  if (cols?.length) {
+    const hit = segSolidHit(
+      { x: ex, y: ey, z: ez },
+      { x: ex + dx * c.lockDist, y: ey + dy * c.lockDist, z: ez + dz * c.lockDist },
+      cols,
+    );
+    if (hit) c.lockDist = Math.min(c.lockDist, hit.t * c.lockDist);
   }
 }
 
@@ -964,6 +988,7 @@ export function stepTotem(
   field: Heightfield,
   target: SimVec | null,
   authoritative: boolean,
+  cols?: readonly StructureCollider[],
 ): CrawlerEvent | null {
   c.stunTimer = Math.max(0, c.stunTimer - dt);
   c.blinkCd = Math.max(0, c.blinkCd - dt);
@@ -979,7 +1004,7 @@ export function stepTotem(
       if (target && c.stunTimer <= 0 && c.blinkCd <= 0 &&
           (dist < c.sp.MIN_RANGE ||
            c.shotsFired >= c.sp.RELOCATE_SHOTS ||
-           (c.windupTimer <= 0 && !totemLineClear(c, field, target.x, target.y, target.z)))) {
+           (c.windupTimer <= 0 && !totemLineClear(c, field, target.x, target.y, target.z, cols)))) {
         totemPickBlink(c, field, target.x, target.z);
         c.state = 'blinkOut';
         c.hopTimer = c.sp.BLINK_OUT_S;
@@ -990,7 +1015,7 @@ export function stepTotem(
         // and both sides replay the identical lock.
         c.state = 'charge';
         c.hopTimer = c.sp.CHARGE;
-        totemSolveBeam(c, field, target.x, target.y, target.z);
+        totemSolveBeam(c, field, target.x, target.y, target.z, cols);
         return 'charge';
       }
       break;

@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { getHeightfield } from '../world/terrain.js';
 import { hmHeight } from '../../../shared/heightfield.js';
 import { type SimCrawler, type SimFlyer, type SimRoller, type SimSlither, type SimBaneling, type SimTotem, stepCrawler, stepFlyer, stepRoller, stepSlither, stepBaneling, stepTotem, makeSimCrawler, makeSimFlyer, makeSimRoller, makeSimSlither, makeSimBaneling, makeSimTotem, commitTarget } from '../../../shared/creatureSim.js';
+import { Projectile } from '../projectiles/Projectile.js';
 import type { Terrain } from '../world/terrain.js';
 
 /** The fields every netDriven melee species needs — duck-typed so each
@@ -388,7 +389,9 @@ export function updateNetTotem(e: NetTotemLike, dt: number, terrain: Terrain): v
   const tgt = s.tgtValid ? { x: s.tx, y: s.ty, z: s.tz } : null;
   while (e.netAcc >= 0.05) {
     e.netAcc -= 0.05;
-    if (stepTotem(s, 0.05, field, tgt, false) === 'fire') e.onSimFire();
+    // Solid colliders ride the projectile-static set — same list the
+    // server sims, so the predictor clips the beam identically.
+    if (stepTotem(s, 0.05, field, tgt, false, Projectile.solidColliders) === 'fire') e.onSimFire();
   }
   e.pos.set(s.x, s.y, s.z);
   e.health = s.health;

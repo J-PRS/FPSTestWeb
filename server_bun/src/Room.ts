@@ -215,6 +215,7 @@ export class Room {
       (pid, msg) => this.connections.sendToPlayer(pid, msg),
     );
     this.creatureSim.pops = this.spec.creatures ?? {};
+    this.creatureSim.colliders = this.ballSim.colliders;
     this.creatureSim.onBite = (c, targetId) => this.messages.crawlerBite(targetId, c.biteDamage, c.species);
     this.creatureSim.onDetonate = (b) => {
       const pos = { x: b.x, y: b.y, z: b.z };
@@ -586,6 +587,7 @@ export class Room {
     if (spec.balls) this.ballSim.population = spec.balls;
     if (spec.ballMix) this.ballSim.ballMix = spec.ballMix;
     this.creatureSim.pops = spec.creatures ?? {};
+    this.creatureSim.colliders = this.ballSim.colliders;
     this.messages.setMap(spec.bases, spec.structures, spec.arena, spec.ambient, spec.terrain);
     this.broadcast({
       type: 'mapUpdate',

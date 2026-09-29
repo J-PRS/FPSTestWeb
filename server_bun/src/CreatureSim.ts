@@ -21,7 +21,7 @@ import {
   isTotemSpecies, makeSimTotem, stepTotem, applyTotemDamage, totemFireTargets,
   CRAWLER_SIM,
 } from '../../shared/creatureSim.ts';
-import type { SimVec } from '../../shared/ballSim.ts';
+import type { SimVec, StructureCollider } from '../../shared/ballSim.ts';
 import type { PlayerManager } from './PlayerManager.ts';
 import type { ServerMessage, Vec3 } from './types.ts';
 import { STATUS } from '../../shared/status.ts';
@@ -63,6 +63,9 @@ const isTotem = (c: SimBeing): c is SimTotem => 'lockDist' in c;
 
 export class CreatureSim {
   private field: Heightfield | null = null;
+  /** Map yaw-OBBs — the totem beam solve and LOS gate clip against these
+   *  so a compound wall blocks the lock like it blocks projectiles. */
+  colliders: readonly StructureCollider[] = [];
   private crawlers = new Map<number, SimBeing>();
   private nextId = 1;
   private retargetAcc = new Map<number, number>();
@@ -322,7 +325,7 @@ export class CreatureSim {
       const ev: CrawlerEvent | null = isFlyer(c)
         ? stepFlyer(c, TICK_DT, this.field!, tgt, true)
         : isTotem(c)
-          ? stepTotem(c, TICK_DT, this.field!, tgt, true)
+          ? stepTotem(c, TICK_DT, this.field!, tgt, true, this.colliders)
           : isRoller(c)
             ? stepRoller(c, TICK_DT, this.field!, tgt, true)
             : isSlither(c)
