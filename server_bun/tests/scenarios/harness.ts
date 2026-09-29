@@ -21,6 +21,7 @@ export function mkRoom(spec: Partial<MapSpec>, mode = '', seed = 1337): Room {
   const room = new Room('t', flat, mode, resolveMapSpec(spec));
   room.ballSim.rng = lcg(seed);
   room.creatureSim.rng = lcg(seed + 1);
+  room.rng = lcg(seed + 2);
   return room;
 }
 

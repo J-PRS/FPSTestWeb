@@ -47,6 +47,8 @@ export class Room {
   readonly messages: MessageHandler;
   readonly ballSim: BallSim;
   readonly creatureSim: CreatureSim;
+  /** Host-side randomness (loot scatter) — tests inject a seeded fn. */
+  rng: () => number = Math.random;
 
   // Per-room session bookkeeping (was global — a grace-period slot belongs
   // to the match it was in, not the whole server).
@@ -331,7 +333,7 @@ export class Room {
     // dy<=6 pickup grab can never reach it and the economy starves.
     const gy = (this.field ? hmHeight(this.field, pos.x, pos.z) : pos.y) + 0.5;
     if (powerup) {
-      this.pickups?.spawn({ x: pos.x + (Math.random() - 0.5) * 2, y: gy, z: pos.z + (Math.random() - 0.5) * 2 }, powerup);
+      this.pickups?.spawn({ x: pos.x + (this.rng() - 0.5) * 2, y: gy, z: pos.z + (this.rng() - 0.5) * 2 }, powerup);
     }
     const spec = this.modeSpec;
     if (spec?.teams) {
@@ -339,7 +341,7 @@ export class Room {
       // burst, fodder still drops one (same scale curve the client uses).
       const drops = [1, 2, 3, 3][variant] ?? 1;
       for (let i = 0; i < drops; i++) {
-        this.pickups?.spawn({ x: pos.x + (Math.random() - 0.5) * 2, y: gy, z: pos.z + (Math.random() - 0.5) * 2 });
+        this.pickups?.spawn({ x: pos.x + (this.rng() - 0.5) * 2, y: gy, z: pos.z + (this.rng() - 0.5) * 2 });
       }
       return;
     }
