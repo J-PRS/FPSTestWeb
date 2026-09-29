@@ -73,6 +73,10 @@ export class ServerBots {
   private roles = new Map<string, BotRole>();
   /** Bots we saw dead — respawn transition resyncs the move shadow. */
   private deadSet = new Set<string>();
+  /** Brains silenced for tests — the body stays in the sim, it just never
+   *  thinks: no wander, no cloak, no shots. Production code never populates
+   *  this; the scenario harness does. */
+  readonly quiet = new Set<string>();
   /** Next allowed sentry-clearing lob per bot — keeps gear suppression
    *  on a human cadence instead of a per-tick mortar stream. */
   private gearLobT = new Map<string, number>();
@@ -501,6 +505,10 @@ export class ServerBots {
       }
       p.lastSeen = now; // bots never send positions — heartbeat manually
         // or the idle reaper would cull them on schedule
+
+      // Test-silenced: heartbeat and shadow upkeep still run — only the
+      // think/fire/move pipeline is skipped.
+      if (this.quiet.has(id)) continue;
 
       // Respawn moved the body — reseat the shadow or the sim keeps
       // integrating from the corpse spot and every tick diverges.

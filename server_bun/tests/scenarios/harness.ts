@@ -59,6 +59,14 @@ export function pin(room: Room, playerId: string, pos: Vec3): void {
   p.protectedUntil = 0;
 }
 
+/** pin + silence the brain — pinned bots that keep thinking wander out of
+ *  staged shots and cloak mid-test (the spawnShield flake). A frozen body
+ *  stays in the sim but never thinks/moves. */
+export function freeze(room: Room, playerId: string, pos: Vec3): void {
+  room.bots.quiet.add(playerId);
+  pin(room, playerId, pos);
+}
+
 /** Record every broadcast by type. Call `.count(type)` after stepping. */
 export function watch(room: Room): { count: (type: string, kind?: string) => number; msgs: ServerMessage[] } {
   const msgs: ServerMessage[] = [];

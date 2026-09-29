@@ -1,3 +1,5 @@
+2026-10-03 - ServerBots quiet-gate + harness freeze(): pinned-shot scenarios can silence brains so wander/cloak can't flake staged hits. Applied to spawnShield, ffaScore, tdmTag, friendlyFire.
+
 2026-10-03 - ffaScore scenario: dm kill bumps the shooter's personal board and never fires teamScore.
 
 2026-10-03 - 3 more scenarios: joinerBootstrap (handshake echoes mode/scores/flags/rosters), spawnShield (protection window blocks then allows damage), respawnState (clean-life reset: status stripped, hp restored, no armor handout, protection re-armed).
