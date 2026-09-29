@@ -61,7 +61,7 @@ export class ServerBots {
    *  grazing: warn on low ski/air fraction or walking-pace travel.
    *  Only ticks where the brain pushes a destination count, so anchor
    *  defenders holding a stand stay legitimately still. */
-  private sheep = new Map<string, { winStart: number; ticks: number; skiAir: number; dist: number; lx: number; lz: number }>();
+  private sheep = new Map<string, { winStart: number; ticks: number; skiAir: number; air: number; jet: number; dist: number; lx: number; lz: number }>();
   private static readonly SHEEP_WIN_MS = 10000;
   private static readonly SHEEP_MIN_TICKS = 60;
   private static readonly SHEEP_SKIAIR = 0.5;
@@ -367,15 +367,22 @@ export class ServerBots {
    *  tick — defenders parked on a stand don't accrue. Warns once per
    *  10s window when a mobile bot stays flat-footed: under half its
    *  travel ticks skiing/airborne, or averaging walking pace. */
-  private checkSheep(id: string, p: { position: Vec3 }, trying: boolean, skiAir: boolean, dtRef: number, now: number): void {
+  private checkSheep(id: string, p: { position: Vec3 }, trying: boolean, ski: boolean, airborne: boolean, jetting: boolean, dtRef: number, now: number): void {
     let s = this.sheep.get(id);
     if (!s) {
-      this.sheep.set(id, { winStart: now, ticks: 0, skiAir: 0, dist: 0, lx: p.position.x, lz: p.position.z });
+      this.sheep.set(id, { winStart: now, ticks: 0, skiAir: 0, air: 0, jet: 0, dist: 0, lx: p.position.x, lz: p.position.z });
       return;
     }
     const dx = p.position.x - s.lx, dz = p.position.z - s.lz;
     s.lx = p.position.x; s.lz = p.position.z;
-    if (trying) { s.ticks++; s.dist += Math.hypot(dx, dz); if (skiAir) s.skiAir++; }
+    if (trying) {
+      s.ticks++; s.dist += Math.hypot(dx, dz);
+      if (ski || airborne) s.skiAir++;
+      // airPct is the honest "dynamic Tribes bot" number — skiHeld on the
+      // ground counts as ski, but only real altitude counts as air.
+      if (airborne) s.air++;
+      if (jetting) s.jet++;
+    }
     const winMs = now - s.winStart;
     if (winMs < ServerBots.SHEEP_WIN_MS) return;
     if (s.ticks >= ServerBots.SHEEP_MIN_TICKS) {
@@ -384,6 +391,8 @@ export class ServerBots {
       const stats = {
         room: this.room.name, bot: id,
         skiAirPct: Math.round(frac * 100),
+        airPct: Math.round((s.air / s.ticks) * 100),
+        jetPct: Math.round((s.jet / s.ticks) * 100),
         avgSpeed: +avgSpeed.toFixed(1),
         covered: +s.dist.toFixed(1),
       };
@@ -394,7 +403,7 @@ export class ServerBots {
         logger.warn('Bot sheeping', stats);
       }
     }
-    s.winStart = now; s.ticks = 0; s.skiAir = 0; s.dist = 0;
+    s.winStart = now; s.ticks = 0; s.skiAir = 0; s.air = 0; s.jet = 0; s.dist = 0;
   }
 
   tick(dt: number): void {
@@ -477,7 +486,7 @@ export class ServerBots {
         } else {
           this.room.moveSim.setInput(id, { forward: 0, right: 0, jumpHeld: false, skiHeld: false, jetHeld: false }, p.status, this.seq++);
         }
-        this.checkSheep(id, p, dist >= 0.5, !!out.move?.ski || !sh.onGround, dt, now);
+        this.checkSheep(id, p, dist >= 0.5, !!out.move?.ski, !sh.onGround, !!out.move?.jet, dt, now);
         p.position.x = sh.pos.x; p.position.y = sh.pos.y; p.position.z = sh.pos.z;
         p.velocity.x = sh.vel.x; p.velocity.y = sh.vel.y; p.velocity.z = sh.vel.z;
         // Ski bit rides the tick flag byte (bit 2) — drives remote dust.

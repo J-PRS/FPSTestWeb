@@ -486,22 +486,30 @@ export class BotBrain {
     const airborne = pos.y - g0 > 2;
     // Jet when the way ahead climbs faster than running covers — or the
     // hunt target is clearly airborne and pursuit needs altitude.
-    const uphill = rise > 3;
+    const uphill = rise > 2;
     const targetHigh = this.hunt ? this.hunt.pos.y - pos.y > 6 : false;
+    const destHigh = dest.y - pos.y > 3;
     // Jet respects the tank — below the reserve the bot saves energy for
     // skills rather than hovering dry at the wall.
     const tanked = ctx.energy === undefined || ctx.energy > 15;
+    // Discretionary spending asks for a healthier tank — boosting to
+    // speed is nice-to-have, climbing out of a hole is not.
+    const comfy = ctx.energy === undefined || ctx.energy > 30;
     // The Tribes hop: on gentle rises, ski through the approach and jet-
     // assist over the lip — the up-over-down rhythm that converts energy
     // into speed. A bot that only jets on cliffs never gets dynamic.
-    const hop = rise > 0.8 && rise <= 3;
+    const hop = rise > 0.5 && rise <= 3;
+    // The anti-sheep move: a bot at walking pace with ground to cover
+    // jets to build momentum — jet thrust pushes forward too, so this
+    // converts fuel into travel speed instead of plodding.
+    const boost = speed < 12 && gd > 15 && comfy;
     return {
       // Tribes default: ski is held whenever the bot has somewhere to
       // be. Momentum is life — a bot that only skis downhill reads as a
       // pedestrian, which is exactly the sheep behavior the watchdog
       // now flags. Friction/jets sort out the uphill cost.
       ski: true,
-      jet: (uphill || targetHigh || (hop && speed > 4)) && speed > 0.3 && tanked,
+      jet: (uphill || targetHigh || destHigh || hop || boost) && tanked,
       // Uphill + near-stationary = hop it; autohop chains the rest.
       jump: uphill && speed < 3 && !airborne,
     };
