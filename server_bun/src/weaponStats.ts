@@ -27,12 +27,27 @@ export interface WeaponRow {
 interface ModeTable { [source: string]: WeaponRow }
 interface RoomTable { [mode: string]: ModeTable }
 
+// Balance telemetry beyond raw damage:
+// - deaths: kill locations binned to 10m cells — heatmaps expose spawn
+//   traps, dead zones, and dominant sightlines per map/mode.
+// - ttk: first-hit→kill ms per weapon source — raw damage overstates
+//   spray weapons; engagement time is the real lethality signal.
+// - flags: carrier hold ms on cap, dropped ms on return — answers
+//   "do flags die on the stand or never reach midfield".
+interface TtkRow { n: number; totalMs: number }
+interface FlagRow { caps: number; holdMs: number; returns: number; dropMs: number }
+
+const CELL = 10;
+
 const FLUSH_MS = 60_000;
 const LOGS_DIR = join(import.meta.dir, '..', '..', 'logs');
 const STATS_FILE = join(LOGS_DIR, 'weaponstats.jsonl');
 
 class WeaponStats {
   private table: RoomTable = {};
+  private deaths: { [mode: string]: { [cell: string]: number } } = {};
+  private ttk: { [mode: string]: { [source: string]: TtkRow } } = {};
+  private flags: { [mode: string]: FlagRow } = {};
   private dirty = false;
 
   private row(mode: string, source: string): WeaponRow {
@@ -55,8 +70,34 @@ class WeaponStats {
     this.dirty = true;
   }
 
-  snapshot(): RoomTable {
-    return JSON.parse(JSON.stringify(this.table));
+  /** A kill location, binned to a CELL-meter grid cell. */
+  recordDeath(mode: string, pos: { x: number; z: number }): void {
+    const m = (this.deaths[mode] ??= {});
+    const cell = `${Math.round(pos.x / CELL)},${Math.round(pos.z / CELL)}`;
+    m[cell] = (m[cell] ?? 0) + 1;
+    this.dirty = true;
+  }
+
+  /** Engagement time for a finished duel (ms, first-hit → kill). */
+  recordTtk(mode: string, source: string, ms: number): void {
+    const m = (this.ttk[mode] ??= {});
+    const r = (m[source] ??= { n: 0, totalMs: 0 });
+    r.n++; r.totalMs += ms;
+    this.dirty = true;
+  }
+
+  /** Flag lifecycle: 'cap' adds holdMs (pickup→cap), 'return' dropMs. */
+  recordFlag(mode: string, kind: 'cap' | 'return', ms: number): void {
+    const r = (this.flags[mode] ??= { caps: 0, holdMs: 0, returns: 0, dropMs: 0 });
+    if (kind === 'cap') { r.caps++; r.holdMs += ms; }
+    else { r.returns++; r.dropMs += ms; }
+    this.dirty = true;
+  }
+
+  snapshot(): { byMode: RoomTable; deaths: typeof this.deaths; ttk: typeof this.ttk; flags: typeof this.flags } {
+    return JSON.parse(JSON.stringify({
+      byMode: this.table, deaths: this.deaths, ttk: this.ttk, flags: this.flags,
+    }));
   }
 
   /** Append the accumulated rollup to the JSONL ledger. */
@@ -65,7 +106,10 @@ class WeaponStats {
     this.dirty = false;
     try {
       mkdirSync(LOGS_DIR, { recursive: true });
-      appendFileSync(STATS_FILE, JSON.stringify({ ts: new Date().toISOString(), byMode: this.table }) + '\n');
+      appendFileSync(STATS_FILE, JSON.stringify({
+        ts: new Date().toISOString(), byMode: this.table,
+        deaths: this.deaths, ttk: this.ttk, flags: this.flags,
+      }) + '\n');
     } catch (e) {
       logger.warn('WeaponStats flush failed', e);
     }

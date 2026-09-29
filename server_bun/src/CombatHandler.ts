@@ -62,6 +62,9 @@ export class CombatHandler {
   /** Cosmetic relay gate for shotFired — a hitscan pull has no damage
    *  semantics, so excess ones are silently dropped instead of rejected. */
   private lastFireNotify = new Map<string, number>();
+  /** First-hit timestamps per shooter|victim pair — kill-side applies it
+   *  as the engagement time (TTK), hit-side only refreshes it. */
+  private duelStart = new Map<string, number>();
 
   constructor(
     private playerManager: PlayerManager,
@@ -635,8 +638,20 @@ export class CombatHandler {
 
   private applyHit(shooterId: string, targetId: string, damage: number, result: { killed: boolean; newHealth: number; newArmor: number }, hitLabel: string, extra?: Record<string, unknown>, weapon?: number): void {
     this.onHit?.(targetId, shooterId);
-    weaponStats.record(this.modeTag, weapon !== undefined ? `w${weapon}` : hitLabel,
-      damage, result.killed, shooterId.startsWith('BOT-'));
+    const src = weapon !== undefined ? `w${weapon}` : hitLabel;
+    weaponStats.record(this.modeTag, src, damage, result.killed, shooterId.startsWith('BOT-'));
+    if (result.killed) {
+      const victim = this.playerManager.getPlayer(targetId);
+      if (victim) weaponStats.recordDeath(this.modeTag, victim.position);
+      // Duel engagement: first-hit→kill time per shooter+victim pair.
+      const duelKey = `${shooterId}|${targetId}`;
+      const started = this.duelStart.get(duelKey);
+      if (started !== undefined) weaponStats.recordTtk(this.modeTag, src, Date.now() - started);
+      this.duelStart.delete(duelKey);
+    } else {
+      this.duelStart.set(`${shooterId}|${targetId}`, this.duelStart.get(`${shooterId}|${targetId}`) ?? Date.now());
+      if (this.duelStart.size > 512) this.duelStart.clear(); // leak cap — entries die with their duels anyway
+    }
     if (!result.killed) {
       logger.info(hitLabel, { shooter: shooterId, target: targetId, damage, targetHealth: result.newHealth, ...extra });
       this.broadcast({ type: 'playerHit', shooterId, targetId, damage, health: result.newHealth, armor: result.newArmor });

@@ -13,6 +13,7 @@ import type { Vec3 } from './types.ts';
 import type { Room } from './Room.ts';
 import { FLAG_PICKUP_R, FLAG_HOME_R, FLAG_RESET_S, TEAMS, type TeamId } from '../../shared/teams.ts';
 import { logger } from './logger.ts';
+import { weaponStats } from './weaponStats.ts';
 
 export type FlagState = 'home' | 'carried' | 'dropped';
 
@@ -24,6 +25,10 @@ export interface RoomFlag {
   carrier: string | null;
   /** Seconds left before a dropped flag walks itself home. */
   dropT: number;
+  /** Balance telemetry: grab/drop wall-times → carrier hold ms on cap,
+   *  drop ms on return (flags dying on the stand vs midfield transit). */
+  carriedAt: number;
+  droppedAt: number;
 }
 
 export class RoomFlags {
@@ -36,7 +41,7 @@ export class RoomFlags {
     this.room = room;
     for (const team of TEAMS) {
       const home = bases[team];
-      this.flags.set(team, { team, home, pos: { ...home }, state: 'home', carrier: null, dropT: 0 });
+      this.flags.set(team, { team, home, pos: { ...home }, state: 'home', carrier: null, dropT: 0, carriedAt: 0, droppedAt: 0 });
     }
   }
 
@@ -68,6 +73,7 @@ export class RoomFlags {
       f.carrier = null;
       f.state = 'dropped';
       f.dropT = FLAG_RESET_S;
+      f.droppedAt = Date.now();
       this.dirty = true;
     }
   }
@@ -101,9 +107,11 @@ export class RoomFlags {
         if (carrier.team !== f.team && ownFlag.state === 'home'
           && Math.sqrt(cdx * cdx + cdz * cdz) <= FLAG_HOME_R) {
           logger.info('Flag captured', { room: this.room.name, flag: f.team, by: carrier.id });
+          if (f.carriedAt) weaponStats.recordFlag(this.room.mode, 'cap', Date.now() - f.carriedAt);
           f.state = 'home';
           f.pos = { ...f.home };
           f.carrier = null;
+          f.carriedAt = 0;
           captureBy = carrier.team as TeamId;
           this.dirty = true;
         }
@@ -113,8 +121,10 @@ export class RoomFlags {
       if (f.state === 'dropped') {
         f.dropT -= dt;
         if (f.dropT <= 0) {
+          if (f.droppedAt) weaponStats.recordFlag(this.room.mode, 'return', Date.now() - f.droppedAt);
           f.state = 'home';
           f.pos = { ...f.home };
+          f.droppedAt = 0;
           this.dirty = true;
           continue;
         }
@@ -126,13 +136,16 @@ export class RoomFlags {
       if (!t) continue;
       if (t.team === f.team && f.state === 'dropped') {
         logger.info('Flag returned', { room: this.room.name, flag: f.team, by: t.id });
+        if (f.droppedAt) weaponStats.recordFlag(this.room.mode, 'return', Date.now() - f.droppedAt);
         f.state = 'home';
         f.pos = { ...f.home };
+        f.droppedAt = 0;
         this.dirty = true;
       } else if (t.team && t.team !== f.team) {
         logger.info('Flag grabbed', { room: this.room.name, flag: f.team, by: t.id });
         f.state = 'carried';
         f.carrier = t.id;
+        f.carriedAt = Date.now();
         this.dirty = true;
       }
     }
