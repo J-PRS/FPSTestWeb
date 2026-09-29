@@ -196,9 +196,9 @@ solve when a check can possibly matter, skip provably-dead ticks; plus
    segSolidHit on both ends (d0a8ec0); melee bites gate on creature→chest
    wall LOS server-side (e15b06d); botBrain LOS sense tests structures
    via BrainCtx.solids/solidIndex — bots stop shooting into buildings on
-   server and client (89380f6). Still open: creature MOTION ignores OBBs
-   (hop/dive arcs pass through walls — harmless until a wall separates
-   body from bite, which the LOS gate now covers).
+   server and client (89380f6). Creature motion clips too (3ace038):
+   clipMotion sweeps each move leg vs OBBs — hops bonk into walls and
+   drop, ground families stop at faces; deterministic on both ends.
    ballSim predictive terrain probes (3c12a28): parabola-scheduled gy
    sampling — resample at ~60% of predicted impact, on ~2m horizontal
    drift, or any velocity discontinuity; deterministic, bounded clip.
