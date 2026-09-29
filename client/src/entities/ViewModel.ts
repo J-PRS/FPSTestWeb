@@ -191,6 +191,12 @@ export class ViewModel {
       if (done.has(g)) continue;
       done.add(g);
       try {
+        // HEAD-probe first: a missing GLB makes the dev server serve the
+        // 404 HTML page, which then fails PARSING — the miss arrives as a
+        // real Error, indistinguishable from a corrupt bake. Probing keeps
+        // expected misses from ever becoming fetch/parse noise.
+        const probe = await fetch(`/weapons/w${wt}_baked.glb`, { method: 'HEAD' });
+        if (!probe.ok) { bakeVertexAO(g); continue; }
         await this.swapBaked(wt, g, loader, texLoader);
       } catch (e) {
         // Fetch missed → this weapon stays procedural, so bake its vertex
