@@ -53,14 +53,10 @@ export class RemotePlayer {
   // setVisible(false) can't silently take it down with the body.
   private shieldBubble: ShieldBubble | null = null;
   private _shielded = false;
-  private mendAura: ShieldBubble | null = null;
-  private _mending = false;
-  private regenAura: ShieldBubble | null = null;
-  private _regenAura = false;
-  private ddAura: ShieldBubble | null = null;
-  private _ddAura = false;
-  private chargeAura: ShieldBubble | null = null;
-  private _charged = false;
+  // One-bit status auras (mend/regen/dd/charge) — identical lazy-glow
+  // plumbing per STATUS bit, keyed so a new aura is a table row rather
+  // than a fourth copy of the same field/update/hide/show blocks.
+  private statusAuras = new Map<string, { bubble: ShieldBubble; on: boolean }>();
   protected velocity: THREE.Vector3 = new THREE.Vector3();
   private angularVelocity: THREE.Vector3 = new THREE.Vector3();
   private isOnGround: boolean = true;
@@ -419,21 +415,9 @@ export class RemotePlayer {
       this.shieldBubble.update(dt);
       if (this._shielded) this.shieldBubble.mesh.position.set(this.position.x, y + 1.1, this.position.z);
     }
-    if (this.mendAura) {
-      this.mendAura.update(dt);
-      if (this._mending) this.mendAura.mesh.position.set(this.position.x, y + 1.0, this.position.z);
-    }
-    if (this.regenAura) {
-      this.regenAura.update(dt);
-      if (this._regenAura) this.regenAura.mesh.position.set(this.position.x, y + 1.0, this.position.z);
-    }
-    if (this.ddAura) {
-      this.ddAura.update(dt);
-      if (this._ddAura) this.ddAura.mesh.position.set(this.position.x, y + 1.0, this.position.z);
-    }
-    if (this.chargeAura) {
-      this.chargeAura.update(dt);
-      if (this._charged) this.chargeAura.mesh.position.set(this.position.x, y + 1.0, this.position.z);
+    for (const a of this.statusAuras.values()) {
+      a.bubble.update(dt);
+      if (a.on) a.bubble.mesh.position.set(this.position.x, y + 1.0, this.position.z);
     }
   }
 
@@ -479,10 +463,7 @@ export class RemotePlayer {
     this.model.setVisible(false);
     this.gizmo?.hide();
     if (this.shieldBubble) this.shieldBubble.mesh.visible = false;
-    if (this.mendAura) this.mendAura.mesh.visible = false;
-    if (this.regenAura) this.regenAura.mesh.visible = false;
-    if (this.ddAura) this.ddAura.mesh.visible = false;
-    if (this.chargeAura) this.chargeAura.mesh.visible = false;
+    for (const a of this.statusAuras.values()) a.bubble.mesh.visible = false;
   }
 
   show(): void {
@@ -493,10 +474,7 @@ export class RemotePlayer {
     }
     this.gizmo?.attach();
     if (this.shieldBubble && this._shielded) this.shieldBubble.mesh.visible = true;
-    if (this.mendAura && this._mending) this.mendAura.mesh.visible = true;
-    if (this.regenAura && this._regenAura) this.regenAura.mesh.visible = true;
-    if (this.ddAura && this._ddAura) this.ddAura.mesh.visible = true;
-    if (this.chargeAura && this._charged) this.chargeAura.mesh.visible = true;
+    for (const a of this.statusAuras.values()) if (a.on) a.bubble.mesh.visible = true;
   }
 
   // Simulate physics when player stops sending updates (dead reckoning)
@@ -582,39 +560,30 @@ export class RemotePlayer {
   }
   get isShielded(): boolean { return this._shielded; }
 
-  // Medkit channel — a tighter green aura inside where the bubble sits.
-  setMending(on: boolean): void {
-    if (on === this._mending) return;
-    this._mending = on;
-    if (on && !this.mendAura) this.mendAura = makeShieldBubble(this.scene, 1.6, 0x3fdd6f);
-    if (this.mendAura) this.mendAura.mesh.visible = on && !this._cloakHidden && !this._staleHidden;
+  private setStatusAura(key: string, on: boolean, radius: number, color: number): void {
+    let a = this.statusAuras.get(key);
+    if ((a?.on ?? false) === on) return;
+    if (!a) {
+      a = { bubble: makeShieldBubble(this.scene, radius, color), on: false };
+      this.statusAuras.set(key, a);
+    }
+    a.on = on;
+    a.bubble.mesh.visible = on && !this._cloakHidden && !this._staleHidden;
   }
-  get isMending(): boolean { return this._mending; }
+
+  // Medkit channel — a tighter green aura inside where the bubble sits.
+  setMending(on: boolean): void { this.setStatusAura('mend', on, 1.6, 0x3fdd6f); }
+  get isMending(): boolean { return this.statusAuras.get('mend')?.on ?? false; }
 
   // Powerup tells — a buffed enemy should be readable at range: regen
   // shimmers teal, double-damage burns red. Server-owned bits.
-  setRegenAura(on: boolean): void {
-    if (on === this._regenAura) return;
-    this._regenAura = on;
-    if (on && !this.regenAura) this.regenAura = makeShieldBubble(this.scene, 1.8, 0x66ffee);
-    if (this.regenAura) this.regenAura.mesh.visible = on && !this._cloakHidden && !this._staleHidden;
-  }
-  setDdAura(on: boolean): void {
-    if (on === this._ddAura) return;
-    this._ddAura = on;
-    if (on && !this.ddAura) this.ddAura = makeShieldBubble(this.scene, 1.8, 0xff4422);
-    if (this.ddAura) this.ddAura.mesh.visible = on && !this._cloakHidden && !this._staleHidden;
-  }
+  setRegenAura(on: boolean): void { this.setStatusAura('regen', on, 1.8, 0x66ffee); }
+  setDdAura(on: boolean): void { this.setStatusAura('dd', on, 1.8, 0xff4422); }
 
   // LG charge telegraph — the walking-bomb warning, same electric tint
   // as the beam so the read is instant. Bit-level flag only: remotes see
   // "loaded", not the exact bank size.
-  setCharged(on: boolean): void {
-    if (on === this._charged) return;
-    this._charged = on;
-    if (on && !this.chargeAura) this.chargeAura = makeShieldBubble(this.scene, 1.9, 0x9fd8ff);
-    if (this.chargeAura) this.chargeAura.mesh.visible = on && !this._cloakHidden && !this._staleHidden;
-  }
+  setCharged(on: boolean): void { this.setStatusAura('charge', on, 1.9, 0x9fd8ff); }
 
   // Remote fired a weapon — kick the gun's procedural recoil
   fire(weaponType?: number): void {

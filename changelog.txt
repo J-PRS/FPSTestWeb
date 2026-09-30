@@ -1,3 +1,4 @@
+2026-09-26 - RemotePlayer aura dedupe: mend/regen/dd/charge collapse into a keyed statusAuras map — a new one-bit glow is a table row, not a fifth copy of field/update/hide/show/setter.
 2026-09-26 - Carrier-side charge warning: own tick records exclude self, so the server echoes the decayed bank (yourCharge, 0.5Hz, + terminal 0); the client stores world.selfCharge and crackles the sizzle at the carriers own position while live.
 2026-09-26 - chargePop.test.ts: scenario coverage for the server charge economy — beam banking, partial detonation min(banked,dmg) with smoldering remainder, and the corpse pop on kill.
 2026-09-26 - LG pop-charge goes server-authoritative for PvP: the server banks withheld beam damage on the victim (PlayerState.charge), any non-LG hit detonates min(banked,dmg) as a real blast, kills pop the corpse, and a CHARGED status bit telegraphs walking bombs on remotes.
