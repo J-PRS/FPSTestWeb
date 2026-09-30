@@ -4,8 +4,11 @@
 import * as THREE from 'three';
 import type { NetCtx } from './ctx.js';
 import * as sfx from '../../core/sfx.js';
+import { Explosion } from '../../effects/explosion.js';
+import { TEAM_COLORS } from '../../../../shared/teams.js';
 
 const _flagMarker = new THREE.Vector3();
+const _burstPos = new THREE.Vector3();
 
 export function wireFlags(ctx: NetCtx): void {
   const { deps, networkManager } = ctx;
@@ -53,7 +56,15 @@ export function wireFlags(ctx: NetCtx): void {
   // beat. Previous state decides what happened: →carried = grab,
   // carried→home = capture, dropped→home = return/reset.
   const prevState = new Map<string, string>();
-  const callout = (f: { team: 'alpha' | 'bravo'; state: string; carrier: string | null }) => {
+  // Team-colored blast where the flag just changed hands — the grab pop,
+  // the drop puff, and the big capture detonation read instantly without
+  // watching the killfeed.
+  const burst = (f: { team: 'alpha' | 'bravo'; pos: { x: number; y: number; z: number } }, scale: number) => {
+    deps.world.explosions.push(new Explosion(
+      deps.lazyScene(), _burstPos.set(f.pos.x, f.pos.y + 1.2, f.pos.z),
+      false, 0, deps.lazyTerrain(), scale, TEAM_COLORS[f.team]));
+  };
+  const callout = (f: { team: 'alpha' | 'bravo'; state: string; carrier: string | null; pos: { x: number; y: number; z: number } }) => {
     const prev = prevState.get(f.team);
     prevState.set(f.team, f.state);
     if (prev === f.state || prev === undefined) return;
@@ -64,13 +75,16 @@ export function wireFlags(ctx: NetCtx): void {
       if (iAmCarrier) frag.show('YOU HAVE THE FLAG!');
       else frag.show(mine ? 'OUR FLAG TAKEN!' : 'ENEMY FLAG TAKEN!');
       sfx.flagCue('taken', mine);
+      burst(f, 1.4);
     } else if (f.state === 'dropped') {
       frag.show(mine ? 'OUR FLAG DROPPED' : 'ENEMY FLAG DROPPED');
       sfx.flagCue('dropped', mine);
+      burst(f, 1.0);
     } else if (f.state === 'home') {
       if (prev === 'carried') frag.show(mine ? 'THEY SCORED!' : 'CAPTURED!');
       else frag.show(mine ? 'FLAG RETURNED' : 'ENEMY FLAG RETURNED');
       sfx.flagCue(prev === 'carried' ? 'captured' : 'returned', mine);
+      burst(f, prev === 'carried' ? 2.4 : 1.4);
     }
   };
 

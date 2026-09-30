@@ -17,6 +17,7 @@ import { PlayerDebris } from '../effects/debris.js';
 import type { Terrain } from '../world/terrain.js';
 import { MELEE_RANGE, MELEE_DAMAGE } from '../core/config.js';
 import { CtfFlags } from './ctfFlags.js';
+import { Explosion } from '../effects/explosion.js';
 import * as sfx from '../core/sfx.js';
 import { poissonDisc } from '../utils/poissonSpread.js';
 import { killTaunt, deathTaunt } from '../../../shared/botTaunts.js';
@@ -140,6 +141,13 @@ export class TeamBots {
         scores: this.scores,
         onCapture: () => this.pushScore(),
         onFeed: (t) => this.hooks.remoteKillFeed(t),
+        onFlagEvent: (kind, team, at) => {
+          sfx.flagCue(kind, team === this.playerTeam);
+          deps.world.explosions.push(new Explosion(
+            deps.lazyScene(), _flagBurst.copy(at).setY(at.y + 1.2), false, 0,
+            deps.lazyTerrain(), kind === 'captured' ? 2.4 : kind === 'dropped' ? 1.0 : 1.4,
+            TEAM_COLORS[team]));
+        },
       }, deps.lazyPlayer().pos);
     }
   }
@@ -834,6 +842,7 @@ const _touchers: [string, THREE.Vector3][] = [];
 const _enemies: { id: string; pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean }[] = [];
 const _collectors: { id: string; pos: THREE.Vector3; alive: boolean; pickupScale: number }[] = [];
 // Scratch LOS ctx — foeSeen only rides losClear (groundY/solids/now).
+const _flagBurst = new THREE.Vector3();
 const _losCtx: BrainCtx = {
   pos: { x: 0, y: 0, z: 0 }, enemies: [], groundY: () => 0, now: 0,
   solids: Projectile.solidColliders, solidIndex: Projectile.solidIndex,

@@ -26,6 +26,8 @@ export interface FlagCtx {
   /** Capture landed — the referee pushes the HUD score. */
   onCapture(team: TeamId): void;
   onFeed(text: string): void;
+  /** Flag state edge for cues — same beats the network path plays. */
+  onFlagEvent?(kind: 'taken' | 'dropped' | 'returned' | 'captured', team: TeamId, at: THREE.Vector3): void;
 }
 
 const FLAG_POLE_GEO = new THREE.CylinderGeometry(0.06, 0.08, 4, 6);
@@ -143,7 +145,7 @@ export class CtfFlags {
   }
 
   dropCarried(carrierId: string, at: THREE.Vector3): void {
-    for (const f of this.flags.values()) {
+    for (const [team, f] of this.flags) {
       if (f.carrier !== carrierId) continue;
       f.carrier = null;
       f.state = 'dropped';
@@ -152,6 +154,7 @@ export class CtfFlags {
       f.dropT = FLAG_RESET_S;
       const bot = this.ctx.bots.find(b => b.playerId === carrierId);
       if (bot) bot.carryingFlag = false;
+      this.ctx.onFlagEvent?.('dropped', team, f.pos);
     }
   }
 
@@ -190,6 +193,7 @@ export class CtfFlags {
     if (ownBase.state !== 'home' || cp.distanceTo(ownBase.home) >= FLAG_HOME_R) return;
     bank(ctx.scores, carrierTeam);
     ctx.onCapture(carrierTeam);
+    ctx.onFlagEvent?.('captured', team, f.home);
     ctx.onFeed(`${f.carrier === 'local' ? 'YOU' : f.carrier!.replace('bot:', '')} captured the ${TEAM_LABEL[team]} flag!`);
     if (f.carrier === 'local') sfx.pickup();
     const bot = ctx.bots.find(b => b.playerId === f.carrier);
@@ -204,9 +208,11 @@ export class CtfFlags {
       if (tp.distanceTo(f.pos) > this.ctx.pickupRadiusOf(id)) continue;
       if (f.state === 'dropped' && tTeam === team) {
         f.state = 'home'; f.pos.copy(f.home); // returned on touch
+        ctx.onFlagEvent?.('returned', team, f.pos);
         return;
       }
       if (tTeam !== team) {
+        ctx.onFlagEvent?.('taken', team, f.pos);
         f.state = 'carried'; f.carrier = id;
         const bot = ctx.bots.find(b => b.playerId === id);
         if (bot) bot.carryingFlag = true;
