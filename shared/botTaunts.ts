@@ -46,7 +46,11 @@ const SPEAK_CHANCE = 0.55;
 const COOLDOWN_MS = 20_000;
 
 const lastSpoke = new Map<string, number>();
-const pick = (arr: string[]): string => arr[(Math.random() * arr.length) | 0]!;
+// Injectable so this can live in shared/ without leaning on ambient
+// randomness — sims and tests pass their own sources.
+let rand = Math.random;
+export function tauntRng(r: () => number): void { rand = r; }
+const pick = (arr: string[]): string => arr[(rand() * arr.length) | 0]!;
 
 /** One taunt line for a kill where `botId` fragged `other`, or null when
  *  the bot stays quiet (cooldown or dice). */
@@ -72,7 +76,7 @@ export function spreeTaunt(botId: string): string | null {
 function maybe(botId: string, line: string): string | null {
   const now = Date.now();
   const last = lastSpoke.get(botId) ?? 0;
-  if (now - last < COOLDOWN_MS || Math.random() > SPEAK_CHANCE) return null;
+  if (now - last < COOLDOWN_MS || rand() > SPEAK_CHANCE) return null;
   lastSpoke.set(botId, now);
   if (lastSpoke.size > 256) lastSpoke.clear();
   return line;
