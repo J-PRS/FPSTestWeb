@@ -12,6 +12,7 @@ import type { ServerMessage } from '../../shared/protocol.ts';
 import { logger } from './logger.ts';
 import { weaponStats } from './weaponStats.ts';
 import { aoeDamage } from '../../shared/combat.ts';
+import { REPAIR_RANGE, REPAIR_HEAL_PER_TICK, REPAIR_MIN_TICK_S, REPAIR_ARMOR_MULT } from '../../shared/weapons.ts';
 import { segSolidHit } from '../../shared/solidWorld.ts';
 
 export type DeployKind = 'turret' | 'mine' | 'station' | 'drone';
@@ -29,6 +30,9 @@ interface Deployed {
   ttl: number;
   fireCd: number;
   hp: number;
+  /** Overcharge layer from repair beams — soaks damage before hp, caps
+   *  at REPAIR_ARMOR_MULT × base hp. The technician's payoff. */
+  armor: number;
 }
 
 // Blast-only durability — splash damage clears a stand's defenses the
@@ -85,7 +89,7 @@ export class RoomDeployables {
     const armDelay = k === 'turret' ? TURRET_UNFOLD_S + Math.random() * 0.4
       : k === 'mine' ? MINE_ARM_S
       : k === 'station' ? STATION_HEAL_CD : 0;
-    this.items.set(id, { id, owner: playerId, kind: k, pos: { ...pos }, ttl: TTL_S[k], fireCd: armDelay, hp: HP[k] });
+    this.items.set(id, { id, owner: playerId, kind: k, pos: { ...pos }, ttl: TTL_S[k], fireCd: armDelay, hp: HP[k], armor: 0 });
     logger.info('Deploy placed', { owner: playerId, kind: k, x: +pos.x.toFixed(1), y: +pos.y.toFixed(1), z: +pos.z.toFixed(1) });
     weaponStats.recordDeploy(this.room.mode, k);
     this.room.broadcast({ type: 'deploySpawn', id, owner: playerId, kind: k, pos: { ...pos }, team: player.team } as ServerMessage);
@@ -104,8 +108,8 @@ export class RoomDeployables {
     for (const id of this.items.keys()) this.remove(id);
   }
 
-  snapshot(): { id: number; owner: string; kind: DeployKind; pos: Vec3 }[] {
-    return [...this.items.values()].map((d) => ({ id: d.id, owner: d.owner, kind: d.kind, pos: { ...d.pos } }));
+  snapshot(): { id: number; owner: string; kind: DeployKind; pos: Vec3; hp: number; armor: number }[] {
+    return [...this.items.values()].map((d) => ({ id: d.id, owner: d.owner, kind: d.kind, pos: { ...d.pos }, hp: d.hp, armor: d.armor }));
   }
 
   /** Creature-sim candidates — `dep:N` ids mirror the client species
@@ -126,11 +130,58 @@ export class RoomDeployables {
   gnaw(depId: string, dmg: number): void {
     const d = this.items.get(+depId.slice(4));
     if (!d) return;
+    this.hurt(d, dmg, 'creature');
+  }
+
+  /** Armor soaks before hp; any change rides out as deployHp so clients
+   *  can paint the overcharge. */
+  private hurt(d: Deployed, dmg: number, by: string): void {
+    if (d.armor > 0) {
+      const soaked = Math.min(d.armor, dmg);
+      d.armor -= soaked;
+      dmg -= soaked;
+    }
     d.hp -= dmg;
+    this.sendHp(d);
     if (d.hp <= 0) {
-      logger.info('Deploy destroyed', { id: d.id, kind: d.kind, owner: d.owner, by: 'creature' });
+      logger.info('Deploy destroyed', { id: d.id, kind: d.kind, owner: d.owner, by });
       this.remove(d.id);
     }
+  }
+
+  private sendHp(d: Deployed): void {
+    this.room.broadcast({ type: 'deployHp', id: d.id, hp: Math.max(0, Math.round(d.hp)), armor: Math.round(d.armor) } as ServerMessage);
+  }
+
+  // Repair claims are rate-limited per shooter+target — a client can pace
+  // its beam ticks but can't bank a year's worth in a burst.
+  private lastRepair = new Map<string, number>();
+
+  /** Repair-tool beam tick on a friendly deployable: heal to base, then
+   *  overcharge armor to REPAIR_ARMOR_MULT×. Server re-derives distance,
+   *  LOS, team and the heal amount — the claim names a target, nothing
+   *  else. */
+  repair(playerId: string, targetId: number): void {
+    const d = this.items.get(targetId);
+    const p = this.room.players.getPlayer(playerId);
+    if (!d || !p || p.isDead) return;
+    // Friendly only: own gear always; teammates' gear when teams exist.
+    if (p.team && d.owner !== playerId) {
+      const owner = this.room.players.getPlayer(d.owner);
+      if (owner?.team !== p.team) return;
+    } else if (!p.team && d.owner !== playerId) return;
+    const dx = d.pos.x - p.position.x, dy = d.pos.y - p.position.y, dz = d.pos.z - p.position.z;
+    if (dx * dx + dy * dy + dz * dz > REPAIR_RANGE * REPAIR_RANGE * 2.25) return; // 1.5× slack
+    if (!this.losClear(p.position, d.pos)) return;
+    const key = `${playerId}:${targetId}`;
+    const now = Date.now() / 1000;
+    if (now - (this.lastRepair.get(key) ?? -1) < REPAIR_MIN_TICK_S) return;
+    this.lastRepair.set(key, now);
+    const hpCap = HP[d.kind];
+    const healed = Math.min(REPAIR_HEAL_PER_TICK, hpCap - d.hp);
+    d.hp += healed;
+    d.armor = Math.min(REPAIR_ARMOR_MULT * hpCap, d.armor + (REPAIR_HEAL_PER_TICK - healed));
+    this.sendHp(d);
   }
 
   private remove(id: number): void {
@@ -152,12 +203,8 @@ export class RoomDeployables {
       // well-placed lobs instead of a dozen grazed edges.
       const dmg = Math.max(aoeDamage(damage, dist, radius), Math.round(damage * 0.5));
       if (dmg <= 0) continue;
-      d.hp -= dmg;
       logger.debug('Deploy hit', { kind: d.kind, dist: +dist.toFixed(1), dmg, hp: d.hp, by: shooterId });
-      if (d.hp <= 0) {
-        logger.info('Deploy destroyed', { id: d.id, kind: d.kind, owner: d.owner, by: shooterId });
-        this.remove(d.id);
-      }
+      this.hurt(d, dmg, shooterId);
     }
   }
 

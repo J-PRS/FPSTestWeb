@@ -101,6 +101,9 @@ export class NetworkManager {
   /** Server-owned mine exploded — explosion FX only; damage flows via the
    *  normal playerHit/knockback channel. */
   public onMineBoom: ((id: number, pos: { x: number; y: number; z: number }) => void) | null = null;
+  /** Server's vitals table for a deployable — repair heals echo back
+   *  through this; armor is the repair-tool overheal pool. */
+  public onDeployHp: ((id: number, hp: number, armor: number) => void) | null = null;
   public onSnapshot: ((players: SnapshotPlayer[], timestamp: number) => void) | null = null;
   public onStateHash: ((hash: string, tick: number, playerCount: number, timestamp: number) => void) | null = null;
   public onCorrection: ((seq: number, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }, inputSeq?: number, grounded?: boolean) => void) | null = null;
@@ -342,6 +345,7 @@ export class NetworkManager {
     deployGone: (data) => this.onDeployGone?.(data.id),
     turretShot: (data) => this.onTurretShot?.(data.id, data.owner, data.targetId),
     mineBoom: (data) => this.onMineBoom?.(data.id, data.pos),
+    deployHp: (data) => this.onDeployHp?.(data.id, data.hp, data.armor),
     // Server refused a hit claim — worth surfacing: a healthy client
     // should basically never see this, so it's a desync tell.
     shotRejected: (data) => {
@@ -655,6 +659,13 @@ export class NetworkManager {
   sendDeploy(kind: 'turret' | 'mine' | 'station' | 'drone', position: { x: number; y: number; z: number }): void {
     if (!this.connected) return;
     this.send({ type: 'deploy', kind, position });
+  }
+
+  /** Repair claim — only the target id crosses the wire; the server
+   *  re-derives range, LOS, team, heal amount, and pacing itself. */
+  sendRepair(targetId: number): void {
+    if (!this.connected) return;
+    this.send({ type: 'repair', targetId });
   }
 
   /** Loadout class pick mid-match — the server banks it for the next

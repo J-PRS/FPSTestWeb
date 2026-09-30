@@ -55,7 +55,7 @@ export class LightningBeam {
    *  overclocks the spark fountain as the bomb loads. */
   private charge = 0;
 
-  constructor(scene: THREE.Scene) {
+  constructor(scene: THREE.Scene, tint?: { glow: number; core: number; chain: number; hit: number; sparkTop: number }) {
     this.beamPts = Array.from({ length: SEGS + 1 }, () => new THREE.Vector3());
 
     // Two crossed ribbons in ONE geometry (X cross-section) — volumetric
@@ -90,11 +90,11 @@ export class LightningBeam {
       return m;
     };
 
-    this.glow = mkRibbon(0x2266ff, 0.35);
-    this.core = mkRibbon(0xeaf6ff, 0.95);
+    this.glow = mkRibbon(tint?.glow ?? 0x2266ff, 0.35);
+    this.core = mkRibbon(tint?.core ?? 0xeaf6ff, 0.95);
     // Chain hop: same ribbon machinery, slightly dimmer — it reads as a
     // fork off the main bolt
-    this.chainCore = mkRibbon(0x9fd4ff, 0.7);
+    this.chainCore = mkRibbon(tint?.chain ?? 0x9fd4ff, 0.7);
     this.chainCore.visible = false;
     this.chainPts = Array.from({ length: SEGS + 1 }, () => new THREE.Vector3());
     this.group.add(this.glow, this.core, this.chainCore);
@@ -102,7 +102,7 @@ export class LightningBeam {
     // Contact glow — bright ball pinned at the hit point
     const glowTex = LightningBeam.makeGlowTexture();
     this.hitGlow = new THREE.Sprite(new THREE.SpriteMaterial({
-      map: glowTex, color: 0xaaddff, transparent: true, opacity: 0.9,
+      map: glowTex, color: tint?.hit ?? 0xaaddff, transparent: true, opacity: 0.9,
       blending: THREE.AdditiveBlending, depthWrite: false,
     }));
     this.hitGlow.scale.setScalar(2.2);
@@ -116,11 +116,18 @@ export class LightningBeam {
     sGeo.setAttribute('position', new THREE.BufferAttribute(this.sparkPos, 3));
     // Per-spark color jitter — white core to deep blue edge, no two alike
     const sCol = new Float32Array(SPARKS * 3);
+    const sparkTop = new THREE.Color(tint?.sparkTop ?? 0xffffff);
     for (let i = 0; i < SPARKS; i++) {
       const t = Math.random();
-      sCol[i * 3] = 0.55 + t * 0.45;
-      sCol[i * 3 + 1] = 0.75 + t * 0.25;
-      sCol[i * 3 + 2] = 1.0;
+      if (tint) {
+        sCol[i * 3] = sparkTop.r * (0.55 + t * 0.45);
+        sCol[i * 3 + 1] = sparkTop.g * (0.75 + t * 0.25);
+        sCol[i * 3 + 2] = sparkTop.b;
+      } else {
+        sCol[i * 3] = 0.55 + t * 0.45;
+        sCol[i * 3 + 1] = 0.75 + t * 0.25;
+        sCol[i * 3 + 2] = 1.0;
+      }
     }
     sGeo.setAttribute('color', new THREE.BufferAttribute(sCol, 3));
     this.sparkPoints = new THREE.Points(sGeo, new THREE.PointsMaterial({

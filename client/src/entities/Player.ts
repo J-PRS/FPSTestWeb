@@ -290,12 +290,12 @@ export class Player {
   beltItem: BeltItem = (BELT_ITEMS as readonly string[]).includes(settings.get('fps-belt'))
     ? settings.get('fps-belt') as BeltItem : 'disc';
   // Sidearm: one hold-out weapon — the sidearm key pulls it while held.
-  // wid is slot-space (SLOT_DEFS index): pistol 12, revolver 13, shotgun 9.
-  // (sticky launcher sits at wid 14 — primary loadout, not a hold-out.)
-  static readonly SIDEARM_WIDS = { pistol: 12, revolver: 13, shotgun: 9 } as const;
-  sidearm: 'pistol' | 'revolver' | 'shotgun' =
-    (settings.get('fps-sidearm') as 'pistol' | 'revolver' | 'shotgun') in Player.SIDEARM_WIDS
-      ? settings.get('fps-sidearm') as 'pistol' | 'revolver' | 'shotgun' : 'pistol';
+  // wid is slot-space (SLOT_DEFS index): pistol 12, revolver 13, shotgun 9,
+  // repair 17. (sticky launcher sits at wid 14 — primary, not a hold-out.)
+  static readonly SIDEARM_WIDS = { pistol: 12, revolver: 13, shotgun: 9, repair: 17 } as const;
+  sidearm: 'pistol' | 'revolver' | 'shotgun' | 'repair' =
+    (settings.get('fps-sidearm') as 'pistol' | 'revolver' | 'shotgun' | 'repair') in Player.SIDEARM_WIDS
+      ? settings.get('fps-sidearm') as 'pistol' | 'revolver' | 'shotgun' | 'repair' : 'pistol';
   // Pack: one deployable on the deploy key — ESC menu picks.
   packItem: 'turret' | 'mine' | 'station' | 'drone' =
     (['turret', 'mine', 'station', 'drone'] as const).includes(settings.get('fps-pack') as 'turret' | 'mine' | 'station' | 'drone')
@@ -334,7 +334,7 @@ export class Player {
     this.beltItem = item;
     settings.set('fps-belt', item);
   }
-  setSidearm(s: 'pistol' | 'revolver' | 'shotgun'): void {
+  setSidearm(s: 'pistol' | 'revolver' | 'shotgun' | 'repair'): void {
     this.sidearm = s;
     settings.set('fps-sidearm', s);
   }

@@ -31,11 +31,12 @@ describe('weapon registry', () => {
     expect(weaponDef(999)).toBe(SLOT_DEFS[0]);
   });
 
-  it('fan weapons declare pellets; beams are Lightning only', () => {
+  it('fan weapons declare pellets; beams are hitscan only', () => {
+    const BEAM_WEAPONS = new Set([WeaponType.Lightning, WeaponType.Repair]);
     for (const def of SLOT_DEFS) {
       if (def.kind === 'fan') expect(def.pellets).toBeDefined();
-      if (def.kind === 'beam') expect(def.weaponType).toBe(WeaponType.Lightning);
-      if (def.weaponType === WeaponType.Lightning) expect(def.kind).toBe('beam');
+      if (def.kind === 'beam') expect(BEAM_WEAPONS.has(def.weaponType)).toBe(true);
+      if (BEAM_WEAPONS.has(def.weaponType)) expect(def.kind).toBe('beam');
     }
   });
 

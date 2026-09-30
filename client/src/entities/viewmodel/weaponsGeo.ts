@@ -785,6 +785,7 @@ const MODEL_BUILDERS: [number, () => THREE.Group][] = [
   [WeaponType.Pistol, mkPistol],
   [WeaponType.Revolver, mkRevolver],
   [WeaponType.Sticky, mkSticky],
+  [WeaponType.Repair, mkPistol], // repair tool — pistol receiver, beam emitter
 ];
 
 export function buildWeaponMeshes(parent: THREE.Group, muzzleZ: Record<number, number>): WeaponMeshes {

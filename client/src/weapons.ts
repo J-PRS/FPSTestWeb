@@ -30,11 +30,12 @@ import { RKT_CONFIG } from './projectiles/rocketLauncherConfig.js';
 import { PISTOL_CONFIG } from './projectiles/pistolConfig.js';
 import { REVOLVER_CONFIG } from './projectiles/revolverConfig.js';
 import { STICKY_CONFIG } from './projectiles/stickyConfig.js';
+import { REPAIR_CONFIG } from './projectiles/repairConfig.js';
 import {
   FIRE_RATE, DISC_RATE, CHAINGUN_RATE, MORTAR_RATE, GL_RATE, FLAK_RATE,
   PLASMA_RATE, RAILGUN_RATE, LG_RATE, SHOTGUN_RATE, CANNON_RATE, RKT_RATE,
   PISTOL_RATE, REVOLVER_RATE, STICKY_RATE, PLASMAGUN_RATE,
-  SPRINKLER_RATE, SPRINKLER_SPREAD,
+  SPRINKLER_RATE, SPRINKLER_SPREAD, REPAIR_RATE,
   FLAK_SHARDS, FLAK_SPREAD, SG_PELLETS, SG_SPREAD,
 } from './core/config.js';
 
@@ -68,7 +69,8 @@ function def(weaponType: WeaponType, rate: number, config: ProjectileConfig,
              kick: number, opts: { auto?: boolean; pellets?: { count: number; spread: number }; spread?: number; sidearm?: boolean } = {}): WeaponDef {
   return {
     weaponType, rate, config, kick,
-    kind: opts.pellets ? 'fan' : weaponType === WeaponType.Lightning ? 'beam' : 'projectile',
+    kind: opts.pellets ? 'fan'
+      : weaponType === WeaponType.Lightning || weaponType === WeaponType.Repair ? 'beam' : 'projectile',
     auto: opts.auto ?? false,
     pellets: opts.pellets,
     spread: opts.spread,
@@ -97,6 +99,7 @@ export const SLOT_DEFS: readonly WeaponDef[] = [
   def(WeaponType.Sticky, STICKY_RATE, STICKY_CONFIG, 1.2),
   def(WeaponType.PlasmaGun, PLASMAGUN_RATE, PLASMAGUN_CONFIG, 0.6),
   def(WeaponType.Sprinkler, SPRINKLER_RATE, SPRINKLER_CONFIG, 0.5, { auto: true, spread: SPRINKLER_SPREAD }),
+  def(WeaponType.Repair, REPAIR_RATE, REPAIR_CONFIG, 0, { auto: true, sidearm: true }),
 ];
 
 export const SLOT_COUNT = SLOT_DEFS.length;

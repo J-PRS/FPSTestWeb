@@ -367,6 +367,7 @@ export class Room {
       flags: () => this.flags?.snapshot() ?? [],
       pickups: () => this.pickups?.snapshot() ?? [],
       onDeploy: (pid, kind, pos) => this.deployables.handleDeploy(pid, kind, pos),
+      onRepair: (pid, targetId) => this.deployables.repair(pid, targetId),
       deployBlast: (pos, damage, radius, shooter) => this.deployables.applyBlast(pos, damage, radius, shooter),
       deployables: () => this.deployables.snapshot(),
       matchEndsAt: () => this.matchClock.timeLeftMs() > 0 ? Date.now() + this.matchClock.timeLeftMs() : 0,

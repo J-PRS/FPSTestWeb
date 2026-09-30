@@ -60,6 +60,9 @@ export class Mine implements Targetable, SwarmSlotOwner {
   dead = false;
   health = 1;
   maxHealth = 1;
+  // Repair-tool armor lets a planted field survive stray chip damage —
+  // soak ticks down before the shell itself gets touched.
+  armor = 0;
   radius: number;
   color = new THREE.Color(0x3a2a1a); // dark shell, glow does the talking
   scale = 0.2;
@@ -162,8 +165,14 @@ export class Mine implements Targetable, SwarmSlotOwner {
     this.onDetonate?.(this);
   }
 
+  heal(n: number): void {
+    this.armor = Math.min(this.maxHealth * 2, this.armor + n);
+  }
+
   takeDamage(): boolean {
-    // Any damage detonates — clearing a field by shooting it is the counterplay
+    // Any damage detonates — clearing a field by shooting it is the counterplay.
+    // Repair armor soaks the first hits, so an armored mine eats a few shots.
+    if (this.armor > 0) { this.armor -= 1; return false; }
     this.detonate();
     return true;
   }

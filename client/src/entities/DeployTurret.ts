@@ -43,6 +43,8 @@ export class DeployTurret {
   dead = false;
   health = 60;
   maxHealth = 60;
+  // Repair-tool overheal — armor soaks hits before health does.
+  armor = 0;
 
   readonly group = new THREE.Group();
   private head = new THREE.Group();
@@ -161,9 +163,18 @@ export class DeployTurret {
     this.head.position.y = 1.4;
   }
 
+  /** Repair beam: heal refills health first, overflow banks as armor. */
+  heal(n: number): void {
+    const over = Math.max(0, this.health + n - this.maxHealth);
+    this.health = Math.min(this.maxHealth, this.health + n);
+    this.armor = Math.min(this.maxHealth * 2, this.armor + over);
+  }
+
   takeDamage(dmg: number): void {
     if (this.dead) return;
-    this.health -= dmg;
+    const soak = Math.min(this.armor, dmg);
+    this.armor -= soak;
+    this.health -= dmg - soak;
     if (this.health <= 0) this.dead = true;
   }
 

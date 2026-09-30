@@ -1,0 +1,58 @@
+import * as THREE from 'three';
+
+import { WEAPONS } from '../../../shared/weapons.js';
+
+import type { ProjectileConfig } from './types.js';
+
+// Repair tool: a beam weapon — this config carries display/menu identity
+// only; the heal is not a projectile so most ballistics fields are inert.
+export const REPAIR_CONFIG: ProjectileConfig = {
+  name: 'repair',
+  displayName: 'Repair Tool',
+  weaponType: 26,
+  speed: WEAPONS[26].speed,
+  gravity: WEAPONS[26].gravity,
+  explosionRadius: 0,
+  force: 0,
+  forceMode: 'push',
+  bodyRadius: WEAPONS[26].bodyRadius,
+  hitMin: WEAPONS[26].hitMin,
+  hitMax: WEAPONS[26].hitMax,
+  hitGrow: WEAPONS[26].hitGrow,
+  falloffMultiplier: 1.0,
+  collisionMultiplier: 1.0,
+  forceMultiplier: 0,
+  aoeDamage: 0,
+  aoeRadius: 0,
+  damageColor: '#7dffb8',
+  trailColors: [new THREE.Color(0.5, 1.0, 0.72)],
+  trailParticlesPerUnit: 0,
+  trailLifeMin: 0,
+  trailLifeMax: 0,
+  trailSpread: 0,
+  trailForwardSpread: 0,
+  trailParticleGravity: 0,
+  trailOpacity: 0.6,
+  trailBaseSize: 0.04,
+  trailSizeRange: 0.03,
+  trailScaleMin: 0.3,
+  trailScaleMax: 1.0,
+  trailRampIn: 0,
+  meshColor: 0x7dffb8,
+  meshType: 'rocket',
+  glowShell: false,
+  glowColor: 0x7dffb8,
+  glowOpacity: 0,
+  meshRampIn: false,
+  meshRampInDuration: 0,
+  meshStartScale: 1.0,
+  terrainOffset: 0.05,
+  needsServerTracking: true,
+  noExplosion: true,
+  trailMeshType: 'sphere',
+  ribbonTrail: true,
+  ribbonLanes: 1,
+  ribbonWidth: 0.16,
+  ribbonLife: 0.06,
+  ribbonColor: 0x7dffb8,
+};

@@ -36,6 +36,7 @@ export enum WeaponType {
   PlasmaGun = 23,     // Quake-style rapid plasma: fast cadence, mid-speed fat bolt
   RemoteRailgun = 24, // belt throw: slug discharges a hitscan rail mid-flight, pops at the hit point
   Sprinkler = 25,     // plasma hose: rapid stream of arced bolts with cone spread
+  Repair = 26,        // repair-tool sidearm: short beam that heals deployables, overheal → armor
 }
 
 export interface WeaponStats {
@@ -499,7 +500,31 @@ export const WEAPONS: Record<number, WeaponStats> = {
     hitMax: 0,
     hitGrow: 0,
   },
+  [WeaponType.Repair]: {
+    // Hitscan repair beam — the sting vs creatures exists so the tool
+    // isn't a dead slot in a fight, but its real damage is the heal:
+    // REPAIR_HEAL_PER_TICK flows into a friendly deployable, overflow
+    // banking as armor up to REPAIR_ARMOR_MULT × its base hp.
+    directDamage: 6,
+    aoeDamage: 0,
+    aoeRadius: 0,
+    knockbackForce: 0,
+    forceMode: 'push',
+    speed: 0,
+    gravity: false,
+    bodyRadius: 0,
+    hitMin: 0,
+    hitMax: 0,
+    hitGrow: 0,
+  },
 };
+
+// Repair-tool economy — one number set on both ends so the server heal
+// and the client beam agree without trusting the claim.
+export const REPAIR_RANGE = 14;        // beam reach (m)
+export const REPAIR_HEAL_PER_TICK = 5; // per fire tick → ~50 hp/s at 0.1s rate
+export const REPAIR_MIN_TICK_S = 0.07; // server: min seconds between claims per shooter+target
+export const REPAIR_ARMOR_MULT = 2;    // armor cap = this × the deployable's base hp
 
 export function getWeaponStats(weaponType: number | undefined): WeaponStats {
   return WEAPONS[weaponType ?? WeaponType.Rocket] ?? WEAPONS[WeaponType.Rocket]!;

@@ -22,7 +22,7 @@ import { DeployRockets } from './deployRockets.js';
 import { screenShake } from '../effects/screenShake.js';
 import * as sfx from '../core/sfx.js';
 import { GRAVITY, MAX_ENERGY, MINE_DAMAGE_MAX, ROCKET_RADIUS } from '../core/config.js';
-import { WeaponType } from '../../../shared/weapons.js';
+import { WeaponType, REPAIR_ARMOR_MULT } from '../../../shared/weapons.js';
 import { THROW_RELEASE, THROW_TOTAL } from '../entities/ViewModel.js';
 import type { GameContext } from './context.js';
 import type { Targetable } from '../entities/balls.js';
@@ -46,6 +46,7 @@ const POD_RADIUS = 0.32;
 const POD_TTL = 8;         // airtime budget — a pod that never settles fizzles
 const _UP = new THREE.Vector3(0, 1, 0);
 const _FAR = new THREE.Vector3(0, -1e5, 0); // dormant-proxy for flying mines
+const _repTo = new THREE.Vector3(); // repair-beam ray scratch
 
 interface Pod {
   kind: DeployKind;
@@ -61,7 +62,7 @@ interface Pod {
   landed: boolean;
 }
 
-interface Item {
+export interface Item {
   kind: DeployKind;
   candId: string;
   pos: THREE.Vector3;
@@ -72,7 +73,17 @@ interface Item {
   /** Plant owner — per-owner caps and owner-team foe lists for bots.
    *  Undefined = the local player. */
   owner?: string;
+  /** Wire id the server assigned (echoed via deploySpawn). The repair
+   *  claim carries only this — the server re-derives the heal itself. */
+  serverId?: number;
+  /** Vitals the repair beam reads — the entity itself for real items,
+   *  a plain record for remote-visual ones. */
+  v: { health: number; armor: number; maxHealth: number };
 }
+
+// Base hp caps — mirrors the server's HP table + entity maxHealth, used
+// for remote-visual items and the armor cap before deployHp lands.
+const DEPLOY_V_CAP: Record<DeployKind, number> = { turret: 60, mine: 1, station: 90, drone: 50 };
 
 /** A bot that plants — foe lists, anchors, and heals all read through
  *  this instead of the local player singleton. */
@@ -315,10 +326,10 @@ export class Deployables {
   ackLocal(id: number): void {
     const live = this.items.filter(i => !i.dead);
     const newest = live[live.length - 1];
-    if (newest) this.byId.set(id, newest);
+    if (newest) { newest.serverId = id; this.byId.set(id, newest); }
   }
 
-  remoteSpawn(id: number, owner: string, kind: DeployKind, pos: { x: number; y: number; z: number }): void {
+  remoteSpawn(id: number, owner: string, kind: DeployKind, pos: { x: number; y: number; z: number }, hp?: number, armor?: number): void {
     if (this.remote.has(id)) return;
     const terrain = this.deps.lazyTerrain();
     const at = new THREE.Vector3(pos.x, pos.y, pos.z);
@@ -326,12 +337,14 @@ export class Deployables {
     if (kind === 'turret') {
       const t = new DeployTurret(this.deps.scene, terrain, at);
       t.unfoldDone();
+      if (hp !== undefined) { t.health = hp; t.armor = armor ?? 0; }
       item = {
         kind, candId: `rdep:${id}`, pos: t.pos, dead: false,
         hurt: () => {}, // server owns its lifetime — deployGone removes it
         // Remote sentries still scan and aim — pure cosmetics, no firing.
         update: (dt) => void t.update(dt, this._enemies),
         dispose: () => t.dispose(this.deps.scene),
+        v: t,
       };
     } else {
       const group = new THREE.Group();
@@ -350,10 +363,52 @@ export class Deployables {
             if (op) group.position.set(op.x, op.y + 2.5, op.z);
           }
         : () => {};
-      item = { kind, candId: `rdep:${id}`, pos: group.position, dead: false, hurt: () => {}, update, dispose: () => this.deps.scene.remove(group) };
+      item = {
+        kind, candId: `rdep:${id}`, pos: group.position, dead: false,
+        hurt: () => {}, update, dispose: () => this.deps.scene.remove(group),
+        v: { health: hp ?? DEPLOY_V_CAP[kind], armor: armor ?? 0, maxHealth: DEPLOY_V_CAP[kind] },
+      };
     }
+    item.serverId = id;
     this.remote.set(id, item);
     this.byId.set(id, item);
+  }
+
+  /** deployHp broadcast — server is the vitals authority; the local
+   *  beam's predicted heal gets corrected by this same write. */
+  applyDeployHp(id: number, hp: number, armor: number): void {
+    const it = this.byId.get(id);
+    if (it) { it.v.health = hp; it.v.armor = armor; }
+  }
+
+  /** Repair-beam pick: nearest deployed item along the ray, padded —
+   *  beam thin but not needle-thin, aim at the body not the feet. */
+  repairHit(origin: THREE.Vector3, dir: THREE.Vector3, range: number): { item: Item; t: number } | null {
+    let best: Item | null = null;
+    let bestT = range;
+    for (const i of this.items) {
+      if (i.dead) continue;
+      _repTo.copy(i.pos).sub(origin);
+      _repTo.y += 0.7; // body center — turret mast / pad crystal / drone hull
+      const proj = _repTo.dot(dir);
+      if (proj < 0 || proj > bestT) continue;
+      const perp2 = _repTo.lengthSq() - proj * proj;
+      const r = 1.1;
+      if (perp2 >= r * r) continue;
+      const entry = proj - Math.sqrt(r * r - perp2);
+      if (entry < bestT) { bestT = Math.max(entry, 0); best = i; }
+    }
+    return best ? { item: best, t: bestT } : null;
+  }
+
+  /** Repair beam: heal to maxHealth, overflow banks as armor. The local
+   *  write is the offline authority AND the prediction — the server's
+   *  deployHp echo lands the same number when connected. */
+  healItem(item: Item, n: number): void {
+    const v = item.v;
+    const over = Math.max(0, v.health + n - v.maxHealth);
+    v.health = Math.min(v.maxHealth, v.health + n);
+    v.armor = Math.min(v.maxHealth * REPAIR_ARMOR_MULT, v.armor + over);
   }
 
   remoteRemove(id: number): void {
@@ -397,6 +452,7 @@ export class Deployables {
     const item: Item = {
       kind: 'turret', candId: t.candId, pos: t.pos, dead: false,
       hurt: (dmg) => t.takeDamage(dmg),
+      v: t,
       update: (dt) => {
         const shot = t.update(dt, this.foesFor(owner));
         if (!shot) return;
@@ -422,6 +478,7 @@ export class Deployables {
     const item: Item = {
       kind: 'drone', candId: d.candId, pos: d.pos, dead: false,
       hurt: (dmg) => d.takeDamage(dmg),
+      v: d,
       update: (dt) => {
         // Anchor is the plant owner — a bot's drone chases the bot.
         const shot = d.update(dt, owner?.pos ?? p.pos, owner ? owner.yaw() : p.yaw, this.foesFor(owner));
@@ -469,6 +526,7 @@ export class Deployables {
     const item: Item = {
       kind: 'mine', candId: `dep:${m.id}`, pos: m.pos, dead: false,
       hurt: (dmg) => { void dmg; m.takeDamage(); }, // mines pop on any hit
+      v: m,
       update: (dt) => {
         // Trigger proxy: the nearest hostile to THIS mine. Mine.update was
         // written for player-proximity; we feed it our enemy instead.
@@ -499,6 +557,7 @@ export class Deployables {
     const item: Item = {
       kind: 'station', candId: s.candId, pos: s.pos, dead: false,
       hurt: (dmg) => s.takeDamage(dmg),
+      v: s,
       update: (dt) => {
         // Field owner gets the charge — a bot's pad heals the bot.
         const who = owner ?? p;

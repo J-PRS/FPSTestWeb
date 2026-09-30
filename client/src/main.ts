@@ -397,6 +397,7 @@ function makeCombat(): ReturnType<typeof createCombat> {
     lazyHud: () => hud,
     lazyHealthBarSystem: () => healthBarSystem,
     lazyDamageNumbers: () => damageNumberManager,
+    lazyDeployables: () => entities.deployables,
     fragMessages,
     inputTracking,
     explosionTracker,

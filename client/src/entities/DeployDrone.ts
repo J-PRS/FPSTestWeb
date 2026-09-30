@@ -39,6 +39,7 @@ export class DeployDrone {
   dead = false;
   health = 50;
   maxHealth = 50;
+  armor = 0;
 
   readonly group = new THREE.Group();
   private rotor: THREE.Mesh;
@@ -147,9 +148,17 @@ export class DeployDrone {
     this.group.scale.setScalar(1);
   }
 
+  heal(n: number): void {
+    const over = Math.max(0, this.health + n - this.maxHealth);
+    this.health = Math.min(this.maxHealth, this.health + n);
+    this.armor = Math.min(this.maxHealth * 2, this.armor + over);
+  }
+
   takeDamage(dmg: number): void {
     if (this.dead) return;
-    this.health -= dmg;
+    const soak = Math.min(this.armor, dmg);
+    this.armor -= soak;
+    this.health -= dmg - soak;
     if (this.health <= 0) this.dead = true;
   }
 

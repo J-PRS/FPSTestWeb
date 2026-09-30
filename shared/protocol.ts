@@ -69,6 +69,9 @@ export type ClientMessage =
   // the two id namespaces don't overlap (crawl ids live in CreatureSim).
   | { type: 'crawlerHit'; id: number; damage: number; kx?: number; ky?: number; kz?: number }
   | { type: 'deploy'; kind: 'turret' | 'mine' | 'station' | 'drone'; position: Vec3 }
+  // Repair-tool beam tick: the server re-derives range, LOS, team and the
+  // heal amount itself — the claim carries only WHICH deployable.
+  | { type: 'repair'; targetId: number }
   | { type: 'snapshotRequest' }
   // Loadout class picked mid-match — stored as pending and applied on the
   // next respawn (Tribes rule: no instant tier swap mid-life, it'd be a
@@ -102,7 +105,7 @@ export interface TickUpdatePlayer {
 export type ServerMessage =
   // room/mode: which match this state belongs to — set by the room's first
   // joiner, inherited by everyone after (join claims can't redefine it).
-  | { type: 'gameState'; players: GameStatePlayer[]; localPlayerState?: LocalPlayerState; sessionToken?: string; protocolVersion?: number; room?: string; mode?: string; team?: 'alpha' | 'bravo'; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number>; map?: { mode?: string; bases?: { alpha?: Vec3; bravo?: Vec3 }; structures?: { kind: 'box' | 'wall' | 'pillar' | 'ramp'; pos: Vec3; size: Vec3; rotY?: number; team?: 'alpha' | 'bravo' }[]; arena?: { x: number; z: number; radius: number }; ambient?: Record<string, number> }; flags?: { team: 'alpha' | 'bravo'; pos: Vec3; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]; pickups?: { id: number; pos: Vec3; kind?: PickupKind }[]; deployables?: { id: number; owner: string; kind: 'turret' | 'mine' | 'station' | 'drone'; pos: Vec3 }[]; matchEndsAt?: number; respawnMs?: number }
+  | { type: 'gameState'; players: GameStatePlayer[]; localPlayerState?: LocalPlayerState; sessionToken?: string; protocolVersion?: number; room?: string; mode?: string; team?: 'alpha' | 'bravo'; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number>; map?: { mode?: string; bases?: { alpha?: Vec3; bravo?: Vec3 }; structures?: { kind: 'box' | 'wall' | 'pillar' | 'ramp'; pos: Vec3; size: Vec3; rotY?: number; team?: 'alpha' | 'bravo' }[]; arena?: { x: number; z: number; radius: number }; ambient?: Record<string, number> }; flags?: { team: 'alpha' | 'bravo'; pos: Vec3; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]; pickups?: { id: number; pos: Vec3; kind?: PickupKind }[]; deployables?: { id: number; owner: string; kind: 'turret' | 'mine' | 'station' | 'drone'; pos: Vec3; hp?: number; armor?: number }[]; matchEndsAt?: number; respawnMs?: number }
   | { type: 'playerJoined'; playerId: string; internalId: string; position: Vec3; rotation: Rotation; team?: 'alpha' | 'bravo'; transport?: 'wt' | 'rtc' | 'ws'; armorClass?: string }
   | { type: 'playerLeft'; playerId: string }
   // Team reassignment mid-match — team comes through playerJoined/gameState
@@ -165,6 +168,8 @@ export type ServerMessage =
   | { type: 'pickupSpawn'; id: number; pos: Vec3; kind?: PickupKind }
   | { type: 'deploySpawn'; id: number; owner: string; kind: 'turret' | 'mine' | 'station' | 'drone'; pos: Vec3; team?: 'alpha' | 'bravo' }
   | { type: 'deployGone'; id: number }
+  // Durability sync — hp + overcharge armor riding whenever either moves.
+  | { type: 'deployHp'; id: number; hp: number; armor: number }
   // Server-owned sentry fired at a player — clients render the rocket
   // visual; damage itself arrives through playerHit like everything else.
   | { type: 'turretShot'; id: number; owner: string; targetId: string }

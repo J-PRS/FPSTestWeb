@@ -24,6 +24,7 @@ import type { WeaponDef } from '../weapons.js';
 import type { FireEvent } from '../entities/Player.js';
 import { createBlastForce } from './blastForce.js';
 import { createLightning, lgDischarge } from './combat/lightning.js';
+import { createRepair } from './combat/repair.js';
 import { burstGibs } from '../entities/swarms.js';
 import type { SwarmSlotOwner } from '../entities/swarm.js';
 import { PENDING_ROCKET_TIMEOUT, ROCKET_RADIUS, CHAINGUN_RATE } from '../core/config.js';
@@ -39,6 +40,8 @@ export interface CombatDeps extends GameContext {
   lazyViewModel(): ViewModel | undefined;
   lazyHealthBarSystem(): HealthBarSystem;
   lazyDamageNumbers(): DamageNumberManager;
+  /** Deployable registry — the repair beam's heal targets live here. */
+  lazyDeployables?: () => import('./deployables.js').Deployables;
   fragMessages: FragMessages;
   inputTracking: ReturnType<typeof setupInputTracking>;
   explosionTracker: ExplosionTracker;
@@ -592,10 +595,14 @@ export function createCombat(deps: CombatDeps) {
   });
   const { lightning, updateBeamVisual } = lg;
 
+  // Repair tool — the technician's hold-out beam (combat/repair.ts).
+  // Shares the LG's beam machinery, tinted weld-green.
+  const rep = createRepair(deps);
+
   const c: CombatCtx = {
     deps,
     applyExplosionForce,
-    lg: { tickBeam: lg.tickBeam },
+    lg: { tickBeam: (dt: number) => { lg.tickBeam(dt); rep.tickBeam(dt); } },
     // Chaingun ramp state: targetId → last hit time + chain count.
     chainRamp: new Map(),
   };
@@ -610,7 +617,10 @@ export function createCombat(deps: CombatDeps) {
           weaponType: def.weaponType, dir: { x: e.dir.x, y: e.dir.y, z: e.dir.z },
         });
       }
-      if (def.kind === 'beam') lightning(e);
+      if (def.kind === 'beam') {
+        if (def.weaponType === WeaponType.Repair) rep.repair(e);
+        else lightning(e);
+      }
       else fire.fireWeapon(def, e);
     },
     onBelt,
@@ -618,7 +628,7 @@ export function createCombat(deps: CombatDeps) {
     onLightning: lightning,
     slam: (pos: THREE.Vector3, impactSpeed: number) => slam(c, pos, impactSpeed),
     updateProjectiles: (dt: number) => updateProjectiles(c, dt),
-    updateBeamVisual,
+    updateBeamVisual: () => { updateBeamVisual(); rep.updateBeamVisual(); },
     hitTargetLocal: (t: import('../entities/balls.js').Targetable, dmg: number) => hitTargetLocal(c, t, dmg),
   };
 }

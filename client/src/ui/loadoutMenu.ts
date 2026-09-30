@@ -205,8 +205,8 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
   const sidearm = mkRow('');
   ui.sidearmLabel = sidearm.label;
   ui.sidearmDrop = mkDrop(
-    [{ v: 'pistol', label: 'Pistol' }, { v: 'revolver', label: 'Revolver' }, { v: 'shotgun', label: 'Shotgun' }],
-    (v) => deps.lazyPlayer().setSidearm(v as 'pistol' | 'revolver' | 'shotgun'),
+    [{ v: 'pistol', label: 'Pistol' }, { v: 'revolver', label: 'Revolver' }, { v: 'shotgun', label: 'Shotgun' }, { v: 'repair', label: 'Repair Tool' }],
+    (v) => deps.lazyPlayer().setSidearm(v as 'pistol' | 'revolver' | 'shotgun' | 'repair'),
   );
   sidearm.row.appendChild(ui.sidearmDrop.el);
 

@@ -76,6 +76,7 @@ export class ViewModel {
     [WeaponType.Sticky]: -0.40,
     [WeaponType.Pistol]: -0.17,   // stubby barrel face
     [WeaponType.Revolver]: -0.27, // long barrel + underlug tip
+    [WeaponType.Repair]: -0.17,   // pistol frame, stubby emitter face
   };
   private chainBarrels: THREE.Group | null = null;
   // Bore axis in the SPIN NODE's local space — procedural barrels run
@@ -351,6 +352,7 @@ export class ViewModel {
     [WeaponType.Pistol]:          [22, 0.01, 0xffe0a0, 0.35, 0.4, 1.1], // snappy crack — muzzle flip, quick settle
     [WeaponType.Revolver]:        [8,  0.05, 0xffb060, 1.1, 0.8, 1.3],  // hand-cannon bark — big muzzle flip
     [WeaponType.Sticky]:          [13, 0.02, 0xff66dd, 0.8, 0.7, 0.9],  // thoomp — tube launch, magenta spit
+    [WeaponType.Repair]:          [16, 0.05, 0x7dffb8, 0.4, 0.4, 0.4],  // per-tick hum — green weld spark
   };
 
   kick(strength = 1): void {

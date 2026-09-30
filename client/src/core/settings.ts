@@ -13,7 +13,7 @@ type Schema = {
   'fps-minimap': number;      // 0 = corner radar, 1 = crosshair threat overlay
   'fps-loadout': string;      // "0,2,6,7" — weapon id per slot
   'fps-belt': string;         // 'disc' | 'grenade'
-  'fps-sidearm': string;      // 'pistol' | 'revolver' | 'shotgun'
+  'fps-sidearm': string;      // 'pistol' | 'revolver' | 'shotgun' | 'repair'
   'fps-pack': string;         // DeployKind — 'turret' | 'mine' | 'station'
   'fps-skill': string;        // SkillId
   'fps-perk': string;         // PerkId

@@ -52,6 +52,8 @@ export interface RoomInfo {
   matchEndsAt?: () => number;
   /** Deploy claim sink — Room.deployables.handleDeploy. */
   onDeploy?: (playerId: string, kind: string, pos: Vec3) => void;
+  /** Repair-beam claim sink — Room.deployables.repair. */
+  onRepair?: (playerId: string, targetId: number) => void;
   /** AOE blast sink for deployables — Room.deployables.applyBlast. */
   deployBlast?: (pos: Vec3, damage: number, radius: number, shooterId: string) => void;
   /** Shadow-move hooks — Room.moveSim. Position reports reconcile the
@@ -82,7 +84,7 @@ export interface RoomInfo {
    *  claims far past melee range get flagged, not silently eaten. */
   envRange?: (playerId: string) => number;
   /** Live deployables for gameState joins — RoomDeployables.snapshot. */
-  deployables?: () => { id: number; owner: string; kind: 'turret' | 'mine' | 'station' | 'drone'; pos: Vec3 }[];
+  deployables?: () => { id: number; owner: string; kind: 'turret' | 'mine' | 'station' | 'drone'; pos: Vec3; hp?: number; armor?: number }[];
 }
 
 export class MessageHandler {
@@ -150,6 +152,7 @@ export class MessageHandler {
       environmentDamage: (id, m) => this.combat.handleEnvironmentDamage(id, m as Extract<ClientMessage, { type: 'environmentDamage' }>),
       heal: (id, m) => this.combat.handleHeal(id, m as Extract<ClientMessage, { type: 'heal' }>),
       deploy: (id, m) => this.roomInfo.onDeploy?.(id, (m as Extract<ClientMessage, { type: 'deploy' }>).kind, (m as Extract<ClientMessage, { type: 'deploy' }>).position),
+      repair: (id, m) => this.roomInfo.onRepair?.(id, (m as Extract<ClientMessage, { type: 'repair' }>).targetId),
       creatureHit: (id, m) => {
         const h = m as Extract<ClientMessage, { type: 'creatureHit' }>;
         this.ballSim?.handleHit(id, h.id, h.damage, h.kx, h.ky, h.kz);
