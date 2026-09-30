@@ -4,16 +4,15 @@
 import { CircularBuffer } from './CircularBuffer.js';
 import {
   DemoFrame, ProjectileEvent, TargetEvent, RemoteFrame, RemoteFrameFlags,
-  ProjectileEventType, TargetEventType,
   createFrame, DEMO_MAGIC, DEMO_FORMAT_VERSION,
   type DemoFile, type DemoRosterEntry,
 } from './types.js';
 import type { IPlayerDataProvider, IInputProvider, Vec3 } from './interfaces.js';
 import { collectRemoteFrames, collectProjectileEvents, collectTargetEvents } from './demoClip.js';
+import * as ev from './demoEvents.js';
 
 const DEFAULT_BUFFER_SECONDS = 30;
 const DEFAULT_TICK_RATE = 60; // frames per second
-const MAX_EVENTS_PER_SEC = 1000;
 // Remote players don't need the local tick rate — the wire itself only
 // carries ~20Hz, so sampling faster just stores duplicates.
 const REMOTE_SAMPLE_HZ = 20;
@@ -53,30 +52,30 @@ const DEMO_ZERO_FRAME = {
 
 export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecorder {
   private frameBuffer: CircularBuffer<DemoFrame>;
-  private projectileEvents: ProjectileEvent[] = [];
-  private targetEvents: TargetEvent[] = [];
+  projectileEvents: ProjectileEvent[] = [];
+  targetEvents: TargetEvent[] = [];
   private remoteFrames: RemoteFrame[] = [];
-  private rosterIdxById = new Map<string, number>();
-  private roster: DemoRosterEntry[] = [];
-  private remoteSource: (() => Iterable<RemoteSample>) | null = null;
-  private lastRemoteSampleT = 0;
-  private context: DemoContext = { room: '', mode: '', playerName: '' };
+  rosterIdxById = new Map<string, number>();
+  roster: DemoRosterEntry[] = [];
+  remoteSource: (() => Iterable<RemoteSample>) | null = null;
+  lastRemoteSampleT = 0;
+  context: DemoContext = { room: '', mode: '', playerName: '' };
 
-  private recording = false;
-  private frameNumber = 0;
-  private startTime = 0;
-  private elapsedTime = 0;
-  private lastTickTime = 0;
-  private tickInterval: number;
-  private bufferSeconds: number;
-  private nextProjectileId = 1;
+  recording = false;
+  frameNumber = 0;
+  startTime = 0;
+  elapsedTime = 0;
+  lastTickTime = 0;
+  tickInterval: number;
+  bufferSeconds: number;
+  nextProjectileId = 1;
 
   private playerData: IPlayerDataProvider | null = null;
   private inputData: IInputProvider | null = null;
 
   // Event rate limiting
-  private eventCountThisSecond = 0;
-  private lastEventResetTime = 0;
+  eventCountThisSecond = 0;
+  lastEventResetTime = 0;
 
   constructor(bufferSeconds: number = DEFAULT_BUFFER_SECONDS, tickRate: number = DEFAULT_TICK_RATE) {
     this.bufferSeconds = bufferSeconds;
@@ -183,141 +182,34 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
     pruneEventsBefore(this.remoteFrames, cutoff);
   }
 
-  private checkEventRate(): boolean {
-    if (this.elapsedTime - this.lastEventResetTime >= 1.0) {
-      this.eventCountThisSecond = 0;
-      this.lastEventResetTime = this.elapsedTime;
-    }
-    if (this.eventCountThisSecond >= MAX_EVENTS_PER_SEC) return false;
-    this.eventCountThisSecond++;
-    return true;
-  }
-
-  // IProjectileEventRecorder
+  // Event recorders — the rate-limited projectile/target event spool
+  // lives in demoEvents.ts; these keep the interface shape.
   recordFired(position: Vec3, velocity: Vec3, weaponType: number): number {
-    if (!this.recording || !this.checkEventRate()) return 0;
-    const id = this.nextProjectileId;
-    this.nextProjectileId = (this.nextProjectileId % 65535) + 1;
-    this.projectileEvents.push({
-      eventType: ProjectileEventType.Fired,
-      timestamp: this.elapsedTime,
-      posX: position.x, posY: position.y, posZ: position.z,
-      velX: velocity.x, velY: velocity.y, velZ: velocity.z,
-      projectileId: id, weaponType,
-      surfaceNormalX: 0, surfaceNormalY: 0, surfaceNormalZ: 0,
-      targetId: 0, hasPeakPosition: false,
-      peakPosX: 0, peakPosY: 0, peakPosZ: 0,
-    });
-    return id;
+    return ev.recordFired(this, position, velocity, weaponType);
   }
-
   recordBounce(projectileId: number, position: Vec3, velocity: Vec3, surfaceNormal: Vec3): void {
-    // 0 = recordFired's rate-limit/not-recording sentinel — no live projectile
-    if (projectileId === 0 || !this.recording || !this.checkEventRate()) return;
-    this.projectileEvents.push({
-      eventType: ProjectileEventType.Bounce,
-      timestamp: this.elapsedTime,
-      posX: position.x, posY: position.y, posZ: position.z,
-      velX: velocity.x, velY: velocity.y, velZ: velocity.z,
-      projectileId, weaponType: 0,
-      surfaceNormalX: surfaceNormal.x, surfaceNormalY: surfaceNormal.y, surfaceNormalZ: surfaceNormal.z,
-      targetId: 0, hasPeakPosition: false,
-      peakPosX: 0, peakPosY: 0, peakPosZ: 0,
-    });
+    ev.recordBounce(this, projectileId, position, velocity, surfaceNormal);
   }
-
   recordHit(projectileId: number, position: Vec3, targetId: number): void {
-    if (projectileId === 0 || !this.recording || !this.checkEventRate()) return;
-    this.projectileEvents.push({
-      eventType: ProjectileEventType.Hit,
-      timestamp: this.elapsedTime,
-      posX: position.x, posY: position.y, posZ: position.z,
-      velX: 0, velY: 0, velZ: 0,
-      projectileId, weaponType: 0,
-      surfaceNormalX: 0, surfaceNormalY: 0, surfaceNormalZ: 0,
-      targetId, hasPeakPosition: false,
-      peakPosX: 0, peakPosY: 0, peakPosZ: 0,
-    });
+    ev.recordHit(this, projectileId, position, targetId);
   }
-
   recordDestroyed(projectileId: number, position: Vec3): void {
-    if (projectileId === 0 || !this.recording || !this.checkEventRate()) return;
-    this.projectileEvents.push({
-      eventType: ProjectileEventType.Destroyed,
-      timestamp: this.elapsedTime,
-      posX: position.x, posY: position.y, posZ: position.z,
-      velX: 0, velY: 0, velZ: 0,
-      projectileId, weaponType: 0,
-      surfaceNormalX: 0, surfaceNormalY: 0, surfaceNormalZ: 0,
-      targetId: 0, hasPeakPosition: false,
-      peakPosX: 0, peakPosY: 0, peakPosZ: 0,
-    });
+    ev.recordDestroyed(this, projectileId, position);
   }
-
-  // ITargetEventRecorder
   recordTargetSpawned(targetId: number, position: Vec3, velocity: Vec3, targetType: number): void {
-    if (!this.recording || !this.checkEventRate()) return;
-    this.targetEvents.push({
-      eventType: TargetEventType.Spawned,
-      timestamp: this.elapsedTime,
-      posX: position.x, posY: position.y, posZ: position.z,
-      velX: velocity.x, velY: velocity.y, velZ: velocity.z,
-      targetId, targetType, health: 0,
-      hasPeakPosition: false,
-      peakPosX: 0, peakPosY: 0, peakPosZ: 0,
-    });
+    ev.recordTargetSpawned(this, targetId, position, velocity, targetType);
   }
-
   recordTargetBounce(targetId: number, position: Vec3, velocity: Vec3, targetType: number): void {
-    if (!this.recording || !this.checkEventRate()) return;
-    this.targetEvents.push({
-      eventType: TargetEventType.Bounce,
-      timestamp: this.elapsedTime,
-      posX: position.x, posY: position.y, posZ: position.z,
-      velX: velocity.x, velY: velocity.y, velZ: velocity.z,
-      targetId, targetType, health: 0,
-      hasPeakPosition: false,
-      peakPosX: 0, peakPosY: 0, peakPosZ: 0,
-    });
+    ev.recordTargetBounce(this, targetId, position, velocity, targetType);
   }
-
   recordTargetPeak(targetId: number, position: Vec3, velocity: Vec3, targetType: number): void {
-    if (!this.recording || !this.checkEventRate()) return;
-    this.targetEvents.push({
-      eventType: TargetEventType.StateChanged,
-      timestamp: this.elapsedTime,
-      posX: position.x, posY: position.y, posZ: position.z,
-      velX: velocity.x, velY: velocity.y, velZ: velocity.z,
-      targetId, targetType, health: 0,
-      hasPeakPosition: true,
-      peakPosX: position.x, peakPosY: position.y, peakPosZ: position.z,
-    });
+    ev.recordTargetPeak(this, targetId, position, velocity, targetType);
   }
-
   recordTargetHit(targetId: number, position: Vec3, velocity: Vec3, targetType: number, health: number): void {
-    if (!this.recording || !this.checkEventRate()) return;
-    this.targetEvents.push({
-      eventType: TargetEventType.Hit,
-      timestamp: this.elapsedTime,
-      posX: position.x, posY: position.y, posZ: position.z,
-      velX: velocity.x, velY: velocity.y, velZ: velocity.z,
-      targetId, targetType, health,
-      hasPeakPosition: false,
-      peakPosX: 0, peakPosY: 0, peakPosZ: 0,
-    });
+    ev.recordTargetHit(this, targetId, position, velocity, targetType, health);
   }
-
   recordTargetDestroyed(targetId: number, position: Vec3, targetType: number, health: number = 0): void {
-    if (!this.recording || !this.checkEventRate()) return;
-    this.targetEvents.push({
-      eventType: TargetEventType.Destroyed,
-      timestamp: this.elapsedTime,
-      posX: position.x, posY: position.y, posZ: position.z,
-      velX: 0, velY: 0, velZ: 0,
-      targetId, targetType, health,
-      hasPeakPosition: false,
-      peakPosX: 0, peakPosY: 0, peakPosZ: 0,
-    });
+    ev.recordTargetDestroyed(this, targetId, position, targetType, health);
   }
 
   // Extract all recorded data into a DemoFile
