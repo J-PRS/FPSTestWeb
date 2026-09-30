@@ -1,3 +1,4 @@
+2026-09-30 - volumetricClouds split: billboard puff layer (sprite texture bake, geometry builder, shaders) moved to cloudPuffs.ts; host keeps the six-deck dome (519->350).
 2026-09-30 - HUD split: per-frame stat painter (vitals/speed/telemetry/slots/hit marker/damage fx/buffs/fps) moved to hud/hudStats.ts behind a StatsHost element surface (552->370).
 2026-09-30 - RemotePlayer split: snapshot ingest + adaptive interp + dead reckoning + predicted knockback moved to remoteInterp.ts behind an InterpHost surface; all DR/prediction timers are family-owned (558->387).
 2026-09-30 - shared/weapons split: WeaponType enum + WeaponStats + the ~450-line WEAPONS record moved to weaponTable.ts; weapons.ts keeps helpers + re-exports so callers are unchanged (589->75).
