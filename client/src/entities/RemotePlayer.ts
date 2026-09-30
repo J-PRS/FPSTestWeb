@@ -13,6 +13,7 @@ import { resetCorpse, launchCorpse, stepCorpse, type CorpseState } from './remot
 import { WeaponType } from '../../../shared/weapons.js';
 import { RemoteAuras } from './remoteAuras.js';
 import { RemoteAnim } from './remoteAnim.js';
+import { hideRemote, showRemote, setStaleVis, setCloakVis, shootReveal, tickGhostF } from './remoteVis.js';
 
 const logger = new ChildLogger('RemotePlayer');
 
@@ -36,15 +37,15 @@ export class RemotePlayer {
   rotation: { yaw: number; pitch: number; roll: number };
   playerId: string;
   readonly instanceId: number;
-  private _model: PlayerModel;
+  _model: PlayerModel; // public — vis/anim family reads the loaded model
   previousPosition: THREE.Vector3; // public — anim drive derives speed from it
-  private _loaded: boolean = false;
+  _loaded: boolean = false;
   private _isDead: boolean = false;
-  private gizmo: RemoteGizmo | null = null;
+  gizmo: RemoteGizmo | null = null;
   scene: THREE.Scene; // public — RemoteAuras builds bubbles in it
   // Shield bubble + status auras (mend/regen/dd/charge) — the lazy-glow
   // plumbing lives in remoteAuras.ts behind the AuraHost surface.
-  private auras = new RemoteAuras(this);
+  auras = new RemoteAuras(this);
   velocity: THREE.Vector3 = new THREE.Vector3(); // public — anim drive reads it
   private angularVelocity: THREE.Vector3 = new THREE.Vector3();
   private isOnGround: boolean = true;
@@ -239,26 +240,13 @@ export class RemotePlayer {
     this.model.removeColliderGizmo();
   }
 
+  hide(): void { hideRemote(this); }
+  show(): void { showRemote(this); }
+
   /** Team tint on the name ring — Nugget Wars bots use it; server players
    *  could too once teamAssign lands on the wire. */
   setGizmoColor(hex: number): void {
     this.gizmo?.setColor(hex);
-  }
-
-  hide(): void {
-    this.model.setVisible(false);
-    this.gizmo?.hide();
-    this.auras.hide();
-  }
-
-  show(): void {
-    this.model.setVisible(true);
-    // Only add collider if model is loaded (colliderGizmo exists)
-    if (this.loaded) {
-      this.model.addColliderGizmo();
-    }
-    this.gizmo?.attach();
-    this.auras.show();
   }
 
   respawn(position: { x: number; y: number; z: number }): void {
@@ -280,7 +268,7 @@ export class RemotePlayer {
     this.rotation.roll = 0;
     this.isOnGround = true;
     this.interp.reset(this.position);
-    if (!this.cloakHidden) this.show();
+    if (!this.cloakHidden) showRemote(this);
   }
 
   // Staleness gate: hide players whose updates stopped arriving (backgrounded
@@ -288,21 +276,9 @@ export class RemotePlayer {
   // Public fields — RemoteAuras reads them to gate aura visibility.
   staleHidden = false;
   cloakHidden = false;
-  setStaleHidden(hidden: boolean): void {
-    if (hidden === this.staleHidden) return;
-    this.staleHidden = hidden;
-    if (hidden) this.hide(); else if (!this.cloakHidden) this.show();
-  }
-
-  // Server-authoritative cloak — separate flag from staleHidden because a
-  // decloak must restore visibility even while a stale socket stays hidden.
-  setCloakHidden(hidden: boolean): void {
-    if (hidden === this.cloakHidden) return;
-    this.cloakHidden = hidden;
-    if (hidden) this.hide(); else if (!this.staleHidden) this.show();
-  }
   get isCloakHidden(): boolean { return this.cloakHidden; }
-
+  setStaleHidden(hidden: boolean): void { setStaleVis(this, hidden); }
+  setCloakHidden(hidden: boolean): void { setCloakVis(this, hidden); }
   setShielded(on: boolean): void { this.auras.setShielded(on); }
   get isShielded(): boolean { return this.auras.isShielded; }
 
@@ -336,20 +312,7 @@ export class RemotePlayer {
     }
     // Firing decloaks: a cloaked shooter shimmers visible for a beat —
     // the price of shooting from stealth.
-    if (this.cloakHidden && this._loaded) {
-      this.ghostT = 1;
-      this._model.setGhost(true);
-      this.model.setVisible(true);
-    }
-  }
-
-  private ghostT = 0;
-  tickGhost(dt: number): void { // public — anim drive calls it post-locomotion
-    if (this.ghostT <= 0) return;
-    this.ghostT -= dt;
-    if (this.ghostT > 0) return;
-    this._model.setGhost(false);
-    if (this.cloakHidden || this.staleHidden) this.model.setVisible(false);
+    shootReveal(this);
   }
 
   // Predicted knockback: run the victim through dead reckoning for ~1 RTT
@@ -358,6 +321,9 @@ export class RemotePlayer {
   // the exact server impulse math (dir*mag XZ, 0.5*mag up / 0.3 pull).
   // Snapshots are cleared so interpolation can't resample the pre-hit path
   // after the window — that stale-buffer resample was the old snap-back bug.
+  ghostT = 0; // fire-shimmer timer — remoteVis owns the decay
+  tickGhost(dt: number): void { tickGhostF(this, dt); } // anim drive calls it post-locomotion
+
   applyPredictedKnockback(fromPos: THREE.Vector3, impulseMag: number, pull = false): void {
     this.interp.predict(fromPos, impulseMag, pull);
   }

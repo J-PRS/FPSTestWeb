@@ -1,3 +1,4 @@
+2026-09-30 - RemotePlayer split: visibility gate (stale/cloak hides, show/hide, fire-shimmer ghost) -> remoteVis.ts (381->318).
 2026-09-30 - DemoManager split: DemoPlayer/DemoUI callback graft -> demoWire.ts (418->348).
 2026-09-30 - skills split: energy-channel toggles (cloak/shield/mend ante+drain) -> skillChannels.ts, warp beacon (throw/bounce/teleport) -> skillBeacon.ts (406->225).
 2026-09-30 - botBrain split: disposition family (flinch/orbit dest pick, fortification deploy pick, toggle-skill intent) moved to botDisposition.ts (406->318).
