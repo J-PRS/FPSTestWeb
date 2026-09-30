@@ -58,7 +58,7 @@ export function driveMove(h: DriveHost, id: string, p: { position: Vec3; velocit
     h.room.moveSim.faceYaw(id, yaw);
     p.rotation.yaw = yaw;
   }
-  commitMoveInput(h, id, p, out, dist >= 0.5, { edge: yeeted, held: yeetHeld }, now);
+  commitMoveInput(h, id, p, out, { moving: dist >= 0.5, edge: yeeted, held: yeetHeld }, now);
   h.checkSheep(id, p, { trying: dist >= 0.5, ski: !!out.move?.ski, airborne: !sh.onGround, jetting: !!out.move?.jet, dt }, now);
   p.position.x = sh.pos.x; p.position.y = sh.pos.y; p.position.z = sh.pos.z;
   p.velocity.x = sh.vel.x; p.velocity.y = sh.vel.y; p.velocity.z = sh.vel.z;
@@ -69,7 +69,9 @@ export function driveMove(h: DriveHost, id: string, p: { position: Vec3; velocit
 /** The bot's intent becomes input keys — only what a player's fingers
  *  could press. A yeet edge pins jump/jet; the arsenal's post-throw jet
  *  pin rides the same held bit. */
-function commitMoveInput(h: DriveHost, id: string, p: { status: number }, out: BrainOut, moving: boolean, yeet: { edge: boolean; held: boolean }, now: number): void {
+function commitMoveInput(h: DriveHost, id: string, p: { status: number }, out: BrainOut, intent: { moving: boolean; edge: boolean; held: boolean }, now: number): void {
+  const { moving, edge: yeetEdge, held: yeetHeld } = intent;
+  const yeet = { edge: yeetEdge, held: yeetHeld };
   h.room.moveSim.setInput(id, moving ? {
     forward: 1, right: 0,
     jumpPressed: yeet.edge || !!out.move?.jump, jumpHeld: !!out.move?.jump || yeet.held,

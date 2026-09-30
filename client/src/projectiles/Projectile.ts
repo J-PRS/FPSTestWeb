@@ -18,12 +18,6 @@ import type { StructureCollider } from '../../../shared/ballSim.js';
 import { ProjCollide } from './projCollide.js';
 import { ProjStuck } from './projStuck.js';
 const _rayDir = new THREE.Vector3();
-const _velDir = new THREE.Vector3();
-const _FORWARD = new THREE.Vector3(0, 0, 1);
-// Embed visuals: how far the body slides into the surface, and the
-// shrink-out duration once the hold window ends.
-const EMBED_DEPTH = 0.4;
-const EMBED_SHRINK_TIME = 0.25;
 
 
 /**

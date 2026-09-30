@@ -49,10 +49,7 @@ export class BotSheepMeter {
     const prev = this.meter.get(id) ?? 0;
     let why = this.why.get(id);
     if (!why) { why = { idle: 0, ignore: 0, cover: 0 }; this.why.set(id, why); }
-    const base = m.dt * (tribesing
-      ? -(10 + speedXZ * 0.5 + (jetting ? 15 : 0))
-      : m.hasDest ? 9 : 18);
-    if (base > 0) why.idle += base;
+    const base = this.charge(m, tribesing, speedXZ, jetting, why);
     let meter = prev + base;
     // The foe-ignoring charge only counts a PARKED bot — one that's
     // skiing/jetting/covering ground is playing Tribes even while it
@@ -62,12 +59,9 @@ export class BotSheepMeter {
     // then must land and re-acquire — charging during that window is
     // the loop the previous comment described.
     if (m.out.fire?.targetId) this.lastFire.set(id, this.simMs);
-    if ((this.yeetUntil.get(id) ?? -Infinity) + 3000 <= now) {
-      const ig = tribesing ? 0 : this.ignoreDebit(id, m);
-      const cov = this.coverageDebit(id, p, m.hasDest, this.simMs);
-      why.ignore += ig; why.cover += cov;
-      meter += ig + cov;
-    }
+    if ((this.yeetUntil.get(id) ?? -Infinity) + 3000 <= now)
+      meter += this.debits(id, p, m, tribesing, why);
+
     if (meter >= 100) {
       // The yeet is pinned INPUT, not injected velocity — ServerBots
       // holds the bot's jump+jets for the window, exactly the keys a
@@ -92,6 +86,24 @@ export class BotSheepMeter {
    *  brain elects not to shoot. The 3s recency window matters — volley
    *  pacing means an ENGAGED bot legitimately goes ~2s between shots,
    *  so the charge only counts a sustained refusal to fire. */
+  /** Base idle charge — negative while the bot is doing Tribes things. */
+  private charge(m: { out: BrainOut; hasDest: boolean; dt: number }, tribesing: boolean, speedXZ: number, jetting: boolean, why: { idle: number }): number {
+    const base = m.dt * (tribesing
+      ? -(10 + speedXZ * 0.5 + (jetting ? 15 : 0))
+      : m.hasDest ? 9 : 18);
+    if (base > 0) why.idle += base;
+    return base;
+  }
+
+  /** Post-grace debits: foe-ignoring (only a parked bot — a skiing one
+   *  is playing Tribes even while it holds fire) + coverage stall. */
+  private debits(id: string, p: { position: Vec3; velocity: Vec3 }, m: { out: BrainOut; hasDest: boolean; foe?: boolean; dt: number }, tribesing: boolean, why: { idle: number; ignore: number; cover: number }): number {
+    const ig = tribesing ? 0 : this.ignoreDebit(id, m);
+    const cov = this.coverageDebit(id, p, m.hasDest, this.simMs);
+    why.ignore += ig; why.cover += cov;
+    return ig + cov;
+  }
+
   private ignoreDebit(id: string, m: { out: BrainOut; foe?: boolean; dt: number }): number {
     return m.foe && this.simMs - (this.lastFire.get(id) ?? -Infinity) > 3000 ? m.dt * 40 : 0;
   }
