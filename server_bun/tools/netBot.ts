@@ -83,7 +83,11 @@ const stats = { sent: 0, recv: 0, corrections: 0, shots: 0, errors: 0, closes: 0
 // speed·dt. A jump far past that is a visible teleport — server truth uses
 // the segment's own sim-time `t`, so late delivery doesn't false-positive.
 const lastSeg = new Map<string, { t: number; x: number; y: number; z: number; sp: number }>();
-function segJump(kind: 'ball' | 'crawl', id: number, x: number, y: number, z: number, sp: number, t: number): void {
+function segJump(kind: 'ball' | 'crawl', id: number, x: number, y: number, z: number, sp: number, t: number, segKind = ''): void {
+  // teleport/spawn/knockback segments legitimately move the entity — a jump
+  // there is the event's payload, not lost smoothness.
+  if (segKind === 'teleport' || segKind === 'spawn' || segKind === 'knockback'
+    || segKind === 'blink' || segKind === 'detonate') return;
   const key = `${kind}${id}`;
   const prev = lastSeg.get(key);
   lastSeg.set(key, { t, x, y, z, sp });
@@ -275,7 +279,7 @@ class WireBot {
       if (seg) {
         stats.ballSegs++;
         segJump('ball', seg.id, seg.position.x, seg.position.y, seg.position.z,
-          Math.hypot(seg.velocity.x, seg.velocity.y, seg.velocity.z), seg.t);
+          Math.hypot(seg.velocity.x, seg.velocity.y, seg.velocity.z), seg.t, seg.kind);
       }
       if (f) for (const u of f.updates) {
         if (u.playerId === this.id) continue;
@@ -306,7 +310,7 @@ class WireBot {
       case 'crawlEvt':
         stats.crawlEvts++;
         segJump('crawl', m.id, m.position.x, m.position.y, m.position.z,
-          Math.hypot(m.velocity?.x ?? 0, m.velocity?.y ?? 0, m.velocity?.z ?? 0), m.t);
+          Math.hypot(m.velocity?.x ?? 0, m.velocity?.y ?? 0, m.velocity?.z ?? 0), m.t, m.kind);
         break;
       case 'correction':
         // A real client rewinds to the server's truth — do the same.
