@@ -344,6 +344,14 @@ class WireBot {
         }
         stats.corrections++;
         break;
+      case 'teleport':
+        // A remote's declared warp — update the aim roster immediately
+        // instead of shooting the pre-warp ghost until the next tick.
+        if (m.playerId && m.playerId !== this.id) {
+          const r = this.roster.get(m.playerId);
+          if (r) { r.pos.x = m.position.x; r.pos.y = m.position.y; r.pos.z = m.position.z; }
+        }
+        break;
       case 'playerRespawn':
         // Our own respawn — a real client snaps to the spawn point.
         // Without this the local sim keeps reporting from the corpse
@@ -354,6 +362,9 @@ class WireBot {
           s.vel.x = 0; s.vel.y = 0; s.vel.z = 0;
           s.onGround = true;
           this.waypoint = { x: rand(-140, 140), z: rand(-140, 140) };
+        } else if (m.playerId && m.playerId !== this.id) {
+          const r = this.roster.get(m.playerId);
+          if (r) { r.pos.x = m.position.x; r.pos.y = m.position.y; r.pos.z = m.position.z; }
         }
         break;
     }
@@ -440,8 +451,20 @@ class WireBot {
       this.send({ type: 'perkUpdate', perk: PERKS[Math.floor(rand(0, PERKS.length))] });
     }
     if (now >= this.nextEnvDmg) {
+      // Legal claims only: the server flags env damage with no creature
+      // within ~15m as implausible, so bots only report when something's
+      // actually on them.
       this.nextEnvDmg = now + rand(40000, 120000);
-      this.send({ type: 'environmentDamage', amount: Math.round(rand(5, 15)) });
+      let near = false;
+      for (const p of this.crawls.values()) {
+        const d = (p.x - s.pos.x) ** 2 + (p.y - s.pos.y) ** 2 + (p.z - s.pos.z) ** 2;
+        if (d < 15 * 15) { near = true; break; }
+      }
+      if (!near) for (const p of this.balls.values()) {
+        const d = (p.x - s.pos.x) ** 2 + (p.y - s.pos.y) ** 2 + (p.z - s.pos.z) ** 2;
+        if (d < 15 * 15) { near = true; break; }
+      }
+      if (near) this.send({ type: 'environmentDamage', amount: Math.round(rand(5, 15)) });
     }
     if (now >= this.nextSwitch) {
       // Room-hop stress path — full teardown + rejoin, rare like a real hop.
