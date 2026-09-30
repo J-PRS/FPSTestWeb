@@ -4,16 +4,6 @@
 import type { ProjectileEvent, TargetEvent, RemoteFrame, DemoFile } from './types.js';
 import * as pb from './demoPlayback.js';
 
-const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
-
-// Angle interpolation (handle wraparound for yaw)
-const lerpAngle = (a: number, b: number, t: number) => {
-  let diff = b - a;
-  while (diff > Math.PI) diff -= 2 * Math.PI;
-  while (diff < -Math.PI) diff += 2 * Math.PI;
-  return a + diff * t;
-};
-
 export interface InterpolatedRemote {
   rosterIdx: number;
   posX: number; posY: number; posZ: number;
