@@ -3,7 +3,7 @@ import { CONFIG } from './config.ts';
 import { Room } from './Room.ts';
 import { BallSim } from './BallSim.ts';
 import { validateMessage } from './validation.ts';
-import type { WebSocketData } from './types.ts';
+import type { WebSocketData, PlayerState } from './types.ts';
 import { logger } from './logger.ts';
 import { fileURLToPath } from 'node:url';
 import type { Heightfield } from '../../shared/heightfield.ts';
@@ -404,28 +404,9 @@ export class GameServer {
   private switchRoom(ws: ServerWebSocket<WebSocketData>, playerId: string, raw: unknown): void {
     if (this.switchThrottled(playerId)) return;
 
-    const msg = raw as { room?: string; map?: string; mode?: string; bots?: number };
-    const target = word(msg.room) ?? 'default';
-    const from = this.roomOfPlayer(playerId);
-    if (!from) return;
-    if (from.name === target) return; // already seated — no-op, not an error
-
-    const bots = typeof msg.bots === 'number' && Number.isFinite(msg.bots)
-      ? Math.max(0, Math.min(24, Math.floor(msg.bots))) : undefined;
-    const to = this.roomFor(target, word(msg.mode) ?? '', word(msg.map) ?? '', bots);
-    if (this.roomFull(to)) {
-      from.connections.sendToPlayer(playerId, { type: 'matchNotice', text: `${target} is full` });
-      return;
-    }
-
-    // The kit rides with the player — the hop isn't a loadout reset.
-    const prev = from.players.getPlayer(playerId);
-    // Dead players can't hop — reseating runs addPlayer, which spawns
-    // alive, so a hop would dodge the whole respawn delay.
-    if (prev?.isDead) {
-      from.connections.sendToPlayer(playerId, { type: 'matchNotice', text: 'Respawning — hold on' });
-      return;
-    }
+    const target = this.switchTarget(playerId, raw as { room?: string; map?: string; mode?: string; bots?: number });
+    if (!target) return;
+    const { from, to, prev } = target;
 
     // Leave teardown: the disconnect path minus the grace window.
     from.connections.unregister(playerId);
@@ -435,6 +416,33 @@ export class GameServer {
 
     this.seatPlayer(to, ws, playerId, prev?.perk ?? 'none', prev?.armorClass ?? 'medium', prev?.transport);
     logger.info('Player switched rooms', { playerId, from: from.name, to: to.name });
+  }
+
+  /** Everything that can deny a hop before teardown — null means the
+   *  request dies here (with the client notified when it's worth it). */
+  private switchTarget(playerId: string, msg: { room?: string; map?: string; mode?: string; bots?: number }): { from: Room; to: Room; prev?: PlayerState } | null {
+    const name = word(msg.room) ?? 'default';
+    const from = this.roomOfPlayer(playerId);
+    if (!from) return null;
+    if (from.name === name) return null; // already seated — no-op, not an error
+
+    const bots = typeof msg.bots === 'number' && Number.isFinite(msg.bots)
+      ? Math.max(0, Math.min(24, Math.floor(msg.bots))) : undefined;
+    const to = this.roomFor(name, word(msg.mode) ?? '', word(msg.map) ?? '', bots);
+    if (this.roomFull(to)) {
+      from.connections.sendToPlayer(playerId, { type: 'matchNotice', text: `${name} is full` });
+      return null;
+    }
+
+    // The kit rides with the player — the hop isn't a loadout reset.
+    const prev = from.players.getPlayer(playerId);
+    // Dead players can't hop — reseating runs addPlayer, which spawns
+    // alive, so a hop would dodge the whole respawn delay.
+    if (prev?.isDead) {
+      from.connections.sendToPlayer(playerId, { type: 'matchNotice', text: 'Respawning — hold on' });
+      return null;
+    }
+    return { from, to, prev: prev ?? undefined };
   }
 
   /** The join tail a room hop shares with SessionManager's accept path —

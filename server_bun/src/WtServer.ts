@@ -35,7 +35,7 @@ type WtModule = {
  * ~47%, so the unreliable lane buys nothing. Presents the
  * ServerWebSocket shape GameServer uses — send/close/readyState/data.
  */
-class WtSocketAdapter {
+export class WtSocketAdapter {
   readonly data: WebSocketData = { playerId: '', connectedAt: Date.now() };
   readonly remoteAddress = 'webtransport';
   private open = true;
