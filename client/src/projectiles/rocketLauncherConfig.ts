@@ -27,6 +27,7 @@ export const RKT_CONFIG: ProjectileConfig = {
   forceMultiplier: KNOCKBACK_MULTIPLIER,
   aoeDamage: WEAPONS[15].aoeDamage,
   aoeRadius: WEAPONS[15].aoeRadius,
+  vfx: 'concussion',
   damageColor: '#ffaa55',
   // Thick exhaust column — hot orange at the motor, drying to grey smoke
   trailColors: [

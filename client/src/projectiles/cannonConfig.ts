@@ -28,6 +28,7 @@ export const CANNON_CONFIG: ProjectileConfig = {
   forceMultiplier: KNOCKBACK_MULTIPLIER,
   aoeDamage: WEAPONS[14].aoeDamage,
   aoeRadius: WEAPONS[14].aoeRadius,
+  vfx: 'concussion',
   damageColor: '#ffbb66',
   // No trail — the joke IS the giant ball. A smoke streak behind a
   // beach-ball-sized cannonball just clutters the read.

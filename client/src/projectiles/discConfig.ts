@@ -27,6 +27,7 @@ export const DISC_CONFIG: ProjectileConfig = {
   forceMultiplier: KNOCKBACK_MULTIPLIER,
   aoeDamage: WEAPONS[1].aoeDamage,
   aoeRadius: WEAPONS[1].aoeRadius,
+  vfx: 'energy',
   damageColor: '#00ffff',
   trailColors: [
     new THREE.Color(0.0, 0.5, 1.0),

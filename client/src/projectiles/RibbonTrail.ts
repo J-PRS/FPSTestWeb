@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-import { BLOOM_LAYER } from '../core/config.js';
+import { BLOOM_LAYER, EMIT_GAIN } from '../core/config.js';
 
 const MAX_SAMPLES = 48;
 
@@ -163,7 +163,9 @@ export class RibbonTrail {
 
     const pos = this.posAttr.array as Float32Array;
     const col = this.colAttr.array as Float32Array;
-    const r = this.baseColor.r, g = this.baseColor.g, b = this.baseColor.b;
+    // EMIT_GAIN: vertex colors go HDR-hot so the ribbon clears the bloom
+    // threshold; ACES brings the display color back to the authored hue.
+    const r = this.baseColor.r * EMIT_GAIN, g = this.baseColor.g * EMIT_GAIN, b = this.baseColor.b * EMIT_GAIN;
 
     for (let i = 0; i < this.count; i++) {
       // oldest -> newest

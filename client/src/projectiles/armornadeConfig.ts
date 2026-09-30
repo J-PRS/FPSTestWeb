@@ -28,6 +28,7 @@ export const ARMORNADE_CONFIG: ProjectileConfig = {
   forceMultiplier: KNOCKBACK_MULTIPLIER,
   aoeDamage: WEAPONS[WeaponType.ArmorGrenade].aoeDamage,
   aoeRadius: WEAPONS[WeaponType.ArmorGrenade].aoeRadius,
+  vfx: 'energy',
   damageColor: '#66ffaa',
   trailColors: [
     new THREE.Color(0.6, 1.0, 0.75),

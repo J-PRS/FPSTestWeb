@@ -1,4 +1,5 @@
 export type { ProjectileConfig } from './types.js';
+export { Projectile } from './Projectile.js';
 export { ROCKET_CONFIG } from './rocketConfig.js';
 export { DISC_CONFIG, BELT_DISC_CONFIG } from './discConfig.js';
 export { GRENADE_CONFIG } from './grenadeConfig.js';

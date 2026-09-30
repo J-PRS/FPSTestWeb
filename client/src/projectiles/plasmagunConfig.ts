@@ -30,6 +30,7 @@ export const PLASMAGUN_CONFIG: ProjectileConfig = {
   forceMultiplier: KNOCKBACK_MULTIPLIER,
   aoeDamage: W.aoeDamage,
   aoeRadius: W.aoeRadius,
+  vfx: 'energy',
   damageColor: '#66ccff',
   trailColors: [
     new THREE.Color(0.4, 0.8, 1.0),

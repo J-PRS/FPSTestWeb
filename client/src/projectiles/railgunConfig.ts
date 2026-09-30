@@ -29,6 +29,7 @@ export const RAILGUN_CONFIG: ProjectileConfig = {
   forceMultiplier: KNOCKBACK_MULTIPLIER,
   aoeDamage: WEAPONS[9].aoeDamage,
   aoeRadius: WEAPONS[9].aoeRadius,
+  vfx: 'kinetic',
   damageColor: '#66ccff',
   trailColors: [
     new THREE.Color(0.7, 0.95, 1.0), // white-hot core

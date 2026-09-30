@@ -34,6 +34,7 @@ export const REMOTE_RAILGUN_CONFIG: ProjectileConfig = {
   rayBurst: W.rayDelay !== undefined && W.rayRange !== undefined
     ? { delay: W.rayDelay, range: W.rayRange }
     : undefined,
+  vfx: 'kinetic',
   damageColor: '#99eeff',
   trailColors: [
     new THREE.Color(0.6, 0.95, 1.0),

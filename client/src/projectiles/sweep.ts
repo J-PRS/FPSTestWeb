@@ -10,7 +10,7 @@
  */
 import * as THREE from 'three';
 
-import { PLAYER_RADIUS, CAPSULE_HALF_HEIGHT, CAPSULE_CENTER_Y, EYE_OFFSET } from '../core/config.js';
+import { PLAYER_RADIUS, CAPSULE_HALF_HEIGHT, CAPSULE_CENTER_Y, EYE_OFFSET, TERRAIN_HEIGHT_SCALE } from '../core/config.js';
 import { ChildLogger } from '../core/Logger.js';
 import type { Targetable } from '../entities/balls.js';
 import type { Terrain } from '../world/terrain.js';
@@ -51,6 +51,10 @@ export function sweepTerrain(p: SweepHost, terrain: Terrain): boolean {
   // the shallow offset is fine (the ball never visually sits there).
   const offset = Math.max(p.config.terrainOffset,
     p.canBounce ? p.config.bodyRadius : 0);
+  // Whole field tops out at TERRAIN_HEIGHT_SCALE — a segment whose lowest
+  // endpoint clears it can never intersect. Skips the ~96-getHeight loop
+  // for every high-altitude shell (most of them mid-flight).
+  if (Math.min(p.pos.y, p.prevPos.y) > TERRAIN_HEIGHT_SCALE + offset) return false;
   const step = Math.max(0.08, Math.min(0.5, offset));
   const steps = Math.max(1, Math.min(96, Math.ceil(dist / step)));
   const below = (t: number) => {

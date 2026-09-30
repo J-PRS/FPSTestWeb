@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-import { BLOOM_LAYER } from '../core/config.js';
+import { BLOOM_LAYER, EMIT_GAIN } from '../core/config.js';
 import { getGlowTexture } from '../effects/glowTexture.js';
 import type { ProjectileConfig } from './types.js';
 
@@ -48,8 +48,13 @@ export interface TrailHost {
  */
 export class ProjectileTrail {
   private particles: TrailParticle[] = [];
-  private pool: TrailParticle[] = []; // dead particles kept for reuse
+  // Shared free-list per mesh type — a per-instance pool meant every
+  // projectile rebuilt its trail set from scratch. Static + keyed keeps
+  // sustained fire at ~zero allocation once warm.
+  private static pools = new Map<string, TrailParticle[]>();
   private accum = 0; // fractional carry-over for even particle spacing
+
+  private meshKey(): string { return this.host.config.trailMeshType ?? 'sphere'; }
 
   constructor(private host: TrailHost) {}
 
@@ -136,8 +141,9 @@ export class ProjectileTrail {
     const { config, scene } = this.host;
     const meshType = config.trailMeshType ?? 'sphere';
 
-    // Reuse a dead particle's mesh+material (meshType is fixed per projectile)
-    const pooled = this.pool.pop();
+    // Reuse a dead particle's mesh+material — pooled per meshType
+    const pool = ProjectileTrail.pools.get(this.meshKey());
+    const pooled = pool?.pop();
     if (pooled) {
       pooled.vel.copy(vel);
       pooled.life = life;
@@ -160,7 +166,7 @@ export class ProjectileTrail {
       // Sprite auto-faces the camera — visible even shooting straight ahead
       const mat = new THREE.SpriteMaterial({
         map: getTrailSpriteTex(),
-        color: config.trailColors[0],
+        color: new THREE.Color(config.trailColors[0]).multiplyScalar(EMIT_GAIN),
         transparent: true,
         opacity: config.trailOpacity,
         depthWrite: false,
@@ -175,7 +181,7 @@ export class ProjectileTrail {
     }
 
     const mat = new THREE.MeshBasicMaterial({
-      color: config.trailColors[0],
+      color: new THREE.Color(config.trailColors[0]).multiplyScalar(EMIT_GAIN),
       transparent: true,
       opacity: config.trailOpacity,
       depthWrite: false,
@@ -213,7 +219,9 @@ export class ProjectileTrail {
       p.life -= dt;
       if (p.life <= 0) {
         scene.remove(p.mesh);
-        this.pool.push(p); // keep mesh+mat for reuse
+        const pool = ProjectileTrail.pools.get(this.meshKey())
+          ?? ProjectileTrail.pools.set(this.meshKey(), []).get(this.meshKey())!;
+        pool.push(p); // keep mesh+mat for reuse across projectiles
         this.particles.splice(i, 1);
         continue;
       }
@@ -244,12 +252,14 @@ export class ProjectileTrail {
 
   dispose(): void {
     const scene = this.host.scene;
+    const pool = ProjectileTrail.pools.get(this.meshKey())
+      ?? ProjectileTrail.pools.set(this.meshKey(), []).get(this.meshKey())!;
+    // Still-live particles go back to the shared pool — the pool now
+    // outlives the projectile, so materials must NOT be disposed here.
     for (const p of this.particles) {
       scene.remove(p.mesh);
-      p.mat.dispose();
+      pool.push(p);
     }
     this.particles.length = 0;
-    for (const p of this.pool) p.mat.dispose();
-    this.pool.length = 0;
   }
 }

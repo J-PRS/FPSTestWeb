@@ -89,16 +89,25 @@ export const BOMBLET_CONFIG: ProjectileConfig = beltBall(22, 0x2a2d24, 0xccff66,
 // Javelin: a fast near-flat dart — no splash, precision throw.
 export const JAVELIN_CONFIG: ProjectileConfig = {
   ...beltBall(20, 0x8a8f96, 0xccddff, { displayName: 'Javelin' }),
-  meshType: 'rocket', // oriented tube — a spear reads as a rod in flight
+  meshType: 'javelin', // real spear — shaft + flared tip, ~2m long
   noExplosion: true,  // contact is a thunk + bullet mark, not a blast
+  embeds: 2.0,        // planted for 2s, then shrinks away
   damageColor: '#ccddff',
   trailOpacity: 0.25,
+  // Single thin ribbon lane — the bolt-launcher line streak, not a smoke
+  // plume; particles still ride alongside.
+  ribbonTrail: true,
+  ribbonLanes: 1,
+  ribbonWidth: 0.16,
+  ribbonLife: 0.3,
+  ribbonColor: 0x9db8ff,
 };
 
 // Impact grenade: bright cyan shell, flat long arc, pops on touch,
 // outsized shove. The movement tool.
 export const IMPACT_CONFIG: ProjectileConfig = beltBall(21, 0x2a4a4d, 0x44ffee, {
   displayName: 'Impact Grenade',
+  vfx: 'energy',
   damageColor: '#66ffee',
   glowColor: 0x44ffee,
 });

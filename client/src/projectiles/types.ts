@@ -70,8 +70,16 @@ export interface ProjectileConfig {
    *  shared WEAPONS table (rayDelay/rayRange) so the server's reach check
    *  allows the jump. */
   rayBurst?: { delay: number; range: number };
-  /** Impact VFX variant — 'splash' swaps the fireball for droplets + mist
-   *  (sprinkler hose); unset = the shared explosion. */
-  vfx?: 'splash';
+  /** Impact VFX variant — the blast's silhouette, per weapon family:
+   *  'energy' = ring+spikes, no smoke (disc/plasma); 'kinetic' = a hard
+   *  strike (railgun slugs, javelin); 'concussion' = heavy HE, blacker
+   *  smoke + dirt debris (mortar/cannon/warhead); 'arc' = electric pop
+   *  (lightning); 'splash' = droplets + mist (sprinkler hose);
+   *  'punch' = melee puff. Unset = the shared powder recipe. */
+  vfx?: 'splash' | 'punch' | 'energy' | 'kinetic' | 'concussion' | 'arc';
+  /** Terrain/structure hits: the shell stays planted at the contact point
+   *  for N seconds, then shrinks away — a javelin quivering in the dirt.
+   *  Combat resolution is unchanged (impact still reports immediately). */
+  embeds?: number;
 }
 

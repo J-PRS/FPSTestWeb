@@ -10,6 +10,7 @@ import type { ProjectileConfig } from './types.js';
 import * as sfx from '../core/sfx.js';
 import { RibbonTrail } from './RibbonTrail.js';
 import { ProjectileTrail } from './trailParticles.js';
+import { QuarksTrail } from '../effects/vfx.js';
 import { buildProjectileMeshes, updateProjectileMesh } from './visuals.js';
 import { sweepTerrain, sweepBall, sweepPlayer, sweepObstacle } from './sweep.js';
 import { segSolidHit, ColliderIndex } from '../../../shared/solidWorld.js';
@@ -18,6 +19,12 @@ import type { StructureCollider } from '../../../shared/ballSim.js';
 // Shared projectile geometries — dispose() never frees them, so reuse across shots
 const _tNormal = new THREE.Vector3();
 const _rayDir = new THREE.Vector3();
+const _velDir = new THREE.Vector3();
+const _FORWARD = new THREE.Vector3(0, 0, 1);
+// Embed visuals: how far the body slides into the surface, and the
+// shrink-out duration once the hold window ends.
+const EMBED_DEPTH = 0.4;
+const EMBED_SHRINK_TIME = 0.25;
 
 
 /**
@@ -66,6 +73,12 @@ export interface SweepObstacle {
   readonly pos: THREE.Vector3;
   readonly prevPos: THREE.Vector3;
   readonly radius: number;
+  /** Optional filter — shield domes let friendly shells sail through.
+   *  Presence ALSO overrides the noExplosion guard (a field eats hitscan
+   *  slugs too); obstacles without a predicate keep the old behavior. */
+  blocks?(p: Projectile): boolean;
+  /** Called when this obstacle wins the interception (dome flare). */
+  onBlocked?(p: Projectile): void;
 }
 
 export class Projectile {
@@ -100,6 +113,11 @@ export class Projectile {
   // Sticky: froze to a surface — physics off, fuse still burning. The
   // blast is what hurts people, not the glue point.
   stuck = false;
+  // Embed (javelin): world hit planted the shell — it holds at the contact
+  // point for config.embeds seconds, then shrinks away. Combat already
+  // resolved via explode(); this is purely the visible corpse.
+  private embedded = false;
+  private embedAge = 0;
 
   // Ray-burst (remote railgun): at rayBurst.delay the slug discharges a
   // hitscan beam down its velocity line — implemented as one giant swept
@@ -143,8 +161,9 @@ export class Projectile {
   readonly prevPos: THREE.Vector3; // start-of-frame pos — sweeps step prevPos→pos
   private shotOrigin: THREE.Vector3;
 
-  // Particle trail — emission, pooling, fade-out all live in ProjectileTrail
-  private trail: ProjectileTrail;
+  // Particle trail — quarks-batched by default; the pooled-mesh path
+  // survives only for wakeVisual hosts (no config enables it today).
+  private trail: ProjectileTrail | QuarksTrail;
   private projectileRemoved = false;
   private disposed = false;
   private ribbons: RibbonTrail[] = [];
@@ -162,12 +181,18 @@ export class Projectile {
     this.mesh = v.mesh;
     this.glowMesh = v.glowMesh;
 
-    this.trail = new ProjectileTrail({
-      scene, config,
-      pos: this.pos, prevPos: this.prevPos, vel: this.vel,
-      age: () => this.age,
-      hitRadius: () => this.hitRadius,
-    });
+    this.trail = config.wakeVisual
+      ? new ProjectileTrail({
+          scene, config,
+          pos: this.pos, prevPos: this.prevPos, vel: this.vel,
+          age: () => this.age,
+          hitRadius: () => this.hitRadius,
+        })
+      : new QuarksTrail({
+          config,
+          pos: this.pos, vel: this.vel,
+          age: () => this.age,
+        });
 
     this.ribbons = v.ribbons;
   }
@@ -187,21 +212,17 @@ export class Projectile {
 
     if (!this.exploded) this.updateAlive(dt, terrain, balls, remotePlayers, obstacles);
 
-    // Discharge aftermath: beam visual fires once with the resolved
-    // endpoint (swept hitPoint on a hit, range cap on a miss), then the
-    // slug detonates there. Lives in update() so early returns inside
-    // updateAlive can't skip it.
-    if (this.rayFired && !this.rayDone) {
-      this.rayDone = true;
-      this.onRayBurst?.(this.rayFrom, this.hitPointValid ? this.hitPoint : this.pos);
-      if (!this.exploded) this.explode();
-    }
+    this.tickRayBurst();
 
-    if (this.exploded && !this.projectileRemoved) this.removeProjectileMesh();
+    if (this.embedded) this.tickEmbedded(dt);
+    else if (this.exploded && !this.projectileRemoved) this.removeProjectileMesh();
     for (const r of this.ribbons) r.update(dt);
     this.trail.update(dt);
 
-    if (this.exploded && this.trail.empty && this.ribbons.every(r => r.done)) {
+    // Embedded shells outlive their trails — the planted corpse IS the
+    // effect, so death waits on the mesh removal too.
+    if (this.exploded && this.trail.empty && this.ribbons.every(r => r.done)
+        && (!this.embedded || this.projectileRemoved)) {
       this.dead = true;
     }
   }
@@ -261,6 +282,25 @@ export class Projectile {
     for (const r of this.ribbons) r.push(this.pos, this.vel);
   }
 
+  // Discharge aftermath: beam visual fires once with the resolved
+  // endpoint (swept hitPoint on a hit, range cap on a miss), then the
+  // slug detonates there. Called from update() so early returns inside
+  // updateAlive can't skip it.
+  private tickRayBurst(): void {
+    if (!this.rayFired || this.rayDone) return;
+    this.rayDone = true;
+    this.onRayBurst?.(this.rayFrom, this.hitPointValid ? this.hitPoint : this.pos);
+    if (!this.exploded) this.explode();
+  }
+
+  // Planted shell: hold full size for the embed window, then shrink away.
+  private tickEmbedded(dt: number): void {
+    this.embedAge += dt;
+    const shrink = (this.embedAge - this.config.embeds!) / EMBED_SHRINK_TIME;
+    if (shrink >= 1) this.removeProjectileMesh();
+    else if (shrink > 0) this.mesh.scale.setScalar(1 - shrink);
+  }
+
   // Stuck-bomb tick. No physics, no collision — only the fuse timer. A
   // bomb glued to a live mover RIDES it (world-space offset from
   // contact) — freezing in place while the victim jets away reads as a
@@ -305,6 +345,12 @@ export class Projectile {
       return true;
     }
     if (this.config.sticks && sweepTerrain(this, terrain)) this.stickAt(this.hitPoint);
+    // Embed-capable shells (javelin) die on contact everywhere — the server
+    // never sends a destroy for a dirt hit, so the replica must sense it.
+    if (this.config.embeds !== undefined && sweepTerrain(this, terrain)) {
+      this.explode();
+      return true;
+    }
     return false;
   }
 
@@ -344,16 +390,20 @@ export class Projectile {
   }
 
   private checkObstacles(obstacles?: SweepObstacle[]): boolean {
-    // Hitscan shells carry no payload — a slug can't cook off a warhead.
-    if (!obstacles || this.config.noExplosion) return false;
+    if (!obstacles) return false;
     let best: SweepObstacle | null = null, bestT = Infinity;
     for (const o of obstacles) {
+      // Filtered obstacles (shield domes) decide per-shell; unfiltered
+      // ones (turret bolts) never intercept hitscan slugs — the guard
+      // moved per-obstacle so a field still eats those.
+      if (o.blocks ? !o.blocks(this) : this.config.noExplosion) continue;
       if (sweepObstacle(this, o) && this.hitT < bestT) { best = o; bestT = this.hitT; }
     }
     if (!best) return false;
     // Re-run the winning sweep so hitPoint/hitT describe ITS contact, not
     // a later bolt's — hitAt was overwritten by each tested obstacle.
     sweepObstacle(this, best);
+    best.onBlocked?.(this);
     this.hitBolt = best;
     if (this.config.sticks) {
       // Shot down mid-flight — cook off on the spot, the bolt eats the pop.
@@ -547,8 +597,32 @@ export class Projectile {
   explode(): void {
     if (this.exploded) return;
     this.exploded = true;
-    this.removeProjectileMesh();
     for (const r of this.ribbons) r.stop();
+    // Embed-capable shells plant on world hits — no target, a swept
+    // contact point to sit at. Fuse pops in mid-air still vanish normally.
+    if (this.config.embeds !== undefined && this.hitPointValid
+        && !this.hitBall && !this.hitPlayerId && !this.hitBolt) {
+      this.embedded = true;
+      this.embedAge = 0;
+      // Tip-origin mesh: slide only a little along the flight line — the
+      // head buries, ~1.6m of tail stays visibly planted in the dirt.
+      // hitPoint itself stays at the swept contact — the impact decal
+      // and blast position still read from it.
+      this.pos.copy(this.hitPoint);
+      if (this.vel.lengthSq() > 0.01) {
+        _velDir.copy(this.vel).normalize();
+        this.pos.addScaledVector(_velDir, EMBED_DEPTH);
+        this.mesh.quaternion.setFromUnitVectors(_FORWARD, _velDir);
+      }
+      this.prevPos.copy(this.pos);
+      // vel kept: the impact effect reads it this same frame to orient
+      // the flash + kick sparks back along the shot line.
+      this.mesh.position.copy(this.pos);
+      this.mesh.scale.setScalar(1);
+      if (this.glowMesh) { this.scene.remove(this.glowMesh); this.glowMesh = null; }
+      return;
+    }
+    this.removeProjectileMesh();
   }
 
   dispose(): void {

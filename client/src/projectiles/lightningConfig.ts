@@ -26,6 +26,7 @@ export const LIGHTNING_CONFIG: ProjectileConfig = {
   forceMultiplier: 1.0,
   aoeDamage: S.aoeDamage,
   aoeRadius: S.aoeRadius,
+  vfx: 'arc',
   damageColor: '#8fdcff', // Quake-LG electric blue — readable at a glance
   trailColors: [new THREE.Color(0.6, 0.85, 1.0)],
   trailParticlesPerUnit: 0,

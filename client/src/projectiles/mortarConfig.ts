@@ -29,6 +29,7 @@ export const MORTAR_CONFIG: ProjectileConfig = {
   forceMultiplier: KNOCKBACK_MULTIPLIER,
   aoeDamage: WEAPONS[4].aoeDamage,
   aoeRadius: WEAPONS[4].aoeRadius,
+  vfx: 'concussion',
   damageColor: '#ff3344',
   trailColors: [
     new THREE.Color(1.0, 0.5, 0.3),

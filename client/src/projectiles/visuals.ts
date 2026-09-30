@@ -2,9 +2,10 @@
 // construction, and the per-frame mesh update (orientation/ramp-in/glow scale).
 // Kept out of Projectile.ts so the class file is flight+collision only.
 import * as THREE from 'three';
-import { BLOOM_LAYER } from '../core/config.js';
+import { BLOOM_LAYER, EMIT_GAIN } from '../core/config.js';
 import type { ProjectileConfig } from './types.js';
 import { RibbonTrail } from './RibbonTrail.js';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 const MESH_GEO_CACHE = new Map<string, THREE.BufferGeometry>();
 // Projectile materials are never mutated after construction — share per color
@@ -15,14 +16,20 @@ const GLOW_GEO = new THREE.SphereGeometry(1.0, 12, 12);
 
 function getBodyMat(color: number): THREE.MeshBasicMaterial {
   let m = BODY_MAT_CACHE.get(color);
-  if (!m) { m = new THREE.MeshBasicMaterial({ color }); BODY_MAT_CACHE.set(color, m); }
+  if (!m) {
+    m = new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(EMIT_GAIN) });
+    BODY_MAT_CACHE.set(color, m);
+  }
   return m;
 }
 
 function getGlowMat(color: number, opacity: number): THREE.MeshBasicMaterial {
   const key = `${color}|${opacity}`;
   let m = GLOW_MAT_CACHE.get(key);
-  if (!m) { m = new THREE.MeshBasicMaterial({ color, transparent: true, opacity, depthWrite: false }); GLOW_MAT_CACHE.set(key, m); }
+  if (!m) {
+    m = new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(EMIT_GAIN), transparent: true, opacity, depthWrite: false });
+    GLOW_MAT_CACHE.set(key, m);
+  }
   return m;
 }
 function getMeshGeo(meshType: string, bodyRadius: number): THREE.BufferGeometry {
@@ -35,6 +42,16 @@ function getMeshGeo(meshType: string, bodyRadius: number): THREE.BufferGeometry 
       // Thrown grenade — faceted icosphere reads as a ball at any angle,
       // unlike the oriented tube meant for rocket shells
       geo = new THREE.IcosahedronGeometry(bodyRadius, 1);
+    } else if (meshType === 'javelin') {
+      // Thrown spear, ~2m, tip apex AT the origin (body trailing -Z) —
+      // pos is the head, so trail/ribbon emission lines up with the
+      // visual point instead of the mid-shaft.
+      const shaft = new THREE.CylinderGeometry(0.035, 0.035, 1.5, 6);
+      shaft.rotateX(Math.PI / 2); shaft.translate(0, 0, -1.25);
+      const tip = new THREE.ConeGeometry(0.09, 0.5, 6);
+      tip.rotateX(Math.PI / 2); tip.translate(0, 0, -0.25);
+      geo = mergeGeometries([shaft, tip])!;
+      shaft.dispose(); tip.dispose();
     } else {
       geo = new THREE.CylinderGeometry(0.08, bodyRadius, 0.7, 6);
       geo.rotateX(Math.PI / 2);

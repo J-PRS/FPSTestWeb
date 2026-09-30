@@ -28,6 +28,7 @@ export const PLASMA_CONFIG: ProjectileConfig = {
   forceMultiplier: KNOCKBACK_MULTIPLIER,
   aoeDamage: WEAPONS[7].aoeDamage,
   aoeRadius: WEAPONS[7].aoeRadius,
+  vfx: 'energy',
   damageColor: '#55ffcc',
   trailColors: [
     new THREE.Color(0.4, 1.0, 0.7),
