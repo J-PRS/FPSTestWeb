@@ -44,7 +44,7 @@ const BELT_ROLES: Record<BeltItem, string> = {
 // label ever overflows and no chip is wider than it needs to be.
 const measureCtx = document.createElement('canvas').getContext('2d')!;
 function dropWidth(options: { label: string }[]): number {
-  measureCtx.font = `600 ${0.66 * 16}px ${getComputedStyle(document.body).fontFamily}`;
+  measureCtx.font = `600 ${0.78 * 16}px ${getComputedStyle(document.body).fontFamily}`;
   let w = 0;
   for (const o of options) w = Math.max(w, measureCtx.measureText(o.label.toUpperCase()).width);
   return Math.ceil(w) + 11 * 2 + 8 + 12; // padding + gap + caret
