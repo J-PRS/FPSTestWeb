@@ -480,8 +480,7 @@ export class MessageHandler {
         // client's next report legitimately snaps to simTruth.pos, and
         // without this the snap itself reads as a speedhack reject.
         player.lastPosCheckPos = { ...simTruth.pos };
-        player.correctionGraceUntil = now + CONFIG.reportGraceMs;
-        this.roomInfo.moveMute?.(playerId);
+        this.muteJudges(player, playerId, now);
       }
       player.rotation = { ...msg.rotation };
       player.lastSeen = now;
@@ -570,8 +569,7 @@ export class MessageHandler {
         // (accepts immediately) or keeps fighting (rejects count up
         // to the force-accept, which then sticks).
         player.lastPosCheckPos = { ...validState.position };
-        player.correctionGraceUntil = now + CONFIG.reportGraceMs;
-        this.roomInfo.moveMute?.(playerId);
+        this.muteJudges(player, playerId, now);
       }
     }
     // Client persisting past corrections (disputed knockback, lost
@@ -603,15 +601,25 @@ export class MessageHandler {
     player.hasReceivedPosition = true;
     this.announceIfInWorld(player);
     this.roomInfo.moveResync?.(playerId, msg.position, msg.rotation.yaw);
-    // Reports already in flight predate the warp — mute the plausibility
-    // judge for the same drain window corrections/respawns use.
-    player.correctionGraceUntil = Date.now() + CONFIG.reportGraceMs;
+    // Reports already in flight predate the warp — same drain window
+    // corrections and respawns get.
+    this.muteJudges(player, playerId, Date.now());
     // Pre-warp samples are a different location entirely — keeping them
     // lets lag-comp rewind land the shooter/target back at the corpse.
     player.history.length = 0;
     pushRewindSample(player, Date.now());
     // Relay so observers snap instead of interpolating across the gap
     this.broadcast({ type: 'teleport', playerId, position: msg.position, velocity: msg.velocity }, playerId);
+  }
+
+  /** Every re-seat (correction out, respawn, room hop, teleport) must
+   *  mute BOTH judges for the drain window: plausibility via the grace
+   *  timestamp, the shadow sim via moveMute/markReseated — in-flight
+   *  pre-warp reports otherwise read as speedhacks on one judge or
+   *  divergences on the other. */
+  private muteJudges(player: PlayerState, playerId: string, now: number): void {
+    player.correctionGraceUntil = now + CONFIG.reportGraceMs;
+    this.roomInfo.moveMute?.(playerId);
   }
 
   // jump/jetpack are pure presence relays — same shape, dead check, echo
