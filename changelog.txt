@@ -1,3 +1,4 @@
+2026-09-26 - Concepts report: forgiving-floor/costly-ceiling north star, LG as worked example, pattern across Tribes/Quake/Halo/TF2/fighters
 2026-09-26 - Beam scales with victim charge: bolt thickens up to ~2.6x and the contact spark fountain boils faster/harder as the pop bank loads; resets on misses
 2026-09-26 - Charge detonation: any non-Lightning direct hit pops min(banked, hitDamage) off a charged victim, remainder stays smoldering; charge bank moved to module-level registry
 2026-09-26 - LG charge decays smoothly (800/s, 5x fill rate) when the beam leaves a target instead of hard-resetting; shroud fades with the draining bank
