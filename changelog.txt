@@ -1,3 +1,4 @@
+2026-09-30 - suicide feed: self-splash no longer reads as a frag — server skips streak credit/taunts and broadcasts a suicide notice, client death overlay says fragged yourself.
 2026-09-30 - playerHit seq dedup: per-room monotonic seq server-side, client drops re-delivered events so reconnect replay cannot double-apply damage.
 2026-09-30 - audio split: positional routing (doppler rate, distance/pan/air-absorb chain, freeInput) -> audioRoute.ts (362->300).
 2026-09-30 - debris split: per-shard lifecycle (bounce, trail puffs, greying, shrink) -> debrisStep.ts (321->235).

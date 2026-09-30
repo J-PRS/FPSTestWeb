@@ -36,6 +36,12 @@ export class KillFeed {
         : deathTaunt(targetId, shooterId));
     }
     if (shooterId === 'environment') return;
+    // Self-splash reads as a death, not a frag — no streak credit, no
+    // taunt, just the suicide notice.
+    if (shooterId === targetId) {
+      this.broadcast({ type: 'matchNotice', text: `${targetId} fragged themselves` });
+      return;
+    }
 
     const shooter = this.playerManager.getPlayer(shooterId);
     if (!shooter) return;

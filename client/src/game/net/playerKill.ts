@@ -38,7 +38,9 @@ export function onPlayerKill(ctx: NetCtx, streak: { v: number }, shooterId: stri
     streak.v = 0;
     deps.fragMessages.show(shooterId === 'environment'
       ? `YOU DIED\n${player.lastDamageSource || 'claimed by the wasteland'}`
-      : `YOU DIED\nfragged by ${shooterId}`);
+      : shooterId === targetId
+        ? `YOU DIED\nfragged yourself`
+        : `YOU DIED\nfragged by ${shooterId}`);
     return;
   }
 
