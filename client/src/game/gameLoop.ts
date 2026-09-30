@@ -91,7 +91,15 @@ interface LoopState {
   lowFpsFrames: number;
   lowFpsAccum: number;
   lastFpsDump: number;
-  degradeStep: number;
+  /** Dynamic quality level: 0 = full fidelity … 3 = cheapest. Steps down
+   *  on sustained low fps, back up on sustained headroom. */
+  qualityLevel: number;
+  /** Wall-clock accumulator of >55fps frames — step-up hysteresis so a
+   *  brief smooth burst doesn't bounce quality up and down. */
+  headroomAccum: number;
+  /** True when the current pixel mode was set by auto-scaling, not the
+   *  user — auto-set modes must not read as a pinned user choice. */
+  autoPixel: boolean;
   fxCursor: number;
   fxJobs: (() => void)[];
 }
@@ -102,8 +110,16 @@ interface LoopState {
 // hidden tabs (rAF throttling ≠ real perf).
 function fpsWatchdog(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof createFrameBudget>, perf: ReturnType<typeof createPerfHud>, rawElapsed: number, now: number): void {
   if (document.hidden || rawElapsed <= 0) return;
-  if (1 / rawElapsed < 40) { st.lowFpsFrames++; st.lowFpsAccum += rawElapsed; }
-  else { st.lowFpsFrames = 0; st.lowFpsAccum = 0; }
+  if (1 / rawElapsed < 40) { st.lowFpsFrames++; st.lowFpsAccum += rawElapsed; st.headroomAccum = 0; }
+  else {
+    st.lowFpsFrames = 0; st.lowFpsAccum = 0;
+    // Comfortable headroom: >55fps accumulates toward a quality step-UP.
+    // 20s of sustained headroom per step keeps the ladder from bouncing.
+    if (1 / rawElapsed > 55) {
+      st.headroomAccum += rawElapsed;
+      if (st.headroomAccum > 20) { st.headroomAccum = 0; autoScale(deps, st, +1); }
+    }
+  }
   if (st.lowFpsFrames > 10 && now - st.lastFpsDump > 10_000) {
     st.lastFpsDump = now;
     const player = deps.lazyPlayer();
@@ -138,35 +154,47 @@ function fpsWatchdog(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeo
         : undefined,
     });
     st.lowFpsFrames = 0; st.lowFpsAccum = 0;
-    autoDegrade(deps, st);
+    autoScale(deps, st, -1);
   }
 }
 
-// Auto-degrade: each sustained low-fps dump steps down one render-cost tier
-// so potatoes converge on a playable frame instead of staying slow forever.
-// Skipped when the user already picked a pixelated mode — they chose their
-// fidelity. Settings keys are written so the choice survives reload.
-function autoDegrade(deps: GameLoopDeps, st: LoopState): void {
+// Dynamic quality scaling — the render cost follows the machine instead of
+// a manual ?shadows=off param. dir -1 steps down a tier per sustained low
+// fps dump (10s throttle), +1 steps up per ~20s of >55fps headroom:
+//   level 0 = full fidelity (shadows, full-res)
+//   level 1 = shadows off      — biggest single win on weak GPUs
+//   level 2 = medium low-res   — pixel mode 1
+//   level 3 = hard low-res     — pixel mode 2
+// Explicit choices still win: a ?px= param or a non-zero fps-pixelated the
+// user picked pins the pixel tier; fps-shadows=false pins the shadow tier.
+function autoScale(deps: GameLoopDeps, st: LoopState, dir: number): void {
+  const { rendererSetup } = deps;
+  // A pixel mode the scaler itself set reads the same in settings as a
+  // user choice — autoPixel marks it so the ladder stays free to move.
+  const pixelPinned = urlParams.get('px') !== null || (settings.get('fps-pixelated') !== 0 && !st.autoPixel);
+  // Cap the ladder at the pinned tiers: a user-set pixel mode tops the
+  // ladder at 1 (shadows only), a user-disabled shadow floor at 1.
+  const cap = pixelPinned ? 1 : 3;
+  const floor = (!settings.get('fps-shadows') && dir > 0) ? 1 : 0;
+  const next = Math.min(cap, Math.max(floor, st.qualityLevel - dir));
+  if (next === st.qualityLevel) return;
+  if (next <= 1 && rendererSetup.renderer.shadowMap.enabled !== (next === 0)) setShadows(deps, next === 0);
+  const pixel = next <= 1 ? 0 : next - 1;
+  if (next >= 2 || st.autoPixel) { rendererSetup.setPixelated(pixel); st.autoPixel = true; }
+  st.qualityLevel = next;
+  Logger[dir < 0 ? 'warn' : 'info'](`auto-quality: level ${next} (${dir < 0 ? 'sustained low fps' : 'headroom'})`);
+}
+
+function setShadows(deps: GameLoopDeps, on: boolean): void {
   const { rendererSetup, sceneSetup } = deps;
-  if (st.degradeStep === 0) {
-    st.degradeStep++;
-    if (rendererSetup.renderer.shadowMap.enabled) {
-      rendererSetup.renderer.shadowMap.enabled = false;
-      sceneSetup.sun.castShadow = false;
-      // Lit materials cache shadow uniforms — flag for recompile once.
-      sceneSetup.scene.traverse(o => {
-        const m = (o as THREE.Mesh).material;
-        if (m) (Array.isArray(m) ? m : [m]).forEach(x => { x.needsUpdate = true; });
-      });
-      settings.set('fps-shadows', false);
-      Logger.warn('auto-degrade: shadows off (sustained low fps)');
-    }
-    return;
-  }
-  if (settings.get('fps-pixelated') === 0 && urlParams.get('px') === null) {
-    if (st.degradeStep === 1) { rendererSetup.setPixelated(1); st.degradeStep++; Logger.warn('auto-degrade: low-res render (medium)'); return; }
-    if (st.degradeStep === 2) { rendererSetup.setPixelated(2); st.degradeStep++; Logger.warn('auto-degrade: low-res render (hard)'); }
-  }
+  rendererSetup.renderer.shadowMap.enabled = on;
+  sceneSetup.sun.castShadow = on;
+  // Lit materials cache shadow uniforms — flag for recompile once.
+  sceneSetup.scene.traverse(o => {
+    const m = (o as THREE.Mesh).material;
+    if (m) (Array.isArray(m) ? m : [m]).forEach(x => { x.needsUpdate = true; });
+  });
+  settings.set('fps-shadows', on);
 }
 
 // Demo bookkeeping: update recorder/player, freeze input during playback.
@@ -362,7 +390,7 @@ function hudTick(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof cr
 
 export function createGameLoop(deps: GameLoopDeps) {
   let lastTime = 0;
-  const st: LoopState = { lastYaw: 0, lastPitch: 0, lowFpsFrames: 0, lowFpsAccum: 0, lastFpsDump: 0, degradeStep: 0, fxCursor: 0, fxJobs: [] };
+  const st: LoopState = { lastYaw: 0, lastPitch: 0, lowFpsFrames: 0, lowFpsAccum: 0, lastFpsDump: 0, qualityLevel: 0, headroomAccum: 0, autoPixel: false, fxCursor: 0, fxJobs: [] };
 
   // stats.js perf panels — FPS/MS/MB in a row along the bottom-right,
   // toggled with ` (backquote). stats.js only renders one panel per
