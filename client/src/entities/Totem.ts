@@ -4,9 +4,9 @@ import { nextTargetId } from './targetIds.js';
 import {
   TOTEM_RADIUS, TOTEM_HEALTH,
   TOTEM_RANGE, TOTEM_REFIRE,
-  TOTEM_PEAK_RADIUS, TOTEM_PEAK_MIN_GAIN, TOTEM_MATERIALIZE,
+  TOTEM_MATERIALIZE,
   UBER_TOTEM_RADIUS, UBER_TOTEM_HEALTH, UBER_TOTEM_REFIRE,
-  UBER_TOTEM_HIT_RADIUS, UBER_TOTEM_BEAM_WIDTH,
+  UBER_TOTEM_BEAM_WIDTH,
 } from '../core/config.js';
 import { Terrain } from '../world/terrain.js';
 import { bindNetTotem, applyNetEdgeTotem, updateNetTotem, claimDamageMelee, type NetBindArgs } from '../game/netMelee.js';
@@ -18,10 +18,8 @@ import type { SwarmSlotOwner } from './swarm.js';
 import { TerrainFoot } from '../effects/terrainFoot.js';
 import { writeTotemInstances } from './totemVisual.js';
 export { totemParts } from './totemVisual.js';
+import { beginBlinkF, lineClear, solveBeam, fireBeam, blastPush, blastPull } from './totemBeam.js';
 
-const _v = new THREE.Vector3();
-const _v2 = new THREE.Vector3();
-const _dir = new THREE.Vector3();
 
 /**
  * Sniper totem — the perpendicular-movement teacher. Blinks to high ground,
@@ -251,91 +249,12 @@ export class Totem implements Targetable, SwarmSlotOwner {
     writeTotemInstances(this);
   }
 
-  beginBlink(playerPos: THREE.Vector3): void {
-    // Gate: staggered (damage-locked) or still on post-blink cooldown —
-    // the caller treats a no-op as "stay put".
-    if (this.staggerT > 0 || this.blinkCd > 0) return;
-    // Peak-seek: sample a ring of terrain around the PLAYER'S general
-    // bearing, pick the highest point that keeps firing range.
-    let bestH = -Infinity;
-    let found = false;
-    for (let i = 0; i < 16; i++) {
-      const a = (i / 16) * Math.PI * 2 + Math.random() * 0.4;
-      const r = 15 + Math.random() * TOTEM_PEAK_RADIUS;
-      const x = this.pos.x + Math.cos(a) * r;
-      const z = this.pos.z + Math.sin(a) * r;
-      const h = this.terrain.getHeight(x, z);
-      const pd = Math.hypot(playerPos.x - x, playerPos.z - z);
-      if (pd > TOTEM_RANGE * 0.9) continue;
-      if (h > bestH) { bestH = h; this.blinkTarget.set(x, h, z); found = true; }
-    }
-    if (!found || bestH < this.terrain.getHeight(this.pos.x, this.pos.z) + TOTEM_PEAK_MIN_GAIN) {
-      const a = Math.random() * Math.PI * 2;
-      const r = 30 + Math.random() * 20;
-      this.blinkTarget.set(playerPos.x + Math.cos(a) * r, 0, playerPos.z + Math.sin(a) * r);
-    }
-    this.state = 'blinkOut';
-    this.stateTimer = 0.25;
-    this.beamOn = false;
-    this.onBlink?.(this.pos);
-  }
-
-  // LOS check — sampled straight-ish line; totem fires nearly flat bolts
-  // so terrain grazing matters more than arc clearance.
-  lineClear(target: THREE.Vector3): boolean {
-    const sy = this.pos.y + 3.9 * this.radius;
-    for (let i = 1; i <= 10; i++) {
-      const t = i / 10;
-      const x = this.pos.x + (target.x - this.pos.x) * t;
-      const z = this.pos.z + (target.z - this.pos.z) * t;
-      const y = sy + (target.y - sy) * t;
-      if (y < this.terrain.getHeight(x, z) + 0.4) return false;
-    }
-    return true;
-  }
-
-  // Solve the locked beam once: direction at lockPoint, extended to its
-  // full length — terrain hit or TOTEM_RANGE.
-  solveBeam(): void {
-    _v.set(this.pos.x, this.pos.y + 3.9 * this.radius, this.pos.z); // eye
-    this.lockDir.copy(this.lockPoint).sub(_v).normalize();
-    this.lockDist = TOTEM_RANGE;
-    for (let t = 1; t <= TOTEM_RANGE; t += 1) {
-      const x = _v.x + this.lockDir.x * t,
-            y = _v.y + this.lockDir.y * t,
-            z = _v.z + this.lockDir.z * t;
-      if (y < this.terrain.getHeight(x, z)) { this.lockDist = t; break; }
-    }
-  }
-
-  // Railgun fire: instant hitscan along the LOCKED line. Sidestep during
-  // charge and the locked line whiffs you entirely.
-  fireBeam(playerPos: THREE.Vector3): void {
-    _v.set(this.pos.x, this.pos.y + 3.9 * this.radius, this.pos.z);
-    _dir.copy(this.lockDir);
-    const dist = this.lockDist;
-    const hitGround = dist < TOTEM_RANGE;
-
-    _v2.subVectors(playerPos, _v);
-    const proj = _v2.dot(_dir);
-    // Uber's death ray is a fat line — a wider catch envelope matches the
-    // telegraph width. It can't miss a held course; it CAN miss a juke.
-    const hitR2 = this.uber ? UBER_TOTEM_HIT_RADIUS * UBER_TOTEM_HIT_RADIUS : 1.7;
-    if (proj > 0 && proj < dist && _v2.addScaledVector(_dir, -proj).lengthSq() < hitR2) {
-      this.onBoltHit?.(this);
-    } else if (hitGround) {
-      _v2.copy(_v).addScaledVector(_dir, dist);
-      this.onBoltLand?.(_v2);
-    }
-
-    // Post-shot flash: the DISCHARGE — starts wide like the charge beam's
-    // full envelope (energy leaving the whole line), snaps thin as it
-    // decays. beamFade drives the white-hot color in writeInstances.
-    this.beamWidth = this.uber ? UBER_TOTEM_BEAM_WIDTH * 0.5 : 0.3;
-    this.beamOpacity = 1.0;
-    this.beamFade = 0.35;
-    this.beamOn = true;
-  }
+  beginBlink(playerPos: THREE.Vector3): void { beginBlinkF(this, playerPos); }
+  lineClear(target: THREE.Vector3): boolean { return lineClear(this, target); }
+  solveBeam(): void { solveBeam(this); }
+  fireBeam(playerPos: THREE.Vector3): void { fireBeam(this, playerPos); }
+  applyKnockback(from: THREE.Vector3, force: number): void { blastPush(this, from, force); }
+  applyPull(to: THREE.Vector3, force: number): void { blastPull(this, to, force); }
 
   takeDamage(damage: number): boolean {
     if (this.netDriven) {
@@ -349,20 +268,6 @@ export class Totem implements Targetable, SwarmSlotOwner {
     this.staggerT = Math.max(this.staggerT, 2.1); // pinned — can't blink
     if (this.health <= 0) { this.dead = true; return true; }
     return false;
-  }
-
-  applyKnockback(from: THREE.Vector3, force: number): void {
-    // Anchored — a blast during charge drops the aim. Staggered it can't
-    // even flee: the charge fizzles but the totem holds its ground.
-    if (this.state !== 'charge' || force <= 8) return;
-    if (this.staggerT > 0 || this.blinkCd > 0) { this.state = 'aim'; this.refire = Math.max(this.refire, 0.4); this.beamOn = false; }
-    else this.beginBlink(from);
-  }
-
-  applyPull(to: THREE.Vector3, force: number): void {
-    if (this.state !== 'charge' || force <= 8) return;
-    if (this.staggerT > 0 || this.blinkCd > 0) { this.state = 'aim'; this.refire = Math.max(this.refire, 0.4); this.beamOn = false; }
-    else this.beginBlink(to);
   }
 
   dispose(): void {
