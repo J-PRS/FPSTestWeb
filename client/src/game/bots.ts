@@ -5,7 +5,8 @@ import { BOT_LOADOUTS, pickBotWeapon } from '../../../shared/botLoadouts.js';
 import { getProjectileConfig } from '../projectiles/index.js';
 import { Projectile } from '../projectiles/Projectile.js';
 import { SLOT_DEFS } from '../weapons.js';
-import { WeaponType } from '../../../shared/weapons.js';
+import { WeaponType, getWeaponStats } from '../../../shared/weapons.js';
+import { GRAVITY } from '../../../shared/movement.js';
 import type { Nugget } from '../entities/Nugget.js';
 import type { Targetable } from '../entities/balls.js';
 import type { GameContext } from './context.js';
@@ -198,7 +199,15 @@ export class TeamBots {
         objective: this.ctf?.objectiveFor(bot) ?? null,
         others,
       });
-      if (shot && !this.over) this.resolveShot(bot, shot.targetId, shot.aim); // ceasefire while the banner's up
+      if (this.over) { this.sheepTick(bot, dt, terrain); continue; }
+      if (shot) this.resolveShot(bot, shot.targetId, shot.aim);
+      // Belt + propel are real-spawn actions — offline only, same gate
+      // as resolveShot (a connected room's wire remotes can't attribute).
+      const online = this.deps.lazyNetworkManager?.()?.isConnected() ?? false;
+      if (!online) {
+        if (bot.wantBelt) this.throwBelt(bot);
+        this.tryPropel(bot, !!shot);
+      }
       this.sheepTick(bot, dt, terrain);
     }
   }
@@ -495,6 +504,112 @@ export class TeamBots {
       this.deps.world.projectiles.push(p);
     }
     sfx.shoot(wt);
+  }
+
+  /** Live position of a brain hunt target — belt throws arc at it. */
+  private targetPos(targetId: string | null): THREE.Vector3 | null {
+    if (!targetId) return null;
+    if (targetId === 'local') { const p = this.deps.lazyPlayer(); return p.isDead ? null : p.pos; }
+    if (targetId.startsWith('creature:')) {
+      const t = this.deps.targets.find(x => x.id === +targetId.slice(9));
+      return t && !t.dead ? t.pos : null;
+    }
+    const rp = this.deps.world.remotePlayers.get(targetId);
+    return rp && !rp.isDead ? rp.pos : null;
+  }
+
+  /** Belt throw — a lobbed grenade at the hunt's last-seen spot. Mirrors
+   *  ServerBots.throwBelt: real projectile, ballistic pitch, 50% vel
+   *  inheritance handled inside the Projectile ctor. */
+  private throwBelt(bot: GameBot): void {
+    bot.wantBelt = false;
+    const aim = this.targetPos(bot.huntTargetId);
+    if (aim) this.lobAt(bot, aim);
+  }
+
+  /** Lob the belt weapon at an explicit point — ballistic arc solves
+   *  θ from the target's range instead of a flat guess. */
+  private lobAt(bot: GameBot, aim: { x: number; y: number; z: number }): void {
+    const wt = bot.loadout?.belt ?? WeaponType.Grenade;
+    const stats = getWeaponStats(wt);
+    const cfg = getProjectileConfig(wt);
+    if (!stats || stats.speed <= 0 || !cfg) return;
+    const dx = aim.x - bot.position.x, dz = aim.z - bot.position.z;
+    const d = Math.hypot(dx, dz) || 1;
+    let pitch: number;
+    if (stats.rayDelay) {
+      pitch = 0.15;
+    } else {
+      const g = Math.abs(GRAVITY);
+      const sin2t = Math.min(0.98, (d * g) / (stats.speed * stats.speed));
+      pitch = Math.asin(sin2t) / 2;
+    }
+    const dir = { x: dx / d, y: Math.tan(pitch), z: dz / d };
+    const len = Math.hypot(dir.x, dir.y, dir.z);
+    // The ctor inherits half the bot's velocity — steer the launch
+    // against the carry the same way the server does.
+    const vx = (dir.x / len) * stats.speed - bot.vel.x * 0.5;
+    const vy = (dir.y / len) * stats.speed - bot.vel.y * 0.5;
+    const vz = (dir.z / len) * stats.speed - bot.vel.z * 0.5;
+    const vl = Math.hypot(vx, vy, vz) || 1;
+    const p = new Projectile(this.deps.lazyScene(),
+      _shotMuzzle.set(bot.position.x, bot.position.y + 1.4, bot.position.z),
+      _shotDir.set(vx / vl, vy / vl, vz / vl), bot.vel,
+      { ...cfg, needsServerTracking: false });
+    p.shooterId = bot.playerId;
+    p.sweepLocal = () => { const pl = this.deps.lazyPlayer(); return pl.isDead ? null : pl.pos; };
+    this.deps.world.projectiles.push(p);
+    sfx.shoot(wt);
+  }
+
+  /** First push-class AOE weapon in the kit — pull weapons would drag
+   *  the bot toward its own feet. */
+  private propelWeapon(bot: GameBot): number {
+    const lo = bot.loadout ?? BOT_LOADOUTS[0]!;
+    const pick = [lo.mid, lo.far].find((wt) => {
+      const s = getWeaponStats(wt);
+      return s && s.aoeRadius > 0 && s.speed > 0 && s.forceMode !== 'pull';
+    });
+    return pick ?? WeaponType.Disc;
+  }
+
+  /** Disc-jump / implosion ride — a grounded bot starting a long open
+   *  run detonates an explosive at its heels and surfs the blast (or
+   *  lobs a pull-belt implosion ahead and rides the drag). Same gates
+   *  as ServerBots.tryPropel: long run, low speed, fuel for the climb,
+   *  never mid-firefight. */
+  private tryPropel(bot: GameBot, firing: boolean): void {
+    const now = performance.now();
+    if (firing || !bot.grounded || bot.propelUntil > now) return;
+    const dx = bot.lastDest.x - bot.position.x, dz = bot.lastDest.z - bot.position.z;
+    const dist = Math.hypot(dx, dz);
+    if (dist < 35) return;
+    const v = bot.vel;
+    if (Math.hypot(v.x, v.z) > 12) return; // already moving — boost is for launches
+    if (bot.energy < 30) return;
+    const nx = dx / dist, nz = dz / dist;
+    if (getWeaponStats(bot.loadout?.belt)?.forceMode === 'pull') {
+      this.lobAt(bot, { x: bot.position.x + nx * 18, y: bot.position.y - 1, z: bot.position.z + nz * 18 });
+    } else {
+      const wt = this.propelWeapon(bot);
+      const cfg = getProjectileConfig(wt);
+      if (cfg && cfg.speed > 0) {
+        const mx = bot.position.x, my = bot.position.y + 1.4, mz = bot.position.z;
+        const hx = bot.position.x - nx * 1.8 - mx;
+        const hy = bot.position.y - 1.8 - my;
+        const hz = bot.position.z - nz * 1.8 - mz;
+        const len = Math.hypot(hx, hy, hz) || 1;
+        const p = new Projectile(this.deps.lazyScene(),
+          _shotMuzzle.set(mx, my, mz), _shotDir.set(hx / len, hy / len, hz / len), bot.vel,
+          { ...cfg, needsServerTracking: false });
+        p.shooterId = bot.playerId;
+        this.deps.world.projectiles.push(p);
+        sfx.shoot(wt);
+      }
+    }
+    bot.propelUntil = now + 8000;
+    bot.propelJetT = 0.9; // ride the shove skyward like a real disc-jump
+    this.deps.logger.debug(`bot ${bot.playerId} propel`);
   }
 
   /** Instant-claim resolution: melee, beams, and connected rooms where

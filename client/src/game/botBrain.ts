@@ -57,6 +57,16 @@ export class GameBot extends RemotePlayer {
   sheepShown = 0;
   /** Jets pinned by a sheep yeet — countdown in seconds. */
   yeetT = 0;
+  /** Jets pinned by a propel blast — rides the shove like a disc-jump;
+   *  burns the real tank (only the yeet is free). */
+  propelJetT = 0;
+  /** Brain's belt intent from the last think — TeamBots resolves the arc. */
+  wantBelt = false;
+  /** The destination the brain steered toward last think — propel gates
+   *  on how far the bot still has to run. */
+  readonly lastDest = new THREE.Vector3();
+  /** Propel cooldown (performance.now deadline) — one jump per launch. */
+  propelUntil = 0;
 
   /** The sheep-yeet: an impulse launch that forces a few seconds of
    *  airborne Tribes play — the penalty is the cure. */
@@ -82,6 +92,10 @@ export class GameBot extends RemotePlayer {
   private appliedSpecList: readonly StructureSpec[] | undefined;
   /** Jet energy tank — a bot can only hold burn while fuel remains. */
   energy: number = ENERGY.max;
+  /** Shared brain's current hunt target — belt throws arc at its spot. */
+  get huntTargetId(): string | null { return this.brain.currentHuntId; }
+  /** MoveSim grounded flag — propel only launches from a stand. */
+  get grounded(): boolean { return this.moveState.onGround; }
 
   constructor(scene: THREE.Scene, name: string, team: TeamId | 'ffa', spawn: THREE.Vector3, terrain: Terrain,
               cls: 'light' | 'medium' | 'heavy' = 'medium') {
@@ -139,7 +153,10 @@ export class GameBot extends RemotePlayer {
       now: performance.now(),
     });
     const dest = out.dest;
+    this.lastDest.set(dest.x, dest.y, dest.z);
+    this.wantBelt = !!out.belt;
     if (this.yeetT > 0) this.yeetT -= dt;
+    if (this.propelJetT > 0) this.propelJetT -= dt;
     this.locomote(dt, ctx, dest, out.move);
     if (!out.fire) return null;
     this.fire();
@@ -162,7 +179,7 @@ export class GameBot extends RemotePlayer {
     this.moveState.yaw = this.rotation.yaw;
     this.moveState.pitch = 0;
     // Yeet overrides fuel — the penalty jet ignores the tank on purpose.
-    const jet = (!!move?.jet && this.energy > 0.5) || this.yeetT > 0;
+    const jet = ((!!move?.jet || this.propelJetT > 0) && this.energy > 0.5) || this.yeetT > 0;
     this.movement.setInput({
       forward: md > 0.5 ? 1 : 0,
       right: 0,
