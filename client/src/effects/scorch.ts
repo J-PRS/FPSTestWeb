@@ -15,17 +15,20 @@ const EMBER_PEAK = 0.9;
  */
 export class ScorchDecal {
   dead = false;
-  private entry: { x: number; z: number; r: number; intensity: number; ember: number };
-  private terrain: Terrain;
+  private entry: { x: number; z: number; r: number; intensity: number; ember: number } | null = null;
+  private terrain!: Terrain;
   private age = 0;
 
   constructor(_scene: THREE.Scene, terrain: Terrain, pos: THREE.Vector3, radius: number) {
+    // See Explosion — hidden-tab spawns die at birth.
+    if (typeof document !== 'undefined' && document.hidden) { this.dead = true; return; }
     this.terrain = terrain;
     this.entry = terrain.addScorch(pos.x, pos.z, radius);
     this.entry.ember = EMBER_PEAK;
   }
 
   update(dt: number): void {
+    if (!this.entry) { this.dead = true; return; }
     this.age += dt;
     const t = this.age / LIFETIME;
     if (t >= 1) {
@@ -39,6 +42,6 @@ export class ScorchDecal {
   }
 
   dispose(): void {
-    this.terrain.removeScorch(this.entry);
+    if (this.entry) this.terrain.removeScorch(this.entry);
   }
 }

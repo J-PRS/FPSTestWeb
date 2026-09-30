@@ -50,15 +50,17 @@ const arcPool: Arc[] = [];
 export class Implosion {
   dead = false;
   private particles: IP[] = [];
-  private scene: THREE.Scene;
+  private scene!: THREE.Scene;
   private elapsed = 0;
-  private ox: number; private oy: number; private oz: number;
+  private ox!: number; private oy!: number; private oz!: number;
   private shockwaves: Shock[] = [];
   private rings: TerrainRing[] = [];
   private core: Core | null = null;
   private arcs: Arc[] = [];
 
   constructor(scene: THREE.Scene, pos: THREE.Vector3, age: number = 0, terrain?: Terrain) {
+    // See Explosion — hidden-tab spawns die at birth.
+    if (typeof document !== 'undefined' && document.hidden) { this.dead = true; return; }
     this.scene = scene;
     this.ox = pos.x; this.oy = pos.y; this.oz = pos.z;
 
