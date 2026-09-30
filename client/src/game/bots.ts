@@ -2,6 +2,7 @@ import * as THREE from 'three';
 
 import { GameBot, BOT_DMG, EYE } from './botBrain.js';
 import { BotWatchdog } from './botWatchdog.js';
+import { losClear, type BrainCtx } from '../../../shared/botBrain.js';
 import { BOT_LOADOUTS, pickBotWeapon } from '../../../shared/botLoadouts.js';
 import { getProjectileConfig } from '../projectiles/index.js';
 import { Projectile } from '../projectiles/Projectile.js';
@@ -199,7 +200,8 @@ export class TeamBots {
         if (bot.respawnAt <= 0) this.respawnBot(bot);
         continue;
       }
-      const shot = bot.think(dt, this.ctxFor(bot, this.enemyList(bot), others, terrain));
+      const foes = this.enemyList(bot);
+      const shot = bot.think(dt, this.ctxFor(bot, foes, others, terrain));
       if (this.over) { this.sheepTick(bot, dt, terrain); continue; }
       if (shot) this.resolveShot(bot, shot.targetId, shot.aim);
       // Belt + propel are real-spawn actions — offline only, same gate
@@ -210,7 +212,7 @@ export class TeamBots {
         if (bot.wantDeploy) this.tryDeploy(bot);
         this.tryPropel(bot, !!shot);
       }
-      this.sheepTick(bot, dt, terrain);
+      this.sheepTick(bot, dt, terrain, this.foeSeen(bot, foes, terrain), !shot);
     }
   }
 
@@ -240,13 +242,31 @@ export class TeamBots {
    *  (slow, grounded, or parked), drains while it's doing Tribes things
    *  (covering ground, airborne, jetting). At 100 it gets yeeted: an
    *  impulse launch that forces the behavior the meter wants. */
-  private sheepTick(bot: GameBot, dt: number, terrain: Terrain): void {
+  /** Is a live enemy PLAYER within dueling range AND line of sight?
+   *  Creatures don't count — walking past wildlife isn't fear. Mirrors
+   *  ServerBots.markFoeNear: the same visible-enemy evidence the server
+   *  meter charges on. */
+  private foeSeen(bot: GameBot, foes: { id: string; pos: THREE.Vector3; alive: boolean }[], terrain: Terrain): boolean {
+    for (const e of foes) {
+      if (!e.alive || e.id.startsWith('creature:')) continue;
+      if (e.pos.distanceTo(bot.position) >= 60) continue;
+      _losCtx.groundY = (x, z) => terrain.getHeight(x, z);
+      _losCtx.now = performance.now();
+      if (losClear(_losCtx, bot.position, e.pos)) return true;
+    }
+    return false;
+  }
+
+  private sheepTick(bot: GameBot, dt: number, terrain: Terrain, foe = false, ignoring = false): void {
     const v = bot.vel;
     const speedXZ = Math.hypot(v.x, v.z);
     const grounded = bot.pos.y - terrain.getHeight(bot.pos.x, bot.pos.z) < 2;
-    const tribesing = speedXZ > 8 || !grounded || bot.yeetT > 0;
+    const tribesing = speedXZ > 10 || !grounded || bot.yeetT > 0;
     const moving = speedXZ > 1;
-    const delta = tribesing ? -(8 + speedXZ * 0.5 + (bot.yeetT > 0 ? 12 : 0)) : moving ? 6 : 14;
+    // Rates mirror the server meter — a bot offline is held to the same
+    // standard it is on the wire.
+    let delta = tribesing ? -(10 + speedXZ * 0.5 + (bot.yeetT > 0 ? 15 : 0)) : moving ? 9 : 18;
+    if (foe && ignoring) delta += 40; // visible enemy, no shot — the fastest tell
     bot.sheep = Math.max(0, Math.min(100, bot.sheep + delta * dt));
     // ~2s trailing average for display — the raw meter jitters ±10/s
     // around the fill/drain boundary, which reads as flicker.
@@ -813,6 +833,11 @@ export class TeamBots {
 const _touchers: [string, THREE.Vector3][] = [];
 const _enemies: { id: string; pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean }[] = [];
 const _collectors: { id: string; pos: THREE.Vector3; alive: boolean; pickupScale: number }[] = [];
+// Scratch LOS ctx — foeSeen only rides losClear (groundY/solids/now).
+const _losCtx: BrainCtx = {
+  pos: { x: 0, y: 0, z: 0 }, enemies: [], groundY: () => 0, now: 0,
+  solids: Projectile.solidColliders, solidIndex: Projectile.solidIndex,
+};
 const _shotDir = new THREE.Vector3();
 const _shotMuzzle = new THREE.Vector3();
 const _pelletRight = new THREE.Vector3();

@@ -1,3 +1,4 @@
+2026-09-26 - offline sheep meter matches server: same debits, same foe-ignoring charge (visible enemy + no shot = 40/s)
 2026-09-26 - sheep meter charges 40/s when a visible live enemy is within 60m and the bot elects not to fire (losClear exported for reuse)
 2026-09-26 - classUpdate/perkUpdate enum-clamped at dispatch (off-table class crashed respawn on CLASS_STATS lookup)
 2026-09-26 - chat relay truncates payloads at 280 chars (one client's oversized text can no longer amplify into every socket)
