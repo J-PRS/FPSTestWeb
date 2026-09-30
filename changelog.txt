@@ -1,3 +1,4 @@
+2026-09-30 - fix(class): wire respawn trusts server-banked armorClass for local player; fix(bots): WEAPON_FIRE_INTERVAL_S cadence gate in botFire (mortar no longer fires at chaingun pace)
 2026-09-26 - Top-left roster slot replaced with a battle log: kills+weapons, flag grabs/drops/captures/returns, fed from kill feed and CTF events
 2026-09-26 - Bots fire REAL projectiles in P2P-host mode (online gate only applies to wire-remote targets); bot-authored shells can never claim as the local player
 2026-09-26 - Fix sheep yeet loop: foe-ignore charge now requires the enemy inside the bot view cone; 3s post-yeet charge grace

@@ -13,7 +13,7 @@ import { BOT_LOADOUTS, pickBotWeapon } from '../../../shared/botLoadouts.js';
 import { getProjectileConfig } from '../projectiles/index.js';
 import { Projectile } from '../projectiles/Projectile.js';
 import { SLOT_DEFS } from '../weapons.js';
-import { WeaponType, getWeaponStats } from '../../../shared/weapons.js';
+import { WeaponType, getWeaponStats, WEAPON_FIRE_INTERVAL_S } from '../../../shared/weapons.js';
 import { GRAVITY } from '../../../shared/movement.js';
 import { MELEE_RANGE, MELEE_DAMAGE } from '../core/config.js';
 import * as sfx from '../core/sfx.js';
@@ -49,6 +49,7 @@ export class BotFire {
   // GL buffer upload + dispose for a 120ms visual.
   private bolts: { line: THREE.Line; t: number }[] = [];
   private boltPool: THREE.Line[] = [];
+  private lastShotAt = new Map<string, number>();
 
   constructor(private host: FireHost) {}
 
@@ -64,6 +65,7 @@ export class BotFire {
     const dist = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1;
     const wt = pickBotWeapon(lo, Math.hypot(dx, dz), dist);
     const melee = wt === WeaponType.Melee || dist <= MELEE_RANGE;
+    if (!this.canFire(bot.playerId, melee ? WeaponType.Melee : (wt as WeaponType))) return;
     const cfg = melee ? undefined : getProjectileConfig(wt);
 
     // The claim path exists ONLY for wire-remote targets: a locally
@@ -79,6 +81,18 @@ export class BotFire {
       return;
     }
     this.spawnShells(bot, wt, cfg, dx / dist, dy / dist, dz / dist);
+  }
+
+  /** The brain's volley cadence is weapon-blind — a 0.45s burst pick of
+   *  Mortar would out-cadence a player holding the same gun (2.0s).
+   *  Same gate the server's botArsenal applies to its bots. */
+  private canFire(botId: string, wt: WeaponType): boolean {
+    const interval = WEAPON_FIRE_INTERVAL_S[wt] ?? 0.1;
+    const last = this.lastShotAt.get(botId) ?? -interval * 1000;
+    const now = performance.now();
+    if (now - last < interval * 1000) return false;
+    this.lastShotAt.set(botId, now);
+    return true;
   }
 
   /** Real shells into the world projectile list — pellet weapons fan

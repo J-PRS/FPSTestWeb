@@ -7,6 +7,7 @@ import { REMOTE_PLAYER_FIXED_DT, DEBUG_LOG_SAMPLE_RATE } from '../../core/config
 import * as sfx from '../../core/sfx.js';
 import { PlayerDebris } from '../../effects/debris.js';
 import { TEAM_COLORS } from '../../../../shared/teams.js';
+import type { ArmorClass } from '../../../../shared/botClasses.js';
 import { noteKill } from '../../core/stateDebug.js';
 import type { NetCtx } from './ctx.js';
 
@@ -245,7 +246,7 @@ function gibVictim(ctx: NetCtx, shooterId: string, targetId: string, remotePlaye
   // Shatter like the creatures do: shards burst off the capsule shell,
   // carry the blast direction through the body, and inherit whatever
   // speed the corpse had. Team color when known, robot grey otherwise.
-  const centerY = remotePlayer.position.y + 1.0;
+  const centerY = remotePlayer.position.y - 0.6; // eye ~1.6 → chest
   let impulseDir: THREE.Vector3 | undefined;
   if (explosionPos) {
     impulseDir = new THREE.Vector3(
@@ -315,6 +316,10 @@ function wirePlayerLifecycle(ctx: NetCtx): void {
     if (playerId === nm().getLocalPlayerId()) {
       logger.info(`Local player respawned at ${JSON.stringify(position)}`);
       const player = deps.lazyPlayer();
+      // The respawn carries the class the server actually banked — trust
+      // it over the local pick or a dropped classUpdate leaves the client
+      // shouldering ordnance the authority still calls class-locked.
+      if (armorClass) player.armorClass = armorClass as ArmorClass;
       player.resetLifeState();
       player.pos.set(position.x, position.y, position.z);
       deps.setLastSentPos({ x: position.x, y: position.y, z: position.z });

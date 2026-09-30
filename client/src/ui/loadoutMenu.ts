@@ -24,15 +24,6 @@ const BELT_LABELS: Record<BeltItem, string> = {
   remoterailgun: 'Remote Railgun', armornade: 'Armor Grenade',
 };
 
-// One-line role reads — only for effects you can't feel by firing once.
-// Weapons get no line: squeeze the trigger and the gun explains itself.
-// Belt/pack/perk effects (plating allies, escort behavior) stay labelled.
-const BELT_ROLES: Record<BeltItem, string> = {
-  disc: 'bouncing charge', grenade: 'frag', cluster: 'splits mid-air',
-  javelin: 'arcing spear', sticky: 'remote chain', impact: 'instant pop',
-  remoterailgun: 'capacitor slug', armornade: 'plates friendlies',
-};
-
 // Chip width is measured, not hardcoded — canvas-measure the widest
 // option (uppercased, same font as .lo-opt) + padding + caret so no
 // label ever overflows and no chip is wider than it needs to be.
@@ -84,8 +75,8 @@ export function wireLoadoutBar(deps: LoadoutDeps): { refreshLoadout(): void } {
         it.className = 'lo-opt';
         it.textContent = o.label;
         if (o.desc) {
-          // Perks are the only invisible pick — weapons/skills you can
-          // feel in a second, a perk's effect needs a label.
+          // Perks are the only invisible pick — everything else
+          // self-explains in a second of firing it.
           it.classList.add('has-desc');
           const d = document.createElement('span');
           d.className = 'lo-desc';
@@ -201,7 +192,10 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
   const heavyOnly = new Set(Player.HEAVY_ONLY.map(String));
   const weaponOptsFor = (cls: string) => SLOT_DEFS
     .map((def, wid) => ({ v: String(wid), label: def.config.displayName, sidearm: !!def.sidearm }))
-    .filter((o) => !o.sidearm && (cls === 'heavy' || !heavyOnly.has(o.v)));
+    .filter((o) => !o.sidearm && (cls === 'heavy' || !heavyOnly.has(o.v)))
+    // SLOT_DEFS order is wire identity (wid = index) — the MENU sorts by
+    // name instead; v stays the wid so picks never reshuffle.
+    .sort((a, b) => a.label.localeCompare(b.label));
 
   // --- ARMOR: tile picker, not a dropup — the speed/HP tradeoff is the
   // headline and tiles show all three choices at once. ---
@@ -213,9 +207,10 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
   const pickClass = (v: string) => {
     deps.lazyPlayer().setArmorClass(v as ArmorClass);
     deps.lazyNetworkManager?.()?.sendClassUpdate(v);
-    // Class change re-filters the weapon drops on the spot — heavy
-    // ordnance shows/hides without closing the menu.
-    for (const d of ui.slotDrops) d.setOptions?.(weaponOptsFor(v));
+    // Re-filter on the tier in effect, not the pick — the banked swap
+    // lands at respawn, and ordnance the player can't shoulder yet
+    // must not masquerade as selectable.
+    for (const d of ui.slotDrops) d.setOptions?.(weaponOptsFor(deps.lazyPlayer().appliedClass));
     refreshTiles();
   };
   const refreshTiles = () => {
@@ -244,7 +239,9 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
   // --- WEAPONS: one numbered cell per slot. No group head — every cell
   // is already captioned, the banner just ate vertical space. ---
   const weaponCells = mkGroup('WEAPONS', false);
-  const weaponOpts = weaponOptsFor(deps.lazyPlayer()?.armorClass ?? 'medium');
+  // Filter by appliedClass (tier in effect), not armorClass — a banked
+  // mid-life pick doesn't unlock heavy ordnance until the next respawn.
+  const weaponOpts = weaponOptsFor(deps.lazyPlayer()?.appliedClass ?? 'medium');
   const allWeaponOpts = weaponOptsFor('heavy'); // label source for filtered-out picks
   for (let i = 0; i < Player.LOADOUT_SLOTS; i++) {
     const { cell, cap } = mkCellDom(weaponCells);
@@ -260,7 +257,8 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
   const belt = mkCellDom(kitCells);
   ui.beltLabel = belt.cap;
   ui.beltDrop = mkDrop(
-    BELT_ITEMS.map((b) => ({ v: b, label: BELT_LABELS[b], desc: BELT_ROLES[b] })),
+    // No descs — every belt item is one throw away from explaining itself.
+    BELT_ITEMS.map((b) => ({ v: b, label: BELT_LABELS[b] })),
     (v) => deps.lazyPlayer().setBeltItem(v as BeltItem),
   );
   belt.cell.appendChild(ui.beltDrop.el);
@@ -268,10 +266,10 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
   const sidearm = mkCellDom(kitCells);
   ui.sidearmLabel = sidearm.cap;
   ui.sidearmDrop = mkDrop(
-    [{ v: 'pistol', label: 'Pistol', desc: 'light hold-out' },
-     { v: 'revolver', label: 'Revolver', desc: 'heavy hold-out' },
-     { v: 'shotgun', label: 'Shotgun', desc: 'close fan' },
-     { v: 'repair', label: 'Repair Tool', desc: 'weld + over-armor deployables' }],
+    [{ v: 'pistol', label: 'Pistol' },
+     { v: 'revolver', label: 'Revolver' },
+     { v: 'shotgun', label: 'Shotgun' },
+     { v: 'repair', label: 'Repair Tool' }],
     (v) => deps.lazyPlayer().setSidearm(v as 'pistol' | 'revolver' | 'shotgun' | 'repair'),
   );
   sidearm.cell.appendChild(ui.sidearmDrop.el);
@@ -279,11 +277,12 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
   const pack = mkCellDom(kitCells);
   ui.packLabel = pack.cap;
   ui.packDrop = mkDrop(
-    [{ v: 'turret', label: 'Sentry', desc: 'auto-gun deployable' },
-     { v: 'mine', label: 'Mine', desc: 'proximity trap' },
-     { v: 'station', label: 'Pad', desc: 'heal + resupply' },
-     { v: 'drone', label: 'Drone', desc: 'escort drone' }],
-    (v) => deps.lazyPlayer().setPackItem(v as 'turret' | 'mine' | 'station' | 'drone'),
+    [{ v: 'turret', label: 'Sentry' },
+     { v: 'mine', label: 'Mine' },
+     { v: 'station', label: 'Pad' },
+     { v: 'drone', label: 'Drone' },
+     { v: 'shield', label: 'Barrier' }],
+    (v) => deps.lazyPlayer().setPackItem(v as 'turret' | 'mine' | 'station' | 'drone' | 'shield'),
   );
   pack.cell.appendChild(ui.packDrop.el);
 
