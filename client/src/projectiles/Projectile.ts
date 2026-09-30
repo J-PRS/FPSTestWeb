@@ -12,7 +12,7 @@ import { RibbonTrail } from './RibbonTrail.js';
 import { ProjectileTrail } from './trailParticles.js';
 import { QuarksTrail } from '../effects/vfx.js';
 import { buildProjectileMeshes, updateProjectileMesh } from './visuals.js';
-import { sweepTerrain } from './sweep.js';
+import { tickRemote } from './projRemote.js';
 import { ColliderIndex } from '../../../shared/solidWorld.js';
 import type { StructureCollider } from '../../../shared/ballSim.js';
 import { ProjCollide } from './projCollide.js';
@@ -118,7 +118,7 @@ export class Projectile {
   // hitscan beam down its velocity line — implemented as one giant swept
   // step so terrain/target/obstacle collision applies to the beam itself.
   // Terminal: hit or miss, the slug is spent at the end of the segment.
-  private rayFired = false;
+  rayFired = false;
   private rayDone = false;
   private readonly rayFrom = new THREE.Vector3();
   /** Visual/sfx hook — fired once at discharge with (beam origin, end). */
@@ -193,7 +193,7 @@ export class Projectile {
   }
 
   /** Impact policy (bounce/fuse/intercept/target record) — projCollide.ts. */
-  private collide = new ProjCollide(this);
+  collide = new ProjCollide(this);
   solids(): readonly StructureCollider[] { return Projectile.solidColliders; }
   solidIdx(): ColliderIndex | null { return Projectile.solidIndex; }
 
@@ -293,33 +293,9 @@ export class Projectile {
     if (!this.exploded) this.explode();
   }
 
-  // Planted shell: hold full size for the embed window, then shrink away.
-  // Remote replica terrain handling. A replica never sweep-hits a target
-  // (server owns damage) but terrain is deterministic from spawn state:
-  // bounces match the shooter's arc, armed shells die on contact, remote
-  // stickies glue on the shared fuse clock. Returns true when the shell
-  // exploded this frame.
-  private tickRemote(terrain: Terrain): boolean {
-    // A discharged beam still respects terrain — the sweep sets hitPoint
-    // so update() pops the slug at contact, not at the range cap.
-    if (this.rayFired) sweepTerrain(this, terrain);
-    if (this.canBounce && sweepTerrain(this, terrain) && !this.collide.bounceOffTerrain(terrain)) {
-      this.explode(); // bounce budget/graze exhausted — die like a local shard
-      return true;
-    }
-    if (!this.canBounce && this.config.armTime !== undefined && sweepTerrain(this, terrain)) {
-      this.explode(); // armed mortar shell touching terrain on a remote client
-      return true;
-    }
-    if (this.config.sticks && sweepTerrain(this, terrain)) this.glue.stickAt(this.hitPoint);
-    // Embed-capable shells (javelin) die on contact everywhere — the server
-    // never sends a destroy for a dirt hit, so the replica must sense it.
-    if (this.config.embeds !== undefined && sweepTerrain(this, terrain)) {
-      this.explode();
-      return true;
-    }
-    return false;
-  }
+  // Remote replicas skip all collision — terrain-only behavior lives
+  // in tickRemote (server owns damage on every hit).
+  private tickRemote(terrain: Terrain): boolean { return tickRemote(this, terrain); }
 
   // Runs all swept collision checks; returns true if the projectile hit
   // something and exploded (records hit target + accuracy data).

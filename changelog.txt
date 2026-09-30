@@ -1,3 +1,4 @@
+2026-09-30 - Projectile split: remote-replica terrain rules (bounce/armed/sticky/embed sweeps) -> projRemote.ts (402->379).
 2026-09-30 - Lint cleanup: Projectile dead scratch dupes; botSheep.check split into charge/debits (complexity 20->12); commitMoveInput intent bundle (7->6 params); ServerBots dead imports.
 2026-09-30 - hud.ts split: kill feed + match strip + death/spectate/status overlays -> hud/hudChrome.ts (370->257).
 2026-09-30 - ViewModel split: cloak ghost (depth-shell fade) + shield/mend gun field -> vmGhost.ts (373->281).
