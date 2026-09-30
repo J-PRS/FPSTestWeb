@@ -1,3 +1,4 @@
+2026-10-02 - CI workflow (.github/workflows/ci.yml) + cross-platform Chrome probe
 2026-10-02 - _tools/e2e/all.ts: suite runner, bun run e2e / e2e:perf scripts, duo chat timeout fix
 2026-10-02 - _tools/e2e/reconnect.ts: grace-period reconnect E2E
 2026-10-02 - Open p2p lobbies + quick-join (HOST OPEN / QUICK buttons, /rtc/lobbies, ?p2p=quick)
