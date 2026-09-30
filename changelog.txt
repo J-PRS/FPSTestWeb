@@ -1,3 +1,4 @@
+2026-09-26 - tests: teleport report-grace + room health rollup scenarios (445 bun tests)
 2026-09-26 - VGS: added Target (VT*) and Warning (VW*) categories matching the T:A bind table — full OG category coverage
 2026-09-26 - metrics: per-room health counters (rej/diverge/posrej/ratelimit/envdmg/dmg/kill) now cumulative on /metrics instead of log-only 15s rollups
 2026-09-26 - net: teleport handler arms correctionGraceUntil — in-flight pre-warp reports no longer read as speedhacks
