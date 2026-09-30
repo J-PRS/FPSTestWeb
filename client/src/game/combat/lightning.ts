@@ -39,8 +39,28 @@ interface LgState {
   beamTo: THREE.Vector3;
   acc: Map<number, number>;
   ramp: Map<number, { t: number; n: number }>;
+  shroud: Map<number, { sprite: THREE.Sprite; seenAt: number }>;
 }
 const _traceT = { t: 0 };
+
+// Charged-enemy shroud: one shared radial texture; per-target sprites
+// scale and flicker with banked pop charge so a loaded victim reads
+// "about to detonate" to anyone looking, not just the beamer.
+let _shroudTex: THREE.Texture | null = null;
+function shroudTexture(): THREE.Texture {
+  if (_shroudTex) return _shroudTex;
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const ctx = c.getContext('2d')!;
+  const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+  g.addColorStop(0, 'rgba(255,255,255,0.9)');
+  g.addColorStop(0.35, 'rgba(140,220,255,0.45)');
+  g.addColorStop(1, 'rgba(60,140,255,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 64, 64);
+  _shroudTex = new THREE.CanvasTexture(c);
+  return _shroudTex;
+}
 
 // Beam start: the muzzle node's actual rendered pixel, unprojected into
 // world space through the main camera — FOV difference between the
@@ -207,6 +227,20 @@ function tickBeam(lg: LgState, dt: number): void {
     lg.lastFire = 0;
     lg.beam.clearChain();
   }
+  // Charge shrouds: flicker with banked charge, die out when the beam
+  // leaves the victim (same window as the ramp reset).
+  const now = performance.now() / 1000;
+  for (const [id, sh] of lg.shroud) {
+    const age = now - sh.seenAt;
+    if (age > LG_RAMP_WINDOW_S * 2) {
+      sh.sprite.removeFromParent();
+      lg.shroud.delete(id);
+      continue;
+    }
+    const charge = Math.min((lg.acc.get(id) ?? 0) / LG_POP_DMG_CAP, 1);
+    const flicker = 0.75 + Math.random() * 0.25 + charge * 0.5 * (Math.random() < 0.3 ? 1 : 0);
+    (sh.sprite.material as THREE.SpriteMaterial).opacity = Math.min(1, (0.15 + charge * 0.8) * flicker);
+  }
   // NOTE: beam weld lives in updateBeamVisual, called post-viewModel
   // update from gameLoop — the muzzle node is stale here.
 }
@@ -231,11 +265,28 @@ function zapTarget(deps: CombatDeps, hooks: LightningHooks, lg: LgState,
   // beam charges nothing, a held beam detonates for the decay it paid.
   const acc = (lg.acc.get(t.id) ?? 0) + (8 - lgTickDamage(n)) * dmgScale * LG_POP_CHARGE_MULT;
   lg.acc.set(t.id, acc);
+  // Shroud grows + hardens with charge — a readable countdown to the pop.
+  const charge = Math.min(acc / LG_POP_DMG_CAP, 1);
+  let sh = lg.shroud.get(t.id);
+  if (!sh) {
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: shroudTexture(), transparent: true, blending: THREE.AdditiveBlending,
+      depthWrite: false, color: 0x9fd8ff,
+    }));
+    deps.lazyScene().add(sprite);
+    sh = { sprite, seenAt: 0 };
+    lg.shroud.set(t.id, sh);
+  }
+  sh.seenAt = now;
+  sh.sprite.position.copy(t.pos);
+  sh.sprite.scale.setScalar(1.5 + charge * 4);
   deps.reportTargetDamage?.(t, dmg);
   if (t.takeDamage(dmg)) {
     hooks.onTargetDestroyed(t, t.vel, WeaponType.Lightning);
     lgPop(deps, hooks, t.pos, acc);
     lg.acc.delete(t.id);
+    const dead = lg.shroud.get(t.id);
+    if (dead) { dead.sprite.removeFromParent(); lg.shroud.delete(t.id); }
   } else if (!t.hideHealthBar) {
     deps.lazyHealthBarSystem().spawnBall(t, dmg, t.health);
   }
@@ -253,6 +304,7 @@ export function createLightning(deps: CombatDeps, hooks: LightningHooks) {
     beamTo: new THREE.Vector3(), // beam tip — follows the target between ticks
     acc: new Map(), // beam charge per target — detonated on the kill
     ramp: new Map(), // consecutive-tick count per target — steps damage down
+    shroud: new Map(), // charged-enemy glow — telegraphs the banked pop
   };
 
   // Beam start: the muzzle node's actual rendered pixel, unprojected into

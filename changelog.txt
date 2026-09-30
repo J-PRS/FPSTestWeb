@@ -1,3 +1,4 @@
+2026-09-26 - Charged-enemy shroud: beamed targets get an additive electric glow that swells and flickers with banked pop charge, telegraphing the detonation; fades ~0.6s after the beam leaves
 2026-09-26 - LG pop damage cap 160->320: the charged kill is a real payoff for the hold handicap (~2.7s sustained beam to cap)
 2026-09-26 - LG pop charge multiplier x2: withheld damage banks doubled so a held-beam kill pays out the elenuke
 2026-09-26 - LG kill-pop banks withheld damage (8 - tick damage) instead of dealt damage: fresh beams charge nothing, sustained holds detonate for the decay paid
