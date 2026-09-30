@@ -360,8 +360,8 @@ export class Room {
       }, status, seq),
       moveReport: (pid, pos, yaw, vel, inputSeq) => this.moveSim.reconcile(pid, pos, yaw, vel, inputSeq),
       moveImpulse: (pid, dv) => this.moveSim.applyImpulse(pid, dv),
-      moveResync: (pid, pos, yaw) => {
-        this.moveSim.resync(pid, pos, yaw);
+      moveResync: (pid, pos, yaw, fullEnergy) => {
+        this.moveSim.resync(pid, pos, yaw, fullEnergy);
         // Resync re-anchors the shadow — also refresh the class speed
         // scale so a respawn-applied tier swap propagates (moveTrack
         // only re-reads it at handshake).

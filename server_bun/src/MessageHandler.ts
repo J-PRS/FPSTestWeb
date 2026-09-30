@@ -63,7 +63,7 @@ export interface RoomInfo {
   moveReport?: (playerId: string, pos: Vec3, yaw: number, vel?: Vec3, inputSeq?: number) => { pos: Vec3; vel: Vec3; inputSeq: number; onGround: boolean } | null;
   /** Server-side impulses (knockback) the sim must also receive. */
   moveImpulse?: (playerId: string, dv: Vec3) => void;
-  moveResync?: (playerId: string, pos: Vec3, yaw: number) => void;
+  moveResync?: (playerId: string, pos: Vec3, yaw: number, fullEnergy?: boolean) => void;
   moveTrack?: (playerId: string, pos: Vec3, yaw: number) => void;
   moveUntrack?: (playerId: string) => void;
   /** When set, the sim is truth: position reports degrade to aim/ping/

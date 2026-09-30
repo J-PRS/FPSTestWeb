@@ -767,7 +767,7 @@ export class ServerBots {
       if (!p.isDead && wasDead) {
         this.deadSet.delete(id);
         this.sheepMeter.delete(id); // respawn is a fresh leash
-        this.room.moveSim.resync(id, p.position, p.rotation.yaw);
+        this.room.moveSim.resync(id, p.position, p.rotation.yaw, true);
       }
 
       // Test-silenced: heartbeat and shadow upkeep still run — only the

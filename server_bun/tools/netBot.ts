@@ -17,7 +17,7 @@
  *       --net best|rtc|ws — best probes /rtcs (WebRTC datachannel via
  *         node-datachannel) then falls back to /ws like a real client.
  */
-import { MoveSim, GRAVITY, type MoveState } from '../../shared/movement.ts';
+import { MoveSim, GRAVITY, ENERGY, type MoveState } from '../../shared/movement.ts';
 import { hmHeight, type Heightfield } from '../../shared/heightfield.ts';
 import { encodePosition, decodeTickFrame, decodeBallSegment, isWireFrame } from '../../shared/wire.ts';
 import { PERK_ORDER } from '../../shared/perks.ts';
@@ -46,12 +46,27 @@ const FIRE = arg('fire', '1') !== '0';
 // first (unreliable lane kills head-of-line stutter), WS as the floor.
 // WebTransport has no client stack in Bun — skipped like a Firefox client.
 const NET = arg('net', 'best');
-const MAP_PATH = arg('map', new URL('../heightmap.bin', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'));
-
-// ---- surface ------------------------------------------------------------
 const bunFile = (globalThis as { Bun?: { file(p: string): { arrayBuffer(): Promise<ArrayBuffer> } } }).Bun?.file;
 if (!bunFile) throw new Error('netBot requires Bun');
-const buf = new Uint8Array(await bunFile(MAP_PATH).arrayBuffer());
+// A named room plays on its map spec's terrain — simming the default
+// heightmap against e.g. swarm.bin ground leaves every report floating
+// tens of meters off the shadow and reads as a movement cheat.
+const specPath = new URL(`../../maps/${ROOM}.json`, import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
+let MAP_PATH = arg('map', '');
+if (!MAP_PATH) {
+  try {
+    const spec = JSON.parse(new TextDecoder().decode(await bunFile!(specPath).arrayBuffer())) as { terrain?: string };
+    MAP_PATH = spec.terrain
+      ? new URL(`../../maps/${spec.terrain}`, import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')
+      : new URL('../heightmap.bin', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
+  } catch {
+    MAP_PATH = new URL('../heightmap.bin', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
+  }
+}
+console.log(`[netBot] terrain: ${MAP_PATH}`);
+
+// ---- surface ------------------------------------------------------------
+const buf = new Uint8Array(await bunFile!(MAP_PATH).arrayBuffer());
 const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
 const W = dv.getUint32(0, true), H = dv.getUint32(4, true);
 const field: Heightfield = { size: W, data: buf.subarray(8), stride: 1 };
@@ -189,6 +204,10 @@ class WireBot {
   seq = 0; inputSeq = 0; pingMs = 10;
   waypoint = { x: rand(-120, 120), z: rand(-120, 120) };
   jetUntil = 0; input = { forward: 1, right: 0, jump: 0, ski: 1, jet: 0, status: 0 };
+  // The server's shadow models a real fuel tank and refuses jets at 0 —
+  // a bot that thrusts on an infinite tank climbs tens of meters past
+  // its shadow and reads as a teleport-scale cheat.
+  energy = ENERGY.max;
   sentPingAt = 0; timers: ReturnType<typeof setInterval>[] = [];
   lastTickSeq = -1; lastTickAt = 0;
   balls = new Map<number, Vec3>(); crawls = new Map<number, Vec3>();
@@ -200,6 +219,22 @@ class WireBot {
   pendingClaims: { pid?: string; wt: number; vx: number; vy: number; vz: number }[] = [];
   nextDeploy = 0; nextChat = 0; nextTeleport = 0; nextHeal = 0; nextLoadout = 0; nextEnvDmg = 0; nextSwitch = 0;
   wasJump = false; wasJet = false;
+  private lastSentInput = '';
+
+  /** Real clients report input on change edges — the 400ms heartbeat
+   *  alone makes the shadow replay each jet burst 400ms late, which
+   *  reads as multi-meter false divergence. */
+  private pushInput(): void {
+    const key = JSON.stringify(this.input);
+    if (key === this.lastSentInput) return;
+    this.lastSentInput = key;
+    const s = this.sim?.state;
+    this.send({
+      type: 'inputMove', seq: ++this.inputSeq,
+      input: { ...this.input },
+      rotation: { yaw: s?.yaw ?? 0, pitch: 0 },
+    });
+  }
   dead = false; // yourHealth<=0 until playerRespawn — dead clients go quiet
   team?: 'alpha' | 'bravo'; // own team — friendly targets are unshootable
   // Warp state is per-bot — each socket sees its own (possibly interest-
@@ -391,6 +426,20 @@ class WireBot {
         // Death arrives as a kill broadcast — the corpse goes quiet.
         if (m.targetId === this.id) this.dead = true;
         break;
+      case 'knockback':
+        // The server's shadow received this impulse too — a client that
+        // doesn't apply it reports an unshoved trajectory and reads as a
+        // teleport-scale divergence until the judge kicks it.
+        if (m.targetId === this.id && this.sim) {
+          const s = this.sim.state;
+          const dx = s.pos.x - m.position.x, dy = s.pos.y - m.position.y, dz = s.pos.z - m.position.z;
+          const d = Math.hypot(dx, dy, dz);
+          if (d > 0) {
+            if (m.pull) { s.vel.x -= (dx / d) * m.force; s.vel.y += 0.3 * m.force; s.vel.z -= (dz / d) * m.force; }
+            else { s.vel.x += (dx / d) * m.force; s.vel.y += 0.5 * m.force; s.vel.z += (dz / d) * m.force; }
+          }
+        }
+        break;
       case 'yourHealth':
         if (m.health <= 0) this.dead = true;
         break;
@@ -411,6 +460,7 @@ class WireBot {
           s.pos.x = m.position.x; s.pos.y = m.position.y; s.pos.z = m.position.z;
           s.vel.x = 0; s.vel.y = 0; s.vel.z = 0;
           s.onGround = true;
+          this.energy = ENERGY.max; // respawn refills the tank
           this.waypoint = { x: rand(-140, 140), z: rand(-140, 140) };
           this.dead = false;
         } else if (m.playerId && m.playerId !== this.id) {
@@ -441,13 +491,8 @@ class WireBot {
     // inputMove journal — change-driven like a real client plus a
     // heartbeat so late seq gaps never starve the shadow.
     this.timers.push(setInterval(() => {
-      this.inputSeq++;
-      const s = this.sim?.state;
-      this.send({
-        type: 'inputMove', seq: this.inputSeq,
-        input: { ...this.input },
-        rotation: { yaw: s?.yaw ?? 0, pitch: 0 },
-      });
+      this.lastSentInput = ''; // heartbeat — re-push whatever is current
+      this.pushInput();
     }, 400));
     this.timers.push(setInterval(() => {
       this.sentPingAt = Date.now();
@@ -561,11 +606,16 @@ class WireBot {
     const dx = this.waypoint.x - s.pos.x, dz = this.waypoint.z - s.pos.z;
     if (dx * dx + dz * dz < 25) this.waypoint = { x: rand(-140, 140), z: rand(-140, 140) };
     s.yaw = Math.atan2(dx, dz);
-    // Uphill climbs get a jet burst — same thing a human does.
-    if (this.jetUntil < performance.now() && Math.random() < 0.004) this.jetUntil = performance.now() + rand(400, 1200);
-    const jetting = performance.now() < this.jetUntil;
+    // Uphill climbs get a jet burst — same thing a human does. Fuel is
+    // real: thrust drains 15/s, idle recharges 8/s, empty tank = no jets
+    // (the server's shadow enforces the identical model).
+    if (this.jetUntil < performance.now() && this.energy > 20 && Math.random() < 0.004) this.jetUntil = performance.now() + rand(400, 1200);
+    const jetting = performance.now() < this.jetUntil && this.energy > 0;
+    if (jetting) this.energy = Math.max(0, this.energy - ENERGY.jetDrain * dt);
+    else this.energy = Math.min(ENERGY.max, this.energy + ENERGY.jetCharge * dt);
     this.input.jet = jetting ? 1 : 0;
     this.input.jump = Math.random() < 0.008 ? 1 : 0;
+    this.pushInput();
     // Rising-edge event reports — real clients announce jump/jet starts
     // so remotes see the launch, not just the position drift.
     if (this.input.jump === 1 && !this.wasJump) this.send({ type: 'jump', position: { ...s.pos } });

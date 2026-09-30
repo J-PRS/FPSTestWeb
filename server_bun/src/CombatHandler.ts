@@ -48,7 +48,7 @@ export interface CombatDeps {
   moveImpulse?: (playerId: string, dv: Vec3) => void;
   /** Server-driven respawn is a declared discontinuity — reseat the
    *  shadow at the spawn or the corpse→spawn jump reads as divergence. */
-  moveResync?: (playerId: string, pos: Vec3, yaw: number) => void;
+  moveResync?: (playerId: string, pos: Vec3, yaw: number, fullEnergy?: boolean) => void;
   /** Room mode tag for balance telemetry ('ctf', 'nuggets', ...). */
   mode?: string;
   /** Deployable blast sweep — Room.deployables.applyBlast. Absent on
@@ -800,7 +800,7 @@ export class CombatHandler {
       if (!player) return;
 
       logger.info('Player respawned', { playerId, position: result.position });
-      this.deps.moveResync?.(playerId, result.position, result.rotation.yaw);
+      this.deps.moveResync?.(playerId, result.position, result.rotation.yaw, true);
       // The respawn broadcast and the honest post-snap report are both in
       // flight — the client's snap to spawn (and any straggler reports
       // from the corpse spot) read as impossible speed/divergence against

@@ -401,7 +401,7 @@ export class RoomMoveSim {
   }
 
   /** Declared discontinuity (teleport/respawn) — resync without counting. */
-  resync(playerId: string, pos: Vec3Like, yaw: number): void {
+  resync(playerId: string, pos: Vec3Like, yaw: number, fullEnergy = false): void {
     const sh = this.shadows.get(playerId);
     if (!sh) return;
     const s = sh.sim.state;
@@ -409,9 +409,18 @@ export class RoomMoveSim {
       pos: { x: pos.x, y: pos.y, z: pos.z },
       vel: { x: 0, y: 0, z: 0 }, yaw, pitch: s.pitch, onGround: true,
     });
+    // Respawn refills the client's tank; a drained shadow would refuse
+    // jets the client legitimately flies → guaranteed divergence streak.
+    // Teleport keeps the tank as-modeled (beacons don't recharge).
+    if (fullEnergy) sh.energy = ENERGY.max * sh.energyMax;
     // Journal anchors pre-teleport positions — the discarded trajectory
     // would swallow fresh reports' divergence checks.
     sh.seqStates.clear();
+    // Input dies with the discontinuity: the client re-declares intent on
+    // its next inputMove, but a retained pre-respawn stick/ski/jet would
+    // coast the shadow away from the anchor until kick-scale divergence.
+    sh.sim.setInput({ forward: 0, right: 0, jumpPressed: false, jumpHeld: false, skiHeld: false, jetHeld: false });
+    sh.jetWanted = false;
     sh.resyncSeq = sh.lastInputSeq;
     sh.resyncAt = Date.now();
     sh.divergences = 0; // new trajectory — don't carry old accumulation
