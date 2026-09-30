@@ -1,3 +1,4 @@
+2026-10-02 - demo/index.ts barrel trimmed to the 2 externally-used symbols (knip noise down)
 2026-10-02 - knip config tightened (dump entries, stale ignores); dead exports heightmapSize/resetDirectionalFog removed
 2026-10-02 - PlayerVisuals.updateModelAnim split: locomotion-lean helper removes last oxlint complexity warning
 2026-10-02 - shared/botTaunts rng injectable; audit: reconnect reclaim re-tracks moveSim shadow, all timers accounted
