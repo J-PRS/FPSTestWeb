@@ -41,6 +41,11 @@ const BOT_LOADOUTS: BotLoadout[] = [
   { perk: 'plated',      near: WeaponType.Chaingun, mid: WeaponType.PlasmaGun, far: WeaponType.Disc,          belt: WeaponType.Grenade,       side: WeaponType.Revolver }, // anchor
   { perk: 'overcharge',  near: WeaponType.Chaingun, mid: WeaponType.Disc,      far: WeaponType.Rocket,        belt: WeaponType.RemoteRailgun, side: WeaponType.Pistol   }, // skirmisher
   { perk: 'vitality',    near: WeaponType.Chaingun, mid: WeaponType.Sprinkler, far: WeaponType.Rocket,        belt: WeaponType.Grenade,       side: WeaponType.Pistol   }, // hose — area denial
+  { perk: 'plated',      near: WeaponType.Shotgun,  mid: WeaponType.Cannon,    far: WeaponType.Railgun,       belt: WeaponType.Javelin,       side: WeaponType.Revolver }, // bruiser — big slugs
+  { perk: 'featherjets', near: WeaponType.Flak,     mid: WeaponType.GrenadeLauncher, far: WeaponType.RocketLauncher, belt: WeaponType.ImpactGrenade, side: WeaponType.Pistol }, // skirmisher — shove tools
+  { perk: 'bombardier',  near: WeaponType.Chaingun, mid: WeaponType.PlasmaCannon, far: WeaponType.Mortar,     belt: WeaponType.ClusterBomb,   side: WeaponType.Pistol   }, // artillery
+  { perk: 'overcharge',  near: WeaponType.Lightning, mid: WeaponType.Disc,     far: WeaponType.Railgun,       belt: WeaponType.DiscPull,      side: WeaponType.Pistol   }, // beam rider
+  { perk: 'vitality',    near: WeaponType.Shotgun,  mid: WeaponType.Sticky,    far: WeaponType.RocketLauncher, belt: WeaponType.ClusterBomb,   side: WeaponType.Revolver }, // trapper
 ];
 
 const SPEED = 14;          // m/s ground move
@@ -228,8 +233,11 @@ export class ServerBots {
     }
     const stats = getWeaponStats(wt);
     // Lead the target by its velocity over the shell's flight time —
-    // without it every bolt lands behind a skiing player forever.
-    const lead = isSuper(p.id) ? dist / stats.speed : (dist / stats.speed) * 0.8;
+    // without it every bolt lands behind a skiing player forever. Hitscan
+    // lines (speed 0) take no lead: dist/0 would smear the dir to NaN.
+    const lead = stats.speed > 0
+      ? (isSuper(p.id) ? dist / stats.speed : (dist / stats.speed) * 0.8)
+      : 0;
     const ax = aim.x + target.velocity.x * lead - muzzle.x;
     const ay = aim.y + target.velocity.y * lead - muzzle.y;
     const az = aim.z + target.velocity.z * lead - muzzle.z;
