@@ -21,6 +21,7 @@ import { MoveSim, GRAVITY, ENERGY, type MoveState } from '../../shared/movement.
 import { hmHeight, type Heightfield } from '../../shared/heightfield.ts';
 import { encodePosition, decodeTickFrame, decodeBallSegment, isWireFrame } from '../../shared/wire.ts';
 import { PERK_ORDER } from '../../shared/perks.ts';
+import { CLASS_STATS, type ArmorClass } from '../../shared/botClasses.ts';
 import type { Vec3 } from '../../shared/protocol.ts';
 
 // ---- args ---------------------------------------------------------------
@@ -88,7 +89,7 @@ const surface = {
 
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
 const PERKS = PERK_ORDER.filter(p => p !== 'none');
-const CLASSES = ['light', 'medium', 'heavy'];
+const CLASSES: ArmorClass[] = ['light', 'medium', 'heavy'];
 
 interface Roster { pos: Vec3; vel: Vec3; team?: 'alpha' | 'bravo'; dead?: boolean }
 
@@ -237,6 +238,15 @@ class WireBot {
   }
   dead = false; // yourHealth<=0 until playerRespawn — dead clients go quiet
   team?: 'alpha' | 'bravo'; // own team — friendly targets are unshootable
+  // The join-declared tier: the shadow skis at its speedScale, so the
+  // local sim must too — a 1.0-sim against a 0.78 heavy shadow is a
+  // permanent ~20% overspeed that reads as a movement cheat.
+  private armorClass: ArmorClass;
+  private pendingClass: ArmorClass | null = null; // classUpdate applies at respawn
+  private applyClass(cls: ArmorClass): void {
+    this.armorClass = cls;
+    if (this.sim) this.sim.speedScale = CLASS_STATS[cls].speedScale;
+  }
   // Warp state is per-bot — each socket sees its own (possibly interest-
   // filtered) stream, so comparing across sockets invents teleports.
   private lastSeg = new Map<string, { t: number; x: number; y: number; z: number; sp: number; judge: boolean }>();
@@ -272,6 +282,7 @@ class WireBot {
 
   constructor(private i: number) {
     this.id = `NB-${i}-${Math.random().toString(36).slice(2, 6)}`;
+    this.armorClass = CLASSES[i % CLASSES.length]!;
     void this.connect();
   }
 
@@ -303,7 +314,7 @@ class WireBot {
     this.send({
       type: 'join', playerId: this.id, room: ROOM, mode: MODE,
       transport: this.tier,
-      perk: PERKS[this.i % PERKS.length], armorClass: CLASSES[this.i % CLASSES.length],
+      perk: PERKS[this.i % PERKS.length], armorClass: this.armorClass,
     });
   }
 
@@ -372,6 +383,7 @@ class WireBot {
           pos: { x: me.x, y: me.y, z: me.z },
           vel: { x: 0, y: 0, z: 0 }, yaw: 0, pitch: 0, onGround: true,
         });
+        this.sim.speedScale = CLASS_STATS[this.armorClass].speedScale;
         stats.joins++;
         // Re-seat (switchRoom, reconnect) revives: the corpse flag belongs
         // to the room we just left — no respawn message ever arrives for
@@ -461,6 +473,7 @@ class WireBot {
           s.vel.x = 0; s.vel.y = 0; s.vel.z = 0;
           s.onGround = true;
           this.energy = ENERGY.max; // respawn refills the tank
+          if (this.pendingClass) { this.applyClass(this.pendingClass); this.pendingClass = null; }
           this.waypoint = { x: rand(-140, 140), z: rand(-140, 140) };
           this.dead = false;
         } else if (m.playerId && m.playerId !== this.id) {
@@ -552,7 +565,8 @@ class WireBot {
     }
     if (now >= this.nextLoadout) {
       this.nextLoadout = now + rand(60000, 150000);
-      this.send({ type: 'classUpdate', armorClass: CLASSES[Math.floor(rand(0, 3))] });
+      this.pendingClass = CLASSES[Math.floor(rand(0, 3))]!;
+      this.send({ type: 'classUpdate', armorClass: this.pendingClass });
       this.send({ type: 'perkUpdate', perk: PERKS[Math.floor(rand(0, PERKS.length))] });
     }
     if (now >= this.nextEnvDmg) {
