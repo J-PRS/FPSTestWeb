@@ -14,61 +14,47 @@
  * few seconds — a retarget is itself a segment event so replays keep
  * pulling toward the same player's live position.
  */
-import { type Heightfield, hmHeight, hmFingerprint } from '../../shared/heightfield.ts';
+import { type Heightfield, hmFingerprint } from '../../shared/heightfield.ts';
 import {
   type SimBall, type SimVec, type BallVariant, type SegmentKind,
-  makeSimBall, stepBall, type StructureCollider,
+  stepBall, type StructureCollider,
 } from '../../shared/ballSim.ts';
 import { ColliderIndex } from '../../shared/solidWorld.ts';
 import type { PlayerManager } from './PlayerManager.ts';
 import type { ServerMessage, Vec3 } from './types.ts';
 import { encodeBallSegment } from '../../shared/wire.ts';
-import { STATUS } from '../../shared/status.ts';
 import { logger } from './logger.ts';
 import { type BallPopulation, DEFAULT_MAP_SPEC } from '../../shared/mapSpec.ts';
 import { BallCombat } from './ballCombat.ts';
+import {
+  DEFAULT_MIX, rollVariant, alivePlayers, nearestPlayer,
+  spawnBall as spawnBallInto, snapTarget as snapTargetInto, targetSnap as targetSnapOf,
+  RETARGET_INTERVAL, RESYNC_INTERVAL,
+} from './ballSpawn.ts';
 
 const TICK_DT = 0.05;           // 20Hz — matches GameServer tick broadcast
-const RETARGET_INTERVAL = 2.0;  // seconds between nearest-player re-evals
 // Resync floor: a ball in long flat flight emits NO bounce events, and
 // client prediction diverges freely meanwhile — force a segment every
 // ~1.2s so the worst-case replay error is bounded by ~1.2s of drift, not
 // by however long the ball happens to stay airborne. 40 balls ≈ 2KB/s.
-const RESYNC_INTERVAL = 1.2;
-// Brain buckets — see CreatureSim: decision accumulators are phased by
-// ball id so a same-tick spawn wave doesn't dump every nearest-player
-// scan into one tick.
-const BRAIN_BUCKETS = 8;
 const _snap: SimVec = { x: 0, y: 0, z: 0 }; // scratch — stepBall's target arg
 
-// 5% elite, otherwise weighted fodder sizes (v0 common, v1/v2 rare).
-// Weights are cumulative so a map spec can override the whole table.
-const DEFAULT_MIX: readonly number[] = [0.84, 0.07, 0.04, 0.05];
-function rollVariant(mix: readonly number[] = DEFAULT_MIX, rng: () => number = Math.random): BallVariant {
-  const total = mix[0]! + mix[1]! + mix[2]! + mix[3]!;
-  let r = rng() * total;
-  for (let i = 0; i < 4; i++) {
-    r -= mix[i]!;
-    if (r <= 0) return i as BallVariant;
-  }
-  return 0;
-}
-
 export class BallSim {
-  private field: Heightfield | null = null;
-  private balls = new Map<number, SimBall>();
-  private nextId = 1;
+  // Public flat fields — ballSpawn.ts's SpawnHost reads/writes them.
+  field: Heightfield | null = null;
+  readonly balls = new Map<number, SimBall>();
+  nextId = 1;
   private pendingRespawns = 0;
-  private retargetAcc = new Map<number, number>();
-  private resyncAcc = new Map<number, number>();
-  private broadcast: (msg: ServerMessage) => void;
+  readonly retargetAcc = new Map<number, number>();
+  readonly resyncAcc = new Map<number, number>();
+  broadcast: (msg: ServerMessage) => void;
 
   /** Reliable lane for segments — a lost resync stamp makes every client
    *  extrapolate a stale leg for ~1.2s (the rubberband storm). */
   private broadcastBinaryReliable: (data: Uint8Array) => void;
-  private players: PlayerManager;
+  players: PlayerManager; // public — ballSpawn target checks read the roster
   private timer: ReturnType<typeof setInterval> | null = null;
-  private simTime = 0; // monotonic sim clock — stamped on every event so clients measure TRUE age, not ping guesses
+  simTime = 0; // monotonic sim clock — stamped on every event so clients measure TRUE age, not ping guesses
   private lastTickAt = 0;
   // setInterval under load fires LATE (measured +11ms avg) — stepping once
   // per fire makes sim time run ~18% behind wall clock, and every client
@@ -178,77 +164,19 @@ export class BallSim {
   }
 
   private alivePlayers(): { id: string; pos: SimVec }[] {
-    const out: { id: string; pos: SimVec }[] = [];
-    for (const [id, p] of this.players.getAllPlayers()) {
-      if (!p.isDead && !(p.status & STATUS.CLOAK)) out.push({ id, pos: p.position });
-    }
-    return out;
-  }
-
-  private nearestPlayer(b: SimBall, alive: { id: string; pos: SimVec }[]): { id: string; pos: SimVec } | null {
-    let best: { id: string; pos: SimVec } | null = null;
-    let bestD = Infinity;
-    for (const p of alive) {
-      const dx = p.pos.x - b.x;
-      const dz = p.pos.z - b.z;
-      const d = dx * dx + dz * dz;
-      if (d < bestD) { bestD = d; best = p; }
-    }
-    return best;
+    return alivePlayers(this.players);
   }
 
   private spawnBall(variant: BallVariant, near?: SimVec, posOverride?: SimVec): SimBall {
-    const field = this.field!;
-    let x: number, z: number;
-    if (posOverride) {
-      x = posOverride.x; z = posOverride.z;
-    } else {
-      const cx = near ? near.x : 0;
-      const cz = near ? near.z : 0;
-      const ang = this.rng() * Math.PI * 2;
-      const dist = 60 + this.rng() * 60;
-      x = cx + Math.cos(ang) * dist;
-      z = cz + Math.sin(ang) * dist;
-    }
-    const y = posOverride ? posOverride.y : hmHeight(field, x, z) + 40 + this.rng() * 40;
-    const ang = this.rng() * Math.PI * 2;
-    const spd = this.rng() * 20;
-    const b = makeSimBall(
-      this.nextId++, variant, Math.floor(this.rng() * 8),
-      { x, y, z },
-      { x: Math.cos(ang) * spd, y: -2, z: Math.sin(ang) * spd },
-    );
-    b.targetId = this.nearestPlayer(b, this.alivePlayers())?.id ?? null;
-    this.snapTarget(b);
-    this.retargetAcc.set(b.id, -RETARGET_INTERVAL * ((b.id % BRAIN_BUCKETS) / BRAIN_BUCKETS));
-    this.resyncAcc.set(b.id, -RESYNC_INTERVAL * ((b.id % BRAIN_BUCKETS) / BRAIN_BUCKETS));
-    this.balls.set(b.id, b);
-    this.broadcast({
-      type: 'ballSpawn', id: b.id, variant: b.variant, colorIdx: b.colorIdx,
-      position: { x: b.x, y: b.y, z: b.z },
-      velocity: { x: b.vx, y: b.vy, z: b.vz },
-      targetId: b.targetId, tp: this.targetSnap(b),
-      t: this.simTime,
-    });
-    return b;
+    return spawnBallInto(this, variant, near, posOverride);
   }
 
-  /** Freeze the pull/lunge aim into the sim ball. stepBall reads the
-   *  snapshot, the wire carries it — both sides integrate the same input.
-   *  (If the predictor aimed at the LIVE local player pos while the server
-   *  aimed at its last-received pos, arcs diverged ~100m per segment.) */
-  private snapTarget(b: SimBall): void {
-    const p = b.targetId ? this.players.getPlayer(b.targetId) : null;
-    if (p && !p.isDead && !(p.status & STATUS.CLOAK)) {
-      b.tx = p.position.x; b.ty = p.position.y; b.tz = p.position.z;
-      b.tgtValid = true;
-    } else {
-      b.tgtValid = false;
-    }
+  snapTarget(b: SimBall): void { // public — ballSpawn host interface
+    snapTargetInto(this.players, b);
   }
 
-  private targetSnap(b: SimBall): SimVec | null {
-    return b.tgtValid ? { x: b.tx, y: b.ty, z: b.tz } : null;
+  targetSnap(b: SimBall): SimVec | null { // public — ballSpawn host interface
+    return targetSnapOf(b);
   }
 
   private segment(b: SimBall, kind: SegmentKind): void {
@@ -330,7 +258,7 @@ export class BallSim {
     this.tickAcc = Math.min(this.tickAcc, BallSim.TICK_CATCHUP_CAP);
     if (this.tickAcc < TICK_DT) return;
 
-    const alive = this.alivePlayers();
+    const alive = alivePlayers(this.players);
     if (alive.length === 0) { this.tickAcc = 0; return; } // room empty — freeze the ecosystem
 
     // Population: base + per-player, spawn drip-fed one per tick fire
@@ -359,7 +287,7 @@ export class BallSim {
       const ra = (this.retargetAcc.get(b.id) ?? 0) + TICK_DT;
       if (ra >= RETARGET_INTERVAL) {
         this.retargetAcc.set(b.id, 0);
-        const t = this.nearestPlayer(b, alive);
+        const t = nearestPlayer(b, alive);
         if ((t?.id ?? null) !== b.targetId) {
           b.targetId = t?.id ?? null;
           this.segment(b, 'bounce');
