@@ -240,9 +240,17 @@ export class PlayerVisuals {
     if (animState === 'shoot' && shootT > this.lastShootT) model.forceAnimationState('shoot');
     else model.setAnimationState(animState);
     this.lastShootT = shootT;
-    // Move direction vs facing — drives the backpedal clip flip and the
-    // grounded strafe lean. vel is the real velocity, not an input echo,
-    // so it stays honest through collisions and knockback.
+    this.applyLocomotionLean(model, animState, yaw, speed, vel, jetting);
+    // pos is eye height — the model plants its feet 1.8m below
+    model.setPosition(pos.x, pos.y - EYE_OFFSET, pos.z);
+    model.setRotation(yaw, pitch);
+    model.update(dt);
+    return jumpAnimTimer;
+  }
+
+  /** Backpedal clip flip + jet tilt/strafe roll. vel is real velocity,
+   *  not an input echo — it stays honest through collisions/knockback. */
+  private applyLocomotionLean(model: PlayerModel, animState: AnimationState, yaw: number, speed: number, vel: THREE.Vector3 | undefined, jetting: boolean): void {
     let fwd = 0, side = 0;
     if (vel && speed > 1) {
       const sin = Math.sin(yaw), cos = Math.cos(yaw);
@@ -263,10 +271,5 @@ export class PlayerVisuals {
       const strafing = Math.abs(side) > 0.6 * speed && Math.abs(side) > Math.abs(fwd) * 0.8;
       model.setBodyLean(0, strafing ? Math.max(-0.3, Math.min(0.3, -side * 0.02)) : 0);
     }
-    // pos is eye height — the model plants its feet 1.8m below
-    model.setPosition(pos.x, pos.y - EYE_OFFSET, pos.z);
-    model.setRotation(yaw, pitch);
-    model.update(dt);
-    return jumpAnimTimer;
   }
 }
