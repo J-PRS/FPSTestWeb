@@ -1,3 +1,4 @@
+2026-10-01 - CombatHandler.ts 697->539: AOE claim adjudication (projectile pop + melee/slam/beam/cluster blast contracts) -> combatAoe.ts AoeClaims
 2026-10-01 - Room.ts 687->601: score/kill economy (creature drops, powerup grants, team/FFA scoring, match-end awards) -> roomScore.ts RoomScore
 2026-10-01 - MessageHandler.ts 717->547: position/teleport plausibility funnel (consecutive-report speed judge, force-accept resync, warp cadence, judge muting) -> moveClaims.ts MoveClaims
 2026-10-01 - CombatHandler.ts 878->697: blast sweep (processAOE/splashOne/shove/plateAll/serverBlast/mineBlast/charge pop + occlusion) -> combatBlast.ts BlastRunner

@@ -1,9 +1,8 @@
 import type { ClientMessage, ServerMessage, Vec3 } from './types.ts';
 import type { PlayerManager } from './PlayerManager.ts';
-import type { WeaponStats } from '../../shared/weapons.ts';
-import { getWeaponStats, WeaponType, directHitAoeBonus } from '../../shared/weapons.ts';
+import { getWeaponStats, WeaponType } from '../../shared/weapons.ts';
 import { perkMods } from '../../shared/perks.ts';
-import { validateHitClaim, validateAoeClaim, lgTickDamage, LG_TICK_BASE } from '../../shared/combat.ts';
+import { validateHitClaim, lgTickDamage } from '../../shared/combat.ts';
 import { POWERUP } from '../../shared/pickups.ts';
 import type { PlayerState } from './types.ts';
 import { logger } from './logger.ts';
@@ -16,6 +15,7 @@ import { KillFeed } from './killFeed.ts';
 import { RespawnManager } from './respawn.ts';
 import { ChargeBank } from './combatCharge.ts';
 import { BlastRunner, FORCE_SEND_MS } from './combatBlast.ts';
+import { AoeClaims } from './combatAoe.ts';
 
 type BroadcastFn = (msg: ServerMessage, excludePlayerId?: string) => void;
 type SendToPlayerFn = (playerId: string, msg: ServerMessage) => void;
@@ -60,16 +60,17 @@ export interface CombatDeps {
  * in claimLedger — this file keeps the damage policy.
  */
 export class CombatHandler {
-  private ledger = new ClaimLedger();
+  ledger = new ClaimLedger(); // public — claim families read it via hosts
   /** The blast sweep — claimed AOE resolutions, trusted server blasts,
    *  plating sweeps, mine pops. Own file (combatBlast.ts) via BlastHost. */
-  private blast: BlastRunner;
+  blast: BlastRunner; // public — aoeClaims drives it via AoeHost
   /** Cosmetic relay gate for shotFired — a hitscan pull has no damage
    *  semantics, so excess ones are silently dropped instead of rejected. */
   private lastFireNotify = new Map<string, number>();
   /** The LG bank/ramp economy — own file (combatCharge.ts); this handler
    *  only supplies the detonation (a real processAOE blast). */
-  private chargeBank: ChargeBank;
+  chargeBank: ChargeBank; // public — aoeClaims banks LG ticks through it
+  private aoe: AoeClaims;
   /** First-hit timestamps per shooter|victim pair — kill-side applies it
    *  as the engagement time (TTK), hit-side only refreshes it. */
   private duelStart = new Map<string, number>();
@@ -99,6 +100,7 @@ export class CombatHandler {
     this.respawner = new RespawnManager(playerManager, broadcast, (pid, pos, yaw, full) => this.deps.moveResync?.(pid, pos, yaw, full));
     this.blast = new BlastRunner(this);
     this.chargeBank = new ChargeBank((ownerId, target, amount) => this.blast.pop(ownerId, target, amount));
+    this.aoe = new AoeClaims(this);
   }
 
   hb(key: string, n = 1): void {
@@ -289,167 +291,7 @@ export class CombatHandler {
   }
 
   handleAOEShot(playerId: string, msg: Extract<ClientMessage, { type: 'aoeShot' }>): void {
-    const player = this.playerManager.getPlayer(playerId);
-    if (!player || player.isDead) return;
-    this.hb('aoe');
-    if (msg.weaponType !== undefined && HEAVY_ONLY_WEAPONS.has(msg.weaponType) && player.armorClass !== 'heavy') {
-      this.reject(playerId, 'AOE', 'class-locked weapon', undefined, msg.weaponType);
-      return;
-    }
-    player.protectedUntil = 0; // firing breaks your own spawn shield
-    const stats = getWeaponStats(msg.weaponType);
-
-    if (msg.weaponType === WeaponType.Melee) {
-      this.aoeMelee(playerId, player, msg, stats);
-      return;
-    }
-
-    if (msg.weaponType === WeaponType.Slam) {
-      this.aoeSlam(playerId, player, msg, stats);
-      return;
-    }
-
-    if (stats.speed <= 0) {
-      this.aoeBeam(playerId, player, msg, stats);
-      return;
-    }
-
-    this.aoeProjectile(playerId, player, msg, stats);
-  }
-
-  /** Projectile detonation claim: the blast must name the tracked shell
-   *  that popped (same fallback resolution as direct-hit claims — the
-   *  hit can race the server's projectileCreated). */
-  private aoeProjectile(playerId: string, player: PlayerState, msg: Extract<ClientMessage, { type: 'aoeShot' }>, stats: WeaponStats): void {
-    const proj = this.ledger.resolve(playerId, msg.projectileId, msg.weaponType, 'aoe');
-    if (!proj) {
-      this.reject(playerId, 'AOE', `blast with no known projectile (id=${msg.projectileId ?? 'null'})`, undefined, msg.weaponType);
-      return;
-    }
-    if (msg.airtime === undefined) {
-      this.reject(playerId, 'AOE', 'blast claim missing airtime', undefined, msg.weaponType);
-      return;
-    }
-    const verdict = validateAoeClaim({
-      projectile: proj,
-      blastPos: msg.position,
-      airtime: msg.airtime,
-      shooterVel: player.velocity,
-      now: Date.now(),
-      solids: this.solids,
-    });
-    if (!verdict.ok) {
-      this.reject(playerId, 'AOE', verdict.reason, undefined, msg.weaponType);
-      return;
-    }
-    // (The id stays resolvable in spentProjectiles for the paired claim —
-    // deletion happens via projectileDestroy, the 5s staleness cap, or
-    // the eviction sweep.)
-
-    // Canonical launchers (Bolt/Disc): a claimed direct hit blooms the
-    // blast. Server re-derives the bonus from the shared table — the
-    // client can't widen the radius past what the weapon allows.
-    const bloom = msg.directHit ? directHitAoeBonus(msg.weaponType ?? -1) : 1;
-    this.blast.processAOE(playerId, msg.position, msg.excludeTargetId,
-      bloom === 1 ? stats : { ...stats, aoeRadius: stats.aoeRadius * bloom }, msg.weaponType);
-
-    if (stats.cluster) this.aoeCluster(playerId, msg, stats.cluster);
-  }
-
-  /** Swing distance to the player — self-positioned skills (melee, slam)
-   *  and the beam eye measure from different heights, so the caller picks
-   *  the reference point. */
-  private static distTo(from: Vec3, to: Vec3): number {
-    return Math.hypot(from.x - to.x, from.y - to.y, from.z - to.z);
-  }
-
-  /** The punch is a skill, not a projectile — same self-positioned
-   *  contract as Slam, tightened to melee reach. No projectile to
-   *  resolve, no airtime to check: the swing point just has to sit
-   *  in front of the swinger. */
-  private aoeMelee(playerId: string, player: PlayerState, msg: Extract<ClientMessage, { type: 'aoeShot' }>, stats: WeaponStats): void {
-    const dist = CombatHandler.distTo(player.position, msg.position);
-    if (dist > stats.aoeRadius + 10) {
-      this.reject(playerId, 'AOE', `melee ${dist.toFixed(0)}m from player`, undefined, msg.weaponType);
-      return;
-    }
-    this.blast.processAOE(playerId, msg.position, msg.excludeTargetId, stats, msg.weaponType);
-  }
-
-  /** Slam is a skill, not a projectile — the blast must land where the
-   *  player is (they slam into the ground under themselves). Power is a
-   *  client-reported impact-speed scaler; clamped to the same range the
-   *  client uses so a forged value can't exceed a max-dive blast. */
-  private aoeSlam(playerId: string, player: PlayerState, msg: Extract<ClientMessage, { type: 'aoeShot' }>, stats: WeaponStats): void {
-    const dist = CombatHandler.distTo(player.position, msg.position);
-    if (dist > stats.aoeRadius + 20) {
-      this.reject(playerId, 'AOE', `slam ${dist.toFixed(0)}m from player`, undefined, msg.weaponType);
-      return;
-    }
-    const power = msg.power !== undefined
-      ? Math.min(Math.max(msg.power, 0.2), 1.8)
-      : 1;
-    this.blast.processAOE(playerId, msg.position, msg.excludeTargetId, {
-      ...stats,
-      aoeDamage: stats.aoeDamage * power,
-      aoeRadius: stats.aoeRadius * power,
-      knockbackForce: stats.knockbackForce * power,
-    }, msg.weaponType);
-  }
-
-  /** Hitscan-class (Lightning beam): the claim names no projectile —
-   *  same self-positioned contract as Melee/Slam, tightened to the
-   *  beam's range. The tip also can't sit through a wall: the eye→tip
-   *  ray must be clear of structures. */
-  private aoeBeam(playerId: string, player: PlayerState, msg: Extract<ClientMessage, { type: 'aoeShot' }>, stats: WeaponStats): void {
-    const eye = { x: player.position.x, y: player.position.y + 1.6, z: player.position.z };
-    const dist = CombatHandler.distTo(eye, msg.position);
-    if (dist > 70) { // LG_RANGE 55 + lag slack
-      this.reject(playerId, 'AOE', `beam tip ${dist.toFixed(0)}m from eye`, undefined, msg.weaponType);
-      return;
-    }
-    if (this.solids.length && segSolidHit(eye, msg.position, this.solids, this.solidIndex ?? undefined)) {
-      this.reject(playerId, 'AOE', 'beam tip behind structure', undefined, msg.weaponType);
-      return;
-    }
-    // Same stepped ramp the client applies: consecutive ticks on one
-    // target decay, a target switch or miss window resets to full.
-    const n = this.chargeBank.step(playerId, msg.excludeTargetId ?? null);
-    // The withheld tick damage banks ON the victim — bank before the
-    // blast resolves so this tick's share counts if it kills.
-    const victim = msg.excludeTargetId ? this.playerManager.getPlayer(msg.excludeTargetId) : null;
-    if (victim && !victim.isDead && !this.friendly(playerId, victim.id)) this.chargeBank.bank(victim, this.chargeBank.withheldFor(n));
-    // The victim sits in excludeTargetId — projectile semantics would skip
-    // them in the blast, but the beam has no paired `shot` claim. Apply the
-    // tick directly (lag-comp'd, occluded, pin shove) — same ramp botAttack
-    // uses, so a held beam on one player decays identically either side.
-    if (victim && !victim.isDead) {
-      const dmg = lgTickDamage(n) * perkMods(player.perk).directDamage * this.ddMult(player);
-      this.blast.splashOne({
-        shooterId: playerId, ping: player.ping, pos: msg.position,
-        radius: stats.aoeRadius, baseDamage: dmg,
-        impulse: stats.knockbackForce, pull: false,
-        label: 'LG beam hit', weapon: msg.weaponType,
-      }, victim.id, victim, false, dmg);
-    }
-    const scale = lgTickDamage(n) / LG_TICK_BASE;
-    this.blast.processAOE(playerId, msg.position, msg.excludeTargetId, { ...stats, aoeDamage: stats.aoeDamage * scale }, msg.weaponType);
-  }
-
-  /** Cluster carrier: the carrier's blast is only the delivery pop — the
-   *  real damage is `count` bomblet blasts scattered inside `radius`, each
-   *  rolled with ClusterBomblet stats. Client bomblets are visual-only. */
-  private aoeCluster(playerId: string, msg: Extract<ClientMessage, { type: 'aoeShot' }>, cluster: { count: number; radius: number }): void {
-    const bomblet = getWeaponStats(WeaponType.ClusterBomblet);
-    for (let i = 0; i < cluster.count; i++) {
-      const ang = Math.random() * Math.PI * 2;
-      const r = Math.random() * cluster.radius;
-      this.blast.processAOE(playerId, {
-        x: msg.position.x + Math.cos(ang) * r,
-        y: msg.position.y, // bomblets scatter on the blast plane
-        z: msg.position.z + Math.sin(ang) * r,
-      }, msg.excludeTargetId, bomblet, WeaponType.ClusterBomb);
-    }
+    this.aoe.handleAOEShot(playerId, msg);
   }
 
   /** Server-owned blast — the room's projectile/deployable sims decided
