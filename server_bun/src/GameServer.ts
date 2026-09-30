@@ -609,9 +609,18 @@ export class GameServer {
       gracePending: r.disconnected.size,
       ballSimNow: r.ballSim.simNow,
     }));
+    const mem = process.memoryUsage();
     return {
       uptimeS,
       players: this.totalPlayers(),
+      memMB: {
+        rss: +(mem.rss / 1048576).toFixed(1),
+        heapUsed: +(mem.heapUsed / 1048576).toFixed(1),
+        heapTotal: +(mem.heapTotal / 1048576).toFixed(1),
+      },
+      // Last 10s tick-fanout window — null until a player has been connected
+      // long enough to close one.
+      bandwidth: this.tickLoop.bandwidthWindow(),
       rooms,
       joins: o.joins,
       leaves: o.leaves,

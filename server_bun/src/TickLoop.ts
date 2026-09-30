@@ -96,6 +96,10 @@ export class TickLoop {
   // Tick-bandwidth metrics — aggregated per log window so we can see what
   // interest tiers + suppression are actually saving.
   private metrics = { ticks: 0, recordsBuilt: 0, recordsSuppressed: 0, recordsIdleReaped: 0, recordsSent: 0, recordsTierSkipped: 0, bytesSent: 0, windowStart: 0 };
+  /** Last completed 10s rollup — surfaced on /metrics, null until a
+   *  window closes (needs a connected player to accumulate). */
+  private lastBw: { kbpsDownTotal: number; recordsPerSec: number; suppressedPerSec: number; tierSkippedPerSec: number } | null = null;
+  bandwidthWindow() { return this.lastBw; }
 
   // Reused per-recipient record list — the fanout loop runs every tick and
   // a fresh Uint8Array[] per recipient was the biggest GC churn source.
@@ -389,13 +393,13 @@ export class TickLoop {
     if (m.windowStart === 0) m.windowStart = now0;
     if (now0 - m.windowStart > 10000) {
       const secs = (now0 - m.windowStart) / 1000;
-      logger.info('Tick bandwidth', {
+      this.lastBw = {
         kbpsDownTotal: +(m.bytesSent * 8 / 1000 / secs).toFixed(1),
         recordsPerSec: +(m.recordsSent / secs).toFixed(0),
         suppressedPerSec: +(m.recordsSuppressed / secs).toFixed(0),
         tierSkippedPerSec: +(m.recordsTierSkipped / secs).toFixed(0),
-        players: playerCount,
-      });
+      };
+      logger.info('Tick bandwidth', { ...this.lastBw, players: playerCount });
       m.ticks = m.recordsBuilt = m.recordsSuppressed = m.recordsIdleReaped =
         m.recordsSent = m.recordsTierSkipped = m.bytesSent = 0;
       m.windowStart = now0;

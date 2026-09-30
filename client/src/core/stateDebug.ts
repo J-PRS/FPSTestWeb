@@ -91,6 +91,13 @@ function hashableEntry(
 const fmt = (v: { x: number; y: number; z: number }) =>
   `(${v.x.toFixed(1)},${v.y.toFixed(1)},${v.z.toFixed(1)})`;
 
+/** Chrome-only JS heap gauge — absent in Firefox/Safari, so the line
+ *  degrades to nothing instead of lying. */
+function heapLine(): string {
+  const m = (performance as { memory?: { usedJSHeapSize: number; jsHeapSizeLimit: number } }).memory;
+  return m ? ` heap ${(m.usedJSHeapSize / 1048576).toFixed(0)}/${(m.jsHeapSizeLimit / 1048576).toFixed(0)}MB` : '';
+}
+
 function diagLines(ctx: StateDebugContext): string[] {
   const nm = ctx.networkManager;
   const p = ctx.getPlayer();
@@ -98,6 +105,7 @@ function diagLines(ctx: StateDebugContext): string[] {
   const lines: string[] = [
     `localId: ${nm.getLocalPlayerId()}`,
     `connected: ${nm.isConnected()} tier: ${nm.getTransportTier() ?? '-'} ping: ${nm.getPing()}ms loss: ${nm.getPacketLoss()}% jitter: ${nm.getJitter()}ms`,
+    `net: up ${(nm.bandwidth().up / 1024).toFixed(1)}KB/s down ${(nm.bandwidth().down / 1024).toFixed(1)}KB/s${heapLine()}`,
     `local: dead=${p.isDead} hp=${p.health} pos=${fmt(p.pos)} vel=${fmt(p.vel)} yaw=${p.yaw.toFixed(2)} pitch=${p.pitch.toFixed(2)} onGround=${p.onGround}`,
     `lastSentPos: ${fmt(ctx.getLastSentPos())}`,
   ];
