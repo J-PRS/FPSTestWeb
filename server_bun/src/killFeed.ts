@@ -6,7 +6,7 @@
  */
 import type { ServerMessage } from './types.ts';
 import type { PlayerManager } from './PlayerManager.ts';
-import { killTaunt, deathTaunt, envDeathTaunt, spreeTaunt } from './botTaunts.ts';
+import { killTaunt, deathTaunt, envDeathTaunt, spreeTaunt } from '../../shared/botTaunts.ts';
 
 type BroadcastFn = (msg: ServerMessage, excludePlayerId?: string) => void;
 

@@ -17,6 +17,8 @@ import { MELEE_RANGE, MELEE_DAMAGE } from '../core/config.js';
 import { CtfFlags } from './ctfFlags.js';
 import * as sfx from '../core/sfx.js';
 import { poissonDisc } from '../utils/poissonSpread.js';
+import { killTaunt, deathTaunt } from '../../../shared/botTaunts.js';
+import { chatSink } from './chat.js';
 
 /**
  * TeamBots — the mode referee. Bot brains/bodies live in botBrain.ts;
@@ -746,6 +748,7 @@ export class TeamBots {
     this.creditKill(attackerId, false);
     this.localDied();
     this.hooks.killFeed(attackerId.replace('bot:', ''), 'YOU', false, true);
+    this.botSay(attackerId, killTaunt(attackerId, 'YOU'));
     this.hooks.localPlayerKilled(attackerId.replace('bot:', ''));
   }
 
@@ -763,6 +766,14 @@ export class TeamBots {
     this.deps.lazyHealthBarSystem().spawn(playerId, dmg, died ? 0 : rp.botHp);
     if (died) this.botKilled(attackerId, rp);
     return true;
+  }
+
+  /** A bot's line lands a beat after the frag like a typed reply — the
+   *  same delay envelope the server killfeed uses over the wire. */
+  private botSay(id: string, line: string | null): void {
+    if (!line) return;
+    const name = id.replace('bot:', '');
+    setTimeout(() => chatSink.add?.(name, line), 1200 + Math.random() * 1800);
   }
 
   private botKilled(killerId: string, bot: GameBot): void {
@@ -785,6 +796,8 @@ export class TeamBots {
     this.dropCarriedFlag(bot.playerId, bot.position);
     const kn = killerId === 'local' ? 'YOU' : killerId.replace('bot:', '');
     this.hooks.killFeed(kn, bot.playerId.replace('bot:', ''), killerId === 'local', false);
+    if (killerId !== 'local') this.botSay(killerId, killTaunt(killerId, kn));
+    this.botSay(bot.playerId, deathTaunt(bot.playerId, kn));
     if (killerId === 'local') sfx.killConfirm();
   }
 

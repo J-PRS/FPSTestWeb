@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'bun:test';
 import { WeaponType } from '../../../shared/weapons.ts';
 import { CombatHandler } from '../../src/CombatHandler.ts';
 import { mkRoom, step, pin, watch } from './harness.ts';
-import { resetTauntCooldowns } from '../../src/botTaunts.ts';
+import { resetTauntCooldowns } from '../../../shared/botTaunts.ts';
 
 describe('scenario: bot kill taunts', () => {
   beforeEach(() => {

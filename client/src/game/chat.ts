@@ -19,6 +19,11 @@ export interface ChatDeps {
 const MAX_LINES = 8;
 const FADE_MS = 12000;
 
+/** The one live feed — Chat is constructed once by netHandlers; other
+ *  self-contained modules (offline bots) reach it without threading a
+ *  deps chain through three layers. */
+export const chatSink: { add?: (from: string | null, text: string, team?: boolean) => void } = {};
+
 export class Chat {
   private feed: HTMLDivElement;
   private inputWrap: HTMLDivElement;
@@ -48,6 +53,7 @@ export class Chat {
 
     // Capture phase: while composing, keys are ours alone.
     window.addEventListener('keydown', (e) => this.onKey(e), true);
+    chatSink.add = (from, text, team) => this.add(from, text, team);
   }
 
   private get composing(): boolean {
