@@ -1,3 +1,4 @@
+2026-09-26 - CombatHandler: armor-grenade plating sweep extracted to plateAll() (processAOE back under complexity limit)
 2026-09-26 - Lint pass on server+shared: RtcRelay sort->toSorted, mapSpec isVec hoisted out of parseStructures
 2026-09-26 - Scenario coverage: armorPlating.test.ts — player plating, maxArmor cap, self/enemy plating, radius bound, creature overcap health
 2026-09-26 - Chaingun antipattern fix: flat +dmg ramp converted to banked stagger — 8-hit chain dumps a shove instead of melting (compress the middle, pay the top)

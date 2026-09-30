@@ -491,23 +491,26 @@ export class CombatHandler {
     // sentries aren't immortal, you clear a stand with explosives.
     this.deps.deployBlast?.(position, ctx.baseDamage, radius, playerId);
 
-    // Armor grenade: the blast's payload is plating, not just damage —
-    // it coats EVERY player it catches (friend or foe: arming the enemy
-    // is the thrower's cost) plus the creature sweep below.
-    if (weapon === WeaponType.ArmorGrenade) {
-      for (const [targetId, target] of this.playerManager.getAllPlayers()) {
-        if (target.isDead) continue;
-        const tpos = rewindPos(target, clampPing(ctx.ping));
-        const d = Math.hypot(tpos.x - position.x, tpos.y - position.y, tpos.z - position.z);
-        if (d > radius) continue;
-        if (this.solids.length && this.blastBlocked(position, tpos)) continue;
-        target.armor = Math.min(POWERUP.maxArmor, target.armor + ARMORNADE_ARMOR);
-        target.forceSendUntil = Date.now() + FORCE_SEND_MS;
-        this.hb('armor.nade');
-        logger.info('Armor grenade plated player', { shooter: playerId, target: targetId, armor: target.armor });
-      }
-      this.deps.creatureArmor?.(position, ARMORNADE_ARMOR, radius);
+    // Armor grenade: the blast's payload is plating, not just damage.
+    if (weapon === WeaponType.ArmorGrenade) this.plateAll(playerId, position, radius, ctx.ping);
+  }
+
+  /** Armor-grenade plating sweep: coats EVERY player caught — friend or
+   *  foe (arming the enemy is the thrower's cost) — plus the creature
+   *  sweep. Same lag-comp + occlusion rules as damage. */
+  private plateAll(playerId: string, position: Vec3, radius: number, ping: number): void {
+    for (const [targetId, target] of this.playerManager.getAllPlayers()) {
+      if (target.isDead) continue;
+      const tpos = rewindPos(target, clampPing(ping));
+      const d = Math.hypot(tpos.x - position.x, tpos.y - position.y, tpos.z - position.z);
+      if (d > radius) continue;
+      if (this.solids.length && this.blastBlocked(position, tpos)) continue;
+      target.armor = Math.min(POWERUP.maxArmor, target.armor + ARMORNADE_ARMOR);
+      target.forceSendUntil = Date.now() + FORCE_SEND_MS;
+      this.hb('armor.nade');
+      logger.info('Armor grenade plated player', { shooter: playerId, target: targetId, armor: target.armor });
     }
+    this.deps.creatureArmor?.(position, ARMORNADE_ARMOR, radius);
   }
 
   /** One target inside (or outside) a blast envelope: lag-comp position,
