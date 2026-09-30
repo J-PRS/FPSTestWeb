@@ -11,7 +11,7 @@ import { logger } from './logger.ts';
  *  per-tick speed check but never actually go anywhere. */
 export class BotSheepMeter {
   private meter = new Map<string, number>();
-  private window = new Map<string, { start: number; dist: number; lx: number; lz: number }>();
+  private window = new Map<string, { start: number; dist: number; lx: number; ly: number; lz: number }>();
   private yeetUntil = new Map<string, number>();
   /** Per-source charge ledger since the last yeet — dumped into the
    *  yeet warn so tuning reads "why" instead of "that". */
@@ -94,9 +94,11 @@ export class BotSheepMeter {
    *  speed check squeaks by. Returns the meter debit for the window. */
   coverageDebit(id: string, p: { position: Vec3 }, hasDest: boolean, simMs: number): number {
     let w = this.window.get(id);
-    if (!w) { w = { start: simMs, dist: 0, lx: p.position.x, lz: p.position.z }; this.window.set(id, w); }
-    w.dist += Math.hypot(p.position.x - w.lx, p.position.z - w.lz);
-    w.lx = p.position.x; w.lz = p.position.z;
+    if (!w) { w = { start: simMs, dist: 0, lx: p.position.x, ly: p.position.y, lz: p.position.z }; this.window.set(id, w); }
+    // 3D displacement — XZ-only reads a bot grinding up a steep
+    // slope (half of every T2 port) as covering no ground.
+    w.dist += Math.hypot(p.position.x - w.lx, p.position.y - w.ly, p.position.z - w.lz);
+    w.lx = p.position.x; w.ly = p.position.y; w.lz = p.position.z;
     if (simMs - w.start < 5000) return 0;
     const owed = hasDest && w.dist < 30 ? 20 : 0;
     w.start = simMs; w.dist = 0;

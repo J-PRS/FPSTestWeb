@@ -252,15 +252,17 @@ export class TeamBots {
   // destination reads as sheeping even when per-tick speed squeaks by.
   // Windows run on sim dt, not wall clock — a throttled frame would
   // otherwise mis-measure the distance.
-  private sheepCov = new Map<string, { start: number; dist: number; lx: number; lz: number }>();
+  private sheepCov = new Map<string, { start: number; dist: number; lx: number; ly: number; lz: number }>();
   private sheepSimMs = 0;
 
   private coverageDebit(bot: GameBot, hasDest: boolean): number {
     const now = this.sheepSimMs;
     let w = this.sheepCov.get(bot.playerId);
-    if (!w) { w = { start: now, dist: 0, lx: bot.pos.x, lz: bot.pos.z }; this.sheepCov.set(bot.playerId, w); }
-    w.dist += Math.hypot(bot.pos.x - w.lx, bot.pos.z - w.lz);
-    w.lx = bot.pos.x; w.lz = bot.pos.z;
+    if (!w) { w = { start: now, dist: 0, lx: bot.pos.x, ly: bot.pos.y, lz: bot.pos.z }; this.sheepCov.set(bot.playerId, w); }
+    // 3D displacement — XZ-only reads a bot grinding up a steep
+    // slope (half of every T2 port) as covering no ground.
+    w.dist += Math.hypot(bot.pos.x - w.lx, bot.pos.y - w.ly, bot.pos.z - w.lz);
+    w.lx = bot.pos.x; w.ly = bot.pos.y; w.lz = bot.pos.z;
     if (now - w.start < 5000) return 0;
     const owed = hasDest && w.dist < 30 ? 20 : 0;
     w.start = now; w.dist = 0;
