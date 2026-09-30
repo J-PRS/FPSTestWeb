@@ -324,7 +324,7 @@ function setupOfflineMode(mode: string): void {
     {
       dropNuggets: (pos, n, vel) => entities.spawnNuggetsAt(pos, n, vel),
       localPlayerKilled: (killerName) => killLocal(`fragged by ${killerName}`),
-      remoteKillFeed: (text) => fragMessages.show(text),
+      remoteKillFeed: (text) => { fragMessages.show(text); hud.logEvent(text); },
       killFeed: (s, t, ls, lt) => hud.feedKill(s, t, ls, lt),
       nearestNugget: (pos, maxDist) => {
         let best: typeof entities.nuggets[0] | null = null;

@@ -270,7 +270,9 @@ export function handlePlayerHit(c: CombatCtx, p: Projectile, playerId: string): 
   logHitScore(c, p, 'player', airborne);
 
   const networkManager = deps.lazyNetworkManager();
-  if (networkManager) {
+  // A bot-authored shell has no business claiming as the local player —
+  // server/P2P authority resolves bot damage on its own end.
+  if (networkManager && !p.shooterId?.startsWith('bot:')) {
     networkManager.sendShot({
       targetId: playerId,
       position: { x: p.pos.x, y: p.pos.y, z: p.pos.z },

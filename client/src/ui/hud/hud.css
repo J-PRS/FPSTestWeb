@@ -66,6 +66,24 @@
   border: 1px solid rgba(255,255,255,0.12);
 }
 #hud-bc .bar-wrap.thin { height: 5px; }
+/* Speedo row — three fixed cells so a growing value never shifts its
+   neighbours: label sits left, number pinned right with tabular nums. */
+#hud-speedo {
+  display: flex; gap: 14px;
+  font-size: 0.65rem; letter-spacing: 0.12em;
+  color: rgba(160,180,200,0.45); font-weight: 600;
+}
+#hud-speedo .spd-cell {
+  flex: 1; display: flex; align-items: baseline; justify-content: space-between;
+  border-bottom: 1px solid rgba(255,255,255,0.10);
+  padding-bottom: 1px;
+}
+#hud-speedo .spd-cell i { font-style: normal; }
+#hud-speedo .spd-cell b {
+  color: #fff; font-size: 1.05rem; font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  min-width: 3ch; text-align: right;
+}
 #hud-weapons {
   display: flex; justify-content: center; gap: 14px;
   font-size: 0.65rem; letter-spacing: 0.12em; font-weight: 600;
@@ -237,17 +255,18 @@
   font-size: 0.75rem; color: #ccc; line-height: 1.7;
   text-align: left;
 }
-#player-list .player-id {
+#player-list .log-row {
   display: block;
   margin-bottom: 2px;
+  color: #b8c8d8;
+  transition: opacity 0.6s;
+  text-shadow: 0 1px 3px #000;
 }
-#player-list .player-id.local {
-  color: #0f0;
-  font-weight: bold;
-}
-#player-list .player-id.remote {
-  color: #ccc;
-}
+#player-list .log-row.me { color: #ffd54a; }
+#player-list .log-row.dead { color: #ff6b6b; }
+#player-list .log-row.mine { color: #9fd0ff; }
+#player-list .log-row.foe { color: #ffb08a; }
+#player-list .log-row.fade { opacity: 0; }
 #scoreboard {
   position: absolute; top: 50%; left: 50%;
   transform: translate(-50%, -50%);

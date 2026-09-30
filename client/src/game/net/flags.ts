@@ -71,21 +71,36 @@ export function wireFlags(ctx: NetCtx): void {
     const mine = f.team === deps.world.localTeam;
     const iAmCarrier = f.carrier === networkManager.getLocalPlayerId();
     const frag = deps.fragMessages;
+    const log = (text: string) => deps.lazyHud().logEvent(text, mine ? 'mine' : 'foe');
+    const carrierName = f.carrier?.replace('bot:', '') ?? null;
     if (f.state === 'carried') {
       if (iAmCarrier) frag.show('YOU HAVE THE FLAG!');
       else frag.show(mine ? 'OUR FLAG TAKEN!' : 'ENEMY FLAG TAKEN!');
       sfx.flagCue('taken', mine);
       burst(f, 1.4);
+      log(`${iAmCarrier ? 'You' : (carrierName ?? 'Someone')} took the ${f.team} flag`);
     } else if (f.state === 'dropped') {
       frag.show(mine ? 'OUR FLAG DROPPED' : 'ENEMY FLAG DROPPED');
       sfx.flagCue('dropped', mine);
       burst(f, 1.0);
+      log(`${f.team} flag dropped`);
     } else if (f.state === 'home') {
-      if (prev === 'carried') frag.show(mine ? 'THEY SCORED!' : 'CAPTURED!');
-      else frag.show(mine ? 'FLAG RETURNED' : 'ENEMY FLAG RETURNED');
-      sfx.flagCue(prev === 'carried' ? 'captured' : 'returned', mine);
-      burst(f, prev === 'carried' ? 2.4 : 1.4);
+      homeCallout(f, prev, mine, frag, log, carrierName);
     }
+  };
+  /** Home transition: carried→home = capture, dropped→home = return. */
+  const homeCallout = (
+    f: { team: 'alpha' | 'bravo'; pos: { x: number; y: number; z: number } },
+    prev: string | undefined, mine: boolean,
+    frag: { show(t: string): void },
+    log: (t: string) => void,
+    carrierName: string | null,
+  ) => {
+    const scored = prev === 'carried';
+    frag.show(scored ? (mine ? 'THEY SCORED!' : 'CAPTURED!') : (mine ? 'FLAG RETURNED' : 'ENEMY FLAG RETURNED'));
+    sfx.flagCue(scored ? 'captured' : 'returned', mine);
+    burst(f, scored ? 2.4 : 1.4);
+    log(scored ? `${carrierName ?? 'Someone'} captured the ${f.team} flag` : `${f.team} flag returned`);
   };
 
   networkManager.onFlagUpdate = (flags) => {

@@ -261,8 +261,6 @@ export function createRemotes(deps: RemotesDeps) {
     rosterPollT -= dt;
     if (rosterPollT <= 0) {
       rosterPollT = 0.5;
-      const activeIds = Array.from(players.keys()).filter(id => id !== localPlayerId && isRemoteActive(deps, id, players));
-      deps.lazyHud().updatePlayerList([localPlayerId, ...activeIds], localPlayerId);
       const rosterKey = [...players.keys()].filter(id => id !== localPlayerId).toSorted().join(',');
       if (rosterKey !== lastRemotePosLog) {
         lastRemotePosLog = rosterKey;

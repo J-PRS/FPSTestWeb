@@ -39,6 +39,8 @@ export class HUD {
   private energy: HTMLSpanElement;
   private ammo: HTMLSpanElement;
   private speed: HTMLSpanElement;
+  private speedH: HTMLSpanElement;
+  private speedV: HTMLSpanElement;
   private kills: HTMLSpanElement;
   private state: HTMLSpanElement;
   private ping: HTMLSpanElement;
@@ -80,6 +82,8 @@ export class HUD {
     this.energy = d.energy;
     this.ammo = d.ammo;
     this.speed = d.speed;
+    this.speedH = d.speedH;
+    this.speedV = d.speedV;
     this.kills = d.kills;
     this.state = d.state;
     this.ping = d.ping;
@@ -137,6 +141,8 @@ export class HUD {
     this.killFeed.append(row);
     while (this.killFeed.childElementCount > 6) this.killFeed.firstElementChild!.remove();
     setTimeout(() => { row.classList.add('fade'); setTimeout(() => row.remove(), 600); }, 5200);
+    const wname = weapon !== undefined && WeaponType[weapon] ? ` [${WeaponType[weapon]}]` : '';
+    this.logEvent(`${shooter}${wname} ▸ ${target}`, localIsShooter ? 'me' : localIsTarget ? 'dead' : undefined);
   }
 
   /** Run clock — MM:SS, DOM write only when the second rolls over */
@@ -425,7 +431,10 @@ export class HUD {
       this.energyBar.style.width = `${energyPct}%`;
     }
 
-    this.setText(this.speed, 'speed', String(Math.round(player.getSpeed())));
+    // Three readouts, all magnitude: |v| total, XZ horizontal, |vy|.
+    this.setText(this.speed, 'speed', String(Math.round(player.vel.length())));
+    this.setText(this.speedH, 'speedH', String(Math.round(player.getSpeed())));
+    this.setText(this.speedV, 'speedV', String(Math.round(Math.abs(player.vel.y))));
     this.setText(this.kills, 'kills', String(player.kills));
     this.setText(this.state, 'state', player.onGround ? 'GROUND' : 'AIR');
     this.setText(this.ping, 'ping', String(Math.round(ping)));
@@ -457,7 +466,9 @@ export class HUD {
   // Health text + bar with ghost-drain: damage leaves a trailing sliver
   // that bleeds down at ~40%/s so a hit reads as loss, not a snap.
   private tickVitals(dt: number, player: Player): void {
-    this.setText(this.health, 'health', String(player.health));
+    // health is float (regen ticks at 12/s leave fractions) — the chip
+    // shows whole hp or it prints 78.00000000000001.
+    this.setText(this.health, 'health', String(Math.round(player.health)));
     const healthPct = Math.round(player.health);
     if (healthPct !== this.lastHealthPct) {
       this.lastHealthPct = healthPct;
@@ -578,19 +589,15 @@ export class HUD {
     this.indicators.clear();
   }
 
-  private lastPlayerListKey = '';
-
-  updatePlayerList(playerIds: string[], localPlayerId: string): void {
-    // Roster changes are rare; rebuilding DOM every frame (60Hz) was pure churn
-    const key = playerIds.join('');
-    if (key === this.lastPlayerListKey) return;
-    this.lastPlayerListKey = key;
-    this.playerList.innerHTML = '';
-    playerIds.forEach(playerId => {
-      const div = document.createElement('div');
-      div.className = playerId === localPlayerId ? 'player-id local' : 'player-id remote';
-      div.textContent = playerId;
-      this.playerList.appendChild(div);
-    });
+  /** Battle log — the old roster slot now scrolls match events (kills,
+   *  deaths, flag grabs/caps/returns). Rows linger longer than the top-
+   *  right feed so the timeline reads like a log, not a ticker. */
+  logEvent(text: string, cls?: string): void {
+    const row = document.createElement('div');
+    row.className = 'log-row' + (cls ? ` ${cls}` : '');
+    row.textContent = text;
+    this.playerList.appendChild(row);
+    while (this.playerList.childElementCount > 9) this.playerList.firstElementChild!.remove();
+    setTimeout(() => { row.classList.add('fade'); setTimeout(() => row.remove(), 600); }, 9000);
   }
 }

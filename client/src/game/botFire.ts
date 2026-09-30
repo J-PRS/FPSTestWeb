@@ -66,7 +66,15 @@ export class BotFire {
     const melee = wt === WeaponType.Melee || dist <= MELEE_RANGE;
     const cfg = melee ? undefined : getProjectileConfig(wt);
 
-    if (melee || !cfg || cfg.speed <= 0 || this.host.online()) {
+    // The claim path exists ONLY for wire-remote targets: a locally
+    // spawned shell landing on a remote player would misattribute to
+    // the local player (server bots own that case). In P2P-host mode
+    // every other target — bots, creatures, 'local' — is a local entity
+    // the host is authoritative for, so they get REAL shells there too.
+    const wireRemote = this.host.online()
+      && targetId !== 'local'
+      && !(this.host.world().remotePlayers.get(targetId) instanceof GameBot);
+    if (melee || !cfg || cfg.speed <= 0 || wireRemote) {
       this.claimShot(bot, targetId, aim, melee, melee ? MELEE_DAMAGE : BOT_DMG, wt);
       return;
     }
