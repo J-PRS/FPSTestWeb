@@ -1,22 +1,19 @@
 import * as THREE from 'three';
 import { nextTargetId } from './targetIds.js';
 
-import { GRAVITY, BALL_MAX_DIST, BALL_TELE_MIN, BALL_TELE_MAX, BALL_TELE_HEIGHT, BALL_BASE_RADIUS, BALL_ENRAGE_ENABLED, BALL_ENRAGE_FORCE, BALL_ENRAGE_TIMEOUT, BALL_ENRAGE_DASH_DIST, BALL_ENRAGE_DASH_SPEED, BALL_ENRAGE_TELEGRAPH_H } from '../core/config.js';
+import { GRAVITY, BALL_BASE_RADIUS } from '../core/config.js';
 
 import { Terrain, getHeightfield } from '../world/terrain.js';
-import { makeSimBall, BALL_OVERSPEED, BALL_MIN_SPEED, BALL_STALL_TIME, type StructureCollider } from '../../../shared/ballSim.js';
+import { makeSimBall, type StructureCollider } from '../../../shared/ballSim.js';
 import { ColliderIndex } from '../../../shared/solidWorld.js';
 import { type Heightfield, hmFingerprint } from '../../../shared/heightfield.js';
 import { type NetBag, newNetBag, type NetStatics, type NetSeg, tickNet, isStaleSeg, applySeg } from './ballNet.js';
 import { RibbonTrail } from '../projectiles/RibbonTrail.js';
 import { BallTrailDots } from './ballTrails.js';
-import { ChildLogger } from '../core/Logger.js';
+import { tickStallBreaker as tickStall, tickEnrage as tickRage, handleGroundBounce as groundBounce, setEnraged as rageSet } from './ballRage.js';
 import { allocSlots, freeSlots, getSwarm, getShadows, type SwarmPart } from './swarms.js';
 
-const logger = new ChildLogger('Ball');
-
 const BALL_GRAVITY   = GRAVITY;
-const BOUNCE         = 1.0;
 const _m = new THREE.Matrix4();
 const _q = new THREE.Quaternion();
 const _s = new THREE.Vector3();
@@ -119,8 +116,10 @@ export class Ball {
   private scene: THREE.Scene;
   scale: number;
   emissive = new THREE.Color(0, 0, 0); // additive glow — folded into instanceColor; public so ballNet can mirror enrage state onto it
-  private trails: BallTrailDots;
-  private ribbons: RibbonTrail[];
+  // Public flat fields — ballRage's BallRageHost mutates them (the same
+  // state-bag pattern as the *Visual splits).
+  trails: BallTrailDots;
+  ribbons: RibbonTrail[];
   private _lastTrailPos = new THREE.Vector3();
   private flashTimer = 0;
   private meshRemoved = false; // swarm slot freed; name kept — it gates dead-ball cleanup
@@ -133,7 +132,7 @@ export class Ball {
   onBounce?: (pos: THREE.Vector3, vel: THREE.Vector3) => void;
   onPeak?: (pos: THREE.Vector3, vel: THREE.Vector3) => void;
   private prevVelY = 0;
-  private lastBounceEnergy = 0; // Track total mechanical energy (KE + PE) after last bounce for loss detection
+  lastBounceEnergy = 0; // Track total mechanical energy (KE + PE) after last bounce for loss detection
 
   // Enrage mode (replaces teleport when BALL_ENRAGE_ENABLED): out-of-range
   // balls get pulled toward the player while still bouncing normally.
@@ -142,10 +141,9 @@ export class Ball {
   /** Minimap reads this — enraged balls are threats, not ambient cyan. */
   get isEnraged(): boolean { return this.enraged; }
   enrageTimer = 0;
-  private slowTimer = 0; // seconds under BALL_MIN_SPEED — fires the stall breaker
+  slowTimer = 0; // seconds under BALL_MIN_SPEED — fires the stall breaker
   dampNextBounce = false; // set by the enrage dash — next ground bounce reflects at 50%
-  private dashFlash = 0; // brief white-hot pop right after a lunge
-  private static _enrageDir = new THREE.Vector3(); // scratch
+  dashFlash = 0; // brief white-hot pop right after a lunge
 
   // ---- Server-driven mode (shared PvE) ---------------------------------
   // A netDriven ball replays shared/ballSim.ts NON-authoritatively: server
@@ -155,7 +153,7 @@ export class Ball {
   netDriven = false;
   netId = 0;
   get netTargetId(): string | null { return this.netS.netTargetId; }
-  private readonly netS: NetBag = newNetBag();
+  readonly netS: NetBag = newNetBag();
   private static field: Heightfield | null = null;
   /** Read-only for desync forensics (netBalls logs its fingerprint on
    *  rubberbands). Mutate via initNetMode only. */
@@ -200,7 +198,7 @@ export class Ball {
     colliderIndex: () => Ball.colliderIndex,
   };
   readonly renderOffset = new THREE.Vector3(); // public: ballNet blends segment corrections into it
-  private readonly _rpos = new THREE.Vector3(); // pos + renderOffset, scratch
+  readonly _rpos = new THREE.Vector3(); // pos + renderOffset, scratch
 
   /** One-time init: the heightfield the shared sim needs for bounce prediction. */
   static initNetMode(force = false): void {
@@ -307,11 +305,11 @@ export class Ball {
       this.onPeak(this.pos.clone(), this.vel.clone());
     }
 
-    this.tickEnrage(dt, terrain, playerPos);
+    tickRage(this, dt, terrain, playerPos);
 
     if (!this.netDriven) {
-      this.handleGroundBounce(terrain, playerPos);
-      this.tickStallBreaker(dt, playerPos);
+      groundBounce(this, terrain, playerPos);
+      tickStall(this, dt, playerPos);
     }
     getShadows()?.set(this, this._rpos, this.radius, 0.3);
     this.writeInstance();
@@ -342,67 +340,6 @@ export class Ball {
     this._rpos.x += this.vel.x * rem;
     this._rpos.y += this.vel.y * rem + 0.5 * BALL_GRAVITY * rem * rem;
     this._rpos.z += this.vel.z * rem;
-  }
-
-  // Stall breaker — loitering under MIN_SPEED for STALL_TIME earns a free
-  // spring launch at the target (same skill as the enrage launch, fired
-  // on boredom instead of distance). Mirrors shared/ballSim.ts — a ball
-  // resting in a dip can't just sit there being scenery.
-  private tickStallBreaker(dt: number, playerPos: THREE.Vector3): void {
-    const sp = this.vel.length();
-    this.slowTimer = sp < BALL_MIN_SPEED ? this.slowTimer + dt : 0;
-    if (this.slowTimer < BALL_STALL_TIME) return;
-    this.slowTimer = 0;
-    this.launchAt(playerPos, Math.SQRT1_2);
-    this.dashFlash = 0.15;
-    this.trails.burst(8, this._rpos, this.radius, this.color);
-    this.onBounce?.(this.pos.clone(), this.vel.clone());
-  }
-
-  // Enrage pull + dash telegraph emissive + post-dash pop.
-  private tickEnrage(dt: number, terrain: Terrain, playerPos: THREE.Vector3): void {
-    // Enraged balls are pulled toward the player — a linear accel, so they
-    // still bounce and arc naturally instead of homing like missiles.
-    // (netDriven: the shared stepper already applied this pull above.)
-    if (this.enraged && !this.netDriven) {
-      this.enrageTimer += dt;
-      Ball._enrageDir.subVectors(playerPos, this.pos);
-      Ball._enrageDir.y += this.radius; // aim at the body, not the feet
-      const d = Ball._enrageDir.length();
-      if (d > 0.001) {
-        this.vel.addScaledVector(Ball._enrageDir.multiplyScalar(1 / d), BALL_ENRAGE_FORCE * dt);
-      }
-      // Calm down once back in play range; give up and teleport if it can
-      // never catch up (player teleporting/skiing away at speed)
-      // Rage only discharges via a lunge (in handleGroundBounce) or the
-      // timeout fallback — a ball that can't catch up eventually teleports
-      if (this.enrageTimer > BALL_ENRAGE_TIMEOUT) {
-        this.setEnraged(false);
-        this.teleportNearPlayer(terrain, playerPos);
-      }
-    }
-
-    // Dash telegraph: while enraged inside lunge range, burn hotter as the
-    // ball descends — a falling white-hot ball reads as "it's about to dash"
-    if (this.enraged) {
-      const ddx = this.pos.x - playerPos.x;
-      const ddz = this.pos.z - playerPos.z;
-      if (ddx * ddx + ddz * ddz <= BALL_ENRAGE_DASH_DIST * BALL_ENRAGE_DASH_DIST) {
-        const h = this.pos.y - terrain.getHeight(this.pos.x, this.pos.z) - this.radius;
-        const t = Math.min(1, Math.max(0, 1 - h / BALL_ENRAGE_TELEGRAPH_H));
-        this.emissive.setRGB(0.55 + 0.45 * t, 0.45 * t, 0.35 * t); // red → white-hot
-      } else {
-        // Pulsing red burn — a static tint reads as texture; a ~2.5Hz throb
-        // reads as "hostile". Bright enough to push past any base hue.
-        const p = 0.75 + 0.85 * (0.5 + 0.5 * Math.sin(this.enrageTimer * 15));
-        this.emissive.setRGB(p, p * 0.1, p * 0.08);
-      }
-    }
-    if (this.dashFlash > 0) {
-      this.dashFlash -= dt;
-      this.emissive.setRGB(1, 0.9, 0.7); // post-dash pop
-      if (this.dashFlash <= 0 && this.enraged) this.emissive.setRGB(0.55, 0, 0);
-    }
   }
 
   private tickTrails(dt: number): void {
@@ -437,156 +374,8 @@ export class Ball {
     }
   }
 
-  private handleGroundBounce(terrain: Terrain, playerPos: THREE.Vector3): void {
-    const gy = terrain.getHeight(this.pos.x, this.pos.z);
-    if (this.pos.y - this.radius > gy) return;
-    this.pos.y = gy + this.radius;
-    const n = terrain.getNormal(this.pos.x, this.pos.z);
-    const dot = this.vel.dot(n);
-
-    // Only treat as a bounce when the ball is moving INTO the surface (dot < 0).
-    // This prevents a spurious re-bounce when update() is called with dt=0 right
-    // after a playback keyframe snap: the ball sits exactly on the ground with
-    // upward velocity, and without this guard the reflection would flip it back
-    // downward, causing a one-frame dip/stutter (and a possible stray teleport).
-    if (dot >= 0) return;
-
-    // Enraged lunge: touching down within range launches at the player
-    // instead of a normal bounce — velocity is REPLACED (clean readable dash,
-    // not a bounce that adds up unpredictably)
-    if (this.enraged && this.tryEnrageLunge(playerPos)) return;
-
-    // Calculate total mechanical energy at bounce: KE + PE
-    // KE = 0.5 * v^2, PE = g * (global height above reference)
-    // Use fixed reference (y=0) to account for terrain height changes
-    const velBeforeReflection = this.vel.clone();
-    const totalEnergy = 0.5 * velBeforeReflection.lengthSq() + Math.abs(BALL_GRAVITY) * this.pos.y;
-
-    // Post-dash landing OR an overspeed impact: reflect at 50% elasticity
-    // so the segment ends with a thud, not a full-energy ricochet into
-    // orbit. (Mirrors shared/ballSim.ts BALL_OVERSPEED — keep in sync.)
-    const elasticity = (this.dampNextBounce || velBeforeReflection.length() > BALL_OVERSPEED) ? 0.5 : BOUNCE;
-    this.dampNextBounce = false;
-    this.vel.addScaledVector(n, -(1.0 + elasticity) * dot);
-
-    // Check if reflection itself preserves energy (should be 100% with BOUNCE=1.0)
-    const velAfterMag = this.vel.length();
-    const velBeforeMag = velBeforeReflection.length();
-    const reflectionEnergyRatio = velAfterMag / velBeforeMag;
-    if (Math.abs(reflectionEnergyRatio - 1.0) > 0.01) {
-      logger.debug(`Ball ${this.id} reflection lost energy: ${(reflectionEnergyRatio * 100).toFixed(1)}% (should be 100%)`);
-    }
-
-    // Compare total mechanical energy to previous bounce
-    if (this.lastBounceEnergy > 0) {
-      const energyRatio = totalEnergy / this.lastBounceEnergy;
-      if (energyRatio < 0.95 || energyRatio > 1.05) {
-        const kind = energyRatio < 0.95 ? 'LOSS' : 'GAIN';
-        logger.debug(`Ball ${this.id} total energy ${kind}: ${(energyRatio * 100).toFixed(1)}% (KE: ${(0.5 * velBeforeMag * velBeforeMag).toFixed(1)}, PE: ${(Math.abs(BALL_GRAVITY) * this.pos.y).toFixed(1)})`);
-      }
-    }
-    this.lastBounceEnergy = totalEnergy;
-
-    // Record bounce keyframe (after velocity reflection)
-    this.onBounce?.(this.pos.clone(), this.vel.clone());
-    this.chaseIfFar(terrain, playerPos);
-  }
-
-  // Touchdown within dash range while enraged → ballistic lunge that
-  // discharges the rage. Returns true when the lunge consumed the bounce.
-  private tryEnrageLunge(playerPos: THREE.Vector3): boolean {
-    const pdx = playerPos.x - this.pos.x;
-    const pdz = playerPos.z - this.pos.z;
-    if (pdx * pdx + pdz * pdz > BALL_ENRAGE_DASH_DIST * BALL_ENRAGE_DASH_DIST) return false;
-    this.dashAt(playerPos);
-    this.dashFlash = 0.15;
-    this.setEnraged(false); // lunge discharges the rage
-    this.dampNextBounce = true; // the landing bounce is deadened — no slingshot flyout
-    this.trails.burst(8, this._rpos, this.radius, this.color); // dust-burst at takeoff
-    this.lastBounceEnergy = 0;
-    this.onBounce?.(this.pos.clone(), this.vel.clone());
-    return true;
-  }
-
-  // Bounced beyond engagement range: enrage + spring at the player when
-  // enabled, else teleport back into play.
-  private chaseIfFar(terrain: Terrain, playerPos: THREE.Vector3): void {
-    const dx = this.pos.x - playerPos.x;
-    const dz = this.pos.z - playerPos.z;
-    if (dx * dx + dz * dz <= BALL_MAX_DIST * BALL_MAX_DIST) return;
-    if (!BALL_ENRAGE_ENABLED) { this.teleportNearPlayer(terrain, playerPos); return; }
-    this.setEnraged(true);
-    // Spring at the player on enrage — 45° launch, same redirect physics
-    // as the ground lunge. Rage stays ON (this isn't the discharging dash,
-    // it's the opening move) until a real lunge lands or timeout hits.
-    this.launchAt(playerPos, Math.SQRT1_2);
-    this.dashFlash = 0.15;
-    this.trails.burst(8, this._rpos, this.radius, this.enraged ? _enrageTint : this.color);
-    this.onBounce?.(this.pos.clone(), this.vel.clone());
-  }
-
-  // Redirect velocity toward the player, preserving current speed (floored
-  // at half dash speed so a dead-slow roll still produces a real launch).
-  // upFrac is sin(launch angle): 0.34 ≈ flat lunge, √½ = 45° spring.
-  private launchAt(playerPos: THREE.Vector3, upFrac: number): void {
-    const pdx = playerPos.x - this.pos.x;
-    const pdz = playerPos.z - this.pos.z;
-    const pd = Math.sqrt(pdx * pdx + pdz * pdz) || 0.001;
-    const speed = Math.max(this.vel.length(), BALL_ENRAGE_DASH_SPEED * 0.5);
-    const h = Math.sqrt(1 - upFrac * upFrac);
-    this.vel.set((pdx / pd) * speed * h, 0, (pdz / pd) * speed * h);
-    // Launch angle, plus extra loft if the player is above
-    this.vel.y = Math.max(speed * upFrac, (playerPos.y - this.pos.y) * 0.8);
-  }
-
-  // Ballistic lunge: horizontal speed becomes the approach speed, then vy is
-  // solved so the arc lands on the player after t = dist/hspeed seconds.
-  // Angles up as needed — over bumps, up at elevated players — instead of a
-  // flat beeline that eats terrain or hits feet.
-  private dashAt(playerPos: THREE.Vector3): void {
-    const pdx = playerPos.x - this.pos.x;
-    const pdz = playerPos.z - this.pos.z;
-    const pd = Math.sqrt(pdx * pdx + pdz * pdz) || 0.001;
-    const hSpeed = Math.max(Math.hypot(this.vel.x, this.vel.z), BALL_ENRAGE_DASH_SPEED * 0.5);
-    const t = Math.max(0.15, pd / hSpeed); // flight time
-    const vy = (playerPos.y - this.pos.y + 0.5 * Math.abs(BALL_GRAVITY) * t * t) / t;
-    this.vel.set((pdx / pd) * hSpeed, vy, (pdz / pd) * hSpeed);
-  }
-
   /** Director hook — enrage storms light up every ball at once. */
-  enrage(): void { this.setEnraged(true); }
-
-  private setEnraged(on: boolean): void {
-    if (this.enraged === on) return;
-    this.enraged = on;
-    this.enrageTimer = 0;
-    // Visual cue: emissive red burn while enraged
-    this.emissive.setRGB(on ? 0.55 : 0, 0, 0);
-  }
-
-  // Ball drifted too far from the player — teleport it back into play range
-  private teleportNearPlayer(terrain: Terrain, playerPos: THREE.Vector3): void {
-    const ang = Math.random() * Math.PI * 2;
-    const dist = BALL_TELE_MIN + Math.random() * (BALL_TELE_MAX - BALL_TELE_MIN);
-    this.pos.x = playerPos.x + Math.cos(ang) * dist;
-    this.pos.z = playerPos.z + Math.sin(ang) * dist;
-    this.pos.y = terrain.getHeight(this.pos.x, this.pos.z) + BALL_TELE_HEIGHT;
-
-    // Position jumped — cut the ribbons so they don't streak across the teleport
-    for (const r of this.ribbons) r.clear();
-
-    // Preserve absolute velocity, redirect according to terrain normal at teleport point
-    const currentSpeed = this.vel.length();
-    const n = terrain.getNormal(this.pos.x, this.pos.z);
-    const dot = this.vel.dot(n);
-    this.vel.addScaledVector(n, -2.0 * dot * BOUNCE);
-    this.vel.normalize().multiplyScalar(currentSpeed);
-
-    // Reset energy tracking on teleport (intentional energy reset)
-    this.lastBounceEnergy = 0;
-    // Record teleport as a bounce keyframe too (position + velocity reset)
-    this.onBounce?.(this.pos.clone(), this.vel.clone());
-  }
+  enrage(): void { rageSet(this, true); }
 
   hitTest(px: number, py: number, pz: number, extraRadius = 0): boolean {
     const dx = px - this.pos.x;
