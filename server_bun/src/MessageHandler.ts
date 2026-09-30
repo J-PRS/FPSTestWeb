@@ -180,16 +180,21 @@ export class MessageHandler {
       chat: (id, m) => {
         const msg = m as Extract<ClientMessage, { type: 'chat' }>;
         const sender = this.playerManager.getPlayer(id);
+        // Truncate — the relay is the broadcast ceiling too, so an
+        // oversized payload would amplify one client's bandwidth into
+        // every socket in the room.
+        const text = typeof msg.text === 'string' ? msg.text.slice(0, 280) : '';
+        if (!text) return;
         // Team channel: only the sender's own team hears it — and only
         // when the sender actually carries a team, else a ffa client
         // claiming 'team' would quietly self-filter to nobody.
         if (msg.team && sender?.team) {
           for (const [pid, p] of this.playerManager.getAllPlayers()) {
-            if (p.team === sender.team) this.sendToPlayer(pid, { type: 'chat', playerId: id, text: msg.text, team: true });
+            if (p.team === sender.team) this.sendToPlayer(pid, { type: 'chat', playerId: id, text, team: true });
           }
           return;
         }
-        this.broadcast({ type: 'chat', playerId: id, text: msg.text });
+        this.broadcast({ type: 'chat', playerId: id, text });
       },
       ping: (id, m) => {
         const p = this.playerManager.getPlayer(id);
