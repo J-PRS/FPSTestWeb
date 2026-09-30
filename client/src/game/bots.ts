@@ -7,11 +7,10 @@ import { WeaponType } from '../../../shared/weapons.js';
 import type { Nugget } from '../entities/Nugget.js';
 import type { Targetable } from '../entities/balls.js';
 import type { GameContext } from './context.js';
-import { TEAM_COLORS, TEAM_LABEL, MODES, bank, makeScores, FLAG_PICKUP_R, type TeamId, type TeamScores, type ModeId } from '../../../shared/teams.js';
+import { TEAM_COLORS, TEAM_LABEL, MODES, bank, makeScores, type TeamId, type TeamScores, type ModeId } from '../../../shared/teams.js';
 import { PlayerDebris } from '../effects/debris.js';
 import type { Terrain } from '../world/terrain.js';
-import { CtfFlags } from './ctfFlags.js';
-import { Explosion } from '../effects/explosion.js';
+import { CtfBridge } from './botCtf.js';
 import * as sfx from '../core/sfx.js';
 import { killTaunt, deathTaunt } from '../../../shared/botTaunts.js';
 import { chatSink } from './chat.js';
@@ -76,7 +75,7 @@ export class TeamBots {
   over: string | null = null;
   readonly spec: (typeof MODES)[ModeId];
 
-  private ctf: CtfFlags | null = null;
+  private ctf: CtfBridge | null = null;
   private senses: BotSenses;
   private fire: BotFire;
 
@@ -148,25 +147,15 @@ export class TeamBots {
       mk('bravo', counts.bravo);
     }
     if (this.spec.flags) {
-      this.ctf = new CtfFlags({
-        lazyTerrain: deps.lazyTerrain,
-        lazyScene: deps.lazyScene,
-        carrierPos: (id) => this.carrierPos(id),
-        teamOf: (id) => this.teamOf.get(id),
-        pickupRadiusOf: (id) => FLAG_PICKUP_R * (this.modsFor(id)?.pickupRadius ?? 1),
-        touchers: () => this.touchers(),
+      this.ctf = new CtfBridge(deps, {
         bots: this.bots,
+        teamOf: this.teamOf,
         scores: this.scores,
+        playerTeam: this.playerTeam as TeamId,
+        modsFor: (id) => this.modsFor(id),
         onCapture: () => this.pushScore(),
         onFeed: (t) => this.hooks.remoteKillFeed(t),
-        onFlagEvent: (kind, team, at) => {
-          sfx.flagCue(kind, team === this.playerTeam);
-          deps.world.explosions.push(new Explosion(
-            deps.lazyScene(), _flagBurst.copy(at).setY(at.y + 1.2), false, 0,
-            deps.lazyTerrain(), kind === 'captured' ? 2.4 : kind === 'dropped' ? 1.0 : 1.4,
-            TEAM_COLORS[team]));
-        },
-      }, deps.lazyPlayer().pos);
+      });
     }
   }
 
@@ -179,21 +168,7 @@ export class TeamBots {
     for (const b of this.bots) if (!b.isDead) others.push(b.position);
     others.push(player.pos);
     this.tickBots(dt, others);
-    if (this.spec.flags) {
-      this.ctf?.update(dt);
-      // Flag markers ride the player-indicator overlay — a DOM element
-      // projects through terrain, which is the entire point.
-      if (this.ctf) {
-        const cam = this.deps.lazyCamera();
-        for (const m of this.ctf.markers()) {
-          // +3.4 → the indicator's own +1.0 puts the diamond at the 4m
-          // pole tip instead of at the base's feet.
-          m.pos.y += 3.4;
-          this.deps.lazyHud().updateFlagIndicator(`flag:${m.team}`, m.pos, cam, m.team);
-          m.pos.y -= 3.4;
-        }
-      }
-    }
+    this.ctf?.update(dt);
     this.wd.step(dt, this.bots);
     this.syncLocalTeam();
     if (!this.over) {
@@ -520,7 +495,7 @@ export class TeamBots {
     if (!this.spec.ffa) this.hooks.dropNuggets(bot.position, 3, bot.vel);
     this.deps.world.killCounts.set(killerId, (this.deps.world.killCounts.get(killerId) ?? 0) + 1);
     this.creditKill(killerId, false);
-    this.dropCarriedFlag(bot.playerId, bot.position);
+    this.ctf?.dropCarried(bot.playerId, bot.position);
     const kn = killerId === 'local' ? 'YOU' : killerId.replace('bot:', '');
     noteKill(killerId === 'local' ? 'local' : killerId, bot.playerId, weapon);
     this.hooks.killFeed(kn, bot.playerId.replace('bot:', ''), killerId === 'local', false);
@@ -537,28 +512,9 @@ export class TeamBots {
 
   /** The local player died (any mode) — release a carried flag. */
   localDied(): void {
-    this.dropCarriedFlag('local', this.deps.lazyPlayer().pos);
+    this.ctf?.dropCarried('local', this.deps.lazyPlayer().pos);
   }
 
-  // ---- CTF (mechanics live in ctfFlags.ts; this bridges roster/scores) ----
-
-  private carrierPos(id: string): THREE.Vector3 | null {
-    if (id === 'local') { const p = this.deps.lazyPlayer(); return p.isDead ? null : p.pos; }
-    const rp = this.deps.world.remotePlayers.get(id);
-    return rp && !rp.isDead ? rp.pos : null;
-  }
-
-  private touchers(): [string, THREE.Vector3][] {
-    const player = this.deps.lazyPlayer();
-    _touchers.length = 0;
-    if (!player.isDead) _touchers.push(['local', player.pos]);
-    for (const b of this.bots) if (!b.isDead) _touchers.push([b.playerId, b.position]);
-    return _touchers;
-  }
-
-  private dropCarriedFlag(carrierId: string, at: THREE.Vector3): void {
-    this.ctf?.dropCarried(carrierId, at);
-  }
 
   /** A nugget was collected by 'local' or a bot id — bank it for the team. */
   collect(collectorId: string): void {
@@ -596,8 +552,6 @@ export class TeamBots {
   }
 }
 
-const _touchers: [string, THREE.Vector3][] = [];
 const _collectors: { id: string; pos: THREE.Vector3; alive: boolean; pickupScale: number }[] = [];
-const _flagBurst = new THREE.Vector3();
 // Small accessor so update() reads deps once per frame.
 function deps0(m: TeamBots) { return m.deps; }
