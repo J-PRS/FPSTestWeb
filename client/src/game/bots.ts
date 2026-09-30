@@ -7,7 +7,7 @@ import { WeaponType } from '../../../shared/weapons.js';
 import type { Nugget } from '../entities/Nugget.js';
 import type { Targetable } from '../entities/balls.js';
 import type { GameContext } from './context.js';
-import { TEAM_COLORS, TEAM_LABEL, MODES, bank, makeScores, type TeamId, type TeamScores, type ModeId } from '../../../shared/teams.js';
+import { TEAM_COLORS, MODES, makeScores, type TeamId, type TeamScores, type ModeId } from '../../../shared/teams.js';
 import { PlayerDebris } from '../effects/debris.js';
 import type { Terrain } from '../world/terrain.js';
 import { CtfBridge } from './botCtf.js';
@@ -17,6 +17,7 @@ import { chatSink } from './chat.js';
 import { noteKill } from '../core/stateDebug.js';
 import { BotSenses } from './botSenses.js';
 import { BotFire } from './botFire.js';
+import { winText, checkWin, resetMatch, creditKill, collect, pushScore, syncLocalTeam } from './botMatch.js';
 
 /**
  * TeamBots — the mode referee. Bot brains/bodies live in botBrain.ts;
@@ -75,13 +76,14 @@ export class TeamBots {
   over: string | null = null;
   readonly spec: (typeof MODES)[ModeId];
 
-  private ctf: CtfBridge | null = null;
+  // Public — botMatch.ts (the match referee) reads/resets flags through it.
+  ctf: CtfBridge | null = null;
   private senses: BotSenses;
   private fire: BotFire;
 
   constructor(
     readonly deps: BotsDeps,
-    private hooks: BotHooks,
+    readonly hooks: BotHooks,
     private playerTeam: string,
     counts: { alpha: number; bravo: number },
     private mode: ModeId,
@@ -153,7 +155,7 @@ export class TeamBots {
         scores: this.scores,
         playerTeam: this.playerTeam as TeamId,
         modsFor: (id) => this.modsFor(id),
-        onCapture: () => this.pushScore(),
+        onCapture: () => pushScore(this),
         onFeed: (t) => this.hooks.remoteKillFeed(t),
       });
     }
@@ -170,21 +172,21 @@ export class TeamBots {
     this.tickBots(dt, others);
     this.ctf?.update(dt);
     this.wd.step(dt, this.bots);
-    this.syncLocalTeam();
+    syncLocalTeam(this);
     if (!this.over) {
-      const w = this.checkWin();
+      const w = checkWin(this);
       if (w) {
         this.over = w;
-        this.hooks.remoteKillFeed(this.winText(w));
+        this.hooks.remoteKillFeed(winText(this, w));
         sfx.pickup();
         this.overAt = performance.now();
       }
     } else if (performance.now() - this.overAt > 8000) {
-      this.resetMatch();
+      resetMatch(this);
     }
   }
 
-  private overAt = 0;
+  overAt = 0; // public — botMatch writes it via the host interface
 
   /** Per-bot think pass — interp tick, respawn countdown, brain, fire. */
   private tickBots(dt: number, others: THREE.Vector3[]): void {
@@ -318,55 +320,14 @@ export class TeamBots {
    *  or the bots' friend/foe reads the WRONG side of the scoreboard.
    *  And if the flip lands you on the 5-bot side, a bot crosses over:
    *  the match is authored as you+4 vs 5 either way. */
-  private syncLocalTeam(): void {
-    if (this.spec.ffa) return;
-    let lt = this.deps.world.localTeam;
-    if (lt !== 'alpha' && lt !== 'bravo') {
-      // A teamless/quiet wire (offline, or a mode-less room) has no say —
-      // the local squad owns the team frame. Re-assert it or every
-      // friendly check (indicators, tint, scoreboard) reads all-red.
-      const own = this.teamOf.get('local');
-      if (own !== 'alpha' && own !== 'bravo') return;
-      this.deps.world.localTeam = own;
-      lt = own;
-    }
-    if (this.teamOf.get('local') === lt) return;
-    this.teamOf.set('local', lt);
-    const other: TeamId = lt === 'alpha' ? 'bravo' : 'alpha';
-    const wantAllies = Math.floor(this.bots.length / 2);
-    while (this.bots.filter(b => b.team === lt).length > wantAllies) {
-      const b = this.bots.find(x => x.team === lt);
-      if (!b) break;
-      // Jersey swap — rename the id so the scoreboard's -A/-B suffix
-      // stays truthful, then re-key every roster that holds it.
-      const oldId = b.playerId;
-      const newId = oldId.replace(/-[AB]$/, `-${other === 'alpha' ? 'A' : 'B'}`);
-      if (newId !== oldId) {
-        this.deps.world.remotePlayers.rename(oldId, newId);
-        this.teamOf.delete(oldId);
-        b.playerId = newId;
-      }
-      b.team = other;
-      this.teamOf.set(b.playerId, other);
-      b.setGizmoColor(TEAM_COLORS[other]);
-      this.hooks.killFeed(other === 'alpha' ? 'ALPHA' : 'BRAVO', `${b.playerId.replace('bot:', '')} defects`, false, false);
-    }
-  }
-
   // Bots failing silently is the recurring bug class — the watchdog
   // diffs logic vs render motion; see botWatchdog.ts. Assigned in the
   // ctor: param props aren't visible to field initializers.
   private wd: BotWatchdog;
 
-  private winText(w: string): string {
-    if (!this.spec.ffa) return `${TEAM_LABEL[w as TeamId]} WINS — ${this.scores.alpha}:${this.scores.bravo}`;
-    const name = w === 'local' ? 'YOU' : w.replace('bot:', '');
-    return `${name} WINS the deathmatch — ${this.ffaScores.get(w)} pts`;
-  }
-
   /** Re-seat a dead bot on the spawn ring — shared by the respawn timer
    *  and match reset (same spot-finding, hp, and gizmo re-tint). */
-  private respawnBot(bot: GameBot): void {
+  respawnBot(bot: GameBot): void { // public — botMatch's resetMatch calls it
     const player = this.deps.lazyPlayer();
     const terrain = this.deps.lazyTerrain();
     const a = Math.random() * Math.PI * 2;
@@ -386,45 +347,9 @@ export class TeamBots {
    *  bots keep their ground (hp/meters refilled), only the dead come
    *  back through the spawn ring — teleporting a healthy squad reads
    *  as a glitch, not a new match. */
-  private resetMatch(): void {
-    this.over = null;
-    this.scores.alpha = 0; this.scores.bravo = 0;
-    for (const k of this.ffaScores.keys()) this.ffaScores.set(k, 0);
-    for (const bot of this.bots) {
-      bot.carryingFlag = false;
-      if (bot.isDead) this.respawnBot(bot);
-      else {
-        bot.botHp = bot.botMaxHp;
-        bot.sheep = 0;
-        bot.sheepShown = 0;
-        bot.yeetT = 0;
-      }
-    }
-    this.ctf?.reset();
-    this.pushScore();
-    this.hooks.remoteKillFeed(`${this.spec.label} — NEW MATCH`);
-  }
-
-  private checkWin(): string | null {
-    if (!this.spec.ffa) {
-      const s = this.scores;
-      if (s.alpha >= this.spec.winAt) return 'alpha';
-      if (s.bravo >= this.spec.winAt) return 'bravo';
-      return null;
-    }
-    for (const [id, sc] of this.ffaScores) if (sc >= this.spec.winAt) return id;
-    return null;
-  }
-
   /** DM kill credit — a player/bot frag vs a creature frag. */
   creditKill(id: string, isCreature: boolean): void {
-    if (!this.spec.ffa || this.over) return;
-    const pts = isCreature ? this.spec.ptsCreatureKill : this.spec.ptsPlayerKill;
-    this.ffaScores.set(id, (this.ffaScores.get(id) ?? 0) + pts);
-    const me = this.ffaScores.get('local') ?? 0;
-    let lead = 0;
-    for (const [, v] of this.ffaScores) if (v > lead) lead = v;
-    this.deps.lazyHud().setTeamScore(me, lead);
+    creditKill(this, id, isCreature);
   }
 
   /** Builder bots plant — the brain picked kind+spot, the deployables
@@ -544,14 +469,7 @@ export class TeamBots {
 
   /** A nugget was collected by 'local' or a bot id — bank it for the team. */
   collect(collectorId: string): void {
-    if (this.spec.ffa || this.over) return; // dm: nuggets heal, don't score
-    // Networked matches score through server-owned gems (RoomPickups
-    // touch) — the teamScore echo is the truth; this local board is the
-    // offline path's own scoreboard.
-    const team = this.teamOf.get(collectorId) as TeamId | undefined;
-    if (!team) return;
-    bank(this.scores, team);
-    this.pushScore();
+    collect(this, collectorId);
   }
 
   /** Per-id perk mods — 'local' reads the live player. */
@@ -568,7 +486,7 @@ export class TeamBots {
   }
 
   private pushScore(): void {
-    this.deps.lazyHud().setTeamScore?.(this.scores.alpha, this.scores.bravo);
+    pushScore(this);
   }
 
   dispose(): void {
