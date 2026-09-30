@@ -6,6 +6,7 @@
 //   mine    — proximity charge that triggers on ENEMIES (not the planter)
 //   station — recharge pad: energy + health while you stand in its field
 //   drone   — escort that hovers over your shoulder and fires mini-rockets
+//   shield  — barrier dome: hostile shells detonate on the field, yours pass
 //
 // Deployables are creature-visible: they appear in the species targeting
 // candidates (dep:N ids) so the wildlife chews on them — that's the T2
@@ -17,6 +18,8 @@ import { DeployTurret } from '../entities/DeployTurret.js';
 import { Mine } from '../entities/Mine.js';
 import { DeployStation } from '../entities/DeployStation.js';
 import { DeployDrone } from '../entities/DeployDrone.js';
+import { DeployShield } from '../entities/DeployShield.js';
+import type { SweepObstacle } from '../projectiles/Projectile.js';
 import { Explosion } from '../effects/explosion.js';
 import { DeployRockets } from './deployRockets.js';
 import { DeployAdopter } from './deployAdopt.js';
@@ -29,13 +32,14 @@ import type { GameContext } from './context.js';
 import type { Targetable } from '../entities/balls.js';
 import type { TargetCandidate } from './targeting.js';
 
-export type DeployKind = 'turret' | 'mine' | 'station' | 'drone';
+export type DeployKind = 'turret' | 'mine' | 'station' | 'drone' | 'shield';
 
 export const DEPLOY_DEFS: { kind: DeployKind; label: string; max: number }[] = [
   { kind: 'turret',  label: 'SENTRY',   max: 2 },
   { kind: 'mine',    label: 'MINE',     max: 6 },
   { kind: 'station', label: 'PAD',      max: 1 },
   { kind: 'drone',   label: 'DRONE',    max: 1 },
+  { kind: 'shield',  label: 'BARRIER',  max: 1 },
 ];
 
 // Sentry mini-rockets live in deployRockets.ts — a real flying body with
@@ -57,6 +61,7 @@ interface Pod {
   mine?: Mine;
   station?: DeployStation;
   drone?: DeployDrone;
+  shield?: DeployShield;
   pos: THREE.Vector3;
   vel: THREE.Vector3;
   ttl: number;
@@ -80,11 +85,16 @@ export interface Item {
   /** Vitals the repair beam reads — the entity itself for real items,
    *  a plain record for remote-visual ones. */
   v: { health: number; armor: number; maxHealth: number };
+  /** Team of the owner when known (bot DeployOwner.team / deploySpawn
+   *  wire field) — dome friend-foe checks read it. */
+  team?: string;
+  /** Dome lattice flare when the field soaks a shell — shield only. */
+  flash?: () => void;
 }
 
 // Base hp caps — mirrors the server's HP table + entity maxHealth, used
 // for remote-visual items and the armor cap before deployHp lands.
-const DEPLOY_V_CAP: Record<DeployKind, number> = { turret: 60, mine: 1, station: 90, drone: 50 };
+const DEPLOY_V_CAP: Record<DeployKind, number> = { turret: 60, mine: 1, station: 90, drone: 50, shield: 120 };
 
 /** A bot that plants — foe lists, anchors, and heals all read through
  *  this instead of the local player singleton. */
@@ -102,7 +112,7 @@ type Foe = { pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean; playerId?: 
 export interface DeployDeps extends GameContext {
   scene: THREE.Scene;    // scene exists before deployables is constructed
   targets: Targetable[]; // shared creature surface
-  lazyCombat: () => { hitTargetLocal(t: Targetable, dmg: number): boolean } | undefined;
+  lazyCombat: () => { hitTargetLocal(t: Targetable, dmg: number, attackerId?: string): boolean } | undefined;
   /** Enemy bots the turret may legally shoot (deployer's team excluded). */
   enemyBots?: () => { playerId: string; pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean }[];
   /** Damage funnel for bot hits — same authority as a player's bolts. */
@@ -175,6 +185,7 @@ export class Deployables {
     if (kind === 'turret') pod.turret = new DeployTurret(this.deps.scene, terrain, pos);
     else if (kind === 'station') pod.station = new DeployStation(this.deps.scene, terrain, pos);
     else if (kind === 'drone') pod.drone = new DeployDrone(this.deps.scene, terrain, pos);
+    else if (kind === 'shield') pod.shield = new DeployShield(this.deps.scene, terrain, pos);
     else pod.mine = new Mine(this.deps.scene, terrain, pos);
     this.pods.push(pod);
     sfx.dash();
@@ -202,6 +213,11 @@ export class Deployables {
       pod.drone.group.rotation.y += dt * 4;
       pod.drone.pos.copy(pod.pos);
       pod.drone.group.position.copy(pod.pos);
+    } else if (pod.shield) {
+      pod.shield.tickUnfold(dt);
+      pod.shield.group.rotation.y += dt * 4;
+      pod.shield.pos.copy(pod.pos);
+      pod.shield.group.position.copy(pod.pos);
     } else if (pod.mine) {
       pod.mine.pos.copy(pod.pos);
       pod.mine.update(dt, _FAR); // airborne — nobody to trigger on
@@ -256,6 +272,14 @@ export class Deployables {
       d.unfoldDone(); // lifts off from the touchdown spot on its own lift
       this.adopter.adoptDrone(d, undefined);
       pod.drone = undefined;
+    } else if (pod.shield) {
+      const s = pod.shield;
+      s.pos.copy(pod.pos);
+      s.group.position.copy(pod.pos);
+      s.group.quaternion.setFromUnitVectors(_UP, n);
+      s.unfoldDone();
+      this.adopter.adoptShield(s, undefined);
+      pod.shield = undefined;
     } else if (pod.mine) {
       pod.mine.pos.copy(pod.pos);
       pod.mine.seatOn(terrain);
@@ -289,6 +313,10 @@ export class Deployables {
       const d = new DeployDrone(this.deps.scene, terrain, at);
       d.unfoldDone();
       this.adopter.adoptDrone(d, owner);
+    } else if (kind === 'shield') {
+      const s = new DeployShield(this.deps.scene, terrain, at);
+      s.unfoldDone();
+      this.adopter.adoptShield(s, owner);
     } else {
       const m = new Mine(this.deps.scene, terrain, at);
       m.seatOn(terrain);
@@ -334,12 +362,25 @@ export class Deployables {
     if (newest) { newest.serverId = id; this.byId.set(id, newest); }
   }
 
-  remoteSpawn(id: number, owner: string, kind: DeployKind, pos: { x: number; y: number; z: number }, hp?: number, armor?: number): void {
+  remoteSpawn(id: number, owner: string, kind: DeployKind, pos: { x: number; y: number; z: number }, hp?: number, armor?: number, team?: string): void {
     if (this.remote.has(id)) return;
     const terrain = this.deps.lazyTerrain();
     const at = new THREE.Vector3(pos.x, pos.y, pos.z);
     let item: Item;
-    if (kind === 'turret') {
+    if (kind === 'shield') {
+      // The dome IS the deployable — no proxy sphere for this kind; the
+      // field must be visible or enemies can't read what ate their shell.
+      const s = new DeployShield(this.deps.scene, terrain, at);
+      s.unfoldDone();
+      if (hp !== undefined) { s.health = hp; s.armor = armor ?? 0; }
+      item = {
+        kind, candId: `rdep:${id}`, pos: s.pos, dead: false,
+        hurt: () => {},
+        update: (dt) => s.update(dt),
+        dispose: () => s.dispose(this.deps.scene),
+        v: s, owner, flash: () => s.flash(),
+      };
+    } else if (kind === 'turret') {
       const t = new DeployTurret(this.deps.scene, terrain, at);
       t.unfoldDone();
       if (hp !== undefined) { t.health = hp; t.armor = armor ?? 0; }
@@ -375,6 +416,7 @@ export class Deployables {
       };
     }
     item.serverId = id;
+    item.team = team;
     this.remote.set(id, item);
     this.byId.set(id, item);
   }
@@ -442,7 +484,7 @@ export class Deployables {
     // terrain at the target's toes (the damage lands regardless, so the
     // visual was reading as "sentry shoots the ground").
     const target = { pos: new THREE.Vector3(tp.x, tp.y + 1.0, tp.z), vel: new THREE.Vector3(), alive: true };
-    this.rockets.spawn(item.pos.clone().add(new THREE.Vector3(0, 1.4, 0)), target);
+    this.rockets.spawn(item.pos.clone().add(new THREE.Vector3(0, 1.4, 0)), target, 1, item.owner);
     sfx.shotAt(item.pos, WeaponType.RocketLauncher);
   }
 
@@ -473,9 +515,9 @@ export class Deployables {
   private killItem(item: Item): void {
     if (item.dead) return;
     item.dead = true;
-    if (item.kind === 'station' || item.kind === 'drone') {
+    if (item.kind === 'station' || item.kind === 'drone' || item.kind === 'shield') {
       // Fizzle-pop — smaller than the turret's, still tells you it died.
-      const tint = item.kind === 'drone' ? 0x88ddff : 0x55ffcc;
+      const tint = item.kind === 'drone' ? 0x88ddff : item.kind === 'shield' ? 0x66ccff : 0x55ffcc;
       this.deps.world.explosions.push(new Explosion(
         this.deps.scene, item.pos, false, 0, this.deps.lazyTerrain(), 0.9, tint));
       sfx.explosionAt(item.pos, false);
@@ -492,6 +534,56 @@ export class Deployables {
   hurt(candId: string, dmg: number): void {
     const it = this.items.find(i => i.candId === candId && !i.dead);
     it?.hurt(dmg);
+  }
+
+  /** Live domes as projectile obstacles — the sweep layer treats each
+   *  shield as a static sphere; `blocks` filters friendlies so your own
+   *  fire sails through your field while hostile shells pop on contact. */
+  private readonly _shieldObs: SweepObstacle[] = [];
+  shieldObstacles(): SweepObstacle[] {
+    const out = this._shieldObs;
+    out.length = 0;
+    for (const i of this.items) {
+      if (!i.dead && i.kind === 'shield') out.push(this.domeObstacle(i, false));
+    }
+    for (const i of this.remote.values()) {
+      if (!i.dead && i.kind === 'shield') out.push(this.domeObstacle(i, true));
+    }
+    return out;
+  }
+
+  private domeObstacle(i: Item, remote: boolean): SweepObstacle {
+    return {
+      pos: i.pos, prevPos: i.pos, radius: DeployShield.RADIUS,
+      blocks: (p) => remote ? this.remoteShellHostile(i, p.shooterId) : this.localShellHostile(i, p.shooterId),
+      onBlocked: () => i.flash?.(),
+    };
+  }
+
+  /** Locally-simulated domes (yours or a GameBot's, offline): the foe
+   *  tables already resolve who's hostile — a bot's dome shields it from
+   *  YOUR shells, your dome eats enemy-bot fire. */
+  private localShellHostile(i: Item, shooterId: string | null): boolean {
+    if (!i.owner) { // the local player's dome — hostile = enemy bots
+      return shooterId != null && !!this.deps.enemyBots?.().some(b => b.playerId === shooterId);
+    }
+    // Bot-owned dome: the bot's foe list names who's hostile; 'local'
+    // covers the player's own shells (shooterId null → 'local').
+    const shooter = shooterId ?? 'local';
+    return !!this.deps.botFoes?.(i.team ?? '').some(f => f.playerId === shooter);
+  }
+
+  /** Remote (server-owned) domes: teammates pass, everyone else eats the
+   *  field — the owner's own shells are replicas elsewhere and never run
+   *  this sweep anyway. Team unknown → ffa: all but the owner's shots. */
+  private remoteShellHostile(i: Item, shooterId: string | null): boolean {
+    const nm = this.deps.lazyNetworkManager();
+    const me = nm.getLocalPlayerId();
+    const shooterTeam = shooterId === null
+      ? this.deps.world.localTeam
+      : nm.getPlayers().get(shooterId)?.team;
+    if (i.team !== undefined && shooterTeam !== undefined) return shooterTeam !== i.team;
+    return (shooterId ?? me) !== i.owner;
   }
 
   /** Creature-targeting candidates — deployed items aggro the wildlife. */
@@ -515,6 +607,7 @@ export class Deployables {
         pod.turret?.dispose(this.deps.scene);
         pod.station?.dispose(this.deps.scene);
         pod.drone?.dispose(this.deps.scene);
+        pod.shield?.dispose(this.deps.scene);
         pod.mine?.dispose();
         this.pods.splice(i, 1);
       }

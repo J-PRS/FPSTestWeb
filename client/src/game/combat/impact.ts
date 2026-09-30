@@ -150,7 +150,9 @@ export function recordProjectileHit(c: CombatCtx, p: Projectile): void {
     const targetId = p.hitBall ? p.hitBall.id : (p.hitPlayerId ? 0xFFFF : 0);
     demoManager.recordProjectileHit(p.demoProjectileId, { x: p.pos.x, y: p.pos.y, z: p.pos.z }, targetId);
   }
-  if (p.hitBall || p.hitPlayerId) {
+  // CoolShot/auto-clip is MY highlight reel — a bot's air shot isn't mine
+  // to bank. Player shells leave shooterId unset; bots carry 'bot:*'.
+  if ((p.hitBall || p.hitPlayerId) && !p.shooterId) {
     deps.logger.info(`[CoolShot] ${p.config.displayName} hit ${p.hitBall ? 'ball' : 'player'} airtime=${p.hitAge.toFixed(3)}s dist=${p.hitDistance.toFixed(1)} direct=${p.directHit}`);
     if (demoManager?.isRecording && p.hitAge > 0.2) {
       demoManager.autoClipOnHit(p.hitAge, 0.2);
@@ -180,8 +182,10 @@ export function onTargetDestroyed(c: CombatCtx, ball: import('../../entities/bal
   const deps = c.deps;
   // Railgun reward: any kill (direct or its splash) instantly reloads —
   // the "not useless" payoff that turns a slow precision weapon into a
-  // chain-kill tool against clusters.
-  if (weaponType === WeaponType.Railgun) deps.lazyPlayer().refundWeaponCooldown();
+  // chain-kill tool against clusters. Only when the kill is MINE —
+  // a bot's railgun shouldn't refund my trigger.
+  const mine = !shooterId || shooterId === 'local';
+  if (mine && weaponType === WeaponType.Railgun) deps.lazyPlayer().refundWeaponCooldown();
   if (impulse) _debrisDir.copy(impulse).normalize(); else _debrisDir.set(0, 0.5, 0);
   if (!burstGibs(ball as unknown as SwarmSlotOwner, ball.pos, _debrisDir, ball.vel)) {
     deps.world.debrisList.push(new BallDebris(
@@ -192,7 +196,12 @@ export function onTargetDestroyed(c: CombatCtx, ball: import('../../entities/bal
   }
   screenShake.blast(ball.pos, 1.6, deps.lazyPlayer().pos);
   sfx.enemyCue(ball.pos, ball.dieCue ?? 'die');
-  if (!ball.scoreless) { deps.lazyPlayer().kills++; deps.onCreatureKilled?.(shooterId); }
+  // kills++ is personal credit — bot-authored kills still reach the
+  // referee via onCreatureKilled(shooterId), just not my counter.
+  if (!ball.scoreless) {
+    if (mine) deps.lazyPlayer().kills++;
+    deps.onCreatureKilled?.(shooterId);
+  }
   if (!ball.lootless) {
     for (let n = 0; n < Math.round(ball.scale); n++) {
       deps.nuggets.push(new Nugget(deps.lazyScene(), ball.pos, ball.vel));
@@ -242,12 +251,15 @@ export function handleBallHit(c: CombatCtx, p: Projectile, ball: import('../../e
   deps.reportTargetDamage?.(ball, dmg);
   const destroyed = ball.takeDamage(dmg);
   detonateCharge(p, ball, dmg);
-  deps.lazyDamageNumbers().spawn(ball.pos, Math.round(dmg), p.config.damageColor, deps.lazyCamera());
+  // Numbers + crosshair marker are MY-hit feedback — bot shells carry
+  // shooterId and shouldn't fire them (damage itself still applies).
+  const mine = !p.shooterId;
+  if (mine) deps.lazyDamageNumbers().spawn(ball.pos, Math.round(dmg), p.config.damageColor, deps.lazyCamera());
   if (!destroyed && !ball.hideHealthBar) {
     deps.lazyHealthBarSystem().spawnBall(ball, dmg, ball.health);
   }
   const airborne = ball.pos.y - ball.radius - deps.lazyTerrain().getHeight(ball.pos.x, ball.pos.z) > 0.6;
-  logHitScore(c, p, 'ball', airborne);
+  if (mine) logHitScore(c, p, 'ball', airborne);
   if (destroyed) onTargetDestroyed(c, ball, p.vel, p.config.weaponType, p.shooterId ?? undefined);
 
   const demoManager = deps.lazyDemoManager();
@@ -261,8 +273,12 @@ export function handlePlayerHit(c: CombatCtx, p: Projectile, playerId: string): 
   const targetPlayer = deps.world.remotePlayers.get(playerId);
   const hitPos = targetPlayer ? targetPlayer.position : deps.lazyPlayer().pos;
   const directDamage = getWeaponStats(p.config.weaponType).directDamage * deps.lazyPlayer().mods.directDamage;
-  deps.lazyDamageNumbers().spawn(hitPos, directDamage, p.config.damageColor, deps.lazyCamera());
+  // Personal feedback (numbers/marker/score) is for shells I fired — a
+  // bot-authored hit isn't my frag. Player shells leave shooterId unset.
+  const mine = !p.shooterId;
+  if (mine) deps.lazyDamageNumbers().spawn(hitPos, directDamage, p.config.damageColor, deps.lazyCamera());
   if (deps.botHit?.(playerId, directDamage, p.pos, p.shooterId ?? undefined, p.config.weaponType)) return; // bot authority: real damage, no claim
+  if (!mine) return;
   deps.lazyHealthBarSystem().predictDamage(playerId, directDamage);
   const airborne = targetPlayer
     ? targetPlayer.feetY - deps.lazyTerrain().getHeight(hitPos.x, hitPos.z) > 0.6
@@ -285,12 +301,16 @@ export function handlePlayerHit(c: CombatCtx, p: Projectile, playerId: string): 
 }
 
 /** Nugget Wars bots damaging creatures: the identical funnel a
- *  projectile hit runs — aggro report, damage numbers, kill pipeline. */
-export function hitTargetLocal(c: CombatCtx, t: import('../../entities/balls.js').Targetable, dmg: number): boolean {
+ *  projectile hit runs — aggro report, damage numbers, kill pipeline.
+ *  attackerId set ⇒ not mine: apply damage but skip the floating number
+ *  (personal feedback is for damage I dealt). */
+export function hitTargetLocal(c: CombatCtx, t: import('../../entities/balls.js').Targetable, dmg: number, attackerId?: string): boolean {
   const deps = c.deps;
   deps.reportTargetDamage?.(t, dmg);
-  deps.lazyDamageNumbers().spawn(t.pos, Math.round(dmg), '#ffe08a', deps.lazyCamera());
-  if (t.takeDamage(dmg)) { onTargetDestroyed(c, t, t.vel); return true; }
+  if (!attackerId || attackerId === 'local') {
+    deps.lazyDamageNumbers().spawn(t.pos, Math.round(dmg), '#ffe08a', deps.lazyCamera());
+  }
+  if (t.takeDamage(dmg)) { onTargetDestroyed(c, t, t.vel, undefined, attackerId); return true; }
   if (!t.hideHealthBar) deps.lazyHealthBarSystem().spawnBall(t, dmg, t.health);
   return false;
 }

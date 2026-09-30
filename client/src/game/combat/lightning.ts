@@ -8,7 +8,8 @@ import {
   LG_CHAIN_RANGE, LG_CHAIN_DMG_SCALE, LG_POP_CHARGE_MULT, LG_CHARGE_DECAY_S,
 } from '../../core/config.js';
 import { getWeaponStats, WeaponType } from '../../../../shared/weapons.js';
-import { lgTickDamage, LG_RAMP_WINDOW_S } from '../../../../shared/combat.js';
+import { lgTickDamage, LG_TICK_BASE, LG_RAMP_WINDOW_S } from '../../../../shared/combat.js';
+import { PLAYER_RADIUS, PLAYER_HEIGHT, EYE_OFFSET } from '../../../../shared/constants.js';
 import { segSolidHit } from '../../../../shared/solidWorld.js';
 import { Projectile } from '../../projectiles/Projectile.js';
 import type { CombatDeps, FireArgs, ExplosionArgs } from '../combat.js';
@@ -37,7 +38,10 @@ interface LgState {
   lastFire: number;
   sizzleAt: number;
   beamTo: THREE.Vector3;
+  tipAt: number;         // last visual-frame timestamp for the tip spring
+  tipSettled: boolean;   // first frame after spawn pins the tip — no 0→hit whip
   ramp: Map<number, { t: number; n: number }>;
+  rampP: Map<string, { t: number; n: number }>; // remote-player victims, same stepped decay
   shroud: Map<number, { sprite: THREE.Sprite; seenAt: number }>;
 }
 const _traceT = { t: 0 };
@@ -85,6 +89,11 @@ function shroudTexture(): THREE.Texture {
 // viewmodel pass (55) and world pass (90) means a raw view-space offset
 // lands on the wrong ray, which read as the bolt lagging the gun.
 function lgAnchorLive(deps: CombatDeps, cam: THREE.Camera, out: THREE.Vector3): void {
+  const player = deps.lazyPlayer();
+  // Third person: the viewmodel is hidden — its muzzle node still resolves
+  // to the first-person screen spot, so the beam visibly springs from mid-
+  // air under the crosshair. Anchor at the body model's barrel tip instead.
+  if (player.thirdPerson && player.muzzleWorld(out)) return;
   if (!deps.lazyViewModel()?.muzzleAnchorWorld(WeaponType.Lightning, cam, out)) {
     lgMuzzleAnchor(cam, out); // fixed-offset fallback until the node exists
   }
@@ -192,14 +201,45 @@ function tracePlayerHit(deps: CombatDeps, hitT: number, traceT: { t: number }): 
   let hitId: string | null = null;
   for (const [pid, rp] of deps.world.remotePlayers) {
     if (rp.isDead) continue;
-    _lgTo.copy(rp.position).sub(_lgO);
-    _lgTo.y += 0.9; // capsule center is ~chest, not feet
-    const proj = _lgTo.dot(_lgD);
-    if (proj < 0 || proj > traceT.t) continue;
-    const entry = sphereEntry(traceT.t, 1.0, proj);
+    // Ray vs the SHARED player capsule (shared/constants — the same shape
+    // the debug wireframe draws and the server validates). rp.position is
+    // eye height; the capsule axis runs feet+R .. feet+HEIGHT−R below it.
+    const entry = rayCapsuleEntry(rp.position, traceT.t);
     if (entry !== null) { traceT.t = entry; hitId = pid; }
   }
   return hitId;
+}
+
+const CAP_PAD = PLAYER_RADIUS + 0.2; // beam is thin but not needle-thin
+
+/** Entry distance along _lgD for the player capsule at eyePos, or null.
+ *  Closest-approach between the ray and the capsule's vertical axis
+ *  segment, then back off the surface by sqrt(r²−d²) — the standard
+ *  capsule-beam solve (exact for horizontal rays, ≤cm error for steep
+ *  ones vs a true cylindrical cast). */
+function rayCapsuleEntry(eyePos: THREE.Vector3, hitT: number): number | null {
+  const yLo = eyePos.y - EYE_OFFSET + PLAYER_RADIUS;
+  const axisH = (PLAYER_HEIGHT - 2 * PLAYER_RADIUS); // yLo .. yLo+axisH
+  const wx = _lgO.x - eyePos.x;
+  const wy = _lgO.y - yLo;
+  const wz = _lgO.z - eyePos.z;
+  const a = _lgD.y;                        // axis dir is (0,1,0) → only y matters
+  const b = wx * _lgD.x + wy * _lgD.y + wz * _lgD.z; // w0·D (D normalized)
+  const denom = a * a - 1;                 // −(Dx²+Dz²): 0 for a vertical ray
+  // Unclamped line-line closest axis param, then clamp to the segment and
+  // re-optimize the ray param for the clamped point.
+  let s = denom < -1e-6 ? (b * a - wy) / denom : (a > 0 ? 0 : axisH);
+  s = Math.min(Math.max(s, 0), axisH);
+  let t = s * a - b;
+  t = Math.min(Math.max(t, 0), hitT);
+  s = Math.min(Math.max(t * a + wy, 0), axisH); // re-solve s for clamped t
+  const px = _lgO.x + _lgD.x * t - eyePos.x;
+  const py = _lgO.y + _lgD.y * t - (yLo + s);
+  const pz = _lgO.z + _lgD.z * t - eyePos.z;
+  const d2 = px * px + py * py + pz * pz;
+  if (d2 >= CAP_PAD * CAP_PAD) return null;
+  const entry = t - Math.sqrt(CAP_PAD * CAP_PAD - d2);
+  return entry < hitT ? Math.max(entry, 0) : null;
 }
 
 // Ray-vs-sphere entry distance along _lgD for the to-target vector in
@@ -224,15 +264,25 @@ function updateBeamVisual(deps: CombatDeps, lg: LgState): void {
   // Re-trace EVERY FRAME — the 44ms tick tip goes ~1.7m stale during a
   // strafe, and a live trace tracks the enemy's surface as it moves.
   // Damage stays per-tick; this is purely welding the visual.
-  const { hitT, hitTarget } = lgTrace(deps, cam, _traceT); // refreshes _lgHit at the live camera
-  lg.beamTo.copy(_lgHit);
+  const { hitT, hitTarget, hitPlayerId } = lgTrace(deps, cam, _traceT); // refreshes _lgHit at the live camera
+  // Tip spring: the trace is exact, but snapping the DISPLAYED tip to a
+  // new depth every frame reads as a rigid rod pivoting on the crosshair
+  // (55m instant jumps on sky↔wall sweeps). A fast exp approach keeps the
+  // beam welded to aim while a real sweep whips instead of teleporting.
+  const nowV = performance.now();
+  if (!lg.tipSettled) { lg.beamTo.copy(_lgHit); lg.tipSettled = true; }
+  else {
+    const dtV = Math.min((nowV - lg.tipAt) / 1000, 0.1);
+    lg.beamTo.lerp(_lgHit, 1 - Math.exp(-dtV * 28)); // ~150ms to settle
+  }
+  lg.tipAt = nowV;
   if (hitTarget) {
     const chain = pickChain(deps, _lgHit, hitTarget);
     if (chain) lg.beam.fireChain(_lgHit, chain.pos); else lg.beam.clearChain();
   } else {
     lg.beam.clearChain();
   }
-  lg.beam.fire(_lgMuzzle, lg.beamTo, cam.position, hitT < LG_RANGE);
+  lg.beam.fire(_lgMuzzle, lg.beamTo, cam.position, hitT < LG_RANGE, hitTarget !== null || hitPlayerId !== null);
 }
 
 // Beam fades ~80ms after the last tick — driven from updateProjectiles.
@@ -244,6 +294,7 @@ function tickBeam(lg: LgState, dt: number): void {
     sfx.beamLoopStop(); // trigger dropped — ramp the hum out
     lg.lastFire = 0;
     lg.beam.clearChain();
+    lg.tipSettled = false; // next pull re-pins the tip, no stale whip
   }
   // Charge shrouds: banked charge decays smoothly once the beam leaves a
   // victim (5x fill rate) — the glow fades as the bomb bleeds off.
@@ -287,7 +338,7 @@ function zapTarget(deps: CombatDeps, hooks: LightningHooks, lg: LgState,
   deps.lazyDamageNumbers().spawn(t.pos, dmg, '#8fdcff', cam);
   // The pop banks what the ramp withheld, not what it dealt — a fresh
   // beam charges nothing, a held beam detonates for the decay it paid.
-  const acc = (chargeBank.get(t.id) ?? 0) + (8 - lgTickDamage(n)) * dmgScale * LG_POP_CHARGE_MULT;
+  const acc = (chargeBank.get(t.id) ?? 0) + (LG_TICK_BASE - lgTickDamage(n)) * dmgScale * LG_POP_CHARGE_MULT;
   chargeBank.set(t.id, acc);
   // Shroud grows + hardens with charge — a readable countdown to the pop.
   const charge = Math.min(acc / LG_POP_DMG_CAP, 1);
@@ -326,8 +377,11 @@ export function createLightning(deps: CombatDeps, hooks: LightningHooks) {
     beam: null,
     lastFire: 0,
     sizzleAt: 0, // throttle the connect sizzle — one crackle per ~6 ticks
-    beamTo: new THREE.Vector3(), // beam tip — follows the target between ticks
+    beamTo: new THREE.Vector3(), // displayed tip — updateBeamVisual springs it
+    tipAt: 0,
+    tipSettled: false,
     ramp: new Map(), // consecutive-tick count per target — steps damage down
+    rampP: new Map(),
     shroud: new Map(), // charged-enemy glow — telegraphs the banked pop
   };
   dischargeFx = (pos, amount) => lgPop(deps, hooks, pos, amount);
@@ -348,7 +402,8 @@ export function createLightning(deps: CombatDeps, hooks: LightningHooks) {
 
     const { hitT, hitTarget, hitPlayerId } = lgTrace(deps, cam, _traceT);
 
-    lg.beamTo.copy(_lgHit); // tip = exact aim point on the surface, no snap
+    // beamTo is display state owned by updateBeamVisual — the tick still
+    // fires from the raw _lgHit so damage/explosions stay exact.
     const lgNow = performance.now();
     lg.lastFire = lgNow;
     sfx.beamLoop(); // continuous drone — keepalive per tick
@@ -361,7 +416,7 @@ export function createLightning(deps: CombatDeps, hooks: LightningHooks) {
 
     // Same anchor as the per-frame refresh — one function, no drift.
     lgAnchorLive(deps, cam, _lgMuzzle);
-    lg.beam.fire(_lgMuzzle, _lgHit, _lgO, hitT < LG_RANGE);
+    lg.beam.fire(_lgMuzzle, _lgHit, _lgO, hitT < LG_RANGE, hitTarget !== null || hitPlayerId !== null);
 
     deps.lazyViewModel()?.kick(0.22); // per-tick hum — stacks into a buzz
     // Contact sparks only when the bolt actually lands on something —
@@ -386,18 +441,37 @@ export function createLightning(deps: CombatDeps, hooks: LightningHooks) {
       lg.beam?.setCharge(0); // arcing air — nothing banked, nothing to show
     }
 
-    if (hitPlayerId) {
-      // Server-authoritative damage claim at the point the beam lands on them;
-      // applyForceToRemotes mirrors knockback+damage through the RTT gap.
-      const networkManager = deps.lazyNetworkManager();
-      if (networkManager?.isConnected()) {
-        networkManager.sendAOEShot({
-          position: { x: _lgHit.x, y: _lgHit.y, z: _lgHit.z },
-          weaponType: WeaponType.Lightning, excludeTargetId: hitPlayerId,
-        });
-      }
-      hooks.applyForceToRemotes({ pos: _lgHit, radius: stats.aoeRadius, force: stats.knockbackForce, forceMode: 'push', aoeDamage: stats.aoeDamage, directHitTargetId: null, falloffMultiplier: 1, collisionMultiplier: 1, forceMultiplier: 1 });
+    if (hitPlayerId) zapPlayer(hitPlayerId, stats);
+  }
+
+  // One beam tick on a remote player: the victim can't ride the generic
+  // splash (aoeDamage(5, ~1m, 1.6r) ≈ 2-3/tick — a sixth of the enemy-side
+  // ramp), so they take the stepped tick directly. Bots resolve through
+  // local authority, peers get the prediction until the server's aoeBeam
+  // lands the identical tick.
+  function zapPlayer(hitPlayerId: string, stats: ReturnType<typeof getWeaponStats>): void {
+    const nowV = performance.now() / 1000;
+    const stV = lg.rampP.get(hitPlayerId);
+    const nV = stV && nowV - stV.t <= LG_RAMP_WINDOW_S ? stV.n + 1 : 1;
+    lg.rampP.set(hitPlayerId, { t: nowV, n: nV });
+    if (lg.rampP.size > 32) {
+      for (const [id, s] of lg.rampP) if (nowV - s.t > LG_RAMP_WINDOW_S) lg.rampP.delete(id);
     }
+    const tick = lgTickDamage(nV);
+    if (!deps.botHit?.(hitPlayerId, tick, _lgHit, 'local')) {
+      deps.lazyHealthBarSystem().predictDamage(hitPlayerId, tick);
+    }
+    deps.lazyHud().showHitMarker();
+    const networkManager = deps.lazyNetworkManager();
+    if (networkManager?.isConnected()) {
+      networkManager.sendAOEShot({
+        position: { x: _lgHit.x, y: _lgHit.y, z: _lgHit.z },
+        weaponType: WeaponType.Lightning, excludeTargetId: hitPlayerId,
+      });
+    }
+    // Splash sweep still runs for bystander knockback; the named victim is
+    // skipped so the pin + predict above isn't double-applied.
+    hooks.applyForceToRemotes({ pos: _lgHit, radius: stats.aoeRadius, force: stats.knockbackForce, forceMode: 'push', aoeDamage: stats.aoeDamage, directHitTargetId: hitPlayerId, falloffMultiplier: 1, collisionMultiplier: 1, forceMultiplier: 1 });
   }
 
 

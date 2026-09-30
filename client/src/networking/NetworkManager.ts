@@ -92,7 +92,7 @@ export class NetworkManager {
   public onFfaScore: ((scores: Record<string, number>, winAt: number) => void) | null = null;
   public onFfaMatchEnd: ((winner: string, scores: Record<string, number>) => void) | null = null;
   /** Admin hot-reload — structures/arena changed mid-match; rebuild them. */
-  public onMapUpdate: ((map: { bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } }; structures?: import('../../../shared/mapSpec.js').StructureSpec[]; arena?: { x: number; z: number; radius: number } | null; terrain?: string; terrainTex?: string; sky?: string }) => void) | null = null;
+  public onMapUpdate: ((map: { bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } }; structures?: import('../../../shared/mapSpec.js').StructureSpec[]; arena?: { x: number; z: number; radius: number } | null; terrain?: string; terrainTex?: string; sky?: string; interiors?: import('../../../shared/mapSpec.js').InteriorSpec[] }) => void) | null = null;
   // Server-owned deployables — rendered as dumb visuals client-side;
   // the sim (firing/damage) stays authoritative on the server.
   public onDeploySpawn: ((id: number, owner: string, kind: 'turret' | 'mine' | 'station' | 'drone' | 'shield', pos: { x: number; y: number; z: number }, team?: 'alpha' | 'bravo') => void) | null = null;
@@ -691,9 +691,9 @@ export class NetworkManager {
 
   /** Self-inflicted environment damage (crawler pounce, etc.) — the server
    *  clamps and applies it, then broadcasts the authoritative health. */
-  sendEnvironmentDamage(amount: number): void {
+  sendEnvironmentDamage(amount: number, attacker?: string): void {
     if (!this.connected) { this.localAuthority?.envDamage(amount); return; }
-    this.send({ type: 'environmentDamage', amount });
+    this.send({ type: 'environmentDamage', amount, attacker });
   }
 
   /** Client-claimed heal (nugget pickup) — keeps server health the truth. */

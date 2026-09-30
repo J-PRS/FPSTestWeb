@@ -54,6 +54,10 @@ export function createRepair(deps: CombatDeps) {
   const st: RepairState = { beam: null, lastFire: 0, beamTo: new THREE.Vector3() };
 
   function muzzle(cam: THREE.Camera): void {
+    // Same third-person rule as the LG: hidden viewmodel ≠ a muzzle —
+    // anchor the weld at the body model's barrel tip.
+    const player = deps.lazyPlayer();
+    if (player.thirdPerson && player.muzzleWorld(_muzzle)) return;
     if (!deps.lazyViewModel()?.muzzleAnchorWorld(WeaponType.Repair, cam, _muzzle)) {
       lgMuzzleAnchor(cam, _muzzle);
     }
@@ -80,7 +84,7 @@ export function createRepair(deps: CombatDeps) {
       deps.lazyDamageNumbers().spawn(hit.item.pos, REPAIR_HEAL_PER_TICK, '#7dffb8', cam);
     }
     muzzle(cam);
-    st.beam.fire(_muzzle, st.beamTo, cam.position, hit.item !== null);
+    st.beam.fire(_muzzle, st.beamTo, cam.position, hit.item !== null, hit.item !== null);
   }
 
   // Per-frame beam refresh — re-trace so the tip tracks the item (a
@@ -91,7 +95,7 @@ export function createRepair(deps: CombatDeps) {
     muzzle(cam);
     const hit = repairTrace(deps, cam);
     st.beamTo.copy(_o).addScaledVector(_d, hit.hitT);
-    st.beam.fire(_muzzle, st.beamTo, cam.position, hit.item !== null);
+    st.beam.fire(_muzzle, st.beamTo, cam.position, hit.item !== null, hit.item !== null);
   }
 
   // Beam fades ~90ms after the last tick — driven from updateProjectiles.

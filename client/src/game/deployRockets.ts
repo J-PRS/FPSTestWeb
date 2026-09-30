@@ -33,6 +33,9 @@ interface Rocket {
   ttl: number;
   puff: number;
   dmgScale: number;
+  /** Planter id — 'bot:*' for bot deployables, unset for the player's.
+   *  Damage numbers only fire on unattributed (mine) hits. */
+  owner?: string;
   group: THREE.Group;
 }
 
@@ -44,7 +47,7 @@ export class DeployRockets {
 
   constructor(private deps: DeployDeps) {}
 
-  spawn(muzzle: THREE.Vector3, target: Rocket['target'], dmgScale = 1): void {
+  spawn(muzzle: THREE.Vector3, target: Rocket['target'], dmgScale = 1, owner?: string): void {
     const group = new THREE.Group();
     const body = new THREE.Mesh(_geoRktBody, _rktBodyMat);
     body.rotation.x = Math.PI / 2; // cylinder axis → +Z (flight dir)
@@ -59,7 +62,7 @@ export class DeployRockets {
     const r: Rocket = {
       pos: muzzle.clone(),
       vel: new THREE.Vector3(),
-      target, ttl: ROCKET_TTL, puff: 0, dmgScale, group,
+      target, ttl: ROCKET_TTL, puff: 0, dmgScale, owner, group,
     };
     if (!target) { // fired with no live target — lob up-forward, no homing
       const yaw = this.deps.lazyPlayer().yaw;
@@ -143,7 +146,7 @@ export class DeployRockets {
       const d = c.pos.distanceTo(r.pos);
       if (d < ROCKET_AOE) {
         const dmg = Math.round(ROCKET_DMG * r.dmgScale * (1 - d / ROCKET_AOE));
-        if (dmg > 0) this.deps.lazyCombat()?.hitTargetLocal(c, dmg);
+        if (dmg > 0) this.deps.lazyCombat()?.hitTargetLocal(c, dmg, r.owner);
       }
     }
     for (const b of this.deps.enemyBots?.() ?? []) {

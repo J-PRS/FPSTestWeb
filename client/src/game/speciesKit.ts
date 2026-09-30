@@ -162,7 +162,7 @@ class SpeciesKitImpl {
       }
     }
     p.lastDamageSource = deathText;
-    p.applyKnockback(fromPos, force);
+    p.applyKnockback(fromPos, force * p.mods.knockbackTaken);
     this.deps.lazyNetworkManager()?.sendEnvironmentDamage(damage);
     this.deps.lazyHud().showDamage(fromPos, damage); // vignette + directional arc
     sfx.playerHurt();
@@ -199,7 +199,7 @@ class SpeciesKitImpl {
     const dmg = Math.round(maxDmg * (1 - dist / radius) * mult);
     if (dmg <= 0) return 0;
     p.lastDamageSource = deathText;
-    p.applyKnockback(origin, knockback);
+    p.applyKnockback(origin, knockback * p.mods.knockbackTaken);
     this.deps.lazyNetworkManager()?.sendEnvironmentDamage(dmg);
     this.deps.lazyHud().showDamage(origin, dmg);
     return dmg;

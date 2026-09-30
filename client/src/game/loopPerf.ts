@@ -8,6 +8,7 @@ import * as THREE from 'three';
 import { urlParams } from '../core/params.js';
 import { settings } from '../core/settings.js';
 import Logger from '../core/Logger.js';
+import { vfxStats } from '../effects/vfx.js';
 import type { createFrameBudget } from '../core/frameBudget.js';
 import type { createPerfHud } from '../core/perfHud.js';
 import type { GameLoopDeps, LoopState } from './gameLoop.js';
@@ -18,7 +19,11 @@ import type { GameLoopDeps, LoopState } from './gameLoop.js';
 // hidden tabs (rAF throttling ≠ real perf).
 export function fpsWatchdog(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof createFrameBudget>, perf: ReturnType<typeof createPerfHud>, rawElapsed: number, now: number): void {
   if (document.hidden || rawElapsed <= 0) return;
-  if (1 / rawElapsed < 40) { st.lowFpsFrames++; st.lowFpsAccum += rawElapsed; st.headroomAccum = 0; }
+  // A >0.5s frame isn't a slow frame — it's an rAF stall (occluded/
+  // headless tab, OS jank). Counting them reported "avgFps 1" dumps on
+  // machines rendering fine; stalls fall into the healthy branch and
+  // reset the counter instead.
+  if (1 / rawElapsed < 40 && rawElapsed < 0.5) { st.lowFpsFrames++; st.lowFpsAccum += rawElapsed; st.headroomAccum = 0; }
   else {
     st.lowFpsFrames = 0; st.lowFpsAccum = 0;
     // Comfortable headroom: >55fps accumulates toward a quality step-UP.
@@ -36,40 +41,48 @@ export function fpsWatchdog(deps: GameLoopDeps, st: LoopState, budget: ReturnTyp
     const phases = perf.snapshot();
     const jsMs = Object.values(phases).reduce((a, v) => a + v, 0);
     st.cpuBound = jsMs > (st.lowFpsAccum / st.lowFpsFrames) * 1000 * 0.35;
-    const player = deps.lazyPlayer();
-    const nm = deps.lazyNetworkManager();
-    const info = deps.rendererSetup.renderer.info;
-    const entities = deps.entities;
-    Logger.warn('LOW FPS sustained — perf dump', {
-      avgFps: Math.round(st.lowFpsFrames / st.lowFpsAccum),
-      frames: st.lowFpsFrames,
-      pos: { x: +player.pos.x.toFixed(1), y: +player.pos.y.toFixed(1), z: +player.pos.z.toFixed(1) },
-      speed: +player.vel.length().toFixed(1),
-      dead: player.isDead,
-      demo: deps.lazyDemoManager()?.isPlaying ?? false,
-      targets: entities.targets.length,
-      balls: entities.balls.filter(b => !b.dead && !b.disposed).length,
-      nuggets: entities.nuggets.length,
-      remotes: deps.world.remotePlayers.size,
-      projectiles: deps.world.projectiles.length,
-      explosions: deps.world.explosions.length,
-      debris: deps.world.debrisList.length + deps.world.playerDebrisList.length,
-      scorches: deps.world.scorches.length,
-      drawCalls: info.render.calls,
-      triangles: info.render.triangles,
-      geometries: info.memory.geometries,
-      textures: info.memory.textures,
-      phases: perf.snapshot(),
-      budget: budget.stats(),
-      ping: nm?.getPing?.(),
-      packetLoss: nm?.getPacketLoss?.(),
-      heapMB: (performance as { memory?: { usedJSHeapSize: number } }).memory
-        ? Math.round((performance as { memory?: { usedJSHeapSize: number } }).memory!.usedJSHeapSize / 1048576)
-        : undefined,
-    });
+    dumpPerf(deps, st, budget, perf);
     st.lowFpsFrames = 0; st.lowFpsAccum = 0;
     autoScale(deps, st, -1);
   }
+}
+
+function dumpPerf(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof createFrameBudget>, perf: ReturnType<typeof createPerfHud>): void {
+  const player = deps.lazyPlayer();
+  const nm = deps.lazyNetworkManager();
+  const info = deps.rendererSetup.renderer.info;
+  const entities = deps.entities;
+  Logger.warn('LOW FPS sustained — perf dump', {
+    avgFps: Math.round(st.lowFpsFrames / st.lowFpsAccum),
+    frames: st.lowFpsFrames,
+    pos: { x: +player.pos.x.toFixed(1), y: +player.pos.y.toFixed(1), z: +player.pos.z.toFixed(1) },
+    speed: +player.vel.length().toFixed(1),
+    dead: player.isDead,
+    demo: deps.lazyDemoManager()?.isPlaying ?? false,
+    targets: entities.targets.length,
+    balls: entities.balls.filter(b => !b.dead && !b.disposed).length,
+    nuggets: entities.nuggets.length,
+    remotes: deps.world.remotePlayers.size,
+    projectiles: deps.world.projectiles.length,
+    explosions: deps.world.explosions.length,
+    debris: deps.world.debrisList.length + deps.world.playerDebrisList.length,
+    scorches: deps.world.scorches.length,
+    vfx: vfxStats(),
+    drawCalls: info.render.calls,
+    triangles: info.render.triangles,
+    geometries: info.memory.geometries,
+    textures: info.memory.textures,
+    phases: perf.snapshot(),
+    budget: budget.stats(),
+    ping: nm?.getPing?.(),
+    packetLoss: nm?.getPacketLoss?.(),
+    heapMB: (performance as { memory?: { usedJSHeapSize: number } }).memory
+      ? Math.round((performance as { memory?: { usedJSHeapSize: number } }).memory!.usedJSHeapSize / 1048576)
+      : undefined,
+  });
+  // worstItemMs is an all-time max — reset per dump so it reflects the
+  // current window, not a fossil from the worst frame ever recorded.
+  budget.reset('fxdecay');
 }
 
 // Dynamic quality scaling — the render cost follows the machine instead of

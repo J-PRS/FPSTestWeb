@@ -14,7 +14,7 @@ import { BOT_LOADOUTS, pickBotWeapon } from '../../../shared/botLoadouts.js';
 import { getWeaponStats } from '../../../shared/weapons.js';
 import { STATUS } from '../../../shared/status.js';
 import type { BotLoadout } from '../../../shared/botLoadouts.js';
-import { perkMods, type PerkMods } from '../../../shared/perks.js';
+import { perkMods, effectiveResist, type PerkMods } from '../../../shared/perks.js';
 
 /**
  * GameBot — an in-world fake player. A GameBot is a RemotePlayer registered
@@ -141,7 +141,7 @@ export class GameBot extends RemotePlayer {
   takeDamageLocal(dmg: number, fromPos: THREE.Vector3): boolean {
     if (this.isDead) return false;
     // Plated et al — the server's applyDamage applies the same resist.
-    dmg *= 1 - this.mods.damageResist;
+    dmg *= 1 - effectiveResist(this.mods, this.botHp, this.botMaxHp);
     // Held shield burns tank instead of flesh — same exchange rate the
     // server shadow models (10 hp per energy point).
     if ((this.status & STATUS.SHIELD) && this.energy > 0) {

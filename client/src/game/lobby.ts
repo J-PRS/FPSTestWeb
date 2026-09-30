@@ -28,7 +28,10 @@ export interface RoomRow {
 
 export interface MapRow {
   name: string;
+  /** The map's default ruleset — used when MODE is left on ANY. */
   mode: string;
+  /** Modes the map can legally host (map = geometry, mode = ruleset). */
+  modes: string[];
   bots: number;
 }
 
@@ -41,9 +44,9 @@ export interface LobbyDeps {
    *  fitting the request (or spins a fresh room from the map spec). */
   quickJoin(mode: string, map?: string, bots?: number): Promise<{ room: string }>;
   /** In-place room hop over the live socket — false when there's no
-   *  connection (caller reloads instead). map/bots are creation hints for
-   *  a room that doesn't exist yet. */
-  switchRoom?(name: string, map?: string, bots?: number): boolean;
+   *  connection (caller reloads instead). map/bots/mode are creation
+   *  hints for a room that doesn't exist yet. */
+  switchRoom?(name: string, map?: string, bots?: number, mode?: string): boolean;
 }
 
 const POLL_MS = 3000;
@@ -108,7 +111,9 @@ export class Lobby {
   private rows: HTMLDivElement;
   private here: HTMLDivElement;
   private mapSelect: HTMLSelectElement;
+  private modeSelect: HTMLSelectElement;
   private botsInput: HTMLInputElement;
+  private maps: MapRow[] = [];
   private timer: ReturnType<typeof setInterval> | null = null;
 
   private currentRoom(): string {
@@ -134,9 +139,16 @@ export class Lobby {
     this.rows = document.createElement('div');
     this.rows.className = 'lb-rows';
 
-    // Match setup — pick a map (its spec carries the mode), optionally
-    // override bot count, and the server spins or fills the right room.
+    // Match setup — mode (ruleset) and map (geometry) are separate picks:
+    // MODE filters which maps are offered, MAP picks the arena. Bot count
+    // can override the spec default.
     const hostLbl = label('HOST MATCH');
+    const modeRow = field('MODE');
+    this.modeSelect = document.createElement('select');
+    this.modeSelect.className = 'lb-input';
+    this.modeSelect.style.cssText = 'cursor:pointer;flex:1;min-width:0;';
+    this.modeSelect.addEventListener('change', () => this.fillMapSelect());
+    modeRow.appendChild(this.modeSelect);
     const mapRow = field('MAP');
     this.mapSelect = document.createElement('select');
     this.mapSelect.className = 'lb-input';
@@ -157,7 +169,8 @@ export class Lobby {
       hostBtn.disabled = true;
       try {
         const map = this.mapSelect.value;
-        const mode = this.mapSelect.selectedOptions[0]?.dataset.mode ?? '';
+        // ANY = let the map's own spec decide the ruleset.
+        const mode = this.modeSelect.value || this.mapSelect.selectedOptions[0]?.dataset.mode || '';
         const bots = this.botsInput.value === '' ? undefined : Math.max(0, Math.min(24, Number(this.botsInput.value) || 0));
         this.join((await this.deps.quickJoin(mode, map || undefined, bots)).room, map || undefined, bots);
       } catch { hostBtn.disabled = false; }
@@ -189,8 +202,9 @@ export class Lobby {
       const v = input.value.trim();
       if (!v) return;
       const map = this.mapSelect.value || undefined;
+      const mode = this.modeSelect.value || this.mapSelect.selectedOptions[0]?.dataset.mode || undefined;
       const bots = this.botsInput.value === '' ? undefined : Math.max(0, Math.min(24, Number(this.botsInput.value) || 0));
-      this.join(v, map, bots);
+      this.join(v, map, bots, mode);
     };
     input.addEventListener('keydown', (e) => {
       e.stopPropagation();
@@ -227,7 +241,7 @@ export class Lobby {
     p2pRow.appendChild(p2pIn);
     const p2pBtns = buildP2PButtons(p2pIn);
 
-    this.panel.append(head, this.here, this.rows, hostLbl, mapRow, botsRow, hostBtn, quickLbl, quick, newWrap, connLbl, srvRow, p2pRow, p2pBtns);
+    this.panel.append(head, this.here, this.rows, hostLbl, modeRow, mapRow, botsRow, hostBtn, quickLbl, quick, newWrap, connLbl, srvRow, p2pRow, p2pBtns);
     (document.getElementById('overlay') ?? document.body).appendChild(this.panel);
     // Menu closed while the panel was open (resume / re-lock) — display:none
     // hides it anyway, but the poll timer would keep burning for nothing.
@@ -236,30 +250,55 @@ export class Lobby {
     }).observe(document.body, { attributes: true, attributeFilter: ['class'] });
   }
 
-  /** Populate the map picker once per open — cheap, menu is user-paced. */
+  /** Populate the mode + map pickers once per open — cheap, menu is
+   *  user-paced. Mode select lists the union of every map's legal modes. */
   private async refreshMaps(): Promise<void> {
     try {
-      const maps = await this.deps.listMaps();
-      this.mapSelect.textContent = '';
-      if (!maps.length) {
-        const o = document.createElement('option');
-        o.textContent = 'server default';
-        o.value = ''; o.dataset.mode = '';
-        this.mapSelect.appendChild(o);
-        return;
-      }
-      for (const m of maps) {
-        const o = document.createElement('option');
-        o.value = m.name;
-        o.dataset.mode = m.mode;
-        o.textContent = `${m.name.toUpperCase()}${m.mode ? ` · ${m.mode.toUpperCase()}` : ''}${m.bots ? ` · ${m.bots} bots` : ''}`;
-        this.mapSelect.appendChild(o);
-      }
+      this.maps = await this.deps.listMaps();
     } catch {
-      this.mapSelect.textContent = '';
+      this.maps = [];
+    }
+    this.modeSelect.textContent = '';
+    const any = document.createElement('option');
+    any.value = ''; any.textContent = 'ANY';
+    this.modeSelect.appendChild(any);
+    const modes = [...new Set(this.maps.flatMap((m) => m.modes.length ? m.modes : (m.mode ? [m.mode] : [])))].toSorted();
+    for (const mode of modes) {
       const o = document.createElement('option');
-      o.textContent = 'maps unavailable';
+      o.value = mode;
+      o.textContent = mode.toUpperCase();
+      this.modeSelect.appendChild(o);
+    }
+    this.fillMapSelect();
+  }
+
+  /** Refill MAP for the chosen MODE — a map only shows the modes it
+   *  declares, so the list shrinks to the legal arenas. */
+  private fillMapSelect(): void {
+    const mode = this.modeSelect.value;
+    this.mapSelect.textContent = '';
+    if (!this.maps.length) {
+      const o = document.createElement('option');
+      o.textContent = 'server default';
       o.value = ''; o.dataset.mode = '';
+      this.mapSelect.appendChild(o);
+      return;
+    }
+    const rows = mode ? this.maps.filter((m) => (m.modes.length ? m.modes : [m.mode]).includes(mode)) : this.maps;
+    if (!rows.length) {
+      const o = document.createElement('option');
+      o.textContent = `no ${mode} maps`;
+      o.value = ''; o.dataset.mode = '';
+      this.mapSelect.appendChild(o);
+      return;
+    }
+    for (const m of rows) {
+      const o = document.createElement('option');
+      o.value = m.name;
+      o.dataset.mode = mode || m.mode;
+      // Label shows the default ruleset so a shared map doesn't pretend
+      // the pick is unique to the selected mode.
+      o.textContent = `${m.name.toUpperCase()}${m.mode ? ` · ${m.mode.toUpperCase()}` : ''}${m.bots ? ` · ${m.bots} bots` : ''}`;
       this.mapSelect.appendChild(o);
     }
   }
@@ -320,26 +359,23 @@ export class Lobby {
     this.rows.appendChild(row);
   }
 
-  private join(name: string, map?: string, bots?: number): void {
+  private join(name: string, map?: string, bots?: number, mode?: string): void {
     // Already there — a reload would boot us into the same seat anyway.
     if (name === this.currentRoom()) return;
-    // Live socket: hop in place — the gameState rebuild does the rest.
-    // Keep the URL honest so refresh/share still lands in this room.
-    if (this.deps.switchRoom?.(name, map, bots)) {
-      const q = new URLSearchParams(location.search);
-      if (name === 'default') q.delete('room');
-      else q.set('room', name);
-      if (map) q.set('map', map); else q.delete('map');
-      if (bots !== undefined) q.set('bots', String(bots)); else q.delete('bots');
-      history.replaceState(null, '', `${location.pathname}?${q.toString()}`);
-      return;
-    }
+    // map/bots/mode ride the URL so a disposed room rebuilds with its
+    // spec intact — and so refresh/share land in this same match.
     const q = new URLSearchParams(location.search);
     if (name === 'default') q.delete('room');
     else q.set('room', name);
-    // map/bots go along so a disposed room rebuilds with its spec intact.
-    if (map) q.set('map', map); else q.delete('map');
-    if (bots !== undefined) q.set('bots', String(bots)); else q.delete('bots');
-    location.href = `${location.pathname}?${q.toString()}`;
+    for (const [k, v] of [['map', map], ['bots', bots], ['mode', mode]] as const) {
+      if (v !== undefined && v !== '') q.set(k, String(v)); else q.delete(k);
+    }
+    const href = `${location.pathname}?${q.toString()}`;
+    // Live socket: hop in place — the gameState rebuild does the rest.
+    if (this.deps.switchRoom?.(name, map, bots, mode)) {
+      history.replaceState(null, '', href);
+      return;
+    }
+    location.href = href;
   }
 }

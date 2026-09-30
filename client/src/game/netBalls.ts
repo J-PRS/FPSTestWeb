@@ -200,6 +200,16 @@ export function createNetBalls(deps: EntitiesDeps, ctx: NetBallsCtx, logger: Chi
       logger.debug(`ball #${m.id} ${kind} rubberband ${err.toFixed(1)}m during terrain swap`);
       return;
     }
+    // Stale-leg extrapolation isn't a desync: distance-tiered sends leave
+    // far balls on a committed anchor for many seconds, and the inert leg
+    // CAN'T track lunge/enrage retargets in between. Divergence there is
+    // the design working — warn only on a fresh anchor, where the sim
+    // genuinely disagrees with the server.
+    const legAge = b.netDiag?.legAge ?? 0;
+    if (legAge > 3) {
+      logger.debug(`ball #${m.id} ${kind} rubberband ${err.toFixed(1)}m on stale leg (legAge ${legAge.toFixed(1)}s)`);
+      return;
+    }
     const nowMs = performance.now();
     const lastW = rbLastWarn.get(m.id) ?? -Infinity;
     if (nowMs - lastW < RB_WARN_MS) {

@@ -10,6 +10,7 @@
  */
 
 import { vgsGate } from './vgs.ts';
+import { speakVgs, speakChat, chatTtsEnabled } from '../core/tts.js';
 
 export interface ChatDeps {
   send(text: string, team: boolean): void;
@@ -24,7 +25,7 @@ const FADE_MS = 12000;
 /** The one live feed — Chat is constructed once by netHandlers; other
  *  self-contained modules (offline bots) reach it without threading a
  *  deps chain through three layers. */
-export const chatSink: { add?: (from: string | null, text: string, team?: boolean) => void } = {};
+export const chatSink: { add?: (from: string | null, text: string, team?: boolean, vgs?: string) => void } = {};
 
 export class Chat {
   private feed: HTMLDivElement;
@@ -55,7 +56,7 @@ export class Chat {
 
     // Capture phase: while composing, keys are ours alone.
     window.addEventListener('keydown', (e) => this.onKey(e), true);
-    chatSink.add = (from, text, team) => this.add(from, text, team);
+    chatSink.add = (from, text, team, vgs) => this.add(from, text, team, vgs);
   }
 
   private get composing(): boolean {
@@ -100,8 +101,22 @@ export class Chat {
     this.input.blur();
   }
 
-  /** A line in the feed. `from === null` renders as a system line. */
-  add(from: string | null, text: string, team = false): void {
+  /** A line in the feed. `from === null` renders as a system line.
+   *  `vgs` = the chord ("VGS") — printed as a prefix AND the speech
+   *  switch: VGS goes to the robot, typed lines to system TTS when the
+   *  CHAT TTS toggle is on. Speech lives here (not in onChat) so every
+   *  path that lands in the feed — wire, host relay, offline echo, bot
+   *  taunts — speaks identically. */
+  add(from: string | null, text: string, team = false, vgs?: string): void {
+    if (from !== null) {
+      const isSelf = from === this.deps.localName();
+      if (vgs) {
+        // Own VGS spoke at send time — the echo back is feed-only.
+        if (!isSelf) void speakVgs(text, from);
+      } else if (chatTtsEnabled()) {
+        speakChat(text, from); // own lines too — audible send confirmation
+      }
+    }
     const line = document.createElement('div');
     line.style.cssText = 'text-shadow:1px 1px 0 #000;margin-top:1px;';
     if (from === null) {
@@ -112,7 +127,14 @@ export class Chat {
       who.style.color = team ? '#7d7' : '#fd8';
       who.textContent = `${team ? '[T] ' : ''}${from}: `;
       const body = document.createElement('span');
-      body.textContent = text;
+      body.textContent = vgs ? `[${vgs}] ${text}` : text;
+      // Whole line tinted for team — name-color alone was easy to miss
+      // mid-fight. A left tick marks the channel too.
+      if (team) {
+        body.style.color = '#9e9';
+        line.style.borderLeft = '2px solid #4a4';
+        line.style.paddingLeft = '5px';
+      }
       line.append(who, body);
     }
     this.feed.appendChild(line);

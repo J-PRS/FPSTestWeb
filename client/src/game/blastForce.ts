@@ -126,7 +126,9 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
       if (occluded(pos, rp.position)) continue;
       rp.applyPredictedKnockback(pos, impulse, forceMode === 'pull');
       if (playerId === directHitTargetId) continue;
-      deps.lazyHud().showHitMarker();
+      // Hitmarker is personal feedback — a bot's blast (shooterId set)
+      // clipping a remote isn't my frag to celebrate.
+      if (!a.shooterId) deps.lazyHud().showHitMarker();
       const aoeDmg = aoeDamageOf(aoeDamage, dist, radius);
       if (deps.botHit?.(playerId, aoeDmg, pos, shooterId, a.weaponType)) continue; // local authority resolved it
       deps.lazyHealthBarSystem().predictDamage(playerId, aoeDmg);
@@ -153,7 +155,11 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
       // Self-AOE damage: a tiny fraction of what an enemy would take at the
       // same distance — rocket jumps should be viable, not lethal. Faint
       // vignette only, no hurt sound (JP: the grunt is too much for this).
-      const selfDmg = aoeDamageOf(aoeDamage, dpx, radius) * SELF_AOE_DAMAGE_SCALE * player.mods.selfDamage;
+      // A bot-authored blast (shooterId set) is ENEMY fire, not a rocket
+      // jump — it deals full falloff damage and reports the bot as attacker.
+      const enemyBlast = a.shooterId && a.shooterId !== 'local';
+      const selfDmg = aoeDamageOf(aoeDamage, dpx, radius)
+        * (enemyBlast ? 1 : SELF_AOE_DAMAGE_SCALE * player.mods.selfDamage);
       if (selfDmg >= 1 && !player.isDead) {
         // Shield soaks self-splash too — the server holds health steady so
         // the only thing to report is the energy burn + its flash.
@@ -162,8 +168,10 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
           deps.lazyHud().showShieldDamage(null, selfDmg);
           sfx.shieldHit();
         } else {
-          player.lastDamageSource = 'cooked by your own blast'; // suicide reads as suicide, not "a crawler"
-          deps.lazyNetworkManager()?.sendEnvironmentDamage(selfDmg);
+          player.lastDamageSource = enemyBlast
+            ? `${a.shooterId!.replace('bot:', '')} blast`
+            : 'cooked by your own blast'; // suicide reads as suicide, not "a crawler"
+          deps.lazyNetworkManager()?.sendEnvironmentDamage(selfDmg, a.shooterId ?? undefined);
           deps.lazyHud().showDamage(null, selfDmg);
         }
       }

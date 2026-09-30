@@ -117,7 +117,9 @@ export class BotFire {
       };
       this.host.world().projectiles.push(p);
     }
-    sfx.shoot(wt);
+    // Positional — sfx.shoot is the LOCAL voice (full volume at the ear);
+    // a bot firing through it sounded adjacent no matter the range.
+    sfx.shotAt(_shotMuzzle, wt, bot.vel);
   }
 
   /** Live position of a brain hunt target — belt throws arc at it. */
@@ -175,7 +177,7 @@ export class BotFire {
     p.shooterId = bot.playerId;
     p.sweepLocal = () => { const pl = this.host.player(); return pl.isDead ? null : pl.pos; };
     this.host.world().projectiles.push(p);
-    sfx.shoot(wt);
+    sfx.shotAt(_shotMuzzle, wt, bot.vel);
   }
 
   /** First push-class AOE weapon in the kit — pull weapons would drag
@@ -220,7 +222,7 @@ export class BotFire {
           { ...cfg, needsServerTracking: false });
         p.shooterId = bot.playerId;
         this.host.world().projectiles.push(p);
-        sfx.shoot(wt);
+        sfx.shotAt(_shotMuzzle, wt, bot.vel);
       }
     }
     bot.propelUntil = now + 8000;
@@ -231,26 +233,33 @@ export class BotFire {
   /** Instant-claim resolution: melee, beams, and connected rooms where
    *  local shells can't own the attribution. */
   private claimShot(bot: GameBot, targetId: string, aim: THREE.Vector3, melee: boolean, dmg: number, weapon?: number): void {
-    if (!melee) this.spawnBolt(bot.position, aim);
+    if (!melee) {
+      this.spawnBolt(bot.position, aim);
+      // The claim path never made sound before — beam/bolt shots at a
+      // remote wire target were visually a tracer and audibly nothing.
+      sfx.shotAt(_shotMuzzle.set(bot.position.x, bot.position.y + 1.4, bot.position.z), weapon ?? 0, bot.vel);
+    }
     const src = `${bot.playerId.replace('bot:', '')} ${melee ? 'fist' : 'bolt'}`;
-    if (targetId === 'local') {
-      const p = this.host.player();
-      if (!p.isDead && aim.distanceTo(p.pos) < 1.6) {
-        this.host.hurtLocal(dmg, bot.position, src, melee, bot.playerId);
-      }
-      return;
-    }
-    if (targetId.startsWith('creature:')) {
-      const id = +targetId.slice(9);
-      const t = this.host.targets.find(x => x.id === id);
-      if (t && !t.dead && aim.distanceTo(t.pos) < t.radius + 1) {
-        if (this.host.damageCreature(t.id, dmg, bot.playerId)) this.host.creditKill(bot.playerId, true);
-      }
-      return;
-    }
+    if (targetId === 'local') { this.claimLocal(bot, aim, melee, dmg, src); return; }
+    if (targetId.startsWith('creature:')) { this.claimCreature(bot, targetId, aim, dmg); return; }
     const rp = this.host.world().remotePlayers.get(targetId);
     if (rp instanceof GameBot && aim.distanceTo(rp.pos) < 1.6) {
       if (rp.takeDamageLocal(dmg, bot.position)) this.host.botKilled(bot.playerId, rp, weapon);
+    }
+  }
+
+  private claimLocal(bot: GameBot, aim: THREE.Vector3, melee: boolean, dmg: number, src: string): void {
+    const p = this.host.player();
+    if (!p.isDead && aim.distanceTo(p.pos) < 1.6) {
+      this.host.hurtLocal(dmg, bot.position, src, melee, bot.playerId);
+    }
+  }
+
+  private claimCreature(bot: GameBot, targetId: string, aim: THREE.Vector3, dmg: number): void {
+    const id = +targetId.slice(9);
+    const t = this.host.targets.find(x => x.id === id);
+    if (t && !t.dead && aim.distanceTo(t.pos) < t.radius + 1) {
+      if (this.host.damageCreature(t.id, dmg, bot.playerId)) this.host.creditKill(bot.playerId, true);
     }
   }
 

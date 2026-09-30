@@ -153,6 +153,6 @@ export function createCombat(deps: CombatDeps) {
     slam: (pos: THREE.Vector3, impactSpeed: number) => slam(c, pos, impactSpeed),
     updateProjectiles: (dt: number) => updateProjectiles(c, dt),
     updateBeamVisual: () => { updateBeamVisual(); rep.updateBeamVisual(); },
-    hitTargetLocal: (t: import('../entities/balls.js').Targetable, dmg: number) => hitTargetLocal(c, t, dmg),
+    hitTargetLocal: (t: import('../entities/balls.js').Targetable, dmg: number, attackerId?: string) => hitTargetLocal(c, t, dmg, attackerId),
   };
 }

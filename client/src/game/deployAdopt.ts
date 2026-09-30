@@ -9,6 +9,7 @@ import type { DeployTurret } from '../entities/DeployTurret.js';
 import type { Mine } from '../entities/Mine.js';
 import type { DeployStation } from '../entities/DeployStation.js';
 import type { DeployDrone } from '../entities/DeployDrone.js';
+import type { DeployShield } from '../entities/DeployShield.js';
 import { DeployStation as StationClass } from '../entities/DeployStation.js';
 import { Explosion } from '../effects/explosion.js';
 import { screenShake } from '../effects/screenShake.js';
@@ -41,7 +42,7 @@ export class DeployAdopter {
       update: (dt) => {
         const shot = t.update(dt, this.host.foesFor(owner));
         if (!shot) return;
-        this.rockets.spawn(shot.muzzle, shot.target);
+        this.rockets.spawn(shot.muzzle, shot.target, 1, owner?.id);
         sfx.shotAt(shot.muzzle, WeaponType.RocketLauncher); // thump + whoosh
       },
       dispose: () => t.dispose(this.deps.scene),
@@ -65,7 +66,7 @@ export class DeployAdopter {
         // Anchor is the plant owner — a bot's drone chases the bot.
         const shot = d.update(dt, owner?.pos ?? p.pos, owner ? owner.yaw() : p.yaw, this.host.foesFor(owner));
         if (!shot) return;
-        this.rockets.spawn(shot.muzzle, shot.target, 0.6);
+        this.rockets.spawn(shot.muzzle, shot.target, 0.6, owner?.id);
         sfx.shotAt(shot.muzzle, WeaponType.RocketLauncher);
       },
       dispose: () => d.dispose(this.deps.scene),
@@ -90,7 +91,7 @@ export class DeployAdopter {
         const d = c.pos.distanceTo(mine.pos);
         if (d < mine.blastRadius) {
           const dmg = Math.round(MINE_DAMAGE_MAX * (1 - d / mine.blastRadius));
-          if (dmg > 0) this.deps.lazyCombat()?.hitTargetLocal(c, dmg);
+          if (dmg > 0) this.deps.lazyCombat()?.hitTargetLocal(c, dmg, owner?.id);
         }
       }
       for (const b of this.host.foesFor(owner)) {
@@ -154,6 +155,25 @@ export class DeployAdopter {
       },
       dispose: () => s.dispose(this.deps.scene),
       owner: owner?.id,
+    };
+    const hurt = item.hurt;
+    item.hurt = (dmg) => { hurt(dmg); if (s.dead) this.host.killItem(item); };
+    this.items.push(item);
+  }
+
+  /** Barrier dome — the emitter is a plain dep: destructible like any
+   *  other; the FIELD blocks hostile shells via the shieldObstacles
+   *  sweep (deployables.ts), not through this item's update. */
+  adoptShield(s: DeployShield, owner?: DeployOwner): void {
+    const item: Item = {
+      kind: 'shield', candId: s.candId, pos: s.pos, dead: false,
+      hurt: (dmg) => s.takeDamage(dmg),
+      v: s,
+      update: (dt) => s.update(dt),
+      dispose: () => s.dispose(this.deps.scene),
+      owner: owner?.id,
+      team: owner?.team,
+      flash: () => s.flash(),
     };
     const hurt = item.hurt;
     item.hurt = (dmg) => { hurt(dmg); if (s.dead) this.host.killItem(item); };

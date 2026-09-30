@@ -9,9 +9,9 @@ export function wireDeployables(ctx: NetCtx): void {
   const mgr = () => deps.entities().deployables;
   const localId = () => deps.lazyNetworkManager().getLocalPlayerId();
 
-  networkManager.onDeploySpawn = (id, owner, kind, pos) => {
+  networkManager.onDeploySpawn = (id, owner, kind, pos, team) => {
     if (owner === localId()) { mgr().ackLocal(id); return; } // pod path already rendered it
-    mgr().remoteSpawn(id, owner, kind, pos);
+    mgr().remoteSpawn(id, owner, kind, pos, undefined, undefined, team);
   };
   networkManager.onDeployGone = (id) => mgr().remoteRemove(id);
   networkManager.onTurretShot = (id, _owner, targetId) => mgr().remoteTurretShot(id, targetId);
@@ -21,12 +21,12 @@ export function wireDeployables(ctx: NetCtx): void {
 
 /** Join-time roster — same reconcile the pickups get: spawn what the
  *  snapshot lists, drop what it doesn't (deployGone missed while down). */
-export function reconcileDeployables(ctx: NetCtx, roster: { id: number; owner: string; kind: 'turret' | 'mine' | 'station' | 'drone'; pos: { x: number; y: number; z: number }; hp?: number; armor?: number }[] | undefined): void {
+export function reconcileDeployables(ctx: NetCtx, roster: { id: number; owner: string; kind: 'turret' | 'mine' | 'station' | 'drone' | 'shield'; pos: { x: number; y: number; z: number }; hp?: number; armor?: number; team?: string }[] | undefined): void {
   const mgr = ctx.deps.entities().deployables;
   const live = new Set<number>();
   for (const d of roster ?? []) {
     live.add(d.id);
-    if (d.owner !== ctx.deps.lazyNetworkManager().getLocalPlayerId()) mgr.remoteSpawn(d.id, d.owner, d.kind, d.pos, d.hp, d.armor);
+    if (d.owner !== ctx.deps.lazyNetworkManager().getLocalPlayerId()) mgr.remoteSpawn(d.id, d.owner, d.kind, d.pos, d.hp, d.armor, d.team);
     else if (d.hp !== undefined) mgr.applyDeployHp(d.id, d.hp, d.armor ?? 0);
   }
   for (const id of mgr.remoteIds()) if (!live.has(id)) mgr.remoteRemove(id);

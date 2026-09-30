@@ -7,6 +7,7 @@
  */
 
 import { audio } from '../core/audio.ts';
+import { settings } from '../core/settings.js';
 
 type VgsNode = { label: string } & ({ line: string; team?: boolean } | { children: Record<string, VgsNode> });
 
@@ -59,6 +60,7 @@ const TREE: Record<string, VgsNode> = {
     W: line('Wait', 'Wait for my signal before attacking.'),
   }),
   D: cat('Defend', {
+    D: line('Defend'),
     B: line('Base', 'Defend our base!'),
     C: line('Flag carrier', 'Defend the flag carrier!'),
     E: line('Entrances', 'Defend the entrances!'),
@@ -74,6 +76,7 @@ const TREE: Record<string, VgsNode> = {
     D: line('Defend', 'Defend our flag!'),
     F: line('I have the flag', 'I have the flag!'),
     G: line('Give me', 'Give me the flag!'),
+    Q: line("I'll retrieve", "I'll retrieve our flag!"),
     R: line('Retrieve', 'Retrieve our flag!'),
     S: line('Secure', 'Our flag is secure!'),
     T: line('Take', 'Take the flag from me!'),
@@ -82,9 +85,13 @@ const TREE: Record<string, VgsNode> = {
     C: line('Covering fire', 'Need covering fire.'),
     D: line('Driver', 'I need a driver.'),
     E: line('Escort', 'I need an escort.'),
+    // Canon VNH is "Hold that vehicle!" — no vehicles yet, so the hold
+    // lands on a position instead.
+    H: line('Hold', "Hold that position! I'm coming!"),
     N: line('Nuggets', 'I need nuggets!'),
     R: line('Ride', 'I need a ride!'),
     S: line('Support', 'I need support!'),
+    V: line('Vehicle', 'Vehicle ready. Need a ride?'),
     W: line('Where to?'),
   }),
   B: cat('Base', {
@@ -114,23 +121,50 @@ const TREE: Record<string, VgsNode> = {
   }),
   T: cat('Target', {
     A: line('Acquired', 'Target acquired!'),
+    B: line('Base', "Target the enemy base! I'm in position."),
     D: line('Destroyed', 'Target destroyed!'),
     F: line('Flag carrier', 'Target the flag carrier!'),
     G: line('Generator', 'Target the generator!'),
     M: line('Me', 'Target me!'),
+    N: line('Need painted', 'I need a target painted!'),
     S: line('Sensors', 'Target the sensors!'),
     T: line('Turret', "Target the turret! I'm in position."),
+    V: line('Vehicle', "Target the vehicle! I'm in position."),
     W: line('Wait', 'Wait — target not yet.'),
   }),
   W: cat('Warning', {
     B: line('Behind us', 'Watch — enemies behind us!'),
     C: line('Cover', 'Take cover!'),
+    E: line('Enemies', 'Incoming hostiles!'),
     F: line('Fall back', 'Fall back!'),
     I: line('Incoming', 'Incoming!'),
     L: line('Look out', 'Look out!'),
     O: line('Overhead', 'Incoming from above!'),
     S: line('Spotted', 'Enemies spotted nearby!'),
+    V: line('Vehicle', 'Incoming enemy vehicle!'),
     W: line('Watch it', 'Watch it!'),
+  }),
+  // Canon VU/VSU upgrade tree — kept for chord completeness even though
+  // base assets don't have an upgrade mechanic yet; the lines read fine
+  // as a request to whoever owns repairs.
+  U: cat('Upgrade', {
+    G: line('Generator', 'Upgrade our generator!'),
+    S: line('Sensors', 'Upgrade our sensors!'),
+    T: line('Turrets', 'Upgrade our base turrets!'),
+  }),
+  // Canon "VV" quick-response category — one-key answers under V V.
+  V: cat('Quick', {
+    A: line('Any time'),
+    B: line('Base secure?', 'Is our base secure?'),
+    C: line('Cease fire', 'Cease fire!'),
+    D: line("Don't know", "I don't know."),
+    H: line('Help!'),
+    M: line('Move!'),
+    N: line('No'),
+    S: line('Sorry'),
+    T: line('Thanks'),
+    W: line('Wait'),
+    Y: line('Yes'),
   }),
   S: cat('Self', {
     A: cat('Attack', {
@@ -138,43 +172,83 @@ const TREE: Record<string, VgsNode> = {
       B: line('Base', 'I will attack the enemy base.'),
       F: line('Flag', 'I will get the enemy flag.'),
       G: line('Generator', 'I will destroy the enemy generator.'),
+      S: line('Sensors', 'I will attack the enemy sensors.'),
       T: line('Turrets', 'I will destroy the enemy turrets.'),
+      V: line('Vehicle', 'I will attack the enemy vehicle.'),
     }),
     D: cat('Defend', {
+      D: line('Defend', 'I will defend.'),
       B: line('Base', 'I will defend our base.'),
       F: line('Flag', 'I will defend our flag.'),
       G: line('Generator', 'I will defend our generator.'),
+      S: line('Sensors', 'I will defend our sensors.'),
       T: line('Turrets', 'I will defend our turrets.'),
+      V: line('Vehicle', 'I will defend our vehicle.'),
     }),
     R: cat('Repair', {
+      B: line('Base', 'I will repair our base.'),
       G: line('Generator', 'I will repair our generator.'),
       S: line('Sensors', 'I will repair our sensors.'),
       T: line('Turrets', 'I will repair our turrets.'),
+      V: line('Vehicle', 'I will repair the vehicle.'),
+    }),
+    U: cat('Upgrade', {
+      G: line('Generator', "I'll upgrade our generator."),
+      S: line('Sensors', "I'll upgrade our sensors."),
+      T: line('Turrets', "I'll upgrade our base turrets."),
+    }),
+    // Canon VST* task reports — our old flat S.T "Target spotted" moved
+    // to S.P so the chord matches canon.
+    T: cat('Task', {
+      C: line('Cover you', "I'll cover you."),
+      S: line('Set up defenses', "I'll set up defenses."),
+      D: line('Forcefields', "I'm deploying forcefields."),
+      O: line('On it', "I'm on it."),
+      E: line('Sensors', "I'm deploying sensors."),
+      T: line('Turrets', "I'm deploying turrets."),
+      V: line('Vehicle', "I'll get a vehicle ready."),
     }),
     C: line('Cover me', 'Cover me!'),
     E: line('Enemy spotted', 'Enemy spotted!'),
     O: line('On my way', 'On my way.'),
-    T: line('Target spotted', 'Target spotted!'),
+    P: line('Target spotted', 'Target spotted!'),
   }),
 };
 
 const TIMEOUT_MS = 3000;
+
+/** The letter a chord keypress means: layout letter (e.key) by default —
+ *  matches what the menu prints — or the QWERTY position letter
+ *  (e.code) when the physical-position toggle is on or the layout key
+ *  isn't a letter at all (non-Latin boards). */
+function chordLetter(e: KeyboardEvent): string {
+  if (!settings.get('fps-vgs-physical')) {
+    const k = e.key;
+    if (k.length === 1 && /[a-zA-Z]/.test(k)) return k.toUpperCase();
+  }
+  return e.code.startsWith('Key') ? e.code.slice(3) : '';
+}
 
 /** Other window-level key routers (chat) check this before claiming a
  *  letter — listener registration order is not a reliable gate. */
 export const vgsGate = { active: false };
 
 export interface VgsDeps {
-  /** Wire chat — team flag scopes the line. */
-  send(text: string, team: boolean): void;
+  /** Wire chat — team flag scopes the line; chord is the keypath ("VGS")
+   *  printed next to the message so the menu is learnable from chat. */
+  send(text: string, team: boolean, chord: string): void;
   isConnected(): boolean;
   /** Offline/local echo into the feed. */
-  echo(text: string, team: boolean): void;
+  echo(text: string, team: boolean, chord: string): void;
+  /** Spoken voice for the line — fires at send time so the sender hears
+   *  it once whether the server echoes the chat back or not. */
+  speak(text: string): void;
 }
 
 export class Vgs {
   private menu: HTMLDivElement;
   private path: VgsNode[] = [];
+  private keys: string[] = [];
   private active = false;
   private timer = 0;
 
@@ -212,17 +286,25 @@ export class Vgs {
     e.preventDefault();
     e.stopImmediatePropagation();
     if (e.code === 'Escape') { this.close(); return; }
-    const letter = e.code.startsWith('Key') ? e.code.slice(3) : '';
+    // V opens by physical position (it's a bind), but chord letters follow
+    // the typist's layout — the printed [VGS] prefix advertises letters, so
+    // the keys should be letters too (Dvorak V ≠ QWERTY V position).
+    // 'fps-vgs-physical' opts into raw positions for classic muscle memory;
+    // e.code also serves as fallback when the layout key isn't a letter.
+    const letter = chordLetter(e);
     const next = letter && this.node[letter];
     if (!next) { this.close(); return; }
     if ('line' in next) {
       const team = next.team !== false;
-      this.deps.send(next.line, team);
-      if (!this.deps.isConnected()) this.deps.echo(next.line, team);
+      const chord = 'V' + this.keys.join('') + letter;
+      this.deps.send(next.line, team, chord);
+      if (!this.deps.isConnected()) this.deps.echo(next.line, team, chord);
+      this.deps.speak(next.line);
       this.blip();
       this.close();
       return;
     }
+    this.keys.push(letter);
     this.path.push(next);
     this.render();
     this.rearm();
@@ -232,6 +314,7 @@ export class Vgs {
     this.active = true;
     vgsGate.active = true;
     this.path = [];
+    this.keys = [];
     this.menu.style.display = 'block';
     this.render();
     this.rearm();

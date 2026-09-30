@@ -28,7 +28,7 @@ export interface EntitiesDeps extends GameContext {
   nuggetCollectors?: () => { id: string; pos: THREE.Vector3; alive: boolean; pickupScale?: number }[];
   onNuggetCollect?: (collectorId: string) => void;
   /** Deployables: combat resolves after entities is built — lazy getter. */
-  lazyCombat?: () => { hitTargetLocal(t: Targetable, dmg: number): boolean } | undefined;
+  lazyCombat?: () => { hitTargetLocal(t: Targetable, dmg: number, attackerId?: string): boolean } | undefined;
   /** Enemy bots deployable turrets may shoot (deployer's team excluded). */
   deployEnemyBots?: () => { playerId: string; pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean }[];
   /** Hostiles of a given team — a bot-owned turret/mine scans these. */
@@ -288,6 +288,7 @@ export function createEntities(deps: EntitiesDeps) {
     spawnTotem: siege.spawnTotem, spawnUberTotem: siege.spawnUberTotem,
     spawnEliteBall, plantMine: siege.plantMine,
     turretBolts: siege.turretBolts, consumeBolt: siege.consumeBolt, cookBoltsNear: siege.cookBoltsNear,
+    shieldObstacles: () => deployables.shieldObstacles(),
     reportTargetDamage,
     deployables,
     updateDeployables: (dt: number) => deployables.update(dt),

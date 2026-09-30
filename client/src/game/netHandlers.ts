@@ -15,6 +15,7 @@ import type { WorldState } from './worldState.js';
 import type { createEntities } from './entities.js';
 import type { FragMessages } from '../ui/FragMessages.js';
 import { Chat } from './chat.js';
+import { speakVgs } from '../core/tts.js';
 import { Vgs } from './vgs.js';
 import type { HUD } from '../ui/hud.js';
 import type { HealthBarSystem } from '../ui/HealthBarSystem.js';
@@ -58,12 +59,19 @@ export function wireNetworkHandlers(deps: NetDeps): void {
     isConnected: () => networkManager.isConnected(),
     localName: () => networkManager.getLocalPlayerId(),
   });
-  networkManager.onChat = (playerId, text, team) => chat.add(playerId, text, team);
+  // VGS lines arrive flagged with their chord — the feed prints
+  // "[VGS] SHAZBOT!" (keypaths learnable from chat) and speaks through
+  // the robot. Speech/formatting live inside chat.add so wire, host
+  // relay, and offline echo paths all behave identically.
+  networkManager.onChat = (playerId, text, team, vgsChord) => {
+    chat.add(playerId, text, team, vgsChord);
+  };
   // V rides the same chat wire — tactical lines team-scoped, emotes global.
   const vgs = new Vgs({
-    send: (text, team) => networkManager.sendChat(text, team),
+    send: (text, team, chord) => networkManager.sendChat(text, team, chord),
     isConnected: () => networkManager.isConnected(),
-    echo: (text, team) => chat.add(networkManager.getLocalPlayerId(), text, team),
+    echo: (text, team, chord) => chat.add(networkManager.getLocalPlayerId(), text, team, chord),
+    speak: (text) => void speakVgs(text, networkManager.getLocalPlayerId()),
   });
   void vgs; // self-contained like Chat — its key routing lives on window
 
@@ -112,6 +120,6 @@ export function wireNetworkHandlers(deps: NetDeps): void {
       if (!res.ok) throw new Error(`join ${res.status}`);
       return res.json() as Promise<{ room: string }>;
     },
-    switchRoom: (name, map, bots) => networkManager.switchRoom(name, map, bots),
+    switchRoom: (name, map, bots, mode) => networkManager.switchRoom(name, map, bots, mode),
   }));
 }
