@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { buildBeam } from './beamBuild.js';
 
 // Quake-style lightning gun beam — juicy version.
 // Lines are 1px forever, so the beam is TWO camera-facing triangle-strip
@@ -6,14 +7,14 @@ import * as THREE from 'three';
 // midpoint jag every ~35ms. On top: an additive hit-glow sprite + a
 // particle fountain boiling continuously at the contact point — the
 // "damage is being dealt HERE" read that actually sells the beam.
-const SEGS = 16;
+export const SEGS = 16;
 const JITTER_TIME = 0.03;
 const FADE_TIME = 0.09;
 const JAG = 0.45;            // sideways jag amplitude
 const CORE_W = 0.07;
 const GLOW_W = 0.3;
 
-const SPARKS = 26;           // hitpoint fountain particles
+export const SPARKS = 26;           // hitpoint fountain particles
 const SPARK_LIFE = 0.28;
 const SPARK_SPEED = 7;
 
@@ -33,21 +34,21 @@ function perpBasis(dir: THREE.Vector3, side: THREE.Vector3, up: THREE.Vector3): 
 
 export class LightningBeam {
   readonly group = new THREE.Group();
-  private core: THREE.Mesh;
-  private glow: THREE.Mesh;
-  private arc: THREE.Mesh;      // damage sub-beam — wilder jag, only while the tip bites
-  private arcPts: THREE.Vector3[];
-  private chainCore: THREE.Mesh;  // hop bolt: first target → chained enemy
-  private chainPts: THREE.Vector3[];
+  core!: THREE.Mesh;
+  glow!: THREE.Mesh;
+  arc!: THREE.Mesh;      // damage sub-beam — wilder jag, only while the tip bites
+  arcPts!: THREE.Vector3[];
+  chainCore!: THREE.Mesh;  // hop bolt: first target → chained enemy
+  chainPts!: THREE.Vector3[];
   private chainFrom = new THREE.Vector3();
   private chainTo = new THREE.Vector3();
   private chainLive = false;
-  private hitGlow: THREE.Sprite;
-  private sparkPoints: THREE.Points;
-  private sparkPos: Float32Array;
-  private sparkVel: Float32Array;
-  private sparkAge: Float32Array;
-  private beamPts: THREE.Vector3[]; // last rolled skeleton (core + glow share it)
+  hitGlow!: THREE.Sprite;
+  sparkPoints!: THREE.Points;
+  sparkPos!: Float32Array;
+  sparkVel!: Float32Array;
+  sparkAge!: Float32Array;
+  beamPts!: THREE.Vector3[]; // last rolled skeleton (core + glow share it)
   private from = new THREE.Vector3();
   private to = new THREE.Vector3();
   private camPos = new THREE.Vector3();
@@ -61,100 +62,11 @@ export class LightningBeam {
   private contact = 0;
 
   constructor(scene: THREE.Scene, tint?: { glow: number; core: number; chain: number; hit: number; sparkTop: number }) {
-    this.beamPts = Array.from({ length: SEGS + 1 }, () => new THREE.Vector3());
-
-    // Two crossed ribbons in ONE geometry (X cross-section) — volumetric
-    // from every angle, and it can't degenerate into a screen-filling fan
-    // when the beam points at/away from the camera like a billboard does.
-    const mkRibbon = (color: number, opacity: number) => {
-      const geo = new THREE.BufferGeometry();
-      const verts = new Float32Array((SEGS + 1) * 4 * 3); // 4 verts/segment: 2 strips
-      const idx: number[] = [];
-      for (let i = 0; i < SEGS; i++) {
-        const a = i * 4;
-        idx.push(a, a + 1, a + 4, a + 1, a + 5, a + 4);
-        idx.push(a + 2, a + 3, a + 6, a + 3, a + 7, a + 6);
-      }
-      geo.setAttribute('position', new THREE.BufferAttribute(verts, 3));
-      geo.setIndex(idx);
-      const mat = new THREE.MeshBasicMaterial({
-        color, transparent: true, opacity,
-        blending: THREE.AdditiveBlending, depthWrite: false,
-        // depthTest off — the bolt must read over terrain/props; it lives
-        // half inside the viewmodel space visually and z-fighting it into
-        // hills made it clip under geometry near the muzzle.
-        depthTest: false,
-        side: THREE.DoubleSide,
-      });
-      const m = new THREE.Mesh(geo, mat);
-      m.renderOrder = 900; // after opaque + shadows, before late overlays
-      // Vertices are rewritten every jag — the static bounding sphere is
-      // meaningless (sits at origin) and would cull the beam for half of
-      // all view directions. Never frustum-cull ribbon meshes.
-      m.frustumCulled = false;
-      return m;
-    };
-
-    this.glow = mkRibbon(tint?.glow ?? 0x2266ff, 0.35);
-    this.core = mkRibbon(tint?.core ?? 0xeaf6ff, 0.95);
-    // Chain hop: same ribbon machinery, slightly dimmer — it reads as a
-    // fork off the main bolt
-    this.chainCore = mkRibbon(tint?.chain ?? 0x9fd4ff, 0.7);
-    this.chainCore.visible = false;
-    this.chainPts = Array.from({ length: SEGS + 1 }, () => new THREE.Vector3());
-    // Damage arc: same ribbon machinery at the core color — a second,
-    // jaggier bolt riding the main shaft while the tip bites
-    this.arc = mkRibbon(tint?.core ?? 0xeaf6ff, 0.9);
-    this.arc.visible = false;
-    this.arcPts = Array.from({ length: SEGS + 1 }, () => new THREE.Vector3());
-    this.group.add(this.glow, this.core, this.chainCore, this.arc);
-
-    // Contact glow — bright ball pinned at the hit point
-    const glowTex = LightningBeam.makeGlowTexture();
-    this.hitGlow = new THREE.Sprite(new THREE.SpriteMaterial({
-      map: glowTex, color: tint?.hit ?? 0xaaddff, transparent: true, opacity: 0.9,
-      blending: THREE.AdditiveBlending, depthWrite: false,
-    }));
-    this.hitGlow.scale.setScalar(2.2);
-    this.group.add(this.hitGlow);
-
-    // Spark fountain — plain Points, respawned at the contact while firing
-    this.sparkPos = new Float32Array(SPARKS * 3);
-    this.sparkVel = new Float32Array(SPARKS * 3);
-    this.sparkAge = new Float32Array(SPARKS);
-    const sGeo = new THREE.BufferGeometry();
-    sGeo.setAttribute('position', new THREE.BufferAttribute(this.sparkPos, 3));
-    // Per-spark color jitter — white core to deep blue edge, no two alike
-    const sCol = new Float32Array(SPARKS * 3);
-    const sparkTop = new THREE.Color(tint?.sparkTop ?? 0xffffff);
-    for (let i = 0; i < SPARKS; i++) {
-      const t = Math.random();
-      if (tint) {
-        sCol[i * 3] = sparkTop.r * (0.55 + t * 0.45);
-        sCol[i * 3 + 1] = sparkTop.g * (0.75 + t * 0.25);
-        sCol[i * 3 + 2] = sparkTop.b;
-      } else {
-        sCol[i * 3] = 0.55 + t * 0.45;
-        sCol[i * 3 + 1] = 0.75 + t * 0.25;
-        sCol[i * 3 + 2] = 1.0;
-      }
-    }
-    sGeo.setAttribute('color', new THREE.BufferAttribute(sCol, 3));
-    this.sparkPoints = new THREE.Points(sGeo, new THREE.PointsMaterial({
-      map: glowTex,           // soft radial blob — kills the square-quad look
-      vertexColors: true,
-      size: 0.55, transparent: true, opacity: 0.9,
-      blending: THREE.AdditiveBlending, depthWrite: false, sizeAttenuation: true,
-    }));
-    this.sparkPoints.frustumCulled = false;
-    this.group.add(this.sparkPoints);
-
-    this.group.visible = false;
-    scene.add(this.group);
+    buildBeam(this, scene, tint);
   }
 
   private static _glowTex: THREE.Texture | null = null;
-  private static makeGlowTexture(): THREE.Texture {
+  static makeGlowTexture(): THREE.Texture {
     if (this._glowTex) return this._glowTex;
     const c = document.createElement('canvas');
     c.width = c.height = 64;
