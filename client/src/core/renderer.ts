@@ -269,8 +269,8 @@ function makeComposer(renderer: THREE.WebGLRenderer, scene: THREE.Scene,
     postproEnabled: boolean, pixelMode: number) {
   const bloomEffect = new BloomEffect({
     mipmapBlur: true,
-    luminanceThreshold: 0.9,
-    intensity: 1.5,
+    luminanceThreshold: 1.0,
+    intensity: 1.3,
     radius: 0.6,
   });
 
@@ -290,18 +290,22 @@ function makeComposer(renderer: THREE.WebGLRenderer, scene: THREE.Scene,
   });
   composer.addPass(new RenderPass(scene, camera));
 
-  const acesPass = new EffectPass(camera, acesGradeEffect);
-  composer.addPass(acesPass);
-
+  // Bloom reads the raw HDR frame — additive emitters (trails, explosions,
+  // nuggets, the sun disc) are the only pixels over 1.0 luminance, so the
+  // threshold IS the selectivity. After ACES everything is clamped to ≤1
+  // and thresholding catches bright sky — that ordering was the
+  // "bloom destroyed the mood" bug.
   const bloomMergePass = new EffectPass(camera, bloomEffect);
   composer.addPass(bloomMergePass);
+
+  const acesPass = new EffectPass(camera, acesGradeEffect);
+  composer.addPass(acesPass);
 
   const contrastPass = new EffectPass(camera, new BrightnessContrastEffect({ contrast: 0.06 }));
   composer.addPass(contrastPass);
 
   // acesPass re-grades the RenderPass output so the composer chain sees
-  // the same post-ACES values a direct canvas render produces — bloom
-  // thresholds behave identically either way.
+  // the same post-ACES values a direct canvas render produces.
 
   // Pixelated mode: scene renders at 1/PIXEL_SCALE into the composer buffer,
   // then this pass upscales to the full-res canvas with edge-aware blending.
