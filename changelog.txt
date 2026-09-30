@@ -1,3 +1,4 @@
+2026-09-26 - Split net/players.ts: kill wire + victim gib -> net/playerKill.ts (366->262)
 2026-09-26 - Split CreatureSim.ts: spawn/target snapshot family -> creatureSpawn.ts (349->250)
 2026-09-26 - Split ServerBots.ts: legal-input move drive (driveMove/commitMoveInput/legacyMove) -> botDrive.ts (361->292)
 2026-09-26 - Split combat.ts: projectile update family (explosion processing, bolt intercept, sticky chain, slam) -> combat/projectiles.ts (379->158)
