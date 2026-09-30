@@ -4,6 +4,11 @@ import type { Terrain } from '../world/terrain.js';
 import { EYE_OFFSET } from '../core/config.js';
 import { pickLocomotionAnim } from './locomotionAnim.js';
 import type { AnimationState, PlayerModel } from './PlayerModel.js';
+import { BallTrailDots } from './ballTrails.js';
+import { UNGRADE_GLSL } from '../core/gradeGlsl.js';
+
+const _airP = new THREE.Vector3();
+const _airTint = new THREE.Color(0.75, 0.85, 1.0);
 
 /**
  * First-person presentation for Player: camera follow + terrain clamp, shadow
@@ -16,8 +21,11 @@ export class PlayerVisuals {
   private shadowBlob: THREE.Mesh;
   private groundGizmo: THREE.Mesh;
   private groundGizmoGhost: THREE.Mesh;
+  // Same faint air trail remotes get — your own arc is only readable in
+  // third person, so emission gates on that flag (dots spawn behind you).
+  private airTrail: BallTrailDots | null = null;
 
-  constructor(scene: THREE.Scene) {
+  constructor(private scene: THREE.Scene) {
     // Shadow blob — a small grid conforming to the terrain, not a flat
     // circle: on slopes a flat disc buries its uphill half inside the hill
     // and depthTest clips it. Vertices are displaced per-frame in
@@ -39,10 +47,13 @@ export class PlayerVisuals {
         uniform vec3 color;
         uniform float opacity;
         varying vec2 vUv;
+        ${UNGRADE_GLSL}
         void main() {
           float dist = distance(vUv, vec2(0.5));
           float alpha = smoothstep(0.5, 0.2, dist) * opacity;
-          gl_FragColor = vec4(color, alpha);
+          gl_FragColor = vec4(ungradeColor(color), alpha);
+          #include <tonemapping_fragment>
+          #include <colorspace_fragment>
         }
       `,
       transparent: true,
@@ -68,8 +79,10 @@ export class PlayerVisuals {
     this.groundGizmo.renderOrder = 999;
     scene.add(this.groundGizmo);
     // Ghost pass: draws only where terrain occludes the ring (GreaterDepth) —
-    // on slopes the buried arc shows through dimmed instead of vanishing
-    const ghostMat = new THREE.MeshBasicMaterial({ color: 0x66ffcc, transparent: true, opacity: 0.18, side: THREE.DoubleSide, depthWrite: false, depthFunc: THREE.GreaterDepth });
+    // on slopes the buried arc shows through dimmed instead of vanishing.
+    // Kept very faint: behind a real ridge the whole ring would paint over
+    // the terrain (same failure the TerrainRing ghost had at 0.35).
+    const ghostMat = new THREE.MeshBasicMaterial({ color: 0x66ffcc, transparent: true, opacity: 0.08, side: THREE.DoubleSide, depthWrite: false, depthFunc: THREE.GreaterDepth });
     this.groundGizmoGhost = new THREE.Mesh(gizmoGeo, ghostMat);
     this.groundGizmoGhost.rotation.x = -Math.PI / 2;
     this.groundGizmoGhost.renderOrder = 998;
@@ -210,10 +223,20 @@ export class PlayerVisuals {
   private airT = 0;
   private lastShootT = 0;
 
-  updateModelAnim(model: PlayerModel | null, pos: THREE.Vector3, ...rest: [yaw: number, pitch: number, jumpAnimTimer: number, speed: number, dt: number, onGround: boolean, jetting?: boolean, vel?: THREE.Vector3, skiing?: boolean, shootT?: number]): number {
-    const [yaw, pitch, jumpAnimTimer0, speed, dt, onGround, jetting = false, vel, skiing, shootT = 0] = rest;
+  /** Faint innate air trail — the same arc read remotes get; gated to third person since your own dots would just bloom behind the camera. */
+  private tickAirTrail(dt: number, pos: THREE.Vector3, vel: THREE.Vector3 | undefined, emit: boolean): void {
+    if (emit) {
+      if (!this.airTrail) this.airTrail = new BallTrailDots(this.scene, { opacity: 0.32, sizeMul: 0.45, interval: 0.05, maxDots: 18 });
+      _airP.copy(pos); _airP.y -= 0.7;
+      this.airTrail.emit(dt, _airP, vel ?? _airP, 0.4, _airTint);
+    }
+    this.airTrail?.fade(dt);
+  }
+
+  updateModelAnim(model: PlayerModel | null, pos: THREE.Vector3, ...rest: [yaw: number, pitch: number, jumpAnimTimer: number, speed: number, dt: number, onGround: boolean, jetting?: boolean, vel?: THREE.Vector3, skiing?: boolean, shootT?: number, thirdPerson?: boolean]): number {
+    const [yaw, pitch, jumpAnimTimer0, speed, dt, onGround, jetting = false, vel, skiing, shootT = 0, thirdPerson = false] = rest;
     let jumpAnimTimer = jumpAnimTimer0;
-    if (!model) return jumpAnimTimer;
+    if (!model) { this.tickAirTrail(dt, pos, undefined, false); return jumpAnimTimer; }
     if (jumpAnimTimer > 0) {
       jumpAnimTimer = Math.max(0, jumpAnimTimer - dt);
     }
@@ -225,27 +248,40 @@ export class PlayerVisuals {
     // speed ("sliding while walking"). Only real airtime poses as jump.
     this.airT = onGround ? 0 : this.airT + dt;
     const airborne = this.airT > 0.12 || (!onGround && jumpAnimTimer > 0);
+    this.tickAirTrail(dt, pos, vel, thirdPerson && airborne && speed > 6);
     // Firing snaps the body into the armed pose — if the gun was down for
     // ANY reason (belt lower, flinch, holster), a trigger pull is the
     // moment it must read as aimed. Airborne keeps the jump/jet pose;
     // the arm-layer aims up there regardless.
     const animState: AnimationState = airborne
       ? (jetting ? 'jet' : 'jump')
-      : shootT > 0
+      // The mannequin's fire feedback is the procedural recoil + muzzle
+      // flash (model.fire) under the always-on aim layer — the Pistol_Shoot
+      // clip only flickers the arms off-aim, so it never owns the state.
+      : shootT > 0 && model.variant !== 'mannequin'
         ? 'shoot'
         : pickLocomotionAnim(model['currentState'] as AnimationState, speed, skiing);
-    // Auto-fire re-arms shootT while 'shoot' still owns the state —
-    // force replays the clip from its aimed frame each pull, else only
-    // the first shot of a held trigger animates.
-    if (animState === 'shoot' && shootT > this.lastShootT) model.forceAnimationState('shoot');
-    else model.setAnimationState(animState);
-    this.lastShootT = shootT;
+    // Each fresh trigger pull (shootT rising) kicks the gun — the recoil/
+    // flash runs for EVERY shot including the local third-person model,
+    // which previously got no fire feedback at all.
+    this.applyShootKick(model, animState, shootT);
     this.applyLocomotionLean(model, animState, yaw, speed, vel, jetting);
     // pos is eye height — the model plants its feet 1.8m below
     model.setPosition(pos.x, pos.y - EYE_OFFSET, pos.z);
     model.setRotation(yaw, pitch);
     model.update(dt);
     return jumpAnimTimer;
+  }
+
+  private applyShootKick(model: PlayerModel, animState: AnimationState, shootT: number): void {
+    if (shootT > this.lastShootT) {
+      model.fire();
+      if (animState === 'shoot') model.forceAnimationState('shoot');
+      else model.setAnimationState(animState);
+    } else {
+      model.setAnimationState(animState);
+    }
+    this.lastShootT = shootT;
   }
 
   /** Backpedal clip flip + jet tilt/strafe roll. vel is real velocity,
@@ -257,7 +293,10 @@ export class PlayerVisuals {
       fwd = vel.x * sin + vel.z * cos;
       side = vel.x * cos - vel.z * sin;
     }
-    model.setLocomotionReversed(
+    // Dedicated 8-dir clips when the KevDev bake landed — otherwise the
+    // reverse-playback backpedal trick covers backward motion.
+    const dedicated = model.setLocomotionVector(fwd, side);
+    if (!dedicated) model.setLocomotionReversed(
       (animState === 'walk' || animState === 'run') && fwd < -0.6 * speed && -fwd > Math.abs(side));
     // Same directional jet tilt remotes get — your own body is visible
     // in third-person, so it should lean into the thrust too. Grounded
@@ -268,7 +307,7 @@ export class PlayerVisuals {
         Math.max(-0.45, Math.min(0.45, fwd * 0.022)),
         Math.max(-0.4, Math.min(0.4, -side * 0.02)));
     } else {
-      const strafing = Math.abs(side) > 0.6 * speed && Math.abs(side) > Math.abs(fwd) * 0.8;
+      const strafing = !dedicated && Math.abs(side) > 0.6 * speed && Math.abs(side) > Math.abs(fwd) * 0.8;
       model.setBodyLean(0, strafing ? Math.max(-0.3, Math.min(0.3, -side * 0.02)) : 0);
     }
   }

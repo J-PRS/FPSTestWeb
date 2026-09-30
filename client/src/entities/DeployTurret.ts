@@ -14,6 +14,8 @@ import type { Terrain } from '../world/terrain.js';
 
 const RANGE = 42;           // acquire envelope
 const FIRE_INTERVAL = 1.25; // mini-rockets: heavier shots, longer beat
+const TURN_RATE = 2.6;      // rad/s traverse — a real slew, not a snap
+const AIM_TOL = 0.18;       // must be on-target within this to fire
 const MUZZLE = new THREE.Vector3(0, 0.05, 0.95); // local to head pivot — tube mouth
 
 const _v = new THREE.Vector3();
@@ -48,6 +50,9 @@ export class DeployTurret {
 
   readonly group = new THREE.Group();
   private head = new THREE.Group();
+  private tubes: THREE.Mesh[] = [];
+  private tubeKick = [0, 0];   // per-tube recoil spring — alternate tubes per shot
+  private nextTube = 0;
   private flash: THREE.Sprite;
   private flashT = 0;
   private fireCd = 0.6 + Math.random() * 0.4; // stagger multi-turret volleys
@@ -78,6 +83,7 @@ export class DeployTurret {
     const tubeR = new THREE.Mesh(_geoTube, _dark);
     tubeR.rotation.x = Math.PI / 2;
     tubeR.position.set(0.14, 0.08, 0.55);
+    this.tubes = [tubeL, tubeR];
     const eye = new THREE.Mesh(_geoEye, _glow);
     eye.position.set(0, 0.3, 0.3);
     this.head.add(dome, pod, tubeL, tubeR, eye);
@@ -108,6 +114,18 @@ export class DeployTurret {
     if (this.unfoldT < 1) { this.tickUnfold(dt); return null; } // still assembling
     this.flashT -= dt;
     this.flash.material.opacity = Math.max(0, this.flashT / 0.09);
+    // Barrel recoil: each fired tube slides back AND shortens — the tail
+    // must stay inside the pod housing (a knock-back that pokes through
+    // the rear face reads as a bug, not a cannon). z-slide gives the
+    // shove; y-scale (barrel axis, mesh rotated to +Z) hides the tail.
+    for (let i = 0; i < 2; i++) {
+      const k = this.tubeKick[i]!;
+      if (k <= 0.001) continue;
+      this.tubeKick[i] = k * Math.exp(-dt * 10);
+      const tube = this.tubes[i]!;
+      tube.position.z = 0.55 - k * 0.10;
+      tube.scale.y = 1 - k * 0.22; // tail = z − 0.55·scaleY ≥ pod rear −0.06
+    }
 
     let best: (typeof enemies)[0] | null = null;
     let bestD2 = RANGE * RANGE;
@@ -117,25 +135,18 @@ export class DeployTurret {
       if (d2 < bestD2) { bestD2 = d2; best = e; }
     }
 
-    if (best) {
-      _aim.copy(best.pos).sub(this.pos);
-      const yaw = Math.atan2(_aim.x, _aim.z);
-      // Slew the head — a snapped turret reads as a debug helper
-      const cur = this.head.rotation.y;
-      let dy = yaw - cur;
-      while (dy > Math.PI) dy -= Math.PI * 2;
-      while (dy < -Math.PI) dy += Math.PI * 2;
-      this.head.rotation.y = cur + dy * Math.min(1, dt * 10);
-      this.head.rotation.x = THREE.MathUtils.clamp(-Math.atan2(_aim.y, Math.hypot(_aim.x, _aim.z)), -0.9, 0.5);
-    } else {
-      this.head.rotation.y = (this.idleSpin += dt * 0.6); // scanning sweep
-      this.head.rotation.x *= 1 - Math.min(1, dt * 4);
-    }
+    // Rate-limited traverse — see slewTo for the rule. Only fires when
+    // the head is actually on target: a fast jinker earns real dodge time.
+    const aimed = best ? this.slewTo(best.pos, dt) : (this.scan(dt), false);
 
     this.fireCd -= dt;
-    if (!best || this.fireCd > 0) return null;
+    // No firing off-bore: a fast jinker earns real dodge time while the
+    // head traverses. The cooldown keeps ticking so it's ready on target.
+    if (!best || !aimed || this.fireCd > 0) return null;
     this.fireCd = FIRE_INTERVAL;
     this.flashT = 0.09;
+    this.tubeKick[this.nextTube] = 1;
+    this.nextTube ^= 1; // volleys alternate tubes
 
     // Launch point: the tube mouth in world space. MUZZLE is local to the
     // head pivot — go through its world matrix so the +1.4 mast height and
@@ -145,6 +156,29 @@ export class DeployTurret {
     this.head.updateWorldMatrix(true, false);
     const muzzle = _v.copy(MUZZLE).applyMatrix4(this.head.matrixWorld).clone();
     return { muzzle, target: best };
+  }
+
+  /** Slew the head toward `pos` at TURN_RATE — a snapped sentry reads as
+   *  a debug helper and gives the target no dodge window. Returns true
+   *  when the head is within AIM_TOL of the bearing (fire gate). */
+  private slewTo(pos: THREE.Vector3, dt: number): boolean {
+    _aim.copy(pos).sub(this.pos);
+    const yaw = Math.atan2(_aim.x, _aim.z);
+    let dy = yaw - this.head.rotation.y;
+    while (dy > Math.PI) dy -= Math.PI * 2;
+    while (dy < -Math.PI) dy += Math.PI * 2;
+    const step = TURN_RATE * dt;
+    this.head.rotation.y += Math.abs(dy) <= step ? dy : Math.sign(dy) * step;
+    const pitch = THREE.MathUtils.clamp(-Math.atan2(_aim.y, Math.hypot(_aim.x, _aim.z)), -0.9, 0.5);
+    const dp = pitch - this.head.rotation.x;
+    this.head.rotation.x += Math.abs(dp) <= step ? dp : Math.sign(dp) * step;
+    return Math.abs(dy) <= AIM_TOL && Math.abs(dp) <= AIM_TOL;
+  }
+
+  /** No target: idle scanning sweep, pitch drifting back to level. */
+  private scan(dt: number): void {
+    this.head.rotation.y = (this.idleSpin += dt * 0.6);
+    this.head.rotation.x *= 1 - Math.min(1, dt * 4);
   }
 
   /** Advance the unfold anim. The throw pod drives this while airborne so

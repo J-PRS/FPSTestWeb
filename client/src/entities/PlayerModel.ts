@@ -25,6 +25,14 @@ const _leanB = new THREE.Vector3();
 const _dampA = new THREE.Quaternion();
 const _dampB = new THREE.Quaternion();
 
+// 8-way facing-frame direction. atan2(side, fwd): 0=F, +90°=R, ±180°=B.
+type LocoDir = 'F' | 'FR' | 'R' | 'BR' | 'B' | 'BL' | 'L' | 'FL';
+const DIR8: LocoDir[] = ['F', 'FR', 'R', 'BR', 'B', 'BL', 'L', 'FL'];
+const DIR_SUFFIX: Record<LocoDir, string> = {
+  F: 'Forward', FR: 'ForwardRight', R: 'Right', BR: 'BackwardRight',
+  B: 'Backward', BL: 'BackwardLeft', L: 'Left', FL: 'ForwardLeft',
+};
+
 // Locomotion clip surgery — mannequin/knight rigs carry authored root
 // motion and full-body tracks our layered system has to carve up.
 
@@ -40,52 +48,15 @@ function stripHipXZ(clip: THREE.AnimationClip): void {
   }
 }
 
-/** Halve torso-chain sway: full-run spine roll carries the aimed arms
+/** Dampen torso-chain sway: full-run spine roll carries the aimed arms
  *  with it and reads as the CoD sprint wade — waving the gun side to
- *  side. Each quaternion key slerps halfway to the track's baseline, so
- *  the bob timing and stride direction survive at half amplitude.
- *  Position tracks (hip bob) are untouched. */
-const SWAY_BONES = new Set([
-  'defhips', 'defspine001', 'defspine002', 'defspine003', 'defneck', 'defhead',
-]);
-function dampenSway(clip: THREE.AnimationClip): void {
-  for (const tr of clip.tracks) {
-    if (!tr.name.endsWith('.quaternion')) continue;
-    const node = normBone(tr.name.slice(0, tr.name.indexOf('.')));
-    if (!SWAY_BONES.has(node)) continue;
-    const v = tr.values;
-    _dampA.set(v[0], v[1], v[2], v[3]);
-    for (let i = 4; i < v.length; i += 4) {
-      _dampB.set(v[i], v[i + 1], v[i + 2], v[i + 3]);
-      _dampB.slerp(_dampA, 0.5);
-      v[i] = _dampB.x; v[i + 1] = _dampB.y; v[i + 2] = _dampB.z; v[i + 3] = _dampB.w;
-    }
-  }
-}
-// Jet-lean pivot: the pack thrusts from the sternum, so the body tilts
-// about that point and the legs swing — feet-pivot lean reads as a
-// cardboard cutout tipping over.
-const LEAN_PIVOT_Y = 1.3;
-
-/** Pin hip/root XZ translation to the clip's first key — the entity owns
- *  world position, so loop-clipped hip drift would slide the mesh out
- *  from under the hitbox each cycle. */
-function stripHipXZ(clip: THREE.AnimationClip): void {
-  for (const tr of clip.tracks) {
-    if (!tr.name.endsWith('.position')) continue;
-    const node = normBone(tr.name.slice(0, tr.name.indexOf('.')));
-    if (node !== 'defhips' && node !== 'root' && node !== 'hips' && node !== 'bone') continue;
-    const v = tr.values;
-    for (let i = 3; i < v.length; i += 3) { v[i] = v[0]; v[i + 2] = v[2]; }
-  }
-}
-
-/** Dampen torso/head ROTATION (not removal): full-run spine roll carries
- *  the aimed arms with it and reads as sprint-sway — the gun waves side
- *  to side. Slerping each key halfway to the track baseline halves the
- *  wade while hips still bob and legs still stride, so the run doesn't
- *  freeze into "sliding" either. */
-function dampenSway(clip: THREE.AnimationClip): void {
+ *  side. Each quaternion key slerps `amt` toward the track's baseline,
+ *  so the bob timing and stride direction survive at reduced amplitude.
+ *  Directional clips get the stronger damp — the kevdev strafes author
+ *  a ~90° spine twist toward travel, which drags the aimed muzzle
+ *  off-bore; ~0.8 leaves a readable lean into the step. Position tracks
+ *  (hip bob) are untouched. */
+function dampenSway(clip: THREE.AnimationClip, amt = 0.5): void {
   for (const tr of clip.tracks) {
     if (!tr.name.endsWith('.quaternion')) continue;
     const node = normBone(tr.name.slice(0, tr.name.indexOf('.')));
@@ -94,11 +65,15 @@ function dampenSway(clip: THREE.AnimationClip): void {
     _dampA.set(v[0], v[1], v[2], v[3]);
     for (let i = 4; i < v.length; i += 4) {
       _dampB.set(v[i], v[i + 1], v[i + 2], v[i + 3]);
-      _dampB.slerp(_dampA, 0.5);
+      _dampB.slerp(_dampA, amt);
       v[i] = _dampB.x; v[i + 1] = _dampB.y; v[i + 2] = _dampB.z; v[i + 3] = _dampB.w;
     }
   }
 }
+// Jet-lean pivot: the pack thrusts from the sternum, so the body tilts
+// about that point and the legs swing — feet-pivot lean reads as a
+// cardboard cutout tipping over.
+const LEAN_PIVOT_Y = 1.3;
 
 export type { AnimationState } from './playerClips.js';
 import { ANIM_NAMES, KNIGHT_ANIMS, ONESHOT_CLIPS,
@@ -127,12 +102,30 @@ export class PlayerModel {
   private _queuedAnim: string | null = null;
   private currentAction: THREE.AnimationAction | null = null;
   private currentState: AnimationState = 'idle';
+  // Facing-frame locomotion direction, quantized to 8 sectors — feeds the
+  // KevDev directional clip table when state is 'walk'/'run'.
+  private locoDir: LocoDir = 'F';
+  /** True while a dedicated directional clip drives the current action —
+   *  callers skip the reverse-playback/strafe-lean fallbacks then. */
+  dirClipActive = false;
   private colliderGizmo: THREE.Mesh | null = null;
   // Aim-pitch bones: quaternion pitch stacked on top of the animated pose.
   // lastPitch is un-applied before the mixer runs so it never accumulates
   // (the mixer skips bones whose track value didn't change).
   private aimBones: { bone: THREE.Object3D; factor: number; last: THREE.Quaternion }[] = [];
   private aimPitch = 0;
+  // Weapon-swap dip — mirrors the first-person viewmodel's lower→raise:
+  // the held gun drops toward the hip and the muzzle tips down, then the
+  // "new" weapon comes back up. Purely cosmetic on the body model (the
+  // prop gun doesn't change), but the motion is the readable swap tell.
+  private swapT = -1;
+  private throwT = -1;
+  private punchT = -1;
+  private landT = -1;
+  private landAmp = 0;
+  private landE = 0;
+  private gunUnit = 1; // 1 world meter in bone-space units (1/ws.x)
+  private gunBaseY = 0;
   // Whole-body jet lean: targets set by the owner (RemotePlayer,
   // PlayerVisuals) from velocity-in-facing-frame; damped toward them in
   // update() so the tilt eases in/out instead of snapping per frame.
@@ -309,11 +302,11 @@ export class PlayerModel {
     // clip. Cached globally so only the first model pays the bake.
     // The mannequin binds UAL clips natively and the knight ships
     // its own set — neither pays a retarget pass.
-    // Robot-only: its UAL2 retarget reads clean. The mannequin tried
-    // the same bake — UE bone-axis conventions (X-along-bone vs the
-    // Rigify Y-along) bake a face-down slide; its Crouch_Fwd tuck
-    // reads better, so it skips the pass. Knight is native-only.
-    if (!mann && !knight) this.retargetUAL();
+    // Robot bakes the full UAL set; the mannequin bakes the KevDev
+    // directional locomotion only (its UAL clips ship natively — the
+    // variants filter in playerUal skips the artifact-prone UAL2 pass).
+    // Knight is native-only.
+    if (!knight) this.retargetUAL();
 
     this.scene.add(this.model);
     logger.debug('MODEL ADDED to scene', { children: this.scene.children.length });
@@ -415,7 +408,9 @@ export class PlayerModel {
     this.gun.scale.setScalar(0.7 / ws.x); // ~0.7m gun in world space
     this.gunBaseZ = 0.05 / ws.x;
     this.gunKickZ = 0.15 / ws.x; // recoil distance in bone units
-    this.gun.position.set(0, 0.05 / ws.x, this.gunBaseZ);
+    this.gunUnit = 1 / ws.x;
+    this.gunBaseY = 0.05 * this.gunUnit;
+    this.gun.position.set(0, this.gunBaseY, this.gunBaseZ);
     // Robot palm bones: barrel forward = local -Z flipped by π yaw.
     // UAL hand bones (measured via gun-math probe under the live aim
     // pose): barrel -X on plain yaw is the sideways look. X-90 sends the
@@ -483,7 +478,7 @@ export class PlayerModel {
     if (!this.aimNeutral) logger.debug('Aim layer unavailable — no Pistol_Aim clips');
   }
 
-  playAnimation(name: string): void {
+  playAnimation(name: string, startPhase = 0): void {
     if (!this._loaded) { this._queuedAnim = name; return; }
     const action = this.animations.get(name);
     if (!action) {
@@ -509,6 +504,9 @@ export class PlayerModel {
     // frame and crossfade fast so the snap reads as recoil, not a draw.
     const isShoot = name === 'Pistol_Shoot' || name === 'UAL_Pistol_Shoot';
     if (isShoot) action.time = 0.18;
+    // Direction flip mid-stride: enter the new clip at the previous clip's
+    // cycle phase so the footfall doesn't restart mid-step.
+    else if (startPhase > 0) action.time = startPhase * action.getClip().duration;
     action.fadeIn(isShoot ? 0.06 : 0.2);
     action.timeScale = 1;
     // Death: play once, clamp the corpse.
@@ -537,10 +535,36 @@ export class PlayerModel {
     this.playingUAL = name.startsWith('UAL_');
   }
 
-  // Locomotion direction: no dedicated backpedal clips exist, so
-  // backward movement runs the walk/run clip in reverse (the UE
-  // "Rate Scale -1" blendspace trick — the footstep phase flips too,
-  // which is exactly what kills the moonwalk look).
+  /** Facing-frame velocity → 8-way dir; when the KevDev directional clips
+   *  baked, walk/run re-resolves onto the matching stride (phase carried
+   *  over so the footfall doesn't pop). Returns true while a dedicated
+   *  clip drives the motion — callers drop the reverse/lean fallbacks. */
+  setLocomotionVector(fwd: number, side: number): boolean {
+    const dir = DIR8[((Math.round(Math.atan2(side, fwd) / (Math.PI / 4)) % 8) + 8) % 8];
+    if (dir !== this.locoDir) {
+      this.locoDir = dir;
+      if (this.currentState === 'walk' || this.currentState === 'run')
+        this.forceAnimationState(this.currentState, true);
+    }
+    return this.dirClipActive;
+  }
+
+  /** The KevDev clip for the current dir+state, or null when the sector
+   *  has no dedicated stride (forward keeps the UAL jog/sprint, and a
+   *  missing bake falls back to the reverse/lean tricks). */
+  private directionalClip(state: 'walk' | 'run'): string | null {
+    if (this.locoDir === 'F') return null;
+    // The Sprint set only covers the forward hemisphere — back-half
+    // run sectors ride the Run clips.
+    const fwdHemi = this.locoDir === 'FL' || this.locoDir === 'FR' || this.locoDir === 'L' || this.locoDir === 'R';
+    const set = state === 'run' ? (fwdHemi ? 'Sprint01' : 'Run01') : 'Walk01';
+    const name = 'UAL_' + set + '_' + DIR_SUFFIX[this.locoDir];
+    return this.animations.has(name) ? name : null;
+  }
+
+  // Locomotion direction: sectors without a dedicated clip run the
+  // walk/run clip in reverse (the UE "Rate Scale -1" blendspace trick —
+  // the footstep phase flips too, which is what kills the moonwalk look).
   setLocomotionReversed(rev: boolean): void {
     const a = this.currentAction;
     if (!a) return;
@@ -560,12 +584,25 @@ export class PlayerModel {
     this.forceAnimationState(state);
   }
 
-  // Force animation switch without checking current state (for hysteresis)
-  forceAnimationState(state: AnimationState): void {
+  // Force animation switch without checking current state (for hysteresis).
+  // keepPhase carries the outgoing clip's cycle position into the new one —
+  // used when a locomotion direction flip re-resolves walk/run mid-stride.
+  forceAnimationState(state: AnimationState, keepPhase = false): void {
+    const prev = this.currentAction;
+    const phase = keepPhase && prev ? prev.time / Math.max(prev.getClip().duration, 1e-6) : 0;
     this.currentState = state;
+    this.dirClipActive = false;
     if (this.variant === 'knight') {
       this.playAnimation(KNIGHT_ANIMS[state]);
       return;
+    }
+    if (state === 'walk' || state === 'run') {
+      const dirClip = this.directionalClip(state);
+      if (dirClip) {
+        this.dirClipActive = true;
+        this.playAnimation(dirClip, phase);
+        return;
+      }
     }
     const [ual, fallback] = ANIM_NAMES[state];
     if (this.variant === 'mannequin') {
@@ -598,6 +635,17 @@ export class PlayerModel {
     bakeUALClips(this.model, this.variant).then(baked => {
       if (this._disposed || !this.mixer || !this.model) return;
       for (const [name, clip] of baked) {
+        // Baked clips arrive full-body — the mannequin's arm tracks must
+        // yield to the aim layer and its hip XZ to the entity, same as
+        // its native clips get at registerClip.
+        if (this.variant === 'mannequin') {
+          stripHipXZ(clip);
+          if (PlayerModel.isLayeredClip(name)) {
+            clip.tracks = clip.tracks.filter(t =>
+              !PlayerModel.AIM_BONE_MASK.has(normBone(t.name.slice(0, t.name.indexOf('.')))));
+            dampenSway(clip);
+          }
+        }
         this.animations.set(name, this.mixer.clipAction(clip));
       }
       // Re-resolve the current state onto the better clip if one landed.
@@ -672,12 +720,81 @@ export class PlayerModel {
 
   // Recoil: exponential decay kick on the gun (position + muzzle flip);
   // muzzle flash is a ~90ms pop decaying on the same curve.
+  /** Third-person weapon swap — the same lower→switch→raise the
+   *  viewmodel plays (its timings: 0.12s down, 0.16s up). The prop gun
+   *  doesn't actually change; the dip IS the swap read. */
+  weaponSwap(): void {
+    if (this.gun) { this.swapT = 0; this.throwT = -1; this.punchT = -1; }
+  }
+
+  /** Belt throw — same beat as the viewmodel's THROW_DIP: gun down and
+   *  rolled outward while the off hand releases, then back to ready. */
+  weaponThrow(): void {
+    if (this.gun) { this.throwT = 0; this.swapT = -1; this.punchT = -1; }
+  }
+
+  /** Melee — butt-stroke sweep: the gun shoves forward-right with a hard
+   *  roll, mirroring the viewmodel's punch arc. */
+  weaponPunch(): void {
+    if (this.gun) { this.punchT = 0; this.swapT = -1; this.throwT = -1; }
+  }
+
+  /** Landing compress — a quick forward pitch scaled by impact speed,
+   *  stacked inside the lean write (jet lean keeps working on top). */
+  landPulse(impactSpeed: number): void {
+    if (impactSpeed < 6) return; // stepping off a ledge isn't a landing
+    this.landAmp = Math.min(1, impactSpeed / 30);
+    this.landT = 0;
+  }
+
   private tickGunFx(dt: number): void {
-    if (this.gun && this.recoil > 0) {
-      this.recoil = Math.max(0, this.recoil - dt * 7);
+    // Swap dip phase: 0→1 lowers, the hold flips, then raises back.
+    let swapDip = 0;
+    if (this.swapT >= 0) {
+      this.swapT += dt;
+      const t = this.swapT;
+      if (t < 0.12) swapDip = t / 0.12;
+      else swapDip = Math.max(0, 1 - (t - 0.12) / 0.16);
+      if (swapDip <= 0 && t > 0.12) this.swapT = -1;
+    }
+    // Belt throw: 0.14s down, 0.12s held through the release, 0.26s up.
+    let throwE = 0;
+    if (this.throwT >= 0) {
+      this.throwT += dt;
+      const t = this.throwT;
+      if (t < 0.14) throwE = t / 0.14;
+      else if (t < 0.26) throwE = 1;
+      else throwE = Math.max(0, 1 - (t - 0.26) / 0.26);
+      if (throwE <= 0 && t > 0.26) this.throwT = -1;
+    }
+    // Melee punch: fast in, short hold, slow settle (viewmodel's 0.09/0.08/0.32).
+    let punchE = 0;
+    if (this.punchT >= 0) {
+      this.punchT += dt;
+      const t = this.punchT;
+      if (t < 0.09) punchE = t / 0.09;
+      else if (t < 0.17) punchE = 1;
+      else punchE = Math.max(0, 1 - (t - 0.17) / 0.32);
+      if (punchE <= 0 && t > 0.17) this.punchT = -1;
+    }
+    // Landing: sharp compress then a slower settle — read in tickJetLean.
+    this.landE = 0;
+    if (this.landT >= 0) {
+      this.landT += dt;
+      const t = this.landT;
+      this.landE = (t < 0.07 ? t / 0.07 : Math.max(0, 1 - (t - 0.07) / 0.32)) * this.landAmp;
+      if (this.landE <= 0 && t > 0.07) this.landT = -1;
+    }
+    if (this.recoil > 0) this.recoil = Math.max(0, this.recoil - dt * 7);
+    if (this.gun) {
       const k = this.recoil * this.recoil; // snappy attack, soft release
-      this.gun.position.z = this.gunBaseZ - k * this.gunKickZ;
-      this.gun.rotation.x = this.gunBaseX - k * 0.45;
+      // All prop motions compose into one transform: swap dips down,
+      // throw drops + rolls out, punch shoves forward-right.
+      this.gun.position.x = punchE * 0.18 * this.gunUnit;
+      this.gun.position.y = this.gunBaseY - (swapDip * 0.3 + throwE * 0.25 + punchE * 0.15) * this.gunUnit;
+      this.gun.position.z = this.gunBaseZ - k * this.gunKickZ + (swapDip * 0.1 + throwE * 0.08 + punchE * 0.3) * this.gunUnit;
+      this.gun.rotation.x = this.gunBaseX - k * 0.45 + swapDip * 0.6 + throwE * 0.35 + punchE * 0.25;
+      this.gun.rotation.z = throwE * 0.45 + punchE * 0.5;
     }
     if (this.muzzleFlash && this.flashTTL > 0) {
       this.flashTTL = Math.max(0, this.flashTTL - dt);
@@ -694,19 +811,22 @@ export class PlayerModel {
   // so rotation.z is rebuilt here from lastRoll + lean — never read
   // the euler back, or the lean would double-apply.
   private tickJetLean(dt: number): void {
-    if (!this.model || (this.leanPT === 0 && this.leanRT === 0 && this.leanP === 0 && this.leanR === 0)) return;
+    if (!this.model || (this.leanPT === 0 && this.leanRT === 0 && this.leanP === 0 && this.leanR === 0 && this.landE === 0)) return;
     const k = 1 - Math.exp(-dt * 7);
     this.leanP += (this.leanPT - this.leanP) * k;
     this.leanR += (this.leanRT - this.leanR) * k;
     if (Math.abs(this.leanP) < 1e-3 && this.leanPT === 0) this.leanP = 0;
     if (Math.abs(this.leanR) < 1e-3 && this.leanRT === 0) this.leanR = 0;
-    this.model.rotation.x = this.leanP;
+    // Landing pitch stacks on the lean — the absorb crouch reads as the
+    // whole body tipping forward a beat, not just the knees.
+    const pitch = this.leanP + this.landE * 0.18;
+    this.model.rotation.x = pitch;
     this.model.rotation.z = this.lastRoll + this.leanR;
     // Pivot compensation: keep the sternum where the un-leaned pose
     // would put it, so the tilt swings the legs instead of the chest.
     const yaw = this.model.rotation.y;
     _leanNo.setFromEuler(_leanEul.set(0, yaw, this.lastRoll, 'YXZ'));
-    _leanYes.setFromEuler(_leanEul.set(this.leanP, yaw, this.lastRoll + this.leanR, 'YXZ'));
+    _leanYes.setFromEuler(_leanEul.set(pitch, yaw, this.lastRoll + this.leanR, 'YXZ'));
     _leanOff.set(0, LEAN_PIVOT_Y, 0);
     _leanA.copy(_leanOff).applyQuaternion(_leanNo);
     _leanB.copy(_leanOff).applyQuaternion(_leanYes);

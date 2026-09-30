@@ -90,6 +90,37 @@ export const MANNEQUIN_UAL2_BONE_MAP: Record<string, string> = {
   'DEF-thighR': 'thighr', 'DEF-shinR': 'calfr',
 };
 
+// Kevin Iglesias Human Basic Motions (free tier) — the directional
+// locomotion source UAL's free packs lack (8-dir Walk/Run, 5-dir Sprint).
+// B-* rig names arrive norm'd to 'bhips', 'bupperarml', etc.
+// Values are prefix-free — bakeSource prepends spec.prefix ('b') when it
+// looks nodes up, so 'bhips' here would resolve as 'bbhips' and match
+// nothing. The B-* rig names arrive norm'd to 'bhips', 'bupperarml', etc.
+export const KEVDEV_BONE_MAP: Record<string, string> = {
+  Hips: 'hips',
+  Abdomen: 'spine',
+  Torso_1: 'chest',
+  Neck: 'neck',
+  Head: 'head',
+  ShoulderL: 'shoulderl', UpperArmL: 'upperarml', LowerArmL: 'forearml', Palm2L: 'handl',
+  ShoulderR: 'shoulderr', UpperArmR: 'upperarmr', LowerArmR: 'forearmr', Palm2R: 'handr',
+  UpperLegL: 'thighl', LowerLegL: 'shinl',
+  UpperLegR: 'thighr', LowerLegR: 'shinr',
+};
+
+// Mannequin DEF-* rig → kevdev B-* names (same targets as the UAL2 map).
+export const MANNEQUIN_KEVDEV_BONE_MAP: Record<string, string> = {
+  'DEF-hips': 'hips',
+  'DEF-spine001': 'spine',
+  'DEF-spine003': 'chest',
+  'DEF-neck': 'neck',
+  'DEF-head': 'head',
+  'DEF-shoulderL': 'shoulderl', 'DEF-upper_armL': 'upperarml', 'DEF-forearmL': 'forearml', 'DEF-handL': 'handl',
+  'DEF-shoulderR': 'shoulderr', 'DEF-upper_armR': 'upperarmr', 'DEF-forearmR': 'forearmr', 'DEF-handR': 'handr',
+  'DEF-thighL': 'thighl', 'DEF-shinL': 'shinl',
+  'DEF-thighR': 'thighr', 'DEF-shinR': 'shinr',
+};
+
 export const normBone = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
 
 // Shared radial-gradient flash texture — one per process, all remote

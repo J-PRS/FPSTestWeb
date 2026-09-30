@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { Terrain } from '../world/terrain.js';
+import { UNGRADE_GLSL } from '../core/gradeGlsl.js';
 
 /**
  * Instanced swarm renderer — the draw-call fix for massive enemy counts.
@@ -145,10 +146,13 @@ const shadowVert = /* glsl */ `
 const shadowFrag = /* glsl */ `
   varying vec2 vUv;
   varying float vOpacity;
+  ${UNGRADE_GLSL}
   void main() {
     float dist = distance(vUv, vec2(0.5));
     float alpha = smoothstep(0.5, 0.2, dist) * vOpacity;
-    gl_FragColor = vec4(0.0, 0.0, 0.0, alpha);
+    gl_FragColor = vec4(ungradeColor(vec3(0.0)), alpha);
+    #include <tonemapping_fragment>
+    #include <colorspace_fragment>
   }
 `;
 

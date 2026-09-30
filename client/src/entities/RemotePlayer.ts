@@ -11,7 +11,9 @@ import { pickLocomotionAnim } from './locomotionAnim.js';
 import { SnapshotBuffer } from './remoteSnapshots.js';
 import { RemoteGizmo } from './remoteGizmo.js';
 import { resetCorpse, launchCorpse, stepCorpse, type CorpseState } from './remoteDeath.js';
-import { makeShieldBubble, ShieldBubble } from '../effects/shieldBubble.js';
+import { WeaponType } from '../../../shared/weapons.js';
+import { makeContouredShield, makeShieldBubble, ShieldBubble } from '../effects/shieldBubble.js';
+import { BallTrailDots } from './ballTrails.js';
 
 const logger = new ChildLogger('RemotePlayer');
 
@@ -27,6 +29,8 @@ let _remotePlayerInstanceCounter = 0;
 
 // Scratch — shared across RemotePlayer instances, never retained past the call
 const _extrapolated = new THREE.Vector3();
+const _trailP = new THREE.Vector3();
+const _trailTint = new THREE.Color(0.75, 0.85, 1.0); // cool air-sheen — jets tint it warmer on top
 const _sampledRot = { yaw: 0, pitch: 0 };
 
 export class RemotePlayer {
@@ -147,6 +151,13 @@ export class RemotePlayer {
       this.applyClassScale();
       this.model.setPosition(this.position.x, this.position.y - EYE_OFFSET, this.position.z);
       this._model.setRotation(this.rotation.yaw, this.rotation.pitch);
+      // Shield may have gone up before the GLB landed (sphere fallback)
+      // — upgrade it to the contoured shell once the bones exist.
+      if (this._shielded && !this._shieldContoured) {
+        this.shieldBubble?.dispose();
+        this.buildShield();
+        this.shieldBubble!.mesh.visible = !this._staleHidden && !this._cloakHidden;
+      }
       // Show collider gizmo for remote players (unless already dead or stale-hidden)
       if (!this._isDead && !this._staleHidden) {
         this._model.setColliderVisible(true);
@@ -321,6 +332,20 @@ export class RemotePlayer {
     }
   }
 
+  /** Faint dots on the flight path — readable arc on a jetting bot,
+   *  subtle enough not to pile on the jetpack flame itself. Emits at
+   *  chest (eye −0.7); a >15m jump (teleport/respawn edge) drops the
+   *  frame rather than streaking a dotted line across the map. */
+  private tickAirTrail(dt: number, airborne: boolean, speed: number): void {
+    if (airborne && speed > 6 && this._lastTrailPos.distanceToSquared(this.position) < 225) {
+      if (!this.airTrail) this.airTrail = new BallTrailDots(this.scene, { opacity: 0.32, sizeMul: 0.45, interval: 0.05, maxDots: 18 });
+      _trailP.copy(this.position); _trailP.y -= 0.7;
+      this.airTrail.emit(dt, _trailP, this.velocity, 0.4, _trailTint);
+    }
+    this.airTrail?.fade(dt);
+    this._lastTrailPos.copy(this.position);
+  }
+
   private updateAliveModel(dt: number): void {
     if (!this._loaded) return;
     this._model.setPosition(this.position.x, this.position.y - EYE_OFFSET, this.position.z);
@@ -333,6 +358,12 @@ export class RemotePlayer {
     const airborne = this.terrain
       ? this.feetY - this.terrain.getHeight(this.position.x, this.position.z) > 0.6
       : false;
+    // Landing compress — peak fall speed at touchdown drives the pulse,
+    // same cue the local model gets from onLand.
+    if (airborne) this._fallV = Math.min(this._fallV, this.velocity.y);
+    else if (this._airborne) { this._model.landPulse(-this._fallV); this._fallV = 0; }
+    this._airborne = airborne;
+    this.tickAirTrail(dt, airborne, speed);
     // A fired shot outranks the flinch — the shoot oneshot is itself an
     // aimed pose, so a bot shooting mid-hit snaps its gun back to aim
     // instead of flailing through the flinch with the weapon down.
@@ -394,12 +425,13 @@ export class RemotePlayer {
     const sin = Math.sin(this.rotation.yaw), cos = Math.cos(this.rotation.yaw);
     const fwd = this.velocity.x * sin + this.velocity.z * cos;
     const side = this.velocity.x * cos - this.velocity.z * sin;
-    // Backpedal plays the forward cycle in reverse (no dedicated clips);
-    // grounded strafe gets a roll lean so the footwork doesn't moonwalk.
-    this._model.setLocomotionReversed(
+    // Dedicated 8-dir clips when the KevDev bake landed; otherwise the
+    // reverse-playback backpedal + strafe roll lean keep covering it.
+    const dedicated = this._model.setLocomotionVector(fwd, side);
+    if (!dedicated) this._model.setLocomotionReversed(
       (state === 'walk' || state === 'run') && speed > 1 && fwd < -0.6 * speed && -fwd > Math.abs(side));
     if (!jetting) {
-      const strafing = Math.abs(side) > 0.6 * speed && Math.abs(side) > Math.abs(fwd) * 0.8;
+      const strafing = !dedicated && Math.abs(side) > 0.6 * speed && Math.abs(side) > Math.abs(fwd) * 0.8;
       this._model.setBodyLean(0, strafing ? Math.max(-0.3, Math.min(0.3, -side * 0.02)) : 0);
       return;
     }
@@ -408,6 +440,12 @@ export class RemotePlayer {
       Math.max(-0.4, Math.min(0.4, -side * 0.02)));
   }
   private _lastShootT = 0;
+  private _airborne = false;
+  private _fallV = 0;
+  // Faint air trail — the ballistic arc read a bouncing ball gets for
+  // free. Innate to every flyer; the jetpack flame stacks on top.
+  private airTrail: BallTrailDots | null = null;
+  private _lastTrailPos = new THREE.Vector3();
 
   private tickAuras(dt: number): void {
     const y = this.position.y - EYE_OFFSET;
@@ -552,10 +590,19 @@ export class RemotePlayer {
   }
   get isCloakHidden(): boolean { return this._cloakHidden; }
 
+  private _shieldContoured = false;
+  /** Prefer the body-hugging shell once the model's skinned meshes exist;
+   *  the sphere is only a pre-load fallback. */
+  private buildShield(): void {
+    const root = this._model.object3D;
+    const contoured = root ? makeContouredShield(root) : null;
+    this._shieldContoured = !!contoured;
+    this.shieldBubble = contoured ?? makeShieldBubble(this.scene);
+  }
   setShielded(on: boolean): void {
     if (on === this._shielded) return;
     this._shielded = on;
-    if (on && !this.shieldBubble) this.shieldBubble = makeShieldBubble(this.scene);
+    if (on && !this.shieldBubble) this.buildShield();
     if (this.shieldBubble) this.shieldBubble.mesh.visible = on;
   }
   get isShielded(): boolean { return this._shielded; }
@@ -585,12 +632,28 @@ export class RemotePlayer {
   // "loaded", not the exact bank size.
   setCharged(on: boolean): void { this.setStatusAura('charge', on, 1.9, 0x9fd8ff); }
 
+  // Belt throws arrive as ordinary projectileCreated spawns — the throw
+  // tell lives on the shooter's model, keyed off the spawned weaponType.
+  // Sticky(18) is ambiguous (launcher AND belt share it) so it stays a
+  // plain shot; a wrong dip is worse than a missing one.
+  private static readonly THROW_TYPES = new Set([
+    WeaponType.DiscPull, WeaponType.Grenade, WeaponType.ClusterBomb,
+    WeaponType.Javelin, WeaponType.ImpactGrenade, WeaponType.RemoteRailgun,
+    WeaponType.ArmorGrenade,
+  ]);
+
   // Remote fired a weapon — kick the gun's procedural recoil
   fire(weaponType?: number): void {
-    // Only re-arm once the previous oneshot expired — spam-restarting the
-    // clip under rapid fire pins the model mid-Punch
-    if (!this._isDead && this.shootT <= 0) this.shootT = 0.3;
-    if (this._loaded) this._model.fire(weaponType);
+    // The mannequin's shot feedback is the recoil kick + muzzle flash —
+    // its arm-chain aim layer owns the upper body, so playing the
+    // Pistol_Shoot clip only flickers the arms off-aim. Other variants
+    // still arm the shoot oneshot.
+    if (!this._isDead && this.shootT <= 0 && this._model.variant !== 'mannequin') this.shootT = 0.3;
+    if (this._loaded) {
+      if (weaponType === WeaponType.Melee) this._model.weaponPunch();
+      else if (weaponType !== undefined && RemotePlayer.THROW_TYPES.has(weaponType)) this._model.weaponThrow();
+      else this._model.fire(weaponType);
+    }
     // Firing decloaks: a cloaked shooter shimmers visible for a beat —
     // the price of shooting from stealth.
     if (this._cloakHidden && this._loaded) {
@@ -638,6 +701,9 @@ export class RemotePlayer {
     // Drop the loaded flag too — a dangling tick (debug hooks, orphaned
     // owner loop) must not walk into a cleared animation map.
     this._loaded = false;
+    this.shieldBubble?.dispose();
+    this.airTrail?.dispose();
+    for (const a of this.statusAuras.values()) a.bubble.dispose();
     this._model.dispose();
     if (this.gizmo) {
       this.gizmo.dispose();

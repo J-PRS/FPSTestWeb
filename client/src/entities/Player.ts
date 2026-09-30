@@ -7,7 +7,7 @@ import { PlayerSkills, SHIELD_DMG_PER_ENERGY } from './player/skills.js';
 import { STATUS } from '../../../shared/status.js';
 import { perkMods, PERK_ORDER, type PerkId } from '../../../shared/perks.js';
 import { CLASS_STATS, CLASS_MODEL_SCALE, type ArmorClass } from '../../../shared/botClasses.js';
-import { makeShieldBubble, ShieldBubble } from '../effects/shieldBubble.js';
+import { makeContouredShield, makeShieldBubble, ShieldBubble } from '../effects/shieldBubble.js';
 
 import { MovementController, MovementState } from './movement.js';
 import { weaponDef, SLOT_COUNT, type WeaponDef } from '../weapons.js';
@@ -94,16 +94,20 @@ export class Player {
     if (this.appliedClass === c) return;
     this.appliedClass = c;
     this.movement.setSpeedScale(CLASS_STATS[c].speedScale);
-    // Dropping down a tier unshoulders restricted ordnance — swap each
-    // gated slot for the chaingun so no slot ends up empty.
-    if (c !== 'heavy') {
-      for (let i = 0; i < this.loadout.length; i++) {
-        if (Player.HEAVY_ONLY.includes(this.loadout[i])) this.setLoadoutSlot(i, 2);
-      }
-    }
+    if (c !== 'heavy') this.unshoulderHeavy();
     // One cast for all tiers — the class reads as a scale bump, not a
     // different model, so a tier swap is a rescale, not a rebuild.
     this.model?.setScale(CLASS_MODEL_SCALE[c]);
+  }
+
+  /** Unshoulder restricted ordnance — swap each gated slot for the
+   *  chaingun so no slot ends up empty. Called when a tier drops below
+   *  heavy (respawn bank) AND at construction, since the persisted
+   *  loadout parses raw and can carry a stale heavy pick. */
+  private unshoulderHeavy(): void {
+    for (let i = 0; i < this.loadout.length; i++) {
+      if (Player.HEAVY_ONLY.includes(this.loadout[i])) this.setLoadoutSlot(i, 2);
+    }
   }
 
   /** Respawn-time perk application — the picked perk banks here so its
@@ -185,7 +189,10 @@ export class Player {
   private setShielded(on: boolean): void {
     if (this.shielded === on) return;
     this.shielded = on;
-    if (on && !this.shieldBubble) this.shieldBubble = makeShieldBubble(this.scene);
+    if (on && !this.shieldBubble) {
+      const root = this.model?.object3D;
+      this.shieldBubble = (root ? makeContouredShield(root) : null) ?? makeShieldBubble(this.scene);
+    }
     // Own bubble only renders in third person — in first person it would
     // swallow the camera; the gun shell + vignette are the FP read instead.
     if (this.shieldBubble) this.shieldBubble.mesh.visible = on && this.thirdPerson;
@@ -243,6 +250,7 @@ export class Player {
     const dir = this.getAimDir();
     this.vel.addScaledVector(dir, MELEE_LUNGE);
     this.syncMovement();
+    this.model?.weaponPunch();
     this.onMelee?.({ origin: this.pos.clone(), dir, playerVel: this.vel.clone() });
   }
 
@@ -297,9 +305,9 @@ export class Player {
     (settings.get('fps-sidearm') as 'pistol' | 'revolver' | 'shotgun' | 'repair') in Player.SIDEARM_WIDS
       ? settings.get('fps-sidearm') as 'pistol' | 'revolver' | 'shotgun' | 'repair' : 'pistol';
   // Pack: one deployable on the deploy key — ESC menu picks.
-  packItem: 'turret' | 'mine' | 'station' | 'drone' =
-    (['turret', 'mine', 'station', 'drone'] as const).includes(settings.get('fps-pack') as 'turret' | 'mine' | 'station' | 'drone')
-      ? settings.get('fps-pack') as 'turret' | 'mine' | 'station' | 'drone' : 'turret';
+  packItem: 'turret' | 'mine' | 'station' | 'drone' | 'shield' =
+    (['turret', 'mine', 'station', 'drone', 'shield'] as const).includes(settings.get('fps-pack') as 'turret' | 'mine' | 'station' | 'drone' | 'shield')
+      ? settings.get('fps-pack') as 'turret' | 'mine' | 'station' | 'drone' | 'shield' : 'turret';
 
   private static parseLoadout(raw: string): number[] {
     const ids = raw.split(',').map(Number).filter((n) => Number.isInteger(n) && n >= 0 && n < SLOT_COUNT);
@@ -317,8 +325,11 @@ export class Player {
 
   setLoadoutSlot(slot: number, weaponId: number): void {
     // Heavy-only ordnance bounces off lighter armor — the menu filters it
-    // out, this is the belt line for stale loadouts/console picks.
-    if (this.armorClass !== 'heavy' && Player.HEAVY_ONLY.includes(weaponId)) return;
+    // out, this is the belt line for stale loadouts/console picks. Gates on
+    // appliedClass (the tier the server enforces), not armorClass — a mid-
+    // life heavy pick banks until respawn; letting it shoulder now would
+    // spam class-locked rejections for the rest of the life.
+    if (this.appliedClass !== 'heavy' && Player.HEAVY_ONLY.includes(weaponId)) return;
     // Picking a weapon that's already equipped elsewhere swaps the slots
     // instead of duplicating it — standard loadout-menu behavior.
     const other = this.loadout.indexOf(weaponId);
@@ -326,8 +337,15 @@ export class Player {
     this.loadout[slot] = weaponId;
     settings.set('fps-loadout', this.loadout.join(','));
     if (this.weaponIndex === slot || this.weaponIndex === other) {
-      this.onWeaponSwitch?.(this.loadout[this.weaponIndex]);
+      this.emitWeaponSwitch(this.loadout[this.weaponIndex]);
     }
+  }
+
+  /** Weapon changed: viewmodel/audio hook + the third-person body's
+   *  lower→raise swap dip on the held prop gun. */
+  private emitWeaponSwitch(wid: number): void {
+    this.onWeaponSwitch?.(wid);
+    this.model?.weaponSwap();
   }
 
   setBeltItem(item: BeltItem): void {
@@ -338,7 +356,7 @@ export class Player {
     this.sidearm = s;
     settings.set('fps-sidearm', s);
   }
-  setPackItem(p: 'turret' | 'mine' | 'station' | 'drone'): void {
+  setPackItem(p: 'turret' | 'mine' | 'station' | 'drone' | 'shield'): void {
     this.packItem = p;
     settings.set('fps-pack', p);
   }
@@ -365,6 +383,11 @@ export class Player {
   skiing = false;
   /** Z toggles Tribes Ascend-style chase cam — centered, under the crosshair. */
   thirdPerson = false;
+  /** Body-model barrel tip in world space — the beam/tracer anchor when
+   *  the viewmodel is hidden (third person / spectating). */
+  muzzleWorld(out: THREE.Vector3): boolean {
+    return this.model?.muzzleWorld(out) ?? false;
+  }
   onJetpack: ((pos: THREE.Vector3) => void) | null = null;
   onSki: ((pos: THREE.Vector3, vel: THREE.Vector3) => void) | null = null;
   onFootDust: ((pos: THREE.Vector3, vel: THREE.Vector3) => void) | null = null;
@@ -404,6 +427,7 @@ export class Player {
     this.appliedClass = this.armorClass;
     this.appliedPerk = this.perk;
     this.movement.setSpeedScale(CLASS_STATS[this.appliedClass].speedScale);
+    if (this.appliedClass !== 'heavy') this.unshoulderHeavy();
 
     // Your third-person body is the mannequin at your tier's silhouette
     // scale — the same read remotes get (one cast, class reads as bulk).
@@ -462,20 +486,20 @@ export class Player {
         if (wid !== this.secondaryWid) {
           this.secondaryWid = wid;
           this.secondaryDrawT = SIDEARM_DRAW_TIME;
-          this.onWeaponSwitch?.(wid);
+          this.emitWeaponSwitch(wid);
         }
       },
       secondaryUp: () => {
         if (this.secondaryWid !== null) {
           this.secondaryWid = null;
-          this.onWeaponSwitch?.(this.currentWeapon);
+          this.emitWeaponSwitch(this.currentWeapon);
         }
       },
-      deploy: () => this.onDeploy?.(),
+      deploy: () => { this.model?.weaponThrow(); this.onDeploy?.(); },
       selectSlot: (i) => {
         if (i !== this.weaponIndex) {
           this.weaponIndex = i;
-          this.onWeaponSwitch?.(this.loadout[i]);
+          this.emitWeaponSwitch(this.loadout[i]);
         }
       },
       cycleWeapon: (step) => {
@@ -483,7 +507,7 @@ export class Player {
         const idx = (this.weaponIndex + step + n) % n;
         if (idx !== this.weaponIndex) {
           this.weaponIndex = idx;
-          this.onWeaponSwitch?.(this.loadout[idx]);
+          this.emitWeaponSwitch(this.loadout[idx]);
         }
       },
       look: (dx, dy) => {
@@ -577,7 +601,7 @@ export class Player {
     this.fireWeapons();
     this.emitMoveEvents(isJetting, input.skiHeld, input.jumpHeld, dt);
     this.visuals.updateShadowBlob(this.terrain, this.pos);
-    this.jumpAnimTimer = this.visuals.updateModelAnim(this.model, this.pos, this.yaw, this.pitch, this.jumpAnimTimer, this.getSpeed(), dt, this.onGround, isJetting, this.vel, input.skiHeld, this.shootAnimTimer);
+    this.jumpAnimTimer = this.visuals.updateModelAnim(this.model, this.pos, this.yaw, this.pitch, this.jumpAnimTimer, this.getSpeed(), dt, this.onGround, isJetting, this.vel, input.skiHeld, this.shootAnimTimer, this.thirdPerson);
   }
 
   private tickTimers(dt: number): void {
@@ -741,6 +765,7 @@ export class Player {
       this.beltTimer = DISC_RATE;
       this.throwLockT = THROW_TOTAL;
       this.shootAnimTimer = 0.3; // lob raise — same snap as a shot
+      this.model?.weaponThrow();
       this.onBelt?.({ origin: this.pos.clone(), dir: this.getAimDir(), playerVel: this.vel.clone() }, this.beltItem);
     }
   }
@@ -758,7 +783,9 @@ export class Player {
     // Ground-contact sound — any landing transition (slam stacks its own
     // bigger boom on top via onSlam).
     if (!this.wasOnGround && this.onGround) {
-      this.onLand?.(Math.max(0, -this.prevVelY));
+      const impact = Math.max(0, -this.prevVelY);
+      this.model?.landPulse(impact);
+      this.onLand?.(impact);
     }
 
     // Trigger jump animation on real lift-off — not every bump crest,

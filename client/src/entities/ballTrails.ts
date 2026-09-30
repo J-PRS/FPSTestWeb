@@ -47,14 +47,23 @@ export class BallTrailDots {
   private dots: TrailDot[] = [];
   private pool: TrailDot[] = [];
   private timer = 0;
+  private opacity: number;   // master dimmer — air trails are faint, ball sparkle is not
+  private sizeMul: number;
+  private interval: number;
+  private maxDots: number;
 
-  constructor(private scene: THREE.Scene) {}
+  constructor(private scene: THREE.Scene, opts?: { opacity?: number; sizeMul?: number; interval?: number; maxDots?: number }) {
+    this.opacity = opts?.opacity ?? 1;
+    this.sizeMul = opts?.sizeMul ?? 1;
+    this.interval = opts?.interval ?? TRAIL_INTERVAL;
+    this.maxDots = opts?.maxDots ?? TRAIL_COUNT;
+  }
 
   /** Emit a sparkle when the cadence fires — caller passes the ball's
    *  render pos, radius, and tint (enraged tint swaps handled upstream). */
   emit(dt: number, pos: THREE.Vector3, vel: THREE.Vector3, radius: number, tint: THREE.Color): void {
     this.timer += dt;
-    if (this.timer < TRAIL_INTERVAL) return;
+    if (this.timer < this.interval) return;
     this.timer = 0;
     if (vel.lengthSq() <= 0.5) return;
     this.spawn(pos, radius, tint);
@@ -95,10 +104,11 @@ export class BallTrailDots {
     }
     (d.halo.material as THREE.SpriteMaterial).color.copy(tint);
     (d.core.material as THREE.SpriteMaterial).color.copy(tint).lerp(_white, 0.65);
-    d.halo.scale.setScalar(haloSz);
-    d.core.scale.setScalar(coreSz);
-    if (this.dots.length >= TRAIL_COUNT) this.remove(this.dots.shift()!);
-    d.age = 0; d.life = life; d.haloSz = haloSz; d.coreSz = coreSz;
+    const hs = haloSz * this.sizeMul, cs = coreSz * this.sizeMul;
+    d.halo.scale.setScalar(hs);
+    d.core.scale.setScalar(cs);
+    if (this.dots.length >= this.maxDots) this.remove(this.dots.shift()!);
+    d.age = 0; d.life = life; d.haloSz = hs; d.coreSz = cs;
     this.dots.push(d);
   }
 
@@ -111,8 +121,8 @@ export class BallTrailDots {
         this.dots.splice(i, 1);
       } else {
         const t = 1.0 - d.age / d.life;
-        d.halo.material.opacity = t * 0.28;
-        d.core.material.opacity = t * 0.7;
+        d.halo.material.opacity = t * 0.28 * this.opacity;
+        d.core.material.opacity = t * 0.7 * this.opacity;
         d.core.scale.setScalar(d.coreSz * (0.4 + 0.6 * t));
         d.halo.scale.setScalar(d.haloSz * (0.7 + 0.3 * t));
       }

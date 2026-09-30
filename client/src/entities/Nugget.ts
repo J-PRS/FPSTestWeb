@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-import { GRAVITY, BLOOM_LAYER } from '../core/config.js';
+import { GRAVITY, BLOOM_LAYER, EMIT_GAIN } from '../core/config.js';
 import { Terrain } from '../world/terrain.js';
 import { getGlowTexture } from '../effects/glowTexture.js';
 
@@ -64,7 +64,7 @@ export class Nugget {
     this.vel.y += Math.random() * 3 + 1;
     this.vel.z += (Math.random() - 0.5) * 4;
 
-    this.mat = new THREE.MeshBasicMaterial({ color: 0xffee88 });
+    this.mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0xffee88).multiplyScalar(EMIT_GAIN) });
     this.mesh = new THREE.Mesh(NUGGET_GEO, this.mat);
     this.mesh.position.copy(this.pos);
     this.mesh.layers.enable(BLOOM_LAYER);
@@ -73,7 +73,7 @@ export class Nugget {
     // Billboarded glow halo — makes the nugget readable at distance
     this.glowMat = new THREE.SpriteMaterial({
       map: getNuggetTex(),
-      color: this.baseColor,
+      color: this.baseColor.clone().multiplyScalar(EMIT_GAIN),
       transparent: true,
       opacity: 0.85,
       depthWrite: false,
@@ -189,7 +189,7 @@ export class Nugget {
     if (this.settled) {
       this.mesh.position.y = this.pos.y + Math.sin(this.age * 2.5) * 0.06;
       const pulse = 1 + Math.sin(this.age * 5) * 0.12;
-      this.mat.color.setHex(0xffee88).multiplyScalar(pulse);
+      this.mat.color.setHex(0xffee88).multiplyScalar(pulse * EMIT_GAIN);
       this.glowMat.opacity = 0.7 + Math.sin(this.age * 5) * 0.15;
     }
     // Halo stays welded to the nugget — the polygonOffset bias handles the
@@ -220,7 +220,7 @@ export class Nugget {
     } else {
       const mat = new THREE.SpriteMaterial({
         map: getNuggetTex(),
-        color: this.baseColor,
+        color: this.baseColor.clone().multiplyScalar(EMIT_GAIN),
         transparent: true,
         opacity: 0.7,
         depthWrite: false,

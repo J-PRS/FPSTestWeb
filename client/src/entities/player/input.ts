@@ -226,6 +226,30 @@ export class PlayerInput {
         location.reload();
       });
     }
+
+    // Read live per message — no reload needed.
+    const ttsBtn = document.getElementById('tts-chat-toggle') as HTMLButtonElement | null;
+    if (ttsBtn) {
+      const label = () => { ttsBtn.textContent = settings.get('fps-tts-chat') ? 'CHAT TTS: ON' : 'CHAT TTS: OFF'; };
+      label();
+      ttsBtn.addEventListener('click', () => {
+        settings.set('fps-tts-chat', !settings.get('fps-tts-chat'));
+        label();
+      });
+    }
+
+    // VGS chord letters: layout (typed letters, matches the printed chord)
+    // vs physical QWERTY positions (classic Tribes muscle memory). Live —
+    // vgs.ts reads the setting per keypress.
+    const vgsKeysBtn = document.getElementById('vgs-keys-toggle') as HTMLButtonElement | null;
+    if (vgsKeysBtn) {
+      const label = () => { vgsKeysBtn.textContent = settings.get('fps-vgs-physical') ? 'VGS KEYS: PHYSICAL' : 'VGS KEYS: LAYOUT'; };
+      label();
+      vgsKeysBtn.addEventListener('click', () => {
+        settings.set('fps-vgs-physical', !settings.get('fps-vgs-physical'));
+        label();
+      });
+    }
   }
 }
 
