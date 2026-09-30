@@ -124,7 +124,7 @@ export class GameServer {
     return this.factory.quickRoom(mode, map, bots);
   }
 
-  listMaps(): { name: string; mode: string; bots: number }[] {
+  listMaps(): { name: string; mode: string; modes: string[]; bots: number }[] {
     return this.maps.list();
   }
 

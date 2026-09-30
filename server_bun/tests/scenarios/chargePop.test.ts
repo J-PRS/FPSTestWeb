@@ -54,10 +54,10 @@ describe('scenario: LG charge economy vs players', () => {
     expect(b.charge).toBe(0);
 
     for (let i = 0; i < 10; i++) beamTick(room, a.id, b);
-    // Ticks 1-4 pay full damage (bank 0); 5-9 bank (8-6)x2=4 each,
-    // 10+ bank (8-4)x2=8 — 20 + 8 = 28 gross, minus tiny drain.
-    expect(b.charge).toBeGreaterThan(24);
-    expect(b.charge).toBeLessThan(29);
+    // Ticks 1-4 pay full damage (bank 0); 5-9 bank (4-3)x2=2 each,
+    // 10+ bank (4-2)x2=4 — 10 + 4 = 14 gross, minus tiny drain.
+    expect(b.charge).toBeGreaterThan(10);
+    expect(b.charge).toBeLessThan(15);
   });
 
   it('a non-LG hit detonates only min(banked, damage) — the rest smolders', () => {

@@ -187,8 +187,15 @@ export async function demoRoute(ctx: HttpCtx, req: Request, url: URL): Promise<R
 // the same bytes the room's sims consume so terrain matches bit-for-bit.
 export async function mapBinRoute(url: URL): Promise<Response> {
   const file = url.pathname.slice('/maps/'.length);
-  if (!/^[\w-]{1,64}\.bin$/.test(file)) return corsResponse('Not found', { status: 404 });
+  // maps/-relative asset path: word-char segments, ≤2 dirs deep, bin or
+  // image payload (terrain bins, baked albedos, skybox faces).
+  if (!/^(?:[\w-]{1,64}\/){0,2}[\w-]{1,64}\.(?:bin|png|jpe?g|glb)$/.test(file)) {
+    return corsResponse('Not found', { status: 404 });
+  }
   const f = Bun.file(`${import.meta.dir}/../../maps/${file}`);
   if (!(await f.exists())) return corsResponse('Not found', { status: 404 });
-  return corsResponse(f, { headers: { 'Content-Type': 'application/octet-stream' } });
+  const ct = file.endsWith('.png') ? 'image/png'
+    : file.endsWith('.glb') ? 'model/gltf-binary'
+    : file.match(/\.jpe?g$/) ? 'image/jpeg' : 'application/octet-stream';
+  return corsResponse(f, { headers: { 'Content-Type': ct } });
 }

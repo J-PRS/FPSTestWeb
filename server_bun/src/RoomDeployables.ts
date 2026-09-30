@@ -15,10 +15,10 @@ import { aoeDamage } from '../../shared/combat.ts';
 import { REPAIR_RANGE, REPAIR_HEAL_PER_TICK, REPAIR_MIN_TICK_S, REPAIR_ARMOR_MULT } from '../../shared/weapons.ts';
 import { segSolidHit } from '../../shared/solidWorld.ts';
 
-export type DeployKind = 'turret' | 'mine' | 'station' | 'drone';
-const KINDS = new Set<DeployKind>(['turret', 'mine', 'station', 'drone']);
-const MAX_PER_PLAYER: Record<DeployKind, number> = { turret: 2, mine: 6, station: 1, drone: 2 };
-const TTL_S: Record<DeployKind, number> = { turret: 180, mine: 120, station: 240, drone: 90 };
+export type DeployKind = 'turret' | 'mine' | 'station' | 'drone' | 'shield';
+const KINDS = new Set<DeployKind>(['turret', 'mine', 'station', 'drone', 'shield']);
+const MAX_PER_PLAYER: Record<DeployKind, number> = { turret: 2, mine: 6, station: 1, drone: 2, shield: 1 };
+const TTL_S: Record<DeployKind, number> = { turret: 180, mine: 120, station: 240, drone: 90, shield: 120 };
 // Plants near the action are legit; plants across the map are not.
 const MAX_PLANT_DIST = 40;
 
@@ -38,7 +38,13 @@ interface Deployed {
 // Blast-only durability — splash damage clears a stand's defenses the
 // Tribes way (mortar/disc spam opens the approach). Hitscan has no
 // deployable collision, so these are AOE-sweep budgets, not bullet HP.
-const HP: Record<DeployKind, number> = { turret: 60, mine: 20, station: 80, drone: 40 };
+const HP: Record<DeployKind, number> = { turret: 60, mine: 20, station: 80, drone: 40, shield: 120 };
+
+// Barrier dome — a sphere centered on the emitter (the half-buried read
+// conforms to any slope). Hostile shells detonate on entry; friendly
+// fire passes. The emitter itself eats blast damage like any stand —
+// shelling the dome is the intended counterplay.
+export const SHIELD_RADIUS = 6;
 
 // Sentry combat envelope — mirrors the client DeployTurret constants so
 // the server sim and the visual agree on what the gun can reach.
@@ -62,6 +68,22 @@ const STATION_RANGE = 9;
 const STATION_HP_RATE = 0.09;   // fraction of maxHealth per second
 const STATION_HEAL_CD = 0.5;    // heal tick cadence
 const FORCE_SEND_MS = 900;      // health rides tickUpdate; force past suppression
+
+/** First t∈[0,1] where the segment enters the sphere — quadratic solve,
+ *  null on a miss. A segment already inside returns 0 (blocked at once). */
+function segSphereEnter(from: Vec3, to: Vec3, c: Vec3, r: number): number | null {
+  const dx = to.x - from.x, dy = to.y - from.y, dz = to.z - from.z;
+  const mx = from.x - c.x, my = from.y - c.y, mz = from.z - c.z;
+  const a = dx * dx + dy * dy + dz * dz;
+  if (a < 1e-9) return null;
+  const cc = mx * mx + my * my + mz * mz - r * r;
+  if (cc <= 0) return 0; // started inside
+  const b = 2 * (mx * dx + my * dy + mz * dz);
+  const disc = b * b - 4 * a * cc;
+  if (disc < 0) return null;
+  const t = (-b - Math.sqrt(disc)) / (2 * a);
+  return t >= 0 && t <= 1 ? t : null;
+}
 
 export class RoomDeployables {
   private items = new Map<number, Deployed>();
@@ -108,8 +130,8 @@ export class RoomDeployables {
     for (const id of this.items.keys()) this.remove(id);
   }
 
-  snapshot(): { id: number; owner: string; kind: DeployKind; pos: Vec3; hp: number; armor: number }[] {
-    return [...this.items.values()].map((d) => ({ id: d.id, owner: d.owner, kind: d.kind, pos: { ...d.pos }, hp: d.hp, armor: d.armor }));
+  snapshot(): { id: number; owner: string; kind: DeployKind; pos: Vec3; hp: number; armor: number; team?: string }[] {
+    return [...this.items.values()].map((d) => ({ id: d.id, owner: d.owner, kind: d.kind, pos: { ...d.pos }, hp: d.hp, armor: d.armor, team: this.room.players.getPlayer(d.owner)?.team }));
   }
 
   /** Creature-sim candidates — `dep:N` ids mirror the client species
@@ -123,6 +145,23 @@ export class RoomDeployables {
   posOf(depId: string): Vec3 | null {
     const d = this.items.get(+depId.slice(4));
     return d ? d.pos : null;
+  }
+
+  /** Shield sweep: does this shell's frame segment enter an ENEMY dome?
+   *  Returns the earliest entry t∈[0,1], or null — the caller detonates
+   *  the shell at that point. Friendly fire sails through: the owner and
+   *  teammates (when a team is known) are exempt. */
+  shieldBlock(from: Vec3, to: Vec3, shooterId: string): number | null {
+    let bestT = Infinity;
+    const shooterTeam = this.room.players.getPlayer(shooterId)?.team;
+    for (const d of this.items.values()) {
+      if (d.kind !== 'shield' || d.owner === shooterId) continue;
+      const domeTeam = this.room.players.getPlayer(d.owner)?.team;
+      if (domeTeam !== undefined && shooterTeam !== undefined && domeTeam === shooterTeam) continue;
+      const t = segSphereEnter(from, to, d.pos, SHIELD_RADIUS);
+      if (t !== null && t < bestT) bestT = t;
+    }
+    return bestT === Infinity ? null : bestT;
   }
 
   /** A creature's bite lands on a deployable — same durability pool the

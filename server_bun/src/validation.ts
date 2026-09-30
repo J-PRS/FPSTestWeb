@@ -239,8 +239,8 @@ const VALIDATORS: Record<string, (obj: Record<string, unknown>) => ValidationRes
 
   deploy: (obj) => {
     const kind = obj.kind;
-    if (kind !== 'turret' && kind !== 'mine' && kind !== 'station' && kind !== 'drone') {
-      return { success: false, error: 'kind must be turret|mine|station|drone' };
+    if (kind !== 'turret' && kind !== 'mine' && kind !== 'station' && kind !== 'drone' && kind !== 'shield') {
+      return { success: false, error: 'kind must be turret|mine|station|drone|shield' };
     }
     const dpos = validateVec3(obj.position);
     if (!dpos.success) return { success: false, error: `position: ${dpos.error}` };
@@ -281,7 +281,10 @@ const VALIDATORS: Record<string, (obj: Record<string, unknown>) => ValidationRes
     if (typeof obj.text !== 'string' || obj.text.length === 0 || obj.text.length > 200) {
       return { success: false, error: 'chat text must be 1-200 chars' };
     }
-    return { success: true, data: { type: 'chat', text: obj.text, team: obj.team === true ? true : undefined } };
+    // vgs carries the chord letters ("VGS") so receivers can print the
+    // keypath alongside the line — newbies learn the menu by reading chat.
+    const vgs = typeof obj.vgs === 'string' && /^[A-Z]{1,8}$/.test(obj.vgs) ? obj.vgs : undefined;
+    return { success: true, data: { type: 'chat', text: obj.text, team: obj.team === true ? true : undefined, vgs } };
   },
 
   ping: (obj) => {

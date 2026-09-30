@@ -26,6 +26,9 @@ export interface RoomInfo {
   scores?: { alpha: number; bravo: number };
   /** Team-mode room → friendly fire is blocked at the damage funnel. */
   teams?: boolean;
+  /** Server option (CONFIG.friendlyFire / FPS_FRIENDLY_FIRE): when set,
+   *  teammates CAN damage each other — the friendly gate opens. */
+  friendlyFire?: boolean;
   winAt?: number;
   /** Objective anchors from the map spec — echoed on gameState so clients
    *  place flags/bases where the map says, not where the URL guessed. */
@@ -40,6 +43,11 @@ export interface RoomInfo {
   /** Heightfield file (maps/<name>.bin) — echoed on gameState so clients
    *  fetch the identical terrain the server's sims run on. */
   terrain?: string;
+  /** Baked terrain albedo + skybox dir — client dressing only. */
+  terrainTex?: string;
+  sky?: string;
+  /** Interior placements (T2 .dif→.glb buildings) — client dressing only. */
+  interiors?: { file: string; pos: { x: number; y: number; z: number }; rot?: number[]; scale?: { x: number; y: number; z: number } }[];
   /** Any kill — Room drops carried flags here. */
   onKill?: (targetId: string, shooterId: string) => void;
   /** Any damage event — Room flinches bot brains here. */
@@ -89,7 +97,7 @@ export interface RoomInfo {
   /** Armor-grenade plating sweep — BallSim.armorBlast + CreatureSim.armorBlast. */
   creatureArmor?: (pos: Vec3, amount: number, radius: number) => void;
   /** Live deployables for gameState joins — RoomDeployables.snapshot. */
-  deployables?: () => { id: number; owner: string; kind: 'turret' | 'mine' | 'station' | 'drone'; pos: Vec3; hp?: number; armor?: number }[];
+  deployables?: () => { id: number; owner: string; kind: 'turret' | 'mine' | 'station' | 'drone' | 'shield'; pos: Vec3; hp?: number; armor?: number; team?: string }[];
 }
 
 export class MessageHandler {
@@ -134,6 +142,7 @@ export class MessageHandler {
       onKill: roomInfo?.onKill,
       onHit: roomInfo?.onHit,
       teams: roomInfo?.teams,
+      friendlyFire: roomInfo?.friendlyFire,
       moveImpulse: roomInfo?.moveImpulse,
       moveResync: roomInfo?.moveResync,
       mode: roomInfo?.mode,
@@ -191,13 +200,14 @@ export class MessageHandler {
         // Team channel: only the sender's own team hears it — and only
         // when the sender actually carries a team, else a ffa client
         // claiming 'team' would quietly self-filter to nobody.
+        const vgs = typeof msg.vgs === 'string' ? msg.vgs : undefined;
         if (msg.team && sender?.team) {
           for (const [pid, p] of this.playerManager.getAllPlayers()) {
-            if (p.team === sender.team) this.sendToPlayer(pid, { type: 'chat', playerId: id, text, team: true });
+            if (p.team === sender.team) this.sendToPlayer(pid, { type: 'chat', playerId: id, text, team: true, vgs });
           }
           return;
         }
-        this.broadcast({ type: 'chat', playerId: id, text });
+        this.broadcast({ type: 'chat', playerId: id, text, vgs });
       },
       ping: (id, m) => {
         const p = this.playerManager.getPlayer(id);
@@ -258,12 +268,18 @@ export class MessageHandler {
     arena: RoomInfo['arena'],
     ambient?: RoomInfo['ambient'],
     terrain?: RoomInfo['terrain'],
+    terrainTex?: RoomInfo['terrainTex'],
+    sky?: RoomInfo['sky'],
+    interiors?: RoomInfo['interiors'],
   ): void {
     this.roomInfo.bases = bases;
     this.roomInfo.structures = structures;
     this.roomInfo.arena = arena;
     this.roomInfo.ambient = ambient;
     this.roomInfo.terrain = terrain;
+    this.roomInfo.terrainTex = terrainTex;
+    this.roomInfo.sky = sky;
+    this.roomInfo.interiors = interiors;
     this.attachStructures(structures);
   }
 
@@ -341,7 +357,7 @@ export class MessageHandler {
       scores: this.roomInfo.scores ? { ...this.roomInfo.scores } : undefined,
       ffaScores: this.roomInfo.ffaScores?.(),
       map: this.roomInfo.bases || this.roomInfo.structures || this.roomInfo.arena || this.roomInfo.terrain
-        ? { mode: this.roomInfo.mode || undefined, bases: this.roomInfo.bases, structures: this.roomInfo.structures, arena: this.roomInfo.arena, ambient: this.roomInfo.ambient, terrain: this.roomInfo.terrain }
+        ? { mode: this.roomInfo.mode || undefined, bases: this.roomInfo.bases, structures: this.roomInfo.structures, arena: this.roomInfo.arena, ambient: this.roomInfo.ambient, terrain: this.roomInfo.terrain, terrainTex: this.roomInfo.terrainTex, sky: this.roomInfo.sky, interiors: this.roomInfo.interiors }
         : undefined,
       flags: this.roomInfo.flags?.(),
       pickups: this.roomInfo.pickups?.(),

@@ -1,5 +1,5 @@
 import { readFileSync, readdirSync } from 'node:fs';
-import { type MapSpec, resolveMapSpec } from '../../shared/mapSpec.ts';
+import { type MapSpec, resolveMapSpec, specModes } from '../../shared/mapSpec.ts';
 import { logger } from './logger.ts';
 
 const MAPS_DIR = `${import.meta.dir}/../../maps`;
@@ -47,6 +47,12 @@ export class MapCatalog {
     }
     if (!spec && map) { spec = this.loadMapSpec(map); src = map; }
     if (!spec) { spec = this.loadMapSpec(mode); src = spec ? mode : ''; }
+    // Mode and map are separate axes: a requested mode that the spec
+    // can host swaps in over the spec's default; one it can't leaves the
+    // map's own ruleset in charge (a dm map never sprouts flag stands).
+    if (spec && mode && spec.mode !== mode && specModes(spec).includes(mode)) {
+      spec = { ...spec, mode };
+    }
     if (bots !== undefined) spec = { ...spec, bots, botFill: bots } as MapSpec;
     return { spec, src };
   }
@@ -83,7 +89,10 @@ export class MapCatalog {
       const name = list[this.rotationIdx++ % list.length];
       if (name === undefined) continue;
       const spec = this.loadMapSpec(name);
-      if (!spec || (spec.mode && room.mode && spec.mode !== room.mode)) continue;
+      // A spec declares its legal modes; a mode-less one is a bare arena
+      // that inherits whatever the room already runs.
+      const legal = specModes(spec);
+      if (!spec || (room.mode && legal.length && !legal.includes(room.mode))) continue;
       this.rotationIdx %= list.length;
       this.roomMapName.set(room.name, name);
       logger.info('Map rotated', { room: room.name, map: name });
@@ -92,9 +101,10 @@ export class MapCatalog {
     return null;
   }
 
-  /** Playable map list for the menu — name + declared mode + default
-   *  bot count, straight from maps/*.json. */
-  list(): { name: string; mode: string; bots: number }[] {
+  /** Playable map list for the menu — name + legal modes + default
+   *  bot count, straight from maps/*.json. `mode` stays the spec's own
+   *  default so the picker can label "default ruleset" honestly. */
+  list(): { name: string; mode: string; modes: string[]; bots: number }[] {
     try {
       return readdirSync(MAPS_DIR)
         .filter((f) => f.endsWith('.json') && f !== 'rotation.json') // rotation.json is a playlist, not a map
@@ -103,6 +113,7 @@ export class MapCatalog {
           return {
             name: f.slice(0, -5),
             mode: spec?.mode ?? '',
+            modes: specModes(spec),
             bots: spec?.bots ?? spec?.botFill ?? 0,
           };
         })

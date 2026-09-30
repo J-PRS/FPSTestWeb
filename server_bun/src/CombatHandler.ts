@@ -3,7 +3,7 @@ import type { PlayerManager } from './PlayerManager.ts';
 import type { WeaponStats } from '../../shared/weapons.ts';
 import { getWeaponStats, WeaponType, directHitAoeBonus, ARMORNADE_ARMOR } from '../../shared/weapons.ts';
 import { perkMods } from '../../shared/perks.ts';
-import { aoeDamage, aoeImpulse, KNOCKBACK_SCALE, BLAST_IMPULSE_MAX, validateHitClaim, validateAoeClaim, lgTickDamage, LG_POP_DMG_CAP, LG_POP_RADIUS_MIN, LG_POP_RADIUS_MAX } from '../../shared/combat.ts';
+import { aoeDamage, aoeImpulse, KNOCKBACK_SCALE, BLAST_IMPULSE_MAX, validateHitClaim, validateAoeClaim, lgTickDamage, LG_TICK_BASE, LG_POP_DMG_CAP, LG_POP_RADIUS_MIN, LG_POP_RADIUS_MAX } from '../../shared/combat.ts';
 import { POWERUP } from '../../shared/pickups.ts';
 import type { PlayerState } from './types.ts';
 import { logger } from './logger.ts';
@@ -45,6 +45,9 @@ export interface CombatDeps {
   /** Team-mode rooms block damage between teammates (knockback still
    *  applies — boosting off a teammate's splash is intentional). */
   teams?: boolean;
+  /** Server option: set = teammates CAN damage each other — friendly()
+   *  returns false even in team rooms. Splash knockback is unaffected. */
+  friendlyFire?: boolean;
   /** Movement shadow sim — gets the same impulse deltas we apply to
    *  target.velocity so a legit blast doesn't read as divergence. */
   moveImpulse?: (playerId: string, dv: Vec3) => void;
@@ -128,7 +131,9 @@ export class CombatHandler {
   }
 
   private friendly(shooterId: string, targetId: string): boolean {
-    if (!this.deps.teams || shooterId === targetId) return false; // self-splash = rocket jumps
+    // friendlyFire server option opens the gate entirely; self-splash
+    // stays allowed regardless (rocket jumps).
+    if (!this.deps.teams || shooterId === targetId || this.deps.friendlyFire) return false;
     const s = this.playerManager.getPlayer(shooterId);
     const t = this.playerManager.getPlayer(targetId);
     return !!(s?.team && t?.team && s.team === t.team);
@@ -440,7 +445,7 @@ export class CombatHandler {
         label: 'LG beam hit', weapon: msg.weaponType,
       }, victim.id, victim, false, dmg);
     }
-    const scale = lgTickDamage(n) / 8;
+    const scale = lgTickDamage(n) / LG_TICK_BASE;
     this.processAOE(playerId, msg.position, msg.excludeTargetId, { ...stats, aoeDamage: stats.aoeDamage * scale }, msg.weaponType);
   }
 
@@ -625,15 +630,22 @@ export class CombatHandler {
     // nearby. Past ~15m there's no legal pounce — flag it in the
     // heartbeat + warn (damage still applies: this is a self-report, and
     // a bugged client shouldn't be silently maimed).
-    const range = this.deps.envRange?.(playerId);
-    if (range !== undefined && range > 15) {
-      this.hb('envdmg.far');
-      logger.warn('Environment damage implausible: no creature near', { playerId, dist: Math.round(range) });
+    // Attacker-tagged claims come from host-simmed sources the server has
+    // no creature-range check for (team bots, deployables) — skip the
+    // melee-from-afar warn and let a heavier cap cover bot melee (60).
+    const attacker = typeof msg.attacker === 'string' && /^[\w: .-]{1,32}$/.test(msg.attacker)
+      ? msg.attacker : undefined;
+    if (!attacker) {
+      const range = this.deps.envRange?.(playerId);
+      if (range !== undefined && range > 15) {
+        this.hb('envdmg.far');
+        logger.warn('Environment damage implausible: no creature near', { playerId, dist: Math.round(range) });
+      }
     }
-    const damage = Math.min(40, Math.max(1, Math.round(msg.amount)));
+    const damage = Math.min(attacker ? 80 : 40, Math.max(1, Math.round(msg.amount)));
     const result = this.playerManager.applyDamage(playerId, damage);
     player.forceSendUntil = Date.now() + FORCE_SEND_MS;
-    this.applyHit('environment', playerId, damage, result, { label: 'Player hit' });
+    this.applyHit(attacker ?? 'environment', playerId, damage, result, { label: 'Player hit' });
   }
 
   /** Free-form heal claims still need a cadence — without a credit gate

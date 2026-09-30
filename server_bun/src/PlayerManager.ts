@@ -1,7 +1,7 @@
 import type { PlayerState, Vec3, Rotation, GameStatePlayer } from './types.ts';
 import { CONFIG } from './config.ts';
 import { STATUS } from '../../shared/status.ts';
-import { perkMods } from '../../shared/perks.ts';
+import { perkMods, effectiveResist } from '../../shared/perks.ts';
 import { CLASS_STATS } from '../../shared/botClasses.ts';
 import { POWERUP } from '../../shared/pickups.ts';
 import { ENERGY } from '../../shared/movement.ts';
@@ -223,7 +223,7 @@ export class PlayerManager {
 
     // Perk damage resist — the join-declared table owns the modifier,
     // the server applies it so the number can't be client-inflated.
-    let incoming = damage * (1 - perkMods(target.perk).damageResist);
+    let incoming = damage * (1 - effectiveResist(perkMods(target.perk), target.health, target.maxHealth));
     // Armor pool: absorbs armorAbsorb of the hit while it lasts, overflow
     // leaks to health (100hp/100armor taking 100 → 80hp/20armor).
     if (target.armor > 0) {

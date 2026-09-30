@@ -65,7 +65,10 @@ describe('PlayerManager', () => {
     pm.addPlayer('tank', undefined, 'plated');
     pm.addPlayer('tough', undefined, 'vitality');
     pm.breakShield('tank'); pm.breakShield('tough');
-    expect(pm.applyDamage('tank', 40).newHealth).toBe(70);  // 25% resist
+    // Underdog plate: full-health hits punch straight through…
+    expect(pm.applyDamage('tank', 40).newHealth).toBe(60);
+    // …resist kicks in only below 80% max HP.
+    expect(pm.applyDamage('tank', 40).newHealth).toBe(30);  // 60 - 40*0.75
     expect(pm.getPlayer('tough')!.health).toBe(150);        // 100 + 50
   });
 

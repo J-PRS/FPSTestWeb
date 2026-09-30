@@ -63,6 +63,11 @@ export const CONFIG = {
   // Off = judge mode (report is truth, sim only flags divergence).
   moveAuthority: envStr('FPS_MOVE_AUTHORITY', '0') === '1',
 
+  // Friendly fire: default OFF — teammates can't damage each other in
+  // team rooms. FPS_FRIENDLY_FIRE=1 lets team damage through the friendly
+  // gate (splash knockback onto teammates stays on either way).
+  friendlyFire: envStr('FPS_FRIENDLY_FIRE', '0') === '1',
+
   // Minimum projectile airtime (seconds) for a demo to be listed as a "cool shot".
   // Set to 0.2s during testing phase so clips are easy to trigger. Raise to ~2.0s for production.
   minDemoLifetime: envNum('FPS_MIN_DEMO_LIFETIME', 0.2),

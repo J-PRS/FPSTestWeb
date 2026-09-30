@@ -1,5 +1,5 @@
 import type { PlayerState } from './types.ts';
-import { lgChargeAt, lgTickDamage, LG_RAMP_WINDOW_S, LG_POP_CHARGE_MULT } from '../../shared/combat.ts';
+import { lgChargeAt, lgTickDamage, LG_TICK_BASE, LG_RAMP_WINDOW_S, LG_POP_CHARGE_MULT } from '../../shared/combat.ts';
 
 /** The LG charge economy: beam ticks bank withheld damage onto the victim
  *  as a walking bomb; any later hit — or death — detonates the bank as a
@@ -55,9 +55,9 @@ export class ChargeBank {
   }
 
   /** Withheld share a beam tick banks on the victim — the ramp's gap
-   *  between the full 8 and the stepped tick the victim actually takes. */
+   *  between the full base tick and the stepped tick actually taken. */
   withheldFor(n: number): number {
-    return 8 - lgTickDamage(n);
+    return LG_TICK_BASE - lgTickDamage(n);
   }
 
   delete(shooterId: string): void { this.ramp.delete(shooterId); }

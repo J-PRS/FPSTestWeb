@@ -17,10 +17,13 @@ describe('botFill', () => {
     expect(resolveMapSpec({}).botFill).toBeUndefined();
   });
 
-  test('terrain spec accepts only plain .bin filenames', () => {
+  test('terrain spec accepts maps/-relative .bin paths only', () => {
     expect(resolveMapSpec({ terrain: 'ravine.bin' }).terrain).toBe('ravine.bin');
+    expect(resolveMapSpec({ terrain: 'sub/dir.bin' }).terrain).toBe('sub/dir.bin');     // one subdir ok
+    expect(resolveMapSpec({ terrain: 't2/x/terrain.bin' }).terrain).toBe('t2/x/terrain.bin'); // t2 ports
     expect(resolveMapSpec({ terrain: '../etc/passwd' }).terrain).toBeUndefined();
-    expect(resolveMapSpec({ terrain: 'sub/dir.bin' }).terrain).toBeUndefined();
+    expect(resolveMapSpec({ terrain: 'a/b/c/d.bin' }).terrain).toBeUndefined();          // too deep
+    expect(resolveMapSpec({ terrain: '/abs.bin' }).terrain).toBeUndefined();
     expect(resolveMapSpec({}).terrain).toBeUndefined();
   });
 

@@ -99,8 +99,10 @@ export class RoomFactory {
   quickRoom(mode: string, map = '', bots?: number): Room {
     let best: Room | undefined;
     for (const room of this.host.rooms.values()) {
-      if (map ? this.host.maps.mapNameOf(room.name) !== map
-              : room.mode !== mode) continue;
+      // Map and mode are independent filters — a peaks-ctf room must not
+      // absorb a peaks-dm quick-join just because the map matches.
+      if (map && this.host.maps.mapNameOf(room.name) !== map) continue;
+      if (mode && room.mode !== mode) continue;
       if (room.playerCount() >= CONFIG.maxPlayers) continue;
       if (!best || room.playerCount() < best.playerCount()) best = room;
     }

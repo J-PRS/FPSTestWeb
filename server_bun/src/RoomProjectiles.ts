@@ -187,6 +187,18 @@ export class RoomProjectiles {
       const hit = segSolidHit(from, p.pos, this.solids, this.solidIndex ?? undefined);
       if (hit) { this.detonate(proj, hit); return true; }
     }
+    // Shield sweep — an enemy dome eats the shell at the field's edge,
+    // before any body inside can be reached. Walls already won if they
+    // hit earlier in the frame (sequential order like everything else).
+    const st = this.room.deployables.shieldBlock(from, p.pos, proj.ownerId);
+    if (st !== null) {
+      this.detonate(proj, {
+        x: from.x + (p.pos.x - from.x) * st,
+        y: from.y + (p.pos.y - from.y) * st,
+        z: from.z + (p.pos.z - from.z) * st,
+      });
+      return true;
+    }
     // Player sweep — same legal radius the hit-claim validator allows:
     // capsule radius + the larger of body/wake radius at this airtime.
     const reach = PLAYER_RADIUS + Math.max(stats.bodyRadius, hitRadiusAt(proj.weaponType, p.age));
@@ -244,6 +256,9 @@ export class RoomProjectiles {
       const sh = segSolidHit(p.pos, end, this.solids, this.solidIndex ?? undefined);
       if (sh) bestT = Math.min(bestT, segPointT(p.pos, end, sh));
     }
+    // A dome eats the discharged beam too — same rule as flight contact.
+    const sht = this.room.deployables.shieldBlock(p.pos, end, proj.ownerId);
+    if (sht !== null) bestT = Math.min(bestT, sht);
     const midX = (p.pos.x + end.x) / 2, midY = (p.pos.y + end.y) / 2, midZ = (p.pos.z + end.z) / 2;
     const margin = reach + range / 2;
     for (const [pid, target] of this.room.players.getAllPlayers()) {

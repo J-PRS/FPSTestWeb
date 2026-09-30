@@ -29,6 +29,7 @@ import { RoomProjectiles } from './RoomProjectiles.ts';
 import type { PlayerState, Vec3 } from './types.ts';
 import { CLASS_STATS } from '../../shared/botClasses.ts';
 import { logger } from './logger.ts';
+import { CONFIG } from './config.ts';
 import type { ServerMessage } from '../../shared/protocol.ts';
 import { POWERUP, rollCreatureDrop, type PowerupKind } from '../../shared/pickups.ts';
 import { ENERGY } from '../../shared/movement.ts';
@@ -355,6 +356,7 @@ export class Room {
       mode: this.mode,
       scores: this.scores,
       teams: this.modeSpec?.teams,
+      friendlyFire: CONFIG.friendlyFire,
       winAt: this.modeSpec?.winAt,
       ffaScores: () => Object.fromEntries(this.ffaScores),
       bases: this.spec.bases,
@@ -362,6 +364,9 @@ export class Room {
       arena: this.spec.arena,
       ambient: this.spec.ambient,
       terrain: this.spec.terrain,
+      terrainTex: this.spec.terrainTex,
+      sky: this.spec.sky,
+      interiors: this.spec.interiors,
       onKill: (pid, shooter) => this.onKill(pid, shooter),
       onHit: (pid, shooter) => this.bots.flinch(pid, shooter),
       flags: () => this.flags?.snapshot() ?? [],
@@ -579,7 +584,7 @@ export class Room {
     if (spec.ballMix) this.ballSim.ballMix = spec.ballMix;
     this.creatureSim.pops = spec.creatures ?? {};
     this.creatureSim.colliders = this.ballSim.colliders;
-    this.messages.setMap(spec.bases, spec.structures, spec.arena, spec.ambient, spec.terrain);
+    this.messages.setMap(spec.bases, spec.structures, spec.arena, spec.ambient, spec.terrain, spec.terrainTex, spec.sky, spec.interiors);
     this.broadcast({
       type: 'mapUpdate',
       bases: spec.bases,
@@ -587,6 +592,9 @@ export class Room {
       arena: spec.arena ?? null,
       ambient: spec.ambient,
       terrain: spec.terrain,
+      terrainTex: spec.terrainTex,
+      sky: spec.sky,
+      interiors: spec.interiors,
     });
     // Rotate the sims' heightfield WITH the broadcast — clients rebuild on
     // mapUpdate; a sim still running the old field disagrees about where
