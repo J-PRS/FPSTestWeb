@@ -10,22 +10,20 @@
  * Event budget: ~1 retarget per crawler per RETARGET_INTERVAL plus one
  * edge per attack cycle — a 6-crawler room ≈ a few hundred bytes/sec.
  */
-import { type Heightfield, hmHeight } from '../../shared/heightfield.ts';
+import { type Heightfield } from '../../shared/heightfield.ts';
 import {
-  makeSimCrawler, applyCrawlerDamage,
-  isFlyerSpecies, makeSimFlyer, applyFlyerDamage,
-  isRollerSpecies, makeSimRoller, applyRollerDamage,
-  isSlitherSpecies, makeSimSlither, applySlitherDamage,
-  isBanelingSpecies, makeSimBaneling, applyBanelingDamage,
-  isTotemSpecies, makeSimTotem, applyTotemDamage,
-  commitTarget,
+  applyCrawlerDamage, applyFlyerDamage, applyRollerDamage,
+  applySlitherDamage, applyBanelingDamage, applyTotemDamage,
   type SimBaneling,
 } from '../../shared/creatureSim.ts';
 import { CreatureBrain, type SimBeing, isFlyer, isTotem, isRoller, isSlither, isBaneling } from './creatureBrain.ts';
+import {
+  alivePlayers as alivePlayersOf, nearestPlayer,
+  spawnCrawler as spawnCrawlerInto, snapTarget as snapTargetInto, targetSnap as targetSnapOf,
+} from './creatureSpawn.ts';
 import type { SimVec, StructureCollider } from '../../shared/ballSim.ts';
 import type { PlayerManager } from './PlayerManager.ts';
 import type { ServerMessage, Vec3 } from './types.ts';
-import { STATUS } from '../../shared/status.ts';
 import { logger } from './logger.ts';
 import { ARMORNADE_OVERCAP, MAX_HIT_CLAIM_DMG } from '../../shared/weapons.ts';
 
@@ -39,20 +37,21 @@ const TICK_DT = 0.05;
 const NEAR_D2 = 80 * 80;
 const FAR_SKIP = 4;
 export class CreatureSim {
-  private field: Heightfield | null = null;
+  // Public flat fields — creatureSpawn.ts's SpawnHost reads/writes them.
+  field: Heightfield | null = null;
   /** Map yaw-OBBs — the totem beam solve and LOS gate clip against these
    *  so a compound wall blocks the lock like it blocks projectiles. */
   colliders: readonly StructureCollider[] = [];
-  private crawlers = new Map<number, SimBeing>();
-  private nextId = 1;
+  readonly crawlers = new Map<number, SimBeing>();
+  nextId = 1;
   /** Confused hunt: the sighting the creature circles plus its expiry. */
-  private brain: CreatureBrain;
-  private broadcast: (msg: ServerMessage) => void;
+  brain: CreatureBrain;
+  broadcast: (msg: ServerMessage) => void;
   private sendTo: ((playerId: string, msg: ServerMessage) => void) | null = null;
   private edgeSeq = new Map<number, number>();
-  private players: PlayerManager;
+  players: PlayerManager;
   private timer: ReturnType<typeof setInterval> | null = null;
-  private simTime = 0;
+  simTime = 0;
   private lastTickAt = 0;
   private tickAcc = 0;
   private static readonly TICK_CATCHUP_CAP = 0.25;
@@ -132,82 +131,26 @@ export class CreatureSim {
   }
 
   private alivePlayers(): { id: string; pos: SimVec }[] {
-    const out: { id: string; pos: SimVec }[] = [];
-    for (const [id, p] of this.players.getAllPlayers()) {
-      if (!p.isDead && !(p.status & STATUS.CLOAK)) out.push({ id, pos: p.position });
-    }
-    if (this.extraTargets) out.push(...this.extraTargets());
-    return out;
+    return alivePlayersOf(this);
   }
 
   private nearestPlayer(c: SimBeing, alive: { id: string; pos: SimVec }[]): { id: string; pos: SimVec } | null {
-    let best: { id: string; pos: SimVec } | null = null;
-    let bestD = Infinity;
-    for (const p of alive) {
-      const d = (p.pos.x - c.x) ** 2 + (p.pos.z - c.z) ** 2;
-      if (d < bestD) { bestD = d; best = p; }
-    }
-    return best;
+    return nearestPlayer(c, alive);
   }
 
   private spawnCrawler(near: SimVec, species: string): SimBeing {
-    const field = this.field!;
-    const ang = this.rng() * Math.PI * 2;
-    const dist = 40 + this.rng() * 50;
-    const x = near.x + Math.cos(ang) * dist;
-    const z = near.z + Math.sin(ang) * dist;
-    const seed = (this.rng() * 0xffffffff) >>> 0 || 1;
-    const gy = hmHeight(field, x, z);
-    const id = this.nextId++;
-    const uber = this.rng() < 0.05;
-    const c: SimBeing = isFlyerSpecies(species)
-      ? makeSimFlyer(id, { x, y: gy, z }, uber, seed, species)
-      : isTotemSpecies(species)
-        ? makeSimTotem(id, { x, y: gy, z }, uber, seed, species)
-        : isRollerSpecies(species)
-          ? makeSimRoller(id, { x, y: gy, z }, uber, seed, species)
-          : isSlitherSpecies(species)
-            ? makeSimSlither(id, { x, y: gy, z }, uber, seed, species)
-            : isBanelingSpecies(species)
-              ? makeSimBaneling(id, { x, y: gy, z }, uber, seed, species)
-              : makeSimCrawler(id, { x, y: gy, z }, uber, seed, species);
-    if (isFlyer(c)) c.y = gy + c.sp.ORBIT_ALT; // flyers enter at cruise alt
-    if (isRoller(c)) c.y = gy + 1.6;           // rollers ride the surface
-    if (isSlither(c)) c.y = gy + 0.5;          // belly on the dirt
-    if (isBaneling(c)) c.y = gy + 0.7;         // sac skims low
-    // Negative offset pushes this crawler's first retarget into its own
-    // bucket instead of the spawn tick — the spread survives every reset.
-    this.brain.seedBuckets(c.id);
-    c.targetId = this.nearestPlayer(c, this.alivePlayers())?.id ?? null;
-    this.snapTarget(c);
-    this.crawlers.set(c.id, c);
-    this.broadcast({
-      type: 'crawlSpawn', id: c.id, position: { x: c.x, y: c.y, z: c.z },
-      seed, uber: c.uber, species: c.species,
-      targetId: c.targetId, tp: this.targetSnap(c),
-      t: this.simTime,
-    });
-    return c;
+    return spawnCrawlerInto(this, near, species);
   }
 
   /** Freeze the pounce/chase aim into the sim — same rationale as
    *  BallSim.snapTarget: both sides steer at THIS snapshot, not the
-   *  moving player. */
-  private snapTarget(c: SimBeing): void {
-    const p = c.targetId ? this.players.getPlayer(c.targetId) : null;
-    if (p && !p.isDead && !(p.status & STATUS.CLOAK)) {
-      commitTarget(c, c.targetId, p.position);
-    } else if (c.targetId && this.targetPos) {
-      const tp = this.targetPos(c.targetId);
-      if (tp) { commitTarget(c, c.targetId, tp); return; }
-      commitTarget(c, null, null);
-    } else {
-      commitTarget(c, null, null);
-    }
+   *  moving player. Public — creatureSpawn calls it back through the host. */
+  snapTarget(c: SimBeing): void {
+    snapTargetInto(this, c);
   }
 
-  private targetSnap(c: SimBeing): Vec3 | null {
-    return c.tgtValid ? { x: c.tx, y: c.ty, z: c.tz } : null;
+  targetSnap(c: SimBeing): Vec3 | null {
+    return targetSnapOf(c);
   }
 
   private edge(c: SimBeing, kind: 'retarget' | 'windup' | 'pounce' | 'bite' | 'detonate' | 'charge' | 'fire' | 'blink'): void {
