@@ -1,3 +1,4 @@
+2026-10-02 - RtcRelay lobby lifecycle covered by bun tests (list/pair/re-list/delist/order); e2e specs share _tools/e2e/check.ts
 2026-10-02 - TASKS.md refresh (e2e suite, p2p lobbies, CI); RTC soak clean (115 gems, 0 rej/corr/closes)
 2026-10-02 - CI workflow (.github/workflows/ci.yml) + cross-platform Chrome probe
 2026-10-02 - _tools/e2e/all.ts: suite runner, bun run e2e / e2e:perf scripts, duo chat timeout fix
