@@ -554,3 +554,28 @@ export const ARMORNADE_OVERCAP = 2;    // creature armor cap = this × maxHealth
 export function getWeaponStats(weaponType: number | undefined): WeaponStats {
   return WEAPONS[weaponType ?? WeaponType.Rocket] ?? WEAPONS[WeaponType.Rocket]!;
 }
+
+/** Legal fire cadence per primary/sidearm (s between shots) — the same
+ *  numbers the client trigger enforces. Server bots gate on this so a
+ *  drawn weapon can't out-cadence a human with the same gun (a mortar
+ *  brain at 0.45s cadence would otherwise out-shoot a player's 2.0s). */
+export const WEAPON_FIRE_INTERVAL_S: Partial<Record<WeaponType, number>> = {
+  [WeaponType.Rocket]: 0.8,
+  [WeaponType.Disc]: 1.0,
+  [WeaponType.Chaingun]: 0.09,
+  [WeaponType.Mortar]: 2.0,
+  [WeaponType.GrenadeLauncher]: 0.7,
+  [WeaponType.Flak]: 1.1,
+  [WeaponType.PlasmaCannon]: 0.28,
+  [WeaponType.Railgun]: 1.5,
+  [WeaponType.Lightning]: 0.05,
+  [WeaponType.Shotgun]: 0.7,
+  [WeaponType.Cannon]: 0.55,
+  [WeaponType.RocketLauncher]: 0.85,
+  [WeaponType.Pistol]: 0.22,
+  [WeaponType.Revolver]: 0.6,
+  [WeaponType.Sticky]: 0.8,
+  [WeaponType.PlasmaGun]: 0.13,
+  [WeaponType.Sprinkler]: 0.11,
+  [WeaponType.Melee]: 0.5,
+};

@@ -8,7 +8,7 @@ import type { Vec3 } from './types.ts';
 import type { Room } from './Room.ts';
 import { EYE_OFFSET, PLAYER_RADIUS } from '../../shared/constants.ts';
 import { logger } from './logger.ts';
-import { WeaponType, getWeaponStats } from '../../shared/weapons.ts';
+import { WeaponType, getWeaponStats, WEAPON_FIRE_INTERVAL_S } from '../../shared/weapons.ts';
 import { GRAVITY, type MoveState } from '../../shared/movement.ts';
 import { segFieldHit, segPointDist, segPointT } from '../../shared/projSim.ts';
 import { segSolidHit } from '../../shared/solidWorld.ts';
@@ -30,6 +30,12 @@ export class BotArsenal {
    *  launch impulse rides out like a real disc-jump. */
   private propelT = new Map<string, number>();
   private propelJetUntil = new Map<string, number>();
+  /** Last shot time per bot — the weapon-rate gate that keeps a fast
+   *  brain cadence from out-shooting the drawn weapon's legal rate. */
+  private lastShot = new Map<string, number>();
+  /** Sim clock — the rate gate compares in sim-ms, not wall time, so
+   *  scenario tests and slow-tick servers measure the same cadence. */
+  private clock = 0;
 
   constructor(
     private room: Room,
@@ -46,6 +52,26 @@ export class BotArsenal {
   untrack(id: string): void {
     this.propelT.delete(id);
     this.propelJetUntil.delete(id);
+    this.lastShot.delete(id);
+  }
+
+  /** Players can't out-run a weapon's rate either — the drawn gun owns
+   *  the trigger interval, not the brain's cadence. */
+  step(dt: number): void {
+    this.clock += dt * 1000;
+  }
+
+  private rateOk(id: string, wt: number): boolean {
+    const interval = (WEAPON_FIRE_INTERVAL_S[wt as WeaponType] ?? 0.1) * 1000;
+    if (this.clock - (this.lastShot.get(id) ?? -interval) < interval) return false;
+    this.lastShot.set(id, this.clock);
+    return true;
+  }
+
+  /** Deterministic-world tests drive the arsenal without a room tick —
+   *  nudge the sim clock so rate-gating still measures a cadence. */
+  testAdvance(ms: number): void {
+    this.clock += ms;
   }
 
   fireAt(p: BotBody, targetId: string, aim: Vec3): void {
@@ -66,6 +92,7 @@ export class BotArsenal {
     // 3.3m+ in 3D and the band could never open.
     const lo = this.loadouts.get(p.id) ?? BOT_LOADOUTS[0]!;
     const wt = this.pickWeapon(lo, distXZ, dist);
+    if (!this.rateOk(p.id, wt)) return;
     if (wt === WeaponType.Melee) {
       // The punch IS the player's swing — combat funnels it identically,
       // and the broadcast swing lets observers see the melee. Speed is 0
@@ -104,6 +131,7 @@ export class BotArsenal {
     const lenb = Math.sqrt(dxb * dxb + dyb * dyb + dzb * dzb) || 1;
     const lo = this.loadouts.get(p.id) ?? BOT_LOADOUTS[0]!;
     const wt = this.pickWeapon(lo, Math.hypot(dxb, dzb), lenb);
+    if (!this.rateOk(p.id, wt)) return;
     if (wt === WeaponType.Melee) {
       // The punch lands if the creature is inside the swing's reach —
       // geometry decides, not a dice roll.

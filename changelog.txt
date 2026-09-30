@@ -1,3 +1,4 @@
+2026-09-26 - Bots obey weapon fire rates: WEAPON_FIRE_INTERVAL_S in shared, arsenal gates each drawn weapon on a sim clock (mortar bots no longer out-cadence humans)
 2026-09-26 - Tests: bot beam-vs-player path pinned (weld damages, whiff does not)
 2026-09-26 - Tests: beam-vs-player scenario coverage — excluded victim takes the tick, held-beam band decay
 2026-09-26 - Bots shoot real weapons: creature targets now eat real shells (RoomProjectiles creature sweep + splashDamage), projectile-less weapons use a geometric beam ray instead of RNG hitscan

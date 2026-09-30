@@ -594,6 +594,7 @@ export class ServerBots {
 
   tick(dt: number): void {
     this.maintain(Date.now());
+    this.arsenal.step(dt); // sim-clock — the weapon-rate gate is sim-paced
     if (this.brains.size === 0) return;
     const now = Date.now();
     for (const [id, brain] of this.brains) {

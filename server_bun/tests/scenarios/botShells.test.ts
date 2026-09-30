@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test';
-import { mkRoom, step, pin, twoPlayers } from './harness.ts';
+import { mkRoom, step, pin, watch } from './harness.ts';
 import { WeaponType } from '../../../shared/weapons.ts';
 import { BOT_LOADOUTS } from '../../../shared/botLoadouts.ts';
 import type { Vec3 } from '../../src/types.ts';
@@ -56,13 +56,17 @@ describe('scenario: bot shells hit creatures like player shots', () => {
     // Force the beam-rider kit (index 8) — near band draws Lightning, which
     // has no projectile body and routes through fireSpeedless.
     const bots = room.bots as unknown as {
-      arsenal: { fireAt(p: { id: string; position: Vec3; velocity: Vec3 }, t: string, aim: Vec3): void };
+      arsenal: { fireAt(p: { id: string; position: Vec3; velocity: Vec3 }, t: string, aim: Vec3): void; testAdvance(ms: number): void };
       loadouts: Map<string, (typeof BOT_LOADOUTS)[number]>;
     };
     bots.loadouts.set(b.id, BOT_LOADOUTS[8]!);
     const hp0 = victim.health;
-    for (let i = 0; i < 6; i++) bots.arsenal.fireAt(b, 'victim', { x: 10, y: 32, z: 0 });
-    expect(victim.health).toBeLessThan(hp0);
+    const armor0 = victim.armor;
+    for (let i = 0; i < 6; i++) {
+      bots.arsenal.testAdvance(60); // LG tick 50ms — stay legal
+      bots.arsenal.fireAt(b, 'victim', { x: 10, y: 32, z: 0 });
+    }
+    expect(victim.health < hp0 || victim.armor < armor0).toBe(true);
   });
 
   it('a beam into empty dirt pays nothing — the tracer lies less than the RNG did', () => {
@@ -79,5 +83,24 @@ describe('scenario: bot shells hit creatures like player shots', () => {
     // Aim 4m over the victim's head — the ray must not "hit" anyway.
     bots.arsenal.fireAt(b, 'victim', { x: 10, y: 36, z: 0 });
     expect(victim.health).toBe(victim.maxHealth);
+  });
+
+  it('the arsenal enforces the drawn weapon\'s rate — no fast-cadence mortars', () => {
+    const room = mkRoom({ bots: 1 }, 'dm');
+    const w = watch(room);
+    const b = bot(room);
+    room.players.addPlayer('victim');
+    pin(room, b.id, { x: 0, y: 31, z: 0 });
+    pin(room, 'victim', { x: 50, y: 31, z: 0 }); // far band → Mortar (2.0s rate)
+    const bots = room.bots as unknown as {
+      arsenal: { fireAt(p: { id: string; position: Vec3; velocity: Vec3 }, t: string, aim: Vec3): void; testAdvance(ms: number): void };
+      loadouts: Map<string, (typeof BOT_LOADOUTS)[number]>;
+    };
+    bots.loadouts.set(b.id, BOT_LOADOUTS[7]!); // artillery
+    for (let i = 0; i < 3; i++) bots.arsenal.fireAt(b, 'victim', { x: 50, y: 32, z: 0 });
+    expect(w.count('projectileCreated')).toBe(1); // one shell per 2.0s, not three per tick
+    bots.arsenal.testAdvance(2100);
+    bots.arsenal.fireAt(b, 'victim', { x: 50, y: 32, z: 0 });
+    expect(w.count('projectileCreated')).toBe(2); // rate elapsed — legal again
   });
 });
