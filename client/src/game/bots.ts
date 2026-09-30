@@ -2,7 +2,6 @@ import * as THREE from 'three';
 
 import { GameBot, BOT_DMG, EYE } from './botBrain.js';
 import { BotWatchdog } from './botWatchdog.js';
-import { losClear, type BrainCtx } from '../../../shared/botBrain.js';
 import { BOT_LOADOUTS, pickBotWeapon } from '../../../shared/botLoadouts.js';
 import { getProjectileConfig } from '../projectiles/index.js';
 import { Projectile } from '../projectiles/Projectile.js';
@@ -23,6 +22,7 @@ import { poissonDisc } from '../utils/poissonSpread.js';
 import { killTaunt, deathTaunt } from '../../../shared/botTaunts.js';
 import { chatSink } from './chat.js';
 import { noteKill } from '../core/stateDebug.js';
+import { BotSenses } from './botSenses.js';
 
 /**
  * TeamBots — the mode referee. Bot brains/bodies live in botBrain.ts;
@@ -82,6 +82,7 @@ export class TeamBots {
   readonly spec: (typeof MODES)[ModeId];
 
   private ctf: CtfFlags | null = null;
+  private senses: BotSenses;
 
   constructor(
     readonly deps: BotsDeps,
@@ -91,6 +92,14 @@ export class TeamBots {
     private mode: ModeId,
   ) {
     this.spec = MODES[mode]; // param props assign after field inits — do it here
+    this.senses = new BotSenses({
+      bots: this.bots,
+      teamOf: this.teamOf,
+      player: () => this.deps.lazyPlayer(),
+      world: () => this.deps.world,
+      mode: () => this.mode,
+      nearestCreature: (p, d) => this.hooks.nearestCreature(p, d),
+    });
     this.wd = new BotWatchdog(deps.logger, () => this.over !== null);
     const ffa = this.spec.ffa;
     this.teamOf.set('local', ffa ? 'local' : playerTeam);
@@ -209,7 +218,7 @@ export class TeamBots {
         if (bot.respawnAt <= 0) this.respawnBot(bot);
         continue;
       }
-      const foes = this.enemyList(bot);
+      const foes = this.senses.enemyList(bot);
       const shot = bot.think(dt, this.ctxFor(bot, foes, others, terrain));
       if (this.over) { this.sheepTick(bot, dt, terrain); continue; }
       if (shot) this.resolveShot(bot, shot.targetId, shot.aim);
@@ -221,7 +230,7 @@ export class TeamBots {
         if (bot.wantDeploy) this.tryDeploy(bot);
         this.tryPropel(bot, !!shot);
       }
-      this.sheepTick(bot, dt, terrain, this.foeSeen(bot, foes, terrain), !shot);
+      this.sheepTick(bot, dt, terrain, this.senses.foeSeen(bot, foes, terrain), !shot);
     }
   }
 
@@ -242,8 +251,8 @@ export class TeamBots {
       others,
       // Hearing: fresh blasts pull idle bots toward the action — the
       // same noisesNear sense the server feeds its brains.
-      sounds: this.recentNoises(bot.position),
-      threats: this.incomingNear(bot.position),
+      sounds: this.senses.recentNoises(bot.position),
+      threats: this.senses.incomingNear(bot.position),
     };
   }
 
@@ -251,21 +260,6 @@ export class TeamBots {
    *  (slow, grounded, or parked), drains while it's doing Tribes things
    *  (covering ground, airborne, jetting). At 100 it gets yeeted: an
    *  impulse launch that forces the behavior the meter wants. */
-  /** Is a live enemy PLAYER within dueling range AND line of sight?
-   *  Creatures don't count — walking past wildlife isn't fear. Mirrors
-   *  ServerBots.markFoeNear: the same visible-enemy evidence the server
-   *  meter charges on. */
-  private foeSeen(bot: GameBot, foes: { id: string; pos: THREE.Vector3; alive: boolean }[], terrain: Terrain): boolean {
-    for (const e of foes) {
-      if (!e.alive || e.id.startsWith('creature:')) continue;
-      if (e.pos.distanceTo(bot.position) >= 45) continue; // brawl range — server mirror
-      _losCtx.groundY = (x, z) => terrain.getHeight(x, z);
-      _losCtx.now = performance.now();
-      if (losClear(_losCtx, bot.position, e.pos)) return true;
-    }
-    return false;
-  }
-
   private sheepTick(bot: GameBot, dt: number, terrain: Terrain, foe = false, ignoring = false): void {
     const v = bot.vel;
     const speedXZ = Math.hypot(v.x, v.z);
@@ -413,75 +407,13 @@ export class TeamBots {
   /** Bots hostile to the LOCAL player — the deployable turret's target
    *  list. Enemy-team members in team modes, everyone in FFA. */
   enemyBotsForLocal(): { playerId: string; pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean }[] {
-    const myTeam = this.teamOf.get('local');
-    return this.bots
-      .filter(b => !b.isDead && b.team !== myTeam)
-      .map(b => ({ playerId: b.playerId, pos: b.pos, vel: b.vel, alive: true }));
+    return this.senses.enemyBotsForLocal();
   }
 
-  /** Players hostile to a GIVEN team — a bot-owned turret/mine scans
-   *  these: enemy bots AND the local player when they're on the other
-   *  side. FFA makes everyone a foe of everyone. */
+  /** Players hostile to a GIVEN team — bot-owned turrets/mines scan
+   *  these: enemy bots AND the local player on the other side. */
   enemyBotsForTeam(team: string): { playerId: string; pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean }[] {
-    const out: { playerId: string; pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean }[] = [];
-    const player = this.deps.lazyPlayer();
-    if (this.teamOf.get('local') !== team) {
-      out.push({ playerId: 'local', pos: player.pos, vel: player.vel, alive: !player.isDead && !player.isCloaked });
-    }
-    for (const b of this.bots) {
-      if (b.team === team) continue;
-      out.push({ playerId: b.playerId, pos: b.pos, vel: b.vel, alive: !b.isDead && !b.isCloakHidden });
-    }
-    return out;
-  }
-
-  /** Blasts younger than ~1.5s inside earshot — mirrors Room.noisesNear
-   *  (50m radius). Gunshots stay unheard, same as the server. */
-  private recentNoises(pos: THREE.Vector3): { x: number; y: number; z: number }[] {
-    const out: { x: number; y: number; z: number }[] = [];
-    for (const e of this.deps.world.explosions) {
-      if (e.age > 1.5) continue;
-      const dx = e.pos.x - pos.x, dy = e.pos.y - pos.y, dz = e.pos.z - pos.z;
-      if (dx * dx + dy * dy + dz * dz < 50 * 50) out.push({ x: e.pos.x, y: e.pos.y, z: e.pos.z });
-    }
-    return out;
-  }
-
-  /** Shells inside 12m closing on the bot — mirrors RoomProjectiles
-   *  .incomingNear: a round flying away is no threat at any distance. */
-  private incomingNear(pos: THREE.Vector3): { x: number; y: number; z: number }[] {
-    const out: { x: number; y: number; z: number }[] = [];
-    for (const p of this.deps.world.projectiles) {
-      const dx = pos.x - p.pos.x, dy = pos.y - p.pos.y, dz = pos.z - p.pos.z;
-      const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
-      if (d > 12) continue;
-      if (p.vel.x * dx + p.vel.y * dy + p.vel.z * dz <= 0) continue;
-      out.push({ x: p.pos.x, y: p.pos.y, z: p.pos.z });
-    }
-    return out;
-  }
-
-  /** Everything the bot may legally shoot: enemy-team players (the local
-   *  player included) and hostile creatures. */
-  private enemyList(bot: GameBot): { id: string; pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean }[] {
-    _enemies.length = 0;
-    const player = this.deps.lazyPlayer();
-    if (this.teamOf.get('local') !== bot.team) {
-      _enemies.push({ id: 'local', pos: player.pos, vel: player.vel, alive: !player.isDead && !player.isCloaked });
-    }
-    for (const [id, rp] of this.deps.world.remotePlayers) {
-      if (id === bot.playerId) continue;
-      const team = this.teamOf.get(id);
-      if (team === bot.team) continue;
-      // A held cloak removes the bot from enemy senses — same rule the
-      // local player's cloak enjoys in this list.
-      _enemies.push({ id, pos: rp.pos, vel: rp.vel, alive: !rp.isDead && !rp.isCloakHidden });
-    }
-    // Farming modes look farther — the brain prefers beast targets
-    // when huntCreatures is on, so a far beast still enters the list.
-    const c = this.hooks.nearestCreature(bot.position, this.mode === 'nuggets' ? 80 : 35);
-    if (c) _enemies.push({ id: `creature:${c.id}`, pos: c.pos, vel: c.vel, alive: !c.dead });
-    return _enemies;
+    return this.senses.enemyBotsForTeam(team);
   }
 
   /** Resolve a bot's shot. Range-band pick comes from the shared loadout
@@ -845,14 +777,8 @@ export class TeamBots {
 }
 
 const _touchers: [string, THREE.Vector3][] = [];
-const _enemies: { id: string; pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean }[] = [];
 const _collectors: { id: string; pos: THREE.Vector3; alive: boolean; pickupScale: number }[] = [];
-// Scratch LOS ctx — foeSeen only rides losClear (groundY/solids/now).
 const _flagBurst = new THREE.Vector3();
-const _losCtx: BrainCtx = {
-  pos: { x: 0, y: 0, z: 0 }, enemies: [], groundY: () => 0, now: 0,
-  solids: Projectile.solidColliders, solidIndex: Projectile.solidIndex,
-};
 const _shotDir = new THREE.Vector3();
 const _shotMuzzle = new THREE.Vector3();
 const _pelletRight = new THREE.Vector3();
