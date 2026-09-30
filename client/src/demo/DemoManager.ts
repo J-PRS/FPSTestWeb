@@ -2,34 +2,35 @@
 // Single entry point for the game to interact with the demo system.
 
 import { DemoRecorder, type DemoContext, type RemoteSample } from './DemoRecorder.js';
-import { DemoSerializer } from './DemoSerializer.js';
 import { DemoPlayer, type InterpolatedRemote } from './DemoPlayer.js';
 import type { PlaybackState } from './DemoPlayer.js';
 import { DemoUI } from './DemoUI.js';
 import type { IPlayerDataProvider, IInputProvider, Vec3 } from './interfaces.js';
-import { ProjectileEventType } from './types.js';
 import type { ProjectileEvent, TargetEvent, DemoFile } from './types.js';
 import { CoolShotManager } from './coolShots.js';
 import type { CoolShotEntry } from './coolShots.js';
 import { VideoRecorder } from './VideoRecorder.js';
 import { ChildLogger } from '../core/Logger.js';
 import { urlParams } from '../core/params.js';
+import * as demoIO from './demoIO.js';
 
 export type { CoolShotEntry } from './coolShots.js';
 
 const logger = new ChildLogger('Demo');
 
-export class DemoManager {
-  private recorder: DemoRecorder;
-  private player: DemoPlayer;
-  private ui: DemoUI;
+export class DemoManager implements demoIO.DemoIOHost {
+  recorder: DemoRecorder;
+  player: DemoPlayer;
+  ui: DemoUI;
   // Clip queue + server sync live in CoolShotManager; playback/mode stay here
-  private coolShotMgr: CoolShotManager;
+  coolShotMgr: CoolShotManager;
 
   private playerData: IPlayerDataProvider | null = null;
   private inputData: IInputProvider | null = null;
 
   private mode: 'idle' | 'recording' | 'playing' | 'paused' = 'idle';
+  /** demoIO writes through this — the only external writer of mode. */
+  setMode(m: 'idle' | 'recording' | 'playing' | 'paused'): void { this.mode = m; }
   private uiVisible = false;
   private video: VideoRecorder = new VideoRecorder();
 
@@ -57,8 +58,8 @@ export class DemoManager {
       isRecording: () => this.mode === 'recording',
       setStatus: (s) => this.ui.setStatus(s),
       playDemoData: (d) => this.playDemoData(d),
-      downloadDemoFile: (d, f) => this.downloadDemoFile(d, f),
-      timestampStr: () => this.timestampStr(),
+      downloadDemoFile: (d, f) => demoIO.downloadDemoFile(d, f),
+      timestampStr: () => demoIO.timestampStr(),
     });
     this.coolShotMgr.onChanged = (shots) => this.onCoolShotsChanged?.(shots);
 
@@ -188,7 +189,7 @@ export class DemoManager {
     if (this.video.isRecording) {
       this.ui.setVideoRecording(false);
       const ctx = this.player.isLoaded ? 'demo' : 'live';
-      void this.video.stopAndDownload(`kribes_${ctx}_${this.timestampStr()}`).then(ok => {
+      void this.video.stopAndDownload(`kribes_${ctx}_${demoIO.timestampStr()}`).then(ok => {
         this.ui.setStatus(ok ? 'video saved' : 'video failed');
       });
       return;
@@ -281,14 +282,7 @@ export class DemoManager {
   }
 
   // Save current recording to file
-  saveDemo(): void {
-    if (this.recorder.frameCount === 0) {
-      logger.warn('No frames to save');
-      return;
-    }
-    const data = this.recorder.buildDemoFile();
-    this.downloadDemoFile(data, `demo_${this.timestampStr()}.demo`);
-  }
+  saveDemo(): void { demoIO.saveDemo(this); }
 
   // Auto-clip: called when a projectile hits something.
   // If projectileLifetime > minLifetime, schedules a clip extraction
@@ -337,24 +331,8 @@ export class DemoManager {
     this.ui.show();
     this.uiVisible = true;
     this.ui.setTime(0, data.header.duration);
-    this.updateHitMarkers(data);
+    demoIO.updateHitMarkers(this, data);
     this.onPlaybackStart?.();
-  }
-
-  private downloadDemoFile(data: DemoFile, filename: string): void {
-    const blob = DemoSerializer.toBlob(data);
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }
-
-  private timestampStr(): string {
-    return new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
   }
 
   // Set the server base URL for demo upload/list/download
@@ -368,73 +346,10 @@ export class DemoManager {
   }
 
   // Load demo from file
-  async loadDemo(file: File): Promise<void> {
-    try {
-      const buffer = await file.arrayBuffer();
-      const data = DemoSerializer.deserialize(buffer);
-      this.finishLoad(data);
-      this.ui.setStatus(`Loaded: ${data.frames.length} frames, ${data.header.duration.toFixed(1)}s`);
-    } catch (e) {
-      logger.error('Failed to load demo:', e);
-      this.ui.setStatus(`Load error: ${(e as Error).message}`);
-    }
-  }
+  async loadDemo(file: File): Promise<void> { return demoIO.loadDemo(this, file); }
 
   // Load demo from ArrayBuffer (for programmatic loading)
-  loadDemoFromBuffer(buffer: ArrayBuffer): void {
-    try {
-      this.finishLoad(DemoSerializer.deserialize(buffer));
-    } catch (e) {
-      logger.error('Failed to load demo:', e);
-      this.ui.setStatus(`Load error: ${(e as Error).message}`);
-    }
-  }
-
-  // Shared post-load: parked at 0, not playing — differs from playDemoData
-  // which starts playback immediately.
-  private finishLoad(data: DemoFile): void {
-    if (this.recorder.isRecording) {
-      this.coolShotMgr.flushPending();
-      this.recorder.stop();
-      this.ui.setRecording(false);
-      this.ui.setStatus('');
-    }
-    this.player.load(data);
-    this.mode = 'idle';
-    this.ui.setPlaying(false);
-    this.ui.setTime(0, data.header.duration);
-    this.updateHitMarkers(data);
-  }
-
-  private updateHitMarkers(data: DemoFile): void {
-    // Collect all fired and hit timestamps, paired by projectileId.
-    // Shows every shot/hit on the seekbar, not just the best one.
-    const firedTimes = new Map<number, number>();
-    for (const e of data.projectileEvents) {
-      if (e.eventType === ProjectileEventType.Fired) {
-        firedTimes.set(e.projectileId, e.timestamp);
-      }
-    }
-
-    // "Hot" = the shot this clip exists for: fired→hit airtime matching the
-    // header's recorded best lifetime (80% band catches float jitter and
-    // near-equal combo partners). Full recordings (lifetime 0) show all hot.
-    const best = data.header.projectileLifetime;
-    const isHot = (lifetime: number) => best <= 0 || lifetime >= best * 0.8;
-
-    const hitTimes: { t: number; hot: boolean }[] = [];
-    const shotTimes: { t: number; hot: boolean }[] = [];
-    for (const e of data.projectileEvents) {
-      if (e.eventType !== ProjectileEventType.Hit) continue;
-      const firedAt = firedTimes.get(e.projectileId);
-      if (firedAt === undefined) continue;
-      const hot = isHot(e.timestamp - firedAt);
-      hitTimes.push({ t: e.timestamp, hot });
-      shotTimes.push({ t: firedAt, hot });
-    }
-
-    this.ui.setMarkers(hitTimes, shotTimes, data.header.duration);
-  }
+  loadDemoFromBuffer(buffer: ArrayBuffer): void { demoIO.loadDemoFromBuffer(this, buffer); }
 
   // Called every game frame
   update(dt: number): void {
