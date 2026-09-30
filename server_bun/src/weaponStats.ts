@@ -10,13 +10,25 @@
  * (and /weaponstats serves the live in-memory table) — accumulated data
  * survives restarts, the same convention as matches.jsonl.
  */
-import { appendFileSync, mkdirSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { logger } from './logger.ts';
 
-// import.meta.dir is Bun-only — the vitest suite imports this module too.
-const HERE = (import.meta as { dir?: string }).dir ?? dirname(fileURLToPath(import.meta.url));
+// This module rides p2p/host.ts into the browser bundle — node builtins
+// are externalized stubs there, so fs resolves lazily inside flush()
+// (never called client-side) instead of at import time.
+const NODE = typeof window === 'undefined';
+let statsPaths: { dir: string; file: string } | null = null;
+async function statsFile(): Promise<{ dir: string; file: string } | null> {
+  if (!NODE) return null;
+  if (!statsPaths) {
+    const { dirname, join } = await import('node:path');
+    const { fileURLToPath } = await import('node:url');
+    // import.meta.dir is Bun-only — the vitest suite imports this too.
+    const here = (import.meta as { dir?: string }).dir ?? dirname(fileURLToPath(import.meta.url));
+    const dir = join(here, '..', '..', 'logs');
+    statsPaths = { dir, file: join(dir, 'weaponstats.jsonl') };
+  }
+  return statsPaths;
+}
 
 export interface WeaponRow {
   hits: number;
@@ -63,8 +75,6 @@ const speedBin = (v: { x: number; y: number; z: number } | null): string => {
 };
 
 const FLUSH_MS = 60_000;
-const LOGS_DIR = join(HERE, '..', '..', 'logs');
-const STATS_FILE = join(LOGS_DIR, 'weaponstats.jsonl');
 
 class WeaponStats {
   private table: RoomTable = {};
@@ -192,16 +202,20 @@ class WeaponStats {
   private flush(): void {
     if (!this.dirty) return;
     this.dirty = false;
-    try {
-      mkdirSync(LOGS_DIR, { recursive: true });
-      appendFileSync(STATS_FILE, JSON.stringify({
-        ts: new Date().toISOString(), byMode: this.table,
-        deaths: this.deaths, ttk: this.ttk, flags: this.flags,
-        speeds: this.speeds, pickups: this.pickups, deploys: this.deploys,
-      }) + '\n');
-    } catch (e) {
-      logger.warn('WeaponStats flush failed', e);
-    }
+    void statsFile().then(async (paths) => {
+      if (!paths) return;
+      try {
+        const { appendFileSync, mkdirSync } = await import('node:fs');
+        mkdirSync(paths.dir, { recursive: true });
+        appendFileSync(paths.file, JSON.stringify({
+          ts: new Date().toISOString(), byMode: this.table,
+          deaths: this.deaths, ttk: this.ttk, flags: this.flags,
+          speeds: this.speeds, pickups: this.pickups, deploys: this.deploys,
+        }) + '\n');
+      } catch (e) {
+        logger.warn('WeaponStats flush failed', e);
+      }
+    });
   }
 
   start(): void {
