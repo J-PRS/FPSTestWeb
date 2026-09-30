@@ -4,9 +4,10 @@ import { nextTargetId } from './targetIds.js';
 import { GRAVITY, BALL_MAX_DIST, BALL_TELE_MIN, BALL_TELE_MAX, BALL_TELE_HEIGHT, BALL_BASE_RADIUS, BALL_ENRAGE_ENABLED, BALL_ENRAGE_FORCE, BALL_ENRAGE_TIMEOUT, BALL_ENRAGE_DASH_DIST, BALL_ENRAGE_DASH_SPEED, BALL_ENRAGE_TELEGRAPH_H } from '../core/config.js';
 
 import { Terrain, getHeightfield } from '../world/terrain.js';
-import { makeSimBall, stepBall, BALL_OVERSPEED, BALL_MIN_SPEED, BALL_REST_SPEED, BALL_STALL_TIME, type SimBall, type StructureCollider } from '../../../shared/ballSim.js';
+import { makeSimBall, BALL_OVERSPEED, BALL_MIN_SPEED, BALL_STALL_TIME, type StructureCollider } from '../../../shared/ballSim.js';
 import { ColliderIndex } from '../../../shared/solidWorld.js';
-import { type Heightfield, hmHeight, hmFingerprint } from '../../../shared/heightfield.js';
+import { type Heightfield, hmFingerprint } from '../../../shared/heightfield.js';
+import { type NetBag, newNetBag, type NetStatics, type NetSeg, tickNet, isStaleSeg, applySeg } from './ballNet.js';
 import { RibbonTrail } from '../projectiles/RibbonTrail.js';
 import { BallTrailDots } from './ballTrails.js';
 import { ChildLogger } from '../core/Logger.js';
@@ -117,7 +118,7 @@ export class Ball {
 
   private scene: THREE.Scene;
   scale: number;
-  private emissive = new THREE.Color(0, 0, 0); // additive glow — folded into instanceColor
+  emissive = new THREE.Color(0, 0, 0); // additive glow — folded into instanceColor; public so ballNet can mirror enrage state onto it
   private trails: BallTrailDots;
   private ribbons: RibbonTrail[];
   private _lastTrailPos = new THREE.Vector3();
@@ -135,13 +136,14 @@ export class Ball {
   private lastBounceEnergy = 0; // Track total mechanical energy (KE + PE) after last bounce for loss detection
 
   // Enrage mode (replaces teleport when BALL_ENRAGE_ENABLED): out-of-range
-  // balls get pulled toward the player while still bouncing normally
-  private enraged = false;
+  // balls get pulled toward the player while still bouncing normally.
+  // Public: ballNet mirrors the sim's enrage bits onto these every tick.
+  enraged = false;
   /** Minimap reads this — enraged balls are threats, not ambient cyan. */
   get isEnraged(): boolean { return this.enraged; }
-  private enrageTimer = 0;
+  enrageTimer = 0;
   private slowTimer = 0; // seconds under BALL_MIN_SPEED — fires the stall breaker
-  private dampNextBounce = false; // set by the enrage dash — next ground bounce reflects at 50%
+  dampNextBounce = false; // set by the enrage dash — next ground bounce reflects at 50%
   private dashFlash = 0; // brief white-hot pop right after a lunge
   private static _enrageDir = new THREE.Vector3(); // scratch
 
@@ -152,8 +154,8 @@ export class Ball {
   // -bounce identical, so corrections are invisible unless latency spikes.
   netDriven = false;
   netId = 0;
-  netTargetId: string | null = null;
-  private sim: SimBall | null = null;
+  get netTargetId(): string | null { return this.netS.netTargetId; }
+  private readonly netS: NetBag = newNetBag();
   private static field: Heightfield | null = null;
   /** Read-only for desync forensics (netBalls logs its fingerprint on
    *  rubberbands). Mutate via initNetMode only. */
@@ -167,13 +169,14 @@ export class Ball {
    *  regime diverged" in one line: simT≫simNow = free-ran past the clock
    *  gate; inert legAge pinned at ~8 = stale anchor extrapolating blind. */
   get netDiag(): { simT: number; simNow: number | null; legT0: number; legAge: number; enraged: boolean; tgtValid: boolean } | null {
-    if (!this.sim) return null;
+    const sim = this.netS.sim;
+    if (!sim) return null;
     const simNow = Ball.netSimNow?.() ?? null;
-    const legAge = simNow !== null && Number.isFinite(simNow) && this.legT0 >= 0
-      ? simNow - this.legT0 : -1;
+    const legAge = simNow !== null && Number.isFinite(simNow) && this.netS.legT0 >= 0
+      ? simNow - this.netS.legT0 : -1;
     return {
-      simT: this.simT, simNow, legT0: this.legT0, legAge,
-      enraged: this.sim.enraged, tgtValid: this.sim.tgtValid,
+      simT: this.netS.simT, simNow, legT0: this.netS.legT0, legAge,
+      enraged: sim.enraged, tgtValid: sim.tgtValid,
     };
   }
   /** Map-structure colliders from gameState — prediction ricochets off
@@ -189,16 +192,14 @@ export class Ball {
   /** entities.ts wires this once — hit claims go to the server, not local health. */
   static hitClaim: ((netId: number, damage: number, ix: number, iy: number, iz: number) => void) | null = null;
   private _netImp = new THREE.Vector3(); // pending knockback impulse → next claim
-  private netAcc = 0; // fixed-dt accumulator — prediction steps at server rate
-  private flightT = 0; // seconds flown on the current inert leg (analytic path)
-  private legT0 = -1;  // sim-time stamp the current leg started at; inert
-                       // flight measures T off the server clock so tick
-                       // drift can't push prediction ahead of authority
-  private static _simTarget = { x: 0, y: 0, z: 0 };
-  // Render-only correction: segment snaps shift `pos` to truth instantly
-  // (gameplay stays exact), while this offset carries the visual error and
-  // decays over ~0.2s — the ball slides instead of teleporting.
-  private readonly renderOffset = new THREE.Vector3();
+  /** ballNet reads Ball's statics through closures — no circular import. */
+  private static readonly NET_S: NetStatics = {
+    field: () => Ball.field,
+    simNow: () => Ball.netSimNow?.(),
+    colliders: () => Ball.colliders,
+    colliderIndex: () => Ball.colliderIndex,
+  };
+  readonly renderOffset = new THREE.Vector3(); // public: ballNet blends segment corrections into it
   private readonly _rpos = new THREE.Vector3(); // pos + renderOffset, scratch
 
   /** One-time init: the heightfield the shared sim needs for bounce prediction. */
@@ -251,7 +252,7 @@ export class Ball {
       this.pos = new THREE.Vector3(netSpawn.x, netSpawn.y, netSpawn.z);
       this.vel = new THREE.Vector3(netSpawn.vx, netSpawn.vy, netSpawn.vz);
       if (variant === 0) this.color = BALL_COLORS[netSpawn.colorIdx % BALL_COLORS.length]!.clone();
-      this.sim = makeSimBall(netSpawn.id, variant, netSpawn.colorIdx,
+      this.netS.sim = makeSimBall(netSpawn.id, variant, netSpawn.colorIdx,
         { x: netSpawn.x, y: netSpawn.y, z: netSpawn.z },
         { x: netSpawn.vx, y: netSpawn.vy, z: netSpawn.vz });
     } else {
@@ -292,8 +293,8 @@ export class Ball {
     }
 
     this.prevVelY = this.vel.y;
-    if (this.netDriven && this.sim && Ball.field) {
-      this.tickNetSim(dt);
+    if (this.netDriven && this.netS.sim && Ball.field) {
+      tickNet(Ball.NET_S, this.netS, this, dt);
     } else {
       this.vel.y += BALL_GRAVITY * dt;
       this.pos.addScaledVector(this.vel, dt);
@@ -334,8 +335,9 @@ export class Ball {
       this.renderOffset.set(0, 0, 0);
     }
     this._rpos.copy(this.pos).add(this.renderOffset);
-    if (!(this.netDriven && this.sim && this.sim.enraged && this.sim.tgtValid)) return;
-    const rem = this.netAcc;
+    const sim = this.netS.sim;
+    if (!(this.netDriven && sim && sim.enraged && sim.tgtValid)) return;
+    const rem = this.netS.netAcc;
     if (rem <= 0) return;
     this._rpos.x += this.vel.x * rem;
     this._rpos.y += this.vel.y * rem + 0.5 * BALL_GRAVITY * rem * rem;
@@ -355,95 +357,6 @@ export class Ball {
     this.dashFlash = 0.15;
     this.trails.burst(8, this._rpos, this.radius, this.color);
     this.onBounce?.(this.pos.clone(), this.vel.clone());
-  }
-
-  // Server-authoritative replay: enraged legs step the shared integrator
-  // on the server's 50ms grid; inert legs solve the parabola exactly.
-  private tickNetSim(dt: number): void {
-    const s = this.sim!;
-    if (s.enraged && s.tgtValid) {
-      // Enrage pull curves the flight — must be stepped. Locked to the
-      // server's 50ms grid and gated on the stamped sim clock so the
-      // replay neither phase-shifts nor free-runs ahead of authority.
-      this.netAcc = Math.min(this.netAcc + dt, 0.5);
-      const tgt = Ball._simTarget;
-      tgt.x = s.tx; tgt.y = s.ty; tgt.z = s.tz;
-      const simNow = Ball.netSimNow?.() ?? Infinity;
-      while (this.netAcc >= 0.05 && this.simT + 0.05 <= simNow) {
-        this.stepNetLeg(s, tgt);
-      }
-      if (this.netAcc >= 0.5) {
-        // Clock-estimate stalls must never freeze the sim.
-        while (this.netAcc >= 0.05) this.stepNetLeg(s, tgt);
-      }
-    } else {
-      this.tickNetInert(dt, s);
-    }
-    this.enraged = s.enraged;
-    this.enrageTimer = s.enrageTimer;
-    this.dampNextBounce = s.dampNextBounce;
-    if (s.dead && !this.dead) this.dead = true;
-  }
-
-  // Inert leg: gravity-only flight is EXACTLY solvable — stepping adds
-  // 20Hz quantization for zero benefit. The closed form matches the
-  // server's semi-implicit Euler bit-for-bit (the +T*dt/2 term is the
-  // velocity update Euler applies before the position one), so an arc
-  // flies pixel-smooth until the next bounce event lands. T comes off
-  // the (rate-corrected) server sim clock — a lagging tick loop never
-  // overshoots; wall-time fallback until seeded.
-  private tickNetInert(dt: number, s: SimBall): void {
-    const simNow2 = Ball.netSimNow?.();
-    let T = this.legT0 >= 0 && simNow2 !== undefined && Number.isFinite(simNow2)
-      ? Math.min(Math.max(0, simNow2 - this.legT0), 8)
-      : (this.flightT = Math.min(this.flightT + dt, 8));
-    // Structures hit mid-leg: the server resolves sphere∩box in
-    // stepBall and stamps a bounce at contact — an analytic arc that
-    // ignores them sails through the wall and the stamp lands 50-150m
-    // off. March the leg for the earliest contact and park T there;
-    // the stamped segment arrives with the reflected velocity.
-    const tcS = firstStructureContact(s, T);
-    if (tcS < T) T = tcS;
-    this.pos.set(
-      s.x + s.vx * T,
-      s.y + s.vy * T + 0.5 * BALL_GRAVITY * (T * T + 0.05 * T),
-      s.z + s.vz * T,
-    );
-    this.vel.set(s.vx, s.vy + BALL_GRAVITY * T, s.vz);
-    // Terrain: the server parks sub-REST contacts silently — no
-    // segment is emitted — so a leg that touched down slow never
-    // ends in an event. Walking T back to first contact and parking
-    // keeps the prediction where authority actually left it (the
-    // stall pounce event re-wakes it ~2s later). Fast contacts DO
-    // produce a bounce event imminently — clamp, don't park.
-    const gy = Ball.field ? hmHeight(Ball.field, this.pos.x, this.pos.z) + s.radius : -Infinity;
-    if (this.pos.y >= gy || !Ball.field) return;
-    let tc = T;
-    while (tc > 0.05) {
-      const tt = tc - 0.05;
-      const yy = s.y + s.vy * tt + 0.5 * BALL_GRAVITY * (tt * tt + 0.05 * tt);
-      if (yy > hmHeight(Ball.field, s.x + s.vx * tt, s.z + s.vz * tt) + s.radius) break;
-      tc = tt;
-    }
-    const spd = Math.hypot(s.vx, s.vy + BALL_GRAVITY * tc, s.vz);
-    if (spd < BALL_REST_SPEED) {
-      const cx = s.x + s.vx * tc, cz = s.z + s.vz * tc;
-      this.pos.set(cx, hmHeight(Ball.field, cx, cz) + s.radius, cz);
-      this.vel.set(0, 0, 0);
-    } else {
-      this.pos.y = gy;
-      if (this.vel.y < 0) this.vel.y = 0;
-    }
-  }
-
-  private stepNetLeg(s: SimBall, tgt: { x: number; y: number; z: number }): void {
-    this.netAcc -= 0.05;
-    this.simT += 0.05;
-    s.x = this.pos.x; s.y = this.pos.y; s.z = this.pos.z;
-    s.vx = this.vel.x; s.vy = this.vel.y; s.vz = this.vel.z;
-    stepBall(s, 0.05, Ball.field!, tgt, false, { colliders: Ball.colliders, colliderIndex: Ball.colliderIndex ?? undefined });
-    this.pos.set(s.x, s.y, s.z);
-    this.vel.set(s.vx, s.vy, s.vz);
   }
 
   // Enrage pull + dash telegraph emissive + post-dash pop.
@@ -714,72 +627,9 @@ export class Ball {
     this.vel.addScaledVector(dir, force);
   }
 
-  /** Wire-ordering guard — stamps only move forward. A delayed or
-   *  reordered segment carries an OLD anchor; applying it rewinds legT0
-   *  and the next frames extrapolate a stale leg into a 100m rubberband. */
-  isStaleSegment(t: number | undefined): boolean {
-    return t !== undefined && t < this.simT;
-  }
+  isStaleSegment(t: number | undefined): boolean { return isStaleSeg(this.netS, t); }
 
-  /** Authoritative resync — a segment event lands mid-flight: snap the sim
-   *  (and the render) to server truth, then advance it by `lead` seconds
-   *  (≈half RTT) because the event is already stale when it arrives —
-   *  without this every bounce visibly rewinds the ball before re-flying.
-   *  The >20m trail-cut already handles teleport discontinuities. */
-  applyNetSegment(seg: NetSeg): void {
-    const s = this.sim;
-    if (!s) return;
-    const simT = seg.simT;
-    if (this.isStaleSegment(simT)) return; // older stamp — never rewind
-    s.x = seg.px; s.y = seg.py; s.z = seg.pz;
-    s.vx = seg.vx; s.vy = seg.vy; s.vz = seg.vz;
-    s.gt = 0; // stamped arc — the cached terrain-probe schedule is stale
-    s.enraged = seg.enraged;
-    // The timers ride the wire — resetting them here would restart the
-    // server's 20s enrage countdown on every heartbeat and the client ball
-    // would outlive enrages the authority already teleported out of.
-    s.enrageTimer = seg.timers?.et ?? 0;
-    s.slowTimer = seg.timers?.slowT ?? 0;
-    s.dampNextBounce = seg.timers?.damp ?? false;
-    // Aim snapshot — the server pulled toward THIS point, so we do too.
-    if (seg.tp) { s.tx = seg.tp.x; s.ty = seg.tp.y; s.tz = seg.tp.z; s.tgtValid = true; }
-    else s.tgtValid = false;
-    this.netTargetId = seg.targetId;
-    // Do NOT step the lead age here: a partial-width step leaves the sim
-    // cursor off the server's 0.05 grid permanently — every subsequent
-    // prediction step is phase-shifted, bounce contacts resolve at
-    // different points, and elastic reflections compound the error into
-    // the 20-100m rubberbands the logs show. Bank the age instead: the
-    // update loop consumes whole cells only (sim stays exactly on-grid),
-    // and the render path ballistically extrapolates the sub-step
-    // remainder — which is all the lead was ever for.
-    this.netAcc = Math.min(seg.lead ?? 0, 0.5);
-    this.flightT = seg.lead ?? 0; // inert path flies on from the event's age — seamless handoff
-    // The leg's flight clock anchors to the stamped sim time — update()
-    // measures T as estSimNow−legT0 so server-clock drift can't skew it.
-    this.legT0 = simT ?? -1; // unstamped event → wall-time fallback
-    // Sim cursor anchors to the event's stamped grid time — the banked
-    // lead is consumed by whole cells in update(), not stepped here.
-    if (simT !== undefined) this.simT = simT;
-    this.blendSegCorrection(s, seg);
-  }
-
-  // Carry the visible error into renderOffset: (old rendered pos) - (new
-  // truth). Prediction-vs-truth divergence is dominated by server-clock
-  // skew, not real desync — so every non-discontinuity correction blends
-  // (a 10m slide over 0.2s on a moving arc reads as nothing). Only
-  // teleport/spawn hard-snap: there continuity is impossible anyway.
-  private blendSegCorrection(s: SimBall, seg: NetSeg): void {
-    this._rpos.copy(this.pos).add(this.renderOffset);
-    this._rpos.x -= s.x; this._rpos.y -= s.y; this._rpos.z -= s.z;
-    if (seg.hard || this._rpos.lengthSq() > 3600) this.renderOffset.set(0, 0, 0);
-    else this.renderOffset.copy(this._rpos);
-    this.pos.set(s.x, s.y, s.z);
-    this.vel.set(s.vx, s.vy, s.vz);
-    this.enraged = s.enraged;
-    this.enrageTimer = 0;
-    if (!seg.enraged) this.emissive.setRGB(0, 0, 0);
-  }
+  applyNetSegment(seg: NetSeg): void { applySeg(this.netS, this, seg); }
 
   /** Server said dead — the updateDead path fades trails as usual. */
   netKill(): void {
@@ -793,49 +643,7 @@ export class Ball {
   }
 }
 
-// Segment event applied to a netDriven ball — server truth for the sim
-// anchor plus the ride-along state (timers, aim snapshot, stamped clock).
-export interface NetSeg {
-  px: number; py: number; pz: number;
-  vx: number; vy: number; vz: number;
-  enraged: boolean;
-  targetId: string | null;
-  lead?: number;
-  timers?: { et?: number; slowT?: number; damp?: boolean };
-  tp?: { x: number; y: number; z: number } | null;
-  simT?: number;
-  hard?: boolean;
-}
-
-/** Earliest analytic-time sphere∩OBB touch along a ballistic leg, marched
- *  in the server's 0.05 grid cells. Same contact predicate as
- *  shared/ballSim.ts collideStructures (clamped-point distance < radius)
- *  so the predictor finds the wall at (≤1 tick behind) the same instant
- *  authority does. Infinity = no contact before T. */
-function firstStructureContact(s: SimBall, T: number): number {
-  const colliders = Ball.colliders;
-  if (!colliders.length) return Infinity;
-  const r = s.radius;
-  for (let tt = 0.05; tt <= T; tt += 0.05) {
-    const x = s.x + s.vx * tt;
-    const y = s.y + s.vy * tt + 0.5 * BALL_GRAVITY * (tt * tt + 0.05 * tt);
-    const z = s.z + s.vz * tt;
-    for (const c of colliders) {
-      const dx = x - c.cx, dz = z - c.cz;
-      const rr = Math.max(c.hx, c.hz) + r + 0.5;
-      if (dx * dx + dz * dz > rr * rr) continue; // cheap xz broadphase
-      const lx = dx * c.cos + dz * c.sin;
-      const lz = -dx * c.sin + dz * c.cos;
-      const dy = y - c.cy;
-      const qx = Math.max(-c.hx, Math.min(c.hx, lx));
-      const qy = Math.max(-c.hy, Math.min(c.hy, dy));
-      const qz = Math.max(-c.hz, Math.min(c.hz, lz));
-      const ex = lx - qx, ey = dy - qy, ez = lz - qz;
-      if (ex * ex + ey * ey + ez * ez < r * r) return tt;
-    }
-  }
-  return Infinity;
-}
+export type { NetSeg } from './ballNet.js';
 
 export function pickVariant(): 0 | 1 | 2 | 3 {
   const r = Math.random();
