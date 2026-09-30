@@ -10,7 +10,7 @@
  */
 
 import { GRAVITY } from './movement.ts';
-import { losClear } from './botLos.ts';
+import { losClear, BOT_EYE } from './botLos.ts';
 import type { BotVec, BotEnemy, BrainCtx, BrainOut } from './botBrain.ts';
 
 // LOS lives in botLos.ts — re-export so botBrain's public surface stays put.
