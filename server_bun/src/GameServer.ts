@@ -3,7 +3,7 @@ import { CONFIG } from './config.ts';
 import { Room } from './Room.ts';
 import { BallSim } from './BallSim.ts';
 import { validateMessage } from './validation.ts';
-import type { WebSocketData, PlayerState } from './types.ts';
+import type { WebSocketData } from './types.ts';
 import { logger } from './logger.ts';
 import { fileURLToPath } from 'node:url';
 import type { Heightfield } from '../../shared/heightfield.ts';
@@ -13,11 +13,8 @@ import { SessionManager } from './SessionManager.ts';
 import { appendFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { MapCatalog } from './mapCatalog.ts';
+import { RoomSwitcher } from './roomSwitch.ts';
 import type { MapSpec } from '../../shared/mapSpec.ts';
-
-// Room/map/mode name grammar — bad values fall through to 'default'.
-const word = (v: unknown): string | undefined =>
-  typeof v === 'string' && /^[\w-]{1,32}$/.test(v) ? v : undefined;
 
 export class GameServer {
   // One match's state per room — players land in 'default' unless the join
@@ -29,6 +26,7 @@ export class GameServer {
   private readonly tickLoop: TickLoop;
   private readonly sessions: SessionManager;
   private readonly maps = new MapCatalog();
+  private readonly switcher: RoomSwitcher;
 
   // Ops counters — cheap ints, read by /metrics. msgsIn counts everything
   // that passed validation; tick lag measures setInterval drift (the
@@ -79,6 +77,14 @@ export class GameServer {
       roomOfPlayer: (id) => this.roomOfPlayer(id),
       totalPlayers: () => this.totalPlayers(),
       ops: this.ops,
+    });
+    this.switcher = new RoomSwitcher({
+      roomOfPlayer: (id) => this.roomOfPlayer(id),
+      roomFor: (n, m, mp, b) => this.roomFor(n, m, mp, b),
+      removePlayerCompletely: (r, id, reason) => this.removePlayerCompletely(r, id, reason),
+      totalPlayers: () => this.totalPlayers(),
+      playerRoom: this.playerRoom,
+      sessions: this.sessions,
     });
   }
 
@@ -290,114 +296,11 @@ export class GameServer {
     // inside one room's MessageHandler.
     const probe = raw as { type?: string };
     if (probe.type === 'switchRoom') {
-      this.switchRoom(ws, existingPlayerId, raw);
+      this.switcher.switchRoom(ws, existingPlayerId, raw);
       return;
     }
 
     this.handleGameMessage(room, existingPlayerId, raw);
-  }
-
-  // Switch-spam guard: reseating a session tears down/rebuilds a player
-  // record plus two broadcasts — cheap per hop, but a 20Hz spammer would
-  // churn two rooms' rosters for free. A short cooldown is plenty.
-  private switchCooldowns = new Map<string, number>();
-  private static readonly SWITCH_COOLDOWN_MS = 1500;
-
-  /** Mid-match room hop: same socket, new membership. Reuses the leave
-   *  teardown + SessionManager's join tail — the fresh gameState the new
-   *  room emits drives the client's existing (re)connect rebuild, so the
-   *  wire needs no new shape. */
-  private switchRoom(ws: ServerWebSocket<WebSocketData>, playerId: string, raw: unknown): void {
-    if (this.switchThrottled(playerId)) return;
-
-    const target = this.switchTarget(playerId, raw as { room?: string; map?: string; mode?: string; bots?: number });
-    if (!target) return;
-    const { from, to, prev } = target;
-
-    // Leave teardown: the disconnect path minus the grace window.
-    from.connections.unregister(playerId);
-    from.rateLimiter.removePlayer(playerId);
-    from.messages.onPlayerDisconnected(playerId);
-    this.removePlayerCompletely(from, playerId, 'roomSwitch');
-
-    this.seatPlayer(to, ws, playerId, prev?.perk ?? 'none', prev?.armorClass ?? 'medium', prev?.transport);
-    // Banked respawn edits ride the hop too — a hop is a seat transfer,
-    // not a respawn, so a queued class/perk swap must survive it or the
-    // client's declared next-life loadout silently vanishes.
-    if (prev) {
-      const reseated = to.players.getPlayer(playerId);
-      if (reseated) {
-        reseated.pendingClass = prev.pendingClass;
-        reseated.pendingPerk = prev.pendingPerk;
-      }
-    }
-    logger.info('Player switched rooms', { playerId, from: from.name, to: to.name });
-  }
-
-  /** Everything that can deny a hop before teardown — null means the
-   *  request dies here (with the client notified when it's worth it). */
-  private switchTarget(playerId: string, msg: { room?: string; map?: string; mode?: string; bots?: number }): { from: Room; to: Room; prev?: PlayerState } | null {
-    const name = word(msg.room) ?? 'default';
-    const from = this.roomOfPlayer(playerId);
-    if (!from) return null;
-    if (from.name === name) return null; // already seated — no-op, not an error
-
-    const bots = typeof msg.bots === 'number' && Number.isFinite(msg.bots)
-      ? Math.max(0, Math.min(24, Math.floor(msg.bots))) : undefined;
-    const to = this.roomFor(name, word(msg.mode) ?? '', word(msg.map) ?? '', bots);
-    if (this.roomFull(to)) {
-      from.connections.sendToPlayer(playerId, { type: 'matchNotice', text: `${name} is full` });
-      return null;
-    }
-
-    // The kit rides with the player — the hop isn't a loadout reset.
-    const prev = from.players.getPlayer(playerId);
-    // Dead players can't hop — reseating runs addPlayer, which spawns
-    // alive, so a hop would dodge the whole respawn delay.
-    if (prev?.isDead) {
-      from.connections.sendToPlayer(playerId, { type: 'matchNotice', text: 'Respawning — hold on' });
-      return null;
-    }
-    return { from, to, prev: prev ?? undefined };
-  }
-
-  /** The join tail a room hop shares with SessionManager's accept path —
-   *  token, roster entry, socket registration, handshake replay. */
-  private seatPlayer(room: Room, ws: ServerWebSocket<WebSocketData>, playerId: string, perk: string, armorClass: string, transport?: 'wt' | 'rtc' | 'ws'): void {
-    const sessionToken = this.sessions.tokenFor(playerId);
-    room.sessionTokens.set(playerId, sessionToken);
-    const joined = room.players.addPlayer(playerId, room.nextTeam(), perk, armorClass);
-    if (transport) joined.transport = transport;
-    // Room hops don't stop the client's stream: reports emitted in the
-    // OLD room keep arriving for ~1 RTT and would poison the fresh
-    // anchor (first straggler seats lastPosCheckPos, the post-hop spawn
-    // report then reads as an impossible 100m+ jump). Mute the
-    // plausibility gate + shadow judge for the same drain window a
-    // correction gets.
-    joined.correctionGraceUntil = Date.now() + CONFIG.reportGraceMs;
-    this.playerRoom.set(playerId, room);
-    room.connections.register(playerId, ws);
-    room.messages.handleHandshake(playerId, sessionToken);
-    // The shadow is created inside handleHandshake — arm its drain
-    // window after it exists.
-    room.moveSim.markReseated(playerId);
-  }
-
-  private switchThrottled(playerId: string): boolean {
-    const now = Date.now();
-    if (now - (this.switchCooldowns.get(playerId) ?? 0) < GameServer.SWITCH_COOLDOWN_MS) return true;
-    // Mark on attempt — denied paths (room full, dead, no-op) stay
-    // throttled too or switchRoom name-spam churns roomFor unbounded.
-    this.switchCooldowns.set(playerId, now);
-    // Server-lifetime map: hoppers keep their entry past removal (the
-    // cooldown must survive the hop), so cap growth like duelStart.
-    if (this.switchCooldowns.size > 1024) this.switchCooldowns.clear();
-    return false;
-  }
-
-  private roomFull(room: Room): boolean {
-    return room.playerCount() >= CONFIG.maxPlayers ||
-      (CONFIG.globalMaxPlayers > 0 && this.totalPlayers() >= CONFIG.globalMaxPlayers);
   }
 
   private reconnectGraceMs = CONFIG.reconnectGraceMs; // Grace period for F5 reconnect

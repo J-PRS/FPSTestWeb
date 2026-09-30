@@ -1,3 +1,4 @@
+2026-09-26 - Split mid-match room hops out of GameServer into roomSwitch.ts (RoomSwitcher): switchRoom/switchTarget/seatPlayer/throttle/roomFull; GameServer keeps dispatch only
 2026-09-26 - botFire vitest: every loadout spawns real Projectile shells (speed/gravity/pellets per weapon table), melee+online paths claim-only, belt lobs real arcs, kill feed carries weapon id; test: coverage
 2026-09-26 - battleLog kill lines now name the weapon on the bot-vs-bot claim path too; fix: kill feed attribution
 2026-09-26 - split projectile impact handling (fx/aoe/cluster/hit-scoring/kill pipeline) into combat/impact.ts (combat.ts 659->378); mod: code cleanup
