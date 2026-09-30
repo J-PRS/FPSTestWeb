@@ -109,7 +109,7 @@ const CLASSES: ArmorClass[] = ['light', 'medium', 'heavy'];
 
 interface Roster { pos: Vec3; vel: Vec3; team?: 'alpha' | 'bravo'; dead?: boolean }
 
-const stats = { sent: 0, recv: 0, corrections: 0, shots: 0, rejected: 0, errors: 0, closes: 0, joins: 0, tickGaps: 0, tickJit: 0, ballSegs: 0, ballWarps: 0, ballMaxJump: 0, crawlEvts: 0, crawlWarps: 0, crawlMaxJump: 0, rtc: 0, gems: 0, gapSamples: [] as string[] };
+const stats = { sent: 0, recv: 0, corrections: 0, shots: 0, rejected: 0, errors: 0, closes: 0, joins: 0, tickGaps: 0, tickJit: 0, ballSegs: 0, ballWarps: 0, ballMaxJump: 0, crawlEvts: 0, crawlWarps: 0, crawlMaxJump: 0, rtc: 0, gems: 0, belowGround: 0, gapSamples: [] as string[] };
 
 // Warp detector: consecutive updates for an entity should move it about
 // speed·dt. A jump far past that is a visible teleport — server truth uses
@@ -672,6 +672,10 @@ class WireBot {
       s.pos.y = gy(s.pos.x, s.pos.z) + 2;
       s.vel.x = s.vel.y = s.vel.z = 0;
     }
+    // Terrain penetration probe: a fast descent can tunnel below the
+    // field — reports from under the map read as clipping cheats.
+    const depth = gy(s.pos.x, s.pos.z) - s.pos.y;
+    if (depth > 2) stats.belowGround++;
   }
 
   private fire(): void {
@@ -765,5 +769,5 @@ setInterval(() => {
   const ping = pings.length
     ? ` ping=${pings[0]}/${pings[Math.floor(pings.length / 2)]}/${pings[pings.length - 1]}ms`
     : '';
-  console.log(`[netBot] ${bots.length} bots (${s.rtc} rtc) | joins=${s.joins} sent=${s.sent} recv=${s.recv} shots=${s.shots} rej=${s.rejected} gems=${s.gems} corr=${s.corrections} err=${s.errors} closes=${s.closes} tickGaps=${s.tickGaps} maxTickGap=${Math.round(s.tickJit)}ms ball=${s.ballSegs}/${s.ballWarps}w max${s.ballMaxJump.toFixed(0)}m crawl=${s.crawlEvts}/${s.crawlWarps}w max${s.crawlMaxJump.toFixed(0)}m${ping}${s.gapSamples.length ? ` gaps[${s.gapSamples.join(' ')}]` : ''}`);
+  console.log(`[netBot] ${bots.length} bots (${s.rtc} rtc) | joins=${s.joins} sent=${s.sent} recv=${s.recv} shots=${s.shots} rej=${s.rejected} gems=${s.gems} corr=${s.corrections} belowGnd=${s.belowGround} err=${s.errors} closes=${s.closes} tickGaps=${s.tickGaps} maxTickGap=${Math.round(s.tickJit)}ms ball=${s.ballSegs}/${s.ballWarps}w max${s.ballMaxJump.toFixed(0)}m crawl=${s.crawlEvts}/${s.crawlWarps}w max${s.crawlMaxJump.toFixed(0)}m${ping}${s.gapSamples.length ? ` gaps[${s.gapSamples.join(' ')}]` : ''}`);
 }, 5000);
