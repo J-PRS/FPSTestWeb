@@ -148,6 +148,9 @@ export class Room {
     // Shield soak burns the same tank the jet model owns — without this
     // a shielded player under fire runs the sim tank ahead of the real one.
     this.players.energyBurn = (pid, n) => this.moveSim.drainEnergy(pid, n);
+    // Closure over this.field — a mid-match terrain swap must not leave
+    // spawn anchors snapping to the old map.
+    this.players.groundAt = (x, z) => (this.field ? hmHeight(this.field, x, z) : 0);
     this.ballSim = new BallSim(
       this.players,
       (msg) => this.connections.broadcast(msg),

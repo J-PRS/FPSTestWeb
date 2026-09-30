@@ -434,12 +434,15 @@ export class CombatHandler {
     const player = this.playerManager.getPlayer(playerId);
     if (!player || player.isDead) return;
 
-    // Cheat prevention: AOE position must be within 200m of shooter
+    // Cheat prevention: bound the blast to plausible projectile range —
+    // legit long shots (mortar arcs, cross-map rockets) fly hundreds of
+    // metres; 200m was rejecting real hits. 500m still catches the cheat
+    // this guards: a blast teleported to a victim across the map.
     const dx = player.position.x - position.x;
     const dy = player.position.y - position.y;
     const dz = player.position.z - position.z;
     const distSq = dx * dx + dy * dy + dz * dz;
-    if (!trusted && distSq > 40000) { // 200m squared
+    if (!trusted && distSq > 250000) { // 500m squared
       this.reject(playerId, 'AOE', `blast too far from shooter (${Math.sqrt(distSq).toFixed(0)}m)`, undefined, weapon);
       return;
     }

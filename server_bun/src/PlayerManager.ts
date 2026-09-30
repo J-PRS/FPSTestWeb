@@ -28,6 +28,11 @@ export class PlayerManager {
    *  applyDamage burns the move shadow's modeled tank. Room wires it. */
   energyBurn?: (playerId: string, energy: number) => void;
 
+  /** Ground height at (x,z) — Room wires its live heightfield. Spawn
+   *  anchors are authored data: a point buried under the terrain lifts to
+   *  the surface instead of spawning a player inside the ground. */
+  groundAt?: (x: number, z: number) => number;
+
   addPlayer(playerId: string, team?: 'alpha' | 'bravo', perk: string = 'none', armorClass: string = 'medium'): PlayerState {
     const spawn = this.pickSpawnPoint(playerId, team);
     const cls = armorClass === 'light' || armorClass === 'heavy' ? armorClass : 'medium';
@@ -303,6 +308,14 @@ export class PlayerManager {
 
   private pickSpawnPoint(playerId: string, team?: 'alpha' | 'bravo'): Vec3 {
     const points: Vec3[] = (this.spawnPoints ?? CONFIG.spawnPoints).map((p) => ({ x: p.x, y: p.y, z: p.z }));
+    // Authored anchors predate the current terrain — anything buried
+    // under the field lifts to the surface rather than spawning into it.
+    if (this.groundAt) {
+      for (const p of points) {
+        const g = this.groundAt(p.x, p.z);
+        if (p.y < g) p.y = g;
+      }
+    }
     if (this.players.size === 0) {
       return { ...points[0]! };
     }
