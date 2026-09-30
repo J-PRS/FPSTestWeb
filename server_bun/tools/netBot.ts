@@ -386,6 +386,20 @@ class WireBot {
     const m = JSON.parse(data);
     switch (m.type) {
       case 'gameState': {
+        // A re-seat (switchRoom hop) replaces the whole room: old-room
+        // roster ids read as 'unknown target' on claims, entity anchors
+        // read as 300m warps, and projectile ids minted over there read
+        // as 'blast with no known projectile' here. Reset all of it.
+        this.roster.clear();
+        this.lastSeg.clear();
+        this.balls.clear();
+        this.crawls.clear();
+        this.pickups.clear();
+        this.ownShots.length = 0;
+        this.pendingClaims.length = 0;
+        // Tick seqs are per-room — a hop lands mid-sequence in the new
+        // room's domain, not a dropped frame.
+        this.lastTickSeq = -1;
         // Seat the sim at our spawn and index the roster for aiming.
         this.team = m.team;
         for (const p of m.players ?? []) {
