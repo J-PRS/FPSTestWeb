@@ -1,13 +1,13 @@
 import * as THREE from 'three';
 
-import { GRAVITY, EYE_OFFSET } from '../core/config.js';
+import { EYE_OFFSET } from '../core/config.js';
 
 import { Terrain } from '../world/terrain.js';
 import { ChildLogger } from '../core/Logger.js';
 
 import { PlayerModel } from './PlayerModel.js';
 import { CLASS_MODEL_SCALE } from '../../../shared/botClasses.js';
-import { SnapshotBuffer } from './remoteSnapshots.js';
+import { RemoteInterp } from './remoteInterp.js';
 import { RemoteGizmo } from './remoteGizmo.js';
 import { resetCorpse, launchCorpse, stepCorpse, type CorpseState } from './remoteDeath.js';
 import { WeaponType } from '../../../shared/weapons.js';
@@ -26,14 +26,7 @@ let _remotePlayerInstanceCounter = 0;
 // checkIfGrounded). The robot model's origin is at its feet, so the model
 // must render EYE_OFFSET below the networked position.
 
-// Scratch — shared across RemotePlayer instances, never retained past the call
-const _extrapolated = new THREE.Vector3();
-const _sampledRot = { yaw: 0, pitch: 0 };
-
 export class RemotePlayer {
-  // Snapshot buffer + adaptive interp delay — the pure netcode half lives
-  // in remoteSnapshots.ts (unit-testable, no scene deps)
-  private net = new SnapshotBuffer();
 
   position: THREE.Vector3;
   /** Feet height — `position.y` is the networked EYE height; convert
@@ -57,26 +50,19 @@ export class RemotePlayer {
   private isOnGround: boolean = true;
   terrain: Terrain | null = null; // public — anim drive ground-tests off it
   private corpse!: CorpseState; // ctor assigns — aliases live position/vel/rotation refs
-  private targetPosition: THREE.Vector3;
-  private targetRotation: { yaw: number; pitch: number };
-  private ping: number = 0; // Connection ping in milliseconds
-  private _lastUpdateTime: number = 0; // Timestamp of last position update
-  private _isSimulating: boolean = false; // True if we're simulating physics (dead reckoning)
-  private simulatedVelocity: THREE.Vector3 = new THREE.Vector3(); // Velocity during simulation
-  private predictionTimer: number = 0; // Seconds of forced local prediction (bridges server round-trip)
-  protected serverVelocity: THREE.Vector3 = new THREE.Vector3(); // Velocity reported by server
-  private lastServerUpdateMs: number = 0; // Timestamp of last server update (ms)
-  private reconcileBlend: number = 0; // Blends from predicted to server position (0 = done)
-  private gizmoMismatchLogTimer: number = 0; // Throttle for gizmo mismatch warnings
-  private lastServerPosition: THREE.Vector3 = new THREE.Vector3(); // Last raw server position (for velocity estimation)
+  serverVelocity: THREE.Vector3 = new THREE.Vector3(); // Velocity reported by server (public — interp family reads it)
+  // Snapshot ingest, adaptive-delay interp, dead reckoning and the
+  // predicted-knockback window — the whole netcode half lives in
+  // remoteInterp.ts behind the InterpHost surface.
+  private interp = new RemoteInterp(this);
 
   // Public getters for main.ts access (removes need for (as any) casts)
-  get lastUpdateTime(): number { return this._lastUpdateTime; }
+  get lastUpdateTime(): number { return this.interp.lastUpdate; }
   // Alias for the Forceable interface (Player/Ball use `pos`, we use `position`)
   get pos(): THREE.Vector3 { return this.position; }
   get isDead(): boolean { return this._isDead; }
   get scale(): number { return this.corpse.scale; }
-  get isSimulating(): boolean { return this._isSimulating; }
+  get isSimulating(): boolean { return this.interp.simulating; }
   /** Local authority (GameBot): position is written directly each frame,
    *  so the snapshot interp / dead-reckoning path would fight it — tick
    *  short-circuits to model+gizmo upkeep only. */
@@ -104,10 +90,7 @@ export class RemotePlayer {
   teleportTo(pos: THREE.Vector3): void {
     this.position.copy(pos);
     this.previousPosition.copy(pos);
-    this.targetPosition.copy(pos);
-    this.net.clear();
-    this._lastUpdateTime = Date.now();
-    this._isSimulating = false;
+    this.interp.reseat(pos);
   }
 
   constructor(scene: THREE.Scene, playerId: string, startPos: { x: number; y: number; z: number }, terrain?: Terrain, _armorClass?: string) {
@@ -124,11 +107,7 @@ export class RemotePlayer {
       angularVelocity: this.angularVelocity, rotation: this.rotation,
       landed: false, landedAt: 0, scale: 1,
     };
-    this.targetPosition = this.position.clone();
-    this.targetRotation = { yaw: 0, pitch: 0 };
-    this._lastUpdateTime = Date.now(); // Initialize to current time to prevent immediate dead reckoning
-    this.lastServerUpdateMs = this.lastUpdateTime;
-    this.lastServerPosition.copy(this.position);
+    this.interp.reset(this.position); // fresh interp state — prevents immediate dead reckoning
 
     this.gizmo = new RemoteGizmo(scene, startPos);
     logger.debug(`GIZMO ADDED`, { playerId, instanceId: this.instanceId });
@@ -158,55 +137,7 @@ export class RemotePlayer {
   }
 
   update(targetPosition: { x: number; y: number; z: number }, targetRotation: { yaw: number; pitch: number }, dt: number, ping: number = 0, serverVelocity?: { x: number; y: number; z: number }): void {
-    // Update last update timestamp
-    const prevUpdateMs = this.lastServerUpdateMs;
-    this._lastUpdateTime = Date.now();
-    this.lastServerUpdateMs = this._lastUpdateTime;
-
-    // If we were simulating and now got an update, stop simulating and start blending
-    // But keep predicting if we're within the prediction window (server hasn't caught up yet)
-    if (this._isSimulating && this.predictionTimer <= 0) {
-      this._isSimulating = false;
-      // Don't hard-snap — blend to server position over ~100ms to avoid visual jump
-      this.reconcileBlend = 0.1;
-      logger.debug(`RESUMED updates, blending to server position`, { playerId: this.playerId });
-    }
-
-    // Update ping for interpolation adjustments
-    this.ping = ping;
-    // Store target position/rotation for interpolation
-    this.targetPosition.set(targetPosition.x, targetPosition.y, targetPosition.z);
-    this.targetRotation = { yaw: targetRotation.yaw, pitch: targetRotation.pitch };
-
-    // Push onto the snapshot buffer — it also tracks arrival jitter and
-    // adapts the render delay (see remoteSnapshots.ts)
-    this.net.push(
-      this.lastServerUpdateMs,
-      targetPosition,
-      targetRotation,
-      serverVelocity ?? { x: 0, y: 0, z: 0 },
-    );
-
-    // Store server-reported velocity for extrapolation
-    if (serverVelocity) {
-      this.serverVelocity.set(serverVelocity.x, serverVelocity.y, serverVelocity.z);
-    }
-
-    // Estimate velocity from consecutive server positions (not extrapolated position)
-    // Skip during prediction window — server hasn't reflected the knockback yet
-    if (this.predictionTimer <= 0) {
-      if (this.lastServerPosition.lengthSq() > 0) {
-        const serverDt = (this.lastUpdateTime - prevUpdateMs) / 1000;
-        if (serverDt > 0) {
-          this.simulatedVelocity.set(
-            (targetPosition.x - this.lastServerPosition.x) / serverDt,
-            (targetPosition.y - this.lastServerPosition.y) / serverDt,
-            (targetPosition.z - this.lastServerPosition.z) / serverDt
-          );
-        }
-      }
-      this.lastServerPosition.set(targetPosition.x, targetPosition.y, targetPosition.z);
-    }
+    this.interp.onUpdate(targetPosition, targetRotation, ping, serverVelocity);
     // NOTE: death physics (gravity, bounce, tumble, shrink) are handled in tick()
     // so they run every frame at the real dt — running them here at 20Hz with a
     // fixed dt made dead bodies fall/tumble at ~32% speed and look choppy.
@@ -253,73 +184,11 @@ export class RemotePlayer {
   }
 
   private tickAlive(dt: number): void {
-    // Dead reckoning trigger scaled to the measured update cadence: ~2 missed
-    // packets at that player's actual send rate. Fixed 300/450ms thresholds
-    // flapped DR on/off when heartbeats arrived slower than their nominal
-    // 250ms interval (dr threshold straddled the real cadence).
-    const drThreshold = Math.min(1500, Math.max(350, this.net.arrivalInterval * 2.5));
-    const timeSinceUpdate = Date.now() - this._lastUpdateTime;
-    if (timeSinceUpdate > drThreshold && !this._isSimulating && !this.localDriven) {
-      this._isSimulating = true;
-      logger.debug(`STARTING dead reckoning`, { playerId: this.playerId, silentMs: timeSinceUpdate });
-    }
-
-    if (this._isSimulating) {
-      if (this.predictionTimer > 0) {
-        this.predictionTimer = Math.max(0, this.predictionTimer - dt);
-      }
-      this.simulatePhysics(dt);
-    } else if (!this.localDriven) {
-      this.interpolate(dt);
-    }
-    // localDriven: position/rotation were already written by the owner —
-    // interpolating would stomp them with a delayed snapshot sample.
+    this.interp.step(dt, this.localDriven);
 
     this.updateAliveModel(dt);
 
     this.gizmo?.follow(this.position);
-  }
-
-  // Sample the snapshot buffer at renderTime = now - adaptive interp delay
-  // (the math lives in remoteSnapshots.ts — Hermite tangents from the
-  // server-reported velocities, linear fallback on wild overshoot)
-  private sampleSnapshots(outPos: THREE.Vector3, outYawPitch: { yaw: number; pitch: number }): void {
-    this.net.sample(outPos, outYawPitch,
-      this.targetPosition, this.targetRotation.yaw, this.targetRotation.pitch);
-  }
-
-  // Interpolate between buffered server snapshots (skipped during
-  // dead-reckoning simulation)
-  private interpolate(dt: number): void {
-    const sampledPos = _extrapolated;
-    const sampledRot = _sampledRot;
-    this.sampleSnapshots(sampledPos, sampledRot);
-
-    if (this.reconcileBlend > 0) {
-      // Reconciliation blend: recovering from simulation, ease onto the
-      // sampled path instead of snapping
-      this.reconcileBlend = Math.max(0, this.reconcileBlend - dt);
-      const blendStrength = Math.min(1, dt / Math.max(0.001, this.reconcileBlend + dt));
-      this.position.lerp(sampledPos, blendStrength);
-    } else {
-      // Directly place on the interpolated path — smooth by construction
-      this.position.copy(sampledPos);
-    }
-
-    // Per-remote position spam removed — positions are inspectable via
-    // ?debug state wiring (core/stateDebug.ts) instead of a 2s log timer
-
-    // Rotation comes straight from the sampled interpolation (already smoothed)
-    this.rotation.yaw = sampledRot.yaw;
-    this.rotation.pitch = sampledRot.pitch;
-    this.rotation.roll = 0; // Roll is not networked, only used for death physics
-
-    // Update velocity for extrapolation (estimate from recent movement)
-    if (dt > 0) {
-      this.velocity.x = (this.position.x - this.previousPosition.x) / dt;
-      this.velocity.y = (this.position.y - this.previousPosition.y) / dt;
-      this.velocity.z = (this.position.z - this.previousPosition.z) / dt;
-    }
   }
 
   /** Faint dots on the flight path — readable arc on a jetting bot,
@@ -392,32 +261,6 @@ export class RemotePlayer {
     this.auras.show();
   }
 
-  // Simulate physics when player stops sending updates (dead reckoning)
-  simulatePhysics(dt: number): void {
-    if (this._isDead) return; // Don't simulate if already dead (death physics handles it)
-
-    // Apply gravity
-    this.simulatedVelocity.y += GRAVITY * dt;
-
-    // No air friction — matches game physics (local player has no air drag)
-
-    // Apply velocity
-    this.position.x += this.simulatedVelocity.x * dt;
-    this.position.y += this.simulatedVelocity.y * dt;
-    this.position.z += this.simulatedVelocity.z * dt;
-
-    // Ground collision
-    if (this.terrain) {
-      const groundY = this.terrain.getHeight(this.position.x, this.position.z);
-      if (this.position.y < groundY + EYE_OFFSET) { // keep EYE at eye height above feet
-        this.position.y = groundY + EYE_OFFSET;
-        this.simulatedVelocity.y = 0;
-        this.simulatedVelocity.x *= 0.9; // Friction
-        this.simulatedVelocity.z *= 0.9;
-      }
-    }
-  }
-
   respawn(position: { x: number; y: number; z: number }): void {
     this._isDead = false;
     resetCorpse(this.corpse);
@@ -427,9 +270,7 @@ export class RemotePlayer {
     this._model.setScale(this._classScale);
     this.position.set(position.x, position.y, position.z);
     this.previousPosition.copy(this.position);
-    this.targetPosition.copy(this.position);
     this.velocity.set(0, 0, 0);
-    this.simulatedVelocity.set(0, 0, 0);
     this.serverVelocity.set(0, 0, 0);
     this.angularVelocity.set(0, 0, 0);
     // Corpse tumble left pitch/roll on the shared rotation — network
@@ -438,13 +279,7 @@ export class RemotePlayer {
     this.rotation.pitch = 0;
     this.rotation.roll = 0;
     this.isOnGround = true;
-    this._isSimulating = false;
-    this.net.clear();
-    this.predictionTimer = 0;
-    this.reconcileBlend = 0;
-    this.lastServerPosition.copy(this.position);
-    this.lastServerUpdateMs = Date.now();
-    this._lastUpdateTime = Date.now();
+    this.interp.reset(this.position);
     if (!this.cloakHidden) this.show();
   }
 
@@ -524,19 +359,7 @@ export class RemotePlayer {
   // Snapshots are cleared so interpolation can't resample the pre-hit path
   // after the window — that stale-buffer resample was the old snap-back bug.
   applyPredictedKnockback(fromPos: THREE.Vector3, impulseMag: number, pull = false): void {
-    const dx = this.position.x - fromPos.x;
-    const dy = this.position.y - fromPos.y;
-    const dz = this.position.z - fromPos.z;
-    const dist = Math.sqrt(dx * dx + dy * dy + dz * dz) || 0.001;
-    this.simulatedVelocity.copy(this.serverVelocity);
-    const s = pull ? -1 : 1;
-    this.simulatedVelocity.x += (dx / dist) * impulseMag * s;
-    this.simulatedVelocity.y += (pull ? 0.3 : 0.5) * impulseMag;
-    this.simulatedVelocity.z += (dz / dist) * impulseMag * s;
-    this.net.clear();
-    this._isSimulating = true;
-    // Window: ping + one server tick + interp delay, clamped
-    this.predictionTimer = Math.min(0.6, Math.max(0.15, (this.ping + 200) / 1000));
+    this.interp.predict(fromPos, impulseMag, pull);
   }
 
   // simulatePhysics() remains for genuine packet-loss dead reckoning.
