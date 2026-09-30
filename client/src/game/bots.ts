@@ -194,18 +194,7 @@ export class TeamBots {
         if (bot.respawnAt <= 0) this.respawnBot(bot);
         continue;
       }
-      const enemies = this.enemyList(bot);
-      const shot = bot.think(dt, {
-        terrain,
-        enemies,
-        nugget: this.spec.flags ? null : this.hooks.nearestNugget(bot.position, 60),
-        objective: this.ctf?.objectiveFor(bot) ?? null,
-        others,
-        // Hearing: fresh blasts pull idle bots toward the action — the
-        // same noisesNear sense the server feeds its brains.
-        sounds: this.recentNoises(bot.position),
-        threats: this.incomingNear(bot.position),
-      });
+      const shot = bot.think(dt, this.ctxFor(bot, this.enemyList(bot), others, terrain));
       if (this.over) { this.sheepTick(bot, dt, terrain); continue; }
       if (shot) this.resolveShot(bot, shot.targetId, shot.aim);
       // Belt + propel are real-spawn actions — offline only, same gate
@@ -218,6 +207,28 @@ export class TeamBots {
       }
       this.sheepTick(bot, dt, terrain);
     }
+  }
+
+  /** One brain ctx per bot per tick — every sense the server feeds its
+   *  brains (objective+infiltrating, huntCreatures, hearing, dodge) has
+   *  a client-side mirror here. */
+  private ctxFor(bot: GameBot, enemies: Parameters<GameBot['think']>[1]['enemies'], others: THREE.Vector3[], terrain: Terrain): Parameters<GameBot['think']>[1] {
+    const info = this.ctf?.objectiveInfoFor(bot);
+    return {
+      terrain,
+      enemies,
+      nugget: this.spec.flags ? null : this.hooks.nearestNugget(bot.position, 60),
+      objective: info?.pos ?? null,
+      infiltrating: info?.infiltrating ?? false,
+      // Nuggets rooms farm wildlife for the objective — the server
+      // flips the same flag only in economy modes.
+      huntCreatures: this.mode === 'nuggets',
+      others,
+      // Hearing: fresh blasts pull idle bots toward the action — the
+      // same noisesNear sense the server feeds its brains.
+      sounds: this.recentNoises(bot.position),
+      threats: this.incomingNear(bot.position),
+    };
   }
 
   /** Sheep meter accrual — fills while the bot moves like a pedestrian
@@ -527,7 +538,9 @@ export class TeamBots {
       // local player's cloak enjoys in this list.
       _enemies.push({ id, pos: rp.pos, vel: rp.vel, alive: !rp.isDead && !rp.isCloakHidden });
     }
-    const c = this.hooks.nearestCreature(bot.position, 35);
+    // Farming modes look farther — the brain prefers beast targets
+    // when huntCreatures is on, so a far beast still enters the list.
+    const c = this.hooks.nearestCreature(bot.position, this.mode === 'nuggets' ? 80 : 35);
     if (c) _enemies.push({ id: `creature:${c.id}`, pos: c.pos, vel: c.vel, alive: !c.dead });
     return _enemies;
   }

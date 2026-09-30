@@ -113,22 +113,31 @@ export class CtfFlags {
   /** Where a flag-focused bot should run — the shared role table
    *  (shared/flagGoals.ts) resolved against this room's flag state. */
   objectiveFor(bot: GameBot): THREE.Vector3 | null {
+    const info = this.objectiveInfoFor(bot);
+    return info ? info.pos : null;
+  }
+
+  /** Objective + whether the bot is rushing the enemy stand — the
+   *  infiltrating flag the server feeds its brains (cloak skill). */
+  objectiveInfoFor(bot: GameBot): { pos: THREE.Vector3; infiltrating: boolean } | null {
     const enemyTeam: TeamId = bot.team === 'alpha' ? 'bravo' : 'alpha';
     const enemy = this.flags.get(enemyTeam);
     const own = this.flags.get(bot.team as TeamId);
     if (!enemy || !own) return null;
-    if (bot.carryingFlag) return own.home;
+    if (bot.carryingFlag) return { pos: own.home.clone(), infiltrating: false };
     const role = this.roles.get(bot.playerId) ?? 'offense';
     const thief = own.state === 'carried' && own.carrier ? this.ctx.carrierPos(own.carrier) : null;
     const escortPos = enemy.carrier ? this.ctx.carrierPos(enemy.carrier) : null;
+    const enemyStand = enemy.state !== 'carried' ? enemy.pos : null;
     const pick = roleObjective(role, {
       home: own.home,
       thief,
       dropped: own.state === 'dropped' ? own.pos : null,
-      enemyStand: enemy.state !== 'carried' ? enemy.pos : null,
+      enemyStand,
       escort: escortPos,
     });
-    return new THREE.Vector3(pick.x, pick.y, pick.z);
+    const infiltrating = enemyStand !== null && pick === enemyStand;
+    return { pos: new THREE.Vector3(pick.x, pick.y, pick.z), infiltrating };
   }
 
   dropCarried(carrierId: string, at: THREE.Vector3): void {
