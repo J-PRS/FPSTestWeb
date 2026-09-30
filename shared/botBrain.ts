@@ -511,7 +511,7 @@ export class BotBrain {
       }
     }
 
-    return { dest, move: this.moveHints(ctx, pos, dest), fire, status: this.statusIntent(ctx), belt, deploy };
+    return { dest, move: this.moveHints(dt, ctx, pos, dest), fire, status: this.statusIntent(ctx), belt, deploy };
   }
 
   /** Sidestep the nearest closing shell — a perpendicular step dodges a
@@ -579,8 +579,11 @@ export class BotBrain {
       let best: { x: number; y: number; z: number } | null = null;
       let bestDrop = -Infinity;
       for (let tries = 0; tries < 3; tries++) {
-        const a = Math.random() * Math.PI * 2;
-        const r = (15 + Math.random() * 40) * this.wanderlust;
+        // Committed lines: a skier picks a direction and holds it — the
+        // roll is a forward cone off the current heading with real run
+        // length, not a fresh random bearing that reverses mid-carve.
+        const a = Math.atan2(this.heading.z, this.heading.x) + (Math.random() - 0.5) * 2.4;
+        const r = (25 + Math.random() * 55) * this.wanderlust;
         const wp = { x: pos.x + Math.cos(a) * r, z: pos.z + Math.sin(a) * r };
         if (this.nearDeath(wp)) continue;
         const drop = g0 - ctx.groundY(wp.x, wp.z);
@@ -617,7 +620,13 @@ export class BotBrain {
   /** Ski/jet/jump as the same buttons a human presses: ski downhill or
    *  when already fast, jet when the goal sits above a climbable wall,
    *  jump when an uphill stall is the blocker (pairs with detour). */
-  private moveHints(ctx: BrainCtx, pos: BotVec, dest: BotVec): BrainOut['move'] {
+  /** Committed jet window — a player holds RMB for a real burn
+   *  (~0.5-1s), not per-frame feathering. Without the latch the slope
+   *  probes flicker mid-climb and the jet strobes on/off, which reads
+   *  as buzzing instead of thrusting. */
+  private jetHold = 0;
+
+  private moveHints(dt: number, ctx: BrainCtx, pos: BotVec, dest: BotVec): BrainOut['move'] {
     const dx = dest.x - pos.x, dz = dest.z - pos.z;
     const gd = Math.hypot(dx, dz);
     if (gd < 0.5) return { ski: false, jet: false, jump: false };
@@ -646,13 +655,19 @@ export class BotBrain {
     // jets to build momentum — jet thrust pushes forward too, so this
     // converts fuel into travel speed instead of plodding.
     const boost = speed < 12 && gd > 15 && comfy;
+    this.jetHold = Math.max(0, this.jetHold - dt);
+    const wantJet = uphill || targetHigh || destHigh || hop || boost;
+    // Re-arm while the reason holds (a long climb = one long burn),
+    // plus a minimum pulse so a gate flicker can't chop the burn.
+    if (wantJet && tanked) this.jetHold = Math.max(this.jetHold, 0.45 + Math.random() * 0.4);
+    const jet = (this.jetHold > 0 || this.escapeJetT > 0) && tanked;
     return {
       // Tribes default: ski is held whenever the bot has somewhere to
       // be. Momentum is life — a bot that only skis downhill reads as a
       // pedestrian, which is exactly the sheep behavior the watchdog
       // now flags. Friction/jets sort out the uphill cost.
       ski: true,
-      jet: (uphill || targetHigh || destHigh || hop || boost || this.escapeJetT > 0) && tanked,
+      jet,
       // Uphill + near-stationary = hop it; autohop chains the rest.
       jump: uphill && speed < 3 && !airborne,
     };
@@ -769,12 +784,18 @@ export class BotBrain {
     // worse than a sideways shuffle.
     if (bestScore <= 0.001) { bestX = safeX; bestZ = safeZ; }
 
-    // Blend with the previous heading — smooths slot-to-slot jitter while
-    // the momentum term above keeps real turns responsive.
-    const mx = bestX * 0.7 + this.heading.x * 0.3;
-    const mz = bestZ * 0.7 + this.heading.z * 0.3;
-    const ml = Math.hypot(mx, mz) || 1;
-    this.heading.x = mx / ml; this.heading.z = mz / ml;
+    // Carve, don't flick: a human swings their view at wrist speed —
+    // ~4 rad/s — so the heading can only rotate that far per tick and
+    // slot flips become smooth arcs instead of tick-to-tick skitter.
+    // dodge/detour bypass this (they should read as decisive jukes).
+    const cur = Math.atan2(this.heading.x, this.heading.z);
+    const tgt = Math.atan2(bestX, bestZ);
+    let dYaw = tgt - cur;
+    if (dYaw > Math.PI) dYaw -= Math.PI * 2;
+    if (dYaw < -Math.PI) dYaw += Math.PI * 2;
+    const maxTurn = 4.0 * dt;
+    const a = cur + Math.max(-maxTurn, Math.min(maxTurn, dYaw));
+    this.heading.x = Math.sin(a); this.heading.z = Math.cos(a);
     const step = Math.min(gd, STEP);
     return { x: pos.x + this.heading.x * step, y: pos.y, z: pos.z + this.heading.z * step };
   }

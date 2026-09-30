@@ -648,7 +648,13 @@ export class ServerBots {
     const dz = out.dest.z - p.position.z;
     const dist = Math.sqrt(dx * dx + dz * dz);
     if (dist >= 0.5) {
-      const yaw = Math.atan2(dx, dz);
+      // Wrist-speed turn — a snapped 180° reads as a fly-flick while an
+      // arc at ~5 rad/s reads as a player swinging their view around.
+      const want = Math.atan2(dx, dz);
+      let dyaw = want - p.rotation.yaw;
+      if (dyaw > Math.PI) dyaw -= Math.PI * 2;
+      if (dyaw < -Math.PI) dyaw += Math.PI * 2;
+      const yaw = p.rotation.yaw + Math.max(-5 * dt, Math.min(5 * dt, dyaw));
       this.room.moveSim.faceYaw(id, yaw);
       p.rotation.yaw = yaw;
       this.room.moveSim.setInput(id, {

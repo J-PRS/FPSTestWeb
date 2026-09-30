@@ -277,7 +277,9 @@ export class GameBot extends RemotePlayer {
   private locomote(dt: number, _ctx: { terrain: Terrain }, dest: { x: number; y: number; z: number }, move: { ski?: boolean; jet?: boolean; jump?: boolean } | undefined): void {
     const pos = this.position;
     const md = Math.hypot(dest.x - pos.x, dest.z - pos.z);
-    this.rotation.yaw = md > 0.01 ? Math.atan2(dest.x - pos.x, dest.z - pos.z) : this.rotation.yaw;
+    // Wrist-speed turn — same slew the server host applies, so an
+    // offline bot carves its view around instead of fly-flicking.
+    if (md > 0.01) this.rotation.yaw = slewYaw(this.rotation.yaw, Math.atan2(dest.x - pos.x, dest.z - pos.z), 5 * dt);
     this.rotation.pitch = 0;
     this.rotation.roll = 0; // corpse roll would otherwise stick forever
 
@@ -338,6 +340,15 @@ export class GameBot extends RemotePlayer {
 let botStructureSpec: readonly StructureSpec[] | undefined;
 export function setBotStructureSpecs(list: readonly StructureSpec[] | undefined): void {
   botStructureSpec = list;
+}
+
+/** Rotate `cur` toward `want` by at most `maxDelta` radians — view
+ *  turns have wrist speed, so a snapped 180° reads as a fly-flick. */
+function slewYaw(cur: number, want: number, maxDelta: number): number {
+  let d = want - cur;
+  if (d > Math.PI) d -= Math.PI * 2;
+  if (d < -Math.PI) d += Math.PI * 2;
+  return cur + Math.max(-maxDelta, Math.min(maxDelta, d));
 }
 
 const _aim = new THREE.Vector3();
