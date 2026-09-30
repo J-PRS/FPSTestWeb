@@ -10,7 +10,7 @@ export class DamageNumber {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
   private texture: THREE.CanvasTexture;
-  age = 0; // public: manager reads it for the merge window
+  private age = 0;
   private dead = false;
   private readonly duration = 1.0; // seconds
   private readonly popScale = 0.1; // Initial pop scale
@@ -22,7 +22,7 @@ export class DamageNumber {
   // Velocity-based drift: bursts up+sideways, gravity settles it — the
   // ease-out arc reads intentional where a straight linear rise reads cheap
   private vel = new THREE.Vector3();
-  readonly anchor = new THREE.Vector3(); // for manager-side merging
+  readonly anchor = new THREE.Vector3();
 
   constructor(scene: THREE.Scene) {
     this.canvas = document.createElement('canvas');
@@ -71,16 +71,6 @@ export class DamageNumber {
     this.material.opacity = 1.0;
     this.age = 0;
     this.dead = false;
-  }
-
-  /** Merge another hit into this number (rapid-fire aggregation). Refreshes
-   *  life and pops slightly — Borderlands-style running total per target. */
-  merge(extra: number): void {
-    this.damage += extra;
-    this.dmgScale = Math.min(1.6, 1 + Math.sqrt(Math.max(0, this.damage)) * 0.05);
-    this.redraw();
-    this.age = Math.min(this.age, this.duration * 0.3); // partial refresh
-    this.vel.y = Math.max(this.vel.y, 1.6); // little hop so the merge reads
   }
 
   private redraw(): void {
@@ -154,19 +144,9 @@ export class DamageNumberManager {
     this.scene = scene;
   }
 
-  private mergeRadiusSq = 1.2 * 1.2; // same target, roughly
-  private mergeWindow = 0.35; // seconds — rapid hits fold into one number
-
   spawn(pos: THREE.Vector3, damage: number, color?: string, camera?: THREE.Camera): void {
-    // Rapid hits on the same spot aggregate into a running total instead of
-    // a shotgun spray of overlapping numbers (chaingun/flak feel)
-    for (let i = this.numbers.length - 1; i >= 0; i--) {
-      const n = this.numbers[i]!;
-      if (n.age < this.mergeWindow && n.anchor.distanceToSquared(pos) < this.mergeRadiusSq) {
-        n.merge(damage);
-        return;
-      }
-    }
+    // Every hit gets its own number — no merging. Shooter players learn
+    // the damage table; a summed pop can show a value no shot deals.
     const num = this.pool.pop() ?? new DamageNumber(this.scene);
     num.reset(pos, damage, color, camera);
     this.numbers.push(num);

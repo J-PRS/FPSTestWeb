@@ -23,6 +23,38 @@ export function getGlowTexture(size = 64): THREE.Texture {
   return tex;
 }
 
+// Smoke/debris puff: several offset soft blobs composited into one
+// asymmetric blotch — a radially symmetric sprite makes billboard
+// rotation invisible, which is why static quads read "low-poly 2005".
+const puffCache = new Map<number, THREE.Texture>();
+
+export function getPuffTexture(size = 128): THREE.Texture {
+  let tex = puffCache.get(size);
+  if (!tex) {
+    const c = document.createElement('canvas');
+    c.width = c.height = size;
+    const ctx = c.getContext('2d')!;
+    const half = size / 2;
+    // 7 overlapping blobs at fixed-but-ragged offsets — one draw call per
+    // particle still, but the silhouette tumbles when the quad spins.
+    const blobs: [number, number, number][] = [
+      [0, 0, 0.42], [0.28, -0.12, 0.30], [-0.24, 0.16, 0.32],
+      [0.08, 0.26, 0.26], [-0.10, -0.28, 0.24], [0.30, 0.18, 0.2], [-0.3, -0.06, 0.22],
+    ];
+    for (const [bx, by, br] of blobs) {
+      const g = ctx.createRadialGradient(half + bx * half, half + by * half, 0,
+        half + bx * half, half + by * half, br * size);
+      g.addColorStop(0, 'rgba(255,255,255,0.55)');
+      g.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, size, size);
+    }
+    tex = new THREE.CanvasTexture(c);
+    puffCache.set(size, tex);
+  }
+  return tex;
+}
+
 // Muzzle-flash sprite: hot radial core + a star of tapered spikes. Flat
 // quads need an alpha-shaped texture or they read as literal squares —
 // this gives the burst an irregular, spiky silhouette.

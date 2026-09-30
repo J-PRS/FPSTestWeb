@@ -1,0 +1,460 @@
+// Quarks integration — the gradual-migration home for VFX. One
+// BatchedRenderer batches every quarks system of the same material
+// into a single draw call; per-effect particle state lives on the GPU
+// side buffers it owns, so a burst costs a few attribute writes, not
+// N meshes+materials.
+//
+// POC usage: impactBurst() replaces the old per-spark-mesh bullet
+// impact puff. New effects should start here rather than growing the
+// hand-rolled pools in effects.ts/explosion.ts.
+import * as THREE from 'three';
+import {
+  BatchedRenderer, ParticleSystem, RenderMode,
+  ConeEmitter, IntervalValue, ConstantValue, ConstantColor,
+  GravityForce, ColorOverLife, Gradient, SizeOverLife,
+  RandomColorBetweenGradient, RotationOverLife,
+  // quarks.core math types are NOT three's — keep them separate.
+  Vector3 as QV3, Vector4 as QV4,
+} from 'three.quarks';
+import type { FunctionValueGenerator, GeneratorMemory, FunctionJSON } from 'three.quarks';
+import { CircleEmitter } from 'three.quarks';
+import { BLOOM_LAYER, EMIT_GAIN, GRAVITY } from '../core/config.js';
+import { getGlowTexture, getPuffTexture } from './glowTexture.js';
+import type { ProjectileConfig } from '../projectiles/types.js';
+
+let batcher: BatchedRenderer | null = null;
+let scene: THREE.Scene | null = null;
+const live = new Set<ParticleSystem>();
+
+export function initVfx(s: THREE.Scene): void {
+  if (batcher) return;
+  scene = s;
+  batcher = new BatchedRenderer();
+  batcher.layers.enable(BLOOM_LAYER);
+  s.add(batcher);
+}
+
+/** Perf-dump visibility: live one-shots in `live`, systems the batcher
+ *  still holds, particles across them. A growing `systems` count under
+ *  steady fire = a leak; growth only under explosions = honest load. */
+export function vfxStats(): { systems: number; tracked: number; particles: number } {
+  let particles = 0;
+  for (const ps of live) particles += ps.particleNum;
+  return { systems: batcher?.systemToBatchIndex.size ?? 0, tracked: live.size, particles };
+}
+
+export function updateVfx(dt: number): void {
+  batcher?.update(dt);
+  // Prune finished one-shots — emission ends at `duration`; particles
+  // may outlive it, but quarks keeps rendering them until they die, so
+  // the system must stay attached until then. `particleNum` is the
+  // truth, not the clock.
+  for (const ps of live) {
+    if (ps.time >= ps.duration && ps.particleNum === 0) {
+      batcher?.deleteSystem(ps);
+      scene?.remove(ps.emitter);
+      live.delete(ps);
+    }
+  }
+}
+
+const _upQ = new QV3(0, 1, 0);
+
+// Shared materials — quarks batches by material instance, so a fresh
+// material per burst would break the batch AND leak GL programs. Lazy:
+// getGlowTexture() needs a 2d canvas, which node-side tests don't have.
+let _impactMat: THREE.MeshBasicMaterial | null = null;
+let _normalMat: THREE.MeshBasicMaterial | null = null;
+function impactMat(): THREE.MeshBasicMaterial {
+  return _impactMat ??= new THREE.MeshBasicMaterial({
+    map: getGlowTexture(), transparent: true, depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    // HDR-hot tint: particle vertex colors × EMIT_GAIN push every additive
+    // emitter (trails, flashes, glow layers) past the bloom threshold.
+    color: new THREE.Color(EMIT_GAIN, EMIT_GAIN, EMIT_GAIN),
+  });
+}
+function normalMat(): THREE.MeshBasicMaterial {
+  // Blotchy asymmetric puff — smoke/debris quads NEED a non-symmetric
+  // silhouette or RotationOverLife spins an invisible radial sprite.
+  return _normalMat ??= new THREE.MeshBasicMaterial({
+    map: getPuffTexture(), transparent: true, depthWrite: false,
+    blending: THREE.NormalBlending,
+  });
+}
+
+/** Bullet-impact puff: a short cone of hot sparks kicked back along the
+ *  shot direction + gravity. Replaces Effects.spawnImpact's per-particle
+ *  meshes — one batched burst, ~0 allocation, one draw call shared with
+ *  every other burst in flight. */
+export function impactBurst(pos: THREE.Vector3, vel: THREE.Vector3): void {
+  if (!batcher || !scene) return;
+  const ps = new ParticleSystem({
+    duration: 0.35,
+    looping: false,
+    startLife: new IntervalValue(0.12, 0.27),
+    startSpeed: new IntervalValue(4, 12),
+    startSize: new IntervalValue(0.08, 0.2),
+    startColor: new ConstantColor(new QV4(1.0, 0.9, 0.45, 0.9)),
+    emissionOverTime: new ConstantValue(0),
+    emissionBursts: [{ time: 0, count: new ConstantValue(8), cycle: 0, interval: 0.01, probability: 1 }],
+    shape: new ConeEmitter({ radius: 0.02, angle: 0.7 }),
+    material: impactMat(),
+    renderMode: RenderMode.BillBoard,
+    worldSpace: true,
+    behaviors: [
+      new GravityForce(_upQ, -9.8),
+      new ColorOverLife(new Gradient(
+        [[new QV3(1, 0.9, 0.45), 0], [new QV3(1, 0.5, 0.15), 1]],
+        [[0.9, 0], [0, 1]],
+      )),
+    ],
+  });
+  ps.emitter.position.copy(pos);
+  // Cone emits along local +Z — aim it back along the incoming shot.
+  if (vel.lengthSq() > 0) {
+    _back.copy(vel).normalize().negate();
+    ps.emitter.quaternion.setFromUnitVectors(_forward, _back);
+  }
+  batcher.addSystem(ps);
+  scene.add(ps.emitter);
+  live.add(ps);
+  ps.play();
+}
+
+const _back = new THREE.Vector3();
+const _forward = new THREE.Vector3(0, 0, 1);
+
+// ---- Projectile trails ----
+
+/** Same host contract as ProjectileTrail — nothing else needed. */
+export interface QuarksTrailHost {
+  config: ProjectileConfig;
+  pos: THREE.Vector3;
+  vel: THREE.Vector3;
+  age(): number;
+}
+
+const _tDir = new THREE.Vector3();
+
+/** Trail as ONE batched quarks system per projectile: the old pool-per-
+ *  host trail meant ~1 mesh+material+draw call per emitted particle; here
+ *  the emitter just tracks the projectile and `emissionOverDistance`
+ *  reproduces the exact same world-space spacing (slow shell vs fast
+ *  slug get equal density). Emission stops by itself once the emitter
+ *  stops moving — explode() simply stops calling emitSegment.
+ *
+ *  Trade vs the hand-rolled version: ring/disc mesh types collapse to
+ *  billboards (only 'billboard' was ever configured anyway) and wakeVisual
+ *  keeps the old path — no config enables it. */
+export class QuarksTrail {
+  private ps: ParticleSystem | null = null;
+  private circle: CircleEmitter | null = null;
+
+  constructor(private host: QuarksTrailHost) {
+    const config = host.config;
+    if (!batcher || !scene || config.trailParticlesPerUnit <= 0) return;
+
+    // Gradient + alpha fade built from the config's arbitrary-length
+    // trailColors — same lerp the per-particle loop used to do by hand.
+    const cols = config.trailColors;
+    const colorStops: [QV3, number][] = cols.map((c, i) =>
+      [new QV3(c.r, c.g, c.b), cols.length > 1 ? i / (cols.length - 1) : 0]);
+    const alphaStops: [number, number][] = [[config.trailOpacity, 0], [0, 1]];
+    const smin = config.trailScaleMin, smax = config.trailScaleMax;
+
+    const behaviors: ConstructorParameters<typeof ParticleSystem>[0]['behaviors'] = [
+      new ColorOverLife(new Gradient(colorStops, alphaStops)),
+      new SizeOverLife(new FnValue(t => smin + (smax - smin) * t)),
+    ];
+    // Old loop did vel.y += gravity*dt (positive lifts — sprinkler droplets)
+    if (config.trailParticleGravity) {
+      behaviors.push(new GravityForce(_upQ, config.trailParticleGravity));
+    }
+
+    this.circle = new CircleEmitter({ radius: config.trailSpread * 0.5, thickness: 1 });
+    this.ps = new ParticleSystem({
+      duration: 1, looping: true,
+      startLife: new IntervalValue(config.trailLifeMin, config.trailLifeMax),
+      // slight outward drift — CircleEmitter pushes velocity radially
+      startSpeed: new IntervalValue(0, 0.2),
+      startSize: new IntervalValue(config.trailBaseSize,
+        config.trailBaseSize + config.trailSizeRange),
+      startColor: new ConstantColor(new QV4(1, 1, 1, 1)),
+      emissionOverTime: new ConstantValue(0),
+      emissionOverDistance: new ConstantValue(config.trailParticlesPerUnit),
+      shape: this.circle,
+      material: impactMat(),
+      renderMode: RenderMode.BillBoard,
+      worldSpace: true,
+      behaviors,
+    });
+    this.ps.emitter.position.copy(host.pos);
+    batcher.addSystem(this.ps);
+    scene.add(this.ps.emitter);
+    this.ps.play();
+  }
+
+  // Move + aim the emitter; quarks emits floor(dist*ppu) particles itself.
+  emitSegment(): void {
+    if (!this.ps) return;
+    const { pos, vel, config } = this.host;
+    this.ps.emitter.position.copy(pos);
+    if (vel.lengthSq() > 1e-4) {
+      this.ps.emitter.quaternion.setFromUnitVectors(
+        _forward, _tDir.copy(vel).normalize());
+    }
+    // Ramp-in: shrink the scatter disc during the trailRampIn window
+    if (this.circle && config.trailRampIn > 0) {
+      this.circle.radius = config.trailSpread * 0.5
+        * Math.min(this.host.age() / config.trailRampIn, 1);
+    }
+  }
+
+  /** True once exploded AND every emitted particle has died — the emitter
+   *  simply stops moving, so no new particles spawn after the last
+   *  emitSegment. */
+  get empty(): boolean { return !this.ps || this.ps.particleNum === 0; }
+
+  update(_dt: number): void { /* batcher.update drives everything */ }
+
+  dispose(): void {
+    if (!this.ps) return;
+    this.ps.stop(); // kill particles immediately — old dispose() pooled them away just as fast
+    batcher?.deleteSystem(this.ps);
+    scene?.remove(this.ps.emitter);
+    this.ps.dispose();
+    this.ps = null;
+  }
+}
+
+// ---- Continuous/small puffs (jetpack, dust, slipstreams) ----
+
+export interface PuffSpec {
+  count: number;
+  /** spawn scatter box, half-extents added to the emit position */
+  pos?: [number, number, number];
+  /** per-axis uniform velocity range */
+  velMin: [number, number, number];
+  velMax: [number, number, number];
+  /** flat velocity added to every particle — carries a fraction of the
+   *  emitter's motion (ski dust sheds -0.05·vel, fly trails -0.1·vel) */
+  shed?: [number, number, number];
+  lifeMin: number; lifeMax: number;
+  /** multiplies the old update-loop scale curve (0.15-radius sphere base) */
+  sizeScale?: number;
+  /** per-particle color endpoints — component-wise random lerp */
+  colA: [number, number, number];
+  colB: [number, number, number];
+  additive?: boolean;
+  gravity?: boolean; // default true — matches the old update loop
+}
+
+interface PuffParticle extends BlastParticle { startSpeed: number; }
+
+/** Emits the old per-call particle semantics: box-scattered spawn,
+ *  per-axis velocity range + a shared "shed" term. Direction/color/life
+ *  all ride the system's generators so a call is a handful of small
+ *  objects, not N meshes+materials+draw calls. */
+class PuffEmitter {
+  readonly type = 'puff';
+  constructor(private spec: PuffSpec) { }
+  update(): void { }
+  initialize(p: PuffParticle): void {
+    const s = this.spec, h = s.pos;
+    p.position.set(
+      h ? (Math.random() - 0.5) * 2 * h[0] : 0,
+      h ? (Math.random() - 0.5) * 2 * h[1] : 0,
+      h ? (Math.random() - 0.5) * 2 * h[2] : 0);
+    p.velocity.set(
+      s.velMin[0] + Math.random() * (s.velMax[0] - s.velMin[0]),
+      s.velMin[1] + Math.random() * (s.velMax[1] - s.velMin[1]),
+      s.velMin[2] + Math.random() * (s.velMax[2] - s.velMin[2]));
+    if (s.shed) {
+      p.velocity.x += s.shed[0]; p.velocity.y += s.shed[1]; p.velocity.z += s.shed[2];
+    }
+    p.startSpeed = 0; // velocity fully owned — don't let the shape scale it
+  }
+  toJSON(): { type: string } { return { type: this.type }; }
+  clone(): PuffEmitter { return new PuffEmitter(this.spec); }
+}
+
+/** One small effect call → one batched burst. Replicates the pooled
+ *  particle lifecycle: alpha always faded t·0.6 (the old update loop
+ *  overwrote spawn opacity), size ran (0.3+t·1.4)·sizeScale shrinking
+ *  over life, gravity applied unless noGravity. */
+export function fxPuff(pos: THREE.Vector3, spec: PuffSpec): void {
+  if (!batcher || !scene) return;
+  const ss = spec.sizeScale ?? 1;
+  const ps = new ParticleSystem({
+    duration: spec.lifeMax + 0.05,
+    looping: false,
+    startLife: new IntervalValue(spec.lifeMin, spec.lifeMax),
+    startSpeed: new ConstantValue(0),
+    // base quad size ≈ old 0.15-radius sphere × 2 → diameter
+    startSize: new ConstantValue(0.3 * ss),
+    startColor: new ConstantColor(new QV4(1, 1, 1, 1)),
+    startRotation: new IntervalValue(0, Math.PI * 2),
+    emissionOverTime: new ConstantValue(0),
+    emissionBursts: [{ time: 0, count: new ConstantValue(spec.count), cycle: 0, interval: 0.01, probability: 1 }],
+    shape: new PuffEmitter(spec),
+    material: spec.additive ? impactMat() : normalMat(),
+    renderMode: RenderMode.BillBoard,
+    worldSpace: true,
+    behaviors: [
+      ...(spec.gravity === false ? [] : [new GravityForce(_upQ, GRAVITY)]),
+      new ColorOverLife(new RandomColorBetweenGradient(
+        new Gradient([[new QV3(...spec.colA), 0], [new QV3(...spec.colA), 1]],
+          [[0.6, 0], [0, 1]]),
+        new Gradient([[new QV3(...spec.colB), 0], [new QV3(...spec.colB), 1]],
+          [[0.6, 0], [0, 1]]))),
+      // shrink 1.7→0.3 over life — the old s=(0.3+t·1.4) formula
+      new SizeOverLife(new FnValue(t => 0.3 + (1 - t) * 1.4)),
+      new RotationOverLife(new IntervalValue(-2, 2)),
+    ],
+  });
+  ps.emitter.position.copy(pos);
+  batcher.addSystem(ps);
+  scene.add(ps.emitter);
+  live.add(ps);
+  ps.play();
+}
+
+// ---- Explosion blast layers ----
+
+/** quarks expects classes for value/emitter plugins, but all it checks
+ *  is the structural interface — a tiny function-valued generator lets
+ *  us hand in real curves instead of bezier control points. */
+class FnValue implements FunctionValueGenerator {
+  type = 'function' as const;
+  constructor(private fn: (t: number) => number) { }
+  startGen(): void { }
+  genValue(_m: GeneratorMemory, t: number): number { return this.fn(t); }
+  toJSON(): FunctionJSON { return { type: 'function' } as FunctionJSON; }
+  clone(): FnValue { return new FnValue(this.fn); }
+}
+
+// Grow-in over the first 12% then linear shrink — the shape the old
+// pooled particles used (t<0.12 ? t/0.12 : 1-t).
+const GROW_SHRINK = new FnValue(t => (t < 0.12 ? t / 0.12 : 1 - t));
+
+interface QVec {
+  x: number; y: number; z: number;
+  set(x: number, y: number, z: number): QVec;
+  multiplyScalar(s: number): QVec;
+}
+interface BlastParticle {
+  position: QVec;
+  velocity: QVec;
+  startSpeed: number;
+}
+
+/** Direction distribution the old spawnBurst loop used: elv drawn from
+ *  [rand-elvBase)*elvSpan, uniform azimuth, plus a flat vy lift — or a
+ *  flat horizontal disc for `planar` layers. Owns velocity fully, so
+ *  the system-level startSpeed is just the speed roll. */
+class BlastEmitter {
+  readonly type = 'blast';
+  constructor(private elvBase: number, private elvSpan: number,
+              private planar: boolean, private vy: number) { }
+  update(): void { }
+  initialize(p: BlastParticle): void {
+    const ang = Math.random() * Math.PI * 2;
+    p.position.set((Math.random() - 0.5) * 0.5, (Math.random() - 0.5) * 0.5, (Math.random() - 0.5) * 0.5);
+    if (this.planar) {
+      p.velocity.set(Math.sin(ang) + (Math.random() - 0.5), 0, Math.cos(ang) + (Math.random() - 0.5))
+        .multiplyScalar(p.startSpeed);
+      p.velocity.y += this.vy + Math.random() * 4;
+    } else {
+      const elv = (Math.random() - this.elvBase) * this.elvSpan;
+      const c = Math.cos(elv);
+      p.velocity.set(c * Math.sin(ang), Math.sin(elv), c * Math.cos(ang))
+        .multiplyScalar(p.startSpeed);
+      p.velocity.y += this.vy;
+    }
+  }
+  toJSON(): { type: string } { return { type: this.type }; }
+  clone(): BlastEmitter { return new BlastEmitter(this.elvBase, this.elvSpan, this.planar, this.vy); }
+}
+
+export interface BlastSpec {
+  count: number;
+  elvBase?: number; elvSpan?: number;   // non-planar elevation distribution
+  planar?: boolean;                     // flat horizontal sheet
+  spdMin: number; spdMax: number; vy: number;
+  lifeMin: number; lifeMax: number;
+  sizeMin: number; sizeMax: number;
+  gravity: number;
+  c1: [number, number, number]; c2: [number, number, number];
+  opacity: number;
+  gVar?: number;                        // per-particle green-channel spread
+  stretched?: boolean;                  // velocity-stretched quads (spike rays)
+  stretchLen?: number;                  // startLength multiplier for stretched
+  /** Emission stagger window (s): splits `count` across 3 bursts over the
+   *  window so a layer breathes instead of popping in one frame — the
+   *  "low-FPS flipbook" tell is everything spawning at t=0. */
+  stagger?: number;
+  /** Billboard spin ±rad/s — rotating smoke/debris is the modern read;
+   *  irrelevant on stretched quads (velocity-aligned) and symmetric glow. */
+  spin?: number;
+}
+
+/** One explosion particle layer as a single batched quarks burst — the
+ *  replacement for spawnBurst's per-particle pooled meshes/sprites.
+ *  `kind: 'glow'` = additive, 'smoke'/'solid' = normal blend. */
+/** gVar spreads the green channel per-particle — organic fire variance. */
+function blastColorGen(spec: BlastSpec) {
+  const g1 = new Gradient([[new QV3(...spec.c1), 0], [new QV3(...spec.c2), 1]],
+    [[spec.opacity, 0], [0, 1]]);
+  return spec.gVar
+    ? new RandomColorBetweenGradient(g1, new Gradient(
+        [[new QV3(spec.c1[0], spec.c1[1] + spec.gVar, spec.c1[2]), 0],
+         [new QV3(...spec.c2), 1]], [[spec.opacity, 0], [0, 1]]))
+    : g1;
+}
+
+/** Staggered emission: 60% at t=0 (the hit still snaps), 25%/15% trailing
+ *  across the window so a layer breathes instead of popping in one frame. */
+function blastBursts(count: number, w: number) {
+  if (w <= 0) return [{ time: 0, count: new ConstantValue(count), cycle: 0, interval: 0.01, probability: 1 }];
+  return [[0, Math.ceil(count * 0.6)], [w * 0.45, Math.ceil(count * 0.25)], [w, Math.floor(count * 0.15)]]
+    .filter(b => b[1] > 0)
+    .map(([time, c]) => ({ time, count: new ConstantValue(c), cycle: 0, interval: 0.01, probability: 1 }));
+}
+
+export function blastBurst(pos: THREE.Vector3, spec: BlastSpec,
+    additive: boolean): void {
+  if (!batcher || !scene) return;
+  const colorGen = blastColorGen(spec);
+  const lifeMax = spec.lifeMax;
+  const w = spec.stagger ?? 0;
+  const bursts = blastBursts(spec.count, w);
+  const ps = new ParticleSystem({
+    duration: lifeMax + w + 0.05,
+    looping: false,
+    startLife: new IntervalValue(spec.lifeMin, lifeMax),
+    startSpeed: new IntervalValue(spec.spdMin, spec.spdMax),
+    startSize: new IntervalValue(spec.sizeMin, spec.sizeMax),
+    startColor: new ConstantColor(new QV4(1, 1, 1, 1)),
+    startRotation: new IntervalValue(0, Math.PI * 2),
+    emissionOverTime: new ConstantValue(0),
+    emissionBursts: bursts,
+    shape: new BlastEmitter(spec.elvBase ?? 0.5, spec.elvSpan ?? Math.PI, !!spec.planar, spec.vy),
+    material: additive ? impactMat() : normalMat(),
+    renderMode: spec.stretched ? RenderMode.StretchedBillBoard : RenderMode.BillBoard,
+    speedFactor: spec.stretched ? 0.12 : undefined,
+    startLength: spec.stretched ? new ConstantValue(spec.stretchLen ?? 8) : undefined,
+    worldSpace: true,
+    behaviors: [
+      new GravityForce(_upQ, spec.gravity),
+      new ColorOverLife(colorGen),
+      new SizeOverLife(GROW_SHRINK),
+      ...(spec.stretched ? [] : [new RotationOverLife(new IntervalValue(-(spec.spin ?? 1.2), spec.spin ?? 1.2))]),
+    ],
+  });
+  ps.emitter.position.copy(pos);
+  batcher.addSystem(ps);
+  scene.add(ps.emitter);
+  live.add(ps);
+  ps.play();
+}

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { BLOOM_LAYER } from '../core/config.js';
+import { BLOOM_LAYER, EMIT_GAIN } from '../core/config.js';
 import { Terrain } from '../world/terrain.js';
 
 interface IP {
@@ -125,7 +125,7 @@ export class Implosion {
       this.scene.add(mesh);
       sw = { mesh, mat, life: 0, elapsed: 0, maxRadius: 0, dead: false };
     }
-    sw.mat.color.setHex(0x00ffff);
+    sw.mat.color.setHex(0x00ffff).multiplyScalar(EMIT_GAIN);
     sw.mat.opacity = 0.8;
     sw.mesh.position.copy(pos);
     sw.life = 0.4; sw.elapsed = 0; sw.maxRadius = 8.0 * timeScale; sw.dead = false;
@@ -148,7 +148,7 @@ export class Implosion {
       this.scene.add(mesh);
       core = { mesh, mat, dead: false };
     }
-    core.mat.color.setHex(0xffffff);
+    core.mat.color.setHex(0xffffff).multiplyScalar(EMIT_GAIN);
     core.mat.opacity = 1.0;
     core.mesh.position.copy(pos);
     core.mesh.scale.setScalar(1);
@@ -188,7 +188,7 @@ export class Implosion {
         arc.basePts[j * 3 + 1] = radius * Math.sin(elv);
         arc.basePts[j * 3 + 2] = radius * Math.cos(elv) * Math.cos(angle);
       }
-      arc.mat.color.setHex(0x88ffff);
+      arc.mat.color.setHex(0x88ffff).multiplyScalar(EMIT_GAIN);
       arc.mat.opacity = 0.8;
       arc.life = 0.3; arc.elapsed = 0; arc.dead = false;
       this.arcs.push(arc);
@@ -321,11 +321,13 @@ export class Implosion {
         : p.baseScale * ft;
       p.mesh.scale.setScalar(Math.max(scl, 0.01));
 
-      // Color gradient
+      // Color gradient — sprites (additive glow) write HDR-hot for bloom;
+      // solid chunks keep display colors.
+      const g = p.isSprite ? EMIT_GAIN : 1;
       p.mat.color.setRGB(
-        p.r1 + (p.r2 - p.r1) * t,
-        p.g1 + (p.g2 - p.g1) * t,
-        p.b1 + (p.b2 - p.b1) * t,
+        (p.r1 + (p.r2 - p.r1) * t) * g,
+        (p.g1 + (p.g2 - p.g1) * t) * g,
+        (p.b1 + (p.b2 - p.b1) * t) * g,
       );
       p.mat.opacity = ft * (p.isSprite ? 0.9 : 1.0);
     }

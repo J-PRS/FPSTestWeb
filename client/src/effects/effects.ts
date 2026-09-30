@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 
 import { GRAVITY } from '../core/config.js';
+import { impactBurst, fxPuff, blastBurst } from './vfx.js';
 import type { Terrain } from '../world/terrain.js';
 
 interface Particle {
@@ -90,16 +91,18 @@ export class EffectsManager {
   }
 
   spawnExplosion(pos: THREE.Vector3, radius: number, count: number): void {
-    for (let i = 0; i < count; i++) {
-      _c.setHSL(0.05 + Math.random() * 0.08, 1, 0.5 + Math.random() * 0.3);
-      const spd = radius * (2 + Math.random() * 3);
-      _v.set(
-        (Math.random() - 0.5) * 2,
-        Math.random(),
-        (Math.random() - 0.5) * 2
-      ).normalize().multiplyScalar(spd);
-      this.alloc(this.sharedGeo, pos, _v, 0.4 + Math.random() * 0.5, _c);
-    }
+    // Batched burst — hemisphere elv 0..π/2 (old normalized (±, +, ±) dirs),
+    // HSL(0.05–0.13, 1, 0.5–0.8) ≈ the orange pair below.
+    blastBurst(pos, {
+      count,
+      elvBase: 0, elvSpan: Math.PI / 2,
+      spdMin: radius * 2, spdMax: radius * 5, vy: 0,
+      lifeMin: 0.4, lifeMax: 0.9,
+      sizeMin: 0.25, sizeMax: 0.5,
+      gravity: GRAVITY,
+      c1: [1.0, 0.5, 0.0], c2: [1.0, 0.85, 0.4],
+      opacity: 0.6,
+    }, true);
 
     // Flash sphere — sharedGeo scaled up via sizeScale in the update loop
     _c.setHex(0xffcc44);
@@ -107,20 +110,11 @@ export class EffectsManager {
     this.alloc(this.sharedGeo, pos, _v, 0.12, _c, { opacity: 0.9, sizeScale: (radius * 0.8) / 0.15 });
   }
 
-  // Small spark burst for bullet impacts — sparks kick back along the shot
-  // direction with spread, brief flash quad for the hit pop.
+  // Small spark burst for bullet impacts — quarks batch now (one shared
+  // draw call); the flash quad stays local, it's a single pooled mesh.
   spawnImpact(pos: THREE.Vector3, vel: THREE.Vector3): void {
     const back = vel.lengthSq() > 0 ? _v.copy(vel).normalize().negate() : _v.set(0, 1, 0);
-    for (let i = 0; i < 6; i++) {
-      _c.setRGB(1.0, 0.85 + Math.random() * 0.15, 0.4 + Math.random() * 0.3);
-      const spd = 4 + Math.random() * 8;
-      _v2.copy(back).addScaledVector(_v3.set(
-        (Math.random() - 0.5) * 1.6,
-        Math.random() * 0.8 + 0.2,
-        (Math.random() - 0.5) * 1.6
-      ), 1).normalize().multiplyScalar(spd);
-      this.alloc(this.sharedGeo, pos, _v2, 0.12 + Math.random() * 0.15, _c, { opacity: 0.9, additive: true, depthWrite: false });
-    }
+    impactBurst(pos, vel);
     // Tiny flash at the exact hit point — quad faces along the shot direction
     _c.setHex(0xffee99);
     _v2.copy(pos).addScaledVector(back, 0.05);
@@ -154,34 +148,30 @@ export class EffectsManager {
   // blobs you're inside of. Additive + small sizeScale so overlaps add
   // light instead of mass, and the grow-on-age update reads as streaks.
   spawnJetpack(pos: THREE.Vector3): void {
-    for (let i = 0; i < 2; i++) {
-      _c.setRGB(0.3 + Math.random() * 0.3, 0.7 + Math.random() * 0.3, 1.0);
-      _v.set(
-        (Math.random() - 0.5) * 2.5,
-        -(14 + Math.random() * 6), // exhaust velocity — clears your face fast
-        (Math.random() - 0.5) * 2.5
-      );
-      _v2.copy(pos).addScaledVector(_v3.set(0, -1, 0), 1.1);
-      _v2.x += (Math.random() - 0.5) * 0.3;
-      _v2.z += (Math.random() - 0.5) * 0.3;
-      this.alloc(this.sharedGeo, _v2, _v, 0.18 + Math.random() * 0.12, _c,
-        { opacity: 0.4, additive: true, depthWrite: false, sizeScale: 0.35 });
-    }
+    // quarks-batched — the per-particle mesh pool stayed 1 draw call per
+    // puff; now the whole stream batches with every other additive system
+    _v2.copy(pos); _v2.y -= 1.1; // emit below the feet, like the old -1.1 offset
+    fxPuff(_v2, {
+      count: 2,
+      pos: [0.15, 0, 0.15],
+      velMin: [-1.25, -20, -1.25], velMax: [1.25, -14, 1.25],
+      lifeMin: 0.18, lifeMax: 0.30,
+      sizeScale: 0.35,
+      colA: [0.3, 0.7, 1.0], colB: [0.6, 1.0, 1.0],
+      additive: true,
+    });
   }
 
   // Warp beacon trail — emits AT the beacon (spawnJetpack offsets -1.2m
   // for feet, which drags the trail under the disc). Sparks shed backward
   // with a slight sag so the arc of the flight path reads.
   spawnWarpTrail(pos: THREE.Vector3): void {
-    for (let i = 0; i < 2; i++) {
-      _c.setRGB(0.35, 0.9 + Math.random() * 0.1, 0.95); // teal — matches beacon glow
-      _v.set(
-        (Math.random() - 0.5) * 2,
-        -(0.5 + Math.random() * 1.5), // gentle shed, not a jet exhaust
-        (Math.random() - 0.5) * 2
-      );
-      this.alloc(this.sharedGeo, pos, _v, 0.25 + Math.random() * 0.15, _c);
-    }
+    fxPuff(pos, {
+      count: 2,
+      velMin: [-1, -2, -1], velMax: [1, -0.5, 1],
+      lifeMin: 0.25, lifeMax: 0.40,
+      colA: [0.35, 0.9, 0.95], colB: [0.35, 1.0, 0.95],
+    });
   }
 
   spawnJumpDust(pos: THREE.Vector3): void {
@@ -236,21 +226,17 @@ export class EffectsManager {
   }
 
   spawnSkiDust(pos: THREE.Vector3, velocity: THREE.Vector3): void {
-    for (let i = 0; i < 2; i++) {
-      _c.setRGB(0.7, 0.65, 0.55);
-      const groundY = this.terrain ? this.terrain.getHeight(pos.x, pos.z) : 0;
-      _v2.set(
-        pos.x + (Math.random() - 0.5) * 1.0,
-        groundY + 0.3,
-        pos.z + (Math.random() - 0.5) * 1.0
-      );
-      _v.set(
-        -velocity.x * 0.05 + (Math.random() - 0.5) * 0.3,
-        0.1 + Math.random() * 0.1,
-        -velocity.z * 0.05 + (Math.random() - 0.5) * 0.3
-      );
-      this.alloc(this.sharedGeo, _v2, _v, 0.3 + Math.random() * 0.3, _c, { opacity: 0.3, noGravity: true });
-    }
+    const groundY = this.terrain ? this.terrain.getHeight(pos.x, pos.z) : 0;
+    _v2.set(pos.x, groundY + 0.3, pos.z);
+    fxPuff(_v2, {
+      count: 2,
+      pos: [0.5, 0, 0.5],
+      velMin: [-0.15, 0.1, -0.15], velMax: [0.15, 0.2, 0.15],
+      shed: [-velocity.x * 0.05, 0, -velocity.z * 0.05],
+      lifeMin: 0.3, lifeMax: 0.6,
+      colA: [0.7, 0.65, 0.55], colB: [0.7, 0.65, 0.55],
+      gravity: false,
+    });
   }
 
   // Creature ground dust — ONE puff per call, callers emit on a distance
@@ -261,22 +247,20 @@ export class EffectsManager {
     const groundY = this.terrain ? this.terrain.getHeight(pos.x, pos.z) : 0;
     const k = Math.min(1, speed / 14); // 0=creep, 1=hauling
     const n = speed > 8 ? 2 : 1;       // fast movers shed pairs per puff
-    for (let i = 0; i < n; i++) {
-      const shade = 0.55 + Math.random() * 0.2 + k * 0.15; // faster = kicked higher, dries brighter
-      _c.setRGB(shade, shade * 0.92, shade * 0.72);
-      _v2.set(
-        pos.x + (Math.random() - 0.5) * radius * 1.6,
-        groundY + 0.15 + k * 0.3,
-        pos.z + (Math.random() - 0.5) * radius * 1.6
-      );
-      _v.set(
-        -vel.x * 0.06 + (Math.random() - 0.5) * (1 + k * 2),
-        0.4 + k * 2.2 + Math.random() * 0.6, // speed throws it UP
-        -vel.z * 0.06 + (Math.random() - 0.5) * (1 + k * 2)
-      );
-      this.alloc(this.sharedGeo, _v2, _v, 0.35 + k * 0.5 + Math.random() * 0.2, _c,
-        { opacity: 0.22 + k * 0.3, noGravity: true, sizeScale: 0.6 + k * 0.9 });
-    }
+    const s = 0.55 + k * 0.15;         // shade base — rand range rides colA→colB
+    const spread = 0.5 + k;            // (rand-0.5)·(1+k·2)
+    _v2.set(pos.x, groundY + 0.15 + k * 0.3, pos.z);
+    fxPuff(_v2, {
+      count: n,
+      pos: [radius * 0.8, 0, radius * 0.8],
+      velMin: [-spread, 0.4 + k * 2.2, -spread],
+      velMax: [spread, 0.4 + k * 2.2 + 0.6, spread],
+      shed: [-vel.x * 0.06, 0, -vel.z * 0.06],
+      lifeMin: 0.35 + k * 0.5, lifeMax: 0.55 + k * 0.5,
+      sizeScale: 0.6 + k * 0.9,
+      colA: [s, s * 0.92, s * 0.72], colB: [s + 0.2, (s + 0.2) * 0.92, (s + 0.2) * 0.72],
+      gravity: false,
+    });
   }
 
   // Flyer trail — ONE faint mote per call, callers emit on a distance
@@ -285,16 +269,17 @@ export class EffectsManager {
   spawnFlyTrail(pos: THREE.Vector3, vel: THREE.Vector3, speed: number): void {
     const k = Math.min(1, speed / 18);
     const shade = 0.6 + k * 0.2;
-    _c.setRGB(shade, shade * 0.95, shade * 0.85);
-    _v2.set(
-      pos.x + (Math.random() - 0.5) * 0.4,
-      pos.y + (Math.random() - 0.5) * 0.4,
-      pos.z + (Math.random() - 0.5) * 0.4
-    );
     // Shed slightly back + drift down — a settling slipstream, not a jet
-    _v.set(-vel.x * 0.1 + (Math.random() - 0.5) * 0.4, -0.3 - k * 0.4, -vel.z * 0.1 + (Math.random() - 0.5) * 0.4);
-    this.alloc(this.sharedGeo, _v2, _v, 0.5 + k * 0.6, _c,
-      { opacity: 0.10 + k * 0.12, noGravity: true, sizeScale: 0.35 + k * 0.4 });
+    fxPuff(pos, {
+      count: 1,
+      pos: [0.2, 0.2, 0.2],
+      velMin: [-0.2, -0.3 - k * 0.4, -0.2], velMax: [0.2, -0.3 - k * 0.4, 0.2],
+      shed: [-vel.x * 0.1, 0, -vel.z * 0.1],
+      lifeMin: 0.5 + k * 0.6, lifeMax: 0.5 + k * 0.6,
+      sizeScale: 0.35 + k * 0.4,
+      colA: [shade, shade * 0.95, shade * 0.85], colB: [shade, shade * 0.95, shade * 0.85],
+      gravity: false,
+    });
   }
 
   // Hitscan beam flash (remote railgun discharge): a transient additive

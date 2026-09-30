@@ -35,6 +35,8 @@ export class LightningBeam {
   readonly group = new THREE.Group();
   private core: THREE.Mesh;
   private glow: THREE.Mesh;
+  private arc: THREE.Mesh;      // damage sub-beam — wilder jag, only while the tip bites
+  private arcPts: THREE.Vector3[];
   private chainCore: THREE.Mesh;  // hop bolt: first target → chained enemy
   private chainPts: THREE.Vector3[];
   private chainFrom = new THREE.Vector3();
@@ -54,6 +56,9 @@ export class LightningBeam {
   /** 0..1 banked pop charge on the current victim — thickens the bolt and
    *  overclocks the spark fountain as the bomb loads. */
   private charge = 0;
+  /** 1 while the tip is on a damageable thing — drives the arc sub-beam
+   *  and the core swell, the "this is HURTING them" read. */
+  private contact = 0;
 
   constructor(scene: THREE.Scene, tint?: { glow: number; core: number; chain: number; hit: number; sparkTop: number }) {
     this.beamPts = Array.from({ length: SEGS + 1 }, () => new THREE.Vector3());
@@ -97,7 +102,12 @@ export class LightningBeam {
     this.chainCore = mkRibbon(tint?.chain ?? 0x9fd4ff, 0.7);
     this.chainCore.visible = false;
     this.chainPts = Array.from({ length: SEGS + 1 }, () => new THREE.Vector3());
-    this.group.add(this.glow, this.core, this.chainCore);
+    // Damage arc: same ribbon machinery at the core color — a second,
+    // jaggier bolt riding the main shaft while the tip bites
+    this.arc = mkRibbon(tint?.core ?? 0xeaf6ff, 0.9);
+    this.arc.visible = false;
+    this.arcPts = Array.from({ length: SEGS + 1 }, () => new THREE.Vector3());
+    this.group.add(this.glow, this.core, this.chainCore, this.arc);
 
     // Contact glow — bright ball pinned at the hit point
     const glowTex = LightningBeam.makeGlowTexture();
@@ -163,7 +173,7 @@ export class LightningBeam {
    *  billboarding, hasContact = the tip actually landed on something —
    *  the glow sprite + spark fountain are CONTACT VFX and must not float
    *  at the end of a max-range air shot. */
-  fire(from: THREE.Vector3, to: THREE.Vector3, camPos: THREE.Vector3, hasContact = true): void {
+  fire(from: THREE.Vector3, to: THREE.Vector3, camPos: THREE.Vector3, hasContact = true, damaging = false): void {
     this.from.copy(from);
     this.to.copy(to);
     this.camPos.copy(camPos);
@@ -172,6 +182,7 @@ export class LightningBeam {
     this.hitGlow.position.copy(to);
     this.hitGlow.visible = hasContact;
     this.sparkPoints.visible = hasContact;
+    this.contact = damaging ? 1 : 0; // re-armed each frame the tip bites
   }
 
   /** Optional second hop: beam forks from the hit enemy to a chained one. */
@@ -196,8 +207,11 @@ export class LightningBeam {
     this.fade = Math.max(0, this.fade - dt / FADE_TIME);
     const f = this.fade;
     const c = this.charge;
+    const k = this.contact;
     (this.core.material as THREE.MeshBasicMaterial).opacity = 0.95 * f;
     (this.glow.material as THREE.MeshBasicMaterial).opacity = (0.35 + c * 0.4) * f;
+    (this.arc.material as THREE.MeshBasicMaterial).opacity = 0.9 * f;
+    this.arc.visible = k > 0;
     (this.hitGlow.material as THREE.SpriteMaterial).opacity = 0.9 * f;
     (this.sparkPoints.material as THREE.PointsMaterial).opacity = 0.9 * f;
     (this.chainCore.material as THREE.MeshBasicMaterial).opacity = 0.7 * f;
@@ -219,8 +233,20 @@ export class LightningBeam {
           .addScaledVector(_side, (Math.random() - 0.5) * amp)
           .addScaledVector(_up, (Math.random() - 0.5) * amp);
       }
-      this.writeRibbon(this.core, CORE_W * (1 + c * 1.6));
+      this.writeRibbon(this.core, CORE_W * (1 + c * 1.6 + k * 0.8));
       this.writeRibbon(this.glow, GLOW_W * (1 + c * 1.4));
+      // Damage arc: same shaft, nearly double the jag — it reads as the
+      // bolt tearing INTO the contact, not just reaching it
+      if (k > 0) {
+        for (let i = 0; i <= SEGS; i++) {
+          const t = i / SEGS;
+          const amp = Math.sin(t * Math.PI) * JAG * 1.9 * Math.min(1, len / 30);
+          this.arcPts[i]!.copy(this.from).addScaledVector(_dir, t)
+            .addScaledVector(_side, (Math.random() - 0.5) * amp)
+            .addScaledVector(_up, (Math.random() - 0.5) * amp);
+        }
+        this.writeRibbonPts(this.arc, this.arcPts, CORE_W * 1.3);
+      }
       // Roll the chain hop too — tighter jag, it's a short fork
       if (this.chainLive) {
         _dir.copy(this.chainTo).sub(this.chainFrom);
@@ -241,11 +267,16 @@ export class LightningBeam {
     // exactly the "beam detaches on fast turns" artifact.
     this.beamPts[0]!.copy(this.from);
     this.beamPts[SEGS]!.copy(this.to);
-    this.writeRibbon(this.core, CORE_W * (1 + c * 1.6));
+    this.writeRibbon(this.core, CORE_W * (1 + c * 1.6 + k * 0.8));
     this.writeRibbon(this.glow, GLOW_W * (1 + c * 1.4));
+    if (k > 0) {
+      this.arcPts[0]!.copy(this.from);
+      this.arcPts[SEGS]!.copy(this.to);
+      this.writeRibbonPts(this.arc, this.arcPts, CORE_W * 1.3);
+    }
 
     // Hit glow throbs
-    const pulse = 1.9 + Math.sin(performance.now() * 0.04) * 0.5;
+    const pulse = (1.9 + Math.sin(performance.now() * 0.04) * 0.5) * (1 + k * 0.35);
     this.hitGlow.scale.setScalar(pulse * f);
 
     // Spark fountain: integrate + respawn dead sparks at the contact

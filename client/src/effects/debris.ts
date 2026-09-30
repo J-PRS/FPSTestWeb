@@ -3,18 +3,11 @@ import * as THREE from 'three';
 import { GRAVITY, BOUNCE_Y, FRICTION_XZ, SHRINK_DUR, GREY_DUR, BASE_SPEED, EXTRA_SPEED, LIFE_BASE, LIFE_RAND, PLAYER_RADIUS } from '../core/config.js';
 
 import { Terrain } from '../world/terrain.js';
+import { fxPuff } from './vfx.js';
 
 const TRAIL_INTERVAL  = 0.03; // seconds between trail emission
 const TRAIL_LIFE      = 0.8;  // trail particle lifetime
-const TRAIL_GEO       = new THREE.SphereGeometry(1, 4, 4);
-
-interface TrailParticle {
-  mesh: THREE.Mesh;
-  mat: THREE.MeshBasicMaterial;
-  life: number;
-  maxLife: number;
-  baseSize: number;
-}
+const _trailPos = new THREE.Vector3();
 
 interface Shard {
   mesh: THREE.Mesh;
@@ -30,7 +23,6 @@ interface Shard {
   cr: number; cg: number; cb: number;
   dead: boolean;
   trailTimer: number;
-  trails: TrailParticle[];
   brush: boolean;
   goo: boolean;
   /** Geometry borrowed from the dying body — never dispose it. */
@@ -87,49 +79,55 @@ function pickShardGeo(part: DebrisPart | undefined, opts: DebrisOptions, sw: num
   return geo;
 }
 
+function partLaunch(part: DebrisPart, opts: DebrisOptions, px: number, py: number, pz: number):
+  { o: THREE.Vector3; vel: THREE.Vector3 } {
+  // Body part: spawn at its own centroid, fly outward from the
+  // burst center along the part's offset (a head pops UP off the
+  // neck, an arm goes sideways — dismemberment, not shrapnel).
+  const o = new THREE.Vector3(part.pos.x - px, part.pos.y - py, part.pos.z - pz);
+  const l = Math.hypot(o.x, o.y, o.z);
+  const dx = l > 0.01 ? o.x / l : Math.random() * 2 - 1;
+  const dy = l > 0.01 ? o.y / l : Math.random() * 0.5 + 0.5;
+  const dz = l > 0.01 ? o.z / l : Math.random() * 2 - 1;
+  const spd = (BASE_SPEED * 0.6) + Math.random() * EXTRA_SPEED * 0.6;
+  const vel = new THREE.Vector3(dx * spd, dy * spd + 1.5, dz * spd);
+  if (opts.impulseDir) vel.addScaledVector(opts.impulseDir, 6);
+  if (opts.inheritVel) vel.addScaledVector(opts.inheritVel, 0.7);
+  return { o, vel };
+}
+
+function shellLaunch(opts: DebrisOptions):
+  { o: THREE.Vector3; vel: THREE.Vector3 } {
+  // Surface-sampled: random unit direction, shard sits ON the shell
+  // (0.55–0.95R so pieces overlap — no gaps in the first frame) and
+  // flies along that normal — the body bursts outward, not just apart.
+  const dx = Math.random() * 2 - 1;
+  const dy = Math.random() * 2 - 1;
+  const dz = Math.random() * 2 - 1;
+  const len = Math.hypot(dx, dy, dz) || 1;
+  const ndx = dx / len, ndy = dy / len, ndz = dz / len;
+  const r = opts.shellRadius! * (0.55 + Math.random() * 0.4);
+  const o = new THREE.Vector3(ndx * r, ndy * r, ndz * r);
+  // Speed gradient: shards on the far side (aligned with the shot)
+  // fly fastest — the burst wave travels THROUGH the body.
+  let spd = BASE_SPEED + Math.random() * EXTRA_SPEED;
+  if (opts.impulseDir) {
+    const align = ndx * opts.impulseDir.x + ndy * opts.impulseDir.y + ndz * opts.impulseDir.z;
+    spd *= 1 + Math.max(0, align) * 0.9;
+  }
+  const vel = new THREE.Vector3(ndx * spd, ndy * spd + 1.5, ndz * spd);
+  // ~40% of the shot's push carried through the shards
+  if (opts.impulseDir) vel.addScaledVector(opts.impulseDir, 6);
+  if (opts.inheritVel) vel.addScaledVector(opts.inheritVel, 0.7);
+  return { o, vel };
+}
+
 // Shard origin offset (o) + launch velocity (vel) for the three spawn
 // modes: posed body part, shell-sampled burst, or plain spread cone.
 function shardLaunch(part: DebrisPart | undefined, opts: DebrisOptions, px: number, py: number, pz: number):
   { o: THREE.Vector3; vel: THREE.Vector3 } {
-  if (part) {
-    // Body part: spawn at its own centroid, fly outward from the
-    // burst center along the part's offset (a head pops UP off the
-    // neck, an arm goes sideways — dismemberment, not shrapnel).
-    const o = new THREE.Vector3(part.pos.x - px, part.pos.y - py, part.pos.z - pz);
-    const l = Math.hypot(o.x, o.y, o.z);
-    const dx = l > 0.01 ? o.x / l : Math.random() * 2 - 1;
-    const dy = l > 0.01 ? o.y / l : Math.random() * 0.5 + 0.5;
-    const dz = l > 0.01 ? o.z / l : Math.random() * 2 - 1;
-    const spd = (BASE_SPEED * 0.6) + Math.random() * EXTRA_SPEED * 0.6;
-    const vel = new THREE.Vector3(dx * spd, dy * spd + 1.5, dz * spd);
-    if (opts.impulseDir) vel.addScaledVector(opts.impulseDir, 6);
-    if (opts.inheritVel) vel.addScaledVector(opts.inheritVel, 0.7);
-    return { o, vel };
-  }
-  if (opts.shellRadius) {
-    // Surface-sampled: random unit direction, shard sits ON the shell
-    // (0.55–0.95R so pieces overlap — no gaps in the first frame) and
-    // flies along that normal — the body bursts outward, not just apart.
-    const dx = Math.random() * 2 - 1;
-    const dy = Math.random() * 2 - 1;
-    const dz = Math.random() * 2 - 1;
-    const len = Math.hypot(dx, dy, dz) || 1;
-    const ndx = dx / len, ndy = dy / len, ndz = dz / len;
-    const r = opts.shellRadius * (0.55 + Math.random() * 0.4);
-    const o = new THREE.Vector3(ndx * r, ndy * r, ndz * r);
-    // Speed gradient: shards on the far side (aligned with the shot)
-    // fly fastest — the burst wave travels THROUGH the body.
-    let spd = BASE_SPEED + Math.random() * EXTRA_SPEED;
-    if (opts.impulseDir) {
-      const align = ndx * opts.impulseDir.x + ndy * opts.impulseDir.y + ndz * opts.impulseDir.z;
-      spd *= 1 + Math.max(0, align) * 0.9;
-    }
-    const vel = new THREE.Vector3(ndx * spd, ndy * spd + 1.5, ndz * spd);
-    // ~40% of the shot's push carried through the shards
-    if (opts.impulseDir) vel.addScaledVector(opts.impulseDir, 6);
-    if (opts.inheritVel) vel.addScaledVector(opts.inheritVel, 0.7);
-    return { o, vel };
-  }
+  if (part) return partLaunch(part, opts, px, py, pz);
+  if (opts.shellRadius) return shellLaunch(opts);
   const o = new THREE.Vector3(
     (Math.random() - 0.5) * opts.spreadX,
     (Math.random() - 0.5) * opts.spreadY,
@@ -161,6 +159,7 @@ export class Debris {
   private ghostT = 0;
   private static readonly GHOST_LIFE = 0.15;
   private static readonly GHOST_GROW = 1.6;
+  private static ghostPool: { mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial }[] = [];
 
   constructor(
     scene: THREE.Scene, terrain: Terrain,
@@ -171,65 +170,76 @@ export class Debris {
     this.scene   = scene;
     this.terrain = terrain;
 
-    if (opts.shellRadius) {
-      // Icosahedron detail 0 matches the ball's faceted silhouette
-      this.ghostMat = new THREE.MeshBasicMaterial({
-        color: new THREE.Color(Math.min(1, color.r + 0.6), Math.min(1, color.g + 0.6), Math.min(1, color.b + 0.6)),
-        transparent: true, opacity: 0.95,
-        blending: THREE.AdditiveBlending, depthWrite: false,
-      });
-      this.ghost = new THREE.Mesh(new THREE.IcosahedronGeometry(opts.shellRadius, 0), this.ghostMat);
-      this.ghost.position.set(px, py, pz);
-      scene.add(this.ghost);
-    }
+    if (opts.shellRadius) this.allocGhost(scene, opts.shellRadius, color, px, py, pz);
 
     this.spawnShards(px, py, pz, color, opts);
+  }
+
+  /** Icosahedron detail 0 matches the ball's faceted silhouette.
+   *  Mesh+mat pooled (geometry is radius-dependent → rebuilt each use). */
+  private allocGhost(scene: THREE.Scene, shellRadius: number, color: THREE.Color, px: number, py: number, pz: number): void {
+    const pooled = Debris.ghostPool.pop();
+    this.ghostMat = pooled ? pooled.mat : new THREE.MeshBasicMaterial({
+      transparent: true, opacity: 0.95,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+    });
+    this.ghostMat.color.setRGB(Math.min(1, color.r + 0.6), Math.min(1, color.g + 0.6), Math.min(1, color.b + 0.6));
+    this.ghostMat.opacity = 0.95;
+    this.ghost = pooled ? pooled.mesh : new THREE.Mesh();
+    this.ghost.geometry = new THREE.IcosahedronGeometry(shellRadius, 0);
+    if (this.ghost.material !== this.ghostMat) this.ghost.material = this.ghostMat;
+    this.ghost.scale.setScalar(1);
+    this.ghost.position.set(px, py, pz);
+    scene.add(this.ghost);
   }
 
   private spawnShards(px: number, py: number, pz: number, color: THREE.Color, opts: DebrisOptions): void {
     const count = opts.parts?.length ?? opts.count;
     for (let i = 0; i < count; i++) {
-      const sw = 0.25 + Math.random() * 0.55;
-      const sh = 0.18 + Math.random() * 0.45;
-      const sd = 0.20 + Math.random() * 0.50;
-      const part = opts.parts?.[i];
-      const geo = pickShardGeo(part, opts, sw, sh, sd);
-
-      const v   = 0.75 + Math.random() * 0.25;
-      const cr  = color.r * v;
-      const cg  = color.g * v;
-      const cb  = color.b * v;
-      const mat = new THREE.MeshLambertMaterial({ color: new THREE.Color(cr, cg, cb) });
-      const mesh = new THREE.Mesh(geo, mat);
-
-      const { o, vel } = shardLaunch(part, opts, px, py, pz);
-      mesh.position.set(px + o.x, py + o.y, pz + o.z);
-      mesh.castShadow = false;
-      this.scene.add(mesh);
-
-      const sharedGeo = !!opts.shardGeos?.length;
-      const tumble = 4.0 + Math.random() * 8.0;
-
-      this.shards.push({
-        mesh, mat,
-        x: px + o.x, y: py + o.y, z: pz + o.z,
-        vx: vel.x, vy: vel.y, vz: vel.z,
-        rx: (Math.random() - 0.5) * 2 * tumble,
-        ry: (Math.random() - 0.5) * 2 * tumble,
-        rz: (Math.random() - 0.5) * 2 * tumble,
-        life: (opts.kind === 'brush' ? 0.7 : 1) * (LIFE_BASE + Math.random() * LIFE_RAND),
-        elapsed: 0,
-        radius: part ? (geo.boundingSphere?.radius ?? 0.3) * 0.35
-          : sharedGeo ? (geo.boundingSphere?.radius ?? 0.3) * 0.5
-          : opts.kind === 'brush' ? 0.08 : opts.kind === 'goo' ? 0.06 : Math.max(sw, sh, sd),
-        landed: false, landedAt: 0,
-        cr, cg, cb, dead: false,
-        trailTimer: 0, trails: [],
-        brush: opts.kind === 'brush',
-        goo: opts.kind === 'goo',
-        sharedGeo,
-      });
+      this.spawnShard(opts.parts?.[i], opts, px, py, pz, color);
     }
+  }
+
+  private spawnShard(part: DebrisPart | undefined, opts: DebrisOptions,
+      px: number, py: number, pz: number, color: THREE.Color): void {
+    const sw = 0.25 + Math.random() * 0.55;
+    const sh = 0.18 + Math.random() * 0.45;
+    const sd = 0.20 + Math.random() * 0.50;
+    const geo = pickShardGeo(part, opts, sw, sh, sd);
+
+    const v   = 0.75 + Math.random() * 0.25;
+    const cr  = color.r * v;
+    const cg  = color.g * v;
+    const cb  = color.b * v;
+    const { mesh, mat } = this.allocShardMesh(geo, cr, cg, cb);
+
+    const { o, vel } = shardLaunch(part, opts, px, py, pz);
+    mesh.position.set(px + o.x, py + o.y, pz + o.z);
+    mesh.castShadow = false;
+    this.scene.add(mesh);
+
+    const sharedGeo = !!opts.shardGeos?.length;
+    const tumble = 4.0 + Math.random() * 8.0;
+
+    this.shards.push({
+      mesh, mat,
+      x: px + o.x, y: py + o.y, z: pz + o.z,
+      vx: vel.x, vy: vel.y, vz: vel.z,
+      rx: (Math.random() - 0.5) * 2 * tumble,
+      ry: (Math.random() - 0.5) * 2 * tumble,
+      rz: (Math.random() - 0.5) * 2 * tumble,
+      life: (opts.kind === 'brush' ? 0.7 : 1) * (LIFE_BASE + Math.random() * LIFE_RAND),
+      elapsed: 0,
+      radius: part ? (geo.boundingSphere?.radius ?? 0.3) * 0.35
+        : sharedGeo ? (geo.boundingSphere?.radius ?? 0.3) * 0.5
+        : opts.kind === 'brush' ? 0.08 : opts.kind === 'goo' ? 0.06 : Math.max(sw, sh, sd),
+      landed: false, landedAt: 0,
+      cr, cg, cb, dead: false,
+      trailTimer: 0,
+      brush: opts.kind === 'brush',
+      goo: opts.kind === 'goo',
+      sharedGeo,
+    });
   }
 
   update(dt: number): void {
@@ -241,7 +251,7 @@ export class Debris {
       if (t >= 1) {
         this.scene.remove(this.ghost);
         this.ghost.geometry.dispose();
-        this.ghostMat.dispose();
+        Debris.ghostPool.push({ mesh: this.ghost, mat: this.ghostMat });
         this.ghost = null; this.ghostMat = null;
       }
     }
@@ -293,50 +303,26 @@ export class Debris {
     s.mesh.rotation.z += s.rz * dt;
 
     if (!s.landed) this.emitTrail(s, dt);
-    this.updateTrail(s, dt);
     this.greyShard(s);
     return this.shrinkLanded(s);
   }
 
-  // Dead puffs are pooled per-Debris — the burst fires a material+mesh pair
-  // per shard per interval, which GC'd hard during multi-kill fights.
-  private trailPool: { mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial }[] = [];
-
+  // Trail puffs ride the shared quarks batch — a kill storm used to be a
+  // draw call per puff per shard per interval (the 5000+ draw-call spikes).
   private emitTrail(s: Shard, dt: number): void {
     s.trailTimer += dt;
     while (s.trailTimer >= TRAIL_INTERVAL) {
       s.trailTimer -= TRAIL_INTERVAL;
-      const size = s.radius * 0.4;
-      let p = this.trailPool.pop();
-      if (!p) {
-        const mat = new THREE.MeshBasicMaterial({
-          transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
-        });
-        p = { mesh: new THREE.Mesh(TRAIL_GEO, mat), mat };
-      }
-      p.mat.color.setRGB(s.cr, s.cg, s.cb);
-      p.mat.opacity = 0.5;
-      p.mesh.position.set(s.x, s.y, s.z);
-      p.mesh.scale.setScalar(size);
-      this.scene.add(p.mesh);
-      s.trails.push({ mesh: p.mesh, mat: p.mat, life: TRAIL_LIFE, maxLife: TRAIL_LIFE, baseSize: size });
-    }
-  }
-
-  private updateTrail(s: Shard, dt: number): void {
-    for (let i = s.trails.length - 1; i >= 0; i--) {
-      const p = s.trails[i];
-      p.life -= dt;
-      if (p.life <= 0) {
-        this.scene.remove(p.mesh);
-        this.trailPool.push({ mesh: p.mesh, mat: p.mat });
-        s.trails[i] = s.trails[s.trails.length - 1];
-        s.trails.pop();
-        continue;
-      }
-      const t = p.life / p.maxLife;
-      p.mat.opacity = t * 0.5;
-      p.mesh.scale.setScalar(p.baseSize * t);
+      _trailPos.set(s.x, s.y, s.z);
+      fxPuff(_trailPos, {
+        count: 1,
+        velMin: [0, 0, 0], velMax: [0, 0, 0],
+        lifeMin: TRAIL_LIFE, lifeMax: TRAIL_LIFE,
+        sizeScale: s.radius * 0.4 / 0.15,
+        colA: [s.cr, s.cg, s.cb], colB: [s.cr, s.cg, s.cb],
+        additive: true,
+        gravity: false,
+      });
     }
   }
 
@@ -361,29 +347,42 @@ export class Debris {
     return true;
   }
 
+  // Shared free-list — shard mesh+material outlive the Debris instance;
+  // random geometries are still per-shard and disposed at release.
+  private static shardPool: { mesh: THREE.Mesh; mat: THREE.MeshLambertMaterial }[] = [];
+
+  /** Mesh+mat pooled — a kill used to allocate ~20 materials. The
+   *  pooled mesh's old random geo was already disposed on release,
+   *  so assigning here is safe. */
+  private allocShardMesh(geo: THREE.BufferGeometry, cr: number, cg: number, cb: number) {
+    const pooled = Debris.shardPool.pop();
+    const mesh = pooled ? pooled.mesh : new THREE.Mesh();
+    const mat = pooled ? pooled.mat : new THREE.MeshLambertMaterial();
+    mesh.geometry = geo;
+    if (mesh.material !== mat) mesh.material = mat;
+    mat.color.setRGB(cr, cg, cb);
+    mesh.scale.setScalar(1);
+    mesh.rotation.set(0, 0, 0);
+    return { mesh, mat };
+  }
+
   private removeShard(s: Shard): void {
     this.scene.remove(s.mesh);
     if (!s.sharedGeo) s.mesh.geometry.dispose();
-    s.mat.dispose();
     s.dead = true;
+    Debris.shardPool.push({ mesh: s.mesh, mat: s.mat });
   }
 
   dispose(): void {
     if (this.ghost && this.ghostMat) {
       this.scene.remove(this.ghost);
       this.ghost.geometry.dispose();
-      this.ghostMat.dispose();
+      Debris.ghostPool.push({ mesh: this.ghost, mat: this.ghostMat });
       this.ghost = null; this.ghostMat = null;
     }
     for (const s of this.shards) {
       if (!s.dead) this.removeShard(s);
-      for (const p of s.trails) {
-        this.scene.remove(p.mesh);
-        p.mat.dispose();
-      }
     }
-    for (const p of this.trailPool) p.mat.dispose();
-    this.trailPool.length = 0;
   }
 }
 

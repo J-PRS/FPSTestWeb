@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { BLOOM_LAYER } from '../core/config.js';
+import { BLOOM_LAYER, EMIT_GAIN } from '../core/config.js';
 import { Terrain } from '../world/terrain.js';
 
 const SEGS = 64;
@@ -30,7 +30,10 @@ export class TerrainRing {
     private life: number,
     private maxRadius: number,
     ...opts: [terrain?: Terrain, baseOpacity?: number, ghostOpacity?: number]) {
-    const [terrain, baseOpacity = 0.8, ghostOpacity = 0.35] = opts;
+    // Ghost is a GreaterDepth re-pass: it intentionally paints the arcs
+    // terrain occludes. Kept faint — at 0.35 a ring on the far side of a
+    // hill read as a full neon circle drawn ON the hillside.
+    const [terrain, baseOpacity = 0.8, ghostOpacity = 0.12] = opts;
     this.terrain = terrain;
     this.baseOpacity = baseOpacity;
     this.ghostOpacity = ghostOpacity;
@@ -47,8 +50,9 @@ export class TerrainRing {
     }
     this.geo.setIndex(new THREE.BufferAttribute(idx, 1));
 
+    const hot = new THREE.Color(color).multiplyScalar(EMIT_GAIN);
     this.mat = new THREE.MeshBasicMaterial({
-      color, transparent: true, opacity: baseOpacity,
+      color: hot, transparent: true, opacity: baseOpacity,
       side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
       depthWrite: false,
       polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
@@ -60,7 +64,7 @@ export class TerrainRing {
     scene.add(this.mesh);
 
     this.ghostMat = new THREE.MeshBasicMaterial({
-      color, transparent: true, opacity: ghostOpacity,
+      color: hot, transparent: true, opacity: ghostOpacity,
       side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
       depthWrite: false, depthFunc: THREE.GreaterDepth,
     });
