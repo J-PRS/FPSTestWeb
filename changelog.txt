@@ -1,3 +1,4 @@
+2026-10-01 - Room.ts 687->601: score/kill economy (creature drops, powerup grants, team/FFA scoring, match-end awards) -> roomScore.ts RoomScore
 2026-10-01 - MessageHandler.ts 717->547: position/teleport plausibility funnel (consecutive-report speed judge, force-accept resync, warp cadence, judge muting) -> moveClaims.ts MoveClaims
 2026-10-01 - CombatHandler.ts 878->697: blast sweep (processAOE/splashOne/shove/plateAll/serverBlast/mineBlast/charge pop + occlusion) -> combatBlast.ts BlastRunner
 2026-10-01 - explosion.ts 889->66: per-weapon blast layer recipes -> explosionLayers.ts (variants, shock dome pool, ground rings), batched trail sparks -> explosionSparks.ts

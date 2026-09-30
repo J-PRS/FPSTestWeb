@@ -19,7 +19,7 @@ import { structureColliders } from '../../shared/ballSim.ts';
 import { hmHeight, type Heightfield } from '../../shared/heightfield.ts';
 import { RoomMoveSim } from './RoomMoveSim.ts';
 import { type MapSpec, resolveMapSpec } from '../../shared/mapSpec.ts';
-import { MODES, pickTeam, makeScores, bank, winner, type ModeId, type ModeSpec, type TeamScores } from '../../shared/teams.ts';
+import { MODES, pickTeam, makeScores, type ModeId, type ModeSpec, type TeamScores } from '../../shared/teams.ts';
 import { ServerBots } from './ServerBots.ts';
 import { RoomFlags } from './RoomFlags.ts';
 import { RoomPickups } from './RoomPickups.ts';
@@ -31,12 +31,12 @@ import { CLASS_STATS } from '../../shared/botClasses.ts';
 import { logger } from './logger.ts';
 import { CONFIG } from './config.ts';
 import type { ServerMessage } from '../../shared/protocol.ts';
-import { POWERUP, rollCreatureDrop, type PowerupKind } from '../../shared/pickups.ts';
+import { MatchClock, type MatchHost } from './roomMatch.ts';
+import { RoomScore } from './roomScore.ts';
 import { ENERGY } from '../../shared/movement.ts';
 import { perkMods } from '../../shared/perks.ts';
 import type { ServerWebSocket } from 'bun';
 import type { WebSocketData } from './types.ts';
-import { MatchClock, type MatchHost } from './roomMatch.ts';
 
 export class Room {
   readonly name: string;
@@ -129,13 +129,6 @@ export class Room {
    *  balls bounce on ground that doesn't exist (the rubberband storm). */
   onTerrain?: (spec: MapSpec) => void;
 
-  /** Per-player K/D at the horn — the match journal's useful payload. */
-  private matchPlayers(): { id: string; team?: string; kills: number; deaths: number }[] {
-    return [...this.players.getAllPlayers().values()].map((p) => ({
-      id: p.id, team: p.team, kills: p.kills, deaths: p.deaths,
-    }));
-  }
-
   /** Push the player's armor-class ground multiplier into its shadow —
    *  the single place class→speedScale mapping is read. */
   private applyClassScale(playerId: string): void {
@@ -176,7 +169,7 @@ export class Room {
       (data) => this.connections.broadcastBinaryReliable(data),
     );
     if (this.spec.balls) this.ballSim.population = this.spec.balls;
-    this.ballSim.onKilled = (by, pos, variant) => this.creatureKill(by, pos, variant);
+    this.ballSim.onKilled = (by, pos, variant) => this.scoring.creatureKill(by, pos, variant);
     this.ballSim.colliders = structureColliders(this.spec.structures);
     if (this.spec.ballMix) this.ballSim.ballMix = this.spec.ballMix;
     if (this.spec.spawns) this.players.spawnPoints = this.spec.spawns;
@@ -207,7 +200,7 @@ export class Room {
       this.messages.mineBlast('environment', pos, b.biteDamage, b.blastRadius, 14);
       this.pushNoise(pos); // bots hear the pop like any other blast
     };
-    this.creatureSim.onKilled = (by, pos) => this.creatureKill(by, pos, 0);
+    this.creatureSim.onKilled = (by, pos) => this.scoring.creatureKill(by, pos, 0);
     this.messages.setCreatureSim(this.creatureSim);
     if (field) this.creatureSim.attachField(field);
     this.bots = new ServerBots(this, field);
@@ -245,7 +238,7 @@ export class Room {
         if (team === 'alpha' || team === 'bravo') this.score(team);
         return;
       }
-      this.applyPowerup(p, kind);
+      this.scoring.applyPowerup(p, kind);
     };
     if (this.modeSpec?.flags && bases?.alpha && bases?.bravo) {
       // Spec y is advisory — flags live on the ground, so touch checks
@@ -289,60 +282,12 @@ export class Room {
     this.flags?.dropIfCarrier(playerId);
   }
 
-  /** Per-player scoreboard for FFA modes (dm). Bots are in the same map —
-   *  a bot can legitimately win a deathmatch. */
-  readonly ffaScores = new Map<string, number>();
-
-  /** Creature kill — ballDie attribution from BallSim. FFA modes award
-   *  the killer directly; team modes drop a nugget at the corpse that
-   *  anyone must touch to bank (kill-confirmed style scoring). */
-  private creatureKill(by: string, pos: Vec3, variant = 0): void {
-    // The economy runs on kills — soak validation needs these visible.
-    logger.info('Creature killed', { room: this.name, by, variant });
-    // Powerup drops roll in EVERY mode — the pickup does the granting.
-    const powerup = rollCreatureDrop();
-    // Creatures die mid-flight — the drop must land on the ground or the
-    // dy<=6 pickup grab can never reach it and the economy starves.
-    const gy = (this.field ? hmHeight(this.field, pos.x, pos.z) : pos.y) + 0.5;
-    if (powerup) {
-      this.pickups?.spawn({ x: pos.x + (this.rng() - 0.5) * 2, y: gy, z: pos.z + (this.rng() - 0.5) * 2 }, powerup);
-    }
-    const spec = this.modeSpec;
-    if (spec?.teams) {
-      // Pay for the corpse's threat: variant 3 elites and v2 tanks drop a
-      // burst, fodder still drops one (same scale curve the client uses).
-      const drops = [1, 2, 3, 3][variant] ?? 1;
-      for (let i = 0; i < drops; i++) {
-        this.pickups?.spawn({ x: pos.x + (this.rng() - 0.5) * 2, y: gy, z: pos.z + (this.rng() - 0.5) * 2 });
-      }
-      return;
-    }
-    if (!spec?.ffa || spec.ptsCreatureKill <= 0 || !this.players.getPlayer(by)) return;
-    this.awardFfa(by, spec.ptsCreatureKill);
-  }
-
-  /** Powerup pickup resolution — buffs are server-owned so a client can
-   *  never claim regen/dd it didn't touch. Bots collect too: they read
-   *  the fields directly, no wire message needed for them. */
-  private applyPowerup(p: PlayerState, kind: PowerupKind): void {
-    const now = Date.now();
-    const buff: Extract<ServerMessage, { type: 'buff' }> = { type: 'buff', kind };
-    if (kind === 'heal') {
-      p.health = Math.min(p.maxHealth, p.health + POWERUP.heal);
-      buff.health = p.health;
-    } else if (kind === 'armor') {
-      p.armor = Math.min(POWERUP.maxArmor, p.armor + POWERUP.armor);
-      buff.armor = p.armor;
-    } else if (kind === 'regen') {
-      p.regenUntil = now + POWERUP.regenMs;
-      buff.until = p.regenUntil;
-    } else {
-      p.ddUntil = now + POWERUP.ddMs;
-      buff.until = p.ddUntil;
-    }
-    p.forceSendUntil = now + 500; // buffed health/status rides the next ticks
-    this.connections.sendToPlayer(p.id, buff);
-  }
+  /** The score/kill economy — creature drops, powerup grants, team/FFA
+   *  scoring, match-end awards. Own file (roomScore.ts) via ScoreHost. */
+  readonly scoring = new RoomScore(this);
+  /** Per-player FFA scoreboard — lives on RoomScore now; kept as the
+   *  public name GameServer/tests already read. */
+  get ffaScores() { return this.scoring.ffaScores; }
 
   /** Match lifecycle — clock/leader/reset funnel lives in roomMatch.ts;
    *  matchHost adapts Room's fields to the leaf interface it takes. */
@@ -358,7 +303,7 @@ export class Room {
       teams: this.modeSpec?.teams,
       friendlyFire: CONFIG.friendlyFire,
       winAt: this.modeSpec?.winAt,
-      ffaScores: () => Object.fromEntries(this.ffaScores),
+      ffaScores: () => Object.fromEntries(this.scoring.ffaScores),
       bases: this.spec.bases,
       structures: this.spec.structures,
       arena: this.spec.arena,
@@ -367,7 +312,7 @@ export class Room {
       terrainTex: this.spec.terrainTex,
       sky: this.spec.sky,
       interiors: this.spec.interiors,
-      onKill: (pid, shooter) => this.onKill(pid, shooter),
+      onKill: (pid, shooter) => this.scoring.onKill(pid, shooter),
       onHit: (pid, shooter) => this.bots.flinch(pid, shooter),
       flags: () => this.flags?.snapshot() ?? [],
       pickups: () => this.pickups?.snapshot() ?? [],
@@ -421,9 +366,9 @@ export class Room {
       mode: this.mode,
       modeSpec: this.modeSpec,
       scores: this.scores,
-      ffaScores: this.ffaScores,
+      ffaScores: this.scoring.ffaScores,
       getHumanCount: () => this.players.getHumanCount(),
-      matchPlayers: () => this.matchPlayers(),
+      matchPlayers: () => this.scoring.matchPlayers(),
       broadcast: (msg) => this.broadcast(msg),
       endCleanup: () => {
         this.flags?.reset();
@@ -452,46 +397,19 @@ export class Room {
     return this.matchClock.forceEnd();
   }
 
-  private endMatch(w: string): void {
+  endMatch(w: string): void { // public — ScoreHost calls it on a win
     this.matchClock.end(w);
-  }
-
-  private awardFfa(id: string, n: number): void {
-    const spec = this.modeSpec!;
-    const pts = (this.ffaScores.get(id) ?? 0) + n;
-    this.ffaScores.set(id, pts);
-    this.broadcast({ type: 'ffaScore', scores: Object.fromEntries(this.ffaScores), winAt: spec.winAt });
-    if (pts >= spec.winAt) this.endMatch(id);
-  }
-
-  /** Kill hook from the damage funnel: flag drop in every mode, frag
-   *  points in FFA rooms. 'environment' shooters score nothing. */
-  private onKill(targetId: string, shooterId: string): void {
-    this.flagCarrierDied(targetId);
-    this.deployables.clearOwner(targetId);
-    // A death is audible — nearby idle bots drift toward the kill spot.
-    const corpse = this.players.getPlayer(targetId);
-    if (corpse) this.pushNoise(corpse.position);
-    const spec = this.modeSpec;
-    const shooter = this.players.getPlayer(shooterId);
-    if (!spec || !shooter || spec.ptsPlayerKill <= 0) return;
-    if (spec.ffa) this.awardFfa(shooterId, spec.ptsPlayerKill);
-    else if (shooter.team) {
-      this.score(shooter.team, spec.ptsPlayerKill);
-      // Kill-confirmed mode (tdm): the corpse drops a tag that ANY team
-      // can pick up for another point — deny by grabbing it first.
-      const t = this.players.getPlayer(targetId);
-      if (this.mode === 'tdm' && t) this.pickups?.spawn(t.position, 'tag');
-    }
   }
 
   /** Team point from a server-observed objective (flag cap, gem touch). */
   score(team: 'alpha' | 'bravo', n = 1): void {
-    if (!this.modeSpec?.teams) return;
-    bank(this.scores, team, n);
-    this.broadcast({ type: 'teamScore', scores: { ...this.scores }, winAt: this.modeSpec.winAt });
-    const w = winner(this.scores, this.modeSpec.winAt);
-    if (w) this.endMatch(w);
+    this.scoring.score(team, n);
+  }
+
+  /** A Room-shaped send for host interfaces — RoomScore echoes buffs
+   *  through the same path the ctor closures use. */
+  sendToPlayer(playerId: string, msg: ServerMessage): void {
+    this.connections.sendToPlayer(playerId, msg);
   }
 
   // Combat noise — a short-lived ring of recent loud events (shots,
@@ -635,9 +553,7 @@ export class Room {
     this.deployables.clearOwner(playerId);
     this.projectiles.clearOwner(playerId);
     this.players.removePlayer(playerId);
-    if (this.ffaScores.delete(playerId)) {
-      this.broadcast({ type: 'ffaScore', scores: Object.fromEntries(this.ffaScores), winAt: this.modeSpec!.winAt });
-    }
+    this.scoring.dropPlayer(playerId);
     this.messages.onPlayerRemoved(playerId);
     this.sessionTokens.delete(playerId);
     // Removal-without-disconnect paths (kick, idle reap, bot retire)
