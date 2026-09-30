@@ -5,7 +5,7 @@ import { LightningBeam } from '../../effects/lightningBeam.js';
 import { lgMuzzleAnchor } from '../lgAnchor.js';
 import {
   LG_RANGE, LG_POP_DMG_CAP, LG_POP_RADIUS_MAX, LG_POP_RADIUS_MIN,
-  LG_CHAIN_RANGE, LG_CHAIN_DMG_SCALE,
+  LG_CHAIN_RANGE, LG_CHAIN_DMG_SCALE, LG_POP_CHARGE_MULT,
 } from '../../core/config.js';
 import { getWeaponStats, WeaponType } from '../../../../shared/weapons.js';
 import { lgTickDamage, LG_RAMP_WINDOW_S } from '../../../../shared/combat.js';
@@ -229,7 +229,7 @@ function zapTarget(deps: CombatDeps, hooks: LightningHooks, lg: LgState,
   deps.lazyDamageNumbers().spawn(t.pos, dmg, '#8fdcff', cam);
   // The pop banks what the ramp withheld, not what it dealt — a fresh
   // beam charges nothing, a held beam detonates for the decay it paid.
-  const acc = (lg.acc.get(t.id) ?? 0) + (8 - lgTickDamage(n)) * dmgScale;
+  const acc = (lg.acc.get(t.id) ?? 0) + (8 - lgTickDamage(n)) * dmgScale * LG_POP_CHARGE_MULT;
   lg.acc.set(t.id, acc);
   deps.reportTargetDamage?.(t, dmg);
   if (t.takeDamage(dmg)) {

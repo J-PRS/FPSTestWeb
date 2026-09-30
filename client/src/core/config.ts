@@ -35,6 +35,7 @@ export const LG_RANGE = 55.0;      // hard beam cap — mid-range tracker, outra
 // Death-burst: a beam kill detonates the corpse for (accumulated beam
 // damage dealt to it) — overcharging a fat target pays out a fat pop.
 export const LG_POP_DMG_CAP = 160;   // explosion damage ceiling
+export const LG_POP_CHARGE_MULT = 2; // withheld damage pays back doubled — the pop should feel earned, not break-even
 export const LG_POP_RADIUS_MAX = 14; // blast radius ceiling (m)
 export const LG_POP_RADIUS_MIN = 3;  // even a popgun kill pops SOMETHING
 // Chain fork: after the beam lands, it arcs to one more enemy within range
