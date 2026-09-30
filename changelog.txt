@@ -1,3 +1,4 @@
+2026-10-02 - _tools/e2e: headless Chrome E2E suite (smoke + duo) — real client vs real server, port-probing stack spawner
 2026-10-02 - removed dead ProfileName type export in targeting.ts
 2026-10-02 - TASKS.md refreshed (stats + Recent Changes list was months stale)
 2026-10-02 - demo/index.ts barrel trimmed to the 2 externally-used symbols (knip noise down)
