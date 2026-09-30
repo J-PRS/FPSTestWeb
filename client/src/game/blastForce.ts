@@ -128,7 +128,7 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
       if (playerId === directHitTargetId) continue;
       deps.lazyHud().showHitMarker();
       const aoeDmg = aoeDamageOf(aoeDamage, dist, radius);
-      if (deps.botHit?.(playerId, aoeDmg, pos, shooterId)) continue; // local authority resolved it
+      if (deps.botHit?.(playerId, aoeDmg, pos, shooterId, a.weaponType)) continue; // local authority resolved it
       deps.lazyHealthBarSystem().predictDamage(playerId, aoeDmg);
     }
   }

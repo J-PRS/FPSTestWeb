@@ -22,6 +22,7 @@ import * as sfx from '../core/sfx.js';
 import { poissonDisc } from '../utils/poissonSpread.js';
 import { killTaunt, deathTaunt } from '../../../shared/botTaunts.js';
 import { chatSink } from './chat.js';
+import { noteKill } from '../core/stateDebug.js';
 
 /**
  * TeamBots — the mode referee. Bot brains/bodies live in botBrain.ts;
@@ -670,7 +671,7 @@ export class TeamBots {
 
   /** Shared local-hit funnel: trigger-time claims and real bot-shell
    *  impacts land here — damage, knockback, death feed + credit. */
-  private hurtLocal(dmg: number, fromPos: THREE.Vector3, src: string, melee: boolean, attackerId: string): void {
+  private hurtLocal(dmg: number, fromPos: THREE.Vector3, src: string, melee: boolean, attackerId: string, weapon?: number): void {
     const p = this.deps.lazyPlayer();
     if (p.isDead) return;
     p.health = Math.max(0, p.health - dmg);
@@ -682,6 +683,7 @@ export class TeamBots {
     this.deps.world.killCounts.set(attackerId, (this.deps.world.killCounts.get(attackerId) ?? 0) + 1);
     this.creditKill(attackerId, false);
     this.localDied();
+    noteKill(attackerId, 'local', weapon ?? (melee ? WeaponType.Melee : undefined));
     this.hooks.killFeed(attackerId.replace('bot:', ''), 'YOU', false, true);
     this.botSay(attackerId, killTaunt(attackerId, 'YOU'));
     this.hooks.localPlayerKilled(attackerId.replace('bot:', ''));
@@ -690,16 +692,16 @@ export class TeamBots {
   /** Player/explosion damage routed here when the victim is a bot —
    *  combat consults `hit` before predictDamage. A bot shell can also
    *  hit 'local' (sweepLocal) — that resolves through the same funnel. */
-  hit(playerId: string, dmg: number, fromPos: THREE.Vector3, attackerId = 'local'): boolean {
+  hit(playerId: string, dmg: number, fromPos: THREE.Vector3, attackerId = 'local', weapon?: number): boolean {
     if (playerId === 'local') {
-      this.hurtLocal(dmg, fromPos, attackerId.replace('bot:', ''), false, attackerId);
+      this.hurtLocal(dmg, fromPos, attackerId.replace('bot:', ''), false, attackerId, weapon);
       return true;
     }
     const rp = this.deps.world.remotePlayers.get(playerId);
     if (!(rp instanceof GameBot)) return false;
     const died = rp.takeDamageLocal(dmg, fromPos);
     this.deps.lazyHealthBarSystem().spawn(playerId, dmg, died ? 0 : rp.botHp);
-    if (died) this.botKilled(attackerId, rp);
+    if (died) this.botKilled(attackerId, rp, weapon);
     return true;
   }
 
@@ -711,7 +713,7 @@ export class TeamBots {
     setTimeout(() => chatSink.add?.(name, line), 1200 + Math.random() * 1800);
   }
 
-  private botKilled(killerId: string, bot: GameBot): void {
+  private botKilled(killerId: string, bot: GameBot, weapon?: number): void {
     // Same shatter as wire remotes — the corpse pops into team-colored
     // shards instead of just shrinking away.
     const t = bot.team;
@@ -730,6 +732,7 @@ export class TeamBots {
     this.creditKill(killerId, false);
     this.dropCarriedFlag(bot.playerId, bot.position);
     const kn = killerId === 'local' ? 'YOU' : killerId.replace('bot:', '');
+    noteKill(killerId === 'local' ? 'local' : killerId, bot.playerId, weapon);
     this.hooks.killFeed(kn, bot.playerId.replace('bot:', ''), killerId === 'local', false);
     if (killerId !== 'local') this.botSay(killerId, killTaunt(killerId, kn));
     this.botSay(bot.playerId, deathTaunt(bot.playerId, kn));

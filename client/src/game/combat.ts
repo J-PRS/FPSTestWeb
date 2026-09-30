@@ -58,7 +58,7 @@ export interface CombatDeps extends GameContext {
   /** Nugget Wars local authority: a hit on a `bot:*` id resolves HERE
    *  (no server to claim to). Returns true when it consumed the hit —
    *  callers then skip the predictDamage/sendShot path. */
-  botHit?: (playerId: string, dmg: number, fromPos: THREE.Vector3, attackerId?: string) => boolean;
+  botHit?: (playerId: string, dmg: number, fromPos: THREE.Vector3, attackerId?: string, weaponType?: number) => boolean;
   /** A creature died by local hands — DM scoring credits the killer
    *  ('local' when unset; offline bot shells carry their bot id). */
   onCreatureKilled?: (shooterId?: string) => void;
@@ -566,7 +566,7 @@ function handlePlayerHit(c: CombatCtx, p: Projectile, playerId: string): void {
   const hitPos = targetPlayer ? targetPlayer.position : deps.lazyPlayer().pos;
   const directDamage = getWeaponStats(p.config.weaponType).directDamage * deps.lazyPlayer().mods.directDamage;
   deps.lazyDamageNumbers().spawn(hitPos, directDamage, p.config.damageColor, deps.lazyCamera());
-  if (deps.botHit?.(playerId, directDamage, p.pos, p.shooterId ?? undefined)) return; // bot authority: real damage, no claim
+  if (deps.botHit?.(playerId, directDamage, p.pos, p.shooterId ?? undefined, p.config.weaponType)) return; // bot authority: real damage, no claim
   deps.lazyHealthBarSystem().predictDamage(playerId, directDamage);
   const airborne = targetPlayer
     ? targetPlayer.feetY - deps.lazyTerrain().getHeight(hitPos.x, hitPos.z) > 0.6
