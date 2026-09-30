@@ -206,7 +206,9 @@ async function init(): Promise<void> {
   });
 
   hud = new HUD();
-  if (mode === 'nuggets' || mode === 'ctf' || mode === 'dm') hud.setTeamScore(0, 0);
+  // Team-score strip only in team modes — dm painted a permanent
+  // ALPHA 0 : 0 BRAVO badge over free-for-all play.
+  if (mode === 'nuggets' || mode === 'ctf') hud.setTeamScore(0, 0);
   healthBarSystem = new HealthBarSystem(camera);
   damageNumberManager = new DamageNumberManager(scene);
   profiler.markTime('hudCreated');
@@ -586,5 +588,15 @@ init().then(async () => {
       teamBots: () => teamBots,
       logger,
     });
+  }
+
+  // Headless/probe hook — the puppeteer scripts in headless-test drive off
+  // this (spawn PlayerModels, read player.pos, aim the camera). DEV or
+  // ?debug only; absent in prod builds.
+  if (import.meta.env.DEV || urlParams.debug) {
+    (window as unknown as { __test: unknown }).__test = {
+      player, scene, entities, world, terrain,
+      networkManager, demoManager,
+    };
   }
 });
