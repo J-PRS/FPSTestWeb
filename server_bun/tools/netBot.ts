@@ -77,7 +77,7 @@ const CLASSES = ['light', 'medium', 'heavy'];
 
 interface Roster { pos: Vec3; vel: Vec3 }
 
-const stats = { sent: 0, recv: 0, corrections: 0, shots: 0, errors: 0, closes: 0, joins: 0, tickGaps: 0, tickJit: 0, ballSegs: 0, ballWarps: 0, ballMaxJump: 0, crawlEvts: 0, crawlWarps: 0, crawlMaxJump: 0, rtc: 0 };
+const stats = { sent: 0, recv: 0, corrections: 0, shots: 0, errors: 0, closes: 0, joins: 0, tickGaps: 0, tickJit: 0, ballSegs: 0, ballWarps: 0, ballMaxJump: 0, crawlEvts: 0, crawlWarps: 0, crawlMaxJump: 0, rtc: 0, gems: 0 };
 
 // Warp detector: consecutive updates for an entity should move it about
 // speed·dt. A jump far past that is a visible teleport — server truth uses
@@ -192,6 +192,7 @@ class WireBot {
   sentPingAt = 0; timers: ReturnType<typeof setInterval>[] = [];
   lastTickSeq = -1; lastTickAt = 0;
   balls = new Map<number, Vec3>(); crawls = new Map<number, Vec3>();
+  pickups = new Map<number, Vec3>(); // gem/tag drops — sought in team modes
   ownShots: { id: string; until: number }[] = []; shotN = 0;
   nextDeploy = 0; nextChat = 0; nextTeleport = 0; nextHeal = 0; nextLoadout = 0; nextEnvDmg = 0; nextSwitch = 0;
   wasJump = false; wasJet = false;
@@ -312,6 +313,7 @@ class WireBot {
         for (const p of m.players ?? []) {
           if (p.playerId !== this.id) this.roster.set(p.playerId, { pos: p.position, vel: p.velocity ?? { x: 0, y: 0, z: 0 } });
         }
+        for (const pk of m.pickups ?? []) this.pickups.set(pk.id, pk.pos);
         const me = m.localPlayerState?.position ?? m.players?.find((p: { playerId: string }) => p.playerId === this.id)?.position
           ?? { x: rand(-20, 20), y: 40, z: rand(-20, 20) };
         this.sim = new MoveSim(surface, {
@@ -332,6 +334,8 @@ class WireBot {
         this.crawls.set(m.id, m.position);
         if (this.crawls.size > 300) this.crawls.clear();
         break;
+      case 'pickupSpawn': this.pickups.set(m.id, m.pos); break;
+      case 'pickupGone': this.pickups.delete(m.id); if (m.by === this.id) stats.gems++; break;
       case 'ballDie': this.balls.delete(m.id); this.lastSeg.delete(`ball${m.id}`); break;
       case 'crawlDie': this.crawls.delete(m.id); this.lastSeg.delete(`crawl${m.id}`); break;
       case 'correction':
@@ -487,6 +491,17 @@ class WireBot {
    *  Tribes player, jet bursts when climbing, occasional hops. */
   private step(dt: number): void {
     const s = this.sim!.state;
+    // Team-mode objective play: nearest drop inside 80m outranks the
+    // wander waypoint — bots farm gems and earn their heal credit like
+    // a player instead of claiming heals they never touched.
+    if (MODE === 'nuggets' || MODE === 'ctf') {
+      let bd = 80 * 80, bp: Vec3 | null = null;
+      for (const p of this.pickups.values()) {
+        const d = (p.x - s.pos.x) ** 2 + (p.z - s.pos.z) ** 2;
+        if (d < bd) { bd = d; bp = p; }
+      }
+      if (bp) this.waypoint = { x: bp.x, z: bp.z };
+    }
     const dx = this.waypoint.x - s.pos.x, dz = this.waypoint.z - s.pos.z;
     if (dx * dx + dz * dz < 25) this.waypoint = { x: rand(-140, 140), z: rand(-140, 140) };
     s.yaw = Math.atan2(dx, dz);
@@ -555,5 +570,5 @@ setInterval(() => {
   const ping = pings.length
     ? ` ping=${pings[0]}/${pings[Math.floor(pings.length / 2)]}/${pings[pings.length - 1]}ms`
     : '';
-  console.log(`[netBot] ${bots.length} bots (${s.rtc} rtc) | joins=${s.joins} sent=${s.sent} recv=${s.recv} shots=${s.shots} corr=${s.corrections} err=${s.errors} closes=${s.closes} tickGaps=${s.tickGaps} maxTickGap=${Math.round(s.tickJit)}ms ball=${s.ballSegs}/${s.ballWarps}w max${s.ballMaxJump.toFixed(0)}m crawl=${s.crawlEvts}/${s.crawlWarps}w max${s.crawlMaxJump.toFixed(0)}m${ping}`);
+  console.log(`[netBot] ${bots.length} bots (${s.rtc} rtc) | joins=${s.joins} sent=${s.sent} recv=${s.recv} shots=${s.shots} gems=${s.gems} corr=${s.corrections} err=${s.errors} closes=${s.closes} tickGaps=${s.tickGaps} maxTickGap=${Math.round(s.tickJit)}ms ball=${s.ballSegs}/${s.ballWarps}w max${s.ballMaxJump.toFixed(0)}m crawl=${s.crawlEvts}/${s.crawlWarps}w max${s.crawlMaxJump.toFixed(0)}m${ping}`);
 }, 5000);
