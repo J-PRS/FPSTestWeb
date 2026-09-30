@@ -201,6 +201,9 @@ export class TeamBots {
         nugget: this.spec.flags ? null : this.hooks.nearestNugget(bot.position, 60),
         objective: this.ctf?.objectiveFor(bot) ?? null,
         others,
+        // Hearing: fresh blasts pull idle bots toward the action — the
+        // same noisesNear sense the server feeds its brains.
+        sounds: this.recentNoises(bot.position),
       });
       if (this.over) { this.sheepTick(bot, dt, terrain); continue; }
       if (shot) this.resolveShot(bot, shot.targetId, shot.aim);
@@ -477,6 +480,18 @@ export class TeamBots {
     for (const b of this.bots) {
       if (b.team === team) continue;
       out.push({ playerId: b.playerId, pos: b.pos, vel: b.vel, alive: !b.isDead && !b.isCloakHidden });
+    }
+    return out;
+  }
+
+  /** Blasts younger than ~1.5s inside earshot — mirrors Room.noisesNear
+   *  (50m radius). Gunshots stay unheard, same as the server. */
+  private recentNoises(pos: THREE.Vector3): { x: number; y: number; z: number }[] {
+    const out: { x: number; y: number; z: number }[] = [];
+    for (const e of this.deps.world.explosions) {
+      if (e.age > 1.5) continue;
+      const dx = e.pos.x - pos.x, dy = e.pos.y - pos.y, dz = e.pos.z - pos.z;
+      if (dx * dx + dy * dy + dz * dz < 50 * 50) out.push({ x: e.pos.x, y: e.pos.y, z: e.pos.z });
     }
     return out;
   }

@@ -174,6 +174,8 @@ export class GameBot extends RemotePlayer {
     objective?: THREE.Vector3 | null;
     /** Nearby bodies for the steering separation sense. */
     others?: THREE.Vector3[];
+    /** Fresh blasts in earshot — the hearing sense. */
+    sounds?: { x: number; y: number; z: number }[];
   }): { targetId: string; aim: THREE.Vector3 } | null {
     const pos = this.position;
     const out = this.brain.think(dt, {
@@ -185,6 +187,7 @@ export class GameBot extends RemotePlayer {
       solids: Projectile.solidColliders,
       solidIndex: Projectile.solidIndex,
       others: ctx.others,
+      sounds: ctx.sounds,
       now: performance.now(),
       // The real tank + hp — fear, mend, shield, and retreat gates all
       // read these; without them every status decision saw a full sheet.

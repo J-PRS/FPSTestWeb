@@ -67,6 +67,10 @@ export class Explosion {
   private sparks: Spark[] = [];
   private scene: THREE.Scene;
   private elapsed = 0;
+  /** Immobile after construction — the blast's hearing surface for
+   *  bot senses (mirrors the server's noise events). */
+  readonly pos: THREE.Vector3;
+  get age(): number { return this.elapsed; }
   private ox: number; private oy: number; private oz: number;
   // Per-weapon energy tint — lerped into glow particles, shock dome and
   // ground ring so a teal plasma bolt doesn't pop orange.
@@ -76,10 +80,11 @@ export class Explosion {
 
   // sizeScale normalizes blast size to weapon radius (rocket = 1.0):
   // a mortar's 14m blast shouldn't render like a 6m rocket.
-  constructor(scene: THREE.Scene, pos: THREE.Vector3, directHit: boolean = false, age: number = 0, ...opts: [terrain?: Terrain, sizeScale?: number, tint?: string | number]) {
-    const [terrain, sizeScale = 1.0, tint] = opts;
+  constructor(scene: THREE.Scene, pos: THREE.Vector3, directHit: boolean = false, age: number = 0, ...opts: [terrain?: Terrain, sizeScale?: number, tint?: string | number, vfx?: 'splash' | 'punch']) {
+    const [terrain, sizeScale = 1.0, tint, vfx] = opts;
     this.scene = scene;
     this.ox = pos.x; this.oy = pos.y; this.oz = pos.z;
+    this.pos = pos.clone();
     if (tint !== undefined) {
       this.tint.set(tint);
       this.hasTint = true;
@@ -89,6 +94,23 @@ export class Explosion {
     const timeScale = (directHit ? Math.min(0.5 + age * 0.5, 1.0) : 1.0) * sizeScale;
     // Multipliers for direct hit enhancement (base 1.8, scaled by time)
     const mult = (directHit ? 1.8 * timeScale : sizeScale);
+
+    if (vfx === 'splash') {
+      // Watery variant (sprinkler) — droplets + mist, no sparks/spikes/
+      // shock dome: a hose splashes, it doesn't detonate.
+      this.spawnFlash(pos, mult * 0.5);
+      this.spawnSplashLayers(pos, mult, directHit);
+      this.spawnGroundRing(pos, mult * 0.8, terrain);
+      return;
+    }
+
+    if (vfx === 'punch') {
+      // Melee swing — a fist isn't an ordnance event. Small dust puff +
+      // a couple of streaks, ~0.2s, no flash sprite: the default recipe
+      // point-blank to the camera is a self-flashbang every swing.
+      this.spawnPunch(pos, mult);
+      return;
+    }
 
     this.spawnFlash(pos, mult);
     this.spawnSpikes(pos, mult);
@@ -274,6 +296,79 @@ export class Explosion {
     });
   }
 
+  /** Splash layers — a lime burst that reads as liquid, not fire:
+   *  crown droplets lobbed up and rained down, a fast fine spray, slow
+   *  pale mist puffs, and a low sheet skimming the surface. Deliberately
+   *  cheap — the hose pops at ~9/s. */
+  private spawnSplashLayers(pos: THREE.Vector3, mult: number, directHit: boolean): void {
+    const dh = directHit ? 1.25 : 1.0;
+    this.spawnBurst(pos, { // crown — fat droplets arced skyward
+      count: 14, countMult: mult,
+      elvBase: 0.1, elvSpan: Math.PI * 0.5,
+      spdMin: 3, spdMax: 13, spdBoost: dh, vy: 6,
+      lifeMin: 0.45, lifeVar: 0.4, lifeBoost: dh,
+      sizeMin: 0.22, sizeVar: 0.4, sizeBoost: dh,
+      gravity: -30,
+      r1: 0.7, g1: 1.0, b1: 0.4, r2: 0.25, g2: 0.55, b2: 0.12, kind: 'glow',
+    });
+    this.spawnBurst(pos, { // fine spray — many small fast droplets
+      count: 22, countMult: mult,
+      elvBase: 0.15, elvSpan: Math.PI * 0.7,
+      spdMin: 8, spdMax: 26, spdBoost: dh, vy: 5,
+      lifeMin: 0.2, lifeVar: 0.25, lifeBoost: dh,
+      sizeMin: 0.05, sizeVar: 0.1, sizeBoost: dh,
+      gravity: -34,
+      r1: 0.6, g1: 1.0, b1: 0.35, r2: 0.2, g2: 0.5, b2: 0.1, kind: 'glow',
+    });
+    this.spawnBurst(pos, { // mist — pale puffs that linger a beat
+      count: 6, countMult: mult,
+      elvBase: 0, elvSpan: 0,
+      spdMin: 1, spdMax: 4, spdBoost: 1, vy: 1.8,
+      lifeMin: 0.5, lifeVar: 0.4, lifeBoost: 1,
+      sizeMin: 0.3, sizeVar: 0.35, sizeBoost: dh,
+      gravity: -3,
+      r1: 0.7, g1: 0.95, b1: 0.55, r2: 0.3, g2: 0.45, b2: 0.25, kind: 'smoke',
+      planar: true,
+    });
+    this.spawnBurst(pos, { // ground sheet — droplets skimming outward
+      count: 9, countMult: mult,
+      elvBase: 0, elvSpan: 0,
+      spdMin: 6, spdMax: 17, spdBoost: dh, vy: 1.2,
+      lifeMin: 0.22, lifeVar: 0.2, lifeBoost: dh,
+      sizeMin: 0.08, sizeVar: 0.14, sizeBoost: dh,
+      gravity: -18,
+      r1: 0.65, g1: 1.0, b1: 0.4, r2: 0.25, g2: 0.55, b2: 0.12, kind: 'glow',
+      planar: true,
+    });
+  }
+
+  /** Punch puff — melee impact cue. A few short streaks + a dust puff,
+   *  ~0.2s. No flash sprite, no sparks: a fist isn't an ordnance event,
+   *  and anything brighter point-blank reads as a self-flashbang. */
+  private spawnPunch(pos: THREE.Vector3, mult: number): void {
+    for (let i = 0; i < Math.floor(4 * mult); i++) {
+      const p = this.allocMesh(GEO_BOX, pos, _c.setHex(0xbfd4e0), 0.55, true, false);
+      _dir.randomDirection();
+      p.mesh.lookAt(_vA.copy(pos).add(_dir));
+      const spd = 10 + Math.random() * 12;
+      Object.assign(p, { vx: _dir.x * spd, vy: _dir.y * spd, vz: _dir.z * spd,
+        life: 0.12, elapsed: 0, baseScale: 0.5, gravity: 0,
+        r1: 0.75, g1: 0.83, b1: 0.88, r2: 0.3, g2: 0.35, b2: 0.4,
+        dead: false, baseOpacity: 0.55, stretch: 8 });
+      this.particles.push(p);
+    }
+    this.spawnBurst(pos, { // dust puff — a handful of soft billboards
+      count: 6, countMult: mult,
+      elvBase: 0, elvSpan: 0,
+      spdMin: 1, spdMax: 4, spdBoost: 1, vy: 1.5,
+      lifeMin: 0.2, lifeVar: 0.15, lifeBoost: 1,
+      sizeMin: 0.15, sizeVar: 0.2, sizeBoost: 1,
+      gravity: -2,
+      r1: 0.6, g1: 0.65, b1: 0.7, r2: 0.3, g2: 0.33, b2: 0.36, kind: 'smoke',
+      planar: true,
+    });
+  }
+
   private spawnDirectHitLayers(pos: THREE.Vector3, timeScale: number): void {
     // Layer 6: Direct hit bonus — extra bright white core particles
     for (let i = 0; i < Math.floor(60 * timeScale); i++) {
@@ -305,8 +400,9 @@ export class Explosion {
       this.allocShock(pos, color, life, maxRadius, opacity);
     }
 
-    // Layer 10: Sparks with trails — mix of orange and blue
-    for (let i = 0; i < Math.floor(35 * timeScale); i++) {
+    // Layer 10: Sparks with trails — mix of orange and blue. Sparse: the
+    // direct-hit bonus is already three layers of glow + twin domes.
+    for (let i = 0; i < Math.floor(18 * timeScale); i++) {
       const ang = Math.random() * Math.PI * 2;
       const elv = (Math.random() - 0.5) * Math.PI * 0.8;
       const spd = 15 + Math.random() * 30;
@@ -314,7 +410,7 @@ export class Explosion {
 
       const spark = this.allocSpark(pos);
       spark.mat.color.setRGB(isBlue ? 0.1 : 1.0, isBlue ? 0.4 : 0.8 + Math.random() * 0.2, isBlue ? 1.0 : 0.3 + Math.random() * 0.3);
-      spark.mat.opacity = 0.8;
+      spark.mat.opacity = 0.55;
       spark.vel.set(
         spd * Math.cos(elv) * Math.sin(ang),
         spd * Math.sin(elv) + 5,
@@ -387,9 +483,10 @@ export class Explosion {
   }
 
   // Trailing sparks for every blast — the debris streaks are most of what
-  // makes a big explosion read as violent at distance.
+  // makes a big explosion read as violent at distance. Kept sparse and
+  // dim: at full strength they outshouted the fireball itself.
   private spawnDebrisSparks(pos: THREE.Vector3, mult: number): void {
-    const count = Math.floor(14 * Math.min(mult, 2.5)); // cap count so mortar doesn't melt the pool
+    const count = Math.floor(8 * Math.min(mult, 2.5)); // cap count so mortar doesn't melt the pool
     for (let i = 0; i < count; i++) {
       const ang = Math.random() * Math.PI * 2;
       const elv = (Math.random() - 0.3) * Math.PI * 0.7; // biased upward — ground blast
@@ -400,13 +497,13 @@ export class Explosion {
       } else {
         spark.mat.color.setRGB(1.0, 0.6 + Math.random() * 0.3, 0.2);
       }
-      spark.mat.opacity = 0.8;
+      spark.mat.opacity = 0.5;
       spark.vel.set(
         spd * Math.cos(elv) * Math.sin(ang),
         spd * Math.sin(elv) + 6,
         spd * Math.cos(elv) * Math.cos(ang)
       );
-      spark.life = 0.8 + Math.random() * 0.5;
+      spark.life = 0.5 + Math.random() * 0.4;
     }
   }
 
