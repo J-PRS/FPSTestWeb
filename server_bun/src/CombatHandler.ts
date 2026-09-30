@@ -13,6 +13,7 @@ import { HEAVY_ONLY_WEAPONS } from '../../shared/botClasses.ts';
 import type { StructureCollider } from '../../shared/ballSim.ts';
 import { segSolidHit, blastOccluded, ColliderIndex } from '../../shared/solidWorld.ts';
 import { ClaimLedger, clampPing, rewindPos } from './claimLedger.ts';
+import { killTaunt, deathTaunt } from './botTaunts.ts';
 
 // How long a hit/knocked-back player stays on the unsuppressed full-rate
 // tick path — covers the shooter's predicted-knockback window (~0.6s)
@@ -766,6 +767,17 @@ export class CombatHandler {
     }
     if (ended >= 3) {
       this.broadcast({ type: 'matchNotice', text: `${shooterId} ended ${targetId}'s ${ended}-kill streak` });
+    }
+
+    // Bots mouth off on the real chat wire — same 'chat' shape players
+    // send, so it lands in the feed indistinguishable from a human line.
+    if (shooterId.startsWith('BOT-')) {
+      const line = killTaunt(shooterId, targetId);
+      if (line) this.broadcast({ type: 'chat', playerId: shooterId, text: line });
+    }
+    if (targetId.startsWith('BOT-')) {
+      const line = deathTaunt(targetId, shooterId);
+      if (line) this.broadcast({ type: 'chat', playerId: targetId, text: line });
     }
   }
 

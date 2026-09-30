@@ -1,3 +1,4 @@
+2026-09-26 - Server bots trash-talk on the real chat wire: Quake-style kill + death lines in CombatHandler announceKill, 55% speak chance / 20s cooldown per bot.
 2026-09-26 - netBot: sim the room's spec terrain (was always heightmap.bin - infestation runs swarm.bin), real fuel tank, edge-triggered inputMove; RoomMoveSim resync resets stale input + refills shadow energy. Post-respawn kick false-positives eliminated.
 2026-09-26 - tests: wire-validation contract — every protocol verb must validate a legal body and preserve optional fields (regression guard for the crawlerHit/team-flag bugs)
 2026-09-26 - validation: add missing crawlerHit validator (every crawler hit claim was schema-rejected at the wire boundary) + preserve chat team flag through validation (team chat silently fell back to global) + crawlerHit rate bucket
