@@ -1,3 +1,4 @@
+2026-09-26 - Blast-distance ledger: scenario test detonates 7 blast types at 3m and caps peak knockback drift (catches catapult regressions)
 2026-09-26 - Armor grenade: knockback 55->25 (nudge, not launcher)
 2026-09-26 - Bot roster: support loadout fields armor grenades (plated pushes get plated)
 2026-09-26 - Armor grenade (belt): mid blast + knockback plates +50 armor on every player caught (self, friend, foe) and grants creatures overcap health up to 2x; green weld-arc visuals; loadout menu entry
