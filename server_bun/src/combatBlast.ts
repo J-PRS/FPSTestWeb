@@ -1,0 +1,240 @@
+import type { ServerMessage, Vec3, PlayerState } from './types.ts';
+import type { PlayerManager } from './PlayerManager.ts';
+import type { WeaponStats } from '../../shared/weapons.ts';
+import { getWeaponStats, WeaponType, ARMORNADE_ARMOR } from '../../shared/weapons.ts';
+import { perkMods } from '../../shared/perks.ts';
+import { aoeDamage, aoeImpulse, KNOCKBACK_SCALE, BLAST_IMPULSE_MAX, LG_POP_DMG_CAP, LG_POP_RADIUS_MIN, LG_POP_RADIUS_MAX } from '../../shared/combat.ts';
+import { POWERUP } from '../../shared/pickups.ts';
+import type { StructureCollider } from '../../shared/ballSim.ts';
+import { blastOccluded, ColliderIndex } from '../../shared/solidWorld.ts';
+import { clampPing, rewindPos } from './claimLedger.ts';
+import { logger } from './logger.ts';
+
+// How long a hit/knocked-back player stays on the unsuppressed full-rate
+// tick path — covers the shooter's predicted-knockback window (~0.6s)
+// plus margin so the real trajectory replaces the prediction.
+export const FORCE_SEND_MS = 900;
+
+/** One blast's derived envelope — computed once per processAOE, shared
+ *  by every target the splash sweep touches. */
+interface BlastCtx {
+  shooterId: string;
+  ping: number;
+  pos: Vec3;
+  radius: number;
+  baseDamage: number;
+  impulse: number;
+  pull: boolean;
+  label: string;
+  weapon?: number;
+}
+
+/** The CombatHandler surface the blast sweep reads. */
+export interface BlastHost {
+  playerManager: PlayerManager;
+  deps: {
+    deployBlast?: (pos: Vec3, damage: number, radius: number, shooterId: string) => void;
+    creatureArmor?: (pos: Vec3, amount: number, radius: number) => void;
+    moveImpulse?: (playerId: string, dv: Vec3) => void;
+    health?: Map<string, number>;
+  };
+  sendToPlayer: (playerId: string, msg: ServerMessage) => void;
+  solids: readonly StructureCollider[];
+  solidIndex: ColliderIndex | null;
+  hb(key: string, n?: number): void;
+  friendly(shooterId: string, targetId: string): boolean;
+  reject(playerId: string, kind: string, reason: string, targetId?: string, weaponType?: number): void;
+  applyHit(shooterId: string, targetId: string, damage: number,
+           result: { killed: boolean; newHealth: number; newArmor: number },
+           opts: { label: string; extra?: Record<string, unknown>; weapon?: number }): void;
+  ddMult(shooter: PlayerState): number;
+}
+
+/** Every explosion the server resolves: client-claimed blast sweeps,
+ *  trusted server blasts (room sims, charge pops), armor-nade plating,
+ *  mine blasts — plus the shared splash/shove/occlusion internals.
+ *  Split from CombatHandler so the claim-validation half stays readable. */
+export class BlastRunner {
+  constructor(private h: BlastHost) {}
+
+  processAOE(playerId: string, position: Vec3, excludeTargetId: string | null | undefined, stats: WeaponStats, weapon?: number, trusted = false): void {
+    const player = this.h.playerManager.getPlayer(playerId);
+    // Trusted server blasts still run from dead owners — a corpse's
+    // in-flight ordnance and its charge-pop both outlive the kill.
+    if (!player || (player.isDead && !trusted)) return;
+
+    // Cheat prevention: bound the blast to plausible projectile range —
+    // legit long shots (mortar arcs, cross-map rockets) fly hundreds of
+    // metres; 200m was rejecting real hits. 500m still catches the cheat
+    // this guards: a blast teleported to a victim across the map.
+    const dx = player.position.x - position.x;
+    const dy = player.position.y - position.y;
+    const dz = player.position.z - position.z;
+    const distSq = dx * dx + dy * dy + dz * dz;
+    if (!trusted && distSq > 250000) { // 500m squared
+      this.h.reject(playerId, 'AOE', `blast too far from shooter (${Math.sqrt(distSq).toFixed(0)}m)`, undefined, weapon);
+      return;
+    }
+
+    const pull = stats.forceMode === 'pull';
+    // Perk modifies the blast envelope, not the damage numbers — a
+    // Sharpshooter's rocket lands tighter, not weaker.
+    const radius = stats.aoeRadius * perkMods(player.perk).aoeRadius;
+    const ctx: BlastCtx = {
+      shooterId: playerId, ping: player.ping, pos: position,
+      radius, baseDamage: stats.aoeDamage * this.h.ddMult(player),
+      impulse: stats.knockbackForce, pull,
+      label: pull ? 'disc AOE' : 'AOE', weapon,
+    };
+
+    for (const [targetId, target] of this.h.playerManager.getAllPlayers()) {
+      if (targetId === excludeTargetId) continue; // Skip direct hit target
+      if (target.isDead) continue;
+      if (targetId === playerId) {
+        // Self-knockback for bots only: a bot's velocity is server truth
+        // so a disc-jump blast must land here. Human clients self-predict
+        // their own displacement and would double-apply it.
+        if (target.isBot) this.splashOne(ctx, targetId, target, true);
+        continue;
+      }
+      this.splashOne(ctx, targetId, target);
+    }
+
+    // Deployables in the blast envelope eat the same scaled splash —
+    // sentries aren't immortal, you clear a stand with explosives.
+    this.h.deps.deployBlast?.(position, ctx.baseDamage, radius, playerId);
+
+    // Armor grenade: the blast's payload is plating, not just damage.
+    if (weapon === WeaponType.ArmorGrenade) this.plateAll(playerId, position, radius, ctx.ping);
+  }
+
+  /** Armor-grenade plating sweep: coats EVERY player caught — friend or
+   *  foe (arming the enemy is the thrower's cost) — plus the creature
+   *  sweep. Same lag-comp + occlusion rules as damage. */
+  private plateAll(playerId: string, position: Vec3, radius: number, ping: number): void {
+    for (const [targetId, target] of this.h.playerManager.getAllPlayers()) {
+      if (target.isDead) continue;
+      const tpos = rewindPos(target, clampPing(ping));
+      const d = Math.hypot(tpos.x - position.x, tpos.y - position.y, tpos.z - position.z);
+      if (d > radius) continue;
+      if (this.h.solids.length && this.blastBlocked(position, tpos)) continue;
+      target.armor = Math.min(POWERUP.maxArmor, target.armor + ARMORNADE_ARMOR);
+      target.forceSendUntil = Date.now() + FORCE_SEND_MS;
+      this.h.hb('armor.nade');
+      logger.info('Armor grenade plated player', { shooter: playerId, target: targetId, armor: target.armor });
+    }
+    this.h.deps.creatureArmor?.(position, ARMORNADE_ARMOR, radius);
+  }
+
+  /** One target inside (or outside) a blast envelope: lag-comp position,
+   *  wall occlusion, scaled damage, knockback impulse, friendly gate. */
+  splashOne(ctx: BlastCtx, targetId: string, target: PlayerState, shoveOnly = false, directDmg?: number): void {
+    // Lag-comp the victim position the same as hitscan — a rocket
+    // that exploded on the shooter's screen should hit the ghost.
+    const tpos = rewindPos(target, clampPing(ctx.ping));
+    const tdx = tpos.x - ctx.pos.x;
+    const tdy = tpos.y - ctx.pos.y;
+    const tdz = tpos.z - ctx.pos.z;
+    const dist = Math.sqrt(tdx * tdx + tdy * tdy + tdz * tdz);
+    if (!Number.isFinite(dist) || dist > ctx.radius) return;
+
+    // Wall occlusion — a blast outside a structure doesn't splash
+    // targets inside it (and vice versa). Blasts can legitimately
+    // sit INSIDE geometry (shell popped at the face), so a contact
+    // at t≈0 is stepped past rather than counted.
+    if (this.h.solids.length && this.blastBlocked(ctx.pos, tpos)) return;
+
+    // shared/combat.ts — same formula the client predicts with; beam ticks
+    // pass a flat figure (the ramp already IS the falloff)
+    const damage = directDmg ?? aoeDamage(ctx.baseDamage, dist, ctx.radius);
+    if (damage <= 0) return;
+
+    const impulseMag = Math.min(
+      aoeImpulse(ctx.impulse, dist, ctx.radius) * KNOCKBACK_SCALE * perkMods(target.perk).knockbackTaken,
+      BLAST_IMPULSE_MAX);
+    this.shove(targetId, target, { x: tdx, y: tdy, z: tdz }, impulseMag, ctx.pos, ctx.pull);
+    if (shoveOnly) return; // self-propulsion: displace, never damage
+
+    // Splash still displaces teammates (jump-boost assists); it just
+    // never deals damage to them in team rooms.
+    if (this.h.friendly(ctx.shooterId, targetId)) return;
+    const result = this.h.playerManager.applyDamage(targetId, damage);
+    this.h.applyHit(ctx.shooterId, targetId, damage, result, { label: `Player ${ctx.label} hit`, extra: { dist: +dist.toFixed(2) }, weapon: ctx.weapon });
+  }
+
+  /** One blast shove: velocity impulse + knockback wire notify + the
+   *  forceSend flag that makes the next position update authoritative.
+   *  `offset` is target-from-blast; `pull` reverses direction and
+   *  flattens the up-vector (disc suck). */
+  private shove(targetId: string, target: PlayerState, offset: Vec3, impulseMag: number, pos: Vec3, pull: boolean): void {
+    const dist = Math.hypot(offset.x, offset.y, offset.z);
+    if (dist <= 0) return;
+    const dv: Vec3 = pull
+      ? { x: -(offset.x / dist) * impulseMag, y: 0.3 * impulseMag, z: -(offset.z / dist) * impulseMag }
+      : { x: (offset.x / dist) * impulseMag, y: 0.5 * impulseMag, z: (offset.z / dist) * impulseMag };
+    target.velocity.x += dv.x;
+    target.velocity.y += dv.y;
+    target.velocity.z += dv.z;
+    this.h.deps.moveImpulse?.(targetId, dv);
+    target.forceSendUntil = Date.now() + FORCE_SEND_MS;
+    this.h.sendToPlayer(targetId, {
+      type: 'knockback', targetId, position: pos, force: impulseMag,
+      pull: pull || undefined,
+    });
+  }
+
+  /** The charge pop itself — a Lightning-stat blast scaled by the amount
+   *  detonated, credited to the detonating shooter. ChargeBank decides
+   *  when this fires; the blast is ours. */
+  pop(ownerId: string, target: PlayerState, amount: number): void {
+    const lgStats = getWeaponStats(WeaponType.Lightning);
+    this.processAOE(ownerId, { ...target.position }, null, {
+      ...lgStats,
+      aoeDamage: Math.min(amount, LG_POP_DMG_CAP),
+      aoeRadius: Math.min(LG_POP_RADIUS_MIN + amount * 0.12, LG_POP_RADIUS_MAX),
+      knockbackForce: 30,
+    }, WeaponType.Lightning, true);
+  }
+
+  /** True when a wall stands between blast point and target chest.
+   *  The blast point itself may sit inside geometry (a shell that just
+   *  kissed a face) — step 0.4m past each t=0 contact, up to 3 hops,
+   *  before concluding the target is really occluded. */
+  private blastBlocked(from: Vec3, toEye: Vec3): boolean {
+    return blastOccluded(from, toEye, this.h.solids, this.h.solidIndex ?? undefined);
+  }
+
+  /** Server-owned blast — the room's projectile/deployable sims decided
+   *  where this pops, so the shooter-distance sanity check doesn't apply. */
+  serverBlast(ownerId: string, position: Vec3, weaponType: number, excludeTargetId?: string | null): void {
+    const stats = getWeaponStats(weaponType);
+    if (!stats || stats.aoeRadius <= 0) return;
+    this.processAOE(ownerId, position, excludeTargetId, stats, weaponType, true);
+  }
+
+  /** Server-owned mine blast — owner is the shooter for scoring/friendly
+   *  checks, but the sim decided to detonate. Position check skipped: the
+   *  blast center is the mine's own spot, not the owner's. */
+  mineBlast(ownerId: string, pos: Vec3, maxDamage: number, radius: number, knockback: number): void {
+    const owner = this.h.playerManager.getPlayer(ownerId);
+    const baseDamage = maxDamage * (owner ? this.h.ddMult(owner) : 1);
+    for (const [targetId, target] of this.h.playerManager.getAllPlayers()) {
+      if (target.isDead) continue;
+      const dx = target.position.x - pos.x;
+      const dy = target.position.y - pos.y;
+      const dz = target.position.z - pos.z;
+      const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      if (dist > radius) continue;
+      // Falloff + shove from shared formulas — client predicts the same hit.
+      const damage = targetId === ownerId ? 0 : aoeDamage(baseDamage, dist, radius);
+      const impulseMag = aoeImpulse(knockback, dist, radius) * KNOCKBACK_SCALE * perkMods(target.perk).knockbackTaken;
+      this.shove(targetId, target, { x: dx, y: dy, z: dz }, impulseMag, pos, false);
+      // Owner eats the blast too — mines don't pick friends.
+      if (!this.h.friendly(ownerId, targetId) && damage > 0) {
+        const result = this.h.playerManager.applyDamage(targetId, damage);
+        target.forceSendUntil = Date.now() + FORCE_SEND_MS;
+        this.h.applyHit(ownerId, targetId, damage, result, { label: 'Mine hit', extra: { dist: +dist.toFixed(2) } });
+      }
+    }
+  }
+}
