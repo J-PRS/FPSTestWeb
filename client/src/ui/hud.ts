@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { WeaponType } from '../../../shared/weapons.js';
 import { Minimap } from './minimap.js';
 import { createHudDom } from './hud/dom.js';
 import { PlayerIndicators } from './hud/indicators.js';
@@ -7,17 +6,11 @@ import type { Targetable } from '../entities/balls.js';
 import type { Nugget } from '../entities/Nugget.js';
 import { Scoreboard, type SbRow } from './hud/scoreboard.js';
 import { HudStats } from './hud/hudStats.js';
+import * as ch from './hud/hudChrome.js';
 
 import { Player } from '../entities/Player.js';
 
 const countSpan = (n: number) => `<span class="${n > 0 ? 'hot' : 'dim'}">${n}</span>`;
-
-const paintFlagChip = (el: HTMLElement, st?: string) => {
-  el.style.display = st ? '' : 'none';
-  if (!st) return;
-  el.textContent = st === 'home' ? '⚑' : st === 'carried' ? '⚑ TAKEN' : '⚑ LOOSE';
-  el.classList.toggle('taken', st !== 'home');
-};
 
 export class HUD {
   private el: HTMLDivElement;
@@ -44,7 +37,7 @@ export class HUD {
   // Per-frame stat painter (vitals, speed, telemetry, slots,
   // hit marker, damage fx, buffs, fps) — hud/hudStats.ts
   private stats!: HudStats;
-  private playerList: HTMLDivElement;
+  playerList: HTMLDivElement;
   private ballCountEl: HTMLDivElement;
   private timerEl: HTMLDivElement;
   private lastBallCount = -1;
@@ -100,33 +93,12 @@ export class HUD {
     this.indicators = new PlayerIndicators(this.el);
   }
 
-  private killFeed: HTMLDivElement;
+  killFeed: HTMLDivElement;
 
   /** Kill feed — "shooter [weapon] ▸ target" under the match strip. Timed
    *  fade, capped at 6 rows; textContent only (names are server strings). */
   feedKill(shooter: string, target: string, localIsShooter: boolean, localIsTarget: boolean, weapon?: number): void {
-    const row = document.createElement('div');
-    row.className = 'kf-row';
-    if (localIsShooter) row.classList.add('me');
-    // Self-inflicted kill (own splash): "X cratered" — "X ▸ X" reads as a
-    // normal frag in the feed.
-    const suicide = shooter === target;
-    const s = document.createElement('span');
-    s.className = 'kf-s';
-    s.textContent = shooter === 'environment' ? '☠' : shooter;
-    const w = document.createElement('span');
-    w.className = 'kf-w';
-    // Enum-name reverse lookup: `WeaponType[7]` → 'PlasmaCannon'. Unknown/absent → nothing shown.
-    w.textContent = weapon !== undefined && WeaponType[weapon] ? `[${WeaponType[weapon]}] ` : '';
-    const t = document.createElement('span');
-    t.className = 'kf-t' + (localIsTarget ? ' dead' : '');
-    t.textContent = suicide ? 'self' : target;
-    row.append(s, w, t);
-    this.killFeed.append(row);
-    while (this.killFeed.childElementCount > 6) this.killFeed.firstElementChild!.remove();
-    setTimeout(() => { row.classList.add('fade'); setTimeout(() => row.remove(), 600); }, 5200);
-    const wname = weapon !== undefined && WeaponType[weapon] ? ` [${WeaponType[weapon]}]` : '';
-    this.logEvent(suicide ? `${target}${wname} cratered` : `${shooter}${wname} ▸ ${target}`, localIsShooter ? 'me' : localIsTarget ? 'dead' : undefined);
+    ch.feedKill(this, shooter, target, localIsShooter, localIsTarget, weapon);
   }
 
   /** Run clock — MM:SS, DOM write only when the second rolls over */
@@ -178,33 +150,15 @@ export class HUD {
 
   /** Match clock + flag chips under the score strip. null hides the
    *  strip's clock; flag chips show only for teams the wire described. */
-  private matchStatus!: HTMLDivElement;
-  private matchClock!: HTMLElement;
-  private flagA!: HTMLElement;
-  private flagB!: HTMLElement;
-  private lastClockTxt = '';
-  private lastFlagsKey = '';
+  matchStatus!: HTMLDivElement;
+  matchClock!: HTMLElement;
+  flagA!: HTMLElement;
+  flagB!: HTMLElement;
+  lastClockTxt = '';
+  lastFlagsKey = '';
 
   setMatchStatus(msLeft: number | null, flags: { alpha?: string; bravo?: string }): void {
-    const hasAny = msLeft !== null || flags.alpha || flags.bravo;
-    this.matchStatus.style.display = hasAny ? 'flex' : 'none';
-    if (!hasAny) return;
-    let txt = '';
-    if (msLeft !== null) {
-      const s = Math.max(0, Math.floor(msLeft / 1000));
-      txt = msLeft <= 0 ? 'OT' : `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
-      this.matchClock.classList.toggle('late', msLeft < 60_000);
-      this.matchClock.style.display = '';
-    } else {
-      this.matchClock.style.display = 'none';
-    }
-    if (txt !== this.lastClockTxt) { this.lastClockTxt = txt; this.matchClock.textContent = txt; }
-    const key = `${flags.alpha ?? ''}|${flags.bravo ?? ''}`;
-    if (key !== this.lastFlagsKey) {
-      this.lastFlagsKey = key;
-      paintFlagChip(this.flagA, flags.alpha);
-      paintFlagChip(this.flagB, flags.bravo);
-    }
+    ch.setMatchStatus(this, msLeft, flags);
   }
 
   /** Nuggets collected — DOM write only on change */
@@ -236,78 +190,23 @@ export class HUD {
   // Death overlay: desaturate the world + dark vignette while dead.
   // Lives outside #hud (appended to body) so hide() doesn't remove it;
   // pure DOM/CSS — one backdrop-filter composite, no render-pass cost.
-  private deathOverlay: HTMLDivElement | null = null;
-  private deathClock: HTMLDivElement | null = null;
-  private diedAt = 0;
-  private lastDeathTxt = '';
+  deathOverlay: HTMLDivElement | null = null;
+  deathClock: HTMLDivElement | null = null;
+  diedAt = 0;
+  lastDeathTxt = '';
 
-  setDeathOverlay(on: boolean): void {
-    if (on && !this.deathOverlay) {
-      const d = document.createElement('div');
-      d.id = 'death-overlay';
-      const c = document.createElement('div');
-      c.className = 'death-clock';
-      d.appendChild(c);
-      document.body.appendChild(d);
-      this.deathOverlay = d;
-      this.deathClock = c;
-      this.diedAt = performance.now();
-      this.lastDeathTxt = '';
-    } else if (!on && this.deathOverlay) {
-      this.deathOverlay.remove();
-      this.deathOverlay = null;
-      this.deathClock = null;
-    }
-  }
-
-  /** Frame tick while dead — counts down to the server respawnMs deadline. */
-  updateDeathCountdown(respawnMs: number): void {
-    if (!this.deathClock) return;
-    const left = Math.max(0, respawnMs - (performance.now() - this.diedAt));
-    const txt = left > 0 ? `RESPAWN IN ${(left / 1000).toFixed(1)}` : 'RESPAWNING';
-    if (txt !== this.lastDeathTxt) {
-      this.deathClock.textContent = txt;
-      this.lastDeathTxt = txt;
-    }
-  }
-
+  setDeathOverlay(on: boolean): void { ch.setDeathOverlay(this, on); }
+  updateDeathCountdown(respawnMs: number): void { ch.updateDeathCountdown(this, respawnMs); }
   // Spectator chrome: HUD hides entirely while flying; this hint is all
   // that remains so the exit key stays discoverable.
-  private spectateHint: HTMLDivElement | null = null;
-
-  setSpectatorHint(on: boolean): void {
-    if (on && !this.spectateHint) {
-      const d = document.createElement('div');
-      d.id = 'spectate-hint';
-      d.textContent = 'SPECTATING';
-      document.body.appendChild(d);
-      this.spectateHint = d;
-    } else if (!on && this.spectateHint) {
-      this.spectateHint.remove();
-      this.spectateHint = null;
-    }
-  }
+  spectateHint: HTMLDivElement | null = null;
+  setSpectatorHint(on: boolean): void { ch.setSpectatorHint(this, on); }
 
   /* Status effects (cloak/shield/mend) share one chrome shape: a top-center
-     chip + a full-screen edge vignette. Colors/offsets live in hud.css —
-     these methods just flip elements on and off. */
-  private statusFx = new Map<string, { hint: HTMLDivElement; vig: HTMLDivElement }>();
-
+     chip + a full-screen edge vignette. */
+  statusFx = new Map<string, { hint: HTMLDivElement; vig: HTMLDivElement }>();
   private setStatusFx(kind: 'cloak' | 'shield' | 'mend', label: string, on: boolean): void {
-    const fx = this.statusFx.get(kind);
-    if (on && !fx) {
-      const vig = document.createElement('div');
-      vig.className = `status-vignette ${kind}`;
-      const hint = document.createElement('div');
-      hint.className = `status-hint ${kind}`;
-      hint.textContent = label;
-      document.body.append(vig, hint);
-      this.statusFx.set(kind, { hint, vig });
-    } else if (!on && fx) {
-      fx.hint.remove();
-      fx.vig.remove();
-      this.statusFx.delete(kind);
-    }
+    ch.setStatusFx(this, kind, label, on);
   }
 
   // Cloak reads as indigo, shield as cyan, mend as green — the energy bar

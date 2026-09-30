@@ -1,3 +1,4 @@
+2026-09-30 - hud.ts split: kill feed + match strip + death/spectate/status overlays -> hud/hudChrome.ts (370->257).
 2026-09-30 - ViewModel split: cloak ghost (depth-shell fade) + shield/mend gun field -> vmGhost.ts (373->281).
 2026-09-30 - Totem split: rail telegraph family (blink peak-seek, LOS march, locked solve, hitscan, blast fizzle) -> totemBeam.ts (375->276).
 2026-09-30 - RoomDeployables split: per-kind ticks (drone scan, mine fuse, station pulse, sentry LOS+fire) -> deployTicks.ts (368->250).
