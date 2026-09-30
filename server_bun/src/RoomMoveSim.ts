@@ -308,6 +308,10 @@ export class RoomMoveSim {
     if (!sh.seeded) {
       sh.seeded = true;
       s.pos = { x: pos.x, y: pos.y, z: pos.z };
+      // The guess-run during the mute built momentum the client never
+      // had — adopt the reported velocity too or the leftover vel
+      // carries the shadow ~10m ahead for one divergence blip.
+      if (vel) s.vel = { x: vel.x, y: vel.y, z: vel.z };
       s.onGround = true;
       sh.seqStates.clear(); // pre-seed journal anchors the discarded guess
       return null;
