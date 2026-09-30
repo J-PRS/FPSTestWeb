@@ -1,6 +1,40 @@
 /* HUD stylesheet — imported by dom.ts (Vite injects it). Behavior and the
    element map stay in TS; presentation lives here. resumePulse is defined
    in chrome.css (global overlay keyframes). */
+
+/* HUD LAYOUT CONTRACT
+   ==================
+   Elements never hardcode a top/bottom offset. Every chrome piece claims
+   a numbered slot in exactly ONE corner zone below; a slot's px value is
+   (previous slot's offset + that element's rendered height + gap).
+   To add HUD chrome: pick a free slot number in the right zone — never
+   nudge someone else's px. Two elements may share a slot ONLY when
+   they're mutually exclusive (e.g. status hint vs spectate hint).
+   Zones are on :root so inline-styled pieces (minimap dish, chat feed,
+   VGS menu, shotFeed) resolve the same variables. */
+:root {
+  /* Top-center: score, match strip, then status/spectate hints */
+  --z-tc-1: 12px;   /* team score strip */
+  --z-tc-2: 58px;   /* match-status (clock + flag chips) */
+  --z-tc-3: 78px;   /* status hint row 1 · spectate hint */
+  --z-tc-4: 94px;   /* status hint row 2 */
+  --z-tc-5: 110px;  /* status hint row 3 */
+  /* Top-right: net strip, FPS, timer, minimap dish (160px), killfeed */
+  --z-tr-1: 14px;
+  --z-tr-2: 44px;
+  --z-tr-3: 84px;
+  --z-tr-4: 110px;
+  --z-tr-5: 276px;
+  /* Top-left: player roster */
+  --z-tl-1: 14px;
+  /* Bottom-left: chat feed, VGS menu */
+  --z-bl-1: 12px;
+  --z-bl-2: 140px;
+  /* Bottom-right: entity counts, shot feed */
+  --z-br-1: 24px;
+  --z-br-2: 96px;
+}
+
 #hud {
   position: absolute; inset: 0; pointer-events: none;
   user-select: none; -webkit-user-select: none;
@@ -57,17 +91,17 @@
 #buffs .buff.regen { color: #6f6; background: rgba(60,220,80,0.15); border: 1px solid rgba(60,220,80,0.4); }
 #buffs .buff.dd { color: #f88; background: rgba(240,60,60,0.15); border: 1px solid rgba(240,60,60,0.4); }
 #hud-tr {
-  position: absolute; top: 14px; right: 20px;
+  position: absolute; top: var(--z-tr-1); right: 20px;
   font-size: 0.75rem; color: #8cf; text-align: right;
   line-height: 1.7;
 }
 #hud-fps {
-  position: absolute; top: 44px; right: 20px;
+  position: absolute; top: var(--z-tr-2); right: 20px;
   font-size: 2.2rem; font-weight: bold; color: #8cf;
   text-align: right; line-height: 1;
 }
 #ent-counts {
-  position: fixed; bottom: 24px; right: 24px; text-align: right;
+  position: fixed; bottom: var(--z-br-1); right: 24px; text-align: right;
   font-size: 0.78rem; color: #ccc; line-height: 1.55;
   font-variant-numeric: tabular-nums; white-space: pre;
   text-shadow: 1px 1px 2px #000; pointer-events: none;
@@ -76,7 +110,7 @@
 #ent-counts .hot { color: #fc8; font-weight: bold; }
 #hud-timer {
   /* Top-right stack under FPS — top-center belongs to the team score. */
-  position: absolute; top: 84px; right: 20px;
+  position: absolute; top: var(--z-tr-3); right: 20px;
   font-size: 1.1rem; font-weight: bold; color: #ffd9a0;
   font-variant-numeric: tabular-nums;
   text-shadow: 0 0 6px rgba(0,0,0,0.8), 1px 1px 0 #000;
@@ -199,7 +233,7 @@
 .player-indicator.flag.offscreen.alpha { background: #55aaff; }
 .player-indicator.flag.offscreen.bravo { background: #ff8855; }
 #player-list {
-  position: absolute; top: 14px; left: 20px;
+  position: absolute; top: var(--z-tl-1); left: 20px;
   font-size: 0.75rem; color: #ccc; line-height: 1.7;
   text-align: left;
 }
@@ -255,7 +289,7 @@
 #scoreboard tr.sb-alpha td:first-child { color: #7db8ff; }
 #scoreboard tr.sb-bravo td:first-child { color: #ff9a6a; }
 #team-score {
-  position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+  position: absolute; top: var(--z-tc-1); left: 50%; transform: translateX(-50%);
   display: none; font: 700 18px/1 monospace; letter-spacing: 0.08em;
   text-shadow: 0 0 8px #000; pointer-events: none; white-space: nowrap;
 }
@@ -264,7 +298,7 @@
 /* Match meta strip under the score — clock + flag chips. Only shows
    in matches that declare them (same gate as the score strip). */
 #match-status {
-  position: fixed; top: 58px; left: 50%; transform: translateX(-50%);
+  position: fixed; top: var(--z-tc-2); left: 50%; transform: translateX(-50%);
   display: none; align-items: center; gap: 12px;
   font-size: 12px; letter-spacing: 0.12em; color: #cdd9e5;
   font-variant-numeric: tabular-nums;
@@ -308,20 +342,20 @@
   pointer-events: none; z-index: 5;
   font: 600 13px/1 monospace; letter-spacing: 0.2em; text-shadow: 0 1px 3px #000;
 }
-.status-hint.cloak { top: 78px; color: #b9c8ff; opacity: 0.75; }
-.status-hint.shield { top: 94px; color: #9adcf9; opacity: 0.8; }
-.status-hint.mend { top: 110px; color: #8ff5ae; opacity: 0.8; }
+.status-hint.cloak { top: var(--z-tc-3); color: #b9c8ff; opacity: 0.75; }
+.status-hint.shield { top: var(--z-tc-4); color: #9adcf9; opacity: 0.8; }
+.status-hint.mend { top: var(--z-tc-5); color: #8ff5ae; opacity: 0.8; }
 
 /* Spectator hint — only chrome shown while flying */
 #spectate-hint {
-  position: absolute; top: 78px; left: 50%; transform: translateX(-50%);
+  position: absolute; top: var(--z-tc-3); left: 50%; transform: translateX(-50%);
   pointer-events: none; z-index: 5; color: #cfe8ff; opacity: 0.7;
   font: 600 13px/1 monospace; letter-spacing: 0.15em; text-shadow: 0 1px 3px #000;
 }
 
 /* Kill feed — top-right, newest at bottom, timed fade */
 #killfeed {
-  position: fixed; top: 276px; right: 14px; display: flex; flex-direction: column;
+  position: fixed; top: var(--z-tr-5); right: 14px; display: flex; flex-direction: column;
   align-items: flex-end; gap: 4px; pointer-events: none; z-index: 6;
   font: 600 12px/1.2 monospace; letter-spacing: 0.06em;
 }

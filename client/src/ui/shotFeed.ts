@@ -10,7 +10,7 @@ let feedEl: HTMLDivElement | null = null;
 function feed(): HTMLDivElement {
   if (!feedEl) {
     feedEl = document.createElement('div');
-    feedEl.style.cssText = 'position:fixed;bottom:96px;right:16px;display:flex;flex-direction:column-reverse;gap:4px;align-items:flex-end;z-index:99990;pointer-events:none;';
+    feedEl.style.cssText = 'position:fixed;bottom:var(--z-br-2);right:16px;display:flex;flex-direction:column-reverse;gap:4px;align-items:flex-end;z-index:99990;pointer-events:none;';
     document.body.appendChild(feedEl);
   }
   return feedEl;

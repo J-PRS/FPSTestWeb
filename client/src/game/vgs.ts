@@ -157,7 +157,7 @@ export class Vgs {
   constructor(private deps: VgsDeps) {
     this.menu = document.createElement('div');
     this.menu.style.cssText =
-      'position:fixed;left:12px;bottom:140px;z-index:60;display:none;' +
+      'position:fixed;left:12px;bottom:var(--z-bl-2);z-index:60;display:none;' +
       'font:13px/1.5 monospace;color:#fff;background:rgba(0,0,0,.65);' +
       'border:1px solid #555;padding:6px 10px;min-width:220px;pointer-events:none;';
     document.body.appendChild(this.menu);

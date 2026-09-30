@@ -31,7 +31,7 @@ export class Chat {
 
     const root = document.createElement('div');
     root.id = 'chat';
-    root.style.cssText = 'position:fixed;left:12px;bottom:12px;z-index:60;font:13px/1.4 monospace;color:#fff;pointer-events:none;max-width:420px;';
+    root.style.cssText = 'position:fixed;left:12px;bottom:var(--z-bl-1);z-index:60;font:13px/1.4 monospace;color:#fff;pointer-events:none;max-width:420px;';
 
     this.feed = document.createElement('div');
     root.appendChild(this.feed);
