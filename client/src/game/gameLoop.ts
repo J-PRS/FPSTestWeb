@@ -54,6 +54,11 @@ function updateDeadList<T extends { update(dt: number): void; dead: boolean; dis
 
 const _aliveCount = (l: { dead: boolean }[]) => { let n = 0; for (const e of l) if (!e.dead) n++; return n; };
 
+// Live-explosion ceiling — a busy room stacks blasts until particles
+// and draw calls crush the frame (seen: 155 live, 30k particles). Past
+// the cap the oldest is retired early; it loses only its tail frames.
+const MAX_LIVE_EXPLOSIONS = 48;
+
 export interface GameLoopDeps {
   camera: THREE.PerspectiveCamera;
   sceneSetup: ReturnType<typeof createScene>;
@@ -229,7 +234,11 @@ function fxTick(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof cre
     () => updateDeadList(deps.world.playerDebrisList, fxDt),
     () => updateGibs(fxDt),
     () => updateDeadList(deps.world.scorches, fxDt),
-    () => updateDeadList(deps.world.explosions, fxDt),
+    () => {
+      const ex = deps.world.explosions;
+      for (let i = 0; i <= ex.length - MAX_LIVE_EXPLOSIONS; i++) ex[i]!.dead = true;
+      updateDeadList(ex, fxDt);
+    },
     () => updateDeadList(deps.world.implosions, fxDt),
     () => updateDeadList(deps.world.aoeGizmos, fxDt),
   );

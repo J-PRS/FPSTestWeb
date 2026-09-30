@@ -192,6 +192,10 @@ export class TeamBots {
   private tickBots(dt: number, others: THREE.Vector3[]): void {
     const terrain = this.deps.lazyTerrain();
     this.fire.tickBolts(dt); // frame-rate, not per-bot — it was over-integrating in the loop
+    // Sheep coverage windows run on sim ms advanced ONCE per frame —
+    // doing it inside sheepTick scaled every 5s window by the roster
+    // size (9 bots → windows fired ~9x too often, cover-dominated yeets).
+    this.sheepSimMs += dt * 1000;
     for (const bot of this.bots) this.tickBot(bot, dt, others, terrain);
   }
 
@@ -291,7 +295,6 @@ export class TeamBots {
   private sheepWhy = new Map<string, { idle: number; ignore: number; bleed: number; cover: number }>();
 
   private sheepTick(bot: GameBot, dt: number, terrain: Terrain, foe = false, ignoring = false, hasDest = false): void {
-    this.sheepSimMs += dt * 1000;
     const v = bot.vel;
     const speedXZ = Math.hypot(v.x, v.z);
     const height = bot.pos.y - terrain.getHeight(bot.pos.x, bot.pos.z);
