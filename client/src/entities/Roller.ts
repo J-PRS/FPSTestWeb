@@ -9,47 +9,16 @@ import {
 } from '../core/config.js';
 import { Terrain } from '../world/terrain.js';
 import type { Targetable } from './balls.js';
-import { allocSlots, freeSlots, getSwarm, getShadows } from './swarms.js';
-import type { SwarmPart, SwarmSlotOwner } from './swarm.js';
+import { allocSlots, freeSlots } from './swarms.js';
+import type { SwarmSlotOwner } from './swarm.js';
+import { writeRollerInstances } from './rollerVisual.js';
+export { rollerParts } from './rollerVisual.js';
 import { type SimRoller, makeSimRoller, stepRoller } from '../../../shared/creatureSim.js';
 import { bindNetSim, applyNetEdgeSim, updateNetSim, claimDamageMelee, type NetBindArgs } from '../game/netMelee.js';
 
 const _dir = new THREE.Vector3();
 const _axis = new THREE.Vector3();
 const _dq = new THREE.Quaternion();
-const _m = new THREE.Matrix4();
-const _s = new THREE.Vector3();
-
-// Faceted boulder — vertex-jittered so the silhouette is lumpy rock, not a
-// beach ball. Displacement is a position-hash: shared verts displace
-// identically, so no cracks open, and every roller uses the same seed so
-// the swarm instances stay identical.
-let _geo: THREE.BufferGeometry | null = null;
-function rollerGeo(): THREE.BufferGeometry {
-  if (!_geo) {
-    const g = new THREE.IcosahedronGeometry(1, 2);
-    const pos = g.getAttribute('position') as THREE.BufferAttribute;
-    const v = new THREE.Vector3();
-    for (let i = 0; i < pos.count; i++) {
-      v.set(pos.getX(i), pos.getY(i), pos.getZ(i));
-      const n = Math.sin(v.x * 12.9898 + v.y * 78.233 + v.z * 37.719) * 43758.5453;
-      const j = 0.8 + (n - Math.floor(n)) * 0.4; // 0.8..1.2 radial bulge
-      v.multiplyScalar(j);
-      pos.setXYZ(i, v.x, v.y, v.z);
-    }
-    g.computeVertexNormals(); // re-light after the deform — lumps get shading
-    _geo = g;
-  }
-  return _geo;
-}
-
-let _mat: THREE.MeshLambertMaterial | null = null;
-
-/** Swarm part table — one rigid boulder per roller. */
-export function rollerParts(): SwarmPart[] {
-  if (!_mat) _mat = new THREE.MeshLambertMaterial({ color: 0xffffff });
-  return [{ geometry: rollerGeo(), material: _mat, castShadow: true }];
-}
 
 /**
  * Roller — a big ball that just rolls toward the player. Terrain-following
@@ -73,12 +42,13 @@ export class Roller implements Targetable, SwarmSlotOwner {
 
   swarmSlot = -1;
   shadowSlot = -1;
-  private hasSlots = false;
+  // Public flat fields — rollerVisual's RollerVisHost reads them.
+  hasSlots = false;
 
   // Roll rotation is accumulated — instancing has no scene node to mutate
-  private rollQuat = new THREE.Quaternion();
-  private tint = 0.8 + Math.random() * 0.4; // per-roller rock shade variance
-  private flash = 0;
+  rollQuat = new THREE.Quaternion();
+  tint = 0.8 + Math.random() * 0.4; // per-roller rock shade variance
+  flash = 0;
   private hitCooldown = 0; // brief invuln so contact doesn't multi-tick
   private airborne = false;
   // Burrow-in state (set by spawn) — slides up out of the ground on emerge
@@ -120,17 +90,8 @@ export class Roller implements Targetable, SwarmSlotOwner {
     }
   }
 
-  writeInstances(_terrain?: Terrain): void {
-    if (!this.hasSlots) return;
-    const swarm = getSwarm('roller');
-    if (swarm) {
-      _s.setScalar(this.radius);
-      _m.compose(this.pos, this.rollQuat, _s);
-      swarm.setMatrix(0, this.swarmSlot, _m);
-      const fr = this.flash > 0 ? 4 : 1;
-      swarm.setColor(0, this.swarmSlot, this.color.r * fr * this.tint, this.color.g * fr * this.tint, this.color.b * fr * this.tint);
-    }
-    getShadows()?.set(this, this.pos, this.radius * 1.05, 0.4);
+  writeInstances(terrain?: Terrain): void {
+    writeRollerInstances(this, terrain);
   }
 
   get disposed(): boolean { return this.dead; }
