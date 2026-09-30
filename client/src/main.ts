@@ -276,8 +276,11 @@ async function init(): Promise<void> {
   await connectServer({ serverUrl, classicMode: classicMode || soloMode, networkManager, logger, fragMessages, profiler });
   player.serverOwnsHealth = () => networkManager.isConnected();
 
-  // Initial balls
-  for (let i = 0; i < 8; i++) entities.spawnBall();
+  // Initial balls — offline only. In a room the wire owns the ball
+  // population; boot-time locals were duplicate spam on the default map.
+  if (!networkManager.isConnected()) {
+    for (let i = 0; i < 8; i++) entities.spawnBall();
+  }
 
   // Auto-start demo recording so cool shots are captured seamlessly
   demoManager?.startRecording();

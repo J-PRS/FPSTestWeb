@@ -14,6 +14,7 @@ import type { AmbientParticles } from '../effects/ambientParticles.js';
 import type { GroundMist } from '../effects/groundMist.js';
 import type { AmbientBirds } from '../effects/birds.js';
 import { screenShake } from '../effects/screenShake.js';
+import { updateVfx } from '../effects/vfx.js';
 import * as sfxAudio from '../core/sfx/world.js';
 
 import type { NetworkManager } from '../networking/NetworkManager.js';
@@ -200,7 +201,10 @@ function tickEntities(deps: GameLoopDeps, perf: ReturnType<typeof createPerfHud>
     entities.updateDeployables(dt);
   }
   perf.mark('species');
-  if (!demoPlaying) deps.waveDirector().update(dt);
+  // Ambient population is an offline feature — connected rooms own
+  // their balls/creatures on the wire; the director spawning locals
+  // alongside them was the busy double-population on join.
+  if (!demoPlaying && !deps.lazyNetworkManager().isConnected()) deps.waveDirector().update(dt);
   if (!demoPlaying) entities.updateNuggets(dt);
   deps.teamBots?.()?.update(dt);
   perf.mark('bots');
@@ -219,6 +223,7 @@ const FX_MS_CAP = 1.2;
 function fxTick(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof createFrameBudget>, fxDt: number): void {
   st.fxJobs.length = 0;
   st.fxJobs.push(
+    () => updateVfx(fxDt), // quarks batch — cheap, but jobs rotate anyway
     () => deps.lazyEffects().update(fxDt),
     () => updateDeadList(deps.world.debrisList, fxDt),
     () => updateDeadList(deps.world.playerDebrisList, fxDt),
@@ -358,7 +363,7 @@ export function createGameLoop(deps: GameLoopDeps) {
     const dt = Math.min(rawElapsed, MAX_DELTA_TIME);
     lastTime = time;
     fpsWatchdog(deps, st, budget, perf, rawElapsed, time);
-    perf.begin();
+    perf.begin(deps.rendererSetup.renderer);
 
     // Hidden tabs get ~1 rAF/sec — dt clamps to 0.05 so game logic runs in
     // slow motion, but cosmetic VFX must still expire in real time or they
@@ -386,6 +391,7 @@ export function createGameLoop(deps: GameLoopDeps) {
     perf.mark('hud');
 
     renderFrame(fxDt); // damage numbers ride fxDt — same hidden-tab decay fix
+    perf.mark('render');
     perf.end(deps.rendererSetup.renderer, () => {
       const bw = deps.lazyNetworkManager().bandwidth();
       return `tgt ${deps.entities.targets.length} rem ${deps.world.remotePlayers.size}\n` +
