@@ -1,3 +1,4 @@
+2026-10-02 - rtc tier probe no longer leaks its signalling ws on loss; e2e output quieted (Vite HMR unhandled rejection was dev-server noise)
 2026-10-02 - e2e vgs spec: real key-chord input reaches peer chat wire (SHAZBOT!, Attack!); suite now 7 specs
 2026-10-02 - perf gate retuned: p95 3x (SwiftShader tail noise), jsBusy +750nchanged; compare-vs-baseline run confirms no regression (jsBusy 0.26 vs 0.23)
 2026-10-02 - e2e duo specs drive real teleports (pos->syncMovement->markTeleport); bare sendTeleport misuse removed, diagnosed via instrumented run
