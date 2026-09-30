@@ -12,6 +12,8 @@ import type { Targetable } from './balls.js';
 import { getGlowTexture } from '../effects/glowTexture.js';
 import { TerrainFoot } from '../effects/terrainFoot.js';
 import { allocSlots, freeSlots, getSwarm, getShadows, type SwarmPart } from './swarms.js';
+import { type Bolt, spawnBolt, detonateBolt as detBolt, updateBolts as stepBolts, disposeBolts } from './turretBolts.js';
+export type { Bolt } from './turretBolts.js';
 
 const _v = new THREE.Vector3();
 const _dir = new THREE.Vector3();
@@ -51,11 +53,6 @@ function barrelGeo(): THREE.CylinderGeometry {
   }
   return _barrelGeo;
 }
-let _boltGeo: THREE.SphereGeometry | null = null;
-function boltGeo(): THREE.SphereGeometry {
-  if (!_boltGeo) _boltGeo = new THREE.SphereGeometry(0.16, 8, 6);
-  return _boltGeo;
-}
 let _eyeGeo: THREE.PlaneGeometry | null = null;
 function eyeGeo(): THREE.PlaneGeometry {
   if (!_eyeGeo) _eyeGeo = new THREE.PlaneGeometry(0.5, 0.5);
@@ -81,19 +78,6 @@ function eyeMat(): THREE.MeshBasicMaterial {
   });
   return _eyeMat;
 }
-let _boltMat: THREE.MeshBasicMaterial | null = null;
-function boltMat(): THREE.MeshBasicMaterial {
-  if (!_boltMat) _boltMat = new THREE.MeshBasicMaterial({ color: 0xffcc66 });
-  return _boltMat;
-}
-let _trailMat: THREE.MeshBasicMaterial | null = null;
-function trailMat(): THREE.MeshBasicMaterial {
-  if (!_trailMat) _trailMat = new THREE.MeshBasicMaterial({
-    color: 0xff8830, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
-  });
-  return _trailMat;
-}
-
 const PART_BASE = 0, PART_DOME = 1, PART_BARREL = 2, PART_EYE = 3;
 const DOME_R = 0x4a / 255, DOME_G = 0x5f / 255, DOME_B = 0x73 / 255;
 const HULL_R = 0x3a / 255, HULL_G = 0x4a / 255, HULL_B = 0x5a / 255;
@@ -105,23 +89,6 @@ export function turretterParts(): SwarmPart[] {
     { geometry: barrelGeo(), material: baseMat() },
     { geometry: eyeGeo(), material: eyeMat() },
   ];
-}
-
-export interface Bolt {
-  mesh: THREE.Mesh;
-  glow: THREE.Sprite;
-  pos: THREE.Vector3;
-  prevPos: THREE.Vector3; // start-of-frame pos — swept interception is segment-vs-segment
-  radius: number;         // intercept envelope (visual sphere is only 0.16 — this is the forgiving hitbox)
-  vel: THREE.Vector3;
-  life: number;
-  trailAcc: number;
-}
-
-interface TrailDot {
-  mesh: THREE.Mesh;
-  life: number;
-  maxLife: number;
 }
 
 /**
@@ -155,7 +122,7 @@ export class Turretter implements Targetable {
   swarmSlot = -1;
   shadowSlot = -1;
 
-  private scene: THREE.Scene;
+  scene: THREE.Scene; // public — turretBolts owns bolt meshes through it
   private _terrain: Terrain;
   private rootQuat = new THREE.Quaternion(); // terrain tilt when planted; tumble when airborne
   private headYaw = 0;                       // turretHead yaw (world aim → tilted local frame)
@@ -163,7 +130,8 @@ export class Turretter implements Targetable {
   // Live lobbed shells — public so combat can proximity-check them: a
   // player explosive clipping a bolt cooks it off mid-air (detonateBolt).
   readonly bolts: Bolt[] = [];
-  private trailDots: TrailDot[] = [];
+  // Bolt trail dots — public for turretBolts.ts (host-interface pattern).
+  readonly trailDots: { mesh: THREE.Mesh; life: number; maxLife: number }[] = [];
 
   private planted = false;          // false = airborne ballistic
   private dwell = 0;                // time since landing
@@ -211,7 +179,7 @@ export class Turretter implements Targetable {
     if (this.dead) return;
     if (this.flashTimer > 0) this.flashTimer -= dt;
 
-    this.updateBolts(dt, terrain, playerPos);
+    stepBolts(this, this, dt, terrain, playerPos);
 
     if (this.planted) {
       this.dwell += dt;
@@ -423,90 +391,15 @@ export class Turretter implements Targetable {
   }
 
   private fireBolt(vel: THREE.Vector3): void {
-    const mesh = new THREE.Mesh(boltGeo(), boltMat());
-    const pos = this.pos.clone();
-    pos.y += 1.0;
-    mesh.position.copy(pos);
-    // Hot halo — the bolt reads at range even when the sphere is subpixel
-    const glow = new THREE.Sprite(new THREE.SpriteMaterial({
-      map: getGlowTexture(), color: 0xffaa44, transparent: true,
-      blending: THREE.AdditiveBlending, depthWrite: false,
-    }));
-    glow.scale.setScalar(1.6);
-    glow.position.copy(pos);
-    this.scene.add(mesh, glow);
-    this.bolts.push({
-      mesh, glow, pos,
-      prevPos: pos.clone(),
-      radius: 1.5, // generous — clipping a 60m/s shell mid-air is a skill shot
-      vel: vel.clone(),
-      life: 10.0, // lobbed shells are slow arks — long fuse so a shot fired
-      // at range actually lands instead of fizzing mid-air
-      trailAcc: 0,
-    });
+    spawnBolt(this, vel);
   }
 
   /** Cooked mid-air by a player shell — same cleanup as a landed bolt, no callbacks. */
   detonateBolt(i: number): void {
-    const b = this.bolts[i];
-    if (!b) return;
-    this.scene.remove(b.mesh, b.glow);
-    (b.glow.material as THREE.SpriteMaterial).dispose();
-    this.bolts.splice(i, 1);
+    detBolt(this, i);
   }
 
-  private updateBolts(dt: number, terrain: Terrain, playerPos: THREE.Vector3): void {
-    for (let i = this.bolts.length - 1; i >= 0; i--) {
-      const b = this.bolts[i];
-      b.life -= dt;
-      b.vel.y += GRAVITY * dt;
-      b.prevPos.copy(b.pos);
-      b.pos.addScaledVector(b.vel, dt);
-      b.mesh.position.copy(b.pos);
-      b.glow.position.copy(b.pos);
-      // Stretch along velocity — a lobbed streak, not a marble
-      b.mesh.scale.set(1, 1, 1 + b.vel.length() * 0.05);
-      _v.copy(b.vel).normalize();
-      b.mesh.lookAt(_v.add(b.pos));
 
-      // Ember trail — dots that shrink out behind the bolt
-      b.trailAcc += dt;
-      while (b.trailAcc > 0.03) {
-        b.trailAcc -= 0.03;
-        const dot = new THREE.Mesh(boltGeo(), trailMat());
-        dot.scale.setScalar(0.6);
-        dot.position.copy(b.pos);
-        this.scene.add(dot);
-        this.trailDots.push({ mesh: dot, life: 0.35, maxLife: 0.35 });
-      }
-
-      const hitPlayer = b.pos.distanceToSquared(playerPos) < 1.7; // ~1.3m
-      const hitGround = b.pos.y < terrain.getHeight(b.pos.x, b.pos.z);
-      if (hitPlayer) {
-        this.scene.remove(b.mesh, b.glow);
-        (b.glow.material as THREE.SpriteMaterial).dispose();
-        this.bolts.splice(i, 1);
-        this.onBoltHit?.(this);
-      } else if (hitGround || b.life <= 0) {
-        this.scene.remove(b.mesh, b.glow);
-        (b.glow.material as THREE.SpriteMaterial).dispose();
-        this.bolts.splice(i, 1);
-        if (hitGround) this.onBoltLand?.(b.pos);
-      }
-    }
-
-    // Trail dots shrink to nothing
-    for (let i = this.trailDots.length - 1; i >= 0; i--) {
-      const d = this.trailDots[i];
-      d.life -= dt;
-      if (d.life <= 0) {
-        this.scene.remove(d.mesh);
-        this.trailDots.splice(i, 1);
-        continue;
-      }
-      d.mesh.scale.setScalar(0.6 * (d.life / d.maxLife));
-    }
-  }
 
   /** Planted = armored (half damage), airborne = vulnerable (triple — the
    *  airshot window is the skill check, make it pay). */
@@ -531,13 +424,7 @@ export class Turretter implements Targetable {
 
   dispose(): void {
     freeSlots('turretter', this);
-    for (const b of this.bolts) {
-      this.scene.remove(b.mesh, b.glow);
-      (b.glow.material as THREE.SpriteMaterial).dispose();
-    }
-    this.bolts.length = 0;
-    for (const d of this.trailDots) this.scene.remove(d.mesh);
-    this.trailDots.length = 0;
+    disposeBolts(this);
     this.foot.dispose();
   }
 }

@@ -1,3 +1,4 @@
+2026-09-26 - Split Turretter.ts: bolt pool (spawn/update/detonate/dispose) -> turretBolts.ts (543->430)
 2026-09-26 - Split Totem.ts: swarm-write/visual material block -> totemVisual.ts (Totem 609->469)
 2026-09-26 - Split balls.ts net-replay into ballNet.ts (tickNet/applySeg/isStaleSeg; sim cursors in NetBag, Ball statics via NetStatics closures)
 2026-09-26 - flag thief becomes a real hunt target: beacon-marked carrier (pos+vel) feeds pickHunt as fallback for chase roles, plus sheep meter charges on mechanical-energy bleed (deadstop signature, Tribes momentum-conservation framing)
