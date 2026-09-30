@@ -13,12 +13,12 @@ describe('scenario: a rebalanced flag carrier drops the flag', () => {
     }, 'ctf');
     const players = [...room.players.getAllPlayers().values()].filter((p) => p.isBot);
     // Rig the sides: 3 alpha, 1 bravo — delta 2 triggers a flip.
-    room.players.setTeam(players[0].id, 'alpha');
-    room.players.setTeam(players[1].id, 'alpha');
-    room.players.setTeam(players[2].id, 'alpha');
-    room.players.setTeam(players[3].id, 'bravo');
+    const carrier = players[0]!;
+    room.players.setTeam(carrier.id, 'alpha');
+    room.players.setTeam(players[1]!.id, 'alpha');
+    room.players.setTeam(players[2]!.id, 'alpha');
+    room.players.setTeam(players[3]!.id, 'bravo');
     // An alpha bot carries bravo's flag.
-    const carrier = players[0];
     const bravoFlag = room.flags!.flags.get('bravo')!;
     carrier.position = { ...bravoFlag.pos };
     room.tickFlags(0.05);

@@ -2,7 +2,6 @@ import { describe, it, expect } from 'bun:test';
 import { mkRoom, step, freeze, twoPlayers, watch } from './harness.ts';
 import { WeaponType, getWeaponStats } from '../../../shared/weapons.ts';
 import type { ServerMessage } from '../../../shared/protocol.ts';
-import type { Vec3 } from '../../src/types.ts';
 
 // Server-side LG charge economy: beam ticks bank withheld damage ON the
 // victim, a non-LG hit detonates only what it invests, and a kill pops
@@ -31,7 +30,7 @@ function shootAt(room: Room, shooter: Player, victim: Player, weapon: WeaponType
     z: victim.position.z - shooter.position.z,
   };
   const len = Math.hypot(dir.x, dir.z) || 1;
-  const speed = getWeaponStats(weapon).projectileSpeed ?? 90;
+  const speed = getWeaponStats(weapon).speed ?? 90;
   room.messages.handleMessage(shooter.id, {
     type: 'shot', targetId: null, weaponType: weapon,
     position: { x: shooter.position.x, y: shooter.position.y + 1.6, z: shooter.position.z },

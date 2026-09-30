@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test';
-import { mkRoom, twoPlayers, pin, freeze, watch } from './harness.ts';
+import { mkRoom, twoPlayers, freeze, watch } from './harness.ts';
 import type { ServerMessage } from '../../../shared/protocol.ts';
 
 // The spawn-report contract real clients (and wire bots) depend on:

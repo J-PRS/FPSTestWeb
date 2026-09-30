@@ -10,9 +10,10 @@ import type { Heightfield } from '../../shared/heightfield.ts';
 import { isWireFrame, decodePosition } from '../../shared/wire.ts';
 import { TickLoop } from './TickLoop.ts';
 import { SessionManager } from './SessionManager.ts';
-import { readFileSync, appendFileSync, mkdirSync, readdirSync } from 'node:fs';
+import { appendFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { type MapSpec, resolveMapSpec } from '../../shared/mapSpec.ts';
+import { MapCatalog } from './mapCatalog.ts';
+import type { MapSpec } from '../../shared/mapSpec.ts';
 
 // Room/map/mode name grammar — bad values fall through to 'default'.
 const word = (v: unknown): string | undefined =>
@@ -27,6 +28,7 @@ export class GameServer {
   private bunServer: Server<WebSocketData> | null = null;
   private readonly tickLoop: TickLoop;
   private readonly sessions: SessionManager;
+  private readonly maps = new MapCatalog();
 
   // Ops counters — cheap ints, read by /metrics. msgsIn counts everything
   // that passed validation; tick lag measures setInterval drift (the
@@ -155,30 +157,14 @@ export class GameServer {
    *  base of a numbered ad-hoc name ('nugwar-3' → 'nugwar'), then the
    *  join's explicit map/mode fallback. `bots` overrides whatever the
    *  spec says — even with no named spec at all. */
-  private specFor(name: string, mode: string, map: string, bots?: number): { spec: MapSpec | undefined; src: string } {
-    let spec = this.loadMapSpec(name);
-    let src = spec ? name : '';
-    if (!spec) {
-      // Numbered ad-hoc rooms inherit their base spec — a bare --room
-      // join must play the same rules quickRoom would, or numbered rooms
-      // silently run spec-less defaults.
-      const base = name.replace(/-\d+$/, '');
-      if (base !== name) { spec = this.loadMapSpec(base); src = spec ? base : ''; }
-    }
-    if (!spec && map) { spec = this.loadMapSpec(map); src = map; }
-    if (!spec) { spec = this.loadMapSpec(mode); src = spec ? mode : ''; }
-    if (bots !== undefined) spec = { ...spec, bots, botFill: bots } as MapSpec;
-    return { spec, src };
-  }
-
   /** Resolve-or-create a room. Joins may name any room; 'default' is the
    *  unnamed lobby every existing client already lands in. `mode` is only
    *  honored at creation — the first joiner defines the match. */
   private roomFor(name: string, mode = '', map = '', bots?: number): Room {
     let room = this.rooms.get(name);
     if (!room) {
-      const { spec, src } = this.specFor(name, mode, map, bots);
-      if (src) this.roomMapName.set(name, src);
+      const { spec, src } = this.maps.specFor(name, mode, map, bots);
+      this.maps.noteSource(name, src);
       room = new Room(name, this.field, mode, spec, CONFIG.moveAuthority);
       // `room` is a mutable let — bind a const for the closures or TS
       // widens them back to Room | undefined.
@@ -191,7 +177,7 @@ export class GameServer {
         logger.warn('Movement cheat detected', { playerId: pid, room: r.name, dist: +dist.toFixed(1) });
         this.kickPlayer(pid);
       };
-      room.onRotate = () => this.nextRotationSpec(r);
+      room.onRotate = () => this.maps.nextRotationSpec(r);
       room.onTerrain = (s) => this.attachTerrain(r, s);
       if (spec?.terrain) this.attachTerrain(room, spec);
       this.rooms.set(name, room);
@@ -217,78 +203,13 @@ export class GameServer {
     });
   }
 
-  // Map rotation pool: maps/rotation.json (["name","name",…]) or the
-  // FPS_MAP_ROTATION env (comma list). Rooms advance a shared cursor —
-  // every room on the rotation marches the same sequence.
-  private rotationList: string[] | null | undefined;
-  private rotationIdx = 0;
-
-  private rotation(): string[] {
-    if (this.rotationList === undefined) {
-      const env = (process.env.FPS_MAP_ROTATION ?? '').split(',')
-        .map(s => s.trim()).filter(Boolean);
-      if (env.length) this.rotationList = env;
-      else {
-        try {
-          const raw = readFileSync(`${import.meta.dir}/../../maps/rotation.json`, 'utf8');
-          const list = JSON.parse(raw);
-          this.rotationList = Array.isArray(list) ? list.filter(s => typeof s === 'string') : [];
-        } catch { this.rotationList = null; }
-      }
-    }
-    return this.rotationList ?? [];
-  }
-
-  /** Next map in the rotation whose mode matches the room's — a mode
-   *  swap would need Room reconstruction (mode wiring is ctor-time), so
-   *  foreign-mode specs are skipped rather than half-applied. */
-  private nextRotationSpec(room: Room): MapSpec | null {
-    const list = this.rotation();
-    if (!list.length) return null;
-    for (let i = 0; i < list.length; i++) {
-      const name = list[this.rotationIdx++ % list.length];
-      if (name === undefined) continue;
-      const spec = this.loadMapSpec(name);
-      if (!spec || (spec.mode && room.mode && spec.mode !== room.mode)) continue;
-      this.rotationIdx %= list.length;
-      // Terrain attach rides applySpec's onTerrain hook — calling it here
-      // too would double-attach the same field.
-      this.roomMapName.set(room.name, name);
-      logger.info('Map rotated', { room: room.name, map: name });
-      return spec;
-    }
-    return null;
-  }
-
-  /** maps/<name>.json at repo root — a missing or malformed file just
-   *  means "default match rules", not an error. roomFor also tries the
-   *  mode name so ad-hoc rooms like 'ctf-2' inherit ctf.json's rules. */
-  private loadMapSpec(name: string): MapSpec | undefined {
-    if (!name) return undefined;
-    try {
-      const path = `${import.meta.dir}/../../maps/${name}.json`;
-      // readFileSync keeps roomFor synchronous — map files are tiny and
-      // loaded once per room lifetime.
-      const raw = readFileSync(path, 'utf8');
-      const spec = resolveMapSpec(JSON.parse(raw));
-      logger.info('Map spec loaded', { room: name, path });
-      return spec;
-    } catch {
-      return undefined;
-    }
-  }
-
-  /** Which maps/<X>.json spawned each room — lets quick-join group by
-   *  map rather than room name. */
-  private roomMapName = new Map<string, string>();
-
   /** Quick-join: pick the emptiest open room already running `mode`
    *  (and `map` when given), else spin up `<map|mode>-N`. `bots`
    *  overrides the spec's bot count/botFill on creation only. */
   quickRoom(mode: string, map = '', bots?: number): Room {
     let best: Room | undefined;
     for (const room of this.rooms.values()) {
-      if (map ? this.roomMapName.get(room.name) !== map
+      if (map ? this.maps.mapNameOf(room.name) !== map
               : room.mode !== mode) continue;
       if (room.playerCount() >= CONFIG.maxPlayers) continue;
       if (!best || room.playerCount() < best.playerCount()) best = room;
@@ -301,24 +222,9 @@ export class GameServer {
   }
 
   /** Playable map list for the menu — name + declared mode + default
-   *  bot count, straight from maps/*.json. */
+   *  bot count, straight from maps/*.json (catalog owns the dir). */
   listMaps(): { name: string; mode: string; bots: number }[] {
-    try {
-      const dir = `${import.meta.dir}/../../maps`;
-      return readdirSync(dir)
-        .filter((f) => f.endsWith('.json') && f !== 'rotation.json') // rotation.json is a playlist, not a map
-        .map((f) => {
-          const spec = this.loadMapSpec(f.slice(0, -5));
-          return {
-            name: f.slice(0, -5),
-            mode: spec?.mode ?? '',
-            bots: spec?.bots ?? spec?.botFill ?? 0,
-          };
-        })
-        .toSorted((a, b) => a.name.localeCompare(b.name));
-    } catch {
-      return [];
-    }
+    return this.maps.list();
   }
 
   // playerId → room index: the binary position path calls this at 20Hz per
@@ -536,7 +442,7 @@ export class GameServer {
     return [...this.rooms.values()].map(r => ({
       name: r.name,
       mode: r.mode || undefined,
-      map: this.roomMapName.get(r.name),
+      map: this.maps.mapNameOf(r.name),
       players: r.playerCount(),
       maxPlayers: CONFIG.maxPlayers,
       spectators: r.spectators.size || undefined,
@@ -561,7 +467,7 @@ export class GameServer {
     if (!room) return 'no-room';
     // The room's name isn't always its map's (ad-hoc room names, map= pick
     // in /join, post-rotation state) — reload whatever spec it's playing.
-    const spec = this.loadMapSpec(this.roomMapName.get(name) ?? name);
+    const spec = this.maps.loadMapSpec(this.maps.mapNameOf(name) ?? name);
     if (!spec) return 'no-spec';
     room.applySpec(spec);
     logger.info('Room spec reloaded', { room: name });

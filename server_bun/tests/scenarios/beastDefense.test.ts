@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test';
-import { mkRoom, step, pin, watch } from './harness.ts';
+import { mkRoom, step, pin } from './harness.ts';
 import type { Vec3 } from '../../src/types.ts';
 
 // SpawnBall is private — scenario tests stage creatures directly rather
