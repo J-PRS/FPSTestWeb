@@ -9,6 +9,8 @@
  * rendering — chat is the classic HTML-injection vector.
  */
 
+import { vgsGate } from './vgs.ts';
+
 export interface ChatDeps {
   send(text: string, team: boolean): void;
   /** null when offline — feed still shows locally-echoed/system lines */
@@ -77,7 +79,7 @@ export class Chat {
     }
     // Don't steal T/Y while typing in menus/other inputs, or when a
     // chat-less surface owns the keyboard.
-    if ((e.code === 'KeyT' || e.code === 'KeyY') && !(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement)) {
+    if ((e.code === 'KeyT' || e.code === 'KeyY') && !vgsGate.active && !(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement)) {
       this.open(e.code === 'KeyY');
       e.preventDefault();
       e.stopPropagation();

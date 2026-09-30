@@ -160,6 +160,10 @@ const TREE: Record<string, VgsNode> = {
 
 const TIMEOUT_MS = 3000;
 
+/** Other window-level key routers (chat) check this before claiming a
+ *  letter — listener registration order is not a reliable gate. */
+export const vgsGate = { active: false };
+
 export interface VgsDeps {
   /** Wire chat — team flag scopes the line. */
   send(text: string, team: boolean): void;
@@ -182,6 +186,11 @@ export class Vgs {
       'border:1px solid #555;padding:6px 10px;min-width:220px;pointer-events:none;';
     document.body.appendChild(this.menu);
     window.addEventListener('keydown', (e) => this.onKey(e), true);
+    // While the menu is up the keys belong to it entirely — keyup too,
+    // so a release can't reach game handlers that never saw the press.
+    window.addEventListener('keyup', (e) => {
+      if (this.active) { e.preventDefault(); e.stopImmediatePropagation(); }
+    }, true);
   }
 
   private get node(): Record<string, VgsNode> {
@@ -194,12 +203,14 @@ export class Vgs {
       if (e.code === 'KeyV' && !(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement)) {
         this.open();
         e.preventDefault();
-        e.stopPropagation();
+        // stopImmediatePropagation — same-target window listeners (chat)
+        // ignore plain stopPropagation.
+        e.stopImmediatePropagation();
       }
       return;
     }
     e.preventDefault();
-    e.stopPropagation();
+    e.stopImmediatePropagation();
     if (e.code === 'Escape') { this.close(); return; }
     const letter = e.code.startsWith('Key') ? e.code.slice(3) : '';
     const next = letter && this.node[letter];
@@ -219,6 +230,7 @@ export class Vgs {
 
   private open(): void {
     this.active = true;
+    vgsGate.active = true;
     this.path = [];
     this.menu.style.display = 'block';
     this.render();
@@ -227,6 +239,7 @@ export class Vgs {
 
   private close(): void {
     this.active = false;
+    vgsGate.active = false;
     this.menu.style.display = 'none';
     clearTimeout(this.timer);
   }
