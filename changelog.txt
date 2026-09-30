@@ -1,3 +1,4 @@
+2026-09-26 - Mute both position judges for ~1 RTT after a room-hop seat: pre-hop stragglers were seating the fresh room's anchor, making the post-hop spawn report read as an impossible 100m+ jump (posrej per hop).
 2026-09-26 - Split kill-announce + bot-taunt block out of CombatHandler into killFeed.ts (KillFeed); taunt timers now tracked and drained on room teardown via new dispose chain (Room -> MessageHandler -> CombatHandler).
 2026-09-30 - fix: emitted corrections now also mute the shadow divergence judge (~1 RTT via roomInfo.moveMute) — in-flight pre-correction reports could blip the divergence counter toward a kick on lossy links; TASKS.md testing counts refreshed
 2026-09-30 - dev tooling: package scripts gain check/test:scenarios/soak/rtc:relay/rtc:punch; _punchtest + _relaycheck take --url args (dead tunnel URL was hardcoded); tests/rewind.test.ts covers pushRewindSample, rewindPos, clampPing, parseField (443 total)

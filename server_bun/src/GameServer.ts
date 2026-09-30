@@ -462,9 +462,19 @@ export class GameServer {
     room.sessionTokens.set(playerId, sessionToken);
     const joined = room.players.addPlayer(playerId, room.nextTeam(), perk, armorClass);
     if (transport) joined.transport = transport;
+    // Room hops don't stop the client's stream: reports emitted in the
+    // OLD room keep arriving for ~1 RTT and would poison the fresh
+    // anchor (first straggler seats lastPosCheckPos, the post-hop spawn
+    // report then reads as an impossible 100m+ jump). Mute the
+    // plausibility gate + shadow judge for the same drain window a
+    // correction gets.
+    joined.correctionGraceUntil = Date.now() + CONFIG.reportGraceMs;
     this.playerRoom.set(playerId, room);
     room.connections.register(playerId, ws);
     room.messages.handleHandshake(playerId, sessionToken);
+    // The shadow is created inside handleHandshake — arm its drain
+    // window after it exists.
+    room.moveSim.markReseated(playerId);
   }
 
   private switchThrottled(playerId: string): boolean {
