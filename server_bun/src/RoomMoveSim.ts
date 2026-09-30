@@ -5,6 +5,7 @@ import { hmHeight, hmNormal, type Heightfield } from '../../shared/heightfield.t
 import { SolidWorld } from '../../shared/solidWorld.ts';
 import type { StructureSpec } from '../../shared/mapSpec.ts';
 import { logger } from './logger.ts';
+import { CONFIG } from './config.ts';
 
 /**
  * Server-side movement shadow — every player gets a MoveSim fed by their
@@ -303,7 +304,7 @@ export class RoomMoveSim {
     // seed the fresh shadow at the old position and flag the real spawn
     // landing ~60m away as a cheat. The hop grace mutes them; the first
     // post-gameState report seeds at the true spawn instead.
-    if (Date.now() - sh.resyncAt < 500) return null;
+    if (Date.now() - sh.resyncAt < CONFIG.reportGraceMs) return null;
     if (!sh.seeded) {
       sh.seeded = true;
       s.pos = { x: pos.x, y: pos.y, z: pos.z };

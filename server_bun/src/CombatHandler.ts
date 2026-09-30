@@ -837,7 +837,7 @@ export class CombatHandler {
       // flight — the client's snap to spawn (and any straggler reports
       // from the corpse spot) read as impossible speed/divergence against
       // the reseated anchors. Same drain window a correction gets.
-      player.correctionGraceUntil = Date.now() + 500;
+      player.correctionGraceUntil = Date.now() + CONFIG.reportGraceMs;
 
       this.broadcast({
         type: 'playerRespawn',

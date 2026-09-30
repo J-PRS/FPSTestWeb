@@ -11,6 +11,7 @@ type WtDuplex = {
   writable: WritableStream<Uint8Array>;
 };
 type WtSession = {
+  readonly peer?: { ip: string; port: number };
   ready: Promise<void>;
   closed: Promise<{ closeCode?: number; reason?: string }>;
   close(info?: { closeCode?: number; reason?: string }): void;
@@ -37,7 +38,9 @@ type WtModule = {
  */
 export class WtSocketAdapter {
   readonly data: WebSocketData = { playerId: '', connectedAt: Date.now() };
-  readonly remoteAddress = 'webtransport';
+  // The session knows its peer — a literal string put EVERY WT client in
+  // one per-IP join-throttle bucket (the same bug the RTC adapter had).
+  readonly remoteAddress: string;
   private open = true;
   private writer: WritableStreamDefaultWriter<Uint8Array> | null = null;
   private encoder = new TextEncoder();
@@ -47,6 +50,7 @@ export class WtSocketAdapter {
     private session: WtSession,
     private game: GameServer,
   ) {
+    this.remoteAddress = session.peer?.ip ?? 'webtransport';
     // The client's first action after connect is creating THE reliable
     // bidi stream — grab it and start pumping both lanes.
     void this.acceptReliable().catch(() => this.die());

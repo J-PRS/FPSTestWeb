@@ -474,7 +474,7 @@ export class MessageHandler {
         // client's next report legitimately snaps to simTruth.pos, and
         // without this the snap itself reads as a speedhack reject.
         player.lastPosCheckPos = { ...simTruth.pos };
-        player.correctionGraceUntil = now + 500;
+        player.correctionGraceUntil = now + CONFIG.reportGraceMs;
       }
       player.rotation = { ...msg.rotation };
       player.lastSeen = now;
@@ -563,7 +563,7 @@ export class MessageHandler {
         // (accepts immediately) or keeps fighting (rejects count up
         // to the force-accept, which then sticks).
         player.lastPosCheckPos = { ...validState.position };
-        player.correctionGraceUntil = now + 500;
+        player.correctionGraceUntil = now + CONFIG.reportGraceMs;
       }
     }
     // Client persisting past corrections (disputed knockback, lost

@@ -45,6 +45,12 @@ export const CONFIG = {
     { x: 80, y: 60, z: -80 },
   ] as const,
 
+  // In-flight-report drain window (~1 RTT plus margin): any event that
+  // reseats a client's position source-of-truth (correction, respawn,
+  // room hop) must mute position judging this long or honest stragglers
+  // from the old trajectory read as impossible speed/divergence.
+  reportGraceMs: 500,
+
   idleTimeoutSec: envNum('FPS_IDLE_TIMEOUT_S', 120),
   maxPayloadLength: envNum('FPS_MAX_PAYLOAD', 1024 * 1024),
   hashBroadcastIntervalMs: envNum('FPS_HASH_INTERVAL_MS', 2000),

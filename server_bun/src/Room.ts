@@ -125,6 +125,13 @@ export class Room {
     }));
   }
 
+  /** Push the player's armor-class ground multiplier into its shadow —
+   *  the single place class→speedScale mapping is read. */
+  private applyClassScale(playerId: string): void {
+    const cls = this.players.getPlayer(playerId)?.armorClass as 'light' | 'medium' | 'heavy' | undefined;
+    this.moveSim.setSpeedScale(playerId, CLASS_STATS[cls ?? 'medium']?.speedScale ?? 1);
+  }
+
   /** Room's current heightfield — GameServer updates it on terrain
    *  attach/rotation so gameplay code can resolve ground height. */
   field: Heightfield | null = null;
@@ -365,19 +372,15 @@ export class Room {
         // Resync re-anchors the shadow — also refresh the class speed
         // scale so a respawn-applied tier swap propagates (moveTrack
         // only re-reads it at handshake).
-        const cls = this.players.getPlayer(pid)?.armorClass;
-        this.moveSim.setSpeedScale(pid, CLASS_STATS[(cls as 'light' | 'medium' | 'heavy') ?? 'medium']?.speedScale ?? 1);
+        this.applyClassScale(pid);
       },
       moveTrack: (pid, pos, yaw) => {
         this.moveSim.track(pid, pos, yaw, this.players.getPlayer(pid)?.perk);
         // Re-seats (room hop) have stale position frames in flight — arm
-        // the same 500ms grace resync() uses so they can't seed the fresh
+        // the same grace resync() uses so they can't seed the fresh
         // shadow at the old seat and flag the real spawn landing a cheat.
         this.moveSim.markReseated(pid);
-        const cls = this.players.getPlayer(pid)?.armorClass;
-        if (cls === 'light' || cls === 'heavy') {
-          this.moveSim.setSpeedScale(pid, CLASS_STATS[cls].speedScale);
-        }
+        this.applyClassScale(pid);
       },
       moveUntrack: (pid) => this.moveSim.untrack(pid),
       moveAuthority: () => this.moveAuthority,
