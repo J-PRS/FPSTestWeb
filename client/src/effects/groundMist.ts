@@ -11,6 +11,9 @@ const CARD_COUNT = 9;
 const SAMPLE_RANGE = 350;   // anchors are searched within ±this of origin
 const SAMPLES = 220;        // candidate points evaluated for lowest spots
 const WANDER = 2.5;         // slow drift amplitude (m)
+const WIND_X = 1, WIND_Z = 0.1; // shared with volumetricClouds — banks flow the same direction the sky does
+const WIND_DRIFT = 3;       // m/s downwind, wraps so banks never leave their valleys
+const WIND_WRAP = 60;
 
 interface Card {
   mesh: THREE.Mesh;
@@ -73,8 +76,9 @@ export class GroundMist {
       // Cylindrical billboard — yaw toward camera only, cards stay upright
       c.mesh.rotation.y = Math.atan2(camPos.x - c.mesh.position.x, camPos.z - c.mesh.position.z);
       // Slow wander — banks drift, never teleport
-      c.mesh.position.x = c.baseX + Math.sin(this.time * 0.05 + c.phase) * WANDER;
-      c.mesh.position.z = c.baseZ + Math.cos(this.time * 0.04 + c.phase * 2) * WANDER;
+      const windT = ((this.time * WIND_DRIFT + c.phase * 10) % WIND_WRAP) - WIND_WRAP / 2;
+      c.mesh.position.x = c.baseX + Math.sin(this.time * 0.05 + c.phase) * WANDER + windT * WIND_X;
+      c.mesh.position.z = c.baseZ + Math.cos(this.time * 0.04 + c.phase * 2) * WANDER + windT * WIND_Z;
     }
   }
 }
