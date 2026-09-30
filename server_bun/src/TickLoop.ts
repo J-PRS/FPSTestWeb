@@ -383,9 +383,13 @@ export class TickLoop {
     // Spectators have no viewpoint for interest tiers — they get the
     // full record set every tick.
     if (room.spectators.size > 0) {
-      const frame = encodeTickFrame(room.tickSeq, room.tickSeq, records.map(r => r.data));
-      this.metrics.bytesSent += frame.byteLength * room.spectators.size;
-      for (const id of room.spectators) room.connections.sendBinaryToPlayer(id, frame);
+      for (const id of room.spectators) {
+        // Same ackSeq contract as player frames — a spectator who spawns
+        // mid-session must not carry a synthetic seq into history pruning.
+        const frame = encodeTickFrame(room.players.getLastSeq(id), seq, records.map(r => r.data));
+        this.metrics.bytesSent += frame.byteLength;
+        room.connections.sendBinaryToPlayer(id, frame);
+      }
     }
   }
 

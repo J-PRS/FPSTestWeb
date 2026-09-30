@@ -1,3 +1,4 @@
+2026-09-26 - spectator tick frames now carry their own ackSeq (getLastSeq) instead of a synthetic room tickSeq
 2026-09-26 - move judge: replay seq journal segment-wise with journaled inputs — a mid-window jet toggle no longer reads as a ~19m divergence
 2026-09-26 - tests: teleport report-grace + room health rollup scenarios (445 bun tests)
 2026-09-26 - VGS: added Target (VT*) and Warning (VW*) categories matching the T:A bind table — full OG category coverage
