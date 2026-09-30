@@ -14,6 +14,7 @@ import { BOT_LOADOUTS, pickBotWeapon } from '../../../shared/botLoadouts.js';
 import { getWeaponStats } from '../../../shared/weapons.js';
 import { STATUS } from '../../../shared/status.js';
 import type { BotLoadout } from '../../../shared/botLoadouts.js';
+import { perkMods, type PerkMods } from '../../../shared/perks.js';
 
 /**
  * GameBot — an in-world fake player. A GameBot is a RemotePlayer registered
@@ -40,13 +41,29 @@ export class GameBot extends RemotePlayer {
    *  ground speed changes land exactly as the server computes them. */
   armorClass: 'light' | 'medium' | 'heavy' = 'medium';
   botMaxHp = BOT_HP;
+  /** Loadout perk modifiers — the same table the server multiplies
+   *  through CombatHandler/GameServer. 'none' until setLoadout runs. */
+  private mods = perkMods('none');
+  get perkMods(): PerkMods { return this.mods; }
+  private perkHealthBonus = 0;
+  setLoadout(lo: BotLoadout): void {
+    this.loadout = lo;
+    this.mods = perkMods(lo.perk);
+    this.perkHealthBonus = this.mods.maxHealth;
+    this.recalcMaxHp();
+  }
   setBotClass(cls: 'light' | 'medium' | 'heavy'): void {
     this.armorClass = cls;
     const st = CLASS_STATS[cls];
     this.movement.setSpeedScale(st.speedScale);
-    this.botMaxHp = BOT_HP + st.maxHealth;
-    this.botHp = Math.min(this.botMaxHp, this.botHp + Math.max(0, this.botMaxHp - BOT_HP));
+    this.recalcMaxHp();
     this.setClass(cls); // silhouette
+  }
+  private recalcMaxHp(): void {
+    const cap = BOT_HP + CLASS_STATS[this.armorClass].maxHealth + this.perkHealthBonus;
+    const gained = cap - this.botMaxHp;
+    this.botMaxHp = cap;
+    if (gained > 0) this.botHp = Math.min(cap, this.botHp + gained);
   }
   respawnAt = 0;
   /** CTF: carrying the enemy flag home — objective overrides roam. */
@@ -126,6 +143,8 @@ export class GameBot extends RemotePlayer {
    *  plays online. Returns true when the hit killed. */
   takeDamageLocal(dmg: number, fromPos: THREE.Vector3): boolean {
     if (this.isDead) return false;
+    // Plated et al — the server's applyDamage applies the same resist.
+    dmg *= 1 - this.mods.damageResist;
     // Held shield burns tank instead of flesh — same exchange rate the
     // server shadow models (10 hp per energy point).
     if ((this.status & STATUS.SHIELD) && this.energy > 0) {
@@ -226,6 +245,8 @@ export class GameBot extends RemotePlayer {
     // Mend channel heals — 12 hp/s while the flag rides (same rate the
     // server applies to a mending player).
     if (this.status & STATUS.MEND) this.botHp = Math.min(this.botMaxHp, this.botHp + 12 * dt);
+    // Regenerator — the server's per-player trickle, same rate.
+    if (this.mods.regen > 0 && !this.isDead) this.heal(this.mods.regen * dt);
     this.setMending(!!(this.status & STATUS.MEND));
     this.setShielded(!!(this.status & STATUS.SHIELD));
     this.setCloakHidden(!!(this.status & STATUS.CLOAK));
@@ -263,9 +284,11 @@ export class GameBot extends RemotePlayer {
       jetHeld: jet,
     });
     this.movement.update(dt);
-    if (jet && this.yeetT <= 0) this.energy = Math.max(0, this.energy - ENERGY.jetDrain * dt);
+    if (jet && this.yeetT <= 0) this.energy = Math.max(0, this.energy - ENERGY.jetDrain * this.mods.jetDrain * dt);
     else if (this.moveState.onGround && this.energy < ENERGY.max) {
-      this.energy = Math.min(ENERGY.max, this.energy + ENERGY.jetCharge * dt);
+      // One tank feeds jets AND skills — featherjets' fuel regen and
+      // overcharge's pool regen both land here.
+      this.energy = Math.min(ENERGY.max, this.energy + ENERGY.jetCharge * this.mods.jetRegen * this.mods.energyRegen * dt);
     }
 
     this.wireSki = !!move?.ski;
@@ -282,10 +305,11 @@ export class GameBot extends RemotePlayer {
     const dy = this.position.y - fromPos.y;
     const dz = this.position.z - fromPos.z;
     const dist = Math.sqrt(dx * dx + dy * dy + dz * dz) || 0.001;
+    const mag = impulseMag * this.mods.knockbackTaken;
     const s = pull ? -1 : 1;
-    this.velocity.x += (dx / dist) * impulseMag * s;
-    this.velocity.y += (pull ? 0.3 : 0.5) * impulseMag;
-    this.velocity.z += (dz / dist) * impulseMag * s;
+    this.velocity.x += (dx / dist) * mag * s;
+    this.velocity.y += (pull ? 0.3 : 0.5) * mag;
+    this.velocity.z += (dz / dist) * mag * s;
   }
 
   override respawn(position: { x: number; y: number; z: number }): void {

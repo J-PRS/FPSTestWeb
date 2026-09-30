@@ -106,7 +106,7 @@ export class TeamBots {
           ni % 4 === 1 ? 'light' : ni % 4 === 3 ? 'heavy' : 'medium');
         // Same roster the dedicated server fields — loadout picks the
         // weapon by engagement range instead of one generic bolt.
-        bot.loadout = BOT_LOADOUTS[(ni - 1) % BOT_LOADOUTS.length];
+        bot.setLoadout(BOT_LOADOUTS[(ni - 1) % BOT_LOADOUTS.length]!);
         if (ffa) {
           // FFA pseudo-team = own id — everyone is everyone else's enemy.
           bot.team = bot.playerId;
@@ -531,8 +531,12 @@ export class TeamBots {
     const muzzle = _shotMuzzle.set(bot.position.x, bot.position.y + 1.4, bot.position.z);
     const pellets = SLOT_DEFS.find(w => w.weaponType === wt)?.pellets;
     for (const d of pelletDirs(dir, pellets?.count ?? 1, pellets?.spread ?? 0)) {
+      // Perk mods the server folds in: bombardier widens the boom,
+      // sharpshooter tightens it (damage scaling lands at claim time).
+      const radius = cfg.aoeRadius * bot.perkMods.aoeRadius;
+      const dmg = cfg.aoeDamage * bot.perkMods.directDamage;
       const p = new Projectile(this.deps.lazyScene(), muzzle, d, bot.vel,
-        { ...cfg, needsServerTracking: false });
+        { ...cfg, aoeRadius: radius, aoeDamage: dmg, needsServerTracking: false });
       p.shooterId = bot.playerId;
       // 'local' isn't in remotePlayerPositions — this lets a bot shell
       // actually CONNECT with you instead of relying on a trigger-time claim.
@@ -594,7 +598,9 @@ export class TeamBots {
     const p = new Projectile(this.deps.lazyScene(),
       _shotMuzzle.set(bot.position.x, bot.position.y + 1.4, bot.position.z),
       _shotDir.set(vx / vl, vy / vl, vz / vl), bot.vel,
-      { ...cfg, needsServerTracking: false });
+      { ...cfg, aoeRadius: cfg.aoeRadius * bot.perkMods.aoeRadius,
+        aoeDamage: cfg.aoeDamage * bot.perkMods.directDamage,
+        needsServerTracking: false });
     p.shooterId = bot.playerId;
     p.sweepLocal = () => { const pl = this.deps.lazyPlayer(); return pl.isDead ? null : pl.pos; };
     this.deps.world.projectiles.push(p);
