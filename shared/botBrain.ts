@@ -562,57 +562,78 @@ export class BotBrain {
       // Hit from somewhere unseen: push toward the shooter rather than
       // continue a patrol — the flinch already spent the recoil.
       this.goal = { ...this.revengeFrom };
-    } else if ((ctx.healthFrac ?? 1) < 0.4 && ctx.others && ctx.others.length > 0) {
-      // Hurt with nobody shooting back at: fold toward the nearest body.
-      // Safety-in-numbers emerges — nobody scripts a retreat.
-      let ally: BotVec | null = null;
-      let ad = Infinity;
-      for (const o of ctx.others) {
-        const d = distSq(pos, o);
-        if (d < ad && d > 4) { ad = d; ally = o; }
-      }
-      if (ally) this.goal = { ...ally };
-    } else if (ctx.objective) {
-      this.goal = { ...ctx.objective };
-    } else if (ctx.pickup) {
-      this.goal = { ...ctx.pickup };
-    } else if (ctx.sounds && ctx.sounds.length > 0) {
-      // Heard a fight: investigate the nearest noise. Curiosity is a
-      // personality roll so a squad doesn't stampede as one.
-      let loudest: BotVec | null = null;
-      let ld = Infinity;
-      for (const s of ctx.sounds) {
-        const d = distSq(pos, s);
-        if (d < ld) { ld = d; loudest = s; }
-      }
-      if (loudest && Math.random() < this.wanderlust * 0.5) this.goal = { ...loudest };
-    } else if (this.wanderT <= 0 || distSq(pos, this.wanderWp) < 9) {
+      return;
+    }
+    if ((ctx.healthFrac ?? 1) < 0.4 && ctx.others && ctx.others.length > 0) {
+      const rally = this.rallyGoal(ctx, pos);
+      if (rally) this.goal = rally;
+      return;
+    }
+    if (ctx.objective) { this.goal = { ...ctx.objective }; return; }
+    if (ctx.pickup) { this.goal = { ...ctx.pickup }; return; }
+    if (ctx.sounds && ctx.sounds.length > 0) {
+      const heard = this.heardGoal(ctx, pos);
+      if (heard) this.goal = heard;
+      return;
+    }
+    if (this.wanderT <= 0 || distSq(pos, this.wanderWp) < 9) {
       this.wanderT = (3 + Math.random() * 4) / this.wanderlust;
-      // Roll a few candidate waypoints; downhill lines win — picking the
-      // low ground is what makes wander read as skiing runs instead of a
-      // jog across flats. Death spots are skipped outright.
-      const g0 = ctx.groundY(pos.x, pos.z);
-      let best: { x: number; y: number; z: number } | null = null;
-      let bestDrop = -Infinity;
-      for (let tries = 0; tries < 3; tries++) {
-        // Committed lines: a skier picks a direction and holds it — the
-        // roll is a forward cone off the current heading with real run
-        // length, not a fresh random bearing that reverses mid-carve.
-        const a = Math.atan2(this.heading.z, this.heading.x) + (Math.random() - 0.5) * 2.4;
-        const r = (25 + Math.random() * 55) * this.wanderlust;
-        const wp = { x: pos.x + Math.cos(a) * r, z: pos.z + Math.sin(a) * r };
-        if (this.nearDeath(wp)) continue;
-        const drop = g0 - ctx.groundY(wp.x, wp.z);
-        if (drop > bestDrop) {
-          bestDrop = drop;
-          best = { x: wp.x, y: ctx.groundY(wp.x, wp.z) + BOT_EYE, z: wp.z };
-        }
-      }
+      const best = this.rollWander(ctx, pos);
       if (best) {
         this.wanderWp = best;
         this.goal = { ...this.wanderWp };
       }
     }
+  }
+
+  /** Roll a few candidate waypoints; downhill lines win — picking the
+   *  low ground is what makes wander read as skiing runs instead of a
+   *  jog across flats. Death spots are skipped outright. */
+  private rollWander(ctx: BrainCtx, pos: BotVec): BotVec | null {
+    const g0 = ctx.groundY(pos.x, pos.z);
+    let best: BotVec | null = null;
+    let bestDrop = -Infinity;
+    for (let tries = 0; tries < 3; tries++) {
+      // Committed lines: a skier picks a direction and holds it — the
+      // roll is a forward cone off the current heading with real run
+      // length, not a fresh random bearing that reverses mid-carve.
+      const a = Math.atan2(this.heading.z, this.heading.x) + (Math.random() - 0.5) * 2.4;
+      const r = (25 + Math.random() * 55) * this.wanderlust;
+      const wp = { x: pos.x + Math.cos(a) * r, z: pos.z + Math.sin(a) * r };
+      if (this.nearDeath(wp)) continue;
+      const drop = g0 - ctx.groundY(wp.x, wp.z);
+      if (drop > bestDrop) {
+        bestDrop = drop;
+        best = { x: wp.x, y: ctx.groundY(wp.x, wp.z) + BOT_EYE, z: wp.z };
+      }
+    }
+    return best;
+  }
+
+  /** Hurt with nobody shooting back at: fold toward the nearest body.
+   *  Safety-in-numbers emerges — nobody scripts a retreat. */
+  private rallyGoal(ctx: BrainCtx, pos: BotVec): BotVec | null {
+    if ((ctx.healthFrac ?? 1) >= 0.4 || !ctx.others || ctx.others.length === 0) return null;
+    let ally: BotVec | null = null;
+    let ad = Infinity;
+    for (const o of ctx.others) {
+      const d = distSq(pos, o);
+      if (d < ad && d > 4) { ad = d; ally = o; }
+    }
+    return ally ? { ...ally } : null;
+  }
+
+  /** Heard a fight: investigate the nearest noise. Curiosity is a
+   *  personality roll so a squad doesn't stampede as one. */
+  private heardGoal(ctx: BrainCtx, pos: BotVec): BotVec | null {
+    if (!ctx.sounds || ctx.sounds.length === 0) return null;
+    let loudest: BotVec | null = null;
+    let ld = Infinity;
+    for (const s of ctx.sounds) {
+      const d = distSq(pos, s);
+      if (d < ld) { ld = d; loudest = s; }
+    }
+    return loudest && Math.random() < this.wanderlust * 0.5 ? { ...loudest } : null;
   }
 
   /** Toggle-skill intent — the STATUS bits a legal client claims. Mend
@@ -648,34 +669,21 @@ export class BotBrain {
     if (gd < 0.5) return { ski: false, jet: false, jump: false };
     const nx = dx / gd, nz = dz / gd;
     const g0 = ctx.groundY(pos.x, pos.z);
-    const ahead = ctx.groundY(pos.x + nx * 6, pos.z + nz * 6);
-    const rise = ahead - g0;
+    const rise = ctx.groundY(pos.x + nx * 6, pos.z + nz * 6) - g0;
     const speed = ctx.vel ? Math.hypot(ctx.vel.x, ctx.vel.z) : 0;
     const airborne = pos.y - g0 > 2;
     // Jet when the way ahead climbs faster than running covers — or the
     // hunt target is clearly airborne and pursuit needs altitude.
     const uphill = rise > 2;
-    const targetHigh = this.hunt ? this.hunt.pos.y - pos.y > 6 : false;
-    const destHigh = dest.y - pos.y > 3;
     // Jet respects the tank — below the reserve the bot saves energy for
     // skills rather than hovering dry at the wall.
     const tanked = ctx.energy === undefined || ctx.energy > 15;
-    // Discretionary spending asks for a healthier tank — boosting to
-    // speed is nice-to-have, climbing out of a hole is not.
-    const comfy = ctx.energy === undefined || ctx.energy > 30;
-    // The Tribes hop: on gentle rises, ski through the approach and jet-
-    // assist over the lip — the up-over-down rhythm that converts energy
-    // into speed. A bot that only jets on cliffs never gets dynamic.
-    const hop = rise > 0.5 && rise <= 3;
-    // The anti-sheep move: a bot at walking pace with ground to cover
-    // jets to build momentum — jet thrust pushes forward too, so this
-    // converts fuel into travel speed instead of plodding.
-    const boost = speed < 12 && gd > 15 && comfy;
     this.jetHold = Math.max(0, this.jetHold - dt);
-    const wantJet = uphill || targetHigh || destHigh || hop || boost;
     // Re-arm while the reason holds (a long climb = one long burn),
     // plus a minimum pulse so a gate flicker can't chop the burn.
-    if (wantJet && tanked) this.jetHold = Math.max(this.jetHold, 0.45 + Math.random() * 0.4);
+    if (this.wantJet(ctx, pos, dest, rise, speed, gd) && tanked) {
+      this.jetHold = Math.max(this.jetHold, 0.45 + Math.random() * 0.4);
+    }
     const jet = (this.jetHold > 0 || this.escapeJetT > 0) && tanked;
     return {
       // Tribes default: ski is held whenever the bot has somewhere to
@@ -687,6 +695,26 @@ export class BotBrain {
       // Uphill + near-stationary = hop it; autohop chains the rest.
       jump: uphill && speed < 3 && !airborne,
     };
+  }
+
+  /** Whether the situation calls for a burn: genuine climbs, airborne
+   *  prey, a high destination — or discretionary speed plays when the
+   *  tank is comfortable. */
+  private wantJet(ctx: BrainCtx, pos: BotVec, dest: BotVec, rise: number, speed: number, gd: number): boolean {
+    const targetHigh = this.hunt ? this.hunt.pos.y - pos.y > 6 : false;
+    const destHigh = dest.y - pos.y > 3;
+    // Discretionary spending asks for a healthier tank — boosting to
+    // speed is nice-to-have, climbing out of a hole is not.
+    const comfy = ctx.energy === undefined || ctx.energy > 30;
+    // The Tribes hop: on gentle rises, ski through the approach and jet-
+    // assist over the lip — the up-over-down rhythm that converts energy
+    // into speed. A bot that only jets on cliffs never gets dynamic.
+    const hop = rise > 0.5 && rise <= 3;
+    // The anti-sheep move: a bot at walking pace with ground to cover
+    // jets to build momentum — jet thrust pushes forward too, so this
+    // converts fuel into travel speed instead of plodding.
+    const boost = speed < 12 && gd > 15 && comfy;
+    return rise > 2 || targetHigh || destHigh || hop || boost;
   }
 
   /** Killzone-style position pick: score a ring of candidate spots by
@@ -765,32 +793,7 @@ export class BotBrain {
       interest *= interest; // sharpen: prefer near-goal arcs over drift
       interest += 0.25 * Math.max(0, dx * this.heading.x + dz * this.heading.z);
 
-      let danger = 0;
-      const riseA = ctx.groundY(pos.x + dx * PROBE_A, pos.z + dz * PROBE_A) - g0;
-      const riseB = ctx.groundY(pos.x + dx * PROBE_B, pos.z + dz * PROBE_B) - g0;
-      const slope = Math.max(riseA / PROBE_A, riseB / PROBE_B);
-      if (slope > 0.45) danger = Math.min(1, danger + (slope - 0.45) * 2);
-      if (riseA < -12) danger = Math.min(1, danger + 0.5); // sheer drop
-
-      if (ctx.others) {
-        for (const o of ctx.others) {
-          const ox = o.x - pos.x, oz = o.z - pos.z;
-          const od = Math.hypot(ox, oz);
-          if (od > SEP_RANGE || od < 0.01) continue;
-          const toward = dx * (ox / od) + dz * (oz / od);
-          if (toward > 0.5) danger = Math.min(1, danger + toward * (1 - od / SEP_RANGE));
-        }
-      }
-      for (const m of this.memory) {
-        const mx = m.x - pos.x, mz = m.z - pos.z;
-        const md = Math.hypot(mx, mz);
-        if (md > MEM_RANGE || md < 0.5) continue;
-        const toward = dx * (mx / md) + dz * (mz / md);
-        if (toward > 0.5) {
-          danger = Math.min(1, danger + toward * 0.2 * (1 - md / MEM_RANGE) * (1 - (now - m.t) / MEM_MS));
-        }
-      }
-
+      const danger = this.slotDanger(ctx, pos, dx, dz, g0, now);
       const score = interest * (1 - danger);
       if (score > bestScore) { bestScore = score; bestX = dx; bestZ = dz; }
       if (danger < safeDanger) { safeDanger = danger; safeX = dx; safeZ = dz; }
@@ -814,6 +817,38 @@ export class BotBrain {
     this.heading.x = Math.sin(a); this.heading.z = Math.cos(a);
     const step = Math.min(gd, STEP);
     return { x: pos.x + this.heading.x * step, y: pos.y, z: pos.z + this.heading.z * step };
+  }
+
+  /** Danger score [0..1] for one steering slot: slope probes (climbs,
+   *  sheer drops), bodies in the way, and the recently-visited memory
+   *  trail that lets a bot escape a local minimum. */
+  private slotDanger(ctx: BrainCtx, pos: BotVec, dx: number, dz: number, g0: number, now: number): number {
+    let danger = 0;
+    const riseA = ctx.groundY(pos.x + dx * PROBE_A, pos.z + dz * PROBE_A) - g0;
+    const riseB = ctx.groundY(pos.x + dx * PROBE_B, pos.z + dz * PROBE_B) - g0;
+    const slope = Math.max(riseA / PROBE_A, riseB / PROBE_B);
+    if (slope > 0.45) danger = Math.min(1, danger + (slope - 0.45) * 2);
+    if (riseA < -12) danger = Math.min(1, danger + 0.5); // sheer drop
+
+    if (ctx.others) {
+      for (const o of ctx.others) {
+        const ox = o.x - pos.x, oz = o.z - pos.z;
+        const od = Math.hypot(ox, oz);
+        if (od > SEP_RANGE || od < 0.01) continue;
+        const toward = dx * (ox / od) + dz * (oz / od);
+        if (toward > 0.5) danger = Math.min(1, danger + toward * (1 - od / SEP_RANGE));
+      }
+    }
+    for (const m of this.memory) {
+      const mx = m.x - pos.x, mz = m.z - pos.z;
+      const md = Math.hypot(mx, mz);
+      if (md > MEM_RANGE || md < 0.5) continue;
+      const toward = dx * (mx / md) + dz * (mz / md);
+      if (toward > 0.5) {
+        danger = Math.min(1, danger + toward * 0.2 * (1 - md / MEM_RANGE) * (1 - (now - m.t) / MEM_MS));
+      }
+    }
+    return danger;
   }
 }
 

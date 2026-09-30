@@ -1,3 +1,4 @@
+2026-09-26 - botBrain helpers decomposed: rollWander/rallyGoal/heardGoal/wantJet/slotDanger extracted — zero oxlint warnings remain in the file.
 2026-09-26 - botBrain.think decomposed (complexity 78→under limit): pickHunt/scanVisible/pickDest/retreatDest/pickFire/pickDeploy/stuckBreak extracted as named phases — think() is now a readable conductor.
 2026-09-26 - Charge detonation now covers server-authored hits too: serverHit (bot attacks, turrets) detonates min(banked,dmg) off a charged victim, matching the client claim path.
 2026-09-26 - RemotePlayer aura dedupe: mend/regen/dd/charge collapse into a keyed statusAuras map — a new one-bit glow is a table row, not a fifth copy of field/update/hide/show/setter.
