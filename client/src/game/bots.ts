@@ -2,6 +2,7 @@ import * as THREE from 'three';
 
 import { GameBot, EYE } from './botBrain.js';
 import { BotWatchdog } from './botWatchdog.js';
+import { SheepMeter } from './botSheep.js';
 import { BOT_LOADOUTS } from '../../../shared/botLoadouts.js';
 import { WeaponType } from '../../../shared/weapons.js';
 import type { Nugget } from '../entities/Nugget.js';
@@ -80,6 +81,9 @@ export class TeamBots {
   ctf: CtfBridge | null = null;
   private senses: BotSenses;
   private fire: BotFire;
+  // Anti-pedestrian meter (idle/ignore/bleed/coverage + yeet)
+  // lives in botSheep.ts — rates mirror the server meter.
+  private sheep = new SheepMeter({ warn: (m) => this.deps.logger.warn(m) });
 
   constructor(
     readonly deps: BotsDeps,
@@ -195,7 +199,7 @@ export class TeamBots {
     // Sheep coverage windows run on sim ms advanced ONCE per frame —
     // doing it inside sheepTick scaled every 5s window by the roster
     // size (9 bots → windows fired ~9x too often, cover-dominated yeets).
-    this.sheepSimMs += dt * 1000;
+    this.sheep.advance(dt);
     for (const bot of this.bots) this.tickBot(bot, dt, others, terrain);
   }
 
@@ -212,7 +216,7 @@ export class TeamBots {
     }
     const foes = this.senses.enemyList(bot);
     const shot = bot.think(dt, this.ctxFor(bot, foes, others, terrain));
-    if (this.over) { this.sheepTick(bot, dt, terrain); return; }
+    if (this.over) { this.sheep.tick(bot, dt, terrain); return; }
     if (shot) this.fire.resolveShot(bot, shot.targetId, shot.aim);
     // Belt + propel are real-spawn actions — offline only, same gate
     // as resolveShot (a connected room's wire remotes can't attribute).
@@ -222,13 +226,13 @@ export class TeamBots {
       if (bot.wantDeploy) this.tryDeploy(bot);
       this.fire.tryPropel(bot, !!shot);
     }
-    if (shot) this.lastShot.set(bot.playerId, performance.now());
+    if (shot) this.sheep.markShot(bot.playerId);
     // "Ignoring" means a sustained refusal to fire — volley cadence
     // legitimately goes ~2s between bursts, so a mid-fight gap isn't a
     // tell. Same 3s recency window the server meter uses.
-    const ignoring = !shot && performance.now() - (this.lastShot.get(bot.playerId) ?? -Infinity) > 3000;
+    const ignoring = !shot && this.sheep.notShooting(bot.playerId);
     const hasDest = Math.hypot(bot.lastDest.x - bot.pos.x, bot.lastDest.z - bot.pos.z) >= 0.5;
-    this.sheepTick(bot, dt, terrain, this.senses.foeSeen(bot, foes, terrain), ignoring, hasDest);
+    this.sheep.tick(bot, dt, terrain, this.senses.foeSeen(bot, foes, terrain), ignoring, hasDest);
   }
 
   /** One brain ctx per bot per tick — every sense the server feeds its
@@ -277,103 +281,6 @@ export class TeamBots {
   // Coverage window — mirrors BotSheepMeter.coverageDebit on the wire:
   // under ~30m of real displacement per 5s while the brain claims a
   // destination reads as sheeping even when per-tick speed squeaks by.
-  // Windows run on sim dt, not wall clock — a throttled frame would
-  // otherwise mis-measure the distance.
-  private sheepCov = new Map<string, { start: number; dist: number; lx: number; ly: number; lz: number }>();
-  private sheepSimMs = 0;
-
-  private coverageDebit(bot: GameBot, hasDest: boolean): number {
-    const now = this.sheepSimMs;
-    let w = this.sheepCov.get(bot.playerId);
-    if (!w) { w = { start: now, dist: 0, lx: bot.pos.x, ly: bot.pos.y, lz: bot.pos.z }; this.sheepCov.set(bot.playerId, w); }
-    // 3D displacement — XZ-only reads a bot grinding up a steep
-    // slope (half of every T2 port) as covering no ground.
-    w.dist += Math.hypot(bot.pos.x - w.lx, bot.pos.y - w.ly, bot.pos.z - w.lz);
-    w.lx = bot.pos.x; w.ly = bot.pos.y; w.lz = bot.pos.z;
-    if (now - w.start < 5000) return 0;
-    const owed = hasDest && w.dist < 30 ? 20 : 0;
-    w.start = now; w.dist = 0;
-    return owed;
-  }
-
-  /** Last sampled mechanical energy (per unit mass) — the momentum
-   *  conservation probe: ½v² + g·height-above-terrain. */
-  private sheepE = new Map<string, number>();
-
-  /** Instantaneous E loss since last sample, clamped — a bot sliding
-   *  to a deadstop bleeds once, not forever. */
-  private energyBleed(bot: GameBot, v: THREE.Vector3, height: number, foe: boolean): number {
-    const mech = 0.5 * (v.x * v.x + v.y * v.y + v.z * v.z) + 9.8 * height;
-    const ePrev = this.sheepE.get(bot.playerId);
-    this.sheepE.set(bot.playerId, mech);
-    if (ePrev === undefined || mech >= ePrev || foe || bot.yeetT > 0) return 0;
-    return Math.min(8, (ePrev - mech) * 0.08);
-  }
-
-  /** Per-source sheep ledger — positive charge points each channel
-   *  contributed since the last yeet, dumped into the warn so tuning
-   *  reads "why" instead of "that". */
-  private sheepWhy = new Map<string, { idle: number; ignore: number; bleed: number; cover: number }>();
-  /** Wall-ms of each bot's last fired shot — the ignore debit needs
-   *  recency, not a per-tick fire flag. */
-  private lastShot = new Map<string, number>();
-
-  private sheepLedger(id: string): { idle: number; ignore: number; bleed: number; cover: number } {
-    let w = this.sheepWhy.get(id);
-    if (!w) { w = { idle: 0, ignore: 0, bleed: 0, cover: 0 }; this.sheepWhy.set(id, w); }
-    return w;
-  }
-
-  /** Counts as Tribesing while it's converting — speed, airtime, or still
-   *  inside the post-yeet pin (a yeeted bot shouldn't re-drain instantly). */
-  private static isTribesing(bot: GameBot, speedXZ: number, grounded: boolean): boolean {
-    return speedXZ > 10 || !grounded || bot.yeetT > 0;
-  }
-
-  private sheepTick(bot: GameBot, dt: number, terrain: Terrain, foe = false, ignoring = false, hasDest = false): void {
-    const v = bot.vel;
-    const speedXZ = Math.hypot(v.x, v.z);
-    const height = bot.pos.y - terrain.getHeight(bot.pos.x, bot.pos.z);
-    const grounded = height < 2;
-    const tribesing = TeamBots.isTribesing(bot, speedXZ, grounded);
-    const moving = speedXZ > 1;
-    const why = this.sheepLedger(bot.playerId);
-    // Rates mirror the server meter — a bot offline is held to the same
-    // standard it is on the wire.
-    let delta = tribesing ? -(10 + speedXZ * 0.5 + (bot.yeetT > 0 ? 15 : 0)) : moving ? 9 : 18;
-    if (!tribesing) why.idle += delta * dt;
-    // Parked within reach of a visible enemy and holding fire — the
-    // fastest tell. Only counts while NOT tribesing: a bot that's
-    // skiing or repositioning is playing even with its finger off.
-    if (foe && ignoring && !tribesing) { delta += 40; why.ignore += 40 * dt; }
-    // Bleeding total energy without a fight on screen is the deadstop
-    // signature — Tribes play is converting height↔speed losslessly,
-    // so E stays flat through clean skiing and only drops on
-    // face-plants, wall hits, and pedestrian friction.
-    const bleed = this.energyBleed(bot, v, height, foe);
-    why.bleed += bleed;
-    bot.sheep += bleed;
-    const cover = tribesing ? 0 : this.coverageDebit(bot, hasDest);
-    why.cover += cover;
-    bot.sheep += cover;
-    bot.sheep = Math.max(0, Math.min(100, bot.sheep + delta * dt));
-    // ~2s trailing average for display — the raw meter jitters ±10/s
-    // around the fill/drain boundary, which reads as flicker.
-    bot.sheepShown += (bot.sheep - bot.sheepShown) * Math.min(1, dt * 0.5);
-    if (bot.sheep >= 100) this.yeetSheep(bot);
-  }
-
-  private yeetSheep(bot: GameBot): void {
-    // Post-yeet the meter lands at 40 like the server — otherwise the
-    // pinned jet ends inside a still-full meter and re-yeets forever.
-    bot.sheep = 40;
-    bot.yeet();
-    const w = this.sheepWhy.get(bot.playerId) ?? { idle: 0, ignore: 0, bleed: 0, cover: 0 };
-    this.sheepWhy.set(bot.playerId, { idle: 0, ignore: 0, bleed: 0, cover: 0 });
-    this.deps.logger.warn(
-      `bot ${bot.playerId} yeeted — sheep 100 (why: idle=${w.idle.toFixed(1)} ignore=${w.ignore.toFixed(1)} bleed=${w.bleed.toFixed(1)} cover=${w.cover.toFixed(1)})`);
-  }
-
   /** Terrain swapped under the roster — re-seat every live bot on the
    *  spawn ring near the player without touching hp/meters/loadout. */
   reseatAll(): void {
@@ -414,8 +321,7 @@ export class TeamBots {
     bot.sheep = 0; // fresh leash on the meter
     bot.sheepShown = 0;
     bot.yeetT = 0;
-    this.sheepE.delete(bot.playerId);
-    this.sheepWhy.delete(bot.playerId);
+    this.sheep.clear(bot.playerId);
     bot.show();
     bot.setGizmoColor(bot.team === 'ffa' ? 0xcc66ff : TEAM_COLORS[bot.team as TeamId]);
   }

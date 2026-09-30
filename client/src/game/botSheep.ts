@@ -1,0 +1,135 @@
+import * as THREE from 'three';
+import { Terrain } from '../world/terrain.js';
+import type { GameBot } from './botBrain.js';
+
+/**
+ * SheepMeter — the anti-pedestrian meter for offline bots. Charged on
+ * four channels (idle, ignoring a visible foe, energy bleed, coverage
+ * stall) and yeets at 100. Rates mirror the server meter — a bot
+ * offline is held to the same standard it is on the wire.
+ */
+
+interface SheepHost {
+  warn(msg: string): void;
+}
+
+export class SheepMeter {
+  // Coverage windows run on sim dt, not wall clock — a throttled frame
+  // would otherwise mis-measure the distance.
+  private cov = new Map<string, { start: number; dist: number; lx: number; ly: number; lz: number }>();
+  private simMs = 0;
+
+  /** Last sampled mechanical energy (per unit mass) — the momentum
+   *  conservation probe: ½v² + g·height-above-terrain. */
+  private eLast = new Map<string, number>();
+
+  /** Per-source ledger — positive charge points each channel contributed
+   *  since the last yeet, dumped into the warn so tuning reads "why"
+   *  instead of "that". */
+  private why = new Map<string, { idle: number; ignore: number; bleed: number; cover: number }>();
+  /** Wall-ms of each bot's last fired shot — the ignore debit needs
+   *  recency, not a per-tick fire flag. */
+  private lastShot = new Map<string, number>();
+
+  constructor(private h: SheepHost) {}
+
+  /** Advance once per frame — NOT per bot: doing it inside tick() scaled
+   *  every 5s window by the roster size. */
+  advance(dt: number): void {
+    this.simMs += dt * 1000;
+  }
+
+  markShot(id: string): void {
+    this.lastShot.set(id, performance.now());
+  }
+
+  /** >3s since this bot last fired — long enough that holding fire in
+   *  front of a visible foe is a tell, not a reload beat. */
+  notShooting(id: string): boolean {
+    return performance.now() - (this.lastShot.get(id) ?? -Infinity) > 3000;
+  }
+
+  /** Respawn clears the bot's meter state — a fresh life starts clean. */
+  clear(id: string): void {
+    this.eLast.delete(id);
+    this.why.delete(id);
+  }
+
+  tick(bot: GameBot, dt: number, terrain: Terrain, foe = false, ignoring = false, hasDest = false): void {
+    const v = bot.vel;
+    const speedXZ = Math.hypot(v.x, v.z);
+    const height = bot.pos.y - terrain.getHeight(bot.pos.x, bot.pos.z);
+    const grounded = height < 2;
+    const tribesing = SheepMeter.isTribesing(bot, speedXZ, grounded);
+    const moving = speedXZ > 1;
+    const why = this.ledger(bot.playerId);
+    let delta = tribesing ? -(10 + speedXZ * 0.5 + (bot.yeetT > 0 ? 15 : 0)) : moving ? 9 : 18;
+    if (!tribesing) why.idle += delta * dt;
+    // Parked within reach of a visible enemy and holding fire — the
+    // fastest tell. Only counts while NOT tribesing: a bot that's
+    // skiing or repositioning is playing even with its finger off.
+    if (foe && ignoring && !tribesing) { delta += 40; why.ignore += 40 * dt; }
+    // Bleeding total energy without a fight on screen is the deadstop
+    // signature — Tribes play is converting height↔speed losslessly,
+    // so E stays flat through clean skiing and only drops on
+    // face-plants, wall hits, and pedestrian friction.
+    const bleed = this.energyBleed(bot, v, height, foe);
+    why.bleed += bleed;
+    bot.sheep += bleed;
+    const cover = tribesing ? 0 : this.coverageDebit(bot, hasDest);
+    why.cover += cover;
+    bot.sheep += cover;
+    bot.sheep = Math.max(0, Math.min(100, bot.sheep + delta * dt));
+    // ~2s trailing average for display — the raw meter jitters ±10/s
+    // around the fill/drain boundary, which reads as flicker.
+    bot.sheepShown += (bot.sheep - bot.sheepShown) * Math.min(1, dt * 0.5);
+    if (bot.sheep >= 100) this.yeet(bot);
+  }
+
+  private yeet(bot: GameBot): void {
+    // Post-yeet the meter lands at 40 like the server — otherwise the
+    // pinned jet ends inside a still-full meter and re-yeets forever.
+    bot.sheep = 40;
+    bot.yeet();
+    const w = this.why.get(bot.playerId) ?? { idle: 0, ignore: 0, bleed: 0, cover: 0 };
+    this.why.set(bot.playerId, { idle: 0, ignore: 0, bleed: 0, cover: 0 });
+    this.h.warn(
+      `bot ${bot.playerId} yeeted — sheep 100 (why: idle=${w.idle.toFixed(1)} ignore=${w.ignore.toFixed(1)} bleed=${w.bleed.toFixed(1)} cover=${w.cover.toFixed(1)})`);
+  }
+
+  private coverageDebit(bot: GameBot, hasDest: boolean): number {
+    const now = this.simMs;
+    let w = this.cov.get(bot.playerId);
+    if (!w) { w = { start: now, dist: 0, lx: bot.pos.x, ly: bot.pos.y, lz: bot.pos.z }; this.cov.set(bot.playerId, w); }
+    // 3D displacement — XZ-only reads a bot grinding up a steep
+    // slope (half of every T2 port) as covering no ground.
+    w.dist += Math.hypot(bot.pos.x - w.lx, bot.pos.y - w.ly, bot.pos.z - w.lz);
+    w.lx = bot.pos.x; w.ly = bot.pos.y; w.lz = bot.pos.z;
+    if (now - w.start < 5000) return 0;
+    const owed = hasDest && w.dist < 30 ? 20 : 0;
+    w.start = now; w.dist = 0;
+    return owed;
+  }
+
+  /** Instantaneous E loss since last sample, clamped — a bot sliding
+   *  to a deadstop bleeds once, not forever. */
+  private energyBleed(bot: GameBot, v: THREE.Vector3, height: number, foe: boolean): number {
+    const mech = 0.5 * (v.x * v.x + v.y * v.y + v.z * v.z) + 9.8 * height;
+    const ePrev = this.eLast.get(bot.playerId);
+    this.eLast.set(bot.playerId, mech);
+    if (ePrev === undefined || mech >= ePrev || foe || bot.yeetT > 0) return 0;
+    return Math.min(8, (ePrev - mech) * 0.08);
+  }
+
+  private ledger(id: string): { idle: number; ignore: number; bleed: number; cover: number } {
+    let w = this.why.get(id);
+    if (!w) { w = { idle: 0, ignore: 0, bleed: 0, cover: 0 }; this.why.set(id, w); }
+    return w;
+  }
+
+  /** Counts as Tribesing while it's converting — speed, airtime, or still
+   *  inside the post-yeet pin (a yeeted bot shouldn't re-drain instantly). */
+  private static isTribesing(bot: GameBot, speedXZ: number, grounded: boolean): boolean {
+    return speedXZ > 10 || !grounded || bot.yeetT > 0;
+  }
+}
