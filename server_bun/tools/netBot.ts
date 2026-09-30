@@ -82,28 +82,7 @@ const stats = { sent: 0, recv: 0, corrections: 0, shots: 0, errors: 0, closes: 0
 // Warp detector: consecutive updates for an entity should move it about
 // speed·dt. A jump far past that is a visible teleport — server truth uses
 // the segment's own sim-time `t`, so late delivery doesn't false-positive.
-const lastSeg = new Map<string, { t: number; x: number; y: number; z: number; sp: number }>();
-function segJump(kind: 'ball' | 'crawl', id: number, x: number, y: number, z: number, sp: number, t: number, segKind = ''): void {
-  // Balls: only 'bounce' segments follow a predictable arc — lunge/hit/
-  // teleport/spawn/knockback all legitimately relocate it. Crawlers get
-  // checked on every event except their own teleports.
-  if (kind === 'ball' ? segKind !== 'bounce'
-    : (segKind === 'blink' || segKind === 'detonate')) return;
-  const key = `${kind}${id}`;
-  const prev = lastSeg.get(key);
-  lastSeg.set(key, { t, x, y, z, sp });
-  if (!prev) return;
-  const dt = t - prev.t;
-  if (dt <= 0) return; // stale or replayed segment
-  const jump = Math.hypot(x - prev.x, y - prev.y, z - prev.z);
-  const expected = Math.max(4, prev.sp * dt * 2 + 2); // slack for unseen accel
-  if (jump > expected) {
-    if (kind === 'ball') { stats.ballWarps++; stats.ballMaxJump = Math.max(stats.ballMaxJump, jump); }
-    else { stats.crawlWarps++; stats.crawlMaxJump = Math.max(stats.crawlMaxJump, jump); }
-  }
-  // Dead entries accumulate (despawns emit no final segment) — cap the map.
-  if (lastSeg.size > 400) lastSeg.clear();
-}
+
 
 // Minimal socket shape — WebSocket and the RTC adapter both satisfy it.
 interface Link {
@@ -216,6 +195,34 @@ class WireBot {
   ownShots: { id: string; until: number }[] = []; shotN = 0;
   nextDeploy = 0; nextChat = 0; nextTeleport = 0; nextHeal = 0; nextLoadout = 0; nextEnvDmg = 0; nextSwitch = 0;
   wasJump = false; wasJet = false;
+  // Warp state is per-bot — each socket sees its own (possibly interest-
+  // filtered) stream, so comparing across sockets invents teleports.
+  private lastSeg = new Map<string, { t: number; x: number; y: number; z: number; sp: number }>();
+
+  private segJump(kind: 'ball' | 'crawl', id: number, x: number, y: number, z: number, sp: number, t: number, segKind = ''): void {
+    // Balls: only 'bounce' segments follow a predictable arc — lunge/hit/
+    // teleport/spawn/knockback all legitimately relocate it. Crawlers get
+    // checked on every event except their own teleports.
+    if (kind === 'ball' ? segKind !== 'bounce'
+      : (segKind === 'blink' || segKind === 'detonate')) return;
+    const key = `${kind}${id}`;
+    const prev = this.lastSeg.get(key);
+    this.lastSeg.set(key, { t, x, y, z, sp });
+    if (!prev) return;
+    const dt = t - prev.t;
+    if (dt <= 0) return; // stale or replayed segment
+    // Interest-scoped delivery drops segments — a >0.5s gap can hide a
+    // legit relocation (hit/knockback between bounces), so only judge
+    // tight sample pairs where a jump is provably discontinuous.
+    if (dt > 0.5) return;
+    const jump = Math.hypot(x - prev.x, y - prev.y, z - prev.z);
+    const expected = Math.max(4, prev.sp * dt * 2 + 2); // slack for unseen accel
+    if (jump > expected) {
+      if (kind === 'ball') { stats.ballWarps++; stats.ballMaxJump = Math.max(stats.ballMaxJump, jump); }
+      else { stats.crawlWarps++; stats.crawlMaxJump = Math.max(stats.crawlMaxJump, jump); }
+    }
+    if (this.lastSeg.size > 400) this.lastSeg.clear();
+  }
 
   constructor(private i: number) {
     this.id = `NB-${i}-${Math.random().toString(36).slice(2, 6)}`;
@@ -224,7 +231,7 @@ class WireBot {
 
   private async connect(): Promise<void> {
     if (NET !== 'ws') {
-      this.link = await connectRtc((d) => this.onMessage(d), () => { stats.closes++; this.stop(); });
+      this.link = await connectRtc((d) => this.onMessage(d), () => { stats.closes++; console.log(`[netBot] ${this.id} rtc closed`); this.stop(); });
       if (this.link) { this.tier = 'rtc'; stats.rtc++; }
     }
     if (!this.link) {
@@ -235,7 +242,7 @@ class WireBot {
       ws.onopen = () => this.onLinkOpen();
       ws.onmessage = (e) => this.onMessage(e.data);
       ws.onerror = () => stats.errors++;
-      ws.onclose = () => { stats.closes++; this.stop(); };
+      ws.onclose = (e) => { stats.closes++; console.log(`[netBot] ${this.id} closed ${e.code} ${e.reason}`); this.stop(); };
       this.link = {
         send: (d) => { if (ws.readyState === 1) ws.send(d); },
         close: () => ws.close(),
@@ -283,7 +290,7 @@ class WireBot {
       const seg = decodeBallSegment(new Uint8Array(data));
       if (seg) {
         stats.ballSegs++;
-        segJump('ball', seg.id, seg.position.x, seg.position.y, seg.position.z,
+        this.segJump('ball', seg.id, seg.position.x, seg.position.y, seg.position.z,
           Math.hypot(seg.velocity.x, seg.velocity.y, seg.velocity.z), seg.t, seg.kind);
         this.balls.set(seg.id, seg.position);
         if (this.balls.size > 300) this.balls.clear();
@@ -316,13 +323,13 @@ class WireBot {
       case 'pong': this.pingMs = Math.max(1, Date.now() - m.timestamp); break;
       case 'crawlEvt':
         stats.crawlEvts++;
-        segJump('crawl', m.id, m.position.x, m.position.y, m.position.z,
+        this.segJump('crawl', m.id, m.position.x, m.position.y, m.position.z,
           Math.hypot(m.velocity?.x ?? 0, m.velocity?.y ?? 0, m.velocity?.z ?? 0), m.t, m.kind);
         this.crawls.set(m.id, m.position);
         if (this.crawls.size > 300) this.crawls.clear();
         break;
-      case 'ballDie': this.balls.delete(m.id); break;
-      case 'crawlDie': this.crawls.delete(m.id); break;
+      case 'ballDie': this.balls.delete(m.id); this.lastSeg.delete(`ball${m.id}`); break;
+      case 'crawlDie': this.crawls.delete(m.id); this.lastSeg.delete(`crawl${m.id}`); break;
       case 'correction':
         // A real client rewinds to the server's truth — do the same.
         if (this.sim) {
@@ -332,6 +339,18 @@ class WireBot {
           if (m.grounded !== undefined) s.onGround = m.grounded;
         }
         stats.corrections++;
+        break;
+      case 'playerRespawn':
+        // Our own respawn — a real client snaps to the spawn point.
+        // Without this the local sim keeps reporting from the corpse
+        // spot and the judge reads 100m+ of "teleport" divergence.
+        if (m.playerId === this.id && this.sim) {
+          const s = this.sim.state;
+          s.pos.x = m.position.x; s.pos.y = m.position.y; s.pos.z = m.position.z;
+          s.vel.x = 0; s.vel.y = 0; s.vel.z = 0;
+          s.onGround = true;
+          this.waypoint = { x: rand(-140, 140), z: rand(-140, 140) };
+        }
         break;
     }
   }
