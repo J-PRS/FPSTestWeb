@@ -295,6 +295,7 @@ export class MessageHandler {
     }
     this.combat.onPlayerDisconnected(playerId);
     this.roomInfo.moveUntrack?.(playerId);
+    this.lastTeleport.delete(playerId);
   }
 
   /** Drop live projectiles when a player is fully removed (grace timeout /
@@ -307,6 +308,7 @@ export class MessageHandler {
       if (key.startsWith(`${playerId}:`)) this.rateLimitWarnings.delete(key);
     }
     this.combat.onPlayerRemoved(playerId);
+    this.lastTeleport.delete(playerId);
     // Removal paths that skip onPlayerDisconnected (kick, reap, admin
     // reload, bot retire) must still free the moveSim shadow.
     this.roomInfo.moveUntrack?.(playerId);
@@ -591,9 +593,21 @@ export class MessageHandler {
   // Declared discontinuity (warp beacon, respawn): position arrives
   // pre-accepted — reseat the plausibility anchor so the NEXT report
   // deltas from here instead of measuring a 50m jump as a speedhack.
+  /** Declared-warp cadence — TL beacons are ≥4s apart (TL_COOLDOWN),
+   *  joins/respawns are one-offs, so 3s leaves every legal warp free
+   *  while a teleport-spam client eats plausibility corrections instead
+   *  of free relocation. */
+  private lastTeleport = new Map<string, number>();
+
   private handleTeleport(playerId: string, msg: Extract<ClientMessage, { type: 'teleport' }>): void {
     const player = this.playerManager.getPlayer(playerId);
     if (!player || player.isDead) return;
+    const now = Date.now();
+    if ((this.lastTeleport.get(playerId) ?? 0) > now) {
+      logger.warn('teleport dropped: cadence', { playerId });
+      return;
+    }
+    this.lastTeleport.set(playerId, now + 3000);
     player.lastPosCheckPos = { ...msg.position };
     player.lastPosCheckTime = Date.now();
     player.consecutiveRejects = 0;
@@ -609,11 +623,11 @@ export class MessageHandler {
     this.roomInfo.moveResync?.(playerId, msg.position, msg.rotation.yaw);
     // Reports already in flight predate the warp — same drain window
     // corrections and respawns get.
-    this.muteJudges(player, playerId, Date.now());
+    this.muteJudges(player, playerId, now);
     // Pre-warp samples are a different location entirely — keeping them
     // lets lag-comp rewind land the shooter/target back at the corpse.
     player.history.length = 0;
-    pushRewindSample(player, Date.now());
+    pushRewindSample(player, now);
     // Relay so observers snap instead of interpolating across the gap
     this.broadcast({ type: 'teleport', playerId, position: msg.position, velocity: msg.velocity }, playerId);
   }
