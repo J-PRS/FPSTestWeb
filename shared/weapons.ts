@@ -526,7 +526,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     directDamage: 0,
     aoeDamage: 40,
     aoeRadius: 10.0,
-    knockbackForce: 55.0,
+    knockbackForce: 25.0, // a nudge, not a launcher — the plating is the payload
     forceMode: 'push',
     speed: 40.0,
     gravity: true,
