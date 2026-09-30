@@ -51,8 +51,8 @@ describe('scenario: grace timer teardown', () => {
     }
     expect(pm.getPlayer('p1')!.isDead).toBe(true);
     const timers = (combat as unknown as {
-      respawnTimers: Map<string, ReturnType<typeof setTimeout>>;
-    }).respawnTimers;
+      respawner: { timers: Map<string, ReturnType<typeof setTimeout>> };
+    }).respawner.timers;
     expect(timers.has('p1')).toBe(true);
     combat.onPlayerRemoved('p1');
     expect(timers.has('p1')).toBe(false);

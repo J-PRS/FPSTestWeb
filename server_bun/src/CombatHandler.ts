@@ -6,7 +6,6 @@ import { perkMods } from '../../shared/perks.ts';
 import { aoeDamage, aoeImpulse, KNOCKBACK_SCALE, validateHitClaim, validateAoeClaim } from '../../shared/combat.ts';
 import { POWERUP } from '../../shared/pickups.ts';
 import type { PlayerState } from './types.ts';
-import { CONFIG } from './config.ts';
 import { logger } from './logger.ts';
 import { weaponStats } from './weaponStats.ts';
 import { HEAVY_ONLY_WEAPONS } from '../../shared/botClasses.ts';
@@ -14,6 +13,7 @@ import type { StructureCollider } from '../../shared/ballSim.ts';
 import { segSolidHit, blastOccluded, ColliderIndex } from '../../shared/solidWorld.ts';
 import { ClaimLedger, clampPing, rewindPos } from './claimLedger.ts';
 import { KillFeed } from './killFeed.ts';
+import { RespawnManager } from './respawn.ts';
 
 // How long a hit/knocked-back player stays on the unsuppressed full-rate
 // tick path — covers the shooter's predicted-knockback window (~0.6s)
@@ -72,7 +72,6 @@ export interface CombatDeps {
  */
 export class CombatHandler {
   private ledger = new ClaimLedger();
-  private respawnTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
   /** Cosmetic relay gate for shotFired — a hitscan pull has no damage
    *  semantics, so excess ones are silently dropped instead of rejected. */
   private lastFireNotify = new Map<string, number>();
@@ -90,6 +89,7 @@ export class CombatHandler {
   }
 
   private killFeed: KillFeed;
+  private respawner: RespawnManager;
 
   constructor(
     private playerManager: PlayerManager,
@@ -100,6 +100,7 @@ export class CombatHandler {
     // Late binding on the static — tests reassign tauntDelayMs after
     // construction and must still steer the delay.
     this.killFeed = new KillFeed(playerManager, broadcast, () => CombatHandler.tauntDelayMs());
+    this.respawner = new RespawnManager(playerManager, broadcast, (pid, pos, yaw, full) => this.deps.moveResync?.(pid, pos, yaw, full));
   }
 
   private hb(key: string, n = 1): void {
@@ -135,15 +136,8 @@ export class CombatHandler {
     this.onPlayerDisconnected(playerId);
   }
 
-  /** Cancel a pending respawn on disconnect — the player might rejoin during
-   *  the grace window, and a stale timer would fire on the new session (or
-   *  double-respawn if they died again after reconnecting). */
   onPlayerDisconnected(playerId: string): void {
-    const pending = this.respawnTimers.get(playerId);
-    if (pending) {
-      clearTimeout(pending);
-      this.respawnTimers.delete(playerId);
-    }
+    this.respawner.cancel(playerId);
     // Per-player fire-throttle state is per-connection like the room's
     // warn keys — a leaver's entry otherwise sits in the map for the
     // room's life.
@@ -742,7 +736,7 @@ export class CombatHandler {
     this.broadcast({ type: 'playerKill', shooterId, targetId, weapon, streak: shooterStreak });
     this.killFeed.announce(shooterId, targetId);
     this.deps.onKill?.(targetId, shooterId);
-    this.scheduleRespawn(targetId);
+    this.respawner.schedule(targetId);
   }
 
   // Spree callouts ride matchNotice (system chat line). killTotal()===1 pins
@@ -753,8 +747,7 @@ export class CombatHandler {
   /** Room teardown — pending respawns and queued taunts die with the
    *  room or a hibernating room fires broadcasts into an empty world. */
   dispose(): void {
-    for (const t of this.respawnTimers.values()) clearTimeout(t);
-    this.respawnTimers.clear();
+    this.respawner.dispose();
     this.killFeed.dispose();
   }
 
@@ -762,55 +755,11 @@ export class CombatHandler {
    *  stubs this to 0 to see taunts inside the frag loop. */
   static tauntDelayMs: () => number = () => 1200 + Math.random() * 1800;
 
-  /** Reconnect restores state verbatim — including isDead. If the disconnect
-   *  cancelled a pending respawn (it did), a restored-dead player would stay
-   *  dead forever without this re-arm. */
   ensureRespawn(playerId: string): void {
-    const player = this.playerManager.getPlayer(playerId);
-    if (player?.isDead && !this.respawnTimers.has(playerId)) {
-      this.scheduleRespawn(playerId);
-    }
+    this.respawner.ensure(playerId);
   }
 
-  /** Re-arm respawn for a rejoining dead player — disconnect cancels the
-   *  timer, so without this a socket flap mid-death strands them dead. */
   ensureRespawnScheduled(playerId: string): void {
-    const player = this.playerManager.getPlayer(playerId);
-    if (player?.isDead) this.scheduleRespawn(playerId);
-  }
-
-  private scheduleRespawn(playerId: string): void {
-    // One respawn timer per player — a second kill while dead replaces it
-    // instead of stacking.
-    const existing = this.respawnTimers.get(playerId);
-    if (existing) clearTimeout(existing);
-    const timer = setTimeout(() => {
-      this.respawnTimers.delete(playerId);
-      const result = this.playerManager.respawnPlayer(playerId);
-      if (!result) return;
-
-      const player = this.playerManager.getPlayer(playerId);
-      if (!player) return;
-
-      logger.info('Player respawned', { playerId, position: result.position });
-      this.deps.moveResync?.(playerId, result.position, result.rotation.yaw, true);
-      // The respawn broadcast and the honest post-snap report are both in
-      // flight — the client's snap to spawn (and any straggler reports
-      // from the corpse spot) read as impossible speed/divergence against
-      // the reseated anchors. Same drain window a correction gets.
-      player.correctionGraceUntil = Date.now() + CONFIG.reportGraceMs;
-
-      this.broadcast({
-        type: 'playerRespawn',
-        playerId,
-        internalId: player.internalId,
-        position: result.position,
-        rotation: result.rotation,
-        // A banked classUpdate may have just applied — remotes rebuild the
-        // silhouette off this rather than learning it on the next join.
-        armorClass: result.armorClass,
-      });
-    }, CONFIG.respawnDelayMs);
-    this.respawnTimers.set(playerId, timer);
+    this.respawner.ensureScheduled(playerId);
   }
 }
