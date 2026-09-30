@@ -1,3 +1,4 @@
+2026-10-01 - explosion.ts 889->66: per-weapon blast layer recipes -> explosionLayers.ts (variants, shock dome pool, ground rings), batched trail sparks -> explosionSparks.ts
 2026-10-01 - RemotePlayer.ts 714->661: shield bubble + per-status aura plumbing (mend/regen/dd/charge lazy-glow, contoured upgrade, hide/show/dispose) -> remoteAuras.ts behind AuraHost
 2026-10-01 - Player.ts 883->742: move-event FX emitters (jetpack trail, ski/foot dust, land/jump edges) -> playerEmit.ts; toggle-status family (cloak/shield/mend, wire status byte, shield bubble, spectator) -> playerStatus.ts
 2026-10-01 - weaponsGeo.ts 943->607: energy weapon builders (plasma cannon/gun, railgun, lightning) -> weaponsGeoEnergy.ts; sidearm/tool builders (pistol, revolver, repair) -> weaponsGeoSidearm.ts; shared material palette + tube/bore helpers -> weaponKit.ts
