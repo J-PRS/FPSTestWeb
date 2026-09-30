@@ -37,7 +37,6 @@ interface LgState {
   lastFire: number;
   sizzleAt: number;
   beamTo: THREE.Vector3;
-  acc: Map<number, number>;
   ramp: Map<number, { t: number; n: number }>;
   shroud: Map<number, { sprite: THREE.Sprite; seenAt: number }>;
 }
@@ -46,6 +45,25 @@ const _traceT = { t: 0 };
 // Charged-enemy shroud: one shared radial texture; per-target sprites
 // scale and flicker with banked pop charge so a loaded victim reads
 // "about to detonate" to anyone looking, not just the beamer.
+// Charge bank: per-target accumulated pop charge. Module-level so the
+// generic projectile impact path can detonate it — ANY weapon's direct
+// hit pops min(banked, hitDamage) off the charge, remainder keeps
+// smoldering. The beam itself still pays full on its own kills.
+const chargeBank = new Map<number, number>();
+let dischargeFx: ((pos: THREE.Vector3, amount: number) => void) | null = null;
+
+/** Pop `damage` worth of banked charge on target `id` at `at`. Returns
+ *  the amount detonated (0 = nothing banked). Lightning's own ticks
+ *  skip this — they charge, not detonate. */
+export function lgDischarge(id: number, damage: number, at: THREE.Vector3): number {
+  const acc = chargeBank.get(id) ?? 0;
+  const pop = Math.min(acc, damage);
+  if (pop <= 0) return 0;
+  if (acc - pop <= 0) chargeBank.delete(id); else chargeBank.set(id, acc - pop);
+  dischargeFx?.(at, pop);
+  return pop;
+}
+
 let _shroudTex: THREE.Texture | null = null;
 function shroudTexture(): THREE.Texture {
   if (_shroudTex) return _shroudTex;
@@ -233,16 +251,16 @@ function tickBeam(lg: LgState, dt: number): void {
   for (const [id, sh] of lg.shroud) {
     const age = now - sh.seenAt;
     if (age > LG_RAMP_WINDOW_S) {
-      const acc = (lg.acc.get(id) ?? 0) - LG_CHARGE_DECAY_S * dt;
+      const acc = (chargeBank.get(id) ?? 0) - LG_CHARGE_DECAY_S * dt;
       if (acc <= 0) {
-        lg.acc.delete(id);
+        chargeBank.delete(id);
         sh.sprite.removeFromParent();
         lg.shroud.delete(id);
         continue;
       }
-      lg.acc.set(id, acc);
+      chargeBank.set(id, acc);
     }
-    const charge = Math.min((lg.acc.get(id) ?? 0) / LG_POP_DMG_CAP, 1);
+    const charge = Math.min((chargeBank.get(id) ?? 0) / LG_POP_DMG_CAP, 1);
     const flicker = 0.75 + Math.random() * 0.25 + charge * 0.5 * (Math.random() < 0.3 ? 1 : 0);
     (sh.sprite.material as THREE.SpriteMaterial).opacity = Math.min(1, (0.15 + charge * 0.8) * flicker);
     sh.sprite.scale.setScalar(1.5 + charge * 4);
@@ -269,8 +287,8 @@ function zapTarget(deps: CombatDeps, hooks: LightningHooks, lg: LgState,
   deps.lazyDamageNumbers().spawn(t.pos, dmg, '#8fdcff', cam);
   // The pop banks what the ramp withheld, not what it dealt — a fresh
   // beam charges nothing, a held beam detonates for the decay it paid.
-  const acc = (lg.acc.get(t.id) ?? 0) + (8 - lgTickDamage(n)) * dmgScale * LG_POP_CHARGE_MULT;
-  lg.acc.set(t.id, acc);
+  const acc = (chargeBank.get(t.id) ?? 0) + (8 - lgTickDamage(n)) * dmgScale * LG_POP_CHARGE_MULT;
+  chargeBank.set(t.id, acc);
   // Shroud grows + hardens with charge — a readable countdown to the pop.
   const charge = Math.min(acc / LG_POP_DMG_CAP, 1);
   let sh = lg.shroud.get(t.id);
@@ -290,7 +308,7 @@ function zapTarget(deps: CombatDeps, hooks: LightningHooks, lg: LgState,
   if (t.takeDamage(dmg)) {
     hooks.onTargetDestroyed(t, t.vel, WeaponType.Lightning);
     lgPop(deps, hooks, t.pos, acc);
-    lg.acc.delete(t.id);
+    chargeBank.delete(t.id);
     const dead = lg.shroud.get(t.id);
     if (dead) { dead.sprite.removeFromParent(); lg.shroud.delete(t.id); }
   } else if (!t.hideHealthBar) {
@@ -308,10 +326,10 @@ export function createLightning(deps: CombatDeps, hooks: LightningHooks) {
     lastFire: 0,
     sizzleAt: 0, // throttle the connect sizzle — one crackle per ~6 ticks
     beamTo: new THREE.Vector3(), // beam tip — follows the target between ticks
-    acc: new Map(), // beam charge per target — detonated on the kill
     ramp: new Map(), // consecutive-tick count per target — steps damage down
     shroud: new Map(), // charged-enemy glow — telegraphs the banked pop
   };
+  dischargeFx = (pos, amount) => lgPop(deps, hooks, pos, amount);
 
   // Beam start: the muzzle node's actual rendered pixel, unprojected into
   // world space through the main camera — FOV difference between the

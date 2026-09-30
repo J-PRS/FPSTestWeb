@@ -23,7 +23,7 @@ import { createFire } from './combat/fire.js';
 import type { WeaponDef } from '../weapons.js';
 import type { FireEvent } from '../entities/Player.js';
 import { createBlastForce } from './blastForce.js';
-import { createLightning } from './combat/lightning.js';
+import { createLightning, lgDischarge } from './combat/lightning.js';
 import { burstGibs } from '../entities/swarms.js';
 import type { SwarmSlotOwner } from '../entities/swarm.js';
 import { PENDING_ROCKET_TIMEOUT, ROCKET_RADIUS, CHAINGUN_RATE } from '../core/config.js';
@@ -495,6 +495,12 @@ function onTargetDestroyed(c: CombatCtx, ball: import('../entities/balls.js').Ta
 // Entries prune lazily on write — the map stays small.
 
 
+/** A non-beam direct hit invests its damage into the victim's banked pop
+ *  charge — the rest of the charge stays smoldering, not wasted. */
+function detonateCharge(p: Projectile, ball: import('../entities/balls.js').Targetable, dmg: number): void {
+  if (p.config.weaponType !== WeaponType.Lightning) lgDischarge(ball.id, dmg, ball.pos);
+}
+
 function handleBallHit(c: CombatCtx, p: Projectile, ball: import('../entities/balls.js').Targetable): void {
   const deps = c.deps;
   let dmg = getWeaponStats(p.config.weaponType).directDamage * deps.lazyPlayer().mods.directDamage;
@@ -511,6 +517,7 @@ function handleBallHit(c: CombatCtx, p: Projectile, ball: import('../entities/ba
   }
   deps.reportTargetDamage?.(ball, dmg);
   const destroyed = ball.takeDamage(dmg);
+  detonateCharge(p, ball, dmg);
   deps.lazyDamageNumbers().spawn(ball.pos, Math.round(dmg), p.config.damageColor, deps.lazyCamera());
   if (!destroyed && !ball.hideHealthBar) {
     deps.lazyHealthBarSystem().spawnBall(ball, dmg, ball.health);
