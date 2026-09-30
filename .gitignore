@@ -15,3 +15,20 @@ server_bun/demos/*.demo
 logs/
 *.jsonl
 client/nul.old
+
+# Extracted Tribes 2 assets — local playtest only, do not redistribute
+maps/t2/
+
+# Heavy local scratch — extraction dumps, screenshots, zips (not for git)
+_tools/animpacks/
+_tools/ualgrab/
+_tools/dif_test/
+_tools/e2e/shots/
+_tools/poseshot/
+_tmp/
+screenshots/
+screenshots_legacy/
+TEMP_WEBual/
+client/x
+client/public/mespeak.old/
+terrain_gen/*.png
