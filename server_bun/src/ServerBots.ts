@@ -28,6 +28,7 @@ import { BOT_LOADOUTS, pickBotWeapon, type BotLoadout } from '../../shared/botLo
 import { roleObjective, ROLE_PRIORITY, type BotRole } from '../../shared/flagGoals.ts';
 import { BotWatchdog, type MobilitySample } from './botWatchdog.ts';
 import { BotArsenal, isSuper } from './botArsenal.ts';
+import { BotSheepMeter } from './botSheep.ts';
 
 const SPEED = 14;          // m/s ground move
 
@@ -62,18 +63,10 @@ export class ServerBots {
   private gearLobT = new Map<string, number>();
   /** inputMove ordering key — the shadow drops non-increasing seqs. */
   private seq = 1;
-  /** Sheep meter per bot: foot-slogging fills it, skiing/airborne/jetting
-   *  drains it. At 100 the bot gets yeeted — a launch impulse plus an
-   *  escape-jet burst, so the penalty for pedestrian play is literally
-   *  becoming a Tribes player for a few seconds. */
-  private sheepMeter = new Map<string, number>();
-  /** Rolling distance window per bot — speed alone can squeak by while
-   *  the bot goes nowhere (orbiting, climbing stairs); coverage is the
-   *  honest measure of actually playing Tribes. */
-  private sheepWin = new Map<string, { start: number; dist: number; lx: number; lz: number }>();
-  /** Yeet hang-time — while set the bot's jet stays pinned so the launch
-   *  carries through instead of being a single frame of thrust. */
-  private yeetUntil = new Map<string, number>();
+  /** Sheep meter lives in botSheep.ts — pedestrian play fills it, the
+   *  yeet (impulse + pinned jets) cures it. Kept off this file like the
+   *  watchdog so ServerBots stays about driving bots. */
+  private sheep: BotSheepMeter;
   /** Trigger discipline — own file (botArsenal.ts): weapon select,
    *  muzzle geometry, lobs, disc-jump propels. This file drives brains
    *  and bodies; the arsenal decides when and at what to fire. */
@@ -88,6 +81,7 @@ export class ServerBots {
     this.room = room;
     this.field = field;
     this.watchdog = new BotWatchdog(room.name);
+    this.sheep = new BotSheepMeter(room);
     this.arsenal = new BotArsenal(room, this.loadouts, (id) => this.lastHuntId(id));
   }
 
@@ -102,10 +96,6 @@ export class ServerBots {
   private thinkPhase = new Map<string, number>();
   private lastOut = new Map<string, BrainOut>();
   private thinkCounter = 0;
-  /** Sim clock (ms) — windows that measure play (sheep coverage) must
-   *  not run on wall time or a slow tick mis-reads them. */
-  private simClock = 0;
-
   /** Spawn n bots — each is a real roster entry (playerJoined broadcasts)
    *  minus a socket. Call once at room creation, before human joins, so
    *  team balancing lands humans on the emptier side. */
@@ -156,9 +146,7 @@ export class ServerBots {
     this.lastOut.delete(playerId);
     this.roles.delete(playerId);
     this.classes.delete(playerId);
-    this.sheepMeter.delete(playerId);
-    this.sheepWin.delete(playerId);
-    this.yeetUntil.delete(playerId);
+    this.sheep.clear(playerId);
     this.arsenal.untrack(playerId);
     this.gearLobT.delete(playerId);
     this.deadSet.delete(playerId);
@@ -514,14 +502,14 @@ export class ServerBots {
         forward: 1, right: 0,
         jumpPressed: !!out.move?.jump, jumpHeld: !!out.move?.jump,
         skiHeld: !!out.move?.ski,
-        jetHeld: !!out.move?.jet || (this.yeetUntil.get(id) ?? 0) > now
+        jetHeld: !!out.move?.jet || this.sheep.yeetUntilMs(id) > now
           || this.arsenal.jetPinUntil(id) > now,
       }, p.status, this.seq++);
     } else {
       this.room.moveSim.setInput(id, { forward: 0, right: 0, jumpHeld: false, skiHeld: false, jetHeld: false }, p.status, this.seq++);
     }
     this.checkSheep(id, p, { trying: dist >= 0.5, ski: !!out.move?.ski, airborne: !sh.onGround, jetting: !!out.move?.jet, dt }, now);
-    this.checkSheepMeter(id, p, { out, airborne: !sh.onGround, hasDest: dist >= 0.5, dt }, now, this.simClock);
+    this.sheep.check(id, p, { out, airborne: !sh.onGround, hasDest: dist >= 0.5, dt }, now);
     p.position.x = sh.pos.x; p.position.y = sh.pos.y; p.position.z = sh.pos.z;
     p.velocity.x = sh.vel.x; p.velocity.y = sh.vel.y; p.velocity.z = sh.vel.z;
     // Ski bit rides the tick flag byte (bit 2) — drives remote dust.
@@ -559,66 +547,30 @@ export class ServerBots {
 
   /** The meter the tick stream publishes — 0 for non-bots. */
   sheepOf(id: string): number {
-    return Math.round(this.sheepMeter.get(id) ?? 0);
+    return this.sheep.of(id);
   }
 
   /** Test hook — seed the meter directly; accrual tests shouldn't need
    *  to park a bot for 30 simulated seconds to reach the yeet. */
   debugSetSheep(id: string, v: number): void {
-    this.sheepMeter.set(id, v);
+    this.sheep.set(id, v);
   }
 
   /** Test hook — whether the bot's jet is currently pinned by a yeet. */
   debugYeeted(id: string): boolean {
-    return (this.yeetUntil.get(id) ?? 0) > Date.now();
+    return this.sheep.yeetUntilMs(id) > Date.now();
   }
 
-  /** Sheep meter accrual. Fills when the bot moves like a pedestrian —
-   *  walking under ski speed or parked — and drains faster while it's
-   *  doing Tribes things (covering ground, airborne, jetting). At 100
-   *  the bot gets yeeted: an impulse launch plus pinned jets, so the
-   *  penalty for sheepish play IS the cure. */
-  private checkSheepMeter(id: string, p: { position: Vec3; velocity: Vec3 }, m: { out: BrainOut; airborne: boolean; hasDest: boolean; dt: number }, now: number, simMs: number): void {
-    const speedXZ = Math.hypot(p.velocity.x, p.velocity.z);
-    const jetting = !!m.out.move?.jet || (this.yeetUntil.get(id) ?? 0) > now;
-    const tribesing = speedXZ > 10 || m.airborne || jetting;
-    const prev = this.sheepMeter.get(id) ?? 0;
-    let meter = prev + m.dt * (tribesing
-      ? -(10 + speedXZ * 0.5 + (jetting ? 15 : 0))
-      : m.hasDest ? 9 : 18);
-    meter += this.coverageDebit(id, p, m.hasDest, simMs);
-    if (meter >= 100) {
-      const yaw = Math.random() * Math.PI * 2;
-      this.room.moveSim.applyImpulse(id, { x: Math.cos(yaw) * 12, y: 18, z: Math.sin(yaw) * 12 });
-      this.yeetUntil.set(id, now + 1500);
-      meter = 40;
-      logger.warn('Sheep yeet', { room: this.room.name, bot: id });
-    } else if (meter < 0) {
-      meter = 0;
-    } else if (prev < 60 && meter >= 60) {
-      logger.info('Sheep meter high', { room: this.room.name, bot: id, meter: Math.round(meter) });
-    }
-    this.sheepMeter.set(id, meter);
+  /** Test hook — the 5s coverage window, driven by explicit sim ms. */
+  coverageDebit(id: string, p: { position: Vec3 }, hasDest: boolean, simMs: number): number {
+    return this.sheep.coverageDebit(id, p, hasDest, simMs);
   }
 
-  /** Coverage window: under ~30m of real displacement per 5s while the
-   *  brain claims a destination reads as sheeping even when the per-tick
-   *  speed check squeaks by. Returns the meter debit for the window. */
-  private coverageDebit(id: string, p: { position: Vec3 }, hasDest: boolean, simMs: number): number {
-    let w = this.sheepWin.get(id);
-    if (!w) { w = { start: simMs, dist: 0, lx: p.position.x, lz: p.position.z }; this.sheepWin.set(id, w); }
-    w.dist += Math.hypot(p.position.x - w.lx, p.position.z - w.lz);
-    w.lx = p.position.x; w.lz = p.position.z;
-    if (simMs - w.start < 5000) return 0;
-    const owed = hasDest && w.dist < 30 ? 20 : 0;
-    w.start = simMs; w.dist = 0;
-    return owed;
-  }
 
   tick(dt: number): void {
     this.maintain(Date.now());
     this.arsenal.step(dt); // sim-clock — the weapon-rate gate is sim-paced
-    this.simClock += dt * 1000;
+    this.sheep.step(dt); // sim-clock — the coverage window is sim-paced too
     if (this.brains.size === 0) return;
     const now = Date.now();
     for (const [id, brain] of this.brains) {
@@ -642,7 +594,7 @@ export class ServerBots {
       const wasDead = this.deadSet.has(id);
       if (!p.isDead && wasDead) {
         this.deadSet.delete(id);
-        this.sheepMeter.delete(id); // respawn is a fresh leash
+        this.sheep.clear(id); // respawn is a fresh leash
         this.room.moveSim.resync(id, p.position, p.rotation.yaw, true);
       }
 
