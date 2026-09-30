@@ -3,7 +3,8 @@
 
 import * as THREE from 'three';
 import { buildStructures, buildArenaDome, clearArenaDome } from '../../world/mapStructures.js';
-import type { StructureSpec } from '../../../../shared/mapSpec.js';
+import type { StructureSpec, InteriorSpec } from '../../../../shared/mapSpec.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { setAmbientCaps } from '../species/ambientCaps.js';
 import { structureColliders } from '../../../../shared/ballSim.js';
 import { ColliderIndex } from '../../../../shared/solidWorld.js';
@@ -75,11 +76,12 @@ export function wireWorld(ctx: NetCtx): void {
       clearArenaDome(deps.lazyScene());
     }
     if (map.terrain) void applyTerrain(ctx, map.terrain, map.terrainTex, map.sky);
+    void applyInteriors(ctx, map.interiors);
     chat.add(null, 'map updated by admin');
   };
 
   // Initial connection and reconnection — full roster + local restore.
-  networkManager.onGameState = (players: GameStatePlayer[], localPlayerState: LocalPlayerState | undefined, roomInfo?: { room?: string; mode?: string; team?: 'alpha' | 'bravo'; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number>; pickups?: { id: number; pos: { x: number; y: number; z: number }; kind?: import('../../../../shared/pickups.js').PickupKind }[]; flags?: { team: 'alpha' | 'bravo'; pos: { x: number; y: number; z: number }; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]; matchEndsAt?: number; respawnMs?: number; deployables?: { id: number; owner: string; kind: 'turret' | 'mine' | 'station' | 'drone' | 'shield'; pos: { x: number; y: number; z: number }; team?: string }[]; map?: { mode?: string; bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } }; structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number }; ambient?: Record<string, number>; terrain?: string; terrainTex?: string; sky?: string } }) => {
+  networkManager.onGameState = (players: GameStatePlayer[], localPlayerState: LocalPlayerState | undefined, roomInfo?: { room?: string; mode?: string; team?: 'alpha' | 'bravo'; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number>; pickups?: { id: number; pos: { x: number; y: number; z: number }; kind?: import('../../../../shared/pickups.js').PickupKind }[]; flags?: { team: 'alpha' | 'bravo'; pos: { x: number; y: number; z: number }; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]; matchEndsAt?: number; respawnMs?: number; deployables?: { id: number; owner: string; kind: 'turret' | 'mine' | 'station' | 'drone' | 'shield'; pos: { x: number; y: number; z: number }; team?: string }[]; map?: { mode?: string; bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } }; structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number }; ambient?: Record<string, number>; terrain?: string; terrainTex?: string; sky?: string; interiors?: InteriorSpec[] } }) => {
     logger.debug(`gameState received, players: ${players.length}`);
     applyRoomInfo(ctx, players.length, roomInfo);
     if (localPlayerState) restoreLocalPlayer(ctx, localPlayerState);
@@ -148,7 +150,7 @@ function announceRoom(ctx: NetCtx, playerCount: number, roomInfo?: RoomInfo): vo
   }
 }
 
-type MapSnapshot = { structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number }; ambient?: Record<string, number>; terrain?: string; terrainTex?: string; sky?: string };
+type MapSnapshot = { structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number }; ambient?: Record<string, number>; terrain?: string; terrainTex?: string; sky?: string; interiors?: InteriorSpec[] };
 
 /** Structures, dome, and per-map species caps — shared by gameState's
  *  join path; mapUpdate handles the same rebuild itself since it always
@@ -174,6 +176,7 @@ function applyMapSnapshot(ctx: NetCtx, map?: MapSnapshot): void {
   }
   setAmbientCaps(map?.ambient);
   void applyTerrain(ctx, map?.terrain ?? null, map?.terrainTex, map?.sky);
+  void applyInteriors(ctx, map?.interiors);
 }
 
 /** Fetch the room's heightfield and swap the live terrain over to it.
@@ -181,6 +184,11 @@ function applyMapSnapshot(ctx: NetCtx, map?: MapSnapshot): void {
  *  finish out of order and leave the older field resident. */
 let terrainSwap: Promise<void> = Promise.resolve();
 let terrainActive: string | null = null;
+/** Resolves when the first terrain decision lands — a room's map spec
+ *  or confirmation that the boot field stays. Offline bot fill waits on
+ *  this so it never seeds a roster on the wrong heightmap. */
+let firstTerrainResolve!: () => void;
+export const firstTerrain = new Promise<void>((r) => { firstTerrainResolve = r; });
 // Rooms without a spec terrain reset to the boot field — the PNG the
 // session loaded at startup.
 const BOOT_HEIGHTMAP = '/assets/heightmaps/test_vertex.png';
@@ -218,6 +226,7 @@ async function applyTerrain(ctx: NetCtx, file: string | null, texPath?: string, 
       await applySky(deps, httpUrl, skyDir);
 
       terrainActive = key;
+      deps.world.onTerrainApplied?.(file);
       deps.logger.info(`Terrain swapped to maps/${file}`);
     } catch (e) {
       // THREE loaders reject with ProgressEvent (no .message) — log
@@ -228,6 +237,7 @@ async function applyTerrain(ctx: NetCtx, file: string | null, texPath?: string, 
       deps.logger.warn(`Terrain load failed for ${file ?? BOOT_HEIGHTMAP}: ${detail}`);
     } finally {
       Ball.terrainSwapping = false;
+      firstTerrainResolve();
     }
   });
   return terrainSwap;
@@ -356,3 +366,87 @@ function restoreLocalPlayer(ctx: NetCtx, localPlayerState: LocalPlayerState): vo
 
   deps.logger.debug(`Player state restored from gameState - pos(${localPlayerState.position.x.toFixed(1)},${localPlayerState.position.y.toFixed(1)},${localPlayerState.position.z.toFixed(1)}) vel(${localPlayerState.velocity?.x.toFixed(1) || 0},${localPlayerState.velocity?.y.toFixed(1) || 0},${localPlayerState.velocity?.z.toFixed(1) || 0}) health:${localPlayerState.health} dead:${localPlayerState.isDead}`);
 }
+
+// ── T2 interiors ────────────────────────────────────────────────────────
+// .dif files were converted to glb offline (io_dif → Blender 5.2 → glTF);
+// the spec carries our-space pos + pre-squashed scale + the raw T2
+// axis-angle. The transform composes:
+//   M = T(pos) · D(scaleOurs) · SwapYZ · R(axis-angle, T2 space) · G
+// G = rotX(+90°) undoes Blender's Z-up→Y-up export (glb verts are
+// (u,w,-v) in T2 coords); SwapYZ maps T2 (u,v,w)→ours (u,w,v); R is the
+// mission rotation in T2 axes. SwapYZ is a reflection — DoubleSide on
+// every material keeps the mirrored winding renderable.
+const SWAP_YZ = new THREE.Matrix4().set(
+  1, 0, 0, 0,
+  0, 0, 1, 0,
+  0, 1, 0, 0,
+  0, 0, 0, 1);
+const G_GLB_TO_T2 = new THREE.Matrix4().makeRotationX(Math.PI / 2);
+
+let interiorGroup: THREE.Group | null = null;
+const glbCache = new Map<string, Promise<THREE.Group | null>>();
+const glbLoader = new GLTFLoader();
+
+async function fetchGlb(httpUrl: string, file: string): Promise<THREE.Group | null> {
+  const name = file.replace(/\.dif$/i, '.glb');
+  let p = glbCache.get(name);
+  if (!p) {
+    p = glbLoader.loadAsync(`${httpUrl}/maps/t2/dif/${name}`)
+      .then((g) => g.scene)
+      .catch(() => null);
+    glbCache.set(name, p);
+  }
+  return p;
+}
+
+/** Instance a converted T2 interior. Clone shares geometry/materials —
+ *  these are static hulls, no skeletons. */
+async function applyInteriors(ctx: NetCtx, list: InteriorSpec[] | undefined): Promise<void> {
+  const { deps } = ctx;
+  const scene = deps.lazyScene();
+  if (interiorGroup) {
+    scene.remove(interiorGroup);
+    interiorGroup = null;
+  }
+  if (!list?.length) return;
+  const { httpUrl } = await resolveServerEndpoints();
+  const group = new THREE.Group();
+  group.name = '__t2interiors';
+  interiorGroup = group;
+  scene.add(group);
+
+  const missing = new Set<string>();
+  await Promise.all(list.map(async (spec) => {
+    const src = await fetchGlb(httpUrl, spec.file);
+    if (!src) { missing.add(spec.file); return; }
+    const inst = src.clone(true);
+    const m = new THREE.Matrix4();
+    const pos = spec.pos;
+    m.setPosition(pos.x, pos.y, pos.z);
+    if (spec.scale) m.multiply(new THREE.Matrix4().makeScale(spec.scale.x, spec.scale.y, spec.scale.z));
+    m.multiply(SWAP_YZ);
+    if (spec.rot) {
+      _axis.set(spec.rot[0], spec.rot[1], spec.rot[2]);
+      if (_axis.lengthSq() > 1e-8) {
+        _q.setFromAxisAngle(_axis.normalize(), spec.rot[3] * Math.PI / 180);
+        m.multiply(new THREE.Matrix4().makeRotationFromQuaternion(_q));
+      }
+    }
+    m.multiply(G_GLB_TO_T2);
+    inst.matrixAutoUpdate = false;
+    inst.matrix.copy(m);
+    inst.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (mesh.isMesh) {
+        const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+        for (const mat of mats) if (mat) mat.side = THREE.DoubleSide;
+      }
+    });
+    group.add(inst);
+  }));
+  if (missing.size) deps.logger.warn(`Interiors missing glb: ${[...missing].join(', ')}`);
+  deps.logger.info(`T2 interiors placed: ${list.length - missing.size}/${list.length}`);
+}
+
+const _axis = new THREE.Vector3();
+const _q = new THREE.Quaternion();

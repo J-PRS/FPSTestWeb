@@ -192,32 +192,34 @@ export class TeamBots {
   private tickBots(dt: number, others: THREE.Vector3[]): void {
     const terrain = this.deps.lazyTerrain();
     this.fire.tickBolts(dt); // frame-rate, not per-bot — it was over-integrating in the loop
-    for (const bot of this.bots) {
-      // Local bots aren't in the wire roster, so remotes.ts never ticks
-      // them — tick() is what advances the snapshot interpolation and
-      // AnimationMixer onto the model. Without it think() moves the
-      // logical position but the rendered body stands frozen at spawn.
-      bot.tick(dt);
-      if (bot.isDead) {
-        bot.respawnAt -= dt;
-        if (bot.respawnAt <= 0) this.respawnBot(bot);
-        continue;
-      }
-      const foes = this.senses.enemyList(bot);
-      const shot = bot.think(dt, this.ctxFor(bot, foes, others, terrain));
-      if (this.over) { this.sheepTick(bot, dt, terrain); continue; }
-      if (shot) this.fire.resolveShot(bot, shot.targetId, shot.aim);
-      // Belt + propel are real-spawn actions — offline only, same gate
-      // as resolveShot (a connected room's wire remotes can't attribute).
-      const online = this.deps.lazyNetworkManager?.()?.isConnected() ?? false;
-      if (!online) {
-        if (bot.wantBelt) this.fire.throwBelt(bot);
-        if (bot.wantDeploy) this.tryDeploy(bot);
-        this.fire.tryPropel(bot, !!shot);
-      }
-      const hasDest = Math.hypot(bot.lastDest.x - bot.pos.x, bot.lastDest.z - bot.pos.z) >= 0.5;
-      this.sheepTick(bot, dt, terrain, this.senses.foeSeen(bot, foes, terrain), !shot, hasDest);
+    for (const bot of this.bots) this.tickBot(bot, dt, others, terrain);
+  }
+
+  private tickBot(bot: GameBot, dt: number, others: THREE.Vector3[], terrain: Terrain): void {
+    // Local bots aren't in the wire roster, so remotes.ts never ticks
+    // them — tick() is what advances the snapshot interpolation and
+    // AnimationMixer onto the model. Without it think() moves the
+    // logical position but the rendered body stands frozen at spawn.
+    bot.tick(dt);
+    if (bot.isDead) {
+      bot.respawnAt -= dt;
+      if (bot.respawnAt <= 0) this.respawnBot(bot);
+      return;
     }
+    const foes = this.senses.enemyList(bot);
+    const shot = bot.think(dt, this.ctxFor(bot, foes, others, terrain));
+    if (this.over) { this.sheepTick(bot, dt, terrain); return; }
+    if (shot) this.fire.resolveShot(bot, shot.targetId, shot.aim);
+    // Belt + propel are real-spawn actions — offline only, same gate
+    // as resolveShot (a connected room's wire remotes can't attribute).
+    const online = this.deps.lazyNetworkManager?.()?.isConnected() ?? false;
+    if (!online) {
+      if (bot.wantBelt) this.fire.throwBelt(bot);
+      if (bot.wantDeploy) this.tryDeploy(bot);
+      this.fire.tryPropel(bot, !!shot);
+    }
+    const hasDest = Math.hypot(bot.lastDest.x - bot.pos.x, bot.lastDest.z - bot.pos.z) >= 0.5;
+    this.sheepTick(bot, dt, terrain, this.senses.foeSeen(bot, foes, terrain), !shot, hasDest);
   }
 
   /** One brain ctx per bot per tick — every sense the server feeds its
@@ -320,15 +322,34 @@ export class TeamBots {
     // ~2s trailing average for display — the raw meter jitters ±10/s
     // around the fill/drain boundary, which reads as flicker.
     bot.sheepShown += (bot.sheep - bot.sheepShown) * Math.min(1, dt * 0.5);
-    if (bot.sheep >= 100) {
-      // Post-yeet the meter lands at 40 like the server — otherwise the
-      // pinned jet ends inside a still-full meter and re-yeets forever.
-      bot.sheep = 40;
-      bot.yeet();
-      const w = this.sheepWhy.get(bot.playerId) ?? { idle: 0, ignore: 0, bleed: 0, cover: 0 };
-      this.sheepWhy.set(bot.playerId, { idle: 0, ignore: 0, bleed: 0, cover: 0 });
-      this.deps.logger.warn(
-        `bot ${bot.playerId} yeeted — sheep 100 (why: idle=${w.idle.toFixed(1)} ignore=${w.ignore.toFixed(1)} bleed=${w.bleed.toFixed(1)} cover=${w.cover.toFixed(1)})`);
+    if (bot.sheep >= 100) this.yeetSheep(bot);
+  }
+
+  private yeetSheep(bot: GameBot): void {
+    // Post-yeet the meter lands at 40 like the server — otherwise the
+    // pinned jet ends inside a still-full meter and re-yeets forever.
+    bot.sheep = 40;
+    bot.yeet();
+    const w = this.sheepWhy.get(bot.playerId) ?? { idle: 0, ignore: 0, bleed: 0, cover: 0 };
+    this.sheepWhy.set(bot.playerId, { idle: 0, ignore: 0, bleed: 0, cover: 0 });
+    this.deps.logger.warn(
+      `bot ${bot.playerId} yeeted — sheep 100 (why: idle=${w.idle.toFixed(1)} ignore=${w.ignore.toFixed(1)} bleed=${w.bleed.toFixed(1)} cover=${w.cover.toFixed(1)})`);
+  }
+
+  /** Terrain swapped under the roster — re-seat every live bot on the
+   *  spawn ring near the player without touching hp/meters/loadout. */
+  reseatAll(): void {
+    const player = this.deps.lazyPlayer();
+    const terrain = this.deps.lazyTerrain();
+    for (const bot of this.bots) {
+      if (bot.isDead) continue;
+      const a = Math.random() * Math.PI * 2;
+      const r = 20 + Math.random() * 40;
+      const sp = new THREE.Vector3(player.pos.x + Math.cos(a) * r, 0, player.pos.z + Math.sin(a) * r);
+      sp.y = terrain.getHeight(sp.x, sp.z) + EYE;
+      // respawn() clears the interp state a teleport needs; it doesn't
+      // touch hp or meters so it doubles as a quiet re-seat.
+      bot.respawn(sp);
     }
   }
 
@@ -404,8 +425,19 @@ export class TeamBots {
   private hurtLocal(dmg: number, fromPos: THREE.Vector3, src: string, melee: boolean, attackerId: string, weapon?: number): void {
     const p = this.deps.lazyPlayer();
     if (p.isDead) return;
-    p.health = Math.max(0, p.health - dmg);
     p.lastDamageSource = src;
+    // Connected room: health is server truth. A local write gets stomped
+    // by the next yourHealth echo — report through the self-damage channel
+    // (same as creature melee) and let the wire echo apply it. Feedback
+    // stays local so the hit still reads instantly.
+    if (this.deps.lazyNetworkManager?.()?.isConnected()) {
+      p.applyKnockback(fromPos, (melee ? 6 : 4) * p.mods.knockbackTaken);
+      this.deps.lazyHud().showDamage(fromPos, dmg);
+      sfx.playerHurt();
+      this.deps.lazyNetworkManager().sendEnvironmentDamage(dmg, attackerId);
+      return;
+    }
+    p.health = Math.max(0, p.health - dmg);
     p.applyKnockback(fromPos, (melee ? 6 : 4) * p.mods.knockbackTaken);
     this.deps.lazyHud().showDamage(fromPos, dmg);
     sfx.playerHurt();

@@ -19,6 +19,7 @@ import { ViewModel } from './entities/ViewModel.js';
 
 import { DamageNumberManager } from './effects/damageNumbers.js';
 import { EffectsManager } from './effects/effects.js';
+import { initVfx } from './effects/vfx.js';
 import { SpeedLines } from './effects/speedLines.js';
 import { AmbientParticles } from './effects/ambientParticles.js';
 import { GroundMist } from './effects/groundMist.js';
@@ -34,10 +35,13 @@ import { HealthBarSystem } from './ui/HealthBarSystem.js';
 import { HUD } from './ui/hud.js';
 import { wireOverlayInput } from './ui/overlayInput.js';
 
+import { effectiveResist } from '../../shared/perks.js';
+
 import { applyDebugHooks } from './game/debugHooks.js';
 import { createWorldState } from './game/worldState.js';
 import { createCombat } from './game/combat.js';
 import { TeamBots } from './game/bots.js';
+import { firstTerrain } from './game/net/world.js';
 import { wirePlayerHooks } from './game/playerHooks.js';
 import { createWaveDirector } from './game/waveDirector.js';
 import { createDemoLifecycle } from './game/demoLifecycle.js';
@@ -146,6 +150,7 @@ async function init(): Promise<void> {
   initSwarms(scene, terrain, SWARM_SPECS);
 
   effects = new EffectsManager(scene);
+  initVfx(scene); // quarks batch renderer — one draw call per material
   effects.setTerrain(terrain);
   groundMist = new GroundMist(scene, terrain); // valley fog banks
   profiler.markTime('effectsCreated');
@@ -173,7 +178,15 @@ async function init(): Promise<void> {
   // teleport back instead of raging (enrage was layered on top later)
   const classicMode = mode === 'classic';
   if (classicMode) setBallEnrage(false);
-  if (mode) setupOfflineMode(mode);
+  // Bot roster waits on the first terrain decision — a room's map spec
+  // arrives a few seconds after connect, and bots seeded on the boot
+  // heightmap first would spawn → re-seat in the same breath. Offline
+  // (no gameState ever) falls back to the boot field after 8s.
+  if (mode) {
+    world.onTerrainApplied = () => teamBots?.reseatAll();
+    void Promise.race([firstTerrain, new Promise((r) => setTimeout(r, 8000))])
+      .then(() => { if (!teamBots) setupOfflineMode(mode); });
+  }
 
   // ?yaw/?pitch/?dummy headless-screenshot hooks — see game/debugHooks.ts
   dummyUpdate = applyDebugHooks({ scene, player, terrain, remotePlayers, logger });
@@ -425,7 +438,7 @@ function wirePlayerStatusHooks(): void {
   ambientBirds.onPeck = (pos) => {
     if (player.isDead) return;
     player.lastDamageSource = 'pecked to death by a buzzard';
-    player.applyKnockback(pos, 18);
+    player.applyKnockback(pos, 18 * player.mods.knockbackTaken);
     networkManager?.sendEnvironmentDamage(45);
     hud?.showDamage(pos, 45);
     sfx.playerHurt();
@@ -462,7 +475,7 @@ function wireNetworkLocal(): void {
   player.onNetworkInput = (input, rotation) => networkManager.sendInputMove(input, rotation);
   networkManager.localAuthority = {
     envDamage: (amount) => {
-      const dmg = Math.min(40, Math.max(1, Math.round(amount * (1 - player.mods.damageResist))));
+      const dmg = Math.min(40, Math.max(1, Math.round(amount * (1 - effectiveResist(player.mods, player.health, player.maxHealth)))));
       if (player.isDead) return;
       player.health = Math.max(0, player.health - dmg);
       player.lastDamageSource = 'the wilderness';
@@ -600,7 +613,7 @@ init().then(async () => {
   if (import.meta.env.DEV || urlParams.debug) {
     (window as unknown as { __test: unknown }).__test = {
       player, scene, entities, world, terrain,
-      networkManager, demoManager,
+      networkManager, demoManager, rendererSetup,
       chatSink: (await import('./game/chat.js')).chatSink,
     };
   }

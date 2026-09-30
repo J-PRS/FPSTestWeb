@@ -47,6 +47,9 @@ export interface WorldState {
   /** Self-knockback predictions — stamped when a local explosion already
    *  shoved the player so the server's `knockback` echo (~RTT later)
    *  doesn't apply the same blast twice. */
+  /** Fired after a terrain swap completes — local bots re-seat onto the
+   *  new heightmap instead of standing at the old field's altitude. */
+  onTerrainApplied?: (file: string | null) => void;
   selfBlastStamps: { x: number; y: number; z: number; t: number }[];
   /** Own banked LG charge, echoed by the server (yourCharge) — the
    *  carrier is excluded from tick fanout so the walking-bomb warning

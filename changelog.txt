@@ -1,3 +1,4 @@
+2026-09-26 - Boot flow: offline bot roster defers to first terrain decision (room map) with 8s fallback; bots re-seat quietly on terrain swaps via world.onTerrainApplied -> TeamBots.reseatAll
 2026-09-26 - Hidden-tab VFX suppression: Explosion/Implosion/ScorchDecal die at birth while document.hidden (was stacking hundreds of live particles into the tab-back frame); scorch entry nullable for the early-out
 2026-09-26 - Sheep coverage debit measures 3D displacement (was XZ-only; climbing read as idle on steep T2 terrain)
 2026-09-26 - Sheep yeet diagnostics: per-source charge ledger (idle/ignore/cover + client-side bleed) dumped into every yeet warn on both client and server meters
