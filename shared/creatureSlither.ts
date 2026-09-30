@@ -83,50 +83,21 @@ export function stepSlither(
 
   const dx = target ? target.x - c.x : 0;
   const dz = target ? target.z - c.z : 0;
-  const distSq = dx * dx + dz * dz;
   const dy = target ? target.y - c.y : 0;
-  const hitSq = distSq + dy * dy;
+  const geom = { dx, dz, distSq: dx * dx + dz * dz, hitSq: dx * dx + dz * dz + dy * dy };
 
+  // Per-state steppers return the edge to emit, or null to fall through
+  // to integration — the event kinds are the wire.
+  let ev: CrawlerEvent | null = null;
   switch (c.state) {
-    case 'windup': {
-      // Coil — stationary telegraph; contact during the coil doesn't bite,
-      // the committed lunge does.
-      c.vx = 0; c.vz = 0;
-      c.windupTimer -= dt;
-      if (c.windupTimer <= 0 && c.stunTimer <= 0) {
-        c.state = 'lunge';
-        c.hopTimer = c.sp.LUNGE_T; // reuse hopTimer as the lunge clock
-        const d = Math.sqrt(distSq) || 0.001;
-        c.vx = (dx / d) * c.sp.LUNGE_SPEED;
-        c.vz = (dz / d) * c.sp.LUNGE_SPEED;
-        return 'pounce';
-      }
-      break;
-    }
-    case 'lunge': {
+    case 'windup': ev = stepCoil(c, dt, geom); break;
+    case 'lunge':
       c.hopTimer -= dt;
       if (c.hopTimer <= 0) c.state = 'slither';
       break;
-    }
-    default: { // slither
-      if (c.stunTimer <= 0 && target && distSq < c.sp.AGGRO_D2) {
-        const wantYaw = Math.atan2(dx, dz);
-        const weave = Math.sin(c.animT * c.sp.WEAVE_HZ) * c.sp.WEAVE_AMP;
-        const wy = wantYaw + weave;
-        c.vx = Math.sin(wy) * c.sp.SPEED;
-        c.vz = Math.cos(wy) * c.sp.SPEED;
-        if (hitSq < c.sp.STRIKE_D2 && c.strikeCd <= 0) {
-          c.state = 'windup';
-          c.windupTimer = c.sp.WINDUP_S;
-          return 'windup';
-        }
-      } else {
-        c.vx *= Math.max(0, 1 - 4 * dt);
-        c.vz *= Math.max(0, 1 - 4 * dt);
-      }
-      break;
-    }
+    default: ev = stepWeave(c, dt, target, geom); break;
   }
+  if (ev !== null) return ev;
 
   const spx = c.x, spz = c.z;
   c.x += c.vx * dt;
@@ -134,7 +105,7 @@ export function stepSlither(
   clipMotion(c, spx, c.y, spz, cols);
   c.y = hmHeight(field, c.x, c.z) + 0.5; // belly rides the terrain
 
-  if (c.state === 'lunge' && target && hitSq < c.sp.BITE_D2) {
+  if (c.state === 'lunge' && target && geom.hitSq < c.sp.BITE_D2) {
     c.state = 'slither';
     c.hopTimer = 0;
     c.strikeCd = c.sp.STRIKE_CD;
@@ -147,6 +118,47 @@ export function stepSlither(
     while (dyy > Math.PI) dyy -= Math.PI * 2;
     while (dyy < -Math.PI) dyy += Math.PI * 2;
     c.yaw += dyy * Math.min(1, 6 * dt);
+  }
+  return null;
+}
+
+type SlitherGeom = { dx: number; dz: number; distSq: number; hitSq: number };
+
+/** Coil — stationary telegraph; contact during the coil doesn't bite,
+ *  the committed lunge does. */
+function stepCoil(c: SimSlither, dt: number, g: SlitherGeom): CrawlerEvent | null {
+  c.vx = 0; c.vz = 0;
+  c.windupTimer -= dt;
+  if (c.windupTimer <= 0 && c.stunTimer <= 0) {
+    c.state = 'lunge';
+    c.hopTimer = c.sp.LUNGE_T; // reuse hopTimer as the lunge clock
+    const d = Math.sqrt(g.distSq) || 0.001;
+    c.vx = (g.dx / d) * c.sp.LUNGE_SPEED;
+    c.vz = (g.dz / d) * c.sp.LUNGE_SPEED;
+    return 'pounce';
+  }
+  return null;
+}
+
+/** S-weave pursuit at the committed snapshot; bleeds off when no prey
+ *  is in aggro, telegraphs into the coil when the strike lands. */
+function stepWeave(
+  c: SimSlither, dt: number, target: SimVec | null, g: SlitherGeom,
+): CrawlerEvent | null {
+  if (c.stunTimer <= 0 && target && g.distSq < c.sp.AGGRO_D2) {
+    const wantYaw = Math.atan2(g.dx, g.dz);
+    const weave = Math.sin(c.animT * c.sp.WEAVE_HZ) * c.sp.WEAVE_AMP;
+    const wy = wantYaw + weave;
+    c.vx = Math.sin(wy) * c.sp.SPEED;
+    c.vz = Math.cos(wy) * c.sp.SPEED;
+    if (g.hitSq < c.sp.STRIKE_D2 && c.strikeCd <= 0) {
+      c.state = 'windup';
+      c.windupTimer = c.sp.WINDUP_S;
+      return 'windup';
+    }
+  } else {
+    c.vx *= Math.max(0, 1 - 4 * dt);
+    c.vz *= Math.max(0, 1 - 4 * dt);
   }
   return null;
 }
