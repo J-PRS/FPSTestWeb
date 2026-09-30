@@ -6,7 +6,7 @@ import { RemotePlayer } from '../entities/RemotePlayer.js';
 import type { Terrain } from '../world/terrain.js';
 import type { Nugget } from '../entities/Nugget.js';
 import { MovementController, type MovementState } from '../entities/movement.js';
-import { ENERGY, cloakDrainPerSec } from '../../../shared/movement.js';
+import { ENERGY } from '../../../shared/movement.js';
 import type { StructureSpec } from '../../../shared/mapSpec.js';
 import { TEAM_COLORS, type TeamId } from '../../../shared/teams.js';
 import { BotBrain, BOT_EYE } from '../../../shared/botBrain.js';
