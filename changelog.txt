@@ -1,3 +1,4 @@
+2026-10-01 - Player.ts 883->742: move-event FX emitters (jetpack trail, ski/foot dust, land/jump edges) -> playerEmit.ts; toggle-status family (cloak/shield/mend, wire status byte, shield bubble, spectator) -> playerStatus.ts
 2026-10-01 - weaponsGeo.ts 943->607: energy weapon builders (plasma cannon/gun, railgun, lightning) -> weaponsGeoEnergy.ts; sidearm/tool builders (pistol, revolver, repair) -> weaponsGeoSidearm.ts; shared material palette + tube/bore helpers -> weaponKit.ts
 2026-09-30 - Lint floor zeroed: sheepTick split (sheepLedger + isTribesing helpers, complexity 16->13), remoteSpawn params bundled to spec object (7->2). oxlint now reports 0 warnings across client src
 2026-10-01 - PlayerModel.ts: per-frame cosmetic FX family (prop-gun swap/throw/punch/land envelopes, recoil, muzzle flash, jet lean, damage white-pop) -> modelFx.ts behind ModelFxHost; 993->828 lines; envelope timers deduped into one attack-hold-release helper
