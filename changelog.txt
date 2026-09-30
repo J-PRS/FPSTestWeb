@@ -1,3 +1,4 @@
+2026-09-30 - DemoSerializer split: codec halves -> demoWriter.ts (record encoders + crc32 + sizes) and demoReader.ts (bounds-checked cursor + version-gated reads); namespace is a thin facade (454->25).
 2026-09-30 - networking/tiers split: WebTransport transport + tier probe moved to tiersWebTransport.ts (447->309).
 2026-09-30 - combat/lightning split: hitscan ray family (terrain march, capsule/sphere entry, chain-fork pick) moved to lightningTrace.ts with exported ray scratch (479->335).
 2026-09-30 - Player split: armory (class/perk banking, slot/belt/sidearm/pack picks, hold-out secondary swap) moved to playerLoadout.ts behind a LoadoutHost surface; statics re-exported (742->645).
