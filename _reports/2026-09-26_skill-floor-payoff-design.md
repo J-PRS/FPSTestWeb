@@ -1,164 +1,164 @@
-# North Star: Forgiving Floor, Costly Ceiling
+# North Star: Compress the Middle, Pay the Top
 
 *Design concept — 2026-09-26*
 
-## The principle
+## The principle, corrected
 
-Every strong tool in the game should answer two questions at once:
+The goal is NOT "handicap the weapon, give pros a consolation prize."
+The real shape of it:
 
-1. **Who is it forgiving to?** — the "noob handicap": a built-in limiter that
-   keeps the weapon approachable and prevents it from dominating low-skill
-   lobbies.
-2. **What does it pay back for skill?** — the "pro payoff": a deeper mechanic
-   that the same limiter feeds, rewarding mastery with something a flat-stat
-   weapon can't do.
+**Absorb the middle of the skill spectrum.** Whether a player can hold a
+beam on target for 0.1s or 0.3s (metaphorically), they should land in the
+same damage curve — mediocre vs decent tracking shouldn't separate
+players much, because that gap is where stomps are born. Then push the
+entire skill expression into the tail: the player who can hold for a full
+second+ gets something genuinely *awesome* — not more damage, but a
+different order of capability.
 
-The key is that both sides must be *the same mechanic seen from two seats*.
-Not a nerf plus a separate gimmick — one system whose cost IS its payoff.
-When it works, nobody calls the limiter a handicap: casuals experience a
-weapon that feels good immediately, pros experience a resource engine.
+Flatten the mid-skill separation. Make mastery spectacular.
+
+That's the inversion that matters: in ordinary shooter balance, better
+aim → more damage, linearly — the decent player beats the average one,
+the good one stomps the decent one, and the noob feeds everyone. Our
+north star instead *compresses* the ladder in the middle and *explodes*
+the payoff at the top. Average players aren't punished for being
+average; mastery is rewarded with spectacle instead of a bigger number.
 
 ## The worked example: the Lightning Gun
 
-The LG shipped as flat 8/tick — ~178 dps, dominant in every lobby. The
-redesign (all committed this session):
+Shipped as flat 8/tick (~178 dps — dominant everywhere). The redesign:
 
 - **Stepped ramp-down**: consecutive ticks on one target step 8 → 6 → 4,
-  floor reached at tick 10 (~0.5s of hold). Misses inside a 0.3s window
-  keep the count; target-switching resets. Sustained DPS ~90, burst DPS
-  ~178. *Handicap*: sustained accuracy is weaker than it looks — and
-  this is deliberately inverted from normal balance: the decay punishes
-  the *good* player (a perfect track bleeds to the floor), while a
-  sprayer hopping fresh targets keeps full 8/tick forever. The noob
-  isn't handicapped at all; the pro is, which is exactly why the payoff
-  side has to be serious.
+  floor at tick 10 (~0.5s). Misses inside 0.3s keep the count; switching
+  targets resets. Sustained ~90 dps, burst ~178. *The absorption*: a
+  2-tick graze and a 7-tick track land on nearly the same stepped curve —
+  the middle of the aim spectrum collapses into the same bucket. And the
+  decay punishes the *accurate* player specifically — a perfect track
+  bleeds to the floor while a sprayer on fresh targets keeps full 8.
+  The handicap is on mastery, which is why the payoff must be serious.
 - **The bank**: each tick banks `8 − tickDamage` (what the ramp withheld)
-  ×2 into a per-target charge, capped at 320. *Payoff*: the withheld
-  damage isn't lost — it's stored on the victim as a bomb.
+  ×2 into a per-target charge, cap 320. *The payoff*: the withheld
+  damage isn't lost — it's stored ON THE VICTIM as a bomb. The only
+  way to the 320 detonation is the ~2.7s sustained track that almost
+  nobody can do — that's the tail-end skill expression.
 - **Telegraph**: the victim wears an electric shroud that swells and
   flickers with charge; the beam itself thickens ~2.6× and crackles
-  harder. Everyone in the fight can read the bomb's size — charge is a
-  public combat state, not a hidden meter.
+  harder. The stored payoff is public — everyone can read the bomb.
 - **Detonation economy**: any non-LG direct hit pops
-  `min(banked, hitDamage)` — a pellet sparks 10 out, a rocket dumps 90.
-  The remainder keeps smoldering (decays at 5× fill rate once the beam
-  leaves). The LG's own kill pops the full bank.
+  `min(banked, hitDamage)` — a pellet sparks 10 out, a rocket dumps 90;
+  remainder keeps smoldering (decays at 5× fill rate off-beam). The LG's
+  own kill pops the full bank.
 
-Why it's both seats of one mechanic: a casual's beam still kills (small
-pops feel great), while a pro converts a 2.7s sustained track into a 320
-detonation — and can *feed* the bomb to a teammate's rocket. The limiter
-purchased the payoff literally, in the same units.
+## The anti-pattern in our own roster: the Chaingun ramp
+
+The chaingun's ramp (`dmg += n`, up to +8 on sustained per-target hits)
+is this design *backwards* — and it's the reason it's worth calling out:
+
+- It pays the accurate tracker a linear bonus for sustained hits —
+  i.e. it WIDENS the mid-skill gap. The decent aimer melts where the
+  average one plinks. That's a skill separator, not a compressor.
+- Its payoff is just more of the same damage — no spectacle, no stored
+  resource, nothing the victim or observers can read or play around.
+- Net effect on a noob: the good player holding the trigger does MORE
+  damage to them, faster — the ramp is a stomp amplifier. It rewards the
+  skill that already wins.
+
+It isn't "wrong" in isolation — a ramp is a fine mechanic — but under
+the north star it's the inverted shape: payoff proportional to
+mid-spectrum accuracy instead of a threshold the tail unlocks. If the
+chaingun gets a pass someday, the honest fix isn't deleting the ramp,
+it's converting it: e.g. the ramp builds a *separate* payoff state
+(overheat stun-power, a spread-burst finisher) rather than flat +dmg —
+compress the middle, pay the top.
+
+## How rare is the pattern in our roster? Honest audit
+
+- **Disc — the only genuine sibling.** Self-knockback risk (eat your
+  own blast) is a real *cost*, spent on disc-jump mobility — the
+  franchise-defining tail skill. Mid-skill players barely jump; experts
+  cross the map in seconds. Cost→payoff in one mechanic. Fits.
+- **Chaingun — the anti-pattern** (above).
+- **Mortar — aim gate, wrong seat.** The arc is execution difficulty,
+  and the 18m splash is forgiveness *for the shooter* — noob-friendly,
+  but with no stored payoff; it's just a skill gate with a soft floor.
+- **Railgun — pure skill gate.** A fast precise slug (450 m/s, 0.5
+  proxy cap). No cost converts to anything; accuracy pays linearly.
+- **Cannon — flat.** No forgiveness axis, no depth axis — the prime
+  candidate for the next pass (slow dodgeable ball justifies a
+  consecutive-hit charge/ramp payoff).
+
+So: one full implementation (LG), one genuine sibling (Disc), one
+anti-pattern (Chaingun), and three weapons that are difficulty-gated
+or flat.
 
 ## The pattern in other games
 
 **Tribes: Ascend — Spinfusor (disc)**
-Handicap: slow projectile + punishing self-knockback if you eat your own
-blast. Payoff: that same blast is the movement system — disc-jumping is
-*the* core skill of the franchise. The thing that makes it hard for
-beginners is the thing that makes it legendary for veterans. Our disc
-already does this.
+Same shape as ours: the blast that's dangerous to eat is the mobility
+engine. The mid-skill player uses it as a slow grenade; the expert
+chains mid-air discs into map-crossing routes. Tail payoff, real cost.
 
 **Quake — Lightning Gun**
-The original truth our LG was modeled on: absurd point-blank DPS gated by
-a beam that's hard to hold on strafing targets. Handicap = tracking
-difficulty, payoff = the highest sustained DPS in the game. Our version
-makes the *cost* explicit (decay) and banks it (charge) instead of leaving
-it as pure aim-gate.
+High point-blank DPS gated by tracking difficulty — the original
+inspiration. But note: Quake's LG pays linearly for aim — it's a skill
+gate, not a compressor. Ours goes further: the decay *absorbs* mid-aim
+and converts it into stored payoff.
 
-**Halo — Energy Sword lunge**
-Handicap: useless at range — the noob who whiffs is exposed. Payoff: the
-lunge *is* the skill — reading spacing, baiting the commit, punishing the
-whiff. One stat (lunge range) creates both the floor and the ceiling.
+**TF2 — ÜberCharge**
+Handicap: the medic can't fight — a real cost. Payoff: 8 seconds of the
+strongest state in the game. And it telegraphs — the charge visual on
+the pair is counterplay, exactly why our shroud exists.
 
 **TF2 — Pyro airblast**
-Handicap: pathetic direct damage. Payoff: the compression blast is a
-utility toolbox (reflect projectiles, extinguish teammates, force-push
-ubi jumps). Nobody calls reflect a handicap — the weak flamethrower is
-what justifies it.
+Weak flamethrower (cost) buys a reflect/push/extinguish toolbox
+(payoff). Nobody reads the weak damage as a handicap — it's what the
+utility costs.
 
-**Fighting games — comeback mechanics (X-Factor, Rage, V-Trigger)**
-Handicap: you're losing (the literal handicap). Payoff: damage/utility
-scaling proportional to deficit — codified rubber-banding that gives the
-behind player a real out without taking anything from the ahead one.
-Design lesson: the cost side can be *situational* (behind, whiffed,
-sustained) rather than statistical.
-
-**Destiny/Bungie — Charge of Light / super economy**
-Handicap: you spend time/position building meter. Payoff: a payoff that
-dwarfs any single weapon. The shroud+pop is this in miniature — the meter
-is ON the enemy, which is the novel bit.
+**Fighting games — comeback mechanics (X-Factor, Rage)**
+The "cost" is being behind; the payoff is damage scaling proportional
+to deficit — codified rubber-banding that gives the losing player a
+real out without taxing the winner. The cost side can be *situational*,
+not statistical.
 
 **Monster Hunter — Long Sword Spirit Gauge**
-Handicap: the gauge decays if you stop attacking — sustained pressure is
-the tax. Payoff: spirit blade finishers. Same shape as our decay-in /
-decay-out charge: maintenance is the skill expression.
+Gauge decays when you stop attacking — sustained pressure is the tax,
+spirit finishers are the payoff. Same maintenance-creates-value shape
+as our off-beam drain.
 
-**Team Fortress 2 — ÜberCharge**
-Handicap: the medic can't fight — the weapon itself is the handicap.
-Payoff: the most powerful 8 seconds in the game. *And it telegraphs* —
-the charge visual on the medic pair is readable counterplay, exactly the
-reason our shroud exists.
+**Halo — Energy Sword lunge**
+Useless at range (cost); the lunge spacing game *is* the skill
+(payoff). One stat creates floor and ceiling together.
 
 ## Design rules extracted
 
-1. **One mechanic, two seats.** If you can't describe the payoff without
-   naming the limiter, they're probably two features bolted together.
-2. **Charge is a public state.** A bank the victim and observers can read
-   is counterplay; a hidden meter is a feel-bad surprise. Telegraph
-   everything that can kill someone.
-3. **Decay on both sides.** Charge fades when the beam leaves (5× drain);
-   the ramp resets on target switch. Stored power must be *maintained* —
-   that's what makes the payoff earned rather than parked.
-4. **Proportional detonation.** `min(banked, hitDamage)` means small hits
-   can't arbitrage a big bomb — the economy stays honest.
-5. **The handicap is allowed to be scary.** A 20-tick decay to 4 damage
-   is a real cost — that's what buys a 320-damage payoff without breaking
-   casual lobbies. Timid handicaps buy timid payoffs.
-
-## Honest re-audit: how rare is it really in our roster?
-
-First draft oversold the pattern. Looking at the actual mechanics:
-
-- **Disc — the only genuine sibling.** Self-knockback risk (eat your own
-  blast) is a real *cost*, and it's spent on the payoff — disc-jump
-  mobility, the franchise-defining skill. Cost→payoff in the same
-  mechanic. Fits.
-- **Chaingun — half a fit.** A real ramp exists (`dmg += n`, up to +8 on
-  sustained per-target hits), so there is a paid-for ceiling. But the
-  "cost" is only time-at-target — nothing is stored, nothing telegraphs,
-  the ramp can't be stolen or detonated. It's a delayed-stat payoff,
-  shallower than the LG's resource economy.
-- **Mortar — oversold.** The arc is an *aim gate*, not a stored cost —
-  and the forgiving part (18m splash) is forgiveness *for the shooter*,
-  which is the wrong seat entirely. It's a noob-friendly weapon with an
-  execution ceiling, not a limiter→payoff coupling.
-- **Railgun — oversold.** No charge time, no mechanic — a fast precise
-  slug (450 m/s, tight 0.5 proxy cap). Precision is a skill *requirement*,
-  not a limiter that buys anything.
-- **Cannon — nothing at all.** A flat heavy comedy ball: no forgiveness
-  axis, no depth axis. The weakest fit — the prime candidate for the
-  next pass (e.g. per-target consecutive-hit damage ramp — LG-shaped,
-  justified by the ball being slow and dodgeable).
-
-So the honest claim: **the pattern is rare.** One full implementation
-(LG), one genuine sibling (Disc), one half-fit (Chaingun), and three
-weapons that are just difficulty-gated or flat. That scarcity is the
-opportunity — the roster has room for two or three more couplings
-without repeating the charge mechanic itself.
-
-Important distinction sharpened by the audit: **a skill gate is not a
-payoff.** "Hard to aim" makes a weapon skill-restricted; it doesn't give
-anything back. The north star requires the limiter to be a *cost that
-converts* — withheld damage, self-harm, spent position, stored time —
-not merely difficulty.
+1. **One mechanic, two seats.** The limiter and the payoff must be the
+   same system — if you can describe the payoff without naming the
+   cost, it's two features bolted together.
+2. **Compress, don't gate.** A skill gate ("hard to aim") just raises
+   the entry bar — it still pays mid-skill players linearly and stomps
+   noobs harder. The north star compresses mid-skill separation and
+   pays the tail instead.
+3. **The payoff must be visible.** Stored power everyone can read is
+   counterplay and drama; a hidden meter is a feel-bad surprise.
+   Telegraph anything that can kill someone.
+4. **Stored power must be maintained.** Charge decays off-beam; the
+   ramp resets on target-switch. Parked payoffs are unearned ones.
+5. **Proportional detonation keeps the economy honest.** Small hits
+   can't arbitrage a big bank — `min(banked, hitDamage)`.
+6. **The handicap is allowed to be scary.** A decay to 4/tick is a
+   real cost — that's what buys a 320 payoff without breaking casual
+   lobbies. Timid costs buy timid payoffs.
+7. **Beware the inverted version.** Paying accuracy linearly (the
+   chaingun ramp) widens the very gap we're trying to close — it's the
+   anti-pattern, not a milder flavor of the same idea.
 
 ## Open questions
 
-- Should charge be visible on the HUD to the *victim* themselves (a
-  "you're loaded — get clear" warning), or is world-readability enough?
-  Currently only the shroud exists — no self-warning.
-- Does charge bank across deaths/respawns? (Currently no — it lives on
-  the target id.)
-- PvP parity: shroud + detonation is client-side for creatures today.
-  A remote-player version would need the server to relay charge state —
-  worth it if the mechanic survives playtesting.
+- Should the victim see their own charge on the HUD ("you're loaded —
+  get clear"), or is the world-readable shroud enough?
+- Charge doesn't survive death (it lives on the target id) — correct
+  for now, revisit if it becomes a traded resource.
+- PvP parity: shroud + detonation are client-side creature mechanics
+  today; remote players would need server-relayed charge state.
+- Chaingun: leave the flat ramp as-is, or convert it to a
+  compress/pay shape (e.g. ramp builds a burst-finisher state)?
