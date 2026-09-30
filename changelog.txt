@@ -1,3 +1,4 @@
+2026-09-26 - tests: room-hop scenarios — kit + pending loadout carryover, dead-hop denial, spam throttle (448 bun tests)
 2026-09-26 - spectate bind moved V to P (VGS owns V now); stale saved spectate=V binds drop to the new default
 2026-09-26 - claim ledger: sweep spent tombstones on the null-id fallback path too — unbounded growth under sustained fire on unordered transports
 2026-09-26 - dedupe: single muteJudges() for the reseat ritual (grace window + shadow markReseated) across correction, reject-commit, and teleport paths
