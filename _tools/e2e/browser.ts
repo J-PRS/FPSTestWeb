@@ -66,6 +66,12 @@ export async function launchClient(clientUrl: string): Promise<Client> {
   page.on('pageerror', (e) => {
     if (!e.message.includes('WebSocket closed without opened')) console.error('[pageerror]', e.message);
   });
+  page.on('console', (m) => {
+    if (m.type() !== 'error' && m.type() !== 'warning') return;
+    const t = m.text();
+    if (t.includes('WebSocket closed without opened') || t.includes('THREE.WebGLRenderer: Context Lost')) return;
+    console.error(`[console.${m.type()}]`, t.slice(0, 600));
+  });
   await page.goto(clientUrl, { waitUntil: 'domcontentloaded' });
 
   const test = <T = Record<string, unknown>>(expr: string): Promise<T> =>

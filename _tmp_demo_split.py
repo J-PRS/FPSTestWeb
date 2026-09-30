@@ -1,0 +1,304 @@
+import io, re
+p = 'src/game/demoLifecycle.ts'
+s = io.open(p, encoding='utf-8').read()
+
+# Ctx type + module function bodies
+mod = '''interface DemoLifecycleCtx extends DemoLifecycleDeps {
+  playbackWorld: PlaybackWorld;
+  playbackProjectiles: Projectile[];
+  playbackProjectileById: Map<number, Projectile>;
+  playbackBallById: Map<number, Ball>;
+  playbackProjectileOrigin: Map<number, THREE.Vector3>;
+  playbackRemotes: Map<number, RemotePlayer>;
+  frozenWarn: { n: number };
+  seekReconstructing: { on: boolean };
+}
+
+function updatePlaybackProjectiles(d: DemoLifecycleCtx, dt: number): void {
+  // Fade playback rail beams — pooled alongside the projectiles that spawn them.
+  for (let i = d.playbackWorld.beams.length - 1; i >= 0; i--) {
+    const b = d.playbackWorld.beams[i];
+    b.life -= dt;
+    if (b.life <= 0) {
+      d.lazyScene().remove(b.mesh);
+      d.playbackWorld.beamPool.push(b);
+      d.playbackWorld.beams.splice(i, 1);
+    } else {
+      b.mat.opacity = 0.85 * (b.life / b.maxLife);
+    }
+  }
+  for (let i = d.playbackProjectiles.length - 1; i >= 0; i--) {
+    const r = d.playbackProjectiles[i];
+    r.update(dt, d.lazyTerrain());
+    if (r.dead) {
+      r.dispose();
+      d.playbackProjectiles.splice(i, 1);
+      for (const [id, proj] of d.playbackProjectileById) {
+        if (proj === r) {
+          d.playbackProjectileById.delete(id);
+          break;
+        }
+      }
+    }
+  }
+}
+
+// During playback: only update playback balls, skip live game balls and spawning
+function updateBallsPlayback(d: DemoLifecycleCtx, dt: number): void {
+  const terrain = d.lazyTerrain();
+  const player = d.lazyPlayer();
+  let frozenCount = 0;
+  for (let i = d.balls.length - 1; i >= 0; i--) {
+    const b = d.balls[i];
+    if (d.playbackBallById.has(b.id)) {
+      b.update(dt, terrain, player.pos);
+      // Detect frozen balls (near-zero velocity, not dead, not on ground resting)
+      if (!b.dead && b.vel.lengthSq() < 0.01) {
+        frozenCount++;
+      }
+    }
+    if (b.disposed) {
+      d.balls.splice(i, 1);
+      const ti = d.targets.indexOf(b);
+      if (ti >= 0) d.targets.splice(ti, 1);
+    }
+  }
+  if (frozenCount > 0) {
+    d.frozenWarn.n++;
+    if (d.frozenWarn.n <= 5 || d.frozenWarn.n % 60 === 0) {
+      logger.debug(`${frozenCount} ball(s) frozen midair (vel~0). Total playback balls: ${d.playbackBallById.size}`);
+    }
+  } else {
+    d.frozenWarn.n = 0;
+  }
+}
+
+// Shared cleanup: dispose live + playback transient objects
+function clearTransientObjects(d: DemoLifecycleCtx): void {
+  for (const rp of d.playbackRemotes.values()) rp.dispose();
+  d.playbackRemotes.clear();
+  for (const r of d.playbackProjectiles) r.dispose();
+  d.playbackProjectiles.length = 0;
+  d.playbackProjectileById.clear();
+  d.playbackProjectileOrigin.clear();
+  for (const ball of d.playbackBallById.values()) {
+    ball.dispose();
+    const idx = d.balls.indexOf(ball);
+    if (idx >= 0) d.balls.splice(idx, 1);
+    const ti = d.targets.indexOf(ball);
+    if (ti >= 0) d.targets.splice(ti, 1);
+  }
+  d.playbackBallById.clear();
+  for (const e of d.world.debrisList) e.dispose();
+  d.world.debrisList.length = 0;
+  for (const e of d.world.explosions) e.dispose();
+  d.world.explosions.length = 0;
+  for (const i of d.world.implosions) i.dispose();
+  d.world.implosions.length = 0;
+  for (const g of d.world.aoeGizmos) g.dispose();
+  d.world.aoeGizmos.length = 0;
+  for (const dd of d.world.playerDebrisList) dd.dispose();
+  d.world.playerDebrisList.length = 0;
+  for (const b of d.playbackWorld.beams) d.lazyScene().remove(b.mesh);
+  d.playbackWorld.beamPool.push(...d.playbackWorld.beams);
+  d.playbackWorld.beams.length = 0;
+}
+
+// Snapshot existing alive balls into the demo recording — needed when recording
+// starts after balls are already in the scene (they have no Spawned event yet).
+function snapshotExistingBallsForRecording(d: DemoLifecycleCtx, onBallRecorded?: (ball: Ball) => void): void {
+  const dm = d.lazyDemoManager();
+  if (!dm?.isRecording) return;
+  for (const ball of d.balls) {
+    if (ball.dead) continue;
+    dm.recordTargetSpawned(ball.id, { x: ball.pos.x, y: ball.pos.y, z: ball.pos.z }, { x: ball.vel.x, y: ball.vel.y, z: ball.vel.z }, ball.variant);
+    onBallRecorded?.(ball);
+  }
+}
+
+function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlaybackStop: () => void): void {
+  // Handle projectile events from demo playback: spawn projectiles on Fired, explode on Destroyed
+  demoManager.onPlaybackEvent = (events: { projectiles: ProjectileEvent[], targets: TargetEvent[] }) => {
+    if (d.seekReconstructing.on) {
+      reconstructSeek(d.playbackWorld, events, demoManager.currentTime);
+      d.seekReconstructing.on = false;
+      return;
+    }
+    applyPlaybackEvents(d.playbackWorld, events);
+  };
+  demoManager.onPlaybackState = (state) => {
+    if (demoManager.isPlaying) {
+      const player = d.lazyPlayer();
+      player.pos.set(state.posX, state.posY, state.posZ);
+      player.vel.set(state.velX, state.velY, state.velZ);
+      player.yaw = state.yaw;
+      player.pitch = state.pitch;
+    }
+  };
+
+  // Demo playback ends — just pause, keep objects visible (frozen)
+  demoManager.onPlaybackEnd = () => {
+    // No cleanup — objects stay visible as if user pressed pause.
+    // Cleanup happens when user explicitly stops playback via ESC.
+  };
+
+  // User explicitly stops playback (ESC, UI stop button) — full cleanup
+  demoManager.onPlaybackStop = () => {
+    d.world.playbackMode = false;
+    for (const rp of d.world.remotePlayers.values()) rp.setStaleHidden(false);
+    clearTransientObjects(d);
+    // Show overlay menu so user can replay or pick another clip
+    if (document.pointerLockElement === d.rendererCanvas) {
+      document.exitPointerLock();
+    }
+    d.overlay.style.display = 'flex';
+    document.body.classList.add('menu-open'); // hides the HUD layer — same as overlayInput.setOverlay
+    demoManager.fetchCoolShotsFromServer();
+    // Resume recording for new cool shots
+    demoManager.startRecording();
+    onPlaybackStop();
+  };
+
+  // Clear live game objects when playback starts so they don't hang frozen in the scene
+  demoManager.onPlaybackStart = () => {
+    // The replay is its own world — the live wire must not fight it
+    d.world.playbackMode = true;
+    // Cool-shot clicks come from the overlay menu — a replay behind an
+    // open menu is invisible. Close it and grab pointer lock (the click
+    // is a user gesture, so the request is legal).
+    d.overlay.style.display = 'none';
+    document.body.classList.remove('menu-open');
+    d.rendererCanvas.requestPointerLock();
+    // Live remote players would otherwise stand ghosted inside the replay
+    for (const rp of d.world.remotePlayers.values()) rp.setStaleHidden(true);
+    // Dispose all non-playback balls (live game balls)
+    const playbackBallSet = new Set(d.playbackBallById.values());
+    for (let i = d.balls.length - 1; i >= 0; i--) {
+      const b = d.balls[i];
+      if (!playbackBallSet.has(b)) {
+        b.dispose();
+        d.balls.splice(i, 1);
+        const ti = d.targets.indexOf(b);
+        if (ti >= 0) d.targets.splice(ti, 1);
+      }
+    }
+    // Clear live projectiles
+    for (const r of d.world.projectiles) r.dispose();
+    d.world.projectiles.length = 0;
+    // All live species are game objects too — dispose so they don't hang
+    // frozen in the scene during playback
+    for (const m of d.mines) m.onDetonate = undefined; // teardown isn't a detonation
+    type DisposableTarget = import('../entities/balls.js').Targetable & { dispose(): void };
+    for (const list of [d.crawlers, d.turrets, d.rollers, d.seekers, d.overlords, d.mines, d.totems, d.rakks] as DisposableTarget[][]) {
+      for (const e of list) {
+        e.dispose();
+        const ti = d.targets.indexOf(e);
+        if (ti >= 0) d.targets.splice(ti, 1);
+      }
+      list.length = 0;
+    }
+    clearTransientObjects(d);
+  };
+
+  // Clear playback projectiles on seek so they don't get orphaned
+  demoManager.onPlaybackSeek = () => {
+    d.seekReconstructing.on = true;
+    clearTransientObjects(d);
+  };
+
+  // Recorded remote players — states arrive already interpolated at demo
+  // time; RemotePlayer's own snapshot buffer gets them as live updates,
+  // so replica smoothing is literally the production netcode path.
+  demoManager.onRemotePlayback = (states, dt) => {
+    const roster = demoManager.getRoster();
+    const seen = new Set<number>();
+    for (const s of states) {
+      seen.add(s.rosterIdx);
+      let rp = d.playbackRemotes.get(s.rosterIdx);
+      const pos = { x: s.posX, y: s.posY, z: s.posZ };
+      if (!rp) {
+        rp = new RemotePlayer(d.lazyScene(), roster[s.rosterIdx] ?? `remote${s.rosterIdx}`, pos, d.lazyTerrain());
+        d.playbackRemotes.set(s.rosterIdx, rp);
+      }
+      rp.update(pos, { yaw: s.yaw, pitch: s.pitch }, dt, 0, { x: s.velX, y: s.velY, z: s.velZ });
+      rp.tick(dt, d.lazyCamera().position);
+      rp.setStaleHidden((s.flags & RemoteFrameFlags.Dead) !== 0);
+    }
+    // Roster players absent at this time keep their replica but hidden —
+    // e.g. they joined after the seek target or hadn't spawned yet.
+    for (const [idx, rp] of d.playbackRemotes) {
+      if (!seen.has(idx)) rp.setStaleHidden(true);
+    }
+  };
+
+  // Recording source: every remote player the world knows about. Bot
+  // entries ('bot:'-prefixed) ride along too — they're in the same map.
+  demoManager.setRemoteSource(() => {
+    const out: RemoteSample[] = [];
+    for (const [id, rp] of d.world.remotePlayers) {
+      out.push({
+        id,
+        posX: rp.position.x, posY: rp.position.y, posZ: rp.position.z,
+        velX: rp.vel.x, velY: rp.vel.y, velZ: rp.vel.z,
+        yaw: rp.rotation.yaw, pitch: rp.rotation.pitch,
+        dead: rp.isDead, ski: false,
+      });
+    }
+    return out;
+  });
+}
+
+// Demo playback lifecycle: owns the playback projectile/ball registries and
+// wires all onPlayback* handlers (events, state, start/stop/seek/end).
+export function createDemoLifecycle'''
+s = s.replace("// Demo playback lifecycle: owns the playback projectile/ball registries and\n// wires all onPlayback* handlers (events, state, start/stop/seek/end).\nexport function createDemoLifecycle", mod, 1)
+
+# Replace factory body: cut from first fn decl to "  return {"
+a = s.index("  // ---- Playback projectile reconstruction registries ----")
+b = s.index("  return {", s.index("export function createDemoLifecycle"))
+body = '''  const d: DemoLifecycleCtx = Object.assign(deps, {
+    playbackProjectiles: [] as Projectile[],
+    playbackProjectileById: new Map<number, Projectile>(),
+    playbackBallById: new Map<number, Ball>(),
+    playbackProjectileOrigin: new Map<number, THREE.Vector3>(),
+    // Recorded remote players replayed as real RemotePlayer replicas — their
+    // snapshot buffer smooths the 20Hz samples exactly like live net code.
+    playbackRemotes: new Map<number, RemotePlayer>(),
+    frozenWarn: { n: 0 },
+    seekReconstructing: { on: false },
+  });
+  const { playbackProjectiles, playbackProjectileById, playbackBallById, playbackProjectileOrigin } = d;
+
+  const playbackWorld: PlaybackWorld = {
+    get scene() { return deps.lazyScene(); },
+    get terrain() { return deps.lazyTerrain(); },
+    get camera() { return deps.lazyCamera(); },
+    getPlayer: () => deps.lazyPlayer(),
+    balls: deps.balls,
+    debrisList: deps.world.debrisList,
+    explosions: deps.world.explosions,
+    implosions: deps.world.implosions,
+    playbackBallById,
+    playbackProjectiles,
+    playbackProjectileById,
+    playbackProjectileOrigin,
+    beams: [],
+    beamPool: [],
+    get damageNumberManager() { return deps.damageNumberManager(); },
+    get fragMessages() { return deps.fragMessages(); },
+    get hud() { return deps.lazyHud(); },
+  };
+  d.playbackWorld = playbackWorld;
+
+'''
+s = s[:a] + body + s[b:]
+
+s = s.replace("    playbackWorld,\n    playbackBallById,\n    updatePlaybackProjectiles,\n    updateBallsPlayback,\n    snapshotExistingBallsForRecording,\n    wireDemoHandlers,",
+'''    playbackWorld,
+    playbackBallById,
+    updatePlaybackProjectiles: (dt: number) => updatePlaybackProjectiles(d, dt),
+    updateBallsPlayback: (dt: number) => updateBallsPlayback(d, dt),
+    snapshotExistingBallsForRecording: (cb?: (ball: Ball) => void) => snapshotExistingBallsForRecording(d, cb),
+    wireDemoHandlers: (dm: DemoManager, onStop: () => void) => wireDemoHandlers(d, dm, onStop),''')
+io.open(p, 'w', encoding='utf-8').write(s)
+print('ok')

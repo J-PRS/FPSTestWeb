@@ -1,0 +1,14 @@
+import { launchClient, closeClient } from './browser.ts';
+import { upStack } from './env.ts';
+const stack = await upStack({ serverPort: 8312 });
+const a = await launchClient(stack.clientUrl('&room=e2esmoke&bots=4'));
+await a.waitFor(`t.networkManager && t.networkManager.isConnected()`, 30000);
+const b = await launchClient(stack.clientUrl('&room=e2esmoke&net=ws'));
+const cdp = await b.page.createCDPSession();
+await cdp.send('Network.enable');
+cdp.on('Network.webSocketFrameSent', (e: any) => { const p = e.response.payloadData; if (p?.startsWith('{')) console.log('OUT>', p.slice(0,140)); });
+cdp.on('Network.webSocketFrameReceived', (e: any) => { const p = e.response.payloadData; if (p?.startsWith('{')) console.log('IN<', p.slice(0,140)); });
+await b.waitFor(`t.networkManager && t.networkManager.isConnected()`, 30000);
+await new Promise((r) => setTimeout(r, 3000));
+console.log('b nm.players:', await b.test(`t.networkManager.players?.size`));
+await closeClient(a); await closeClient(b); stack.down();

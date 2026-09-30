@@ -1,0 +1,20 @@
+import { launchClient, closeClient } from './browser.ts';
+import { upStack } from './env.ts';
+const stack = await upStack({ serverPort: 8312 });
+const b = await launchClient(stack.clientUrl('&room=e2esmoke&net=ws'));
+await b.waitFor(`t.networkManager && t.networkManager.isConnected()`, 30000);
+await new Promise((r) => setTimeout(r, 2000));
+console.log('socket url:', await b.test(`t.networkManager.ws?.inner?.ws?.url`));
+console.log('sent log:', await b.test(`(() => {
+  const ws = t.networkManager.ws?.inner?.ws;
+  if (!ws) return 'no ws';
+  if (ws.__sent) return ws.__sent;
+  const orig = ws.send.bind(ws);
+  ws.__sent = [];
+  ws.send = (d) => { ws.__sent.push(typeof d === 'string' ? d.slice(0,80) : 'BIN'); return orig(d); };
+  return 'wrapped-now';
+})()`));
+await new Promise((r) => setTimeout(r, 3000));
+console.log('after:', await b.test(`t.networkManager.ws?.inner?.ws?.__sent`));
+console.log('b nm.players:', await b.test(`t.networkManager.players?.size`), 'tick:', await b.test(`t.networkManager.lastTickSeq`));
+await closeClient(b); stack.down();

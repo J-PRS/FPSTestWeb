@@ -104,6 +104,15 @@ def load_tex(mat_name: str) -> np.ndarray:
 TILE_PX = 32
 
 
+def half_shift(a):
+    """T2's terrain square is centered on the world origin, but our
+    heightmap UV maps frac(world/1500) — a half-tile phase difference.
+    Rolling every grid-derived export by half its width makes
+    texel (x,z) land on T2 coordinate (u,v) instead of (u+1024,v+1024).
+    ±half is identical modulo the wrap."""
+    return np.roll(np.roll(a, a.shape[0] // 2, axis=0), a.shape[1] // 2, axis=1)
+
+
 def bake_albedo(matmap, names, used, alpha, res=ALBEDO_RES):
     """alphaMap weights blend continuously-tiled material textures — T2's
     real blend, not per-cell stamping. Weights are per-8m-cell, so
@@ -156,8 +165,8 @@ def export_mats(dest: Path, names, used, alpha, matmap):
     for k, i in enumerate(used):
         (tdir / f"m{k}.png").write_bytes(tex_blob(names[i]))
         tiles.append(f"tiles/m{k}.png")
-    (dest / "matmap.bin").write_bytes(matmap.astype(np.uint8).tobytes())
-    (dest / "alphas.bin").write_bytes(alpha.tobytes())
+    (dest / "matmap.bin").write_bytes(half_shift(matmap).astype(np.uint8).tobytes())
+    (dest / "alphas.bin").write_bytes(half_shift(alpha).tobytes())
     manifest = {
         "grid": GRID,
         "count": len(used),
@@ -345,10 +354,11 @@ def main():
         else:
             u8 = (hm - lo) / max(relief, 1e-6) * 255.0
         u8 = np.rint(u8).astype(np.uint8)
-        (dest / "terrain.bin").write_bytes(struct.pack("<II", GRID, GRID) + u8.tobytes())
+        (dest / "terrain.bin").write_bytes(struct.pack("<II", GRID, GRID) + half_shift(u8).tobytes())
 
         print(f"{mapname}: {lo:.0f}..{hi:.0f}m ({relief:.0f}m relief), mats {[names[i] for i in used]}")
-        bake_albedo(matmap, names, used, alpha, args.res).save(dest / "albedo.png")
+        alb = np.asarray(bake_albedo(matmap, names, used, alpha, args.res))
+        Image.fromarray(half_shift(alb)).save(dest / "albedo.png")
         export_mats(dest, names, used, alpha, matmap)
         faces = extract_sky(mis_text, dest / "sky")
         print(f"  albedo.png {args.res}px, sky faces: {faces}")
@@ -362,9 +372,9 @@ def main():
             (su, sv, sw) = i.get("scale", (1, 1, 1))
             return {
                 "file": i["file"],
-                "pos": [round(u * XZ_SCALE, 2), round((w - lo) * hs, 2), round(v * XZ_SCALE, 2)],
+                "pos": {"x": round(u * XZ_SCALE, 2), "y": round((w - lo) * hs, 2), "z": round(v * XZ_SCALE, 2)},
                 "rot": i.get("rot"),     # raw T2 axis-angle (x y z deg)
-                "scale": [round(su * XZ_SCALE, 3), round(sw * hs, 3), round(sv * XZ_SCALE, 3)],
+                "scale": {"x": round(su * XZ_SCALE, 3), "y": round(sw * hs, 3), "z": round(sv * XZ_SCALE, 3)},
             }
 
         spec = {
