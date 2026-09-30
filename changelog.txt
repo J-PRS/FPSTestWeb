@@ -1,3 +1,4 @@
+2026-09-26 - Lint sweep: drop dead imports post-loopPerf split, useless spread fallback, extract fuelTick from GameBot.locomote
 2026-09-26 - Extract sphere-vs-structure collision from shared/ballSim.ts into ballCollide.ts
 2026-09-26 - Extract spawn-point selection from PlayerManager into spawnPicker.ts
 2026-09-26 - Extract room resolve-or-create + terrain attach from GameServer into roomFactory.ts

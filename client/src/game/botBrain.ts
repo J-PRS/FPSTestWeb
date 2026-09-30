@@ -297,18 +297,22 @@ export class GameBot extends RemotePlayer {
       jetHeld: jet,
     });
     this.movement.update(dt);
-    if (jet && this.yeetT <= 0) this.energy = Math.max(0, this.energy - ENERGY.jetDrain * this.mods.jetDrain * dt);
-    else if (this.moveState.onGround && this.energy < this.energyCap) {
-      // One tank feeds jets AND skills — featherjets' fuel regen and
-      // overcharge's pool regen both land here.
-      this.energy = Math.min(this.energyCap, this.energy + ENERGY.jetCharge * this.mods.jetRegen * this.mods.energyRegen * dt);
-    }
+    this.fuelTick(dt, jet);
 
     this.wireSki = !!move?.ski;
     // Real jet button for the trail — the vel.y heuristic can't tell a
     // burn from a knockback launch; the brain knows.
     this.wireJet = jet;
     this.serverVelocity.copy(this.velocity); // vel getter prefers this
+  }
+
+  /** One tank feeds jets AND skills — featherjets' fuel regen and
+   *  overcharge's pool regen both land here. */
+  private fuelTick(dt: number, jet: boolean): void {
+    if (jet && this.yeetT <= 0) this.energy = Math.max(0, this.energy - ENERGY.jetDrain * this.mods.jetDrain * dt);
+    else if (this.moveState.onGround && this.energy < this.energyCap) {
+      this.energy = Math.min(this.energyCap, this.energy + ENERGY.jetCharge * this.mods.jetRegen * this.mods.energyRegen * dt);
+    }
   }
 
   override applyPredictedKnockback(fromPos: THREE.Vector3, impulseMag: number, pull = false): void {

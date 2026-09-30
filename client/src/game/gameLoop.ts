@@ -3,7 +3,6 @@ import Stats from 'stats.js';
 
 import { MAX_DELTA_TIME } from '../core/config.js';
 import { urlParams } from '../core/params.js';
-import { settings } from '../core/settings.js';
 import type { DemoManager } from '../demo/index.js';
 import type { Player } from '../entities/Player.js';
 import { updateGibs } from '../entities/swarms.js';
@@ -30,7 +29,6 @@ import type { createDemoLifecycle } from './demoLifecycle.js';
 import type { createRemotes } from './remotes.js';
 import type { createWaveDirector } from './waveDirector.js';
 import type { WorldState } from './worldState.js';
-import Logger from '../core/Logger.js';
 import { createPerfHud } from '../core/perfHud.js';
 import { createFrameBudget } from '../core/frameBudget.js';
 import { lastWeaponByPlayer } from './net/projectiles.js';
