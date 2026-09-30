@@ -8,16 +8,13 @@ import { WeaponType } from '../../../shared/weapons.js';
 import type { Nugget } from '../entities/Nugget.js';
 import type { Targetable } from '../entities/balls.js';
 import type { GameContext } from './context.js';
-import { TEAM_COLORS, MODES, makeScores, type TeamId, type TeamScores, type ModeId } from '../../../shared/teams.js';
-import { PlayerDebris } from '../effects/debris.js';
+import { MODES, makeScores, type TeamId, type TeamScores, type ModeId } from '../../../shared/teams.js';
 import type { Terrain } from '../world/terrain.js';
 import { CtfBridge } from './botCtf.js';
 import * as sfx from '../core/sfx.js';
-import { killTaunt, deathTaunt } from '../../../shared/botTaunts.js';
-import { chatSink } from './chat.js';
-import { noteKill } from '../core/stateDebug.js';
 import { BotSenses } from './botSenses.js';
 import { BotFire } from './botFire.js';
+import { respawnBotF, hitF, hurtLocal, botKilledF } from './botKill.js';
 import { winText, checkWin, resetMatch, creditKill, collect, pushScore, syncLocalTeam } from './botMatch.js';
 
 /**
@@ -83,7 +80,7 @@ export class TeamBots {
   private fire: BotFire;
   // Anti-pedestrian meter (idle/ignore/bleed/coverage + yeet)
   // lives in botSheep.ts — rates mirror the server meter.
-  private sheep = new SheepMeter({ warn: (m) => this.deps.logger.warn(m) });
+  sheep = new SheepMeter({ warn: (m) => this.deps.logger.warn(m) });
 
   constructor(
     readonly deps: BotsDeps,
@@ -110,8 +107,8 @@ export class TeamBots {
       logger: this.deps.logger,
       damageCreature: (id, dmg, att) => this.hooks.damageCreature(id, dmg, att),
       creditKill: (id, cr) => this.creditKill(id, cr),
-      botKilled: (k, b) => this.botKilled(k, b),
-      hurtLocal: (d, fp, src, m, att) => this.hurtLocal(d, fp, src, m, att),
+      botKilled: (k, b) => botKilledF(this, k, b),
+      hurtLocal: (d, fp, src, m, att) => hurtLocal(this, d, fp, att, { src, melee: m }),
     });
     this.wd = new BotWatchdog(deps.logger, () => this.over !== null);
     const ffa = this.spec.ffa;
@@ -308,23 +305,8 @@ export class TeamBots {
   // ctor: param props aren't visible to field initializers.
   private wd: BotWatchdog;
 
-  /** Re-seat a dead bot on the spawn ring — shared by the respawn timer
-   *  and match reset (same spot-finding, hp, and gizmo re-tint). */
-  respawnBot(bot: GameBot): void { // public — botMatch's resetMatch calls it
-    const player = this.deps.lazyPlayer();
-    const terrain = this.deps.lazyTerrain();
-    const a = Math.random() * Math.PI * 2;
-    const sp = new THREE.Vector3(player.pos.x + Math.cos(a) * 50, 0, player.pos.z + Math.sin(a) * 50);
-    sp.y = terrain.getHeight(sp.x, sp.z) + EYE;
-    bot.respawn({ x: sp.x, y: sp.y, z: sp.z });
-    bot.botHp = bot.botMaxHp;
-    bot.sheep = 0; // fresh leash on the meter
-    bot.sheepShown = 0;
-    bot.yeetT = 0;
-    this.sheep.clear(bot.playerId);
-    bot.show();
-    bot.setGizmoColor(bot.team === 'ffa' ? 0xcc66ff : TEAM_COLORS[bot.team as TeamId]);
-  }
+  respawnBot(bot: GameBot): void { respawnBotF(this, bot); } // public — botMatch's resetMatch calls it
+
 
   /** Match over → wipe scores, flags home. Rounds are seamless: live
    *  bots keep their ground (hp/meters refilled), only the dead come
@@ -364,89 +346,11 @@ export class TeamBots {
     return this.senses.enemyBotsForTeam(team);
   }
 
-  /** Shared local-hit funnel: trigger-time claims and real bot-shell
-   *  impacts land here — damage, knockback, death feed + credit. */
-  private hurtLocal(dmg: number, fromPos: THREE.Vector3, src: string, melee: boolean, attackerId: string, weapon?: number): void {
-    const p = this.deps.lazyPlayer();
-    if (p.isDead) return;
-    p.lastDamageSource = src;
-    // Connected room: health is server truth. A local write gets stomped
-    // by the next yourHealth echo — report through the self-damage channel
-    // (same as creature melee) and let the wire echo apply it. Feedback
-    // stays local so the hit still reads instantly.
-    if (this.deps.lazyNetworkManager?.()?.isConnected()) {
-      p.applyKnockback(fromPos, (melee ? 6 : 4) * p.mods.knockbackTaken);
-      this.deps.lazyHud().showDamage(fromPos, dmg);
-      sfx.playerHurt();
-      this.deps.lazyNetworkManager().sendEnvironmentDamage(dmg, attackerId);
-      return;
-    }
-    p.health = Math.max(0, p.health - dmg);
-    p.applyKnockback(fromPos, (melee ? 6 : 4) * p.mods.knockbackTaken);
-    this.deps.lazyHud().showDamage(fromPos, dmg);
-    sfx.playerHurt();
-    if (p.health > 0) return;
-    this.deps.world.killCounts.set(attackerId, (this.deps.world.killCounts.get(attackerId) ?? 0) + 1);
-    this.creditKill(attackerId, false);
-    this.localDied();
-    noteKill(attackerId, 'local', weapon ?? (melee ? WeaponType.Melee : undefined));
-    this.hooks.killFeed(attackerId.replace('bot:', ''), 'YOU', false, true);
-    this.botSay(attackerId, killTaunt(attackerId, 'YOU'));
-    this.hooks.localPlayerKilled(attackerId.replace('bot:', ''));
-  }
-
   /** Player/explosion damage routed here when the victim is a bot —
    *  combat consults `hit` before predictDamage. A bot shell can also
    *  hit 'local' (sweepLocal) — that resolves through the same funnel. */
   hit(playerId: string, dmg: number, fromPos: THREE.Vector3, attackerId = 'local', weapon?: number): boolean {
-    // Local authority has to enforce the same friendly gate the server's
-    // CombatHandler does — without it P2P-host/offline kills teammates.
-    const aTeam = this.teamOf.get(attackerId), vTeam = this.teamOf.get(playerId);
-    if (attackerId !== playerId && aTeam && aTeam === vTeam) return true; // claim swallowed, like a server reject
-    if (playerId === 'local') {
-      this.hurtLocal(dmg, fromPos, attackerId.replace('bot:', ''), false, attackerId, weapon);
-      return true;
-    }
-    const rp = this.deps.world.remotePlayers.get(playerId);
-    if (!(rp instanceof GameBot)) return false;
-    const died = rp.takeDamageLocal(dmg, fromPos);
-    this.deps.lazyHealthBarSystem().spawn(playerId, dmg, died ? 0 : rp.botHp);
-    if (died) this.botKilled(attackerId, rp, weapon);
-    return true;
-  }
-
-  /** A bot's line lands a beat after the frag like a typed reply — the
-   *  same delay envelope the server killfeed uses over the wire. */
-  private botSay(id: string, line: string | null): void {
-    if (!line) return;
-    const name = id.replace('bot:', '');
-    setTimeout(() => chatSink.add?.(name, line), 1200 + Math.random() * 1800);
-  }
-
-  private botKilled(killerId: string, bot: GameBot, weapon?: number): void {
-    // Same shatter as wire remotes — the corpse pops into team-colored
-    // shards instead of just shrinking away.
-    const t = bot.team;
-    let parts: { geo: THREE.BufferGeometry; pos: THREE.Vector3 }[] | undefined;
-    try { parts = bot.model.deathParts() ?? undefined; }
-    catch { /* fall through to generic shards */ }
-    this.deps.world.playerDebrisList.push(new PlayerDebris(
-      this.deps.lazyScene(), this.deps.lazyTerrain(),
-      { x: bot.position.x, y: bot.position.y + 1.0, z: bot.position.z },
-      new THREE.Color(t === 'alpha' || t === 'bravo' ? TEAM_COLORS[t] : 0xcc66ff),
-      { inheritVel: bot.vel, parts },
-    ));
-    // Kills drop nuggets — bots feed the economy like everything else.
-    if (!this.spec.ffa) this.hooks.dropNuggets(bot.position, 3, bot.vel);
-    this.deps.world.killCounts.set(killerId, (this.deps.world.killCounts.get(killerId) ?? 0) + 1);
-    this.creditKill(killerId, false);
-    this.ctf?.dropCarried(bot.playerId, bot.position);
-    const kn = killerId === 'local' ? 'YOU' : killerId.replace('bot:', '');
-    noteKill(killerId === 'local' ? 'local' : killerId, bot.playerId, weapon);
-    this.hooks.killFeed(kn, bot.playerId.replace('bot:', ''), killerId === 'local', false);
-    if (killerId !== 'local') this.botSay(killerId, killTaunt(killerId, kn));
-    this.botSay(bot.playerId, deathTaunt(bot.playerId, kn));
-    if (killerId === 'local') sfx.killConfirm();
+    return hitF(this, playerId, dmg, fromPos, attackerId, weapon);
   }
 
   /** DM: local player's creature kill — combat calls this from
