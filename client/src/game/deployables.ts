@@ -19,9 +19,10 @@ import { DeployStation } from '../entities/DeployStation.js';
 import { DeployDrone } from '../entities/DeployDrone.js';
 import { Explosion } from '../effects/explosion.js';
 import { DeployRockets } from './deployRockets.js';
+import { DeployAdopter } from './deployAdopt.js';
 import { screenShake } from '../effects/screenShake.js';
 import * as sfx from '../core/sfx.js';
-import { GRAVITY, MAX_ENERGY, MINE_DAMAGE_MAX, ROCKET_RADIUS } from '../core/config.js';
+import { GRAVITY } from '../core/config.js';
 import { WeaponType, REPAIR_ARMOR_MULT } from '../../../shared/weapons.js';
 import { THROW_RELEASE, THROW_TOTAL } from '../entities/ViewModel.js';
 import type { GameContext } from './context.js';
@@ -121,6 +122,10 @@ export class Deployables {
 
   constructor(private deps: DeployDeps) {
     this.rockets = new DeployRockets(deps);
+    this.adopter = new DeployAdopter(deps, this.rockets, this.items, {
+      foesFor: (o) => this.foesFor(o),
+      killItem: (i) => this.killItem(i),
+    });
   }
 
   /** Pack item is a loadout choice (ESC menu), not a cycle — X throws
@@ -234,7 +239,7 @@ export class Deployables {
       t.group.quaternion.setFromUnitVectors(_UP, n);
       t.group.scale.setScalar(1); // snap any unfolding tail to done
       t.unfoldDone();
-      this.adoptTurret(t, undefined);
+      this.adopter.adoptTurret(t, undefined);
       pod.turret = undefined; // ownership moved — fizzle cleanup must not dispose it
     } else if (pod.station) {
       const s = pod.station;
@@ -242,19 +247,19 @@ export class Deployables {
       s.group.position.copy(pod.pos);
       s.group.quaternion.setFromUnitVectors(_UP, n);
       s.unfoldDone();
-      this.adoptStation(s, undefined);
+      this.adopter.adoptStation(s, undefined);
       pod.station = undefined;
     } else if (pod.drone) {
       const d = pod.drone;
       d.pos.copy(pod.pos);
       d.group.position.copy(pod.pos);
       d.unfoldDone(); // lifts off from the touchdown spot on its own lift
-      this.adoptDrone(d, undefined);
+      this.adopter.adoptDrone(d, undefined);
       pod.drone = undefined;
     } else if (pod.mine) {
       pod.mine.pos.copy(pod.pos);
       pod.mine.seatOn(terrain);
-      this.adoptMine(pod.mine, undefined);
+      this.adopter.adoptMine(pod.mine, undefined);
       pod.mine = undefined;
     }
     this.deps.lazyEffects().spawnMoveDust(pod.pos, this._zeroVel, 10, 0.6);
@@ -275,19 +280,19 @@ export class Deployables {
     if (kind === 'turret') {
       const t = new DeployTurret(this.deps.scene, terrain, at);
       t.unfoldDone();
-      this.adoptTurret(t, owner);
+      this.adopter.adoptTurret(t, owner);
     } else if (kind === 'station') {
       const s = new DeployStation(this.deps.scene, terrain, at);
       s.unfoldDone();
-      this.adoptStation(s, owner);
+      this.adopter.adoptStation(s, owner);
     } else if (kind === 'drone') {
       const d = new DeployDrone(this.deps.scene, terrain, at);
       d.unfoldDone();
-      this.adoptDrone(d, owner);
+      this.adopter.adoptDrone(d, owner);
     } else {
       const m = new Mine(this.deps.scene, terrain, at);
       m.seatOn(terrain);
-      this.adoptMine(m, owner);
+      this.adopter.adoptMine(m, owner);
     }
     this.deps.lazyEffects().spawnMoveDust(at, this._zeroVel, 10, 0.6);
     sfx.land(1);
@@ -448,135 +453,22 @@ export class Deployables {
     sfx.explosionAt(new THREE.Vector3(pos.x, pos.y, pos.z), true);
   }
 
-  private adoptTurret(t: DeployTurret, owner?: DeployOwner): void {
-    const item: Item = {
-      kind: 'turret', candId: t.candId, pos: t.pos, dead: false,
-      hurt: (dmg) => t.takeDamage(dmg),
-      v: t,
-      update: (dt) => {
-        const shot = t.update(dt, this.foesFor(owner));
-        if (!shot) return;
-        this.rockets.spawn(shot.muzzle, shot.target);
-        sfx.shotAt(shot.muzzle, WeaponType.RocketLauncher); // thump + whoosh
-      },
-      dispose: () => t.dispose(this.deps.scene),
-      owner: owner?.id,
-    };
-    // Keep item.dead in step with the entity's — gnaw damage lands on `t`.
-    const hurt = item.hurt;
-    item.hurt = (dmg) => { hurt(dmg); if (t.dead) this.killItem(item); };
-    this.items.push(item);
-  }
+
 
   // Sentry mini-rockets — see deployRockets.ts.
   private readonly rockets: DeployRockets;
+  private readonly adopter: DeployAdopter;
 
   /** Escort drone — follows the owner's head, plinks enemies with weaker
    *  mini-rockets (60% sentry damage). Same dep: targeting rules. */
-  private adoptDrone(d: DeployDrone, owner?: DeployOwner): void {
-    const p = this.deps.lazyPlayer();
-    const item: Item = {
-      kind: 'drone', candId: d.candId, pos: d.pos, dead: false,
-      hurt: (dmg) => d.takeDamage(dmg),
-      v: d,
-      update: (dt) => {
-        // Anchor is the plant owner — a bot's drone chases the bot.
-        const shot = d.update(dt, owner?.pos ?? p.pos, owner ? owner.yaw() : p.yaw, this.foesFor(owner));
-        if (!shot) return;
-        this.rockets.spawn(shot.muzzle, shot.target, 0.6);
-        sfx.shotAt(shot.muzzle, WeaponType.RocketLauncher);
-      },
-      dispose: () => d.dispose(this.deps.scene),
-      owner: owner?.id,
-    };
-    const hurt = item.hurt;
-    item.hurt = (dmg) => { hurt(dmg); if (d.dead) this.killItem(item); };
-    this.items.push(item);
-  }
 
-  private adoptMine(m: Mine, owner?: DeployOwner): void {
-    const player = this.deps.lazyPlayer();
-    m.onDetonate = (mine) => {
-      this.deps.world.explosions.push(new Explosion(
-        this.deps.scene, mine.pos, false, 0, this.deps.lazyTerrain(),
-        mine.blastRadius / ROCKET_RADIUS, 0xffaa44));
-      sfx.explosionAt(mine.pos, true);
-      screenShake.blast(mine.pos, 2.5, player.pos);
-      // Friendly mine — creatures + enemy bots take the blast, not you.
-      for (const c of this.deps.targets) {
-        if (c.dead) continue;
-        const d = c.pos.distanceTo(mine.pos);
-        if (d < mine.blastRadius) {
-          const dmg = Math.round(MINE_DAMAGE_MAX * (1 - d / mine.blastRadius));
-          if (dmg > 0) this.deps.lazyCombat()?.hitTargetLocal(c, dmg);
-        }
-      }
-      for (const b of this.foesFor(owner)) {
-        if (!b.playerId) continue; // creatures take the blast via targets above
-        const d = b.pos.distanceTo(mine.pos);
-        // 'local' resolves through the same hit funnel — it routes to
-        // hurtLocal on the TeamBots side.
-        if (b.alive && d < mine.blastRadius) {
-          const dmg = Math.round(MINE_DAMAGE_MAX * (1 - d / mine.blastRadius));
-          if (dmg > 0) this.deps.damageBot?.(b.playerId, dmg, mine.pos);
-        }
-      }
-    };
-    const nearest = new THREE.Vector3();
-    const item: Item = {
-      kind: 'mine', candId: `dep:${m.id}`, pos: m.pos, dead: false,
-      hurt: (dmg) => { void dmg; m.takeDamage(); }, // mines pop on any hit
-      v: m,
-      update: (dt) => {
-        // Trigger proxy: the nearest hostile to THIS mine. Mine.update was
-        // written for player-proximity; we feed it our enemy instead.
-        let bx = 0, by = 0, bz = 0, bd = Infinity;
-        for (const b of this.foesFor(owner)) {
-          // Player-sourced mines exclude the owner's teammates; the
-          // botFoes list already filters by team for bot owners.
-          if (!b.alive) continue;
-          const d2 = b.pos.distanceToSquared(m.pos);
-          if (d2 < bd) { bd = d2; bx = b.pos.x; by = b.pos.y; bz = b.pos.z; }
-        }
-        if (bd === Infinity) return; // nothing hostile alive — stay dormant
-        nearest.set(bx, by, bz);
-        m.update(dt, nearest);
-        if (m.dead) this.killItem(item);
-      },
-      dispose: () => m.dispose(),
-      owner: owner?.id,
-    };
-    this.items.push(item);
-  }
+
+
 
   /** Recharge pad — standing in the envelope refills energy fast and
    *  health slowly. Aggro bait by design: it's a dep: candidate, so the
    *  wildlife gnaws it while it works. */
-  private adoptStation(s: DeployStation, owner?: DeployOwner): void {
-    const p = this.deps.lazyPlayer();
-    const item: Item = {
-      kind: 'station', candId: s.candId, pos: s.pos, dead: false,
-      hurt: (dmg) => s.takeDamage(dmg),
-      v: s,
-      update: (dt) => {
-        // Field owner gets the charge — a bot's pad heals the bot.
-        const who = owner ?? p;
-        if (!s.update(dt, who.pos)) return;
-        if (owner) {
-          owner.addEnergy(DeployStation.JET_RATE * dt);
-          owner.heal(DeployStation.HP_RATE * dt);
-        } else {
-          p.energy = Math.min(MAX_ENERGY, p.energy + DeployStation.JET_RATE * dt);
-          p.heal(DeployStation.HP_RATE * dt);
-        }
-      },
-      dispose: () => s.dispose(this.deps.scene),
-      owner: owner?.id,
-    };
-    const hurt = item.hurt;
-    item.hurt = (dmg) => { hurt(dmg); if (s.dead) this.killItem(item); };
-    this.items.push(item);
-  }
+
 
   private killItem(item: Item): void {
     if (item.dead) return;
