@@ -177,6 +177,8 @@ export class GameBot extends RemotePlayer {
     threats?: { x: number; y: number; z: number }[];
     /** Rushing the enemy stand — cloak candidates cloak up. */
     infiltrating?: boolean;
+    /** Enemy carrying OUR flag — beacon-marked, engages without LOS. */
+    thief?: { id: string; pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean } | null;
     /** Economy modes prefer creature targets (nuggets farming). */
     huntCreatures?: boolean;
   }): { targetId: string; aim: THREE.Vector3 } | null {
@@ -193,6 +195,7 @@ export class GameBot extends RemotePlayer {
       sounds: ctx.sounds,
       threats: ctx.threats,
       infiltrating: ctx.infiltrating,
+      thief: ctx.thief ?? null,
       huntCreatures: ctx.huntCreatures,
       now: performance.now(),
       // The real tank + hp — fear, mend, shield, and retreat gates all

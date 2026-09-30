@@ -154,10 +154,19 @@ export function pickHunt(st: HuntState, ctx: BrainCtx, pos: BotVec, now: number,
   // across the map like a human focused on the score. In any mode a
   // creature on top of the bot is urgent: deal with what's biting.
   const best = bestBeast && (!player || bestD > THREAT_M || bestBeastD < CREATURE_URGENT_M) ? bestBeast : player;
-  st.hunt = best;
+  // The flag thief is the fallback hunt: a beacon-marked carrier is
+  // legally trackable without LOS, but a bot only commits when it's
+  // close enough to matter — farther out the objective goal still
+  // walks it toward the carrier without it firing blind.
+  const thief = best ? null : thiefBeacon(ctx, pos);
+  st.hunt = best ?? thief;
   if (best) {
     st.lastSeen = { ...best.pos };
     st.lastSeenVel = { ...best.vel };
+    st.lastSeenAt = now;
+  } else if (thief) {
+    st.lastSeen = { ...thief.pos };
+    st.lastSeenVel = { ...thief.vel };
     st.lastSeenAt = now;
   }
   st.fightPos = null;
@@ -167,6 +176,15 @@ export function pickHunt(st: HuntState, ctx: BrainCtx, pos: BotVec, now: number,
     st.fightPos = pickFightPos(st, ctx, pos, best);
   }
   if (!best) pickGoal(ctx, pos);
+}
+
+/** The beacon-marked flag carrier, when it's in committing range —
+ *  beacon range (80m) or any clear eye line. */
+function thiefBeacon(ctx: BrainCtx, pos: BotVec): BotEnemy | null {
+  const t = ctx.thief;
+  if (!t || !t.alive) return null;
+  if (dist3(pos, t.pos) >= 80 && !losClear(ctx, pos, t.pos)) return null;
+  return t;
 }
 
 /** Volley pick: burst cadence + sloppy ballistic lead at lastSeen. */

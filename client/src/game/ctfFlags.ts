@@ -9,6 +9,9 @@ import * as sfx from '../core/sfx.js';
 export interface Flag {
   mesh: THREE.Group; home: THREE.Vector3; pos: THREE.Vector3;
   state: 'home' | 'carried' | 'dropped'; carrier: string | null; dropT: number;
+  /** Carrier's measured velocity — the flag rides the body, so the
+   *  banner's own displacement IS the thief's velocity for aim lead. */
+  vel: THREE.Vector3;
 }
 
 export interface FlagCtx {
@@ -57,7 +60,7 @@ export class CtfFlags {
       g.add(pole, banner);
       g.position.copy(home);
       ctx.lazyScene().add(g);
-      this.flags.set(team, { mesh: g, home, pos: home.clone(), state: 'home', carrier: null, dropT: 0 });
+      this.flags.set(team, { mesh: g, home, pos: home.clone(), state: 'home', carrier: null, dropT: 0, vel: new THREE.Vector3() });
     }
   }
 
@@ -122,8 +125,11 @@ export class CtfFlags {
   }
 
   /** Objective + whether the bot is rushing the enemy stand — the
-   *  infiltrating flag the server feeds its brains (cloak skill). */
-  objectiveInfoFor(bot: GameBot): { pos: THREE.Vector3; infiltrating: boolean } | null {
+   *  infiltrating flag the server feeds its brains (cloak skill).
+   *  When the role's pick IS the thief, the carrier rides along as a
+   *  beacon-marked enemy so the brain engages him, not just the spot. */
+  objectiveInfoFor(bot: GameBot): { pos: THREE.Vector3; infiltrating: boolean;
+      thief?: { id: string; pos: THREE.Vector3; vel: THREE.Vector3 } } | null {
     const enemyTeam: TeamId = bot.team === 'alpha' ? 'bravo' : 'alpha';
     const enemy = this.flags.get(enemyTeam);
     const own = this.flags.get(bot.team as TeamId);
@@ -141,7 +147,13 @@ export class CtfFlags {
       escort: escortPos,
     });
     const infiltrating = enemyStand !== null && pick === enemyStand;
-    return { pos: new THREE.Vector3(pick.x, pick.y, pick.z), infiltrating };
+    return {
+      pos: new THREE.Vector3(pick.x, pick.y, pick.z), infiltrating,
+      // Only roles whose goal IS the thief get the beacon — a capper
+      // escorting doesn't break off to chase.
+      thief: thief !== null && pick === thief && own.carrier
+        ? { id: own.carrier, pos: thief, vel: own.vel } : undefined,
+    };
   }
 
   dropCarried(carrierId: string, at: THREE.Vector3): void {
@@ -168,13 +180,18 @@ export class CtfFlags {
   update(dt: number): void {
     this.rebalanceRoles(performance.now());
     for (const [team, f] of this.flags) {
+      const px = f.pos.x, py = f.pos.y, pz = f.pos.z;
       if (f.state === 'carried') this.tickCarried(team, f);
       else if (f.state === 'dropped') {
         f.dropT -= dt;
         if (f.dropT <= 0) { f.state = 'home'; f.pos.copy(f.home); }
       }
       // Touch rules: enemy team grabs it, own team returns a dropped flag.
-      if (f.state === 'carried') { f.mesh.position.copy(f.pos); continue; }
+      if (f.state === 'carried') {
+        if (dt > 0) f.vel.set((f.pos.x - px) / dt, (f.pos.y - py) / dt, (f.pos.z - pz) / dt);
+        f.mesh.position.copy(f.pos);
+        continue;
+      }
       this.tickTouch(team, f);
       f.mesh.position.copy(f.pos);
     }

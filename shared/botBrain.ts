@@ -48,6 +48,11 @@ export interface BrainCtx {
    *  CTF offense heading for the enemy stand. Lets the status sense
    *  read the approach as an infiltration (cloak) rather than a roam. */
   infiltrating?: boolean;
+  /** The enemy carrying OUR flag, when the host tracks flags and this
+   *  bot's role chases the thief. Carrier position+velocity are beacon
+   *  info (the flag broadcasts the carrier — Tribes' command circuit),
+   *  so engaging the thief is legal without LOS. */
+  thief?: BotEnemy | null;
   /** Ground pickup to chase (nugget) — outranks wander. */
   pickup?: BotVec | null;
   /** Terrain height at x,z — wander waypoints clamp to ground. */

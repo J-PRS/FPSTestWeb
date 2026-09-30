@@ -229,6 +229,7 @@ export class TeamBots {
       nugget: this.spec.flags ? null : this.hooks.nearestNugget(bot.position, 60),
       objective: info?.pos ?? null,
       infiltrating: info?.infiltrating ?? false,
+      thief: info?.thief ? { id: info.thief.id, pos: info.thief.pos, vel: info.thief.vel, alive: true } : null,
       // Nuggets rooms farm wildlife for the objective — the server
       // flips the same flag only in economy modes.
       huntCreatures: this.mode === 'nuggets',
@@ -264,11 +265,26 @@ export class TeamBots {
     return owed;
   }
 
+  /** Last sampled mechanical energy (per unit mass) — the momentum
+   *  conservation probe: ½v² + g·height-above-terrain. */
+  private sheepE = new Map<string, number>();
+
+  /** Instantaneous E loss since last sample, clamped — a bot sliding
+   *  to a deadstop bleeds once, not forever. */
+  private energyBleed(bot: GameBot, v: THREE.Vector3, height: number, foe: boolean): number {
+    const mech = 0.5 * (v.x * v.x + v.y * v.y + v.z * v.z) + 9.8 * height;
+    const ePrev = this.sheepE.get(bot.playerId);
+    this.sheepE.set(bot.playerId, mech);
+    if (ePrev === undefined || mech >= ePrev || foe || bot.yeetT > 0) return 0;
+    return Math.min(8, (ePrev - mech) * 0.08);
+  }
+
   private sheepTick(bot: GameBot, dt: number, terrain: Terrain, foe = false, ignoring = false, hasDest = false): void {
     this.sheepSimMs += dt * 1000;
     const v = bot.vel;
     const speedXZ = Math.hypot(v.x, v.z);
-    const grounded = bot.pos.y - terrain.getHeight(bot.pos.x, bot.pos.z) < 2;
+    const height = bot.pos.y - terrain.getHeight(bot.pos.x, bot.pos.z);
+    const grounded = height < 2;
     const tribesing = speedXZ > 10 || !grounded || bot.yeetT > 0;
     const moving = speedXZ > 1;
     // Rates mirror the server meter — a bot offline is held to the same
@@ -278,6 +294,11 @@ export class TeamBots {
     // fastest tell. Only counts while NOT tribesing: a bot that's
     // skiing or repositioning is playing even with its finger off.
     if (foe && ignoring && !tribesing) delta += 40;
+    // Bleeding total energy without a fight on screen is the deadstop
+    // signature — Tribes play is converting height↔speed losslessly,
+    // so E stays flat through clean skiing and only drops on
+    // face-plants, wall hits, and pedestrian friction.
+    bot.sheep += this.energyBleed(bot, v, height, foe);
     if (!tribesing) bot.sheep += this.coverageDebit(bot, hasDest);
     bot.sheep = Math.max(0, Math.min(100, bot.sheep + delta * dt));
     // ~2s trailing average for display — the raw meter jitters ±10/s
@@ -356,6 +377,7 @@ export class TeamBots {
     bot.sheep = 0; // fresh leash on the meter
     bot.sheepShown = 0;
     bot.yeetT = 0;
+    this.sheepE.delete(bot.playerId);
     bot.show();
     bot.setGizmoColor(bot.team === 'ffa' ? 0xcc66ff : TEAM_COLORS[bot.team as TeamId]);
   }

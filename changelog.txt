@@ -1,3 +1,4 @@
+2026-09-26 - flag thief becomes a real hunt target: beacon-marked carrier (pos+vel) feeds pickHunt as fallback for chase roles, plus sheep meter charges on mechanical-energy bleed (deadstop signature, Tribes momentum-conservation framing)
 2026-09-30 - fix(class): wire respawn trusts server-banked armorClass for local player; fix(bots): WEAPON_FIRE_INTERVAL_S cadence gate in botFire (mortar no longer fires at chaingun pace)
 2026-09-26 - Top-left roster slot replaced with a battle log: kills+weapons, flag grabs/drops/captures/returns, fed from kill feed and CTF events
 2026-09-26 - Bots fire REAL projectiles in P2P-host mode (online gate only applies to wire-remote targets); bot-authored shells can never claim as the local player
