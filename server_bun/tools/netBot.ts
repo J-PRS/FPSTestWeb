@@ -75,9 +75,9 @@ const rand = (a: number, b: number) => a + Math.random() * (b - a);
 const PERKS = PERK_ORDER.filter(p => p !== 'none');
 const CLASSES = ['light', 'medium', 'heavy'];
 
-interface Roster { pos: Vec3; vel: Vec3 }
+interface Roster { pos: Vec3; vel: Vec3; team?: 'alpha' | 'bravo'; dead?: boolean }
 
-const stats = { sent: 0, recv: 0, corrections: 0, shots: 0, errors: 0, closes: 0, joins: 0, tickGaps: 0, tickJit: 0, ballSegs: 0, ballWarps: 0, ballMaxJump: 0, crawlEvts: 0, crawlWarps: 0, crawlMaxJump: 0, rtc: 0, gems: 0, gapSamples: [] as string[] };
+const stats = { sent: 0, recv: 0, corrections: 0, shots: 0, rejected: 0, errors: 0, closes: 0, joins: 0, tickGaps: 0, tickJit: 0, ballSegs: 0, ballWarps: 0, ballMaxJump: 0, crawlEvts: 0, crawlWarps: 0, crawlMaxJump: 0, rtc: 0, gems: 0, gapSamples: [] as string[] };
 
 // Warp detector: consecutive updates for an entity should move it about
 // speed·dt. A jump far past that is a visible teleport — server truth uses
@@ -193,10 +193,14 @@ class WireBot {
   lastTickSeq = -1; lastTickAt = 0;
   balls = new Map<number, Vec3>(); crawls = new Map<number, Vec3>();
   pickups = new Map<number, Vec3>(); // gem/tag drops — sought in team modes
-  ownShots: { id: string; until: number }[] = []; shotN = 0;
+  ownShots: { id: string; until: number; usedShot: boolean; usedAoe: boolean }[] = []; shotN = 0;
+  // Claims waiting for their server id — spawn order matches
+  // projectileCreated order, so FIFO binds them.
+  pendingClaims: { pid?: string }[] = [];
   nextDeploy = 0; nextChat = 0; nextTeleport = 0; nextHeal = 0; nextLoadout = 0; nextEnvDmg = 0; nextSwitch = 0;
   wasJump = false; wasJet = false;
   dead = false; // yourHealth<=0 until playerRespawn — dead clients go quiet
+  team?: 'alpha' | 'bravo'; // own team — friendly targets are unshootable
   // Warp state is per-bot — each socket sees its own (possibly interest-
   // filtered) stream, so comparing across sockets invents teleports.
   private lastSeg = new Map<string, { t: number; x: number; y: number; z: number; sp: number; judge: boolean }>();
@@ -306,7 +310,12 @@ class WireBot {
       }
       if (f) for (const u of f.updates) {
         if (u.playerId === this.id) continue;
-        this.roster.set(u.playerId, { pos: u.position, vel: u.velocity });
+        // Merge — overwriting drops team/dead fields that only the
+        // announce path carries, and would silently re-enable friendly
+        // fire + corpse-shooting every tick.
+        const r = this.roster.get(u.playerId) ?? { pos: u.position, vel: u.velocity };
+        r.pos = u.position; r.vel = u.velocity; r.dead = u.isDead;
+        this.roster.set(u.playerId, r);
       }
       return;
     }
@@ -314,23 +323,46 @@ class WireBot {
     switch (m.type) {
       case 'gameState': {
         // Seat the sim at our spawn and index the roster for aiming.
+        this.team = m.team;
         for (const p of m.players ?? []) {
-          if (p.playerId !== this.id) this.roster.set(p.playerId, { pos: p.position, vel: p.velocity ?? { x: 0, y: 0, z: 0 } });
+          // gameState roster uses `id` (not `playerId` like tick records).
+          const pid = p.id ?? p.playerId;
+          if (pid !== this.id) this.roster.set(pid, { pos: p.position, vel: p.velocity ?? { x: 0, y: 0, z: 0 }, team: p.team });
         }
         for (const pk of m.pickups ?? []) this.pickups.set(pk.id, pk.pos);
-        const me = m.localPlayerState?.position ?? m.players?.find((p: { playerId: string }) => p.playerId === this.id)?.position
+        const me = m.localPlayerState?.position ?? m.players?.find((p: { id?: string; playerId?: string }) => (p.id ?? p.playerId) === this.id)?.position
           ?? { x: rand(-20, 20), y: 40, z: rand(-20, 20) };
         this.sim = new MoveSim(surface, {
           pos: { x: me.x, y: me.y, z: me.z },
           vel: { x: 0, y: 0, z: 0 }, yaw: 0, pitch: 0, onGround: true,
         });
         stats.joins++;
+        // Re-seat (switchRoom, reconnect) revives: the corpse flag belongs
+        // to the room we just left — no respawn message ever arrives for
+        // it in the new one.
+        this.dead = false;
         this.start();
         break;
       }
-      case 'playerJoined': this.roster.set(m.playerId, { pos: m.position, vel: { x: 0, y: 0, z: 0 } }); break;
+      case 'playerJoined': this.roster.set(m.playerId, { pos: m.position, vel: { x: 0, y: 0, z: 0 }, team: m.team }); break;
+      case 'teamUpdate':
+        if (m.playerId === this.id) this.team = m.team;
+        else { const r = this.roster.get(m.playerId); if (r) r.team = m.team; }
+        break;
+      case 'projectileCreated':
+        // Server-assigned id — destroy claims must name this one.
+        if (m.ownerId === this.id) {
+          this.ownShots.push({ id: m.projectileId, until: performance.now() + 2500, usedShot: false, usedAoe: false });
+          const c = this.pendingClaims.shift();
+          if (c) c.pid = m.projectileId;
+        }
+        break;
       case 'playerLeft': this.roster.delete(m.playerId); break;
       case 'pong': this.pingMs = Math.max(1, Date.now() - m.timestamp); break;
+      case 'shotRejected':
+        stats.rejected++;
+        if (stats.rejected <= 10) console.log(`[netBot] ${this.id} shotRejected: ${m.reason}`);
+        break;
       case 'crawlEvt':
         stats.crawlEvts++;
         this.segJump('crawl', m.id, m.position.x, m.position.y, m.position.z,
@@ -387,6 +419,10 @@ class WireBot {
   }
 
   start(): void {
+    // Idempotent — a second gameState (switchRoom re-seat) must reset the
+    // cadence, not stack another copy of every interval.
+    this.stop();
+    this.timers.length = 0;
     const posMs = 1000 / POS_HZ;
     // Position stream — the binary lane real clients use.
     this.timers.push(setInterval(() => {
@@ -551,28 +587,58 @@ class WireBot {
   private fire(): void {
     if (!this.sim || this.roster.size === 0) return;
     const s = this.sim.state;
-    // Nearest wire target — aim claims must name a live peer id.
+    // Nearest wire target — aim claims must name a live peer id, and
+    // never a teammate (friendly fire is rejected outright).
     let best: string | null = null, bd = 1e9;
     for (const [id, r] of this.roster) {
+      if (this.team && r.team === this.team) continue;
+      if (r.dead) continue;
       const d = (r.pos.x - s.pos.x) ** 2 + (r.pos.y - s.pos.y) ** 2 + (r.pos.z - s.pos.z) ** 2;
       if (d < bd) { bd = d; best = id; }
     }
     if (!best || bd > 100 * 100) return;
     stats.shots++;
-    // Every claim carries a projectileId and a matching destroy later —
-    // same lifecycle the server validates for real clients.
-    const pid = `nb-${this.i}-${++this.shotN}`;
-    this.ownShots.push({ id: pid, until: performance.now() + 1500 });
-    if (Math.random() < 0.5) {
-      // Hitscan claim — server clamps damage by weapon type.
-      this.send({ type: 'shotFired', weaponType: 2 });
-      this.send({ type: 'shot', targetId: best, weaponType: 2, projectileId: pid });
-    } else {
-      // Disc AOE — legal as long as the blast point is within 500m.
-      const t = this.roster.get(best)!;
-      const jx = t.pos.x + rand(-4, 4), jz = t.pos.z + rand(-4, 4);
-      this.send({ type: 'aoeShot', position: { x: jx, y: Math.max(gy(jx, jz), t.pos.y), z: jz }, weaponType: 0, airtime: rand(0.3, 1.6), projectileId: pid });
-    }
+    const t = this.roster.get(best)!;
+    const dist = Math.max(Math.sqrt(bd), 1);
+    const weaponType = Math.random() < 0.5 ? 2 : 0;
+    const speed = weaponType === 2 ? 60 : 90;
+    const dir = { x: (t.pos.x - s.pos.x) / dist, y: (t.pos.y - s.pos.y) / dist, z: (t.pos.z - s.pos.z) / dist };
+    // A claim only resolves against a shell the ledger watched launch —
+    // the spawn report goes first, the server-assigned id arrives on the
+    // projectileCreated echo (claims may omit the id → latest-of-type).
+    this.send({
+      type: 'shot', targetId: null, weaponType,
+      position: { x: s.pos.x, y: s.pos.y + 1.6, z: s.pos.z },
+      velocity: { x: dir.x * speed, y: dir.y * speed, z: dir.z * speed },
+    });
+    const airtime = dist / speed;
+    // The claim must outlive its own airtime — the server rejects a
+    // detonation whose claimed flight time exceeds the shell's age. And
+    // it must name THIS shell's id: a bare claim resolves the newest
+    // matching projectile, so a shell fired mid-flight would inherit
+    // our airtime against its own fresh age.
+    const mine: { pid?: string } = {};
+    this.pendingClaims.push(mine);
+    const claim = () => {
+      const pid = mine.pid;
+      if (weaponType === 2) {
+        // A real client only claims what it hit — if the target drifted
+        // since we fired, that shell just missed; claim nothing.
+        const cur = this.roster.get(best);
+        if (cur && (cur.pos.x - t.pos.x) ** 2 + (cur.pos.z - t.pos.z) ** 2 > 36) return;
+        this.send({ type: 'shotFired', weaponType });
+        this.send({ type: 'shot', targetId: best, weaponType, position: { ...(cur?.pos ?? t.pos) }, airtime, projectileId: pid });
+      } else {
+        // The blast claim must sit where the shell actually flew — the
+        // reach check recomputes the trajectory, so aiming at where the
+        // target moved reads as an impossible detonation.
+        const ex = s.pos.x + dir.x * speed * airtime;
+        const ez = s.pos.z + dir.z * speed * airtime;
+        const ey = Math.max(gy(ex, ez), s.pos.y + dir.y * speed * airtime);
+        this.send({ type: 'aoeShot', position: { x: ex, y: ey, z: ez }, weaponType, airtime, projectileId: pid });
+      }
+    };
+    setTimeout(claim, Math.min(airtime, 1.5) * 1000);
   }
 
   private stop(): void { for (const t of this.timers) clearInterval(t); }
@@ -587,5 +653,5 @@ setInterval(() => {
   const ping = pings.length
     ? ` ping=${pings[0]}/${pings[Math.floor(pings.length / 2)]}/${pings[pings.length - 1]}ms`
     : '';
-  console.log(`[netBot] ${bots.length} bots (${s.rtc} rtc) | joins=${s.joins} sent=${s.sent} recv=${s.recv} shots=${s.shots} gems=${s.gems} corr=${s.corrections} err=${s.errors} closes=${s.closes} tickGaps=${s.tickGaps} maxTickGap=${Math.round(s.tickJit)}ms ball=${s.ballSegs}/${s.ballWarps}w max${s.ballMaxJump.toFixed(0)}m crawl=${s.crawlEvts}/${s.crawlWarps}w max${s.crawlMaxJump.toFixed(0)}m${ping}${s.gapSamples.length ? ` gaps[${s.gapSamples.join(' ')}]` : ''}`);
+  console.log(`[netBot] ${bots.length} bots (${s.rtc} rtc) | joins=${s.joins} sent=${s.sent} recv=${s.recv} shots=${s.shots} rej=${s.rejected} gems=${s.gems} corr=${s.corrections} err=${s.errors} closes=${s.closes} tickGaps=${s.tickGaps} maxTickGap=${Math.round(s.tickJit)}ms ball=${s.ballSegs}/${s.ballWarps}w max${s.ballMaxJump.toFixed(0)}m crawl=${s.crawlEvts}/${s.crawlWarps}w max${s.crawlMaxJump.toFixed(0)}m${ping}${s.gapSamples.length ? ` gaps[${s.gapSamples.join(' ')}]` : ''}`);
 }, 5000);
