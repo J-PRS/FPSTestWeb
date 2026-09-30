@@ -316,7 +316,7 @@ export class BotBrain {
         // a ridge shakes pursuit like it would a human.
         if (!losClear(ctx, pos, e.pos)) continue;
         if (e.id.startsWith('b:')) {
-          if (ctx.huntCreatures && d < bestBeastD) { bestBeastD = d; bestBeast = e; }
+          if (d < bestBeastD) { bestBeastD = d; bestBeast = e; }
           continue;
         }
         if (d < bestD) { bestD = d; best = e; }

@@ -7,6 +7,7 @@ import { REMOTE_PLAYER_FIXED_DT, DEBUG_LOG_SAMPLE_RATE } from '../../core/config
 import * as sfx from '../../core/sfx.js';
 import { PlayerDebris } from '../../effects/debris.js';
 import { TEAM_COLORS } from '../../../../shared/teams.js';
+import { noteKill } from '../../core/stateDebug.js';
 import type { NetCtx } from './ctx.js';
 
 export function wirePlayers(ctx: NetCtx): void {
@@ -175,6 +176,7 @@ function onPlayerKill(ctx: NetCtx, streak: { v: number }, shooterId: string, tar
   const { deps, nm } = ctx;
   const logger = deps.logger;
   if (deps.world.playbackMode) return;
+  noteKill(shooterId, targetId, weapon); // Alt+Q battle log
   deps.world.killCounts.set(shooterId, (deps.world.killCounts.get(shooterId) ?? 0) + 1);
   const localId = nm().getLocalPlayerId();
   deps.lazyHud().feedKill(shooterId, targetId, shooterId === localId, targetId === localId, weapon);

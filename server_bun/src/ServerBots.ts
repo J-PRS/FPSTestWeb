@@ -223,8 +223,7 @@ export class ServerBots {
     // distance: muzzle sits +1.4y over feet, so a flat 3m gap already reads
     // 3.3m+ in 3D and the band could never open.
     const lo = this.loadouts.get(p.id) ?? BOT_LOADOUTS[0]!;
-    const wt = distXZ < MELEE_M ? WeaponType.Melee
-      : dist < SIDEARM_M ? lo.side : dist < NEAR_M ? lo.near : dist > FAR_M ? lo.far : lo.mid;
+    const wt = this.pickWeapon(lo, distXZ, dist);
     if (wt === WeaponType.Melee) {
       // The punch IS the player's swing — combat funnels it identically,
       // and the broadcast swing lets observers see the melee. Speed is 0
@@ -252,6 +251,13 @@ export class ServerBots {
     }
   }
 
+  /** Range-band weapon select — shared by player and creature targets so
+   *  the visible tracer reads as the kit the bot would really draw. */
+  private pickWeapon(lo: BotLoadout, distXZ: number, dist: number): number {
+    return distXZ < MELEE_M ? WeaponType.Melee
+      : dist < SIDEARM_M ? lo.side : dist < NEAR_M ? lo.near : dist > FAR_M ? lo.far : lo.mid;
+  }
+
   /** Creature targets route through the same claim funnel a client's
    *  creatureHit uses — plausibility check and all — so a bot kill drops
    *  its gem/FFA point identically. */
@@ -260,11 +266,13 @@ export class ServerBots {
     const dyb = aim.y - p.position.y;
     const dzb = aim.z - p.position.z;
     const lenb = Math.sqrt(dxb * dxb + dyb * dyb + dzb * dzb) || 1;
+    const lo = this.loadouts.get(p.id) ?? BOT_LOADOUTS[0]!;
+    const wt = this.pickWeapon(lo, Math.hypot(dxb, dzb), lenb);
     this.room.messages.botFire(
       p.id, null,
       { x: p.position.x, y: p.position.y + 1.4, z: p.position.z },
       { x: (dxb / lenb) * BOLT_SPEED, y: (dyb / lenb) * BOLT_SPEED, z: (dzb / lenb) * BOLT_SPEED },
-      3, false,
+      wt, false,
     );
     if (isSuper(p.id) || Math.random() < Math.max(0.15, 0.6 - lenb / 200)) {
       this.room.ballSim.handleHit(p.id, ball, isSuper(p.id) ? 30 : 8);

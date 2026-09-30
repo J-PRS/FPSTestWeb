@@ -6,6 +6,7 @@ import Logger, { ChildLogger } from './Logger.js';
 import { computeStateHash } from '../../../shared/stateHash.js';
 import { StateSnapshot, type EntityState, type GameStateSnapshot } from './StateSnapshot.js';
 import type { SnapshotPlayer } from '../../../shared/protocol.js';
+import { WeaponType } from '../../../shared/weapons.js';
 import type { Player } from '../entities/Player.js';
 import type { RemotePlayer } from '../entities/RemotePlayer.js';
 import type { NetworkManager } from '../networking/NetworkManager.js';
@@ -28,6 +29,20 @@ const SNAPSHOT_COOLDOWN_MS = 5000; // Don't request snapshots more often than ev
 const POSITION_TOLERANCE = 50.0;   // Warn if position delta exceeds this (higher for async snapshot comparison)
 
 let pendingServerSnapshot: ((players: SnapshotPlayer[], timestamp: number) => void) | null = null;
+
+// Rolling battle log for the Alt+Q dump — every kill the wire reported,
+// newest last. Capped so a long session doesn't grow it unboundedly.
+const battleLog: string[] = [];
+const BATTLE_LOG_MAX = 40;
+const killName = (id: string) => id.replace(/^bot:/, '');
+
+/** Called by the kill handler — "shooter killed target with weapon" lines
+ *  for the diagnostics dump's battle-log section. */
+export function noteKill(shooterId: string, targetId: string, weapon?: number): void {
+  const w = weapon !== undefined && WeaponType[weapon] ? ` with ${WeaponType[weapon]}` : '';
+  battleLog.push(`${killName(shooterId)} killed ${killName(targetId)}${w}`);
+  if (battleLog.length > BATTLE_LOG_MAX) battleLog.splice(0, battleLog.length - BATTLE_LOG_MAX);
+}
 
 declare global {
   interface Window {
@@ -105,6 +120,10 @@ function diagLines(ctx: StateDebugContext): string[] {
     `projectiles: ${ctx.projectiles.length} live`,
     `uptime: ${(performance.now() / 1000).toFixed(0)}s`,
   );
+  if (battleLog.length) {
+    lines.push('battleLog:');
+    for (const k of battleLog.slice(-15)) lines.push(`  ${k}`);
+  }
   return lines;
 }
 
