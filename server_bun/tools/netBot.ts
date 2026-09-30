@@ -88,6 +88,9 @@ class WireBot {
   // spawn signature — FIFO alone breaks when a spawn is rejected
   // (its echo never comes, so the next echo binds off-by-one).
   pendingClaims: { pid?: string; wt: number; vx: number; vy: number; vz: number }[] = [];
+  // Room generation — bumped on every re-seat so a claim timer armed in
+  // the old room can't fire into the new one with stale ids.
+  private gen = 0;
   nextDeploy = 0; nextChat = 0; nextTeleport = 0; nextHeal = 0; nextLoadout = 0; nextEnvDmg = 0; nextSwitch = 0;
   private hopAlt = false;
   wasJump = false; wasJet = false;
@@ -255,6 +258,7 @@ class WireBot {
         this.pickups.clear();
         this.ownShots.length = 0;
         this.pendingClaims.length = 0;
+        this.gen++;
         // Tick seqs are per-room — a hop lands mid-sequence in the new
         // room's domain, not a dropped frame.
         this.lastTickSeq = -1;
@@ -597,7 +601,9 @@ class WireBot {
       if (i >= 0) this.pendingClaims.splice(i, 1);
     };
     let waited = 0;
+    const gen = this.gen;
     const claim = () => {
+      if (gen !== this.gen) return; // armed in a room we already left
       // The echo can lag the airtime deadline on unordered lanes — a
       // bare claim would resolve the NEWEST matching shell and paint
       // our airtime onto its fresh age. Hold briefly for the id.
