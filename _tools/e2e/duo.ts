@@ -22,7 +22,9 @@ const ok = (cond: boolean, label: string) => {
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 const stack = await upStack();
-const url = stack.clientUrl('&room=e2eduo');
+// bots=0 — no server bots, so a counted 'teleport' message can only be
+// A's declared warp (bot spawns would pollute the tpSeen counter).
+const url = stack.clientUrl('&room=e2eduo&bots=0');
 const [a, b] = await Promise.all([launchClient(url), launchClient(url)]);
 
 try {
@@ -42,17 +44,38 @@ try {
   const bSeesA = await b.test<boolean>(`t.world.remotePlayers.entities.has('${aId}')`);
   ok(aSeesB && bSeesA, `mutual visibility (a→b=${aSeesB} b→a=${bSeesA})`);
 
-  // A teleports far away; B's wire snapshot of A must track it — proves
-  // real position propagation, not just presence. Count teleport msgs to
-  // distinguish "event never arrived" from "entity didn't snap".
+  // A teleports a modest hop; B's wire snapshot of A must track it — proves
+  // real position propagation, not just presence. Kept inside B's interest
+  // radius on purpose: a 500m+ jump leaves the position-record radius, so
+  // B legitimately keeps a stale target (only the event arrives). Count
+  // teleport msgs to distinguish "event never arrived" from "entity didn't
+  // snap".
   await b.page.evaluate(`(() => { const nm = window.__test.networkManager; const orig = nm.onRemoteTeleport; window.__tpSeen = 0; nm.onRemoteTeleport = (...args) => { window.__tpSeen++; orig?.(...args); }; })()`);
   const bx0 = await b.test<number>(`(t.world.remotePlayers.entities.get('${aId}')?.targetPosition?.x) ?? 1e9`);
-  await a.test(`t.networkManager.sendTeleport(
-    { x: 500, y: 60, z: 500 }, { yaw: 0, pitch: 0 }, { x: 0, y: 0, z: 0 })`);
-  await b.waitFor(`Math.abs((t.world.remotePlayers.entities.get('${aId}')?.targetPosition?.x ?? 0) - 500) < 20`, 20000).catch(() => null);
+  // The REAL warp path: set pos → syncMovement (reseats the controller so
+  // the sim doesn't revert next frame) → markTeleport — the next position
+  // report then emits the 'teleport' verb. Bare sendTeleport only DECLARES
+  // a warp; the player's real pos stays put and the judge corrects them
+  // back (verified: aPos stayed ~80 while B saw the stale 79).
+  const tp = await a.test<{ x: number; z: number }>(`(() => {
+    const p = t.player;
+    const dest = { x: p.pos.x + 25, y: 60, z: p.pos.z };
+    p.pos.set(dest.x, dest.y, dest.z);
+    p.vel.set(0, 0, 0);
+    p.syncMovement();
+    p.markTeleport();
+    return { x: dest.x, z: dest.z };
+  })()`);
+  await b.waitFor(`Math.abs((t.world.remotePlayers.entities.get('${aId}')?.targetPosition?.x ?? 0) - ${tp.x}) < 5`, 20000).catch(() => null);
   const bx1 = await b.test<number>(`(t.world.remotePlayers.entities.get('${aId}')?.targetPosition?.x) ?? 0`);
   const tpSeen = await b.test<number>(`window.__tpSeen`);
-  ok(Math.abs(bx1 - 500) < 20, `A's teleport propagated to B (x: ${bx0.toFixed(0)} → ${bx1.toFixed(0)}, teleport msgs seen: ${tpSeen})`);
+  ok(Math.abs(bx1 - tp.x) < 5, `A's teleport propagated to B (x: ${bx0.toFixed(0)} → ${bx1.toFixed(0)}, target ${tp.x.toFixed(0)}, teleport msgs seen: ${tpSeen})`);
+  if (Math.abs(bx1 - tp.x) >= 5) {
+    // Diagnostics: is A's server pos actually at the warp site, and is B's
+    // entity just frozen (records suppressed) or still tracking stale data?
+    const aPos = await a.test(`(() => { const p = t.player.pos; return {x:p.x,y:p.y,z:p.z}; })()`);
+    console.log(`   diag: aPos=${JSON.stringify(aPos)} metrics=${JSON.stringify(await stack.serverMetrics())}`);
+  }
 
   // Chat both directions on the real wire — capture at onChat (the raw
   // receive path; DOM fades make feed polling flaky under SwiftShader).

@@ -39,10 +39,15 @@ try {
     nm.onRemoteTeleport = (id, p, v) => { window.__tpSeen++; orig?.(id, p, v); };
   })()`);
 
-  // Move the host's own player — the real path: local pos → binary
-  // position report → loopback → P2PHost tick → DataChannel → guest world.
-  // (Declared teleport like the dedicated-server duo spec also counts.)
-  await host.test(`t.networkManager.sendTeleport({x:500,y:60,z:500}, {yaw:0,pitch:0}, {x:0,y:0,z:0})`);
+  // Move the host's own player — the REAL warp path: set pos →
+  // syncMovement (keep the sim from reverting) → markTeleport; the next
+  // position report emits the 'teleport' verb. Bare sendTeleport only
+  // declares a warp without moving the player.
+  await host.test(`(() => {
+    const p = t.player;
+    p.pos.set(500, 60, 500); p.vel.set(0, 0, 0);
+    p.syncMovement(); p.markTeleport();
+  })()`);
   let streamed = false;
   try {
     await guest.waitFor(
