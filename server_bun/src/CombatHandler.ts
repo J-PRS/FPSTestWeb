@@ -3,7 +3,7 @@ import type { PlayerManager } from './PlayerManager.ts';
 import type { WeaponStats } from '../../shared/weapons.ts';
 import { getWeaponStats, WeaponType, directHitAoeBonus } from '../../shared/weapons.ts';
 import { perkMods } from '../../shared/perks.ts';
-import { aoeDamage, aoeImpulse, KNOCKBACK_SCALE, validateHitClaim, validateAoeClaim } from '../../shared/combat.ts';
+import { aoeDamage, aoeImpulse, KNOCKBACK_SCALE, validateHitClaim, validateAoeClaim, lgTickDamage, LG_RAMP_WINDOW_S } from '../../shared/combat.ts';
 import { POWERUP } from '../../shared/pickups.ts';
 import type { PlayerState } from './types.ts';
 import { logger } from './logger.ts';
@@ -75,6 +75,9 @@ export class CombatHandler {
   /** Cosmetic relay gate for shotFired — a hitscan pull has no damage
    *  semantics, so excess ones are silently dropped instead of rejected. */
   private lastFireNotify = new Map<string, number>();
+  /** Lightning ramp state per shooter — mirrors the client's stepped
+   *  8→6→4 hold decay so beam claims can't outpace the honest curve. */
+  private lgRamp = new Map<string, { targetId: string | null; t: number; n: number }>();
   /** First-hit timestamps per shooter|victim pair — kill-side applies it
    *  as the engagement time (TTK), hit-side only refreshes it. */
   private duelStart = new Map<string, number>();
@@ -142,6 +145,7 @@ export class CombatHandler {
     // warn keys — a leaver's entry otherwise sits in the map for the
     // room's life.
     this.lastFireNotify.delete(playerId);
+    this.lgRamp.delete(playerId);
   }
 
   handleShot(playerId: string, msg: Extract<ClientMessage, { type: 'shot' }>): void {
@@ -404,7 +408,15 @@ export class CombatHandler {
       this.reject(playerId, 'AOE', 'beam tip behind structure', undefined, msg.weaponType);
       return;
     }
-    this.processAOE(playerId, msg.position, msg.excludeTargetId, stats, msg.weaponType);
+    // Same stepped ramp the client applies: consecutive ticks on one
+    // target decay, a target switch or miss window resets to full.
+    const now = Date.now() / 1000;
+    const st = this.lgRamp.get(playerId);
+    const n = st && st.targetId === (msg.excludeTargetId ?? null) && now - st.t <= LG_RAMP_WINDOW_S
+      ? st.n + 1 : 1;
+    this.lgRamp.set(playerId, { targetId: msg.excludeTargetId ?? null, t: now, n });
+    const scale = lgTickDamage(n) / 8;
+    this.processAOE(playerId, msg.position, msg.excludeTargetId, { ...stats, aoeDamage: stats.aoeDamage * scale }, msg.weaponType);
   }
 
   /** Cluster carrier: the carrier's blast is only the delivery pop — the
@@ -679,7 +691,16 @@ export class CombatHandler {
     // Melee carries its damage on the aoe line (instant cone, directDamage 0)
     // — falling back to it keeps bot punches non-zero.
     const stats = getWeaponStats(weaponType);
-    const damage = (stats.directDamage || stats.aoeDamage) * perkMods(shooter.perk).directDamage;
+    let damage = (stats.directDamage || stats.aoeDamage) * perkMods(shooter.perk).directDamage;
+    // Bot beams ramp down like human ones — the beam-rider loadout pays
+    // the same hold-decay a client's beam does.
+    if (weaponType === WeaponType.Lightning) {
+      const now = Date.now() / 1000;
+      const st = this.lgRamp.get(shooterId);
+      const n = st && st.targetId === targetId && now - st.t <= LG_RAMP_WINDOW_S ? st.n + 1 : 1;
+      this.lgRamp.set(shooterId, { targetId, t: now, n });
+      damage = lgTickDamage(n) * perkMods(shooter.perk).directDamage;
+    }
     this.serverHit(shooterId, targetId, damage, 'Bot hit', { weapon: weaponType });
   }
 

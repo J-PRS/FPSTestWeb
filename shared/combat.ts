@@ -66,6 +66,19 @@ export function hitRadiusAt(weaponType: number | undefined, airtime: number): nu
   return s.hitMax * t;
 }
 
+/** Lightning beam ramp-down: consecutive ticks on the same target step
+ *  8 → 6 → 4, floor reached at tick 10 (~0.5s of hold at 20 ticks/s).
+ *  The beam stays lethal on first contact and bleeds off on a sustained
+ *  hold — the kill-fork pop is the payoff, not a free bonus. Resets after
+ *  a miss window or a target switch. `n` is the 1-based tick count. */
+export function lgTickDamage(n: number): number {
+  return n <= 4 ? 8 : n <= 9 ? 6 : 4;
+}
+
+/** Gap after which a beam's ramp resets — misses within the window keep
+ *  the count. Sized off the 50ms tick so brief tracking errors forgive. */
+export const LG_RAMP_WINDOW_S = 0.3;
+
 /** What the server knows about a live projectile. */
 export interface TrackedProjectile {
   ownerId: string;

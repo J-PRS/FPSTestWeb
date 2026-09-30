@@ -30,7 +30,7 @@ export const FIRE_RATE = 0.8; // Rocket fire rate (seconds)
 export const DISC_RATE = 1.0; // Disc fire rate (seconds)
 export const GRENADE_RATE = 1.2; // Grenade fire rate (seconds)
 export const CHAINGUN_RATE = 0.09; // Chaingun fire rate (seconds)
-export const LG_RATE = 0.045;      // Lightning gun tick — Quake's 44ms beam
+export const LG_RATE = 0.05;       // Lightning gun tick — clean 20/s for the stepped ramp
 export const LG_RANGE = 55.0;      // hard beam cap — mid-range tracker, outranged by totems
 // Death-burst: a beam kill detonates the corpse for (accumulated beam
 // damage dealt to it) — overcharging a fat target pays out a fat pop.

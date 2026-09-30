@@ -8,6 +8,7 @@ import {
   LG_CHAIN_RANGE, LG_CHAIN_DMG_SCALE,
 } from '../../core/config.js';
 import { getWeaponStats, WeaponType } from '../../../../shared/weapons.js';
+import { lgTickDamage, LG_RAMP_WINDOW_S } from '../../../../shared/combat.js';
 import { segSolidHit } from '../../../../shared/solidWorld.js';
 import { Projectile } from '../../projectiles/Projectile.js';
 import type { CombatDeps, FireArgs, ExplosionArgs } from '../combat.js';
@@ -37,6 +38,7 @@ interface LgState {
   sizzleAt: number;
   beamTo: THREE.Vector3;
   acc: Map<number, number>;
+  ramp: Map<number, { t: number; n: number }>;
 }
 const _traceT = { t: 0 };
 
@@ -213,7 +215,17 @@ function tickBeam(lg: LgState, dt: number): void {
 // every tick pumped into a target charges its burst. Shared by the
 // primary strike and the chain fork.
 function zapTarget(deps: CombatDeps, hooks: LightningHooks, lg: LgState,
-    t: (typeof deps.targets)[number], dmg: number, cam: THREE.Camera): void {
+    t: (typeof deps.targets)[number], dmgScale: number, cam: THREE.Camera): void {
+  // Stepped ramp-down: sustained hold bleeds to the floor — the beam's
+  // burst is the first contact, the pop is the payoff for the cost paid.
+  const now = performance.now() / 1000;
+  const st = lg.ramp.get(t.id);
+  const n = st && now - st.t <= LG_RAMP_WINDOW_S ? st.n + 1 : 1;
+  lg.ramp.set(t.id, { t: now, n });
+  if (lg.ramp.size > 32) {
+    for (const [id, s] of lg.ramp) if (now - s.t > LG_RAMP_WINDOW_S) lg.ramp.delete(id);
+  }
+  const dmg = lgTickDamage(n) * dmgScale;
   deps.lazyDamageNumbers().spawn(t.pos, dmg, '#8fdcff', cam);
   const acc = (lg.acc.get(t.id) ?? 0) + dmg;
   lg.acc.set(t.id, acc);
@@ -238,6 +250,7 @@ export function createLightning(deps: CombatDeps, hooks: LightningHooks) {
     sizzleAt: 0, // throttle the connect sizzle — one crackle per ~6 ticks
     beamTo: new THREE.Vector3(), // beam tip — follows the target between ticks
     acc: new Map(), // beam charge per target — detonated on the kill
+    ramp: new Map(), // consecutive-tick count per target — steps damage down
   };
 
   // Beam start: the muzzle node's actual rendered pixel, unprojected into
@@ -279,7 +292,7 @@ export function createLightning(deps: CombatDeps, hooks: LightningHooks) {
 
     if (hitTarget) {
       hitTarget.applyKnockback(player.pos, stats.knockbackForce); // the pin
-      zapTarget(deps, hooks, lg, hitTarget, stats.directDamage, cam);
+      zapTarget(deps, hooks, lg, hitTarget, 1, cam);
       deps.lazyHud().showHitMarker();
 
       // Chain fork: arc from the CONTACT POINT to the nearest OTHER enemy
@@ -288,7 +301,7 @@ export function createLightning(deps: CombatDeps, hooks: LightningHooks) {
       if (chainT) {
         lg.beam.fireChain(_lgHit, chainT.pos);
         chainT.applyKnockback(hitTarget.pos, stats.knockbackForce * 0.6);
-        zapTarget(deps, hooks, lg, chainT, stats.directDamage * LG_CHAIN_DMG_SCALE, cam);
+        zapTarget(deps, hooks, lg, chainT, LG_CHAIN_DMG_SCALE, cam);
       }
     }
 
