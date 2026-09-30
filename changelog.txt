@@ -1,3 +1,4 @@
+2026-09-30 - RoomDeployables split: per-kind ticks (drone scan, mine fuse, station pulse, sentry LOS+fire) -> deployTicks.ts (368->250).
 2026-09-30 - bots split: kill/respawn bookkeeping (respawn, player->bot hit funnel, local death) -> botKill.ts (495->395).
 2026-09-30 - Player split: skills/input ctx wire-up closures -> playerCtor.ts (646->592).
 2026-09-30 - CombatHandler split: hit funnel tail (hit telemetry/duels, kill broadcast+credit, corpse charge) -> hitLedger.ts (539->443).
