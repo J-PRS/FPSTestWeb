@@ -63,13 +63,17 @@ is this design *backwards* — and it's the reason it's worth calling out:
   damage to them, faster — the ramp is a stomp amplifier. It rewards the
   skill that already wins.
 
-It isn't "wrong" in isolation — a ramp is a fine mechanic — but under
-the north star it's the inverted shape: payoff proportional to
-mid-spectrum accuracy instead of a threshold the tail unlocks. If the
-chaingun gets a pass someday, the honest fix isn't deleting the ramp,
-it's converting it: e.g. the ramp builds a *separate* payoff state
-(overheat stun-power, a spread-burst finisher) rather than flat +dmg —
-compress the middle, pay the top.
+It is an anti-pattern — not a milder flavor, the inverted design. Any
+mechanic that pays linearly for mid-spectrum accuracy is a stomp
+amplifier: it takes the player who already wins the mid-skill gap and
+makes them win harder, while giving the noob nothing to read, dodge, or
+trade against. Under the north star that shape is simply wrong,
+regardless of how common "ramp/spin-up" is in shooters.
+
+The fix when the chaingun gets its pass is a conversion, not a nerf:
+the ramp should bank a *separate* payoff state (overheat stun-power, a
+spread-burst finisher, a telegraphed special) rather than flat +dmg —
+compress the middle, pay the top. Same ramp, opposite seat.
 
 ## How rare is the pattern in our roster? Honest audit
 
