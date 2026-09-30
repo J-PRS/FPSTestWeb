@@ -1,3 +1,4 @@
+2026-09-30 - ViewModel split: recoil family (KICK_TUNE + damped-oscillator kick + muzzle flash/light pop) -> vmKick.ts (375->320).
 2026-09-30 - botBrain split: energy tank family (status activation/drain, mend heal, jet fuel, regen) -> botEnergy.ts (367->285).
 2026-09-30 - effects.ts split: locomotion dust family (jetpack/warp/jump/ski/move/fly puffs + bounce burst) -> effectDust.ts (345->219).
 2026-09-30 - playbackReconstruction split: ball/target replay (seek rebuild, smooth-snap drift, hit flash+debris) -> playbackTargets.ts (354->250).
