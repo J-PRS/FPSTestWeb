@@ -34,7 +34,7 @@ export const LG_RATE = 0.05;       // Lightning gun tick — clean 20/s for the 
 export const LG_RANGE = 55.0;      // hard beam cap — mid-range tracker, outranged by totems
 // Death-burst: a beam kill detonates the corpse for (accumulated beam
 // damage dealt to it) — overcharging a fat target pays out a fat pop.
-export const LG_POP_DMG_CAP = 160;   // explosion damage ceiling
+export const LG_POP_DMG_CAP = 320;   // explosion damage ceiling — a capped hold must pay like an ult, not a nerf tax
 export const LG_POP_CHARGE_MULT = 2; // withheld damage pays back doubled — the pop should feel earned, not break-even
 export const LG_POP_RADIUS_MAX = 14; // blast radius ceiling (m)
 export const LG_POP_RADIUS_MIN = 3;  // even a popgun kill pops SOMETHING

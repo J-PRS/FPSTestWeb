@@ -1,3 +1,4 @@
+2026-09-26 - LG pop damage cap 160->320: the charged kill is a real payoff for the hold handicap (~2.7s sustained beam to cap)
 2026-09-26 - LG pop charge multiplier x2: withheld damage banks doubled so a held-beam kill pays out the elenuke
 2026-09-26 - LG kill-pop banks withheld damage (8 - tick damage) instead of dealt damage: fresh beams charge nothing, sustained holds detonate for the decay paid
 2026-09-26 - Lightning gun stepped ramp-down: 8->6->4 per consecutive tick on a target (floor at tick 10, ~0.5s at 20 ticks/s); ramp resets on target switch or 0.3s miss window; server validates same curve for claims and bot beams; LG tick rate 45ms->50ms
