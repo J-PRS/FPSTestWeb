@@ -5,10 +5,9 @@ import { createHudDom } from './hud/dom.js';
 import { PlayerIndicators } from './hud/indicators.js';
 import type { Targetable } from '../entities/balls.js';
 import type { Nugget } from '../entities/Nugget.js';
+import { Scoreboard, type SbRow } from './hud/scoreboard.js';
 
 import { Player } from '../entities/Player.js';
-
-type SbRow = { name: string; frags: number; score: number | null; ping: number | null; net?: string | null; self: boolean; dead: boolean; team?: 'alpha' | 'bravo'; sheep?: number | null };
 
 const countSpan = (n: number) => `<span class="${n > 0 ? 'hot' : 'dim'}">${n}</span>`;
 
@@ -18,20 +17,6 @@ const paintFlagChip = (el: HTMLElement, st?: string) => {
   el.textContent = st === 'home' ? '⚑' : st === 'carried' ? '⚑ TAKEN' : '⚑ LOOSE';
   el.classList.toggle('taken', st !== 'home');
 };
-
-// textContent, not innerHTML — display names will be player-chosen
-// strings; interpolating them raw is a stored-XSS hole in waiting.
-function sbRowEl(r: SbRow): HTMLTableRowElement {
-  const tr = document.createElement('tr');
-  tr.className = `${r.self ? 'self' : ''}${r.dead ? ' dead' : ''}${r.team ? ` sb-${r.team}` : ''}`;
-  for (const cell of [r.name, String(r.frags), r.score === null ? '—' : String(r.score), r.net ?? '—', r.ping === null ? '—' : String(Math.round(r.ping)), r.sheep == null ? '—' : `${Math.round(r.sheep)}%`]) {
-    const td = document.createElement('td');
-    td.textContent = cell;
-    tr.appendChild(td);
-  }
-  return tr;
-}
-
 
 export class HUD {
   private el: HTMLDivElement;
@@ -105,8 +90,7 @@ export class HUD {
     this.armor = d.armor;
     this.armorBar = d.armorBar;
     this.buffsRow = d.buffsRow;
-    this.scoreboard = d.scoreboard;
-    this.sbRows = d.sbRows;
+    this.sb = new Scoreboard(d.scoreboard, d.sbRows);
     this.teamScore = d.teamScore;
     this.tsA = d.tsA;
     this.tsB = d.tsB;
@@ -228,17 +212,11 @@ export class HUD {
     this.setText(this.ammo, 'nuggets', String(n));
   }
 
-  setScoreboardVisible(v: boolean): void {
-    this.sbVisible = v;
-    this.scoreboard.style.display = v ? 'block' : 'none';
-    if (v) this.sbRefresh = 0; // force render on open
-  }
+  setScoreboardVisible(v: boolean): void { this.sb.setVisible(v); }
 
-  get scoreboardVisible(): boolean { return this.sbVisible; }
+  get scoreboardVisible(): boolean { return this.sb.isVisible; }
 
-  setScoreboardRows(rows: { name: string; frags: number; score: number | null; ping: number | null; net?: string | null; self: boolean; dead: boolean; team?: 'alpha' | 'bravo'; sheep?: number | null }[]): void {
-    this.sbData = rows;
-  }
+  setScoreboardRows(rows: SbRow[]): void { this.sb.setRows(rows); }
 
   private weaponSlots: HTMLSpanElement[] = [];
   private healthBar!: HTMLDivElement;
@@ -251,11 +229,7 @@ export class HUD {
   private lastHealthPct = -1;
   private lastEnergyPct = -1;
   private lastFpsColor = '';
-  private scoreboard: HTMLDivElement;
-  private sbRows: HTMLElement;
-  private sbVisible = false;
-  private sbRefresh = 0;
-  private sbData: { name: string; frags: number; score: number | null; ping: number | null; net?: string | null; self: boolean; dead: boolean; team?: 'alpha' | 'bravo'; sheep?: number | null }[] = [];
+  private sb!: Scoreboard;
 
   showHitMarker(): void {
     this.hitTimer = 0.12;
@@ -540,35 +514,7 @@ export class HUD {
   }
 
   // Scoreboard: rebuild rows at 4Hz while open (live ping/frags)
-  private updateScoreboard(dt: number): void {
-    if (!this.sbVisible) return;
-    this.sbRefresh -= dt;
-    if (this.sbRefresh <= 0) {
-      this.sbRefresh = 0.25;
-      // Any row carrying a team → split into sections; otherwise flat FFA.
-      const hasTeams = this.sbData.some(r => r.team);
-      if (!hasTeams) {
-        this.sbRows.replaceChildren(...this.sbData.map(sbRowEl));
-        return;
-      }
-      const kids: HTMLElement[] = [];
-      for (const team of ['alpha', 'bravo'] as const) {
-        const trs = this.sbData.filter(r => r.team === team).map(sbRowEl);
-        if (!trs.length) continue;
-        const th = document.createElement('tr');
-        th.className = `sb-team ${team}`;
-        const td = document.createElement('td');
-        td.colSpan = 5;
-        td.textContent = team.toUpperCase();
-        th.appendChild(td);
-        kids.push(th, ...trs);
-      }
-      // Teamless stragglers (spectators, unteamed) under their own header.
-      const rest = this.sbData.filter(r => !r.team);
-      if (rest.length) kids.push(...rest.map(sbRowEl));
-      this.sbRows.replaceChildren(...kids);
-    }
-  }
+  private updateScoreboard(dt: number): void { this.sb.tick(dt); }
 
   updatePlayerIndicator(playerId: string, position: { x: number; y: number; z: number }, camera: THREE.Camera, isDead: boolean = false, friendly = false, sheep?: number): void {
     this.indicators.update(playerId, position, camera, { isDead, friendly, sheep });
