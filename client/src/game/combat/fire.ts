@@ -7,6 +7,7 @@ import { Projectile } from '../../projectiles/Projectile.js';
 import {
   GRENADE_CONFIG, BELT_DISC_CONFIG, STICKY_CONFIG,
   CLUSTER_CONFIG, JAVELIN_CONFIG, IMPACT_CONFIG, REMOTE_RAILGUN_CONFIG,
+  ARMORNADE_CONFIG,
 } from '../../projectiles/index.js';
 import type { WeaponDef } from '../../weapons.js';
 import type { BeltItem } from '../../entities/Player.js';
@@ -109,6 +110,7 @@ const BELT_THROWS: Record<BeltItem, ProjectileConfig> = {
   sticky: STICKY_CONFIG,
   impact: IMPACT_CONFIG,
   remoterailgun: REMOTE_RAILGUN_CONFIG,
+  armornade: ARMORNADE_CONFIG,
 };
 
 function onBelt(deps: CombatDeps, _e: FireArgs, item: BeltItem): void {

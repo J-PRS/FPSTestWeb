@@ -83,6 +83,8 @@ export interface RoomInfo {
   /** Distance from a player to the nearest live creature — env-damage
    *  claims far past melee range get flagged, not silently eaten. */
   envRange?: (playerId: string) => number;
+  /** Armor-grenade plating sweep — BallSim.armorBlast + CreatureSim.armorBlast. */
+  creatureArmor?: (pos: Vec3, amount: number, radius: number) => void;
   /** Live deployables for gameState joins — RoomDeployables.snapshot. */
   deployables?: () => { id: number; owner: string; kind: 'turret' | 'mine' | 'station' | 'drone'; pos: Vec3; hp?: number; armor?: number }[];
 }
@@ -135,6 +137,7 @@ export class MessageHandler {
       deployBlast: roomInfo?.deployBlast,
       health: roomInfo?.health,
       envRange: roomInfo?.envRange,
+      creatureArmor: roomInfo?.creatureArmor,
     });
     this.attachStructures(roomInfo?.structures);
 

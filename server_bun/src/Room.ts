@@ -369,6 +369,10 @@ export class Room {
       onDeploy: (pid, kind, pos) => this.deployables.handleDeploy(pid, kind, pos),
       onRepair: (pid, targetId) => this.deployables.repair(pid, targetId),
       deployBlast: (pos, damage, radius, shooter) => this.deployables.applyBlast(pos, damage, radius, shooter),
+      creatureArmor: (pos, amount, radius) => {
+        this.ballSim.armorBlast(pos, radius, amount);
+        this.creatureSim.armorBlast(pos, radius, amount);
+      },
       deployables: () => this.deployables.snapshot(),
       matchEndsAt: () => this.matchClock.timeLeftMs() > 0 ? Date.now() + this.matchClock.timeLeftMs() : 0,
       moveInput: (pid, i, status, seq) => this.moveSim.setInput(pid, {

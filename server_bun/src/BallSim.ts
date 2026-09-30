@@ -26,6 +26,7 @@ import { encodeBallSegment } from '../../shared/wire.ts';
 import { STATUS } from '../../shared/status.ts';
 import { logger } from './logger.ts';
 import { type BallPopulation, DEFAULT_MAP_SPEC } from '../../shared/mapSpec.ts';
+import { ARMORNADE_OVERCAP } from '../../shared/weapons.ts';
 
 const TICK_DT = 0.05;           // 20Hz — matches GameServer tick broadcast
 const RETARGET_INTERVAL = 2.0;  // seconds between nearest-player re-evals
@@ -272,6 +273,20 @@ export class BallSim {
       if (d < best) best = d;
     }
     return best;
+  }
+
+  /** Armor-grenade plating: every live ball inside the blast wears the
+   *  grant as overcap health (≤ ARMORNADE_OVERCAP × maxHealth — same
+   *  trick as deployable armor, so the soak needs no armor field). No
+   *  segment: ball hp never rides the wire, so nothing to propagate. */
+  armorBlast(pos: SimVec, radius: number, amount: number): void {
+    const r2 = radius * radius;
+    for (const b of this.balls.values()) {
+      if (b.dead) continue;
+      const d2 = (b.x - pos.x) ** 2 + (b.y - pos.y) ** 2 + (b.z - pos.z) ** 2;
+      if (d2 > r2) continue;
+      b.health = Math.min(b.maxHealth * ARMORNADE_OVERCAP, b.health + amount);
+    }
   }
 
   /** creatureHit claim. Lenient sanity clamps only — real validation is an

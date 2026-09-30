@@ -1,3 +1,4 @@
+2026-09-26 - Armor grenade (belt): mid blast + knockback plates +50 armor on every player caught (self, friend, foe) and grants creatures overcap health up to 2x; green weld-arc visuals; loadout menu entry
 2026-09-26 - Repair tool sidearm: green beam heals deployables 5hp/tick (~50hp/s), overheal banks as armor up to 2x max hp; server-owned claim (targetId only), deployHp vitals broadcast; sidearm menu entry + pistol-frame viewmodel
 2026-09-26 - Fire-and-reveal cloak price: a cloaked remote that shoots shimmers translucent for 1s (ghost material override on the model), then re-hides — stealth positions, it doesn't ambush free
 2026-09-26 - Infiltrator cloak repriced by motion: drain scales 1/s static to 10/s at 100 m/s (slower is sneakier), activation ante halved to 10; server shadow and bots pay the same speed-scaled rate

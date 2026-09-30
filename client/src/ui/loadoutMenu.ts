@@ -19,7 +19,7 @@ interface Drop { el: HTMLElement; setValue(v: string): void; setOptions?(o: Drop
 const BELT_LABELS: Record<BeltItem, string> = {
   disc: 'Disc', grenade: 'Grenade', cluster: 'Cluster Bomb',
   javelin: 'Javelin', sticky: 'Sticky Bomb', impact: 'Impact Grenade',
-  remoterailgun: 'Remote Railgun',
+  remoterailgun: 'Remote Railgun', armornade: 'Armor Grenade',
 };
 
 // Chip width is measured, not hardcoded — canvas-measure the widest

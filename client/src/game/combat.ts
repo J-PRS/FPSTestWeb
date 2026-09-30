@@ -29,7 +29,8 @@ import { burstGibs } from '../entities/swarms.js';
 import type { SwarmSlotOwner } from '../entities/swarm.js';
 import { PENDING_ROCKET_TIMEOUT, ROCKET_RADIUS, CHAINGUN_RATE } from '../core/config.js';
 import { urlParams } from '../core/params.js';
-import { getWeaponStats, WeaponType, AOE_VFX_SCALE, directHitAoeBonus } from '../../../shared/weapons.js';
+import { getWeaponStats, WeaponType, AOE_VFX_SCALE, directHitAoeBonus, ARMORNADE_ARMOR } from '../../../shared/weapons.js';
+import { POWERUP } from '../../../shared/pickups.js';
 
 import { screenShake } from '../effects/screenShake.js';
 import type { GameContext } from './context.js';
@@ -172,6 +173,16 @@ function processProjectileExplosion(c: CombatCtx, a: ExplosionArgs): void {
   deps.explosionTracker.addExplosion(pos, force, a.shooterId || deps.lazyNetworkManager().getLocalPlayerId());
 
   c.applyExplosionForce({ pos, radius, force, forceMode, falloffMultiplier: a.falloffMultiplier, collisionMultiplier: a.collisionMultiplier, forceMultiplier: a.forceMultiplier, aoeDamage, directHitTargetId: a.directHitTargetId ?? null, weaponType: a.weaponType, shooterId: a.shooterId });
+
+  // Armor grenade: predict the plating the server grants so the HUD armor
+  // jumps with the blast, not on the next tick. Enemy plating stays
+  // server-side — we never predict another player's armor pool.
+  if (a.weaponType === WeaponType.ArmorGrenade) {
+    const player = deps.lazyPlayer();
+    if (player.pos.distanceTo(pos) <= radius) {
+      player.armor = Math.min(POWERUP.maxArmor, player.armor + ARMORNADE_ARMOR);
+    }
+  }
 
   // AOE damage to remote players (server-side authority)
   const networkManager = deps.lazyNetworkManager();

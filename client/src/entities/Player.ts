@@ -33,7 +33,7 @@ export const SKILL_ORDER: SkillId[] = ['bounce', 'blink', 'dash', 'slam', 'warp'
 // Belt loadout slot — one throwable on the belt key; fire.ts maps each id
 // to its projectile config. Order is the loadout-menu order.
 // 'remoterailgun' = capacitor slug that discharges a hitscan rail mid-flight.
-export const BELT_ITEMS = ['disc', 'grenade', 'cluster', 'javelin', 'sticky', 'impact', 'remoterailgun'] as const;
+export const BELT_ITEMS = ['disc', 'grenade', 'cluster', 'javelin', 'sticky', 'impact', 'remoterailgun', 'armornade'] as const;
 export type BeltItem = typeof BELT_ITEMS[number];
 
 export class Player {

@@ -37,6 +37,7 @@ export enum WeaponType {
   RemoteRailgun = 24, // belt throw: slug discharges a hitscan rail mid-flight, pops at the hit point
   Sprinkler = 25,     // plasma hose: rapid stream of arced bolts with cone spread
   Repair = 26,        // repair-tool sidearm: short beam that heals deployables, overheal → armor
+  ArmorGrenade = 27,  // belt throw: mid blast that plates every player + creature it catches
 }
 
 export interface WeaponStats {
@@ -517,6 +518,24 @@ export const WEAPONS: Record<number, WeaponStats> = {
     hitMax: 0,
     hitGrow: 0,
   },
+  [WeaponType.ArmorGrenade]: {
+    // Support ordnance: the blast is deliberately mid — the payoff is the
+    // plating it sprays onto EVERYTHING it catches (players via the armor
+    // pool, creatures as overcap health). Arming the enemy is the cost of
+    // plating your own push — see ARMORNADE_* below.
+    directDamage: 0,
+    aoeDamage: 40,
+    aoeRadius: 10.0,
+    knockbackForce: 55.0,
+    forceMode: 'push',
+    speed: 40.0,
+    gravity: true,
+    bodyRadius: 0.25,
+    hitMin: 0.0,
+    hitMax: 8.0,
+    hitGrow: 2.0,
+    maxLifetime: 2.0,
+  },
 };
 
 // Repair-tool economy — one number set on both ends so the server heal
@@ -525,6 +544,12 @@ export const REPAIR_RANGE = 14;        // beam reach (m)
 export const REPAIR_HEAL_PER_TICK = 5; // per fire tick → ~50 hp/s at 0.1s rate
 export const REPAIR_MIN_TICK_S = 0.07; // server: min seconds between claims per shooter+target
 export const REPAIR_ARMOR_MULT = 2;    // armor cap = this × the deployable's base hp
+
+// Armor-grenade economy — the plating the blast sprays is server-derived
+// (claims carry no armor amount). Creatures wear it as overcap health up
+// to ARMORNADE_OVERCAP × maxHealth — same trick as deployable armor.
+export const ARMORNADE_ARMOR = 50;     // flat armor each blast grants
+export const ARMORNADE_OVERCAP = 2;    // creature armor cap = this × maxHealth
 
 export function getWeaponStats(weaponType: number | undefined): WeaponStats {
   return WEAPONS[weaponType ?? WeaponType.Rocket] ?? WEAPONS[WeaponType.Rocket]!;

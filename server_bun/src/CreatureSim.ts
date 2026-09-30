@@ -26,6 +26,7 @@ import type { PlayerManager } from './PlayerManager.ts';
 import type { ServerMessage, Vec3 } from './types.ts';
 import { STATUS } from '../../shared/status.ts';
 import { logger } from './logger.ts';
+import { ARMORNADE_OVERCAP } from '../../shared/weapons.ts';
 
 const TICK_DT = 0.05;
 const RETARGET_INTERVAL = CRAWLER_SIM.RETARGET_S;
@@ -251,6 +252,18 @@ export class CreatureSim {
       const d2 = (p.position.x - c.x) ** 2 + (p.position.z - c.z) ** 2;
       if (d2 > NEAR_D2) continue;
       this.sendTo(pid, msg);
+    }
+  }
+
+  /** Armor-grenade plating — mirrors BallSim.armorBlast: overcap health,
+   *  no edge needed since creature hp never rides the wire either. */
+  armorBlast(pos: SimVec, radius: number, amount: number): void {
+    const r2 = radius * radius;
+    for (const c of this.crawlers.values()) {
+      if (c.dead) continue;
+      const d2 = (c.x - pos.x) ** 2 + (c.y - pos.y) ** 2 + (c.z - pos.z) ** 2;
+      if (d2 > r2) continue;
+      c.health = Math.min(c.maxHealth * ARMORNADE_OVERCAP, c.health + amount);
     }
   }
 
