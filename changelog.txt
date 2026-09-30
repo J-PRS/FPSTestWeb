@@ -1,3 +1,4 @@
+2026-09-26 - Split FPS watchdog + auto-quality ladders out of gameLoop into loopPerf.ts
 2026-09-26 - Split match journal/leaderboard out of GameServer into matchJournal.ts
 2026-09-26 - Split ball damage surface (claim validation, splash, sweep, armor) out of BallSim into ballCombat.ts
 2026-09-26 - Split tick record build/suppress/interest fanout out of TickLoop into tickRecords.ts (TickFanout)
