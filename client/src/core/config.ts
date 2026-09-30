@@ -36,6 +36,9 @@ export const LG_RANGE = 55.0;      // hard beam cap — mid-range tracker, outra
 // damage dealt to it) — overcharging a fat target pays out a fat pop.
 export const LG_POP_DMG_CAP = 320;   // explosion damage ceiling — a capped hold must pay like an ult, not a nerf tax
 export const LG_POP_CHARGE_MULT = 2; // withheld damage pays back doubled — the pop should feel earned, not break-even
+// Bank drains at 5x its max fill rate (4 withheld x2 x20t/s = 160/s) once
+// the beam leaves a target — a full cap bleeds off in ~0.4s of whiffing.
+export const LG_CHARGE_DECAY_S = 800;
 export const LG_POP_RADIUS_MAX = 14; // blast radius ceiling (m)
 export const LG_POP_RADIUS_MIN = 3;  // even a popgun kill pops SOMETHING
 // Chain fork: after the beam lands, it arcs to one more enemy within range

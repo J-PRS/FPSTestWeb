@@ -5,7 +5,7 @@ import { LightningBeam } from '../../effects/lightningBeam.js';
 import { lgMuzzleAnchor } from '../lgAnchor.js';
 import {
   LG_RANGE, LG_POP_DMG_CAP, LG_POP_RADIUS_MAX, LG_POP_RADIUS_MIN,
-  LG_CHAIN_RANGE, LG_CHAIN_DMG_SCALE, LG_POP_CHARGE_MULT,
+  LG_CHAIN_RANGE, LG_CHAIN_DMG_SCALE, LG_POP_CHARGE_MULT, LG_CHARGE_DECAY_S,
 } from '../../core/config.js';
 import { getWeaponStats, WeaponType } from '../../../../shared/weapons.js';
 import { lgTickDamage, LG_RAMP_WINDOW_S } from '../../../../shared/combat.js';
@@ -227,19 +227,25 @@ function tickBeam(lg: LgState, dt: number): void {
     lg.lastFire = 0;
     lg.beam.clearChain();
   }
-  // Charge shrouds: flicker with banked charge, die out when the beam
-  // leaves the victim (same window as the ramp reset).
+  // Charge shrouds: banked charge decays smoothly once the beam leaves a
+  // victim (5x fill rate) — the glow fades as the bomb bleeds off.
   const now = performance.now() / 1000;
   for (const [id, sh] of lg.shroud) {
     const age = now - sh.seenAt;
-    if (age > LG_RAMP_WINDOW_S * 2) {
-      sh.sprite.removeFromParent();
-      lg.shroud.delete(id);
-      continue;
+    if (age > LG_RAMP_WINDOW_S) {
+      const acc = (lg.acc.get(id) ?? 0) - LG_CHARGE_DECAY_S * dt;
+      if (acc <= 0) {
+        lg.acc.delete(id);
+        sh.sprite.removeFromParent();
+        lg.shroud.delete(id);
+        continue;
+      }
+      lg.acc.set(id, acc);
     }
     const charge = Math.min((lg.acc.get(id) ?? 0) / LG_POP_DMG_CAP, 1);
     const flicker = 0.75 + Math.random() * 0.25 + charge * 0.5 * (Math.random() < 0.3 ? 1 : 0);
     (sh.sprite.material as THREE.SpriteMaterial).opacity = Math.min(1, (0.15 + charge * 0.8) * flicker);
+    sh.sprite.scale.setScalar(1.5 + charge * 4);
   }
   // NOTE: beam weld lives in updateBeamVisual, called post-viewModel
   // update from gameLoop — the muzzle node is stale here.
