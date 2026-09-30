@@ -1,3 +1,4 @@
+2026-09-26 - battleLog kill lines now name the weapon on the bot-vs-bot claim path too; fix: kill feed attribution
 2026-09-26 - split projectile impact handling (fx/aoe/cluster/hit-scoring/kill pipeline) into combat/impact.ts (combat.ts 659->378); mod: code cleanup
 2026-09-26 - split deployable adoption (turret/drone/mine/station item wiring) into deployAdopt.ts (deployables 641->530); mod: code cleanup
 2026-09-26 - split bot sensorium (enemies/gear/flagGoal/ctx build) out of ServerBots.ts into serverSenses.ts (668->500); mod: code cleanup

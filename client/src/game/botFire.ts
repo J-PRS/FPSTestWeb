@@ -38,7 +38,7 @@ export interface FireHost {
   logger: { debug(msg: string): void };
   damageCreature(id: number, dmg: number, attackerId: string): boolean;
   creditKill(id: string, isCreature: boolean): void;
-  botKilled(killerId: string, bot: GameBot): void;
+  botKilled(killerId: string, bot: GameBot, weapon?: number): void;
   hurtLocal(dmg: number, fromPos: THREE.Vector3, src: string, melee: boolean, attackerId: string): void;
 }
 
@@ -67,7 +67,7 @@ export class BotFire {
     const cfg = melee ? undefined : getProjectileConfig(wt);
 
     if (melee || !cfg || cfg.speed <= 0 || this.host.online()) {
-      this.claimShot(bot, targetId, aim, melee, melee ? MELEE_DAMAGE : BOT_DMG);
+      this.claimShot(bot, targetId, aim, melee, melee ? MELEE_DAMAGE : BOT_DMG, wt);
       return;
     }
     this.spawnShells(bot, wt, cfg, dx / dist, dy / dist, dz / dist);
@@ -208,7 +208,7 @@ export class BotFire {
 
   /** Instant-claim resolution: melee, beams, and connected rooms where
    *  local shells can't own the attribution. */
-  private claimShot(bot: GameBot, targetId: string, aim: THREE.Vector3, melee: boolean, dmg: number): void {
+  private claimShot(bot: GameBot, targetId: string, aim: THREE.Vector3, melee: boolean, dmg: number, weapon?: number): void {
     if (!melee) this.spawnBolt(bot.position, aim);
     const src = `${bot.playerId.replace('bot:', '')} ${melee ? 'fist' : 'bolt'}`;
     if (targetId === 'local') {
@@ -228,7 +228,7 @@ export class BotFire {
     }
     const rp = this.host.world().remotePlayers.get(targetId);
     if (rp instanceof GameBot && aim.distanceTo(rp.pos) < 1.6) {
-      if (rp.takeDamageLocal(dmg, bot.position)) this.host.botKilled(bot.playerId, rp);
+      if (rp.takeDamageLocal(dmg, bot.position)) this.host.botKilled(bot.playerId, rp, weapon);
     }
   }
 
