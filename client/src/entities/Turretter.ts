@@ -2,10 +2,9 @@ import * as THREE from 'three';
 import { nextTargetId } from './targetIds.js';
 
 import {
-  GRAVITY,
   TURRET_RADIUS, TURRET_HEALTH,
   TURRET_RANGE, TURRET_RELAUNCH, TURRET_MIN_DWELL,
-  TURRET_HOP_T, TURRET_REFIRE, TURRET_BOLT_SPEED,
+  TURRET_REFIRE,
 } from '../core/config.js';
 import { Terrain } from '../world/terrain.js';
 import type { Targetable } from './balls.js';
@@ -13,6 +12,7 @@ import { getGlowTexture } from '../effects/glowTexture.js';
 import { TerrainFoot } from '../effects/terrainFoot.js';
 import { allocSlots, freeSlots, getSwarm, getShadows, type SwarmPart } from './swarms.js';
 import { type Bolt, spawnBolt, detonateBolt as detBolt, updateBolts as stepBolts, disposeBolts } from './turretBolts.js';
+import { updateAir as balAir, seat as balSeat, launch as balLaunch, solveBolt as balSolve, pathClear as balPath } from './turretBallistics.js';
 export type { Bolt } from './turretBolts.js';
 
 const _v = new THREE.Vector3();
@@ -28,9 +28,6 @@ const _local = new THREE.Matrix4();
 const _world = new THREE.Matrix4();
 const _s = new THREE.Vector3();
 const _p = new THREE.Vector3();
-// Base bottom buries this deep below CENTER ground — shallow, constant.
-// Gaps under the rim are the foot's job, not the sink's.
-const TURRET_BURROW = 0.18;
 const FOOT_RIM = 1.28; // base cone bottom radius (1.3) minus a hair — tucks in
 
 // Shared geometries
@@ -123,8 +120,8 @@ export class Turretter implements Targetable {
   shadowSlot = -1;
 
   scene: THREE.Scene; // public — turretBolts owns bolt meshes through it
-  private _terrain: Terrain;
-  private rootQuat = new THREE.Quaternion(); // terrain tilt when planted; tumble when airborne
+  terrain: Terrain;   // public — turretBallistics reads heights through it
+  rootQuat = new THREE.Quaternion(); // terrain tilt when planted; tumble when airborne
   private headYaw = 0;                       // turretHead yaw (world aim → tilted local frame)
   private headPitch = 0;
   // Live lobbed shells — public so combat can proximity-check them: a
@@ -133,12 +130,12 @@ export class Turretter implements Targetable {
   // Bolt trail dots — public for turretBolts.ts (host-interface pattern).
   readonly trailDots: { mesh: THREE.Mesh; life: number; maxLife: number }[] = [];
 
-  private planted = false;          // false = airborne ballistic
-  private dwell = 0;                // time since landing
+  planted = false;                // false = airborne ballistic
+  dwell = 0;                      // time since landing
   private refire = TURRET_REFIRE;   // first shot is immediate-ish
   private flashTimer = 0;
-  private meshYOffset = 0;          // visual sink below gameplay pos (set by seat)
-  private foot!: TerrainFoot;       // rim→dirt wall, conformed in seat() — set unless swarm alloc fails
+  meshYOffset = 0;                  // visual sink below gameplay pos (set by seat)
+  foot!: TerrainFoot;               // rim→dirt wall, conformed in seat() — set unless swarm alloc fails
 
   /** Landing shockwave FX hook */
   onLanded?: (pos: THREE.Vector3) => void;
@@ -153,7 +150,7 @@ export class Turretter implements Targetable {
 
   constructor(scene: THREE.Scene, terrain: Terrain, pos: THREE.Vector3, uber = false) {
     this.scene = scene;
-    this._terrain = terrain;
+    this.terrain = terrain;
     this.id = nextTargetId();
     // Uber = "siege engine": double tank, bigger chassis, and a THREE-BOLT
     // volley — a fanned spread that punishes a straight approach.
@@ -171,7 +168,7 @@ export class Turretter implements Targetable {
 
     this.foot = new TerrainFoot(scene, FOOT_RIM);
 
-    this.seat(terrain); // spawned planted — sit on the slope immediately
+    balSeat(this, terrain); // spawned planted — sit on the slope immediately
     this.writeInstances();
   }
 
@@ -185,7 +182,7 @@ export class Turretter implements Targetable {
       this.dwell += dt;
       this.updatePlanted(dt, playerPos, playerVel);
     } else {
-      this.updateAir(dt, terrain, playerPos);
+      balAir(this, dt, terrain);
     }
 
     this.writeInstances();
@@ -240,7 +237,7 @@ export class Turretter implements Targetable {
     // Relaunch: far away AND past the dwell floor — the two conditions
     // together are what prevent ping-pong.
     if (dist > TURRET_RELAUNCH && this.dwell >= TURRET_MIN_DWELL) {
-      this.launch(playerPos, playerVel);
+      balLaunch(this, playerPos, playerVel);
       return;
     }
     if (dist > TURRET_RANGE) return; // out of range — sit tight
@@ -257,8 +254,8 @@ export class Turretter implements Targetable {
 
     this.refire -= dt;
     if (this.refire <= 0) {
-      const sol = this.solveBolt(playerPos, playerVel);
-      if (sol && this.pathClear(sol)) {
+      const sol = balSolve(this, playerPos, playerVel);
+      if (sol && balPath(this, sol)) {
         this.refire = TURRET_REFIRE;
         this.fireBolt(sol);
         if (this.uber) {
@@ -273,7 +270,7 @@ export class Turretter implements Targetable {
         // Terrain eats the arc — reposition instead of shelling a hillside.
         // Still gated by the dwell floor so a blocked turret doesn't hop-spam.
         if (this.dwell >= TURRET_MIN_DWELL) {
-          this.launch(playerPos, playerVel);
+          balLaunch(this, playerPos, playerVel);
         } else {
           this.refire = 0.4; // retry soon — LOS may open
         }
@@ -281,113 +278,6 @@ export class Turretter implements Targetable {
         this.refire = TURRET_REFIRE; // out of range — don't spam failed solves
       }
     }
-  }
-
-  private updateAir(dt: number, terrain: Terrain, _playerPos: THREE.Vector3): void {
-    this.vel.y += GRAVITY * dt;
-    this.pos.addScaledVector(this.vel, dt);
-    // Tumble slightly in flight — reads as "thrown", not "flying"
-    _q.setFromEuler(_e.set(dt * 2.2, 0, dt * 1.4));
-    this.rootQuat.premultiply(_q);
-
-    const gy = terrain.getHeight(this.pos.x, this.pos.z);
-    if (this.pos.y - this.radius * 0.5 <= gy) {
-      this.pos.y = gy + this.radius * 0.5;
-      this.planted = true;
-      this.dwell = 0;
-      this.vel.set(0, 0, 0);
-      this.seat(terrain);
-      this.onLanded?.(this.pos);
-    }
-  }
-
-  // Seat the base onto the terrain:
-  //  1. Tilt to the ground normal (works on any slope)
-  //  2. Sink the base bottom a shallow burrow under CENTER ground — no
-  //     footprint chasing; the skirt owns the gap now, so the base never
-  //     needs to dive for the lowest dirt (that was the squash bug).
-  //  3. Drape the skirt: hem = terrain per-vertex, shoulder = base rim —
-  //     ground contact is a geometric guarantee on any relief.
-  // No yaw here — the turret head owns all aiming.
-  private seat(terrain: Terrain): void {
-    const n = terrain.getNormal(this.pos.x, this.pos.z);
-    _v.set(0, 1, 0);
-    this.rootQuat.setFromUnitVectors(_v, n);
-
-    const cx = this.pos.x, cz = this.pos.z;
-    const gy = terrain.getHeight(cx, cz);
-    this.pos.y = gy + this.radius * 0.5;
-
-    const baseBottomWorldY = gy - TURRET_BURROW;
-    this.meshYOffset = baseBottomWorldY - this.pos.y;
-
-    // Weld the foot wall: rim ring tracks the tilted body, bottom ring is
-    // driven under the terrain at each column — no gap can form.
-    this.foot.conform(cx, cz, this.pos.y + this.meshYOffset, terrain, this.rootQuat);
-    this.foot.mesh.visible = true;
-  }
-
-  // Perfect ballistic arc onto the player's predicted position — fixed
-  // flight time, solve for the launch velocity. Inert from here on out.
-  private launch(playerPos: THREE.Vector3, playerVel?: THREE.Vector3): void {
-    _v.copy(playerPos);
-    if (playerVel) _v.addScaledVector(playerVel, TURRET_HOP_T * 0.7); // lead, not lag
-    _v.y = 0; // land at terrain height — solve on XZ + terrain
-    const tx = _v.x, tz = _v.z;
-    const ty = playerPos.y; // aim at the player's feet-ish
-    const t = TURRET_HOP_T;
-    const dx = tx - this.pos.x, dz = tz - this.pos.z;
-    const dy = ty - this.pos.y;
-    this.vel.set(dx / t, (dy + 0.5 * Math.abs(GRAVITY) * t * t) / t, dz / t);
-    this.planted = false;
-    this.meshYOffset = 0; // in flight the mesh rides the body exactly
-    this.rootQuat.identity(); // reset tilt — tumble owns the rotation
-    this.foot.mesh.visible = false; // foundation stays behind
-    // Dome goes hot mid-air via writeInstances' instanceColor — "shoot me now"
-    this.onLaunch?.(this.pos);
-  }
-
-  // Solve the bolt launch velocity for the player's predicted position:
-  // fixed 60 m/s, elevation from the range equation, low arc preferred.
-  // Returns null when the target is beyond max range (disc < 0).
-  private solveBolt(playerPos: THREE.Vector3, playerVel?: THREE.Vector3): THREE.Vector3 | null {
-    const muzzleY = this.pos.y + 1.0;
-    const v = TURRET_BOLT_SPEED;
-    const g = Math.abs(GRAVITY);
-
-    // First pass at the un-led distance for a flight-time estimate,
-    // then aim at the player's position predicted over that time.
-    const pd = Math.hypot(playerPos.x - this.pos.x, playerPos.z - this.pos.z) || 0.001;
-    _v.copy(playerPos);
-    if (playerVel) _v.addScaledVector(playerVel, (pd / v) * 0.5);
-
-    const dx = _v.x - this.pos.x;
-    const dz = _v.z - this.pos.z;
-    const dy = _v.y - muzzleY;
-    const d = Math.hypot(dx, dz) || 0.001;
-
-    // tan θ = (v² ∓ √(v⁴ - g(g·d² + 2·dy·v²))) / (g·d) — take the low arc.
-    const disc = v * v * v * v - g * (g * d * d + 2 * dy * v * v);
-    if (disc < 0) return null; // out of range entirely
-    const theta = Math.atan((v * v - Math.sqrt(disc)) / (g * d));
-    const cosT = Math.cos(theta), sinT = Math.sin(theta);
-    return new THREE.Vector3((dx / d) * v * cosT, v * sinT, (dz / d) * v * cosT);
-  }
-
-  // March the solved arc and check it clears terrain — 12 samples is plenty
-  // for a 1s flight. Cheap: no allocation, getHeight is a heightmap read.
-  private pathClear(vel: THREE.Vector3): boolean {
-    const muzzle = this.pos.y + 1.0;
-    const g = Math.abs(GRAVITY);
-    const tEnd = Math.min(1.5, 2 * vel.y / g + 0.3); // up-and-down time + margin
-    for (let i = 1; i <= 12; i++) {
-      const t = (i / 12) * tEnd;
-      const x = this.pos.x + vel.x * t;
-      const z = this.pos.z + vel.z * t;
-      const y = muzzle + vel.y * t - 0.5 * g * t * t;
-      if (y < this._terrain.getHeight(x, z) + 0.3) return false; // arc clips terrain
-    }
-    return true;
   }
 
   private fireBolt(vel: THREE.Vector3): void {
