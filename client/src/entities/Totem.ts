@@ -132,7 +132,7 @@ export class Totem implements Targetable, SwarmSlotOwner {
 
   private state: TotemState = 'materialize';
   private stateTimer = TOTEM_MATERIALIZE;
-  // Stagger lock: every hit sets ~1.1s of "can't blink" — sustained fire
+  // Stagger lock: every hit sets ~2.1s of "can't blink" — sustained fire
   // pins the obelisk in place. That's the counterplay: it can still shoot
   // back, but it can't escape while you're landing damage.
   private staggerT = 0;
@@ -574,7 +574,7 @@ export class Totem implements Targetable, SwarmSlotOwner {
     if (this.intangible) return false;
     this.health -= damage;
     this.flash = 0.12;
-    this.staggerT = Math.max(this.staggerT, 1.1); // pinned — can't blink
+    this.staggerT = Math.max(this.staggerT, 2.1); // pinned — can't blink
     if (this.health <= 0) { this.dead = true; return true; }
     return false;
   }

@@ -34,7 +34,7 @@ export const TOTEM_SIM = {
   BLINK_CD_VAR: 3.0,
   EYE_HEIGHT: 3.9,       // beam origin per unit body radius (× c.radius)
   HIT_R2: 1.7,           // beam catch radius² vs a player on the line
-  STAGGER_S: 1.1,        // damage pins the obelisk — it can't blink
+  STAGGER_S: 2.1,        // damage pins the obelisk — it can't blink
 } as const;
 
 // Uber mirrors the client's crowned elder: slower, fatter, predictive.
