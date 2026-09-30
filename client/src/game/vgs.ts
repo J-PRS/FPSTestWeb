@@ -112,6 +112,26 @@ const TREE: Record<string, VgsNode> = {
     D: line('Declined'),
     W: line('Assignment?', "What's my assignment?"),
   }),
+  T: cat('Target', {
+    A: line('Acquired', 'Target acquired!'),
+    D: line('Destroyed', 'Target destroyed!'),
+    F: line('Flag carrier', 'Target the flag carrier!'),
+    G: line('Generator', 'Target the generator!'),
+    M: line('Me', 'Target me!'),
+    S: line('Sensors', 'Target the sensors!'),
+    T: line('Turret', "Target the turret! I'm in position."),
+    W: line('Wait', 'Wait — target not yet.'),
+  }),
+  W: cat('Warning', {
+    B: line('Behind us', 'Watch — enemies behind us!'),
+    C: line('Cover', 'Take cover!'),
+    F: line('Fall back', 'Fall back!'),
+    I: line('Incoming', 'Incoming!'),
+    L: line('Look out', 'Look out!'),
+    O: line('Overhead', 'Incoming from above!'),
+    S: line('Spotted', 'Enemies spotted nearby!'),
+    W: line('Watch it', 'Watch it!'),
+  }),
   S: cat('Self', {
     A: cat('Attack', {
       A: line('Attack', 'I will attack.'),
