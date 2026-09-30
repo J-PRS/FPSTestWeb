@@ -178,13 +178,15 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
     beltLabel: null, skillLabel: null, sidearmLabel: null, packLabel: null,
   };
 
-  const mkGroup = (title: string): HTMLElement => {
+  const mkGroup = (title: string, showHead = true): HTMLElement => {
     const g = document.createElement('div');
     g.className = 'lo-group';
     const h = document.createElement('div');
-    h.className = 'lo-head';
-    h.textContent = title;
-    g.appendChild(h);
+    if (showHead) {
+      h.className = 'lo-head';
+      h.textContent = title;
+      g.appendChild(h);
+    }
     const cells = document.createElement('div');
     cells.className = 'lo-cells';
     g.appendChild(cells);
@@ -239,8 +241,9 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
   // Drop-compatible shim: refreshLoadout drives faces via setValue.
   ui.classDrop = { el: tiles, setValue: () => refreshTiles() };
 
-  // --- WEAPONS: one numbered cell per slot. ---
-  const weaponCells = mkGroup('WEAPONS');
+  // --- WEAPONS: one numbered cell per slot. No group head — every cell
+  // is already captioned, the banner just ate vertical space. ---
+  const weaponCells = mkGroup('WEAPONS', false);
   const weaponOpts = weaponOptsFor(deps.lazyPlayer()?.armorClass ?? 'medium');
   const allWeaponOpts = weaponOptsFor('heavy'); // label source for filtered-out picks
   for (let i = 0; i < Player.LOADOUT_SLOTS; i++) {
@@ -251,8 +254,9 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
     ui.slotDrops.push(drop);
   }
 
-  // --- KIT: the five equipment picks in one strip. ---
-  const kitCells = mkGroup('KIT');
+  // --- KIT: the five equipment picks in one strip — headless like the
+  // weapon row; each cell names its own slot. ---
+  const kitCells = mkGroup('KIT', false);
   const belt = mkCellDom(kitCells);
   ui.beltLabel = belt.cap;
   ui.beltDrop = mkDrop(
