@@ -13,8 +13,10 @@
 - **Networking:** edges + committed snapshots, not position streams;
   distance-tiered fanout; players are the only always-on stream (20Hz).
   PROTOCOL_VERSION=4. `ROADMAP.md` is the living manifesto — read first.
-- **Testing:** `server_bun/tests/` ~300 bun tests incl. `tests/scenarios/`
-  one-file-per-staged-interaction suite (harness.ts); client vitest (93);
+- **Testing:** `server_bun/tests/` ~440 bun tests incl. `tests/scenarios/`
+  one-file-per-staged-interaction suite (harness.ts); client vitest (~99);
+  `server_bun/tools/netBot.ts` wire-level soak bots (+ `bun run soak`,
+  `rtc:relay`, `rtc:punch` scripts);
   `_tools/pvptest/soakreport.ts` headless fleet+server audit.
 - **Recent Changes:**
   - Server creatures raze deployables (`dep:N` targets + gnaw hp pool)

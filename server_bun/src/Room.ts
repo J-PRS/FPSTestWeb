@@ -382,6 +382,7 @@ export class Room {
         this.moveSim.markReseated(pid);
         this.applyClassScale(pid);
       },
+      moveMute: (pid) => this.moveSim.markReseated(pid),
       moveUntrack: (pid) => this.moveSim.untrack(pid),
       moveAuthority: () => this.moveAuthority,
       health: this.health,

@@ -65,6 +65,11 @@ export interface RoomInfo {
   /** Server-side impulses (knockback) the sim must also receive. */
   moveImpulse?: (playerId: string, dv: Vec3) => void;
   moveResync?: (playerId: string, pos: Vec3, yaw: number, fullEnergy?: boolean) => void;
+  /** Mute the shadow's divergence judge ~1 RTT without re-seating it —
+   *  armed alongside correctionGraceUntil whenever a correction goes out:
+   *  pre-correction reports still in flight would otherwise blip the
+   *  divergence counter toward a kick. */
+  moveMute?: (playerId: string) => void;
   moveTrack?: (playerId: string, pos: Vec3, yaw: number) => void;
   moveUntrack?: (playerId: string) => void;
   /** When set, the sim is truth: position reports degrade to aim/ping/
@@ -476,6 +481,7 @@ export class MessageHandler {
         // without this the snap itself reads as a speedhack reject.
         player.lastPosCheckPos = { ...simTruth.pos };
         player.correctionGraceUntil = now + CONFIG.reportGraceMs;
+        this.roomInfo.moveMute?.(playerId);
       }
       player.rotation = { ...msg.rotation };
       player.lastSeen = now;
@@ -565,6 +571,7 @@ export class MessageHandler {
         // to the force-accept, which then sticks).
         player.lastPosCheckPos = { ...validState.position };
         player.correctionGraceUntil = now + CONFIG.reportGraceMs;
+        this.roomInfo.moveMute?.(playerId);
       }
     }
     // Client persisting past corrections (disputed knockback, lost
