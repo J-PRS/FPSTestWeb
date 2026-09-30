@@ -1,3 +1,4 @@
+2026-09-26 - netBot: room hops actually hop now (was a same-room no-op the server silently dropped) + the local sim re-resolves terrain per gameState.map.terrain so a hop into a different-mapped room does not ski ghost ground.
 2026-09-26 - RTC disconnect logged twice: game+ctrl datachannels die together, each fired the grace path. Only the first closed channel now runs it.
 2026-09-26 - Bot taunts: typed-reply delay (1.2-3s beat after the event, same wall-clock edge as respawn timers) + two new triggers - environmental deaths ("Who put that wall there?") and spree-tier boasts ("I'm on fire!").
 2026-09-26 - netBot: sim the declared armor class (speedScale) - a heavy bot overskied its own shadow by ~25%, a sustained ~2m/s cheat-looking crawl; classUpdate rotations apply at respawn like the server.

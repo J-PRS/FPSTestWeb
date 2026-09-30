@@ -72,6 +72,22 @@ const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
 const W = dv.getUint32(0, true), H = dv.getUint32(4, true);
 const field: Heightfield = { size: W, data: buf.subarray(8), stride: 1 };
 if (W !== H) throw new Error('non-square heightmap');
+let loadedTerrain = MAP_PATH.split(/[\\/]/).pop()!;
+// Room hops change the ground under the sim — gameState.map.terrain
+// names the file the room replays.
+async function ensureTerrain(name: string): Promise<void> {
+  if (name === loadedTerrain) return;
+  try {
+    const p = new URL(`../../maps/${name}`, import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
+    const b = new Uint8Array(await bunFile!(p).arrayBuffer());
+    const d = new DataView(b.buffer, b.byteOffset, b.byteLength);
+    const w = d.getUint32(0, true), h = d.getUint32(4, true);
+    if (w !== h) return;
+    field.size = w; field.data = b.subarray(8);
+    loadedTerrain = name;
+    console.log(`[netBot] terrain swapped: ${name}`);
+  } catch { /* unknown file — keep the old field rather than crash */ }
+}
 const gy = (x: number, z: number) => hmHeight(field, x, z);
 const _gn = { x: 0, y: 1, z: 0 };
 const surface = {
@@ -219,6 +235,7 @@ class WireBot {
   // (its echo never comes, so the next echo binds off-by-one).
   pendingClaims: { pid?: string; wt: number; vx: number; vy: number; vz: number }[] = [];
   nextDeploy = 0; nextChat = 0; nextTeleport = 0; nextHeal = 0; nextLoadout = 0; nextEnvDmg = 0; nextSwitch = 0;
+  private hopAlt = false;
   wasJump = false; wasJet = false;
   private lastSentInput = '';
 
@@ -379,17 +396,19 @@ class WireBot {
         for (const pk of m.pickups ?? []) this.pickups.set(pk.id, pk.pos);
         const me = m.localPlayerState?.position ?? m.players?.find((p: { id?: string; playerId?: string }) => (p.id ?? p.playerId) === this.id)?.position
           ?? { x: rand(-20, 20), y: 40, z: rand(-20, 20) };
-        this.sim = new MoveSim(surface, {
-          pos: { x: me.x, y: me.y, z: me.z },
-          vel: { x: 0, y: 0, z: 0 }, yaw: 0, pitch: 0, onGround: true,
+        void ensureTerrain(m.map?.terrain ?? 'heightmap.bin').then(() => {
+          this.sim = new MoveSim(surface, {
+            pos: { x: me.x, y: me.y, z: me.z },
+            vel: { x: 0, y: 0, z: 0 }, yaw: 0, pitch: 0, onGround: true,
+          });
+          this.sim.speedScale = CLASS_STATS[this.armorClass].speedScale;
+          stats.joins++;
+          // Re-seat (switchRoom, reconnect) revives: the corpse flag belongs
+          // to the room we just left — no respawn message ever arrives for
+          // it in the new one.
+          this.dead = false;
+          this.start();
         });
-        this.sim.speedScale = CLASS_STATS[this.armorClass].speedScale;
-        stats.joins++;
-        // Re-seat (switchRoom, reconnect) revives: the corpse flag belongs
-        // to the room we just left — no respawn message ever arrives for
-        // it in the new one.
-        this.dead = false;
-        this.start();
         break;
       }
       case 'playerJoined': this.roster.set(m.playerId, { pos: m.position, vel: { x: 0, y: 0, z: 0 }, team: m.team }); break;
@@ -524,7 +543,9 @@ class WireBot {
     this.nextHeal = performance.now() + rand(20000, 60000);
     this.nextLoadout = performance.now() + rand(45000, 120000);
     this.nextEnvDmg = performance.now() + rand(30000, 90000);
-    this.nextSwitch = performance.now() + rand(120000, 240000);
+    // First hop lands early enough for a soak to see it — after that
+    // the 2-4min cadence applies.
+    this.nextSwitch = performance.now() + rand(20000, 80000);
   }
 
   /** Everything else a legal client says, rolled at plausible rates. */
@@ -587,8 +608,10 @@ class WireBot {
     }
     if (now >= this.nextSwitch) {
       // Room-hop stress path — full teardown + rejoin, rare like a real hop.
+      // Alternate target: hopping into ROOM itself is a server-side no-op.
       this.nextSwitch = now + rand(120000, 240000);
-      this.send({ type: 'switchRoom', room: ROOM, mode: MODE });
+      this.hopAlt = !this.hopAlt;
+      this.send({ type: 'switchRoom', room: this.hopAlt ? `${ROOM}-alt` : ROOM, mode: MODE });
     }
 
     // Creature claims — only when something's actually in reach, same
