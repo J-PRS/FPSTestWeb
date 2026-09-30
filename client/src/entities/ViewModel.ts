@@ -3,8 +3,12 @@ import { WeaponType } from '../../../shared/weapons.js';
 import { bakeVertexAO } from '../effects/vertexAO.js';
 import { urlParams } from '../core/params.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { buildWeaponMeshes, buildHandAndFlash, FIST_JAB, FIST_OFF } from './viewmodel/weaponsGeo.js';
+import { buildWeaponMeshes, buildHandAndFlash } from './viewmodel/weaponsGeo.js';
 import { makeShieldMaterial } from '../effects/shieldBubble.js';
+import { VmEnvelopes } from './vmEnvelopes.js';
+// Timing constants live with the envelopes — re-export so Player/fire.ts
+// keep importing them from the file they already know.
+export { THROW_RELEASE, THROW_TOTAL, SIDEARM_DRAW_TIME } from './vmEnvelopes.js';
 
 // Port of Assets/Scripts/WeaponSway.cs (Unity FPS_Test) — mouse-lag sway,
 // velocity offset, perlin-ish bob, and landing dip.
@@ -20,35 +24,14 @@ const FALL_MAX = 0.08;
 
 const REST_POS = new THREE.Vector3(0.25, -0.28, -0.45);
 
-// Belt-item throw (Tribes-style build up): weapon dips, item releases
-// mid-animation, weapon raises back. THROW_RELEASE is when the
-// projectile should actually spawn.
-export const THROW_RELEASE = 0.7; // Tribes Ascend belt-item build-up time
-const THROW_LOWER_TIME = 0.18;
-const THROW_RAISE_TIME = 0.25;
-// Total throw cycle — Player gates primary fire on this: the gun is
-// physically lowered, shooting mid-throw means firing through the hip.
-export const THROW_TOTAL = THROW_RELEASE + THROW_RAISE_TIME + 0.05;
 const THROW_DIP_Y = -0.22;
 const THROW_DIP_Z = 0.06;
 const THROW_DIP_ROT = -0.12; // slight muzzle-down tilt, gun stays level-ish
 const THROW_DIP_ROLL = 0.18; // rolls outward, weapon tips to the right
 
-// Weapon switch: quick lower, swap model at the bottom, raise back up
-const SWITCH_LOWER_TIME = 0.12;
-const SWITCH_RAISE_TIME = 0.16;
-// Sidearm hold-out gates its fire on the raise completing — a "pull it out
-// and it's live" beat, same window the viewmodel spends drawing the gun.
-export const SIDEARM_DRAW_TIME = SWITCH_LOWER_TIME + SWITCH_RAISE_TIME;
 const SWITCH_DIP_Y = -0.34;
 const SWITCH_DIP_ROT = -0.35; // muzzle tips down as it holsters
 
-// Melee punch: CoD-style — the weapon drops low/right like holstering while
-// an off-hand fist jabs in from bottom-left. Fast in, impact hold, spring back.
-const PUNCH_IN = 0.09;
-const PUNCH_HOLD = 0.08;
-const PUNCH_OUT = 0.32;
-const PUNCH_TOTAL = PUNCH_IN + PUNCH_HOLD + PUNCH_OUT;
 const PUNCH_X = 0.18;    // gun swings right
 const PUNCH_Y = -0.3;    // and deep — nearly holstered, not a recoil
 const PUNCH_Z = 0.06;
@@ -59,7 +42,7 @@ export class ViewModel {
   readonly group: THREE.Group;
   // Keyed by WeaponType — the array order used to collide with the enum
   // (Chaingun=3 showed the mortar mesh, Railgun=9 indexed past the end).
-  private weapons = new Map<number, THREE.Group>();
+  weapons = new Map<number, THREE.Group>(); // public — envelopes swap visibility
   // Empty node parked at each weapon's muzzle — world position IS the
   // attachment point for beam VFX, so the bolt tracks sway/kick exactly.
   private muzzleNodes = new Map<number, THREE.Object3D>();
@@ -85,9 +68,7 @@ export class ViewModel {
   private spinAxis = new THREE.Vector3(0, 0, -1);
   private spinVel = 0;
   private static readonly SPIN_MAX = 40; // rad/s at full spin
-  private activeWeapon = 0;
-  private switchT = -1;
-  private pendingWeapon = -1;
+  activeWeapon = 0; // public — the switch envelope rewrites it at the dip
   private timer = 0;
   private kickAmount = 0;
   private kickVel = 0;       // spring velocity — impulse IN, overshoot settle
@@ -96,13 +77,11 @@ export class ViewModel {
   private kickDecay = 12;    // per-weapon spring rate
   private kickAmp = 1;       // per-weapon muzzle-rise multiplier
   private flashLifeScale = 1;
-  private throwT = -1;
-  private punchT = -1;
-  private fistGroup: THREE.Group;
+  fistGroup: THREE.Group; // public — the punch envelope flies it
   private baseRotX = 0.04;
   private baseRotZ = 0;
-  private flashMesh: THREE.Mesh;
-  private flashMesh2: THREE.Mesh;
+  flashMesh: THREE.Mesh;  // public — the switch envelope re-parks it
+  flashMesh2: THREE.Mesh;
   private flashMat: THREE.MeshBasicMaterial;
   private flashLight: THREE.PointLight;
   private flashBaseS = 1;
@@ -401,8 +380,13 @@ export class ViewModel {
     return true;
   }
 
+  /** Dip-cycle family (throw/switch/punch envelopes) — own file
+   *  (vmEnvelopes.ts); the public triggers stay as delegates. */
+  private env = new VmEnvelopes(this);
+  muzzleZ(wt: number): number { return ViewModel.MUZZLE_Z[wt] ?? -0.35; }
+
   startThrow(): void {
-    this.throwT = 0;
+    this.env.startThrow();
   }
 
   // Cloak ghosting — a true "whole-layer" fade, not per-surface alpha.
@@ -476,8 +460,8 @@ export class ViewModel {
   // Energy shield, first-person read: the same hex+fresnel field that wraps
   // the third-person bubble crawls over the gun's surface — the player who
   // raised it sees the charge on their own weapon.
-  private shieldShells: THREE.Object3D[] = [];
-  private shellColor = 0x66ccff;
+  shieldShells: THREE.Object3D[] = []; // public — switch envelope re-wraps
+  shellColor = 0x66ccff;
   setShield(on: boolean, color = 0x66ccff): void {
     if (!on) {
       for (const s of this.shieldShells) s.parent?.remove(s);
@@ -509,18 +493,12 @@ export class ViewModel {
     }
   }
 
-  // Melee swing: sweeps the weapon aside instead of kicking — reads as a
-  // punch, not a shot. No flash (melee isn't a discharge).
   punch(): void {
-    this.punchT = 0;
-    this.fistGroup.visible = true;
+    this.env.punch();
   }
 
-  // Lower → swap model at the bottom → raise. Cosmetic only; firing isn't gated.
   switchWeapon(index: number): void {
-    if (index === this.activeWeapon && this.switchT < 0) return;
-    this.pendingWeapon = index;
-    if (this.switchT < 0) this.switchT = 0; // already lowering: just retarget
+    this.env.switchWeapon(index);
   }
 
   update(
@@ -577,9 +555,7 @@ export class ViewModel {
     this.kickX *= Math.exp(-dt * this.kickDecay * 1.4); // jitter settles faster than the shove
     const kickZ = this.kickAmount * 0.55;
     const kickY = this.kickAmount * 0.12;
-    const dip = this.updateThrowDip(dt);
-    const switchDip = this.updateSwitchDip(dt);
-    const punch = this.updatePunchDip(dt);
+    const { dip, switchDip, punch } = this.env.tick(dt);
     const totalDip = Math.max(dip, switchDip);
 
     const target = this.tmpDir.set(
@@ -622,66 +598,5 @@ export class ViewModel {
 
     this.lastFrameYVel = playerVel.y;
     this.lastFrameVel.copy(playerVel);
-  }
-
-  // Throw anim: quick lower, hold through release, spring back up
-  private updateThrowDip(dt: number): number {
-    if (this.throwT < 0) return 0;
-    this.throwT += dt;
-    const t = this.throwT;
-    if (t >= THROW_TOTAL) {
-      this.throwT = -1;
-      return 0;
-    }
-    if (t < THROW_LOWER_TIME) return t / THROW_LOWER_TIME;
-    if (t < THROW_RELEASE + 0.07) return 1;
-    return Math.max(0, 1 - (t - THROW_RELEASE - 0.07) / THROW_RAISE_TIME);
-  }
-
-  // Weapon switch: lower, swap at the bottom, raise
-  private updateSwitchDip(dt: number): number {
-    if (this.switchT < 0) return 0;
-    this.switchT += dt;
-    const t = this.switchT;
-    if (t < SWITCH_LOWER_TIME) return t / SWITCH_LOWER_TIME;
-    if (this.pendingWeapon >= 0 && this.pendingWeapon !== this.activeWeapon) {
-      const prev = this.weapons.get(this.activeWeapon);
-      if (prev) prev.visible = false;
-      this.activeWeapon = this.pendingWeapon;
-      const next = this.weapons.get(this.activeWeapon);
-      if (next) next.visible = true;
-      // The field shell wraps the OLD gun's silhouette — re-wrap the new one.
-      if (this.shieldShells.length) { this.setShield(false); this.setShield(true, this.shellColor); }
-      // Park the flash at this weapon's actual muzzle, not a shared offset
-      const mz = ViewModel.MUZZLE_Z[this.activeWeapon] ?? -0.35;
-      this.flashMesh.position.z = mz;
-      this.flashMesh2.position.z = mz;
-    }
-    const dip = Math.max(0, 1 - (t - SWITCH_LOWER_TIME) / SWITCH_RAISE_TIME);
-    if (dip <= 0) { this.switchT = -1; this.pendingWeapon = -1; }
-    return dip;
-  }
-
-  // Punch swing envelope: snap in, brief apex hold, spring back out.
-  // Also flies the fist — weapon envelope drives the gun, this moves the glove.
-  private updatePunchDip(dt: number): number {
-    if (this.punchT < 0) return 0;
-    this.punchT += dt;
-    const t = this.punchT;
-    if (t >= PUNCH_TOTAL) {
-      this.punchT = -1;
-      this.fistGroup.visible = false;
-      this.fistGroup.position.copy(FIST_OFF);
-      return 0;
-    }
-    let env: number;
-    if (t < PUNCH_IN) env = t / PUNCH_IN;
-    else if (t < PUNCH_IN + PUNCH_HOLD) env = 1;
-    else env = 1 - (t - PUNCH_IN - PUNCH_HOLD) / PUNCH_OUT;
-    // Fist leads: it jabs in on the weapon's way out and snaps back first
-    const ft = t < PUNCH_IN ? t / PUNCH_IN : t < PUNCH_IN + PUNCH_HOLD + 0.05 ? 1 : Math.max(0, 1 - (t - PUNCH_IN - PUNCH_HOLD - 0.05) / 0.12);
-    const ease = 1 - (1 - ft) * (1 - ft); // ease-out — fast launch, lands hard
-    this.fistGroup.position.lerpVectors(FIST_OFF, FIST_JAB, ease);
-    return env;
   }
 }
