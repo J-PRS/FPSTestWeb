@@ -128,7 +128,12 @@ export class ClaimLedger {
       latest = { proj, shot: false, aoe: false, at: Date.now() };
       this.spent.set(id, latest);
     }
-    if (latest) return this.take(latest, claim);
+    if (latest) {
+      // This path mints tombstones without passing through sweepSpent —
+      // unbounded growth under sustained fire on unordered transports.
+      this.sweepSpent();
+      return this.take(latest, claim);
+    }
     for (const rec of this.spent.values()) {
       if (!this.matches(rec.proj, playerId, weaponType)) continue;
       if (Date.now() - rec.at >= SPENT_CLAIM_MS) continue;
