@@ -10,6 +10,8 @@ import type { StructureSpec } from '../../../shared/mapSpec.js';
 import { TEAM_COLORS, type TeamId } from '../../../shared/teams.js';
 import { BotBrain, BOT_EYE } from '../../../shared/botBrain.js';
 import { CLASS_STATS } from '../../../shared/botClasses.js';
+import { BOT_LOADOUTS, pickBotWeapon } from '../../../shared/botLoadouts.js';
+import { getWeaponStats } from '../../../shared/weapons.js';
 import type { BotLoadout } from '../../../shared/botLoadouts.js';
 
 /**
@@ -151,6 +153,12 @@ export class GameBot extends RemotePlayer {
       solidIndex: Projectile.solidIndex,
       others: ctx.others,
       now: performance.now(),
+      // Aim lead uses the muzzle speed of the weapon this bot would
+      // pick at that range — mirrors the server's senses hook.
+      weaponSpeed: (d) => {
+        const wt = pickBotWeapon(this.loadout ?? BOT_LOADOUTS[0]!, d, d);
+        return getWeaponStats(wt).speed || 60;
+      },
     });
     const dest = out.dest;
     this.lastDest.set(dest.x, dest.y, dest.z);

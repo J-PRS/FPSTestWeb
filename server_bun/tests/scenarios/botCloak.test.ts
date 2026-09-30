@@ -19,8 +19,15 @@ describe('scenario: bots cannot aim a cloaked target', () => {
     }
     const hits = () => w.msgs.filter((m) => m.type === 'playerHit' && (m as { targetId?: string }).targetId === 'P1').length;
     expect(hits()).toBeGreaterThan(0);
-    const before = w.msgs.length;
     p.status = STATUS.CLOAK;
+    // Drain in-flight shells — a round launched pre-cloak landing on the
+    // target is a legal hit, not aim through cloak.
+    for (let i = 0; i < 40; i++) {
+      pin(room, bot.id, { x: 40, y: 31, z: 0 });
+      pin(room, 'P1', { x: 50, y: 31, z: 0 });
+      step(room, 1);
+    }
+    const before = w.msgs.length;
     for (let i = 0; i < 200; i++) {
       pin(room, bot.id, { x: 40, y: 31, z: 0 });
       pin(room, 'P1', { x: 50, y: 31, z: 0 });

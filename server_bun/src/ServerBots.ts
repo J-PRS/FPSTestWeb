@@ -213,16 +213,11 @@ export class ServerBots {
         WeaponType.Melee, true);
       return;
     }
-    const stats = getWeaponStats(wt);
-    // Lead the target by its velocity over the shell's flight time —
-    // without it every bolt lands behind a skiing player forever. Hitscan
-    // lines (speed 0) take no lead: dist/0 would smear the dir to NaN.
-    const lead = stats.speed > 0
-      ? (isSuper(p.id) ? dist / stats.speed : (dist / stats.speed) * 0.8)
-      : 0;
-    const ax = aim.x + target.velocity.x * lead - muzzle.x;
-    const ay = aim.y + target.velocity.y * lead - muzzle.y;
-    const az = aim.z + target.velocity.z * lead - muzzle.z;
+    // The brain's aim already leads by target velocity over real flight
+    // time (weaponSpeed hook below) — adding lead here would double it.
+    const ax = aim.x - muzzle.x;
+    const ay = aim.y - muzzle.y;
+    const az = aim.z - muzzle.z;
     const alen = Math.sqrt(ax * ax + ay * ay + az * az) || 1;
     const dir = { x: ax / alen, y: ay / alen, z: az / alen };
     if (!this.room.projectiles.spawn(p.id, wt, muzzle, dir, p.velocity)) {
@@ -574,6 +569,12 @@ export class ServerBots {
         this.room.moveSim.structureTop(x, z),
       ),
       others: this.othersOf(p),
+      // Aim lead uses the muzzle speed of the weapon this bot would
+      // pick at that range — same band select fireAt runs.
+      weaponSpeed: (d) => {
+        const w = pickBotWeapon(this.loadouts.get(id) ?? BOT_LOADOUTS[0]!, d, d);
+        return getWeaponStats(w).speed || 60;
+      },
       // Wall occlusion for the LOS sense — bots stop wasting ammo on
       // targets behind structures they'd never see through anyway.
       solids: this.room.ballSim.colliders,

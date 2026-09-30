@@ -69,6 +69,11 @@ export interface BrainCtx {
    *  without one fall back to terrain-only LOS like before. */
   solids?: readonly StructureCollider[];
   solidIndex?: ColliderIndex | null;
+  /** Host hook: muzzle speed of the weapon the bot would pick at `dist`
+   *  — aim lead divides range by real flight speed instead of a fixed
+   *  60 m/s guess (a mortar under-leads and a disc over-leads at 60).
+   *  Return 0 for hitscan speed rows; the brain falls back to 60. */
+  weaponSpeed?(dist: number): number;
 }
 
 export interface BrainOut {
@@ -438,12 +443,14 @@ export class BotBrain {
         // aim just stops being sloppy.
         let err = 0.5 + Math.hypot(this.lastSeenVel.x, this.lastSeenVel.y, this.lastSeenVel.z) * 0.1 + d * 0.02;
         err *= hero ? 0.3 : fearing ? 2.5 : 1;
+        const ws = ctx.weaponSpeed?.(d);
+        const flight = d / (ws && ws > 0 ? ws : 60);
         fire = {
           targetId: this.hunt.id,
           aim: {
-            x: this.lastSeen.x + this.lastSeenVel.x * (d / 60) + (Math.random() - 0.5) * err,
-            y: this.lastSeen.y + this.lastSeenVel.y * (d / 60) + (Math.random() - 0.5) * err * 0.5,
-            z: this.lastSeen.z + this.lastSeenVel.z * (d / 60) + (Math.random() - 0.5) * err,
+            x: this.lastSeen.x + this.lastSeenVel.x * flight + (Math.random() - 0.5) * err,
+            y: this.lastSeen.y + this.lastSeenVel.y * flight + (Math.random() - 0.5) * err * 0.5,
+            z: this.lastSeen.z + this.lastSeenVel.z * flight + (Math.random() - 0.5) * err,
           },
         };
       }
