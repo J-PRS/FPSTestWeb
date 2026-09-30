@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-import { MAX_ENERGY, MAX_HEALTH, JET_DRAIN, JET_CHARGE, DISC_RATE, MELEE_COOLDOWN, MELEE_LUNGE } from '../core/config.js';
+import { MAX_ENERGY, MAX_HEALTH, JET_DRAIN, JET_CHARGE, MELEE_COOLDOWN, MELEE_LUNGE } from '../core/config.js';
 
 import { Terrain } from '../world/terrain.js';
 import { PlayerSkills } from './player/skills.js'
@@ -10,15 +10,15 @@ import { CLASS_STATS, CLASS_MODEL_SCALE, type ArmorClass } from '../../../shared
 import { PlayerStatus } from './playerStatus.js';
 
 import { MovementController, MovementState } from './movement.js';
-import { weaponDef, type WeaponDef } from '../weapons.js';
+import { type WeaponDef } from '../weapons.js';
 import { settings } from '../core/settings.js';
 import { isDown } from '../core/keybinds.js';
 import { PlayerInput } from './player/input.js';
 import { PlayerModel } from './PlayerModel.js';
+import * as imp from './playerImpulse.js';
 import { PlayerEmit } from './playerEmit.js';
 import { PlayerLoadout } from './playerLoadout.js';
 import { PlayerVisuals } from './PlayerVisuals.js';
-import { THROW_TOTAL } from './ViewModel.js';
 import { ChildLogger } from '../core/Logger.js';
 
 const logger = new ChildLogger('Player');
@@ -162,7 +162,7 @@ export class Player {
   public movement: MovementController; // Public for client-side prediction reconciliation
   model: PlayerModel | null = null; // public — PlayerEmit/PlayerStatus read it
   jumpAnimTimer = 0.0; // public — PlayerEmit re-arms it on lift-off
-  private shootAnimTimer = 0.0;
+  shootAnimTimer = 0.0;
   wasOnGround = false; // public — PlayerEmit owns the transition edge
   visuals: PlayerVisuals; // camera/shadow/gizmo/observer — see PlayerVisuals.ts
 
@@ -520,31 +520,7 @@ export class Player {
   }
 
   // Weapon triggers: selected weapon (LMB) plus C/F belt throws.
-  private fireWeapons(): void {
-    const wid = this.armory.secondaryWid ?? this.loadout[this.weaponIndex];
-    const def = weaponDef(wid);
-    // Weapon is lowered during a belt-throw — no primary fire mid-throw.
-    // A held secondary auto-fires at its own cadence — no click needed.
-    const wantFire = this.throwLockT <= 0 &&
-      (this.armory.secondaryWid !== null ? this.armory.secondaryDrawT <= 0
-        : def.auto ? this.input.mouseHeld : (this.input.firePending || (this.input.mouseHeld && !this.input.needsRelease)));
-    if (!this.input.mouseHeld) this.input.needsRelease = false;
-    if (wantFire && this.fireTimer <= 0) {
-      this.fireTimer = def.rate;
-      this.shootAnimTimer = 0.3;
-      this.onWeaponFire?.(def, { origin: this.pos.clone(), dir: this.getAimDir(), playerVel: this.vel.clone() });
-    }
-    this.input.firePending = false;
-
-    // Belt item (C key) — the equipped throw; hold to repeat
-    if (this.input.beltHeld && this.beltTimer <= 0) {
-      this.beltTimer = DISC_RATE;
-      this.throwLockT = THROW_TOTAL;
-      this.shootAnimTimer = 0.3; // lob raise — same snap as a shot
-      this.model?.weaponThrow();
-      this.onBelt?.({ origin: this.pos.clone(), dir: this.getAimDir(), playerVel: this.vel.clone() }, this.beltItem);
-    }
-  }
+  private fireWeapons(): void { imp.fireWeapons(this); }
 
   // Every impulse path must push pos/vel back into the controller —
   // it owns integration and its snapshot would overwrite our values
@@ -553,34 +529,10 @@ export class Player {
     this.movement.setState({ pos: this.pos, vel: this.vel, yaw: this.yaw, pitch: this.pitch, onGround: this.onGround });
   }
 
-  /** Nugget pickup: half the tank back, no free-jet window — unlimited
-   *  energy made the toggle skills (cloak/shield/mend) effectively free. */
-  grantJetBoost(): void {
-    this.energy = Math.min(this.energyCap, this.energy + this.energyCap * 0.5);
-  }
-
-  /** Nugget pickup: restore a chunk of health, capped at max. */
-  heal(fraction: number): void {
-    this.health = Math.min(this.maxHealth, this.health + this.maxHealth * fraction);
-  }
-
-  applyKnockback(from: THREE.Vector3, force: number): void {
-    const dir = this.pos.clone().sub(from).normalize();
-    this.vel.addScaledVector(dir, force);
-    this.vel.y += force * 0.5;
-    // Explosion impulse ungrounds — otherwise ground friction eats the
-    // horizontal component while still within the near-ground band.
-    this.onGround = false;
-    this.syncMovement();
-  }
-
-  applyPull(to: THREE.Vector3, force: number): void {
-    const dir = to.clone().sub(this.pos).normalize();
-    this.vel.addScaledVector(dir, force);
-    this.vel.y += force * 0.3;
-    this.onGround = false;
-    this.syncMovement();
-  }
+  grantJetBoost(): void { imp.grantJetBoost(this); }
+  heal(fraction: number): void { imp.heal(this, fraction); }
+  applyKnockback(from: THREE.Vector3, force: number): void { imp.applyKnockback(this, from, force); }
+  applyPull(to: THREE.Vector3, force: number): void { imp.applyPull(this, to, force); }
 
   getSpeed(): number {
     return Math.sqrt(this.vel.x * this.vel.x + this.vel.z * this.vel.z);
