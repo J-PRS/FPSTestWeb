@@ -415,6 +415,16 @@ export class GameServer {
     this.removePlayerCompletely(from, playerId, 'roomSwitch');
 
     this.seatPlayer(to, ws, playerId, prev?.perk ?? 'none', prev?.armorClass ?? 'medium', prev?.transport);
+    // Banked respawn edits ride the hop too — a hop is a seat transfer,
+    // not a respawn, so a queued class/perk swap must survive it or the
+    // client's declared next-life loadout silently vanishes.
+    if (prev) {
+      const reseated = to.players.getPlayer(playerId);
+      if (reseated) {
+        reseated.pendingClass = prev.pendingClass;
+        reseated.pendingPerk = prev.pendingPerk;
+      }
+    }
     logger.info('Player switched rooms', { playerId, from: from.name, to: to.name });
   }
 
