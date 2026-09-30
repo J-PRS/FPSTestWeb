@@ -11,6 +11,7 @@
  * locomotion, the visual, and resolving the hit.
  */
 
+import { BotSteer } from './botSteer.ts';
 import { STATUS } from './status.ts';
 import { ENERGY } from './movement.ts';
 import type { ColliderIndex } from './solidWorld.ts';
@@ -124,14 +125,6 @@ const FEAR_HP = 0.15;
 const HERO_CHANCE = 0.3; // per hurt episode, rolled on the rising edge
 const HERO_S = 6;        // seconds of hero before it cools off
 
-// --- context steering senses ---
-const SLOTS = 16;        // directions sampled around the circle
-const PROBE_A = 4;       // m — near slope probe
-const PROBE_B = 9;       // m — far probe catches ridgelines early
-const STEP = 8;          // m — steering lookahead distance
-const SEP_RANGE = 7;     // m — personal space vs other bodies
-const MEM_MS = 4000;     // recently-visited ground repels for this long
-const MEM_RANGE = 12;    // m — memory trail influence radius
 const DEATH_MS = 15000;  // a death spot stays scary this long
 const DEATH_RANGE = 10;  // m — repel radius around each remembered death
 
@@ -163,9 +156,7 @@ export class BotBrain {
    *  a wall pocket, so the streak escalates to a jet escape burst. */
   private stuckStreak = 0;
   private escapeJetT = 0;
-  private heading = { x: 1, z: 0 };
-  private memory: { x: number; z: number; t: number }[] = [];
-  private memT = 0;
+  private readonly steerer = new BotSteer();
   // Death memory — where the host reported this body dying. Souring
   // goals near a death spot is how map denial emerges: nobody scripts
   // "that corner is dangerous", the squad just stops wandering back.
@@ -257,7 +248,7 @@ export class BotBrain {
     let dest = this.pickDest(dt, ctx, pos, fearing, hero);
 
     // --- context steering: senses score every direction ---
-    dest = this.steer(dt, ctx, pos, dest);
+    dest = this.steerer.steer(dt, ctx, pos, dest);
 
     dest = this.stuckBreak(dt, ctx, pos, dest);
 
@@ -429,7 +420,7 @@ export class BotBrain {
       // Committed lines: a skier picks a direction and holds it — the
       // roll is a forward cone off the current heading with real run
       // length, not a fresh random bearing that reverses mid-carve.
-      const a = Math.atan2(this.heading.z, this.heading.x) + (Math.random() - 0.5) * 2.4;
+      const a = Math.atan2(this.steerer.headingVec().z, this.steerer.headingVec().x) + (Math.random() - 0.5) * 2.4;
       const r = (25 + Math.random() * 55) * this.wanderlust;
       const wp = { x: pos.x + Math.cos(a) * r, z: pos.z + Math.sin(a) * r };
       if (this.nearDeath(wp)) continue;
@@ -551,101 +542,6 @@ export class BotBrain {
 
   
   
-  /** Context steering — every direction is scored instead of testing
-   *  just the goal line. Interest comes from goal alignment and current
-   *  heading (momentum); danger comes from slope probes, bodies in the
-   *  way, and recently-visited ground (the memory trail, which is what
-   *  lets a bot escape a local minimum instead of orbitting it).
-   *  Danger masks interest; the best surviving slot wins, and the result
-   *  is blended with the last heading so 22.5° slot granularity never
-   *  shows as jitter. */
-  private steer(dt: number, ctx: BrainCtx, pos: BotVec, dest: BotVec): BotVec {
-    let gx = dest.x - pos.x, gz = dest.z - pos.z;
-    const gd = Math.hypot(gx, gz);
-    if (gd < 0.5) return dest;
-    gx /= gd; gz /= gd;
-    const g0 = ctx.groundY(pos.x, pos.z);
-    const now = ctx.now;
-
-    // Lay the trail, then drop crumbs that are stale or out of range.
-    this.memT -= dt;
-    if (this.memT <= 0) {
-      this.memT = 0.4;
-      this.memory.push({ x: pos.x, z: pos.z, t: now });
-      if (this.memory.length > 24) this.memory.shift();
-    }
-    this.memory = this.memory.filter(
-      (m) => now - m.t < MEM_MS && (m.x - pos.x) ** 2 + (m.z - pos.z) ** 2 < MEM_RANGE * MEM_RANGE,
-    );
-
-    let bestX = gx, bestZ = gz, bestScore = -1;
-    let safeX = gx, safeZ = gz, safeDanger = 2;
-    for (let i = 0; i < SLOTS; i++) {
-      const a = (i / SLOTS) * Math.PI * 2;
-      const dx = Math.cos(a), dz = Math.sin(a);
-
-      const align = dx * gx + dz * gz;
-      let interest = Math.max(0, align);
-      interest *= interest; // sharpen: prefer near-goal arcs over drift
-      interest += 0.25 * Math.max(0, dx * this.heading.x + dz * this.heading.z);
-
-      const danger = this.slotDanger(ctx, pos, dx, dz, g0, now);
-      const score = interest * (1 - danger);
-      if (score > bestScore) { bestScore = score; bestX = dx; bestZ = dz; }
-      if (danger < safeDanger) { safeDanger = danger; safeX = dx; safeZ = dz; }
-    }
-
-    // Every slot masked → take the least-dangerous one; a standstill is
-    // worse than a sideways shuffle.
-    if (bestScore <= 0.001) { bestX = safeX; bestZ = safeZ; }
-
-    // Carve, don't flick: a human swings their view at wrist speed —
-    // ~4 rad/s — so the heading can only rotate that far per tick and
-    // slot flips become smooth arcs instead of tick-to-tick skitter.
-    // dodge/detour bypass this (they should read as decisive jukes).
-    const cur = Math.atan2(this.heading.x, this.heading.z);
-    const tgt = Math.atan2(bestX, bestZ);
-    let dYaw = tgt - cur;
-    if (dYaw > Math.PI) dYaw -= Math.PI * 2;
-    if (dYaw < -Math.PI) dYaw += Math.PI * 2;
-    const maxTurn = 4.0 * dt;
-    const a = cur + Math.max(-maxTurn, Math.min(maxTurn, dYaw));
-    this.heading.x = Math.sin(a); this.heading.z = Math.cos(a);
-    const step = Math.min(gd, STEP);
-    return { x: pos.x + this.heading.x * step, y: pos.y, z: pos.z + this.heading.z * step };
-  }
-
-  /** Danger score [0..1] for one steering slot: slope probes (climbs,
-   *  sheer drops), bodies in the way, and the recently-visited memory
-   *  trail that lets a bot escape a local minimum. */
-  private slotDanger(ctx: BrainCtx, pos: BotVec, dx: number, dz: number, g0: number, now: number): number {
-    let danger = 0;
-    const riseA = ctx.groundY(pos.x + dx * PROBE_A, pos.z + dz * PROBE_A) - g0;
-    const riseB = ctx.groundY(pos.x + dx * PROBE_B, pos.z + dz * PROBE_B) - g0;
-    const slope = Math.max(riseA / PROBE_A, riseB / PROBE_B);
-    if (slope > 0.45) danger = Math.min(1, danger + (slope - 0.45) * 2);
-    if (riseA < -12) danger = Math.min(1, danger + 0.5); // sheer drop
-
-    if (ctx.others) {
-      for (const o of ctx.others) {
-        const ox = o.x - pos.x, oz = o.z - pos.z;
-        const od = Math.hypot(ox, oz);
-        if (od > SEP_RANGE || od < 0.01) continue;
-        const toward = dx * (ox / od) + dz * (oz / od);
-        if (toward > 0.5) danger = Math.min(1, danger + toward * (1 - od / SEP_RANGE));
-      }
-    }
-    for (const m of this.memory) {
-      const mx = m.x - pos.x, mz = m.z - pos.z;
-      const md = Math.hypot(mx, mz);
-      if (md > MEM_RANGE || md < 0.5) continue;
-      const toward = dx * (mx / md) + dz * (mz / md);
-      if (toward > 0.5) {
-        danger = Math.min(1, danger + toward * 0.2 * (1 - md / MEM_RANGE) * (1 - (now - m.t) / MEM_MS));
-      }
-    }
-    return danger;
-  }
 }
 
 function dist3(a: BotVec, b: BotVec): number {

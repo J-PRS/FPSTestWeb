@@ -1,3 +1,4 @@
+2026-09-26 - Extracted BotSteer from shared/botBrain.ts into botSteer.ts (context steering, slot danger scoring, memory trail, turn-rate clamp); botBrain now reads as a decision pipeline
 2026-09-26 - Extracted MoveJudge from RoomMoveSim into moveJudge.ts (divergence verdicts, cheat detection, seq-anchored replay, FieldSurface+Shadow types); RoomMoveSim keeps shadow bookkeeping only
 2026-09-26 - Split mid-match room hops out of GameServer into roomSwitch.ts (RoomSwitcher): switchRoom/switchTarget/seatPlayer/throttle/roomFull; GameServer keeps dispatch only
 2026-09-26 - botFire vitest: every loadout spawns real Projectile shells (speed/gravity/pellets per weapon table), melee+online paths claim-only, belt lobs real arcs, kill feed carries weapon id; test: coverage
