@@ -163,6 +163,7 @@ export class RtcServer {
     const adapter = new RtcSocketAdapter(ws.remoteAddress);
     const sock = adapter as unknown as ServerWebSocket<WebSocketData>;
     let opened = false;
+    let closedOnce = false;
     // Half-open peer guard: if signaling finished but no datachannel
     // arrives (client vanished mid-handshake), don't hold the PC forever.
     const staleTimer = setTimeout(() => {
@@ -181,7 +182,10 @@ export class RtcServer {
       });
       dc.onClosed(() => {
         this.adapterOf.delete(dc);
-        if (adapter.readyState !== 1) {
+        // Two channels (game/ctrl) die together — only the first close
+        // runs the grace path, else every RTC player logs disconnect twice.
+        if (adapter.readyState !== 1 && !closedOnce) {
+          closedOnce = true;
           this.game.onClose(sock);
           this.livePeers.delete(ws);
           this.peers.delete(ws);
