@@ -2,7 +2,6 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 import { PLAYER_RADIUS, CAPSULE_CYLINDER_HEIGHT, CAPSULE_CENTER_Y } from '../core/config.js';
-import { getProjectileConfig } from '../projectiles/index.js';
 import { urlParams } from '../core/params.js';
 
 import { ChildLogger } from '../core/Logger.js';
@@ -12,16 +11,9 @@ const logger = new ChildLogger('PlayerModel');
 
 const X_AXIS = new THREE.Vector3(1, 0, 0);
 const _pitchQuat = new THREE.Quaternion();
-const _white = new THREE.Color(0xffffff);
 const _footW = new THREE.Vector3();
 const _footQ = new THREE.Quaternion();
 const _footPQ = new THREE.Quaternion();
-const _leanEul = new THREE.Euler();
-const _leanNo = new THREE.Quaternion();
-const _leanYes = new THREE.Quaternion();
-const _leanOff = new THREE.Vector3();
-const _leanA = new THREE.Vector3();
-const _leanB = new THREE.Vector3();
 const _dampA = new THREE.Quaternion();
 const _dampB = new THREE.Quaternion();
 
@@ -70,19 +62,16 @@ function dampenSway(clip: THREE.AnimationClip, amt = 0.5): void {
     }
   }
 }
-// Jet-lean pivot: the pack thrusts from the sternum, so the body tilts
-// about that point and the legs swing — feet-pivot lean reads as a
-// cardboard cutout tipping over.
-const LEAN_PIVOT_Y = 1.3;
 
 export type { AnimationState } from './playerClips.js';
 import { ANIM_NAMES, KNIGHT_ANIMS, ONESHOT_CLIPS,
-  normBone, makeFlashTexture, type AnimationState } from './playerClips.js';
+  normBone, type AnimationState } from './playerClips.js';
+import { ModelFx } from './modelFx.js';
 import { bakeUALClips } from './playerUal.js';
 
 export class PlayerModel {
   private scene: THREE.Scene;
-  private model: THREE.Group | null = null;
+  model: THREE.Group | null = null; // public — ModelFx writes lean/pivot
   private modelScale = 0.5;
   // Disposed before the GLB finishes loading (pruned remote, ?dummy reaped
   // by the roster cleanup): the async onLoad must not re-add the mesh or
@@ -118,33 +107,22 @@ export class PlayerModel {
   // the held gun drops toward the hip and the muzzle tips down, then the
   // "new" weapon comes back up. Purely cosmetic on the body model (the
   // prop gun doesn't change), but the motion is the readable swap tell.
-  private swapT = -1;
-  private throwT = -1;
-  private punchT = -1;
-  private landT = -1;
-  private landAmp = 0;
-  private landE = 0;
-  private gunUnit = 1; // 1 world meter in bone-space units (1/ws.x)
-  private gunBaseY = 0;
-  // Whole-body jet lean: targets set by the owner (RemotePlayer,
-  // PlayerVisuals) from velocity-in-facing-frame; damped toward them in
-  // update() so the tilt eases in/out instead of snapping per frame.
-  private leanP = 0; private leanR = 0;
-  private leanPT = 0; private leanRT = 0;
-  private lastRoll = 0;
+  // Prop-gun transform + lean roll live on the model — the FX pass
+  // (modelFx.ts) reads/writes them through the ModelFxHost surface.
+  gunUnit = 1; // 1 world meter in bone-space units (1/ws.x)
+  gunBaseY = 0;
+  lastRoll = 0;
   private handBone: THREE.Bone | null = null;
-  private gun: THREE.Group | null = null;
-  private gunBaseZ = 0;
-  private gunBaseX = 0; // mannequin attach pitch — recoil adds on top
-  private gunKickZ = 0;
-  private recoil = 0;
-  private muzzleFlash: THREE.Sprite | null = null;
-  private flashTTL = 0;
+  gun: THREE.Group | null = null;
+  gunBaseZ = 0;
+  gunBaseX = 0; // mannequin attach pitch — recoil adds on top
+  gunKickZ = 0;
+  muzzleFlash: THREE.Sprite | null = null;
   // Damage flash — same white-pop the creatures do (flash timer × brighter
   // surface). Skinned materials can't use instanceColor, so we lerp each
   // material's emissive toward white and back from a cached baseline.
-  private dmgFlash = 0;
-  private flashMats: { m: THREE.MeshStandardMaterial; e: THREE.Color; i: number }[] = [];
+  flashMats: { m: THREE.MeshStandardMaterial; e: THREE.Color; i: number }[] = [];
+  private fx = new ModelFx(this);
 
   // ---- Retargeted UAL clips ------------------------------------------
   // Fetch/parse/bake caches live in playerUal.ts; this class only wires
@@ -422,16 +400,7 @@ export class PlayerModel {
     // fire() and faded in update(). Cheap (one sprite per remote),
     // blooms nicely at distance — this is what makes remote fire
     // readable when tracking small targets in the sky.
-    const flashMat = new THREE.SpriteMaterial({
-      map: makeFlashTexture(),
-      color: 0xaad4ff,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-      transparent: true,
-    });
-    this.muzzleFlash = new THREE.Sprite(flashMat);
-    this.muzzleFlash.scale.setScalar(0); // hidden until fire()
-    this.muzzleFlash.position.set(0, 0.05, 1.0); // barrel tip (gun-local)
+    this.muzzleFlash = ModelFx.buildMuzzleFlash();
     this.gun.add(this.muzzleFlash);
 
     handBone.add(this.gun);
@@ -692,9 +661,7 @@ export class PlayerModel {
       ab.bone.quaternion.multiply(ab.last);
     }
     this.snapFeetToShins();
-    this.tickGunFx(dt);
-    this.tickJetLean(dt);
-    this.tickDamageFlash(dt);
+    this.fx.tick(dt);
   }
 
   // Retargeted clips don't drive the robot's IK foot bones — pin each
@@ -723,145 +690,16 @@ export class PlayerModel {
   /** Third-person weapon swap — the same lower→switch→raise the
    *  viewmodel plays (its timings: 0.12s down, 0.16s up). The prop gun
    *  doesn't actually change; the dip IS the swap read. */
-  weaponSwap(): void {
-    if (this.gun) { this.swapT = 0; this.throwT = -1; this.punchT = -1; }
-  }
-
-  /** Belt throw — same beat as the viewmodel's THROW_DIP: gun down and
-   *  rolled outward while the off hand releases, then back to ready. */
-  weaponThrow(): void {
-    if (this.gun) { this.throwT = 0; this.swapT = -1; this.punchT = -1; }
-  }
-
-  /** Melee — butt-stroke sweep: the gun shoves forward-right with a hard
-   *  roll, mirroring the viewmodel's punch arc. */
-  weaponPunch(): void {
-    if (this.gun) { this.punchT = 0; this.swapT = -1; this.throwT = -1; }
-  }
-
-  /** Landing compress — a quick forward pitch scaled by impact speed,
-   *  stacked inside the lean write (jet lean keeps working on top). */
-  landPulse(impactSpeed: number): void {
-    if (impactSpeed < 6) return; // stepping off a ledge isn't a landing
-    this.landAmp = Math.min(1, impactSpeed / 30);
-    this.landT = 0;
-  }
-
-  private tickGunFx(dt: number): void {
-    // Swap dip phase: 0→1 lowers, the hold flips, then raises back.
-    let swapDip = 0;
-    if (this.swapT >= 0) {
-      this.swapT += dt;
-      const t = this.swapT;
-      if (t < 0.12) swapDip = t / 0.12;
-      else swapDip = Math.max(0, 1 - (t - 0.12) / 0.16);
-      if (swapDip <= 0 && t > 0.12) this.swapT = -1;
-    }
-    // Belt throw: 0.14s down, 0.12s held through the release, 0.26s up.
-    let throwE = 0;
-    if (this.throwT >= 0) {
-      this.throwT += dt;
-      const t = this.throwT;
-      if (t < 0.14) throwE = t / 0.14;
-      else if (t < 0.26) throwE = 1;
-      else throwE = Math.max(0, 1 - (t - 0.26) / 0.26);
-      if (throwE <= 0 && t > 0.26) this.throwT = -1;
-    }
-    // Melee punch: fast in, short hold, slow settle (viewmodel's 0.09/0.08/0.32).
-    let punchE = 0;
-    if (this.punchT >= 0) {
-      this.punchT += dt;
-      const t = this.punchT;
-      if (t < 0.09) punchE = t / 0.09;
-      else if (t < 0.17) punchE = 1;
-      else punchE = Math.max(0, 1 - (t - 0.17) / 0.32);
-      if (punchE <= 0 && t > 0.17) this.punchT = -1;
-    }
-    // Landing: sharp compress then a slower settle — read in tickJetLean.
-    this.landE = 0;
-    if (this.landT >= 0) {
-      this.landT += dt;
-      const t = this.landT;
-      this.landE = (t < 0.07 ? t / 0.07 : Math.max(0, 1 - (t - 0.07) / 0.32)) * this.landAmp;
-      if (this.landE <= 0 && t > 0.07) this.landT = -1;
-    }
-    if (this.recoil > 0) this.recoil = Math.max(0, this.recoil - dt * 7);
-    if (this.gun) {
-      const k = this.recoil * this.recoil; // snappy attack, soft release
-      // All prop motions compose into one transform: swap dips down,
-      // throw drops + rolls out, punch shoves forward-right.
-      this.gun.position.x = punchE * 0.18 * this.gunUnit;
-      this.gun.position.y = this.gunBaseY - (swapDip * 0.3 + throwE * 0.25 + punchE * 0.15) * this.gunUnit;
-      this.gun.position.z = this.gunBaseZ - k * this.gunKickZ + (swapDip * 0.1 + throwE * 0.08 + punchE * 0.3) * this.gunUnit;
-      this.gun.rotation.x = this.gunBaseX - k * 0.45 + swapDip * 0.6 + throwE * 0.35 + punchE * 0.25;
-      this.gun.rotation.z = throwE * 0.45 + punchE * 0.5;
-    }
-    if (this.muzzleFlash && this.flashTTL > 0) {
-      this.flashTTL = Math.max(0, this.flashTTL - dt);
-      const f = this.flashTTL / 0.09;
-      this.muzzleFlash.scale.setScalar(0.5 * f + 0.15 * f * f);
-      (this.muzzleFlash.material as THREE.SpriteMaterial).opacity = f;
-    } else if (this.muzzleFlash && this.muzzleFlash.scale.x > 0) {
-      this.muzzleFlash.scale.setScalar(0);
-    }
-  }
-
-  // Jet lean: ease toward the target, then write the composed tilt
-  // on top of yaw/roll. setRotation may run before or after update,
-  // so rotation.z is rebuilt here from lastRoll + lean — never read
-  // the euler back, or the lean would double-apply.
-  private tickJetLean(dt: number): void {
-    if (!this.model || (this.leanPT === 0 && this.leanRT === 0 && this.leanP === 0 && this.leanR === 0 && this.landE === 0)) return;
-    const k = 1 - Math.exp(-dt * 7);
-    this.leanP += (this.leanPT - this.leanP) * k;
-    this.leanR += (this.leanRT - this.leanR) * k;
-    if (Math.abs(this.leanP) < 1e-3 && this.leanPT === 0) this.leanP = 0;
-    if (Math.abs(this.leanR) < 1e-3 && this.leanRT === 0) this.leanR = 0;
-    // Landing pitch stacks on the lean — the absorb crouch reads as the
-    // whole body tipping forward a beat, not just the knees.
-    const pitch = this.leanP + this.landE * 0.18;
-    this.model.rotation.x = pitch;
-    this.model.rotation.z = this.lastRoll + this.leanR;
-    // Pivot compensation: keep the sternum where the un-leaned pose
-    // would put it, so the tilt swings the legs instead of the chest.
-    const yaw = this.model.rotation.y;
-    _leanNo.setFromEuler(_leanEul.set(0, yaw, this.lastRoll, 'YXZ'));
-    _leanYes.setFromEuler(_leanEul.set(pitch, yaw, this.lastRoll + this.leanR, 'YXZ'));
-    _leanOff.set(0, LEAN_PIVOT_Y, 0);
-    _leanA.copy(_leanOff).applyQuaternion(_leanNo);
-    _leanB.copy(_leanOff).applyQuaternion(_leanYes);
-    this.model.position.add(_leanA.sub(_leanB));
-  }
-
-  // Damage flash: emissive snaps toward white then decays back to each
-  // material's own baseline (the gun keeps its 0x334455 glow).
-  private tickDamageFlash(dt: number): void {
-    if (this.dmgFlash <= 0) return;
-    this.dmgFlash = Math.max(0, this.dmgFlash - dt);
-    const k = this.dmgFlash / 0.15;
-    for (const f of this.flashMats) {
-      f.m.emissive.copy(f.e).lerp(_white, k);
-      f.m.emissiveIntensity = f.i + k * 2.5;
-    }
-  }
+  weaponSwap(): void { this.fx.weaponSwap(); }
+  weaponThrow(): void { this.fx.weaponThrow(); }
+  weaponPunch(): void { this.fx.weaponPunch(); }
+  landPulse(impactSpeed: number): void { this.fx.landPulse(impactSpeed); }
 
   /** Damage white-pop — creature-style hit readability on the robot body. */
-  damageFlash(): void {
-    this.dmgFlash = 0.15;
-  }
+  damageFlash(): void { this.fx.damageFlash(); }
 
   // Procedural fire kick + muzzle flash — call when the remote player shoots.
-  // weaponType tints the flash so an LG blast reads differently to a shotgun.
-  fire(weaponType?: number): void {
-    this.recoil = 1;
-    this.flashTTL = 0.09;
-    // Reset to the default tint too — a shotgun shouldn't leave the next
-    // LG shot flashing amber.
-    if (this.muzzleFlash) {
-      const glow = weaponType !== undefined ? getProjectileConfig(weaponType)?.glowColor : undefined;
-      (this.muzzleFlash.material as THREE.SpriteMaterial).color.set(glow ?? 0xaad4ff);
-    }
-  }
+  fire(weaponType?: number): void { this.fx.fire(weaponType); }
 
   setPosition(x: number, y: number, z: number): void {
     if (this.model) {
@@ -885,10 +723,7 @@ export class PlayerModel {
    *  back to level. Applied to the whole model so it composes with
    *  whatever clip is playing — TA-style directional jetting reads from
    *  body tilt, not a per-direction clip set (UAL has none). */
-  setBodyLean(pitch: number, roll: number): void {
-    this.leanPT = pitch;
-    this.leanRT = roll;
-  }
+  setBodyLean(pitch: number, roll: number): void { this.fx.setBodyLean(pitch, roll); }
 
   setRotation(yaw: number, pitch: number, roll: number = 0): void {
     if (this.model) {
