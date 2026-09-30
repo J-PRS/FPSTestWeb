@@ -1,3 +1,4 @@
+2026-09-26 - split bot fire path (resolveShot/spawnShells/belts/propels/bolt pool) out of bots.ts into botFire.ts (bots 806->577); mod: code cleanup
 2026-09-30 - seamless match reset: offline resetMatch no longer teleports live bots to the spawn ring — only dead bots re-enter; hp/sheep refill in place (server endCleanup never moved anyone either)
 2026-09-30 - client bots.ts split: perception helpers (enemyBotsFor*, recentNoises, incomingNear, enemyList, foeSeen) extracted to botSenses.ts; bots.ts 880→806
 2026-09-30 - shared/botBrain.ts split: combat half (LOS march + scanVisible/pickHunt/pickFightPos/pickFire/retreatDest) extracted to shared/botHunt.ts as HuntState + free fns; botBrain 867→657 lines, losClear/BOT_EYE re-exported
