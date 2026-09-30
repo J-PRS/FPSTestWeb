@@ -13,7 +13,7 @@ import { logger } from './logger.ts';
 import { weaponStats } from './weaponStats.ts';
 import { aoeDamage } from '../../shared/combat.ts';
 import { REPAIR_RANGE, REPAIR_HEAL_PER_TICK, REPAIR_MIN_TICK_S, REPAIR_ARMOR_MULT } from '../../shared/weapons.ts';
-import { tickDrone, tickMine, tickStation, tickTurret } from './deployTicks.ts';
+import { tickDrone, tickMine, tickStation, tickTurret, losClear } from './deployTicks.ts';
 
 export type DeployKind = 'turret' | 'mine' | 'station' | 'drone' | 'shield';
 const KINDS = new Set<DeployKind>(['turret', 'mine', 'station', 'drone', 'shield']);
@@ -22,7 +22,7 @@ const TTL_S: Record<DeployKind, number> = { turret: 180, mine: 120, station: 240
 // Plants near the action are legit; plants across the map are not.
 const MAX_PLANT_DIST = 40;
 
-interface Deployed {
+export interface Deployed {
   id: number;
   owner: string;
   kind: DeployKind;
@@ -67,7 +67,6 @@ export const DRONE_HOVER_UP = 2.5;
 export const STATION_RANGE = 9;
 export const STATION_HP_RATE = 0.09;   // fraction of maxHealth per second
 export const STATION_HEAL_CD = 0.5;    // heal tick cadence
-const FORCE_SEND_MS = 900;      // health rides tickUpdate; force past suppression
 
 /** First t∈[0,1] where the segment enters the sphere — quadratic solve,
  *  null on a miss. A segment already inside returns 0 (blocked at once). */
@@ -211,7 +210,7 @@ export class RoomDeployables {
     } else if (!p.team && d.owner !== playerId) return;
     const dx = d.pos.x - p.position.x, dy = d.pos.y - p.position.y, dz = d.pos.z - p.position.z;
     if (dx * dx + dy * dy + dz * dz > REPAIR_RANGE * REPAIR_RANGE * 2.25) return; // 1.5× slack
-    if (!this.losClear(p.position, d.pos)) return;
+    if (!losClear(this, p.position, d.pos)) return;
     const key = `${playerId}:${targetId}`;
     const now = Date.now() / 1000;
     if (now - (this.lastRepair.get(key) ?? -1) < REPAIR_MIN_TICK_S) return;

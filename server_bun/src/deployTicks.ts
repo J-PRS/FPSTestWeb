@@ -84,7 +84,7 @@ export function tickStation(r: RoomDeployables, d: Deployed, dt: number): void {
 
   /** Structure LOS for the gun scan — a sentry indoors shouldn't plink
    *  players outside through the wall. Target at chest height. */
-function losClear(r: RoomDeployables, from: Vec3, to: Vec3): boolean {
+export function losClear(r: RoomDeployables, from: Vec3, to: Vec3): boolean {
     const cols = r.room.ballSim.colliders;
     if (!cols.length) return true;
     return !segSolidHit(
