@@ -90,7 +90,9 @@ export function spawnImpactEffect(c: CombatCtx, p: Projectile): void {
   // Untracked client-local children (cluster bomblets) skip the claim —
   // their damage is the server's WeaponStats.cluster scatter, so a claim
   // would just bounce off projectile resolution.
-  const sendAOE = p.config.needsServerTracking === false
+  const sendAOE = p.config.needsServerTracking === false || p.serverProjectileId === null
+    // No server id means the shell was fired before we (re)connected —
+    // a blast claim can never resolve and only earns a reject warn.
     ? () => {}
     : (pos: { x: number; y: number; z: number }, targetId: string | null) =>
     networkManager.sendAOEShot({
