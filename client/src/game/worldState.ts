@@ -48,6 +48,10 @@ export interface WorldState {
    *  shoved the player so the server's `knockback` echo (~RTT later)
    *  doesn't apply the same blast twice. */
   selfBlastStamps: { x: number; y: number; z: number; t: number }[];
+  /** Own banked LG charge, echoed by the server (yourCharge) — the
+   *  carrier is excluded from tick fanout so the walking-bomb warning
+   *  needs this channel. Decays between echoes; drives the crackle tell. */
+  selfCharge: number;
 }
 
 export function createWorldState(): WorldState {
@@ -71,5 +75,6 @@ export function createWorldState(): WorldState {
     flagStates: {},
     playbackMode: false,
     selfBlastStamps: [],
+    selfCharge: 0,
   };
 }

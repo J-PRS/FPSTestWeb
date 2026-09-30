@@ -223,6 +223,7 @@ export class TickLoop {
     for (const [playerId, p] of players) {
       if (this.skipRecord(room, playerId, p, now)) continue;
       this.tickServerHeals(room, playerId, p, now);
+      this.tickChargeEcho(room, playerId, p, now);
       const forceSend = now < p.forceSendUntil;
       const lastSent = room.lastSentPositions.get(playerId);
       const sheep = room.bots.sheepOf(playerId);
@@ -328,6 +329,20 @@ export class TickLoop {
       p.healthEchoAt = now;
       room.connections.sendToPlayer(playerId, { type: 'yourHealth', health: p.health });
     }
+  }
+
+  /** The carrier is the one client that can't see the CHARGED status bit
+   *  (own records are excluded from fanout) — echo their decayed bank at
+   *  0.5Hz so a walking bomb can hear itself crackle. A final 0 lands the
+   *  moment the bank drains so the warning doesn't linger. */
+  private tickChargeEcho(room: Room, playerId: string, p: PlayerState, now: number): void {
+    const acc = lgChargeAt(p.charge, p.chargeT, now / 1000);
+    const live = acc > 0.5;
+    if (!live && p.chargeEchoed <= 0) return;
+    if (live && now - p.chargeEchoAt < 500) return;
+    p.chargeEchoAt = now;
+    p.chargeEchoed = live ? acc : 0;
+    room.connections.sendToPlayer(playerId, { type: 'yourCharge', charge: p.chargeEchoed });
   }
 
   /** Suppression: if reported state still matches where the clients' dead

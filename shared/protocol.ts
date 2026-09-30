@@ -181,6 +181,9 @@ export type ServerMessage =
   // health silently every tick — self is excluded from tickUpdate, so
   // without this echo the owner's hp drifts until the next hit event.
   | { type: 'yourHealth'; health: number }
+  // Your own banked LG charge — own tick records exclude the carrier, so
+  // the server echoes it directly while >0 (and once more at 0).
+  | { type: 'yourCharge'; charge: number }
   // Combat claim refused — the shooter's predicted damage never happened.
   // Sent ONLY to the shooter so the client can log why a landed shot did
   // nothing (stale projectile, dead/friendly target, implausible claim).

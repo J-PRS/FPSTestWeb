@@ -77,6 +77,8 @@ export class PlayerManager {
       ddUntil: 0,
       charge: 0,
       chargeT: 0,
+      chargeEchoed: 0,
+      chargeEchoAt: 0,
       healthEchoAt: 0,
     };
 

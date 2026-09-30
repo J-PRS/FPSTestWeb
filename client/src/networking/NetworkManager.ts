@@ -87,6 +87,7 @@ export class NetworkManager {
   /** Server-owned heal echo (regen/mend/powerup tick in the sim) — keeps
    *  local hp converged between discrete hit events. */
   public onYourHealth: ((health: number) => void) | null = null;
+  public onYourCharge: ((charge: number) => void) | null = null;
   public onPickupGone: ((id: number, by: string | null) => void) | null = null;
   public onFfaScore: ((scores: Record<string, number>, winAt: number) => void) | null = null;
   public onFfaMatchEnd: ((winner: string, scores: Record<string, number>) => void) | null = null;
@@ -310,6 +311,7 @@ export class NetworkManager {
     playerHit: (data) => this.handlePlayerHit(data),
     buff: (data) => this.onBuff?.(data),
     yourHealth: (data) => this.onYourHealth?.(data.health),
+    yourCharge: (data) => this.onYourCharge?.(data.charge),
     playerKill: (data) => this.handlePlayerKill(data),
     knockback: (data) => this.onKnockback?.(data.position, data.force, data.pull),
     jump: (data) => this.onPlayerJump?.(data.playerId, data.position),

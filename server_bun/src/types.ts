@@ -104,6 +104,9 @@ export interface PlayerState {
   // min(bank, hitDamage); death pops the rest.
   charge: number;
   chargeT: number;
+  // yourCharge echo bookkeeping — last sent value + throttle (ms).
+  chargeEchoed: number;
+  chargeEchoAt: number;
   /** Last time the owner was echoed their server-healed hp (yourHealth
    *  throttle — healPerTick runs every tick, one echo per 500ms is enough
    *  to keep the client's HUD and state-hash view converged). */

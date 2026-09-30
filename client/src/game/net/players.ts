@@ -80,6 +80,15 @@ function wirePlayerCombat(ctx: NetCtx): void {
     if (!player.isDead) player.health = health;
   };
 
+  // Own LG charge echo — the carrier can't see the CHARGED aura, so the
+  // warning is audible: each echo crackles at the player's own position,
+  // a steady sizzle while the bank is live.
+  networkManager.onYourCharge = (charge) => {
+    if (deps.world.playbackMode) return;
+    deps.world.selfCharge = charge;
+    if (charge > 0) sfx.lgSizzle(deps.lazyPlayer().pos);
+  };
+
   // Server tells us to apply knockback/pull to our local player
   networkManager.onKnockback = (position: { x: number; y: number; z: number }, force: number, pull?: boolean) => {
     if (deps.world.playbackMode) return; // replay owns the camera's body
