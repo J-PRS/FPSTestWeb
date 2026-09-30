@@ -227,7 +227,9 @@ function zapTarget(deps: CombatDeps, hooks: LightningHooks, lg: LgState,
   }
   const dmg = lgTickDamage(n) * dmgScale;
   deps.lazyDamageNumbers().spawn(t.pos, dmg, '#8fdcff', cam);
-  const acc = (lg.acc.get(t.id) ?? 0) + dmg;
+  // The pop banks what the ramp withheld, not what it dealt — a fresh
+  // beam charges nothing, a held beam detonates for the decay it paid.
+  const acc = (lg.acc.get(t.id) ?? 0) + (8 - lgTickDamage(n)) * dmgScale;
   lg.acc.set(t.id, acc);
   deps.reportTargetDamage?.(t, dmg);
   if (t.takeDamage(dmg)) {
