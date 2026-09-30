@@ -44,8 +44,13 @@ export class BotSheepMeter {
     // The foe-ignoring charge only counts a PARKED bot — one that's
     // skiing/jetting/covering ground is playing Tribes even while it
     // holds fire, and charging it produces a yeet loop: meter lands at
-    // 40 post-yeet and an unlucky perch re-fills in ~1s forever.
-    meter += (tribesing ? 0 : this.ignoreDebit(m)) + this.coverageDebit(id, p, m.hasDest, this.simMs);
+    // 40 post-yeet and an unlucky perch re-fills in ~1s forever. The 3s
+    // grace after a yeet is the same fix: the bot is airborne mid-yeet
+    // then must land and re-acquire — charging during that window is
+    // the loop the previous comment described.
+    if ((this.yeetUntil.get(id) ?? -Infinity) + 3000 <= now) {
+      meter += this.postDebits(id, p, m, tribesing);
+    }
     if (meter >= 100) {
       // The yeet is pinned INPUT, not injected velocity — ServerBots
       // holds the bot's jump+jets for the window, exactly the keys a
@@ -63,6 +68,12 @@ export class BotSheepMeter {
     }
     this.meter.set(id, meter);
     return false;
+  }
+
+  /** Post-yeet-window debits: the foe-ignore charge (parked bots only)
+   *  plus the 5s coverage-window debit. */
+  private postDebits(id: string, p: { position: Vec3 }, m: { out: BrainOut; foe?: boolean; hasDest: boolean; dt: number }, tribesing: boolean): number {
+    return (tribesing ? 0 : this.ignoreDebit(m)) + this.coverageDebit(id, p, m.hasDest, this.simMs);
   }
 
   /** Fastest cowardice tell: a visible live enemy in range and the

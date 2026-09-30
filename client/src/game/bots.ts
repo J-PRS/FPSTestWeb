@@ -458,6 +458,10 @@ export class TeamBots {
    *  combat consults `hit` before predictDamage. A bot shell can also
    *  hit 'local' (sweepLocal) — that resolves through the same funnel. */
   hit(playerId: string, dmg: number, fromPos: THREE.Vector3, attackerId = 'local', weapon?: number): boolean {
+    // Local authority has to enforce the same friendly gate the server's
+    // CombatHandler does — without it P2P-host/offline kills teammates.
+    const aTeam = this.teamOf.get(attackerId), vTeam = this.teamOf.get(playerId);
+    if (attackerId !== playerId && aTeam && aTeam === vTeam) return true; // claim swallowed, like a server reject
     if (playerId === 'local') {
       this.hurtLocal(dmg, fromPos, attackerId.replace('bot:', ''), false, attackerId, weapon);
       return true;

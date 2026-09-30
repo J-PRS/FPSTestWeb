@@ -336,7 +336,7 @@ export class ServerBots {
         const goal = this.sense.flagGoal(p);
         const ctx = this.sense.build(id, p, goal, now);
         out = brain.think(dt * ServerBots.THINK_DIV, ctx);
-        this.sense.markFoeNear(id, ctx, p.position, now);
+        this.sense.markFoeNear(id, ctx, p.position, p.rotation.yaw, now);
         this.applyStatus(id, p, out);
         const sh0 = this.room.moveSim.simState(id);
         this.firePhase(id, p, out, goal, now, sh0);

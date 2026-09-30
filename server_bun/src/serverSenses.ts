@@ -87,13 +87,20 @@ export class ServerBotSenses {
    *  past wildlife isn't fear. Computed at think cadence; the flag
    *  decays in half a second so a bot that out-skis a duel isn't
    *  re-charged while it's gone. */
-  markFoeNear(id: string, ctx: BrainCtx, pos: Vec3, now: number): void {
+  markFoeNear(id: string, ctx: BrainCtx, pos: Vec3, yaw: number, now: number): void {
     for (const e of ctx.enemies) {
       if (e.id.startsWith('b:')) continue;
-      const d = Math.hypot(e.pos.x - pos.x, e.pos.y - pos.y, e.pos.z - pos.z);
+      const dx = e.pos.x - pos.x, dz = e.pos.z - pos.z;
+      const d = Math.hypot(dx, e.pos.y - pos.y, dz);
       // Brawl range, not spotting range — a foe it can't reach yet is a
       // marching target, not an ignored duel.
       if (d < 45 && losClear(ctx, pos, e.pos)) {
+        // Only counts when the bot is actually LOOKING at the foe —
+        // an enemy outside the ~130° view cone is invisible to it, so
+        // "ignoring" it is a false positive that yeet-loops honest bots.
+        const fx = Math.sin(yaw), fz = Math.cos(yaw);
+        const gd = Math.hypot(dx, dz) || 1;
+        if ((dx * fx + dz * fz) / gd < -0.4) continue;
         this.foeNear.set(id, now + 500);
         return;
       }

@@ -1,3 +1,5 @@
+2026-09-26 - Fix sheep yeet loop: foe-ignore charge now requires the enemy inside the bot view cone; 3s post-yeet charge grace
+2026-09-26 - Local authority (P2P-host/offline) now enforces the friendly-fire team gate that server mode applies
 2026-09-26 - Extract ski/jet/jump movement-hint intents from shared/botBrain into botMoves.ts
 2026-09-26 - Extract idle-goal ladder (revenge/rally/objective/pickup/heard/wander) from shared/botBrain into botGoals.ts
 2026-09-26 - Lint sweep: drop dead imports post-loopPerf split, useless spread fallback, extract fuelTick from GameBot.locomote
