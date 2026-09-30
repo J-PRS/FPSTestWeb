@@ -13,7 +13,7 @@ import { HEAVY_ONLY_WEAPONS } from '../../shared/botClasses.ts';
 import type { StructureCollider } from '../../shared/ballSim.ts';
 import { segSolidHit, blastOccluded, ColliderIndex } from '../../shared/solidWorld.ts';
 import { ClaimLedger, clampPing, rewindPos } from './claimLedger.ts';
-import { killTaunt, deathTaunt, envDeathTaunt, spreeTaunt } from './botTaunts.ts';
+import { KillFeed } from './killFeed.ts';
 
 // How long a hit/knocked-back player stays on the unsuppressed full-rate
 // tick path — covers the shooter's predicted-knockback window (~0.6s)
@@ -89,12 +89,18 @@ export class CombatHandler {
     this.solidIndex = list.length ? new ColliderIndex(list) : null;
   }
 
+  private killFeed: KillFeed;
+
   constructor(
     private playerManager: PlayerManager,
     private broadcast: BroadcastFn,
     private sendToPlayer: SendToPlayerFn,
     private deps: CombatDeps = {},
-  ) {}
+  ) {
+    // Late binding on the static — tests reassign tauntDelayMs after
+    // construction and must still steer the delay.
+    this.killFeed = new KillFeed(playerManager, broadcast, () => CombatHandler.tauntDelayMs());
+  }
 
   private hb(key: string, n = 1): void {
     if (this.deps.health) this.deps.health.set(key, (this.deps.health.get(key) ?? 0) + n);
@@ -734,7 +740,7 @@ export class CombatHandler {
     const shooterStreak = shooterId === 'environment' ? undefined
       : (this.playerManager.getPlayer(shooterId)?.streak ?? 0) + 1;
     this.broadcast({ type: 'playerKill', shooterId, targetId, weapon, streak: shooterStreak });
-    this.announceKill(shooterId, targetId);
+    this.killFeed.announce(shooterId, targetId);
     this.deps.onKill?.(targetId, shooterId);
     this.scheduleRespawn(targetId);
   }
@@ -742,59 +748,14 @@ export class CombatHandler {
   // Spree callouts ride matchNotice (system chat line). killTotal()===1 pins
   // first blood exactly — stats are wiped at match boundaries, so a 1 can
   // only mean the opening frag.
-  private static readonly SPREE_TIERS: [number, string][] = [
-    [3, 'killing spree'], [5, 'rampage'], [8, 'dominating'], [12, 'unstoppable'],
-  ];
 
-  private announceKill(shooterId: string, targetId: string): void {
-    const victim = this.playerManager.getPlayer(targetId);
-    const ended = victim?.streak ?? 0;
-    if (victim) victim.streak = 0;
-    if (targetId.startsWith('BOT-')) {
-      this.botSay(targetId, shooterId === 'environment'
-        ? envDeathTaunt(targetId)
-        : deathTaunt(targetId, shooterId));
-    }
-    if (shooterId === 'environment') return;
 
-    const shooter = this.playerManager.getPlayer(shooterId);
-    if (!shooter) return;
-    shooter.streak++;
-
-    if (this.playerManager.killTotal() === 1) {
-      this.broadcast({ type: 'matchNotice', text: `${shooterId} draws first blood` });
-    }
-    const tier = CombatHandler.SPREE_TIERS.find(([n]) => n === shooter.streak);
-    if (tier) {
-      this.broadcast({ type: 'matchNotice', text: `${shooterId} is on a ${tier[1]} (${tier[0]})` });
-      if (shooterId.startsWith('BOT-')) this.botSay(shooterId, spreeTaunt(shooterId));
-    } else if (shooter.streak > 12 && shooter.streak % 4 === 0) {
-      this.broadcast({ type: 'matchNotice', text: `${shooterId} is godlike (${shooter.streak})` });
-    }
-    if (ended >= 3) {
-      this.broadcast({ type: 'matchNotice', text: `${shooterId} ended ${targetId}'s ${ended}-kill streak` });
-    }
-
-    // Bots mouth off on the real chat wire — same 'chat' shape players
-    // send, so it lands in the feed indistinguishable from a human line.
-    if (shooterId.startsWith('BOT-')) {
-      this.botSay(shooterId, killTaunt(shooterId, targetId));
-    }
-  }
-
-  /** A bot's chat line lands like a typed reply — a 1.2-3s beat after the
-   *  event, not inside the kill frame, and dropped if the speaker left
-   *  the room meanwhile. */
-  private botSay(id: string, line: string | null): void {
-    if (!line) return;
-    const delay = CombatHandler.tauntDelayMs();
-    if (delay <= 0) {
-      if (this.playerManager.getPlayer(id)) this.broadcast({ type: 'chat', playerId: id, text: line });
-      return;
-    }
-    setTimeout(() => {
-      if (this.playerManager.getPlayer(id)) this.broadcast({ type: 'chat', playerId: id, text: line });
-    }, delay);
+  /** Room teardown — pending respawns and queued taunts die with the
+   *  room or a hibernating room fires broadcasts into an empty world. */
+  dispose(): void {
+    for (const t of this.respawnTimers.values()) clearTimeout(t);
+    this.respawnTimers.clear();
+    this.killFeed.dispose();
   }
 
   /** Typing-beat delay — a scenario test steps sim-time only, so it

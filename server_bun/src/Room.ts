@@ -596,6 +596,7 @@ export class Room {
   dispose(): void {
     this.ballSim.stop();
     this.creatureSim.stop();
+    this.messages.dispose();
   }
 
   /** Full teardown — every store moves together or a slot/token leaks. */

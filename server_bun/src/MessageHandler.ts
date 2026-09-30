@@ -650,4 +650,9 @@ export class MessageHandler {
     ).join('|');
     logger.info(`Snapshot requested by ${playerId} | Server state: ${stateStr} | Hash input: ${hashInput}`);
   }
+
+  /** Room teardown — the combat funnel owns the pending timers. */
+  dispose(): void {
+    this.combat.dispose();
+  }
 }

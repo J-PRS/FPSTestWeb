@@ -1,3 +1,4 @@
+2026-09-26 - Split kill-announce + bot-taunt block out of CombatHandler into killFeed.ts (KillFeed); taunt timers now tracked and drained on room teardown via new dispose chain (Room -> MessageHandler -> CombatHandler).
 2026-09-30 - fix: emitted corrections now also mute the shadow divergence judge (~1 RTT via roomInfo.moveMute) — in-flight pre-correction reports could blip the divergence counter toward a kick on lossy links; TASKS.md testing counts refreshed
 2026-09-30 - dev tooling: package scripts gain check/test:scenarios/soak/rtc:relay/rtc:punch; _punchtest + _relaycheck take --url args (dead tunnel URL was hardcoded); tests/rewind.test.ts covers pushRewindSample, rewindPos, clampPing, parseField (443 total)
 2026-09-30 - claimLedger: named the spent-map windows (SPENT_CLAIM_MS 5s bind window, SPENT_SWEEP_MS 10s expiry, MAX_SPENT 512 cap) — were three bare literals
