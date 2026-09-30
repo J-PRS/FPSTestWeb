@@ -3,6 +3,7 @@ import Stats from 'stats.js';
 
 import { MAX_DELTA_TIME } from '../core/config.js';
 import { urlParams } from '../core/params.js';
+import { settings } from '../core/settings.js';
 import type { DemoManager } from '../demo/index.js';
 import type { Player } from '../entities/Player.js';
 import { updateGibs } from '../entities/swarms.js';
@@ -90,6 +91,7 @@ interface LoopState {
   lowFpsFrames: number;
   lowFpsAccum: number;
   lastFpsDump: number;
+  degradeStep: number;
   fxCursor: number;
   fxJobs: (() => void)[];
 }
@@ -136,6 +138,34 @@ function fpsWatchdog(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeo
         : undefined,
     });
     st.lowFpsFrames = 0; st.lowFpsAccum = 0;
+    autoDegrade(deps, st);
+  }
+}
+
+// Auto-degrade: each sustained low-fps dump steps down one render-cost tier
+// so potatoes converge on a playable frame instead of staying slow forever.
+// Skipped when the user already picked a pixelated mode — they chose their
+// fidelity. Settings keys are written so the choice survives reload.
+function autoDegrade(deps: GameLoopDeps, st: LoopState): void {
+  const { rendererSetup, sceneSetup } = deps;
+  if (st.degradeStep === 0) {
+    st.degradeStep++;
+    if (rendererSetup.renderer.shadowMap.enabled) {
+      rendererSetup.renderer.shadowMap.enabled = false;
+      sceneSetup.sun.castShadow = false;
+      // Lit materials cache shadow uniforms — flag for recompile once.
+      sceneSetup.scene.traverse(o => {
+        const m = (o as THREE.Mesh).material;
+        if (m) (Array.isArray(m) ? m : [m]).forEach(x => { x.needsUpdate = true; });
+      });
+      settings.set('fps-shadows', false);
+      Logger.warn('auto-degrade: shadows off (sustained low fps)');
+    }
+    return;
+  }
+  if (settings.get('fps-pixelated') === 0 && urlParams.get('px') === null) {
+    if (st.degradeStep === 1) { rendererSetup.setPixelated(1); st.degradeStep++; Logger.warn('auto-degrade: low-res render (medium)'); return; }
+    if (st.degradeStep === 2) { rendererSetup.setPixelated(2); st.degradeStep++; Logger.warn('auto-degrade: low-res render (hard)'); }
   }
 }
 
@@ -332,7 +362,7 @@ function hudTick(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof cr
 
 export function createGameLoop(deps: GameLoopDeps) {
   let lastTime = 0;
-  const st: LoopState = { lastYaw: 0, lastPitch: 0, lowFpsFrames: 0, lowFpsAccum: 0, lastFpsDump: 0, fxCursor: 0, fxJobs: [] };
+  const st: LoopState = { lastYaw: 0, lastPitch: 0, lowFpsFrames: 0, lowFpsAccum: 0, lastFpsDump: 0, degradeStep: 0, fxCursor: 0, fxJobs: [] };
 
   // stats.js perf panels — FPS/MS/MB in a row along the bottom-right,
   // toggled with ` (backquote). stats.js only renders one panel per
