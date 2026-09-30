@@ -204,6 +204,7 @@ export class TeamBots {
         // Hearing: fresh blasts pull idle bots toward the action — the
         // same noisesNear sense the server feeds its brains.
         sounds: this.recentNoises(bot.position),
+        threats: this.incomingNear(bot.position),
       });
       if (this.over) { this.sheepTick(bot, dt, terrain); continue; }
       if (shot) this.resolveShot(bot, shot.targetId, shot.aim);
@@ -492,6 +493,20 @@ export class TeamBots {
       if (e.age > 1.5) continue;
       const dx = e.pos.x - pos.x, dy = e.pos.y - pos.y, dz = e.pos.z - pos.z;
       if (dx * dx + dy * dy + dz * dz < 50 * 50) out.push({ x: e.pos.x, y: e.pos.y, z: e.pos.z });
+    }
+    return out;
+  }
+
+  /** Shells inside 12m closing on the bot — mirrors RoomProjectiles
+   *  .incomingNear: a round flying away is no threat at any distance. */
+  private incomingNear(pos: THREE.Vector3): { x: number; y: number; z: number }[] {
+    const out: { x: number; y: number; z: number }[] = [];
+    for (const p of this.deps.world.projectiles) {
+      const dx = pos.x - p.pos.x, dy = pos.y - p.pos.y, dz = pos.z - p.pos.z;
+      const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      if (d > 12) continue;
+      if (p.vel.x * dx + p.vel.y * dy + p.vel.z * dz <= 0) continue;
+      out.push({ x: p.pos.x, y: p.pos.y, z: p.pos.z });
     }
     return out;
   }
