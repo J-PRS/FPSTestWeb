@@ -99,8 +99,12 @@ class RtcSocketAdapter {
     // Reliable lane always — see the lanes note above.
     const dc = this.ctrl ?? this.game;
     if (!dc?.isOpen()) return 0;
-    if (typeof msg === 'string') dc.sendMessage(msg);
-    else dc.sendMessageBinary(new Uint8Array(msg));
+    // isOpen() can lag the real channel state on close races; a failed
+    // send must not take down the whole broadcast path.
+    try {
+      if (typeof msg === 'string') dc.sendMessage(msg);
+      else dc.sendMessageBinary(new Uint8Array(msg));
+    } catch { return 0; }
     return typeof msg === 'string' ? msg.length : msg.byteLength;
   }
   close(code = 1000, reason = ''): void {

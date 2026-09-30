@@ -194,9 +194,10 @@ class WireBot {
   balls = new Map<number, Vec3>(); crawls = new Map<number, Vec3>();
   pickups = new Map<number, Vec3>(); // gem/tag drops — sought in team modes
   ownShots: { id: string; until: number; usedShot: boolean; usedAoe: boolean }[] = []; shotN = 0;
-  // Claims waiting for their server id — spawn order matches
-  // projectileCreated order, so FIFO binds them.
-  pendingClaims: { pid?: string }[] = [];
+  // Claims waiting for their server id, correlated to the echo by
+  // spawn signature — FIFO alone breaks when a spawn is rejected
+  // (its echo never comes, so the next echo binds off-by-one).
+  pendingClaims: { pid?: string; wt: number; vx: number; vy: number; vz: number }[] = [];
   nextDeploy = 0; nextChat = 0; nextTeleport = 0; nextHeal = 0; nextLoadout = 0; nextEnvDmg = 0; nextSwitch = 0;
   wasJump = false; wasJet = false;
   dead = false; // yourHealth<=0 until playerRespawn — dead clients go quiet
@@ -353,8 +354,10 @@ class WireBot {
         // Server-assigned id — destroy claims must name this one.
         if (m.ownerId === this.id) {
           this.ownShots.push({ id: m.projectileId, until: performance.now() + 2500, usedShot: false, usedAoe: false });
-          const c = this.pendingClaims.shift();
-          if (c) c.pid = m.projectileId;
+          const ci = this.pendingClaims.findIndex((c) =>
+            c.wt === (m.weaponType ?? -1) &&
+            Math.hypot(c.vx - m.velocity.x, c.vy - m.velocity.y, c.vz - m.velocity.z) < 1);
+          if (ci >= 0) this.pendingClaims.splice(ci, 1)[0]!.pid = m.projectileId;
         }
         break;
       case 'playerLeft': this.roster.delete(m.playerId); break;
@@ -617,14 +620,36 @@ class WireBot {
     // it must name THIS shell's id: a bare claim resolves the newest
     // matching projectile, so a shell fired mid-flight would inherit
     // our airtime against its own fresh age.
-    const mine: { pid?: string } = {};
+    const mine: { pid?: string; wt: number; vx: number; vy: number; vz: number } = {
+      wt: weaponType, vx: dir.x * speed, vy: dir.y * speed, vz: dir.z * speed,
+    };
     this.pendingClaims.push(mine);
+    // A rejected spawn never echoes — its entry must leave the queue at
+    // claim time or it steals the NEXT projectileCreated binding and
+    // every later claim names a shell that isn't its own.
+    const unpend = () => {
+      const i = this.pendingClaims.indexOf(mine);
+      if (i >= 0) this.pendingClaims.splice(i, 1);
+    };
+    let waited = 0;
     const claim = () => {
+      // The echo can lag the airtime deadline on unordered lanes — a
+      // bare claim would resolve the NEWEST matching shell and paint
+      // our airtime onto its fresh age. Hold briefly for the id.
+      if (!mine.pid && waited < 400) { waited += 40; setTimeout(claim, 40); return; }
+      unpend();
+      // No echo = the spawn was rejected: there is nothing to claim on.
+      // A bare claim would invoke the latest-of-type fallback, which
+      // tombstones EVERY matching live shell — stealing other pending
+      // claims' projectiles.
+      if (!mine.pid) return;
       const pid = mine.pid;
       if (weaponType === 2) {
         // A real client only claims what it hit — if the target drifted
-        // since we fired, that shell just missed; claim nothing.
+        // since we fired, that shell just missed; claim nothing. A dead
+        // target is an untouchable corpse — also claim nothing.
         const cur = this.roster.get(best);
+        if (cur?.dead) return;
         if (cur && (cur.pos.x - t.pos.x) ** 2 + (cur.pos.z - t.pos.z) ** 2 > 36) return;
         this.send({ type: 'shotFired', weaponType });
         this.send({ type: 'shot', targetId: best, weaponType, position: { ...(cur?.pos ?? t.pos) }, airtime, projectileId: pid });
