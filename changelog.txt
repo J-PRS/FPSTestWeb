@@ -1,3 +1,4 @@
+2026-09-30 - Projectile split: planted-shell family (sticky glue attachment + javelin embed corpse) moved to projStuck.ts behind a StuckHost surface; host keeps a stickAt delegate (480->402).
 2026-09-30 - bots.ts split: sheep meter (idle/ignore/bleed/coverage ledger + yeet) moved to botSheep.ts as SheepMeter; TeamBots delegates tick/markShot/clear (589->495).
 2026-09-30 - volumetricClouds split: billboard puff layer (sprite texture bake, geometry builder, shaders) moved to cloudPuffs.ts; host keeps the six-deck dome (519->350).
 2026-09-30 - HUD split: per-frame stat painter (vitals/speed/telemetry/slots/hit marker/damage fx/buffs/fps) moved to hud/hudStats.ts behind a StatsHost element surface (552->370).

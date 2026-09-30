@@ -16,6 +16,7 @@ import { sweepTerrain } from './sweep.js';
 import { ColliderIndex } from '../../../shared/solidWorld.js';
 import type { StructureCollider } from '../../../shared/ballSim.js';
 import { ProjCollide } from './projCollide.js';
+import { ProjStuck } from './projStuck.js';
 const _rayDir = new THREE.Vector3();
 const _velDir = new THREE.Vector3();
 const _FORWARD = new THREE.Vector3(0, 0, 1);
@@ -115,11 +116,9 @@ export class Projectile {
   // Sticky: froze to a surface — physics off, fuse still burning. The
   // blast is what hurts people, not the glue point.
   stuck = false;
-  // Embed (javelin): world hit planted the shell — it holds at the contact
-  // point for config.embeds seconds, then shrinks away. Combat already
-  // resolved via explode(); this is purely the visible corpse.
-  private embedded = false;
-  private embedAge = 0;
+  // Embed (javelin) + sticky glue — the planted-shell family lives in
+  // projStuck.ts behind the StuckHost surface.
+  glue = new ProjStuck(this); // public-ish: projCollide calls stickAt
 
   // Ray-burst (remote railgun): at rayBurst.delay the slug discharges a
   // hitscan beam down its velocity line — implemented as one giant swept
@@ -157,9 +156,9 @@ export class Projectile {
   get force(): number { return this.config.force; }
   get forceMode(): 'push' | 'pull' { return this.config.forceMode; }
 
-  private scene: THREE.Scene;
-  private mesh: THREE.Mesh;
-  private glowMesh: THREE.Mesh | null = null;
+  scene: THREE.Scene;  // public — collide/stuck families remove planted meshes
+  mesh: THREE.Mesh;
+  glowMesh: THREE.Mesh | null = null;
   readonly prevPos: THREE.Vector3; // start-of-frame pos — sweeps step prevPos→pos
   readonly shotOrigin: THREE.Vector3;
 
@@ -221,7 +220,7 @@ export class Projectile {
 
     this.tickRayBurst();
 
-    if (this.embedded) this.tickEmbedded(dt);
+    if (this.glue.embedded && !this.glue.tickEmbedded(dt)) this.removeProjectileMesh();
     else if (this.exploded && !this.projectileRemoved) this.removeProjectileMesh();
     for (const r of this.ribbons) r.update(dt);
     this.trail.update(dt);
@@ -229,7 +228,7 @@ export class Projectile {
     // Embedded shells outlive their trails — the planted corpse IS the
     // effect, so death waits on the mesh removal too.
     if (this.exploded && this.trail.empty && this.ribbons.every(r => r.done)
-        && (!this.embedded || this.projectileRemoved)) {
+        && (!this.glue.embedded || this.projectileRemoved)) {
       this.dead = true;
     }
   }
@@ -250,7 +249,7 @@ export class Projectile {
     this.age += dt;
 
     // Stuck bomb: planted on a surface, ticking down to fuse.
-    if (this.stuck && this.tickStuck()) return;
+    if (this.stuck && this.glue.tickStuck()) return;
     // hitPoint is per-frame: a stale value from a previous bounce would
     // teleport the explosion back to the last terrain contact (the
     // "explosion in the wrong spot" bug on fuse/ball/player kills)
@@ -301,39 +300,6 @@ export class Projectile {
   }
 
   // Planted shell: hold full size for the embed window, then shrink away.
-  private tickEmbedded(dt: number): void {
-    this.embedAge += dt;
-    const shrink = (this.embedAge - this.config.embeds!) / EMBED_SHRINK_TIME;
-    if (shrink >= 1) this.removeProjectileMesh();
-    else if (shrink > 0) this.mesh.scale.setScalar(1 - shrink);
-  }
-
-  // Stuck-bomb tick. No physics, no collision — only the fuse timer. A
-  // bomb glued to a live mover RIDES it (world-space offset from
-  // contact) — freezing in place while the victim jets away reads as a
-  // miss, not a hit. Returns true while still glued (caller returns).
-  private tickStuck(): boolean {
-    const anchor = this.stuckTo ? (this.stuckTo.dead ? null : this.stuckTo.pos)
-      : this.stuckPlayerId ? (this.stuckMap?.get(this.stuckPlayerId) ?? null)
-      : null;
-    if (this.stuckTo || this.stuckPlayerId) {
-      if (anchor) {
-        this.pos.copy(anchor).add(this.stuckOffset);
-        this.prevPos.copy(this.pos);
-        this.hitPoint.copy(this.pos); // blast follows the ride, not the contact point
-      } else {
-        // Victim died/despawned under the bomb — it lets go and falls.
-        this.stuck = false;
-        this.stuckTo = null;
-        this.stuckPlayerId = null;
-      }
-    }
-    if (!this.stuck) return false; // dropped — fall through into physics with zero velocity
-    if (this.config.maxLifetime && this.age >= this.config.maxLifetime) this.explode();
-    else this.updateMesh();
-    return true;
-  }
-
   // Remote replica terrain handling. A replica never sweep-hits a target
   // (server owns damage) but terrain is deterministic from spawn state:
   // bounces match the shooter's arc, armed shells die on contact, remote
@@ -351,7 +317,7 @@ export class Projectile {
       this.explode(); // armed mortar shell touching terrain on a remote client
       return true;
     }
-    if (this.config.sticks && sweepTerrain(this, terrain)) this.stickAt(this.hitPoint);
+    if (this.config.sticks && sweepTerrain(this, terrain)) this.glue.stickAt(this.hitPoint);
     // Embed-capable shells (javelin) die on contact everywhere — the server
     // never sends a destroy for a dirt hit, so the replica must sense it.
     if (this.config.embeds !== undefined && sweepTerrain(this, terrain)) {
@@ -365,6 +331,12 @@ export class Projectile {
   // something and exploded (records hit target + accuracy data).
   private checkCollisions(terrain: Terrain, balls?: Targetable[], remotePlayers?: Map<string, THREE.Vector3>, obstacles?: SweepObstacle[]): boolean {
     return this.collide.checkCollisions(terrain, balls, remotePlayers, obstacles);
+  }
+
+  /** Plant the bomb at a contact point — the glue family owns the state. */
+  stickAt(p: THREE.Vector3, ball?: Targetable, playerId?: string,
+          remotePlayers?: Map<string, THREE.Vector3>): void {
+    this.glue.stickAt(p, ball, playerId, remotePlayers);
   }
 
   get armed(): boolean {
@@ -397,13 +369,13 @@ export class Projectile {
   // so a 0.4s shotgun pellet still snaps to size fast.
 
 
-  private updateMesh(): void {
+  updateMesh(): void {
     updateProjectileMesh(this.mesh, this.glowMesh, this.pos, this.vel,
       this.config, this.age, this.hitRadius,
       { x: this.tumbleX, y: this.tumbleY, z: this.tumbleZ }, this.lastDt);
   }
 
-  private removeProjectileMesh(): void {
+  removeProjectileMesh(): void {
     if (this.projectileRemoved) return;
     this.scene.remove(this.mesh);
     // mat/glowMat are cache-shared — never dispose
@@ -413,57 +385,13 @@ export class Projectile {
     this.projectileRemoved = true;
   }
 
-  // Stick attachment: a bomb glued to a victim rides it at a fixed
-  // world-space offset (no victim-local frame — fine for spheres/capsules).
-  private stuckTo: Targetable | null = null;
-  private stuckPlayerId: string | null = null;
-  private stuckMap: Map<string, THREE.Vector3> | null = null;
-  private readonly stuckOffset = new THREE.Vector3();
-
-  /** Plant the bomb at a contact point — motion and sweeps stop, the
-   *  fuse doesn't. With a victim it tracks; without one it just hangs. */
-  stickAt(p: THREE.Vector3, ball?: Targetable, playerId?: string,
-                  remotePlayers?: Map<string, THREE.Vector3>): void {
-    this.stuck = true;
-    this.pos.copy(p);
-    this.prevPos.copy(p);
-    this.vel.set(0, 0, 0);
-    this.stuckTo = ball ?? null;
-    this.stuckPlayerId = playerId ?? null;
-    this.stuckMap = remotePlayers ?? null;
-    const anchor = ball ? ball.pos : (playerId && remotePlayers?.get(playerId));
-    if (anchor) this.stuckOffset.copy(p).sub(anchor);
-    this.updateMesh();
-  }
-
   explode(): void {
     if (this.exploded) return;
     this.exploded = true;
     for (const r of this.ribbons) r.stop();
     // Embed-capable shells plant on world hits — no target, a swept
     // contact point to sit at. Fuse pops in mid-air still vanish normally.
-    if (this.config.embeds !== undefined && this.hitPointValid
-        && !this.hitBall && !this.hitPlayerId && !this.hitBolt) {
-      this.embedded = true;
-      this.embedAge = 0;
-      // Tip-origin mesh: slide only a little along the flight line — the
-      // head buries, ~1.6m of tail stays visibly planted in the dirt.
-      // hitPoint itself stays at the swept contact — the impact decal
-      // and blast position still read from it.
-      this.pos.copy(this.hitPoint);
-      if (this.vel.lengthSq() > 0.01) {
-        _velDir.copy(this.vel).normalize();
-        this.pos.addScaledVector(_velDir, EMBED_DEPTH);
-        this.mesh.quaternion.setFromUnitVectors(_FORWARD, _velDir);
-      }
-      this.prevPos.copy(this.pos);
-      // vel kept: the impact effect reads it this same frame to orient
-      // the flash + kick sparks back along the shot line.
-      this.mesh.position.copy(this.pos);
-      this.mesh.scale.setScalar(1);
-      if (this.glowMesh) { this.scene.remove(this.glowMesh); this.glowMesh = null; }
-      return;
-    }
+    if (this.glue.tryEmbed()) return;
     this.removeProjectileMesh();
   }
 
