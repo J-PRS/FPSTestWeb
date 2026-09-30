@@ -99,7 +99,13 @@ export const BOT_FIRE_RANGE = 45;
 // duel range, so the farming reach runs longer (3D distance still applies:
 // a beast parked 80m overhead is out of reach until it swoops).
 const CREATURE_FIRE_RANGE = 65;
+// Non-economy rooms don't farm, but a swarm gnawing the bot's legs is a
+// threat in every mode — creatures inside this radius are always huntable.
+const CREATURE_DEFENSE_M = 30;
 const THREAT_M = 55; // a player inside this radius always outranks farming
+// A creature literally on top of the bot beats even a close player —
+// answer what's biting before what's shooting.
+const CREATURE_URGENT_M = 14;
 const THINK_S = 0.3;
 const ORBIT_FAR = 22;    // orbit the target inside this ring distance
 const ORBIT_TOO_CLOSE = 12;
@@ -301,7 +307,7 @@ export class BotBrain {
       let best: BotEnemy | null = null;
       let bestD = hero ? BOT_FIRE_RANGE * 1.4 : BOT_FIRE_RANGE;
       let bestBeast: BotEnemy | null = null;
-      let bestBeastD = ctx.huntCreatures ? CREATURE_FIRE_RANGE : 0;
+      let bestBeastD = ctx.huntCreatures ? CREATURE_FIRE_RANGE : CREATURE_DEFENSE_M;
       for (const e of ctx.enemies) {
         if (!e.alive) continue;
         const d = dist3(pos, e.pos);
@@ -317,8 +323,9 @@ export class BotBrain {
       }
       // In economy rooms, only an actual nearby player threat outranks
       // the harvest — otherwise the bot keeps farming past a firefight
-      // across the map like a human focused on the score.
-      if (bestBeast && (!best || bestD > THREAT_M)) best = bestBeast;
+      // across the map like a human focused on the score. In any mode a
+      // creature on top of the bot is urgent: deal with what's biting.
+      if (bestBeast && (!best || bestD > THREAT_M || bestBeastD < CREATURE_URGENT_M)) best = bestBeast;
       this.hunt = best;
       if (best) {
         this.lastSeen = { ...best.pos };
@@ -422,9 +429,9 @@ export class BotBrain {
     if (this.hunt && now - this.lastSeenAt <= STALE_MS) {
       this.fireT -= dt;
       if (this.fireT <= 0) {
-        if (this.burstLeft <= 0) this.burstLeft = 3;
+        if (this.burstLeft <= 0) this.burstLeft = 5;
         this.burstLeft--;
-        this.fireT = (this.burstLeft > 0 ? 0.85 : 1.6 + Math.random()) / this.temper
+        this.fireT = (this.burstLeft > 0 ? 0.45 : 0.8 + Math.random() * 0.5) / this.temper
           * (hero ? 0.65 : fearing ? 0.75 : 1);
         const d = dist3(pos, this.lastSeen);
         // Suppressive fire is deliberately sloppy — noise, not hits. Hero

@@ -1,3 +1,4 @@
+2026-10-02 - Bots engage creatures in every mode (were nuggets-only): beasts within 30m are always huntable, within 14m they outrank even close players; fire cadence doubled — 5-shot bursts at 0.45s with ~1s lulls
 2026-10-02 - Bots can disc-jump: own blasts now self-shove bots (bot velocity is server truth; humans still self-predict). Grounded bots launching a long run fire a push explosive at their heels and ride the blast; pull-belt carriers lob the implosion ~18m ahead and get dragged forward
 2026-10-02 - Bot arsenal widened: 5 new loadouts cover Shotgun, Flak, Cannon, PlasmaCannon, Railgun, Lightning, RocketLauncher, GrenadeLauncher, Mortar, Sticky, Javelin, ImpactGrenade, DiscPull, ClusterBomb; hitscan weapons (speed 0) take no target lead
 2026-10-02 - Ball rubberband watch quiets during a terrain swap: prediction runs on the previous heightfield until the new bin rebinds, so divergences there are expected, not desync
