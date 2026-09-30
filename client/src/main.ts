@@ -362,10 +362,10 @@ function setupOfflineMode(mode: string): void {
         }
         return best;
       },
-      damageCreature: (id, dmg) => {
+      damageCreature: (id, dmg, att) => {
         const t = entities.targets.find(x => x.id === id);
         if (!t || t.dead) return false;
-        return combat.hitTargetLocal(t, dmg); // same pipeline as a projectile hit
+        return combat.hitTargetLocal(t, dmg, att); // same pipeline as a projectile hit
       },
       botDeploy: (kind, pos, owner) =>
         entities.deployables.plantFor(kind as import('./game/deployables.js').DeployKind, pos, owner),

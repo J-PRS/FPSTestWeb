@@ -47,15 +47,42 @@ if (pvariant) {
   const pm = new PlayerModel(scene, pvariant as 'robot' | 'mannequin' | 'knight');
   await pm.load();
   const wantState = q.get('state') ?? 'ski';
+  // dir=B|BL|L|FL|FR|R|BR feeds setLocomotionVector before the state
+  // resolves — exercises the KevDev directional clip table.
+  const dir = q.get('dir');
+  if (dir) {
+    const DIRS: Record<string, [number, number]> = {
+      F: [1, 0], FR: [1, 1], R: [0, 1], BR: [-1, 1],
+      B: [-1, 0], BL: [-1, -1], L: [0, -1], FL: [1, -1],
+    };
+    const v = DIRS[dir] ?? DIRS.F;
+    pm.setLocomotionVector(v[0], v[1]);
+  }
+  // Optional locomotion direction for the KevDev 8-dir table —
+  // &dir=B|L|R|FL|FR|BL|BR makes walk/run pick the strafe/backpedal clip.
+  const wantDir = q.get('dir');
+  const DIRV: Record<string, [number, number]> = {
+    F: [1, 0], FR: [0.7, 0.7], R: [0, 1], BR: [-0.7, 0.7],
+    B: [-1, 0], BL: [-0.7, -0.7], L: [0, -1], FL: [0.7, -0.7],
+  };
   const poll = () => {
     const model = pm.object3D;
     const anims = (pm as unknown as { animations: Map<string, unknown> }).animations;
+    // Retargeted frames can land outside the bind-pose bounds — same fix
+    // the raw path applies below.
+    model?.traverse(o => { if ((o as THREE.SkinnedMesh).isSkinnedMesh) o.frustumCulled = false; });
     // Wait for the GLB AND the async retarget bake — natives fill the map
     // first, so a bare size check would race past the bake every time.
-    const need = pvariant === 'mannequin' || pvariant === 'robot'
-      ? anims.has('UAL_Slide_Loop') : anims.size > 0;
+    // Mannequin bakes the KevDev set (UAL clips are native); robot bakes
+    // the full UAL set including UAL2's Slide.
+    const need = pvariant === 'mannequin'
+      ? anims.has('UAL_Walk01_Left')
+      : pvariant === 'robot' ? anims.has('UAL_Slide_Loop') : anims.size > 0;
     if (!model || !anims || !need) { setTimeout(poll, 120); return; }
+    if (wantDir && DIRV[wantDir]) (pm as unknown as { setLocomotionVector(f: number, s: number): void })
+      .setLocomotionVector(DIRV[wantDir][0], DIRV[wantDir][1]);
     pm.forceAnimationState(wantState as never);
+    (window as any).__pm = pm;
     // Step the mixer a fixed phase so loops settle mid-cycle.
     for (let i = 0; i < 30; i++) pm.update(1 / 60 * wantT * 4);
     model.updateMatrixWorld(true);
