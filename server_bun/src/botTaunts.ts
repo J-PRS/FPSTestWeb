@@ -3,45 +3,43 @@
 // chance keep it a flavor line, not a spam channel.
 
 const KILL_LINES = [
-  '{v} had it coming.',
-  'You fight like a dairy farmer, {v}.',
-  'Sit down, {v}.',
-  '{v} just got schooled.',
-  'Is that all you got, {v}?',
-  'Fragged like it was nothing.',
-  '{v}, meet my spinfusor.',
-  'Too slow, {v}.',
-  'Another one bites the dust.',
-  'I eat {v}s for breakfast.',
+  'wp',
+  'nice catch {v}',
+  'gotcha {v}',
+  'sorry',
+  're',
+  'close one',
+  'ty for standing still {v}',
+  'lucked out',
+  '{v} walked into that',
+  'gg {v}',
 ];
 
 const DEATH_LINES = [
-  'Lucky shot, {k}.',
-  'Ouch.',
-  'That was my favorite armor!',
-  '{k} got me this time.',
-  'I demand a rematch.',
-  'Totally meant to do that.',
-  'LAG. Definitely lag.',
-  '{k}, you cheated. Somehow.',
-  'Enjoy it while it lasts, {k}.',
-  'My shoelace was untied.',
+  'wp {k}',
+  'nice',
+  'gg',
+  'lag',
+  'fair',
+  'ow',
+  'again {k}',
+  'deserved',
+  'walked into that',
+  'yep',
 ];
 
 const ENV_DEATH_LINES = [
-  'Who put that wall there?',
-  'The terrain and I have beef.',
-  'Gravity: 1, me: 0.',
-  'Note to self: look down next time.',
-  'That cliff came out of nowhere.',
+  'who put a wall there',
+  'meant to do that',
+  'fat fingered',
+  'terrain won',
+  'missed the jump',
 ];
 
 const SPREE_LINES = [
-  'I\'m on fire!',
-  'Somebody stop me.',
-  'This is too easy.',
-  'Is this what skill feels like?',
-  'Kill streak, baby.',
+  'ok that was a run',
+  'still alive somehow',
+  'whew',
 ];
 
 const SPEAK_CHANCE = 0.55;
