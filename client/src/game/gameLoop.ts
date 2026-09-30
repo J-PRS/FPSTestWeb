@@ -33,6 +33,8 @@ import type { WorldState } from './worldState.js';
 import Logger from '../core/Logger.js';
 import { createPerfHud } from '../core/perfHud.js';
 import { createFrameBudget } from '../core/frameBudget.js';
+import { lastWeaponByPlayer } from './net/projectiles.js';
+import { WeaponType } from '../../../shared/weapons.js';
 
 const _zeroVel = new THREE.Vector3(); // shared zero for demo playback
 const _sunDir = new THREE.Vector3(); // scratch — directional fog sun lookup
@@ -443,11 +445,16 @@ export function createGameLoop(deps: GameLoopDeps) {
   (window as unknown as { __perf: () => Record<string, number> }).__perf =
     () => ({ ...perf.snapshot(), ...budget.stats() as unknown as Record<string, number> });
   document.addEventListener('keydown', (e) => {
-    // Alt+W — hard reload escape hatch. F5 is flaky under pointer lock +
-    // dev HMR; this survives both (keydown still fires while locked).
+    // Alt+W — bot weapon audit: last gun each bot drew + its shot count,
+    // so "do they fire real weapons" is a one-keypress read. Alt+Shift+W
+    // keeps the old hard-reload hatch (F5 is flaky under pointer lock).
     if (e.altKey && e.code === 'KeyW') {
       e.preventDefault();
-      location.reload();
+      if (e.shiftKey) { location.reload(); return; }
+      const rows = [...lastWeaponByPlayer.entries()]
+        .filter(([id]) => id.startsWith('BOT-'))
+        .map(([id, r]) => ({ bot: id, weapon: WeaponType[r.wt] ?? `w${r.wt}`, shots: r.n }));
+      console.table(rows.length ? rows : [{ note: 'no bot fire seen yet' }]);
       return;
     }
     if (e.code === 'Backquote') {

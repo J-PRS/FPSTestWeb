@@ -10,6 +10,17 @@ import { Explosion } from '../../effects/explosion.js';
 import { MELEE_RANGE, ROCKET_RADIUS } from '../../core/config.js';
 import type { NetCtx } from './ctx.js';
 
+/** Last weapon + shot count seen per shooter — every remote fire event
+ *  funnels through here (botFire markers included), so alt+w can audit
+ *  what each bot is actually drawing. */
+export const lastWeaponByPlayer = new Map<string, { wt: number; n: number }>();
+function noteWeapon(id: string, weaponType: number | undefined): void {
+  if (weaponType === undefined) return;
+  const rec = lastWeaponByPlayer.get(id) ?? { wt: 0, n: 0 };
+  rec.wt = weaponType; rec.n++;
+  lastWeaponByPlayer.set(id, rec);
+}
+
 export function wireProjectiles(ctx: NetCtx): void {
   const { deps, networkManager, nm } = ctx;
 
@@ -44,6 +55,7 @@ export function wireProjectiles(ctx: NetCtx): void {
 
   networkManager.onProjectileCreated = (projectileId: string, ownerId: string, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }, weaponType?: number) => {
     if (deps.world.playbackMode) return; // live shots don't belong in the replay
+    noteWeapon(ownerId, weaponType);
     // For own projectiles: link the pending local projectile to this server ID
     if (ownerId === nm().getLocalPlayerId()) {
       const localProjectile = deps.world.projectileRegistry.pending.shift();
@@ -92,6 +104,7 @@ export function wireProjectiles(ctx: NetCtx): void {
   // also paint a short tracer along the claimed aim dir.
   networkManager.onPlayerShot = (id, weaponType, pos, dir) => {
     if (deps.world.playbackMode) return;
+    noteWeapon(id, weaponType);
     const rp = deps.world.remotePlayers.get(id);
     const origin = pos
       ? new THREE.Vector3(pos.x, pos.y, pos.z)

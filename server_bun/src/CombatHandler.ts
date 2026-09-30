@@ -795,6 +795,7 @@ export class CombatHandler {
   botAttack(shooterId: string, targetId: string, weaponType: number): void {
     const shooter = this.playerManager.getPlayer(shooterId);
     if (!shooter || shooter.isDead) return;
+    shooter.protectedUntil = 0; // firing breaks your own spawn shield
     // Melee carries its damage on the aoe line (instant cone, directDamage 0)
     // — falling back to it keeps bot punches non-zero.
     const stats = getWeaponStats(weaponType);
