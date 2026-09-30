@@ -1,3 +1,4 @@
+2026-09-26 - Extracted AggroKit from speciesKit into speciesAggro.ts (multi-player threat roster, wander/stalk/frenzy waypoints, approach weave, damage funnel); speciesKit delegates so entity call sites are unchanged
 2026-09-26 - Extracted BotSteer from shared/botBrain.ts into botSteer.ts (context steering, slot danger scoring, memory trail, turn-rate clamp); botBrain now reads as a decision pipeline
 2026-09-26 - Extracted MoveJudge from RoomMoveSim into moveJudge.ts (divergence verdicts, cheat detection, seq-anchored replay, FieldSurface+Shadow types); RoomMoveSim keeps shadow bookkeeping only
 2026-09-26 - Split mid-match room hops out of GameServer into roomSwitch.ts (RoomSwitcher): switchRoom/switchTarget/seatPlayer/throttle/roomFull; GameServer keeps dispatch only
