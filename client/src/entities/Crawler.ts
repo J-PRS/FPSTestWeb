@@ -12,108 +12,14 @@ import {
 import { Terrain } from '../world/terrain.js';
 import { type SimCrawler, makeSimCrawler, stepCrawler } from '../../../shared/creatureSim.js';
 import { bindNetSim, applyNetEdgeSim, updateNetSim, claimDamageMelee, type NetBindArgs } from '../game/netMelee.js';
-import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { Targetable } from './balls.js';
-import { allocSlots, freeSlots, getSwarm, getShadows } from './swarms.js';
-import type { SwarmPart, SwarmSlotOwner } from './swarm.js';
-import { getGlowTexture } from '../effects/glowTexture.js';
+import { allocSlots, freeSlots } from './swarms.js';
+import type { SwarmSlotOwner } from './swarm.js';
+import { writeCrawlerInstances } from './crawlerVisual.js';
+export { crawlerParts } from './crawlerVisual.js';
 
 const _dir = new THREE.Vector3();
-const _UP = new THREE.Vector3(0, 1, 0);
-const _tiltQ = new THREE.Quaternion(); // ground-normal alignment while grounded
-const _root = new THREE.Matrix4();
-const _local = new THREE.Matrix4();
-const _world = new THREE.Matrix4();
-const _p = new THREE.Vector3();
-const _q = new THREE.Quaternion();
-const _e = new THREE.Euler();
-const _s = new THREE.Vector3();
 
-// Part indices into the crawler swarm — order must match crawlerParts().
-const PART_BODY = 0;
-const PART_HEAD = 1;
-const PART_LEG = 2;   // eight instances per crawler: slot*8+i
-const PART_FANG = 3;  // two per crawler
-const PART_EYE = 4;   // two per crawler — additive glow quads
-const LEGS_PER = 8;   // spiders have eight
-const FANGS_PER = 2;
-const EYES_PER = 2;
-
-// Geometries are shared — instancing renders one geometry × N slots.
-// Body: segmented bug, not a potato — swollen abdomen + thorax + head plate
-// merged into one part so it stays a single instanced draw.
-let _bodyGeo: THREE.BufferGeometry | null = null;
-function bodyGeo(): THREE.BufferGeometry {
-  if (!_bodyGeo) {
-    // detail 0 = bare 20-face icosahedra — chunky facets read as STYLE,
-    // where detail-1 smooths them into "bad organic modelling"
-    const abdomen = new THREE.IcosahedronGeometry(1, 0);
-    abdomen.scale(0.95, 0.72, 1.05);
-    abdomen.translate(0, 0.2, -0.5);
-    const thorax = new THREE.IcosahedronGeometry(0.55, 0);
-    thorax.scale(1.0, 0.8, 0.9);
-    thorax.translate(0, 0.08, 0.45);
-    const headPlate = new THREE.IcosahedronGeometry(0.32, 0);
-    headPlate.scale(1.15, 0.65, 0.8);
-    headPlate.translate(0, 0.05, 0.95);
-    _bodyGeo = mergeGeometries([abdomen, thorax, headPlate])!;
-  }
-  return _bodyGeo;
-}
-// Head: small mandible lobe riding the front of the thorax
-let _headGeo: THREE.BufferGeometry | null = null;
-function headGeo(): THREE.BufferGeometry {
-  if (!_headGeo) {
-    _headGeo = new THREE.IcosahedronGeometry(0.3, 0);
-    _headGeo.scale(1.1, 0.7, 0.85);
-  }
-  return _headGeo;
-}
-// Leg: BENT spider leg — hip → knee (out+up) → foot (down+out), one merged
-// geometry so each leg is still a single instance slot. Extends +X local;
-// instance yaw fans it fore/aft and mirrors it for the left side.
-let _legGeo: THREE.BufferGeometry | null = null;
-function legGeo(): THREE.BufferGeometry {
-  if (!_legGeo) {
-    const upper = new THREE.ConeGeometry(0.06, 0.85, 4);
-    upper.rotateZ(-Math.atan2(0.45, 0.55)); // tip toward (0.45,0.55)
-    upper.translate(0.225, 0.275, 0);
-    const lower = new THREE.ConeGeometry(0.05, 0.9, 4);
-    // +Y tip toward (0.5,-0.9): rotateZ(atan2(-dx, dy))
-    lower.rotateZ(Math.atan2(-0.5, -0.9));
-    lower.translate(0.7, 0.1, 0); // knee(0.45,0.55) → midpoint to foot(0.95,-0.35)
-    _legGeo = mergeGeometries([upper, lower])!;
-  }
-  return _legGeo;
-}
-const _fangGeo = new THREE.ConeGeometry(0.07, 0.5, 4);
-const _eyeGeo = new THREE.PlaneGeometry(1, 1);
-
-let _bodyMat: THREE.MeshLambertMaterial | null = null;
-let _eyeMat: THREE.MeshBasicMaterial | null = null;
-
-/** Swarm part table — registered once in swarms.initSwarms. */
-export function crawlerParts(): SwarmPart[] {
-  if (!_bodyMat) _bodyMat = new THREE.MeshLambertMaterial({
-    color: 0xffffff, emissive: 0x000000,
-    flatShading: true, // hard facets — the facets ARE the art direction
-  });
-  if (!_eyeMat) _eyeMat = new THREE.MeshBasicMaterial({
-    map: getGlowTexture(), color: 0xff3311, transparent: true, blending: THREE.AdditiveBlending,
-    depthWrite: false, side: THREE.DoubleSide,
-  });
-  return [
-    { geometry: bodyGeo(), material: _bodyMat, castShadow: true },
-    { geometry: headGeo(), material: _bodyMat },
-    { geometry: legGeo(), material: _bodyMat, per: LEGS_PER },
-    { geometry: _fangGeo, material: _bodyMat, per: FANGS_PER },
-    { geometry: _eyeGeo, material: _eyeMat, per: EYES_PER },
-  ];
-}
-
-// Sub-slot math: leg/fang/eye InstancedMeshes index by crawler.slot * N + i.
-// Capacity is expressed in crawlers; sub-parts allocate N× the capacity via a
-// wider InstancedMesh — see crawlerPartsCapacity in swarms.ts usage.
 
 
 /**
@@ -139,15 +45,16 @@ export class Crawler implements Targetable, SwarmSlotOwner {
 
   swarmSlot = -1;
   shadowSlot = -1;
-  private hasSlots = false;
-
-  private animT = Math.random() * 10;
+  // Public flat fields — crawlerVisual.ts's writeCrawlerInstances reads them
+  // through the CrawlerVisHost interface.
+  hasSlots = false;
+  animT = Math.random() * 10;
   yaw = 0; // net replay writes this from the sim
-  private squash = 1; // 1 = normal, <1 crouched (windup telegraph)
-  private glow = 0;   // emissive heat 0..1 — instanceColor >1 fakes the ramp
-  private flash = 0;  // damage white-flash decay
+  squash = 1; // 1 = normal, <1 crouched (windup telegraph)
+  glow = 0;   // emissive heat 0..1 — instanceColor >1 fakes the ramp
+  flash = 0;  // damage white-flash decay
 
-  private state: 'wander' | 'chase' | 'windup' = 'wander';
+  state: 'wander' | 'chase' | 'windup' = 'wander';
   private hopTimer = 0;
   private windupTimer = 0;
   private stunTimer = 0;
@@ -283,93 +190,7 @@ export class Crawler implements Targetable, SwarmSlotOwner {
   }
 
   writeInstances(terrain: Terrain): void {
-    if (!this.hasSlots) return;
-    const swarm = getSwarm('crawler');
-    if (!swarm) return;
-    const slot = this.swarmSlot;
-    const r = this.radius;
-
-    // Root: position + facing + windup squash. When grounded the body
-    // also tilts onto the terrain normal — a crawler on a hillside hugs
-    // the slope (legs mask it partially, but the body was piercing).
-    _e.set(0, this.yaw, 0);
-    _q.setFromEuler(_e);
-    if (!this.airborne) {
-      _tiltQ.setFromUnitVectors(_UP, terrain.getNormal(this.pos.x, this.pos.z));
-      _q.premultiply(_tiltQ); // yaw first, then tip onto the slope
-    }
-    const sy = r * this.squash;
-    _s.set(r * (2 - this.squash), sy, r * (2 - this.squash)); // widen as it squashes
-    _p.copy(this.pos);
-    _root.compose(_p, _q, _s);
-
-    // Tint: base color, white flash on hit, emissive heat faked via >1 color
-    const heat = this.glow;
-    const fr = this.flash > 0 ? 4 : 1;
-    swarm.setColor(PART_BODY, slot,
-      this.color.r * fr + heat * 0.6, this.color.g * fr + heat * 0.08, this.color.b * fr);
-    swarm.setMatrix(PART_BODY, slot, _root);
-
-    // Head rides the front of the thorax, low — it's a jaw, not a beach ball
-    _local.compose(_p.set(0, 0.05, 1.05), _q.identity(), _s.set(1, 1, 1));
-    _world.multiplyMatrices(_root, _local);
-    swarm.setMatrix(PART_HEAD, slot, _world);
-    swarm.setColor(PART_HEAD, slot, this.color.r * 0.8 * fr, this.color.g * 0.8 * fr + heat * 0.08, this.color.b * 0.8 * fr);
-
-    this.writeLegs(swarm, slot);
-    this.writeFangs(swarm, slot);
-    this.writeEyes(swarm, slot);
-
-    getShadows()?.set(this, this.pos, r * 1.1, 0.35);
-  }
-
-  // Eight legs, 4 pairs fanned thorax→abdomen. The leg geo is already
-  // bent (hip→knee→foot); instance yaw fans fore legs forward, rear legs
-  // back, and mirrors the left side. Wiggle = scuttle.
-  private writeLegs(swarm: NonNullable<ReturnType<typeof getSwarm>>, slot: number): void {
-    const amp = this.airborne ? 0.08 : (this.state === 'wander' ? 0.25 : 0.55);
-    for (let i = 0; i < LEGS_PER; i++) {
-      const side = i % 2 === 0 ? -1 : 1;
-      const k = Math.floor(i / 2); // pair 0..3, front→back
-      const fan = (k - 1.5) * 0.4;
-      const wiggle = Math.sin(this.animT * 16 + i * 1.31) * amp;
-      _e.set(0, side < 0 ? Math.PI - fan + wiggle : fan + wiggle, 0);
-      _q.setFromEuler(_e);
-      _local.compose(
-        _p.set(side * 0.5, 0.1 + Math.abs(Math.sin(this.animT * 16 + i * 1.31)) * amp * 0.15, (k - 1.5) * 0.55),
-        _q, _s.set(1, 1, 1));
-      _world.multiplyMatrices(_root, _local);
-      swarm.setMatrix(PART_LEG, slot * LEGS_PER + i, _world);
-      // Legs darker than carapace — silhouette reads jointed, not blobbed
-      swarm.setColor(PART_LEG, slot * LEGS_PER + i, this.color.r * 0.45, this.color.g * 0.45, this.color.b * 0.45);
-    }
-  }
-
-  // Fangs: two forward-curved tusks framing the head
-  private writeFangs(swarm: NonNullable<ReturnType<typeof getSwarm>>, slot: number): void {
-    for (let i = 0; i < FANGS_PER; i++) {
-      const side = i === 0 ? -1 : 1;
-      _e.set(2.4, 0, side * -0.25);
-      _q.setFromEuler(_e);
-      _local.compose(_p.set(side * 0.16, -0.02, 1.25), _q, _s.set(1, 1.3, 1));
-      _world.multiplyMatrices(_root, _local);
-      swarm.setMatrix(PART_FANG, slot * FANGS_PER + i, _world);
-      // Pale chitin — mandibles should catch the eye, not blend in
-      swarm.setColor(PART_FANG, slot * FANGS_PER + i, 0.9, 0.8, 0.6);
-    }
-  }
-
-  // Eyes: two additive quads on the head plate — widen during windup
-  private writeEyes(swarm: NonNullable<ReturnType<typeof getSwarm>>, slot: number): void {
-    const eyeS = (this.state === 'wander' ? 0.55 : this.state === 'windup' ? 0.9 : 0.75) * 0.55;
-    for (let i = 0; i < EYES_PER; i++) {
-      const side = i === 0 ? -1 : 1;
-      _local.compose(
-        _p.set(side * 0.16, 0.28, 1.15), _q.identity(), _s.setScalar(eyeS),
-      );
-      _world.multiplyMatrices(_root, _local);
-      swarm.setMatrix(PART_EYE, slot * EYES_PER + i, _world);
-    }
+    writeCrawlerInstances(this, terrain);
   }
 
   private groundThink(dt: number, terrain: Terrain, playerPos: THREE.Vector3, distSq: number): void {
