@@ -46,13 +46,13 @@ const ZERO: PerkMods = { jetDrain: 1, jetRegen: 1, damageResist: 0, maxHealth: 0
 export const PERKS: Record<PerkId, { name: string; blurb: string; mods: Partial<PerkMods> }> = {
   none:        { name: 'No Perk',     blurb: '', mods: {} },
   featherjets: { name: 'Featherjets', blurb: 'Jets burn 30% less, recharge 50% faster', mods: { jetDrain: 0.7, jetRegen: 1.5 } },
-  plated:      { name: 'Plated',      blurb: 'Take 25% less damage', mods: { damageResist: 0.25 } },
+  plated:      { name: 'Plated',      blurb: 'Take 25% less damage below 80% health', mods: { damageResist: 0.25 } },
   vitality:    { name: 'Vitality',    blurb: '+50 max health', mods: { maxHealth: 50 } },
   regenerator: { name: 'Regenerator', blurb: 'Regenerate 4 hp/s', mods: { regen: 4 } },
   overcharge:  { name: 'Overcharge',  blurb: 'Energy recharges 50% faster', mods: { energyRegen: 1.5 } },
   sharpshooter:{ name: 'Sharpshooter',blurb: '+20% direct hits, −40% blast radius', mods: { directDamage: 1.2, aoeRadius: 0.6 } },
   bombardier:  { name: 'Bombardier',  blurb: '+40% blast radius, −15% direct hits', mods: { directDamage: 0.85, aoeRadius: 1.4 } },
-  juggernaut:  { name: 'Juggernaut',  blurb: 'Take 40% less knockback', mods: { knockbackTaken: 0.6 } },
+  juggernaut:  { name: 'Juggernaut',  blurb: 'Take 80% less knockback', mods: { knockbackTaken: 0.2 } },
   scavenger:   { name: 'Scavenger',   blurb: 'Pickups heal 50% more', mods: { healBoost: 1.5 } },
   lightfoot:   { name: 'Lightfoot',   blurb: 'Own blasts deal 50% less self-damage', mods: { selfDamage: 0.5 } },
   airtank:     { name: 'Airtank',     blurb: '+50% energy pool', mods: { energyMax: 1.5 } },
@@ -64,6 +64,12 @@ export const PERK_ORDER: PerkId[] = ['none', 'featherjets', 'plated', 'vitality'
 export function perkMods(id: string | undefined | null): PerkMods {
   const p = PERKS[(id ?? 'none') as PerkId];
   return p ? { ...ZERO, ...p.mods } : { ...ZERO };
+}
+
+/** Plated is an underdog plate — resist only counts below 80% max HP,
+ *  so a big hit on a healthy target punches straight through it. */
+export function effectiveResist(mods: PerkMods, health: number, maxHealth: number): number {
+  return health < maxHealth * 0.8 ? mods.damageResist : 0;
 }
 
 export function isPerkId(s: unknown): s is PerkId {

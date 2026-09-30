@@ -73,12 +73,13 @@ export function hitRadiusAt(weaponType: number | undefined, airtime: number): nu
 }
 
 /** Lightning beam ramp-down: consecutive ticks on the same target step
- *  8 → 6 → 4, floor reached at tick 10 (~0.5s of hold at 20 ticks/s).
- *  The beam stays lethal on first contact and bleeds off on a sustained
- *  hold — the kill-fork pop is the payoff, not a free bonus. Resets after
- *  a miss window or a target switch. `n` is the 1-based tick count. */
+ *  4 → 3 → 2 (halved from 8→6→4 — ~45 dps sustained, the pop bank is the
+ *  damage, not the beam), floor reached at tick 10 (~0.5s of hold at 20
+ *  ticks/s). Resets after a miss window or a target switch. `n` is the
+ *  1-based tick count. */
+export const LG_TICK_BASE = 4;
 export function lgTickDamage(n: number): number {
-  return n <= 4 ? 8 : n <= 9 ? 6 : 4;
+  return n <= 4 ? 4 : n <= 9 ? 3 : 2;
 }
 
 /** Gap after which a beam's ramp resets — misses within the window keep
@@ -87,7 +88,7 @@ export const LG_RAMP_WINDOW_S = 0.3;
 
 /** Pop-charge economy — shared so the server banks/detonates the same
  *  numbers the client predicts. The victim's withheld tick damage
- *  (8 − stepped tick) banks at MULT ×, caps at DMG_CAP, and drains at
+ *  (LG_TICK_BASE − stepped tick) banks at MULT ×, caps at DMG_CAP, and drains at
  *  DRAIN/s once the beam leaves them. */
 export const LG_POP_DMG_CAP = 320;
 export const LG_POP_CHARGE_MULT = 2;

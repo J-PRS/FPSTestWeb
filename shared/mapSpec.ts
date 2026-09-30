@@ -18,7 +18,13 @@ export interface BallPopulation {
 }
 
 export interface MapSpec {
+  /** Default mode when the host doesn't pick one. */
   mode?: string;
+  /** Modes this map can host — map = geometry+spawns+bases, mode = the
+   *  ruleset on top. ctf-capable maps carry bases; modes not listed here
+   *  fall back to the map's own `mode` (the map wins). Absent = only
+   *  `mode` is legal, preserving the old one-mode-per-map semantics. */
+  modes?: string[];
   balls: BallPopulation;
   /** Spawn anchors — farthest-from-enemies pick among these. Absent = the
    *  server's default spawn ring. */
@@ -35,13 +41,25 @@ export interface MapSpec {
   /** Spawn weights per ball variant [common, mid, large, elite] — default
    *  [0.84, 0.07, 0.04, 0.05]. Lets a map go all-elite or fodder-only. */
   ballMix?: number[];
-  /** Heightmap filename under maps/ (e.g. "ravine.bin") — a different
-   *  terrain for this room's BallSim. Absent = the server's default field. */
+  /** Heightmap filename under maps/ (e.g. "ravine.bin" or
+   *  "t2/escalade/terrain.bin" — one subdir deep) — a different terrain
+   *  for this room's BallSim. Absent = the server's default field. */
   terrain?: string;
+  /** Baked terrain albedo under maps/ (e.g. "t2/escalade/albedo.png") —
+   *  client-only dressing; the sims never read it. */
+  terrainTex?: string;
+  /** Skybox dir under maps/ containing px/nx/py/ny/pz/nz.png — replaces
+   *  the procedural sky when set. Client-only. */
+  sky?: string;
   /** Static structures — axis-aligned boxes the server echoes into
    *  gameState so every client builds the same base compounds/cover.
    *  `kind` selects the renderer; `pos` is the piece's center. */
   structures?: StructureSpec[];
+  /** Placed interior meshes — converted .dif→.glb buildings. `file` is a
+   *  bare basename resolved to maps/t2/dif/<name>.glb client-side; `pos` is
+   *  already in our meters; `rot` is a raw T2 axis-angle [x,y,z,deg];
+   *  `scale` is pre-squashed into our axes. */
+  interiors?: InteriorSpec[];
   /** Arena boundary — a dome centered on {x,z} with this radius. Echoed to
    *  clients for the barrier render; server uses it for out-of-bounds
    *  checks (future: damage/skid-push on contact). */
@@ -70,6 +88,13 @@ export interface StructureSpec {
 
 export interface Vec3like { x: number; y: number; z: number }
 
+export interface InteriorSpec {
+  file: string;
+  pos: Vec3like;
+  rot?: number[];   // T2 axis-angle [ax, ay, az, degrees]
+  scale?: Vec3like;
+}
+
 export const DEFAULT_MAP_SPEC: MapSpec = {
   balls: { base: 10, perPlayer: 4, max: 40 },
 };
@@ -95,6 +120,7 @@ export function resolveMapSpec(raw: unknown): MapSpec {
 
   return {
     mode: parseMode((src as { mode?: unknown }).mode),
+    modes: parseModes((src as { modes?: unknown }).modes),
     balls,
     spawns: parseSpawns((src as { spawns?: unknown }).spawns),
     bases: parseBases((src as { bases?: unknown }).bases),
@@ -104,7 +130,10 @@ export function resolveMapSpec(raw: unknown): MapSpec {
     // filename-only — the value is resolved under maps/ server-side, so
     // anything with a slash or dot-traversal is dropped on the floor
     terrain: parseTerrain((src as { terrain?: unknown }).terrain),
+    terrainTex: parsePathField((src as { terrainTex?: unknown }).terrainTex, /\.(?:png|jpe?g)$/),
+    sky: parsePathField((src as { sky?: unknown }).sky, /[\w-]{1,64}$/),
     structures: parseStructures((src as { structures?: unknown }).structures),
+    interiors: parseInteriors((src as { interiors?: unknown }).interiors),
     arena: parseArena((src as { arena?: unknown }).arena),
     ambient: parseAmbient((src as { ambient?: unknown }).ambient),
     creatures: parseAmbient((src as { creatures?: unknown }).creatures),
@@ -115,8 +144,33 @@ function parseMode(raw: unknown): string | undefined {
   return typeof raw === 'string' && /^[\w-]{1,32}$/.test(raw) ? raw : undefined;
 }
 
+function parseModes(raw: unknown): string[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out = raw.filter((m): m is string => parseMode(m) !== undefined).slice(0, 8);
+  return out.length ? out : undefined;
+}
+
+/** Modes a spec can legally host: the declared list, else its own mode,
+ *  else anything (a mode-less spec is a bare arena). */
+export function specModes(spec: MapSpec | undefined): string[] {
+  return spec?.modes ?? (spec?.mode ? [spec.mode] : []);
+}
+
 function parseTerrain(raw: unknown): string | undefined {
-  return typeof raw === 'string' && /^[\w-]{1,64}\.bin$/.test(raw) ? raw : undefined;
+  return parsePathField(raw, /\.bin$/); // t2/<map>/terrain.bin is 2 deep
+}
+
+/** maps/-relative path — word-char dirs, filename must carry the
+ *  extension `tail` requires. No dots in segments => no traversal. */
+function parsePathField(raw: unknown, tail: RegExp, maxDepth = 2): string | undefined {
+  if (typeof raw !== 'string' || raw.length > 128) return undefined;
+  const parts = raw.split('/');
+  if (parts.length > maxDepth + 1) return undefined;
+  for (const p of parts.slice(0, -1)) {
+    if (!/^[\w-]{1,64}$/.test(p)) return undefined;   // dirs: word chars only, no dots
+  }
+  if (!/^[\w-]{1,64}(\.[\w-]{1,8})?$/.test(parts[parts.length - 1]!)) return undefined;
+  return tail.test(raw) ? raw : undefined;
 }
 
 function parseSpawns(raw: unknown): Vec3like[] | undefined {
@@ -185,6 +239,26 @@ function parseStructures(raw: unknown): StructureSpec[] | undefined {
       rotY: typeof o.rotY === 'number' && Number.isFinite(o.rotY) ? o.rotY : undefined,
       team: o.team === 'alpha' || o.team === 'bravo' ? o.team : undefined,
     });
+    if (out.length >= 256) break;
+  }
+  return out.length ? out : undefined;
+}
+
+/** Validated interior placements — bare .dif basenames only (client maps
+ *  them to t2/dif/*.glb), sane-clamped transforms, cap 256. */
+function parseInteriors(raw: unknown): InteriorSpec[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out: InteriorSpec[] = [];
+  for (const s of raw) {
+    if (!s || typeof s !== 'object') continue;
+    const o = s as Record<string, unknown>;
+    const file = typeof o.file === 'string' && /^[\w-]{1,64}\.dif$/i.test(o.file)
+      ? o.file.toLowerCase() : undefined;
+    if (!file || !isVec(o.pos)) continue;
+    const rot = Array.isArray(o.rot) && o.rot.length === 4
+      && o.rot.every(v => typeof v === 'number' && Number.isFinite(v))
+      ? o.rot as number[] : undefined;
+    out.push({ file, pos: o.pos, rot, scale: isVec(o.scale) ? o.scale : undefined });
     if (out.length >= 256) break;
   }
   return out.length ? out : undefined;

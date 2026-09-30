@@ -268,10 +268,11 @@ export const WEAPONS: Record<number, WeaponStats> = {
   },
   [WeaponType.Lightning]: {
     // Hitscan beam — not a projectile; ballistic fields inert. Tick damage is
-    // directDamage (~178 dps vs enemies); aoeDamage/aoeRadius validate the
+    // directDamage (~89 dps vs enemies — halved: 8dmg ticks were sawing
+    // through targets in a blink); aoeDamage/aoeRadius validate the
     // per-tick blast claim the client sends for remote-player hits.
-    directDamage: 8,
-    aoeDamage: 5,
+    directDamage: 4,
+    aoeDamage: 2.5,
     aoeRadius: 1.6, // narrow shaft — tracking weapon, not a wake
     knockbackForce: 4, // the pin: a nudge per tick — it accrues at 22/s, keep it modest
     forceMode: 'push',
@@ -424,13 +425,13 @@ export const WEAPONS: Record<number, WeaponStats> = {
     aoeRadius: 0,
     knockbackForce: 14.0,
     forceMode: 'push',
-    speed: 95.0,
+    speed: 120.0,  // bolt-launcher velocity — a thrown spear shouldn't lob
     gravity: true,
     bodyRadius: 0.15,
     hitMin: 0.0,
     hitMax: 0.6,
     hitGrow: 0.2,
-    maxLifetime: 3.0, // ~285m of reach
+    maxLifetime: 2.4, // ~285m of reach — same as before, just faster
   },
   [WeaponType.ImpactGrenade]: {
     // Contact-fused knockback tool: flies flat and far, pops on ANY touch,
