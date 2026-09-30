@@ -242,6 +242,11 @@ export class MoveSim {
     const n = this.surface.getNormal(s.pos.x, s.pos.z, _n);
     const dirLen = Math.hypot(dir.x, dir.z);
 
+    // Horizontal speed before input accel — the cap below measures
+    // overspeed against this, not the post-accel value, so holding a
+    // direction can never grow speed past the cap (that input-pushed
+    // equilibrium is what let walking reach absurd speeds).
+    const hSpeedIn = Math.hypot(s.vel.x, s.vel.z);
     if (dirLen > 0) {
       // Project input onto the slope surface.
       const dotN = dir.x * n.x + dir.z * n.z;
@@ -270,13 +275,16 @@ export class MoveSim {
     }
 
     // Horizontal-only cap: vertical velocity is ballistic and must never
-    // bleed into this path, and horizontal overspeed (a blast shove, a
-    // landing) bleeds toward the cap rather than snapping to it.
+    // bleed into this path. Impulse overspeed (a blast shove, a landing)
+    // bleeds toward the cap rather than snapping to it — but the bleed
+    // measures against pre-input speed, so walk accel clamps at the cap
+    // exactly like the old hard truncate did.
     const hSpeed = Math.hypot(s.vel.x, s.vel.z);
     const maxGround = MOVEMENT_CONFIG.maxVelocityGround * this.speedScale;
     if (hSpeed > maxGround) {
-      const want = maxGround + (hSpeed - maxGround) * Math.max(0, 1 - MOVEMENT_CONFIG.overspeedBleed * dt);
-      const k = want / hSpeed;
+      const base = Math.max(hSpeedIn, maxGround);
+      const want = maxGround + (base - maxGround) * Math.max(0, 1 - MOVEMENT_CONFIG.overspeedBleed * dt);
+      const k = Math.min(1, want / hSpeed);
       s.vel.x *= k; s.vel.z *= k;
     }
   }

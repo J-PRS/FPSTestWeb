@@ -91,6 +91,42 @@ describe('RoomMoveSim', () => {
     expect(m.simPos('p1')!.y).toBeLessThan(50);
   });
 
+  test('walking cannot exceed the ground speed cap', () => {
+    // Regression: the overspeed bleed capped against post-input speed,
+    // letting input accel push equilibrium far above maxVelocityGround.
+    const m = new RoomMoveSim(flat);
+    m.track('p1', { x: 0, y: MOVEMENT_CONFIG.playerHeight, z: 0 }, 0);
+    m.setInput('p1', { forward: 1, right: 0 });
+    let peak = 0;
+    for (let i = 0; i < 300; i++) { // 15s of held-forward walking
+      m.tick(0.05);
+      const v = m.simState('p1')!.vel;
+      peak = Math.max(peak, Math.hypot(v.x, v.z));
+    }
+    expect(peak).toBeGreaterThan(5);
+    expect(peak).toBeLessThanOrEqual(MOVEMENT_CONFIG.maxVelocityGround + 0.01);
+  });
+
+  test('impulse overspeed bleeds off instead of snapping or sticking', () => {
+    const m = new RoomMoveSim(flat);
+    m.track('p1', { x: 0, y: MOVEMENT_CONFIG.playerHeight, z: 0 }, 0);
+    const s = m.simState('p1')!;
+    s.vel.x = 20; // a blast shove — above cap
+    m.setInput('p1', { forward: 1 }); // walking during the slide
+    let first = Infinity;
+    for (let i = 0; i < 200; i++) {
+      m.tick(0.05);
+      const v = m.simState('p1')!.vel;
+      const h = Math.hypot(v.x, v.z);
+      if (i === 0) first = h;
+    }
+    const v = m.simState('p1')!.vel;
+    const h = Math.hypot(v.x, v.z);
+    expect(first).toBeGreaterThan(MOVEMENT_CONFIG.maxVelocityGround);
+    expect(first).toBeLessThan(20);           // decays, doesn't snap
+    expect(h).toBeLessThanOrEqual(MOVEMENT_CONFIG.maxVelocityGround + 0.01); // settles at cap, not above
+  });
+
   test('config stays in lockstep with the client values', () => {
     expect(MOVEMENT_CONFIG.jumpSpeed).toBe(7.0);
     expect(MOVEMENT_CONFIG.maxVelocityGround).toBe(7.0);
