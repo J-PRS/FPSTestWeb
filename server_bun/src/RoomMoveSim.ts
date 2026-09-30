@@ -86,7 +86,7 @@ interface Shadow {
    *  must compare against the journal entry at N replayed to now — the
    *  live sim applied inputs the report predates (e.g. a jump), which
    *  reads as a divergence otherwise. Insertion-ordered; bounded. */
-  seqStates: Map<number, { st: MoveState; tick: number; inp: MoveInput }>;
+  seqStates: Map<number, { st: MoveState; tick: number; inp: MoveInput; e: number }>;
   /** Number of 1/30 sim quanta the shadow has integrated. */
   simTicks: number;
   /** Input seq consumed at the last resync() — reports stamped at or below
@@ -114,9 +114,10 @@ export class RoomMoveSim {
   // client needs tight, frequent acks or its prediction drifts for real.
   // Judge tolerance sits above the systematic offset a different-rate
   // predictor produces (server steps 30Hz; clients step at frame rate —
-  // an honest fleet bot at 20Hz drifts ~8m, a 60Hz human drifts less).
-  // Real cheats diverge by orders of magnitude more.
-  private static readonly DIVERGENCE_M = 10;
+  // live soaks measure honest 20Hz clients drifting up to ~15m steady,
+  // a 60Hz human drifts less). Real cheats diverge by orders of
+  // magnitude more — 60m+ reads teleport.
+  private static readonly DIVERGENCE_M = 14;
   /** Per-step integration noise scales with speed — a skier at 35m/s
    *  legitimately drifts ~60% farther per tick than a walker, and
    *  contact-timing differences (crest lips) widen it more. Scale the
@@ -243,10 +244,12 @@ export class RoomMoveSim {
       sh.seqStates.set(seq, {
         st: { pos: { ...s.pos }, vel: { ...s.vel }, yaw: s.yaw, pitch: s.pitch, onGround: s.onGround },
         tick: sh.simTicks,
-        // Input snapshot at the moment this seq was consumed — replaying
-        // the journal window with CURRENT input reads a mid-window jet
-        // toggle as a false ~20m divergence for an honest client.
+        // Input + energy snapshot at the moment this seq was consumed —
+        // replaying the window with current input (or without the tank)
+        // reads a mid-window jet toggle or drain-out as a false ~20m
+        // divergence for an honest client.
         inp: { ...sh.sim.input },
+        e: sh.energy,
       });
       if (sh.seqStates.size > 32) sh.seqStates.delete(sh.seqStates.keys().next().value!);
     }
@@ -330,11 +333,18 @@ export class RoomMoveSim {
     // (inputs still in flight), the client is legitimately ahead by up
     // to ~vel * pending-steps — compare against a probe stepped forward
     // that many ticks with the last-seen input instead of the stale sim.
-    const cmp = reportInputSeq !== undefined
-      ? this.anchoredCompare(sh, s, reportInputSeq)
-      : s;
-    const dx = pos.x - cmp.pos.x, dy = pos.y - cmp.pos.y, dz = pos.z - cmp.pos.z;
-    const dist = Math.hypot(dx, dy, dz);
+    const dx0 = pos.x - s.pos.x, dy0 = pos.y - s.pos.y, dz0 = pos.z - s.pos.z;
+    let dist = Math.hypot(dx0, dy0, dz0);
+    if (reportInputSeq !== undefined) {
+      // The journal replay is an approximation — it can't reproduce
+      // server-applied impulses (knockback, energy grants) inside the
+      // window. Judging the worst of both comparisons flags honest hits;
+      // the judge takes the better of the two — a cheat still reads far
+      // from every reference.
+      const cmp = this.anchoredCompare(sh, s, reportInputSeq);
+      const d = Math.hypot(pos.x - cmp.pos.x, pos.y - cmp.pos.y, pos.z - cmp.pos.z);
+      if (d < dist) dist = d;
+    }
     const speed = Math.hypot(s.vel.x, s.vel.z);
     const tol = this.divergenceM * (1 + speed / RoomMoveSim.SPEED_TOL_REF);
     if (dist <= tol) return null;
@@ -401,7 +411,7 @@ export class RoomMoveSim {
     // mid-window then replays correctly instead of being applied to the
     // whole span.
     let anchorSeq: number | undefined;
-    const after: { st: MoveState; tick: number; inp: MoveInput }[] = [];
+    const after: { st: MoveState; tick: number; inp: MoveInput; e: number }[] = [];
     for (const [k, e] of sh.seqStates) {
       if (k <= reportSeq && (anchorSeq === undefined || k > anchorSeq)) anchorSeq = k;
       else if (k > reportSeq) after.push(e);
@@ -414,14 +424,31 @@ export class RoomMoveSim {
     let tick = anchor.tick;
     let inp = anchor.inp;
     const segs = [...after, { st: anchor.st, tick: sh.simTicks, inp: sh.sim.input }];
+    // Cap TOTAL replay work, not each segment — a per-segment cap leaves
+    // the probe stale mid-window and reads the truncation as divergence.
+    // The journal is ≤32 entries so the whole window is naturally small.
+    let budget = 128;
+    // The probe must mirror the tank: the live sim gates jetHeld off when
+    // energy drains — replaying raw input keeps the probe jetting where
+    // the real sim ran dry (~18m false divergence at spawn jet windows).
+    let e = anchor.e;
     for (const seg of segs) {
-      const steps = Math.min(seg.tick - tick, 16);
+      const steps = Math.min(seg.tick - tick, budget);
       if (steps > 0) {
         Object.assign(probe.input, inp);
-        for (let i = 0; i < steps; i++) probe.update(MoveSim.STEP);
+        for (let i = 0; i < steps; i++) {
+          const jetting = inp.jetHeld === true && e > 0;
+          probe.input.jetHeld = jetting;
+          if (jetting) e -= ENERGY.jetDrain * sh.jetDrain * MoveSim.STEP;
+          else if (!sh.skillSuppressRegen) e = Math.min(ENERGY.max * sh.energyMax, e + ENERGY.jetCharge * sh.jetRegen * sh.energyRegen * MoveSim.STEP);
+          if (sh.skillDrainPerSec > 0) e -= sh.skillDrainPerSec * MoveSim.STEP;
+          e = Math.max(0, e);
+          probe.update(MoveSim.STEP);
+        }
         tick += steps;
+        budget -= steps;
       }
-      if (tick >= sh.simTicks) break;
+      if (tick >= sh.simTicks || budget <= 0) break;
       inp = seg.inp;
     }
     return probe.state;
