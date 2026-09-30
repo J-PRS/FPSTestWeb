@@ -182,22 +182,7 @@ export function stepCrawler(
 
   // Windup is a timed edge, not a position event — but the pounce LAUNCH is
   // the discontinuity, so it's the event the wire carries.
-  if (c.state === 'windup') {
-    c.windupTimer -= dt;
-    if (c.windupTimer <= 0) {
-      c.state = 'chase';
-      if (target) {
-        const dx = target.x - c.x, dz = target.z - c.z;
-        const pd = Math.sqrt(dx * dx + dz * dz) || 0.001;
-        const t = Math.max(0.15, pd / c.sp.POUNCE_SPEED);
-        c.vx = (dx / pd) * c.sp.POUNCE_SPEED;
-        c.vz = (dz / pd) * c.sp.POUNCE_SPEED;
-        c.vy = (target.y - c.y + 0.5 * Math.abs(c.sp.GRAVITY) * t * t) / t;
-        return 'pounce';
-      }
-    }
-    return null;
-  }
+  if (c.state === 'windup') return windupPounce(c, dt, target);
 
   // A pounce that already landed beside the target = the bite. Both sides
   // take the same early return — only the pendingBite flag is authority
@@ -220,6 +205,29 @@ export function stepCrawler(
     return 'windup';
   }
 
+  return hopLaunch(c, dt, target, distSq);
+}
+
+/** Grounded windup countdown → ballistic pounce at the committed point. */
+function windupPounce(c: SimCrawler, dt: number, target: SimVec | null): CrawlerEvent | null {
+  c.windupTimer -= dt;
+  if (c.windupTimer <= 0) {
+    c.state = 'chase';
+    if (target) {
+      const dx = target.x - c.x, dz = target.z - c.z;
+      const pd = Math.sqrt(dx * dx + dz * dz) || 0.001;
+      const t = Math.max(0.15, pd / c.sp.POUNCE_SPEED);
+      c.vx = (dx / pd) * c.sp.POUNCE_SPEED;
+      c.vz = (dz / pd) * c.sp.POUNCE_SPEED;
+      c.vy = (target.y - c.y + 0.5 * Math.abs(c.sp.GRAVITY) * t * t) / t;
+      return 'pounce';
+    }
+  }
+  return null;
+}
+
+/** Hop clock → chase launch at the snapshot, or a wander hop. */
+function hopLaunch(c: SimCrawler, dt: number, target: SimVec | null, distSq: number): CrawlerEvent | null {
   if (c.stunTimer > 0) return null; // staggered — no hops until it clears
 
   c.hopTimer -= dt;
