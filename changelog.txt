@@ -1,3 +1,4 @@
+2026-09-26 - LG charge economy extracted to combatCharge.ts (ramp, bank, discharge, corpse-pop); CombatHandler keeps only the detonation blast
 2026-09-26 - Pin: botAttack drops the shooter's spawn shield (first-shot legality, mirrors handleShot)
 2026-09-26 - registerClip decomposed: stripHipXZ + dampenSway helpers; last own-code lint warning cleared
 2026-09-26 - Sheep meter extracted to botSheep.ts (meter + coverage window + yeet + sim clock); ServerBots keeps thin delegates

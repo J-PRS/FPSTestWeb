@@ -3,7 +3,7 @@ import type { PlayerManager } from './PlayerManager.ts';
 import type { WeaponStats } from '../../shared/weapons.ts';
 import { getWeaponStats, WeaponType, directHitAoeBonus, ARMORNADE_ARMOR } from '../../shared/weapons.ts';
 import { perkMods } from '../../shared/perks.ts';
-import { aoeDamage, aoeImpulse, KNOCKBACK_SCALE, BLAST_IMPULSE_MAX, validateHitClaim, validateAoeClaim, lgTickDamage, LG_RAMP_WINDOW_S, lgChargeAt, LG_POP_DMG_CAP, LG_POP_CHARGE_MULT, LG_POP_RADIUS_MIN, LG_POP_RADIUS_MAX } from '../../shared/combat.ts';
+import { aoeDamage, aoeImpulse, KNOCKBACK_SCALE, BLAST_IMPULSE_MAX, validateHitClaim, validateAoeClaim, lgTickDamage, LG_POP_DMG_CAP, LG_POP_RADIUS_MIN, LG_POP_RADIUS_MAX } from '../../shared/combat.ts';
 import { POWERUP } from '../../shared/pickups.ts';
 import type { PlayerState } from './types.ts';
 import { logger } from './logger.ts';
@@ -14,6 +14,7 @@ import { segSolidHit, blastOccluded, ColliderIndex } from '../../shared/solidWor
 import { ClaimLedger, clampPing, rewindPos } from './claimLedger.ts';
 import { KillFeed } from './killFeed.ts';
 import { RespawnManager } from './respawn.ts';
+import { ChargeBank } from './combatCharge.ts';
 
 // How long a hit/knocked-back player stays on the unsuppressed full-rate
 // tick path — covers the shooter's predicted-knockback window (~0.6s)
@@ -78,9 +79,9 @@ export class CombatHandler {
   /** Cosmetic relay gate for shotFired — a hitscan pull has no damage
    *  semantics, so excess ones are silently dropped instead of rejected. */
   private lastFireNotify = new Map<string, number>();
-  /** Lightning ramp state per shooter — mirrors the client's stepped
-   *  8→6→4 hold decay so beam claims can't outpace the honest curve. */
-  private lgRamp = new Map<string, { targetId: string | null; t: number; n: number }>();
+  /** The LG bank/ramp economy — own file (combatCharge.ts); this handler
+   *  only supplies the detonation (a real processAOE blast). */
+  private chargeBank: ChargeBank;
   /** First-hit timestamps per shooter|victim pair — kill-side applies it
    *  as the engagement time (TTK), hit-side only refreshes it. */
   private duelStart = new Map<string, number>();
@@ -107,6 +108,7 @@ export class CombatHandler {
     // construction and must still steer the delay.
     this.killFeed = new KillFeed(playerManager, broadcast, () => CombatHandler.tauntDelayMs());
     this.respawner = new RespawnManager(playerManager, broadcast, (pid, pos, yaw, full) => this.deps.moveResync?.(pid, pos, yaw, full));
+    this.chargeBank = new ChargeBank((ownerId, target, amount) => this.blastPop(ownerId, target, amount));
   }
 
   private hb(key: string, n = 1): void {
@@ -148,7 +150,7 @@ export class CombatHandler {
     // warn keys — a leaver's entry otherwise sits in the map for the
     // room's life.
     this.lastFireNotify.delete(playerId);
-    this.lgRamp.delete(playerId);
+    this.chargeBank.delete(playerId);
   }
 
   handleShot(playerId: string, msg: Extract<ClientMessage, { type: 'shot' }>): void {
@@ -235,8 +237,8 @@ export class CombatHandler {
     // LG charge detonation: a non-beam hit sparks min(banked, damage)
     // off the victim's bank — the rest keeps smoldering.
     if (!result.killed && proj.weaponType !== WeaponType.Lightning) {
-      const acc = this.chargeOf(target);
-      if (acc > 0) this.dischargeVictim(playerId, target, Math.min(acc, shotDamage));
+      const acc = this.chargeBank.of(target);
+      if (acc > 0) this.chargeBank.discharge(playerId, target, Math.min(acc, shotDamage));
     }
   }
 
@@ -419,11 +421,11 @@ export class CombatHandler {
     }
     // Same stepped ramp the client applies: consecutive ticks on one
     // target decay, a target switch or miss window resets to full.
-    const n = this.lgStep(playerId, msg.excludeTargetId ?? null);
+    const n = this.chargeBank.step(playerId, msg.excludeTargetId ?? null);
     // The withheld tick damage banks ON the victim — bank before the
     // blast resolves so this tick's share counts if it kills.
     const victim = msg.excludeTargetId ? this.playerManager.getPlayer(msg.excludeTargetId) : null;
-    if (victim && !victim.isDead && !this.friendly(playerId, victim.id)) this.bankCharge(victim, 8 - lgTickDamage(n));
+    if (victim && !victim.isDead && !this.friendly(playerId, victim.id)) this.chargeBank.bank(victim, this.chargeBank.withheldFor(n));
     // The victim sits in excludeTargetId — projectile semantics would skip
     // them in the blast, but the beam has no paired `shot` claim. Apply the
     // tick directly (lag-comp'd, occluded, pin shove) — same ramp botAttack
@@ -439,16 +441,6 @@ export class CombatHandler {
     }
     const scale = lgTickDamage(n) / 8;
     this.processAOE(playerId, msg.position, msg.excludeTargetId, { ...stats, aoeDamage: stats.aoeDamage * scale }, msg.weaponType);
-  }
-
-  /** Advance a shooter's beam ramp — consecutive ticks on one victim
-   *  count up, a switch or lull resets to the first step. */
-  private lgStep(playerId: string, targetId: string | null): number {
-    const now = Date.now() / 1000;
-    const st = this.lgRamp.get(playerId);
-    const n = st && st.targetId === targetId && now - st.t <= LG_RAMP_WINDOW_S ? st.n + 1 : 1;
-    this.lgRamp.set(playerId, { targetId, t: now, n });
-    return n;
   }
 
   /** Cluster carrier: the carrier's blast is only the delivery pop — the
@@ -601,21 +593,9 @@ export class CombatHandler {
     });
   }
 
-  /** Bank withheld beam damage onto the victim — the walking bomb.
-   *  The bank drains lazily at 5× fill rate once the beam leaves them,
-   *  matching the client's shroud shrink exactly. */
-  private bankCharge(target: PlayerState, withheld: number): void {
-    const now = Date.now() / 1000;
-    target.charge = lgChargeAt(target.charge, target.chargeT, now) + withheld * LG_POP_CHARGE_MULT;
-    target.chargeT = now;
-  }
-
-  private chargeOf(target: PlayerState): number {
-    return lgChargeAt(target.charge, target.chargeT, Date.now() / 1000);
-  }
-
   /** The charge pop itself — a Lightning-stat blast scaled by the amount
-   *  detonated, credited to the detonating shooter. */
+   *  detonated, credited to the detonating shooter. ChargeBank decides
+   *  when this fires; the blast is ours. */
   private blastPop(ownerId: string, target: PlayerState, amount: number): void {
     const lgStats = getWeaponStats(WeaponType.Lightning);
     this.processAOE(ownerId, { ...target.position }, null, {
@@ -624,24 +604,6 @@ export class CombatHandler {
       aoeRadius: Math.min(LG_POP_RADIUS_MIN + amount * 0.12, LG_POP_RADIUS_MAX),
       knockbackForce: 30,
     }, WeaponType.Lightning, true);
-  }
-
-  /** Detonate `pop` worth of a victim's banked charge as a real blast —
-   *  the remainder keeps smoldering. Owner credit goes to the detonating
-   *  shooter. */
-  private dischargeVictim(ownerId: string, target: PlayerState, pop: number): void {
-    const now = Date.now() / 1000;
-    target.charge = lgChargeAt(target.charge, target.chargeT, now) - pop;
-    target.chargeT = now;
-    this.blastPop(ownerId, target, pop);
-  }
-
-  /** Death-burst: a killed victim pops for everything still banked. */
-  private popCorpse(shooterId: string, target: PlayerState): void {
-    const acc = this.chargeOf(target);
-    if (acc <= 0) return;
-    target.charge = 0; // zero before the blast — a chain kill can't double-pop the same bank
-    this.blastPop(shooterId, target, acc);
   }
 
   /** True when a wall stands between blast point and target chest.
@@ -768,8 +730,8 @@ export class CombatHandler {
     // Same charge rule as client claims: a non-beam direct hit detonates
     // min(banked, damage). 'environment' can't own a blast — skip it.
     if (!result.killed && opts.weapon !== WeaponType.Lightning && ownerId !== 'environment') {
-      const acc = this.chargeOf(target);
-      if (acc > 0) this.dischargeVictim(ownerId, target, Math.min(acc, dmg));
+      const acc = this.chargeBank.of(target);
+      if (acc > 0) this.chargeBank.discharge(ownerId, target, Math.min(acc, dmg));
     }
   }
 
@@ -803,10 +765,10 @@ export class CombatHandler {
     // Bot beams ramp down like human ones — the beam-rider loadout pays
     // the same hold-decay a client's beam does.
     if (weaponType === WeaponType.Lightning) {
-      const n = this.lgStep(shooterId, targetId);
+      const n = this.chargeBank.step(shooterId, targetId);
       damage = lgTickDamage(n) * perkMods(shooter.perk).directDamage;
       const victim = this.playerManager.getPlayer(targetId);
-      if (victim && !victim.isDead && !this.friendly(shooterId, targetId)) this.bankCharge(victim, 8 - lgTickDamage(n));
+      if (victim && !victim.isDead && !this.friendly(shooterId, targetId)) this.chargeBank.bank(victim, this.chargeBank.withheldFor(n));
     }
     this.serverHit(shooterId, targetId, damage, 'Bot hit', { weapon: weaponType });
   }
@@ -830,7 +792,7 @@ export class CombatHandler {
       return;
     }
     const corpse = this.playerManager.getPlayer(targetId);
-    if (corpse) this.popCorpse(shooterId, corpse); // banked LG charge goes off on the body
+    if (corpse) this.chargeBank.corpse(shooterId, corpse); // banked LG charge goes off on the body
     this.creditKill(shooterId, targetId, damage, opts.label, opts.extra, opts.weapon);
   }
 
