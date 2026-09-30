@@ -8,12 +8,14 @@ const STUCK_DIST = 2;
 const STUCK_MS = 5000;
 const STUCK_MS_FLAG = 2500;
 
-// Sheep audit: mobile bots should spend a decent slice of travel ticks
-// skiing/airborne, and move faster than a walk.
+// Sheep audit: mobile bots should spend most travel ticks skiing/
+// airborne, jet a slice of the time, and actually cover ground.
 const SHEEP_WIN_MS = 10000;
 const SHEEP_MIN_TICKS = 60;
-const SHEEP_SKIAIR = 0.5;
-const SHEEP_SPEED = 4;
+const SHEEP_SKIAIR = 0.65;
+const SHEEP_JETPCT = 0.05;
+const SHEEP_SPEED = 6;
+const SHEEP_COVER_M = 40;
 
 interface StuckState { x: number; z: number; since: number; warned: boolean }
 interface SheepState { winStart: number; ticks: number; skiAir: number; air: number; jet: number; dist: number; lx: number; lz: number }
@@ -74,9 +76,9 @@ export class BotWatchdog {
 
   /** Rolling mobility audit. 'trying' = the brain has a destination this
    *  tick — defenders parked on a stand don't accrue. Warns once per 10s
-   *  window when a mobile bot stays flat-footed: under half of its
-   *  travel ticks skiing/airborne, or averaging walking pace. Healthy
-   *  mobility is logged too, so a regression is visible not just failures. */
+   *  window when a mobile bot stays pedestrian: under the ski/air,
+   *  jet-use, pace, or coverage floors. Healthy mobility is logged too,
+   *  so a regression is visible not just failures. */
   checkSheep(id: string, pos: Vec3, m: MobilitySample, now: number): void {
     let s = this.sheep.get(id);
     if (!s) {
@@ -107,7 +109,8 @@ export class BotWatchdog {
         covered: +s.dist.toFixed(1),
       };
       logger.info('Bot mobility', stats);
-      if (frac < SHEEP_SKIAIR || avgSpeed < SHEEP_SPEED) {
+      const jetPct = s.jet / s.ticks;
+      if (frac < SHEEP_SKIAIR || avgSpeed < SHEEP_SPEED || jetPct < SHEEP_JETPCT || s.dist < SHEEP_COVER_M) {
         logger.warn('Bot sheeping', stats);
       }
     }

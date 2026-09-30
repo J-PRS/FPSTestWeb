@@ -67,6 +67,10 @@ export class ServerBots {
    *  escape-jet burst, so the penalty for pedestrian play is literally
    *  becoming a Tribes player for a few seconds. */
   private sheepMeter = new Map<string, number>();
+  /** Rolling distance window per bot — speed alone can squeak by while
+   *  the bot goes nowhere (orbiting, climbing stairs); coverage is the
+   *  honest measure of actually playing Tribes. */
+  private sheepWin = new Map<string, { start: number; dist: number; lx: number; lz: number }>();
   /** Yeet hang-time — while set the bot's jet stays pinned so the launch
    *  carries through instead of being a single frame of thrust. */
   private yeetUntil = new Map<string, number>();
@@ -150,6 +154,7 @@ export class ServerBots {
     this.roles.delete(playerId);
     this.classes.delete(playerId);
     this.sheepMeter.delete(playerId);
+    this.sheepWin.delete(playerId);
     this.yeetUntil.delete(playerId);
     this.arsenal.untrack(playerId);
     this.gearLobT.delete(playerId);
@@ -573,11 +578,12 @@ export class ServerBots {
   private checkSheepMeter(id: string, p: { position: Vec3; velocity: Vec3 }, m: { out: BrainOut; airborne: boolean; hasDest: boolean; dt: number }, now: number): void {
     const speedXZ = Math.hypot(p.velocity.x, p.velocity.z);
     const jetting = !!m.out.move?.jet || (this.yeetUntil.get(id) ?? 0) > now;
-    const tribesing = speedXZ > 8 || m.airborne || jetting;
+    const tribesing = speedXZ > 10 || m.airborne || jetting;
     const prev = this.sheepMeter.get(id) ?? 0;
     let meter = prev + m.dt * (tribesing
-      ? -(8 + speedXZ * 0.5 + (jetting ? 12 : 0))
-      : m.hasDest ? 6 : 14);
+      ? -(10 + speedXZ * 0.5 + (jetting ? 15 : 0))
+      : m.hasDest ? 9 : 18);
+    meter += this.coverageDebit(id, p, m.hasDest, now);
     if (meter >= 100) {
       const yaw = Math.random() * Math.PI * 2;
       this.room.moveSim.applyImpulse(id, { x: Math.cos(yaw) * 12, y: 18, z: Math.sin(yaw) * 12 });
@@ -590,6 +596,20 @@ export class ServerBots {
       logger.info('Sheep meter high', { room: this.room.name, bot: id, meter: Math.round(meter) });
     }
     this.sheepMeter.set(id, meter);
+  }
+
+  /** Coverage window: under ~30m of real displacement per 5s while the
+   *  brain claims a destination reads as sheeping even when the per-tick
+   *  speed check squeaks by. Returns the meter debit for the window. */
+  private coverageDebit(id: string, p: { position: Vec3 }, hasDest: boolean, now: number): number {
+    let w = this.sheepWin.get(id);
+    if (!w) { w = { start: now, dist: 0, lx: p.position.x, lz: p.position.z }; this.sheepWin.set(id, w); }
+    w.dist += Math.hypot(p.position.x - w.lx, p.position.z - w.lz);
+    w.lx = p.position.x; w.lz = p.position.z;
+    if (now - w.start < 5000) return 0;
+    const owed = hasDest && w.dist < 30 ? 20 : 0;
+    w.start = now; w.dist = 0;
+    return owed;
   }
 
   tick(dt: number): void {
