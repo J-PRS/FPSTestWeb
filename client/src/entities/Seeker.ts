@@ -9,65 +9,17 @@ import {
 } from '../core/config.js';
 import { Terrain } from '../world/terrain.js';
 import type { Targetable } from './balls.js';
-import { allocSlots, freeSlots, getSwarm, getShadows } from './swarms.js';
-import type { SwarmPart, SwarmSlotOwner } from './swarm.js';
-import { getGlowTexture } from '../effects/glowTexture.js';
+import { allocSlots, freeSlots } from './swarms.js';
+import type { SwarmSlotOwner } from './swarm.js';
+import { writeSeekerInstances } from './seekerVisual.js';
+export { seekerParts } from './seekerVisual.js';
 
 const _dir = new THREE.Vector3();
 const _scratch = new THREE.Vector3();
-const _root = new THREE.Matrix4();
-const _local = new THREE.Matrix4();
-const _world = new THREE.Matrix4();
-const _p = new THREE.Vector3();
-const _q = new THREE.Quaternion();
-const _e = new THREE.Euler();
-const _s = new THREE.Vector3();
 
 type SeekerState = 'patrol' | 'chase' | 'telegraph' | 'dart' | 'recover';
 interface SeekerCtx { dt: number; distSq: number; playerPos: THREE.Vector3; playerVel?: THREE.Vector3 }
 
-const PART_BODY = 0;
-const PART_WING = 1;    // 2 per seeker
-const PART_STINGER = 2;
-const PART_JAW = 3;     // 2 per seeker
-const PART_EYE = 4;     // single cyclops eye quad
-const WINGS_PER = 2;
-const JAWS_PER = 2;
-
-// Shared geometries — skull is an elongated icosahedron, wings are thin
-// membrane planes, stinger a small rear cone.
-let _bodyGeo: THREE.IcosahedronGeometry | null = null;
-function bodyGeo(): THREE.BufferGeometry {
-  if (!_bodyGeo) {
-    _bodyGeo = new THREE.IcosahedronGeometry(1, 1);
-    _bodyGeo.scale(0.62, 0.55, 1.0);
-  }
-  return _bodyGeo;
-}
-const _wingGeo = new THREE.BoxGeometry(1.5, 0.04, 0.55);
-const _stingerGeo = new THREE.ConeGeometry(0.12, 0.7, 5);
-const _jawGeo = new THREE.ConeGeometry(0.1, 0.5, 4);
-const _eyeGeo = new THREE.PlaneGeometry(1, 1);
-
-let _bodyMat: THREE.MeshLambertMaterial | null = null;
-let _wingMat: THREE.MeshLambertMaterial | null = null;
-let _eyeMat: THREE.MeshBasicMaterial | null = null;
-
-export function seekerParts(): SwarmPart[] {
-  if (!_bodyMat) _bodyMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
-  if (!_wingMat) _wingMat = new THREE.MeshLambertMaterial({ color: 0x776655, transparent: true, opacity: 0.45, side: THREE.DoubleSide });
-  if (!_eyeMat) _eyeMat = new THREE.MeshBasicMaterial({
-    map: getGlowTexture(), color: 0xffcc44, transparent: true, blending: THREE.AdditiveBlending,
-    depthWrite: false, side: THREE.DoubleSide,
-  });
-  return [
-    { geometry: bodyGeo(), material: _bodyMat, castShadow: true },
-    { geometry: _wingGeo, material: _wingMat, per: WINGS_PER },
-    { geometry: _stingerGeo, material: _bodyMat },
-    { geometry: _jawGeo, material: _bodyMat, per: JAWS_PER },
-    { geometry: _eyeGeo, material: _eyeMat },
-  ];
-}
 
 /**
  * Airborne sting enemy — the anti-"fly in a straight line" teacher.
@@ -91,17 +43,19 @@ export class Seeker implements Targetable, SwarmSlotOwner {
 
   swarmSlot = -1;
   shadowSlot = -1;
-  private hasSlots = false;
+  // Public flat fields — seekerVisual.ts's writeSeekerInstances reads them
+  // through the SeekerVisHost interface.
+  hasSlots = false;
 
-  private animT = Math.random() * 10;
-  private yaw = 0;
-  private pitch = 0;
-  private roll = 0;
-  private eyeScale = 0.55;
-  private glow = 0;
-  private flash = 0;
+  animT = Math.random() * 10;
+  yaw = 0;
+  pitch = 0;
+  roll = 0;
+  eyeScale = 0.55;
+  glow = 0;
+  flash = 0;
 
-  private state: SeekerState = 'patrol';
+  state: SeekerState = 'patrol';
   private telegraphTimer = 0;
   private dartTimer = 0;
   private recoverTimer = 0;
@@ -248,64 +202,7 @@ export class Seeker implements Targetable, SwarmSlotOwner {
   }
 
   private writeInstances(): void {
-    if (!this.hasSlots) return;
-    const swarm = getSwarm('seeker');
-    if (!swarm) return;
-    const slot = this.swarmSlot;
-    const r = this.radius;
-
-    _e.set(this.pitch, this.yaw, this.roll, 'YXZ');
-    _q.setFromEuler(_e);
-    _s.setScalar(r);
-    _p.copy(this.pos);
-    _root.compose(_p, _q, _s);
-
-    const fr = this.flash > 0 ? 4 : 1;
-    const g = this.glow;
-    const cr = this.color.r * fr + g * 0.9;
-    const cg = this.color.g * fr + g * 0.45;
-    const cb = this.color.b * fr;
-    swarm.setMatrix(PART_BODY, slot, _root);
-    swarm.setColor(PART_BODY, slot, cr, cg, cb);
-    swarm.setColor(PART_STINGER, slot, cr, cg, cb);
-    swarm.setColor(PART_EYE, slot, 1, 1, 1);
-
-    // Stinger trails back-down
-    _e.set(-1.9, 0, 0);
-    _q.setFromEuler(_e);
-    _local.compose(_p.set(0, -0.15, -1.05), _q, _s.set(1, 1, 1));
-    _world.multiplyMatrices(_root, _local);
-    swarm.setMatrix(PART_STINGER, slot, _world);
-
-    // Jaw fangs point down
-    for (let i = 0; i < JAWS_PER; i++) {
-      const side = i === 0 ? -1 : 1;
-      _e.set(Math.PI, 0, 0);
-      _q.setFromEuler(_e);
-      _local.compose(_p.set(side * 0.22, -0.35, 0.55), _q, _s.set(1, 1, 1));
-      _world.multiplyMatrices(_root, _local);
-      swarm.setMatrix(PART_JAW, slot * JAWS_PER + i, _world);
-      swarm.setColor(PART_JAW, slot * JAWS_PER + i, cr, cg, cb);
-    }
-
-    // Wings flap — fast buzz, tuck during telegraph rear-back
-    const flapRate = this.state === 'telegraph' ? 4 : 22;
-    const wingA = Math.sin(this.animT * flapRate) * (this.state === 'dart' ? 0.9 : 0.6);
-    for (let i = 0; i < WINGS_PER; i++) {
-      const side = i === 0 ? -1 : 1;
-      _e.set(0, 0, side * (0.15 + wingA));
-      _q.setFromEuler(_e);
-      _local.compose(_p.set(side * 0.85, 0.35, -0.1), _q, _s.set(1, 1, 1));
-      _world.multiplyMatrices(_root, _local);
-      swarm.setMatrix(PART_WING, slot * WINGS_PER + i, _world);
-    }
-
-    // Cyclops eye — additive quad riding the face
-    _local.compose(_p.set(0, 0.15, 0.75), _q.identity(), _s.setScalar(this.eyeScale * 0.9));
-    _world.multiplyMatrices(_root, _local);
-    swarm.setMatrix(PART_EYE, slot, _world);
-
-    getShadows()?.set(this, this.pos, r * 1.2, 0.3);
+    writeSeekerInstances(this);
   }
 
   private beginRecover(): void {
