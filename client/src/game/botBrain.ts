@@ -12,6 +12,7 @@ import { BotBrain, BOT_EYE } from '../../../shared/botBrain.js';
 import { CLASS_STATS } from '../../../shared/botClasses.js';
 import { BOT_LOADOUTS, pickBotWeapon } from '../../../shared/botLoadouts.js';
 import { getWeaponStats } from '../../../shared/weapons.js';
+import { STATUS } from '../../../shared/status.js';
 import type { BotLoadout } from '../../../shared/botLoadouts.js';
 
 /**
@@ -94,6 +95,9 @@ export class GameBot extends RemotePlayer {
   private appliedSpecList: readonly StructureSpec[] | undefined;
   /** Jet energy tank — a bot can only hold burn while fuel remains. */
   energy: number = ENERGY.max;
+  /** Toggle-skill bits the bot holds (MEND/SHIELD/CLOAK) — the same
+   *  STATUS mask a legal client's inputMove carries. */
+  status = 0;
   /** Shared brain's current hunt target — belt throws arc at its spot. */
   get huntTargetId(): string | null { return this.brain.currentHuntId; }
   /** MoveSim grounded flag — propel only launches from a stand. */
@@ -120,6 +124,14 @@ export class GameBot extends RemotePlayer {
    *  plays online. Returns true when the hit killed. */
   takeDamageLocal(dmg: number, fromPos: THREE.Vector3): boolean {
     if (this.isDead) return false;
+    // Held shield burns tank instead of flesh — same exchange rate the
+    // server shadow models (10 hp per energy point).
+    if ((this.status & STATUS.SHIELD) && this.energy > 0) {
+      const absorbed = Math.min(dmg, this.energy * ENERGY.shieldDmgPerEnergy);
+      this.energy -= absorbed / ENERGY.shieldDmgPerEnergy;
+      dmg -= absorbed;
+      if (this.energy <= 0.5) this.dropSkill(STATUS.SHIELD);
+    }
     this.botHp -= dmg;
     this.brain.takeHit(fromPos); // recoil decision lives in the shared brain
     this.flinch(); // RemotePlayer 'hit' oneshot — the model reacts, not just the brain
@@ -153,6 +165,10 @@ export class GameBot extends RemotePlayer {
       solidIndex: Projectile.solidIndex,
       others: ctx.others,
       now: performance.now(),
+      // The real tank + hp — fear, mend, shield, and retreat gates all
+      // read these; without them every status decision saw a full sheet.
+      energy: this.energy,
+      healthFrac: this.botHp / this.botMaxHp,
       // Aim lead uses the muzzle speed of the weapon this bot would
       // pick at that range — mirrors the server's senses hook.
       weaponSpeed: (d) => {
@@ -166,9 +182,51 @@ export class GameBot extends RemotePlayer {
     if (this.yeetT > 0) this.yeetT -= dt;
     if (this.propelJetT > 0) this.propelJetT -= dt;
     this.locomote(dt, ctx, dest, out.move);
+    if (out.status !== undefined) this.applyStatus(out.status, dt);
     if (!out.fire) return null;
     this.fire();
     return { targetId: out.fire.targetId, aim: _aim.set(out.fire.aim.x, out.fire.aim.y, out.fire.aim.z) };
+  }
+
+  /** Toggle-skill intent from the brain — ante on the rising edge,
+   *  per-second drains while held, auto-drop on an empty tank. Mirrors
+   *  what the server shadow applies to out.status. */
+  private applyStatus(claim: number, dt: number): void {
+    const want = claim & (STATUS.MEND | STATUS.SHIELD | STATUS.CLOAK);
+    // Rising-edge activation cost per bit.
+    const rising = want & ~this.status;
+    const antes: [number, number][] = [
+      [STATUS.MEND, ENERGY.mendCost], [STATUS.SHIELD, ENERGY.shieldCost], [STATUS.CLOAK, ENERGY.cloakCost],
+    ];
+    for (const [bit, cost] of antes) {
+      if (!(rising & bit)) continue;
+      if (this.energy >= cost) this.energy -= cost;
+      else claim &= ~bit;
+    }
+    this.status = claim & (STATUS.MEND | STATUS.SHIELD | STATUS.CLOAK);
+    // Held drains — the brain re-declares every think, so a bit it
+    // can't afford to keep simply drops here.
+    const drain = (bit: number, perSec: number) => {
+      if (!(this.status & bit)) return;
+      this.energy -= perSec * dt;
+      if (this.energy <= 0) { this.energy = 0; this.dropSkill(bit); }
+    };
+    drain(STATUS.MEND, ENERGY.mendDrain);
+    drain(STATUS.SHIELD, ENERGY.shieldDrain);
+    drain(STATUS.CLOAK, ENERGY.cloakDrain);
+    // Mend channel heals — 12 hp/s while the flag rides (same rate the
+    // server applies to a mending player).
+    if (this.status & STATUS.MEND) this.botHp = Math.min(this.botMaxHp, this.botHp + 12 * dt);
+    this.setMending(!!(this.status & STATUS.MEND));
+    this.setShielded(!!(this.status & STATUS.SHIELD));
+    this.setCloakHidden(!!(this.status & STATUS.CLOAK));
+  }
+
+  private dropSkill(bit: number): void {
+    this.status &= ~bit;
+    if (bit === STATUS.MEND) this.setMending(false);
+    else if (bit === STATUS.SHIELD) this.setShielded(false);
+    else if (bit === STATUS.CLOAK) this.setCloakHidden(false);
   }
 
   /** Locomotion: point yaw at the destination, feed the brain's buttons

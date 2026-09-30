@@ -456,7 +456,9 @@ export class TeamBots {
       if (id === bot.playerId) continue;
       const team = this.teamOf.get(id);
       if (team === bot.team) continue;
-      _enemies.push({ id, pos: rp.pos, vel: rp.vel, alive: !rp.isDead });
+      // A held cloak removes the bot from enemy senses — same rule the
+      // local player's cloak enjoys in this list.
+      _enemies.push({ id, pos: rp.pos, vel: rp.vel, alive: !rp.isDead && !rp.isCloakHidden });
     }
     const c = this.hooks.nearestCreature(bot.position, 35);
     if (c) _enemies.push({ id: `creature:${c.id}`, pos: c.pos, vel: c.vel, alive: !c.dead });
