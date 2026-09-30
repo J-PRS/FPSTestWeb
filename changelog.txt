@@ -1,3 +1,4 @@
+2026-09-30 - Player split: skills/input ctx wire-up closures -> playerCtor.ts (646->592).
 2026-09-30 - CombatHandler split: hit funnel tail (hit telemetry/duels, kill broadcast+credit, corpse charge) -> hitLedger.ts (539->443).
 2026-09-30 - RemotePlayer split: visibility gate (stale/cloak hides, show/hide, fire-shimmer ghost) -> remoteVis.ts (381->318).
 2026-09-30 - DemoManager split: DemoPlayer/DemoUI callback graft -> demoWire.ts (418->348).

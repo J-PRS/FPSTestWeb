@@ -3,7 +3,8 @@ import * as THREE from 'three';
 import { MAX_ENERGY, MAX_HEALTH, JET_DRAIN, JET_CHARGE, DISC_RATE, MELEE_COOLDOWN, MELEE_LUNGE } from '../core/config.js';
 
 import { Terrain } from '../world/terrain.js';
-import { PlayerSkills } from './player/skills.js';
+import { PlayerSkills } from './player/skills.js'
+import { buildSkillsCtx, buildInputCtx } from './playerCtor.js';;
 import { perkMods, PERK_ORDER, type PerkId } from '../../../shared/perks.js';
 import { CLASS_STATS, CLASS_MODEL_SCALE, type ArmorClass } from '../../../shared/botClasses.js';
 import { PlayerStatus } from './playerStatus.js';
@@ -109,7 +110,7 @@ export class Player {
   // Toggle-status family (cloak/shield/mend flags, wire status byte,
   // shield bubble, spectator ghost-flight) lives in playerStatus.ts —
   // these getters/hooks keep the public names the rest of the app reads.
-  private status = new PlayerStatus(this);
+  status = new PlayerStatus(this);
   get isSpectating(): boolean { return this.status.spectating; }
   get isCloaked(): boolean { return this.status.cloaked; }
   get isShielded(): boolean { return this.status.shielded; }
@@ -142,7 +143,7 @@ export class Player {
   // Power punch (E): CoD-style lunge toward the crosshair, hit itself is
   // resolved in combat.melee() as a cone + small AOE claim.
   private meleeCooldown = 0.0;
-  private tryMelee(): void {
+  tryMelee(): void {
     if (this.meleeCooldown > 0) return;
     this.meleeCooldown = MELEE_COOLDOWN;
     const dir = this.getAimDir();
@@ -157,13 +158,13 @@ export class Player {
   }
 
   private terrain: Terrain;
-  private camera: THREE.PerspectiveCamera;
+  camera: THREE.PerspectiveCamera;
   public movement: MovementController; // Public for client-side prediction reconciliation
   model: PlayerModel | null = null; // public — PlayerEmit/PlayerStatus read it
   jumpAnimTimer = 0.0; // public — PlayerEmit re-arms it on lift-off
   private shootAnimTimer = 0.0;
   wasOnGround = false; // public — PlayerEmit owns the transition edge
-  private visuals: PlayerVisuals; // camera/shadow/gizmo/observer — see PlayerVisuals.ts
+  visuals: PlayerVisuals; // camera/shadow/gizmo/observer — see PlayerVisuals.ts
 
   // Input state lives in PlayerInput — raw DOM events → flags, game
   // semantics reach back through the handler interface it was given.
@@ -226,7 +227,7 @@ export class Player {
   // wids are slot-space indices into SLOT_DEFS.
   // Class-tier/perk banking, slot/belt/sidearm/pack picks and the hold-out
   // secondary swap — the armory lives in playerLoadout.ts.
-  private armory = new PlayerLoadout(this);
+  armory = new PlayerLoadout(this);
 
   // Events
   /** Trigger handler — receives the weapon's def so combat dispatches by
@@ -290,65 +291,10 @@ export class Player {
     this.model = new PlayerModel(scene, 'mannequin');
     this.visuals = new PlayerVisuals(scene);
 
-    // Q-slot skills — reads pos/vel by ref and reaches the assignable on*
-    // hooks through emit closures (they're wired after construction).
-    this.skills = new PlayerSkills({
-      pos: this.pos,
-      vel: this.vel,
-      scene,
-      terrain,
-      isOnGround: () => this.onGround,
-      aimDir: () => this.getAimDir(),
-      syncMovement: () => this.syncMovement(),
-      markTeleport: () => this.markTeleport(),
-      blinkFrame: () => {
-        this.movement.setState({ pos: this.pos, vel: this.vel, yaw: this.yaw, pitch: this.pitch, onGround: false });
-        this.visuals.updateCamera(this.camera, this.terrain, this.pos, this.yaw, this.pitch);
-        this.visuals.updateShadowBlob(this.terrain, this.pos);
-      },
-      emitBlink: (a, b) => this.onBlink?.(a, b),
-      emitDash: (a, b) => this.onDash?.(a, b),
-      emitWarpThrow: (a, b) => this.onWarpThrow?.(a, b),
-      emitWarpTick: (a) => this.onWarpTick?.(a),
-      emitWarp: (a, b) => this.onWarp?.(a, b),
-      emitSlam: (a, b) => this.onSlam?.(a, b),
-      emitBounce: (a, b) => this.onBounce?.(a, b),
-      emitCloak: (on) => this.status.setCloaked(on),
-      emitShield: (on) => this.status.setShielded(on),
-      emitMend: (on) => this.status.setMending(on),
-      healSelf: (hp) => { this.health = Math.min(this.maxHealth, this.health + hp); },
-      netHeals: () => this.serverOwnsHealth?.() ?? false,
-      shieldAbsorb: (dmg) => { this.energy = Math.max(0, this.energy - dmg); if (this.energy <= 0) this.status.setShielded(false); },
-      energy: () => this.energy,
-      spendEnergy: (n) => { if (this.energy < n) return false; this.energy -= n; return true; },
-      drainEnergy: (n) => { this.energy = Math.max(0, this.energy - n); },
-    });
-
-    this.input = new PlayerInput({
-      isSpectating: () => this.status.spectating,
-      toggleSpectator: () => this.toggleSpectator(),
-      melee: () => this.tryMelee(),
-      toggleCamera: () => {
-        this.thirdPerson = !this.thirdPerson;
-        this.model?.setVisible(this.thirdPerson && !this.isDead && !this.status.cloaked);
-        // Own bubble exists for spectators/remote eyes only — FP is the
-        // gun shell + vignette, so it flips with the camera toggle.
-        this.status.syncBubbleVisibility();
-      },
-      skillPress: () => this.skills.press(this.skill),
-      skillRelease: () => this.skills.release(this.skill),
-      sidearmWid: () => this.sidearmWid,
-      secondaryDown: (wid) => this.armory.secondaryDown(wid),
-      secondaryUp: () => this.armory.secondaryUp(),
-      deploy: () => { this.model?.weaponThrow(); this.onDeploy?.(); },
-      selectSlot: (i) => this.armory.selectSlot(i),
-      cycleWeapon: (step) => this.armory.cycleWeapon(step),
-      look: (dx, dy) => {
-        this.yaw -= dx * 0.002 * this.input.sensitivity;
-        this.pitch += dy * 0.002 * this.input.sensitivity * (this.input.invertY ? 1 : -1);
-        this.pitch = Math.max(-Math.PI / 2 + 0.01, Math.min(Math.PI / 2 - 0.01, this.pitch));
-      },
-    });
+    // Q-slot skills + input routing — the two ctx objects live in
+    // playerCtor.ts (wire-up, not gameplay).
+    this.skills = new PlayerSkills(buildSkillsCtx(this, terrain, scene));
+    this.input = new PlayerInput(buildInputCtx(this));
   }
 
   async loadModel(): Promise<void> {
@@ -565,7 +511,7 @@ export class Player {
     };
   }
 
-  private getAimDir(): THREE.Vector3 {
+  getAimDir(): THREE.Vector3 {
     return new THREE.Vector3(
       Math.cos(this.pitch) * Math.sin(this.yaw),
       Math.sin(this.pitch),
