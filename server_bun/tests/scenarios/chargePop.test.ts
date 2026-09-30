@@ -99,4 +99,17 @@ describe('scenario: LG charge economy vs players', () => {
     expect(b.charge).toBe(0);
     expect(c.health).toBeLessThan(hpC);
   });
+
+  it('bot direct hits detonate too — the rule is not claim-path-only', () => {
+    const room = mkRoom({ bots: 2 }, 'dm');
+    const [a, b] = twoPlayers(room);
+    freeze(room, a.id, { x: 0, y: 31, z: 0 });
+    freeze(room, b.id, { x: 30, y: 31, z: 0 });
+
+    for (let i = 0; i < 12; i++) beamTick(room, a.id, b);
+    const banked = b.charge;
+    room.messages.botAttack(a.id, b.id, WeaponType.Chaingun);
+    expect(b.charge).toBeLessThan(banked);
+    expect(b.charge).toBeGreaterThan(0); // a pellet can't empty the bank
+  });
 });

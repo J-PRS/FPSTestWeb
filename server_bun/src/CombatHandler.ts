@@ -745,6 +745,12 @@ export class CombatHandler {
     const result = this.playerManager.applyDamage(targetId, dmg);
     target.forceSendUntil = Date.now() + FORCE_SEND_MS;
     this.applyHit(ownerId, targetId, dmg, result, { label, weapon: opts.weapon });
+    // Same charge rule as client claims: a non-beam direct hit detonates
+    // min(banked, damage). 'environment' can't own a blast — skip it.
+    if (!result.killed && opts.weapon !== WeaponType.Lightning && ownerId !== 'environment') {
+      const acc = this.chargeOf(target);
+      if (acc > 0) this.dischargeVictim(ownerId, target, Math.min(acc, dmg));
+    }
   }
 
   /** Server-authored creature bite (CreatureSim). */
