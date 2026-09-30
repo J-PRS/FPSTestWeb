@@ -18,8 +18,18 @@
   `server_bun/tools/netBot.ts` wire-level soak bots — full client-verb
   coverage, real claim ledger, objective farming (+ `bun run soak`,
   `rtc:relay`, `rtc:punch` scripts);
-  `_tools/pvptest/soakreport.ts` headless fleet+server audit.
+  `_tools/e2e/` real-browser E2E (headless, locked-PC safe): smoke /
+  duo / duo_p2p / lobby / reconnect / perf — `bun _tools/e2e/all.ts`,
+  CI runs it on every push; `_tools/pvptest/soakreport.ts` headless
+  fleet+server audit.
 - **Recent Changes:**
+  - `_tools/e2e/` suite + `.github/workflows/ci.yml` — real Chrome vs
+    real server: connect/gameState/tick frames/corrections/chat on ws,
+    p2p host+guest over a DataChannel, open-lobby quick-join, grace
+    reconnect reclaim, frame-time + JS-busy perf baseline diffing
+  - Open p2p lobbies: `?lobby`/`HOST OPEN` lists the room at
+    `GET /rtc/lobbies`; `?p2p=quick`/`QUICK` joins the oldest — the
+    friend-play path needs no code swap
   - VGS menu (V + chords) on the real chat wire: tactical cats team-only,
     VG* global — verified live multiplayer
   - Team chat on Y (`chat{team:true}`), global on T; green `[T]` lines
