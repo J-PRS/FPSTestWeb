@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { WeaponType } from '../../../shared/weapons.js';
 import { buildWeaponMeshes, buildHandAndFlash } from './viewmodel/weaponsGeo.js';
-import { makeShieldMaterial } from '../effects/shieldBubble.js';
+import * as vm from './vmGhost.js';
 import { VmEnvelopes } from './vmEnvelopes.js';
 import { VmBaked } from './vmBaked.js';
 // Timing constants live with the envelopes — re-export so Player/fire.ts
@@ -251,103 +251,20 @@ export class ViewModel {
   // Already-transparent stuff (muzzle flash, glow sprites) just dims.
   ghostMats: // public — VmBaked joins bakes mid-cloak
    { m: THREE.Material; opacity: number; transparent: boolean; depthWrite: boolean }[] = [];
-  private ghostShells: THREE.Mesh[] = [];
-  private static depthShellMat = new THREE.MeshBasicMaterial({ colorWrite: false });
+  ghostShells: THREE.Mesh[] = [];
 
-  ghostifyMesh(mesh: THREE.Mesh): void { // public — VmBaked
-
-    const shell = new THREE.Mesh(mesh.geometry, ViewModel.depthShellMat);
-    shell.renderOrder = mesh.renderOrder;
-    mesh.parent?.add(shell);
-    shell.position.copy(mesh.position);
-    shell.quaternion.copy(mesh.quaternion);
-    shell.scale.copy(mesh.scale);
-    this.ghostShells.push(shell);
-  }
-
-  ghostify(m: THREE.Material): void { // public — VmBaked
-
-    this.ghostMats.push({ m, opacity: m.opacity, transparent: m.transparent, depthWrite: m.depthWrite });
-    m.opacity = Math.min(m.opacity, m.transparent ? 0.25 : 0.3);
-    m.transparent = true;
-    m.depthWrite = false; // shells own the depth now — color pass only blends
-    // `transparent` is a shader define — post-compile flips are inert until
-    // the program rebuilds (three.js #23866).
-    m.needsUpdate = true;
-  }
-
-  setGhost(on: boolean): void {
-    if (!on) {
-      for (const g of this.ghostMats) {
-        g.m.opacity = g.opacity;
-        g.m.transparent = g.transparent;
-        g.m.depthWrite = g.depthWrite;
-        g.m.needsUpdate = true;
-      }
-      this.ghostMats = [];
-      for (const s of this.ghostShells) s.parent?.remove(s);
-      this.ghostShells = [];
-      return;
-    }
-    const seen = new Set<THREE.Material>();
-    const toShell: THREE.Mesh[] = [];
-    this.group.traverse((o) => {
-      const mesh = o as THREE.Mesh;
-      if (!mesh.isMesh) {
-        const spr = o as THREE.Sprite;
-        if (spr.isSprite && spr.material && !seen.has(spr.material)) {
-          seen.add(spr.material);
-          this.ghostify(spr.material);
-        }
-        return;
-      }
-      const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-      let shelled = false;
-      for (const m of mats) {
-        if (!m || seen.has(m)) continue;
-        seen.add(m);
-        if (!m.transparent && !shelled) { toShell.push(mesh); shelled = true; }
-        this.ghostify(m);
-      }
-    });
-    for (const mesh of toShell) this.ghostifyMesh(mesh);
-  }
-
+  ghostifyMesh(mesh: THREE.Mesh): void { vm.ghostifyMesh(this, mesh); } // public — VmBaked
+  ghostify(m: THREE.Material): void { vm.ghostify(this, m); } // public — VmBaked
+  setGhost(on: boolean): void { vm.setGhost(this, on); }
   // Energy shield, first-person read: the same hex+fresnel field that wraps
-  // the third-person bubble crawls over the gun's surface — the player who
-  // raised it sees the charge on their own weapon.
+  // the third-person bubble crawls over the gun's surface.
   shieldShells: THREE.Object3D[] = []; // public — switch envelope re-wraps
   shellColor = 0x66ccff;
-  setShield(on: boolean, color = 0x66ccff): void {
-    if (!on) {
-      for (const s of this.shieldShells) s.parent?.remove(s);
-      this.shieldShells = [];
-      return;
-    }
-    if (this.shieldShells.length) return;
-    this.shellColor = color;
-    const src = this.weapons.get(this.activeWeapon);
-    if (!src) return;
-    const shell = src.clone(true);
-    shell.traverse((o) => {
-      const m = o as THREE.Mesh;
-      if (m.isMesh) m.material = makeShieldMaterial(color);
-    });
-    shell.scale.setScalar(1.06);
-    src.parent?.add(shell);
-    this.shieldShells.push(shell);
-  }
+  setShield(on: boolean, color = 0x66ccff): void { vm.setShield(this, on, color); }
   // Medkit reuses the gun shell — same field, green read.
-  setMend(on: boolean): void { this.setShield(on, 0x3fdd6f); }
+  setMend(on: boolean): void { vm.setShield(this, on, 0x3fdd6f); }
   /** Tick the field animation on the gun shells (called from update). */
-  private updateShieldShells(dt: number): void {
-    for (const s of this.shieldShells) {
-      s.traverse((o) => {
-        const m = (o as THREE.Mesh).material as THREE.ShaderMaterial;
-        if (m?.uniforms?.uTime) m.uniforms.uTime.value += dt;
-      });
-    }
-  }
+  updateShieldShells(dt: number): void { vm.updateShieldShells(this, dt); }
 
   punch(): void {
     this.env.punch();
