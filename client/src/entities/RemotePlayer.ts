@@ -59,6 +59,8 @@ export class RemotePlayer {
   private _regenAura = false;
   private ddAura: ShieldBubble | null = null;
   private _ddAura = false;
+  private chargeAura: ShieldBubble | null = null;
+  private _charged = false;
   protected velocity: THREE.Vector3 = new THREE.Vector3();
   private angularVelocity: THREE.Vector3 = new THREE.Vector3();
   private isOnGround: boolean = true;
@@ -429,6 +431,10 @@ export class RemotePlayer {
       this.ddAura.update(dt);
       if (this._ddAura) this.ddAura.mesh.position.set(this.position.x, y + 1.0, this.position.z);
     }
+    if (this.chargeAura) {
+      this.chargeAura.update(dt);
+      if (this._charged) this.chargeAura.mesh.position.set(this.position.x, y + 1.0, this.position.z);
+    }
   }
 
   // Damage flinch / shot recoil timers — drive the oneshot states in
@@ -476,6 +482,7 @@ export class RemotePlayer {
     if (this.mendAura) this.mendAura.mesh.visible = false;
     if (this.regenAura) this.regenAura.mesh.visible = false;
     if (this.ddAura) this.ddAura.mesh.visible = false;
+    if (this.chargeAura) this.chargeAura.mesh.visible = false;
   }
 
   show(): void {
@@ -489,6 +496,7 @@ export class RemotePlayer {
     if (this.mendAura && this._mending) this.mendAura.mesh.visible = true;
     if (this.regenAura && this._regenAura) this.regenAura.mesh.visible = true;
     if (this.ddAura && this._ddAura) this.ddAura.mesh.visible = true;
+    if (this.chargeAura && this._charged) this.chargeAura.mesh.visible = true;
   }
 
   // Simulate physics when player stops sending updates (dead reckoning)
@@ -596,6 +604,16 @@ export class RemotePlayer {
     this._ddAura = on;
     if (on && !this.ddAura) this.ddAura = makeShieldBubble(this.scene, 1.8, 0xff4422);
     if (this.ddAura) this.ddAura.mesh.visible = on && !this._cloakHidden && !this._staleHidden;
+  }
+
+  // LG charge telegraph — the walking-bomb warning, same electric tint
+  // as the beam so the read is instant. Bit-level flag only: remotes see
+  // "loaded", not the exact bank size.
+  setCharged(on: boolean): void {
+    if (on === this._charged) return;
+    this._charged = on;
+    if (on && !this.chargeAura) this.chargeAura = makeShieldBubble(this.scene, 1.9, 0x9fd8ff);
+    if (this.chargeAura) this.chargeAura.mesh.visible = on && !this._cloakHidden && !this._staleHidden;
   }
 
   // Remote fired a weapon — kick the gun's procedural recoil

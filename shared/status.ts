@@ -22,10 +22,14 @@ export const STATUS = {
   // must not be able to claim a regen/dd they never picked up).
   REGEN: 32,
   DD: 64,
+  // LG pop-charge on the victim — server-owned like REGEN/DD: the beam
+  // banks it, the server advertises the walking-bomb flag on tick records
+  // so remotes render the charge shroud. Clients never claim it.
+  CHARGED: 128,
 } as const;
 
 /** Mask of every bit the status channel owns (bits ≥4). */
 export const STATUS_MASK = 0xFC;
 
 /** Bits the client may legitimately claim in inputMove.status. */
-export const CLIENT_STATUS_MASK = STATUS_MASK & ~(STATUS.REGEN | STATUS.DD);
+export const CLIENT_STATUS_MASK = STATUS_MASK & ~(STATUS.REGEN | STATUS.DD | STATUS.CHARGED);

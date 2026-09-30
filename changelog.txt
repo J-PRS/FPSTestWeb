@@ -1,3 +1,4 @@
+2026-09-26 - LG pop-charge goes server-authoritative for PvP: the server banks withheld beam damage on the victim (PlayerState.charge), any non-LG hit detonates min(banked,dmg) as a real blast, kills pop the corpse, and a CHARGED status bit telegraphs walking bombs on remotes.
 2026-09-26 - CombatHandler: armor-grenade plating sweep extracted to plateAll() (processAOE back under complexity limit)
 2026-09-26 - Lint pass on server+shared: RtcRelay sort->toSorted, mapSpec isVec hoisted out of parseStructures
 2026-09-26 - Scenario coverage: armorPlating.test.ts — player plating, maxArmor cap, self/enemy plating, radius bound, creature overcap health

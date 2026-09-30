@@ -98,6 +98,12 @@ export interface PlayerState {
   armor: number;
   regenUntil: number;
   ddUntil: number;
+  // LG pop-charge banked ON this victim by enemy beams — the walking bomb.
+  // `charge` is the bank at `chargeT` (epoch s); reads decay lazily via
+  // lgChargeAt (5× drain), so no ticking needed. Any non-LG hit detonates
+  // min(bank, hitDamage); death pops the rest.
+  charge: number;
+  chargeT: number;
   /** Last time the owner was echoed their server-healed hp (yourHealth
    *  throttle — healPerTick runs every tick, one echo per 500ms is enough
    *  to keep the client's HUD and state-hash view converged). */

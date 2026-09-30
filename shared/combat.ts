@@ -85,6 +85,22 @@ export function lgTickDamage(n: number): number {
  *  the count. Sized off the 50ms tick so brief tracking errors forgive. */
 export const LG_RAMP_WINDOW_S = 0.3;
 
+/** Pop-charge economy — shared so the server banks/detonates the same
+ *  numbers the client predicts. The victim's withheld tick damage
+ *  (8 − stepped tick) banks at MULT ×, caps at DMG_CAP, and drains at
+ *  DRAIN/s once the beam leaves them. */
+export const LG_POP_DMG_CAP = 320;
+export const LG_POP_CHARGE_MULT = 2;
+export const LG_CHARGE_DRAIN_S = 800;
+export const LG_POP_RADIUS_MAX = 14;
+export const LG_POP_RADIUS_MIN = 3;
+
+/** Decayed banked charge on a victim — both ends run the same lazy drain.
+ *  `chargeT` is in the caller's timebase (server: epoch seconds). */
+export function lgChargeAt(acc: number, chargeT: number, nowS: number): number {
+  return Math.max(0, acc - LG_CHARGE_DRAIN_S * Math.max(0, nowS - chargeT));
+}
+
 /** What the server knows about a live projectile. */
 export interface TrackedProjectile {
   ownerId: string;

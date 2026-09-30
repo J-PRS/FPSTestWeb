@@ -67,6 +67,7 @@ function applyStatusVisuals(deps: RemotesDeps, playerId: string, remotePlayer: R
   remotePlayer.setMending(!!(status & STATUS.MEND));
   remotePlayer.setRegenAura(!!(status & STATUS.REGEN));
   remotePlayer.setDdAura(!!(status & STATUS.DD));
+  remotePlayer.setCharged(!!(status & STATUS.CHARGED));
   if (!(status & STATUS.CLOAK)) return true;
   deps.lazyHud().removePlayerIndicator(playerId);
   deps.lazyHealthBarSystem().removeBar(playerId);

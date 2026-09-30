@@ -2,6 +2,7 @@ import { CONFIG } from './config.ts';
 import type { Room } from './Room.ts';
 import { encodeTickPlayer, encodeTickFrame } from '../../shared/wire.ts';
 import { STATUS, CLIENT_STATUS_MASK } from '../../shared/status.ts';
+import { lgChargeAt } from '../../shared/combat.ts';
 import { perkMods } from '../../shared/perks.ts';
 import { POWERUP } from '../../shared/pickups.ts';
 import { computeStateHash } from '../../shared/stateHash.ts';
@@ -244,7 +245,8 @@ export class TickLoop {
       // inputMove) so they must be OR-ed on here, not read off p.status.
       snap.status = p.status
         | (now < p.regenUntil ? STATUS.REGEN : 0)
-        | (now < p.ddUntil ? STATUS.DD : 0);
+        | (now < p.ddUntil ? STATUS.DD : 0)
+        | (lgChargeAt(p.charge, p.chargeT, now / 1000) > 0 ? STATUS.CHARGED : 0);
       snap.sheep = sheep;
       snap.t = now;
 

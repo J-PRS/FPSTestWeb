@@ -75,6 +75,8 @@ export class PlayerManager {
       armor: 0,
       regenUntil: 0,
       ddUntil: 0,
+      charge: 0,
+      chargeT: 0,
       healthEchoAt: 0,
     };
 
@@ -229,6 +231,7 @@ export class PlayerManager {
       target.armor = 0;
       target.regenUntil = 0;
       target.ddUntil = 0;
+      // NOTE: `charge` survives the kill — applyHit pops the corpse's bank.
       return { killed: true, newHealth: 0, newArmor: 0 };
     }
 
@@ -267,6 +270,7 @@ export class PlayerManager {
     player.armor = 0;
     player.regenUntil = 0;
     player.ddUntil = 0;
+    player.charge = 0;
     player.pendingRespawn = false;
     player.lastSeq = 0;
     player.lastValidPosition = { ...spawn };

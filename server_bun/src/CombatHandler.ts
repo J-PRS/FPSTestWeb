@@ -3,7 +3,7 @@ import type { PlayerManager } from './PlayerManager.ts';
 import type { WeaponStats } from '../../shared/weapons.ts';
 import { getWeaponStats, WeaponType, directHitAoeBonus, ARMORNADE_ARMOR } from '../../shared/weapons.ts';
 import { perkMods } from '../../shared/perks.ts';
-import { aoeDamage, aoeImpulse, KNOCKBACK_SCALE, BLAST_IMPULSE_MAX, validateHitClaim, validateAoeClaim, lgTickDamage, LG_RAMP_WINDOW_S } from '../../shared/combat.ts';
+import { aoeDamage, aoeImpulse, KNOCKBACK_SCALE, BLAST_IMPULSE_MAX, validateHitClaim, validateAoeClaim, lgTickDamage, LG_RAMP_WINDOW_S, lgChargeAt, LG_POP_DMG_CAP, LG_POP_CHARGE_MULT, LG_POP_RADIUS_MIN, LG_POP_RADIUS_MAX } from '../../shared/combat.ts';
 import { POWERUP } from '../../shared/pickups.ts';
 import type { PlayerState } from './types.ts';
 import { logger } from './logger.ts';
@@ -232,6 +232,12 @@ export class CombatHandler {
     target.forceSendUntil = Date.now() + FORCE_SEND_MS;
 
     this.applyHit(playerId, targetId, shotDamage, result, { label: 'Player hit', weapon: proj.weaponType });
+    // LG charge detonation: a non-beam hit sparks min(banked, damage)
+    // off the victim's bank — the rest keeps smoldering.
+    if (!result.killed && proj.weaponType !== WeaponType.Lightning) {
+      const acc = this.chargeOf(target);
+      if (acc > 0) this.dischargeVictim(playerId, target, Math.min(acc, shotDamage));
+    }
   }
 
   /** A claim with no target: a miss. If it carries spawn coordinates it
@@ -418,6 +424,10 @@ export class CombatHandler {
     const n = st && st.targetId === (msg.excludeTargetId ?? null) && now - st.t <= LG_RAMP_WINDOW_S
       ? st.n + 1 : 1;
     this.lgRamp.set(playerId, { targetId: msg.excludeTargetId ?? null, t: now, n });
+    // The withheld tick damage banks ON the victim — bank before the
+    // blast resolves so this tick's share counts if it kills.
+    const victim = msg.excludeTargetId ? this.playerManager.getPlayer(msg.excludeTargetId) : null;
+    if (victim && !victim.isDead && !this.friendly(playerId, victim.id)) this.bankCharge(victim, 8 - lgTickDamage(n));
     const scale = lgTickDamage(n) / 8;
     this.processAOE(playerId, msg.position, msg.excludeTargetId, { ...stats, aoeDamage: stats.aoeDamage * scale }, msg.weaponType);
   }
@@ -448,7 +458,9 @@ export class CombatHandler {
 
   private processAOE(playerId: string, position: Vec3, excludeTargetId: string | null | undefined, stats: WeaponStats, weapon?: number, trusted = false): void {
     const player = this.playerManager.getPlayer(playerId);
-    if (!player || player.isDead) return;
+    // Trusted server blasts still run from dead owners — a corpse's
+    // in-flight ordnance and its charge-pop both outlive the kill.
+    if (!player || (player.isDead && !trusted)) return;
 
     // Cheat prevention: bound the blast to plausible projectile range —
     // legit long shots (mortar arcs, cross-map rockets) fly hundreds of
@@ -567,6 +579,49 @@ export class CombatHandler {
       type: 'knockback', targetId, position: pos, force: impulseMag,
       pull: pull || undefined,
     });
+  }
+
+  /** Bank withheld beam damage onto the victim — the walking bomb.
+   *  The bank drains lazily at 5× fill rate once the beam leaves them,
+   *  matching the client's shroud shrink exactly. */
+  private bankCharge(target: PlayerState, withheld: number): void {
+    const now = Date.now() / 1000;
+    target.charge = lgChargeAt(target.charge, target.chargeT, now) + withheld * LG_POP_CHARGE_MULT;
+    target.chargeT = now;
+  }
+
+  private chargeOf(target: PlayerState): number {
+    return lgChargeAt(target.charge, target.chargeT, Date.now() / 1000);
+  }
+
+  /** The charge pop itself — a Lightning-stat blast scaled by the amount
+   *  detonated, credited to the detonating shooter. */
+  private blastPop(ownerId: string, target: PlayerState, amount: number): void {
+    const lgStats = getWeaponStats(WeaponType.Lightning);
+    this.processAOE(ownerId, { ...target.position }, null, {
+      ...lgStats,
+      aoeDamage: Math.min(amount, LG_POP_DMG_CAP),
+      aoeRadius: Math.min(LG_POP_RADIUS_MIN + amount * 0.12, LG_POP_RADIUS_MAX),
+      knockbackForce: 30,
+    }, WeaponType.Lightning, true);
+  }
+
+  /** Detonate `pop` worth of a victim's banked charge as a real blast —
+   *  the remainder keeps smoldering. Owner credit goes to the detonating
+   *  shooter. */
+  private dischargeVictim(ownerId: string, target: PlayerState, pop: number): void {
+    const now = Date.now() / 1000;
+    target.charge = lgChargeAt(target.charge, target.chargeT, now) - pop;
+    target.chargeT = now;
+    this.blastPop(ownerId, target, pop);
+  }
+
+  /** Death-burst: a killed victim pops for everything still banked. */
+  private popCorpse(shooterId: string, target: PlayerState): void {
+    const acc = this.chargeOf(target);
+    if (acc <= 0) return;
+    target.charge = 0; // zero before the blast — a chain kill can't double-pop the same bank
+    this.blastPop(shooterId, target, acc);
   }
 
   /** True when a wall stands between blast point and target chest.
@@ -726,6 +781,8 @@ export class CombatHandler {
       const n = st && st.targetId === targetId && now - st.t <= LG_RAMP_WINDOW_S ? st.n + 1 : 1;
       this.lgRamp.set(shooterId, { targetId, t: now, n });
       damage = lgTickDamage(n) * perkMods(shooter.perk).directDamage;
+      const victim = this.playerManager.getPlayer(targetId);
+      if (victim && !victim.isDead && !this.friendly(shooterId, targetId)) this.bankCharge(victim, 8 - lgTickDamage(n));
     }
     this.serverHit(shooterId, targetId, damage, 'Bot hit', { weapon: weaponType });
   }
@@ -748,6 +805,8 @@ export class CombatHandler {
       this.broadcast({ type: 'playerHit', shooterId, targetId, damage, health: result.newHealth, armor: result.newArmor });
       return;
     }
+    const corpse = this.playerManager.getPlayer(targetId);
+    if (corpse) this.popCorpse(shooterId, corpse); // banked LG charge goes off on the body
     this.creditKill(shooterId, targetId, damage, opts.label, opts.extra, opts.weapon);
   }
 
