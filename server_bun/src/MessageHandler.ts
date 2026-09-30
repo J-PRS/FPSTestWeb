@@ -6,7 +6,7 @@ import { logger } from './logger.ts';
 import { PROTOCOL_VERSION } from '../../shared/protocol.ts';
 import { CLIENT_STATUS_MASK } from '../../shared/status.ts';
 import { CONFIG } from './config.ts';
-import { pushRewindSample } from './rewind.ts';
+import { MoveClaims } from './moveClaims.ts';
 import type { BallSim } from './BallSim.ts';
 import type { CreatureSim } from './CreatureSim.ts';
 import { structureColliders } from '../../shared/ballSim.ts';
@@ -101,10 +101,13 @@ export interface RoomInfo {
 }
 
 export class MessageHandler {
-  private playerManager: PlayerManager;
+  // Public fields/methods are the MoveClaims host surface (moveClaims.ts)
+  // — the position/teleport plausibility funnel lives there.
+  playerManager: PlayerManager;
   private rateLimiter: RateLimiter;
-  private broadcast: BroadcastFn;
-  private sendToPlayer: SendToPlayerFn;
+  broadcast: BroadcastFn;
+  sendToPlayer: SendToPlayerFn;
+  private moves: MoveClaims;
   // Everything that deals damage — projectiles, blasts, env damage, respawns
   private combat: CombatHandler;
   // Server-owned creatures (balls). Optional — a missing/unloadable
@@ -117,11 +120,11 @@ export class MessageHandler {
 
   private roomInfo: RoomInfo = { room: 'default', mode: '' };
 
-  private hb(key: string, n = 1): void {
+  hb(key: string, n = 1): void {
     const h = this.roomInfo.health;
     if (h) h.set(key, (h.get(key) ?? 0) + n);
   }
-  private hbMax(key: string, v: number): void {
+  hbMax(key: string, v: number): void {
     const h = this.roomInfo.health;
     if (h && v > (h.get(key) ?? 0)) h.set(key, Math.round(v * 10) / 10);
   }
@@ -151,13 +154,14 @@ export class MessageHandler {
       envRange: roomInfo?.envRange,
       creatureArmor: roomInfo?.creatureArmor,
     });
+    this.moves = new MoveClaims(this);
     this.attachStructures(roomInfo?.structures);
 
     // Per-type dispatch — a new message type is one table entry. Field
     // order: handlers need this.combat, so the table is built last.
     this.handlers = {
-      position: (id, m) => this.handlePosition(id, m as Extract<ClientMessage, { type: 'position' }>),
-      teleport: (id, m) => this.handleTeleport(id, m as Extract<ClientMessage, { type: 'teleport' }>),
+      position: (id, m) => this.moves.handlePosition(id, m as Extract<ClientMessage, { type: 'position' }>),
+      teleport: (id, m) => this.moves.handleTeleport(id, m as Extract<ClientMessage, { type: 'teleport' }>),
       shot: (id, m) => this.combat.handleShot(id, m as Extract<ClientMessage, { type: 'shot' }>),
       aoeShot: (id, m) => this.combat.handleAOEShot(id, m as Extract<ClientMessage, { type: 'aoeShot' }>),
       shotFired: (id, m) => this.combat.handleShotFired(id, m as Extract<ClientMessage, { type: 'shotFired' }>),
@@ -323,7 +327,7 @@ export class MessageHandler {
     }
     this.combat.onPlayerDisconnected(playerId);
     this.roomInfo.moveUntrack?.(playerId);
-    this.lastTeleport.delete(playerId);
+    this.moves.dropPlayer(playerId);
   }
 
   /** Drop live projectiles when a player is fully removed (grace timeout /
@@ -336,7 +340,7 @@ export class MessageHandler {
       if (key.startsWith(`${playerId}:`)) this.rateLimitWarnings.delete(key);
     }
     this.combat.onPlayerRemoved(playerId);
-    this.lastTeleport.delete(playerId);
+    this.moves.dropPlayer(playerId);
     // Removal paths that skip onPlayerDisconnected (kick, reap, admin
     // reload, bot retire) must still free the moveSim shadow.
     this.roomInfo.moveUntrack?.(playerId);
@@ -422,7 +426,7 @@ export class MessageHandler {
 
   /** Broadcast the playerJoined announce once — gates on the flag so a
    *  player reports for a while, then a second path can't re-announce. */
-  private announceIfInWorld(player: PlayerState): void {
+  announceIfInWorld(player: PlayerState): void {
     if (player.joinAnnounced) return;
     player.joinAnnounced = true;
     this.announceJoin(player);
@@ -487,188 +491,14 @@ export class MessageHandler {
     handler(playerId, msg);
   }
 
-  private handlePosition(playerId: string, msg: Extract<ClientMessage, { type: 'position' }>): void {
-    const player = this.playerManager.getPlayer(playerId);
-    if (!player || player.isDead) return;
-
-    const now = Date.now();
-    if (!this.plausible(playerId, player, msg, now)) return;
-
-    // inputSeq (not the frame seq) anchors the probe: it's the count of
-    // inputMove events the client had consumed when it took this snapshot.
-    const simTruth = this.roomInfo.moveReport?.(playerId, msg.position, msg.rotation.yaw, msg.velocity, msg.inputSeq);
-
-    if (this.roomInfo.moveAuthority?.()) {
-      // Authority mode: the sim owns position — the report only feeds it
-      // yaw/vel hints and carries ping + liveness. Corrections still flow
-      // on divergence (tighter tolerance/throttle inside the sim).
-      if (simTruth) {
-        this.sendToPlayer(playerId, {
-          type: 'correction',
-          seq: msg.seq ?? 0,
-          inputSeq: simTruth.inputSeq,
-          grounded: simTruth.onGround,
-          position: simTruth.pos,
-          velocity: simTruth.vel,
-          rotation: msg.rotation,
-        });
-        // Reseat the plausibility anchor at the corrected position: the
-        // client's next report legitimately snaps to simTruth.pos, and
-        // without this the snap itself reads as a speedhack reject.
-        player.lastPosCheckPos = { ...simTruth.pos };
-        this.muteJudges(player, playerId, now);
-      }
-      player.rotation = { ...msg.rotation };
-      player.lastSeen = now;
-      if (msg.seq !== undefined && msg.seq > player.lastSeq) player.lastSeq = msg.seq;
-      player.hasReceivedPosition = true;
-      this.announceIfInWorld(player);
-      if (msg.ping !== undefined) player.ping = Math.max(1, msg.ping);
-      pushRewindSample(player, now); // player.position is sim truth
-      return;
-    }
-
-    // Judge mode: divergence is an anti-cheat SIGNAL, never a correction.
-    // The shadow sim replays snapshot inputs at fixed ticks while the
-    // client integrates per-frame — honest play drifts past tolerance
-    // routinely, and snapping the client on sim drift IS the warp
-    // players feel. reconcile() still counts divergences for kicks;
-    // the client's own report stays truth (as updatePosition applies).
-    this.playerManager.updatePosition(playerId, msg.position, msg.rotation, msg.velocity, msg.seq);
-    player.hasReceivedPosition = true;
-    this.announceIfInWorld(player);
-    if (msg.ping !== undefined) player.ping = Math.max(1, msg.ping);
-    pushRewindSample(player, now);
-    // Don't broadcast immediately — batched in tickUpdate
+  // MoveClaims host surface — the room's optional moveSim hooks arrive
+  // as always-defined delegates so the funnel doesn't sprinkle ?.().
+  moveAuthority(): boolean { return this.roomInfo.moveAuthority?.() ?? false; }
+  moveReport(playerId: string, pos: Vec3, yaw: number, vel?: Vec3, inputSeq?: number) {
+    return this.roomInfo.moveReport?.(playerId, pos, yaw, vel, inputSeq) ?? null;
   }
-
-  /** Cheat prevention: position plausibility. Compares CONSECUTIVE reports
-   *  (lastPosCheck* updates even on reject), so a rejected position
-   *  doesn't poison every subsequent check — the old version measured
-   *  each new report against a stale accepted pos, spiralling into
-   *  permanent rejection once a player got >threshold away.
-   *  Returns false when the report is rejected (still counting up the
-   *  force-accept streak); true accepts, including the >10 force-accept
-   *  resync for a client persisting past corrections. */
-  private plausible(playerId: string, player: PlayerState, msg: Extract<ClientMessage, { type: 'position' }>, now: number): boolean {
-    const dt = Math.max((now - player.lastPosCheckTime) / 1000, 0.05); // floor: bursts of queued packets report ~1ms gaps
-    player.lastPosCheckTime = now;
-    if (!player.hasReceivedPosition || !player.lastPosCheckPos) {
-      player.lastPosCheckPos = { ...msg.position };
-      return true;
-    }
-    const dx = msg.position.x - player.lastPosCheckPos.x;
-    const dy = msg.position.y - player.lastPosCheckPos.y;
-    const dz = msg.position.z - player.lastPosCheckPos.z;
-    const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-    const speed = dist / dt;
-    player.lastPosCheckPos = { ...msg.position };
-    // Reject only genuine impossibilities: >50m in one report, or speed
-    // beyond any legit combination of skiing + knockback + jetpack.
-    // The window has to be a REAL window — position reports stream at
-    // 20Hz, so dt > ~0.5s means the report chain broke (transport blip,
-    // hidden tab, transport switch), and the accumulated distance over
-    // a dead interval isn't speed evidence (34s gap → 589m at 17m/s
-    // used to reject). Reseat the anchor and resume measuring.
-    // A correction we just sent snaps the client's reports onto sim
-    // truth — but reports emitted before the packet landed still come
-    // from the old trajectory and would all read as impossible speed.
-    // Mute the check while those in-flight reports drain (grace covers
-    // ~2 RTTs of stragglers).
-    if (now < player.correctionGraceUntil || dt > 0.5 || (dist <= 50 && speed <= 300)) {
-      player.consecutiveRejects = 0;
-      return true;
-    }
-    player.consecutiveRejects++;
-    this.hb('posrej');
-    this.hbMax('posrejSpeed', speed);
-    logger.warn(`Position rejected: ${playerId} moved ${dist.toFixed(1)}m in ${dt.toFixed(3)}s (${speed.toFixed(0)} m/s)`);
-    // Send correction on the first reject of a streak only — no flood
-    if (player.consecutiveRejects === 1) {
-      const validState = this.playerManager.getLastValidState(playerId);
-      if (validState) {
-        this.sendToPlayer(playerId, {
-          type: 'correction',
-          seq: validState.seq,
-          position: validState.position,
-          velocity: validState.velocity,
-          rotation: validState.rotation,
-        });
-        // COMMIT the anchor: reseat the check point AT the corrected
-        // position. We just told the client to teleport there — its
-        // post-snap report legitimately sits ~far from the rejected
-        // pos we recorded above, and without this reseat it is
-        // guaranteed-rejected, accumulates to the >10 force-accept,
-        // flips lastValid to the far anchor, and the next correction
-        // snaps the client BACK — the infinite ping-pong. One anchor,
-        // one commit: either the client lands at the correction
-        // (accepts immediately) or keeps fighting (rejects count up
-        // to the force-accept, which then sticks).
-        player.lastPosCheckPos = { ...validState.position };
-        this.muteJudges(player, playerId, now);
-      }
-    }
-    // Client persisting past corrections (disputed knockback, lost
-    // correction packet): force-accept after 10 rejects to resync
-    // instead of warping the player forever.
-    if (player.consecutiveRejects <= 10) return false;
-    this.hb('posforce');
-    logger.warn(`Position force-accepted: ${playerId} after ${player.consecutiveRejects} rejects (resync)`);
-    player.consecutiveRejects = 0;
-    return true;
-  }
-
-  // Declared discontinuity (warp beacon, respawn): position arrives
-  // pre-accepted — reseat the plausibility anchor so the NEXT report
-  // deltas from here instead of measuring a 50m jump as a speedhack.
-  /** Declared-warp cadence — TL beacons are ≥4s apart (TL_COOLDOWN),
-   *  joins/respawns are one-offs, so 3s leaves every legal warp free
-   *  while a teleport-spam client eats plausibility corrections instead
-   *  of free relocation. */
-  private lastTeleport = new Map<string, number>();
-
-  private handleTeleport(playerId: string, msg: Extract<ClientMessage, { type: 'teleport' }>): void {
-    const player = this.playerManager.getPlayer(playerId);
-    if (!player || player.isDead) return;
-    const now = Date.now();
-    if ((this.lastTeleport.get(playerId) ?? 0) > now) {
-      logger.warn('teleport dropped: cadence', { playerId });
-      return;
-    }
-    this.lastTeleport.set(playerId, now + 3000);
-    player.lastPosCheckPos = { ...msg.position };
-    player.lastPosCheckTime = Date.now();
-    player.consecutiveRejects = 0;
-    this.playerManager.updatePosition(playerId, msg.position, msg.rotation, msg.velocity, undefined);
-    // updatePosition only touches lastValid on a seq bump — a declared
-    // teleport has no seq, so seat it manually or the next correction
-    // would snap the player back to BEFORE the warp
-    player.lastValidPosition = { ...msg.position };
-    player.lastValidVelocity = { ...msg.velocity };
-    player.lastValidRotation = { ...msg.rotation };
-    player.hasReceivedPosition = true;
-    this.announceIfInWorld(player);
-    this.roomInfo.moveResync?.(playerId, msg.position, msg.rotation.yaw);
-    // Reports already in flight predate the warp — same drain window
-    // corrections and respawns get.
-    this.muteJudges(player, playerId, now);
-    // Pre-warp samples are a different location entirely — keeping them
-    // lets lag-comp rewind land the shooter/target back at the corpse.
-    player.history.length = 0;
-    pushRewindSample(player, now);
-    // Relay so observers snap instead of interpolating across the gap
-    this.broadcast({ type: 'teleport', playerId, position: msg.position, velocity: msg.velocity }, playerId);
-  }
-
-  /** Every re-seat (correction out, respawn, room hop, teleport) must
-   *  mute BOTH judges for the drain window: plausibility via the grace
-   *  timestamp, the shadow sim via moveMute/markReseated — in-flight
-   *  pre-warp reports otherwise read as speedhacks on one judge or
-   *  divergences on the other. */
-  private muteJudges(player: PlayerState, playerId: string, now: number): void {
-    player.correctionGraceUntil = now + CONFIG.reportGraceMs;
-    this.roomInfo.moveMute?.(playerId);
-  }
+  moveResync(playerId: string, pos: Vec3, yaw: number): void { this.roomInfo.moveResync?.(playerId, pos, yaw); }
+  moveMute(playerId: string): void { this.roomInfo.moveMute?.(playerId); }
 
   // jump/jetpack are pure presence relays — same shape, dead check, echo
   // to everyone but the sender for remote-side jump-dust/jet FX.
