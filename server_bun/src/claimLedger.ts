@@ -4,6 +4,12 @@ import type { TrackedProjectile } from '../../shared/combat.ts';
 // Lag compensation: clamp self-reported ping to a sane rewind window —
 // unclamped, a forged 60s "ping" could rewind targets anywhere.
 const MAX_REWIND_MS = 250;
+// A resolved (spent) projectile's id can still bind late or reordered
+// claims this long — past it the shell is provably dead and its id is
+// recycled garbage.
+const SPENT_CLAIM_MS = 5_000;
+const SPENT_SWEEP_MS = 10_000;
+const MAX_SPENT = 512;
 export function clampPing(ping: number): number {
   return Math.min(Math.max(ping, 0), MAX_REWIND_MS);
 }
@@ -58,7 +64,7 @@ export class ClaimLedger {
     });
     // A live game never has >512 in-flight projectiles — the cap bounds
     // memory if clients never send destroys.
-    if (this.projectiles.size > 512) {
+    if (this.projectiles.size > MAX_SPENT) {
       const oldest = this.projectiles.keys().next().value;
       if (oldest) this.projectiles.delete(oldest);
     }
@@ -102,7 +108,7 @@ export class ClaimLedger {
       return this.take(rec, claim);
     }
     const rec = this.spent.get(projectileId);
-    if (rec && rec.proj.ownerId === playerId && Date.now() - rec.at < 5000) {
+    if (rec && rec.proj.ownerId === playerId && Date.now() - rec.at < SPENT_CLAIM_MS) {
       return this.take(rec, claim);
     }
     return undefined;
@@ -125,7 +131,7 @@ export class ClaimLedger {
     if (latest) return this.take(latest, claim);
     for (const rec of this.spent.values()) {
       if (!this.matches(rec.proj, playerId, weaponType)) continue;
-      if (Date.now() - rec.at >= 5000) continue;
+      if (Date.now() - rec.at >= SPENT_CLAIM_MS) continue;
       latest = rec;
     }
     return latest ? this.take(latest, claim) : undefined;
@@ -170,14 +176,14 @@ export class ClaimLedger {
 
   get size(): number { return this.projectiles.size; }
 
-  /** Bound the spent map — same 512 cap as live projectiles, plus a lazy
+  /** Bound the spent map — same cap as live projectiles, plus a lazy
    *  age sweep so stale ids can't resolve hours later. */
   private sweepSpent(): void {
     const now = Date.now();
     for (const [id, rec] of this.spent) {
-      if (now - rec.at > 10000) this.spent.delete(id);
+      if (now - rec.at > SPENT_SWEEP_MS) this.spent.delete(id);
     }
-    while (this.spent.size > 512) {
+    while (this.spent.size > MAX_SPENT) {
       this.spent.delete(this.spent.keys().next().value!);
     }
   }

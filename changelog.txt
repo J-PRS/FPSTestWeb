@@ -1,3 +1,4 @@
+2026-09-30 - claimLedger: named the spent-map windows (SPENT_CLAIM_MS 5s bind window, SPENT_SWEEP_MS 10s expiry, MAX_SPENT 512 cap) — were three bare literals
 2026-09-30 - dedupe: lag-comp rewind buffer (push+trim, 400ms window) unified as src/rewind.ts pushRewindSample — MessageHandler and ServerBots ran verbatim copies; fix: botSay rolled its typing delay twice (gate then setTimeout) making the first roll dead
 2026-09-30 - netBot split: tools/netLink.ts (RTC transport negotiation) + tools/netTerrain.ts (heightfield loading/surface) extracted; RTC channel death now fires onClose (was a dead param)
 2026-09-30 - net cleanups: WT adapter reports real peer IP (join throttle was one shared bucket); 500ms in-flight-report grace window unified as CONFIG.reportGraceMs (was 4 bare literals); Room class-speedScale application deduped into applyClassScale
