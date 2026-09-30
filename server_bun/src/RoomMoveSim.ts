@@ -59,6 +59,10 @@ interface Shadow {
   /** Corrections throttle — a client fighting the snap reports divergent
    *  positions every tick; one correction per window is enough. */
   lastCorrection: number;
+  /** Last server-applied impulse — a knocked client's report and shadow
+   *  apply the shove at different sim phases, so mid-arc reads diverge
+   *  ~40m for ~2s without anyone cheating. */
+  lastImpulseAt: number;
   // ---- Energy model ---------------------------------------------------
   // The wire `jet` bit is a claim the tank has fuel; the sim must model
   // the same economy or infinite-jet claims read as valid trajectories.
@@ -203,7 +207,7 @@ export class RoomMoveSim {
     };
     const mods = perkMods(perk);
     this.shadows.set(playerId, {
-      sim: new MoveSim(this.surface, state), divergences: 0, lastCorrection: 0,
+      sim: new MoveSim(this.surface, state), divergences: 0, lastCorrection: 0, lastImpulseAt: 0,
       severeT: [], cheated: false,
       // Spawn seed is the server's guess — the client's first position
       // report is the authoritative landing spot (client picks its own
@@ -296,6 +300,7 @@ export class RoomMoveSim {
     if (!sh) return;
     const v = sh.sim.state.vel;
     v.x += dv.x; v.y += dv.y; v.z += dv.z;
+    sh.lastImpulseAt = Date.now();
   }
 
   /** Compare a client position report against the shadow sim. Returns the
@@ -387,7 +392,10 @@ export class RoomMoveSim {
         this.onCheat?.(playerId, dist);
       }
     }
-    const transient = dist < tol * 1.5;
+    // Mid-arc knockback skew is transient by construction — the severe
+    // counter still eats it (3 hits in 60s = real teleport), but the
+    // log line stays informational.
+    const transient = dist < tol * 1.5 || Date.now() - sh.lastImpulseAt < 2000;
     if (sh.divergences !== 1 && sh.divergences % 20 !== 0) return;
     const s = sh.sim.state;
     logger[transient ? 'info' : 'warn']('Move sim divergence', {

@@ -87,11 +87,15 @@ class WireBot {
   // Claims waiting for their server id, correlated to the echo by
   // spawn signature — FIFO alone breaks when a spawn is rejected
   // (its echo never comes, so the next echo binds off-by-one).
-  pendingClaims: { pid?: string; wt: number; vx: number; vy: number; vz: number }[] = [];
+  pendingClaims: { pid?: string; wt: number; vx: number; vy: number; vz: number; exp: number }[] = [];
   // Room generation — bumped on every re-seat so a claim timer armed in
   // the old room can't fire into the new one with stale ids.
   private gen = 0;
   nextDeploy = 0; nextChat = 0; nextTeleport = 0; nextHeal = 0; nextLoadout = 0; nextEnvDmg = 0; nextSwitch = 0;
+  // Right after a reseat (teleport, respawn) the server's last known
+  // position lags until the next report lands — a spawn claim in that
+  // gap reads as "implausible origin". Wait out the report grace.
+  private fireHoldUntil = 0;
   private hopAlt = false;
   wasJump = false; wasJet = false;
   private lastSentInput = '';
@@ -259,6 +263,11 @@ class WireBot {
         this.ownShots.length = 0;
         this.pendingClaims.length = 0;
         this.gen++;
+        this.fireHoldUntil = performance.now() + 600;
+        // The sim is rebuilt after the async terrain load — until then
+        // this.sim is the OLD room's sim at an old-room position, and a
+        // claim fired from it reads as a 100m+ implausible spawn.
+        this.sim = null;
         // Tick seqs are per-room — a hop lands mid-sequence in the new
         // room's domain, not a dropped frame.
         this.lastTickSeq = -1;
@@ -299,6 +308,7 @@ class WireBot {
         if (m.ownerId === this.id) {
           this.ownShots.push({ id: m.projectileId, until: performance.now() + 2500, usedShot: false, usedAoe: false });
           const ci = this.pendingClaims.findIndex((c) =>
+            c.exp > performance.now() &&
             c.wt === (m.weaponType ?? -1) &&
             Math.hypot(c.vx - m.velocity.x, c.vy - m.velocity.y, c.vz - m.velocity.z) < 1);
           if (ci >= 0) this.pendingClaims.splice(ci, 1)[0]!.pid = m.projectileId;
@@ -334,6 +344,10 @@ class WireBot {
       case 'playerKill':
         // Death arrives as a kill broadcast — the corpse goes quiet.
         if (m.targetId === this.id) this.dead = true;
+        else if (m.targetId) {
+          const r = this.roster.get(m.targetId);
+          if (r) r.dead = true;
+        }
         break;
       case 'knockback':
         // The server's shadow received this impulse too — a client that
@@ -373,9 +387,10 @@ class WireBot {
           if (this.pendingClass) { this.applyClass(this.pendingClass); this.pendingClass = null; }
           this.waypoint = { x: rand(-140, 140), z: rand(-140, 140) };
           this.dead = false;
+          this.fireHoldUntil = performance.now() + 600;
         } else if (m.playerId && m.playerId !== this.id) {
           const r = this.roster.get(m.playerId);
-          if (r) { r.pos.x = m.position.x; r.pos.y = m.position.y; r.pos.z = m.position.z; }
+          if (r) { r.pos.x = m.position.x; r.pos.y = m.position.y; r.pos.z = m.position.z; r.dead = false; }
         }
         break;
     }
@@ -457,6 +472,7 @@ class WireBot {
       s.pos.x = tx; s.pos.z = tz; s.pos.y = this.myGy(tx, tz) + 1;
       s.vel.x *= 0.5; s.vel.y = 0; s.vel.z *= 0.5;
       this.send({ type: 'teleport', position: { ...s.pos }, rotation: { yaw: s.yaw, pitch: s.pitch }, velocity: { ...s.vel } });
+      this.fireHoldUntil = performance.now() + 600;
     }
     if (now >= this.nextHeal) {
       this.nextHeal = now + rand(25000, 70000);
@@ -559,7 +575,8 @@ class WireBot {
   }
 
   private fire(): void {
-    if (!this.sim || this.roster.size === 0) return;
+    if (!this.sim || this.roster.size === 0 || this.dead) return;
+    if (performance.now() < this.fireHoldUntil) return;
     const s = this.sim.state;
     // Nearest wire target — aim claims must name a live peer id, and
     // never a teammate (friendly fire is rejected outright).
@@ -586,13 +603,17 @@ class WireBot {
       velocity: { x: dir.x * speed, y: dir.y * speed, z: dir.z * speed },
     });
     const airtime = dist / speed;
+    const firedAt = performance.now();
     // The claim must outlive its own airtime — the server rejects a
     // detonation whose claimed flight time exceeds the shell's age. And
     // it must name THIS shell's id: a bare claim resolves the newest
     // matching projectile, so a shell fired mid-flight would inherit
     // our airtime against its own fresh age.
-    const mine: { pid?: string; wt: number; vx: number; vy: number; vz: number } = {
+    // Expiry = airtime + echo slack — a spawn rejected server-side never
+    // echoes, and its stale entry must not bind a LATER spawn's echo.
+    const mine: { pid?: string; wt: number; vx: number; vy: number; vz: number; exp: number } = {
       wt: weaponType, vx: dir.x * speed, vy: dir.y * speed, vz: dir.z * speed,
+      exp: firedAt + airtime * 1000 + 400,
     };
     this.pendingClaims.push(mine);
     // A rejected spawn never echoes — its entry must leave the queue at
@@ -644,7 +665,10 @@ class WireBot {
         this.send({ type: 'aoeShot', position: { x: ex, y: ey, z: ez }, weaponType, airtime, projectileId: pid });
       }
     };
-    setTimeout(claim, Math.min(airtime, 1.5) * 1000);
+    // Claims land at real impact time — claiming early on a long shot
+    // sends an airtime the shell hasn't flown yet and the server's reach
+    // check reads it as an impossible endpoint.
+    setTimeout(claim, airtime * 1000);
   }
 
   private stop(): void { for (const t of this.timers) clearInterval(t); }
