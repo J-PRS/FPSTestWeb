@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 
 import { GameBot, BOT_DMG, EYE } from './botBrain.js';
+import { BotWatchdog } from './botWatchdog.js';
 import { BOT_LOADOUTS, pickBotWeapon } from '../../../shared/botLoadouts.js';
 import { getProjectileConfig } from '../projectiles/index.js';
 import { Projectile } from '../projectiles/Projectile.js';
@@ -87,6 +88,7 @@ export class TeamBots {
     private mode: ModeId,
   ) {
     this.spec = MODES[mode]; // param props assign after field inits — do it here
+    this.wd = new BotWatchdog(deps.logger, () => this.over !== null);
     const ffa = this.spec.ffa;
     this.teamOf.set('local', ffa ? 'local' : playerTeam);
     if (ffa) this.ffaScores.set('local', 0);
@@ -165,7 +167,7 @@ export class TeamBots {
         }
       }
     }
-    this.watchdog(dt);
+    this.wd.step(dt, this.bots);
     this.syncLocalTeam();
     if (!this.over) {
       const w = this.checkWin();
@@ -295,108 +297,10 @@ export class TeamBots {
     }
   }
 
-  // ---- Watchdog ----
-  // Bots failing silently is the recurring bug class (tick dropped, brains
-  // wedged). Every 4s we diff each bot's LOGICAL position against where
-  // the rendered model actually is:
-  //   - logic moved but model didn't → tick/interp stall (frozen statue)
-  //   - NOTHING moved, all alive bots → brains aren't running at all
-  // Warns once per episode per bot (recovers → re-arms). Match-over and
-  // all-dead windows are legit stillness, not failures.
-  private watchdogT = 0;
-  private readonly wdLogic = new Map<string, THREE.Vector3>();
-  private readonly wdRender = new Map<string, THREE.Vector3>();
-  private readonly wdStalled = new Set<string>();
-  // Displacement anchor — where the bot stood ~10s ago. A bot stuck in a
-  // corner keeps producing 4s motion deltas (jiggle, repulsion pushback),
-  // so the stall test is NET displacement over a longer window: pacing in
-  // a 3m circle cancels out, real travel doesn't.
-  private readonly wdAnchor = new Map<string, { p: THREE.Vector3; t: number }>();
-  private readonly wdStuck = new Set<string>();
-  private wdIdleWindows = 0;
-  private static readonly WD_DT = 4;
-  private static readonly WD_STUCK_T = 10; // seconds per displacement window
-  private static readonly WD_STUCK_D = 10; // meters of net travel expected
-
-  private watchdog(dt: number): void {
-    this.watchdogT += dt;
-    if (this.watchdogT < TeamBots.WD_DT) return;
-    this.watchdogT = 0;
-    const log = this.deps.logger;
-    let alive = 0, stuckNow = 0, stuckEval = 0;
-    for (const bot of this.bots) {
-      if (bot.isDead) continue;
-      alive++;
-      const prev = this.wdLogic.get(bot.playerId);
-      const logicD = prev ? prev.distanceTo(bot.position) : 99;
-      if (prev) prev.copy(bot.position); else this.wdLogic.set(bot.playerId, bot.position.clone());
-
-      // Displacement check — every WD_STUCK_T seconds compare against the
-      // anchor, then re-anchor at the current spot.
-      const evald = this.wdCheckDisplacement(bot);
-      if (evald === 'stuck') { stuckEval++; stuckNow++; }
-      else if (evald === 'ok') stuckEval++;
-
-      this.wdCheckRender(bot, logicD);
-    }
-    // Whole-squad freeze: every bot that finished a displacement window
-    // this tick came up stuck. Two consecutive all-stuck ticks = brains
-    // aren't producing travel at all (not just one wedged path).
-    if (stuckEval > 0 && stuckNow === stuckEval && stuckEval >= Math.max(1, alive >> 1) && !this.over) {
-      if (++this.wdIdleWindows >= 2) {
-        log.warn(`all ${alive} bots pinned — <${TeamBots.WD_STUCK_D}m net travel per ${TeamBots.WD_STUCK_T}s window (brains not ticking?)`);
-        this.wdIdleWindows = 0; // re-arm the counter, not the warning state
-      }
-    } else {
-      this.wdIdleWindows = 0;
-    }
-  }
-
-  /** One displacement-window verdict for the watchdog: 'stuck' | 'ok' when
-   *  a window just closed, 'pending' while still accumulating. */
-  private wdCheckDisplacement(bot: GameBot): 'stuck' | 'ok' | 'pending' {
-    const a = this.wdAnchor.get(bot.playerId);
-    if (!a) {
-      this.wdAnchor.set(bot.playerId, { p: bot.position.clone(), t: 0 });
-      return 'pending';
-    }
-    a.t += TeamBots.WD_DT;
-    if (a.t < TeamBots.WD_STUCK_T) return 'pending';
-    const disp = a.p.distanceTo(bot.position);
-    a.p.copy(bot.position);
-    a.t = 0;
-    if (disp < TeamBots.WD_STUCK_D && !this.over) {
-      if (!this.wdStuck.has(bot.playerId)) {
-        this.wdStuck.add(bot.playerId);
-        this.deps.logger.warn(`bot ${bot.playerId} stuck — only ${disp.toFixed(1)}m net travel in ${TeamBots.WD_STUCK_T}s (wedged or brain loop?)`);
-      }
-      return 'stuck';
-    }
-    if (this.wdStuck.delete(bot.playerId)) {
-      this.deps.logger.info(`bot ${bot.playerId} unstuck — ${disp.toFixed(1)}m net travel`);
-    }
-    return 'ok';
-  }
-
-  /** Render-side watchdog leg — model position vs its own last sample.
-   *  Feet sit EYE below the logical pos; we only need the delta. */
-  private wdCheckRender(bot: GameBot, logicD: number): void {
-    const have = bot.model.getModelPosition(_wdPos);
-    if (!have) return;
-    const rp = this.wdRender.get(bot.playerId);
-    if (!rp) {
-      this.wdRender.set(bot.playerId, _wdPos.clone());
-      return;
-    }
-    const renderD = rp.distanceTo(_wdPos);
-    rp.copy(_wdPos);
-    if (logicD > 1.5 && renderD < 0.2 && !this.wdStalled.has(bot.playerId)) {
-      this.wdStalled.add(bot.playerId);
-      this.deps.logger.warn(`bot ${bot.playerId} render stalled — logic moved ${logicD.toFixed(1)}m, model moved ${renderD.toFixed(2)}m (tick/interp not running)`);
-    } else if (renderD > 0.5 && this.wdStalled.delete(bot.playerId)) {
-      this.deps.logger.info(`bot ${bot.playerId} render recovered`);
-    }
-  }
+  // Bots failing silently is the recurring bug class — the watchdog
+  // diffs logic vs render motion; see botWatchdog.ts. Assigned in the
+  // ctor: param props aren't visible to field initializers.
+  private wd: BotWatchdog;
 
   private winText(w: string): string {
     if (!this.spec.ffa) return `${TEAM_LABEL[w as TeamId]} WINS — ${this.scores.alpha}:${this.scores.bravo}`;
@@ -909,7 +813,6 @@ export class TeamBots {
 const _touchers: [string, THREE.Vector3][] = [];
 const _enemies: { id: string; pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean }[] = [];
 const _collectors: { id: string; pos: THREE.Vector3; alive: boolean; pickupScale: number }[] = [];
-const _wdPos = new THREE.Vector3();
 const _shotDir = new THREE.Vector3();
 const _shotMuzzle = new THREE.Vector3();
 const _pelletRight = new THREE.Vector3();
