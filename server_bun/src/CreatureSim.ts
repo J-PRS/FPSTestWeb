@@ -12,15 +12,16 @@
  */
 import { type Heightfield, hmHeight } from '../../shared/heightfield.ts';
 import {
-  type SimCrawler, type SimFlyer, type SimRoller, type SimSlither, type SimBaneling, type SimTotem, type CrawlerEvent,
-  makeSimCrawler, stepCrawler, applyCrawlerDamage, commitTarget,
-  isFlyerSpecies, makeSimFlyer, stepFlyer, applyFlyerDamage,
-  isRollerSpecies, makeSimRoller, stepRoller, applyRollerDamage,
-  isSlitherSpecies, makeSimSlither, stepSlither, applySlitherDamage,
-  isBanelingSpecies, makeSimBaneling, stepBaneling, applyBanelingDamage,
-  isTotemSpecies, makeSimTotem, stepTotem, applyTotemDamage, totemFireTargets,
-  CRAWLER_SIM,
+  makeSimCrawler, applyCrawlerDamage,
+  isFlyerSpecies, makeSimFlyer, applyFlyerDamage,
+  isRollerSpecies, makeSimRoller, applyRollerDamage,
+  isSlitherSpecies, makeSimSlither, applySlitherDamage,
+  isBanelingSpecies, makeSimBaneling, applyBanelingDamage,
+  isTotemSpecies, makeSimTotem, applyTotemDamage,
+  commitTarget,
+  type SimBaneling,
 } from '../../shared/creatureSim.ts';
+import { CreatureBrain, type SimBeing, isFlyer, isTotem, isRoller, isSlither, isBaneling } from './creatureBrain.ts';
 import type { SimVec, StructureCollider } from '../../shared/ballSim.ts';
 import type { PlayerManager } from './PlayerManager.ts';
 import type { ServerMessage, Vec3 } from './types.ts';
@@ -29,11 +30,6 @@ import { logger } from './logger.ts';
 import { ARMORNADE_OVERCAP, MAX_HIT_CLAIM_DMG } from '../../shared/weapons.ts';
 
 const TICK_DT = 0.05;
-const RETARGET_INTERVAL = CRAWLER_SIM.RETARGET_S;
-// Silence desyncs a wanderer just like a long-flying ball — force a
-// resync edge (same committed snapshot) every few seconds.
-const RESYNC_INTERVAL = 4.0;
-const _snap: SimVec = { x: 0, y: 0, z: 0 };
 // Distance-tiered send: committed edges only matter to players who can
 // see the crawler. Everyone still replays the same sim stream — far
 // clients just ride an older committed snapshot longer, which is safe
@@ -42,29 +38,6 @@ const _snap: SimVec = { x: 0, y: 0, z: 0 };
 // retarget rate).
 const NEAR_D2 = 80 * 80;
 const FAR_SKIP = 4;
-// Cloak confusion: seconds a creature keeps hunting its prey's last
-// sighting, and the radius the ghost target wanders.
-const CONFUSE_TTL = 7;
-const CONFUSE_DRIFT_R = 6;
-// Brain buckets: retarget/resync decision ticks are staggered across
-// BRAIN_BUCKETS phases keyed by creature id, so a pack that all spawned
-// on the same tick doesn't dump its O(players) scans + edge fanouts into
-// one frame. Classic amortized-AI trick — physics still steps every tick
-// (dt can't change without diverging predictors), only decisions
-// spread. Re-seeded on spawn so same-tick batches land in different
-// buckets.
-const BRAIN_BUCKETS = 8;
-
-/** Hop + flyer + roller + totem families share every wire field — the
- *  union only matters at step/damage dispatch, discriminated by
- *  family-only fields (`orbitPhase` = flyer, `hitCd` = roller). */
-type SimBeing = SimCrawler | SimFlyer | SimRoller | SimSlither | SimBaneling | SimTotem;
-const isFlyer = (c: SimBeing): c is SimFlyer => 'orbitPhase' in c;
-const isRoller = (c: SimBeing): c is SimRoller => 'hitCd' in c;
-const isSlither = (c: SimBeing): c is SimSlither => 'animT' in c;
-const isBaneling = (c: SimBeing): c is SimBaneling => 'age' in c;
-const isTotem = (c: SimBeing): c is SimTotem => 'lockDist' in c;
-
 export class CreatureSim {
   private field: Heightfield | null = null;
   /** Map yaw-OBBs — the totem beam solve and LOS gate clip against these
@@ -72,10 +45,8 @@ export class CreatureSim {
   colliders: readonly StructureCollider[] = [];
   private crawlers = new Map<number, SimBeing>();
   private nextId = 1;
-  private retargetAcc = new Map<number, number>();
   /** Confused hunt: the sighting the creature circles plus its expiry. */
-  private confuseGhosts = new Map<number, { x: number; y: number; z: number; until: number }>();
-  private resyncAcc = new Map<number, number>();
+  private brain: CreatureBrain;
   private broadcast: (msg: ServerMessage) => void;
   private sendTo: ((playerId: string, msg: ServerMessage) => void) | null = null;
   private edgeSeq = new Map<number, number>();
@@ -117,6 +88,17 @@ export class CreatureSim {
     this.players = players;
     this.broadcast = broadcast;
     this.sendTo = sendTo ?? null;
+    this.brain = new CreatureBrain({
+      field: () => this.field!,
+      colliders: () => this.colliders as StructureCollider[] | undefined,
+      simTime: () => this.simTime,
+      nearestPlayer: (c, alive) => this.nearestPlayer(c, alive),
+      snapTarget: (c) => this.snapTarget(c),
+      edge: (c, kind) => this.edge(c, kind),
+      onBite: (c, pid) => this.onBite?.(c, pid),
+      kill: (c) => this.kill(c),
+      playerState: (id) => this.players.getPlayer(id) ?? null,
+    });
   }
 
   attachField(field: Heightfield): void {
@@ -195,8 +177,7 @@ export class CreatureSim {
     if (isBaneling(c)) c.y = gy + 0.7;         // sac skims low
     // Negative offset pushes this crawler's first retarget into its own
     // bucket instead of the spawn tick — the spread survives every reset.
-    this.retargetAcc.set(c.id, -RETARGET_INTERVAL * ((c.id % BRAIN_BUCKETS) / BRAIN_BUCKETS));
-    this.resyncAcc.set(c.id, -RESYNC_INTERVAL * ((c.id % BRAIN_BUCKETS) / BRAIN_BUCKETS));
+    this.brain.seedBuckets(c.id);
     c.targetId = this.nearestPlayer(c, this.alivePlayers())?.id ?? null;
     this.snapTarget(c);
     this.crawlers.set(c.id, c);
@@ -230,7 +211,7 @@ export class CreatureSim {
   }
 
   private edge(c: SimBeing, kind: 'retarget' | 'windup' | 'pounce' | 'bite' | 'detonate' | 'charge' | 'fire' | 'blink'): void {
-    this.resyncAcc.set(c.id, 0);
+    this.brain.noteEdge(c.id);
     const msg: ServerMessage = {
       type: 'crawlEvt', id: c.id, kind,
       // For 'blink' the position field carries the committed DESTINATION —
@@ -303,7 +284,7 @@ export class CreatureSim {
   private kill(c: SimBeing, by?: string): void {
     c.dead = true;
     this.crawlers.delete(c.id);
-    this.confuseGhosts.delete(c.id);
+    this.brain.forget(c.id);
     // A baneling dies by popping — shot or fuse, the blast is the point.
     if (isBaneling(c)) { this.edge(c, 'detonate'); this.onDetonate?.(c); }
     const pos = { x: c.x, y: c.y, z: c.z };
@@ -328,7 +309,8 @@ export class CreatureSim {
     }
     while (this.tickAcc >= TICK_DT) {
       this.tickAcc -= TICK_DT;
-      this.stepAll(alive);
+      this.simTime += TICK_DT;
+      this.brain.stepAll(this.crawlers.values(), alive);
     }
   }
 
@@ -360,117 +342,8 @@ export class CreatureSim {
 
     while (this.tickAcc >= TICK_DT) {
       this.tickAcc -= TICK_DT;
-      this.stepAll(alive);
+      this.simTime += TICK_DT;
+      this.brain.stepAll(this.crawlers.values(), alive);
     }
-  }
-
-  private stepAll(alive: { id: string; pos: SimVec }[]): void {
-    this.simTime += TICK_DT;
-    for (const c of this.crawlers.values()) {
-      if (c.dead) continue;
-      // A due retarget consumes the whole tick step for this creature —
-      // it re-aims first, moves next tick.
-      if (this.retargetDue(c, alive)) { this.edge(c, 'retarget'); continue; }
-      _snap.x = c.tx; _snap.y = c.ty; _snap.z = c.tz;
-      const ev = this.stepBody(c, c.tgtValid ? _snap : null);
-      if (ev === 'detonate') { this.kill(c); continue; }
-      this.routeEvent(c, ev, alive);
-    }
-  }
-
-  /** Retarget bookkeeping. Returns true when this tick's step was spent
-   *  re-aiming — including the cloak-ghost detour where a creature keeps
-   *  hunting the last sighting instead of snapping a U-turn. */
-  private retargetDue(c: SimBeing, alive: { id: string; pos: SimVec }[]): boolean {
-    const ra = (this.retargetAcc.get(c.id) ?? 0) + TICK_DT;
-    if (ra < RETARGET_INTERVAL) { this.retargetAcc.set(c.id, ra); return false; }
-    this.retargetAcc.set(c.id, 0);
-    const t = this.nearestPlayer(c, alive);
-    if (t) {
-      c.targetId = t.id;
-      this.confuseGhosts.delete(c.id);
-      this.snapTarget(c);
-      return true;
-    }
-    this.cloakGhost(c);
-    return true;
-  }
-
-  /** No visible target: keep hunting a cloaked player's last sighting as
-   *  a drifting "ghost" point, else clear the lock entirely. Cloak
-   *  breaks the lock, not the scent — the creature reads as searching
-   *  confused, and the committed snapshot keeps server + clients
-   *  deterministic. */
-  private cloakGhost(c: SimBeing): void {
-    const prev = c.targetId ? this.players.getPlayer(c.targetId) : null;
-    if (prev && !prev.isDead && (prev.status & STATUS.CLOAK) && c.tgtValid) {
-      const g = this.confuseGhosts.get(c.id);
-      this.confuseGhosts.set(c.id, g
-        ? { ...g, until: this.simTime + CONFUSE_TTL }
-        : { x: c.tx, y: c.ty, z: c.tz, until: this.simTime + CONFUSE_TTL });
-    }
-    const g = this.confuseGhosts.get(c.id);
-    if (c.tgtValid && g && g.until > this.simTime) {
-      const a = this.simTime * 0.9 + (c.id * 131) % 977;
-      commitTarget(c, c.targetId, {
-        x: g.x + Math.cos(a) * CONFUSE_DRIFT_R,
-        y: g.y,
-        z: g.z + Math.sin(a) * CONFUSE_DRIFT_R,
-      });
-      return;
-    }
-    this.confuseGhosts.delete(c.id);
-    c.targetId = null;
-    this.snapTarget(c);
-  }
-
-  /** One deterministic step — the family picks its own step routine. */
-  private stepBody(c: SimBeing, tgt: SimVec | null): CrawlerEvent | null {
-    const f = this.field!;
-    if (isFlyer(c)) return stepFlyer(c, TICK_DT, f, tgt, true, this.colliders);
-    if (isTotem(c)) return stepTotem(c, TICK_DT, f, tgt, true, this.colliders);
-    if (isRoller(c)) return stepRoller(c, TICK_DT, f, tgt, true, this.colliders);
-    if (isSlither(c)) return stepSlither(c, TICK_DT, f, tgt, true, this.colliders);
-    if (isBaneling(c)) return stepBaneling(c, TICK_DT, f, tgt, true, this.colliders);
-    return stepCrawler(c, TICK_DT, f, tgt, true, this.colliders);
-  }
-
-  /** What the step left behind — an edge to stream, an authoritative
-   *  hit to land, or just resync bookkeeping. */
-  private routeEvent(c: SimBeing, ev: CrawlerEvent | null, alive: { id: string; pos: SimVec }[]): void {
-    if (ev === 'charge' || ev === 'blink' || (ev === 'land' && isTotem(c))) {
-      // 'land' doubles as the post-blink resync edge for totems — other
-      // families land every hop, so gating it to them would be spam.
-      this.edge(c, ev === 'land' ? 'retarget' : ev);
-      return;
-    }
-    if (ev === 'fire' && isTotem(c)) {
-      // Authoritative hitscan: sweep LIVE players along the committed
-      // beam line — sidestepping after the lock shows is the dodge.
-      this.edge(c, 'fire');
-      for (const pid of totemFireTargets(c, alive)) {
-        this.onBite?.(c, pid);
-      }
-      c.pendingBite = false;
-      return;
-    }
-    if (ev === 'windup' || ev === 'pounce') { this.edge(c, ev); return; }
-    if (ev === 'bite') { this.bite(c); return; }
-    const rs = (this.resyncAcc.get(c.id) ?? 0) + TICK_DT;
-    if (rs >= RESYNC_INTERVAL) this.edge(c, 'retarget');
-    else this.resyncAcc.set(c.id, rs);
-  }
-
-  /** A pending bite lands only if the committed target is still
-   *  physically next to the creature — without this a confused hunter
-   *  pouncing a stale sighting damages a cloaked player across the map. */
-  private bite(c: SimBeing): void {
-    this.edge(c, 'bite');
-    if (!c.pendingBite || !c.targetId) return;
-    const live = this.players.getPlayer(c.targetId);
-    const near = live && !live.isDead
-      && (live.position.x - c.x) ** 2 + (live.position.y - c.y) ** 2 + (live.position.z - c.z) ** 2 < 8 * 8;
-    if (near) this.onBite?.(c, c.targetId);
-    c.pendingBite = false;
   }
 }

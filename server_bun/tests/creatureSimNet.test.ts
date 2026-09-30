@@ -90,9 +90,11 @@ describe('brain buckets', () => {
     // land in this window.
     addPlayerAt(sim, 'p1', 5000, 0);
     const priv = (sim as unknown as SimPrivate & {
-      stepAll(alive: { id: string; pos: { x: number; y: number; z: number } }[]): void;
-      retargetAcc: Map<number, number>;
-      resyncAcc: Map<number, number>;
+      brain: {
+        stepAll(crawlers: Iterable<SimCrawler>, alive: { id: string; pos: { x: number; y: number; z: number } }[]): void;
+        retargetAcc: Map<number, number>;
+        resyncAcc: Map<number, number>;
+      };
       field: object | null;
     });
     priv.field = { size: 1, data: new Uint8Array(1), stride: 1 };
@@ -104,8 +106,8 @@ describe('brain buckets', () => {
       const c = makeSimCrawler(100 + i, { x: i * 5, y: 0, z: 0 }, false, 7 + i, 'crawler');
       // Same seeding as spawnCrawler: negative offset phases this
       // crawler's first retarget into its bucket (2.0–3.75s window).
-      priv.retargetAcc.set(c.id, -2 * ((c.id % 8) / 8));
-      priv.resyncAcc.set(c.id, -4 * ((c.id % 8) / 8));
+      priv.brain.retargetAcc.set(c.id, -2 * ((c.id % 8) / 8));
+      priv.brain.resyncAcc.set(c.id, -4 * ((c.id % 8) / 8));
       priv.crawlers.set(c.id, c);
       crawlers.push(c);
     }
@@ -125,7 +127,7 @@ describe('brain buckets', () => {
     // window without reaching any resync beat (4s+).
     for (let t = 0; t < 76; t++) {
       tick = t;
-      priv.stepAll(alive);
+      priv.brain.stepAll(priv.crawlers.values() as Iterable<SimCrawler>, alive);
     }
     const retargets = calls.filter((c) => c.kind === 'retarget');
     const perTick = new Map<number, number>();

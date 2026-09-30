@@ -1,3 +1,4 @@
+2026-09-26 - Split creature decision loop out of CreatureSim into creatureBrain.ts (retarget cadence, cloak ghosts, family step dispatch, edge routing, bite verify)
 2026-09-26 - Offline sheep meter now mirrors the wire meter: 5s coverage window (<30m with a dest = debit, sim-time tracked) and post-yeet reset to 40 so the pinned jet doesn't re-trigger
 2026-09-26 - Extracted AggroKit from speciesKit into speciesAggro.ts (multi-player threat roster, wander/stalk/frenzy waypoints, approach weave, damage funnel); speciesKit delegates so entity call sites are unchanged
 2026-09-26 - Extracted BotSteer from shared/botBrain.ts into botSteer.ts (context steering, slot danger scoring, memory trail, turn-rate clamp); botBrain now reads as a decision pipeline
