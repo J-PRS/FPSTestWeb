@@ -17,18 +17,19 @@ import type { Vec3 } from './types.ts';
 import type { Room } from './Room.ts';
 import { hmHeight, type Heightfield } from '../../shared/heightfield.ts';
 import { EYE_OFFSET } from '../../shared/constants.ts';
-import { BotBrain, losClear, type BotEnemy, type BotVec, type BrainCtx, type BrainOut } from '../../shared/botBrain.ts';
+import { BotBrain, type BotVec, type BrainOut } from '../../shared/botBrain.ts';
 import { logger } from './logger.ts';
 import { pushRewindSample } from './rewind.ts';
 import { STATUS, CLIENT_STATUS_MASK } from '../../shared/status.ts';
-import { WeaponType, getWeaponStats } from '../../shared/weapons.ts';
+import { WeaponType } from '../../shared/weapons.ts';
 import type { MoveState } from '../../shared/movement.ts';
 import { CLASS_STATS, type ArmorClass } from '../../shared/botClasses.ts';
-import { BOT_LOADOUTS, pickBotWeapon, type BotLoadout } from '../../shared/botLoadouts.ts';
-import { roleObjective, ROLE_PRIORITY, type BotRole } from '../../shared/flagGoals.ts';
+import { BOT_LOADOUTS, type BotLoadout } from '../../shared/botLoadouts.ts';
+import { ROLE_PRIORITY, type BotRole } from '../../shared/flagGoals.ts';
 import { BotWatchdog, type MobilitySample } from './botWatchdog.ts';
 import { BotArsenal, isSuper } from './botArsenal.ts';
 import { BotSheepMeter } from './botSheep.ts';
+import { ServerBotSenses } from './serverSenses.ts';
 
 const SPEED = 14;          // m/s ground move
 
@@ -76,6 +77,8 @@ export class ServerBots {
   /** Mobility watchdog — stuck + sheep alarms live in botWatchdog.ts so
    *  this file stays about driving bots, not auditing them. */
   private watchdog: BotWatchdog;
+  /** What brains may see — serverSenses.ts builds the wire-legal ctx. */
+  private sense: ServerBotSenses;
 
   constructor(room: Room, field: Heightfield | null) {
     this.room = room;
@@ -83,6 +86,7 @@ export class ServerBots {
     this.watchdog = new BotWatchdog(room.name);
     this.sheep = new BotSheepMeter(room);
     this.arsenal = new BotArsenal(room, this.loadouts, (id) => this.lastHuntId(id));
+    this.sense = new ServerBotSenses(room, field, this.loadouts, this.roles, this.foeNear);
   }
 
   private nextIdx = 1;
@@ -158,80 +162,9 @@ export class ServerBots {
     this.room.moveSim.untrack(playerId);
   }
 
-  /** Hostiles this bot may hunt. Team modes fight the other side; FFA
-   *  bots pick any non-bot (fighting filler-vs-filler burns ticks nobody
-   *  asked for). */
-  private enemiesOf(p: { id: string; team?: string }): BotEnemy[] {
-    const out: BotEnemy[] = [];
-    for (const q of this.room.players.getAllPlayers().values()) {
-      if (q.id === p.id || q.isDead) continue;
-      if (this.room.modeSpec?.teams) {
-        if (q.team === p.team) continue;
-      } else if (q.isBot) continue;
-      if (q.status & STATUS.CLOAK) continue; // bots can't aim what they can't see
-      out.push({ id: q.id, pos: q.position, vel: q.velocity, alive: !q.isDead });
-    }
-    // Creatures are huntable too — in nuggets rooms they're the whole
-    // objective (each kill drops the gem that scores), and shooting
-    // hunters off your back is correct behavior in every mode.
-    for (const b of this.room.ballSim.roster()) {
-      out.push({ id: `b:${b.id}`, pos: b.position, vel: b.velocity, alive: true });
-    }
-    return out;
-  }
-
-  /** Positions of every other live player — the brain's separation
-   *  sense, so a squad spreads instead of stacking on one slot. */
-  private othersOf(p: { id: string }): Vec3[] {
-    const out: Vec3[] = [];
-    for (const q of this.room.players.getAllPlayers().values()) {
-      if (q.id === p.id || q.isDead) continue;
-      out.push(q.position);
-    }
-    return out;
-  }
-
-  /** Hostile emplacement the bot can legally see — a turret/mine/drone
-   *  owned by the other team, near the bot and near what it's after.
-   *  The stand's kill-zone is knowledge the room advertises anyway. */
-  private hostileGear(p: { id: string; team?: string; position: Vec3 }, goal: BotVec | null, sabotage = false): Vec3 | null {
-    if (!goal && !sabotage) return null;
-    let best: Vec3 | null = null;
-    // Lob from the edge of turret sight (42m) — a bot that must first
-    // survive to 30m never gets the shot off.
-    let bestD = 40;
-    for (const d of this.room.deployables.snapshot()) {
-      if (d.kind === 'station') continue; // pads aren't a threat
-      const owner = this.room.players.getPlayer(d.owner);
-      if (p.team && owner?.team === p.team) continue;
-      if (!p.team && d.owner === p.id) continue;
-      const bd = Math.hypot(d.pos.x - p.position.x, d.pos.z - p.position.z);
-      // A saboteur wrecks whatever gear it can reach — goal proximity
-      // only gates the objective-driven lobbers.
-      const gd = goal ? Math.hypot(d.pos.x - goal.x, d.pos.z - goal.z) : 0;
-      if (bd < bestD && (sabotage || gd < 50)) { bestD = bd; best = d.pos; }
-    }
-    return best;
-  }
-
-  /** Ignoring-the-enemy evidence for the sheep meter: a live visible
-   *  enemy PLAYER within 60m while the brain elects not to fire is the
-   *  fastest cowardice tell there is. Creatures don't count — walking
-   *  past wildlife isn't fear. Computed at think cadence; the flag
-   *  decays in half a second so a bot that out-skis a duel isn't
-   *  re-charged while it's gone. */
-  private markFoeNear(id: string, ctx: BrainCtx, pos: Vec3, now: number): void {
-    for (const e of ctx.enemies) {
-      if (e.id.startsWith('b:')) continue;
-      const d = Math.hypot(e.pos.x - pos.x, e.pos.y - pos.y, e.pos.z - pos.z);
-      // Brawl range, not spotting range — a foe it can't reach yet is a
-      // marching target, not an ignored duel.
-      if (d < 45 && losClear(ctx, pos, e.pos)) {
-        this.foeNear.set(id, now + 500);
-        return;
-      }
-    }
-    this.foeNear.set(id, 0);
+  /** Scenario tests poke the objective pick directly. */
+  flagGoal(p: { id: string; team?: string; position: Vec3 }) {
+    return this.sense.flagGoal(p);
   }
 
   /** The brain's current hunt target id — needed by throwBelt since the
@@ -239,45 +172,6 @@ export class ServerBots {
   private lastHuntId(botId: string): string | null {
     const brain = this.brains.get(botId);
     return brain?.currentHuntId ?? null;
-  }
-
-  /** CTF objective for a bot: carrying the enemy flag → own base; own flag
-   *  carried off → run down the carrier (the carrier's position IS known —
-   *  tickUpdate streams it, this is a legal pursuit not a wallhack); own
-   *  flag dropped → touch it home; a teammate carrying → escort them;
-   *  enemy flag reachable → go grab it. Defenders invert it: their flag
-   *  recovery/intercept outranks pressing the enemy stand. */
-  private flagGoal(p: { id: string; team?: string; position: Vec3 }): { pos: BotVec; infiltrating: boolean } | null {
-    const flags = this.room.flags;
-    if (!flags || !p.team) return null;
-    const me = p.team as 'alpha' | 'bravo';
-    const enemy = flags.flags.get(me === 'alpha' ? 'bravo' : 'alpha');
-    const own = flags.flags.get(me);
-    if (!enemy || !own) return null;
-    if (enemy.carrier === p.id) return { pos: own.home, infiltrating: false };
-
-    const enemyStand = enemy.state !== 'carried' ? enemy.pos : null;
-    // One role table for both runtimes — shared/flagGoals.ts.
-    const pick = roleObjective(this.roles.get(p.id) ?? 'offense', {
-      home: own.home,
-      // Own flag's carrier — chase the thief, not the base.
-      thief: own.state === 'carried' && own.carrier
-        ? this.room.players.getPlayer(own.carrier)?.position ?? null : null,
-      // Own flag dropped — anyone close enough touches it home.
-      dropped: own.state === 'dropped' ? own.pos : null,
-      enemyStand,
-      escort: this.escortSpot(enemy.carrier, me),
-    });
-    // Pressing the enemy stand is the infiltrate signal — the brain reads
-    // it as cloak intent on the approach.
-    return { pos: pick, infiltrating: pick === enemyStand && enemyStand !== null };
-  }
-
-  /** A teammate carrying the enemy flag is the escort point — the
-   *  carrier's position is already on the wire, no wallhack needed. */
-  private escortSpot(carrier: string | null | undefined, me: 'alpha' | 'bravo'): Vec3 | null {
-    const escortP = carrier ? this.room.players.getPlayer(carrier) : null;
-    return escortP && escortP.team === me ? escortP.position : null;
   }
 
   /** Apply the armor class to a live bot record: maxHealth shifts and
@@ -407,57 +301,6 @@ export class ServerBots {
     this.watchdog.checkSheep(id, p.position, m, now);
   }
 
-  /** The brain's sensorium for one tick — every channel a legal client
-   *  could read from the wire (positions, pickups, inbound shells,
-   *  noises, wall occlusion, the move shadow's honest energy tank). */
-  private senses(id: string, p: { id: string; team?: string; position: Vec3; velocity: Vec3; health: number; maxHealth: number }, goal: { pos: BotVec; infiltrating: boolean } | null, now: number): BrainCtx {
-    return {
-      pos: p.position,
-      vel: p.velocity,
-      enemies: this.enemiesOf(p),
-      objective: goal?.pos ?? null,
-      infiltrating: goal?.infiltrating ?? false,
-      // Team rooms drop nuggets on creature kills — bots farm them too,
-      // which is what keeps a bot-filled match's scoreboard moving.
-      pickup: this.room.pickups?.nearest(p.position) ?? undefined,
-      // Gem-economy rooms make hunting creatures the actual objective;
-      // on any map that spawns real creatures they're threats worth
-      // shooting too. Structureless-free: pops is {} where spec doesn't
-      // declare `creatures`.
-      huntCreatures: this.room.mode === 'nuggets'
-        || Object.values(this.room.creatureSim.pops).some((cap) => cap > 0),
-      // Structures read as raised ground — brains route around walls
-      // and onto platforms instead of pushing into solid geometry.
-      groundY: (x, z) => Math.max(
-        this.field ? hmHeight(this.field, x, z) : p.position.y,
-        this.room.moveSim.structureTop(x, z),
-      ),
-      others: this.othersOf(p),
-      // Aim lead uses the muzzle speed of the weapon this bot would
-      // pick at that range — same band select fireAt runs.
-      weaponSpeed: (d) => {
-        const w = pickBotWeapon(this.loadouts.get(id) ?? BOT_LOADOUTS[0]!, d, d);
-        return getWeaponStats(w).speed || 60;
-      },
-      // Lobbed shells need the arc's drop added back on the aim point.
-      weaponGravity: (d) =>
-        getWeaponStats(pickBotWeapon(this.loadouts.get(id) ?? BOT_LOADOUTS[0]!, d, d)).gravity,
-      // Wall occlusion for the LOS sense — bots stop wasting ammo on
-      // targets behind structures they'd never see through anyway.
-      solids: this.room.ballSim.colliders,
-      solidIndex: this.room.ballSim.colliderIndex,
-      // The shadow tank is the truth — brains read it to gate jets,
-      // shields, mends. Null field → undefined → full-tank behavior.
-      energy: this.room.moveSim.energyOf(id) ?? undefined,
-      healthFrac: p.maxHealth > 0 ? p.health / p.maxHealth : 1,
-      // Inbound shells feed the dodge sense — bots sidestep rockets
-      // like a human reading the arc instead of eating every volley.
-      threats: this.room.projectiles.incomingNear(p.position, 12),
-      sounds: this.room.noisesNear(p.position, 50),
-      now,
-    };
-  }
-
   /** The brain's status intent IS the player's claim — same rising-edge
    *  antes + drains the human path models, applied via setInput below.
    *  Keep server-owned buff bits (REGEN/DD) — the brain only claims
@@ -489,7 +332,7 @@ export class ServerBots {
     // to soften a stand, not a wallhack aim-assist.
     const saboteur = this.roles.get(id) === 'infiltrator';
     const ready = (this.gearLobT.get(id) ?? 0) <= now;
-    const gear = ready ? this.hostileGear(p, goal?.pos ?? null, saboteur) : null;
+    const gear = ready ? this.sense.hostileGear(p, goal?.pos ?? null, saboteur) : null;
     if (gear) {
       this.arsenal.lobAt(p, gear);
       // 3s keeps a siege going: ~1.5-2s grenade flight + reload beat.
@@ -640,10 +483,10 @@ export class ServerBots {
       this.thinkCounter = (this.thinkCounter + 1) % ServerBots.THINK_DIV;
       let out = this.lastOut.get(id);
       if (this.thinkCounter === (this.thinkPhase.get(id) ?? 0) || !out) {
-        const goal = this.flagGoal(p);
-        const ctx = this.senses(id, p, goal, now);
+        const goal = this.sense.flagGoal(p);
+        const ctx = this.sense.build(id, p, goal, now);
         out = brain.think(dt * ServerBots.THINK_DIV, ctx);
-        this.markFoeNear(id, ctx, p.position, now);
+        this.sense.markFoeNear(id, ctx, p.position, now);
         this.applyStatus(id, p, out);
         const sh0 = this.room.moveSim.simState(id);
         this.firePhase(id, p, out, goal, now, sh0);
