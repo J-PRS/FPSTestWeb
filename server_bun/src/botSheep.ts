@@ -31,7 +31,7 @@ export class BotSheepMeter {
   yeetUntilMs(id: string): number { return this.yeetUntil.get(id) ?? 0; }
   set(id: string, v: number): void { this.meter.set(id, v); }
 
-  check(id: string, p: { position: Vec3; velocity: Vec3 }, m: { out: BrainOut; airborne: boolean; hasDest: boolean; dt: number }, now: number): void {
+  check(id: string, p: { position: Vec3; velocity: Vec3 }, m: { out: BrainOut; airborne: boolean; hasDest: boolean; foe?: boolean; dt: number }, now: number): void {
     const speedXZ = Math.hypot(p.velocity.x, p.velocity.z);
     const jetting = !!m.out.move?.jet || this.yeetUntilMs(id) > now;
     const tribesing = speedXZ > 10 || m.airborne || jetting;
@@ -39,7 +39,7 @@ export class BotSheepMeter {
     let meter = prev + m.dt * (tribesing
       ? -(10 + speedXZ * 0.5 + (jetting ? 15 : 0))
       : m.hasDest ? 9 : 18);
-    meter += this.coverageDebit(id, p, m.hasDest, this.simMs);
+    meter += this.ignoreDebit(m) + this.coverageDebit(id, p, m.hasDest, this.simMs);
     if (meter >= 100) {
       const yaw = Math.random() * Math.PI * 2;
       this.room.moveSim.applyImpulse(id, { x: Math.cos(yaw) * 12, y: 18, z: Math.sin(yaw) * 12 });
@@ -52,6 +52,13 @@ export class BotSheepMeter {
       logger.info('Sheep meter high', { room: this.room.name, bot: id, meter: Math.round(meter) });
     }
     this.meter.set(id, meter);
+  }
+
+  /** Fastest cowardice tell: a visible live enemy in range and the
+   *  brain elects not to shoot. ~2.5s of ignoring a duel fills the
+   *  meter on its own. */
+  private ignoreDebit(m: { out: BrainOut; foe?: boolean; dt: number }): number {
+    return m.foe && !m.out.fire?.targetId ? m.dt * 40 : 0;
   }
 
   /** Coverage window: under ~30m of real displacement per 5s while the

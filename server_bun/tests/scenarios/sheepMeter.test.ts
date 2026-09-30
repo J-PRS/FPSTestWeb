@@ -55,6 +55,30 @@ describe('sheep meter', () => {
     expect(debit).toBe(0);
   });
 
+  it('ignoring a visible enemy charges the meter fast', () => {
+    const room = mkRoom({ bots: 1 });
+    const bots = room.bots as unknown as {
+      sheep: { check(id: string, p: unknown, m: unknown, now: number): void; of(id: string): number };
+    };
+    const p = { position: { x: 0, y: 60, z: 0 }, velocity: { x: 0, y: 0, z: 0 } };
+    const idle = { out: { dest: { x: 10, y: 60, z: 0 } }, airborne: false, hasDest: true, foe: true, dt: 1 };
+    bots.sheep.check('BOT-t1', p, idle, 0);
+    // 1s of ignoring = idle debit (9) + foe charge (40) — the foe term
+    // alone fills a meter in ~2.5s.
+    expect(bots.sheep.of('BOT-t1')).toBeGreaterThanOrEqual(45);
+  });
+
+  it('firing at the visible enemy never charges the foe debit', () => {
+    const room = mkRoom({ bots: 1 });
+    const bots = room.bots as unknown as {
+      sheep: { check(id: string, p: unknown, m: unknown, now: number): void; of(id: string): number };
+    };
+    const p = { position: { x: 0, y: 60, z: 0 }, velocity: { x: 0, y: 0, z: 0 } };
+    const firing = { out: { dest: { x: 10, y: 60, z: 0 }, fire: { targetId: 'p2', aim: { x: 5, y: 60, z: 0 } } }, airborne: false, hasDest: true, foe: true, dt: 1 };
+    bots.sheep.check('BOT-t1', p, firing, 0);
+    expect(bots.sheep.of('BOT-t1')).toBeLessThanOrEqual(10); // only the idle debit, no foe charge
+  });
+
   it('death and respawn reset the meter', () => {
     const room = mkRoom({ bots: 1 });
     const id = 'BOT-t1';

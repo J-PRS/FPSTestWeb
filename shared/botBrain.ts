@@ -163,7 +163,7 @@ function losKey(from: BotVec, to: BotVec): number {
   return ((ax * 4096 + az) * 4096 + bx) * 4096 + bz;
 }
 
-function losClear(ctx: BrainCtx, from: BotVec, to: BotVec): boolean {
+export function losClear(ctx: BrainCtx, from: BotVec, to: BotVec): boolean {
   const key = losKey(from, to);
   const hit = losMemo.get(key);
   if (hit && hit.until > ctx.now) return hit.clear;

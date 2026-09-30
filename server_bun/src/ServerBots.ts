@@ -17,7 +17,7 @@ import type { Vec3 } from './types.ts';
 import type { Room } from './Room.ts';
 import { hmHeight, type Heightfield } from '../../shared/heightfield.ts';
 import { EYE_OFFSET } from '../../shared/constants.ts';
-import { BotBrain, type BotEnemy, type BotVec, type BrainCtx, type BrainOut } from '../../shared/botBrain.ts';
+import { BotBrain, losClear, type BotEnemy, type BotVec, type BrainCtx, type BrainOut } from '../../shared/botBrain.ts';
 import { logger } from './logger.ts';
 import { pushRewindSample } from './rewind.ts';
 import { STATUS, CLIENT_STATUS_MASK } from '../../shared/status.ts';
@@ -95,6 +95,8 @@ export class ServerBots {
   private static readonly THINK_DIV = 5;
   private thinkPhase = new Map<string, number>();
   private lastOut = new Map<string, BrainOut>();
+  /** Visible-enemy-present flag from the last think (epoch ms expiry). */
+  private foeNear = new Map<string, number>();
   private thinkCounter = 0;
   /** Spawn n bots — each is a real roster entry (playerJoined broadcasts)
    *  minus a socket. Call once at room creation, before human joins, so
@@ -148,6 +150,7 @@ export class ServerBots {
     this.classes.delete(playerId);
     this.sheep.clear(playerId);
     this.arsenal.untrack(playerId);
+    this.foeNear.delete(playerId);
     this.gearLobT.delete(playerId);
     this.deadSet.delete(playerId);
     this.quiet.delete(playerId);
@@ -209,6 +212,24 @@ export class ServerBots {
       if (bd < bestD && (sabotage || gd < 50)) { bestD = bd; best = d.pos; }
     }
     return best;
+  }
+
+  /** Ignoring-the-enemy evidence for the sheep meter: a live visible
+   *  enemy PLAYER within 60m while the brain elects not to fire is the
+   *  fastest cowardice tell there is. Creatures don't count — walking
+   *  past wildlife isn't fear. Computed at think cadence; the flag
+   *  decays in half a second so a bot that out-skis a duel isn't
+   *  re-charged while it's gone. */
+  private markFoeNear(id: string, ctx: BrainCtx, pos: Vec3, now: number): void {
+    for (const e of ctx.enemies) {
+      if (e.id.startsWith('b:')) continue;
+      const d = Math.hypot(e.pos.x - pos.x, e.pos.y - pos.y, e.pos.z - pos.z);
+      if (d < 60 && losClear(ctx, pos, e.pos)) {
+        this.foeNear.set(id, now + 500);
+        return;
+      }
+    }
+    this.foeNear.set(id, 0);
   }
 
   /** The brain's current hunt target id — needed by throwBelt since the
@@ -509,7 +530,7 @@ export class ServerBots {
       this.room.moveSim.setInput(id, { forward: 0, right: 0, jumpHeld: false, skiHeld: false, jetHeld: false }, p.status, this.seq++);
     }
     this.checkSheep(id, p, { trying: dist >= 0.5, ski: !!out.move?.ski, airborne: !sh.onGround, jetting: !!out.move?.jet, dt }, now);
-    this.sheep.check(id, p, { out, airborne: !sh.onGround, hasDest: dist >= 0.5, dt }, now);
+    this.sheep.check(id, p, { out, airborne: !sh.onGround, hasDest: dist >= 0.5, foe: (this.foeNear.get(id) ?? 0) > now, dt }, now);
     p.position.x = sh.pos.x; p.position.y = sh.pos.y; p.position.z = sh.pos.z;
     p.velocity.x = sh.vel.x; p.velocity.y = sh.vel.y; p.velocity.z = sh.vel.z;
     // Ski bit rides the tick flag byte (bit 2) — drives remote dust.
@@ -595,6 +616,7 @@ export class ServerBots {
       if (!p.isDead && wasDead) {
         this.deadSet.delete(id);
         this.sheep.clear(id); // respawn is a fresh leash
+        this.foeNear.delete(id);
         this.room.moveSim.resync(id, p.position, p.rotation.yaw, true);
       }
 
@@ -609,7 +631,9 @@ export class ServerBots {
       let out = this.lastOut.get(id);
       if (this.thinkCounter === (this.thinkPhase.get(id) ?? 0) || !out) {
         const goal = this.flagGoal(p);
-        out = brain.think(dt * ServerBots.THINK_DIV, this.senses(id, p, goal, now));
+        const ctx = this.senses(id, p, goal, now);
+        out = brain.think(dt * ServerBots.THINK_DIV, ctx);
+        this.markFoeNear(id, ctx, p.position, now);
         this.applyStatus(id, p, out);
         const sh0 = this.room.moveSim.simState(id);
         this.firePhase(id, p, out, goal, now, sh0);
