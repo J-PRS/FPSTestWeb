@@ -95,6 +95,8 @@ export class ServerBots {
   /** Yeet hang-time — while set the bot's jet stays pinned so the launch
    *  carries through instead of being a single frame of thrust. */
   private yeetUntil = new Map<string, number>();
+  private propelT = new Map<string, number>();
+  private propelJetUntil = new Map<string, number>();
   private readonly room: Room;
   private readonly field: Heightfield | null;
   /** Mobility watchdog — stuck + sheep alarms live in botWatchdog.ts so
@@ -159,6 +161,8 @@ export class ServerBots {
     this.classes.delete(playerId);
     this.sheepMeter.delete(playerId);
     this.yeetUntil.delete(playerId);
+    this.propelT.delete(playerId);
+    this.propelJetUntil.delete(playerId);
     this.gearLobT.delete(playerId);
     this.deadSet.delete(playerId);
     this.quiet.delete(playerId);
@@ -316,6 +320,52 @@ export class ServerBots {
     this.room.projectiles.spawn(p.id, wt,
       { x: p.position.x, y: p.position.y + 1.4, z: p.position.z },
       { x: vx / vl, y: vy / vl, z: vz / vl }, p.velocity);
+  }
+
+  /** First push-class AOE weapon in the kit — the blast needs forceMode
+   *  'push' (a pull weapon would drag the bot toward its own feet). */
+  private propelWeapon(lo: BotLoadout): number {
+    const pick = [lo.mid, lo.far].find((wt) => {
+      const s = getWeaponStats(wt);
+      return s && s.aoeRadius > 0 && s.speed > 0 && s.forceMode !== 'pull';
+    });
+    return pick ?? WeaponType.Disc;
+  }
+
+  /** Disc-jump / implosion ride. A grounded bot launching a long open run
+   *  fires an explosive into the ground at its heels and surfs the blast —
+   *  the self-shove lands via processAOE's bot-only branch, so the speed is
+   *  real physics, not a cheat impulse. Pull-belt carriers ride forward
+   *  instead: lob the implosion ahead and let the pop drag them. Gated to
+   *  launches worth a fuse (long run, low speed, tank for the climb) and
+   *  never mid-firefight. */
+  private tryPropel(id: string, p: { id: string; position: Vec3; velocity: Vec3 }, out: BrainOut, goal: { pos: BotVec } | null, sh: MoveState | null, now: number): void {
+    if (!goal || !sh?.onGround || out.fire) return;
+    if ((this.propelT.get(id) ?? 0) > now) return;
+    const dx = goal.pos.x - p.position.x, dz = goal.pos.z - p.position.z;
+    const dist = Math.hypot(dx, dz);
+    if (dist < 35) return;
+    if (Math.hypot(sh.vel.x, sh.vel.z) > 12) return; // already moving — boost is for launches
+    if ((this.room.moveSim.energyOf(id) ?? 0) < 30) return;
+    const lo = this.loadouts.get(id) ?? BOT_LOADOUTS[0]!;
+    const nx = dx / dist, nz = dz / dist;
+    if (getWeaponStats(lo.belt)?.forceMode === 'pull') {
+      // Implosion ~18m ahead — the bot's own approach speed puts it in
+      // the pull envelope when the disc pops.
+      this.lobAt(p, { x: p.position.x + nx * 18, y: p.position.y - 1, z: p.position.z + nz * 18 });
+    } else {
+      // Classic disc-jump: shell into the heels, blast pushes forward+up.
+      const wt = this.propelWeapon(lo);
+      const muzzle = { x: p.position.x, y: p.position.y + 1.4, z: p.position.z };
+      const hx = p.position.x - nx * 1.8 - muzzle.x;
+      const hy = p.position.y - EYE_OFFSET - muzzle.y;
+      const hz = p.position.z - nz * 1.8 - muzzle.z;
+      const len = Math.hypot(hx, hy, hz) || 1;
+      this.room.projectiles.spawn(id, wt, muzzle, { x: hx / len, y: hy / len, z: hz / len }, p.velocity);
+    }
+    this.propelT.set(id, now + 8000);
+    this.propelJetUntil.set(id, now + 900); // ride the shove skyward like a real disc-jump
+    logger.info('Bot propel', { id });
   }
 
   /** Hostile emplacement the bot can legally see — a turret/mine/drone
@@ -578,9 +628,10 @@ export class ServerBots {
   /** Everything the brain asked to shoot or plant this tick — primary
    *  trigger, belt throw, sentry-clearing lob on its slow cadence, and
    *  deploy claims re-validated through the human message path. */
-  private firePhase(id: string, p: { id: string; position: Vec3; velocity: Vec3; team?: string }, out: BrainOut, goal: { pos: BotVec } | null, now: number): void {
+  private firePhase(id: string, p: { id: string; position: Vec3; velocity: Vec3; team?: string }, out: BrainOut, goal: { pos: BotVec } | null, now: number, sh: MoveState | null): void {
     if (out.fire) this.fireAt(p, out.fire.targetId, out.fire.aim);
     if (out.belt) this.throwBelt(p);
+    this.tryPropel(id, p, out, goal, sh, now);
     // Sentry-clearing lob: hostile gear watching the objective gets a
     // grenade on its own slow cadence — the same legal path humans use
     // to soften a stand, not a wallhack aim-assist.
@@ -616,7 +667,8 @@ export class ServerBots {
         forward: 1, right: 0,
         jumpPressed: !!out.move?.jump, jumpHeld: !!out.move?.jump,
         skiHeld: !!out.move?.ski,
-        jetHeld: !!out.move?.jet || (this.yeetUntil.get(id) ?? 0) > now,
+        jetHeld: !!out.move?.jet || (this.yeetUntil.get(id) ?? 0) > now
+          || (this.propelJetUntil.get(id) ?? 0) > now,
       }, p.status, this.seq++);
     } else {
       this.room.moveSim.setInput(id, { forward: 0, right: 0, jumpHeld: false, skiHeld: false, jetHeld: false }, p.status, this.seq++);
@@ -737,9 +789,8 @@ export class ServerBots {
       const goal = this.flagGoal(p);
       const out = brain.think(dt, this.senses(id, p, goal, now));
       this.applyStatus(id, p, out);
-      this.firePhase(id, p, out, goal, now);
-
       const sh = this.room.moveSim.simState(id);
+      this.firePhase(id, p, out, goal, now, sh);
       if (sh) this.driveMove(id, p, out, sh, dt, now);
       else if (this.legacyMove(id, p, out.dest, dt)) continue;
 

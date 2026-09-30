@@ -459,9 +459,15 @@ export class CombatHandler {
     };
 
     for (const [targetId, target] of this.playerManager.getAllPlayers()) {
-      if (targetId === playerId) continue; // Don't damage self
       if (targetId === excludeTargetId) continue; // Skip direct hit target
       if (target.isDead) continue;
+      if (targetId === playerId) {
+        // Self-knockback for bots only: a bot's velocity is server truth
+        // so a disc-jump blast must land here. Human clients self-predict
+        // their own displacement and would double-apply it.
+        if (target.isBot) this.splashOne(ctx, targetId, target, true);
+        continue;
+      }
       this.splashOne(ctx, targetId, target);
     }
 
@@ -472,7 +478,7 @@ export class CombatHandler {
 
   /** One target inside (or outside) a blast envelope: lag-comp position,
    *  wall occlusion, scaled damage, knockback impulse, friendly gate. */
-  private splashOne(ctx: BlastCtx, targetId: string, target: PlayerState): void {
+  private splashOne(ctx: BlastCtx, targetId: string, target: PlayerState, shoveOnly = false): void {
     // Lag-comp the victim position the same as hitscan — a rocket
     // that exploded on the shooter's screen should hit the ghost.
     const tpos = rewindPos(target, clampPing(ctx.ping));
@@ -494,6 +500,7 @@ export class CombatHandler {
 
     const impulseMag = aoeImpulse(ctx.impulse, dist, ctx.radius) * KNOCKBACK_SCALE * perkMods(target.perk).knockbackTaken;
     this.shove(targetId, target, { x: tdx, y: tdy, z: tdz }, impulseMag, ctx.pos, ctx.pull);
+    if (shoveOnly) return; // self-propulsion: displace, never damage
 
     // Splash still displaces teammates (jump-boost assists); it just
     // never deals damage to them in team rooms.
