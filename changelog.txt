@@ -1,3 +1,4 @@
+2026-09-26 - Lint sweep done: RoomMoveSim noteDivergence/anchoredCompare split, blastForce occluded hoisted — oxlint fully warning-free across shared/server/client
 2026-09-26 - shared/ complexity sweep: stepRoller/resolveMapSpec/resolveBody/checkFlightLegality/roleObjective decomposed — oxlint shared/ now warning-free
 2026-09-26 - Decompose stepTotem + stepCrawler into per-state steppers (aim/charge, windupPounce/hopLaunch)
 2026-09-26 - Decompose stepFlyer + stepSlither into per-state steppers (orbit/windup/dive/climb, coil/weave); param objects for geometry

@@ -380,19 +380,8 @@ export class RoomMoveSim {
    *  noise floor and stay INFO for later review. */
   private noteDivergence(sh: Shadow, playerId: string, pos: Vec3Like, reportInputSeq: number | undefined, dist: number, tol: number): void {
     sh.divergences++;
-    if (this.health) {
-      this.health.set('diverge', (this.health.get('diverge') ?? 0) + 1);
-      if (dist > (this.health.get('gapMax') ?? 0)) this.health.set('gapMax', Math.round(dist * 10) / 10);
-    }
-    if (dist > RoomMoveSim.SEVERE_M && !sh.cheated) {
-      const now = Date.now();
-      sh.severeT = sh.severeT.filter((t) => now - t < RoomMoveSim.SEVERE_MS);
-      sh.severeT.push(now);
-      if (sh.severeT.length >= RoomMoveSim.SEVERE_N) {
-        sh.cheated = true;
-        this.onCheat?.(playerId, dist);
-      }
-    }
+    this.noteHealth(dist);
+    this.noteSevere(sh, playerId, dist);
     // Mid-arc knockback skew is transient by construction — the severe
     // counter still eats it (3 hits in 60s = real teleport), but the
     // log line stays informational. Same for permissive mode: without
@@ -409,6 +398,25 @@ export class RoomMoveSim {
       simPos: `${s.pos.x.toFixed(1)},${s.pos.y.toFixed(1)},${s.pos.z.toFixed(1)}`,
       repPos: `${pos.x.toFixed(1)},${pos.y.toFixed(1)},${pos.z.toFixed(1)}`,
     });
+  }
+
+  private noteHealth(dist: number): void {
+    if (!this.health) return;
+    this.health.set('diverge', (this.health.get('diverge') ?? 0) + 1);
+    if (dist > (this.health.get('gapMax') ?? 0)) this.health.set('gapMax', Math.round(dist * 10) / 10);
+  }
+
+  /** Rolling severe-blow counter — N overshoots inside the window flags
+   *  the shadow as a teleporter, not a drifter. */
+  private noteSevere(sh: Shadow, playerId: string, dist: number): void {
+    if (dist <= RoomMoveSim.SEVERE_M || sh.cheated) return;
+    const now = Date.now();
+    sh.severeT = sh.severeT.filter((t) => now - t < RoomMoveSim.SEVERE_MS);
+    sh.severeT.push(now);
+    if (sh.severeT.length >= RoomMoveSim.SEVERE_N) {
+      sh.cheated = true;
+      this.onCheat?.(playerId, dist);
+    }
   }
 
   /** Pick the sim state a seq-stamped report should be compared against.
@@ -433,12 +441,22 @@ export class RoomMoveSim {
     if (!anchor) return s;
     const probe = (sh.probe ??= new MoveSim(this.surface!, anchor.st));
     probe.setState(anchor.st);
+    const segs = [...after, { st: anchor.st, tick: sh.simTicks, inp: sh.sim.input }];
+    this.replayWindow(sh, probe, anchor, segs);
+    return probe.state;
+  }
+
+  /** Replay the anchor→now input segments through the probe, mirroring
+   *  the tank's energy gating. Cap TOTAL replay work, not each segment —
+   *  a per-segment cap leaves the probe stale mid-window and reads the
+   *  truncation as divergence (journal is ≤32 entries, window is small). */
+  private replayWindow(
+    sh: Shadow, probe: MoveSim,
+    anchor: { st: MoveState; tick: number; inp: MoveInput; e: number },
+    segs: { tick: number; inp: MoveInput }[],
+  ): void {
     let tick = anchor.tick;
     let inp = anchor.inp;
-    const segs = [...after, { st: anchor.st, tick: sh.simTicks, inp: sh.sim.input }];
-    // Cap TOTAL replay work, not each segment — a per-segment cap leaves
-    // the probe stale mid-window and reads the truncation as divergence.
-    // The journal is ≤32 entries so the whole window is naturally small.
     let budget = 128;
     // The probe must mirror the tank: the live sim gates jetHeld off when
     // energy drains — replaying raw input keeps the probe jetting where
@@ -463,7 +481,6 @@ export class RoomMoveSim {
       if (tick >= sh.simTicks || budget <= 0) break;
       inp = seg.inp;
     }
-    return probe.state;
   }
 
   private probeForward(sh: Shadow, from: MoveState, steps: number, inp: MoveInput): MoveState {

@@ -31,6 +31,9 @@ const SELF_AOE_DAMAGE_SCALE = 0.15;
 // damage the funnel will never confirm (then resyncing it back).
 const solids = () => Projectile.solidColliders;
 
+const occluded = (pos: THREE.Vector3, target: THREE.Vector3) =>
+  solids().length > 0 && blastOccluded(pos, target, solids());
+
 // Splash damage-number color follows the weapon — getProjectileConfig
 // looks up by wire weaponType (the array order isn't the enum).
 function splashColor(weaponType?: number): string {
@@ -54,8 +57,6 @@ export interface BlastArgs {
 }
 
 export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
-  const occluded = (pos: THREE.Vector3, target: THREE.Vector3) =>
-    solids().length > 0 && blastOccluded(pos, target, solids());
 
   // Nuggets are light pickups — blast throws them at a boosted force so
   // explosions visibly scatter loot instead of it hovering through the blast
