@@ -1,3 +1,4 @@
+2026-09-26 - crawlerHit shares the same derived damage ceiling (MAX_HIT_CLAIM_DMG now lives in shared/weapons.ts)
 2026-09-26 - creatureHit damage clamp derived from weapons table (max direct+splash, perk headroom) — 300 flat cap halved
 2026-09-26 - Heal claims rate-gated (1.5s cadence) — free-form FFA heals were infinite regen; refused claims don't burn the window
 2026-09-26 - LG charge economy extracted to combatCharge.ts (ramp, bank, discharge, corpse-pop); CombatHandler keeps only the detonation blast

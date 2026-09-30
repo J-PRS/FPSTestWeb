@@ -26,7 +26,7 @@ import type { PlayerManager } from './PlayerManager.ts';
 import type { ServerMessage, Vec3 } from './types.ts';
 import { STATUS } from '../../shared/status.ts';
 import { logger } from './logger.ts';
-import { ARMORNADE_OVERCAP } from '../../shared/weapons.ts';
+import { ARMORNADE_OVERCAP, MAX_HIT_CLAIM_DMG } from '../../shared/weapons.ts';
 
 const TICK_DT = 0.05;
 const RETARGET_INTERVAL = CRAWLER_SIM.RETARGET_S;
@@ -283,7 +283,7 @@ export class CreatureSim {
       logger.warn('crawlerHit dropped: out of range', { playerId, id });
       return;
     }
-    const dmg = Math.max(1, Math.min(300, damage));
+    const dmg = Math.max(1, Math.min(MAX_HIT_CLAIM_DMG, damage));
     const dead = isFlyer(c)
       ? applyFlyerDamage(c, dmg)
       : isTotem(c)

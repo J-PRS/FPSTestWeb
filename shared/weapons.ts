@@ -551,6 +551,13 @@ export const REPAIR_ARMOR_MULT = 2;    // armor cap = this × the deployable's b
 export const ARMORNADE_ARMOR = 50;     // flat armor each blast grants
 export const ARMORNADE_OVERCAP = 2;    // creature armor cap = this × maxHealth
 
+/** Biggest legal single damage claim vs a creature: table max
+ *  (direct+splash) with perk headroom. creatureHit/crawlerHit claims
+ *  carry no weapon ref, so this is the widest honest ceiling — anything
+ *  above it is doctored. */
+export const MAX_HIT_CLAIM_DMG = Math.ceil(
+  Math.max(...Object.values(WEAPONS).map(w => w.directDamage + w.aoeDamage)) * 1.4);
+
 export function getWeaponStats(weaponType: number | undefined): WeaponStats {
   return WEAPONS[weaponType ?? WeaponType.Rocket] ?? WEAPONS[WeaponType.Rocket]!;
 }

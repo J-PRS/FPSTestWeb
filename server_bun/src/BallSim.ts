@@ -20,7 +20,7 @@ import {
   makeSimBall, stepBall, applySimDamage, type StructureCollider,
 } from '../../shared/ballSim.ts';
 import { ColliderIndex } from '../../shared/solidWorld.ts';
-import { WEAPONS } from '../../shared/weapons.ts';
+import { MAX_HIT_CLAIM_DMG } from '../../shared/weapons.ts';
 import type { PlayerManager } from './PlayerManager.ts';
 import type { ServerMessage, Vec3 } from './types.ts';
 import { encodeBallSegment } from '../../shared/wire.ts';
@@ -32,11 +32,6 @@ import { segPointDist, segPointT } from '../../shared/projSim.ts';
 import { aoeDamage } from '../../shared/combat.ts';
 
 const TICK_DT = 0.05;           // 20Hz — matches GameServer tick broadcast
-/** Biggest legal single-claim damage vs a creature: table max
- *  (direct+splash) with perk headroom. Claims carry no weapon ref, so
- *  this is the widest honest ceiling — anything above is doctored. */
-const MAX_HIT_CLAIM_DMG = Math.ceil(
-  Math.max(...Object.values(WEAPONS).map(w => w.directDamage + w.aoeDamage)) * 1.4);
 const RETARGET_INTERVAL = 2.0;  // seconds between nearest-player re-evals
 // Resync floor: a ball in long flat flight emits NO bounce events, and
 // client prediction diverges freely meanwhile — force a segment every
@@ -370,6 +365,7 @@ export class BallSim {
     // The claim carries no weapon ref — cap at the biggest legal one-hit
     // (direct+splash, perk-boosted) instead of a flat 300.
     const dmg = Math.max(1, Math.min(MAX_HIT_CLAIM_DMG, damage));
+
     let ix = 0, iy = 0, iz = 0;
     if (kx !== undefined && ky !== undefined && kz !== undefined) {
       const m = Math.hypot(kx, ky, kz);
