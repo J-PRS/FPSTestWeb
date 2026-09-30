@@ -1,3 +1,4 @@
+2026-09-26 - e2e: smoke forced-ws leg isolated in own room+bots (peer wt drop under spawn CPU spike no longer flakes it); env probe now rejects ports whose UDP/WT bind fails (stale-server cross-talk)
 2026-10-02 - rtc tier probe no longer leaks its signalling ws on loss; e2e output quieted (Vite HMR unhandled rejection was dev-server noise)
 2026-10-02 - e2e vgs spec: real key-chord input reaches peer chat wire (SHAZBOT!, Attack!); suite now 7 specs
 2026-10-02 - perf gate retuned: p95 3x (SwiftShader tail noise), jsBusy +750nchanged; compare-vs-baseline run confirms no regression (jsBusy 0.26 vs 0.23)

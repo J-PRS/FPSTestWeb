@@ -66,6 +66,31 @@ try {
   await client.page.evaluate(`window.__test.networkManager.send({ type: 'chat', text: 'e2e ping' })`);
   const chatSeen = await client.waitFor(`window.__chatLog?.some(l => l.text === 'e2e ping')`, 8000).then(() => true).catch(() => false);
   ok(chatSeen, 'chat line round-tripped the wire');
+
+  const tier = await client.test(`t.networkManager.getTransportTier()`);
+  console.log(`   (primary tier: ${tier})`);
+
+  // 7. forced-ws leg: the tiered probe prefers wt in this env, so without
+  // pinning ?net=ws the plain socket path would go untested by the suite.
+  // Own room + own bots: the primary client can drop while the second
+  // headless Chrome spawns (CPU spike kills wt sessions), and sharing a
+  // room would leave this client alone in a recreated empty one.
+  const wsClient = await launchClient(stack.clientUrl('&room=e2esmoke-ws&bots=2&net=ws'));
+  try {
+    await wsClient.waitFor(`t.networkManager && t.networkManager.isConnected()`, 30000);
+    const wsTier = await wsClient.test(`t.networkManager.getTransportTier()`);
+    ok(wsTier === 'ws', `forced ws tier negotiated (got ${wsTier})`);
+    const w0 = await wsClient.test<number>(`t.networkManager.lastTickSeq`);
+    await sleep(2000);
+    const w1 = await wsClient.test<number>(`t.networkManager.lastTickSeq`);
+    ok(w1 > w0, `ws tick frames advancing (${w0} → ${w1})`);
+    await wsClient.waitFor(`t.world.remotePlayers.entities.size >= 1`, 20000)
+      .catch(() => null);
+    const wsRoster = await wsClient.test<number>(`t.world.remotePlayers.entities.size`);
+    ok(wsRoster >= 1, `ws client sees server bot(s) (${wsRoster})`);
+  } finally {
+    await closeClient(wsClient);
+  }
 } finally {
   await closeClient(client);
   stack.down();
