@@ -13,7 +13,7 @@
 - **Networking:** edges + committed snapshots, not position streams;
   distance-tiered fanout; players are the only always-on stream (20Hz).
   PROTOCOL_VERSION=4. `ROADMAP.md` is the living manifesto — read first.
-- **Testing:** `server_bun/tests/` 448 bun tests incl. `tests/scenarios/`
+- **Testing:** `server_bun/tests/` 451 bun tests incl. `tests/scenarios/`
   one-file-per-staged-interaction suite (harness.ts); client vitest (99);
   `server_bun/tools/netBot.ts` wire-level soak bots — full client-verb
   coverage, real claim ledger, objective farming (+ `bun run soak`,
@@ -23,6 +23,17 @@
   CI runs it on every push; `_tools/pvptest/soakreport.ts` headless
   fleet+server audit.
 - **Recent Changes:**
+  - Perf arc: bot brain 20Hz→4Hz phase-staggered; two-axis dynamic
+    quality scaler (GPU ladder: shadows→px2→px1→px3→px4; CPU ladder:
+    ambient fx off→pixel) driven by sustained fps + JS-phase timing;
+    `?px=`/`fps-*` user picks always win
+  - GPU offload: volumetric cloud wind moved to vertex shader
+    (per-instance windOffset attr + windVector uniform) — kills
+    per-frame instanceMatrix churn; cloud undersides shaded for volume
+  - Mood on the cheap: `sunShafts.ts` fake god rays (one additive
+    sprite, camera-facing-gated), mist banks drift on shared wind
+    vector, bloom re-ordered to threshold the HDR frame pre-ACES
+    (only over-bright emitters bloom — trails/explosions/sun)
   - `_tools/e2e/` suite + `.github/workflows/ci.yml` — real Chrome vs
     real server: connect/gameState/tick frames/corrections/chat on ws,
     p2p host+guest over a DataChannel, open-lobby quick-join, grace
