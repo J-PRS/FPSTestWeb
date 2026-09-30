@@ -384,3 +384,16 @@ describe('bot fire legality', () => {
     expect(bot.protectedUntil).toBe(0);
   });
 });
+
+describe('heal claims', () => {
+  it('free-form heals are rate-gated — a spammed second claim inside the window is dropped', () => {
+    const { players, combat } = harness();
+    players.addPlayer('p1');
+    const p = players.getPlayer('p1')!;
+    p.health = 50;
+    combat.handleHeal('p1', { type: 'heal', amount: 25 });
+    expect(p.health).toBe(75);
+    combat.handleHeal('p1', { type: 'heal', amount: 25 });
+    expect(p.health).toBe(75); // in-window claim dropped
+  });
+});

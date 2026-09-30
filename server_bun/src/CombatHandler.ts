@@ -150,6 +150,7 @@ export class CombatHandler {
     // warn keys — a leaver's entry otherwise sits in the map for the
     // room's life.
     this.lastFireNotify.delete(playerId);
+    this.lastHeal.delete(playerId);
     this.chargeBank.delete(playerId);
   }
 
@@ -635,6 +636,11 @@ export class CombatHandler {
     this.applyHit('environment', playerId, damage, result, { label: 'Player hit' });
   }
 
+  /** Free-form heal claims still need a cadence — without a credit gate
+   *  (non-team rooms) a spammed claim is infinite regen. 1.5s matches the
+   *  fastest honest gem-touch rhythm. */
+  private lastHeal = new Map<string, number>();
+
   // Client-claimed heal — self-only. Team-mode rooms require credit the
   // server granted on a gem touch; elsewhere the claim stays free-form
   // (local nuggets in non-team rooms have no server backing). No
@@ -643,6 +649,8 @@ export class CombatHandler {
   handleHeal(playerId: string, msg: Extract<ClientMessage, { type: 'heal' }>): void {
     const player = this.playerManager.getPlayer(playerId);
     if (!player || player.isDead) return;
+    const now = Date.now();
+    if ((this.lastHeal.get(playerId) ?? 0) > now) return;
     const heal = Math.min(25, Math.max(1, Math.round(msg.amount * perkMods(player.perk).healBoost)));
     if (this.deps.teams) {
       if (player.healCredit <= 0) return;
@@ -652,6 +660,7 @@ export class CombatHandler {
     } else {
       player.health = Math.min(player.maxHealth, player.health + heal);
     }
+    this.lastHeal.set(playerId, now + 1500); // a heal that landed sets the cadence; a refused one doesn't
     player.forceSendUntil = Date.now() + FORCE_SEND_MS;
     logger.info('Player healed', { playerId, heal, health: player.health });
   }
