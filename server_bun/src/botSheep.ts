@@ -13,6 +13,9 @@ export class BotSheepMeter {
   private meter = new Map<string, number>();
   private window = new Map<string, { start: number; dist: number; lx: number; lz: number }>();
   private yeetUntil = new Map<string, number>();
+  /** Per-source charge ledger since the last yeet — dumped into the
+   *  yeet warn so tuning reads "why" instead of "that". */
+  private why = new Map<string, { idle: number; ignore: number; cover: number }>();
   /** Windows that measure play must run on sim time — wall clock lies
    *  whenever the tick is throttled. */
   private simMs = 0;
@@ -25,6 +28,7 @@ export class BotSheepMeter {
     this.meter.delete(id);
     this.window.delete(id);
     this.yeetUntil.delete(id);
+    this.why.delete(id);
   }
 
   of(id: string): number { return Math.round(this.meter.get(id) ?? 0); }
@@ -38,9 +42,13 @@ export class BotSheepMeter {
     const jetting = !!m.out.move?.jet || this.yeetUntilMs(id) > now;
     const tribesing = speedXZ > 10 || m.airborne || jetting;
     const prev = this.meter.get(id) ?? 0;
-    let meter = prev + m.dt * (tribesing
+    let why = this.why.get(id);
+    if (!why) { why = { idle: 0, ignore: 0, cover: 0 }; this.why.set(id, why); }
+    const base = m.dt * (tribesing
       ? -(10 + speedXZ * 0.5 + (jetting ? 15 : 0))
       : m.hasDest ? 9 : 18);
+    if (base > 0) why.idle += base;
+    let meter = prev + base;
     // The foe-ignoring charge only counts a PARKED bot — one that's
     // skiing/jetting/covering ground is playing Tribes even while it
     // holds fire, and charging it produces a yeet loop: meter lands at
@@ -49,7 +57,10 @@ export class BotSheepMeter {
     // then must land and re-acquire — charging during that window is
     // the loop the previous comment described.
     if ((this.yeetUntil.get(id) ?? -Infinity) + 3000 <= now) {
-      meter += this.postDebits(id, p, m, tribesing);
+      const ig = tribesing ? 0 : this.ignoreDebit(m);
+      const cov = this.coverageDebit(id, p, m.hasDest, this.simMs);
+      why.ignore += ig; why.cover += cov;
+      meter += ig + cov;
     }
     if (meter >= 100) {
       // The yeet is pinned INPUT, not injected velocity — ServerBots
@@ -59,7 +70,8 @@ export class BotSheepMeter {
       this.yeetUntil.set(id, now + 1500);
       meter = 40;
       this.meter.set(id, meter);
-      logger.warn('Sheep yeet', { room: this.room.name, bot: id });
+      this.why.set(id, { idle: 0, ignore: 0, cover: 0 });
+      logger.warn('Sheep yeet', { room: this.room.name, bot: id, why: { idle: +why.idle.toFixed(1), ignore: +why.ignore.toFixed(1), cover: +why.cover.toFixed(1) } });
       return true;
     } else if (meter < 0) {
       meter = 0;
@@ -68,12 +80,6 @@ export class BotSheepMeter {
     }
     this.meter.set(id, meter);
     return false;
-  }
-
-  /** Post-yeet-window debits: the foe-ignore charge (parked bots only)
-   *  plus the 5s coverage-window debit. */
-  private postDebits(id: string, p: { position: Vec3 }, m: { out: BrainOut; foe?: boolean; hasDest: boolean; dt: number }, tribesing: boolean): number {
-    return (tribesing ? 0 : this.ignoreDebit(m)) + this.coverageDebit(id, p, m.hasDest, this.simMs);
   }
 
   /** Fastest cowardice tell: a visible live enemy in range and the

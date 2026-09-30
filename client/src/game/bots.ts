@@ -281,6 +281,11 @@ export class TeamBots {
     return Math.min(8, (ePrev - mech) * 0.08);
   }
 
+  /** Per-source sheep ledger — positive charge points each channel
+   *  contributed since the last yeet, dumped into the warn so tuning
+   *  reads "why" instead of "that". */
+  private sheepWhy = new Map<string, { idle: number; ignore: number; bleed: number; cover: number }>();
+
   private sheepTick(bot: GameBot, dt: number, terrain: Terrain, foe = false, ignoring = false, hasDest = false): void {
     this.sheepSimMs += dt * 1000;
     const v = bot.vel;
@@ -289,19 +294,26 @@ export class TeamBots {
     const grounded = height < 2;
     const tribesing = speedXZ > 10 || !grounded || bot.yeetT > 0;
     const moving = speedXZ > 1;
+    let why = this.sheepWhy.get(bot.playerId);
+    if (!why) { why = { idle: 0, ignore: 0, bleed: 0, cover: 0 }; this.sheepWhy.set(bot.playerId, why); }
     // Rates mirror the server meter — a bot offline is held to the same
     // standard it is on the wire.
     let delta = tribesing ? -(10 + speedXZ * 0.5 + (bot.yeetT > 0 ? 15 : 0)) : moving ? 9 : 18;
+    if (!tribesing) why.idle += delta * dt;
     // Parked within reach of a visible enemy and holding fire — the
     // fastest tell. Only counts while NOT tribesing: a bot that's
     // skiing or repositioning is playing even with its finger off.
-    if (foe && ignoring && !tribesing) delta += 40;
+    if (foe && ignoring && !tribesing) { delta += 40; why.ignore += 40 * dt; }
     // Bleeding total energy without a fight on screen is the deadstop
     // signature — Tribes play is converting height↔speed losslessly,
     // so E stays flat through clean skiing and only drops on
     // face-plants, wall hits, and pedestrian friction.
-    bot.sheep += this.energyBleed(bot, v, height, foe);
-    if (!tribesing) bot.sheep += this.coverageDebit(bot, hasDest);
+    const bleed = this.energyBleed(bot, v, height, foe);
+    why.bleed += bleed;
+    bot.sheep += bleed;
+    const cover = tribesing ? 0 : this.coverageDebit(bot, hasDest);
+    why.cover += cover;
+    bot.sheep += cover;
     bot.sheep = Math.max(0, Math.min(100, bot.sheep + delta * dt));
     // ~2s trailing average for display — the raw meter jitters ±10/s
     // around the fill/drain boundary, which reads as flicker.
@@ -311,7 +323,10 @@ export class TeamBots {
       // pinned jet ends inside a still-full meter and re-yeets forever.
       bot.sheep = 40;
       bot.yeet();
-      this.deps.logger.warn(`bot ${bot.playerId} yeeted — sheep meter hit 100`);
+      const w = this.sheepWhy.get(bot.playerId) ?? { idle: 0, ignore: 0, bleed: 0, cover: 0 };
+      this.sheepWhy.set(bot.playerId, { idle: 0, ignore: 0, bleed: 0, cover: 0 });
+      this.deps.logger.warn(
+        `bot ${bot.playerId} yeeted — sheep 100 (why: idle=${w.idle.toFixed(1)} ignore=${w.ignore.toFixed(1)} bleed=${w.bleed.toFixed(1)} cover=${w.cover.toFixed(1)})`);
     }
   }
 
@@ -339,6 +354,7 @@ export class TeamBots {
     bot.sheepShown = 0;
     bot.yeetT = 0;
     this.sheepE.delete(bot.playerId);
+    this.sheepWhy.delete(bot.playerId);
     bot.show();
     bot.setGizmoColor(bot.team === 'ffa' ? 0xcc66ff : TEAM_COLORS[bot.team as TeamId]);
   }
@@ -388,7 +404,7 @@ export class TeamBots {
     if (p.isDead) return;
     p.health = Math.max(0, p.health - dmg);
     p.lastDamageSource = src;
-    p.applyKnockback(fromPos, melee ? 6 : 4);
+    p.applyKnockback(fromPos, (melee ? 6 : 4) * p.mods.knockbackTaken);
     this.deps.lazyHud().showDamage(fromPos, dmg);
     sfx.playerHurt();
     if (p.health > 0) return;
