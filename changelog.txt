@@ -1,3 +1,4 @@
+2026-09-26 - Tests: bot beam-vs-player path pinned (weld damages, whiff does not)
 2026-09-26 - Tests: beam-vs-player scenario coverage — excluded victim takes the tick, held-beam band decay
 2026-09-26 - Bots shoot real weapons: creature targets now eat real shells (RoomProjectiles creature sweep + splashDamage), projectile-less weapons use a geometric beam ray instead of RNG hitscan
 2026-09-26 - Lint sweep done: RoomMoveSim noteDivergence/anchoredCompare split, blastForce occluded hoisted — oxlint fully warning-free across shared/server/client

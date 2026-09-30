@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'bun:test';
-import { mkRoom, step, pin } from './harness.ts';
+import { mkRoom, step, pin, twoPlayers } from './harness.ts';
 import { WeaponType } from '../../../shared/weapons.ts';
+import { BOT_LOADOUTS } from '../../../shared/botLoadouts.ts';
 import type { Vec3 } from '../../src/types.ts';
 
 // Bots fire REAL shells through RoomProjectiles — this suite pins the
@@ -44,5 +45,39 @@ describe('scenario: bot shells hit creatures like player shots', () => {
       { x: 0, y: 31.4, z: 0 }, { x: 1, y: 0, z: 0 }, { x: 0, y: 0, z: 0 });
     for (let i = 0; i < 60; i++) step(room, 1);
     expect(ballHp(room, aim)).toBe(hp0);
+  });
+
+  it('a beam-rider bot welds a player for real — same funnel as botAttack', () => {
+    const room = mkRoom({ bots: 1 }, 'dm');
+    const b = bot(room);
+    const victim = room.players.addPlayer('victim');
+    pin(room, b.id, { x: 0, y: 31, z: 0 });
+    pin(room, 'victim', { x: 10, y: 31, z: 0 }); // inside the 15m near band
+    // Force the beam-rider kit (index 8) — near band draws Lightning, which
+    // has no projectile body and routes through fireSpeedless.
+    const bots = room.bots as unknown as {
+      arsenal: { fireAt(p: { id: string; position: Vec3; velocity: Vec3 }, t: string, aim: Vec3): void };
+      loadouts: Map<string, (typeof BOT_LOADOUTS)[number]>;
+    };
+    bots.loadouts.set(b.id, BOT_LOADOUTS[8]!);
+    const hp0 = victim.health;
+    for (let i = 0; i < 6; i++) bots.arsenal.fireAt(b, 'victim', { x: 10, y: 32, z: 0 });
+    expect(victim.health).toBeLessThan(hp0);
+  });
+
+  it('a beam into empty dirt pays nothing — the tracer lies less than the RNG did', () => {
+    const room = mkRoom({ bots: 1 }, 'dm');
+    const b = bot(room);
+    const victim = room.players.addPlayer('victim');
+    pin(room, b.id, { x: 0, y: 31, z: 0 });
+    pin(room, 'victim', { x: 10, y: 31, z: 0 });
+    const bots = room.bots as unknown as {
+      arsenal: { fireAt(p: { id: string; position: Vec3; velocity: Vec3 }, t: string, aim: Vec3): void };
+      loadouts: Map<string, (typeof BOT_LOADOUTS)[number]>;
+    };
+    bots.loadouts.set(b.id, BOT_LOADOUTS[8]!);
+    // Aim 4m over the victim's head — the ray must not "hit" anyway.
+    bots.arsenal.fireAt(b, 'victim', { x: 10, y: 36, z: 0 });
+    expect(victim.health).toBe(victim.maxHealth);
   });
 });
