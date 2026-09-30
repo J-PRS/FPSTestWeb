@@ -1,3 +1,4 @@
+2026-09-26 - Extract client-log ingest + rotation from server.ts into clientLogs.ts
 2026-09-26 - Split CTF flag bridge out of client bots.ts into botCtf.ts
 2026-09-26 - Split FPS watchdog + auto-quality ladders out of gameLoop into loopPerf.ts
 2026-09-26 - Split match journal/leaderboard out of GameServer into matchJournal.ts

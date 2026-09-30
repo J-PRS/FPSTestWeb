@@ -8,8 +8,8 @@ import { DemoStorage } from './DemoStorage.ts';
 import { RtcRelay } from './RtcRelay.ts';
 import { RtcServer } from './RtcServer.ts';
 import { WtServer } from './WtServer.ts';
-import { join, basename, extname } from 'node:path';
-import { appendFileSync, mkdirSync, existsSync, statSync, renameSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { clientLogRoute, rotateLogs } from './clientLogs.ts';
 
 const gameServer = new GameServer();
 const demoStorage = new DemoStorage(join(import.meta.dir, '..', 'demos'));
@@ -201,60 +201,7 @@ ROUTES['/demos'] = async () => {
   return json({ demos: list });
 };
 
-const LOGS_DIR = join(import.meta.dir, '..', '..', 'logs');
-
-// Log rotation — the previous run's logs move to logs/OLD/<name>_<mtime
-// -ts>.<ext> at boot so each file always reflects the build that produced
-// it (JP's manual timestamp convention, automated). Best-effort only.
-const p2 = (n: number) => String(n).padStart(2, '0');
-const logStamp = (t: Date) =>
-  `${t.getFullYear()}_${p2(t.getMonth() + 1)}_${p2(t.getDate())}-${p2(t.getHours())}_${p2(t.getMinutes())}_${p2(t.getSeconds())}`;
-
-const rotateLog = (p: string): void => {
-  try {
-    if (!existsSync(p) || statSync(p).size === 0) return;
-    const dst = join(LOGS_DIR, 'OLD', `${basename(p, extname(p))}_${logStamp(statSync(p).mtime)}${extname(p)}`);
-    renameSync(p, dst);
-  } catch { /* rotation must never block boot */ }
-};
-
-function rotateLogs(): void {
-  try {
-    mkdirSync(join(LOGS_DIR, 'OLD'), { recursive: true });
-    for (const f of readdirSync(LOGS_DIR)) {
-      if (/\.(log|jsonl)$/.test(f)) rotateLog(join(LOGS_DIR, f));
-    }
-    rotateLog(join(import.meta.dir, '..', 'logs', 'server.log'));
-  } catch { /* same */ }
-}
 rotateLogs();
-
-// Client log shipping: POST /client-log — appended to logs/client.log.
-// Bodies are plain text lines (WARN/ERROR only by client convention).
-// Lines also fan out by level: client_warning.log / client_error.log.
-async function clientLogRoute(req: Request): Promise<Response> {
-  try {
-    const body = await req.text();
-    if (body.length > 512 * 1024) {
-      return corsResponse('Too large', { status: 413 });
-    }
-    mkdirSync(LOGS_DIR, { recursive: true });
-    appendFileSync(join(LOGS_DIR, 'client.log'), body);
-    const warnLines: string[] = [];
-    const errLines: string[] = [];
-    for (const line of body.split('\n')) {
-      if (!line) continue;
-      if (line.includes('[ERROR]')) errLines.push(line);
-      else if (line.includes('[WARN]')) warnLines.push(line);
-    }
-    if (warnLines.length) appendFileSync(join(LOGS_DIR, 'client_warning.log'), warnLines.join('\n') + '\n');
-    if (errLines.length) appendFileSync(join(LOGS_DIR, 'client_error.log'), errLines.join('\n') + '\n');
-    return corsResponse('ok');
-  } catch (e) {
-    logger.warn('Client log append failed', { error: (e as Error).message });
-    return corsResponse('append failed', { status: 500 });
-  }
-}
 
 const server = Bun.serve<WebSocketData>({
   port: CONFIG.port,
@@ -324,7 +271,7 @@ const server = Bun.serve<WebSocketData>({
     if (url.pathname.startsWith('/admin/')) return adminRoute(req, url);
     if (url.pathname.startsWith('/demos/')) return demoRoute(req, url);
     if (url.pathname.startsWith('/maps/')) return mapBinRoute(url);
-    if (url.pathname === '/client-log' && req.method === 'POST') return clientLogRoute(req);
+    if (url.pathname === '/client-log' && req.method === 'POST') return clientLogRoute(req, corsResponse);
 
     return corsResponse('Not found', { status: 404 });
   },
