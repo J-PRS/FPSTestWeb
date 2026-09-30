@@ -86,7 +86,7 @@ interface Shadow {
    *  must compare against the journal entry at N replayed to now — the
    *  live sim applied inputs the report predates (e.g. a jump), which
    *  reads as a divergence otherwise. Insertion-ordered; bounded. */
-  seqStates: Map<number, { st: MoveState; tick: number }>;
+  seqStates: Map<number, { st: MoveState; tick: number; inp: MoveInput }>;
   /** Number of 1/30 sim quanta the shadow has integrated. */
   simTicks: number;
   /** Input seq consumed at the last resync() — reports stamped at or below
@@ -243,6 +243,10 @@ export class RoomMoveSim {
       sh.seqStates.set(seq, {
         st: { pos: { ...s.pos }, vel: { ...s.vel }, yaw: s.yaw, pitch: s.pitch, onGround: s.onGround },
         tick: sh.simTicks,
+        // Input snapshot at the moment this seq was consumed — replaying
+        // the journal window with CURRENT input reads a mid-window jet
+        // toggle as a false ~20m divergence for an honest client.
+        inp: { ...sh.sim.input },
       });
       if (sh.seqStates.size > 32) sh.seqStates.delete(sh.seqStates.keys().next().value!);
     }
@@ -391,21 +395,42 @@ export class RoomMoveSim {
    *  anchor at/below the report seq up to now — the live sim applied
    *  inputs the report predates, which reads as divergence otherwise. */
   private anchoredCompare(sh: Shadow, s: MoveState, reportSeq: number): MoveState {
-    if (reportSeq > sh.lastInputSeq) return this.probeForward(sh, s, reportSeq - sh.lastInputSeq);
+    if (reportSeq > sh.lastInputSeq) return this.probeForward(sh, s, reportSeq - sh.lastInputSeq, sh.sim.input);
+    // Entries after the anchor (sorted) define input segments: each runs
+    // its recorded input until the next entry's sim tick — a jet toggle
+    // mid-window then replays correctly instead of being applied to the
+    // whole span.
     let anchorSeq: number | undefined;
-    for (const k of sh.seqStates.keys()) {
+    const after: { st: MoveState; tick: number; inp: MoveInput }[] = [];
+    for (const [k, e] of sh.seqStates) {
       if (k <= reportSeq && (anchorSeq === undefined || k > anchorSeq)) anchorSeq = k;
+      else if (k > reportSeq) after.push(e);
     }
+    after.sort((x, y) => x.tick - y.tick);
     const anchor = anchorSeq !== undefined ? sh.seqStates.get(anchorSeq) : undefined;
     if (!anchor) return s;
-    const steps = sh.simTicks - anchor.tick;
-    return steps > 0 ? this.probeForward(sh, anchor.st, steps) : anchor.st;
+    const probe = (sh.probe ??= new MoveSim(this.surface!, anchor.st));
+    probe.setState(anchor.st);
+    let tick = anchor.tick;
+    let inp = anchor.inp;
+    const segs = [...after, { st: anchor.st, tick: sh.simTicks, inp: sh.sim.input }];
+    for (const seg of segs) {
+      const steps = Math.min(seg.tick - tick, 16);
+      if (steps > 0) {
+        Object.assign(probe.input, inp);
+        for (let i = 0; i < steps; i++) probe.update(MoveSim.STEP);
+        tick += steps;
+      }
+      if (tick >= sh.simTicks) break;
+      inp = seg.inp;
+    }
+    return probe.state;
   }
 
-  private probeForward(sh: Shadow, from: MoveState, steps: number): MoveState {
+  private probeForward(sh: Shadow, from: MoveState, steps: number, inp: MoveInput): MoveState {
     const probe = (sh.probe ??= new MoveSim(this.surface!, from));
     probe.setState(from);
-    Object.assign(probe.input, sh.sim.input);
+    Object.assign(probe.input, inp);
     for (let i = 0, n = Math.min(steps, 16); i < n; i++) probe.update(MoveSim.STEP);
     return probe.state;
   }
