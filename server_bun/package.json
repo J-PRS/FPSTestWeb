@@ -5,7 +5,12 @@
   "scripts": {
     "dev": "bun dev-watch.ts",
     "start": "bun src/server.ts",
-    "test": "bun test"
+    "test": "bun test",
+    "test:scenarios": "bun test tests/scenarios/",
+    "check": "bun x tsc --noEmit && bun test",
+    "soak": "bun tools/netBot.ts --bots 8 --room infestation --mode nuggets --net best",
+    "rtc:relay": "bun tools/_relaycheck.ts",
+    "rtc:punch": "bun tools/_punchtest.ts"
   },
   "devDependencies": {
     "@types/bun": "latest"

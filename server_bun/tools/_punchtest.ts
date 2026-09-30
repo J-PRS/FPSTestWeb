@@ -1,13 +1,23 @@
-// Two node-datachannel peers hole-punch over the tunnel /rtc relay.
-const URL_ = 'wss://accommodate-rna-pads-fired.trycloudflare.com/rtc?room=punch7';
+// Two node-datachannel peers hole-punch over the /rtc relay.
+//   bun tools/_punchtest.ts --url accommodate-rna-pads-fired   (tunnel)
+//   bun tools/_punchtest.ts                                   (localhost)
+const arg = (k: string, d: string): string => {
+  const i = process.argv.indexOf(`--${k}`);
+  return i >= 0 && process.argv[i + 1] ? process.argv[i + 1]! : d;
+};
+const normUrl = (u: string): string => {
+  if (!u.includes('://')) u = `wss://${u.includes('.') ? u : u + '.trycloudflare.com'}`;
+  return u.replace(/^https:/, 'wss:').replace(/^http:/, 'ws:').replace(/\/(ws|rtc|rtcs).*$/, '');
+};
+const URL_ = `${normUrl(arg('url', 'ws://localhost:8000'))}/rtc?room=${arg('room', 'punch7')}`;
 const nd = await import('node-datachannel');
 const PeerConnection = (nd.default ?? nd).PeerConnection;
 const ICE = { iceServers: [{ hostname: 'stun.l.google.com', port: 19302 }] };
 const log = (m: string) => console.log('[punch]', m);
 
-function sig(room: string): Promise<WebSocket> {
+function sig(): Promise<WebSocket> {
   return new Promise((res, rej) => {
-    const ws = new WebSocket(URL_ + room);
+    const ws = new WebSocket(URL_);
     ws.onopen = () => res(ws); ws.onerror = () => rej(new Error('sig fail'));
   });
 }
@@ -18,7 +28,8 @@ function member(ws: WebSocket) {
   box.send = (m: any) => ws.send(JSON.stringify(m));
   return box as any;
 }
-const wsA = member(await sig('')); const wsB = member(await sig(''));
+const wsA = member(await sig());
+const wsB = member(await sig());
 const roleA = await wsA.wait(); const roleB = await wsB.wait();
 log(`roles: A=${JSON.stringify(roleA)} B=${JSON.stringify(roleB)}`);
 // host makes the offer on 'peer'
