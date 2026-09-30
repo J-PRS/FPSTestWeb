@@ -12,6 +12,7 @@ import { losClear, type BotEnemy, type BotVec, type BrainCtx } from '../../share
 import { STATUS } from '../../shared/status.ts';
 import { getWeaponStats } from '../../shared/weapons.ts';
 import { BOT_LOADOUTS, pickBotWeapon, type BotLoadout } from '../../shared/botLoadouts.ts';
+import { WeaponType } from '../../shared/weapons.ts';
 import { roleObjective, type BotRole } from '../../shared/flagGoals.ts';
 
 export class ServerBotSenses {
@@ -43,6 +44,20 @@ export class ServerBotSenses {
     // hunters off your back is correct behavior in every mode.
     for (const b of this.room.ballSim.roster()) {
       out.push({ id: `b:${b.id}`, pos: b.position, vel: b.velocity, alive: true });
+    }
+    return out;
+  }
+
+  /** Live teammates only — the rally channel. An enemy body is the
+   *  worst place a hurt bot could fold onto, so separation keeps
+   *  reading `others` while retreat reads this. FFA → empty (nobody
+   *  to rally to). */
+  private alliesOf(p: { id: string; team?: string }): Vec3[] {
+    if (!p.team) return [];
+    const out: Vec3[] = [];
+    for (const q of this.room.players.getAllPlayers().values()) {
+      if (q.id === p.id || q.isDead || q.team !== p.team) continue;
+      out.push(q.position);
     }
     return out;
   }
@@ -134,9 +149,11 @@ export class ServerBotSenses {
       enemyStand,
       escort: this.escortSpot(enemy.carrier, me),
     });
-    // Pressing the enemy stand is the infiltrate signal — the brain reads
-    // it as cloak intent on the approach.
-    return { pos: pick, infiltrating: pick === enemyStand && enemyStand !== null };
+    // Cloak intent only for the infiltrator: the drain is speed-scaled,
+    // so a light capper burning RMB-to-stand empties its tank mid-route
+    // and arrives with no jet fuel — infiltration is the saboteur's job.
+    return { pos: pick, infiltrating: pick === enemyStand && enemyStand !== null
+      && this.roles.get(p.id) === 'infiltrator' };
   }
 
   /** A teammate carrying the enemy flag is the escort point — the
@@ -185,6 +202,10 @@ export class ServerBotSenses {
         this.room.moveSim.structureTop(x, z),
       ),
       others: this.othersOf(p),
+      allies: this.alliesOf(p),
+      // Mortar heavies acquire siege-range targets; everyone else holds
+      // the duel band. The shared brain takes max(FIRE_RANGE, this).
+      engageRange: this.loadouts.get(id)?.far === WeaponType.Mortar ? 95 : undefined,
       thief: this.thiefOf(p.team ?? ''),
       // Aim lead uses the muzzle speed of the weapon this bot would
       // pick at that range — same band select fireAt runs.

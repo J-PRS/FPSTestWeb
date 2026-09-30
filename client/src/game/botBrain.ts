@@ -171,6 +171,12 @@ export class GameBot extends RemotePlayer {
     objective?: THREE.Vector3 | null;
     /** Nearby bodies for the steering separation sense. */
     others?: THREE.Vector3[];
+    /** Teammates only — the rally/fold sense (retreat never folds
+     *  onto an enemy). */
+    allies?: THREE.Vector3[];
+    /** Long-arm reach for mortar heavies — extends acquisition past
+     *  the duel band. */
+    engageRange?: number;
     /** Fresh blasts in earshot — the hearing sense. */
     sounds?: { x: number; y: number; z: number }[];
     /** Inbound shells — the dodge sense. */
@@ -192,6 +198,8 @@ export class GameBot extends RemotePlayer {
       solids: Projectile.solidColliders,
       solidIndex: Projectile.solidIndex,
       others: ctx.others,
+      allies: ctx.allies,
+      engageRange: ctx.engageRange,
       sounds: ctx.sounds,
       threats: ctx.threats,
       infiltrating: ctx.infiltrating,

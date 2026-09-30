@@ -1,3 +1,4 @@
+2026-09-30 - Bots: mission-layer fixes — cloak intent is now infiltrator-only (cappers stopped draining tanks pressing the stand), offline CTF gained the infiltrator role, fearing bots MEND while fleeing instead of holding SHIELD, retreat rallies onto teammates via a new allies channel (not the nearest enemy), mortar heavies acquire at 95m, and hold-orbit now jukes direction+radius instead of carouseling.
 2026-10-01 - kill feed: suicides render as "X [weapon] self" + "cratered" log line instead of "X killed X"
 2026-10-01 - RemotePlayer.ts 661->553: model-anim drive (locomotion/jet pick, landing pulse, air trail, shoot/hit oneshots, mixer LOD) -> remoteAnim.ts RemoteAnim
 2026-10-01 - Projectile.ts 638->480: collision-policy family (terrain bounce/fuse, wall+obstacle intercept, ball/player hits, hit-record) -> projCollide.ts ProjCollide

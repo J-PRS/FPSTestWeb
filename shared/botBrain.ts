@@ -62,6 +62,16 @@ export interface BrainCtx {
    *  distance) for the separation sense. Optional; steering works
    *  without it. */
   others?: BotVec[];
+  /** Teammates only — the rally/fold sense. In team modes a hurt bot
+   *  folding onto an ENEMY is worse than going it alone, so the rally
+   *  reads this channel instead of `others`. FFA hosts leave it absent
+   *  (there's no one to rally to). */
+  allies?: BotVec[];
+  /** How far out this bot's armament can productively engage — a mortar
+   *  heavy suppresses at ~95m where a chaingun medium would just waste
+   *  ammo. Hosts compute it from the loadout's long-range weapon; absent
+   *  → the default duel range. */
+  engageRange?: number;
   /** Wall/sim time in ms — brain cooldowns key off this, not frames. */
   now: number;
   /** Modeled energy tank (server shadow truth) — skills/jet gate on it.
@@ -219,10 +229,14 @@ export class BotBrain {
   // Personality scalars — ±20-30% per bot so a squad doesn't read as one
   // centipede: different preferred ranges, wander appetites, tempers.
   private readonly wanderlust = 0.7 + Math.random() * 0.6;
-  /** Held-position strafe orbit — angle advances each pickDest step;
-   *  direction is a per-bot coin so a squad doesn't circle in lockstep. */
+  /** Held-position strafe orbit — angle advances each pickDest step.
+   *  Direction reverses on a jitter (a real duelist breaks the readable
+   *  circle) and the radius breathes per flip, so the hold never reads
+   *  as a carousel. */
   private orbitA = Math.random() * Math.PI * 2;
-  private readonly orbitDir = Math.random() < 0.5 ? 1 : -1;
+  private orbitDir = Math.random() < 0.5 ? 1 : -1;
+  private orbitFlipT = 1 + Math.random() * 1.5;
+  private orbitMul = 1;
   /** Last think resolved to stand-and-shoot — a legal hold, not a stall.
    *  Hosts read this to keep stall/mobility watchdogs honest. */
   holding = false;
@@ -296,7 +310,7 @@ export class BotBrain {
     // --- deploy: a quiet defender with hands free fortifies the stand ---
     const deploy = this.pickDeploy(dt, ctx, pos, fearing);
 
-    return { dest, move: this.moves.hints(dt, ctx, pos, dest), fire, status: this.statusIntent(ctx), belt, deploy };
+    return { dest, move: this.moves.hints(dt, ctx, pos, dest), fire, status: this.statusIntent(ctx, fearing), belt, deploy };
   }
 
   
@@ -328,7 +342,13 @@ export class BotBrain {
     this.holding = this.h.fightPos === null;
     if (this.h.fightPos) return this.h.fightPos;
     this.orbitA += dt * (this.orbitDir * 0.55);
-    const mid = (this.h.orbitFar + this.h.orbitClose) * 0.5;
+    this.orbitFlipT -= dt;
+    if (this.orbitFlipT <= 0) {
+      this.orbitFlipT = 1.2 + Math.random() * 1.4;
+      this.orbitDir = -this.orbitDir;
+      this.orbitMul = 0.75 + Math.random() * 0.4; // jink in/out too — not just direction
+    }
+    const mid = (this.h.orbitFar + this.h.orbitClose) * 0.5 * this.orbitMul;
     const ox = t.pos.x + Math.cos(this.orbitA) * mid;
     const oz = t.pos.z + Math.sin(this.orbitA) * mid;
     return { x: ox, y: ctx.groundY(ox, oz), z: oz };
@@ -359,15 +379,17 @@ export class BotBrain {
   }
 
   /** Toggle-skill intent — the STATUS bits a legal client claims. Mend
-   *  wins: hurt + unpressured + can afford the ante. Otherwise shield up
-   *  in a real fight while the tank can carry the drain. Returns
-   *  undefined when the host has no energy model (offline bots). */
-  private statusIntent(ctx: BrainCtx): number | undefined {
+   *  wins when hurt and unpressured — and while FLEEING: a retreat is
+   *  exactly when a Tribes player channels, so fearing counts as the
+   *  unpressured window even though the hunt is technically still live.
+   *  Otherwise shield up in a real fight while the tank can carry the
+   *  drain. Returns undefined when the host has no energy model. */
+  private statusIntent(ctx: BrainCtx, fearing: boolean): number | undefined {
     if (ctx.energy === undefined) return undefined;
     const fighting = this.h.hunt !== null;
     const hurt = (ctx.healthFrac ?? 1) < 0.6;
     let status = 0;
-    if (!fighting && hurt && ctx.energy >= ENERGY.mendCost + 10) status |= STATUS.MEND;
+    if (hurt && (!fighting || fearing) && ctx.energy >= ENERGY.mendCost + 10) status |= STATUS.MEND;
     else if (fighting && ctx.energy >= ENERGY.shieldCost + 15) status |= STATUS.SHIELD;
     // Infiltration cloak: pressing an enemy stand unseen beats shielding
     // through it — cloak only while the approach is still covert (no

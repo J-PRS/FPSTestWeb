@@ -89,7 +89,10 @@ export function scanVisible(ctx: BrainCtx, pos: BotVec, range: number, beastRang
  *  per enemy) and 3Hz is plenty for position keeping. */
 export function pickHunt(st: HuntState, ctx: BrainCtx, pos: BotVec, now: number, mood: { hero: boolean; fearing: boolean }, pickGoal: (ctx: BrainCtx, pos: BotVec) => void): void {
   const { hero, fearing } = mood;
-  const range = hero ? BOT_FIRE_RANGE * 1.4 : BOT_FIRE_RANGE;
+  // Armament reach widens acquisition for siege weapons — a mortar heavy
+  // engages at ~95m where a chaingun medium still holds the duel band.
+  const base = Math.max(BOT_FIRE_RANGE, ctx.engageRange ?? 0);
+  const range = hero ? base * 1.4 : base;
   const beastRange = ctx.huntCreatures ? CREATURE_FIRE_RANGE : CREATURE_DEFENSE_M;
   const { player, beast: bestBeast, playerD: bestD, beastD: bestBeastD } = scanVisible(ctx, pos, range, beastRange);
   // In economy rooms, only an actual nearby player threat outranks

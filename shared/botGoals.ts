@@ -41,7 +41,7 @@ export class BotGoals {
       s.goal = { ...s.revengeFrom };
       return;
     }
-    if ((ctx.healthFrac ?? 1) < 0.15 && ctx.others && ctx.others.length > 0) {
+    if ((ctx.healthFrac ?? 1) < 0.15 && ctx.allies && ctx.allies.length > 0) {
       const rally = this.rallyGoal(ctx, pos);
       if (rally) s.goal = rally;
       return;
@@ -88,13 +88,13 @@ export class BotGoals {
     return best;
   }
 
-  /** Hurt with nobody shooting back at: fold toward the nearest body.
-   *  Safety-in-numbers emerges — nobody scripts a retreat. */
+  /** Hurt with nobody shooting back at: fold toward the nearest ALLY —
+   *  folding onto an enemy while at 15% hp was worse than running solo. */
   private rallyGoal(ctx: BrainCtx, pos: BotVec): BotVec | null {
-    if ((ctx.healthFrac ?? 1) >= 0.15 || !ctx.others || ctx.others.length === 0) return null;
+    if ((ctx.healthFrac ?? 1) >= 0.15 || !ctx.allies || ctx.allies.length === 0) return null;
     let ally: BotVec | null = null;
     let ad = Infinity;
-    for (const o of ctx.others) {
+    for (const o of ctx.allies) {
       const d = distSq(pos, o);
       if (d < ad && d > 4) { ad = d; ally = o; }
     }

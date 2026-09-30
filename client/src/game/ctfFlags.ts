@@ -72,13 +72,16 @@ export class CtfFlags {
   }
 
   // Offline roles — the same shared/flagGoals.ts table ServerBots uses,
-  // minus technician/infiltrator (the local objective channel only
-  // carries a position, so cloak/deploy intent has nothing to ride on).
+  // minus technician (no deploy kit locally). Infiltrator IS supported:
+  // the cloak intent rides GameBot.applyStatus like anywhere else.
   // Without roles every bot read the same objective and the whole squad
   // ran the same flag route — nobody held the stand.
-  private roles = new Map<string, 'capper' | 'ldefense' | 'hof' | 'offense' | 'defense'>();
+  private roles = new Map<string, 'capper' | 'ldefense' | 'hof' | 'offense' | 'defense' | 'infiltrator'>();
   private roleT = 0;
-  private static readonly SUPPORTED = new Set(['capper', 'ldefense', 'hof']);
+  // Offline bots DO carry the cloak intent (GameBot.applyStatus →
+  // STATUS.CLOAK → setCloakHidden), so the infiltrator lane is playable
+  // locally too — technician alone stays server-only (no deploy kit).
+  private static readonly SUPPORTED = new Set(['capper', 'ldefense', 'hof', 'infiltrator']);
 
   private rebalanceRoles(now: number): void {
     if (now < this.roleT) return;
@@ -104,7 +107,7 @@ export class CtfFlags {
         while (have < want) {
           const donor = donors.shift();
           if (!donor) break;
-          this.roles.set(donor, role as 'capper' | 'ldefense' | 'hof');
+          this.roles.set(donor, role as 'capper' | 'ldefense' | 'hof' | 'infiltrator');
           have++;
         }
       }
@@ -146,7 +149,9 @@ export class CtfFlags {
       enemyStand,
       escort: escortPos,
     });
-    const infiltrating = enemyStand !== null && pick === enemyStand;
+    // Cloak intent is the infiltrator's alone — the drain is
+    // speed-scaled, so a sprinting capper would arrive tank-dry.
+    const infiltrating = enemyStand !== null && pick === enemyStand && role === 'infiltrator';
     return {
       pos: new THREE.Vector3(pick.x, pick.y, pick.z), infiltrating,
       // Only roles whose goal IS the thief get the beacon — a capper
