@@ -31,7 +31,9 @@ export class BotSheepMeter {
   yeetUntilMs(id: string): number { return this.yeetUntil.get(id) ?? 0; }
   set(id: string, v: number): void { this.meter.set(id, v); }
 
-  check(id: string, p: { position: Vec3; velocity: Vec3 }, m: { out: BrainOut; airborne: boolean; hasDest: boolean; foe?: boolean; dt: number }, now: number): void {
+  /** Returns true on the tick the yeet fires — ServerBots uses the edge
+   *  to press the bot's own jump input once. */
+  check(id: string, p: { position: Vec3; velocity: Vec3 }, m: { out: BrainOut; airborne: boolean; hasDest: boolean; foe?: boolean; dt: number }, now: number): boolean {
     const speedXZ = Math.hypot(p.velocity.x, p.velocity.z);
     const jetting = !!m.out.move?.jet || this.yeetUntilMs(id) > now;
     const tribesing = speedXZ > 10 || m.airborne || jetting;
@@ -45,17 +47,22 @@ export class BotSheepMeter {
     // 40 post-yeet and an unlucky perch re-fills in ~1s forever.
     meter += (tribesing ? 0 : this.ignoreDebit(m)) + this.coverageDebit(id, p, m.hasDest, this.simMs);
     if (meter >= 100) {
-      const yaw = Math.random() * Math.PI * 2;
-      this.room.moveSim.applyImpulse(id, { x: Math.cos(yaw) * 12, y: 18, z: Math.sin(yaw) * 12 });
+      // The yeet is pinned INPUT, not injected velocity — ServerBots
+      // holds the bot's jump+jets for the window, exactly the keys a
+      // player would press. A direct impulse would be a move no legal
+      // player can make.
       this.yeetUntil.set(id, now + 1500);
       meter = 40;
+      this.meter.set(id, meter);
       logger.warn('Sheep yeet', { room: this.room.name, bot: id });
+      return true;
     } else if (meter < 0) {
       meter = 0;
     } else if (prev < 60 && meter >= 60) {
       logger.info('Sheep meter high', { room: this.room.name, bot: id, meter: Math.round(meter) });
     }
     this.meter.set(id, meter);
+    return false;
   }
 
   /** Fastest cowardice tell: a visible live enemy in range and the

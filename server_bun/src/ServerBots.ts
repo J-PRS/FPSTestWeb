@@ -511,6 +511,11 @@ export class ServerBots {
     const dx = out.dest.x - p.position.x;
     const dz = out.dest.z - p.position.z;
     const dist = Math.sqrt(dx * dx + dz * dz);
+    // Sheep check before the input commit: a yeet edge presses the bot's
+    // own jump key this tick, and the window holds jets — the same keys
+    // a player holds, never an injected velocity.
+    const yeeted = this.sheep.check(id, p, { out, airborne: !sh.onGround, hasDest: dist >= 0.5, foe: (this.foeNear.get(id) ?? 0) > now, dt }, now);
+    const yeetHeld = this.sheep.yeetUntilMs(id) > now;
     if (dist >= 0.5) {
       // Wrist-speed turn — a snapped 180° reads as a fly-flick while an
       // arc at ~5 rad/s reads as a player swinging their view around.
@@ -523,16 +528,19 @@ export class ServerBots {
       p.rotation.yaw = yaw;
       this.room.moveSim.setInput(id, {
         forward: 1, right: 0,
-        jumpPressed: !!out.move?.jump, jumpHeld: !!out.move?.jump,
+        jumpPressed: yeeted || !!out.move?.jump, jumpHeld: !!out.move?.jump || yeetHeld,
         skiHeld: !!out.move?.ski,
-        jetHeld: !!out.move?.jet || this.sheep.yeetUntilMs(id) > now
+        jetHeld: !!out.move?.jet || yeetHeld
           || this.arsenal.jetPinUntil(id) > now,
       }, p.status, this.seq++);
     } else {
-      this.room.moveSim.setInput(id, { forward: 0, right: 0, jumpHeld: false, skiHeld: false, jetHeld: false }, p.status, this.seq++);
+      this.room.moveSim.setInput(id, {
+        forward: 0, right: 0,
+        jumpPressed: yeeted, jumpHeld: yeetHeld,
+        skiHeld: false, jetHeld: yeetHeld,
+      }, p.status, this.seq++);
     }
     this.checkSheep(id, p, { trying: dist >= 0.5, ski: !!out.move?.ski, airborne: !sh.onGround, jetting: !!out.move?.jet, dt }, now);
-    this.sheep.check(id, p, { out, airborne: !sh.onGround, hasDest: dist >= 0.5, foe: (this.foeNear.get(id) ?? 0) > now, dt }, now);
     p.position.x = sh.pos.x; p.position.y = sh.pos.y; p.position.z = sh.pos.z;
     p.velocity.x = sh.vel.x; p.velocity.y = sh.vel.y; p.velocity.z = sh.vel.z;
     // Ski bit rides the tick flag byte (bit 2) — drives remote dust.

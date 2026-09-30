@@ -90,13 +90,10 @@ export class GameBot extends RemotePlayer {
   /** Propel cooldown (performance.now deadline) — one jump per launch. */
   propelUntil = 0;
 
-  /** The sheep-yeet: an impulse launch that forces a few seconds of
-   *  airborne Tribes play — the penalty is the cure. */
+  /** The sheep-yeet: jump+jets pinned for a few seconds — the same
+   *  inputs a player holds, never an injected velocity (bots are legal
+   *  players; a launch no key produces would be cheating). */
   yeet(): void {
-    const yaw = Math.random() * Math.PI * 2;
-    this.velocity.x += Math.cos(yaw) * 12;
-    this.velocity.y = 18;
-    this.velocity.z += Math.sin(yaw) * 12;
     this.yeetT = 1.5;
     this.sheep = 40;
   }
@@ -294,7 +291,8 @@ export class GameBot extends RemotePlayer {
     this.movement.setInput({
       forward: md > 0.5 ? 1 : 0,
       right: 0,
-      jumpHeld: !!move?.jump,
+      // Yeet window holds space too — jets alone barely lift off.
+      jumpHeld: !!move?.jump || this.yeetT > 0,
       skiHeld: !!move?.ski,
       jetHeld: jet,
     });

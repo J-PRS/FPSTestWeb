@@ -1,3 +1,4 @@
+2026-09-26 - sheep yeet is now legal input: pinned jump+jets for 1.5s instead of an injected impulse no player could produce (server + offline)
 2026-09-26 - sheep meter: foe-ignoring charge only counts parked bots (fixes yeet loop), foe sight range 60->45m brawl range, meter resets on respawn
 2026-09-26 - loadout sheet: dropped redundant WEAPONS/KIT group headers (every cell already captions itself)
 2026-09-26 - flag events get team-colored explosion bursts (grab/drop/capture/return) + full sfx online AND offline (ctfFlags onFlagEvent hook)
