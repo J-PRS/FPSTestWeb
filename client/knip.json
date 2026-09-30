@@ -1,11 +1,5 @@
 {
+  "entry": ["index.html", "posedump.html", "sfxdump.html", "vmdump.html"],
   "project": ["src/**/*.ts"],
-  "ignore": [
-    "node_modules/**",
-    "dist/**",
-    "reports/**"
-  ],
-  "ignoreDependencies": [
-    "msgpack-lite"
-  ]
+  "ignoreDependencies": []
 }

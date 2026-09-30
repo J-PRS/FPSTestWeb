@@ -38,10 +38,6 @@ export async function loadHeightfieldBin(url: string): Promise<void> {
   hmSize = w;
 }
 
-/** Swap the active field after a reload — Terrain picks it up on
- *  reloadHeightmap(). */
-export function heightmapSize(): number { return hmSize; }
-
 export async function loadHeightmap(url: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const img = new Image();

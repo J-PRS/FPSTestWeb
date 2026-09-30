@@ -38,7 +38,3 @@ export function updateDirectionalFog(fog: THREE.Fog, camera: THREE.Camera, sunDi
   camera.getWorldDirection(_camDir);
   return fogTint(_base, _camDir, sunDir, _tinted);
 }
-
-export function resetDirectionalFog(): void {
-  _base = null;
-}
