@@ -11,14 +11,10 @@ import { type NetBag, newNetBag, type NetStatics, type NetSeg, tickNet, isStaleS
 import { RibbonTrail } from '../projectiles/RibbonTrail.js';
 import { BallTrailDots } from './ballTrails.js';
 import { tickStallBreaker as tickStall, tickEnrage as tickRage, handleGroundBounce as groundBounce, setEnraged as rageSet } from './ballRage.js';
-import { allocSlots, freeSlots, getSwarm, getShadows, type SwarmPart } from './swarms.js';
+import { writeBallInstance, tickBallRenderPos, tickBallTrails, updateBallDead } from './ballVisual.js';
+import { allocSlots, freeSlots, getShadows, type SwarmPart } from './swarms.js';
 
 const BALL_GRAVITY   = GRAVITY;
-const _m = new THREE.Matrix4();
-const _q = new THREE.Quaternion();
-const _s = new THREE.Vector3();
-const _c = new THREE.Color();
-const _enrageTint = new THREE.Color(1, 0.12, 0.08);
 
 // One shared geometry for every ball — radius baked in, per-ball scale lives
 // in the instance matrix.
@@ -113,17 +109,17 @@ export class Ball {
   swarmSlot = -1;
   shadowSlot = -1;
 
-  private scene: THREE.Scene;
+  scene: THREE.Scene;
   scale: number;
   emissive = new THREE.Color(0, 0, 0); // additive glow — folded into instanceColor; public so ballNet can mirror enrage state onto it
   // Public flat fields — ballRage's BallRageHost mutates them (the same
   // state-bag pattern as the *Visual splits).
   trails: BallTrailDots;
   ribbons: RibbonTrail[];
-  private _lastTrailPos = new THREE.Vector3();
-  private flashTimer = 0;
-  private meshRemoved = false; // swarm slot freed; name kept — it gates dead-ball cleanup
-  private _disposed = false;
+  _lastTrailPos = new THREE.Vector3();
+  flashTimer = 0;
+  meshRemoved = false; // swarm slot freed; name kept — it gates dead-ball cleanup
+  _disposed = false;
 
   // True once the ball and its trail are fully cleaned up (safe to remove)
   get disposed(): boolean { return this._disposed; }
@@ -273,28 +269,12 @@ export class Ball {
     }
 
     if (!allocSlots('ball', this)) { this.dead = true; this._disposed = true; }
-    this.writeInstance();
-  }
-
-  // Ball body → swarm slot; instanceColor = hue + emissive glow.
-  private writeInstance(): void {
-    if (this.meshRemoved || this.swarmSlot < 0) return;
-    const swarm = getSwarm('ball');
-    if (!swarm) return;
-    this._rpos.copy(this.pos).add(this.renderOffset);
-    _m.compose(this._rpos, _q.identity(), _s.setScalar(this.scale));
-    swarm.setMatrix(0, this.swarmSlot, _m);
-    if (this.flashTimer > 0) {
-      swarm.setColor(0, this.swarmSlot, 4, 4, 4);
-    } else {
-      _c.copy(this.color).add(this.emissive);
-      swarm.setColor(0, this.swarmSlot, _c.r, _c.g, _c.b);
-    }
+    writeBallInstance(this);
   }
 
   update(dt: number, terrain: Terrain, playerPos: THREE.Vector3): void {
     if (this.dead) {
-      this.updateDead(dt);
+      updateBallDead(this, dt);
       return;
     }
 
@@ -306,7 +286,7 @@ export class Ball {
       this.pos.addScaledVector(this.vel, dt);
     }
 
-    this.tickRenderPos(dt);
+    tickBallRenderPos(this, dt);
 
     // Peak detection: vel.y crossed from positive to negative (apex of arc)
     if (this.prevVelY > 0 && this.vel.y <= 0 && this.onPeak) {
@@ -320,66 +300,14 @@ export class Ball {
       tickStall(this, dt, playerPos);
     }
     getShadows()?.set(this, this._rpos, this.radius, 0.3);
-    this.writeInstance();
+    writeBallInstance(this);
 
     if (this.flashTimer > 0) {
       this.flashTimer -= dt;
       if (this.flashTimer <= 0) this.emissive.setRGB(0, 0, 0);
     }
 
-    this.tickTrails(dt);
-  }
-
-  // Render position = sim pos + decaying correction offset; enraged legs
-  // additionally extrapolate over the sub-50ms remainder so the ball
-  // doesn't step at ~20fps. (Inert legs already integrate continuously.)
-  private tickRenderPos(dt: number): void {
-    // Segment corrections drain back to zero — exp decay, ~0.2s time constant.
-    if (this.renderOffset.lengthSq() > 0.0001) {
-      this.renderOffset.multiplyScalar(Math.exp(-dt * 10));
-    } else {
-      this.renderOffset.set(0, 0, 0);
-    }
-    this._rpos.copy(this.pos).add(this.renderOffset);
-    const sim = this.netS.sim;
-    if (!(this.netDriven && sim && sim.enraged && sim.tgtValid)) return;
-    const rem = this.netS.netAcc;
-    if (rem <= 0) return;
-    this._rpos.x += this.vel.x * rem;
-    this._rpos.y += this.vel.y * rem + 0.5 * BALL_GRAVITY * rem * rem;
-    this._rpos.z += this.vel.z * rem;
-  }
-
-  private tickTrails(dt: number): void {
-    this.trails.emit(dt, this._rpos, this.vel, this.radius, this.enraged ? _enrageTint : this.color);
-    this.trails.fade(dt);
-    // Position discontinuity (teleport or playback keyframe snap) — cut the
-    // ribbons so they don't streak across the jump
-    if (this._rpos.distanceToSquared(this._lastTrailPos) > 400) {
-      for (const r of this.ribbons) r.clear();
-    }
-    this._lastTrailPos.copy(this._rpos);
-    if (this.vel.lengthSq() > 0.5) {
-      for (const r of this.ribbons) r.push(this._rpos, this.vel);
-    }
-    for (const r of this.ribbons) r.update(dt, Ball.viewPos);
-  }
-
-  // Dead ball: swarm slot freed, just fade out remaining trail dots/ribbons
-  private updateDead(dt: number): void {
-    if (!this.meshRemoved) {
-      for (const r of this.ribbons) r.stop();
-      freeSlots('ball', this);
-      this.meshRemoved = true;
-    }
-    this.trails.fade(dt);
-    for (const r of this.ribbons) r.update(dt, Ball.viewPos);
-    if (this.trails.size === 0 && this.ribbons.every(r => r.done)) {
-      // Final cleanup — caller splices on `disposed` without dispose()
-      this.trails.dispose();
-      for (const r of this.ribbons) r.dispose(this.scene);
-      this._disposed = true;
-    }
+    tickBallTrails(this, dt);
   }
 
   /** Director hook — enrage storms light up every ball at once. */
