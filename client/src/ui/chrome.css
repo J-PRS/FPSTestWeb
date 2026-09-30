@@ -189,27 +189,53 @@ body.menu-open #frag-msg { display: none !important; }
   margin-bottom: 14px; font-weight: 700;
 }
 #cool-shots-panel .sub { font-size: 0.65rem; color: rgba(140,170,195,0.6); margin-bottom: 12px; letter-spacing: 0.08em; }
-/* Loadout picker — bottom-center strip inside the ESC overlay.
-   Cells are label-over-chip and the bar wraps as a row: weapons fill
-   the first line, belt/sidearm/pack/skill/perk flow after — a loadout
-   read, not a form column. */
+/* Loadout picker — bottom sheet inside the ESC overlay. Three labeled
+   groups: ARMOR tiles (whole pick visible), WEAPONS slots, KIT strip —
+   a loadout read, not a form column. */
 #loadout-bar {
   position: absolute; left: 50%; bottom: 26px;
   transform: translateX(-50%);
   display: flex; flex-direction: row; flex-wrap: wrap;
-  justify-content: center; align-items: flex-end;
-  gap: 8px 14px; max-width: 760px;
+  justify-content: center; align-items: stretch;
+  gap: 10px 20px; padding: 12px 18px;
+  max-width: min(96vw, 900px);
+  background: rgba(10,16,26,0.85);
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 8px;
   cursor: default;
 }
-#loadout-bar .lo-row { display: flex; flex-direction: column; gap: 3px; align-items: center; }
-#loadout-bar .lo-row.lo-gap {
-  margin-left: 10px; padding-left: 24px;
-  border-left: 1px solid rgba(255,255,255,0.1);
+#loadout-bar .lo-group { display: flex; flex-direction: column; gap: 6px; }
+#loadout-bar .lo-head {
+  font-size: 0.52rem; letter-spacing: 0.24em; font-weight: 700;
+  color: rgba(140,170,195,0.6);
 }
-#loadout-bar .lo-label {
-  font-size: 0.52rem; letter-spacing: 0.2em; font-weight: 600;
+#loadout-bar .lo-cells { display: flex; flex-wrap: wrap; gap: 6px; align-items: flex-end; }
+#loadout-bar .lo-cell { display: flex; flex-direction: column; gap: 3px; align-items: center; }
+#loadout-bar .lo-cap {
+  font-size: 0.5rem; letter-spacing: 0.2em; font-weight: 600;
   color: rgba(140,170,195,0.55); text-align: center;
 }
+/* Armor-class tiles — the whole pick visible at once; stat line is the
+   speed/HP tradeoff that makes the decision concrete. */
+#loadout-bar .lo-tiles { display: flex; gap: 6px; }
+#loadout-bar .lo-tile {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 7px 12px; min-width: 74px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.14); border-radius: 5px;
+  color: #cdd9e5; font-size: 0.66rem; font-weight: 600; letter-spacing: 0.08em;
+  cursor: pointer; transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+#loadout-bar .lo-tile:hover { background: rgba(58,167,255,0.15); color: #fff; }
+#loadout-bar .lo-tile.sel {
+  background: rgba(58,167,255,0.25); border-color: #3aa7ff; color: #fff;
+  box-shadow: 0 0 12px rgba(58,167,255,0.25);
+}
+#loadout-bar .lo-tile .lo-tile-sub {
+  font-size: 0.52rem; font-weight: 500; letter-spacing: 0.04em;
+  color: #8fa2b3; text-transform: none;
+}
+#loadout-bar .lo-tile.sel .lo-tile-sub { color: #9fc6ee; }
 #loadout-bar .lo-chip {
   padding: 6px 11px;
   background: rgba(255,255,255,0.06);

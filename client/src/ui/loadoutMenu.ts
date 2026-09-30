@@ -3,6 +3,7 @@
 // game-menu illusion. Chip face + styled option list opening upward.
 import { SKILL_ORDER, Player, type SkillId, BELT_ITEMS, type BeltItem } from '../entities/Player.js';
 import { PERKS, PERK_ORDER, type PerkId } from '../../../shared/perks.js';
+import { CLASS_STATS, type ArmorClass } from '../../../shared/botClasses.js';
 import { SLOT_DEFS } from '../weapons.js';
 import { codeFor, codeLabel } from '../core/keybinds.js';
 
@@ -20,6 +21,21 @@ const BELT_LABELS: Record<BeltItem, string> = {
   disc: 'Disc', grenade: 'Grenade', cluster: 'Cluster Bomb',
   javelin: 'Javelin', sticky: 'Sticky Bomb', impact: 'Impact Grenade',
   remoterailgun: 'Remote Railgun', armornade: 'Armor Grenade',
+};
+
+// One-line role reads — the pick list is a wall of names without them,
+// and "what does PlasmaCannon do" is the question a new player is asking.
+const WEAPON_ROLES: Record<number, string> = {
+  0: 'arcing splash rockets', 1: 'fast precise arc', 2: 'held spray, banks stagger',
+  3: 'long-range siege lob', 4: 'bouncing frag shells', 5: 'close shard fan',
+  6: 'heavy plasma burst', 7: 'hitscan sniper', 8: 'beam — charges targets into bombs',
+  10: 'slow heavy slug', 11: 'rocket volley', 12: 'remote-detonated chain',
+  14: 'rapid plasma bolts', 15: 'auto pellet stream',
+};
+const BELT_ROLES: Record<BeltItem, string> = {
+  disc: 'bouncing charge', grenade: 'frag', cluster: 'splits mid-air',
+  javelin: 'arcing spear', sticky: 'remote chain', impact: 'instant pop',
+  remoterailgun: 'capacitor slug', armornade: 'plates friendlies',
 };
 
 // Chip width is measured, not hardcoded — canvas-measure the widest
@@ -143,38 +159,39 @@ export function wireLoadoutBar(deps: LoadoutDeps): { refreshLoadout(): void } {
   return { refreshLoadout };
 }
 
-// Row construction — each equipment line is a label span plus a chip dropup.
+function mkCellDom(parent: HTMLElement): { cell: HTMLElement; cap: HTMLSpanElement } {
+  const cell = document.createElement('div');
+  cell.className = 'lo-cell';
+  const cap = document.createElement('span');
+  cap.className = 'lo-cap';
+  cell.appendChild(cap);
+  parent.appendChild(cell);
+  return { cell, cap };
+}
+
+// Panel construction — three labeled groups (ARMOR / WEAPONS / KIT) inside
+// one bottom sheet. Class is a tile picker because its tradeoff (speed vs
+// HP) reads at a glance; everything else stays a dropup chip.
 function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
   const ui: BarUi = {
     slotDrops: [], beltDrop: null, skillDrop: null, perkDrop: null,
     classDrop: null, sidearmDrop: null, packDrop: null,
     beltLabel: null, skillLabel: null, sidearmLabel: null, packLabel: null,
   };
-  const mkRow = (labelText: string, gap = false): { row: HTMLElement; label: HTMLSpanElement } => {
-    const row = document.createElement('div');
-    row.className = gap ? 'lo-row lo-gap' : 'lo-row';
-    const label = document.createElement('span');
-    label.className = 'lo-label';
-    label.textContent = labelText;
-    row.appendChild(label);
-    bar.appendChild(row);
-    return { row, label };
-  };
 
-  // Armor class leads the bar — the Tribes loadout decision is tier
-  // first, then the weapons you carry in it.
-  const classRow = mkRow('CLASS');
-  ui.classDrop = mkDrop(
-    [{ v: 'light', label: 'Light' }, { v: 'medium', label: 'Medium' }, { v: 'heavy', label: 'Heavy' }],
-    (v) => {
-      deps.lazyPlayer().setArmorClass(v as 'light' | 'medium' | 'heavy');
-      deps.lazyNetworkManager?.()?.sendClassUpdate(v);
-      // Class change re-filters the weapon drops on the spot — heavy
-      // ordnance shows/hides without closing the menu.
-      for (const d of ui.slotDrops) d.setOptions?.(weaponOptsFor(v));
-    },
-  );
-  classRow.row.appendChild(ui.classDrop.el);
+  const mkGroup = (title: string): HTMLElement => {
+    const g = document.createElement('div');
+    g.className = 'lo-group';
+    const h = document.createElement('div');
+    h.className = 'lo-head';
+    h.textContent = title;
+    g.appendChild(h);
+    const cells = document.createElement('div');
+    cells.className = 'lo-cells';
+    g.appendChild(cells);
+    bar.appendChild(g);
+    return cells;
+  };
 
   // Sidearms are chosen in their own row — a primary slot offering them
   // would let a loadout double-carry the hold-out tier. Heavy-only
@@ -182,51 +199,100 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
   // unshoulders whatever was equipped).
   const heavyOnly = new Set(Player.HEAVY_ONLY.map(String));
   const weaponOptsFor = (cls: string) => SLOT_DEFS
-    .map((def, wid) => ({ v: String(wid), label: def.config.displayName, sidearm: !!def.sidearm }))
+    .map((def, wid) => ({ v: String(wid), label: def.config.displayName, desc: WEAPON_ROLES[wid], sidearm: !!def.sidearm }))
     .filter((o) => !o.sidearm && (cls === 'heavy' || !heavyOnly.has(o.v)));
-  // The bar can be wired before Player exists — pick the safe default and
-  // let the class-change callback + refreshLoadout re-filter for real.
+
+  // --- ARMOR: tile picker, not a dropup — the speed/HP tradeoff is the
+  // headline and tiles show all three choices at once. ---
+  const armorCells = mkGroup('ARMOR');
+  const tiles = document.createElement('div');
+  tiles.className = 'lo-tiles';
+  armorCells.appendChild(tiles);
+  const classTileEls: { v: string; el: HTMLElement }[] = [];
+  const pickClass = (v: string) => {
+    deps.lazyPlayer().setArmorClass(v as ArmorClass);
+    deps.lazyNetworkManager?.()?.sendClassUpdate(v);
+    // Class change re-filters the weapon drops on the spot — heavy
+    // ordnance shows/hides without closing the menu.
+    for (const d of ui.slotDrops) d.setOptions?.(weaponOptsFor(v));
+    refreshTiles();
+  };
+  const refreshTiles = () => {
+    const cur = deps.lazyPlayer()?.armorClass ?? 'medium';
+    for (const t of classTileEls) t.el.classList.toggle('sel', t.v === cur);
+  };
+  for (const cls of ['light', 'medium', 'heavy'] as const) {
+    const st = CLASS_STATS[cls];
+    const t = document.createElement('div');
+    t.className = 'lo-tile';
+    const name = document.createElement('span');
+    name.className = 'lo-tile-name';
+    name.textContent = cls.toUpperCase();
+    const sub = document.createElement('span');
+    sub.className = 'lo-tile-sub';
+    sub.textContent = `${st.maxHealth >= 0 ? '+' : ''}${st.maxHealth} HP · ${Math.round(st.speedScale * 100)}%`;
+    t.appendChild(name);
+    t.appendChild(sub);
+    t.addEventListener('click', (e) => { e.stopPropagation(); pickClass(cls); });
+    tiles.appendChild(t);
+    classTileEls.push({ v: cls, el: t });
+  }
+  // Drop-compatible shim: refreshLoadout drives faces via setValue.
+  ui.classDrop = { el: tiles, setValue: () => refreshTiles() };
+
+  // --- WEAPONS: one numbered cell per slot. ---
+  const weaponCells = mkGroup('WEAPONS');
   const weaponOpts = weaponOptsFor(deps.lazyPlayer()?.armorClass ?? 'medium');
   for (let i = 0; i < Player.LOADOUT_SLOTS; i++) {
-    const { row } = mkRow(`SLOT ${i + 1}`);
+    const { cell, cap } = mkCellDom(weaponCells);
+    cap.textContent = `SLOT ${i + 1}`;
     const drop = mkDrop(weaponOpts, (v) => deps.lazyPlayer().setLoadoutSlot(i, Number(v)));
-    row.appendChild(drop.el);
+    cell.appendChild(drop.el);
     ui.slotDrops.push(drop);
   }
 
-  const belt = mkRow('', true); // gap separates weapon slots from equipment
-  ui.beltLabel = belt.label;
+  // --- KIT: the five equipment picks in one strip. ---
+  const kitCells = mkGroup('KIT');
+  const belt = mkCellDom(kitCells);
+  ui.beltLabel = belt.cap;
   ui.beltDrop = mkDrop(
-    BELT_ITEMS.map((b) => ({ v: b, label: BELT_LABELS[b] })),
+    BELT_ITEMS.map((b) => ({ v: b, label: BELT_LABELS[b], desc: BELT_ROLES[b] })),
     (v) => deps.lazyPlayer().setBeltItem(v as BeltItem),
   );
-  belt.row.appendChild(ui.beltDrop.el);
+  belt.cell.appendChild(ui.beltDrop.el);
 
-  const sidearm = mkRow('');
-  ui.sidearmLabel = sidearm.label;
+  const sidearm = mkCellDom(kitCells);
+  ui.sidearmLabel = sidearm.cap;
   ui.sidearmDrop = mkDrop(
-    [{ v: 'pistol', label: 'Pistol' }, { v: 'revolver', label: 'Revolver' }, { v: 'shotgun', label: 'Shotgun' }, { v: 'repair', label: 'Repair Tool' }],
+    [{ v: 'pistol', label: 'Pistol', desc: 'light hold-out' },
+     { v: 'revolver', label: 'Revolver', desc: 'heavy hold-out' },
+     { v: 'shotgun', label: 'Shotgun', desc: 'close fan' },
+     { v: 'repair', label: 'Repair Tool', desc: 'weld + over-armor deployables' }],
     (v) => deps.lazyPlayer().setSidearm(v as 'pistol' | 'revolver' | 'shotgun' | 'repair'),
   );
-  sidearm.row.appendChild(ui.sidearmDrop.el);
+  sidearm.cell.appendChild(ui.sidearmDrop.el);
 
-  const pack = mkRow('');
-  ui.packLabel = pack.label;
+  const pack = mkCellDom(kitCells);
+  ui.packLabel = pack.cap;
   ui.packDrop = mkDrop(
-    [{ v: 'turret', label: 'Sentry' }, { v: 'mine', label: 'Mine' }, { v: 'station', label: 'Pad' }, { v: 'drone', label: 'Drone' }],
+    [{ v: 'turret', label: 'Sentry', desc: 'auto-gun deployable' },
+     { v: 'mine', label: 'Mine', desc: 'proximity trap' },
+     { v: 'station', label: 'Pad', desc: 'heal + resupply' },
+     { v: 'drone', label: 'Drone', desc: 'escort drone' }],
     (v) => deps.lazyPlayer().setPackItem(v as 'turret' | 'mine' | 'station' | 'drone'),
   );
-  pack.row.appendChild(ui.packDrop.el);
+  pack.cell.appendChild(ui.packDrop.el);
 
-  const skill = mkRow('');
-  ui.skillLabel = skill.label;
+  const skill = mkCellDom(kitCells);
+  ui.skillLabel = skill.cap;
   ui.skillDrop = mkDrop(
     SKILL_ORDER.map((s) => ({ v: s, label: s[0].toUpperCase() + s.slice(1) })),
     (v) => deps.lazyPlayer().setSkill(v as SkillId),
   );
-  skill.row.appendChild(ui.skillDrop.el);
+  skill.cell.appendChild(ui.skillDrop.el);
 
-  const perk = mkRow('PERK');
+  const perk = mkCellDom(kitCells);
+  perk.cap.textContent = 'PERK';
   ui.perkDrop = mkDrop(
     PERK_ORDER.map((p) => ({ v: p, label: PERKS[p].name, desc: PERKS[p].blurb })),
     (v) => {
@@ -234,7 +300,7 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
       deps.lazyNetworkManager?.()?.sendPerkUpdate(v);
     },
   );
-  perk.row.appendChild(ui.perkDrop.el);
+  perk.cell.appendChild(ui.perkDrop.el);
 
   return ui;
 }
