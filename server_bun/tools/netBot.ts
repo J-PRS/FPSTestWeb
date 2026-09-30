@@ -472,15 +472,17 @@ class WireBot {
       // Legal claims only: the server flags env damage with no creature
       // within ~15m as implausible, so bots only report when something's
       // actually on them.
+      // Tracked positions go stale between events — the server measures
+      // against live sims, so keep slack below its plausibility gate.
       this.nextEnvDmg = now + rand(40000, 120000);
       let near = false;
       for (const p of this.crawls.values()) {
         const d = (p.x - s.pos.x) ** 2 + (p.y - s.pos.y) ** 2 + (p.z - s.pos.z) ** 2;
-        if (d < 15 * 15) { near = true; break; }
+        if (d < 10 * 10) { near = true; break; }
       }
       if (!near) for (const p of this.balls.values()) {
         const d = (p.x - s.pos.x) ** 2 + (p.y - s.pos.y) ** 2 + (p.z - s.pos.z) ** 2;
-        if (d < 15 * 15) { near = true; break; }
+        if (d < 10 * 10) { near = true; break; }
       }
       if (near) this.send({ type: 'environmentDamage', amount: Math.round(rand(5, 15)) });
     }
@@ -620,10 +622,18 @@ class WireBot {
         // since we fired, that shell just missed; claim nothing. A dead
         // target is an untouchable corpse — also claim nothing.
         const cur = this.roster.get(best);
-        if (cur?.dead) return;
-        if (cur && (cur.pos.x - t.pos.x) ** 2 + (cur.pos.z - t.pos.z) ** 2 > 36) return;
+        // No roster entry = the target hopped or left mid-flight — a real
+        // client lost its bead too; claiming at the stale spot reads as
+        // an impossible reach.
+        if (!cur || cur.dead) return;
+        // Team balance flips land between fire and claim — re-check or
+        // the hit lands as friendly fire.
+        if (this.team && cur.team === this.team) return;
+        // Drift check must be 3D — a target falling 100m+ shares x/z but
+        // the claimed hit reads as an impossible reach server-side.
+        if ((cur.pos.x - t.pos.x) ** 2 + (cur.pos.y - t.pos.y) ** 2 + (cur.pos.z - t.pos.z) ** 2 > 36) return;
         this.send({ type: 'shotFired', weaponType });
-        this.send({ type: 'shot', targetId: best, weaponType, position: { ...(cur?.pos ?? t.pos) }, airtime, projectileId: pid });
+        this.send({ type: 'shot', targetId: best, weaponType, position: { ...cur.pos }, airtime, projectileId: pid });
       } else {
         // The blast claim must sit where the shell actually flew — the
         // reach check recomputes the trajectory, so aiming at where the

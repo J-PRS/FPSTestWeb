@@ -603,6 +603,9 @@ export class MessageHandler {
     player.hasReceivedPosition = true;
     this.announceIfInWorld(player);
     this.roomInfo.moveResync?.(playerId, msg.position, msg.rotation.yaw);
+    // Reports already in flight predate the warp — mute the plausibility
+    // judge for the same drain window corrections/respawns use.
+    player.correctionGraceUntil = Date.now() + CONFIG.reportGraceMs;
     // Pre-warp samples are a different location entirely — keeping them
     // lets lag-comp rewind land the shooter/target back at the corpse.
     player.history.length = 0;
