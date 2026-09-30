@@ -1,3 +1,4 @@
+2026-09-26 - Scenario coverage: armorPlating.test.ts — player plating, maxArmor cap, self/enemy plating, radius bound, creature overcap health
 2026-09-26 - Chaingun antipattern fix: flat +dmg ramp converted to banked stagger — 8-hit chain dumps a shove instead of melting (compress the middle, pay the top)
 2026-09-26 - Knockback tone-down: BLAST_IMPULSE_MAX 40->30, top-tier forces tapered (mortar 55->45, grenade/GL 45->35, melee/cannon/sticky 50->40, impact nade 65->45)
 2026-09-26 - Knockback fix: ground clamp no longer truncates blast impulses (horizontal overspeed bleeds instead); per-blast impulse capped at 40 m/s; blast ledger now measures feet-pop drift + loft
