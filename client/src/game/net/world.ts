@@ -186,6 +186,7 @@ async function applyTerrain(ctx: NetCtx, file: string | null): Promise<void> {
   const { deps } = ctx;
   terrainSwap = terrainSwap.then(async () => {
     if (terrainActive === file) return;
+    Ball.terrainSwapping = true;
     try {
       if (file) {
         const { httpUrl } = await resolveServerEndpoints();
@@ -202,6 +203,8 @@ async function applyTerrain(ctx: NetCtx, file: string | null): Promise<void> {
       deps.logger.info(`Terrain swapped to maps/${file}`);
     } catch (e) {
       deps.logger.warn(`Terrain load failed for maps/${file}: ${(e as Error).message}`);
+    } finally {
+      Ball.terrainSwapping = false;
     }
   });
   return terrainSwap;

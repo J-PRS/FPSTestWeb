@@ -193,6 +193,13 @@ export function createNetBalls(deps: EntitiesDeps, ctx: NetBallsCtx, logger: Chi
       if (err > 2) logger.debug(`ball #${m.id} segment correction ${err.toFixed(1)}m`);
       return;
     }
+    // A terrain swap leaves prediction on the previous field until the new
+    // bin loads and rebinds — every bounce in that window diverges by
+    // design, so the warn is noise, not a desync signal.
+    if (Ball.terrainSwapping) {
+      logger.debug(`ball #${m.id} ${kind} rubberband ${err.toFixed(1)}m during terrain swap`);
+      return;
+    }
     const nowMs = performance.now();
     const lastW = rbLastWarn.get(m.id) ?? -Infinity;
     if (nowMs - lastW < RB_WARN_MS) {

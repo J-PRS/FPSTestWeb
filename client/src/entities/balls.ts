@@ -158,6 +158,10 @@ export class Ball {
   /** Read-only for desync forensics (netBalls logs its fingerprint on
    *  rubberbands). Mutate via initNetMode only. */
   static get netField(): Heightfield | null { return Ball.field; }
+  /** True while a terrain swap is loading — prediction still runs on the
+   *  previous field until initNetMode(true) rebinds it, so rubberband
+   *  warns in this window are expected, not desync signal. */
+  static terrainSwapping = false;
 
   /** Prediction-state snapshot for the rubberband warn — answers "which
    *  regime diverged" in one line: simT≫simNow = free-ran past the clock
