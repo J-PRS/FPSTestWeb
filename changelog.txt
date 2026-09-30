@@ -1,3 +1,4 @@
+2026-09-26 - Added the debinarization section to the design doc: gradients compress the mid-skill gap for free since only wide distributions gain; inventoried what is already graded (proxy growth, AOE falloff, partial detonation) vs still-binary (rail, melee, sticky arm, juggle thresholds)
 2026-09-26 - Rewrote the design doc around the real shape: compress mid-skill, pay the tail; flagged the chaingun ramp as the inverted anti-pattern that widens the gap and amplifies stomps
 2026-09-26 - Corrected the skill-floor-payoff report after a closer weapons audit: Disc is the only genuine sibling, Chaingun a half-fit, Mortar/Railgun/Cannon are difficulty-gates not cost-converts
 2026-09-26 - Concepts report: forgiving-floor/costly-ceiling north star, LG as worked example, pattern across Tribes/Quake/Halo/TF2/fighters

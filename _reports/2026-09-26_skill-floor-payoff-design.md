@@ -133,6 +133,48 @@ as our off-beam drain.
 Useless at range (cost); the lunge spacing game *is* the skill
 (payoff). One stat creates floor and ceiling together.
 
+## Debinarization: the gentler sibling
+
+Compression doesn't only come from cost→payoff couplings. The other
+tool is **debinarization** — replacing 0-or-1 outcomes with gradients,
+so "almost did it" pays a fraction instead of nothing.
+
+Why it's stronger than it looks: aim is a *distribution*, not a point.
+A pro's spread is tight — binary vs graded contact barely changes their
+hit rate. A noob's spread is wide — binary gives them 0 for the same
+shot a graded system pays 30% on. The gradient therefore compresses the
+mid-skill gap *without taxing the top* — the cleanest compression there
+is, because nobody feels a cost being extracted.
+
+We already use it in several places:
+
+- **Growing proxy hitboxes** (`hitMin`→`hitMax` over travel): a midair
+  near-miss still registers contact — the classic all-or-nothing shell
+  becomes a graze. This is the canonical example: pros were hitting the
+  direct anyway, so the wake mostly pays the wide distributions.
+- **AOE falloff** — edge chip instead of an in/out blast boundary (the
+  banded `[[0.2,0.8],[0.5,0.4],[1.0,0.2]]` proposal sharpens this into
+  readable tiers).
+- **Partial charge detonation** — `min(banked, dmg)` means "couldn't
+  fully pop it" still pays proportionally; the bomb is a gradient, not
+  a switch.
+
+Where the roster is still binary — the conversion candidates:
+
+- **Railgun** — 0.5 proxy cap at 450 m/s is near-binary hit-or-miss.
+  A modest wake or grazed-chip lane would grade it.
+- **Melee** — connect-or-nothing inside 3.2m; a partial-whiff lunge
+  would grade the edge.
+- **Sticky fuse arm/disarm** — binary arm states; could pay partial
+  charge on premature triggers.
+- **Knockback thresholds** — launched vs not; graded juggle force would
+  soften the cliff between "combo'd" and "untouched".
+- **TTK cliffs generally** — 100hp vs per-hit damage leaves binary
+  breakpoints everywhere; falloff/banding blurs them naturally.
+
+The generic recipe is "give the miss a fraction": wakes, chip damage,
+partial charge, reduced-effect instead of no-effect.
+
 ## Design rules extracted
 
 1. **One mechanic, two seats.** The limiter and the payoff must be the
@@ -141,7 +183,10 @@ Useless at range (cost); the lunge spacing game *is* the skill
 2. **Compress, don't gate.** A skill gate ("hard to aim") just raises
    the entry bar — it still pays mid-skill players linearly and stomps
    noobs harder. The north star compresses mid-skill separation and
-   pays the tail instead.
+   pays the tail instead. Two ways to compress: absorb the middle
+   (cost→payoff, the LG) or grade the cliff (debinarization, the
+   growing proxy). Prefer gradients where a binary edge exists — they
+   compress without anyone feeling taxed.
 3. **The payoff must be visible.** Stored power everyone can read is
    counterplay and drama; a hidden meter is a feel-bad surprise.
    Telegraph anything that can kill someone.
