@@ -412,46 +412,48 @@ export class TickLoop {
 
   private startHashBroadcast(): void {
     this.hashTimer = setInterval(() => {
-      for (const room of this.rooms.values()) {
-        const playerCount = room.playerCount();
-        if (playerCount === 0) continue;
-
-        // tag the hash with the last EMITTED tick — consuming a fresh
-        // tickSeq here would ship a seq no frame ever carries, and every
-        // client's loss telemetry counts that phantom skip as a dropped
-        // frame (~3% bogus loss at the hash cadence).
-        const hash = this.computeStateHash(room);
-        const timestamp = Date.now();
-
-        room.broadcast({
-          type: 'stateHash',
-          hash,
-          tick: room.tickSeq,
-          playerCount,
-          timestamp,
-        });
-
-        // Periodic status summary - suppress duplicates, batch with count
-        const players = room.players.getAllPlayers();
-        const summary = Array.from(players.entries()).map(([id, p]) =>
-          `${id}[${p.kills}/${p.deaths}] ${p.isDead ? 'DEAD' : `HP${p.health}`} @(${p.position.x.toFixed(0)},${p.position.y.toFixed(0)},${p.position.z.toFixed(0)})`
-        ).join(' | ');
-        const statusLine = `Status [${room.name} · ${playerCount} players] ${summary}`;
-
-        if (statusLine === this.lastStatusLine) {
-          this.statusRepeatCount++;
-        } else {
-          if (this.statusRepeatCount > 0) {
-            logger.info(`${this.lastStatusLine} [x${this.statusRepeatCount + 1}]`);
-            this.statusRepeatCount = 0;
-          }
-          logger.info(statusLine);
-          this.lastStatusLine = statusLine;
-        }
-
-        logger.debug('State hash broadcast', { room: room.name, tick: room.tickSeq, hash, playerCount });
-      }
+      for (const room of this.rooms.values()) this.broadcastStateHash(room);
     }, CONFIG.hashBroadcastIntervalMs);
+  }
+
+  private broadcastStateHash(room: Room): void {
+    const playerCount = room.playerCount();
+    if (playerCount === 0) return;
+
+    // tag the hash with the last EMITTED tick — consuming a fresh
+    // tickSeq here would ship a seq no frame ever carries, and every
+    // client's loss telemetry counts that phantom skip as a dropped
+    // frame (~3% bogus loss at the hash cadence).
+    const hash = this.computeStateHash(room);
+    const timestamp = Date.now();
+
+    room.broadcast({
+      type: 'stateHash',
+      hash,
+      tick: room.tickSeq,
+      playerCount,
+      timestamp,
+    });
+
+    // Periodic status summary - suppress duplicates, batch with count
+    const players = room.players.getAllPlayers();
+    const summary = Array.from(players.entries()).map(([id, p]) =>
+      `${id}[${p.kills}/${p.deaths}] ${p.isDead ? 'DEAD' : `HP${p.health}`} @(${p.position.x.toFixed(0)},${p.position.y.toFixed(0)},${p.position.z.toFixed(0)})`
+    ).join(' | ');
+    const statusLine = `Status [${room.name} · ${playerCount} players] ${summary}`;
+
+    if (statusLine === this.lastStatusLine) {
+      this.statusRepeatCount++;
+    } else {
+      if (this.statusRepeatCount > 0) {
+        logger.info(`${this.lastStatusLine} [x${this.statusRepeatCount + 1}]`);
+        this.statusRepeatCount = 0;
+      }
+      logger.info(statusLine);
+      this.lastStatusLine = statusLine;
+    }
+
+    logger.debug('State hash broadcast', { room: room.name, tick: room.tickSeq, hash, playerCount });
   }
 
   private stopHashBroadcast(): void {
