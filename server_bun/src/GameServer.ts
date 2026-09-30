@@ -10,9 +10,9 @@ import type { Heightfield } from '../../shared/heightfield.ts';
 import { isWireFrame, decodePosition } from '../../shared/wire.ts';
 import { TickLoop } from './TickLoop.ts';
 import { SessionManager } from './SessionManager.ts';
-import { appendFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { MapCatalog } from './mapCatalog.ts';
+import { MatchJournal } from './matchJournal.ts';
 import { RoomSwitcher } from './roomSwitch.ts';
 import type { MapSpec } from '../../shared/mapSpec.ts';
 
@@ -108,55 +108,19 @@ export class GameServer {
   }
 
   // Match journal — every win condition lands one JSON line on disk plus
-  // a small in-memory ring for /matches. Append-only so a restart never
-  // loses history; the ring is just a cheap read cache.
-  private matchRing: ({ t: number; room: string; mode: string; winner: string; scores: Record<string, number> })[] = [];
-  private recordMatchEnd(rec: {
-    room: string; mode: string; winner: string; scores: Record<string, number>;
-    players?: { id: string; team?: string; kills: number; deaths: number }[];
-  }): void {
-    const entry = { t: Date.now(), ...rec };
-    this.matchRing.push(entry);
-    if (this.matchRing.length > 100) this.matchRing.shift();
-    try {
-      const dir = join(import.meta.dir, '..', '..', 'logs');
-      mkdirSync(dir, { recursive: true });
-      appendFileSync(join(dir, 'matches.jsonl'), JSON.stringify(entry) + '\n');
-    } catch (e) {
-      logger.warn('Match journal write failed', { err: String(e) });
-    }
-  }
+  // Match history lives in MatchJournal — the ring is a read cache over
+  // the append-only matches.jsonl journal.
+  private readonly journal = new MatchJournal();
 
   /** Recent match results — newest last. */
   listMatches(): unknown[] {
-    return this.matchRing;
+    return this.journal.list();
   }
 
   /** Lifetime leaderboard read off the match journal — survives restarts
-   *  since matches.jsonl is append-only. Read-per-request is fine at this
-   *  scale; cache it if the file ever grows past a few MB. */
+   *  since matches.jsonl is append-only. */
   async getStats(): Promise<unknown[]> {
-    interface Row { playerId: string; matches: number; wins: number; kills: number; deaths: number }
-    const agg = new Map<string, Row>();
-    try {
-      const file = Bun.file(join(import.meta.dir, '..', '..', 'logs', 'matches.jsonl'));
-      const text = await file.text();
-      for (const line of text.split('\n')) {
-        if (!line.trim()) continue;
-        let rec: { winner?: string; players?: { id: string; team?: string; kills?: number; deaths?: number }[] };
-        try { rec = JSON.parse(line); } catch { continue; }
-        for (const p of rec.players ?? []) {
-          const row = agg.get(p.id) ?? { playerId: p.id, matches: 0, wins: 0, kills: 0, deaths: 0 };
-          row.matches++;
-          row.kills += p.kills ?? 0;
-          row.deaths += p.deaths ?? 0;
-          // FFA records name the player; team records name the side.
-          if (rec.winner === p.id || (p.team && rec.winner === p.team)) row.wins++;
-          agg.set(p.id, row);
-        }
-      }
-    } catch { /* no journal yet — empty leaderboard */ }
-    return [...agg.values()].toSorted((a, b) => b.wins - a.wins || b.kills - a.kills);
+    return this.journal.stats();
   }
 
   /** Which map spec defines a fresh room: the room's own name, then the
@@ -175,7 +139,7 @@ export class GameServer {
       // `room` is a mutable let — bind a const for the closures or TS
       // widens them back to Room | undefined.
       const r = room;
-      room.onMatchEnd = (rec) => this.recordMatchEnd(rec);
+      room.onMatchEnd = (rec) => this.journal.recordEnd(rec);
       // Judge mode counts divergences instead of correcting — the kick
       // only fires on repeated teleport-scale gaps honest drift can't
       // reach (see RoomMoveSim.SEVERE_*).
