@@ -6,6 +6,7 @@ import { PlayerIndicators } from './hud/indicators.js';
 import type { Targetable } from '../entities/balls.js';
 import type { Nugget } from '../entities/Nugget.js';
 import { Scoreboard, type SbRow } from './hud/scoreboard.js';
+import { HudStats } from './hud/hudStats.js';
 
 import { Player } from '../entities/Player.js';
 
@@ -20,32 +21,29 @@ const paintFlagChip = (el: HTMLElement, st?: string) => {
 
 export class HUD {
   private el: HTMLDivElement;
-  private health: HTMLSpanElement;
-  private energy: HTMLSpanElement;
+  health: HTMLSpanElement  // public — HudStats family paints it;
+  energy: HTMLSpanElement  // public — HudStats family paints it;
   private ammo: HTMLSpanElement;
-  private speed: HTMLSpanElement;
-  private speedH: HTMLSpanElement;
-  private speedV: HTMLSpanElement;
-  private kills: HTMLSpanElement;
-  private state: HTMLSpanElement;
-  private ping: HTMLSpanElement;
-  private loss: HTMLSpanElement;
-  private jitter: HTMLSpanElement;
-  private fps: HTMLSpanElement;
+  speed: HTMLSpanElement  // public — HudStats family paints it;
+  speedH: HTMLSpanElement  // public — HudStats family paints it;
+  speedV: HTMLSpanElement  // public — HudStats family paints it;
+  kills: HTMLSpanElement  // public — HudStats family paints it;
+  state: HTMLSpanElement  // public — HudStats family paints it;
+  ping: HTMLSpanElement  // public — HudStats family paints it;
+  loss: HTMLSpanElement  // public — HudStats family paints it;
+  jitter: HTMLSpanElement  // public — HudStats family paints it;
+  fps: HTMLSpanElement  // public — HudStats family paints it;
   private crosshair: HTMLDivElement;
-  private hitMarker: HTMLDivElement;
+  hitMarker: HTMLDivElement  // public — HudStats family paints it;
   private minimap: Minimap;
-  private hitTimer = 0;
-  private dmgVignette: HTMLDivElement;
-  private dmgDir: HTMLDivElement;
-  private dmgDirArc: HTMLDivElement;
-  private dmgT = 0;            // vignette decay
-  private dmgDirT = 0;         // arc fade
-  private lastPlayerPos = new THREE.Vector3();
-  private lastPlayerYaw = 0;
-  private ghostBar: HTMLDivElement;
-  private ghostPct = 100;      // trails healthPct downward on damage
+  dmgVignette: HTMLDivElement  // public — HudStats family paints it;
+  dmgDir: HTMLDivElement  // public — HudStats family paints it;
+  dmgDirArc: HTMLDivElement  // public — HudStats family paints it;
+  ghostBar: HTMLDivElement  // public — HudStats family paints it;
   private indicators!: PlayerIndicators;
+  // Per-frame stat painter (vitals, speed, telemetry, slots,
+  // hit marker, damage fx, buffs, fps) — hud/hudStats.ts
+  private stats!: HudStats;
   private playerList: HTMLDivElement;
   private ballCountEl: HTMLDivElement;
   private timerEl: HTMLDivElement;
@@ -54,11 +52,9 @@ export class HUD {
   private teamScore: HTMLDivElement;
   private tsA: HTMLElement;
   private tsB: HTMLElement;
-  private armor: HTMLSpanElement;
-  private armorBar: HTMLDivElement;
-  private buffsRow: HTMLDivElement;
-  private lastArmor = -1;
-  private lastBuffsKey = '';
+  armor: HTMLSpanElement  // public — HudStats family paints it;
+  armorBar: HTMLDivElement  // public — HudStats family paints it;
+  buffsRow: HTMLDivElement  // public — HudStats family paints it;
 
   constructor() {
     const d = createHudDom();
@@ -99,6 +95,7 @@ export class HUD {
     this.flagA = d.flagA;
     this.flagB = d.flagB;
     this.killFeed = d.killFeed;
+    this.stats = new HudStats(this);
     this.minimap = new Minimap(this.el);
     this.indicators = new PlayerIndicators(this.el);
   }
@@ -212,7 +209,7 @@ export class HUD {
 
   /** Nuggets collected — DOM write only on change */
   setNuggets(n: number): void {
-    this.setText(this.ammo, 'nuggets', String(n));
+    this.stats.setText(this.ammo, 'nuggets', String(n));
   }
 
   setScoreboardVisible(v: boolean): void { this.sb.setVisible(v); }
@@ -221,23 +218,12 @@ export class HUD {
 
   setScoreboardRows(rows: SbRow[]): void { this.sb.setRows(rows); }
 
-  private weaponSlots: HTMLSpanElement[] = [];
-  private healthBar!: HTMLDivElement;
-  private energyBar!: HTMLDivElement;
-  private lastWeapon = '';
-  // HUD abbreviations by weapon id (WEAPON_RATES / viewmodel order)
-  private static readonly WEAPON_SHORT = ['BLT', 'DSG', 'CG', 'MTR', 'GL', 'FLK', 'PLM', 'RAIL', 'LG', 'SG', 'CAN', 'RKT'];
-  // Last-rendered values — skip redundant DOM writes
-  private lastText: Record<string, string> = {};
-  private lastHealthPct = -1;
-  private lastEnergyPct = -1;
-  private lastFpsColor = '';
+  weaponSlots: HTMLSpanElement[] = [];  // public — HudStats family paints it
+  healthBar!: HTMLDivElement;
+  energyBar!: HTMLDivElement;
   private sb!: Scoreboard;
 
-  showHitMarker(): void {
-    this.hitTimer = 0.12;
-    this.hitMarker.classList.add('visible');
-  }
+  showHitMarker(): void { this.stats.hit(); }
 
   hide(): void {
     this.el.style.display = 'none';
@@ -329,195 +315,27 @@ export class HUD {
   setCloak(on: boolean): void { this.setStatusFx('cloak', 'CLOAKED', on); }
   setShield(on: boolean): void { this.setStatusFx('shield', 'SHIELDED', on); }
   setMend(on: boolean): void { this.setStatusFx('mend', 'MENDING', on); }
-  private fpsAccum = 0;
-  private fpsFrames = 0;
-  private fpsValue = 0;
-
-  // Write text only when it changed — textContent assignment touches the DOM
-  // even for identical strings
-  private setText(el: HTMLElement, key: string, value: string): void {
-    if (this.lastText[key] === value) return;
-    this.lastText[key] = value;
-    el.textContent = value;
-  }
-
   /** Local player took damage — vignette pulse scaled to the hit, plus a
    *  directional arc pointing at the source when we know where it is. */
   showDamage(fromPos: THREE.Vector3 | null, damage: number): void {
-    // Vignette: 10dmg ≈ subtle, 40+ ≈ strong. Stacking hits push opacity up
-    // but cap below readability loss.
-    this.dmgT = Math.min(1, this.dmgT + 0.18 + damage * 0.012);
-    this.dmgVignette.style.opacity = String(Math.min(0.85, this.dmgT));
-
-    if (fromPos) {
-      // Bearing: world angle of (source - player) relative to facing.
-      // forward = (sin yaw, cos yaw) on XZ; arc's 0° is screen-top.
-      const dx = fromPos.x - this.lastPlayerPos.x;
-      const dz = fromPos.z - this.lastPlayerPos.z;
-      let rel = Math.atan2(dx, dz) - this.lastPlayerYaw;
-      // Normalize to [-π, π], then flip: screen-right is -x when yaw=0
-      while (rel > Math.PI) rel -= Math.PI * 2;
-      while (rel < -Math.PI) rel += Math.PI * 2;
-      this.dmgDirArc.style.transform = `rotate(${-rel}rad)`;
-      this.dmgDirT = 1;
-      this.dmgDir.style.opacity = '1';
-    }
+    this.stats.damage(fromPos, damage);
   }
 
-  /** Shielded hit — same directional language as showDamage but cyan and
-   *  punchier: the bubble ate it, the energy bar is the real damage readout. */
+  /** Shielded hit — same directional language but cyan: the bubble ate it. */
   showShieldDamage(fromPos: THREE.Vector3 | null, damage: number): void {
-    this.dmgT = Math.min(1, this.dmgT + 0.12 + damage * 0.008);
-    this.dmgVignette.style.opacity = String(Math.min(0.6, this.dmgT));
-    this.dmgVignette.style.boxShadow =
-      'inset 0 0 18vmax rgba(90,200,255,0.55), inset 0 0 5vmax rgba(140,220,255,0.4)';
-    // Restore the red shadow for the next real hit — showDamage resets it.
-    clearTimeout(this.shieldVignetteReset);
-    this.shieldVignetteReset = window.setTimeout(() => {
-      this.dmgVignette.style.boxShadow = '';
-    }, 300);
-    if (fromPos) {
-      const dx = fromPos.x - this.lastPlayerPos.x;
-      const dz = fromPos.z - this.lastPlayerPos.z;
-      let rel = Math.atan2(dx, dz) - this.lastPlayerYaw;
-      while (rel > Math.PI) rel -= Math.PI * 2;
-      while (rel < -Math.PI) rel += Math.PI * 2;
-      this.dmgDirArc.style.transform = `rotate(${-rel}rad)`;
-      this.dmgDirT = 1;
-      this.dmgDir.style.opacity = '1';
-    }
+    this.stats.shieldDamage(fromPos, damage);
   }
-  private shieldVignetteReset = 0;
 
   updateMinimap(targets: Targetable[], nuggets: Nugget[], pos: THREE.Vector3, yaw: number, birds?: THREE.Vector3[], players?: Iterable<import('./minimap.js').MinimapPlayer>): void {
     this.minimap.update(targets, nuggets, pos, yaw, birds, players);
   }
 
   update(dt: number, player: Player, ping: number = 0, packetLoss: number = 0, jitter: number = 0): void {
-    this.tickVitals(dt, player);
-    this.tickBuffs(player);
-    this.lastPlayerPos.copy(player.pos);
-    this.lastPlayerYaw = player.yaw;
-    this.tickDamageFx(dt);
+    this.stats.tick(dt, player, ping, packetLoss, jitter);
 
-    const nrg = Math.round(player.energy);
-    this.setText(this.energy, 'energy', String(nrg));
-    const energyPct = Math.round((nrg / 60) * 100);
-    if (energyPct !== this.lastEnergyPct) {
-      this.lastEnergyPct = energyPct;
-      this.energyBar.style.width = `${energyPct}%`;
-    }
-
-    // Three readouts, all magnitude: |v| total, XZ horizontal, |vy|.
-    this.setText(this.speed, 'speed', String(Math.round(player.vel.length())));
-    this.setText(this.speedH, 'speedH', String(Math.round(player.getSpeed())));
-    this.setText(this.speedV, 'speedV', String(Math.round(Math.abs(player.vel.y))));
-    this.setText(this.kills, 'kills', String(player.kills));
-    this.setText(this.state, 'state', player.onGround ? 'GROUND' : 'AIR');
-    this.setText(this.ping, 'ping', String(Math.round(ping)));
-    this.setText(this.loss, 'loss', String(Math.round(packetLoss)));
-    this.setText(this.jitter, 'jitter', String(Math.round(jitter)));
-
-    // Slots are loadout-driven: labels + highlight re-render only on change.
-    const loadoutKey = player.loadout.join(',') + '|' + player.weaponIndex;
-    if (loadoutKey !== this.lastWeapon) {
-      this.lastWeapon = loadoutKey;
-      player.loadout.forEach((wid, i) => {
-        const s = this.weaponSlots[i];
-        if (!s) return;
-        s.textContent = `${i + 1} ${HUD.WEAPON_SHORT[wid] ?? '?'}`;
-        s.classList.toggle('active', i === player.weaponIndex);
-      });
-    }
-
-    this.updateFps(dt);
-
-    if (this.hitTimer > 0) {
-      this.hitTimer -= dt;
-      if (this.hitTimer <= 0) this.hitMarker.classList.remove('visible');
-    }
-
-    this.updateScoreboard(dt);
+    // Scoreboard: rebuild rows at 4Hz while open (live ping/frags)
+    this.sb.tick(dt);
   }
-
-  // Health text + bar with ghost-drain: damage leaves a trailing sliver
-  // that bleeds down at ~40%/s so a hit reads as loss, not a snap.
-  private tickVitals(dt: number, player: Player): void {
-    // health is float (regen ticks at 12/s leave fractions) — the chip
-    // shows whole hp or it prints 78.00000000000001.
-    this.setText(this.health, 'health', String(Math.round(player.health)));
-    const healthPct = Math.round(player.health);
-    if (healthPct !== this.lastHealthPct) {
-      this.lastHealthPct = healthPct;
-      this.healthBar.style.width = `${healthPct}%`;
-      // Damage → ghost holds the old width and drains down; heal → snap
-      if (healthPct < this.ghostPct) {
-        this.ghostBar.style.left = `${healthPct}%`;
-        this.ghostBar.style.width = `${this.ghostPct - healthPct}%`;
-      } else {
-        this.ghostPct = healthPct;
-        this.ghostBar.style.width = '0%';
-      }
-    }
-    if (this.ghostPct > healthPct) {
-      this.ghostPct = Math.max(healthPct, this.ghostPct - 40 * dt);
-      this.ghostBar.style.left = `${healthPct}%`;
-      this.ghostBar.style.width = `${this.ghostPct - healthPct}%`;
-    }
-    const armor = Math.round(player.armor);
-    if (armor !== this.lastArmor) {
-      this.lastArmor = armor;
-      this.setText(this.armor, 'armor', String(armor));
-      this.armorBar.style.width = `${armor}%`;
-    }
-  }
-
-  // Timed buffs — chips with seconds left; rebuilt only on change.
-  private tickBuffs(player: Player): void {
-    const now = Date.now();
-    const buffsKey = `${player.buffUntil.regen > now ? Math.ceil((player.buffUntil.regen - now) / 1000) : 0}|${player.buffUntil.dd > now ? Math.ceil((player.buffUntil.dd - now) / 1000) : 0}`;
-    if (buffsKey === this.lastBuffsKey) return;
-    this.lastBuffsKey = buffsKey;
-    const chips: string[] = [];
-    const [rs, ds] = buffsKey.split('|').map(Number);
-    if (rs > 0) chips.push(`<span class="buff regen">REGEN ${rs}s</span>`);
-    if (ds > 0) chips.push(`<span class="buff dd">2×DMG ${ds}s</span>`);
-    this.buffsRow.innerHTML = chips.join('');
-  }
-
-  // Damage vignette decay (~0.7s to clear) + direction arc fade.
-  private tickDamageFx(dt: number): void {
-    if (this.dmgT > 0) {
-      this.dmgT = Math.max(0, this.dmgT - dt * 1.4);
-      this.dmgVignette.style.opacity = String(this.dmgT * 0.85);
-    }
-    if (this.dmgDirT > 0) {
-      this.dmgDirT = Math.max(0, this.dmgDirT - dt * 1.1);
-      this.dmgDir.style.opacity = String(this.dmgDirT);
-    }
-  }
-
-  private updateFps(dt: number): void {
-    this.fpsAccum += dt;
-    this.fpsFrames++;
-    if (this.fpsAccum >= 0.5) {
-      this.fpsValue = Math.round(this.fpsFrames / this.fpsAccum);
-      this.fpsAccum = 0;
-      this.fpsFrames = 0;
-    }
-    this.setText(this.fps, 'fps', String(this.fpsValue));
-    const fpsColor =
-      this.fpsValue < 40 ? '#f44' :
-      this.fpsValue < 50 ? '#f80' :
-      this.fpsValue < 59 ? '#ff4' : '#8cf';
-    if (fpsColor !== this.lastFpsColor) {
-      this.lastFpsColor = fpsColor;
-      this.fps.style.color = fpsColor;
-    }
-  }
-
-  // Scoreboard: rebuild rows at 4Hz while open (live ping/frags)
-  private updateScoreboard(dt: number): void { this.sb.tick(dt); }
 
   updatePlayerIndicator(playerId: string, position: { x: number; y: number; z: number }, camera: THREE.Camera, isDead: boolean = false, friendly = false, sheep?: number): void {
     this.indicators.update(playerId, position, camera, { isDead, friendly, sheep });
