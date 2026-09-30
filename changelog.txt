@@ -1,3 +1,4 @@
+2026-09-26 - metrics: per-room health counters (rej/diverge/posrej/ratelimit/envdmg/dmg/kill) now cumulative on /metrics instead of log-only 15s rollups
 2026-09-26 - net: teleport handler arms correctionGraceUntil — in-flight pre-warp reports no longer read as speedhacks
 2026-09-26 - netBot: claim-time re-checks (3D drift, team flip, vanished target) + env-dmg gate 10m — rej=0 across 15-hop soak
 2026-09-26 - HUD: zone-slot layout contract — :root --z-* ladder owns every anchor; elements claim a slot instead of guessing px so new chrome cannot collide by accident

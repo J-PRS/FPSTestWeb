@@ -66,6 +66,9 @@ export class Room {
    *  every ~15s so a soak log answers "did anything weird happen" at a
    *  glance instead of needing per-event archaeology. */
   readonly health = new Map<string, number>();
+  /** Since-boot totals — the rollup window clears per flush, so /metrics
+   *  reads this cumulative mirror instead of racing it. */
+  readonly healthTotal = new Map<string, number>();
   healthBump(key: string, n = 1): void {
     this.health.set(key, (this.health.get(key) ?? 0) + n);
   }
@@ -76,6 +79,13 @@ export class Room {
     this.healthTimer = 0;
     if (!this.health.size) return;
     logger.info('Room health', { room: this.name, humans: this.players.getHumanCount(), ...Object.fromEntries(this.health) });
+    // Fold the window into since-boot totals. gapMax is a gauge (the
+    // worst single sample), not a counter — merge by max, not sum.
+    for (const [k, v] of this.health) {
+      this.healthTotal.set(k, k === 'gapMax'
+        ? Math.max(this.healthTotal.get(k) ?? 0, v)
+        : (this.healthTotal.get(k) ?? 0) + v);
+    }
     this.health.clear();
   }
 

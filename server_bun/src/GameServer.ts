@@ -628,6 +628,9 @@ export class GameServer {
       pickups: r.pickups?.snapshot().length ?? 0,
       gracePending: r.disconnected.size,
       ballSimNow: r.ballSim.simNow,
+      // Since-boot judge/claim counters — the room's 15s rollup clears
+      // per flush, so scrapes need the cumulative mirror.
+      health: Object.fromEntries(r.healthTotal),
     }));
     const mem = process.memoryUsage();
     return {
