@@ -1,3 +1,4 @@
+2026-09-26 - Knockback tone-down: BLAST_IMPULSE_MAX 40->30, top-tier forces tapered (mortar 55->45, grenade/GL 45->35, melee/cannon/sticky 50->40, impact nade 65->45)
 2026-09-26 - Knockback fix: ground clamp no longer truncates blast impulses (horizontal overspeed bleeds instead); per-blast impulse capped at 40 m/s; blast ledger now measures feet-pop drift + loft
 2026-09-26 - Blast-distance ledger: scenario test detonates 7 blast types at 3m and caps peak knockback drift (catches catapult regressions)
 2026-09-26 - Armor grenade: knockback 55->25 (nudge, not launcher)

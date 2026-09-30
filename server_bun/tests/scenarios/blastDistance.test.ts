@@ -34,9 +34,9 @@ describe('scenario: blast knockback distance', () => {
   const CASES: [number, string, number, number, number, number][] = [
     [WeaponType.Rocket, 'rocket', 16.5, 22, 2.8, 4],
     [WeaponType.Disc, 'disc', 13.6, 18, 2.2, 4],
-    [WeaponType.Grenade, 'grenade', 40.6, 55, 6.4, 9],
-    [WeaponType.Mortar, 'mortar', 40.6, 55, 6.4, 9],
-    [WeaponType.ImpactGrenade, 'impact grenade', 40.6, 55, 6.4, 9],
+    [WeaponType.Grenade, 'grenade', 22.9, 30, 3.9, 6],
+    [WeaponType.Mortar, 'mortar', 22.9, 30, 3.9, 6],
+    [WeaponType.ImpactGrenade, 'impact grenade', 22.9, 30, 3.9, 6],
     [WeaponType.ArmorGrenade, 'armor grenade', 13.6, 18, 2.2, 4],
     [WeaponType.DiscPull, 'disc pull', 8.5, 12, 0.4, 1.5],
   ];
