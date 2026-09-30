@@ -1,3 +1,4 @@
+2026-09-26 - HUD: fix overlapping elements — right column reordered (net stats > fps > timer > minimap > killfeed), status hints + spectate moved below match-status strip, ent-counts moved bottom-right above shotFeed, removed dead #hud-tl/#ball-count rules
 2026-09-26 - Extract the firing half of ServerBots into botArsenal.ts (BotArsenal: fireAt/fireAtBall/fireFallback/throwBelt/lobAt/propelWeapon/tryPropel + propel timers); ServerBots 636 lines, down from 804.
 2026-09-26 - Seed the move-sim shadow with the reported velocity too, not just position: the guess-run during the mute window built momentum the client never had, carrying the shadow ~10m+ ahead for one divergence blip after every join.
 2026-09-26 - Extract respawn lifecycle from CombatHandler into respawn.ts (RespawnManager: cancel/ensure/ensureScheduled/schedule/dispose); CombatHandler now 765 lines, down from 855.

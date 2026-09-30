@@ -66,13 +66,8 @@
   font-size: 2.2rem; font-weight: bold; color: #8cf;
   text-align: right; line-height: 1;
 }
-#ball-count {
-  position: fixed; bottom: 24px; left: 24px;
-  font-size: 1.4rem; font-weight: bold; color: #fc8;
-  font-variant-numeric: tabular-nums;
-}
 #ent-counts {
-  position: fixed; bottom: 24px; left: 24px;
+  position: fixed; bottom: 24px; right: 24px; text-align: right;
   font-size: 0.78rem; color: #ccc; line-height: 1.55;
   font-variant-numeric: tabular-nums; white-space: pre;
   text-shadow: 1px 1px 2px #000; pointer-events: none;
@@ -81,15 +76,12 @@
 #ent-counts .hot { color: #fc8; font-weight: bold; }
 #hud-timer {
   /* Top-right stack under FPS — top-center belongs to the team score. */
-  position: absolute; top: 66px; right: 20px;
+  position: absolute; top: 84px; right: 20px;
   font-size: 1.1rem; font-weight: bold; color: #ffd9a0;
   font-variant-numeric: tabular-nums;
   text-shadow: 0 0 6px rgba(0,0,0,0.8), 1px 1px 0 #000;
 }
-#hud-tl {
-  position: absolute; top: 14px; left: 20px;
-  font-size: 0.75rem; color: #ccc; line-height: 1.7;
-}
+
 #crosshair {
   position: absolute; top: 50%; left: 50%;
   transform: translate(-50%, -50%);
@@ -316,20 +308,20 @@
   pointer-events: none; z-index: 5;
   font: 600 13px/1 monospace; letter-spacing: 0.2em; text-shadow: 0 1px 3px #000;
 }
-.status-hint.cloak { top: 14px; color: #b9c8ff; opacity: 0.75; }
-.status-hint.shield { top: 30px; color: #9adcf9; opacity: 0.8; }
-.status-hint.mend { top: 48px; color: #8ff5ae; opacity: 0.8; }
+.status-hint.cloak { top: 78px; color: #b9c8ff; opacity: 0.75; }
+.status-hint.shield { top: 94px; color: #9adcf9; opacity: 0.8; }
+.status-hint.mend { top: 110px; color: #8ff5ae; opacity: 0.8; }
 
 /* Spectator hint — only chrome shown while flying */
 #spectate-hint {
-  position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
+  position: absolute; top: 78px; left: 50%; transform: translateX(-50%);
   pointer-events: none; z-index: 5; color: #cfe8ff; opacity: 0.7;
   font: 600 13px/1 monospace; letter-spacing: 0.15em; text-shadow: 0 1px 3px #000;
 }
 
 /* Kill feed — top-right, newest at bottom, timed fade */
 #killfeed {
-  position: fixed; top: 84px; right: 14px; display: flex; flex-direction: column;
+  position: fixed; top: 276px; right: 14px; display: flex; flex-direction: column;
   align-items: flex-end; gap: 4px; pointer-events: none; z-index: 6;
   font: 600 12px/1.2 monospace; letter-spacing: 0.06em;
 }

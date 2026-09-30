@@ -57,7 +57,7 @@ export class Minimap {
     this.canvas.style.cssText = this.cross
       ? `position: absolute; top: 50%; left: 50%; width: ${SIZE}px; height: ${SIZE}px;
          transform: translate(-50%, -50%); pointer-events: none;`
-      : `position: absolute; top: 86px; right: 20px; width: ${SIZE}px; height: ${SIZE}px;
+      : `position: absolute; top: 110px; right: 20px; width: ${SIZE}px; height: ${SIZE}px;
          border-radius: 50%; border: 1px solid rgba(255,255,255,0.25);
          background: rgba(8,12,18,0.55); pointer-events: none;`;
   }
