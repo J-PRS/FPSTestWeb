@@ -72,37 +72,56 @@ const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
 const W = dv.getUint32(0, true), H = dv.getUint32(4, true);
 const field: Heightfield = { size: W, data: buf.subarray(8), stride: 1 };
 if (W !== H) throw new Error('non-square heightmap');
-let loadedTerrain = MAP_PATH.split(/[\\/]/).pop()!;
-// Room hops change the ground under the sim — gameState.map.terrain
-// names the file the room replays.
-async function ensureTerrain(name: string): Promise<void> {
-  if (name === loadedTerrain) return;
-  try {
-    const p = new URL(`../../maps/${name}`, import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
-    const b = new Uint8Array(await bunFile!(p).arrayBuffer());
+const DEFAULT_TERRAIN = MAP_PATH.split(/[\\/]/).pop()!;
+const terrainCache = new Map<string, Heightfield>([[DEFAULT_TERRAIN, field]]);
+// Spec-less rooms replay the server's own heightmap.bin — it lives in
+// server_bun/, not maps/, and the run's default may be a spec file, so
+// it needs its own cache entry, not a fallback-to-default.
+{
+  const serverDef = new URL('../heightmap.bin', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
+  if (!terrainCache.has('heightmap.bin')) {
+    const b = new Uint8Array(await bunFile!(serverDef).arrayBuffer());
     const d = new DataView(b.buffer, b.byteOffset, b.byteLength);
     const w = d.getUint32(0, true), h = d.getUint32(4, true);
-    if (w !== h) return;
-    field.size = w; field.data = b.subarray(8);
-    loadedTerrain = name;
-    console.log(`[netBot] terrain swapped: ${name}`);
-  } catch { /* unknown file — keep the old field rather than crash */ }
+    if (w === h) terrainCache.set('heightmap.bin', { size: w, data: b.subarray(8), stride: 1 });
+  }
 }
-const gy = (x: number, z: number) => hmHeight(field, x, z);
-const _gn = { x: 0, y: 1, z: 0 };
-const surface = {
-  getHeight: gy,
-  getNormal(x: number, z: number, out: { x: number; y: number; z: number }) {
-    const e = 0.5;
-    out.x = (gy(x - e, z) - gy(x + e, z)) / (2 * e);
-    out.y = 1;
-    out.z = (gy(x, z - e) - gy(x, z + e)) / (2 * e);
-    const l = Math.hypot(out.x, out.y, out.z);
-    out.x /= l; out.y /= l; out.z /= l;
-    return out;
-  },
-};
-
+// Rooms can sit on different terrain files — each bot needs ITS room's
+// field. A shared field swapped on hop corrupts every sim still in the
+// old room (the post-hop vertical divergence).
+async function loadTerrain(name: string): Promise<Heightfield> {
+  const cached = terrainCache.get(name);
+  if (cached) return cached;
+  let f: Heightfield;
+  try {
+    const p = new URL(`../../maps/${name}`, import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
+  const b = new Uint8Array(await bunFile!(p).arrayBuffer());
+  const d = new DataView(b.buffer, b.byteOffset, b.byteLength);
+  const w = d.getUint32(0, true), h = d.getUint32(4, true);
+  if (w !== h) return field; // malformed file — stay on the default
+  f = { size: w, data: b.subarray(8), stride: 1 };
+  console.log(`[netBot] terrain loaded: ${name}`);
+  } catch {
+    f = field; // unknown file — default, matching the server's fallback
+  }
+  terrainCache.set(name, f);
+  return f;
+}
+function surfaceFor(field: Heightfield) {
+  const g = (x: number, z: number) => hmHeight(field, x, z);
+  return {
+    getHeight: g,
+    getNormal(x: number, z: number, out: { x: number; y: number; z: number }) {
+      const e = 0.5;
+      out.x = (g(x - e, z) - g(x + e, z)) / (2 * e);
+      out.y = 1;
+      out.z = (g(x, z - e) - g(x, z + e)) / (2 * e);
+      const l = Math.hypot(out.x, out.y, out.z);
+      out.x /= l; out.y /= l; out.z /= l;
+      return out;
+    },
+  };
+}
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
 const PERKS = PERK_ORDER.filter(p => p !== 'none');
 const CLASSES: ArmorClass[] = ['light', 'medium', 'heavy'];
@@ -267,6 +286,10 @@ class WireBot {
   // Warp state is per-bot — each socket sees its own (possibly interest-
   // filtered) stream, so comparing across sockets invents teleports.
   private lastSeg = new Map<string, { t: number; x: number; y: number; z: number; sp: number; judge: boolean }>();
+  // Per-bot terrain: rooms can sit on different heightfields.
+  private myField: Heightfield = field;
+  private mySurf = surfaceFor(field);
+  private myGy = (x: number, z: number) => hmHeight(this.myField, x, z);
 
   private segJump(kind: 'ball' | 'crawl', id: number, x: number, y: number, z: number, sp: number, t: number, segKind = ''): void {
     // Only judged→judged pairs are compared, but every segment updates
@@ -410,8 +433,10 @@ class WireBot {
         for (const pk of m.pickups ?? []) this.pickups.set(pk.id, pk.pos);
         const me = m.localPlayerState?.position ?? m.players?.find((p: { id?: string; playerId?: string }) => (p.id ?? p.playerId) === this.id)?.position
           ?? { x: rand(-20, 20), y: 40, z: rand(-20, 20) };
-        void ensureTerrain(m.map?.terrain ?? 'heightmap.bin').then(() => {
-          this.sim = new MoveSim(surface, {
+        void loadTerrain(m.map?.terrain ?? 'heightmap.bin').then((f) => {
+          this.myField = f;
+          this.mySurf = surfaceFor(f);
+          this.sim = new MoveSim(this.mySurf, {
             pos: { x: me.x, y: me.y, z: me.z },
             vel: { x: 0, y: 0, z: 0 }, yaw: 0, pitch: 0, onGround: true,
           });
@@ -590,7 +615,7 @@ class WireBot {
       // Warp-blink cadence — the server caps teleports at ~1/s anyway.
       this.nextTeleport = now + rand(25000, 70000);
       const tx = s.pos.x + rand(-30, 30), tz = s.pos.z + rand(-30, 30);
-      s.pos.x = tx; s.pos.z = tz; s.pos.y = gy(tx, tz) + 1;
+      s.pos.x = tx; s.pos.z = tz; s.pos.y = this.myGy(tx, tz) + 1;
       s.vel.x *= 0.5; s.vel.y = 0; s.vel.z *= 0.5;
       this.send({ type: 'teleport', position: { ...s.pos }, rotation: { yaw: s.yaw, pitch: s.pitch }, velocity: { ...s.vel } });
     }
@@ -683,12 +708,12 @@ class WireBot {
     // Gravity safety net: MoveSim integrates but a stray NaN poisons
     // every subsequent report — clamp like a client's own sanity check.
     if (!Number.isFinite(s.pos.x + s.pos.y + s.pos.z)) {
-      s.pos.y = gy(s.pos.x, s.pos.z) + 2;
+      s.pos.y = this.myGy(s.pos.x, s.pos.z) + 2;
       s.vel.x = s.vel.y = s.vel.z = 0;
     }
     // Terrain penetration probe: a fast descent can tunnel below the
     // field — reports from under the map read as clipping cheats.
-    const depth = gy(s.pos.x, s.pos.z) - s.pos.y;
+    const depth = this.myGy(s.pos.x, s.pos.z) - s.pos.y;
     if (depth > 2) stats.belowGround++;
   }
 
@@ -764,7 +789,7 @@ class WireBot {
         // target moved reads as an impossible detonation.
         const ex = s.pos.x + dir.x * speed * airtime;
         const ez = s.pos.z + dir.z * speed * airtime;
-        const ey = Math.max(gy(ex, ez), s.pos.y + dir.y * speed * airtime);
+        const ey = Math.max(this.myGy(ex, ez), s.pos.y + dir.y * speed * airtime);
         this.send({ type: 'aoeShot', position: { x: ex, y: ey, z: ez }, weaponType, airtime, projectileId: pid });
       }
     };
