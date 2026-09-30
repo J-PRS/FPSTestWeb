@@ -14,12 +14,10 @@
 import { BotSteer } from './botSteer.ts';
 import { BotGoals } from './botGoals.ts';
 import { BotMoves } from './botMoves.ts';
-import { STATUS } from './status.ts';
-import { ENERGY } from './movement.ts';
 import type { ColliderIndex } from './solidWorld.ts';
 import type { StructureCollider } from './ballSim.ts';
 import {
-  newHuntState, pickHunt, pickFire, retreatDest,
+  newHuntState, pickHunt, pickFire,
   STALE_MS, type HuntState,
 } from './botHunt.ts';
 import { stuckBreak, dodge, type EscapeState } from './botEscape.ts';
@@ -27,6 +25,7 @@ import { stuckBreak, dodge, type EscapeState } from './botEscape.ts';
 // Combat half lives in botHunt.ts — re-export so existing imports keep
 // resolving (losClear/BOT_EYE/BOT_FIRE_RANGE are the public surface).
 export { losClear, BOT_EYE, BOT_FIRE_RANGE } from './botHunt.ts';
+import { pickDest, pickDeploy, statusIntent } from './botDisposition.ts';
 
 export interface BotVec { x: number; y: number; z: number }
 
@@ -127,9 +126,7 @@ export interface BrainOut {
 }
 
 const THINK_S = 0.3;
-const CLOSE_PRESS_M = 6; // inside this the orbit breaks — press to fist range
 const FLINCH_S = 0.4;
-const FLINCH_DIST = 8;
 
 // Fear / hero — both are sense tuning, never new moves or info. Below
 // FEAR_HP the bot breaks contact (retreat, sloppy suppression on purpose);
@@ -153,9 +150,9 @@ export class BotBrain {
   }
 
   private thinkT = Math.random() * THINK_S;
-  private readonly h: HuntState;
-  private flinchT = 0;
-  private flinchFrom: BotVec = { x: 0, y: 0, z: 0 };
+  readonly h: HuntState;
+  flinchT = 0;
+  flinchFrom: BotVec = { x: 0, y: 0, z: 0 };
   private beltT = 4 + Math.random() * 4; // stagger first throws across the squad
   // Stuck/dodge senses live in botEscape.ts — escapeS is their state bag.
   private readonly escapeS: EscapeState = {
@@ -170,7 +167,7 @@ export class BotBrain {
   private readonly steerer = new BotSteer();
   // Idle-goal ladder lives in botGoals.ts — goalS is the state bag it
   // reads/writes so the brain's goal/wander/revenge fields stay private.
-  private readonly goalS: import('./botGoals.ts').GoalState = {
+  readonly goalS: import('./botGoals.ts').GoalState = {
     goal: { x: 0, y: 0, z: 0 },
     revengeT: 0,
     revengeFrom: { x: 0, y: 0, z: 0 },
@@ -200,8 +197,8 @@ export class BotBrain {
   // (objective in reach, nobody shooting) is the whole trigger: the
   // emplacement emerges from "a defender with time on their hands",
   // not a scripted base layout.
-  private deployT = 8 + Math.random() * 25;
-  private builder = Math.random() < 0.45;
+  deployT = 8 + Math.random() * 25;
+  builder = Math.random() < 0.45;
 
   /** Hosts can pin the builder trait — a technician role shouldn't be
    *  a dice roll away from never touching the deploy kit. */
@@ -233,10 +230,10 @@ export class BotBrain {
    *  Direction reverses on a jitter (a real duelist breaks the readable
    *  circle) and the radius breathes per flip, so the hold never reads
    *  as a carousel. */
-  private orbitA = Math.random() * Math.PI * 2;
-  private orbitDir = Math.random() < 0.5 ? 1 : -1;
-  private orbitFlipT = 1 + Math.random() * 1.5;
-  private orbitMul = 1;
+  orbitA = Math.random() * Math.PI * 2;
+  orbitDir = Math.random() < 0.5 ? 1 : -1;
+  orbitFlipT = 1 + Math.random() * 1.5;
+  orbitMul = 1;
   /** Last think resolved to stand-and-shoot — a legal hold, not a stall.
    *  Hosts read this to keep stall/mobility watchdogs honest. */
   holding = false;
@@ -286,7 +283,7 @@ export class BotBrain {
     this.goalS.revengeT -= dt;
 
     // --- choose the step destination ---
-    let dest = this.pickDest(dt, ctx, pos, fearing, hero);
+    let dest = pickDest(this, dt, ctx, pos, fearing, hero);
 
     // --- context steering: senses score every direction ---
     dest = this.steerer.steer(dt, ctx, pos, dest);
@@ -308,97 +305,13 @@ export class BotBrain {
     }
 
     // --- deploy: a quiet defender with hands free fortifies the stand ---
-    const deploy = this.pickDeploy(dt, ctx, pos, fearing);
+    const deploy = pickDeploy(this, dt, ctx, pos, fearing);
 
-    return { dest, move: this.moves.hints(dt, ctx, pos, dest), fire, status: this.statusIntent(ctx, fearing), belt, deploy };
+    return { dest, move: this.moves.hints(dt, ctx, pos, dest), fire, status: statusIntent(this, ctx, fearing), belt, deploy };
   }
 
   
   
-  /** Step destination: flinch knock > hunt press/retreat/orbit > goal. */
-  private pickDest(dt: number, ctx: BrainCtx, pos: BotVec, fearing: boolean, hero: boolean): BotVec {
-    this.holding = false;
-    if (this.flinchT > 0) {
-      this.flinchT -= dt;
-      const fx = pos.x - this.flinchFrom.x, fz = pos.z - this.flinchFrom.z;
-      const l = Math.hypot(fx, fz) || 1;
-      return { x: pos.x + (fx / l) * FLINCH_DIST, y: pos.y, z: pos.z + (fz / l) * FLINCH_DIST };
-    }
-    if (!this.h.hunt) return this.goalS.goal;
-    const t = this.h.hunt;
-    const d = dist3(pos, t.pos);
-    if (fearing) return retreatDest(ctx, pos, t);
-    if (d < CLOSE_PRESS_M || d > this.h.orbitFar * (hero ? 0.7 : 1)) {
-      // Point-blank or outranged: press straight in either way — inside
-      // fist reach the press converts to the punch, outside it to the
-      // approach. Holding the orbit at 2m would stare down a barrel.
-      return { ...t.pos };
-    }
-    // fightPos comes from the last replan tick — "hold" used to mean
-    // stand still and shoot, which reads (and meters) as sheeping.
-    // A held position now strafes: orbit the target inside the
-    // preferred range band, cycling angle so the bot keeps moving
-    // between volleys like a real duelist.
-    this.holding = this.h.fightPos === null;
-    if (this.h.fightPos) return this.h.fightPos;
-    this.orbitA += dt * (this.orbitDir * 0.55);
-    this.orbitFlipT -= dt;
-    if (this.orbitFlipT <= 0) {
-      this.orbitFlipT = 1.2 + Math.random() * 1.4;
-      this.orbitDir = -this.orbitDir;
-      this.orbitMul = 0.75 + Math.random() * 0.4; // jink in/out too — not just direction
-    }
-    const mid = (this.h.orbitFar + this.h.orbitClose) * 0.5 * this.orbitMul;
-    const ox = t.pos.x + Math.cos(this.orbitA) * mid;
-    const oz = t.pos.z + Math.sin(this.orbitA) * mid;
-    return { x: ox, y: ctx.groundY(ox, oz), z: oz };
-  }
-
-  /** Fortification pick: planting while a fight rages on the stand is
-   *  suicide, but a defender watching a duel across the field still has
-   *  hands free — the gate is "nobody close enough to interrupt", not
-   *  "nobody visible at all" (a busy room never goes fully quiet, which
-   *  starved the sense). */
-  private pickDeploy(dt: number, ctx: BrainCtx, pos: BotVec, fearing: boolean): BrainOut['deploy'] {
-    this.deployT -= dt;
-    const handsFree = !this.h.hunt || dist3(pos, this.h.hunt.pos) > 25;
-    if (!this.builder || this.deployT > 0 || !handsFree || fearing || !ctx.objective) return undefined;
-    if (dist3(pos, ctx.objective) >= 15) return undefined;
-    this.deployT = 28 + Math.random() * 20;
-    // A hurting builder drops a station first (it heals the squad);
-    // otherwise the stand gets guns, a minefield, or a patrol drone
-    // by temperament — drones roam the stand's perimeter so they're
-    // the pick when the anchor is already watched.
-    const roll = Math.random();
-    const kind: string = (ctx.healthFrac ?? 1) < 0.4 ? 'station'
-      : roll < 0.55 ? 'turret' : roll < 0.85 ? 'mine' : 'drone';
-    const a = Math.random() * Math.PI * 2;
-    const r = 4 + Math.random() * 6;
-    const px = pos.x + Math.cos(a) * r, pz = pos.z + Math.sin(a) * r;
-    return { kind, pos: { x: px, y: ctx.groundY(px, pz), z: pz } };
-  }
-
-  /** Toggle-skill intent — the STATUS bits a legal client claims. Mend
-   *  wins when hurt and unpressured — and while FLEEING: a retreat is
-   *  exactly when a Tribes player channels, so fearing counts as the
-   *  unpressured window even though the hunt is technically still live.
-   *  Otherwise shield up in a real fight while the tank can carry the
-   *  drain. Returns undefined when the host has no energy model. */
-  private statusIntent(ctx: BrainCtx, fearing: boolean): number | undefined {
-    if (ctx.energy === undefined) return undefined;
-    const fighting = this.h.hunt !== null;
-    const hurt = (ctx.healthFrac ?? 1) < 0.6;
-    let status = 0;
-    if (hurt && (!fighting || fearing) && ctx.energy >= ENERGY.mendCost + 10) status |= STATUS.MEND;
-    else if (fighting && ctx.energy >= ENERGY.shieldCost + 15) status |= STATUS.SHIELD;
-    // Infiltration cloak: pressing an enemy stand unseen beats shielding
-    // through it — cloak only while the approach is still covert (no
-    // hunt target), so contact drops the veil the tick fighting starts.
-    else if (ctx.infiltrating && !fighting && ctx.energy >= ENERGY.cloakCost + 15) status |= STATUS.CLOAK;
-    return status;
-  }
-
-
 }
 
 function dist3(a: BotVec, b: BotVec): number {

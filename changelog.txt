@@ -1,3 +1,4 @@
+2026-09-30 - botBrain split: disposition family (flinch/orbit dest pick, fortification deploy pick, toggle-skill intent) moved to botDisposition.ts (406->318).
 2026-09-30 - GameServer split: ops/metrics surface (totalPlayers, server-browser card, /health row, /metrics snapshot) moved to serverOps.ts as flat-host functions (390->330).
 2026-09-30 - lobby split: panel DOM construction + lb-* builders moved to lobbyPanel.ts behind a LobbyPanelHost (381->200).
 2026-09-30 - DemoPlayer split: playback internals (loop wrap, seek reconstruction, event windows, frame interp) moved to demoPlayback.ts (423->255).
