@@ -1,0 +1,14 @@
+import { launchClient, closeClient } from './browser.ts';
+import { upStack } from './env.ts';
+const stack = await upStack();
+const c = await launchClient(stack.clientUrl('&room=wsprobe&bots=0'));
+const cdp = await c.page.createCDPSession();
+await cdp.send('Network.enable');
+cdp.on('Network.webSocketCreated', (e: any) => console.log('WS>', e.url));
+cdp.on('Network.webSocketHandshakeResponseReceived', (e: any) => console.log('WSH', e.response.status, e.response.statusText));
+cdp.on('Network.webSocketClosed', (e: any) => console.log('WS<'));
+c.page.on('console', (m) => { if (m.type() === 'error') console.log('CONSOLE-ERR:', m.text()); });
+await c.waitFor(`t.networkManager && t.networkManager.isConnected()`, 30000);
+console.log('tier:', await c.test(`t.networkManager.getTransportTier()`));
+await new Promise((r) => setTimeout(r, 5000));
+await closeClient(c); stack.down();

@@ -284,6 +284,7 @@ class ServerRtcTransport implements GameTransport {
 async function tryWebRTC(config: ConnectionConfig): Promise<GameTransport | null> {
   if (typeof RTCPeerConnection === 'undefined') return null;
   let pc: RTCPeerConnection | undefined;
+  let signalRef: WebSocket | undefined;
   try {
     // ICE servers come from the server itself (/rtcconfig) — STUN/TURN is a
     // deployment property, not a client constant; LAN/dev needs neither.
@@ -304,6 +305,7 @@ async function tryWebRTC(config: ConnectionConfig): Promise<GameTransport | null
     // are embedded in the SDP (non-trickle — the server doesn't accept
     // trickle candidates; on LAN/host scenarios that's sufficient).
     const signal = new WebSocket(config.url.replace(/\/ws$/, '/rtcs'));
+    signalRef = signal;
     const offer = await conn.createOffer();
     await conn.setLocalDescription(offer);
     if (conn.iceGatheringState !== 'complete') {
@@ -342,6 +344,14 @@ async function tryWebRTC(config: ConnectionConfig): Promise<GameTransport | null
   } catch {
     // Failed probe — the ICE/DTLS machinery keeps running without this.
     try { pc?.close(); } catch { /* gone */ }
+    // The signal ws leaks otherwise: closing while CONNECTING trips
+    // Chrome's "closed before established" pageerror, so let it finish
+    // opening and shut it then.
+    const s = signalRef;
+    if (s && s.readyState !== WebSocket.CLOSED && s.readyState !== WebSocket.CLOSING) {
+      if (s.readyState === WebSocket.OPEN) s.close();
+      else s.addEventListener('open', () => s.close(), { once: true });
+    }
     return null;
   }
 }

@@ -60,7 +60,12 @@ export async function launchClient(clientUrl: string): Promise<Client> {
   });
   const page = await browser.newPage();
   await page.evaluateOnNewDocument(POINTER_LOCK_STUB);
-  page.on('pageerror', (e) => console.error('[pageerror]', e.message));
+  // Vite's HMR client rejects with "WebSocket closed without opened" when
+  // the page loads faster than the dev-server socket — dev-server noise,
+  // not game code. Keep real page errors loud.
+  page.on('pageerror', (e) => {
+    if (!e.message.includes('WebSocket closed without opened')) console.error('[pageerror]', e.message);
+  });
   await page.goto(clientUrl, { waitUntil: 'domcontentloaded' });
 
   const test = <T = Record<string, unknown>>(expr: string): Promise<T> =>
