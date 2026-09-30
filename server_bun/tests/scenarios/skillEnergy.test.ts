@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'bun:test';
 import { mkRoom, pin, firstPlayer } from './harness.ts';
-import { ENERGY } from '../../../shared/movement.ts';
+import { ENERGY, cloakDrainPerSec } from '../../../shared/movement.ts';
 
 describe('scenario: skill energy on the shadow sim', () => {
   it('claiming cloak pays the activation ante, then drains while held', () => {
@@ -18,10 +18,10 @@ describe('scenario: skill energy on the shadow sim', () => {
     expect(room.moveSim.energyOf(p.id)!).toBe(ENERGY.max - ENERGY.cloakCost);
     const afterAnte = room.moveSim.energyOf(p.id)!;
 
-    // Held cloak burns the drain rate per sim-tick; regen is suppressed
-    // while any skill drain is active.
+    // Held cloak burns the speed-priced drain — a pinned player sits at
+    // the 1/s floor; regen is suppressed while any skill drain is active.
     room.moveSim.tick(1.0);
-    expect(room.moveSim.energyOf(p.id)!).toBeCloseTo(afterAnte - ENERGY.cloakDrain, 5);
+    expect(room.moveSim.energyOf(p.id)!).toBeCloseTo(afterAnte - cloakDrainPerSec(0), 5);
 
     // Drop the bit: drain stops and the tank refills.
     room.messages.handleMessage(p.id, {

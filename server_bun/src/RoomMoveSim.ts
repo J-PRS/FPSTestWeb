@@ -1,4 +1,4 @@
-import { MoveSim, ENERGY, type MoveInput, type MoveState, type Vec3Like } from '../../shared/movement.ts';
+import { MoveSim, ENERGY, cloakDrainPerSec, type MoveInput, type MoveState, type Vec3Like } from '../../shared/movement.ts';
 import { STATUS } from '../../shared/status.ts';
 import { perkMods } from '../../shared/perks.ts';
 import { hmHeight, hmNormal, type Heightfield } from '../../shared/heightfield.ts';
@@ -268,8 +268,9 @@ export class RoomMoveSim {
     if (rising & STATUS.MEND) sh.energy = Math.max(0, sh.energy - ENERGY.mendCost);
     sh.lastStatus = status;
 
+    const hSpeed = Math.hypot(sh.sim.state.vel.x, sh.sim.state.vel.z);
     sh.skillDrainPerSec =
-      (status & STATUS.CLOAK ? ENERGY.cloakDrain : 0) +
+      (status & STATUS.CLOAK ? cloakDrainPerSec(hSpeed) : 0) +
       (status & STATUS.SHIELD ? ENERGY.shieldDrain : 0) +
       (status & STATUS.MEND ? ENERGY.mendDrain : 0);
     sh.skillSuppressRegen = sh.skillDrainPerSec > 0;

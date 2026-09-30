@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { getGlowTexture } from '../../effects/glowTexture.js';
 import type { Terrain } from '../../world/terrain.js';
 import { GRAVITY } from '../../core/config.js';
-import { ENERGY } from '../../../../shared/movement.js';
+import { ENERGY, cloakDrainPerSec } from '../../../../shared/movement.js';
 import type { SkillId } from '../Player.js';
 
 // ---- Skill tuning ----
@@ -24,8 +24,7 @@ const TL_BOUNCE = 0.35;      // restitution — it skitters, doesn't thud
 
 // Energy economy constants live in shared/movement.ts (ENERGY) — the
 // server shadow sims the same tank to judge jet/skill claims.
-const CLOAK_COST = ENERGY.cloakCost;   // activation — a commitment, not a tap
-const CLOAK_DRAIN = ENERGY.cloakDrain; // per second while invisible
+const CLOAK_COST = ENERGY.cloakCost; // activation — cheap ante, the upkeep is the price
 
 const SHIELD_COST = ENERGY.shieldCost;   // activation — same ante as cloak
 const SHIELD_DRAIN = ENERGY.shieldDrain; // per second while the bubble is up
@@ -210,7 +209,10 @@ export class PlayerSkills {
 
   updateCloak(dt: number): void {
     if (!this.cloaked) return;
-    this.ctx.drainEnergy(CLOAK_DRAIN * dt);
+    // Horizontal speed prices the upkeep: sitting still is nearly free,
+    // running full tilt burns ~10x — slower is sneakier.
+    const speed = Math.hypot(this.ctx.vel.x, this.ctx.vel.z);
+    this.ctx.drainEnergy(cloakDrainPerSec(speed) * dt);
     if (this.ctx.energy() <= 0) this.setCloak(false); // tank dry — surface
   }
 

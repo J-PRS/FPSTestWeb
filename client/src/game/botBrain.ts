@@ -5,7 +5,7 @@ import { RemotePlayer } from '../entities/RemotePlayer.js';
 import type { Terrain } from '../world/terrain.js';
 import type { Nugget } from '../entities/Nugget.js';
 import { MovementController, type MovementState } from '../entities/movement.js';
-import { ENERGY } from '../../../shared/movement.js';
+import { ENERGY, cloakDrainPerSec } from '../../../shared/movement.js';
 import type { StructureSpec } from '../../../shared/mapSpec.js';
 import { TEAM_COLORS, type TeamId } from '../../../shared/teams.js';
 import { BotBrain, BOT_EYE } from '../../../shared/botBrain.js';
@@ -254,7 +254,7 @@ export class GameBot extends RemotePlayer {
     };
     drain(STATUS.MEND, ENERGY.mendDrain);
     drain(STATUS.SHIELD, ENERGY.shieldDrain);
-    drain(STATUS.CLOAK, ENERGY.cloakDrain);
+    drain(STATUS.CLOAK, cloakDrainPerSec(Math.hypot(this.velocity.x, this.velocity.z)));
     // Mend channel heals — 12 hp/s while the flag rides (same rate the
     // server applies to a mending player).
     if (this.status & STATUS.MEND) this.botHp = Math.min(this.botMaxHp, this.botHp + 12 * dt);

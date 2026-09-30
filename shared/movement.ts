@@ -36,11 +36,20 @@ export const ENERGY = {
   max: 60,
   jetDrain: 15,      // per second while thrusting
   jetCharge: 8,      // per second while grounded-and-idle
-  cloakCost: 20, cloakDrain: 5,
+  cloakCost: 10,
+  // Cloak upkeep is priced by motion: static ~1/s, draining to 10/s at
+  // 100 m/s — the infiltrator pays for speed, not for existing.
+  cloakDrainMin: 1, cloakDrainMax: 10, cloakDrainSpeedMps: 100,
   shieldCost: 20, shieldDrain: 5,
   mendCost: 20, mendDrain: 15,
   shieldDmgPerEnergy: 10, // absorbed damage burns this much of a point
 } as const;
+
+/** Cloak drain per second at a given horizontal speed (m/s). */
+export function cloakDrainPerSec(speed: number): number {
+  const t = Math.min(Math.max(speed, 0) / ENERGY.cloakDrainSpeedMps, 1);
+  return ENERGY.cloakDrainMin + (ENERGY.cloakDrainMax - ENERGY.cloakDrainMin) * t;
+}
 
 export interface Vec3Like { x: number; y: number; z: number }
 
