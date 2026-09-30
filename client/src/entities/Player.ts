@@ -12,7 +12,7 @@ import { PlayerStatus } from './playerStatus.js';
 import { MovementController, MovementState } from './movement.js';
 import { type WeaponDef } from '../weapons.js';
 import { settings } from '../core/settings.js';
-import { isDown } from '../core/keybinds.js';
+import * as read from './playerRead.js';
 import { PlayerInput } from './player/input.js';
 import { PlayerModel } from './PlayerModel.js';
 import * as imp from './playerImpulse.js';
@@ -308,38 +308,15 @@ export class Player {
     }
   }
 
-  private getForwardXZ(): THREE.Vector2 {
-    return new THREE.Vector2(Math.sin(this.yaw), Math.cos(this.yaw));
-  }
-  private getRightXZ(): THREE.Vector2 {
-    return new THREE.Vector2(-Math.cos(this.yaw), Math.sin(this.yaw));
-  }
+  private getForwardXZ(): THREE.Vector2 { return read.getForwardXZ(this); }
+  private getRightXZ(): THREE.Vector2 { return read.getRightXZ(this); }
 
   getInputState(): { forward: number; right: number; jumpPressed: boolean; jumpHeld: boolean; skiHeld: boolean; firePressed: boolean; jetHeld: boolean; beltHeld: boolean } {
-    const keys = this.input.keys;
-    let forward = 0, right = 0;
-    if (isDown(keys, 'forward') || keys['ArrowUp'])    forward += 1;
-    if (isDown(keys, 'back') || keys['ArrowDown'])     forward -= 1;
-    if (isDown(keys, 'left') || keys['ArrowLeft'])     right -= 1;
-    if (isDown(keys, 'right') || keys['ArrowRight'])   right += 1;
-
-    const mlen = Math.sqrt(forward * forward + right * right);
-    if (mlen > 0) { forward /= mlen; right /= mlen; }
-
-    return {
-      forward,
-      right,
-      jumpPressed: this.input.jumpHeld,
-      jumpHeld: this.input.jumpHeld,
-      skiHeld: isDown(keys, 'ski'),
-      firePressed: this.input.firePending,
-      jetHeld: this.input.jetPending,
-      beltHeld: this.input.beltHeld,
-    };
+    return read.getInputState(this);
   }
 
   update(dt: number): void {
-    // Dying while spectating: death owns the cam now — drop the flag so
+    // Dying while spectating: death owns the cam now â€” drop the flag so
     // respawn doesn't leave the player stuck flying
     if (this.isDead) this.status.setCloaked(false); // corpse can't stay hidden
     if (this.status.spectating && this.isDead) {
@@ -374,7 +351,7 @@ export class Player {
     this.visuals.updateCamera(this.camera, this.terrain, this.pos, this.yaw, this.pitch, this.thirdPerson);
     this.checkCameraSpinout(dt);
     // Model visibility follows the toggle AND death (observer cam is ghost
-    // flight — your corpse shouldn't fly with you)
+    // flight â€” your corpse shouldn't fly with you)
     this.model?.setVisible(this.thirdPerson && !this.isDead && !this.status.cloaked);
     this.visuals.updateFeetMarker(this.terrain, this.pos);
     this.fireWeapons();
@@ -416,7 +393,7 @@ export class Player {
       jetHeld: this.input.jetPending && this.energy > 0,
     });
 
-    // Fall speed entering this frame — grounding inside movement.update
+    // Fall speed entering this frame â€” grounding inside movement.update
     // zeroes vel.y, so the slam impact reads the pre-integration value
     this.prevVelY = this.vel.y;
 
@@ -439,7 +416,7 @@ export class Player {
   }
 
   // Jetpack thrust is inside the shared sim (fed via jetHeld into
-  // stepMovement) — here only the energy economy and the FX flag remain.
+  // stepMovement) â€” here only the energy economy and the FX flag remain.
   // Tribes-style tank: drains while burning, recharges only when off the
   // jet; cloak/shield/mend compete for the same tank, never fill it.
   private tickEnergy(dt: number): boolean {
@@ -453,7 +430,7 @@ export class Player {
       this.energy = Math.min(this.energyCap, this.energy + JET_CHARGE * this.mods.jetRegen * this.mods.energyRegen * dt);
     }
 
-    // Regenerator perk — MP regenerates in the server tick; offline we
+    // Regenerator perk â€” MP regenerates in the server tick; offline we
     // tick it here so the perk works without a connection.
     if (this.mods.regen > 0 && !(this.serverOwnsHealth?.() ?? false) && !this.isDead) {
       this.health = Math.min(this.maxHealth, this.health + this.mods.regen * dt);
@@ -461,9 +438,9 @@ export class Player {
     return isJetting;
   }
 
-  // Spinout detector: a camera rotation jump >35° in a single frame is a
-  // discontinuity (snap/teleport/NaN), not human input — even a violent
-  // flick is <2°/frame at 60fps. Warn logs carry pose so we can repro.
+  // Spinout detector: a camera rotation jump >35Â° in a single frame is a
+  // discontinuity (snap/teleport/NaN), not human input â€” even a violent
+  // flick is <2Â°/frame at 60fps. Warn logs carry pose so we can repro.
   private _prevCamQuat = new THREE.Quaternion();
   private _camQuatValid = false;
   private _spinoutCd = 0;
@@ -473,7 +450,7 @@ export class Player {
     if (this._camQuatValid && this._spinoutCd <= 0) {
       const deg = q.angleTo(this._prevCamQuat) * 180 / Math.PI;
       if (deg > 35) {
-        this._spinoutCd = 0.5; // throttle — a stuck spinout spams otherwise
+        this._spinoutCd = 0.5; // throttle â€” a stuck spinout spams otherwise
         logger.warn(`Camera spinout ${deg.toFixed(1)}deg/frame`, {
           pos: `(${this.pos.x.toFixed(1)},${this.pos.y.toFixed(1)},${this.pos.z.toFixed(1)})`,
           yaw: this.yaw.toFixed(3), pitch: this.pitch.toFixed(3),
@@ -487,37 +464,10 @@ export class Player {
   }
 
   private readMoveInput(): { forward: number; right: number; jumpHeld: boolean; skiHeld: boolean; moveX: number; moveZ: number } {
-    const fwd = this.getForwardXZ();
-    const rgt = this.getRightXZ();
-    const keys = this.input.keys;
-
-    let forward = 0, right = 0;
-    if (isDown(keys, 'forward') || keys['ArrowUp'])    forward += 1;
-    if (isDown(keys, 'back') || keys['ArrowDown'])     forward -= 1;
-    if (isDown(keys, 'left') || keys['ArrowLeft'])     right -= 1;
-    if (isDown(keys, 'right') || keys['ArrowRight'])   right += 1;
-
-    // Normalize input
-    const mlen = Math.sqrt(forward * forward + right * right);
-    if (mlen > 0) { forward /= mlen; right /= mlen; }
-
-    return {
-      forward, right,
-      jumpHeld: this.input.jumpHeld, // autoHop: held = pressed
-      skiHeld: isDown(keys, 'ski'),
-      // World-space move dir for jetpack thrust
-      moveX: fwd.x * forward + rgt.x * right,
-      moveZ: fwd.y * forward + rgt.y * right,
-    };
+    return read.readMoveInput(this);
   }
 
-  getAimDir(): THREE.Vector3 {
-    return new THREE.Vector3(
-      Math.cos(this.pitch) * Math.sin(this.yaw),
-      Math.sin(this.pitch),
-      Math.cos(this.pitch) * Math.cos(this.yaw)
-    ).normalize();
-  }
+  getAimDir(): THREE.Vector3 { return read.getAimDir(this); }
 
   // Weapon triggers: selected weapon (LMB) plus C/F belt throws.
   private fireWeapons(): void { imp.fireWeapons(this); }

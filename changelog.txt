@@ -1,3 +1,4 @@
+2026-09-30 - Player split: move-intent input reads (basis vectors, polled state, aim dir) -> playerRead.ts (544->494).
 2026-09-30 - aoeShot skip: projectiles with no serverProjectileId (fired pre-reconnect) no longer send a blast claim that can only reject.
 2026-09-30 - DemoUI split: chrome construction (timeline slider + thumb CSS + transport controls + button style) -> demoUIBuild.ts (302->197).
 2026-09-30 - suicide feed: self-splash no longer reads as a frag — server skips streak credit/taunts and broadcasts a suicide notice, client death overlay says fragged yourself.
