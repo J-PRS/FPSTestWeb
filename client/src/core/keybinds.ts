@@ -28,7 +28,8 @@ export const BIND_DEFS: BindDef[] = [
   { action: 'melee',   label: 'Melee',         def: 'KeyE' },
   { action: 'camera',  label: 'Third person',  def: 'KeyZ' },
   { action: 'skill',   label: 'Skill',         def: 'KeyQ' },
-  { action: 'spectate', label: 'Spectator fly', def: 'KeyV' },
+  // VGS owns V (Tribes convention) — spectate lives on P.
+  { action: 'spectate', label: 'Spectator fly', def: 'KeyP' },
   { action: 'sidearm',     label: 'Sidearm (hold)',   def: 'KeyF' },
   { action: 'deploy',      label: 'Deploy pack item', def: 'KeyX' },
   { action: 'slot0',   label: 'Weapon slot 1', def: 'Digit1' },
@@ -43,7 +44,9 @@ function parseSaved(raw: string): Partial<Record<BindAction, string>> {
   const out: Partial<Record<BindAction, string>> = {};
   for (const pair of raw.split(',')) {
     const [k, v] = pair.split('=');
-    if (k && v && k in DEFAULTS) out[k as BindAction] = v;
+    // spectate=V predates VGS taking V — drop the stale save so it falls
+    // through to the new default instead of colliding with the menu.
+    if (k && v && k in DEFAULTS && !(k === 'spectate' && v === 'KeyV')) out[k as BindAction] = v;
   }
   return out;
 }

@@ -135,7 +135,7 @@ export class Player {
 
   // Spectator fly: the death-observer free-flight cam without dying — no
   // desaturation, no respawn timer, body follows the ghost (pos IS the
-  // camera rig). Toggled by the 'spectate' bind (V).
+  // camera rig). Toggled by the 'spectate' bind (P).
   private spectating = false;
   get isSpectating(): boolean { return this.spectating; }
   // HUD hook — spectating drops the combat chrome (crosshair/health/belt)
