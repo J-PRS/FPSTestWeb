@@ -17,7 +17,16 @@ export function createPerfHud() {
   const phases = new Map<string, number>(); // EMA ms
   let frameMs = 0, frameStart = 0, lastMark = 0, lastText = 0;
 
-  function begin(): void { frameStart = lastMark = performance.now(); }
+  /** `renderer.info.autoReset` makes each render pass wipe the counters —
+   *  so the HUD/dump only ever saw the LAST pass (the composer quad).
+   *  Take over the reset: manual at frame start, totals span all passes. */
+  function begin(renderer?: WebGLRenderer): void {
+    if (renderer) {
+      renderer.info.autoReset = false;
+      renderer.info.reset();
+    }
+    frameStart = lastMark = performance.now();
+  }
 
   /** Records ms since the previous mark under `name` — place marks at
    *  coarse boundaries (sim/fx/hud/render); no code wrapping needed. */

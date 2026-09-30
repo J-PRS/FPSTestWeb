@@ -24,11 +24,20 @@ export interface PositionalLoop extends LoopHandle {
 }
 
 const MAX_VOICES = 24;          // cap concurrent one-shots — beyond this, drop
-const WORLD_REF_DIST = 8;       // meters at which a positional sound is ~full
-const WORLD_MAX_DIST = 220;     // beyond this, don't spawn the node at all
+// Gunfire carries for hundreds of meters — ref 8m made a 100m shot
+// −22dB, i.e. silent. 16m keeps close shots loud without killing far ones.
+const WORLD_REF_DIST = 16;      // meters at which a positional sound is ~full
+const WORLD_MAX_DIST = 260;     // beyond this, don't spawn the node at all
 // Effective sound speed for the Doppler bend — much lower than real air
 // (343 m/s) so the game's 40–250 m/s speeds stay inside a musical range.
 const DOPPLER_C = 550;
+// Air absorption: high frequencies die exponentially with distance —
+// real gunshots past ~80m are all low thump, no crack. Exponential
+// (not the old linear 1/(1+d/60), which left 7.5kHz alive at 100m and
+// made every shot sound adjacent). 30m→~8.5k, 100m→~1.9k, 200m→~500Hz.
+const AIR_ABSORB_M = 45;
+const airAbsorbHz = (d: number): number =>
+  Math.max(400, Math.min(20000, 18000 * Math.exp(-d / AIR_ABSORB_M)));
 
 export class AudioEngine {
   private ctx: BaseAudioContext | null = null;
@@ -36,6 +45,11 @@ export class AudioEngine {
   private sfx!: GainNode;
   private world!: GainNode;
   private ui!: GainNode;
+  /** Menu duck chain — sfx/world route through duckLp→duckGain→master;
+   *  the ESC overlay dips gain + collapses the top end ("in the next
+   *  room"), while ui/VGS bypass it so menu feedback stays crisp. */
+  private duckLp!: BiquadFilterNode;
+  private duckGain!: GainNode;
   private voices = 0;
   private noiseBuf: AudioBuffer | null = null;
   private buffers = new Map<string, AudioBuffer>();
@@ -103,8 +117,12 @@ export class AudioEngine {
     comp.threshold.value = -12; comp.knee.value = 20; comp.ratio.value = 8;
     this.master.connect(comp).connect(ctx.destination);
     this.master.gain.value = settings.get('fps-volume');
-    this.sfx = ctx.createGain(); this.sfx.connect(this.master);
-    this.world = ctx.createGain(); this.world.connect(this.master);
+    this.duckLp = ctx.createBiquadFilter();
+    this.duckLp.type = 'lowpass'; this.duckLp.frequency.value = 20000;
+    this.duckGain = ctx.createGain();
+    this.duckLp.connect(this.duckGain).connect(this.master);
+    this.sfx = ctx.createGain(); this.sfx.connect(this.duckLp);
+    this.world = ctx.createGain(); this.world.connect(this.duckLp);
     this.ui = ctx.createGain(); this.ui.connect(this.master);
     // 2s of white noise — the raw material for most SFX.
     const len = ctx.sampleRate * 2;
@@ -117,6 +135,15 @@ export class AudioEngine {
   get context(): BaseAudioContext | null { return this.ctx; }
   get sfxBus(): GainNode | null { return this.ctx ? this.sfx : null; }
   get uiBus(): GainNode | null { return this.ctx ? this.ui : null; }
+
+  /** ESC-menu duck: -10dB + a 900Hz blanket on game sounds. Fast attack,
+   *  slower release so re-entering the game doesn't pop. */
+  setDucked(on: boolean): void {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    this.duckGain.gain.setTargetAtTime(on ? 0.32 : 1, t, on ? 0.04 : 0.12);
+    this.duckLp.frequency.setTargetAtTime(on ? 900 : 20000, t, on ? 0.04 : 0.12);
+  }
 
   setVolume(v: number): void {
     settings.set('fps-volume', v);
@@ -171,14 +198,27 @@ export class AudioEngine {
       (dx * this.listenerRight.x + dz * this.listenerRight.z) / dist)) : 0;
     const g = this.ctx.createGain();
     g.gain.value = distGain;
+    // Two cascaded biquads = 24dB/oct — a single pole rolls off too
+    // gently, so a 100m shot still carried its 4kHz crack.
     const lp = this.ctx.createBiquadFilter();
-    lp.type = 'lowpass';
-    // Air absorbs highs with distance — sells scale better than gain alone.
-    lp.frequency.value = Math.max(800, 20000 / (1 + dist / 60));
+    const lp2 = this.ctx.createBiquadFilter();
+    lp.type = lp2.type = 'lowpass';
+    lp.frequency.value = lp2.frequency.value = airAbsorbHz(dist);
     const p = this.ctx.createStereoPanner();
     p.pan.value = pan;
-    g.connect(lp).connect(p).connect(this.world);
+    g.connect(lp).connect(lp2).connect(p).connect(this.world);
+    // Voice-cap rejections leave this chain attached to the bus forever
+    // (connected nodes aren't collectable) — callers free it via freeInput.
+    (g as GainNode & { _tail?: AudioNode[] })._tail = [lp, lp2, p];
     return g;
+  }
+
+  /** Drop a worldInput chain when the caller's voice was refused —
+   *  without this every capped shot leaks filter/panner nodes. */
+  freeInput(g: GainNode): void {
+    g.disconnect();
+    const tail = (g as GainNode & { _tail?: AudioNode[] })._tail;
+    if (tail) for (const n of tail) n.disconnect();
   }
 
   /** Offline-dump hook: live code releases voices via timers, which would
@@ -245,8 +285,9 @@ export class AudioEngine {
     const inten = c.createGain(); inten.gain.value = 0;
     const dist = c.createGain(); dist.gain.value = 0;
     const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 20000;
+    const lp2 = c.createBiquadFilter(); lp2.type = 'lowpass'; lp2.frequency.value = 20000;
     const pan = c.createStereoPanner();
-    inten.connect(dist).connect(lp).connect(pan).connect(this.world);
+    inten.connect(dist).connect(lp).connect(lp2).connect(pan).connect(this.world);
     let kill: () => void;
     let pitch: AudioParam | undefined;
     let pitchBase = 1;
@@ -281,7 +322,9 @@ export class AudioEngine {
       const dz = pos.z - this.listenerPos.z;
       const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
       dist.gain.setTargetAtTime(d > WORLD_MAX_DIST ? 0 : 1 / (1 + d / WORLD_REF_DIST), c.currentTime, 0.08);
-      lp.frequency.setTargetAtTime(Math.max(800, 20000 / (1 + d / 60)), c.currentTime, 0.08);
+      const fc = airAbsorbHz(d);
+      lp.frequency.setTargetAtTime(fc, c.currentTime, 0.08);
+      lp2.frequency.setTargetAtTime(fc, c.currentTime, 0.08);
       pan.pan.setTargetAtTime(d > 1 ? Math.max(-1, Math.min(1,
         (dx * this.listenerRight.x + dz * this.listenerRight.z) / d)) : 0, c.currentTime, 0.08);
       const rate = this.dopplerRate(pos, emitVel);

@@ -7,10 +7,17 @@ import { audio } from '../audio.js';
 export function ctx(): BaseAudioContext | null { return audio.context; }
 
 /** One-shot through a bus node; returns false when voice-capped. */
-export function play(node: AudioNode, dur: number): boolean {
+export function play(node: AudioNode, dur: number, chain?: GainNode): boolean {
   const c = ctx();
   if (!c || !audio.takeVoice()) return false;
-  setTimeout(() => { audio.releaseVoice(); node.disconnect(); }, dur * 1000 + 100);
+  setTimeout(() => {
+    audio.releaseVoice();
+    node.disconnect();
+    // Positional calls pass their worldInput node as `chain` — without
+    // freeing it the lp/pan tail stays attached to the world bus forever
+    // (connected nodes aren't collectable, so every shot would leak).
+    if (chain) audio.freeInput(chain);
+  }, dur * 1000 + 100);
   return true;
 }
 
@@ -122,7 +129,7 @@ export function at(pos: THREE.Vector3, name: string, gain = 1, rate = 1, emitVel
   if (!inNode) return;
   const g = c.createGain(); g.connect(inNode);
   try {
-    if (!play(g, 1)) return;
+    if (!play(g, 1, inNode)) { audio.freeInput(inNode); return; }
     sample(name, g, gain, rate);
   } finally { audio.emitterPitch = 1; }
 }

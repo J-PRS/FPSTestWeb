@@ -16,8 +16,9 @@ const qp = new URLSearchParams(window.location.search);
 export const urlParams = {
   get: (k: string) => qp.get(k),
   has: (k: string) => qp.has(k),
-  /** Game mode — a menu setting ('' | nuggets | ctf | dm | classic). */
-  mode: settings.get('fps-mode') || null,
+  /** Game mode — URL wins (shareable room links carry ?mode=), then the
+   *  persisted menu pick ('' | nuggets | ctf | dm | tdm | duel | classic). */
+  mode: qp.get('mode') || settings.get('fps-mode') || null,
   /** classic = solo bounce-and-shoot: balls only, no rage, no roster */
   isClassic: settings.get('fps-mode') === 'classic',
   /** All-random creature spawns — no scripted beats, everything rolls from t=0 */

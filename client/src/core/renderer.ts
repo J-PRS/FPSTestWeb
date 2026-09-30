@@ -61,9 +61,9 @@ function resolveModes(): RenderModes {
   if (pp !== null) postproEnabled = pp === 'on';
   const bm = urlParams.get('bloom');
   if (bm !== null) bloomEnabled = bm === 'on';
-  // Pixelated is the cheap path: stored bloom/postpro don't re-engage
-  // under it (hard mode has no composer at all); URL params may opt in.
-  if (pixelMode > 0 && pp === null && bm === null) {
+  // Floyd mode bypasses the composer entirely (GL render → CPU quantize),
+  // so postpro/bloom can never engage under it — suppress dead toggles.
+  if (pixelMode === 5) {
     postproEnabled = false;
     bloomEnabled = false;
   }
@@ -99,30 +99,38 @@ function makeFloydEngine(renderer: THREE.WebGLRenderer) {
     gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, buf);
     const src = buf, dst = img.data, step = 255 / (FS_LEVELS - 1);
     for (let y = 0; y < h; y++) {
-      const srcRow = (h - 1 - y) * w * 4; // GL rows are bottom-up — flip here
-      const dstRow = y * w * 4;
       const cur = errA; errA = errB; errB = cur; errB.fill(0);
-      // Serpentine: alternate scan direction per row — pure raster order
-      // smears error one way and leaves diagonal worm artifacts
-      const fwd = (y & 1) === 0;
-      for (let xi = 0; xi < w; xi++) {
-        const x = fwd ? xi : w - 1 - xi;
-        const si = srcRow + x * 4, di = dstRow + x * 4, ei = x * 3;
-        const ahead = fwd ? 3 : -3, behind = -ahead;
-        for (let c = 0; c < 3; c++) {
-          const v = src[si + c] + errA[ei + c];
-          const q = v < 0 ? 0 : v > 255 ? 255 : Math.round(v / step) * step;
-          const e = v - q;
-          errA[ei + ahead + c] += e * 0.4375;
-          errB[ei + c]         += e * 0.3125;
-          errB[ei + ahead + c] += e * 0.0625;
-          errB[ei + behind + c] += e * 0.1875;
-          dst[di + c] = q;
-        }
-        dst[di + 3] = 255;
-      }
+      ditherRow(y, src, dst, w, h, step);
     }
     ctx2d.putImageData(img, 0, 0);
+  }
+
+  /** One serpentine row of quantize + error push — extracted so
+   *  quantize() isn't carrying the per-channel conditionals. errA/errB
+   *  (and their swap) live on the engine closure. */
+  function ditherRow(y: number, src: Uint8ClampedArray, dst: Uint8ClampedArray,
+      w: number, h: number, step: number): void {
+    const srcRow = (h - 1 - y) * w * 4; // GL rows are bottom-up — flip here
+    const dstRow = y * w * 4;
+    // Serpentine: alternate scan direction per row — pure raster order
+    // smears error one way and leaves diagonal worm artifacts
+    const fwd = (y & 1) === 0;
+    const ahead = fwd ? 3 : -3, behind = -ahead;
+    for (let xi = 0; xi < w; xi++) {
+      const x = fwd ? xi : w - 1 - xi;
+      const si = srcRow + x * 4, di = dstRow + x * 4, ei = x * 3;
+      for (let c = 0; c < 3; c++) {
+        const v = src[si + c] + errA[ei + c];
+        const q = v < 0 ? 0 : v > 255 ? 255 : Math.round(v / step) * step;
+        const e = v - q;
+        errA[ei + ahead + c] += e * 0.4375;
+        errB[ei + c]         += e * 0.3125;
+        errB[ei + ahead + c] += e * 0.0625;
+        errB[ei + behind + c] += e * 0.1875;
+        dst[di + c] = q;
+      }
+      dst[di + 3] = 255;
+    }
   }
 
   return { canvasEl, alloc, quantize };
@@ -269,9 +277,16 @@ function makeComposer(renderer: THREE.WebGLRenderer, scene: THREE.Scene,
     postproEnabled: boolean, pixelMode: number) {
   const bloomEffect = new BloomEffect({
     mipmapBlur: true,
-    luminanceThreshold: 1.0,
-    intensity: 1.3,
-    radius: 0.6,
+    // HDR linear frame: authored/emitting pixels sit at or above ~1
+    // luminance (sun disc runs far past it) — 1.2 + a wide knee keeps
+    // bloom on emitters and off the fogged horizon band.
+    // Most scene content peaks at fog/sky luminance ~0.9-1.1 even in HDR
+    // linear — 1.2 clears the horizon band while catching fading emitter
+    // pixels; the mipmap halo can't lift the whole frame into a veil.
+    luminanceThreshold: 1.3,
+    luminanceSmoothing: 0.25,
+    intensity: 1.25,
+    radius: 0.5,
   });
 
   const upscaleEffect = new Effect('EdgeUpscale', UPSCALE_GLSL, {
@@ -284,17 +299,20 @@ function makeComposer(renderer: THREE.WebGLRenderer, scene: THREE.Scene,
 
   const acesGradeEffect = new Effect('ACESGrade', ACES_GLSL);
 
+  // HDR linear buffers: three skips toneMapping AND output encoding when
+  // rendering into a render target (WebGLPrograms gates on
+  // currentRenderTarget===null), so the composer chain is responsible for
+  // grading — acesPass replicates the canvas path's ACES exactly. Every
+  // custom shader carries tonemapping_fragment/colorspace_fragment, so
+  // the two paths stay pixel-consistent instead of double-encoding.
   const composer = new EffectComposer(renderer, {
     frameBufferType: THREE.HalfFloatType,
     multisampling: 0,
   });
   composer.addPass(new RenderPass(scene, camera));
 
-  // Bloom reads the raw HDR frame — additive emitters (trails, explosions,
-  // nuggets, the sun disc) are the only pixels over 1.0 luminance, so the
-  // threshold IS the selectivity. After ACES everything is clamped to ≤1
-  // and thresholding catches bright sky — that ordering was the
-  // "bloom destroyed the mood" bug.
+  // Bloom reads the raw linear frame, before the ACES grade clamps it to
+  // display range — HDR luminance is what makes the threshold selective.
   const bloomMergePass = new EffectPass(camera, bloomEffect);
   composer.addPass(bloomMergePass);
 
@@ -303,9 +321,6 @@ function makeComposer(renderer: THREE.WebGLRenderer, scene: THREE.Scene,
 
   const contrastPass = new EffectPass(camera, new BrightnessContrastEffect({ contrast: 0.06 }));
   composer.addPass(contrastPass);
-
-  // acesPass re-grades the RenderPass output so the composer chain sees
-  // the same post-ACES values a direct canvas render produces.
 
   // Pixelated mode: scene renders at 1/PIXEL_SCALE into the composer buffer,
   // then this pass upscales to the full-res canvas with edge-aware blending.
@@ -317,14 +332,38 @@ function makeComposer(renderer: THREE.WebGLRenderer, scene: THREE.Scene,
   upscalePass.enabled = pixelMode === 3 || pixelMode === 4;
   upscaleEffect.uniforms.get('mode')!.value = pixelMode === 4 ? 2 : 1;
 
-  return { composer, bloomMergePass, contrastPass, upscalePass, upscaleEffect };
+  // postprocessing's autoRenderToScreen only flags the LAST pass in the
+  // array — upscalePass — so disabling it (every non-pixelated mode)
+  // leaves no pass writing to the canvas: the whole composer rendered
+  // black. The last ENABLED pass must carry the flag; re-sync on every
+  // toggle, not just construction.
+  function syncRenderToScreen(): void {
+    const passes = composer.passes;
+    let found = false;
+    for (let i = passes.length - 1; i >= 0; i--) {
+      const p = passes[i]!;
+      p.renderToScreen = !found && p.enabled;
+      if (p.renderToScreen) found = true;
+    }
+  }
+  syncRenderToScreen();
+
+  return { composer, bloomMergePass, contrastPass, upscalePass, upscaleEffect, syncRenderToScreen };
 }
 
-function wireToggleButtons(px: HTMLButtonElement, bm: HTMLButtonElement,
-    pp: HTMLButtonElement, onPx: () => void, onBm: () => void, onPp: () => void): void {
-  px.addEventListener('click', onPx);
-  bm.addEventListener('click', onBm);
-  pp.addEventListener('click', onPp);
+// ESC-menu toggles: look up the three buttons once, seed their labels
+// from resolved modes, and return them wired to the caller's callbacks.
+function wireToggleButtons(modes: RenderModes, onPx: () => void, onBm: () => void, onPp: () => void) {
+  const pixelToggleBtn = document.getElementById('pixel-toggle')! as HTMLButtonElement;
+  const bloomToggleBtn = document.getElementById('bloom-toggle')! as HTMLButtonElement;
+  const postproToggleBtn = document.getElementById('postpro-toggle')! as HTMLButtonElement;
+  pixelToggleBtn.textContent = pixelLabel(modes.pixelMode);
+  bloomToggleBtn.textContent = modes.bloomEnabled ? 'BLOOM: ON' : 'BLOOM: OFF';
+  postproToggleBtn.textContent = modes.postproEnabled ? 'POST-PROCESSING: ON' : 'POST-PROCESSING: OFF';
+  pixelToggleBtn.addEventListener('click', onPx);
+  bloomToggleBtn.addEventListener('click', onBm);
+  postproToggleBtn.addEventListener('click', onPp);
+  return { pixelToggleBtn, bloomToggleBtn, postproToggleBtn };
 }
 
 export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Scene): RendererSetup {
@@ -377,27 +416,20 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
   renderer.toneMappingExposure = TONE_MAPPING_EXPOSURE;
   document.body.appendChild(renderer.domElement);
 
-  // Initialize button text from localStorage
-  const pixelToggleBtn = document.getElementById('pixel-toggle')! as HTMLButtonElement;
-  pixelToggleBtn.textContent = pixelLabel(pixelMode);
-
-  const bloomToggleBtn = document.getElementById('bloom-toggle')! as HTMLButtonElement;
-  bloomToggleBtn.textContent = bloomEnabled ? 'BLOOM: ON' : 'BLOOM: OFF';
-
-  const postproToggleBtn = document.getElementById('postpro-toggle')! as HTMLButtonElement;
-  postproToggleBtn.textContent = postproEnabled ? 'POST-PROCESSING: ON' : 'POST-PROCESSING: OFF';
-
   const cc = makeComposer(renderer, scene, camera, bloomEnabled, postproEnabled, pixelMode);
-  const { composer, bloomMergePass, contrastPass, upscalePass, upscaleEffect } = cc;
+  const { composer, bloomMergePass, contrastPass, upscalePass, upscaleEffect, syncRenderToScreen } = cc;
 
   // composer.setSize() also resizes the canvas — so always set buffers first,
   // then restore the canvas to full res. Pixelated = low-res buffers upscaled
   // by the final pass; the canvas itself never shrinks.
   function applyBufferSizes(): void {
-    // Composer buffers only shrink for smooth mode — hard/medium bypass it.
-    const smallBuf = pixelMode === 3 || pixelMode === 4;
-    const w = smallBuf ? Math.floor(window.innerWidth / PIXEL_SCALE) : window.innerWidth;
-    const h = smallBuf ? Math.floor(window.innerHeight / PIXEL_SCALE) : window.innerHeight;
+    // Composer buffers track the render resolution: hard/dithered run at
+    // 1/PIXEL_SCALE, medium at half that, so post passes stay cheap and
+    // their output lands on the shrunken canvas for CSS upscale.
+    const div = pixelMode === 2 ? PIXEL_SCALE / 2
+      : (pixelMode >= 1 ? PIXEL_SCALE : 1);
+    const w = Math.floor(window.innerWidth / div);
+    const h = Math.floor(window.innerHeight / div);
     composer.setSize(w, h);
     upscaleEffect.uniforms.get('lowTexel')!.value.set(1 / w, 1 / h);
     // composer.setSize() also resizes the canvas — restore whichever canvas
@@ -421,9 +453,12 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
     settings.set('fps-pixelated', pixelMode);
     upscalePass.enabled = pixelMode === 3 || pixelMode === 4;
     upscaleEffect.uniforms.get('mode')!.value = pixelMode === 4 ? 2 : 1;
-    // Pixelated is the cheap/retro path — bloom and contrast post-pro are
-    // the opposite of "simple low-res render", so opting in drops them.
-    if (pixelMode > 0) {
+    syncRenderToScreen();
+    // Floyd (5) bypasses the composer entirely — bloom/post have no
+    // pipeline to live in there, so opting into it drops them. Hard/
+    // medium/smooth/dithered run the composer at reduced res and CAN
+    // carry post effects.
+    if (pixelMode === 5) {
       if (postproEnabled) setPostProcessingEnabled(false);
       if (bloomEnabled) setBloomEnabled(false);
     }
@@ -433,18 +468,24 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
   }
 
   function setPostProcessingEnabled(enabled: boolean): void {
-    // Hard/medium pixelation have no composer — post can't exist there.
-    postproEnabled = enabled && (pixelMode === 0 || pixelMode === 3);
+    // Floyd mode has no composer — enabling post there drops floyd rather
+    // than silently refusing (the toggle used to clamp back to OFF with
+    // no feedback and read as dead). Other pixel modes share the chain.
+    if (enabled && pixelMode === 5) setPixelated(0);
+    postproEnabled = enabled;
     settings.set('fps-postpro', postproEnabled);
     contrastPass.enabled = postproEnabled;
+    syncRenderToScreen();
     postproToggleBtn.textContent = postproEnabled ? 'POST-PROCESSING: ON' : 'POST-PROCESSING: OFF';
   }
 
   function setBloomEnabled(enabled: boolean): void {
-    // Bloom needs the composer — hard/medium pixelation have none.
-    bloomEnabled = enabled && (pixelMode === 0 || pixelMode === 3);
+    // Same story as post — only floyd is exclusive.
+    if (enabled && pixelMode === 5) setPixelated(0);
+    bloomEnabled = enabled;
     settings.set('fps-bloom', bloomEnabled);
     bloomMergePass.enabled = bloomEnabled;
+    syncRenderToScreen();
     bloomToggleBtn.textContent = bloomEnabled ? 'BLOOM: ON' : 'BLOOM: OFF';
   }
 
@@ -459,7 +500,7 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
     applyBufferSizes();
   });
 
-  wireToggleButtons(pixelToggleBtn, bloomToggleBtn, postproToggleBtn,
+  const { pixelToggleBtn, bloomToggleBtn, postproToggleBtn } = wireToggleButtons(modes,
     () => setPixelated((pixelMode + 1) % 6),
     () => setBloomEnabled(!bloomEnabled),
     () => setPostProcessingEnabled(!postproEnabled));

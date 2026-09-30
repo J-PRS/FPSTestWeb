@@ -14,7 +14,7 @@ type Schema = {
   'fps-loadout': string;      // "0,2,6,7" — weapon id per slot
   'fps-belt': string;         // BeltItem id — see Player.BELT_ITEMS
   'fps-sidearm': string;      // 'pistol' | 'revolver' | 'shotgun' | 'repair'
-  'fps-pack': string;         // DeployKind — 'turret' | 'mine' | 'station'
+  'fps-pack': string;         // DeployKind — 'turret' | 'mine' | 'station' | 'drone' | 'shield'
   'fps-skill': string;        // SkillId
   'fps-perk': string;         // PerkId
   'fps-class': string;        // ArmorClass (light|medium|heavy)
@@ -27,6 +27,8 @@ type Schema = {
   'fps-p2p': string;          // 'host:CODE' | 'join:CODE' | 'quick' — WebRTC duel, '' = off
   'fps-lobby': number;        // 1 = host's p2p room is listed publicly (/rtc/lobbies)
   'fps-shadows': boolean;     // shadow map pass — off on potatoes (whole second scene raster per frame)
+  'fps-tts-chat': boolean;    // speak typed chat aloud via system TTS (VGS lines always use the robot voice)
+  'fps-vgs-physical': boolean; // VGS chord letters by physical position (QWERTY mnemonic) instead of layout letter
 };
 
 const DEFAULTS: Schema = {
@@ -52,6 +54,8 @@ const DEFAULTS: Schema = {
   'fps-p2p': '',
   'fps-lobby': 0,
   'fps-shadows': true,
+  'fps-tts-chat': false,
+  'fps-vgs-physical': false,
 };
 
 const parse = {

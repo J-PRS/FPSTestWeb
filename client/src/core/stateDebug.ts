@@ -192,7 +192,9 @@ function diffPlayerFields(
   if (Math.max(dx, dy, dz) > POSITION_TOLERANCE) {
     diffs.push(`Player ${id} position delta=(${dx.toFixed(1)},${dy.toFixed(1)},${dz.toFixed(1)})`);
   }
-  if (Math.abs(cp.health - sp.health) > 0) {
+  // Sub-1hp deltas are float dust (fractional regen ticks, armor soak
+  // remainders) — a real desync is a whole hit or more.
+  if (Math.abs(cp.health - sp.health) > 0.5) {
     diffs.push(`Player ${id} health: client=${cp.health} server=${sp.health}`);
   }
   if (cp.isDead !== sp.isDead) {

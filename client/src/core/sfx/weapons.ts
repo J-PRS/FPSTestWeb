@@ -23,7 +23,7 @@ export function shotAt(pos: THREE.Vector3, weaponType: number, emitVel?: THREE.V
   if (!inNode) return;
   const g = c.createGain(); g.connect(inNode);
   try {
-    if (!play(g, 0.3)) return;
+    if (!play(g, 0.3, inNode)) { audio.freeInput(inNode); return; }
     shootInto(g, weaponType);
   } finally { audio.emitterPitch = 1; }
 }
@@ -87,6 +87,14 @@ const SHOT_LAYERS: Partial<Record<number, [name: string, gain: number, rate?: nu
     ['thud_big', 0.9, 0.65, 500, 0.2],
     ['punch', 0.45, 0.9, 1500, 0.08],
     ['hg_tick', 0.3, 0.6, 1200, 0.18, 0.04], // venting hiss, slightly delayed
+  ],
+  // Javelin: a THROWN spear — pure whoosh sell. hg_throw carries a
+  // launcher clunk baked in (read as a weird second sound), so the throw
+  // is the dash whoosh + a fast rising air-streak whistle over it.
+  [WeaponType.Javelin]: [
+    ['dash2', 0.9, 1.2],
+    // release tick — the wrist-snap, not a whistle (that layer read wrong)
+    ['hg_tick', 0.3, 1.8, 3000, 0.04],
   ],
   [WeaponType.Chaingun]: [
     ['shot_chaingun', 0.75, 1.15, undefined, 0.08],
@@ -187,4 +195,7 @@ const SYNTH_SHOTS: Record<number, (g: GainNode) => void> = {
   [WeaponType.Railgun]:   (g) => { osc('sawtooth', 2600, 200, 0.22, 0.25, g); noise(0.15, 0.2, g, 'highpass', 4000, 6000); },
   [WeaponType.Lightning]: synthLightning,
   [WeaponType.Melee]:     (g) => { noise(0.15, 0.45, g, 'bandpass', 300, 2200, 1.4); osc('sine', 110, 45, 0.14, 0.5, g); },
+  // Javelin synth fallback — same idea as the layered version: release
+  // snap + rising air-tear whoosh + body thump.
+  [WeaponType.Javelin]:   (g) => { noise(0.22, 0.5, g, 'bandpass', 900, 3800, 1.6); osc('sawtooth', 240, 900, 0.16, 0.3, g); osc('sine', 150, 60, 0.18, 0.35, g); },
 };

@@ -424,6 +424,10 @@ export const SKY_MIE_DIRECTIONAL_G = 0.758; // Mie forward-scatter directionalit
 export const SKY_SUN_INTENSITY = 22.0; // Sun radiance for scattering (not a visible disc)
 
 // Volumetric cloud constants
+// Layered-deck + billboard hybrid shelved for now — visuals weren't
+// landing ("flat roof + blobs"). Code kept in volumetricClouds.ts; flip
+// this back on or use ?clouds=on to re-enable without reverting.
+export const CLOUDS_ENABLED = false;
 export const CLOUD_COUNT = 30; // Number of cloud clusters
 export const CLOUD_DENSITY = 0.35; // Cloud density
 export const CLOUD_WIND_SPEED = 3.0; // Wind speed
@@ -464,6 +468,10 @@ export const BALL_BASE_RADIUS = 1.2; // Base ball radius
 // Renderer constants
 export const TONE_MAPPING_EXPOSURE = 0.4; // Tone mapping exposure (lower = darker)
 export const BLOOM_LAYER = 7; // objects on this layer feed the bloom buffer (trails, explosions)
+// Emitter colors get written HDR-hot (×EMIT_GAIN) into the composer buffer
+// so they clear the bloom luminance threshold; ACES saturates them back to
+// the same display hue — the glow comes from bloom, not a washed-out frame.
+export const EMIT_GAIN = 3;
 
 
 

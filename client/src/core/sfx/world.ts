@@ -93,7 +93,7 @@ export function warpJump(pos: THREE.Vector3, emitVel?: THREE.Vector3): void {
   if (!inNode) return;
   const g = c.createGain(); g.connect(inNode);
   try {
-    if (!play(g, 0.8)) return;
+    if (!play(g, 0.8, inNode)) { audio.freeInput(inNode); return; }
     if (layer(g, [
       ['sparks', 0.9, 1.15, undefined, 0.2],
       ['shot_energy', 0.65, 0.8],
@@ -158,7 +158,7 @@ export function enemyCue(pos: THREE.Vector3, kind: CueKind, emitVel?: THREE.Vect
   if (!inNode) return;
   const g = c.createGain(); g.connect(inNode);
   try {
-    if (!play(g, 0.4)) return;
+    if (!play(g, 0.4, inNode)) { audio.freeInput(inNode); return; }
     CUES[kind](g);
   } finally { audio.emitterPitch = 1; }
 }

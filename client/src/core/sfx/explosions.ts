@@ -12,7 +12,7 @@ export function explosionAt(pos: THREE.Vector3, big: boolean, weaponType?: numbe
   if (!inNode) return;
   const g = c.createGain(); g.connect(inNode);
   try {
-    if (!play(g, 0.8)) return;
+    if (!play(g, 0.8, inNode)) { audio.freeInput(inNode); return; }
     if (explosionSample(g, big, weaponType)) return;
     noise(0.6, big ? 0.9 : 0.55, g, 'lowpass', 3000, 60);
     osc('sine', 60, 25, 0.5, big ? 0.7 : 0.45, g);
@@ -70,7 +70,7 @@ export function implosionAt(pos: THREE.Vector3, direct: boolean, emitVel?: THREE
   if (!inNode) return;
   const g = c.createGain(); g.connect(inNode);
   try {
-    if (!play(g, 0.7)) return;
+    if (!play(g, 0.7, inNode)) { audio.freeInput(inNode); return; }
     if (layer(g, [
       ['shot_energy', 0.8, 0.6],
       ['explosion_small', direct ? 0.7 : 0.5, 1.2],

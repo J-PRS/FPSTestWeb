@@ -271,19 +271,19 @@ export class ChildLogger {
   constructor(private context: string) {}
 
   debug(message: string, context?: any): void {
-    Logger.logTagged(LogLevel.DEBUG, context, message, context);
+    Logger.logTagged(LogLevel.DEBUG, this.context, message, context);
   }
 
   info(message: string, context?: any): void {
-    Logger.logTagged(LogLevel.INFO, context, message, context);
+    Logger.logTagged(LogLevel.INFO, this.context, message, context);
   }
 
   warn(message: string, context?: any): void {
-    Logger.logTagged(LogLevel.WARN, context, message, context);
+    Logger.logTagged(LogLevel.WARN, this.context, message, context);
   }
 
   error(message: string, context?: any): void {
-    Logger.logTagged(LogLevel.ERROR, context, message, context);
+    Logger.logTagged(LogLevel.ERROR, this.context, message, context);
   }
 }
 

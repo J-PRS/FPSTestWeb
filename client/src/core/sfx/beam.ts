@@ -8,7 +8,7 @@ import { ctx, play, osc, noise, layer } from './util.js';
 // tick while firing; beamLoopStop() ramps it out when the trigger drops.
 
 let lgLoopGain: GainNode | null = null;
-let lgLoopSrcs: AudioScheduledSourceNode[] = [];
+const lgLoopSrcs: AudioScheduledSourceNode[] = [];
 
 export function beamLoop(): void {
   const bus = audio.sfxBus, c = ctx();
@@ -64,7 +64,7 @@ export function lgSizzle(pos: THREE.Vector3): void {
   if (!inNode) return;
   const g = c.createGain(); g.connect(inNode);
   try {
-    if (!play(g, 0.25)) return;
+    if (!play(g, 0.25, inNode)) { audio.freeInput(inNode); return; }
     if (layer(g, [
       ['sparks', 0.5, 1.5 + Math.random() * 0.4, undefined, 0.12],
       ['hg_tick', 0.35, 2.4, 5000, 0.1],
