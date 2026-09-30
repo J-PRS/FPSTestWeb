@@ -1,3 +1,4 @@
+2026-09-26 - registerClip decomposed: stripHipXZ + dampenSway helpers; last own-code lint warning cleared
 2026-09-26 - Sheep meter extracted to botSheep.ts (meter + coverage window + yeet + sim clock); ServerBots keeps thin delegates
 2026-09-26 - Alt+W prints each bot's last-drawn weapon + shot count (console.table); hard reload moved to Alt+Shift+W; bot spawn shield breaks on first shot
 2026-09-26 - Sheep coverage window runs on sim time + pinned by tests (debit for going nowhere, clear for real travel)

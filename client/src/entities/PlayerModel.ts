@@ -22,10 +22,83 @@ const _leanYes = new THREE.Quaternion();
 const _leanOff = new THREE.Vector3();
 const _leanA = new THREE.Vector3();
 const _leanB = new THREE.Vector3();
+const _dampA = new THREE.Quaternion();
+const _dampB = new THREE.Quaternion();
+
+// Locomotion clip surgery — mannequin/knight rigs carry authored root
+// motion and full-body tracks our layered system has to carve up.
+
+/** Strip hip/root XZ translation — the entity owns world position; left
+ *  in, loop clips translate the mesh out from under the hitbox. */
+function stripHipXZ(clip: THREE.AnimationClip): void {
+  for (const tr of clip.tracks) {
+    if (!tr.name.endsWith('.position')) continue;
+    const node = tr.name.slice(0, tr.name.indexOf('.'));
+    if (normBone(node) !== 'defhips' && normBone(node) !== 'root' && normBone(node) !== 'hips' && normBone(node) !== 'bone') continue;
+    const v = tr.values;
+    for (let i = 3; i < v.length; i += 3) { v[i] = v[0]; v[i + 2] = v[2]; }
+  }
+}
+
+/** Halve torso-chain sway: full-run spine roll carries the aimed arms
+ *  with it and reads as the CoD sprint wade — waving the gun side to
+ *  side. Each quaternion key slerps halfway to the track's baseline, so
+ *  the bob timing and stride direction survive at half amplitude.
+ *  Position tracks (hip bob) are untouched. */
+const SWAY_BONES = new Set([
+  'defhips', 'defspine001', 'defspine002', 'defspine003', 'defneck', 'defhead',
+]);
+function dampenSway(clip: THREE.AnimationClip): void {
+  for (const tr of clip.tracks) {
+    if (!tr.name.endsWith('.quaternion')) continue;
+    const node = normBone(tr.name.slice(0, tr.name.indexOf('.')));
+    if (!SWAY_BONES.has(node)) continue;
+    const v = tr.values;
+    _dampA.set(v[0], v[1], v[2], v[3]);
+    for (let i = 4; i < v.length; i += 4) {
+      _dampB.set(v[i], v[i + 1], v[i + 2], v[i + 3]);
+      _dampB.slerp(_dampA, 0.5);
+      v[i] = _dampB.x; v[i + 1] = _dampB.y; v[i + 2] = _dampB.z; v[i + 3] = _dampB.w;
+    }
+  }
+}
 // Jet-lean pivot: the pack thrusts from the sternum, so the body tilts
 // about that point and the legs swing — feet-pivot lean reads as a
 // cardboard cutout tipping over.
 const LEAN_PIVOT_Y = 1.3;
+
+/** Pin hip/root XZ translation to the clip's first key — the entity owns
+ *  world position, so loop-clipped hip drift would slide the mesh out
+ *  from under the hitbox each cycle. */
+function stripHipXZ(clip: THREE.AnimationClip): void {
+  for (const tr of clip.tracks) {
+    if (!tr.name.endsWith('.position')) continue;
+    const node = normBone(tr.name.slice(0, tr.name.indexOf('.')));
+    if (node !== 'defhips' && node !== 'root' && node !== 'hips' && node !== 'bone') continue;
+    const v = tr.values;
+    for (let i = 3; i < v.length; i += 3) { v[i] = v[0]; v[i + 2] = v[2]; }
+  }
+}
+
+/** Dampen torso/head ROTATION (not removal): full-run spine roll carries
+ *  the aimed arms with it and reads as sprint-sway — the gun waves side
+ *  to side. Slerping each key halfway to the track baseline halves the
+ *  wade while hips still bob and legs still stride, so the run doesn't
+ *  freeze into "sliding" either. */
+function dampenSway(clip: THREE.AnimationClip): void {
+  for (const tr of clip.tracks) {
+    if (!tr.name.endsWith('.quaternion')) continue;
+    const node = normBone(tr.name.slice(0, tr.name.indexOf('.')));
+    if (!PlayerModel.SWAY_BONES.has(node)) continue;
+    const v = tr.values;
+    _dampA.set(v[0], v[1], v[2], v[3]);
+    for (let i = 4; i < v.length; i += 4) {
+      _dampB.set(v[i], v[i + 1], v[i + 2], v[i + 3]);
+      _dampB.slerp(_dampA, 0.5);
+      v[i] = _dampB.x; v[i + 1] = _dampB.y; v[i + 2] = _dampB.z; v[i + 3] = _dampB.w;
+    }
+  }
+}
 
 export type { AnimationState } from './playerClips.js';
 import { ANIM_NAMES, KNIGHT_ANIMS, ONESHOT_CLIPS,
@@ -110,6 +183,11 @@ export class PlayerModel {
     'defshoulderl', 'defshoulderr',
     'defupperarml', 'defupperarmr', 'defforearml', 'defforearmr',
     'defhandl', 'defhandr',
+  ]);
+  // Torso chain whose locomotion sway gets halved — spine roll is what
+  // swung the aimed gun side to side. Position tracks (hip bob) untouched.
+  static readonly SWAY_BONES = new Set([
+    'defhips', 'defspine001', 'defspine002', 'defspine003', 'defneck', 'defhead',
   ]);
   // Foot bones are IK targets detached from the leg chain — retargeted
   // clips leave them frozen mid-air. When a UAL clip plays, snap each foot
@@ -369,21 +447,11 @@ export class PlayerModel {
   // mesh out from under the hitbox each cycle. Y stays (the crouch dip).
   private registerClip(clip: THREE.AnimationClip, mann: boolean, knight: boolean): void {
     if (mann || knight) {
-      for (const tr of clip.tracks) {
-        if (!tr.name.endsWith('.position')) continue;
-        const node = tr.name.slice(0, tr.name.indexOf('.'));
-        if (normBone(node) !== 'defhips' && normBone(node) !== 'root' && normBone(node) !== 'hips' && normBone(node) !== 'bone') continue;
-        const v = tr.values;
-        for (let i = 3; i < v.length; i += 3) { v[i] = v[0]; v[i + 2] = v[2]; }
-      }
-      // Mannequin: strip the masked arm tracks from looping clips so the
-      // aim layer owns the weapon hold outright — otherwise locomotion
-      // and the aim layer blend 50/50 and the gun ends up parked on the
-      // shoulder. Spine/neck/head stay so the torso keeps its run-bob. Full-body oneshots (shoot/hit/death)
-      // keep every track; the aim layer drops to weight 0 while they run.
+      stripHipXZ(clip);
       if (mann && PlayerModel.isLayeredClip(clip.name)) {
         clip.tracks = clip.tracks.filter(t =>
           !PlayerModel.AIM_BONE_MASK.has(normBone(t.name.slice(0, t.name.indexOf('.')))));
+        dampenSway(clip);
       }
     }
     const action = this.mixer!.clipAction(clip);
@@ -551,7 +619,14 @@ export class PlayerModel {
     let procPitch = this.aimPitch;
     if (this.aimNeutral) {
       const t = Math.max(-1, Math.min(1, this.aimPitch / PlayerModel.AIM_CLIP_RAD));
-      const oneshot = !!this.currentAction?.isRunning() &&
+      // Suppress only while the oneshot actually OWNS the arms: during
+      // fadeOut the clip is still isRunning but its weight is decaying —
+      // suppressing on isRunning alone left the arm chain un-driven for
+      // ~200ms after every shot (arms drifted toward bind pose = the
+      // "opens hands, almost T-pose" on each trigger pull). Death clamps
+      // at full weight so its suppression still holds forever.
+      const a = this.currentAction;
+      const oneshot = !!a?.isRunning() && a.getEffectiveWeight() > 0.5 &&
         (!!this.currentClipName && (ONESHOT_CLIPS.has(this.currentClipName) || this.currentClipName === 'UAL_Death01'));
       const w = oneshot ? 0 : 1;
       this.aimNeutral.setEffectiveWeight((1 - Math.abs(t)) * w);
@@ -586,6 +661,13 @@ export class PlayerModel {
       parent.getWorldQuaternion(_footPQ).invert();
       fs.foot.quaternion.copy(_footPQ.multiply(_footQ));
     }
+  }
+
+  /** Barrel-tip world point — third-person beam/tracer anchor. */
+  muzzleWorld(out: THREE.Vector3): boolean {
+    if (!this.muzzleFlash) return false;
+    this.muzzleFlash.getWorldPosition(out);
+    return true;
   }
 
   // Recoil: exponential decay kick on the gun (position + muzzle flip);
