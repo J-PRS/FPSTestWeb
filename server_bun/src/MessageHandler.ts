@@ -11,6 +11,9 @@ import type { BallSim } from './BallSim.ts';
 import type { CreatureSim } from './CreatureSim.ts';
 import { structureColliders } from '../../shared/ballSim.ts';
 import type { PickupKind } from '../../shared/pickups.ts';
+import { isPerkId } from '../../shared/perks.ts';
+import { CLASS_STATS } from '../../shared/botClasses.ts';
+import type { ArmorClass } from '../../shared/botClasses.ts';
 
 type BroadcastFn = (msg: ServerMessage, excludePlayerId?: string) => void;
 type SendToPlayerFn = (playerId: string, msg: ServerMessage) => void;
@@ -209,11 +212,15 @@ export class MessageHandler {
       // without the shadow knowing.
       classUpdate: (id, m) => {
         const p = this.playerManager.getPlayer(id);
-        if (p) p.pendingClass = (m as Extract<ClientMessage, { type: 'classUpdate' }>).armorClass as 'light' | 'medium' | 'heavy';
+        // A cast here isn't a check — an off-table class hits
+        // CLASS_STATS[garbage].maxHealth at respawn and throws.
+        const cls = (m as Extract<ClientMessage, { type: 'classUpdate' }>).armorClass;
+        if (p && typeof cls === 'string' && cls in CLASS_STATS) p.pendingClass = cls as ArmorClass;
       },
       perkUpdate: (id, m) => {
         const p = this.playerManager.getPlayer(id);
-        if (p) p.pendingPerk = (m as Extract<ClientMessage, { type: 'perkUpdate' }>).perk;
+        const perk = (m as Extract<ClientMessage, { type: 'perkUpdate' }>).perk;
+        if (p && isPerkId(perk)) p.pendingPerk = perk;
       },
     };
   }

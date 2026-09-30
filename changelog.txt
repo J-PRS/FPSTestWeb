@@ -1,3 +1,4 @@
+2026-09-26 - classUpdate/perkUpdate enum-clamped at dispatch (off-table class crashed respawn on CLASS_STATS lookup)
 2026-09-26 - chat relay truncates payloads at 280 chars (one client's oversized text can no longer amplify into every socket)
 2026-09-26 - extracted bot liveness watchdog to client/src/game/botWatchdog.ts (bots.ts 937 to 839 lines)
 2026-09-26 - botBrain death memory on sim clock (markDeath takes now param; shared sim no longer reads Date.now)
