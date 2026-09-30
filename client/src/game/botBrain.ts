@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import * as en from './botEnergy.js';
 
 import { Projectile } from '../projectiles/Projectile.js';
 import { RemotePlayer } from '../entities/RemotePlayer.js';
@@ -43,7 +44,7 @@ export class GameBot extends RemotePlayer {
   botMaxHp = BOT_HP;
   /** Loadout perk modifiers — the same table the server multiplies
    *  through CombatHandler/GameServer. 'none' until setLoadout runs. */
-  private mods = perkMods('none');
+  mods = perkMods('none');
   get perkMods(): PerkMods { return this.mods; }
   private perkHealthBonus = 0;
   setLoadout(lo: BotLoadout): void {
@@ -107,7 +108,7 @@ export class GameBot extends RemotePlayer {
   readonly movement: MovementController;
   /** Live MoveState aliasing position/velocity — the sim mutates the
    *  RemotePlayer's own vectors in place (same trick as Player). */
-  private moveState: MovementState;
+  moveState: MovementState;
   private appliedSpecList: readonly StructureSpec[] | undefined;
   /** Jet energy tank — a bot can only hold burn while fuel remains. */
   energy: number = ENERGY.max;
@@ -240,45 +241,9 @@ export class GameBot extends RemotePlayer {
   get energyCap(): number { return ENERGY.max * this.mods.energyMax; }
   addEnergy(n: number): void { this.energy = Math.min(this.energyCap, this.energy + n); }
 
-  private applyStatus(claim: number, dt: number): void {
-    const want = claim & (STATUS.MEND | STATUS.SHIELD | STATUS.CLOAK);
-    // Rising-edge activation cost per bit.
-    const rising = want & ~this.status;
-    const antes: [number, number][] = [
-      [STATUS.MEND, ENERGY.mendCost], [STATUS.SHIELD, ENERGY.shieldCost], [STATUS.CLOAK, ENERGY.cloakCost],
-    ];
-    for (const [bit, cost] of antes) {
-      if (!(rising & bit)) continue;
-      if (this.energy >= cost) this.energy -= cost;
-      else claim &= ~bit;
-    }
-    this.status = claim & (STATUS.MEND | STATUS.SHIELD | STATUS.CLOAK);
-    // Held drains — the brain re-declares every think, so a bit it
-    // can't afford to keep simply drops here.
-    const drain = (bit: number, perSec: number) => {
-      if (!(this.status & bit)) return;
-      this.energy -= perSec * dt;
-      if (this.energy <= 0) { this.energy = 0; this.dropSkill(bit); }
-    };
-    drain(STATUS.MEND, ENERGY.mendDrain);
-    drain(STATUS.SHIELD, ENERGY.shieldDrain);
-    drain(STATUS.CLOAK, cloakDrainPerSec(Math.hypot(this.velocity.x, this.velocity.z)));
-    // Mend channel heals — 12 hp/s while the flag rides (same rate the
-    // server applies to a mending player).
-    if (this.status & STATUS.MEND) this.botHp = Math.min(this.botMaxHp, this.botHp + 12 * dt);
-    // Regenerator — the server's per-player trickle, same rate.
-    if (this.mods.regen > 0 && !this.isDead) this.heal(this.mods.regen * dt);
-    this.setMending(!!(this.status & STATUS.MEND));
-    this.setShielded(!!(this.status & STATUS.SHIELD));
-    this.setCloakHidden(!!(this.status & STATUS.CLOAK));
-  }
-
-  private dropSkill(bit: number): void {
-    this.status &= ~bit;
-    if (bit === STATUS.MEND) this.setMending(false);
-    else if (bit === STATUS.SHIELD) this.setShielded(false);
-    else if (bit === STATUS.CLOAK) this.setCloakHidden(false);
-  }
+  private applyStatus(claim: number, dt: number): void { en.applyStatus(this, claim, dt); }
+  private dropSkill(bit: number): void { en.dropSkill(this, bit); }
+  private fuelTick(dt: number, jet: boolean): void { en.fuelTick(this, dt, jet); }
 
   /** Locomotion: point yaw at the destination, feed the brain's buttons
    *  into the shared MoveSim, keep an honest energy tank on the jets. */
@@ -308,22 +273,13 @@ export class GameBot extends RemotePlayer {
       jetHeld: jet,
     });
     this.movement.update(dt);
-    this.fuelTick(dt, jet);
+    en.fuelTick(this, dt, jet);
 
     this.wireSki = !!move?.ski;
     // Real jet button for the trail — the vel.y heuristic can't tell a
     // burn from a knockback launch; the brain knows.
     this.wireJet = jet;
     this.serverVelocity.copy(this.velocity); // vel getter prefers this
-  }
-
-  /** One tank feeds jets AND skills — featherjets' fuel regen and
-   *  overcharge's pool regen both land here. */
-  private fuelTick(dt: number, jet: boolean): void {
-    if (jet && this.yeetT <= 0) this.energy = Math.max(0, this.energy - ENERGY.jetDrain * this.mods.jetDrain * dt);
-    else if (this.moveState.onGround && this.energy < this.energyCap) {
-      this.energy = Math.min(this.energyCap, this.energy + ENERGY.jetCharge * this.mods.jetRegen * this.mods.energyRegen * dt);
-    }
   }
 
   override applyPredictedKnockback(fromPos: THREE.Vector3, impulseMag: number, pull = false): void {
