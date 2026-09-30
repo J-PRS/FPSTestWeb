@@ -10,11 +10,10 @@ import type { Heightfield } from '../../shared/heightfield.ts';
 import { isWireFrame, decodePosition } from '../../shared/wire.ts';
 import { TickLoop } from './TickLoop.ts';
 import { SessionManager } from './SessionManager.ts';
-import { join } from 'node:path';
 import { MapCatalog } from './mapCatalog.ts';
+import { RoomFactory } from './roomFactory.ts';
 import { MatchJournal } from './matchJournal.ts';
 import { RoomSwitcher } from './roomSwitch.ts';
-import type { MapSpec } from '../../shared/mapSpec.ts';
 
 export class GameServer {
   // One match's state per room — players land in 'default' unless the join
@@ -26,6 +25,7 @@ export class GameServer {
   private readonly tickLoop: TickLoop;
   private readonly sessions: SessionManager;
   private readonly maps = new MapCatalog();
+  private readonly factory: RoomFactory;
   private readonly switcher: RoomSwitcher;
 
   // Ops counters — cheap ints, read by /metrics. msgsIn counts everything
@@ -73,14 +73,21 @@ export class GameServer {
       rooms: this.rooms,
       playerRoom: this.playerRoom,
       specRooms: this.specRooms,
-      roomFor: (n, m, mp, b) => this.roomFor(n, m, mp, b),
+      roomFor: (n, m, mp, b) => this.factory.roomFor(n, m, mp, b),
       roomOfPlayer: (id) => this.roomOfPlayer(id),
       totalPlayers: () => this.totalPlayers(),
       ops: this.ops,
     });
+    this.factory = new RoomFactory({
+      rooms: this.rooms,
+      maps: this.maps,
+      field: () => this.field,
+      recordEnd: (rec) => this.journal.recordEnd(rec),
+      kickPlayer: (pid) => this.kickPlayer(pid),
+    });
     this.switcher = new RoomSwitcher({
       roomOfPlayer: (id) => this.roomOfPlayer(id),
-      roomFor: (n, m, mp, b) => this.roomFor(n, m, mp, b),
+      roomFor: (n, m, mp, b) => this.factory.roomFor(n, m, mp, b),
       removePlayerCompletely: (r, id, reason) => this.removePlayerCompletely(r, id, reason),
       totalPlayers: () => this.totalPlayers(),
       playerRoom: this.playerRoom,
@@ -88,26 +95,16 @@ export class GameServer {
     });
   }
 
-  // Per-map terrain: spec.terrain names a maps/<file>.bin heightfield;
-  // files are shared across rooms via this cache and attach when ready —
-  // a room always plays on the default field until its own terrain lands.
-  private fields = new Map<string, Promise<Heightfield | null>>();
+  // playerId → room index: the binary position path calls this at 20Hz per
+  // player, so scanning this.rooms per frame doesn't scale. Kept in sync at
+  // join/addPlayer and every removal (close/grace/kick/idle paths all funnel
+  // through removePlayerCompletely or onClose).
+  private playerRoom = new Map<string, Room>();
 
-  private loadField(file: string): Promise<Heightfield | null> {
-    let p = this.fields.get(file);
-    if (!p) {
-      const bunFile = (globalThis as { Bun?: { file(p: string): { arrayBuffer(): Promise<ArrayBuffer> } } }).Bun?.file;
-      p = bunFile
-        ? bunFile(join(import.meta.dir, '..', '..', 'maps', file)).arrayBuffer()
-            .then(ab => BallSim.parseHeightmap(new Uint8Array(ab)))
-            .catch(err => { logger.warn('map terrain load failed', { file, err: String(err) }); return null; })
-        : Promise.resolve(null);
-      this.fields.set(file, p);
-    }
-    return p;
+  private roomOfPlayer(playerId: string): Room | undefined {
+    return this.playerRoom.get(playerId);
   }
 
-  // Match journal — every win condition lands one JSON line on disk plus
   // Match history lives in MatchJournal — the ring is a read cache over
   // the append-only matches.jsonl journal.
   private readonly journal = new MatchJournal();
@@ -123,88 +120,12 @@ export class GameServer {
     return this.journal.stats();
   }
 
-  /** Which map spec defines a fresh room: the room's own name, then the
-   *  base of a numbered ad-hoc name ('nugwar-3' → 'nugwar'), then the
-   *  join's explicit map/mode fallback. `bots` overrides whatever the
-   *  spec says — even with no named spec at all. */
-  /** Resolve-or-create a room. Joins may name any room; 'default' is the
-   *  unnamed lobby every existing client already lands in. `mode` is only
-   *  honored at creation — the first joiner defines the match. */
-  private roomFor(name: string, mode = '', map = '', bots?: number): Room {
-    let room = this.rooms.get(name);
-    if (!room) {
-      const { spec, src } = this.maps.specFor(name, mode, map, bots);
-      this.maps.noteSource(name, src);
-      room = new Room(name, this.field, mode, spec, CONFIG.moveAuthority);
-      // `room` is a mutable let — bind a const for the closures or TS
-      // widens them back to Room | undefined.
-      const r = room;
-      room.onMatchEnd = (rec) => this.journal.recordEnd(rec);
-      // Judge mode counts divergences instead of correcting — the kick
-      // only fires on repeated teleport-scale gaps honest drift can't
-      // reach (see RoomMoveSim.SEVERE_*).
-      room.moveSim.onCheat = (pid, dist) => {
-        logger.warn('Movement cheat detected', { playerId: pid, room: r.name, dist: +dist.toFixed(1) });
-        this.kickPlayer(pid);
-      };
-      room.onRotate = () => this.maps.nextRotationSpec(r);
-      room.onTerrain = (s) => this.attachTerrain(r, s);
-      if (spec?.terrain) this.attachTerrain(room, spec);
-      this.rooms.set(name, room);
-      logger.info('Room created', { room: name, mode: room.mode });
-    }
-    return room;
-  }
-
-  /** Attach a spec's terrain to every room sim that sweeps it — missing
-   *  one means two systems disagree about where the ground is. */
-  private attachTerrain(room: Room, spec: MapSpec): void {
-    const roomName = room.name;
-    // No spec.terrain → the room plays on the default field. Rotation can
-    // land on a terrain-less map after a terrain one, so reverting matters.
-    const target = spec.terrain ? this.loadField(spec.terrain) : Promise.resolve(this.field);
-    target.then(f => {
-      if (!f || this.rooms.get(roomName) !== room) return;
-      room.field = f;
-      room.ballSim.attachField(f);
-      room.moveSim.attachField(f, (pid) => room.players.getPlayer(pid)?.position);
-      room.projectiles.attachField(f);
-      logger.info('Room terrain attached', { room: roomName, terrain: spec.terrain ?? 'default' });
-    });
-  }
-
-  /** Quick-join: pick the emptiest open room already running `mode`
-   *  (and `map` when given), else spin up `<map|mode>-N`. `bots`
-   *  overrides the spec's bot count/botFill on creation only. */
   quickRoom(mode: string, map = '', bots?: number): Room {
-    let best: Room | undefined;
-    for (const room of this.rooms.values()) {
-      if (map ? this.maps.mapNameOf(room.name) !== map
-              : room.mode !== mode) continue;
-      if (room.playerCount() >= CONFIG.maxPlayers) continue;
-      if (!best || room.playerCount() < best.playerCount()) best = room;
-    }
-    if (best) return best;
-    const base = map || mode || 'arena';
-    let n = 1;
-    while (this.rooms.has(`${base}-${n}`)) n++;
-    return this.roomFor(`${base}-${n}`, mode, map, bots);
+    return this.factory.quickRoom(mode, map, bots);
   }
 
-  /** Playable map list for the menu — name + declared mode + default
-   *  bot count, straight from maps/*.json (catalog owns the dir). */
   listMaps(): { name: string; mode: string; bots: number }[] {
     return this.maps.list();
-  }
-
-  // playerId → room index: the binary position path calls this at 20Hz per
-  // player, so scanning this.rooms per frame doesn't scale. Kept in sync at
-  // join/addPlayer and every removal (close/grace/kick/idle paths all funnel
-  // through removePlayerCompletely or onClose).
-  private playerRoom = new Map<string, Room>();
-
-  private roomOfPlayer(playerId: string): Room | undefined {
-    return this.playerRoom.get(playerId);
   }
 
   /** Spectator sockets aren't players — roomOfPlayer can't find them. */
