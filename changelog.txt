@@ -1,3 +1,4 @@
+2026-09-26 - VGS: the Tribes voice-menu is in - V opens the chord menu (G Global with Compliment/Respond/Taunt submenus, A Attack, D Defend, F Flag, N Need, B Base, E Enemy, R Repair, C Command, S Self w/ sub-trees), 3s timeout, Esc/invalid cancels, lines ride the chat wire with real Tribes scoping (emotes global, tactical team-only) + a radio ack blip.
 2026-09-26 - netBot: room hops actually hop now (was a same-room no-op the server silently dropped) + the local sim re-resolves terrain per gameState.map.terrain so a hop into a different-mapped room does not ski ghost ground.
 2026-09-26 - RTC disconnect logged twice: game+ctrl datachannels die together, each fired the grace path. Only the first closed channel now runs it.
 2026-09-26 - Bot taunts: typed-reply delay (1.2-3s beat after the event, same wall-clock edge as respawn timers) + two new triggers - environmental deaths ("Who put that wall there?") and spree-tier boasts ("I'm on fire!").

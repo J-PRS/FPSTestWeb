@@ -15,6 +15,7 @@ import type { WorldState } from './worldState.js';
 import type { createEntities } from './entities.js';
 import type { FragMessages } from '../ui/FragMessages.js';
 import { Chat } from './chat.js';
+import { Vgs } from './vgs.js';
 import type { HUD } from '../ui/hud.js';
 import type { HealthBarSystem } from '../ui/HealthBarSystem.js';
 import type { ExplosionTracker } from '../utils/ExplosionTracker.js';
@@ -58,6 +59,13 @@ export function wireNetworkHandlers(deps: NetDeps): void {
     localName: () => networkManager.getLocalPlayerId(),
   });
   networkManager.onChat = (playerId, text, team) => chat.add(playerId, text, team);
+  // V rides the same chat wire — tactical lines team-scoped, emotes global.
+  const vgs = new Vgs({
+    send: (text, team) => networkManager.sendChat(text, team),
+    isConnected: () => networkManager.isConnected(),
+    echo: (text, team) => chat.add(networkManager.getLocalPlayerId(), text, team),
+  });
+  void vgs; // self-contained like Chat — its key routing lives on window
 
   // Both first-seen-update and respawn-into-missing end up here.
   const ensureRemotePlayer = (playerId: string, position: { x: number; y: number; z: number }, via: string): RemotePlayer => {
