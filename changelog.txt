@@ -1,3 +1,4 @@
+2026-09-26 - Split Totem.ts: swarm-write/visual material block -> totemVisual.ts (Totem 609->469)
 2026-09-26 - Split balls.ts net-replay into ballNet.ts (tickNet/applySeg/isStaleSeg; sim cursors in NetBag, Ball statics via NetStatics closures)
 2026-09-26 - flag thief becomes a real hunt target: beacon-marked carrier (pos+vel) feeds pickHunt as fallback for chase roles, plus sheep meter charges on mechanical-energy bleed (deadstop signature, Tribes momentum-conservation framing)
 2026-09-30 - fix(class): wire respawn trusts server-banked armorClass for local player; fix(bots): WEAPON_FIRE_INTERVAL_S cadence gate in botFire (mortar no longer fires at chaingun pace)

@@ -13,77 +13,19 @@ import { Terrain } from '../world/terrain.js';
 import { bindNetTotem, applyNetEdgeTotem, updateNetTotem, claimDamageMelee, type NetBindArgs } from '../game/netMelee.js';
 import { type SimTotem, makeSimTotem, stepTotem } from '../../../shared/creatureSim.js';
 import type { Targetable } from './balls.js';
-import { allocSlots, freeSlots, getSwarm, getShadows } from './swarms.js';
-import type { SwarmPart, SwarmSlotOwner } from './swarm.js';
+import { allocSlots, freeSlots, getShadows } from './swarms.js';
+import type { SwarmSlotOwner } from './swarm.js';
 import { TerrainFoot } from '../effects/terrainFoot.js';
-import { getGlowTexture } from '../effects/glowTexture.js';
+import { writeTotemInstances } from './totemVisual.js';
+export { totemParts } from './totemVisual.js';
 
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _dir = new THREE.Vector3();
 const _zeroVel = new THREE.Vector3();
-const _root = new THREE.Matrix4();
-const _local = new THREE.Matrix4();
-const _world = new THREE.Matrix4();
-const _p = new THREE.Vector3();
-const _q = new THREE.Quaternion();
-const _s = new THREE.Vector3();
 
 type TotemState = 'materialize' | 'aim' | 'charge' | 'blinkOut' | 'blinkIn';
 interface TotemCtx { dt: number; dist: number; playerPos: THREE.Vector3; playerVel?: THREE.Vector3 }
-
-const PART_SHAFT = 0;
-const PART_CAP = 1;
-const PART_EYE = 2;      // glow slit quad near the top
-const PART_BEAM = 3;     // aim-beam quad — zero-scale when idle
-const PART_SHIMMER = 4;  // blink-in arrival column — zero-scale when idle
-const PART_CORE = 5;     // white-hot core of the FIRED ray — zero-scale otherwise
-
-const _shaftGeo = new THREE.CylinderGeometry(0.35, 0.7, 4.2, 4); // 4-sided obelisk
-const _capGeo = new THREE.ConeGeometry(0.5, 1.0, 4);
-// Aim beam — a thin quad stretched between totem and player during charge;
-// origin at the totem end so scaling +z extends it downrange.
-const _beamGeo = (() => {
-  const g = new THREE.PlaneGeometry(1, 1);
-  g.rotateY(Math.PI / 2); // lies along +z
-  g.translate(0, 0, 0.5);
-  return g;
-})();
-const _eyeGeo = new THREE.PlaneGeometry(1, 1);
-
-let _shaftMat: THREE.MeshLambertMaterial | null = null;
-let _eyeMat: THREE.MeshBasicMaterial | null = null;
-let _beamMat: THREE.MeshBasicMaterial | null = null;
-let _shimmerMat: THREE.MeshBasicMaterial | null = null;
-let _coreMat: THREE.MeshBasicMaterial | null = null;
-
-export function totemParts(): SwarmPart[] {
-  if (!_shaftMat) _shaftMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
-  if (!_eyeMat) _eyeMat = new THREE.MeshBasicMaterial({
-    map: getGlowTexture(), color: 0x66ddff, transparent: true, blending: THREE.AdditiveBlending,
-    depthWrite: false, side: THREE.DoubleSide,
-  });
-  if (!_beamMat) _beamMat = new THREE.MeshBasicMaterial({
-    color: 0xff3344, transparent: true, blending: THREE.AdditiveBlending,
-    depthWrite: false, side: THREE.DoubleSide,
-  });
-  if (!_shimmerMat) _shimmerMat = new THREE.MeshBasicMaterial({
-    color: 0x8899ff, transparent: true, blending: THREE.AdditiveBlending,
-    depthWrite: false,
-  });
-  if (!_coreMat) _coreMat = new THREE.MeshBasicMaterial({
-    color: 0xffffff, transparent: true, blending: THREE.AdditiveBlending,
-    depthWrite: false, side: THREE.DoubleSide,
-  });
-  return [
-    { geometry: _shaftGeo, material: _shaftMat, castShadow: true },
-    { geometry: _capGeo, material: _shaftMat },
-    { geometry: _eyeGeo, material: _eyeMat },
-    { geometry: _beamGeo, material: _beamMat },
-    { geometry: _shaftGeo, material: _shimmerMat },
-    { geometry: _beamGeo, material: _coreMat },
-  ];
-}
 
 /**
  * Sniper totem — the perpendicular-movement teacher. Blinks to high ground,
@@ -115,36 +57,38 @@ export class Totem implements Targetable, SwarmSlotOwner {
 
   swarmSlot = -1;
   shadowSlot = -1;
-  private hasSlots = false;
+  hasSlots = false; // public — writeTotemInstances gates on it
   private foot: TerrainFoot | null = null;
   private _terrain: Terrain;
 
-  private bodyScale = 0.3;   // materialize grow-in / blinkOut shrink
-  private eyeScale = 0.4;
-  private eyeBright = 0;     // 0..1 charge heat — instanceColor on the eye quad
-  private beamOn = false;
-  private beamOpacity = 0;
-  private beamWidth = 0.65;
-  private shimmerOn = false;
-  private shimmerPulse = 0;
-  private flash = 0;
-  private chargeGlow = 0;
+  // Visual channel — public so totemVisual.ts can read the flat fields
+  // (same host-interface pattern as ballNet).
+  bodyScale = 0.3;   // materialize grow-in / blinkOut shrink
+  eyeScale = 0.4;
+  eyeBright = 0;     // 0..1 charge heat — instanceColor on the eye quad
+  beamOn = false;
+  beamOpacity = 0;
+  beamWidth = 0.65;
+  shimmerOn = false;
+  shimmerPulse = 0;
+  flash = 0;
+  chargeGlow = 0;
 
-  private state: TotemState = 'materialize';
+  state: TotemState = 'materialize';
   private stateTimer = TOTEM_MATERIALIZE;
   // Stagger lock: every hit sets ~2.1s of "can't blink" — sustained fire
   // pins the obelisk in place. That's the counterplay: it can still shoot
   // back, but it can't escape while you're landing damage.
-  private staggerT = 0;
+  staggerT = 0;
   private chargeTimer = 0;
   private refire: number;
   private shotsFired = 0;
   private blinkTarget = new THREE.Vector3();
   private blinkCd = 0; // random 2–5s between blinks — no pop-pop-pop escapes
   private lockPoint = new THREE.Vector3(); // beam locks here — dodge by moving after lock
-  private lockDir = new THREE.Vector3();   // locked firing direction
-  private lockDist = TOTEM_RANGE;
-  private beamFade = 0;                    // post-shot beam decay timer
+  lockDir = new THREE.Vector3();   // locked firing direction
+  lockDist = TOTEM_RANGE;
+  beamFade = 0;                    // post-shot beam decay timer
 
   /** netDriven = server-authoritative replay — the shared SimTotem drives
    *  the state machine; this class only mirrors it into the visuals. */
@@ -398,85 +342,7 @@ export class Totem implements Targetable, SwarmSlotOwner {
   }
 
   writeInstances(_terrain?: import('../world/terrain.js').Terrain): void {
-    if (!this.hasSlots) return;
-    const swarm = getSwarm('totem');
-    if (!swarm) return;
-    const slot = this.swarmSlot;
-    const r = this.radius;
-    const visible = this.state !== 'blinkIn';
-    const bs = visible ? this.bodyScale : 0;
-
-    // Shaft + cap ride the body scale (materialize grow / blinkOut shrink)
-    _q.identity();
-    _root.compose(this.pos, _q, _s.setScalar(r * Math.max(0.0001, bs)));
-    _local.compose(_p.set(0, 2.1, 0), _q.identity(), _s.set(1, 1, 1));
-    _world.multiplyMatrices(_root, _local);
-    swarm.setMatrix(PART_SHAFT, slot, _world);
-
-    const fr = this.flash > 0 ? 4 : 1;
-    const cg = this.chargeGlow;
-    const cr = this.color.r * fr + cg * 0.6;
-    const cgg = this.color.g * fr + cg * 0.3;
-    const cb = this.color.b * fr + cg;
-    swarm.setColor(PART_SHAFT, slot, cr, cgg, cb);
-    swarm.setColor(PART_CAP, slot, cr, cgg, cb);
-
-    _local.compose(_p.set(0, 4.7, 0), _q.identity(), _s.set(1, 1, 1));
-    _world.multiplyMatrices(_root, _local);
-    swarm.setMatrix(PART_CAP, slot, _world);
-
-    // Eye slit — charges blinding-white before the shot
-    _local.compose(_p.set(0, 3.9, 0), _q.identity(), _s.setScalar(this.eyeScale * 0.8));
-    _world.multiplyMatrices(_root, _local);
-    swarm.setMatrix(PART_EYE, slot, visible ? _world : zeroM(_world));
-    // Staggered = pinned: the eye strobes dim — a readable "it's anchored"
-    // tell so the counterplay state is visible, not just mechanical.
-    const eb = this.staggerT > 0
-      ? this.eyeBright * (0.25 + 0.3 * Math.abs(Math.sin(this.staggerT * 25)))
-      : this.eyeBright;
-    swarm.setColor(PART_EYE, slot, 0.4 + eb, 0.85 + eb * 0.4, 1 + eb * 0.5);
-
-    // Aim beam — stretched from eye height down the locked line
-    if (this.beamOn || this.beamFade > 0) {
-      _p.set(this.pos.x, this.pos.y + 3.9 * r, this.pos.z);
-      _v2.copy(_p).addScaledVector(this.lockDir, this.lockDist);
-      // Matrix4.lookAt aims +Z eye→target — swapped args on purpose:
-      // eye=_v2 (far end), target=_p (totem) makes +Z point totem→player,
-      // which is where the beam quad extends. The old order drew the
-      // telegraph line BACKWARD — "totem fires in a random direction".
-      _root.lookAt(_v2, _p, _v.set(0, 1, 0));
-      _q.setFromRotationMatrix(_root);
-      _root.compose(_p, _q, _s.set(1, this.beamWidth, this.lockDist));
-      swarm.setMatrix(PART_BEAM, slot, _root);
-      const bo = this.beamOpacity;
-      if (this.beamFade > 0) {
-        // FIRED: two-layer energy ray. The outer quad becomes a cyan
-        // plasma sheath; a thinner WHITE core quad rides inside it —
-        // the classic hot-center/colored-edge discharge read.
-        swarm.setColor(PART_BEAM, slot, bo * 0.3, bo * 0.85, bo * 1.7);
-        _local.compose(_p, _q, _s.set(1, this.beamWidth * 0.35, this.lockDist));
-        swarm.setMatrix(PART_CORE, slot, _local);
-        swarm.setColor(PART_CORE, slot, bo * 2.2, bo * 2.2, bo * 2.2);
-      } else {
-        // Charging: red aiming laser that narrows as it heats up
-        swarm.setColor(PART_BEAM, slot, bo, bo * (0.35 - this.beamWidth * 0.1), bo * 0.3);
-        swarm.setMatrix(PART_CORE, slot, zeroM(_local));
-      }
-    } else {
-      swarm.setMatrix(PART_BEAM, slot, zeroM(_root));
-      swarm.setMatrix(PART_CORE, slot, zeroM(_root));
-    }
-
-    // Arrival shimmer column during blinkIn
-    if (this.shimmerOn) {
-      _p.set(this.pos.x, this.pos.y + 2.4, this.pos.z);
-      _local.compose(_p, _q.identity(), _s.set(r, 1.3, r));
-      swarm.setMatrix(PART_SHIMMER, slot, _local);
-      const sp = this.shimmerPulse;
-      swarm.setColor(PART_SHIMMER, slot, sp, sp, sp);
-    } else {
-      swarm.setMatrix(PART_SHIMMER, slot, zeroM(_local));
-    }
+    writeTotemInstances(this);
   }
 
   private beginBlink(playerPos: THREE.Vector3): void {
@@ -600,10 +466,4 @@ export class Totem implements Targetable, SwarmSlotOwner {
       this.hasSlots = false;
     }
   }
-}
-
-// Zero matrix — hides an instanced part without touching the slot count.
-const _zero = new THREE.Matrix4().makeScale(0, 0, 0);
-function zeroM(out: THREE.Matrix4): THREE.Matrix4 {
-  return out.copy(_zero);
 }
