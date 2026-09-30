@@ -96,6 +96,10 @@ class WireBot {
   // position lags until the next report lands — a spawn claim in that
   // gap reads as "implausible origin". Wait out the report grace.
   private fireHoldUntil = 0;
+  // envDamage is a creature-contact report — no creature event in ~0.6s
+  // means our tracked positions are stale (interest thinning, die)
+  // and the server's live-sim check will call it implausible.
+  private lastCreatureEvtAt = 0;
   private hopAlt = false;
   wasJump = false; wasJet = false;
   private lastSentInput = '';
@@ -235,6 +239,7 @@ class WireBot {
         this.segJump('ball', seg.id, seg.position.x, seg.position.y, seg.position.z,
           Math.hypot(seg.velocity.x, seg.velocity.y, seg.velocity.z), seg.t, seg.kind);
         this.balls.set(seg.id, seg.position);
+        this.lastCreatureEvtAt = performance.now();
         if (this.balls.size > 300) this.balls.clear();
       }
       if (f) for (const u of f.updates) {
@@ -325,6 +330,7 @@ class WireBot {
         this.segJump('crawl', m.id, m.position.x, m.position.y, m.position.z,
           Math.hypot(m.velocity?.x ?? 0, m.velocity?.y ?? 0, m.velocity?.z ?? 0), m.t, m.kind);
         this.crawls.set(m.id, m.position);
+        this.lastCreatureEvtAt = performance.now();
         if (this.crawls.size > 300) this.crawls.clear();
         break;
       case 'pickupSpawn': this.pickups.set(m.id, m.pos); break;
@@ -491,16 +497,18 @@ class WireBot {
       // Tracked positions go stale between events — the server measures
       // against live sims, so keep slack below its plausibility gate.
       this.nextEnvDmg = now + rand(40000, 120000);
-      let near = false;
-      for (const p of this.crawls.values()) {
-        const d = (p.x - s.pos.x) ** 2 + (p.y - s.pos.y) ** 2 + (p.z - s.pos.z) ** 2;
-        if (d < 10 * 10) { near = true; break; }
+      if (now - this.lastCreatureEvtAt <= 600) {
+        let near = false;
+        for (const p of this.crawls.values()) {
+          const d = (p.x - s.pos.x) ** 2 + (p.y - s.pos.y) ** 2 + (p.z - s.pos.z) ** 2;
+          if (d < 10 * 10) { near = true; break; }
+        }
+        if (!near) for (const p of this.balls.values()) {
+          const d = (p.x - s.pos.x) ** 2 + (p.y - s.pos.y) ** 2 + (p.z - s.pos.z) ** 2;
+          if (d < 10 * 10) { near = true; break; }
+        }
+        if (near) this.send({ type: 'environmentDamage', amount: Math.round(rand(5, 15)) });
       }
-      if (!near) for (const p of this.balls.values()) {
-        const d = (p.x - s.pos.x) ** 2 + (p.y - s.pos.y) ** 2 + (p.z - s.pos.z) ** 2;
-        if (d < 10 * 10) { near = true; break; }
-      }
-      if (near) this.send({ type: 'environmentDamage', amount: Math.round(rand(5, 15)) });
     }
     if (now >= this.nextSwitch) {
       // Room-hop stress path — full teardown + rejoin, rare like a real hop.
