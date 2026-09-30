@@ -1,3 +1,4 @@
+2026-09-30 - vgs.ts split: 200-line chord tree (pure data) -> vgsTree.ts (368->173).
 2026-09-30 - Player split: fire/belt triggers + knockback/pull/heal/jetBoost impulse writers -> playerImpulse.ts (592->527).
 2026-09-30 - Projectile split: remote-replica terrain rules (bounce/armed/sticky/embed sweeps) -> projRemote.ts (402->379).
 2026-09-30 - Lint cleanup: Projectile dead scratch dupes; botSheep.check split into charge/debits (complexity 20->12); commitMoveInput intent bundle (7->6 params); ServerBots dead imports.
