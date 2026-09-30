@@ -12,7 +12,7 @@ import { SnapshotBuffer } from './remoteSnapshots.js';
 import { RemoteGizmo } from './remoteGizmo.js';
 import { resetCorpse, launchCorpse, stepCorpse, type CorpseState } from './remoteDeath.js';
 import { WeaponType } from '../../../shared/weapons.js';
-import { makeContouredShield, makeShieldBubble, ShieldBubble } from '../effects/shieldBubble.js';
+import { RemoteAuras } from './remoteAuras.js';
 import { BallTrailDots } from './ballTrails.js';
 
 const logger = new ChildLogger('RemotePlayer');
@@ -51,16 +51,10 @@ export class RemotePlayer {
   private _loaded: boolean = false;
   private _isDead: boolean = false;
   private gizmo: RemoteGizmo | null = null;
-  private scene: THREE.Scene;
-  // Energy-shield bubble — lazily built on first use so un-shielded remotes
-  // cost nothing. Lives at scene level (not inside the model) so cloak's
-  // setVisible(false) can't silently take it down with the body.
-  private shieldBubble: ShieldBubble | null = null;
-  private _shielded = false;
-  // One-bit status auras (mend/regen/dd/charge) — identical lazy-glow
-  // plumbing per STATUS bit, keyed so a new aura is a table row rather
-  // than a fourth copy of the same field/update/hide/show blocks.
-  private statusAuras = new Map<string, { bubble: ShieldBubble; on: boolean }>();
+  scene: THREE.Scene; // public — RemoteAuras builds bubbles in it
+  // Shield bubble + status auras (mend/regen/dd/charge) — the lazy-glow
+  // plumbing lives in remoteAuras.ts behind the AuraHost surface.
+  private auras = new RemoteAuras(this);
   protected velocity: THREE.Vector3 = new THREE.Vector3();
   private angularVelocity: THREE.Vector3 = new THREE.Vector3();
   private isOnGround: boolean = true;
@@ -153,17 +147,13 @@ export class RemotePlayer {
       this._model.setRotation(this.rotation.yaw, this.rotation.pitch);
       // Shield may have gone up before the GLB landed (sphere fallback)
       // — upgrade it to the contoured shell once the bones exist.
-      if (this._shielded && !this._shieldContoured) {
-        this.shieldBubble?.dispose();
-        this.buildShield();
-        this.shieldBubble!.mesh.visible = !this._staleHidden && !this._cloakHidden;
-      }
+      this.auras.upgradeContoured();
       // Show collider gizmo for remote players (unless already dead or stale-hidden)
-      if (!this._isDead && !this._staleHidden) {
+      if (!this._isDead && !this.staleHidden) {
         this._model.setColliderVisible(true);
       }
       // Model may have been hidden while the GLB was still loading — reapply
-      if (this._staleHidden) {
+      if (this.staleHidden) {
         this._model.setVisible(false);
       }
       logger.debug(`MODEL LOADED`, { playerId, instanceId: this.instanceId, isDead: this._isDead });
@@ -448,15 +438,7 @@ export class RemotePlayer {
   private _lastTrailPos = new THREE.Vector3();
 
   private tickAuras(dt: number): void {
-    const y = this.position.y - EYE_OFFSET;
-    if (this.shieldBubble) {
-      this.shieldBubble.update(dt);
-      if (this._shielded) this.shieldBubble.mesh.position.set(this.position.x, y + 1.1, this.position.z);
-    }
-    for (const a of this.statusAuras.values()) {
-      a.bubble.update(dt);
-      if (a.on) a.bubble.mesh.position.set(this.position.x, y + 1.0, this.position.z);
-    }
+    this.auras.tick(dt);
   }
 
   // Damage flinch / shot recoil timers — drive the oneshot states in
@@ -468,7 +450,7 @@ export class RemotePlayer {
   flinch(): void {
     if (!this._isDead) this.hitT = 0.35;
     if (this._loaded) this._model.damageFlash(); // creature-style white pop
-    if (this._shielded) this.shieldBubble?.flash(); // soaked — flare the lattice
+    this.auras.flashShield(); // soaked — flare the lattice
   }
 
   playDeath(explosionPos?: THREE.Vector3, explosionForce?: number): void {
@@ -500,8 +482,7 @@ export class RemotePlayer {
   hide(): void {
     this.model.setVisible(false);
     this.gizmo?.hide();
-    if (this.shieldBubble) this.shieldBubble.mesh.visible = false;
-    for (const a of this.statusAuras.values()) a.bubble.mesh.visible = false;
+    this.auras.hide();
   }
 
   show(): void {
@@ -511,8 +492,7 @@ export class RemotePlayer {
       this.model.addColliderGizmo();
     }
     this.gizmo?.attach();
-    if (this.shieldBubble && this._shielded) this.shieldBubble.mesh.visible = true;
-    for (const a of this.statusAuras.values()) if (a.on) a.bubble.mesh.visible = true;
+    this.auras.show();
   }
 
   // Simulate physics when player stops sending updates (dead reckoning)
@@ -568,69 +548,37 @@ export class RemotePlayer {
     this.lastServerPosition.copy(this.position);
     this.lastServerUpdateMs = Date.now();
     this._lastUpdateTime = Date.now();
-    if (!this._cloakHidden) this.show();
+    if (!this.cloakHidden) this.show();
   }
 
   // Staleness gate: hide players whose updates stopped arriving (backgrounded
   // tabs keep their socket open but stop simulating). Auto-reshow on resume.
-  private _staleHidden = false;
+  // Public fields — RemoteAuras reads them to gate aura visibility.
+  staleHidden = false;
+  cloakHidden = false;
   setStaleHidden(hidden: boolean): void {
-    if (hidden === this._staleHidden) return;
-    this._staleHidden = hidden;
-    if (hidden) this.hide(); else if (!this._cloakHidden) this.show();
+    if (hidden === this.staleHidden) return;
+    this.staleHidden = hidden;
+    if (hidden) this.hide(); else if (!this.cloakHidden) this.show();
   }
 
   // Server-authoritative cloak — separate flag from staleHidden because a
   // decloak must restore visibility even while a stale socket stays hidden.
-  private _cloakHidden = false;
   setCloakHidden(hidden: boolean): void {
-    if (hidden === this._cloakHidden) return;
-    this._cloakHidden = hidden;
-    if (hidden) this.hide(); else if (!this._staleHidden) this.show();
+    if (hidden === this.cloakHidden) return;
+    this.cloakHidden = hidden;
+    if (hidden) this.hide(); else if (!this.staleHidden) this.show();
   }
-  get isCloakHidden(): boolean { return this._cloakHidden; }
+  get isCloakHidden(): boolean { return this.cloakHidden; }
 
-  private _shieldContoured = false;
-  /** Prefer the body-hugging shell once the model's skinned meshes exist;
-   *  the sphere is only a pre-load fallback. */
-  private buildShield(): void {
-    const root = this._model.object3D;
-    const contoured = root ? makeContouredShield(root) : null;
-    this._shieldContoured = !!contoured;
-    this.shieldBubble = contoured ?? makeShieldBubble(this.scene);
-  }
-  setShielded(on: boolean): void {
-    if (on === this._shielded) return;
-    this._shielded = on;
-    if (on && !this.shieldBubble) this.buildShield();
-    if (this.shieldBubble) this.shieldBubble.mesh.visible = on;
-  }
-  get isShielded(): boolean { return this._shielded; }
+  setShielded(on: boolean): void { this.auras.setShielded(on); }
+  get isShielded(): boolean { return this.auras.isShielded; }
 
-  private setStatusAura(key: string, on: boolean, radius: number, color: number): void {
-    let a = this.statusAuras.get(key);
-    if ((a?.on ?? false) === on) return;
-    if (!a) {
-      a = { bubble: makeShieldBubble(this.scene, radius, color), on: false };
-      this.statusAuras.set(key, a);
-    }
-    a.on = on;
-    a.bubble.mesh.visible = on && !this._cloakHidden && !this._staleHidden;
-  }
-
-  // Medkit channel — a tighter green aura inside where the bubble sits.
-  setMending(on: boolean): void { this.setStatusAura('mend', on, 1.6, 0x3fdd6f); }
-  get isMending(): boolean { return this.statusAuras.get('mend')?.on ?? false; }
-
-  // Powerup tells — a buffed enemy should be readable at range: regen
-  // shimmers teal, double-damage burns red. Server-owned bits.
-  setRegenAura(on: boolean): void { this.setStatusAura('regen', on, 1.8, 0x66ffee); }
-  setDdAura(on: boolean): void { this.setStatusAura('dd', on, 1.8, 0xff4422); }
-
-  // LG charge telegraph — the walking-bomb warning, same electric tint
-  // as the beam so the read is instant. Bit-level flag only: remotes see
-  // "loaded", not the exact bank size.
-  setCharged(on: boolean): void { this.setStatusAura('charge', on, 1.9, 0x9fd8ff); }
+  setMending(on: boolean): void { this.auras.setMending(on); }
+  get isMending(): boolean { return this.auras.isMending; }
+  setRegenAura(on: boolean): void { this.auras.setRegenAura(on); }
+  setDdAura(on: boolean): void { this.auras.setDdAura(on); }
+  setCharged(on: boolean): void { this.auras.setCharged(on); }
 
   // Belt throws arrive as ordinary projectileCreated spawns — the throw
   // tell lives on the shooter's model, keyed off the spawned weaponType.
@@ -656,7 +604,7 @@ export class RemotePlayer {
     }
     // Firing decloaks: a cloaked shooter shimmers visible for a beat —
     // the price of shooting from stealth.
-    if (this._cloakHidden && this._loaded) {
+    if (this.cloakHidden && this._loaded) {
       this.ghostT = 1;
       this._model.setGhost(true);
       this.model.setVisible(true);
@@ -669,7 +617,7 @@ export class RemotePlayer {
     this.ghostT -= dt;
     if (this.ghostT > 0) return;
     this._model.setGhost(false);
-    if (this._cloakHidden || this._staleHidden) this.model.setVisible(false);
+    if (this.cloakHidden || this.staleHidden) this.model.setVisible(false);
   }
 
   // Predicted knockback: run the victim through dead reckoning for ~1 RTT
@@ -701,9 +649,8 @@ export class RemotePlayer {
     // Drop the loaded flag too — a dangling tick (debug hooks, orphaned
     // owner loop) must not walk into a cleared animation map.
     this._loaded = false;
-    this.shieldBubble?.dispose();
+    this.auras.dispose();
     this.airTrail?.dispose();
-    for (const a of this.statusAuras.values()) a.bubble.dispose();
     this._model.dispose();
     if (this.gizmo) {
       this.gizmo.dispose();
