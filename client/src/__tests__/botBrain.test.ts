@@ -104,7 +104,7 @@ describe('BotBrain senses', () => {
     // Wander goals that land inside the repel radius get re-rolled — run
     // several think cadences; none should settle ~north of the body.
     for (let i = 0; i < 12; i++) b.think(4, ctx(pos, flat, {}));
-    const goal = (b as unknown as { goal: { x: number; z: number } }).goal;
+    const goal = (b as unknown as { goalS: { goal: { x: number; z: number } } }).goalS.goal;
     expect(Math.hypot(goal.x, goal.z - 20) > 12 || Math.hypot(goal.x - pos.x, goal.z - pos.z) < 15).toBe(true);
   });
 

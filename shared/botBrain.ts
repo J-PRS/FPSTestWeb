@@ -12,6 +12,7 @@
  */
 
 import { BotSteer } from './botSteer.ts';
+import { BotGoals } from './botGoals.ts';
 import { STATUS } from './status.ts';
 import { ENERGY } from './movement.ts';
 import type { ColliderIndex } from './solidWorld.ts';
@@ -132,21 +133,14 @@ const DEATH_RANGE = 10;  // m — repel radius around each remembered death
 export class BotBrain {
   /** Set the spawn point as the initial goal. */
   constructor(spawn: BotVec) {
-    this.goal = { ...spawn };
+    this.goalS.goal = { ...spawn };
     this.h = newHuntState(spawn);
   }
 
   private thinkT = Math.random() * THINK_S;
-  private goal: BotVec;
   private readonly h: HuntState;
   private flinchT = 0;
   private flinchFrom: BotVec = { x: 0, y: 0, z: 0 };
-  // Revenge — after the recoil ends the bot pushes toward the attacker's
-  // position: ambushes get answered, not just absorbed.
-  private revengeT = 0;
-  private revengeFrom: BotVec = { x: 0, y: 0, z: 0 };
-  private wanderWp: BotVec = { x: 0, y: 0, z: 0 };
-  private wanderT = 0;
   private beltT = 4 + Math.random() * 4; // stagger first throws across the squad
   private progressPos: BotVec = { x: 0, y: 0, z: 0 };
   private progressT = 0;
@@ -157,6 +151,21 @@ export class BotBrain {
   private stuckStreak = 0;
   private escapeJetT = 0;
   private readonly steerer = new BotSteer();
+  // Idle-goal ladder lives in botGoals.ts — goalS is the state bag it
+  // reads/writes so the brain's goal/wander/revenge fields stay private.
+  private readonly goalS: import('./botGoals.ts').GoalState = {
+    goal: { x: 0, y: 0, z: 0 },
+    revengeT: 0,
+    revengeFrom: { x: 0, y: 0, z: 0 },
+    wanderT: 0,
+    wanderWp: { x: 0, y: 0, z: 0 },
+  };
+  private readonly goals = new BotGoals(
+    () => this.goalS,
+    () => this.wanderlust,
+    () => this.steerer.headingVec(),
+    (p) => this.nearDeath(p),
+  );
   // Death memory — where the host reported this body dying. Souring
   // goals near a death spot is how map denial emerges: nobody scripts
   // "that corner is dangerous", the squad just stops wandering back.
@@ -211,8 +220,8 @@ export class BotBrain {
   takeHit(from: BotVec): void {
     this.flinchT = FLINCH_S;
     this.flinchFrom = { ...from };
-    this.revengeT = 2.5;
-    this.revengeFrom = { ...from };
+    this.goalS.revengeT = 2.5;
+    this.goalS.revengeFrom = { ...from };
   }
 
   think(dt: number, ctx: BrainCtx): BrainOut {
@@ -235,14 +244,14 @@ export class BotBrain {
     this.thinkT -= dt;
     if (this.thinkT <= 0) {
       this.thinkT = hero ? THINK_S * 0.45 : THINK_S;
-      pickHunt(this.h, ctx, pos, now, { hero, fearing }, (c, p) => this.pickGoal(c, p));
+      pickHunt(this.h, ctx, pos, now, { hero, fearing }, (c, p) => this.goals.pick(c, p));
     }
-    this.wanderT -= dt;
+    this.goalS.wanderT -= dt;
     // detourT decays here, with the other timers — decrementing it inside
     // the dest block below would let the setting call's dt eat the window.
     this.detourT -= dt;
     this.escapeJetT -= dt;
-    this.revengeT -= dt;
+    this.goalS.revengeT -= dt;
 
     // --- choose the step destination ---
     let dest = this.pickDest(dt, ctx, pos, fearing, hero);
@@ -283,7 +292,7 @@ export class BotBrain {
       const l = Math.hypot(fx, fz) || 1;
       return { x: pos.x + (fx / l) * FLINCH_DIST, y: pos.y, z: pos.z + (fz / l) * FLINCH_DIST };
     }
-    if (!this.h.hunt) return this.goal;
+    if (!this.h.hunt) return this.goalS.goal;
     const t = this.h.hunt;
     const d = dist3(pos, t.pos);
     if (fearing) return retreatDest(ctx, pos, t);
@@ -310,7 +319,7 @@ export class BotBrain {
     if (distSq(pos, this.progressPos) < 2.25) {
       this.stuckStreak++;
       if (this.detourT <= 0) {
-        const gx = this.goal.x - pos.x, gz = this.goal.z - pos.z;
+        const gx = this.goalS.goal.x - pos.x, gz = this.goalS.goal.z - pos.z;
         const gl = Math.hypot(gx, gz) || 1;
         const side = Math.random() < 0.5 ? -1 : 1;
         const dx = (-gz / gl) * side * 14, dz = (gx / gl) * side * 14;
@@ -376,87 +385,6 @@ export class BotBrain {
       y: pos.y,
       z: pos.z + (tx / tl) * side * dodgeStep,
     };
-  }
-
-  /** Idle-goal selection, in priority order: objective > pickup >
-   *  heard fight > wander. Runs on the slow think cadence. */
-  private pickGoal(ctx: BrainCtx, pos: BotVec): void {
-    if (this.revengeT > 0) {
-      // Hit from somewhere unseen: push toward the shooter rather than
-      // continue a patrol — the flinch already spent the recoil.
-      this.goal = { ...this.revengeFrom };
-      return;
-    }
-    if ((ctx.healthFrac ?? 1) < 0.15 && ctx.others && ctx.others.length > 0) {
-      const rally = this.rallyGoal(ctx, pos);
-      if (rally) this.goal = rally;
-      return;
-    }
-    if (ctx.objective) { this.goal = { ...ctx.objective }; return; }
-    if (ctx.pickup) { this.goal = { ...ctx.pickup }; return; }
-    if (ctx.sounds && ctx.sounds.length > 0) {
-      const heard = this.heardGoal(ctx, pos);
-      if (heard) this.goal = heard;
-      return;
-    }
-    if (this.wanderT <= 0 || distSq(pos, this.wanderWp) < 9) {
-      this.wanderT = (3 + Math.random() * 4) / this.wanderlust;
-      const best = this.rollWander(ctx, pos);
-      if (best) {
-        this.wanderWp = best;
-        this.goal = { ...this.wanderWp };
-      }
-    }
-  }
-
-  /** Roll a few candidate waypoints; downhill lines win — picking the
-   *  low ground is what makes wander read as skiing runs instead of a
-   *  jog across flats. Death spots are skipped outright. */
-  private rollWander(ctx: BrainCtx, pos: BotVec): BotVec | null {
-    const g0 = ctx.groundY(pos.x, pos.z);
-    let best: BotVec | null = null;
-    let bestDrop = -Infinity;
-    for (let tries = 0; tries < 3; tries++) {
-      // Committed lines: a skier picks a direction and holds it — the
-      // roll is a forward cone off the current heading with real run
-      // length, not a fresh random bearing that reverses mid-carve.
-      const a = Math.atan2(this.steerer.headingVec().z, this.steerer.headingVec().x) + (Math.random() - 0.5) * 2.4;
-      const r = (25 + Math.random() * 55) * this.wanderlust;
-      const wp = { x: pos.x + Math.cos(a) * r, z: pos.z + Math.sin(a) * r };
-      if (this.nearDeath(wp)) continue;
-      const drop = g0 - ctx.groundY(wp.x, wp.z);
-      if (drop > bestDrop) {
-        bestDrop = drop;
-        best = { x: wp.x, y: ctx.groundY(wp.x, wp.z) + BOT_EYE, z: wp.z };
-      }
-    }
-    return best;
-  }
-
-  /** Hurt with nobody shooting back at: fold toward the nearest body.
-   *  Safety-in-numbers emerges — nobody scripts a retreat. */
-  private rallyGoal(ctx: BrainCtx, pos: BotVec): BotVec | null {
-    if ((ctx.healthFrac ?? 1) >= 0.15 || !ctx.others || ctx.others.length === 0) return null;
-    let ally: BotVec | null = null;
-    let ad = Infinity;
-    for (const o of ctx.others) {
-      const d = distSq(pos, o);
-      if (d < ad && d > 4) { ad = d; ally = o; }
-    }
-    return ally ? { ...ally } : null;
-  }
-
-  /** Heard a fight: investigate the nearest noise. Curiosity is a
-   *  personality roll so a squad doesn't stampede as one. */
-  private heardGoal(ctx: BrainCtx, pos: BotVec): BotVec | null {
-    if (!ctx.sounds || ctx.sounds.length === 0) return null;
-    let loudest: BotVec | null = null;
-    let ld = Infinity;
-    for (const s of ctx.sounds) {
-      const d = distSq(pos, s);
-      if (d < ld) { ld = d; loudest = s; }
-    }
-    return loudest && Math.random() < this.wanderlust * 0.5 ? { ...loudest } : null;
   }
 
   /** Toggle-skill intent — the STATUS bits a legal client claims. Mend

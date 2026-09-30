@@ -1,3 +1,4 @@
+2026-09-26 - Extract idle-goal ladder (revenge/rally/objective/pickup/heard/wander) from shared/botBrain into botGoals.ts
 2026-09-26 - Lint sweep: drop dead imports post-loopPerf split, useless spread fallback, extract fuelTick from GameBot.locomote
 2026-09-26 - Extract sphere-vs-structure collision from shared/ballSim.ts into ballCollide.ts
 2026-09-26 - Extract spawn-point selection from PlayerManager into spawnPicker.ts
