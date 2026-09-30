@@ -17,12 +17,14 @@
  *       --net best|rtc|ws — best probes /rtcs (WebRTC datachannel via
  *         node-datachannel) then falls back to /ws like a real client.
  */
-import { MoveSim, GRAVITY, ENERGY, type MoveState } from '../../shared/movement.ts';
+import { MoveSim, ENERGY } from '../../shared/movement.ts';
 import { hmHeight, type Heightfield } from '../../shared/heightfield.ts';
-import { encodePosition, decodeTickFrame, decodeBallSegment, isWireFrame } from '../../shared/wire.ts';
+import { encodePosition, decodeTickFrame, decodeBallSegment } from '../../shared/wire.ts';
 import { PERK_ORDER } from '../../shared/perks.ts';
 import { CLASS_STATS, type ArmorClass } from '../../shared/botClasses.ts';
 import type { Vec3 } from '../../shared/protocol.ts';
+import { connectRtc, type Link } from './netLink.ts';
+import { resolveRoomTerrain, makeTerrainLoader, surfaceFor } from './netTerrain.ts';
 
 // ---- args ---------------------------------------------------------------
 const arg = (k: string, d: string): string => {
@@ -47,81 +49,11 @@ const FIRE = arg('fire', '1') !== '0';
 // first (unreliable lane kills head-of-line stutter), WS as the floor.
 // WebTransport has no client stack in Bun — skipped like a Firefox client.
 const NET = arg('net', 'best');
-const bunFile = (globalThis as { Bun?: { file(p: string): { arrayBuffer(): Promise<ArrayBuffer> } } }).Bun?.file;
-if (!bunFile) throw new Error('netBot requires Bun');
-// A named room plays on its map spec's terrain — simming the default
-// heightmap against e.g. swarm.bin ground leaves every report floating
-// tens of meters off the shadow and reads as a movement cheat.
-const specPath = new URL(`../../maps/${ROOM}.json`, import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
-let MAP_PATH = arg('map', '');
-if (!MAP_PATH) {
-  try {
-    const spec = JSON.parse(new TextDecoder().decode(await bunFile!(specPath).arrayBuffer())) as { terrain?: string };
-    MAP_PATH = spec.terrain
-      ? new URL(`../../maps/${spec.terrain}`, import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')
-      : new URL('../heightmap.bin', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
-  } catch {
-    MAP_PATH = new URL('../heightmap.bin', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
-  }
-}
-console.log(`[netBot] terrain: ${MAP_PATH}`);
 
 // ---- surface ------------------------------------------------------------
-const buf = new Uint8Array(await bunFile!(MAP_PATH).arrayBuffer());
-const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
-const W = dv.getUint32(0, true), H = dv.getUint32(4, true);
-const field: Heightfield = { size: W, data: buf.subarray(8), stride: 1 };
-if (W !== H) throw new Error('non-square heightmap');
-const DEFAULT_TERRAIN = MAP_PATH.split(/[\\/]/).pop()!;
-const terrainCache = new Map<string, Heightfield>([[DEFAULT_TERRAIN, field]]);
-// Spec-less rooms replay the server's own heightmap.bin — it lives in
-// server_bun/, not maps/, and the run's default may be a spec file, so
-// it needs its own cache entry, not a fallback-to-default.
-{
-  const serverDef = new URL('../heightmap.bin', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
-  if (!terrainCache.has('heightmap.bin')) {
-    const b = new Uint8Array(await bunFile!(serverDef).arrayBuffer());
-    const d = new DataView(b.buffer, b.byteOffset, b.byteLength);
-    const w = d.getUint32(0, true), h = d.getUint32(4, true);
-    if (w === h) terrainCache.set('heightmap.bin', { size: w, data: b.subarray(8), stride: 1 });
-  }
-}
-// Rooms can sit on different terrain files — each bot needs ITS room's
-// field. A shared field swapped on hop corrupts every sim still in the
-// old room (the post-hop vertical divergence).
-async function loadTerrain(name: string): Promise<Heightfield> {
-  const cached = terrainCache.get(name);
-  if (cached) return cached;
-  let f: Heightfield;
-  try {
-    const p = new URL(`../../maps/${name}`, import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
-  const b = new Uint8Array(await bunFile!(p).arrayBuffer());
-  const d = new DataView(b.buffer, b.byteOffset, b.byteLength);
-  const w = d.getUint32(0, true), h = d.getUint32(4, true);
-  if (w !== h) return field; // malformed file — stay on the default
-  f = { size: w, data: b.subarray(8), stride: 1 };
-  console.log(`[netBot] terrain loaded: ${name}`);
-  } catch {
-    f = field; // unknown file — default, matching the server's fallback
-  }
-  terrainCache.set(name, f);
-  return f;
-}
-function surfaceFor(field: Heightfield) {
-  const g = (x: number, z: number) => hmHeight(field, x, z);
-  return {
-    getHeight: g,
-    getNormal(x: number, z: number, out: { x: number; y: number; z: number }) {
-      const e = 0.5;
-      out.x = (g(x - e, z) - g(x + e, z)) / (2 * e);
-      out.y = 1;
-      out.z = (g(x, z - e) - g(x, z + e)) / (2 * e);
-      const l = Math.hypot(out.x, out.y, out.z);
-      out.x /= l; out.y /= l; out.z /= l;
-      return out;
-    },
-  };
-}
+const { path: MAP_PATH, field } = await resolveRoomTerrain(ROOM, arg('map', ''));
+console.log(`[netBot] terrain: ${MAP_PATH}`);
+const loadTerrain = makeTerrainLoader(field);
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
 const PERKS = PERK_ORDER.filter(p => p !== 'none');
 const CLASSES: ArmorClass[] = ['light', 'medium', 'heavy'];
@@ -133,103 +65,6 @@ const stats = { sent: 0, recv: 0, corrections: 0, shots: 0, rejected: 0, errors:
 // Warp detector: consecutive updates for an entity should move it about
 // speed·dt. A jump far past that is a visible teleport — server truth uses
 // the segment's own sim-time `t`, so late delivery doesn't false-positive.
-
-
-// Minimal socket shape — WebSocket and the RTC adapter both satisfy it.
-interface Link {
-  send(data: string | Uint8Array): void;
-  close(): void;
-  open(): boolean;
-}
-
-// node-datachannel is the same native lib the server answers offers with —
-// lazy-loaded so --net ws runs don't need it at all.
-type NdcPc = {
-  createDataChannel(label: string): NdcDc;
-  setRemoteDescription(sdp: string, type: string): void;
-  setLocalDescription(type?: string): void;
-  localDescription(): { sdp: string; type: string } | undefined;
-  onGatheringStateChange(cb: (s: string) => void): void;
-  gatheringState(): string;
-  close(): void;
-};
-type NdcDc = {
-  sendMessage(m: string): void; sendMessageBinary(m: Uint8Array): void;
-  onMessage(cb: (m: string | Uint8Array) => void): void;
-  onOpen(cb: () => void): void; onClosed(cb: () => void): void;
-  isOpen(): boolean; close(): void;
-};
-
-/** Best-effort RTC connect: offer over the /rtcs signal socket, data over
- *  'ctrl' like every send on the server adapter. Returns null on any
- *  failure so the caller falls to WS. */
-async function connectRtc(onMsg: (d: string | ArrayBuffer) => void, onClose: () => void): Promise<Link | null> {
-  let nd: { PeerConnection: new (n: string, cfg: { iceServers: { hostname: string; port: number }[] }) => NdcPc };
-  try { nd = (await import('node-datachannel')) as never; } catch { return null; }
-  const mod = (nd as unknown as { default?: unknown }).default ?? nd;
-  const Nd = mod as { PeerConnection: new (n: string, cfg: { iceServers: { hostname: string; port: number }[] }) => NdcPc };
-  try {
-    const httpBase = URL_.replace(/^wss?:/, URL_.startsWith('wss') ? 'https:' : 'http:').replace(/\/ws$/, '');
-    const iceRaw = await fetch(`${httpBase}/rtcconfig`).then((r) => r.json()).catch(() => ({})) as { iceServers?: unknown[] };
-    const iceServers: { hostname: string; port: number }[] = [];
-    for (const e of Array.isArray(iceRaw?.iceServers) ? iceRaw.iceServers : []) {
-      const urls = typeof e === 'string' ? [e] : (Array.isArray((e as { urls?: unknown }).urls) ? (e as { urls: string[] }).urls : [String((e as { urls?: unknown }).urls ?? '')]);
-      for (const u of urls) {
-        const m = typeof u === 'string' && u.match(/^(stun|turn)s?:\/\/([^:/]+):?(\d+)?/);
-        if (m) iceServers.push({ hostname: m[2]!, port: m[3] ? +m[3] : 3478 });
-      }
-    }
-    const pc = new Nd.PeerConnection('nb', { iceServers });
-    const game = pc.createDataChannel('game');
-    const ctrl = pc.createDataChannel('ctrl');
-    const route = (d: string | Uint8Array) => onMsg(typeof d === 'string' ? d : d.buffer.slice(d.byteOffset, d.byteOffset + d.byteLength) as ArrayBuffer);
-    game.onMessage(route); ctrl.onMessage(route);
-    const signal = new WebSocket(URL_.replace(/\/ws$/, '/rtcs'));
-    pc.setLocalDescription();
-    if (pc.gatheringState() !== 'complete') {
-      await new Promise<void>((res) => {
-        const t = setTimeout(res, 2500);
-        pc.onGatheringStateChange((s) => { if (s === 'complete') { clearTimeout(t); res(); } });
-      });
-    }
-    const sdp = pc.localDescription()?.sdp;
-    if (!sdp) { pc.close(); return null; }
-    const answer = await new Promise<{ sdp?: string }>((res, rej) => {
-      const t = setTimeout(() => rej(new Error('rtc signal timeout')), 10000);
-      signal.onmessage = (ev) => {
-        try {
-          const m = JSON.parse(String(ev.data));
-          if (m.type === 'answer') { clearTimeout(t); res(m); }
-        } catch { /* not ours */ }
-      };
-      signal.onerror = () => rej(new Error('rtc signal error'));
-      const offer = () => signal.send(JSON.stringify({ type: 'offer', sdp }));
-      if (signal.readyState === WebSocket.OPEN) offer();
-      else signal.onopen = offer;
-    }).catch(() => null);
-    if (!answer?.sdp) { try { signal.close(); pc.close(); } catch { /* gone */ } return null; }
-    pc.setRemoteDescription(answer.sdp, 'answer');
-    try { signal.close(); } catch { /* gone */ }
-    // Wait for ctrl (reliable lane the server actually uses) to open.
-    const opened = await new Promise<boolean>((res) => {
-      const t = setTimeout(() => res(false), 8000);
-      const check = () => { if (ctrl.isOpen() || game.isOpen()) { clearTimeout(t); res(true); } };
-      ctrl.onOpen(check); game.onOpen(check);
-      check();
-    });
-    if (!opened) { try { pc.close(); } catch { /* gone */ } return null; }
-    const lane = () => (ctrl.isOpen() ? ctrl : game);
-    return {
-      send(data: string | Uint8Array) {
-        const dc = lane();
-        if (typeof data === 'string') dc.sendMessage(data);
-        else dc.sendMessageBinary(data);
-      },
-      close() { try { game.close(); ctrl.close(); pc.close(); } catch { /* gone */ } },
-      open() { return ctrl.isOpen() || game.isOpen(); },
-    };
-  } catch { return null; }
-}
 
 class WireBot {
   id: string;
@@ -328,7 +163,7 @@ class WireBot {
 
   private async connect(): Promise<void> {
     if (NET !== 'ws') {
-      this.link = await connectRtc((d) => this.onMessage(d), () => { stats.closes++; console.log(`[netBot] ${this.id} rtc closed`); this.stop(); });
+      this.link = await connectRtc(URL_, (d) => this.onMessage(d), () => { stats.closes++; console.log(`[netBot] ${this.id} rtc closed`); this.stop(); });
       if (this.link) { this.tier = 'rtc'; stats.rtc++; }
     }
     if (!this.link) {
