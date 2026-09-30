@@ -10,12 +10,21 @@ import {
 
 // Cloud shader for soft volumetric appearance
 const cloudVertexShader = /* glsl */`
+  attribute float windOffset;   // per-instance phase so clusters don't move in lockstep
+  uniform vec3 windVector;      // windDirection * windSpeed * time — one uniform, GPU moves every puff
   varying vec3 vNormal;
   varying vec3 vViewPosition;
-  
+
   void main() {
+    // Baked instance transform, then wind drift in shader — the CPU
+    // touches nothing per frame.
+    vec4 wp = instanceMatrix * vec4(position, 1.0);
+    wp.xyz += windVector * (1.0 + windOffset);
+    const float SPREAD = 3000.0;
+    wp.x = mod(wp.x + SPREAD, SPREAD * 2.0) - SPREAD;
+    wp.z = mod(wp.z + SPREAD, SPREAD * 2.0) - SPREAD;
     vNormal = normalize(normalMatrix * normal);
-    vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+    vec4 mvPosition = viewMatrix * wp;
     vViewPosition = -mvPosition.xyz;
     gl_Position = projectionMatrix * mvPosition;
   }
@@ -65,7 +74,6 @@ export class VolumetricClouds {
   private sunDirection: THREE.Vector3;
   private dummy: THREE.Object3D;
   private count: number;
-  private cloudData: Array<{ center: THREE.Vector3; offset: THREE.Vector3; windOffset: number }> = [];
   
   constructor(scene: THREE.Scene, params: CloudParams = {}) {
     this.count = params.count ?? CLOUD_COUNT; // Fewer but larger cloud clusters
@@ -84,6 +92,7 @@ export class VolumetricClouds {
         cloudColor: { value: params.cloudColor ?? new THREE.Color(0xffffff) },
         sunDirection: { value: this.sunDirection },
         density: { value: params.cloudDensity ?? CLOUD_DENSITY },
+        windVector: { value: new THREE.Vector3() },
       },
       transparent: true,
       depthWrite: false,
@@ -91,16 +100,16 @@ export class VolumetricClouds {
       blending: THREE.NormalBlending,
     });
 
-    this.mesh = new THREE.InstancedMesh(geometry, this.material, this.count * 10); // 10 spheres per cloud
-    this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    this.mesh = new THREE.InstancedMesh(geometry, this.material, this.count * CLOUD_SPHERES_PER_CLOUD);
+    const windOffsets = new Float32Array(this.mesh.count);
     
     // Generate cloud clusters
-    this.generateCloudClusters(params);
+    this.generateCloudClusters(params, windOffsets);
     
     scene.add(this.mesh);
   }
   
-  private generateCloudClusters(params: CloudParams): void {
+  private generateCloudClusters(params: CloudParams, windOffsets: Float32Array): void {
     const cloudCount = this.count;
     const spheresPerCloud = CLOUD_SPHERES_PER_CLOUD;
     const minHeight = params.minHeight ?? CLOUD_DEFAULT_MIN_HEIGHT;
@@ -144,17 +153,12 @@ export class VolumetricClouds {
         
         this.mesh.setMatrixAt(instanceIndex, this.dummy.matrix);
         
-        // Store cloud data
-        this.cloudData.push({
-          center: cloudCenter.clone(),
-          offset: offset.clone(),
-          windOffset: windOffset,
-        });
-        
+        windOffsets[instanceIndex] = windOffset;
         instanceIndex++;
       }
     }
     
+    this.mesh.geometry.setAttribute('windOffset', new THREE.InstancedBufferAttribute(windOffsets, 1));
     this.mesh.instanceMatrix.needsUpdate = true;
   }
   
@@ -169,53 +173,14 @@ export class VolumetricClouds {
   
   update(dt: number): void {
     this.time += dt;
-    
-    // Animate clouds with wind
-    const spread = 3000;
-    
-    for (let i = 0; i < this.mesh.count; i++) {
-      const data = this.cloudData[i];
-      
-      if (data) {
-        // Calculate wind movement
-        const windMove = this.windDirection.clone().multiplyScalar(
-          this.time * this.windSpeed + data.windOffset
-        );
-        
-        // Apply wind to cloud center
-        const newCenter = data.center.clone().add(windMove);
-        
-        // Wrap around
-        newCenter.x = ((newCenter.x + spread) % (spread * 2)) - spread;
-        newCenter.z = ((newCenter.z + spread) % (spread * 2)) - spread;
-        
-        // Update stored center
-        data.center.copy(newCenter);
-        
-        // Calculate new position with offset
-        const newPosition = newCenter.clone().add(data.offset);
-        
-        // Get current matrix to preserve rotation and scale
-        const matrix = new THREE.Matrix4();
-        this.mesh.getMatrixAt(i, matrix);
-        
-        const scale = new THREE.Vector3();
-        const quaternion = new THREE.Quaternion();
-        matrix.decompose(new THREE.Vector3(), quaternion, scale);
-        
-        // Recompose with new position
-        matrix.compose(newPosition, quaternion, scale);
-        this.mesh.setMatrixAt(i, matrix);
-      }
-    }
-    
-    this.mesh.instanceMatrix.needsUpdate = true;
+    // Wind lives in the vertex shader — one uniform upload per frame,
+    // zero per-instance matrix churn or allocation.
+    this.material.uniforms.windVector!.value.copy(this.windDirection).multiplyScalar(this.time * this.windSpeed);
   }
   
   dispose(): void {
     this.mesh.geometry.dispose();
     this.material.dispose();
     this.mesh.dispose();
-    this.cloudData = [];
   }
 }

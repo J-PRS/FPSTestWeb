@@ -1,3 +1,4 @@
+2026-09-28 - Volumetric clouds: wind drift moved to the vertex shader (per-instance windOffset attribute + windVector uniform) — kills per-frame matrix decompose/compose churn and instanceMatrix re-uploads
 2026-09-28 - Dynamic quality: two-axis scaler — GPU ladder steps shadows + pixel modes 2/1/3/4, CPU-bound frames (JS phases dominate) cut ambient systems instead of res; explicit ?px=/settings pins still win
 2026-09-28 - Divergence warns demoted to info in permissive mode: without sim authority nothing converges the shadow, so cresty-terrain drift is expected steady state, not a warn
 2026-09-28 - Dynamic quality scaler: fps-driven quality ladder steps down under sustained low fps and back up under headroom (shadows off -> low-res modes); user-pinned ?px=/settings still win
