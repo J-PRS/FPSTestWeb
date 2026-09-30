@@ -1,3 +1,4 @@
+2026-09-26 - Split DemoRecorder.ts: clip-window collectors -> demoClip.ts (593->447)
 2026-09-26 - Split hud.ts: scoreboard overlay -> hud/scoreboard.ts (603->549)
 2026-09-26 - Split botArsenal.ts: creature/beam fire paths -> botBeam.ts (288->205)
 2026-09-26 - Split shared/botHunt.ts: LOS memoized terrain march -> botLos.ts (286->231)
