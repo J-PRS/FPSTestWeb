@@ -10,6 +10,7 @@ import type { Vec3 } from './types.ts';
 import type { Room } from './Room.ts';
 import { logger } from './logger.ts';
 import { weaponStats } from './weaponStats.ts';
+import { perkMods } from '../../shared/perks.ts';
 import type { PickupKind } from '../../shared/pickups.ts';
 
 const PICKUP_R = 2.2;   // planar grab radius, same feel as flag pickup
@@ -81,7 +82,8 @@ export class RoomPickups {
         const dy = Math.abs(pl.position.y - p.pos.y);
         if (dy > 6) continue;
         const dx = pl.position.x - p.pos.x, dz = pl.position.z - p.pos.z;
-        if (dx * dx + dz * dz > PICKUP_R * PICKUP_R) continue;
+        const reach = PICKUP_R * perkMods(pl.perk).pickupRadius;
+        if (dx * dx + dz * dz > reach * reach) continue;
         this.remove(p.id, pl.id);
         weaponStats.recordPickup(this.room.mode, p.kind, 'banked');
         // Score touches are the money line — log them so a soak can prove

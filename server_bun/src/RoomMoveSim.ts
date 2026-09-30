@@ -67,6 +67,8 @@ interface Shadow {
   jetDrain: number;   // perk multipliers — declared at join
   jetRegen: number;
   energyRegen: number;
+  /** Pool-size perk multiplier (airtank = 1.5). */
+  energyMax: number;
   /** Raw claimed jet bit — the sim sees it gated by modeled energy. */
   jetWanted: boolean;
   /** Sum of active per-second skill drains from claimed status bits. */
@@ -205,7 +207,7 @@ export class RoomMoveSim {
       // report is the authoritative landing spot (client picks its own
       // spawn point); comparing would flag a phantom join divergence.
       seeded: false,
-      energy: ENERGY.max,
+      energy: ENERGY.max * mods.energyMax, energyMax: mods.energyMax,
       jetDrain: mods.jetDrain, jetRegen: mods.jetRegen, energyRegen: mods.energyRegen,
       jetWanted: false, skillDrainPerSec: 0, skillSuppressRegen: false, lastStatus: 0,
       lastInputSeq: 0, acc: 0, seqStates: new Map(), simTicks: 0, resyncSeq: -1, resyncAt: 0,
@@ -258,7 +260,7 @@ export class RoomMoveSim {
   /** Energy refunds the world grants — gem pickup half-tank refill. */
   grantEnergy(playerId: string, amount: number): void {
     const sh = this.shadows.get(playerId);
-    if (sh) sh.energy = Math.min(ENERGY.max, sh.energy + amount);
+    if (sh) sh.energy = Math.min(ENERGY.max * sh.energyMax, sh.energy + amount);
   }
 
   /** Energy burns outside the input stream — shield damage soak. */
@@ -424,7 +426,7 @@ export class RoomMoveSim {
       if (jetting) sh.energy -= ENERGY.jetDrain * sh.jetDrain * dt;
       if (sh.skillDrainPerSec > 0) sh.energy -= sh.skillDrainPerSec * dt;
       if (!jetting && !sh.skillSuppressRegen) {
-        sh.energy = Math.min(ENERGY.max, sh.energy + ENERGY.jetCharge * sh.jetRegen * sh.energyRegen * dt);
+        sh.energy = Math.min(ENERGY.max * sh.energyMax, sh.energy + ENERGY.jetCharge * sh.jetRegen * sh.energyRegen * dt);
       }
       sh.energy = Math.max(0, sh.energy);
       sh.sim.setInput({ jetHeld: jetting });

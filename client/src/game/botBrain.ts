@@ -229,7 +229,8 @@ export class GameBot extends RemotePlayer {
    *  what the server shadow applies to out.status. */
   /** Owner callbacks for bot-deployed pads — a station heals its planter. */
   heal(n: number): void { this.botHp = Math.min(this.botMaxHp, this.botHp + n); }
-  addEnergy(n: number): void { this.energy = Math.min(ENERGY.max, this.energy + n); }
+  get energyCap(): number { return ENERGY.max * this.mods.energyMax; }
+  addEnergy(n: number): void { this.energy = Math.min(this.energyCap, this.energy + n); }
 
   private applyStatus(claim: number, dt: number): void {
     const want = claim & (STATUS.MEND | STATUS.SHIELD | STATUS.CLOAK);
@@ -297,10 +298,10 @@ export class GameBot extends RemotePlayer {
     });
     this.movement.update(dt);
     if (jet && this.yeetT <= 0) this.energy = Math.max(0, this.energy - ENERGY.jetDrain * this.mods.jetDrain * dt);
-    else if (this.moveState.onGround && this.energy < ENERGY.max) {
+    else if (this.moveState.onGround && this.energy < this.energyCap) {
       // One tank feeds jets AND skills — featherjets' fuel regen and
       // overcharge's pool regen both land here.
-      this.energy = Math.min(ENERGY.max, this.energy + ENERGY.jetCharge * this.mods.jetRegen * this.mods.energyRegen * dt);
+      this.energy = Math.min(this.energyCap, this.energy + ENERGY.jetCharge * this.mods.jetRegen * this.mods.energyRegen * dt);
     }
 
     this.wireSki = !!move?.ski;
@@ -326,7 +327,7 @@ export class GameBot extends RemotePlayer {
 
   override respawn(position: { x: number; y: number; z: number }): void {
     super.respawn(position);
-    this.energy = ENERGY.max;
+    this.energy = this.energyCap;
     this.moveState.onGround = true;
     this.movement.setState(this.moveState);
   }

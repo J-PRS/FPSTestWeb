@@ -94,7 +94,7 @@ export class Nugget {
   }
 
   /** playerPos is the player's eye/camera position (player.pos). */
-  update(dt: number, terrain: Terrain, playerPos: THREE.Vector3): void {
+  update(dt: number, terrain: Terrain, playerPos: THREE.Vector3, pickupScale = 1): void {
     this.age += dt;
     if (this.age > LIFETIME) this.collected = true; // fade out if ignored
 
@@ -112,7 +112,7 @@ export class Nugget {
     const dist = this.pos.distanceTo(_target);
 
     if (dist < MAGNET_RADIUS && this.scatterTimer <= 0) {
-      this.magnetStep(dt, dist);
+      this.magnetStep(dt, dist, pickupScale);
     } else if (!this.settled) {
       this.ballisticStep(dt, terrain);
     }
@@ -131,13 +131,13 @@ export class Nugget {
     if (this.collectFade >= 1 && this.trail.length === 0) this.dead = true;
   }
 
-  private magnetStep(dt: number, dist: number): void {
+  private magnetStep(dt: number, dist: number, pickupScale = 1): void {
     // Accelerate toward player, speed ramps up as it closes in
     _dir.copy(_target).sub(this.pos).normalize();
     const speed = Math.min(MAGNET_MAX_SPEED, MAGNET_ACCEL * this.age * 0.5 + 15);
     this.vel.lerp(_dir.multiplyScalar(speed), Math.min(1, dt * 10));
     this.settled = false;
-    if (dist < PICKUP_RADIUS) this.collected = true;
+    if (dist < PICKUP_RADIUS * pickupScale) this.collected = true;
   }
 
   private ballisticStep(dt: number, terrain: Terrain): void {

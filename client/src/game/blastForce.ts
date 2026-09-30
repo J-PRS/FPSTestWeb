@@ -152,7 +152,7 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
       // Self-AOE damage: a tiny fraction of what an enemy would take at the
       // same distance — rocket jumps should be viable, not lethal. Faint
       // vignette only, no hurt sound (JP: the grunt is too much for this).
-      const selfDmg = aoeDamageOf(aoeDamage, dpx, radius) * SELF_AOE_DAMAGE_SCALE;
+      const selfDmg = aoeDamageOf(aoeDamage, dpx, radius) * SELF_AOE_DAMAGE_SCALE * player.mods.selfDamage;
       if (selfDmg >= 1 && !player.isDead) {
         // Shield soaks self-splash too — the server holds health steady so
         // the only thing to report is the energy burn + its flash.

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 import type { Terrain } from '../world/terrain.js';
-import { TEAM_COLORS, TEAM_LABEL, FLAG_PICKUP_R, FLAG_HOME_R, FLAG_RESET_S, bank, type TeamId, type TeamScores } from '../../../shared/teams.js';
+import { TEAM_COLORS, TEAM_LABEL, FLAG_HOME_R, FLAG_RESET_S, bank, type TeamId, type TeamScores } from '../../../shared/teams.js';
 import type { GameBot } from './botBrain.js';
 import { roleObjective, ROLE_PRIORITY } from '../../../shared/flagGoals.js';
 import * as sfx from '../core/sfx.js';
@@ -17,6 +17,8 @@ export interface FlagCtx {
   /** id → pos for 'local' and bot playerIds; null when dead. */
   carrierPos(id: string): THREE.Vector3 | null;
   teamOf(id: string): string | undefined;
+  /** Per-touch grab radius — the reach perk widens it (flag touch too). */
+  pickupRadiusOf(id: string): number;
   /** Living toucher candidates: [id, pos] pairs incl. the local player. */
   touchers(): [string, THREE.Vector3][];
   bots: GameBot[];
@@ -199,7 +201,7 @@ export class CtfFlags {
     const ctx = this.ctx;
     for (const [id, tp] of ctx.touchers()) {
       const tTeam = ctx.teamOf(id);
-      if (tp.distanceTo(f.pos) > FLAG_PICKUP_R) continue;
+      if (tp.distanceTo(f.pos) > this.ctx.pickupRadiusOf(id)) continue;
       if (f.state === 'dropped' && tTeam === team) {
         f.state = 'home'; f.pos.copy(f.home); // returned on touch
         return;

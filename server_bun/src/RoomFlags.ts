@@ -14,6 +14,7 @@ import type { Room } from './Room.ts';
 import { FLAG_PICKUP_R, FLAG_HOME_R, FLAG_RESET_S, TEAMS, type TeamId } from '../../shared/teams.ts';
 import { logger } from './logger.ts';
 import { weaponStats } from './weaponStats.ts';
+import { perkMods } from '../../shared/perks.ts';
 
 export type FlagState = 'home' | 'carried' | 'dropped';
 
@@ -179,7 +180,7 @@ export class RoomFlags {
       const dy = Math.abs(p.position.y - f.pos.y);
       if (dy > 6) continue;
       const d = Math.sqrt(dx * dx + dz * dz);
-      if (d <= FLAG_PICKUP_R && (!best || d < best.d)) best = { id: p.id, team: p.team, d };
+      if (d <= FLAG_PICKUP_R * perkMods(p.perk).pickupRadius && (!best || d < best.d)) best = { id: p.id, team: p.team, d };
     }
     return best;
   }

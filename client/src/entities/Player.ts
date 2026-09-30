@@ -72,6 +72,8 @@ export class Player {
    *  mid-life would desync the shadow and hand out free heals. */
   appliedClass: ArmorClass = 'medium';
   get mods() { return perkMods(this.appliedPerk); }
+  /** Pool cap after the perk multiplier — cloak/shield/mend share it. */
+  get energyCap(): number { return MAX_ENERGY * this.mods.energyMax; }
   get maxHealth(): number { return MAX_HEALTH + this.mods.maxHealth + CLASS_STATS[this.appliedClass].maxHealth; }
   setPerk(p: PerkId): void { this.perk = p; settings.set('fps-perk', p); }
   /** Tier-restricted ordnance — the heavy's exclusive arsenal, same as
@@ -253,6 +255,7 @@ export class Player {
   public movement: MovementController; // Public for client-side prediction reconciliation
   private model: PlayerModel | null = null;
   private jumpAnimTimer = 0.0;
+  private shootAnimTimer = 0.0;
   private wasOnGround = false;
   private visuals: PlayerVisuals; // camera/shadow/gizmo/observer — see PlayerVisuals.ts
 
@@ -574,11 +577,12 @@ export class Player {
     this.fireWeapons();
     this.emitMoveEvents(isJetting, input.skiHeld, input.jumpHeld, dt);
     this.visuals.updateShadowBlob(this.terrain, this.pos);
-    this.jumpAnimTimer = this.visuals.updateModelAnim(this.model, this.pos, this.yaw, this.pitch, this.jumpAnimTimer, this.getSpeed(), dt, this.onGround, isJetting, this.vel);
+    this.jumpAnimTimer = this.visuals.updateModelAnim(this.model, this.pos, this.yaw, this.pitch, this.jumpAnimTimer, this.getSpeed(), dt, this.onGround, isJetting, this.vel, input.skiHeld, this.shootAnimTimer);
   }
 
   private tickTimers(dt: number): void {
     this.fireTimer = Math.max(0, this.fireTimer - dt);
+    this.shootAnimTimer = Math.max(0, this.shootAnimTimer - dt);
     this.beltTimer = Math.max(0, this.beltTimer - dt);
     this.throwLockT = Math.max(0, this.throwLockT - dt);
     this.secondaryDrawT = Math.max(0, this.secondaryDrawT - dt);
@@ -646,7 +650,7 @@ export class Player {
       this.onGround = false;
     }
     if (!isJetting && !this.cloaked && !this.shielded && !this.mending) {
-      this.energy = Math.min(MAX_ENERGY, this.energy + JET_CHARGE * this.mods.jetRegen * this.mods.energyRegen * dt);
+      this.energy = Math.min(this.energyCap, this.energy + JET_CHARGE * this.mods.jetRegen * this.mods.energyRegen * dt);
     }
 
     // Regenerator perk — MP regenerates in the server tick; offline we
@@ -727,6 +731,7 @@ export class Player {
     if (!this.input.mouseHeld) this.input.needsRelease = false;
     if (wantFire && this.fireTimer <= 0) {
       this.fireTimer = def.rate;
+      this.shootAnimTimer = 0.3;
       this.onWeaponFire?.(def, { origin: this.pos.clone(), dir: this.getAimDir(), playerVel: this.vel.clone() });
     }
     this.input.firePending = false;
@@ -735,6 +740,7 @@ export class Player {
     if (this.input.beltHeld && this.beltTimer <= 0) {
       this.beltTimer = DISC_RATE;
       this.throwLockT = THROW_TOTAL;
+      this.shootAnimTimer = 0.3; // lob raise — same snap as a shot
       this.onBelt?.({ origin: this.pos.clone(), dir: this.getAimDir(), playerVel: this.vel.clone() }, this.beltItem);
     }
   }
@@ -755,9 +761,11 @@ export class Player {
       this.onLand?.(Math.max(0, -this.prevVelY));
     }
 
-    // Trigger jump animation when leaving ground
+    // Trigger jump animation on real lift-off — not every bump crest,
+    // or micro-airtime at running speed keeps re-arming the tuck pose
+    // and the model "slides" while grounded.
     if (this.wasOnGround && !this.onGround) {
-      this.jumpAnimTimer = 0.8;
+      if (jumpHeld || this.vel.y > 3) this.jumpAnimTimer = 0.8;
       if (jumpHeld && this.onJump) {
         this.onJump(this.pos.clone());
       }
@@ -812,7 +820,7 @@ export class Player {
   /** Nugget pickup: half the tank back, no free-jet window — unlimited
    *  energy made the toggle skills (cloak/shield/mend) effectively free. */
   grantJetBoost(): void {
-    this.energy = Math.min(MAX_ENERGY, this.energy + MAX_ENERGY * 0.5);
+    this.energy = Math.min(this.energyCap, this.energy + this.energyCap * 0.5);
   }
 
   /** Nugget pickup: restore a chunk of health, capped at max. */

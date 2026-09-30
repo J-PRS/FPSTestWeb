@@ -32,6 +32,7 @@ import { logger } from './logger.ts';
 import type { ServerMessage } from '../../shared/protocol.ts';
 import { POWERUP, rollCreatureDrop, type PowerupKind } from '../../shared/pickups.ts';
 import { ENERGY } from '../../shared/movement.ts';
+import { perkMods } from '../../shared/perks.ts';
 import type { ServerWebSocket } from 'bun';
 import type { WebSocketData } from './types.ts';
 import { MatchClock, type MatchHost } from './roomMatch.ts';
@@ -220,7 +221,7 @@ export class Room {
           p.healCredit += 25;
           // Client refills half the energy tank on a gem — the shadow
           // must too or the next jet run diverges for honest reasons.
-          this.moveSim.grantEnergy(pid, ENERGY.max * 0.5);
+          this.moveSim.grantEnergy(pid, ENERGY.max * 0.5 * perkMods(p.perk).energyMax);
         }
         const team = p.team;
         if (team === 'alpha' || team === 'bravo') this.score(team);

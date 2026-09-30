@@ -25,7 +25,7 @@ export interface EntitiesDeps extends GameContext {
   /** Nugget Wars: extra collectors (bots) nuggets magnet toward, plus a
    *  callback so each pickup banks on the right team. Absent = solo mode,
    *  the player is the only collector. */
-  nuggetCollectors?: () => { id: string; pos: THREE.Vector3; alive: boolean }[];
+  nuggetCollectors?: () => { id: string; pos: THREE.Vector3; alive: boolean; pickupScale?: number }[];
   onNuggetCollect?: (collectorId: string) => void;
   /** Deployables: combat resolves after entities is built — lazy getter. */
   lazyCombat?: () => { hitTargetLocal(t: Targetable, dmg: number): boolean } | undefined;
@@ -240,15 +240,16 @@ export function createEntities(deps: EntitiesDeps) {
       const n = nuggets[i]!;
       let magnetPos = player.pos;
       let magnetId = 'local';
+      let magnetScale = player.mods.pickupRadius;
       if (collectors) {
         let bestD = Infinity;
         for (const c of collectors) {
           if (!c.alive) continue;
           const d = c.pos.distanceToSquared(n.pos);
-          if (d < bestD) { bestD = d; magnetPos = c.pos; magnetId = c.id; }
+          if (d < bestD) { bestD = d; magnetPos = c.pos; magnetId = c.id; magnetScale = c.pickupScale ?? 1; }
         }
       }
-      n.update(dt, terrain, magnetPos);
+      n.update(dt, terrain, magnetPos, magnetScale);
       if (n.collected && !n.collectNotified) {
         n.collectNotified = true;
         if (magnetId === 'local') {

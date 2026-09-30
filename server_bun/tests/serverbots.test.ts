@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'bun:test';
 import { Room } from '../src/Room.ts';
 import { resolveMapSpec } from '../../shared/mapSpec.ts';
+import { getWeaponStats } from '../../shared/weapons.ts';
 import type { Heightfield } from '../../shared/heightfield.ts';
 
 // A real field turns on the MoveSim path — bots then integrate through the
@@ -124,9 +125,9 @@ describe('ServerBots', () => {
     // Guard against a vacuous run — the bot must have fired at all.
     expect(msgs.some(m => m.type === 'projectileCreated' || m.type === 'playerShot')).toBe(true);
     for (const m of msgs.filter(mm => mm.type === 'projectileCreated')) {
-      // near-band Chaingun is hitscan and never reaches this broadcast —
-      // anything that spawned must be a real ballistic weapon.
-      expect([0, 1, 23]).toContain(m.weaponType!);
+      // Anything that spawned must be a real ballistic weapon — hitscan
+      // (speed 0, e.g. near-band Chaingun) never reaches this broadcast.
+      expect(getWeaponStats(m.weaponType!).speed).toBeGreaterThan(0);
     }
   });
 

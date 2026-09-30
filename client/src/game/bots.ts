@@ -10,7 +10,7 @@ import { GRAVITY } from '../../../shared/movement.js';
 import type { Nugget } from '../entities/Nugget.js';
 import type { Targetable } from '../entities/balls.js';
 import type { GameContext } from './context.js';
-import { TEAM_COLORS, TEAM_LABEL, MODES, bank, makeScores, type TeamId, type TeamScores, type ModeId } from '../../../shared/teams.js';
+import { TEAM_COLORS, TEAM_LABEL, MODES, bank, makeScores, FLAG_PICKUP_R, type TeamId, type TeamScores, type ModeId } from '../../../shared/teams.js';
 import { PlayerDebris } from '../effects/debris.js';
 import type { Terrain } from '../world/terrain.js';
 import { MELEE_RANGE, MELEE_DAMAGE } from '../core/config.js';
@@ -129,6 +129,7 @@ export class TeamBots {
         lazyScene: deps.lazyScene,
         carrierPos: (id) => this.carrierPos(id),
         teamOf: (id) => this.teamOf.get(id),
+        pickupRadiusOf: (id) => FLAG_PICKUP_R * (this.modsFor(id)?.pickupRadius ?? 1),
         touchers: () => this.touchers(),
         bots: this.bots,
         scores: this.scores,
@@ -832,11 +833,16 @@ export class TeamBots {
 
   /** Collectors nuggets should magnet toward — entities consults this each
    *  frame so bots sweep gems the same way the player does. */
-  collectors(): { id: string; pos: THREE.Vector3; alive: boolean }[] {
+  /** Per-id perk mods — 'local' reads the live player. */
+  private modsFor(id: string) {
+    return id === 'local' ? this.deps.lazyPlayer().mods : this.bots.find(b => b.playerId === id)?.perkMods;
+  }
+
+  collectors(): { id: string; pos: THREE.Vector3; alive: boolean; pickupScale: number }[] {
     _collectors.length = 0;
     const p = this.deps.lazyPlayer();
-    _collectors.push({ id: 'local', pos: p.pos, alive: !p.isDead });
-    for (const b of this.bots) _collectors.push({ id: b.playerId, pos: b.position, alive: !b.isDead });
+    _collectors.push({ id: 'local', pos: p.pos, alive: !p.isDead, pickupScale: p.mods.pickupRadius });
+    for (const b of this.bots) _collectors.push({ id: b.playerId, pos: b.position, alive: !b.isDead, pickupScale: b.perkMods.pickupRadius });
     return _collectors;
   }
 
@@ -889,7 +895,7 @@ export class TeamBots {
 
 const _touchers: [string, THREE.Vector3][] = [];
 const _enemies: { id: string; pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean }[] = [];
-const _collectors: { id: string; pos: THREE.Vector3; alive: boolean }[] = [];
+const _collectors: { id: string; pos: THREE.Vector3; alive: boolean; pickupScale: number }[] = [];
 const _wdPos = new THREE.Vector3();
 const _shotDir = new THREE.Vector3();
 const _shotMuzzle = new THREE.Vector3();
