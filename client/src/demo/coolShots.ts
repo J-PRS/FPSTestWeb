@@ -4,21 +4,14 @@
 // DemoManager owns mode/playback/UI; this owns everything clip-shaped.
 
 import { DemoRecorder } from './DemoRecorder.js';
-import { DemoSerializer } from './DemoSerializer.js';
 import type { DemoFile } from './types.js';
+import * as net from './coolShotsNet.js';
 import { ChildLogger } from '../core/Logger.js';
 import { feedShot } from '../ui/shotFeed.js';
 
 const logger = new ChildLogger('Demo');
 
 // Shape of a demo record in the server's GET /demos JSON response
-interface ServerDemoRecord {
-  filename: string;
-  projectileLifetime: number;
-  timestamp: number;
-  description: string;
-}
-
 export interface CoolShotEntry {
   id: string;
   filename?: string; // server-side filename
@@ -52,14 +45,14 @@ export interface CoolShotDeps {
 
 export class CoolShotManager {
   private pendingClips: PendingClip[] = [];
-  private coolShots: CoolShotEntry[] = [];
-  private serverUrl = '';
-  private uploadFailureCount = 0;
+  coolShots: CoolShotEntry[] = [];
+  serverUrl = '';
+  uploadFailureCount = 0;
   private static MAX_UPLOAD_WARNINGS = 3;
 
   onChanged?: (shots: CoolShotEntry[]) => void;
 
-  constructor(private deps: CoolShotDeps) {}
+  constructor(public deps: CoolShotDeps) {}
 
   setServerUrl(url: string): void {
     this.serverUrl = url.replace(/\/$/, '');
@@ -178,7 +171,7 @@ export class CoolShotManager {
   }
 
   // Keep top 10 by lifetime + recent 10 by timestamp (may overlap)
-  private trimList(): void {
+  trimList(): void {
     this.coolShots.toSorted((a, b) => b.projectileLifetime - a.projectileLifetime);
     const topIds = new Set(this.coolShots.slice(0, 10).map(s => s.id));
     const recentIds = new Set([...this.coolShots].toSorted((a, b) => b.timestamp - a.timestamp).slice(0, 10).map(s => s.id));
@@ -222,108 +215,9 @@ export class CoolShotManager {
     }
   }
 
-  // GET /demos/<filename> → DemoFile, with status/logging handled
-  private async fetchDemo(filename: string): Promise<DemoFile | null> {
-    if (!this.serverUrl) {
-      logger.warn('No server URL set');
-      return null;
-    }
-    try {
-      const resp = await fetch(`${this.serverUrl}/demos/${filename}`);
-      if (!resp.ok) {
-        logger.warn('Failed to download clip:', resp.status);
-        this.deps.setStatus('Download failed');
-        return null;
-      }
-      const buffer = await resp.arrayBuffer();
-      return DemoSerializer.deserialize(buffer);
-    } catch (e) {
-      logger.warn('Failed to download from server:', e);
-      this.deps.setStatus('Download failed');
-      return null;
-    }
-  }
+  private async fetchDemo(filename: string): Promise<DemoFile | null> { return net.fetchDemo(this, filename); }
+  private async playFromServer(filename: string): Promise<void> { return net.playFromServer(this, filename); }
+  private async uploadClipToServer(clipData: DemoFile): Promise<string | null> { return net.uploadClipToServer(this, clipData); }
 
-  private async playFromServer(filename: string): Promise<void> {
-    this.deps.setStatus('Loading clip...');
-    const data = await this.fetchDemo(filename);
-    if (!data) {
-      this.deps.setStatus('Load failed');
-      return;
-    }
-    this.deps.playDemoData(data);
-    this.deps.setStatus('');
-    logger.debug(`Playing cool shot from server: ${filename}`);
-  }
-
-  // Upload clip binary to server. Returns the server-assigned filename, or null on failure.
-  private async uploadClipToServer(clipData: DemoFile): Promise<string | null> {
-    if (!this.serverUrl) {
-      logger.warn('No server URL set, skipping upload');
-      return null;
-    }
-    try {
-      const buffer = DemoSerializer.serialize(clipData);
-      const resp = await fetch(`${this.serverUrl}/demos/upload`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/octet-stream' },
-        body: buffer,
-      });
-      if (!resp.ok) {
-        logger.warn('Server upload failed:', resp.status);
-        return null;
-      }
-      const result = await resp.json();
-      this.uploadFailureCount = 0;
-      if (result.rejected || !result.filename) {
-        logger.debug(`Clip rejected by server: ${result.reason ?? 'no filename returned'}`);
-        return null;
-      }
-      logger.debug(`Clip uploaded to server: ${result.filename}`);
-      return result.filename as string;
-    } catch (e) {
-      this.uploadFailureCount++;
-      if (this.uploadFailureCount <= CoolShotManager.MAX_UPLOAD_WARNINGS) {
-        logger.warn(`Failed to upload clip (${this.uploadFailureCount}):`, e);
-        if (this.uploadFailureCount === CoolShotManager.MAX_UPLOAD_WARNINGS) {
-          logger.warn('Suppressing further upload failure warnings. Check server CORS/network.');
-        }
-      }
-      return null;
-    }
-  }
-
-  // Merge the server's demo list with local clips (by filename)
-  async fetchFromServer(): Promise<void> {
-    if (!this.serverUrl) return;
-    try {
-      const resp = await fetch(`${this.serverUrl}/demos`);
-      if (!resp.ok) {
-        logger.warn(`Failed to fetch cool shots: HTTP ${resp.status}`);
-        return;
-      }
-      const data = await resp.json();
-      const serverDemos: CoolShotEntry[] = ((data.demos || []) as ServerDemoRecord[]).map((d) => ({
-        id: d.filename,
-        filename: d.filename,
-        projectileLifetime: d.projectileLifetime,
-        timestamp: d.timestamp,
-        description: d.description,
-      }));
-      logger.debug(`Fetched ${serverDemos.length} demos from server`);
-
-      const localFilenames = new Set(this.coolShots.map(s => s.filename));
-      for (const sd of serverDemos) {
-        if (!localFilenames.has(sd.filename)) {
-          this.coolShots.push(sd);
-        }
-      }
-      this.trimList();
-      this.onChanged?.(this.coolShots);
-
-      logger.debug(`[CoolShots] ${this.coolShots.length} entries (top: ${this.coolShots[0]?.projectileLifetime.toFixed(2) ?? 'none'}s)`);
-    } catch (e) {
-      logger.warn('Failed to fetch cool shots from server:', e);
-    }
-  }
+  async fetchFromServer(): Promise<void> { return net.fetchFromServer(this); }
 }
