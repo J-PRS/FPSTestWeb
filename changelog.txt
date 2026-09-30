@@ -1,3 +1,4 @@
+2026-09-26 - Bot beam fire paints an instant shaft, not a fake bolt: cosmeticShot folds melee/speed-0 markers into real VFX; playerShot LG/melee deduped
 2026-09-26 - Bots obey weapon fire rates: WEAPON_FIRE_INTERVAL_S in shared, arsenal gates each drawn weapon on a sim clock (mortar bots no longer out-cadence humans)
 2026-09-26 - Tests: bot beam-vs-player path pinned (weld damages, whiff does not)
 2026-09-26 - Tests: beam-vs-player scenario coverage — excluded victim takes the tick, held-beam band decay

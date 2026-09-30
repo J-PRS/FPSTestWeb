@@ -25,6 +25,23 @@ export function wireProjectiles(ctx: NetCtx): void {
     ));
   };
 
+  // Swing markers and beam-class weapon fire carry no projectile body —
+  // the message is cosmetic, so paint the punch flash / instant shaft a
+  // player's weld paints instead of flying a slow fake bolt. */
+  const cosmeticShot = (ownerId: string, weaponType: number | undefined, origin: THREE.Vector3, dir: THREE.Vector3): boolean => {
+    if (weaponType === WeaponType.Melee) {
+      meleeFlash(origin, dir);
+    } else if (weaponType !== undefined && getWeaponStats(weaponType).speed <= 0) {
+      const beamCfg = getProjectileConfig(weaponType);
+      deps.lazyEffects().spawnBeam(origin, origin.clone().addScaledVector(dir, 80), beamCfg?.glowColor ?? 0x8fdcff);
+    } else {
+      return false;
+    }
+    deps.world.remotePlayers.get(ownerId)?.fire(weaponType);
+    sfx.shotAt(origin, weaponType, deps.world.remotePlayers.get(ownerId)?.vel);
+    return true;
+  };
+
   networkManager.onProjectileCreated = (projectileId: string, ownerId: string, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }, weaponType?: number) => {
     if (deps.world.playbackMode) return; // live shots don't belong in the replay
     // For own projectiles: link the pending local projectile to this server ID
@@ -41,12 +58,7 @@ export function wireProjectiles(ctx: NetCtx): void {
     const vel = new THREE.Vector3(velocity.x, velocity.y, velocity.z);
     const origin = new THREE.Vector3(position.x, position.y, position.z);
     const dir = vel.clone().normalize();
-    if (weaponType === WeaponType.Melee) {
-      meleeFlash(origin, dir);
-      deps.world.remotePlayers.get(ownerId)?.fire(weaponType);
-      sfx.shotAt(origin, WeaponType.Melee, deps.world.remotePlayers.get(ownerId)?.vel);
-      return;
-    }
+    if (cosmeticShot(ownerId, weaponType, origin, dir)) return;
     const cfg = (weaponType !== undefined ? getProjectileConfig(weaponType) : undefined) ?? ROCKET_CONFIG;
     const remoteProjectile = new Projectile(deps.lazyScene(), origin, dir, new THREE.Vector3(0, 0, 0), cfg);
     remoteProjectile.vel.copy(vel); // override with exact server velocity
@@ -87,17 +99,11 @@ export function wireProjectiles(ctx: NetCtx): void {
     if (!origin) return;
     rp?.fire(weaponType);
     sfx.shotAt(origin, weaponType ?? 0, rp?.vel);
-    // The LG beam is instant on the shooter's screen — paint the same
-    // flash for observers along the claimed aim (clamped, cosmetic-only).
-    if (dir && weaponType === WeaponType.Lightning) {
-      const cfg = getProjectileConfig(WeaponType.Lightning);
+    // Instant classes (beam weld, melee swing) paint the same flash the
+    // shooter sees along the claimed aim — cosmetic only.
+    if (dir) {
       const d = new THREE.Vector3(dir.x, dir.y, dir.z).normalize();
-      deps.lazyEffects().spawnBeam(origin, origin.clone().addScaledVector(d, 80), cfg?.glowColor ?? 0x8fdcff);
-    }
-    // Melee swing — same small impact flash the puncher sees at the
-    // reach point, so observers read the whiff, not just hear a whoosh.
-    if (dir && weaponType === WeaponType.Melee) {
-      meleeFlash(origin, new THREE.Vector3(dir.x, dir.y, dir.z));
+      cosmeticShot(id, weaponType, origin, d);
     }
   };
 
