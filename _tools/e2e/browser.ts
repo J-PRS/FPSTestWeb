@@ -8,12 +8,21 @@
  * import.meta.env.DEV — i.e. always under `npm run dev`).
  */
 import { createRequire } from 'node:module';
+import { existsSync } from 'node:fs';
 import type { Page, Browser } from 'puppeteer-core';
 
 const require = createRequire(import.meta.url);
 const puppeteer = require('puppeteer-core') as typeof import('puppeteer-core');
 
+// CHROME_PATH wins; otherwise probe the usual install spots
+// (Windows dev box first, then Linux CI runners).
 const CHROME = process.env.CHROME_PATH
+  ?? [
+    'C:/Program Files/Google/Chrome/Application/chrome.exe',
+    '/usr/bin/google-chrome',
+    '/usr/bin/chromium-browser',
+    '/usr/bin/chromium',
+  ].find((p) => existsSync(p))
   ?? 'C:/Program Files/Google/Chrome/Application/chrome.exe';
 
 /** Pointer-lock stub — headless Chrome has none; the game gates input on

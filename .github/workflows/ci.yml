@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Server tests
+        working-directory: server_bun
+        run: |
+          bun install
+          bun x tsc --noEmit
+          bun test
+
+      - name: Client checks
+        working-directory: client
+        run: |
+          npm ci
+          npx tsc --noEmit
+          npx vitest run
+          npx oxlint src
+
+      # Headless real-browser suite. perf is excluded — software GL makes
+      # absolute frame times a machine-load meter, not a regression signal.
+      - name: E2E (headless Chrome)
+        working-directory: _tools
+        run: |
+          npm ci
+          bun e2e/all.ts --skip perf
