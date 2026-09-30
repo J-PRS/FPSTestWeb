@@ -1,3 +1,4 @@
+2026-10-02 - offline bots speak: botTaunts moved to shared/, GameBot frags/deaths emit kill/death lines to the local feed
 2026-10-02 - netBot: envDamage claims require a fresh (<600ms) creature event — kills the last implausible-env warn lane
 2026-10-02 - netBot claim legality: dead-target skip, stale-pid expiry, real-airtime claims, reseat fire hold; judge: knockback-arc transients log as info
 2026-10-02 - fix judge false divergences: journal replays journaled input+energy per segment, judge takes min(live, replay) dist, tolerance 10m->14m per measured honest drift
