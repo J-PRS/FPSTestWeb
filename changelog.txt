@@ -1,3 +1,4 @@
+2026-09-26 - Extract spawn-point selection from PlayerManager into spawnPicker.ts
 2026-09-26 - Extract room resolve-or-create + terrain attach from GameServer into roomFactory.ts
 2026-09-26 - Extract HTTP route handlers (GET table, admin, demos, map-bin) from server.ts into serverRoutes.ts
 2026-09-26 - Extract client-log ingest + rotation from server.ts into clientLogs.ts

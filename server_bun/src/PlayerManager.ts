@@ -5,6 +5,7 @@ import { perkMods } from '../../shared/perks.ts';
 import { CLASS_STATS } from '../../shared/botClasses.ts';
 import { POWERUP } from '../../shared/pickups.ts';
 import { ENERGY } from '../../shared/movement.ts';
+import { SpawnPicker } from './spawnPicker.ts';
 
 let internalIdCounter = 0;
 
@@ -33,8 +34,15 @@ export class PlayerManager {
    *  the surface instead of spawning a player inside the ground. */
   groundAt?: (x: number, z: number) => number;
 
+  private readonly spawnPicker = new SpawnPicker({
+    players: () => this.players,
+    spawnPoints: () => this.spawnPoints,
+    teamBases: () => this.teamBases,
+    groundAt: () => this.groundAt,
+  });
+
   addPlayer(playerId: string, team?: 'alpha' | 'bravo', perk: string = 'none', armorClass: string = 'medium'): PlayerState {
-    const spawn = this.pickSpawnPoint(playerId, team);
+    const spawn = this.spawnPicker.pick(playerId, team);
     const cls = armorClass === 'light' || armorClass === 'heavy' ? armorClass : 'medium';
     const maxHealth = CONFIG.playerMaxHealth + perkMods(perk).maxHealth + CLASS_STATS[cls].maxHealth;
 
@@ -262,7 +270,7 @@ export class PlayerManager {
     }
     player.pendingPerk = undefined;
 
-    const spawn = this.pickSpawnPoint(playerId, player.team);
+    const spawn = this.spawnPicker.pick(playerId, player.team);
     player.position = { ...spawn };
     player.rotation = { yaw: 0, pitch: 0 };
     player.velocity = { x: 0, y: 0, z: 0 };
@@ -310,53 +318,5 @@ export class PlayerManager {
     if (player) {
       player.kills++;
     }
-  }
-
-  private pickSpawnPoint(playerId: string, team?: 'alpha' | 'bravo'): Vec3 {
-    const points: Vec3[] = (this.spawnPoints ?? CONFIG.spawnPoints).map((p) => ({ x: p.x, y: p.y, z: p.z }));
-    // Authored anchors predate the current terrain — anything buried
-    // under the field lifts to the surface rather than spawning into it.
-    if (this.groundAt) {
-      for (const p of points) {
-        const g = this.groundAt(p.x, p.z);
-        if (p.y < g) p.y = g;
-      }
-    }
-    if (this.players.size === 0) {
-      return { ...points[0]! };
-    }
-
-    // Team modes prefer own-base spawns — materializing among enemies is
-    // instant camp food. Score blends base proximity with enemy clearance.
-    const base = team === 'alpha' || team === 'bravo' ? this.teamBases?.[team] : undefined;
-    let best: Vec3 = { ...points[0]! };
-    let bestScore = -Infinity;
-
-    for (const spawn of points) {
-      const minFoeDist = this.foeClearance(spawn, playerId, team);
-      const score = base
-        ? minFoeDist - 2 * Math.hypot(spawn.x - base.x, spawn.z - base.z)
-        : minFoeDist;
-      if (score > bestScore) {
-        bestScore = score;
-        best = { ...spawn };
-      }
-    }
-
-    return best;
-  }
-
-  /** Distance to the nearest living non-teammate from a spawn point —
-   *  teammates near a spawn are safety, not a threat. Empty field scores
-   *  0 (a flat map, not a jackpot). */
-  private foeClearance(spawn: Vec3, playerId: string, team?: 'alpha' | 'bravo'): number {
-    let min = Infinity;
-    for (const [id, p] of this.players) {
-      if (id === playerId || p.isDead) continue;
-      if (team && p.team === team) continue;
-      const dist = Math.hypot(spawn.x - p.position.x, spawn.z - p.position.z);
-      if (dist < min) min = dist;
-    }
-    return min === Infinity ? 0 : min;
   }
 }
