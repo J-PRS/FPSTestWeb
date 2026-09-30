@@ -1,3 +1,4 @@
+2026-10-02 - TASKS.md refresh (e2e suite, p2p lobbies, CI); RTC soak clean (115 gems, 0 rej/corr/closes)
 2026-10-02 - CI workflow (.github/workflows/ci.yml) + cross-platform Chrome probe
 2026-10-02 - _tools/e2e/all.ts: suite runner, bun run e2e / e2e:perf scripts, duo chat timeout fix
 2026-10-02 - _tools/e2e/reconnect.ts: grace-period reconnect E2E
