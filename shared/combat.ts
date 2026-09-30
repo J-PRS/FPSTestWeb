@@ -175,12 +175,7 @@ function checkFlightLegality(args: {
   // inherited shooter speed and a margin for the end-of-frame sample error.
   const speed = Math.hypot(projectile.velocity.x, projectile.velocity.y, projectile.velocity.z)
     + Math.hypot(shooterVel.x, shooterVel.y, shooterVel.z) * INHERITANCE_MARGIN;
-  // Ray-burst weapons (remote railgun) teleport forward along their velocity
-  // once they pass the discharge delay — the beam's range is legal reach.
-  const rayReach = (stats.rayRange !== undefined && stats.rayDelay !== undefined && airtime >= stats.rayDelay)
-    ? stats.rayRange : 0;
-  const gMag = stats.gravity ? Math.abs(GRAVITY) : 0;
-  const maxReach = speed * airtime + 0.5 * gMag * airtime * airtime + rayReach + REACH_MARGIN_M;
+  const maxReach = flightReach(stats, speed, airtime);
   const dx = endPos.x - projectile.origin.x;
   const dy = endPos.y - projectile.origin.y;
   const dz = endPos.z - projectile.origin.z;
@@ -192,24 +187,44 @@ function checkFlightLegality(args: {
   // Wall occlusion: sample the ballistic arc — a shell that would have
   // struck a face before its claimed end can't honestly get there.
   if (args.solids?.length) {
-    const STEPS = 16;
-    const g = stats.gravity ? GRAVITY : 0;
-    let px = projectile.origin.x, py = projectile.origin.y, pz = projectile.origin.z;
-    for (let i = 1; i <= STEPS; i++) {
-      const t = (airtime * i) / STEPS;
-      const nx = projectile.origin.x + projectile.velocity.x * t;
-      const ny = projectile.origin.y + projectile.velocity.y * t + 0.5 * g * t * t;
-      const nz = projectile.origin.z + projectile.velocity.z * t;
-      if (t > 0.03) { // muzzle grace — a spawn point may hug a doorway lip
-        if (segSolidHit({ x: px, y: py, z: pz }, { x: nx, y: ny, z: nz }, args.solids)) {
-          return { ok: false, reason: `flight blocked by structure at ~${t.toFixed(2)}s` };
-        }
-      }
-      px = nx; py = ny; pz = nz;
+    const blockedAt = arcBlockedAt(projectile, stats.gravity ? GRAVITY : 0, airtime, args.solids);
+    if (blockedAt !== null) {
+      return { ok: false, reason: `flight blocked by structure at ~${blockedAt.toFixed(2)}s` };
     }
   }
 
   return { ok: true, airtime };
+}
+
+/** Max legal reach for a claimed airtime: ballistic v·t + ½·|g|·t², plus
+ *  ray-burst range once the discharge delay has passed (remote railgun
+ *  teleports its beam forward — that range is legal reach). */
+function flightReach(stats: ReturnType<typeof getWeaponStats>, speed: number, airtime: number): number {
+  const rayReach = (stats.rayRange !== undefined && stats.rayDelay !== undefined && airtime >= stats.rayDelay)
+    ? stats.rayRange : 0;
+  const gMag = stats.gravity ? Math.abs(GRAVITY) : 0;
+  return speed * airtime + 0.5 * gMag * airtime * airtime + rayReach + REACH_MARGIN_M;
+}
+
+/** March the ballistic arc in 16 segments — returns the flight time where
+ *  a structure face stops the shell, or null when the arc is clean. */
+function arcBlockedAt(
+  projectile: TrackedProjectile, g: number, airtime: number,
+  solids: readonly StructureCollider[],
+): number | null {
+  const STEPS = 16;
+  let px = projectile.origin.x, py = projectile.origin.y, pz = projectile.origin.z;
+  for (let i = 1; i <= STEPS; i++) {
+    const t = (airtime * i) / STEPS;
+    const nx = projectile.origin.x + projectile.velocity.x * t;
+    const ny = projectile.origin.y + projectile.velocity.y * t + 0.5 * g * t * t;
+    const nz = projectile.origin.z + projectile.velocity.z * t;
+    if (t > 0.03) { // muzzle grace — a spawn point may hug a doorway lip
+      if (segSolidHit({ x: px, y: py, z: pz }, { x: nx, y: ny, z: nz }, solids)) return t;
+    }
+    px = nx; py = ny; pz = nz;
+  }
+  return null;
 }
 
 export function validateHitClaim(args: {

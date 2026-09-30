@@ -50,46 +50,53 @@ export const ROLE_PRIORITY: { role: BotRole; want: number; minSquad: number }[] 
  *  server reads as its infiltrate/cloak intent). */
 export function roleObjective(role: string, s: FlagSituation): { x: number; y: number; z: number } {
   switch (role) {
-    // HoF: planted on the stand, PERIOD — never chases a thief (that's
-    // what LD exists for). Only leaves the ring for a flag dropped in
-    // easy reach.
-    case 'hof':
-      if (s.dropped && Math.hypot(s.dropped.x - s.home.x, s.dropped.z - s.home.z) < 25) return s.dropped;
-      return s.home;
-
-    // Light defense / technician / generic defense: home-side
-    // priorities — thief, dropped, then hold home in intercept range.
-    case 'ldefense':
-    case 'technician':
-    case 'defense':
-      if (s.thief) return s.thief;
-      if (s.dropped) return s.dropped;
-      return s.home;
-
-    // Capper: the flag route is the job — escort a carrier teammate,
-    // otherwise press the stand. Only a dropped own flag pulls it
-    // off-route.
-    case 'capper':
-      if (s.escort) return s.escort;
-      if (s.dropped) return s.dropped;
-      if (s.enemyStand) return s.enemyStand;
-      return s.home;
-
-    // Infiltrator: slips in to wreck gear / grab — the stand press holds
-    // even when nobody's home so the cloak keeps covering the breach.
-    case 'infiltrator':
-      if (s.escort) return s.escort;
-      if (s.enemyStand) return s.enemyStand;
-      if (s.thief) return s.thief;
-      return s.home;
-
-    // Offense (light offense in Tribes terms): escort a carrier, punish
-    // a thief, else press the enemy stand to clear it for the capper.
-    default:
-      if (s.escort) return s.escort;
-      if (s.thief) return s.thief;
-      if (s.dropped) return s.dropped;
-      if (s.enemyStand) return s.enemyStand;
-      return s.home; // flag's moving — defend home
+    case 'hof': return hofGoal(s);
+    case 'ldefense': case 'technician': case 'defense': return defenseGoal(s);
+    case 'capper': return capperGoal(s);
+    case 'infiltrator': return infiltratorGoal(s);
+    default: return offenseGoal(s);
   }
+}
+
+/** HoF: planted on the stand, PERIOD — never chases a thief (that's what
+ *  LD exists for). Only leaves the ring for a flag dropped in easy reach. */
+function hofGoal(s: FlagSituation) {
+  if (s.dropped && Math.hypot(s.dropped.x - s.home.x, s.dropped.z - s.home.z) < 25) return s.dropped;
+  return s.home;
+}
+
+/** Light defense / technician / generic defense: home-side priorities —
+ *  thief, dropped, then hold home in intercept range. */
+function defenseGoal(s: FlagSituation) {
+  if (s.thief) return s.thief;
+  if (s.dropped) return s.dropped;
+  return s.home;
+}
+
+/** Capper: the flag route is the job — escort a carrier teammate,
+ *  otherwise press the stand. Only a dropped own flag pulls it off-route. */
+function capperGoal(s: FlagSituation) {
+  if (s.escort) return s.escort;
+  if (s.dropped) return s.dropped;
+  if (s.enemyStand) return s.enemyStand;
+  return s.home;
+}
+
+/** Infiltrator: slips in to wreck gear / grab — the stand press holds
+ *  even when nobody's home so the cloak keeps covering the breach. */
+function infiltratorGoal(s: FlagSituation) {
+  if (s.escort) return s.escort;
+  if (s.enemyStand) return s.enemyStand;
+  if (s.thief) return s.thief;
+  return s.home;
+}
+
+/** Offense (light offense in Tribes terms): escort a carrier, punish a
+ *  thief, else press the enemy stand to clear it for the capper. */
+function offenseGoal(s: FlagSituation) {
+  if (s.escort) return s.escort;
+  if (s.thief) return s.thief;
+  if (s.dropped) return s.dropped;
+  if (s.enemyStand) return s.enemyStand;
+  return s.home; // flag's moving — defend home
 }

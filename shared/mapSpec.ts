@@ -93,43 +93,46 @@ export function resolveMapSpec(raw: unknown): MapSpec {
   };
   if (balls.max < balls.base) balls.max = balls.base;
 
-  const isVec = (s: unknown): s is Vec3like =>
-    !!s && typeof s === 'object' &&
-    Number.isFinite((s as Vec3like).x) &&
-    Number.isFinite((s as Vec3like).y) &&
-    Number.isFinite((s as Vec3like).z);
-
-  const spawns = Array.isArray((src as { spawns?: unknown }).spawns)
-    ? (src as { spawns: unknown[] }).spawns.filter(isVec).slice(0, 32)
-    : undefined;
-
-  const rawBases = (src as { bases?: unknown }).bases;
-  const bases = rawBases && typeof rawBases === 'object'
-    ? {
-        alpha: isVec((rawBases as { alpha?: unknown }).alpha) ? (rawBases as { alpha: Vec3like }).alpha : undefined,
-        bravo: isVec((rawBases as { bravo?: unknown }).bravo) ? (rawBases as { bravo: Vec3like }).bravo : undefined,
-      }
-    : undefined;
-
   return {
-    mode: typeof src.mode === 'string' && /^[\w-]{1,32}$/.test(src.mode) ? src.mode : undefined,
+    mode: parseMode((src as { mode?: unknown }).mode),
     balls,
-    spawns: spawns?.length ? spawns : undefined,
-    bases: bases && (bases.alpha || bases.bravo) ? bases : undefined,
+    spawns: parseSpawns((src as { spawns?: unknown }).spawns),
+    bases: parseBases((src as { bases?: unknown }).bases),
     bots: clampInt((src as { bots?: unknown }).bots, 0, 16, 0) || undefined,
     botFill: clampInt((src as { botFill?: unknown }).botFill, 0, 24, 0) || undefined,
     ballMix: parseBallMix((src as { ballMix?: unknown }).ballMix),
     // filename-only — the value is resolved under maps/ server-side, so
     // anything with a slash or dot-traversal is dropped on the floor
-    terrain: typeof (src as { terrain?: unknown }).terrain === 'string'
-        && /^[\w-]{1,64}\.bin$/.test((src as { terrain: string }).terrain)
-      ? (src as { terrain: string }).terrain
-      : undefined,
+    terrain: parseTerrain((src as { terrain?: unknown }).terrain),
     structures: parseStructures((src as { structures?: unknown }).structures),
     arena: parseArena((src as { arena?: unknown }).arena),
     ambient: parseAmbient((src as { ambient?: unknown }).ambient),
     creatures: parseAmbient((src as { creatures?: unknown }).creatures),
   };
+}
+
+function parseMode(raw: unknown): string | undefined {
+  return typeof raw === 'string' && /^[\w-]{1,32}$/.test(raw) ? raw : undefined;
+}
+
+function parseTerrain(raw: unknown): string | undefined {
+  return typeof raw === 'string' && /^[\w-]{1,64}\.bin$/.test(raw) ? raw : undefined;
+}
+
+function parseSpawns(raw: unknown): Vec3like[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out = raw.filter(isVec).slice(0, 32);
+  return out.length ? out : undefined;
+}
+
+function parseBases(raw: unknown): MapSpec['bases'] {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const b = raw as { alpha?: unknown; bravo?: unknown };
+  const out: MapSpec['bases'] = {
+    alpha: isVec(b.alpha) ? b.alpha : undefined,
+    bravo: isVec(b.bravo) ? b.bravo : undefined,
+  };
+  return out.alpha || out.bravo ? out : undefined;
 }
 
 function parseAmbient(raw: unknown): Record<string, number> | undefined {

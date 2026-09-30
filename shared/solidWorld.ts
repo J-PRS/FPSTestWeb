@@ -153,45 +153,55 @@ export class SolidWorld {
     const cands = this.cands;
     cands.length = 0;
     this.index.queryPoint(s.pos.x, s.pos.z, r + 1, cands);
-    for (const c of cands) {
-      const dx = s.pos.x - c.cx, dz = s.pos.z - c.cz;
-      const rr = Math.max(c.hx, c.hz) + r + 1;
-      if (dx * dx + dz * dz > rr * rr) continue;
-      const top = c.cy + c.hy, bot = c.cy - c.hy;
-      if (feet >= top - STEP_UP) continue;          // floor candidate — ground clamp owns it
-      if (s.pos.y <= bot || feet >= top) continue;   // entirely below or above
+    for (const c of cands) this.resolveOne(s, c, r, feet);
+  }
 
-      const lx = dx * c.cos + dz * c.sin;
-      const lz = -dx * c.sin + dz * c.cos;
-      const px = c.hx + r - Math.abs(lx);
-      const pz = c.hz + r - Math.abs(lz);
-      if (px <= 0 || pz <= 0) continue;              // outside the padded footprint
-      if (feet < bot && s.pos.y > bot) {
-        // Head into the underside — ceiling: drop out, kill upward motion.
-        if (s.pos.y - bot < top - s.pos.y) {
-          s.pos.y = bot - SKIN;
-          if (s.vel.y > 0) s.vel.y = 0;
-          continue;
-        }
+  /** One collider vs the capsule: ceiling drop or least-penetration
+   *  horizontal push + velocity kill into the face. */
+  private resolveOne(s: MS, c: StructureCollider, r: number, feet: number): void {
+    const dx = s.pos.x - c.cx, dz = s.pos.z - c.cz;
+    const rr = Math.max(c.hx, c.hz) + r + 1;
+    if (dx * dx + dz * dz > rr * rr) return;
+    const top = c.cy + c.hy, bot = c.cy - c.hy;
+    if (feet >= top - STEP_UP) return;          // floor candidate — ground clamp owns it
+    if (s.pos.y <= bot || feet >= top) return;   // entirely below or above
+
+    const lx = dx * c.cos + dz * c.sin;
+    const lz = -dx * c.sin + dz * c.cos;
+    const px = c.hx + r - Math.abs(lx);
+    const pz = c.hz + r - Math.abs(lz);
+    if (px <= 0 || pz <= 0) return;              // outside the padded footprint
+    if (feet < bot && s.pos.y > bot) {
+      // Head into the underside — ceiling: drop out, kill upward motion.
+      if (s.pos.y - bot < top - s.pos.y) {
+        s.pos.y = bot - SKIN;
+        if (s.vel.y > 0) s.vel.y = 0;
+        return;
       }
-      let pushX: number, pushZ: number;
-      if (px < pz) {                                  // least-penetration axis
-        const dir = lx >= 0 ? 1 : -1;
-        pushX = dir * px * c.cos;
-        pushZ = dir * px * c.sin;
-      } else {
-        const dir = lz >= 0 ? 1 : -1;
-        pushX = -dir * pz * c.sin;
-        pushZ = dir * pz * c.cos;
-      }
-      s.pos.x += pushX + Math.sign(pushX) * SKIN;
-      s.pos.z += pushZ + Math.sign(pushZ) * SKIN;
-      // Kill velocity into the face — sliding along walls stays free.
-      const nx = px < pz ? Math.sign(pushX) * c.cos : -Math.sign(pushZ) * c.sin;
-      const nz = px < pz ? Math.sign(pushX) * c.sin : Math.sign(pushZ) * c.cos;
-      const dot = s.vel.x * nx + s.vel.z * nz;
-      if (dot < 0) { s.vel.x -= nx * dot; s.vel.z -= nz * dot; }
     }
+    this.pushOut(s, c, lx, lz, px, pz);
+  }
+
+  /** Least-penetration horizontal push out of a face, plus the velocity
+   *  kill into it — sliding along walls stays free. */
+  private pushOut(s: MS, c: StructureCollider, lx: number, lz: number, px: number, pz: number): void {
+    let pushX: number, pushZ: number;
+    if (px < pz) {                                  // least-penetration axis
+      const dir = lx >= 0 ? 1 : -1;
+      pushX = dir * px * c.cos;
+      pushZ = dir * px * c.sin;
+    } else {
+      const dir = lz >= 0 ? 1 : -1;
+      pushX = -dir * pz * c.sin;
+      pushZ = dir * pz * c.cos;
+    }
+    s.pos.x += pushX + Math.sign(pushX) * SKIN;
+    s.pos.z += pushZ + Math.sign(pushZ) * SKIN;
+    // Kill velocity into the face — sliding along walls stays free.
+    const nx = px < pz ? Math.sign(pushX) * c.cos : -Math.sign(pushZ) * c.sin;
+    const nz = px < pz ? Math.sign(pushX) * c.sin : Math.sign(pushZ) * c.cos;
+    const dot = s.vel.x * nx + s.vel.z * nz;
+    if (dot < 0) { s.vel.x -= nx * dot; s.vel.z -= nz * dot; }
   }
 }
 
