@@ -1,10 +1,10 @@
 import * as THREE from 'three';
 
-import { getGlowTexture } from '../../effects/glowTexture.js';
 import type { Terrain } from '../../world/terrain.js';
-import { GRAVITY } from '../../core/config.js';
-import { ENERGY, cloakDrainPerSec } from '../../../../shared/movement.js';
+import { ENERGY } from '../../../../shared/movement.js';
 import type { SkillId } from '../Player.js';
+import { SkillChannels } from './skillChannels.js';
+import { WarpBeacon } from './skillBeacon.js';
 
 // ---- Skill tuning ----
 const BLINK_RANGE = 20;      // metres along the crosshair
@@ -17,21 +17,10 @@ const DASH_COOLDOWN = 0.9;   // s between dashes
 const SLAM_SPEED = 55;       // m/s straight down
 const SLAM_COOLDOWN = 1.4;   // s
 
-const TL_THROW_SPEED = 45;   // m/s along the crosshair (+ 50% inherit)
-const TL_COOLDOWN = 4.0;     // s after a teleport
-const TL_MAX_LIFE = 6.0;     // held beacon fizzles — can't camp it forever
-const TL_BOUNCE = 0.35;      // restitution — it skitters, doesn't thud
 
 // Energy economy constants live in shared/movement.ts (ENERGY) — the
 // server shadow sims the same tank to judge jet/skill claims.
-const CLOAK_COST = ENERGY.cloakCost; // activation — cheap ante, the upkeep is the price
-
-const SHIELD_COST = ENERGY.shieldCost;   // activation — same ante as cloak
-const SHIELD_DRAIN = ENERGY.shieldDrain; // per second while the bubble is up
 export const SHIELD_DMG_PER_ENERGY = ENERGY.shieldDmgPerEnergy;
-
-const MEND_COST = ENERGY.mendCost;   // activation — same ante
-const MEND_DRAIN = ENERGY.mendDrain; // per second — mending burns fast, heals slow
 export const MEND_HP_PER_SEC = 12; // server applies this while the flag is up
 
 // Everything a skill needs from Player — mutable refs for pos/vel, plus
@@ -95,31 +84,29 @@ export class PlayerSkills {
   private slamActive = false;  // falling at slam speed — detonates on landing
   private slamCooldown = 0;
 
-  private cloaked = false;
-  get isCloaked(): boolean { return this.cloaked; }
+  // Energy-channel toggles (cloak/shield/mend) live in skillChannels.ts.
+  private readonly chan: SkillChannels;
+  get isCloaked(): boolean { return this.chan.cloaked; }
+  get isShielded(): boolean { return this.chan.shielded; }
+  get isMending(): boolean { return this.chan.mending; }
+  /** Outside forces (damage soak, death) drop the bubble through the
+   *  same emit path so the wire flag and FX never disagree. */
+  forceShieldOff(): void { this.chan.forceShieldOff(); }
 
-  private shielded = false;
-  get isShielded(): boolean { return this.shielded; }
+  // Warp beacon (Q-down throws, Q-up teleports) lives in skillBeacon.ts.
+  private readonly warp: WarpBeacon;
 
-  private mending = false;
-  get isMending(): boolean { return this.mending; }
-
-  private tlBeacon: { pos: THREE.Vector3; vel: THREE.Vector3; age: number; grounded: boolean } | null = null;
-  private tlCooldown = 0;
-  private tlMesh: THREE.Mesh | null = null;
-  private tlGlow: THREE.Sprite | null = null;
-  private tlTrailT = 0;
-
-  constructor(private ctx: SkillsCtx) {}
+  constructor(private ctx: SkillsCtx) {
+    this.chan = new SkillChannels(ctx);
+    this.warp = new WarpBeacon(ctx);
+  }
 
   reset(): void {
     this.bounceHeld = this.bounceArmed = false;
     this.blinkActive = false;
     this.slamActive = false;
-    this.setCloak(false);
-    this.setShield(false);
-    this.setMend(false);
-    this.fizzleBeacon();
+    this.chan.resetAll();
+    this.warp.fizzle();
   }
 
   // Q pressed — one dispatch point per skill.
@@ -127,25 +114,30 @@ export class PlayerSkills {
     if (skill === 'blink') this.tryBlink();
     else if (skill === 'dash') this.tryDash();
     else if (skill === 'slam') this.trySlam();
-    else if (skill === 'warp') this.throwBeacon();
-    else if (skill === 'cloak') this.toggleCloak();
-    else if (skill === 'shield') this.toggleShield();
-    else if (skill === 'medkit') this.toggleMend();
+    else if (skill === 'warp') this.warp.throwBeacon();
+    else if (skill === 'cloak') this.chan.toggleCloak();
+    else if (skill === 'shield') this.chan.toggleShield();
+    else if (skill === 'medkit') this.chan.toggleMend();
     else this.bounceHeld = true;
   }
 
   release(skill: SkillId): void {
     this.bounceHeld = false;
     this.bounceArmed = false;
-    if (skill === 'warp') this.releaseBeacon();
+    if (skill === 'warp') this.warp.releaseBeacon();
   }
 
   tickCooldowns(dt: number): void {
     this.blinkCooldown = Math.max(0, this.blinkCooldown - dt);
     this.dashCooldown = Math.max(0, this.dashCooldown - dt);
     this.slamCooldown = Math.max(0, this.slamCooldown - dt);
-    this.tlCooldown = Math.max(0, this.tlCooldown - dt);
+    this.warp.cooldown = Math.max(0, this.warp.cooldown - dt);
   }
+
+  updateCloak(dt: number): void { this.chan.updateCloak(dt); }
+  updateShield(dt: number): void { this.chan.updateShield(dt); }
+  updateMend(dt: number): void { this.chan.updateMend(dt); }
+  updateBeacon(dt: number): void { this.warp.updateBeacon(dt); }
 
   private tryBlink(): void {
     if (this.blinkActive || this.blinkCooldown > 0) return;
@@ -191,82 +183,6 @@ export class PlayerSkills {
     return true;
   }
 
-  // ---- Cloak ----
-  // Toggle on Q. The drain is unconditional and regen is suppressed on
-  // the Player side while cloaked.
-
-  private toggleCloak(): void {
-    if (this.cloaked) { this.setCloak(false); return; }
-    if (!this.ctx.spendEnergy(CLOAK_COST)) return; // can't pay the ante
-    this.setCloak(true);
-  }
-
-  private setCloak(on: boolean): void {
-    if (this.cloaked === on) return;
-    this.cloaked = on;
-    this.ctx.emitCloak(on);
-  }
-
-  updateCloak(dt: number): void {
-    if (!this.cloaked) return;
-    // Horizontal speed prices the upkeep: sitting still is nearly free,
-    // running full tilt burns ~10x — slower is sneakier.
-    const speed = Math.hypot(this.ctx.vel.x, this.ctx.vel.z);
-    this.ctx.drainEnergy(cloakDrainPerSec(speed) * dt);
-    if (this.ctx.energy() <= 0) this.setCloak(false); // tank dry — surface
-  }
-
-  // ---- Shield ----
-  // Same economy as cloak; instead of hiding you it soaks damage into the
-  // energy pool. Shield hits don't bypass the tank — a dried-up bubble pops.
-
-  private toggleShield(): void {
-    if (this.shielded) { this.setShield(false); return; }
-    if (!this.ctx.spendEnergy(SHIELD_COST)) return;
-    this.setShield(true);
-  }
-
-  private setShield(on: boolean): void {
-    if (this.shielded === on) return;
-    this.shielded = on;
-    this.ctx.emitShield(on);
-  }
-
-  /** Outside forces (damage soak, death) drop the bubble through the same
-   *  emit path so the wire flag and FX never disagree. */
-  forceShieldOff(): void { this.setShield(false); }
-
-  updateShield(dt: number): void {
-    if (!this.shielded) return;
-    this.ctx.drainEnergy(SHIELD_DRAIN * dt);
-    if (this.ctx.energy() <= 0) this.setShield(false); // tank dry — pop
-  }
-
-  // ---- Medkit ----
-  // Energy → health conversion channel. Health itself is server-owned
-  // (server regens while the mend flag is up); the client owns the energy
-  // burn — dry tank = mend off. Deliberately a trickle: it patches you up
-  // between fights, it doesn't win them.
-
-  private toggleMend(): void {
-    if (this.mending) { this.setMend(false); return; }
-    if (!this.ctx.spendEnergy(MEND_COST)) return;
-    this.setMend(true);
-  }
-
-  private setMend(on: boolean): void {
-    if (this.mending === on) return;
-    this.mending = on;
-    this.ctx.emitMend(on);
-  }
-
-  updateMend(dt: number): void {
-    if (!this.mending) return;
-    this.ctx.drainEnergy(MEND_DRAIN * dt);
-    if (this.ctx.energy() <= 0) { this.setMend(false); return; } // tank dry — channel ends
-    if (!this.ctx.netHeals()) this.ctx.healSelf(MEND_HP_PER_SEC * dt);
-  }
-
   private tryDash(): void {
     if (this.dashCooldown > 0) return;
     this.dashCooldown = DASH_COOLDOWN;
@@ -282,99 +198,6 @@ export class PlayerSkills {
     this.slamCooldown = SLAM_COOLDOWN;
     this.ctx.vel.y = -SLAM_SPEED; // keep horizontal momentum — spike the vertical
     this.ctx.syncMovement();
-  }
-
-  // ---- Warp beacon ----
-  // Q-down throws the beacon; it flies/arcs/bounces while Q is held.
-  // Q-up teleports the player onto it with momentum preserved.
-
-  private throwBeacon(): void {
-    if (this.tlBeacon || this.tlCooldown > 0) return;
-    if (!this.tlMesh) {
-      // Glowing beacon: white-hot octa core + additive halo — it must read
-      // as a warp anchor, not a pebble, at 60m against the sand
-      this.tlMesh = new THREE.Mesh(
-        new THREE.OctahedronGeometry(0.32),
-        new THREE.MeshBasicMaterial({ color: 0xaafff4 })
-      );
-      this.tlGlow = new THREE.Sprite(new THREE.SpriteMaterial({
-        map: getGlowTexture(),
-        color: 0x33ffdd,
-        transparent: true,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-      }));
-      this.tlGlow.scale.setScalar(2.2);
-      this.tlMesh.add(this.tlGlow);
-      this.ctx.scene.add(this.tlMesh);
-    }
-    const dir = this.ctx.aimDir();
-    this.tlBeacon = {
-      pos: new THREE.Vector3(this.ctx.pos.x, this.ctx.pos.y + 1.4, this.ctx.pos.z),
-      vel: dir.multiplyScalar(TL_THROW_SPEED).addScaledVector(this.ctx.vel, 0.5),
-      age: 0,
-      grounded: false,
-    };
-    this.tlMesh.visible = true;
-    this.tlMesh.position.copy(this.tlBeacon.pos);
-    this.tlTrailT = 0;
-    this.ctx.emitWarpThrow(this.tlBeacon.pos.clone(), this.tlBeacon.vel.clone());
-  }
-
-  private releaseBeacon(): void {
-    const b = this.tlBeacon;
-    this.tlBeacon = null;
-    if (!b) return;
-    if (this.tlMesh) this.tlMesh.visible = false;
-    // Land the player just over the beacon — never inside terrain
-    const gy = this.ctx.terrain.getHeight(b.pos.x, b.pos.z);
-    const from = this.ctx.pos.clone();
-    this.ctx.pos.set(b.pos.x, Math.max(b.pos.y + 0.4, gy + 0.4), b.pos.z);
-    // Momentum survives the warp (UT rule) — vel untouched
-    this.tlCooldown = TL_COOLDOWN;
-    this.ctx.syncMovement();
-    this.ctx.markTeleport(); // tell the server this jump is intentional
-    this.ctx.emitWarp(from, this.ctx.pos.clone());
-  }
-
-  private fizzleBeacon(): void {
-    this.tlBeacon = null;
-    if (this.tlMesh) this.tlMesh.visible = false;
-  }
-
-  updateBeacon(dt: number): void {
-    const b = this.tlBeacon;
-    if (!b) return;
-    b.age += dt;
-    if (b.age > TL_MAX_LIFE) { this.fizzleBeacon(); return; }
-
-    if (!b.grounded) {
-      b.vel.y += GRAVITY * dt;
-      b.pos.addScaledVector(b.vel, dt);
-      const gy = this.ctx.terrain.getHeight(b.pos.x, b.pos.z) + 0.28;
-      if (b.pos.y <= gy) {
-        b.pos.y = gy;
-        b.vel.y = Math.abs(b.vel.y) > 3 ? -b.vel.y * TL_BOUNCE : 0;
-        b.vel.x *= 0.7; b.vel.z *= 0.7;
-        if (b.vel.y === 0 && b.vel.lengthSq() < 4) { b.vel.set(0, 0, 0); b.grounded = true; }
-      }
-    }
-    // Spark trail while airborne — the flight path must be visible to
-    // read "I'm about to warp THERE". Grounded beacon just glows.
-    if (!b.grounded) {
-      this.tlTrailT += dt;
-      if (this.tlTrailT >= 0.03) {
-        this.tlTrailT = 0;
-        this.ctx.emitWarpTick(b.pos);
-      }
-    }
-    if (this.tlMesh) {
-      this.tlMesh.position.copy(b.pos);
-      this.tlMesh.rotation.y += dt * 8;
-      this.tlMesh.rotation.x += dt * 5;
-      // Halo pulses — a live anchor, not a dead pebble
-      this.tlGlow?.scale.setScalar(2.2 + Math.sin(b.age * 10) * 0.5);
-    }
   }
 
   // Landing-transition handling — runs after movement.sync each frame.
