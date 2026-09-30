@@ -30,6 +30,31 @@ describe('sheep meter', () => {
     expect(room.bots.sheepOf(id)).toBe(0);
   });
 
+  it('the coverage window debits a bot that claims a destination but goes nowhere', () => {
+    const room = mkRoom({ bots: 1 });
+    const bots = room.bots as unknown as {
+      coverageDebit(id: string, p: { position: { x: number; y: number; z: number } }, hasDest: boolean, simMs: number): number;
+    };
+    const p = { position: { x: 0, y: 60, z: 0 } };
+    let debit = 0;
+    for (let t = 0; t <= 5000; t += 100) debit = bots.coverageDebit('BOT-t1', p, true, t);
+    expect(debit).toBe(20); // 5s window elapsed, zero real displacement
+  });
+
+  it('covering ground clears the window — speed-check squeakers included', () => {
+    const room = mkRoom({ bots: 1 });
+    const bots = room.bots as unknown as {
+      coverageDebit(id: string, p: { position: { x: number; y: number; z: number } }, hasDest: boolean, simMs: number): number;
+    };
+    const p = { position: { x: 0, y: 60, z: 0 } };
+    let debit = -1;
+    for (let t = 0; t <= 5000; t += 100) {
+      p.position.x += 10; // 100 m/s of honest travel — 500m over the window
+      debit = bots.coverageDebit('BOT-t1', p, true, t);
+    }
+    expect(debit).toBe(0);
+  });
+
   it('death and respawn reset the meter', () => {
     const room = mkRoom({ bots: 1 });
     const id = 'BOT-t1';

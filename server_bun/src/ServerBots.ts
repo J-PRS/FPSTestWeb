@@ -102,6 +102,9 @@ export class ServerBots {
   private thinkPhase = new Map<string, number>();
   private lastOut = new Map<string, BrainOut>();
   private thinkCounter = 0;
+  /** Sim clock (ms) — windows that measure play (sheep coverage) must
+   *  not run on wall time or a slow tick mis-reads them. */
+  private simClock = 0;
 
   /** Spawn n bots — each is a real roster entry (playerJoined broadcasts)
    *  minus a socket. Call once at room creation, before human joins, so
@@ -518,7 +521,7 @@ export class ServerBots {
       this.room.moveSim.setInput(id, { forward: 0, right: 0, jumpHeld: false, skiHeld: false, jetHeld: false }, p.status, this.seq++);
     }
     this.checkSheep(id, p, { trying: dist >= 0.5, ski: !!out.move?.ski, airborne: !sh.onGround, jetting: !!out.move?.jet, dt }, now);
-    this.checkSheepMeter(id, p, { out, airborne: !sh.onGround, hasDest: dist >= 0.5, dt }, now);
+    this.checkSheepMeter(id, p, { out, airborne: !sh.onGround, hasDest: dist >= 0.5, dt }, now, this.simClock);
     p.position.x = sh.pos.x; p.position.y = sh.pos.y; p.position.z = sh.pos.z;
     p.velocity.x = sh.vel.x; p.velocity.y = sh.vel.y; p.velocity.z = sh.vel.z;
     // Ski bit rides the tick flag byte (bit 2) — drives remote dust.
@@ -575,7 +578,7 @@ export class ServerBots {
    *  doing Tribes things (covering ground, airborne, jetting). At 100
    *  the bot gets yeeted: an impulse launch plus pinned jets, so the
    *  penalty for sheepish play IS the cure. */
-  private checkSheepMeter(id: string, p: { position: Vec3; velocity: Vec3 }, m: { out: BrainOut; airborne: boolean; hasDest: boolean; dt: number }, now: number): void {
+  private checkSheepMeter(id: string, p: { position: Vec3; velocity: Vec3 }, m: { out: BrainOut; airborne: boolean; hasDest: boolean; dt: number }, now: number, simMs: number): void {
     const speedXZ = Math.hypot(p.velocity.x, p.velocity.z);
     const jetting = !!m.out.move?.jet || (this.yeetUntil.get(id) ?? 0) > now;
     const tribesing = speedXZ > 10 || m.airborne || jetting;
@@ -583,7 +586,7 @@ export class ServerBots {
     let meter = prev + m.dt * (tribesing
       ? -(10 + speedXZ * 0.5 + (jetting ? 15 : 0))
       : m.hasDest ? 9 : 18);
-    meter += this.coverageDebit(id, p, m.hasDest, now);
+    meter += this.coverageDebit(id, p, m.hasDest, simMs);
     if (meter >= 100) {
       const yaw = Math.random() * Math.PI * 2;
       this.room.moveSim.applyImpulse(id, { x: Math.cos(yaw) * 12, y: 18, z: Math.sin(yaw) * 12 });
@@ -601,20 +604,21 @@ export class ServerBots {
   /** Coverage window: under ~30m of real displacement per 5s while the
    *  brain claims a destination reads as sheeping even when the per-tick
    *  speed check squeaks by. Returns the meter debit for the window. */
-  private coverageDebit(id: string, p: { position: Vec3 }, hasDest: boolean, now: number): number {
+  private coverageDebit(id: string, p: { position: Vec3 }, hasDest: boolean, simMs: number): number {
     let w = this.sheepWin.get(id);
-    if (!w) { w = { start: now, dist: 0, lx: p.position.x, lz: p.position.z }; this.sheepWin.set(id, w); }
+    if (!w) { w = { start: simMs, dist: 0, lx: p.position.x, lz: p.position.z }; this.sheepWin.set(id, w); }
     w.dist += Math.hypot(p.position.x - w.lx, p.position.z - w.lz);
     w.lx = p.position.x; w.lz = p.position.z;
-    if (now - w.start < 5000) return 0;
+    if (simMs - w.start < 5000) return 0;
     const owed = hasDest && w.dist < 30 ? 20 : 0;
-    w.start = now; w.dist = 0;
+    w.start = simMs; w.dist = 0;
     return owed;
   }
 
   tick(dt: number): void {
     this.maintain(Date.now());
     this.arsenal.step(dt); // sim-clock — the weapon-rate gate is sim-paced
+    this.simClock += dt * 1000;
     if (this.brains.size === 0) return;
     const now = Date.now();
     for (const [id, brain] of this.brains) {
