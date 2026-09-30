@@ -70,10 +70,12 @@ makes them win harder, while giving the noob nothing to read, dodge, or
 trade against. Under the north star that shape is simply wrong,
 regardless of how common "ramp/spin-up" is in shooters.
 
-The fix when the chaingun gets its pass is a conversion, not a nerf:
-the ramp should bank a *separate* payoff state (overheat stun-power, a
-spread-burst finisher, a telegraphed special) rather than flat +dmg —
-compress the middle, pay the top. Same ramp, opposite seat.
+The fix — now implemented — is a conversion, not a nerf: the ramp is a
+*bank*, not a damage curve. Consecutive hits on one target wind the
+barrels (same chain-window bookkeeping as before); at the cap the shot
+dumps a stagger shove into the victim and the bank resets for another
+wind-up. Sustained tracking pays in displacement and control, not melt
+— compress the middle, pay the top. Same ramp, opposite seat.
 
 ## How rare is the pattern in our roster? Honest audit
 
@@ -81,7 +83,7 @@ compress the middle, pay the top. Same ramp, opposite seat.
   own blast) is a real *cost*, spent on disc-jump mobility — the
   franchise-defining tail skill. Mid-skill players barely jump; experts
   cross the map in seconds. Cost→payoff in one mechanic. Fits.
-- **Chaingun — the anti-pattern** (above).
+- **Chaingun — converted** (was the anti-pattern, above).
 - **Mortar — aim gate, wrong seat.** The arc is execution difficulty,
   and the 18m splash is forgiveness *for the shooter* — noob-friendly,
   but with no stored payoff; it's just a skill gate with a soft floor.

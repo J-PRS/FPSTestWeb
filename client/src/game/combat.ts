@@ -78,12 +78,16 @@ const BOLT_MEGA_FORCE = 55;
 const BOLT_CHAIN_RADIUS = 8.0;     // cookoff blast pops neighboring shells too
 const BOLT_CHAIN_PASSES = 3;       // bounded worklist — a chain can't run away
 
-// Chaingun ramp: +1 dmg per consecutive hit on the same target. A hit
+// Chaingun bank: consecutive hits on one target wind the barrels — at
+// the cap the shot lands a stagger shove instead of extra damage. A hit
 // landing within 1.5× the fire rate of the previous hit on that target
 // counts as chained (a miss forces the next shot to arrive ≥2× rate, so
-// the ramp naturally resets). Caps at +8 — sustained fire doubles damage.
+// the bank naturally resets). The old flat +dmg ramp widened the
+// mid-skill gap — a juggle pays the sustained tracker with control, not
+// melt (skill-floor-payoff doctrine: compress the middle, pay the top).
 const CHAIN_WINDOW = CHAINGUN_RATE * 1.5;
 const CHAIN_RAMP_CAP = 8;
+const CHAIN_STAGGER_FORCE = 6.0; // juggles the target, doesn't melt it
 
 const _debrisDir = new THREE.Vector3();
 const _bombDir = new THREE.Vector3(); // cluster bomblet scatter
@@ -515,20 +519,30 @@ function detonateCharge(p: Projectile, ball: import('../entities/balls.js').Targ
   if (p.config.weaponType !== WeaponType.Lightning) lgDischarge(ball.id, dmg, ball.pos);
 }
 
+/** Wind the chaingun's bank on a hit: at the cap the shot dumps a
+ *  stagger shove into the victim and the bank resets for another
+ *  wind-up — sustained tracking pays in displacement, not damage. */
+function chaingunBank(c: CombatCtx, p: Projectile, ball: import('../entities/balls.js').Targetable): void {
+  const now = performance.now() / 1000;
+  const st = c.chainRamp.get(ball.id);
+  const n = st && now - st.t <= CHAIN_WINDOW ? st.n + 1 : 0;
+  c.chainRamp.set(ball.id, { t: now, n: n >= CHAIN_RAMP_CAP ? 0 : n });
+  if (n >= CHAIN_RAMP_CAP) {
+    const dir = _bombDir.copy(p.vel).normalize();
+    ball.vel.x += dir.x * CHAIN_STAGGER_FORCE;
+    ball.vel.y += CHAIN_STAGGER_FORCE * 0.6;
+    ball.vel.z += dir.z * CHAIN_STAGGER_FORCE;
+  }
+  // Cheap sweep: drop entries past the chain window when the map grows
+  if (c.chainRamp.size > 32) {
+    for (const [id, s] of c.chainRamp) if (now - s.t > CHAIN_WINDOW) c.chainRamp.delete(id);
+  }
+}
+
 function handleBallHit(c: CombatCtx, p: Projectile, ball: import('../entities/balls.js').Targetable): void {
   const deps = c.deps;
-  let dmg = getWeaponStats(p.config.weaponType).directDamage * deps.lazyPlayer().mods.directDamage;
-  if (p.config.weaponType === WeaponType.Chaingun) {
-    const now = performance.now() / 1000;
-    const st = c.chainRamp.get(ball.id);
-    const n = st && now - st.t <= CHAIN_WINDOW ? Math.min(st.n + 1, CHAIN_RAMP_CAP) : 0;
-    c.chainRamp.set(ball.id, { t: now, n });
-    dmg += n;
-    // Cheap sweep: drop entries past the chain window when the map grows
-    if (c.chainRamp.size > 32) {
-      for (const [id, s] of c.chainRamp) if (now - s.t > CHAIN_WINDOW) c.chainRamp.delete(id);
-    }
-  }
+  const dmg = getWeaponStats(p.config.weaponType).directDamage * deps.lazyPlayer().mods.directDamage;
+  if (p.config.weaponType === WeaponType.Chaingun) chaingunBank(c, p, ball);
   deps.reportTargetDamage?.(ball, dmg);
   const destroyed = ball.takeDamage(dmg);
   detonateCharge(p, ball, dmg);
