@@ -48,6 +48,10 @@ export function connectP2P(opts: { signalUrl: string; timeoutMs?: number }): Pro
         switch (msg.t) {
           case 'role':
             isHost = !!msg.host;
+            // The host must outwait the guest — a 15s handshake timeout here
+            // killed the room's signalling socket for anyone arriving late.
+            // Guests keep the deadline: their join either works fast or not.
+            if (isHost) clearTimeout(timeout);
             break;
           case 'peer': {
             // Second member arrived — host makes the offer
@@ -75,6 +79,9 @@ export function connectP2P(opts: { signalUrl: string; timeoutMs?: number }): Pro
             await pc?.addIceCandidate(msg.ice);
             break;
           case 'peer-left':
+            // Host waits for the next guest — the first join attempt may be
+            // the friend retrying after a failed hole punch.
+            if (isHost) { try { pc?.close(); } catch { /* gone */ } pc = null; break; }
             fail(new Error('peer left during handshake'));
             break;
         }
