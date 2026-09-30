@@ -1,3 +1,4 @@
+2026-09-30 - combat/lightning split: hitscan ray family (terrain march, capsule/sphere entry, chain-fork pick) moved to lightningTrace.ts with exported ray scratch (479->335).
 2026-09-30 - Player split: armory (class/perk banking, slot/belt/sidearm/pack picks, hold-out secondary swap) moved to playerLoadout.ts behind a LoadoutHost surface; statics re-exported (742->645).
 2026-09-30 - AmbientBirds split: per-bird flight modes (dive/depart/loner soar/kettle orbit + pose helpers) moved to birdFlight.ts behind a FlightHost surface (485->295).
 2026-09-30 - Projectile split: planted-shell family (sticky glue attachment + javelin embed corpse) moved to projStuck.ts behind a StuckHost surface; host keeps a stickAt delegate (480->402).
