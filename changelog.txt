@@ -1,3 +1,4 @@
+2026-10-02 - PlayerVisuals.updateModelAnim split: locomotion-lean helper removes last oxlint complexity warning
 2026-10-02 - shared/botTaunts rng injectable; audit: reconnect reclaim re-tracks moveSim shadow, all timers accounted
 2026-10-02 - offline bots speak: botTaunts moved to shared/, GameBot frags/deaths emit kill/death lines to the local feed
 2026-10-02 - netBot: envDamage claims require a fresh (<600ms) creature event — kills the last implausible-env warn lane
