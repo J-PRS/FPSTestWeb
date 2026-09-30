@@ -1,10 +1,12 @@
 import * as THREE from 'three';
 
-import { GRAVITY } from '../core/config.js';
 import { Projectile } from '../projectiles/Projectile.js';
 import { RemotePlayer } from '../entities/RemotePlayer.js';
 import type { Terrain } from '../world/terrain.js';
 import type { Nugget } from '../entities/Nugget.js';
+import { MovementController, type MovementState } from '../entities/movement.js';
+import { ENERGY } from '../../../shared/movement.js';
+import type { StructureSpec } from '../../../shared/mapSpec.js';
 import { TEAM_COLORS, type TeamId } from '../../../shared/teams.js';
 import { BotBrain, BOT_EYE } from '../../../shared/botBrain.js';
 import { CLASS_STATS } from '../../../shared/botClasses.js';
@@ -22,7 +24,6 @@ import type { BotLoadout } from '../../../shared/botLoadouts.js';
  * scatter — the same Omicron delay as the pvptest harness bots.
  */
 
-const BOT_SPEED = 16;
 export const BOT_HP = 100;
 export const BOT_DMG = 18;   // bolt claim damage, tuned to threaten but not melt
 export const EYE = BOT_EYE;
@@ -32,15 +33,14 @@ export class GameBot extends RemotePlayer {
   /** 'alpha'/'bravo' in team modes; the bot's own playerId in FFA. */
   team: string;
   botHp = BOT_HP;
-  /** Armor tier — offline bots don't run the shared sim, so class lands
-   *  as a flat speed multiplier + HP cap + silhouette scale. */
+  /** Armor tier — speedScale feeds the shared MoveSim so heavy/light
+   *  ground speed changes land exactly as the server computes them. */
   armorClass: 'light' | 'medium' | 'heavy' = 'medium';
-  private classSpeed = 1;
   botMaxHp = BOT_HP;
   setBotClass(cls: 'light' | 'medium' | 'heavy'): void {
     this.armorClass = cls;
     const st = CLASS_STATS[cls];
-    this.classSpeed = st.speedScale;
+    this.movement.setSpeedScale(st.speedScale);
     this.botMaxHp = BOT_HP + st.maxHealth;
     this.botHp = Math.min(this.botMaxHp, this.botHp + Math.max(0, this.botMaxHp - BOT_HP));
     this.setClass(cls); // silhouette
@@ -62,9 +62,9 @@ export class GameBot extends RemotePlayer {
    *  airborne Tribes play — the penalty is the cure. */
   yeet(): void {
     const yaw = Math.random() * Math.PI * 2;
-    this.botVel.x += Math.cos(yaw) * 12;
-    this.botVel.y = 18;
-    this.botVel.z += Math.sin(yaw) * 12;
+    this.velocity.x += Math.cos(yaw) * 12;
+    this.velocity.y = 18;
+    this.velocity.z += Math.sin(yaw) * 12;
     this.yeetT = 1.5;
     this.sheep = 40;
   }
@@ -73,7 +73,15 @@ export class GameBot extends RemotePlayer {
   /** Kit from the shared roster — TeamBots assigns it so range-band
    *  weapon picks mirror the dedicated server's bots. */
   loadout?: BotLoadout;
-  private botVel = new THREE.Vector3();
+  /** Shared MoveSim — the same physics the server shadow runs, so a bot
+   *  skis/jets/lands exactly like a legal player (no invented velocities). */
+  readonly movement: MovementController;
+  /** Live MoveState aliasing position/velocity — the sim mutates the
+   *  RemotePlayer's own vectors in place (same trick as Player). */
+  private moveState: MovementState;
+  private appliedSpecList: readonly StructureSpec[] | undefined;
+  /** Jet energy tank — a bot can only hold burn while fuel remains. */
+  energy: number = ENERGY.max;
 
   constructor(scene: THREE.Scene, name: string, team: TeamId | 'ffa', spawn: THREE.Vector3, terrain: Terrain,
               cls: 'light' | 'medium' | 'heavy' = 'medium') {
@@ -81,6 +89,8 @@ export class GameBot extends RemotePlayer {
     // picked inside the RemotePlayer ctor before setBotClass could speak.
     super(scene, `bot:${name}`, { x: spawn.x, y: spawn.y, z: spawn.z }, terrain, cls);
     this.team = team;
+    this.moveState = { pos: this.position, vel: this.velocity, yaw: 0, pitch: 0, onGround: true };
+    this.movement = new MovementController(terrain, this.moveState);
     this.setBotClass(cls);
     this.brain = new BotBrain({ x: spawn.x, y: spawn.y, z: spawn.z });
     // Local authority: think() writes position/rotation directly — routing
@@ -136,82 +146,69 @@ export class GameBot extends RemotePlayer {
     return { targetId: out.fire.targetId, aim: _aim.set(out.fire.aim.x, out.fire.aim.y, out.fire.aim.z) };
   }
 
-  /** Locomotion: steering + the brain's ski/jet/jump buttons. Ski holds
-   *  momentum past run speed (steering only, downhill feeds it); jet is
-   *  real thrust, forward included. */
-  private locomote(dt: number, ctx: { terrain: Terrain }, dest: { x: number; y: number; z: number }, move: { ski?: boolean; jet?: boolean; jump?: boolean } | undefined): void {
+  /** Locomotion: point yaw at the destination, feed the brain's buttons
+   *  into the shared MoveSim, keep an honest energy tank on the jets. */
+  private locomote(dt: number, _ctx: { terrain: Terrain }, dest: { x: number; y: number; z: number }, move: { ski?: boolean; jet?: boolean; jump?: boolean } | undefined): void {
     const pos = this.position;
-    _move.set(dest.x - pos.x, 0, dest.z - pos.z);
-    const md = _move.length();
-    const groundY = ctx.terrain.getHeight(pos.x, pos.z) + EYE;
-    const grounded = pos.y <= groundY + 0.1;
-    const speedXZ = Math.hypot(this.botVel.x, this.botVel.z);
-    const k = { dt, terrain: ctx.terrain, md, speedXZ, grounded };
-    this.steer(dt, move?.ski, md, speedXZ, grounded);
-    this.propel(pos, move, k);
-    pos.addScaledVector(this.botVel, dt);
-    const gy = ctx.terrain.getHeight(pos.x, pos.z) + EYE;
-    if (pos.y < gy) { pos.y = gy; this.botVel.y = 0; }
-    else if (pos.y > gy + 0.05 && this.botVel.y < -2) { /* falling */ }
+    const md = Math.hypot(dest.x - pos.x, dest.z - pos.z);
+    this.rotation.yaw = md > 0.01 ? Math.atan2(dest.x - pos.x, dest.z - pos.z) : this.rotation.yaw;
+    this.rotation.pitch = 0;
+    this.rotation.roll = 0; // corpse roll would otherwise stick forever
 
-    // Drive the RemotePlayer visual directly — localDriven means tick()
-    // skips snapshot interp, so we own position/rotation/velocity.
-    // wireSki feeds the anim pick the bot's real ski button — without it
-    // the speed heuristic tucks every fast bot, sliding or not.
+    if (this.appliedSpecList !== botStructureSpec) {
+      this.appliedSpecList = botStructureSpec;
+      this.movement.setStructures(botStructureSpec);
+    }
+    this.moveState.yaw = this.rotation.yaw;
+    this.moveState.pitch = 0;
+    // Yeet overrides fuel — the penalty jet ignores the tank on purpose.
+    const jet = (!!move?.jet && this.energy > 0.5) || this.yeetT > 0;
+    this.movement.setInput({
+      forward: md > 0.5 ? 1 : 0,
+      right: 0,
+      jumpHeld: !!move?.jump,
+      skiHeld: !!move?.ski,
+      jetHeld: jet,
+    });
+    this.movement.update(dt);
+    if (jet && this.yeetT <= 0) this.energy = Math.max(0, this.energy - ENERGY.jetDrain * dt);
+    else if (this.moveState.onGround && this.energy < ENERGY.max) {
+      this.energy = Math.min(ENERGY.max, this.energy + ENERGY.jetCharge * dt);
+    }
+
     this.wireSki = !!move?.ski;
     // Real jet button for the trail — the vel.y heuristic can't tell a
     // burn from a knockback launch; the brain knows.
-    this.wireJet = !!move?.jet || this.yeetT > 0;
-    this.rotation.yaw = Math.atan2(dest.x - pos.x, dest.z - pos.z);
-    this.rotation.pitch = 0;
-    this.rotation.roll = 0; // corpse roll would otherwise stick forever
-    this.velocity.copy(this.botVel);
-    this.serverVelocity.copy(this.botVel); // vel getter prefers this
+    this.wireJet = jet;
+    this.serverVelocity.copy(this.velocity); // vel getter prefers this
   }
 
-  /** Thrust + slope physics: gravity always, jet adds real thrust
-   *  (forward too, not just up), downhill ski converts slope into speed
-   *  past the run cap, flat-ski bleeds momentum gently. */
-  private propel(pos: THREE.Vector3, move: { ski?: boolean; jet?: boolean; jump?: boolean } | undefined, k: { dt: number; terrain: Terrain; md: number; speedXZ: number; grounded: boolean }): void {
-    const { dt, terrain, md, speedXZ, grounded } = k;
-    this.botVel.y += GRAVITY * dt;
-    if (move?.jet || this.yeetT > 0) {
-      this.botVel.y += 55 * dt;
-      if (this.botVel.y > 14) this.botVel.y = 14;
-      if (md > 0.5) { this.botVel.x += _move.x / BOT_SPEED * 6 * dt; this.botVel.z += _move.z / BOT_SPEED * 6 * dt; }
-    }
-    if (move?.jump && grounded) this.botVel.y = 12;
-    if (!move?.ski || !grounded || speedXZ <= 1) return;
-    const nx = this.botVel.x / speedXZ, nz = this.botVel.z / speedXZ;
-    const drop = terrain.getHeight(pos.x, pos.z) - terrain.getHeight(pos.x + nx * 6, pos.z + nz * 6);
-    if (drop > 0) {
-      const push = Math.min(drop * 18, 30) * dt;
-      this.botVel.x += nx * push; this.botVel.z += nz * push;
-    } else if (speedXZ > BOT_SPEED * this.classSpeed) {
-      const bleed = Math.max(0, 1 - dt * 0.35);
-      this.botVel.x *= bleed; this.botVel.z *= bleed;
-    }
+  override applyPredictedKnockback(fromPos: THREE.Vector3, impulseMag: number, pull = false): void {
+    // Local authority: the shove lands directly on the sim velocity —
+    // no dead-reckoning guess like wire remotes get.
+    const dx = this.position.x - fromPos.x;
+    const dy = this.position.y - fromPos.y;
+    const dz = this.position.z - fromPos.z;
+    const dist = Math.sqrt(dx * dx + dy * dy + dz * dz) || 0.001;
+    const s = pull ? -1 : 1;
+    this.velocity.x += (dx / dist) * impulseMag * s;
+    this.velocity.y += (pull ? 0.3 : 0.5) * impulseMag;
+    this.velocity.z += (dz / dist) * impulseMag * s;
   }
 
-  /** XZ steering: walk-lerp toward BOT_SPEED under run speed; past it a
-   *  skiing bot keeps magnitude and the lerp only steers heading. */
-  private steer(dt: number, ski: boolean | undefined, md: number, speedXZ: number, _grounded: boolean): void {
-    if (md > 0.5) {
-      _move.multiplyScalar(BOT_SPEED * this.classSpeed / md);
-      if (ski && speedXZ > BOT_SPEED * this.classSpeed) {
-        const m = Math.hypot(_move.x, _move.z) || 1;
-        this.botVel.x += (_move.x / m * speedXZ - this.botVel.x) * Math.min(1, dt * 3);
-        this.botVel.z += (_move.z / m * speedXZ - this.botVel.z) * Math.min(1, dt * 3);
-      } else {
-        this.botVel.x += (_move.x - this.botVel.x) * Math.min(1, dt * 6);
-        this.botVel.z += (_move.z - this.botVel.z) * Math.min(1, dt * 6);
-      }
-    } else {
-      this.botVel.x *= Math.max(0, 1 - dt * 8);
-      this.botVel.z *= Math.max(0, 1 - dt * 8);
-    }
+  override respawn(position: { x: number; y: number; z: number }): void {
+    super.respawn(position);
+    this.energy = ENERGY.max;
+    this.moveState.onGround = true;
+    this.movement.setState(this.moveState);
   }
 }
 
-const _move = new THREE.Vector3();
+// Map structures every bot's movement surface resolves against — set from
+// the same map.structures the player's controller gets (net/world.ts).
+let botStructureSpec: readonly StructureSpec[] | undefined;
+export function setBotStructureSpecs(list: readonly StructureSpec[] | undefined): void {
+  botStructureSpec = list;
+}
+
 const _aim = new THREE.Vector3();

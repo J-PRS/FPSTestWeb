@@ -14,6 +14,7 @@ import type { NetCtx } from './ctx.js';
 import { loadHeightfieldBin, loadHeightmap } from '../../world/heightmap.js';
 import { reconcileDeployables } from './deployables.js';
 import { resolveServerEndpoints } from '../../networking/endpoints.js';
+import { setBotStructureSpecs } from '../botBrain.js';
 
 export function wireWorld(ctx: NetCtx): void {
   const { deps, networkManager, chat } = ctx;
@@ -66,6 +67,7 @@ export function wireWorld(ctx: NetCtx): void {
     Projectile.solidColliders = Ball.colliders;
     Projectile.solidIndex = Ball.colliderIndex;
     deps.lazyPlayer().movement.setStructures(map.structures);
+    setBotStructureSpecs(map.structures);
     if (map.arena) {
       buildArenaDome(map.arena, deps.lazyTerrain().getHeight(map.arena.x, map.arena.z), deps.lazyScene());
     } else {
@@ -163,6 +165,7 @@ function applyMapSnapshot(ctx: NetCtx, map?: MapSnapshot): void {
   // Player collision — the move sim's solid layer must hold the same
   // pieces or every wall contact reads as a divergence.
   deps.lazyPlayer().movement.setStructures(map?.structures);
+  setBotStructureSpecs(map?.structures);
   if (map?.arena) {
     buildArenaDome(map.arena, deps.lazyTerrain().getHeight(map.arena.x, map.arena.z), deps.lazyScene());
   } else {
