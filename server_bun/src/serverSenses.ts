@@ -128,8 +128,7 @@ export class ServerBotSenses {
     const pick = roleObjective(this.roles.get(p.id) ?? 'offense', {
       home: own.home,
       // Own flag's carrier — chase the thief, not the base.
-      thief: own.state === 'carried' && own.carrier
-        ? this.room.players.getPlayer(own.carrier)?.position ?? null : null,
+      thief: this.thiefOf(me)?.pos ?? null,
       // Own flag dropped — anyone close enough touches it home.
       dropped: own.state === 'dropped' ? own.pos : null,
       enemyStand,
@@ -145,6 +144,20 @@ export class ServerBotSenses {
   private escortSpot(carrier: string | null | undefined, me: 'alpha' | 'bravo'): Vec3 | null {
     const escortP = carrier ? this.room.players.getPlayer(carrier) : null;
     return escortP && escortP.team === me ? escortP.position : null;
+  }
+
+  /** Who's carrying OUR flag — pos+vel are beacon info (the wire streams
+   *  the carrier anyway), so returning them to the brain is not a wallhack.
+   *  pickHunt consumes this to actually ENGAGE the thief, not just run at
+   *  the flag's old stand position. */
+  private thiefOf(team: string): BotEnemy | null {
+    const flags = this.room.flags;
+    if (!flags || (team !== 'alpha' && team !== 'bravo')) return null;
+    const own = flags.flags.get(team);
+    if (!own || own.state !== 'carried' || !own.carrier) return null;
+    const t = this.room.players.getPlayer(own.carrier);
+    if (!t || t.isDead) return null;
+    return { id: t.id, pos: t.position, vel: t.velocity, alive: true };
   }
 
   /** The sensorium for one think tick — see file header for what's legal
@@ -172,6 +185,7 @@ export class ServerBotSenses {
         this.room.moveSim.structureTop(x, z),
       ),
       others: this.othersOf(p),
+      thief: this.thiefOf(p.team ?? ''),
       // Aim lead uses the muzzle speed of the weapon this bot would
       // pick at that range — same band select fireAt runs.
       weaponSpeed: (d) => {
