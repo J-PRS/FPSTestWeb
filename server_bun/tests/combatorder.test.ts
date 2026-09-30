@@ -185,6 +185,53 @@ describe('hitscan AOE claims (lightning beam)', () => {
     expect(rejections(sentTo, 'p1').length).toBe(1);
   });
 
+  it('the excluded victim still eats the tick — the beam has no paired shot claim', () => {
+    const { players, combat, sentTo } = harness();
+    const p1 = players.addPlayer('p1');
+    p1.position = { x: 0, y: 10, z: 0 };
+    const target = players.addPlayer('p2');
+    target.position = { x: 0, y: 10, z: -10 };
+    target.protectedUntil = 0;
+
+    // Exactly what the client sends while welding a player: tip at the
+    // victim, victim in excludeTargetId (projectile semantics: "already
+    // took the direct hit"). Without a paired shot this used to pay
+    // nothing but banked charge.
+    combat.handleAOEShot('p1', {
+      type: 'aoeShot',
+      position: { x: 0, y: 10.8, z: -10 },
+      weaponType: WeaponType.Lightning,
+      excludeTargetId: 'p2',
+    });
+
+    expect(rejections(sentTo, 'p1')).toEqual([]);
+    expect(target.health).toBeLessThan(target.maxHealth);
+  });
+
+  it('held ticks on one victim ramp down like botAttack beams', () => {
+    const { players, combat } = harness();
+    const p1 = players.addPlayer('p1');
+    p1.position = { x: 0, y: 10, z: 0 };
+    const target = players.addPlayer('p2');
+    target.position = { x: 0, y: 10, z: -10 };
+    target.protectedUntil = 0;
+    target.armor = 0; // health deltas read clean against lgTickDamage
+
+    const claim = () => combat.handleAOEShot('p1', {
+      type: 'aoeShot',
+      position: { x: 0, y: 10.8, z: -10 },
+      weaponType: WeaponType.Lightning,
+      excludeTargetId: 'p2',
+    });
+    const tick = () => { const before = target.health; claim(); return before - target.health; };
+    const t1 = tick();
+    for (let i = 0; i < 3; i++) tick(); // ticks 2-4 hold the same band
+    const t5 = tick();
+    expect(t1).toBeGreaterThan(0);
+    expect(t5).toBeGreaterThan(0);
+    expect(t5).toBeLessThan(t1); // hold-decay: same gun, less pay
+  });
+
   it('a tip behind a wall rejects — beams cannot pierce structures', async () => {
     const { structureColliders } = await import('../../shared/ballSim.ts');
     const { players, combat, sentTo } = harness();
