@@ -5,16 +5,18 @@ import { ctx, play, osc, sample, layer, noise } from './util.js';
 
 // World (positional — routed through distance gain + pan)
 
-export function explosionAt(pos: THREE.Vector3, big: boolean, weaponType?: number): void {
+export function explosionAt(pos: THREE.Vector3, big: boolean, weaponType?: number, emitVel?: THREE.Vector3): void {
   const c = ctx();
   if (!c) return;
-  const inNode = audio.worldInput(pos);
+  const inNode = audio.worldInput(pos, emitVel);
   if (!inNode) return;
   const g = c.createGain(); g.connect(inNode);
-  if (!play(g, 0.8)) return;
-  if (explosionSample(g, big, weaponType)) return;
-  noise(0.6, big ? 0.9 : 0.55, g, 'lowpass', 3000, 60);
-  osc('sine', 60, 25, 0.5, big ? 0.7 : 0.45, g);
+  try {
+    if (!play(g, 0.8)) return;
+    if (explosionSample(g, big, weaponType)) return;
+    noise(0.6, big ? 0.9 : 0.55, g, 'lowpass', 3000, 60);
+    osc('sine', 60, 25, 0.5, big ? 0.7 : 0.45, g);
+  } finally { audio.emitterPitch = 1; }
 }
 
 // Per-weapon explosion identities — same physics, different voice so you
@@ -61,19 +63,21 @@ const BOOM_SAMPLES: Partial<Record<number, [string, number, number?, number?, nu
 }
 
 /** Pull-mode detonation (disc) — a suck-in zap layered over a deep pop. */
-export function implosionAt(pos: THREE.Vector3, direct: boolean): void {
+export function implosionAt(pos: THREE.Vector3, direct: boolean, emitVel?: THREE.Vector3): void {
   const c = ctx();
   if (!c) return;
-  const inNode = audio.worldInput(pos);
+  const inNode = audio.worldInput(pos, emitVel);
   if (!inNode) return;
   const g = c.createGain(); g.connect(inNode);
-  if (!play(g, 0.7)) return;
-  if (layer(g, [
-    ['shot_energy', 0.8, 0.6],
-    ['explosion_small', direct ? 0.7 : 0.5, 1.2],
-  ])) return;
-  osc('sawtooth', 1800, 200, 0.25, 0.4, g);
-  noise(0.4, 0.5, g, 'lowpass', 4000, 300);
+  try {
+    if (!play(g, 0.7)) return;
+    if (layer(g, [
+      ['shot_energy', 0.8, 0.6],
+      ['explosion_small', direct ? 0.7 : 0.5, 1.2],
+    ])) return;
+    osc('sawtooth', 1800, 200, 0.25, 0.4, g);
+    noise(0.4, 0.5, g, 'lowpass', 4000, 300);
+  } finally { audio.emitterPitch = 1; }
 }
 
 /** sfxdump-only hook: render an arbitrary layer recipe through the sfx bus

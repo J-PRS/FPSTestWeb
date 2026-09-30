@@ -63,11 +63,13 @@ export function lgSizzle(pos: THREE.Vector3): void {
   const inNode = audio.worldInput(pos);
   if (!inNode) return;
   const g = c.createGain(); g.connect(inNode);
-  if (!play(g, 0.25)) return;
-  if (layer(g, [
-    ['sparks', 0.5, 1.5 + Math.random() * 0.4, undefined, 0.12],
-    ['hg_tick', 0.35, 2.4, 5000, 0.1],
-  ])) return;
-  noise(0.14, 0.3, g, 'bandpass', 4500, 800);
-  osc('square', 2400, 900, 0.1, 0.12, g);
+  try {
+    if (!play(g, 0.25)) return;
+    if (layer(g, [
+      ['sparks', 0.5, 1.5 + Math.random() * 0.4, undefined, 0.12],
+      ['hg_tick', 0.35, 2.4, 5000, 0.1],
+    ])) return;
+    noise(0.14, 0.3, g, 'bandpass', 4500, 800);
+    osc('square', 2400, 900, 0.1, 0.12, g);
+  } finally { audio.emitterPitch = 1; }
 }

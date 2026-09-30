@@ -95,7 +95,7 @@ function tickRemoteCosmetics(deps: RemotesDeps, playerId: string, remotePlayer: 
   // that write wireJet (brain's real jet button) override the guess.
   const jetting = isJetting(remotePlayer, playerState.isDead);
   if (jetting) deps.lazyEffects().spawnJetpack(remotePlayer.position);
-  sfxWorld.remoteMoveAudio(playerId, remotePlayer.position, remotePlayer.vel.length(), jetting, skiing);
+  sfxWorld.remoteMoveAudio(playerId, remotePlayer.position, remotePlayer.vel.length(), jetting, skiing, remotePlayer.vel);
   if (!playerState.isDead) {
     // Teammates read green, everything else stays enemy red — FFA and
     // teamless modes leave `team` undefined so nothing turns friendly.

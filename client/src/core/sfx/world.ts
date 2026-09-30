@@ -57,7 +57,7 @@ export function updateAudio(dt: number, player: LoopPlayer, camera: THREE.Perspe
 
   // Listener: camera position + its right axis drives cheap stereo pan
   _right.set(1, 0, 0).applyQuaternion(camera.quaternion);
-  audio.updateListener(camera.position, _right);
+  audio.updateListener(camera.position, _right, player.vel);
 
   const l = ensureLoops();
   swapToRealSamples();
@@ -86,22 +86,24 @@ export function warpThrow(): void {
 
 /** Warp teleport — the money sound: discharge crack + whoosh collapse.
  *  Positional at the ARRIVAL point so distant warps read quiet. */
-export function warpJump(pos: THREE.Vector3): void {
+export function warpJump(pos: THREE.Vector3, emitVel?: THREE.Vector3): void {
   const c = ctx();
   if (!c) return;
-  const inNode = audio.worldInput(pos);
+  const inNode = audio.worldInput(pos, emitVel);
   if (!inNode) return;
   const g = c.createGain(); g.connect(inNode);
-  if (!play(g, 0.8)) return;
-  if (layer(g, [
-    ['sparks', 0.9, 1.15, undefined, 0.2],
-    ['shot_energy', 0.65, 0.8],
-    ['dash2', 0.55, 1.0, undefined, 0.12],
-    ['explosion_small', 0.4, 1.6, 3000, 0.15],
-  ])) return;
-  noise(0.2, 0.55, g, 'highpass', 2800, 5000);
-  osc('sawtooth', 280, 2400, 0.22, 0.45, g);
-  osc('sine', 140, 40, 0.3, 0.35, g); // sub-thump under the crack
+  try {
+    if (!play(g, 0.8)) return;
+    if (layer(g, [
+      ['sparks', 0.9, 1.15, undefined, 0.2],
+      ['shot_energy', 0.65, 0.8],
+      ['dash2', 0.55, 1.0, undefined, 0.12],
+      ['explosion_small', 0.4, 1.6, 3000, 0.15],
+    ])) return;
+    noise(0.2, 0.55, g, 'highpass', 2800, 5000);
+    osc('sawtooth', 280, 2400, 0.22, 0.45, g);
+    osc('sine', 140, 40, 0.3, 0.35, g); // sub-thump under the crack
+  } finally { audio.emitterPitch = 1; }
 }
 
 // ---------------------------------------------------------------------------
@@ -138,25 +140,27 @@ function acquireRemoteLoops(id: string): RemoteLoops | null {
   return l;
 }
 
-export function remoteMoveAudio(id: string, pos: THREE.Vector3, speed: number, jetting: boolean, skiing: boolean): void {
+export function remoteMoveAudio(id: string, pos: THREE.Vector3, speed: number, jetting: boolean, skiing: boolean, vel?: THREE.Vector3): void {
   if (!audio.ready) return;
   const l = remoteLoops.get(id) ?? ((jetting || skiing) ? acquireRemoteLoops(id) : null);
   if (!l) return;
   l.busy = jetting || skiing;
-  l.jet?.setPos(pos); l.jet?.set(jetting ? 0.45 : 0);
-  l.ski?.setPos(pos); l.ski?.set(skiing ? Math.min(0.18, speed / 90 * 0.18) : 0);
+  l.jet?.setPos(pos, vel); l.jet?.set(jetting ? 0.45 : 0);
+  l.ski?.setPos(pos, vel); l.ski?.set(skiing ? Math.min(0.18, speed / 90 * 0.18) : 0);
 }
 
 type CueKind = 'pounce' | 'skitter' | 'splat' | 'dart' | 'zap' | 'launch' | 'die' | 'hit' | 'rustle' | 'squawk';
 
-export function enemyCue(pos: THREE.Vector3, kind: CueKind): void {
+export function enemyCue(pos: THREE.Vector3, kind: CueKind, emitVel?: THREE.Vector3): void {
   const c = ctx();
   if (!c) return;
-  const inNode = audio.worldInput(pos);
+  const inNode = audio.worldInput(pos, emitVel);
   if (!inNode) return;
   const g = c.createGain(); g.connect(inNode);
-  if (!play(g, 0.4)) return;
-  CUES[kind](g);
+  try {
+    if (!play(g, 0.4)) return;
+    CUES[kind](g);
+  } finally { audio.emitterPitch = 1; }
 }
 
 // Crawler landing: chitin tick-rattle + short hiss + soft leg thud —

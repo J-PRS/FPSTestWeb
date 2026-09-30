@@ -44,7 +44,7 @@ export function wireProjectiles(ctx: NetCtx): void {
     if (weaponType === WeaponType.Melee) {
       meleeFlash(origin, dir);
       deps.world.remotePlayers.get(ownerId)?.fire(weaponType);
-      sfx.shotAt(origin, WeaponType.Melee);
+      sfx.shotAt(origin, WeaponType.Melee, deps.world.remotePlayers.get(ownerId)?.vel);
       return;
     }
     const cfg = (weaponType !== undefined ? getProjectileConfig(weaponType) : undefined) ?? ROCKET_CONFIG;
@@ -61,6 +61,7 @@ export function wireProjectiles(ctx: NetCtx): void {
       };
     }
     remoteProjectile.spawnedThisFrame = false; // remote projectiles don't need first-frame skip
+    const shooterVel = deps.world.remotePlayers.get(ownerId)?.vel;
     // Fast-forward by half-RTT: the server relays the spawn ~half a round-trip
     // late, so without this the projectile lags behind the shooter's real one
     const lead = Math.min(0.15, nm().getPing() / 2000);
@@ -71,7 +72,7 @@ export function wireProjectiles(ctx: NetCtx): void {
     remoteProjectiles.set(projectileId, remoteProjectile);
     // Gun recoil kick on the shooter's remote model
     deps.world.remotePlayers.get(ownerId)?.fire(weaponType);
-    sfx.shotAt(origin, cfg.weaponType);
+    sfx.shotAt(origin, cfg.weaponType, shooterVel);
   };
 
   // Hitscan fire relay — observers get muzzle audio at the shooter's
@@ -85,7 +86,7 @@ export function wireProjectiles(ctx: NetCtx): void {
       : rp?.position;
     if (!origin) return;
     rp?.fire(weaponType);
-    sfx.shotAt(origin, weaponType ?? 0);
+    sfx.shotAt(origin, weaponType ?? 0, rp?.vel);
     // The LG beam is instant on the shooter's screen — paint the same
     // flash for observers along the claimed aim (clamped, cosmetic-only).
     if (dir && weaponType === WeaponType.Lightning) {

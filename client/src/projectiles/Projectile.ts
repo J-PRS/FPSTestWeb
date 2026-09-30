@@ -407,7 +407,7 @@ export class Projectile {
       this.vel.addScaledVector(_tNormal, -vn);
       this.pos.copy(this.hitPoint).addScaledVector(_tNormal, depenetrate);
       this.prevPos.copy(this.pos);
-      if (this.config.bounceSfx) sfx.at(this.pos, this.config.bounceSfx, 0.5, 1.4);
+      if (this.config.bounceSfx) sfx.at(this.pos, this.config.bounceSfx, 0.5, 1.4, this.vel);
       return true;
     }
     this.vel.addScaledVector(_tNormal, -(1 + (this.config.bounceRestitution ?? 0.5)) * vn);
@@ -420,7 +420,7 @@ export class Projectile {
     if (this.config.bounceSfx) {
       // Harder hits ping louder; weak grazes stay quiet — sells mass.
       const gain = Math.min(1, -vn / 40);
-      sfx.at(this.pos, `ricochet${1 + Math.floor(Math.random() * 3)}`, gain);
+      sfx.at(this.pos, `ricochet${1 + Math.floor(Math.random() * 3)}`, gain, 1, this.vel);
     }
     return true;
   }

@@ -16,14 +16,16 @@ export function shoot(weaponType: number): void {
 }
 
 /** Remote player's shot — same signature, distance-attenuated + panned. */
-export function shotAt(pos: THREE.Vector3, weaponType: number): void {
+export function shotAt(pos: THREE.Vector3, weaponType: number, emitVel?: THREE.Vector3): void {
   const c = ctx();
   if (!c) return;
-  const inNode = audio.worldInput(pos);
+  const inNode = audio.worldInput(pos, emitVel);
   if (!inNode) return;
   const g = c.createGain(); g.connect(inNode);
-  if (!play(g, 0.3)) return;
-  shootInto(g, weaponType);
+  try {
+    if (!play(g, 0.3)) return;
+    shootInto(g, weaponType);
+  } finally { audio.emitterPitch = 1; }
 }
 
 // Layered shot recipes — checked before SHOT_SAMPLES. Flak's voice is a

@@ -27,8 +27,9 @@ export function osc(type: OscillatorType, f0: number, f1: number, dur: number,
   const g = c.createGain();
   const t0 = c.currentTime;
   o.type = type;
-  o.frequency.setValueAtTime(f0, t0);
-  o.frequency.exponentialRampToValueAtTime(Math.max(1, f1), t0 + dur);
+  const bend = audio.emitterPitch;
+  o.frequency.setValueAtTime(f0 * bend, t0);
+  o.frequency.exponentialRampToValueAtTime(Math.max(1, f1 * bend), t0 + dur);
   env(g, t0, peak, dur);
   o.connect(g).connect(dest);
   o.start(t0); o.stop(t0 + dur + 0.05);
@@ -45,7 +46,7 @@ export function sample(name: string, dest: AudioNode, gain = 1, rate = 1,
   if (!c || !buf) return false;
   const src = c.createBufferSource();
   src.buffer = buf;
-  const playRate = rate * (0.94 + Math.random() * 0.12);
+  const playRate = rate * audio.emitterPitch * (0.94 + Math.random() * 0.12);
   src.playbackRate.value = playRate;
   const g = c.createGain();
   g.gain.value = gain;
@@ -104,8 +105,8 @@ export function noise(dur: number, peak: number, dest: AudioNode,
   src.buffer = nb;
   const filt = c.createBiquadFilter();
   filt.type = filtType; filt.Q.value = q;
-  filt.frequency.setValueAtTime(f0, c.currentTime);
-  filt.frequency.exponentialRampToValueAtTime(Math.max(20, f1), c.currentTime + dur);
+  filt.frequency.setValueAtTime(f0 * audio.emitterPitch, c.currentTime);
+  filt.frequency.exponentialRampToValueAtTime(Math.max(20, f1 * audio.emitterPitch), c.currentTime + dur);
   const g = c.createGain();
   env(g, c.currentTime, peak, dur);
   src.connect(filt).connect(g).connect(dest);
@@ -114,12 +115,14 @@ export function noise(dur: number, peak: number, dest: AudioNode,
 
 /** Any sample through the world bus at a position — the generic positional
  *  player for bounce pings, debris hits, etc. */
-export function at(pos: THREE.Vector3, name: string, gain = 1, rate = 1): void {
+export function at(pos: THREE.Vector3, name: string, gain = 1, rate = 1, emitVel?: THREE.Vector3): void {
   const c = ctx();
   if (!c || !audio.sample(name)) return;
-  const inNode = audio.worldInput(pos);
+  const inNode = audio.worldInput(pos, emitVel);
   if (!inNode) return;
   const g = c.createGain(); g.connect(inNode);
-  if (!play(g, 1)) return;
-  sample(name, g, gain, rate);
+  try {
+    if (!play(g, 1)) return;
+    sample(name, g, gain, rate);
+  } finally { audio.emitterPitch = 1; }
 }
