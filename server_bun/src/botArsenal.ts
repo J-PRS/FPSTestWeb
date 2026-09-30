@@ -14,6 +14,8 @@ import { BOT_LOADOUTS, pickBotWeapon, type BotLoadout } from '../../shared/botLo
 import type { BotVec, BrainOut } from '../../shared/botBrain.ts';
 import { fireAtBall as beamAtBall, fireSpeedless as beamSpeedless, type BeamHost } from './botBeam.ts';
 
+const BOLT_SPEED = 60; // m/s — the melee swing's visual bolt
+
 // Demo/debug knob: FPS_SUPERBOT=<id-substring> gives the matching bot
 // superpowers — 3× ground speed and a hit roll that never misses.
 const SUPERBOT = process.env.FPS_SUPERBOT ?? '';
@@ -111,7 +113,7 @@ export class BotArsenal implements BeamHost {
     const alen = Math.sqrt(ax * ax + ay * ay + az * az) || 1;
     const dir = { x: ax / alen, y: ay / alen, z: az / alen };
     if (!this.room.projectiles.spawn(p.id, wt, muzzle, dir, p.velocity)) {
-      this.fireSpeedless(p.id, muzzle, dir, wt);
+      beamSpeedless(this, p.id, muzzle, dir, wt);
     }
   }
 
