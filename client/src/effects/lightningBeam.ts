@@ -51,6 +51,9 @@ export class LightningBeam {
   private camPos = new THREE.Vector3();
   private jagT = 0;
   private fade = 0;
+  /** 0..1 banked pop charge on the current victim — thickens the bolt and
+   *  overclocks the spark fountain as the bomb loads. */
+  private charge = 0;
 
   constructor(scene: THREE.Scene) {
     this.beamPts = Array.from({ length: SEGS + 1 }, () => new THREE.Vector3());
@@ -172,6 +175,9 @@ export class LightningBeam {
     this.chainCore.visible = true;
   }
 
+  /** Banked charge level of the struck victim, 0..1. */
+  setCharge(c: number): void { this.charge = Math.min(Math.max(c, 0), 1); }
+
   /** No fork this frame — hide the hop ribbon until the next fireChain. */
   clearChain(): void {
     this.chainLive = false;
@@ -182,8 +188,9 @@ export class LightningBeam {
     if (this.fade <= 0) { this.group.visible = false; this.chainLive = false; return; }
     this.fade = Math.max(0, this.fade - dt / FADE_TIME);
     const f = this.fade;
+    const c = this.charge;
     (this.core.material as THREE.MeshBasicMaterial).opacity = 0.95 * f;
-    (this.glow.material as THREE.MeshBasicMaterial).opacity = 0.35 * f;
+    (this.glow.material as THREE.MeshBasicMaterial).opacity = (0.35 + c * 0.4) * f;
     (this.hitGlow.material as THREE.SpriteMaterial).opacity = 0.9 * f;
     (this.sparkPoints.material as THREE.PointsMaterial).opacity = 0.9 * f;
     (this.chainCore.material as THREE.MeshBasicMaterial).opacity = 0.7 * f;
@@ -205,8 +212,8 @@ export class LightningBeam {
           .addScaledVector(_side, (Math.random() - 0.5) * amp)
           .addScaledVector(_up, (Math.random() - 0.5) * amp);
       }
-      this.writeRibbon(this.core, CORE_W);
-      this.writeRibbon(this.glow, GLOW_W);
+      this.writeRibbon(this.core, CORE_W * (1 + c * 1.6));
+      this.writeRibbon(this.glow, GLOW_W * (1 + c * 1.4));
       // Roll the chain hop too — tighter jag, it's a short fork
       if (this.chainLive) {
         _dir.copy(this.chainTo).sub(this.chainFrom);
@@ -227,8 +234,8 @@ export class LightningBeam {
     // exactly the "beam detaches on fast turns" artifact.
     this.beamPts[0]!.copy(this.from);
     this.beamPts[SEGS]!.copy(this.to);
-    this.writeRibbon(this.core, CORE_W);
-    this.writeRibbon(this.glow, GLOW_W);
+    this.writeRibbon(this.core, CORE_W * (1 + c * 1.6));
+    this.writeRibbon(this.glow, GLOW_W * (1 + c * 1.4));
 
     // Hit glow throbs
     const pulse = 1.9 + Math.sin(performance.now() * 0.04) * 0.5;
@@ -238,11 +245,12 @@ export class LightningBeam {
     for (let i = 0; i < SPARKS; i++) {
       this.sparkAge[i]! -= dt;
       if (this.sparkAge[i]! <= 0) {
-        // Respawn: burst outward from the hit point + slight gravity bounce
-        this.sparkAge[i] = SPARK_LIFE * (0.5 + Math.random() * 0.5);
+        // Respawn: burst outward from the hit point + slight gravity bounce;
+        // charged victims boil faster and fling harder.
+        this.sparkAge[i] = SPARK_LIFE * (0.5 + Math.random() * 0.5) * (1 + c * 0.6);
         this.sparkPos[i * 3] = this.to.x; this.sparkPos[i * 3 + 1] = this.to.y; this.sparkPos[i * 3 + 2] = this.to.z;
         const a = Math.random() * Math.PI * 2, e = Math.random() * Math.PI - Math.PI / 2;
-        const s = SPARK_SPEED * (0.4 + Math.random() * 0.6);
+        const s = SPARK_SPEED * (0.4 + Math.random() * 0.6) * (1 + c * 1.2);
         this.sparkVel[i * 3] = Math.cos(a) * Math.cos(e) * s;
         this.sparkVel[i * 3 + 1] = Math.abs(Math.sin(e)) * s * 0.7 + 2; // biased up
         this.sparkVel[i * 3 + 2] = Math.sin(a) * Math.cos(e) * s;

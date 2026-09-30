@@ -291,6 +291,7 @@ function zapTarget(deps: CombatDeps, hooks: LightningHooks, lg: LgState,
   chargeBank.set(t.id, acc);
   // Shroud grows + hardens with charge — a readable countdown to the pop.
   const charge = Math.min(acc / LG_POP_DMG_CAP, 1);
+  lg.beam?.setCharge(charge); // the bolt itself thickens as the bomb loads
   let sh = lg.shroud.get(t.id);
   if (!sh) {
     const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
@@ -381,6 +382,8 @@ export function createLightning(deps: CombatDeps, hooks: LightningHooks) {
         chainT.applyKnockback(hitTarget.pos, stats.knockbackForce * 0.6);
         zapTarget(deps, hooks, lg, chainT, LG_CHAIN_DMG_SCALE, cam);
       }
+    } else {
+      lg.beam?.setCharge(0); // arcing air — nothing banked, nothing to show
     }
 
     if (hitPlayerId) {
