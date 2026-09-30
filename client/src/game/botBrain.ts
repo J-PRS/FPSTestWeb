@@ -8,6 +8,7 @@ import type { Nugget } from '../entities/Nugget.js';
 import { TEAM_COLORS, type TeamId } from '../../../shared/teams.js';
 import { BotBrain, BOT_EYE } from '../../../shared/botBrain.js';
 import { CLASS_STATS } from '../../../shared/botClasses.js';
+import type { BotLoadout } from '../../../shared/botLoadouts.js';
 
 /**
  * GameBot — an in-world fake player. A GameBot is a RemotePlayer registered
@@ -69,6 +70,9 @@ export class GameBot extends RemotePlayer {
   }
   /** Shared decision core — same brain server bots run. */
   private brain: BotBrain;
+  /** Kit from the shared roster — TeamBots assigns it so range-band
+   *  weapon picks mirror the dedicated server's bots. */
+  loadout?: BotLoadout;
   private botVel = new THREE.Vector3();
 
   constructor(scene: THREE.Scene, name: string, team: TeamId | 'ffa', spawn: THREE.Vector3, terrain: Terrain,
@@ -152,8 +156,15 @@ export class GameBot extends RemotePlayer {
 
     // Drive the RemotePlayer visual directly — localDriven means tick()
     // skips snapshot interp, so we own position/rotation/velocity.
+    // wireSki feeds the anim pick the bot's real ski button — without it
+    // the speed heuristic tucks every fast bot, sliding or not.
+    this.wireSki = !!move?.ski;
+    // Real jet button for the trail — the vel.y heuristic can't tell a
+    // burn from a knockback launch; the brain knows.
+    this.wireJet = !!move?.jet || this.yeetT > 0;
     this.rotation.yaw = Math.atan2(dest.x - pos.x, dest.z - pos.z);
     this.rotation.pitch = 0;
+    this.rotation.roll = 0; // corpse roll would otherwise stick forever
     this.velocity.copy(this.botVel);
     this.serverVelocity.copy(this.botVel); // vel getter prefers this
   }

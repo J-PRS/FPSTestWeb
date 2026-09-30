@@ -1,6 +1,11 @@
 import * as THREE from 'three';
 
 import { GameBot, BOT_DMG, EYE } from './botBrain.js';
+import { BOT_LOADOUTS, pickBotWeapon } from '../../../shared/botLoadouts.js';
+import { getProjectileConfig } from '../projectiles/index.js';
+import { Projectile } from '../projectiles/Projectile.js';
+import { SLOT_DEFS } from '../weapons.js';
+import { WeaponType } from '../../../shared/weapons.js';
 import type { Nugget } from '../entities/Nugget.js';
 import type { Targetable } from '../entities/balls.js';
 import type { GameContext } from './context.js';
@@ -10,6 +15,7 @@ import type { Terrain } from '../world/terrain.js';
 import { MELEE_RANGE, MELEE_DAMAGE } from '../core/config.js';
 import { CtfFlags } from './ctfFlags.js';
 import * as sfx from '../core/sfx.js';
+import { poissonDisc } from '../utils/poissonSpread.js';
 
 /**
  * TeamBots — the mode referee. Bot brains/bodies live in botBrain.ts;
@@ -94,6 +100,9 @@ export class TeamBots {
         // rides the ctor so a heavy lands the knight model, not just stats.
         const bot = new GameBot(scene, name, team === 'alpha' ? 'alpha' : 'bravo', spawn, terrain,
           ni % 4 === 1 ? 'light' : ni % 4 === 3 ? 'heavy' : 'medium');
+        // Same roster the dedicated server fields — loadout picks the
+        // weapon by engagement range instead of one generic bolt.
+        bot.loadout = BOT_LOADOUTS[(ni - 1) % BOT_LOADOUTS.length];
         if (ffa) {
           // FFA pseudo-team = own id — everyone is everyone else's enemy.
           bot.team = bot.playerId;
@@ -445,15 +454,54 @@ export class TeamBots {
     return _enemies;
   }
 
-  /** Resolve a bot's bolt: instant claim with the aim point — the same
-   *  legal-claim funnel pvptest bots use, minus the network. Inside fist
-   *  range the bot punches instead — a fist lands flat 60, no bolt streak. */
+  /** Resolve a bot's shot. Range-band pick comes from the shared loadout
+   *  roster; the trigger pull then spawns a REAL projectile — same sweep
+   *  + blast pipeline as the player's own shells, so travel time,
+   *  gravity, splash, and misses are all honest. Only offline: in a
+   *  connected room a shell landing on a WIRE remote would misattribute
+   *  the claim to the local player — server bots own that case anyway. */
   private resolveShot(bot: GameBot, targetId: string, aim: THREE.Vector3): void {
-    const melee = bot.position.distanceTo(aim) <= MELEE_RANGE;
-    if (!melee) this.spawnBolt(bot.position, aim); // cheap pooled tracer
-    const dmg = melee ? MELEE_DAMAGE : BOT_DMG;
-    const src = `${bot.playerId.replace('bot:', '')} ${melee ? 'fist' : 'bolt'}`;
+    const lo = bot.loadout ?? BOT_LOADOUTS[0]!;
+    const dx = aim.x - bot.position.x, dy = aim.y - bot.position.y, dz = aim.z - bot.position.z;
+    const dist = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1;
+    const wt = pickBotWeapon(lo, Math.hypot(dx, dz), dist);
+    const melee = wt === WeaponType.Melee || dist <= MELEE_RANGE;
+    const cfg = melee ? undefined : getProjectileConfig(wt);
+    const online = this.deps.lazyNetworkManager?.()?.isConnected() ?? false;
 
+    if (melee || !cfg || cfg.speed <= 0 || online) {
+      this.claimShot(bot, targetId, aim, melee, melee ? MELEE_DAMAGE : BOT_DMG);
+      return;
+    }
+    this.spawnShells(bot, wt, cfg, dx / dist, dy / dist, dz / dist);
+  }
+
+  /** Real shells into the world projectile list — pellet weapons fan
+   *  out per their def, everything else lobs a single round. */
+  private spawnShells(bot: GameBot, wt: number, cfg: NonNullable<ReturnType<typeof getProjectileConfig>>, nx: number, ny: number, nz: number): void {
+    const dir = _shotDir.set(nx, ny, nz);
+    const muzzle = _shotMuzzle.set(bot.position.x, bot.position.y + 1.4, bot.position.z);
+    const pellets = SLOT_DEFS.find(w => w.weaponType === wt)?.pellets;
+    for (const d of pelletDirs(dir, pellets?.count ?? 1, pellets?.spread ?? 0)) {
+      const p = new Projectile(this.deps.lazyScene(), muzzle, d, bot.vel,
+        { ...cfg, needsServerTracking: false });
+      p.shooterId = bot.playerId;
+      // 'local' isn't in remotePlayerPositions — this lets a bot shell
+      // actually CONNECT with you instead of relying on a trigger-time claim.
+      p.sweepLocal = () => {
+        const pl = this.deps.lazyPlayer();
+        return pl.isDead ? null : pl.pos;
+      };
+      this.deps.world.projectiles.push(p);
+    }
+    sfx.shoot(wt);
+  }
+
+  /** Instant-claim resolution: melee, beams, and connected rooms where
+   *  local shells can't own the attribution. */
+  private claimShot(bot: GameBot, targetId: string, aim: THREE.Vector3, melee: boolean, dmg: number): void {
+    if (!melee) this.spawnBolt(bot.position, aim);
+    const src = `${bot.playerId.replace('bot:', '')} ${melee ? 'fist' : 'bolt'}`;
     if (targetId === 'local') {
       this.resolveShotOnLocal(bot, aim, dmg, melee, src);
       return;
@@ -476,22 +524,35 @@ export class TeamBots {
   private resolveShotOnLocal(bot: GameBot, aim: THREE.Vector3, dmg: number, melee: boolean, src: string): void {
     const p = this.deps.lazyPlayer();
     if (p.isDead || aim.distanceTo(p.pos) >= 1.6) return;
+    this.hurtLocal(dmg, bot.position, src, melee, bot.playerId);
+  }
+
+  /** Shared local-hit funnel: trigger-time claims and real bot-shell
+   *  impacts land here — damage, knockback, death feed + credit. */
+  private hurtLocal(dmg: number, fromPos: THREE.Vector3, src: string, melee: boolean, attackerId: string): void {
+    const p = this.deps.lazyPlayer();
+    if (p.isDead) return;
     p.health = Math.max(0, p.health - dmg);
     p.lastDamageSource = src;
-    p.applyKnockback(bot.position, melee ? 6 : 4);
-    this.deps.lazyHud().showDamage(bot.position, dmg);
+    p.applyKnockback(fromPos, melee ? 6 : 4);
+    this.deps.lazyHud().showDamage(fromPos, dmg);
     sfx.playerHurt();
     if (p.health > 0) return;
-    this.deps.world.killCounts.set(bot.playerId, (this.deps.world.killCounts.get(bot.playerId) ?? 0) + 1);
-    this.creditKill(bot.playerId, false);
+    this.deps.world.killCounts.set(attackerId, (this.deps.world.killCounts.get(attackerId) ?? 0) + 1);
+    this.creditKill(attackerId, false);
     this.localDied();
-    this.hooks.killFeed(bot.playerId.replace('bot:', ''), 'YOU', false, true);
-    this.hooks.localPlayerKilled(bot.playerId.replace('bot:', ''));
+    this.hooks.killFeed(attackerId.replace('bot:', ''), 'YOU', false, true);
+    this.hooks.localPlayerKilled(attackerId.replace('bot:', ''));
   }
 
   /** Player/explosion damage routed here when the victim is a bot —
-   *  combat consults `hit` before predictDamage. */
+   *  combat consults `hit` before predictDamage. A bot shell can also
+   *  hit 'local' (sweepLocal) — that resolves through the same funnel. */
   hit(playerId: string, dmg: number, fromPos: THREE.Vector3, attackerId = 'local'): boolean {
+    if (playerId === 'local') {
+      this.hurtLocal(dmg, fromPos, attackerId.replace('bot:', ''), false, attackerId);
+      return true;
+    }
     const rp = this.deps.world.remotePlayers.get(playerId);
     if (!(rp instanceof GameBot)) return false;
     const died = rp.takeDamageLocal(dmg, fromPos);
@@ -627,6 +688,27 @@ const _touchers: [string, THREE.Vector3][] = [];
 const _enemies: { id: string; pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean }[] = [];
 const _collectors: { id: string; pos: THREE.Vector3; alive: boolean }[] = [];
 const _wdPos = new THREE.Vector3();
+const _shotDir = new THREE.Vector3();
+const _shotMuzzle = new THREE.Vector3();
+const _pelletRight = new THREE.Vector3();
+const _pelletUp = new THREE.Vector3();
+const _pelletUp0 = new THREE.Vector3(0, 1, 0);
+
+/** Pellet fan for flak/shotgun bots — one random cone dir per pellet;
+ *  count 1 collapses to a single straight shot. */
+function pelletDirs(dir: THREE.Vector3, count: number, spread: number): THREE.Vector3[] {
+  if (count <= 1 || spread <= 0) return [dir.clone()];
+  _pelletRight.crossVectors(dir, _pelletUp0);
+  if (_pelletRight.lengthSq() < 1e-8) _pelletRight.set(1, 0, 0); else _pelletRight.normalize();
+  _pelletUp.crossVectors(_pelletRight, dir);
+  const rot = Math.random() * Math.PI * 2;
+  const cs = Math.cos(rot), sn = Math.sin(rot);
+  return poissonDisc(count).map(pt => {
+    const ox = (pt.x * cs - pt.y * sn) * spread;
+    const oy = (pt.x * sn + pt.y * cs) * spread;
+    return dir.clone().addScaledVector(_pelletRight, ox).addScaledVector(_pelletUp, oy).normalize();
+  });
+}
 const BOLT_MAT = new THREE.LineBasicMaterial({ color: 0xffe08a, transparent: true, opacity: 0.9 });
 
 // Small accessor so update() reads deps once per frame.

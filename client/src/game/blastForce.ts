@@ -13,7 +13,7 @@ import type { Targetable } from '../entities/balls.js';
 import * as sfx from '../core/sfx.js';
 
 export interface BlastForceHooks {
-  onTargetDestroyed(t: Targetable, impulse?: THREE.Vector3, weaponType?: number): void;
+  onTargetDestroyed(t: Targetable, impulse?: THREE.Vector3, weaponType?: number, shooterId?: string): void;
 }
 
 interface Forceable {
@@ -49,6 +49,8 @@ export interface BlastArgs {
   aoeDamage: number;
   directHitTargetId: string | null;
   weaponType?: number;
+  /** Offline bot shells carry their bot id so splash kills credit right. */
+  shooterId?: string;
 }
 
 export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
@@ -95,7 +97,7 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
       if (dmg < 1) continue;
       deps.lazyDamageNumbers().spawn(ball.pos, dmg, splashColor(weaponType), deps.lazyCamera());
       deps.reportTargetDamage?.(ball, dmg);
-      if (ball.takeDamage(dmg)) { hooks.onTargetDestroyed(ball, ball.vel, weaponType); continue; }
+      if (ball.takeDamage(dmg)) { hooks.onTargetDestroyed(ball, ball.vel, weaponType, a.shooterId); continue; }
       if (!ball.hideHealthBar) deps.lazyHealthBarSystem().spawnBall(ball, dmg, ball.health);
       const dm = deps.lazyDemoManager();
       if (dm?.isRecording) {
@@ -109,14 +111,8 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
   // ~1 RTT before the victim's real trajectory streams back — RemotePlayer
   // runs it as dead reckoning and clears stale pre-hit snapshots so there's
   // no snap-back when interpolation resumes.
-  function applyForceToRemotes(
-    pos: THREE.Vector3,
-    radius: number,
-    force: number,
-    forceMode: 'push' | 'pull',
-    aoeDamage: number,
-    directHitTargetId: string | null
-  ): void {
+  function applyForceToRemotes(a: BlastArgs): void {
+    const { pos, radius, force, forceMode, aoeDamage, directHitTargetId, shooterId } = a;
     for (const [playerId, rp] of deps.world.remotePlayers) {
       if (rp.isDead) continue;
       // Match server damage exactly: 1 - dist/radius inside radius, 0 outside.
@@ -131,14 +127,14 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
       if (playerId === directHitTargetId) continue;
       deps.lazyHud().showHitMarker();
       const aoeDmg = aoeDamageOf(aoeDamage, dist, radius);
-      if (deps.botHit?.(playerId, aoeDmg, pos)) continue; // local authority resolved it
+      if (deps.botHit?.(playerId, aoeDmg, pos, shooterId)) continue; // local authority resolved it
       deps.lazyHealthBarSystem().predictDamage(playerId, aoeDmg);
     }
   }
 
   // Apply push/pull force to local player, balls, and remote players
   function applyExplosionForce(a: BlastArgs): void {
-    const { pos, radius, force, forceMode, falloffMultiplier, forceMultiplier, aoeDamage, directHitTargetId } = a;
+    const { pos, radius, force, forceMode, falloffMultiplier, forceMultiplier, aoeDamage } = a;
     const falloffAt = (dist: number) => 1 - dist / (radius * falloffMultiplier);
     const applyTo = (t: Forceable, f: number) =>
       forceMode === 'push' ? t.applyKnockback(pos, f) : t.applyPull(pos, f);
@@ -174,7 +170,7 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
     const kbForce = force * KNOCKBACK_SCALE;
     applyForceToBalls({ ...a, force: kbForce }, applyTo);
     applyForceToNuggets(pos, radius, kbForce, forceMode, forceMultiplier);
-    applyForceToRemotes(pos, radius, force, forceMode, aoeDamage, directHitTargetId);
+    applyForceToRemotes(a);
   }
 
   return { applyExplosionForce, applyForceToRemotes };

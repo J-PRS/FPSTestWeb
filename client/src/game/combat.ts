@@ -55,8 +55,9 @@ export interface CombatDeps extends GameContext {
    *  (no server to claim to). Returns true when it consumed the hit —
    *  callers then skip the predictDamage/sendShot path. */
   botHit?: (playerId: string, dmg: number, fromPos: THREE.Vector3, attackerId?: string) => boolean;
-  /** A creature died by local hands — DM scoring credits 'local'. */
-  onCreatureKilled?: () => void;
+  /** A creature died by local hands — DM scoring credits the killer
+   *  ('local' when unset; offline bot shells carry their bot id). */
+  onCreatureKilled?: (shooterId?: string) => void;
   balls: Ball[];
   targets: import('../entities/balls.js').Targetable[]; // balls + crawlers — shootable/blastable
   nuggets: Nugget[];
@@ -167,7 +168,7 @@ function processProjectileExplosion(c: CombatCtx, a: ExplosionArgs): void {
   // Record explosion for death impulse calculation
   deps.explosionTracker.addExplosion(pos, force, a.shooterId || deps.lazyNetworkManager().getLocalPlayerId());
 
-  c.applyExplosionForce({ pos, radius, force, forceMode, falloffMultiplier: a.falloffMultiplier, collisionMultiplier: a.collisionMultiplier, forceMultiplier: a.forceMultiplier, aoeDamage, directHitTargetId: a.directHitTargetId ?? null, weaponType: a.weaponType });
+  c.applyExplosionForce({ pos, radius, force, forceMode, falloffMultiplier: a.falloffMultiplier, collisionMultiplier: a.collisionMultiplier, forceMultiplier: a.forceMultiplier, aoeDamage, directHitTargetId: a.directHitTargetId ?? null, weaponType: a.weaponType, shooterId: a.shooterId });
 
   // AOE damage to remote players (server-side authority)
   const networkManager = deps.lazyNetworkManager();
@@ -461,16 +462,12 @@ function logHitScore(c: CombatCtx, p: Projectile, target: 'ball' | 'player', air
 // Shared death pipeline for direct hits AND splash kills — debris,
 // nuggets, kill credit, elite split. Without this a blast kill would
 // silently delete the entity with no payout.
-function onTargetDestroyed(c: CombatCtx, ball: import('../entities/balls.js').Targetable, impulse?: THREE.Vector3, weaponType?: number): void {
+function onTargetDestroyed(c: CombatCtx, ball: import('../entities/balls.js').Targetable, impulse?: THREE.Vector3, weaponType?: number, shooterId?: string): void {
   const deps = c.deps;
   // Railgun reward: any kill (direct or its splash) instantly reloads —
   // the "not useless" payoff that turns a slow precision weapon into a
   // chain-kill tool against clusters.
   if (weaponType === WeaponType.Railgun) deps.lazyPlayer().refundWeaponCooldown();
-  // Seamless shatter for instanced species: the body's own part
-  // instances become the debris at identical transforms — the corpse IS
-  // the wreckage on frame 0, no pop to mask. Single-part bodies (balls)
-  // fall back to the shell-sampled shard burst.
   if (impulse) _debrisDir.copy(impulse).normalize(); else _debrisDir.set(0, 0.5, 0);
   if (!burstGibs(ball as unknown as SwarmSlotOwner, ball.pos, _debrisDir, ball.vel)) {
     deps.world.debrisList.push(new BallDebris(
@@ -481,7 +478,7 @@ function onTargetDestroyed(c: CombatCtx, ball: import('../entities/balls.js').Ta
   }
   screenShake.blast(ball.pos, 1.6, deps.lazyPlayer().pos);
   sfx.enemyCue(ball.pos, ball.dieCue ?? 'die');
-  if (!ball.scoreless) { deps.lazyPlayer().kills++; deps.onCreatureKilled?.(); }
+  if (!ball.scoreless) { deps.lazyPlayer().kills++; deps.onCreatureKilled?.(shooterId); }
   if (!ball.lootless) {
     for (let n = 0; n < Math.round(ball.scale); n++) {
       deps.nuggets.push(new Nugget(deps.lazyScene(), ball.pos, ball.vel));
@@ -520,7 +517,7 @@ function handleBallHit(c: CombatCtx, p: Projectile, ball: import('../entities/ba
   }
   const airborne = ball.pos.y - ball.radius - deps.lazyTerrain().getHeight(ball.pos.x, ball.pos.z) > 0.6;
   logHitScore(c, p, 'ball', airborne);
-  if (destroyed) onTargetDestroyed(c, ball, p.vel, p.config.weaponType);
+  if (destroyed) onTargetDestroyed(c, ball, p.vel, p.config.weaponType, p.shooterId ?? undefined);
 
   const demoManager = deps.lazyDemoManager();
   if (demoManager?.isRecording && !destroyed) {
@@ -534,7 +531,7 @@ function handlePlayerHit(c: CombatCtx, p: Projectile, playerId: string): void {
   const hitPos = targetPlayer ? targetPlayer.position : deps.lazyPlayer().pos;
   const directDamage = getWeaponStats(p.config.weaponType).directDamage * deps.lazyPlayer().mods.directDamage;
   deps.lazyDamageNumbers().spawn(hitPos, directDamage, p.config.damageColor, deps.lazyCamera());
-  if (deps.botHit?.(playerId, directDamage, p.pos)) return; // bot authority: real damage, no claim
+  if (deps.botHit?.(playerId, directDamage, p.pos, p.shooterId ?? undefined)) return; // bot authority: real damage, no claim
   deps.lazyHealthBarSystem().predictDamage(playerId, directDamage);
   const airborne = targetPlayer
     ? targetPlayer.feetY - deps.lazyTerrain().getHeight(hitPos.x, hitPos.z) > 0.6

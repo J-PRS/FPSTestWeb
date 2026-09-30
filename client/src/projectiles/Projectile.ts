@@ -80,6 +80,14 @@ export class Projectile {
   hitBall: Targetable | null = null; // balls AND crawlers — any shootable target
   hitPlayerId: string | null = null;
   serverProjectileId: string | null = null; // remote player hit tracking
+  /** Whose shell this is — kill attribution for local-authority shots
+   *  (offline GameBots; null = the local player). */
+  shooterId: string | null = null;
+  /** Local-player sweep override: offline bot shells include the local
+   *  player as a hittable body — they're the only projectiles whose
+   *  shooter ISN'T the local player, so self-hits can't happen. Returns
+   *  the live local pos each frame, or null to skip. */
+  sweepLocal: (() => THREE.Vector3 | null) | null = null;
   demoProjectileId = 0; // demo recording tracking ID
   hitAccuracy = 0.0; // actual center-to-center dist at moment of hit
   hitAge = 0.0; // projectile age at hit (airtime)
@@ -438,6 +446,19 @@ export class Projectile {
   }
 
   private checkPlayers(remotePlayers?: Map<string, THREE.Vector3>): boolean {
+    if (this.sweepLocal) {
+      const lp = this.sweepLocal();
+      if (lp && sweepPlayer(this, lp, 'local')) {
+        this.recordHit(this.minHitDist - PLAYER_RADIUS);
+        this.hitPlayerId = 'local';
+        if (this.config.sticks) {
+          this.stickAt(this.hitPoint, undefined, 'local', remotePlayers);
+          return true;
+        }
+        this.explode();
+        return true;
+      }
+    }
     if (!remotePlayers) return false;
     for (const [playerId, playerPos] of remotePlayers) {
       if (sweepPlayer(this, playerPos, playerId)) {

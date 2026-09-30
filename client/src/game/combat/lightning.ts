@@ -11,6 +11,7 @@ import { getWeaponStats, WeaponType } from '../../../../shared/weapons.js';
 import { segSolidHit } from '../../../../shared/solidWorld.js';
 import { Projectile } from '../../projectiles/Projectile.js';
 import type { CombatDeps, FireArgs, ExplosionArgs } from '../combat.js';
+import type { BlastArgs } from '../blastForce.js';
 import type { Targetable } from '../../entities/balls.js';
 
 // Lightning beam scratch — rebuilt per trace, never retained
@@ -27,7 +28,7 @@ type ProcessExplosion = (a: ExplosionArgs) => void;
 export interface LightningHooks {
   processExplosion: ProcessExplosion;
   onTargetDestroyed: (t: Targetable, impulse?: THREE.Vector3, weaponType?: number) => void;
-  applyForceToRemotes: (pos: THREE.Vector3, radius: number, force: number, forceMode: 'push' | 'pull', aoeDamage: number, directHitTargetId: string | null) => void;
+  applyForceToRemotes: (a: BlastArgs) => void;
 }
 
 interface LgState {
@@ -301,7 +302,7 @@ export function createLightning(deps: CombatDeps, hooks: LightningHooks) {
           weaponType: WeaponType.Lightning, excludeTargetId: hitPlayerId,
         });
       }
-      hooks.applyForceToRemotes(_lgHit, stats.aoeRadius, stats.knockbackForce, 'push', stats.aoeDamage, null);
+      hooks.applyForceToRemotes({ pos: _lgHit, radius: stats.aoeRadius, force: stats.knockbackForce, forceMode: 'push', aoeDamage: stats.aoeDamage, directHitTargetId: null, falloffMultiplier: 1, collisionMultiplier: 1, forceMultiplier: 1 });
     }
   }
 

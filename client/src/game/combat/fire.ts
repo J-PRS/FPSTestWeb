@@ -18,6 +18,7 @@ import {
 } from '../../core/config.js';
 import { getWeaponStats, WeaponType } from '../../../../shared/weapons.js';
 import type { CombatDeps, FireArgs } from '../combat.js';
+import type { BlastArgs } from '../blastForce.js';
 import type { Targetable } from '../../entities/balls.js';
 
 // Flak/shotgun spread basis — rebuilt per shot, never retained
@@ -30,7 +31,7 @@ const _meleeToT = new THREE.Vector3();
 
 export interface FireHooks {
   onTargetDestroyed: (t: Targetable, impulse?: THREE.Vector3, weaponType?: number) => void;
-  applyForceToRemotes: (pos: THREE.Vector3, radius: number, force: number, forceMode: 'push' | 'pull', aoeDamage: number, directHitTargetId: string | null) => void;
+  applyForceToRemotes: (a: BlastArgs) => void;
 }
 
 // Weapon trigger handlers: every onX translates a FireArgs into spawned
@@ -173,7 +174,7 @@ function melee(deps: CombatDeps, hooks: FireHooks, e: FireArgs): void {
   deps.lazyViewModel()?.punch();
   deps.world.explosions.push(new Explosion(
     deps.lazyScene(), _meleeHitPos, true, 0, deps.lazyTerrain(),
-    (stats.aoeRadius * 0.7) / ROCKET_RADIUS, 0xaaddff,
+    (stats.aoeRadius * 0.7) / ROCKET_RADIUS, 0xaaddff, 'punch',
   ));
   screenShake.blast(_meleeHitPos, stats.aoeRadius, player.pos);
 
@@ -208,7 +209,7 @@ function melee(deps: CombatDeps, hooks: FireHooks, e: FireArgs): void {
       weaponType: WeaponType.Melee, excludeTargetId: null,
     });
   }
-  hooks.applyForceToRemotes(_meleeHitPos, stats.aoeRadius, stats.knockbackForce, 'push', stats.aoeDamage, null);
+  hooks.applyForceToRemotes({ pos: _meleeHitPos, radius: stats.aoeRadius, force: stats.knockbackForce, forceMode: 'push', aoeDamage: stats.aoeDamage, directHitTargetId: null, falloffMultiplier: 1, collisionMultiplier: 1, forceMultiplier: 1 });
 }
 export function createFire(deps: CombatDeps, hooks: FireHooks) {
 
