@@ -13,6 +13,8 @@ cd server_bun && bun test tests/scenarios/       # gameplay scenario tests
 cd client && ./node_modules/.bin/tsc --noEmit    # client typecheck
 cd client && ./node_modules/.bin/vitest run      # client tests
 cd client && npx -y oxlint src                   # lint
+bun _tools/e2e/all.ts                            # headless E2E (locked-PC safe): smoke/duo/p2p/lobby/reconnect/perf
+bun _tools/e2e/perf.ts --compare _tools/e2e/baseline.json   # perf regression vs baseline
 # bun: export PATH="$HOME/.bun/bin:$PATH"   (Windows, Git Bash)
 ```
 

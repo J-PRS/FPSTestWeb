@@ -61,9 +61,11 @@ try {
   }
   await a.page.evaluate(`window.__test.networkManager.send({ type: 'chat', text: 'hello from A' })`);
   await b.page.evaluate(`window.__test.networkManager.send({ type: 'chat', text: 'hello from B' })`);
+  // Under SwiftShader + machine load, wall-clock timeouts are ~7x
+  // tighter in game time — 30s is still only a few seconds of sim.
   const [bHeard, aHeard] = await Promise.all([
-    b.waitFor(`window.__chatLog?.some(l => l.text === 'hello from A')`, 15000).then(() => true).catch(() => false),
-    a.waitFor(`window.__chatLog?.some(l => l.text === 'hello from B')`, 15000).then(() => true).catch(() => false),
+    b.waitFor(`window.__chatLog?.some(l => l.text === 'hello from A')`, 30000).then(() => true).catch(() => false),
+    a.waitFor(`window.__chatLog?.some(l => l.text === 'hello from B')`, 30000).then(() => true).catch(() => false),
   ]);
   ok(bHeard && aHeard, `chat both directions (a→b=${bHeard} b→a=${aHeard})`);
 

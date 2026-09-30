@@ -2,6 +2,10 @@
   "name": "fpswebtest-tools",
   "private": true,
   "type": "module",
+  "scripts": {
+    "e2e": "bun e2e/all.ts",
+    "e2e:perf": "bun e2e/perf.ts --compare e2e/baseline.json"
+  },
   "dependencies": {
     "puppeteer-core": "^25.12.0"
   }
