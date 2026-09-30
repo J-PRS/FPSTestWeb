@@ -1,3 +1,4 @@
+2026-09-26 - Split Rakk.ts: parts/geometries/materials + writeInstances/wingbeat -> rakkVisual.ts (366->254)
 2026-09-26 - Split Crawler.ts: parts/geometries/materials + writeInstances/legs/fangs/eyes -> crawlerVisual.ts (486->307)
 2026-09-26 - Server bots now hunt the flag thief: ctx.thief wired in serverSenses.build (was only feeding roleObjective movement, never the hunt sense)
 2026-09-26 - Split bots.ts: match referee (checkWin/winText/resetMatch/creditKill/collect/syncLocalTeam) -> botMatch.ts (583->501)
