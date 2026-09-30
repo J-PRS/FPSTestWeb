@@ -26,7 +26,12 @@ redesign (all committed this session):
 - **Stepped ramp-down**: consecutive ticks on one target step 8 → 6 → 4,
   floor reached at tick 10 (~0.5s of hold). Misses inside a 0.3s window
   keep the count; target-switching resets. Sustained DPS ~90, burst DPS
-  ~178. *Handicap*: spraying is weaker than it looks.
+  ~178. *Handicap*: sustained accuracy is weaker than it looks — and
+  this is deliberately inverted from normal balance: the decay punishes
+  the *good* player (a perfect track bleeds to the floor), while a
+  sprayer hopping fresh targets keeps full 8/tick forever. The noob
+  isn't handicapped at all; the pro is, which is exactly why the payoff
+  side has to be serious.
 - **The bank**: each tick banks `8 − tickDamage` (what the ramp withheld)
   ×2 into a per-target charge, capped at 320. *Payoff*: the withheld
   damage isn't lost — it's stored on the victim as a bomb.
