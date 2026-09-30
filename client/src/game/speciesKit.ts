@@ -229,7 +229,10 @@ class SpeciesKitImpl {
       // leash range converges on the last-seen spot and stands there biting
       // air, which reads as "all enemies deaggroed me". 2s without a
       // position update = not a valid target; the AI wanders instead.
-      rc.alive = !r.isDead && (now - r.lastUpdateTime < 2000);
+      // localDriven remotes (offline GameBots) update their position every
+      // frame but never stamp lastUpdateTime — they're always fresh.
+      rc.alive = !r.isDead
+        && ((r as { localDriven?: boolean }).localDriven || (now - r.lastUpdateTime < 2000));
     }
   }
 
