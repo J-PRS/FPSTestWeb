@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test';
-import { mkRoom, pin, step } from './harness.ts';
+import { mkRoom, freeze, step } from './harness.ts';
 import { WeaponType } from '../../../shared/weapons.ts';
 
 // Disc-jump physics: a bot's own blast shoves its shadow (bot velocity is
@@ -9,7 +9,8 @@ describe('scenario: self blast shove', () => {
   it('a bot at its own blast edge gains velocity away from the center', () => {
     const room = mkRoom({ bots: 1 }, 'dm');
     const bot = [...room.players.getAllPlayers().values()].find((p) => p.isBot)!;
-    pin(room, bot.id, { x: 0, y: 31, z: 0 });
+    // freeze() quiets the brain — only the shove may move the shadow.
+    freeze(room, bot.id, { x: 0, y: 31, z: 0 });
     const before = { ...room.moveSim.simPos(bot.id)! };
 
     // Blast 2m behind the bot — push impulse should carry it forward (+z) and up.
