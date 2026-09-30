@@ -37,12 +37,15 @@ export class ConnectionManager {
    *  loopback was ~47%, which played as remote stutter + a bogus loss
    *  reading, and the datagram lane buys nothing when it's dropping half
    *  the frames anyway. Revisit if the QUIC lane proves reliable. */
-  sendBinaryToPlayer(playerId: string, data: Uint8Array): void {
+  /** Returns 'sent' | 'backlogged' | 'gone' — the caller only counts
+   *  'backlogged' as loss; a closing socket isn't a dropped frame. */
+  sendBinaryToPlayer(playerId: string, data: Uint8Array): 'sent' | 'backlogged' | 'gone' {
     const ws = this.connections.get(playerId);
-    if (!ws || ws.readyState !== 1) return;
+    if (!ws || ws.readyState !== 1) return 'gone';
     const buffered = (ws as unknown as { getBufferedAmount?(): number }).getBufferedAmount?.() ?? 0;
-    if (buffered > MAX_TICK_BACKLOG) return;
+    if (buffered > MAX_TICK_BACKLOG) return 'backlogged';
     ws.send(data);
+    return 'sent';
   }
 
   /** Correctness-critical binary (ball segments) — always the reliable

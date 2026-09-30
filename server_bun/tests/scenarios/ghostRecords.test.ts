@@ -22,6 +22,7 @@ describe('ghost records', () => {
     obs.hasReceivedPosition = true; // live observer, else it ghosts too
     room.connections.sendBinaryToPlayer = (_id, data) => {
       sent.push(new TextDecoder().decode(data));
+      return 'sent' as const;
     };
     const loop = new TickLoop(new Map([['t', room]]), { tickLagMsMax: 0, tickLagMsSum: 0, tickLagSamples: 0, lastTickAt: 0 }, () => {});
     loop.tickRoomNow(room, Date.now());
@@ -33,6 +34,7 @@ describe('ghost records', () => {
     room.connections.sendBinaryToPlayer = (_id, data) => {
       const s = new TextDecoder().decode(data);
       if (s.includes(ghostId)) ghostMentions++;
+      return 'sent' as const;
     };
     loop.tickRoomNow(room, Date.now() + 50);
     expect(ghostMentions).toBe(0);
@@ -65,6 +67,7 @@ describe('ghost records', () => {
     let mentions = 0;
     room.connections.sendBinaryToPlayer = (_id, data) => {
       if (new TextDecoder().decode(data).includes('late')) mentions++;
+      return 'sent' as const;
     };
     // A second live human receives the frame containing 'late'.
     room.players.addPlayer('observer');

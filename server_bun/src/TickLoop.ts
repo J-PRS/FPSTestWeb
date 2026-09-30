@@ -95,10 +95,10 @@ export class TickLoop {
 
   // Tick-bandwidth metrics — aggregated per log window so we can see what
   // interest tiers + suppression are actually saving.
-  private metrics = { ticks: 0, recordsBuilt: 0, recordsSuppressed: 0, recordsIdleReaped: 0, recordsSent: 0, recordsTierSkipped: 0, bytesSent: 0, windowStart: 0 };
+  private metrics = { ticks: 0, recordsBuilt: 0, recordsSuppressed: 0, recordsIdleReaped: 0, recordsSent: 0, recordsTierSkipped: 0, bytesSent: 0, tickFramesDropped: 0, windowStart: 0 };
   /** Last completed 10s rollup — surfaced on /metrics, null until a
    *  window closes (needs a connected player to accumulate). */
-  private lastBw: { kbpsDownTotal: number; recordsPerSec: number; suppressedPerSec: number; tierSkippedPerSec: number } | null = null;
+  private lastBw: { kbpsDownTotal: number; recordsPerSec: number; suppressedPerSec: number; tierSkippedPerSec: number; tickFramesDroppedPerSec: number } | null = null;
   bandwidthWindow() { return this.lastBw; }
 
   // Reused per-recipient record list — the fanout loop runs every tick and
@@ -375,7 +375,10 @@ export class TickLoop {
       );
       this.metrics.recordsSent += others.length;
       this.metrics.bytesSent += frame.byteLength;
-      room.connections.sendBinaryToPlayer(recipientId, frame);
+      // Dropped frames surface as tickSeq gaps client-side — count them
+      // here so a consumer that can't drain reads as rising loss, not
+      // as an unexplained stutter nobody can attribute.
+      if (room.connections.sendBinaryToPlayer(recipientId, frame) === 'backlogged') this.metrics.tickFramesDropped++;
     }
     // Spectators have no viewpoint for interest tiers — they get the
     // full record set every tick.
@@ -398,10 +401,11 @@ export class TickLoop {
         recordsPerSec: +(m.recordsSent / secs).toFixed(0),
         suppressedPerSec: +(m.recordsSuppressed / secs).toFixed(0),
         tierSkippedPerSec: +(m.recordsTierSkipped / secs).toFixed(0),
+        tickFramesDroppedPerSec: +(m.tickFramesDropped / secs).toFixed(0),
       };
       logger.info('Tick bandwidth', { ...this.lastBw, players: playerCount });
       m.ticks = m.recordsBuilt = m.recordsSuppressed = m.recordsIdleReaped =
-        m.recordsSent = m.recordsTierSkipped = m.bytesSent = 0;
+        m.recordsSent = m.recordsTierSkipped = m.bytesSent = m.tickFramesDropped = 0;
       m.windowStart = now0;
     }
   }
@@ -412,7 +416,10 @@ export class TickLoop {
         const playerCount = room.playerCount();
         if (playerCount === 0) continue;
 
-        room.tickSeq++;
+        // tag the hash with the last EMITTED tick — consuming a fresh
+        // tickSeq here would ship a seq no frame ever carries, and every
+        // client's loss telemetry counts that phantom skip as a dropped
+        // frame (~3% bogus loss at the hash cadence).
         const hash = this.computeStateHash(room);
         const timestamp = Date.now();
 

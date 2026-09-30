@@ -77,7 +77,7 @@ const CLASSES = ['light', 'medium', 'heavy'];
 
 interface Roster { pos: Vec3; vel: Vec3 }
 
-const stats = { sent: 0, recv: 0, corrections: 0, shots: 0, errors: 0, closes: 0, joins: 0, tickGaps: 0, tickJit: 0, ballSegs: 0, ballWarps: 0, ballMaxJump: 0, crawlEvts: 0, crawlWarps: 0, crawlMaxJump: 0, rtc: 0, gems: 0 };
+const stats = { sent: 0, recv: 0, corrections: 0, shots: 0, errors: 0, closes: 0, joins: 0, tickGaps: 0, tickJit: 0, ballSegs: 0, ballWarps: 0, ballMaxJump: 0, crawlEvts: 0, crawlWarps: 0, crawlMaxJump: 0, rtc: 0, gems: 0, gapSamples: [] as string[] };
 
 // Warp detector: consecutive updates for an entity should move it about
 // speed·dt. A jump far past that is a visible teleport — server truth uses
@@ -284,7 +284,10 @@ class WireBot {
       const f = decodeTickFrame(new Uint8Array(data));
       if (f) {
         // Tick-seq gaps = dropped frames → remote players stutter/warp.
-        if (f.tickSeq > this.lastTickSeq + 1 && this.lastTickSeq >= 0) stats.tickGaps += f.tickSeq - this.lastTickSeq - 1;
+        if (f.tickSeq > this.lastTickSeq + 1 && this.lastTickSeq >= 0) {
+          stats.tickGaps += f.tickSeq - this.lastTickSeq - 1;
+          if (stats.gapSamples.length < 20) stats.gapSamples.push(`${this.lastTickSeq}->${f.tickSeq}`);
+        }
         this.lastTickSeq = Math.max(this.lastTickSeq, f.tickSeq);
         const now = performance.now();
         if (this.lastTickAt > 0) {
@@ -583,5 +586,5 @@ setInterval(() => {
   const ping = pings.length
     ? ` ping=${pings[0]}/${pings[Math.floor(pings.length / 2)]}/${pings[pings.length - 1]}ms`
     : '';
-  console.log(`[netBot] ${bots.length} bots (${s.rtc} rtc) | joins=${s.joins} sent=${s.sent} recv=${s.recv} shots=${s.shots} gems=${s.gems} corr=${s.corrections} err=${s.errors} closes=${s.closes} tickGaps=${s.tickGaps} maxTickGap=${Math.round(s.tickJit)}ms ball=${s.ballSegs}/${s.ballWarps}w max${s.ballMaxJump.toFixed(0)}m crawl=${s.crawlEvts}/${s.crawlWarps}w max${s.crawlMaxJump.toFixed(0)}m${ping}`);
+  console.log(`[netBot] ${bots.length} bots (${s.rtc} rtc) | joins=${s.joins} sent=${s.sent} recv=${s.recv} shots=${s.shots} gems=${s.gems} corr=${s.corrections} err=${s.errors} closes=${s.closes} tickGaps=${s.tickGaps} maxTickGap=${Math.round(s.tickJit)}ms ball=${s.ballSegs}/${s.ballWarps}w max${s.ballMaxJump.toFixed(0)}m crawl=${s.crawlEvts}/${s.crawlWarps}w max${s.crawlMaxJump.toFixed(0)}m${ping}${s.gapSamples.length ? ` gaps[${s.gapSamples.join(' ')}]` : ''}`);
 }, 5000);

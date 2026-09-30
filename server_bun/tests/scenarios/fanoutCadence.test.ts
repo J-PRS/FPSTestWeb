@@ -13,7 +13,7 @@ describe('fanout cadence', () => {
     const id = 'BOT-t1';
     pin(room, id, { x: 0, y: 60, z: 0 });
     let frames = 0;
-    room.connections.sendBinaryToPlayer = () => { frames++; };
+    room.connections.sendBinaryToPlayer = () => { frames++; return 'sent' as const; };
     const loop = new TickLoop(new Map([['t', room]]), { tickLagMsMax: 0, tickLagMsSum: 0, tickLagSamples: 0, lastTickAt: 0 }, () => {});
     // Tick 1 builds the first record (lastSent absent); tick 2+ find the
     // bot still on its extrapolated path → suppressed → zero records.
