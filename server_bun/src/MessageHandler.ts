@@ -6,6 +6,7 @@ import { logger } from './logger.ts';
 import { PROTOCOL_VERSION } from '../../shared/protocol.ts';
 import { CLIENT_STATUS_MASK } from '../../shared/status.ts';
 import { CONFIG } from './config.ts';
+import { pushRewindSample } from './rewind.ts';
 import type { BallSim } from './BallSim.ts';
 import type { CreatureSim } from './CreatureSim.ts';
 import { structureColliders } from '../../shared/ballSim.ts';
@@ -482,7 +483,7 @@ export class MessageHandler {
       player.hasReceivedPosition = true;
       this.announceIfInWorld(player);
       if (msg.ping !== undefined) player.ping = Math.max(1, msg.ping);
-      this.pushHistory(player, now); // player.position is sim truth
+      pushRewindSample(player, now); // player.position is sim truth
       return;
     }
 
@@ -496,7 +497,7 @@ export class MessageHandler {
     player.hasReceivedPosition = true;
     this.announceIfInWorld(player);
     if (msg.ping !== undefined) player.ping = Math.max(1, msg.ping);
-    this.pushHistory(player, now);
+    pushRewindSample(player, now);
     // Don't broadcast immediately — batched in tickUpdate
   }
 
@@ -576,14 +577,6 @@ export class MessageHandler {
     return true;
   }
 
-  private static readonly HISTORY_MS = 400; // rewind window for lag comp
-  private pushHistory(player: { history: { t: number; x: number; y: number; z: number }[]; position: { x: number; y: number; z: number } }, now: number): void {
-    player.history.push({ t: now, x: player.position.x, y: player.position.y, z: player.position.z });
-    while (player.history.length > 0 && player.history[0]!.t < now - MessageHandler.HISTORY_MS) {
-      player.history.shift();
-    }
-  }
-
   // Declared discontinuity (warp beacon, respawn): position arrives
   // pre-accepted — reseat the plausibility anchor so the NEXT report
   // deltas from here instead of measuring a 50m jump as a speedhack.
@@ -606,7 +599,7 @@ export class MessageHandler {
     // Pre-warp samples are a different location entirely — keeping them
     // lets lag-comp rewind land the shooter/target back at the corpse.
     player.history.length = 0;
-    this.pushHistory(player, Date.now());
+    pushRewindSample(player, Date.now());
     // Relay so observers snap instead of interpolating across the gap
     this.broadcast({ type: 'teleport', playerId, position: msg.position, velocity: msg.velocity }, playerId);
   }

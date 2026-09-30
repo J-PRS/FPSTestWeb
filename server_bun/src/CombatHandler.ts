@@ -794,7 +794,7 @@ export class CombatHandler {
     }
     setTimeout(() => {
       if (this.playerManager.getPlayer(id)) this.broadcast({ type: 'chat', playerId: id, text: line });
-    }, CombatHandler.tauntDelayMs());
+    }, delay);
   }
 
   /** Typing-beat delay — a scenario test steps sim-time only, so it

@@ -19,6 +19,7 @@ import { hmHeight, type Heightfield } from '../../shared/heightfield.ts';
 import { EYE_OFFSET } from '../../shared/constants.ts';
 import { BotBrain, type BotEnemy, type BotVec, type BrainCtx, type BrainOut } from '../../shared/botBrain.ts';
 import { logger } from './logger.ts';
+import { pushRewindSample } from './rewind.ts';
 import { STATUS, CLIENT_STATUS_MASK } from '../../shared/status.ts';
 import { WeaponType, getWeaponStats } from '../../shared/weapons.ts';
 import { GRAVITY, type MoveState } from '../../shared/movement.ts';
@@ -797,8 +798,7 @@ export class ServerBots {
       // Bots never send positions, so nothing else feeds their rewind
       // buffer — without samples, hit validation rewinds to the stale
       // spawn seed and legit shots at moving bots get rejected.
-      p.history.push({ t: now, x: p.position.x, y: p.position.y, z: p.position.z });
-      while (p.history.length > 0 && p.history[0]!.t < now - 400) p.history.shift();
+      pushRewindSample(p, now);
     }
   }
 }
