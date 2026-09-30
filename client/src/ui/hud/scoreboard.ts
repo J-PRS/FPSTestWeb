@@ -36,6 +36,9 @@ export class Scoreboard {
   setVisible(v: boolean): void {
     this.visible = v;
     this.root.style.display = v ? 'block' : 'none';
+    // Player markers are later siblings in #hud — no z-index anywhere, so
+    // they paint over the panel's translucent dim. Hide them while open.
+    this.root.parentElement?.classList.toggle('sb-open', v);
     if (v) this.refresh = 0; // force render on open
   }
 

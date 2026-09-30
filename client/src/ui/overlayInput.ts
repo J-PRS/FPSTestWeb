@@ -41,6 +41,7 @@ export function wireOverlayInput(deps: OverlayInputDeps) {
   function setOverlay(open: boolean): void {
     overlay.style.display = open ? 'flex' : 'none';
     document.body.classList.toggle('menu-open', open);
+    audio.setDucked(open);
     if (open) refreshLoadout();
   }
 

@@ -44,7 +44,7 @@ interface BarUi {
   sidearmLabel: HTMLElement | null; packLabel: HTMLElement | null;
 }
 
-type MkDrop = (options: DropOpt[], onPick: (v: string) => void, faceOpts?: DropOpt[]) => Drop;
+type MkDrop = (options: DropOpt[], onPick: (v: string) => void, faceOpts?: DropOpt[], cols2?: boolean) => Drop;
 
 export function wireLoadoutBar(deps: LoadoutDeps): { refreshLoadout(): void } {
   const loadoutBar = document.getElementById('loadout-bar');
@@ -53,6 +53,7 @@ export function wireLoadoutBar(deps: LoadoutDeps): { refreshLoadout(): void } {
     initialOptions: DropOpt[],
     onPick: (v: string) => void,
     faceOpts?: DropOpt[],
+    cols2 = false,
   ): Drop {
     const el = document.createElement('div');
     el.className = 'lo-chip lo-drop';
@@ -63,7 +64,7 @@ export function wireLoadoutBar(deps: LoadoutDeps): { refreshLoadout(): void } {
     caret.textContent = '▴';
     el.appendChild(caret);
     const list = document.createElement('div');
-    list.className = 'lo-list';
+    list.className = cols2 ? 'lo-list cols2' : 'lo-list';
     el.appendChild(list);
     let options = initialOptions;
     let currentV = '';
@@ -73,7 +74,12 @@ export function wireLoadoutBar(deps: LoadoutDeps): { refreshLoadout(): void } {
       for (const o of options) {
         const it = document.createElement('div');
         it.className = 'lo-opt';
-        it.textContent = o.label;
+        // 'none' isn't a perk — banner it across both columns.
+        if (cols2 && o.v === 'none') it.classList.add('full');
+        const name = document.createElement('span');
+        name.className = 'lo-name';
+        name.textContent = o.label;
+        it.appendChild(name);
         if (o.desc) {
           // Perks are the only invisible pick — everything else
           // self-explains in a second of firing it.
@@ -197,9 +203,9 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
     // name instead; v stays the wid so picks never reshuffle.
     .sort((a, b) => a.label.localeCompare(b.label));
 
-  // --- ARMOR: tile picker, not a dropup — the speed/HP tradeoff is the
-  // headline and tiles show all three choices at once. ---
-  const armorCells = mkGroup('ARMOR');
+  // --- ARMOR: tile picker, not a dropup — headless like the other
+  // groups; three labeled tiles need no banner to read as armor class.
+  const armorCells = mkGroup('ARMOR', false);
   const tiles = document.createElement('div');
   tiles.className = 'lo-tiles';
   armorCells.appendChild(tiles);
@@ -254,15 +260,6 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
   // --- KIT: the five equipment picks in one strip — headless like the
   // weapon row; each cell names its own slot. ---
   const kitCells = mkGroup('KIT', false);
-  const belt = mkCellDom(kitCells);
-  ui.beltLabel = belt.cap;
-  ui.beltDrop = mkDrop(
-    // No descs — every belt item is one throw away from explaining itself.
-    BELT_ITEMS.map((b) => ({ v: b, label: BELT_LABELS[b] })),
-    (v) => deps.lazyPlayer().setBeltItem(v as BeltItem),
-  );
-  belt.cell.appendChild(ui.beltDrop.el);
-
   const sidearm = mkCellDom(kitCells);
   ui.sidearmLabel = sidearm.cap;
   ui.sidearmDrop = mkDrop(
@@ -273,6 +270,15 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
     (v) => deps.lazyPlayer().setSidearm(v as 'pistol' | 'revolver' | 'shotgun' | 'repair'),
   );
   sidearm.cell.appendChild(ui.sidearmDrop.el);
+
+  const belt = mkCellDom(kitCells);
+  ui.beltLabel = belt.cap;
+  ui.beltDrop = mkDrop(
+    // No descs — every belt item is one throw away from explaining itself.
+    BELT_ITEMS.map((b) => ({ v: b, label: BELT_LABELS[b] })),
+    (v) => deps.lazyPlayer().setBeltItem(v as BeltItem),
+  );
+  belt.cell.appendChild(ui.beltDrop.el);
 
   const pack = mkCellDom(kitCells);
   ui.packLabel = pack.cap;
@@ -302,6 +308,7 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
       deps.lazyPlayer().setPerk(v as PerkId);
       deps.lazyNetworkManager?.()?.sendPerkUpdate(v);
     },
+    undefined, true, // 2 cols — 10 perks stack taller than the menu otherwise
   );
   perk.cell.appendChild(ui.perkDrop.el);
 

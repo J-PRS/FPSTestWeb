@@ -7,6 +7,8 @@ export interface HudDom {
   energy: HTMLSpanElement;
   ammo: HTMLSpanElement;
   speed: HTMLSpanElement;
+  speedH: HTMLSpanElement;
+  speedV: HTMLSpanElement;
   kills: HTMLSpanElement;
   state: HTMLSpanElement;
   ping: HTMLSpanElement;
@@ -43,10 +45,15 @@ export function createHudDom(): HudDom {
     el.innerHTML = `
       <div id="player-list"></div>
       <div id="hud-tr">
-        Speed: <span id="spd">0</span> &nbsp; <span id="state-lbl">GROUND</span> &nbsp; Ping: <span id="ping">0</span>ms &nbsp; Loss: <span id="loss">0</span>% &nbsp; Jitter: <span id="jitter">0</span>ms
+        <span id="state-lbl">GROUND</span> &nbsp; Ping: <span id="ping">0</span>ms &nbsp; Loss: <span id="loss">0</span>% &nbsp; Jitter: <span id="jitter">0</span>ms
       </div>
       <div id="hud-fps"><span id="fps">0</span></div>
       <div id="hud-bc">
+        <div id="hud-speedo">
+          <span class="spd-cell"><i>A</i><b id="spd">0</b></span>
+          <span class="spd-cell"><i>H</i><b id="spd-h">0</b></span>
+          <span class="spd-cell"><i>V</i><b id="spd-v">0</b></span>
+        </div>
         <div id="hud-weapons">
           <span class="wslot" data-w="0"></span>
           <span class="wslot" data-w="1"></span>
@@ -87,6 +94,8 @@ export function createHudDom(): HudDom {
     const energy = el.querySelector('#nrg')! as HTMLSpanElement;
     const ammo = el.querySelector('#ammo')! as HTMLSpanElement;
     const speed = el.querySelector('#spd')! as HTMLSpanElement;
+    const speedH = el.querySelector('#spd-h')! as HTMLSpanElement;
+    const speedV = el.querySelector('#spd-v')! as HTMLSpanElement;
     const kills = el.querySelector('#kills')! as HTMLSpanElement;
     const state = el.querySelector('#state-lbl')! as HTMLSpanElement;
     const ping = el.querySelector('#ping')! as HTMLSpanElement;
@@ -123,7 +132,7 @@ export function createHudDom(): HudDom {
   ammo.textContent = '0';
   ammo.style.color = '#ffd54a'; // gold, matching the pickup
 
-  return { el, health, energy, ammo, speed, kills, state, ping, loss, jitter,
+  return { el, health, energy, ammo, speed, speedH, speedV, kills, state, ping, loss, jitter,
     fps, crosshair, hitMarker, dmgVignette, dmgDir, dmgDirArc, ghostBar,
     playerList, ballCountEl, timerEl, weaponSlots, healthBar, energyBar,
     armor, armorBar, buffsRow,

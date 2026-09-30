@@ -226,6 +226,11 @@
 .player-indicator.hidden {
   opacity: 0;
 }
+/* Scoreboard open: world-anchored markers are HUD siblings that paint
+   above the panel (DOM order, no z-index) — fade them out entirely. */
+.sb-open .player-indicator {
+  opacity: 0;
+}
 /* Flag markers — diamond silhouette, team color, always legible. */
 .player-indicator.flag {
   border: 0;

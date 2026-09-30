@@ -217,7 +217,9 @@ body.lobby-open #loadout-bar {
   font-size: 0.74rem; letter-spacing: 0.2em; font-weight: 700;
   color: rgba(140,170,195,0.6);
 }
-#loadout-bar .lo-cells { display: flex; flex-wrap: wrap; gap: 6px; align-items: flex-end; }
+/* nowrap inside a group — a squeezed row wraps at the GROUP level
+   (whole row drops together), never orphans a lone slot mid-wrap. */
+#loadout-bar .lo-cells { display: flex; flex-wrap: nowrap; gap: 6px; align-items: flex-end; }
 #loadout-bar .lo-cell { display: flex; flex-direction: column; gap: 3px; align-items: center; }
 #loadout-bar .lo-cap {
   font-size: 0.66rem; letter-spacing: 0.18em; font-weight: 600;
@@ -282,6 +284,17 @@ body.lobby-open #loadout-bar {
   box-shadow: 0 -6px 24px rgba(0,0,0,0.5);
 }
 #loadout-bar .lo-drop.open .lo-list { display: flex; }
+/* Two-column dropup (perks) — the 10-option stack was taller than the
+   menu. Grid, centered on the chip, fixed width so cols don't jitter. */
+#loadout-bar .lo-drop.open .lo-list.cols2 {
+  display: grid; grid-template-columns: 1fr 1fr;
+  left: 50%; right: auto; transform: translateX(-50%);
+  width: 340px;
+}
+#loadout-bar .lo-list.cols2 .lo-opt.full {
+  grid-column: 1 / -1; text-align: center;
+}
+#loadout-bar .lo-list.cols2 .lo-name { display: block; text-align: center; }
 #loadout-bar .lo-opt {
   padding: 8px 12px; color: #cdd9e5;
   font-size: 0.78rem; font-weight: 600; letter-spacing: 0.08em;

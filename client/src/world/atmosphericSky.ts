@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { UNGRADE_GLSL } from '../core/gradeGlsl.js';
 
 // Atmospheric scattering shader based on wwwtyro/glsl-atmosphere
 // Rayleigh and Mie scattering for realistic sky colors
@@ -28,6 +29,7 @@ const atmosphereFragmentShader = /* glsl */`
   #define PI 3.141592
   #define iSteps 16
   #define jSteps 8
+  ${UNGRADE_GLSL}
 
   float hash3(vec3 p) {
     return fract(sin(dot(p, vec3(12.9898, 78.233, 45.164))) * 43758.5453);
@@ -148,7 +150,9 @@ const atmosphereFragmentShader = /* glsl */`
       color += vec3(1.0, 1.0, 0.95) * star * twinkle * fade * starIntensity;
     }
 
-    gl_FragColor = vec4(color, 1.0);
+    gl_FragColor = vec4(ungradeColor(color), 1.0);
+    #include <tonemapping_fragment>
+    #include <colorspace_fragment>
   }
 `;
 
@@ -191,6 +195,7 @@ export class AtmosphericSky {
     });
     
     this.mesh = new THREE.Mesh(geometry, this.material);
+    this.mesh.name = '__sky'; // map specs with a baked skybox hide this
     scene.add(this.mesh);
     
     // Mid-morning sun: high enough for bright light, angled enough to be

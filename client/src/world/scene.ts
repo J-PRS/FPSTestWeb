@@ -9,6 +9,7 @@ import {
   SKY_MIE_COEFFICIENT,
   SKY_MIE_DIRECTIONAL_G,
   SKY_SUN_INTENSITY,
+  CLOUDS_ENABLED,
   CLOUD_COUNT,
   CLOUD_DENSITY,
   CLOUD_WIND_SPEED,
@@ -37,7 +38,7 @@ import { settings } from '../core/settings.js';
 export interface SceneSetup {
   scene: THREE.Scene;
   atmosphericSky: AtmosphericSky;
-  volumetricClouds: VolumetricClouds;
+  volumetricClouds: VolumetricClouds | null;
   sunShafts: SunShafts;
   ambient: THREE.AmbientLight;
   sun: THREE.DirectionalLight;
@@ -64,16 +65,18 @@ export function createScene(): SceneSetup {
   // Volumetric Clouds
   const sunShafts = new SunShafts(scene);
 
-  const volumetricClouds = new VolumetricClouds(scene, {
-    count: CLOUD_COUNT,
-    cloudColor: new THREE.Color(0xffffff),
-    cloudDensity: CLOUD_DENSITY,
-    windSpeed: CLOUD_WIND_SPEED,
-    windDirection: new THREE.Vector3(1, 0, 0.1),
-    minHeight: CLOUD_MIN_HEIGHT,
-    maxHeight: CLOUD_MAX_HEIGHT,
-    spreadRadius: CLOUD_SPREAD_RADIUS,
-  });
+  const volumetricClouds = (CLOUDS_ENABLED || urlParams.get('clouds') === 'on')
+    ? new VolumetricClouds(scene, {
+        count: CLOUD_COUNT,
+        cloudColor: new THREE.Color(0xffffff),
+        cloudDensity: CLOUD_DENSITY,
+        windSpeed: CLOUD_WIND_SPEED,
+        windDirection: new THREE.Vector3(1, 0, 0.1),
+        minHeight: CLOUD_MIN_HEIGHT,
+        maxHeight: CLOUD_MAX_HEIGHT,
+        spreadRadius: CLOUD_SPREAD_RADIUS,
+      })
+    : null;
 
   // Lighting
   const ambient = new THREE.AmbientLight(AMBIENT_COLOR, AMBIENT_INTENSITY);
@@ -101,18 +104,18 @@ export function createScene(): SceneSetup {
   sun.position.copy(atmosphericSky.getSunPosition());
   sun.target.position.set(0, 0, 0);
   sun.target.updateMatrixWorld();
-  volumetricClouds.setSunDirection(atmosphericSky.getSunDirection());
+  volumetricClouds?.setSunDirection(atmosphericSky.getSunDirection());
 
   const hemi = new THREE.HemisphereLight(HEMI_SKY_COLOR, HEMI_GROUND_COLOR, HEMI_INTENSITY);
   scene.add(hemi);
 
   function update(dt: number): void {
-    volumetricClouds.update(dt);
+    volumetricClouds?.update(dt);
     atmosphericSky.update(dt);
-    
+
     // Sync sun position with atmospheric sky (for dynamic day/night)
     sun.position.copy(atmosphericSky.getSunPosition());
-    volumetricClouds.setSunDirection(atmosphericSky.getSunDirection());
+    volumetricClouds?.setSunDirection(atmosphericSky.getSunDirection());
   }
 
   /** Camera-dependent mood pass — the shader knows where the sun is. */

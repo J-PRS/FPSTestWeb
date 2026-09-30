@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-import { MAX_HEALTH, PLAYER_HEIGHT } from '../core/config.js';
+import { MAX_HEALTH } from '../core/config.js';
 
 import { Ball, Targetable } from '../entities/balls.js';
 
@@ -135,7 +135,8 @@ export class HealthBarSystem {
       }
 
       const pos = rp ? rp.position : playerState!.position;
-      const targetPos = _targetPos.set(pos.x, pos.y + PLAYER_HEIGHT + 0.3, pos.z);
+      // pos is EYE height — a small margin above it is already over the head
+      const targetPos = _targetPos.set(pos.x, pos.y + 0.5, pos.z);
       this.updateBar(bar, dt, targetPos, cameraPos, cameraDir, () => this.removeBar(playerId));
     }
 
