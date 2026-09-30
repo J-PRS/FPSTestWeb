@@ -21,15 +21,13 @@ import { BotBrain, type BotVec, type BrainOut } from '../../shared/botBrain.ts';
 import { logger } from './logger.ts';
 import { pushRewindSample } from './rewind.ts';
 import { STATUS, CLIENT_STATUS_MASK } from '../../shared/status.ts';
-import { WeaponType } from '../../shared/weapons.ts';
 import type { MoveState } from '../../shared/movement.ts';
-import { CLASS_STATS, type ArmorClass } from '../../shared/botClasses.ts';
-import { BOT_LOADOUTS, type BotLoadout } from '../../shared/botLoadouts.ts';
-import { ROLE_PRIORITY, type BotRole } from '../../shared/flagGoals.ts';
+import { type BotLoadout } from '../../shared/botLoadouts.ts';
 import { BotWatchdog, type MobilitySample } from './botWatchdog.ts';
 import { BotArsenal, isSuper } from './botArsenal.ts';
 import { BotSheepMeter } from './botSheep.ts';
 import { ServerBotSenses } from './serverSenses.ts';
+import { BotRoster } from './botRoster.ts';
 
 const SPEED = 14;          // m/s ground move
 
@@ -37,22 +35,12 @@ const SPEED = 14;          // m/s ground move
  *  shared/flagGoals.ts so offline CTF plays by the identical table. */
 
 
-/** Armor class follows the role — Tribes pacing lives on this: cappers
- *  and infiltrators fly light, HoF and technicians anchor heavy, the
- *  fighting middle wears medium. */
-const ROLE_CLASS: Record<BotRole, ArmorClass> = {
-  capper: 'light', infiltrator: 'light',
-  offense: 'medium', ldefense: 'medium', defense: 'medium',
-  hof: 'heavy', technician: 'heavy',
-};
-
 export class ServerBots {
   private brains = new Map<string, BotBrain>();
   private loadouts = new Map<string, BotLoadout>();
   /** Squad role — self-assigned and rebalanced by need (see
    *  rebalanceRoles): nobody scripts positions, the squad just notices
    *  a lane is empty and someone takes it. */
-  private roles = new Map<string, BotRole>();
   /** Bots we saw dead — respawn transition resyncs the move shadow. */
   private deadSet = new Set<string>();
   /** Brains silenced for tests — the body stays in the sim, it just never
@@ -86,11 +74,11 @@ export class ServerBots {
     this.watchdog = new BotWatchdog(room.name);
     this.sheep = new BotSheepMeter(room);
     this.arsenal = new BotArsenal(room, this.loadouts, (id) => this.lastHuntId(id));
-    this.sense = new ServerBotSenses(room, field, this.loadouts, this.roles, this.foeNear);
+    this.roster = new BotRoster(room, this.brains, this.loadouts, this.thinkPhase, (id) => this.untrack(id), ServerBots.THINK_DIV);
+    this.sense = new ServerBotSenses(room, field, this.loadouts, this.roster.roleInfo, this.foeNear);
   }
 
-  private nextIdx = 1;
-  private maintainAt = 0;
+  private roster: BotRoster;
   /** Brain cadence: senses+think+fire run every THINK_DIV tick per bot
    *  (phase-offset so the squad doesn't think in lockstep). 20Hz decisions
    *  cost O(bots × (players+creatures)) per tick; at 4Hz reaction is still
@@ -103,39 +91,9 @@ export class ServerBots {
   private foeNear = new Map<string, number>();
   private thinkCounter = 0;
   /** Spawn n bots — each is a real roster entry (playerJoined broadcasts)
-   *  minus a socket. Call once at room creation, before human joins, so
-   *  team balancing lands humans on the emptier side. */
+   *  minus a socket. Roster owns the spawn/role/class bookkeeping. */
   populate(n: number): void {
-    for (let i = 0; i < n; i++) {
-      const id = `BOT-${this.room.name}${this.nextIdx++}`;
-      const loadout = BOT_LOADOUTS[(this.nextIdx - 2 + BOT_LOADOUTS.length) % BOT_LOADOUTS.length]!;
-      const p = this.room.players.addPlayer(id, undefined, loadout.perk);
-      this.loadouts.set(id, loadout);
-      // CTF role from the loadout: plated anchors hold home, everyone else
-      // presses. A whole team grabbing leaves the stand unguarded.
-      // Seed roles from the loadout; the rebalancer shifts them as the
-      // match's needs change. Plated anchors start as HoF candidates.
-      this.roles.set(id, loadout.perk === 'plated' ? 'hof' : 'offense');
-      this.applyClass(p, ROLE_CLASS[this.roles.get(id)!]);
-      p.isBot = true;
-      if (isSuper(id)) p.health = 400; // superbot tanks a beating
-      p.lastSeen = Date.now();
-      this.room.assignTeam(p);
-      this.room.broadcast({
-        type: 'playerJoined',
-        playerId: id,
-        internalId: p.internalId,
-        position: p.position,
-        rotation: p.rotation,
-        team: p.team,
-      });
-      this.brains.set(id, new BotBrain(p.position));
-      this.thinkPhase.set(id, this.nextIdx % ServerBots.THINK_DIV);
-      // Legal body: the bot gets a move shadow exactly like a human join —
-      // brains emit inputs, the sim owns motion, energy model included.
-      this.room.moveSim.track(id, p.position, p.rotation.yaw, p.perk);
-    }
-    if (n > 0) logger.info('Bots spawned', { room: this.room.name, count: n });
+    this.roster.populate(n);
   }
 
   get count(): number {
@@ -150,8 +108,7 @@ export class ServerBots {
     this.loadouts.delete(playerId);
     this.thinkPhase.delete(playerId);
     this.lastOut.delete(playerId);
-    this.roles.delete(playerId);
-    this.classes.delete(playerId);
+    this.roster.forget(playerId);
     this.sheep.clear(playerId);
     this.arsenal.untrack(playerId);
     this.foeNear.delete(playerId);
@@ -174,122 +131,11 @@ export class ServerBots {
     return brain?.currentHuntId ?? null;
   }
 
-  /** Apply the armor class to a live bot record: maxHealth shifts and
-   *  current HP follows the delta (gaining plating grants the points,
-   *  dropping it just clamps). The move shadow's ground scale makes the
-   *  class legally different — a light capper really out-runs a heavy. */
-  private classes = new Map<string, ArmorClass>();
-  private applyClass(p: { id: string; maxHealth: number; health: number }, cls: ArmorClass): void {
-    const prev = this.classes.get(p.id);
-    if (prev === cls) return;
-    const base = p.maxHealth - (prev ? CLASS_STATS[prev].maxHealth : 0);
-    this.classes.set(p.id, cls);
-    // Heavies shoulder the mortar — tier-locked ordnance is what makes the
-    // class read as an anchor instead of just a slower medium.
-    if (cls === 'heavy') {
-      const lo = this.loadouts.get(p.id);
-      if (lo && lo.far !== WeaponType.Mortar) this.loadouts.set(p.id, { ...lo, far: WeaponType.Mortar });
-    }
-    const delta = base + CLASS_STATS[cls].maxHealth - p.maxHealth;
-    p.maxHealth += delta;
-    p.health = Math.min(p.maxHealth, p.health + Math.max(0, delta));
-    this.room.moveSim.setSpeedScale(p.id, CLASS_STATS[cls].speedScale);
-  }
-
-  /** Rebalance squad roles ~every 5s. Needs are computed per team: a flag
-   *  mode wants a capper; a bigger squad earns a HoF anchor, a technician
-   *  and an infiltrator; the rest split offense/defense. Reassignment
-   *  skips carriers mid-run — the flagGoal carrier check owns them. */
-  private roleT = 0;
-  private rebalanceRoles(now: number): void {
-    if (!this.room.flags || now < this.roleT) return;
-    this.roleT = now + 5000;
-    const byTeam = new Map<string, string[]>();
-    for (const id of this.brains.keys()) {
-      const p = this.room.players.getPlayer(id);
-      if (!p?.team) continue;
-      (byTeam.get(p.team) ?? byTeam.set(p.team, []).get(p.team)!).push(id);
-    }
-    for (const ids of byTeam.values()) this.rebalanceTeam(ids);
-  }
-
-  /** One team's role fill: walk ROLE_PRIORITY (capper@3 … infiltrator@7)
-   *  so a 3-stack gets capper+LD and specialists only show once the
-   *  lanes they free up are actually covered. */
-  private rebalanceTeam(ids: string[]): void {
-    // Never reassign a carrier — the flagGoal carrier check owns them.
-    const free = ids.filter((id) => {
-      const p = this.room.players.getPlayer(id);
-      if (!p || p.isDead) return true; // corpses re-role freely on respawn
-      for (const f of this.room.flags!.flags.values()) {
-        if (f.carrier === id) return false;
-      }
-      return true;
-    });
-    // Specialists are sticky: donors only come from the generic pool
-    // (offense/defense), and a bot is consumed once per cycle — else the
-    // same body flip-flops capper→hof→technician on every pass.
-    const donors = free.filter((id) => !ROLE_PRIORITY.some((w) => this.roles.get(id) === w.role));
-    for (const { role: want, want: need, minSquad } of ROLE_PRIORITY) {
-      if (ids.length < minSquad) break;
-      let have = 0;
-      for (const id of ids) if (this.roles.get(id) === want) have++;
-      while (have < need) {
-        const donor = donors.shift();
-        if (!donor) break;
-        this.roles.set(donor, want);
-        const donorP = this.room.players.getPlayer(donor);
-        if (donorP) this.applyClass(donorP, ROLE_CLASS[want]);
-        // Technician is the only role that promises the deploy kit —
-        // pin its builder trait instead of trusting the spawn roll.
-        if (want === 'technician') this.brains.get(donor)?.setBuilder(true);
-        logger.info('Bot role', { id: donor, role: want, room: this.room.name });
-        have++;
-      }
-    }
-  }
-
   /** Getting shot makes the brain recoil — called from the combat funnel. */
   flinch(targetId: string, shooterId: string): void {
     const brain = this.brains.get(targetId);
     const shooter = this.room.players.getPlayer(shooterId);
     if (brain && shooter) brain.takeHit(shooter.position);
-  }
-
-  /** botFill floor — once a second, top up or retire bots so the room
-   *  holds `spec.botFill` total bodies. Retirees prefer a dead bot
-   *  (popping a live one mid-fight reads as a vanish). */
-  private maintain(now: number): void {
-    this.rebalanceRoles(now);
-    const fill = this.room.spec.botFill;
-    if (!fill || now < this.maintainAt) return;
-    this.maintainAt = now + 1000;
-    const humans = this.room.playerCount() - this.brains.size;
-    const want = Math.max(0, Math.min(16, fill - humans));
-    if (this.brains.size < want) {
-      this.populate(want - this.brains.size);
-      return;
-    }
-    let excess = this.brains.size - want;
-    if (excess <= 0) return;
-    // Map iterators tolerate mid-loop delete — no snapshot needed.
-    for (const id of this.brains.keys()) {
-      if (excess <= 0) break;
-      const p = this.room.players.getPlayer(id);
-      if (p && !p.isDead) continue; // keep live bots, kill the corpse queue first
-      this.retire(id);
-      excess--;
-    }
-    for (const id of this.brains.keys()) {
-      if (excess <= 0) break;
-      this.retire(id);
-      excess--;
-    }
-  }
-
-  private retire(id: string): void {
-    this.untrack(id);
-    this.room.removePlayerCompletely(id, 'botFill', (m, o) => logger.info(m, o));
   }
 
   private checkStuck(id: string, p: { position: Vec3 }, brain: BotBrain, now: number): void {
@@ -330,7 +176,7 @@ export class ServerBots {
     // Sentry-clearing lob: hostile gear watching the objective gets a
     // grenade on its own slow cadence — the same legal path humans use
     // to soften a stand, not a wallhack aim-assist.
-    const saboteur = this.roles.get(id) === 'infiltrator';
+    const saboteur = this.roster.roleInfo.get(id) === 'infiltrator';
     const ready = (this.gearLobT.get(id) ?? 0) <= now;
     const gear = ready ? this.sense.hostileGear(p, goal?.pos ?? null, saboteur) : null;
     if (gear) {
@@ -369,25 +215,29 @@ export class ServerBots {
       const yaw = p.rotation.yaw + Math.max(-5 * dt, Math.min(5 * dt, dyaw));
       this.room.moveSim.faceYaw(id, yaw);
       p.rotation.yaw = yaw;
-      this.room.moveSim.setInput(id, {
-        forward: 1, right: 0,
-        jumpPressed: yeeted || !!out.move?.jump, jumpHeld: !!out.move?.jump || yeetHeld,
-        skiHeld: !!out.move?.ski,
-        jetHeld: !!out.move?.jet || yeetHeld
-          || this.arsenal.jetPinUntil(id) > now,
-      }, p.status, this.seq++);
-    } else {
-      this.room.moveSim.setInput(id, {
-        forward: 0, right: 0,
-        jumpPressed: yeeted, jumpHeld: yeetHeld,
-        skiHeld: false, jetHeld: yeetHeld,
-      }, p.status, this.seq++);
     }
+    this.commitMoveInput(id, p, out, dist >= 0.5, { edge: yeeted, held: yeetHeld }, now);
     this.checkSheep(id, p, { trying: dist >= 0.5, ski: !!out.move?.ski, airborne: !sh.onGround, jetting: !!out.move?.jet, dt }, now);
     p.position.x = sh.pos.x; p.position.y = sh.pos.y; p.position.z = sh.pos.z;
     p.velocity.x = sh.vel.x; p.velocity.y = sh.vel.y; p.velocity.z = sh.vel.z;
     // Ski bit rides the tick flag byte (bit 2) — drives remote dust.
     p.skiing = out.move?.ski ? 1 : 0;
+  }
+
+  /** The bot's intent becomes input keys — only what a player's fingers
+   *  could press. A yeet edge pins jump/jet; the arsenal's post-throw jet
+   *  pin rides the same held bit. */
+  private commitMoveInput(id: string, p: { status: number }, out: BrainOut, moving: boolean, yeet: { edge: boolean; held: boolean }, now: number): void {
+    this.room.moveSim.setInput(id, moving ? {
+      forward: 1, right: 0,
+      jumpPressed: yeet.edge || !!out.move?.jump, jumpHeld: !!out.move?.jump || yeet.held,
+      skiHeld: !!out.move?.ski,
+      jetHeld: !!out.move?.jet || yeet.held || this.arsenal.jetPinUntil(id) > now,
+    } : {
+      forward: 0, right: 0,
+      jumpPressed: yeet.edge, jumpHeld: yeet.held,
+      skiHeld: false, jetHeld: yeet.held,
+    }, p.status, this.seq++);
   }
 
   /** No heightfield → no shadow → legacy direct-write fallback.
@@ -442,7 +292,7 @@ export class ServerBots {
 
 
   tick(dt: number): void {
-    this.maintain(Date.now());
+    this.roster.maintain(Date.now());
     this.arsenal.step(dt); // sim-clock — the weapon-rate gate is sim-paced
     this.sheep.step(dt); // sim-clock — the coverage window is sim-paced too
     if (this.brains.size === 0) return;

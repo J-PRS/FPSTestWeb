@@ -155,7 +155,7 @@ describe('ServerBots', () => {
       (room.bots as unknown as { flagGoal: (q: unknown) => { pos: { x: number; z: number } } | null }).flagGoal(p)?.pos;
     const bots = [...(room.bots as unknown as { brains: Map<string, unknown> }).brains.keys()]
       .map((id) => room.players.getPlayer(id)!);
-    const roles = (room.bots as unknown as { roles: Map<string, string> }).roles;
+    const roles = (room.bots as unknown as { roster: { roleInfo: Map<string, string> } }).roster.roleInfo;
     const carrier = bots.find((b) => b.team === 'alpha')!;
     // An offense teammate escorts; a plated defender holds the stand.
     const escort = bots.find((b) => b.team === 'alpha' && b !== carrier)!;

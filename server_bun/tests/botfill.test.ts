@@ -6,7 +6,7 @@ const noop = () => {};
 
 // maintain() is wall-clock throttled at 1s — tests ungate it directly.
 function forceMaintain(room: Room): void {
-  (room.bots as unknown as { maintainAt: number }).maintainAt = 0;
+  (room.bots as unknown as { roster: { maintainAt: number } }).roster.maintainAt = 0;
   room.bots.tick(0.016);
 }
 
