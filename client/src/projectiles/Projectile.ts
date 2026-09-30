@@ -1,23 +1,21 @@
 import * as THREE from 'three';
 
-import { PLAYER_RADIUS, GRAVITY } from '../core/config.js';
+import { GRAVITY } from '../core/config.js';
 import { hitRadiusAt } from '../../../shared/combat.js';
 
 import type { Targetable } from '../entities/balls.js';
 
 import { Terrain } from '../world/terrain.js';
 import type { ProjectileConfig } from './types.js';
-import * as sfx from '../core/sfx.js';
+
 import { RibbonTrail } from './RibbonTrail.js';
 import { ProjectileTrail } from './trailParticles.js';
 import { QuarksTrail } from '../effects/vfx.js';
 import { buildProjectileMeshes, updateProjectileMesh } from './visuals.js';
-import { sweepTerrain, sweepBall, sweepPlayer, sweepObstacle } from './sweep.js';
-import { segSolidHit, ColliderIndex } from '../../../shared/solidWorld.js';
+import { sweepTerrain } from './sweep.js';
+import { ColliderIndex } from '../../../shared/solidWorld.js';
 import type { StructureCollider } from '../../../shared/ballSim.js';
-
-// Shared projectile geometries — dispose() never frees them, so reuse across shots
-const _tNormal = new THREE.Vector3();
+import { ProjCollide } from './projCollide.js';
 const _rayDir = new THREE.Vector3();
 const _velDir = new THREE.Vector3();
 const _FORWARD = new THREE.Vector3(0, 0, 1);
@@ -107,6 +105,10 @@ export class Projectile {
   hitDistance = 0.0; // travel distance from shot origin
   directHit = false; // true = hit with core hitbox, false = expanding wake hitbox
   minHitDist = 0.0; // minimum distance during sweep (for accurate accuracy)
+  // Contact bookkeeping — read/written by projCollide (the impact-policy family).
+  hitX = 0; hitY = 0; hitZ = 0; hitT = 1;
+  lastDt = 0; // dt of the running update — hitAge backs off to swept contact
+  bouncesTaken = 0;
   readonly hitPoint = new THREE.Vector3(); // exact sweep intersection (set by sweepTerrain)
   hitPointValid = false;
   explosionProcessed = false;
@@ -159,7 +161,7 @@ export class Projectile {
   private mesh: THREE.Mesh;
   private glowMesh: THREE.Mesh | null = null;
   readonly prevPos: THREE.Vector3; // start-of-frame pos — sweeps step prevPos→pos
-  private shotOrigin: THREE.Vector3;
+  readonly shotOrigin: THREE.Vector3;
 
   // Particle trail — quarks-batched by default; the pooled-mesh path
   // survives only for wakeVisual hosts (no config enables it today).
@@ -196,6 +198,11 @@ export class Projectile {
 
     this.ribbons = v.ribbons;
   }
+
+  /** Impact policy (bounce/fuse/intercept/target record) — projCollide.ts. */
+  private collide = new ProjCollide(this);
+  solids(): readonly StructureCollider[] { return Projectile.solidColliders; }
+  solidIdx(): ColliderIndex | null { return Projectile.solidIndex; }
 
   // Swept collision math lives in sweep.ts (SweepHost) — the checks are
   // free functions so they're testable without a scene-bound projectile.
@@ -336,7 +343,7 @@ export class Projectile {
     // A discharged beam still respects terrain — the sweep sets hitPoint
     // so update() pops the slug at contact, not at the range cap.
     if (this.rayFired) sweepTerrain(this, terrain);
-    if (this.canBounce && sweepTerrain(this, terrain) && !this.bounceOffTerrain(terrain)) {
+    if (this.canBounce && sweepTerrain(this, terrain) && !this.collide.bounceOffTerrain(terrain)) {
       this.explode(); // bounce budget/graze exhausted — die like a local shard
       return true;
     }
@@ -357,72 +364,10 @@ export class Projectile {
   // Runs all swept collision checks; returns true if the projectile hit
   // something and exploded (records hit target + accuracy data).
   private checkCollisions(terrain: Terrain, balls?: Targetable[], remotePlayers?: Map<string, THREE.Vector3>, obstacles?: SweepObstacle[]): boolean {
-    if (sweepTerrain(this, terrain)) {
-      // arming fuse (T2 mortar): bounces only apply BEFORE the shell is armed
-      if (this.canBounce && this.bounceOffTerrain(terrain)) {
-        return false; // bounced — still live, fuse keeps running
-      }
-      if (this.config.sticks) {
-        this.stickAt(this.hitPoint);
-        return true;
-      }
-      this.explode();
-      return true;
-    }
-    // Map structures next — walls stop shells like terrain does; without
-    // this a mortar splashes the generator room straight through the roof.
-    if (Projectile.solidColliders.length) {
-      const hit = segSolidHit(this.prevPos, this.pos, Projectile.solidColliders, Projectile.solidIndex ?? undefined);
-      if (hit) {
-        this.hitAt(hit.x, hit.y, hit.z, hit.t);
-        if (this.config.sticks) {
-          this.stickAt(this.hitPoint);
-          return true;
-        }
-        this.explode();
-        return true;
-      }
-    }
-    // Obstacles (turret bolts) before targets: an interception is the
-    // earliest contact worth reporting — the blast usually takes the
-    // enemy anyway, and the cookoff is the interesting outcome.
-    return this.checkObstacles(obstacles) || this.checkBalls(balls) || this.checkPlayers(remotePlayers);
+    return this.collide.checkCollisions(terrain, balls, remotePlayers, obstacles);
   }
 
-  private checkObstacles(obstacles?: SweepObstacle[]): boolean {
-    if (!obstacles) return false;
-    let best: SweepObstacle | null = null, bestT = Infinity;
-    for (const o of obstacles) {
-      // Filtered obstacles (shield domes) decide per-shell; unfiltered
-      // ones (turret bolts) never intercept hitscan slugs — the guard
-      // moved per-obstacle so a field still eats those.
-      if (o.blocks ? !o.blocks(this) : this.config.noExplosion) continue;
-      if (sweepObstacle(this, o) && this.hitT < bestT) { best = o; bestT = this.hitT; }
-    }
-    if (!best) return false;
-    // Re-run the winning sweep so hitPoint/hitT describe ITS contact, not
-    // a later bolt's — hitAt was overwritten by each tested obstacle.
-    sweepObstacle(this, best);
-    best.onBlocked?.(this);
-    this.hitBolt = best;
-    if (this.config.sticks) {
-      // Shot down mid-flight — cook off on the spot, the bolt eats the pop.
-      this.explode();
-      return true;
-    }
-    this.explode();
-    return true;
-  }
-
-  // dt of the currently-running update — recordHit uses it to back the
-  // reported hitAge off to the actual swept contact point, not end-of-frame.
-  private lastDt = 0;
-
-  // Reflect velocity off the heightfield normal at hitPoint. Returns false
-  // when the impact was too weak to bounce — caller should treat it as a
-  // detonation instead of letting the shell sink or jitter in place.
-  private bouncesTaken = 0;
-  private get armed(): boolean {
+  get armed(): boolean {
     return this.config.armTime === undefined || this.age >= this.config.armTime;
   }
 
@@ -432,104 +377,10 @@ export class Projectile {
     return !!this.config.bounces && (this.config.armTime === undefined || !this.armed);
   }
 
-  private bounceOffTerrain(terrain: Terrain): boolean {
-    if (this.config.maxBounces !== undefined && ++this.bouncesTaken > this.config.maxBounces) {
-      return false; // out of bounces — treat as impact
-    }
-    const e = 0.5;
-    const x = this.hitPoint.x, z = this.hitPoint.z;
-    _tNormal.set(
-      -(terrain.getHeight(x + e, z) - terrain.getHeight(x - e, z)) / (2 * e),
-      1,
-      -(terrain.getHeight(x, z + e) - terrain.getHeight(x, z - e)) / (2 * e)
-    ).normalize();
-
-    const vn = this.vel.dot(_tNormal);
-    // hitPoint is already the center AT the collision plane (radius above
-    // the surface for bouncers) — depenetration just needs a small normal
-    // clearance so the next sweep doesn't instantly retrigger on slopes.
-    const depenetrate = this.config.terrainOffset + 0.05;
-    // Grazing/resting contact: armed shells detonate; unarmed (mortar
-    // pre-arm) shells bleed off the normal component and slide until the
-    // fuse arms them — the T2 mortar bounces off dirt before it can pop.
-    if (vn >= -2) {
-      if (this.armed) return false;
-      this.vel.addScaledVector(_tNormal, -vn);
-      this.pos.copy(this.hitPoint).addScaledVector(_tNormal, depenetrate);
-      this.prevPos.copy(this.pos);
-      if (this.config.bounceSfx) sfx.at(this.pos, this.config.bounceSfx, 0.5, 1.4, this.vel);
-      return true;
-    }
-    this.vel.addScaledVector(_tNormal, -(1 + (this.config.bounceRestitution ?? 0.5)) * vn);
-    const fr = this.config.bounceFriction ?? 0.7;
-    this.vel.x *= fr;
-    this.vel.z *= fr;
-    // Sit just above the surface so the next sweep doesn't immediately retrigger
-    this.pos.copy(this.hitPoint).addScaledVector(_tNormal, depenetrate);
-    this.prevPos.copy(this.pos);
-    if (this.config.bounceSfx) {
-      // Harder hits ping louder; weak grazes stay quiet — sells mass.
-      const gain = Math.min(1, -vn / 40);
-      sfx.at(this.pos, `ricochet${1 + Math.floor(Math.random() * 3)}`, gain, 1, this.vel);
-    }
-    return true;
-  }
-
-  private checkBalls(balls?: Targetable[]): boolean {
-    if (!balls) return false;
-    for (const ball of balls) {
-      if (ball.dead) continue;
-      if (sweepBall(this, ball)) {
-        this.recordHit(this.minHitDist - ball.radius);
-        this.hitBall = ball;
-        if (this.config.sticks) {
-          // Glued to a live victim — it rides the target at the contact
-          // offset until the fuse pops it on top of them.
-          this.stickAt(this.hitPoint, ball);
-          return true;
-        }
-        this.explode();
-        return true;
-      }
-    }
-    return false;
-  }
-
-  private checkPlayers(remotePlayers?: Map<string, THREE.Vector3>): boolean {
-    if (this.sweepLocal) {
-      const lp = this.sweepLocal();
-      if (lp && sweepPlayer(this, lp, 'local')) {
-        this.recordHit(this.minHitDist - PLAYER_RADIUS);
-        this.hitPlayerId = 'local';
-        if (this.config.sticks) {
-          this.stickAt(this.hitPoint, undefined, 'local', remotePlayers);
-          return true;
-        }
-        this.explode();
-        return true;
-      }
-    }
-    if (!remotePlayers) return false;
-    for (const [playerId, playerPos] of remotePlayers) {
-      if (sweepPlayer(this, playerPos, playerId)) {
-        this.recordHit(this.minHitDist - PLAYER_RADIUS);
-        this.hitPlayerId = playerId;
-        if (this.config.sticks) {
-          this.stickAt(this.hitPoint, undefined, playerId, remotePlayers);
-          return true;
-        }
-        this.explode();
-        return true;
-      }
-    }
-    return false;
-  }
-
   // Contact point along this frame's sweep + its parametric position
   // (0=prevPos, 1=pos). Hit distance/airtime come from here, not the
   // already-integrated end-of-frame pos — a fast shell could overshoot the
   // target by meters inside one frame and inflate the hit score/claim.
-  private hitX = 0; private hitY = 0; private hitZ = 0; private hitT = 1;
   hitAt(x: number, y: number, z: number, t: number): void {
     this.hitX = x; this.hitY = y; this.hitZ = z; this.hitT = t;
     // Also the detonation point — combat renders the blast at hitPoint when
@@ -537,15 +388,6 @@ export class Projectile {
     // the overshot end-of-frame position.
     this.hitPoint.set(x, y, z);
     this.hitPointValid = true;
-  }
-
-  private recordHit(minDist: number): void {
-    this.hitAccuracy = Math.max(0, minDist);
-    this.hitAge = this.age - this.lastDt * (1 - this.hitT);
-    const dx = this.hitX - this.shotOrigin.x;
-    const dy = this.hitY - this.shotOrigin.y;
-    const dz = this.hitZ - this.shotOrigin.z;
-    this.hitDistance = Math.sqrt(dx * dx + dy * dy + dz * dz);
   }
 
   // Mesh ramp-in: every projectile pops in small and grows to full size —
@@ -580,7 +422,7 @@ export class Projectile {
 
   /** Plant the bomb at a contact point — motion and sweeps stop, the
    *  fuse doesn't. With a victim it tracks; without one it just hangs. */
-  private stickAt(p: THREE.Vector3, ball?: Targetable, playerId?: string,
+  stickAt(p: THREE.Vector3, ball?: Targetable, playerId?: string,
                   remotePlayers?: Map<string, THREE.Vector3>): void {
     this.stuck = true;
     this.pos.copy(p);
