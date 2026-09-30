@@ -1,3 +1,4 @@
+2026-09-26 - Toughen bot nerve: fear at 15% HP, hero roll 30%, sharper hurt-fire, death spots repel less; bots hold fights instead of scattering
 2026-09-26 - Enlarge loadout sheet type: heads/caps/options/descriptions up ~20-40% for readability
 2026-09-26 - Fix lobby panel overlap: GO button overflow (min-width:0 flex fix), loadout sheet recenters/wraps in free band when lobby opens
 2026-09-26 - Loadout picker follow-ups: armor tiles show absolute HP (75/100/150); filtered-out equipped weapon resolves its label instead of printing the raw wid; dropup options carry role one-liners.

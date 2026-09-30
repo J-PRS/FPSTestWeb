@@ -129,9 +129,11 @@ const DODGE_STEP = 9;    // m — lateral hop, ~one body-length burst
 // FEAR_HP the bot breaks contact (retreat, sloppy suppression on purpose);
 // a rare hero roll on entering that state instead sharpens every sense a
 // human could sharpen: cadence, aim, dodge horizon, acquisition range.
-const FEAR_HP = 0.35;
-const HERO_CHANCE = 0.08; // per hurt episode, rolled on the rising edge
-const HERO_S = 6;         // seconds of hero before it cools off
+// Tribes players don't scatter at the first scratch — FEAR_HP sits near
+// death, and the hero roll is a real coin flip toward a last stand.
+const FEAR_HP = 0.15;
+const HERO_CHANCE = 0.3; // per hurt episode, rolled on the rising edge
+const HERO_S = 6;        // seconds of hero before it cools off
 
 // --- context steering senses ---
 const SLOTS = 16;        // directions sampled around the circle
@@ -141,8 +143,8 @@ const STEP = 8;          // m — steering lookahead distance
 const SEP_RANGE = 7;     // m — personal space vs other bodies
 const MEM_MS = 4000;     // recently-visited ground repels for this long
 const MEM_RANGE = 12;    // m — memory trail influence radius
-const DEATH_MS = 30000;  // a death spot stays scary this long
-const DEATH_RANGE = 15;  // m — repel radius around each remembered death
+const DEATH_MS = 15000;  // a death spot stays scary this long
+const DEATH_RANGE = 10;  // m — repel radius around each remembered death
 
 // LOS memo — the march is per-(bot,enemy) the single priciest sense, so
 // results cache on quantized endpoints (1.5m cells) with a short TTL.
@@ -471,7 +473,7 @@ export class BotBrain {
     if (this.burstLeft <= 0) this.burstLeft = 5;
     this.burstLeft--;
     this.fireT = (this.burstLeft > 0 ? 0.45 : 0.8 + Math.random() * 0.5) / this.temper
-      * (hero ? 0.65 : fearing ? 0.75 : 1);
+      * (hero ? 0.65 : fearing ? 0.9 : 1);
     const d = dist3(pos, this.lastSeen);
     // Suppressive fire is deliberately sloppy — noise, not hits. Hero
     // aim just stops being sloppy.
@@ -482,7 +484,7 @@ export class BotBrain {
     // shell's time in flight — a 1.3s mortar lob is a much bigger
     // prediction than a 0.6s disc at the same range.
     let err = 0.5 + Math.hypot(this.lastSeenVel.x, this.lastSeenVel.y, this.lastSeenVel.z) * 0.1 + d * 0.02 + flight * 1.2;
-    err *= hero ? 0.3 : fearing ? 2.5 : 1;
+    err *= hero ? 0.3 : fearing ? 1.8 : 1;
     // Ballistic intercept: the target keeps falling while the shell
     // travels — a skier mid-air arcs down, and a flat lead overshoots
     // high. Clamp at terrain so a grounded runner isn't predicted
@@ -522,7 +524,7 @@ export class BotBrain {
     // by temperament — drones roam the stand's perimeter so they're
     // the pick when the anchor is already watched.
     const roll = Math.random();
-    const kind: string = (ctx.healthFrac ?? 1) < 0.6 ? 'station'
+    const kind: string = (ctx.healthFrac ?? 1) < 0.4 ? 'station'
       : roll < 0.55 ? 'turret' : roll < 0.85 ? 'mine' : 'drone';
     const a = Math.random() * Math.PI * 2;
     const r = 4 + Math.random() * 6;
@@ -564,7 +566,7 @@ export class BotBrain {
       this.goal = { ...this.revengeFrom };
       return;
     }
-    if ((ctx.healthFrac ?? 1) < 0.4 && ctx.others && ctx.others.length > 0) {
+    if ((ctx.healthFrac ?? 1) < 0.15 && ctx.others && ctx.others.length > 0) {
       const rally = this.rallyGoal(ctx, pos);
       if (rally) this.goal = rally;
       return;
@@ -613,7 +615,7 @@ export class BotBrain {
   /** Hurt with nobody shooting back at: fold toward the nearest body.
    *  Safety-in-numbers emerges — nobody scripts a retreat. */
   private rallyGoal(ctx: BrainCtx, pos: BotVec): BotVec | null {
-    if ((ctx.healthFrac ?? 1) >= 0.4 || !ctx.others || ctx.others.length === 0) return null;
+    if ((ctx.healthFrac ?? 1) >= 0.15 || !ctx.others || ctx.others.length === 0) return null;
     let ally: BotVec | null = null;
     let ad = Infinity;
     for (const o of ctx.others) {
