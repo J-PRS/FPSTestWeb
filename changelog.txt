@@ -1,5 +1,6 @@
+2026-10-01 - kill feed: suicides render as "X [weapon] self" + "cratered" log line instead of "X killed X"
 2026-10-01 - RemotePlayer.ts 661->553: model-anim drive (locomotion/jet pick, landing pulse, air trail, shoot/hit oneshots, mixer LOD) -> remoteAnim.ts RemoteAnim
-2026-10-01 - Projectile.ts 638->443: collision-policy family (terrain bounce/fuse, wall+obstacle intercept, ball/player hits, hit-record) -> projCollide.ts ProjCollide
+2026-10-01 - Projectile.ts 638->480: collision-policy family (terrain bounce/fuse, wall+obstacle intercept, ball/player hits, hit-record) -> projCollide.ts ProjCollide
 2026-10-01 - ViewModel.ts 687->602: dip-cycle family (throw/switch/punch envelopes + their triggers + timing constants) -> vmEnvelopes.ts VmEnvelopes
 2026-10-01 - Sheep meter: ignore channel now needs 3s of sustained no-fire with a visible foe (volley cadence no longer reads as passivity); held fight positions strafe-orbit instead of standing still
 2026-10-01 - CombatHandler.ts 697->539: AOE claim adjudication (projectile pop + melee/slam/beam/cluster blast contracts) -> combatAoe.ts AoeClaims

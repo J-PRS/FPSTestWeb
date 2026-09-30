@@ -111,6 +111,9 @@ export class HUD {
     const row = document.createElement('div');
     row.className = 'kf-row';
     if (localIsShooter) row.classList.add('me');
+    // Self-inflicted kill (own splash): "X cratered" — "X ▸ X" reads as a
+    // normal frag in the feed.
+    const suicide = shooter === target;
     const s = document.createElement('span');
     s.className = 'kf-s';
     s.textContent = shooter === 'environment' ? '☠' : shooter;
@@ -120,13 +123,13 @@ export class HUD {
     w.textContent = weapon !== undefined && WeaponType[weapon] ? `[${WeaponType[weapon]}] ` : '';
     const t = document.createElement('span');
     t.className = 'kf-t' + (localIsTarget ? ' dead' : '');
-    t.textContent = target;
+    t.textContent = suicide ? 'self' : target;
     row.append(s, w, t);
     this.killFeed.append(row);
     while (this.killFeed.childElementCount > 6) this.killFeed.firstElementChild!.remove();
     setTimeout(() => { row.classList.add('fade'); setTimeout(() => row.remove(), 600); }, 5200);
     const wname = weapon !== undefined && WeaponType[weapon] ? ` [${WeaponType[weapon]}]` : '';
-    this.logEvent(`${shooter}${wname} ▸ ${target}`, localIsShooter ? 'me' : localIsTarget ? 'dead' : undefined);
+    this.logEvent(suicide ? `${target}${wname} cratered` : `${shooter}${wname} ▸ ${target}`, localIsShooter ? 'me' : localIsTarget ? 'dead' : undefined);
   }
 
   /** Run clock — MM:SS, DOM write only when the second rolls over */
