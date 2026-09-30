@@ -85,6 +85,9 @@ const ROUTES: Record<string, (url: URL) => Response | Promise<Response>> = {
   // WebRTC tier: STUN/TURN servers come from the deployment, not the
   // client build — parsed once at boot from FPS_ICE_SERVERS.
   '/rtcconfig': () => json({ iceServers: iceServers() }),
+  // Open P2P lobbies — hosts that marked their room public, still waiting
+  // on a guest. Quick-join picks the first (longest waiting).
+  '/rtc/lobbies': () => json(rtcRelay.lobbies()),
 };
 
 let _ice: unknown[] | null = null;
@@ -304,7 +307,8 @@ const server = Bun.serve<WebSocketData>({
       if (!/^[a-zA-Z0-9_-]{1,32}$/.test(room)) {
         return new Response('Bad room', { status: 400 });
       }
-      return wsUpgrade(srv, req, { playerId: '', connectedAt: Date.now(), rtc: true, room });
+      const open = url.searchParams.get('open') === '1';
+      return wsUpgrade(srv, req, { playerId: '', connectedAt: Date.now(), rtc: true, room, open });
     }
 
     // Server-peer WebRTC signalling: /rtcs — one shot offer/answer, then

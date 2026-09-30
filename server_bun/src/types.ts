@@ -16,6 +16,8 @@ export interface WebSocketData {
   /** /rtc signalling sockets: relayed room-to-room, never reach GameServer. */
   rtc?: boolean;
   room?: string;
+  /** Host opted this room into the public lobby list (/rtc/lobbies). */
+  open?: boolean;
   /** /rtcs signalling sockets: negotiate a server-peer DataChannel. */
   rtcs?: boolean;
 }

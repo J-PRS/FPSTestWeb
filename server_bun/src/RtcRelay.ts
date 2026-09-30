@@ -13,6 +13,18 @@ import { logger } from './logger.ts';
  */
 export class RtcRelay {
   private rooms = new Map<string, Set<ServerWebSocket<WebSocketData>>>();
+  /** Rooms the host opened to strangers — listed until a second member
+   *  lands or the host leaves. */
+  private openRooms = new Map<string, number>(); // room → openedAt ms
+
+  /** Public lobby list for quick-join: open rooms still waiting on a guest. */
+  lobbies(): { room: string; since: number }[] {
+    const out: { room: string; since: number }[] = [];
+    for (const [room, since] of this.openRooms) {
+      if ((this.rooms.get(room)?.size ?? 0) === 1) out.push({ room, since });
+    }
+    return out.sort((a, b) => a.since - b.since);
+  }
 
   onOpen(ws: ServerWebSocket<WebSocketData>): void {
     const room = ws.data.room ?? '';
@@ -23,6 +35,7 @@ export class RtcRelay {
       return;
     }
     members.add(ws);
+    if (members.size === 1 && ws.data.open) this.openRooms.set(room, Date.now());
     // First member hosts; the second's arrival kicks off the offer.
     ws.send(JSON.stringify({ t: 'role', host: members.size === 1 }));
     if (members.size === 2) {
@@ -47,6 +60,12 @@ export class RtcRelay {
     for (const m of members) {
       if (m.readyState === 1) m.send(JSON.stringify({ t: 'peer-left' }));
     }
-    if (members.size === 0) this.rooms.delete(room);
+    if (members.size === 0) {
+      this.rooms.delete(room);
+      this.openRooms.delete(room);
+    } else if (![...members].some((m) => m.data.open)) {
+      // The OPEN member left — a lone guest isn't a joinable lobby.
+      this.openRooms.delete(room);
+    }
   }
 }

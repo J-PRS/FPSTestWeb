@@ -28,6 +28,9 @@ export const urlParams = {
   /** ?p2p=host:CODE|join:CODE — WebRTC duel via /rtc handshake relay.
    *  URL wins for shareability; falls back to the lobby's saved field. */
   p2p: qp.get('p2p') || settings.get('fps-p2p') || null,
+  /** ?lobby / saved flag — host marks the p2p room public on the relay
+   *  so quick-joiners find it via /rtc/lobbies. */
+  lobby: qp.has('lobby') || settings.get('fps-lobby') === 1,
   /** ?room=NAME — match room on the server (default: 'default'). Lets two
    *  matches coexist on one server; share the URL to share the room. */
   room: qp.get('room'),

@@ -24,7 +24,8 @@ type Schema = {
   'fps-volume': number;       // master volume 0..1
   'fps-keys': string;         // "forward=KeyW,back=KeyS,..." — see core/keybinds.ts
   'fps-server': string;       // remote host (trycloudflare name or full host) — '' = same-host dev
-  'fps-p2p': string;          // 'host:CODE' | 'join:CODE' — WebRTC duel, '' = off
+  'fps-p2p': string;          // 'host:CODE' | 'join:CODE' | 'quick' — WebRTC duel, '' = off
+  'fps-lobby': number;        // 1 = host's p2p room is listed publicly (/rtc/lobbies)
 };
 
 const DEFAULTS: Schema = {
@@ -48,6 +49,7 @@ const DEFAULTS: Schema = {
   'fps-keys': '',
   'fps-server': '',
   'fps-p2p': '',
+  'fps-lobby': 0,
 };
 
 const parse = {

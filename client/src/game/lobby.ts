@@ -74,6 +74,35 @@ function label(text: string): HTMLDivElement {
   return d;
 }
 
+/** Buttons persist to settings then reload so the URL params stay the
+ *  single source of truth (?p2p=/?lobby). */
+function p2pGo(p2p: string, lobby: number): void {
+  settings.set('fps-p2p', p2p);
+  settings.set('fps-lobby', lobby);
+  location.reload();
+}
+
+function buildP2PButtons(p2pIn: HTMLInputElement): HTMLDivElement {
+  const code = () => p2pIn.value.trim() || 'duel';
+  const wrap = document.createElement('div');
+  wrap.className = 'lb-quick';
+  const specs: [string, () => void][] = [
+    ['HOST', () => p2pGo(`host:${code()}`, 0)],
+    ['JOIN', () => p2pGo(`join:${code()}`, 0)],
+    // Open lobby: host publicly — anyone pressing QUICK lands here.
+    ['HOST OPEN', () => p2pGo(`host:${code()}`, 1)],
+    // Quick join: the relay hands back the oldest open lobby.
+    ['QUICK', () => p2pGo('quick', 0)],
+    ['OFF', () => p2pGo('', 0)],
+  ];
+  for (const [text, fn] of specs) {
+    const b = btn(text);
+    b.addEventListener('click', fn);
+    wrap.appendChild(b);
+  }
+  return wrap;
+}
+
 export class Lobby {
   private panel: HTMLDivElement;
   private rows: HTMLDivElement;
@@ -196,21 +225,7 @@ export class Lobby {
     p2pIn.style.cssText = 'flex:1;min-width:0;';
     p2pIn.addEventListener('keydown', (e) => e.stopPropagation());
     p2pRow.appendChild(p2pIn);
-    // Role buttons get their own row — inline flex-wrap left OFF stranded alone.
-    const p2pBtns = document.createElement('div');
-    p2pBtns.className = 'lb-quick';
-    for (const role of ['host', 'join'] as const) {
-      const b = btn(role.toUpperCase());
-      b.addEventListener('click', () => {
-        const code = p2pIn.value.trim() || 'duel';
-        settings.set('fps-p2p', `${role}:${code}`);
-        location.reload();
-      });
-      p2pBtns.appendChild(b);
-    }
-    const p2pOff = btn('OFF');
-    p2pOff.addEventListener('click', () => { settings.set('fps-p2p', ''); location.reload(); });
-    p2pBtns.appendChild(p2pOff);
+    const p2pBtns = buildP2PButtons(p2pIn);
 
     this.panel.append(head, this.here, this.rows, hostLbl, mapRow, botsRow, hostBtn, quickLbl, quick, newWrap, connLbl, srvRow, p2pRow, p2pBtns);
     (document.getElementById('overlay') ?? document.body).appendChild(this.panel);
