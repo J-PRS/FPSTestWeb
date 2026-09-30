@@ -123,6 +123,11 @@ export class AmbientParticles {
     scene.add(this.points);
   }
 
+  /** Dynamic-quality switch — hides the cloud and skips the per-frame
+   *  integration so CPU-throttled machines shed the whole cost. */
+  setActive(on: boolean): void { this.points.visible = on; this.active = on; }
+  private active = true;
+
   private cfg: KindConfig;
 
   // Uniform-random point in the spherical shell around the camera,
@@ -151,6 +156,7 @@ export class AmbientParticles {
   }
 
   update(dt: number, camPos: THREE.Vector3, terrain: Terrain): void {
+    if (!this.active) return;
     this.time += dt;
     const cfg = this.cfg;
     const n = cfg.count;

@@ -188,9 +188,18 @@ export class AmbientBirds {
   }
 
   /** The whole flock snaps aggro — one bird bleeds, they all dive. */
-  aggro(): void { this.aggroT = AGGRO_TIME; }
+  aggro(): void { if (this.active) this.aggroT = AGGRO_TIME; }
+
+  /** Dynamic-quality switch — hides the flock and skips the flock sim.
+   *  Live birds keep their slots in targets but stay parked. */
+  setActive(on: boolean): void {
+    this.active = on;
+    for (const b of this.birds) b.group.visible = on && !b.dead;
+  }
+  private active = true;
 
   update(dt: number, playerPos: THREE.Vector3, terrain: Terrain, playerDead = false): void {
+    if (!this.active) return;
     this.seedFlock(playerPos, terrain);
     this.roamKettles(dt, playerPos, terrain);
     this.tickAggro(dt, playerPos, playerDead);

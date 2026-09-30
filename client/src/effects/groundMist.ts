@@ -57,8 +57,17 @@ export class GroundMist {
   }
 
   private time = 0;
+  private active = true;
+
+  /** Dynamic-quality switch — hides the cards and skips the billboard
+   *  wander so CPU-throttled machines shed the whole cost. */
+  setActive(on: boolean): void {
+    this.active = on;
+    for (const c of this.cards) c.mesh.visible = on;
+  }
 
   update(dt: number, camPos: THREE.Vector3): void {
+    if (!this.active) return;
     this.time += dt;
     for (const c of this.cards) {
       // Cylindrical billboard — yaw toward camera only, cards stay upright

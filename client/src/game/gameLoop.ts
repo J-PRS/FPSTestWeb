@@ -91,9 +91,13 @@ interface LoopState {
   lowFpsFrames: number;
   lowFpsAccum: number;
   lastFpsDump: number;
-  /** Dynamic quality level: 0 = full fidelity … 3 = cheapest. Steps down
-   *  on sustained low fps, back up on sustained headroom. */
-  qualityLevel: number;
+  /** Dynamic quality levels — render cost (0=full … 5=cheapest) and CPU
+   *  cost (0=all ambient work … 2=stripped). Chosen per dump by whether
+   *  JS phases or raster dominated the slow frames: a CPU-throttled box
+   *  gains nothing from a smaller framebuffer. */
+  gpuLevel: number;
+  cpuLevel: number;
+  cpuBound: boolean;
   /** Wall-clock accumulator of >55fps frames — step-up hysteresis so a
    *  brief smooth burst doesn't bounce quality up and down. */
   headroomAccum: number;
@@ -122,6 +126,12 @@ function fpsWatchdog(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeo
   }
   if (st.lowFpsFrames > 10 && now - st.lastFpsDump > 10_000) {
     st.lastFpsDump = now;
+    // JS share of the slow frames decides which axis degrades: sim/HUD
+    // phases over a third of frame time is a CPU-throttled box, and
+    // dropping resolution would only shrink the raster it wasn't bound on.
+    const phases = perf.snapshot();
+    const jsMs = Object.values(phases).reduce((a, v) => a + v, 0);
+    st.cpuBound = jsMs > (st.lowFpsAccum / st.lowFpsFrames) * 1000 * 0.35;
     const player = deps.lazyPlayer();
     const nm = deps.lazyNetworkManager();
     const info = deps.rendererSetup.renderer.info;
@@ -159,30 +169,46 @@ function fpsWatchdog(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeo
 }
 
 // Dynamic quality scaling — the render cost follows the machine instead of
-// a manual ?shadows=off param. dir -1 steps down a tier per sustained low
-// fps dump (10s throttle), +1 steps up per ~20s of >55fps headroom:
-//   level 0 = full fidelity (shadows, full-res)
-//   level 1 = shadows off      — biggest single win on weak GPUs
-//   level 2 = medium low-res   — pixel mode 1
-//   level 3 = hard low-res     — pixel mode 2
-// Explicit choices still win: a ?px= param or a non-zero fps-pixelated the
-// user picked pins the pixel tier; fps-shadows=false pins the shadow tier.
+// a manual ?shadows=off param. dir -1 steps down per sustained low-fps dump
+// (10s throttle), +1 steps up per ~20s of >55fps headroom.
+//
+// GPU ladder (frame is mostly raster): 0 full → 1 shadows off → 2 px-mode 2
+// (2×) → 3 px-mode 1 (4×) → 4 px-mode 3 → 5 px-mode 4 (low-res composer).
+// CPU ladder (JS phases dominate): 0 all work → 1 ambient systems off
+// (particles/mist/birds + slower HUD sweeps) → 2 + pixel mode regardless.
+// Explicit choices still win: ?px= or a user-set pixel mode pins the pixel
+// tier; fps-shadows=false pins shadows.
 function autoScale(deps: GameLoopDeps, st: LoopState, dir: number): void {
+  if (st.cpuBound) return autoScaleCpu(deps, st, dir);
   const { rendererSetup } = deps;
-  // A pixel mode the scaler itself set reads the same in settings as a
-  // user choice — autoPixel marks it so the ladder stays free to move.
   const pixelPinned = urlParams.get('px') !== null || (settings.get('fps-pixelated') !== 0 && !st.autoPixel);
-  // Cap the ladder at the pinned tiers: a user-set pixel mode tops the
-  // ladder at 1 (shadows only), a user-disabled shadow floor at 1.
-  const cap = pixelPinned ? 1 : 3;
+  const cap = pixelPinned ? 1 : 5;
   const floor = (!settings.get('fps-shadows') && dir > 0) ? 1 : 0;
-  const next = Math.min(cap, Math.max(floor, st.qualityLevel - dir));
-  if (next === st.qualityLevel) return;
-  if (next <= 1 && rendererSetup.renderer.shadowMap.enabled !== (next === 0)) setShadows(deps, next === 0);
-  const pixel = next <= 1 ? 0 : next - 1;
+  const next = Math.min(cap, Math.max(floor, st.gpuLevel - dir));
+  if (next === st.gpuLevel) return;
+  const wantShadows = next === 0;
+  if (rendererSetup.renderer.shadowMap.enabled !== wantShadows) setShadows(deps, wantShadows);
+  const pixel = next <= 1 ? 0 : [0, 0, 2, 1, 3, 4][next]!;
   if (next >= 2 || st.autoPixel) { rendererSetup.setPixelated(pixel); st.autoPixel = true; }
-  st.qualityLevel = next;
-  Logger[dir < 0 ? 'warn' : 'info'](`auto-quality: level ${next} (${dir < 0 ? 'sustained low fps' : 'headroom'})`);
+  st.gpuLevel = next;
+  Logger[dir < 0 ? 'warn' : 'info'](`auto-quality: gpu level ${next} (${dir < 0 ? 'sustained low fps' : 'headroom'})`);
+}
+
+// CPU-bound ladder — JS phases dominate the frame, so a smaller buffer
+// buys nothing; shed ambient JS work first, then drop res as a last resort.
+function autoScaleCpu(deps: GameLoopDeps, st: LoopState, dir: number): void {
+  const { rendererSetup } = deps;
+  const pixelPinned = urlParams.get('px') !== null || (settings.get('fps-pixelated') !== 0 && !st.autoPixel);
+  const cap = pixelPinned ? 1 : 2;
+  const next = Math.min(cap, Math.max(0, st.cpuLevel - dir));
+  if (next === st.cpuLevel) return;
+  const ambientOn = next === 0;
+  for (const layer of deps.ambientLayers) layer.setActive(ambientOn);
+  deps.groundMist().setActive(ambientOn);
+  deps.ambientBirds.setActive(ambientOn);
+  if (next === 2 || (next === 1 && st.autoPixel)) { rendererSetup.setPixelated(next === 2 ? 1 : 0); st.autoPixel = true; }
+  st.cpuLevel = next;
+  Logger[dir < 0 ? 'warn' : 'info'](`auto-quality: cpu level ${next} (${dir < 0 ? 'sustained low fps' : 'headroom'})`);
 }
 
 function setShadows(deps: GameLoopDeps, on: boolean): void {
@@ -370,9 +396,11 @@ function hudTick(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof cr
   // Peripheral speed lines along the true velocity vector; demo-suppressed.
   deps.speedLines.update(fxDt, camera.position, demoManager?.isPlaying ? _zeroVel : player.vel);
 
-  for (const layer of deps.ambientLayers) layer.update(fxDt, camera.position, terrain);
-  deps.groundMist().update(fxDt, camera.position);
-  deps.ambientBirds.update(fxDt, player.pos, terrain, player.isDead);
+  if (st.cpuLevel === 0) {
+    for (const layer of deps.ambientLayers) layer.update(fxDt, camera.position, terrain);
+    deps.groundMist().update(fxDt, camera.position);
+    deps.ambientBirds.update(fxDt, player.pos, terrain, player.isDead);
+  }
   perf.mark('ambient');
 
   sceneSetup.update(dt);
@@ -390,7 +418,7 @@ function hudTick(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof cr
 
 export function createGameLoop(deps: GameLoopDeps) {
   let lastTime = 0;
-  const st: LoopState = { lastYaw: 0, lastPitch: 0, lowFpsFrames: 0, lowFpsAccum: 0, lastFpsDump: 0, qualityLevel: 0, headroomAccum: 0, autoPixel: false, fxCursor: 0, fxJobs: [] };
+  const st: LoopState = { lastYaw: 0, lastPitch: 0, lowFpsFrames: 0, lowFpsAccum: 0, lastFpsDump: 0, gpuLevel: 0, cpuLevel: 0, cpuBound: false, headroomAccum: 0, autoPixel: false, fxCursor: 0, fxJobs: [] };
 
   // stats.js perf panels — FPS/MS/MB in a row along the bottom-right,
   // toggled with ` (backquote). stats.js only renders one panel per
