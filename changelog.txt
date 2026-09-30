@@ -1,3 +1,4 @@
+2026-09-30 - shared/weapons split: WeaponType enum + WeaponStats + the ~450-line WEAPONS record moved to weaponTable.ts; weapons.ts keeps helpers + re-exports so callers are unchanged (589->75).
 2026-09-30 - ViewModel split: baked-GLB adoption pipeline (HEAD probe, swapBaked, chaingun spin-pivot adoption+reseat) moved to vmBaked.ts behind a BakedHost surface; 602->458.
 2026-09-30 - weaponsGeo split: all ten ballistic builders (rocket/disc/chaingun/mortar/GL/sticky/flak/shotgun/cannon/rpg) moved to weaponsGeoBallistic.ts; assembly table + hand/flash stay (607->117).
 2026-09-30 - ExplosionLayers split: per-weapon blast recipes (splash/punch/energy/kinetic/arc/bolt/flak + direct-hit bonus + electric sparks) moved to blastVariants.ts behind a flat VariantHost (spawnBurst/blastTinted/flash/ring/shock-dome primitives stay); 723->299.
