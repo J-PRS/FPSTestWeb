@@ -76,7 +76,10 @@ type DataChannelLabeled = DataChannelLike & { getLabel?(): string; label?: strin
 
 class RtcSocketAdapter {
   readonly data: WebSocketData = { playerId: '', connectedAt: Date.now() };
-  readonly remoteAddress = 'webrtc';
+  // The datachannel has no IP, but its signalling ws did — inherit it so
+  // per-IP flood control (join throttle) attributes correctly. Sharing the
+  // literal 'webrtc' made EVERY RTC client share one throttle bucket.
+  constructor(readonly remoteAddress: string) {}
   // Two lanes per peer: 'game' (unordered/unreliable) and 'ctrl'
   // (ordered/reliable). All game traffic rides send() → ctrl: a 33%
   // measured drop rate on the game lane made unreliable sends strictly
@@ -153,7 +156,7 @@ export class RtcServer {
     const pc = new nd.PeerConnection('srv', { iceServers: SERVER_ICE });
     this.peers.set(ws, pc);
 
-    const adapter = new RtcSocketAdapter();
+    const adapter = new RtcSocketAdapter(ws.remoteAddress);
     const sock = adapter as unknown as ServerWebSocket<WebSocketData>;
     let opened = false;
     // Half-open peer guard: if signaling finished but no datachannel
