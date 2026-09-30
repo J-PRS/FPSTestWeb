@@ -39,7 +39,11 @@ export class BotSheepMeter {
     let meter = prev + m.dt * (tribesing
       ? -(10 + speedXZ * 0.5 + (jetting ? 15 : 0))
       : m.hasDest ? 9 : 18);
-    meter += this.ignoreDebit(m) + this.coverageDebit(id, p, m.hasDest, this.simMs);
+    // The foe-ignoring charge only counts a PARKED bot — one that's
+    // skiing/jetting/covering ground is playing Tribes even while it
+    // holds fire, and charging it produces a yeet loop: meter lands at
+    // 40 post-yeet and an unlucky perch re-fills in ~1s forever.
+    meter += (tribesing ? 0 : this.ignoreDebit(m)) + this.coverageDebit(id, p, m.hasDest, this.simMs);
     if (meter >= 100) {
       const yaw = Math.random() * Math.PI * 2;
       this.room.moveSim.applyImpulse(id, { x: Math.cos(yaw) * 12, y: 18, z: Math.sin(yaw) * 12 });

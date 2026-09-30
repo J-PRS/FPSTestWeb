@@ -224,7 +224,9 @@ export class ServerBots {
     for (const e of ctx.enemies) {
       if (e.id.startsWith('b:')) continue;
       const d = Math.hypot(e.pos.x - pos.x, e.pos.y - pos.y, e.pos.z - pos.z);
-      if (d < 60 && losClear(ctx, pos, e.pos)) {
+      // Brawl range, not spotting range — a foe it can't reach yet is a
+      // marching target, not an ignored duel.
+      if (d < 45 && losClear(ctx, pos, e.pos)) {
         this.foeNear.set(id, now + 500);
         return;
       }

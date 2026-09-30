@@ -257,7 +257,7 @@ export class TeamBots {
   private foeSeen(bot: GameBot, foes: { id: string; pos: THREE.Vector3; alive: boolean }[], terrain: Terrain): boolean {
     for (const e of foes) {
       if (!e.alive || e.id.startsWith('creature:')) continue;
-      if (e.pos.distanceTo(bot.position) >= 60) continue;
+      if (e.pos.distanceTo(bot.position) >= 45) continue; // brawl range — server mirror
       _losCtx.groundY = (x, z) => terrain.getHeight(x, z);
       _losCtx.now = performance.now();
       if (losClear(_losCtx, bot.position, e.pos)) return true;
@@ -274,7 +274,10 @@ export class TeamBots {
     // Rates mirror the server meter — a bot offline is held to the same
     // standard it is on the wire.
     let delta = tribesing ? -(10 + speedXZ * 0.5 + (bot.yeetT > 0 ? 15 : 0)) : moving ? 9 : 18;
-    if (foe && ignoring) delta += 40; // visible enemy, no shot — the fastest tell
+    // Parked within reach of a visible enemy and holding fire — the
+    // fastest tell. Only counts while NOT tribesing: a bot that's
+    // skiing or repositioning is playing even with its finger off.
+    if (foe && ignoring && !tribesing) delta += 40;
     bot.sheep = Math.max(0, Math.min(100, bot.sheep + delta * dt));
     // ~2s trailing average for display — the raw meter jitters ±10/s
     // around the fill/drain boundary, which reads as flicker.
