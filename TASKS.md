@@ -13,18 +13,30 @@
 - **Networking:** edges + committed snapshots, not position streams;
   distance-tiered fanout; players are the only always-on stream (20Hz).
   PROTOCOL_VERSION=4. `ROADMAP.md` is the living manifesto — read first.
-- **Testing:** `server_bun/tests/` ~440 bun tests incl. `tests/scenarios/`
-  one-file-per-staged-interaction suite (harness.ts); client vitest (~99);
-  `server_bun/tools/netBot.ts` wire-level soak bots (+ `bun run soak`,
+- **Testing:** `server_bun/tests/` 448 bun tests incl. `tests/scenarios/`
+  one-file-per-staged-interaction suite (harness.ts); client vitest (99);
+  `server_bun/tools/netBot.ts` wire-level soak bots — full client-verb
+  coverage, real claim ledger, objective farming (+ `bun run soak`,
   `rtc:relay`, `rtc:punch` scripts);
   `_tools/pvptest/soakreport.ts` headless fleet+server audit.
 - **Recent Changes:**
+  - VGS menu (V + chords) on the real chat wire: tactical cats team-only,
+    VG* global — verified live multiplayer
+  - Team chat on Y (`chat{team:true}`), global on T; green `[T]` lines
+  - Doppler: one-shots pitch-bend at trigger, sustained loops per-frame
+    (listener velocity counts; ±45% clamp)
+  - Bot taunts on the real chat wire (kill/death/env-death/spree, delayed
+    1.5-3s like typing; `shared/botTaunts.ts`, injectable rng)
+  - MoveSim judge: journaled-input segment replay + `min(live, replayed)`
+    divergence — soaks now read 0 WARN under full churn
+  - netBot legality hardening: corpse-target claims skipped, stale-claim
+    expiry, real-airtime claims, respawn/death silence, per-room reset
+  - HUD zone-slot contract: every element anchors a named stack slot —
+    no overlapping anchors possible
   - Server creatures raze deployables (`dep:N` targets + gnaw hp pool)
-  - Scenario suite grew to ~22 files; caught baneling-fuse, flag-drop,
-    and wall-clip classes of bugs
-  - bots.ts bolt sim hoisted out of per-bot loop (was over-integrating)
+  - Scenario suite: teleportGrace/healthTotals/roomHop/claimLedger/
+    teamChat/spawnContract/tickSeq regressions all covered
   - Light wildlife packs on crossfire + stonekeep (PvPvE on real maps)
-  - `scene.background` set to fog color (Three.js requirement for seamless horizon)
 
 ## Technical Context
 - **Dependencies:**
