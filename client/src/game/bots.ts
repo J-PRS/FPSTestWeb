@@ -351,14 +351,23 @@ export class TeamBots {
     bot.setGizmoColor(bot.team === 'ffa' ? 0xcc66ff : TEAM_COLORS[bot.team as TeamId]);
   }
 
-  /** Match over → wipe scores, respawn every bot, flags home. */
+  /** Match over → wipe scores, flags home. Rounds are seamless: live
+   *  bots keep their ground (hp/meters refilled), only the dead come
+   *  back through the spawn ring — teleporting a healthy squad reads
+   *  as a glitch, not a new match. */
   private resetMatch(): void {
     this.over = null;
     this.scores.alpha = 0; this.scores.bravo = 0;
     for (const k of this.ffaScores.keys()) this.ffaScores.set(k, 0);
     for (const bot of this.bots) {
       bot.carryingFlag = false;
-      this.respawnBot(bot);
+      if (bot.isDead) this.respawnBot(bot);
+      else {
+        bot.botHp = bot.botMaxHp;
+        bot.sheep = 0;
+        bot.sheepShown = 0;
+        bot.yeetT = 0;
+      }
     }
     this.ctf?.reset();
     this.pushScore();
