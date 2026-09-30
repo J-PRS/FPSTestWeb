@@ -84,10 +84,11 @@ const stats = { sent: 0, recv: 0, corrections: 0, shots: 0, errors: 0, closes: 0
 // the segment's own sim-time `t`, so late delivery doesn't false-positive.
 const lastSeg = new Map<string, { t: number; x: number; y: number; z: number; sp: number }>();
 function segJump(kind: 'ball' | 'crawl', id: number, x: number, y: number, z: number, sp: number, t: number, segKind = ''): void {
-  // teleport/spawn/knockback segments legitimately move the entity — a jump
-  // there is the event's payload, not lost smoothness.
-  if (segKind === 'teleport' || segKind === 'spawn' || segKind === 'knockback'
-    || segKind === 'blink' || segKind === 'detonate') return;
+  // Balls: only 'bounce' segments follow a predictable arc — lunge/hit/
+  // teleport/spawn/knockback all legitimately relocate it. Crawlers get
+  // checked on every event except their own teleports.
+  if (kind === 'ball' ? segKind !== 'bounce'
+    : (segKind === 'blink' || segKind === 'detonate')) return;
   const key = `${kind}${id}`;
   const prev = lastSeg.get(key);
   lastSeg.set(key, { t, x, y, z, sp });
@@ -211,6 +212,10 @@ class WireBot {
   jetUntil = 0; input = { forward: 1, right: 0, jump: 0, ski: 1, jet: 0, status: 0 };
   sentPingAt = 0; timers: ReturnType<typeof setInterval>[] = [];
   lastTickSeq = -1; lastTickAt = 0;
+  balls = new Map<number, Vec3>(); crawls = new Map<number, Vec3>();
+  ownShots: { id: string; until: number }[] = []; shotN = 0;
+  nextDeploy = 0; nextChat = 0; nextTeleport = 0; nextHeal = 0; nextLoadout = 0; nextEnvDmg = 0; nextSwitch = 0;
+  wasJump = false; wasJet = false;
 
   constructor(private i: number) {
     this.id = `NB-${i}-${Math.random().toString(36).slice(2, 6)}`;
@@ -280,6 +285,8 @@ class WireBot {
         stats.ballSegs++;
         segJump('ball', seg.id, seg.position.x, seg.position.y, seg.position.z,
           Math.hypot(seg.velocity.x, seg.velocity.y, seg.velocity.z), seg.t, seg.kind);
+        this.balls.set(seg.id, seg.position);
+        if (this.balls.size > 300) this.balls.clear();
       }
       if (f) for (const u of f.updates) {
         if (u.playerId === this.id) continue;
@@ -311,7 +318,11 @@ class WireBot {
         stats.crawlEvts++;
         segJump('crawl', m.id, m.position.x, m.position.y, m.position.z,
           Math.hypot(m.velocity?.x ?? 0, m.velocity?.y ?? 0, m.velocity?.z ?? 0), m.t, m.kind);
+        this.crawls.set(m.id, m.position);
+        if (this.crawls.size > 300) this.crawls.clear();
         break;
+      case 'ballDie': this.balls.delete(m.id); break;
+      case 'crawlDie': this.crawls.delete(m.id); break;
       case 'correction':
         // A real client rewinds to the server's truth — do the same.
         if (this.sim) {
@@ -350,6 +361,80 @@ class WireBot {
       this.send({ type: 'ping', timestamp: this.sentPingAt });
     }, 2000));
     if (FIRE) this.timers.push(setInterval(() => this.fire(), rand(900, 2200)));
+    // The rest of the client vocabulary, at a human-plausible cadence:
+    // deployables, chat, teleports, heals, loadout edits, creature claims,
+    // projectile destroys. snapshotRequest once — that's what a real client
+    // asks for right after joining a live room.
+    this.send({ type: 'snapshotRequest' });
+    this.timers.push(setInterval(() => this.misc(), 500));
+    this.nextDeploy = performance.now() + rand(8000, 20000);
+    this.nextChat = performance.now() + rand(15000, 45000);
+    this.nextTeleport = performance.now() + rand(30000, 80000);
+    this.nextHeal = performance.now() + rand(20000, 60000);
+    this.nextLoadout = performance.now() + rand(45000, 120000);
+    this.nextEnvDmg = performance.now() + rand(30000, 90000);
+    this.nextSwitch = performance.now() + rand(120000, 240000);
+  }
+
+  /** Everything else a legal client says, rolled at plausible rates. */
+  private misc(): void {
+    const s = this.sim?.state;
+    if (!s) return;
+    const now = performance.now();
+
+    // Own-projectile cleanup — clients destroy their live shells on
+    // impact/expiry; ours live ~1.5s of airtime.
+    while (this.ownShots.length && this.ownShots[0]!.until <= now) {
+      const id = this.ownShots.shift()!.id;
+      this.send({ type: 'projectileDestroy', projectileId: id });
+    }
+
+    if (now >= this.nextDeploy) {
+      this.nextDeploy = now + rand(15000, 40000);
+      const kinds = ['turret', 'mine', 'station', 'drone'] as const;
+      this.send({ type: 'deploy', kind: kinds[Math.floor(rand(0, 4))], position: { x: s.pos.x, y: s.pos.y, z: s.pos.z } });
+    }
+    if (now >= this.nextChat) {
+      this.nextChat = now + rand(20000, 60000);
+      const lines = ['wp', 'incoming!', 'disc jump incoming', 'need a pickup', 'flag runner left', 'lag check'];
+      this.send({ type: 'chat', text: lines[Math.floor(rand(0, lines.length))] });
+    }
+    if (now >= this.nextTeleport) {
+      // Warp-blink cadence — the server caps teleports at ~1/s anyway.
+      this.nextTeleport = now + rand(25000, 70000);
+      const tx = s.pos.x + rand(-30, 30), tz = s.pos.z + rand(-30, 30);
+      s.pos.x = tx; s.pos.z = tz; s.pos.y = gy(tx, tz) + 1;
+      s.vel.x *= 0.5; s.vel.y = 0; s.vel.z *= 0.5;
+      this.send({ type: 'teleport', position: { ...s.pos }, rotation: { yaw: s.yaw, pitch: s.pitch }, velocity: { ...s.vel } });
+    }
+    if (now >= this.nextHeal) {
+      this.nextHeal = now + rand(25000, 70000);
+      this.send({ type: 'heal', amount: Math.round(rand(5, 25)) });
+    }
+    if (now >= this.nextLoadout) {
+      this.nextLoadout = now + rand(60000, 150000);
+      this.send({ type: 'classUpdate', armorClass: CLASSES[Math.floor(rand(0, 3))] });
+      this.send({ type: 'perkUpdate', perk: PERKS[Math.floor(rand(0, PERKS.length))] });
+    }
+    if (now >= this.nextEnvDmg) {
+      this.nextEnvDmg = now + rand(40000, 120000);
+      this.send({ type: 'environmentDamage', amount: Math.round(rand(5, 15)) });
+    }
+    if (now >= this.nextSwitch) {
+      // Room-hop stress path — full teardown + rejoin, rare like a real hop.
+      this.nextSwitch = now + rand(120000, 240000);
+      this.send({ type: 'switchRoom', room: ROOM, mode: MODE });
+    }
+
+    // Creature claims — only when something's actually in reach, same
+    // rule a real client's input resolves by.
+    const reach = (p: Vec3) => (p.x - s.pos.x) ** 2 + (p.y - s.pos.y) ** 2 + (p.z - s.pos.z) ** 2 < 20 * 20;
+    for (const [id, p] of this.balls) {
+      if (reach(p)) { this.send({ type: 'creatureHit', id, damage: Math.round(rand(10, 30)) }); break; }
+    }
+    for (const [id, p] of this.crawls) {
+      if (reach(p)) { this.send({ type: 'crawlerHit', id, damage: Math.round(rand(10, 30)) }); break; }
+    }
   }
 
   /** One honest sim step toward the current waypoint — ski held like any
@@ -364,6 +449,11 @@ class WireBot {
     const jetting = performance.now() < this.jetUntil;
     this.input.jet = jetting ? 1 : 0;
     this.input.jump = Math.random() < 0.008 ? 1 : 0;
+    // Rising-edge event reports — real clients announce jump/jet starts
+    // so remotes see the launch, not just the position drift.
+    if (this.input.jump === 1 && !this.wasJump) this.send({ type: 'jump', position: { ...s.pos } });
+    if (jetting && !this.wasJet) this.send({ type: 'jetpack', position: { ...s.pos } });
+    this.wasJump = this.input.jump === 1; this.wasJet = jetting;
     this.sim!.setInput({
       forward: 1, right: 0,
       jumpHeld: this.input.jump === 1,
@@ -391,15 +481,19 @@ class WireBot {
     }
     if (!best || bd > 100 * 100) return;
     stats.shots++;
+    // Every claim carries a projectileId and a matching destroy later —
+    // same lifecycle the server validates for real clients.
+    const pid = `nb-${this.i}-${++this.shotN}`;
+    this.ownShots.push({ id: pid, until: performance.now() + 1500 });
     if (Math.random() < 0.5) {
       // Hitscan claim — server clamps damage by weapon type.
       this.send({ type: 'shotFired', weaponType: 2 });
-      this.send({ type: 'shot', targetId: best, weaponType: 2 });
+      this.send({ type: 'shot', targetId: best, weaponType: 2, projectileId: pid });
     } else {
       // Disc AOE — legal as long as the blast point is within 500m.
       const t = this.roster.get(best)!;
       const jx = t.pos.x + rand(-4, 4), jz = t.pos.z + rand(-4, 4);
-      this.send({ type: 'aoeShot', position: { x: jx, y: Math.max(gy(jx, jz), t.pos.y), z: jz }, weaponType: 0, airtime: rand(0.3, 1.6) });
+      this.send({ type: 'aoeShot', position: { x: jx, y: Math.max(gy(jx, jz), t.pos.y), z: jz }, weaponType: 0, airtime: rand(0.3, 1.6), projectileId: pid });
     }
   }
 
