@@ -1,3 +1,4 @@
+2026-10-02 - _tools/e2e/reconnect.ts: grace-period reconnect E2E
 2026-10-02 - Open p2p lobbies + quick-join (HOST OPEN / QUICK buttons, /rtc/lobbies, ?p2p=quick)
 2026-10-02 - _tools/e2e/duo_p2p.ts: host+guest WebRTC E2E (friend-play path)
 2026-10-02 - _tools/e2e/perf.ts: frame-time + JS-busy regression harness w/ baseline diffing
