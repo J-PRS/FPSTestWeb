@@ -18,6 +18,11 @@ export const MOVEMENT_CONFIG = {
   terminalVelocity: 100.0,
   jumpSpeed: 7.0,
   autoHop: true,
+  // Horizontal overspeed bleed while grounded: blast/slide velocity above
+  // the ground cap decays toward it instead of being hard-clamped — the
+  // clamp used to truncate knockback impulses (including the loft that
+  // makes rocket jumps) before the body ever left the floor.
+  overspeedBleed: 4.0,
   // Skiing: friction toggle only — no artificial accel/boost/lift, but a
   // skier counts as grounded a little higher off the surface.
   skiTargetDistance: 0.5,
@@ -264,11 +269,15 @@ export class MoveSim {
       s.vel.x -= n.x * velDotN; s.vel.y -= n.y * velDotN; s.vel.z -= n.z * velDotN;
     }
 
-    const speed = Math.hypot(s.vel.x, s.vel.y, s.vel.z);
+    // Horizontal-only cap: vertical velocity is ballistic and must never
+    // bleed into this path, and horizontal overspeed (a blast shove, a
+    // landing) bleeds toward the cap rather than snapping to it.
+    const hSpeed = Math.hypot(s.vel.x, s.vel.z);
     const maxGround = MOVEMENT_CONFIG.maxVelocityGround * this.speedScale;
-    if (speed > maxGround) {
-      const k = maxGround / speed;
-      s.vel.x *= k; s.vel.y *= k; s.vel.z *= k;
+    if (hSpeed > maxGround) {
+      const want = maxGround + (hSpeed - maxGround) * Math.max(0, 1 - MOVEMENT_CONFIG.overspeedBleed * dt);
+      const k = want / hSpeed;
+      s.vel.x *= k; s.vel.z *= k;
     }
   }
 

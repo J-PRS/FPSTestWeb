@@ -3,7 +3,7 @@ import type { PlayerManager } from './PlayerManager.ts';
 import type { WeaponStats } from '../../shared/weapons.ts';
 import { getWeaponStats, WeaponType, directHitAoeBonus, ARMORNADE_ARMOR } from '../../shared/weapons.ts';
 import { perkMods } from '../../shared/perks.ts';
-import { aoeDamage, aoeImpulse, KNOCKBACK_SCALE, validateHitClaim, validateAoeClaim, lgTickDamage, LG_RAMP_WINDOW_S } from '../../shared/combat.ts';
+import { aoeDamage, aoeImpulse, KNOCKBACK_SCALE, BLAST_IMPULSE_MAX, validateHitClaim, validateAoeClaim, lgTickDamage, LG_RAMP_WINDOW_S } from '../../shared/combat.ts';
 import { POWERUP } from '../../shared/pickups.ts';
 import type { PlayerState } from './types.ts';
 import { logger } from './logger.ts';
@@ -532,7 +532,9 @@ export class CombatHandler {
     const damage = aoeDamage(ctx.baseDamage, dist, ctx.radius);
     if (damage <= 0) return;
 
-    const impulseMag = aoeImpulse(ctx.impulse, dist, ctx.radius) * KNOCKBACK_SCALE * perkMods(target.perk).knockbackTaken;
+    const impulseMag = Math.min(
+      aoeImpulse(ctx.impulse, dist, ctx.radius) * KNOCKBACK_SCALE * perkMods(target.perk).knockbackTaken,
+      BLAST_IMPULSE_MAX);
     this.shove(targetId, target, { x: tdx, y: tdy, z: tdz }, impulseMag, ctx.pos, ctx.pull);
     if (shoveOnly) return; // self-propulsion: displace, never damage
 

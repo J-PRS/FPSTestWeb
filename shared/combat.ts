@@ -41,6 +41,12 @@ export function aoeDamage(amount: number, dist: number, radius: number): number 
  *  pulled back to 1.0 — keep the constant as the single tuning point. */
 export const KNOCKBACK_SCALE = 1.0;
 
+/** Ceiling on a single blast's impulse magnitude — blasts scale their
+ *  shove down rather than being truncated, so no point-blank pop can
+ *  launch a victim to absurd velocity. 40 m/s still makes real rocket
+ *  jumps (≈14m apex on the up component) while bounding the worst case. */
+export const BLAST_IMPULSE_MAX = 40;
+
 export function aoeImpulse(force: number, dist: number, radius: number): number {
   return force * aoeFalloff(dist, radius);
 }

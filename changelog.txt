@@ -1,3 +1,4 @@
+2026-09-26 - Knockback fix: ground clamp no longer truncates blast impulses (horizontal overspeed bleeds instead); per-blast impulse capped at 40 m/s; blast ledger now measures feet-pop drift + loft
 2026-09-26 - Blast-distance ledger: scenario test detonates 7 blast types at 3m and caps peak knockback drift (catches catapult regressions)
 2026-09-26 - Armor grenade: knockback 55->25 (nudge, not launcher)
 2026-09-26 - Bot roster: support loadout fields armor grenades (plated pushes get plated)

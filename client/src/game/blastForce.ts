@@ -6,7 +6,7 @@ import * as THREE from 'three';
 
 import { getProjectileConfig } from '../projectiles/index.js';
 import { Projectile } from '../projectiles/Projectile.js';
-import { aoeImpulse, aoeDamage as aoeDamageOf, KNOCKBACK_SCALE } from '../../../shared/combat.js';
+import { aoeImpulse, aoeDamage as aoeDamageOf, KNOCKBACK_SCALE, BLAST_IMPULSE_MAX } from '../../../shared/combat.js';
 import { blastOccluded } from '../../../shared/solidWorld.js';
 import type { CombatDeps } from './combat.js';
 import type { Targetable } from '../entities/balls.js';
@@ -120,7 +120,7 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
       // predicts splash damage the server never applies, and the health bar
       // snaps back to full on the next authoritative update.)
       const dist = rp.position.distanceTo(pos);
-      const impulse = aoeImpulse(force, dist, radius) * KNOCKBACK_SCALE;
+      const impulse = Math.min(aoeImpulse(force, dist, radius) * KNOCKBACK_SCALE, BLAST_IMPULSE_MAX);
       if (impulse <= 0) continue;
       if (occluded(pos, rp.position)) continue;
       rp.applyPredictedKnockback(pos, impulse, forceMode === 'pull');
@@ -137,7 +137,7 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
     const { pos, radius, force, forceMode, falloffMultiplier, forceMultiplier, aoeDamage } = a;
     const falloffAt = (dist: number) => 1 - dist / (radius * falloffMultiplier);
     const applyTo = (t: Forceable, f: number) =>
-      forceMode === 'push' ? t.applyKnockback(pos, f) : t.applyPull(pos, f);
+      forceMode === 'push' ? t.applyKnockback(pos, Math.min(f, BLAST_IMPULSE_MAX)) : t.applyPull(pos, Math.min(f, BLAST_IMPULSE_MAX));
 
     const player = deps.lazyPlayer();
     const dpx = player.pos.distanceTo(pos);
