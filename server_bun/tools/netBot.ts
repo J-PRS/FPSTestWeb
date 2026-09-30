@@ -197,18 +197,22 @@ class WireBot {
   wasJump = false; wasJet = false;
   // Warp state is per-bot — each socket sees its own (possibly interest-
   // filtered) stream, so comparing across sockets invents teleports.
-  private lastSeg = new Map<string, { t: number; x: number; y: number; z: number; sp: number }>();
+  private lastSeg = new Map<string, { t: number; x: number; y: number; z: number; sp: number; judge: boolean }>();
 
   private segJump(kind: 'ball' | 'crawl', id: number, x: number, y: number, z: number, sp: number, t: number, segKind = ''): void {
-    // Balls: only 'bounce' segments follow a predictable arc — lunge/hit/
-    // teleport/spawn/knockback all legitimately relocate it. Crawlers get
-    // checked on every event except their own teleports.
-    if (kind === 'ball' ? segKind !== 'bounce'
-      : (segKind === 'blink' || segKind === 'detonate')) return;
+    // Only judged→judged pairs are compared, but every segment updates
+    // the anchor — otherwise a retarget→pounce→retarget run reads the
+    // lunge's whole displacement as one wire jump. Balls judge 'bounce'
+    // only (lunge/hit/teleport relocate legitimately); crawlers judge
+    // the ground-travel kinds (pounce/charge/bite land wherever the
+    // lunge ended).
+    const judge = kind === 'ball'
+      ? segKind === 'bounce'
+      : (segKind === 'retarget' || segKind === 'windup' || segKind === 'fire');
     const key = `${kind}${id}`;
     const prev = this.lastSeg.get(key);
-    this.lastSeg.set(key, { t, x, y, z, sp });
-    if (!prev) return;
+    this.lastSeg.set(key, { t, x, y, z, sp, judge });
+    if (!prev || !judge || !prev.judge) return;
     const dt = t - prev.t;
     if (dt <= 0) return; // stale or replayed segment
     // Interest-scoped delivery drops segments — a >0.5s gap can hide a
