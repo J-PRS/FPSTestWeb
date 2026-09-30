@@ -6,7 +6,6 @@ import { validateHitClaim, lgTickDamage } from '../../shared/combat.ts';
 import { POWERUP } from '../../shared/pickups.ts';
 import type { PlayerState } from './types.ts';
 import { logger } from './logger.ts';
-import { weaponStats } from './weaponStats.ts';
 import { HEAVY_ONLY_WEAPONS } from '../../shared/botClasses.ts';
 import type { StructureCollider } from '../../shared/ballSim.ts';
 import { segSolidHit, ColliderIndex } from '../../shared/solidWorld.ts';
@@ -16,6 +15,7 @@ import { RespawnManager } from './respawn.ts';
 import { ChargeBank } from './combatCharge.ts';
 import { BlastRunner, FORCE_SEND_MS } from './combatBlast.ts';
 import { AoeClaims } from './combatAoe.ts';
+import { HitLedger } from './hitLedger.ts';
 
 type BroadcastFn = (msg: ServerMessage, excludePlayerId?: string) => void;
 type SendToPlayerFn = (playerId: string, msg: ServerMessage) => void;
@@ -73,7 +73,6 @@ export class CombatHandler {
   private aoe: AoeClaims;
   /** First-hit timestamps per shooter|victim pair — kill-side applies it
    *  as the engagement time (TTK), hit-side only refreshes it. */
-  private duelStart = new Map<string, number>();
   /** Map-structure colliders — claim validation rejects flights that
    *  would have to pass through a wall to reach their end point.
    *  solidIndex is public — BlastRunner marches through it too. */
@@ -85,12 +84,13 @@ export class CombatHandler {
     this.solidIndex = list.length ? new ColliderIndex(list) : null;
   }
 
-  private killFeed: KillFeed;
-  private respawner: RespawnManager;
+  killFeed: KillFeed;
+  private hitLedger = new HitLedger();
+  respawner: RespawnManager;
 
   constructor(
     public playerManager: PlayerManager,
-    private broadcast: BroadcastFn,
+    public broadcast: BroadcastFn,
     public sendToPlayer: SendToPlayerFn,
     public deps: CombatDeps = {},
   ) {
@@ -462,55 +462,7 @@ export class CombatHandler {
   }
 
   applyHit(shooterId: string, targetId: string, damage: number, result: { killed: boolean; newHealth: number; newArmor: number }, opts: { label: string; extra?: Record<string, unknown>; weapon?: number }): void {
-    this.hb('hit');
-    this.hb('dmg', Math.round(damage));
-    if (result.killed) this.hb('kill');
-    this.deps.onHit?.(targetId, shooterId);
-    const src = opts.weapon !== undefined ? `w${opts.weapon}` : opts.label;
-    this.noteHit(shooterId, targetId, src, damage, result.killed);
-    if (!result.killed) {
-      logger.info(opts.label, { shooter: shooterId, target: targetId, damage, targetHealth: result.newHealth, ...opts.extra });
-      this.broadcast({ type: 'playerHit', shooterId, targetId, damage, health: result.newHealth, armor: result.newArmor });
-      return;
-    }
-    const corpse = this.playerManager.getPlayer(targetId);
-    if (corpse) this.chargeBank.corpse(shooterId, corpse); // banked LG charge goes off on the body
-    this.creditKill(shooterId, targetId, damage, opts.label, opts.extra, opts.weapon);
-  }
-
-  /** Telemetry + duel bookkeeping for one applied hit — weapon spread,
-   *  death spot, kill speed, and first-hit→kill TTK per pairing. */
-  private noteHit(shooterId: string, targetId: string, src: string, damage: number, killed: boolean): void {
-    const modeTag = this.deps.mode ?? '';
-    weaponStats.record(modeTag, src, damage, killed, shooterId.startsWith('BOT-'));
-    const duelKey = `${shooterId}|${targetId}`;
-    if (!killed) {
-      this.duelStart.set(duelKey, this.duelStart.get(duelKey) ?? Date.now());
-      if (this.duelStart.size > 512) this.duelStart.clear(); // leak cap — entries die with their duels anyway
-      return;
-    }
-    const victim = this.playerManager.getPlayer(targetId);
-    if (victim) weaponStats.recordDeath(modeTag, victim.position);
-    weaponStats.recordKillSpeed(modeTag,
-      this.playerManager.getPlayer(shooterId)?.velocity ?? null,
-      victim?.velocity ?? null);
-    // Duel engagement: first-hit→kill time per shooter+victim pair.
-    const started = this.duelStart.get(duelKey);
-    if (started !== undefined) weaponStats.recordTtk(modeTag, src, Date.now() - started);
-    this.duelStart.delete(duelKey);
-  }
-
-  /** The kill tail: score credit, kill broadcast, spree callouts, and the
-   *  respawn timer — every damage path converges here. */
-  private creditKill(shooterId: string, targetId: string, damage: number, hitLabel: string, extra?: Record<string, unknown>, weapon?: number): void {
-    if (shooterId !== 'environment') this.playerManager.addKill(shooterId);
-    logger.info(`${hitLabel} → kill`, { shooter: shooterId, target: targetId, damage, ...extra });
-    const shooterStreak = shooterId === 'environment' ? undefined
-      : (this.playerManager.getPlayer(shooterId)?.streak ?? 0) + 1;
-    this.broadcast({ type: 'playerKill', shooterId, targetId, weapon, streak: shooterStreak });
-    this.killFeed.announce(shooterId, targetId);
-    this.deps.onKill?.(targetId, shooterId);
-    this.respawner.schedule(targetId);
+    this.hitLedger.applyHit(this, shooterId, targetId, damage, result, opts);
   }
 
   // Spree callouts ride matchNotice (system chat line). killTotal()===1 pins
