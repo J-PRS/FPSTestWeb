@@ -1,3 +1,4 @@
+2026-09-30 - DemoSerializer split: codec halves -> demoWriter.ts (crc32 + record encoders + sizes) and demoReader.ts (cursor + version-gated readers); namespace stays as facade (454->25).
 2026-09-30 - debris split: shard geometry pick + three launch modes (posed part / shell burst / cone) moved to debrisShards.ts (433->322).
 2026-09-30 - DemoRecorder split: rate-limited projectile/target event spool moved to demoEvents.ts as flat-host functions (447->340).
 2026-09-30 - Ball split: visual family (instance write, render-pos blend, trail lifecycle, dead fade-out) moved to ballVisual.ts (451->375).
