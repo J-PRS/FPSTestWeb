@@ -23,7 +23,7 @@ export class HitLedger {
     }
     const corpse = c.playerManager.getPlayer(targetId);
     if (corpse) c.chargeBank.corpse(shooterId, corpse); // banked LG charge goes off on the body
-    this.creditKill(c, shooterId, targetId, damage, opts.label, opts.extra, opts.weapon);
+    this.creditKill(c, shooterId, targetId, damage, opts);
   }
 
   /** Telemetry + duel bookkeeping for one applied hit — weapon spread,
@@ -50,12 +50,12 @@ export class HitLedger {
 
   /** The kill tail: score credit, kill broadcast, spree callouts, and the
    *  respawn timer — every damage path converges here. */
-  private creditKill(c: CombatHandler, shooterId: string, targetId: string, damage: number, hitLabel: string, extra?: Record<string, unknown>, weapon?: number): void {
+  private creditKill(c: CombatHandler, shooterId: string, targetId: string, damage: number, opts: { label: string; extra?: Record<string, unknown>; weapon?: number }): void {
     if (shooterId !== 'environment') c.playerManager.addKill(shooterId);
-    logger.info(`${hitLabel} → kill`, { shooter: shooterId, target: targetId, damage, ...extra });
+    logger.info(`${opts.label} → kill`, { shooter: shooterId, target: targetId, damage, ...opts.extra });
     const shooterStreak = shooterId === 'environment' ? undefined
       : (c.playerManager.getPlayer(shooterId)?.streak ?? 0) + 1;
-    c.broadcast({ type: 'playerKill', shooterId, targetId, weapon, streak: shooterStreak });
+    c.broadcast({ type: 'playerKill', shooterId, targetId, weapon: opts.weapon, streak: shooterStreak });
     c.killFeed.announce(shooterId, targetId);
     c.deps.onKill?.(targetId, shooterId);
     c.respawner.schedule(targetId);
