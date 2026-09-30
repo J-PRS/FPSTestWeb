@@ -27,6 +27,8 @@ import { STATUS } from '../../shared/status.ts';
 import { logger } from './logger.ts';
 import { type BallPopulation, DEFAULT_MAP_SPEC } from '../../shared/mapSpec.ts';
 import { ARMORNADE_OVERCAP } from '../../shared/weapons.ts';
+import { segPointDist, segPointT } from '../../shared/projSim.ts';
+import { aoeDamage } from '../../shared/combat.ts';
 
 const TICK_DT = 0.05;           // 20Hz — matches GameServer tick broadcast
 const RETARGET_INTERVAL = 2.0;  // seconds between nearest-player re-evals
@@ -286,6 +288,37 @@ export class BallSim {
       const d2 = (b.x - pos.x) ** 2 + (b.y - pos.y) ** 2 + (b.z - pos.z) ** 2;
       if (d2 > r2) continue;
       b.health = Math.min(b.maxHealth * ARMORNADE_OVERCAP, b.health + amount);
+    }
+  }
+
+  /** Live ball lookup for honest melee/contact checks. */
+  ballAt(id: number): { x: number; y: number; z: number; radius: number } | null {
+    const b = this.balls.get(id);
+    return b && !b.dead ? { x: b.x, y: b.y, z: b.z, radius: b.radius } : null;
+  }
+
+  /** Earliest live-ball contact along a segment — same order rule the
+   *  player sweep uses (terrain/walls are the caller's to check first). */
+  sweepHit(from: SimVec, to: SimVec, extraReach: number): { id: number; t: number } | null {
+    let best: { id: number; t: number } | null = null;
+    for (const b of this.balls.values()) {
+      if (b.dead) continue;
+      const c = { x: b.x, y: b.y, z: b.z };
+      if (segPointDist(from, to, c) > b.radius + extraReach) continue;
+      const t = segPointT(from, to, c);
+      if (!best || t < best.t) best = { id: b.id, t };
+    }
+    return best;
+  }
+
+  /** Splash into the swarm — same falloff curve the AOE funnel applies to
+   *  players. skipId keeps a direct-hit ball from eating blast twice. */
+  splashDamage(ownerId: string, pos: SimVec, radius: number, maxDamage: number, skipId?: number): void {
+    for (const b of this.balls.values()) {
+      if (b.dead || b.id === skipId) continue;
+      const d = Math.max(0, Math.hypot(b.x - pos.x, b.y - pos.y, b.z - pos.z) - b.radius);
+      const dmg = aoeDamage(maxDamage, d, radius);
+      if (dmg >= 1) this.handleHit(ownerId, b.id, dmg);
     }
   }
 

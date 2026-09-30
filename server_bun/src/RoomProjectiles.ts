@@ -85,6 +85,9 @@ export class RoomProjectiles {
   /** Solid map geometry — shells pop on walls like they do on terrain,
    *  so a mortar can't splash through the base roof. */
   private solids: readonly StructureCollider[] = [];
+  /** Structure occluders — the beam contact check reads the same set the
+   *  flight sweep detonates against. */
+  get solidColliders(): readonly StructureCollider[] { return this.solids; }
   private solidIndex: ColliderIndex | null = null;
   private projs = new Map<string, LiveProj>();
   private nextId = 1;
@@ -204,6 +207,18 @@ export class RoomProjectiles {
         return true;
       }
     }
+    // Creature sweep — server shells connect with the swarm the same way a
+    // client's creatureHit claim does: earliest ball contact along the leg.
+    const bc = this.room.ballSim?.sweepHit(from, p.pos, reach - PLAYER_RADIUS);
+    if (bc) {
+      const at: Vec3 = {
+        x: from.x + (p.pos.x - from.x) * bc.t,
+        y: from.y + (p.pos.y - from.y) * bc.t,
+        z: from.z + (p.pos.z - from.z) * bc.t,
+      };
+      this.detonate(proj, at, null, bc.id);
+      return true;
+    }
     return false;
   }
 
@@ -247,12 +262,21 @@ export class RoomProjectiles {
     this.detonate(proj, at, hitId);
   }
 
-  private detonate(proj: LiveProj, at: Vec3, directHitId?: string | null): void {
+  private detonate(proj: LiveProj, at: Vec3, directHitId?: string | null, ballId?: number): void {
     this.projs.delete(proj.id);
     this.room.broadcast({ type: 'projectileDestroyed', projectileId: proj.id });
     if (directHitId) this.room.messages.botAttack(proj.ownerId, directHitId, proj.weaponType);
+    // A shell that lands on a creature deals its direct line, then the
+    // blast splashes the rest of the swarm — same outcome a player-caused
+    // hit + aoeShot pair produces, minus the claims.
+    if (ballId !== undefined) {
+      this.room.ballSim?.handleHit(proj.ownerId, ballId, proj.stats.directDamage || proj.stats.aoeDamage);
+    }
     this.room.pushNoise(at); // a blast is louder than the muzzle that launched it
     this.room.messages.serverBlast(proj.ownerId, at, proj.weaponType, directHitId ?? null);
+    if (proj.stats.aoeRadius > 0) {
+      this.room.ballSim?.splashDamage(proj.ownerId, at, proj.stats.aoeRadius, proj.stats.aoeDamage, ballId);
+    }
 
     // Sticky chain: a blast cooks every sibling bomb in its radius — the
     // client already rips the chain visually; aging siblings to fuse lets

@@ -419,17 +419,36 @@ export class CombatHandler {
     }
     // Same stepped ramp the client applies: consecutive ticks on one
     // target decay, a target switch or miss window resets to full.
-    const now = Date.now() / 1000;
-    const st = this.lgRamp.get(playerId);
-    const n = st && st.targetId === (msg.excludeTargetId ?? null) && now - st.t <= LG_RAMP_WINDOW_S
-      ? st.n + 1 : 1;
-    this.lgRamp.set(playerId, { targetId: msg.excludeTargetId ?? null, t: now, n });
+    const n = this.lgStep(playerId, msg.excludeTargetId ?? null);
     // The withheld tick damage banks ON the victim — bank before the
     // blast resolves so this tick's share counts if it kills.
     const victim = msg.excludeTargetId ? this.playerManager.getPlayer(msg.excludeTargetId) : null;
     if (victim && !victim.isDead && !this.friendly(playerId, victim.id)) this.bankCharge(victim, 8 - lgTickDamage(n));
+    // The victim sits in excludeTargetId — projectile semantics would skip
+    // them in the blast, but the beam has no paired `shot` claim. Apply the
+    // tick directly (lag-comp'd, occluded, pin shove) — same ramp botAttack
+    // uses, so a held beam on one player decays identically either side.
+    if (victim && !victim.isDead) {
+      const dmg = lgTickDamage(n) * perkMods(player.perk).directDamage * this.ddMult(player);
+      this.splashOne({
+        shooterId: playerId, ping: player.ping, pos: msg.position,
+        radius: stats.aoeRadius, baseDamage: dmg,
+        impulse: stats.knockbackForce, pull: false,
+        label: 'LG beam hit', weapon: msg.weaponType,
+      }, victim.id, victim, false, dmg);
+    }
     const scale = lgTickDamage(n) / 8;
     this.processAOE(playerId, msg.position, msg.excludeTargetId, { ...stats, aoeDamage: stats.aoeDamage * scale }, msg.weaponType);
+  }
+
+  /** Advance a shooter's beam ramp — consecutive ticks on one victim
+   *  count up, a switch or lull resets to the first step. */
+  private lgStep(playerId: string, targetId: string | null): number {
+    const now = Date.now() / 1000;
+    const st = this.lgRamp.get(playerId);
+    const n = st && st.targetId === targetId && now - st.t <= LG_RAMP_WINDOW_S ? st.n + 1 : 1;
+    this.lgRamp.set(playerId, { targetId, t: now, n });
+    return n;
   }
 
   /** Cluster carrier: the carrier's blast is only the delivery pop — the
@@ -527,7 +546,7 @@ export class CombatHandler {
 
   /** One target inside (or outside) a blast envelope: lag-comp position,
    *  wall occlusion, scaled damage, knockback impulse, friendly gate. */
-  private splashOne(ctx: BlastCtx, targetId: string, target: PlayerState, shoveOnly = false): void {
+  private splashOne(ctx: BlastCtx, targetId: string, target: PlayerState, shoveOnly = false, directDmg?: number): void {
     // Lag-comp the victim position the same as hitscan — a rocket
     // that exploded on the shooter's screen should hit the ghost.
     const tpos = rewindPos(target, clampPing(ctx.ping));
@@ -543,8 +562,9 @@ export class CombatHandler {
     // at t≈0 is stepped past rather than counted.
     if (this.solids.length && this.blastBlocked(ctx.pos, tpos)) return;
 
-    // shared/combat.ts — same formula the client predicts with
-    const damage = aoeDamage(ctx.baseDamage, dist, ctx.radius);
+    // shared/combat.ts — same formula the client predicts with; beam ticks
+    // pass a flat figure (the ramp already IS the falloff)
+    const damage = directDmg ?? aoeDamage(ctx.baseDamage, dist, ctx.radius);
     if (damage <= 0) return;
 
     const impulseMag = Math.min(
@@ -782,10 +802,7 @@ export class CombatHandler {
     // Bot beams ramp down like human ones — the beam-rider loadout pays
     // the same hold-decay a client's beam does.
     if (weaponType === WeaponType.Lightning) {
-      const now = Date.now() / 1000;
-      const st = this.lgRamp.get(shooterId);
-      const n = st && st.targetId === targetId && now - st.t <= LG_RAMP_WINDOW_S ? st.n + 1 : 1;
-      this.lgRamp.set(shooterId, { targetId, t: now, n });
+      const n = this.lgStep(shooterId, targetId);
       damage = lgTickDamage(n) * perkMods(shooter.perk).directDamage;
       const victim = this.playerManager.getPlayer(targetId);
       if (victim && !victim.isDead && !this.friendly(shooterId, targetId)) this.bankCharge(victim, 8 - lgTickDamage(n));

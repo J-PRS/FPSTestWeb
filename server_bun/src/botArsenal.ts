@@ -6,10 +6,12 @@
  */
 import type { Vec3 } from './types.ts';
 import type { Room } from './Room.ts';
-import { EYE_OFFSET } from '../../shared/constants.ts';
+import { EYE_OFFSET, PLAYER_RADIUS } from '../../shared/constants.ts';
 import { logger } from './logger.ts';
 import { WeaponType, getWeaponStats } from '../../shared/weapons.ts';
 import { GRAVITY, type MoveState } from '../../shared/movement.ts';
+import { segFieldHit, segPointDist, segPointT } from '../../shared/projSim.ts';
+import { segSolidHit } from '../../shared/solidWorld.ts';
 import { BOT_LOADOUTS, pickBotWeapon, type BotLoadout } from '../../shared/botLoadouts.ts';
 import type { BotVec, BrainOut } from '../../shared/botBrain.ts';
 
@@ -82,7 +84,7 @@ export class BotArsenal {
     const alen = Math.sqrt(ax * ax + ay * ay + az * az) || 1;
     const dir = { x: ax / alen, y: ay / alen, z: az / alen };
     if (!this.room.projectiles.spawn(p.id, wt, muzzle, dir, p.velocity)) {
-      this.fireFallback(p.id, targetId, muzzle, dir, wt, dist);
+      this.fireSpeedless(p.id, muzzle, dir, wt);
     }
   }
 
@@ -90,36 +92,84 @@ export class BotArsenal {
     return pickBotWeapon(lo, distXZ, dist);
   }
 
-  /** Creature targets route through the same claim funnel a client's
-   *  creatureHit uses — plausibility check and all — so a bot kill drops
-   *  its gem/FFA point identically. */
+  /** Creature targets fire REAL shells — the projectile sim sweeps them
+   *  against live balls and pays through handleHit, so a bot kill drops
+   *  its gem/FFA point identically to a player's. Melee and projectile-
+   *  less weapons keep the honest geometric checks. */
   private fireAtBall(p: BotBody, ball: number, aim: Vec3): void {
-    const dxb = aim.x - p.position.x;
-    const dyb = aim.y - p.position.y;
-    const dzb = aim.z - p.position.z;
+    const muzzle = { x: p.position.x, y: p.position.y + 1.4, z: p.position.z };
+    const dxb = aim.x - muzzle.x;
+    const dyb = aim.y - muzzle.y;
+    const dzb = aim.z - muzzle.z;
     const lenb = Math.sqrt(dxb * dxb + dyb * dyb + dzb * dzb) || 1;
     const lo = this.loadouts.get(p.id) ?? BOT_LOADOUTS[0]!;
     const wt = this.pickWeapon(lo, Math.hypot(dxb, dzb), lenb);
-    this.room.messages.botFire(
-      p.id, null,
-      { x: p.position.x, y: p.position.y + 1.4, z: p.position.z },
-      { x: (dxb / lenb) * BOLT_SPEED, y: (dyb / lenb) * BOLT_SPEED, z: (dzb / lenb) * BOLT_SPEED },
-      wt, false,
-    );
-    if (isSuper(p.id) || Math.random() < Math.max(0.15, 0.6 - lenb / 200)) {
-      this.room.ballSim.handleHit(p.id, ball, isSuper(p.id) ? 30 : 8);
+    if (wt === WeaponType.Melee) {
+      // The punch lands if the creature is inside the swing's reach —
+      // geometry decides, not a dice roll.
+      const b = this.room.ballSim.ballAt(ball);
+      const stats = getWeaponStats(WeaponType.Melee);
+      if (b && stats) {
+        const d = Math.hypot(b.x - muzzle.x, b.y - muzzle.y, b.z - muzzle.z);
+        if (d <= stats.aoeRadius + b.radius) {
+          this.room.ballSim.handleHit(p.id, ball, isSuper(p.id) ? 300 : stats.aoeDamage);
+        }
+      }
+      return;
+    }
+    if (!this.room.projectiles.spawn(p.id, wt, muzzle,
+      { x: dxb / lenb, y: dyb / lenb, z: dzb / lenb }, p.velocity)) {
+      this.fireSpeedless(p.id, muzzle, { x: dxb / lenb, y: dyb / lenb, z: dzb / lenb }, wt);
     }
   }
 
-  /** Spawn refused (owner gone / hitscan stat line like Chaingun) —
-   *  rolled-tracer fallback keeps the bot armed rather than disarmed. */
-  private fireFallback(id: string, targetId: string, muzzle: Vec3, dir: Vec3, wt: number, dist: number): void {
-    const hit = isSuper(id) || Math.random() < Math.max(0.15, 0.6 - dist / 200);
-    this.room.messages.botFire(
-      id, hit ? targetId : null, muzzle,
-      { x: dir.x * BOLT_SPEED, y: dir.y * BOLT_SPEED, z: dir.z * BOLT_SPEED },
-      wt, hit,
-    );
+  /** Projectile-less weapons (beam-class): an honest ray decides contact —
+   *  earliest of terrain/wall/player/creature pays, a whiff is a real
+   *  miss. Damage lands via the same funnels the projectile paths use. */
+  private fireSpeedless(id: string, muzzle: Vec3, dir: Vec3, wt: number): void {
+    const stats = getWeaponStats(wt);
+    const c = isSuper(id) ? null : this.beamContact(id, muzzle, dir);
+    const playerId = isSuper(id) ? this.lastHunt(id) : (c?.playerId ?? null);
+    this.room.messages.botFire(id, playerId, muzzle,
+      { x: dir.x * BOLT_SPEED, y: dir.y * BOLT_SPEED, z: dir.z * BOLT_SPEED }, wt, !!playerId);
+    if (c?.ballId !== undefined && stats) {
+      this.room.ballSim.handleHit(id, c.ballId, stats.directDamage || stats.aoeDamage);
+    }
+  }
+
+  /** First thing a 60m ray actually strikes: terrain face, wall, player
+   *  chest, or creature — earliest contact wins, like dischargeRay. */
+  private beamContact(shooterId: string, muzzle: Vec3, dir: Vec3, range = 60): { playerId?: string; ballId?: number } | null {
+    const end = { x: muzzle.x + dir.x * range, y: muzzle.y + dir.y * range, z: muzzle.z + dir.z * range };
+    let bestT = 1;
+    if (this.room.field) {
+      const th = segFieldHit(muzzle, end, this.room.field);
+      if (th) bestT = segPointT(muzzle, end, th);
+    }
+    const solids = this.room.projectiles.solidColliders;
+    if (solids.length) {
+      const sh = segSolidHit(muzzle, end, solids);
+      if (sh) bestT = Math.min(bestT, segPointT(muzzle, end, sh));
+    }
+    return this.beamEntityAt(shooterId, muzzle, end, bestT);
+  }
+
+  /** Players and creatures the ray reaches before its first world
+   *  contact — earliest wins; none = the beam ended in dirt. */
+  private beamEntityAt(shooterId: string, muzzle: Vec3, end: Vec3, worldT: number): { playerId?: string; ballId?: number } | null {
+    let bestT = worldT;
+    let playerId: string | undefined;
+    for (const [pid, t] of this.room.players.getAllPlayers()) {
+      if (pid === shooterId || t.isDead) continue;
+      const c = { x: t.position.x, y: t.position.y + 1.0, z: t.position.z };
+      if (segPointDist(muzzle, end, c) > PLAYER_RADIUS + 0.2) continue;
+      const tt = segPointT(muzzle, end, c);
+      if (tt <= bestT) { bestT = tt; playerId = pid; }
+    }
+    const bc = this.room.ballSim?.sweepHit(muzzle, end, 0.2);
+    if (bc && bc.t <= bestT) return { ballId: bc.id };
+    if (playerId !== undefined) return { playerId };
+    return worldT < 1 ? {} : null;
   }
 
   /** Belt throw — a lobbed grenade at the hunt's last-seen spot. Same
