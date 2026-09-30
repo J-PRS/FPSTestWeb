@@ -216,6 +216,13 @@ export class RoomMoveSim {
 
   untrack(playerId: string): void { this.shadows.delete(playerId); }
 
+  /** Arm the post-re-seat report grace — see the resyncAt comment on the
+   *  shadow: pre-gameState frames still in flight are muted ~1 RTT. */
+  markReseated(playerId: string): void {
+    const sh = this.shadows.get(playerId);
+    if (sh) sh.resyncAt = Date.now();
+  }
+
   /** Armor-class ground speed multiplier (server bots / future loadouts). */
   setSpeedScale(playerId: string, scale: number): void {
     const sh = this.shadows.get(playerId);
@@ -291,6 +298,12 @@ export class RoomMoveSim {
     if (!sh) return null;
     const s = sh.sim.state;
     s.yaw = yaw; // facing is client truth — sim only needs it for input dir
+    // Stale in-flight reports after a re-seat (room hop): the old seat
+    // kept reporting until the client saw gameState — those frames would
+    // seed the fresh shadow at the old position and flag the real spawn
+    // landing ~60m away as a cheat. The hop grace mutes them; the first
+    // post-gameState report seeds at the true spawn instead.
+    if (Date.now() - sh.resyncAt < 500) return null;
     if (!sh.seeded) {
       sh.seeded = true;
       s.pos = { x: pos.x, y: pos.y, z: pos.z };
@@ -303,7 +316,6 @@ export class RoomMoveSim {
     // teleport that reseated the shadow. Judging it against the new anchor
     // flags a phantom blow-through (a guaranteed ~100m spike per respawn).
     if (reportInputSeq !== undefined && reportInputSeq <= sh.resyncSeq) return null;
-    if (Date.now() - sh.resyncAt < 500) return null;
     // The report's seq tells us how many input events the client had
     // consumed when it generated this position. If the shadow is behind
     // (inputs still in flight), the client is legitimately ahead by up

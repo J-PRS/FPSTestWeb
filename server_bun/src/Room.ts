@@ -370,6 +370,10 @@ export class Room {
       },
       moveTrack: (pid, pos, yaw) => {
         this.moveSim.track(pid, pos, yaw, this.players.getPlayer(pid)?.perk);
+        // Re-seats (room hop) have stale position frames in flight — arm
+        // the same 500ms grace resync() uses so they can't seed the fresh
+        // shadow at the old seat and flag the real spawn landing a cheat.
+        this.moveSim.markReseated(pid);
         const cls = this.players.getPlayer(pid)?.armorClass;
         if (cls === 'light' || cls === 'heavy') {
           this.moveSim.setSpeedScale(pid, CLASS_STATS[cls].speedScale);

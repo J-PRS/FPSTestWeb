@@ -1,3 +1,4 @@
+2026-09-26 - RoomMoveSim: stale in-flight reports after a room hop could seed the fresh shadow at the OLD seat, then the real spawn landing read ~60m off -> 3 sevres -> kick. moveTrack now arms the same 500ms report grace resync() uses; first post-gameState report seeds at the true spawn. 0 kicks in hop soak (was 6).
 2026-09-26 - netBot: belowGround counter - reports emitted from under the heightfield would read as clipping cheats; probe reads 0 across hops/respawns, ruling out terrain tunneling for the residual divergence.
 2026-09-26 - switchRoom carried armorClass+perk but silently ate pendingClass/pendingPerk - a queued class change vanished on hop while the client still believed it banked (shadow vs local sim scale drift). Banked loadout edits now ride the hop.
 2026-09-26 - Bot chatter de-cringed: kill/death/env lines rewritten in real player voice (lowercase, clipped - wp/gg/lag/deserved, not sitcom quips); spree boasts cut to 3 dry lines.
