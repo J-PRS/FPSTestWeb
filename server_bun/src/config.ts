@@ -108,6 +108,7 @@ export const CONFIG = {
     // ~37hp/s while leaving burst pickups legal.
     heal: { maxCount: 3, windowMs: 2000 },
     creatureHit: { maxCount: 120, windowMs: 1000 }, // chaingun-rate hit claims vs server creatures
+    crawlerHit: { maxCount: 120, windowMs: 1000 }, // same claim rate vs ground crawlers
     deploy: { maxCount: 4, windowMs: 1000 }, // plants are deliberate, not per-frame
     chat: { maxCount: 4, windowMs: 1000 }, // human typing speed, generous
     default: { maxCount: 120, windowMs: 1000 },

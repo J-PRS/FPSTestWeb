@@ -224,6 +224,19 @@ const VALIDATORS: Record<string, (obj: Record<string, unknown>) => ValidationRes
     return { success: true, data: { type: 'creatureHit', id: obj.id, damage: obj.damage, kx, ky, kz } };
   },
 
+  crawlerHit: (obj) => {
+    if (!isFiniteNumber(obj.id) || !Number.isInteger(obj.id) || obj.id < 0) {
+      return { success: false, error: 'id must be a non-negative integer' };
+    }
+    if (!isFiniteNumber(obj.damage)) {
+      return { success: false, error: 'damage must be a finite number' };
+    }
+    const kx = isFiniteNumber(obj.kx) ? obj.kx : undefined;
+    const ky = isFiniteNumber(obj.ky) ? obj.ky : undefined;
+    const kz = isFiniteNumber(obj.kz) ? obj.kz : undefined;
+    return { success: true, data: { type: 'crawlerHit', id: obj.id, damage: obj.damage, kx, ky, kz } };
+  },
+
   deploy: (obj) => {
     const kind = obj.kind;
     if (kind !== 'turret' && kind !== 'mine' && kind !== 'station' && kind !== 'drone') {
@@ -268,7 +281,7 @@ const VALIDATORS: Record<string, (obj: Record<string, unknown>) => ValidationRes
     if (typeof obj.text !== 'string' || obj.text.length === 0 || obj.text.length > 200) {
       return { success: false, error: 'chat text must be 1-200 chars' };
     }
-    return { success: true, data: { type: 'chat', text: obj.text } };
+    return { success: true, data: { type: 'chat', text: obj.text, team: obj.team === true ? true : undefined } };
   },
 
   ping: (obj) => {
