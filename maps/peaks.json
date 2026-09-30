@@ -1,0 +1,374 @@
+{
+  "mode": "ctf",
+  "modes": ["ctf"],
+  "bots": 8,
+  "botFill": 10,
+  "bases": {
+    "alpha": {
+      "x": -85,
+      "y": 0,
+      "z": -85
+    },
+    "bravo": {
+      "x": 85,
+      "y": 0,
+      "z": 85
+    }
+  },
+  "spawns": [
+    {
+      "x": -95,
+      "y": 0,
+      "z": -95
+    },
+    {
+      "x": -75,
+      "y": 0,
+      "z": -95
+    },
+    {
+      "x": -95,
+      "y": 0,
+      "z": -75
+    },
+    {
+      "x": 95,
+      "y": 0,
+      "z": 95
+    },
+    {
+      "x": 75,
+      "y": 0,
+      "z": 95
+    },
+    {
+      "x": 95,
+      "y": 0,
+      "z": 75
+    }
+  ],
+  "structures": [
+    {
+      "kind": "wall",
+      "pos": {
+        "x": -100,
+        "y": 0,
+        "z": -70
+      },
+      "size": {
+        "x": 1.2,
+        "y": 6,
+        "z": 22
+      },
+      "rotY": 0.785,
+      "team": "alpha"
+    },
+    {
+      "kind": "wall",
+      "pos": {
+        "x": -70,
+        "y": 0,
+        "z": -100
+      },
+      "size": {
+        "x": 1.2,
+        "y": 6,
+        "z": 22
+      },
+      "rotY": 0.785,
+      "team": "alpha"
+    },
+    {
+      "kind": "box",
+      "pos": {
+        "x": -85,
+        "y": 0,
+        "z": -70
+      },
+      "size": {
+        "x": 6,
+        "y": 4,
+        "z": 6
+      },
+      "team": "alpha"
+    },
+    {
+      "kind": "box",
+      "pos": {
+        "x": -70,
+        "y": 0,
+        "z": -85
+      },
+      "size": {
+        "x": 6,
+        "y": 4,
+        "z": 6
+      },
+      "team": "alpha"
+    },
+    {
+      "kind": "pillar",
+      "pos": {
+        "x": -100,
+        "y": 0,
+        "z": -100
+      },
+      "size": {
+        "x": 4,
+        "y": 10,
+        "z": 4
+      },
+      "team": "alpha"
+    },
+    {
+      "kind": "wall",
+      "pos": {
+        "x": 100,
+        "y": 0,
+        "z": 70
+      },
+      "size": {
+        "x": 1.2,
+        "y": 6,
+        "z": 22
+      },
+      "rotY": 0.785,
+      "team": "bravo"
+    },
+    {
+      "kind": "wall",
+      "pos": {
+        "x": 70,
+        "y": 0,
+        "z": 100
+      },
+      "size": {
+        "x": 1.2,
+        "y": 6,
+        "z": 22
+      },
+      "rotY": 0.785,
+      "team": "bravo"
+    },
+    {
+      "kind": "box",
+      "pos": {
+        "x": 85,
+        "y": 0,
+        "z": 70
+      },
+      "size": {
+        "x": 6,
+        "y": 4,
+        "z": 6
+      },
+      "team": "bravo"
+    },
+    {
+      "kind": "box",
+      "pos": {
+        "x": 70,
+        "y": 0,
+        "z": 85
+      },
+      "size": {
+        "x": 6,
+        "y": 4,
+        "z": 6
+      },
+      "team": "bravo"
+    },
+    {
+      "kind": "pillar",
+      "pos": {
+        "x": 100,
+        "y": 0,
+        "z": 100
+      },
+      "size": {
+        "x": 4,
+        "y": 10,
+        "z": 4
+      },
+      "team": "bravo"
+    },
+    {
+      "kind": "pillar",
+      "pos": {
+        "x": -6,
+        "y": 0,
+        "z": -6
+      },
+      "size": {
+        "x": 5,
+        "y": 16,
+        "z": 5
+      }
+    },
+    {
+      "kind": "pillar",
+      "pos": {
+        "x": 6,
+        "y": 0,
+        "z": -6
+      },
+      "size": {
+        "x": 5,
+        "y": 16,
+        "z": 5
+      }
+    },
+    {
+      "kind": "pillar",
+      "pos": {
+        "x": -6,
+        "y": 0,
+        "z": 6
+      },
+      "size": {
+        "x": 5,
+        "y": 16,
+        "z": 5
+      }
+    },
+    {
+      "kind": "pillar",
+      "pos": {
+        "x": 6,
+        "y": 0,
+        "z": 6
+      },
+      "size": {
+        "x": 5,
+        "y": 16,
+        "z": 5
+      }
+    },
+    {
+      "kind": "wall",
+      "pos": {
+        "x": 0,
+        "y": 15,
+        "z": 0
+      },
+      "size": {
+        "x": 20,
+        "y": 1.2,
+        "z": 20
+      }
+    },
+    {
+      "kind": "ramp",
+      "pos": {
+        "x": -16,
+        "y": 0,
+        "z": -16
+      },
+      "size": {
+        "x": 8,
+        "y": 15,
+        "z": 8
+      },
+      "rotY": 0.785
+    },
+    {
+      "kind": "ramp",
+      "pos": {
+        "x": 16,
+        "y": 0,
+        "z": 16
+      },
+      "size": {
+        "x": 8,
+        "y": 15,
+        "z": 8
+      },
+      "rotY": 0.785
+    },
+    {
+      "kind": "box",
+      "pos": {
+        "x": -40,
+        "y": 0,
+        "z": 0
+      },
+      "size": {
+        "x": 7,
+        "y": 3,
+        "z": 7
+      }
+    },
+    {
+      "kind": "box",
+      "pos": {
+        "x": 40,
+        "y": 0,
+        "z": 0
+      },
+      "size": {
+        "x": 7,
+        "y": 3,
+        "z": 7
+      }
+    },
+    {
+      "kind": "box",
+      "pos": {
+        "x": 0,
+        "y": 0,
+        "z": -40
+      },
+      "size": {
+        "x": 7,
+        "y": 3,
+        "z": 7
+      }
+    },
+    {
+      "kind": "box",
+      "pos": {
+        "x": 0,
+        "y": 0,
+        "z": 40
+      },
+      "size": {
+        "x": 7,
+        "y": 3,
+        "z": 7
+      }
+    },
+    {
+      "kind": "pillar",
+      "pos": {
+        "x": -55,
+        "y": 0,
+        "z": 55
+      },
+      "size": {
+        "x": 3,
+        "y": 9,
+        "z": 3
+      }
+    },
+    {
+      "kind": "pillar",
+      "pos": {
+        "x": 55,
+        "y": 0,
+        "z": -55
+      },
+      "size": {
+        "x": 3,
+        "y": 9,
+        "z": 3
+      }
+    }
+  ],
+  "terrain": "peaks.bin",
+  "creatures": {
+    "totem": 2,
+    "snake": 2,
+    "rakk": 2
+  },
+  "_creatures_notes": "Light neutral wildlife: midfield totems guard the plateau approaches, snakes lurk the flag lanes, rakks circle the pillars. Thin enough that flag runs stay primary \u00e2\u20ac\u201d creatures are hazards, not the match."
+}

@@ -1,5 +1,6 @@
 {
   "mode": "dm",
+  "modes": ["dm", "tdm", "duel", "nuggets"],
   "bots": 8,
   "ballMix": [
     0.2,

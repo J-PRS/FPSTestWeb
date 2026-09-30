@@ -1,5 +1,6 @@
 {
   "mode": "duel",
+  "modes": ["duel", "dm"],
   "bots": 0,
   "arena": {
     "x": 0,

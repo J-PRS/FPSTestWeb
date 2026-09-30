@@ -1,5 +1,6 @@
 {
   "mode": "dm",
+  "modes": ["dm", "tdm", "duel", "nuggets"],
   "bots": 10,
   "botFill": 12,
   "arena": {
