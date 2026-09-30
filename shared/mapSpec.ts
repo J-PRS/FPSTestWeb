@@ -151,14 +151,15 @@ function parseArena(raw: unknown): MapSpec['arena'] {
 }
 
 const STRUCT_KINDS = new Set(['box', 'wall', 'pillar', 'ramp']);
+const isVec = (s: unknown): s is Vec3like =>
+  !!s && typeof s === 'object' &&
+  Number.isFinite((s as Vec3like).x) &&
+  Number.isFinite((s as Vec3like).y) &&
+  Number.isFinite((s as Vec3like).z);
+
 /** Validated structure list — bad entries dropped, sane clamps, cap 256. */
 function parseStructures(raw: unknown): StructureSpec[] | undefined {
   if (!Array.isArray(raw)) return undefined;
-  const isVec = (s: unknown): s is Vec3like =>
-    !!s && typeof s === 'object' &&
-    Number.isFinite((s as Vec3like).x) &&
-    Number.isFinite((s as Vec3like).y) &&
-    Number.isFinite((s as Vec3like).z);
   const out: StructureSpec[] = [];
   for (const s of raw) {
     if (!s || typeof s !== 'object') continue;

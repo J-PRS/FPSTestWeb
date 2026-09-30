@@ -23,7 +23,7 @@ export class RtcRelay {
     for (const [room, since] of this.openRooms) {
       if ((this.rooms.get(room)?.size ?? 0) === 1) out.push({ room, since });
     }
-    return out.sort((a, b) => a.since - b.since);
+    return out.toSorted((a, b) => a.since - b.since);
   }
 
   onOpen(ws: ServerWebSocket<WebSocketData>): void {
