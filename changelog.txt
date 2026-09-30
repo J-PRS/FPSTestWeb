@@ -1,3 +1,4 @@
+2026-10-02 - removed dead ProfileName type export in targeting.ts
 2026-10-02 - TASKS.md refreshed (stats + Recent Changes list was months stale)
 2026-10-02 - demo/index.ts barrel trimmed to the 2 externally-used symbols (knip noise down)
 2026-10-02 - knip config tightened (dump entries, stale ignores); dead exports heightmapSize/resetDirectionalFog removed
