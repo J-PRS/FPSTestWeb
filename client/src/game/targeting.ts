@@ -55,8 +55,6 @@ export const PROFILES = {
   siege:     { wDist: 0.6, wDmg: 0.3,  sticky: 1.8,  evalEvery: 2.5, decay: 0.10, leash: 350 },
 } satisfies Record<string, TargetProfile>;
 
-export type ProfileName = keyof typeof PROFILES;
-
 /** One creature's targeting state. Owns: who it currently hates, how much
  *  it hates each candidate, and when it next reconsiders. */
 export class ThreatTable {
