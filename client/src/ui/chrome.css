@@ -204,6 +204,14 @@ body.menu-open #frag-msg { display: none !important; }
   border-radius: 8px;
   cursor: default;
 }
+/* The lobby column pins the right 300px — recenter the sheet in the
+   space that remains instead of sliding under it. */
+body.lobby-open #loadout-bar {
+  left: calc(50% - 190px);
+  /* The band between the side columns can't hold the single-row sheet —
+   *  cap it so the groups wrap instead of sliding under either edge. */
+  max-width: 460px;
+}
 #loadout-bar .lo-group { display: flex; flex-direction: column; gap: 6px; }
 #loadout-bar .lo-head {
   font-size: 0.52rem; letter-spacing: 0.24em; font-weight: 700;
@@ -347,6 +355,9 @@ body.menu-open #frag-msg { display: none !important; }
   background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.18);
   border-radius: 4px; color: #fff; font-family: inherit;
   font-size: 0.72rem; padding: 5px 8px; outline: none; letter-spacing: 0.08em;
+  /* flex:1 inputs default to min-width:auto — the placeholder text wins
+   *  and pushes trailing buttons (GO) out past the field edge. */
+  min-width: 0;
 }
 .lb-input:focus { border-color: #3aa7ff; }
 /* No spinners on numeric inputs, ever — they're fiddly at game-UI scale. */

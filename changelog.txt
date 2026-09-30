@@ -1,3 +1,4 @@
+2026-09-26 - Fix lobby panel overlap: GO button overflow (min-width:0 flex fix), loadout sheet recenters/wraps in free band when lobby opens
 2026-09-26 - Loadout picker follow-ups: armor tiles show absolute HP (75/100/150); filtered-out equipped weapon resolves its label instead of printing the raw wid; dropup options carry role one-liners.
 2026-09-26 - Loadout picker overhauled: bottom sheet with three labeled groups (ARMOR tiles w/ live speed·HP readout, WEAPONS slots, KIT strip); every option shows a one-line role description; class pick re-filters heavy ordnance in place.
 2026-09-26 - ballSim lint sweep: stepBall decomposed (enragePull/groundContact, complexity 25→under limit); makeSimBall/stepBall take vec+world objects (max-params cleared); lobby.ts stray zero-width space removed.

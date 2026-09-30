@@ -208,7 +208,7 @@ export class Lobby {
     srvIn.placeholder = 'host (blank = local)';
     srvIn.value = settings.get('fps-server');
     srvIn.className = 'lb-input';
-    srvIn.style.cssText = 'flex:1;margin:0 6px;';
+    srvIn.style.cssText = 'flex:1;min-width:0;';
     srvIn.addEventListener('keydown', (e) => e.stopPropagation());
     const srvBtn = btn('GO');
     srvBtn.addEventListener('click', () => { settings.set('fps-server', srvIn.value.trim()); location.reload(); });
@@ -268,10 +268,12 @@ export class Lobby {
     const open = this.panel.style.display !== 'none';
     if (open) {
       this.panel.style.display = 'none';
+      document.body.classList.remove('lobby-open');
       if (this.timer) clearInterval(this.timer);
       this.timer = null;
     } else {
       this.panel.style.display = 'block';
+      document.body.classList.add('lobby-open');
       void this.refresh();
       void this.refreshMaps();
       this.timer = setInterval(() => void this.refresh(), POLL_MS);
