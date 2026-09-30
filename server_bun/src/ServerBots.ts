@@ -24,12 +24,11 @@ import { STATUS, CLIENT_STATUS_MASK } from '../../shared/status.ts';
 import type { MoveState } from '../../shared/movement.ts';
 import { type BotLoadout } from '../../shared/botLoadouts.ts';
 import { BotWatchdog, type MobilitySample } from './botWatchdog.ts';
-import { BotArsenal, isSuper } from './botArsenal.ts';
+import { BotArsenal } from './botArsenal.ts';
 import { BotSheepMeter } from './botSheep.ts';
 import { ServerBotSenses } from './serverSenses.ts';
 import { BotRoster } from './botRoster.ts';
-
-const SPEED = 14;          // m/s ground move
+import { driveMove as driveMoveInto, legacyMove as legacyMoveInto } from './botDrive.ts';
 
 /** Tribes-flavored squad roles — the type and the objective rules live in
  *  shared/flagGoals.ts so offline CTF plays by the identical table. */
@@ -51,20 +50,21 @@ export class ServerBots {
    *  on a human cadence instead of a per-tick mortar stream. */
   private gearLobT = new Map<string, number>();
   /** inputMove ordering key — the shadow drops non-increasing seqs. */
-  private seq = 1;
+  seq = 1; // public — botDrive commits inputs under this counter
   /** Sheep meter lives in botSheep.ts — pedestrian play fills it, the
    *  yeet (impulse + pinned jets) cures it. Kept off this file like the
-   *  watchdog so ServerBots stays about driving bots. */
-  private sheep: BotSheepMeter;
+   *  watchdog so ServerBots stays about driving bots.
+   *  Public + the others below: botDrive.ts's DriveHost reads them. */
+  sheep: BotSheepMeter;
   /** Trigger discipline — own file (botArsenal.ts): weapon select,
    *  muzzle geometry, lobs, disc-jump propels. This file drives brains
    *  and bodies; the arsenal decides when and at what to fire. */
-  private arsenal: BotArsenal;
-  private readonly room: Room;
-  private readonly field: Heightfield | null;
+  arsenal: BotArsenal;
+  readonly room: Room;
+  readonly field: Heightfield | null;
   /** Mobility watchdog — stuck + sheep alarms live in botWatchdog.ts so
    *  this file stays about driving bots, not auditing them. */
-  private watchdog: BotWatchdog;
+  watchdog: BotWatchdog;
   /** What brains may see — serverSenses.ts builds the wire-legal ctx. */
   private sense: ServerBotSenses;
 
@@ -88,7 +88,7 @@ export class ServerBots {
   private thinkPhase = new Map<string, number>();
   private lastOut = new Map<string, BrainOut>();
   /** Visible-enemy-present flag from the last think (epoch ms expiry). */
-  private foeNear = new Map<string, number>();
+  readonly foeNear = new Map<string, number>();
   private thinkCounter = 0;
   /** Spawn n bots — each is a real roster entry (playerJoined broadcasts)
    *  minus a socket. Roster owns the spawn/role/class bookkeeping. */
@@ -143,7 +143,7 @@ export class ServerBots {
     this.watchdog.checkStuck(id, p.position, brain, carrying, now);
   }
 
-  private checkSheep(id: string, p: { position: Vec3 }, m: MobilitySample, now: number): void {
+  checkSheep(id: string, p: { position: Vec3 }, m: MobilitySample, now: number): void { // public — botDrive host hook
     this.watchdog.checkSheep(id, p.position, m, now);
   }
 
@@ -192,81 +192,12 @@ export class ServerBots {
     if (out.deploy) this.room.deployables.handleDeploy(id, out.deploy.kind, out.deploy.pos);
   }
 
-  /** Legal path: convert the brain's destination into human inputs
-   *  (heading → yaw, walk = forward key) and let the sim integrate.
-   *  Commit happens on the NEXT tick — sims[] order puts moveSim.tick
-   *  after bots.tick, so this reads the fresh post-step state. */
   private driveMove(id: string, p: { position: Vec3; velocity: Vec3; rotation: { yaw: number }; status: number; skiing: number }, out: BrainOut, sh: MoveState, dt: number, now: number): void {
-    const dx = out.dest.x - p.position.x;
-    const dz = out.dest.z - p.position.z;
-    const dist = Math.sqrt(dx * dx + dz * dz);
-    // Sheep check before the input commit: a yeet edge presses the bot's
-    // own jump key this tick, and the window holds jets — the same keys
-    // a player holds, never an injected velocity.
-    const yeeted = this.sheep.check(id, p, { out, airborne: !sh.onGround, hasDest: dist >= 0.5, foe: (this.foeNear.get(id) ?? 0) > now, dt }, now);
-    const yeetHeld = this.sheep.yeetUntilMs(id) > now;
-    if (dist >= 0.5) {
-      // Wrist-speed turn — a snapped 180° reads as a fly-flick while an
-      // arc at ~5 rad/s reads as a player swinging their view around.
-      const want = Math.atan2(dx, dz);
-      let dyaw = want - p.rotation.yaw;
-      if (dyaw > Math.PI) dyaw -= Math.PI * 2;
-      if (dyaw < -Math.PI) dyaw += Math.PI * 2;
-      const yaw = p.rotation.yaw + Math.max(-5 * dt, Math.min(5 * dt, dyaw));
-      this.room.moveSim.faceYaw(id, yaw);
-      p.rotation.yaw = yaw;
-    }
-    this.commitMoveInput(id, p, out, dist >= 0.5, { edge: yeeted, held: yeetHeld }, now);
-    this.checkSheep(id, p, { trying: dist >= 0.5, ski: !!out.move?.ski, airborne: !sh.onGround, jetting: !!out.move?.jet, dt }, now);
-    p.position.x = sh.pos.x; p.position.y = sh.pos.y; p.position.z = sh.pos.z;
-    p.velocity.x = sh.vel.x; p.velocity.y = sh.vel.y; p.velocity.z = sh.vel.z;
-    // Ski bit rides the tick flag byte (bit 2) — drives remote dust.
-    p.skiing = out.move?.ski ? 1 : 0;
+    driveMoveInto(this, id, p, out, sh, dt, now);
   }
 
-  /** The bot's intent becomes input keys — only what a player's fingers
-   *  could press. A yeet edge pins jump/jet; the arsenal's post-throw jet
-   *  pin rides the same held bit. */
-  private commitMoveInput(id: string, p: { status: number }, out: BrainOut, moving: boolean, yeet: { edge: boolean; held: boolean }, now: number): void {
-    this.room.moveSim.setInput(id, moving ? {
-      forward: 1, right: 0,
-      jumpPressed: yeet.edge || !!out.move?.jump, jumpHeld: !!out.move?.jump || yeet.held,
-      skiHeld: !!out.move?.ski,
-      jetHeld: !!out.move?.jet || yeet.held || this.arsenal.jetPinUntil(id) > now,
-    } : {
-      forward: 0, right: 0,
-      jumpPressed: yeet.edge, jumpHeld: yeet.held,
-      skiHeld: false, jetHeld: yeet.held,
-    }, p.status, this.seq++);
-  }
-
-  /** No heightfield → no shadow → legacy direct-write fallback.
-   *  Returns true when the parked case already finished the tick. */
   private legacyMove(id: string, p: { position: Vec3; velocity: Vec3; rotation: { yaw: number }; lastSeq: number }, dest: Vec3, dt: number): boolean {
-    const dx = dest.x - p.position.x;
-    const dz = dest.z - p.position.z;
-    const dist = Math.sqrt(dx * dx + dz * dz);
-    if (dist < 0.5) { p.velocity.x = 0; p.velocity.z = 0; p.lastSeq++; return true; }
-    const nx = dx / dist, nz = dz / dist;
-    const speed = isSuper(id) ? SPEED * 3 : SPEED;
-    p.velocity.x = nx * speed;
-    p.velocity.z = nz * speed;
-    const groundY = Math.max(
-      this.field ? hmHeight(this.field, p.position.x, p.position.z) : p.position.y,
-      this.room.moveSim.structureTop(p.position.x, p.position.z),
-    );
-    // p.position is EYE-height (the wire convention — clients render
-    // feet at pos.y - EYE_OFFSET); groundY+0.1 parked the model 1.7m
-    // underground.
-    const targetY = Math.max(groundY + EYE_OFFSET, p.position.y - 9 * dt);
-    const hopping = p.position.y > groundY + EYE_OFFSET + 1.1;
-    p.velocity.y = hopping ? p.velocity.y - 30 * dt : 0;
-    p.position.x += p.velocity.x * dt;
-    p.position.z += p.velocity.z * dt;
-    p.position.y += p.velocity.y * dt;
-    if (p.position.y < targetY) { p.position.y = targetY; p.velocity.y = 0; }
-    p.rotation.yaw = Math.atan2(nx, nz);
-    return false;
+    return legacyMoveInto(this, id, p, dest, dt);
   }
 
   /** The meter the tick stream publishes — 0 for non-bots. */
