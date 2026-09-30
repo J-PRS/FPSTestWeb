@@ -10,13 +10,7 @@
  */
 import { launchClient, closeClient } from './browser.ts';
 import { upStack } from './env.ts';
-
-let pass = 0;
-const check = (ok: boolean, name: string) => {
-  console.log(`  ${ok ? 'PASS' : 'FAIL'}  ${name}`);
-  if (!ok) process.exitCode = 1;
-  else pass++;
-};
+import { check, checkCount } from './check.ts';
 
 const ROOM = 'e2ep2p';
 const stack = await upStack();
@@ -86,4 +80,4 @@ try {
   await closeClient(guest);
   stack.down();
 }
-console.log(`\n${pass} checks passed`);
+console.log(`\n${checkCount()} checks passed`);

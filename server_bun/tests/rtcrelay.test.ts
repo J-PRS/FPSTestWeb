@@ -4,10 +4,10 @@ import type { ServerWebSocket } from 'bun';
 import type { WebSocketData } from '../src/types.ts';
 
 /** Fake socket — records sent frames, readyState=1 (OPEN). */
-function fakeWs(room: string) {
+function fakeWs(room: string, open = false) {
   const sent: (string | ArrayBuffer)[] = [];
   const ws = {
-    data: { room, rtc: true, playerId: '', connectedAt: Date.now() },
+    data: { room, rtc: true, open, playerId: '', connectedAt: Date.now() },
     readyState: 1,
     sent,
     closed: null as { code: number; reason: string } | null,
@@ -69,5 +69,41 @@ describe('RtcRelay', () => {
     const d = fakeWs('r1');
     relay.onOpen(d);
     expect(JSON.parse(d.sent[0] as string)).toEqual({ t: 'role', host: true });
+  });
+
+  it('lobbies(): open hosts listed while waiting, paired rooms hidden', () => {
+    const relay = new RtcRelay();
+    const a = fakeWs('open1', true);   // host opted into the lobby list
+    const b = fakeWs('closed1');       // private duel
+    relay.onOpen(a); relay.onOpen(b);
+    expect(relay.lobbies().map((l) => l.room)).toEqual(['open1']);
+    // a guest arrives — the room fills and drops off the list
+    const g = fakeWs('open1');
+    relay.onOpen(g);
+    expect(relay.lobbies()).toEqual([]);
+    // guest drops again — the open host is waiting once more
+    relay.onClose(g);
+    expect(relay.lobbies().map((l) => l.room)).toEqual(['open1']);
+  });
+
+  it('lobbies(): host leaving unlists the room even with a guest left', () => {
+    const relay = new RtcRelay();
+    const host = fakeWs('r', true);
+    const guest = fakeWs('r');
+    relay.onOpen(host); relay.onOpen(guest);
+    relay.onClose(guest);            // back to waiting — listed
+    expect(relay.lobbies().length).toBe(1);
+    relay.onClose(host);             // host gone → lone guest isn't a lobby
+    expect(relay.lobbies()).toEqual([]);
+    relay.onClose(guest);            // room fully gone
+    expect(relay.lobbies()).toEqual([]);
+  });
+
+  it('lobbies(): longest-waiting first', async () => {
+    const relay = new RtcRelay();
+    relay.onOpen(fakeWs('older', true));
+    await new Promise((r) => setTimeout(r, 5)); // distinct openedAt
+    relay.onOpen(fakeWs('newer', true));
+    expect(relay.lobbies().map((l) => l.room)).toEqual(['older', 'newer']);
   });
 });
