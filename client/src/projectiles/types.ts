@@ -70,5 +70,8 @@ export interface ProjectileConfig {
    *  shared WEAPONS table (rayDelay/rayRange) so the server's reach check
    *  allows the jump. */
   rayBurst?: { delay: number; range: number };
+  /** Impact VFX variant — 'splash' swaps the fireball for droplets + mist
+   *  (sprinkler hose); unset = the shared explosion. */
+  vfx?: 'splash';
 }
 

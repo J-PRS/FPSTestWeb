@@ -329,7 +329,7 @@ function applyPlaybackProjectileHit(world: PlaybackWorld, ev: ProjectileEvent, r
 
   // Spawn correct effect (explosion for push, implosion for pull)
   if (r.config.forceMode === 'push') {
-    explosions.push(new Explosion(scene, r.pos, directHit, r.age, terrain, r.explosionRadius / 6, r.config.damageColor));
+    explosions.push(new Explosion(scene, r.pos, directHit, r.age, terrain, r.explosionRadius / 6, r.config.damageColor, r.config.vfx));
   } else {
     implosions.push(new Implosion(scene, r.pos, r.age, terrain));
   }

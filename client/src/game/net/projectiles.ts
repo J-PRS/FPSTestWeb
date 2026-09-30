@@ -21,7 +21,7 @@ export function wireProjectiles(ctx: NetCtx): void {
     const hit = origin.clone().addScaledVector(dirV.normalize(), MELEE_RANGE * 0.7);
     deps.world.explosions.push(new Explosion(
       deps.lazyScene(), hit, true, 0, deps.lazyTerrain(),
-      (getWeaponStats(WeaponType.Melee).aoeRadius * 0.7) / ROCKET_RADIUS, 0xaaddff,
+      (getWeaponStats(WeaponType.Melee).aoeRadius * 0.7) / ROCKET_RADIUS, 0xaaddff, 'punch',
     ));
   };
 

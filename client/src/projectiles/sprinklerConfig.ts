@@ -66,4 +66,5 @@ export const SPRINKLER_CONFIG: ProjectileConfig = {
   ribbonWidth: 0.15,
   ribbonLife: 0.1,
   ribbonColor: 0x88ff44,
+  vfx: 'splash', // watery burst, not a fireball — it's a hose
 };
