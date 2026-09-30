@@ -8,6 +8,7 @@ import type { CombatHandler } from './CombatHandler.ts';
 // duelStart bookkeeping lives here too since only noteHit maintains it.
 export class HitLedger {
   private duelStart = new Map<string, number>();
+  private hitSeq = 0; // per-room monotonic — reconnect replays carry stale seqs
 
   applyHit(c: CombatHandler, shooterId: string, targetId: string, damage: number, result: { killed: boolean; newHealth: number; newArmor: number }, opts: { label: string; extra?: Record<string, unknown>; weapon?: number }): void {
     c.hb('hit');
@@ -18,7 +19,7 @@ export class HitLedger {
     this.noteHit(c, shooterId, targetId, src, damage, result.killed);
     if (!result.killed) {
       logger.info(opts.label, { shooter: shooterId, target: targetId, damage, targetHealth: result.newHealth, ...opts.extra });
-      c.broadcast({ type: 'playerHit', shooterId, targetId, damage, health: result.newHealth, armor: result.newArmor });
+      c.broadcast({ type: 'playerHit', shooterId, targetId, damage, health: result.newHealth, armor: result.newArmor, seq: ++this.hitSeq });
       return;
     }
     const corpse = c.playerManager.getPlayer(targetId);

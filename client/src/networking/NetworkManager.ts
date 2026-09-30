@@ -390,6 +390,7 @@ export class NetworkManager {
         this.players.set(player.id, player);
       }
     }
+    logger.warn(`raw gameState map: ${data.map ? JSON.stringify(data.map).slice(0, 300) : 'none'}`);
     this.onGameState?.(data.players || [], data.localPlayerState, { room: data.room, mode: data.mode, team: data.team, scores: data.scores, ffaScores: data.ffaScores, pickups: data.pickups, flags: data.flags, matchEndsAt: data.matchEndsAt, respawnMs: data.respawnMs, deployables: data.deployables, map: data.map });
   }
 
@@ -476,7 +477,15 @@ export class NetworkManager {
     this.onPlayerRespawn?.(data.playerId, data.position, data.rotation, data.armorClass);
   }
 
+  /** Reconnect grace lets the server replay in-flight playerHit events —
+   *  seq is per-room monotonic so a stale re-delivery can't double-apply. */
+  private lastHitSeq = 0;
+
   private handlePlayerHit(data: Extract<ServerMessage, { type: 'playerHit' }>): void {
+    if (data.seq !== undefined) {
+      if (data.seq <= this.lastHitSeq) return;
+      this.lastHitSeq = data.seq;
+    }
     // Update REMOTE player health in storage (local player health handled by callback)
     this.upsertRemotePlayer(data.targetId, { health: data.health });
     this.onPlayerHit?.(data.shooterId, data.targetId, data.damage, data.health, data.armor);

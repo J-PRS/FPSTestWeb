@@ -1,3 +1,4 @@
+2026-09-30 - playerHit seq dedup: per-room monotonic seq server-side, client drops re-delivered events so reconnect replay cannot double-apply damage.
 2026-09-30 - audio split: positional routing (doppler rate, distance/pan/air-absorb chain, freeInput) -> audioRoute.ts (362->300).
 2026-09-30 - debris split: per-shard lifecycle (bounce, trail puffs, greying, shrink) -> debrisStep.ts (321->235).
 2026-09-30 - DemoRecorder split: DemoFile assembly (whole-recording dump + windowed clip extraction) -> demoExtract.ts (339->234).

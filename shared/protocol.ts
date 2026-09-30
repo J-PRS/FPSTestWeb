@@ -115,7 +115,9 @@ export type ServerMessage =
   | { type: 'teamUpdate'; playerId: string; team: 'alpha' | 'bravo' }
   // Server system line — renders unstyled (no "name:" prefix) in chat.
   | { type: 'matchNotice'; text: string }
-  | { type: 'playerHit'; shooterId: string; targetId: string; damage: number; health: number; armor?: number }
+  // seq lets a re-delivered event (reconnect replay, transport dup) be
+  // dropped client-side — it's process-monotonic, never reused.
+  | { type: 'playerHit'; shooterId: string; targetId: string; damage: number; health: number; armor?: number; seq?: number }
   // Powerup grabbed — heal/armor/regen/dd buff applied to the collector.
   // `until` is server epoch ms for timed buffs; armor/health are absolute.
   | { type: 'buff'; kind: 'heal' | 'armor' | 'regen' | 'dd'; armor?: number; health?: number; until?: number }
