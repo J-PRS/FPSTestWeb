@@ -365,7 +365,9 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
   }
 
   updateRendererSize();
-  renderer.shadowMap.enabled = true;
+  // Skip the whole shadow-map raster when the scene opted out — the
+  // second full-scene pass is the dominant fill cost on weak GPUs.
+  renderer.shadowMap.enabled = urlParams.get('shadows') !== 'off' && settings.get('fps-shadows');
   renderer.shadowMap.type = THREE.PCFShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = TONE_MAPPING_EXPOSURE;

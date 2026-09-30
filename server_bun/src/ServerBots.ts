@@ -89,6 +89,15 @@ export class ServerBots {
 
   private nextIdx = 1;
   private maintainAt = 0;
+  /** Brain cadence: senses+think+fire run every THINK_DIV tick per bot
+   *  (phase-offset so the squad doesn't think in lockstep). 20Hz decisions
+   *  cost O(bots × (players+creatures)) per tick; at 4Hz reaction is still
+   *  faster than human perception while the move sim keeps integrating
+   *  at full rate, so motion smoothness is unchanged. */
+  private static readonly THINK_DIV = 5;
+  private thinkPhase = new Map<string, number>();
+  private lastOut = new Map<string, BrainOut>();
+  private thinkCounter = 0;
 
   /** Spawn n bots — each is a real roster entry (playerJoined broadcasts)
    *  minus a socket. Call once at room creation, before human joins, so
@@ -118,6 +127,7 @@ export class ServerBots {
         team: p.team,
       });
       this.brains.set(id, new BotBrain(p.position));
+      this.thinkPhase.set(id, this.nextIdx % ServerBots.THINK_DIV);
       // Legal body: the bot gets a move shadow exactly like a human join —
       // brains emit inputs, the sim owns motion, energy model included.
       this.room.moveSim.track(id, p.position, p.rotation.yaw, p.perk);
@@ -135,6 +145,8 @@ export class ServerBots {
   untrack(playerId: string): void {
     this.brains.delete(playerId);
     this.loadouts.delete(playerId);
+    this.thinkPhase.delete(playerId);
+    this.lastOut.delete(playerId);
     this.roles.delete(playerId);
     this.classes.delete(playerId);
     this.sheepMeter.delete(playerId);
@@ -613,11 +625,20 @@ export class ServerBots {
       // think/fire/move pipeline is skipped.
       if (this.quiet.has(id)) continue;
 
-      const goal = this.flagGoal(p);
-      const out = brain.think(dt, this.senses(id, p, goal, now));
-      this.applyStatus(id, p, out);
+      // Think pipeline runs on the bot's slow cadence; between thinks the
+      // previous decision is re-emitted so the move sim still gets inputs
+      // every tick (a stale dest for 200ms beats idling the drive).
+      this.thinkCounter = (this.thinkCounter + 1) % ServerBots.THINK_DIV;
+      let out = this.lastOut.get(id);
+      if (this.thinkCounter === (this.thinkPhase.get(id) ?? 0) || !out) {
+        const goal = this.flagGoal(p);
+        out = brain.think(dt * ServerBots.THINK_DIV, this.senses(id, p, goal, now));
+        this.applyStatus(id, p, out);
+        const sh0 = this.room.moveSim.simState(id);
+        this.firePhase(id, p, out, goal, now, sh0);
+        this.lastOut.set(id, out);
+      }
       const sh = this.room.moveSim.simState(id);
-      this.firePhase(id, p, out, goal, now, sh);
       if (sh) this.driveMove(id, p, out, sh, dt, now);
       else if (this.legacyMove(id, p, out.dest, dt)) continue;
 

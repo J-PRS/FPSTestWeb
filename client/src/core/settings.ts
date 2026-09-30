@@ -26,6 +26,7 @@ type Schema = {
   'fps-server': string;       // remote host (trycloudflare name or full host) — '' = same-host dev
   'fps-p2p': string;          // 'host:CODE' | 'join:CODE' | 'quick' — WebRTC duel, '' = off
   'fps-lobby': number;        // 1 = host's p2p room is listed publicly (/rtc/lobbies)
+  'fps-shadows': boolean;     // shadow map pass — off on potatoes (whole second scene raster per frame)
 };
 
 const DEFAULTS: Schema = {
@@ -50,6 +51,7 @@ const DEFAULTS: Schema = {
   'fps-server': '',
   'fps-p2p': '',
   'fps-lobby': 0,
+  'fps-shadows': true,
 };
 
 const parse = {

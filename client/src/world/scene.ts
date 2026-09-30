@@ -30,6 +30,8 @@ import {
 
 import { AtmosphericSky } from './atmosphericSky.js';
 import { VolumetricClouds } from './volumetricClouds.js';
+import { urlParams } from '../core/params.js';
+import { settings } from '../core/settings.js';
 
 export interface SceneSetup {
   scene: THREE.Scene;
@@ -72,8 +74,12 @@ export function createScene(): SceneSetup {
   const ambient = new THREE.AmbientLight(AMBIENT_COLOR, AMBIENT_INTENSITY);
   scene.add(ambient);
 
+  // Shadow pass is the heaviest per-frame cost on weak GPUs — the whole
+  // scene rasterizes a second time into the map. Cheap-path opt-out:
+  // ?shadows=off or the fps-shadows setting. Casting stays on in code so
+  // renderer.shadowMap.enabled can still gate the raster.
   const sun = new THREE.DirectionalLight(SUN_COLOR, SUN_INTENSITY);
-  sun.castShadow = true;
+  sun.castShadow = urlParams.get('shadows') !== 'off' && settings.get('fps-shadows');
   sun.shadow.mapSize.set(SHADOW_MAP_SIZE, SHADOW_MAP_SIZE);
   sun.shadow.camera.near = SHADOW_CAMERA_NEAR;
   sun.shadow.camera.far = SHADOW_CAMERA_FAR;
