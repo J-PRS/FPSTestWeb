@@ -238,7 +238,8 @@ export class TeamBots {
         if (bot.wantDeploy) this.tryDeploy(bot);
         this.fire.tryPropel(bot, !!shot);
       }
-      this.sheepTick(bot, dt, terrain, this.senses.foeSeen(bot, foes, terrain), !shot);
+      const hasDest = Math.hypot(bot.lastDest.x - bot.pos.x, bot.lastDest.z - bot.pos.z) >= 0.5;
+      this.sheepTick(bot, dt, terrain, this.senses.foeSeen(bot, foes, terrain), !shot, hasDest);
     }
   }
 
@@ -266,9 +267,30 @@ export class TeamBots {
 
   /** Sheep meter accrual — fills while the bot moves like a pedestrian
    *  (slow, grounded, or parked), drains while it's doing Tribes things
-   *  (covering ground, airborne, jetting). At 100 it gets yeeted: an
-   *  impulse launch that forces the behavior the meter wants. */
-  private sheepTick(bot: GameBot, dt: number, terrain: Terrain, foe = false, ignoring = false): void {
+   *  (covering ground, airborne, jetting). At 100 it gets yeeted: jump+
+   *  jets pinned as inputs, exactly the keys a player would hold. */
+  // Coverage window — mirrors BotSheepMeter.coverageDebit on the wire:
+  // under ~30m of real displacement per 5s while the brain claims a
+  // destination reads as sheeping even when per-tick speed squeaks by.
+  // Windows run on sim dt, not wall clock — a throttled frame would
+  // otherwise mis-measure the distance.
+  private sheepCov = new Map<string, { start: number; dist: number; lx: number; lz: number }>();
+  private sheepSimMs = 0;
+
+  private coverageDebit(bot: GameBot, hasDest: boolean): number {
+    const now = this.sheepSimMs;
+    let w = this.sheepCov.get(bot.playerId);
+    if (!w) { w = { start: now, dist: 0, lx: bot.pos.x, lz: bot.pos.z }; this.sheepCov.set(bot.playerId, w); }
+    w.dist += Math.hypot(bot.pos.x - w.lx, bot.pos.z - w.lz);
+    w.lx = bot.pos.x; w.lz = bot.pos.z;
+    if (now - w.start < 5000) return 0;
+    const owed = hasDest && w.dist < 30 ? 20 : 0;
+    w.start = now; w.dist = 0;
+    return owed;
+  }
+
+  private sheepTick(bot: GameBot, dt: number, terrain: Terrain, foe = false, ignoring = false, hasDest = false): void {
+    this.sheepSimMs += dt * 1000;
     const v = bot.vel;
     const speedXZ = Math.hypot(v.x, v.z);
     const grounded = bot.pos.y - terrain.getHeight(bot.pos.x, bot.pos.z) < 2;
@@ -281,11 +303,15 @@ export class TeamBots {
     // fastest tell. Only counts while NOT tribesing: a bot that's
     // skiing or repositioning is playing even with its finger off.
     if (foe && ignoring && !tribesing) delta += 40;
+    if (!tribesing) bot.sheep += this.coverageDebit(bot, hasDest);
     bot.sheep = Math.max(0, Math.min(100, bot.sheep + delta * dt));
     // ~2s trailing average for display — the raw meter jitters ±10/s
     // around the fill/drain boundary, which reads as flicker.
     bot.sheepShown += (bot.sheep - bot.sheepShown) * Math.min(1, dt * 0.5);
     if (bot.sheep >= 100) {
+      // Post-yeet the meter lands at 40 like the server — otherwise the
+      // pinned jet ends inside a still-full meter and re-yeets forever.
+      bot.sheep = 40;
       bot.yeet();
       this.deps.logger.warn(`bot ${bot.playerId} yeeted — sheep meter hit 100`);
     }
