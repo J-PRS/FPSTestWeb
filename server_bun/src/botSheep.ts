@@ -13,6 +13,10 @@ export class BotSheepMeter {
   private meter = new Map<string, number>();
   private window = new Map<string, { start: number; dist: number; lx: number; ly: number; lz: number }>();
   private yeetUntil = new Map<string, number>();
+  /** Sim-ms of the bot's last actual fire — the ignore charge needs a
+   *  recency window or legal volley cadence (0.8–1.9s between bursts)
+   *  reads as passivity and buries every other channel in the ledger. */
+  private lastFire = new Map<string, number>();
   /** Per-source charge ledger since the last yeet — dumped into the
    *  yeet warn so tuning reads "why" instead of "that". */
   private why = new Map<string, { idle: number; ignore: number; cover: number }>();
@@ -29,6 +33,7 @@ export class BotSheepMeter {
     this.window.delete(id);
     this.yeetUntil.delete(id);
     this.why.delete(id);
+    this.lastFire.delete(id);
   }
 
   of(id: string): number { return Math.round(this.meter.get(id) ?? 0); }
@@ -56,8 +61,9 @@ export class BotSheepMeter {
     // grace after a yeet is the same fix: the bot is airborne mid-yeet
     // then must land and re-acquire — charging during that window is
     // the loop the previous comment described.
+    if (m.out.fire?.targetId) this.lastFire.set(id, this.simMs);
     if ((this.yeetUntil.get(id) ?? -Infinity) + 3000 <= now) {
-      const ig = tribesing ? 0 : this.ignoreDebit(m);
+      const ig = tribesing ? 0 : this.ignoreDebit(id, m);
       const cov = this.coverageDebit(id, p, m.hasDest, this.simMs);
       why.ignore += ig; why.cover += cov;
       meter += ig + cov;
@@ -83,10 +89,11 @@ export class BotSheepMeter {
   }
 
   /** Fastest cowardice tell: a visible live enemy in range and the
-   *  brain elects not to shoot. ~2.5s of ignoring a duel fills the
-   *  meter on its own. */
-  private ignoreDebit(m: { out: BrainOut; foe?: boolean; dt: number }): number {
-    return m.foe && !m.out.fire?.targetId ? m.dt * 40 : 0;
+   *  brain elects not to shoot. The 3s recency window matters — volley
+   *  pacing means an ENGAGED bot legitimately goes ~2s between shots,
+   *  so the charge only counts a sustained refusal to fire. */
+  private ignoreDebit(id: string, m: { out: BrainOut; foe?: boolean; dt: number }): number {
+    return m.foe && this.simMs - (this.lastFire.get(id) ?? -Infinity) > 3000 ? m.dt * 40 : 0;
   }
 
   /** Coverage window: under ~30m of real displacement per 5s while the

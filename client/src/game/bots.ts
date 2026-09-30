@@ -35,7 +35,7 @@ import { winText, checkWin, resetMatch, creditKill, collect, pushScore, syncLoca
  * scatter — the same Omicron delay as the pvptest harness bots.
  */
 
-const BOT_NAMES = ['VEKTOR', 'SLATE', 'MARA', 'DUNE', 'PICO', 'RANCHO', 'OZONE', 'TALUS', 'BRICK', 'SABLE'];
+import { BOT_NAMES } from '../../../shared/botNames.js';
 
 export interface BotsDeps extends GameContext {
   lazyScene(): THREE.Scene;
@@ -222,8 +222,13 @@ export class TeamBots {
       if (bot.wantDeploy) this.tryDeploy(bot);
       this.fire.tryPropel(bot, !!shot);
     }
+    if (shot) this.lastShot.set(bot.playerId, performance.now());
+    // "Ignoring" means a sustained refusal to fire — volley cadence
+    // legitimately goes ~2s between bursts, so a mid-fight gap isn't a
+    // tell. Same 3s recency window the server meter uses.
+    const ignoring = !shot && performance.now() - (this.lastShot.get(bot.playerId) ?? -Infinity) > 3000;
     const hasDest = Math.hypot(bot.lastDest.x - bot.pos.x, bot.lastDest.z - bot.pos.z) >= 0.5;
-    this.sheepTick(bot, dt, terrain, this.senses.foeSeen(bot, foes, terrain), !shot, hasDest);
+    this.sheepTick(bot, dt, terrain, this.senses.foeSeen(bot, foes, terrain), ignoring, hasDest);
   }
 
   /** One brain ctx per bot per tick — every sense the server feeds its
@@ -293,16 +298,30 @@ export class TeamBots {
    *  contributed since the last yeet, dumped into the warn so tuning
    *  reads "why" instead of "that". */
   private sheepWhy = new Map<string, { idle: number; ignore: number; bleed: number; cover: number }>();
+  /** Wall-ms of each bot's last fired shot — the ignore debit needs
+   *  recency, not a per-tick fire flag. */
+  private lastShot = new Map<string, number>();
+
+  private sheepLedger(id: string): { idle: number; ignore: number; bleed: number; cover: number } {
+    let w = this.sheepWhy.get(id);
+    if (!w) { w = { idle: 0, ignore: 0, bleed: 0, cover: 0 }; this.sheepWhy.set(id, w); }
+    return w;
+  }
+
+  /** Counts as Tribesing while it's converting — speed, airtime, or still
+   *  inside the post-yeet pin (a yeeted bot shouldn't re-drain instantly). */
+  private static isTribesing(bot: GameBot, speedXZ: number, grounded: boolean): boolean {
+    return speedXZ > 10 || !grounded || bot.yeetT > 0;
+  }
 
   private sheepTick(bot: GameBot, dt: number, terrain: Terrain, foe = false, ignoring = false, hasDest = false): void {
     const v = bot.vel;
     const speedXZ = Math.hypot(v.x, v.z);
     const height = bot.pos.y - terrain.getHeight(bot.pos.x, bot.pos.z);
     const grounded = height < 2;
-    const tribesing = speedXZ > 10 || !grounded || bot.yeetT > 0;
+    const tribesing = TeamBots.isTribesing(bot, speedXZ, grounded);
     const moving = speedXZ > 1;
-    let why = this.sheepWhy.get(bot.playerId);
-    if (!why) { why = { idle: 0, ignore: 0, bleed: 0, cover: 0 }; this.sheepWhy.set(bot.playerId, why); }
+    const why = this.sheepLedger(bot.playerId);
     // Rates mirror the server meter — a bot offline is held to the same
     // standard it is on the wire.
     let delta = tribesing ? -(10 + speedXZ * 0.5 + (bot.yeetT > 0 ? 15 : 0)) : moving ? 9 : 18;

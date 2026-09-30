@@ -219,6 +219,10 @@ export class BotBrain {
   // Personality scalars — ±20-30% per bot so a squad doesn't read as one
   // centipede: different preferred ranges, wander appetites, tempers.
   private readonly wanderlust = 0.7 + Math.random() * 0.6;
+  /** Held-position strafe orbit — angle advances each pickDest step;
+   *  direction is a per-bot coin so a squad doesn't circle in lockstep. */
+  private orbitA = Math.random() * Math.PI * 2;
+  private readonly orbitDir = Math.random() < 0.5 ? 1 : -1;
   /** Last think resolved to stand-and-shoot — a legal hold, not a stall.
    *  Hosts read this to keep stall/mobility watchdogs honest. */
   holding = false;
@@ -316,10 +320,18 @@ export class BotBrain {
       // approach. Holding the orbit at 2m would stare down a barrel.
       return { ...t.pos };
     }
-    // fightPos comes from the last replan tick — no pick yet (or the
-    // pick was "hold") means stand and shoot.
+    // fightPos comes from the last replan tick — "hold" used to mean
+    // stand still and shoot, which reads (and meters) as sheeping.
+    // A held position now strafes: orbit the target inside the
+    // preferred range band, cycling angle so the bot keeps moving
+    // between volleys like a real duelist.
     this.holding = this.h.fightPos === null;
-    return this.h.fightPos ?? { ...pos };
+    if (this.h.fightPos) return this.h.fightPos;
+    this.orbitA += dt * (this.orbitDir * 0.55);
+    const mid = (this.h.orbitFar + this.h.orbitClose) * 0.5;
+    const ox = t.pos.x + Math.cos(this.orbitA) * mid;
+    const oz = t.pos.z + Math.sin(this.orbitA) * mid;
+    return { x: ox, y: ctx.groundY(ox, oz), z: oz };
   }
 
   /** Fortification pick: planting while a fight rages on the stand is
