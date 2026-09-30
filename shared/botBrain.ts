@@ -255,15 +255,18 @@ export class BotBrain {
    *  a dice roll away from never touching the deploy kit. */
   setBuilder(v: boolean): void { this.builder = v; }
 
-  /** Host reports the bot's corpse spot on death. */
-  markDeath(pos: BotVec): void {
-    this.deaths.push({ x: pos.x, z: pos.z, t: Date.now() });
+  /** Host reports the bot's corpse spot on death, stamped with the
+   *  same clock ctx.now rides — shared sim code never reads wall-clock
+   *  itself (test harnesses step sim-time, not real time). */
+  private now = 0;
+  markDeath(pos: BotVec, now: number): void {
+    this.deaths.push({ x: pos.x, z: pos.z, t: now });
     if (this.deaths.length > 8) this.deaths.shift();
   }
 
   /** Is p within the repel radius of a recent death? */
   private nearDeath(p: { x: number; z: number }): boolean {
-    const now = Date.now();
+    const now = this.now;
     for (const d of this.deaths) {
       if (now - d.t > DEATH_MS) continue;
       const dx = p.x - d.x, dz = p.z - d.z;
@@ -299,6 +302,7 @@ export class BotBrain {
   think(dt: number, ctx: BrainCtx): BrainOut {
     const pos = ctx.pos;
     const now = ctx.now;
+    this.now = now;
 
     // Fear/hero state rides the health fraction — a rare hero roll on the
     // rising edge of getting hurt decides whether low HP means retreat or

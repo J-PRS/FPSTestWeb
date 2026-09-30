@@ -100,7 +100,7 @@ describe('BotBrain senses', () => {
   it('avoids wandering back to a death spot', () => {
     const b = new BotBrain({ x: 0, y: 0, z: 0 });
     const pos = { x: 0, y: 1.6, z: 0 };
-    b.markDeath({ x: 0, y: 0, z: 20 }); // died just north
+    b.markDeath({ x: 0, y: 0, z: 20 }, 0); // died just north, t=0 to match ctx.now
     // Wander goals that land inside the repel radius get re-rolled — run
     // several think cadences; none should settle ~north of the body.
     for (let i = 0; i < 12; i++) b.think(4, ctx(pos, flat, {}));

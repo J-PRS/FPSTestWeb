@@ -579,7 +579,7 @@ export class ServerBots {
       if (p.isDead) {
         // First sighting of this corpse — the brain keeps the spot as a
         // death memory so its wander goals sour on kill zones.
-        if (!this.deadSet.has(id)) brain.markDeath(p.position);
+        if (!this.deadSet.has(id)) brain.markDeath(p.position, now);
         this.deadSet.add(id);
         continue;
       }

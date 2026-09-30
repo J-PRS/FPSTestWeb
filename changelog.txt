@@ -1,3 +1,4 @@
+2026-09-26 - botBrain death memory on sim clock (markDeath takes now param; shared sim no longer reads Date.now)
 2026-09-26 - teleport cadence gate (3s) — declared-warp spam no longer grants free relocation; TL beacons (4s cooldown), joins and respawns stay legal
 2026-09-26 - crawlerHit shares the same derived damage ceiling (MAX_HIT_CLAIM_DMG now lives in shared/weapons.ts)
 2026-09-26 - creatureHit damage clamp derived from weapons table (max direct+splash, perk headroom) — 300 flat cap halved
