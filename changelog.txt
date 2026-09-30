@@ -1,3 +1,4 @@
+2026-09-26 - Split shared/botHunt.ts: LOS memoized terrain march -> botLos.ts (286->231)
 2026-09-26 - Split Turretter.ts: hop/launch/seat/bolt-solve ballistics -> turretBallistics.ts (430->300)
 2026-09-26 - Split Totem.ts: offline FSM (materialize/aim/charge/blink) -> totemFsm.ts (469->374)
 2026-09-26 - Split shared/botBrain.ts: stuck-detour + shell-dodge senses -> botEscape.ts (430->372)
