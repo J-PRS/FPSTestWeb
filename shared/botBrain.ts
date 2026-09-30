@@ -20,8 +20,9 @@ import type { ColliderIndex } from './solidWorld.ts';
 import type { StructureCollider } from './ballSim.ts';
 import {
   newHuntState, pickHunt, pickFire, retreatDest,
-  BOT_EYE, STALE_MS, type HuntState,
+  STALE_MS, type HuntState,
 } from './botHunt.ts';
+import { stuckBreak, dodge, type EscapeState } from './botEscape.ts';
 
 // Combat half lives in botHunt.ts — re-export so existing imports keep
 // resolving (losClear/BOT_EYE/BOT_FIRE_RANGE are the public surface).
@@ -119,8 +120,6 @@ const THINK_S = 0.3;
 const CLOSE_PRESS_M = 6; // inside this the orbit breaks — press to fist range
 const FLINCH_S = 0.4;
 const FLINCH_DIST = 8;
-const DODGE_RANGE = 12;  // m — only react to shells already inbound
-const DODGE_STEP = 9;    // m — lateral hop, ~one body-length burst
 
 // Fear / hero — both are sense tuning, never new moves or info. Below
 // FEAR_HP the bot breaks contact (retreat, sloppy suppression on purpose);
@@ -148,14 +147,16 @@ export class BotBrain {
   private flinchT = 0;
   private flinchFrom: BotVec = { x: 0, y: 0, z: 0 };
   private beltT = 4 + Math.random() * 4; // stagger first throws across the squad
-  private progressPos: BotVec = { x: 0, y: 0, z: 0 };
-  private progressT = 0;
-  private detour: BotVec | null = null;
-  private detourT = 0;
-  /** Consecutive no-progress windows — a sidestep that also fails means
-   *  a wall pocket, so the streak escalates to a jet escape burst. */
-  private stuckStreak = 0;
-  private escapeJetT = 0;
+  // Stuck/dodge senses live in botEscape.ts — escapeS is their state bag.
+  private readonly escapeS: EscapeState = {
+    stuckStreak: 0,
+    escapeJetT: 0,
+    detour: null,
+    detourT: 0,
+    progressPos: { x: 0, y: 0, z: 0 },
+    progressT: 0,
+    goal: { x: 0, y: 0, z: 0 }, // kept in sync with goalS.goal each think
+  };
   private readonly steerer = new BotSteer();
   // Idle-goal ladder lives in botGoals.ts — goalS is the state bag it
   // reads/writes so the brain's goal/wander/revenge fields stay private.
@@ -175,7 +176,7 @@ export class BotBrain {
   // Ski/jet/jump hint intents live in botMoves.ts — host closures read
   // the escape burst latch and the live hunt target.
   private readonly moves = new BotMoves({
-    escapeJetT: () => this.escapeJetT,
+    escapeJetT: () => this.escapeS.escapeJetT,
     huntPos: () => this.h.hunt?.pos ?? null,
   });
   // Death memory — where the host reported this body dying. Souring
@@ -261,8 +262,9 @@ export class BotBrain {
     this.goalS.wanderT -= dt;
     // detourT decays here, with the other timers — decrementing it inside
     // the dest block below would let the setting call's dt eat the window.
-    this.detourT -= dt;
-    this.escapeJetT -= dt;
+    this.escapeS.detourT -= dt;
+    this.escapeS.escapeJetT -= dt;
+    this.escapeS.goal = this.goalS.goal;
     this.goalS.revengeT -= dt;
 
     // --- choose the step destination ---
@@ -271,10 +273,10 @@ export class BotBrain {
     // --- context steering: senses score every direction ---
     dest = this.steerer.steer(dt, ctx, pos, dest);
 
-    dest = this.stuckBreak(dt, ctx, pos, dest);
+    dest = stuckBreak(this.escapeS, dt, ctx, pos, dest);
 
     // --- dodge: sidestep the nearest closing shell ---
-    dest = this.dodge(ctx, pos, dest, hero);
+    dest = dodge(ctx, pos, dest, hero);
 
     // --- fire ---
     const fire = pickFire(this.h, dt, ctx, pos, now, { hero, fearing });
@@ -320,36 +322,6 @@ export class BotBrain {
     return this.h.fightPos ?? { ...pos };
   }
 
-  /** Stuck break — no progress for 1.5s means the straight line is
-   *  blocked (structure, cliff, another bot). Sidestep perpendicular to
-   *  the goal for a beat; random side per incident keeps herds from
-   *  detouring in lockstep. */
-  private stuckBreak(dt: number, ctx: BrainCtx, pos: BotVec, dest: BotVec): BotVec {
-    this.progressT += dt;
-    if (this.progressT < 1.5) return this.detourT > 0 && this.detour ? this.detour : dest;
-    this.progressT = 0;
-    if (distSq(pos, this.progressPos) < 2.25) {
-      this.stuckStreak++;
-      if (this.detourT <= 0) {
-        const gx = this.goalS.goal.x - pos.x, gz = this.goalS.goal.z - pos.z;
-        const gl = Math.hypot(gx, gz) || 1;
-        const side = Math.random() < 0.5 ? -1 : 1;
-        const dx = (-gz / gl) * side * 14, dz = (gx / gl) * side * 14;
-        this.detour = { x: pos.x + dx, y: ctx.groundY(pos.x + dx, pos.z + dz) + BOT_EYE, z: pos.z + dz };
-        this.detourT = 1.2;
-      }
-      // Pinned through a detour = a wall pocket every sideways probe
-      // is a face — thrust up and over is the legal way out.
-      if (this.stuckStreak >= 2) this.escapeJetT = Math.max(this.escapeJetT, 1.1);
-    } else {
-      this.stuckStreak = 0;
-    }
-    this.progressPos = { ...pos };
-    return this.detourT > 0 && this.detour ? this.detour : dest;
-  }
-
-  
-  
   /** Fortification pick: planting while a fight rages on the stand is
    *  suicide, but a defender watching a duel across the field still has
    *  hands free — the gate is "nobody close enough to interrupt", not
@@ -374,31 +346,6 @@ export class BotBrain {
     return { kind, pos: { x: px, y: ctx.groundY(px, pz), z: pz } };
   }
 
-  /** Sidestep the nearest closing shell — a perpendicular step dodges a
-   *  ballistic arc without abandoning the fight; the side that keeps
-   *  current momentum wins (dodging backward through your own velocity
-   *  reads as a stumble, not a juke). Hero sharpens both senses: it sees
-   *  the shell sooner and hops farther. */
-  private dodge(ctx: BrainCtx, pos: BotVec, dest: BotVec, hero: boolean): BotVec {
-    let nearest: BotVec | null = null;
-    let nearestD = hero ? DODGE_RANGE * 1.7 : DODGE_RANGE;
-    for (const t of ctx.threats ?? []) {
-      const d = dist3(pos, t);
-      if (d < nearestD) { nearestD = d; nearest = t; }
-    }
-    if (!nearest) return dest;
-    const dodgeStep = hero ? DODGE_STEP * 1.4 : DODGE_STEP;
-    const tx = pos.x - nearest.x, tz = pos.z - nearest.z;
-    const tl = Math.hypot(tx, tz) || 1;
-    const vx = ctx.vel?.x ?? 0, vz = ctx.vel?.z ?? 0;
-    const side = (vx * -tz + vz * tx) * tl >= 0 ? 1 : -1; // keep momentum
-    return {
-      x: pos.x + (-tz / tl) * side * dodgeStep,
-      y: pos.y,
-      z: pos.z + (tx / tl) * side * dodgeStep,
-    };
-  }
-
   /** Toggle-skill intent — the STATUS bits a legal client claims. Mend
    *  wins: hurt + unpressured + can afford the ante. Otherwise shield up
    *  in a real fight while the tank can carry the drain. Returns
@@ -417,14 +364,9 @@ export class BotBrain {
     return status;
   }
 
-  
-  
+
 }
 
 function dist3(a: BotVec, b: BotVec): number {
   return Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
-}
-function distSq(a: BotVec, b: BotVec): number {
-  const dx = a.x - b.x, dy = a.y - b.y, dz = a.z - b.z;
-  return dx * dx + dy * dy + dz * dz;
 }

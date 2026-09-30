@@ -1,3 +1,4 @@
+2026-09-26 - Split shared/botBrain.ts: stuck-detour + shell-dodge senses -> botEscape.ts (430->372)
 2026-09-26 - Split balls.ts: enrage/lunge/stall/bounce/teleport family -> ballRage.ts (654->445)
 2026-09-26 - Split net/players.ts: kill wire + victim gib -> net/playerKill.ts (366->262)
 2026-09-26 - Split CreatureSim.ts: spawn/target snapshot family -> creatureSpawn.ts (349->250)
