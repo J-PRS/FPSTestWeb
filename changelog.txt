@@ -1,3 +1,4 @@
+2026-09-30 - DemoRecorder split: DemoFile assembly (whole-recording dump + windowed clip extraction) -> demoExtract.ts (339->234).
 2026-09-30 - coolShots split: demo-server I/O (download/upload/list fetch + play-from-server) -> coolShotsNet.ts (329->226).
 2026-09-30 - ViewModel split: recoil family (KICK_TUNE + damped-oscillator kick + muzzle flash/light pop) -> vmKick.ts (375->320).
 2026-09-30 - botBrain split: energy tank family (status activation/drain, mend heal, jet fuel, regen) -> botEnergy.ts (367->285).

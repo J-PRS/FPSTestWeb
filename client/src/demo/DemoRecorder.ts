@@ -4,12 +4,12 @@
 import { CircularBuffer } from './CircularBuffer.js';
 import {
   DemoFrame, ProjectileEvent, TargetEvent, RemoteFrame, RemoteFrameFlags,
-  createFrame, DEMO_MAGIC, DEMO_FORMAT_VERSION,
+  createFrame,
   type DemoFile, type DemoRosterEntry,
 } from './types.js';
 import type { IPlayerDataProvider, IInputProvider, Vec3 } from './interfaces.js';
-import { collectRemoteFrames, collectProjectileEvents, collectTargetEvents } from './demoClip.js';
 import * as ev from './demoEvents.js';
+import { buildDemoFile, extractClip } from './demoExtract.js';
 
 const DEFAULT_BUFFER_SECONDS = 30;
 const DEFAULT_TICK_RATE = 60; // frames per second
@@ -44,17 +44,11 @@ export interface DemoContext {
   room: string; mode: string; playerName: string;
 }
 
-// Zeroed frame — lets the start-of-clip header read a missing first
-// frame as all-zero fields without a chain of ?? fallbacks.
-const DEMO_ZERO_FRAME = {
-  posX: 0, posY: 0, posZ: 0, yaw: 0, pitch: 0, velX: 0, velY: 0, velZ: 0,
-} as DemoFrame;
-
 export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecorder {
-  private frameBuffer: CircularBuffer<DemoFrame>;
+  frameBuffer: CircularBuffer<DemoFrame>;
   projectileEvents: ProjectileEvent[] = [];
   targetEvents: TargetEvent[] = [];
-  private remoteFrames: RemoteFrame[] = [];
+  remoteFrames: RemoteFrame[] = [];
   rosterIdxById = new Map<string, number>();
   roster: DemoRosterEntry[] = [];
   remoteSource: (() => Iterable<RemoteSample>) | null = null;
@@ -213,111 +207,12 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
   }
 
   // Extract all recorded data into a DemoFile
-  buildDemoFile(description: string = ''): DemoFile {
-    const frames = this.frameBuffer.extractAll();
-
-    return {
-      header: {
-        magic: DEMO_MAGIC,
-        formatVersion: DEMO_FORMAT_VERSION,
-        gameVersion: '1.0.0',
-        timestamp: Date.now(),
-        duration: this.elapsedTime,
-        totalFrames: frames.length,
-        projectileEventCount: this.projectileEvents.length,
-        targetEventCount: this.targetEvents.length,
-        checksum: 0,
-        description,
-        ...DemoRecorder.startFrame(frames.length > 0 ? frames[0] : null),
-        projectileLifetime: 0,
-        ...this.context,
-      },
-      frames,
-      projectileEvents: [...this.projectileEvents],
-      targetEvents: [...this.targetEvents],
-      roster: this.roster.map(r => ({ ...r })),
-      remoteFrames: [...this.remoteFrames],
-    };
-  }
-
-  private static startFrame(first: DemoFrame | null) {
-    const f = first ?? DEMO_ZERO_FRAME;
-    return {
-      startPosX: f.posX,
-      startPosY: f.posY,
-      startPosZ: f.posZ,
-      startYaw: f.yaw,
-      startPitch: f.pitch,
-      startVelX: f.velX,
-      startVelY: f.velY,
-      startVelZ: f.velZ,
-    };
-  }
+  buildDemoFile(description: string = ''): DemoFile { return buildDemoFile(this, description); }
 
   // Extract a clip: frames and events within [startTime, endTime].
   // Times are relative to recording start (elapsedTime).
   extractClip(startTime: number, endTime: number, description: string, projectileLifetime: number = 0): DemoFile | null {
-    if (this.frameBuffer.IsEmpty) return null;
-
-    // Clamp to available range
-    const oldest = this.frameBuffer.peekOldest().timestamp;
-    const newest = this.frameBuffer.peekNewest().timestamp;
-    const clipStart = Math.max(startTime, oldest);
-    const clipEnd = Math.min(endTime, newest);
-    if (clipEnd <= clipStart) return null;
-
-    // Find frame indices in the buffer
-    const startIdx = this.frameBuffer.findIndexAfterTimestamp(
-      clipStart - 0.001, f => f.timestamp
-    );
-    if (startIdx < 0) return null;
-
-    // Collect frames from startIdx until timestamp > clipEnd
-    const frames: DemoFrame[] = [];
-    for (let i = startIdx; i < this.frameBuffer.Count; i++) {
-      const f = this.frameBuffer.getUnsafe(i);
-      if (f.timestamp > clipEnd) break;
-      frames.push(f);
-    }
-    if (frames.length === 0) return null;
-
-    const projEvents = collectProjectileEvents(this.projectileEvents, clipStart, clipEnd);
-    const tgtEvents = collectTargetEvents(this.targetEvents, clipStart, clipEnd);
-
-    // Renormalize timestamps to clip start. frameNumber wraps at 65536, so
-    // a clip spanning the wrap would produce negative numbers — mod back.
-    const first = frames[0];
-    const normFrames = frames.map(f => Object.assign({}, f, {
-      timestamp: f.timestamp - clipStart,
-      frameNumber: (f.frameNumber - first.frameNumber + 65536) % 65536,
-    }));
-    const normProj = projEvents.map(e => Object.assign({}, e, { timestamp: e.timestamp - clipStart }));
-    const normTgt = tgtEvents.map(e => Object.assign({}, e, { timestamp: e.timestamp - clipStart }));
-
-    return {
-      header: {
-        magic: DEMO_MAGIC,
-        formatVersion: DEMO_FORMAT_VERSION,
-        gameVersion: '1.0.0',
-        timestamp: Date.now(),
-        duration: clipEnd - clipStart,
-        totalFrames: normFrames.length,
-        projectileEventCount: normProj.length,
-        targetEventCount: normTgt.length,
-        checksum: 0,
-        description,
-        startPosX: first.posX, startPosY: first.posY, startPosZ: first.posZ,
-        startYaw: first.yaw, startPitch: first.pitch,
-        startVelX: first.velX, startVelY: first.velY, startVelZ: first.velZ,
-        projectileLifetime,
-        ...this.context,
-      },
-      frames: normFrames,
-      projectileEvents: normProj,
-      targetEvents: normTgt,
-      roster: this.roster.map(r => ({ ...r })),
-      remoteFrames: collectRemoteFrames(this.remoteFrames, clipStart, clipEnd),
-    };
+    return extractClip(this, startTime, endTime, description, projectileLifetime);
   }
 
 }
