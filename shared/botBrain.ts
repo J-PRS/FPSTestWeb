@@ -445,10 +445,14 @@ export class BotBrain {
         const d = dist3(pos, this.lastSeen);
         // Suppressive fire is deliberately sloppy — noise, not hits. Hero
         // aim just stops being sloppy.
-        let err = 0.5 + Math.hypot(this.lastSeenVel.x, this.lastSeenVel.y, this.lastSeenVel.z) * 0.1 + d * 0.02;
-        err *= hero ? 0.3 : fearing ? 2.5 : 1;
         const ws = ctx.weaponSpeed?.(d);
         const flight = d / (ws && ws > 0 ? ws : 60);
+        // Scatter grows with how far ahead the bot must predict: target
+        // speed (a jinking enemy is hard to lead), raw distance, and the
+        // shell's time in flight — a 1.3s mortar lob is a much bigger
+        // prediction than a 0.6s disc at the same range.
+        let err = 0.5 + Math.hypot(this.lastSeenVel.x, this.lastSeenVel.y, this.lastSeenVel.z) * 0.1 + d * 0.02 + flight * 1.2;
+        err *= hero ? 0.3 : fearing ? 2.5 : 1;
         // Ballistic intercept: the target keeps falling while the shell
         // travels — a skier mid-air arcs down, and a flat lead overshoots
         // high. Clamp at terrain so a grounded runner isn't predicted
