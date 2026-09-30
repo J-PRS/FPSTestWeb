@@ -57,8 +57,9 @@ const replays = new Map<number, Replay>();
 
 type Seg = NonNullable<ReturnType<typeof decodeBallSegment>>;
 function makeReplay(m: Seg, age: number, variant: BallVariant = 0): Replay {
-  const sim = makeSimBall(m.id, variant, 0, m.position.x, m.position.y, m.position.z,
-    m.velocity.x, m.velocity.y, m.velocity.z);
+  const sim = makeSimBall(m.id, variant, 0,
+    { x: m.position.x, y: m.position.y, z: m.position.z },
+    { x: m.velocity.x, y: m.velocity.y, z: m.velocity.z });
   sim.enraged = m.enraged;
   sim.enrageTimer = m.et;   // wire already decodes u8 tenths → seconds
   sim.slowTimer = m.slowT;

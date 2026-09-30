@@ -252,7 +252,8 @@ export class Ball {
       this.vel = new THREE.Vector3(netSpawn.vx, netSpawn.vy, netSpawn.vz);
       if (variant === 0) this.color = BALL_COLORS[netSpawn.colorIdx % BALL_COLORS.length]!.clone();
       this.sim = makeSimBall(netSpawn.id, variant, netSpawn.colorIdx,
-        netSpawn.x, netSpawn.y, netSpawn.z, netSpawn.vx, netSpawn.vy, netSpawn.vz);
+        { x: netSpawn.x, y: netSpawn.y, z: netSpawn.z },
+        { x: netSpawn.vx, y: netSpawn.vy, z: netSpawn.vz });
     } else {
       const rx = (Math.random() - 0.5) * 400;
       const rz = (Math.random() - 0.5) * 400;
@@ -440,7 +441,7 @@ export class Ball {
     this.simT += 0.05;
     s.x = this.pos.x; s.y = this.pos.y; s.z = this.pos.z;
     s.vx = this.vel.x; s.vy = this.vel.y; s.vz = this.vel.z;
-    stepBall(s, 0.05, Ball.field!, tgt, false, Ball.colliders, Ball.colliderIndex ?? undefined);
+    stepBall(s, 0.05, Ball.field!, tgt, false, { colliders: Ball.colliders, colliderIndex: Ball.colliderIndex ?? undefined });
     this.pos.set(s.x, s.y, s.z);
     this.vel.set(s.vx, s.vy, s.vz);
   }

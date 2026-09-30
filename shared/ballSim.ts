@@ -90,12 +90,13 @@ export interface SimBall {
 
 const _n: SimVec = { x: 0, y: 0, z: 0 };
 
-export function makeSimBall(id: number, variant: BallVariant, colorIdx: number, x: number, y: number, z: number, vx: number, vy: number, vz: number): SimBall {
+export function makeSimBall(id: number, variant: BallVariant, colorIdx: number, pos: SimVec, vel: SimVec): SimBall {
+  const { x, y, z } = pos;
   const scale = BALL_VARIANT_SCALE[variant];
   const health = BALL_VARIANT_HEALTH[variant];
   return {
     id, variant, colorIdx,
-    x, y, z, vx, vy, vz,
+    x, y, z, vx: vel.x, vy: vel.y, vz: vel.z,
     scale, radius: BALL_BASE_RADIUS * scale,
     health, maxHealth: health,
     enraged: false, enrageTimer: 0, slowTimer: 0, dampNextBounce: false,
@@ -183,60 +184,71 @@ function collideStructures(b: SimBall, colliders: readonly StructureCollider[], 
  *  client predictor passes the same list from gameState, so the bounce is
  *  identical on both sides. Returns the segment kind if this step produced
  *  a discontinuity the authority should broadcast. */
+export interface StepWorld {
+  colliders?: readonly StructureCollider[];
+  colliderIndex?: { queryPoint(x: number, z: number, pad: number, out: StructureCollider[]): void };
+}
+
 export function stepBall(
   b: SimBall,
   dt: number,
   field: Heightfield,
   target: SimVec | null,
   authoritative: boolean,
-  colliders?: readonly StructureCollider[],
-  colliderIndex?: { queryPoint(x: number, z: number, pad: number, out: StructureCollider[]): void },
+  world?: StepWorld,
 ): SegmentKind | null {
   b.vy += BALL_GRAVITY * dt;
   b.x += b.vx * dt;
   b.y += b.vy * dt;
   b.z += b.vz * dt;
 
-  // Enrage pull: linear accel toward the committed target (still ballistic-
-  // flavored — it arcs and bounces rather than homing).
-  if (b.enraged && target) {
-    b.enrageTimer += dt;
-    let dx = target.x - b.x;
-    let dy = target.y + b.radius - b.y;
-    let dz = target.z - b.z;
-    const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
-    if (d > 0.001) {
-      const f = BALL_ENRAGE_FORCE * dt / d;
-      b.vx += dx * f;
-      b.vy += dy * f;
-      b.vz += dz * f;
-    }
-    if (b.enrageTimer > BALL_ENRAGE_TIMEOUT) {
-      b.enraged = false;
-      if (authoritative) return teleportNearTarget(b, field, target);
-      return null; // predictor: let it fly, the event will snap it
-    }
-  }
+  const enrage = enragePull(b, dt, field, target, authoritative);
+  if (enrage !== undefined) return enrage;
 
   // Stall breaker — RNG-free, so predictors run it too and land the same
   // spring the server commits to. Fires BEFORE the bounce check so a ball
   // resting on the ground (the common stall) launches immediately.
-  {
-    const sp = Math.hypot(b.vx, b.vy, b.vz);
-    b.slowTimer = sp < BALL_MIN_SPEED ? b.slowTimer + dt : 0;
-    if (b.slowTimer >= BALL_STALL_TIME && target) {
-      b.slowTimer = 0;
-      launchAt(b, target, Math.SQRT1_2);
-      return 'stall';
-    }
+  const sp = Math.hypot(b.vx, b.vy, b.vz);
+  b.slowTimer = sp < BALL_MIN_SPEED ? b.slowTimer + dt : 0;
+  if (b.slowTimer >= BALL_STALL_TIME && target) {
+    b.slowTimer = 0;
+    launchAt(b, target, Math.SQRT1_2);
+    return 'stall';
   }
 
   // Structures before terrain — a ball inside a wall would otherwise
   // terrain-resolve first and stay embedded.
-  if (colliders && collideStructures(b, colliders, colliderIndex)) return 'bounce';
+  if (world?.colliders && collideStructures(b, world.colliders, world.colliderIndex)) return 'bounce';
 
-  // Ground contact → reflect. Mirrors handleGroundBounce: only a bounce
-  // while moving INTO the surface counts.
+  return groundContact(b, dt, field, target);
+}
+
+/** Enrage pull: linear accel toward the committed target (still ballistic-
+ *  flavored — it arcs and bounces rather than homing). Returns the segment
+ *  kind when the step ends here, undefined when the sim should continue. */
+function enragePull(b: SimBall, dt: number, field: Heightfield, target: SimVec | null, authoritative: boolean): SegmentKind | null | undefined {
+  if (!b.enraged || !target) return undefined;
+  b.enrageTimer += dt;
+  const dx = target.x - b.x;
+  const dy = target.y + b.radius - b.y;
+  const dz = target.z - b.z;
+  const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+  if (d > 0.001) {
+    const f = BALL_ENRAGE_FORCE * dt / d;
+    b.vx += dx * f;
+    b.vy += dy * f;
+    b.vz += dz * f;
+  }
+  if (b.enrageTimer <= BALL_ENRAGE_TIMEOUT) return undefined;
+  b.enraged = false;
+  if (authoritative) return teleportNearTarget(b, field, target);
+  return null; // predictor: let it fly, the event will snap it
+}
+
+/** Ground contact → reflect. Mirrors handleGroundBounce: only a bounce
+ *  while moving INTO the surface counts. Terrain probes are scheduled
+ *  (closed-form time-to-ground) rather than sampled every tick. */
+function groundContact(b: SimBall, dt: number, field: Heightfield, target: SimVec | null): SegmentKind | null {
   b.gt -= dt;
   const needSample = b.gt <= 0 ||
     (b.x - b.gx) * (b.x - b.gx) + (b.z - b.gz) * (b.z - b.gz) > 4 ||
@@ -261,15 +273,11 @@ export function stepBall(
   const dot = b.vx * _n.x + b.vy * _n.y + b.vz * _n.z;
   if (dot >= 0) return null;
 
-  if (b.enraged && target) {
-    const pdx = target.x - b.x;
-    const pdz = target.z - b.z;
-    if (pdx * pdx + pdz * pdz <= BALL_ENRAGE_DASH_DIST * BALL_ENRAGE_DASH_DIST) {
-      dashAt(b, target);
-      b.enraged = false;
-      b.dampNextBounce = true;
-      return 'lunge';
-    }
+  if (b.enraged && target && (target.x - b.x) ** 2 + (target.z - b.z) ** 2 <= BALL_ENRAGE_DASH_DIST * BALL_ENRAGE_DASH_DIST) {
+    dashAt(b, target);
+    b.enraged = false;
+    b.dampNextBounce = true;
+    return 'lunge';
   }
 
   // Post-dash landing OR an overspeed impact: reflect at 50% elasticity so
@@ -290,17 +298,13 @@ export function stepBall(
 
   // Drift check: too far from the committed target → enrage spring (the
   // authority decides; the predictor sees it on the segment event anyway).
-  if (target) {
-    const dx = b.x - target.x;
-    const dz = b.z - target.z;
-    if (dx * dx + dz * dz > BALL_MAX_DIST * BALL_MAX_DIST) {
-      // launchAt is RNG-free — the predictor commits the same enrage spring
-      // the authority does instead of waiting one tick for the segment.
-      b.enraged = true;
-      b.enrageTimer = 0;
-      launchAt(b, target, Math.SQRT1_2);
-      return 'enrage';
-    }
+  if (target && (b.x - target.x) ** 2 + (b.z - target.z) ** 2 > BALL_MAX_DIST * BALL_MAX_DIST) {
+    // launchAt is RNG-free — the predictor commits the same enrage spring
+    // the authority does instead of waiting one tick for the segment.
+    b.enraged = true;
+    b.enrageTimer = 0;
+    launchAt(b, target, Math.SQRT1_2);
+    return 'enrage';
   }
   return 'bounce';
 }

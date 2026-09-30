@@ -200,7 +200,7 @@ export class Lobby {
     create.addEventListener('click', named);
     newWrap.append(input, create);
 
-    // Server + P2P — the URL params ?server=/​?p2p= still work for links,
+    // Server + P2P — the URL params ?server=/?p2p= still work for links,
     // but these fields make them reachable without editing the URL.
     const connLbl = label('CONNECTION');
     const srvRow = field('SERVER');

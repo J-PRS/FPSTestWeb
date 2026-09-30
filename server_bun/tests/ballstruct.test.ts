@@ -13,14 +13,14 @@ const wall = structureColliders([{
 
 function ballAt(x: number, vx: number) {
   // Ball radius 1.2; field height 0 everywhere.
-  return makeSimBall(1, 0, 0, x, 1.2, 0, vx, 0, 0);
+  return makeSimBall(1, 0, 0, { x, y: 1.2, z: 0 }, { x: vx, y: 0, z: 0 });
 }
 
 describe('ball vs structure collision', () => {
   test('a ball flying into a wall ricochets back with a bounce event', () => {
     const b = ballAt(6, 20); // wall face at x=9
     const kinds: (string | null)[] = [];
-    for (let i = 0; i < 10; i++) kinds.push(stepBall(b, 0.05, FIELD, null, true, wall));
+    for (let i = 0; i < 10; i++) kinds.push(stepBall(b, 0.05, FIELD, null, true, { colliders: wall }));
     expect(kinds).toContain('bounce');
     expect(b.vx).toBeLessThan(0); // reflected
     expect(b.x).toBeLessThan(9); // pushed out, never inside
@@ -29,7 +29,7 @@ describe('ball vs structure collision', () => {
   test('a ball that never reaches the wall produces no bounce', () => {
     const b = ballAt(0, 1);
     const kinds: (string | null)[] = [];
-    for (let i = 0; i < 5; i++) kinds.push(stepBall(b, 0.05, FIELD, null, true, wall));
+    for (let i = 0; i < 5; i++) kinds.push(stepBall(b, 0.05, FIELD, null, true, { colliders: wall }));
     expect(b.x).toBeLessThan(8); // never reached the wall face at x=9
   });
 
@@ -43,14 +43,14 @@ describe('ball vs structure collision', () => {
     // slab after rotation: hx=10, hz=1 → face at z=1. Ball at z=5 flying +z misses; aim -z:
     b.vz = -20;
     const kinds: (string | null)[] = [];
-    for (let i = 0; i < 10; i++) kinds.push(stepBall(b, 0.05, FIELD, null, true, rot));
+    for (let i = 0; i < 10; i++) kinds.push(stepBall(b, 0.05, FIELD, null, true, { colliders: rot }));
     expect(kinds).toContain('bounce');
     expect(b.vz).toBeGreaterThan(0);
   });
 
   test('no colliders → free flight unchanged', () => {
     const b = ballAt(6, 20);
-    for (let i = 0; i < 10; i++) stepBall(b, 0.05, FIELD, null, true, []);
+    for (let i = 0; i < 10; i++) stepBall(b, 0.05, FIELD, null, true, { colliders: [] });
     expect(b.x).toBeGreaterThan(6); // flew through where the wall would be
   });
 });
@@ -66,7 +66,7 @@ describe('terrain probe scheduler', () => {
   };
 
   test('a dropped ball still bounces — and the gate schedules ahead mid-flight', () => {
-    const b = makeSimBall(1, 0, 0, 0, 40, 0, 0, 0, 0);
+    const b = makeSimBall(1, 0, 0, { x: 0, y: 40, z: 0 }, { x: 0, y: 0, z: 0 });
     const kinds: (string | null)[] = [];
     let scheduledAhead = false;
     for (let i = 0; i < 200 && !kinds.includes('bounce'); i++) {
@@ -81,7 +81,7 @@ describe('terrain probe scheduler', () => {
   test('terrain rising into the flight path still collides — bounded undershoot', () => {
     // Ball cruises at ~8m toward the plateau face; the drift trigger +
     // early resample must catch the climb within a few ticks.
-    const b = makeSimBall(1, 0, 0, -60, 12, 0, 20, 0, 0);
+    const b = makeSimBall(1, 0, 0, { x: -60, y: 12, z: 0 }, { x: 20, y: 0, z: 0 });
     let worst = 0;
     let bounced = false;
     for (let i = 0; i < 200 && !bounced; i++) {

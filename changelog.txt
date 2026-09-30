@@ -1,3 +1,4 @@
+2026-09-26 - ballSim lint sweep: stepBall decomposed (enragePull/groundContact, complexity 25→under limit); makeSimBall/stepBall take vec+world objects (max-params cleared); lobby.ts stray zero-width space removed.
 2026-09-26 - botBrain helpers decomposed: rollWander/rallyGoal/heardGoal/wantJet/slotDanger extracted — zero oxlint warnings remain in the file.
 2026-09-26 - botBrain.think decomposed (complexity 78→under limit): pickHunt/scanVisible/pickDest/retreatDest/pickFire/pickDeploy/stuckBreak extracted as named phases — think() is now a readable conductor.
 2026-09-26 - Charge detonation now covers server-authored hits too: serverHit (bot attacks, turrets) detonates min(banked,dmg) off a charged victim, matching the client claim path.

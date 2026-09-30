@@ -207,8 +207,8 @@ export class BallSim {
     const spd = this.rng() * 20;
     const b = makeSimBall(
       this.nextId++, variant, Math.floor(this.rng() * 8),
-      x, y, z,
-      Math.cos(ang) * spd, -2, Math.sin(ang) * spd,
+      { x, y, z },
+      { x: Math.cos(ang) * spd, y: -2, z: Math.sin(ang) * spd },
     );
     b.targetId = this.nearestPlayer(b, this.alivePlayers())?.id ?? null;
     this.snapTarget(b);
@@ -417,7 +417,7 @@ export class BallSim {
       // Pull/lunge aim comes from the snapshot last emitted on a segment —
       // predictors replay the identical input, not the live player pos.
       _snap.x = b.tx; _snap.y = b.ty; _snap.z = b.tz;
-      const kind = stepBall(b, TICK_DT, this.field!, b.tgtValid ? _snap : null, true, this.colliders, this.colliderIndex ?? undefined);
+      const kind = stepBall(b, TICK_DT, this.field!, b.tgtValid ? _snap : null, true, { colliders: this.colliders, colliderIndex: this.colliderIndex ?? undefined });
       if (kind) {
         this.segment(b, kind);
       } else {
