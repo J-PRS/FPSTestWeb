@@ -1,3 +1,4 @@
+2026-09-26 - Drop weapon role lines from loadout — descriptions only where the effect is invisible (perk/belt/pack)
 2026-09-26 - VGS key ownership: stopImmediatePropagation on all keydowns + swallow keyup while menu open; chat defers via vgsGate (listener order was leaking letters to game/chat handlers)
 2026-09-26 - Fix walking overspeed: ground cap measures pre-input speed so input accel cannot grow overspeed; blast impulse still bleeds off. Walk-cap + overspeed-decay regression tests
 2026-09-26 - Toughen bot nerve: fear at 15% HP, hero roll 30%, sharper hurt-fire, death spots repel less; bots hold fights instead of scattering

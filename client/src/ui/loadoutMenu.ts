@@ -24,15 +24,9 @@ const BELT_LABELS: Record<BeltItem, string> = {
   remoterailgun: 'Remote Railgun', armornade: 'Armor Grenade',
 };
 
-// One-line role reads — the pick list is a wall of names without them,
-// and "what does PlasmaCannon do" is the question a new player is asking.
-const WEAPON_ROLES: Record<number, string> = {
-  0: 'arcing splash rockets', 1: 'fast precise arc', 2: 'held spray, banks stagger',
-  3: 'long-range siege lob', 4: 'bouncing frag shells', 5: 'close shard fan',
-  6: 'heavy plasma burst', 7: 'hitscan sniper', 8: 'beam — charges targets into bombs',
-  10: 'slow heavy slug', 11: 'rocket volley', 12: 'remote-detonated chain',
-  14: 'rapid plasma bolts', 15: 'auto pellet stream',
-};
+// One-line role reads — only for effects you can't feel by firing once.
+// Weapons get no line: squeeze the trigger and the gun explains itself.
+// Belt/pack/perk effects (plating allies, escort behavior) stay labelled.
 const BELT_ROLES: Record<BeltItem, string> = {
   disc: 'bouncing charge', grenade: 'frag', cluster: 'splits mid-air',
   javelin: 'arcing spear', sticky: 'remote chain', impact: 'instant pop',
@@ -204,7 +198,7 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
   // unshoulders whatever was equipped).
   const heavyOnly = new Set(Player.HEAVY_ONLY.map(String));
   const weaponOptsFor = (cls: string) => SLOT_DEFS
-    .map((def, wid) => ({ v: String(wid), label: def.config.displayName, desc: WEAPON_ROLES[wid], sidearm: !!def.sidearm }))
+    .map((def, wid) => ({ v: String(wid), label: def.config.displayName, sidearm: !!def.sidearm }))
     .filter((o) => !o.sidearm && (cls === 'heavy' || !heavyOnly.has(o.v)));
 
   // --- ARMOR: tile picker, not a dropup — the speed/HP tradeoff is the
