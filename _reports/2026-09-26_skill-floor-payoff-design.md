@@ -110,19 +110,42 @@ reason our shroud exists.
    is a real cost — that's what buys a 320-damage payoff without breaking
    casual lobbies. Timid handicaps buy timid payoffs.
 
-## Where else this maps in our roster
+## Honest re-audit: how rare is it really in our roster?
 
-- **Chaingun** — already inverted-LG: weak start, ramp to melt on
-  sustained track. Handicap = slow start; payoff = the ramp. Clean.
-- **Mortar** — handicap-by-trajectory (arc is hard), payoff-by-bankshot
-  and splash coverage. The arc IS the limiter AND the skill.
-- **Disc** — self-knockback risk / ski-mobility payoff (see Tribes above).
-- **Cannon** — currently a flat heavy hitter with no real forgiveness or
-  depth axis; the weakest fit. A candidate for the next pass: e.g. slower
-  projectile (forgiving to dodge) with a damage ramp per consecutive
-  direct hit on the same target (tracking payoff — LG-shaped).
-- **Railgun** — long charge time is the classic handicap; the payoff
-  could be penetration/pierce scaling rather than flat damage.
+First draft oversold the pattern. Looking at the actual mechanics:
+
+- **Disc — the only genuine sibling.** Self-knockback risk (eat your own
+  blast) is a real *cost*, and it's spent on the payoff — disc-jump
+  mobility, the franchise-defining skill. Cost→payoff in the same
+  mechanic. Fits.
+- **Chaingun — half a fit.** A real ramp exists (`dmg += n`, up to +8 on
+  sustained per-target hits), so there is a paid-for ceiling. But the
+  "cost" is only time-at-target — nothing is stored, nothing telegraphs,
+  the ramp can't be stolen or detonated. It's a delayed-stat payoff,
+  shallower than the LG's resource economy.
+- **Mortar — oversold.** The arc is an *aim gate*, not a stored cost —
+  and the forgiving part (18m splash) is forgiveness *for the shooter*,
+  which is the wrong seat entirely. It's a noob-friendly weapon with an
+  execution ceiling, not a limiter→payoff coupling.
+- **Railgun — oversold.** No charge time, no mechanic — a fast precise
+  slug (450 m/s, tight 0.5 proxy cap). Precision is a skill *requirement*,
+  not a limiter that buys anything.
+- **Cannon — nothing at all.** A flat heavy comedy ball: no forgiveness
+  axis, no depth axis. The weakest fit — the prime candidate for the
+  next pass (e.g. per-target consecutive-hit damage ramp — LG-shaped,
+  justified by the ball being slow and dodgeable).
+
+So the honest claim: **the pattern is rare.** One full implementation
+(LG), one genuine sibling (Disc), one half-fit (Chaingun), and three
+weapons that are just difficulty-gated or flat. That scarcity is the
+opportunity — the roster has room for two or three more couplings
+without repeating the charge mechanic itself.
+
+Important distinction sharpened by the audit: **a skill gate is not a
+payoff.** "Hard to aim" makes a weapon skill-restricted; it doesn't give
+anything back. The north star requires the limiter to be a *cost that
+converts* — withheld damage, self-harm, spent position, stored time —
+not merely difficulty.
 
 ## Open questions
 
