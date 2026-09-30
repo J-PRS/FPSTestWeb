@@ -372,3 +372,15 @@ describe('spree announcements', () => {
     expect(kills().map((m) => m.streak)).toEqual([1, 2]);
   });
 });
+
+describe('bot fire legality', () => {
+  it('a bot\'s first shot drops its own spawn shield, same as a human trigger pull', () => {
+    const { players, combat } = harness();
+    players.addPlayer('BOT-1');
+    players.addPlayer('v1');
+    const bot = players.getPlayer('BOT-1')!;
+    expect(bot.protectedUntil).toBeGreaterThan(Date.now());
+    combat.botAttack('BOT-1', 'v1', WeaponType.Rocket);
+    expect(bot.protectedUntil).toBe(0);
+  });
+});
