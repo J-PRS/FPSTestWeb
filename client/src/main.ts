@@ -600,6 +600,7 @@ init().then(async () => {
     (window as unknown as { __test: unknown }).__test = {
       player, scene, entities, world, terrain,
       networkManager, demoManager,
+      chatSink: (await import('./game/chat.js')).chatSink,
     };
   }
 });
