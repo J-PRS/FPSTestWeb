@@ -707,6 +707,36 @@ export class PlayerModel {
     }
   }
 
+  // Ghost shimmer — translucent material override for the decloak-reveal.
+  // Baselines are captured once so restore hands every material its own
+  // state back (GLBs share materials across meshes).
+  private ghostBaseline: Map<THREE.Material, { transparent: boolean; opacity: number; depthWrite: boolean }> | null = null;
+  setGhost(on: boolean): void {
+    if (!this.model) return;
+    if (on) {
+      if (this.ghostBaseline) return;
+      this.ghostBaseline = new Map();
+      this.model.traverse((child) => {
+        const mat = (child as THREE.Mesh).material as THREE.Material | THREE.Material[] | undefined;
+        if (!mat) return;
+        for (const m of Array.isArray(mat) ? mat : [mat]) {
+          this.ghostBaseline!.set(m, { transparent: m.transparent, opacity: m.opacity, depthWrite: m.depthWrite });
+          m.transparent = true;
+          m.opacity = 0.28;
+          m.depthWrite = false;
+        }
+      });
+      return;
+    }
+    if (!this.ghostBaseline) return;
+    for (const [m, st] of this.ghostBaseline) {
+      m.transparent = st.transparent;
+      m.opacity = st.opacity;
+      m.depthWrite = st.depthWrite;
+    }
+    this.ghostBaseline = null;
+  }
+
   setColliderVisible(visible: boolean): void {
     if (this.colliderGizmo) {
       this.colliderGizmo.visible = visible && urlParams.debug;

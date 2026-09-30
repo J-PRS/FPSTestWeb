@@ -352,6 +352,7 @@ export class RemotePlayer {
       this.tickAnimState(dt, speed, airborne);
     }
     this._lastShootT = this.shootT;
+    this.tickGhost(dt);
     this.tickAuras(dt);
     this.previousPosition.copy(this.position);
     // Anim LOD — the mixer step is the dominant per-remote cost, so far
@@ -603,6 +604,22 @@ export class RemotePlayer {
     // clip under rapid fire pins the model mid-Punch
     if (!this._isDead && this.shootT <= 0) this.shootT = 0.3;
     if (this._loaded) this._model.fire(weaponType);
+    // Firing decloaks: a cloaked shooter shimmers visible for a beat —
+    // the price of shooting from stealth.
+    if (this._cloakHidden && this._loaded) {
+      this.ghostT = 1;
+      this._model.setGhost(true);
+      this.model.setVisible(true);
+    }
+  }
+
+  private ghostT = 0;
+  private tickGhost(dt: number): void {
+    if (this.ghostT <= 0) return;
+    this.ghostT -= dt;
+    if (this.ghostT > 0) return;
+    this._model.setGhost(false);
+    if (this._cloakHidden || this._staleHidden) this.model.setVisible(false);
   }
 
   // Predicted knockback: run the victim through dead reckoning for ~1 RTT

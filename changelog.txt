@@ -1,3 +1,4 @@
+2026-09-26 - Fire-and-reveal cloak price: a cloaked remote that shoots shimmers translucent for 1s (ghost material override on the model), then re-hides — stealth positions, it doesn't ambush free
 2026-09-26 - Infiltrator cloak repriced by motion: drain scales 1/s static to 10/s at 100 m/s (slower is sneakier), activation ante halved to 10; server shadow and bots pay the same speed-scaled rate
 2026-09-26 - Added the debinarization section to the design doc: gradients compress the mid-skill gap for free since only wide distributions gain; inventoried what is already graded (proxy growth, AOE falloff, partial detonation) vs still-binary (rail, melee, sticky arm, juggle thresholds)
 2026-09-26 - Rewrote the design doc around the real shape: compress mid-skill, pay the tail; flagged the chaingun ramp as the inverted anti-pattern that widens the gap and amplifies stomps
