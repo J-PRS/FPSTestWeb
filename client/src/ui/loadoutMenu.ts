@@ -13,7 +13,8 @@ export interface LoadoutDeps {
   lazyNetworkManager?: () => { sendClassUpdate(armorClass: string): void; sendPerkUpdate(perk: string): void } | null;
 }
 
-interface Drop { el: HTMLElement; setValue(v: string): void; setOptions?(o: { v: string; label: string }[]): void; }
+interface DropOpt { v: string; label: string; desc?: string }
+interface Drop { el: HTMLElement; setValue(v: string): void; setOptions?(o: DropOpt[]): void; }
 
 const BELT_LABELS: Record<BeltItem, string> = {
   disc: 'Disc', grenade: 'Grenade', cluster: 'Cluster Bomb',
@@ -41,13 +42,13 @@ interface BarUi {
   sidearmLabel: HTMLElement | null; packLabel: HTMLElement | null;
 }
 
-type MkDrop = (options: { v: string; label: string }[], onPick: (v: string) => void) => Drop;
+type MkDrop = (options: DropOpt[], onPick: (v: string) => void) => Drop;
 
 export function wireLoadoutBar(deps: LoadoutDeps): { refreshLoadout(): void } {
   const loadoutBar = document.getElementById('loadout-bar');
 
   function mkDrop(
-    initialOptions: { v: string; label: string }[],
+    initialOptions: DropOpt[],
     onPick: (v: string) => void,
   ): Drop {
     const el = document.createElement('div');
@@ -70,6 +71,15 @@ export function wireLoadoutBar(deps: LoadoutDeps): { refreshLoadout(): void } {
         const it = document.createElement('div');
         it.className = 'lo-opt';
         it.textContent = o.label;
+        if (o.desc) {
+          // Perks are the only invisible pick — weapons/skills you can
+          // feel in a second, a perk's effect needs a label.
+          it.classList.add('has-desc');
+          const d = document.createElement('span');
+          d.className = 'lo-desc';
+          d.textContent = o.desc;
+          it.appendChild(d);
+        }
         it.dataset.v = o.v;
         it.addEventListener('click', (e) => {
           e.stopPropagation();
@@ -218,7 +228,7 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
 
   const perk = mkRow('PERK');
   ui.perkDrop = mkDrop(
-    PERK_ORDER.map((p) => ({ v: p, label: PERKS[p].name })),
+    PERK_ORDER.map((p) => ({ v: p, label: PERKS[p].name, desc: PERKS[p].blurb })),
     (v) => {
       deps.lazyPlayer().setPerk(v as PerkId);
       deps.lazyNetworkManager?.()?.sendPerkUpdate(v);

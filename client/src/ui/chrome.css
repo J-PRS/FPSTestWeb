@@ -255,6 +255,13 @@ body.menu-open #frag-msg { display: none !important; }
 }
 #loadout-bar .lo-opt:hover { background: rgba(58,167,255,0.18); color: #fff; }
 #loadout-bar .lo-opt.sel { color: #3aa7ff; }
+#loadout-bar .lo-opt.has-desc { white-space: normal; }
+#loadout-bar .lo-opt .lo-desc {
+  display: block; margin-top: 2px;
+  font-size: 0.6rem; font-weight: 500; letter-spacing: 0.02em;
+  text-transform: none; color: #8fa2b3;
+}
+#loadout-bar .lo-opt.sel .lo-desc { color: #6f9ec9; }
 #cool-shots-top, #cool-shots-recent { display: flex; flex-direction: column; gap: 3px; }
 .cool-shot-item {
   display: flex; align-items: center; gap: 10px;
