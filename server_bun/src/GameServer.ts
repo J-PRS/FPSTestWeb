@@ -1,6 +1,7 @@
 import type { ServerWebSocket, Server } from 'bun';
 import { CONFIG } from './config.ts';
 import { Room } from './Room.ts';
+import { totalPlayers as opsTotalPlayers, getServerInfo as opsGetServerInfo, getHealthStatus as opsGetHealthStatus, getMetrics as opsGetMetrics } from './serverOps.ts';
 import { BallSim } from './BallSim.ts';
 import { validateMessage } from './validation.ts';
 import type { WebSocketData } from './types.ts';
@@ -19,11 +20,11 @@ export class GameServer {
   // One match's state per room — players land in 'default' unless the join
   // handshake names a room. Everything per-match (players, sockets, ball
   // sim, tick bookkeeping) lives inside Room; GameServer is the dispatcher.
-  private rooms = new Map<string, Room>();
+  rooms = new Map<string, Room>();
   private field: Heightfield | null = null; // shared across rooms
   private bunServer: Server<WebSocketData> | null = null;
-  private readonly tickLoop: TickLoop;
-  private readonly sessions: SessionManager;
+  readonly tickLoop: TickLoop;
+  readonly sessions: SessionManager;
   private readonly maps = new MapCatalog();
   private readonly factory: RoomFactory;
   private readonly switcher: RoomSwitcher;
@@ -31,7 +32,7 @@ export class GameServer {
   // Ops counters — cheap ints, read by /metrics. msgsIn counts everything
   // that passed validation; tick lag measures setInterval drift (the
   // server-clock skew that makes client replays overshoot).
-  private ops = {
+  ops = {
     startedAt: Date.now(),
     msgsIn: 0, msgsRejected: 0, joins: 0, leaves: 0,
     // Which netcode-v2 tier clients actually land on — the cost/perf mix
@@ -75,7 +76,7 @@ export class GameServer {
       specRooms: this.specRooms,
       roomFor: (n, m, mp, b) => this.factory.roomFor(n, m, mp, b),
       roomOfPlayer: (id) => this.roomOfPlayer(id),
-      totalPlayers: () => this.totalPlayers(),
+      totalPlayers: () => opsTotalPlayers(this),
       ops: this.ops,
     });
     this.factory = new RoomFactory({
@@ -89,7 +90,7 @@ export class GameServer {
       roomOfPlayer: (id) => this.roomOfPlayer(id),
       roomFor: (n, m, mp, b) => this.factory.roomFor(n, m, mp, b),
       removePlayerCompletely: (r, id, reason) => this.removePlayerCompletely(r, id, reason),
-      totalPlayers: () => this.totalPlayers(),
+      totalPlayers: () => opsTotalPlayers(this),
       playerRoom: this.playerRoom,
       sessions: this.sessions,
     });
@@ -279,77 +280,16 @@ export class GameServer {
     return room.forceEndMatch() ? 'ok' : 'no-mode';
   }
 
-  private totalPlayers(): number {
-    let n = 0;
-    for (const room of this.rooms.values()) n += room.playerCount();
-    return n;
-  }
-
   /** Server-browser card: what a master list / LAN browser displays per
    *  host. Cheap to poll — one row per room, no per-player data. */
-  getServerInfo() {
-    const uptimeS = Math.floor((Date.now() - this.ops.startedAt) / 1000);
-    return {
-      name: CONFIG.serverName,
-      region: CONFIG.serverRegion || undefined,
-      tickRate: CONFIG.tickRate,
-      maxPlayers: CONFIG.maxPlayers,
-      players: this.totalPlayers(),
-      uptimeS,
-      rooms: this.listRooms(),
-    };
-  }
+  getServerInfo() { return opsGetServerInfo(this); }
 
   getHealthStatus(): { status: string; players: number; maxPlayers: number; tickRate: number } {
-    return {
-      status: 'running',
-      players: this.totalPlayers(),
-      maxPlayers: CONFIG.maxPlayers,
-      tickRate: CONFIG.tickRate,
-    };
+    return opsGetHealthStatus(this);
   }
 
-  /** Ops snapshot for /metrics — counts since boot plus tick-lag stats,
-   *  with per-room occupancy/ball counts for match-level observability. */
-  getMetrics() {
-    const o = this.ops;
-    const uptimeS = Math.floor((Date.now() - o.startedAt) / 1000);
-    const rooms = [...this.rooms.values()].map(r => ({
-      name: r.name,
-      players: r.playerCount(),
-      balls: r.ballSim.ballCount,
-      scores: r.modeSpec?.teams ? { ...r.scores } : undefined,
-      pickups: r.pickups?.snapshot().length ?? 0,
-      gracePending: r.disconnected.size,
-      ballSimNow: r.ballSim.simNow,
-      // Since-boot judge/claim counters — the room's 15s rollup clears
-      // per flush, so scrapes need the cumulative mirror.
-      health: Object.fromEntries(r.healthTotal),
-    }));
-    const mem = process.memoryUsage();
-    return {
-      uptimeS,
-      players: this.totalPlayers(),
-      memMB: {
-        rss: +(mem.rss / 1048576).toFixed(1),
-        heapUsed: +(mem.heapUsed / 1048576).toFixed(1),
-        heapTotal: +(mem.heapTotal / 1048576).toFixed(1),
-      },
-      // Last 10s tick-fanout window — null until a player has been connected
-      // long enough to close one.
-      bandwidth: this.tickLoop.bandwidthWindow(),
-      rooms,
-      joins: o.joins,
-      leaves: o.leaves,
-      msgsIn: o.msgsIn,
-      msgsRejected: o.msgsRejected,
-      tiers: { ws: o.tierWs, wt: o.tierWt, rtc: o.tierRtc, other: o.tierOther },
-      tickLagMs: {
-        avg: o.tickLagSamples ? +(o.tickLagMsSum / o.tickLagSamples).toFixed(2) : 0,
-        max: o.tickLagMsMax,
-      },
-    };
-  }
+  /** Ops snapshot for /metrics. */
+  getMetrics() { return opsGetMetrics(this); }
 
   setBunServer(server: Server<WebSocketData>): void {
     this.bunServer = server;
