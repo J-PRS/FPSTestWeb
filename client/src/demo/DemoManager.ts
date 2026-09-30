@@ -13,6 +13,7 @@ import { VideoRecorder } from './VideoRecorder.js';
 import { ChildLogger } from '../core/Logger.js';
 import { urlParams } from '../core/params.js';
 import * as demoIO from './demoIO.js';
+import { buildDemoUI, wirePlayerCallbacks } from './demoWire.js';
 
 export type { CoolShotEntry } from './coolShots.js';
 
@@ -28,11 +29,11 @@ export class DemoManager implements demoIO.DemoIOHost {
   private playerData: IPlayerDataProvider | null = null;
   private inputData: IInputProvider | null = null;
 
-  private mode: 'idle' | 'recording' | 'playing' | 'paused' = 'idle';
+  mode: 'idle' | 'recording' | 'playing' | 'paused' = 'idle';
   /** demoIO writes through this — the only external writer of mode. */
   setMode(m: 'idle' | 'recording' | 'playing' | 'paused'): void { this.mode = m; }
-  private uiVisible = false;
-  private video: VideoRecorder = new VideoRecorder();
+  uiVisible = false;
+  video: VideoRecorder = new VideoRecorder();
 
   // Callback when cool shots list changes
   onCoolShotsChanged?: (shots: CoolShotEntry[]) => void;
@@ -73,73 +74,8 @@ export class DemoManager implements demoIO.DemoIOHost {
     // this handle — the DOM only exposes coarse ±2s keys otherwise).
     (window as unknown as { __demoManager?: DemoManager }).__demoManager = this;
 
-    this.setupUI();
-    this.setupPlayerCallbacks();
-  }
-
-  private setupPlayerCallbacks(): void {
-    this.player.setCallbacks({
-      onFrameUpdate: (state, events) => {
-        this.onPlaybackState?.(state);
-        this.onPlaybackEvent?.(events);
-      },
-      onPlaybackEnd: () => {
-        this.mode = 'paused';
-        this.ui.setPlaying(false);
-        this.onPlaybackEnd?.();
-      },
-      onTimeUpdate: (current, duration) => {
-        this.ui.setTime(current, duration);
-      },
-      onSeek: () => {
-        this.onPlaybackSeek?.();
-      },
-    });
-  }
-
-  private setupUI(): void {
-    this.ui.setCallbacks({
-      onPlayPause: () => this.togglePlayPause(),
-      onSeek: (time: number) => {
-        this.player.seek(time);
-        // Replicas snap to the interpolated pose at the seek target
-        this.onRemotePlayback?.(this.player.getRemoteStates(), 0);
-      },
-      onSpeedChange: (speed: number) => {
-        this.player.setSpeed(speed);
-      },
-      onLoop: (loop: boolean) => {
-        this.player.setLoop(loop);
-        this.ui.setLoopActive(loop);
-      },
-      onStop: () => {
-        this.player.stop();
-        this.mode = 'idle';
-        this.ui.setPlaying(false);
-        this.ui.hide();
-        this.uiVisible = false;
-        this.onPlaybackStop?.();
-        // Stop exits replay — flush any in-flight video export so the clip
-        // isn't abandoned silently.
-        if (this.video.isRecording) this.toggleVideoRecord();
-      },
-      onSave: () => {
-        this.saveDemo();
-      },
-      onLoad: (file: File) => {
-        this.loadDemo(file);
-      },
-      onRecordToggle: () => {
-        if (this.mode === 'recording') {
-          this.stopRecording();
-        } else {
-          this.startRecording();
-        }
-      },
-      onVideoToggle: () => {
-        this.toggleVideoRecord();
-      },
-    });
+    buildDemoUI(this);
+    wirePlayerCallbacks(this);
   }
 
   // Set data providers for recording
