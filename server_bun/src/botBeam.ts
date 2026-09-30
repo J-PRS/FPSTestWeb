@@ -1,0 +1,110 @@
+/**
+ * botBeam — the non-shell fire paths of BotArsenal: creature shots
+ * (real shells sweep live balls), and projectile-less beam-class weapons
+ * where an honest ray decides contact (earliest of terrain/wall/player/
+ * creature pays; a whiff is a real miss). Extracted from botArsenal so
+ * the arsenal keeps only trigger timing + lobs.
+ */
+import type { Vec3 } from './types.ts';
+import type { Room } from './Room.ts';
+import { PLAYER_RADIUS } from '../../shared/constants.ts';
+import { WeaponType, getWeaponStats } from '../../shared/weapons.ts';
+import { segFieldHit, segPointDist, segPointT } from '../../shared/projSim.ts';
+import { segSolidHit } from '../../shared/solidWorld.ts';
+import type { BotLoadout } from '../../shared/botLoadouts.ts';
+import { isSuper } from './botArsenal.ts';
+
+const BOLT_SPEED = 60; // m/s visual bolt + hitscan travel is instant
+
+type BotBody = { id: string; position: Vec3; velocity: Vec3 };
+
+/** Minimal arsenal surface the beam family needs — the arsenal keeps the
+ *  private maps; these are the helpers already public-ish on it. */
+export interface BeamHost {
+  room: Room;
+  pickWeapon(lo: BotLoadout, distXZ: number, dist: number): number;
+  rateOk(id: string, wt: number): boolean;
+  lastHunt(id: string): string | null;
+  loadouts: Map<string, BotLoadout>;
+}
+
+/** Creature targets fire REAL shells — the projectile sim sweeps them
+ *  against live balls and pays through handleHit, so a bot kill drops
+ *  its gem/FFA point identically to a player's. Melee and projectile-
+ *  less weapons keep the honest geometric checks. */
+export function fireAtBall(h: BeamHost, p: BotBody, ball: number, aim: Vec3, pickDefault: BotLoadout): void {
+  const muzzle = { x: p.position.x, y: p.position.y + 1.4, z: p.position.z };
+  const dxb = aim.x - muzzle.x;
+  const dyb = aim.y - muzzle.y;
+  const dzb = aim.z - muzzle.z;
+  const lenb = Math.sqrt(dxb * dxb + dyb * dyb + dzb * dzb) || 1;
+  const lo = h.loadouts.get(p.id) ?? pickDefault;
+  const wt = h.pickWeapon(lo, Math.hypot(dxb, dzb), lenb);
+  if (!h.rateOk(p.id, wt)) return;
+  if (wt === WeaponType.Melee) {
+    // The punch lands if the creature is inside the swing's reach —
+    // geometry decides, not a dice roll.
+    const b = h.room.ballSim.ballAt(ball);
+    const stats = getWeaponStats(WeaponType.Melee);
+    if (b && stats) {
+      const d = Math.hypot(b.x - muzzle.x, b.y - muzzle.y, b.z - muzzle.z);
+      if (d <= stats.aoeRadius + b.radius) {
+        h.room.ballSim.handleHit(p.id, ball, isSuper(p.id) ? 300 : stats.aoeDamage);
+      }
+    }
+    return;
+  }
+  if (!h.room.projectiles.spawn(p.id, wt, muzzle,
+    { x: dxb / lenb, y: dyb / lenb, z: dzb / lenb }, p.velocity)) {
+    fireSpeedless(h, p.id, muzzle, { x: dxb / lenb, y: dyb / lenb, z: dzb / lenb }, wt);
+  }
+}
+
+/** Projectile-less weapons (beam-class): an honest ray decides contact —
+ *  earliest of terrain/wall/player/creature pays, a whiff is a real
+ *  miss. Damage lands via the same funnels the projectile paths use. */
+export function fireSpeedless(h: BeamHost, id: string, muzzle: Vec3, dir: Vec3, wt: number): void {
+  const stats = getWeaponStats(wt);
+  const c = isSuper(id) ? null : beamContact(h, id, muzzle, dir);
+  const playerId = isSuper(id) ? h.lastHunt(id) : (c?.playerId ?? null);
+  h.room.messages.botFire(id, playerId, muzzle,
+    { x: dir.x * BOLT_SPEED, y: dir.y * BOLT_SPEED, z: dir.z * BOLT_SPEED }, wt, !!playerId);
+  if (c?.ballId !== undefined && stats) {
+    h.room.ballSim.handleHit(id, c.ballId, stats.directDamage || stats.aoeDamage);
+  }
+}
+
+/** First thing a 60m ray actually strikes: terrain face, wall, player
+ *  chest, or creature — earliest contact wins, like dischargeRay. */
+function beamContact(h: BeamHost, shooterId: string, muzzle: Vec3, dir: Vec3, range = 60): { playerId?: string; ballId?: number } | null {
+  const end = { x: muzzle.x + dir.x * range, y: muzzle.y + dir.y * range, z: muzzle.z + dir.z * range };
+  let bestT = 1;
+  if (h.room.field) {
+    const th = segFieldHit(muzzle, end, h.room.field);
+    if (th) bestT = segPointT(muzzle, end, th);
+  }
+  const solids = h.room.projectiles.solidColliders;
+  if (solids.length) {
+    const sh = segSolidHit(muzzle, end, solids);
+    if (sh) bestT = Math.min(bestT, segPointT(muzzle, end, sh));
+  }
+  return beamEntityAt(h, shooterId, muzzle, end, bestT);
+}
+
+/** Players and creatures the ray reaches before its first world
+ *  contact — earliest wins; none = the beam ended in dirt. */
+function beamEntityAt(h: BeamHost, shooterId: string, muzzle: Vec3, end: Vec3, worldT: number): { playerId?: string; ballId?: number } | null {
+  let bestT = worldT;
+  let playerId: string | undefined;
+  for (const [pid, t] of h.room.players.getAllPlayers()) {
+    if (pid === shooterId || t.isDead) continue;
+    const c = { x: t.position.x, y: t.position.y + 1.0, z: t.position.z };
+    if (segPointDist(muzzle, end, c) > PLAYER_RADIUS + 0.2) continue;
+    const tt = segPointT(muzzle, end, c);
+    if (tt <= bestT) { bestT = tt; playerId = pid; }
+  }
+  const bc = h.room.ballSim?.sweepHit(muzzle, end, 0.2);
+  if (bc && bc.t <= bestT) return { ballId: bc.id };
+  if (playerId !== undefined) return { playerId };
+  return worldT < 1 ? {} : null;
+}
