@@ -26,7 +26,15 @@ const arg = (k: string, d: string): string => {
   const i = process.argv.indexOf(`--${k}`);
   return i >= 0 && process.argv[i + 1] ? process.argv[i + 1]! : d;
 };
-const URL_ = arg('url', 'ws://localhost:8000/ws');
+// Accepts ws/wss URLs, pasted https tunnel URLs, or bare tunnel hosts —
+// the friend test uses `wss://<host>.trycloudflare.com/ws`.
+const normUrl = (u: string): string => {
+  if (!u.includes('://')) u = `wss://${u.includes('.') ? u : u + '.trycloudflare.com'}`;
+  u = u.replace(/^https:/, 'wss:').replace(/^http:/, 'ws:');
+  if (!u.slice(u.indexOf('://') + 3).includes('/')) u += '/ws';
+  return u;
+};
+const URL_ = normUrl(arg('url', 'ws://localhost:8000/ws'));
 const N = parseInt(arg('bots', '8'), 10);
 const ROOM = arg('room', 'default');
 const MODE = arg('mode', 'dm');

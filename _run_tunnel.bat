@@ -28,9 +28,10 @@ if errorlevel 1 (
 echo Starting tunnel to http://localhost:8000 ...
 echo.
 
-REM Run cloudflared, tee output to a log, and grab the generated URL.
+REM Run cloudflared with output tee'd to console AND log (output must stay
+REM visible for review; the log feeds the URL parser below).
 del "%LOG%" 2>nul
-start "cloudflared" cmd /c ""%CLOUDFLARED%" tunnel --url http://localhost:8000 > "%LOG%" 2>&1"
+start "cloudflared" cmd /k "powershell -NoProfile -Command ""& '%CLOUDFLARED%' tunnel --url http://localhost:8000 2>&1 | Tee-Object -FilePath '%LOG%'"""
 
 set "URL="
 for /l %%i in (1,1,60) do (
@@ -59,6 +60,9 @@ echo.
 echo  Deploy client against it:
 echo    _surge_deploy.bat %HOST%
 echo ============================================
+REM Persist the resolved URL next to this script so it survives clipboard/log loss.
+> "%~dp0_tunnel_url.txt" echo %URL%
+echo (saved to _tunnel_url.txt)
 echo %HOST%
 set "SHORT=%HOST:.trycloudflare.com=%"
 echo %SHORT%
