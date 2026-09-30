@@ -351,6 +351,8 @@ function setupOfflineMode(mode: string): void {
         if (!t || t.dead) return false;
         return combat.hitTargetLocal(t, dmg); // same pipeline as a projectile hit
       },
+      botDeploy: (kind, pos, owner) =>
+        entities.deployables.plantFor(kind as import('./game/deployables.js').DeployKind, pos, owner),
     },
     'alpha',
     mode === 'dm' ? { alpha: 5, bravo: 4 } : { alpha: 4, bravo: 5 },
@@ -377,6 +379,7 @@ function makeEntities(): ReturnType<typeof createEntities> {
     onNuggetCollect: (id) => teamBots?.collect(id),
     lazyCombat: () => combat,
     deployEnemyBots: () => teamBots?.enemyBotsForLocal() ?? [],
+    deployBotFoes: (team) => teamBots?.enemyBotsForTeam(team) ?? [],
     deployDamageBot: (id, dmg, from) => teamBots?.hit(id, dmg, from, 'local') ?? false,
   });
 }

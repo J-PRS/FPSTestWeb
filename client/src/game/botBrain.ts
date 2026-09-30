@@ -65,6 +65,8 @@ export class GameBot extends RemotePlayer {
   propelJetT = 0;
   /** Brain's belt intent from the last think — TeamBots resolves the arc. */
   wantBelt = false;
+  /** Builder intent from the shared brain — TeamBots plants it. */
+  wantDeploy: { kind: string; pos: { x: number; y: number; z: number } } | null = null;
   /** The destination the brain steered toward last think — propel gates
    *  on how far the bot still has to run. */
   readonly lastDest = new THREE.Vector3();
@@ -179,6 +181,7 @@ export class GameBot extends RemotePlayer {
     const dest = out.dest;
     this.lastDest.set(dest.x, dest.y, dest.z);
     this.wantBelt = !!out.belt;
+    this.wantDeploy = out.deploy ?? null;
     if (this.yeetT > 0) this.yeetT -= dt;
     if (this.propelJetT > 0) this.propelJetT -= dt;
     this.locomote(dt, ctx, dest, out.move);
@@ -191,6 +194,10 @@ export class GameBot extends RemotePlayer {
   /** Toggle-skill intent from the brain — ante on the rising edge,
    *  per-second drains while held, auto-drop on an empty tank. Mirrors
    *  what the server shadow applies to out.status. */
+  /** Owner callbacks for bot-deployed pads — a station heals its planter. */
+  heal(n: number): void { this.botHp = Math.min(this.botMaxHp, this.botHp + n); }
+  addEnergy(n: number): void { this.energy = Math.min(ENERGY.max, this.energy + n); }
+
   private applyStatus(claim: number, dt: number): void {
     const want = claim & (STATUS.MEND | STATUS.SHIELD | STATUS.CLOAK);
     // Rising-edge activation cost per bit.

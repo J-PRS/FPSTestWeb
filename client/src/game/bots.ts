@@ -61,6 +61,9 @@ interface BotHooks {
   /** A bot's bolt connected with a creature — damage through the entity.
    *  Returns true on kill (DM credits the bot). */
   damageCreature(id: number, dmg: number, attackerId: string): boolean;
+  /** A builder bot wants to plant — owner wrapper keeps the item's foes,
+   *  anchors, and heals pointed at the bot, not the local player. */
+  botDeploy?(kind: string, pos: { x: number; y: number; z: number }, owner: import('./deployables.js').DeployOwner): void;
 }
 
 export class TeamBots {
@@ -206,6 +209,7 @@ export class TeamBots {
       const online = this.deps.lazyNetworkManager?.()?.isConnected() ?? false;
       if (!online) {
         if (bot.wantBelt) this.throwBelt(bot);
+        if (bot.wantDeploy) this.tryDeploy(bot);
         this.tryPropel(bot, !!shot);
       }
       this.sheepTick(bot, dt, terrain);
@@ -435,6 +439,23 @@ export class TeamBots {
     this.deps.lazyHud().setTeamScore(me, lead);
   }
 
+  /** Builder bots plant — the brain picked kind+spot, the deployables
+   *  pipeline owns the pod+item (mirrors the server's handleDeploy). */
+  private tryDeploy(bot: GameBot): void {
+    const want = bot.wantDeploy;
+    if (!want) return;
+    bot.wantDeploy = null;
+    if (want.kind !== 'turret' && want.kind !== 'mine' && want.kind !== 'station' && want.kind !== 'drone') return;
+    this.hooks.botDeploy?.(want.kind, want.pos, {
+      id: bot.playerId,
+      team: bot.team,
+      pos: bot.position,
+      yaw: () => bot.rotation.yaw,
+      heal: (n) => bot.heal(n),
+      addEnergy: (n) => bot.addEnergy(n),
+    });
+  }
+
   /** Bots hostile to the LOCAL player — the deployable turret's target
    *  list. Enemy-team members in team modes, everyone in FFA. */
   enemyBotsForLocal(): { playerId: string; pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean }[] {
@@ -442,6 +463,22 @@ export class TeamBots {
     return this.bots
       .filter(b => !b.isDead && b.team !== myTeam)
       .map(b => ({ playerId: b.playerId, pos: b.pos, vel: b.vel, alive: true }));
+  }
+
+  /** Players hostile to a GIVEN team — a bot-owned turret/mine scans
+   *  these: enemy bots AND the local player when they're on the other
+   *  side. FFA makes everyone a foe of everyone. */
+  enemyBotsForTeam(team: string): { playerId: string; pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean }[] {
+    const out: { playerId: string; pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean }[] = [];
+    const player = this.deps.lazyPlayer();
+    if (this.teamOf.get('local') !== team) {
+      out.push({ playerId: 'local', pos: player.pos, vel: player.vel, alive: !player.isDead && !player.isCloaked });
+    }
+    for (const b of this.bots) {
+      if (b.team === team) continue;
+      out.push({ playerId: b.playerId, pos: b.pos, vel: b.vel, alive: !b.isDead && !b.isCloakHidden });
+    }
+    return out;
   }
 
   /** Everything the bot may legally shoot: enemy-team players (the local

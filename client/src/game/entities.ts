@@ -31,6 +31,8 @@ export interface EntitiesDeps extends GameContext {
   lazyCombat?: () => { hitTargetLocal(t: Targetable, dmg: number): boolean } | undefined;
   /** Enemy bots deployable turrets may shoot (deployer's team excluded). */
   deployEnemyBots?: () => { playerId: string; pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean }[];
+  /** Hostiles of a given team — a bot-owned turret/mine scans these. */
+  deployBotFoes?: (team: string) => { playerId?: string; pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean }[];
   deployDamageBot?: (playerId: string, dmg: number, fromPos: THREE.Vector3) => boolean;
 }
 
@@ -195,6 +197,7 @@ export function createEntities(deps: EntitiesDeps) {
     targets,
     lazyCombat: () => deps.lazyCombat?.(),
     enemyBots: deps.deployEnemyBots,
+    botFoes: deps.deployBotFoes,
     damageBot: deps.deployDamageBot,
   });
   const {
