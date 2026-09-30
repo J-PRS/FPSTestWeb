@@ -575,6 +575,9 @@ export class ServerBots {
         const w = pickBotWeapon(this.loadouts.get(id) ?? BOT_LOADOUTS[0]!, d, d);
         return getWeaponStats(w).speed || 60;
       },
+      // Lobbed shells need the arc's drop added back on the aim point.
+      weaponGravity: (d) =>
+        getWeaponStats(pickBotWeapon(this.loadouts.get(id) ?? BOT_LOADOUTS[0]!, d, d)).gravity,
       // Wall occlusion for the LOS sense — bots stop wasting ammo on
       // targets behind structures they'd never see through anyway.
       solids: this.room.ballSim.colliders,

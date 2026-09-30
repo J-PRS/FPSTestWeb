@@ -12,7 +12,7 @@
  */
 
 import { STATUS } from './status.ts';
-import { ENERGY } from './movement.ts';
+import { ENERGY, GRAVITY } from './movement.ts';
 import { type ColliderIndex, segSolidHit } from './solidWorld.ts';
 import type { StructureCollider } from './ballSim.ts';
 
@@ -74,6 +74,10 @@ export interface BrainCtx {
    *  60 m/s guess (a mortar under-leads and a disc over-leads at 60).
    *  Return 0 for hitscan speed rows; the brain falls back to 60. */
   weaponSpeed?(dist: number): number;
+  /** Host hook: whether the weapon the bot would pick at `dist` is
+   *  gravity-bent — the aim point gets the drop added back so lobbed
+   *  shells don't land short. Omit → flat trajectories. */
+  weaponGravity?(dist: number): boolean;
 }
 
 export interface BrainOut {
@@ -445,12 +449,25 @@ export class BotBrain {
         err *= hero ? 0.3 : fearing ? 2.5 : 1;
         const ws = ctx.weaponSpeed?.(d);
         const flight = d / (ws && ws > 0 ? ws : 60);
+        // Ballistic intercept: the target keeps falling while the shell
+        // travels — a skier mid-air arcs down, and a flat lead overshoots
+        // high. Clamp at terrain so a grounded runner isn't predicted
+        // under the map.
+        const px = this.lastSeen.x + this.lastSeenVel.x * flight;
+        const pz = this.lastSeen.z + this.lastSeenVel.z * flight;
+        const py = Math.max(
+          ctx.groundY(px, pz),
+          this.lastSeen.y + this.lastSeenVel.y * flight + 0.5 * GRAVITY * flight * flight,
+        );
+        // Gravity-bent shells drop by the same amount — aim the arc's
+        // drop back so mortars don't land short.
+        const drop = ctx.weaponGravity?.(d) ? -0.5 * GRAVITY * flight * flight : 0;
         fire = {
           targetId: this.hunt.id,
           aim: {
-            x: this.lastSeen.x + this.lastSeenVel.x * flight + (Math.random() - 0.5) * err,
-            y: this.lastSeen.y + this.lastSeenVel.y * flight + (Math.random() - 0.5) * err * 0.5,
-            z: this.lastSeen.z + this.lastSeenVel.z * flight + (Math.random() - 0.5) * err,
+            x: px + (Math.random() - 0.5) * err,
+            y: py + drop + (Math.random() - 0.5) * err * 0.5,
+            z: pz + (Math.random() - 0.5) * err,
           },
         };
       }

@@ -177,6 +177,8 @@ export class GameBot extends RemotePlayer {
         const wt = pickBotWeapon(this.loadout ?? BOT_LOADOUTS[0]!, d, d);
         return getWeaponStats(wt).speed || 60;
       },
+      weaponGravity: (d) =>
+        getWeaponStats(pickBotWeapon(this.loadout ?? BOT_LOADOUTS[0]!, d, d)).gravity,
     });
     const dest = out.dest;
     this.lastDest.set(dest.x, dest.y, dest.z);
