@@ -138,6 +138,27 @@ describe('RoomProjectiles', () => {
     expect(target.health).toBeLessThan(CONFIG.playerMaxHealth);
   });
 
+  it('a sticky blast cooks a sibling bomb in its radius', () => {
+    const { room, shooter } = arena();
+    shooter.position = { x: 0, y: FLOOR + 1.4, z: 0 };
+    let pops = 0;
+    const orig = room.broadcast.bind(room);
+    const tap = ((m: { type: string }) => {
+      if (m.type === 'projectileDestroyed') pops++;
+      orig(m as Parameters<typeof room.broadcast>[0]);
+    }) as typeof room.broadcast;
+    room.broadcast = tap;
+    // Bomb 1 drops straight down and pops on contact ~0.13s in. Bomb 2 is
+    // fired nearly straight up: it can't touch terrain or hit its 3s fuse
+    // inside the 1.5s window, so a second blast proves the chain cooked it.
+    room.projectiles.spawn(shooter.id, WeaponType.Sticky,
+      { x: 0, y: FLOOR + 1.4, z: 0 }, { x: 0, y: -0.2, z: 0 }, { x: 0, y: 0, z: 0 });
+    room.projectiles.spawn(shooter.id, WeaponType.Sticky,
+      { x: 4, y: FLOOR + 1.4, z: 0 }, { x: 0, y: 1, z: 0 }, { x: 0, y: 0, z: 0 });
+    for (let i = 0; i < 30; i++) room.projectiles.tick(0.05);
+    expect(pops).toBe(2);
+  });
+
   it('hitscan weapons refuse a body — spawn returns null', () => {
     const { room, shooter } = arena();
     expect(room.projectiles.spawn(shooter.id, WeaponType.Slam,

@@ -1,3 +1,4 @@
+2026-09-26 - Server: sticky chain-detonation (blast ages siblings to fuse, matching client cook-off); fix timeToCeiling negative-root bug that never scheduled terrain sweeps for vy~0 shells
 2026-09-30 - TASKS.md refresh: perf arc + mood pass recorded (bot think 4Hz, two-axis quality scaler, cloud GPU wind, sun shafts, HDR bloom), test counts corrected to 451/99
 2026-09-30 - Bloom now reads the raw HDR frame before the ACES grade (was post-grade, where a 0.9 threshold caught bright sky — the mood-killer). Threshold raised to 1.0 so only over-bright additive emitters (trails, explosions, sun) bloom
 2026-09-28 - Ground mist drifts downwind on the shared cloud wind vector (wrapped, banks stay in their valleys) — sky and fog now move the same direction

@@ -13,7 +13,9 @@
  *
  * Deliberate simplifications vs the client Projectile: no terrain bounce
  * (a server shell pops on contact — bounces are cosmetic anyway since
- * clients resolve their own arcs) and no stickies. Ray-burst IS modeled:
+ * clients resolve their own arcs). Stickies DO chain: a blast ages every
+ * sibling in its radius to fuse, so server pops match the client's
+ * visible cook-off. Ray-burst IS modeled:
  * crossing stats.rayDelay discharges a hitscan beam along the velocity
  * line (dischargeRay) so remote railgun blasts land where the beam hit.
  */
@@ -23,7 +25,7 @@ import { structureColliders, type StructureCollider } from '../../shared/ballSim
 import type { StructureSpec } from '../../shared/mapSpec.ts';
 import { HM_DIVISOR, HM_HEIGHT_SCALE, type Heightfield } from '../../shared/heightfield.ts';
 import { PLAYER_RADIUS } from '../../shared/constants.ts';
-import { getWeaponStats } from '../../shared/weapons.ts';
+import { getWeaponStats, WeaponType } from '../../shared/weapons.ts';
 import { GRAVITY } from '../../shared/movement.ts';
 import { hitRadiusAt } from '../../shared/combat.ts';
 import type { Vec3 } from './types.ts';
@@ -68,8 +70,10 @@ function timeToCeiling(y0: number, vy: number, g: number, ceiling: number): numb
   const sq = Math.sqrt(disc);
   const t1 = (-vy - sq) / (2 * a);
   const t0 = (-vy + sq) / (2 * a);
-  const t = Math.min(t0, t1);
-  return t > 0 ? t : Infinity;
+  // First descent = smallest positive root; taking min() picks the
+  // negative root whenever vy≈0 and the sweep gets scheduled at Infinity.
+  if (t0 > 0) return Math.min(t0, t1 > 0 ? t1 : t0);
+  return t1 > 0 ? t1 : Infinity;
 }
 
 export class RoomProjectiles {
@@ -249,6 +253,20 @@ export class RoomProjectiles {
     if (directHitId) this.room.messages.botAttack(proj.ownerId, directHitId, proj.weaponType);
     this.room.pushNoise(at); // a blast is louder than the muzzle that launched it
     this.room.messages.serverBlast(proj.ownerId, at, proj.weaponType, directHitId ?? null);
+
+    // Sticky chain: a blast cooks every sibling bomb in its radius — the
+    // client already rips the chain visually; aging siblings to fuse lets
+    // the same cascade happen server-side so blasts land when shown.
+    if (proj.weaponType === WeaponType.Sticky) {
+      const r2 = proj.stats.aoeRadius * proj.stats.aoeRadius;
+      for (const sib of this.projs.values()) {
+        if (sib.weaponType !== WeaponType.Sticky) continue;
+        const dx = sib.p.pos.x - at.x, dy = sib.p.pos.y - at.y, dz = sib.p.pos.z - at.z;
+        if (dx * dx + dy * dy + dz * dz <= r2) {
+          sib.p.age = sib.stats.maxLifetime ?? HARD_TTL_S;
+        }
+      }
+    }
   }
 
   /** Shells inside `radius` that are closing on `pos` — feeds bot threat
