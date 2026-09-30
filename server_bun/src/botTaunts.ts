@@ -28,6 +28,22 @@ const DEATH_LINES = [
   'My shoelace was untied.',
 ];
 
+const ENV_DEATH_LINES = [
+  'Who put that wall there?',
+  'The terrain and I have beef.',
+  'Gravity: 1, me: 0.',
+  'Note to self: look down next time.',
+  'That cliff came out of nowhere.',
+];
+
+const SPREE_LINES = [
+  'I\'m on fire!',
+  'Somebody stop me.',
+  'This is too easy.',
+  'Is this what skill feels like?',
+  'Kill streak, baby.',
+];
+
 const SPEAK_CHANCE = 0.55;
 const COOLDOWN_MS = 20_000;
 
@@ -43,6 +59,16 @@ export function killTaunt(botId: string, victim: string): string | null {
 /** One taunt line when `botId` was fragged by `other`. */
 export function deathTaunt(botId: string, killer: string): string | null {
   return maybe(botId, pick(DEATH_LINES).replace('{k}', killer));
+}
+
+/** One taunt line when `botId` died to nobody (fall, own blast, lava). */
+export function envDeathTaunt(botId: string): string | null {
+  return maybe(botId, pick(ENV_DEATH_LINES));
+}
+
+/** One boast line when `botId` hits a spree tier. */
+export function spreeTaunt(botId: string): string | null {
+  return maybe(botId, pick(SPREE_LINES));
 }
 
 function maybe(botId: string, line: string): string | null {

@@ -13,7 +13,7 @@ import { HEAVY_ONLY_WEAPONS } from '../../shared/botClasses.ts';
 import type { StructureCollider } from '../../shared/ballSim.ts';
 import { segSolidHit, blastOccluded, ColliderIndex } from '../../shared/solidWorld.ts';
 import { ClaimLedger, clampPing, rewindPos } from './claimLedger.ts';
-import { killTaunt, deathTaunt } from './botTaunts.ts';
+import { killTaunt, deathTaunt, envDeathTaunt, spreeTaunt } from './botTaunts.ts';
 
 // How long a hit/knocked-back player stays on the unsuppressed full-rate
 // tick path — covers the shooter's predicted-knockback window (~0.6s)
@@ -750,6 +750,11 @@ export class CombatHandler {
     const victim = this.playerManager.getPlayer(targetId);
     const ended = victim?.streak ?? 0;
     if (victim) victim.streak = 0;
+    if (targetId.startsWith('BOT-')) {
+      this.botSay(targetId, shooterId === 'environment'
+        ? envDeathTaunt(targetId)
+        : deathTaunt(targetId, shooterId));
+    }
     if (shooterId === 'environment') return;
 
     const shooter = this.playerManager.getPlayer(shooterId);
@@ -762,6 +767,7 @@ export class CombatHandler {
     const tier = CombatHandler.SPREE_TIERS.find(([n]) => n === shooter.streak);
     if (tier) {
       this.broadcast({ type: 'matchNotice', text: `${shooterId} is on a ${tier[1]} (${tier[0]})` });
+      if (shooterId.startsWith('BOT-')) this.botSay(shooterId, spreeTaunt(shooterId));
     } else if (shooter.streak > 12 && shooter.streak % 4 === 0) {
       this.broadcast({ type: 'matchNotice', text: `${shooterId} is godlike (${shooter.streak})` });
     }
@@ -772,14 +778,28 @@ export class CombatHandler {
     // Bots mouth off on the real chat wire — same 'chat' shape players
     // send, so it lands in the feed indistinguishable from a human line.
     if (shooterId.startsWith('BOT-')) {
-      const line = killTaunt(shooterId, targetId);
-      if (line) this.broadcast({ type: 'chat', playerId: shooterId, text: line });
-    }
-    if (targetId.startsWith('BOT-')) {
-      const line = deathTaunt(targetId, shooterId);
-      if (line) this.broadcast({ type: 'chat', playerId: targetId, text: line });
+      this.botSay(shooterId, killTaunt(shooterId, targetId));
     }
   }
+
+  /** A bot's chat line lands like a typed reply — a 1.2-3s beat after the
+   *  event, not inside the kill frame, and dropped if the speaker left
+   *  the room meanwhile. */
+  private botSay(id: string, line: string | null): void {
+    if (!line) return;
+    const delay = CombatHandler.tauntDelayMs();
+    if (delay <= 0) {
+      if (this.playerManager.getPlayer(id)) this.broadcast({ type: 'chat', playerId: id, text: line });
+      return;
+    }
+    setTimeout(() => {
+      if (this.playerManager.getPlayer(id)) this.broadcast({ type: 'chat', playerId: id, text: line });
+    }, CombatHandler.tauntDelayMs());
+  }
+
+  /** Typing-beat delay — a scenario test steps sim-time only, so it
+   *  stubs this to 0 to see taunts inside the frag loop. */
+  static tauntDelayMs: () => number = () => 1200 + Math.random() * 1800;
 
   /** Reconnect restores state verbatim — including isDead. If the disconnect
    *  cancelled a pending respawn (it did), a restored-dead player would stay

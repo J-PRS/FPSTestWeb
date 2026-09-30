@@ -1,10 +1,16 @@
 import { describe, it, expect, beforeEach } from 'bun:test';
 import { WeaponType } from '../../../shared/weapons.ts';
+import { CombatHandler } from '../../src/CombatHandler.ts';
 import { mkRoom, step, pin, watch } from './harness.ts';
 import { resetTauntCooldowns } from '../../src/botTaunts.ts';
 
 describe('scenario: bot kill taunts', () => {
-  beforeEach(() => resetTauntCooldowns());
+  beforeEach(() => {
+    resetTauntCooldowns();
+    // The scenario clock is sim-time — production's typed-reply beat
+    // would land after the test ended.
+    CombatHandler.tauntDelayMs = () => 0;
+  });
 
   it('bot frags eventually produce real chat lines on the wire', () => {
     const room = mkRoom({ mode: 'dm', bots: 2 }, 'dm');
