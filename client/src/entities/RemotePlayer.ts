@@ -7,13 +7,12 @@ import { ChildLogger } from '../core/Logger.js';
 
 import { PlayerModel } from './PlayerModel.js';
 import { CLASS_MODEL_SCALE } from '../../../shared/botClasses.js';
-import { pickLocomotionAnim } from './locomotionAnim.js';
 import { SnapshotBuffer } from './remoteSnapshots.js';
 import { RemoteGizmo } from './remoteGizmo.js';
 import { resetCorpse, launchCorpse, stepCorpse, type CorpseState } from './remoteDeath.js';
 import { WeaponType } from '../../../shared/weapons.js';
 import { RemoteAuras } from './remoteAuras.js';
-import { BallTrailDots } from './ballTrails.js';
+import { RemoteAnim } from './remoteAnim.js';
 
 const logger = new ChildLogger('RemotePlayer');
 
@@ -29,8 +28,6 @@ let _remotePlayerInstanceCounter = 0;
 
 // Scratch — shared across RemotePlayer instances, never retained past the call
 const _extrapolated = new THREE.Vector3();
-const _trailP = new THREE.Vector3();
-const _trailTint = new THREE.Color(0.75, 0.85, 1.0); // cool air-sheen — jets tint it warmer on top
 const _sampledRot = { yaw: 0, pitch: 0 };
 
 export class RemotePlayer {
@@ -47,7 +44,7 @@ export class RemotePlayer {
   playerId: string;
   readonly instanceId: number;
   private _model: PlayerModel;
-  private previousPosition: THREE.Vector3;
+  previousPosition: THREE.Vector3; // public — anim drive derives speed from it
   private _loaded: boolean = false;
   private _isDead: boolean = false;
   private gizmo: RemoteGizmo | null = null;
@@ -55,10 +52,10 @@ export class RemotePlayer {
   // Shield bubble + status auras (mend/regen/dd/charge) — the lazy-glow
   // plumbing lives in remoteAuras.ts behind the AuraHost surface.
   private auras = new RemoteAuras(this);
-  protected velocity: THREE.Vector3 = new THREE.Vector3();
+  velocity: THREE.Vector3 = new THREE.Vector3(); // public — anim drive reads it
   private angularVelocity: THREE.Vector3 = new THREE.Vector3();
   private isOnGround: boolean = true;
-  private terrain: Terrain | null = null;
+  terrain: Terrain | null = null; // public — anim drive ground-tests off it
   private corpse!: CorpseState; // ctor assigns — aliases live position/vel/rotation refs
   private targetPosition: THREE.Vector3;
   private targetRotation: { yaw: number; pitch: number };
@@ -229,10 +226,13 @@ export class RemotePlayer {
   }
 
   /** XZ distance² to the camera — gates the remote anim-LOD tiers below. */
-  private camDistSq = 0;
+  camDistSq = 0; // public — anim LOD tiers off it
   /** Accumulated dt the mixer still owes — far remotes animate in bursts
    *  at a lower cadence instead of paying a full mixer step every frame. */
-  private animAcc = 0;
+  // Animation drive (locomotion pick, air trail, shoot/hit oneshots, mixer
+  // LOD) lives in remoteAnim.ts; its internal timers moved with it.
+  private readonly anim = new RemoteAnim(this);
+
 
   // Death physics (ragdoll-like rigidbody) run every frame at the real dt so
   // bodies fall/tumble/shrink at full speed and smoothly. Moved here from
@@ -326,77 +326,10 @@ export class RemotePlayer {
    *  subtle enough not to pile on the jetpack flame itself. Emits at
    *  chest (eye −0.7); a >15m jump (teleport/respawn edge) drops the
    *  frame rather than streaking a dotted line across the map. */
-  private tickAirTrail(dt: number, airborne: boolean, speed: number): void {
-    if (airborne && speed > 6 && this._lastTrailPos.distanceToSquared(this.position) < 225) {
-      if (!this.airTrail) this.airTrail = new BallTrailDots(this.scene, { opacity: 0.32, sizeMul: 0.45, interval: 0.05, maxDots: 18 });
-      _trailP.copy(this.position); _trailP.y -= 0.7;
-      this.airTrail.emit(dt, _trailP, this.velocity, 0.4, _trailTint);
-    }
-    this.airTrail?.fade(dt);
-    this._lastTrailPos.copy(this.position);
-  }
-
   private updateAliveModel(dt: number): void {
-    if (!this._loaded) return;
-    this._model.setPosition(this.position.x, this.position.y - EYE_OFFSET, this.position.z);
-    this._model.setRotation(this.rotation.yaw, this.rotation.pitch, this.rotation.roll);
-    // dt=0 (paused/first frame) would blow speed to Infinity → 'ski' flicker
-    const speed = dt > 0 ? this.position.distanceTo(this.previousPosition) / dt : 0;
-    // Airborne overrides locomotion — the speed check alone reads jetting
-    // as "run", i.e. the robot sprinting on air. Feet clearly above
-    // terrain → Jump pose; grounded/skiing keeps the walk/run cycle.
-    const airborne = this.terrain
-      ? this.feetY - this.terrain.getHeight(this.position.x, this.position.z) > 0.6
-      : false;
-    // Landing compress — peak fall speed at touchdown drives the pulse,
-    // same cue the local model gets from onLand.
-    if (airborne) this._fallV = Math.min(this._fallV, this.velocity.y);
-    else if (this._airborne) { this._model.landPulse(-this._fallV); this._fallV = 0; }
-    this._airborne = airborne;
-    this.tickAirTrail(dt, airborne, speed);
-    // A fired shot outranks the flinch — the shoot oneshot is itself an
-    // aimed pose, so a bot shooting mid-hit snaps its gun back to aim
-    // instead of flailing through the flinch with the weapon down.
-    if (this.shootT > 0) {
-      // Re-arm while already 'shoot' (auto fire) means a new shot —
-      // force replays the clip from its aimed frame; otherwise the
-      // oneshot plays once and every following pull shows nothing.
-      if (this.shootT > this._lastShootT) this._model.forceAnimationState('shoot');
-      this.shootT -= dt;
-      if (this.shootT > 0) this._model.setAnimationState('shoot');
-    } else if (this.hitT > 0) {
-      this.hitT -= dt;
-      if (this.hitT > 0) this._model.setAnimationState('hit');
-    } else {
-      this.tickAnimState(dt, speed, airborne);
-    }
-    this._lastShootT = this.shootT;
-    this.tickGhost(dt);
-    this.tickAuras(dt);
-    this.previousPosition.copy(this.position);
-    // Anim LOD — the mixer step is the dominant per-remote cost, so far
-    // bodies animate in coarser bursts (accumulated dt keeps playback
-    // speed correct) instead of a full mixer update every frame. State
-    // changes and oneshots still apply every frame; only playback ticks.
-    const animDt = this.camDistSq > 120 * 120 ? 1 / 15
-      : this.camDistSq > 60 * 60 ? 1 / 30
-      : 0;
-    if (animDt > 0) {
-      this.animAcc += dt;
-      if (this.animAcc >= animDt) {
-        this._model.update(this.animAcc);
-        this.animAcc = 0;
-      }
-    } else {
-      this.animAcc = 0;
-      this._model.update(dt);
-    }
+    this.anim.tickModel(dt);
   }
 
-  // Powered climb reads as jetting (same inference the jet audio makes) —
-  // a plain airborne fall keeps the jump loop. Directional jetting tilts
-  // the whole body toward horizontal velocity in the facing frame: pitch
-  // into forward thrust, roll into lateral strafe.
   /** Wire ski flag, set by remotes.ts from playerState.ski — the anim pick
    *  trusts it over the speed heuristic: a grounded non-skiing mover is
    *  running, not sliding, even at ski speeds (momentum outlives the key). */
@@ -406,56 +339,20 @@ export class RemotePlayer {
   // jet bit, so callers fall back to the vel.y heuristic.
   wireJet: boolean | undefined;
 
-  private tickAnimState(dt: number, speed: number, airborne: boolean): void {
-    const jetting = airborne && this.velocity.y > 3;
-    const state = airborne
-      ? (jetting ? 'jet' : 'jump')
-      : pickLocomotionAnim(this._model.animationState, speed, this.wireSki);
-    this._model.setAnimationState(state);
-    const sin = Math.sin(this.rotation.yaw), cos = Math.cos(this.rotation.yaw);
-    const fwd = this.velocity.x * sin + this.velocity.z * cos;
-    const side = this.velocity.x * cos - this.velocity.z * sin;
-    // Dedicated 8-dir clips when the KevDev bake landed; otherwise the
-    // reverse-playback backpedal + strafe roll lean keep covering it.
-    const dedicated = this._model.setLocomotionVector(fwd, side);
-    if (!dedicated) this._model.setLocomotionReversed(
-      (state === 'walk' || state === 'run') && speed > 1 && fwd < -0.6 * speed && -fwd > Math.abs(side));
-    if (!jetting) {
-      const strafing = !dedicated && Math.abs(side) > 0.6 * speed && Math.abs(side) > Math.abs(fwd) * 0.8;
-      this._model.setBodyLean(0, strafing ? Math.max(-0.3, Math.min(0.3, -side * 0.02)) : 0);
-      return;
-    }
-    this._model.setBodyLean(
-      Math.max(-0.45, Math.min(0.45, fwd * 0.022)),
-      Math.max(-0.4, Math.min(0.4, -side * 0.02)));
-  }
-  private _lastShootT = 0;
-  private _airborne = false;
-  private _fallV = 0;
-  // Faint air trail — the ballistic arc read a bouncing ball gets for
-  // free. Innate to every flyer; the jetpack flame stacks on top.
-  private airTrail: BallTrailDots | null = null;
-  private _lastTrailPos = new THREE.Vector3();
-
-  private tickAuras(dt: number): void {
+  tickAuras(dt: number): void {
     this.auras.tick(dt);
   }
 
-  // Damage flinch / shot recoil timers — drive the oneshot states in
-  // updateAliveModel; shoot outranks hit so a trigger pull snaps to aim
-  private hitT = 0;
-  private shootT = 0;
-
   /** Non-lethal hit feedback — the model plays the 'No' flinch briefly. */
   flinch(): void {
-    if (!this._isDead) this.hitT = 0.35;
+    if (!this._isDead) this.anim.hitT = 0.35;
     if (this._loaded) this._model.damageFlash(); // creature-style white pop
     this.auras.flashShield(); // soaked — flare the lattice
   }
 
   playDeath(explosionPos?: THREE.Vector3, explosionForce?: number): void {
     this._isDead = true;
-    this.hitT = 0;
+    this.anim.hitT = 0;
     // Alive-path visual state (jet/strafe lean, reversed walk) is dead
     // code under tickDead — leave it set and the corpse keeps the lean.
     this._model.setBodyLean(0, 0);
@@ -596,7 +493,7 @@ export class RemotePlayer {
     // its arm-chain aim layer owns the upper body, so playing the
     // Pistol_Shoot clip only flickers the arms off-aim. Other variants
     // still arm the shoot oneshot.
-    if (!this._isDead && this.shootT <= 0 && this._model.variant !== 'mannequin') this.shootT = 0.3;
+    if (!this._isDead && this.anim.shootT <= 0 && this._model.variant !== 'mannequin') this.anim.shootT = 0.3;
     if (this._loaded) {
       if (weaponType === WeaponType.Melee) this._model.weaponPunch();
       else if (weaponType !== undefined && RemotePlayer.THROW_TYPES.has(weaponType)) this._model.weaponThrow();
@@ -612,7 +509,7 @@ export class RemotePlayer {
   }
 
   private ghostT = 0;
-  private tickGhost(dt: number): void {
+  tickGhost(dt: number): void { // public — anim drive calls it post-locomotion
     if (this.ghostT <= 0) return;
     this.ghostT -= dt;
     if (this.ghostT > 0) return;
@@ -650,7 +547,7 @@ export class RemotePlayer {
     // owner loop) must not walk into a cleared animation map.
     this._loaded = false;
     this.auras.dispose();
-    this.airTrail?.dispose();
+    this.anim.dispose();
     this._model.dispose();
     if (this.gizmo) {
       this.gizmo.dispose();
