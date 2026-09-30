@@ -1,3 +1,4 @@
+2026-09-26 - Split ball damage surface (claim validation, splash, sweep, armor) out of BallSim into ballCombat.ts
 2026-09-26 - Split tick record build/suppress/interest fanout out of TickLoop into tickRecords.ts (TickFanout)
 2026-09-26 - Split squad roster (populate/roles/classes/botFill) out of ServerBots into botRoster.ts; driveMove input commit helper
 2026-09-26 - Split creature decision loop out of CreatureSim into creatureBrain.ts (retarget cadence, cloak ghosts, family step dispatch, edge routing, bite verify)

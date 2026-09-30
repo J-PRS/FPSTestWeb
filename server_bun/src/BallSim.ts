@@ -17,19 +17,16 @@
 import { type Heightfield, hmHeight, hmFingerprint } from '../../shared/heightfield.ts';
 import {
   type SimBall, type SimVec, type BallVariant, type SegmentKind,
-  makeSimBall, stepBall, applySimDamage, type StructureCollider,
+  makeSimBall, stepBall, type StructureCollider,
 } from '../../shared/ballSim.ts';
 import { ColliderIndex } from '../../shared/solidWorld.ts';
-import { MAX_HIT_CLAIM_DMG } from '../../shared/weapons.ts';
 import type { PlayerManager } from './PlayerManager.ts';
 import type { ServerMessage, Vec3 } from './types.ts';
 import { encodeBallSegment } from '../../shared/wire.ts';
 import { STATUS } from '../../shared/status.ts';
 import { logger } from './logger.ts';
 import { type BallPopulation, DEFAULT_MAP_SPEC } from '../../shared/mapSpec.ts';
-import { ARMORNADE_OVERCAP } from '../../shared/weapons.ts';
-import { segPointDist, segPointT } from '../../shared/projSim.ts';
-import { aoeDamage } from '../../shared/combat.ts';
+import { BallCombat } from './ballCombat.ts';
 
 const TICK_DT = 0.05;           // 20Hz — matches GameServer tick broadcast
 const RETARGET_INTERVAL = 2.0;  // seconds between nearest-player re-evals
@@ -78,6 +75,7 @@ export class BallSim {
   // replay overshoots by that much. Accumulate real elapsed time and catch
   // up in whole 50ms cells so sim time tracks wall time.
   private tickAcc = 0;
+  private combat: BallCombat;
   private static readonly TICK_CATCHUP_CAP = 0.25; // don't spiral on a 1s hiccup
   population: BallPopulation = DEFAULT_MAP_SPEC.balls;
   /** Variant spawn weights from the map spec — default mix below. */
@@ -97,6 +95,13 @@ export class BallSim {
     this.players = players;
     this.broadcast = broadcast;
     this.broadcastBinaryReliable = broadcastBinaryReliable ?? (() => {});
+    this.combat = new BallCombat({
+      balls: () => this.balls,
+      field: () => this.field,
+      players,
+      segment: (b, kind) => this.segment(b, kind),
+      kill: (b, by) => this.kill(b, by),
+    });
   }
 
   /** Load heightmap from disk and start the tick loop. */
@@ -269,117 +274,30 @@ export class BallSim {
   /** Distance to the nearest live ball — env-damage plausibility wants to
    *  know whether a melee claim has any creature near it. */
   nearestBallDist(x: number, y: number, z: number): number {
-    let best = Infinity;
-    for (const b of this.balls.values()) {
-      if (b.dead) continue;
-      const d = Math.hypot(x - b.x, y - b.y, z - b.z);
-      if (d < best) best = d;
-    }
-    return best;
-  }
-
-  /** Armor-grenade plating: every live ball inside the blast wears the
-   *  grant as overcap health (≤ ARMORNADE_OVERCAP × maxHealth — same
-   *  trick as deployable armor, so the soak needs no armor field). No
-   *  segment: ball hp never rides the wire, so nothing to propagate. */
-  armorBlast(pos: SimVec, radius: number, amount: number): void {
-    const r2 = radius * radius;
-    for (const b of this.balls.values()) {
-      if (b.dead) continue;
-      const d2 = (b.x - pos.x) ** 2 + (b.y - pos.y) ** 2 + (b.z - pos.z) ** 2;
-      if (d2 > r2) continue;
-      b.health = Math.min(b.maxHealth * ARMORNADE_OVERCAP, b.health + amount);
-    }
+    return this.combat.nearestBallDist(x, y, z);
   }
 
   /** Live ball lookup for honest melee/contact checks. */
   ballAt(id: number): { x: number; y: number; z: number; radius: number } | null {
-    const b = this.balls.get(id);
-    return b && !b.dead ? { x: b.x, y: b.y, z: b.z, radius: b.radius } : null;
+    return this.combat.ballAt(id);
   }
 
-  /** Earliest live-ball contact along a segment — same order rule the
-   *  player sweep uses (terrain/walls are the caller's to check first). */
+  /** Armor plating sweep — BallCombat owns the damage surface. */
+  armorBlast(pos: SimVec, radius: number, amount: number): void {
+    this.combat.armorBlast(pos, radius, amount);
+  }
+
   sweepHit(from: SimVec, to: SimVec, extraReach: number): { id: number; t: number } | null {
-    let best: { id: number; t: number } | null = null;
-    for (const b of this.balls.values()) {
-      if (b.dead) continue;
-      const c = { x: b.x, y: b.y, z: b.z };
-      if (segPointDist(from, to, c) > b.radius + extraReach) continue;
-      const t = segPointT(from, to, c);
-      if (!best || t < best.t) best = { id: b.id, t };
-    }
-    return best;
+    return this.combat.sweepHit(from, to, extraReach);
   }
 
-  /** Splash into the swarm — same falloff curve the AOE funnel applies to
-   *  players. skipId keeps a direct-hit ball from eating blast twice. */
   splashDamage(ownerId: string, pos: SimVec, radius: number, maxDamage: number, skipId?: number): void {
-    for (const b of this.balls.values()) {
-      if (b.dead || b.id === skipId) continue;
-      const d = Math.max(0, Math.hypot(b.x - pos.x, b.y - pos.y, b.z - pos.z) - b.radius);
-      const dmg = aoeDamage(maxDamage, d, radius);
-      if (dmg >= 1) this.handleHit(ownerId, b.id, dmg);
-    }
+    this.combat.splashDamage(ownerId, pos, radius, maxDamage, skipId);
   }
 
-  /** creatureHit claim. Lenient sanity clamps only — real validation is an
-   *  anticheat-phase concern; a bogus claim costs a shoved ball, not state. */
+  /** creatureHit claim — BallCombat does the lenient clamps + impulse cap. */
   handleHit(playerId: string, id: number, damage: number, kx?: number, ky?: number, kz?: number): void {
-    const b = this.balls.get(id);
-    // A claim on a just-killed ball is the normal aim→claim race — the
-    // corpse still rendered when the shot was fired. Debug, not warn.
-    if (b?.dead) {
-      logger.debug('creatureHit on dead ball (aim/claim race)', { playerId, id });
-      return;
-    }
-    if (!b || !this.field) {
-      // Same race as the dead-ball path above: the ball was culled (kill,
-      // TTL, roster swap) between the shot and this claim — the client
-      // genuinely saw it live. Warn only when there IS no field, which
-      // means the claim arrived before spec terrain attached — a real bug.
-      const lvl = this.field ? 'debug' : 'warn';
-      logger[lvl]('creatureHit dropped: unknown ball', { playerId, id, known: this.balls.size, field: !!this.field });
-      return;
-    }
-    const claimer = this.players.getPlayer(playerId);
-    if (!claimer) {
-      logger.warn('creatureHit dropped: no claimer', { playerId });
-      return;
-    }
-    // Loose plausibility: claimer within engagement envelope of the ball
-    const dx = claimer.position.x - b.x;
-    const dy = claimer.position.y - b.y;
-    const dz = claimer.position.z - b.z;
-    const d2 = dx * dx + dy * dy + dz * dz;
-    if (d2 > 600 * 600) {
-      logger.warn('creatureHit dropped: out of range', {
-        playerId, id, dist: Math.round(Math.sqrt(d2)),
-        claimerPos: { x: Math.round(claimer.position.x), y: Math.round(claimer.position.y), z: Math.round(claimer.position.z) },
-        ballPos: { x: Math.round(b.x), y: Math.round(b.y), z: Math.round(b.z) },
-        claimerDead: claimer.isDead,
-      });
-      return;
-    }
-
-    // The claim carries no weapon ref — cap at the biggest legal one-hit
-    // (direct+splash, perk-boosted) instead of a flat 300.
-    const dmg = Math.max(1, Math.min(MAX_HIT_CLAIM_DMG, damage));
-
-    let ix = 0, iy = 0, iz = 0;
-    if (kx !== undefined && ky !== undefined && kz !== undefined) {
-      const m = Math.hypot(kx, ky, kz);
-      const cap = 60; // impulse magnitude ceiling
-      if (m > 0.001) {
-        const s = Math.min(cap, m) / m;
-        ix = kx * s; iy = ky * s; iz = kz * s;
-      }
-    }
-    if (applySimDamage(b, dmg, ix, iy, iz)) {
-      this.kill(b, playerId);
-    } else {
-      this.segment(b, 'hit'); // the impulse IS a velocity discontinuity
-    }
+    this.combat.handleHit(playerId, id, damage, kx, ky, kz);
   }
 
   /** Kill notification for the room's scoreboard (DM creature points,
