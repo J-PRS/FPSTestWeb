@@ -196,6 +196,7 @@ class WireBot {
   ownShots: { id: string; until: number }[] = []; shotN = 0;
   nextDeploy = 0; nextChat = 0; nextTeleport = 0; nextHeal = 0; nextLoadout = 0; nextEnvDmg = 0; nextSwitch = 0;
   wasJump = false; wasJet = false;
+  dead = false; // yourHealth<=0 until playerRespawn — dead clients go quiet
   // Warp state is per-bot — each socket sees its own (possibly interest-
   // filtered) stream, so comparing across sockets invents teleports.
   private lastSeg = new Map<string, { t: number; x: number; y: number; z: number; sp: number; judge: boolean }>();
@@ -348,6 +349,13 @@ class WireBot {
         }
         stats.corrections++;
         break;
+      case 'playerKill':
+        // Death arrives as a kill broadcast — the corpse goes quiet.
+        if (m.targetId === this.id) this.dead = true;
+        break;
+      case 'yourHealth':
+        if (m.health <= 0) this.dead = true;
+        break;
       case 'teleport':
         // A remote's declared warp — update the aim roster immediately
         // instead of shooting the pre-warp ghost until the next tick.
@@ -366,6 +374,7 @@ class WireBot {
           s.vel.x = 0; s.vel.y = 0; s.vel.z = 0;
           s.onGround = true;
           this.waypoint = { x: rand(-140, 140), z: rand(-140, 140) };
+          this.dead = false;
         } else if (m.playerId && m.playerId !== this.id) {
           const r = this.roster.get(m.playerId);
           if (r) { r.pos.x = m.position.x; r.pos.y = m.position.y; r.pos.z = m.position.z; }
@@ -379,6 +388,10 @@ class WireBot {
     // Position stream — the binary lane real clients use.
     this.timers.push(setInterval(() => {
       if (!this.sim) return;
+      // Dead players stop streaming — the server drops their reports
+      // anyway, and a corpse walking is exactly the anomaly the judge
+      // exists to catch. The respawn broadcast reseats us.
+      if (this.dead) return;
       this.step(posMs / 1000);
       const s = this.sim.state;
       this.sendBin(encodePosition(s.pos, { yaw: s.yaw, pitch: s.pitch }, s.vel, ++this.seq, this.pingMs, this.inputSeq));
@@ -417,7 +430,7 @@ class WireBot {
   /** Everything else a legal client says, rolled at plausible rates. */
   private misc(): void {
     const s = this.sim?.state;
-    if (!s) return;
+    if (!s || this.dead) return;
     const now = performance.now();
 
     // Own-projectile cleanup — clients destroy their live shells on
