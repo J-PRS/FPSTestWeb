@@ -200,11 +200,19 @@ export class Ball {
   readonly renderOffset = new THREE.Vector3(); // public: ballNet blends segment corrections into it
   readonly _rpos = new THREE.Vector3(); // pos + renderOffset, scratch
 
+  private static lastBoundFp = '';
+
   /** One-time init: the heightfield the shared sim needs for bounce prediction. */
   static initNetMode(force = false): void {
     if (force || !Ball.field) {
       Ball.field = getHeightfield();
-      if (Ball.field) console.warn(`[Ball] netmode field bound fp=${hmFingerprint(Ball.field)}`);
+      if (Ball.field) {
+        const fp = hmFingerprint(Ball.field);
+        if (fp !== Ball.lastBoundFp) {
+          Ball.lastBoundFp = fp;
+          console.info(`[Ball] netmode field bound fp=${fp}`);
+        }
+      }
     }
   }
 

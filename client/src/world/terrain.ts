@@ -111,7 +111,15 @@ export class Terrain {
           // Required with lights:true — renderer writes light/shadow state here
           ...THREE.UniformsLib.lights,
           heightMap:       { value: this.heightTexture },
+          albedoMap:       { value: null },
+          useAlbedo:       { value: false },
+          matTiles:        { value: null },
+          matAlphaA:       { value: null },
+          matAlphaB:       { value: null },
+          useMats:         { value: false },
+          tileMeters:      { value: 5.86 },
           hmWorldScale:    { value: HM_WORLD_SCALE },
+          hmWorldScaleFrag:{ value: HM_WORLD_SCALE },
           hScale:          { value: HSCALE },
           gridOrigin:      { value: new THREE.Vector2(0, 0) },
           levelScale:      { value: levelScale },
@@ -166,6 +174,30 @@ export class Terrain {
     this.heightTexture.needsUpdate = true;
     for (const level of this.levels) {
       level.material.uniforms.heightMap.value = this.heightTexture;
+    }
+  }
+
+  /** Baked albedo (T2 ports carry terrainTex) replaces the procedural
+   *  palette — the fragment shader samples it in heightmap UV space. */
+  private albedoTex: THREE.Texture | null = null;
+  setAlbedo(tex: THREE.Texture | null): void {
+    this.albedoTex = tex;
+    for (const level of this.levels) {
+      level.material.uniforms.albedoMap.value = tex;
+      level.material.uniforms.useAlbedo.value = !!tex;
+    }
+  }
+
+  /** T2 material blend layer — atlas of 256px tiles + packed alpha
+   *  weights; the shader blends them over the albedo near the camera. */
+  setMaterialBlend(tiles: THREE.Texture | null, alphaA: THREE.Texture | null,
+                   alphaB: THREE.Texture | null, tileMeters: number): void {
+    for (const level of this.levels) {
+      level.material.uniforms.matTiles.value = tiles;
+      level.material.uniforms.matAlphaA.value = alphaA;
+      level.material.uniforms.matAlphaB.value = alphaB;
+      level.material.uniforms.tileMeters.value = tileMeters;
+      level.material.uniforms.useMats.value = !!tiles;
     }
   }
 

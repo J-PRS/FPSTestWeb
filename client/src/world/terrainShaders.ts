@@ -1,6 +1,7 @@
 // Terrain GLSL — vertex displacement over the clipmap + fragment shading
 // (scorch decals, fog, lighting). Kept apart from terrain.ts so the clipmap
 // machinery reads without two pages of shader text.
+import { UNGRADE_GLSL } from '../core/gradeGlsl.js';
 
 export const terrainVert = /* glsl */`
   uniform sampler2D heightMap;
@@ -124,6 +125,17 @@ export const terrainFrag = /* glsl */`
   uniform vec3 ambientColor;
   uniform float hscale;
   uniform int terrainPreset; // 0=mixed, 1=desert
+  uniform sampler2D albedoMap;
+  uniform bool useAlbedo;
+  // T2 material blend layer — real 256px tiles in a 4x2 atlas, blended
+  // by the map's alpha weights instead of the baked albedo's flattened
+  // result. Fades out with distance; the bake carries the far field.
+  uniform sampler2D matTiles;
+  uniform sampler2D matAlphaA;
+  uniform sampler2D matAlphaB;
+  uniform bool useMats;
+  uniform float tileMeters;
+  uniform float hmWorldScaleFrag;
   uniform vec3 fogColor;
   uniform float fogStart;
   uniform float fogEnd;
@@ -150,6 +162,25 @@ export const terrainFrag = /* glsl */`
     return vec3(v, g);
   }
   float noise(vec2 p) { return noised(p).x; }
+
+  // Valley mist — exponential height fog integrated along the view ray.
+  // Density pools near HF_FLOOR and thins exponentially with altitude, so
+  // distant lowlands dissolve into haze while ridgelines stay crisp.
+  // The integral is closed-form (no marching): D0*exp(-K*(ro-FLOOR)) with
+  // the (1-e^-kΔy)/(k·rd.y) term handling up/down rays exactly.
+  const float HF_FLOOR = 18.0;  // world-y where fog density peaks
+  const float HF_K = 0.024;     // altitude falloff (1/m) — layer thins ~every 29m
+  const float HF_D0 = 0.0024;   // extinction per meter at the floor
+  const float HF_CAP = 0.80;    // never fully opaque — haze, not soup
+  float heightFogAmount(vec3 ro, vec3 delta, float dist) {
+    if (dist < 1.0) return 0.0;
+    float rdy = delta.y / dist;
+    float a = HF_D0 * exp(-HF_K * max(ro.y - HF_FLOOR, 0.0));
+    float od = abs(rdy) < 1e-3
+      ? a * dist
+      : a * (1.0 - exp(-HF_K * rdy * dist)) / (HF_K * rdy);
+    return min(1.0 - exp(-max(od, 0.0)), HF_CAP);
+  }
 
   // --- Derivative erosion FBM (suppresses detail on steep slopes) ---
   const mat2 m2 = mat2(0.8, -0.6, 0.6, 0.8);
@@ -282,6 +313,8 @@ export const terrainFrag = /* glsl */`
     return e;
   }
 
+  ${UNGRADE_GLSL}
+
   void main() {
     if (innerHalfSize > 0.0) {
       vec2 _d = vWorldPos.xz - innerGridOrigin;
@@ -296,6 +329,48 @@ export const terrainFrag = /* glsl */`
     vec2 uv    = vWorldPos.xz * 0.032;
     vec2 uvMed = vWorldPos.xz * 0.14;
     vec2 uvFin = vWorldPos.xz * 0.72;
+
+    // --- baked albedo (ported maps): texture in heightmap UV space, same
+    // lighting/fog/scorch tail as the procedural palettes ---
+    if (useAlbedo) {
+      vec3 col = texture2D(albedoMap, fract(vWorldPos.xz / hmWorldScaleFrag)).rgb;
+      if (useMats) {
+        vec2 hmUV = fract(vWorldPos.xz / hmWorldScaleFrag);
+        vec2 au = fract(vWorldPos.xz / tileMeters) * vec2(0.25, 0.5);
+        vec4 wA = texture2D(matAlphaA, hmUV);
+        vec4 wB = texture2D(matAlphaB, hmUV);
+        vec3 det =
+          texture2D(matTiles, au + vec2(0.00, 0.0)).rgb * wA.r +
+          texture2D(matTiles, au + vec2(0.25, 0.0)).rgb * wA.g +
+          texture2D(matTiles, au + vec2(0.50, 0.0)).rgb * wA.b +
+          texture2D(matTiles, au + vec2(0.75, 0.0)).rgb * wA.a +
+          texture2D(matTiles, au + vec2(0.00, 0.5)).rgb * wB.r +
+          texture2D(matTiles, au + vec2(0.25, 0.5)).rgb * wB.g +
+          texture2D(matTiles, au + vec2(0.50, 0.5)).rgb * wB.b +
+          texture2D(matTiles, au + vec2(0.75, 0.5)).rgb * wB.a;
+        float wsum = wA.r + wA.g + wA.b + wA.a + wB.r + wB.g + wB.b + wB.a;
+        float detFade = 1.0 - smoothstep(140.0, 380.0, length(vWorldPos - vCameraPos));
+        col = mix(col, det, detFade * clamp(wsum, 0.0, 1.0));
+      }
+      float detail = noise(uvFin) * 0.5 + noise(uvMed) * 0.5;
+      col *= 0.82 + 0.36 * detail;
+      col *= 1.0 - scorchMask(vWorldPos.xz);
+      float diff = max(dot(vNormal, sunDir), 0.0);
+      float shadow = diff * diff;
+      float rim = pow(1.0 - max(dot(vNormal, vec3(0,1,0)), 0.0), 2.5) * 0.15;
+      col *= ambientColor + sunColor * shadow * shadowMask + vec3(rim);
+      col += scorchEmberGlow(vWorldPos.xz);
+      vec3 fogDelta = vWorldPos - vCameraPos;
+      float fogDist = length(vec3(fogDelta.x, min(fogDelta.y, 0.0) * 0.3, fogDelta.z));
+      float fogFactor = smoothstep(fogStart, fogEnd, fogDist);
+      float heightFog = smoothstep(fogStart * 0.6, fogEnd * 0.7, fogDist) * smoothstep(0.3, 0.8, height);
+      float mist = heightFogAmount(vCameraPos, fogDelta, length(fogDelta));
+      fogFactor = clamp(fogFactor + heightFog + mist * (1.0 - fogFactor), 0.0, 1.0);
+      gl_FragColor = vec4(ungradeColor(mix(col, fogColor, fogFactor)), 1.0);
+      #include <tonemapping_fragment>
+      #include <colorspace_fragment>
+      return;
+    }
 
     // --- desert preset (sand + dirt + rock only) ---
     if(terrainPreset == 1) {
@@ -341,9 +416,12 @@ export const terrainFrag = /* glsl */`
       float fogDist = length(vec3(fogDelta.x, min(fogDelta.y, 0.0) * 0.3, fogDelta.z));
       float fogFactor = smoothstep(fogStart, fogEnd, fogDist);
       float heightFog = smoothstep(fogStart * 0.6, fogEnd * 0.7, fogDist) * smoothstep(0.3, 0.8, height);
-      fogFactor = clamp(fogFactor + heightFog, 0.0, 1.0);
+      float mist = heightFogAmount(vCameraPos, fogDelta, length(fogDelta));
+      fogFactor = clamp(fogFactor + heightFog + mist * (1.0 - fogFactor), 0.0, 1.0);
       col = mix(col, fogColor, fogFactor);
-      gl_FragColor = vec4(col, 1.0);
+      gl_FragColor = vec4(ungradeColor(col), 1.0);
+      #include <tonemapping_fragment>
+      #include <colorspace_fragment>
       return;
     }
 
@@ -421,9 +499,12 @@ export const terrainFrag = /* glsl */`
     // Height-augmented fog: tall terrain at distance gets extra fog
     float heightFog = smoothstep(fogStart * 0.6, fogEnd * 0.7, dist)
                      * smoothstep(0.3, 0.8, height);
-    fogFactor = clamp(fogFactor + heightFog, 0.0, 1.0);
+    float mist = heightFogAmount(vCameraPos, fogDelta, length(fogDelta));
+    fogFactor = clamp(fogFactor + heightFog + mist * (1.0 - fogFactor), 0.0, 1.0);
     col = mix(col, fogColor, fogFactor);
-    gl_FragColor = vec4(col, 1.0);
+    gl_FragColor = vec4(ungradeColor(col), 1.0);
+    #include <tonemapping_fragment>
+    #include <colorspace_fragment>
   }
 `;
 

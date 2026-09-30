@@ -72,9 +72,9 @@ export class NetworkManager {
   public onPlayerJoined: ((playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }) => void) | null = null;
   public onPlayerLeft: ((playerId: string) => void) | null = null;
   public onKnockback: ((position: { x: number; y: number; z: number }, force: number, pull?: boolean) => void) | null = null;
-  public onChat: ((playerId: string, text: string, team: boolean) => void) | null = null;
+  public onChat: ((playerId: string, text: string, team: boolean, vgs: string | undefined) => void) | null = null;
   public onPlayerUpdate: ((playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }, timestamp: number, velocity?: { x: number; y: number; z: number }) => void) | null = null;
-  public onGameState: ((players: GameStatePlayer[], localPlayerState: LocalPlayerState | undefined, roomInfo?: { room?: string; mode?: string; team?: 'alpha' | 'bravo'; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number>; pickups?: { id: number; pos: { x: number; y: number; z: number }; kind?: PickupKind }[]; flags?: { team: 'alpha' | 'bravo'; pos: { x: number; y: number; z: number }; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]; matchEndsAt?: number; respawnMs?: number; deployables?: { id: number; owner: string; kind: 'turret' | 'mine' | 'station' | 'drone'; pos: { x: number; y: number; z: number } }[]; map?: { mode?: string; bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } }; structures?: import('../../../shared/mapSpec.js').StructureSpec[]; arena?: { x: number; z: number; radius: number }; ambient?: Record<string, number> } }) => void) | null = null;
+  public onGameState: ((players: GameStatePlayer[], localPlayerState: LocalPlayerState | undefined, roomInfo?: { room?: string; mode?: string; team?: 'alpha' | 'bravo'; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number>; pickups?: { id: number; pos: { x: number; y: number; z: number }; kind?: PickupKind }[]; flags?: { team: 'alpha' | 'bravo'; pos: { x: number; y: number; z: number }; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]; matchEndsAt?: number; respawnMs?: number; deployables?: { id: number; owner: string; kind: 'turret' | 'mine' | 'station' | 'drone' | 'shield'; pos: { x: number; y: number; z: number }; team?: string }[]; map?: { mode?: string; bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } }; structures?: import('../../../shared/mapSpec.js').StructureSpec[]; arena?: { x: number; z: number; radius: number }; ambient?: Record<string, number>; terrain?: string; terrainTex?: string; sky?: string } }) => void) | null = null;
   public onTeamScore: ((scores: { alpha: number; bravo: number }, winAt: number) => void) | null = null;
   public onMatchEnd: ((winner: 'alpha' | 'bravo' | 'draw', scores: { alpha: number; bravo: number }) => void) | null = null;
   public onMatchStart: ((mode: string, scores: { alpha: number; bravo: number }) => void) | null = null;
@@ -92,10 +92,10 @@ export class NetworkManager {
   public onFfaScore: ((scores: Record<string, number>, winAt: number) => void) | null = null;
   public onFfaMatchEnd: ((winner: string, scores: Record<string, number>) => void) | null = null;
   /** Admin hot-reload — structures/arena changed mid-match; rebuild them. */
-  public onMapUpdate: ((map: { bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } }; structures?: import('../../../shared/mapSpec.js').StructureSpec[]; arena?: { x: number; z: number; radius: number } | null; terrain?: string }) => void) | null = null;
+  public onMapUpdate: ((map: { bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } }; structures?: import('../../../shared/mapSpec.js').StructureSpec[]; arena?: { x: number; z: number; radius: number } | null; terrain?: string; terrainTex?: string; sky?: string }) => void) | null = null;
   // Server-owned deployables — rendered as dumb visuals client-side;
   // the sim (firing/damage) stays authoritative on the server.
-  public onDeploySpawn: ((id: number, owner: string, kind: 'turret' | 'mine' | 'station' | 'drone', pos: { x: number; y: number; z: number }, team?: 'alpha' | 'bravo') => void) | null = null;
+  public onDeploySpawn: ((id: number, owner: string, kind: 'turret' | 'mine' | 'station' | 'drone' | 'shield', pos: { x: number; y: number; z: number }, team?: 'alpha' | 'bravo') => void) | null = null;
   public onDeployGone: ((id: number) => void) | null = null;
   /** Server sim fired a remote sentry — paint the rocket at the deployable. */
   public onTurretShot: ((id: number, owner: string, targetId: string) => void) | null = null;
@@ -332,7 +332,7 @@ export class NetworkManager {
     crawlDie: (data) => this.onCrawlDie?.(data),
     crawlRoster: (data) => this.onCrawlRoster?.(data),
     pong: (data) => this.handlePong(data.timestamp),
-    chat: (data) => this.onChat?.(data.playerId, data.text, data.team === true),
+    chat: (data) => this.onChat?.(data.playerId, data.text, data.team === true, typeof data.vgs === 'string' ? data.vgs : undefined),
     flagUpdate: (data) => this.onFlagUpdate?.(data.flags),
     matchNotice: (data) => this.onMatchNotice?.(data.text),
     pickupSpawn: (data) => this.onPickupSpawn?.(data.id, data.pos, data.kind),
@@ -394,7 +394,9 @@ export class NetworkManager {
   }
 
   private handleTickUpdate(data: { updates: TickUpdatePlayer[]; ackSeq?: number }): void {
-    this.telemetry.onTickArrival(Date.now());
+    // Host loopback delivers ticks in per-frame bursts — feeding those to
+    // the gap tracker turns frame hitches into fake "packet loss".
+    if (this.ws?.tier !== 'host') this.telemetry.onTickArrival(Date.now());
     // Batched player updates from server (delta compressed)
     if (data.ackSeq !== undefined && data.ackSeq > 0) {
       this.pruneStateHistory(data.ackSeq);
@@ -658,7 +660,7 @@ export class NetworkManager {
 
   /** Deployable plant claim — sent when the pod lands and seats, so the
    *  position is the settled one the server will enforce caps/TTL on. */
-  sendDeploy(kind: 'turret' | 'mine' | 'station' | 'drone', position: { x: number; y: number; z: number }): void {
+  sendDeploy(kind: 'turret' | 'mine' | 'station' | 'drone' | 'shield', position: { x: number; y: number; z: number }): void {
     if (!this.connected) return;
     this.send({ type: 'deploy', kind, position });
   }
@@ -715,17 +717,17 @@ export class NetworkManager {
     this.send({ type: 'snapshotRequest' });
   }
 
-  sendChat(text: string, team = false): void {
-    this.send({ type: 'chat', text, team: team || undefined });
+  sendChat(text: string, team = false, vgs?: string): void {
+    this.send({ type: 'chat', text, team: team || undefined, vgs });
   }
 
   /** Mid-match room hop — the server re-seats this session and answers
    *  with a fresh gameState, which the normal (re)connect path rebuilds
    *  from. Returns false when there's no live socket (caller falls back
    *  to a reload join). */
-  switchRoom(room: string, map?: string, bots?: number): boolean {
+  switchRoom(room: string, map?: string, bots?: number, mode?: string): boolean {
     if (!this.isConnected()) return false;
-    this.send({ type: 'switchRoom', room, map, bots });
+    this.send({ type: 'switchRoom', room, map, bots, mode });
     return true;
   }
 

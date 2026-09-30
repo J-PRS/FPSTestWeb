@@ -1,6 +1,7 @@
 // World wire handlers — gameState join/restore, admin mapUpdate, and the
 // server-owned creature (ball) event channel.
 
+import * as THREE from 'three';
 import { buildStructures, buildArenaDome, clearArenaDome } from '../../world/mapStructures.js';
 import type { StructureSpec } from '../../../../shared/mapSpec.js';
 import { setAmbientCaps } from '../species/ambientCaps.js';
@@ -73,12 +74,12 @@ export function wireWorld(ctx: NetCtx): void {
     } else {
       clearArenaDome(deps.lazyScene());
     }
-    if (map.terrain) void applyTerrain(ctx, map.terrain);
+    if (map.terrain) void applyTerrain(ctx, map.terrain, map.terrainTex, map.sky);
     chat.add(null, 'map updated by admin');
   };
 
   // Initial connection and reconnection — full roster + local restore.
-  networkManager.onGameState = (players: GameStatePlayer[], localPlayerState: LocalPlayerState | undefined, roomInfo?: { room?: string; mode?: string; team?: 'alpha' | 'bravo'; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number>; pickups?: { id: number; pos: { x: number; y: number; z: number }; kind?: import('../../../../shared/pickups.js').PickupKind }[]; flags?: { team: 'alpha' | 'bravo'; pos: { x: number; y: number; z: number }; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]; matchEndsAt?: number; respawnMs?: number; deployables?: { id: number; owner: string; kind: 'turret' | 'mine' | 'station' | 'drone'; pos: { x: number; y: number; z: number } }[]; map?: { mode?: string; bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } }; structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number }; ambient?: Record<string, number>; terrain?: string } }) => {
+  networkManager.onGameState = (players: GameStatePlayer[], localPlayerState: LocalPlayerState | undefined, roomInfo?: { room?: string; mode?: string; team?: 'alpha' | 'bravo'; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number>; pickups?: { id: number; pos: { x: number; y: number; z: number }; kind?: import('../../../../shared/pickups.js').PickupKind }[]; flags?: { team: 'alpha' | 'bravo'; pos: { x: number; y: number; z: number }; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]; matchEndsAt?: number; respawnMs?: number; deployables?: { id: number; owner: string; kind: 'turret' | 'mine' | 'station' | 'drone' | 'shield'; pos: { x: number; y: number; z: number }; team?: string }[]; map?: { mode?: string; bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } }; structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number }; ambient?: Record<string, number>; terrain?: string; terrainTex?: string; sky?: string } }) => {
     logger.debug(`gameState received, players: ${players.length}`);
     applyRoomInfo(ctx, players.length, roomInfo);
     if (localPlayerState) restoreLocalPlayer(ctx, localPlayerState);
@@ -147,7 +148,7 @@ function announceRoom(ctx: NetCtx, playerCount: number, roomInfo?: RoomInfo): vo
   }
 }
 
-type MapSnapshot = { structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number }; ambient?: Record<string, number>; terrain?: string };
+type MapSnapshot = { structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number }; ambient?: Record<string, number>; terrain?: string; terrainTex?: string; sky?: string };
 
 /** Structures, dome, and per-map species caps — shared by gameState's
  *  join path; mapUpdate handles the same rebuild itself since it always
@@ -172,8 +173,7 @@ function applyMapSnapshot(ctx: NetCtx, map?: MapSnapshot): void {
     clearArenaDome(deps.lazyScene());
   }
   setAmbientCaps(map?.ambient);
-  if (map?.terrain) void applyTerrain(ctx, map.terrain);
-  else void applyTerrain(ctx, null);
+  void applyTerrain(ctx, map?.terrain ?? null, map?.terrainTex, map?.sky);
 }
 
 /** Fetch the room's heightfield and swap the live terrain over to it.
@@ -184,15 +184,16 @@ let terrainActive: string | null = null;
 // Rooms without a spec terrain reset to the boot field — the PNG the
 // session loaded at startup.
 const BOOT_HEIGHTMAP = '/assets/heightmaps/test_vertex.png';
-async function applyTerrain(ctx: NetCtx, file: string | null): Promise<void> {
-  if (terrainActive === file) return;
+async function applyTerrain(ctx: NetCtx, file: string | null, texPath?: string, skyDir?: string): Promise<void> {
+  const key = `${file}|${texPath}|${skyDir}`;
+  if (terrainActive === key) return;
   const { deps } = ctx;
   terrainSwap = terrainSwap.then(async () => {
-    if (terrainActive === file) return;
+    if (terrainActive === key) return;
     Ball.terrainSwapping = true;
     try {
+      const { httpUrl } = await resolveServerEndpoints();
       if (file) {
-        const { httpUrl } = await resolveServerEndpoints();
         await loadHeightfieldBin(`${httpUrl}/maps/${file}`);
       } else {
         await loadHeightmap(BOOT_HEIGHTMAP);
@@ -202,15 +203,119 @@ async function applyTerrain(ctx: NetCtx, file: string | null): Promise<void> {
       // swapped, not mutated, so the sim would keep predicting bounces on
       // the old terrain. Re-read it now that the new field is resident.
       Ball.initNetMode(true);
-      terrainActive = file;
+
+      // Baked albedo (T2 ports) replaces the procedural palette entirely.
+      // Isolated from the terrain swap: a missing texture shouldn't leave
+      // the old heightfield-resident-but-unbuilt state behind.
+      try {
+        await applyTerrainTex(deps, httpUrl, texPath);
+      } catch (e) {
+        const src = (e as ProgressEvent)?.target as { src?: string } | undefined;
+        deps.logger.warn(`Albedo load failed for ${texPath}: ${src?.src ?? String(e)}`);
+      }
+      // Cube skybox faces extracted as px/nx/py/ny/pz/nz.png; maps
+      // without one fall back to the procedural atmosphere.
+      await applySky(deps, httpUrl, skyDir);
+
+      terrainActive = key;
       deps.logger.info(`Terrain swapped to maps/${file}`);
     } catch (e) {
-      deps.logger.warn(`Terrain load failed for maps/${file}: ${(e as Error).message}`);
+      // THREE loaders reject with ProgressEvent (no .message) — log
+      // whichever URL failed via the event target, plus Error message.
+      const ev = e as ProgressEvent & { target?: { src?: string } };
+      const detail = e instanceof Error ? e.message
+        : ev?.target?.src ?? String(e);
+      deps.logger.warn(`Terrain load failed for ${file ?? BOOT_HEIGHTMAP}: ${detail}`);
     } finally {
       Ball.terrainSwapping = false;
     }
   });
   return terrainSwap;
+}
+
+/** A missing face must not kill the terrain swap — loader rejections
+ *  are ProgressEvents, which used to surface as "undefined" here. */
+async function applySky(deps: NetCtx['deps'], httpUrl: string, skyDir: string | undefined): Promise<void> {
+  const skyMesh = deps.lazyScene().getObjectByName('__sky');
+  if (!skyDir) {
+    deps.lazyScene().background = null;
+    if (skyMesh) skyMesh.visible = true;
+    return;
+  }
+  const order = ['px', 'nx', 'py', 'ny', 'pz', 'nz'].map(
+    (f) => `${httpUrl}/maps/${skyDir}/${f}.png`);
+  try {
+    deps.lazyScene().background = await new THREE.CubeTextureLoader().loadAsync(order);
+    if (skyMesh) skyMesh.visible = false;
+  } catch (e) {
+    const src = (e as ProgressEvent)?.target as { src?: string } | undefined;
+    deps.logger.warn(`Sky load failed for ${skyDir}: ${src?.src ?? String(e)}`);
+  }
+}
+
+/** Baked albedo + optional full-fidelity material layer (mats.json next
+ *  to it on T2 ports). Missing mats just keeps the baked look. */
+async function applyTerrainTex(deps: NetCtx['deps'], httpUrl: string, texPath: string | undefined): Promise<void> {
+  const terrain = deps.lazyTerrain();
+  if (!texPath) {
+    terrain.setAlbedo(null);
+    terrain.setMaterialBlend(null, null, null, 0);
+    return;
+  }
+  const tex = await new THREE.TextureLoader().loadAsync(`${httpUrl}/maps/${texPath}`);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  terrain.setAlbedo(tex);
+  try {
+    const mats = await loadMats(`${httpUrl}/maps/${texPath.slice(0, texPath.lastIndexOf('/'))}`);
+    if (mats) terrain.setMaterialBlend(mats.tiles, mats.alphaA, mats.alphaB, mats.tileMeters);
+  } catch {
+    terrain.setMaterialBlend(null, null, null, 0);
+  }
+}
+
+/** T2 material-blend manifest beside albedo.png: alphas.bin is
+ *  grid²×count u8 weights packed into two RGBA DataTextures (8 max);
+ *  the 256px tiles are drawn into a 4×2 atlas so a plain sampler2D can
+ *  reach all layers. Returns null when no mats.json exists. */
+async function loadMats(dirUrl: string): Promise<{
+  tiles: THREE.Texture; alphaA: THREE.Texture; alphaB: THREE.Texture; tileMeters: number;
+} | null> {
+  const res = await fetch(`${dirUrl}/mats.json`);
+  if (!res.ok) return null;
+  const man = await res.json() as { grid: number; count: number; tiles: string[]; alphas: string; tileMeters: number };
+  const raw = new Uint8Array(await (await fetch(`${dirUrl}/${man.alphas}`)).arrayBuffer());
+  const grid = man.grid, count = man.count;
+  const pack = (offset: number) => {
+    const rgba = new Uint8Array(grid * grid * 4);
+    for (let c = 0; c < 4; c++) {
+      const layer = offset + c;
+      if (layer >= count) break;
+      const src = layer * grid * grid;
+      for (let i = 0; i < grid * grid; i++) rgba[i * 4 + c] = raw[src + i];
+    }
+    const t = new THREE.DataTexture(rgba, grid, grid, THREE.RGBAFormat, THREE.UnsignedByteType);
+    t.magFilter = THREE.LinearFilter;
+    t.minFilter = THREE.LinearFilter;
+    t.needsUpdate = true;
+    return t;
+  };
+  // Tile atlas: 4×2 cells of 256px on one canvas — atlas UVs in the
+  // shader do the layer select, no texture arrays needed.
+  const atlas = document.createElement('canvas');
+  atlas.width = 1024; atlas.height = 512;
+  const g = atlas.getContext('2d')!;
+  await Promise.all(man.tiles.slice(0, 8).map(async (path, k) => {
+    const img = new Image();
+    img.src = `${dirUrl}/${path}`;
+    await img.decode();
+    g.drawImage(img, (k % 4) * 256, Math.floor(k / 4) * 256, 256, 256);
+  }));
+  const tilesTex = new THREE.CanvasTexture(atlas);
+  tilesTex.colorSpace = THREE.SRGBColorSpace;
+  tilesTex.generateMipmaps = true;
+  tilesTex.minFilter = THREE.LinearMipmapLinearFilter;
+  return { tiles: tilesTex, alphaA: pack(0), alphaB: pack(4), tileMeters: man.tileMeters };
 }
 
 /** Local-player half of gameState — position/rotation/health restore on

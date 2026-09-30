@@ -1,3 +1,4 @@
+2026-09-26 - T2 terrain material blend: shader tiles real 256px materials over baked albedo (mats.json + alphas.bin + tile atlas), distance-faded; host-mode loss meter no longer counts loopback frame hitches; ball field-bind log deduped; applyTerrain split for lint
 2026-09-26 - Split DemoManager.ts: file IO + seekbar markers -> demoIO.ts (503->417)
 2026-09-26 - Split DemoRecorder.ts: clip-window collectors -> demoClip.ts (593->447)
 2026-09-26 - Split hud.ts: scoreboard overlay -> hud/scoreboard.ts (603->549)
