@@ -405,6 +405,7 @@ function hudTick(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof cr
 
   sceneSetup.update(dt);
   sceneSetup.atmosphericSky.followCamera(camera.position);
+  sceneSetup.updateCamera(camera);
 
   // Shake composes after player.update's camera write; the LG beam weld
   // is last — it needs the swayed viewmodel AND the post-shake camera or

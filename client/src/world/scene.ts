@@ -30,6 +30,7 @@ import {
 
 import { AtmosphericSky } from './atmosphericSky.js';
 import { VolumetricClouds } from './volumetricClouds.js';
+import { SunShafts } from './sunShafts.js';
 import { urlParams } from '../core/params.js';
 import { settings } from '../core/settings.js';
 
@@ -37,10 +38,12 @@ export interface SceneSetup {
   scene: THREE.Scene;
   atmosphericSky: AtmosphericSky;
   volumetricClouds: VolumetricClouds;
+  sunShafts: SunShafts;
   ambient: THREE.AmbientLight;
   sun: THREE.DirectionalLight;
   hemi: THREE.HemisphereLight;
   update: (dt: number) => void;
+  updateCamera: (camera: THREE.Camera) => void;
 }
 
 export function createScene(): SceneSetup {
@@ -59,6 +62,8 @@ export function createScene(): SceneSetup {
   });
 
   // Volumetric Clouds
+  const sunShafts = new SunShafts(scene);
+
   const volumetricClouds = new VolumetricClouds(scene, {
     count: CLOUD_COUNT,
     cloudColor: new THREE.Color(0xffffff),
@@ -110,13 +115,20 @@ export function createScene(): SceneSetup {
     volumetricClouds.setSunDirection(atmosphericSky.getSunDirection());
   }
 
+  /** Camera-dependent mood pass — the shader knows where the sun is. */
+  function updateCamera(camera: THREE.Camera): void {
+    sunShafts.update(camera, atmosphericSky.getSunPosition());
+  }
+
   return {
     scene,
     atmosphericSky,
     volumetricClouds,
+    sunShafts,
     ambient,
     sun,
     hemi,
     update,
+    updateCamera,
   };
 }

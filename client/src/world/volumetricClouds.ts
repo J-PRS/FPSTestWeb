@@ -13,6 +13,7 @@ const cloudVertexShader = /* glsl */`
   attribute float windOffset;   // per-instance phase so clusters don't move in lockstep
   uniform vec3 windVector;      // windDirection * windSpeed * time — one uniform, GPU moves every puff
   varying vec3 vNormal;
+  varying vec3 vWorldNormal;
   varying vec3 vViewPosition;
 
   void main() {
@@ -24,6 +25,7 @@ const cloudVertexShader = /* glsl */`
     wp.x = mod(wp.x + SPREAD, SPREAD * 2.0) - SPREAD;
     wp.z = mod(wp.z + SPREAD, SPREAD * 2.0) - SPREAD;
     vNormal = normalize(normalMatrix * normal);
+    vWorldNormal = normalize(mat3(instanceMatrix) * normal);
     vec4 mvPosition = viewMatrix * wp;
     vViewPosition = -mvPosition.xyz;
     gl_Position = projectionMatrix * mvPosition;
@@ -36,6 +38,7 @@ const cloudFragmentShader = /* glsl */`
   uniform float density;
   
   varying vec3 vNormal;
+  varying vec3 vWorldNormal;
   varying vec3 vViewPosition;
   
   void main() {
@@ -46,8 +49,12 @@ const cloudFragmentShader = /* glsl */`
     // Lighting
     float light = max(0.0, dot(vNormal, sunDirection)) * 0.5 + 0.5;
     
+    // Darker undersides — the single biggest cue that reads "volume"
+    // instead of "white spheres".
+    float base = mix(0.45, 1.0, smoothstep(-1.0, 0.7, vWorldNormal.y));
+    
     // Combine
-    vec3 color = cloudColor * light;
+    vec3 color = cloudColor * light * base;
     float alpha = density * (0.3 + fresnel * 0.7);
     
     gl_FragColor = vec4(color, alpha);
