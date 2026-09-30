@@ -313,43 +313,7 @@ export class BotBrain {
     this.thinkT -= dt;
     if (this.thinkT <= 0) {
       this.thinkT = hero ? THINK_S * 0.45 : THINK_S;
-      let best: BotEnemy | null = null;
-      let bestD = hero ? BOT_FIRE_RANGE * 1.4 : BOT_FIRE_RANGE;
-      let bestBeast: BotEnemy | null = null;
-      let bestBeastD = ctx.huntCreatures ? CREATURE_FIRE_RANGE : CREATURE_DEFENSE_M;
-      for (const e of ctx.enemies) {
-        if (!e.alive) continue;
-        const d = dist3(pos, e.pos);
-        // No wallhack: only acquire what the eye line can actually see.
-        // An occluded enemy clears the hunt entirely — breaking LOS behind
-        // a ridge shakes pursuit like it would a human.
-        if (!losClear(ctx, pos, e.pos)) continue;
-        if (e.id.startsWith('b:')) {
-          if (d < bestBeastD) { bestBeastD = d; bestBeast = e; }
-          continue;
-        }
-        if (d < bestD) { bestD = d; best = e; }
-      }
-      // In economy rooms, only an actual nearby player threat outranks
-      // the harvest — otherwise the bot keeps farming past a firefight
-      // across the map like a human focused on the score. In any mode a
-      // creature on top of the bot is urgent: deal with what's biting.
-      if (bestBeast && (!best || bestD > THREAT_M || bestBeastD < CREATURE_URGENT_M)) best = bestBeast;
-      this.hunt = best;
-      if (best) {
-        this.lastSeen = { ...best.pos };
-        this.lastSeenVel = { ...best.vel };
-        this.lastSeenAt = now;
-      }
-      // Combat replan rides the slow cadence — the ring eval is the
-      // expensive part (LOS per candidate per enemy) and 3Hz is plenty
-      // for position keeping. A fearing bot skips position-keeping: the
-      // destination block below breaks contact instead.
-      this.fightPos = null;
-      if (best && !fearing && dist3(pos, best.pos) <= this.orbitFar) {
-        this.fightPos = this.pickFightPos(ctx, pos, best);
-      }
-      if (!best) this.pickGoal(ctx, pos);
+      this.pickHunt(ctx, pos, now, hero, fearing);
     }
     this.wanderT -= dt;
     // detourT decays here, with the other timers — decrementing it inside
@@ -359,123 +323,18 @@ export class BotBrain {
     this.revengeT -= dt;
 
     // --- choose the step destination ---
-    this.holding = false;
-    let dest: BotVec;
-    if (this.flinchT > 0) {
-      this.flinchT -= dt;
-      const fx = pos.x - this.flinchFrom.x, fz = pos.z - this.flinchFrom.z;
-      const l = Math.hypot(fx, fz) || 1;
-      dest = { x: pos.x + (fx / l) * FLINCH_DIST, y: pos.y, z: pos.z + (fz / l) * FLINCH_DIST };
-    } else if (this.hunt) {
-      const t = this.hunt;
-      const d = dist3(pos, t.pos);
-      if (fearing) {
-        // Retreat: straight away from the shooter, folding toward the
-        // nearest body when one is near — suppression keeps them honest.
-        const ax = pos.x - t.pos.x, az = pos.z - t.pos.z;
-        const al = Math.hypot(ax, az) || 1;
-        let rx = pos.x + (ax / al) * 24, rz = pos.z + (az / al) * 24;
-        let ally: BotVec | null = null;
-        let ad = Infinity;
-        for (const o of ctx.others ?? []) {
-          const od = distSq(pos, o);
-          if (od < ad && od > 4) { ad = od; ally = o; }
-        }
-        if (ally && ad < 2500) { rx = (rx + ally.x) * 0.5; rz = (rz + ally.z) * 0.5; }
-        dest = { x: rx, y: pos.y, z: rz };
-      } else if (d < CLOSE_PRESS_M || d > this.orbitFar * (hero ? 0.7 : 1)) {
-        // Point-blank or outranged: press straight in either way — inside
-        // fist reach the press converts to the punch, outside it to the
-        // approach. Holding the orbit at 2m would stare down a barrel.
-        dest = { ...t.pos };
-      } else {
-        // fightPos comes from the last replan tick — no pick yet (or the
-        // pick was "hold") means stand and shoot.
-        dest = this.fightPos ?? { ...pos };
-        this.holding = this.fightPos === null;
-      }
-    } else {
-      dest = this.goal;
-    }
+    let dest = this.pickDest(dt, ctx, pos, fearing, hero);
 
     // --- context steering: senses score every direction ---
     dest = this.steer(dt, ctx, pos, dest);
 
-    // Stuck break — no progress for 1.5s means the straight line is
-    // blocked (structure, cliff, another bot). Sidestep perpendicular to
-    // the goal for a beat; random side per incident keeps herds from
-    // detouring in lockstep.
-    this.progressT += dt;
-    if (this.progressT >= 1.5) {
-      this.progressT = 0;
-      if (distSq(pos, this.progressPos) < 2.25) {
-        this.stuckStreak++;
-        if (this.detourT <= 0) {
-          const gx = this.goal.x - pos.x, gz = this.goal.z - pos.z;
-          const gl = Math.hypot(gx, gz) || 1;
-          const side = Math.random() < 0.5 ? -1 : 1;
-          const dx = (-gz / gl) * side * 14, dz = (gx / gl) * side * 14;
-          this.detour = { x: pos.x + dx, y: ctx.groundY(pos.x + dx, pos.z + dz) + BOT_EYE, z: pos.z + dz };
-          this.detourT = 1.2;
-        }
-        // Pinned through a detour = a wall pocket every sideways probe
-        // is a face — thrust up and over is the legal way out.
-        if (this.stuckStreak >= 2) this.escapeJetT = Math.max(this.escapeJetT, 1.1);
-      } else {
-        this.stuckStreak = 0;
-      }
-      this.progressPos = { ...pos };
-    }
-    if (this.detourT > 0 && this.detour) {
-      dest = this.detour;
-    }
+    dest = this.stuckBreak(dt, ctx, pos, dest);
 
     // --- dodge: sidestep the nearest closing shell ---
     dest = this.dodge(ctx, pos, dest, hero);
 
     // --- fire ---
-    let fire: BrainOut['fire'];
-    if (this.hunt && now - this.lastSeenAt <= STALE_MS) {
-      this.fireT -= dt;
-      if (this.fireT <= 0) {
-        if (this.burstLeft <= 0) this.burstLeft = 5;
-        this.burstLeft--;
-        this.fireT = (this.burstLeft > 0 ? 0.45 : 0.8 + Math.random() * 0.5) / this.temper
-          * (hero ? 0.65 : fearing ? 0.75 : 1);
-        const d = dist3(pos, this.lastSeen);
-        // Suppressive fire is deliberately sloppy — noise, not hits. Hero
-        // aim just stops being sloppy.
-        const ws = ctx.weaponSpeed?.(d);
-        const flight = d / (ws && ws > 0 ? ws : 60);
-        // Scatter grows with how far ahead the bot must predict: target
-        // speed (a jinking enemy is hard to lead), raw distance, and the
-        // shell's time in flight — a 1.3s mortar lob is a much bigger
-        // prediction than a 0.6s disc at the same range.
-        let err = 0.5 + Math.hypot(this.lastSeenVel.x, this.lastSeenVel.y, this.lastSeenVel.z) * 0.1 + d * 0.02 + flight * 1.2;
-        err *= hero ? 0.3 : fearing ? 2.5 : 1;
-        // Ballistic intercept: the target keeps falling while the shell
-        // travels — a skier mid-air arcs down, and a flat lead overshoots
-        // high. Clamp at terrain so a grounded runner isn't predicted
-        // under the map.
-        const px = this.lastSeen.x + this.lastSeenVel.x * flight;
-        const pz = this.lastSeen.z + this.lastSeenVel.z * flight;
-        const py = Math.max(
-          ctx.groundY(px, pz),
-          this.lastSeen.y + this.lastSeenVel.y * flight + 0.5 * GRAVITY * flight * flight,
-        );
-        // Gravity-bent shells drop by the same amount — aim the arc's
-        // drop back so mortars don't land short.
-        const drop = ctx.weaponGravity?.(d) ? -0.5 * GRAVITY * flight * flight : 0;
-        fire = {
-          targetId: this.hunt.id,
-          aim: {
-            x: px + (Math.random() - 0.5) * err,
-            y: py + drop + (Math.random() - 0.5) * err * 0.5,
-            z: pz + (Math.random() - 0.5) * err,
-          },
-        };
-      }
-    }
+    const fire = this.pickFire(dt, ctx, pos, now, hero, fearing);
 
     // --- belt: lob a grenade into a mid-range fight on a slow cooldown ---
     this.beltT -= dt;
@@ -486,32 +345,189 @@ export class BotBrain {
     }
 
     // --- deploy: a quiet defender with hands free fortifies the stand ---
-    this.deployT -= dt;
-    let deploy: BrainOut['deploy'];
-    // Planting while a fight rages on the stand is suicide, but a defender
-    // watching a duel across the field still has hands free — the gate is
-    // "nobody close enough to interrupt", not "nobody visible at all"
-    // (a busy room never goes fully quiet, which starved the sense).
-    const handsFree = !this.hunt || dist3(pos, this.hunt.pos) > 25;
-    if (this.builder && this.deployT <= 0 && handsFree && !fearing && ctx.objective) {
-      const od = dist3(pos, ctx.objective);
-      if (od < 15) {
-        this.deployT = 28 + Math.random() * 20;
-        // A hurting builder drops a station first (it heals the squad);
-        // otherwise the stand gets guns, a minefield, or a patrol drone
-        // by temperament — drones roam the stand's perimeter so they're
-        // the pick when the anchor is already watched.
-        const roll = Math.random();
-        const kind: string = (ctx.healthFrac ?? 1) < 0.6 ? 'station'
-          : roll < 0.55 ? 'turret' : roll < 0.85 ? 'mine' : 'drone';
-        const a = Math.random() * Math.PI * 2;
-        const r = 4 + Math.random() * 6;
-        const px = pos.x + Math.cos(a) * r, pz = pos.z + Math.sin(a) * r;
-        deploy = { kind, pos: { x: px, y: ctx.groundY(px, pz), z: pz } };
-      }
-    }
+    const deploy = this.pickDeploy(dt, ctx, pos, fearing);
 
     return { dest, move: this.moveHints(dt, ctx, pos, dest), fire, status: this.statusIntent(ctx), belt, deploy };
+  }
+
+  /** Target acquisition + fight-position replan, on the slow think
+   *  cadence — the ring eval is the expensive part (LOS per candidate
+   *  per enemy) and 3Hz is plenty for position keeping. */
+  private pickHunt(ctx: BrainCtx, pos: BotVec, now: number, hero: boolean, fearing: boolean): void {
+    const range = hero ? BOT_FIRE_RANGE * 1.4 : BOT_FIRE_RANGE;
+    const beastRange = ctx.huntCreatures ? CREATURE_FIRE_RANGE : CREATURE_DEFENSE_M;
+    const { player, beast: bestBeast, playerD: bestD, beastD: bestBeastD } = this.scanVisible(ctx, pos, range, beastRange);
+    // In economy rooms, only an actual nearby player threat outranks
+    // the harvest — otherwise the bot keeps farming past a firefight
+    // across the map like a human focused on the score. In any mode a
+    // creature on top of the bot is urgent: deal with what's biting.
+    const best = bestBeast && (!player || bestD > THREAT_M || bestBeastD < CREATURE_URGENT_M) ? bestBeast : player;
+    this.hunt = best;
+    if (best) {
+      this.lastSeen = { ...best.pos };
+      this.lastSeenVel = { ...best.vel };
+      this.lastSeenAt = now;
+    }
+    this.fightPos = null;
+    // A fearing bot skips position-keeping: the dest pick breaks contact
+    // instead of holding an orbit.
+    if (best && !fearing && dist3(pos, best.pos) <= this.orbitFar) {
+      this.fightPos = this.pickFightPos(ctx, pos, best);
+    }
+    if (!best) this.pickGoal(ctx, pos);
+  }
+
+  /** Nearest visible enemy of each class — no wallhack: only acquire
+   *  what the eye line can actually see; an occluded enemy clears the
+   *  hunt entirely so breaking LOS shakes pursuit like a human's. */
+  private scanVisible(ctx: BrainCtx, pos: BotVec, range: number, beastRange: number): { player: BotEnemy | null; beast: BotEnemy | null; playerD: number; beastD: number } {
+    let player: BotEnemy | null = null, beast: BotEnemy | null = null;
+    let playerD = range, beastD = beastRange;
+    for (const e of ctx.enemies) {
+      if (!e.alive) continue;
+      const d = dist3(pos, e.pos);
+      if (!losClear(ctx, pos, e.pos)) continue;
+      if (e.id.startsWith('b:')) {
+        if (d < beastD) { beastD = d; beast = e; }
+      } else if (d < playerD) { playerD = d; player = e; }
+    }
+    return { player, beast, playerD, beastD };
+  }
+
+  /** Step destination: flinch knock > hunt press/retreat/orbit > goal. */
+  private pickDest(dt: number, ctx: BrainCtx, pos: BotVec, fearing: boolean, hero: boolean): BotVec {
+    this.holding = false;
+    if (this.flinchT > 0) {
+      this.flinchT -= dt;
+      const fx = pos.x - this.flinchFrom.x, fz = pos.z - this.flinchFrom.z;
+      const l = Math.hypot(fx, fz) || 1;
+      return { x: pos.x + (fx / l) * FLINCH_DIST, y: pos.y, z: pos.z + (fz / l) * FLINCH_DIST };
+    }
+    if (!this.hunt) return this.goal;
+    const t = this.hunt;
+    const d = dist3(pos, t.pos);
+    if (fearing) return this.retreatDest(ctx, pos, t);
+    if (d < CLOSE_PRESS_M || d > this.orbitFar * (hero ? 0.7 : 1)) {
+      // Point-blank or outranged: press straight in either way — inside
+      // fist reach the press converts to the punch, outside it to the
+      // approach. Holding the orbit at 2m would stare down a barrel.
+      return { ...t.pos };
+    }
+    // fightPos comes from the last replan tick — no pick yet (or the
+    // pick was "hold") means stand and shoot.
+    this.holding = this.fightPos === null;
+    return this.fightPos ?? { ...pos };
+  }
+
+  /** Stuck break — no progress for 1.5s means the straight line is
+   *  blocked (structure, cliff, another bot). Sidestep perpendicular to
+   *  the goal for a beat; random side per incident keeps herds from
+   *  detouring in lockstep. */
+  private stuckBreak(dt: number, ctx: BrainCtx, pos: BotVec, dest: BotVec): BotVec {
+    this.progressT += dt;
+    if (this.progressT < 1.5) return this.detourT > 0 && this.detour ? this.detour : dest;
+    this.progressT = 0;
+    if (distSq(pos, this.progressPos) < 2.25) {
+      this.stuckStreak++;
+      if (this.detourT <= 0) {
+        const gx = this.goal.x - pos.x, gz = this.goal.z - pos.z;
+        const gl = Math.hypot(gx, gz) || 1;
+        const side = Math.random() < 0.5 ? -1 : 1;
+        const dx = (-gz / gl) * side * 14, dz = (gx / gl) * side * 14;
+        this.detour = { x: pos.x + dx, y: ctx.groundY(pos.x + dx, pos.z + dz) + BOT_EYE, z: pos.z + dz };
+        this.detourT = 1.2;
+      }
+      // Pinned through a detour = a wall pocket every sideways probe
+      // is a face — thrust up and over is the legal way out.
+      if (this.stuckStreak >= 2) this.escapeJetT = Math.max(this.escapeJetT, 1.1);
+    } else {
+      this.stuckStreak = 0;
+    }
+    this.progressPos = { ...pos };
+    return this.detourT > 0 && this.detour ? this.detour : dest;
+  }
+
+  /** Retreat: straight away from the shooter, folding toward the nearest
+   *  body when one is near — suppression keeps them honest. */
+  private retreatDest(ctx: BrainCtx, pos: BotVec, t: BotEnemy): BotVec {
+    const ax = pos.x - t.pos.x, az = pos.z - t.pos.z;
+    const al = Math.hypot(ax, az) || 1;
+    let rx = pos.x + (ax / al) * 24, rz = pos.z + (az / al) * 24;
+    let ally: BotVec | null = null;
+    let ad = Infinity;
+    for (const o of ctx.others ?? []) {
+      const od = distSq(pos, o);
+      if (od < ad && od > 4) { ad = od; ally = o; }
+    }
+    if (ally && ad < 2500) { rx = (rx + ally.x) * 0.5; rz = (rz + ally.z) * 0.5; }
+    return { x: rx, y: pos.y, z: rz };
+  }
+
+  /** Volley pick: burst cadence + sloppy ballistic lead at lastSeen. */
+  private pickFire(dt: number, ctx: BrainCtx, pos: BotVec, now: number, hero: boolean, fearing: boolean): BrainOut['fire'] {
+    if (!this.hunt || now - this.lastSeenAt > STALE_MS) return undefined;
+    this.fireT -= dt;
+    if (this.fireT > 0) return undefined;
+    if (this.burstLeft <= 0) this.burstLeft = 5;
+    this.burstLeft--;
+    this.fireT = (this.burstLeft > 0 ? 0.45 : 0.8 + Math.random() * 0.5) / this.temper
+      * (hero ? 0.65 : fearing ? 0.75 : 1);
+    const d = dist3(pos, this.lastSeen);
+    // Suppressive fire is deliberately sloppy — noise, not hits. Hero
+    // aim just stops being sloppy.
+    const ws = ctx.weaponSpeed?.(d);
+    const flight = d / (ws && ws > 0 ? ws : 60);
+    // Scatter grows with how far ahead the bot must predict: target
+    // speed (a jinking enemy is hard to lead), raw distance, and the
+    // shell's time in flight — a 1.3s mortar lob is a much bigger
+    // prediction than a 0.6s disc at the same range.
+    let err = 0.5 + Math.hypot(this.lastSeenVel.x, this.lastSeenVel.y, this.lastSeenVel.z) * 0.1 + d * 0.02 + flight * 1.2;
+    err *= hero ? 0.3 : fearing ? 2.5 : 1;
+    // Ballistic intercept: the target keeps falling while the shell
+    // travels — a skier mid-air arcs down, and a flat lead overshoots
+    // high. Clamp at terrain so a grounded runner isn't predicted
+    // under the map.
+    const px = this.lastSeen.x + this.lastSeenVel.x * flight;
+    const pz = this.lastSeen.z + this.lastSeenVel.z * flight;
+    const py = Math.max(
+      ctx.groundY(px, pz),
+      this.lastSeen.y + this.lastSeenVel.y * flight + 0.5 * GRAVITY * flight * flight,
+    );
+    // Gravity-bent shells drop by the same amount — aim the arc's
+    // drop back so mortars don't land short.
+    const drop = ctx.weaponGravity?.(d) ? -0.5 * GRAVITY * flight * flight : 0;
+    return {
+      targetId: this.hunt.id,
+      aim: {
+        x: px + (Math.random() - 0.5) * err,
+        y: py + drop + (Math.random() - 0.5) * err * 0.5,
+        z: pz + (Math.random() - 0.5) * err,
+      },
+    };
+  }
+
+  /** Fortification pick: planting while a fight rages on the stand is
+   *  suicide, but a defender watching a duel across the field still has
+   *  hands free — the gate is "nobody close enough to interrupt", not
+   *  "nobody visible at all" (a busy room never goes fully quiet, which
+   *  starved the sense). */
+  private pickDeploy(dt: number, ctx: BrainCtx, pos: BotVec, fearing: boolean): BrainOut['deploy'] {
+    this.deployT -= dt;
+    const handsFree = !this.hunt || dist3(pos, this.hunt.pos) > 25;
+    if (!this.builder || this.deployT > 0 || !handsFree || fearing || !ctx.objective) return undefined;
+    if (dist3(pos, ctx.objective) >= 15) return undefined;
+    this.deployT = 28 + Math.random() * 20;
+    // A hurting builder drops a station first (it heals the squad);
+    // otherwise the stand gets guns, a minefield, or a patrol drone
+    // by temperament — drones roam the stand's perimeter so they're
+    // the pick when the anchor is already watched.
+    const roll = Math.random();
+    const kind: string = (ctx.healthFrac ?? 1) < 0.6 ? 'station'
+      : roll < 0.55 ? 'turret' : roll < 0.85 ? 'mine' : 'drone';
+    const a = Math.random() * Math.PI * 2;
+    const r = 4 + Math.random() * 6;
+    const px = pos.x + Math.cos(a) * r, pz = pos.z + Math.sin(a) * r;
+    return { kind, pos: { x: px, y: ctx.groundY(px, pz), z: pz } };
   }
 
   /** Sidestep the nearest closing shell — a perpendicular step dodges a
