@@ -4,6 +4,7 @@
 import { SKILL_ORDER, Player, type SkillId, BELT_ITEMS, type BeltItem } from '../entities/Player.js';
 import { PERKS, PERK_ORDER, type PerkId } from '../../../shared/perks.js';
 import { CLASS_STATS, type ArmorClass } from '../../../shared/botClasses.js';
+import { MAX_HEALTH } from '../core/config.js';
 import { SLOT_DEFS } from '../weapons.js';
 import { codeFor, codeLabel } from '../core/keybinds.js';
 
@@ -58,7 +59,7 @@ interface BarUi {
   sidearmLabel: HTMLElement | null; packLabel: HTMLElement | null;
 }
 
-type MkDrop = (options: DropOpt[], onPick: (v: string) => void) => Drop;
+type MkDrop = (options: DropOpt[], onPick: (v: string) => void, faceOpts?: DropOpt[]) => Drop;
 
 export function wireLoadoutBar(deps: LoadoutDeps): { refreshLoadout(): void } {
   const loadoutBar = document.getElementById('loadout-bar');
@@ -66,6 +67,7 @@ export function wireLoadoutBar(deps: LoadoutDeps): { refreshLoadout(): void } {
   function mkDrop(
     initialOptions: DropOpt[],
     onPick: (v: string) => void,
+    faceOpts?: DropOpt[],
   ): Drop {
     const el = document.createElement('div');
     el.className = 'lo-chip lo-drop';
@@ -119,7 +121,10 @@ export function wireLoadoutBar(deps: LoadoutDeps): { refreshLoadout(): void } {
       el,
       setValue(v) {
         currentV = v;
-        face.textContent = options.find((o) => o.v === v)?.label ?? v;
+        // faceOpts resolves labels the filtered list can't — an equipped
+        // heavy weapon on lighter armor must name itself, not print "6".
+        face.textContent = options.find((o) => o.v === v)?.label
+          ?? faceOpts?.find((o) => o.v === v)?.label ?? v;
         list.querySelectorAll<HTMLElement>('.lo-opt').forEach((o) =>
           o.classList.toggle('sel', o.dataset.v === v));
       },
@@ -230,7 +235,7 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
     name.textContent = cls.toUpperCase();
     const sub = document.createElement('span');
     sub.className = 'lo-tile-sub';
-    sub.textContent = `${st.maxHealth >= 0 ? '+' : ''}${st.maxHealth} HP · ${Math.round(st.speedScale * 100)}%`;
+    sub.textContent = `${MAX_HEALTH + st.maxHealth} HP · ${Math.round(st.speedScale * 100)}% SPD`;
     t.appendChild(name);
     t.appendChild(sub);
     t.addEventListener('click', (e) => { e.stopPropagation(); pickClass(cls); });
@@ -243,10 +248,11 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
   // --- WEAPONS: one numbered cell per slot. ---
   const weaponCells = mkGroup('WEAPONS');
   const weaponOpts = weaponOptsFor(deps.lazyPlayer()?.armorClass ?? 'medium');
+  const allWeaponOpts = weaponOptsFor('heavy'); // label source for filtered-out picks
   for (let i = 0; i < Player.LOADOUT_SLOTS; i++) {
     const { cell, cap } = mkCellDom(weaponCells);
     cap.textContent = `SLOT ${i + 1}`;
-    const drop = mkDrop(weaponOpts, (v) => deps.lazyPlayer().setLoadoutSlot(i, Number(v)));
+    const drop = mkDrop(weaponOpts, (v) => deps.lazyPlayer().setLoadoutSlot(i, Number(v)), allWeaponOpts);
     cell.appendChild(drop.el);
     ui.slotDrops.push(drop);
   }
