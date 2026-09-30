@@ -53,11 +53,11 @@ export function wireNetworkHandlers(deps: NetDeps): void {
   // Chat is self-contained (own DOM + key routing) — net wiring is just
   // where network↔game glue already lives.
   const chat = new Chat({
-    send: (text) => networkManager.sendChat(text),
+    send: (text, team) => networkManager.sendChat(text, team),
     isConnected: () => networkManager.isConnected(),
     localName: () => networkManager.getLocalPlayerId(),
   });
-  networkManager.onChat = (playerId, text) => chat.add(playerId, text);
+  networkManager.onChat = (playerId, text, team) => chat.add(playerId, text, team);
 
   // Both first-seen-update and respawn-into-missing end up here.
   const ensureRemotePlayer = (playerId: string, position: { x: number; y: number; z: number }, via: string): RemotePlayer => {

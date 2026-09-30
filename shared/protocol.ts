@@ -41,7 +41,7 @@ export type ClientMessage =
   // its check anchor here instead of rejecting it as a speedhack.
   | { type: 'teleport'; position: Vec3; rotation: Rotation; velocity: Vec3 }
   | { type: 'ping'; timestamp: number }
-  | { type: 'chat'; text: string }
+  | { type: 'chat'; text: string; team?: boolean }
   | { type: 'shot'; targetId: string | null; weaponType?: number; position?: Vec3; velocity?: Vec3; timestamp?: number; projectileId?: string | null; airtime?: number }
   | { type: 'aoeShot'; position: Vec3; weaponType?: number; excludeTargetId?: string | null; projectileId?: string | null; airtime?: number; power?: number; directHit?: boolean }
   // Hitscan fire (fan/beam kinds) has no projectile for observers to see —
@@ -157,7 +157,7 @@ export type ServerMessage =
   // Roster for joiners/reconnects — current segment state of every live ball
   | { type: 'ballRoster'; balls: { id: number; variant: number; colorIdx: number; position: Vec3; velocity: Vec3; enraged: boolean; targetId: string | null; tp?: Vec3 | null; t: number }[] }
   | { type: 'pong'; timestamp: number }
-  | { type: 'chat'; playerId: string; text: string }
+  | { type: 'chat'; playerId: string; text: string; team?: boolean }
   // --- Match scoreboard (team-mode rooms) --------------------------------
   | { type: 'flagUpdate'; flags: { team: 'alpha' | 'bravo'; pos: Vec3; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[] }
   // Server-owned pickups: creature kills drop a nugget gem; touching it

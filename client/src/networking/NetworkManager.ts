@@ -72,7 +72,7 @@ export class NetworkManager {
   public onPlayerJoined: ((playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }) => void) | null = null;
   public onPlayerLeft: ((playerId: string) => void) | null = null;
   public onKnockback: ((position: { x: number; y: number; z: number }, force: number, pull?: boolean) => void) | null = null;
-  public onChat: ((playerId: string, text: string) => void) | null = null;
+  public onChat: ((playerId: string, text: string, team: boolean) => void) | null = null;
   public onPlayerUpdate: ((playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }, timestamp: number, velocity?: { x: number; y: number; z: number }) => void) | null = null;
   public onGameState: ((players: GameStatePlayer[], localPlayerState: LocalPlayerState | undefined, roomInfo?: { room?: string; mode?: string; team?: 'alpha' | 'bravo'; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number>; pickups?: { id: number; pos: { x: number; y: number; z: number }; kind?: PickupKind }[]; flags?: { team: 'alpha' | 'bravo'; pos: { x: number; y: number; z: number }; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]; matchEndsAt?: number; respawnMs?: number; deployables?: { id: number; owner: string; kind: 'turret' | 'mine' | 'station' | 'drone'; pos: { x: number; y: number; z: number } }[]; map?: { mode?: string; bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } }; structures?: import('../../../shared/mapSpec.js').StructureSpec[]; arena?: { x: number; z: number; radius: number }; ambient?: Record<string, number> } }) => void) | null = null;
   public onTeamScore: ((scores: { alpha: number; bravo: number }, winAt: number) => void) | null = null;
@@ -327,7 +327,7 @@ export class NetworkManager {
     crawlDie: (data) => this.onCrawlDie?.(data),
     crawlRoster: (data) => this.onCrawlRoster?.(data),
     pong: (data) => this.handlePong(data.timestamp),
-    chat: (data) => this.onChat?.(data.playerId, data.text),
+    chat: (data) => this.onChat?.(data.playerId, data.text, data.team === true),
     flagUpdate: (data) => this.onFlagUpdate?.(data.flags),
     matchNotice: (data) => this.onMatchNotice?.(data.text),
     pickupSpawn: (data) => this.onPickupSpawn?.(data.id, data.pos, data.kind),
@@ -702,8 +702,8 @@ export class NetworkManager {
     this.send({ type: 'snapshotRequest' });
   }
 
-  sendChat(text: string): void {
-    this.send({ type: 'chat', text });
+  sendChat(text: string, team = false): void {
+    this.send({ type: 'chat', text, team: team || undefined });
   }
 
   /** Mid-match room hop — the server re-seats this session and answers

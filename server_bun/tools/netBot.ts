@@ -451,7 +451,8 @@ class WireBot {
     if (now >= this.nextChat) {
       this.nextChat = now + rand(20000, 60000);
       const lines = ['wp', 'incoming!', 'disc jump incoming', 'need a pickup', 'flag runner left', 'lag check'];
-      this.send({ type: 'chat', text: lines[Math.floor(rand(0, lines.length))] });
+      // Half the chatter goes team-scoped — exercises the fanout filter.
+      this.send({ type: 'chat', text: lines[Math.floor(rand(0, lines.length))], team: rand(0, 1) < 0.5 });
     }
     if (now >= this.nextTeleport) {
       // Warp-blink cadence — the server caps teleports at ~1/s anyway.

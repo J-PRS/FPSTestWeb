@@ -2,14 +2,15 @@
  * Chat overlay — self-contained DOM module so it doesn't entangle the
  * HUD/input stacks: own elements, own key routing.
  *
- * Key model: T opens the input (Tribes heritage), Enter sends, Esc closes.
+ * Key model: T opens global chat, Y opens team chat (Tribes/CS heritage),
+ * Enter sends, Esc closes.
  * While the input is focused a capture-phase keydown eats everything so a
  * message typed mid-fight doesn't also ski/jump/fire. textContent-only
  * rendering — chat is the classic HTML-injection vector.
  */
 
 export interface ChatDeps {
-  send(text: string): void;
+  send(text: string, team: boolean): void;
   /** null when offline — feed still shows locally-echoed/system lines */
   isConnected(): boolean;
   localName(): string;
@@ -23,6 +24,7 @@ export class Chat {
   private inputWrap: HTMLDivElement;
   private input: HTMLInputElement;
   private deps: ChatDeps;
+  private team = false;
 
   constructor(deps: ChatDeps) {
     this.deps = deps;
@@ -58,8 +60,8 @@ export class Chat {
       if (e.code === 'Enter') {
         const text = this.input.value.trim();
         if (text) {
-          this.deps.send(text.slice(0, 200));
-          if (!this.deps.isConnected()) this.add(this.deps.localName(), text); // offline echo
+          this.deps.send(text.slice(0, 200), this.team);
+          if (!this.deps.isConnected()) this.add(this.deps.localName(), text, this.team); // offline echo
         }
         this.close();
       } else if (e.code === 'Escape') {
@@ -67,16 +69,19 @@ export class Chat {
       }
       return;
     }
-    // Don't steal T while typing in menus/other inputs, or when a
+    // Don't steal T/Y while typing in menus/other inputs, or when a
     // chat-less surface owns the keyboard.
-    if (e.code === 'KeyT' && !(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement)) {
-      this.open();
+    if ((e.code === 'KeyT' || e.code === 'KeyY') && !(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement)) {
+      this.open(e.code === 'KeyY');
       e.preventDefault();
       e.stopPropagation();
     }
   }
 
-  private open(): void {
+  private open(team: boolean): void {
+    this.team = team;
+    this.input.placeholder = team ? 'team…' : 'say…';
+    this.input.style.borderColor = team ? '#4a4' : '#444';
     this.inputWrap.style.display = 'block';
     this.input.value = '';
     this.input.focus();
@@ -88,7 +93,7 @@ export class Chat {
   }
 
   /** A line in the feed. `from === null` renders as a system line. */
-  add(from: string | null, text: string): void {
+  add(from: string | null, text: string, team = false): void {
     const line = document.createElement('div');
     line.style.cssText = 'text-shadow:1px 1px 0 #000;margin-top:1px;';
     if (from === null) {
@@ -96,8 +101,8 @@ export class Chat {
       line.textContent = text;
     } else {
       const who = document.createElement('span');
-      who.style.color = '#fd8';
-      who.textContent = `${from}: `;
+      who.style.color = team ? '#7d7' : '#fd8';
+      who.textContent = `${team ? '[T] ' : ''}${from}: `;
       const body = document.createElement('span');
       body.textContent = text;
       line.append(who, body);
