@@ -236,15 +236,6 @@ export class TeamBots {
    *  a client-side mirror here. */
   private ctxFor(bot: GameBot, enemies: Parameters<GameBot['think']>[1]['enemies'], others: THREE.Vector3[], terrain: Terrain): Parameters<GameBot['think']>[1] {
     const info = this.ctf?.objectiveInfoFor(bot);
-    // Rally channel = live teammates. Team modes have a real squad to
-    // fold onto; FFA passes nothing (there's nobody safe to run to).
-    let allies: THREE.Vector3[] | undefined;
-    if (bot.team === 'alpha' || bot.team === 'bravo') {
-      allies = [];
-      const player = this.deps.lazyPlayer();
-      if (this.playerTeam === bot.team && !player.isDead) allies.push(player.pos);
-      for (const b of this.bots) if (b !== bot && !b.isDead && b.team === bot.team) allies.push(b.position);
-    }
     return {
       terrain,
       enemies,
@@ -256,7 +247,7 @@ export class TeamBots {
       // flips the same flag only in economy modes.
       huntCreatures: this.mode === 'nuggets',
       others,
-      allies,
+      allies: this.alliesOf(bot),
       // Mortar heavies reach past the duel band — same reach rule the
       // server senses applies.
       engageRange: bot.loadout?.far === WeaponType.Mortar ? 95 : undefined,
@@ -265,6 +256,18 @@ export class TeamBots {
       sounds: this.senses.recentNoises(bot.position),
       threats: this.senses.incomingNear(bot.position),
     };
+  }
+
+  /** Rally channel = live teammates (incl. the local player). Team
+   *  modes have a real squad to fold onto; FFA passes nothing (there's
+   *  nobody safe to run to — bot.team is its own playerId there). */
+  private alliesOf(bot: GameBot): THREE.Vector3[] | undefined {
+    if (bot.team !== 'alpha' && bot.team !== 'bravo') return undefined;
+    const allies: THREE.Vector3[] = [];
+    const player = this.deps.lazyPlayer();
+    if (this.playerTeam === bot.team && !player.isDead) allies.push(player.pos);
+    for (const b of this.bots) if (b !== bot && !b.isDead && b.team === bot.team) allies.push(b.position);
+    return allies;
   }
 
   /** Sheep meter accrual — fills while the bot moves like a pedestrian

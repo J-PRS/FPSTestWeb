@@ -156,9 +156,13 @@ export class CtfFlags {
       pos: new THREE.Vector3(pick.x, pick.y, pick.z), infiltrating,
       // Only roles whose goal IS the thief get the beacon — a capper
       // escorting doesn't break off to chase.
-      thief: thief !== null && pick === thief && own.carrier
-        ? { id: own.carrier, pos: thief, vel: own.vel } : undefined,
+      thief: this.thiefBeacon(thief, pick, own),
     };
+  }
+
+  private thiefBeacon(thief: THREE.Vector3 | null, pick: { x: number; y: number; z: number }, own: Flag) {
+    return thief !== null && pick === thief && own.carrier
+      ? { id: own.carrier, pos: thief, vel: own.vel } : undefined;
   }
 
   dropCarried(carrierId: string, at: THREE.Vector3): void {
