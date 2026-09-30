@@ -394,8 +394,11 @@ export class RoomMoveSim {
     }
     // Mid-arc knockback skew is transient by construction — the severe
     // counter still eats it (3 hits in 60s = real teleport), but the
-    // log line stays informational.
-    const transient = dist < tol * 1.5 || Date.now() - sh.lastImpulseAt < 2000;
+    // log line stays informational. Same for permissive mode: without
+    // sim authority nothing ever corrects the shadow, so two honest
+    // sims drifting on cresty terrain is the expected steady state,
+    // not a warn — the plausibility gate is the real judge there.
+    const transient = !this.authoritative || dist < tol * 1.5 || Date.now() - sh.lastImpulseAt < 2000;
     if (sh.divergences !== 1 && sh.divergences % 20 !== 0) return;
     const s = sh.sim.state;
     logger[transient ? 'info' : 'warn']('Move sim divergence', {

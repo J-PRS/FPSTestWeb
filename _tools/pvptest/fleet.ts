@@ -307,15 +307,16 @@ const moveTimer = setInterval(() => {
     // as orbit spoofs and get rejected as teleports.
     if (!SPOOF && !b.sim) continue;
     if (!SPOOF && b.sim) {
-      // Step at exactly the server's 1/30 rate with an accumulator: any
-      // other granularity integrates ski/ground contact differently than
-      // the 30Hz shadow and drifts ~8-10m — right at the tolerance edge.
+      // MoveSim substeps at 1/60 internally — the update() granularity is
+      // just how the accumulator drains, so it can't cause the drift the
+      // server shadow logs. Keep the old 1/30 feeding cadence.
+      const SIM_DT = 1 / 30;
       b.acc = (b.acc ?? 0) + dt;
-      while (b.acc >= 1 / 30) {
-        b.acc -= 1 / 30;
-        b.yaw += (1 / 30) * 0.35; // gentle arc — a Tribes-ish carve
+      while (b.acc >= SIM_DT) {
+        b.acc -= SIM_DT;
+        b.yaw += SIM_DT * 0.35; // gentle arc — a Tribes-ish carve
         b.sim.setInput({ forward: 1, right: 0, jumpHeld: false, skiHeld: true, jetHeld: false });
-        b.sim.update(1 / 30);
+        b.sim.update(SIM_DT);
       }
       b.ws.send(JSON.stringify({
         type: 'inputMove', seq: ++b.seq,

@@ -1,3 +1,4 @@
+2026-09-28 - Divergence warns demoted to info in permissive mode: without sim authority nothing converges the shadow, so cresty-terrain drift is expected steady state, not a warn
 2026-09-28 - Dynamic quality scaler: fps-driven quality ladder steps down under sustained low fps and back up under headroom (shadows off -> low-res modes); user-pinned ?px=/settings still win
 2026-09-28 - Auto-degrade: sustained low fps now steps down render cost (shadows off, then low-res pixel modes) instead of only logging; skips when user pinned a quality choice
 2026-09-28 - Perf audit: bot brain cadence 20->4Hz (phase-staggered senses/think/fire, move sim still 20Hz) + shadows opt-out (?shadows=off / fps-shadows setting) for weak GPUs
