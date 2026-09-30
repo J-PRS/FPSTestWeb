@@ -435,7 +435,13 @@ export class PlayerModel {
     }
 
     action.reset();
-    action.fadeIn(0.2);
+    // Pistol_Shoot's first ~180ms is a draw wind-up — an arm sweeps wide
+    // before settling on target. Replayed every shot it reads as the
+    // model spreading its arms each trigger pull. Skip to the aimed
+    // frame and crossfade fast so the snap reads as recoil, not a draw.
+    const isShoot = name === 'Pistol_Shoot' || name === 'UAL_Pistol_Shoot';
+    if (isShoot) action.time = 0.18;
+    action.fadeIn(isShoot ? 0.06 : 0.2);
     action.timeScale = 1;
     // Death: play once, clamp the corpse.
     // Jump: Tribes-style fall cycle — ping-pong at ~1/3 speed. LoopRepeat
@@ -461,6 +467,20 @@ export class PlayerModel {
     this.currentAction = action;
     this.currentClipName = name;
     this.playingUAL = name.startsWith('UAL_');
+  }
+
+  // Locomotion direction: no dedicated backpedal clips exist, so
+  // backward movement runs the walk/run clip in reverse (the UE
+  // "Rate Scale -1" blendspace trick — the footstep phase flips too,
+  // which is exactly what kills the moonwalk look).
+  setLocomotionReversed(rev: boolean): void {
+    const a = this.currentAction;
+    if (!a) return;
+    const sign = rev ? -1 : 1;
+    if (Math.sign(a.timeScale || 1) === sign) return;
+    const dur = a.getClip().duration;
+    a.time = dur - a.time; // preserve the cycle phase across the flip
+    a.timeScale = Math.abs(a.timeScale || 1) * sign;
   }
 
   get animationState(): AnimationState {

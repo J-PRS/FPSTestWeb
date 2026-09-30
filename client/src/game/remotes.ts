@@ -90,9 +90,11 @@ function tickRemoteCosmetics(deps: RemotesDeps, playerId: string, remotePlayer: 
       deps.lazyEffects().spawnSkiDust(remotePlayer.position, v);
     }
   }
-  // Jet audio has no wire bit — a sustained powered climb (vel.y past
-  // jump apex) is the only honest tell, matching the remote animation.
-  const jetting = !playerState.isDead && remotePlayer.vel.y > 4.5;
+  // Jet has no wire bit — a sustained powered climb (vel.y past jump
+  // apex) is the only honest tell, matching the remote animation. Bots
+  // that write wireJet (brain's real jet button) override the guess.
+  const jetting = isJetting(remotePlayer, playerState.isDead);
+  if (jetting) deps.lazyEffects().spawnJetpack(remotePlayer.position);
   sfxWorld.remoteMoveAudio(playerId, remotePlayer.position, remotePlayer.vel.length(), jetting, skiing);
   if (!playerState.isDead) {
     // Teammates read green, everything else stays enemy red — FFA and
@@ -102,6 +104,13 @@ function tickRemoteCosmetics(deps: RemotesDeps, playerId: string, remotePlayer: 
   } else {
     hud.removePlayerIndicator(playerId);
   }
+}
+
+// One jetting verdict for audio + trail: wireJet when a driver knows the
+// real button, else the powered-climb heuristic.
+function isJetting(rp: RemotePlayer, dead: boolean): boolean {
+  if (dead) return false;
+  return rp.wireJet ?? rp.vel.y > 4.5;
 }
 
 // Per-remote-player frame work: create if new, hide if stale, tick, then cosmetics
@@ -270,6 +279,9 @@ export function createRemotes(deps: RemotesDeps) {
       if (rp.isDead) {
         hud.removePlayerIndicator(id);
       } else {
+        // Local bots aren't network remotes — without this they'd jet
+        // silently; wireJet carries the brain's real burn (yeet included).
+        if (isJetting(rp, false)) deps.lazyEffects().spawnJetpack(rp.position);
         // GameBot carries `team` ('alpha'/'bravo', own id in FFA) — plain
         // RemotePlayers have none and stay enemy red.
         const friendly = (rp as { team?: string }).team === deps.world.localTeam

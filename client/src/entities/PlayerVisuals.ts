@@ -205,8 +205,13 @@ export class PlayerVisuals {
 
   // Returns the new jumpAnimTimer (the one piece of player state the
   // animation owns — set back on the Player by the caller)
-  updateModelAnim(model: PlayerModel | null, pos: THREE.Vector3, ...rest: [yaw: number, pitch: number, jumpAnimTimer: number, speed: number, dt: number, onGround: boolean, jetting?: boolean, vel?: THREE.Vector3]): number {
-    const [yaw, pitch, jumpAnimTimer0, speed, dt, onGround, jetting = false, vel] = rest;
+  // Continuous airtime for the airborne-anim gate — micro-frames over
+  // bumps don't count as jumping.
+  private airT = 0;
+  private lastShootT = 0;
+
+  updateModelAnim(model: PlayerModel | null, pos: THREE.Vector3, ...rest: [yaw: number, pitch: number, jumpAnimTimer: number, speed: number, dt: number, onGround: boolean, jetting?: boolean, vel?: THREE.Vector3, skiing?: boolean, shootT?: number]): number {
+    const [yaw, pitch, jumpAnimTimer0, speed, dt, onGround, jetting = false, vel, skiing, shootT = 0] = rest;
     let jumpAnimTimer = jumpAnimTimer0;
     if (!model) return jumpAnimTimer;
     if (jumpAnimTimer > 0) {
@@ -215,23 +220,48 @@ export class PlayerVisuals {
     // Airborne takes priority over locomotion — not just the jump
     // transition: sustained jetting/falling at speed reads as "run on
     // air" under the pure speed pick. A powered climb gets the jet pose.
-    const animState: AnimationState = jumpAnimTimer > 0
-      ? 'jump'
-      : !onGround
-        ? (jetting ? 'jet' : 'jump')
-        : pickLocomotionAnim(model['currentState'] as AnimationState, speed);
-    model.setAnimationState(animState);
-    // Same directional jet tilt remotes get — your own body is visible
-    // in third-person, so it should lean into the thrust too.
-    if (jetting && vel) {
+    // Sustained-air gate: cresting a bump drops onGround for a frame or
+    // two — treating that as airborne swap-tucks the model at running
+    // speed ("sliding while walking"). Only real airtime poses as jump.
+    this.airT = onGround ? 0 : this.airT + dt;
+    const airborne = this.airT > 0.12 || (!onGround && jumpAnimTimer > 0);
+    // Firing snaps the body into the armed pose — if the gun was down for
+    // ANY reason (belt lower, flinch, holster), a trigger pull is the
+    // moment it must read as aimed. Airborne keeps the jump/jet pose;
+    // the arm-layer aims up there regardless.
+    const animState: AnimationState = airborne
+      ? (jetting ? 'jet' : 'jump')
+      : shootT > 0
+        ? 'shoot'
+        : pickLocomotionAnim(model['currentState'] as AnimationState, speed, skiing);
+    // Auto-fire re-arms shootT while 'shoot' still owns the state —
+    // force replays the clip from its aimed frame each pull, else only
+    // the first shot of a held trigger animates.
+    if (animState === 'shoot' && shootT > this.lastShootT) model.forceAnimationState('shoot');
+    else model.setAnimationState(animState);
+    this.lastShootT = shootT;
+    // Move direction vs facing — drives the backpedal clip flip and the
+    // grounded strafe lean. vel is the real velocity, not an input echo,
+    // so it stays honest through collisions and knockback.
+    let fwd = 0, side = 0;
+    if (vel && speed > 1) {
       const sin = Math.sin(yaw), cos = Math.cos(yaw);
-      const fwd = vel.x * sin + vel.z * cos;
-      const side = vel.x * cos - vel.z * sin;
+      fwd = vel.x * sin + vel.z * cos;
+      side = vel.x * cos - vel.z * sin;
+    }
+    model.setLocomotionReversed(
+      (animState === 'walk' || animState === 'run') && fwd < -0.6 * speed && -fwd > Math.abs(side));
+    // Same directional jet tilt remotes get — your own body is visible
+    // in third-person, so it should lean into the thrust too. Grounded
+    // strafing gets a smaller version of the same roll — without it the
+    // forward cycle's footwork reads as moonwalking sideways.
+    if (jetting && vel) {
       model.setBodyLean(
         Math.max(-0.45, Math.min(0.45, fwd * 0.022)),
         Math.max(-0.4, Math.min(0.4, -side * 0.02)));
     } else {
-      model.setBodyLean(0, 0);
+      const strafing = Math.abs(side) > 0.6 * speed && Math.abs(side) > Math.abs(fwd) * 0.8;
+      model.setBodyLean(0, strafing ? Math.max(-0.3, Math.min(0.3, -side * 0.02)) : 0);
     }
     // pos is eye height — the model plants its feet 1.8m below
     model.setPosition(pos.x, pos.y - EYE_OFFSET, pos.z);

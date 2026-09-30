@@ -335,18 +335,23 @@ export class RemotePlayer {
     const airborne = this.terrain
       ? this.feetY - this.terrain.getHeight(this.position.x, this.position.z) > 0.6
       : false;
-    // Damage flinch outranks locomotion briefly — 'hit' is a oneshot clip,
-    // so once the timer expires the normal pick reclaims the model.
-    // A fired shot likewise pops a short 'shoot' pose underneath flinch.
-    if (this.hitT > 0) {
-      this.hitT -= dt;
-      if (this.hitT > 0) this._model.setAnimationState('hit');
-    } else if (this.shootT > 0) {
+    // A fired shot outranks the flinch — the shoot oneshot is itself an
+    // aimed pose, so a bot shooting mid-hit snaps its gun back to aim
+    // instead of flailing through the flinch with the weapon down.
+    if (this.shootT > 0) {
+      // Re-arm while already 'shoot' (auto fire) means a new shot —
+      // force replays the clip from its aimed frame; otherwise the
+      // oneshot plays once and every following pull shows nothing.
+      if (this.shootT > this._lastShootT) this._model.forceAnimationState('shoot');
       this.shootT -= dt;
       if (this.shootT > 0) this._model.setAnimationState('shoot');
+    } else if (this.hitT > 0) {
+      this.hitT -= dt;
+      if (this.hitT > 0) this._model.setAnimationState('hit');
     } else {
       this.tickAnimState(dt, speed, airborne);
     }
+    this._lastShootT = this.shootT;
     this.tickAuras(dt);
     this.previousPosition.copy(this.position);
     // Anim LOD — the mixer step is the dominant per-remote cost, so far
@@ -372,19 +377,38 @@ export class RemotePlayer {
   // a plain airborne fall keeps the jump loop. Directional jetting tilts
   // the whole body toward horizontal velocity in the facing frame: pitch
   // into forward thrust, roll into lateral strafe.
+  /** Wire ski flag, set by remotes.ts from playerState.ski — the anim pick
+   *  trusts it over the speed heuristic: a grounded non-skiing mover is
+   *  running, not sliding, even at ski speeds (momentum outlives the key). */
+  wireSki: boolean | undefined;
+  // Real jet claim when a driver knows it (bots write their brain's jet
+  // button + yeet). Network remotes leave it undefined — the wire has no
+  // jet bit, so callers fall back to the vel.y heuristic.
+  wireJet: boolean | undefined;
+
   private tickAnimState(dt: number, speed: number, airborne: boolean): void {
     const jetting = airborne && this.velocity.y > 3;
-    this._model.setAnimationState(airborne
+    const state = airborne
       ? (jetting ? 'jet' : 'jump')
-      : pickLocomotionAnim(this._model.animationState, speed));
-    if (!jetting) { this._model.setBodyLean(0, 0); return; }
+      : pickLocomotionAnim(this._model.animationState, speed, this.wireSki);
+    this._model.setAnimationState(state);
     const sin = Math.sin(this.rotation.yaw), cos = Math.cos(this.rotation.yaw);
     const fwd = this.velocity.x * sin + this.velocity.z * cos;
     const side = this.velocity.x * cos - this.velocity.z * sin;
+    // Backpedal plays the forward cycle in reverse (no dedicated clips);
+    // grounded strafe gets a roll lean so the footwork doesn't moonwalk.
+    this._model.setLocomotionReversed(
+      (state === 'walk' || state === 'run') && speed > 1 && fwd < -0.6 * speed && -fwd > Math.abs(side));
+    if (!jetting) {
+      const strafing = Math.abs(side) > 0.6 * speed && Math.abs(side) > Math.abs(fwd) * 0.8;
+      this._model.setBodyLean(0, strafing ? Math.max(-0.3, Math.min(0.3, -side * 0.02)) : 0);
+      return;
+    }
     this._model.setBodyLean(
       Math.max(-0.45, Math.min(0.45, fwd * 0.022)),
       Math.max(-0.4, Math.min(0.4, -side * 0.02)));
   }
+  private _lastShootT = 0;
 
   private tickAuras(dt: number): void {
     const y = this.position.y - EYE_OFFSET;
@@ -407,7 +431,7 @@ export class RemotePlayer {
   }
 
   // Damage flinch / shot recoil timers — drive the oneshot states in
-  // updateAliveModel; hit outranks shoot so a flinch still reads mid-fight
+  // updateAliveModel; shoot outranks hit so a trigger pull snaps to aim
   private hitT = 0;
   private shootT = 0;
 
@@ -421,6 +445,10 @@ export class RemotePlayer {
   playDeath(explosionPos?: THREE.Vector3, explosionForce?: number): void {
     this._isDead = true;
     this.hitT = 0;
+    // Alive-path visual state (jet/strafe lean, reversed walk) is dead
+    // code under tickDead — leave it set and the corpse keeps the lean.
+    this._model.setBodyLean(0, 0);
+    this._model.setLocomotionReversed(false);
     resetCorpse(this.corpse);
     launchCorpse(this.corpse, explosionPos, explosionForce);
 
@@ -493,8 +521,8 @@ export class RemotePlayer {
     resetCorpse(this.corpse);
     // Corpse shrink writes the MODEL's scale directly — reset it here or
     // a respawned player keeps the shrunken size forever (tickAlive never
-    // re-asserts scale).
-    this._model.setScale(1);
+    // re-asserts scale). Class scale, not 1: heavies respawn bulky.
+    this._model.setScale(this._classScale);
     this.position.set(position.x, position.y, position.z);
     this.previousPosition.copy(this.position);
     this.targetPosition.copy(this.position);
@@ -502,6 +530,11 @@ export class RemotePlayer {
     this.simulatedVelocity.set(0, 0, 0);
     this.serverVelocity.set(0, 0, 0);
     this.angularVelocity.set(0, 0, 0);
+    // Corpse tumble left pitch/roll on the shared rotation — network
+    // remotes clear roll in interpolate() every frame, but localDriven
+    // bodies (GameBot) never do, so they respawned lying on their side.
+    this.rotation.pitch = 0;
+    this.rotation.roll = 0;
     this.isOnGround = true;
     this._isSimulating = false;
     this.net.clear();
