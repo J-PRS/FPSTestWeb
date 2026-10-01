@@ -246,6 +246,8 @@ async function applyTerrain(ctx: NetCtx, file: string | null, texPath?: string, 
   return terrainSwap;
 }
 
+const SKY_FACES = ['px', 'nx', 'py', 'ny', 'pz', 'nz'] as const;
+
 /** A missing face must not kill the terrain swap — loader rejections
  *  are ProgressEvents, which used to surface as "undefined" here. */
 async function applySky(deps: NetCtx['deps'], httpUrl: string, skyDir: string | undefined): Promise<void> {
@@ -255,17 +257,29 @@ async function applySky(deps: NetCtx['deps'], httpUrl: string, skyDir: string | 
     if (skyMesh) skyMesh.visible = true;
     return;
   }
-  // T2 cube exports currently render misoriented (hard face seams) —
-  // opt in with ?t2sky while the face mapping gets sorted.
-  if (!urlParams.has('t2sky')) {
-    deps.lazyScene().background = null;
-    if (skyMesh) skyMesh.visible = true;
-    return;
-  }
-  const order = ['px', 'nx', 'py', 'ny', 'pz', 'nz'].map(
-    (f) => `${httpUrl}/maps/${skyDir}/${f}.png`);
+  // T2 sky exports are baked in the engine's own cube layout, not GL's:
+  // the up/down files land swapped and the -X/+Z/-Z sides come out
+  // v-flipped. Verified against the exported faces' edge texels (side
+  // tops are all dark ≈ ny, bottoms all bright ≈ py); the canvas pass
+  // below reassembles them into three's [px,nx,py,ny,pz,nz] convention.
+  const FLIP = new Set(['nx', 'pz', 'nz']);
+  const SLOTS: Record<string, number> = { px: 0, nx: 1, ny: 2, py: 3, pz: 4, nz: 5 };
   try {
-    deps.lazyScene().background = await new THREE.CubeTextureLoader().loadAsync(order);
+    const faces = await Promise.all(SKY_FACES.map(async (name) => {
+      const img = await new THREE.ImageLoader().loadAsync(`${httpUrl}/maps/${skyDir}/${name}.png`);
+      const c = document.createElement('canvas');
+      c.width = img.width; c.height = img.height;
+      const ctx = c.getContext('2d')!;
+      if (FLIP.has(name)) { ctx.translate(0, img.height); ctx.scale(1, -1); }
+      ctx.drawImage(img, 0, 0);
+      return { name, c };
+    }));
+    const images: HTMLCanvasElement[] = new Array(6);
+    for (const f of faces) images[SLOTS[f.name]] = f.c;
+    const cube = new THREE.CubeTexture(images);
+    cube.colorSpace = THREE.SRGBColorSpace;
+    cube.needsUpdate = true;
+    deps.lazyScene().background = cube;
     if (skyMesh) skyMesh.visible = false;
   } catch (e) {
     const src = (e as ProgressEvent)?.target as { src?: string } | undefined;

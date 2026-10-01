@@ -1,3 +1,4 @@
+2026-10-01 - t2 sky: reassemble cube faces by content (ny up, py down, nx/pz/nz v-flip) — seam-free skybox
 2026-10-01 - t2 maps: mats detail + cube sky now opt-in (?mats / ?t2sky) — albedo + procedural sky is the default look
 2026-10-01 - shadows: frustum follows camera (400m half-extent) + texel-scaled bias — fixes slope shadow acne
 2026-10-01 - terrain mats: tile mean luminance in linear space (sRGB mean made the close-range blend read black)
