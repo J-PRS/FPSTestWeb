@@ -1,3 +1,4 @@
+2026-10-01 - half-rate ribbon rewrites past 200m
 2026-10-01 - freeze bone matrices on offscreen remotes (mixer already skipped)
 2026-10-01 - merge static structures per material; one shared LineSegments for all explosion sparks
 2026-10-01 - skip sheep-badge DOM writes when the displayed value is unchanged

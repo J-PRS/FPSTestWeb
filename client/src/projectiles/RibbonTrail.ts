@@ -120,6 +120,7 @@ export class RibbonTrail {
   private head = -1;
   private count = 0;
   private time = 0;
+  private _far = 0;
   private stopped = false;
 
   // Direction per sample — needed by billboard mode to derive the camera-facing
@@ -239,6 +240,13 @@ export class RibbonTrail {
   update(dt: number, camPos?: THREE.Vector3): void {
     this.time += dt;
     if (this.slot < 0 || this.count < 2) return;
+    // Past ~200m a ribbon is a few px — halving the rewrite cadence is
+    // invisible but cuts the per-sample billboard math in half there.
+    if (camPos && this._far !== undefined) {
+      const dx = camPos.x - this.px[this.head], dy = camPos.y - this.py[this.head], dz = camPos.z - this.pz[this.head];
+      const far = dx * dx + dy * dy + dz * dz > 200 * 200;
+      if (far && (this._far ^= 1)) return;
+    }
 
     const pos = this.batch.pos;
     const col = this.batch.col;
