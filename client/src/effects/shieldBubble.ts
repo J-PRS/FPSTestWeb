@@ -6,6 +6,7 @@
 
 import * as THREE from 'three';
 import { UNGRADE_GLSL } from '../core/gradeGlsl.js';
+import { markProbe } from '../core/fxDiag.js';
 
 // Skinned variant — the field is a shell CLONED from the model's own
 // skinned meshes, inflated along the skinned normal. Reads as a contoured
@@ -144,6 +145,7 @@ export function makeShieldedMesh(parent: THREE.Object3D, geometry: THREE.BufferG
   const mesh = new THREE.Mesh(geometry, mat);
   mesh.visible = false;
   parent.add(mesh);
+  markProbe(mesh, { kind: 'fxMesh', label: 'shieldBubble' });
   return {
     mesh,
     flash() { mat.uniforms.uHit.value = 1; },

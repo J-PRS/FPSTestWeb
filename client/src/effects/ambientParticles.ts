@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 
 import { getGlowTexture } from './glowTexture.js';
+import { markProbe } from '../core/fxDiag.js';
 import type { Terrain } from '../world/terrain.js';
 
 // Ambient world particles — dust motes / embers / falling ash drifting
@@ -121,6 +122,7 @@ export class AmbientParticles {
     this.points = new THREE.Points(geo, mat);
     this.points.frustumCulled = false; // positions move every frame — a stale bounding sphere would clip it
     scene.add(this.points);
+    markProbe(this.points, { kind: 'fxMesh', label: 'ambientParticles' });
   }
 
   /** Dynamic-quality switch — hides the cloud and skips the per-frame

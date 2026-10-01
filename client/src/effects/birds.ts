@@ -5,6 +5,7 @@ import { BirdFlight } from './birdFlight.js';
 import type { Terrain } from '../world/terrain.js';
 import type { Targetable } from '../entities/balls.js';
 import { nextTargetId } from '../entities/targetIds.js';
+import { markProbe } from '../core/fxDiag.js';
 
 // Ambient birds — a small kettle of buzzards riding a thermal above the
 // player. Dark silhouettes, banked circling, flap-burst-then-glide wing
@@ -144,6 +145,7 @@ export class AmbientBirds {
     this.flock.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.flock.frustumCulled = false; // 9 birds span a huge volume — cull math isn't worth it
     scene.add(this.flock);
+    markProbe(this.flock, { kind: 'fxMesh', label: 'birds' });
 
     for (let i = 0; i < BIRD_COUNT; i++) {
       const group = new THREE.Group();

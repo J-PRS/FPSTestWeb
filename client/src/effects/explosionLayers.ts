@@ -5,6 +5,7 @@ import { TerrainRing } from './TerrainRing.js';
 import { blastBurst, type BlastSpec } from './vfx.js';
 import type { ExplosionSparks } from './explosionSparks.js';
 import { BlastVariants, type BurstLayer, type VariantHost } from './blastVariants.js';
+import { markProbe } from '../core/fxDiag.js';
 
 // Per-weapon blast layer recipes — the spawn side of Explosion. Each
 // variant returns true after laying its full recipe so the caller falls
@@ -204,6 +205,7 @@ export class ExplosionLayers implements VariantHost {
       });
       const mesh = new THREE.Mesh(GEO_SHOCK, mat);
       mesh.layers.enable(BLOOM_LAYER);
+      markProbe(mesh, { kind: 'fxMesh', label: 'shockDome' });
       this.scene.add(mesh);
       sw = { mesh, mat, life, elapsed: 0, maxRadius, dead: false };
     }
