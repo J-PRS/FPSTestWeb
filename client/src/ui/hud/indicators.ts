@@ -19,6 +19,7 @@ export class PlayerIndicators {
   // no layout) and size only when the px value actually changes.
   private readonly lastSize = new Map<string, number>();
   private readonly lastSheep = new Map<string, number>();
+  private readonly lastPos = new Map<string, number>();
 
   constructor(container: HTMLElement) {
     this.container = container;
@@ -80,7 +81,7 @@ export class PlayerIndicators {
         indicator.style.width = `${size}px`;
         indicator.style.height = `${size}px`;
       }
-      this.setPos(indicator, x, y);
+      this.setPos(playerId, indicator, x, y);
     } else {
       indicator.classList.add('offscreen');
 
@@ -95,7 +96,7 @@ export class PlayerIndicators {
       const halfHeight = window.innerHeight / 2 - margin;
       const dist = Math.min(halfWidth / Math.abs(Math.cos(angle)), halfHeight / Math.abs(Math.sin(angle)));
 
-      this.setPos(indicator, centerX + Math.cos(angle) * dist, centerY + Math.sin(angle) * dist);
+      this.setPos(playerId, indicator, centerX + Math.cos(angle) * dist, centerY + Math.sin(angle) * dist);
     }
   }
 
@@ -123,8 +124,12 @@ export class PlayerIndicators {
   }
 
   // transform keeps the -50% centering from the stylesheet while moving the
-  // element on the compositor — layout isn't touched at 60Hz.
-  private setPos(el: HTMLElement, x: number, y: number): void {
+  // element on the compositor — layout isn't touched at 60Hz. The packed
+  // 0.1px-quantized key skips the style write entirely on still frames.
+  private setPos(playerId: string, el: HTMLElement, x: number, y: number): void {
+    const q = Math.round(x * 10) * 100000 + Math.round(y * 10);
+    if (this.lastPos.get(playerId) === q) return;
+    this.lastPos.set(playerId, q);
     el.style.transform = `translate(-50%, -50%) translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)`;
   }
 
@@ -135,6 +140,7 @@ export class PlayerIndicators {
       this.indicators.delete(playerId);
       this.lastSize.delete(playerId);
       this.lastSheep.delete(playerId);
+      this.lastPos.delete(playerId);
       logger.debug('INDICATOR REMOVED', { playerId, total: this.indicators.size });
     }
   }
@@ -144,5 +150,6 @@ export class PlayerIndicators {
     this.indicators.clear();
     this.lastSize.clear();
     this.lastSheep.clear();
+    this.lastPos.clear();
   }
 }
