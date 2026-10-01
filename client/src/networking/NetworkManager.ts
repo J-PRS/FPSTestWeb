@@ -295,7 +295,10 @@ export class NetworkManager {
     // Avoid JSON.stringify on every message — tickUpdate arrives at 20Hz
     const handler = this.handlers[data.type] as ((d: ServerMessage) => void) | undefined;
     if (handler) {
-      handler(data);
+      // A malformed-but-parseable message mustn't reach the connection's
+      // onError path — one bad packet shouldn't cost a reconnect.
+      try { handler(data); }
+      catch (e) { logger.warn(`Handler threw for ${data.type}`, e); }
     } else {
       logger.warn(`Unknown message type: ${data.type}`);
     }
