@@ -19,6 +19,11 @@ export class CircularBuffer<T> {
   get IsFull(): boolean { return this.count === this.capacity; }
   get IsEmpty(): boolean { return this.count === 0; }
 
+  // Index add() will write next — lets callers reuse the object already
+  // stored in that slot so a full ring allocates nothing per add.
+  slotForNext(): number { return this.head; }
+  rawAt(index: number): T | undefined { return this.buffer[index]; }
+
   add(item: T): void {
     this.buffer[this.head] = item;
     this.head = (this.head + 1) % this.capacity;

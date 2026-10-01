@@ -19,7 +19,7 @@ const REMOTE_SAMPLE_HZ = 20;
 
 // Splice out all events with timestamp < cutoff in one batch (list is
 // append-ordered, so binary search finds the first keeper index).
-function pruneEventsBefore(events: { timestamp: number }[], cutoff: number): void {
+function pruneEventsBefore<T extends { timestamp: number }>(events: T[], cutoff: number, pool: T[]): void {
   if (events.length === 0 || events[0].timestamp >= cutoff) return;
   let lo = 0, hi = events.length;
   while (lo < hi) {
@@ -27,7 +27,9 @@ function pruneEventsBefore(events: { timestamp: number }[], cutoff: number): voi
     if (events[mid].timestamp < cutoff) lo = mid + 1;
     else hi = mid;
   }
-  events.splice(0, lo);
+  // Retired events go back on the freelist — recording is always-on now,
+  // so a churn-free spool keeps GC out of the steady frame.
+  for (const e of events.splice(0, lo)) pool.push(e);
 }
 
 // Minimal shape the recorder needs from a live remote player —
@@ -49,6 +51,11 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
   projectileEvents: ProjectileEvent[] = [];
   targetEvents: TargetEvent[] = [];
   remoteFrames: RemoteFrame[] = [];
+  /** Freed objects from the prune window — reused by the next push so the
+   *  rolling window stops churning fresh literals every tick. */
+  projectileEventPool: ProjectileEvent[] = [];
+  targetEventPool: TargetEvent[] = [];
+  remoteFramePool: RemoteFrame[] = [];
   rosterIdxById = new Map<string, number>();
   roster: DemoRosterEntry[] = [];
   remoteSource: (() => Iterable<RemoteSample>) | null = null;
@@ -128,14 +135,14 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
         this.rosterIdxById.set(s.id, idx);
         this.roster.push({ name: s.id });
       }
-      this.remoteFrames.push({
-        timestamp: now,
-        rosterIdx: idx,
-        posX: s.posX, posY: s.posY, posZ: s.posZ,
-        velX: s.velX, velY: s.velY, velZ: s.velZ,
-        yaw: s.yaw, pitch: s.pitch,
-        flags: (s.dead ? RemoteFrameFlags.Dead : 0) | (s.ski ? RemoteFrameFlags.Ski : 0),
-      });
+      const f = this.remoteFramePool.pop() ?? ({ timestamp: 0, rosterIdx: 0, posX: 0, posY: 0, posZ: 0, velX: 0, velY: 0, velZ: 0, yaw: 0, pitch: 0, flags: 0 } as RemoteFrame);
+      f.timestamp = now;
+      f.rosterIdx = idx;
+      f.posX = s.posX; f.posY = s.posY; f.posZ = s.posZ;
+      f.velX = s.velX; f.velY = s.velY; f.velZ = s.velZ;
+      f.yaw = s.yaw; f.pitch = s.pitch;
+      f.flags = (s.dead ? RemoteFrameFlags.Dead : 0) | (s.ski ? RemoteFrameFlags.Ski : 0);
+      this.remoteFrames.push(f);
     }
   }
 
@@ -154,7 +161,11 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
     const p = this.playerData;
     const i = this.inputData;
 
-    const frame = createFrame(this.frameNumber, now);
+    // Reuse the slot's existing frame object — the ring overwrites it
+    // anyway, so allocating per tick is pure churn.
+    const slot = this.frameBuffer.slotForNext();
+    const frame = this.frameBuffer.rawAt(slot) ?? createFrame(this.frameNumber, now);
+    frame.frameNumber = this.frameNumber; frame.timestamp = now;
     frame.posX = p.posX; frame.posY = p.posY; frame.posZ = p.posZ;
     frame.velX = p.velX; frame.velY = p.velY; frame.velZ = p.velZ;
     frame.yaw = p.yaw; frame.pitch = p.pitch;
@@ -171,9 +182,9 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
 
     // Prune events older than the frame buffer window — they can never be used in a clip
     const cutoff = this.elapsedTime - this.bufferSeconds;
-    pruneEventsBefore(this.projectileEvents, cutoff);
-    pruneEventsBefore(this.targetEvents, cutoff);
-    pruneEventsBefore(this.remoteFrames, cutoff);
+    pruneEventsBefore(this.projectileEvents, cutoff, this.projectileEventPool);
+    pruneEventsBefore(this.targetEvents, cutoff, this.targetEventPool);
+    pruneEventsBefore(this.remoteFrames, cutoff, this.remoteFramePool);
   }
 
   // Event recorders — the rate-limited projectile/target event spool
