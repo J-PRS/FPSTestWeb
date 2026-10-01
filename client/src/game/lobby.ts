@@ -9,6 +9,7 @@
  */
 
 import { buildLobbyPanel } from './lobbyPanel.js';
+import { urlParams } from '../core/params.js';
 
 export interface RoomRow {
   name: string;
@@ -66,7 +67,7 @@ export class Lobby {
   private timer: ReturnType<typeof setInterval> | null = null;
 
   currentRoom(): string {
-    return new URLSearchParams(location.search).get('room') ?? 'default';
+    return urlParams.room ?? 'default';
   }
 
   constructor(deps: LobbyDeps) {

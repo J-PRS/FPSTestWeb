@@ -1,5 +1,5 @@
 /**
- * URL params — parsed once. Every `new URLSearchParams(location.search)`
+ * URL params — one accessor module. Every `new URLSearchParams(location.search)`
  * call site used to re-parse the same string; this is the single source.
  *
  * The URL is for CONNECTION + headless hooks (server address, p2p code,
@@ -11,36 +11,40 @@
 
 import { settings } from './settings.js';
 
-const qp = new URLSearchParams(window.location.search);
+// Read live, not a boot snapshot: switchRoom() rewrites ?room/?map/?bots
+// via history.replaceState with no reload — a parse-once snapshot would
+// serve the PREVIOUS room to every later call site. These reads are all
+// boot/join paths (never per-frame), so the reparse cost is nil.
+const live = () => new URLSearchParams(window.location.search);
 
 export const urlParams = {
-  get: (k: string) => qp.get(k),
-  has: (k: string) => qp.has(k),
+  get: (k: string) => live().get(k),
+  has: (k: string) => live().has(k),
   /** Game mode — URL wins (shareable room links carry ?mode=), then the
    *  persisted menu pick ('' | nuggets | ctf | dm | tdm | duel | classic). */
-  mode: qp.get('mode') || settings.get('fps-mode') || null,
+  get mode() { return live().get('mode') || settings.get('fps-mode') || null; },
   /** classic = solo bounce-and-shoot: balls only, no rage, no roster */
-  isClassic: settings.get('fps-mode') === 'classic',
+  get isClassic() { return settings.get('fps-mode') === 'classic'; },
   /** All-random creature spawns — no scripted beats, everything rolls from t=0 */
-  randomSpawns: settings.get('fps-spawns') === 1,
+  get randomSpawns() { return settings.get('fps-spawns') === 1; },
   /** Dev overlays / verbose combat logging — menu toggle OR ?debug (the
    *  param stays as a headless-capture override). */
-  debug: qp.has('debug') || settings.get('fps-debug') === 1,
+  get debug() { return live().has('debug') || settings.get('fps-debug') === 1; },
   /** ?p2p=host:CODE|join:CODE — WebRTC duel via /rtc handshake relay.
    *  URL wins for shareability; falls back to the lobby's saved field. */
-  p2p: qp.get('p2p') || settings.get('fps-p2p') || null,
+  get p2p() { return live().get('p2p') || settings.get('fps-p2p') || null; },
   /** ?lobby / saved flag — host marks the p2p room public on the relay
    *  so quick-joiners find it via /rtc/lobbies. */
-  lobby: qp.has('lobby') || settings.get('fps-lobby') === 1,
+  get lobby() { return live().has('lobby') || settings.get('fps-lobby') === 1; },
   /** ?room=NAME — match room on the server (default: 'default'). Lets two
    *  matches coexist on one server; share the URL to share the room. */
-  room: qp.get('room'),
+  get room() { return live().get('room'); },
   /** ?map=/?bots= — spec hints the join message forwards so a fresh
    *  server-side room rebuilds from the right maps/<X>.json. */
-  map: qp.get('map'),
-  bots: qp.get('bots') ? Number(qp.get('bots')) : undefined,
+  get map() { return live().get('map'); },
+  get bots() { const b = live().get('bots'); return b ? Number(b) : undefined; },
   /** ?net=wt|rtc — probe that transport tier before falling back to
    *  WebSocket (netcode v2; the UDP tiers are stubbed until server halves
    *  exist). Absent param = straight WS, today's behavior. */
-  net: qp.get('net'),
+  get net() { return live().get('net'); },
 };

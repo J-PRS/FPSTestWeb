@@ -1,3 +1,4 @@
+2026-10-01 - fix: urlParams reads live — switchRoom replaceState had left boot-parsed snapshot stale; lobby.currentRoom routes through it
 2026-10-01 - lint: fix no-shadow (botRoster) + sort→toSorted (loadoutMenu); oxlint error count 0
 2026-10-01 - determinism: shared/botRand.ts — one injectable rng for all bot heuristics (brains/hunts/goals/dispositions/taunts); harness seeds it, tests replay identically
 2026-10-01 - audit: architecture/quality findings report in _reports/2026-10-01_architecture-audit.md
