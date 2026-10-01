@@ -169,7 +169,6 @@ export function nanScanTransforms(scene: THREE.Scene): Hit[] {
 // frame (a persistent bad vertex persists across frames anyway).
 const EVERY = 8;
 let tick = 0;
-let armed = false;
 const seen = new Set<string>();
 
 function report(h: Hit): void {
@@ -212,7 +211,4 @@ export function nanScanBindProbe(getCtx: () => { scene: THREE.Scene; camera: THR
   });
 }
 
-export function nanScanEnabled(on: boolean): void {
-  armed = on;
-}
-export function nanScanArmed(): boolean { return armed; }
+
