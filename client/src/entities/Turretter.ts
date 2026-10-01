@@ -12,6 +12,7 @@ import { getGlowTexture } from '../effects/glowTexture.js';
 import { TerrainFoot } from '../effects/terrainFoot.js';
 import { allocSlots, freeSlots, getSwarm, getShadows, type SwarmPart } from './swarms.js';
 import { type Bolt, spawnBolt, detonateBolt as detBolt, updateBolts as stepBolts, disposeBolts } from './turretBolts.js';
+import { BallTrailDots } from './ballTrails.js';
 import { updateAir as balAir, seat as balSeat, launch as balLaunch, solveBolt as balSolve, pathClear as balPath } from './turretBallistics.js';
 export type { Bolt } from './turretBolts.js';
 
@@ -115,7 +116,8 @@ export class Turretter implements Targetable {
   scale = 1.2;
 
   // Swarm-slot handles — the turret renders through instanced parts, not a
-  // scene-graph Group. bolts/trailDots stay real meshes (counts are tiny).
+  // scene-graph Group. bolts stay real meshes (counts are tiny); the ember
+  // trail is one slot in the shared dot batch.
   swarmSlot = -1;
   shadowSlot = -1;
 
@@ -127,8 +129,8 @@ export class Turretter implements Targetable {
   // Live lobbed shells — public so combat can proximity-check them: a
   // player explosive clipping a bolt cooks it off mid-air (detonateBolt).
   readonly bolts: Bolt[] = [];
-  // Bolt trail dots — public for turretBolts.ts (host-interface pattern).
-  readonly trailDots: { mesh: THREE.Mesh; life: number; maxLife: number }[] = [];
+  // Bolt ember trail — shared Points batch via turretBolts.ts (host-interface pattern).
+  readonly trailFx: BallTrailDots;
 
   planted = false;                // false = airborne ballistic
   dwell = 0;                      // time since landing
@@ -159,6 +161,7 @@ export class Turretter implements Targetable {
     this.radius = uber ? TURRET_RADIUS * 1.4 : TURRET_RADIUS;
     if (uber) this.color.set(0x5a3a2a); // rusted siege bronze
 
+    this.trailFx = new BallTrailDots(scene, { sizeMul: 0.5 });
     this.pos = pos.clone();
     this.pos.y = terrain.getHeight(pos.x, pos.z) + this.radius;
     this.vel = new THREE.Vector3();

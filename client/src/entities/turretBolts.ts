@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { GRAVITY } from '../core/config.js';
 import { Terrain } from '../world/terrain.js';
 import { getGlowTexture } from '../effects/glowTexture.js';
+import { BallTrailDots } from './ballTrails.js';
 
 let _boltGeo: THREE.SphereGeometry | null = null;
 function boltGeo(): THREE.SphereGeometry {
@@ -13,13 +14,8 @@ function boltMat(): THREE.MeshBasicMaterial {
   if (!_boltMat) _boltMat = new THREE.MeshBasicMaterial({ color: 0xffcc66 });
   return _boltMat;
 }
-let _trailMat: THREE.MeshBasicMaterial | null = null;
-function trailMat(): THREE.MeshBasicMaterial {
-  if (!_trailMat) _trailMat = new THREE.MeshBasicMaterial({
-    color: 0xff8830, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
-  });
-  return _trailMat;
-}
+// Ember tint shared by every host's BallTrailDots burst.
+const EMBER = new THREE.Color(0xff8830);
 
 export interface Bolt {
   mesh: THREE.Mesh;
@@ -32,17 +28,13 @@ export interface Bolt {
   trailAcc: number;
 }
 
-interface TrailDot {
-  mesh: THREE.Mesh;
-  life: number;
-  maxLife: number;
-}
-
 /** What the bolt pool needs from the turret — flat fields, no class import. */
 export interface BoltHost<T> {
   scene: THREE.Scene;
   bolts: Bolt[];
-  trailDots: TrailDot[];
+  /** Shared Points-batch sparkle layer — one draw call for all embers
+   *  (a firing turret used to emit ~33 separate dot Meshes per second). */
+  trailFx: BallTrailDots;
   pos: THREE.Vector3;
   onBoltHit?: (t: T) => void;
   onBoltLand?: (pos: THREE.Vector3) => void;
@@ -102,15 +94,11 @@ export function updateBolts<T>(h: BoltHost<T>, t: T, dt: number, terrain: Terrai
     _v.copy(b.vel).normalize();
     b.mesh.lookAt(_v.add(b.pos));
 
-    // Ember trail — dots that shrink out behind the bolt
+    // Ember trail — one batched point per cadence tick
     b.trailAcc += dt;
     while (b.trailAcc > 0.03) {
       b.trailAcc -= 0.03;
-      const dot = new THREE.Mesh(boltGeo(), trailMat());
-      dot.scale.setScalar(0.6);
-      dot.position.copy(b.pos);
-      h.scene.add(dot);
-      h.trailDots.push({ mesh: dot, life: 0.35, maxLife: 0.35 });
+      h.trailFx.burst(1, b.pos, 0.3, EMBER);
     }
 
     const hitPlayer = b.pos.distanceToSquared(playerPos) < 1.7; // ~1.3m
@@ -124,17 +112,7 @@ export function updateBolts<T>(h: BoltHost<T>, t: T, dt: number, terrain: Terrai
     }
   }
 
-  // Trail dots shrink to nothing
-  for (let i = h.trailDots.length - 1; i >= 0; i--) {
-    const d = h.trailDots[i];
-    d.life -= dt;
-    if (d.life <= 0) {
-      h.scene.remove(d.mesh);
-      h.trailDots.splice(i, 1);
-      continue;
-    }
-    d.mesh.scale.setScalar(0.6 * (d.life / d.maxLife));
-  }
+  h.trailFx.fade(dt);
 }
 
 export function disposeBolts<T>(h: BoltHost<T>): void {
@@ -143,6 +121,5 @@ export function disposeBolts<T>(h: BoltHost<T>): void {
     (b.glow.material as THREE.SpriteMaterial).dispose();
   }
   h.bolts.length = 0;
-  for (const d of h.trailDots) h.scene.remove(d.mesh);
-  h.trailDots.length = 0;
+  h.trailFx.dispose();
 }
