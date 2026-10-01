@@ -9,6 +9,8 @@ import {
   BloomEffect,
   BrightnessContrastEffect,
   BlendFunction,
+  FXAAEffect,
+  SMAAEffect,
 } from 'postprocessing';
 import {
   TONE_MAPPING_EXPOSURE,
@@ -515,6 +517,17 @@ function makeComposer(renderer: THREE.WebGLRenderer, scene: THREE.Scene,
   const xbrPass = new EffectPass(camera, xbrEffect);
   composer.addPass(xbrPass);
 
+  // AA runs LAST — on the display-res frame after the upscale passes, so
+  // it smooths real output edges (post-tonemap LDR is what FXAA/SMAA are
+  // designed for). MSAA isn't a pass at all: it multisamples the composer
+  // buffer itself.
+  const fxaaPass = new EffectPass(camera, new FXAAEffect());
+  const smaaPass = new EffectPass(camera, new SMAAEffect());
+  composer.addPass(fxaaPass);
+  composer.addPass(smaaPass);
+  fxaaPass.enabled = false;
+  smaaPass.enabled = false;
+
   bloomMergePass.enabled = bloomEnabled;
   dirtPass.enabled = bloomEnabled;
   contrastPass.enabled = postproEnabled;
@@ -536,9 +549,19 @@ function makeComposer(renderer: THREE.WebGLRenderer, scene: THREE.Scene,
       if (p.renderToScreen) found = true;
     }
   }
+  // fps-aa: 0 off / 1 FXAA / 2 SMAA / 3 MSAA2x / 4 MSAA4x — MSAA rebuilds
+  // the multisampled buffer via the composer's setter, the rest toggle a
+  // pass. syncRenderToScreen must re-run since the tail pass changed.
+  function applyAA(v: number): void {
+    fxaaPass.enabled = v === 1;
+    smaaPass.enabled = v === 2;
+    composer.multisampling = v === 3 ? 2 : v === 4 ? 4 : 0;
+    syncRenderToScreen();
+  }
+
   syncRenderToScreen();
 
-  return { composer, bloomMergePass, dirtPass, contrastPass, upscalePass, upscaleEffect, xbrPass, xbrEffect, syncRenderToScreen };
+  return { composer, bloomMergePass, dirtPass, contrastPass, upscalePass, upscaleEffect, xbrPass, xbrEffect, syncRenderToScreen, applyAA };
 }
 
 // Canvas sizing for every pixel/res path — hard modes render into a
@@ -584,6 +607,15 @@ function wireSegRow(id: string, current: () => number,
   btns.forEach((b, i) => b.addEventListener('click', () => pick(Number(b.dataset['v'] ?? i))));
   mark(current());
   return mark;
+}
+
+// ANTIALIAS row: reads+persist fps-aa, applies the stored pick at boot.
+// Lives at module level so createRenderer stays under the line cap.
+function wireAARow(applyAA: (v: number) => void): void {
+  let aaMode = settings.get('fps-aa');
+  applyAA(aaMode);
+  wireSegRow('aa-row', () => aaMode,
+    (v) => { aaMode = v; settings.set('fps-aa', v); applyAA(v); });
 }
 
 // ESC-menu toggles: seed the toggle labels from resolved modes and
@@ -660,7 +692,7 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
   document.body.appendChild(renderer.domElement);
 
   const cc = makeComposer(renderer, scene, camera, bloomEnabled, postproEnabled, pmode);
-  const { composer, bloomMergePass, dirtPass, contrastPass, upscalePass, upscaleEffect, xbrPass, xbrEffect, syncRenderToScreen } = cc;
+  const { composer, bloomMergePass, dirtPass, contrastPass, upscalePass, upscaleEffect, xbrPass, xbrEffect, syncRenderToScreen, applyAA } = cc;
 
   // composer.setSize() also resizes the canvas — set buffers first, then
   // restore whichever canvas sizing the pixel mode wants (it never shrinks).
@@ -765,6 +797,7 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
     (v) => setPixel(v, pmode));
   markPmode = wireSegRow('pmode-row', () => pmode,
     (v) => setPixel(pscale, v));
+  wireAARow(applyAA);
 
   return {
     renderer,

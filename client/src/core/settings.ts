@@ -34,6 +34,7 @@ type Schema = {
   'fps-filter': number;       // upscale filter for fractional resScale: 0 = nearest, 1 = bilinear, 2 = xBR-lv2
   'fps-pscale': number;       // integer pixel-size divisor 1-4 (retro chunk)
   'fps-pmode': number;        // pixel mode: 0 raw / 1 smooth(xBR) / 2 dithered / 3 atkinson
+  'fps-aa': number;           // antialiasing: 0 off / 1 FXAA / 2 SMAA / 3 MSAA2x / 4 MSAA4x
 };
 
 const DEFAULTS: Schema = {
@@ -66,6 +67,7 @@ const DEFAULTS: Schema = {
   'fps-filter': 0,
   'fps-pscale': 1,
   'fps-pmode': 0,
+  'fps-aa': 0,
 };
 
 const parse = {
