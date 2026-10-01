@@ -1,3 +1,4 @@
+2026-10-01 - t2 maps: mats detail + cube sky now opt-in (?mats / ?t2sky) — albedo + procedural sky is the default look
 2026-10-01 - shadows: frustum follows camera (400m half-extent) + texel-scaled bias — fixes slope shadow acne
 2026-10-01 - terrain mats: tile mean luminance in linear space (sRGB mean made the close-range blend read black)
 2026-10-01 - terrain mats: 4x-finer detail repeat (~1.5m grain, was 5.86m blobs); ?nomats debug toggle

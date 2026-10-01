@@ -255,6 +255,13 @@ async function applySky(deps: NetCtx['deps'], httpUrl: string, skyDir: string | 
     if (skyMesh) skyMesh.visible = true;
     return;
   }
+  // T2 cube exports currently render misoriented (hard face seams) —
+  // opt in with ?t2sky while the face mapping gets sorted.
+  if (!urlParams.has('t2sky')) {
+    deps.lazyScene().background = null;
+    if (skyMesh) skyMesh.visible = true;
+    return;
+  }
   const order = ['px', 'nx', 'py', 'ny', 'pz', 'nz'].map(
     (f) => `${httpUrl}/maps/${skyDir}/${f}.png`);
   try {
@@ -280,9 +287,9 @@ async function applyTerrainTex(deps: NetCtx['deps'], httpUrl: string, texPath: s
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   terrain.setAlbedo(tex);
   try {
-    const mats = urlParams.has('nomats')
-      ? null
-      : await loadMats(`${httpUrl}/maps/${texPath.slice(0, texPath.lastIndexOf('/'))}`);
+    const mats = urlParams.has('mats')
+      ? await loadMats(`${httpUrl}/maps/${texPath.slice(0, texPath.lastIndexOf('/'))}`)
+      : null;
     if (mats) terrain.setMaterialBlend(mats.tiles, mats.alphaA, mats.alphaB, mats.tileMeters, mats.means);
   } catch {
     terrain.setMaterialBlend(null, null, null, 0, null);
