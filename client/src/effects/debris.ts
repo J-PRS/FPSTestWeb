@@ -125,14 +125,20 @@ export class Debris {
   ];
   private static primMat = new THREE.MeshLambertMaterial();
   private instCap = 32;
+  // Kill bursts used to build+dispose up to 5 InstancedMesh per death —
+  // a 9-11ms spike under throttle. Buckets pool like shardPool above:
+  // capacity persists, count/free reset between Debris instances.
+  private static instPool: Map<number, THREE.InstancedMesh[]> = new Map();
 
   private instAlloc(prim: number): { inst: number; slot: number } {
     let b = this.insts[prim];
     if (!b) {
-      const mesh = new THREE.InstancedMesh(Debris.primGeos[prim]!, Debris.primMat, this.instCap);
+      const pooled = Debris.instPool.get(prim)?.pop();
+      const mesh = pooled ?? new THREE.InstancedMesh(Debris.primGeos[prim]!, Debris.primMat, this.instCap);
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       mesh.castShadow = false;
       mesh.frustumCulled = false; // shards scatter; unit-geo bounds don't cover instances
+      mesh.count = 0;
       b = this.insts[prim] = { mesh, free: [] };
       this.scene.add(mesh);
     }
@@ -315,7 +321,11 @@ export class Debris {
       if (!s.dead) this.removeShard(s);
     }
     for (const b of this.insts) {
-      if (b) { this.scene.remove(b.mesh); b.mesh.dispose(); }
+      if (!b) continue;
+      this.scene.remove(b.mesh);
+      let pool = Debris.instPool.get(this.insts.indexOf(b));
+      if (!pool) Debris.instPool.set(this.insts.indexOf(b), pool = []);
+      pool.push(b.mesh);
     }
     this.insts = [];
   }

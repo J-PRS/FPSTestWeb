@@ -1,3 +1,4 @@
+2026-10-01 - perf: pooled debris InstancedMesh buckets (kill-burst alloc spike)
 2026-10-01 - perf: per-think memoized groundY for bot senses (~2.5% throttled frame)
 2026-10-01 - weapons: baked-GLB swap path now gets curvature bake + wear shader (was flat, no AO coverage)
 2026-10-01 - weapons: per-vertex curvature bake (convexity) + AO-gated edge-wear shader
