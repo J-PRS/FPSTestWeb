@@ -64,8 +64,9 @@ Scope: client/src, server_bun/src, shared. Goal: ease of future work, testabilit
    loudly; acceptable.
 3. ~~**Test coverage gap**~~ — narrowed this round: `netMalformed` (dispatch
    robustness), `projsim`, `flagGoals`, `botlos` tests landed; server suite
-   now 519 files. Remaining honest gap: interpolation rewind edge cases on
-   the client.
+   now 519 files. Re-checked the interpolation gap — already covered:
+   `remoteSnapshots` (bracketing/bounded-extrapolation/stale-cap/±PI yaw),
+   `rewind.test.ts` + `clampPing` on the server (lag-comp contract).
 4. ~~**Module-state test seams**~~ — every mutable module-level cache now
    has a flush hook: `losMemoReset()` joined `setBotRand`/`setTauntClock`/
    `Room.rng`. Verified the rest (texture/pool caches) key on immutable
@@ -79,6 +80,21 @@ Scope: client/src, server_bun/src, shared. Goal: ease of future work, testabilit
    readable.
 7. **Respawn timers still wall-clock** (known server edge per AGENTS.md) —
    the only nondeterminism in server sims; flagged not fixed by design.
+8. **ThreatTable wDmg is dead weight for 6/7 profiles** (found via
+   targeting tests): challenger max score = wDist+wDmg; incumbent min =
+   wDist+sticky — for hunter/rammer/artillery/sniper/siege/fodder the
+   sticky bonus alone exceeds any challenger's max, so damage aggro can
+   never flip a committed target (only death/leash/forget can). Only
+   flyer (0.8 > ~0.4 slack) can flip. Docs say "a real damage-dealer
+   pulls aggro" — if intended, sticky < wDist+wDmg or a separate
+   threat lane; if commit-is-personality is intended, the doc string
+   overpromises. Test pins current semantics.
+9. **Client coverage caught up** (was the thinnest layer): 158 tests /
+   26 files now cover targeting hysteresis, VGS chords, aggro roster
+   freshness, anim cadence/locomotion picks, settings store, poissonDisc,
+   ExplosionTracker, frameBudget, keybinds — plus the earlier wire/demo/
+   interp files. DOM test stub gained append/createTextNode/setTimeout/
+   HTMLElement classes (what kept DOM-touching modules untestable).
 8. **`.old` accumulation**: 28 soft-deleted files; the biggest cluster is
    the old adapter stack (Colyseus/Naia/FastAPI/Tribes2/Ghost/Move/Event/
    Stream managers, all superseded by NetworkManager). Scheduled user
