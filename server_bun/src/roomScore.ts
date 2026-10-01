@@ -53,7 +53,7 @@ export class RoomScore {
     // The economy runs on kills — soak validation needs these visible.
     logger.info('Creature killed', { room: this.h.name, by, variant });
     // Powerup drops roll in EVERY mode — the pickup does the granting.
-    const powerup = rollCreatureDrop();
+    const powerup = rollCreatureDrop(this.h.rng(), this.h.rng());
     // Creatures die mid-flight — the drop must land on the ground or the
     // dy<=6 pickup grab can never reach it and the economy starves.
     const gy = (this.h.field ? hmHeight(this.h.field, pos.x, pos.z) : pos.y) + 0.5;

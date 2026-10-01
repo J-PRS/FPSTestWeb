@@ -3,7 +3,6 @@ import type { Room } from './Room.ts';
 import { computeStateHash } from '../../shared/stateHash.ts';
 import { logger } from './logger.ts';
 import { TickFanout } from './tickRecords.ts';
-import type { PlayerState } from './types.ts';
 
 // Heal/suppression helpers live in tickHelpers.ts so tickRecords doesn't
 // import this file — re-exported here because scenario tests import them
