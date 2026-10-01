@@ -251,6 +251,9 @@ export class RibbonTrail {
       far = dx * dx + dy * dy + dz * dz > 200 * 200;
       if (far && (this._far ^= 1)) return;
     }
+    // Stopped ribbons only rewrite for the fade — halving that to 30Hz
+    // is invisible on a sub-second trail and halves the sample loop.
+    if (this.stopped && (this._far ^= 1)) return;
 
     // Billboard sides only change when the camera moves — a parked camera
     // makes the per-sample cross-product + position rewrite a pure no-op.
