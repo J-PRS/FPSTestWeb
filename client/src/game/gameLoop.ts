@@ -236,9 +236,15 @@ function tickEntities(deps: GameLoopDeps, perf: ReturnType<typeof createPerfHud>
  *  Skipped frames are absorbed by the dt-based decay. */
 const FX_MS_CAP = 1.2;
 function fxTick(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof createFrameBudget>, fxDt: number): void {
+  // vfx runs OUTSIDE the rotation: batcher.update must tick every frame
+  // (particles freeze otherwise) and its prune/cap is what keeps the
+  // sim bounded — deferring it under load let `live` balloon past
+  // MAX_LIVE_SYSTEMS (seen: 1201 systems → 10-24ms vfx frames).
+  const v0 = performance.now();
+  updateVfx(fxDt, deps.camera.position);
+  fxJobMs.set('vfx', (fxJobMs.get('vfx') ?? 0) * 0.9 + (performance.now() - v0) * 0.1);
   st.fxJobs.length = 0;
   st.fxJobs.push(
-    ['vfx', () => updateVfx(fxDt)], // quarks batch — cheap, but jobs rotate anyway
     ['effects', () => deps.lazyEffects().update(fxDt)],
     ['debris', () => updateDeadList(deps.world.debrisList, fxDt)],
     ['pdebris', () => updateDeadList(deps.world.playerDebrisList, fxDt)],
@@ -343,7 +349,9 @@ export function createGameLoop(deps: GameLoopDeps) {
     s.showPanel(panel);
     const dom = s.dom as HTMLElement;
     // bottom:40 — above the "⟳ files changed" badge strip (bottom:8, ~24px tall)
-    dom.style.cssText = `position:fixed;bottom:40px;right:${20 + (2 - i) * 88}px;left:auto;top:auto;z-index:10000;display:none;`;
+    // --z-br-3: reserved debug row in hud.css — hardcoding an offset here
+    // is what parked the charts on top of the entity-counts row.
+    dom.style.cssText = `position:fixed;bottom:var(--z-br-3);right:${20 + (2 - i) * 88}px;left:auto;top:auto;z-index:10000;display:none;`;
     document.body.appendChild(dom);
     return s;
   });

@@ -58,7 +58,20 @@ export function vfxPressure(): number {
  *  spawn order, so the front is the stalest). */
 const MAX_LIVE_SYSTEMS = 320;
 
-export function updateVfx(dt: number): void {
+/** Past this distance a burst is sub-pixel — pause its CPU sim entirely.
+ *  batcher.update skips paused systems, so this is the only knob that
+ *  shrinks the per-frame sim cost itself (the cap only bounds count). */
+const VFX_SIM_RADIUS_SQ = 260 * 260;
+
+export function updateVfx(dt: number, camPos?: THREE.Vector3): void {
+  // Distance-pause BEFORE the batch sim: skip offscreen systems this frame.
+  // Covers every attached system (live bursts AND projectile trails).
+  if (camPos && batcher) {
+    for (const ps of batcher.systemToBatchIndex.keys()) {
+      const em = ps.emitter as ParticleSystem['emitter'];
+      ps.paused = em.position.distanceToSquared(camPos) > VFX_SIM_RADIUS_SQ;
+    }
+  }
   batcher?.update(dt);
   // Prune finished one-shots — emission ends at `duration`; particles
   // may outlive it, but quarks keeps rendering them until they die, so
