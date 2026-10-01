@@ -33,6 +33,8 @@ export const BOT_HP = 100;
 export const BOT_DMG = 18;   // bolt claim damage, tuned to threaten but not melt
 export const EYE = BOT_EYE;
 const BOT_RESPAWN_S = 4;
+// Terrain heights are static mid-match — one shared memo for every bot.
+const sharedGroundYCache = new Map<number, number>();
 
 export class GameBot extends RemotePlayer {
   /** 'alpha'/'bravo' in team modes; the bot's own playerId in FFA. */
@@ -110,7 +112,6 @@ export class GameBot extends RemotePlayer {
    *  RemotePlayer's own vectors in place (same trick as Player). */
   moveState: MovementState;
   private appliedSpecList: readonly StructureSpec[] | undefined;
-  private gyc = new Map<number, number>();
   /** Jet energy tank — a bot can only hold burn while fuel remains. */
   energy: number = ENERGY.max;
   /** Toggle-skill bits the bot holds (MEND/SHIELD/CLOAK) — the same
@@ -191,10 +192,11 @@ export class GameBot extends RemotePlayer {
     huntCreatures?: boolean;
   }): { targetId: string; aim: THREE.Vector3 } | null {
     const pos = this.position;
-    // Heights are static for a match's lifetime — the senses re-query the
-    // same terrain cells across thinks AND frames (steer probes + LOS
-    // march + goal scoring), so the ~4cm-cell memo lives on the bot.
-    const gyc = this.gyc;
+    // Heights are static for a match's lifetime — every bot probes the
+    // same terrain, so ONE shared memo beats a per-bot copy of the same
+    // cells: teammates re-query each other's cached LOS marches and steer
+    // probes instead of recomputing them.
+    const gyc = sharedGroundYCache;
     const out = this.brain.think(dt, {
       pos,
       enemies: ctx.enemies,
