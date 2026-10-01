@@ -142,7 +142,11 @@ export class HUD {
   private lastCountsKey = '';
 
   /** Nugget Wars team totals — shown only while the mode runs. */
+  private lastTeamScore = '';
   setTeamScore(a: number, b: number): void {
+    const key = `${a}|${b}`;
+    if (key === this.lastTeamScore) return;
+    this.lastTeamScore = key;
     this.teamScore.style.display = 'block';
     this.tsA.textContent = String(a);
     this.tsB.textContent = String(b);

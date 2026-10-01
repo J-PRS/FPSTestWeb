@@ -1,3 +1,4 @@
+2026-10-01 - HUD audit: setTeamScore change-gated; rest already quantized/budgeted
 2026-10-01 - quarks sim radius 260m -> 180m (fewer live systems on burst frames)
 2026-10-01 - pdebris job capped at 1.5ms; over-budget debris tickAge like far ones
 2026-10-01 - Far ribbons keep fixed side vector (skip per-sample billboard math)
