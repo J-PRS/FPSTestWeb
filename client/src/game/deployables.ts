@@ -162,6 +162,7 @@ export class Deployables {
     // Aim captured at release, not at keypress — the wind-up is long
     // enough to swing the throw across the sky.
     setTimeout(() => {
+      if (p.isDead) return; // corpse doesn't release the wind-up
       const dir = new THREE.Vector3(
         Math.cos(p.pitch) * Math.sin(p.yaw),
         Math.sin(p.pitch),
@@ -362,7 +363,8 @@ export class Deployables {
     if (newest) { newest.serverId = id; this.byId.set(id, newest); }
   }
 
-  remoteSpawn(id: number, owner: string, kind: DeployKind, pos: { x: number; y: number; z: number }, hp?: number, armor?: number, team?: string): void {
+  remoteSpawn(id: number, spec: { owner: string; kind: DeployKind; pos: { x: number; y: number; z: number }; hp?: number; armor?: number; team?: string }): void {
+    const { owner, kind, pos, hp, armor, team } = spec;
     if (this.remote.has(id)) return;
     const terrain = this.deps.lazyTerrain();
     const at = new THREE.Vector3(pos.x, pos.y, pos.z);

@@ -116,7 +116,9 @@ const BELT_THROWS: Record<BeltItem, ProjectileConfig> = {
 function onBelt(deps: CombatDeps, _e: FireArgs, item: BeltItem): void {
   deps.lazyViewModel()?.startThrow();
   const config = BELT_THROWS[item] ?? BELT_DISC_CONFIG;
-  setTimeout(() => spawnProjectile(deps, config, freshFireArgs(deps)), THROW_RELEASE * 1000);
+  // Dying mid wind-up must not release — the server rejects dead-player
+  // claims, leaving a local ghost projectile.
+  setTimeout(() => { if (!deps.lazyPlayer().isDead) spawnProjectile(deps, config, freshFireArgs(deps)); }, THROW_RELEASE * 1000);
 }
 
 // Pellet fan (flak/shotgun): one trigger = a poisson-disc spread of
