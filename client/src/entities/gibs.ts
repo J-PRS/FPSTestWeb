@@ -64,10 +64,38 @@ class GibMeshPool {
     if (!geo.boundingSphere) geo.computeBoundingSphere();
   }
 
-  /** Take a gib slot at this exact world transform/color. False = pool full. */
+  /** Double every parallel state array + the instance buffers, handing the
+   *  fresh indices to freeIdx — a full pool used to silently skip gibs. */
+  private grow(): void {
+    const cap = (this.freeIdx.length + this.live) * 2;
+    const growA = (a: Float32Array): Float32Array<ArrayBuffer> => {
+      const n = new Float32Array(cap); n.set(a); return n;
+    };
+    this.px = growA(this.px); this.py = growA(this.py); this.pz = growA(this.pz);
+    this.vx = growA(this.vx); this.vy = growA(this.vy); this.vz = growA(this.vz);
+    this.rx = growA(this.rx); this.ry = growA(this.ry); this.rz = growA(this.rz);
+    this.wx = growA(this.wx); this.wy = growA(this.wy); this.wz = growA(this.wz);
+    this.sx = growA(this.sx); this.sy = growA(this.sy); this.sz = growA(this.sz);
+    this.cr = growA(this.cr); this.cg = growA(this.cg); this.cb = growA(this.cb);
+    this.age = growA(this.age); this.life = growA(this.life);
+    this.bodyR = growA(this.bodyR);
+    const la = new Float32Array(cap).fill(-1); la.set(this.landedAt); this.landedAt = la;
+    const oldCap = cap / 2;
+    for (let i = cap - 1; i >= oldCap; i--) this.freeIdx.push(i);
+    const mat = new THREE.InstancedBufferAttribute(new Float32Array(cap * 16), 16);
+    mat.array.set(this.mesh.instanceMatrix.array);
+    mat.setUsage(THREE.DynamicDrawUsage);
+    this.mesh.instanceMatrix = mat;
+    const c = new THREE.InstancedBufferAttribute(new Float32Array(cap * 3).fill(1), 3);
+    c.array.set(this.mesh.instanceColor!.array);
+    c.setUsage(THREE.DynamicDrawUsage);
+    this.mesh.instanceColor = c;
+  }
+
+  /** Take a gib slot at this exact world transform/color; grows when full. */
   spawn(matrix: THREE.Matrix4, col: THREE.Color, radius: number): number {
-    const i = this.freeIdx.pop();
-    if (i === undefined) return -1;
+    let i = this.freeIdx.pop();
+    if (i === undefined) { this.grow(); i = this.freeIdx.pop()!; }
     matrix.decompose(_p, _q, _s);
     _e.setFromQuaternion(_q);
     this.px[i] = _p.x; this.py[i] = _p.y; this.pz[i] = _p.z;
@@ -180,6 +208,13 @@ export class GibPool {
   get totalPartsPerBody(): number {
     let n = 0;
     for (const p of this.pools) n += p.per;
+    return n;
+  }
+
+  /** Live gib slots across all part pools — dump census. */
+  get live(): number {
+    let n = 0;
+    for (const p of this.pools) n += p.live;
     return n;
   }
 

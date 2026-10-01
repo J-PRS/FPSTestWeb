@@ -59,12 +59,11 @@ export function vfxPressure(): number {
   return p * _qualityScale;
 }
 
-/** Live-system cap — batcher.update simulates EVERY attached system on
- *  the CPU each frame, so an unbounded count is a monolithic 10-25ms
- *  spike no job budget can slice. 320 keeps a heavy firefight below
- *  ~6ms of quarks sim; past it we cull the oldest systems (Set order =
- *  spawn order, so the front is the stalest). */
-const MAX_LIVE_SYSTEMS = 320;
+// No live-system count cap — the old 320 limit culled the OLDEST system
+// under sustained fire, which ate projectile trails mid-flight. The CPU
+// bound is the 180m distance-pause + vfxPressure LOD instead; a system
+// count that grows past those is a leak to hunt (vfxStats/dump), not a
+// number to silently truncate.
 
 /** Past this distance a burst is sub-pixel — pause its CPU sim entirely.
  *  batcher.update skips paused systems, so this is the only knob that
@@ -88,27 +87,61 @@ const STARVE_LIMIT = 60;
 // objects per burst — the burst-frame spikes. Finished systems restart
 // cleanly, so pool them by config kind instead of rebuilding each hit.
 const kindOf = new Map<ParticleSystem, string>();
-const pools = new Map<string, ParticleSystem[]>();
+// Pooled entries carry the time they went idle — growth is unbounded
+// (peak demand IS the right size) but idle entries decay back down to
+// POOL_FLOOR so a burst spike doesn't pin capacity forever.
+const pools = new Map<string, { ps: ParticleSystem; idleAt: number }[]>();
 const attached = new WeakSet<ParticleSystem>();
 // Systems parked in a pool stay attached but dead — starve-reaping would
 // otherwise dispose them each bookkeeping pass and the pool never fills.
 const pooled = new WeakSet<ParticleSystem>();
-const POOL_CAP = 32;
+// Dynamic-pool shrink: an entry idle this long beyond the floor is pure
+// cost — every pooled system stays attached and iterates in
+// batcher.update each frame. The floor keeps a warm minimum per kind.
+const POOL_IDLE_MS = 30_000;
+const POOL_FLOOR = 4;
 function attachSystem(ps: ParticleSystem): void {
   if (attached.has(ps)) return;
   batcher?.addSystem(ps);
   scene?.add(ps.emitter);
+  // Aim-probe tag — a crosshair hit on a live Points cloud resolves back
+  // to the system (paused/particle count) instead of an anonymous blur.
+  (ps.emitter as unknown as THREE.Object3D).userData.dbg = { kind: 'quarks', ps };
   attached.add(ps);
 }
 
 function takeSystem(kind: string, build: () => ParticleSystem): ParticleSystem {
-  const ps = pools.get(kind)?.pop();
+  const ps = pools.get(kind)?.pop()?.ps;
   const st = window.__vfxStats;
-  if (ps) { if (st) st.hits++; pooled.delete(ps); return ps; }
+  if (ps) {
+    if (st) st.hits++; pooled.delete(ps);
+    // Pooled systems can come back parked distance-paused (the flag lives
+    // on the system, not in restart()) — a paused reuse emits nothing.
+    ps.paused = false;
+    return ps;
+  }
   if (st) st.misses++;
   const n = build();
   kindOf.set(n, kind);
   return n;
+}
+
+/** Resync quarks' emit-over-distance bookkeeping to the emitter's current
+ *  position. restart() only clears waitEmiting — travelDistance and
+ *  previousWorldPos survive, so after any teleport (pool reuse, unpause
+ *  drift) the next emit() would read the jump as one giant deposit and
+ *  dump N particles at a single point: the "first particle duplicated,
+ *  too bright, lingering" blob. `??=` matters — `?.set` on a missing
+ *  vector no-ops and quarks re-reads the stale emitter.matrixWorld. */
+function resyncEmission(ps: IParticleSystem, em: THREE.Object3D): void {
+  const st = (ps as ParticleSystem).emissionState as {
+    travelDistance: number;
+    waitEmiting: number;
+    previousWorldPos?: THREE.Vector3;
+  };
+  st.travelDistance = 0;
+  st.waitEmiting = 0;
+  (st.previousWorldPos ??= new THREE.Vector3()).copy(em.position);
 }
 
 function reapStarved(ps: IParticleSystem): void {
@@ -164,53 +197,39 @@ function queueIfCold(key: string): boolean {
 // was the last per-frame O(systems) cost in vfx.
 let prunePhase = 0;
 
+/** Distance-pause / suspend-decay for one system. Far systems get a coarse
+ *  manual age step (batcher.update skips paused ones, so their particles
+ *  would hang mid-air forever); near systems just unpause. Both resync the
+ *  emission state first — emitSegment keeps writing emitter.position while
+ *  paused, but previousWorldPos only advances inside emit(), so without
+ *  the resync the suspended drift cashes as one giant travel jump. */
+function tickSuspended(ps: IParticleSystem, em: THREE.Object3D, camPos: THREE.Vector3): void {
+  const far = em.position.distanceToSquared(camPos) > VFX_SIM_RADIUS_SQ;
+  if (!far) {
+    if ((ps as ParticleSystem).paused) resyncEmission(ps, em);
+    (ps as ParticleSystem).paused = false;
+    return;
+  }
+  resyncEmission(ps, em);
+  (ps as ParticleSystem).paused = false;
+  // quarks marks update() private in its typings though it's the method
+  // BatchedRenderer.update calls per frame — the cast is the same call,
+  // scoped to this one system.
+  (ps as unknown as { update(d: number): void }).update(PAUSED_DECAY_S);
+  (ps as ParticleSystem).paused = true;
+}
+
 function runBookkeeping(camPos?: THREE.Vector3): void {
   // Distance-pause BEFORE the batch sim: skip offscreen systems this frame.
   // Covers every attached system (live bursts AND projectile trails).
   if (batcher) {
     for (const ps of batcher.systemToBatchIndex.keys()) {
-      if (camPos) {
-        const em = ps.emitter as ParticleSystem['emitter'];
-        const far = em.position.distanceToSquared(camPos) > VFX_SIM_RADIUS_SQ;
-        if (far) {
-          // batcher.update skips paused systems entirely, so their
-          // particles would hang mid-air forever. Age suspended systems
-          // a coarse step here instead — the emitter is parked, so no
-          // new particles spawn while the existing ones decay out.
-          //
-          // emitSegment keeps writing emitter.position while paused, but
-          // emissionState.previousWorldPos only advances inside emit() —
-          // skipped under paused. Without resyncing first, this update
-          // (or the eventual unpause) reads the whole suspended drift as
-          // one giant travel jump and smears a burst along it — the
-          // "stretching trail" artifact at distance.
-          const st = ps.emissionState as {
-            travelDistance: number;
-            previousWorldPos?: { set(x: number, y: number, z: number): void };
-          };
-          st.travelDistance = 0;
-          st.previousWorldPos?.set(em.position.x, em.position.y, em.position.z);
-          ps.paused = false;
-          // quarks marks update() private in its typings though it's the
-          // method BatchedRenderer.update calls per frame — the cast is
-          // the same call, scoped to this one system.
-          (ps as unknown as { update(d: number): void }).update(PAUSED_DECAY_S);
-          ps.paused = true;
-        } else {
-          if (ps.paused) {
-            // First live tick after a suspended span: the emitter drifted
-            // while paused — don't let emissionOverDistance cash the jump
-            // as one long deposit.
-            const st = ps.emissionState as {
-              travelDistance: number;
-              previousWorldPos?: { set(x: number, y: number, z: number): void };
-            };
-            st.travelDistance = 0;
-            st.previousWorldPos?.set(em.position.x, em.position.y, em.position.z);
-          }
-          ps.paused = false;
-        }
-      }
+      // Trails are exempt from the 180m distance-pause: a suspended system
+      // emits nothing, so the particle trail would freeze mid-flight even
+      // while the projectile keeps going — and trails are cheap continuous
+      // emitters compared to the multi-layer bursts this pause exists for.
+      if (camPos && !activeTrailPs.has(ps as ParticleSystem))
+        tickSuspended(ps, ps.emitter as unknown as THREE.Object3D, camPos);
       if (live.has(ps as ParticleSystem) || pooled.has(ps as ParticleSystem)) continue;
       reapStarved(ps);
     }
@@ -226,16 +245,14 @@ function runBookkeeping(camPos?: THREE.Vector3): void {
       const kind = kindOf.get(ps);
       if (kind) {
         const pool = pools.get(kind) ?? [];
-        if (pool.length < POOL_CAP) {
-          // Pooled systems stay attached to the batcher — a dead system
-          // sims ~0 particles, so detach+reattach would only rebuy the
-          // batch slice that restart() repopulates for free.
-          pool.push(ps);
-          pooled.add(ps);
-          live.delete(ps);
-          continue;
-        }
+        // Pooled systems stay attached to the batcher — a dead system
+        // sims ~0 particles, so detach+reattach would only rebuy the
+        // batch slice that restart() repopulates for free.
+        pool.push({ ps, idleAt: performance.now() });
+        pooled.add(ps);
         pools.set(kind, pool);
+        live.delete(ps);
+        continue;
       }
       batcher?.deleteSystem(ps);
       scene?.remove(ps.emitter);
@@ -244,6 +261,27 @@ function runBookkeeping(camPos?: THREE.Vector3): void {
     }
   }
   _liveParticles = particles;
+  shrinkPools(performance.now());
+}
+
+// The contract half of the dynamic pool: entries idle past the keep-alive
+// window are retired back toward POOL_FLOOR — capacity tracks demand
+// instead of staying pinned at the all-time peak.
+function shrinkPools(now: number): void {
+  for (const [kind, pool] of pools) {
+    for (let i = pool.length - 1; i >= POOL_FLOOR; i--) {
+      if (now - pool[i]!.idleAt <= POOL_IDLE_MS) continue;
+      const ps = pool[i]!.ps;
+      pool[i] = pool[pool.length - 1]!;
+      pool.pop();
+      batcher?.deleteSystem(ps);
+      scene?.remove(ps.emitter);
+      attached.delete(ps);
+      pooled.delete(ps);
+      ps.dispose();
+    }
+    if (!pool.length) pools.delete(kind);
+  }
 }
 
 export function updateVfx(dt: number, camPos?: THREE.Vector3): void {
@@ -254,17 +292,6 @@ export function updateVfx(dt: number, camPos?: THREE.Vector3): void {
   }
   simParity = !simParity;
   if (simParity) batcher?.update(dt * 2);
-  // Hard cap: cull oldest systems until under the ceiling. A killed
-  // system vanishes mid-effect — only reached under sustained overload
-  // where the alternative is a slideshow.
-  while (live.size > MAX_LIVE_SYSTEMS) {
-    const oldest = live.values().next().value;
-    if (!oldest) break;
-    batcher?.deleteSystem(oldest);
-    scene?.remove(oldest.emitter);
-    attached.delete(oldest);
-    live.delete(oldest);
-  }
 }
 
 const _upQ = new QV3(0, 1, 0);
@@ -297,7 +324,7 @@ function normalMat(): THREE.MeshBasicMaterial {
  *  meshes — one batched burst, ~0 allocation, one draw call shared with
  *  every other burst in flight. */
 export function impactBurst(pos: THREE.Vector3, vel: THREE.Vector3): void {
-  if (!batcher || !scene || live.size >= MAX_LIVE_SYSTEMS) return;
+  if (!batcher || !scene) return;
   const ps = takeSystem('impact', () => new ParticleSystem({
     duration: 0.35,
     looping: false,
@@ -417,10 +444,36 @@ export function trailDump(): Record<string, unknown>[] {
   return out;
 }
 
+/** Pool inventory + batcher census — a trailKind whose pool keeps a dead
+ *  system shows as depth with broken renders. paused/pooled/starved/
+ *  buildQueue expose the suspended-work surface the plain counts hide. */
+export function poolDump(): Record<string, unknown> {
+  const keys: Record<string, number> = {};
+  for (const [k, v] of pools) keys[k] = v.length;
+  let paused = 0, pooledN = 0;
+  if (batcher) {
+    for (const ps of batcher.systemToBatchIndex.keys()) {
+      if ((ps as ParticleSystem).paused) paused++;
+    }
+  }
+  for (const v of pools.values()) pooledN += v.length;
+  return {
+    batcherSystems: batcher ? batcher.systemToBatchIndex.size : 0,
+    live: live.size,
+    liveParticles: _liveParticles,
+    paused, pooled: pooledN,
+    starveWatch: starveFrames.size,
+    buildQueue: buildQueue.length,
+    activeTrails: activeTrailPs.size,
+    poolDepth: keys,
+  };
+}
+
 export class QuarksTrail {
   private ps: ParticleSystem | null = null;
   private circle: CircleEmitter | null = null;
   private key = '';
+  private segCount = 0;
 
   constructor(private host: QuarksTrailHost) {
     const config = host.config;
@@ -474,17 +527,16 @@ export class QuarksTrail {
     this.ps.emitter.position.copy(host.pos);
     attachSystem(this.ps);
     this.ps.restart();
-    // restart() doesn't clear emissionState.travelDistance/previousWorldPos
-    // — a pooled system still remembers the PREVIOUS projectile's last
-    // position, so the distance-based emitter reads the teleport to the new
-    // muzzle as travel and dumps its entire budget as one stationary burst
-    // (the visible "streak from the old spot" + dead trail after).
-    const st = this.ps.emissionState as {
-      travelDistance: number;
-      previousWorldPos?: THREE.Vector3;
-    };
-    st.travelDistance = 0;
-    st.previousWorldPos = undefined;
+    // Pool reuse must seed the distance bookkeeping to the new muzzle —
+    // leaving previousWorldPos undefined is worse than stale: the next
+    // emit() re-reads it from emitter.matrixWorld, still the PREVIOUS
+    // projectile's parked transform (updateWorldMatrix only runs on
+    // firstTimeUpdate — consumed on first use). Tick 2 then sees the real
+    // position and the whole teleport cashes as one giant stationary
+    // burst at the muzzle — the "first particle duplicated × N, too big,
+    // too bright, lingers" blob. Emitter sits directly under the scene
+    // (worldSpace), so local position == world position.
+    resyncEmission(this.ps, this.ps.emitter);
     activeTrailPs.add(this.ps);
     liveQuarks.add(this);
     // A system reaped out from under a previous owner comes back dead —
@@ -496,10 +548,13 @@ export class QuarksTrail {
     const ps = this.ps;
     const { pos, vel, config } = this.host;
     return {
+      n: config.name,
+      age: +this.host.age().toFixed(2),
       pos: `${pos.x.toFixed(1)},${pos.y.toFixed(1)},${pos.z.toFixed(1)}`,
       spd: +vel.length().toFixed(1),
       ppu: config.trailParticlesPerUnit,
       hasPs: !!ps,
+      segs: this.segCount,
       particles: ps?.particleNum ?? -1,
       attached: ps ? !!batcher && batcher.systemToBatchIndex.has(ps) : false,
       paused: ps?.paused ?? false,
@@ -510,6 +565,7 @@ export class QuarksTrail {
   // Move + aim the emitter; quarks emits floor(dist*ppu) particles itself.
   emitSegment(): void {
     if (!this.ps) return;
+    this.segCount++;
     const { pos, vel, config } = this.host;
     this.ps.emitter.position.copy(pos);
     if (vel.lengthSq() > 1e-4) {
@@ -538,16 +594,9 @@ export class QuarksTrail {
     liveQuarks.delete(this);
     ps.stop(); // kill particles immediately — old dispose() pooled them away just as fast
     const pool = pools.get(this.key) ?? [];
-    if (pool.length < POOL_CAP) {
-      pool.push(ps);
-      pooled.add(ps);
-      pools.set(this.key, pool);
-      return;
-    }
-    batcher?.deleteSystem(ps);
-    scene?.remove(ps.emitter);
-    attached.delete(ps);
-    ps.dispose();
+    pool.push({ ps, idleAt: performance.now() });
+    pooled.add(ps);
+    pools.set(this.key, pool);
   }
 }
 
@@ -607,7 +656,7 @@ class PuffEmitter {
  *  overwrote spawn opacity), size ran (0.3+t·1.4)·sizeScale shrinking
  *  over life, gravity applied unless noGravity. */
 export function fxPuff(pos: THREE.Vector3, spec: PuffSpec): void {
-  if (!batcher || !scene || live.size > 1200) return;
+  if (!batcher || !scene) return;
   const pressure = vfxPressure();
   // Ambient emitters fire every frame — under pressure each call still
   // costs a ParticleSystem even at count 1, so skip emissions outright.
@@ -805,7 +854,7 @@ export function implodeBurst(pos: THREE.Vector3, spec: ImplodeSpec, additive: bo
 }
 
 function spawnImplodeBurst(pos: THREE.Vector3, spec: ImplodeSpec, additive: boolean): void {
-  if (!batcher || !scene || live.size >= MAX_LIVE_SYSTEMS) return;
+  if (!batcher || !scene) return;
   const w = spec.stagger ?? 0;
   const ps = takeSystem(burstKey('implode', spec, additive), () => new ParticleSystem({
     duration: spec.lifeMax + w + 0.05,
@@ -895,7 +944,7 @@ export function blastBurst(pos: THREE.Vector3, spec: BlastSpec,
 
 function spawnBlastBurst(pos: THREE.Vector3, spec: BlastSpec,
     additive: boolean): void {
-  if (!batcher || !scene || live.size >= MAX_LIVE_SYSTEMS) return;
+  if (!batcher || !scene) return;
   const colorGen = blastColorGen(spec);
   const lifeMax = spec.lifeMax;
   const w = spec.stagger ?? 0;

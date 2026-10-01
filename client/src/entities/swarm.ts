@@ -64,9 +64,39 @@ export class SpeciesSwarm {
   get capacity(): number { return this.owners.length; }
   get liveCount(): number { return this.live; }
 
-  /** Returns a slot index, or -1 when the swarm is full. */
+  /** Aim probe: the owner an instance index belongs to — each owner owns
+   *  `per` consecutive instances inside a part mesh. */
+  ownerAt(meshIdx: number, instanceId: number): SwarmSlotOwner | undefined {
+    const per = this.pers[meshIdx] ?? 1;
+    return this.owners[Math.floor(instanceId / per)];
+  }
+
+  /** Double every per-part instance buffer and the owners table — a full
+   *  swarm used to refuse the spawn outright (silent invisible enemy).
+   *  Live data is copied into the head of the new buffers; slots stay
+   *  dense, so the count bound needs no remapping. */
+  private grow(): void {
+    const cap = this.owners.length * 2;
+    this.owners.length = cap;
+    for (let i = 0; i < this.meshes.length; i++) {
+      const m = this.meshes[i]!;
+      const per = this.pers[i]!;
+      const mat = new THREE.InstancedBufferAttribute(new Float32Array(cap * per * 16), 16);
+      mat.array.set(m.instanceMatrix.array);
+      mat.setUsage(THREE.DynamicDrawUsage);
+      m.instanceMatrix = mat;
+      const col = new THREE.InstancedBufferAttribute(new Float32Array(cap * per * 3).fill(1), 3);
+      col.array.set(m.instanceColor!.array);
+      col.setUsage(THREE.DynamicDrawUsage);
+      m.instanceColor = col;
+    }
+    this.dirty = true;
+    this.flagDirty();
+  }
+
+  /** Returns a slot index; grows the swarm instead of ever returning -1. */
   alloc(owner: SwarmSlotOwner): number {
-    if (this.live >= this.owners.length) return -1;
+    if (this.live >= this.owners.length) this.grow();
     const slot = this.live++;
     this.owners[slot] = owner;
     owner.swarmSlot = slot;
@@ -147,7 +177,7 @@ export class SpeciesSwarm {
  * per-enemy BlobShadow meshes (one draw call for ALL enemy shadows).
  * Per-instance altitude fade is carried in a float attribute the shader reads.
  */
-const SHADOW_CAPACITY = 1024;
+const SHADOW_CAPACITY = 1024; // initial size — grows on demand
 
 const shadowVert = /* glsl */ `
   attribute float aOpacity;
@@ -201,11 +231,34 @@ export class InstancedBlobShadows {
     this.mesh.renderOrder = 999;
     this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     scene.add(this.mesh);
+    this.mesh.userData.dbg = { kind: 'blobShadows', swarm: this };
     this.owners = Array.from<SwarmSlotOwner | undefined>({ length: SHADOW_CAPACITY });
   }
 
+  /** Aim probe: which owner's blob a shadow instance is. */
+  ownerAt(slot: number): SwarmSlotOwner | undefined { return this.owners[slot]; }
+
+  /** Realloc instance buffers at double capacity — the owners table is
+   *  the source of truth for capacity, so a full pool grows instead of
+   *  silently skipping the shadow. */
+  private grow(): void {
+    const cap = this.owners.length * 2;
+    this.owners.length = cap;
+    const mat = new THREE.InstancedBufferAttribute(new Float32Array(cap * 16), 16);
+    mat.array.set(this.mesh.instanceMatrix.array);
+    mat.setUsage(THREE.DynamicDrawUsage);
+    this.mesh.instanceMatrix = mat;
+    const op = new THREE.InstancedBufferAttribute(new Float32Array(cap), 1);
+    op.array.set(this.opacity.array);
+    op.setUsage(THREE.DynamicDrawUsage);
+    this.opacity = op;
+    this.mesh.geometry.setAttribute('aOpacity', op);
+  }
+
+  get liveCount(): number { return this.live; }
+
   alloc(owner: SwarmSlotOwner): number {
-    if (this.live >= SHADOW_CAPACITY) return -1;
+    if (this.live >= this.owners.length) this.grow();
     const slot = this.live++;
     this.owners[slot] = owner;
     this.mesh.count = this.live;

@@ -31,6 +31,9 @@ export function getSwarm(species: string): SpeciesSwarm | null {
   const spec = specTable[species];
   if (!spec || !registryScene) return null;
   const swarm = new SpeciesSwarm(registryScene, spec.parts(), spec.capacity);
+  // Aim-probe tags — a crosshair hit on any part mesh resolves to this
+  // species + the owning entity through swarm.ownerAt.
+  swarm.meshes.forEach((m, i) => { m.userData.dbg = { kind: 'species', species, swarm, part: i }; });
   swarms.set(species, swarm);
   return swarm;
 }
@@ -88,6 +91,20 @@ export function burstGibs(
 export function updateGibs(dt: number): void {
   if (!registryTerrain) return;
   for (const pool of gibPools.values()) pool.update(dt, registryTerrain);
+}
+
+/** Capacity/live census for the Alt+Q dump — a species pinned at capacity
+ *  or a gib pool that never drains shows up here before it starves. */
+export function swarmStats(): Record<string, unknown> {
+  const species: Record<string, { live: number; cap: number }> = {};
+  for (const [k, s] of swarms) species[k] = { live: s.liveCount, cap: s.capacity };
+  const gibs: Record<string, number> = {};
+  for (const [k, g] of gibPools) gibs[k] = g.live;
+  return {
+    species,
+    gibs,
+    shadows: shadows ? { live: shadows.liveCount } : null,
+  };
 }
 
 // No flush pass needed — SpeciesSwarm.setMatrix/setColor and
