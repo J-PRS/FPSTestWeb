@@ -4,28 +4,26 @@
 // are full — peak demand IS the right size; retire removes an emptied
 // overflow batch so capacity contracts back to batch[0] (the floor).
 // Callers own the slot logic; this owns the list/bookkeeping only.
-import type { Scene } from 'three';
+export type BatchMap<K, T> = Map<K, T[]>;
 
-export type BatchMap<T> = Map<Scene, T[]>;
-
-/** First batch with room for this scene, else a fresh sibling appended. */
-export function acquireBatch<T>(
-  map: BatchMap<T>, scene: Scene, make: (scene: Scene) => T, hasRoom: (b: T) => boolean,
+/** First batch with room under `key`, else a fresh sibling appended. */
+export function acquireBatch<K, T>(
+  map: BatchMap<K, T>, key: K, make: (key: K) => T, hasRoom: (b: T) => boolean,
 ): T {
-  let list = map.get(scene);
-  if (!list) { list = []; map.set(scene, list); }
+  let list = map.get(key);
+  if (!list) { list = []; map.set(key, list); }
   for (const b of list) if (hasRoom(b)) return b;
-  const b = make(scene);
+  const b = make(key);
   list.push(b);
   return b;
 }
 
-/** Drop `b` from the scene's list and dispose it when fully drained and
+/** Drop `b` from the key's list and dispose it when fully drained and
  *  not the floor batch. Safe no-op when the batch isn't registered. */
-export function retireBatch<T>(
-  map: BatchMap<T>, scene: Scene, b: T, isDrained: (b: T) => boolean, dispose: (b: T) => void,
+export function retireBatch<K, T>(
+  map: BatchMap<K, T>, key: K, b: T, isDrained: (b: T) => boolean, dispose: (b: T) => void,
 ): void {
-  const list = map.get(scene);
+  const list = map.get(key);
   if (!list || list[0] === b || !isDrained(b)) return;
   const i = list.indexOf(b);
   if (i < 0) return;

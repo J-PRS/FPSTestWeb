@@ -151,7 +151,7 @@ class DotBatch {
 // batch when every existing slot is taken (one extra draw call), retire
 // an overflow batch the moment it empties — batch[0] is the floor. The
 // old code silently rendered nothing once 128 trails were live.
-const dotBatches: BatchMap<DotBatch> = new Map();
+const dotBatches: BatchMap<THREE.Scene, DotBatch> = new Map();
 
 /** Take a slot from any non-full batch for the scene; grow on demand. */
 function acquireDotSlot(scene: THREE.Scene): { batch: DotBatch; slot: number } {

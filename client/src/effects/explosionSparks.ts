@@ -108,7 +108,7 @@ class SparkBatch {
 // silently once the single shared buffer filled (alloc returned -1 and
 // finalize dropped the whole burst). Now sibling batches spawn on demand
 // and retire when empty — batches[0] is the floor.
-const sparkBatches: BatchMap<SparkBatch> = new Map();
+const sparkBatches: BatchMap<THREE.Scene, SparkBatch> = new Map();
 
 function sparkAlloc(scene: THREE.Scene, n: number): { batch: SparkBatch; base: number } {
   // hasRoom runs alloc() speculatively — -1 means the batch is full,

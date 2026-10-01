@@ -114,7 +114,7 @@ export class TrailBatch {
 // A scene's trails live in a LIST of batches — 512 slots each. Overflow
 // spawns another batch (one more draw call) instead of starving ribbons;
 // emptied overflow batches shrink back away on release.
-const batches: BatchMap<TrailBatch> = new Map();
+const batches: BatchMap<THREE.Scene, TrailBatch> = new Map();
 
 export function claimableBatch(scene: THREE.Scene): TrailBatch {
   return acquireBatch(batches, scene, s => new TrailBatch(s), b => b.free.length > 0);

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 
 import { GRAVITY } from '../core/config.js';
+import { acquireBatch, retireBatch, type BatchMap } from '../core/batchPool.js';
 import { impactBurst, blastBurst } from './vfx.js';
 import * as du from './effectDust.js';
 import type { Terrain } from '../world/terrain.js';
@@ -38,10 +39,11 @@ const POOL_MAX = 128;
 class InstBucket {
   readonly mesh: THREE.InstancedMesh;
   private alphaAttr: THREE.InstancedBufferAttribute;
-  private free: number[] = [];
+  free: number[] = [];
   used = 0;
+  key = ''; // buckets-map key — the retire path finds its list by it
 
-  constructor(geo: THREE.BufferGeometry, mat: THREE.MeshBasicMaterial) {
+  constructor(geo: THREE.BufferGeometry, readonly mat: THREE.MeshBasicMaterial) { 
     this.alphaAttr = new THREE.InstancedBufferAttribute(new Float32Array(POOL_MAX), 1);
     this.alphaAttr.setUsage(THREE.DynamicDrawUsage);
     geo = geo.clone();
@@ -65,10 +67,15 @@ class InstBucket {
   }
 
   take(): number {
-    const s = this.free.pop();
-    if (s === undefined) return -1;
+    const s = this.free.pop()!; // acquireBatch only hands out buckets with room
     this.used++;
     return s;
+  }
+
+  dispose(): void {
+    this.mesh.parent?.remove(this.mesh);
+    this.mesh.geometry.dispose();
+    this.mat.dispose();
   }
 
   give(s: number): void {
@@ -125,7 +132,7 @@ export class EffectsManager {
   private scene: THREE.Scene;
   private particles: Particle[] = [];
   private deadP: Particle[] = [];
-  private buckets = new Map<string, InstBucket>();
+  private buckets: BatchMap<string, InstBucket> = new Map();
   sharedGeo: THREE.SphereGeometry;
   private sharedDiscGeo: THREE.CircleGeometry;
   private beamGeo: THREE.CylinderGeometry;
@@ -149,24 +156,26 @@ export class EffectsManager {
     const depthWrite = opts.depthWrite ?? true;
     const side = opts.side ?? THREE.FrontSide;
     const key = `${geo.uuid}|${additive ? 1 : 0}|${depthWrite ? 1 : 0}|${side}`;
-    let b = this.buckets.get(key);
-    if (!b) {
-      b = new InstBucket(geo, new THREE.MeshBasicMaterial({
+    // Same contract as every other FX batch: overflow spawns a sibling
+    // bucket (one more draw call) instead of dropping the particle —
+    // the old `take() === -1 → return null` silently ate spawn calls.
+    const b = acquireBatch(this.buckets, key, () => {
+      const nb = new InstBucket(geo, new THREE.MeshBasicMaterial({
         transparent: true,
         blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending,
         depthWrite,
         side,
       }));
-      this.scene.add(b.mesh);
-      this.buckets.set(key, b);
-    }
+      nb.key = key;
+      this.scene.add(nb.mesh);
+      return nb;
+    }, x => x.free.length > 0);
     return b;
   }
 
   alloc(geo: THREE.BufferGeometry, pos: THREE.Vector3, vel: THREE.Vector3, life: number, color: THREE.Color, opts: SpawnOpts = {}): Particle | null {
     const bucket = this.bucketFor(geo, opts);
     const slot = bucket.take();
-    if (slot < 0) return null;
     let p = this.deadP.pop();
     if (!p) {
       p = { bucket, slot: -1, pos: new THREE.Vector3(), quat: new THREE.Quaternion(), scale: 1,
@@ -307,6 +316,9 @@ export class EffectsManager {
       p.life -= dt;
       if (p.life <= 0) {
         p.bucket.give(p.slot);
+        // Empty overflow bucket retires — the first bucket per material
+        // combo is the floor so idle capacity contracts.
+        retireBatch(this.buckets, p.bucket.key, p.bucket, b => b.used === 0, b => b.dispose());
         this.deadP.push(p);
         const last = this.particles.length - 1;
         this.particles[i] = this.particles[last];
@@ -324,8 +336,8 @@ export class EffectsManager {
       if (p.slot > (highOf.get(p.bucket) ?? -1)) highOf.set(p.bucket, p.slot);
     }
     for (const [bucket, high] of highOf) bucket.flush(high);
-    for (const bucket of this.buckets.values()) {
-      if (!highOf.has(bucket)) bucket.mesh.count = 0;
+    for (const list of this.buckets.values()) {
+      for (const bucket of list) if (!highOf.has(bucket)) bucket.mesh.count = 0;
     }
   }
 }

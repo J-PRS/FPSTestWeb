@@ -37,7 +37,7 @@ interface RingPool {
 // sibling pool when every slot is taken (two extra draw calls: main +
 // ghost), retire an overflow pool the moment it empties — pools[0] is
 // the floor. The old code silently no-op'd the ring once 48 were live.
-const pools: BatchMap<RingPool> = new Map();
+const pools: BatchMap<THREE.Scene, RingPool> = new Map();
 
 function makePool(scene: THREE.Scene): RingPool {
   const geo = new THREE.BufferGeometry();
