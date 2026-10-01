@@ -96,11 +96,15 @@ const _canonMats = new Map<string, { key: string; mat: THREE.Material }>();
 function canonInteriorMat(mat: THREE.Material): { key: string; mat: THREE.Material } {
   const std = mat as THREE.MeshStandardMaterial;
   const key = [
-    mat.name.replace(/\.\d+$/, ''),
     std.color ? std.color.getHexString() : '-',
+    // Texture identity comes from the map's own name — two materials that
+    // differ only in .name (the exporter's per-file .NNN suffixes already
+    // stripped) render identically and can share one draw call.
     std.map ? std.map.name || 'tex' : '-',
     String(std.roughness ?? ''), String(std.metalness ?? ''),
     std.emissive ? std.emissive.getHexString() : '-',
+    String(std.emissiveIntensity ?? ''),
+    String(std.flatShading ?? ''), String(std.side ?? ''),
     std.transparent ? 't' : 'o',
   ].join('|');
   const hit = _canonMats.get(key);
