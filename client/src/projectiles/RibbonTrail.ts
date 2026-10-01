@@ -276,14 +276,8 @@ export class RibbonTrail {
       // Far ribbons keep their stored side — a billboard facing error
       // beyond 200m is subpixel, and this skips a cross+sqrt per sample.
       if (this.billboard && camPos && camMoved && !far) {
-        // Side = dir x (dir to camera): ribbon plane always faces the viewer
-        const vx = camPos.x - this.px[s], vy = camPos.y - this.py[s], vz = camPos.z - this.pz[s];
-        sx = this.dy[s] * vz - this.dz[s] * vy;
-        sy = this.dz[s] * vx - this.dx[s] * vz;
-        sz = this.dx[s] * vy - this.dy[s] * vx;
-        const len = Math.sqrt(sx * sx + sy * sy + sz * sz);
-        if (len > 1e-6) { sx /= len; sy /= len; sz /= len; }
-        else { sx = this.sx[s]; sy = this.sy[s]; sz = this.sz[s]; }
+        const s3 = this.sideFor(s, camPos);
+        if (s3) { sx = s3[0]!; sy = s3[1]!; sz = s3[2]!; }
       }
       // Stopped trails keep their samples frozen — only the color fade
       // moves; rewriting the same positions every frame was half the cost.
@@ -303,6 +297,20 @@ export class RibbonTrail {
     }
     this.batch.mark(base, base + this.count * 6);
     this.batch.flush();
+  }
+
+  // Side = dir x (dir to camera): ribbon plane always faces the viewer.
+  private static _s3 = new Float32Array(3);
+  private sideFor(s: number, camPos: THREE.Vector3): Float32Array | null {
+    const vx = camPos.x - this.px[s], vy = camPos.y - this.py[s], vz = camPos.z - this.pz[s];
+    let sx = this.dy[s] * vz - this.dz[s] * vy;
+    let sy = this.dz[s] * vx - this.dx[s] * vz;
+    let sz = this.dx[s] * vy - this.dy[s] * vx;
+    const len = Math.sqrt(sx * sx + sy * sy + sz * sz);
+    if (len <= 1e-6) return null;
+    const o = RibbonTrail._s3;
+    o[0] = sx / len; o[1] = sy / len; o[2] = sz / len;
+    return o;
   }
 
   /** Release back to the pool — buffers/slot kept for reuse. */
