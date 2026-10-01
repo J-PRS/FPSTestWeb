@@ -98,6 +98,7 @@ class GibMeshPool {
     if (this.live === 0) return;
     // Walk live slots via the count bound; dead slots get compacted lazily
     // by skip (they're in freeIdx already).
+    let wrote = false;
     for (let i = 0; i < this.mesh.count; i++) {
       if (this.life[i]! <= 0) continue; // dead slot
       this.age[i]! += dt;
@@ -110,6 +111,7 @@ class GibMeshPool {
         this.life[i] = 0;
         this.freeIdx.push(i);
         this.live--;
+        wrote = true;
         continue;
       }
 
@@ -150,8 +152,14 @@ class GibMeshPool {
       _m.compose(_p, _q, _s);
       this.mesh.setMatrixAt(i, _m);
     }
-    this.mesh.instanceMatrix.needsUpdate = true;
-    this.mesh.instanceColor!.needsUpdate = true;
+    // Upload only the live slot span — capacity is far larger than the
+    // gib count in play, and idle pools skip the transfer entirely.
+    if (this.live > 0 || wrote) {
+      this.mesh.instanceMatrix.addUpdateRange(0, this.mesh.count * 16);
+      this.mesh.instanceMatrix.needsUpdate = true;
+      this.mesh.instanceColor!.addUpdateRange(0, this.mesh.count * 3);
+      this.mesh.instanceColor!.needsUpdate = true;
+    }
   }
 }
 

@@ -265,6 +265,7 @@ export class Debris {
     _tmpS.set(s.sw * k, s.sh * s.flatY * k, s.sd * k);
     _tmpMat.compose(_tmpP, _tmpQ, _tmpS);
     b.mesh.setMatrixAt(s.slot, _tmpMat);
+    b.mesh.instanceMatrix.addUpdateRange(s.slot * 16, 16);
     b.mesh.instanceMatrix.needsUpdate = true;
   }
 
@@ -272,7 +273,10 @@ export class Debris {
     const bk = this.insts[s.inst];
     if (!bk) return;
     bk.mesh.setColorAt(s.slot, _tmpColor.setRGB(r, g, b));
-    if (bk.mesh.instanceColor) bk.mesh.instanceColor.needsUpdate = true;
+    if (bk.mesh.instanceColor) {
+      bk.mesh.instanceColor.addUpdateRange(s.slot * 3, 3);
+      bk.mesh.instanceColor.needsUpdate = true;
+    }
   }
 
   private stepShard(s: Shard, dt: number): boolean { return stepShard(this, s, dt); }
@@ -306,7 +310,12 @@ export class Debris {
       Debris.shardPool.push({ mesh: s.mesh, mat: s.mat });
     } else {
       const b = this.insts[s.inst];
-      if (b) { b.mesh.setMatrixAt(s.slot, _zeroM); b.mesh.instanceMatrix.needsUpdate = true; b.free.push(s.slot); }
+      if (b) {
+        b.mesh.setMatrixAt(s.slot, _zeroM);
+        b.mesh.instanceMatrix.addUpdateRange(s.slot * 16, 16);
+        b.mesh.instanceMatrix.needsUpdate = true;
+        b.free.push(s.slot);
+      }
     }
     s.dead = true;
   }

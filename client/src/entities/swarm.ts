@@ -96,6 +96,7 @@ export class SpeciesSwarm {
     this.owners[last] = undefined;
     this.live--;
     for (let i = 0; i < this.meshes.length; i++) this.meshes[i]!.count = this.live * this.pers[i]!;
+    this.dirty = true;
     this.flagDirty();
   }
 
@@ -104,13 +105,16 @@ export class SpeciesSwarm {
     if (slot < 0) return; // slot already freed (gib burst) — a dying owner may still tick once
     const m = this.meshes[part]!;
     m.setMatrixAt(slot, matrix);
+    m.instanceMatrix.addUpdateRange(slot * 16, 16);
     m.instanceMatrix.needsUpdate = true;
+    this.dirty = true;
   }
 
   setColor(part: number, slot: number, r: number, g: number, b: number): void {
     if (slot < 0) return;
     const m = this.meshes[part]!;
     m.instanceColor!.setXYZ(slot, r, g, b);
+    m.instanceColor!.addUpdateRange(slot * 3, 3);
     m.instanceColor!.needsUpdate = true;
   }
 
@@ -118,11 +122,22 @@ export class SpeciesSwarm {
   perFor(part: number): number { return this.pers[part]!; }
   get partCount(): number { return this.meshes.length; }
 
-  /** Per-frame upload flag — call once after all species have updated. */
+  /** Per-frame upload flag — call once after all species have updated.
+   *  Slots are dense [0, live), so the upload can stop at live*per
+   *  instances instead of the full capacity, and skip entirely when
+   *  nothing moved (setMatrix/setColor flag `dirty`). */
+  private dirty = false;
   flagDirty(): void {
-    for (const m of this.meshes) {
+    if (!this.dirty) return;
+    this.dirty = false;
+    for (let i = 0; i < this.meshes.length; i++) {
+      const m = this.meshes[i]!;
+      m.instanceMatrix.addUpdateRange(0, this.live * this.pers[i]! * 16);
       m.instanceMatrix.needsUpdate = true;
-      if (m.instanceColor) m.instanceColor.needsUpdate = true;
+      if (m.instanceColor) {
+        m.instanceColor.addUpdateRange(0, this.live * this.pers[i]! * 3);
+        m.instanceColor.needsUpdate = true;
+      }
     }
   }
 }
@@ -208,6 +223,10 @@ export class InstancedBlobShadows {
       this.mesh.getMatrixAt(last, _m);
       this.mesh.setMatrixAt(slot, _m);
       this.opacity.setX(slot, this.opacity.getX(last));
+      this.mesh.instanceMatrix.addUpdateRange(slot * 16, 16);
+      this.mesh.instanceMatrix.needsUpdate = true;
+      this.opacity.addUpdateRange(slot, 1);
+      this.opacity.needsUpdate = true;
     }
     this.owners[last] = undefined;
     this.live--;
@@ -231,7 +250,9 @@ export class InstancedBlobShadows {
     _m.compose(this._v, this._q.identity(), this._s);
     this.mesh.setMatrixAt(slot, _m);
     this.opacity.setX(slot, o);
+    this.mesh.instanceMatrix.addUpdateRange(slot * 16, 16);
     this.mesh.instanceMatrix.needsUpdate = true;
+    this.opacity.addUpdateRange(slot, 1);
     this.opacity.needsUpdate = true;
   }
 }
