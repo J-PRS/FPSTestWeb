@@ -1,3 +1,4 @@
+2026-10-01 - Sky: px v-flip — seamcheck.py (edge-continuity prover) confirms all seams ~1/255; GL order restored, no rotations needed
 2026-10-01 - Perf: mannequin_opt.glb 14.6k->6.1k tris x16 remotes; RibbonTrail batch drawRange skips dead slots (48k tris always-drawn -> live only)
 2026-10-01 - Sky: un-rotate py 180deg in applySky — its dark edge sat opposite px dark top = hard zenith seam (proven by up-facing sandbox shots)
 2026-10-01 - Perf: merge all RibbonTrails into one shared-geometry batch mesh (240 draw calls -> 1); audit shows calls 823->623 after trail-Points + vfx fixes
