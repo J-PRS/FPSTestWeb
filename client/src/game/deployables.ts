@@ -32,14 +32,17 @@ import type { GameContext } from './context.js';
 import type { Targetable } from '../entities/balls.js';
 import type { TargetCandidate } from './targeting.js';
 
-export type DeployKind = 'turret' | 'mine' | 'station' | 'drone' | 'shield';
+export type { DeployKind } from '../../../shared/deployables.js';
+import { DEPLOY_MAX, DEPLOY_HP, type DeployKind } from '../../../shared/deployables.js';
 
+// Caps come from the shared table — the server authority and this UI once
+// diverged (drone max 1 here vs 2 there).
 export const DEPLOY_DEFS: { kind: DeployKind; label: string; max: number }[] = [
-  { kind: 'turret',  label: 'SENTRY',   max: 2 },
-  { kind: 'mine',    label: 'MINE',     max: 6 },
-  { kind: 'station', label: 'PAD',      max: 1 },
-  { kind: 'drone',   label: 'DRONE',    max: 1 },
-  { kind: 'shield',  label: 'BARRIER',  max: 1 },
+  { kind: 'turret',  label: 'SENTRY',   max: DEPLOY_MAX.turret },
+  { kind: 'mine',    label: 'MINE',     max: DEPLOY_MAX.mine },
+  { kind: 'station', label: 'PAD',      max: DEPLOY_MAX.station },
+  { kind: 'drone',   label: 'DRONE',    max: DEPLOY_MAX.drone },
+  { kind: 'shield',  label: 'BARRIER',  max: DEPLOY_MAX.shield },
 ];
 
 // Sentry mini-rockets live in deployRockets.ts — a real flying body with
@@ -94,7 +97,7 @@ export interface Item {
 
 // Base hp caps — mirrors the server's HP table + entity maxHealth, used
 // for remote-visual items and the armor cap before deployHp lands.
-const DEPLOY_V_CAP: Record<DeployKind, number> = { turret: 60, mine: 1, station: 90, drone: 50, shield: 120 };
+const DEPLOY_V_CAP = DEPLOY_HP;
 
 /** A bot that plants — foe lists, anchors, and heals all read through
  *  this instead of the local player singleton. */

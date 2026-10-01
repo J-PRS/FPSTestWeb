@@ -8,16 +8,16 @@
  */
 import type { Vec3 } from './types.ts';
 import type { Room } from './Room.ts';
-import type { ServerMessage } from '../../shared/protocol.ts';
 import { logger } from './logger.ts';
 import { weaponStats } from './weaponStats.ts';
 import { aoeDamage } from '../../shared/combat.ts';
 import { REPAIR_RANGE, REPAIR_HEAL_PER_TICK, REPAIR_MIN_TICK_S, REPAIR_ARMOR_MULT } from '../../shared/weapons.ts';
 import { tickDrone, tickMine, tickStation, tickTurret, losClear } from './deployTicks.ts';
 
-export type DeployKind = 'turret' | 'mine' | 'station' | 'drone' | 'shield';
-const KINDS = new Set<DeployKind>(['turret', 'mine', 'station', 'drone', 'shield']);
-const MAX_PER_PLAYER: Record<DeployKind, number> = { turret: 2, mine: 6, station: 1, drone: 2, shield: 1 };
+export type { DeployKind } from '../../shared/deployables.ts';
+import { DEPLOY_KINDS, DEPLOY_MAX, DEPLOY_HP, type DeployKind } from '../../shared/deployables.ts';
+const KINDS = new Set<DeployKind>(DEPLOY_KINDS);
+const MAX_PER_PLAYER = DEPLOY_MAX;
 const TTL_S: Record<DeployKind, number> = { turret: 180, mine: 120, station: 240, drone: 90, shield: 120 };
 // Plants near the action are legit; plants across the map are not.
 const MAX_PLANT_DIST = 40;
@@ -38,7 +38,7 @@ export interface Deployed {
 // Blast-only durability — splash damage clears a stand's defenses the
 // Tribes way (mortar/disc spam opens the approach). Hitscan has no
 // deployable collision, so these are AOE-sweep budgets, not bullet HP.
-const HP: Record<DeployKind, number> = { turret: 60, mine: 20, station: 80, drone: 40, shield: 120 };
+const HP = DEPLOY_HP;
 
 // Barrier dome — a sphere centered on the emitter (the half-buried read
 // conforms to any slope). Hostile shells detonate on entry; friendly
@@ -113,7 +113,7 @@ export class RoomDeployables {
     this.items.set(id, { id, owner: playerId, kind: k, pos: { ...pos }, ttl: TTL_S[k], fireCd: armDelay, hp: HP[k], armor: 0 });
     logger.info('Deploy placed', { owner: playerId, kind: k, x: +pos.x.toFixed(1), y: +pos.y.toFixed(1), z: +pos.z.toFixed(1) });
     weaponStats.recordDeploy(this.room.mode, k);
-    this.room.broadcast({ type: 'deploySpawn', id, owner: playerId, kind: k, pos: { ...pos }, team: player.team } as ServerMessage);
+    this.room.broadcast({ type: 'deploySpawn', id, owner: playerId, kind: k, pos: { ...pos }, team: player.team });
   }
 
   /** Owner death clears their field — no orphaned turrets farming kills
@@ -188,7 +188,7 @@ export class RoomDeployables {
   }
 
   private sendHp(d: Deployed): void {
-    this.room.broadcast({ type: 'deployHp', id: d.id, hp: Math.max(0, Math.round(d.hp)), armor: Math.round(d.armor) } as ServerMessage);
+    this.room.broadcast({ type: 'deployHp', id: d.id, hp: Math.max(0, Math.round(d.hp)), armor: Math.round(d.armor) });
   }
 
   // Repair claims are rate-limited per shooter+target — a client can pace
@@ -224,7 +224,7 @@ export class RoomDeployables {
 
   remove(id: number): void {
     if (!this.items.delete(id)) return;
-    this.room.broadcast({ type: 'deployGone', id } as ServerMessage);
+    this.room.broadcast({ type: 'deployGone', id });
   }
 
   /** AOE blast sweep — every deployable inside the radius eats scaled

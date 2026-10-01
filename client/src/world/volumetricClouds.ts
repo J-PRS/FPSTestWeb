@@ -7,7 +7,7 @@ import {
 import { FOG_COLOR } from '../core/config.js';
 import { UNGRADE_GLSL } from '../core/gradeGlsl.js';
 import { puffVertex, puffFragment, makePuffTexture, buildPuffGeometry } from './cloudPuffs.js';
-import { NOISE_WORLD_SCALE, noiseHash, _smooth, sampleBase } from './cloudNoise.js';
+import { NOISE_WORLD_SCALE, noiseHash, _smooth } from './cloudNoise.js';
 
 // ---------------------------------------------------------------------------
 // Clouds = one dome, six stacked noise DECKS, zero raymarching.

@@ -34,7 +34,7 @@ if (q.get('export')) {
   const { GLTFExporter } = await import('three/examples/jsm/exporters/GLTFExporter.js');
   const exporter = new GLTFExporter();
   const out: Record<number, string> = {};
-  for (const [wt, g] of (vm as any).weapons as Map<number, THREE.Group>) {
+  for (const [wt, g] of vm.weapons) {
     g.visible = true;
     const glow: THREE.Mesh[] = [];
     g.traverse((o) => {
@@ -87,7 +87,7 @@ for (let i = 0; i < 60; i++) vm.update(1 / 60, 0, 0, zeroVel, camera);
 if (q.get('close')) {
   // Detach the active weapon from the viewmodel rig and frame it directly —
   // view-space shots are too small to judge shading detail.
-  const active = vm.group.children.find(c => c.visible && c !== (vm as any).flashMesh) as THREE.Group;
+  const active = vm.group.children.find(c => c.visible && c !== vm.flashMesh) as THREE.Group;
   camera.remove(vm.group);
   if (active) {
     active.position.set(0, 0, 0);

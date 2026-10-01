@@ -1,3 +1,8 @@
+2026-10-01 - audit: oxlint fully clean — hoisted burstKey quantizers in vfx.ts
+2026-10-01 - audit: protocol deploy-kind unions now reference shared DeployKind; vestigial casts removed in vmdump + volumetricClouds unused import
+2026-10-01 - audit: dropped unneeded `as ServerMessage` casts on broadcasts — literals now typecheck against the union (protocol drift becomes a compile error)
+2026-10-01 - audit: shared DEPLOY_HP — client V_CAP mirror had drifted on mine/station/drone (wrong visual maxHealth until first deployHp tick)
+2026-10-01 - audit: unified DeployKind + per-player caps into shared/deployables.ts — client drone cap had drifted (UI max 1 vs server max 2)
 2026-10-01 - audit: vitest for DemoRecorder dead-reckon dedupe (identical-skip / drift-write / verbatim mode)
 2026-10-01 - audit: CircularBuffer vitest coverage (wrap/evict order, slot reuse, ranges, timestamp search)
 2026-10-01 - audit: demo writer stamps frame/event counts from arrays (stale header counts can no longer corrupt clips); new vitest demo writer->reader round-trip + corruption rejection

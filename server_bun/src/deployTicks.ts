@@ -1,4 +1,4 @@
-import type { ServerMessage, Vec3 } from './types.ts';
+import type { Vec3 } from './types.ts';
 import { segSolidHit } from '../../shared/solidWorld.ts';
 import { FORCE_SEND_MS } from './combatBlast.ts';
 import type { Deployed, RoomDeployables } from './RoomDeployables.ts';
@@ -37,7 +37,7 @@ export function tickDrone(r: RoomDeployables, d: Deployed, dt: number): void {
     }
     if (!target) { d.fireCd = 0.15; return; }
     d.fireCd = DRONE_FIRE_INTERVAL;
-    r.room.broadcast({ type: 'turretShot', id: d.id, owner: d.owner, targetId: target } as ServerMessage);
+    r.room.broadcast({ type: 'turretShot', id: d.id, owner: d.owner, targetId: target });
     r.room.messages.turretAttack(d.owner, target, DRONE_DAMAGE);
   }
 
@@ -54,7 +54,7 @@ export function tickMine(r: RoomDeployables, d: Deployed, _dt: number): void {
       if (owner?.team && p.team === owner.team) continue;
       const dx = p.position.x - d.pos.x, dy = p.position.y - d.pos.y, dz = p.position.z - d.pos.z;
       if (dx * dx + dy * dy + dz * dz < MINE_TRIGGER_DIST * MINE_TRIGGER_DIST) {
-        r.room.broadcast({ type: 'mineBoom', id: d.id, owner: d.owner, pos: { ...d.pos } } as ServerMessage);
+        r.room.broadcast({ type: 'mineBoom', id: d.id, owner: d.owner, pos: { ...d.pos } });
         r.remove(d.id);
         r.room.messages.mineBlast(d.owner, d.pos, MINE_DAMAGE, MINE_BLAST_RADIUS, MINE_KNOCKBACK);
         return;
@@ -116,5 +116,5 @@ export function tickTurret(r: RoomDeployables, d: Deployed, dt: number): void {
     }
     if (!target) { d.fireCd = Math.min(d.fireCd + 0.15, 0.15); return; } // idle scan: cheap re-check
     d.fireCd = TURRET_FIRE_INTERVAL;
-    r.room.broadcast({ type: 'turretShot', id: d.id, owner: d.owner, targetId: target } as ServerMessage);
+    r.room.broadcast({ type: 'turretShot', id: d.id, owner: d.owner, targetId: target });
     r.room.messages.turretAttack(d.owner, target, TURRET_DAMAGE);}

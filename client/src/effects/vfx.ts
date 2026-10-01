@@ -613,14 +613,17 @@ const _eVel = new THREE.Vector3();
 // emitter is stored alongside and its liveDir re-seeded on take.
 const shapeOf = new WeakMap<ParticleSystem, BlastEmitter>();
 
+// Spec-quantizers hoisted out of burstKey — they're recreated per call otherwise.
+const _q = (v?: number, step = 0.05) => v === undefined ? '' : Math.round(v / step) * step;
+const _qc = (c?: number[]) => c === undefined ? '' : c.map(v => Math.round(v * 20) / 20).join('-');
+
 function burstKey(kind: string, spec: BlastSpec | ImplodeSpec, additive: boolean): string {
   const s = spec as BlastSpec & ImplodeSpec;
   // Specs arrive with per-shot micro-variance (counts scaled by blast
   // radius, tints recomputed per weapon energy) — unquantized floats would
   // give every call a distinct key and the pool would never hit. Rounding
   // buckets specs whose visual difference is below perception anyway.
-  const q = (v?: number, step = 0.05) => v === undefined ? '' : Math.round(v / step) * step;
-  const qc = (c?: number[]) => c === undefined ? '' : c.map(v => Math.round(v * 20) / 20).join('-');
+  const q = _q, qc = _qc;
   // count/gVar excluded: they scale per-shot (blast radius, heat value) and
   // a reused system's baked emission count is already pressure-scaled —
   // the drift is invisible, and keying on them empties the pool.
