@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import * as sfx from '../core/sfx.js';
 import { GameBot } from './botBrain.js';
 import type { BotFire } from './botFire.js';
+import { WeaponType } from '../../../shared/weapons.js';
 
 type BoltHost = BotFire;
 const _shotMuzzle = new THREE.Vector3();
@@ -13,6 +14,11 @@ const BOLT_MAT = new THREE.LineBasicMaterial({ color: 0xffe08a, transparent: tru
 
 export function claimShot(b: BoltHost, bot: GameBot, targetId: string, claim: { aim: THREE.Vector3; melee: boolean; dmg: number; weapon?: number }): void {
   const { aim, melee, dmg, weapon } = claim;
+    // Arm the shooter's model: recoil kick + muzzle flash, and the
+    // firing spine-lock that stops the stride roll waving the gun —
+    // the claim path used to skip this, so local bots ran with a
+    // permanently swaying torso even mid-firefight.
+    bot.fire?.(weapon ?? (melee ? WeaponType.Melee : WeaponType.Disc));
     if (!melee) {
       spawnBolt(b, bot.position, aim);
       // The claim path never made sound before — beam/bolt shots at a
