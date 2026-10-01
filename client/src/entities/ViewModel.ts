@@ -69,6 +69,7 @@ export class ViewModel {
   private static readonly SPIN_MAX = 40; // rad/s at full spin
   activeWeapon = 0; // public — the switch envelope rewrites it at the dip
   private timer = 0;
+  private aimBlend = 0;
   private kickAmount = 0;
   kickVel = 0;       // spring velocity — impulse IN, overshoot settle
   kickX = 0;         // sideways kick — flak/melee shudder
@@ -231,8 +232,14 @@ export class ViewModel {
     lookDeltaX: number, // radians turned this frame (yaw)
     lookDeltaY: number, // radians turned this frame (pitch)
     playerVel: THREE.Vector3,
-    camera: THREE.PerspectiveCamera
+    camera: THREE.PerspectiveCamera,
+    firing = false
   ): void {
+    // Firing steadies the gun: lateral velocity sway and walk-bob damp
+    // toward zero while the trigger's hot, so strafing under fire stops
+    // waddling the weapon side to side.
+    this.aimBlend += ((firing ? 1 : 0) - this.aimBlend) * Math.min(dt * 10, 1);
+    const hold = 1 - this.aimBlend * 0.85;
     // tmpQuat is the inverse camera rotation — shared by sway and landing-dip
     // world->camera-space conversions
     camera.getWorldQuaternion(this.tmpQuat).invert();
@@ -249,13 +256,13 @@ export class ViewModel {
     this.tmpDir.applyQuaternion(this.tmpQuat); // world -> camera local
     // forward motion converts to slight downward push
     const fwdToVert = Math.max(0, this.tmpDir.z * -1); // -z is forward
-    moveX -= this.tmpDir.x;
+    moveX -= this.tmpDir.x * hold;
     moveY -= this.tmpDir.y - fwdToVert;
 
     // Cheap perlin-ish bob (layered sines, close enough at this amplitude)
     this.timer += BOB_SPEED * dt;
-    const bobX = (Math.sin(this.timer) * 0.6 + Math.sin(this.timer * 1.73) * 0.4) * BOB_HEIGHT;
-    const bobY = (Math.cos(this.timer * 0.87) * 0.6 + Math.cos(this.timer * 1.31) * 0.4) * BOB_HEIGHT;
+    const bobX = (Math.sin(this.timer) * 0.6 + Math.sin(this.timer * 1.73) * 0.4) * BOB_HEIGHT * hold;
+    const bobY = (Math.cos(this.timer * 0.87) * 0.6 + Math.cos(this.timer * 1.31) * 0.4) * BOB_HEIGHT * hold;
 
     // Landing dip — big downward vel changes kick the gun
     let fallX = 0, fallY = 0, fallZ = 0;

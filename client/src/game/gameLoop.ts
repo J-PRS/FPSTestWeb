@@ -33,7 +33,8 @@ import type { WorldState } from './worldState.js';
 import { createPerfHud } from '../core/perfHud.js';
 import { createFrameBudget } from '../core/frameBudget.js';
 import { lastWeaponByPlayer } from './net/projectiles.js';
-import { fpsWatchdog } from './loopPerf.js';
+import { fpsWatchdog, resetAutoQuality } from './loopPerf.js';
+import { settings } from '../core/settings.js';
 import { WeaponType } from '../../../shared/weapons.js';
 
 const _zeroVel = new THREE.Vector3(); // shared zero for demo playback
@@ -112,7 +113,16 @@ export interface LoopState {
    *  user — auto-set modes must not read as a pinned user choice. */
   autoPixel: boolean;
   fxCursor: number;
-  fxJobs: (() => void)[];
+  fxJobs: [name: string, run: () => void][];
+}
+
+// Per-fxJob EMA ms — 'fx' was one opaque phase over nine rotated jobs;
+// the dump couldn't tell the quarks batch from a legacy list pileup.
+const fxJobMs = new Map<string, number>();
+export function fxJobStats(): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const [k, v] of fxJobMs) out[k] = +v.toFixed(2);
+  return out;
 }
 
 // Demo bookkeeping: update recorder/player, freeze input during playback.
@@ -228,23 +238,27 @@ const FX_MS_CAP = 1.2;
 function fxTick(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof createFrameBudget>, fxDt: number): void {
   st.fxJobs.length = 0;
   st.fxJobs.push(
-    () => updateVfx(fxDt), // quarks batch — cheap, but jobs rotate anyway
-    () => deps.lazyEffects().update(fxDt),
-    () => updateDeadList(deps.world.debrisList, fxDt),
-    () => updateDeadList(deps.world.playerDebrisList, fxDt),
-    () => updateGibs(fxDt),
-    () => updateDeadList(deps.world.scorches, fxDt),
-    () => {
+    ['vfx', () => updateVfx(fxDt)], // quarks batch — cheap, but jobs rotate anyway
+    ['effects', () => deps.lazyEffects().update(fxDt)],
+    ['debris', () => updateDeadList(deps.world.debrisList, fxDt)],
+    ['pdebris', () => updateDeadList(deps.world.playerDebrisList, fxDt)],
+    ['gibs', () => updateGibs(fxDt)],
+    ['scorch', () => updateDeadList(deps.world.scorches, fxDt)],
+    ['explosions', () => {
       const ex = deps.world.explosions;
       for (let i = 0; i <= ex.length - MAX_LIVE_EXPLOSIONS; i++) ex[i]!.dead = true;
       updateDeadList(ex, fxDt);
-    },
-    () => updateDeadList(deps.world.implosions, fxDt),
-    () => updateDeadList(deps.world.aoeGizmos, fxDt),
+    }],
+    ['implosions', () => updateDeadList(deps.world.implosions, fxDt)],
+    ['aoegiz', () => updateDeadList(deps.world.aoeGizmos, fxDt)],
   );
   if (st.fxCursor > 0) st.fxJobs.push(...st.fxJobs.splice(0, st.fxCursor));
   st.fxCursor = (st.fxCursor + 1) % st.fxJobs.length;
-  budget.each('fxdecay', st.fxJobs, FX_MS_CAP, (job) => job());
+  budget.each('fxdecay', st.fxJobs, FX_MS_CAP, ([name, run]) => {
+    const t0 = performance.now();
+    run();
+    fxJobMs.set(name, (fxJobMs.get(name) ?? 0) * 0.9 + (performance.now() - t0) * 0.1);
+  });
   // Deferred lists resume on their own next frame — nothing carries over.
   st.fxJobs.length = 0;
 }
@@ -286,7 +300,7 @@ function hudTick(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof cr
 
   viewModel.group.visible = !demoManager?.isPlaying && !player.isDead && !player.thirdPerson && !player.isSpectating;
   const yawDelta = Math.atan2(Math.sin(player.yaw - st.lastYaw), Math.cos(player.yaw - st.lastYaw));
-  viewModel.update(dt, yawDelta, player.pitch - st.lastPitch, player.vel, camera);
+  viewModel.update(dt, yawDelta, player.pitch - st.lastPitch, player.vel, camera, player.shootAnimTimer > 0);
   st.lastYaw = player.yaw;
   st.lastPitch = player.pitch;
   perf.mark('viewmodel');
@@ -334,6 +348,20 @@ export function createGameLoop(deps: GameLoopDeps) {
     return s;
   });
   const perf = createPerfHud();
+  // AUTO QUALITY toggle (top of SETTINGS): off freezes the ladder where it
+  // is AND restores full quality, so the user isn't left on a preset they
+  // never picked. No reload — ladders gate on the setting live.
+  const autoqBtn = document.getElementById('autoq-toggle') as HTMLButtonElement | null;
+  if (autoqBtn) {
+    const label = () => { autoqBtn.textContent = settings.get('fps-autoq') ? 'AUTO QUALITY: ON' : 'AUTO QUALITY: OFF'; };
+    label();
+    autoqBtn.addEventListener('click', () => {
+      const on = !settings.get('fps-autoq');
+      settings.set('fps-autoq', on);
+      if (!on) resetAutoQuality(deps, st);
+      label();
+    });
+  }
   // Frame-budget runner — ms-quota chunking + phased sweeps for work
   // that's expensive but not frame-critical. First pilot: the minimap
   // sweep at 25Hz (full-rate blip redraw was invisible anyway).
@@ -450,7 +478,7 @@ export function createGameLoop(deps: GameLoopDeps) {
     }
 
     // Damage numbers update after post-processing (bypass bloom/contrast for visibility)
-    deps.damageNumberManager().update(dt);
+    deps.damageNumberManager().update(dt, deps.camera);
   }
 
   return {

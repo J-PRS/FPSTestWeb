@@ -1,3 +1,4 @@
+2026-10-01 - ViewModel: firing steadies the gun — lateral velocity sway and walk-bob damp ~85% toward zero while shootAnimTimer is hot (aimBlend), so strafing under fire no longer waddles the weapon.
 2026-10-01 - vfx.ts: live-system cap 320 — batcher.update is monolithic CPU sim, so unbounded systems were a 10-25ms/frame spike; oldest systems now cull past the cap + all spawn paths guard. (rides on the uncommitted vfx sweep)
 2026-09-30 - botSenses: pooled the per-call vec/entry literals (recentNoises, incomingNear, enemyList) — kills ~3 allocs per matching sense per bot per frame.
 2026-09-30 - bots.ts: allies list reused as scratch per think() — kills a per-bot per-frame array alloc in the ctx pipeline.
