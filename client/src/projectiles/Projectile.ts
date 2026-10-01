@@ -233,6 +233,9 @@ export class Projectile {
     this.prevPos.copy(this.pos);
     this.pos.addScaledVector(this.vel, seconds);
     this.age += seconds;
+    // The jump is a discontinuity — ribbons must not bridge it with a
+    // quad between the spawn point and here (streak across the map).
+    for (const r of this.ribbons) r.clear();
     if (this.mesh) { this.mesh.position.copy(this.pos); syncProjectileInstance(this.mesh); }
   }
 
@@ -267,6 +270,9 @@ export class Projectile {
       _rayDir.copy(this.vel).normalize();
       this.prevPos.copy(this.pos);
       this.pos.addScaledVector(_rayDir, this.config.rayBurst.range);
+      // The discharge is a teleport — the ribbon would bridge it with a
+      // streak across the whole beam range (same hazard advanceBy covers).
+      for (const r of this.ribbons) r.clear();
     }
 
     // Remote (server-authoritative/demo) replicas skip all collision —
