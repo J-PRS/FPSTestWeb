@@ -91,30 +91,36 @@ function trailMat(): THREE.ShaderMaterial {
   return _mat;
 }
 
-// One shared Points mesh for every trail — each trail owns a contiguous
+// One shared Points mesh per batch — each trail owns a contiguous
 // slot range (TRAIL_COUNT*2 verts) inside the shared geometry.
 const SLOT_VERTS = TRAIL_COUNT * 2;   // halo + core per dot
-const MAX_TRAILS = 128;
+const BATCH_TRAILS = 128;
 
 class DotBatch {
   readonly geo = new THREE.BufferGeometry();
-  readonly posAttr = new THREE.BufferAttribute(new Float32Array(MAX_TRAILS * SLOT_VERTS * 3), 3);
-  readonly sizeAttr = new THREE.BufferAttribute(new Float32Array(MAX_TRAILS * SLOT_VERTS), 1);
-  readonly colAttr = new THREE.BufferAttribute(new Float32Array(MAX_TRAILS * SLOT_VERTS * 4), 4);
+  readonly posAttr = new THREE.BufferAttribute(new Float32Array(BATCH_TRAILS * SLOT_VERTS * 3), 3);
+  readonly sizeAttr = new THREE.BufferAttribute(new Float32Array(BATCH_TRAILS * SLOT_VERTS), 1);
+  readonly colAttr = new THREE.BufferAttribute(new Float32Array(BATCH_TRAILS * SLOT_VERTS * 4), 4);
   free: number[] = [];
+  readonly points: THREE.Points;
   private dirtyLo = Infinity;
   private dirtyHi = 0;
 
-  constructor(scene: THREE.Scene) {
+  constructor(private scene: THREE.Scene) {
     for (const a of [this.posAttr, this.sizeAttr, this.colAttr]) a.setUsage(THREE.DynamicDrawUsage);
     this.geo.setAttribute('position', this.posAttr);
     this.geo.setAttribute('aSize', this.sizeAttr);
     this.geo.setAttribute('aColor', this.colAttr);
     this.geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1e6);
-    const points = new THREE.Points(this.geo, trailMat());
-    points.frustumCulled = false;
-    scene.add(points);
-    for (let s = MAX_TRAILS - 1; s >= 0; s--) this.free.push(s);
+    this.points = new THREE.Points(this.geo, trailMat());
+    this.points.frustumCulled = false;
+    scene.add(this.points);
+    for (let s = BATCH_TRAILS - 1; s >= 0; s--) this.free.push(s);
+  }
+
+  dispose(): void {
+    this.scene.remove(this.points);
+    this.geo.dispose();
   }
 
   /** Accumulate a dirty vert range — flush() uploads just the touched
@@ -140,11 +146,33 @@ class DotBatch {
   }
 }
 
-const dotBatches = new Map<THREE.Scene, DotBatch>();
-function dotBatchFor(scene: THREE.Scene): DotBatch {
-  let b = dotBatches.get(scene);
-  if (!b) { b = new DotBatch(scene); dotBatches.set(scene, b); }
-  return b;
+// Dynamic batching, same contract as the trail batches: spawn a sibling
+// batch when every existing slot is taken (one extra draw call), retire
+// an overflow batch the moment it empties — batch[0] is the floor. The
+// old code silently rendered nothing once 128 trails were live.
+const dotBatches = new Map<THREE.Scene, DotBatch[]>();
+
+/** Take a slot from any non-full batch for the scene; grow on demand. */
+function acquireDotSlot(scene: THREE.Scene): { batch: DotBatch; slot: number } {
+  let list = dotBatches.get(scene);
+  if (!list) { list = [new DotBatch(scene)]; dotBatches.set(scene, list); }
+  for (const b of list) {
+    const slot = b.free.pop();
+    if (slot !== undefined) return { batch: b, slot };
+  }
+  const b = new DotBatch(scene);
+  list.push(b);
+  return { batch: b, slot: b.free.pop()! };
+}
+
+/** Return the slot; an emptied overflow batch retires (batch[0] stays). */
+function releaseDotSlot(scene: THREE.Scene, batch: DotBatch, slot: number): void {
+  batch.free.push(slot);
+  const list = dotBatches.get(scene);
+  if (!list || batch === list[0]) return;
+  if (batch.free.length < BATCH_TRAILS) return;
+  list.splice(list.indexOf(batch), 1);
+  batch.dispose();
 }
 
 export class BallTrailDots {
@@ -162,10 +190,10 @@ export class BallTrailDots {
     this.opacity = opts?.opacity ?? 1;
     this.sizeMul = opts?.sizeMul ?? 1;
     this.interval = opts?.interval ?? TRAIL_INTERVAL;
-    this.batch = dotBatchFor(scene);
-    this.slot = this.batch.free.pop() ?? -1;
+    const a = acquireDotSlot(scene);
+    this.batch = a.batch;
+    this.slot = a.slot;
     this.base = this.slot * SLOT_VERTS;
-    if (this.slot < 0) this.maxDots = 0; // saturated — render nothing
   }
 
   /** Emit a sparkle when the cadence fires — caller passes the ball's
@@ -260,7 +288,7 @@ export class BallTrailDots {
       for (let s = this.base; s < this.base + SLOT_VERTS; s++) this.batch.sizeAttr.setX(s, 0);
       this.batch.mark(this.base, this.base + SLOT_VERTS);
       this.batch.flush();
-      this.batch.free.push(this.slot);
+      releaseDotSlot(this.scene, this.batch, this.slot);
       this.slot = -1;
     }
     for (const d of this.dots) freeDot(d);
