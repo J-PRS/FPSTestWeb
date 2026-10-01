@@ -32,6 +32,7 @@ import type { createWaveDirector } from './waveDirector.js';
 import type { WorldState } from './worldState.js';
 import { createPerfHud } from '../core/perfHud.js';
 import { createFrameBudget } from '../core/frameBudget.js';
+import { gpuBegin, gpuEnd, gpuMs } from '../core/gpuTimer.js';
 import { lastWeaponByPlayer } from './net/projectiles.js';
 import { fpsWatchdog, resetAutoQuality } from './loopPerf.js';
 import { createRenderScan } from './renderScan.js';
@@ -414,7 +415,7 @@ function wireDebugKeys(deps: GameLoopDeps, perf: ReturnType<typeof createPerfHud
   // window.__perf — live phase table for headless probes + manual reads;
   // the watchdog dump uses the same data for shipped logs.
   (window as unknown as { __perf: () => Record<string, number> }).__perf =
-    () => ({ ...perf.snapshot(), ...budget.stats() as unknown as Record<string, number>, ...fxJobStats() });
+    () => ({ ...perf.snapshot(), gpu: gpuMs(), ...budget.stats() as unknown as Record<string, number>, ...fxJobStats() });
   // window.__renderScan — staged render breakdown (scene / +shadow / full
   // pipeline / viewmodel) with per-stage calls+tris+GPU-ms. Profiling hook;
   // renders extra frames on top of the loop.
@@ -469,6 +470,17 @@ function maybeWarmShaders(deps: GameLoopDeps, st: LoopState): void {
   if (!deps.sceneSetup.scene.getObjectByName('__t2interiors') && st.warmN <= 600) return;
   st.warmed = true;
   deps.rendererSetup.warmup();
+}
+
+// FPS cap: skip only the render call — sim/input stay full-rate.
+// Carry leftover time so the cap hits its target rate, not stutters.
+function fpsCapAllows(st: LoopState, rawElapsed: number): boolean {
+  const cap = settings.get('fps-cap');
+  if (cap <= 0) return true;
+  st.renderAcc += rawElapsed;
+  if (st.renderAcc < 1 / cap) return false;
+  st.renderAcc = Math.min(st.renderAcc - 1 / cap, 1 / cap);
+  return true;
 }
 
 export function createGameLoop(deps: GameLoopDeps) {
@@ -552,16 +564,7 @@ export function createGameLoop(deps: GameLoopDeps) {
     hudTick(deps, st, budget, perf, frame, fxDt);
     perf.mark('hud');
 
-    // FPS cap: skip only the render call — sim/input stay full-rate.
-    // Carry leftover time so the cap hits its target rate, not stutters.
-    const cap = settings.get('fps-cap');
-    let doRender = true;
-    if (cap > 0) {
-      st.renderAcc += rawElapsed;
-      doRender = st.renderAcc >= 1 / cap;
-      if (doRender) st.renderAcc = Math.min(st.renderAcc - 1 / cap, 1 / cap);
-    }
-    if (doRender) renderFrame(fxDt); // damage numbers ride fxDt — same hidden-tab decay fix
+    if (fpsCapAllows(st, rawElapsed)) renderFrame(fxDt); // damage numbers ride fxDt — same hidden-tab decay fix
     perf.mark('render');
     perf.end(deps.rendererSetup.renderer, () => {
       const bw = deps.lazyNetworkManager().bandwidth();
@@ -608,6 +611,7 @@ export function createGameLoop(deps: GameLoopDeps) {
       st.shadowAcc = 0;
     }
 
+    gpuBegin(renderer);
     if (rendererSetup.needsComposer()) {
       rendererSetup.render(dt); // FLOYD: overlay pass (the VM draw below) runs inside
     } else {
@@ -627,6 +631,7 @@ export function createGameLoop(deps: GameLoopDeps) {
       renderer.render(vmScene, vmCamera);
       renderer.autoClear = prevAutoClear;
     }
+    gpuEnd();
 
     // Damage numbers update after post-processing (bypass bloom/contrast for visibility)
     deps.damageNumberManager().update(dt, deps.camera);

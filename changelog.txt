@@ -1,3 +1,4 @@
+2026-10-01 - GPU-side frame timer (EXT_disjoint_timer_query_webgl2) reported via __perf.gpu
 2026-10-01 - Bot brains think at 10Hz staggered by roster index; quarks batcher sims at 30Hz with 2*dt
 2026-10-01 - Debris shard physics is budget-resumable (cursor + deadline; one debris can no longer overdraw the 1.5ms pdebris cap)
 2026-10-01 - Ribbons rewrite positions only for newly pushed samples (old samples are static, colors-only fade)
