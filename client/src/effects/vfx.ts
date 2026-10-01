@@ -80,6 +80,20 @@ const VFX_SIM_RADIUS_SQ = 180 * 180;
 const starveFrames = new Map<IParticleSystem, number>();
 const STARVE_LIMIT = 60;
 
+// One-shot freelist: ParticleSystem construction builds ~30 behavior
+// objects per burst — the burst-frame spikes. Finished systems restart
+// cleanly, so pool them by config kind instead of rebuilding each hit.
+const kindOf = new Map<ParticleSystem, string>();
+const pools = new Map<string, ParticleSystem[]>();
+const POOL_CAP = 32;
+function takeSystem(kind: string, build: () => ParticleSystem): ParticleSystem {
+  const ps = pools.get(kind)?.pop();
+  if (ps) return ps;
+  const n = build();
+  kindOf.set(n, kind);
+  return n;
+}
+
 function reapStarved(ps: IParticleSystem): void {
   const starved = ps.particleNum === 0 ? (starveFrames.get(ps) ?? 0) + 1 : 0;
   if (starved > STARVE_LIMIT) {
@@ -122,6 +136,12 @@ export function updateVfx(dt: number, camPos?: THREE.Vector3): void {
       batcher?.deleteSystem(ps);
       scene?.remove(ps.emitter);
       live.delete(ps);
+      const kind = kindOf.get(ps);
+      if (kind) {
+        const pool = pools.get(kind) ?? [];
+        if (pool.length < POOL_CAP) pool.push(ps);
+        pools.set(kind, pool);
+      }
     }
   }
   // Hard cap: cull oldest systems until under the ceiling. A killed
@@ -168,7 +188,7 @@ function normalMat(): THREE.MeshBasicMaterial {
  *  every other burst in flight. */
 export function impactBurst(pos: THREE.Vector3, vel: THREE.Vector3): void {
   if (!batcher || !scene || live.size >= MAX_LIVE_SYSTEMS) return;
-  const ps = new ParticleSystem({
+  const ps = takeSystem('impact', () => new ParticleSystem({
     duration: 0.35,
     looping: false,
     startLife: new IntervalValue(0.12, 0.27),
@@ -188,7 +208,7 @@ export function impactBurst(pos: THREE.Vector3, vel: THREE.Vector3): void {
         [[0.9, 0], [0, 1]],
       )),
     ],
-  });
+  }));
   ps.emitter.position.copy(pos);
   // Cone emits along local +Z — aim it back along the incoming shot.
   if (vel.lengthSq() > 0) {
@@ -198,14 +218,14 @@ export function impactBurst(pos: THREE.Vector3, vel: THREE.Vector3): void {
   batcher.addSystem(ps);
   scene.add(ps.emitter);
   live.add(ps);
-  ps.play();
+  ps.restart();
 
   // Directional streak fan — stretched sparks flung back along the shot
   // line. This is what separates a bullet hit from a puff: the eye reads
   // velocity-aligned slivers as fragments. Skipped under particle
   // pressure (the puff above is the minimum readable hit).
   if (vfxPressure() > 0.6) {
-    const streaks = new ParticleSystem({
+    const streaks = takeSystem('impactStreak', () => new ParticleSystem({
       duration: 0.25,
       looping: false,
       startLife: new IntervalValue(0.1, 0.2),
@@ -227,13 +247,13 @@ export function impactBurst(pos: THREE.Vector3, vel: THREE.Vector3): void {
           [[0.9, 0], [0, 1]],
         )),
       ],
-    });
+    }));
     streaks.emitter.position.copy(pos);
     streaks.emitter.quaternion.copy(ps.emitter.quaternion);
     batcher.addSystem(streaks);
     scene.add(streaks.emitter);
     live.add(streaks);
-    streaks.play();
+    streaks.restart();
   }
 }
 
