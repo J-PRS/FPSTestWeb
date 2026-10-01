@@ -264,7 +264,9 @@ export class TeamBots {
    *  nobody safe to run to — bot.team is its own playerId there). */
   private alliesOf(bot: GameBot): THREE.Vector3[] | undefined {
     if (bot.team !== 'alpha' && bot.team !== 'bravo') return undefined;
-    const allies: THREE.Vector3[] = [];
+    // Reused scratch: think() consumes it synchronously before the next bot.
+    const allies = _alliesScratch;
+    allies.length = 0;
     const player = this.deps.lazyPlayer();
     if (this.playerTeam === bot.team && !player.isDead) allies.push(player.pos);
     for (const b of this.bots) if (b !== bot && !b.isDead && b.team === bot.team) allies.push(b.position);
@@ -395,5 +397,6 @@ export class TeamBots {
 }
 
 const _collectors: { id: string; pos: THREE.Vector3; alive: boolean; pickupScale: number }[] = [];
+const _alliesScratch: THREE.Vector3[] = [];
 // Small accessor so update() reads deps once per frame.
 function deps0(m: TeamBots) { return m.deps; }
