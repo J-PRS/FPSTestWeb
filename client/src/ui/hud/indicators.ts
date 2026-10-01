@@ -47,6 +47,13 @@ export class PlayerIndicators {
     camera.getWorldDirection(_cameraDir);
   }
 
+  private throttled(playerId: string, distSq: number, behind: boolean): boolean {
+    if (behind || distSq <= 100 * 100) return false;
+    const p = (this.phase.get(playerId) ?? 0) + 1;
+    this.phase.set(playerId, p);
+    return p % (distSq > 200 * 200 ? 4 : 2) !== 0;
+  }
+
   update(playerId: string, position: { x: number; y: number; z: number }, camera: THREE.Camera, opts: { isDead?: boolean; friendly?: boolean; variant?: string; sheep?: number } = {}): void {
     const { isDead = false, friendly = false, variant, sheep } = opts;
     let indicator = this.indicators.get(playerId);
@@ -75,14 +82,16 @@ export class PlayerIndicators {
 
     const behind = toTarget.angleTo(_cameraDir) > Math.PI / 2;
 
-    // Half-rate far markers: skip the projection/DOM pass on odd phases.
+    // Rate-limited far markers: past 100m the marker crawls across the
+    // screen, so the projection/DOM pass only needs a fraction of the
+    // frame rate — half-rate at 100m, quarter-rate at 200m.
     const distSq = toTarget.lengthSq();
-    if (distSq > 100 * 100 && !behind) {
-      const p = (this.phase.get(playerId) ?? 0) ^ 1;
-      this.phase.set(playerId, p);
-      if (p === 1) return;
-    }
+    if (this.throttled(playerId, distSq, behind)) return;
 
+    this.layout(playerId, indicator, targetPos, camera, behind, distSq);
+  }
+
+  private layout(playerId: string, indicator: HTMLElement, targetPos: THREE.Vector3, camera: THREE.Camera, behind: boolean, distSq: number): void {
     const vector = _projected.copy(targetPos);
     vector.project(camera);
 

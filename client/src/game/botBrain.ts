@@ -203,10 +203,10 @@ export class GameBot extends RemotePlayer {
       objective: ctx.objective ?? undefined,
       pickup: ctx.nugget?.pos,
       groundY: (x, z) => {
-        // ~1m cells, not 4cm: getHeight is a smooth bilinear heightmap
-        // read, so meter snapping is invisible to the senses — and probes
-        // landing a half-meter apart stop memoizing as separate cells.
-        const k = (x | 0) * 131072 + (z | 0);
+        // ~2m cells, not 4cm: getHeight is a smooth bilinear heightmap
+        // read, so meter snapping is invisible to the senses — and wider
+        // cells give the shared memo a much higher hit rate.
+        const k = ((x * 0.5) | 0) * 131072 + ((z * 0.5) | 0);
         let v = gyc.get(k);
         if (v === undefined) {
           // Cap the memo — roaming bots would otherwise grow it a cell at
