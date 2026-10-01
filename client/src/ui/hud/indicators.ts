@@ -20,6 +20,9 @@ export class PlayerIndicators {
   private readonly lastSize = new Map<string, number>();
   private readonly lastSheep = new Map<string, number>();
   private readonly lastPos = new Map<string, number>();
+  // Far markers reproject at half rate — past ~100m a frame of stale
+  // screen pos is sub-pixel. Per-id counter keeps the skip spread out.
+  private readonly phase = new Map<string, number>();
 
   // camera.getWorldPosition/Direction decomposes matrixWorld per call —
   // called once per remote per frame that was ~2 decomposes × N players.
@@ -72,6 +75,14 @@ export class PlayerIndicators {
 
     const behind = toTarget.angleTo(_cameraDir) > Math.PI / 2;
 
+    // Half-rate far markers: skip the projection/DOM pass on odd phases.
+    const distSq = toTarget.lengthSq();
+    if (distSq > 100 * 100 && !behind) {
+      const p = (this.phase.get(playerId) ?? 0) ^ 1;
+      this.phase.set(playerId, p);
+      if (p === 1) return;
+    }
+
     const vector = _projected.copy(targetPos);
     vector.project(camera);
 
@@ -88,7 +99,7 @@ export class PlayerIndicators {
     if (onScreen) {
       indicator.classList.remove('offscreen');
       // Scale dot by inverse square root of distance (gentler than 1/d)
-      const distance = _cameraPos.distanceTo(targetPos);
+      const distance = Math.sqrt(distSq);
       const REF_DIST = 50;
       const MIN_SIZE = 6;
       const MAX_SIZE = 12;
@@ -159,6 +170,7 @@ export class PlayerIndicators {
       this.lastSize.delete(playerId);
       this.lastSheep.delete(playerId);
       this.lastPos.delete(playerId);
+      this.phase.delete(playerId);
       logger.debug('INDICATOR REMOVED', { playerId, total: this.indicators.size });
     }
   }
@@ -169,5 +181,6 @@ export class PlayerIndicators {
     this.lastSize.clear();
     this.lastSheep.clear();
     this.lastPos.clear();
+    this.phase.clear();
   }
 }
