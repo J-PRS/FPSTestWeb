@@ -160,6 +160,18 @@ export class PlayerModel {
   static readonly SWAY_BONES = new Set([
     'defhips', 'defspine001', 'defspine002', 'defspine003', 'defneck', 'defhead',
   ]);
+  // Hips-and-up rotation chain locked toward bind pose while the model
+  // is firing — hip POSITION tracks still animate (stride bob survives,
+  // and leg swing lives on the thigh bones, not hip rotation). DampenSway
+  // leaves half the stride roll, which still waves the muzzle through
+  // the arm chain's parent; this kills it outright while shots go out.
+  private static readonly STEADY_BONES = new Set([
+    'defhips', 'defspine001', 'defspine002', 'defspine003', 'defneck', 'defhead',
+  ]);
+  private steadyBones: { bone: THREE.Object3D; bind: THREE.Quaternion }[] = [];
+  // 0→1 ramp while recently fired — drives the spine lock.
+  private armedT = 0;
+  private armed = 0;
   // Foot bones are IK targets detached from the leg chain — retargeted
   // clips leave them frozen mid-air. When a UAL clip plays, snap each foot
   // to its shin tip (the *_end leaf node follows the skinned leg).
@@ -358,6 +370,9 @@ export class PlayerModel {
     // doesn't drive its IK foot bones). The mannequin's feet are
     // real in-chain bones — nothing to snap.
     if (child.name === 'FootL' || child.name === 'FootR') this.captureFootBone(child);
+    if (PlayerModel.STEADY_BONES.has(nb)) {
+      this.steadyBones.push({ bone: child, bind: child.quaternion.clone() });
+    }
   }
 
   private captureFootBone(child: THREE.Object3D): void {
@@ -575,22 +590,28 @@ export class PlayerModel {
     }
     const [ual, fallback] = ANIM_NAMES[state];
     if (this.variant === 'mannequin') {
-      // Mannequin has no native slide clip — ski rides the tucked Crouch_Fwd
-      // (the UAL2 retarget exists but bakes limb-axis artifacts on this rig).
-      if (state === 'ski') {
-        this.playAnimation(this.animations.has('UAL_Crouch_Fwd_Loop') ? 'UAL_Crouch_Fwd_Loop' : 'Crouch_Fwd_Loop');
-        return;
-      }
-      // Default stance is armed — the relaxed Idle_Loop dangles the gun at
-      // the thigh; Pistol_Idle holds it raised and reads as "in combat".
-      if (state === 'idle' && this.animations.has('UAL_Pistol_Idle_Loop')) {
-        this.playAnimation('UAL_Pistol_Idle_Loop');
+      const m = this.mannequinClip(state);
+      if (m) {
+        this.playAnimation(m);
         return;
       }
     }
     // Prefer the retargeted clip; fall back to the native emote until the
     // UAL bake lands (or forever if the retarget failed).
     this.playAnimation(this.animations.has(ual) ? ual : fallback);
+  }
+
+  // Mannequin clip overrides, or null for the default UAL/fallback pick.
+  private mannequinClip(state: AnimationState): string | null {
+    // Mannequin has no native slide clip — ski rides the tucked Crouch_Fwd
+    // (the UAL2 retarget exists but bakes limb-axis artifacts on this rig).
+    if (state === 'ski') {
+      return this.animations.has('UAL_Crouch_Fwd_Loop') ? 'UAL_Crouch_Fwd_Loop' : 'Crouch_Fwd_Loop';
+    }
+    // Default stance is armed — the relaxed Idle_Loop dangles the gun at
+    // the thigh; Pistol_Idle holds it raised and reads as "in combat".
+    if (state === 'idle' && this.animations.has('UAL_Pistol_Idle_Loop')) return 'UAL_Pistol_Idle_Loop';
+    return null;
   }
 
   /**
@@ -655,6 +676,7 @@ export class PlayerModel {
     if (this.mixer) {
       this.mixer.update(dt);
     }
+    this.applySpineLock(dt);
     for (const ab of this.aimBones) {
       // Negative X tilts up for positive pitch (looking up)
       ab.last.setFromAxisAngle(X_AXIS, -procPitch * ab.factor);
@@ -662,6 +684,18 @@ export class PlayerModel {
     }
     this.snapFeetToShins();
     this.fx.tick(dt);
+  }
+
+  // Spine lock while firing: slerp the torso chain back to bind pose.
+  // Post-mixer so the clip's residual (post-dampenSway) stride roll
+  // can't drag the aimed arm chain side to side; ~0.45s per shot so
+  // continuous fire holds the lock.
+  private applySpineLock(dt: number): void {
+    this.armedT = Math.max(0, this.armedT - dt);
+    this.armed += ((this.armedT > 0 ? 1 : 0) - this.armed) * Math.min(dt * 12, 1);
+    if (this.armed > 0.01) {
+      for (const sb of this.steadyBones) sb.bone.quaternion.slerp(sb.bind, this.armed);
+    }
   }
 
   // Retargeted clips don't drive the robot's IK foot bones — pin each
@@ -699,7 +733,7 @@ export class PlayerModel {
   damageFlash(): void { this.fx.damageFlash(); }
 
   // Procedural fire kick + muzzle flash — call when the remote player shoots.
-  fire(weaponType?: number): void { this.fx.fire(weaponType); }
+  fire(weaponType?: number): void { this.armedT = 0.45; this.fx.fire(weaponType); }
 
   setPosition(x: number, y: number, z: number): void {
     if (this.model) {
