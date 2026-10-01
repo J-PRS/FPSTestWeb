@@ -498,6 +498,7 @@ async function applyInteriors(ctx: NetCtx, list: InteriorSpec[] | undefined): Pr
   const { httpUrl } = await resolveServerEndpoints();
   const group = new THREE.Group();
   group.name = '__t2interiors';
+  group.matrixAutoUpdate = false; // static world container
   interiorGroup = group;
   scene.add(group);
 
@@ -572,6 +573,7 @@ async function applyInteriors(ctx: NetCtx, list: InteriorSpec[] | undefined): Pr
     if (!merged) { // attribute/index quirk — fall back to the unmerged geos
       for (const g of geos) {
         const mesh = new THREE.Mesh(g, mat);
+        mesh.matrixAutoUpdate = false; // baked world transform — static
         mesh.receiveShadow = true;
         mesh.userData.castR = interiorCastRadius(g);
         mesh.castShadow = mesh.userData.castR > 0;
@@ -583,6 +585,7 @@ async function applyInteriors(ctx: NetCtx, list: InteriorSpec[] | undefined): Pr
     for (const g of geos) g.dispose(); // baked clones — merged owns their data now
     mergedGeo.push(merged);
     const mesh = new THREE.Mesh(merged, mat);
+    mesh.matrixAutoUpdate = false; // baked world transform — static
     mesh.receiveShadow = true;
     // Caster census: ~1000 interior meshes were all casting → ~580 extra
     // draw calls in the shadow pass. Only chunky structures' shadows read
