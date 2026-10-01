@@ -45,6 +45,11 @@ Scope: client/src, server_bun/src, shared. Goal: ease of future work, testabilit
   (940→880), `rendererShaders.ts` from renderer.ts (825→601).
 - net dispatch guarded — a malformed-but-parseable message logs a warn
   instead of throwing into the connection's onError path.
+- `f73a74c` + `ArmorClass`/`TransportKind` commits — the literal-union
+  drift class is closed: TeamId, DeployKind, PickupKind, ArmorClass,
+  TransportKind now each have exactly one definition; adding a kind is a
+  one-line edit + compile sweep. `perk`/`mode` stay `string` on the wire
+  by design (boundary validators in perks.ts / mapSpec resolve them).
 
 ## Findings (ranked, not-yet-done)
 
