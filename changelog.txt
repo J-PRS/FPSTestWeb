@@ -1,3 +1,5 @@
+2026-10-01 - audit: renderer.ts GLSL blobs (upscale/xBR/ACES/lens-dirt) extracted to rendererShaders.ts — 825→601 lines
+2026-10-01 - audit: extracted PlayerModel clip surgery to playerClipSurgery.ts leaf (testable without loading the rig)
 2026-10-01 - audit: oxlint fully clean — hoisted burstKey quantizers in vfx.ts
 2026-10-01 - audit: protocol deploy-kind unions now reference shared DeployKind; vestigial casts removed in vmdump + volumetricClouds unused import
 2026-10-01 - audit: dropped unneeded `as ServerMessage` casts on broadcasts — literals now typecheck against the union (protocol drift becomes a compile error)

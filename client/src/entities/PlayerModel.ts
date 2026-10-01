@@ -15,58 +15,14 @@ const _pitchQuat = new THREE.Quaternion();
 const _footW = new THREE.Vector3();
 const _footQ = new THREE.Quaternion();
 const _footPQ = new THREE.Quaternion();
-const _dampA = new THREE.Quaternion();
-const _dampB = new THREE.Quaternion();
-
-// 8-way facing-frame direction. atan2(side, fwd): 0=F, +90°=R, ±180°=B.
-type LocoDir = 'F' | 'FR' | 'R' | 'BR' | 'B' | 'BL' | 'L' | 'FL';
-const DIR8: LocoDir[] = ['F', 'FR', 'R', 'BR', 'B', 'BL', 'L', 'FL'];
-const DIR_SUFFIX: Record<LocoDir, string> = {
-  F: 'Forward', FR: 'ForwardRight', R: 'Right', BR: 'BackwardRight',
-  B: 'Backward', BL: 'BackwardLeft', L: 'Left', FL: 'ForwardLeft',
-};
-
-// Locomotion clip surgery — mannequin/knight rigs carry authored root
-// motion and full-body tracks our layered system has to carve up.
-
-/** Strip hip/root XZ translation — the entity owns world position; left
- *  in, loop clips translate the mesh out from under the hitbox. */
-function stripHipXZ(clip: THREE.AnimationClip): void {
-  for (const tr of clip.tracks) {
-    if (!tr.name.endsWith('.position')) continue;
-    const node = tr.name.slice(0, tr.name.indexOf('.'));
-    if (normBone(node) !== 'defhips' && normBone(node) !== 'root' && normBone(node) !== 'hips' && normBone(node) !== 'bone') continue;
-    const v = tr.values;
-    for (let i = 3; i < v.length; i += 3) { v[i] = v[0]; v[i + 2] = v[2]; }
-  }
-}
-
-/** Dampen torso-chain sway: full-run spine roll carries the aimed arms
- *  with it and reads as the CoD sprint wade — waving the gun side to
- *  side. Each quaternion key slerps `amt` toward the track's baseline,
- *  so the bob timing and stride direction survive at reduced amplitude.
- *  Directional clips get the stronger damp — the kevdev strafes author
- *  a ~90° spine twist toward travel, which drags the aimed muzzle
- *  off-bore; ~0.8 leaves a readable lean into the step. Position tracks
- *  (hip bob) are untouched. */
-function dampenSway(clip: THREE.AnimationClip, amt = 0.5): void {
-  for (const tr of clip.tracks) {
-    if (!tr.name.endsWith('.quaternion')) continue;
-    const node = normBone(tr.name.slice(0, tr.name.indexOf('.')));
-    if (!PlayerModel.SWAY_BONES.has(node)) continue;
-    const v = tr.values;
-    _dampA.set(v[0], v[1], v[2], v[3]);
-    for (let i = 4; i < v.length; i += 4) {
-      _dampB.set(v[i], v[i + 1], v[i + 2], v[i + 3]);
-      _dampB.slerp(_dampA, amt);
-      v[i] = _dampB.x; v[i + 1] = _dampB.y; v[i + 2] = _dampB.z; v[i + 3] = _dampB.w;
-    }
-  }
-}
+// Locomotion clip surgery (stripHipXZ/dampenSway/DIR8) lives in
+// playerClipSurgery.ts — extracted so the layered-anim carve-up is
+// testable without loading the rig.
 
 export type { AnimationState } from './playerClips.js';
 import { ANIM_NAMES, KNIGHT_ANIMS, ONESHOT_CLIPS,
   normBone, type AnimationState } from './playerClips.js';
+import { DIR8, DIR_SUFFIX, stripHipXZ, dampenSway, type LocoDir } from './playerClipSurgery.js';
 import { ModelFx } from './modelFx.js';
 import { bakeUALClips } from './playerUal.js';
 
@@ -508,7 +464,7 @@ export class PlayerModel {
       if (mann && PlayerModel.isLayeredClip(clip.name)) {
         clip.tracks = clip.tracks.filter(t =>
           !PlayerModel.AIM_BONE_MASK.has(normBone(t.name.slice(0, t.name.indexOf('.')))));
-        dampenSway(clip);
+        dampenSway(clip, PlayerModel.SWAY_BONES);
       }
     }
     const action = this.mixer!.clipAction(clip);
@@ -711,7 +667,7 @@ export class PlayerModel {
           if (PlayerModel.isLayeredClip(name)) {
             clip.tracks = clip.tracks.filter(t =>
               !PlayerModel.AIM_BONE_MASK.has(normBone(t.name.slice(0, t.name.indexOf('.')))));
-            dampenSway(clip);
+            dampenSway(clip, PlayerModel.SWAY_BONES);
           }
         }
         this.animations.set(name, this.mixer.clipAction(clip));
