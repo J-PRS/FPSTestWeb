@@ -337,9 +337,13 @@ export class PlayerModel {
       child.castShadow = true;
       child.receiveShadow = true;
       // SkinnedMesh bind-pose bounds don't track bone-driven verts —
-      // wrong bounds get it frustum-culled when it shouldn't be
+      // wrong bounds get it frustum-culled when it shouldn't be. Compute
+      // the skinned bounds at load (three walks verts through the
+      // skeleton) and pad for anim travel so culling can come back on.
       if ((child as THREE.SkinnedMesh).isSkinnedMesh) {
-        child.frustumCulled = false;
+        const sk = child as THREE.SkinnedMesh;
+        sk.computeBoundingSphere();
+        if (sk.boundingSphere) sk.boundingSphere.radius += 0.6;
       }
       // Capture emissive materials for the damage flash — dedupe,
       // a GLB often shares one material across several meshes.
