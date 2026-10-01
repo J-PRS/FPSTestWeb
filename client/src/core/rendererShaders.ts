@@ -217,6 +217,28 @@ export const ACES_GLSL = /* glsl */ `
     }
   `;
 
+// HDR sanitize — runs between RenderPass and the bloom/dirt chain.
+// The composer buffers are HalfFloat: an additive stack (EMIT_GAIN ×
+// overlapping trails/explosions, the sun disc) can push a texel past
+// 65504 → Inf. Bloom's mip chain then lerps Inf-Inf → NaN, and the
+// upsample smears one bad texel across the whole frame — the "glow on =
+// screen flickers black" bug. Zero non-finite channels and clamp to a
+// sane HDR ceiling; 64 is far past the 1.3 bloom threshold, so hot
+// emitters still halo at full strength.
+export const SANITIZE_GLSL = /* glsl */ `
+    void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor) {
+      vec3 c = inputColor.rgb;
+      // NaN fails EVERY comparison (IEEE): the >= 0.0 guard drops NaN to
+      // black, Inf survives the guard and clamps to the ceiling, negatives
+      // floor at 0. Portable — no isnan()/isinf() (GLSL ES 3.00 only).
+      c.r = c.r >= 0.0 ? min(c.r, 64.0) : 0.0;
+      c.g = c.g >= 0.0 ? min(c.g, 64.0) : 0.0;
+      c.b = c.b >= 0.0 ? min(c.b, 64.0) : 0.0;
+      float a = inputColor.a >= 0.0 ? min(inputColor.a, 1.0) : 0.0;
+      outputColor = vec4(c, a);
+    }
+  `;
+
 // Lens dirt (Unity's Bloom Dirtiness): a screen-fit smudge/dust texture
 // multiplied by the POST-bloom luminance — the merged frame already
 // carries the halo, so excess-over-threshold re-boosts exactly where

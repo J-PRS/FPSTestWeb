@@ -15,7 +15,7 @@ import {
 import {
   TONE_MAPPING_EXPOSURE,
 } from './config.js';
-import { UPSCALE_GLSL, XBR_GLSL, ACES_GLSL, LENS_DIRT_GLSL } from './rendererShaders.js';
+import { UPSCALE_GLSL, XBR_GLSL, ACES_GLSL, LENS_DIRT_GLSL, SANITIZE_GLSL } from './rendererShaders.js';
 
 export interface RendererSetup {
   renderer: THREE.WebGLRenderer;
@@ -48,7 +48,7 @@ export interface RendererSetup {
   resize: (width: number, height: number) => void;
 }
 
-interface RenderModes { pscale: number; pmode: number; postproEnabled: boolean; bloomEnabled: boolean }
+interface RenderModes { pscale: number; pmode: number; postproEnabled: boolean; bloomEnabled: boolean; dirtOff: boolean }
 
 // Legacy ?pixelated= / stored fps-pixelated values mapped onto the new
 // (scale, mode) pair: off→1x, hard→4x raw, medium→2x raw, smooth→4x
@@ -112,7 +112,10 @@ function resolveModes(): RenderModes {
     postproEnabled = false;
     bloomEnabled = false;
   }
-  return { pscale, pmode, postproEnabled, bloomEnabled };
+  // ?dirt=off — isolates the lens-dirt stage when bisecting the
+  // black-frame NaN smear (bloom stays on, dirt never samples it).
+  const dirtOff = urlParams.get('dirt') === 'off';
+  return { pscale, pmode, postproEnabled, bloomEnabled, dirtOff };
 }
 
 const FS_LEVELS = 6; // per-channel quantization — 4 was chroma-noise soup
@@ -208,8 +211,8 @@ function applyPixelSize(renderer: THREE.WebGLRenderer,
 // stay under it, so bloom never washes the frame. (A second composer and
 // SelectiveBloomEffect both proved fragile here — keep the simple one.)
 function makeComposer(renderer: THREE.WebGLRenderer, scene: THREE.Scene,
-    camera: THREE.PerspectiveCamera, bloomEnabled: boolean,
-    postproEnabled: boolean, pmode: number) {
+    camera: THREE.PerspectiveCamera, modes: RenderModes) {
+  const { bloomEnabled, postproEnabled, pmode, dirtOff } = modes;
   const bloomEffect = new BloomEffect({
     mipmapBlur: true,
     // HDR linear frame: authored/emitting pixels sit at or above ~1
@@ -246,10 +249,23 @@ function makeComposer(renderer: THREE.WebGLRenderer, scene: THREE.Scene,
   });
   composer.addPass(new RenderPass(scene, camera));
 
+  // NaN/Inf guard before the mip chain: a single Inf texel (additive
+  // stacks over the fp16 ceiling) turns to NaN inside bloom's blur and
+  // upsamples into a full-frame black flash. Cheap fullscreen fix —
+  // also strips NaNs already baked in by scene shaders.
+  composer.addPass(new EffectPass(camera, new Effect('HdrSanitize', SANITIZE_GLSL)));
+
   // Bloom reads the raw linear frame, before the ACES grade clamps it to
   // display range — HDR luminance is what makes the threshold selective.
   const bloomMergePass = new EffectPass(camera, bloomEffect);
   composer.addPass(bloomMergePass);
+
+  // Second NaN/Inf guard AFTER bloom: the merge's own luminance mip chain
+  // can emit a bad texel even with clean input (internal blur/upsample
+  // arithmetic), and lens dirt + ACES then smear it into a black frame.
+  // Cheap insurance — folds any bloom-side NaN back to a clean pixel.
+  const postBloomSanitize = new EffectPass(camera, new Effect('HdrSanitize2', SANITIZE_GLSL));
+  composer.addPass(postBloomSanitize);
 
   // Lens dirt rides the bloom toggle — without bloom there's no halo for
   // the dirt to diffract, so a dirt-only frame would do nothing.
@@ -302,7 +318,7 @@ function makeComposer(renderer: THREE.WebGLRenderer, scene: THREE.Scene,
   smaaPass.enabled = false;
 
   bloomMergePass.enabled = bloomEnabled;
-  dirtPass.enabled = bloomEnabled;
+  dirtPass.enabled = bloomEnabled && !dirtOff;
   contrastPass.enabled = postproEnabled;
   upscalePass.enabled = pmode === 2; // dithered; upscalePass is Bayer-only now — smooth runs the xBR pass
   upscaleEffect.uniforms.get('mode')!.value = 2;
@@ -334,7 +350,7 @@ function makeComposer(renderer: THREE.WebGLRenderer, scene: THREE.Scene,
 
   syncRenderToScreen();
 
-  return { composer, bloomMergePass, dirtPass, contrastPass, upscalePass, upscaleEffect, xbrPass, xbrEffect, syncRenderToScreen, applyAA };
+  return { composer, bloomMergePass, postBloomSanitize, dirtPass, contrastPass, upscalePass, upscaleEffect, xbrPass, xbrEffect, syncRenderToScreen, applyAA };
 }
 
 // Canvas sizing for every pixel/res path — hard modes render into a
@@ -387,8 +403,8 @@ function wireSegRow(id: string, current: () => number,
 function wireAARow(applyAA: (v: number) => void): void {
   let aaMode = settings.get('fps-aa');
   applyAA(aaMode);
-  wireSegRow('aa-row', () => aaMode,
-    (v) => { aaMode = v; settings.set('fps-aa', v); applyAA(v); });
+  const mark = wireSegRow('aa-row', () => aaMode,
+    (v) => { aaMode = v; settings.set('fps-aa', v); applyAA(v); mark(v); });
 }
 
 // ESC-menu toggles: seed the toggle labels from resolved modes and
@@ -464,7 +480,7 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
   renderer.toneMappingExposure = TONE_MAPPING_EXPOSURE;
   document.body.appendChild(renderer.domElement);
 
-  const cc = makeComposer(renderer, scene, camera, bloomEnabled, postproEnabled, pmode);
+  const cc = makeComposer(renderer, scene, camera, modes);
   const { composer, bloomMergePass, dirtPass, contrastPass, upscalePass, upscaleEffect, xbrPass, xbrEffect, syncRenderToScreen, applyAA } = cc;
 
   // composer.setSize() also resizes the canvas — set buffers first, then
@@ -548,7 +564,7 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
     bloomEnabled = enabled;
     settings.set('fps-bloom', bloomEnabled);
     bloomMergePass.enabled = bloomEnabled;
-    dirtPass.enabled = bloomEnabled;
+    dirtPass.enabled = bloomEnabled && !modes.dirtOff;
     syncRenderToScreen();
     bloomToggleBtn.textContent = bloomEnabled ? 'GLOW: ON' : 'GLOW: OFF';
   }
