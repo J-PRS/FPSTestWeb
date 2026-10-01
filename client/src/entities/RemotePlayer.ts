@@ -279,6 +279,7 @@ export class RemotePlayer {
   // tabs keep their socket open but stop simulating). Auto-reshow on resume.
   // Public fields — RemoteAuras reads them to gate aura visibility.
   staleHidden = false;
+  frustumHidden = false;
   cloakHidden = false;
   get isCloakHidden(): boolean { return this.cloakHidden; }
   setStaleHidden(hidden: boolean): void { setStaleVis(this, hidden); }

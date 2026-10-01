@@ -1,3 +1,4 @@
+2026-10-01 - remote: hide offscreen player rigs (frustumVis) so culled ~40-node subtrees leave projectObject + shadow traversal
 2026-10-01 - RibbonTrail: liveFrom scan floor skips permanently-faded tail samples
 2026-10-01 - recorder.deadReckon option: verbatim every-tick recording stays one switch away
 2026-10-01 - demo recorder skips bit-identical frames (dead-reckon dedupe on local + remote samples)

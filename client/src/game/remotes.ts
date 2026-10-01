@@ -5,6 +5,7 @@ import type { ChildLogger } from '../core/Logger.js';
 import type { Terrain } from '../world/terrain.js';
 import type { Player } from '../entities/Player.js';
 import { RemotePlayer } from '../entities/RemotePlayer.js';
+import { setFrustumVis } from '../entities/remoteVis.js';
 import type { EffectsManager } from '../effects/effects.js';
 import type { NetworkManager } from '../networking/NetworkManager.js';
 import type { HealthBarSystem } from '../ui/HealthBarSystem.js';
@@ -127,6 +128,7 @@ function tickOnScreen(deps: RemotesDeps, cam: THREE.PerspectiveCamera): void {
   for (const rp of deps.world.remotePlayers.values()) {
     _sphere.set(rp.position, 2.2);
     rp.onScreen = _frustum.intersectsSphere(_sphere);
+    setFrustumVis(rp, !rp.onScreen);
   }
 }
 
