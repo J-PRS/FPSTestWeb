@@ -16,10 +16,8 @@ import { fireAtBall as beamAtBall, fireSpeedless as beamSpeedless, type BeamHost
 
 const BOLT_SPEED = 60; // m/s — the melee swing's visual bolt
 
-// Demo/debug knob: FPS_SUPERBOT=<id-substring> gives the matching bot
-// superpowers — 3× ground speed and a hit roll that never misses.
-const SUPERBOT = process.env.FPS_SUPERBOT ?? '';
-export const isSuper = (id: string) => SUPERBOT !== '' && id.includes(SUPERBOT);
+// FPS_SUPERBOT knob lives in superBot.ts — leaf import so beam/drive/
+// roster don't reach back through this file.
 
 type BotBody = { id: string; position: Vec3; velocity: Vec3 };
 

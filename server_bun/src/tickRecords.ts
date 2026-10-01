@@ -11,7 +11,7 @@ import { STATUS } from '../../shared/status.ts';
 import { lgChargeAt } from '../../shared/combat.ts';
 import { logger } from './logger.ts';
 import type { PlayerState } from './types.ts';
-import { healPerTick, recordSuppressed, type TickRecord } from './TickLoop.ts';
+import { healPerTick, recordSuppressed, type TickRecord } from './tickHelpers.ts';
 import { CONFIG } from './config.ts';
 
 type Players = ReturnType<Room['players']['getAllPlayers']>;

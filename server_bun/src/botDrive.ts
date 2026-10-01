@@ -14,7 +14,7 @@ import type { BrainOut } from '../../shared/botBrain.ts';
 import type { MoveState } from '../../shared/movement.ts';
 import type { BotSheepMeter } from './botSheep.ts';
 import type { BotArsenal } from './botArsenal.ts';
-import { isSuper } from './botArsenal.ts';
+import { isSuper } from './superBot.ts';
 import type { BotWatchdog, MobilitySample } from './botWatchdog.ts';
 import type { Room } from './Room.ts';
 

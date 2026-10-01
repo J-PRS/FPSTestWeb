@@ -2,7 +2,7 @@
 // wire so it lands in the same feed as player lines. Cooldown + a speak
 // chance keep it a flavor line, not a spam channel.
 
-import { botRand, botRng } from './botRand.ts';
+import { botRand } from './botRand.ts';
 
 const KILL_LINES = [
   'wp',
@@ -48,8 +48,6 @@ const SPEAK_CHANCE = 0.55;
 const COOLDOWN_MS = 20_000;
 
 const lastSpoke = new Map<string, number>();
-// Kept as an alias — callers seed once via botRng and taunts follow.
-export function tauntRng(r: () => number): void { botRng(r); }
 const pick = (arr: string[]): string => arr[(botRand() * arr.length) | 0]!;
 
 /** One taunt line for a kill where `botId` fragged `other`, or null when

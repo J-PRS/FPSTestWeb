@@ -12,7 +12,7 @@ import { WeaponType, getWeaponStats } from '../../shared/weapons.ts';
 import { segFieldHit, segPointDist, segPointT } from '../../shared/projSim.ts';
 import { segSolidHit } from '../../shared/solidWorld.ts';
 import type { BotLoadout } from '../../shared/botLoadouts.ts';
-import { isSuper } from './botArsenal.ts';
+import { isSuper } from './superBot.ts';
 
 const BOLT_SPEED = 60; // m/s visual bolt + hitscan travel is instant
 

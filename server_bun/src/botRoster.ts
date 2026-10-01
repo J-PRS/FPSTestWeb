@@ -12,7 +12,7 @@ import { CLASS_STATS, type ArmorClass } from '../../shared/botClasses.ts';
 import { BOT_LOADOUTS, type BotLoadout } from '../../shared/botLoadouts.ts';
 import { BOT_NAMES } from '../../shared/botNames.ts';
 import { ROLE_PRIORITY, type BotRole } from '../../shared/flagGoals.ts';
-import { isSuper } from './botArsenal.ts';
+import { isSuper } from './superBot.ts';
 
 /** Armor class follows the role — Tribes pacing lives on this: cappers
  *  and infiltrators fly light, HoF and technicians anchor heavy, the
