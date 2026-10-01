@@ -101,6 +101,8 @@ class DotBatch {
   readonly sizeAttr = new THREE.BufferAttribute(new Float32Array(MAX_TRAILS * SLOT_VERTS), 1);
   readonly colAttr = new THREE.BufferAttribute(new Float32Array(MAX_TRAILS * SLOT_VERTS * 4), 4);
   free: number[] = [];
+  private dirtyLo = Infinity;
+  private dirtyHi = 0;
 
   constructor(scene: THREE.Scene) {
     for (const a of [this.posAttr, this.sizeAttr, this.colAttr]) a.setUsage(THREE.DynamicDrawUsage);
@@ -114,9 +116,25 @@ class DotBatch {
     for (let s = MAX_TRAILS - 1; s >= 0; s--) this.free.push(s);
   }
 
-  touch(): void {
+  /** Accumulate a dirty vert range — flush() uploads just the touched
+   *  span instead of the whole ~90KB buffer every frame. */
+  mark(lo: number, hi: number): void {
+    if (lo < this.dirtyLo) this.dirtyLo = lo;
+    if (hi > this.dirtyHi) this.dirtyHi = hi;
+  }
+
+  flush(): void {
+    const lo = this.dirtyLo, n = this.dirtyHi - lo;
+    this.dirtyLo = Infinity; this.dirtyHi = 0;
+    if (n <= 0) return;
+    this.posAttr.clearUpdateRanges();
+    this.posAttr.addUpdateRange(lo * 3, n * 3);
     this.posAttr.needsUpdate = true;
+    this.sizeAttr.clearUpdateRanges();
+    this.sizeAttr.addUpdateRange(lo, n);
     this.sizeAttr.needsUpdate = true;
+    this.colAttr.clearUpdateRanges();
+    this.colAttr.addUpdateRange(lo * 4, n * 4);
     this.colAttr.needsUpdate = true;
   }
 }
@@ -216,7 +234,8 @@ export class BallTrailDots {
     // pushing 3 attribute uploads per ball per frame (~100/frame total).
     if (w === 0 && this._lastLive === 0) return;
     this._lastLive = w;
-    this.batch.touch();
+    this.batch.mark(this.base, this.base + this.maxDots * 2);
+    this.batch.flush();
   }
   private _lastLive = -1;
 
@@ -224,7 +243,8 @@ export class BallTrailDots {
     if (this.slot >= 0) {
       // bury the slot's points before handing it back
       for (let s = this.base; s < this.base + SLOT_VERTS; s++) this.batch.sizeAttr.setX(s, 0);
-      this.batch.touch();
+      this.batch.mark(this.base, this.base + SLOT_VERTS);
+      this.batch.flush();
       this.batch.free.push(this.slot);
       this.slot = -1;
     }

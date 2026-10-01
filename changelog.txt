@@ -1,3 +1,4 @@
+2026-10-01 - Buffer upload ranges for TerrainRing + ballTrails (was whole-buffer per frame)
 2026-10-01 - Freeze matrixWorldAutoUpdate on interiors subtree + all instanced pools
 2026-10-01 - Projectile sweepTerrain: coarse max-height grid rejects flat-ground sweeps in 1 lookup
 2026-10-01 - HUD indicators: skip transform style writes when the quantized position is unchanged

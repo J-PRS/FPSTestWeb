@@ -154,8 +154,14 @@ export class TerrainRing {
         gcol[vi] = r * ghostOpacity; gcol[vi + 1] = g * ghostOpacity; gcol[vi + 2] = b * ghostOpacity;
       }
     }
+    // Update ranges, not whole-buffer uploads — each ring writes only
+    // its own slot span (~1.5KB) instead of the full ~75KB per attribute.
+    const vo = base * 3;
+    this.pool.pos.addUpdateRange(vo, VERTS * 3);
     this.pool.pos.needsUpdate = true;
+    this.pool.col.addUpdateRange(vo, VERTS * 3);
     this.pool.col.needsUpdate = true;
+    this.pool.ghostCol.addUpdateRange(vo, VERTS * 3);
     this.pool.ghostCol.needsUpdate = true;
   }
 
@@ -166,7 +172,9 @@ export class TerrainRing {
     const base = this.slot * VERTS * 3;
     col.fill(0, base, base + VERTS * 3);
     gcol.fill(0, base, base + VERTS * 3);
+    this.pool.col.addUpdateRange(base, VERTS * 3);
     this.pool.col.needsUpdate = true;
+    this.pool.ghostCol.addUpdateRange(base, VERTS * 3);
     this.pool.ghostCol.needsUpdate = true;
     this.pool.free.push(this.slot);
     this.pool.live--;
