@@ -7,8 +7,9 @@ import { registerDiag, markProbe } from '../core/fxDiag.js';
 export type { SwarmPart, SwarmSlotOwner } from './swarm.js';
 
 // Per-species instanced renderers — created lazily on first spawn so the
-// scene only pays for species actually in play. Capacity per species is
-// generous: slots are cheap, and a full swarm just refuses to spawn.
+// scene only pays for species actually in play. `capacity` is the
+// initial buffer size: species grow when full and idle-shrink after
+// ~30s of low occupancy (checkShrink driven from updateGibs).
 export interface SwarmSpec { parts: () => SwarmPart[]; capacity: number }
 
 const swarms = new Map<string, SpeciesSwarm>();
