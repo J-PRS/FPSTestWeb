@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { markProbe } from '../core/fxDiag.js';
 
 // Damage numbers — ONE batched billboard mesh for every number on screen.
 // The old design was a CanvasTexture redraw + GPU upload + sprite draw call
@@ -128,6 +129,7 @@ export class DamageNumberManager {
     this.mesh.frustumCulled = false; // verts move every frame
     this.mesh.renderOrder = 950;
     scene.add(this.mesh);
+    markProbe(this.mesh, { kind: 'fxMesh', label: 'damageNumbers' });
   }
 
   spawn(pos: THREE.Vector3, damage: number, color = '#ffffff', camera?: THREE.Camera): void {

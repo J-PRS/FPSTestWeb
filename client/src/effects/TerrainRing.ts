@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { BLOOM_LAYER, EMIT_GAIN } from '../core/config.js';
 import { acquireBatch, retireBatch, type BatchMap } from '../core/batchPool.js';
+import { markProbe } from '../core/fxDiag.js';
 import { Terrain } from '../world/terrain.js';
 
 const SEGS = 64;
@@ -68,6 +69,7 @@ function makePool(scene: THREE.Scene): RingPool {
   mesh.frustumCulled = false;
   mesh.layers.enable(BLOOM_LAYER);
   scene.add(mesh);
+  markProbe(mesh, { kind: 'fxMesh', label: 'terrainRing' });
 
   // Ghost re-pass needs its own color buffer — same positions, dimmer rgb.
   const ghostGeo = new THREE.BufferGeometry();
@@ -85,6 +87,7 @@ function makePool(scene: THREE.Scene): RingPool {
   ghostMesh.frustumCulled = false;
   ghostMesh.layers.enable(BLOOM_LAYER);
   scene.add(ghostMesh);
+  markProbe(ghostMesh, { kind: 'fxMesh', label: 'terrainRing:ghost' });
 
   const pool: RingPool = {
     pos, col, ghostCol, free: [], live: 0,

@@ -81,6 +81,7 @@ function describePooled(d: DbgTag, h: THREE.Intersection): string {
       return `quarks paused=${ps.paused} particles=${ps.particleNum ?? '?'}`;
     }
     case 'beam': return `beam(${d.label ?? 'hitscan flash'})`;
+    case 'fxMesh': return `fx(${d.label ?? 'mesh'})`;
     default: return `dbg:${d.kind}`;
   }
 }

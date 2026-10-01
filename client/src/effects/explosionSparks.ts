@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { BLOOM_LAYER, EMIT_GAIN } from '../core/config.js';
 import { acquireBatch, retireBatch, type BatchMap } from '../core/batchPool.js';
+import { markProbe } from '../core/fxDiag.js';
 
 // Batched trail sparks — every explosion's debris streaks baked into ONE
 // LineSegments after construction (~40 sparks → 1 draw call where each
@@ -55,6 +56,7 @@ class SparkBatch {
     this.mesh.layers.enable(BLOOM_LAYER);
     this.mesh.frustumCulled = false;
     scene.add(this.mesh);
+    markProbe(this.mesh, { kind: 'fxMesh', label: 'explosionSparks' });
   }
 
   alloc(n: number): number {

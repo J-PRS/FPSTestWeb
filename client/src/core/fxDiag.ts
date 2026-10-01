@@ -28,7 +28,7 @@ export function collectDiag(): DiagSection {
 // because the tagging modules are also the ones the probe imports back
 // for identification; a leaf keeps the graph acyclic.
 export interface DbgTag {
-  kind: 'trailBatch' | 'instPool' | 'species' | 'blobShadows' | 'quarks' | 'beam' | 'gib';
+  kind: 'trailBatch' | 'instPool' | 'species' | 'blobShadows' | 'quarks' | 'beam' | 'gib' | 'fxMesh';
   /** trailBatch: the batch whose slot was hit. */
   batch?: unknown;
   /** instPool/beam/gib: shell-kind label + pool for the lit-free-slot check. */

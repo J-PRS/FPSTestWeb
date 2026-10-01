@@ -10,6 +10,7 @@
  */
 import * as THREE from 'three';
 import { acquireBatch, retireBatch, type BatchMap } from '../core/batchPool.js';
+import { markProbe } from '../core/fxDiag.js';
 
 const TRAIL_COUNT = 14;
 const TRAIL_INTERVAL = 0.04;
@@ -121,6 +122,7 @@ class DotBatch {
     this.points = new THREE.Points(this.geo, trailMat());
     this.points.frustumCulled = false;
     scene.add(this.points);
+    markProbe(this.points, { kind: 'fxMesh', label: 'ballTrailDots' });
     for (let s = BATCH_TRAILS - 1; s >= 0; s--) this.free.push(s);
   }
 
