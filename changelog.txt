@@ -1,3 +1,4 @@
+2026-10-01 - bots aim at chest (position+1.0) not feet - matches the projContact hit sphere; small-proxy bolts no longer graze under targets. Found by new botMatchups duel suite (8 seeded weapon-matchup scenario tests). Harness seeds botRng BEFORE Room construction so brain ctor rolls are deterministic too
 2026-10-01 - rename WeaponType.Rocket -> WeaponType.BoltLauncher (id 0, wire unchanged) + stale identifiers: rocketConfig.ts->boltConfig.ts, ROCKET_CONFIG->BOLT_CONFIG, FIRE_RATE->BOLT_FIRE_RATE, generic ROCKET_RADIUS->EXPLOSION_VFX_RADIUS, EXPLOSION_FALLOFF_MULTIPLIER_ROCKET->..._DEFAULT
 2026-10-01 - Builder bots weld damaged friendly deployables: shared brain repair ctx/out, same heal path humans use, sheep credit for welding
 2026-10-01 - rtc: tolerate single-lane datachannel close (game OR ctrl) - server counts the seat live while either lane is open; client now matches. + ice state logging for flap diagnosis

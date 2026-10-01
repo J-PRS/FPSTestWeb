@@ -17,6 +17,7 @@ import type { BotVec, BotEnemy, BrainCtx, BrainOut } from './botBrain.ts';
 // LOS lives in botLos.ts — re-export so botBrain's public surface stays put.
 export { losClear, losMemoReset, BOT_EYE } from './botLos.ts';
 export const BOT_FIRE_RANGE = 45;
+const CHEST_AIM_Y = 1.0; // matches projContact.ts CHEST_Y — the hit sphere center
 // Creatures are big, slow, and fly — a human plinks them past the normal
 // duel range, so the farming reach runs longer (3D distance still applies:
 // a beast parked 80m overhead is out of reach until it swoops).
@@ -161,9 +162,12 @@ export function pickFire(st: HuntState, dt: number, ctx: BrainCtx, pos: BotVec, 
   // under the map.
   const px = st.lastSeen.x + st.lastSeenVel.x * flight;
   const pz = st.lastSeen.z + st.lastSeenVel.z * flight;
+  // The server's hit sphere sits at position + CHEST_Y — aiming at the
+  // tracked position (feet) grazes under it for bolts whose proxy radius
+  // is still small early in flight.
   const py = Math.max(
     ctx.groundY(px, pz),
-    st.lastSeen.y + st.lastSeenVel.y * flight + 0.5 * GRAVITY * flight * flight,
+    st.lastSeen.y + CHEST_AIM_Y + st.lastSeenVel.y * flight + 0.5 * GRAVITY * flight * flight,
   );
   // Gravity-bent shells drop by the same amount — aim the arc's
   // drop back so mortars don't land short.
