@@ -1,10 +1,12 @@
 import * as THREE from 'three';
+import { acquireBatch, retireBatch, type BatchMap } from '../core/batchPool.js';
+import { markProbe } from '../core/fxDiag.js';
 
 // Team-tintable ring hovering above a remote player's head — the "alive"
 // marker. Every remote used to own a Mesh: ~18 head rings = ~18 draw
 // calls of a 64-tri ring. Now all gizmos share one InstancedMesh —
 // one draw total; follow/setColor/hide write per-instance data.
-const MAX_GIZMOS = 64;
+const MAX_GIZMOS = 64; // slots per batch — overflow spawns a sibling mesh
 const _ringGeo = new THREE.RingGeometry(0.3, 0.4, 32);
 const _flat = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0));
 const _one = new THREE.Vector3(1, 1, 1);
@@ -14,33 +16,38 @@ const _p = new THREE.Vector3();
 const _c = new THREE.Color();
 const _ringMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide, transparent: true, opacity: 0.7 });
 
-// The pool is per-scene singleton — remotes all share one scene, and a
-// second scene (demo teardown/rebuild) gets its own bucket keyed by it.
-const pools = new Map<THREE.Scene, { mesh: THREE.InstancedMesh; free: number[] }>();
+interface GizmoPool {
+  mesh: THREE.InstancedMesh;
+  free: number[];
+  scene: THREE.Scene;
+}
 
-function poolFor(scene: THREE.Scene) {
-  let p = pools.get(scene);
-  if (!p) {
-    const mesh = new THREE.InstancedMesh(_ringGeo, _ringMat, MAX_GIZMOS);
-    mesh.matrixWorldAutoUpdate = false;
-    mesh.frustumCulled = false; // rings scatter map-wide; single bounds can't cover them
-    mesh.count = 0;
-    mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    scene.add(mesh);
-    p = { mesh, free: [] };
-    pools.set(scene, p);
-  }
-  return p;
+// Dynamic batching, same contract as the trail/dot batches: overflow
+// gizmos spawn a sibling InstancedMesh, an emptied overflow batch retires
+// — pools[0] is the floor. count++ past capacity was a silent no-op
+// (out-of-bounds instance writes are ignored), starving remote rings.
+const pools: BatchMap<THREE.Scene, GizmoPool> = new Map();
+
+function makePool(scene: THREE.Scene): GizmoPool {
+  const mesh = new THREE.InstancedMesh(_ringGeo, _ringMat, MAX_GIZMOS);
+  mesh.matrixWorldAutoUpdate = false;
+  mesh.frustumCulled = false; // rings scatter map-wide; single bounds can't cover them
+  mesh.count = 0;
+  mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  scene.add(mesh);
+  markProbe(mesh, { kind: 'fxMesh', label: 'remoteGizmo' });
+  return { mesh, free: [], scene };
 }
 
 export class RemoteGizmo {
   private slot = -1;
-  private pool: { mesh: THREE.InstancedMesh; free: number[] };
+  private pool: GizmoPool;
   private pos = new THREE.Vector3();
   private shown = true;
 
   constructor(scene: THREE.Scene, startPos: { x: number; y: number; z: number }) {
-    this.pool = poolFor(scene);
+    this.pool = acquireBatch(pools, scene, makePool,
+      p => p.free.length > 0 || p.mesh.count < MAX_GIZMOS);
     this.slot = this.pool.free.length ? this.pool.free.pop()! : this.pool.mesh.count++;
     this.setColor(0x00ff00);
     this.follow(startPos);
@@ -81,6 +88,10 @@ export class RemoteGizmo {
     this.shown = false;
     this.write();
     this.pool.free.push(this.slot);
+    const scene = this.pool.scene;
     this.slot = -1;
+    retireBatch(pools, scene, this.pool,
+      p => p.free.length === p.mesh.count,
+      p => { p.scene.remove(p.mesh); p.mesh.dispose(); });
   }
 }
