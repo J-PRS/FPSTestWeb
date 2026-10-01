@@ -296,7 +296,7 @@ export class BallSim {
       // Pull/lunge aim comes from the snapshot last emitted on a segment —
       // predictors replay the identical input, not the live player pos.
       _snap.x = b.tx; _snap.y = b.ty; _snap.z = b.tz;
-      const kind = stepBall(b, TICK_DT, this.field!, b.tgtValid ? _snap : null, true, { colliders: this.colliders, colliderIndex: this.colliderIndex ?? undefined });
+      const kind = stepBall(b, TICK_DT, this.field!, b.tgtValid ? _snap : null, true, { colliders: this.colliders, colliderIndex: this.colliderIndex ?? undefined, rand: this.rng });
       if (kind) {
         this.segment(b, kind);
       } else {

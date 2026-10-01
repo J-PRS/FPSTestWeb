@@ -118,6 +118,9 @@ export type SegmentKind = 'bounce' | 'lunge' | 'enrage' | 'stall' | 'teleport' |
 export interface StepWorld {
   colliders?: readonly StructureCollider[];
   colliderIndex?: { queryPoint(x: number, z: number, pad: number, out: StructureCollider[]): void };
+  /** Seeded roll for the authoritative-only teleport branch — without it
+   *  the sim takes Math.random, which scenario seeds can't reproduce. */
+  rand?: () => number;
 }
 
 export function stepBall(
@@ -133,7 +136,7 @@ export function stepBall(
   b.y += b.vy * dt;
   b.z += b.vz * dt;
 
-  const enrage = enragePull(b, dt, field, target, authoritative);
+  const enrage = enragePull(b, dt, field, target, authoritative, world?.rand);
   if (enrage !== undefined) return enrage;
 
   // Stall breaker — RNG-free, so predictors run it too and land the same
@@ -157,7 +160,7 @@ export function stepBall(
 /** Enrage pull: linear accel toward the committed target (still ballistic-
  *  flavored — it arcs and bounces rather than homing). Returns the segment
  *  kind when the step ends here, undefined when the sim should continue. */
-function enragePull(b: SimBall, dt: number, field: Heightfield, target: SimVec | null, authoritative: boolean): SegmentKind | null | undefined {
+function enragePull(b: SimBall, dt: number, field: Heightfield, target: SimVec | null, authoritative: boolean, rand?: () => number): SegmentKind | null | undefined {
   if (!b.enraged || !target) return undefined;
   b.enrageTimer += dt;
   const dx = target.x - b.x;
@@ -172,7 +175,7 @@ function enragePull(b: SimBall, dt: number, field: Heightfield, target: SimVec |
   }
   if (b.enrageTimer <= BALL_ENRAGE_TIMEOUT) return undefined;
   b.enraged = false;
-  if (authoritative) return teleportNearTarget(b, field, target);
+  if (authoritative) return teleportNearTarget(b, field, target, rand);
   return null; // predictor: let it fly, the event will snap it
 }
 
@@ -265,10 +268,10 @@ function dashAt(b: SimBall, target: SimVec): void {
   b.vy = vy;
 }
 
-function teleportNearTarget(b: SimBall, field: Heightfield, target: SimVec): SegmentKind {
+function teleportNearTarget(b: SimBall, field: Heightfield, target: SimVec, rand: () => number = Math.random): SegmentKind {
   b.gt = 0;
-  const ang = Math.random() * Math.PI * 2;
-  const dist = BALL_TELE_MIN + Math.random() * (BALL_TELE_MAX - BALL_TELE_MIN);
+  const ang = rand() * Math.PI * 2;
+  const dist = BALL_TELE_MIN + rand() * (BALL_TELE_MAX - BALL_TELE_MIN);
   b.x = target.x + Math.cos(ang) * dist;
   b.z = target.z + Math.sin(ang) * dist;
   b.y = hmHeight(field, b.x, b.z) + BALL_TELE_HEIGHT;
