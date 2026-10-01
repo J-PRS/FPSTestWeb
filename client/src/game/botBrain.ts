@@ -110,6 +110,7 @@ export class GameBot extends RemotePlayer {
    *  RemotePlayer's own vectors in place (same trick as Player). */
   moveState: MovementState;
   private appliedSpecList: readonly StructureSpec[] | undefined;
+  private gyc = new Map<number, number>();
   /** Jet energy tank — a bot can only hold burn while fuel remains. */
   energy: number = ENERGY.max;
   /** Toggle-skill bits the bot holds (MEND/SHIELD/CLOAK) — the same
@@ -190,10 +191,10 @@ export class GameBot extends RemotePlayer {
     huntCreatures?: boolean;
   }): { targetId: string; aim: THREE.Vector3 } | null {
     const pos = this.position;
-    // The senses re-query the same terrain cells several times per think
-    // (steer probes + LOS march + goal scoring all share the position) —
-    // memoize at ~4cm cells for the call's lifetime, not per-frame.
-    const gyc = new Map<number, number>();
+    // Heights are static for a match's lifetime — the senses re-query the
+    // same terrain cells across thinks AND frames (steer probes + LOS
+    // march + goal scoring), so the ~4cm-cell memo lives on the bot.
+    const gyc = this.gyc;
     const out = this.brain.think(dt, {
       pos,
       enemies: ctx.enemies,
