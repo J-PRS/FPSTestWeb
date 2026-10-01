@@ -18,6 +18,7 @@ export class PlayerIndicators {
   // Cache last written values — position via transform (compositor-only,
   // no layout) and size only when the px value actually changes.
   private readonly lastSize = new Map<string, number>();
+  private readonly lastSheep = new Map<string, number>();
 
   constructor(container: HTMLElement) {
     this.container = container;
@@ -35,7 +36,7 @@ export class PlayerIndicators {
     }
     indicator.classList.toggle('friendly', friendly);
     if (variant) for (const c of variant.split(' ')) indicator.classList.add(c);
-    this.updateSheepBadge(indicator, sheep);
+    this.updateSheepBadge(playerId, indicator, sheep);
 
     if (isDead) {
       indicator.classList.add('hidden');
@@ -100,16 +101,22 @@ export class PlayerIndicators {
 
   /** Sheep badge — the server's bot mobility meter, floated over the
    *  head so a sheepish bot can be eyeballed, not just read in logs. */
-  private updateSheepBadge(indicator: HTMLElement, sheep: number | undefined): void {
+  private updateSheepBadge(playerId: string, indicator: HTMLElement, sheep: number | undefined): void {
+    const shown = sheep !== undefined && sheep > 0;
+    // textContent writes dirty the DOM every frame — the rounded value
+    // only changes ~1/s, so skip the write unless the display changed.
+    const v = shown ? Math.round(sheep) : -1;
+    if (this.lastSheep.get(playerId) === v) return;
+    this.lastSheep.set(playerId, v);
     let badge = indicator.firstElementChild as HTMLElement | null;
-    if (sheep !== undefined && sheep > 0) {
+    if (shown) {
       if (!badge) {
         badge = document.createElement('span');
         badge.className = 'sheep-badge';
         indicator.appendChild(badge);
       }
-      badge.textContent = `${Math.round(sheep)}`;
-      badge.style.color = sheep >= 60 ? '#ff6b6b' : sheep >= 30 ? '#ffd166' : '#7ddf7d';
+      badge.textContent = `${v}`;
+      badge.style.color = sheep! >= 60 ? '#ff6b6b' : sheep! >= 30 ? '#ffd166' : '#7ddf7d';
     } else if (badge) {
       badge.remove();
     }
@@ -127,6 +134,7 @@ export class PlayerIndicators {
       indicator.remove();
       this.indicators.delete(playerId);
       this.lastSize.delete(playerId);
+      this.lastSheep.delete(playerId);
       logger.debug('INDICATOR REMOVED', { playerId, total: this.indicators.size });
     }
   }
@@ -135,5 +143,6 @@ export class PlayerIndicators {
     this.indicators.forEach(i => i.remove());
     this.indicators.clear();
     this.lastSize.clear();
+    this.lastSheep.clear();
   }
 }

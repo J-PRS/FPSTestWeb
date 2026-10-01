@@ -1,3 +1,4 @@
+2026-10-01 - skip sheep-badge DOM writes when the displayed value is unchanged
 2026-10-01 - distance-gate far explosions and player debris (260m rule)
 2026-10-01 - unified trail-dot Points layer + partial ribbon buffer uploads
 2026-10-01 - instanced particle buckets, half-rate shadow updates, per-fxJob profiling
