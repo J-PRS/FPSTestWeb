@@ -813,7 +813,12 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
     isBloomEnabled: () => bloomEnabled,
     setBloomEnabled,
     updateRendererSize,
-    warmup: () => { void renderer.compileAsync(scene, camera); },
+    warmup: () => {
+      // checkMaterialsReady throws inside three when a material added
+      // mid-compile never receives a currentProgram — benign, but the
+      // rejection was surfacing as a pageerror in probes.
+      void renderer.compileAsync(scene, camera).catch(() => { /* late-added material */ });
+    },
     setPixel,
     setResScale,
     setPostProcessingEnabled,

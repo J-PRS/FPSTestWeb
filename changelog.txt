@@ -1,3 +1,4 @@
+2026-10-01 - warmup: swallow compileAsync late-material rejection (harmless pageerror noise)
 2026-10-01 - ANTIALIAS menu row: OFF / FXAA / SMAA / MSAA 2x / MSAA 4x (pass after upscale; MSAA sets composer multisampling), stored as fps-aa
 2026-10-01 - remote: hide offscreen player rigs (frustumVis) so culled ~40-node subtrees leave projectObject + shadow traversal
 2026-10-01 - RibbonTrail: liveFrom scan floor skips permanently-faded tail samples
