@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { StructureSpec } from '../../../shared/mapSpec.js';
 
 // Static map structures — the server's map spec arrives on gameState and
@@ -11,16 +12,6 @@ const TINTS = {
   alpha: 0x3a5a80,
   bravo: 0x80483a,
 } as const;
-
-const KIND_ROT: Record<StructureSpec['kind'], (m: THREE.Mesh, _s: StructureSpec) => void> = {
-  box: () => {},
-  wall: () => {},
-  pillar: () => {},
-  // Ramp = box pitched forward so its low lip touches the ground in -Z.
-  ramp: (m, _s) => {
-    m.rotation.x = -Math.PI / 7;
-  },
-};
 
 let built: THREE.Group | null = null;
 
@@ -85,16 +76,29 @@ export function buildStructures(list: StructureSpec[], scene: THREE.Scene): void
   };
   const unit = new THREE.BoxGeometry(1, 1, 1);
   const cyl = new THREE.CylinderGeometry(0.5, 0.5, 1, 8);
+  // Bake every piece into one geometry per material — a map's worth of
+  // cover is ~40 static boxes, and per-mesh draws were ~40 program keys
+  // per frame for pixels that never move.
+  const byMat = new Map<keyof typeof mats, THREE.BufferGeometry[]>();
+  const _m = new THREE.Matrix4(), _p = new THREE.Vector3(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _s = new THREE.Vector3();
   for (const s of list) {
-    const mat = mats[s.team ?? 'neutral'];
-    const mesh = new THREE.Mesh(s.kind === 'pillar' ? cyl : unit, mat);
-    mesh.scale.set(s.size.x, s.size.y, s.size.z);
-    mesh.position.set(s.pos.x, s.pos.y + s.size.y / 2, s.pos.z);
-    if (s.rotY) mesh.rotation.y = s.rotY;
-    KIND_ROT[s.kind]?.(mesh, s);
+    const key = s.team ?? 'neutral';
+    _p.set(s.pos.x, s.pos.y + s.size.y / 2, s.pos.z);
+    _e.set(0, s.rotY ?? 0, 0);
+    if (s.kind === 'ramp') _e.x = -Math.PI / 7;
+    _q.setFromEuler(_e);
+    _s.set(s.size.x, s.size.y, s.size.z);
+    _m.compose(_p, _q, _s);
+    const g = (s.kind === 'pillar' ? cyl : unit).clone().applyMatrix4(_m);
+    (byMat.get(key) ?? byMat.set(key, []).get(key)!).push(g);
+  }
+  for (const [key, geos] of byMat) {
+    const merged = mergeGeometries(geos, false);
+    if (!merged) continue;
+    const mesh = new THREE.Mesh(merged, mats[key]);
     mesh.matrixAutoUpdate = false;
-    mesh.updateMatrix();
     built.add(mesh);
+    for (const g of geos) g.dispose();
   }
   scene.add(built);
 }
