@@ -26,6 +26,7 @@ const KICK_TUNE: Record<number, [number, number, number, number, number, number]
     [WeaponType.Revolver]:        [8,  0.05, 0xffb060, 1.1, 0.8, 1.3],  // hand-cannon bark — big muzzle flip
     [WeaponType.Sticky]:          [13, 0.02, 0xff66dd, 0.8, 0.7, 0.9],  // thoomp — tube launch, magenta spit
     [WeaponType.Repair]:          [16, 0.05, 0x7dffb8, 0.4, 0.4, 0.4],  // per-tick hum — green weld spark
+    [WeaponType.MRVLauncher]:     [9,  0.04, 0xff7744, 1.4, 1.4, 1.1],  // volley heave — mortar heave weight, warm burst flash
   };
 
 export function kickF(v: ViewModel, strength = 1): void {

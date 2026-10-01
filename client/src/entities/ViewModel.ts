@@ -59,6 +59,7 @@ export class ViewModel {
     [WeaponType.Pistol]: -0.17,   // stubby barrel face
     [WeaponType.Revolver]: -0.27, // long barrel + underlug tip
     [WeaponType.Repair]: -0.20,   // emitter stud on the reflector dish
+    [WeaponType.MRVLauncher]: -0.37, // just past the stubby barrel ring
   };
   chainBarrels: THREE.Group | null = null; // public — VmBaked reseats the bake's pivot
   // Bore axis in the SPIN NODE's local space — procedural barrels run

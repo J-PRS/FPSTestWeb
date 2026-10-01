@@ -186,7 +186,10 @@ export class AoeClaims {
    *  real damage is `count` bomblet blasts scattered inside `radius`, each
    *  rolled with ClusterBomblet stats. Client bomblets are visual-only. */
   private aoeCluster(playerId: string, msg: Extract<ClientMessage, { type: 'aoeShot' }>, cluster: { count: number; radius: number }): void {
-    const bomblet = getWeaponStats(WeaponType.ClusterBomblet);
+    // Each carrier names its own child stats — the belt's ClusterBomb
+    // scatters ClusterBomblets, the MRVLauncher scatters MRVBomblets.
+    const bomblet = getWeaponStats(
+      msg.weaponType === WeaponType.MRVLauncher ? WeaponType.MRVBomblet : WeaponType.ClusterBomblet);
     for (let i = 0; i < cluster.count; i++) {
       const ang = Math.random() * Math.PI * 2;
       const r = Math.random() * cluster.radius;
@@ -194,7 +197,7 @@ export class AoeClaims {
         x: msg.position.x + Math.cos(ang) * r,
         y: msg.position.y, // bomblets scatter on the blast plane
         z: msg.position.z + Math.sin(ang) * r,
-      }, msg.excludeTargetId, bomblet, WeaponType.ClusterBomb);
+      }, msg.excludeTargetId, bomblet, msg.weaponType);
     }
   }
 }

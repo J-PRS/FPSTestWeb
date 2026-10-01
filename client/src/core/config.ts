@@ -80,6 +80,9 @@ export const PISTOL_RATE = 0.22;  // snappy semi-auto — ~4.5 rps while held
 export const REVOLVER_RATE = 0.6; // hand-cannon cadence — deliberate thumps
 export const STICKY_RATE = 0.8; // sticky launcher — 0.8s vs 3s fuse ⇒ up to 3 live bombs per shooter
 export const REPAIR_RATE = 0.1; // repair-tool beam tick — matches REPAIR_HEAL_PER_TICK's ~50 hp/s
+export const MRV_RATE = 2.4; // MRV launcher — slower than mortar, one trigger = a volley
+export const MRV_BOUNCE_RESTITUTION = 0.35; // carrier shell skips along until the fuse pops
+export const MRV_BOUNCE_FRICTION = 0.7;
 // Cannonball skips: livelier than the GL shell (0.55/0.7) — keeps its speed
 // across hops, that's the whole joke
 export const CANNON_BOUNCE_RESTITUTION = 0.75;

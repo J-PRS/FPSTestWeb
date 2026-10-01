@@ -496,5 +496,43 @@ rpg.visible = false;
 return rpg;
 }
 
+// Weapon 28 — MRV launcher: the mortar's counterpart, so it should read
+// "many shells" not "one bore". A fat ROTARY DRUM (revolver cylinder —
+// the volley tell) under a short stubby tube; no bipod — it's shoulder
+// fire, not crew-served. Drum holes show the loaded rounds.
+export function mkMrv(): THREE.Group {
+const mrv = new THREE.Group();
+mrv.add(mkTube(0.13, 0.12, 0.34, -0.18, bodyMat));      // stubby barrel
+mrv.add(mkBore(0.105, -0.356));
+mrv.add(mkTube(0.145, 0.15, 0.06, -0.36, darkMat));     // muzzle ring
+// Rotary drum — the cluster-shell magazine IS the silhouette.
+const drum = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.2, 10), darkMat);
+drum.rotation.x = Math.PI / 2;
+drum.position.set(0, -0.05, 0.06);
+mrv.add(drum);
+// Chamber bores around the drum face — visible rounds = the MRV read
+for (let i = 0; i < 6; i++) {
+  const a = (i / 6) * Math.PI * 2;
+  const hole = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.205, 8), boreMat);
+  hole.rotation.x = Math.PI / 2;
+  hole.position.set(Math.cos(a) * 0.095, -0.05 + Math.sin(a) * 0.095, 0.06);
+  mrv.add(hole);
+}
+mrv.add(mkTube(0.09, 0.11, 0.16, 0.24, bodyMat));       // receiver behind the drum
+const mrvGrip = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.15, 0.07), darkMat);
+mrvGrip.position.set(0, -0.16, 0.22);
+mrvGrip.rotation.x = 0.3;
+mrv.add(mrvGrip);
+// Loading rail on top — drum-fed weapons run a feed guide, not a sight rail
+const rail = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.03, 0.3), darkMat);
+rail.position.set(0, 0.16, -0.08);
+mrv.add(rail);
+const mrvSight = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.06, 0.025), darkMat);
+mrvSight.position.set(0, 0.2, -0.2);
+mrv.add(mrvSight);
+mrv.visible = false;
+return mrv;
+}
+
 // Map is keyed by WeaponType, never positionally — Grenade/Slam/Melee
 // have no gun model (belt throw / fist), so they map to nothing.

@@ -3,7 +3,7 @@ import { WeaponType } from '../../../../shared/weapons.js';
 import { getMuzzleFlashTexture } from '../../effects/glowTexture.js';
 import { mkPlasmaCannon, mkPlasmaGun, mkRailgun, mkLightningGun } from './weaponsGeoEnergy.js';
 import { mkPistol, mkRevolver, mkRepair } from './weaponsGeoSidearm.js';
-import { mkRocket, mkDisc, mkChaingun, mkMortar, mkGrenadeLauncher, mkSticky, mkFlak, mkShotgun, mkCannon, mkRpg } from './weaponsGeoBallistic.js';
+import { mkRocket, mkDisc, mkChaingun, mkMortar, mkGrenadeLauncher, mkSticky, mkFlak, mkShotgun, mkCannon, mkRpg, mkMrv } from './weaponsGeoBallistic.js';
 
 // Procedural weapon geometry — every viewmodel gun built from primitives.
 // Extracted from ViewModel's constructor; returns the built maps so the
@@ -34,6 +34,7 @@ const MODEL_BUILDERS: [number, () => THREE.Group][] = [
   [WeaponType.Revolver, mkRevolver],
   [WeaponType.Sticky, mkSticky],
   [WeaponType.Repair, mkRepair],
+  [WeaponType.MRVLauncher, mkMrv],
 ];
 
 export function buildWeaponMeshes(parent: THREE.Group, muzzleZ: Record<number, number>): WeaponMeshes {

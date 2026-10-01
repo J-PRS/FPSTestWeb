@@ -110,6 +110,9 @@ const SHOT_SAMPLES: Partial<Record<number, [string, number, number?]>> = {
   [WeaponType.Rocket]:          ['shot_rocket', 0.9],
   [WeaponType.Chaingun]:        ['shot_chaingun', 0.8],
   [WeaponType.Mortar]:          ['shot_cannon', 1.0],
+  // MRV volley — same tube bark as the GL but heavier: one trigger
+  // serves the whole burst, so it needs cannon weight, not pump snap.
+  [WeaponType.MRVLauncher]:     ['shot_cannon', 0.9, 0.75],
   [WeaponType.GrenadeLauncher]: ['shot_cannon', 0.8],
   [WeaponType.Grenade]:         ['shot_energy', 0.8],
   // Flak is layered below in SHOT_LAYERS — not a shotgun pump.
@@ -195,6 +198,9 @@ const SYNTH_SHOTS: Record<number, (g: GainNode) => void> = {
   [WeaponType.Railgun]:   (g) => { osc('sawtooth', 2600, 200, 0.22, 0.25, g); noise(0.15, 0.2, g, 'highpass', 4000, 6000); },
   [WeaponType.Lightning]: synthLightning,
   [WeaponType.Melee]:     (g) => { noise(0.15, 0.45, g, 'bandpass', 300, 2200, 1.4); osc('sine', 110, 45, 0.14, 0.5, g); },
+  // MRV volley thump — mortar body + a bright spit tail that hints at
+  // the burst payload about to scatter.
+  [WeaponType.MRVLauncher]: (g) => { osc('sine', 170, 55, 0.22, 0.55, g); noise(0.18, 0.3, g, 'lowpass', 1100, 250); noise(0.06, 0.2, g, 'bandpass', 1800, 600, 1.3); },
   // Javelin synth fallback — same idea as the layered version: release
   // snap + rising air-tear whoosh + body thump.
   [WeaponType.Javelin]:   (g) => { noise(0.22, 0.5, g, 'bandpass', 900, 3800, 1.6); osc('sawtooth', 240, 900, 0.16, 0.3, g); osc('sine', 150, 60, 0.18, 0.35, g); },

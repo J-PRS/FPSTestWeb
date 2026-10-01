@@ -135,7 +135,7 @@ export function spawnClusterBomblets(c: CombatCtx, p: Projectile): void {
     _bombDir.set(Math.sin(yaw) * Math.sin(tilt), Math.cos(tilt), Math.cos(yaw) * Math.sin(tilt));
     // Per-instance config clone only carries the jittered fuse —
     // 5 allocations per cluster pop, not a hot path.
-    const cfg = { ...BOMBLET_CONFIG, maxLifetime: fuse * (0.6 + Math.random() * 0.8) };
+    const cfg = { ...(p.config.bomblet ?? BOMBLET_CONFIG), maxLifetime: fuse * (0.6 + Math.random() * 0.8) };
     // Bomblet speed lives in the "playerVel" ctor arg: config.speed is 0 and
     // the ctor adds half the inherit term, so dir × (s × 2) nets dir × s.
     _bombVel.copy(_bombDir).multiplyScalar((9 + Math.random() * 6) * 2);

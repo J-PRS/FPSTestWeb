@@ -47,6 +47,12 @@ const BOOM_SAMPLES: Partial<Record<number, [string, number, number?, number?, nu
   [WeaponType.Cannon]: [['explosion1', 0.9, 0.75], ['thud_big', 0.7, 0.7, 400], ['hg_clang', 0.25, 1.4, undefined, 0.2]],
   // Warhead pop: the biggest layered boom — full blast + deep tail
   [WeaponType.RocketLauncher]: [['explosion1', 1.0, 0.8], ['explosion2', 0.7, 0.6], ['thud_big', 0.8, 0.65, 400]],
+  // MRV airburst pop — the carrier's delivery bang: mid-size blast +
+  // spark scatter; the bomblet rain follows on its own voices.
+  [WeaponType.MRVLauncher]: [['explosion1', 0.8, 1.1], ['sparks', 0.6, 0.9, undefined, 0.4], ['thud_big', 0.5, 0.9, 400]],
+  // Bomblet contact pop — small and bright; six in a row must read as a
+  // rain of pops, not one boom — thin like the plasma plip but warmer.
+  [WeaponType.MRVBomblet]: [['explosion_small', 0.5, 1.3], ['sparks', 0.3, 1.1, undefined, 0.25]],
 };
 
 /** LG damage connect — frying sizzle at the contact point. Caller throttles

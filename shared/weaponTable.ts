@@ -31,6 +31,8 @@ export enum WeaponType {
   Sprinkler = 25,     // plasma hose: rapid stream of arced bolts with cone spread
   Repair = 26,        // repair-tool sidearm: short beam that heals deployables, overheal → armor
   ArmorGrenade = 27,  // belt throw: mid blast that plates every player + creature it catches
+  MRVLauncher = 28,   // mortar's counterpart: bouncing carrier shell airbursts into bomblets (MRV — one volley, not MIRV)
+  MRVBomblet = 29,    // spawned by MRVLauncher detonation — contact pop, never fired
 }
 
 export interface WeaponStats {
@@ -515,6 +517,41 @@ export const WEAPONS: Record<number, WeaponStats> = {
     hitMax: 8.0,
     hitGrow: 2.0,
     maxLifetime: 2.0,
+  },
+  [WeaponType.MRVLauncher]: {
+    // Mortar's counterpart: a bouncing carrier shell that AIRBURSTS at
+    // ~1s into bomblets — one volley in one direction (MRV, not MIRV:
+    // the bomblets scatter, they're not independently targeted). The
+    // carrier's own pop is small; the bomblet rain is the weapon.
+    directDamage: 30,
+    aoeDamage: 15,
+    aoeRadius: 8.0,
+    knockbackForce: 15.0, // the pop is delivery — the rain does the shoving
+    forceMode: 'push',
+    speed: 55.0,          // mortar muzzle — same lob line, different payload
+    gravity: true,
+    bodyRadius: 0.3,
+    hitMin: 0.0,
+    hitMax: 2.0,
+    hitGrow: 0.5,
+    maxLifetime: 1.0,     // fuse pop releases the bomblets mid-air
+    cluster: { count: 6, radius: 5.0 }, // bomblet scatter footprint at the burst point
+  },
+  [WeaponType.MRVBomblet]: {
+    // Airburst child — contact pop on whatever it rains onto. Count is
+    // the weapon: 6 × ~29 max ≈ a mortar's worth spread over an area.
+    directDamage: 18,
+    aoeDamage: 12,
+    aoeRadius: 6.0,
+    knockbackForce: 8.0,
+    forceMode: 'push',
+    speed: 0, // scattered by the carrier, never muzzle-fired
+    gravity: true,
+    bodyRadius: 0.15,
+    hitMin: 0.0,
+    hitMax: 4.0,
+    hitGrow: 1.0,
+    maxLifetime: 1.1,
   },
 };
 

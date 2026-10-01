@@ -62,6 +62,9 @@ export interface ProjectileConfig {
    *  (BOMBLET_CONFIG) in an upward cone of half-angle `spread` (rad) that
    *  pop after `fuse`s. Damage is server-side via WeaponStats.cluster. */
   cluster?: { count: number; spread: number; fuse: number };
+  /** Carrier-specific bomblet look — MRVBomblet config etc. Absent = the
+   *  belt's shared BOMBLET_CONFIG. */
+  bomblet?: ProjectileConfig;
   wakeVisual?: boolean; // turbulent wake particles marking the growing proxy hitbox (off by default — tuning pending)
   /** Mid-flight hitscan discharge (remote railgun): at `delay` seconds the
    *  slug fires a beam along its velocity — implemented as one giant swept
@@ -76,7 +79,7 @@ export interface ProjectileConfig {
    *  smoke + dirt debris (mortar/cannon/warhead); 'arc' = electric pop
    *  (lightning); 'splash' = droplets + mist (sprinkler hose);
    *  'punch' = melee puff. Unset = the shared powder recipe. */
-  vfx?: 'splash' | 'punch' | 'energy' | 'kinetic' | 'concussion' | 'arc';
+  vfx?: 'splash' | 'punch' | 'energy' | 'kinetic' | 'concussion' | 'arc' | 'bolt' | 'flak';
   /** Terrain/structure hits: the shell stays planted at the contact point
    *  for N seconds, then shrinks away — a javelin quivering in the dirt.
    *  Combat resolution is unchanged (impact still reports immediately). */
