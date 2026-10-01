@@ -91,7 +91,7 @@ if (q.get('close')) {
   camera.remove(vm.group);
   if (active) {
     active.position.set(0, 0, 0);
-    active.rotation.set(0, Math.PI * 0.75, 0); // muzzle toward camera, 3/4 view
+    active.rotation.set(0, Math.PI * parseFloat(q.get('yaw') ?? '0.75'), 0); // default: muzzle toward camera, 3/4 view
     scene.add(active);
     const box = new THREE.Box3().setFromObject(active);
     const size = box.getSize(new THREE.Vector3()).length();
