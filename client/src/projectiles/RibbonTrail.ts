@@ -121,6 +121,9 @@ export class RibbonTrail {
   private count = 0;
   private time = 0;
   private _far = 0;
+  private _camX = NaN;
+  private _camY = NaN;
+  private _camZ = NaN;
   private stopped = false;
 
   // Direction per sample — needed by billboard mode to derive the camera-facing
@@ -248,6 +251,12 @@ export class RibbonTrail {
       if (far && (this._far ^= 1)) return;
     }
 
+    // Billboard sides only change when the camera moves — a parked camera
+    // makes the per-sample cross-product + position rewrite a pure no-op.
+    const camMoved = !camPos
+      || this._camX !== camPos.x || this._camY !== camPos.y || this._camZ !== camPos.z;
+    if (camPos) { this._camX = camPos.x; this._camY = camPos.y; this._camZ = camPos.z; }
+
     const pos = this.batch.pos;
     const col = this.batch.col;
     const base = this.slot * VERTS * 3;
@@ -263,7 +272,7 @@ export class RibbonTrail {
       const w = this.width * 0.5 * fade;
       const o = base + i * 6;
       let sx = this.sx[s], sy = this.sy[s], sz = this.sz[s];
-      if (this.billboard && camPos) {
+      if (this.billboard && camPos && camMoved) {
         // Side = dir x (dir to camera): ribbon plane always faces the viewer
         const vx = camPos.x - this.px[s], vy = camPos.y - this.py[s], vz = camPos.z - this.pz[s];
         sx = this.dy[s] * vz - this.dz[s] * vy;
@@ -275,8 +284,9 @@ export class RibbonTrail {
       }
       // Stopped trails keep their samples frozen — only the color fade
       // moves; rewriting the same positions every frame was half the cost.
-      // Billboard ribbons still rewrite: their side vector tracks the camera.
-      if (!this.stopped || this.billboard) {
+      // Billboard ribbons rewrite sides only while the camera (or the trail
+      // itself) is moving — a parked camera makes the recompute a no-op.
+      if (!this.stopped || (this.billboard && camMoved)) {
         pos[o] = this.px[s] - sx * w;
         pos[o + 1] = this.py[s] - sy * w;
         pos[o + 2] = this.pz[s] - sz * w;
