@@ -423,7 +423,7 @@ export class Projectile {
   dispose(): void {
     if (this.disposed) return;
     this.removeProjectileMesh();
-    for (const r of this.ribbons) r.dispose(this.scene);
+    for (const r of this.ribbons) r.dispose();
     this.trail.dispose();
     this.disposed = true;
     // Mark dead so a mass-dispose (demo teardown) can't leave a live object

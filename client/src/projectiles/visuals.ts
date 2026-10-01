@@ -6,6 +6,7 @@ import { BLOOM_LAYER, EMIT_GAIN } from '../core/config.js';
 import type { ProjectileConfig } from './types.js';
 import { RibbonTrail } from './RibbonTrail.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { registerDiag } from '../core/fxDiag.js';
 
 const MESH_GEO_CACHE = new Map<string, THREE.BufferGeometry>();
 // Projectile materials are never mutated after construction — share per color
@@ -208,13 +209,14 @@ export function buildProjectileMeshes(
     // billboard=true: the strip re-sides to face the camera each frame —
     // the fixed-horizontal variant was edge-on to every level shot and
     // rendered as a zero-pixel line (ball ribbons already do this).
+    const tag = `proj:${config.name}`;
     if (config.ribbonLanes === 1) {
-      ribbons = [RibbonTrail.acquire(scene, color, width, life, 0, true)];
+      ribbons = [RibbonTrail.acquire(scene, { color, width, life, billboard: true, tag })];
     } else {
       ribbons = [
-        RibbonTrail.acquire(scene, color, width, life, 0, true),
-        RibbonTrail.acquire(scene, coreColor, width * 0.35, life * 0.8, width * 0.07, true),
-        RibbonTrail.acquire(scene, coreColor, width * 0.35, life * 0.8, -width * 0.07, true),
+        RibbonTrail.acquire(scene, { color, width, life, billboard: true, tag }),
+        RibbonTrail.acquire(scene, { color: coreColor, width: width * 0.35, life: life * 0.8, vOffset: width * 0.07, billboard: true, tag }),
+        RibbonTrail.acquire(scene, { color: coreColor, width: width * 0.35, life: life * 0.8, vOffset: -width * 0.07, billboard: true, tag }),
       ];
     }
   }
@@ -260,3 +262,6 @@ export function updateProjectileMesh(
   syncProjectileInstance(mesh);
   syncProjectileInstance(glowMesh);
 }
+
+// Alt+Q census section — instanced shell pools (grow/shrink inventory).
+registerDiag('inst', () => ({ inst: instPoolDump() }));

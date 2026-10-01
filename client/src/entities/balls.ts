@@ -247,8 +247,8 @@ export class Ball {
     // eye-searing; these are emission intensities, not hues
     this.trails = new BallTrailDots(scene);
     this.ribbons = [
-      RibbonTrail.acquire(scene, this.color.clone().multiplyScalar(0.55).getHex(), this.radius * 1.2, 0.5, 0, true),
-      RibbonTrail.acquire(scene, coreColor.multiplyScalar(0.7).getHex(), this.radius * 0.45, 0.4, 0, true),
+      RibbonTrail.acquire(scene, { color: this.color.clone().multiplyScalar(0.55).getHex(), width: this.radius * 1.2, life: 0.5, billboard: true, tag: 'ball' }),
+      RibbonTrail.acquire(scene, { color: coreColor.multiplyScalar(0.7).getHex(), width: this.radius * 0.45, life: 0.4, billboard: true, tag: 'ball' }),
     ];
 
     if (netSpawn) {
@@ -369,7 +369,7 @@ export class Ball {
   dispose(): void {
     if (!this.meshRemoved) { freeSlots('ball', this); this.meshRemoved = true; }
     this.trails.dispose();
-    for (const r of this.ribbons) r.dispose(this.scene);
+    for (const r of this.ribbons) r.dispose();
   }
 }
 

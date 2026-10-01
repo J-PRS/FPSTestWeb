@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import { Explosion } from '../effects/explosion.js';
 import { getGlowTexture } from '../effects/glowTexture.js';
-import { RibbonTrail } from '../projectiles/RibbonTrail.js';
+import { RibbonTrail, DyingRibbons } from '../projectiles/RibbonTrail.js';
 import * as sfx from '../core/sfx.js';
 import type { DeployDeps } from './deployables.js';
 
@@ -51,7 +51,7 @@ export class DeployRockets {
   private rockets: Rocket[] = [];
   /** Stopped ribbons still fade — a detonated missile's streak burns out
    *  in place instead of vanishing frame-perfect with the mesh. */
-  private dying: RibbonTrail[][] = [];
+  private dying = new DyingRibbons();
   private _rktDir = new THREE.Vector3();
   private _rktAim = new THREE.Vector3();
   private _zeroVel = new THREE.Vector3();
@@ -77,9 +77,9 @@ export class DeployRockets {
       // Same lane recipe as Projectile visuals: wide tint band + thin hot
       // core pair offset above/below the band's plane.
       ribbons: [
-        RibbonTrail.acquire(this.deps.scene, RKTT_COLOR, RKTT_W, RKTT_LIFE),
-        RibbonTrail.acquire(this.deps.scene, RKTT_CORE, RKTT_W * 0.35, RKTT_LIFE * 0.8, RKTT_W * 0.07),
-        RibbonTrail.acquire(this.deps.scene, RKTT_CORE, RKTT_W * 0.35, RKTT_LIFE * 0.8, -RKTT_W * 0.07),
+        RibbonTrail.acquire(this.deps.scene, { color: RKTT_COLOR, width: RKTT_W, life: RKTT_LIFE, tag: 'sentry' }),
+        RibbonTrail.acquire(this.deps.scene, { color: RKTT_CORE, width: RKTT_W * 0.35, life: RKTT_LIFE * 0.8, vOffset: RKTT_W * 0.07, tag: 'sentry' }),
+        RibbonTrail.acquire(this.deps.scene, { color: RKTT_CORE, width: RKTT_W * 0.35, life: RKTT_LIFE * 0.8, vOffset: -RKTT_W * 0.07, tag: 'sentry' }),
       ],
     };
     if (!target) { // fired with no live target — lob up-forward, no homing
@@ -108,21 +108,13 @@ export class DeployRockets {
       this.step(r, dt);
       if (r.ttl <= 0) {
         this.deps.scene.remove(r.group); // detonate already removed; ttl cut is the safety
-        for (const t of r.ribbons) t.stop();
-        this.dying.push(r.ribbons);
+        this.dying.fadeAll(r.ribbons);
         this.rockets.splice(i, 1);
         continue;
       }
       for (const t of r.ribbons) { t.push(r.pos, r.vel); t.update(dt); }
     }
-    for (let i = this.dying.length - 1; i >= 0; i--) {
-      const set = this.dying[i]!;
-      for (const t of set) t.update(dt);
-      if (set.every(t => t.done)) {
-        for (const t of set) t.dispose(this.deps.scene);
-        this.dying.splice(i, 1);
-      }
-    }
+    this.dying.update(dt);
   }
 
   private step(r: Rocket, dt: number): void {
@@ -193,10 +185,9 @@ export class DeployRockets {
   dispose(): void {
     for (const r of this.rockets) {
       this.deps.scene.remove(r.group);
-      for (const t of r.ribbons) t.dispose(this.deps.scene);
+      for (const t of r.ribbons) t.dispose();
     }
     this.rockets.length = 0;
-    for (const set of this.dying) for (const t of set) t.dispose(this.deps.scene);
-    this.dying.length = 0;
+    this.dying.disposeAll();
   }
 }

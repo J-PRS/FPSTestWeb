@@ -1,146 +1,43 @@
 import * as THREE from 'three';
 
-import { BLOOM_LAYER, EMIT_GAIN } from '../core/config.js';
+import { EMIT_GAIN } from '../core/config.js';
+import { registerDiag } from '../core/fxDiag.js';
+import {
+  TrailBatch, RIBBON_SAMPLES, RIBBON_FLOATS_PER_SLOT, claimableBatch,
+  retireBatchIfOverflow, slotLit, litAudit, sweepLit, reapedLit,
+  batchStats,
+} from './trailBatch.js';
+export { TrailBatch, RIBBON_TRIS_PER_SLOT } from './trailBatch.js';
 
-const MAX_SAMPLES = 48;
-const VERTS = MAX_SAMPLES * 2;
-const IDX = (MAX_SAMPLES - 1) * 6;
+const MAX_SAMPLES = RIBBON_SAMPLES;
 
 const _side = new THREE.Vector3();
 const _up = new THREE.Vector3(0, 1, 0);
 const _fwd = new THREE.Vector3(1, 0, 0);
 const _dir = new THREE.Vector3();
 
-/**
- * Flat ribbon trail — a triangle strip following the projectile.
- *
- * Every ribbon shares ONE merged BufferGeometry (a slot each) under a
- * single Mesh: 240+ live trails used to cost 240 draw calls — the top
- * Mesh family in the LOW-FPS dumps. Now the whole layer is one call;
- * freed slots just zero their slice (degenerate tris cost nothing).
- */
-const MAX_TRAILS = 512;
-
-export class TrailBatch {
-  geo = new THREE.BufferGeometry();
-  mesh: THREE.Mesh;
-  scene: THREE.Scene;
-  pos: Float32Array;
-  col: Float32Array;
-  posAttr: THREE.BufferAttribute;
-  colAttr: THREE.BufferAttribute;
-  free: number[] = [];
-  used = new Set<number>();
-  dirty = false;
-  // Dirty span in float-array indices — a single live trail used to
-  // re-upload the whole 512-slot buffer every frame (~1.2MB).
-  dirtyLo = Infinity;
-  dirtyHi = 0;
-
-  mark(lo: number, hi: number): void {
-    if (lo < this.dirtyLo) this.dirtyLo = lo;
-    if (hi > this.dirtyHi) this.dirtyHi = hi;
-    this.dirty = true;
-  }
-
-  // Slots alloc lowest-first so the used range stays dense; the highest-
-  // watermark only changes on alloc/free, not per flush.
-  hw = 0;
-  slotsDirty = true;
-
-  constructor(scene: THREE.Scene) {
-    this.scene = scene;
-    this.pos = new Float32Array(MAX_TRAILS * VERTS * 3);
-    this.col = new Float32Array(MAX_TRAILS * VERTS * 3);
-    this.posAttr = new THREE.BufferAttribute(this.pos, 3);
-    this.colAttr = new THREE.BufferAttribute(this.col, 3);
-    this.posAttr.setUsage(THREE.DynamicDrawUsage);
-    this.colAttr.setUsage(THREE.DynamicDrawUsage);
-    this.geo.setAttribute('position', this.posAttr);
-    this.geo.setAttribute('color', this.colAttr);
-    const idx = new Uint32Array(MAX_TRAILS * IDX);
-    for (let r = 0; r < MAX_TRAILS; r++) {
-      const base = r * VERTS, io = r * IDX;
-      for (let i = 0; i < MAX_SAMPLES - 1; i++) {
-        const o = io + i * 6, v = base + i * 2;
-        idx[o] = v; idx[o + 1] = v + 1; idx[o + 2] = v + 2;
-        idx[o + 3] = v + 1; idx[o + 4] = v + 3; idx[o + 5] = v + 2;
-      }
-    }
-    this.geo.setIndex(new THREE.BufferAttribute(idx, 1));
-    this.geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1e7);
-    const mat = new THREE.MeshBasicMaterial({
-      vertexColors: true,
-      transparent: true,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending,
-      side: THREE.DoubleSide,
-    });
-    this.mesh = new THREE.Mesh(this.geo, mat);
-    this.mesh.frustumCulled = false;
-    this.mesh.layers.enable(BLOOM_LAYER);
-    // Aim-probe tag — the crosshair raycast resolves a slot via faceIndex
-    // back to whichever RibbonTrail owns it (or proves it ownerless).
-    this.mesh.userData.dbg = { kind: 'trailBatch', batch: this };
-    for (let s = MAX_TRAILS - 1; s >= 0; s--) this.free.push(s);
-    scene.add(this.mesh);
-  }
-
-  flush(): void {
-    if (!this.dirty) return;
-    this.dirty = false;
-    const n = this.dirtyHi - this.dirtyLo;
-    if (n > 0) {
-      this.posAttr.clearUpdateRanges();
-      this.posAttr.addUpdateRange(this.dirtyLo, n);
-      this.posAttr.needsUpdate = true;
-      this.colAttr.clearUpdateRanges();
-      this.colAttr.addUpdateRange(this.dirtyLo, n);
-      this.colAttr.needsUpdate = true;
-    }
-    this.dirtyLo = Infinity;
-    this.dirtyHi = 0;
-    if (this.slotsDirty) {
-      this.slotsDirty = false;
-      let hw = 0;
-      for (const s of this.used) if (s + 1 > hw) hw = s + 1;
-      this.hw = hw;
-    }
-    this.geo.setDrawRange(0, this.hw * IDX);
-  }
+export interface RibbonOpts {
+  color: number;
+  width?: number;
+  life?: number;
+  vOffset?: number;
+  billboard?: boolean;
+  /** Owning subsystem for the census/aim probe — 'proj:disc', 'ball',
+   *  'sentry'. A frozen streak names its owner, not a mystery slot. */
+  tag?: string;
 }
 
-// A scene's trails live in a LIST of batches — 512 slots each. Overflow
-// spawns another batch (one more draw call) instead of starving ribbons;
-// emptied overflow batches shrink back away on release.
-const batches = new Map<THREE.Scene, TrailBatch[]>();
+/**
+ * Flat ribbon trail — a triangle strip following the projectile.
+ * Buffer/slot ownership lives in trailBatch.ts; this file is the
+ * per-ribbon ring buffer + fade/billboard logic.
+ */
 
 /** Camera position for callers that can't thread one into update() —
  *  updateProjectiles stamps this once per frame so projectile ribbons can
  *  billboard (ball ribbons get theirs via an explicit argument instead). */
 let sharedCamPos: THREE.Vector3 | null = null;
 export function setRibbonCamera(pos: THREE.Vector3 | null): void { sharedCamPos = pos; }
-
-function claimableBatch(scene: THREE.Scene): TrailBatch {
-  let list = batches.get(scene);
-  if (!list) { list = [new TrailBatch(scene)]; batches.set(scene, list); }
-  for (const b of list) if (b.free.length > 0) return b;
-  const b = new TrailBatch(scene);
-  list.push(b);
-  return b;
-}
-
-/** Triangles per ribbon slot — the aim probe maps faceIndex → slot. */
-export const RIBBON_TRIS_PER_SLOT = IDX / 3;
-
-/** Any nonzero float in a slot's color span = pixels still on screen.
- *  Scans are bounded by the high-water mark — slots above it were never
- *  used, so they're provably black. */
-function slotLit(b: TrailBatch, s: number): boolean {
-  const base = s * VERTS * 3;
-  for (let i = 0; i < VERTS * 3; i++) if (b.col[base + i] !== 0) return true;
-  return false;
-}
 
 export class RibbonTrail {
   private batch!: TrailBatch;
@@ -187,20 +84,23 @@ export class RibbonTrail {
   private life: number;
   private vOffset: number; // offset along the ribbon's in-plane "up" (⊥ side)
   private billboard: boolean; // width axis faces the camera each frame
+  // Owning subsystem ('proj:disc', 'ball', 'sentry') — every census/probe
+  // row names the owner so a frozen streak is identified, not hunted.
+  private tag!: string;
 
   // Free-list — projectiles churn ribbons constantly; sample buffers are
   // fixed-size so reuse is free.
   private static poolFixed: RibbonTrail[] = [];
   private static poolBillboard: RibbonTrail[] = [];
 
-  static acquire(scene: THREE.Scene, color: number, width = 0.5, life = 0.3, vOffset = 0, billboard = false): RibbonTrail {
-    const pool = billboard ? RibbonTrail.poolBillboard : RibbonTrail.poolFixed;
+  static acquire(scene: THREE.Scene, o: RibbonOpts): RibbonTrail {
+    const pool = o.billboard ? RibbonTrail.poolBillboard : RibbonTrail.poolFixed;
     const r = pool.pop();
     if (r) {
-      r.reinit(scene, color, width, life, vOffset);
+      r.reinit(scene, o);
       return r;
     }
-    return new RibbonTrail(scene, color, width, life, vOffset, billboard);
+    return new RibbonTrail(scene, o);
   }
 
   private static liveSet = new Set<RibbonTrail>();
@@ -215,7 +115,7 @@ export class RibbonTrail {
       for (let i = 0; i < r.count; i++) { cx += r.px[i]; cy += r.py[i]; cz += r.pz[i]; }
       const n = Math.max(1, r.count);
       out.push({
-        slot: r.slot, count: r.count, pushed: r.pushed, stopped: r.stopped,
+        slot: r.slot, tag: r.tag, count: r.count, pushed: r.pushed, stopped: r.stopped,
         life: r.life, bb: r.billboard, done: r.done,
         lit: r.slot >= 0 && slotLit(r.batch, r.slot),
         starved: r.starvedPushes,
@@ -235,7 +135,7 @@ export class RibbonTrail {
     for (const r of RibbonTrail.liveSet) {
       if (r.batch !== batch || r.slot !== slot) continue;
       return {
-        slot, owner: true, stopped: r.stopped, done: r.done, bb: r.billboard,
+        slot, owner: r.tag, stopped: r.stopped, done: r.done, bb: r.billboard,
         life: r.life, count: r.count, time: +r.time.toFixed(1),
         head: r.head >= 0
           ? `${r.px[r.head].toFixed(0)},${r.py[r.head].toFixed(0)},${r.pz[r.head].toFixed(0)}` : '-',
@@ -253,72 +153,23 @@ export class RibbonTrail {
     for (const r of RibbonTrail.liveSet) {
       if (now - r.lastUpdateAt <= staleMs) continue;
       if (r.slot >= 0) slots.push(r.slot);
-      rows.push({ slot: r.slot, bb: r.billboard, count: r.count, stopped: r.stopped, updMs: Math.round(now - r.lastUpdateAt) });
+      rows.push({ slot: r.slot, tag: r.tag, bb: r.billboard, count: r.count, stopped: r.stopped, updMs: Math.round(now - r.lastUpdateAt) });
     }
     return { count: rows.length, slots, rows };
   }
-  /** Slots lit in the batch color buffer — and, more importantly, slots
-   *  lit WITHOUT a `used` owner. orphans() only sees stale RibbonTrail
-   *  objects; a slot leaked by a path that bypassed releaseSlot keeps its
-   *  last pixels on screen forever with no object left to blame. */
-  static litAudit(): { lit: number; unowned: number[] } {
-    const unowned: number[] = [];
-    let lit = 0;
-    for (const list of batches.values()) {
-      for (const b of list) {
-        for (let s = 0; s < b.hw; s++) {
-          if (!slotLit(b, s)) continue;
-          lit++;
-          if (!b.used.has(s)) unowned.push(s);
-        }
-      }
-    }
-    return { lit, unowned };
-  }
-
-  static reapedLit = 0;
-  /** Sweep unowned lit slots to black — the auto-heal half of litAudit,
-   *  so any undiscovered leak path self-cleans instead of freezing a
-   *  streak midair. Runs once per frame from updateProjectiles. */
-  static sweepLit(): void {
-    for (const list of batches.values()) {
-      for (const b of list) {
-        let dirty = false;
-        for (let s = 0; s < b.hw; s++) {
-          if (b.used.has(s) || !slotLit(b, s)) continue;
-          const base = s * VERTS * 3;
-          b.col.fill(0, base, base + VERTS * 3);
-          b.mark(base, base + VERTS * 3);
-          dirty = true;
-          RibbonTrail.reapedLit++;
-        }
-        if (dirty) b.flush();
-      }
-    }
-  }
+  static litAudit = litAudit;
+  static sweepLit = sweepLit;
+  // Live-binding getter — a static field would freeze the count at init.
+  static get reapedLit(): number { return reapedLit; }
+  static batchStats = batchStats;
 
   /** Per-ribbon state for the Alt+Q dump — pairs a dead lane with its shell. */
-  dbg(): { slot: number; count: number; stopped: boolean; lit: boolean; starved: number } {
+  dbg(): { slot: number; tag: string; count: number; stopped: boolean; lit: boolean; starved: number } {
     return {
-      slot: this.slot, count: this.count, stopped: this.stopped,
+      slot: this.slot, tag: this.tag, count: this.count, stopped: this.stopped,
       lit: this.slot >= 0 && slotLit(this.batch, this.slot),
       starved: this.starvedPushes,
     };
-  }
-  /** Batch census — a slot that's "live" but past drawRange or in an
-   *  invisible mesh explains ribbons that exist but never render. */
-  static batchStats(): Record<string, unknown>[] {
-    const out: Record<string, unknown>[] = [];
-    for (const [scene, list] of batches) {
-      for (const b of list) {
-        out.push({
-          idx: list.indexOf(b), free: b.free.length, used: b.used.size, hw: b.hw,
-          drawRange: b.geo.drawRange.count, meshVisible: b.mesh.visible,
-          inScene: b.mesh.parent === scene,
-        });
-      }
-    }
-    return out;
   }
 
   private claimSlot(scene: THREE.Scene): void {
@@ -331,10 +182,10 @@ export class RibbonTrail {
   private releaseSlot(): void {
     RibbonTrail.liveSet.delete(this);
     if (this.slot < 0) return;
-    const b = this.slot * VERTS * 3;
-    this.batch.pos.fill(0, b, b + VERTS * 3);
-    this.batch.col.fill(0, b, b + VERTS * 3);
-    this.batch.mark(b, b + VERTS * 3);
+    const b = this.slot * RIBBON_FLOATS_PER_SLOT;
+    this.batch.pos.fill(0, b, b + RIBBON_FLOATS_PER_SLOT);
+    this.batch.col.fill(0, b, b + RIBBON_FLOATS_PER_SLOT);
+    this.batch.mark(b, b + RIBBON_FLOATS_PER_SLOT);
     // Upload NOW — mark() alone defers to the next ribbon's update(), and
     // if this was the last live ribbon nothing ever flushes: the slot's
     // stale verts stay lit as a frozen streak across the map.
@@ -346,22 +197,15 @@ export class RibbonTrail {
     // stay packed at the front of the index buffer for drawRange.
     this.batch.free.sort((x, y) => y - x);
     this.slot = -1;
-    // Shrink: an emptied overflow batch is retired — batch 0 is the floor.
-    if (this.batch.used.size === 0) {
-      const list = batches.get(this.batch.scene);
-      if (list && list.length > 1 && list[0] !== this.batch) {
-        list.splice(list.indexOf(this.batch), 1);
-        this.batch.scene.remove(this.batch.mesh);
-        this.batch.geo.dispose();
-      }
-    }
+    retireBatchIfOverflow(this.batch);
   }
 
-  private reinit(scene: THREE.Scene, color: number, width: number, life: number, vOffset: number): void {
-    this.width = width;
-    this.life = life;
-    this.vOffset = vOffset;
-    this.baseColor.setHex(color);
+  private reinit(scene: THREE.Scene, o: RibbonOpts): void {
+    this.width = o.width ?? 0.5;
+    this.life = o.life ?? 0.3;
+    this.vOffset = o.vOffset ?? 0;
+    this.tag = o.tag ?? '?';
+    this.baseColor.setHex(o.color);
     this.stopped = false;
     this.time = 0;
     this.head = -1;
@@ -373,12 +217,13 @@ export class RibbonTrail {
     this.claimSlot(scene);
   }
 
-  private constructor(scene: THREE.Scene, color: number, width = 0.5, life = 0.3, vOffset = 0, billboard = false) {
-    this.width = width;
-    this.life = life;
-    this.vOffset = vOffset;
-    this.billboard = billboard;
-    this.baseColor = new THREE.Color(color);
+  private constructor(scene: THREE.Scene, o: RibbonOpts) {
+    this.width = o.width ?? 0.5;
+    this.life = o.life ?? 0.3;
+    this.vOffset = o.vOffset ?? 0;
+    this.billboard = o.billboard ?? false;
+    this.tag = o.tag ?? '?';
+    this.baseColor = new THREE.Color(o.color);
     this.claimSlot(scene);
   }
 
@@ -424,9 +269,9 @@ export class RibbonTrail {
     this.liveFrom = 0;
     this.starvedPushes = 0;
     if (this.slot >= 0) {
-      const b = this.slot * VERTS * 3;
-      this.batch.col.fill(0, b, b + VERTS * 3);
-      this.batch.mark(b, b + VERTS * 3);
+      const b = this.slot * RIBBON_FLOATS_PER_SLOT;
+      this.batch.col.fill(0, b, b + RIBBON_FLOATS_PER_SLOT);
+      this.batch.mark(b, b + RIBBON_FLOATS_PER_SLOT);
       this.batch.flush(); // same as releaseSlot — a clear is unobservable otherwise
     }
   }
@@ -444,7 +289,7 @@ export class RibbonTrail {
     if (this.slot < 0 || this.count < 2) return;
     const { camMoved, rebillboard } = this.cameraState(camPos);
     const pos = this.batch.pos;
-    const base = this.slot * VERTS * 3;
+    const base = this.slot * RIBBON_FLOATS_PER_SLOT;
     // Positions only move when new samples arrive (or a billboard needs
     // re-siding as the camera moves) — the rest of the ribbon is static,
     // only its colors fade.
@@ -557,9 +402,44 @@ export class RibbonTrail {
   }
 
   /** Release back to the pool — buffers/slot kept for reuse. */
-  dispose(_scene: THREE.Scene): void {
+  dispose(): void {
     this.releaseSlot();
     const pool = this.billboard ? RibbonTrail.poolBillboard : RibbonTrail.poolFixed;
     pool.push(this);
+  }
+}
+
+// One census section for the whole ribbon layer — registered once at
+// module load so __trailDump needs no wiring changes when it grows.
+registerDiag('ribbons', () => ({
+  ribbons: RibbonTrail.dump(),
+  ribbonBatch: batchStats(),
+  ribbonOrphans: RibbonTrail.orphans(),
+  litAudit: litAudit(),
+  reapedLit,
+}));
+
+/** Shared 'stop → update until done → dispose' drain — detonation paths
+ *  used to hand-roll this loop per owner (deployRockets kept its own
+ *  dying[] list; the fade math is identical). */
+export class DyingRibbons {
+  private list: RibbonTrail[] = [];
+
+  fadeAll(set: RibbonTrail[]): void {
+    for (const t of set) t.stop();
+    this.list.push(...set);
+  }
+
+  update(dt: number, camPos?: THREE.Vector3): void {
+    for (let i = this.list.length - 1; i >= 0; i--) {
+      const t = this.list[i]!;
+      t.update(dt, camPos);
+      if (t.done) { t.dispose(); this.list.splice(i, 1); }
+    }
+  }
+
+  disposeAll(): void {
+    for (const t of this.list) t.dispose();
+    this.list.length = 0;
   }
 }

@@ -85,7 +85,7 @@ export function updateBallDead(b: Ball, dt: number, viewPos: THREE.Vector3): voi
     if (b.trails.size === 0 && b.ribbons.every(r => r.done)) {
       // Final cleanup — caller splices on `disposed` without dispose()
       b.trails.dispose();
-      for (const r of b.ribbons) r.dispose(b.scene);
+      for (const r of b.ribbons) r.dispose();
       b._disposed = true;
     }
   }
