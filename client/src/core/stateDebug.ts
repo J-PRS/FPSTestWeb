@@ -186,6 +186,7 @@ interface TrailDump {
   reapedLit?: number;
   inst?: unknown;
   swarm?: unknown;
+  fx?: unknown;
 }
 
 // Trail census — dead-trail bugs need attached/particles/slot per live
@@ -222,6 +223,7 @@ function pushTrailExtras(lines: string[], td: TrailDump, ctx: StateDebugContext)
   }
   if (td.inst) lines.push(`instPools: ${JSON.stringify(td.inst)}`);
   if (td.swarm) lines.push(`swarm: ${JSON.stringify(td.swarm)}`);
+  if (td.fx) lines.push(`fx: ${JSON.stringify(td.fx)}`);
   const aged = ctx.projectiles.toSorted((a, b) => b.age - a.age).slice(0, 5);
   if (aged.length) {
     lines.push(`oldest: ${aged.map(pr => `${pr.config.name}@${pr.age.toFixed(1)}s(${pr.pos.x.toFixed(0)},${pr.pos.y.toFixed(0)},${pr.pos.z.toFixed(0)})`).join(' ')}`);
