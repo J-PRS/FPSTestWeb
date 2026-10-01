@@ -13,10 +13,10 @@ import { segSolidHit } from './solidWorld.ts';
 // point, and RemotePlayer renders feet at pos.y - EYE_OFFSET.
 export const BOT_EYE = 1.8;
 
-// 2m cells + 1s TTL: answers only change when an endpoint crosses a cell,
-// so coarser cells buy hit rate at the cost of ±1m endpoint snap — small
-// next to the 3m march step the probe already uses.
-const LOS_CELL = 2;
+// 3m cells + 1s TTL: answers only change when an endpoint crosses a cell.
+// The snap (±1.5m) stays under the march's own 3m step — jets crossing
+// 2m cells in a fraction of a second were defeating the memo.
+const LOS_CELL = 3;
 const LOS_TTL_MS = 1000;
 const losMemo = new Map<number, { clear: boolean; until: number }>();
 
