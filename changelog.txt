@@ -1,3 +1,4 @@
+2026-10-01 - VFX quality scaler on the gpu/cpu ladders (gpu>=2: 0.7x, gpu>=4: 0.45x, cpu>=1: 0.6x) — quarks CPU sim is the fight-scaling hotspot, density now trades for frame time
 2026-10-01 - Shadow frustum 400m->250m half-extent (0.24m/texel, fewer casters in-frustum) + shadow map updates every 2nd frame at all levels — pass measured at ~46% of frame on a 3070Ti
 2026-10-01 - FPS cap setting (off/30/60/120) in SETTINGS — render-skip only, sim/input stay full-rate; battery + headroom measuring
 2026-10-01 - Weak-GPU first-run detection: probe UNMASKED_RENDERER_WEBGL at boot; SwiftShader/llvmpipe/Intel iGPU/Mali/old Adreno with no stored picks seeds fps-pixelated=1 + shadows off (chromebooks start on the low tier, explicit picks always win)

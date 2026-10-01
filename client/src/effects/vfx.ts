@@ -43,13 +43,20 @@ export function vfxStats(): { systems: number; tracked: number; particles: numbe
 }
 
 let _liveParticles = 0;
+// Quality scaler from the gpu ladder — quarks sim is pure CPU work, so
+// on weak devices density trades for frame time before the pressure
+// curve even engages. 1 = full detail.
+let _qualityScale = 1;
+export function setVfxQualityScale(q: number): void { _qualityScale = q; }
+
 /** Particle-pressure LOD: bursts scale their count down as the global
  *  live-particle total climbs — a 155-explosion pileup was 30k particles
  *  and ~15ms of pure CPU sim. Full detail to 4k, linear to a third at 12k. */
 export function vfxPressure(): number {
-  if (_liveParticles < 4000) return 1;
-  if (_liveParticles > 12000) return 0.35;
-  return 1 - ((_liveParticles - 4000) / 8000) * 0.65;
+  let p = 1;
+  if (_liveParticles > 12000) p = 0.35;
+  else if (_liveParticles > 4000) p = 1 - ((_liveParticles - 4000) / 8000) * 0.65;
+  return p * _qualityScale;
 }
 
 /** Live-system cap — batcher.update simulates EVERY attached system on

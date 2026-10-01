@@ -8,7 +8,7 @@ import * as THREE from 'three';
 import { urlParams } from '../core/params.js';
 import { settings } from '../core/settings.js';
 import Logger from '../core/Logger.js';
-import { vfxStats } from '../effects/vfx.js';
+import { vfxStats, setVfxQualityScale } from '../effects/vfx.js';
 import type { createFrameBudget } from '../core/frameBudget.js';
 import type { createPerfHud } from '../core/perfHud.js';
 import { fxJobStats } from './gameLoop.js';
@@ -143,6 +143,9 @@ function autoScale(deps: GameLoopDeps, st: LoopState, dir: number): void {
   // shades every skyward fragment on a GPU that already can't keep up.
   deps.sceneSetup.volumetricClouds?.setEnabled(next < 3);
   shedPostPasses(rendererSetup, next >= 4);
+  // Quarks sim is pure CPU — on weak GPUs (usually weak CPUs too, e.g.
+  // chromebooks) thin burst density before the pressure curve engages.
+  setVfxQualityScale(next >= 4 ? 0.45 : next >= 2 ? 0.7 : 1);
   st.gpuLevel = next;
   Logger[dir < 0 ? 'warn' : 'info'](`auto-quality: gpu level ${next} (${dir < 0 ? 'sustained low fps' : 'headroom'})`);
 }
@@ -176,6 +179,7 @@ function autoScaleCpu(deps: GameLoopDeps, st: LoopState, dir: number): void {
   const next = Math.min(cap, Math.max(0, st.cpuLevel - dir));
   if (next === st.cpuLevel) return;
   const ambientOn = next === 0;
+  setVfxQualityScale(next === 0 ? 1 : next === 1 ? 0.6 : 0.4);
   for (const layer of deps.ambientLayers) layer.setActive(ambientOn);
   deps.groundMist().setActive(ambientOn);
   deps.ambientBirds.setActive(ambientOn);
@@ -201,6 +205,7 @@ export function resetAutoQuality(deps: GameLoopDeps, st: LoopState): void {
   deps.ambientBirds.setActive(true);
   deps.sceneSetup.volumetricClouds?.setEnabled(true);
   shedPostPasses(deps.rendererSetup, false);
+  setVfxQualityScale(1);
   st.gpuLevel = 0;
   st.cpuLevel = 0;
 }
