@@ -21,23 +21,27 @@ let hmSize = 0;
 const MAXGRID = 64;
 const maxGrid = new Uint8Array(MAXGRID * MAXGRID);
 
+function cellMax(cx: number, cz: number, texel: number): number {
+  let m = 0;
+  const xEnd = Math.min(hmSize, (cx + 1) * texel);
+  const zEnd = Math.min(hmSize, (cz + 1) * texel);
+  for (let z = cz * texel; z < zEnd; z++) {
+    const row = (z * hmSize + cx * texel) * 4;
+    for (let x = cx * texel; x < xEnd; x++) {
+      const v = hmData![row + (x - cx * texel) * 4];
+      if (v > m) m = v;
+    }
+  }
+  return m;
+}
+
 function buildMaxGrid(): void {
   maxGrid.fill(0);
   if (!hmData || !hmSize) return;
   const texel = Math.max(1, Math.floor(hmSize / MAXGRID));
   for (let cz = 0; cz < MAXGRID; cz++) {
-    const zEnd = Math.min(hmSize, (cz + 1) * texel);
     for (let cx = 0; cx < MAXGRID; cx++) {
-      let m = 0;
-      const xEnd = Math.min(hmSize, (cx + 1) * texel);
-      for (let z = cz * texel; z < zEnd; z++) {
-        const row = z * hmSize * 4 + cx * texel * 4;
-        for (let x = 0; x < xEnd - cx * texel; x++) {
-          const v = hmData[row + x * 4];
-          if (v > m) m = v;
-        }
-      }
-      maxGrid[cz * MAXGRID + cx] = m;
+      maxGrid[cz * MAXGRID + cx] = cellMax(cx, cz, texel);
     }
   }
 }
