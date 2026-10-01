@@ -166,9 +166,11 @@ export function serializeDemo(data: DemoFile): ArrayBuffer {
     offset = writeString(view, offset, data.header.gameVersion);
     view.setFloat64(offset, data.header.timestamp, true); offset += 8;
     view.setFloat32(offset, data.header.duration, true); offset += 4;
-    view.setUint32(offset, data.header.totalFrames, true); offset += 4;
-    view.setUint32(offset, data.header.projectileEventCount, true); offset += 4;
-    view.setUint32(offset, data.header.targetEventCount, true); offset += 4;
+    // Counts come from the arrays, not the header — a stale caller count
+    // would otherwise serialize a clip the reader then rejects.
+    view.setUint32(offset, data.frames.length, true); offset += 4;
+    view.setUint32(offset, data.projectileEvents.length, true); offset += 4;
+    view.setUint32(offset, data.targetEvents.length, true); offset += 4;
     view.setUint32(offset, 0, true); offset += 4; // checksum placeholder
     offset = writeString(view, offset, data.header.description);
     view.setFloat32(offset, data.header.startPosX, true); offset += 4;
