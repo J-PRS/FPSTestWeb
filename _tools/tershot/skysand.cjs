@@ -12,8 +12,9 @@ const QS = process.env.QS || '';
   const page = await browser.newPage({ viewport: { width: 800, height: 500 } });
   page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
   const tag = (process.env.TAG || 'cube');
+  const pitch = process.env.PITCH || '0';
   for (const yaw of [0, 90, 180, 270]) {
-    await page.goto(`http://localhost:5199/skytest.html?yaw=${yaw}${QS}`, { waitUntil: 'domcontentloaded' });
+    await page.goto(`http://localhost:5199/skytest.html?yaw=${yaw}&pitch=${pitch}${QS}`, { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(6000);
     const f = path.join(OUT, `${tag}_${yaw}.png`);
     await page.screenshot({ path: f });

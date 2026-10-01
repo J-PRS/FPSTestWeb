@@ -11,6 +11,7 @@ const host = qp.get('host') || 'http://localhost:8001';
 const faces = (qp.get('map') || 'px,nx,py,ny,pz,nz').split(',');
 const flip = new Set((qp.get('flip') || '').split(',').filter(Boolean));
 const mode = qp.get('mode') || 'canvas'; // canvas | raw
+const rot = parseInt(qp.get('rot') || '0', 10); // rotate the py (slot-2) image by N*90° ccw
 
 const renderer = new THREE.WebGLRenderer({ antialias: false });
 renderer.setSize(innerWidth, innerHeight);
@@ -23,10 +24,15 @@ cam.rotation.x = (parseFloat(qp.get('pitch')) || 0) * Math.PI / 180;
 const loader = new THREE.ImageLoader();
 const imgs = await Promise.all(faces.map(async (f) => {
   const img = await loader.loadAsync(`${host}/maps/${skyDir}/${f}.png`);
-  if (mode === 'raw') return img;
+  if (mode === 'raw' && !(f === 'py' && rot)) return img;
   const c = document.createElement('canvas');
   c.width = img.width; c.height = img.height;
   const ctx = c.getContext('2d');
+  if (f === 'py' && rot) {
+    ctx.translate(img.width / 2, img.height / 2);
+    ctx.rotate(rot * Math.PI / 2);
+    ctx.translate(-img.width / 2, -img.height / 2);
+  }
   if (flip.has(f)) { ctx.translate(0, img.height); ctx.scale(1, -1); }
   ctx.drawImage(img, 0, 0);
   return c;

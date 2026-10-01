@@ -259,9 +259,25 @@ async function applySky(deps: NetCtx['deps'], httpUrl: string, skyDir: string | 
   }
   const order = SKY_FACES.map((f) => `${httpUrl}/maps/${skyDir}/${f}.png`);
   try {
-    // The exports are already in GL cube layout — CubeTextureLoader's own
-    // face flip orients them correctly (pre-flipping double-flips).
-    deps.lazyScene().background = await new THREE.CubeTextureLoader().loadAsync(order);
+    // Exports are GL-layout for the four sides + down face. The up face is
+    // exported rotated 180° (its dark edge lands opposite px's dark-top edge,
+    // cutting a hard seam at the zenith ring) — a canvas 180° un-rotates it.
+    const loader = new THREE.ImageLoader();
+    const faces = await Promise.all(order.map(async (url, i) => {
+      const img = await loader.loadAsync(url);
+      if (SKY_FACES[i] !== 'py') return img;
+      const c = document.createElement('canvas');
+      c.width = img.width; c.height = img.height;
+      const ctx = c.getContext('2d')!;
+      ctx.translate(img.width, img.height);
+      ctx.rotate(Math.PI);
+      ctx.drawImage(img, 0, 0);
+      return c;
+    }));
+    const cube = new THREE.CubeTexture(faces);
+    cube.colorSpace = THREE.SRGBColorSpace;
+    cube.needsUpdate = true;
+    deps.lazyScene().background = cube;
     if (skyMesh) skyMesh.visible = false;
   } catch (e) {
     const src = (e as ProgressEvent)?.target as { src?: string } | undefined;
