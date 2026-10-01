@@ -162,12 +162,17 @@ export class TeamBots {
     }
   }
 
+  // Rebuilt each frame but never reallocated — one ~10-slot array of
+  // Vector3 refs per frame was steady GC churn for zero benefit.
+  private readonly othersScratch: THREE.Vector3[] = [];
+
   /** Per-frame: brains, fire resolution, respawns, win check. */
   update(dt: number): void {
     const player = deps0(this).lazyPlayer();
     // Separation sense — every live body the steerer should keep space
     // from. A bot's own position reads as dist 0 and is skipped inside.
-    const others: THREE.Vector3[] = [];
+    const others = this.othersScratch;
+    others.length = 0;
     for (const b of this.bots) if (!b.isDead) others.push(b.position);
     others.push(player.pos);
     this.tickBots(dt, others);
@@ -229,6 +234,11 @@ export class TeamBots {
     const foes = this.senses.enemyList(bot);
     const shot = bot.think(acc, this.ctxFor(bot, foes, others, terrain));
     if (this.over) { this.sheep.tick(bot, acc, terrain); return; }
+    this.afterThink(bot, shot, acc, foes, terrain);
+  }
+
+  private afterThink(bot: GameBot, shot: ReturnType<GameBot['think']>, acc: number,
+    foes: Parameters<GameBot['think']>[1]['enemies'], terrain: Terrain): void {
     if (shot) this.fire.resolveShot(bot, shot.targetId, shot.aim);
     // Belt + propel are real-spawn actions — offline only, same gate
     // as resolveShot (a connected room's wire remotes can't attribute).
