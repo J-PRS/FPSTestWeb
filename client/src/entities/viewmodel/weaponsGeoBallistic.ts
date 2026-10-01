@@ -498,38 +498,92 @@ return rpg;
 
 // Weapon 28 — MRV launcher: the mortar's counterpart, so it should read
 // "many shells" not "one bore". A fat ROTARY DRUM (revolver cylinder —
-// the volley tell) under a short stubby tube; no bipod — it's shoulder
-// fire, not crew-served. Drum holes show the loaded rounds.
+// the volley tell) with GLOWING shell noses in the chamber windows,
+// perforated barrel shroud, slotted muzzle brake, skeletal stock.
+// Shoulder-fired crew ordnance — beefier than the GL, meaner than the
+// mortar since it never asks you to work for the punch.
 export function mkMrv(): THREE.Group {
 const mrv = new THREE.Group();
-mrv.add(mkTube(0.13, 0.12, 0.34, -0.18, bodyMat));      // stubby barrel
-mrv.add(mkBore(0.105, -0.356));
-mrv.add(mkTube(0.145, 0.15, 0.06, -0.36, darkMat));     // muzzle ring
-// Rotary drum — the cluster-shell magazine IS the silhouette.
-const drum = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.2, 10), darkMat);
+// Barrel core — short, fat; the shroud does the visual work
+mrv.add(mkTube(0.115, 0.105, 0.36, -0.2, bodyMat));
+mrv.add(mkBore(0.095, -0.386));
+// Perforated shroud — three ring bands over a vented body: the "swiss
+// cheese" launcher read JP keeps coming back to
+for (const z of [-0.34, -0.22, -0.1]) {
+  mrv.add(mkTube(0.148, 0.148, 0.045, z, darkMat));
+}
+for (let i = 0; i < 8; i++) {
+  const a = (i / 8) * Math.PI * 2;
+  const rib = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.035, 0.3), darkMat);
+  rib.position.set(Math.cos(a) * 0.135, Math.sin(a) * 0.135, -0.22);
+  rib.rotation.z = a + Math.PI / 2;
+  mrv.add(rib);
+}
+// Slotted muzzle brake — three fat ports per side, directional vents
+const brake = mkTube(0.155, 0.14, 0.09, -0.4, darkMat);
+mrv.add(brake);
+for (const side of [-1, 1]) {
+  for (let i = 0; i < 3; i++) {
+    const port = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.035, 0.02), boreMat);
+    port.position.set(side * 0.13, 0.01 - i * 0.045, -0.4);
+    port.rotation.z = side * 0.3;
+    mrv.add(port);
+  }
+}
+// Rotary drum — the cluster-shell magazine IS the silhouette
+const drum = new THREE.Mesh(new THREE.CylinderGeometry(0.145, 0.145, 0.2, 12), darkMat);
 drum.rotation.x = Math.PI / 2;
-drum.position.set(0, -0.05, 0.06);
+drum.position.set(0, -0.05, 0.08);
 mrv.add(drum);
-// Chamber bores around the drum face — visible rounds = the MRV read
+// Drum face rings — machined flange detail front and back
+for (const z of [-0.02, 0.18]) {
+  const flange = new THREE.Mesh(new THREE.TorusGeometry(0.145, 0.015, 8, 16), bodyMat);
+  flange.position.set(0, -0.05, z);
+  mrv.add(flange);
+}
+// Chamber windows + glowing shell noses — the volley is visibly LOADED
+const shellTipMat = new THREE.MeshLambertMaterial({ color: 0xff5518, emissive: 0x992200 });
 for (let i = 0; i < 6; i++) {
   const a = (i / 6) * Math.PI * 2;
-  const hole = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.205, 8), boreMat);
+  const cx = Math.cos(a) * 0.1, cy = -0.05 + Math.sin(a) * 0.1;
+  const hole = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.032, 0.205, 8), boreMat);
   hole.rotation.x = Math.PI / 2;
-  hole.position.set(Math.cos(a) * 0.095, -0.05 + Math.sin(a) * 0.095, 0.06);
+  hole.position.set(cx, cy, 0.08);
   mrv.add(hole);
+  const tip = new THREE.Mesh(new THREE.SphereGeometry(0.022, 8, 6), shellTipMat);
+  tip.position.set(cx, cy, -0.01);
+  mrv.add(tip);
 }
-mrv.add(mkTube(0.09, 0.11, 0.16, 0.24, bodyMat));       // receiver behind the drum
+// Rear receiver + skeletal stock — twin rails to a slim butt pad
+mrv.add(mkTube(0.1, 0.12, 0.16, 0.26, bodyMat));
+for (const side of [-1, 1]) {
+  const strut = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.04, 0.2), darkMat);
+  strut.position.set(side * 0.05, -0.03, 0.4);
+  mrv.add(strut);
+}
+const pad = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.12, 0.03), darkMat);
+pad.position.set(0, -0.02, 0.51);
+mrv.add(pad);
+// Grip + trigger guard
 const mrvGrip = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.15, 0.07), darkMat);
-mrvGrip.position.set(0, -0.16, 0.22);
+mrvGrip.position.set(0, -0.17, 0.24);
 mrvGrip.rotation.x = 0.3;
 mrv.add(mrvGrip);
-// Loading rail on top — drum-fed weapons run a feed guide, not a sight rail
-const rail = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.03, 0.3), darkMat);
-rail.position.set(0, 0.16, -0.08);
+const guard = new THREE.Mesh(new THREE.TorusGeometry(0.045, 0.008, 6, 10, Math.PI), darkMat);
+guard.position.set(0, -0.12, 0.17);
+guard.rotation.x = Math.PI / 2;
+guard.rotation.z = Math.PI;
+mrv.add(guard);
+// Top feed rail + ring sight — drum-fed reads as a guide, not a scope rail
+const rail = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.03, 0.3), darkMat);
+rail.position.set(0, 0.165, -0.08);
 mrv.add(rail);
-const mrvSight = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.06, 0.025), darkMat);
-mrvSight.position.set(0, 0.2, -0.2);
-mrv.add(mrvSight);
+const sight = new THREE.Mesh(new THREE.TorusGeometry(0.035, 0.008, 6, 12), darkMat);
+sight.position.set(0, 0.22, -0.24);
+mrv.add(sight);
+const sightPost = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.03, 0.008), shellTipMat);
+sightPost.position.set(0, 0.215, -0.24);
+mrv.add(sightPost);
 mrv.visible = false;
 return mrv;
 }
