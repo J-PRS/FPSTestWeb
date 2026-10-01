@@ -65,6 +65,7 @@ export class Debris {
   private static readonly GHOST_LIFE = 0.15;
   private static readonly GHOST_GROW = 1.6;
   private static ghostPool: { mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial }[] = [];
+  private static readonly GHOST_POOL_KEEP = 16;
 
   readonly ox: number; readonly oy: number; readonly oz: number;
 
@@ -129,6 +130,7 @@ export class Debris {
   // a 9-11ms spike under throttle. Buckets pool like shardPool above:
   // capacity persists, count/free reset between Debris instances.
   private static instPool: Map<number, THREE.InstancedMesh[]> = new Map();
+  private static readonly INST_POOL_KEEP = 8;
 
   /** Bucket capacity is fixed at InstancedMesh construction — a bucket
    *  pooled by a 14-shard kill would silently drop slots 15+ for a
@@ -241,7 +243,8 @@ export class Debris {
       if (t >= 1) {
         this.scene.remove(this.ghost);
         this.ghost.geometry.dispose();
-        Debris.ghostPool.push({ mesh: this.ghost, mat: this.ghostMat });
+        if (Debris.ghostPool.length < Debris.GHOST_POOL_KEEP) Debris.ghostPool.push({ mesh: this.ghost, mat: this.ghostMat });
+        else this.ghostMat.dispose();
         this.ghost = null; this.ghostMat = null;
       }
     }
@@ -310,7 +313,9 @@ export class Debris {
 
   // Shared free-list — shard mesh+material outlive the Debris instance;
   // random geometries are still per-shard and disposed at release.
+  // Storage keep-floor, not a usage cap: live shards never touch this.
   private static shardPool: { mesh: THREE.Mesh; mat: THREE.MeshLambertMaterial }[] = [];
+  private static readonly SHARD_POOL_KEEP = 64;
 
   /** Mesh+mat pooled — a kill used to allocate ~20 materials. The
    *  pooled mesh's old random geo was already disposed on release,
@@ -331,7 +336,8 @@ export class Debris {
     if (s.mesh && s.mat) {
       this.scene.remove(s.mesh);
       if (!s.sharedGeo) s.mesh.geometry.dispose();
-      Debris.shardPool.push({ mesh: s.mesh, mat: s.mat });
+      if (Debris.shardPool.length < Debris.SHARD_POOL_KEEP) Debris.shardPool.push({ mesh: s.mesh, mat: s.mat });
+      else s.mat.dispose();
     } else {
       const b = this.insts[s.inst];
       if (b) {
@@ -348,7 +354,8 @@ export class Debris {
     if (this.ghost && this.ghostMat) {
       this.scene.remove(this.ghost);
       this.ghost.geometry.dispose();
-      Debris.ghostPool.push({ mesh: this.ghost, mat: this.ghostMat });
+      if (Debris.ghostPool.length < Debris.GHOST_POOL_KEEP) Debris.ghostPool.push({ mesh: this.ghost, mat: this.ghostMat });
+      else this.ghostMat.dispose();
       this.ghost = null; this.ghostMat = null;
     }
     for (const s of this.shards) {
@@ -357,9 +364,10 @@ export class Debris {
     for (const b of this.insts) {
       if (!b) continue;
       this.scene.remove(b.mesh);
-      let pool = Debris.instPool.get(this.insts.indexOf(b));
+      const pool = Debris.instPool.get(this.insts.indexOf(b));
       if (!pool) Debris.instPool.set(this.insts.indexOf(b), pool = []);
-      pool.push(b.mesh);
+      if (pool.length < Debris.INST_POOL_KEEP) pool.push(b.mesh);
+      else b.mesh.dispose();
     }
     this.insts = [];
   }
