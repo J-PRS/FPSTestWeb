@@ -1,3 +1,7 @@
+2026-10-01 - Escalade skybox: real T2 faces (sky_lush_blue.dml) replace the botched cuts; SKY_VFLIP emptied (was inverting every map px)
+2026-10-01 - vfx trails: paused systems exempt from starve-reap (trails died ~4s past 180m); reset emissionState travel history on pooled trail restart (no stale streak); attached-set cleanup on reap
+2026-10-01 - Net smoothness: cadence-scaled interp delay + fast EMA on tier change + far-tier send rate 500ms->200ms (fixes far-remote mini-warps on bodies and HUD markers)
+2026-10-01 - katabatic: real .mis import — 29 interior placements (11 snow difs->glb), teamSpawns spheres w/ weights, arena, _assets (generators/inv/turrets/pads) via _tools/mapgen/mis2spec.py
 2026-10-01 - tests: BotSenses (hostility gates, noises, incoming, creature lanes)
 2026-10-01 - tests: FragMessages escaping/tiers + shotFeed cap; DOM stub gains prepend/remove/_all
 2026-10-01 - tests: blastForce (self-vs-enemy splash, shield soak, stamps, remotes/balls/nuggets)

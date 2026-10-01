@@ -28,7 +28,7 @@ def rot90(img, w, h, k):  # k quarters CCW
             else: nx, ny = h-1-y, x
             s = (y*w+x)*4; t = (ny*(h if k%2 else w)+nx)*4
             out[t:t+4] = img[s:s+4]
-    return (h, w) if k % 2 else (w, h), out
+    return (h, w, out) if k % 2 else (w, h, out)
 
 # GL cube adjacency: for each face, which neighbor touches each edge, and
 # in which direction the edge runs (for texel-wise compare).
@@ -44,7 +44,7 @@ ADJA = [
   ('nz','T','py','T',False),('nz','R','nx','L',False),('nz','B','ny','B',False),('nz','L','px','R',False),
 ]
 
-def edge(img, w, h, e):
+def edge(w, h, img, e):
     if e == 'T': return [px(img, x, 0, w) for x in range(w)]
     if e == 'B': return [px(img, x, h-1, w) for x in range(w)]
     if e == 'L': return [px(img, 0, y, w) for y in range(h)]
@@ -75,7 +75,7 @@ def edge_report(names):
     edges = {}
     for f, (w, h, img) in names.items():
         for e in 'TRBL':
-            edges[(f, e)] = edge(img, w, h, e)
+            edges[(f, e)] = edge(w, h, img, e)
     print('edge -> best matches (mean|diff|/255, lower = tighter seam)')
     for f in names:
         for e in 'TRBL':

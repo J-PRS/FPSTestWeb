@@ -313,10 +313,11 @@ async function applyTerrain(ctx: NetCtx, file: string | null, texPath?: string, 
 
 // Exports are GL-layout (verified by _tools/tershot/seamcheck.py: py's
 // four edges match all four side tops, side ring pairs at ~1 error).
-// Sole export defect: px is written upside-down — its bottom edge matches
-// the up face while every sibling matches via its top. Flip it on canvas.
+// The authentic T2 faces (sky_lush_blue.dml -> desert/skies/d?2.png) are
+// already GL-convention; SKY_VFLIP stays as the escape hatch for exports
+// that ship a face upside-down.
 const SKY_FACES = ['px', 'nx', 'py', 'ny', 'pz', 'nz'] as const;
-const SKY_VFLIP = new Set(['px']);
+const SKY_VFLIP = new Set<string>();
 
 /** A missing face must not kill the terrain swap — loader rejections
  *  are ProgressEvents, which used to surface as "undefined" here. */
