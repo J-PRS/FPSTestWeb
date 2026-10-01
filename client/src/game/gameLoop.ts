@@ -14,6 +14,7 @@ import type { AmbientParticles } from '../effects/ambientParticles.js';
 import type { GroundMist } from '../effects/groundMist.js';
 import type { AmbientBirds } from '../effects/birds.js';
 import { screenShake } from '../effects/screenShake.js';
+import { Explosion } from '../effects/explosion.js';
 import { updateVfx } from '../effects/vfx.js';
 import * as sfxAudio from '../core/sfx/world.js';
 
@@ -480,7 +481,13 @@ function maybeWarmShaders(deps: GameLoopDeps, st: LoopState): void {
   if (!deps.sceneSetup.scene.getObjectByName('__t2interiors') && st.warmN <= 600) return;
   st.warmed = true;
   deps.rendererSetup.warmup();
+  // One underground blast fills the burst-spec freelists, so the first
+  // real explosion restarts pooled systems instead of paying cold
+  // ParticleSystem builds mid-fight. 500m down it never renders.
+  deps.world.explosions.push(new Explosion(deps.sceneSetup.scene, _prewarmPos, false, 0, deps.lazyTerrain(), 1));
 }
+
+const _prewarmPos = new THREE.Vector3(0, -500, 0);
 
 // FPS cap: skip only the render call — sim/input stay full-rate.
 // Carry leftover time so the cap hits its target rate, not stutters.

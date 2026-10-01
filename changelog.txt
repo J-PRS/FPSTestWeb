@@ -1,3 +1,4 @@
+2026-10-01 - vfx: prewarm burst pools at shader-warmup time — one underground Explosion fills the common spec buckets so the first real blast restarts warm
 2026-10-01 - vfx: cold burst builds always enqueue (drain 1/frame, cap 12) — warm restarts bypass; queue peek via pool non-empty
 2026-10-01 - demo: remote-sample buffer reused between 20Hz calls (was ~160 allocs/s of throwaway structs — recorder churn now ~0)
 2026-10-01 - vfx: parked pooled systems exempt from starve-reaping (was disposing them each pass — pool never filled); blast key drops count/gVar and quantizes floats
