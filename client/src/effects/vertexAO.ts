@@ -28,6 +28,49 @@ const RAYS = 16;             // hemisphere samples per vertex — enough for sof
 const RAY_DIST_SCALE = 0.18; // occlusion range = bbox radius × this (crevice scale)
 const EPS = 0.004;           // origin nudge off the surface to avoid self-hit
 const MIN_LIGHT = 0.25;      // floor — deepest crevice never hits full black
+// Curvature gain: 1-dot(n_v, n_face) on a 90° dihedral is ~0.29 — scale
+// so ~90°+ edges saturate the wear mask.
+const WEAR_GAIN = 3.5;
+const _fa = new THREE.Vector3();
+const _fb = new THREE.Vector3();
+const _fc = new THREE.Vector3();
+
+/** Per-vertex convexity bake — Substance's curvature input, at vertex res.
+ *  Vertex normals on a hard edge diverge from the flat face normals of
+ *  their incident triangles; flat-shaded plates stay at ~0. Concave
+ *  edges score too, but the shader gates wear by AO exposure, so crevices
+ *  stay dark and only sun-facing edges whiten — the reverse-weighting
+ *  trick (wear = convexity AND unoccluded). */
+function bakeWear(geo: THREE.BufferGeometry): void {
+  const pos = geo.attributes.position as THREE.BufferAttribute;
+  const nor = geo.attributes.normal as THREE.BufferAttribute;
+  if (!pos || !nor) return;
+  const count = pos.count;
+  const idx = geo.index;
+  const triCount = idx ? idx.count / 3 : count / 3;
+  const acc = new Float32Array(count);
+  const cnt = new Uint16Array(count);
+  for (let t = 0; t < triCount; t++) {
+    const ia = idx ? idx.getX(t * 3) : t * 3;
+    const ib = idx ? idx.getX(t * 3 + 1) : t * 3 + 1;
+    const ic = idx ? idx.getX(t * 3 + 2) : t * 3 + 2;
+    _fa.fromBufferAttribute(pos, ia);
+    _fb.fromBufferAttribute(pos, ib);
+    _fc.fromBufferAttribute(pos, ic);
+    _fb.sub(_fa); _fc.sub(_fa);
+    _fa.crossVectors(_fb, _fc).normalize(); // flat face normal
+    for (const vi of [ia, ib, ic]) {
+      _n.fromBufferAttribute(nor, vi);
+      acc[vi] += Math.max(0, 1 - _n.dot(_fa));
+      cnt[vi]++;
+    }
+  }
+  const wear = new Float32Array(count);
+  for (let i = 0; i < count; i++) {
+    wear[i] = cnt[i] ? Math.min(1, (acc[i]! / cnt[i]!) * WEAR_GAIN) : 0;
+  }
+  geo.setAttribute('wear', new THREE.BufferAttribute(wear, 1));
+}
 
 // Uniform-ish hemisphere dirs (Fibonacci sphere upper half, bent to normal)
 function bakeMesh(mesh: THREE.Mesh, occluder: THREE.Mesh, rayDist: number): void {
@@ -69,6 +112,7 @@ function bakeMesh(mesh: THREE.Mesh, occluder: THREE.Mesh, rayDist: number): void
     colors[i * 3 + 2] = ao;
   }
   geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  bakeWear(geo);
 }
 
 /** Bake vertex AO into every mesh of a group. Call after the group's local
@@ -113,11 +157,12 @@ function enhanceWeaponMaterial(mat: THREE.Material): void {
   mat.userData.__grunge = true;
   mat.onBeforeCompile = (sh) => {
     sh.vertexShader = sh.vertexShader
-      .replace('#include <common>', '#include <common>\nvarying vec3 vWpos;')
-      .replace('#include <fog_vertex>', '#include <fog_vertex>\nvWpos = (modelMatrix * vec4(position, 1.0)).xyz;');
+      .replace('#include <common>', '#include <common>\nvarying vec3 vWpos;\nattribute float wear;\nvarying float vWear;')
+      .replace('#include <fog_vertex>', '#include <fog_vertex>\nvWpos = (modelMatrix * vec4(position, 1.0)).xyz;\nvWear = wear;');
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>
 varying vec3 vWpos;
+varying float vWear;
 float whash(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
 float wnoise(vec3 p) {
   vec3 i = floor(p), f = fract(p);
@@ -134,10 +179,11 @@ float wfbm(vec3 p) { return 0.5 * wnoise(p) + 0.25 * wnoise(p * 2.17) + 0.125 * 
   float g = wfbm(vWpos * 35.0);
   diffuseColor.rgb *= 0.92 + 0.14 * g;
 
-  // Screen-space curvature: fwidth of the normal spikes on hard edges and
-  // plate rims — the true "edge wear" signal, vs noise which is uniform.
+  // Edge wear = baked vertex convexity (the curvature map) refined by
+  // screen-space normal gradient — the bake catches flat-shaded plates
+  // where fwidth(vNormal) reads ~0, fwidth catches intra-triangle detail.
   float curv = length(fwidth(normalize(vNormal)));
-  float edge = smoothstep(0.35, 1.2, curv);
+  float edge = max(smoothstep(0.35, 1.2, curv), smoothstep(0.3, 0.75, vWear));
 
   // Patchy mask so wear clumps in zones like real abrasion, gated to
   // well-lit (unoccluded) faces — crevices don't wear bright.
