@@ -303,17 +303,27 @@ function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlayb
 
   // Recording source: every remote player the world knows about. Bot
   // entries ('bot:'-prefixed) ride along too — they're in the same map.
+  // The sample buffer + objects are reused between calls — the recorder
+  // consumes them synchronously, and ~160 allocs/s of throwaway structs
+  // was the recorder's last GC churn.
+  const remoteSampleBuf: RemoteSample[] = [];
   demoManager.setRemoteSource(() => {
-    const out: RemoteSample[] = [];
+    const out = remoteSampleBuf;
+    let i = 0;
     for (const [id, rp] of d.world.remotePlayers) {
-      out.push({
-        id,
-        posX: rp.position.x, posY: rp.position.y, posZ: rp.position.z,
-        velX: rp.vel.x, velY: rp.vel.y, velZ: rp.vel.z,
-        yaw: rp.rotation.yaw, pitch: rp.rotation.pitch,
-        dead: rp.isDead, ski: false,
-      });
+      let s = out[i];
+      if (!s) {
+        s = { id: '', posX: 0, posY: 0, posZ: 0, velX: 0, velY: 0, velZ: 0, yaw: 0, pitch: 0, dead: false, ski: false };
+        out[i] = s;
+      }
+      s.id = id;
+      s.posX = rp.position.x; s.posY = rp.position.y; s.posZ = rp.position.z;
+      s.velX = rp.vel.x; s.velY = rp.vel.y; s.velZ = rp.vel.z;
+      s.yaw = rp.rotation.yaw; s.pitch = rp.rotation.pitch;
+      s.dead = rp.isDead; s.ski = false;
+      i++;
     }
+    out.length = i;
     return out;
   });
 }

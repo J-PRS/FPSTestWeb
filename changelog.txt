@@ -1,3 +1,4 @@
+2026-10-01 - demo: remote-sample buffer reused between 20Hz calls (was ~160 allocs/s of throwaway structs — recorder churn now ~0)
 2026-10-01 - vfx: parked pooled systems exempt from starve-reaping (was disposing them each pass — pool never filled); blast key drops count/gVar and quantizes floats
 2026-10-01 - vfx: QuarksTrail pooled by config key — per-shot trail systems park attached on dispose and restart on reuse
 2026-10-01 - vfx: pooled systems stay attached to batcher when dead (attachSystem WeakSet) — reuse pays restart() only, no buffer rebuy
