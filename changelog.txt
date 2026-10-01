@@ -1,3 +1,4 @@
+2026-10-01 - Weak-GPU first-run detection: probe UNMASKED_RENDERER_WEBGL at boot; SwiftShader/llvmpipe/Intel iGPU/Mali/old Adreno with no stored picks seeds fps-pixelated=1 + shadows off (chromebooks start on the low tier, explicit picks always win)
 2026-10-01 - Perf dump now reports UNMASKED_RENDERER_WEBGL + devicePixelRatio + canvas res — next LOW-FPS dump identifies SwiftShader/wrong-GPU without a chrome://gpu detour
 2026-10-01 - Auto-quality sheds bloom/post-process passes at gpu level >=4 — full-screen mip-blur chain was the last fill cost left on starving GPUs (restores on recovery)
 2026-10-01 - Remote skinned LOD tightens to 70m with hysteresis (55m swap-back) — far mannequins drop ~80% tris; mats atlas lint cleanup

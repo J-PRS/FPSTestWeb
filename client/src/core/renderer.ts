@@ -45,6 +45,28 @@ const PIXEL_LABELS = ['PIXELATION: OFF', 'PIXELATION: HARD', 'PIXELATION: MEDIUM
   'PIXELATION: SMOOTH', 'PIXELATION: DITHERED', 'PIXELATION: FLOYD'];
 const pixelLabel = (m: number): string => PIXEL_LABELS[m] ?? PIXEL_LABELS[0]!;
 
+// Potato first-run: no stored pixel/shadow picks + a weak GL renderer →
+// start on the low tier instead of laddering down through 10s of 4fps.
+// Explicit user picks (any stored key) always win.
+const WEAK_GL = /swiftshader|llvmpipe|software|intel.*(hd|uhd)\s?graphics|mali|adreno\s?[0-5]|videocore/i;
+function detectWeakGpu(): boolean {
+  try {
+    const c = document.createElement('canvas');
+    const gl = (c.getContext('webgl2') ?? c.getContext('webgl')) as WebGLRenderingContext | null;
+    if (!gl) return true; // no GL at all — deepest tier either way
+    const ext = gl.getExtension('WEBGL_debug_renderer_info');
+    const r = String(ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : '');
+    gl.getExtension('WEBGL_lose_context')?.loseContext();
+    return WEAK_GL.test(r);
+  } catch { return false; }
+}
+function seedPotatoDefaults(): void {
+  if (localStorage.getItem('fps-pixelated') !== null || localStorage.getItem('fps-shadows') !== null) return;
+  if (!detectWeakGpu()) return;
+  settings.set('fps-pixelated', 1);
+  settings.set('fps-shadows', false);
+}
+
 // Pixel mode: 0 = off, 1 = hard 4x4, 2 = medium 2x2, 3 = xBR-smooth
 // upscale, 4 = hard + Bayer-ordered dither (composer path),
 // 5 = true CPU Floyd-Steinberg on the low-res buffer
@@ -399,6 +421,7 @@ function wireToggleButtons(modes: RenderModes, onPx: () => void, onBm: () => voi
 }
 
 export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Scene): RendererSetup {
+  seedPotatoDefaults();
   const modes = resolveModes();
   let pixelMode = modes.pixelMode;
   let postproEnabled = modes.postproEnabled;
