@@ -14,6 +14,7 @@ import type { PickupKind } from '../../shared/pickups.ts';
 import { isPerkId } from '../../shared/perks.ts';
 import { CLASS_STATS } from '../../shared/botClasses.ts';
 import type { ArmorClass } from '../../shared/botClasses.ts';
+import type { TeamId } from '../../shared/teams.ts';
 
 type BroadcastFn = (msg: ServerMessage, excludePlayerId?: string) => void;
 type SendToPlayerFn = (playerId: string, msg: ServerMessage) => void;
@@ -35,7 +36,7 @@ export interface RoomInfo {
   bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } };
   /** Static structures from the map spec — echoed on gameState so every
    *  client builds the same base compounds/cover. */
-  structures?: { kind: 'box' | 'wall' | 'pillar' | 'ramp'; pos: { x: number; y: number; z: number }; size: { x: number; y: number; z: number }; rotY?: number; team?: 'alpha' | 'bravo' }[];
+  structures?: { kind: 'box' | 'wall' | 'pillar' | 'ramp'; pos: { x: number; y: number; z: number }; size: { x: number; y: number; z: number }; rotY?: number; team?: TeamId }[];
   /** Arena dome from the map spec — center {x,z} + radius. */
   arena?: { x: number; z: number; radius: number };
   /** Ambient species population overrides from the map spec. */
@@ -58,7 +59,7 @@ export interface RoomInfo {
   /** FFA scoreboard supplier for gameState joins — Room.ffaScores. */
   ffaScores?: () => Record<string, number>;
   /** Flag snapshot supplier for gameState joins — RoomFlags.snapshot. */
-  flags?: () => { team: 'alpha' | 'bravo'; pos: Vec3; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[];
+  flags?: () => { team: TeamId; pos: Vec3; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[];
   /** Live pickups for gameState joins — RoomPickups.snapshot. */
   pickups?: () => { id: number; pos: Vec3; kind: PickupKind }[];
   /** Match-clock deadline (epoch ms) for gameState joins — Room.matchEndsAt.

@@ -10,7 +10,7 @@ import { ENERGY } from '../../../shared/movement.js';
 import type { StructureSpec } from '../../../shared/mapSpec.js';
 import { TEAM_COLORS, type TeamId } from '../../../shared/teams.js';
 import { BotBrain, BOT_EYE } from '../../../shared/botBrain.js';
-import { CLASS_STATS } from '../../../shared/botClasses.js';
+import { CLASS_STATS, type ArmorClass } from '../../../shared/botClasses.js';
 import { BOT_LOADOUTS, pickBotWeapon } from '../../../shared/botLoadouts.js';
 import { getWeaponStats } from '../../../shared/weapons.js';
 import { STATUS } from '../../../shared/status.js';
@@ -42,7 +42,7 @@ export class GameBot extends RemotePlayer {
   botHp = BOT_HP;
   /** Armor tier — speedScale feeds the shared MoveSim so heavy/light
    *  ground speed changes land exactly as the server computes them. */
-  armorClass: 'light' | 'medium' | 'heavy' = 'medium';
+  armorClass: ArmorClass = 'medium';
   botMaxHp = BOT_HP;
   /** Loadout perk modifiers — the same table the server multiplies
    *  through CombatHandler/GameServer. 'none' until setLoadout runs. */
@@ -55,7 +55,7 @@ export class GameBot extends RemotePlayer {
     this.perkHealthBonus = this.mods.maxHealth;
     this.recalcMaxHp();
   }
-  setBotClass(cls: 'light' | 'medium' | 'heavy'): void {
+  setBotClass(cls: ArmorClass): void {
     this.armorClass = cls;
     const st = CLASS_STATS[cls];
     this.movement.setSpeedScale(st.speedScale);
@@ -123,7 +123,7 @@ export class GameBot extends RemotePlayer {
   get grounded(): boolean { return this.moveState.onGround; }
 
   constructor(scene: THREE.Scene, name: string, team: TeamId | 'ffa', spawn: THREE.Vector3, terrain: Terrain,
-              cls: 'light' | 'medium' | 'heavy' = 'medium') {
+              cls: ArmorClass = 'medium') {
     // Class must ride super() — the model variant (knight for heavy) is
     // picked inside the RemotePlayer ctor before setBotClass could speak.
     super(scene, `bot:${name}`, { x: spawn.x, y: spawn.y, z: spawn.z }, terrain, cls);

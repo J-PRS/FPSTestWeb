@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import type { NetCtx } from './ctx.js';
 import * as sfx from '../../core/sfx.js';
 import { Explosion } from '../../effects/explosion.js';
-import { TEAM_COLORS } from '../../../../shared/teams.js';
+import { TEAM_COLORS, type TeamId } from '../../../../shared/teams.js';
 
 const _flagMarker = new THREE.Vector3();
 const _burstPos = new THREE.Vector3();
@@ -18,7 +18,7 @@ export function wireFlags(ctx: NetCtx): void {
   // which is smoother than any wire rate anyway.
   const flagMeshes = new Map<string, THREE.Group>();
   const flagCarriers = new Map<string, string>();
-  const ensureFlagMesh = (team: 'alpha' | 'bravo'): THREE.Group => {
+  const ensureFlagMesh = (team: TeamId): THREE.Group => {
     let g = flagMeshes.get(team);
     if (g) return g;
     g = new THREE.Group();
@@ -59,12 +59,12 @@ export function wireFlags(ctx: NetCtx): void {
   // Team-colored blast where the flag just changed hands — the grab pop,
   // the drop puff, and the big capture detonation read instantly without
   // watching the killfeed.
-  const burst = (f: { team: 'alpha' | 'bravo'; pos: { x: number; y: number; z: number } }, scale: number) => {
+  const burst = (f: { team: TeamId; pos: { x: number; y: number; z: number } }, scale: number) => {
     deps.world.explosions.push(new Explosion(
       deps.lazyScene(), _burstPos.set(f.pos.x, f.pos.y + 1.2, f.pos.z),
       false, 0, deps.lazyTerrain(), scale, TEAM_COLORS[f.team]));
   };
-  const callout = (f: { team: 'alpha' | 'bravo'; state: string; carrier: string | null; pos: { x: number; y: number; z: number } }) => {
+  const callout = (f: { team: TeamId; state: string; carrier: string | null; pos: { x: number; y: number; z: number } }) => {
     const prev = prevState.get(f.team);
     prevState.set(f.team, f.state);
     if (prev === f.state || prev === undefined) return;
@@ -90,7 +90,7 @@ export function wireFlags(ctx: NetCtx): void {
   };
   /** Home transition: carried→home = capture, dropped→home = return. */
   const homeCallout = (
-    f: { team: 'alpha' | 'bravo'; pos: { x: number; y: number; z: number } },
+    f: { team: TeamId; pos: { x: number; y: number; z: number } },
     prev: string | undefined, mine: boolean,
     frag: { show(t: string): void },
     log: (t: string) => void,
@@ -108,13 +108,13 @@ export function wireFlags(ctx: NetCtx): void {
     // flags) tears the meshes and HUD diamonds down.
     const live = new Set(flags.map(f => f.team));
     for (const team of flagMeshes.keys()) { // Map delete-during-iterate is safe
-      if (live.has(team as 'alpha' | 'bravo')) continue;
+      if (live.has(team as TeamId)) continue;
       deps.lazyScene().remove(flagMeshes.get(team)!);
       flagMeshes.delete(team);
       flagCarriers.delete(team);
       prevState.delete(team);
       deps.lazyHud().removePlayerIndicator(`flag:${team}`);
-      delete deps.world.flagStates[team as 'alpha' | 'bravo'];
+      delete deps.world.flagStates[team as TeamId];
     }
     for (const f of flags) {
       callout(f);

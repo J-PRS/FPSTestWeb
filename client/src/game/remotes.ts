@@ -11,7 +11,7 @@ import type { NetworkManager } from '../networking/NetworkManager.js';
 import type { HealthBarSystem } from '../ui/HealthBarSystem.js';
 import type { HUD } from '../ui/hud.js';
 import type { WorldState } from './worldState.js';
-import { TEAM_COLORS } from '../../../shared/teams.js';
+import { TEAM_COLORS, type TeamId } from '../../../shared/teams.js';
 import * as sfxWorld from '../core/sfx/world.js';
 
 // Hostiles always read red — team colors are for your own side only.
@@ -195,7 +195,7 @@ function updateScoreboard(deps: RemotesDeps): void {
   const ffa = deps.world.ffaScores;
   const rows = [{ name: localId, frags: deps.world.killCounts.get(localId) ?? 0, score: ffa.get(localId) ?? null, ping: nm.getPing(), net: nm.getTransportTier() ?? null, self: true, dead: deps.lazyPlayer().isDead, team: deps.world.localTeam }];
   // net is string|null — 'bot' rows carry a label, not a transport tier.
-  const remoteRows: { name: string; frags: number; score: number | null; ping: number | null; net: string | null; self: boolean; dead: boolean; team?: 'alpha' | 'bravo'; sheep?: number | null }[] = [...nm.getPlayers().keys()]
+  const remoteRows: { name: string; frags: number; score: number | null; ping: number | null; net: string | null; self: boolean; dead: boolean; team?: TeamId; sheep?: number | null }[] = [...nm.getPlayers().keys()]
     .filter(id => id !== localId && isRemoteActive(deps, id, nm.getPlayers()))
     .map(id => {
       const ps = nm.getPlayers().get(id);

@@ -5,6 +5,7 @@
  */
 
 import type { ConnectionConfig } from './WebSocketConnection.js';
+import type { TransportKind } from '../../../shared/protocol.js';
 
 export interface GameTransport {
   connect(url?: string): void;
@@ -13,7 +14,7 @@ export interface GameTransport {
   disconnect(): void;
   /** Which netcode-v2 tier this transport is — reported in the join so
    *  /metrics shows the real deployment's transport mix. */
-  readonly tier?: 'wt' | 'rtc' | 'ws' | 'p2p' | 'host';
+  readonly tier?: TransportKind | 'p2p' | 'host';
 }
 
 export type TransportFactory = (config: ConnectionConfig) => GameTransport;

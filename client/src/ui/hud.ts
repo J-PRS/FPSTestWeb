@@ -9,6 +9,7 @@ import { HudStats } from './hud/hudStats.js';
 import * as ch from './hud/hudChrome.js';
 
 import { Player } from '../entities/Player.js';
+import type { TeamId } from '../../../shared/teams.js';
 
 const countSpan = (n: number) => `<span class="${n > 0 ? 'hot' : 'dim'}">${n}</span>`;
 
@@ -247,7 +248,7 @@ export class HUD {
   /** CTF flag marker — same through-terrain DOM overlay as player dots,
    *  styled as a team-colored diamond so it can't be mistaken for a player. */
   updateFlagIndicator(id: string, position: { x: number; y: number; z: number },
-                      camera: THREE.Camera, team: 'alpha' | 'bravo'): void {
+                      camera: THREE.Camera, team: TeamId): void {
     this.indicators.update(id, position, camera, { variant: `flag ${team}` });
   }
 

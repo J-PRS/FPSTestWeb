@@ -7,6 +7,7 @@ import { CLASS_STATS, type ArmorClass } from '../../../shared/botClasses.js';
 import { MAX_HEALTH } from '../core/config.js';
 import { SLOT_DEFS } from '../weapons.js';
 import { codeFor, codeLabel } from '../core/keybinds.js';
+import type { DeployKind } from '../../../shared/deployables.js';
 
 export interface LoadoutDeps {
   lazyPlayer: () => Player;
@@ -288,7 +289,7 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
      { v: 'station', label: 'Pad' },
      { v: 'drone', label: 'Drone' },
      { v: 'shield', label: 'Barrier' }],
-    (v) => deps.lazyPlayer().setPackItem(v as 'turret' | 'mine' | 'station' | 'drone' | 'shield'),
+    (v) => deps.lazyPlayer().setPackItem(v as DeployKind),
   );
   pack.cell.appendChild(ui.packDrop.el);
 

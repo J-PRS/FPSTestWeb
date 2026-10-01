@@ -14,6 +14,7 @@ import { getWeaponStats } from '../../shared/weapons.ts';
 import { BOT_LOADOUTS, pickBotWeapon, type BotLoadout } from '../../shared/botLoadouts.ts';
 import { WeaponType } from '../../shared/weapons.ts';
 import { roleObjective, type BotRole } from '../../shared/flagGoals.ts';
+import type { TeamId } from '../../shared/teams.ts';
 
 export class ServerBotSenses {
   constructor(
@@ -132,7 +133,7 @@ export class ServerBotSenses {
   flagGoal(p: { id: string; team?: string; position: Vec3 }): { pos: BotVec; infiltrating: boolean } | null {
     const flags = this.room.flags;
     if (!flags || !p.team) return null;
-    const me = p.team as 'alpha' | 'bravo';
+    const me = p.team as TeamId;
     const enemy = flags.flags.get(me === 'alpha' ? 'bravo' : 'alpha');
     const own = flags.flags.get(me);
     if (!enemy || !own) return null;
@@ -158,7 +159,7 @@ export class ServerBotSenses {
 
   /** A teammate carrying the enemy flag is the escort point — the
    *  carrier's position is already on the wire, no wallhack needed. */
-  private escortSpot(carrier: string | null | undefined, me: 'alpha' | 'bravo'): Vec3 | null {
+  private escortSpot(carrier: string | null | undefined, me: TeamId): Vec3 | null {
     const escortP = carrier ? this.room.players.getPlayer(carrier) : null;
     return escortP && escortP.team === me ? escortP.position : null;
   }

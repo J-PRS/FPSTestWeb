@@ -7,6 +7,7 @@ import type { PlayerInput } from './player/input.js';
 import type { PerkId } from '../../../shared/perks.js';
 import { CLASS_STATS, CLASS_MODEL_SCALE, type ArmorClass } from '../../../shared/botClasses.js';
 import type { BeltItem } from './Player.js';
+import type { DeployKind } from '../../../shared/deployables.js';
 
 /**
  * PlayerLoadout — the armory: class-tier banking, perk banking, weapon
@@ -24,7 +25,7 @@ export interface LoadoutHost {
   weaponIndex: number;
   beltItem: BeltItem;
   sidearm: 'pistol' | 'revolver' | 'shotgun' | 'repair';
-  packItem: 'turret' | 'mine' | 'station' | 'drone' | 'shield';
+  packItem: DeployKind;
   fireTimer: number;
   model: PlayerModel | null;
   movement: MovementController;
@@ -140,7 +141,7 @@ export class PlayerLoadout {
     this.h.sidearm = s;
     settings.set('fps-sidearm', s);
   }
-  setPackItem(p: 'turret' | 'mine' | 'station' | 'drone' | 'shield'): void {
+  setPackItem(p: DeployKind): void {
     this.h.packItem = p;
     settings.set('fps-pack', p);
   }

@@ -7,6 +7,7 @@ import { POWERUP } from '../../shared/pickups.ts';
 import { ENERGY } from '../../shared/movement.ts';
 import { SpawnPicker } from './spawnPicker.ts';
 
+import type { TeamId } from '../../shared/teams.ts';
 let internalIdCounter = 0;
 
 function nextInternalId(): string {
@@ -41,7 +42,7 @@ export class PlayerManager {
     groundAt: () => this.groundAt,
   });
 
-  addPlayer(playerId: string, team?: 'alpha' | 'bravo', perk: string = 'none', armorClass: string = 'medium'): PlayerState {
+  addPlayer(playerId: string, team?: TeamId, perk: string = 'none', armorClass: string = 'medium'): PlayerState {
     const spawn = this.spawnPicker.pick(playerId, team);
     const cls = armorClass === 'light' || armorClass === 'heavy' ? armorClass : 'medium';
     const maxHealth = CONFIG.playerMaxHealth + perkMods(perk).maxHealth + CLASS_STATS[cls].maxHealth;
@@ -114,7 +115,7 @@ export class PlayerManager {
   }
 
   /** Mid-match team swap — callers broadcast teamUpdate. */
-  setTeam(playerId: string, team: 'alpha' | 'bravo'): void {
+  setTeam(playerId: string, team: TeamId): void {
     const p = this.players.get(playerId);
     if (p) p.team = team;
   }

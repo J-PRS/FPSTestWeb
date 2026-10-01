@@ -13,6 +13,7 @@
  */
 import type { PickupKind } from './pickups.js';
 import type { DeployKind } from './deployables.js';
+import type { TeamId } from './teams.ts';
 export const PROTOCOL_VERSION = 11; // powerup pickup kinds + buff msg — stale clients' pickup tables would miss them
 
 export interface Vec3 {
@@ -20,6 +21,9 @@ export interface Vec3 {
   y: number;
   z: number;
 }
+
+/** Server↔client socket transports; client adds 'p2p'/'host' locally. */
+export type TransportKind = 'wt' | 'rtc' | 'ws';
 
 export interface Rotation {
   yaw: number;
@@ -108,12 +112,12 @@ export interface TickUpdatePlayer {
 export type ServerMessage =
   // room/mode: which match this state belongs to — set by the room's first
   // joiner, inherited by everyone after (join claims can't redefine it).
-  | { type: 'gameState'; players: GameStatePlayer[]; localPlayerState?: LocalPlayerState; sessionToken?: string; protocolVersion?: number; room?: string; mode?: string; team?: 'alpha' | 'bravo'; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number>; map?: { mode?: string; bases?: { alpha?: Vec3; bravo?: Vec3 }; structures?: { kind: 'box' | 'wall' | 'pillar' | 'ramp'; pos: Vec3; size: Vec3; rotY?: number; team?: 'alpha' | 'bravo' }[]; arena?: { x: number; z: number; radius: number }; ambient?: Record<string, number> }; flags?: { team: 'alpha' | 'bravo'; pos: Vec3; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]; pickups?: { id: number; pos: Vec3; kind?: PickupKind }[]; deployables?: { id: number; owner: string; kind: DeployKind; pos: Vec3; hp?: number; armor?: number; team?: string }[]; matchEndsAt?: number; respawnMs?: number }
-  | { type: 'playerJoined'; playerId: string; internalId: string; position: Vec3; rotation: Rotation; team?: 'alpha' | 'bravo'; transport?: 'wt' | 'rtc' | 'ws'; armorClass?: string }
+  | { type: 'gameState'; players: GameStatePlayer[]; localPlayerState?: LocalPlayerState; sessionToken?: string; protocolVersion?: number; room?: string; mode?: string; team?: TeamId; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number>; map?: { mode?: string; bases?: { alpha?: Vec3; bravo?: Vec3 }; structures?: { kind: 'box' | 'wall' | 'pillar' | 'ramp'; pos: Vec3; size: Vec3; rotY?: number; team?: TeamId }[]; arena?: { x: number; z: number; radius: number }; ambient?: Record<string, number> }; flags?: { team: TeamId; pos: Vec3; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]; pickups?: { id: number; pos: Vec3; kind?: PickupKind }[]; deployables?: { id: number; owner: string; kind: DeployKind; pos: Vec3; hp?: number; armor?: number; team?: string }[]; matchEndsAt?: number; respawnMs?: number }
+  | { type: 'playerJoined'; playerId: string; internalId: string; position: Vec3; rotation: Rotation; team?: TeamId; transport?: TransportKind; armorClass?: string }
   | { type: 'playerLeft'; playerId: string }
   // Team reassignment mid-match — team comes through playerJoined/gameState
   // otherwise; this is the only channel for a swap after join (bot rebalance).
-  | { type: 'teamUpdate'; playerId: string; team: 'alpha' | 'bravo' }
+  | { type: 'teamUpdate'; playerId: string; team: TeamId }
   // Server system line — renders unstyled (no "name:" prefix) in chat.
   | { type: 'matchNotice'; text: string }
   // seq lets a re-delivered event (reconnect replay, transport dup) be
@@ -167,11 +171,11 @@ export type ServerMessage =
   | { type: 'pong'; timestamp: number }
   | { type: 'chat'; playerId: string; text: string; team?: boolean; vgs?: string }
   // --- Match scoreboard (team-mode rooms) --------------------------------
-  | { type: 'flagUpdate'; flags: { team: 'alpha' | 'bravo'; pos: Vec3; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[] }
+  | { type: 'flagUpdate'; flags: { team: TeamId; pos: Vec3; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[] }
   // Server-owned pickups: creature kills drop a nugget gem; touching it
   // banks a team point — replaces trusting client 'bank' claims.
   | { type: 'pickupSpawn'; id: number; pos: Vec3; kind?: PickupKind }
-  | { type: 'deploySpawn'; id: number; owner: string; kind: DeployKind; pos: Vec3; team?: 'alpha' | 'bravo' }
+  | { type: 'deploySpawn'; id: number; owner: string; kind: DeployKind; pos: Vec3; team?: TeamId }
   | { type: 'deployGone'; id: number }
   // Durability sync — hp + overcharge armor riding whenever either moves.
   | { type: 'deployHp'; id: number; hp: number; armor: number }
@@ -200,11 +204,11 @@ export type ServerMessage =
   | { type: 'teamScore'; scores: { alpha: number; bravo: number }; winAt: number }
   | { type: 'ffaScore'; scores: Record<string, number>; winAt: number }
   | { type: 'ffaMatchEnd'; winner: string; scores: Record<string, number> }
-  | { type: 'matchEnd'; winner: 'alpha' | 'bravo' | 'draw'; scores: { alpha: number; bravo: number } }
+  | { type: 'matchEnd'; winner: TeamId | 'draw'; scores: { alpha: number; bravo: number } }
   | { type: 'matchStart'; mode: string; scores: { alpha: number; bravo: number } }
   // Admin hot-reload: the room's map spec changed — clients rebuild
   // structures/dome from this instead of re-joining for a gameState.
-  | { type: 'mapUpdate'; bases?: { alpha?: Vec3; bravo?: Vec3 }; structures?: { kind: 'box' | 'wall' | 'pillar' | 'ramp'; pos: Vec3; size: Vec3; rotY?: number; team?: 'alpha' | 'bravo' }[]; arena?: { x: number; z: number; radius: number } | null; ambient?: Record<string, number>; terrain?: string; terrainTex?: string; sky?: string; interiors?: { file: string; pos: Vec3; rot?: number[]; scale?: Vec3 }[] };
+  | { type: 'mapUpdate'; bases?: { alpha?: Vec3; bravo?: Vec3 }; structures?: { kind: 'box' | 'wall' | 'pillar' | 'ramp'; pos: Vec3; size: Vec3; rotY?: number; team?: TeamId }[]; arena?: { x: number; z: number; radius: number } | null; ambient?: Record<string, number>; terrain?: string; terrainTex?: string; sky?: string; interiors?: { file: string; pos: Vec3; rot?: number[]; scale?: Vec3 }[] };
 
 export interface GameStatePlayer {
   id: string;
@@ -216,9 +220,9 @@ export interface GameStatePlayer {
   health: number;
   status?: number;
   /** Team-mode rooms only — absent in free-for-all. */
-  team?: 'alpha' | 'bravo';
+  team?: TeamId;
   /** Netcode-v2 tier this client connected on — scoreboard NET column. */
-  transport?: 'wt' | 'rtc' | 'ws';
+  transport?: TransportKind;
   /** Armor tier — remote model renders bulkier (heavy) or slimmer (light). */
   armorClass?: string;
 }

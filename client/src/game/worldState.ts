@@ -8,6 +8,7 @@ import type { AoeGizmo } from '../effects/aoeGizmo.js';
 import { createProjectileRegistry, type ProjectileRegistry } from './projectileRegistry.js';
 import { RemoteSet } from './net/RemoteSet.js';
 import type { RemotePlayerState } from '../networking/NetworkManager.js';
+import type { TeamId } from '../../../shared/teams.js';
 
 /**
  * The shared mutable world: every entity collection the game modules
@@ -32,7 +33,7 @@ export interface WorldState {
   // Match meta from the wire — scoreboard needs mode/team/scores to group
   // rows; populated by netHandlers on gameState/teamScore/ffaScore.
   mode?: string;
-  localTeam?: 'alpha' | 'bravo';
+  localTeam?: TeamId;
   ffaScores: Map<string, number>;
   teamScores: { alpha: number; bravo: number } | null;
   /** Match-clock deadline (epoch ms) from gameState — HUD countdown. */

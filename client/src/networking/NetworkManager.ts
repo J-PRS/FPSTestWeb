@@ -1,13 +1,15 @@
 import { ChildLogger } from '../core/Logger.js';
 import { isWireFrame, encodePosition, decodeTickFrame, decodeBallSegment, WIRE_BALLSEG } from '../../../shared/wire.js';
-import type { ClientMessage, ServerMessage, TickUpdatePlayer, GameStatePlayer, LocalPlayerState, SnapshotPlayer } from '../../../shared/protocol.js';
+import type { ClientMessage, ServerMessage, TickUpdatePlayer, GameStatePlayer, LocalPlayerState, SnapshotPlayer, TransportKind } from '../../../shared/protocol.js';
 import type { PickupKind } from '../../../shared/pickups.js';
+import type { DeployKind } from '../../../shared/deployables.js';
 import { PROTOCOL_VERSION } from '../../../shared/protocol.js';
 import { TieredTransport } from './tiers.js';
 import type { GameTransport, TransportFactory } from './transport.js';
 import { NetTelemetry } from './netTelemetry.js';
 import { WeaponType } from '../../../shared/weapons.js';
 import { urlParams } from '../core/params.js';
+import type { TeamId } from '../../../shared/teams.js';
 
 const logger = new ChildLogger('NetworkManager');
 
@@ -35,9 +37,9 @@ export interface RemotePlayerState {
   ski?: number;
   /** Status bitmask — STATUS_* bits (shared/status.ts). */
   status?: number;
-  team?: 'alpha' | 'bravo';
+  team?: TeamId;
   /** Server-reported connect tier (join transport claim) — scoreboard NET. */
-  transport?: 'wt' | 'rtc' | 'ws';
+  transport?: TransportKind;
   /** Armor tier from playerJoined/gameState — remote model scale cue. */
   armorClass?: string;
   /** Server-side sheep meter (bots only) — how pedestrian this bot is. */
@@ -74,12 +76,12 @@ export class NetworkManager {
   public onKnockback: ((position: { x: number; y: number; z: number }, force: number, pull?: boolean) => void) | null = null;
   public onChat: ((playerId: string, text: string, team: boolean, vgs: string | undefined) => void) | null = null;
   public onPlayerUpdate: ((playerId: string, position: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }, timestamp: number, velocity?: { x: number; y: number; z: number }) => void) | null = null;
-  public onGameState: ((players: GameStatePlayer[], localPlayerState: LocalPlayerState | undefined, roomInfo?: { room?: string; mode?: string; team?: 'alpha' | 'bravo'; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number>; pickups?: { id: number; pos: { x: number; y: number; z: number }; kind?: PickupKind }[]; flags?: { team: 'alpha' | 'bravo'; pos: { x: number; y: number; z: number }; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]; matchEndsAt?: number; respawnMs?: number; deployables?: { id: number; owner: string; kind: 'turret' | 'mine' | 'station' | 'drone' | 'shield'; pos: { x: number; y: number; z: number }; team?: string }[]; map?: { mode?: string; bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } }; structures?: import('../../../shared/mapSpec.js').StructureSpec[]; arena?: { x: number; z: number; radius: number }; ambient?: Record<string, number>; terrain?: string; terrainTex?: string; sky?: string } }) => void) | null = null;
+  public onGameState: ((players: GameStatePlayer[], localPlayerState: LocalPlayerState | undefined, roomInfo?: { room?: string; mode?: string; team?: TeamId; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number>; pickups?: { id: number; pos: { x: number; y: number; z: number }; kind?: PickupKind }[]; flags?: { team: TeamId; pos: { x: number; y: number; z: number }; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]; matchEndsAt?: number; respawnMs?: number; deployables?: { id: number; owner: string; kind: DeployKind; pos: { x: number; y: number; z: number }; team?: string }[]; map?: { mode?: string; bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } }; structures?: import('../../../shared/mapSpec.js').StructureSpec[]; arena?: { x: number; z: number; radius: number }; ambient?: Record<string, number>; terrain?: string; terrainTex?: string; sky?: string } }) => void) | null = null;
   public onTeamScore: ((scores: { alpha: number; bravo: number }, winAt: number) => void) | null = null;
-  public onMatchEnd: ((winner: 'alpha' | 'bravo' | 'draw', scores: { alpha: number; bravo: number }) => void) | null = null;
+  public onMatchEnd: ((winner: TeamId | 'draw', scores: { alpha: number; bravo: number }) => void) | null = null;
   public onMatchStart: ((mode: string, scores: { alpha: number; bravo: number }) => void) | null = null;
   /** Server-owned flag state (CTF rooms) — pos/state/carrier per team. */
-  public onFlagUpdate: ((flags: { team: 'alpha' | 'bravo'; pos: { x: number; y: number; z: number }; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]) => void) | null = null;
+  public onFlagUpdate: ((flags: { team: TeamId; pos: { x: number; y: number; z: number }; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]) => void) | null = null;
   public onMatchNotice: ((text: string) => void) | null = null;
   public onPickupSpawn: ((id: number, pos: { x: number; y: number; z: number }, kind?: PickupKind) => void) | null = null;
   /** Powerup applied to US — server-owned buffs (armor/heal/timed). */
@@ -95,7 +97,7 @@ export class NetworkManager {
   public onMapUpdate: ((map: { bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } }; structures?: import('../../../shared/mapSpec.js').StructureSpec[]; arena?: { x: number; z: number; radius: number } | null; terrain?: string; terrainTex?: string; sky?: string; interiors?: import('../../../shared/mapSpec.js').InteriorSpec[] }) => void) | null = null;
   // Server-owned deployables — rendered as dumb visuals client-side;
   // the sim (firing/damage) stays authoritative on the server.
-  public onDeploySpawn: ((id: number, owner: string, kind: 'turret' | 'mine' | 'station' | 'drone' | 'shield', pos: { x: number; y: number; z: number }, team?: 'alpha' | 'bravo') => void) | null = null;
+  public onDeploySpawn: ((id: number, owner: string, kind: DeployKind, pos: { x: number; y: number; z: number }, team?: TeamId) => void) | null = null;
   public onDeployGone: ((id: number) => void) | null = null;
   /** Server sim fired a remote sentry — paint the rocket at the deployable. */
   public onTurretShot: ((id: number, owner: string, targetId: string) => void) | null = null;
@@ -672,7 +674,7 @@ export class NetworkManager {
 
   /** Deployable plant claim — sent when the pod lands and seats, so the
    *  position is the settled one the server will enforce caps/TTL on. */
-  sendDeploy(kind: 'turret' | 'mine' | 'station' | 'drone' | 'shield', position: { x: number; y: number; z: number }): void {
+  sendDeploy(kind: DeployKind, position: { x: number; y: number; z: number }): void {
     if (!this.connected) return;
     this.send({ type: 'deploy', kind, position });
   }
@@ -772,7 +774,7 @@ export class NetworkManager {
 
   /** Netcode-v2 tier our own connection negotiated — self row on the
    *  scoreboard (remotes get theirs from gameState/playerJoined). */
-  getTransportTier(): 'wt' | 'rtc' | 'ws' | 'p2p' | 'host' | undefined {
+  getTransportTier(): TransportKind | 'p2p' | 'host' | undefined {
     return this.ws?.tier;
   }
 

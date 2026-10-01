@@ -18,6 +18,7 @@ import { PlayerModel } from './PlayerModel.js';
 import * as imp from './playerImpulse.js';
 import { PlayerEmit } from './playerEmit.js';
 import { PlayerLoadout } from './playerLoadout.js';
+import { DEPLOY_KINDS, type DeployKind } from '../../../shared/deployables.js';
 import { PlayerVisuals } from './PlayerVisuals.js';
 import { ChildLogger } from '../core/Logger.js';
 
@@ -205,9 +206,9 @@ export class Player {
     (settings.get('fps-sidearm') as 'pistol' | 'revolver' | 'shotgun' | 'repair') in Player.SIDEARM_WIDS
       ? settings.get('fps-sidearm') as 'pistol' | 'revolver' | 'shotgun' | 'repair' : 'pistol';
   // Pack: one deployable on the deploy key — ESC menu picks.
-  packItem: 'turret' | 'mine' | 'station' | 'drone' | 'shield' =
-    (['turret', 'mine', 'station', 'drone', 'shield'] as const).includes(settings.get('fps-pack') as 'turret' | 'mine' | 'station' | 'drone' | 'shield')
-      ? settings.get('fps-pack') as 'turret' | 'mine' | 'station' | 'drone' | 'shield' : 'turret';
+  packItem: DeployKind =
+    (DEPLOY_KINDS as readonly string[]).includes(settings.get('fps-pack'))
+      ? settings.get('fps-pack') as DeployKind : 'turret';
 
 
   get currentWeapon(): number { return this.armory.currentWid; }
@@ -218,7 +219,7 @@ export class Player {
   setLoadoutSlot(slot: number, weaponId: number): void { this.armory.setLoadoutSlot(slot, weaponId); }
   setBeltItem(item: BeltItem): void { this.armory.setBeltItem(item); }
   setSidearm(s: 'pistol' | 'revolver' | 'shotgun' | 'repair'): void { this.armory.setSidearm(s); }
-  setPackItem(p: 'turret' | 'mine' | 'station' | 'drone' | 'shield'): void { this.armory.setPackItem(p); }
+  setPackItem(p: DeployKind): void { this.armory.setPackItem(p); }
   get sidearmWid(): number { return this.armory.sidearmWid; }
   // wid → WeaponType lives on the def: weaponDef(wid).weaponType.
 

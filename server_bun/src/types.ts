@@ -1,4 +1,4 @@
-// Wire-facing message + entity types live in shared/protocol.ts — the
+// Wire-facing message + entity types live in shared/protocol.ts â€” the
 // single source of truth for both client and server. Re-exported here so
 // existing `from './types.ts'` imports keep working.
 export type {
@@ -8,7 +8,9 @@ export type {
   TickUpdatePlayer,
 } from '../../shared/protocol.ts';
 
-import type { Vec3, Rotation } from '../../shared/protocol.ts';
+import type { Vec3, Rotation, TransportKind } from '../../shared/protocol.ts';
+import type { TeamId } from '../../shared/teams.ts';
+import type { ArmorClass } from '../../shared/botClasses.ts';
 
 export interface WebSocketData {
   playerId: string;
@@ -32,7 +34,7 @@ export interface PlayerState {
   isDead: boolean;
   kills: number;
   deaths: number;
-  // Consecutive kills without dying — drives spree announcements. Wiped by
+  // Consecutive kills without dying â€” drives spree announcements. Wiped by
   // resetStats like kills/deaths (per-match, not career).
   streak: number;
   lastSeen: number;
@@ -43,35 +45,35 @@ export interface PlayerState {
   lastValidRotation: Rotation;
   hasReceivedPosition: boolean;
   joinAnnounced: boolean; // playerJoined broadcast fires once, at first report
-  // Anti-cheat position tracking — updated on EVERY position message (even
+  // Anti-cheat position tracking â€” updated on EVERY position message (even
   // rejected ones) so speed checks always compare consecutive reports
   lastPosCheckTime: number;
   lastPosCheckPos: Vec3;
   consecutiveRejects: number; // escape hatch: client persisting past corrections gets force-resynced
   /** Plausibility check is muted until this time after a correction is
-   *  sent — reports still in flight from the pre-snap trajectory would
+   *  sent â€” reports still in flight from the pre-snap trajectory would
    *  otherwise read as impossible speed. */
   correctionGraceUntil: number;
   ping: number; // self-reported client RTT in ms
-  /** Netcode-v2 tier the join negotiated — surfaced to the scoreboard. */
-  transport?: 'wt' | 'rtc' | 'ws';
-  // Team-mode rooms (nuggets/ctf): assigned by the room at join — absent
+  /** Netcode-v2 tier the join negotiated â€” surfaced to the scoreboard. */
+  transport?: TransportKind;
+  // Team-mode rooms (nuggets/ctf): assigned by the room at join â€” absent
   // in free-for-all modes. Owned by the server; clients never set it.
-  team?: 'alpha' | 'bravo';
-  /** Server-driven filler — no socket, no grace period, no idle reap. */
+  team?: TeamId;
+  /** Server-driven filler â€” no socket, no grace period, no idle reap. */
   isBot?: boolean;
   skiing: number; // last reported ski input flag (0/1), from inputMove
-  // Status bitmask (shared/status.ts bits) from inputMove — the server
+  // Status bitmask (shared/status.ts bits) from inputMove â€” the server
   // relays it to remotes and tests bits where mechanics care (shield soaks
   // damage, mend ticks health). Unknown bits pass through untouched, so
   // client-only effects need zero server changes.
   status: number;
-  perk: string;      // join-declared passive (shared/perks.ts) — 'none' default
-  armorClass: string; // join-declared armor tier (shared/botClasses.ts) — 'medium' default
-  /** Mid-match classUpdate pick — applied on the next respawn, never
+  perk: string;      // join-declared passive (shared/perks.ts) â€” 'none' default
+  armorClass: string; // join-declared armor tier (shared/botClasses.ts) â€” 'medium' default
+  /** Mid-match classUpdate pick â€” applied on the next respawn, never
    *  mid-life (an instant tier swap would be a free heal). */
-  pendingClass?: 'light' | 'medium' | 'heavy';
-  /** Mid-match perkUpdate pick — same respawn-bank rule as pendingClass. */
+  pendingClass?: ArmorClass;
+  /** Mid-match perkUpdate pick â€” same respawn-bank rule as pendingClass. */
   pendingPerk?: string;
   maxHealth: number; // derived from perk+class at join; heal/spawn caps use this
   // Lag-comp rewind buffer: accepted position reports stamped at server
@@ -81,12 +83,12 @@ export interface PlayerState {
   history: { t: number; x: number; y: number; z: number }[];
   // Tick-send override: while Date.now() < forceSendUntil, this player is
   // included in every tick regardless of movement/distance suppression.
-  // Set on hit/knockback — the victim's real trajectory MUST flow during
+  // Set on hit/knockback â€” the victim's real trajectory MUST flow during
   // the shooter's ~0.6s predicted-knockback window, or remotes flap
   // between the predicted sim and the stale suppressed position.
   forceSendUntil: number;
   // Spawn protection: while Date.now() < protectedUntil, applyDamage
-  // no-ops on this player. Set on join/respawn; firing clears it —
+  // no-ops on this player. Set on join/respawn; firing clears it â€”
   // shooting from inside your own shield is the standard trade.
   protectedUntil: number;
   // Heal credit: team-mode rooms only accept heal claims backed by a
@@ -98,17 +100,17 @@ export interface PlayerState {
   armor: number;
   regenUntil: number;
   ddUntil: number;
-  // LG pop-charge banked ON this victim by enemy beams — the walking bomb.
+  // LG pop-charge banked ON this victim by enemy beams â€” the walking bomb.
   // `charge` is the bank at `chargeT` (epoch s); reads decay lazily via
-  // lgChargeAt (5× drain), so no ticking needed. Any non-LG hit detonates
+  // lgChargeAt (5Ã— drain), so no ticking needed. Any non-LG hit detonates
   // min(bank, hitDamage); death pops the rest.
   charge: number;
   chargeT: number;
-  // yourCharge echo bookkeeping — last sent value + throttle (ms).
+  // yourCharge echo bookkeeping â€” last sent value + throttle (ms).
   chargeEchoed: number;
   chargeEchoAt: number;
   /** Last time the owner was echoed their server-healed hp (yourHealth
-   *  throttle — healPerTick runs every tick, one echo per 500ms is enough
+   *  throttle â€” healPerTick runs every tick, one echo per 500ms is enough
    *  to keep the client's HUD and state-hash view converged). */
   healthEchoAt: number;
 }

@@ -1,3 +1,7 @@
+2026-10-01 - audit: TransportKind type in protocol.ts; 6 inline wt/rtc/ws unions consolidated
+2026-10-01 - audit: ArmorClass replaces inline light/medium/heavy unions (botBrain, Room, types)
+2026-10-01 - audit: TeamId replaces all 39 inline alpha/bravo unions across both ends + shared tables
+2026-10-01 - audit: DeployKind replaces every inline deploy-kind union on client (settings validation now reads DEPLOY_KINDS)
 2026-10-01 - audit: botVec.ts consolidates triplicated dist3/distSq + BotVec (botBrain re-exports for compat)
 2026-10-01 - audit: botTaunts cooldown clock injectable (setTauntClock) — last wall-clock read in shared/ now pinnable in tests
 2026-10-01 - audit: healPool() consolidates 8 hand-rolled heal-cap sites (incl. ARMORNADE_OVERCAP ceiling)

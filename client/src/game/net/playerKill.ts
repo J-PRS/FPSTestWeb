@@ -7,7 +7,7 @@
 import * as THREE from 'three';
 import * as sfx from '../../core/sfx.js';
 import { PlayerDebris } from '../../effects/debris.js';
-import { TEAM_COLORS } from '../../../../shared/teams.js';
+import { TEAM_COLORS, type TeamId } from '../../../../shared/teams.js';
 import { noteKill } from '../../core/stateDebug.js';
 import type { RemotePlayer } from '../../entities/RemotePlayer.js';
 import type { NetCtx } from './ctx.js';
@@ -98,7 +98,7 @@ function gibVictim(ctx: NetCtx, shooterId: string, targetId: string, remotePlaye
     impulseDir.multiplyScalar(Math.min(1.5, (explosionForce ?? 10) / 15) / l);
   }
   const team = nm().getPlayers().get(targetId)?.team
-    ?? (remotePlayer as { team?: 'alpha' | 'bravo' }).team;
+    ?? (remotePlayer as { team?: TeamId }).team;
   // Gibs are best-effort — a degenerate model must never take the kill
   // handler down with it (generic chunks still spawn on null). Past
   // ~120m real body parts are indistinguishable from primitive shards,

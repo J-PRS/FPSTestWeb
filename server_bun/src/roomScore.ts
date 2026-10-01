@@ -5,7 +5,7 @@ import type { RoomFlags } from './RoomFlags.ts';
 import type { RoomDeployables } from './RoomDeployables.ts';
 import type { Heightfield } from '../../shared/heightfield.ts';
 import { hmHeight } from '../../shared/heightfield.ts';
-import { bank, winner, type ModeSpec, type TeamScores } from '../../shared/teams.ts';
+import { bank, winner, type ModeSpec, type TeamScores, type TeamId } from '../../shared/teams.ts';
 import { POWERUP, rollCreatureDrop, type PowerupKind } from '../../shared/pickups.ts';
 import type { ServerMessage } from '../../shared/protocol.ts';
 import { logger } from './logger.ts';
@@ -120,7 +120,7 @@ export class RoomScore {
   }
 
   /** Team point from a server-observed objective (flag cap, gem touch). */
-  score(team: 'alpha' | 'bravo', n = 1): void {
+  score(team: TeamId, n = 1): void {
     if (!this.h.modeSpec?.teams) return;
     bank(this.h.scores, team, n);
     this.h.broadcast({ type: 'teamScore', scores: { ...this.h.scores }, winAt: this.h.modeSpec.winAt });

@@ -8,6 +8,7 @@
  * objectives land here next; the file already decides what a match IS.
  */
 
+import type { TeamId } from './teams.ts';
 export interface BallPopulation {
   /** solo population */
   base: number;
@@ -83,7 +84,7 @@ export interface StructureSpec {
   /** Y-rotation in radians (ramps/boxes), default 0. */
   rotY?: number;
   /** Team tint — 'alpha'|'bravo' bases color differently, else neutral. */
-  team?: 'alpha' | 'bravo';
+  team?: TeamId;
 }
 
 export interface Vec3like { x: number; y: number; z: number }

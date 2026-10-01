@@ -7,6 +7,7 @@
 import type { PlayerState, Vec3 } from './types.ts';
 import { CONFIG } from './config.ts';
 
+import type { TeamId } from '../../shared/teams.ts';
 export interface SpawnPickerHost {
   players(): Map<string, PlayerState>;
   /** Spawn anchors — map specs override, default is the config ring. */
@@ -20,7 +21,7 @@ export interface SpawnPickerHost {
 export class SpawnPicker {
   constructor(private host: SpawnPickerHost) {}
 
-  pick(playerId: string, team?: 'alpha' | 'bravo'): Vec3 {
+  pick(playerId: string, team?: TeamId): Vec3 {
     const points: Vec3[] = (this.host.spawnPoints() ?? CONFIG.spawnPoints).map((p) => ({ x: p.x, y: p.y, z: p.z }));
     // Authored anchors predate the current terrain — anything buried
     // under the field lifts to the surface rather than spawning into it.
@@ -58,7 +59,7 @@ export class SpawnPicker {
   /** Distance to the nearest living non-teammate from a spawn point —
    *  teammates near a spawn are safety, not a threat. Empty field scores
    *  0 (a flat map, not a jackpot). */
-  private foeClearance(spawn: Vec3, playerId: string, team?: 'alpha' | 'bravo'): number {
+  private foeClearance(spawn: Vec3, playerId: string, team?: TeamId): number {
     let min = Infinity;
     for (const [id, p] of this.host.players()) {
       if (id === playerId || p.isDead) continue;

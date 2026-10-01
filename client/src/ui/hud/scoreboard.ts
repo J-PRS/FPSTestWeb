@@ -4,10 +4,11 @@
  * row carries a team. Extracted from hud.ts; HUD forwards the setters.
  */
 
+import type { TeamId } from '../../../../shared/teams.js';
 export type SbRow = {
   name: string; frags: number; score: number | null; ping: number | null;
   net?: string | null; self: boolean; dead: boolean;
-  team?: 'alpha' | 'bravo'; sheep?: number | null;
+  team?: TeamId; sheep?: number | null;
 };
 
 // textContent, not innerHTML — display names will be player-chosen
