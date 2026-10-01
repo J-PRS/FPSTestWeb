@@ -1,4 +1,11 @@
 import * as THREE from 'three';
+import { MeshBVH, acceleratedRaycast } from 'three-mesh-bvh';
+
+// BVH raycasts: the bake fires 16 hemisphere rays per vertex against the
+// merged occluder — brute-force triangle scans made this an O(verts×tris)
+// startup stall (~15s+ on a throttled CPU). boundsTree + firstHitOnly
+// turns each ray into an O(log n) traversal; the bake drops to ms.
+THREE.Mesh.prototype.raycast = acceleratedRaycast;
 
 /**
  * Runtime-baked vertex AO for procedural models (no UVs → no AO textures).
@@ -9,6 +16,7 @@ import * as THREE from 'three';
  */
 
 const _ray = new THREE.Raycaster();
+_ray.firstHitOnly = true;
 const _origin = new THREE.Vector3();
 const _dir = new THREE.Vector3();
 const _n = new THREE.Vector3();
@@ -74,6 +82,7 @@ export function bakeVertexAO(group: THREE.Group): void {
   if (!meshes.length) return;
 
   const occluderGeo = mergeGeometries(meshes);
+  occluderGeo.boundsTree = new MeshBVH(occluderGeo);
   // DoubleSide is required: hemisphere rays point outward and mostly hit the
   // back faces of surrounding geometry — FrontSide culling would miss them all.
   const occluder = new THREE.Mesh(occluderGeo, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }));

@@ -11,7 +11,7 @@ import Logger from '../core/Logger.js';
 import { vfxStats, setVfxQualityScale } from '../effects/vfx.js';
 import type { createFrameBudget } from '../core/frameBudget.js';
 import type { createPerfHud } from '../core/perfHud.js';
-import { fxJobStats } from './gameLoop.js';
+import { fxJobStats, fxJobResetMax } from './gameLoop.js';
 import type { GameLoopDeps, LoopState } from './gameLoop.js';
 
 // FPS watchdog — sustained <40fps for >10 consecutive frames fires a
@@ -90,6 +90,7 @@ function dumpPerf(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof c
   // worstItemMs is an all-time max — reset per dump so it reflects the
   // current window, not a fossil from the worst frame ever recorded.
   budget.reset('fxdecay');
+  fxJobResetMax();
 }
 
 // Dynamic quality scaling — the render cost follows the machine instead of

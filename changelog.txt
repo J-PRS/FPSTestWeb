@@ -1,3 +1,4 @@
+2026-10-01 - vertexAO bake via three-mesh-bvh (was 78% of throttled CPU in raycasts, now ~4%) + CPU-throttled profiling probes (CPU_THROTTLE/HEAP_MB env) + per-fxJob max tracker
 2026-10-01 - GC churn ~40%: TrailDot object pool (was ~1400 allocs/s), persistent per-bot think ctx (was ~1KB/bot/frame)
 2026-10-01 - ball trail attr uploads gated on live dots (~100 tiny uploads/frame idle); sparkle emit skipped past 200m
 2026-10-01 - interior material dedup by canonical name (.NNN suffix): 1014 meshes -> 44, scene calls ~570->185, shadow-pass delta 681->77 calls
