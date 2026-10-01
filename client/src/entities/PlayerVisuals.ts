@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import * as pvCam from './pvCam.js';
 
 import type { Terrain } from '../world/terrain.js';
 import { EYE_OFFSET } from '../core/config.js';
@@ -19,8 +20,8 @@ const _airTint = new THREE.Color(0.75, 0.85, 1.0);
  */
 export class PlayerVisuals {
   private shadowBlob: THREE.Mesh;
-  private groundGizmo: THREE.Mesh;
-  private groundGizmoGhost: THREE.Mesh;
+  groundGizmo: THREE.Mesh;
+  groundGizmoGhost: THREE.Mesh;
   // Same faint air trail remotes get — your own arc is only readable in
   // third person, so emission gates on that flag (dots spawn behind you).
   private airTrail: BallTrailDots | null = null;
@@ -92,107 +93,25 @@ export class PlayerVisuals {
   // Third-person chase cam — Tribes Ascend style: camera backs out along the
   // horizontal look axis and sits a little high, aim stays at screen center,
   // and the body renders in the lower third. No shoulder offset.
-  private static readonly TP_BACK = 4.2;   // boom length
-  private static readonly TP_UP = 1.7;     // constant lift — keeps the body under the crosshair
-  private static readonly TP_FOCUS = 180;  // camera converges on the aim point at this range
+  static readonly TP_BACK = 4.2;   // boom length
+  static readonly TP_UP = 1.7;     // constant lift — keeps the body under the crosshair
+  static readonly TP_FOCUS = 180;  // camera converges on the aim point at this range
 
   // Update camera to final position — never let it go below the terrain
   // surface, or steep slopes put the eye inside the mesh and you see the
   // interior of the mountain.
   updateCamera(camera: THREE.PerspectiveCamera, terrain: Terrain, pos: THREE.Vector3, yaw: number, pitch: number, thirdPerson = false): void {
-    if (thirdPerson) {
-      // Spherical orbit: the boom opposes the FULL aim vector — aim down
-      // and the camera swings up overhead, aim up and it drops low behind
-      // you. This is what separates a chase cam from "FP moved back".
-      const ax = Math.cos(pitch) * Math.sin(yaw);
-      const ay = Math.sin(pitch);
-      const az = Math.cos(pitch) * Math.cos(yaw);
-      camera.position.set(
-        pos.x - ax * PlayerVisuals.TP_BACK,
-        pos.y - ay * PlayerVisuals.TP_BACK + PlayerVisuals.TP_UP,
-        pos.z - az * PlayerVisuals.TP_BACK,
-      );
-      const groundAtCam = terrain.getHeight(camera.position.x, camera.position.z);
-      if (camera.position.y < groundAtCam + 0.25) {
-        camera.position.y = groundAtCam + 0.25;
-      }
-      // Converge on the aim point at TP_FOCUS range, not parallel gaze —
-      // the slight downward tilt toward YOU is what drops the body into
-      // the lower third and makes it feel like a chase cam, while the
-      // crosshair still lands shots at typical engagement distances
-      const f = PlayerVisuals.TP_FOCUS;
-      const tx = pos.x + Math.cos(pitch) * Math.sin(yaw) * f;
-      const ty = pos.y + Math.sin(pitch) * f;
-      const tz = pos.z + Math.cos(pitch) * Math.cos(yaw) * f;
-      camera.lookAt(tx, ty, tz);
-      return;
-    }
-    camera.position.copy(pos);
-    const groundAtCam = terrain.getHeight(camera.position.x, camera.position.z);
-    if (camera.position.y < groundAtCam + 0.25) {
-      camera.position.y = groundAtCam + 0.25;
-    }
-    // Look target from the CLAMPED camera position — if the eye got lifted
-    // above the terrain while pos sits lower (dead-observer noclip), aiming
-    // at pos would tilt the view pitch. yaw/pitch must mean mouse-look only.
-    const tx = camera.position.x + Math.cos(pitch) * Math.sin(yaw);
-    const ty = camera.position.y + Math.sin(pitch);
-    const tz = camera.position.z + Math.cos(pitch) * Math.cos(yaw);
-    camera.lookAt(tx, ty, tz);
+    pvCam.updateCamera(this, camera, terrain, { pos, yaw, pitch, thirdPerson });
   }
 
-  // Feet marker — pinned to the terrain surface below the player
-  updateFeetMarker(terrain: Terrain, pos: THREE.Vector3): void {
-    this.groundGizmo.position.set(pos.x, terrain.getHeight(pos.x, pos.z) + 0.05, pos.z);
-    this.groundGizmoGhost.position.copy(this.groundGizmo.position);
-  }
+  updateFeetMarker(terrain: Terrain, pos: THREE.Vector3): void { pvCam.updateFeetMarker(this, terrain, pos); }
 
-  // Demo playback path: camera follows pos without input/physics
   updateFrozenCamera(camera: THREE.PerspectiveCamera, terrain: Terrain, pos: THREE.Vector3, yaw: number, pitch: number): void {
-    this.updateCamera(camera, terrain, pos, yaw, pitch);
-    this.updateFeetMarker(terrain, pos);
+    pvCam.updateFrozenCamera(this, camera, terrain, pos, yaw, pitch);
   }
 
-  // T1/T2 observer mode while dead: you become a ghost — free mouse-look
-  // plus noclip flight (WASD + Space to rise, Shift to sink) until the
-  // server respawns you. No forced camera motion, so zero sim-sickness
-  // risk; the player drives the view like T1's observer/Tab mode.
   updateObserverCam(dt: number, camera: THREE.PerspectiveCamera, terrain: Terrain, pos: THREE.Vector3, ...rest: [vel: THREE.Vector3, yaw: number, pitch: number, input: { forward: number; right: number; jumpHeld: boolean; shiftDown: boolean }]): void {
-    const [vel, yaw, pitch, input] = rest;
-    const OBSERVER_SPEED = 40; // m/s ghost-flight
-    const fwd = new THREE.Vector3(
-      Math.cos(pitch) * Math.sin(yaw),
-      Math.sin(pitch),
-      Math.cos(pitch) * Math.cos(yaw)
-    );
-    const right = new THREE.Vector3(-Math.cos(yaw), 0, Math.sin(yaw));
-    pos.addScaledVector(fwd, input.forward * OBSERVER_SPEED * dt);
-    pos.addScaledVector(right, input.right * OBSERVER_SPEED * dt);
-    if (input.jumpHeld) pos.y += OBSERVER_SPEED * dt;
-    if (input.shiftDown) pos.y -= OBSERVER_SPEED * dt;
-    // Terrain collider, spectator-flavored: the floor under the EYE always
-    // holds, and when the view pitches down the terrain ahead of the eye
-    // matters too — the near plane is what dirt clips. Blend the look-dir
-    // footprint in by sin(pitch): level flight is only clamped by ground
-    // below, steep-down flight is clamped by the slope it's about to face.
-    // Creature/projectile collision stays off — it's a ghost, just not a
-    // dirty one.
-    let groundY = terrain.getHeight(pos.x, pos.z);
-    const down = Math.max(0, -Math.sin(pitch)); // pitch<0 = looking down
-    if (down > 0.01) {
-      const fx = Math.sin(yaw) * 1.6, fz = Math.cos(yaw) * 1.6; // ~1.6m ahead
-      const sx = Math.cos(yaw) * 1.0, sz = -Math.sin(yaw) * 1.0; // flank flares
-      const aheadY = Math.max(
-        terrain.getHeight(pos.x + fx, pos.z + fz),
-        terrain.getHeight(pos.x + fx + sx, pos.z + fz + sz),
-        terrain.getHeight(pos.x + fx - sx, pos.z + fz - sz),
-      );
-      if (aheadY > groundY) groundY += (aheadY - groundY) * down;
-    }
-    const floorY = groundY + 0.6; // eye clearance — not a buried-body fight
-    if (pos.y < floorY) pos.y = floorY;
-    vel.set(0, 0, 0); // observer drift isn't body momentum
-    this.updateCamera(camera, terrain, pos, yaw, pitch); // keeps the camera above the terrain surface
+    pvCam.updateObserverCam(this, dt, camera, terrain, pos, ...rest);
   }
 
   private shadowPosAttr: THREE.BufferAttribute | null = null;
