@@ -28,12 +28,14 @@ export function collectDiag(): DiagSection {
 // because the tagging modules are also the ones the probe imports back
 // for identification; a leaf keeps the graph acyclic.
 export interface DbgTag {
-  kind: 'trailBatch' | 'instPool' | 'species' | 'blobShadows' | 'quarks' | 'beam';
+  kind: 'trailBatch' | 'instPool' | 'species' | 'blobShadows' | 'quarks' | 'beam' | 'gib';
   /** trailBatch: the batch whose slot was hit. */
   batch?: unknown;
-  /** instPool: shell-kind label + pool for the lit-free-slot check. */
+  /** instPool/beam/gib: shell-kind label + pool for the lit-free-slot check. */
   label?: string;
   pool?: { free: number[] };
+  /** gib: the GibMeshPool (freeIdx drives the same lit-free check). */
+  gib?: unknown;
   /** species: registry name + which part mesh. */
   species?: string;
   swarm?: unknown;

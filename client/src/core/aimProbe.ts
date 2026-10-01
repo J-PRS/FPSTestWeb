@@ -22,39 +22,65 @@ const MAX_HITS = 5;
 export function aimProbe(scene: THREE.Scene, camera: THREE.Camera): string[] {
   const objs: THREE.Object3D[] = [];
   scene.traverse(o => { if (o.userData.dbg) objs.push(o); });
-  if (!objs.length) return [];
   _ray.setFromCamera(_ndc, camera);
   const hits = _ray.intersectObjects(objs, false);
-  return hits.slice(0, MAX_HITS).map(h => `${h.distance.toFixed(0)}m ${describeHit(h)}`);
+  if (hits.length) return hits.slice(0, MAX_HITS).map(h => `${h.distance.toFixed(0)}m ${describeHit(h)}`);
+  // Nothing tagged under the reticle — blind spot report. Raycast the
+  // whole scene and describe what IS there by type/parent/material, so a
+  // frozen thing made by an untagged system still names itself (that's
+  // the signal to give it a markProbe).
+  return _ray.intersectObjects(scene.children, true)
+    .filter(h => h.object.visible && !h.object.userData.dbg)
+    .slice(0, MAX_HITS)
+    .map(h => `${h.distance.toFixed(0)}m untagged ${describeRaw(h.object)}`);
+}
+
+/** Type + parent chain + name — enough to find which subsystem owns an
+ *  untagged render object without guessing. */
+function describeRaw(o: THREE.Object3D): string {
+  const chain: string[] = [];
+  for (let p: THREE.Object3D | null = o; p && chain.length < 3; p = p.parent)
+    chain.push(`${p.type}${p.name ? `(${p.name})` : ''}`);
+  return chain.join(' < ');
 }
 
 function describeHit(h: THREE.Intersection): string {
   const d = h.object.userData.dbg as DbgTag;
+  if (d.kind === 'trailBatch') {
+    const slot = Math.floor((h.faceIndex ?? 0) / RIBBON_TRIS_PER_SLOT);
+    return `ribbon ${JSON.stringify(RibbonTrail.identify(d.batch as TrailBatch, slot))}`;
+  }
+  if (d.kind === 'species') {
+    const owner = (d.swarm as SpeciesSwarm).ownerAt(d.part!, h.instanceId ?? -1);
+    return `species:${d.species} owner=${describeOwner(owner)}`;
+  }
+  return describePooled(d, h);
+}
+
+// Instance-backed pools — one describe for anything with a slot index +
+// a free list, since the leak signature is the same for all of them:
+// a visible instance already back in the free stack.
+function describePooled(d: DbgTag, h: THREE.Intersection): string {
+  const iid = h.instanceId ?? -1;
   switch (d.kind) {
-    case 'trailBatch': {
-      const slot = Math.floor((h.faceIndex ?? 0) / RIBBON_TRIS_PER_SLOT);
-      return `ribbon ${JSON.stringify(RibbonTrail.identify(d.batch as TrailBatch, slot))}`;
-    }
     case 'instPool': {
-      const iid = h.instanceId ?? -1;
-      // A visible instance that's already back in the free stack is the
-      // "detached frozen shell" leak signature — call it out explicitly.
       const leaked = d.pool!.free.includes(iid) ? ' LEAKED(lit-free-slot)' : '';
       return `shell ${d.label} inst=${iid}${leaked}`;
     }
-    case 'species': {
-      const owner = (d.swarm as SpeciesSwarm).ownerAt(d.part!, h.instanceId ?? -1);
-      return `species:${d.species} owner=${describeOwner(owner)}`;
+    case 'gib': {
+      const g = d.gib as { live: number; cap: number; freeIdx: number[] };
+      const leaked = g.freeIdx.includes(iid) ? ' LEAKED(lit-free-slot)' : '';
+      return `gib ${d.label} inst=${iid} live=${g.live}/${g.cap}${leaked}`;
     }
     case 'blobShadows': {
-      const owner = (d.swarm as InstancedBlobShadows).ownerAt(h.instanceId ?? -1);
-      return `blobShadow inst=${h.instanceId} owner=${describeOwner(owner)}`;
+      const owner = (d.swarm as InstancedBlobShadows).ownerAt(iid);
+      return `blobShadow inst=${iid} owner=${describeOwner(owner)}`;
     }
     case 'quarks': {
       const ps = d.ps as ParticleSystem;
       return `quarks paused=${ps.paused} particles=${ps.particleNum ?? '?'}`;
     }
-    case 'beam': return 'beam(hitscan flash)';
+    case 'beam': return `beam(${d.label ?? 'hitscan flash'})`;
     default: return `dbg:${d.kind}`;
   }
 }

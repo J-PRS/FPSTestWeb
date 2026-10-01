@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { LightningBeam, SEGS, SPARKS } from './lightningBeam.js';
+import { markProbe } from '../core/fxDiag.js';
 
 // Scene-graph assembly: crossed-ribbon core+glow+arc+chain meshes
 // (frustum-cull off — vertices rewrite every jag), the contact sprite,
@@ -54,6 +55,12 @@ export function buildBeam(b: LightningBeam, scene: THREE.Scene, tint?: { glow: n
     b.arc.visible = false;
     b.arcPts = Array.from({ length: SEGS + 1 }, () => new THREE.Vector3());
     b.group.add(b.glow, b.core, b.chainCore, b.arc);
+    // Aim-probe tags — a stuck lightning bolt was indistinguishable from a
+    // ribbon streak on screen before these names existed.
+    markProbe(b.glow, { kind: 'beam', label: 'lightning:glow' });
+    markProbe(b.core, { kind: 'beam', label: 'lightning:core' });
+    markProbe(b.chainCore, { kind: 'beam', label: 'lightning:chain' });
+    markProbe(b.arc, { kind: 'beam', label: 'lightning:arc' });
 
     // Contact glow — bright ball pinned at the hit point
     const glowTex = LightningBeam.makeGlowTexture();
@@ -94,6 +101,8 @@ export function buildBeam(b: LightningBeam, scene: THREE.Scene, tint?: { glow: n
     }));
     b.sparkPoints.frustumCulled = false;
     b.group.add(b.sparkPoints);
+    markProbe(b.hitGlow, { kind: 'beam', label: 'lightning:hitGlow' });
+    markProbe(b.sparkPoints, { kind: 'beam', label: 'lightning:sparks' });
 
     b.group.visible = false;
     scene.add(b.group);

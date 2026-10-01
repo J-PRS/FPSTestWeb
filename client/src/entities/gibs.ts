@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 
 import { GRAVITY, BOUNCE_Y, FRICTION_XZ, SHRINK_DUR, GREY_DUR, BASE_SPEED, EXTRA_SPEED, LIFE_BASE, LIFE_RAND } from '../core/config.js';
+import { markProbe } from '../core/fxDiag.js';
 import type { Terrain } from '../world/terrain.js';
 import type { SpeciesSwarm } from './swarm.js';
 
@@ -66,6 +67,7 @@ class GibMeshPool {
     this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(GIB_CAP * 3).fill(1), 3);
     this.mesh.instanceColor.setUsage(THREE.DynamicDrawUsage);
+    markProbe(this.mesh, { kind: 'gib', label: `gib/${per}`, gib: this });
     scene.add(this.mesh);
     this.freeIdx = Array.from({ length: GIB_CAP }, (_, i) => GIB_CAP - 1 - i);
     if (!geo.boundingSphere) geo.computeBoundingSphere();
