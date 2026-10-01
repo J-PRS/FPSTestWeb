@@ -107,14 +107,7 @@ export class RemoteAnim {
   private stepMixer(dt: number): void {
     const h = this.h;
     const moving = this._speed > 0.5 || this._airborne || this.shootT > 0 || this.hitT > 0;
-    // A far remote standing still doesn't need 15/30Hz bursts — idle sway
-    // is a slow enough signal that 5Hz reads identically. Mid-close
-    // remotes keep full rate: at that distance sway IS readable.
-    const animDt = h.onScreen === false ? Infinity
-      : h.camDistSq > 60 * 60 && !moving ? 1 / 5
-      : h.camDistSq > 120 * 120 ? 1 / 15
-      : h.camDistSq > 60 * 60 ? 1 / 30
-      : 0;
+    const animDt = pickAnimCadence(h.onScreen, h.camDistSq, moving);
     // Frozen bones skip updateMatrixWorld entirely — valid only while the
     // mixer never runs (animDt Infinity), otherwise the pose stalls.
     const frozen = animDt === Infinity;
@@ -202,4 +195,17 @@ export class RemoteAnim {
       Math.max(-0.45, Math.min(0.45, fwd * 0.022)),
       Math.max(-0.4, Math.min(0.4, -side * 0.02)));
   }
+}
+
+/** Anim LOD table — Infinity = freeze everything (renderer already
+ *  culls the skin, so only CPU bone evaluation was burning). A far
+ *  remote standing still drops to 5Hz: idle sway is a slow enough
+ *  signal to read identically; mid-close keeps full rate because at
+ *  that distance sway IS readable. */
+export function pickAnimCadence(onScreen: boolean, camDistSq: number, moving: boolean): number {
+  if (onScreen === false) return Infinity;
+  if (camDistSq > 60 * 60 && !moving) return 1 / 5;
+  if (camDistSq > 120 * 120) return 1 / 15;
+  if (camDistSq > 60 * 60) return 1 / 30;
+  return 0;
 }
