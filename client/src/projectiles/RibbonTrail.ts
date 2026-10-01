@@ -31,6 +31,16 @@ class TrailBatch {
   free: number[] = [];
   used = new Set<number>();
   dirty = false;
+  // Dirty span in float-array indices — a single live trail used to
+  // re-upload the whole 512-slot buffer every frame (~1.2MB).
+  dirtyLo = Infinity;
+  dirtyHi = 0;
+
+  mark(lo: number, hi: number): void {
+    if (lo < this.dirtyLo) this.dirtyLo = lo;
+    if (hi > this.dirtyHi) this.dirtyHi = hi;
+    this.dirty = true;
+  }
 
   constructor(scene: THREE.Scene) {
     this.pos = new Float32Array(MAX_TRAILS * VERTS * 3);
@@ -69,8 +79,17 @@ class TrailBatch {
   flush(): void {
     if (!this.dirty) return;
     this.dirty = false;
-    this.posAttr.needsUpdate = true;
-    this.colAttr.needsUpdate = true;
+    const n = this.dirtyHi - this.dirtyLo;
+    if (n > 0) {
+      this.posAttr.clearUpdateRanges();
+      this.posAttr.addUpdateRange(this.dirtyLo, n);
+      this.posAttr.needsUpdate = true;
+      this.colAttr.clearUpdateRanges();
+      this.colAttr.addUpdateRange(this.dirtyLo, n);
+      this.colAttr.needsUpdate = true;
+    }
+    this.dirtyLo = Infinity;
+    this.dirtyHi = 0;
     // Slots allocate lowest-first so the used range stays dense; drawing
     // past the highest live slot only burns vertex shader on zeroed tris.
     let hw = 0;
@@ -141,7 +160,7 @@ export class RibbonTrail {
     const b = this.slot * VERTS * 3;
     this.batch.pos.fill(0, b, b + VERTS * 3);
     this.batch.col.fill(0, b, b + VERTS * 3);
-    this.batch.dirty = true;
+    this.batch.mark(b, b + VERTS * 3);
     this.batch.used.delete(this.slot);
     this.batch.free.push(this.slot);
     // Keep descending so pop() hands out the smallest slot — used slots
@@ -207,7 +226,7 @@ export class RibbonTrail {
     if (this.slot >= 0) {
       const b = this.slot * VERTS * 3;
       this.batch.col.fill(0, b, b + VERTS * 3);
-      this.batch.dirty = true;
+      this.batch.mark(b, b + VERTS * 3);
     }
   }
 
@@ -261,7 +280,7 @@ export class RibbonTrail {
       col[o] = cr; col[o + 1] = cg; col[o + 2] = cb;
       col[o + 3] = cr; col[o + 4] = cg; col[o + 5] = cb;
     }
-    this.batch.dirty = true;
+    this.batch.mark(base, base + this.count * 6);
     this.batch.flush();
   }
 

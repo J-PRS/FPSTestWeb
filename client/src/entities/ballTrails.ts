@@ -3,10 +3,10 @@
  * (tinted halo + near-white core) scattered inside a small sphere around
  * the ball, random size and lifetime.
  *
- * Drawn as ONE THREE.Points per trail: ~40 balls × 28 sprites each used to
- * cost ~1000 unbatchable draw calls (the top renderer.info.calls entry in
- * every LOW-FPS dump). Points with a per-point size/color shader draws the
- * whole thing in one call; dead slots just get size 0.
+ * Drawn as ONE THREE.Points for the whole layer: ~40 balls × 28 sprites
+ * used to cost ~1000 unbatchable draw calls, then one Points per trail
+ * still cost ~57 calls (census). Now every trail owns a fixed slot range
+ * inside a single shared geometry — the layer is one draw call total.
  */
 import * as THREE from 'three';
 
@@ -90,40 +90,63 @@ function trailMat(): THREE.ShaderMaterial {
   return _mat;
 }
 
+// One shared Points mesh for every trail — each trail owns a contiguous
+// slot range (TRAIL_COUNT*2 verts) inside the shared geometry.
+const SLOT_VERTS = TRAIL_COUNT * 2;   // halo + core per dot
+const MAX_TRAILS = 128;
+
+class DotBatch {
+  readonly geo = new THREE.BufferGeometry();
+  readonly posAttr = new THREE.BufferAttribute(new Float32Array(MAX_TRAILS * SLOT_VERTS * 3), 3);
+  readonly sizeAttr = new THREE.BufferAttribute(new Float32Array(MAX_TRAILS * SLOT_VERTS), 1);
+  readonly colAttr = new THREE.BufferAttribute(new Float32Array(MAX_TRAILS * SLOT_VERTS * 4), 4);
+  free: number[] = [];
+
+  constructor(scene: THREE.Scene) {
+    for (const a of [this.posAttr, this.sizeAttr, this.colAttr]) a.setUsage(THREE.DynamicDrawUsage);
+    this.geo.setAttribute('position', this.posAttr);
+    this.geo.setAttribute('aSize', this.sizeAttr);
+    this.geo.setAttribute('aColor', this.colAttr);
+    this.geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1e6);
+    const points = new THREE.Points(this.geo, trailMat());
+    points.frustumCulled = false;
+    scene.add(points);
+    for (let s = MAX_TRAILS - 1; s >= 0; s--) this.free.push(s);
+  }
+
+  touch(): void {
+    this.posAttr.needsUpdate = true;
+    this.sizeAttr.needsUpdate = true;
+    this.colAttr.needsUpdate = true;
+  }
+}
+
+const dotBatches = new Map<THREE.Scene, DotBatch>();
+function dotBatchFor(scene: THREE.Scene): DotBatch {
+  let b = dotBatches.get(scene);
+  if (!b) { b = new DotBatch(scene); dotBatches.set(scene, b); }
+  return b;
+}
+
 export class BallTrailDots {
   private dots: TrailDot[] = [];
   private timer = 0;
   private opacity: number;
   private sizeMul: number;
   private interval: number;
-  private maxDots: number;
-
-  private readonly geo: THREE.BufferGeometry;
-  private readonly points: THREE.Points;
-  private readonly posAttr: THREE.BufferAttribute;
-  private readonly sizeAttr: THREE.BufferAttribute;
-  private readonly colAttr: THREE.BufferAttribute;
+  private maxDots = TRAIL_COUNT;
+  private readonly batch: DotBatch;
+  private slot: number;
+  private base: number; // vertex index of this trail's slot range
 
   constructor(private scene: THREE.Scene, opts?: { opacity?: number; sizeMul?: number; interval?: number; maxDots?: number }) {
     this.opacity = opts?.opacity ?? 1;
     this.sizeMul = opts?.sizeMul ?? 1;
     this.interval = opts?.interval ?? TRAIL_INTERVAL;
-    this.maxDots = opts?.maxDots ?? TRAIL_COUNT;
-    const cap = this.maxDots * 2; // halo + core slot per dot
-    this.geo = new THREE.BufferGeometry();
-    this.posAttr = new THREE.BufferAttribute(new Float32Array(cap * 3), 3);
-    this.sizeAttr = new THREE.BufferAttribute(new Float32Array(cap), 1);
-    this.colAttr = new THREE.BufferAttribute(new Float32Array(cap * 4), 4);
-    this.posAttr.setUsage(THREE.DynamicDrawUsage);
-    this.sizeAttr.setUsage(THREE.DynamicDrawUsage);
-    this.colAttr.setUsage(THREE.DynamicDrawUsage);
-    this.geo.setAttribute('position', this.posAttr);
-    this.geo.setAttribute('aSize', this.sizeAttr);
-    this.geo.setAttribute('aColor', this.colAttr);
-    this.geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1e6);
-    this.points = new THREE.Points(this.geo, trailMat());
-    this.points.frustumCulled = false;
-    scene.add(this.points);
+    this.batch = dotBatchFor(scene);
+    this.slot = this.batch.free.pop() ?? -1;
+    this.base = this.slot * SLOT_VERTS;
+    if (this.slot < 0) this.maxDots = 0; // saturated — render nothing
   }
 
   /** Emit a sparkle when the cadence fires — caller passes the ball's
@@ -144,6 +167,7 @@ export class BallTrailDots {
   get size(): number { return this.dots.length; }
 
   private spawn(pos: THREE.Vector3, radius: number, tint: THREE.Color): void {
+    if (this.slot < 0) return;
     const spawn = _spawn.copy(pos).addScaledVector(_scatter.set(
       Math.random() * 2 - 1, Math.random() * 2 - 1, Math.random() * 2 - 1,
     ).normalize().multiplyScalar(Math.random() * radius * 0.6), 1);
@@ -159,6 +183,7 @@ export class BallTrailDots {
   }
 
   fade(dt: number): void {
+    if (this.slot < 0) return;
     trailMat().uniforms.uHeight!.value = window.innerHeight || 800;
     let w = 0; // live-dot write cursor over the attribute pair
     for (let i = this.dots.length - 1; i >= 0; i--) {
@@ -175,31 +200,34 @@ export class BallTrailDots {
       const coreA = t * 0.7 * this.opacity;
       const haloS = d.haloSz * (0.7 + 0.3 * t);
       const coreS = d.coreSz * (0.4 + 0.6 * t);
-      const h = w * 2, c = w * 2 + 1;
-      this.posAttr.setXYZ(h, d.pos.x, d.pos.y, d.pos.z);
-      this.posAttr.setXYZ(c, d.pos.x, d.pos.y, d.pos.z);
-      this.sizeAttr.setX(h, haloS);
-      this.sizeAttr.setX(c, coreS);
-      this.colAttr.setXYZW(h, d.tint.r, d.tint.g, d.tint.b, haloA);
+      const h = this.base + w * 2, c = h + 1;
+      this.batch.posAttr.setXYZ(h, d.pos.x, d.pos.y, d.pos.z);
+      this.batch.posAttr.setXYZ(c, d.pos.x, d.pos.y, d.pos.z);
+      this.batch.sizeAttr.setX(h, haloS);
+      this.batch.sizeAttr.setX(c, coreS);
+      this.batch.colAttr.setXYZW(h, d.tint.r, d.tint.g, d.tint.b, haloA);
       _tmpC.copy(d.tint).lerp(_white, 0.65);
-      this.colAttr.setXYZW(c, _tmpC.r, _tmpC.g, _tmpC.b, coreA);
+      this.batch.colAttr.setXYZW(c, _tmpC.r, _tmpC.g, _tmpC.b, coreA);
       w++;
     }
     // zero out the tail slots so stale points don't linger
-    for (let s = w * 2; s < this.maxDots * 2; s++) this.sizeAttr.setX(s, 0);
+    for (let s = this.base + w * 2; s < this.base + this.maxDots * 2; s++) this.batch.sizeAttr.setX(s, 0);
     // Skip the buffer upload when nothing lives — an idle trail was still
     // pushing 3 attribute uploads per ball per frame (~100/frame total).
     if (w === 0 && this._lastLive === 0) return;
     this._lastLive = w;
-    this.posAttr.needsUpdate = true;
-    this.sizeAttr.needsUpdate = true;
-    this.colAttr.needsUpdate = true;
+    this.batch.touch();
   }
   private _lastLive = -1;
 
   dispose(): void {
-    this.scene.remove(this.points);
-    this.geo.dispose();
+    if (this.slot >= 0) {
+      // bury the slot's points before handing it back
+      for (let s = this.base; s < this.base + SLOT_VERTS; s++) this.batch.sizeAttr.setX(s, 0);
+      this.batch.touch();
+      this.batch.free.push(this.slot);
+      this.slot = -1;
+    }
     for (const d of this.dots) freeDot(d);
     this.dots = [];
   }
