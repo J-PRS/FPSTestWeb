@@ -11,7 +11,7 @@ import type { ProjectileConfig } from './types.js';
 import { RibbonTrail } from './RibbonTrail.js';
 import { ProjectileTrail } from './trailParticles.js';
 import { QuarksTrail } from '../effects/vfx.js';
-import { buildProjectileMeshes, updateProjectileMesh } from './visuals.js';
+import { buildProjectileMeshes, updateProjectileMesh, releaseProjectileInstance, syncProjectileInstance } from './visuals.js';
 import { tickRemote } from './projRemote.js';
 import { ColliderIndex } from '../../../shared/solidWorld.js';
 import type { StructureCollider } from '../../../shared/ballSim.js';
@@ -233,7 +233,7 @@ export class Projectile {
     this.prevPos.copy(this.pos);
     this.pos.addScaledVector(this.vel, seconds);
     this.age += seconds;
-    if (this.mesh) this.mesh.position.copy(this.pos);
+    if (this.mesh) { this.mesh.position.copy(this.pos); syncProjectileInstance(this.mesh); }
   }
 
   // Physics + collision + visuals for a live (non-exploded) projectile
@@ -347,10 +347,10 @@ export class Projectile {
 
   removeProjectileMesh(): void {
     if (this.projectileRemoved) return;
-    this.scene.remove(this.mesh);
+    releaseProjectileInstance(this.mesh);
     // mat/glowMat are cache-shared — never dispose
     if (this.glowMesh) {
-      this.scene.remove(this.glowMesh);
+      releaseProjectileInstance(this.glowMesh);
     }
     this.projectileRemoved = true;
   }

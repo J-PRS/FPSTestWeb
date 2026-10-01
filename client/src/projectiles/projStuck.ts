@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { releaseProjectileInstance, syncProjectileInstance } from './visuals.js';
 import type { ProjectileConfig } from './types.js';
 import type { Targetable } from '../entities/balls.js';
 
@@ -117,7 +118,8 @@ export class ProjStuck {
     // the flash + kick sparks back along the shot line.
     h.mesh.position.copy(h.pos);
     h.mesh.scale.setScalar(1);
-    if (h.glowMesh) { h.scene.remove(h.glowMesh); h.glowMesh = null; }
+    syncProjectileInstance(h.mesh);
+    if (h.glowMesh) { releaseProjectileInstance(h.glowMesh); h.glowMesh = null; }
     return true;
   }
 
@@ -127,7 +129,7 @@ export class ProjStuck {
     this.embedAge += dt;
     const shrink = (this.embedAge - h.config.embeds!) / EMBED_SHRINK_TIME;
     if (shrink >= 1) return false; // caller removes the mesh
-    if (shrink > 0) h.mesh.scale.setScalar(1 - shrink);
+    if (shrink > 0) { h.mesh.scale.setScalar(1 - shrink); syncProjectileInstance(h.mesh); }
     return true;
   }
 }

@@ -1,3 +1,4 @@
+2026-10-01 - perf: projectile shells+glows instanced per kind (~36 draw calls -> ~4)
 2026-10-01 - perf: remote head-gizmo rings share one InstancedMesh (~18 draws -> 1)
 2026-10-01 - perf: remote gun merged to one shared geo+mat (2 draws -> 1 per remote)
 2026-10-01 - perf: distance-gate body-part gibs (>120m deaths use instanced primitive shards, kills pdebris 7ms spikes)

@@ -67,6 +67,58 @@ export interface ProjectileMeshes {
   ribbons: RibbonTrail[];
 }
 
+// ---- Instanced projectile shells ----
+// A live scene carries ~30-40 projectiles mid-fight; each used to own a
+// Mesh (+glow Mesh) = 2 draw calls + 2 material state changes apiece.
+// Now all shells of a kind share one InstancedMesh: the returned Mesh
+// is a state object (position/quaternion/scale) that never enters the
+// scene — instanceSync() copies its transform into the slot each frame.
+const INST_CAP = 64;
+interface InstPool { mesh: THREE.InstancedMesh; free: number[] }
+const instPools = new Map<string, InstPool>();
+const _instMat = new THREE.Matrix4();
+const _zeroScale = new THREE.Vector3(0, 0, 0);
+
+interface SlotTag { __inst?: { pool: InstPool; slot: number } }
+
+function instPoolFor(scene: THREE.Scene, kind: string, geo: THREE.BufferGeometry, mat: THREE.Material): InstPool {
+  const key = scene.uuid + '|' + kind; // pools die with their scene — no cross-scene reuse
+  let p = instPools.get(key);
+  if (!p) {
+    const mesh = new THREE.InstancedMesh(geo, mat, INST_CAP);
+    mesh.frustumCulled = false; // shells scatter; per-instance bounds don't exist
+    mesh.count = 0;
+    mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    mesh.layers.enable(BLOOM_LAYER);
+    scene.add(mesh);
+    p = { mesh, free: [] };
+    instPools.set(key, p);
+  }
+  return p;
+}
+
+function instAlloc(pool: InstPool): number {
+  return pool.free.length ? pool.free.pop()! : pool.mesh.count++;
+}
+
+export function syncProjectileInstance(m: THREE.Mesh | null): void {
+  const t = (m as SlotTag | null)?.__inst;
+  if (!t) return;
+  _instMat.compose(m!.position, m!.quaternion, m!.scale);
+  t.pool.mesh.setMatrixAt(t.slot, _instMat);
+  t.pool.mesh.instanceMatrix.needsUpdate = true;
+}
+
+export function releaseProjectileInstance(m: THREE.Mesh | null): void {
+  const t = (m as SlotTag | null)?.__inst;
+  if (!t) return;
+  _instMat.compose(m!.position, m!.quaternion, _zeroScale);
+  t.pool.mesh.setMatrixAt(t.slot, _instMat);
+  t.pool.mesh.instanceMatrix.needsUpdate = true;
+  t.pool.free.push(t.slot);
+  delete (m as SlotTag).__inst;
+}
+
 // Spawn-scale so a 0.4s shotgun pellet still snaps to size fast.
 const RAMP_IN_START = 0.2;
 const RAMP_IN_DUR = 0.2;
@@ -92,13 +144,14 @@ export function buildProjectileMeshes(
 ): ProjectileMeshes {
   const geo = getMeshGeo(config.meshType, config.bodyRadius);
   const mat = getBodyMat(config.meshColor); // shared — never mutated
-  const mesh = new THREE.Mesh(geo, mat);
+  const mesh = new THREE.Mesh(geo, mat); // state only — rendered via the instanced pool
   mesh.position.copy(pos);
   // Spawn at the ramp-in start scale — prevents a one-frame full-size
   // flash before the first update shrinks it
   mesh.scale.setScalar(rampInStartScale(config));
   mesh.layers.enable(BLOOM_LAYER);
-  scene.add(mesh);
+  const bpool = instPoolFor(scene, `body|${config.meshType}|${config.bodyRadius}|${config.meshColor}`, geo, mat);
+  (mesh as SlotTag).__inst = { pool: bpool, slot: instAlloc(bpool) };
 
   let glowMesh: THREE.Mesh | null = null;
   if (config.glowShell) {
@@ -106,7 +159,8 @@ export function buildProjectileMeshes(
     glowMesh = new THREE.Mesh(GLOW_GEO, glowMat);
     glowMesh.position.copy(pos);
     glowMesh.layers.enable(BLOOM_LAYER);
-    scene.add(glowMesh);
+    const gpool = instPoolFor(scene, `glow|${config.glowColor}|${config.glowOpacity}`, GLOW_GEO, glowMat);
+    (glowMesh as SlotTag).__inst = { pool: gpool, slot: instAlloc(gpool) };
   }
 
   let ribbons: RibbonTrail[] = [];
@@ -165,4 +219,7 @@ export function updateProjectileMesh(
       mesh.quaternion.setFromUnitVectors(_FORWARD, _velDir);
     }
   }
+
+  syncProjectileInstance(mesh);
+  syncProjectileInstance(glowMesh);
 }
