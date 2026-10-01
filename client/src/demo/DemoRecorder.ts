@@ -66,6 +66,9 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
   context: DemoContext = { room: '', mode: '', playerName: '' };
 
   recording = false;
+  /** Dedupe bit-identical frames (local + remote). Off = verbatim every
+   *  tick, for analysis tooling that wants an unbroken sample stream. */
+  deadReckon = true;
   frameNumber = 0;
   startTime = 0;
   elapsedTime = 0;
@@ -142,7 +145,7 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
       const flags = (s.dead ? RemoteFrameFlags.Dead : 0) | (s.ski ? RemoteFrameFlags.Ski : 0);
       // Same dead-reckon skip as the local frame: an identical sample
       // reproduces exactly under playback's timestamp lerp.
-      if (this.remoteUnchanged(idx, s, flags)) continue;
+      if (this.deadReckon && this.remoteUnchanged(idx, s, flags)) continue;
       const f = this.remoteFramePool.pop() ?? ({ timestamp: 0, rosterIdx: 0, posX: 0, posY: 0, posZ: 0, velX: 0, velY: 0, velZ: 0, yaw: 0, pitch: 0, flags: 0 } as RemoteFrame);
       f.timestamp = now;
       f.rosterIdx = idx;
@@ -203,7 +206,7 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
     // carries zero information — playback lerps between timestamps and
     // would reproduce the same constants anyway. Idle stretches cost
     // ~12 compares instead of a 49B write each.
-    const last = this.frameBuffer.Count > 0 ? this.frameBuffer.peekNewest() : undefined;
+    const last = this.deadReckon && this.frameBuffer.Count > 0 ? this.frameBuffer.peekNewest() : undefined;
     if (last && this.frameIdentical(last, p, i)) {
       this.housekeep(now);
       return;
