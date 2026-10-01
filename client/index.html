@@ -32,6 +32,7 @@
     <div id="menu-side">
       <div class="menu-section">SETTINGS</div>
       <div class="btn-row">
+        <div class="section-label">PERFORMANCE</div>
         <button id="autoq-toggle">AUTO QUALITY: ON</button>
         <div class="field-row">
           <span>PIXEL SIZE</span>
@@ -45,11 +46,26 @@
             <button data-v="0">RAW</button><button data-v="1">SMOOTH</button><button data-v="2">DITHERED</button><button data-v="3">ATKINSON</button>
           </div>
         </div>
+        <button id="fpscap-toggle">FPS CAP: OFF</button>
+        <div class="section-label">GRAPHICS</div>
         <button id="bloom-toggle">GLOW: OFF</button>
         <button id="postpro-toggle">POST-PROCESSING: OFF</button>
-        <button id="fpscap-toggle">FPS CAP: OFF</button>
+        <div class="section-label">CONTROLS</div>
+        <div class="field-row">
+          <span>MOUSE SENS</span>
+          <input id="sens-input" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" />
+        </div>
         <button id="invert-y-toggle">INVERT Y: OFF</button>
+        <button id="keys-open">KEYBINDS</button>
+        <div class="section-label">AUDIO &amp; HUD</div>
+        <div class="field-row">
+          <span>VOLUME</span>
+          <input id="vol-input" type="range" min="0" max="1" step="0.05" />
+        </div>
+        <button id="tts-chat-toggle">CHAT TTS: OFF</button>
         <button id="minimap-toggle">MINIMAP: CORNER</button>
+        <button id="vgs-keys-toggle">VGS KEYS: LAYOUT</button>
+        <div class="section-label">GAME</div>
         <div class="field-row">
           <span>MODE</span>
           <select id="mode-select">
@@ -60,20 +76,9 @@
             <option value="classic">CLASSIC</option>
           </select>
         </div>
+        <button id="lobby-open">LOBBY / ROOMS</button>
         <button id="spawns-toggle">SPAWNS: SCRIPTED</button>
         <button id="debug-toggle">DEBUG: OFF</button>
-        <button id="tts-chat-toggle">CHAT TTS: OFF</button>
-        <button id="vgs-keys-toggle">VGS KEYS: LAYOUT</button>
-        <div class="field-row">
-          <span>MOUSE SENS</span>
-          <input id="sens-input" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" />
-        </div>
-        <div class="field-row">
-          <span>VOLUME</span>
-          <input id="vol-input" type="range" min="0" max="1" step="0.05" />
-        </div>
-        <button id="keys-open">KEYBINDS</button>
-        <button id="lobby-open">LOBBY / ROOMS</button>
       </div>
     </div>
     <div id="keys-modal"></div>
