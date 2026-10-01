@@ -34,6 +34,23 @@ type BotEntry = { playerId: string; pos: THREE.Vector3; vel: THREE.Vector3; aliv
 // Scratch BrainCtx for losClear — fields it doesn't read stay unset.
 const _losCtx: BrainCtx = { pos: { x: 0, y: 0, z: 0 }, enemies: [], groundY: () => 0, now: 0 };
 const _enemies: EnemyEntry[] = [];
+// Pooled plain-vec + entry scratches: the lists below are consumed
+// synchronously by the bot's think(), so the same entries can be
+// rewritten on the next call instead of reallocated.
+const _vecPool: { x: number; y: number; z: number }[] = [];
+let _vecUsed = 0;
+function nextVec(): { x: number; y: number; z: number } {
+  const v = _vecPool[_vecUsed] ?? (_vecPool[_vecUsed] = { x: 0, y: 0, z: 0 });
+  _vecUsed++;
+  return v;
+}
+const _botPool: (BotEntry & { id?: string })[] = [];
+let _botUsed = 0;
+function nextBot(): BotEntry & { id?: string } {
+  const b = _botPool[_botUsed] ?? (_botPool[_botUsed] = { playerId: '', pos: null as never, vel: null as never, alive: false });
+  _botUsed++;
+  return b;
+}
 
 export class BotSenses {
   constructor(private host: SenseHost) {}
@@ -65,11 +82,17 @@ export class BotSenses {
    *  (50m radius). Gunshots stay unheard, same as the server. */
   recentNoises(pos: THREE.Vector3): { x: number; y: number; z: number }[] {
     const out: { x: number; y: number; z: number }[] = [];
+    const vecBase = _vecUsed;
     for (const e of this.host.world().explosions) {
       if (e.age > 1.5) continue;
       const dx = e.pos.x - pos.x, dy = e.pos.y - pos.y, dz = e.pos.z - pos.z;
-      if (dx * dx + dy * dy + dz * dz < 50 * 50) out.push({ x: e.pos.x, y: e.pos.y, z: e.pos.z });
+      if (dx * dx + dy * dy + dz * dz < 50 * 50) {
+        const v = nextVec();
+        v.x = e.pos.x; v.y = e.pos.y; v.z = e.pos.z;
+        out.push(v);
+      }
     }
+    _vecUsed = vecBase; // out entries keep pool slots until the caller's next read
     return out;
   }
 
@@ -82,7 +105,9 @@ export class BotSenses {
       const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
       if (d > 12) continue;
       if (p.vel.x * dx + p.vel.y * dy + p.vel.z * dz <= 0) continue;
-      out.push({ x: p.pos.x, y: p.pos.y, z: p.pos.z });
+      const v = nextVec();
+      v.x = p.pos.x; v.y = p.pos.y; v.z = p.pos.z;
+      out.push(v);
     }
     return out;
   }
@@ -91,9 +116,12 @@ export class BotSenses {
    *  player included) and hostile creatures. */
   enemyList(bot: GameBot): EnemyEntry[] {
     _enemies.length = 0;
+    _vecUsed = 0; _botUsed = 0;
     const player = this.host.player();
     if (this.host.teamOf.get('local') !== bot.team) {
-      _enemies.push({ id: 'local', pos: player.pos, vel: player.vel, alive: !player.isDead && !player.isCloaked });
+      const e = nextBot() as EnemyEntry & { playerId?: string };
+      e.id = 'local'; e.pos = player.pos; e.vel = player.vel; e.alive = !player.isDead && !player.isCloaked;
+      _enemies.push(e);
     }
     for (const [id, rp] of this.host.world().remotePlayers) {
       if (id === bot.playerId) continue;
@@ -101,12 +129,18 @@ export class BotSenses {
       if (team === bot.team) continue;
       // A held cloak removes the bot from enemy senses — same rule the
       // local player's cloak enjoys in this list.
-      _enemies.push({ id, pos: rp.pos, vel: rp.vel, alive: !rp.isDead && !rp.isCloakHidden });
+      const e = nextBot() as EnemyEntry & { playerId?: string };
+      e.id = id; e.pos = rp.pos; e.vel = rp.vel; e.alive = !rp.isDead && !rp.isCloakHidden;
+      _enemies.push(e);
     }
     // Farming modes look farther — the brain prefers beast targets
     // when huntCreatures is on, so a far beast still enters the list.
     const c = this.host.nearestCreature(bot.position, this.host.mode() === 'nuggets' ? 80 : 35);
-    if (c) _enemies.push({ id: `creature:${c.id}`, pos: c.pos, vel: c.vel, alive: !c.dead });
+    if (c) {
+      const e = nextBot() as EnemyEntry & { playerId?: string };
+      e.id = `creature:${c.id}`; e.pos = c.pos; e.vel = c.vel; e.alive = !c.dead;
+      _enemies.push(e);
+    }
     return _enemies;
   }
 

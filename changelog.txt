@@ -1,3 +1,4 @@
+2026-09-30 - botSenses: pooled the per-call vec/entry literals (recentNoises, incomingNear, enemyList) — kills ~3 allocs per matching sense per bot per frame.
 2026-09-30 - bots.ts: allies list reused as scratch per think() — kills a per-bot per-frame array alloc in the ctx pipeline.
 2026-09-30 - botFire split: claim resolution + bolt tracers (claimShot/claimLocal/claimCreature, spawnBolt/tickBolts) -> botBolts.ts (316->258).
 2026-09-30 - CombatHandler split: shot-claim gates (hitClaim legality chain, registerMiss spawn sanity) -> shotClaims.ts (426->332).
