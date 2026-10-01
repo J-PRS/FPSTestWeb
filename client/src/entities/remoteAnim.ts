@@ -109,6 +109,10 @@ export class RemoteAnim {
       : h.camDistSq > 120 * 120 ? 1 / 15
       : h.camDistSq > 60 * 60 ? 1 / 30
       : 0;
+    // Frozen bones skip updateMatrixWorld entirely — valid only while the
+    // mixer never runs (animDt Infinity), otherwise the pose stalls.
+    const frozen = animDt === Infinity;
+    if (frozen !== this._bonesFrozen) { this._bonesFrozen = frozen; h.model.setBonesFrozen(frozen); }
     if (animDt > 0) {
       this.animAcc += dt;
       if (this.animAcc >= animDt) {
@@ -136,6 +140,7 @@ export class RemoteAnim {
   }
   private _castShadow = true;
   private _lodLevel: 0 | 1 = 0;
+  private _bonesFrozen = false;
 
   private tickAirTrail(dt: number, airborne: boolean, speed: number): void {
     const h = this.h;

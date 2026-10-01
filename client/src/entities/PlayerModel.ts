@@ -347,6 +347,18 @@ export class PlayerModel {
     for (const m of this.skinnedMeshes) m.castShadow = on;
   }
 
+  // Offscreen remotes skip the mixer entirely, so their bones are static —
+  // freezing matrixAutoUpdate drops the whole rig out of updateMatrixWorld
+  // (the rig is ~40 of the ~700 bone nodes walked per frame).
+  private bones: THREE.Bone[] = [];
+
+  setBonesFrozen(frozen: boolean): void {
+    for (const b of this.bones) {
+      b.matrixAutoUpdate = !frozen;
+      if (frozen) b.updateMatrix();
+    }
+  }
+
   /** Far-LOD swap: mannequin_lod1.glb is the same rig decimated ~80% —
    *  geometry carries the skin weights, so swapping geo alone keeps the
    *  pose. The skeleton/mixer is untouched. Only exists for 'mannequin'. */
@@ -410,6 +422,7 @@ export class PlayerModel {
   // Name-based since the model also has same-named plain nodes; only real
   // Bones qualify. Mannequin bones are DEF-* (normBone-stripped compare).
   private captureBone(child: THREE.Object3D): void {
+    this.bones.push(child as THREE.Bone);
     const nb = normBone(child.name);
     if (child.name === 'Head' || nb === 'defhead' || nb === 'head') {
       this.aimBones.push({ bone: child, factor: 0.4, last: new THREE.Quaternion() });
