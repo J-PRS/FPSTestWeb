@@ -190,12 +190,21 @@ export class GameBot extends RemotePlayer {
     huntCreatures?: boolean;
   }): { targetId: string; aim: THREE.Vector3 } | null {
     const pos = this.position;
+    // The senses re-query the same terrain cells several times per think
+    // (steer probes + LOS march + goal scoring all share the position) —
+    // memoize at ~4cm cells for the call's lifetime, not per-frame.
+    const gyc = new Map<number, number>();
     const out = this.brain.think(dt, {
       pos,
       enemies: ctx.enemies,
       objective: ctx.objective ?? undefined,
       pickup: ctx.nugget?.pos,
-      groundY: (x, z) => ctx.terrain.getHeight(x, z),
+      groundY: (x, z) => {
+        const k = ((x * 24) | 0) * 131072 + ((z * 24) | 0);
+        let v = gyc.get(k);
+        if (v === undefined) { v = ctx.terrain.getHeight(x, z); gyc.set(k, v); }
+        return v;
+      },
       solids: Projectile.solidColliders,
       solidIndex: Projectile.solidIndex,
       others: ctx.others,
