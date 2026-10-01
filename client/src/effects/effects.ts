@@ -272,6 +272,7 @@ export class EffectsManager {
         transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
       });
       b = { mesh: new THREE.Mesh(this.beamGeo, mat), mat, life: 0, maxLife: 0 };
+      b.mesh.userData.dbg = { kind: 'beam' };
     }
     b.mesh.position.copy(from).addScaledVector(_v, 0.5);
     b.mesh.quaternion.setFromUnitVectors(_v3.set(0, 1, 0), _v.normalize());

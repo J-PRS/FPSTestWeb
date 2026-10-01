@@ -246,6 +246,7 @@ async function init(): Promise<void> {
     lazyEffects: () => effects,
     logger,
     world,
+    lazyOfflineFfaScores: () => teamBots?.ffaScores ?? null,
   });
 
   // Load player model
@@ -623,6 +624,8 @@ init().then(async () => {
       getLastSentPos: remotes.getLastSentPos,
       world,
       teamBots: () => teamBots,
+      getScene: () => scene,
+      getCamera: () => player.camera,
       logger,
     });
   }

@@ -5,7 +5,7 @@ import { MAX_DELTA_TIME } from '../core/config.js';
 import { urlParams } from '../core/params.js';
 import type { DemoManager } from '../demo/index.js';
 import type { Player } from '../entities/Player.js';
-import { updateGibs } from '../entities/swarms.js';
+import { updateGibs, swarmStats } from '../entities/swarms.js';
 import type { ViewModel } from '../entities/ViewModel.js';
 import type { DamageNumberManager } from '../effects/damageNumbers.js';
 import type { EffectsManager } from '../effects/effects.js';
@@ -15,7 +15,9 @@ import type { GroundMist } from '../effects/groundMist.js';
 import type { AmbientBirds } from '../effects/birds.js';
 import { screenShake } from '../effects/screenShake.js';
 import { Explosion } from '../effects/explosion.js';
-import { updateVfx } from '../effects/vfx.js';
+import { updateVfx, trailStats, trailDump, poolDump } from '../effects/vfx.js';
+import { RibbonTrail } from '../projectiles/RibbonTrail.js';
+import { instPoolDump } from '../projectiles/visuals.js';
 import * as sfxAudio from '../core/sfx/world.js';
 
 import type { NetworkManager } from '../networking/NetworkManager.js';
@@ -39,14 +41,27 @@ import { fpsWatchdog, resetAutoQuality, fxJobSample, fxJobStats } from './loopPe
 import { createRenderScan } from './renderScan.js';
 import { settings } from '../core/settings.js';
 import { WeaponType } from '../../../shared/weapons.js';
+import { isBotId } from '../../../shared/botNames.js';
+import { nanScanTick, nanScanBindProbe } from '../core/nanScan.js';
+import Logger from '../core/Logger.js';
 
 const _zeroVel = new THREE.Vector3(); // shared zero for demo playback
 const _sunDir = new THREE.Vector3(); // scratch — directional fog sun lookup
+// Frame-jump forensic: compare pos at the same point each frame so any
+// discontinuity — respawn, correction, teleport — lands in the log with
+// its from→to pair. Honest skiing is ~2-4m/frame even at 30fps; 8m only
+// fires on a real snap.
+const _posPrev = new THREE.Vector3();
+let _posPrimed = false;
+const JUMP_FRAME_M = 8;
 const _birdPosBuf: THREE.Vector3[] = []; // scratch — minimap debug blips
 const _mapBlips: import('../ui/minimap.js').MinimapPlayer[] = []; // scratch — minimap player/bot blips
 
 // ?mode=classic — solo bounce-and-shoot: balls only, no rage, no roster
 const CLASSIC_MODE = urlParams.isClassic;
+// ?nanscan=1 — see fxTick; hunts the screen-covering-triangle flash.
+const NANSCAN = urlParams.get('nanscan') === '1';
+let nanProbeBound = false;
 
 // Dead-checkable effect list — update each, dispose+splice the finished.
 function updateDeadList<T extends { update(dt: number): void; dead: boolean; dispose(): void }>(list: T[], dt: number): void {
@@ -194,6 +209,14 @@ const fmtBps = (b: number) => b >= 1048576 ? `${(b / 1048576).toFixed(1)}MB/s` :
 function simTick(deps: GameLoopDeps, perf: ReturnType<typeof createPerfHud>, f: TickFrame, terrain: Terrain): boolean {
   const { dt, player, demoManager } = f;
   player.update(dt);
+  if (_posPrimed) {
+    const jump = player.pos.distanceTo(_posPrev);
+    if (jump > JUMP_FRAME_M) {
+      Logger.warn(`POS JUMP ${jump.toFixed(1)}m in one frame — (${_posPrev.x.toFixed(1)},${_posPrev.y.toFixed(1)},${_posPrev.z.toFixed(1)}) → (${player.pos.x.toFixed(1)},${player.pos.y.toFixed(1)},${player.pos.z.toFixed(1)}) dead=${player.isDead}`);
+    }
+  }
+  _posPrev.copy(player.pos);
+  _posPrimed = true;
   terrain.update(player.pos.x, player.pos.z);
   syncFog(deps, terrain);
 
@@ -245,12 +268,23 @@ function tickEntities(deps: GameLoopDeps, perf: ReturnType<typeof createPerfHud>
 const FX_MS_CAP = 1.2;
 function fxTick(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof createFrameBudget>, fxDt: number): void {
   // vfx runs OUTSIDE the rotation: batcher.update must tick every frame
-  // (particles freeze otherwise) and its prune/cap is what keeps the
-  // sim bounded — deferring it under load let `live` balloon past
-  // MAX_LIVE_SYSTEMS (seen: 1201 systems → 10-24ms vfx frames).
+  // (particles freeze otherwise) and its bookkeeping is what keeps the
+  // sim bounded — deferring it under load let `live` balloon past the
+  // old cap (seen: 1201 systems → 10-24ms vfx frames).
   const v0 = performance.now();
   updateVfx(fxDt, deps.camera.position);
   fxJobSample('vfx', performance.now() - v0);
+  // ?nanscan=1 — cheap watchdog for the "giant black triangle" class of
+  // bug: a non-finite/insane vertex in ANY dynamic buffer rasterizes as
+  // a fullscreen quad (undefined per spec), indistinguishable from a
+  // bloom smear except that HUD/viewmodel survive. Scans scene buffers.
+  if (NANSCAN) {
+    nanScanTick(deps.sceneSetup.scene, deps.camera);
+    if (!nanProbeBound) {
+      nanProbeBound = true;
+      nanScanBindProbe(() => ({ scene: deps.sceneSetup.scene, camera: deps.camera }));
+    }
+  }
   st.fxJobs.length = 0;
   st.fxJobs.push(
     ['effects', () => deps.lazyEffects().update(fxDt)],
@@ -328,22 +362,20 @@ function hudTick(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof cr
     deps.world.flagStates,
   );
   hud.updateDeathCountdown(deps.world.respawnMs);
-  budget.sweep('minimap', 40, () => {
-    // Both buffers exist only to feed updateMinimap — build them inside
-    // the sweep so they refresh on the same cadence.
-    deps.ambientBirds.positions(_birdPosBuf);
-    // Player/bot blips — same friend-or-foe rule as the overhead markers:
-    // wire team (or GameBot.team) matching localTeam = green, else red.
-    // Dead and cloaked riders are dropped — no corpse pings, no cloak leak.
-    _mapBlips.length = 0;
-    const wirePlayers = networkManager.getPlayers();
-    for (const [id, rp] of deps.world.remotePlayers) {
-      if (rp.isDead || rp.isCloakHidden) continue;
-      const team = (rp as { team?: string }).team ?? wirePlayers.get(id)?.team;
-      _mapBlips.push({ x: rp.position.x, z: rp.position.z, friendly: !!team && team === deps.world.localTeam });
-    }
-    hud.updateMinimap(entities.targets, entities.nuggets, player.pos, player.yaw, _birdPosBuf, _mapBlips);
-  });
+  // Every frame — a rotating radar at the 25Hz sweep cadence reads as
+  // visibly choppy next to the 60fps world, and the redraw is ~30 arcs.
+  deps.ambientBirds.positions(_birdPosBuf);
+  // Player/bot blips — same friend-or-foe rule as the overhead markers:
+  // wire team (or GameBot.team) matching localTeam = green, else red.
+  // Dead and cloaked riders are dropped — no corpse pings, no cloak leak.
+  _mapBlips.length = 0;
+  const wirePlayers = networkManager.getPlayers();
+  for (const [id, rp] of deps.world.remotePlayers) {
+    if (rp.isDead || rp.isCloakHidden) continue;
+    const team = (rp as { team?: string }).team ?? wirePlayers.get(id)?.team;
+    _mapBlips.push({ x: rp.position.x, z: rp.position.z, friendly: !!team && team === deps.world.localTeam, bot: isBotId(id) });
+  }
+  hud.updateMinimap(entities.targets, entities.nuggets, player.pos, player.yaw, _birdPosBuf, _mapBlips);
 
   // During demo playback the vm mirrors the frame's recorded weaponType —
   // hiding it would strip the shooter POV from cool-shot clips.
@@ -414,6 +446,15 @@ function wireDebugKeys(deps: GameLoopDeps, perf: ReturnType<typeof createPerfHud
   // (per-class triangle census, ad-hoc visibility A/Bs). Debug-only.
   window.__scene = deps.sceneSetup.scene;
   window.__renderer = deps.rendererSetup.renderer;
+  // __trailDump — live projectile-trail census for the "trails vanished"
+  // class of bug: quarks particle counts, batcher attachment, ribbon slots.
+  window.__trailDump = () => ({
+    stats: trailStats, pools: poolDump(),
+    trails: trailDump(), ribbons: RibbonTrail.dump(), ribbonBatch: RibbonTrail.batchStats(),
+    ribbonOrphans: RibbonTrail.orphans(),
+    litAudit: RibbonTrail.litAudit(), reapedLit: RibbonTrail.reapedLit,
+    inst: instPoolDump(), swarm: swarmStats(),
+  });
   document.addEventListener('keydown', (e) => {
     // Alt+W — bot weapon audit: last gun each bot drew + its shot count,
     // so "do they fire real weapons" is a one-keypress read. Alt+Shift+W
@@ -422,7 +463,7 @@ function wireDebugKeys(deps: GameLoopDeps, perf: ReturnType<typeof createPerfHud
       e.preventDefault();
       if (e.shiftKey) { location.reload(); return; }
       const rows = [...lastWeaponByPlayer.entries()]
-        .filter(([id]) => id.startsWith('BOT-'))
+        .filter(([id]) => isBotId(id))
         .map(([id, r]) => ({ bot: id, weapon: WeaponType[r.wt] ?? `w${r.wt}`, shots: r.n }));
       console.table(rows.length ? rows : [{ note: 'no bot fire seen yet' }]);
       return;

@@ -3,6 +3,8 @@
 // (takeClientSnapshot / requestServerSnapshot / compareState / exportClientSnapshots).
 
 import Logger, { ChildLogger } from './Logger.js';
+import { aimProbe } from './aimProbe.js';
+import type * as THREE from 'three';
 import { computeStateHash } from '../../../shared/stateHash.js';
 import { StateSnapshot, type EntityState, type GameStateSnapshot } from './StateSnapshot.js';
 import type { SnapshotPlayer } from '../../../shared/protocol.js';
@@ -22,6 +24,9 @@ export interface StateDebugContext {
   world?: { mode?: string; localTeam?: string; teamScores?: { alpha: number; bravo: number } | null; ffaScores?: Map<string, number>; matchEndsAt?: number | null; playbackMode?: boolean };
   /** Offline bot referee — bot roster/teams for the diagnostics dump. */
   teamBots?: () => { bots: { playerId: string; team: string; isDead: boolean; position: { x: number; y: number; z: number }; botHp?: number }[]; teamOf: Map<string, string>; over: string | null; scores: { alpha: number; bravo: number }; ffaScores: Map<string, number> } | null;
+  /** Scene + view camera for the crosshair aim probe (what's under the reticle). */
+  getScene?: () => THREE.Scene | null;
+  getCamera?: () => THREE.Camera | null;
   logger: ChildLogger;
 }
 
@@ -110,6 +115,7 @@ function diagLines(ctx: StateDebugContext): string[] {
     `lastSentPos: ${fmt(ctx.getLastSentPos())}`,
   ];
   pushWorld(lines, ctx.world);
+  pushAimProbe(lines, ctx);
   lines.push(`remotes: ${ctx.remotePlayers.size} rendered / ${wire.size} known`);
   for (const [id, ps] of wire) {
     const rp = ctx.remotePlayers.get(id);
@@ -128,11 +134,85 @@ function diagLines(ctx: StateDebugContext): string[] {
     `projectiles: ${ctx.projectiles.length} live`,
     `uptime: ${(performance.now() / 1000).toFixed(0)}s`,
   );
+  pushTrailCensus(lines, ctx);
+  pushProjectiles(lines, ctx);
   if (battleLog.length) {
     lines.push('battleLog:');
     for (const k of battleLog.slice(-15)) lines.push(`  ${k}`);
   }
   return lines;
+}
+
+// Per-projectile row — pairs a dead trail with the shell that owns it.
+// Ribbon health flags per lane: '!' stopped, 'L' lit on screen,
+// '~N' pushes starved by the near-zero-velocity gate — a shell pushing
+// every frame that still has count<2 is the silent no-trail case.
+function pushProjectiles(lines: string[], ctx: StateDebugContext): void {
+  let ribbonWarns = 0;
+  for (const pr of ctx.projectiles) {
+    const d = pr.dbg();
+    const rib = d.ribbons.map(r => `${r.slot}:${r.count}${r.stopped ? '!' : ''}${r.lit ? 'L' : ''}${r.starved ? `~${r.starved}` : ''}`).join(',');
+    if (d.ribbons.some(r => r.count < 2 && r.starved > 10)) ribbonWarns++;
+    lines.push(`  proj ${pr.config.name} age=${pr.age.toFixed(2)}${pr.exploded ? ' EX' : ''} q=${JSON.stringify(d.trail)} rib=[${rib}]`);
+  }
+  if (ribbonWarns) lines.push(`ribbonWarns: ${ribbonWarns} projectiles emit pushes but have NO ribbon samples`);
+}
+
+// Crosshair probe near the top — the point of the dump is usually "what
+// is THAT thing", so the answer shouldn't sit under the censuses.
+function pushAimProbe(lines: string[], ctx: StateDebugContext): void {
+  const aimScene = ctx.getScene?.(), aimCam = ctx.getCamera?.();
+  if (!aimScene || !aimCam) return;
+  try {
+    const hits = aimProbe(aimScene, aimCam);
+    lines.push(`aim: ${hits.length ? '' : '(no tagged object under crosshair)'}`);
+    for (const h of hits) lines.push(`  ${h}`);
+  } catch (e) {
+    lines.push(`aim: probe failed ${(e as Error).message}`);
+  }
+}
+
+// Trail census — dead-trail bugs need attached/particles/slot per live
+// trail, not just the projectile count.
+function pushTrailCensus(lines: string[], ctx: StateDebugContext): void {
+  const td = window.__trailDump?.();
+  if (!td) return;
+  lines.push(`trailStats: ${Object.entries(td.stats).map(([k, v]) => `${k}=${v}`).join(' ')}`);
+  lines.push(`pools: ${JSON.stringify(td.pools)}`);
+  for (const t of td.trails) lines.push(`  trail ${JSON.stringify(t)}`);
+  lines.push(`ribbons: ${td.ribbons.length} live ${JSON.stringify(td.ribbonBatch)}`);
+  // Position-tagged rows — a frozen streak on screen maps to a slot by its
+  // head/mid coords; sorted by fullness so the longest streaks lead.
+  const rs = td.ribbons.toSorted((a, b) => ((b.count as number) ?? 0) - ((a.count as number) ?? 0)).slice(0, 16);
+  for (const r of rs) lines.push(`  rib ${JSON.stringify(r)}`);
+  if (td.ribbonOrphans.count > 0) {
+    lines.push(`ribbonOrphans: ${td.ribbonOrphans.count} (leaked slots: ${td.ribbonOrphans.slots.length})`);
+    for (const o of td.ribbonOrphans.rows) lines.push(`  orphan ${JSON.stringify(o)}`);
+  } else {
+    lines.push('ribbonOrphans: 0');
+  }
+  pushTrailExtras(lines, td, ctx);
+}
+
+// The extras half of the trail census: GPU-buffer audits (lit-but-unowned
+// slots — frozen streaks no RibbonTrail object owns, reapedLit counts the
+// ones the sweeper already blacked out), instancing/species pool inventory,
+// and the oldest-shell line that surfaces the next immortal early.
+type TrailDump = NonNullable<ReturnType<NonNullable<Window['__trailDump']>>>;
+function pushTrailExtras(lines: string[], td: TrailDump, ctx: StateDebugContext): void {
+  const unowned = td.litAudit.unowned;
+  lines.push(`litAudit: lit=${td.litAudit.lit} unowned=${unowned.length}${unowned.length ? ' slots=[' + unowned.slice(0, 12).join(',') + (unowned.length > 12 ? ',…' : '') + ']' : ''} reaped=${td.reapedLit}`);
+  lines.push(`instPools: ${JSON.stringify(td.inst)}`);
+  lines.push(`swarm: ${JSON.stringify(td.swarm)}`);
+  const aged = ctx.projectiles.toSorted((a, b) => b.age - a.age).slice(0, 5);
+  if (aged.length) {
+    lines.push(`oldest: ${aged.map(pr => `${pr.config.name}@${pr.age.toFixed(1)}s(${pr.pos.x.toFixed(0)},${pr.pos.y.toFixed(0)},${pr.pos.z.toFixed(0)})`).join(' ')}`);
+  }
+  let offWorld = 0;
+  for (const pr of ctx.projectiles) {
+    if (pr.pos.y < -500 || Math.abs(pr.pos.x) > 4000 || Math.abs(pr.pos.z) > 4000) offWorld++;
+  }
+  if (offWorld) lines.push(`offWorld: ${offWorld} projectiles outside sane bounds`);
 }
 
 function pushWorld(lines: string[], w: StateDebugContext['world']): void {
@@ -190,7 +270,10 @@ function diffPlayerFields(
   const dy = Math.abs(cp.y - sp.position.y);
   const dz = Math.abs(cp.z - sp.position.z);
   if (Math.max(dx, dy, dz) > POSITION_TOLERANCE) {
-    diffs.push(`Player ${id} position delta=(${dx.toFixed(1)},${dy.toFixed(1)},${dz.toFixed(1)})`);
+    // Print BOTH positions, not just the delta — a frozen delta means one
+    // end parked (spawn/teleport desync), and you can't tell which end is
+    // stranded without the coordinates.
+    diffs.push(`Player ${id} position delta=(${dx.toFixed(1)},${dy.toFixed(1)},${dz.toFixed(1)}) client=${fmt(cp)} server=${fmt(sp.position)}`);
   }
   // Sub-1hp deltas are float dust (fractional regen ticks, armor soak
   // remainders) — a real desync is a whole hit or more.
