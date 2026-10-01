@@ -189,6 +189,9 @@ export class ServerBots {
     // Deploy claims run the same handleDeploy a human's message does —
     // kind, plant distance, and per-player cap are all re-validated.
     if (out.deploy) this.room.deployables.handleDeploy(id, out.deploy.kind, out.deploy.pos);
+    // Weld ticks ride the human repair path too — range, LOS, team and
+    // the per-shooter rate cap all re-check server-side.
+    if (out.repair) this.room.deployables.repair(id, +out.repair);
   }
 
   private driveMove(id: string, p: { position: Vec3; velocity: Vec3; rotation: { yaw: number }; status: number; skiing: number }, out: BrainOut, sh: MoveState, dt: number, now: number): void {

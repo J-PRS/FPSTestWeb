@@ -1,6 +1,7 @@
 import { botRand } from './botRand.ts';
 import { STATUS } from './status.ts';
 import { ENERGY } from './movement.ts';
+import { REPAIR_RANGE } from './weapons.ts';
 import { retreatDest } from './botHunt.ts';
 import type { BotVec, BrainCtx, BrainOut, BotBrain } from './botBrain.ts';
 import { dist3 } from './botVec.ts';
@@ -21,7 +22,13 @@ export function pickDest(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, fe
       const l = Math.hypot(fx, fz) || 1;
       return { x: pos.x + (fx / l) * FLINCH_DIST, y: pos.y, z: pos.z + (fz / l) * FLINCH_DIST };
     }
-    if (!b.h.hunt) return b.goalS.goal;
+    if (!b.h.hunt) {
+      // A builder with hands free welds the stand's wounded gear before
+      // wandering on — same "nobody close enough to interrupt" gate the
+      // emplacement pick uses (a weld under fire is a feeding run).
+      if (b.builder && !fearing && ctx.repair) return ctx.repair.pos;
+      return b.goalS.goal;
+    }
     const t = b.h.hunt;
     const d = dist3(pos, t.pos);
     if (fearing) return retreatDest(ctx, pos, t);
@@ -73,6 +80,17 @@ export function pickDeploy(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, 
     const r = 4 + botRand() * 6;
     const px = pos.x + Math.cos(a) * r, pz = pos.z + Math.sin(a) * r;
     return { kind, pos: { x: px, y: ctx.groundY(px, pz), z: pz } };
+  }
+
+  /** Weld intent: a builder inside beam reach of the damaged item works
+   *  on it — same cadence a human holds the trigger, and the host-side
+   *  heal path re-validates range/LOS/team like any claim. The hunt and
+   *  fear gates mirror pickDeploy: nobody welds through a firefight. */
+export function pickRepair(b: BotBrain, ctx: BrainCtx, pos: BotVec, fearing: boolean): string | undefined {
+    if (!b.builder || fearing || !ctx.repair) return undefined;
+    if (b.h.hunt && dist3(pos, b.h.hunt.pos) <= 25) return undefined;
+    if (dist3(pos, ctx.repair.pos) > REPAIR_RANGE * 0.9) return undefined;
+    return ctx.repair.key;
   }
 
   /** Toggle-skill intent — the STATUS bits a legal client claims. Mend

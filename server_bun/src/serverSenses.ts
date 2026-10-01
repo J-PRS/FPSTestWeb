@@ -14,6 +14,7 @@ import { getWeaponStats } from '../../shared/weapons.ts';
 import { BOT_LOADOUTS, pickBotWeapon, type BotLoadout } from '../../shared/botLoadouts.ts';
 import { WeaponType } from '../../shared/weapons.ts';
 import { roleObjective, type BotRole } from '../../shared/flagGoals.ts';
+import { DEPLOY_HP } from '../../shared/deployables.ts';
 import type { TeamId } from '../../shared/teams.ts';
 
 export class ServerBotSenses {
@@ -93,6 +94,26 @@ export class ServerBotSenses {
       // only gates the objective-driven lobbers.
       const gd = goal ? Math.hypot(d.pos.x - goal.x, d.pos.z - goal.z) : 0;
       if (bd < bestD && (sabotage || gd < 50)) { bestD = bd; best = d.pos; }
+    }
+    return best;
+  }
+
+  /** Friendly gear that needs a weld — nearest damaged item within the
+   *  reach a builder would reasonably walk to. Deployables broadcast
+   *  their state to every client, so a bot noticing a hurt turret is
+   *  reading public info, same as a human watching the stand. */
+  repairJob(p: { id: string; team?: string; position: Vec3 }): { key: string; pos: BotVec; frac: number } | null {
+    let best: { key: string; pos: BotVec; frac: number } | null = null;
+    let bestD = 45;
+    for (const d of this.room.deployables.items.values()) {
+      const cap = DEPLOY_HP[d.kind];
+      if (d.hp >= cap) continue;
+      if (d.owner !== p.id) {
+        const owner = this.room.players.getPlayer(d.owner);
+        if (!p.team || owner?.team !== p.team) continue;
+      }
+      const bd = Math.hypot(d.pos.x - p.position.x, d.pos.z - p.position.z);
+      if (bd < bestD) { bestD = bd; best = { key: String(d.id), pos: d.pos, frac: d.hp / cap }; }
     }
     return best;
   }
@@ -229,6 +250,7 @@ export class ServerBotSenses {
       // like a human reading the arc instead of eating every volley.
       threats: this.room.projectiles.incomingNear(p.position, 12),
       sounds: this.room.noisesNear(p.position, 50),
+      repair: this.repairJob(p),
       now,
     };
   }

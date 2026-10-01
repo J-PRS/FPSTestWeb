@@ -47,6 +47,7 @@ export class DeployAdopter {
       },
       dispose: () => t.dispose(this.deps.scene),
       owner: owner?.id,
+      team: owner?.team,
     };
     // Keep item.dead in step with the entity's — gnaw damage lands on `t`.
     const hurt = item.hurt;
@@ -71,6 +72,7 @@ export class DeployAdopter {
       },
       dispose: () => d.dispose(this.deps.scene),
       owner: owner?.id,
+      team: owner?.team,
     };
     const hurt = item.hurt;
     item.hurt = (dmg) => { hurt(dmg); if (d.dead) this.host.killItem(item); };
@@ -128,6 +130,7 @@ export class DeployAdopter {
       },
       dispose: () => m.dispose(),
       owner: owner?.id,
+      team: owner?.team,
     };
     this.items.push(item);
   }
@@ -155,6 +158,7 @@ export class DeployAdopter {
       },
       dispose: () => s.dispose(this.deps.scene),
       owner: owner?.id,
+      team: owner?.team,
     };
     const hurt = item.hurt;
     item.hurt = (dmg) => { hurt(dmg); if (s.dead) this.host.killItem(item); };

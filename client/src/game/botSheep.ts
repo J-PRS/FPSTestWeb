@@ -62,7 +62,7 @@ export class SheepMeter {
     this.maxedSet.delete(id);
   }
 
-  tick(bot: GameBot, dt: number, terrain: Terrain, foe = false, ignoring = false, hasDest = false): void {
+  tick(bot: GameBot, dt: number, terrain: Terrain, foe = false, ignoring = false, hasDest = false, busy = false): void {
     const v = bot.vel;
     const height = Math.max(0, bot.pos.y - terrain.getHeight(bot.pos.x, bot.pos.z));
     const grounded = height < 2;
@@ -78,7 +78,9 @@ export class SheepMeter {
     const eSm = ePrev + (mech - ePrev) * Math.min(1, dt * 5);
     this.eSm.set(bot.playerId, eSm);
     const bonusSpeed = Math.sqrt(Math.max(0, 2 * eSm));
-    const tribesing = SheepMeter.isTribesing(bot, bonusSpeed, grounded);
+    // Welding a stand's gear is honest work — a parked welder is
+    // productive, not a pedestrian (mirrors the server meter).
+    const tribesing = SheepMeter.isTribesing(bot, bonusSpeed, grounded) || busy;
     const moving = Math.hypot(v.x, v.z) > 1;
     const why = this.ledger(bot.playerId);
     // Drain is rate-capped like the server meter — a high-E burst

@@ -455,12 +455,54 @@ export class Deployables {
 
   /** Repair beam: heal to maxHealth, overflow banks as armor. The local
    *  write is the offline authority AND the prediction — the server's
-   *  deployHp echo lands the same number when connected. */
+   *   deployHp echo lands the same number when connected. */
   healItem(item: Item, n: number): void {
     const v = item.v;
     const over = Math.max(0, v.health + n - v.maxHealth);
     v.health = Math.min(v.maxHealth, v.health + n);
     v.armor = Math.min(v.maxHealth * REPAIR_ARMOR_MULT, v.armor + over);
+  }
+
+  // --- Bot welding ---------------------------------------------------------
+  // Offline/local bot brains see damaged friendly gear through the same
+  // channel the server senses feed theirs: nearest wounded item they own
+  // or their team planted. The key mirrors the server's opaque dep id so
+  // the brain's `repair` intent resolves identically on both hosts.
+
+  private keyOf(i: Item): string {
+    return i.serverId !== undefined ? `s${i.serverId}` : i.candId;
+  }
+
+  /** Nearest damaged item the bot could weld — own gear always, same-team
+   *  gear when the item knows its owner's side. 45m mirrors the server
+   *  senses' reach so offline welders behave like wire ones. */
+  repairJob(botId: string, team: string, pos: THREE.Vector3): { key: string; pos: THREE.Vector3; frac: number } | null {
+    let bestD = 45;
+    const scan = (list: Iterable<Item>): Item | null => {
+      let best: Item | null = null;
+      for (const i of list) {
+        if (i.dead || i.v.health >= i.v.maxHealth) continue;
+        if (i.owner !== botId && i.team !== team) continue;
+        const d = Math.hypot(i.pos.x - pos.x, i.pos.z - pos.z);
+        if (d < bestD) { bestD = d; best = i; }
+      }
+      return best;
+    };
+    const best = scan(this.items) ?? scan(this.remote.values());
+    return best ? { key: this.keyOf(best), pos: best.pos, frac: best.v.health / best.v.maxHealth } : null;
+  }
+
+  /** Resolve a brain's repair key to a heal — returns the welded item so
+   *  the caller can paint the work, null when the item died mid-walk. */
+  weld(key: string, n: number): Item | null {
+    const find = (list: Iterable<Item>) => {
+      for (const i of list) if (this.keyOf(i) === key && !i.dead) return i;
+      return null;
+    };
+    const item = find(this.items) ?? find(this.remote.values());
+    if (!item) return null;
+    this.healItem(item, n);
+    return item;
   }
 
   remoteRemove(id: number): void {

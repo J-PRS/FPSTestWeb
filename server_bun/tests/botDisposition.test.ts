@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'bun:test';
 
 import { BotBrain, type BotEnemy, type BrainCtx } from '../../shared/botBrain.ts';
-import { pickDest, pickDeploy, statusIntent } from '../../shared/botDisposition.ts';
+import { pickDest, pickDeploy, pickRepair, statusIntent } from '../../shared/botDisposition.ts';
 import { botRng } from '../../shared/botRand.ts';
 import { STATUS } from '../../shared/status.ts';
 import { ENERGY } from '../../shared/movement.ts';
@@ -95,6 +95,43 @@ describe('pickDeploy', () => {
     const d = pickDeploy(b, 0.1, ctx({ objective: { x: 0, y: 0, z: 0 }, healthFrac: 0.3 }), { x: 0, y: 0, z: 0 }, false);
     expect(d?.kind).toBe('station');
     expect(b.deployT).toBeGreaterThan(0); // cooldown engaged
+  });
+});
+
+describe('bot welding', () => {
+  const job = { key: 'dep:7', pos: { x: 30, y: 0, z: 0 }, frac: 0.5 };
+
+  it('idle builder steers to the weld target instead of the goal', () => {
+    const b = brain();
+    b.builder = true;
+    b.goalS.goal = { x: 10, y: 0, z: -5 };
+    const d = pickDest(b, 0.1, ctx({ repair: job }), { x: 0, y: 0, z: 0 }, false, false);
+    expect(d).toEqual({ x: 30, y: 0, z: 0 });
+  });
+
+  it('non-builders ignore a repair job entirely', () => {
+    const b = brain();
+    b.builder = false;
+    b.goalS.goal = { x: 10, y: 0, z: -5 };
+    const d = pickDest(b, 0.1, ctx({ repair: job }), { x: 0, y: 0, z: 0 }, false, false);
+    expect(d).toEqual({ x: 10, y: 0, z: -5 });
+    expect(pickRepair(b, ctx({ repair: job }), { x: 25, y: 0, z: 0 }, false)).toBeUndefined();
+  });
+
+  it('pickRepair claims once in beam range, not from across the map', () => {
+    const b = brain();
+    b.builder = true;
+    const c = ctx({ repair: job });
+    expect(pickRepair(b, c, { x: 22, y: 0, z: 0 }, false)).toBe('dep:7'); // 8m < REPAIR_RANGE*0.9
+    expect(pickRepair(b, c, { x: 0, y: 0, z: 0 }, false)).toBeUndefined(); // 30m away — walk first
+  });
+
+  it('nobody welds mid-fight', () => {
+    const b = brain();
+    b.builder = true;
+    b.h.hunt = enemy(10, 0);
+    const c = ctx({ repair: job });
+    expect(pickRepair(b, c, { x: 22, y: 0, z: 0 }, false)).toBeUndefined();
   });
 });
 

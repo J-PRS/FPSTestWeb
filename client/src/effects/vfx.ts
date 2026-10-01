@@ -119,6 +119,16 @@ function reapStarved(ps: IParticleSystem): void {
     starveFrames.delete(ps);
     return;
   }
+  // Active projectile trails aren't in live/pooled, so they'd land here
+  // whenever their emitter stops moving ~4s (rested bomblet, pre-launch).
+  // Deleting the system while a Projectile still owns it leaves a zombie
+  // that dispose() pools — every later reuse renders nothing.
+  if (activeTrailPs.has(ps as ParticleSystem)) {
+    const s = ps.particleNum === 0 ? (starveFrames.get(ps) ?? 0) + 1 : 0;
+    if (s === STARVE_LIMIT) trailStats.reapedActive++;
+    if (s) starveFrames.set(ps, s); else starveFrames.delete(ps);
+    return;
+  }
   const starved = ps.particleNum === 0 ? (starveFrames.get(ps) ?? 0) + 1 : 0;
   if (starved > STARVE_LIMIT) {
     batcher?.deleteSystem(ps);
@@ -167,6 +177,19 @@ function runBookkeeping(camPos?: THREE.Vector3): void {
           // particles would hang mid-air forever. Age suspended systems
           // a coarse step here instead — the emitter is parked, so no
           // new particles spawn while the existing ones decay out.
+          //
+          // emitSegment keeps writing emitter.position while paused, but
+          // emissionState.previousWorldPos only advances inside emit() —
+          // skipped under paused. Without resyncing first, this update
+          // (or the eventual unpause) reads the whole suspended drift as
+          // one giant travel jump and smears a burst along it — the
+          // "stretching trail" artifact at distance.
+          const st = ps.emissionState as {
+            travelDistance: number;
+            previousWorldPos?: { set(x: number, y: number, z: number): void };
+          };
+          st.travelDistance = 0;
+          st.previousWorldPos?.set(em.position.x, em.position.y, em.position.z);
           ps.paused = false;
           // quarks marks update() private in its typings though it's the
           // method BatchedRenderer.update calls per frame — the cast is
@@ -174,6 +197,17 @@ function runBookkeeping(camPos?: THREE.Vector3): void {
           (ps as unknown as { update(d: number): void }).update(PAUSED_DECAY_S);
           ps.paused = true;
         } else {
+          if (ps.paused) {
+            // First live tick after a suspended span: the emitter drifted
+            // while paused — don't let emissionOverDistance cash the jump
+            // as one long deposit.
+            const st = ps.emissionState as {
+              travelDistance: number;
+              previousWorldPos?: { set(x: number, y: number, z: number): void };
+            };
+            st.travelDistance = 0;
+            st.previousWorldPos?.set(em.position.x, em.position.y, em.position.z);
+          }
           ps.paused = false;
         }
       }
@@ -367,6 +401,22 @@ function trailKey(config: ProjectileConfig): string {
  *  Trade vs the hand-rolled version: ring/disc mesh types collapse to
  *  billboards (only 'billboard' was ever configured anyway) and wakeVisual
  *  keeps the old path — no config enables it. */
+// Debug surface — a live-trail registry + lifecycle counters so a silent
+// trail can be told apart from (a) never built, (b) reaped while a
+// projectile still owns it, (c) parked paused, (d) zombie from the pool.
+export const trailStats = {
+  built: 0, reused: 0, noBatcher: 0, noRate: 0,
+  reapedActive: 0, poolZombies: 0,
+};
+const activeTrailPs = new Set<ParticleSystem>();
+const liveQuarks = new Set<QuarksTrail>();
+
+export function trailDump(): Record<string, unknown>[] {
+  const out: Record<string, unknown>[] = [];
+  for (const t of liveQuarks) out.push(t.diag());
+  return out;
+}
+
 export class QuarksTrail {
   private ps: ParticleSystem | null = null;
   private circle: CircleEmitter | null = null;
@@ -374,8 +424,10 @@ export class QuarksTrail {
 
   constructor(private host: QuarksTrailHost) {
     const config = host.config;
-    if (!batcher || !scene || config.trailParticlesPerUnit <= 0) return;
+    if (!batcher || !scene) { trailStats.noBatcher++; return; }
+    if (config.trailParticlesPerUnit <= 0) { trailStats.noRate++; return; }
     this.key = trailKey(config);
+    if ((pools.get(this.key)?.length ?? 0) > 0) trailStats.reused++; else trailStats.built++;
     this.ps = takeSystem(this.key, () => {
       // Gradient + alpha fade built from the config's arbitrary-length
       // trailColors — same lerp the per-particle loop used to do by hand.
@@ -433,6 +485,26 @@ export class QuarksTrail {
     };
     st.travelDistance = 0;
     st.previousWorldPos = undefined;
+    activeTrailPs.add(this.ps);
+    liveQuarks.add(this);
+    // A system reaped out from under a previous owner comes back dead —
+    // the batcher no longer knows it, so attach+restart renders nothing.
+    if (batcher && !batcher.systemToBatchIndex.has(this.ps)) trailStats.poolZombies++;
+  }
+
+  diag(): Record<string, unknown> {
+    const ps = this.ps;
+    const { pos, vel, config } = this.host;
+    return {
+      pos: `${pos.x.toFixed(1)},${pos.y.toFixed(1)},${pos.z.toFixed(1)}`,
+      spd: +vel.length().toFixed(1),
+      ppu: config.trailParticlesPerUnit,
+      hasPs: !!ps,
+      particles: ps?.particleNum ?? -1,
+      attached: ps ? !!batcher && batcher.systemToBatchIndex.has(ps) : false,
+      paused: ps?.paused ?? false,
+      waiting: +((ps?.emissionState as { waitEmiting?: number } | undefined)?.waitEmiting ?? 0).toFixed(2),
+    };
   }
 
   // Move + aim the emitter; quarks emits floor(dist*ppu) particles itself.
@@ -462,6 +534,8 @@ export class QuarksTrail {
     if (!this.ps) return;
     const ps = this.ps;
     this.ps = null;
+    activeTrailPs.delete(ps);
+    liveQuarks.delete(this);
     ps.stop(); // kill particles immediately — old dispose() pooled them away just as fast
     const pool = pools.get(this.key) ?? [];
     if (pool.length < POOL_CAP) {

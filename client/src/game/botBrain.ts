@@ -84,6 +84,8 @@ export class GameBot extends RemotePlayer {
   wantBelt = false;
   /** Builder intent from the shared brain — TeamBots plants it. */
   wantDeploy: { kind: string; pos: { x: number; y: number; z: number } } | null = null;
+  /** Weld intent — the deployable key the brain is working on. */
+  wantRepair: string | null = null;
   /** The destination the brain steered toward last think — propel gates
    *  on how far the bot still has to run. */
   readonly lastDest = new THREE.Vector3();
@@ -180,6 +182,9 @@ export class GameBot extends RemotePlayer {
     thief?: { id: string; pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean } | null;
     /** Economy modes prefer creature targets (nuggets farming). */
     huntCreatures?: boolean;
+    /** Damaged friendly deployable a builder could weld (host-opaque
+     *  key — mirrors the server senses' dep id). */
+    repair?: { key: string; pos: THREE.Vector3; frac: number } | null;
   }): { targetId: string; aim: THREE.Vector3 } | null {
     const pos = this.position;
     // Heights are static for a match's lifetime — every bot probes the
@@ -218,6 +223,7 @@ export class GameBot extends RemotePlayer {
       infiltrating: ctx.infiltrating,
       thief: ctx.thief ?? null,
       huntCreatures: ctx.huntCreatures,
+      repair: ctx.repair ?? null,
       now: performance.now(),
       // The real tank + hp — fear, mend, shield, and retreat gates all
       // read these; without them every status decision saw a full sheet.
@@ -237,6 +243,7 @@ export class GameBot extends RemotePlayer {
     this.lastMove = out.move;
     this.wantBelt = !!out.belt;
     this.wantDeploy = out.deploy ?? null;
+    this.wantRepair = out.repair ?? null;
     if (out.status !== undefined) this.applyStatus(out.status, dt);
     if (!out.fire) return null;
     this.fire();

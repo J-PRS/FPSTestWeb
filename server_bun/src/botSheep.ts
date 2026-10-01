@@ -47,7 +47,7 @@ export class BotSheepMeter {
   of(id: string): number { return Math.round(this.meter.get(id) ?? 0); }
   set(id: string, v: number): void { this.meter.set(id, v); }
 
-  check(id: string, p: { position: Vec3; velocity: Vec3 }, m: { out: BrainOut; airborne: boolean; hasDest: boolean; foe?: boolean; dt: number; height?: number }, now: number): void {
+  check(id: string, p: { position: Vec3; velocity: Vec3 }, m: { out: BrainOut; airborne: boolean; hasDest: boolean; foe?: boolean; dt: number; height?: number }, _now: number): void {
     // Total mechanical energy (kinetic + potential) is the Tribes
     // currency — a fast bot low to the ground and a slow bot on a perch
     // are both holding real E. bonusSpeed converts it back to the
@@ -61,7 +61,9 @@ export class BotSheepMeter {
     this.eSm.set(id, eSm);
     const bonusSpeed = Math.sqrt(Math.max(0, 2 * eSm));
     const jetting = !!m.out.move?.jet;
-    const tribesing = bonusSpeed > 14 || m.airborne || jetting;
+    // Welding the stand's gear is honest work — a parked welder is
+    // productive, not a pedestrian.
+    const tribesing = bonusSpeed > 14 || m.airborne || jetting || !!m.out.repair;
     const prev = this.meter.get(id) ?? 0;
     let why = this.why.get(id);
     if (!why) { why = { idle: 0, ignore: 0, cover: 0 }; this.why.set(id, why); }

@@ -26,7 +26,7 @@ import { stuckBreak, dodge, type EscapeState } from './botEscape.ts';
 // Combat half lives in botHunt.ts — re-export so existing imports keep
 // resolving (losClear/BOT_EYE/BOT_FIRE_RANGE are the public surface).
 export { losClear, losMemoReset, BOT_EYE, BOT_FIRE_RANGE } from './botHunt.ts';
-import { pickDest, pickDeploy, statusIntent } from './botDisposition.ts';
+import { pickDest, pickDeploy, pickRepair, statusIntent } from './botDisposition.ts';
 
 export type { BotVec } from './botVec.ts';
 import { dist3, type BotVec } from './botVec.ts';
@@ -92,6 +92,10 @@ export interface BrainCtx {
    *  creature targets (id prefix `b:`) — farming is the objective, and a
    *  human would do the same. Enemies still outrank food when close. */
   huntCreatures?: boolean;
+  /** A friendly deployable that needs a weld — the host's nearest
+   *  damaged item (key is host-opaque: server id, client candId).
+   *  Only builders act on it; everyone else ignores the channel. */
+  repair?: { key: string; pos: BotVec; frac: number } | null;
   /** Map-structure colliders for wall occlusion in LOS — hosts that model
    *  solid structures pass them so bots don't stare into walls; hosts
    *  without one fall back to terrain-only LOS like before. */
@@ -125,6 +129,9 @@ export interface BrainOut {
   /** Deployable claim this step (turret/mine/station) — the same shape a
    *  human's deploy message carries; the host validates + caps it. */
   deploy?: { kind: string; pos: BotVec };
+  /** Repair-beam tick on the ctx.repair target — the host resolves the
+   *  key and runs the same heal path a human's repair claim does. */
+  repair?: string;
 }
 
 const THINK_S = 0.3;
@@ -309,7 +316,10 @@ export class BotBrain {
     // --- deploy: a quiet defender with hands free fortifies the stand ---
     const deploy = pickDeploy(this, dt, ctx, pos, fearing);
 
-    return { dest, move: this.moves.hints(dt, ctx, pos, dest), fire, status: statusIntent(this, ctx, fearing), belt, deploy };
+    // --- repair: a builder in weld range works on the damaged gear ---
+    const repair = pickRepair(this, ctx, pos, fearing);
+
+    return { dest, move: this.moves.hints(dt, ctx, pos, dest), fire, status: statusIntent(this, ctx, fearing), belt, deploy, repair };
   }
 
   

@@ -63,6 +63,11 @@ interface BotHooks {
   /** A builder bot wants to plant — owner wrapper keeps the item's foes,
    *  anchors, and heals pointed at the bot, not the local player. */
   botDeploy?(kind: string, pos: { x: number; y: number; z: number }, owner: import('./deployables.js').DeployOwner): void;
+  /** Damaged friendly deployable the bot could weld — mirrors the
+   *  server senses' repairJob scan (nearest within ~45m). */
+  botRepairJob?(team: string, pos: THREE.Vector3, botId: string): { key: string; pos: THREE.Vector3; frac: number } | null;
+  /** Apply a weld tick — returns true while the item still exists. */
+  botWeld?(key: string): boolean;
 }
 
 export class TeamBots {
@@ -249,6 +254,14 @@ export class TeamBots {
     if (!online) {
       if (bot.wantBelt) this.fire.throwBelt(bot);
       if (bot.wantDeploy) this.tryDeploy(bot);
+      if (bot.wantRepair) {
+        // Welding — the heal rate mirrors a human trigger hold (~50hp/s
+        // at think cadence). A welded item counts as productive work for
+        // the meter: parked but not sheeping.
+        const welded = this.hooks.botWeld?.(bot.wantRepair) ?? false;
+        if (welded) this.sheep.markShot(bot.playerId);
+        else bot.wantRepair = null; // died mid-walk — drop the intent
+      }
       this.fire.tryPropel(bot, !!shot);
     }
     if (shot) this.sheep.markShot(bot.playerId);
@@ -257,7 +270,7 @@ export class TeamBots {
     // tell. Same 3s recency window the server meter uses.
     const ignoring = !shot && this.sheep.notShooting(bot.playerId);
     const hasDest = Math.hypot(bot.lastDest.x - bot.pos.x, bot.lastDest.z - bot.pos.z) >= 0.5;
-    this.sheep.tick(bot, acc, terrain, this.senses.foeSeen(bot, foes, terrain), ignoring, hasDest);
+    this.sheep.tick(bot, acc, terrain, this.senses.foeSeen(bot, foes, terrain), ignoring, hasDest, bot.wantRepair !== null);
   }
 
   // Per-bot persistent think ctx — the literal was a fresh ~1KB object
@@ -276,7 +289,7 @@ export class TeamBots {
         terrain, enemies: [], nugget: null, objective: null,
         infiltrating: false, thief: null, huntCreatures: false,
         others: [], allies: undefined, engageRange: undefined,
-        sounds: [], threats: [],
+        sounds: [], threats: [], repair: null,
       };
       this.ctxCache.set(bot.playerId, ctx);
     }
@@ -298,6 +311,7 @@ export class TeamBots {
     // same noisesNear sense the server feeds its brains.
     ctx.sounds = this.senses.recentNoises(bot.position);
     ctx.threats = this.senses.incomingNear(bot.position);
+    ctx.repair = this.hooks.botRepairJob?.(bot.team, bot.position, bot.playerId) ?? null;
     return ctx;
   }
 

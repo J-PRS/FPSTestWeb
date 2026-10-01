@@ -36,6 +36,7 @@ import { HUD } from './ui/hud.js';
 import { wireOverlayInput } from './ui/overlayInput.js';
 
 import { effectiveResist } from '../../shared/perks.js';
+import { REPAIR_HEAL_PER_TICK } from '../../shared/weapons.js';
 
 import { applyDebugHooks } from './game/debugHooks.js';
 import { createWorldState } from './game/worldState.js';
@@ -370,6 +371,9 @@ function setupOfflineMode(mode: string): void {
       },
       botDeploy: (kind, pos, owner) =>
         entities.deployables.plantFor(kind as import('./game/deployables.js').DeployKind, pos, owner),
+      botRepairJob: (team, pos, botId) => entities.deployables.repairJob(botId, team, pos),
+      // ~50hp/s at think cadence — the same heal a human trigger hold does.
+      botWeld: (key) => entities.deployables.weld(key, REPAIR_HEAL_PER_TICK) !== null,
     },
     'alpha',
     mode === 'dm' ? { alpha: 5, bravo: 4 } : { alpha: 4, bravo: 5 },
@@ -617,7 +621,7 @@ init().then(async () => {
   // ?debug only; absent in prod builds.
   if (import.meta.env.DEV || urlParams.debug) {
     window.__test = {
-      player, scene, entities, world, terrain,
+      player, scene, entities, world, terrain, viewModel,
       networkManager, demoManager, rendererSetup,
       chatSink: (await import('./game/chat.js')).chatSink,
     };
