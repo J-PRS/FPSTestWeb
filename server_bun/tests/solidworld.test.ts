@@ -1,8 +1,9 @@
 import { describe, expect, test } from 'bun:test';
-import { SolidWorld, segSolidHit } from '../../shared/solidWorld.ts';
+import { ColliderIndex, SolidWorld, blastOccluded, segSolidHit } from '../../shared/solidWorld.ts';
 import { structureColliders } from '../../shared/ballSim.ts';
 import { MoveSim, MOVEMENT_CONFIG, type MoveState } from '../../shared/movement.ts';
 import type { StructureSpec } from '../../shared/mapSpec.ts';
+import type { StructureCollider } from '../../shared/ballSim.ts';
 import type { Vec3Like } from '../../shared/movement.ts';
 
 const H = MOVEMENT_CONFIG.playerHeight; // pos.y is capsule top
@@ -128,5 +129,69 @@ describe('segSolidHit', () => {
     const hit = segSolidHit({ x: -10, y: 3, z: 3 }, { x: 10, y: 3, z: 3 }, rotated);
     expect(hit).not.toBeNull();
     expect(Math.abs(hit!.x)).toBeLessThan(8); // entry before the wall centerline
+  });
+});
+
+
+const obox = (cx: number, cy: number, cz: number, hx: number, hy: number, hz: number, rotY = 0): StructureCollider => ({
+  cx, cy, cz, hx, hy, hz, cos: Math.cos(rotY), sin: Math.sin(rotY),
+});
+const BIGWALL = [obox(5, 1, 0, 1, 2, 5)];      // x∈[4,6], z∈[-5,5], y∈[-1,3]
+
+describe('ColliderIndex', () => {
+  test('queries return only nearby boxes — pruning, not skipping', () => {
+    const far = obox(500, 0, 500, 2, 2, 2);
+    const idx = new ColliderIndex([...BIGWALL, far]);
+    const out: StructureCollider[] = [];
+    idx.queryPoint(0, 0, 1, out);
+    expect(out).not.toContain(far);
+    idx.queryPoint(5, 0, 1, out);
+    expect(out).toContain(BIGWALL[0]!);
+  });
+
+  test('indexed segSolidHit answers identically to the linear scan', () => {
+    const idx = new ColliderIndex(BIGWALL);
+    const a = segSolidHit({ x: 0, y: 1, z: 0 }, { x: 10, y: 1, z: 0 }, BIGWALL);
+    const b = segSolidHit({ x: 0, y: 1, z: 0 }, { x: 10, y: 1, z: 0 }, BIGWALL, idx);
+    expect(b).toEqual(a);
+  });
+});
+
+describe('blastOccluded', () => {
+  test('wall between blast and chest blocks the blast', () => {
+    expect(blastOccluded({ x: 0, y: 1, z: 0 }, { x: 10, y: 0, z: 0 }, BIGWALL)).toBe(true);
+  });
+
+  test('clear line → not occluded', () => {
+    expect(blastOccluded({ x: 0, y: 1, z: 0 }, { x: -10, y: 0, z: 0 }, BIGWALL)).toBe(false);
+  });
+
+  test('blast inside the box hops past instead of occluding same-side targets', () => {
+    expect(blastOccluded({ x: 4.05, y: 1, z: 0 }, { x: -5, y: 0, z: 0 }, BIGWALL)).toBe(false);
+  });
+});
+
+describe('SolidWorld extras', () => {
+  const mkBody = (x: number, top: number, z: number): MoveState =>
+    ({ pos: { x, y: top, z }, vel: { x: 5, y: 0, z: 0 } }) as MoveState;
+
+  test('velocity into a face is killed; tangential slide stays free', () => {
+    const w = new SolidWorld(BIGWALL);
+    const s = mkBody(3.7, 1 + H, 0); // capsule nose inside the face
+    s.vel.x = 6;   // into the wall
+    s.vel.z = 3;   // sliding along it
+    w.resolveBody(s);
+    expect(s.vel.z).toBeCloseTo(3, 5);
+    expect(s.vel.x).toBeLessThanOrEqual(0);
+  });
+
+  test('head under a box underside drops out and kills upward motion', () => {
+    const ceiling = [obox(0, 3, 0, 3, 1, 3)]; // bot=2, top=4
+    const w = new SolidWorld(ceiling);
+    const s = mkBody(0, 2.2, 0);
+    s.vel.y = 8;
+    w.resolveBody(s);
+    expect(s.pos.y).toBeLessThanOrEqual(2);
+    expect(s.vel.y).toBe(0);
   });
 });
