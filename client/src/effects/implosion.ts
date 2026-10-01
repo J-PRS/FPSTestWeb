@@ -29,6 +29,24 @@ interface Core  { mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial; dead: boolean 
 const shockPool: Shock[] = [];
 const corePool: Core[] = [];
 const arcPool: Arc[] = [];
+// Grow-only freelists held peak-blast memory forever — keep a small warm
+// floor per kind and dispose the overflow (each entry owns a material;
+// arc also owns its line geometry).
+const SHOCK_POOL_KEEP = 8;
+const CORE_POOL_KEEP = 4;
+const ARC_POOL_KEEP = 16;
+function releaseShock(sw: Shock): void {
+  if (shockPool.length >= SHOCK_POOL_KEEP) sw.mat.dispose();
+  else shockPool.push(sw);
+}
+function releaseCore(c: Core): void {
+  if (corePool.length >= CORE_POOL_KEEP) c.mat.dispose();
+  else corePool.push(c);
+}
+function releaseArc(a: Arc): void {
+  if (arcPool.length >= ARC_POOL_KEEP) { a.mat.dispose(); a.line.geometry.dispose(); }
+  else arcPool.push(a);
+}
 
 export class Implosion {
   dead = false;
@@ -182,7 +200,7 @@ export class Implosion {
     }
     this.scene.remove(this.core.mesh);
     this.core.dead = true;
-    corePool.push(this.core);
+    releaseCore(this.core);
     this.core = null;
     return 0;
   }
@@ -195,7 +213,7 @@ export class Implosion {
       if (sw.elapsed >= sw.life) {
         this.scene.remove(sw.mesh);
         sw.dead = true;
-        shockPool.push(sw);
+        releaseShock(sw);
         continue;
       }
       alive++;
@@ -214,7 +232,7 @@ export class Implosion {
       if (arc.elapsed >= arc.life) {
         this.scene.remove(arc.line);
         arc.dead = true;
-        arcPool.push(arc);
+        releaseArc(arc);
         continue;
       }
       alive++;
@@ -239,20 +257,20 @@ export class Implosion {
       if (!sw.dead) {
         this.scene.remove(sw.mesh);
         sw.dead = true;
-        shockPool.push(sw);
+        releaseShock(sw);
       }
     }
     for (const r of this.rings) r.dispose();
     if (this.core && !this.core.dead) {
       this.scene.remove(this.core.mesh);
       this.core.dead = true;
-      corePool.push(this.core);
+      releaseCore(this.core);
     }
     for (const arc of this.arcs) {
       if (!arc.dead) {
         this.scene.remove(arc.line);
         arc.dead = true;
-        arcPool.push(arc);
+        releaseArc(arc);
       }
     }
     this.shockwaves = [];
