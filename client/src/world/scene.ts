@@ -95,8 +95,10 @@ export function createScene(): SceneSetup {
   sun.shadow.camera.right = SHADOW_CAMERA_SIZE;
   sun.shadow.camera.top = SHADOW_CAMERA_SIZE;
   sun.shadow.camera.bottom = -SHADOW_CAMERA_SIZE;
-  sun.shadow.bias = -0.0001;
-  sun.shadow.normalBias = 0.02;
+  // Texel size is ~0.4m at the player-follow frustum — the bias has to
+  // cover at least that, or slopes self-shadow into contour-band acne.
+  sun.shadow.bias = -0.0002;
+  sun.shadow.normalBias = 0.6;
   scene.add(sun);
   scene.add(sun.target);
 
@@ -121,6 +123,14 @@ export function createScene(): SceneSetup {
   /** Camera-dependent mood pass — the shader knows where the sun is. */
   function updateCamera(camera: THREE.Camera): void {
     sunShafts.update(camera, atmosphericSky.getSunPosition());
+    // Shadow frustum follows the viewer: a map-wide 2.4km ortho box only
+    // has ~1.2m/texel — every slope acnes — and stops covering off-center
+    // play entirely. Snapping the target to a ~2m grid keeps texels from
+    // shimmering while it tracks.
+    const c = camera.position;
+    sun.target.position.set(Math.round(c.x / 2) * 2, 0, Math.round(c.z / 2) * 2);
+    sun.target.updateMatrixWorld();
+    sun.position.copy(atmosphericSky.getSunPosition()).add(sun.target.position);
   }
 
   return {
