@@ -66,6 +66,11 @@ export interface WeaponStats {
    *  Client bomblets are visual-only: they never claim damage, so remote
    *  hits stay server-authoritative. */
   cluster?: { count: number; radius: number };
+  /** Body contact doesn't detonate — the shell flies through players and
+   *  creatures (MRV carrier: a contact pop would make it a fast mortar;
+   *  the fuse airburst IS the attack). Terrain, walls, and shield domes
+   *  still stop it. Both ends read this so the sim stays authoritative. */
+  fuseOnly?: boolean;
   /** Mid-flight hitscan discharge (remote railgun): at `rayDelay` seconds
    *  the projectile fires a beam along its velocity and dies at the hit
    *  point (or at rayRange on a miss). The server reach check adds
@@ -305,7 +310,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     directDamage: 90,
     aoeDamage: 35,
     aoeRadius: 14.0, // big — but under mortar's 18
-    knockbackForce: 55.0, // rocket-jump tier — the tool IS the movement
+    knockbackForce: 30.0, // rocket-jump tier — the tool IS the movement; sits at BLAST_IMPULSE_MAX so point-blank stays the intended apex
     forceMode: 'push',
     speed: 48.0,
     gravity: false,
@@ -532,9 +537,11 @@ export const WEAPONS: Record<number, WeaponStats> = {
     gravity: true,
     bodyRadius: 0.3,
     hitMin: 0.0,
-    hitMax: 2.0,
+    hitMax: 0.5,          // bombardment weapon — no fat wake proxy, the rain is the reach
     hitGrow: 0.5,
-    maxLifetime: 1.0,     // fuse pop releases the bomblets mid-air
+    maxLifetime: 1.5,     // fuse pop releases the bomblets mid-air — ~80m of carry before the split
+    fuseOnly: true,       // bodies don't pop it — a 55 m/s contact shell that
+                        // also rains bomblets is a strictly-better mortar
     cluster: { count: 6, radius: 5.0 }, // bomblet scatter footprint at the burst point
   },
   [WeaponType.MRVBomblet]: {
@@ -549,9 +556,9 @@ export const WEAPONS: Record<number, WeaponStats> = {
     gravity: true,
     bodyRadius: 0.15,
     hitMin: 0.0,
-    hitMax: 4.0,
+    hitMax: 0.5,          // bomblets must LAND — a big proxy would pop them mid-air on anything nearby
     hitGrow: 1.0,
-    maxLifetime: 1.1,
+    maxLifetime: 10.0,    // safety TTL only — contact pops them; an air fuse wastes the rain
   },
 };
 
