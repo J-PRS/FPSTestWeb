@@ -41,7 +41,13 @@ export class SpeciesSwarm {
   private pers: number[] = [];
   private live = 0;
 
+  private readonly initCap: number;
+  // Occupancy idle clock — reset whenever live reaches half of capacity;
+  // a quarter-occupancy streak past IDLE_SHRINK_MS triggers compaction.
+  private idleAt = 0;
+
   constructor(scene: THREE.Scene, parts: SwarmPart[], capacity: number) {
+    this.initCap = capacity;
     this.owners = Array.from<SwarmSlotOwner | undefined>({ length: capacity });
     for (const p of parts) {
       const per = p.per ?? 1;
@@ -72,27 +78,38 @@ export class SpeciesSwarm {
     return this.owners[Math.floor(instanceId / per)];
   }
 
-  /** Double every per-part instance buffer and the owners table — a full
-   *  swarm used to refuse the spawn outright (silent invisible enemy).
+  /** Realloc every per-part instance buffer + owners table at `cap`.
    *  Live data is copied into the head of the new buffers; slots stay
-   *  dense, so the count bound needs no remapping. */
-  private grow(): void {
-    const cap = this.owners.length * 2;
+   *  dense, so the count bound needs no remapping either direction. */
+  private resize(cap: number): void {
     this.owners.length = cap;
     for (let i = 0; i < this.meshes.length; i++) {
       const m = this.meshes[i]!;
       const per = this.pers[i]!;
       const mat = new THREE.InstancedBufferAttribute(new Float32Array(cap * per * 16), 16);
-      mat.array.set(m.instanceMatrix.array);
+      mat.array.set(m.instanceMatrix.array.subarray(0, cap * per * 16)); // subarray — set() throws when the source outlives the target
       mat.setUsage(THREE.DynamicDrawUsage);
       m.instanceMatrix = mat;
       const col = new THREE.InstancedBufferAttribute(new Float32Array(cap * per * 3).fill(1), 3);
-      col.array.set(m.instanceColor!.array);
+      col.array.set(m.instanceColor!.array.subarray(0, cap * per * 3));
       col.setUsage(THREE.DynamicDrawUsage);
       m.instanceColor = col;
     }
     this.dirty = true;
     this.flagDirty();
+  }
+
+  private grow(): void { this.resize(this.owners.length * 2); }
+
+  /** Halve back toward the initial capacity once occupancy has held
+   *  under a quarter for IDLE_SHRINK_MS — a wave spike shouldn't pin
+   *  peak memory forever. Dense slots make truncation lossless. */
+  checkShrink(now: number): void {
+    if (this.live * 4 >= this.owners.length) { this.idleAt = now; return; }
+    if (this.owners.length <= this.initCap || now - this.idleAt < IDLE_SHRINK_MS) return;
+    const cap = Math.max(this.initCap, Math.ceil((this.live * 2) / this.initCap) * this.initCap);
+    if (cap < this.owners.length) this.resize(cap);
+    this.idleAt = now;
   }
 
   /** Returns a slot index; grows the swarm instead of ever returning -1. */
@@ -179,6 +196,10 @@ export class SpeciesSwarm {
  * Per-instance altitude fade is carried in a float attribute the shader reads.
  */
 const SHADOW_CAPACITY = 1024; // initial size — grows on demand
+// Held under quarter-occupancy this long → capacity contracts to the
+// nearest initCap multiple covering 2× live. Same contract as the
+// quarks pool keep-alive window.
+const IDLE_SHRINK_MS = 30_000;
 
 const shadowVert = /* glsl */ `
   attribute float aOpacity;
@@ -239,21 +260,33 @@ export class InstancedBlobShadows {
   /** Aim probe: which owner's blob a shadow instance is. */
   ownerAt(slot: number): SwarmSlotOwner | undefined { return this.owners[slot]; }
 
-  /** Realloc instance buffers at double capacity — the owners table is
-   *  the source of truth for capacity, so a full pool grows instead of
-   *  silently skipping the shadow. */
-  private grow(): void {
-    const cap = this.owners.length * 2;
+  private idleAt = 0;
+
+  /** Realloc instance buffers at `cap` — the owners table is the source
+   *  of truth for capacity, so a full pool grows instead of silently
+   *  skipping the shadow. */
+  private resize(cap: number): void {
     this.owners.length = cap;
     const mat = new THREE.InstancedBufferAttribute(new Float32Array(cap * 16), 16);
-    mat.array.set(this.mesh.instanceMatrix.array);
+    mat.array.set(this.mesh.instanceMatrix.array.subarray(0, cap * 16));
     mat.setUsage(THREE.DynamicDrawUsage);
     this.mesh.instanceMatrix = mat;
     const op = new THREE.InstancedBufferAttribute(new Float32Array(cap), 1);
-    op.array.set(this.opacity.array);
+    op.array.set(this.opacity.array.subarray(0, cap));
     op.setUsage(THREE.DynamicDrawUsage);
     this.opacity = op;
     this.mesh.geometry.setAttribute('aOpacity', op);
+  }
+
+  private grow(): void { this.resize(this.owners.length * 2); }
+
+  /** Same idle-shrink contract as SpeciesSwarm — dense slots, lossless. */
+  checkShrink(now: number): void {
+    if (this.live * 4 >= this.owners.length) { this.idleAt = now; return; }
+    if (this.owners.length <= SHADOW_CAPACITY || now - this.idleAt < IDLE_SHRINK_MS) return;
+    const cap = Math.max(SHADOW_CAPACITY, Math.ceil((this.live * 2) / SHADOW_CAPACITY) * SHADOW_CAPACITY);
+    if (cap < this.owners.length) this.resize(cap);
+    this.idleAt = now;
   }
 
   get liveCount(): number { return this.live; }

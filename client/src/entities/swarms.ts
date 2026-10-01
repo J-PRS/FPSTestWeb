@@ -88,10 +88,16 @@ export function burstGibs(
   return true;
 }
 
-/** Per-frame gib integration — same tick as the shard debris update. */
+/** Per-frame gib integration — same tick as the shard debris update.
+ *  Also the idle-shrink pass for the three grow-only capacity buffers:
+ *  occupancy under a quarter for 30s contracts them back to initCap. */
 export function updateGibs(dt: number): void {
   if (!registryTerrain) return;
   for (const pool of gibPools.values()) pool.update(dt, registryTerrain);
+  const now = performance.now();
+  for (const s of swarms.values()) s.checkShrink(now);
+  for (const g of gibPools.values()) g.checkShrink(now);
+  shadows?.checkShrink(now);
 }
 
 /** Capacity/live census for the Alt+Q dump — a species pinned at capacity
@@ -99,8 +105,8 @@ export function updateGibs(dt: number): void {
 export function swarmStats(): Record<string, unknown> {
   const species: Record<string, { live: number; cap: number }> = {};
   for (const [k, s] of swarms) species[k] = { live: s.liveCount, cap: s.capacity };
-  const gibs: Record<string, number> = {};
-  for (const [k, g] of gibPools) gibs[k] = g.live;
+  const gibs: Record<string, { live: number; cap: number }> = {};
+  for (const [k, g] of gibPools) gibs[k] = { live: g.live, cap: g.cap };
   return {
     species,
     gibs,
