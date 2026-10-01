@@ -1,3 +1,4 @@
+2026-10-01 - RibbonTrail fade-bucket skip: color writes/upload only when fade crosses 1/255 step
 2026-10-01 - Demo format v4: per-frame weaponType + playback viewmodel with stock-weapon fallback; hidden-vm gate removed
 2026-10-01 - MRV Launcher (mortar counterpart): bouncing carrier airbursts into contact bomblets; bot think stagger + trail upload fixes
 2026-10-01 - __perf reports draws/tris; __scene+__renderer debug handles for headless census

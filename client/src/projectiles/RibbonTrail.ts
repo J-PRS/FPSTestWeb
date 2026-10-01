@@ -141,6 +141,10 @@ export class RibbonTrail {
   private dx = new Float32Array(MAX_SAMPLES);
   private dy = new Float32Array(MAX_SAMPLES);
   private dz = new Float32Array(MAX_SAMPLES);
+  // Last written fade bucket per ribbon position (-1 = never written).
+  // Fades only need rewriting when they cross a 1/255 step — a parked
+  // camera + mature trail writes nothing at all.
+  private _lf = new Int16Array(MAX_SAMPLES).fill(-1);
 
   private baseColor: THREE.Color;
   private width: number;
@@ -166,7 +170,7 @@ export class RibbonTrail {
   private claimSlot(scene: THREE.Scene): void {
     this.batch = batchFor(scene);
     this.slot = this.batch.free.pop() ?? -1;
-    if (this.slot >= 0) { this.batch.used.add(this.slot); this.batch.slotsDirty = true; }
+    if (this.slot >= 0) { this.batch.used.add(this.slot); this.batch.slotsDirty = true; this._lf.fill(-1); }
   }
 
   private releaseSlot(): void {
@@ -287,18 +291,25 @@ export class RibbonTrail {
     const freshFrom = this.freshFromIndex(camMoved);
     this.pushed = 0;
     const rebillboard = camPos && camMoved && !far ? camPos : undefined;
+    let dirty = false;
     for (let i = 0; i < this.count; i++) {
       // oldest -> newest
       const s = (this.head - this.count + 1 + i + MAX_SAMPLES) % MAX_SAMPLES;
       const fade = Math.max(0, 1 - (this.time - this.st[s]) / this.life);
       const o = base + i * 6;
-      if (i >= freshFrom) this.writeSample(s, o, fade, rebillboard, pos);
+      if (i >= freshFrom) { this.writeSample(s, o, fade, rebillboard, pos); dirty = true; }
+      const fq = (fade * 255) | 0;
+      if (this._lf[i] === fq) continue;
+      this._lf[i] = fq;
       const e = EMIT_GAIN * fade;
       col[o] = this.baseColor.r * e; col[o + 1] = this.baseColor.g * e; col[o + 2] = this.baseColor.b * e;
       col[o + 3] = col[o]; col[o + 4] = col[o + 1]; col[o + 5] = col[o + 2];
+      dirty = true;
     }
-    this.batch.mark(base, base + this.count * 6);
-    this.batch.flush();
+    if (dirty) {
+      this.batch.mark(base, base + this.count * 6);
+      this.batch.flush();
+    }
   }
 
   private freshFromIndex(camMoved: boolean): number {
