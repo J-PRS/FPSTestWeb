@@ -1,3 +1,4 @@
+2026-09-30 - RoomProjectiles split: swept-contact family (terrain/wall/shield/player/creature sweeps, dischargeRay hitscan) -> projContact.ts (338->241).
 2026-09-30 - CombatHandler split: self-report claims (environmentDamage melee-from-afar check, heal cadence+credit) -> envClaims.ts (491->437).
 2026-09-30 - Strifer split: instance pose (fins dip on hover, muzzle glow) -> striferPose.ts (320->274).
 2026-09-30 - Snake split: instance pose (slither segment chain, eyes, shadow) -> snakePose.ts (331->259).
