@@ -34,11 +34,22 @@ Scope: client/src, server_bun/src, shared. Goal: ease of future work, testabilit
 - `11a1b32` Logger `context?: any` → `unknown` (10 sites).
 - `4c39ec3` `Targetable` declares optional swarm handles; `burstGibs` takes
   `Partial<SwarmSlotOwner>` — the last structural call-site cast gone.
+- `d3c70b0`/`3053eeb` `shared/deployables.ts` — one kind/cap/HP table; the
+  client's visual-cap mirror had silently drifted on mine/station/drone.
+- `d50b53f` broadcast literals lose `as ServerMessage` casts — protocol
+  drift is a compile error again (roomMatch keeps one: the ternary needs it).
+- `083994a` protocol deploy-kind unions reference `DeployKind`; vestigial
+  `as any` casts in vmdump removed (fields were public already).
+- `5cc0fc5` oxlint fully clean.
+- clip-surgery + GLSL extractions: `playerClipSurgery.ts` from PlayerModel
+  (940→880), `rendererShaders.ts` from renderer.ts (825→601).
+- net dispatch guarded — a malformed-but-parseable message logs a warn
+  instead of throwing into the connection's onError path.
 
 ## Findings (ranked, not-yet-done)
 
 1. **Big-file cohesion** (low risk, medium value): largest files are
-   PlayerModel.ts (940), renderer.ts (825), vfx.ts (817), NetworkManager.ts
+   PlayerModel.ts (880), vfx.ts (817) — renderer.ts and PlayerModel already split, vfx.ts (817), NetworkManager.ts
    (788). Internally organized, no action needed today — but any growth past
    ~1k lines should split (e.g. NetworkManager's roster logic could become
    `net/roster.ts` when it next changes).
