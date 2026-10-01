@@ -3,6 +3,7 @@ import { perkMods } from '../../shared/perks.ts';
 import { logger } from './logger.ts';
 import { FORCE_SEND_MS } from './combatBlast.ts';
 import type { CombatHandler } from './CombatHandler.ts';
+import { healPool } from './healPool.ts';
 
 type EnvHost = CombatHandler & { lastHeal: Map<string, number> };
 
@@ -52,9 +53,9 @@ export function handleHeal(h: EnvHost, playerId: string, msg: Extract<ClientMess
       if (player.healCredit <= 0) return;
       const applied = Math.min(heal, player.healCredit);
       player.healCredit -= applied;
-      player.health = Math.min(player.maxHealth, player.health + applied);
+      healPool(player, applied);
     } else {
-      player.health = Math.min(player.maxHealth, player.health + heal);
+      healPool(player, heal);
     }
     h.lastHeal.set(playerId, now + 1500); // a heal that landed sets the cadence; a refused one doesn't
     player.forceSendUntil = Date.now() + FORCE_SEND_MS;

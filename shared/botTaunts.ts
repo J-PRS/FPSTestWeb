@@ -71,8 +71,14 @@ export function spreeTaunt(botId: string): string | null {
   return maybe(botId, pick(SPREE_LINES));
 }
 
+/** Chatter cooldown is wall-clock by nature (a pause between lines, not a
+ *  sim step) — injectable so scenario tests can pin time rather than
+ *  flake on real elapsed ms. */
+let tauntNow: () => number = Date.now;
+export function setTauntClock(now: () => number): void { tauntNow = now; }
+
 function maybe(botId: string, line: string): string | null {
-  const now = Date.now();
+  const now = tauntNow();
   const last = lastSpoke.get(botId) ?? 0;
   if (now - last < COOLDOWN_MS || botRand() > SPEAK_CHANCE) return null;
   lastSpoke.set(botId, now);

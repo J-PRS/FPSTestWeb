@@ -9,6 +9,7 @@ import { bank, winner, type ModeSpec, type TeamScores } from '../../shared/teams
 import { POWERUP, rollCreatureDrop, type PowerupKind } from '../../shared/pickups.ts';
 import type { ServerMessage } from '../../shared/protocol.ts';
 import { logger } from './logger.ts';
+import { healPool } from './healPool.ts';
 
 // Score/kill economy — every path that turns a death or a touch into
 // points, pickups, or the match horn. Split from Room.ts so the room file
@@ -81,7 +82,7 @@ export class RoomScore {
     const now = Date.now();
     const buff: Extract<ServerMessage, { type: 'buff' }> = { type: 'buff', kind };
     if (kind === 'heal') {
-      p.health = Math.min(p.maxHealth, p.health + POWERUP.heal);
+      healPool(p, POWERUP.heal);
       buff.health = p.health;
     } else if (kind === 'armor') {
       p.armor = Math.min(POWERUP.maxArmor, p.armor + POWERUP.armor);

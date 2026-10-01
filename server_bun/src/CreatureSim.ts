@@ -26,6 +26,7 @@ import type { PlayerManager } from './PlayerManager.ts';
 import type { ServerMessage, Vec3 } from './types.ts';
 import { logger } from './logger.ts';
 import { ARMORNADE_OVERCAP, MAX_HIT_CLAIM_DMG } from '../../shared/weapons.ts';
+import { healPool } from './healPool.ts';
 
 const TICK_DT = 0.05;
 // Distance-tiered send: committed edges only matter to players who can
@@ -187,7 +188,7 @@ export class CreatureSim {
       if (c.dead) continue;
       const d2 = (c.x - pos.x) ** 2 + (c.y - pos.y) ** 2 + (c.z - pos.z) ** 2;
       if (d2 > r2) continue;
-      c.health = Math.min(c.maxHealth * ARMORNADE_OVERCAP, c.health + amount);
+      healPool(c, amount, c.maxHealth * ARMORNADE_OVERCAP);
     }
   }
 

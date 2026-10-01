@@ -13,6 +13,7 @@ import { BOT_LOADOUTS, type BotLoadout } from '../../shared/botLoadouts.ts';
 import { BOT_NAMES } from '../../shared/botNames.ts';
 import { ROLE_PRIORITY, type BotRole } from '../../shared/flagGoals.ts';
 import { isSuper } from './superBot.ts';
+import { healPool } from './healPool.ts';
 
 /** Armor class follows the role — Tribes pacing lives on this: cappers
  *  and infiltrators fly light, HoF and technicians anchor heavy, the
@@ -93,7 +94,7 @@ export class BotRoster {
     }
     const delta = base + CLASS_STATS[cls].maxHealth - p.maxHealth;
     p.maxHealth += delta;
-    p.health = Math.min(p.maxHealth, p.health + Math.max(0, delta));
+    healPool(p, Math.max(0, delta));
     this.room.moveSim.setSpeedScale(p.id, CLASS_STATS[cls].speedScale);
   }
 

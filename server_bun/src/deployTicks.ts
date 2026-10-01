@@ -8,6 +8,7 @@ import {
   STATION_RANGE, STATION_HEAL_CD, STATION_HP_RATE,
   DRONE_HOVER_UP, DRONE_RANGE, DRONE_DAMAGE, DRONE_FIRE_INTERVAL,
 } from './RoomDeployables.ts';
+import { healPool } from './healPool.ts';
 
 // Per-kind deployable ticks — drone escort scan, proximity-mine fuse,
 // resupply-pad pulse, structure LOS, sentry fire. RoomDeployables owns
@@ -76,7 +77,7 @@ export function tickStation(r: RoomDeployables, d: Deployed, dt: number): void {
       const dx = p.position.x - d.pos.x, dy = p.position.y - d.pos.y, dz = p.position.z - d.pos.z;
       if (dx * dx + dy * dy + dz * dz > STATION_RANGE * STATION_RANGE) continue;
       if (p.health >= p.maxHealth) continue;
-      p.health = Math.min(p.maxHealth, p.health + p.maxHealth * STATION_HP_RATE * STATION_HEAL_CD);
+      healPool(p, p.maxHealth * STATION_HP_RATE * STATION_HEAL_CD);
       p.forceSendUntil = Date.now() + FORCE_SEND_MS;
       void pid;
     }

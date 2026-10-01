@@ -13,6 +13,7 @@ import { logger } from './logger.ts';
 import type { PlayerState } from './types.ts';
 import { healPerTick, recordSuppressed, type TickRecord } from './tickHelpers.ts';
 import { CONFIG } from './config.ts';
+import { healPool } from './healPool.ts';
 
 type Players = ReturnType<Room['players']['getAllPlayers']>;
 
@@ -145,7 +146,7 @@ export class TickFanout {
   private tickServerHeals(room: Room, playerId: string, p: PlayerState, now: number): void {
     const heal = healPerTick(p, now);
     if (heal <= 0) return;
-    p.health = Math.min(p.maxHealth, p.health + heal);
+    healPool(p, heal);
     // Capping out always echoes — the channel ends here, so the final
     // converged hp would otherwise wait on the next discrete event.
     if (now - p.healthEchoAt >= 500 || p.health >= p.maxHealth) {

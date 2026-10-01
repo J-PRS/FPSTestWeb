@@ -1,3 +1,5 @@
+2026-10-01 - audit: botTaunts cooldown clock injectable (setTauntClock) — last wall-clock read in shared/ now pinnable in tests
+2026-10-01 - audit: healPool() consolidates 8 hand-rolled heal-cap sites (incl. ARMORNADE_OVERCAP ceiling)
 2026-10-01 - audit: netMalformed.test.ts — dispatch absorbs missing-field/unknown-type messages and truncated binary frames without poisoning
 2026-10-01 - audit: net message dispatch guarded — a malformed message logs a warn instead of reaching onError (reconnect risk)
 2026-10-01 - audit: renderer.ts GLSL blobs (upscale/xBR/ACES/lens-dirt) extracted to rendererShaders.ts — 825→601 lines

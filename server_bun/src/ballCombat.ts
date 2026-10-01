@@ -12,6 +12,7 @@ import { ARMORNADE_OVERCAP } from '../../shared/weapons.ts';
 import { segPointDist, segPointT } from '../../shared/projSim.ts';
 import { aoeDamage } from '../../shared/combat.ts';
 import { logger } from './logger.ts';
+import { healPool } from './healPool.ts';
 
 export interface BallCombatHost {
   balls(): Map<number, SimBall>;
@@ -46,7 +47,7 @@ export class BallCombat {
       if (b.dead) continue;
       const d2 = (b.x - pos.x) ** 2 + (b.y - pos.y) ** 2 + (b.z - pos.z) ** 2;
       if (d2 > r2) continue;
-      b.health = Math.min(b.maxHealth * ARMORNADE_OVERCAP, b.health + amount);
+      healPool(b, amount, b.maxHealth * ARMORNADE_OVERCAP);
     }
   }
 
