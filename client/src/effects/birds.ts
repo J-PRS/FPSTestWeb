@@ -140,6 +140,7 @@ export class AmbientBirds {
           }`);
     };
     this.flock = new THREE.InstancedMesh(geo, mat, BIRD_COUNT);
+    this.flock.matrixWorldAutoUpdate = false;
     this.flock.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.flock.frustumCulled = false; // 9 birds span a huge volume — cull math isn't worth it
     scene.add(this.flock);

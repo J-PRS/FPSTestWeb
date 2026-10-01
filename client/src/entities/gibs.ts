@@ -53,6 +53,7 @@ class GibMeshPool {
   constructor(scene: THREE.Scene, geo: THREE.BufferGeometry, mat: THREE.Material, per: number) {
     this.per = per;
     this.mesh = new THREE.InstancedMesh(geo, mat, GIB_CAP);
+    this.mesh.matrixWorldAutoUpdate = false;
     this.mesh.count = 0;
     this.mesh.frustumCulled = false;
     this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);

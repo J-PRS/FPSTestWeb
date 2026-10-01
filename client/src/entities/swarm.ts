@@ -45,6 +45,7 @@ export class SpeciesSwarm {
     for (const p of parts) {
       const per = p.per ?? 1;
       const mesh = new THREE.InstancedMesh(p.geometry, p.material, capacity * per);
+    mesh.matrixWorldAutoUpdate = false;
       mesh.count = 0;
       mesh.frustumCulled = false; // instances span the map — whole-mesh bounds are meaningless
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -179,6 +180,7 @@ export class InstancedBlobShadows {
       depthTest: true,
     });
     this.mesh = new THREE.InstancedMesh(geo, mat, SHADOW_CAPACITY);
+    this.mesh.matrixWorldAutoUpdate = false;
     this.mesh.count = 0;
     this.mesh.frustumCulled = false;
     this.mesh.renderOrder = 999;

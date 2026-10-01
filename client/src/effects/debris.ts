@@ -135,6 +135,7 @@ export class Debris {
     if (!b) {
       const pooled = Debris.instPool.get(prim)?.pop();
       const mesh = pooled ?? new THREE.InstancedMesh(Debris.primGeos[prim]!, Debris.primMat, this.instCap);
+      mesh.matrixWorldAutoUpdate = false;
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       mesh.castShadow = false;
       mesh.frustumCulled = false; // shards scatter; unit-geo bounds don't cover instances

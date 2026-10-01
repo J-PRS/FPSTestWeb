@@ -86,6 +86,7 @@ function instPoolFor(scene: THREE.Scene, kind: string, geo: THREE.BufferGeometry
   let p = instPools.get(key);
   if (!p) {
     const mesh = new THREE.InstancedMesh(geo, mat, INST_CAP);
+    mesh.matrixWorldAutoUpdate = false;
     mesh.frustumCulled = false; // shells scatter; per-instance bounds don't exist
     mesh.count = 0;
     mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);

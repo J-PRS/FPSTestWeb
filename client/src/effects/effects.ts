@@ -54,6 +54,7 @@ class InstBucket {
         .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.a *= vAlpha;');
     };
     this.mesh = new THREE.InstancedMesh(geo, mat, POOL_MAX);
+    this.mesh.matrixWorldAutoUpdate = false;
     this.mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(POOL_MAX * 3), 3);
     this.mesh.instanceColor.setUsage(THREE.DynamicDrawUsage);
     this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);

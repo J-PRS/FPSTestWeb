@@ -22,6 +22,7 @@ function poolFor(scene: THREE.Scene) {
   let p = pools.get(scene);
   if (!p) {
     const mesh = new THREE.InstancedMesh(_ringGeo, _ringMat, MAX_GIZMOS);
+    mesh.matrixWorldAutoUpdate = false;
     mesh.frustumCulled = false; // rings scatter map-wide; single bounds can't cover them
     mesh.count = 0;
     mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);

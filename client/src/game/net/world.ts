@@ -626,6 +626,11 @@ async function applyInteriors(ctx: NetCtx, list: InteriorSpec[] | undefined): Pr
     group.add(mesh);
   }
   if (missing.size) deps.logger.warn(`Interiors missing glb: ${[...missing].join(', ')}`);
+  // Bake every world matrix once, then freeze the whole subtree — the
+  // per-frame updateMatrixWorld walk skips it entirely instead of
+  // re-multiplying hundreds of static nodes.
+  group.updateMatrixWorld(true);
+  group.matrixWorldAutoUpdate = false;
   deps.logger.info(`T2 interiors placed: ${list.length - missing.size}/${list.length} → ${buckets.size + kept.length} draws`);
 }
 
