@@ -338,9 +338,16 @@ async function loadMats(dirUrl: string): Promise<{
     // brightness instead of replacing its color (dark rock tiles used to
     // erase the grass bake outright).
     const d = g.getImageData(cx, cy, 256, 256).data;
+    // The shader compares sampled (linear-decoded) luminance against this
+    // mean — compute it in linear space too or dark tiles divide by an
+    // sRGB mean ~2.4× too high and the whole blend reads as black grime.
+    const srgb2lin = (c: number) => {
+      const v = c / 255;
+      return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+    };
     let s = 0;
-    for (let i = 0; i < d.length; i += 4) s += 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
-    means[k] = Math.max(s / (d.length / 4) / 255, 1e-3);
+    for (let i = 0; i < d.length; i += 4) s += 0.299 * srgb2lin(d[i]) + 0.587 * srgb2lin(d[i + 1]) + 0.114 * srgb2lin(d[i + 2]);
+    means[k] = Math.max(s / (d.length / 4), 1e-3);
   }));
   const tilesTex = new THREE.CanvasTexture(atlas);
   tilesTex.colorSpace = THREE.SRGBColorSpace;
