@@ -246,7 +246,12 @@ async function applyTerrain(ctx: NetCtx, file: string | null, texPath?: string, 
   return terrainSwap;
 }
 
+// Exports are GL-layout (verified by _tools/tershot/seamcheck.py: py's
+// four edges match all four side tops, side ring pairs at ~1 error).
+// Sole export defect: px is written upside-down — its bottom edge matches
+// the up face while every sibling matches via its top. Flip it on canvas.
 const SKY_FACES = ['px', 'nx', 'py', 'ny', 'pz', 'nz'] as const;
+const SKY_VFLIP = new Set(['px']);
 
 /** A missing face must not kill the terrain swap — loader rejections
  *  are ProgressEvents, which used to surface as "undefined" here. */
@@ -259,18 +264,15 @@ async function applySky(deps: NetCtx['deps'], httpUrl: string, skyDir: string | 
   }
   const order = SKY_FACES.map((f) => `${httpUrl}/maps/${skyDir}/${f}.png`);
   try {
-    // Exports are GL-layout for the four sides + down face. The up face is
-    // exported rotated 180° (its dark edge lands opposite px's dark-top edge,
-    // cutting a hard seam at the zenith ring) — a canvas 180° un-rotates it.
     const loader = new THREE.ImageLoader();
     const faces = await Promise.all(order.map(async (url, i) => {
       const img = await loader.loadAsync(url);
-      if (SKY_FACES[i] !== 'py') return img;
+      if (!SKY_VFLIP.has(SKY_FACES[i]!)) return img;
       const c = document.createElement('canvas');
       c.width = img.width; c.height = img.height;
       const ctx = c.getContext('2d')!;
-      ctx.translate(img.width, img.height);
-      ctx.rotate(Math.PI);
+      ctx.translate(0, img.height);
+      ctx.scale(1, -1);
       ctx.drawImage(img, 0, 0);
       return c;
     }));
