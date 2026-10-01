@@ -1,3 +1,4 @@
+2026-10-01 - perf report: CPU-throttled profiling infra (CPU_THROTTLE/HEAP_MB/cpuprobe) + vertexAO BVH bake 78%->4% + static matrix freeze + stopped-ribbon pos skip
 2026-10-01 - matrixAutoUpdate=false on interior group + merged meshes
 2026-10-01 - stopped ribbons skip frozen-position rewrites (billboard still tracks camera)
 2026-10-01 - vertexAO bake via three-mesh-bvh (was 78% of throttled CPU in raycasts, now ~4%) + CPU-throttled profiling probes (CPU_THROTTLE/HEAP_MB env) + per-fxJob max tracker
