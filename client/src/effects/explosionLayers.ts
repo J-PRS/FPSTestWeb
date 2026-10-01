@@ -24,6 +24,13 @@ interface Shockwave {
 
 const GEO_SHOCK = new THREE.SphereGeometry(0.3, 16, 16); // shockwave shell
 const shockPool: Shockwave[] = []; // module pool — shared across blasts
+// Grow-only freelists held peak burst memory forever — pool a small warm
+// floor and dispose the rest (each entry owns a MeshBasicMaterial).
+const SHOCK_POOL_KEEP = 16;
+function releaseShock(sw: Shockwave): void {
+  if (shockPool.length >= SHOCK_POOL_KEEP) sw.mat.dispose();
+  else shockPool.push(sw);
+}
 
 const _c = new THREE.Color();
 const _c2 = new THREE.Color();
@@ -275,7 +282,7 @@ export class ExplosionLayers implements VariantHost {
       if (sw.elapsed >= sw.life) {
         this.scene.remove(sw.mesh);
         sw.dead = true;
-        shockPool.push(sw);
+        releaseShock(sw);
         continue;
       }
       alive++;
@@ -291,7 +298,7 @@ export class ExplosionLayers implements VariantHost {
       if (!sw.dead) {
         this.scene.remove(sw.mesh);
         sw.dead = true;
-        shockPool.push(sw);
+        releaseShock(sw);
       }
     }
     for (const r of this.rings) r.dispose();
