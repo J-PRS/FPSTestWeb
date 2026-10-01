@@ -1,3 +1,4 @@
+2026-10-01 - tests: locomotionAnim ski/walk/run hysteresis + authoritative ski bit
 2026-10-01 - refactor: anim cadence table extracted as pure pickAnimCadence + tier tests
 2026-10-01 - tests: AggroKit roster (local death flags, 2s remote staleness, localDriven exemption, prune, deployable candidates)
 2026-10-01 - tests: ThreatTable aggro hysteresis/leash/lastSeen/forget/decay (pins sticky>wDmg commit semantics)
