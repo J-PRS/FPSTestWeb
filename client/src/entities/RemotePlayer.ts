@@ -159,6 +159,10 @@ export class RemotePlayer {
 
   /** XZ distance² to the camera — gates the remote anim-LOD tiers below. */
   camDistSq = 0; // public — anim LOD tiers off it
+  /** Camera-frustum test per network tick — offscreen bodies skip the
+   *  mixer step entirely (the GPU already culls them; the CPU mixer was
+   *  still ticking every bone). */
+  onScreen = true; // public — remotes.ts writes it
   /** Accumulated dt the mixer still owes — far remotes animate in bursts
    *  at a lower cadence instead of paying a full mixer step every frame. */
   // Animation drive (locomotion pick, air trail, shoot/hit oneshots, mixer

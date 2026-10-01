@@ -16,6 +16,11 @@ import * as sfxWorld from '../core/sfx/world.js';
 // Hostiles always read red — team colors are for your own side only.
 const ENEMY_RED = 0xff3333;
 
+// Shared scratch for the per-tick offscreen test.
+const _frustum = new THREE.Frustum();
+const _projScreen = new THREE.Matrix4();
+const _sphere = new THREE.Sphere();
+
 export interface RemotesDeps {
   lazyNetworkManager: () => NetworkManager;
   lazyScene: () => THREE.Scene;
@@ -112,6 +117,17 @@ function tickRemoteCosmetics(deps: RemotesDeps, playerId: string, remotePlayer: 
 function isJetting(rp: RemotePlayer, dead: boolean): boolean {
   if (dead) return false;
   return rp.wireJet ?? rp.vel.y > 4.5;
+}
+
+/** Offscreen flag for the anim gate — one frustum extraction per frame,
+ *  a ~2m sphere test per remote. Mixer ticks for culled bodies were pure
+ *  waste (the skin never rasterizes). */
+function tickOnScreen(deps: RemotesDeps, cam: THREE.PerspectiveCamera): void {
+  _frustum.setFromProjectionMatrix(_projScreen.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse));
+  for (const rp of deps.world.remotePlayers.values()) {
+    _sphere.set(rp.position, 2.2);
+    rp.onScreen = _frustum.intersectsSphere(_sphere);
+  }
 }
 
 // Per-remote-player frame work: create if new, hide if stale, tick, then cosmetics
@@ -269,10 +285,11 @@ export function createRemotes(deps: RemotesDeps) {
     }
 
     players.forEach((playerState, playerId) => tickRemotePlayer(deps, lastTintOf, playerId, playerState, dt));
-    // Local bots ('bot:', 'dummy') aren't in the network roster, so the
-    // forEach above never touches them — same red marker as real remotes.
     const hud = deps.lazyHud();
     const cam = deps.lazyCamera();
+    tickOnScreen(deps, cam);
+    // Local bots ('bot:', 'dummy') aren't in the network roster, so the
+    // forEach above never touches them — same red marker as real remotes.
     for (const [id, rp] of deps.world.remotePlayers) {
       if (players.has(id)) continue;
       if (rp.isDead) {

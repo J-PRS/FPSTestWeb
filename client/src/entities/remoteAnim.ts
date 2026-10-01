@@ -23,6 +23,8 @@ export interface AnimHost {
   readonly feetY: number;
   readonly terrain: Terrain | null;
   readonly camDistSq: number;
+  /** False while the body sits outside the camera frustum. */
+  readonly onScreen: boolean;
   readonly scene: THREE.Scene;
   readonly model: PlayerModel;
   readonly loaded: boolean;
@@ -92,11 +94,19 @@ export class RemoteAnim {
     h.tickGhost(dt);
     h.tickAuras(dt);
     h.previousPosition.copy(h.position);
-    // Anim LOD — the mixer step is the dominant per-remote cost, so far
-    // bodies animate in coarser bursts (accumulated dt keeps playback
-    // speed correct) instead of a full mixer update every frame. State
-    // changes and oneshots still apply every frame; only playback ticks.
-    const animDt = h.camDistSq > 120 * 120 ? 1 / 15
+    this.stepMixer(dt);
+    this.tickRenderLod();
+  }
+
+  /** Anim LOD — the mixer step is the dominant per-remote cost, so far
+   *  bodies animate in coarser bursts (accumulated dt keeps playback
+   *  speed correct) instead of a full mixer update every frame. Offscreen
+   *  bodies get an Infinity cadence — the renderer already culls the skin,
+   *  only CPU bone evaluation was still burning. */
+  private stepMixer(dt: number): void {
+    const h = this.h;
+    const animDt = h.onScreen === false ? Infinity
+      : h.camDistSq > 120 * 120 ? 1 / 15
       : h.camDistSq > 60 * 60 ? 1 / 30
       : 0;
     if (animDt > 0) {
@@ -109,7 +119,6 @@ export class RemoteAnim {
       this.animAcc = 0;
       h.model.update(dt);
     }
-    this.tickRenderLod();
   }
 
   /** Distance-tiered render budget — cast shadows, skinned geo LOD. */
