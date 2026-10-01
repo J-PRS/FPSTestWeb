@@ -461,11 +461,22 @@ interface BlastParticle {
 class BlastEmitter {
   readonly type = 'blast';
   constructor(private elvBase: number, private elvSpan: number,
-              private planar: boolean, private vy: number) { }
+              private planar: boolean, private vy: number,
+              private dir?: THREE.Vector3, private spread?: number) { }
   update(): void { }
   initialize(p: BlastParticle): void {
     const ang = Math.random() * Math.PI * 2;
     p.position.set((Math.random() - 0.5) * 0.5, (Math.random() - 0.5) * 0.5, (Math.random() - 0.5) * 0.5);
+    if (this.dir) {
+      // Forward cone: dir jittered by `spread` — reads as streaks along a
+      // launch direction rather than an omnidirectional puff.
+      _eVel.copy(this.dir)
+        .addScaledVector(_eRand.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize(), this.spread!)
+        .normalize()
+        .multiplyScalar(p.startSpeed);
+      p.velocity.set(_eVel.x, _eVel.y, _eVel.z);
+      return;
+    }
     if (this.planar) {
       p.velocity.set(Math.sin(ang) + (Math.random() - 0.5), 0, Math.cos(ang) + (Math.random() - 0.5))
         .multiplyScalar(p.startSpeed);
@@ -479,8 +490,10 @@ class BlastEmitter {
     }
   }
   toJSON(): { type: string } { return { type: this.type }; }
-  clone(): BlastEmitter { return new BlastEmitter(this.elvBase, this.elvSpan, this.planar, this.vy); }
+  clone(): BlastEmitter { return new BlastEmitter(this.elvBase, this.elvSpan, this.planar, this.vy, this.dir, this.spread); }
 }
+const _eRand = new THREE.Vector3();
+const _eVel = new THREE.Vector3();
 
 /** Inward shell emitter for implosions: spawn on a sphere shell at
  *  rMin..rMax, velocity aimed at the emitter origin plus a tangential
@@ -562,6 +575,8 @@ export interface BlastSpec {
   count: number;
   elvBase?: number; elvSpan?: number;   // non-planar elevation distribution
   planar?: boolean;                     // flat horizontal sheet
+  dir?: THREE.Vector3;                  // forward-cone mode (launch streaks)
+  spread?: number;                      // cone jitter magnitude for dir mode
   spdMin: number; spdMax: number; vy: number;
   lifeMin: number; lifeMax: number;
   sizeMin: number; sizeMax: number;
@@ -622,7 +637,7 @@ export function blastBurst(pos: THREE.Vector3, spec: BlastSpec,
     startRotation: new IntervalValue(0, Math.PI * 2),
     emissionOverTime: new ConstantValue(0),
     emissionBursts: bursts,
-    shape: new BlastEmitter(spec.elvBase ?? 0.5, spec.elvSpan ?? Math.PI, !!spec.planar, spec.vy),
+    shape: new BlastEmitter(spec.elvBase ?? 0.5, spec.elvSpan ?? Math.PI, !!spec.planar, spec.vy, spec.dir, spec.spread),
     material: additive ? impactMat() : normalMat(),
     renderMode: spec.stretched ? RenderMode.StretchedBillBoard : RenderMode.BillBoard,
     speedFactor: spec.stretched ? 0.12 : undefined,

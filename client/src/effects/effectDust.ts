@@ -1,11 +1,10 @@
 import * as THREE from 'three';
-import { fxPuff } from './vfx.js';
+import { GRAVITY } from '../core/config.js';
+import { fxPuff, blastBurst } from './vfx.js';
 import type { EffectsManager } from './effects.js';
 
-const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
-const _c = new THREE.Color();
 
 // Locomotion dust + trail spawns — jump/ski/move/fly puffs and the
 // bounce redirect burst. Spawn math only; pooling stays in EffectsManager.
@@ -38,27 +37,20 @@ export function spawnWarpTrail(pos: THREE.Vector3): void {
   }
 
 export function spawnJumpDust(m: EffectsManager, pos: THREE.Vector3): void {
-    // Spawn at ground level for better visual
+    // Ground-level ring + center poof as ONE batched quarks system — the
+    // pooled-mesh version cost 20 draw calls per jump.
     const groundY = m.terrain ? m.terrain.getHeight(pos.x, pos.z) : 0;
-    const spawnY = groundY + 0.2;
-
-    // Ring burst effect - more particles, more dramatic
-    for (let i = 0; i < 16; i++) {
-      _c.setRGB(0.7, 0.6, 0.45);
-      const ang = (i / 16) * Math.PI * 2;
-      const spd = 3 + Math.random() * 4;
-      _v.set(Math.cos(ang) * spd, 1.5 + Math.random() * 2.5, Math.sin(ang) * spd);
-      _v2.set(pos.x, spawnY, pos.z);
-      m.alloc(m.sharedGeo, _v2, _v, 0.35 + Math.random() * 0.25, _c);
-    }
-
-    // Add a few center particles for the "poof" effect
-    for (let i = 0; i < 4; i++) {
-      _c.setRGB(0.8, 0.7, 0.5);
-      _v.set((Math.random() - 0.5) * 2, 2 + Math.random() * 3, (Math.random() - 0.5) * 2);
-      _v2.set(pos.x, spawnY, pos.z);
-      m.alloc(m.sharedGeo, _v2, _v, 0.3 + Math.random() * 0.2, _c);
-    }
+    _v2.set(pos.x, groundY + 0.2, pos.z);
+    blastBurst(_v2, {
+      count: 20,
+      planar: true,
+      spdMin: 3, spdMax: 7, vy: 1.5,
+      lifeMin: 0.3, lifeMax: 0.6,
+      sizeMin: 0.3, sizeMax: 0.5,
+      gravity: GRAVITY,
+      c1: [0.7, 0.6, 0.45], c2: [0.8, 0.7, 0.5],
+      opacity: 0.6,
+    }, false);
   }
 
   // Bounce skill FX — cyan energy burst kicked along the launch direction
@@ -67,25 +59,28 @@ export function spawnBounce(m: EffectsManager, pos: THREE.Vector3, dir: THREE.Ve
     const groundY = m.terrain ? m.terrain.getHeight(pos.x, pos.z) : pos.y - 1.8;
     _v3.set(pos.x, Math.max(pos.y - 1.2, groundY + 0.2), pos.z); // burst at feet
 
-    // Forward cone of bright streaks along the launch direction
-    for (let i = 0; i < 18; i++) {
-      const spread = 0.35 + Math.random() * 0.3;
-      _v.copy(dir)
-        .addScaledVector(_v2.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize(), spread)
-        .normalize()
-        .multiplyScalar(10 + Math.random() * 18);
-      _c.setHSL(0.52 + Math.random() * 0.06, 0.9, 0.6 + Math.random() * 0.3); // cyan-white
-      m.alloc(m.sharedGeo, _v3, _v, 0.25 + Math.random() * 0.3, _c,
-        { opacity: 0.9, additive: true, depthWrite: false, noGravity: true });
-    }
-
-    // Small dust ring where you left the ground
-    for (let i = 0; i < 10; i++) {
-      const ang = (i / 10) * Math.PI * 2;
-      _v.set(Math.cos(ang) * 4, 0.8 + Math.random(), Math.sin(ang) * 4);
-      _c.setRGB(0.7, 0.65, 0.55);
-      m.alloc(m.sharedGeo, _v3, _v, 0.3 + Math.random() * 0.2, _c, { opacity: 0.5 });
-    }
+    // Forward cone of bright cyan streaks + a dust ring — both batched;
+    // the pooled version cost 28 draws per bounce.
+    blastBurst(_v3, {
+      count: 18,
+      dir, spread: 0.5,
+      spdMin: 10, spdMax: 28, vy: 0,
+      lifeMin: 0.25, lifeMax: 0.55,
+      sizeMin: 0.25, sizeMax: 0.45,
+      gravity: 0,
+      c1: [0.5, 1.0, 1.0], c2: [0.9, 1.0, 1.0],
+      opacity: 0.9,
+    }, true);
+    blastBurst(_v3, {
+      count: 10,
+      planar: true,
+      spdMin: 4, spdMax: 4.5, vy: 0.8,
+      lifeMin: 0.3, lifeMax: 0.5,
+      sizeMin: 0.3, sizeMax: 0.45,
+      gravity: GRAVITY,
+      c1: [0.7, 0.65, 0.55], c2: [0.7, 0.65, 0.55],
+      opacity: 0.5,
+    }, false);
   }
 
 export function spawnSkiDust(m: EffectsManager, pos: THREE.Vector3, velocity: THREE.Vector3): void {
