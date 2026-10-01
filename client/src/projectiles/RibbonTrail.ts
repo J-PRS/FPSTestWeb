@@ -3,6 +3,8 @@ import * as THREE from 'three';
 import { BLOOM_LAYER, EMIT_GAIN } from '../core/config.js';
 
 const MAX_SAMPLES = 48;
+const VERTS = MAX_SAMPLES * 2;
+const IDX = (MAX_SAMPLES - 1) * 6;
 
 const _side = new THREE.Vector3();
 const _up = new THREE.Vector3(0, 1, 0);
@@ -10,17 +12,78 @@ const _fwd = new THREE.Vector3(1, 0, 0);
 const _dir = new THREE.Vector3();
 
 /**
- * Flat ribbon trail — a single triangle strip following the projectile.
- * One draw call, zero per-frame allocations; much cheaper than particle meshes.
+ * Flat ribbon trail — a triangle strip following the projectile.
  *
- * The ribbon is offset perpendicular to the velocity in the horizontal-ish
- * plane (like a frisbee slicing air). Fades to black toward the tail; with
- * AdditiveBlending black = invisible.
+ * Every ribbon shares ONE merged BufferGeometry (a slot each) under a
+ * single Mesh: 240+ live trails used to cost 240 draw calls — the top
+ * Mesh family in the LOW-FPS dumps. Now the whole layer is one call;
+ * freed slots just zero their slice (degenerate tris cost nothing).
  */
+const MAX_TRAILS = 512;
+
+class TrailBatch {
+  geo = new THREE.BufferGeometry();
+  mesh: THREE.Mesh;
+  pos: Float32Array;
+  col: Float32Array;
+  posAttr: THREE.BufferAttribute;
+  colAttr: THREE.BufferAttribute;
+  free: number[] = [];
+  used = new Set<number>();
+  dirty = false;
+
+  constructor(scene: THREE.Scene) {
+    this.pos = new Float32Array(MAX_TRAILS * VERTS * 3);
+    this.col = new Float32Array(MAX_TRAILS * VERTS * 3);
+    this.posAttr = new THREE.BufferAttribute(this.pos, 3);
+    this.colAttr = new THREE.BufferAttribute(this.col, 3);
+    this.posAttr.setUsage(THREE.DynamicDrawUsage);
+    this.colAttr.setUsage(THREE.DynamicDrawUsage);
+    this.geo.setAttribute('position', this.posAttr);
+    this.geo.setAttribute('color', this.colAttr);
+    const idx = new Uint32Array(MAX_TRAILS * IDX);
+    for (let r = 0; r < MAX_TRAILS; r++) {
+      const base = r * VERTS, io = r * IDX;
+      for (let i = 0; i < MAX_SAMPLES - 1; i++) {
+        const o = io + i * 6, v = base + i * 2;
+        idx[o] = v; idx[o + 1] = v + 1; idx[o + 2] = v + 2;
+        idx[o + 3] = v + 1; idx[o + 4] = v + 3; idx[o + 5] = v + 2;
+      }
+    }
+    this.geo.setIndex(new THREE.BufferAttribute(idx, 1));
+    this.geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1e7);
+    const mat = new THREE.MeshBasicMaterial({
+      vertexColors: true,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
+    });
+    this.mesh = new THREE.Mesh(this.geo, mat);
+    this.mesh.frustumCulled = false;
+    this.mesh.layers.enable(BLOOM_LAYER);
+    for (let s = MAX_TRAILS - 1; s >= 0; s--) this.free.push(s);
+    scene.add(this.mesh);
+  }
+
+  flush(): void {
+    if (!this.dirty) return;
+    this.dirty = false;
+    this.posAttr.needsUpdate = true;
+    this.colAttr.needsUpdate = true;
+  }
+}
+
+const batches = new Map<THREE.Scene, TrailBatch>();
+function batchFor(scene: THREE.Scene): TrailBatch {
+  let b = batches.get(scene);
+  if (!b) { b = new TrailBatch(scene); batches.set(scene, b); }
+  return b;
+}
+
 export class RibbonTrail {
-  private mesh: THREE.Mesh;
-  private geo: THREE.BufferGeometry;
-  private mat: THREE.MeshBasicMaterial;
+  private batch!: TrailBatch;
+  private slot = -1;
 
   // Ring buffer of samples: position + side vector + emit time
   private px = new Float32Array(MAX_SAMPLES);
@@ -30,7 +93,7 @@ export class RibbonTrail {
   private sy = new Float32Array(MAX_SAMPLES);
   private sz = new Float32Array(MAX_SAMPLES);
   private st = new Float32Array(MAX_SAMPLES);
-  private head = -1; // index of newest sample
+  private head = -1;
   private count = 0;
   private time = 0;
   private stopped = false;
@@ -41,16 +104,14 @@ export class RibbonTrail {
   private dy = new Float32Array(MAX_SAMPLES);
   private dz = new Float32Array(MAX_SAMPLES);
 
-  private posAttr: THREE.BufferAttribute;
-  private colAttr: THREE.BufferAttribute;
   private baseColor: THREE.Color;
   private width: number;
   private life: number;
   private vOffset: number; // offset along the ribbon's in-plane "up" (⊥ side)
   private billboard: boolean; // width axis faces the camera each frame
 
-  // Free-list — projectiles churn ribbons constantly; buffers are fixed-size
-  // so reuse is free. Pool is split by billboard mode (structural difference).
+  // Free-list — projectiles churn ribbons constantly; sample buffers are
+  // fixed-size so reuse is free.
   private static poolFixed: RibbonTrail[] = [];
   private static poolBillboard: RibbonTrail[] = [];
 
@@ -64,6 +125,23 @@ export class RibbonTrail {
     return new RibbonTrail(scene, color, width, life, vOffset, billboard);
   }
 
+  private claimSlot(scene: THREE.Scene): void {
+    this.batch = batchFor(scene);
+    this.slot = this.batch.free.pop() ?? -1;
+    if (this.slot >= 0) this.batch.used.add(this.slot);
+  }
+
+  private releaseSlot(): void {
+    if (this.slot < 0) return;
+    const b = this.slot * VERTS * 3;
+    this.batch.pos.fill(0, b, b + VERTS * 3);
+    this.batch.col.fill(0, b, b + VERTS * 3);
+    this.batch.dirty = true;
+    this.batch.used.delete(this.slot);
+    this.batch.free.push(this.slot);
+    this.slot = -1;
+  }
+
   private reinit(scene: THREE.Scene, color: number, width: number, life: number, vOffset: number): void {
     this.width = width;
     this.life = life;
@@ -73,8 +151,7 @@ export class RibbonTrail {
     this.time = 0;
     this.head = -1;
     this.count = 0;
-    this.geo.setDrawRange(0, 0);
-    scene.add(this.mesh);
+    this.claimSlot(scene);
   }
 
   private constructor(scene: THREE.Scene, color: number, width = 0.5, life = 0.3, vOffset = 0, billboard = false) {
@@ -83,36 +160,7 @@ export class RibbonTrail {
     this.vOffset = vOffset;
     this.billboard = billboard;
     this.baseColor = new THREE.Color(color);
-
-    this.geo = new THREE.BufferGeometry();
-    this.posAttr = new THREE.BufferAttribute(new Float32Array(MAX_SAMPLES * 2 * 3), 3);
-    this.colAttr = new THREE.BufferAttribute(new Float32Array(MAX_SAMPLES * 2 * 3), 3);
-    this.posAttr.setUsage(THREE.DynamicDrawUsage);
-    this.colAttr.setUsage(THREE.DynamicDrawUsage);
-    this.geo.setAttribute('position', this.posAttr);
-    this.geo.setAttribute('color', this.colAttr);
-
-    // Static index strip: quad between consecutive sample pairs
-    const idx = new Uint16Array((MAX_SAMPLES - 1) * 6);
-    for (let i = 0; i < MAX_SAMPLES - 1; i++) {
-      const o = i * 6, v = i * 2;
-      idx[o] = v; idx[o + 1] = v + 1; idx[o + 2] = v + 2;
-      idx[o + 3] = v + 1; idx[o + 4] = v + 3; idx[o + 5] = v + 2;
-    }
-    this.geo.setIndex(new THREE.BufferAttribute(idx, 1));
-    this.geo.setDrawRange(0, 0);
-
-    this.mat = new THREE.MeshBasicMaterial({
-      vertexColors: true,
-      transparent: true,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending,
-      side: THREE.DoubleSide,
-    });
-    this.mesh = new THREE.Mesh(this.geo, this.mat);
-    this.mesh.frustumCulled = false; // vertices update every frame; skip bounds math
-    this.mesh.layers.enable(BLOOM_LAYER);
-    scene.add(this.mesh);
+    this.claimSlot(scene);
   }
 
   /** Record a new sample at the projectile's current position/facing. */
@@ -148,7 +196,11 @@ export class RibbonTrail {
   clear(): void {
     this.head = -1;
     this.count = 0;
-    this.geo.setDrawRange(0, 0);
+    if (this.slot >= 0) {
+      const b = this.slot * VERTS * 3;
+      this.batch.col.fill(0, b, b + VERTS * 3);
+      this.batch.dirty = true;
+    }
   }
 
   /** True once the last sample has fully faded — safe to dispose. */
@@ -159,10 +211,11 @@ export class RibbonTrail {
 
   update(dt: number, camPos?: THREE.Vector3): void {
     this.time += dt;
-    if (this.count < 2) { this.geo.setDrawRange(0, 0); return; }
+    if (this.slot < 0 || this.count < 2) return;
 
-    const pos = this.posAttr.array as Float32Array;
-    const col = this.colAttr.array as Float32Array;
+    const pos = this.batch.pos;
+    const col = this.batch.col;
+    const base = this.slot * VERTS * 3;
     // EMIT_GAIN: vertex colors go HDR-hot so the ribbon clears the bloom
     // threshold; ACES brings the display color back to the authored hue.
     const r = this.baseColor.r * EMIT_GAIN, g = this.baseColor.g * EMIT_GAIN, b = this.baseColor.b * EMIT_GAIN;
@@ -173,7 +226,7 @@ export class RibbonTrail {
       const fade = Math.max(0, 1 - (this.time - this.st[s]) / this.life);
       // taper width toward the tail and toward faded samples
       const w = this.width * 0.5 * fade;
-      const o = i * 6;
+      const o = base + i * 6;
       let sx = this.sx[s], sy = this.sy[s], sz = this.sz[s];
       if (this.billboard && camPos) {
         // Side = dir x (dir to camera): ribbon plane always faces the viewer
@@ -195,14 +248,13 @@ export class RibbonTrail {
       col[o] = cr; col[o + 1] = cg; col[o + 2] = cb;
       col[o + 3] = cr; col[o + 4] = cg; col[o + 5] = cb;
     }
-    this.posAttr.needsUpdate = true;
-    this.colAttr.needsUpdate = true;
-    this.geo.setDrawRange(0, (this.count - 1) * 6);
+    this.batch.dirty = true;
+    this.batch.flush();
   }
 
-  /** Release back to the pool — buffers/material kept for reuse. */
-  dispose(scene: THREE.Scene): void {
-    scene.remove(this.mesh);
+  /** Release back to the pool — buffers/slot kept for reuse. */
+  dispose(_scene: THREE.Scene): void {
+    this.releaseSlot();
     const pool = this.billboard ? RibbonTrail.poolBillboard : RibbonTrail.poolFixed;
     pool.push(this);
   }

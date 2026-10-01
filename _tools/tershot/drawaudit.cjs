@@ -15,7 +15,7 @@ const ROOM = 'audit-' + Date.now();
   const report = await page.evaluate(() => {
     const t = window.__test;
     if (!t?.scene) return { err: 'no __test.scene' };
-    const byType = {}, byName = {}, byMat = {};
+    const byType = {}, byName = {}, byMat = {}, byChain = {};
     let meshes = 0, visible = 0, verts = 0;
     const parents = {};
     t.scene.traverse((o) => {
@@ -27,8 +27,16 @@ const ROOM = 'audit-' + Date.now();
         byName[key] = (byName[key] || 0) + 1;
         const gm = o.geometry;
         if (gm?.attributes?.position) verts += gm.attributes.position.count;
+        const mat = o.material;
+        const mk = Array.isArray(mat) ? 'multi' : (mat?.name || mat?.type || '?');
+        byMat[mk] = (byMat[mk] || 0) + 1;
+        // full parent chain for attribution
+        let chain = [], p = o;
+        while (p && p.type !== 'Scene') { chain.unshift(p.name || p.type); p = p.parent; }
+        const ck = chain.slice(0, 3).join('>');
+        byChain[ck] = (byChain[ck] || 0) + 1;
         // top-level group identity for aggregation
-        let p = o; while (p.parent && p.parent.type !== 'Scene') p = p.parent;
+        p = o; while (p.parent && p.parent.type !== 'Scene') p = p.parent;
         const gk = `${p.name || p.type}`;
         if (!parents[gk]) parents[gk] = { drawables: 0, verts: 0 };
         parents[gk].drawables++;
@@ -37,8 +45,10 @@ const ROOM = 'audit-' + Date.now();
     });
     const top = Object.entries(parents).sort((a, b) => b[1].drawables - a[1].drawables).slice(0, 20);
     const names = Object.entries(byName).sort((a, b) => b[1] - a[1]).slice(0, 30);
+    const mats = Object.entries(byMat).sort((a, b) => b[1] - a[1]).slice(0, 15);
+    const chains = Object.entries(byChain).sort((a, b) => b[1] - a[1]).slice(0, 25);
     const info = t.rendererSetup?.renderer?.info?.render || t.renderer?.info?.render;
-    return { meshes, visible, verts, byType, top, names, info };
+    return { meshes, visible, verts, byType, top, names, mats, chains, info };
   });
   console.log(JSON.stringify(report, null, 1));
   await browser.close();
