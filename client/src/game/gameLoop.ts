@@ -123,6 +123,10 @@ export interface LoopState {
   /** Cached interior meshes for the per-frame shadow-caster distance
    *  gate — populated once the __t2interiors group exists. */
   interiorCasters?: THREE.Mesh[];
+  /** Frames rendered before the shader warmup fires — lets async content
+   *  (interiors, rigs) land in the scene before compileAsync runs. */
+  warmN: number;
+  warmed: boolean;
 }
 
 // Per-fxJob EMA ms — 'fx' was one opaque phase over nine rotated jobs;
@@ -443,9 +447,20 @@ function gateInteriorCasters(deps: GameLoopDeps, st: LoopState, camera: THREE.Ca
   }
 }
 
+// Shader warmup — programs used to compile lazily mid-frame and hitch the
+// first ~10s after join (render 116-134ms measured). Once the world content
+// has landed, compileAsync parallel-compiles every scene material instead
+// of stalling individual draws.
+function maybeWarmShaders(deps: GameLoopDeps, st: LoopState): void {
+  if (st.warmed || ++st.warmN <= 60) return;
+  if (!deps.sceneSetup.scene.getObjectByName('__t2interiors') && st.warmN <= 600) return;
+  st.warmed = true;
+  deps.rendererSetup.warmup();
+}
+
 export function createGameLoop(deps: GameLoopDeps) {
   let lastTime = 0;
-  const st: LoopState = { lastYaw: 0, lastPitch: 0, lowFpsFrames: 0, lowFpsAccum: 0, lastFpsDump: 0, gpuLevel: 0, cpuLevel: 0, cpuBound: false, headroomAccum: 0, autoPixel: false, fxCursor: 0, fxJobs: [], shadowAcc: 0, renderAcc: 0 };
+  const st: LoopState = { lastYaw: 0, lastPitch: 0, lowFpsFrames: 0, lowFpsAccum: 0, lastFpsDump: 0, gpuLevel: 0, cpuLevel: 0, cpuBound: false, headroomAccum: 0, autoPixel: false, fxCursor: 0, fxJobs: [], shadowAcc: 0, renderAcc: 0, warmN: 0, warmed: false };
 
   // stats.js perf panels — FPS/MS/MB in a row along the bottom-right,
   // toggled with ` (backquote). stats.js only renders one panel per
@@ -561,6 +576,7 @@ export function createGameLoop(deps: GameLoopDeps) {
     const renderer = rendererSetup.renderer;
 
     gateInteriorCasters(deps, st, camera);
+    maybeWarmShaders(deps, st);
 
     // Shadow-map throttle under the auto-quality ladder: a full-scene
     // re-raster every frame is the heaviest single GPU cost. At ladder ≥2

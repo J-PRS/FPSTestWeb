@@ -30,6 +30,9 @@ export interface RendererSetup {
   isBloomEnabled: () => boolean;
   setBloomEnabled: (enabled: boolean) => void;
   updateRendererSize: () => void;
+  /** Parallel-compile every scene material (KHR_parallel_shader_compile)
+   *  so programs don't lazily stall their first draw. */
+  warmup: () => void;
   setPixelated: (mode: number, persist?: boolean) => void;
   setPostProcessingEnabled: (enabled: boolean) => void;
   resize: (width: number, height: number) => void;
@@ -448,11 +451,7 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
     // rendering by construction, and it's the cheapest path. Floyd (5)
     // uses the same low-res GL render with fsCanvas on top.
     if (applyPixelSize(renderer, fsCanvas, pixelMode)) {
-      if (pixelMode === 5) {
-        fsCanvas.width = renderer.domElement.width;
-        fsCanvas.height = renderer.domElement.height;
-        fs.alloc(fsCanvas.width, fsCanvas.height);
-      }
+      if (pixelMode === 5) { fsCanvas.width = renderer.domElement.width; fsCanvas.height = renderer.domElement.height; fs.alloc(fsCanvas.width, fsCanvas.height); }
       return;
     }
     // Canvas stays full-res — in smooth mode only the composer buffers
@@ -476,13 +475,11 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
   const cc = makeComposer(renderer, scene, camera, bloomEnabled, postproEnabled, pixelMode);
   const { composer, bloomMergePass, dirtPass, contrastPass, upscalePass, upscaleEffect, syncRenderToScreen } = cc;
 
-  // composer.setSize() also resizes the canvas — so always set buffers first,
-  // then restore the canvas to full res. Pixelated = low-res buffers upscaled
-  // by the final pass; the canvas itself never shrinks.
+  // composer.setSize() also resizes the canvas — set buffers first, then
+  // restore whichever canvas sizing the pixel mode wants (it never shrinks).
   function applyBufferSizes(): void {
-    // Composer buffers track the render resolution: hard/dithered run at
-    // 1/PIXEL_SCALE, medium at half that, so post passes stay cheap and
-    // their output lands on the shrunken canvas for CSS upscale.
+    // Post buffers track render res: hard/dithered at 1/PIXEL_SCALE, medium
+    // at half that, so post passes stay cheap on the shrunken canvas.
     const div = pixelMode === 2 ? PIXEL_SCALE / 2
       : (pixelMode >= 1 ? PIXEL_SCALE : 1);
     const w = Math.floor(window.innerWidth / div);
@@ -495,12 +492,9 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
   }
   applyBufferSizes();
 
-  // Shadow-map throttle — the pass re-rasterizes every caster each frame
-  // (~46% of the frame measured on the bench GPU). Every-2nd-frame updates
-  // mean a sun shadow refreshes at 30hz: one frame of lag on a moving
-  // caster is invisible, and the pass cost halves.
-  let shadowTick = 0;
-  renderer.shadowMap.autoUpdate = false;
+  // Half-rate shadow updates: the pass re-rasterizes every caster each
+  // frame (~46% of the frame measured); one frame of lag is invisible.
+  let shadowTick = 0; renderer.shadowMap.autoUpdate = false;
 
   function render(dt?: number): void {
     if ((shadowTick++ & 1) === 0) renderer.shadowMap.needsUpdate = true;
@@ -562,11 +556,7 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
   }
 
   // Setup window resize handler
-  window.addEventListener('resize', () => {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    applyBufferSizes();
-  });
+  window.addEventListener('resize', () => { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); applyBufferSizes(); });
 
   const { pixelToggleBtn, bloomToggleBtn, postproToggleBtn } = wireToggleButtons(modes,
     () => setPixelated((pixelMode + 1) % 6),
@@ -586,6 +576,7 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
     isBloomEnabled: () => bloomEnabled,
     setBloomEnabled,
     updateRendererSize,
+    warmup: () => { void renderer.compileAsync(scene, camera); },
     setPixelated,
     setPostProcessingEnabled,
     resize,
