@@ -53,13 +53,15 @@ export class BotSheepMeter {
     // are both holding real E. bonusSpeed converts it back to the
     // equivalent flat-ground speed so the thresholds stay familiar.
     const v = p.velocity;
-    const mech = 0.5 * (v.x * v.x + v.y * v.y + v.z * v.z) + 9.8 * Math.max(0, m.height ?? 0);
+    // Potential counts at half gravity past a 2m deadband — full g·h let a
+    // bot parked on any hillside bank 'tribesing' forever without moving.
+    const mech = 0.5 * (v.x * v.x + v.y * v.y + v.z * v.z) + 4.9 * Math.max(0, (m.height ?? 0) - 2);
     const ePrev = this.eSm.get(id) ?? mech;
-    const eSm = ePrev + (mech - ePrev) * Math.min(1, m.dt * 4);
+    const eSm = ePrev + (mech - ePrev) * Math.min(1, m.dt * 5);
     this.eSm.set(id, eSm);
     const bonusSpeed = Math.sqrt(Math.max(0, 2 * eSm));
     const jetting = !!m.out.move?.jet || this.yeetUntilMs(id) > now;
-    const tribesing = bonusSpeed > 10 || m.airborne || jetting;
+    const tribesing = bonusSpeed > 14 || m.airborne || jetting;
     const prev = this.meter.get(id) ?? 0;
     let why = this.why.get(id);
     if (!why) { why = { idle: 0, ignore: 0, cover: 0 }; this.why.set(id, why); }

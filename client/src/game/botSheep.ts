@@ -68,9 +68,11 @@ export class SheepMeter {
     // are both holding real E. bonusSpeed converts the recent average
     // back to the equivalent flat-ground speed so thresholds stay
     // familiar. Same formula feeds the bleed probe below.
-    const mech = 0.5 * (v.x * v.x + v.y * v.y + v.z * v.z) + 9.8 * height;
+    // Potential counts at half gravity past a 2m deadband — full g·h let a
+    // bot parked on any hillside bank 'tribesing' forever without moving.
+    const mech = 0.5 * (v.x * v.x + v.y * v.y + v.z * v.z) + 4.9 * Math.max(0, height - 2);
     const ePrev = this.eSm.get(bot.playerId) ?? mech;
-    const eSm = ePrev + (mech - ePrev) * Math.min(1, dt * 4);
+    const eSm = ePrev + (mech - ePrev) * Math.min(1, dt * 5);
     this.eSm.set(bot.playerId, eSm);
     const bonusSpeed = Math.sqrt(Math.max(0, 2 * eSm));
     const tribesing = SheepMeter.isTribesing(bot, bonusSpeed, grounded);
@@ -140,9 +142,9 @@ export class SheepMeter {
   }
 
   /** Counts as Tribesing while it's holding or converting energy —
-   *  bonusSpeed is sqrt(2·E_recent): >10 matches the old speedXZ>10
-   *  gate while letting altitude pay into the same ledger. */
+   *  bonusSpeed is sqrt(2·E_recent): >14 sits above jog speed so a
+   *  cruising bot pays, a dawdling one charges. */
   private static isTribesing(bot: GameBot, bonusSpeed: number, grounded: boolean): boolean {
-    return bonusSpeed > 10 || !grounded || bot.yeetT > 0;
+    return bonusSpeed > 14 || !grounded || bot.yeetT > 0;
   }
 }
