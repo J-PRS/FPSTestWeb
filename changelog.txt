@@ -1,3 +1,4 @@
+2026-10-01 - fix watchdog idleWindows reset on pending ticks (squad alarm never fired); tests botEnergy + botWatchdog
 2026-10-01 - tests: extractClip windowing (renormalize, wrap, synthetic spawn for live projectiles)
 2026-10-01 - tests: KillFeed notices/streaks/bot taunt gating (seeded rng)
 2026-10-01 - tests: SpawnPicker team spheres, clearance, ground lift, scatter
