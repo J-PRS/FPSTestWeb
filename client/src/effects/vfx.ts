@@ -72,6 +72,10 @@ const MAX_LIVE_SYSTEMS = 320;
  *  180m: at ~15px per particle across the map, mid-field explosions
  *  still animate but cross-map firefights stop paying quarks sim. */
 const VFX_SIM_RADIUS_SQ = 180 * 180;
+/** Coarse age-step applied to distance-paused systems each bookkeeping
+ *  pass (~15Hz) — sub-pixel at that range, so decay speed doesn't need
+ *  to be frame-accurate, only fast enough that nothing hangs. */
+const PAUSED_DECAY_S = 1;
 
 // Dead-system starvation counters: trail systems live outside `live`
 // (they're looping emitters owned by projectiles), so an owner that
@@ -157,7 +161,21 @@ function runBookkeeping(camPos?: THREE.Vector3): void {
     for (const ps of batcher.systemToBatchIndex.keys()) {
       if (camPos) {
         const em = ps.emitter as ParticleSystem['emitter'];
-        ps.paused = em.position.distanceToSquared(camPos) > VFX_SIM_RADIUS_SQ;
+        const far = em.position.distanceToSquared(camPos) > VFX_SIM_RADIUS_SQ;
+        if (far) {
+          // batcher.update skips paused systems entirely, so their
+          // particles would hang mid-air forever. Age suspended systems
+          // a coarse step here instead — the emitter is parked, so no
+          // new particles spawn while the existing ones decay out.
+          ps.paused = false;
+          // quarks marks update() private in its typings though it's the
+          // method BatchedRenderer.update calls per frame — the cast is
+          // the same call, scoped to this one system.
+          (ps as unknown as { update(d: number): void }).update(PAUSED_DECAY_S);
+          ps.paused = true;
+        } else {
+          ps.paused = false;
+        }
       }
       if (live.has(ps as ParticleSystem) || pooled.has(ps as ParticleSystem)) continue;
       reapStarved(ps);
@@ -382,8 +400,12 @@ export class QuarksTrail {
         startLife: new IntervalValue(config.trailLifeMin, config.trailLifeMax),
         // slight outward drift — CircleEmitter pushes velocity radially
         startSpeed: new IntervalValue(0, 0.2),
-        startSize: new IntervalValue(config.trailBaseSize,
-          config.trailBaseSize + config.trailSizeRange),
+        // The pooled-mesh trail scaled a radius-1 sphere by `size`, so the
+        // visual diameter was 2·size; BillBoard startSize IS the full quad
+        // side — without the ×2 every trail particle renders at half the
+        // old linear size and reads as "no trail".
+        startSize: new IntervalValue(config.trailBaseSize * 2,
+          (config.trailBaseSize + config.trailSizeRange) * 2),
         startColor: new ConstantColor(new QV4(1, 1, 1, 1)),
         emissionOverTime: new ConstantValue(0),
         emissionOverDistance: new ConstantValue(config.trailParticlesPerUnit),

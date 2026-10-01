@@ -292,6 +292,15 @@ export class RibbonTrail {
     const freshFrom = this.freshFromIndex(camMoved);
     this.pushed = 0;
     const rebillboard = camPos && camMoved && !far ? camPos : undefined;
+    const wrote = this.rewriteSamples(base, pos, freshFrom, rebillboard);
+    const dirty = this.glueBoundary(base, pos) || wrote;
+    if (dirty) {
+      this.batch.mark(base, base + this.count * 6);
+      this.batch.flush();
+    }
+  }
+
+  private rewriteSamples(base: number, pos: Float32Array, freshFrom: number, rebillboard?: THREE.Vector3): boolean {
     let dirty = false;
     for (let i = this.liveFrom; i < this.count; i++) {
       // oldest -> newest
@@ -301,22 +310,21 @@ export class RibbonTrail {
       if (i >= freshFrom) { this.writeSample(s, o, fade, rebillboard, pos); dirty = true; }
       if (this.applyFadeBucket(i, o, fade)) dirty = true;
     }
-    // The index buffer draws every quad in the slot — the one spanning the
-    // last written sample and the next (zeroed 0,0,0) renders as a streak
-    // from the head down to world origin. Gluing the boundary verts to the
-    // head makes it degenerate instead.
-    if (this.count > 0 && this.count < MAX_SAMPLES) {
-      const o = base + this.count * 6;
-      const hx = this.px[this.head], hy = this.py[this.head], hz = this.pz[this.head];
-      pos[o] = hx; pos[o + 1] = hy; pos[o + 2] = hz;
-      pos[o + 3] = hx; pos[o + 4] = hy; pos[o + 5] = hz;
-      this.batch.mark(base, base + (this.count + 1) * 6);
-      dirty = true;
-    }
-    if (dirty) {
-      this.batch.mark(base, base + this.count * 6);
-      this.batch.flush();
-    }
+    return dirty;
+  }
+
+  // The index buffer draws every quad in the slot — the one spanning the
+  // last written sample and the next (zeroed 0,0,0) renders as a streak
+  // from the head down to world origin. Gluing the boundary verts to the
+  // head makes it degenerate instead.
+  private glueBoundary(base: number, pos: Float32Array): boolean {
+    if (this.count === 0 || this.count >= MAX_SAMPLES) return false;
+    const o = base + this.count * 6;
+    const hx = this.px[this.head], hy = this.py[this.head], hz = this.pz[this.head];
+    pos[o] = hx; pos[o + 1] = hy; pos[o + 2] = hz;
+    pos[o + 3] = hx; pos[o + 4] = hy; pos[o + 5] = hz;
+    this.batch.mark(base, base + (this.count + 1) * 6);
+    return true;
   }
 
   /** Fade-bucket write for one slot. Fully-faded tail samples stay at 0

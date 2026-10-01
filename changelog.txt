@@ -1,3 +1,4 @@
+2026-10-01 - vfx: paused particle systems now decay (no more frozen mid-air trails); quarks trail startSize x2 to match old sphere-mesh diameter (line trails visible again); RibbonTrail.update split into rewriteSamples/glueBoundary helpers
 2026-10-01 - Sheep meter tightened: potential energy counts at half-g past a 2m deadband (parked-on-a-hill no longer banks free credit), tribesing energy gate 10->14 equivalent speed, shorter EMA memory
 2026-10-01 - RocketLauncher knockbackForce 55->30: sits at BLAST_IMPULSE_MAX so point-blank rocket jumps top out at the intended ~3m apex instead of hitting the cap silently.
 2026-10-01 - Fix RTC reconnect flap-loop (could not respawn): GameServer.onClose is now seat-aware so a stale socket close cannot detach a re-seated session, and reclaim authenticates by token first then evicts the zombie socket instead of rejecting the owner as "already connected".
