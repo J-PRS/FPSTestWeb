@@ -9,7 +9,7 @@ import { botRand } from './botRand.ts';
 import type { BrainCtx } from './botBrain.ts';
 import { BOT_EYE } from './botHunt.ts';
 
-type BotVec = { x: number; y: number; z: number };
+import { dist3, distSq, type BotVec } from './botVec.ts';
 
 const DODGE_RANGE = 12;  // m — only react to shells already inbound
 const DODGE_STEP = 9;    // m — lateral hop, ~one body-length burst
@@ -81,10 +81,4 @@ export function dodge(ctx: BrainCtx, pos: BotVec, dest: BotVec, hero: boolean): 
   };
 }
 
-function dist3(a: BotVec, b: BotVec): number {
-  return Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
-}
-function distSq(a: BotVec, b: BotVec): number {
-  const dx = a.x - b.x, dy = a.y - b.y, dz = a.z - b.z;
-  return dx * dx + dy * dy + dz * dz;
-}
+// dist3/distSq imported from botVec.ts — shared by the brain family.

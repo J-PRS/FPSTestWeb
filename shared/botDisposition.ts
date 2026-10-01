@@ -3,13 +3,10 @@ import { STATUS } from './status.ts';
 import { ENERGY } from './movement.ts';
 import { retreatDest } from './botHunt.ts';
 import type { BotVec, BrainCtx, BrainOut, BotBrain } from './botBrain.ts';
+import { dist3 } from './botVec.ts';
 
 const CLOSE_PRESS_M = 6; // inside this the orbit breaks — press to fist range
 const FLINCH_DIST = 8;
-
-function dist3(a: BotVec, b: BotVec): number {
-  return Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
-}
 
 // Disposition family — step destination (flinch knock > hunt
 // press/retreat/orbit > goal), the fortification pick, and the

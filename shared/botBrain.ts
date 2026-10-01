@@ -28,7 +28,8 @@ import { stuckBreak, dodge, type EscapeState } from './botEscape.ts';
 export { losClear, BOT_EYE, BOT_FIRE_RANGE } from './botHunt.ts';
 import { pickDest, pickDeploy, statusIntent } from './botDisposition.ts';
 
-export interface BotVec { x: number; y: number; z: number }
+export type { BotVec } from './botVec.ts';
+import { dist3, type BotVec } from './botVec.ts';
 
 export interface BotEnemy {
   id: string;
@@ -315,6 +316,4 @@ export class BotBrain {
   
 }
 
-function dist3(a: BotVec, b: BotVec): number {
-  return Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
-}
+// dist3/distSq live in botVec.ts — shared by the brain family.

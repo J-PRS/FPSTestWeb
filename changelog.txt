@@ -1,3 +1,4 @@
+2026-10-01 - audit: botVec.ts consolidates triplicated dist3/distSq + BotVec (botBrain re-exports for compat)
 2026-10-01 - audit: botTaunts cooldown clock injectable (setTauntClock) — last wall-clock read in shared/ now pinnable in tests
 2026-10-01 - audit: healPool() consolidates 8 hand-rolled heal-cap sites (incl. ARMORNADE_OVERCAP ceiling)
 2026-10-01 - audit: netMalformed.test.ts — dispatch absorbs missing-field/unknown-type messages and truncated binary frames without poisoning
