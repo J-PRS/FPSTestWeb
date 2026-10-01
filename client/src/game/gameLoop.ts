@@ -282,7 +282,8 @@ function fxTick(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof cre
         const d = list[i]!;
         const dx = d.ox - cam.x, dy = d.oy - cam.y, dz = d.oz - cam.z;
         if (dx * dx + dy * dy + dz * dz < VFX_NEAR_SQ) {
-          d.update(fxDt);
+          // Resumable shard budget — one debris can't overdraw the cap.
+          d.update(fxDt, 1.5 - (performance.now() - t0));
           if (performance.now() - t0 > 1.5) { i--; break; }
         } else d.tickAge(fxDt);
         if (d.dead) { d.dispose(); list.splice(i, 1); }

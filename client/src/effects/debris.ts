@@ -213,7 +213,12 @@ export class Debris {
     });
   }
 
-  update(dt: number): void {
+  private shardCursor = 0;
+
+  /** Shard physics, resumable: `deadlineMs` splits a many-shard update
+   *  across frames at the cursor instead of letting one debris overdraw
+   *  the caller's job budget (a PlayerDebris is ~20 shards ≈ 8ms @6x). */
+  update(dt: number, deadlineMs = Infinity): void {
     if (this.ghost && this.ghostMat) {
       this.ghostT += dt;
       const t = Math.min(1, this.ghostT / Debris.GHOST_LIFE);
@@ -227,7 +232,11 @@ export class Debris {
       }
     }
     let alive = 0;
-    for (const s of this.shards) {
+    const n = this.shards.length;
+    const t0 = performance.now();
+    for (let k = 0; k < n; k++) {
+      const s = this.shards[this.shardCursor % n]!;
+      this.shardCursor = (this.shardCursor + 1) % n;
       if (s.dead) continue;
       s.elapsed += dt;
       if (s.elapsed >= s.life) {
@@ -235,8 +244,9 @@ export class Debris {
         continue;
       }
       if (this.stepShard(s, dt)) alive++;
+      if (performance.now() - t0 > deadlineMs) break;
     }
-    if (alive === 0) this.dead = true;
+    if (alive === 0 && performance.now() - t0 <= deadlineMs) this.dead = true;
   }
 
   /** Distance gate — shards past ~260m are sub-pixel, so they just age

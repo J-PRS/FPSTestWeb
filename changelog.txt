@@ -1,3 +1,4 @@
+2026-10-01 - Debris shard physics is budget-resumable (cursor + deadline; one debris can no longer overdraw the 1.5ms pdebris cap)
 2026-10-01 - Ribbons rewrite positions only for newly pushed samples (old samples are static, colors-only fade)
 2026-10-01 - Bot LOS memo: 2m cells + 1s TTL (fewer cache misses on moving targets)
 2026-10-01 - stats.js panels only repaint while debug HUD is visible (~2% frame)
