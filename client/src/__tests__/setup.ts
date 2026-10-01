@@ -25,6 +25,8 @@ if (typeof globalThis.window === 'undefined') {
     location: { search: '', href: 'http://localhost/' },
     addEventListener: () => {},
     removeEventListener: () => {},
+    setTimeout: globalThis.setTimeout.bind(globalThis),
+    clearTimeout: globalThis.clearTimeout.bind(globalThis),
   };
 }
 if (typeof globalThis.document === 'undefined') {
@@ -44,10 +46,20 @@ if (typeof globalThis.document === 'undefined') {
       maxLength: 0,
       placeholder: '',
       addEventListener: () => {},
+      append(..._nodes: unknown[]) {},
       appendChild() { return null; },
       remove() {},
     }),
+    createTextNode: (s: string) => ({ textContent: s }),
     body: { appendChild: () => {}, removeChild: () => {} },
     hidden: false,
   };
+}
+// Element classes for `instanceof` guards (key routers skip typing targets).
+if (typeof globalThis.HTMLInputElement === 'undefined') {
+  // oxlint-disable-next-line no-extraneous-class — instanceof needs a ctor, not a value
+  class HtmlStub {}
+  (globalThis as Record<string, unknown>).HTMLInputElement = HtmlStub;
+  (globalThis as Record<string, unknown>).HTMLTextAreaElement = HtmlStub;
+  (globalThis as Record<string, unknown>).HTMLElement = HtmlStub;
 }

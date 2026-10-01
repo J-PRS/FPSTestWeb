@@ -1,3 +1,6 @@
+2026-10-01 - tests: AggroKit roster (local death flags, 2s remote staleness, localDriven exemption, prune, deployable candidates)
+2026-10-01 - tests: ThreatTable aggro hysteresis/leash/lastSeen/forget/decay (pins sticky>wDmg commit semantics)
+2026-10-01 - tests: VGS chord dispatch (send scope/echo/cancel/tree uniqueness); DOM stub gains append/textNode/setTimeout/HTML classes
 2026-10-01 - tests: poissonDisc spread invariants + ExplosionTracker expiry/clone semantics
 2026-10-01 - perf: far remotes play track-filtered clip variants (distal tracks never evaluated)
 2026-10-01 - perf: far idle remotes animate at 5Hz instead of 15/30Hz bursts
