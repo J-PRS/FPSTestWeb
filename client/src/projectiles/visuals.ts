@@ -7,6 +7,7 @@ import type { ProjectileConfig } from './types.js';
 import { RibbonTrail } from './RibbonTrail.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { registerDiag, markProbe } from '../core/fxDiag.js';
+import { acquireBatch, retireBatch, type BatchMap } from '../core/batchPool.js';
 
 const MESH_GEO_CACHE = new Map<string, THREE.BufferGeometry>();
 // Projectile materials are never mutated after construction — share per color
@@ -75,11 +76,11 @@ export interface ProjectileMeshes {
 // is a state object (position/quaternion/scale) that never enters the
 // scene — instanceSync() copies its transform into the slot each frame.
 const INST_CAP = 256; // per InstancedMesh — overflow grows a sibling mesh
-interface InstPool { mesh: THREE.InstancedMesh; free: number[]; scene: THREE.Scene }
+interface InstPool { mesh: THREE.InstancedMesh; free: number[]; scene: THREE.Scene; key: string }
 // A kind's shells live in a LIST of pools — overflow spawns another
 // InstancedMesh (one more draw call) instead of starving; emptied overflow
 // meshes shrink back away on release.
-const instPools = new Map<string, InstPool[]>();
+const instPools: BatchMap<string, InstPool> = new Map();
 const _instMat = new THREE.Matrix4();
 const _zeroScale = new THREE.Vector3(0, 0, 0);
 
@@ -87,20 +88,18 @@ interface SlotTag { __inst?: { pool: InstPool; slot: number } }
 
 function instPoolFor(scene: THREE.Scene, kind: string, geo: THREE.BufferGeometry, mat: THREE.Material): InstPool {
   const key = scene.uuid + '|' + kind; // pools die with their scene — no cross-scene reuse
-  let list = instPools.get(key);
-  if (!list) { list = []; instPools.set(key, list); }
-  for (const p of list) if (p.free.length || p.mesh.count < INST_CAP) return p;
-  const mesh = new THREE.InstancedMesh(geo, mat, INST_CAP);
-  mesh.matrixWorldAutoUpdate = false;
-  mesh.frustumCulled = false; // shells scatter; per-instance bounds don't exist
-  mesh.count = 0;
-  mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-  mesh.layers.enable(BLOOM_LAYER);
-  scene.add(mesh);
-  const p = { mesh, free: [], scene };
-  markProbe(mesh, { kind: 'instPool', label: kind, pool: p });
-  list.push(p);
-  return p;
+  return acquireBatch(instPools, key, (k) => {
+    const mesh = new THREE.InstancedMesh(geo, mat, INST_CAP);
+    mesh.matrixWorldAutoUpdate = false;
+    mesh.frustumCulled = false; // shells scatter; per-instance bounds don't exist
+    mesh.count = 0;
+    mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    mesh.layers.enable(BLOOM_LAYER);
+    scene.add(mesh);
+    const p = { mesh, free: [], scene, key: k };
+    markProbe(mesh, { kind: 'instPool', label: kind, pool: p });
+    return p;
+  }, p => p.free.length > 0 || p.mesh.count < INST_CAP);
 }
 
 function instAlloc(pool: InstPool): number {
@@ -127,18 +126,9 @@ export function releaseProjectileInstance(m: THREE.Mesh | null): void {
   delete (m as SlotTag).__inst;
   // Shrink: an overflow mesh whose slots are ALL free is retired — the
   // first pool per kind is the floor so the common case stays one draw.
-  if (t.pool.free.length === t.pool.mesh.count) {
-    for (const [key, list] of instPools) {
-      const i = list.indexOf(t.pool);
-      if (i > 0) {
-        list.splice(i, 1);
-        t.pool.scene.remove(t.pool.mesh);
-        t.pool.mesh.dispose();
-        if (!list.length) instPools.delete(key);
-        break;
-      }
-    }
-  }
+  retireBatch(instPools, t.pool.key, t.pool,
+    p => p.free.length === p.mesh.count,
+    p => { p.scene.remove(p.mesh); p.mesh.dispose(); });
 }
 
 /** Instancing census for the Alt+Q dump — pool count per shell kind plus
