@@ -333,6 +333,14 @@ export class PlayerModel {
     if ((child as THREE.Bone).isBone) this.captureBone(child);
   }
 
+  private skinnedMeshes: THREE.SkinnedMesh[] = [];
+
+  /** Distant remotes shouldn't pay the skinned shadow-pass vertex cost —
+   *  nobody reads a 200m figure's cast shadow. */
+  setCastShadow(on: boolean): void {
+    for (const m of this.skinnedMeshes) m.castShadow = on;
+  }
+
   private prepareMesh(child: THREE.Mesh): void {
       child.castShadow = true;
       child.receiveShadow = true;
@@ -342,6 +350,7 @@ export class PlayerModel {
       // skeleton) and pad for anim travel so culling can come back on.
       if ((child as THREE.SkinnedMesh).isSkinnedMesh) {
         const sk = child as THREE.SkinnedMesh;
+        this.skinnedMeshes.push(sk);
         sk.computeBoundingSphere();
         if (sk.boundingSphere) sk.boundingSphere.radius += 0.6;
       }

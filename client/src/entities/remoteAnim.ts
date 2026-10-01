@@ -109,7 +109,12 @@ export class RemoteAnim {
       this.animAcc = 0;
       h.model.update(dt);
     }
+    // Shadow pass re-runs skinning on every caster — past ~80m a figure's
+    // cast shadow is unreadable anyway, so far remotes drop out of it.
+    const cast = h.camDistSq < 80 * 80;
+    if (cast !== this._castShadow) { this._castShadow = cast; h.model.setCastShadow(cast); }
   }
+  private _castShadow = true;
 
   private tickAirTrail(dt: number, airborne: boolean, speed: number): void {
     const h = this.h;
