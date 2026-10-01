@@ -251,6 +251,109 @@ const UPSCALE_GLSL = /* glsl */ `
     }
   `;
 
+// Hyllian's xBR-lv2 (libretro port) — real edge-rule upscaler: a 5x5
+// neighborhood of luma samples feeds thresholded eq/neq rules that find
+// 30°/45°/60° edges and corners, then blends along the detected line with
+// sub-texel weights. Output is the vector-art smoothness the lite shader
+// approximates. One fullscreen pass, 21 taps — far cheaper than the
+// scene raster a 4x res drop saves.
+const XBR_GLSL = /* glsl */ `
+    uniform vec2 lowTexel;   // 1/low-res-buffer size
+    uniform float xbrScale;  // upscale factor (dst px per src texel)
+    vec4 df(vec4 A, vec4 B) { return abs(A - B); }
+    vec4 diff(vec4 A, vec4 B) {
+      return vec4(A.x != B.x ? 1.0 : 0.0, A.y != B.y ? 1.0 : 0.0,
+                  A.z != B.z ? 1.0 : 0.0, A.w != B.w ? 1.0 : 0.0);
+    }
+    vec4 eq(vec4 A, vec4 B) { return step(df(A, B), vec4(15.0)); }
+    vec4 neq(vec4 A, vec4 B) { return vec4(1.0) - eq(A, B); }
+    vec4 wd(vec4 a, vec4 b, vec4 c, vec4 d, vec4 e, vec4 f, vec4 g, vec4 h) {
+      return df(a,b) + df(a,c) + df(d,e) + df(d,f) + 4.0*df(g,h);
+    }
+    float c_df(vec3 c1, vec3 c2) { vec3 d = abs(c1 - c2); return d.r + d.g + d.b; }
+    void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor) {
+      vec2 inv = lowTexel;
+      float dx = inv.x, dy = inv.y;
+      vec2 fp = fract(uv / inv);
+      float S = xbrScale;
+      vec4 delta = vec4(1.0/S), delta_l = vec4(0.5/S, 1.0/S, 0.5/S, 1.0/S);
+      vec4 delta_u = delta_l.yxwz;
+      vec4 A1v = texture2D(inputBuffer, uv + vec2(-dx, -2.0*dy));
+      vec4 B1v = texture2D(inputBuffer, uv + vec2(0.0, -2.0*dy));
+      vec4 C1v = texture2D(inputBuffer, uv + vec2(dx, -2.0*dy));
+      vec4 Av  = texture2D(inputBuffer, uv + vec2(-dx, -dy));
+      vec4 Bv  = texture2D(inputBuffer, uv + vec2(0.0, -dy));
+      vec4 Cv  = texture2D(inputBuffer, uv + vec2(dx, -dy));
+      vec4 Dv  = texture2D(inputBuffer, uv + vec2(-dx, 0.0));
+      vec4 Fv  = texture2D(inputBuffer, uv + vec2(dx, 0.0));
+      vec4 Gv  = texture2D(inputBuffer, uv + vec2(-dx, dy));
+      vec4 Hv  = texture2D(inputBuffer, uv + vec2(0.0, dy));
+      vec4 Iv  = texture2D(inputBuffer, uv + vec2(dx, dy));
+      vec4 G5v = texture2D(inputBuffer, uv + vec2(-dx, 2.0*dy));
+      vec4 H5v = texture2D(inputBuffer, uv + vec2(0.0, 2.0*dy));
+      vec4 I5v = texture2D(inputBuffer, uv + vec2(dx, 2.0*dy));
+      vec4 A0v = texture2D(inputBuffer, uv + vec2(-2.0*dx, -dy));
+      vec4 D0v = texture2D(inputBuffer, uv + vec2(-2.0*dx, 0.0));
+      vec4 G0v = texture2D(inputBuffer, uv + vec2(-2.0*dx, dy));
+      vec4 C4v = texture2D(inputBuffer, uv + vec2(2.0*dx, -dy));
+      vec4 F4v = texture2D(inputBuffer, uv + vec2(2.0*dx, 0.0));
+      vec4 I4v = texture2D(inputBuffer, uv + vec2(2.0*dx, dy));
+      // Luma on a 0-255 scale — the threshold constants assume byte range.
+      vec3 A1=A1v.rgb*255.0,B1=B1v.rgb*255.0,C1=C1v.rgb*255.0;
+      vec3 A=Av.rgb*255.0,B=Bv.rgb*255.0,C=Cv.rgb*255.0;
+      vec3 D=Dv.rgb*255.0,E=inputColor.rgb*255.0,F=Fv.rgb*255.0;
+      vec3 G=Gv.rgb*255.0,H=Hv.rgb*255.0,I=Iv.rgb*255.0;
+      vec3 G5=G5v.rgb*255.0,H5=H5v.rgb*255.0,I5=I5v.rgb*255.0;
+      vec3 A0=A0v.rgb*255.0,D0=D0v.rgb*255.0,G0=G0v.rgb*255.0;
+      vec3 C4=C4v.rgb*255.0,F4=F4v.rgb*255.0,I4=I4v.rgb*255.0;
+      const vec3 rgbw = vec3(14.352, 28.176, 5.472);
+      vec4 b = vec4(dot(B,rgbw), dot(D,rgbw), dot(H,rgbw), dot(F,rgbw));
+      vec4 c = vec4(dot(C,rgbw), dot(A,rgbw), dot(G,rgbw), dot(I,rgbw));
+      vec4 d = b.yzwx;
+      vec4 e = vec4(dot(E,rgbw));
+      vec4 f = b.wxyz;
+      vec4 g = c.zwxy;
+      vec4 h = b.zwxy;
+      vec4 i = c.wxyz;
+      vec4 i4 = vec4(dot(I4,rgbw), dot(C1,rgbw), dot(A0,rgbw), dot(G5,rgbw));
+      vec4 i5 = vec4(dot(I5,rgbw), dot(C4,rgbw), dot(A1,rgbw), dot(G0,rgbw));
+      vec4 h5 = vec4(dot(H5,rgbw), dot(F4,rgbw), dot(B1,rgbw), dot(D0,rgbw));
+      vec4 f4 = h5.yzwx;
+      vec4 fx = vec4(1.0,-1.0,-1.0,1.0)*fp.y + vec4(1.0,1.0,-1.0,-1.0)*fp.x;
+      vec4 fx_l = vec4(1.0,-1.0,-1.0,1.0)*fp.y + vec4(0.5,2.0,-0.5,-2.0)*fp.x;
+      vec4 fx_u = vec4(1.0,-1.0,-1.0,1.0)*fp.y + vec4(2.0,0.5,-2.0,-0.5)*fp.x;
+      vec4 irlv1, irlv0 = diff(e,f) * diff(e,h);
+      irlv1 = irlv0;
+      // CORNER_C + SMOOTH_TIPS (the libretro defaults for blend mode).
+      irlv1 = irlv0 * (neq(f,b) * neq(f,c) + neq(h,d) * neq(h,g) +
+        eq(e,i) * (neq(f,f4) * neq(f,i4) + neq(h,h5) * neq(h,i5)) +
+        eq(e,g) + eq(e,c));
+      vec4 irlv2l = diff(e,g) * diff(d,g);
+      vec4 irlv2u = diff(e,c) * diff(b,c);
+      vec4 fx45i = clamp((fx + delta - vec4(1.5,0.5,-0.5,0.5) - vec4(0.25)) / (2.0*delta), 0.0, 1.0);
+      vec4 fx45 = clamp((fx + delta - vec4(1.5,0.5,-0.5,0.5)) / (2.0*delta), 0.0, 1.0);
+      vec4 fx30 = clamp((fx_l + delta_l - vec4(1.0,1.0,-0.5,0.0)) / (2.0*delta_l), 0.0, 1.0);
+      vec4 fx60 = clamp((fx_u + delta_u - vec4(2.0,0.0,-1.0,0.5)) / (2.0*delta_u), 0.0, 1.0);
+      vec4 wd1 = wd(e,c,g,i,h5,f4,h,f);
+      vec4 wd2 = wd(h,d,i5,f,i4,b,e,i);
+      vec4 edri = step(wd1, wd2) * irlv0;
+      vec4 edr = step(wd1 + vec4(0.1), wd2) * step(vec4(0.5), irlv1);
+      vec4 edr_l = step(2.0*df(f,g), df(h,c)) * irlv2l * edr;
+      vec4 edr_u = step(2.0*df(h,c), df(f,g)) * irlv2u * edr;
+      fx45 *= edr; fx30 *= edr_l; fx60 *= edr_u; fx45i *= edri;
+      vec4 px = step(df(e,f), df(e,h));
+      vec4 maximos = max(max(fx30, fx60), max(fx45, fx45i));
+      vec3 res1 = E;
+      res1 = mix(res1, mix(H, F, px.x), maximos.x);
+      res1 = mix(res1, mix(B, D, px.z), maximos.z);
+      vec3 res2 = E;
+      res2 = mix(res2, mix(F, B, px.y), maximos.y);
+      res2 = mix(res2, mix(D, H, px.w), maximos.w);
+      vec3 res = mix(res1, res2, step(c_df(E,res1), c_df(E,res2)));
+      outputColor = vec4(res / 255.0, inputColor.a);
+    }
+  `;
+
 // Tone-map pass — renders to a composer target DON'T apply tone mapping
 // (three only applies ACES when rendering straight to canvas), so without
 // this the whole composer path outputs a brighter, desaturated grade:
@@ -386,11 +489,25 @@ function makeComposer(renderer: THREE.WebGLRenderer, scene: THREE.Scene,
   const upscalePass = new EffectPass(camera, upscaleEffect);
   composer.addPass(upscalePass);
 
+  // xBR-lv2 pass — real edge-rule upscale for the fractional-degrade path
+  // (FILTER: XBR). Sits after the lite upscaler in the chain; only one of
+  // the two is ever enabled.
+  const xbrEffect = new Effect('XBRlv2', XBR_GLSL, {
+    blendFunction: BlendFunction.NORMAL,
+    uniforms: new Map<string, THREE.Uniform>([
+      ['lowTexel', new THREE.Uniform(new THREE.Vector2(1, 1))],
+      ['xbrScale', new THREE.Uniform(1)],
+    ]),
+  });
+  const xbrPass = new EffectPass(camera, xbrEffect);
+  composer.addPass(xbrPass);
+
   bloomMergePass.enabled = bloomEnabled;
   dirtPass.enabled = bloomEnabled;
   contrastPass.enabled = postproEnabled;
   upscalePass.enabled = pixelMode === 3 || pixelMode === 4;
   upscaleEffect.uniforms.get('mode')!.value = pixelMode === 4 ? 2 : 1;
+  xbrPass.enabled = false;
 
   // postprocessing's autoRenderToScreen only flags the LAST pass in the
   // array — upscalePass — so disabling it (every non-pixelated mode)
@@ -408,7 +525,53 @@ function makeComposer(renderer: THREE.WebGLRenderer, scene: THREE.Scene,
   }
   syncRenderToScreen();
 
-  return { composer, bloomMergePass, dirtPass, contrastPass, upscalePass, upscaleEffect, syncRenderToScreen };
+  return { composer, bloomMergePass, dirtPass, contrastPass, upscalePass, upscaleEffect, xbrPass, xbrEffect, syncRenderToScreen };
+}
+
+// Canvas sizing for every pixel/res path — hard modes render into a
+// shrunken GL canvas (CSS upscale), everything else scales the buffer
+// via pixel ratio and lets the composer's upscale pass finish it.
+function makeUpdateRendererSize(renderer: THREE.WebGLRenderer,
+    fsCanvas: HTMLCanvasElement, fs: ReturnType<typeof makeFloydEngine>,
+    pixelMode: () => number, resScale: () => number,
+    pixelRatio: () => number): () => void {
+  return () => {
+    // Hard/medium never touch the composer: render straight into a low-res
+    // canvas and let CSS upscale it — colors are identical to direct
+    // rendering by construction, and it's the cheapest path. Floyd (5)
+    // uses the same low-res GL render with fsCanvas on top.
+    if (applyPixelSize(renderer, fsCanvas, pixelMode(), settings.get('fps-filter') === 0)) {
+      if (pixelMode() === 5) { fsCanvas.width = renderer.domElement.width; fsCanvas.height = renderer.domElement.height; fs.alloc(fsCanvas.width, fsCanvas.height); }
+      return;
+    }
+    // Canvas stays full-res — in smooth mode only the composer buffers
+    // drop to 1/PIXEL_SCALE and the upscale pass reconstructs to screen.
+    renderer.setPixelRatio(pixelRatio());
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    // Fractional degrade upscales a sub-res buffer through the same CSS
+    // filter path — SHARP keeps deep rungs readable, SMOOTH hides mild ones.
+    renderer.domElement.style.imageRendering =
+      resScale() < 1 && settings.get('fps-filter') === 0 ? 'pixelated' : 'auto';
+    renderer.domElement.style.width = '100%';
+    renderer.domElement.style.height = '100%';
+  };
+}
+
+// FILTER: upscale filtering is orthogonal to render scale — SHARP
+// (nearest) keeps deep low-res readable, SMOOTH (bilinear) hides mild
+// degrade. Applies to every CSS-upscaled path; composer modes 3/4
+// carry their own edge-aware shader instead.
+function wireFilterButton(resize: () => void): void {
+  const filterBtn = document.getElementById('filter-toggle') as HTMLButtonElement | null;
+  if (!filterBtn) return;
+  const LABELS = ['FILTER: SHARP', 'FILTER: SMOOTH', 'FILTER: XBR'];
+  const label = () => { filterBtn.textContent = LABELS[settings.get('fps-filter')] ?? LABELS[0]!; };
+  label();
+  filterBtn.addEventListener('click', () => {
+    settings.set('fps-filter', (settings.get('fps-filter') + 1) % 3);
+    resize();
+    label();
+  });
 }
 
 // ESC-menu toggles: look up the three buttons once, seed their labels
@@ -445,32 +608,16 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
     'position:absolute;inset:0;width:100%;height:100%;image-rendering:pixelated;display:none;pointer-events:none;z-index:1';
   document.body.appendChild(fsCanvas);
   let fsOverlay: (() => void) | null = null; // viewmodel pass, injected by gameLoop
-  // auto-quality degrade — hard-pixel modes force 1 (integer grid)
-  let resScale = 1;
+  // auto-quality degrade — hard-pixel modes force 1 (integer grid).
+  // ?res=0.5 pins a starting scale for headless degrade/filter testing.
+  const resParam = urlParams.get('res');
+  let resScale = resParam !== null ? Math.min(1, Math.max(0.25, parseFloat(resParam) || 1)) : 1;
   function getPixelRatio(): number {
     return pixelMode > 0 ? 1 : Math.min(window.devicePixelRatio, 2) * resScale;
   }
 
-  function updateRendererSize(): void {
-    // Hard/medium never touch the composer: render straight into a low-res
-    // canvas and let CSS upscale it — colors are identical to direct
-    // rendering by construction, and it's the cheapest path. Floyd (5)
-    // uses the same low-res GL render with fsCanvas on top.
-    if (applyPixelSize(renderer, fsCanvas, pixelMode, settings.get('fps-filter'))) {
-      if (pixelMode === 5) { fsCanvas.width = renderer.domElement.width; fsCanvas.height = renderer.domElement.height; fs.alloc(fsCanvas.width, fsCanvas.height); }
-      return;
-    }
-    // Canvas stays full-res — in smooth mode only the composer buffers
-    // drop to 1/PIXEL_SCALE and the upscale pass reconstructs to screen.
-    renderer.setPixelRatio(getPixelRatio());
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    // Fractional degrade upscales a sub-res buffer through the same CSS
-    // filter path — SHARP keeps deep rungs readable, SMOOTH hides mild ones.
-    renderer.domElement.style.imageRendering =
-      resScale < 1 && settings.get('fps-filter') ? 'pixelated' : 'auto';
-    renderer.domElement.style.width = '100%';
-    renderer.domElement.style.height = '100%';
-  }
+  const updateRendererSize = makeUpdateRendererSize(renderer, fsCanvas, fs,
+    () => pixelMode, () => resScale, getPixelRatio);
 
   updateRendererSize();
   // Skip the whole shadow-map raster when the scene opted out — the
@@ -482,7 +629,7 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
   document.body.appendChild(renderer.domElement);
 
   const cc = makeComposer(renderer, scene, camera, bloomEnabled, postproEnabled, pixelMode);
-  const { composer, bloomMergePass, dirtPass, contrastPass, upscalePass, upscaleEffect, syncRenderToScreen } = cc;
+  const { composer, bloomMergePass, dirtPass, contrastPass, upscalePass, upscaleEffect, xbrPass, xbrEffect, syncRenderToScreen } = cc;
 
   // composer.setSize() also resizes the canvas — set buffers first, then
   // restore whichever canvas sizing the pixel mode wants (it never shrinks).
@@ -495,6 +642,12 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
     const h = Math.floor(window.innerHeight / div);
     composer.setSize(w, h);
     upscaleEffect.uniforms.get('lowTexel')!.value.set(1 / w, 1 / h);
+    xbrEffect.uniforms.get('lowTexel')!.value.set(1 / w, 1 / h);
+    xbrEffect.uniforms.get('xbrScale')!.value = window.innerWidth / w;
+    // xBR needs the composer only while degrading through it — when the
+    // tier is picked but res is full, the pass stays off (nothing to do).
+    xbrPass.enabled = resScale < 1 && pixelMode === 0 && settings.get('fps-filter') === 2;
+    syncRenderToScreen();
     // composer.setSize() also resizes the canvas — restore whichever canvas
     // sizing the active pixel mode wants.
     updateRendererSize();
@@ -578,20 +731,9 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
     () => setBloomEnabled(!bloomEnabled),
     () => setPostProcessingEnabled(!postproEnabled));
 
-  // FILTER: upscale filtering is orthogonal to render scale — SHARP
-  // (nearest) keeps deep low-res readable, SMOOTH (bilinear) hides mild
-  // degrade. Applies to every CSS-upscaled path; composer modes 3/4
-  // carry their own edge-aware shader instead.
-  const filterBtn = document.getElementById('filter-toggle') as HTMLButtonElement | null;
-  if (filterBtn) {
-    const label = () => { filterBtn.textContent = settings.get('fps-filter') ? 'FILTER: SHARP' : 'FILTER: SMOOTH'; };
-    label();
-    filterBtn.addEventListener('click', () => {
-      settings.set('fps-filter', !settings.get('fps-filter'));
-      updateRendererSize();
-      label();
-    });
-  }
+  // applyBufferSizes (not just updateRendererSize): XBR toggles a
+  // composer pass on/off, which only that path re-evaluates.
+  wireFilterButton(applyBufferSizes);
 
   return {
     renderer,
@@ -599,7 +741,8 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
     bloomPass: bloomMergePass,
     contrastPass,
     render,
-    needsComposer: () => pixelMode >= 3 || pixelMode === 5 || bloomEnabled || postproEnabled,
+    needsComposer: () => pixelMode >= 3 || pixelMode === 5 || bloomEnabled || postproEnabled ||
+      (resScale < 1 && pixelMode === 0 && settings.get('fps-filter') === 2),
     setOverlayPass: (fn) => { fsOverlay = fn; },
     isFloyd: () => pixelMode === 5,
     isPostProcessingEnabled: () => postproEnabled,
