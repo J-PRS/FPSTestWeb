@@ -90,6 +90,26 @@ export function wireWorld(ctx: NetCtx): void {
   };
 }
 
+// Canonical interior materials — dedup by stripped name (per-GLB `.NNN`
+// suffixes removed) + the shading params that actually differ.
+const _canonMats = new Map<string, { key: string; mat: THREE.Material }>();
+function canonInteriorMat(mat: THREE.Material): { key: string; mat: THREE.Material } {
+  const std = mat as THREE.MeshStandardMaterial;
+  const key = [
+    mat.name.replace(/\.\d+$/, ''),
+    std.color ? std.color.getHexString() : '-',
+    std.map ? std.map.name || 'tex' : '-',
+    String(std.roughness ?? ''), String(std.metalness ?? ''),
+    std.emissive ? std.emissive.getHexString() : '-',
+    std.transparent ? 't' : 'o',
+  ].join('|');
+  const hit = _canonMats.get(key);
+  if (hit) return hit;
+  const entry = { key, mat };
+  _canonMats.set(key, entry);
+  return entry;
+}
+
 // Interior parts worth a cast shadow: sized like architecture, not trim.
 // Radius over ~4m — towers, walls, ramps. Small greebles would cost a
 // draw call each in the shadow pass for an unreadable sliver of shade.
@@ -534,9 +554,15 @@ async function applyInteriors(ctx: NetCtx, list: InteriorSpec[] | undefined): Pr
       // grid multiplied that by 4 → ~1000 draw calls. Bigger cells keep
       // frustum culling useful at range while quartering the mesh count.
       const cell = `${e[12]! / 2048 | 0},${e[14]! / 2048 | 0}`;
-      const sig = `${mat.uuid}|${Object.keys(mesh.geometry.attributes).toSorted().join(',')}|${mesh.geometry.index ? 'i' : 'n'}|${cell}`;
+      // Material dedup: the DIF exporter emits the same Blender material
+      // under a new `.NNN` name per GLB (BE_EWAL01B, .001…005) — ~360
+      // distinct uuids for ~60 real materials. Canonicalize on the
+      // stripped name + shading params or every sibling stays its own
+      // draw call.
+      const canon = canonInteriorMat(mat);
+      const sig = `${canon.key}|${Object.keys(mesh.geometry.attributes).toSorted().join(',')}|${mesh.geometry.index ? 'i' : 'n'}|${cell}`;
       const geo = mesh.geometry.clone().applyMatrix4(mesh.matrixWorld);
-      const b = buckets.get(sig) ?? { mat, geos: [] };
+      const b = buckets.get(sig) ?? { mat: canon.mat, geos: [] };
       b.geos.push(geo);
       buckets.set(sig, b);
     });
