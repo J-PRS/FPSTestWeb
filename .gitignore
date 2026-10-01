@@ -18,6 +18,7 @@ client/nul.old
 
 # Extracted Tribes 2 assets — local playtest only, do not redistribute
 maps/t2/
+_tools/dif2glb_in/
 
 # Heavy local scratch — extraction dumps, screenshots, zips (not for git)
 _tools/animpacks/
