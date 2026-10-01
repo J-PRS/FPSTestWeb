@@ -1,3 +1,4 @@
+2026-10-01 - Mortar trail densified (the old chunky look came from the stale-emitter bug; this restores it legitimately)
 2026-10-01 - Ribbon streak fix: ray-burst discharge teleports now clear ribbons (railgun line across the map)
 2026-10-01 - Escalade skybox: real T2 faces (sky_lush_blue.dml) replace the botched cuts; SKY_VFLIP emptied (was inverting every map px)
 2026-10-01 - vfx trails: paused systems exempt from starve-reap (trails died ~4s past 180m); reset emissionState travel history on pooled trail restart (no stale streak); attached-set cleanup on reap

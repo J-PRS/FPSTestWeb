@@ -38,15 +38,17 @@ export const MORTAR_CONFIG: ProjectileConfig = {
     new THREE.Color(0.3, 0.15, 0.2),
     new THREE.Color(0.25, 0.25, 0.28),
   ],
-  // Heavy smoke column — reads as a fat slow shell, not a dart
-  trailParticlesPerUnit: 1.5,
+  // Heavy smoke column — reads as a fat slow shell, not a dart. Denser
+  // than the baseline since the stale-emitter fix made trails honest:
+  // the old chunky look came from a bug, this is the legitimate version.
+  trailParticlesPerUnit: 2.4,
   trailLifeMin: 0.8,
   trailLifeMax: 1.4,
   trailSpread: 0.3,
   trailForwardSpread: 0.15,
   trailParticleGravity: 0.0,
-  trailOpacity: 0.45,
-  trailBaseSize: 0.15,
+  trailOpacity: 0.55,
+  trailBaseSize: 0.2,
   trailSizeRange: 0.4,
   trailScaleMin: 0.7,
   trailScaleMax: 2.2,
