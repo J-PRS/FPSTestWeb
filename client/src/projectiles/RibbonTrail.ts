@@ -240,20 +240,24 @@ export class RibbonTrail {
     return this.time - this.st[this.head] > this.life;
   }
 
+  /** Cadence gates: past ~200m a ribbon is a few px, and stopped ribbons
+   *  only rewrite for the fade — both halve to ~30Hz invisibly. Returns
+   *  whether the caller should early-out, and (via out-far) whether the
+   *  trail counts as far for the billboard freeze. */
+  private skipThisFrame(camPos: THREE.Vector3 | undefined, outFar: { v: boolean }): boolean {
+    if (!camPos || this._far === undefined) return this.stopped && (this._far ^= 1) === 1;
+    const dx = camPos.x - this.px[this.head], dy = camPos.y - this.py[this.head], dz = camPos.z - this.pz[this.head];
+    outFar.v = dx * dx + dy * dy + dz * dz > 200 * 200;
+    if (this.stopped || outFar.v) return (this._far ^= 1) === 1;
+    return false;
+  }
+
   update(dt: number, camPos?: THREE.Vector3): void {
     this.time += dt;
     if (this.slot < 0 || this.count < 2) return;
-    // Past ~200m a ribbon is a few px — halving the rewrite cadence is
-    // invisible but cuts the per-sample billboard math in half there.
-    let far = false;
-    if (camPos && this._far !== undefined) {
-      const dx = camPos.x - this.px[this.head], dy = camPos.y - this.py[this.head], dz = camPos.z - this.pz[this.head];
-      far = dx * dx + dy * dy + dz * dz > 200 * 200;
-      if (far && (this._far ^= 1)) return;
-    }
-    // Stopped ribbons only rewrite for the fade — halving that to 30Hz
-    // is invisible on a sub-second trail and halves the sample loop.
-    if (this.stopped && (this._far ^= 1)) return;
+    const outFar = { v: false };
+    if (this.skipThisFrame(camPos, outFar)) return;
+    const far = outFar.v;
 
     // Billboard sides only change when the camera moves — a parked camera
     // makes the per-sample cross-product + position rewrite a pure no-op.
@@ -264,42 +268,37 @@ export class RibbonTrail {
     const pos = this.batch.pos;
     const col = this.batch.col;
     const base = this.slot * VERTS * 3;
-    // EMIT_GAIN: vertex colors go HDR-hot so the ribbon clears the bloom
-    // threshold; ACES brings the display color back to the authored hue.
-    const r = this.baseColor.r * EMIT_GAIN, g = this.baseColor.g * EMIT_GAIN, b = this.baseColor.b * EMIT_GAIN;
-
+    const writePos = !this.stopped || (this.billboard && camMoved);
+    const rebillboard = camPos && camMoved && !far ? camPos : undefined;
     for (let i = 0; i < this.count; i++) {
       // oldest -> newest
       const s = (this.head - this.count + 1 + i + MAX_SAMPLES) % MAX_SAMPLES;
       const fade = Math.max(0, 1 - (this.time - this.st[s]) / this.life);
-      // taper width toward the tail and toward faded samples
-      const w = this.width * 0.5 * fade;
       const o = base + i * 6;
-      let sx = this.sx[s], sy = this.sy[s], sz = this.sz[s];
-      // Far ribbons keep their stored side — a billboard facing error
-      // beyond 200m is subpixel, and this skips a cross+sqrt per sample.
-      if (this.billboard && camPos && camMoved && !far) {
-        const s3 = this.sideFor(s, camPos);
-        if (s3) { sx = s3[0]!; sy = s3[1]!; sz = s3[2]!; }
-      }
-      // Stopped trails keep their samples frozen — only the color fade
-      // moves; rewriting the same positions every frame was half the cost.
-      // Billboard ribbons rewrite sides only while the camera (or the trail
-      // itself) is moving — a parked camera makes the recompute a no-op.
-      if (!this.stopped || (this.billboard && camMoved)) {
-        pos[o] = this.px[s] - sx * w;
-        pos[o + 1] = this.py[s] - sy * w;
-        pos[o + 2] = this.pz[s] - sz * w;
-        pos[o + 3] = this.px[s] + sx * w;
-        pos[o + 4] = this.py[s] + sy * w;
-        pos[o + 5] = this.pz[s] + sz * w;
-      }
-      const cr = r * fade, cg = g * fade, cb = b * fade;
-      col[o] = cr; col[o + 1] = cg; col[o + 2] = cb;
-      col[o + 3] = cr; col[o + 4] = cg; col[o + 5] = cb;
+      if (writePos) this.writeSample(s, o, fade, rebillboard, pos);
+      const e = EMIT_GAIN * fade;
+      col[o] = this.baseColor.r * e; col[o + 1] = this.baseColor.g * e; col[o + 2] = this.baseColor.b * e;
+      col[o + 3] = col[o]; col[o + 4] = col[o + 1]; col[o + 5] = col[o + 2];
     }
     this.batch.mark(base, base + this.count * 6);
     this.batch.flush();
+  }
+
+  // EMIT_GAIN: vertex colors go HDR-hot so the ribbon clears the bloom
+  // threshold; ACES brings the display color back to the authored hue.
+  private writeSample(s: number, o: number, fade: number, rebillboard: THREE.Vector3 | undefined, pos: Float32Array): void {
+    let sx = this.sx[s], sy = this.sy[s], sz = this.sz[s];
+    if (rebillboard) {
+      const s3 = this.sideFor(s, rebillboard);
+      if (s3) { sx = s3[0]!; sy = s3[1]!; sz = s3[2]!; }
+    }
+    const w = this.width * 0.5 * fade;
+    pos[o] = this.px[s] - sx * w;
+    pos[o + 1] = this.py[s] - sy * w;
+    pos[o + 2] = this.pz[s] - sz * w;
+    pos[o + 3] = this.px[s] + sx * w;
+    pos[o + 4] = this.py[s] + sy * w;
+    pos[o + 5] = this.pz[s] + sz * w;
   }
 
   // Side = dir x (dir to camera): ribbon plane always faces the viewer.
