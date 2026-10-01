@@ -1,3 +1,4 @@
+2026-10-01 - matrixWorldAutoUpdate=false on static scene branches (structures, dome, clipmap levels)
 2026-10-01 - Shared bot groundY memo (all brains probe the same static terrain — one cache beats per-bot copies)
 2026-10-01 - RibbonTrail fade-bucket skip: color writes/upload only when fade crosses 1/255 step
 2026-10-01 - Demo format v4: per-frame weaponType + playback viewmodel with stock-weapon fallback; hidden-vm gate removed

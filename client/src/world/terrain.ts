@@ -148,6 +148,10 @@ export class Terrain {
       const mesh = new THREE.Mesh(i >= 2 ? outerGeo : gridGeo, material);
       mesh.receiveShadow = true;
       mesh.frustumCulled = false; // world-space extent is set via uniforms, not mesh transform
+      // Clipmap levels never move — geometry does the panning in-shader.
+      mesh.matrixAutoUpdate = false;
+      mesh.matrixWorldAutoUpdate = false;
+      mesh.updateMatrixWorld(true);
       scene.add(mesh);
 
       this.levels.push({

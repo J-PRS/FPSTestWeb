@@ -56,7 +56,9 @@ export function buildArenaDome(a: { x: number; z: number; radius: number }, grou
   };
   dome.position.set(a.x, groundY, a.z);
   dome.matrixAutoUpdate = false;
+  dome.matrixWorldAutoUpdate = false;
   dome.updateMatrix();
+  dome.updateMatrixWorld(true);
   scene.add(dome);
 }
 
@@ -69,6 +71,8 @@ export function buildStructures(list: StructureSpec[], scene: THREE.Scene): void
   if (!list.length) return;
   built = new THREE.Group();
   built.name = 'mapStructures';
+  built.matrixAutoUpdate = false;
+  built.matrixWorldAutoUpdate = false;
   const mats = {
     neutral: new THREE.MeshLambertMaterial({ color: TINTS.neutral }),
     alpha: new THREE.MeshLambertMaterial({ color: TINTS.alpha }),
@@ -97,8 +101,11 @@ export function buildStructures(list: StructureSpec[], scene: THREE.Scene): void
     if (!merged) continue;
     const mesh = new THREE.Mesh(merged, mats[key]);
     mesh.matrixAutoUpdate = false;
+    mesh.matrixWorldAutoUpdate = false;
+    mesh.updateMatrixWorld(true);
     built.add(mesh);
     for (const g of geos) g.dispose();
   }
+  built.updateMatrixWorld(true);
   scene.add(built);
 }
