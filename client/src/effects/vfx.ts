@@ -108,10 +108,18 @@ function takeSystem(kind: string, build: () => ParticleSystem): ParticleSystem {
 }
 
 function reapStarved(ps: IParticleSystem): void {
+  // A paused system is suspended on purpose (out of sim range), not
+  // orphaned — it emits nothing so particleNum sits at 0 and the reaper
+  // would delete live projectile trails ~4s after they leave 180m.
+  if ((ps as ParticleSystem).paused) {
+    starveFrames.delete(ps);
+    return;
+  }
   const starved = ps.particleNum === 0 ? (starveFrames.get(ps) ?? 0) + 1 : 0;
   if (starved > STARVE_LIMIT) {
     batcher?.deleteSystem(ps);
     scene?.remove((ps as ParticleSystem).emitter);
+    attached.delete(ps as ParticleSystem); // else attachSystem's guard makes re-attach a silent no-op
     starveFrames.delete(ps);
   } else if (starved) starveFrames.set(ps, starved);
   else starveFrames.delete(ps);
@@ -179,6 +187,7 @@ function runBookkeeping(camPos?: THREE.Vector3): void {
       }
       batcher?.deleteSystem(ps);
       scene?.remove(ps.emitter);
+      attached.delete(ps);
       live.delete(ps);
     }
   }
@@ -201,6 +210,7 @@ export function updateVfx(dt: number, camPos?: THREE.Vector3): void {
     if (!oldest) break;
     batcher?.deleteSystem(oldest);
     scene?.remove(oldest.emitter);
+    attached.delete(oldest);
     live.delete(oldest);
   }
 }
@@ -390,6 +400,17 @@ export class QuarksTrail {
     this.ps.emitter.position.copy(host.pos);
     attachSystem(this.ps);
     this.ps.restart();
+    // restart() doesn't clear emissionState.travelDistance/previousWorldPos
+    // — a pooled system still remembers the PREVIOUS projectile's last
+    // position, so the distance-based emitter reads the teleport to the new
+    // muzzle as travel and dumps its entire budget as one stationary burst
+    // (the visible "streak from the old spot" + dead trail after).
+    const st = this.ps.emissionState as {
+      travelDistance: number;
+      previousWorldPos?: THREE.Vector3;
+    };
+    st.travelDistance = 0;
+    st.previousWorldPos = undefined;
   }
 
   // Move + aim the emitter; quarks emits floor(dist*ppu) particles itself.
@@ -429,6 +450,7 @@ export class QuarksTrail {
     }
     batcher?.deleteSystem(ps);
     scene?.remove(ps.emitter);
+    attached.delete(ps);
     ps.dispose();
   }
 }
