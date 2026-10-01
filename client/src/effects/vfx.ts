@@ -85,7 +85,15 @@ const STARVE_LIMIT = 60;
 // cleanly, so pool them by config kind instead of rebuilding each hit.
 const kindOf = new Map<ParticleSystem, string>();
 const pools = new Map<string, ParticleSystem[]>();
+const attached = new WeakSet<ParticleSystem>();
 const POOL_CAP = 32;
+function attachSystem(ps: ParticleSystem): void {
+  if (attached.has(ps)) return;
+  batcher?.addSystem(ps);
+  scene?.add(ps.emitter);
+  attached.add(ps);
+}
+
 function takeSystem(kind: string, build: () => ParticleSystem): ParticleSystem {
   const ps = pools.get(kind)?.pop();
   if (ps) return ps;
@@ -142,15 +150,22 @@ function runBookkeeping(camPos?: THREE.Vector3): void {
   for (const ps of live) {
     particles += ps.particleNum;
     if (ps.time >= ps.duration && ps.particleNum === 0) {
-      batcher?.deleteSystem(ps);
-      scene?.remove(ps.emitter);
-      live.delete(ps);
       const kind = kindOf.get(ps);
       if (kind) {
         const pool = pools.get(kind) ?? [];
-        if (pool.length < POOL_CAP) pool.push(ps);
+        if (pool.length < POOL_CAP) {
+          // Pooled systems stay attached to the batcher — a dead system
+          // sims ~0 particles, so detach+reattach would only rebuy the
+          // batch slice that restart() repopulates for free.
+          pool.push(ps);
+          live.delete(ps);
+          continue;
+        }
         pools.set(kind, pool);
       }
+      batcher?.deleteSystem(ps);
+      scene?.remove(ps.emitter);
+      live.delete(ps);
     }
   }
   _liveParticles = particles;
@@ -235,8 +250,7 @@ export function impactBurst(pos: THREE.Vector3, vel: THREE.Vector3): void {
     _back.copy(vel).normalize().negate();
     ps.emitter.quaternion.setFromUnitVectors(_forward, _back);
   }
-  batcher.addSystem(ps);
-  scene.add(ps.emitter);
+  attachSystem(ps);
   live.add(ps);
   ps.restart();
 
@@ -270,8 +284,7 @@ export function impactBurst(pos: THREE.Vector3, vel: THREE.Vector3): void {
     }));
     streaks.emitter.position.copy(pos);
     streaks.emitter.quaternion.copy(ps.emitter.quaternion);
-    batcher.addSystem(streaks);
-    scene.add(streaks.emitter);
+    attachSystem(streaks);
     live.add(streaks);
     streaks.restart();
   }
@@ -650,8 +663,7 @@ function spawnImplodeBurst(pos: THREE.Vector3, spec: ImplodeSpec, additive: bool
     ],
   }));
   ps.emitter.position.copy(pos);
-  batcher.addSystem(ps);
-  scene.add(ps.emitter);
+  attachSystem(ps);
   live.add(ps);
   ps.restart();
 }
@@ -752,8 +764,7 @@ function spawnBlastBurst(pos: THREE.Vector3, spec: BlastSpec,
   });
   shapeOf.get(ps)?.setDir(spec.dir);
   ps.emitter.position.copy(pos);
-  batcher.addSystem(ps);
-  scene.add(ps.emitter);
+  attachSystem(ps);
   live.add(ps);
   ps.restart();
 }
