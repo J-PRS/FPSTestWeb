@@ -1,3 +1,4 @@
+2026-10-01 - vfx: parked pooled systems exempt from starve-reaping (was disposing them each pass — pool never filled); blast key drops count/gVar and quantizes floats
 2026-10-01 - vfx: QuarksTrail pooled by config key — per-shot trail systems park attached on dispose and restart on reuse
 2026-10-01 - vfx: pooled systems stay attached to batcher when dead (attachSystem WeakSet) — reuse pays restart() only, no buffer rebuy
 2026-10-01 - vfx: blast/implode bursts pool by spec key (repeat explosions restart systems instead of rebuilding ~30 behaviors); dir re-seeded via liveDir

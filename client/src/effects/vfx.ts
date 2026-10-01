@@ -86,6 +86,9 @@ const STARVE_LIMIT = 60;
 const kindOf = new Map<ParticleSystem, string>();
 const pools = new Map<string, ParticleSystem[]>();
 const attached = new WeakSet<ParticleSystem>();
+// Systems parked in a pool stay attached but dead — starve-reaping would
+// otherwise dispose them each bookkeeping pass and the pool never fills.
+const pooled = new WeakSet<ParticleSystem>();
 const POOL_CAP = 32;
 function attachSystem(ps: ParticleSystem): void {
   if (attached.has(ps)) return;
@@ -96,7 +99,9 @@ function attachSystem(ps: ParticleSystem): void {
 
 function takeSystem(kind: string, build: () => ParticleSystem): ParticleSystem {
   const ps = pools.get(kind)?.pop();
-  if (ps) return ps;
+  const st = (window as unknown as { __vfxStats?: { hits: number; misses: number } }).__vfxStats;
+  if (ps) { if (st) st.hits++; pooled.delete(ps); return ps; }
+  if (st) st.misses++;
   const n = build();
   kindOf.set(n, kind);
   return n;
@@ -138,7 +143,7 @@ function runBookkeeping(camPos?: THREE.Vector3): void {
         const em = ps.emitter as ParticleSystem['emitter'];
         ps.paused = em.position.distanceToSquared(camPos) > VFX_SIM_RADIUS_SQ;
       }
-      if (live.has(ps as ParticleSystem)) continue;
+      if (live.has(ps as ParticleSystem) || pooled.has(ps as ParticleSystem)) continue;
       reapStarved(ps);
     }
   }
@@ -158,6 +163,7 @@ function runBookkeeping(camPos?: THREE.Vector3): void {
           // sims ~0 particles, so detach+reattach would only rebuy the
           // batch slice that restart() repopulates for free.
           pool.push(ps);
+          pooled.add(ps);
           live.delete(ps);
           continue;
         }
@@ -410,6 +416,7 @@ export class QuarksTrail {
     const pool = pools.get(this.key) ?? [];
     if (pool.length < POOL_CAP) {
       pool.push(ps);
+      pooled.add(ps);
       pools.set(this.key, pool);
       return;
     }
@@ -601,10 +608,20 @@ const shapeOf = new WeakMap<ParticleSystem, BlastEmitter>();
 
 function burstKey(kind: string, spec: BlastSpec | ImplodeSpec, additive: boolean): string {
   const s = spec as BlastSpec & ImplodeSpec;
-  return [kind, additive, s.count, s.spdMin, s.spdMax, s.vy, s.lifeMin, s.lifeMax,
-    s.sizeMin, s.sizeMax, s.gravity, s.c1, s.c2, s.opacity,
-    s.elvBase, s.elvSpan, s.planar, s.stretched, s.stretchLen, s.spin,
-    s.stagger, s.gVar, !!s.dir, s.spread, s.rMin, s.rMax, s.swirl].join(',');
+  // Specs arrive with per-shot micro-variance (counts scaled by blast
+  // radius, tints recomputed per weapon energy) — unquantized floats would
+  // give every call a distinct key and the pool would never hit. Rounding
+  // buckets specs whose visual difference is below perception anyway.
+  const q = (v?: number, step = 0.05) => v === undefined ? '' : Math.round(v / step) * step;
+  const qc = (c?: number[]) => c === undefined ? '' : c.map(v => Math.round(v * 20) / 20).join('-');
+  // count/gVar excluded: they scale per-shot (blast radius, heat value) and
+  // a reused system's baked emission count is already pressure-scaled —
+  // the drift is invisible, and keying on them empties the pool.
+  return [kind, additive, q(s.spdMin), q(s.spdMax), q(s.vy),
+    q(s.lifeMin), q(s.lifeMax), q(s.sizeMin), q(s.sizeMax), q(s.gravity),
+    qc(s.c1), qc(s.c2), q(s.opacity), q(s.elvBase), q(s.elvSpan), s.planar,
+    s.stretched, q(s.stretchLen), q(s.spin), q(s.stagger, 0.1),
+    !!s.dir, q(s.spread), q(s.rMin), q(s.rMax), q(s.swirl)].join(',');
 }
 
 /** Inward shell emitter for implosions: spawn on a sphere shell at
