@@ -1,3 +1,7 @@
+2026-10-01 - Sky: un-rotate py 180deg in applySky — its dark edge sat opposite px dark top = hard zenith seam (proven by up-facing sandbox shots)
+2026-10-01 - Perf: merge all RibbonTrails into one shared-geometry batch mesh (240 draw calls -> 1); audit shows calls 823->623 after trail-Points + vfx fixes
+2026-10-01 - Perf: ball trail dots 977 sprites -> 1 Points draw per ball; vfx out of fx-job rotation (cap was starved -> 1201 systems); distance-pause quarks sims past 260m
+2026-10-01 - Sky: revert to plain CubeTextureLoader — headless proof shows raw faces seamless; canvas pre-flip double-flipped (three flips cube faces internally)
 2026-10-01 - t2 sky: reassemble cube faces by content (ny up, py down, nx/pz/nz v-flip) — seam-free skybox
 2026-10-01 - t2 maps: mats detail + cube sky now opt-in (?mats / ?t2sky) — albedo + procedural sky is the default look
 2026-10-01 - shadows: frustum follows camera (400m half-extent) + texel-scaled bias — fixes slope shadow acne
