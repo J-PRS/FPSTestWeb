@@ -201,7 +201,7 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
     .filter((o) => !o.sidearm && (cls === 'heavy' || !heavyOnly.has(o.v)))
     // SLOT_DEFS order is wire identity (wid = index) — the MENU sorts by
     // name instead; v stays the wid so picks never reshuffle.
-    .sort((a, b) => a.label.localeCompare(b.label));
+    .toSorted((a, b) => a.label.localeCompare(b.label));
 
   // --- ARMOR: tile picker, not a dropup — headless like the other
   // groups; three labeled tiles need no banner to read as armor class.

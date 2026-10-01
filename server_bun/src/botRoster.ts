@@ -10,6 +10,7 @@ import { logger } from './logger.ts';
 import { WeaponType } from '../../shared/weapons.ts';
 import { CLASS_STATS, type ArmorClass } from '../../shared/botClasses.ts';
 import { BOT_LOADOUTS, type BotLoadout } from '../../shared/botLoadouts.ts';
+import { BOT_NAMES } from '../../shared/botNames.ts';
 import { ROLE_PRIORITY, type BotRole } from '../../shared/flagGoals.ts';
 import { isSuper } from './botArsenal.ts';
 
@@ -43,7 +44,10 @@ export class BotRoster {
    *  team balancing lands humans on the emptier side. */
   populate(n: number): void {
     for (let i = 0; i < n; i++) {
-      const id = `BOT-${this.room.name}${this.nextIdx++}`;
+      // Callsign from the shared pool, not the room name — 'BOT-escalade-11'
+      // read as a map tag, not a pilot. Index suffix keeps ids unique.
+      const idx = this.nextIdx++;
+      const id = `BOT-${BOT_NAMES[(idx - 1) % BOT_NAMES.length]}-${String(idx).padStart(2, '0')}`;
       const loadout = BOT_LOADOUTS[(this.nextIdx - 2 + BOT_LOADOUTS.length) % BOT_LOADOUTS.length]!;
       const p = this.room.players.addPlayer(id, undefined, loadout.perk);
       this.loadouts.set(id, loadout);
