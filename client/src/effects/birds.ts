@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { BirdFlight } from './birdFlight.js';
 
 import type { Terrain } from '../world/terrain.js';
@@ -33,9 +34,11 @@ export interface Kettle {
 }
 
 export interface Bird {
+  /** Transform holder only — never added to the scene; its matrixWorld is
+   *  copied into the shared instanced mesh each frame. */
   group: THREE.Group;
-  wingL: THREE.Mesh;
-  wingR: THREE.Mesh;
+  slot: number;        // instance index in the shared flock mesh
+  flapPose: number;    // wing dihedral angle written by flapWings
   kettle: number;      // which thermal this bird rides; -1 = loner
   orbitR: number;      // personal orbit radius (kettle birds)
   orbitA: number;      // current angle
@@ -63,6 +66,12 @@ export interface Bird {
 
 const _target = new THREE.Vector3();
 const _next = new THREE.Vector3();
+const _zero = new THREE.Matrix4().makeScale(0, 0, 0);
+
+function tagWing(geo: THREE.BufferGeometry, side: number): void {
+  const n = geo.getAttribute('position')!.count;
+  geo.setAttribute('wingSide', new THREE.BufferAttribute(new Float32Array(n).fill(side), 1));
+}
 
 export class AmbientBirds {
   birds: Bird[] = [];  // public — flight family iterates it
@@ -92,30 +101,56 @@ export class AmbientBirds {
     for (const b of this.birds) out.push(b.group.position);
   }
 
+  private flock!: THREE.InstancedMesh;
+  private flapAttr!: THREE.InstancedBufferAttribute;
+
   constructor(scene: THREE.Scene) {
     const bodyGeo = new THREE.ConeGeometry(0.12, 0.9, 5);
     bodyGeo.rotateX(-Math.PI / 2); // nose along -Z so lookAt aims it
+    tagWing(bodyGeo, 0);
     // Wing: flat quad hinged at the inner edge (pivot trick — translate the
     // geometry so rotation.z flaps the tip, not the root)
-    const wingGeo = new THREE.PlaneGeometry(1.15, 0.38);
-    wingGeo.translate(0.575, 0, 0);
-    wingGeo.rotateX(-Math.PI / 2); // flat, facing up
+    const wingLGeo = new THREE.PlaneGeometry(1.15, 0.38);
+    wingLGeo.translate(0.575, 0, 0);
+    wingLGeo.rotateX(-Math.PI / 2); // flat, facing up
+    tagWing(wingLGeo, 1);
+    const wingRGeo = wingLGeo.clone();
+    wingRGeo.scale(-1, 1, 1); // mirror — same geometry, opposite wing
+    tagWing(wingRGeo, -1);
 
+    // One instanced mesh for the whole kettle — was 3 meshes per bird
+    // (27 draws for ambient decor). wingSide tags each vertex so the shader
+    // flaps wings about the hinge Z while the body stays rigid.
+    const geo = mergeGeometries([bodyGeo, wingLGeo, wingRGeo], false)!;
     const mat = new THREE.MeshBasicMaterial({ color: 0x1a1410, side: THREE.DoubleSide });
+    this.flapAttr = new THREE.InstancedBufferAttribute(new Float32Array(BIRD_COUNT), 1);
+    this.flapAttr.setUsage(THREE.DynamicDrawUsage);
+    geo.setAttribute('aFlap', this.flapAttr);
+    mat.onBeforeCompile = (sh) => {
+      sh.vertexShader = sh.vertexShader
+        .replace('#include <common>', `#include <common>
+          attribute float wingSide;
+          attribute float aFlap;`)
+        .replace('#include <begin_vertex>', `#include <begin_vertex>
+          {
+            float wa = aFlap * wingSide;
+            float ws = sin(wa), wc = cos(wa);
+            transformed.xy = vec2(transformed.x * wc - transformed.y * ws,
+                                  transformed.x * ws + transformed.y * wc);
+          }`);
+    };
+    this.flock = new THREE.InstancedMesh(geo, mat, BIRD_COUNT);
+    this.flock.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    this.flock.frustumCulled = false; // 9 birds span a huge volume — cull math isn't worth it
+    scene.add(this.flock);
 
     for (let i = 0; i < BIRD_COUNT; i++) {
       const group = new THREE.Group();
-      const body = new THREE.Mesh(bodyGeo, mat);
-      const wingL = new THREE.Mesh(wingGeo, mat);
-      const wingR = new THREE.Mesh(wingGeo, mat);
-      wingR.scale.x = -1; // mirror — same geometry, opposite wing
-      group.add(body, wingL, wingR);
       // Oversized silhouette — at 150–500m real buzzard scale is invisible
       group.scale.setScalar(3.2);
-      scene.add(group);
 
       this.birds.push({
-        group, wingL, wingR,
+        group, slot: i, flapPose: 0,
         // Every 4th bird starts a loner — free-fliers roaming the sky
         kettle: (i + 1) % 4 === 0 ? -1 : i % KETTLE_COUNT,
         orbitR: 20 + Math.random() * 55,   // wide spread — a loose kettle, not a dot
@@ -164,7 +199,6 @@ export class AmbientBirds {
           bb.flapAmp = 1;
           if (bb.health <= 0) {
             bb.dead = true;
-            bb.group.visible = false;
             return true;
           }
           return false;
@@ -191,12 +225,15 @@ export class AmbientBirds {
    *  Live birds keep their slots in targets but stay parked. */
   setActive(on: boolean): void {
     this.active = on;
-    for (const b of this.birds) b.group.visible = on && !b.dead;
   }
   private active = true;
 
   update(dt: number, playerPos: THREE.Vector3, terrain: Terrain, playerDead = false): void {
-    if (!this.active) return;
+    if (!this.active) {
+      for (const b of this.birds) this.flock.setMatrixAt(b.slot, _zero);
+      this.flock.instanceMatrix.needsUpdate = true;
+      return;
+    }
     this.seedFlock(playerPos, terrain);
     this.roamKettles(dt, playerPos, terrain);
     this.flight.tickAggro(dt, playerPos, playerDead);
@@ -220,6 +257,19 @@ export class AmbientBirds {
       if (b.kettle === -1) this.flight.soarLoner(b, dt, playerPos, terrain);
       else this.flight.orbitKettle(b, dt);
     }
+    this.syncFlock();
+  }
+
+  /** Push every bird's transform + wing pose into the instanced flock. */
+  private syncFlock(): void {
+    for (const b of this.birds) {
+      if (b.dead) { this.flock.setMatrixAt(b.slot, _zero); continue; }
+      b.group.updateMatrix();
+      this.flock.setMatrixAt(b.slot, b.group.matrix);
+      this.flapAttr.setX(b.slot, b.flapPose);
+    }
+    this.flock.instanceMatrix.needsUpdate = true;
+    this.flapAttr.needsUpdate = true;
   }
 
   /** Seed both kettles on their roam rings; loners somewhere on the

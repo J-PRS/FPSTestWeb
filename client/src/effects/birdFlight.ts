@@ -52,11 +52,11 @@ export class BirdFlight {
     if (this.h.departT > 0) this.h.departT -= dt;
   }
 
-  /** Shared wing pose from flapPhase/flapAmp — every flight mode ends here. */
+  /** Shared wing pose from flapPhase/flapAmp — every flight mode ends here.
+   *  Wings flap in the instanced mesh's vertex shader; this just stores the
+   *  current dihedral for the per-instance attribute. */
   flapWings(b: Bird): void {
-    const flap = Math.sin(b.flapPhase) * (0.15 + b.flapAmp * 0.85) + 0.15;
-    b.wingL.rotation.z = flap;
-    b.wingR.rotation.z = -flap;
+    b.flapPose = Math.sin(b.flapPhase) * (0.15 + b.flapAmp * 0.85) + 0.15;
   }
 
   /** Vel-derived lookAt + banked turn — dive/depart share the pose. */

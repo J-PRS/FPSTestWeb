@@ -1,3 +1,4 @@
+2026-10-01 - perf: instance ambient bird flock into one draw (27 -> 1), wing flap in vertex shader
 2026-10-01 - perf: batch all terrain rings into 2 shared vertex-color draws (~40 -> 2 in firefights)
 2026-10-01 - perf: projectile shells+glows instanced per kind (~36 draw calls -> ~4)
 2026-10-01 - perf: remote head-gizmo rings share one InstancedMesh (~18 draws -> 1)
