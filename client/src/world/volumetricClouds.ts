@@ -322,6 +322,13 @@ export class VolumetricClouds {
     scene.add(this.puffMesh);
   }
 
+  /** Both cloud meshes cost full-sky fragment work — the auto-quality
+   *  ladder sheds them before touching pixel scale again. */
+  setEnabled(on: boolean): void {
+    this.mesh.visible = on;
+    this.puffMesh.visible = on;
+  }
+
   setSunDirection(direction: THREE.Vector3): void {
     this.sunDirection.copy(direction);
   }

@@ -11,6 +11,7 @@ import Logger from '../core/Logger.js';
 import { vfxStats } from '../effects/vfx.js';
 import type { createFrameBudget } from '../core/frameBudget.js';
 import type { createPerfHud } from '../core/perfHud.js';
+import { fxJobStats } from './gameLoop.js';
 import type { GameLoopDeps, LoopState } from './gameLoop.js';
 
 // FPS watchdog — sustained <40fps for >10 consecutive frames fires a
@@ -68,6 +69,7 @@ function dumpPerf(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof c
     debris: deps.world.debrisList.length + deps.world.playerDebrisList.length,
     scorches: deps.world.scorches.length,
     vfx: vfxStats(),
+    fxJobs: fxJobStats(),
     drawCalls: info.render.calls,
     triangles: info.render.triangles,
     geometries: info.memory.geometries,
@@ -93,20 +95,48 @@ function dumpPerf(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof c
 // (2×) → 3 px-mode 1 (4×) → 4 px-mode 3 → 5 px-mode 4 (low-res composer).
 // CPU ladder (JS phases dominate): 0 all work → 1 ambient systems off
 // (particles/mist/birds + slower HUD sweeps) → 2 + pixel mode regardless.
-// Explicit choices still win: ?px= or a user-set pixel mode pins the pixel
-// tier; fps-shadows=false pins shadows.
+//
+// fps-pixelated is the USER'S baseline, not the live mode: auto steps
+// apply with persist=false, floor at the baseline's own ladder level
+// (it may degrade further, never above it), and ?px=/floyd stay fully
+// pinned. fps-shadows=false pins shadows.
+const PX2LEVEL = [0, 3, 2, 4, 5]; // pixelMode → gpu level where it sits
+const PX_LADDER = [0, 0, 2, 1, 3, 4]; // gpu level → pixel mode
+
+/** Where the GPU ladder wants to land: the user-pinned pixel baseline is
+ *  the floor (degrade past it, never above), ?px=/floyd pin the tier. */
+function gpuLevelTarget(st: LoopState, dir: number, baselinePx: number): { next: number; baselineLevel: number } | null {
+  const pixelPinned = urlParams.get('px') !== null || baselinePx === 5;
+  const baselineLevel = pixelPinned ? 0 : PX2LEVEL[baselinePx]!;
+  const cap = pixelPinned ? 1 : 5;
+  const floor = Math.max(baselineLevel, (!settings.get('fps-shadows') && dir > 0) ? 1 : 0);
+  const next = Math.min(cap, Math.max(floor, st.gpuLevel - dir));
+  return next === st.gpuLevel ? null : { next, baselineLevel };
+}
+
 function autoScale(deps: GameLoopDeps, st: LoopState, dir: number): void {
+  // The SETTINGS toggle is the master switch — an opted-out user keeps
+  // their manual pixel/shadow picks no matter how low the fps sits.
+  if (!settings.get('fps-autoq')) return;
   if (st.cpuBound) return autoScaleCpu(deps, st, dir);
   const { rendererSetup } = deps;
-  const pixelPinned = urlParams.get('px') !== null || (settings.get('fps-pixelated') !== 0 && !st.autoPixel);
-  const cap = pixelPinned ? 1 : 5;
-  const floor = (!settings.get('fps-shadows') && dir > 0) ? 1 : 0;
-  const next = Math.min(cap, Math.max(floor, st.gpuLevel - dir));
-  if (next === st.gpuLevel) return;
-  const wantShadows = next === 0;
+  const baselinePx = settings.get('fps-pixelated');
+  const target = gpuLevelTarget(st, dir, baselinePx);
+  if (!target) return;
+  const { next, baselineLevel } = target;
+  // A pixelated baseline shouldn't imply shadows off: at the resting
+  // level, shadows follow the user's own fps-shadows pick.
+  const wantShadows = next === 0 ||
+    (baselineLevel > 0 && next === baselineLevel && settings.get('fps-shadows'));
   if (rendererSetup.renderer.shadowMap.enabled !== wantShadows) setShadows(deps, wantShadows);
-  const pixel = next <= 1 ? 0 : [0, 0, 2, 1, 3, 4][next]!;
-  if (next >= 2 || st.autoPixel) { rendererSetup.setPixelated(pixel); st.autoPixel = true; }
+  const pixel = next <= 1 ? baselinePx : PX_LADDER[next]!;
+  if (next >= 2 || st.autoPixel) {
+    rendererSetup.setPixelated(pixel, false);
+    st.autoPixel = next > baselineLevel;
+  }
+  // Full-sky raster FX shed before the deepest pixel drop: the cloud dome
+  // shades every skyward fragment on a GPU that already can't keep up.
+  deps.sceneSetup.volumetricClouds?.setEnabled(next < 3);
   st.gpuLevel = next;
   Logger[dir < 0 ? 'warn' : 'info'](`auto-quality: gpu level ${next} (${dir < 0 ? 'sustained low fps' : 'headroom'})`);
 }
@@ -115,7 +145,8 @@ function autoScale(deps: GameLoopDeps, st: LoopState, dir: number): void {
 // buys nothing; shed ambient JS work first, then drop res as a last resort.
 function autoScaleCpu(deps: GameLoopDeps, st: LoopState, dir: number): void {
   const { rendererSetup } = deps;
-  const pixelPinned = urlParams.get('px') !== null || (settings.get('fps-pixelated') !== 0 && !st.autoPixel);
+  const baselinePx = settings.get('fps-pixelated');
+  const pixelPinned = urlParams.get('px') !== null || baselinePx === 5;
   const cap = pixelPinned ? 1 : 2;
   const next = Math.min(cap, Math.max(0, st.cpuLevel - dir));
   if (next === st.cpuLevel) return;
@@ -123,9 +154,29 @@ function autoScaleCpu(deps: GameLoopDeps, st: LoopState, dir: number): void {
   for (const layer of deps.ambientLayers) layer.setActive(ambientOn);
   deps.groundMist().setActive(ambientOn);
   deps.ambientBirds.setActive(ambientOn);
-  if (next === 2 || (next === 1 && st.autoPixel)) { rendererSetup.setPixelated(next === 2 ? 1 : 0); st.autoPixel = true; }
+  // Stepping back up restores the baseline pick, not necessarily OFF.
+  if (next === 2 || (st.autoPixel && next < 2)) {
+    rendererSetup.setPixelated(next === 2 ? 1 : baselinePx, false);
+    st.autoPixel = next === 2;
+  }
   st.cpuLevel = next;
   Logger[dir < 0 ? 'warn' : 'info'](`auto-quality: cpu level ${next} (${dir < 0 ? 'sustained low fps' : 'headroom'})`);
+}
+
+/** Undo every ladder step — called when AUTO QUALITY flips off so the
+ *  player isn't stranded on a degraded preset it chose for them. */
+export function resetAutoQuality(deps: GameLoopDeps, st: LoopState): void {
+  // Restore the stored baseline — the user's own pixel pick, not forced 0.
+  if (st.autoPixel) { deps.rendererSetup.setPixelated(settings.get('fps-pixelated'), false); st.autoPixel = false; }
+  if (deps.rendererSetup.renderer.shadowMap.enabled !== settings.get('fps-shadows')) {
+    setShadows(deps, settings.get('fps-shadows'));
+  }
+  for (const layer of deps.ambientLayers) layer.setActive(true);
+  deps.groundMist().setActive(true);
+  deps.ambientBirds.setActive(true);
+  deps.sceneSetup.volumetricClouds?.setEnabled(true);
+  st.gpuLevel = 0;
+  st.cpuLevel = 0;
 }
 
 function setShadows(deps: GameLoopDeps, on: boolean): void {
