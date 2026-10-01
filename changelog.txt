@@ -1,3 +1,7 @@
+2026-10-01 - tests: BotSenses (hostility gates, noises, incoming, creature lanes)
+2026-10-01 - tests: FragMessages escaping/tiers + shotFeed cap; DOM stub gains prepend/remove/_all
+2026-10-01 - tests: blastForce (self-vs-enemy splash, shield soak, stamps, remotes/balls/nuggets)
+2026-10-01 - tests: CtfFlags state machine (grab/carry/capture/standoff/drop-return/roles)
 2026-10-01 - fix watchdog idleWindows reset on pending ticks (squad alarm never fired); tests botEnergy + botWatchdog
 2026-10-01 - tests: extractClip windowing (renormalize, wrap, synthetic spawn for live projectiles)
 2026-10-01 - tests: KillFeed notices/streaks/bot taunt gating (seeded rng)

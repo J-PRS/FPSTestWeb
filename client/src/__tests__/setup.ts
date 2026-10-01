@@ -38,18 +38,32 @@ if (typeof globalThis.document === 'undefined') {
     getElementById: () => null,
     querySelector: () => null,
     querySelectorAll: () => [],
-    createElement: () => ({
-      style: {},
-      children: [] as unknown[],
-      firstChild: null,
-      id: '',
-      maxLength: 0,
-      placeholder: '',
-      addEventListener: () => {},
-      append(..._nodes: unknown[]) {},
-      appendChild() { return null; },
-      remove() {},
-    }),
+    // Test seam — every element the stub makes, so tests can find module-
+    // cached nodes (shotFeed's stack) that never reach document.body.
+    _all: [] as unknown[],
+    createElement: () => {
+      const el: Record<string, unknown> & { children: unknown[] } = {
+        style: {},
+        children: [] as unknown[],
+        firstChild: null,
+        get lastElementChild() { return el.children.at(-1) ?? null; },
+        innerHTML: '',
+        id: '',
+        maxLength: 0,
+        placeholder: '',
+        _parent: null as { children: unknown[] } | null,
+        addEventListener: () => {},
+        append(..._nodes: unknown[]) {},
+        prepend(n: unknown) { el.children.unshift(n); (n as Record<string, unknown>)._parent = el; },
+        appendChild(n: unknown) { el.children.push(n); (n as Record<string, unknown>)._parent = el; return n; },
+        remove() {
+          const p = el._parent as { children: unknown[] } | null;
+          if (p) { const i = p.children.indexOf(el); if (i >= 0) p.children.splice(i, 1); }
+        },
+      };
+      (globalThis.document as unknown as { _all: unknown[] })._all.push(el);
+      return el;
+    },
     createTextNode: (s: string) => ({ textContent: s }),
     body: { appendChild: () => {}, removeChild: () => {} },
     hidden: false,
