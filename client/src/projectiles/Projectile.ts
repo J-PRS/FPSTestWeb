@@ -2,6 +2,7 @@ import * as THREE from 'three';
 
 import { GRAVITY } from '../core/config.js';
 import { hitRadiusAt } from '../../../shared/combat.js';
+import { idSeed, jitteredTtl } from '../../../shared/weapons.js';
 
 import type { Targetable } from '../entities/balls.js';
 
@@ -18,6 +19,9 @@ import type { StructureCollider } from '../../../shared/ballSim.js';
 import { ProjCollide } from './projCollide.js';
 import { ProjStuck } from './projStuck.js';
 const _rayDir = new THREE.Vector3();
+
+/** Backstop fuse — see the age check in updateAlive. */
+const ABSOLUTE_TTL_S = 10;
 
 
 /**
@@ -86,6 +90,10 @@ export class Projectile {
   hitBall: Targetable | null = null; // balls AND crawlers — any shootable target
   hitPlayerId: string | null = null;
   serverProjectileId: string | null = null; // remote player hit tracking
+  /** Client-minted nonce sent with the spawn claim and echoed on every
+   *  claim naming this shell — binds claims before/independent of the
+   *  serverProjectileId round-trip. */
+  shotId: string | null = null;
   /** Whose shell this is — kill attribution for local-authority shots
    *  (offline GameBots; null = the local player). */
   shooterId: string | null = null;
@@ -94,6 +102,8 @@ export class Projectile {
    *  shooter ISN'T the local player, so self-hits can't happen. Returns
    *  the live local pos each frame, or null to skip. */
   sweepLocal: (() => THREE.Vector3 | null) | null = null;
+  /** Local player's armor class — the body sweep needs its capsule. */
+  localClass: (() => string | undefined) | null = null;
   demoProjectileId = 0; // demo recording tracking ID
   hitAccuracy = 0.0; // actual center-to-center dist at moment of hit
   hitAge = 0.0; // projectile age at hit (airtime)
@@ -125,6 +135,11 @@ export class Projectile {
   onRayBurst: ((from: THREE.Vector3, to: THREE.Vector3) => void) | null = null;
 
   readonly config: ProjectileConfig;
+  /** This shot's effective fuse — config.maxLifetime spread by ttlJitter,
+   *  seeded by the server id when we know it (remote replicas pop in sync
+   *  with the server's detonation; local shots fall back to a random roll
+   *  since their fuse is cosmetic — the destroy edge is authoritative). */
+  private ttl: number | undefined;
   // Random tumble axis for 'ball' projectiles — fixed per shot
   private readonly tumbleX = Math.random() * 2 - 1;
   private readonly tumbleY = Math.random() * 2 - 1;
@@ -149,6 +164,22 @@ export class Projectile {
   get explosionRadius(): number { return this.config.explosionRadius; }
   get force(): number { return this.config.force; }
   get forceMode(): 'push' | 'pull' { return this.config.forceMode; }
+
+  /** Effective fuse for THIS shell: config.maxLifetime spread by
+   *  ttlJitter, seeded from serverProjectileId when the server link has
+   *  landed (remote replicas assign it right after construction) so both
+   *  ends pop at the same age; pending local shots seed randomly — their
+   *  fuse is cosmetic, the server's destroy edge is authoritative anyway. */
+  fuseTtl(): number | undefined {
+    if (this.ttl !== undefined) return this.ttl || undefined;
+    const ml = this.config.maxLifetime;
+    if (!ml) return undefined;
+    const j = this.config.ttlJitter ?? 0;
+    if (!j) { this.ttl = ml; return ml; }
+    const seed = this.serverProjectileId ? idSeed(this.serverProjectileId) : (Math.random() * 4294967296) >>> 0;
+    this.ttl = jitteredTtl({ maxLifetime: ml, ttlJitter: j }, seed);
+    return this.ttl;
+  }
 
   scene: THREE.Scene;  // public — collide/stuck families remove planted meshes
   mesh: THREE.Mesh;
@@ -200,7 +231,7 @@ export class Projectile {
   // Swept collision math lives in sweep.ts (SweepHost) — the checks are
   // free functions so they're testable without a scene-bound projectile.
 
-  update(dt: number, terrain: Terrain, balls?: Targetable[], remotePlayers?: Map<string, THREE.Vector3>, obstacles?: SweepObstacle[]): void {
+  update(dt: number, terrain: Terrain, balls?: Targetable[], remotePlayers?: Map<string, THREE.Vector3>, obstacles?: SweepObstacle[], playerClasses?: Map<string, string>): void {
     if (this.dead) return;
 
     // First frame: just render at spawn position, don't apply physics yet
@@ -210,7 +241,7 @@ export class Projectile {
       return;
     }
 
-    if (!this.exploded) this.updateAlive(dt, terrain, balls, remotePlayers, obstacles);
+    if (!this.exploded) this.updateAlive(dt, terrain, balls, remotePlayers, obstacles, playerClasses);
 
     this.tickRayBurst();
 
@@ -240,10 +271,20 @@ export class Projectile {
   }
 
   // Physics + collision + visuals for a live (non-exploded) projectile
-  private updateAlive(dt: number, terrain: Terrain, balls?: Targetable[], remotePlayers?: Map<string, THREE.Vector3>, obstacles?: SweepObstacle[]): void {
+  private updateAlive(dt: number, terrain: Terrain, balls?: Targetable[], remotePlayers?: Map<string, THREE.Vector3>, obstacles?: SweepObstacle[], playerClasses?: Map<string, string>): void {
     this.prevPos.copy(this.pos);
     this.lastDt = dt;
     this.age += dt;
+
+    // Absolute backstop: fuseless configs (bolt/disc/chaingun fly-until-
+    // contact) or a remote replica whose destroy edge never arrived used
+    // to leave immortal shells drifting — simming 10k-particle trails
+    // 90km below the world at 2300m/s. Any reasonable shot is long dead
+    // by 10s (a 250m/s chaingun slug covers ~2.5km).
+    if (this.age >= ABSOLUTE_TTL_S) {
+      this.explode();
+      return;
+    }
 
     // Stuck bomb: planted on a surface, ticking down to fuse.
     if (this.stuck && this.glue.tickStuck()) return;
@@ -255,7 +296,7 @@ export class Projectile {
     this.pos.addScaledVector(this.vel, dt);
 
     // Fuse: auto-explode if max lifetime is reached
-    if (this.config.maxLifetime && this.age >= this.config.maxLifetime) {
+    if (this.fuseTtl() && this.age >= this.fuseTtl()!) {
       this.explode();
       return;
     }
@@ -279,7 +320,7 @@ export class Projectile {
     // terrain-only behavior lives in tickRemote.
     if (this.isRemote) {
       if (this.tickRemote(terrain)) return;
-    } else if (this.checkCollisions(terrain, balls, remotePlayers, obstacles)) {
+    } else if (this.checkCollisions(terrain, balls, remotePlayers, obstacles, playerClasses)) {
       return; // exploded inside checkCollisions
     }
 
@@ -305,8 +346,8 @@ export class Projectile {
 
   // Runs all swept collision checks; returns true if the projectile hit
   // something and exploded (records hit target + accuracy data).
-  private checkCollisions(terrain: Terrain, balls?: Targetable[], remotePlayers?: Map<string, THREE.Vector3>, obstacles?: SweepObstacle[]): boolean {
-    return this.collide.checkCollisions(terrain, balls, remotePlayers, obstacles);
+  private checkCollisions(terrain: Terrain, balls?: Targetable[], remotePlayers?: Map<string, THREE.Vector3>, obstacles?: SweepObstacle[], playerClasses?: Map<string, string>): boolean {
+    return this.collide.checkCollisions(terrain, balls, remotePlayers, obstacles, playerClasses);
   }
 
   /** Plant the bomb at a contact point — the glue family owns the state. */
@@ -359,6 +400,14 @@ export class Projectile {
       releaseProjectileInstance(this.glowMesh);
     }
     this.projectileRemoved = true;
+  }
+
+  /** Diagnostics row — trail + ribbon state for the Alt+Q dump. */
+  dbg(): { trail: Record<string, unknown> | null; ribbons: ReturnType<RibbonTrail['dbg']>[] } {
+    return {
+      trail: this.trail instanceof QuarksTrail ? this.trail.diag() : null,
+      ribbons: this.ribbons.map(r => r.dbg()),
+    };
   }
 
   explode(): void {
