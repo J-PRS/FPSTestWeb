@@ -23,6 +23,7 @@ export class ExplosionTracker {
   }
 
   getRecentExplosions(): ExplosionInfo[] {
+    this.cleanup(); // reads must not serve entries expired since the last add
     return this.recentExplosions;
   }
 
