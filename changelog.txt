@@ -1,3 +1,4 @@
+2026-10-01 - Far ribbons keep fixed side vector (skip per-sample billboard math)
 2026-10-01 - Instanced pools upload live slot spans only (swarm, shadows, gibs, debris)
 2026-10-01 - damageNumbers uploads only written quad span; idle frames skip upload
 2026-10-01 - ExplosionSparks dirty-span uploads (was full ~344KB buffer per frame)

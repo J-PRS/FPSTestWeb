@@ -245,9 +245,10 @@ export class RibbonTrail {
     if (this.slot < 0 || this.count < 2) return;
     // Past ~200m a ribbon is a few px — halving the rewrite cadence is
     // invisible but cuts the per-sample billboard math in half there.
+    let far = false;
     if (camPos && this._far !== undefined) {
       const dx = camPos.x - this.px[this.head], dy = camPos.y - this.py[this.head], dz = camPos.z - this.pz[this.head];
-      const far = dx * dx + dy * dy + dz * dz > 200 * 200;
+      far = dx * dx + dy * dy + dz * dz > 200 * 200;
       if (far && (this._far ^= 1)) return;
     }
 
@@ -272,7 +273,9 @@ export class RibbonTrail {
       const w = this.width * 0.5 * fade;
       const o = base + i * 6;
       let sx = this.sx[s], sy = this.sy[s], sz = this.sz[s];
-      if (this.billboard && camPos && camMoved) {
+      // Far ribbons keep their stored side — a billboard facing error
+      // beyond 200m is subpixel, and this skips a cross+sqrt per sample.
+      if (this.billboard && camPos && camMoved && !far) {
         // Side = dir x (dir to camera): ribbon plane always faces the viewer
         const vx = camPos.x - this.px[s], vy = camPos.y - this.py[s], vz = camPos.z - this.pz[s];
         sx = this.dy[s] * vz - this.dz[s] * vy;
