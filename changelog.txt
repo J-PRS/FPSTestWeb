@@ -1,3 +1,4 @@
+2026-10-01 - Perf dump now reports UNMASKED_RENDERER_WEBGL + devicePixelRatio + canvas res — next LOW-FPS dump identifies SwiftShader/wrong-GPU without a chrome://gpu detour
 2026-10-01 - Auto-quality sheds bloom/post-process passes at gpu level >=4 — full-screen mip-blur chain was the last fill cost left on starving GPUs (restores on recovery)
 2026-10-01 - Remote skinned LOD tightens to 70m with hysteresis (55m swap-back) — far mannequins drop ~80% tris; mats atlas lint cleanup
 2026-10-01 - Far-LOD skinned rig: mannequin_lod1.glb (1215 tris, meshopt-simplified, skins preserved) swaps in past 140m â€” remote vertex/skinning cost ~-80%

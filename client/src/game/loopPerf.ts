@@ -74,6 +74,11 @@ function dumpPerf(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof c
     triangles: info.render.triangles,
     geometries: info.memory.geometries,
     textures: info.memory.textures,
+    // "SwiftShader"/"ANGLE (Google, Vulkan)" — the whole frame-vs-fps gap
+    // question answered inside the dump instead of a chrome://gpu detour.
+    gl: gpuId(deps.rendererSetup.renderer),
+    dpr: Math.round(window.devicePixelRatio * 100) / 100,
+    res: `${deps.rendererSetup.renderer.domElement.width}x${deps.rendererSetup.renderer.domElement.height}`,
     phases: perf.snapshot(),
     budget: budget.stats(),
     ping: nm?.getPing?.(),
@@ -140,6 +145,17 @@ function autoScale(deps: GameLoopDeps, st: LoopState, dir: number): void {
   shedPostPasses(rendererSetup, next >= 4);
   st.gpuLevel = next;
   Logger[dir < 0 ? 'warn' : 'info'](`auto-quality: gpu level ${next} (${dir < 0 ? 'sustained low fps' : 'headroom'})`);
+}
+
+let _gpuId: string | null = null;
+function gpuId(renderer: THREE.WebGLRenderer): string {
+  if (_gpuId) return _gpuId;
+  const gl = renderer.getContext() as WebGLRenderingContext;
+  const ext = gl.getExtension('WEBGL_debug_renderer_info');
+  _gpuId = ext
+    ? String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL))
+    : 'unknown';
+  return _gpuId;
 }
 
 // Post passes are pure fill cost — bloom's mip-blur chain is the last
