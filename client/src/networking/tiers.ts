@@ -104,7 +104,12 @@ class ServerRtcTransport implements GameTransport {
       }
     });
     dc.addEventListener('open', () => { this.open = true; config.onConnect?.(); });
-    dc.addEventListener('close', () => { this.open = false; config.onDisconnect?.(1000, 'rtc closed'); });
+    // Two lanes share one SCTP association — the server counts the seat
+    // live while EITHER is open (RtcSocketAdapter.readyState), so a
+    // single-lane close must not flap the whole session. Only declare
+    // disconnect when nothing is left to talk on.
+    dc.addEventListener('close', () => this.checkDead('game'));
+    ctrl?.addEventListener('close', () => this.checkDead('ctrl'));
     ctrl?.addEventListener('message', (ev) => {
       const data = ev.data;
       // Binary CAN arrive here — the server pushes ball segments down the
@@ -134,7 +139,17 @@ class ServerRtcTransport implements GameTransport {
     else this.dc.send(new Uint8Array(data));
     return true;
   }
-  connected(): boolean { return this.open && this.dc.readyState === 'open'; }
+  private checkDead(lane: 'game' | 'ctrl'): void {
+    // A lane 'close' event can precede its readyState flip — check both.
+    const gameOpen = this.dc.readyState === 'open';
+    const ctrlOpen = this.ctrl?.readyState === 'open';
+    if (gameOpen || ctrlOpen) return;
+    this.open = false;
+    this.config.onDisconnect?.(1000, `rtc closed (${lane} last)`);
+  }
+  connected(): boolean {
+    return this.open && (this.dc.readyState === 'open' || this.ctrl?.readyState === 'open');
+  }
   disconnect(): void {
     this.open = false;
     try { this.dc.close(); } catch { /* gone */ }
@@ -201,6 +216,13 @@ async function tryWebRTC(config: ConnectionConfig): Promise<GameTransport | null
     });
     await conn.setRemoteDescription(answer);
     signal.close();
+    // ICE diagnostics live on the transport so a flap-loop log shows the
+    // association's own verdict (failed/disconnected/checking) beside
+    // the lane closes — a channel reset and an ICE failure read
+    // identically without it.
+    conn.addEventListener('iceconnectionstatechange', () => {
+      logger.warn(`rtc ice: ${conn.iceConnectionState}`);
+    });
     return new ServerRtcTransport(dc, config, conn, ctrl);
   } catch {
     // Failed probe — the ICE/DTLS machinery keeps running without this.

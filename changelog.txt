@@ -1,3 +1,4 @@
+2026-10-01 - rtc: tolerate single-lane datachannel close (game OR ctrl) - server counts the seat live while either lane is open; client now matches. + ice state logging for flap diagnosis
 2026-10-01 - sheep meter: retire the yeet (it was a joke mechanic) - at 100 the meter now just clamps; botDrive/botBrain jump+jet pinning removed, meter stays a badge/telemetry readout
 2026-10-01 - sheep meter: cap Tribes-behavior drain at 25/s so the meter only moves gradually (a 60m/s plummet used to zero a full meter in ~1s and read as a reset)
 2026-10-01 - vfx: paused particle systems now decay (no more frozen mid-air trails); quarks trail startSize x2 to match old sphere-mesh diameter (line trails visible again); RibbonTrail.update split into rewriteSamples/glueBoundary helpers
