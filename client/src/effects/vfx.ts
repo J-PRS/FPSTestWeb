@@ -68,8 +68,10 @@ const MAX_LIVE_SYSTEMS = 320;
 
 /** Past this distance a burst is sub-pixel — pause its CPU sim entirely.
  *  batcher.update skips paused systems, so this is the only knob that
- *  shrinks the per-frame sim cost itself (the cap only bounds count). */
-const VFX_SIM_RADIUS_SQ = 260 * 260;
+ *  shrinks the per-frame sim cost itself (the cap only bounds count).
+ *  180m: at ~15px per particle across the map, mid-field explosions
+ *  still animate but cross-map firefights stop paying quarks sim. */
+const VFX_SIM_RADIUS_SQ = 180 * 180;
 
 // Dead-system starvation counters: trail systems live outside `live`
 // (they're looping emitters owned by projectiles), so an owner that
