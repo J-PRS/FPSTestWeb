@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { nextTargetId } from './targetIds.js';
 import { getGlowTexture } from '../effects/glowTexture.js';
+import { markProbe } from '../core/fxDiag.js';
 import type { Terrain } from '../world/terrain.js';
 
 // Player-deployable recharge pad — the T2 remote-inventory-station role:
@@ -196,6 +197,7 @@ export class DeployStation {
     }));
     this.motes.renderOrder = 3;
     this.scene.add(this.motes);
+    markProbe(this.motes, { kind: 'fxMesh', label: 'stationMotes' });
   }
 
   private tickEnvelope(dt: number): void {
