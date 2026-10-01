@@ -1,20 +1,40 @@
 import * as THREE from 'three';
 
 import { LIFE_BASE, LIFE_RAND, PLAYER_RADIUS } from '../core/config.js';
-import { pickShardGeo, shardLaunch, type DebrisOptions, type DebrisPart } from './debrisShards.js';
+import { pickShardGeo, pickShardPrim, shardLaunch, type DebrisOptions, type DebrisPart } from './debrisShards.js';
 
 type Vec3Like = { x: number; y: number; z: number };
+
+const _tmpColor = new THREE.Color();
+const _tmpMat = new THREE.Matrix4();
+const _tmpQ = new THREE.Quaternion();
+const _tmpE = new THREE.Euler();
+const _tmpP = new THREE.Vector3();
+const _tmpS = new THREE.Vector3();
+const _zeroM = new THREE.Matrix4().makeScale(0, 0, 0);
 
 import { Terrain } from '../world/terrain.js';
 import { stepShard, emitTrail, greyShard, shrinkLanded } from './debrisStep.js';
 
 
 export interface Shard {
-  mesh: THREE.Mesh;
-  mat: THREE.MeshLambertMaterial;
+  /** Set only on the mesh path (real body parts / custom shardGeos —
+   *  unique geometries can't instance). Primitive shards are null here
+   *  and live in this.insts instead. */
+  mesh: THREE.Mesh | null;
+  mat: THREE.MeshLambertMaterial | null;
+  /** Instanced slot: which bucket + index, or -1 on the mesh path. */
+  inst: number;
+  slot: number;
   x: number; y: number; z: number;
   vx: number; vy: number; vz: number;
   rx: number; ry: number; rz: number;
+  /** Accumulated tumble angles + flatten/shrink factors — folded into
+   *  the instance matrix each step (mesh path mutates mesh directly). */
+  ex: number; ey: number; ez: number;
+  flatY: number;
+  shrink: number;
+  sw: number; sh: number; sd: number;
   life: number;
   elapsed: number;
   radius: number;
@@ -80,44 +100,100 @@ export class Debris {
 
   private spawnShards(px: number, py: number, pz: number, color: THREE.Color, opts: DebrisOptions): void {
     const count = opts.parts?.length ?? opts.count;
+    this.instanced = !opts.parts?.length && !opts.shardGeos?.length;
+    this.instCap = count;
     for (let i = 0; i < count; i++) {
       this.spawnShard(opts.parts?.[i], opts, px, py, pz, color);
     }
   }
 
+  // Primitive shards ride one InstancedMesh per shape family — a 14-shard
+  // ball kill was 14 draw calls + 14 material writes; now it's ≤1 call.
+  // Real body parts and caller-supplied shardGeos keep the mesh path
+  // (unique geometries can't share a bucket).
+  private instanced = false;
+  private insts: { mesh: THREE.InstancedMesh; free: number[] }[] = [];
+  private static primGeos = [
+    new THREE.TetrahedronGeometry(1, 0),
+    new THREE.DodecahedronGeometry(1, 0),
+    new THREE.IcosahedronGeometry(1, 0),
+    new THREE.CylinderGeometry(1, 1, 1, 3),  // brush twig — tapered via x/z scale
+    new THREE.SphereGeometry(1, 5, 4),       // goo droplet
+  ];
+  private static primMat = new THREE.MeshLambertMaterial();
+  private instCap = 32;
+
+  private instAlloc(prim: number): { inst: number; slot: number } {
+    let b = this.insts[prim];
+    if (!b) {
+      const mesh = new THREE.InstancedMesh(Debris.primGeos[prim]!, Debris.primMat, this.instCap);
+      mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      mesh.castShadow = false;
+      mesh.frustumCulled = false; // shards scatter; unit-geo bounds don't cover instances
+      b = this.insts[prim] = { mesh, free: [] };
+      this.scene.add(mesh);
+    }
+    const slot = b.free.length ? b.free.pop()! : b.mesh.count++;
+    return { inst: prim, slot };
+  }
+
+  private allocShard(prim: number, part: DebrisPart | undefined, opts: DebrisOptions,
+      s: { sw: number; sh: number; sd: number; cr: number; cg: number; cb: number;
+           x: number; y: number; z: number; sharedGeo: boolean }) {
+    const { sw, sh, sd, cr, cg, cb } = s;
+    if (this.instanced) {
+      const a = this.instAlloc(prim);
+      const m = this.insts[prim]!.mesh;
+      m.setColorAt(a.slot, _tmpColor.setRGB(cr, cg, cb));
+      if (m.instanceColor) m.instanceColor.needsUpdate = true;
+      return { mesh: null, mat: null, inst: a.inst, slot: a.slot,
+        radius: opts.kind === 'brush' ? 0.08 : opts.kind === 'goo' ? 0.06 : Math.max(sw, sh, sd) };
+    }
+    const geo = pickShardGeo(part, opts, sw, sh, sd);
+    const am = this.allocShardMesh(geo, cr, cg, cb);
+    am.mesh.position.set(s.x, s.y, s.z);
+    am.mesh.castShadow = false;
+    this.scene.add(am.mesh);
+    const radius = part ? (geo.boundingSphere?.radius ?? 0.3) * 0.35
+      : s.sharedGeo ? (geo.boundingSphere?.radius ?? 0.3) * 0.5
+      : Math.max(sw, sh, sd);
+    return { mesh: am.mesh, mat: am.mat, inst: -1, slot: -1, radius };
+  }
+
   private spawnShard(part: DebrisPart | undefined, opts: DebrisOptions,
       px: number, py: number, pz: number, color: THREE.Color): void {
-    const sw = 0.25 + Math.random() * 0.55;
-    const sh = 0.18 + Math.random() * 0.45;
-    const sd = 0.20 + Math.random() * 0.50;
-    const geo = pickShardGeo(part, opts, sw, sh, sd);
+    let sw = 0.25 + Math.random() * 0.55;
+    let sh = 0.18 + Math.random() * 0.45;
+    let sd = 0.20 + Math.random() * 0.50;
+    // Unit-primitive scale: brush twigs are thin rods, goo is droplets —
+    // same dims the old per-shard geometries baked in.
+    const prim = this.instanced ? pickShardPrim(opts) : -1;
+    if (prim === 3) [sw, sh, sd] = [0.011, 0.2 + Math.random() * 0.35, 0.011];
+    else if (prim === 4) sw = sh = sd = 0.05 + Math.random() * 0.1;
 
     const v   = 0.75 + Math.random() * 0.25;
     const cr  = color.r * v;
     const cg  = color.g * v;
     const cb  = color.b * v;
-    const { mesh, mat } = this.allocShardMesh(geo, cr, cg, cb);
-
-    const { o, vel } = shardLaunch(part, opts, px, py, pz);
-    mesh.position.set(px + o.x, py + o.y, pz + o.z);
-    mesh.castShadow = false;
-    this.scene.add(mesh);
-
     const sharedGeo = !!opts.shardGeos?.length;
     const tumble = 4.0 + Math.random() * 8.0;
 
+    const { o, vel } = shardLaunch(part, opts, px, py, pz);
+    const a = this.allocShard(prim, part, opts,
+      { sw, sh, sd, cr, cg, cb, x: px + o.x, y: py + o.y, z: pz + o.z, sharedGeo });
+
     this.shards.push({
-      mesh, mat,
+      mesh: a.mesh, mat: a.mat, inst: a.inst, slot: a.slot,
       x: px + o.x, y: py + o.y, z: pz + o.z,
       vx: vel.x, vy: vel.y, vz: vel.z,
       rx: (Math.random() - 0.5) * 2 * tumble,
       ry: (Math.random() - 0.5) * 2 * tumble,
       rz: (Math.random() - 0.5) * 2 * tumble,
+      ex: 0, ey: 0, ez: 0, flatY: 1, shrink: 1,
+      sw, sh, sd,
       life: (opts.kind === 'brush' ? 0.7 : 1) * (LIFE_BASE + Math.random() * LIFE_RAND),
       elapsed: 0,
-      radius: part ? (geo.boundingSphere?.radius ?? 0.3) * 0.35
-        : sharedGeo ? (geo.boundingSphere?.radius ?? 0.3) * 0.5
-        : opts.kind === 'brush' ? 0.08 : opts.kind === 'goo' ? 0.06 : Math.max(sw, sh, sd),
+      radius: a.radius,
       landed: false, landedAt: 0,
       cr, cg, cb, dead: false,
       trailTimer: 0,
@@ -153,9 +229,31 @@ export class Debris {
     if (alive === 0) this.dead = true;
   }
 
+  /** Instanced shards have no Mesh — pos/tumble/scale fold into the
+   *  slot's matrix; color folds into instanceColor. Called every step. */
+  writeShard(s: Shard): void {
+    const b = this.insts[s.inst];
+    if (!b) return;
+    _tmpE.set(s.ex, s.ey, s.ez);
+    _tmpQ.setFromEuler(_tmpE);
+    _tmpP.set(s.x, s.y, s.z);
+    const k = s.shrink;
+    _tmpS.set(s.sw * k, s.sh * s.flatY * k, s.sd * k);
+    _tmpMat.compose(_tmpP, _tmpQ, _tmpS);
+    b.mesh.setMatrixAt(s.slot, _tmpMat);
+    b.mesh.instanceMatrix.needsUpdate = true;
+  }
+
+  writeShardColor(s: Shard, r: number, g: number, b: number): void {
+    const bk = this.insts[s.inst];
+    if (!bk) return;
+    bk.mesh.setColorAt(s.slot, _tmpColor.setRGB(r, g, b));
+    if (bk.mesh.instanceColor) bk.mesh.instanceColor.needsUpdate = true;
+  }
+
   private stepShard(s: Shard, dt: number): boolean { return stepShard(this, s, dt); }
   private emitTrail(s: Shard, dt: number): void { emitTrail(s, dt); }
-  private greyShard(s: Shard): void { greyShard(s); }
+  private greyShard(s: Shard): void { greyShard(this, s); }
   private shrinkLanded(s: Shard): boolean { return shrinkLanded(this, s); }
 
   // Shared free-list — shard mesh+material outlive the Debris instance;
@@ -178,10 +276,15 @@ export class Debris {
   }
 
   removeShard(s: Shard): void {
-    this.scene.remove(s.mesh);
-    if (!s.sharedGeo) s.mesh.geometry.dispose();
+    if (s.mesh && s.mat) {
+      this.scene.remove(s.mesh);
+      if (!s.sharedGeo) s.mesh.geometry.dispose();
+      Debris.shardPool.push({ mesh: s.mesh, mat: s.mat });
+    } else {
+      const b = this.insts[s.inst];
+      if (b) { b.mesh.setMatrixAt(s.slot, _zeroM); b.mesh.instanceMatrix.needsUpdate = true; b.free.push(s.slot); }
+    }
     s.dead = true;
-    Debris.shardPool.push({ mesh: s.mesh, mat: s.mat });
   }
 
   dispose(): void {
@@ -194,6 +297,10 @@ export class Debris {
     for (const s of this.shards) {
       if (!s.dead) this.removeShard(s);
     }
+    for (const b of this.insts) {
+      if (b) { this.scene.remove(b.mesh); b.mesh.dispose(); }
+    }
+    this.insts = [];
   }
 }
 

@@ -32,6 +32,16 @@ export interface DebrisOptions {
 
 export type DebrisPart = NonNullable<DebrisOptions['parts']>[number];
 
+/** Primitive family index for the instanced path — same shapes as the
+ *  random branch below, but as a bucket id so shards can share one
+ *  InstancedMesh per family (14-20 shards per kill were 14-20 draws). */
+export function pickShardPrim(opts: DebrisOptions): number {
+  if (opts.kind === 'brush') return 3;
+  if (opts.kind === 'goo') return 4;
+  const t = Math.random();
+  return t < 0.4 ? 0 : t < 0.7 ? 1 : 2;
+}
+
 export function pickShardGeo(part: DebrisPart | undefined, opts: DebrisOptions, sw: number, sh: number, sd: number): THREE.BufferGeometry {
   if (part) return part.geo;
   if (opts.shardGeos?.length) {

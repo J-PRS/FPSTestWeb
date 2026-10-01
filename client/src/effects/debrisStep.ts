@@ -29,7 +29,7 @@ export function stepShard(d: Debris, s: Shard, dt: number): boolean {
       if (s.goo) {
         // Splat â€” sticks where it lands, flattens, shrinks away fast
         s.vy = 0; s.vx *= 0.1; s.vz *= 0.1;
-        s.mesh.scale.y = 0.25;
+        if (s.mesh) s.mesh.scale.y = 0.25; else s.flatY = 0.25;
       } else {
         s.vy  = -s.vy * (s.brush ? 0.25 : BOUNCE_Y); // twigs flop, not bounce
         s.vx *= FRICTION_XZ;
@@ -39,13 +39,20 @@ export function stepShard(d: Debris, s: Shard, dt: number): boolean {
       if (!s.landed) { s.landed = true; s.landedAt = s.elapsed; }
     }
 
-    s.mesh.position.set(s.x, s.y, s.z);
-    s.mesh.rotation.x += s.rx * dt;
-    s.mesh.rotation.y += s.ry * dt;
-    s.mesh.rotation.z += s.rz * dt;
+    if (s.mesh) {
+      s.mesh.position.set(s.x, s.y, s.z);
+      s.mesh.rotation.x += s.rx * dt;
+      s.mesh.rotation.y += s.ry * dt;
+      s.mesh.rotation.z += s.rz * dt;
+    } else {
+      s.ex += s.rx * dt;
+      s.ey += s.ry * dt;
+      s.ez += s.rz * dt;
+      d.writeShard(s);
+    }
 
     if (!s.landed) emitTrail(s, dt);
-    greyShard(s);
+    greyShard(d, s);
     return shrinkLanded(d, s);
   }
 
@@ -68,14 +75,14 @@ export function emitTrail(s: Shard, dt: number): void {
     }
   }
 
-export function greyShard(s: Shard): void {
+export function greyShard(d: Debris, s: Shard): void {
     const gt   = Math.min(s.elapsed / GREY_DUR, 1.0);
     const grey = s.cr * 0.299 + s.cg * 0.587 + s.cb * 0.114;
-    s.mat.color.setRGB(
-      s.cr + (grey - s.cr) * gt,
-      s.cg + (grey - s.cg) * gt,
-      s.cb + (grey - s.cb) * gt,
-    );
+    const r = s.cr + (grey - s.cr) * gt;
+    const g = s.cg + (grey - s.cg) * gt;
+    const b = s.cb + (grey - s.cb) * gt;
+    if (s.mat) s.mat.color.setRGB(r, g, b);
+    else d.writeShardColor(s, r, g, b);
   }
 
 export function shrinkLanded(d: Debris, s: Shard): boolean {
@@ -85,7 +92,9 @@ export function shrinkLanded(d: Debris, s: Shard): boolean {
       d.removeShard(s);
       return false;
     }
-    s.mesh.scale.setScalar(ft);
+    if (s.mesh) { s.mesh.scale.setScalar(ft); }
+    else { s.shrink = ft; }
+    d.writeShard(s);
     return true;
   }
 

@@ -17,6 +17,7 @@ import {
   Vector3 as QV3, Vector4 as QV4,
 } from 'three.quarks';
 import type { FunctionValueGenerator, GeneratorMemory, FunctionJSON } from 'three.quarks';
+import type { IParticleSystem } from 'quarks.core';
 import { CircleEmitter } from 'three.quarks';
 import { BLOOM_LAYER, EMIT_GAIN, GRAVITY } from '../core/config.js';
 import { getGlowTexture, getPuffTexture } from './glowTexture.js';
@@ -67,8 +68,18 @@ const VFX_SIM_RADIUS_SQ = 260 * 260;
 // (they're looping emitters owned by projectiles), so an owner that
 // forgets dispose() leaves the system attached forever — batcher.update
 // keeps simulating it. particleNum 0 across ~1s of frames = orphaned.
-const starveFrames = new Map<ParticleSystem, number>();
+const starveFrames = new Map<IParticleSystem, number>();
 const STARVE_LIMIT = 60;
+
+function reapStarved(ps: IParticleSystem): void {
+  const starved = ps.particleNum === 0 ? (starveFrames.get(ps) ?? 0) + 1 : 0;
+  if (starved > STARVE_LIMIT) {
+    batcher?.deleteSystem(ps);
+    scene?.remove((ps as ParticleSystem).emitter);
+    starveFrames.delete(ps);
+  } else if (starved) starveFrames.set(ps, starved);
+  else starveFrames.delete(ps);
+}
 
 export function updateVfx(dt: number, camPos?: THREE.Vector3): void {
   // Distance-pause BEFORE the batch sim: skip offscreen systems this frame.
@@ -79,14 +90,8 @@ export function updateVfx(dt: number, camPos?: THREE.Vector3): void {
         const em = ps.emitter as ParticleSystem['emitter'];
         ps.paused = em.position.distanceToSquared(camPos) > VFX_SIM_RADIUS_SQ;
       }
-      if (live.has(ps)) continue;
-      const starved = ps.particleNum === 0 ? (starveFrames.get(ps) ?? 0) + 1 : 0;
-      if (starved > STARVE_LIMIT) {
-        batcher.deleteSystem(ps);
-        scene?.remove(ps.emitter);
-        starveFrames.delete(ps);
-      } else if (starved) starveFrames.set(ps, starved);
-      else starveFrames.delete(ps);
+      if (live.has(ps as ParticleSystem)) continue;
+      reapStarved(ps);
     }
   }
   batcher?.update(dt);
