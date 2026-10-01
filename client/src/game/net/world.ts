@@ -109,7 +109,34 @@ function canonInteriorMat(mat: THREE.Material): { key: string; mat: THREE.Materi
   ].join('|');
   const hit = _canonMats.get(key);
   if (hit) return hit;
-  const entry = { key, mat };
+  // GLTFLoader gives every DIF interior MeshStandardMaterial — PBR shading
+  // on ~85k tris while the whole rest of the world runs Lambert. Downgrade
+  // here: interiors are static, unmapped geometry; Lambert keeps the same
+  // maps/emissive/AO for a fraction of the fragment cost.
+  let useMat: THREE.Material = mat;
+  if (std.isMeshStandardMaterial) {
+    const lam = new THREE.MeshLambertMaterial({
+      color: std.color,
+      map: std.map,
+      emissive: std.emissive,
+      emissiveMap: std.emissiveMap,
+      emissiveIntensity: std.emissiveIntensity,
+      normalMap: std.normalMap,
+      aoMap: std.aoMap,
+      aoMapIntensity: std.aoMapIntensity,
+      transparent: std.transparent,
+      opacity: std.opacity,
+      side: std.side,
+      alphaTest: std.alphaTest,
+      depthWrite: std.depthWrite,
+      flatShading: std.flatShading,
+      vertexColors: std.vertexColors,
+      fog: std.fog,
+    });
+    lam.name = std.name;
+    useMat = lam;
+  }
+  const entry = { key, mat: useMat };
   _canonMats.set(key, entry);
   return entry;
 }
