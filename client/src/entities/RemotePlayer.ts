@@ -134,6 +134,10 @@ export class RemotePlayer {
         this._model.setVisible(false);
       }
       logger.debug(`MODEL LOADED`, { playerId, instanceId: this.instanceId, isDead: this._isDead });
+    }).catch((e) => {
+      // load() rejects after 4 retries — the player stays a sphere
+      // gizmo; log once instead of an unhandled rejection.
+      logger.warn('Model load gave up', { playerId, error: String(e) });
     });
   }
 

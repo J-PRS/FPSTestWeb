@@ -121,5 +121,9 @@ export function wireNetworkHandlers(deps: NetDeps): void {
       return res.json() as Promise<{ room: string }>;
     },
     switchRoom: (name, map, bots, mode) => networkManager.switchRoom(name, map, bots, mode),
-  }));
+  })).catch((e) => {
+    // Endpoint resolution failing leaves no lobby button — log it so a
+    // dead /rooms host doesn't read as a missing feature.
+    logger.warn('Lobby browser unavailable', e);
+  });
 }

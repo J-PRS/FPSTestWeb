@@ -160,6 +160,9 @@ export class CoolShotManager {
         entry.clipData = undefined;
         this.onChanged?.(this.coolShots);
       }
+    }).catch((e) => {
+      // Upload failing must not eat the local copy — it stays downloadable.
+      logger.warn('Clip upload failed', e);
     });
     this.coolShots.push(entry);
     this.trimList();
