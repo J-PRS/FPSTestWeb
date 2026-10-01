@@ -27,10 +27,15 @@ interface TrailDot {
 // Dot pool — a trail cycles ~40 dots/sec and each spawn used to fresh-
 // alloc a Vector3 + Color + wrapper (~1400 objects/s across the roster).
 const _dotPool: TrailDot[] = [];
+// Freelist high-water mark — storage only, never a cap on live dots.
+// A burst can leave thousands idle; the per-frame trim drains the
+// excess so a quiet match doesn't keep the whole spike resident.
+const DOT_POOL_KEEP = 512;
 function takeDot(): TrailDot {
   return _dotPool.pop() ?? { pos: new THREE.Vector3(), age: 0, life: 0, haloSz: 0, coreSz: 0, tint: new THREE.Color(), wIdx: -1 };
 }
 function freeDot(d: TrailDot): void { _dotPool.push(d); }
+function trimDotPool(): void { if (_dotPool.length > DOT_POOL_KEEP) _dotPool.length = DOT_POOL_KEEP; }
 
 const _spawn = new THREE.Vector3();
 const _scatter = new THREE.Vector3();
@@ -222,6 +227,7 @@ export class BallTrailDots {
 
   fade(dt: number): void {
     if (this.slot < 0) return;
+    trimDotPool();
     for (let i = this.dots.length - 1; i >= 0; i--) {
       const d = this.dots[i];
       d.age += dt;

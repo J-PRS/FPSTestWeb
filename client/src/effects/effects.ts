@@ -131,7 +131,11 @@ interface BeamFx {
 export class EffectsManager {
   private scene: THREE.Scene;
   private particles: Particle[] = [];
+  // Freelist high-water marks — storage only, never a cap on live
+  // particles/beams. Post-burst excess is trimmed per frame.
   private deadP: Particle[] = [];
+  private static DEADP_KEEP = 512;
+  private static BEAM_KEEP = 32;
   private buckets: BatchMap<string, InstBucket> = new Map();
   sharedGeo: THREE.SphereGeometry;
   private sharedDiscGeo: THREE.CircleGeometry;
@@ -340,5 +344,7 @@ export class EffectsManager {
     for (const list of this.buckets.values()) {
       for (const bucket of list) if (!highOf.has(bucket)) bucket.mesh.count = 0;
     }
+    if (this.deadP.length > EffectsManager.DEADP_KEEP) this.deadP.length = EffectsManager.DEADP_KEEP;
+    if (this.beamPool.length > EffectsManager.BEAM_KEEP) this.beamPool.length = EffectsManager.BEAM_KEEP;
   }
 }
