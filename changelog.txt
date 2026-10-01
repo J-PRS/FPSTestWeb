@@ -1,3 +1,4 @@
+2026-10-01 - audit: report item 10 (bot family coverage)
 2026-10-01 - tests: botHunt scan/pickHunt/pickFire/retreat coverage
 2026-10-01 - tests: botSteer turn cap, slope/body avoidance
 2026-10-01 - tests: botGoals goal ladder + wander commitment

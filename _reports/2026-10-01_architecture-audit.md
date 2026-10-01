@@ -95,6 +95,15 @@ Scope: client/src, server_bun/src, shared. Goal: ease of future work, testabilit
    ExplosionTracker, frameBudget, keybinds — plus the earlier wire/demo/
    interp files. DOM test stub gained append/createTextNode/setTimeout/
    HTMLElement classes (what kept DOM-touching modules untestable).
+10. **Bot brain family fully covered** (server now 585 tests / 150
+   files): every shared bot module has direct tests — botHunt (scan/
+   acquire/fire cadence/retreat), botDisposition (dest ladder, deploy
+   gating, status intents), botGoals (goal priority ladder, wander
+   commitment/death-spot skip), botMoves (ski default, jet latch,
+   tank gating), botSteer (wrist-capped turns, slope/body avoidance),
+   botEscape (stuck→detour→jets), plus earlier botLos/botRand/projsim.
+   Each was tested through real `BotBrain`/`BrainCtx` stubs, so the
+   tests double as documentation of each decision ladder's order.
 8. **`.old` accumulation**: 28 soft-deleted files; the biggest cluster is
    the old adapter stack (Colyseus/Naia/FastAPI/Tribes2/Ghost/Move/Event/
    Stream managers, all superseded by NetworkManager). Scheduled user
