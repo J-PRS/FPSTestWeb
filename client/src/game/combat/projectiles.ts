@@ -7,13 +7,14 @@
 import * as THREE from 'three';
 import type { Projectile } from '../../projectiles/Projectile.js';
 import { getProjectileConfig } from '../../projectiles/index.js';
+import { setRibbonCamera, RibbonTrail } from '../../projectiles/RibbonTrail.js';
 import { Explosion } from '../../effects/explosion.js';
 import { AoeGizmo } from '../../effects/aoeGizmo.js';
 import { Implosion } from '../../effects/implosion.js';
 import { ScorchDecal } from '../../effects/scorch.js';
 import * as sfx from '../../core/sfx.js';
 import { screenShake } from '../../effects/screenShake.js';
-import { PENDING_ROCKET_TIMEOUT, EXPLOSION_VFX_RADIUS } from '../../core/config.js';
+import { EXPLOSION_VFX_RADIUS } from '../../core/config.js';
 import { urlParams } from '../../core/params.js';
 import { getWeaponStats, WeaponType, AOE_VFX_SCALE, ARMORNADE_ARMOR } from '../../../../shared/weapons.js';
 import { POWERUP } from '../../../../shared/pickups.js';
@@ -38,6 +39,8 @@ const AOE_DEBUG = urlParams.debug;
 // Remote player positions for projectile collision — rebuilt per frame into
 // the same Map (zeroed allocations in the hot loop)
 const _remotePlayerPositions = new Map<string, THREE.Vector3>();
+// Parallel armor-class map — the sweep needs each body's capsule size.
+const _remotePlayerClasses = new Map<string, string>();
 
 // ---- Projectile explosion processing (push or pull based on config) ----
 // VFX radius is decoupled from gameplay radius — aoeRadius intentionally
@@ -127,18 +130,12 @@ export function slam(c: CombatCtx, pos: THREE.Vector3, impactSpeed: number): voi
 }
 
 // ---- Update projectiles ----
-// Pending shots that never got a server ack age out — the registry is
-// the only thing linking our local projectile to its wire id.
-function prunePendingShots(c: CombatCtx): void {
-  const deps = c.deps;
-  const now = Date.now();
-  const registry = deps.world.projectileRegistry;
-  for (let i = registry.pending.length - 1; i >= 0; i--) {
-    const p = registry.pending[i];
-    if (now - (registry.pendingSince.get(p) || 0) > PENDING_ROCKET_TIMEOUT) {
-      registry.pending.splice(i, 1);
-      registry.pendingSince.delete(p);
-    }
+// Dead shells drop their nonce index entry — the map is the only link
+// between a live shell and its wire identity; leaking it grows forever.
+function pruneShots(c: CombatCtx): void {
+  const registry = c.deps.world.projectileRegistry;
+  for (const [sid, p] of registry.byShotId) {
+    if (p.dead) registry.byShotId.delete(sid);
   }
 }
 
@@ -154,11 +151,11 @@ function collectBoltIntercept(c: CombatCtx, p: Projectile): void {
   p.hitBolt = null;
   const at = p.hitPointValid ? p.hitPoint : p.pos;
   deps.consumeBolt(bolt);
-  boltCookoff(c, at);
+  boltCookoff(c, at, p.shooterId ?? undefined);
   if (!deps.cookBoltsNear) return;
   let frontier = deps.cookBoltsNear(at, BOLT_CHAIN_RADIUS);
   for (let pass = 0; pass < BOLT_CHAIN_PASSES && frontier.length; pass++) {
-    for (const bp of frontier) boltCookoff(c, bp);
+    for (const bp of frontier) boltCookoff(c, bp, p.shooterId ?? undefined);
     frontier = deps.cookBoltsNear(frontier[0], BOLT_CHAIN_RADIUS);
   }
 }
@@ -186,12 +183,17 @@ function chainStickies(c: CombatCtx, src: Projectile): void {
 export function updateProjectiles(c: CombatCtx, dt: number): void {
   const deps = c.deps;
   c.lg.tickBeam(dt); // beam fades ~80ms after the last tick
-  prunePendingShots(c);
+  pruneShots(c);
 
   const remotePlayerPositions = _remotePlayerPositions;
   remotePlayerPositions.clear();
+  const remotePlayerClasses = _remotePlayerClasses;
+  remotePlayerClasses.clear();
   deps.world.remotePlayers.forEach((rp, playerId) => {
-    if (!rp.isDead) remotePlayerPositions.set(playerId, rp.position);
+    if (!rp.isDead) {
+      remotePlayerPositions.set(playerId, rp.position);
+      if (rp.armorClass) remotePlayerClasses.set(playerId, rp.armorClass);
+    }
   });
 
   // Live turret shells + shield domes — collected once per frame, swept
@@ -200,9 +202,16 @@ export function updateProjectiles(c: CombatCtx, dt: number): void {
   const shields = deps.shieldObstacles?.();
   if (shields?.length) obstacles.push(...shields);
 
+  // Billboard ribbons re-side against this each frame — without it the
+  // strip stays locked to its spawn-plane and level shots read edge-on.
+  setRibbonCamera(deps.lazyCamera()?.position ?? null);
+  // GPU-side leak reaper: any ribbon slot left lit without a live owner
+  // (a path that skipped releaseSlot) gets blacked out before it can sit
+  // as a frozen streak — the count surfaces in the Alt+Q dump.
+  RibbonTrail.sweepLit();
   for (let i = deps.world.projectiles.length - 1; i >= 0; i--) {
     const p = deps.world.projectiles[i];
-    p.update(dt, deps.lazyTerrain(), deps.targets, remotePlayerPositions, obstacles);
+    p.update(dt, deps.lazyTerrain(), deps.targets, remotePlayerPositions, obstacles, remotePlayerClasses);
 
     collectBoltIntercept(c, p);
 
@@ -212,26 +221,31 @@ export function updateProjectiles(c: CombatCtx, dt: number): void {
       if (p.config.sticks) chainStickies(c, p);
     }
 
-    if (p.dead) {
-      const demoManager = deps.lazyDemoManager();
-      if (demoManager?.isRecording && p.demoProjectileId) {
-        demoManager.recordProjectileDestroyed(p.demoProjectileId, { x: p.pos.x, y: p.pos.y, z: p.pos.z });
-      }
-      p.dispose();
-      deps.world.projectiles.splice(i, 1);
-    }
+    if (p.dead) retireProjectile(deps, p, i);
   }
+}
+
+// Demo-replay bookkeeping rides on disposal so a recorded shot's destroy
+// event lands in the clip before its meshes leave the scene.
+function retireProjectile(deps: CombatCtx['deps'], p: Projectile, i: number): void {
+  const demoManager = deps.lazyDemoManager();
+  if (demoManager?.isRecording && p.demoProjectileId) {
+    demoManager.recordProjectileDestroyed(p.demoProjectileId, { x: p.pos.x, y: p.pos.y, z: p.pos.z });
+  }
+  p.dispose();
+  deps.world.projectiles.splice(i, 1);
 }
 
 // A cooked turret shell: its payload detonating where it was shot down.
 // No sendAOE — remote-player damage from a cookoff stays unclaimed (it's
 // environment-adjacent), but the blast still shoves/kills client-run
 // targets including the turret that lobbed it.
-function boltCookoff(c: CombatCtx, pos: THREE.Vector3): void {
+function boltCookoff(c: CombatCtx, pos: THREE.Vector3, shooterId?: string): void {
   processProjectileExplosion(c, {
     pos, radius: BOLT_MEGA_RADIUS, force: BOLT_MEGA_FORCE, forceMode: 'push',
     aoeDamage: BOLT_MEGA_DAMAGE,
     falloffMultiplier: 1, collisionMultiplier: 1, forceMultiplier: 1,
     directHit: true, explosionTint: 0xffaa44, vfxRadius: BOLT_MEGA_RADIUS,
+    shooterId, // a bot's interception reads as the bot's blast, not mine
   });
 }

@@ -21,9 +21,10 @@ const _dir = new THREE.Vector3();
  */
 const MAX_TRAILS = 512;
 
-class TrailBatch {
+export class TrailBatch {
   geo = new THREE.BufferGeometry();
   mesh: THREE.Mesh;
+  scene: THREE.Scene;
   pos: Float32Array;
   col: Float32Array;
   posAttr: THREE.BufferAttribute;
@@ -48,6 +49,7 @@ class TrailBatch {
   slotsDirty = true;
 
   constructor(scene: THREE.Scene) {
+    this.scene = scene;
     this.pos = new Float32Array(MAX_TRAILS * VERTS * 3);
     this.col = new Float32Array(MAX_TRAILS * VERTS * 3);
     this.posAttr = new THREE.BufferAttribute(this.pos, 3);
@@ -77,6 +79,9 @@ class TrailBatch {
     this.mesh = new THREE.Mesh(this.geo, mat);
     this.mesh.frustumCulled = false;
     this.mesh.layers.enable(BLOOM_LAYER);
+    // Aim-probe tag — the crosshair raycast resolves a slot via faceIndex
+    // back to whichever RibbonTrail owns it (or proves it ownerless).
+    this.mesh.userData.dbg = { kind: 'trailBatch', batch: this };
     for (let s = MAX_TRAILS - 1; s >= 0; s--) this.free.push(s);
     scene.add(this.mesh);
   }
@@ -105,11 +110,36 @@ class TrailBatch {
   }
 }
 
-const batches = new Map<THREE.Scene, TrailBatch>();
-function batchFor(scene: THREE.Scene): TrailBatch {
-  let b = batches.get(scene);
-  if (!b) { b = new TrailBatch(scene); batches.set(scene, b); }
+// A scene's trails live in a LIST of batches — 512 slots each. Overflow
+// spawns another batch (one more draw call) instead of starving ribbons;
+// emptied overflow batches shrink back away on release.
+const batches = new Map<THREE.Scene, TrailBatch[]>();
+
+/** Camera position for callers that can't thread one into update() —
+ *  updateProjectiles stamps this once per frame so projectile ribbons can
+ *  billboard (ball ribbons get theirs via an explicit argument instead). */
+let sharedCamPos: THREE.Vector3 | null = null;
+export function setRibbonCamera(pos: THREE.Vector3 | null): void { sharedCamPos = pos; }
+
+function claimableBatch(scene: THREE.Scene): TrailBatch {
+  let list = batches.get(scene);
+  if (!list) { list = [new TrailBatch(scene)]; batches.set(scene, list); }
+  for (const b of list) if (b.free.length > 0) return b;
+  const b = new TrailBatch(scene);
+  list.push(b);
   return b;
+}
+
+/** Triangles per ribbon slot — the aim probe maps faceIndex → slot. */
+export const RIBBON_TRIS_PER_SLOT = IDX / 3;
+
+/** Any nonzero float in a slot's color span = pixels still on screen.
+ *  Scans are bounded by the high-water mark — slots above it were never
+ *  used, so they're provably black. */
+function slotLit(b: TrailBatch, s: number): boolean {
+  const base = s * VERTS * 3;
+  for (let i = 0; i < VERTS * 3; i++) if (b.col[base + i] !== 0) return true;
+  return false;
 }
 
 export class RibbonTrail {
@@ -134,6 +164,10 @@ export class RibbonTrail {
   private _camY = NaN;
   private _camZ = NaN;
   private stopped = false;
+  // Wall-clock of the last update() call — the orphan detector: every
+  // owner ticks its ribbons each frame, so a stale stamp means the owner
+  // died without dispose (leaked slot + frozen streak on screen).
+  private lastUpdateAt = 0;
 
   // Direction per sample — needed by billboard mode to derive the camera-facing
   // side vector at update time (side can't be frozen at push since view moves)
@@ -169,13 +203,133 @@ export class RibbonTrail {
     return new RibbonTrail(scene, color, width, life, vOffset, billboard);
   }
 
+  private static liveSet = new Set<RibbonTrail>();
+  /** Debug dump for __trailDump — one row per live ribbon. */
+  static dump(): Record<string, unknown>[] {
+    const now = performance.now();
+    const out: Record<string, unknown>[] = [];
+    for (const r of RibbonTrail.liveSet) {
+      // head pos + a centroid over live samples — enough to point at the
+      // on-screen streak a slot is actually drawing.
+      let cx = 0, cy = 0, cz = 0;
+      for (let i = 0; i < r.count; i++) { cx += r.px[i]; cy += r.py[i]; cz += r.pz[i]; }
+      const n = Math.max(1, r.count);
+      out.push({
+        slot: r.slot, count: r.count, pushed: r.pushed, stopped: r.stopped,
+        life: r.life, bb: r.billboard, done: r.done,
+        lit: r.slot >= 0 && slotLit(r.batch, r.slot),
+        starved: r.starvedPushes,
+        time: +r.time.toFixed(1),
+        head: r.head >= 0
+          ? `${r.px[r.head].toFixed(0)},${r.py[r.head].toFixed(0)},${r.pz[r.head].toFixed(0)}` : '-',
+        mid: `${(cx / n).toFixed(0)},${(cy / n).toFixed(0)},${(cz / n).toFixed(0)}`,
+        updMs: Math.round(now - r.lastUpdateAt),
+      });
+    }
+    return out;
+  }
+
+  /** Aim-probe lookup: the RibbonTrail holding (batch, slot), or a
+ *  {owner:false, lit} verdict proving a lit slot nobody owns. */
+  static identify(batch: TrailBatch, slot: number): Record<string, unknown> {
+    for (const r of RibbonTrail.liveSet) {
+      if (r.batch !== batch || r.slot !== slot) continue;
+      return {
+        slot, owner: true, stopped: r.stopped, done: r.done, bb: r.billboard,
+        life: r.life, count: r.count, time: +r.time.toFixed(1),
+        head: r.head >= 0
+          ? `${r.px[r.head].toFixed(0)},${r.py[r.head].toFixed(0)},${r.pz[r.head].toFixed(0)}` : '-',
+        updMs: Math.round(performance.now() - r.lastUpdateAt),
+      };
+    }
+    return { slot, owner: false, lit: slotLit(batch, slot) };
+  }
+
+  /** Ribbons no owner has updated within `staleMs` — leaked slots. */
+  static orphans(staleMs = 1000): { count: number; slots: number[]; rows: Record<string, unknown>[] } {
+    const now = performance.now();
+    const slots: number[] = [];
+    const rows: Record<string, unknown>[] = [];
+    for (const r of RibbonTrail.liveSet) {
+      if (now - r.lastUpdateAt <= staleMs) continue;
+      if (r.slot >= 0) slots.push(r.slot);
+      rows.push({ slot: r.slot, bb: r.billboard, count: r.count, stopped: r.stopped, updMs: Math.round(now - r.lastUpdateAt) });
+    }
+    return { count: rows.length, slots, rows };
+  }
+  /** Slots lit in the batch color buffer — and, more importantly, slots
+   *  lit WITHOUT a `used` owner. orphans() only sees stale RibbonTrail
+   *  objects; a slot leaked by a path that bypassed releaseSlot keeps its
+   *  last pixels on screen forever with no object left to blame. */
+  static litAudit(): { lit: number; unowned: number[] } {
+    const unowned: number[] = [];
+    let lit = 0;
+    for (const list of batches.values()) {
+      for (const b of list) {
+        for (let s = 0; s < b.hw; s++) {
+          if (!slotLit(b, s)) continue;
+          lit++;
+          if (!b.used.has(s)) unowned.push(s);
+        }
+      }
+    }
+    return { lit, unowned };
+  }
+
+  static reapedLit = 0;
+  /** Sweep unowned lit slots to black — the auto-heal half of litAudit,
+   *  so any undiscovered leak path self-cleans instead of freezing a
+   *  streak midair. Runs once per frame from updateProjectiles. */
+  static sweepLit(): void {
+    for (const list of batches.values()) {
+      for (const b of list) {
+        let dirty = false;
+        for (let s = 0; s < b.hw; s++) {
+          if (b.used.has(s) || !slotLit(b, s)) continue;
+          const base = s * VERTS * 3;
+          b.col.fill(0, base, base + VERTS * 3);
+          b.mark(base, base + VERTS * 3);
+          dirty = true;
+          RibbonTrail.reapedLit++;
+        }
+        if (dirty) b.flush();
+      }
+    }
+  }
+
+  /** Per-ribbon state for the Alt+Q dump — pairs a dead lane with its shell. */
+  dbg(): { slot: number; count: number; stopped: boolean; lit: boolean; starved: number } {
+    return {
+      slot: this.slot, count: this.count, stopped: this.stopped,
+      lit: this.slot >= 0 && slotLit(this.batch, this.slot),
+      starved: this.starvedPushes,
+    };
+  }
+  /** Batch census — a slot that's "live" but past drawRange or in an
+   *  invisible mesh explains ribbons that exist but never render. */
+  static batchStats(): Record<string, unknown>[] {
+    const out: Record<string, unknown>[] = [];
+    for (const [scene, list] of batches) {
+      for (const b of list) {
+        out.push({
+          idx: list.indexOf(b), free: b.free.length, used: b.used.size, hw: b.hw,
+          drawRange: b.geo.drawRange.count, meshVisible: b.mesh.visible,
+          inScene: b.mesh.parent === scene,
+        });
+      }
+    }
+    return out;
+  }
+
   private claimSlot(scene: THREE.Scene): void {
-    this.batch = batchFor(scene);
-    this.slot = this.batch.free.pop() ?? -1;
-    if (this.slot >= 0) { this.batch.used.add(this.slot); this.batch.slotsDirty = true; this._lf.fill(-1); }
+    this.batch = claimableBatch(scene);
+    this.slot = this.batch.free.pop()!;
+    RibbonTrail.liveSet.add(this);
+    this.batch.used.add(this.slot); this.batch.slotsDirty = true; this._lf.fill(-1);
   }
 
   private releaseSlot(): void {
+    RibbonTrail.liveSet.delete(this);
     if (this.slot < 0) return;
     const b = this.slot * VERTS * 3;
     this.batch.pos.fill(0, b, b + VERTS * 3);
@@ -192,6 +346,15 @@ export class RibbonTrail {
     // stay packed at the front of the index buffer for drawRange.
     this.batch.free.sort((x, y) => y - x);
     this.slot = -1;
+    // Shrink: an emptied overflow batch is retired — batch 0 is the floor.
+    if (this.batch.used.size === 0) {
+      const list = batches.get(this.batch.scene);
+      if (list && list.length > 1 && list[0] !== this.batch) {
+        list.splice(list.indexOf(this.batch), 1);
+        this.batch.scene.remove(this.batch.mesh);
+        this.batch.geo.dispose();
+      }
+    }
   }
 
   private reinit(scene: THREE.Scene, color: number, width: number, life: number, vOffset: number): void {
@@ -205,6 +368,7 @@ export class RibbonTrail {
     this.count = 0;
     this.pushed = 0;
     this.liveFrom = 0;
+    this.starvedPushes = 0;
     this._lf.fill(-1);
     this.claimSlot(scene);
   }
@@ -218,11 +382,15 @@ export class RibbonTrail {
     this.claimSlot(scene);
   }
 
+  // Pushes rejected for near-zero velocity — a ribbon whose starved count
+  // climbs while count stays 0 emits nothing (silent no-trail bug).
+  private starvedPushes = 0;
+
   /** Record a new sample at the projectile's current position/facing. */
   push(pos: THREE.Vector3, vel: THREE.Vector3): void {
     if (this.stopped) return;
     _dir.copy(vel);
-    if (_dir.lengthSq() < 1e-6) return;
+    if (_dir.lengthSq() < 1e-6) { this.starvedPushes++; return; }
     _dir.normalize();
     // Side vector: perpendicular to velocity, biased to the world-horizontal plane
     _side.crossVectors(_dir, Math.abs(_dir.y) < 0.95 ? _up : _fwd).normalize();
@@ -254,6 +422,7 @@ export class RibbonTrail {
     this.count = 0;
     this.pushed = 0;
     this.liveFrom = 0;
+    this.starvedPushes = 0;
     if (this.slot >= 0) {
       const b = this.slot * VERTS * 3;
       this.batch.col.fill(0, b, b + VERTS * 3);
@@ -269,21 +438,11 @@ export class RibbonTrail {
   }
 
   update(dt: number, camPos?: THREE.Vector3): void {
+    this.lastUpdateAt = performance.now();
+    camPos = camPos ?? sharedCamPos ?? undefined;
     this.time += dt;
     if (this.slot < 0 || this.count < 2) return;
-    // Trails live <0.5s — halving their rewrite cadence made fades visibly
-    // steppy, and a steppy trail reads as broken, not as optimized.
-    const dx = camPos ? camPos.x - this.px[this.head] : 0;
-    const dy = camPos ? camPos.y - this.py[this.head] : 0;
-    const dz = camPos ? camPos.z - this.pz[this.head] : 0;
-    const far = dx * dx + dy * dy + dz * dz > 200 * 200;
-
-    // Billboard sides only change when the camera moves — a parked camera
-    // makes the per-sample cross-product + position rewrite a pure no-op.
-    const camMoved = !camPos
-      || this._camX !== camPos.x || this._camY !== camPos.y || this._camZ !== camPos.z;
-    if (camPos) { this._camX = camPos.x; this._camY = camPos.y; this._camZ = camPos.z; }
-
+    const { camMoved, rebillboard } = this.cameraState(camPos);
     const pos = this.batch.pos;
     const base = this.slot * VERTS * 3;
     // Positions only move when new samples arrive (or a billboard needs
@@ -291,13 +450,29 @@ export class RibbonTrail {
     // only its colors fade.
     const freshFrom = this.freshFromIndex(camMoved);
     this.pushed = 0;
-    const rebillboard = camPos && camMoved && !far ? camPos : undefined;
     const wrote = this.rewriteSamples(base, pos, freshFrom, rebillboard);
     const dirty = this.glueBoundary(base, pos) || wrote;
     if (dirty) {
       this.batch.mark(base, base + this.count * 6);
       this.batch.flush();
     }
+  }
+
+  /** Billboard bookkeeping: camMoved gates whether OLD samples get
+   *  re-sided (freshFrom=0), while rebillboard carries the camera for
+   *  FRESH samples — those always need the camera-facing side even when
+   *  the camera is parked, else new verts keep the spawn-plane side and
+   *  render edge-on. Past 200m the strip is sub-pixel, so skip the
+   *  cross-product entirely. */
+  private cameraState(camPos?: THREE.Vector3): { camMoved: boolean; rebillboard?: THREE.Vector3 } {
+    if (!camPos) return { camMoved: true };
+    const dx = camPos.x - this.px[this.head];
+    const dy = camPos.y - this.py[this.head];
+    const dz = camPos.z - this.pz[this.head];
+    const far = dx * dx + dy * dy + dz * dz > 200 * 200;
+    const camMoved = this._camX !== camPos.x || this._camY !== camPos.y || this._camZ !== camPos.z;
+    this._camX = camPos.x; this._camY = camPos.y; this._camZ = camPos.z;
+    return { camMoved, rebillboard: this.billboard && !far ? camPos : undefined };
   }
 
   private rewriteSamples(base: number, pos: Float32Array, freshFrom: number, rebillboard?: THREE.Vector3): boolean {
@@ -336,8 +511,10 @@ export class RibbonTrail {
     if (this._lf[i] === fq) return false;
     this._lf[i] = fq;
     const col = this.batch.col;
-    const e = EMIT_GAIN * fade;
-    col[o] = this.baseColor.r * e; col[o + 1] = this.baseColor.g * e; col[o + 2] = this.baseColor.b * e;
+    const v = EMIT_GAIN * (fq / 255);
+    col[o] = this.baseColor.r * v;
+    col[o + 1] = this.baseColor.g * v;
+    col[o + 2] = this.baseColor.b * v;
     col[o + 3] = col[o]; col[o + 4] = col[o + 1]; col[o + 5] = col[o + 2];
     return true;
   }

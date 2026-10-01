@@ -73,9 +73,12 @@ export interface ProjectileMeshes {
 // Now all shells of a kind share one InstancedMesh: the returned Mesh
 // is a state object (position/quaternion/scale) that never enters the
 // scene — instanceSync() copies its transform into the slot each frame.
-const INST_CAP = 64;
-interface InstPool { mesh: THREE.InstancedMesh; free: number[] }
-const instPools = new Map<string, InstPool>();
+const INST_CAP = 256; // per InstancedMesh — overflow grows a sibling mesh
+interface InstPool { mesh: THREE.InstancedMesh; free: number[]; scene: THREE.Scene }
+// A kind's shells live in a LIST of pools — overflow spawns another
+// InstancedMesh (one more draw call) instead of starving; emptied overflow
+// meshes shrink back away on release.
+const instPools = new Map<string, InstPool[]>();
 const _instMat = new THREE.Matrix4();
 const _zeroScale = new THREE.Vector3(0, 0, 0);
 
@@ -83,28 +86,31 @@ interface SlotTag { __inst?: { pool: InstPool; slot: number } }
 
 function instPoolFor(scene: THREE.Scene, kind: string, geo: THREE.BufferGeometry, mat: THREE.Material): InstPool {
   const key = scene.uuid + '|' + kind; // pools die with their scene — no cross-scene reuse
-  let p = instPools.get(key);
-  if (!p) {
-    const mesh = new THREE.InstancedMesh(geo, mat, INST_CAP);
-    mesh.matrixWorldAutoUpdate = false;
-    mesh.frustumCulled = false; // shells scatter; per-instance bounds don't exist
-    mesh.count = 0;
-    mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    mesh.layers.enable(BLOOM_LAYER);
-    scene.add(mesh);
-    p = { mesh, free: [] };
-    instPools.set(key, p);
-  }
+  let list = instPools.get(key);
+  if (!list) { list = []; instPools.set(key, list); }
+  for (const p of list) if (p.free.length || p.mesh.count < INST_CAP) return p;
+  const mesh = new THREE.InstancedMesh(geo, mat, INST_CAP);
+  mesh.matrixWorldAutoUpdate = false;
+  mesh.frustumCulled = false; // shells scatter; per-instance bounds don't exist
+  mesh.count = 0;
+  mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  mesh.layers.enable(BLOOM_LAYER);
+  scene.add(mesh);
+  const p = { mesh, free: [], scene };
+  mesh.userData.dbg = { kind: 'instPool', label: kind, pool: p };
+  list.push(p);
   return p;
 }
 
 function instAlloc(pool: InstPool): number {
-  return pool.free.length ? pool.free.pop()! : pool.mesh.count++;
+  if (pool.free.length) return pool.free.pop()!;
+  // instPoolFor only hands out pools with room, so count is always < cap
+  return pool.mesh.count++;
 }
 
 export function syncProjectileInstance(m: THREE.Mesh | null): void {
   const t = (m as SlotTag | null)?.__inst;
-  if (!t) return;
+  if (!t || t.slot < 0) return;
   _instMat.compose(m!.position, m!.quaternion, m!.scale);
   t.pool.mesh.setMatrixAt(t.slot, _instMat);
   t.pool.mesh.instanceMatrix.needsUpdate = true;
@@ -112,12 +118,39 @@ export function syncProjectileInstance(m: THREE.Mesh | null): void {
 
 export function releaseProjectileInstance(m: THREE.Mesh | null): void {
   const t = (m as SlotTag | null)?.__inst;
-  if (!t) return;
+  if (!t || t.slot < 0) return;
   _instMat.compose(m!.position, m!.quaternion, _zeroScale);
   t.pool.mesh.setMatrixAt(t.slot, _instMat);
   t.pool.mesh.instanceMatrix.needsUpdate = true;
   t.pool.free.push(t.slot);
   delete (m as SlotTag).__inst;
+  // Shrink: an overflow mesh whose slots are ALL free is retired — the
+  // first pool per kind is the floor so the common case stays one draw.
+  if (t.pool.free.length === t.pool.mesh.count) {
+    for (const [key, list] of instPools) {
+      const i = list.indexOf(t.pool);
+      if (i > 0) {
+        list.splice(i, 1);
+        t.pool.scene.remove(t.pool.mesh);
+        t.pool.mesh.dispose();
+        if (!list.length) instPools.delete(key);
+        break;
+      }
+    }
+  }
+}
+
+/** Instancing census for the Alt+Q dump — pool count per shell kind plus
+ *  total allocated/free slots; a count that grows unboundedly or a free
+ *  stack that never drains is a release-side leak. */
+export function instPoolDump(): Record<string, { pools: number; count: number; free: number }> {
+  const out: Record<string, { pools: number; count: number; free: number }> = {};
+  for (const [key, list] of instPools) {
+    let count = 0, free = 0;
+    for (const p of list) { count += p.mesh.count; free += p.free.length; }
+    out[key.slice(key.indexOf('|') + 1)] = { pools: list.length, count, free };
+  }
+  return out;
 }
 
 // Spawn-scale so a 0.4s shotgun pellet still snaps to size fast.
@@ -172,13 +205,16 @@ export function buildProjectileMeshes(
     // 3 lanes: wide outer band + thin bright core pair offset above/below —
     // reads as a glowing energy streak with depth instead of a flat line
     const coreColor = new THREE.Color(color).lerp(new THREE.Color(0xffffff), 0.6).getHex();
+    // billboard=true: the strip re-sides to face the camera each frame —
+    // the fixed-horizontal variant was edge-on to every level shot and
+    // rendered as a zero-pixel line (ball ribbons already do this).
     if (config.ribbonLanes === 1) {
-      ribbons = [RibbonTrail.acquire(scene, color, width, life)];
+      ribbons = [RibbonTrail.acquire(scene, color, width, life, 0, true)];
     } else {
       ribbons = [
-        RibbonTrail.acquire(scene, color, width, life),
-        RibbonTrail.acquire(scene, coreColor, width * 0.35, life * 0.8, width * 0.07),
-        RibbonTrail.acquire(scene, coreColor, width * 0.35, life * 0.8, -width * 0.07),
+        RibbonTrail.acquire(scene, color, width, life, 0, true),
+        RibbonTrail.acquire(scene, coreColor, width * 0.35, life * 0.8, width * 0.07, true),
+        RibbonTrail.acquire(scene, coreColor, width * 0.35, life * 0.8, -width * 0.07, true),
       ];
     }
   }

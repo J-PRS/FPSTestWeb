@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import { Explosion } from '../effects/explosion.js';
 import { getGlowTexture } from '../effects/glowTexture.js';
+import { RibbonTrail } from '../projectiles/RibbonTrail.js';
 import * as sfx from '../core/sfx.js';
 import type { DeployDeps } from './deployables.js';
 
@@ -25,6 +26,12 @@ const _rktGlowMat = new THREE.SpriteMaterial({
   blending: THREE.AdditiveBlending, depthWrite: false,
 });
 const _FWD = new THREE.Vector3(0, 0, 1);
+// Ribbon colors — hot orange band, white-hot core pair. Same 3-lane recipe
+// as live projectiles so a sentry rocket reads as the same class of threat.
+const RKTT_COLOR = 0xff9944;
+const RKTT_CORE = new THREE.Color(RKTT_COLOR).lerp(new THREE.Color(0xffffff), 0.6).getHex();
+const RKTT_W = 0.32;
+const RKTT_LIFE = 0.4;
 
 interface Rocket {
   pos: THREE.Vector3;
@@ -37,10 +44,14 @@ interface Rocket {
    *  Damage numbers only fire on unattributed (mine) hits. */
   owner?: string;
   group: THREE.Group;
+  ribbons: RibbonTrail[];
 }
 
 export class DeployRockets {
   private rockets: Rocket[] = [];
+  /** Stopped ribbons still fade — a detonated missile's streak burns out
+   *  in place instead of vanishing frame-perfect with the mesh. */
+  private dying: RibbonTrail[][] = [];
   private _rktDir = new THREE.Vector3();
   private _rktAim = new THREE.Vector3();
   private _zeroVel = new THREE.Vector3();
@@ -63,6 +74,13 @@ export class DeployRockets {
       pos: muzzle.clone(),
       vel: new THREE.Vector3(),
       target, ttl: ROCKET_TTL, puff: 0, dmgScale, owner, group,
+      // Same lane recipe as Projectile visuals: wide tint band + thin hot
+      // core pair offset above/below the band's plane.
+      ribbons: [
+        RibbonTrail.acquire(this.deps.scene, RKTT_COLOR, RKTT_W, RKTT_LIFE),
+        RibbonTrail.acquire(this.deps.scene, RKTT_CORE, RKTT_W * 0.35, RKTT_LIFE * 0.8, RKTT_W * 0.07),
+        RibbonTrail.acquire(this.deps.scene, RKTT_CORE, RKTT_W * 0.35, RKTT_LIFE * 0.8, -RKTT_W * 0.07),
+      ],
     };
     if (!target) { // fired with no live target — lob up-forward, no homing
       const yaw = this.deps.lazyPlayer().yaw;
@@ -90,7 +108,19 @@ export class DeployRockets {
       this.step(r, dt);
       if (r.ttl <= 0) {
         this.deps.scene.remove(r.group); // detonate already removed; ttl cut is the safety
+        for (const t of r.ribbons) t.stop();
+        this.dying.push(r.ribbons);
         this.rockets.splice(i, 1);
+        continue;
+      }
+      for (const t of r.ribbons) { t.push(r.pos, r.vel); t.update(dt); }
+    }
+    for (let i = this.dying.length - 1; i >= 0; i--) {
+      const set = this.dying[i]!;
+      for (const t of set) t.update(dt);
+      if (set.every(t => t.done)) {
+        for (const t of set) t.dispose(this.deps.scene);
+        this.dying.splice(i, 1);
       }
     }
   }
@@ -161,7 +191,12 @@ export class DeployRockets {
   }
 
   dispose(): void {
-    for (const r of this.rockets) this.deps.scene.remove(r.group);
+    for (const r of this.rockets) {
+      this.deps.scene.remove(r.group);
+      for (const t of r.ribbons) t.dispose(this.deps.scene);
+    }
     this.rockets.length = 0;
+    for (const set of this.dying) for (const t of set) t.dispose(this.deps.scene);
+    this.dying.length = 0;
   }
 }
