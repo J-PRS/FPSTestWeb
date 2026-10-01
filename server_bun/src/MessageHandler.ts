@@ -159,53 +159,51 @@ export class MessageHandler {
 
     // Per-type dispatch — a new message type is one table entry. Field
     // order: handlers need this.combat, so the table is built last.
+    // The mapped type narrows `m` per key, so entries never cast — and a
+    // ClientMessage type with no entry is a table the compiler can see.
     this.handlers = {
-      position: (id, m) => this.moves.handlePosition(id, m as Extract<ClientMessage, { type: 'position' }>),
-      teleport: (id, m) => this.moves.handleTeleport(id, m as Extract<ClientMessage, { type: 'teleport' }>),
-      shot: (id, m) => this.combat.handleShot(id, m as Extract<ClientMessage, { type: 'shot' }>),
-      aoeShot: (id, m) => this.combat.handleAOEShot(id, m as Extract<ClientMessage, { type: 'aoeShot' }>),
-      shotFired: (id, m) => this.combat.handleShotFired(id, m as Extract<ClientMessage, { type: 'shotFired' }>),
-      jump: (id, m) => this.relayPresenceEvent(id, m as Extract<ClientMessage, { type: 'jump' }>),
-      jetpack: (id, m) => this.relayPresenceEvent(id, m as Extract<ClientMessage, { type: 'jetpack' }>),
-      projectileDestroy: (id, m) => this.combat.handleProjectileDestroy(id, m as Extract<ClientMessage, { type: 'projectileDestroy' }>),
-      environmentDamage: (id, m) => this.combat.handleEnvironmentDamage(id, m as Extract<ClientMessage, { type: 'environmentDamage' }>),
-      heal: (id, m) => this.combat.handleHeal(id, m as Extract<ClientMessage, { type: 'heal' }>),
-      deploy: (id, m) => this.roomInfo.onDeploy?.(id, (m as Extract<ClientMessage, { type: 'deploy' }>).kind, (m as Extract<ClientMessage, { type: 'deploy' }>).position),
-      repair: (id, m) => this.roomInfo.onRepair?.(id, (m as Extract<ClientMessage, { type: 'repair' }>).targetId),
+      position: (id, m) => this.moves.handlePosition(id, m),
+      teleport: (id, m) => this.moves.handleTeleport(id, m),
+      shot: (id, m) => this.combat.handleShot(id, m),
+      aoeShot: (id, m) => this.combat.handleAOEShot(id, m),
+      shotFired: (id, m) => this.combat.handleShotFired(id, m),
+      jump: (id, m) => this.relayPresenceEvent(id, m),
+      jetpack: (id, m) => this.relayPresenceEvent(id, m),
+      projectileDestroy: (id, m) => this.combat.handleProjectileDestroy(id, m),
+      environmentDamage: (id, m) => this.combat.handleEnvironmentDamage(id, m),
+      heal: (id, m) => this.combat.handleHeal(id, m),
+      deploy: (id, m) => this.roomInfo.onDeploy?.(id, m.kind, m.position),
+      repair: (id, m) => this.roomInfo.onRepair?.(id, m.targetId),
       creatureHit: (id, m) => {
-        const h = m as Extract<ClientMessage, { type: 'creatureHit' }>;
-        this.ballSim?.handleHit(id, h.id, h.damage, h.kx, h.ky, h.kz);
+        this.ballSim?.handleHit(id, m.id, m.damage, m.kx, m.ky, m.kz);
       },
       crawlerHit: (id, m) => {
-        const h = m as Extract<ClientMessage, { type: 'crawlerHit' }>;
-        this.creatureSim?.handleHit(id, h.id, h.damage);
+        this.creatureSim?.handleHit(id, m.id, m.damage);
       },
       inputMove: (id, m) => {
         const p = this.playerManager.getPlayer(id);
         if (!p || p.isDead) return;
-        const msg = m as Extract<ClientMessage, { type: 'inputMove' }>;
-        const i = msg.input;
+        const i = m.input;
         // Stale input events (reordered datagrams) must not touch skiing/
         // status either — the sim's seq gate decides before we commit.
         const newStatus = (i.status ?? 0) & CLIENT_STATUS_MASK;
-        if (this.roomInfo.moveInput?.(id, i, newStatus, msg.seq) === false) return;
+        if (this.roomInfo.moveInput?.(id, i, newStatus, m.seq) === false) return;
         p.skiing = i.ski ? 1 : 0;
         p.status = newStatus;
       },
       // Room-scoped relay — broadcast() only reaches this room's sockets.
       chat: (id, m) => {
-        const msg = m as Extract<ClientMessage, { type: 'chat' }>;
         const sender = this.playerManager.getPlayer(id);
         // Truncate — the relay is the broadcast ceiling too, so an
         // oversized payload would amplify one client's bandwidth into
         // every socket in the room.
-        const text = typeof msg.text === 'string' ? msg.text.slice(0, 280) : '';
+        const text = typeof m.text === 'string' ? m.text.slice(0, 280) : '';
         if (!text) return;
         // Team channel: only the sender's own team hears it — and only
         // when the sender actually carries a team, else a ffa client
         // claiming 'team' would quietly self-filter to nobody.
-        const vgs = typeof msg.vgs === 'string' ? msg.vgs : undefined;
-        if (msg.team && sender?.team) {
+        const vgs = typeof m.vgs === 'string' ? m.vgs : undefined;
+        if (m.team && sender?.team) {
           for (const [pid, p] of this.playerManager.getAllPlayers()) {
             if (p.team === sender.team) this.sendToPlayer(pid, { type: 'chat', playerId: id, text, team: true, vgs });
           }
@@ -218,7 +216,7 @@ export class MessageHandler {
         if (!p) return;
         p.lastSeen = Date.now(); // ping is a liveness signal too —
         // without it a non-moving client could still go "stale"
-        this.sendToPlayer(id, { type: 'pong', timestamp: (m as Extract<ClientMessage, { type: 'ping' }>).timestamp });
+        this.sendToPlayer(id, { type: 'pong', timestamp: m.timestamp });
       },
       snapshotRequest: (id) => { this.hb('snapreq'); this.handleSnapshotRequest(id); },
       // Tribes rule: the tier swap banks on the next respawn — applying
@@ -228,18 +226,17 @@ export class MessageHandler {
         const p = this.playerManager.getPlayer(id);
         // A cast here isn't a check — an off-table class hits
         // CLASS_STATS[garbage].maxHealth at respawn and throws.
-        const cls = (m as Extract<ClientMessage, { type: 'classUpdate' }>).armorClass;
+        const cls = m.armorClass;
         if (p && typeof cls === 'string' && cls in CLASS_STATS) p.pendingClass = cls as ArmorClass;
       },
       perkUpdate: (id, m) => {
         const p = this.playerManager.getPlayer(id);
-        const perk = (m as Extract<ClientMessage, { type: 'perkUpdate' }>).perk;
-        if (p && isPerkId(perk)) p.pendingPerk = perk;
+        if (p && isPerkId(m.perk)) p.pendingPerk = m.perk;
       },
     };
   }
 
-  private handlers: Record<string, (playerId: string, msg: ClientMessage) => void> = {};
+  private handlers: { [K in ClientMessage['type']]?: (playerId: string, msg: Extract<ClientMessage, { type: K }>) => void } = {};
 
   /** Server-sim entry point — deployable sentries fire through the same
    *  outcome funnel as player/bot damage. */
@@ -361,7 +358,8 @@ export class MessageHandler {
       scores: this.roomInfo.scores ? { ...this.roomInfo.scores } : undefined,
       ffaScores: this.roomInfo.ffaScores?.(),
       map: this.roomInfo.bases || this.roomInfo.structures || this.roomInfo.arena || this.roomInfo.terrain
-        ? { mode: this.roomInfo.mode || undefined, bases: this.roomInfo.bases, structures: this.roomInfo.structures, arena: this.roomInfo.arena, ambient: this.roomInfo.ambient, terrain: this.roomInfo.terrain, terrainTex: this.roomInfo.terrainTex, sky: this.roomInfo.sky, interiors: this.roomInfo.interiors }
+        ? (() => { const m = { mode: this.roomInfo.mode || undefined, bases: this.roomInfo.bases, structures: this.roomInfo.structures, arena: this.roomInfo.arena, ambient: this.roomInfo.ambient, terrain: this.roomInfo.terrain, terrainTex: this.roomInfo.terrainTex, sky: this.roomInfo.sky, interiors: this.roomInfo.interiors };
+          logger.warn(`roomEcho map keys: ${Object.keys(m).join(',')} interiors=${m.interiors?.length}`); return m; })()
         : undefined,
       flags: this.roomInfo.flags?.(),
       pickups: this.roomInfo.pickups?.(),
@@ -482,7 +480,10 @@ export class MessageHandler {
       return;
     }
 
-    const handler = this.handlers[msg.type];
+    // Indexed access widens to the union of all handler signatures —
+    // the per-key narrowing already happened in the table, so one cast
+    // here replaces one per entry.
+    const handler = this.handlers[msg.type] as ((id: string, m: ClientMessage) => void) | undefined;
     if (!handler) {
       this.hb('unhandled');
       logger.warn(`Unhandled message type`, { playerId, type: (msg as { type: string }).type });
