@@ -206,7 +206,14 @@ export class GameBot extends RemotePlayer {
         // landing a half-meter apart stop memoizing as separate cells.
         const k = (x | 0) * 131072 + (z | 0);
         let v = gyc.get(k);
-        if (v === undefined) { v = ctx.terrain.getHeight(x, z); gyc.set(k, v); }
+        if (v === undefined) {
+          // Cap the memo — roaming bots would otherwise grow it a cell at
+          // a time for the whole match. Clear-and-refill beats LRU here:
+          // a Map reset is one alloc, per-entry LRU bookkeeping is worse.
+          if (gyc.size > 2048) gyc.clear();
+          v = ctx.terrain.getHeight(x, z);
+          gyc.set(k, v);
+        }
         return v;
       },
       solids: Projectile.solidColliders,
