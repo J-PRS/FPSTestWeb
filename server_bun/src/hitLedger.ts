@@ -35,7 +35,7 @@ export class HitLedger {
     const duelKey = `${shooterId}|${targetId}`;
     if (!killed) {
       this.duelStart.set(duelKey, this.duelStart.get(duelKey) ?? Date.now());
-      if (this.duelStart.size > 512) this.duelStart.clear(); // leak cap — entries die with their duels anyway
+      if (this.duelStart.size > 512) this.pruneStaleDuels();
       return;
     }
     const victim = c.playerManager.getPlayer(targetId);
@@ -47,6 +47,18 @@ export class HitLedger {
     const started = this.duelStart.get(duelKey);
     if (started !== undefined) weaponStats.recordTtk(modeTag, src, Date.now() - started);
     this.duelStart.delete(duelKey);
+  }
+
+  // An entry is orphaned when its duel never finishes (shooter hits once
+  // and disengages). Prune by age, not a hard cap — live duels keep their
+  // TTK anchor no matter how many pairs are tracked. Iteration order is
+  // insertion order, which approximates age order.
+  private pruneStaleDuels(): void {
+    const cutoff = Date.now() - 60_000;
+    for (const [k, t] of this.duelStart) {
+      if (t > cutoff) break;
+      this.duelStart.delete(k);
+    }
   }
 
   /** The kill tail: score credit, kill broadcast, spree callouts, and the

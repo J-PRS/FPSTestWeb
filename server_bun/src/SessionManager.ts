@@ -55,7 +55,19 @@ export class SessionManager {
     if (!w || now - w.start >= SessionManager.JOIN_WINDOW_MS) {
       w = { count: 0, start: now };
       this.joinWindows.set(ip, w);
-      if (this.joinWindows.size > SessionManager.MAX_JOIN_WINDOWS) this.joinWindows.clear();
+      if (this.joinWindows.size > SessionManager.MAX_JOIN_WINDOWS) {
+        // Drop expired windows first — a flood must not reset the
+        // throttle state of IPs whose windows are still live.
+        for (const [k, e] of this.joinWindows) {
+          if (now - e.start >= SessionManager.JOIN_WINDOW_MS) this.joinWindows.delete(k);
+        }
+        // Still over = a fresh unique-IP flood — evict oldest-first
+        // (insertion order) so the table stays bounded.
+        for (const k of this.joinWindows.keys()) {
+          if (this.joinWindows.size <= SessionManager.MAX_JOIN_WINDOWS) break;
+          this.joinWindows.delete(k);
+        }
+      }
     }
     return ++w.count <= SessionManager.JOIN_LIMIT;
   }
