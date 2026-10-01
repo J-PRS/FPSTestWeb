@@ -364,6 +364,6 @@ export class EffectsManager {
       for (const bucket of list) if (!highOf.has(bucket)) bucket.mesh.count = 0;
     }
     if (this.deadP.length > EffectsManager.DEADP_KEEP) this.deadP.length = EffectsManager.DEADP_KEEP;
-    if (this.beamPool.length > EffectsManager.BEAM_KEEP) this.beamPool.length = EffectsManager.BEAM_KEEP;
+    while (this.beamPool.length > EffectsManager.BEAM_KEEP) this.beamPool.pop()!.mat.dispose();
   }
 }
