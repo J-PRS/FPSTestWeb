@@ -252,6 +252,9 @@ export class PlayerModel {
 
     // Enable shadow casting + grab aim/attachment bones
     this.model.traverse((child) => this.prepareChild(child));
+    // Model may finish loading while a far-LOD swap is already armed —
+    // the freshly captured skinnedMeshes need the swap applied now.
+    if (this.lod === 1) this.applyLodGeos();
     logger.debug(`Aim bones: ${this.aimBones.map(b => b.bone.name).join(', ') || 'NONE'} | hand: ${this.handBone?.name ?? 'NONE'}`);
 
     // Scale and rotate to match our coordinate system
@@ -334,11 +337,49 @@ export class PlayerModel {
   }
 
   private skinnedMeshes: THREE.SkinnedMesh[] = [];
+  private lodGeos: THREE.BufferGeometry[] | null = null;
+  private lodLoadP: Promise<void> | null = null;
+  private lod = 0;
 
   /** Distant remotes shouldn't pay the skinned shadow-pass vertex cost —
    *  nobody reads a 200m figure's cast shadow. */
   setCastShadow(on: boolean): void {
     for (const m of this.skinnedMeshes) m.castShadow = on;
+  }
+
+  /** Far-LOD swap: mannequin_lod1.glb is the same rig decimated ~80% —
+   *  geometry carries the skin weights, so swapping geo alone keeps the
+   *  pose. The skeleton/mixer is untouched. Only exists for 'mannequin'. */
+  setLod(level: 0 | 1): void {
+    if (level === this.lod) return;
+    this.lod = level;
+    if (level === 0 || !this.lodGeos) { this.applyLodGeos(); return; }
+    if (!this.lodLoadP) {
+      this.lodLoadP = new GLTFLoader().loadAsync('/assets/models/mannequin_lod1.glb').then((g) => {
+        const geos: THREE.BufferGeometry[] = [];
+        g.scene.traverse((o) => {
+          if ((o as THREE.SkinnedMesh).isSkinnedMesh) geos.push((o as THREE.SkinnedMesh).geometry);
+        });
+        this.lodGeos = geos;
+        if (this.lod === 1) this.applyLodGeos();
+      }).catch(() => { this.lodLoadP = null; });
+    }
+  }
+
+  private applyLodGeos(): void {
+    if (this.lod === 1 && !this.lodGeos) return;
+    const toLod = this.lod === 1;
+    this.skinnedMeshes.forEach((m, i) => {
+      if (toLod) {
+        if (!m.userData.baseGeo) m.userData.baseGeo = m.geometry;
+        const g = this.lodGeos![i];
+        if (g) m.geometry = g;
+      } else if (m.userData.baseGeo) {
+        m.geometry = m.userData.baseGeo as THREE.BufferGeometry;
+      }
+      m.computeBoundingSphere();
+      if (m.boundingSphere) m.boundingSphere.radius += 0.6;
+    });
   }
 
   private prepareMesh(child: THREE.Mesh): void {

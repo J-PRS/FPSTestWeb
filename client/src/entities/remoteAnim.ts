@@ -109,10 +109,19 @@ export class RemoteAnim {
       this.animAcc = 0;
       h.model.update(dt);
     }
+    this.tickRenderLod();
+  }
+
+  /** Distance-tiered render budget — cast shadows, skinned geo LOD. */
+  private tickRenderLod(): void {
+    const h = this.h;
     // Shadow pass re-runs skinning on every caster — past ~80m a figure's
     // cast shadow is unreadable anyway, so far remotes drop out of it.
     const cast = h.camDistSq < 80 * 80;
     if (cast !== this._castShadow) { this._castShadow = cast; h.model.setCastShadow(cast); }
+    // Past ~140m swap to the ~1.2k-tri decimated rig — vertex/skinning
+    // cost per remote drops ~80% where the silhouette delta is unreadable.
+    h.model.setLod(h.camDistSq > 140 * 140 ? 1 : 0);
   }
   private _castShadow = true;
 
