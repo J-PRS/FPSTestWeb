@@ -516,7 +516,10 @@ export function createGameLoop(deps: GameLoopDeps) {
 
   function loop(time: number): void {
     requestAnimationFrame(loop);
-    for (const s of statsPanels) s.update();
+    // stats.js paints its canvas even when display:none — the panels were
+    // costing ~2% of a throttled frame with the debug HUD hidden.
+    if ((statsPanels[0]!.dom as HTMLElement).style.display !== 'none')
+      for (const s of statsPanels) s.update();
     const rawElapsed = (time - lastTime) / 1000;
     const dt = Math.min(rawElapsed, MAX_DELTA_TIME);
     lastTime = time;
