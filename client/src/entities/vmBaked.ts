@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { WeaponType } from '../../../shared/weapons.js';
 import { urlParams } from '../core/params.js';
-import { bakeVertexAO } from '../effects/vertexAO.js';
+import { bakeVertexAO, bakeWearOnly } from '../effects/vertexAO.js';
 
 // Baked-weapon swap — the GLB+AO adoption pipeline for the viewmodel.
 // When tools/vmdump has shipped w{id}_baked.glb/w{id}_ao.png, the baked
@@ -104,6 +104,10 @@ export class VmBaked {
       m.material = inBarrels && spin.barrelMat ? spin.barrelMat : bakedMat;
     });
     g.add(gltf.scene);
+    // The swap path skips bakeVertexAO entirely (AO lives in the ao.png
+    // map) — curvature still needs baking or the wear shader has no edge
+    // signal and the gun reads flat.
+    bakeWearOnly(gltf.scene as THREE.Group);
     if (spin) this.seatChainPivot(spin.node, g);
     // A bake landing mid-cloak must join the ghost set — otherwise the
     // weapon pops back opaque while you're invisible.

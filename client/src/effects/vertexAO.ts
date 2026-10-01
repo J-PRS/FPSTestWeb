@@ -29,8 +29,8 @@ const RAY_DIST_SCALE = 0.18; // occlusion range = bbox radius × this (crevice s
 const EPS = 0.004;           // origin nudge off the surface to avoid self-hit
 const MIN_LIGHT = 0.25;      // floor — deepest crevice never hits full black
 // Curvature gain: 1-dot(n_v, n_face) on a 90° dihedral is ~0.29 — scale
-// so ~90°+ edges saturate the wear mask.
-const WEAR_GAIN = 3.5;
+// so ~45°+ edges already saturate (smooth-shaded bodies diverge little).
+const WEAR_GAIN = 7.0;
 const _fa = new THREE.Vector3();
 const _fb = new THREE.Vector3();
 const _fc = new THREE.Vector3();
@@ -115,6 +115,18 @@ function bakeMesh(mesh: THREE.Mesh, occluder: THREE.Mesh, rayDist: number): void
   bakeWear(geo);
 }
 
+/** Curvature-only bake for meshes that already carry baked AO textures
+ *  (the vmBaked swap path) — same wear attribute + shader, no raycast AO. */
+export function bakeWearOnly(group: THREE.Group): void {
+  group.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (!m.isMesh) return;
+    if (!m.geometry.getAttribute('wear')) bakeWear(m.geometry);
+    const mats = Array.isArray(m.material) ? m.material : [m.material];
+    for (const mat of mats) if (mat && mat.type !== 'MeshBasicMaterial') enhanceWeaponMaterial(mat);
+  });
+}
+
 /** Bake vertex AO into every mesh of a group. Call after the group's local
  *  transforms are final (add to a parent first or updateWorldMatrix). */
 export function bakeVertexAO(group: THREE.Group): void {
@@ -183,22 +195,28 @@ float wfbm(vec3 p) { return 0.5 * wnoise(p) + 0.25 * wnoise(p * 2.17) + 0.125 * 
   // screen-space normal gradient — the bake catches flat-shaded plates
   // where fwidth(vNormal) reads ~0, fwidth catches intra-triangle detail.
   float curv = length(fwidth(normalize(vNormal)));
-  float edge = max(smoothstep(0.35, 1.2, curv), smoothstep(0.3, 0.75, vWear));
+  float edge = max(smoothstep(0.35, 1.2, curv), smoothstep(0.12, 0.5, vWear));
 
   // Patchy mask so wear clumps in zones like real abrasion, gated to
   // well-lit (unoccluded) faces — crevices don't wear bright.
   float patches = smoothstep(0.55, 0.8, wnoise(vWpos * 90.0));
   #ifdef USE_COLOR
     float exposure = smoothstep(0.55, 0.9, vColor.g);
+  #else
+    // Baked-GLB path: AO lives in the texture, no vertex colors — edge
+    // wear stays unmasked by exposure (concave hits are rare here).
+    float exposure = 1.0;
+  #endif
     float wear = edge * (0.35 + 0.65 * patches) * exposure;
 
     // Worn metal: desaturate and brighten edges; slight micro-scratch noise.
     float scratch = wnoise(vWpos * 700.0) * 0.12;
-    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.72, 0.70, 0.68), wear * 0.55);
+    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.72, 0.70, 0.68), wear * 0.7);
     diffuseColor.rgb *= 1.0 - wear * scratch;
 
+  #ifdef USE_COLOR
     // Extra cavity depth beyond vertex AO — cheap contrast ramp on the bake.
-    diffuseColor.rgb *= 0.75 + 0.25 * smoothstep(0.25, 0.7, vColor.g);
+    diffuseColor.rgb *= 0.6 + 0.4 * smoothstep(0.2, 0.75, vColor.g);
   #endif
 }`);
     mat.needsUpdate = true;
