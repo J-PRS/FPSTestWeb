@@ -1,3 +1,5 @@
+2026-10-01 - perf: distance-gate body-part gibs (>120m deaths use instanced primitive shards, kills pdebris 7ms spikes)
+2026-10-01 - Interiors: GLB MeshStandardMaterial downgraded to Lambert (85k tris of PBR fragment cost -> Lambert, chromebook win)
 2026-10-01 - perf: pooled debris InstancedMesh buckets (kill-burst alloc spike)
 2026-10-01 - perf: per-think memoized groundY for bot senses (~2.5% throttled frame)
 2026-10-01 - weapons: baked-GLB swap path now gets curvature bake + wear shader (was flat, no AO coverage)

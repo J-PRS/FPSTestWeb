@@ -100,10 +100,18 @@ function gibVictim(ctx: NetCtx, shooterId: string, targetId: string, remotePlaye
   const team = nm().getPlayers().get(targetId)?.team
     ?? (remotePlayer as { team?: 'alpha' | 'bravo' }).team;
   // Gibs are best-effort — a degenerate model must never take the kill
-  // handler down with it (generic chunks still spawn on null).
+  // handler down with it (generic chunks still spawn on null). Past
+  // ~120m real body parts are indistinguishable from primitive shards,
+  // so far kills take the instanced path — mesh-path gibs are ~20
+  // unique materials and matrix writes each (~7ms spikes under throttle).
+  const cam = deps.lazyPlayer().pos;
+  const gdx = remotePlayer.position.x - cam.x, gdy = centerY - cam.y, gdz = remotePlayer.position.z - cam.z;
+  const nearEnough = gdx * gdx + gdy * gdy + gdz * gdz < 120 * 120;
   let parts: { geo: THREE.BufferGeometry; pos: THREE.Vector3 }[] | undefined;
-  try { parts = remotePlayer.model.deathParts() ?? undefined; }
-  catch { /* fall through to generic shards */ }
+  if (nearEnough) {
+    try { parts = remotePlayer.model.deathParts() ?? undefined; }
+    catch { /* fall through to generic shards */ }
+  }
   deps.world.playerDebrisList.push(new PlayerDebris(
     deps.lazyScene(), deps.lazyTerrain(),
     { x: remotePlayer.position.x, y: centerY, z: remotePlayer.position.z },

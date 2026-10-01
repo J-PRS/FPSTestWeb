@@ -96,9 +96,16 @@ export function botKilledF(b: TeamBots, killerId: string, bot: GameBot, weapon?:
     // Same shatter as wire remotes — the corpse pops into team-colored
     // shards instead of just shrinking away.
     const t = bot.team;
+    // Past ~120m real body parts read as generic shards anyway — take
+    // the instanced path (mesh-path gibs are ~20 materials + matrix
+    // writes each, the pdebris spike under throttle).
+    const cam = b.deps.lazyCamera().position;
+    const gdx = bot.position.x - cam.x, gdy = bot.position.y + 1.0 - cam.y, gdz = bot.position.z - cam.z;
     let parts: { geo: THREE.BufferGeometry; pos: THREE.Vector3 }[] | undefined;
-    try { parts = bot.model.deathParts() ?? undefined; }
-    catch { /* fall through to generic shards */ }
+    if (gdx * gdx + gdy * gdy + gdz * gdz < 120 * 120) {
+      try { parts = bot.model.deathParts() ?? undefined; }
+      catch { /* fall through to generic shards */ }
+    }
     b.deps.world.playerDebrisList.push(new PlayerDebris(
       b.deps.lazyScene(), b.deps.lazyTerrain(),
       { x: bot.position.x, y: bot.position.y + 1.0, z: bot.position.z },
