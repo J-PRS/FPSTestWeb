@@ -137,8 +137,17 @@ function autoScale(deps: GameLoopDeps, st: LoopState, dir: number): void {
   // Full-sky raster FX shed before the deepest pixel drop: the cloud dome
   // shades every skyward fragment on a GPU that already can't keep up.
   deps.sceneSetup.volumetricClouds?.setEnabled(next < 3);
+  shedPostPasses(rendererSetup, next >= 4);
   st.gpuLevel = next;
   Logger[dir < 0 ? 'warn' : 'info'](`auto-quality: gpu level ${next} (${dir < 0 ? 'sustained low fps' : 'headroom'})`);
+}
+
+// Post passes are pure fill cost — bloom's mip-blur chain is the last
+// thing a starving GPU needs. Shed at the deepest tier and restore by
+// the user's own toggles on recovery (pass flags only, settings kept).
+function shedPostPasses(rendererSetup: GameLoopDeps['rendererSetup'], shed: boolean): void {
+  if (rendererSetup.bloomPass) rendererSetup.bloomPass.enabled = !shed && rendererSetup.isBloomEnabled();
+  if (rendererSetup.contrastPass) rendererSetup.contrastPass.enabled = !shed && rendererSetup.isPostProcessingEnabled();
 }
 
 // CPU-bound ladder — JS phases dominate the frame, so a smaller buffer
@@ -175,6 +184,7 @@ export function resetAutoQuality(deps: GameLoopDeps, st: LoopState): void {
   deps.groundMist().setActive(true);
   deps.ambientBirds.setActive(true);
   deps.sceneSetup.volumetricClouds?.setEnabled(true);
+  shedPostPasses(deps.rendererSetup, false);
   st.gpuLevel = 0;
   st.cpuLevel = 0;
 }
