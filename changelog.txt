@@ -1,3 +1,4 @@
+2026-10-01 - demo recorder skips bit-identical frames (dead-reckon dedupe on local + remote samples)
 2026-10-01 - bots separation-sense list reuses scratch array (no per-frame alloc)
 2026-10-01 - bot groundY memo widened to 2m cells; far HUD indicators quarter-rate past 200m
 2026-10-01 - vfx pause/prune bookkeeping to 15Hz (was a per-frame scan of every attached system)

@@ -60,6 +60,9 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
   roster: DemoRosterEntry[] = [];
   remoteSource: (() => Iterable<RemoteSample>) | null = null;
   lastRemoteSampleT = 0;
+  /** Last stored sample per roster idx — the dead-reckon comparator.
+   *  Lives outside remoteFrames so pooled/pruned frames don't alias it. */
+  private lastRemoteByIdx = new Map<number, { posX: number; posY: number; posZ: number; velX: number; velY: number; velZ: number; yaw: number; pitch: number; flags: number }>();
   context: DemoContext = { room: '', mode: '', playerName: '' };
 
   recording = false;
@@ -105,6 +108,7 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
     this.rosterIdxById.clear();
     this.roster = [];
     this.lastRemoteSampleT = 0;
+    this.lastRemoteByIdx.clear();
     this.frameBuffer.clear();
     this.playerData = playerData;
     this.inputData = inputData;
@@ -135,15 +139,49 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
         this.rosterIdxById.set(s.id, idx);
         this.roster.push({ name: s.id });
       }
+      const flags = (s.dead ? RemoteFrameFlags.Dead : 0) | (s.ski ? RemoteFrameFlags.Ski : 0);
+      // Same dead-reckon skip as the local frame: an identical sample
+      // reproduces exactly under playback's timestamp lerp.
+      if (this.remoteUnchanged(idx, s, flags)) continue;
       const f = this.remoteFramePool.pop() ?? ({ timestamp: 0, rosterIdx: 0, posX: 0, posY: 0, posZ: 0, velX: 0, velY: 0, velZ: 0, yaw: 0, pitch: 0, flags: 0 } as RemoteFrame);
       f.timestamp = now;
       f.rosterIdx = idx;
       f.posX = s.posX; f.posY = s.posY; f.posZ = s.posZ;
       f.velX = s.velX; f.velY = s.velY; f.velZ = s.velZ;
       f.yaw = s.yaw; f.pitch = s.pitch;
-      f.flags = (s.dead ? RemoteFrameFlags.Dead : 0) | (s.ski ? RemoteFrameFlags.Ski : 0);
+      f.flags = flags;
       this.remoteFrames.push(f);
     }
+  }
+
+  /** Bit-exact change test for the remote dead-reckon skip; also updates
+   *  the stored sample when it differs. */
+  private remoteUnchanged(idx: number, s: RemoteSample, flags: number): boolean {
+    let prev = this.lastRemoteByIdx.get(idx);
+    if (!prev) {
+      prev = { posX: 0, posY: 0, posZ: 0, velX: 0, velY: 0, velZ: 0, yaw: 0, pitch: 0, flags: -1 };
+      this.lastRemoteByIdx.set(idx, prev);
+    }
+    const same = prev.posX === s.posX && prev.posY === s.posY && prev.posZ === s.posZ &&
+      prev.velX === s.velX && prev.velY === s.velY && prev.velZ === s.velZ &&
+      prev.yaw === s.yaw && prev.pitch === s.pitch && prev.flags === flags;
+    if (same) return true;
+    prev.posX = s.posX; prev.posY = s.posY; prev.posZ = s.posZ;
+    prev.velX = s.velX; prev.velY = s.velY; prev.velZ = s.velZ;
+    prev.yaw = s.yaw; prev.pitch = s.pitch; prev.flags = flags;
+    return false;
+  }
+
+  /** Bit-exact change test for the local dead-reckon skip — any field
+   *  that differs (including under future physics like drag) forces a write. */
+  private frameIdentical(last: DemoFrame, p: IPlayerDataProvider, i: IInputProvider): boolean {
+    return last.posX === p.posX && last.posY === p.posY && last.posZ === p.posZ &&
+      last.velX === p.velX && last.velY === p.velY && last.velZ === p.velZ &&
+      last.yaw === p.yaw && last.pitch === p.pitch &&
+      last.inputFlags === i.inputFlags &&
+      last.mouseDeltaX === i.mouseDeltaX && last.mouseDeltaY === i.mouseDeltaY &&
+      last.jetpackFlags === i.jetpackFlags && last.jetpackFuel === i.jetpackFuel &&
+      last.weaponType === p.weaponType;
   }
 
   // Called every game frame. Only records at tick interval.
@@ -160,6 +198,16 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
 
     const p = this.playerData;
     const i = this.inputData;
+
+    // Dead-reckoned skip: a frame identical to the last stored one
+    // carries zero information — playback lerps between timestamps and
+    // would reproduce the same constants anyway. Idle stretches cost
+    // ~12 compares instead of a 49B write each.
+    const last = this.frameBuffer.Count > 0 ? this.frameBuffer.peekNewest() : undefined;
+    if (last && this.frameIdentical(last, p, i)) {
+      this.housekeep(now);
+      return;
+    }
 
     // Reuse the slot's existing frame object — the ring overwrites it
     // anyway, so allocating per tick is pure churn.
@@ -179,9 +227,13 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
     this.frameBuffer.add(frame);
     this.frameNumber = (this.frameNumber + 1) % 65536;
 
-    this.sampleRemotes(now);
+    this.housekeep(now);
+  }
 
-    // Prune events older than the frame buffer window — they can never be used in a clip
+  /** Remote sampling + rolling-window prune — runs on every tick whether
+   *  the local frame was written or dead-reckon skipped. */
+  private housekeep(now: number): void {
+    this.sampleRemotes(now);
     const cutoff = this.elapsedTime - this.bufferSeconds;
     pruneEventsBefore(this.projectileEvents, cutoff, this.projectileEventPool);
     pruneEventsBefore(this.targetEvents, cutoff, this.targetEventPool);
