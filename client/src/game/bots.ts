@@ -197,10 +197,18 @@ export class TeamBots {
     // doing it inside sheepTick scaled every 5s window by the roster
     // size (9 bots → windows fired ~9x too often, cover-dominated yeets).
     this.sheep.advance(dt);
-    for (const bot of this.bots) this.tickBot(bot, dt, others, terrain);
+    let i = 0;
+    for (const bot of this.bots) this.tickBot(bot, dt, others, terrain, i++);
   }
 
-  private tickBot(bot: GameBot, dt: number, others: THREE.Vector3[], terrain: Terrain): void {
+  // Think rate: brains decide at ~10Hz (staggered per bot so thinks
+  // don't pile onto one frame), fed the real elapsed since the last
+  // think — steering reads identically, senses/fire just run at the
+  // human-plausible cadence instead of 60+.
+  private static readonly THINK_PERIOD = 0.1;
+  private thinkAccum = new Map<string, number>();
+
+  private tickBot(bot: GameBot, dt: number, others: THREE.Vector3[], terrain: Terrain, rosterIdx = 0): void {
     // Local bots aren't in the wire roster, so remotes.ts never ticks
     // them — tick() is what advances the snapshot interpolation and
     // AnimationMixer onto the model. Without it think() moves the
@@ -211,9 +219,16 @@ export class TeamBots {
       if (bot.respawnAt <= 0) this.respawnBot(bot);
       return;
     }
+    // Roster-indexed start phase spreads thinks across the period —
+    // without it every bot thinks on the same frame and stays aligned.
+    const acc = (this.thinkAccum.get(bot.playerId)
+      ?? (rosterIdx * TeamBots.THINK_PERIOD) / Math.max(1, this.bots.length)) + dt;
+    this.thinkAccum.set(bot.playerId, acc);
+    if (acc < TeamBots.THINK_PERIOD) return;
+    this.thinkAccum.set(bot.playerId, 0);
     const foes = this.senses.enemyList(bot);
-    const shot = bot.think(dt, this.ctxFor(bot, foes, others, terrain));
-    if (this.over) { this.sheep.tick(bot, dt, terrain); return; }
+    const shot = bot.think(acc, this.ctxFor(bot, foes, others, terrain));
+    if (this.over) { this.sheep.tick(bot, acc, terrain); return; }
     if (shot) this.fire.resolveShot(bot, shot.targetId, shot.aim);
     // Belt + propel are real-spawn actions — offline only, same gate
     // as resolveShot (a connected room's wire remotes can't attribute).
@@ -229,7 +244,7 @@ export class TeamBots {
     // tell. Same 3s recency window the server meter uses.
     const ignoring = !shot && this.sheep.notShooting(bot.playerId);
     const hasDest = Math.hypot(bot.lastDest.x - bot.pos.x, bot.lastDest.z - bot.pos.z) >= 0.5;
-    this.sheep.tick(bot, dt, terrain, this.senses.foeSeen(bot, foes, terrain), ignoring, hasDest);
+    this.sheep.tick(bot, acc, terrain, this.senses.foeSeen(bot, foes, terrain), ignoring, hasDest);
   }
 
   // Per-bot persistent think ctx — the literal was a fresh ~1KB object

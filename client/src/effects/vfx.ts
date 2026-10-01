@@ -90,6 +90,12 @@ function reapStarved(ps: IParticleSystem): void {
   else starveFrames.delete(ps);
 }
 
+// Sim decimation: the whole batcher sims at 30Hz — every other frame is
+// skipped and the sim frames step 2·dt, so trajectories and lifetimes
+// stay exact while a spawn-burst's peak cost halves. Short-lived
+// puff/blast particles absorb the 2·dt step invisibly.
+let simParity = false;
+
 export function updateVfx(dt: number, camPos?: THREE.Vector3): void {
   // Distance-pause BEFORE the batch sim: skip offscreen systems this frame.
   // Covers every attached system (live bursts AND projectile trails).
@@ -103,7 +109,8 @@ export function updateVfx(dt: number, camPos?: THREE.Vector3): void {
       reapStarved(ps);
     }
   }
-  batcher?.update(dt);
+  simParity = !simParity;
+  if (simParity) batcher?.update(dt * 2);
   // Prune finished one-shots — emission ends at `duration`; particles
   // may outlive it, but quarks keeps rendering them until they die, so
   // the system must stay attached until then. `particleNum` is the
