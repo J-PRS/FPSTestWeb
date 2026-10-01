@@ -50,7 +50,13 @@ export function tickBallRenderPos(b: Ball, dt: number): void {
   }
 
 export function tickBallTrails(b: Ball, dt: number): void {
-    b.trails.emit(dt, b._rpos, b.vel, b.radius, b.enraged ? _enrageTint : b.color);
+    // Far balls: skip sparkle emission — a 0.5m dot trail is sub-pixel past
+    // ~200m but each emit still churns the dot list. Aging keeps running
+    // so a ball arcing back into range doesn't pop stale sparkles.
+    const nearCam = b._rpos.distanceToSquared(Ball.viewPos) < 200 * 200;
+    if (nearCam) {
+      b.trails.emit(dt, b._rpos, b.vel, b.radius, b.enraged ? _enrageTint : b.color);
+    }
     b.trails.fade(dt);
     // Position discontinuity (teleport or playback keyframe snap) — cut the
     // ribbons so they don't streak across the jump

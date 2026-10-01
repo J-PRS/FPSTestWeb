@@ -179,10 +179,15 @@ export class BallTrailDots {
     }
     // zero out the tail slots so stale points don't linger
     for (let s = w * 2; s < this.maxDots * 2; s++) this.sizeAttr.setX(s, 0);
+    // Skip the buffer upload when nothing lives — an idle trail was still
+    // pushing 3 attribute uploads per ball per frame (~100/frame total).
+    if (w === 0 && this._lastLive === 0) return;
+    this._lastLive = w;
     this.posAttr.needsUpdate = true;
     this.sizeAttr.needsUpdate = true;
     this.colAttr.needsUpdate = true;
   }
+  private _lastLive = -1;
 
   dispose(): void {
     this.scene.remove(this.points);

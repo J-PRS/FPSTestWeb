@@ -1,3 +1,4 @@
+2026-10-01 - ball trail attr uploads gated on live dots (~100 tiny uploads/frame idle); sparkle emit skipped past 200m
 2026-10-01 - interior material dedup by canonical name (.NNN suffix): 1014 meshes -> 44, scene calls ~570->185, shadow-pass delta 681->77 calls
 2026-10-01 - __renderScan staged render profiler; interior casters size+distance gated (shadow pass 681->~430 calls); interior merge cells 512->2048m (scene calls ~570->~300); shadow frustum 250->130m
 2026-10-01 - foeSeen LOS raycasts cached ~200ms per bot (sheep ignore-meter only) — was one ray per foe per bot per frame
