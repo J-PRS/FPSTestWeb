@@ -72,7 +72,7 @@ export class DemoManager implements demoIO.DemoIOHost {
 
     // Render-tool entry point (tools/demorender drives seek+capture through
     // this handle — the DOM only exposes coarse ±2s keys otherwise).
-    (window as unknown as { __demoManager?: DemoManager }).__demoManager = this;
+    window.__demoManager = this;
 
     buildDemoUI(this);
     wirePlayerCallbacks(this);

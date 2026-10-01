@@ -417,7 +417,7 @@ function makeStatsPanels(): Stats[] {
 function wireDebugKeys(deps: GameLoopDeps, perf: ReturnType<typeof createPerfHud>, budget: ReturnType<typeof createFrameBudget>, statsPanels: ReturnType<typeof makeStatsPanels>): void {
   // window.__perf — live phase table for headless probes + manual reads;
   // the watchdog dump uses the same data for shipped logs.
-  (window as unknown as { __perf: () => Record<string, number> }).__perf =
+  window.__perf =
     () => ({ ...perf.snapshot(), gpu: gpuMs(), ...budget.stats() as unknown as Record<string, number>, ...fxJobStats(),
       // info reset lives in perf.begin — counters span every pass of the
       // previous frame (scene+shadow+composer+viewmodel), not just the last.
@@ -426,11 +426,11 @@ function wireDebugKeys(deps: GameLoopDeps, perf: ReturnType<typeof createPerfHud
   // window.__renderScan — staged render breakdown (scene / +shadow / full
   // pipeline / viewmodel) with per-stage calls+tris+GPU-ms. Profiling hook;
   // renders extra frames on top of the loop.
-  (window as unknown as { __renderScan: unknown }).__renderScan = createRenderScan(deps);
+  window.__renderScan = createRenderScan(deps);
   // __scene/__renderer — profiling handles for headless probes
   // (per-class triangle census, ad-hoc visibility A/Bs). Debug-only.
-  (window as unknown as { __scene: unknown }).__scene = deps.sceneSetup.scene;
-  (window as unknown as { __renderer: unknown }).__renderer = deps.rendererSetup.renderer;
+  window.__scene = deps.sceneSetup.scene;
+  window.__renderer = deps.rendererSetup.renderer;
   document.addEventListener('keydown', (e) => {
     // Alt+W — bot weapon audit: last gun each bot drew + its shot count,
     // so "do they fire real weapons" is a one-keypress read. Alt+Shift+W

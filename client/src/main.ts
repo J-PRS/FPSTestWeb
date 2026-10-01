@@ -616,7 +616,7 @@ init().then(async () => {
   // this (spawn PlayerModels, read player.pos, aim the camera). DEV or
   // ?debug only; absent in prod builds.
   if (import.meta.env.DEV || urlParams.debug) {
-    (window as unknown as { __test: unknown }).__test = {
+    window.__test = {
       player, scene, entities, world, terrain,
       networkManager, demoManager, rendererSetup,
       chatSink: (await import('./game/chat.js')).chatSink,

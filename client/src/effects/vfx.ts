@@ -99,7 +99,7 @@ function attachSystem(ps: ParticleSystem): void {
 
 function takeSystem(kind: string, build: () => ParticleSystem): ParticleSystem {
   const ps = pools.get(kind)?.pop();
-  const st = (window as unknown as { __vfxStats?: { hits: number; misses: number } }).__vfxStats;
+  const st = window.__vfxStats;
   if (ps) { if (st) st.hits++; pooled.delete(ps); return ps; }
   if (st) st.misses++;
   const n = build();
