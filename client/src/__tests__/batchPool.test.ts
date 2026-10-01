@@ -7,13 +7,14 @@ import { acquireBatch, retireBatch, type BatchMap } from '../core/batchPool.js';
 
 interface FakeBatch { id: number; used: number; cap: number; disposed: boolean }
 
+const hasRoom = (b: FakeBatch) => b.used < b.cap;
+const isDrained = (b: FakeBatch) => b.used === 0;
+const dispose = (b: FakeBatch) => { b.disposed = true; };
+
 function fixture() {
   const map: BatchMap<string, FakeBatch> = new Map();
   let next = 0;
   const make = (_key: string): FakeBatch => ({ id: next++, used: 0, cap: 2, disposed: false });
-  const hasRoom = (b: FakeBatch) => b.used < b.cap;
-  const isDrained = (b: FakeBatch) => b.used === 0;
-  const dispose = (b: FakeBatch) => { b.disposed = true; };
   const alloc = (key = 'scene'): FakeBatch => {
     const b = acquireBatch(map, key, make, hasRoom);
     b.used++;
@@ -36,26 +37,29 @@ describe('batchPool', () => {
 
   it('spawns a sibling batch on overflow instead of starving', () => {
     const { map, alloc } = fixture();
-    const a = alloc(), alloc2 = alloc();
+    const a = alloc();
+    expect(alloc()).toBe(a);
     const c = alloc(); // first batch full (cap 2) — sibling required
     expect(c).not.toBe(a);
     expect(map.get('scene')!.length).toBe(2);
-    expect(alloc2).toBe(a);
   });
 
   it('refills freed slots in an earlier batch before growing further', () => {
     const { map, alloc, free } = fixture();
-    const a = alloc(), alloc2 = alloc(), c = alloc();
+    const a = alloc(), c1 = alloc(), c = alloc();
     free('scene', a); // batch 0 now has room
     const d = alloc();
     expect(d).toBe(a); // earlier batch wins over a new sibling
     expect(map.get('scene')!.length).toBe(2);
     expect(c).not.toBe(d);
+    expect(c1).toBe(a);
   });
 
   it('retires a fully drained overflow batch and disposes it', () => {
     const { map, alloc, free } = fixture();
-    const a = alloc(), alloc2 = alloc(), c = alloc();
+    const a = alloc();
+    alloc();
+    const c = alloc();
     free('scene', c);
     expect(c.disposed).toBe(true);
     expect(map.get('scene')!.length).toBe(1);
@@ -72,12 +76,13 @@ describe('batchPool', () => {
 
   it('keeps a partially drained overflow batch alive', () => {
     const { map, alloc, free } = fixture();
-    const allocA = alloc(), alloc2 = alloc(), c = alloc();
+    alloc();
+    alloc();
+    const c = alloc();
     alloc('scene'); // put a second occupant in c's batch
     free('scene', c); // batch still has one used slot
     expect(c.disposed).toBe(false);
     expect(map.get('scene')!.length).toBe(2);
-    expect(allocA).toBeTruthy(); expect(alloc2).toBeTruthy();
   });
 
   it('ignores retireBatch for an unregistered batch', () => {
