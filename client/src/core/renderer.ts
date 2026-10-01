@@ -285,14 +285,14 @@ const ACES_GLSL = /* glsl */ `
 // GL canvas MUST stay visible — pointer lock targets it, and a
 // display:none element can't lock; fsCanvas is pointer-events:none.
 function applyPixelSize(renderer: THREE.WebGLRenderer,
-    fsCanvas: HTMLCanvasElement, pixelMode: number): boolean {
+    fsCanvas: HTMLCanvasElement, pixelMode: number, sharp: boolean): boolean {
   fsCanvas.style.display = pixelMode === 5 ? 'block' : 'none';
   if (pixelMode !== 1 && pixelMode !== 2 && pixelMode !== 5) return false;
   const f = pixelMode === 2 ? PIXEL_SCALE / 2 : PIXEL_SCALE;
   renderer.setPixelRatio(1);
   renderer.setSize(Math.floor(window.innerWidth / f),
     Math.floor(window.innerHeight / f), false);
-  renderer.domElement.style.imageRendering = 'pixelated';
+  renderer.domElement.style.imageRendering = sharp ? 'pixelated' : 'auto';
   renderer.domElement.style.width = '100%';
   renderer.domElement.style.height = '100%';
   return true;
@@ -456,7 +456,7 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
     // canvas and let CSS upscale it — colors are identical to direct
     // rendering by construction, and it's the cheapest path. Floyd (5)
     // uses the same low-res GL render with fsCanvas on top.
-    if (applyPixelSize(renderer, fsCanvas, pixelMode)) {
+    if (applyPixelSize(renderer, fsCanvas, pixelMode, settings.get('fps-filter'))) {
       if (pixelMode === 5) { fsCanvas.width = renderer.domElement.width; fsCanvas.height = renderer.domElement.height; fs.alloc(fsCanvas.width, fsCanvas.height); }
       return;
     }
@@ -464,7 +464,10 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
     // drop to 1/PIXEL_SCALE and the upscale pass reconstructs to screen.
     renderer.setPixelRatio(getPixelRatio());
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.domElement.style.imageRendering = 'auto';
+    // Fractional degrade upscales a sub-res buffer through the same CSS
+    // filter path — SHARP keeps deep rungs readable, SMOOTH hides mild ones.
+    renderer.domElement.style.imageRendering =
+      resScale < 1 && settings.get('fps-filter') ? 'pixelated' : 'auto';
     renderer.domElement.style.width = '100%';
     renderer.domElement.style.height = '100%';
   }
@@ -574,6 +577,21 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
     () => setPixelated((pixelMode + 1) % 6),
     () => setBloomEnabled(!bloomEnabled),
     () => setPostProcessingEnabled(!postproEnabled));
+
+  // FILTER: upscale filtering is orthogonal to render scale — SHARP
+  // (nearest) keeps deep low-res readable, SMOOTH (bilinear) hides mild
+  // degrade. Applies to every CSS-upscaled path; composer modes 3/4
+  // carry their own edge-aware shader instead.
+  const filterBtn = document.getElementById('filter-toggle') as HTMLButtonElement | null;
+  if (filterBtn) {
+    const label = () => { filterBtn.textContent = settings.get('fps-filter') ? 'FILTER: SHARP' : 'FILTER: SMOOTH'; };
+    label();
+    filterBtn.addEventListener('click', () => {
+      settings.set('fps-filter', !settings.get('fps-filter'));
+      updateRendererSize();
+      label();
+    });
+  }
 
   return {
     renderer,

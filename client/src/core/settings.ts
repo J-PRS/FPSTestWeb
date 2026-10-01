@@ -31,6 +31,7 @@ type Schema = {
   'fps-vgs-physical': boolean; // VGS chord letters by physical position (QWERTY mnemonic) instead of layout letter
   'fps-autoq': boolean;       // dynamic quality ladder — off = stay at user's manual picks
   'fps-cap': number;          // render cap (0 = every rAF; sim still runs uncapped)
+  'fps-filter': boolean;      // upscale filter: true = nearest (sharp), false = bilinear (smooth)
 };
 
 const DEFAULTS: Schema = {
@@ -60,6 +61,7 @@ const DEFAULTS: Schema = {
   'fps-vgs-physical': false,
   'fps-autoq': true,
   'fps-cap': 0,
+  'fps-filter': true,
 };
 
 const parse = {
