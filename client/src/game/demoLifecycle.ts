@@ -112,6 +112,7 @@ function updateBallsPlayback(d: DemoLifecycleCtx, dt: number): void {
       d.balls.splice(i, 1);
       const ti = d.targets.indexOf(b);
       if (ti >= 0) d.targets.splice(ti, 1);
+      d.playbackBallById.delete(b.id);
     }
   }
   if (frozenCount > 0) {
