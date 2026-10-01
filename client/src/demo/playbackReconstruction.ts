@@ -58,6 +58,14 @@ const beamGeo = new THREE.CylinderGeometry(1, 1, 1, 6, 1, true);
 const _beamDir = new THREE.Vector3();
 const _beamUp = new THREE.Vector3(0, 1, 0);
 
+// Same keep-floor contract as the live beam pool — a demo-heavy session
+// pins peak memory forever otherwise (each beam owns a material).
+const BEAM_POOL_KEEP = 32;
+export function releasePlaybackBeam(world: PlaybackWorld, b: PlaybackBeam): void {
+  if (world.beamPool.length >= BEAM_POOL_KEEP) b.mat.dispose();
+  else world.beamPool.push(b);
+}
+
 export function spawnPlaybackBeam(world: PlaybackWorld, from: THREE.Vector3, to: THREE.Vector3, colorHex = 0x99eeff): void {
   _beamDir.subVectors(to, from);
   const len = _beamDir.length();

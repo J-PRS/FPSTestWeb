@@ -1,4 +1,4 @@
-import { reconstructSeek, applyPlaybackEvents, type PlaybackWorld } from '../demo/playbackReconstruction.js';
+import { reconstructSeek, applyPlaybackEvents, releasePlaybackBeam, type PlaybackWorld } from '../demo/playbackReconstruction.js';
 import type { ProjectileEvent, TargetEvent } from '../demo/types.js';
 import { RemoteFrameFlags } from '../demo/types.js';
 import type { RemoteSample } from '../demo/DemoRecorder.js';
@@ -72,7 +72,7 @@ function updatePlaybackProjectiles(d: DemoLifecycleCtx, dt: number): void {
     b.life -= dt;
     if (b.life <= 0) {
       d.lazyScene().remove(b.mesh);
-      d.playbackWorld.beamPool.push(b);
+      releasePlaybackBeam(d.playbackWorld, b);
       d.playbackWorld.beams.splice(i, 1);
     } else {
       b.mat.opacity = 0.85 * (b.life / b.maxLife);
@@ -150,8 +150,10 @@ function clearTransientObjects(d: DemoLifecycleCtx): void {
   d.world.aoeGizmos.length = 0;
   for (const dd of d.world.playerDebrisList) dd.dispose();
   d.world.playerDebrisList.length = 0;
-  for (const b of d.playbackWorld.beams) d.lazyScene().remove(b.mesh);
-  d.playbackWorld.beamPool.push(...d.playbackWorld.beams);
+  for (const b of d.playbackWorld.beams) {
+    d.lazyScene().remove(b.mesh);
+    releasePlaybackBeam(d.playbackWorld, b);
+  }
   d.playbackWorld.beams.length = 0;
 }
 
