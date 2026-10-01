@@ -14,6 +14,8 @@ import * as THREE from 'three';
 import { ChildLogger } from '../core/Logger.js';
 import type { WorldState } from './worldState.js';
 import { RemotePlayer } from '../entities/RemotePlayer.js';
+import { SLOT_DEFS } from '../weapons.js';
+import { ProjectileEventType } from '../demo/types.js';
 
 const logger = new ChildLogger('DemoPlayback');
 
@@ -23,6 +25,7 @@ export interface DemoLifecycleDeps {
   lazyCamera: () => THREE.PerspectiveCamera;
   lazyPlayer: () => Player;
   lazyDemoManager: () => DemoManager | null;
+  lazyViewModel: () => import('../entities/ViewModel.js').ViewModel | null;
   damageNumberManager: () => DamageNumberManager;
   fragMessages: () => FragMessages;
   lazyHud: () => HUD;
@@ -50,6 +53,16 @@ interface DemoLifecycleCtx extends DemoLifecycleDeps {
   playbackRemotes: Map<number, RemotePlayer>;
   frozenWarn: { n: number };
   seekReconstructing: { on: boolean };
+  /** wid currently mirrored onto the viewmodel — -1 means "not applied yet". */
+  playbackWid: number;
+}
+
+// Frame weaponType → viewmodel wid. Any weaponType the current build doesn't
+// know (deleted since the clip was recorded) shows the stock rocket launcher
+// rather than breaking playback.
+function widForWeaponType(wt: number): number {
+  const i = SLOT_DEFS.findIndex(d => d.weaponType === wt);
+  return i >= 0 ? i : 0;
 }
 
 function updatePlaybackProjectiles(d: DemoLifecycleCtx, dt: number): void {
@@ -162,6 +175,15 @@ function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlayb
       d.seekReconstructing.on = false;
       return;
     }
+    // Muzzle kick rides the same Fired events that spawn the projectiles —
+    // the recorded weapon in frame and the shot stay in sync because they
+    // share one timestamp stream.
+    const vm = d.lazyViewModel();
+    if (vm) {
+      for (const e of events.projectiles) {
+        if (e.eventType === ProjectileEventType.Fired) vm.kick();
+      }
+    }
     applyPlaybackEvents(d.playbackWorld, events);
   };
   demoManager.onPlaybackState = (state) => {
@@ -171,6 +193,13 @@ function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlayb
       player.vel.set(state.velX, state.velY, state.velZ);
       player.yaw = state.yaw;
       player.pitch = state.pitch;
+      // Mirror the recorded held weapon onto the viewmodel. Unknown ids
+      // (a weapon deleted since recording) show the stock launcher.
+      const vm = d.lazyViewModel();
+      if (vm) {
+        const wid = widForWeaponType(state.weaponType);
+        if (wid !== d.playbackWid) { d.playbackWid = wid; vm.switchWeapon(wid); }
+      }
     }
   };
 
@@ -183,6 +212,9 @@ function wireDemoHandlers(d: DemoLifecycleCtx, demoManager: DemoManager, onPlayb
   // User explicitly stops playback (ESC, UI stop button) — full cleanup
   demoManager.onPlaybackStop = () => {
     d.world.playbackMode = false;
+    // Re-arm so the next replay re-applies its own weapon instead of
+    // inheriting whatever the previous clip left selected.
+    d.playbackWid = -1;
     for (const rp of d.world.remotePlayers.values()) rp.setStaleHidden(false);
     clearTransientObjects(d);
     // Show overlay menu so user can replay or pick another clip
@@ -324,6 +356,7 @@ export function createDemoLifecycle(deps: DemoLifecycleDeps) {
     playbackRemotes: new Map<number, RemotePlayer>(),
     frozenWarn: { n: 0 },
     seekReconstructing: { on: false },
+    playbackWid: -1,
     playbackWorld,
   });
 

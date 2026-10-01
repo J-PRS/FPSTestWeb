@@ -1,7 +1,7 @@
 // Demo system data types - binary-efficient structures for recording/replay
 
 export const DEMO_MAGIC = 0x44; // 'D'
-export const DEMO_FORMAT_VERSION = 3;
+export const DEMO_FORMAT_VERSION = 4;
 
 // Remote-frame flag bitmasks
 export const RemoteFrameFlags = {
@@ -44,7 +44,7 @@ export enum TargetEventType {
   StateChanged = 4,
 }
 
-// Flat frame structure for efficient recording (~44 bytes)
+// Flat frame structure for efficient recording (~49 bytes)
 export interface DemoFrame {
   frameNumber: number;       // uint16
   timestamp: number;         // float32
@@ -56,6 +56,10 @@ export interface DemoFrame {
   mouseDeltaY: number;      // int16
   jetpackFlags: number;     // uint8
   jetpackFuel: number;      // float32
+  // v4: held weapon so replays can rebuild the viewmodel. Agnostic on
+  // purpose — if the weapon is deleted from the build, playback swaps in
+  // a stock model rather than refusing to load the clip.
+  weaponType: number;       // uint8
 }
 
 export interface ProjectileEvent {
@@ -146,7 +150,7 @@ export function createFrame(frameNumber: number, timestamp: number): DemoFrame {
     velX: 0, velY: 0, velZ: 0,
     yaw: 0, pitch: 0,
     inputFlags: 0, mouseDeltaX: 0, mouseDeltaY: 0,
-    jetpackFlags: 0, jetpackFuel: 0,
+    jetpackFlags: 0, jetpackFuel: 0, weaponType: 0,
   };
 }
 

@@ -128,8 +128,11 @@ function readRecordCount(r: Reader, what: string, recordSize: number, max: numbe
   return count;
 }
 
-function readFrames(r: Reader): DemoFrame[] {
-  const count = readRecordCount(r, 'frame', FRAME_SIZE, 720000);
+function readFrames(r: Reader, hasWeaponType: boolean): DemoFrame[] {
+  // v4 appended weaponType to the frame record; older files read at their
+  // own record size and default to no held weapon shown.
+  const recSize = hasWeaponType ? FRAME_SIZE : FRAME_SIZE - 1;
+  const count = readRecordCount(r, 'frame', recSize, 720000);
   const frames: DemoFrame[] = Array.from({ length: count });
   for (let i = 0; i < count; i++) {
     frames[i] = {
@@ -143,6 +146,7 @@ function readFrames(r: Reader): DemoFrame[] {
       mouseDeltaY: r.i16(),
       jetpackFlags: r.u8(),
       jetpackFuel: r.f32(),
+      weaponType: hasWeaponType ? r.u8() : 0,
     };
   }
   return frames;
@@ -245,7 +249,7 @@ export function deserializeDemo(buffer: ArrayBuffer): DemoFile {
 
     const r = new Reader(buffer);
     const header = readDemoHeader(r, buffer);
-    const frames = readFrames(r);
+    const frames = readFrames(r, header.formatVersion >= 4);
     const projectileEvents = readProjectileEvents(r);
     const targetEvents = readTargetEvents(r);
     const roster = header.formatVersion >= 3 ? readRoster(r) : [];

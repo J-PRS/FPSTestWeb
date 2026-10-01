@@ -361,7 +361,9 @@ function hudTick(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof cr
     hud.updateMinimap(entities.targets, entities.nuggets, player.pos, player.yaw, _birdPosBuf, _mapBlips);
   });
 
-  viewModel.group.visible = !demoManager?.isPlaying && !player.isDead && !player.thirdPerson && !player.isSpectating;
+  // During demo playback the vm mirrors the frame's recorded weaponType —
+  // hiding it would strip the shooter POV from cool-shot clips.
+  viewModel.group.visible = !player.isDead && !player.thirdPerson && !player.isSpectating;
   const yawDelta = Math.atan2(Math.sin(player.yaw - st.lastYaw), Math.cos(player.yaw - st.lastYaw));
   viewModel.update(dt, yawDelta, player.pitch - st.lastPitch, player.vel, camera, player.shootAnimTimer > 0);
   st.lastYaw = player.yaw;

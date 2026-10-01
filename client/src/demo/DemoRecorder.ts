@@ -174,6 +174,7 @@ export class DemoRecorder implements IProjectileEventRecorder, ITargetEventRecor
     frame.mouseDeltaY = i.mouseDeltaY;
     frame.jetpackFlags = i.jetpackFlags;
     frame.jetpackFuel = i.jetpackFuel;
+    frame.weaponType = p.weaponType;
 
     this.frameBuffer.add(frame);
     this.frameNumber = (this.frameNumber + 1) % 65536;

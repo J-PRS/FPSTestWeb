@@ -6,6 +6,9 @@ export interface IPlayerDataProvider {
   velX: number; velY: number; velZ: number;
   yaw: number;
   pitch: number;
+  // Held weapon, stamped into every frame so replays can rebuild the
+  // viewmodel — demos stay loadable even if the weapon is deleted later.
+  weaponType: number;
 }
 
 export interface IInputProvider {

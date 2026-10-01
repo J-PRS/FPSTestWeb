@@ -1,6 +1,7 @@
 import { InputFlags, JetpackFlags } from './types.js';
 import type { IPlayerDataProvider, IInputProvider } from './interfaces.js';
 import type { Player } from '../entities/Player.js';
+import { weaponDef } from '../weapons.js';
 
 /** Live getters feeding the demo recorder — main.ts just calls this once. */
 export function playerProviders(player: Player): { playerData: IPlayerDataProvider; inputData: IInputProvider } {
@@ -14,6 +15,7 @@ export function playerProviders(player: Player): { playerData: IPlayerDataProvid
       get velZ() { return player.vel.z; },
       get yaw() { return player.yaw; },
       get pitch() { return player.pitch; },
+      get weaponType() { return weaponDef(player.currentWeapon).weaponType; },
     },
     inputData: {
       get inputFlags() {

@@ -273,6 +273,7 @@ async function init(): Promise<void> {
   // ?p2p= code pulls a no-mode session online.
   const soloMode = !mode && !urlParams.room && !urlParams.p2p;
   const serverUrl = (await serverEndpoints).wsUrl;
+  logger.warn(`[diag] serverUrl=${serverUrl} classic=${classicMode || soloMode}`);
   await connectServer({ serverUrl, classicMode: classicMode || soloMode, networkManager, logger, fragMessages, profiler });
   player.serverOwnsHealth = () => networkManager.isConnected();
 
@@ -501,6 +502,7 @@ function makeDemoLifecycle(): ReturnType<typeof createDemoLifecycle> {
     lazyCamera: () => camera,
     lazyPlayer: () => player,
     lazyDemoManager: () => demoManager,
+    lazyViewModel: () => viewModel,
     damageNumberManager: () => damageNumberManager,
     fragMessages: () => fragMessages,
     lazyHud: () => hud,

@@ -19,6 +19,7 @@ export interface PlaybackState {
   inputFlags: number;
   jetpackFlags: number;
   jetpackFuel: number;
+  weaponType: number;
 }
 
 export interface PlaybackCallbacks {

@@ -145,7 +145,7 @@ export function getInterpolatedState(p: DemoPlayer): PlaybackState {
         posX: 0, posY: 0, posZ: 0,
         velX: 0, velY: 0, velZ: 0,
         yaw: 0, pitch: 0,
-        inputFlags: 0, jetpackFlags: 0, jetpackFuel: 0,
+        inputFlags: 0, jetpackFlags: 0, jetpackFuel: 0, weaponType: 0,
       };
     }
 
@@ -176,6 +176,8 @@ export function getInterpolatedState(p: DemoPlayer): PlaybackState {
       inputFlags: t < 0.5 ? f0.inputFlags : f1.inputFlags,
       jetpackFlags: t < 0.5 ? f0.jetpackFlags : f1.jetpackFlags,
       jetpackFuel: lerp(f0.jetpackFuel, f1.jetpackFuel, t),
+      // Held weapon is discrete like the flags — snap at midpoint, not lerp.
+      weaponType: t < 0.5 ? f0.weaponType : f1.weaponType,
     };
   }
 

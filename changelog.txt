@@ -1,3 +1,4 @@
+2026-10-01 - Demo format v4: per-frame weaponType + playback viewmodel with stock-weapon fallback; hidden-vm gate removed
 2026-10-01 - MRV Launcher (mortar counterpart): bouncing carrier airbursts into contact bomblets; bot think stagger + trail upload fixes
 2026-10-01 - __perf reports draws/tris; __scene+__renderer debug handles for headless census
 2026-10-01 - Settings menu regrouped into labeled sections (perf/gfx/controls/audio+HUD/game)

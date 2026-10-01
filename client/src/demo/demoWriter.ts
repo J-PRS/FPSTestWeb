@@ -39,8 +39,8 @@ function writeString(view: DataView, offset: number, str: string): number {
   return offset;
 }
 
-// Frame size: 2 + 4 + 12 + 12 + 8 + 1 + 2 + 2 + 1 + 4 = 48 bytes
-export const FRAME_SIZE = 48;
+// Frame size: 2 + 4 + 12 + 12 + 8 + 1 + 2 + 2 + 1 + 4 + 1 = 49 bytes
+export const FRAME_SIZE = 49;
 // Projectile event size: 1 + 4 + 12 + 12 + 2 + 1 + 12 + 2 + 1 + 12 = 59 bytes
 export const PROJECTILE_EVENT_SIZE = 59;
 // Target event size: 1 + 4 + 12 + 12 + 2 + 1 + 4 + 1 + 12 = 49 bytes
@@ -66,6 +66,7 @@ function writeFrames(view: DataView, offset: number, frames: DemoFile['frames'])
     view.setInt16(offset, f.mouseDeltaY, true); offset += 2;
     view.setUint8(offset++, f.jetpackFlags);
     view.setFloat32(offset, f.jetpackFuel, true); offset += 4;
+    view.setUint8(offset++, f.weaponType);
   }
   return offset;
 }
