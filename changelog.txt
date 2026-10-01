@@ -1,3 +1,6 @@
+2026-10-01 - test: losMemoReset seam + botlos.test.ts (march, memo staleness, TTL, eye height)
+2026-10-01 - test: flagGoals.test.ts — CTF role-objective table incl HoF stand-lock invariant
+2026-10-01 - test: projsim.test.ts — swept-segment math, integration, botVec
 2026-10-01 - audit: TransportKind type in protocol.ts; 6 inline wt/rtc/ws unions consolidated
 2026-10-01 - audit: ArmorClass replaces inline light/medium/heavy unions (botBrain, Room, types)
 2026-10-01 - audit: TeamId replaces all 39 inline alpha/bravo unions across both ends + shared tables

@@ -20,6 +20,10 @@ const LOS_CELL = 3;
 const LOS_TTL_MS = 1000;
 const losMemo = new Map<number, { clear: boolean; until: number }>();
 
+/** Test/map-change seam: answers memoize on cell keys that ignore the
+ *  field, so a different terrain or a fresh harness must flush first. */
+export function losMemoReset(): void { losMemo.clear(); }
+
 function losKey(from: BotVec, to: BotVec): number {
   const ax = Math.round(from.x / LOS_CELL) + 2048;
   const az = Math.round(from.z / LOS_CELL) + 2048;

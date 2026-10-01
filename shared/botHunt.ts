@@ -15,7 +15,7 @@ import { losClear, BOT_EYE } from './botLos.ts';
 import type { BotVec, BotEnemy, BrainCtx, BrainOut } from './botBrain.ts';
 
 // LOS lives in botLos.ts — re-export so botBrain's public surface stays put.
-export { losClear, BOT_EYE } from './botLos.ts';
+export { losClear, losMemoReset, BOT_EYE } from './botLos.ts';
 export const BOT_FIRE_RANGE = 45;
 // Creatures are big, slow, and fly — a human plinks them past the normal
 // duel range, so the farming reach runs longer (3D distance still applies:

@@ -25,7 +25,7 @@ import { stuckBreak, dodge, type EscapeState } from './botEscape.ts';
 
 // Combat half lives in botHunt.ts — re-export so existing imports keep
 // resolving (losClear/BOT_EYE/BOT_FIRE_RANGE are the public surface).
-export { losClear, BOT_EYE, BOT_FIRE_RANGE } from './botHunt.ts';
+export { losClear, losMemoReset, BOT_EYE, BOT_FIRE_RANGE } from './botHunt.ts';
 import { pickDest, pickDeploy, statusIntent } from './botDisposition.ts';
 
 export type { BotVec } from './botVec.ts';
