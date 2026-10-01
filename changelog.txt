@@ -1,3 +1,4 @@
+2026-10-01 - Projectile sweepTerrain: coarse max-height grid rejects flat-ground sweeps in 1 lookup
 2026-10-01 - HUD indicators: skip transform style writes when the quantized position is unchanged
 2026-10-01 - RibbonTrail: skip billboard side-recompute + position rewrite when camera is parked
 2026-10-01 - perf: instance ambient bird flock into one draw (27 -> 1), wing flap in vertex shader

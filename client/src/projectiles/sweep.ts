@@ -11,6 +11,7 @@
 import * as THREE from 'three';
 
 import { PLAYER_RADIUS, CAPSULE_HALF_HEIGHT, CAPSULE_CENTER_Y, EYE_OFFSET, TERRAIN_HEIGHT_SCALE } from '../core/config.js';
+import { maxHeightInRect } from '../world/heightmap.js';
 import { ChildLogger } from '../core/Logger.js';
 import type { Targetable } from '../entities/balls.js';
 import type { Terrain } from '../world/terrain.js';
@@ -55,6 +56,11 @@ export function sweepTerrain(p: SweepHost, terrain: Terrain): boolean {
   // endpoint clears it can never intersect. Skips the ~96-getHeight loop
   // for every high-altitude shell (most of them mid-flight).
   if (Math.min(p.pos.y, p.prevPos.y) > TERRAIN_HEIGHT_SCALE + offset) return false;
+  // Coarse reject: the tallest heightmap cell under the segment's XZ rect
+  // can't be under-reported, so clearing it skips the ~96-sample loop for
+  // every shell cruising over low ground (the common case).
+  const minY = Math.min(p.pos.y, p.prevPos.y);
+  if (minY > maxHeightInRect(p.prevPos.x, p.prevPos.z, p.pos.x, p.pos.z) + offset) return false;
   const step = Math.max(0.08, Math.min(0.5, offset));
   const steps = Math.max(1, Math.min(96, Math.ceil(dist / step)));
   const below = (t: number) => {

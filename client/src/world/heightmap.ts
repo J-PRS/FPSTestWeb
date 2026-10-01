@@ -14,6 +14,65 @@ const CPU_STEP = 5.0;
 let hmData: Uint8ClampedArray | null = null;
 let hmSize = 0;
 
+// Coarse per-cell max over the heightmap — lets a swept segment reject
+// terrain in one lookup when it flies entirely above the local ground.
+// 64×64 cells covers the world; a cell's max can never under-report, so
+// skipping on `minY > cellMax` can't hide a real hit.
+const MAXGRID = 64;
+const maxGrid = new Uint8Array(MAXGRID * MAXGRID);
+
+function buildMaxGrid(): void {
+  maxGrid.fill(0);
+  if (!hmData || !hmSize) return;
+  const texel = Math.max(1, Math.floor(hmSize / MAXGRID));
+  for (let cz = 0; cz < MAXGRID; cz++) {
+    const zEnd = Math.min(hmSize, (cz + 1) * texel);
+    for (let cx = 0; cx < MAXGRID; cx++) {
+      let m = 0;
+      const xEnd = Math.min(hmSize, (cx + 1) * texel);
+      for (let z = cz * texel; z < zEnd; z++) {
+        const row = z * hmSize * 4 + cx * texel * 4;
+        for (let x = 0; x < xEnd - cx * texel; x++) {
+          const v = hmData[row + x * 4];
+          if (v > m) m = v;
+        }
+      }
+      maxGrid[cz * MAXGRID + cx] = m;
+    }
+  }
+}
+
+/** Scaled world height of the tallest texel anywhere under the XZ rect
+ *  (world coords, wrapped like sampleHeight). Returns 0 before data loads —
+ *  callers must treat 0 as "unknown", not "flat". */
+export function maxHeightInRect(wx0: number, wz0: number, wx1: number, wz1: number): number {
+  if (!hmData || !hmSize) return 0;
+  const toCell = (w: number) => {
+    const u = (((w / HM_WORLD_SCALE) % 1.0) + 1.0) % 1.0;
+    return Math.min(MAXGRID - 1, Math.floor(u * MAXGRID));
+  };
+  // Walk cells from each end mod MAXGRID — a seam-crossing rect covers
+  // its real cells; a rect spanning the world just scans the row (a
+  // superset still can't under-report the max).
+  const xa = toCell(wx0), xb = toCell(wx1);
+  const za = toCell(wz0), zb = toCell(wz1);
+  const span = (a: number, b: number) => {
+    const d = (b - a + MAXGRID) % MAXGRID;
+    return Math.min(d, MAXGRID - 1) + 1;
+  };
+  const nx = span(xa, xb), nz = span(za, zb);
+  let m = 0;
+  for (let iz = 0; iz < nz; iz++) {
+    const z = (za + iz) % MAXGRID;
+    const row = z * MAXGRID;
+    for (let ix = 0; ix < nx; ix++) {
+      const v = maxGrid[row + (xa + ix) % MAXGRID];
+      if (v > m) m = v;
+    }
+  }
+  return (m / TERRAIN_HEIGHTMAP_DIVISOR) * HSCALE;
+}
+
 /** Server-format heightmap: 8-byte LE header (w,h) + uint8 grid, stride 1.
  *  This is what maps/<name>.bin carries — same bytes the server's
  *  BallSim/RoomMoveSim parse, so client prediction and server truth sample
@@ -36,6 +95,7 @@ export async function loadHeightfieldBin(url: string): Promise<void> {
   }
   hmData = rgba;
   hmSize = w;
+  buildMaxGrid();
 }
 
 export async function loadHeightmap(url: string): Promise<void> {
@@ -53,6 +113,7 @@ export async function loadHeightmap(url: string): Promise<void> {
       const ctx = canvas.getContext('2d')!;
       ctx.drawImage(img, 0, 0);
       hmData = ctx.getImageData(0, 0, img.width, img.height).data; // RGBA
+      buildMaxGrid();
       resolve();
     });
     img.addEventListener('error', () => reject(new Error(`heightmap load failed: ${url}`)));
