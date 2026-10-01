@@ -7,10 +7,10 @@ import { POWERUP } from '../../../shared/pickups.ts';
 
 describe('armor soak', () => {
   it('absorbs the soak fraction, overflow reaches health', () => {
-    const room = mkRoom('flat', 'dm');
+    const room = mkRoom({}, 'dm');
     room.players.addPlayer('p1', 'alpha', 'none', 'medium');
     const p = firstPlayer(room);
-    pin(room, 'p1');
+    pin(room, 'p1', { x: 0, y: 31, z: 0 });
     p.health = 100; p.armor = 100;
     const r = room.players.applyDamage('p1', 100);
     expect(r.newArmor).toBe(100 - 100 * POWERUP.armorAbsorb); // 20 left
@@ -19,10 +19,10 @@ describe('armor soak', () => {
   });
 
   it('a depleted pool soaks nothing — the whole hit lands on health', () => {
-    const room = mkRoom('flat', 'dm');
+    const room = mkRoom({}, 'dm');
     room.players.addPlayer('p1', 'alpha', 'none', 'medium');
     const p = firstPlayer(room);
-    pin(room, 'p1');
+    pin(room, 'p1', { x: 0, y: 31, z: 0 });
     p.health = 100; p.armor = 5;
     const r = room.players.applyDamage('p1', 100);
     expect(r.newArmor).toBe(0); // 5*0.8=4 soaked, pool gone…
@@ -30,10 +30,10 @@ describe('armor soak', () => {
   });
 
   it('dead players keep dead armor — no zombie padding on respawn edge', () => {
-    const room = mkRoom('flat', 'dm');
+    const room = mkRoom({}, 'dm');
     room.players.addPlayer('p1', 'alpha', 'none', 'medium');
     const p = firstPlayer(room);
-    pin(room, 'p1');
+    pin(room, 'p1', { x: 0, y: 31, z: 0 });
     p.isDead = true; p.armor = 50;
     room.players.applyDamage('p1', 10);
     expect(p.armor).toBe(50); // applyDamage early-returns on isDead

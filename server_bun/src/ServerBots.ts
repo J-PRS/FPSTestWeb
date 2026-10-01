@@ -15,8 +15,7 @@
  */
 import type { Vec3 } from './types.ts';
 import type { Room } from './Room.ts';
-import { hmHeight, type Heightfield } from '../../shared/heightfield.ts';
-import { EYE_OFFSET } from '../../shared/constants.ts';
+import type { Heightfield } from '../../shared/heightfield.ts';
 import { BotBrain, type BotVec, type BrainOut } from '../../shared/botBrain.ts';
 import { logger } from './logger.ts';
 import { pushRewindSample } from './rewind.ts';

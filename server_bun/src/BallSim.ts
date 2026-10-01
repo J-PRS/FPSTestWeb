@@ -163,10 +163,6 @@ export class BallSim {
     return out;
   }
 
-  private alivePlayers(): { id: string; pos: SimVec }[] {
-    return alivePlayers(this.players);
-  }
-
   private spawnBall(variant: BallVariant, near?: SimVec, posOverride?: SimVec): SimBall {
     return spawnBallInto(this, variant, near, posOverride);
   }

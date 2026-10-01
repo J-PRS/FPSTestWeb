@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test';
-import { MatchClock, type MatchHost } from '../../src/RoomMatch.ts';
+import { MatchClock, type MatchHost } from '../../src/roomMatch.ts';
 import type { ServerMessage } from '../../../shared/protocol.ts';
+import { MODES } from '../../../shared/teams.ts';
 
 // Match lifecycle: clock arms on the first human, warns at 60s, horn ends
 // a lead instantly, a tie goes to overtime (next score wins), OT window
@@ -10,7 +11,7 @@ function mkHost() {
   const sent: ServerMessage[] = [];
   const host: MatchHost = {
     room: 't', mode: 'tdm',
-    modeSpec: { teams: true, winAt: 5, timeLimitS: 600 },
+    modeSpec: { ...MODES.tdm, winAt: 5, timeLimitS: 600 },
     scores: { alpha: 0, bravo: 0 },
     ffaScores: new Map(),
     getHumanCount: () => 1,
