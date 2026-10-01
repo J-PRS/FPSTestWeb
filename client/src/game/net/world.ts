@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { buildStructures, buildArenaDome, clearArenaDome } from '../../world/mapStructures.js';
 import type { StructureSpec, InteriorSpec } from '../../../../shared/mapSpec.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { setAmbientCaps } from '../species/ambientCaps.js';
 import { structureColliders } from '../../../../shared/ballSim.js';
 import { ColliderIndex } from '../../../../shared/solidWorld.js';
@@ -82,7 +83,7 @@ export function wireWorld(ctx: NetCtx): void {
 
   // Initial connection and reconnection — full roster + local restore.
   networkManager.onGameState = (players: GameStatePlayer[], localPlayerState: LocalPlayerState | undefined, roomInfo?: { room?: string; mode?: string; team?: 'alpha' | 'bravo'; scores?: { alpha: number; bravo: number }; ffaScores?: Record<string, number>; pickups?: { id: number; pos: { x: number; y: number; z: number }; kind?: import('../../../../shared/pickups.js').PickupKind }[]; flags?: { team: 'alpha' | 'bravo'; pos: { x: number; y: number; z: number }; state: 'home' | 'carried' | 'dropped'; carrier: string | null }[]; matchEndsAt?: number; respawnMs?: number; deployables?: { id: number; owner: string; kind: 'turret' | 'mine' | 'station' | 'drone' | 'shield'; pos: { x: number; y: number; z: number }; team?: string }[]; map?: { mode?: string; bases?: { alpha?: { x: number; y: number; z: number }; bravo?: { x: number; y: number; z: number } }; structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number }; ambient?: Record<string, number>; terrain?: string; terrainTex?: string; sky?: string; interiors?: InteriorSpec[] } }) => {
-    logger.debug(`gameState received, players: ${players.length}`);
+    logger.warn(`gameState room=${roomInfo?.room} mapKeys=${roomInfo?.map ? Object.keys(roomInfo.map).join(',') : 'none'}`);
     applyRoomInfo(ctx, players.length, roomInfo);
     if (localPlayerState) restoreLocalPlayer(ctx, localPlayerState);
   };
@@ -176,7 +177,8 @@ function applyMapSnapshot(ctx: NetCtx, map?: MapSnapshot): void {
   }
   setAmbientCaps(map?.ambient);
   void applyTerrain(ctx, map?.terrain ?? null, map?.terrainTex, map?.sky);
-  void applyInteriors(ctx, map?.interiors);
+  void applyInteriors(ctx, map?.interiors)
+    .catch((e) => ctx.deps.logger.warn(`applyInteriors failed: ${e instanceof Error ? e.message : String(e)}`));
 }
 
 /** Fetch the room's heightfield and swap the live terrain over to it.
@@ -296,13 +298,15 @@ async function loadMats(dirUrl: string): Promise<{
   const man = await res.json() as { grid: number; count: number; tiles: string[]; alphas: string; tileMeters: number };
   const raw = new Uint8Array(await (await fetch(`${dirUrl}/${man.alphas}`)).arrayBuffer());
   const grid = man.grid, count = man.count;
+  // alphas.bin is cell-major: weights packed [cell*count + layer], not
+  // [layer*grid² + cell]. Reading planar spreads every layer at ~0.25
+  // over the whole map — the tiled detail covered the entire terrain.
   const pack = (offset: number) => {
     const rgba = new Uint8Array(grid * grid * 4);
     for (let c = 0; c < 4; c++) {
       const layer = offset + c;
       if (layer >= count) break;
-      const src = layer * grid * grid;
-      for (let i = 0; i < grid * grid; i++) rgba[i * 4 + c] = raw[src + i];
+      for (let i = 0; i < grid * grid; i++) rgba[i * 4 + c] = raw[i * count + layer];
     }
     const t = new THREE.DataTexture(rgba, grid, grid, THREE.RGBAFormat, THREE.UnsignedByteType);
     t.magFilter = THREE.LinearFilter;
@@ -317,6 +321,9 @@ async function loadMats(dirUrl: string): Promise<{
   const g = atlas.getContext('2d')!;
   await Promise.all(man.tiles.slice(0, 8).map(async (path, k) => {
     const img = new Image();
+    // Cross-origin atlas bake — without this the canvas taints and
+    // CanvasTexture's upload throws SecurityError (silent grey terrain).
+    img.crossOrigin = 'anonymous';
     img.src = `${dirUrl}/${path}`;
     await img.decode();
     g.drawImage(img, (k % 4) * 256, Math.floor(k / 4) * 256, 256, 256);
@@ -384,6 +391,7 @@ const SWAP_YZ = new THREE.Matrix4().set(
 const G_GLB_TO_T2 = new THREE.Matrix4().makeRotationX(Math.PI / 2);
 
 let interiorGroup: THREE.Group | null = null;
+let interiorGeos: THREE.BufferGeometry[] = []; // merged geos — owned, must dispose on swap
 const glbCache = new Map<string, Promise<THREE.Group | null>>();
 const glbLoader = new GLTFLoader();
 
@@ -403,10 +411,13 @@ async function fetchGlb(httpUrl: string, file: string): Promise<THREE.Group | nu
  *  these are static hulls, no skeletons. */
 async function applyInteriors(ctx: NetCtx, list: InteriorSpec[] | undefined): Promise<void> {
   const { deps } = ctx;
+  deps.logger.warn(`applyInteriors: list=${list === undefined ? 'undef' : list.length}`);
   const scene = deps.lazyScene();
   if (interiorGroup) {
     scene.remove(interiorGroup);
     interiorGroup = null;
+    for (const g of interiorGeos) g.dispose();
+    interiorGeos = [];
   }
   if (!list?.length) return;
   const { httpUrl } = await resolveServerEndpoints();
@@ -416,6 +427,14 @@ async function applyInteriors(ctx: NetCtx, list: InteriorSpec[] | undefined): Pr
   scene.add(group);
 
   const missing = new Set<string>();
+  // Static-merge buckets: every interior sub-mesh bakes its world transform
+  // into a cloned geometry and merges per (material × attribute layout) —
+  // 33 hulls × dozens of primitives was hundreds of draw calls at idle.
+  // Multi-material meshes keep their original mesh (rare) instead of
+  // splitting groups.
+  const buckets = new Map<string, { mat: THREE.Material; geos: THREE.BufferGeometry[] }>();
+  const mergedGeo: THREE.BufferGeometry[] = interiorGeos;
+  const kept: THREE.Mesh[] = [];
   await Promise.all(list.map(async (spec) => {
     const src = await fetchGlb(httpUrl, spec.file);
     if (!src) { missing.add(spec.file); return; }
@@ -435,17 +454,54 @@ async function applyInteriors(ctx: NetCtx, list: InteriorSpec[] | undefined): Pr
     m.multiply(G_GLB_TO_T2);
     inst.matrixAutoUpdate = false;
     inst.matrix.copy(m);
+    inst.updateMatrixWorld(true);
+    // DEBUG: per-instance world bounds — catches the giant-wedge outliers
+    const bb = new THREE.Box3().setFromObject(inst);
+    const sz = bb.getSize(new THREE.Vector3());
+    deps.logger.warn(`int ${spec.file} sz=${sz.x|0},${sz.y|0},${sz.z|0} ` +
+      `@${pos.x|0},${pos.y|0},${pos.z|0} rot=${spec.rot?.map((v:number)=>v.toFixed(2)).join(',') ?? '-'} scl=${spec.scale ? JSON.stringify(spec.scale) : '-'}`);
     inst.traverse((o) => {
       const mesh = o as THREE.Mesh;
-      if (mesh.isMesh) {
-        const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-        for (const mat of mats) if (mat) mat.side = THREE.DoubleSide;
+      if (!mesh.isMesh) return;
+      const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      for (const mat of mats) if (mat) mat.side = THREE.DoubleSide;
+      if (mats.length !== 1) {
+        // Rare path: keep the multi-material mesh but pin the baked world
+        // transform — re-parenting to `group` drops the instance matrix.
+        const clone = mesh.clone();
+        clone.matrixAutoUpdate = false;
+        clone.matrix.copy(mesh.matrixWorld);
+        kept.push(clone); group.add(clone); return;
       }
+      const mat = mats[0]!;
+      // mergeGeometries refuses mismatched attribute sets — key on the
+      // layout too or one odd primitive sinks a whole material bucket.
+      const sig = `${mat.uuid}|${Object.keys(mesh.geometry.attributes).toSorted().join(',')}|${mesh.geometry.index ? 'i' : 'n'}`;
+      const geo = mesh.geometry.clone().applyMatrix4(mesh.matrixWorld);
+      const b = buckets.get(sig) ?? { mat, geos: [] };
+      b.geos.push(geo);
+      buckets.set(sig, b);
     });
-    group.add(inst);
   }));
+  for (const { mat, geos } of buckets.values()) {
+    const merged = mergeGeometries(geos, false);
+    if (!merged) { // attribute/index quirk — fall back to the unmerged geos
+      for (const g of geos) {
+        const mesh = new THREE.Mesh(g, mat);
+        mesh.castShadow = mesh.receiveShadow = true;
+        group.add(mesh);
+        mergedGeo.push(g);
+      }
+      continue;
+    }
+    for (const g of geos) g.dispose(); // baked clones — merged owns their data now
+    mergedGeo.push(merged);
+    const mesh = new THREE.Mesh(merged, mat);
+    mesh.castShadow = mesh.receiveShadow = true;
+    group.add(mesh);
+  }
   if (missing.size) deps.logger.warn(`Interiors missing glb: ${[...missing].join(', ')}`);
-  deps.logger.info(`T2 interiors placed: ${list.length - missing.size}/${list.length}`);
+  deps.logger.info(`T2 interiors placed: ${list.length - missing.size}/${list.length} → ${buckets.size + kept.length} draws`);
 }
 
 const _axis = new THREE.Vector3();
