@@ -205,6 +205,13 @@ export class GameServer {
     const room = this.roomOfPlayer(playerId);
     if (!room) return;
 
+    // A stale socket's close must not detach a re-seated session: RTC
+    // adapters close both datachannels asynchronously, so the old
+    // socket's onClose can land AFTER a reclaim already handed the seat
+    // to a new socket — marking a live player disconnected and flapping
+    // the connection every reconnect cycle.
+    if (room.connections.getConnection(playerId) !== ws) return;
+
     room.connections.unregister(playerId);
     room.rateLimiter.removePlayer(playerId);
     room.messages.onPlayerDisconnected(playerId);

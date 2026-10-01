@@ -1,3 +1,4 @@
+2026-10-01 - Fix RTC reconnect flap-loop (could not respawn): GameServer.onClose is now seat-aware so a stale socket close cannot detach a re-seated session, and reclaim authenticates by token first then evicts the zombie socket instead of rejecting the owner as "already connected".
 2026-10-01 - Sheep meter scores total mechanical energy: tribesing credit and drain now read sqrt(2*Ema(1/2v^2+g*h)) instead of horizontal speed, so altitude (potential) banks the same ledger as velocity. Server mirrors client; sheepMeter scenario repinned to true ground.
 2026-10-01 - Ribbon origin-streak fix: unwritten slot verts glue to head (index buffer spans every sample pair)
 2026-10-01 - Mortar trail densified (the old chunky look came from the stale-emitter bug; this restores it legitimately)

@@ -78,7 +78,24 @@ describe('grace reconnect', () => {
     const { mgr } = mkSessions(room);
     join(mgr, fakeWs(), 'p1');
     const ws2 = fakeWs();
-    join(mgr, ws2, 'p1'); // no grace entry → plain duplicate
-    expect(ws2.closed[0]?.reason).toBe('Player ID already connected');
+    join(mgr, ws2, 'p1'); // no token → fails auth, can't even probe the slot
+    expect(ws2.closed[0]?.reason).toBe('Invalid session token');
+  });
+
+  it('a valid token evicts a zombie socket still holding the seat', () => {
+    // RTC flap path: the old datachannel's close can lag or be lost while
+    // the client has already reconnected — rejecting that join as
+    // 'already connected' loops the client forever. The session token
+    // proves ownership, so the stale socket is closed and re-seated.
+    const room = mkRoom({}, 'tdm');
+    const { mgr } = mkSessions(room);
+    const ws1 = fakeWs();
+    join(mgr, ws1, 'p1');
+    const ws2 = fakeWs();
+    join(mgr, ws2, 'p1', room.sessionTokens.get('p1'));
+    expect(ws2.closed.length).toBe(0); // reclaimed, not rejected
+    expect(ws1.closed[0]?.reason).toBe('replaced by reconnect'); // zombie evicted
+    expect(room.connections.getConnection('p1') as unknown).toBe(ws2); // live seat is the new socket
+    expect(room.disconnected.has('p1')).toBe(false); // no phantom grace entry
   });
 });

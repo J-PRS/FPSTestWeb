@@ -161,24 +161,38 @@ export class SessionManager {
    *  timer and re-seat the socket, or reject on a bad token / live playerId. */
   private reclaim(ws: ServerWebSocket<WebSocketData>, room: Room, playerId: string, token: string | undefined): void {
     const existingPlayer = room.players.getPlayer(playerId);
-    const disconnected = room.disconnected.get(playerId);
-    if (!existingPlayer || !disconnected) {
-      logger.warn('Duplicate playerId rejected', { playerId });
-      ws.close(1008, 'Player ID already connected');
+    if (!existingPlayer) {
+      logger.warn('Reclaim rejected: no player state', { playerId });
+      ws.close(1008, 'Invalid session token');
       return;
     }
     // Session reclaim requires the server-issued token — bare playerId
-    // knowledge must not be enough to steal a slot
+    // knowledge must not be enough to steal a slot. Check it BEFORE the
+    // disconnected test: a token holder is the slot's owner, and a zombie
+    // socket whose close never landed must be evictable by them — the old
+    // order rejected every reconnect as 'already connected' while the
+    // stale close was still in flight (RTC SCTP shutdown can lag or be
+    // lost entirely on a flap), looping the client forever.
     if (token !== room.sessionTokens.get(playerId)) {
       logger.warn('Reconnect rejected: bad session token', { playerId });
       ws.close(1008, 'Invalid session token');
       return;
     }
-    clearTimeout(disconnected.timeout);
-    room.disconnected.delete(playerId);
-
+    const disconnected = room.disconnected.get(playerId);
+    if (disconnected) {
+      clearTimeout(disconnected.timeout);
+      room.disconnected.delete(playerId);
+    }
+    const oldSock = room.connections.getConnection(playerId);
     ws.data.playerId = playerId;
     room.connections.register(playerId, ws);
+    // Evict whatever still held the seat — zombie or not. Register FIRST:
+    // closing the old socket fires GameServer.onClose, which must see the
+    // seat already owned by ws or it re-marks the player disconnected and
+    // re-arms the removal timer under our live session.
+    if (oldSock && oldSock !== ws) {
+      try { oldSock.close(1000, 'replaced by reconnect'); } catch { /* gone */ }
+    }
     room.messages.handleHandshake(playerId, undefined, true);
     // Disconnect cancelled any pending respawn — if they come back dead,
     // re-arm it or the restored corpse stays dead forever
