@@ -52,6 +52,9 @@ export interface RoomInfo {
   onKill?: (targetId: string, shooterId: string) => void;
   /** Any damage event — Room flinches bot brains here. */
   onHit?: (targetId: string, shooterId: string) => void;
+  /** Seeded room rng — scenario harnesses inject it so claim-path dice
+   *  (bomblet scatter) replay identically under a seed. */
+  rng?: () => number;
   /** FFA scoreboard supplier for gameState joins — Room.ffaScores. */
   ffaScores?: () => Record<string, number>;
   /** Flag snapshot supplier for gameState joins — RoomFlags.snapshot. */
@@ -144,6 +147,7 @@ export class MessageHandler {
     this.combat = new CombatHandler(playerManager, broadcast, sendToPlayer, {
       onKill: roomInfo?.onKill,
       onHit: roomInfo?.onHit,
+      rng: roomInfo?.rng,
       teams: roomInfo?.teams,
       friendlyFire: roomInfo?.friendlyFire,
       moveImpulse: roomInfo?.moveImpulse,

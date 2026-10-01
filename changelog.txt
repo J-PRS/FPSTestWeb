@@ -1,3 +1,4 @@
+2026-10-01 - audit: seeded rng through claim/deploy paths — bomblet scatter + turret arm jitter now replay under scenario seeds (deps rng plumbed roomInfo->CombatDeps->AoeHost)
 2026-10-01 - audit: zero value import cycles repo-wide; determinism sweep seeded (rollCreatureDrop via room rng); no dup fns/TODOs/escapes found
 2026-10-01 - break last server cycles (superBot, tickHelpers leaves); seed rollCreatureDrop via room rng; drop dead tauntRng alias
 2026-10-01 - break last server import cycles: superBot.ts leaf (isSuper env knob out of botArsenal), tickHelpers.ts leaf (healPerTick/recordSuppressed/TickRecord out of TickLoop; tests keep TickLoop re-export); drop dead tauntRng alias

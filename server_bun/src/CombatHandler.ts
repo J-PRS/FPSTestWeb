@@ -51,6 +51,8 @@ export interface CombatDeps {
   /** Armor-grenade plating sweep — grants `amount` armor to every sim
    *  creature inside `radius` of the blast point (overcap health). */
   creatureArmor?: (pos: Vec3, amount: number, radius: number) => void;
+  /** Seeded room rng — absent = ambient Math.random (production). */
+  rng?: () => number;
 }
 
 /**
@@ -88,6 +90,10 @@ export class CombatHandler {
   killFeed: KillFeed;
   private hitLedger = new HitLedger();
   respawner: RespawnManager;
+
+  /** AoeHost surface — seeded rng rides deps so bomblet scatter replays
+   *  under scenario seeds; ambient dice when uninjected. */
+  rng(): number { return (this.deps.rng ?? Math.random)(); }
 
   constructor(
     public playerManager: PlayerManager,

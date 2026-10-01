@@ -107,7 +107,7 @@ export class RoomDeployables {
       this.remove(owned[0]!.id);
     }
     const id = this.nextId++;
-    const armDelay = k === 'turret' ? TURRET_UNFOLD_S + Math.random() * 0.4
+    const armDelay = k === 'turret' ? TURRET_UNFOLD_S + this.room.rng() * 0.4
       : k === 'mine' ? MINE_ARM_S
       : k === 'station' ? STATION_HEAL_CD : 0;
     this.items.set(id, { id, owner: playerId, kind: k, pos: { ...pos }, ttl: TTL_S[k], fireCd: armDelay, hp: HP[k], armor: 0 });

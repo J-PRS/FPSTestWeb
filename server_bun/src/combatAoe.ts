@@ -29,6 +29,8 @@ export interface AoeHost {
   reject(playerId: string, kind: string, reason: string, targetId?: string, weaponType?: number): void;
   friendly(shooterId: string, targetId: string): boolean;
   ddMult(shooter: PlayerState): number;
+  /** Seeded room rng — bomblet scatter must replay under scenario seeds. */
+  rng(): number;
 }
 
 export class AoeClaims {
@@ -191,8 +193,8 @@ export class AoeClaims {
     const bomblet = getWeaponStats(
       msg.weaponType === WeaponType.MRVLauncher ? WeaponType.MRVBomblet : WeaponType.ClusterBomblet);
     for (let i = 0; i < cluster.count; i++) {
-      const ang = Math.random() * Math.PI * 2;
-      const r = Math.random() * cluster.radius;
+      const ang = this.h.rng() * Math.PI * 2;
+      const r = this.h.rng() * cluster.radius;
       this.h.blast.processAOE(playerId, {
         x: msg.position.x + Math.cos(ang) * r,
         y: msg.position.y, // bomblets scatter on the blast plane

@@ -173,6 +173,8 @@ export class Room {
     this.ballSim.colliders = structureColliders(this.spec.structures);
     if (this.spec.ballMix) this.ballSim.ballMix = this.spec.ballMix;
     if (this.spec.spawns) this.players.spawnPoints = this.spec.spawns;
+    this.players.teamSpawns = this.spec.teamSpawns ?? null;
+    this.players.spawnRng = () => this.rng();
     this.messages.setBallSim(this.ballSim);
     if (field) this.ballSim.attachField(field);
     // Server-authoritative melee species — the crawl* wire events are the
@@ -314,6 +316,7 @@ export class Room {
       interiors: this.spec.interiors,
       onKill: (pid, shooter) => this.scoring.onKill(pid, shooter),
       onHit: (pid, shooter) => this.bots.flinch(pid, shooter),
+      rng: () => this.rng(),
       flags: () => this.flags?.snapshot() ?? [],
       pickups: () => this.pickups?.snapshot() ?? [],
       onDeploy: (pid, kind, pos) => this.deployables.handleDeploy(pid, kind, pos),
@@ -495,6 +498,7 @@ export class Room {
     const terrainChanged = spec.terrain !== this.spec.terrain;
     this.spec = spec;
     if (spec.spawns) this.players.spawnPoints = spec.spawns;
+    this.players.teamSpawns = spec.teamSpawns ?? null;
     this.ballSim.colliders = structureColliders(spec.structures);
     this.moveSim.attachStructures(spec.structures);
     this.projectiles.attachStructures(spec.structures);
