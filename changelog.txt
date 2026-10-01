@@ -1,3 +1,4 @@
+2026-10-01 - vfx: blast/implode bursts pool by spec key (repeat explosions restart systems instead of rebuilding ~30 behaviors); dir re-seeded via liveDir
 2026-10-01 - vfx: far burst systems (>60m) queue construction, drain one per frame — kills the ~15ms multi-layer spawn spike
 2026-10-01 - warmup: swallow compileAsync late-material rejection (harmless pageerror noise)
 2026-10-01 - ANTIALIAS menu row: OFF / FXAA / SMAA / MSAA 2x / MSAA 4x (pass after upscale; MSAA sets composer multisampling), stored as fps-aa

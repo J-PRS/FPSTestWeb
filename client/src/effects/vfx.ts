@@ -518,15 +518,21 @@ class BlastEmitter {
   readonly type = 'blast';
   constructor(private elvBase: number, private elvSpan: number,
               private planar: boolean, private vy: number,
-              private dir?: THREE.Vector3, private spread?: number) { }
+              private dir?: THREE.Vector3, private spread?: number) {
+    if (dir) this.liveDir.copy(dir);
+  }
   update(): void { }
+  // Pooled systems keep their constructed emitter — the launch dir is the
+  // only per-shot value a forward-cone burst needs swapped on reuse.
+  private liveDir = new THREE.Vector3();
+  setDir(d?: THREE.Vector3): void { if (d) this.liveDir.copy(d); }
   initialize(p: BlastParticle): void {
     const ang = Math.random() * Math.PI * 2;
     p.position.set((Math.random() - 0.5) * 0.5, (Math.random() - 0.5) * 0.5, (Math.random() - 0.5) * 0.5);
     if (this.dir) {
       // Forward cone: dir jittered by `spread` — reads as streaks along a
       // launch direction rather than an omnidirectional puff.
-      _eVel.copy(this.dir)
+      _eVel.copy(this.liveDir)
         .addScaledVector(_eRand.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize(), this.spread!)
         .normalize()
         .multiplyScalar(p.startSpeed);
@@ -550,6 +556,20 @@ class BlastEmitter {
 }
 const _eRand = new THREE.Vector3();
 const _eVel = new THREE.Vector3();
+
+// Spec-keyed burst pool: explosions repeat the same few layer configs,
+// so systems restart instead of rebuilding ~30 behavior objects per hit.
+// The dir vector can't go in the key — it varies per shot — so the
+// emitter is stored alongside and its liveDir re-seeded on take.
+const shapeOf = new WeakMap<ParticleSystem, BlastEmitter>();
+
+function burstKey(kind: string, spec: BlastSpec | ImplodeSpec, additive: boolean): string {
+  const s = spec as BlastSpec & ImplodeSpec;
+  return [kind, additive, s.count, s.spdMin, s.spdMax, s.vy, s.lifeMin, s.lifeMax,
+    s.sizeMin, s.sizeMax, s.gravity, s.c1, s.c2, s.opacity,
+    s.elvBase, s.elvSpan, s.planar, s.stretched, s.stretchLen, s.spin,
+    s.stagger, s.gVar, !!s.dir, s.spread, s.rMin, s.rMax, s.swirl].join(',');
+}
 
 /** Inward shell emitter for implosions: spawn on a sphere shell at
  *  rMin..rMax, velocity aimed at the emitter origin plus a tangential
@@ -606,7 +626,7 @@ export function implodeBurst(pos: THREE.Vector3, spec: ImplodeSpec, additive: bo
 function spawnImplodeBurst(pos: THREE.Vector3, spec: ImplodeSpec, additive: boolean): void {
   if (!batcher || !scene || live.size >= MAX_LIVE_SYSTEMS) return;
   const w = spec.stagger ?? 0;
-  const ps = new ParticleSystem({
+  const ps = takeSystem(burstKey('implode', spec, additive), () => new ParticleSystem({
     duration: spec.lifeMax + w + 0.05,
     looping: false,
     startLife: new IntervalValue(spec.lifeMin, spec.lifeMax),
@@ -628,12 +648,12 @@ function spawnImplodeBurst(pos: THREE.Vector3, spec: ImplodeSpec, additive: bool
       new SizeOverLife(GROW_SHRINK),
       new RotationOverLife(new IntervalValue(-(spec.spin ?? 1), spec.spin ?? 1)),
     ],
-  });
+  }));
   ps.emitter.position.copy(pos);
   batcher.addSystem(ps);
   scene.add(ps.emitter);
   live.add(ps);
-  ps.play();
+  ps.restart();
 }
 
 export interface BlastSpec {
@@ -702,7 +722,9 @@ function spawnBlastBurst(pos: THREE.Vector3, spec: BlastSpec,
   // Particle-pressure LOD: counts thin as global live particles climb,
   // so a mass-explosion pileup doesn't turn into 30k CPU-simmed quads.
   const bursts = blastBursts(Math.max(1, Math.round(spec.count * vfxPressure())), w);
-  const ps = new ParticleSystem({
+  const em = new BlastEmitter(spec.elvBase ?? 0.5, spec.elvSpan ?? Math.PI, !!spec.planar, spec.vy, spec.dir, spec.spread);
+  const ps = takeSystem(burstKey('blast', spec, additive), () => {
+    const sys = new ParticleSystem({
     duration: lifeMax + w + 0.05,
     looping: false,
     startLife: new IntervalValue(spec.lifeMin, lifeMax),
@@ -712,7 +734,7 @@ function spawnBlastBurst(pos: THREE.Vector3, spec: BlastSpec,
     startRotation: new IntervalValue(0, Math.PI * 2),
     emissionOverTime: new ConstantValue(0),
     emissionBursts: bursts,
-    shape: new BlastEmitter(spec.elvBase ?? 0.5, spec.elvSpan ?? Math.PI, !!spec.planar, spec.vy, spec.dir, spec.spread),
+    shape: em,
     material: additive ? impactMat() : normalMat(),
     renderMode: spec.stretched ? RenderMode.StretchedBillBoard : RenderMode.BillBoard,
     speedFactor: spec.stretched ? 0.12 : undefined,
@@ -724,10 +746,14 @@ function spawnBlastBurst(pos: THREE.Vector3, spec: BlastSpec,
       new SizeOverLife(GROW_SHRINK),
       ...(spec.stretched ? [] : [new RotationOverLife(new IntervalValue(-(spec.spin ?? 1.2), spec.spin ?? 1.2))]),
     ],
+    });
+    shapeOf.set(sys, em);
+    return sys;
   });
+  shapeOf.get(ps)?.setDir(spec.dir);
   ps.emitter.position.copy(pos);
   batcher.addSystem(ps);
   scene.add(ps.emitter);
   live.add(ps);
-  ps.play();
+  ps.restart();
 }
