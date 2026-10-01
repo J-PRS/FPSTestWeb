@@ -2,13 +2,13 @@ import type { ClientMessage, ServerMessage, Vec3 } from './types.ts';
 import type { PlayerManager } from './PlayerManager.ts';
 import { getWeaponStats, WeaponType } from '../../shared/weapons.ts';
 import { perkMods } from '../../shared/perks.ts';
-import { validateHitClaim, lgTickDamage } from '../../shared/combat.ts';
+import { validateHitClaim } from '../../shared/combat.ts';
 import { POWERUP } from '../../shared/pickups.ts';
 import type { PlayerState } from './types.ts';
 import { logger } from './logger.ts';
 import { HEAVY_ONLY_WEAPONS } from '../../shared/botClasses.ts';
 import type { StructureCollider } from '../../shared/ballSim.ts';
-import { segSolidHit, ColliderIndex } from '../../shared/solidWorld.ts';
+import { ColliderIndex } from '../../shared/solidWorld.ts';
 import { ClaimLedger, clampPing, rewindPos } from './claimLedger.ts';
 import { KillFeed } from './killFeed.ts';
 import { RespawnManager } from './respawn.ts';
@@ -17,6 +17,7 @@ import { BlastRunner, FORCE_SEND_MS } from './combatBlast.ts';
 import { AoeClaims } from './combatAoe.ts';
 import { HitLedger } from './hitLedger.ts';
 import { handleEnvironmentDamage, handleHeal } from './envClaims.ts';
+import { crawlerAttack, botAttack } from './serverAttacks.ts';
 
 type BroadcastFn = (msg: ServerMessage, excludePlayerId?: string) => void;
 type SendToPlayerFn = (playerId: string, msg: ServerMessage) => void;
@@ -77,7 +78,7 @@ export class CombatHandler {
   /** Map-structure colliders — claim validation rejects flights that
    *  would have to pass through a wall to reach their end point.
    *  solidIndex is public — BlastRunner marches through it too. */
-  private _solids: readonly StructureCollider[] = [];
+  _solids: readonly StructureCollider[] = [];
   solidIndex: ColliderIndex | null = null;
   get solids(): readonly StructureCollider[] { return this._solids; }
   set solids(list: readonly StructureCollider[]) {
@@ -355,7 +356,7 @@ export class CombatHandler {
    *  multiplier off the shooter, applyDamage + forceSend + applyHit.
    *  'environment' = no shooter, no friendly check — a crawler bites
    *  whoever it landed on. */
-  private serverHit(
+  serverHit(
     ownerId: string, targetId: string, damage: number, label: string,
     opts: { hb?: string; weapon?: number } = {},
   ): void {
@@ -378,17 +379,7 @@ export class CombatHandler {
 
   /** Server-authored creature bite (CreatureSim). */
   crawlerAttack(targetId: string, damage: number, species = 'crawler', from?: { x: number; y: number; z: number }): void {
-    // A creature wedged inside/behind geometry can't bite through it —
-    // contact range is the sim's gate; the wall is ours.
-    if (from && this._solids.length) {
-      const target = this.playerManager.getPlayer(targetId);
-      if (target) {
-        const eye = { x: target.position.x, y: target.position.y + 1.0, z: target.position.z };
-        if (segSolidHit(from, eye, this._solids, this.solidIndex ?? undefined)) return;
-      }
-    }
-    const label = `${species[0]!.toUpperCase()}${species.slice(1)} bite`;
-    this.serverHit('environment', targetId, damage, label, { hb: 'crawlbite' });
+    crawlerAttack(this, targetId, damage, species, from);
   }
 
   turretAttack(ownerId: string, targetId: string, damage: number): void {
@@ -396,22 +387,7 @@ export class CombatHandler {
   }
 
   botAttack(shooterId: string, targetId: string, weaponType: number): void {
-    const shooter = this.playerManager.getPlayer(shooterId);
-    if (!shooter || shooter.isDead) return;
-    shooter.protectedUntil = 0; // firing breaks your own spawn shield
-    // Melee carries its damage on the aoe line (instant cone, directDamage 0)
-    // — falling back to it keeps bot punches non-zero.
-    const stats = getWeaponStats(weaponType);
-    let damage = (stats.directDamage || stats.aoeDamage) * perkMods(shooter.perk).directDamage;
-    // Bot beams ramp down like human ones — the beam-rider loadout pays
-    // the same hold-decay a client's beam does.
-    if (weaponType === WeaponType.Lightning) {
-      const n = this.chargeBank.step(shooterId, targetId);
-      damage = lgTickDamage(n) * perkMods(shooter.perk).directDamage;
-      const victim = this.playerManager.getPlayer(targetId);
-      if (victim && !victim.isDead && !this.friendly(shooterId, targetId)) this.chargeBank.bank(victim, this.chargeBank.withheldFor(n));
-    }
-    this.serverHit(shooterId, targetId, damage, 'Bot hit', { weapon: weaponType });
+    botAttack(this, shooterId, targetId, weaponType);
   }
 
   // Double-damage pickup: multiplies OUTGOING damage while the buff lasts.
