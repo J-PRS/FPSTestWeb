@@ -17,6 +17,7 @@ import { WeaponType, getWeaponStats, WEAPON_FIRE_INTERVAL_S } from '../../../sha
 import { GRAVITY } from '../../../shared/movement.js';
 import { MELEE_RANGE, MELEE_DAMAGE } from '../core/config.js';
 import * as sfx from '../core/sfx.js';
+import { claimShot, tickBolts, disposeBolts } from './botBolts.js';
 import { poissonDisc } from '../utils/poissonSpread.js';
 import type { RemotePlayer } from '../entities/RemotePlayer.js';
 import type { Targetable } from '../entities/balls.js';
@@ -42,16 +43,15 @@ export interface FireHost {
   hurtLocal(dmg: number, fromPos: THREE.Vector3, src: string, melee: boolean, attackerId: string): void;
 }
 
-const BOLT_MAT = new THREE.LineBasicMaterial({ color: 0xffe08a, transparent: true, opacity: 0.9 });
 
 export class BotFire {
   // Bolt tracers share a pool — a fresh BufferGeometry per shot meant a
   // GL buffer upload + dispose for a 120ms visual.
-  private bolts: { line: THREE.Line; t: number }[] = [];
-  private boltPool: THREE.Line[] = [];
+  bolts: { line: THREE.Line; t: number }[] = [];
+  boltPool: THREE.Line[] = [];
   private lastShotAt = new Map<string, number>();
 
-  constructor(private host: FireHost) {}
+  constructor(public host: FireHost) {}
 
   /** Resolve a bot's shot. Range-band pick comes from the shared loadout
    *  roster; the trigger pull then spawns a REAL projectile — same sweep
@@ -233,70 +233,12 @@ export class BotFire {
   /** Instant-claim resolution: melee, beams, and connected rooms where
    *  local shells can't own the attribution. */
   private claimShot(bot: GameBot, targetId: string, aim: THREE.Vector3, melee: boolean, dmg: number, weapon?: number): void {
-    if (!melee) {
-      this.spawnBolt(bot.position, aim);
-      // The claim path never made sound before — beam/bolt shots at a
-      // remote wire target were visually a tracer and audibly nothing.
-      sfx.shotAt(_shotMuzzle.set(bot.position.x, bot.position.y + 1.4, bot.position.z), weapon ?? 0, bot.vel);
-    }
-    const src = `${bot.playerId.replace('bot:', '')} ${melee ? 'fist' : 'bolt'}`;
-    if (targetId === 'local') { this.claimLocal(bot, aim, melee, dmg, src); return; }
-    if (targetId.startsWith('creature:')) { this.claimCreature(bot, targetId, aim, dmg); return; }
-    const rp = this.host.world().remotePlayers.get(targetId);
-    if (rp instanceof GameBot && aim.distanceTo(rp.pos) < 1.6) {
-      if (rp.takeDamageLocal(dmg, bot.position)) this.host.botKilled(bot.playerId, rp, weapon);
-    }
+    claimShot(this, bot, targetId, { aim, melee, dmg, weapon });
   }
 
-  private claimLocal(bot: GameBot, aim: THREE.Vector3, melee: boolean, dmg: number, src: string): void {
-    const p = this.host.player();
-    if (!p.isDead && aim.distanceTo(p.pos) < 1.6) {
-      this.host.hurtLocal(dmg, bot.position, src, melee, bot.playerId);
-    }
-  }
+  tickBolts(dt: number): void { tickBolts(this, dt); }
 
-  private claimCreature(bot: GameBot, targetId: string, aim: THREE.Vector3, dmg: number): void {
-    const id = +targetId.slice(9);
-    const t = this.host.targets.find(x => x.id === id);
-    if (t && !t.dead && aim.distanceTo(t.pos) < t.radius + 1) {
-      if (this.host.damageCreature(t.id, dmg, bot.playerId)) this.host.creditKill(bot.playerId, true);
-    }
-  }
-
-  private spawnBolt(from: THREE.Vector3, to: THREE.Vector3): void {
-    let line = this.boltPool.pop();
-    if (!line) {
-      const g = new THREE.BufferGeometry();
-      g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
-      line = new THREE.Line(g, BOLT_MAT);
-    }
-    const a = line.geometry.getAttribute('position') as THREE.BufferAttribute;
-    a.setXYZ(0, from.x, from.y, from.z);
-    a.setXYZ(1, to.x, to.y, to.z);
-    a.needsUpdate = true;
-    this.host.scene().add(line);
-    this.bolts.push({ line, t: 0.12 });
-  }
-
-  tickBolts(dt: number): void {
-    for (let i = this.bolts.length - 1; i >= 0; i--) {
-      const b = this.bolts[i];
-      b.t -= dt;
-      if (b.t <= 0) {
-        this.host.scene().remove(b.line);
-        this.boltPool.push(b.line);
-        this.bolts[i] = this.bolts[this.bolts.length - 1];
-        this.bolts.pop();
-      }
-    }
-  }
-
-  dispose(): void {
-    for (const b of this.bolts) this.host.scene().remove(b.line);
-    this.bolts.length = 0;
-    for (const l of this.boltPool) l.geometry.dispose();
-    this.boltPool.length = 0;
-  }
+  dispose(): void { disposeBolts(this); }
 }
 
 /** Pellet fan for flak/shotgun bots — one random cone dir per pellet;
