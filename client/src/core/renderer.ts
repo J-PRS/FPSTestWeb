@@ -495,7 +495,15 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
   }
   applyBufferSizes();
 
+  // Shadow-map throttle — the pass re-rasterizes every caster each frame
+  // (~46% of the frame measured on the bench GPU). Every-2nd-frame updates
+  // mean a sun shadow refreshes at 30hz: one frame of lag on a moving
+  // caster is invisible, and the pass cost halves.
+  let shadowTick = 0;
+  renderer.shadowMap.autoUpdate = false;
+
   function render(dt?: number): void {
+    if ((shadowTick++ & 1) === 0) renderer.shadowMap.needsUpdate = true;
     if (pixelMode === 5) {
       renderer.render(scene, camera);
       fsOverlay?.(); // viewmodel renders onto the hidden GL canvas pre-readback

@@ -376,7 +376,7 @@ function wireDebugKeys(deps: GameLoopDeps, perf: ReturnType<typeof createPerfHud
   // window.__perf — live phase table for headless probes + manual reads;
   // the watchdog dump uses the same data for shipped logs.
   (window as unknown as { __perf: () => Record<string, number> }).__perf =
-    () => ({ ...perf.snapshot(), ...budget.stats() as unknown as Record<string, number> });
+    () => ({ ...perf.snapshot(), ...budget.stats() as unknown as Record<string, number>, ...fxJobStats() });
   // window.__renderScan — staged render breakdown (scene / +shadow / full
   // pipeline / viewmodel) with per-stage calls+tris+GPU-ms. Profiling hook;
   // renders extra frames on top of the loop.

@@ -6,11 +6,16 @@ import * as du from './effectDust.js';
 import type { Terrain } from '../world/terrain.js';
 
 interface Particle {
-  mesh: THREE.Mesh;
+  bucket: InstBucket;
+  slot: number;
+  pos: THREE.Vector3;
+  quat: THREE.Quaternion;
+  scale: number;
   vel: THREE.Vector3;
   life: number;
   maxLife: number;
-  mat: THREE.MeshBasicMaterial;
+  color: THREE.Color;
+  opacity: number;
   noGravity?: boolean;
   sizeScale: number; // multiplies the update-loop scale formula (explosion flash)
 }
@@ -20,6 +25,74 @@ const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
 const _c = new THREE.Color();
+const _m = new THREE.Matrix4();
+
+const POOL_MAX = 128;
+
+/** One InstancedMesh per (geometry, blending, depthWrite, side) combo —
+ *  pooled particles share one draw call and one material instead of a
+ *  unique material each (~80 programs re-keyed every frame before).
+ *  Per-instance fade needs an alpha attribute MeshBasicMaterial lacks,
+ *  so the shader gets a tiny patch multiplying diffuseColor.a. */
+class InstBucket {
+  readonly mesh: THREE.InstancedMesh;
+  private alphaAttr: THREE.InstancedBufferAttribute;
+  private free: number[] = [];
+  used = 0;
+
+  constructor(geo: THREE.BufferGeometry, mat: THREE.MeshBasicMaterial) {
+    this.alphaAttr = new THREE.InstancedBufferAttribute(new Float32Array(POOL_MAX), 1);
+    this.alphaAttr.setUsage(THREE.DynamicDrawUsage);
+    geo = geo.clone();
+    geo.setAttribute('aAlpha', this.alphaAttr);
+    mat.onBeforeCompile = (sh) => {
+      sh.vertexShader = sh.vertexShader
+        .replace('#include <common>', '#include <common>\nattribute float aAlpha;\nvarying float vAlpha;')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvAlpha = aAlpha;');
+      sh.fragmentShader = sh.fragmentShader
+        .replace('#include <common>', '#include <common>\nvarying float vAlpha;')
+        .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.a *= vAlpha;');
+    };
+    this.mesh = new THREE.InstancedMesh(geo, mat, POOL_MAX);
+    this.mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(POOL_MAX * 3), 3);
+    this.mesh.instanceColor.setUsage(THREE.DynamicDrawUsage);
+    this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    this.mesh.count = 0;
+    this.mesh.frustumCulled = false; // instances span the map; culling is per-slot pointless
+    for (let i = POOL_MAX - 1; i >= 0; i--) this.free.push(i);
+  }
+
+  take(): number {
+    const s = this.free.pop();
+    if (s === undefined) return -1;
+    this.used++;
+    return s;
+  }
+
+  give(s: number): void {
+    // Slot may sit inside the rendered [0,count) span — bury it so a
+    // stale matrix doesn't flash a ghost quad for one frame.
+    _m.makeScale(0, 0, 0);
+    this.mesh.setMatrixAt(s, _m);
+    this.alphaAttr.array[s] = 0;
+    this.free.push(s);
+    this.used--;
+  }
+
+  write(p: Particle): void {
+    _m.compose(p.pos, p.quat, _v3.setScalar(p.scale));
+    this.mesh.setMatrixAt(p.slot, _m);
+    this.mesh.setColorAt(p.slot, p.color);
+    this.alphaAttr.array[p.slot] = p.opacity;
+  }
+
+  flush(highSlot: number): void {
+    this.mesh.count = highSlot + 1;
+    this.mesh.instanceMatrix.needsUpdate = true;
+    if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true;
+    this.alphaAttr.needsUpdate = true;
+  }
+}
 
 interface SpawnOpts {
   opacity?: number;
@@ -30,10 +103,14 @@ interface SpawnOpts {
   sizeScale?: number;
 }
 
+// Scratch object for lookAt orientation — discs need a facing quaternion
+// without a real Mesh (instanced slots have none).
+const _dummy = new THREE.Object3D();
+
 /**
- * Particle effects with a free-list pool — dead particles keep their
- * Mesh+Material and get reconfigured on the next spawn. Steady-state cost
- * while jetting/skiing is zero allocation (was ~700 allocs/sec before).
+ * Particle effects — spawns are instanced into per-material buckets
+ * (InstBucket): every pooled particle of a config shares one draw call
+ * and one material.
  */
 interface BeamFx {
   mesh: THREE.Mesh;
@@ -45,7 +122,8 @@ interface BeamFx {
 export class EffectsManager {
   private scene: THREE.Scene;
   private particles: Particle[] = [];
-  private pool: Particle[] = [];
+  private deadP: Particle[] = [];
+  private buckets = new Map<string, InstBucket>();
   sharedGeo: THREE.SphereGeometry;
   private sharedDiscGeo: THREE.CircleGeometry;
   private beamGeo: THREE.CylinderGeometry;
@@ -64,29 +142,46 @@ export class EffectsManager {
     this.terrain = terrain;
   }
 
-  alloc(geo: THREE.BufferGeometry, pos: THREE.Vector3, vel: THREE.Vector3, life: number, color: THREE.Color, opts: SpawnOpts = {}): Particle {
-    let p = this.pool.pop();
-    if (p) {
-      p.mesh.geometry = geo;
-      this.scene.add(p.mesh);
-    } else {
-      const mat = new THREE.MeshBasicMaterial({ transparent: true });
-      p = { mesh: new THREE.Mesh(geo, mat), mat, vel: new THREE.Vector3(), life: 0, maxLife: 0, sizeScale: 1 };
-      this.scene.add(p.mesh);
+  private bucketFor(geo: THREE.BufferGeometry, opts: SpawnOpts): InstBucket {
+    const additive = opts.additive ?? false;
+    const depthWrite = opts.depthWrite ?? true;
+    const side = opts.side ?? THREE.FrontSide;
+    const key = `${geo.uuid}|${additive ? 1 : 0}|${depthWrite ? 1 : 0}|${side}`;
+    let b = this.buckets.get(key);
+    if (!b) {
+      b = new InstBucket(geo, new THREE.MeshBasicMaterial({
+        transparent: true,
+        blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending,
+        depthWrite,
+        side,
+      }));
+      this.scene.add(b.mesh);
+      this.buckets.set(key, b);
     }
-    const m = p.mat;
-    m.color.copy(color);
-    m.opacity = opts.opacity ?? 0.7;
-    m.blending = opts.additive ? THREE.AdditiveBlending : THREE.NormalBlending;
-    m.depthWrite = opts.depthWrite ?? true;
-    m.side = opts.side ?? THREE.FrontSide;
+    return b;
+  }
+
+  alloc(geo: THREE.BufferGeometry, pos: THREE.Vector3, vel: THREE.Vector3, life: number, color: THREE.Color, opts: SpawnOpts = {}): Particle | null {
+    const bucket = this.bucketFor(geo, opts);
+    const slot = bucket.take();
+    if (slot < 0) return null;
+    let p = this.deadP.pop();
+    if (!p) {
+      p = { bucket, slot: -1, pos: new THREE.Vector3(), quat: new THREE.Quaternion(), scale: 1,
+        vel: new THREE.Vector3(), life: 0, maxLife: 0,
+        color: new THREE.Color(), opacity: 1, sizeScale: 1 };
+    }
+    p.bucket = bucket;
+    p.slot = slot;
+    p.pos.copy(pos);
+    p.quat.identity();
+    p.scale = 1;
     p.vel.copy(vel);
-    p.life = life;
-    p.maxLife = life;
+    p.life = p.maxLife = life;
+    p.color.copy(color);
+    p.opacity = opts.opacity ?? 0.7;
     p.noGravity = opts.noGravity;
     p.sizeScale = opts.sizeScale ?? 1;
-    p.mesh.position.copy(pos);
-    p.mesh.scale.setScalar(1);
     this.particles.push(p);
     return p;
   }
@@ -120,8 +215,12 @@ export class EffectsManager {
     _c.setHex(0xffee99);
     _v2.copy(pos).addScaledVector(back, 0.05);
     const flash = this.alloc(this.sharedDiscGeo, _v2, _v3.set(0, 0, 0), 0.06, _c, { opacity: 0.8, additive: true, depthWrite: false, side: THREE.DoubleSide });
-    flash.mesh.scale.setScalar(0.5);
-    flash.mesh.lookAt(_v3.copy(pos).add(back));
+    if (flash) {
+      flash.scale = 0.5;
+      _dummy.position.copy(flash.pos);
+      _dummy.lookAt(_v3.copy(pos).add(back));
+      flash.quat.copy(_dummy.quaternion);
+    }
   }
 
   // Bullet pock — small dark disc pressed onto the terrain surface, shrinks
@@ -140,7 +239,11 @@ export class EffectsManager {
     _c.setHex(0x14100c);
     const mark = this.alloc(this.sharedDiscGeo, _v2, _v3.set(0, 0, 0), 1.0, _c,
       { opacity: 0.7, depthWrite: false, noGravity: true, sizeScale: 0.2, side: THREE.DoubleSide });
-    mark.mesh.lookAt(_v3.copy(_v2).add(_v));
+    if (mark) {
+      _dummy.position.copy(mark.pos);
+      _dummy.lookAt(_v3.copy(_v2).add(_v));
+      mark.quat.copy(_dummy.quaternion);
+    }
   }
 
   // Jet contrail — NOT an exhaust cloud. Tribes-style: a thin additive
@@ -195,25 +298,31 @@ export class EffectsManager {
       b.mesh.scale.x = b.mesh.scale.z = 0.14 * (0.4 + t); // the collapse sells the discharge
     }
     const gravity = GRAVITY;
+    const highOf = new Map<InstBucket, number>();
     for (let i = this.particles.length - 1; i >= 0; i--) {
       const p = this.particles[i];
       p.life -= dt;
       if (p.life <= 0) {
-        this.scene.remove(p.mesh);
-        this.pool.push(p); // pooled — mesh+mat reused, nothing disposed
+        p.bucket.give(p.slot);
+        this.deadP.push(p);
         const last = this.particles.length - 1;
         this.particles[i] = this.particles[last];
         this.particles.pop(); // order doesn't matter — splice is O(n) shift
         continue;
       }
       const t = p.life / p.maxLife;
-      p.mat.opacity = t * 0.6;
+      p.opacity = t * 0.6;
       if (!p.noGravity) {
         p.vel.y += gravity * dt;
       }
-      p.mesh.position.addScaledVector(p.vel, dt);
-      const s = (0.3 + t * 1.4) * p.sizeScale;
-      p.mesh.scale.setScalar(s);
+      p.pos.addScaledVector(p.vel, dt);
+      p.scale = (0.3 + t * 1.4) * p.sizeScale;
+      p.bucket.write(p);
+      if (p.slot > (highOf.get(p.bucket) ?? -1)) highOf.set(p.bucket, p.slot);
+    }
+    for (const [bucket, high] of highOf) bucket.flush(high);
+    for (const bucket of this.buckets.values()) {
+      if (!highOf.has(bucket)) bucket.mesh.count = 0;
     }
   }
 }
