@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { markProbe } from '../core/fxDiag.js';
 
 // World-space speed lines — thin streak quads floating in a disc
 // perpendicular to the player's velocity. They're ~stationary in the
@@ -111,6 +112,7 @@ export class SpeedLines {
       });
       const mesh = new THREE.Mesh(GEO, mat);
       mesh.frustumCulled = false;
+      markProbe(mesh, { kind: 'fxMesh', label: 'speedLine' });
       s = { mesh, mat, life: 0, maxLife: 0, drift: new THREE.Vector3(), dead: true };
     }
     this.scene.add(s.mesh);
