@@ -201,7 +201,10 @@ export class GameBot extends RemotePlayer {
       objective: ctx.objective ?? undefined,
       pickup: ctx.nugget?.pos,
       groundY: (x, z) => {
-        const k = ((x * 24) | 0) * 131072 + ((z * 24) | 0);
+        // ~0.5m cells, not 4cm: getHeight is a smooth bilinear heightmap
+        // read, so half-meter snapping is invisible — and probes landing
+        // 20cm apart stop memoizing as separate cells (was the top-3 fn).
+        const k = ((x * 2) | 0) * 131072 + ((z * 2) | 0);
         let v = gyc.get(k);
         if (v === undefined) { v = ctx.terrain.getHeight(x, z); gyc.set(k, v); }
         return v;

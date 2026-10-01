@@ -20,13 +20,14 @@ interface TrailDot {
   haloSz: number;  // per-dot random base scales
   coreSz: number;
   tint: THREE.Color;
+  wIdx: number;    // vert index this dot's pos was last written to (-1 = unwritten)
 }
 
 // Dot pool — a trail cycles ~40 dots/sec and each spawn used to fresh-
 // alloc a Vector3 + Color + wrapper (~1400 objects/s across the roster).
 const _dotPool: TrailDot[] = [];
 function takeDot(): TrailDot {
-  return _dotPool.pop() ?? { pos: new THREE.Vector3(), age: 0, life: 0, haloSz: 0, coreSz: 0, tint: new THREE.Color() };
+  return _dotPool.pop() ?? { pos: new THREE.Vector3(), age: 0, life: 0, haloSz: 0, coreSz: 0, tint: new THREE.Color(), wIdx: -1 };
 }
 function freeDot(d: TrailDot): void { _dotPool.push(d); }
 
@@ -192,6 +193,7 @@ export class BallTrailDots {
     const d = takeDot();
     d.pos.copy(spawn);
     d.age = 0;
+    d.wIdx = -1; // fresh position — force a pos write on next fade
     d.life = 0.35 + Math.random() * 0.85;
     d.haloSz = radius * (1.8 + Math.random() * 2.0) * this.sizeMul;
     d.coreSz = radius * (0.9 + Math.random() * 1.0) * this.sizeMul;
@@ -219,8 +221,13 @@ export class BallTrailDots {
       const haloS = d.haloSz * (0.7 + 0.3 * t);
       const coreS = d.coreSz * (0.4 + 0.6 * t);
       const h = this.base + w * 2, c = h + 1;
-      this.batch.posAttr.setXYZ(h, d.pos.x, d.pos.y, d.pos.z);
-      this.batch.posAttr.setXYZ(c, d.pos.x, d.pos.y, d.pos.z);
+      // Dot positions are static — only re-upload when the dot is new or
+      // an earlier death slid it into a different vert index.
+      if (d.wIdx !== w) {
+        this.batch.posAttr.setXYZ(h, d.pos.x, d.pos.y, d.pos.z);
+        this.batch.posAttr.setXYZ(c, d.pos.x, d.pos.y, d.pos.z);
+        d.wIdx = w;
+      }
       this.batch.sizeAttr.setX(h, haloS);
       this.batch.sizeAttr.setX(c, coreS);
       this.batch.colAttr.setXYZW(h, d.tint.r, d.tint.g, d.tint.b, haloA);
@@ -228,8 +235,11 @@ export class BallTrailDots {
       this.batch.colAttr.setXYZW(c, _tmpC.r, _tmpC.g, _tmpC.b, coreA);
       w++;
     }
-    // zero out the tail slots so stale points don't linger
-    for (let s = this.base + w * 2; s < this.base + this.maxDots * 2; s++) this.batch.sizeAttr.setX(s, 0);
+    // Zero freed tail slots only when the live count shrank — a stable
+    // roster re-zeroes nothing (the tail was already zeroed last shrink).
+    if (w < this._lastLive) {
+      for (let s = this.base + w * 2; s < this.base + this.maxDots * 2; s++) this.batch.sizeAttr.setX(s, 0);
+    }
     // Skip the buffer upload when nothing lives — an idle trail was still
     // pushing 3 attribute uploads per ball per frame (~100/frame total).
     if (w === 0 && this._lastLive === 0) return;
