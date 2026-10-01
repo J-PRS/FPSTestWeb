@@ -10,27 +10,17 @@ import {
 } from '../core/config.js';
 import { Terrain } from '../world/terrain.js';
 import type { Targetable } from './balls.js';
-import { allocSlots, freeSlots, getSwarm, getShadows } from './swarms.js';
+import { allocSlots, freeSlots, getShadows } from './swarms.js';
 import type { SwarmPart, SwarmSlotOwner } from './swarm.js';
 import { getGlowTexture } from '../effects/glowTexture.js';
+import { writeInstances } from './striferPose.js';
 
 const _dir = new THREE.Vector3();
 const _scratch = new THREE.Vector3();
-const _root = new THREE.Matrix4();
-const _local = new THREE.Matrix4();
-const _world = new THREE.Matrix4();
-const _p = new THREE.Vector3();
-const _v = new THREE.Vector3();
-const _q = new THREE.Quaternion();
-const _e = new THREE.Euler();
-const _s = new THREE.Vector3();
 
-const PART_BODY = 0;
-const PART_WING = 1; // 2 per — thin blade fins, not membrane sails
 type StriferState = 'orbit' | 'hover';
 interface StriferCtx { dt: number; terrain: Terrain; playerPos: THREE.Vector3; playerVel?: THREE.Vector3 }
 
-const PART_EYE = 2;  // 1 per — the gun-muzzle glow that telegraphs a shot
 const WINGS_PER = 2;
 const EYES_PER = 1;
 
@@ -91,15 +81,15 @@ export class Strifer implements Targetable, SwarmSlotOwner {
 
   swarmSlot = -1;
   shadowSlot = -1;
-  private hasSlots = false;
+  hasSlots = false;
 
   private animT = Math.random() * 10;
-  private yaw = 0;
-  private pitch = 0;
-  private roll = 0;
-  private flash = 0;
+  yaw = 0;
+  pitch = 0;
+  roll = 0;
+  flash = 0;
 
-  private state: StriferState = 'orbit';
+  state: StriferState = 'orbit';
   private stateTimer = STRIFER_REFIRE_MIN + Math.random() * (STRIFER_REFIRE_MAX - STRIFER_REFIRE_MIN);
   private orbitPhase = Math.random() * Math.PI * 2;
   private orbitDir = Math.random() < 0.5 ? 1 : -1;
@@ -234,44 +224,7 @@ export class Strifer implements Targetable, SwarmSlotOwner {
     }
   }
 
-  private writeInstances(): void {
-    if (!this.hasSlots) return;
-    const swarm = getSwarm('strifer');
-    if (!swarm) return;
-    const slot = this.swarmSlot;
-    const r = this.radius;
-
-    _e.set(this.pitch, this.yaw, this.roll, 'YXZ');
-    _q.setFromEuler(_e);
-    _p.copy(this.pos);
-    _root.compose(_p, _q, _s.setScalar(r));
-
-    const fr = this.flash > 0 ? 4 : 1;
-    const cr = this.color.r * fr, cg = this.color.g * fr, cb = this.color.b * fr;
-    swarm.setMatrix(PART_BODY, slot, _root);
-    swarm.setColor(PART_BODY, slot, cr, cg, cb);
-
-    for (let i = 0; i < WINGS_PER; i++) {
-      const side = i === 0 ? -1 : 1;
-      // fins dip while hovering — reads as the drone planting itself to fire
-      const dip = this.state === 'hover' ? 0.25 : 0;
-      _local.compose(_v.set(side * 0.55, 0.05, -0.15), _q.identity(), _s.setScalar(1));
-      _world.multiplyMatrices(_root, _local);
-      _e.set(0, 0, side * dip, 'XYZ');
-      _q.setFromEuler(_e);
-      _local.compose(_p.set(0, 0, 0), _q, _s.set(1, 1, 1));
-      _world.multiply(_local);
-      swarm.setMatrix(PART_WING, slot * WINGS_PER + i, _world);
-      swarm.setColor(PART_WING, slot * WINGS_PER + i, cr * 0.8, cg * 0.8, cb * 0.8);
-    }
-
-    // muzzle glow: bright while hovering (charging a bolt), dim on orbit
-    const hot = this.state === 'hover' ? 2.2 : 0.8;
-    _local.compose(_v.set(0, 0.05, 1.35), _q.identity(), _s.setScalar(1));
-    _world.multiplyMatrices(_root, _local);
-    swarm.setMatrix(PART_EYE, slot, _world);
-    swarm.setColor(PART_EYE, slot, hot, hot * 0.55, hot * 0.25);
-  }
+  private writeInstances(): void { writeInstances(this); }
 
   private steerToward(target: THREE.Vector3, speed: number, dt: number): void {
     _scratch.subVectors(target, this.pos);
