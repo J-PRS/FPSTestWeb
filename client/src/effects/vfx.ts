@@ -38,10 +38,25 @@ export function initVfx(s: THREE.Scene): void {
  *  still holds, particles across them. A growing `systems` count under
  *  steady fire = a leak; growth only under explosions = honest load. */
 export function vfxStats(): { systems: number; tracked: number; particles: number } {
-  let particles = 0;
-  for (const ps of live) particles += ps.particleNum;
-  return { systems: batcher?.systemToBatchIndex.size ?? 0, tracked: live.size, particles };
+  return { systems: batcher?.systemToBatchIndex.size ?? 0, tracked: live.size, particles: _liveParticles };
 }
+
+let _liveParticles = 0;
+/** Particle-pressure LOD: bursts scale their count down as the global
+ *  live-particle total climbs — a 155-explosion pileup was 30k particles
+ *  and ~15ms of pure CPU sim. Full detail to 4k, linear to a third at 12k. */
+export function vfxPressure(): number {
+  if (_liveParticles < 4000) return 1;
+  if (_liveParticles > 12000) return 0.35;
+  return 1 - ((_liveParticles - 4000) / 8000) * 0.65;
+}
+
+/** Live-system cap — batcher.update simulates EVERY attached system on
+ *  the CPU each frame, so an unbounded count is a monolithic 10-25ms
+ *  spike no job budget can slice. 320 keeps a heavy firefight below
+ *  ~6ms of quarks sim; past it we cull the oldest systems (Set order =
+ *  spawn order, so the front is the stalest). */
+const MAX_LIVE_SYSTEMS = 320;
 
 export function updateVfx(dt: number): void {
   batcher?.update(dt);
@@ -49,13 +64,26 @@ export function updateVfx(dt: number): void {
   // may outlive it, but quarks keeps rendering them until they die, so
   // the system must stay attached until then. `particleNum` is the
   // truth, not the clock.
+  let particles = 0;
   for (const ps of live) {
+    particles += ps.particleNum;
     if (ps.time >= ps.duration && ps.particleNum === 0) {
       batcher?.deleteSystem(ps);
       scene?.remove(ps.emitter);
       live.delete(ps);
     }
   }
+  // Hard cap: cull oldest systems until under the ceiling. A killed
+  // system vanishes mid-effect — only reached under sustained overload
+  // where the alternative is a slideshow.
+  while (live.size > MAX_LIVE_SYSTEMS) {
+    const oldest = live.values().next().value;
+    if (!oldest) break;
+    batcher?.deleteSystem(oldest);
+    scene?.remove(oldest.emitter);
+    live.delete(oldest);
+  }
+  _liveParticles = particles;
 }
 
 const _upQ = new QV3(0, 1, 0);
@@ -88,7 +116,7 @@ function normalMat(): THREE.MeshBasicMaterial {
  *  meshes — one batched burst, ~0 allocation, one draw call shared with
  *  every other burst in flight. */
 export function impactBurst(pos: THREE.Vector3, vel: THREE.Vector3): void {
-  if (!batcher || !scene) return;
+  if (!batcher || !scene || live.size >= MAX_LIVE_SYSTEMS) return;
   const ps = new ParticleSystem({
     duration: 0.35,
     looping: false,
@@ -120,6 +148,42 @@ export function impactBurst(pos: THREE.Vector3, vel: THREE.Vector3): void {
   scene.add(ps.emitter);
   live.add(ps);
   ps.play();
+
+  // Directional streak fan — stretched sparks flung back along the shot
+  // line. This is what separates a bullet hit from a puff: the eye reads
+  // velocity-aligned slivers as fragments. Skipped under particle
+  // pressure (the puff above is the minimum readable hit).
+  if (vfxPressure() > 0.6) {
+    const streaks = new ParticleSystem({
+      duration: 0.25,
+      looping: false,
+      startLife: new IntervalValue(0.1, 0.2),
+      startSpeed: new IntervalValue(18, 45),
+      startSize: new IntervalValue(0.05, 0.09),
+      startColor: new ConstantColor(new QV4(1.0, 0.85, 0.4, 0.9)),
+      emissionOverTime: new ConstantValue(0),
+      emissionBursts: [{ time: 0, count: new ConstantValue(5), cycle: 0, interval: 0.01, probability: 1 }],
+      shape: new ConeEmitter({ radius: 0.02, angle: 0.5 }),
+      material: impactMat(),
+      renderMode: RenderMode.StretchedBillBoard,
+      speedFactor: 0.15,
+      startLength: new ConstantValue(6),
+      worldSpace: true,
+      behaviors: [
+        new GravityForce(_upQ, -14),
+        new ColorOverLife(new Gradient(
+          [[new QV3(1, 0.9, 0.5), 0], [new QV3(0.9, 0.4, 0.1), 1]],
+          [[0.9, 0], [0, 1]],
+        )),
+      ],
+    });
+    streaks.emitter.position.copy(pos);
+    streaks.emitter.quaternion.copy(ps.emitter.quaternion);
+    batcher.addSystem(streaks);
+    scene.add(streaks.emitter);
+    live.add(streaks);
+    streaks.play();
+  }
 }
 
 const _back = new THREE.Vector3();
@@ -284,8 +348,14 @@ class PuffEmitter {
  *  overwrote spawn opacity), size ran (0.3+t·1.4)·sizeScale shrinking
  *  over life, gravity applied unless noGravity. */
 export function fxPuff(pos: THREE.Vector3, spec: PuffSpec): void {
-  if (!batcher || !scene) return;
+  if (!batcher || !scene || live.size > 1200) return;
+  const pressure = vfxPressure();
+  // Ambient emitters fire every frame — under pressure each call still
+  // costs a ParticleSystem even at count 1, so skip emissions outright.
+  // Squaring keeps low-pressure drops rare: 0.35 → ~12% emit rate.
+  if (Math.random() > pressure * pressure) return;
   const ss = spec.sizeScale ?? 1;
+  const count = Math.max(1, Math.round(spec.count * pressure));
   const ps = new ParticleSystem({
     duration: spec.lifeMax + 0.05,
     looping: false,
@@ -296,7 +366,7 @@ export function fxPuff(pos: THREE.Vector3, spec: PuffSpec): void {
     startColor: new ConstantColor(new QV4(1, 1, 1, 1)),
     startRotation: new IntervalValue(0, Math.PI * 2),
     emissionOverTime: new ConstantValue(0),
-    emissionBursts: [{ time: 0, count: new ConstantValue(spec.count), cycle: 0, interval: 0.01, probability: 1 }],
+    emissionBursts: [{ time: 0, count: new ConstantValue(count), cycle: 0, interval: 0.01, probability: 1 }],
     shape: new PuffEmitter(spec),
     material: spec.additive ? impactMat() : normalMat(),
     renderMode: RenderMode.BillBoard,
@@ -377,6 +447,82 @@ class BlastEmitter {
   clone(): BlastEmitter { return new BlastEmitter(this.elvBase, this.elvSpan, this.planar, this.vy); }
 }
 
+/** Inward shell emitter for implosions: spawn on a sphere shell at
+ *  rMin..rMax, velocity aimed at the emitter origin plus a tangential
+ *  swirl term (the old spiral read). Speed still rolls via startSpeed. */
+class ImplodeEmitter {
+  readonly type = 'implode';
+  constructor(private rMin: number, private rMax: number, private swirl: number) { }
+  update(): void { }
+  initialize(p: BlastParticle): void {
+    const elv = (Math.random() - 0.5) * Math.PI;
+    const ang = Math.random() * Math.PI * 2;
+    const c = Math.cos(elv);
+    const dx = c * Math.sin(ang), dy = Math.sin(elv), dz = c * Math.cos(ang);
+    const r = this.rMin + Math.random() * (this.rMax - this.rMin);
+    p.position.set(dx * r, dy * r, dz * r);
+    // Inward at startSpeed; swirl = fixed tangential add (not scaled by
+    // startSpeed or it spins proportionally faster).
+    p.velocity.set(-dx * p.startSpeed, -dy * p.startSpeed, -dz * p.startSpeed);
+    // tangent ⟂ radius: rotate dir 90° about Y for an azimuthal swirl
+    const tx = -dz, tz = dx;
+    p.velocity.set(
+      p.velocity.x + tx * this.swirl,
+      p.velocity.y,
+      p.velocity.z + tz * this.swirl);
+  }
+  toJSON(): { type: string } { return { type: this.type }; }
+  clone(): ImplodeEmitter { return new ImplodeEmitter(this.rMin, this.rMax, this.swirl); }
+}
+
+export interface ImplodeSpec {
+  count: number;
+  rMin: number; rMax: number;    // spawn shell radii
+  spdMin: number; spdMax: number;
+  swirl?: number;                // tangential speed add (spiral read)
+  lifeMin: number; lifeMax: number;
+  sizeMin: number; sizeMax: number;
+  c1: [number, number, number]; c2: [number, number, number];
+  opacity: number;
+  gravity?: number;
+  spin?: number;
+  stagger?: number;
+}
+
+/** Inward variant of blastBurst — same batching, shell → center. */
+export function implodeBurst(pos: THREE.Vector3, spec: ImplodeSpec, additive: boolean): void {
+  if (!batcher || !scene || live.size >= MAX_LIVE_SYSTEMS) return;
+  const w = spec.stagger ?? 0;
+  const ps = new ParticleSystem({
+    duration: spec.lifeMax + w + 0.05,
+    looping: false,
+    startLife: new IntervalValue(spec.lifeMin, spec.lifeMax),
+    startSpeed: new IntervalValue(spec.spdMin, spec.spdMax),
+    startSize: new IntervalValue(spec.sizeMin, spec.sizeMax),
+    startColor: new ConstantColor(new QV4(1, 1, 1, 1)),
+    startRotation: new IntervalValue(0, Math.PI * 2),
+    emissionOverTime: new ConstantValue(0),
+    emissionBursts: blastBursts(Math.max(1, Math.round(spec.count * vfxPressure())), w),
+    shape: new ImplodeEmitter(spec.rMin, spec.rMax, spec.swirl ?? 0),
+    material: additive ? impactMat() : normalMat(),
+    renderMode: RenderMode.BillBoard,
+    worldSpace: true,
+    behaviors: [
+      ...(spec.gravity ? [new GravityForce(_upQ, spec.gravity)] : []),
+      new ColorOverLife(new Gradient(
+        [[new QV3(...spec.c1), 0], [new QV3(...spec.c2), 1]],
+        [[spec.opacity, 0], [0, 1]])),
+      new SizeOverLife(GROW_SHRINK),
+      new RotationOverLife(new IntervalValue(-(spec.spin ?? 1), spec.spin ?? 1)),
+    ],
+  });
+  ps.emitter.position.copy(pos);
+  batcher.addSystem(ps);
+  scene.add(ps.emitter);
+  live.add(ps);
+  ps.play();
+}
+
 export interface BlastSpec {
   count: number;
   elvBase?: number; elvSpan?: number;   // non-planar elevation distribution
@@ -424,11 +570,13 @@ function blastBursts(count: number, w: number) {
 
 export function blastBurst(pos: THREE.Vector3, spec: BlastSpec,
     additive: boolean): void {
-  if (!batcher || !scene) return;
+  if (!batcher || !scene || live.size >= MAX_LIVE_SYSTEMS) return;
   const colorGen = blastColorGen(spec);
   const lifeMax = spec.lifeMax;
   const w = spec.stagger ?? 0;
-  const bursts = blastBursts(spec.count, w);
+  // Particle-pressure LOD: counts thin as global live particles climb,
+  // so a mass-explosion pileup doesn't turn into 30k CPU-simmed quads.
+  const bursts = blastBursts(Math.max(1, Math.round(spec.count * vfxPressure())), w);
   const ps = new ParticleSystem({
     duration: lifeMax + w + 0.05,
     looping: false,
