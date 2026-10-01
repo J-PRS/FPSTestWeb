@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { aimProbe } from './aimProbe.js';
 
 // "Black frame" hunter: a single non-finite vertex position rasterizes as a
 // screen-covering triangle (undefined per GL spec — drivers stretch rather
@@ -197,20 +198,17 @@ export function nanScanTick(scene: THREE.Scene, camera?: THREE.Camera): void {
   }
 }
 
-// Raycast probe: B key shoots a ray through screen center and logs what's
-// along it — a persistent black region means a REAL object is rendering
-// black (fragment-NaN material or unlit mesh), so name it instead of
-// hunting buffers that stay clean.
-const _probeRay = new THREE.Raycaster();
-const _probeUv = new THREE.Vector2(0, 0);
+// Raycast probe: B key logs what the crosshair covers — a persistent
+// black region means a REAL object is rendering black (fragment-NaN
+// material or unlit mesh), so name it instead of hunting buffers that
+// stay clean. Shares the Alt+Q aim probe: tagged FX objects report their
+// owner/slot/pool identity, not just mesh type.
 export function nanScanBindProbe(getCtx: () => { scene: THREE.Scene; camera: THREE.Camera }): void {
   window.addEventListener('keydown', (e) => {
     if (e.code !== 'KeyB') return;
     const { scene, camera } = getCtx();
-    _probeRay.setFromCamera(_probeUv, camera);
-    const hits = _probeRay.intersectObjects(scene.children, true);
-    console.warn('[nanprobe] ' + (hits.slice(0, 8).map(h =>
-      `${h.distance.toFixed(1)}m ${label(h.object)}`).join(' | ') || 'no hits'));
+    const rows = aimProbe(scene, camera);
+    console.warn('[nanprobe] ' + (rows.join(' | ') || 'no hits'));
   });
 }
 
