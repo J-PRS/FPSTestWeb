@@ -13,8 +13,11 @@ import { segSolidHit } from './solidWorld.ts';
 // point, and RemotePlayer renders feet at pos.y - EYE_OFFSET.
 export const BOT_EYE = 1.8;
 
-const LOS_CELL = 1.5;
-const LOS_TTL_MS = 800;
+// 2m cells + 1s TTL: answers only change when an endpoint crosses a cell,
+// so coarser cells buy hit rate at the cost of ±1m endpoint snap — small
+// next to the 3m march step the probe already uses.
+const LOS_CELL = 2;
+const LOS_TTL_MS = 1000;
 const losMemo = new Map<number, { clear: boolean; until: number }>();
 
 function losKey(from: BotVec, to: BotVec): number {
