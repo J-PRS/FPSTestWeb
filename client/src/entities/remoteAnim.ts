@@ -42,6 +42,7 @@ export class RemoteAnim {
   private _lastShootT = 0;
   private _airborne = false;
   private _fallV = 0;
+  private _speed = 0;
   // Faint air trail — the ballistic arc read a bouncing ball gets for
   // free. Innate to every flyer; the jetpack flame stacks on top.
   private airTrail: BallTrailDots | null = null;
@@ -61,7 +62,7 @@ export class RemoteAnim {
     h.model.setPosition(h.position.x, h.position.y - EYE_OFFSET, h.position.z);
     h.model.setRotation(h.rotation.yaw, h.rotation.pitch, h.rotation.roll);
     // dt=0 (paused/first frame) would blow speed to Infinity → 'ski' flicker
-    const speed = dt > 0 ? h.position.distanceTo(h.previousPosition) / dt : 0;
+    const speed = this._speed = dt > 0 ? h.position.distanceTo(h.previousPosition) / dt : 0;
     // Airborne overrides locomotion — the speed check alone reads jetting
     // as "run", i.e. the robot sprinting on air. Feet clearly above
     // terrain → Jump pose; grounded/skiing keeps the walk/run cycle.
@@ -105,14 +106,33 @@ export class RemoteAnim {
    *  only CPU bone evaluation was still burning. */
   private stepMixer(dt: number): void {
     const h = this.h;
+    const moving = this._speed > 0.5 || this._airborne || this.shootT > 0 || this.hitT > 0;
+    // A far remote standing still doesn't need 15/30Hz bursts — idle sway
+    // is a slow enough signal that 5Hz reads identically. Mid-close
+    // remotes keep full rate: at that distance sway IS readable.
     const animDt = h.onScreen === false ? Infinity
+      : h.camDistSq > 60 * 60 && !moving ? 1 / 5
       : h.camDistSq > 120 * 120 ? 1 / 15
       : h.camDistSq > 60 * 60 ? 1 / 30
       : 0;
     // Frozen bones skip updateMatrixWorld entirely — valid only while the
     // mixer never runs (animDt Infinity), otherwise the pose stalls.
     const frozen = animDt === Infinity;
-    if (frozen !== this._bonesFrozen) { this._bonesFrozen = frozen; h.model.setBonesFrozen(frozen); }
+    if (frozen !== this._bonesFrozen) {
+      this._bonesFrozen = frozen;
+      h.model.setBonesFrozen(frozen);
+      // Full freeze/unfreeze rewrites every bone's flag — the distal LOD
+      // state below must be re-applied after it.
+      h.model.setDistalFrozen(this._distalFrozen);
+    }
+    // Progressive bone LOD: past the 30Hz tier, freeze every bone no key
+    // bone (aim/grip/feet/steady) hangs under — fingers, toes, end-markers
+    // stop composing matrices while the core pose still animates.
+    const distal = !frozen && animDt >= 1 / 30;
+    if (distal !== this._distalFrozen) {
+      this._distalFrozen = distal;
+      h.model.setDistalFrozen(distal);
+    }
     if (animDt > 0) {
       this.animAcc += dt;
       if (this.animAcc >= animDt) {
@@ -141,6 +161,7 @@ export class RemoteAnim {
   private _castShadow = true;
   private _lodLevel: 0 | 1 = 0;
   private _bonesFrozen = false;
+  private _distalFrozen = false;
 
   private tickAirTrail(dt: number, airborne: boolean, speed: number): void {
     const h = this.h;

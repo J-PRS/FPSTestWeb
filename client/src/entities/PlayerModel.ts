@@ -209,6 +209,7 @@ export class PlayerModel {
 
     // Enable shadow casting + grab aim/attachment bones
     this.model.traverse((child) => this.prepareChild(child));
+    this.computeDistalBones();
     // Model may finish loading while a far-LOD swap is already armed —
     // the freshly captured skinnedMeshes need the swap applied now.
     if (this.lod === 1) this.applyLodGeos();
@@ -314,6 +315,81 @@ export class PlayerModel {
       b.matrixAutoUpdate = !frozen;
       if (frozen) b.updateMatrix();
     }
+  }
+
+  /** Progressive bone LOD: distal bones are every bone NOT on an ancestor
+   *  chain of a key bone (aim chain, grip, steady dampers, IK feet). Their
+   *  subtrees — fingers, toes, rig end-markers, twist helpers — carry the
+   *  ~60% of the traversal nobody can read past ~60m, so freezing them
+   *  (matrixAutoUpdate off) cuts that work while the core pose still
+   *  animates. Engine rule applied: never freeze a bone an essential
+   *  bone hangs under — ancestors of key bones stay live by construction. */
+  private distalBones: THREE.Bone[] = [];
+  private distalFrozen = false;
+  private distalNameSet = new Set<string>();
+  private farActions = new Map<THREE.AnimationAction, THREE.AnimationAction>();
+
+  /** Clip variant with every distal-bone track removed — the mixer
+   *  skips evaluation entirely rather than writing values nobody reads.
+   *  Frozen bones hold their pose; core tracks stay bit-identical. */
+  private farAction(action: THREE.AnimationAction): THREE.AnimationAction {
+    let a = this.farActions.get(action);
+    if (!a) {
+      const src = action.getClip();
+      const tracks = src.tracks.filter(t =>
+        !this.distalNameSet.has(normBone(t.name.slice(0, t.name.indexOf('.')))));
+      a = this.mixer!.clipAction(new THREE.AnimationClip(src.name + '.far', src.duration, tracks));
+      this.farActions.set(action, a);
+    }
+    return a;
+  }
+
+  private computeDistalBones(): void {
+    const essential = new Set<THREE.Object3D>();
+    const keys: (THREE.Object3D | undefined)[] = [
+      this.handBone ?? undefined,
+      ...this.aimBones.map(b => b.bone),
+      ...this.steadyBones.map(b => b.bone),
+      ...this.footSnaps.flatMap(f => [f.foot, f.shin, f.tip]),
+    ];
+    for (const k of keys) {
+      for (let o = k; o && o !== this.model; o = o.parent!) essential.add(o);
+    }
+    this.distalBones = this.bones.filter(b => !essential.has(b));
+    this.distalNameSet = new Set(this.distalBones.map(b => normBone(b.name)));
+    // Model may finish loading while a far LOD is already armed.
+    if (this.distalFrozen) this.setDistalFrozen(true);
+  }
+
+  setDistalFrozen(frozen: boolean): void {
+    const was = this.distalFrozen;
+    this.distalFrozen = frozen;
+    for (const b of this.distalBones) {
+      b.matrixAutoUpdate = !frozen;
+      if (frozen) b.updateMatrix();
+    }
+    // Swap the running action onto the track-filtered (or full) variant —
+    // same phase so the core pose doesn't pop; distal bones simply hold
+    // (frozen) or resume (unfrozen) where the pose was.
+    if (was !== frozen && this.currentAction && this.currentClipName) {
+      const t = this.currentAction.time;
+      const cur = this.currentAction;
+      const next = frozen ? this.farAction(cur) : this.baseAction(cur);
+      cur.stop();
+      next.reset();
+      next.time = t % next.getClip().duration;
+      next.timeScale = cur.timeScale;
+      next.setLoop(cur.loop, cur.repetitions);
+      next.clampWhenFinished = cur.clampWhenFinished;
+      next.setEffectiveWeight(cur.getEffectiveWeight() || 1);
+      next.play();
+      this.currentAction = next;
+    }
+  }
+
+  private baseAction(a: THREE.AnimationAction): THREE.AnimationAction {
+    for (const [base, far] of this.farActions) if (far === a) return base;
+    return a;
   }
 
   /** Far-LOD swap: mannequin_lod1.glb is the same rig decimated ~80% —
@@ -498,14 +574,15 @@ export class PlayerModel {
 
   playAnimation(name: string, startPhase = 0): void {
     if (!this._loaded) { this._queuedAnim = name; return; }
-    const action = this.animations.get(name);
-    if (!action) {
+    const base = this.animations.get(name);
+    if (!base) {
       if (!this._warnedAnims.has(name)) {
         this._warnedAnims.add(name);
         logger.warn(`Animation not found: ${name}`);
       }
       return;
     }
+    const action = this.distalFrozen ? this.farAction(base) : base;
 
     // (no per-clip head bookkeeping — the pitch un-apply in update() handles
     // both tracked and untracked head bones, including the case where the

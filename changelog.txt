@@ -1,3 +1,6 @@
+2026-10-01 - perf: far remotes play track-filtered clip variants (distal tracks never evaluated)
+2026-10-01 - perf: far idle remotes animate at 5Hz instead of 15/30Hz bursts
+2026-10-01 - perf: progressive bone LOD on remote rigs — distal (non-key) bones freeze past 60m while core pose animates
 2026-10-01 - test: losMemoReset seam + botlos.test.ts (march, memo staleness, TTL, eye height)
 2026-10-01 - test: flagGoals.test.ts — CTF role-objective table incl HoF stand-lock invariant
 2026-10-01 - test: projsim.test.ts — swept-segment math, integration, botVec
