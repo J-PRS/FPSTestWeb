@@ -70,11 +70,25 @@ class SparkBatch {
     this.posAttr.array.fill(0, start * SPARK_FLOATS, (start + n) * SPARK_FLOATS);
     this.colAttr.array.fill(0, start * SPARK_FLOATS, (start + n) * SPARK_FLOATS);
     this.free.push({ start, count: n });
-    this.touch();
+    this.mark(start * SPARK_FLOATS, (start + n) * SPARK_FLOATS);
+    this.flush();
   }
 
-  touch(): void {
+  // Dirty-span tracking: a live firefight touches dozens of slices, not
+  // the whole 43k-float buffer — upload just the written float range.
+  private dirtyLo = Infinity;
+  private dirtyHi = 0;
+  mark(lo: number, hi: number): void {
+    if (lo < this.dirtyLo) this.dirtyLo = lo;
+    if (hi > this.dirtyHi) this.dirtyHi = hi;
+  }
+  flush(): void {
+    const lo = this.dirtyLo, n = this.dirtyHi - lo;
+    this.dirtyLo = Infinity; this.dirtyHi = 0;
+    if (n <= 0) return;
+    this.posAttr.addUpdateRange(lo, n);
     this.posAttr.needsUpdate = true;
+    this.colAttr.addUpdateRange(lo, n);
     this.colAttr.needsUpdate = true;
   }
 }
@@ -115,6 +129,7 @@ export class ExplosionSparks {
 
   update(dt: number): number {
     let alive = 0;
+    let wrote = false;
     if (this.base < 0) return 0;
     const posArr = this.batch.posAttr.array as Float32Array;
     const colArr = this.batch.colAttr.array as Float32Array;
@@ -125,6 +140,7 @@ export class ExplosionSparks {
         spark.dead = true;
         // Collapse the slice — degenerate segments rasterize nothing.
         posArr.fill(0, spark.slice, spark.slice + SPARK_FLOATS);
+        wrote = true;
         continue;
       }
       alive++;
@@ -134,6 +150,7 @@ export class ExplosionSparks {
 
       // Update position
       spark.pos.addScaledVector(spark.vel, dt);
+      wrote = true;
 
       // Push into trail ring buffer
       const tb = spark.trailBuf;
@@ -144,7 +161,10 @@ export class ExplosionSparks {
 
       this.writeSlice(spark, posArr, colArr);
     }
-    if (alive) this.batch.touch();
+    if (wrote) {
+      this.batch.mark(this.base * SPARK_FLOATS, (this.base + this.sparks.length) * SPARK_FLOATS);
+      this.batch.flush();
+    }
     return alive;
   }
 
