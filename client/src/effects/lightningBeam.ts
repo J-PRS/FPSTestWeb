@@ -251,8 +251,12 @@ export class LightningBeam {
 
   dispose(): void {
     this.group.removeFromParent();
-    this.core.geometry.dispose(); this.glow.geometry.dispose();
-    (this.core.material as THREE.Material).dispose();
-    (this.glow.material as THREE.Material).dispose();
+    for (const m of [this.core, this.glow, this.arc, this.chainCore]) {
+      m.geometry.dispose();
+      (m.material as THREE.Material).dispose();
+    }
+    (this.hitGlow.material as THREE.Material).dispose();
+    this.sparkPoints.geometry.dispose();
+    (this.sparkPoints.material as THREE.Material).dispose();
   }
 }
