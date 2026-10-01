@@ -1,3 +1,4 @@
+2026-10-01 - vfx: QuarksTrail pooled by config key — per-shot trail systems park attached on dispose and restart on reuse
 2026-10-01 - vfx: pooled systems stay attached to batcher when dead (attachSystem WeakSet) — reuse pays restart() only, no buffer rebuy
 2026-10-01 - vfx: blast/implode bursts pool by spec key (repeat explosions restart systems instead of rebuilding ~30 behaviors); dir re-seeded via liveDir
 2026-10-01 - vfx: far burst systems (>60m) queue construction, drain one per frame — kills the ~15ms multi-layer spawn spike

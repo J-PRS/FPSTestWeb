@@ -304,6 +304,17 @@ export interface QuarksTrailHost {
 }
 
 const _tDir = new THREE.Vector3();
+// Trails pool like bursts: weapon configs are a bounded set, and a shot's
+// trail construction is ~20 behavior objects — restarting beats rebuilding.
+const circleOf = new WeakMap<ParticleSystem, CircleEmitter>();
+
+function trailKey(config: ProjectileConfig): string {
+  return ['trail', config.trailParticlesPerUnit, config.trailLifeMin,
+    config.trailLifeMax, config.trailBaseSize, config.trailSizeRange,
+    config.trailScaleMin, config.trailScaleMax, config.trailSpread,
+    config.trailOpacity, config.trailParticleGravity, config.trailRampIn,
+    config.trailColors.map(c => `${c.r},${c.g},${c.b}`).join(';')].join(',');
+}
 
 /** Trail as ONE batched quarks system per projectile: the old pool-per-
  *  host trail meant ~1 mesh+material+draw call per emitted particle; here
@@ -318,49 +329,54 @@ const _tDir = new THREE.Vector3();
 export class QuarksTrail {
   private ps: ParticleSystem | null = null;
   private circle: CircleEmitter | null = null;
+  private key = '';
 
   constructor(private host: QuarksTrailHost) {
     const config = host.config;
     if (!batcher || !scene || config.trailParticlesPerUnit <= 0) return;
+    this.key = trailKey(config);
+    this.ps = takeSystem(this.key, () => {
+      // Gradient + alpha fade built from the config's arbitrary-length
+      // trailColors — same lerp the per-particle loop used to do by hand.
+      const cols = config.trailColors;
+      const colorStops: [QV3, number][] = cols.map((c, i) =>
+        [new QV3(c.r, c.g, c.b), cols.length > 1 ? i / (cols.length - 1) : 0]);
+      const alphaStops: [number, number][] = [[config.trailOpacity, 0], [0, 1]];
+      const smin = config.trailScaleMin, smax = config.trailScaleMax;
 
-    // Gradient + alpha fade built from the config's arbitrary-length
-    // trailColors — same lerp the per-particle loop used to do by hand.
-    const cols = config.trailColors;
-    const colorStops: [QV3, number][] = cols.map((c, i) =>
-      [new QV3(c.r, c.g, c.b), cols.length > 1 ? i / (cols.length - 1) : 0]);
-    const alphaStops: [number, number][] = [[config.trailOpacity, 0], [0, 1]];
-    const smin = config.trailScaleMin, smax = config.trailScaleMax;
+      const behaviors: ConstructorParameters<typeof ParticleSystem>[0]['behaviors'] = [
+        new ColorOverLife(new Gradient(colorStops, alphaStops)),
+        new SizeOverLife(new FnValue(t => smin + (smax - smin) * t)),
+      ];
+      // Old loop did vel.y += gravity*dt (positive lifts — sprinkler droplets)
+      if (config.trailParticleGravity) {
+        behaviors.push(new GravityForce(_upQ, config.trailParticleGravity));
+      }
 
-    const behaviors: ConstructorParameters<typeof ParticleSystem>[0]['behaviors'] = [
-      new ColorOverLife(new Gradient(colorStops, alphaStops)),
-      new SizeOverLife(new FnValue(t => smin + (smax - smin) * t)),
-    ];
-    // Old loop did vel.y += gravity*dt (positive lifts — sprinkler droplets)
-    if (config.trailParticleGravity) {
-      behaviors.push(new GravityForce(_upQ, config.trailParticleGravity));
-    }
-
-    this.circle = new CircleEmitter({ radius: config.trailSpread * 0.5, thickness: 1 });
-    this.ps = new ParticleSystem({
-      duration: 1, looping: true,
-      startLife: new IntervalValue(config.trailLifeMin, config.trailLifeMax),
-      // slight outward drift — CircleEmitter pushes velocity radially
-      startSpeed: new IntervalValue(0, 0.2),
-      startSize: new IntervalValue(config.trailBaseSize,
-        config.trailBaseSize + config.trailSizeRange),
-      startColor: new ConstantColor(new QV4(1, 1, 1, 1)),
-      emissionOverTime: new ConstantValue(0),
-      emissionOverDistance: new ConstantValue(config.trailParticlesPerUnit),
-      shape: this.circle,
-      material: impactMat(),
-      renderMode: RenderMode.BillBoard,
-      worldSpace: true,
-      behaviors,
+      const circle = new CircleEmitter({ radius: config.trailSpread * 0.5, thickness: 1 });
+      const sys = new ParticleSystem({
+        duration: 1, looping: true,
+        startLife: new IntervalValue(config.trailLifeMin, config.trailLifeMax),
+        // slight outward drift — CircleEmitter pushes velocity radially
+        startSpeed: new IntervalValue(0, 0.2),
+        startSize: new IntervalValue(config.trailBaseSize,
+          config.trailBaseSize + config.trailSizeRange),
+        startColor: new ConstantColor(new QV4(1, 1, 1, 1)),
+        emissionOverTime: new ConstantValue(0),
+        emissionOverDistance: new ConstantValue(config.trailParticlesPerUnit),
+        shape: circle,
+        material: impactMat(),
+        renderMode: RenderMode.BillBoard,
+        worldSpace: true,
+        behaviors,
+      });
+      circleOf.set(sys, circle);
+      return sys;
     });
+    this.circle = circleOf.get(this.ps) ?? null;
     this.ps.emitter.position.copy(host.pos);
-    batcher.addSystem(this.ps);
-    scene.add(this.ps.emitter);
-    this.ps.play();
+    attachSystem(this.ps);
+    this.ps.restart();
   }
 
   // Move + aim the emitter; quarks emits floor(dist*ppu) particles itself.
@@ -388,11 +404,18 @@ export class QuarksTrail {
 
   dispose(): void {
     if (!this.ps) return;
-    this.ps.stop(); // kill particles immediately — old dispose() pooled them away just as fast
-    batcher?.deleteSystem(this.ps);
-    scene?.remove(this.ps.emitter);
-    this.ps.dispose();
+    const ps = this.ps;
     this.ps = null;
+    ps.stop(); // kill particles immediately — old dispose() pooled them away just as fast
+    const pool = pools.get(this.key) ?? [];
+    if (pool.length < POOL_CAP) {
+      pool.push(ps);
+      pools.set(this.key, pool);
+      return;
+    }
+    batcher?.deleteSystem(ps);
+    scene?.remove(ps.emitter);
+    ps.dispose();
   }
 }
 
