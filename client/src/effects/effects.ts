@@ -5,7 +5,12 @@ import { acquireBatch, retireBatch, type BatchMap } from '../core/batchPool.js';
 import { impactBurst, blastBurst } from './vfx.js';
 import * as du from './effectDust.js';
 import type { Terrain } from '../world/terrain.js';
-import { markProbe } from '../core/fxDiag.js';
+import { registerDiag, markProbe } from '../core/fxDiag.js';
+
+// All live managers (normally one per scene) feed the Alt+Q fx section —
+// buckets/particles/beams were the last unaccounted FX resources.
+const managers: EffectsManager[] = [];
+registerDiag('fx', () => ({ fx: managers.map(m => m.stats()) }));
 
 interface Particle {
   bucket: InstBucket;
@@ -146,6 +151,7 @@ export class EffectsManager {
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
+    managers.push(this);
     this.sharedGeo = new THREE.SphereGeometry(0.15, 8, 8);
     this.sharedDiscGeo = new THREE.CircleGeometry(0.5, 8);
     this.beamGeo = new THREE.CylinderGeometry(1, 1, 1, 6, 1, true);
@@ -287,7 +293,7 @@ export class EffectsManager {
         transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
       });
       b = { mesh: new THREE.Mesh(this.beamGeo, mat), mat, life: 0, maxLife: 0 };
-      markProbe(b.mesh, { kind: 'beam' });
+      markProbe(b.mesh, { kind: 'beam', label: 'hitscan flash' });
     }
     b.mesh.position.copy(from).addScaledVector(_v, 0.5);
     b.mesh.quaternion.setFromUnitVectors(_v3.set(0, 1, 0), _v.normalize());
@@ -297,6 +303,19 @@ export class EffectsManager {
     b.life = b.maxLife = 0.35;
     this.scene.add(b.mesh);
     this.beams.push(b);
+  }
+
+  /** Pool census for the Alt+Q dump — a bucket list that keeps growing
+   *  or a free stack that never drains is a release-side leak. */
+  stats(): Record<string, unknown> {
+    const bucketRows: Record<string, unknown>[] = [];
+    for (const [key, list] of this.buckets) {
+      for (const b of list) {
+        bucketRows.push({ key, count: b.mesh.count, used: b.used, free: b.free.length });
+      }
+    }
+    return { particles: this.particles.length, beams: this.beams.length,
+      deadP: this.deadP.length, beamPool: this.beamPool.length, buckets: bucketRows };
   }
 
   update(dt: number): void {
