@@ -168,6 +168,7 @@ export class EffectsManager {
       }));
       nb.key = key;
       this.scene.add(nb.mesh);
+      markProbe(nb.mesh, { kind: 'instPool', label: `fx/${key}`, pool: nb });
       return nb;
     }, x => x.free.length > 0);
     return b;
