@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 
 import { getGlowTexture } from './glowTexture.js';
+import { markProbe } from '../core/fxDiag.js';
 import type { Terrain } from '../world/terrain.js';
 
 // Ground mist — a handful of large soft billboards pooled in terrain
@@ -54,6 +55,7 @@ export class GroundMist {
       const z = spot.z + (Math.random() - 0.5) * 30;
       mesh.position.set(x, terrain.getHeightVisual(x, z) + 2.2 + Math.random() * 1.5, z);
       mesh.renderOrder = 1;
+      markProbe(mesh, { kind: 'fxMesh', label: 'groundMist' });
       scene.add(mesh);
       this.cards.push({ mesh, baseX: x, baseZ: z, phase: Math.random() * Math.PI * 2 });
     }

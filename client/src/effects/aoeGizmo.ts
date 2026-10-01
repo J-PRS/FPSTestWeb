@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { markProbe } from '../core/fxDiag.js';
 
 /** Debug wireframe sphere — shows the TRUE gameplay blast radius at the
  *  detonation point (vs the Explosion dome, which is only 80% of it).
@@ -20,6 +21,7 @@ export class AoeGizmo {
     this.mesh = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 14), this.mat);
     this.mesh.position.copy(pos);
     this.mesh.scale.setScalar(radius);
+    markProbe(this.mesh, { kind: 'fxMesh', label: 'aoeGizmo' });
     scene.add(this.mesh);
   }
 

@@ -2,32 +2,17 @@ import * as THREE from 'three';
 import { BLOOM_LAYER, EMIT_GAIN } from '../core/config.js';
 import { Terrain } from '../world/terrain.js';
 
-interface IP {
-  mesh: THREE.Mesh | THREE.Sprite;
-  mat: THREE.MeshBasicMaterial | THREE.SpriteMaterial;
-  vx: number; vy: number; vz: number;
-  life: number; elapsed: number;
-  baseScale: number;
-  gravity: number;
-  r1: number; g1: number; b1: number;
-  r2: number; g2: number; b2: number;
-  dead: boolean;
-  startDist: number;
-  isSprite: boolean;
-}
-
-import { getGlowTexture as getGlowTex } from './glowTexture.js';
 import { TerrainRing } from './TerrainRing.js';
+import { implodeBurst } from './vfx.js';
+import { markProbe } from '../core/fxDiag.js';
 
 // ---- Shared GPU resources (never disposed) ----
-const GEO_SPHERE = new THREE.SphereGeometry(1, 5, 5);      // unit — scaled per particle
 const GEO_SHOCK  = new THREE.SphereGeometry(0.3, 16, 16);
 const GEO_CORE   = new THREE.SphereGeometry(1.2, 16, 16);
 const ARC_SEGS   = 8;
 const ARC_POINTS = ARC_SEGS + 1;
 
-const _v = new THREE.Vector3();
-const _c = new THREE.Color();
+
 
 interface Arc {
   line: THREE.Line;
@@ -41,15 +26,12 @@ interface Shock { mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial; life: number; 
 interface Core  { mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial; dead: boolean }
 
 // ---- Module pools — shared across all Implosion instances ----
-const spritePool: IP[] = [];
-const meshPool: IP[] = [];
 const shockPool: Shock[] = [];
 const corePool: Core[] = [];
 const arcPool: Arc[] = [];
 
 export class Implosion {
   dead = false;
-  private particles: IP[] = [];
   private scene!: THREE.Scene;
   private elapsed = 0;
   private ox!: number; private oy!: number; private oz!: number;
@@ -67,49 +49,29 @@ export class Implosion {
     // Scale factor based on projectile flight time: 50% at 0s, 100% at 1s (linear, clamped)
     const timeScale = Math.min(0.5 + age * 0.5, 1.0);
 
-    // Layer 1: Outer ring - bright cyan, fast inward with spiral
-    for (let i = 0; i < Math.floor(80 * timeScale); i++) {
-      const ang = Math.random() * Math.PI * 2;
-      const elv = (Math.random() - 0.5) * Math.PI;
-      const dist = 4 + Math.random() * 3;
-      const spd = 25 + Math.random() * 15;
-      this.spawn(pos, [dist, ang, elv, spd],
-        [0.25 + Math.random()*0.15, 1.0 + Math.random()*0.4, 0.5],
-        [0.8, 1.0, 1.0], [0.0, 0.5, 1.0], [true, true]);
-    }
-
-    // Layer 2: Inner ring - bright blue, medium inward with spiral
-    for (let i = 0; i < Math.floor(60 * timeScale); i++) {
-      const ang = Math.random() * Math.PI * 2;
-      const elv = (Math.random() - 0.5) * Math.PI;
-      const dist = 2.5 + Math.random() * 2;
-      const spd = 18 + Math.random() * 10;
-      this.spawn(pos, [dist, ang, elv, spd],
-        [0.30 + Math.random()*0.20, 0.9 + Math.random()*0.4, 0.5],
-        [0.5, 0.8, 1.0], [0.0, 0.4, 0.8], [true, true]);
-    }
-
-    // Layer 3: Core flash - white, very fast inward with spiral
-    for (let i = 0; i < Math.floor(30 * timeScale); i++) {
-      const ang = Math.random() * Math.PI * 2;
-      const elv = (Math.random() - 0.5) * Math.PI;
-      const dist = 1.5 + Math.random() * 1;
-      const spd = 35 + Math.random() * 20;
-      this.spawn(pos, [dist, ang, elv, spd],
-        [0.12 + Math.random()*0.08, 0.8 + Math.random()*0.3, 0.5],
-        [1.0, 1.0, 1.0], [0.8, 0.9, 1.0], [true, true]);
-    }
-
-    // Layer 4: Debris - solid chunks, inward
-    for (let i = 0; i < Math.floor(40 * timeScale); i++) {
-      const ang = Math.random() * Math.PI * 2;
-      const elv = (Math.random() - 0.5) * Math.PI;
-      const dist = 3 + Math.random() * 2.5;
-      const spd = 15 + Math.random() * 12;
-      this.spawn(pos, [dist, ang, elv, spd],
-        [0.20 + Math.random()*0.15, 0.6 + Math.random()*0.2, 0.3],
-        [0.3, 0.6, 0.5], [0.0, 0.2, 0.3], [false]);
-    }
+    // Layers 1-3: glow rings converging inward — one batched burst each
+    // (the old path spawned 170 individually-drawn sprites/meshes per
+    // implosion). Swirl ≈ 0.8·avgSpeed reproduces the spiral term.
+    implodeBurst(pos, { // outer ring — bright cyan, fast, biggest shell
+      count: 80 * timeScale, rMin: 4, rMax: 7, spdMin: 25, spdMax: 40, swirl: 26,
+      lifeMin: 0.25, lifeMax: 0.4, sizeMin: 3.0, sizeMax: 4.2,
+      c1: [0.8, 1.0, 1.0], c2: [0.0, 0.5, 1.0], opacity: 0.9, stagger: 0.08,
+    }, true);
+    implodeBurst(pos, { // inner ring — blue, tighter, slower
+      count: 60 * timeScale, rMin: 2.5, rMax: 4.5, spdMin: 18, spdMax: 28, swirl: 18,
+      lifeMin: 0.3, lifeMax: 0.5, sizeMin: 2.7, sizeMax: 3.7,
+      c1: [0.5, 0.8, 1.0], c2: [0.0, 0.4, 0.8], opacity: 0.9, stagger: 0.08,
+    }, true);
+    implodeBurst(pos, { // core flash — white, very fast, small shell
+      count: 30 * timeScale, rMin: 1.5, rMax: 2.5, spdMin: 35, spdMax: 55, swirl: 36,
+      lifeMin: 0.12, lifeMax: 0.2, sizeMin: 2.4, sizeMax: 3.9,
+      c1: [1.0, 1.0, 1.0], c2: [0.8, 0.9, 1.0], opacity: 0.9,
+    }, true);
+    implodeBurst(pos, { // debris chunks — solid, inward, no spiral
+      count: 40 * timeScale, rMin: 3, rMax: 5.5, spdMin: 15, spdMax: 27,
+      lifeMin: 0.2, lifeMax: 0.35, sizeMin: 0.6, sizeMax: 1.2,
+      c1: [0.3, 0.6, 0.5], c2: [0.0, 0.2, 0.3], opacity: 1.0, spin: 4, stagger: 0.08,
+    }, false);
 
     // Layer 5: Shockwave - expanding cyan sphere
     let sw = shockPool.pop();
@@ -122,6 +84,7 @@ export class Implosion {
       });
       const mesh = new THREE.Mesh(GEO_SHOCK, mat);
       mesh.layers.enable(BLOOM_LAYER);
+      markProbe(mesh, { kind: 'fxMesh', label: 'implosion:shock' });
       this.scene.add(mesh);
       sw = { mesh, mat, life: 0, elapsed: 0, maxRadius: 0, dead: false };
     }
@@ -145,6 +108,7 @@ export class Implosion {
       });
       const mesh = new THREE.Mesh(GEO_CORE, mat);
       mesh.layers.enable(BLOOM_LAYER);
+      markProbe(mesh, { kind: 'fxMesh', label: 'implosion:core' });
       this.scene.add(mesh);
       core = { mesh, mat, dead: false };
     }
@@ -174,6 +138,7 @@ export class Implosion {
         const line = new THREE.Line(geo, mat);
         line.layers.enable(BLOOM_LAYER);
         line.frustumCulled = false;
+        markProbe(line, { kind: 'fxMesh', label: 'implosion:arc' });
         this.scene.add(line);
         arc = { line, life: 0, elapsed: 0, dead: false,
                 basePts: new Float32Array(ARC_POINTS * 3), posAttr, mat };
@@ -195,143 +160,14 @@ export class Implosion {
     }
   }
 
-  private allocSprite(pos: THREE.Vector3, color: THREE.Color, opacity: number, additive: boolean): IP {
-    let p = spritePool.pop();
-    if (p) {
-      this.scene.add(p.mesh);
-    } else {
-      const mat = new THREE.SpriteMaterial({
-        map: getGlowTex(), transparent: true, depthWrite: false,
-      });
-      const sprite = new THREE.Sprite(mat);
-      sprite.layers.enable(BLOOM_LAYER);
-      this.scene.add(sprite);
-      p = { mesh: sprite, mat, vx: 0, vy: 0, vz: 0, life: 0, elapsed: 0, baseScale: 1, gravity: 0,
-            r1: 0, g1: 0, b1: 0, r2: 0, g2: 0, b2: 0, dead: false, startDist: 0, isSprite: true };
-    }
-    const m = p.mat as THREE.SpriteMaterial;
-    m.color.copy(color);
-    m.opacity = opacity;
-    m.blending = additive ? THREE.AdditiveBlending : THREE.NormalBlending;
-    p.mesh.position.copy(pos);
-    return p;
-  }
-
-  private allocMesh(pos: THREE.Vector3, color: THREE.Color): IP {
-    let p = meshPool.pop();
-    if (p) {
-      this.scene.add(p.mesh);
-    } else {
-      const mat = new THREE.MeshBasicMaterial({ transparent: true });
-      const mesh = new THREE.Mesh(GEO_SPHERE, mat);
-      mesh.layers.enable(BLOOM_LAYER);
-      this.scene.add(mesh);
-      p = { mesh, mat, vx: 0, vy: 0, vz: 0, life: 0, elapsed: 0, baseScale: 1, gravity: 0,
-            r1: 0, g1: 0, b1: 0, r2: 0, g2: 0, b2: 0, dead: false, startDist: 0, isSprite: false };
-    }
-    const m = p.mat;
-    m.color.copy(color);
-    m.opacity = 1.0;
-    m.blending = THREE.NormalBlending;
-    m.depthWrite = true;
-    p.mesh.position.copy(pos);
-    return p;
-  }
-
-  private spawn(
-    pos: THREE.Vector3,
-    [startDist, ang, elv, speed]: [number, number, number, number],
-    [life, size, gravity]: [number, number, number],
-    [r1, g1, b1]: [number, number, number],
-    [r2, g2, b2]: [number, number, number],
-    [additive, spiral = false]: [boolean, boolean?]
-  ): void {
-    // Start at outer radius
-    const sx = pos.x + startDist * Math.cos(elv) * Math.sin(ang);
-    const sy = pos.y + startDist * Math.sin(elv);
-    const zpos = pos.z + startDist * Math.cos(elv) * Math.cos(ang);
-
-    // Velocity points toward center
-    let vx = -speed * Math.cos(elv) * Math.sin(ang);
-    const vy = -speed * Math.sin(elv);
-    let vz = -speed * Math.cos(elv) * Math.cos(ang);
-
-    // Add spiral motion (tangential velocity)
-    if (spiral) {
-      const spiralSpeed = speed * 0.8;
-      const tanX = Math.cos(elv) * Math.cos(ang);
-      const tanZ = -Math.cos(elv) * Math.sin(ang);
-      vx += tanX * spiralSpeed;
-      vz += tanZ * spiralSpeed;
-    }
-
-    _v.set(sx, sy, zpos);
-    _c.setRGB(r1, g1, b1);
-
-    let p: IP;
-    if (additive) {
-      // Billboarded glow sprite — much bigger/brighter read than a tiny sphere
-      p = this.allocSprite(_v, _c, 0.9, true);
-      p.mesh.scale.setScalar(size * 3);
-      p.baseScale = size * 3;
-    } else {
-      // Unit sphere scaled by size — no per-particle geometry
-      p = this.allocMesh(_v, _c);
-      p.baseScale = size;
-    }
-    Object.assign(p, { vx, vy, vz, life, elapsed: 0, gravity, r1, g1, b1, r2, g2, b2, dead: false, startDist });
-    this.particles.push(p);
-  }
-
   update(dt: number): void {
     this.elapsed += dt;
     let alive =
-      this.updateParticles(dt) +
       this.updateCore() +
       this.updateShockwaves(dt) +
       this.updateArcs(dt);
     for (const r of this.rings) if (r.update(dt)) alive++;
-
     if (alive === 0) this.dead = true;
-  }
-
-  private updateParticles(dt: number): number {
-    let alive = 0;
-    for (const p of this.particles) {
-      if (p.dead) continue;
-      p.elapsed += dt;
-      if (p.elapsed >= p.life) {
-        this.scene.remove(p.mesh);
-        p.dead = true;
-        if (p.isSprite) spritePool.push(p); else meshPool.push(p);
-        continue;
-      }
-      alive++;
-      const t = p.elapsed / p.life;
-      const ft = 1 - t;
-
-      // Move inward
-      p.mesh.position.x += p.vx * dt;
-      p.mesh.position.y += p.vy * dt;
-      p.mesh.position.z += p.vz * dt;
-
-      // Sprites keep most of their size and fade out; chunks shrink to a point
-      const scl = p.isSprite
-        ? p.baseScale * (0.5 + 0.5 * ft)
-        : p.baseScale * ft;
-      p.mesh.scale.setScalar(Math.max(scl, 0.01));
-
-      // Color gradient — sprites (additive glow) write HDR-hot for bloom;
-      // solid chunks keep display colors.
-      const g = p.isSprite ? EMIT_GAIN : 1;
-      p.mat.color.setRGB(
-        (p.r1 + (p.r2 - p.r1) * t) * g,
-        (p.g1 + (p.g2 - p.g1) * t) * g,
-        (p.b1 + (p.b2 - p.b1) * t) * g,
-      );
-      p.mat.opacity = ft * (p.isSprite ? 0.9 : 1.0);
-    }
-    return alive;
   }
 
   private updateCore(): number {
@@ -399,13 +235,6 @@ export class Implosion {
   }
 
   dispose(): void {
-    for (const p of this.particles) {
-      if (!p.dead) {
-        this.scene.remove(p.mesh);
-        p.dead = true;
-        if (p.isSprite) spritePool.push(p); else meshPool.push(p);
-      }
-    }
     for (const sw of this.shockwaves) {
       if (!sw.dead) {
         this.scene.remove(sw.mesh);
@@ -426,7 +255,6 @@ export class Implosion {
         arcPool.push(arc);
       }
     }
-    this.particles = [];
     this.shockwaves = [];
     this.rings = [];
     this.arcs = [];

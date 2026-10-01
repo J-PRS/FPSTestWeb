@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { Terrain } from '../world/terrain.js';
+import { markProbe } from '../core/fxDiag.js';
 
 const _v = new THREE.Vector3();
 
@@ -41,6 +42,7 @@ export class TerrainFoot {
     this.mesh = new THREE.Mesh(this.geo,
       new THREE.MeshLambertMaterial({ color, side: THREE.DoubleSide }));
     this.mesh.frustumCulled = false;
+    markProbe(this.mesh, { kind: 'fxMesh', label: 'terrainFoot' });
     scene.add(this.mesh);
   }
 

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 
 import { LIFE_BASE, LIFE_RAND, PLAYER_RADIUS } from '../core/config.js';
 import { pickShardGeo, pickShardPrim, shardLaunch, type DebrisOptions, type DebrisPart } from './debrisShards.js';
+import { markProbe } from '../core/fxDiag.js';
 
 type Vec3Like = { x: number; y: number; z: number };
 
@@ -95,6 +96,7 @@ export class Debris {
     this.ghostMat.color.setRGB(Math.min(1, color.r + 0.6), Math.min(1, color.g + 0.6), Math.min(1, color.b + 0.6));
     this.ghostMat.opacity = 0.95;
     this.ghost = pooled ? pooled.mesh : new THREE.Mesh();
+    markProbe(this.ghost, { kind: 'fxMesh', label: 'debrisGhost' });
     this.ghost.geometry = new THREE.IcosahedronGeometry(shellRadius, 0);
     if (this.ghost.material !== this.ghostMat) this.ghost.material = this.ghostMat;
     this.ghost.scale.setScalar(1);
@@ -155,6 +157,7 @@ export class Debris {
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       mesh.castShadow = false;
       mesh.frustumCulled = false; // shards scatter; unit-geo bounds don't cover instances
+      markProbe(mesh, { kind: 'fxMesh', label: `debrisInst:prim${prim}` });
       mesh.count = 0;
       b = this.insts[prim] = { mesh, free: [] };
       this.scene.add(mesh);
@@ -323,6 +326,7 @@ export class Debris {
   private allocShardMesh(geo: THREE.BufferGeometry, cr: number, cg: number, cb: number) {
     const pooled = Debris.shardPool.pop();
     const mesh = pooled ? pooled.mesh : new THREE.Mesh();
+    markProbe(mesh, { kind: 'fxMesh', label: 'debrisShard' });
     const mat = pooled ? pooled.mat : new THREE.MeshLambertMaterial();
     mesh.geometry = geo;
     if (mesh.material !== mat) mesh.material = mat;
