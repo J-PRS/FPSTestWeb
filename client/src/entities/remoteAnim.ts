@@ -198,13 +198,10 @@ export class RemoteAnim {
 }
 
 /** Anim LOD table — Infinity = freeze everything (renderer already
- *  culls the skin, so only CPU bone evaluation was burning). A far
- *  remote standing still drops to 5Hz: idle sway is a slow enough
- *  signal to read identically; mid-close keeps full rate because at
- *  that distance sway IS readable. */
-export function pickAnimCadence(onScreen: boolean, camDistSq: number, moving: boolean): number {
+ *  culls the skin, so only CPU bone evaluation was burning). Floor is
+ *  15Hz — slower idle tiers read as steppy even at distance. */
+export function pickAnimCadence(onScreen: boolean, camDistSq: number, _moving: boolean): number {
   if (onScreen === false) return Infinity;
-  if (camDistSq > 60 * 60 && !moving) return 1 / 5;
   if (camDistSq > 120 * 120) return 1 / 15;
   if (camDistSq > 60 * 60) return 1 / 30;
   return 0;

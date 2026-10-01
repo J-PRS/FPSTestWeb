@@ -170,7 +170,7 @@ export class TickFanout {
   }
 
   /** Interest management: distance-tiered update rate per recipient.
-   *  <150m (engagement range) every tick · <400m half rate · beyond 1/10.
+   *  <150m (engagement range) every tick · <400m half rate · beyond 1/4.
    *  Hits/kills travel on reliable events, so stale far ghosts only lose
    *  smoothness on targets that are visually specks anyway. */
   fanoutRecords(room: Room, players: Players, records: TickRecord[]): void {
@@ -188,7 +188,10 @@ export class TickFanout {
         const dy = r.pos.y - ry;
         const dz = r.pos.z - rz;
         const dSq = dx * dx + dy * dy + dz * dz;
-        const tier = dSq < 22500 ? 1 : dSq < 160000 ? 2 : 10; // 150m / 400m
+        // 500ms spacing on the far tier read as mini-warps even through the
+        // interpolation buffer — 200ms + Hermite is visually indistinguishable
+        // from full rate and still a 5x send reduction.
+        const tier = dSq < 22500 ? 1 : dSq < 160000 ? 2 : 4; // 150m / 400m
         // force = hit/knockback window: real positions must reach every
         // observer at full rate while they extrapolate the knockback
         if (r.force || seq % tier === 0) others.push(r.data);

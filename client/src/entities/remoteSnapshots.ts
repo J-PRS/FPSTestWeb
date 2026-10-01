@@ -28,9 +28,8 @@ export interface NetSnapshot {
 
 export class SnapshotBuffer {
   static readonly BASE_INTERP_DELAY = 100;
-  static readonly MAX_INTERP_DELAY = 300;
+  static readonly MAX_INTERP_DELAY = 800;
   static readonly MAX_EXTRAPOLATE = 0.25; // s past the newest snapshot
-  private static readonly RETAIN_MS = 1000;
 
   private snapshots: NetSnapshot[] = [];
   private pool: NetSnapshot[] = [];
@@ -50,11 +49,20 @@ export class SnapshotBuffer {
     const prev = this.snapshots.length ? this.snapshots[this.snapshots.length - 1]!.t : 0;
     const gap = prev > 0 ? t - prev : 0;
     if (gap > 10 && gap < 2000) {
-      this.arrivalInterval += (gap - this.arrivalInterval) * 0.15;
+      // Fast EMA on cadence change (tier-10 streams arrive at 10x the
+      // baseline — 0.15 takes ~7s to converge, during which renderTime
+      // sits past the buffer and the remote mini-warps).
+      const rate = gap > this.arrivalInterval * 2 ? 0.6 : 0.15;
+      this.arrivalInterval += (gap - this.arrivalInterval) * rate;
       this.arrivalJitter += (Math.abs(gap - this.arrivalInterval) - this.arrivalJitter) * 0.1;
+      // The delay must cover a full arrival interval, not just jitter:
+      // interest-tier suppression streams at 500ms spacing, and a 300ms
+      // cap leaves renderTime permanently past the newest snapshot —
+      // far remotes then freeze on the extrapolation clamp and step at
+      // the send rate instead of interpolating.
       this.interpDelay = Math.min(
         SnapshotBuffer.MAX_INTERP_DELAY,
-        SnapshotBuffer.BASE_INTERP_DELAY + this.arrivalJitter * 2,
+        SnapshotBuffer.BASE_INTERP_DELAY + this.arrivalInterval + this.arrivalJitter * 2,
       );
     }
 
@@ -64,7 +72,8 @@ export class SnapshotBuffer {
     snap.vx = vel.x; snap.vy = vel.y; snap.vz = vel.z;
     this.snapshots.push(snap);
 
-    const cutoff = t - SnapshotBuffer.RETAIN_MS;
+    // Keep a few intervals of history — the delay window plus one pair.
+    const cutoff = t - Math.max(1000, this.arrivalInterval * 4);
     while (this.snapshots.length > 2 && this.snapshots[0]!.t < cutoff) {
       this.pool.push(this.snapshots.shift()!);
     }
@@ -86,8 +95,11 @@ export class SnapshotBuffer {
 
     const newest = snaps[snaps.length - 1]!;
     if (renderTime >= newest.t) {
-      // Past the buffer — extrapolate briefly from the newest snapshot
-      const ext = Math.min(SnapshotBuffer.MAX_EXTRAPOLATE, (renderTime - newest.t) / 1000);
+      // Past the buffer — extrapolate briefly from the newest snapshot.
+      // Extrapolation scales with the observed cadence: a flat 0.25s cap
+      // freezes a 500ms-tier remote for a quarter-second per packet.
+      const cap = Math.min(0.6, Math.max(SnapshotBuffer.MAX_EXTRAPOLATE, (this.arrivalInterval / 1000) * 0.6));
+      const ext = Math.min(cap, (renderTime - newest.t) / 1000);
       outPos.set(newest.x + newest.vx * ext, newest.y + newest.vy * ext, newest.z + newest.vz * ext);
       outRot.yaw = newest.yaw;
       outRot.pitch = newest.pitch;
@@ -114,7 +126,8 @@ export class SnapshotBuffer {
     const ddx = s1.x - s0.x, ddy = s1.y - s0.y, ddz = s1.z - s0.z;
     const lx = s0.x + ddx * a, ly = s0.y + ddy * a, lz = s0.z + ddz * a;
     let useHermite = false;
-    if (spanSec > 0 && spanSec < 0.5) {
+    // 1s cap: tier-suppressed streams legitimately span ~500ms.
+    if (spanSec > 0 && spanSec < 1.0) {
       const t2 = a * a, t3 = t2 * a;
       const h00 = 2 * t3 - 3 * t2 + 1;
       const h10 = t3 - 2 * t2 + a;

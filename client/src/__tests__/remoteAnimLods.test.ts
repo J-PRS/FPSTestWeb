@@ -21,10 +21,11 @@ describe('pickAnimCadence', () => {
     expect(pickAnimCadence(true, 121 * 121, true)).toBe(1 / 15);
   });
 
-  it('far and idle drops to 5Hz regardless of which distance band', () => {
-    expect(pickAnimCadence(true, 61 * 61, false)).toBe(1 / 5);
-    expect(pickAnimCadence(true, 121 * 121, false)).toBe(1 / 5);
-    expect(pickAnimCadence(true, 500 * 500, false)).toBe(1 / 5);
+  it('idle keeps the distance tiers — sub-15Hz reads as steppy', () => {
+    // The 5Hz idle tier was reverted: idle sway at 5Hz visibly stepped.
+    expect(pickAnimCadence(true, 61 * 61, false)).toBe(1 / 30);
+    expect(pickAnimCadence(true, 121 * 121, false)).toBe(1 / 15);
+    expect(pickAnimCadence(true, 500 * 500, false)).toBe(1 / 15);
   });
 
   it('every decimated tier still qualifies for distal-bone freeze', () => {

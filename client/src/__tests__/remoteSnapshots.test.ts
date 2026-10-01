@@ -17,13 +17,15 @@ describe('SnapshotBuffer', () => {
   it('interpolates between the two snapshots bracketing renderTime', () => {
     const buf = new SnapshotBuffer();
     const now = Date.now();
-    // Two snaps straddling now-100ms (the default interp delay)
-    buf.push(now - 150, {x:0,y:0,z:0}, {yaw:0,pitch:0}, {x:10,y:0,z:0});
-    buf.push(now - 50, {x:1,y:0,z:0}, {yaw:0,pitch:0}, {x:10,y:0,z:0});
+    // 100ms-cadence stream — delay covers one interval, so renderTime
+    // (~-166ms) straddles the middle/older pair.
+    buf.push(now - 250, {x:0,y:0,z:0}, {yaw:0,pitch:0}, {x:10,y:0,z:0});
+    buf.push(now - 150, {x:1,y:0,z:0}, {yaw:0,pitch:0}, {x:10,y:0,z:0});
+    buf.push(now - 50, {x:2,y:0,z:0}, {yaw:0,pitch:0}, {x:10,y:0,z:0});
     const { pos } = sample(buf);
-    // RenderTime sits midway between the snaps -> ~0.5, never at the ends
-    expect(pos.x).toBeGreaterThan(0.3);
-    expect(pos.x).toBeLessThan(0.7);
+    // RenderTime sits between s0 and s1 -> ~0.8-1.0, never at an end
+    expect(pos.x).toBeGreaterThan(0.6);
+    expect(pos.x).toBeLessThan(1.2);
   });
 
   it('extrapolates bounded past the newest snapshot instead of freezing', () => {
@@ -31,11 +33,28 @@ describe('SnapshotBuffer', () => {
     const now = Date.now();
     buf.push(now - 400, {x:0,y:0,z:0}, {yaw:0,pitch:0}, {x:10,y:0,z:0});
     buf.push(now - 200, {x:1,y:0,z:0}, {yaw:0,pitch:0}, {x:10,y:0,z:0});
-    // renderTime is ~100ms past the newest snap -> extrapolates vx*~0.1 = +1m
-    // (the jitter-adaptive delay absorbs a few ms — assert the band, not a point)
+    // The 200ms gap triggers the cadence-change fast-EMA → delay ~250ms,
+    // renderTime lands between the two snaps (~0.65) — inside the buffer,
+    // not frozen on an extrapolation clamp.
     const { pos } = sample(buf);
-    expect(pos.x).toBeGreaterThan(1.5);
-    expect(pos.x).toBeLessThan(2.2);
+    expect(pos.x).toBeGreaterThan(0.4);
+    expect(pos.x).toBeLessThan(1.0);
+  });
+
+  it('covers a tier-suppressed stream instead of freezing on the clamp', () => {
+    const buf = new SnapshotBuffer();
+    const now = Date.now();
+    // Interest-tier suppression: snapshots at ~500ms spacing (tier 10).
+    // The pre-fix 300ms delay cap left renderTime permanently past the
+    // newest snap — far remotes froze on MAX_EXTRAPOLATE and stepped.
+    for (let i = 6; i >= 0; i--) {
+      buf.push(now - i * 500, {x:(6-i)*10,y:0,z:0}, {yaw:0,pitch:0}, {x:20,y:0,z:0});
+    }
+    const { pos } = sample(buf);
+    // renderTime lands INSIDE the buffer (~600ms back) → smooth lerp
+    // between real snaps around x≈40-55, not the newest+clamp (≈72).
+    expect(pos.x).toBeGreaterThan(38);
+    expect(pos.x).toBeLessThan(60);
   });
 
   it('caps extrapolation at MAX_EXTRAPOLATE no matter how stale', () => {
@@ -61,8 +80,10 @@ describe('SnapshotBuffer', () => {
     buf.push(now - 150, {x:1,y:2,z:3}, {yaw:0,pitch:0}, {x:0,y:0,z:0});
     buf.clear();
     expect(buf.size).toBe(0);
-    // Push again — pool reuse must not corrupt new data
-    buf.push(now - 150, {x:4,y:5,z:6}, {yaw:0,pitch:0}, {x:0,y:0,z:0});
+    // Push again — pool reuse must not corrupt new data. Three snaps so
+    // the interval-scaled delay straddles a pair rather than clamping.
+    buf.push(now - 250, {x:4,y:5,z:6}, {yaw:0,pitch:0}, {x:0,y:0,z:0});
+    buf.push(now - 150, {x:5,y:5,z:6}, {yaw:0,pitch:0}, {x:0,y:0,z:0});
     buf.push(now - 50, {x:7,y:5,z:6}, {yaw:0,pitch:0}, {x:0,y:0,z:0});
     const { pos } = sample(buf);
     expect(pos.x).toBeGreaterThan(4);
