@@ -61,7 +61,7 @@ export namespace Logger {
   /**
    * Core logging method
    */
-  function log(level: LogLevel, message: string, context?: any): void {
+  function log(level: LogLevel, message: string, context?: unknown): void {
     if (!shouldLog(level)) return;
 
     const levelStr = LogLevel[level];
@@ -239,24 +239,24 @@ export namespace Logger {
     return writingToConsole;
   }
 
-  export function debug(message: string, context?: any): void {
+  export function debug(message: string, context?: unknown): void {
     log(LogLevel.DEBUG, message, context);
   }
 
-  export function info(message: string, context?: any): void {
+  export function info(message: string, context?: unknown): void {
     log(LogLevel.INFO, message, context);
   }
 
-  export function warn(message: string, context?: any): void {
+  export function warn(message: string, context?: unknown): void {
     log(LogLevel.WARN, message, context);
   }
 
-  export function error(message: string, context?: any): void {
+  export function error(message: string, context?: unknown): void {
     log(LogLevel.ERROR, message, context);
   }
 
   /** Log with a one-shot context tag (used by ChildLogger) */
-  export function logTagged(level: LogLevel, tag: string, message: string, context?: any): void {
+  export function logTagged(level: LogLevel, tag: string, message: string, context?: unknown): void {
     const prevTag = currentTag;
     currentTag = tag;
     log(level, message, context);
@@ -270,19 +270,19 @@ export namespace Logger {
 export class ChildLogger {
   constructor(private context: string) {}
 
-  debug(message: string, context?: any): void {
+  debug(message: string, context?: unknown): void {
     Logger.logTagged(LogLevel.DEBUG, this.context, message, context);
   }
 
-  info(message: string, context?: any): void {
+  info(message: string, context?: unknown): void {
     Logger.logTagged(LogLevel.INFO, this.context, message, context);
   }
 
-  warn(message: string, context?: any): void {
+  warn(message: string, context?: unknown): void {
     Logger.logTagged(LogLevel.WARN, this.context, message, context);
   }
 
-  error(message: string, context?: any): void {
+  error(message: string, context?: unknown): void {
     Logger.logTagged(LogLevel.ERROR, this.context, message, context);
   }
 }

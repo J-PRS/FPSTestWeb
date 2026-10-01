@@ -1,3 +1,4 @@
+2026-10-01 - core: Logger context?: any → unknown — keeps call sites, drops lazy typing on the logging surface
 2026-10-01 - shared: ballSim enrage teleport takes seeded rand via StepWorld (server passes ballSim.rng) — authoritative rolls reproducible under scenario seeds
 2026-10-01 - core: dump-bundle globals typed (__pm/__clips/__ready/__glb/dump in debugGlobals.ts) — drops the window-as-any casts in posedump/vmdump/sfxdump
 2026-10-01 - tests+server: bunx tsc clean — fix RoomMatch casing clash in matchClock, stale mkRoom/pin calls + ModeSpec drift in armorSoak/matchClock, drop unused vars
