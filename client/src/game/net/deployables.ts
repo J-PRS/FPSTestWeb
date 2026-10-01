@@ -17,7 +17,12 @@ export function wireDeployables(ctx: NetCtx): void {
   networkManager.onDeployGone = (id) => mgr().remoteRemove(id);
   networkManager.onTurretShot = (id, _owner, targetId) => mgr().remoteTurretShot(id, targetId);
   networkManager.onMineBoom = (id, pos) => mgr().remoteMineBoom(id, pos);
-  networkManager.onDeployHp = (id, hp, armor) => mgr().applyDeployHp(id, hp, armor);
+  networkManager.onDeployHp = (id, hp, armor, src) => {
+    mgr().applyDeployHp(id, hp, armor);
+    // A heal tick names its welder — draw the beam. The local player's
+    // own weld is already rendered first-person by the repair tool.
+    if (src && src !== localId()) mgr().remoteWeld(src, id);
+  };
 }
 
 /** Join-time roster — same reconcile the pickups get: spawn what the

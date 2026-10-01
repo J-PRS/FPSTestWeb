@@ -106,7 +106,7 @@ export class NetworkManager {
   public onMineBoom: ((id: number, pos: { x: number; y: number; z: number }) => void) | null = null;
   /** Server's vitals table for a deployable — repair heals echo back
    *  through this; armor is the repair-tool overheal pool. */
-  public onDeployHp: ((id: number, hp: number, armor: number) => void) | null = null;
+  public onDeployHp: ((id: number, hp: number, armor: number, src?: string) => void) | null = null;
   public onSnapshot: ((players: SnapshotPlayer[], timestamp: number) => void) | null = null;
   public onStateHash: ((hash: string, tick: number, playerCount: number, timestamp: number) => void) | null = null;
   public onCorrection: ((seq: number, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }, rotation: { yaw: number; pitch: number }, inputSeq?: number, grounded?: boolean) => void) | null = null;
@@ -352,7 +352,7 @@ export class NetworkManager {
     deployGone: (data) => this.onDeployGone?.(data.id),
     turretShot: (data) => this.onTurretShot?.(data.id, data.owner, data.targetId),
     mineBoom: (data) => this.onMineBoom?.(data.id, data.pos),
-    deployHp: (data) => this.onDeployHp?.(data.id, data.hp, data.armor),
+    deployHp: (data) => this.onDeployHp?.(data.id, data.hp, data.armor, data.src),
     // Server refused a hit claim — worth surfacing: a healthy client
     // should basically never see this, so it's a desync tell.
     shotRejected: (data) => {

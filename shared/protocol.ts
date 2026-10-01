@@ -178,7 +178,7 @@ export type ServerMessage =
   | { type: 'deploySpawn'; id: number; owner: string; kind: DeployKind; pos: Vec3; team?: TeamId }
   | { type: 'deployGone'; id: number }
   // Durability sync — hp + overcharge armor riding whenever either moves.
-  | { type: 'deployHp'; id: number; hp: number; armor: number }
+  | { type: 'deployHp'; id: number; hp: number; armor: number; src?: string }
   // Server-owned sentry fired at a player — clients render the rocket
   // visual; damage itself arrives through playerHit like everything else.
   | { type: 'turretShot'; id: number; owner: string; targetId: string }

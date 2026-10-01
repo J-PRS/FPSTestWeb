@@ -27,6 +27,7 @@ import { screenShake } from '../effects/screenShake.js';
 import * as sfx from '../core/sfx.js';
 import { GRAVITY } from '../core/config.js';
 import { WeaponType, REPAIR_ARMOR_MULT } from '../../../shared/weapons.js';
+import { LightningBeam } from '../effects/lightningBeam.js';
 import { THROW_RELEASE, THROW_TOTAL } from '../entities/ViewModel.js';
 import type { GameContext } from './context.js';
 import type { Targetable } from '../entities/balls.js';
@@ -505,6 +506,35 @@ export class Deployables {
     return item;
   }
 
+  // --- Remote welders' beams ------------------------------------------------
+  // Each accepted repair tick the server relays rides deployHp with a src
+  // id — without it, remote welds were invisible: hp climbed but nobody
+  // could see the beam (or who was doing the welding).
+
+  private weldBeams = new Map<string, { beam: LightningBeam; last: number }>();
+  private readonly _weldFrom = new THREE.Vector3();
+
+  /** One weld tick from a remote player/bot — refreshes that welder's
+   *  beam from their eye (remote positions are eye height) to the item. */
+  remoteWeld(srcId: string, serverId: number): void {
+    const item = this.byId.get(serverId);
+    const rp = this.deps.world.remotePlayers.get(srcId);
+    if (!item || item.dead || !rp) return;
+    let w = this.weldBeams.get(srcId);
+    if (!w) {
+      w = {
+        beam: new LightningBeam(this.deps.scene, {
+          glow: 0x1fbb66, core: 0xdcffe8, chain: 0x7dffb8, hit: 0xaaffcc, sparkTop: 0x66ffaa,
+        }),
+        last: 0,
+      };
+      this.weldBeams.set(srcId, w);
+    }
+    w.last = performance.now();
+    this._weldFrom.copy(rp.position);
+    w.beam.fire(this._weldFrom, item.pos, this.deps.lazyPlayer().pos, true, true);
+  }
+
   remoteRemove(id: number): void {
     this.byId.delete(id);
     const item = this.remote.get(id);
@@ -662,12 +692,22 @@ export class Deployables {
     for (let i = this.items.length - 1; i >= 0; i--) {
       if (this.items[i]!.dead) { this.items[i]!.dispose(); this.items.splice(i, 1); }
     }
+    // Weld beams expire a quarter-second after the last relayed tick —
+    // deployHp cadence is ~100ms, so a real weld never gaps long enough
+    // to flicker while a stopped one clears fast.
+    const nowMs = performance.now();
+    for (const [id, w] of this.weldBeams) {
+      w.beam.update(dt);
+      if (nowMs - w.last > 250) { w.beam.dispose(); this.weldBeams.delete(id); }
+    }
     this.rockets.update(dt);
   }
 
   dispose(): void {
     for (const i of this.remote.values()) i.dispose();
     this.remote.clear();
+    for (const w of this.weldBeams.values()) w.beam.dispose();
+    this.weldBeams.clear();
     this.rockets.dispose();
   }
 }

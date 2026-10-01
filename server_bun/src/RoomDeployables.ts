@@ -187,8 +187,10 @@ export class RoomDeployables {
     }
   }
 
-  private sendHp(d: Deployed): void {
-    this.room.broadcast({ type: 'deployHp', id: d.id, hp: Math.max(0, Math.round(d.hp)), armor: Math.round(d.armor) });
+  private sendHp(d: Deployed, src?: string): void {
+    // src is the welder's id on a heal tick — other clients draw their
+    // repair beam off it; damage ticks carry no src.
+    this.room.broadcast({ type: 'deployHp', id: d.id, hp: Math.max(0, Math.round(d.hp)), armor: Math.round(d.armor), ...(src ? { src } : {}) });
   }
 
   // Repair claims are rate-limited per shooter+target — a client can pace
@@ -219,7 +221,7 @@ export class RoomDeployables {
     const healed = Math.min(REPAIR_HEAL_PER_TICK, hpCap - d.hp);
     d.hp += healed;
     d.armor = Math.min(REPAIR_ARMOR_MULT * hpCap, d.armor + (REPAIR_HEAL_PER_TICK - healed));
-    this.sendHp(d);
+    this.sendHp(d, playerId);
   }
 
   remove(id: number): void {
