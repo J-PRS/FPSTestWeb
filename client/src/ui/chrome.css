@@ -159,6 +159,22 @@ body.menu-open #frag-msg { display: none !important; }
   text-align: right; outline: none;
   font-variant-numeric: tabular-nums;
 }
+#overlay .field-row .seg-row { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+#overlay .field-row .seg-row button {
+  padding: 4px 8px;
+  background: rgba(0,0,0,0.3);
+  color: #9db2c4;
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 4px;
+  font-family: inherit; font-size: 0.64rem; font-weight: 600;
+  letter-spacing: 0.06em; cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+#overlay .field-row .seg-row button:hover { color: #fff; }
+#overlay .field-row .seg-row button.active {
+  border-color: #3aa7ff; color: #fff;
+  background: rgba(58,167,255,0.25);
+}
 #overlay .field-row input:focus { border-color: #3aa7ff; }
 #overlay .field-row input[type="range"] {
   width: 110px; padding: 0; accent-color: #3aa7ff; text-align: inherit;

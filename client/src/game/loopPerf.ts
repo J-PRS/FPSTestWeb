@@ -97,27 +97,43 @@ function dumpPerf(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof c
 // a manual ?shadows=off param. dir -1 steps down per sustained low-fps dump
 // (10s throttle), +1 steps up per ~20s of >55fps headroom.
 //
-// GPU ladder (frame is mostly raster): 0 full → 1 shadows off → 2 px-mode 2
-// (2×) → 3 px-mode 1 (4×) → 4 px-mode 3 → 5 px-mode 4 (low-res composer).
+// GPU ladder (frame is mostly raster): 0 full → 1 shadows off → 2 (2×)
+// → 3 (3×) → 4 (4×) → 5 (4× + dithered). Retro baselines enter at their
+// own tier; non-retro baselines take the fractional RES_LADDER instead.
 // CPU ladder (JS phases dominate): 0 all work → 1 ambient systems off
 // (particles/mist/birds + slower HUD sweeps) → 2 + pixel mode regardless.
 //
-// fps-pixelated is the USER'S baseline, not the live mode: auto steps
-// apply with persist=false, floor at the baseline's own ladder level
-// (it may degrade further, never above it), and ?px=/floyd stay fully
-// pinned. fps-shadows=false pins shadows.
-const PX2LEVEL = [0, 3, 2, 4, 5]; // pixelMode → gpu level where it sits
-const PX_LADDER = [0, 0, 2, 1, 3, 4]; // gpu level → pixel mode
+// fps-pscale/fps-pmode are the USER'S baseline, not the live pick: auto
+// steps apply with persist=false, floor at the baseline's own ladder
+// level (it may degrade further, never above it), and ?px=/atkinson
+// stay fully pinned. fps-shadows=false pins shadows.
+const LEGACY_PM = [[1,0],[4,0],[2,0],[4,1],[4,2],[4,3]] as const;
+function baselinePixel(): { p: number; m: number } {
+  if (localStorage.getItem('fps-pscale') !== null) {
+    return { p: settings.get('fps-pscale'), m: settings.get('fps-pmode') };
+  }
+  const [p, m] = LEGACY_PM[settings.get('fps-pixelated')] ?? [1, 0];
+  return { p, m };
+}
+// GPU level ↔ (pscale, pmode): 2→2x, 3→3x, 4→4x, 5→4x + dithered.
+function tierOf(p: number, m: number): number {
+  return p <= 1 ? 0 : p === 2 ? 2 : p === 3 ? 3 : m >= 2 ? 5 : 4;
+}
+function tierToPM(next: number, baseP: number, baseM: number): { p: number; m: number } {
+  if (next <= 1) return { p: baseP, m: baseM };
+  return { p: Math.min(4, next), m: next >= 5 ? 2 : baseM };
+}
 // Non-retro baselines get a gradual degrade: fractional render scale
 // softens evenly, while hard-pixel modes would shimmer on non-integer
-// factors — they keep the integer px tiers above instead.
+// factors — they keep the integer tiers above instead.
 const RES_LADDER = [1, 1, 0.85, 0.7, 0.55, 0.4]; // gpu level → resScale
 
 /** Where the GPU ladder wants to land: the user-pinned pixel baseline is
- *  the floor (degrade past it, never above), ?px=/floyd pin the tier. */
-function gpuLevelTarget(st: LoopState, dir: number, baselinePx: number): { next: number; baselineLevel: number } | null {
-  const pixelPinned = urlParams.get('px') !== null || baselinePx === 5;
-  const baselineLevel = pixelPinned ? 0 : PX2LEVEL[baselinePx]!;
+ *  the floor (degrade past it, never above), ?px=/atkinson pin the tier. */
+function gpuLevelTarget(st: LoopState, dir: number, base: { p: number; m: number }): { next: number; baselineLevel: number } | null {
+  const pixelPinned = urlParams.get('px') !== null || urlParams.get('pscale') !== null ||
+    (base.p > 1 && base.m === 3);
+  const baselineLevel = pixelPinned ? 0 : tierOf(base.p, base.m);
   const cap = pixelPinned ? 1 : 5;
   const floor = Math.max(baselineLevel, (!settings.get('fps-shadows') && dir > 0) ? 1 : 0);
   const next = Math.min(cap, Math.max(floor, st.gpuLevel - dir));
@@ -130,8 +146,8 @@ function autoScale(deps: GameLoopDeps, st: LoopState, dir: number): void {
   if (!settings.get('fps-autoq')) return;
   if (st.cpuBound) return autoScaleCpu(deps, st, dir);
   const { rendererSetup } = deps;
-  const baselinePx = settings.get('fps-pixelated');
-  const target = gpuLevelTarget(st, dir, baselinePx);
+  const base = baselinePixel();
+  const target = gpuLevelTarget(st, dir, base);
   if (!target) return;
   const { next, baselineLevel } = target;
   // A pixelated baseline shouldn't imply shadows off: at the resting
@@ -139,7 +155,7 @@ function autoScale(deps: GameLoopDeps, st: LoopState, dir: number): void {
   const wantShadows = next === 0 ||
     (baselineLevel > 0 && next === baselineLevel && settings.get('fps-shadows'));
   if (rendererSetup.renderer.shadowMap.enabled !== wantShadows) setShadows(deps, wantShadows);
-  applyResTier(deps, st, next, baselinePx, baselineLevel);
+  applyResTier(deps, st, next, base, baselineLevel);
   // Full-sky raster FX shed before the deepest pixel drop: the cloud dome
   // shades every skyward fragment on a GPU that already can't keep up.
   deps.sceneSetup.volumetricClouds?.setEnabled(next < 3);
@@ -151,13 +167,16 @@ function autoScale(deps: GameLoopDeps, st: LoopState, dir: number): void {
   Logger[dir < 0 ? 'warn' : 'info'](`auto-quality: gpu level ${next} (${dir < 0 ? 'sustained low fps' : 'headroom'})`);
 }
 
-function applyResTier(deps: GameLoopDeps, st: LoopState, next: number, baselinePx: number, baselineLevel: number): void {
+function applyResTier(deps: GameLoopDeps, st: LoopState, next: number, base: { p: number; m: number }, baselineLevel: number): void {
   const { rendererSetup } = deps;
   if (next < 2 && !st.autoPixel) return;
   // Gradual path: resScale rungs replace the px jumps entirely; retro
-  // baselines keep the integer px tiers (non-integer factors shimmer).
-  if (baselinePx === 0) rendererSetup.setResScale(RES_LADDER[next]!);
-  else rendererSetup.setPixelated(next <= 1 ? baselinePx : PX_LADDER[next]!, false);
+  // baselines keep the integer tiers (non-integer factors shimmer).
+  if (base.p <= 1) rendererSetup.setResScale(RES_LADDER[next]!);
+  else {
+    const t = tierToPM(next, base.p, base.m);
+    rendererSetup.setPixel(t.p, t.m, false);
+  }
   st.autoPixel = next > baselineLevel;
 }
 
@@ -184,8 +203,8 @@ function shedPostPasses(rendererSetup: GameLoopDeps['rendererSetup'], shed: bool
 // buys nothing; shed ambient JS work first, then drop res as a last resort.
 function autoScaleCpu(deps: GameLoopDeps, st: LoopState, dir: number): void {
   const { rendererSetup } = deps;
-  const baselinePx = settings.get('fps-pixelated');
-  const pixelPinned = urlParams.get('px') !== null || baselinePx === 5;
+  const base = baselinePixel();
+  const pixelPinned = urlParams.get('px') !== null || (base.p > 1 && base.m === 3);
   const cap = pixelPinned ? 1 : 2;
   const next = Math.min(cap, Math.max(0, st.cpuLevel - dir));
   if (next === st.cpuLevel) return;
@@ -196,7 +215,10 @@ function autoScaleCpu(deps: GameLoopDeps, st: LoopState, dir: number): void {
   deps.ambientBirds.setActive(ambientOn);
   // Stepping back up restores the baseline pick, not necessarily OFF.
   if (next === 2 || (st.autoPixel && next < 2)) {
-    rendererSetup.setPixelated(next === 2 ? 1 : baselinePx, false);
+    // CPU-bound: drop to a 2x raw buffer (or the baseline's scale, mode
+    // demoted to raw — CPU dither/xBR passes cost JS/GPU either way).
+    if (next === 2) rendererSetup.setPixel(base.p > 1 ? base.p : 2, 0, false);
+    else rendererSetup.setPixel(base.p, base.m, false);
     st.autoPixel = next === 2;
   }
   st.cpuLevel = next;
@@ -208,8 +230,9 @@ function autoScaleCpu(deps: GameLoopDeps, st: LoopState, dir: number): void {
 export function resetAutoQuality(deps: GameLoopDeps, st: LoopState): void {
   // Restore the stored baseline — the user's own pixel pick, not forced 0.
   if (st.autoPixel) {
-    if (settings.get('fps-pixelated') === 0) deps.rendererSetup.setResScale(1);
-    else deps.rendererSetup.setPixelated(settings.get('fps-pixelated'), false);
+    const base = baselinePixel();
+    if (base.p <= 1) deps.rendererSetup.setResScale(1);
+    else deps.rendererSetup.setPixel(base.p, base.m, false);
     st.autoPixel = false;
   }
   if (deps.rendererSetup.renderer.shadowMap.enabled !== settings.get('fps-shadows')) {

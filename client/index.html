@@ -33,8 +33,18 @@
       <div class="menu-section">SETTINGS</div>
       <div class="btn-row">
         <button id="autoq-toggle">AUTO QUALITY: ON</button>
-        <button id="pixel-toggle">PIXELATED</button>
-        <button id="filter-toggle">FILTER: SHARP</button>
+        <div class="field-row">
+          <span>PIXEL SIZE</span>
+          <div class="seg-row" id="pscale-row">
+            <button data-v="1">1X</button><button data-v="2">2X</button><button data-v="3">3X</button><button data-v="4">4X</button>
+          </div>
+        </div>
+        <div class="field-row">
+          <span>PIXEL MODE</span>
+          <div class="seg-row" id="pmode-row">
+            <button data-v="0">RAW</button><button data-v="1">SMOOTH</button><button data-v="2">DITHERED</button><button data-v="3">ATKINSON</button>
+          </div>
+        </div>
         <button id="bloom-toggle">GLOW: OFF</button>
         <button id="postpro-toggle">POST-PROCESSING: OFF</button>
         <button id="fpscap-toggle">FPS CAP: OFF</button>

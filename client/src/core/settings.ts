@@ -31,7 +31,9 @@ type Schema = {
   'fps-vgs-physical': boolean; // VGS chord letters by physical position (QWERTY mnemonic) instead of layout letter
   'fps-autoq': boolean;       // dynamic quality ladder — off = stay at user's manual picks
   'fps-cap': number;          // render cap (0 = every rAF; sim still runs uncapped)
-  'fps-filter': number;       // upscale filter: 0 = nearest (sharp), 1 = bilinear (smooth), 2 = xBR-lv2
+  'fps-filter': number;       // upscale filter for fractional resScale: 0 = nearest, 1 = bilinear, 2 = xBR-lv2
+  'fps-pscale': number;       // integer pixel-size divisor 1-4 (retro chunk)
+  'fps-pmode': number;        // pixel mode: 0 raw / 1 smooth(xBR) / 2 dithered / 3 atkinson
 };
 
 const DEFAULTS: Schema = {
@@ -62,6 +64,8 @@ const DEFAULTS: Schema = {
   'fps-autoq': true,
   'fps-cap': 0,
   'fps-filter': 0,
+  'fps-pscale': 1,
+  'fps-pmode': 0,
 };
 
 const parse = {
