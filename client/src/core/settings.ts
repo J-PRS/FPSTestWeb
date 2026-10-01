@@ -29,6 +29,8 @@ type Schema = {
   'fps-shadows': boolean;     // shadow map pass — off on potatoes (whole second scene raster per frame)
   'fps-tts-chat': boolean;    // speak typed chat aloud via system TTS (VGS lines always use the robot voice)
   'fps-vgs-physical': boolean; // VGS chord letters by physical position (QWERTY mnemonic) instead of layout letter
+  'fps-autoq': boolean;       // dynamic quality ladder — off = stay at user's manual picks
+  'fps-cap': number;          // render cap (0 = every rAF; sim still runs uncapped)
 };
 
 const DEFAULTS: Schema = {
@@ -56,6 +58,8 @@ const DEFAULTS: Schema = {
   'fps-shadows': true,
   'fps-tts-chat': false,
   'fps-vgs-physical': false,
+  'fps-autoq': true,
+  'fps-cap': 0,
 };
 
 const parse = {

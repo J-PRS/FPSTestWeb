@@ -116,6 +116,8 @@ export interface LoopState {
   fxJobs: [name: string, run: () => void][];
   /** Shadow-map throttle accumulator — see renderFrame. */
   shadowAcc: number;
+  /** FPS-cap render skip accumulator — see loop. */
+  renderAcc: number;
 }
 
 // Per-fxJob EMA ms — 'fx' was one opaque phase over nine rotated jobs;
@@ -358,7 +360,7 @@ function makeStatsPanels(): Stats[] {
 
 export function createGameLoop(deps: GameLoopDeps) {
   let lastTime = 0;
-  const st: LoopState = { lastYaw: 0, lastPitch: 0, lowFpsFrames: 0, lowFpsAccum: 0, lastFpsDump: 0, gpuLevel: 0, cpuLevel: 0, cpuBound: false, headroomAccum: 0, autoPixel: false, fxCursor: 0, fxJobs: [], shadowAcc: 0 };
+  const st: LoopState = { lastYaw: 0, lastPitch: 0, lowFpsFrames: 0, lowFpsAccum: 0, lastFpsDump: 0, gpuLevel: 0, cpuLevel: 0, cpuBound: false, headroomAccum: 0, autoPixel: false, fxCursor: 0, fxJobs: [], shadowAcc: 0, renderAcc: 0 };
 
   // stats.js perf panels — FPS/MS/MB in a row along the bottom-right,
   // toggled with ` (backquote). stats.js only renders one panel per
@@ -376,6 +378,21 @@ export function createGameLoop(deps: GameLoopDeps) {
       const on = !settings.get('fps-autoq');
       settings.set('fps-autoq', on);
       if (!on) resetAutoQuality(deps, st);
+      label();
+    });
+  }
+  // FPS CAP — render skip only; sim/input keep full rAF rate. A real
+  // vsync-off isn't possible in a browser, but capping buys battery on
+  // chromebooks and headroom measurement on high-refresh displays.
+  const FPS_CAPS = [0, 30, 60, 120];
+  const capBtn = document.getElementById('fpscap-toggle') as HTMLButtonElement | null;
+  if (capBtn) {
+    const label = () => { const c = settings.get('fps-cap'); capBtn.textContent = c > 0 ? `FPS CAP: ${c}` : 'FPS CAP: OFF'; };
+    label();
+    capBtn.addEventListener('click', () => {
+      const i = FPS_CAPS.indexOf(settings.get('fps-cap'));
+      settings.set('fps-cap', FPS_CAPS[(i + 1) % FPS_CAPS.length]!);
+      st.renderAcc = 0;
       label();
     });
   }
@@ -444,7 +461,16 @@ export function createGameLoop(deps: GameLoopDeps) {
     hudTick(deps, st, budget, perf, frame, fxDt);
     perf.mark('hud');
 
-    renderFrame(fxDt); // damage numbers ride fxDt — same hidden-tab decay fix
+    // FPS cap: skip only the render call — sim/input stay full-rate.
+    // Carry leftover time so the cap hits its target rate, not stutters.
+    const cap = settings.get('fps-cap');
+    let doRender = true;
+    if (cap > 0) {
+      st.renderAcc += rawElapsed;
+      doRender = st.renderAcc >= 1 / cap;
+      if (doRender) st.renderAcc = Math.min(st.renderAcc - 1 / cap, 1 / cap);
+    }
+    if (doRender) renderFrame(fxDt); // damage numbers ride fxDt — same hidden-tab decay fix
     perf.mark('render');
     perf.end(deps.rendererSetup.renderer, () => {
       const bw = deps.lazyNetworkManager().bandwidth();
@@ -480,7 +506,7 @@ export function createGameLoop(deps: GameLoopDeps) {
     // fast enough for a frame or two of lag to be invisible.
     const shadow = renderer.shadowMap;
     if (shadow.enabled) {
-      const period = st.gpuLevel >= 4 ? 3 : st.gpuLevel >= 2 ? 2 : 1;
+      const period = st.gpuLevel >= 4 ? 3 : 2;
       shadow.autoUpdate = false;
       if (++st.shadowAcc >= period) { st.shadowAcc = 0; shadow.needsUpdate = true; }
     } else {
