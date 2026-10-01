@@ -1,3 +1,4 @@
+2026-10-01 - RibbonTrail: liveFrom scan floor skips permanently-faded tail samples
 2026-10-01 - recorder.deadReckon option: verbatim every-tick recording stays one switch away
 2026-10-01 - demo recorder skips bit-identical frames (dead-reckon dedupe on local + remote samples)
 2026-10-01 - bots separation-sense list reuses scratch array (no per-frame alloc)

@@ -145,6 +145,9 @@ export class RibbonTrail {
   // Fades only need rewriting when they cross a 1/255 step — a parked
   // camera + mature trail writes nothing at all.
   private _lf = new Int16Array(MAX_SAMPLES).fill(-1);
+  // Scan floor for the update loop — tail slots past it are provably
+  // fq===0 forever (fades only decrease with time).
+  private liveFrom = 0;
 
   private baseColor: THREE.Color;
   private width: number;
@@ -198,6 +201,8 @@ export class RibbonTrail {
     this.head = -1;
     this.count = 0;
     this.pushed = 0;
+    this.liveFrom = 0;
+    this._lf.fill(-1);
     this.claimSlot(scene);
   }
 
@@ -245,6 +250,7 @@ export class RibbonTrail {
     this.head = -1;
     this.count = 0;
     this.pushed = 0;
+    this.liveFrom = 0;
     if (this.slot >= 0) {
       const b = this.slot * VERTS * 3;
       this.batch.col.fill(0, b, b + VERTS * 3);
@@ -283,7 +289,6 @@ export class RibbonTrail {
     if (camPos) { this._camX = camPos.x; this._camY = camPos.y; this._camZ = camPos.z; }
 
     const pos = this.batch.pos;
-    const col = this.batch.col;
     const base = this.slot * VERTS * 3;
     // Positions only move when new samples arrive (or a billboard needs
     // re-siding as the camera moves) — the rest of the ribbon is static,
@@ -292,24 +297,33 @@ export class RibbonTrail {
     this.pushed = 0;
     const rebillboard = camPos && camMoved && !far ? camPos : undefined;
     let dirty = false;
-    for (let i = 0; i < this.count; i++) {
+    for (let i = this.liveFrom; i < this.count; i++) {
       // oldest -> newest
       const s = (this.head - this.count + 1 + i + MAX_SAMPLES) % MAX_SAMPLES;
       const fade = Math.max(0, 1 - (this.time - this.st[s]) / this.life);
       const o = base + i * 6;
       if (i >= freshFrom) { this.writeSample(s, o, fade, rebillboard, pos); dirty = true; }
-      const fq = (fade * 255) | 0;
-      if (this._lf[i] === fq) continue;
-      this._lf[i] = fq;
-      const e = EMIT_GAIN * fade;
-      col[o] = this.baseColor.r * e; col[o + 1] = this.baseColor.g * e; col[o + 2] = this.baseColor.b * e;
-      col[o + 3] = col[o]; col[o + 4] = col[o + 1]; col[o + 5] = col[o + 2];
-      dirty = true;
+      if (this.applyFadeBucket(i, o, fade)) dirty = true;
     }
     if (dirty) {
       this.batch.mark(base, base + this.count * 6);
       this.batch.flush();
     }
+  }
+
+  /** Fade-bucket write for one slot. Fully-faded tail samples stay at 0
+   *  forever (fades only fall), so the scan floor advances past them and
+   *  dead slots stop costing iterations. */
+  private applyFadeBucket(i: number, o: number, fade: number): boolean {
+    const fq = (fade * 255) | 0;
+    if (fq === 0 && i === this.liveFrom) this.liveFrom = i + 1;
+    if (this._lf[i] === fq) return false;
+    this._lf[i] = fq;
+    const col = this.batch.col;
+    const e = EMIT_GAIN * fade;
+    col[o] = this.baseColor.r * e; col[o + 1] = this.baseColor.g * e; col[o + 2] = this.baseColor.b * e;
+    col[o + 3] = col[o]; col[o + 4] = col[o + 1]; col[o + 5] = col[o + 2];
+    return true;
   }
 
   private freshFromIndex(camMoved: boolean): number {
