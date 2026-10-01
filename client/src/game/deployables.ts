@@ -690,7 +690,13 @@ export class Deployables {
       }
     }
     for (let i = this.items.length - 1; i >= 0; i--) {
-      if (this.items[i]!.dead) { this.items[i]!.dispose(); this.items.splice(i, 1); }
+      const item = this.items[i]!;
+      if (!item.dead) continue;
+      // A server-acked local item also sits in byId — drop it or
+      // applyDeployHp/remoteWeld keep resolving a corpse until deployGone.
+      if (item.serverId !== undefined) this.byId.delete(item.serverId);
+      item.dispose();
+      this.items.splice(i, 1);
     }
     // Weld beams expire a quarter-second after the last relayed tick —
     // deployHp cadence is ~100ms, so a real weld never gaps long enough
