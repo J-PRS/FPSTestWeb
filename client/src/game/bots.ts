@@ -232,31 +232,45 @@ export class TeamBots {
     this.sheep.tick(bot, dt, terrain, this.senses.foeSeen(bot, foes, terrain), ignoring, hasDest);
   }
 
+  // Per-bot persistent think ctx — the literal was a fresh ~1KB object
+  // (plus two sense arrays) per bot per frame; the brain consumes it
+  // synchronously so reusing the same record is safe.
+  private ctxCache = new Map<string, Parameters<GameBot['think']>[1]>();
+
   /** One brain ctx per bot per tick — every sense the server feeds its
    *  brains (objective+infiltrating, huntCreatures, hearing, dodge) has
    *  a client-side mirror here. */
   private ctxFor(bot: GameBot, enemies: Parameters<GameBot['think']>[1]['enemies'], others: THREE.Vector3[], terrain: Terrain): Parameters<GameBot['think']>[1] {
     const info = this.ctf?.objectiveInfoFor(bot);
-    return {
-      terrain,
-      enemies,
-      nugget: this.spec.flags ? null : this.hooks.nearestNugget(bot.position, 60),
-      objective: info?.pos ?? null,
-      infiltrating: info?.infiltrating ?? false,
-      thief: info?.thief ? { id: info.thief.id, pos: info.thief.pos, vel: info.thief.vel, alive: true } : null,
-      // Nuggets rooms farm wildlife for the objective — the server
-      // flips the same flag only in economy modes.
-      huntCreatures: this.mode === 'nuggets',
-      others,
-      allies: this.alliesOf(bot),
-      // Mortar heavies reach past the duel band — same reach rule the
-      // server senses applies.
-      engageRange: bot.loadout?.far === WeaponType.Mortar ? 95 : undefined,
-      // Hearing: fresh blasts pull idle bots toward the action — the
-      // same noisesNear sense the server feeds its brains.
-      sounds: this.senses.recentNoises(bot.position),
-      threats: this.senses.incomingNear(bot.position),
-    };
+    let ctx = this.ctxCache.get(bot.playerId);
+    if (!ctx) {
+      ctx = {
+        terrain, enemies: [], nugget: null, objective: null,
+        infiltrating: false, thief: null, huntCreatures: false,
+        others: [], allies: undefined, engageRange: undefined,
+        sounds: [], threats: [],
+      };
+      this.ctxCache.set(bot.playerId, ctx);
+    }
+    ctx.terrain = terrain;
+    ctx.enemies = enemies;
+    ctx.nugget = this.spec.flags ? null : this.hooks.nearestNugget(bot.position, 60);
+    ctx.objective = info?.pos ?? null;
+    ctx.infiltrating = info?.infiltrating ?? false;
+    ctx.thief = info?.thief ? { id: info.thief.id, pos: info.thief.pos, vel: info.thief.vel, alive: true } : null;
+    // Nuggets rooms farm wildlife for the objective — the server
+    // flips the same flag only in economy modes.
+    ctx.huntCreatures = this.mode === 'nuggets';
+    ctx.others = others;
+    ctx.allies = this.alliesOf(bot);
+    // Mortar heavies reach past the duel band — same reach rule the
+    // server senses applies.
+    ctx.engageRange = bot.loadout?.far === WeaponType.Mortar ? 95 : undefined;
+    // Hearing: fresh blasts pull idle bots toward the action — the
+    // same noisesNear sense the server feeds its brains.
+    ctx.sounds = this.senses.recentNoises(bot.position);
+    ctx.threats = this.senses.incomingNear(bot.position);
+    return ctx;
   }
 
   /** Rally channel = live teammates (incl. the local player). Team

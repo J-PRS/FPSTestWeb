@@ -1,3 +1,4 @@
+2026-10-01 - GC churn ~40%: TrailDot object pool (was ~1400 allocs/s), persistent per-bot think ctx (was ~1KB/bot/frame)
 2026-10-01 - ball trail attr uploads gated on live dots (~100 tiny uploads/frame idle); sparkle emit skipped past 200m
 2026-10-01 - interior material dedup by canonical name (.NNN suffix): 1014 meshes -> 44, scene calls ~570->185, shadow-pass delta 681->77 calls
 2026-10-01 - __renderScan staged render profiler; interior casters size+distance gated (shadow pass 681->~430 calls); interior merge cells 512->2048m (scene calls ~570->~300); shadow frustum 250->130m

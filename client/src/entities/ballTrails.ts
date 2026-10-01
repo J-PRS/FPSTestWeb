@@ -22,6 +22,14 @@ interface TrailDot {
   tint: THREE.Color;
 }
 
+// Dot pool — a trail cycles ~40 dots/sec and each spawn used to fresh-
+// alloc a Vector3 + Color + wrapper (~1400 objects/s across the roster).
+const _dotPool: TrailDot[] = [];
+function takeDot(): TrailDot {
+  return _dotPool.pop() ?? { pos: new THREE.Vector3(), age: 0, life: 0, haloSz: 0, coreSz: 0, tint: new THREE.Color() };
+}
+function freeDot(d: TrailDot): void { _dotPool.push(d); }
+
 const _spawn = new THREE.Vector3();
 const _scatter = new THREE.Vector3();
 const _white = new THREE.Color(1, 1, 1);
@@ -139,15 +147,14 @@ export class BallTrailDots {
     const spawn = _spawn.copy(pos).addScaledVector(_scatter.set(
       Math.random() * 2 - 1, Math.random() * 2 - 1, Math.random() * 2 - 1,
     ).normalize().multiplyScalar(Math.random() * radius * 0.6), 1);
-    const d: TrailDot = {
-      pos: new THREE.Vector3().copy(spawn),
-      age: 0,
-      life: 0.35 + Math.random() * 0.85,
-      haloSz: radius * (1.8 + Math.random() * 2.0) * this.sizeMul,
-      coreSz: radius * (0.9 + Math.random() * 1.0) * this.sizeMul,
-      tint: tint.clone(),
-    };
-    if (this.dots.length >= this.maxDots) this.dots.shift();
+    const d = takeDot();
+    d.pos.copy(spawn);
+    d.age = 0;
+    d.life = 0.35 + Math.random() * 0.85;
+    d.haloSz = radius * (1.8 + Math.random() * 2.0) * this.sizeMul;
+    d.coreSz = radius * (0.9 + Math.random() * 1.0) * this.sizeMul;
+    d.tint.copy(tint);
+    if (this.dots.length >= this.maxDots) freeDot(this.dots.shift()!);
     this.dots.push(d);
   }
 
@@ -158,6 +165,7 @@ export class BallTrailDots {
       const d = this.dots[i];
       d.age += dt;
       if (d.age >= d.life) {
+        freeDot(d);
         this.dots.splice(i, 1);
       }
     }
@@ -192,6 +200,7 @@ export class BallTrailDots {
   dispose(): void {
     this.scene.remove(this.points);
     this.geo.dispose();
+    for (const d of this.dots) freeDot(d);
     this.dots = [];
   }
 }
