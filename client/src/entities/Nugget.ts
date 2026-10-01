@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { GRAVITY, BLOOM_LAYER, EMIT_GAIN } from '../core/config.js';
 import { Terrain } from '../world/terrain.js';
 import { getGlowTexture } from '../effects/glowTexture.js';
+import { BallTrailDots } from './ballTrails.js';
 
 const getNuggetTex = () => getGlowTexture(32);
 
@@ -16,19 +17,11 @@ const PICKUP_RADIUS = 1.3;
 const MAGNET_ACCEL = 90;      // lerp toward target speed
 const MAGNET_MAX_SPEED = 45;
 const TRAIL_INTERVAL = 0.035;
-const TRAIL_LIFE = 0.4;
 const LIFETIME = 30;          // despawn if never picked up
 
 const NUGGET_GEO = new THREE.IcosahedronGeometry(NUGGET_RADIUS, 0);
 const _target = new THREE.Vector3();
 const _dir = new THREE.Vector3();
-
-interface TrailDot {
-  sprite: THREE.Sprite;
-  mat: THREE.SpriteMaterial;
-  age: number;
-  size: number;
-}
 
 /**
  * Nugget: Vampire-Survivors-style pickup gem dropped by destroyed targets.
@@ -47,7 +40,7 @@ export class Nugget {
   private mat: THREE.MeshBasicMaterial;
   private glow: THREE.Sprite;
   private glowMat: THREE.SpriteMaterial;
-  private trail: TrailDot[] = [];
+  private trailFx: BallTrailDots;
   private trailTimer = 0;
   private age = 0;
   private settled = false;
@@ -91,6 +84,10 @@ export class Nugget {
     this.glow.position.copy(this.pos);
     this.glow.layers.enable(BLOOM_LAYER);
     scene.add(this.glow);
+
+    // Gold sparkle trail — one slot in the shared dot batch (was a
+    // Sprite + SpriteMaterial per dot, one draw call each).
+    this.trailFx = new BallTrailDots(scene, { interval: TRAIL_INTERVAL, sizeMul: 0.5 });
   }
 
   /** playerPos is the player's eye/camera position (player.pos). */
@@ -100,7 +97,7 @@ export class Nugget {
 
     if (this.collected) {
       this.updateCollectFade(dt);
-      this.updateTrailDots(dt);
+      this.trailFx.fade(dt);
       return;
     }
 
@@ -120,7 +117,7 @@ export class Nugget {
     this.pos.addScaledVector(this.vel, dt);
     this.updateVisuals(dt);
     this.emitTrail(dt);
-    this.updateTrailDots(dt);
+    this.trailFx.fade(dt);
   }
 
   private updateCollectFade(dt: number): void {
@@ -128,7 +125,7 @@ export class Nugget {
     this.mesh.scale.setScalar(Math.max(0, 1 - this.collectFade));
     this.glowMat.opacity = Math.max(0, 0.85 * (1 - this.collectFade));
     this.glow.scale.setScalar(2.2 * Math.max(0, 1 - this.collectFade));
-    if (this.collectFade >= 1 && this.trail.length === 0) this.dead = true;
+    if (this.collectFade >= 1 && this.trailFx.size === 0) this.dead = true;
   }
 
   private magnetStep(dt: number, dist: number, pickupScale = 1): void {
@@ -206,50 +203,7 @@ export class Nugget {
     this.trailTimer += dt;
     while (this.trailTimer >= TRAIL_INTERVAL) {
       this.trailTimer -= TRAIL_INTERVAL;
-      this.emitTrailDot(Math.min(1, speedSq / 400));
-    }
-  }
-
-  private dotPool: TrailDot[] = [];
-
-  private emitTrailDot(intensity: number): void {
-    const size = 0.25 + intensity * 0.35;
-    let d = this.dotPool.pop();
-    if (d) {
-      this.scene.add(d.sprite);
-    } else {
-      const mat = new THREE.SpriteMaterial({
-        map: getNuggetTex(),
-        color: this.baseColor.clone().multiplyScalar(EMIT_GAIN),
-        transparent: true,
-        opacity: 0.7,
-        depthWrite: false,
-        blending: THREE.AdditiveBlending,
-      });
-      const sprite = new THREE.Sprite(mat);
-      sprite.layers.enable(BLOOM_LAYER);
-      this.scene.add(sprite);
-      d = { sprite, mat, age: 0, size };
-    }
-    d.sprite.scale.setScalar(size);
-    d.sprite.position.copy(this.pos);
-    d.age = 0; d.size = size;
-    this.trail.push(d);
-  }
-
-  private updateTrailDots(dt: number): void {
-    for (let i = this.trail.length - 1; i >= 0; i--) {
-      const d = this.trail[i];
-      d.age += dt;
-      const t = d.age / TRAIL_LIFE;
-      if (t >= 1) {
-        this.scene.remove(d.sprite);
-        this.dotPool.push(d); // pooled — material reused, nothing disposed
-        this.trail.splice(i, 1);
-      } else {
-        d.mat.opacity = 0.7 * (1 - t);
-        d.sprite.scale.setScalar(d.size * (1 - t * 0.5));
-      }
+      this.trailFx.burst(1, this.pos, 0.4, this.baseColor);
     }
   }
 
@@ -258,14 +212,6 @@ export class Nugget {
     this.scene.remove(this.glow);
     this.mat.dispose();
     this.glowMat.dispose();
-    for (const d of this.trail) {
-      this.scene.remove(d.sprite);
-      this.dotPool.push(d);
-    }
-    this.trail.length = 0;
-    for (const d of this.dotPool) {
-      d.mat.dispose();
-    }
-    this.dotPool.length = 0;
+    this.trailFx.dispose();
   }
 }
