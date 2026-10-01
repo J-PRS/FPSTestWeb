@@ -10,7 +10,7 @@ const mkBot = (energy = 100) => ({
   energyCap: 100,
   botHp: 80,
   botMaxHp: 100,
-  yeetT: 0,
+  propelJetT: 0,
   isDead: false,
   velocity: { x: 0, y: 0, z: 0 },
   moveState: { onGround: true } as GameBot['moveState'],
@@ -91,17 +91,16 @@ describe('dropSkill', () => {
 });
 
 describe('fuelTick', () => {
-  it('jets drain while thrusting; yeet rides free but grounded regen still applies', () => {
+  it('jets drain while thrusting; grounded regen applies when off throttle', () => {
     const b = mkBot(50);
     fuelTick(b, 1, true);
     expect(b.energy).toBeCloseTo(50 - ENERGY.jetDrain, 5);
     const c = mkBot(50);
-    c.yeetT = 0.5;
-    fuelTick(c, 1, true); // no jet drain during yeet — grounded regen instead
+    fuelTick(c, 1, false);
     expect(c.energy).toBeCloseTo(50 + ENERGY.jetCharge, 5);
     c.moveState.onGround = false;
     c.energy = 50;
-    fuelTick(c, 1, true); // airborne yeet: neither drain nor regen
+    fuelTick(c, 1, false); // airborne: no regen
     expect(c.energy).toBe(50);
   });
 

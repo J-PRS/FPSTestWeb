@@ -78,10 +78,7 @@ export class GameBot extends RemotePlayer {
    *  sheepShown so the % doesn't flicker frame to frame). */
   sheep = 0;
   sheepShown = 0;
-  /** Jets pinned by a sheep yeet — countdown in seconds. */
-  yeetT = 0;
-  /** Jets pinned by a propel blast — rides the shove like a disc-jump;
-   *  burns the real tank (only the yeet is free). */
+  /** Jets pinned by a propel blast — rides the shove like a disc-jump. */
   propelJetT = 0;
   /** Brain's belt intent from the last think — TeamBots resolves the arc. */
   wantBelt = false;
@@ -93,13 +90,6 @@ export class GameBot extends RemotePlayer {
   /** Propel cooldown (performance.now deadline) — one jump per launch. */
   propelUntil = 0;
 
-  /** The sheep-yeet: jump+jets pinned for a few seconds — the same
-   *  inputs a player holds, never an injected velocity (bots are legal
-   *  players; a launch no key produces would be cheating). */
-  yeet(): void {
-    this.yeetT = 1.5;
-    this.sheep = 40;
-  }
   /** Shared decision core — same brain server bots run. */
   private brain: BotBrain;
   /** Kit from the shared roster — TeamBots assigns it so range-band
@@ -244,11 +234,9 @@ export class GameBot extends RemotePlayer {
     });
     const dest = out.dest;
     this.lastDest.set(dest.x, dest.y, dest.z);
+    this.lastMove = out.move;
     this.wantBelt = !!out.belt;
     this.wantDeploy = out.deploy ?? null;
-    if (this.yeetT > 0) this.yeetT -= dt;
-    if (this.propelJetT > 0) this.propelJetT -= dt;
-    this.locomote(dt, ctx, dest, out.move);
     if (out.status !== undefined) this.applyStatus(out.status, dt);
     if (!out.fire) return null;
     this.fire();
@@ -262,6 +250,17 @@ export class GameBot extends RemotePlayer {
   heal(n: number): void { this.botHp = Math.min(this.botMaxHp, this.botHp + n); }
   get energyCap(): number { return ENERGY.max * this.mods.energyMax; }
   addEnergy(n: number): void { this.energy = Math.min(this.energyCap, this.energy + n); }
+
+  /** Per-frame locomotion — the brain decides at ~10Hz, but position
+   *  must integrate every render frame or bots warp in 100ms hops.
+   *  Uses the last think's dest/move; a stale plan for 2 frames is
+   *  fine, a stale position is not. */
+  stepFrame(dt: number, ctx: { terrain: Terrain }): void {
+    if (this.propelJetT > 0) this.propelJetT -= dt;
+    this.locomote(dt, ctx, this.lastDest, this.lastMove);
+  }
+
+  private lastMove: { ski?: boolean; jet?: boolean; jump?: boolean } | undefined;
 
   private applyStatus(claim: number, dt: number): void { en.applyStatus(this, claim, dt); }
   private dropSkill(bit: number): void { en.dropSkill(this, bit); }
@@ -284,13 +283,11 @@ export class GameBot extends RemotePlayer {
     }
     this.moveState.yaw = this.rotation.yaw;
     this.moveState.pitch = 0;
-    // Yeet overrides fuel — the penalty jet ignores the tank on purpose.
-    const jet = ((!!move?.jet || this.propelJetT > 0) && this.energy > 0.5) || this.yeetT > 0;
+    const jet = (!!move?.jet || this.propelJetT > 0) && this.energy > 0.5;
     this.movement.setInput({
       forward: md > 0.5 ? 1 : 0,
       right: 0,
-      // Yeet window holds space too — jets alone barely lift off.
-      jumpHeld: !!move?.jump || this.yeetT > 0,
+      jumpHeld: !!move?.jump,
       skiHeld: !!move?.ski,
       jetHeld: jet,
     });

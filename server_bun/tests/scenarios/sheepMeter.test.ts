@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'bun:test';
 import { mkRoom, pin, freeze, step } from './harness.ts';
 
-// Sheep meter: pedestrian play fills it, the yeet launches the offender
-// and pins its jets, respawn and silenced bots get a clean slate.
+// Sheep meter: pedestrian play fills it, a full meter just clamps (it's
+// a readout, not a lever), respawn and silenced bots get a clean slate.
 describe('sheep meter', () => {
-  it('a full meter yeets the bot — impulse launch + pinned jets', () => {
+  it('a full meter clamps at 100 — no launch, no reset', () => {
     const room = mkRoom({ bots: 1 });
     const id = 'BOT-VEKTOR-01';
     // Ground-height pin: the flat field tops out at ~29.4m — a 60m pin now
@@ -12,9 +12,7 @@ describe('sheep meter', () => {
     pin(room, id, { x: 0, y: 31, z: 0 });
     room.bots.debugSetSheep(id, 99.9);
     step(room, 3);
-    expect(room.bots.debugYeeted(id)).toBe(true);
-    // The yeet resets to 40 — the launch itself buys back mobility credit.
-    expect(room.bots.sheepOf(id)).toBeLessThanOrEqual(50);
+    expect(room.bots.sheepOf(id)).toBe(100);
   });
 
   it('a thinking bot that stays Tribes-ing never fills the meter', () => {

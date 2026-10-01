@@ -213,7 +213,7 @@ export class RemotePlayer {
    *  running, not sliding, even at ski speeds (momentum outlives the key). */
   wireSki: boolean | undefined;
   // Real jet claim when a driver knows it (bots write their brain's jet
-  // button + yeet). Network remotes leave it undefined — the wire has no
+  // button). Network remotes leave it undefined — the wire has no
   // jet bit, so callers fall back to the vel.y heuristic.
   wireJet: boolean | undefined;
 

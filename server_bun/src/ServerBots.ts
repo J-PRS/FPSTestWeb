@@ -50,8 +50,8 @@ export class ServerBots {
   private gearLobT = new Map<string, number>();
   /** inputMove ordering key — the shadow drops non-increasing seqs. */
   seq = 1; // public — botDrive commits inputs under this counter
-  /** Sheep meter lives in botSheep.ts — pedestrian play fills it, the
-   *  yeet (impulse + pinned jets) cures it. Kept off this file like the
+  /** Sheep meter lives in botSheep.ts — pedestrian play fills it and
+   *  the value is broadcast as a readout. Kept off this file like the
    *  watchdog so ServerBots stays about driving bots.
    *  Public + the others below: botDrive.ts's DriveHost reads them. */
   sheep: BotSheepMeter;
@@ -205,14 +205,9 @@ export class ServerBots {
   }
 
   /** Test hook — seed the meter directly; accrual tests shouldn't need
-   *  to park a bot for 30 simulated seconds to reach the yeet. */
+   *  to park a bot for 30 simulated seconds to fill the meter. */
   debugSetSheep(id: string, v: number): void {
     this.sheep.set(id, v);
-  }
-
-  /** Test hook — whether the bot's jet is currently pinned by a yeet. */
-  debugYeeted(id: string): boolean {
-    return this.sheep.yeetUntilMs(id) > Date.now();
   }
 
   /** Test hook — the 5s coverage window, driven by explicit sim ms. */

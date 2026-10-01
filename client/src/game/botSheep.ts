@@ -4,8 +4,9 @@ import type { GameBot } from './botBrain.js';
 /**
  * SheepMeter — the anti-pedestrian meter for offline bots. Charged on
  * four channels (idle, ignoring a visible foe, energy bleed, coverage
- * stall) and yeets at 100. Rates mirror the server meter — a bot
- * offline is held to the same standard it is on the wire.
+ * stall) and clamps at 100 — it's a readout, not a lever. Rates
+ * mirror the server meter — a bot offline is held to the same
+ * standard it is on the wire.
  */
 
 interface SheepHost {
@@ -26,13 +27,14 @@ export class SheepMeter {
    *  peak just earned. */
   private eSm = new Map<string, number>();
 
-  /** Per-source ledger — positive charge points each channel contributed
-   *  since the last yeet, dumped into the warn so tuning reads "why"
-   *  instead of "that". */
+  /** Per-source ledger — positive charge points each channel contributed,
+   *  dumped into the warn so tuning reads "why" instead of "that". */
   private why = new Map<string, { idle: number; ignore: number; bleed: number; cover: number }>();
   /** Wall-ms of each bot's last fired shot — the ignore debit needs
    *  recency, not a per-tick fire flag. */
   private lastShot = new Map<string, number>();
+  /** Bots currently pinned at 100 — dedupes the maxed warn. */
+  private maxedSet = new Set<string>();
 
   constructor(private h: SheepHost) {}
 
@@ -57,6 +59,7 @@ export class SheepMeter {
     this.eLast.delete(id);
     this.eSm.delete(id);
     this.why.delete(id);
+    this.maxedSet.delete(id);
   }
 
   tick(bot: GameBot, dt: number, terrain: Terrain, foe = false, ignoring = false, hasDest = false): void {
@@ -78,7 +81,10 @@ export class SheepMeter {
     const tribesing = SheepMeter.isTribesing(bot, bonusSpeed, grounded);
     const moving = Math.hypot(v.x, v.z) > 1;
     const why = this.ledger(bot.playerId);
-    let delta = tribesing ? -(10 + bonusSpeed * 0.5 + (bot.yeetT > 0 ? 15 : 0)) : moving ? 9 : 18;
+    // Drain is rate-capped like the server meter — a high-E burst
+    // (60m/s plummet) used to zero the meter in a second, reading as
+    // a reset. Faster play still drains faster, never in one step.
+    let delta = tribesing ? -Math.min(10 + bonusSpeed * 0.5, 25) : moving ? 9 : 18;
     if (!tribesing) why.idle += delta * dt;
     // Parked within reach of a visible enemy and holding fire — the
     // fastest tell. Only counts while NOT tribesing: a bot that's
@@ -98,18 +104,19 @@ export class SheepMeter {
     // ~2s trailing average for display — the raw meter jitters ±10/s
     // around the fill/drain boundary, which reads as flicker.
     bot.sheepShown += (bot.sheep - bot.sheepShown) * Math.min(1, dt * 0.5);
-    if (bot.sheep >= 100) this.yeet(bot);
+    if (bot.sheep >= 100) this.maxed(bot);
+    else this.maxedSet.delete(bot.playerId);
   }
 
-  private yeet(bot: GameBot): void {
-    // Post-yeet the meter lands at 40 like the server — otherwise the
-    // pinned jet ends inside a still-full meter and re-yeets forever.
-    bot.sheep = 40;
-    bot.yeet();
+  private maxed(bot: GameBot): void {
+    // A full meter just sits — the readout is the point (the launch
+    // penalty is retired). Dedupe the ledger dump so a bot parked at
+    // the cap doesn't re-log every frame.
+    if (this.maxedSet.has(bot.playerId)) return;
+    this.maxedSet.add(bot.playerId);
     const w = this.why.get(bot.playerId) ?? { idle: 0, ignore: 0, bleed: 0, cover: 0 };
-    this.why.set(bot.playerId, { idle: 0, ignore: 0, bleed: 0, cover: 0 });
     this.h.warn(
-      `bot ${bot.playerId} yeeted — sheep 100 (why: idle=${w.idle.toFixed(1)} ignore=${w.ignore.toFixed(1)} bleed=${w.bleed.toFixed(1)} cover=${w.cover.toFixed(1)})`);
+      `bot ${bot.playerId} maxed sheep (why: idle=${w.idle.toFixed(1)} ignore=${w.ignore.toFixed(1)} bleed=${w.bleed.toFixed(1)} cover=${w.cover.toFixed(1)})`);
   }
 
   private coverageDebit(bot: GameBot, hasDest: boolean): number {
@@ -131,7 +138,7 @@ export class SheepMeter {
   private energyBleed(bot: GameBot, mech: number, foe: boolean): number {
     const ePrev = this.eLast.get(bot.playerId);
     this.eLast.set(bot.playerId, mech);
-    if (ePrev === undefined || mech >= ePrev || foe || bot.yeetT > 0) return 0;
+    if (ePrev === undefined || mech >= ePrev || foe) return 0;
     return Math.min(8, (ePrev - mech) * 0.08);
   }
 
@@ -145,6 +152,6 @@ export class SheepMeter {
    *  bonusSpeed is sqrt(2·E_recent): >14 sits above jog speed so a
    *  cruising bot pays, a dawdling one charges. */
   private static isTribesing(bot: GameBot, bonusSpeed: number, grounded: boolean): boolean {
-    return bonusSpeed > 14 || !grounded || bot.yeetT > 0;
+    return bonusSpeed > 14 || !grounded;
   }
 }

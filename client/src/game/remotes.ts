@@ -298,7 +298,7 @@ export function createRemotes(deps: RemotesDeps) {
         hud.removePlayerIndicator(id);
       } else {
         // Local bots aren't network remotes — without this they'd jet
-        // silently; wireJet carries the brain's real burn (yeet included).
+        // silently; wireJet carries the brain's real burn.
         if (isJetting(rp, false)) deps.lazyEffects().spawnJetpack(rp.position);
         // GameBot carries `team` ('alpha'/'bravo', own id in FFA) — plain
         // RemotePlayers have none and stay enemy red.

@@ -27,7 +27,6 @@ export function respawnBotF(b: TeamBots, bot: GameBot): void {
     bot.botHp = bot.botMaxHp;
     bot.sheep = 0; // fresh leash on the meter
     bot.sheepShown = 0;
-    bot.yeetT = 0;
     b.sheep.clear(bot.playerId);
     bot.show();
     bot.setGizmoColor(bot.team === 'ffa' ? 0xcc66ff : TEAM_COLORS[bot.team as TeamId]);

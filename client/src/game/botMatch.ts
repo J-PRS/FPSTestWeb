@@ -55,7 +55,6 @@ export function resetMatch(m: MatchHost): void {
       bot.botHp = bot.botMaxHp;
       bot.sheep = 0;
       bot.sheepShown = 0;
-      bot.yeetT = 0;
     }
   }
   m.ctf?.reset();

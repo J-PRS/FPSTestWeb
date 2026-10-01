@@ -78,8 +78,8 @@ export class TeamBots {
   ctf: CtfBridge | null = null;
   private senses: BotSenses;
   private fire: BotFire;
-  // Anti-pedestrian meter (idle/ignore/bleed/coverage + yeet)
-  // lives in botSheep.ts — rates mirror the server meter.
+  // Anti-pedestrian meter (idle/ignore/bleed/coverage) lives in
+  // botSheep.ts — rates mirror the server meter.
   sheep = new SheepMeter({ warn: (m) => this.deps.logger.warn(m) });
 
   constructor(
@@ -200,7 +200,7 @@ export class TeamBots {
     this.fire.tickBolts(dt); // frame-rate, not per-bot — it was over-integrating in the loop
     // Sheep coverage windows run on sim ms advanced ONCE per frame —
     // doing it inside sheepTick scaled every 5s window by the roster
-    // size (9 bots → windows fired ~9x too often, cover-dominated yeets).
+    // size (9 bots → windows fired ~9x too often, cover-dominated max-outs).
     this.sheep.advance(dt);
     let i = 0;
     for (const bot of this.bots) this.tickBot(bot, dt, others, terrain, i++);
@@ -224,6 +224,9 @@ export class TeamBots {
       if (bot.respawnAt <= 0) this.respawnBot(bot);
       return;
     }
+    // Movement integrates every frame — the 10Hz think gate below is for
+    // decisions only; gating movement made every bot warp in 100ms hops.
+    bot.stepFrame(dt, { terrain });
     // Roster-indexed start phase spreads thinks across the period —
     // without it every bot thinks on the same frame and stays aligned.
     const acc = (this.thinkAccum.get(bot.playerId)
@@ -314,8 +317,8 @@ export class TeamBots {
 
   /** Sheep meter accrual — fills while the bot moves like a pedestrian
    *  (slow, grounded, or parked), drains while it's doing Tribes things
-   *  (covering ground, airborne, jetting). At 100 it gets yeeted: jump+
-   *  jets pinned as inputs, exactly the keys a player would hold. */
+   *  (covering ground, airborne, jetting). At 100 it clamps — a
+   *  readout for the badge, not a punish lever. */
   // Coverage window — mirrors BotSheepMeter.coverageDebit on the wire:
   // under ~30m of real displacement per 5s while the brain claims a
   // destination reads as sheeping even when per-tick speed squeaks by.

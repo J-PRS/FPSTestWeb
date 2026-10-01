@@ -113,7 +113,7 @@ export class ServerBotSenses {
       if (d < 45 && losClear(ctx, pos, e.pos)) {
         // Only counts when the bot is actually LOOKING at the foe —
         // an enemy outside the ~130° view cone is invisible to it, so
-        // "ignoring" it is a false positive that yeet-loops honest bots.
+        // "ignoring" it is a false positive that maxes out honest bots.
         const fx = Math.sin(yaw), fz = Math.cos(yaw);
         const gd = Math.hypot(dx, dz) || 1;
         if ((dx * fx + dz * fz) / gd < -0.4) continue;

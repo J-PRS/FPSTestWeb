@@ -49,7 +49,7 @@ export function dropSkill(b: GameBot, bit: number): void {
   /** One tank feeds jets AND skills — featherjets' fuel regen and
    *  overcharge's pool regen both land here. */
 export function fuelTick(b: GameBot, dt: number, jet: boolean): void {
-    if (jet && b.yeetT <= 0) b.energy = Math.max(0, b.energy - ENERGY.jetDrain * b.mods.jetDrain * dt);
+    if (jet) b.energy = Math.max(0, b.energy - ENERGY.jetDrain * b.mods.jetDrain * dt);
     else if (b.moveState.onGround && b.energy < b.energyCap) {
       b.energy = Math.min(b.energyCap, b.energy + ENERGY.jetCharge * b.mods.jetRegen * b.mods.energyRegen * dt);
     }

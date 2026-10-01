@@ -4,7 +4,7 @@
  * owns the contract that keeps bots honest: every motion goes through
  * the room's MoveSim shadow with key-level inputs (forward/yaw/jump/jet)
  * exactly like a human client's inputMove — no injected positions, no
- * injected velocities (the yeet edge pins the same keys a player holds).
+ * injected velocities.
  * The no-heightfield legacy fallback lives here too.
  */
 import type { Vec3 } from './types.ts';
@@ -42,16 +42,12 @@ export function driveMove(h: DriveHost, id: string, p: { position: Vec3; velocit
   const dx = out.dest.x - p.position.x;
   const dz = out.dest.z - p.position.z;
   const dist = Math.sqrt(dx * dx + dz * dz);
-  // Sheep check before the input commit: a yeet edge presses the bot's
-  // own jump key this tick, and the window holds jets — the same keys
-  // a player holds, never an injected velocity.
   const sheepGround = Math.max(
     h.field ? hmHeight(h.field, p.position.x, p.position.z) : p.position.y,
     h.room.moveSim.structureTop(p.position.x, p.position.z),
   );
   const sheepHeight = Math.max(0, p.position.y - EYE_OFFSET - sheepGround);
-  const yeeted = h.sheep.check(id, p, { out, airborne: !sh.onGround, hasDest: dist >= 0.5, foe: (h.foeNear.get(id) ?? 0) > now, dt, height: sheepHeight }, now);
-  const yeetHeld = h.sheep.yeetUntilMs(id) > now;
+  h.sheep.check(id, p, { out, airborne: !sh.onGround, hasDest: dist >= 0.5, foe: (h.foeNear.get(id) ?? 0) > now, dt, height: sheepHeight }, now);
   if (dist >= 0.5) {
     // Wrist-speed turn — a snapped 180° reads as a fly-flick while an
     // arc at ~5 rad/s reads as a player swinging their view around.
@@ -63,7 +59,7 @@ export function driveMove(h: DriveHost, id: string, p: { position: Vec3; velocit
     h.room.moveSim.faceYaw(id, yaw);
     p.rotation.yaw = yaw;
   }
-  commitMoveInput(h, id, p, out, { moving: dist >= 0.5, edge: yeeted, held: yeetHeld }, now);
+  commitMoveInput(h, id, p, out, { moving: dist >= 0.5 }, now);
   h.checkSheep(id, p, { trying: dist >= 0.5, ski: !!out.move?.ski, airborne: !sh.onGround, jetting: !!out.move?.jet, dt }, now);
   p.position.x = sh.pos.x; p.position.y = sh.pos.y; p.position.z = sh.pos.z;
   p.velocity.x = sh.vel.x; p.velocity.y = sh.vel.y; p.velocity.z = sh.vel.z;
@@ -72,20 +68,16 @@ export function driveMove(h: DriveHost, id: string, p: { position: Vec3; velocit
 }
 
 /** The bot's intent becomes input keys — only what a player's fingers
- *  could press. A yeet edge pins jump/jet; the arsenal's post-throw jet
- *  pin rides the same held bit. */
-function commitMoveInput(h: DriveHost, id: string, p: { status: number }, out: BrainOut, intent: { moving: boolean; edge: boolean; held: boolean }, now: number): void {
-  const { moving, edge: yeetEdge, held: yeetHeld } = intent;
-  const yeet = { edge: yeetEdge, held: yeetHeld };
-  h.room.moveSim.setInput(id, moving ? {
+ *  could press. The arsenal's post-throw jet pin rides the same held
+ *  bit as the brain's own jet key. */
+function commitMoveInput(h: DriveHost, id: string, p: { status: number }, out: BrainOut, intent: { moving: boolean }, now: number): void {
+  h.room.moveSim.setInput(id, intent.moving ? {
     forward: 1, right: 0,
-    jumpPressed: yeet.edge || !!out.move?.jump, jumpHeld: !!out.move?.jump || yeet.held,
+    jumpPressed: !!out.move?.jump, jumpHeld: !!out.move?.jump,
     skiHeld: !!out.move?.ski,
-    jetHeld: !!out.move?.jet || yeet.held || h.arsenal.jetPinUntil(id) > now,
+    jetHeld: !!out.move?.jet || h.arsenal.jetPinUntil(id) > now,
   } : {
     forward: 0, right: 0,
-    jumpPressed: yeet.edge, jumpHeld: yeet.held,
-    skiHeld: false, jetHeld: yeet.held,
   }, p.status, h.seq++);
 }
 
