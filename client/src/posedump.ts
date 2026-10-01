@@ -101,6 +101,7 @@ if (pvariant) {
 const ual2 = q.get('model') === 'ual2';
 const knight = q.get('model') === 'knight';
 const url = knight ? '/assets/models/knight.glb'
+  : q.get('glb') ? `/assets/models/${q.get('glb')}.glb`
   : ual2 ? '/assets/models/mannequin2.glb'
   : mann ? '/assets/models/mannequin.glb' : '/assets/models/RobotExpressive.glb';
 new GLTFLoader().load(url, (gltf) => {

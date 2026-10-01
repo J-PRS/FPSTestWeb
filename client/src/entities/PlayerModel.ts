@@ -211,7 +211,7 @@ export class PlayerModel {
       const attempt = () => {
       loader.load(
         knight ? '/assets/models/knight.glb'
-          : mann ? '/assets/models/mannequin.glb'
+          : mann ? '/assets/models/mannequin_opt.glb'
           : '/assets/models/RobotExpressive.glb',
         (gltf) => {
           if (this._disposed) { resolve(); return; }

@@ -71,6 +71,11 @@ class TrailBatch {
     this.dirty = false;
     this.posAttr.needsUpdate = true;
     this.colAttr.needsUpdate = true;
+    // Slots allocate lowest-first so the used range stays dense; drawing
+    // past the highest live slot only burns vertex shader on zeroed tris.
+    let hw = 0;
+    for (const s of this.used) if (s + 1 > hw) hw = s + 1;
+    this.geo.setDrawRange(0, hw * IDX);
   }
 }
 
@@ -139,6 +144,9 @@ export class RibbonTrail {
     this.batch.dirty = true;
     this.batch.used.delete(this.slot);
     this.batch.free.push(this.slot);
+    // Keep descending so pop() hands out the smallest slot — used slots
+    // stay packed at the front of the index buffer for drawRange.
+    this.batch.free.sort((x, y) => y - x);
     this.slot = -1;
   }
 
