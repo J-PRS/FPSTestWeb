@@ -34,6 +34,7 @@ import { createPerfHud } from '../core/perfHud.js';
 import { createFrameBudget } from '../core/frameBudget.js';
 import { lastWeaponByPlayer } from './net/projectiles.js';
 import { fpsWatchdog, resetAutoQuality } from './loopPerf.js';
+import { createRenderScan } from './renderScan.js';
 import { settings } from '../core/settings.js';
 import { WeaponType } from '../../../shared/weapons.js';
 
@@ -118,6 +119,9 @@ export interface LoopState {
   shadowAcc: number;
   /** FPS-cap render skip accumulator — see loop. */
   renderAcc: number;
+  /** Cached interior meshes for the per-frame shadow-caster distance
+   *  gate — populated once the __t2interiors group exists. */
+  interiorCasters?: THREE.Mesh[];
 }
 
 // Per-fxJob EMA ms — 'fx' was one opaque phase over nine rotated jobs;
@@ -358,6 +362,56 @@ function makeStatsPanels(): Stats[] {
   });
 }
 
+function wireDebugKeys(deps: GameLoopDeps, perf: ReturnType<typeof createPerfHud>, budget: ReturnType<typeof createFrameBudget>, statsPanels: ReturnType<typeof makeStatsPanels>): void {
+  // window.__perf — live phase table for headless probes + manual reads;
+  // the watchdog dump uses the same data for shipped logs.
+  (window as unknown as { __perf: () => Record<string, number> }).__perf =
+    () => ({ ...perf.snapshot(), ...budget.stats() as unknown as Record<string, number> });
+  // window.__renderScan — staged render breakdown (scene / +shadow / full
+  // pipeline / viewmodel) with per-stage calls+tris+GPU-ms. Profiling hook;
+  // renders extra frames on top of the loop.
+  (window as unknown as { __renderScan: unknown }).__renderScan = createRenderScan(deps);
+  document.addEventListener('keydown', (e) => {
+    // Alt+W — bot weapon audit: last gun each bot drew + its shot count,
+    // so "do they fire real weapons" is a one-keypress read. Alt+Shift+W
+    // keeps the old hard-reload hatch (F5 is flaky under pointer lock).
+    if (e.altKey && e.code === 'KeyW') {
+      e.preventDefault();
+      if (e.shiftKey) { location.reload(); return; }
+      const rows = [...lastWeaponByPlayer.entries()]
+        .filter(([id]) => id.startsWith('BOT-'))
+        .map(([id, r]) => ({ bot: id, weapon: WeaponType[r.wt] ?? `w${r.wt}`, shots: r.n }));
+      console.table(rows.length ? rows : [{ note: 'no bot fire seen yet' }]);
+      return;
+    }
+    if (e.code === 'Backquote') {
+      e.preventDefault();
+      const show = (statsPanels[0]!.dom as HTMLElement).style.display === 'none';
+      for (const s of statsPanels) {
+        (s.dom as HTMLElement).style.display = show ? 'block' : 'none';
+      }
+      perf.setVisible(show);
+    }
+  });
+}
+
+// Interior shadow casters distance-gated like remotes: only near-camera
+// architecture darkens the map; far towers' shadows are unreadable.
+// Census showed ~700 caster meshes — at a base view they were half the
+// shadow pass's draw calls.
+function gateInteriorCasters(deps: GameLoopDeps, st: LoopState, camera: THREE.Camera): void {
+  if (!st.interiorCasters) {
+    const g = deps.sceneSetup.scene.getObjectByName('__t2interiors');
+    if (g) st.interiorCasters = g.children as THREE.Mesh[];
+  }
+  if (!st.interiorCasters) return;
+  for (const m of st.interiorCasters) {
+    const bs = m.geometry.boundingSphere!;
+    m.castShadow = (m.userData.castR as number) > 0 &&
+      bs.center.distanceToSquared(camera.position) < (90 + bs.radius) ** 2;
+  }
+}
+
 export function createGameLoop(deps: GameLoopDeps) {
   let lastTime = 0;
   const st: LoopState = { lastYaw: 0, lastPitch: 0, lowFpsFrames: 0, lowFpsAccum: 0, lastFpsDump: 0, gpuLevel: 0, cpuLevel: 0, cpuBound: false, headroomAccum: 0, autoPixel: false, fxCursor: 0, fxJobs: [], shadowAcc: 0, renderAcc: 0 };
@@ -400,32 +454,7 @@ export function createGameLoop(deps: GameLoopDeps) {
   // that's expensive but not frame-critical. First pilot: the minimap
   // sweep at 25Hz (full-rate blip redraw was invisible anyway).
   const budget = createFrameBudget();
-  // window.__perf — live phase table for headless probes + manual reads;
-  // the watchdog dump uses the same data for shipped logs.
-  (window as unknown as { __perf: () => Record<string, number> }).__perf =
-    () => ({ ...perf.snapshot(), ...budget.stats() as unknown as Record<string, number> });
-  document.addEventListener('keydown', (e) => {
-    // Alt+W — bot weapon audit: last gun each bot drew + its shot count,
-    // so "do they fire real weapons" is a one-keypress read. Alt+Shift+W
-    // keeps the old hard-reload hatch (F5 is flaky under pointer lock).
-    if (e.altKey && e.code === 'KeyW') {
-      e.preventDefault();
-      if (e.shiftKey) { location.reload(); return; }
-      const rows = [...lastWeaponByPlayer.entries()]
-        .filter(([id]) => id.startsWith('BOT-'))
-        .map(([id, r]) => ({ bot: id, weapon: WeaponType[r.wt] ?? `w${r.wt}`, shots: r.n }));
-      console.table(rows.length ? rows : [{ note: 'no bot fire seen yet' }]);
-      return;
-    }
-    if (e.code === 'Backquote') {
-      e.preventDefault();
-      const show = (statsPanels[0]!.dom as HTMLElement).style.display === 'none';
-      for (const s of statsPanels) {
-        (s.dom as HTMLElement).style.display = show ? 'block' : 'none';
-      }
-      perf.setVisible(show);
-    }
-  });
+  wireDebugKeys(deps, perf, budget, statsPanels);
 
   function loop(time: number): void {
     requestAnimationFrame(loop);
@@ -499,6 +528,8 @@ export function createGameLoop(deps: GameLoopDeps) {
     const vmCamera = deps.vmCamera();
     const vmScene = deps.vmScene();
     const renderer = rendererSetup.renderer;
+
+    gateInteriorCasters(deps, st, camera);
 
     // Shadow-map throttle under the auto-quality ladder: a full-scene
     // re-raster every frame is the heaviest single GPU cost. At ladder ≥2

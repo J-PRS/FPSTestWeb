@@ -90,6 +90,18 @@ export function wireWorld(ctx: NetCtx): void {
   };
 }
 
+// Interior parts worth a cast shadow: sized like architecture, not trim.
+// Radius over ~4m — towers, walls, ramps. Small greebles would cost a
+// draw call each in the shadow pass for an unreadable sliver of shade.
+// Per-mesh radius is stashed on userData so the loop can distance-gate
+// casting (geometry is world-baked — boundingSphere.center is the mesh's
+// true position).
+function interiorCastRadius(g: THREE.BufferGeometry): number {
+  if (!g.boundingSphere) g.computeBoundingSphere();
+  const r = g.boundingSphere?.radius ?? 0;
+  return r > 4 ? r : 0;
+}
+
 /** Room snapshot half of gameState — mode, team, scores, clock, map
  *  geometry, mid-flight pickups/flags. Pure world setup, no local player. */
 function applyRoomInfo(ctx: NetCtx, playerCount: number, roomInfo?: Parameters<NonNullable<NetworkManager['onGameState']>>[2]): void {
@@ -518,7 +530,10 @@ async function applyInteriors(ctx: NetCtx, list: InteriorSpec[] | undefined): Pr
       // map-wide bounding sphere and never frustum-cull, so every far
       // structure rasterized every frame.
       const e = mesh.matrixWorld.elements;
-      const cell = `${e[12]! / 512 | 0},${e[14]! / 512 | 0}`;
+      // 2048m cells: T2 GLBs shatter into ~250 materials, and the old 512m
+      // grid multiplied that by 4 → ~1000 draw calls. Bigger cells keep
+      // frustum culling useful at range while quartering the mesh count.
+      const cell = `${e[12]! / 2048 | 0},${e[14]! / 2048 | 0}`;
       const sig = `${mat.uuid}|${Object.keys(mesh.geometry.attributes).toSorted().join(',')}|${mesh.geometry.index ? 'i' : 'n'}|${cell}`;
       const geo = mesh.geometry.clone().applyMatrix4(mesh.matrixWorld);
       const b = buckets.get(sig) ?? { mat, geos: [] };
@@ -531,7 +546,9 @@ async function applyInteriors(ctx: NetCtx, list: InteriorSpec[] | undefined): Pr
     if (!merged) { // attribute/index quirk — fall back to the unmerged geos
       for (const g of geos) {
         const mesh = new THREE.Mesh(g, mat);
-        mesh.castShadow = mesh.receiveShadow = true;
+        mesh.receiveShadow = true;
+        mesh.userData.castR = interiorCastRadius(g);
+        mesh.castShadow = mesh.userData.castR > 0;
         group.add(mesh);
         mergedGeo.push(g);
       }
@@ -540,7 +557,12 @@ async function applyInteriors(ctx: NetCtx, list: InteriorSpec[] | undefined): Pr
     for (const g of geos) g.dispose(); // baked clones — merged owns their data now
     mergedGeo.push(merged);
     const mesh = new THREE.Mesh(merged, mat);
-    mesh.castShadow = mesh.receiveShadow = true;
+    mesh.receiveShadow = true;
+    // Caster census: ~1000 interior meshes were all casting → ~580 extra
+    // draw calls in the shadow pass. Only chunky structures' shadows read
+    // at a glance — debris-scale parts don't.
+    mesh.userData.castR = interiorCastRadius(merged);
+    mesh.castShadow = mesh.userData.castR > 0;
     group.add(mesh);
   }
   if (missing.size) deps.logger.warn(`Interiors missing glb: ${[...missing].join(', ')}`);

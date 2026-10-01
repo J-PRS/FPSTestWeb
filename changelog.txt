@@ -1,3 +1,4 @@
+2026-10-01 - __renderScan staged render profiler; interior casters size+distance gated (shadow pass 681->~430 calls); interior merge cells 512->2048m (scene calls ~570->~300); shadow frustum 250->130m
 2026-10-01 - foeSeen LOS raycasts cached ~200ms per bot (sheep ignore-meter only) — was one ray per foe per bot per frame
 2026-10-01 - VFX quality scaler on the gpu/cpu ladders (gpu>=2: 0.7x, gpu>=4: 0.45x, cpu>=1: 0.6x) — quarks CPU sim is the fight-scaling hotspot, density now trades for frame time
 2026-10-01 - Shadow frustum 400m->250m half-extent (0.24m/texel, fewer casters in-frustum) + shadow map updates every 2nd frame at all levels — pass measured at ~46% of frame on a 3070Ti
