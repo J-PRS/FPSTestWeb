@@ -21,8 +21,27 @@ export class PlayerIndicators {
   private readonly lastSheep = new Map<string, number>();
   private readonly lastPos = new Map<string, number>();
 
+  // camera.getWorldPosition/Direction decomposes matrixWorld per call —
+  // called once per remote per frame that was ~2 decomposes × N players.
+  // The camera matrix changes at most once per render, so compare it and
+  // reuse the decompose until it does.
+  private readonly lastCamMat = new Float32Array(16);
+  private camDirty = true;
+
   constructor(container: HTMLElement) {
     this.container = container;
+  }
+
+  private refreshCamera(camera: THREE.Camera): void {
+    const e = camera.matrixWorld.elements;
+    if (!this.camDirty) {
+      for (let i = 0; i < 16; i++) if (this.lastCamMat[i] !== e[i]) { this.camDirty = true; break; }
+    }
+    if (!this.camDirty) return;
+    this.lastCamMat.set(e);
+    this.camDirty = false;
+    camera.getWorldPosition(_cameraPos);
+    camera.getWorldDirection(_cameraDir);
   }
 
   update(playerId: string, position: { x: number; y: number; z: number }, camera: THREE.Camera, opts: { isDead?: boolean; friendly?: boolean; variant?: string; sheep?: number } = {}): void {
@@ -45,8 +64,7 @@ export class PlayerIndicators {
     }
     indicator.classList.remove('hidden');
 
-    camera.getWorldPosition(_cameraPos);
-    camera.getWorldDirection(_cameraDir);
+    this.refreshCamera(camera);
 
     // Position is at feet — point to center (feet + 1.0)
     const targetPos = _targetPos.set(position.x, position.y + 1.0, position.z);
