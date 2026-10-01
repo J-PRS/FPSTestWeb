@@ -44,7 +44,8 @@ export function getShadows(): InstancedBlobShadows | null {
   return shadows;
 }
 
-/** Alloc both handles; returns false when either pool is full. */
+/** Alloc both handles; fails only before initSwarms or on an unknown
+ *  species — the pools themselves grow on demand and never fill. */
 export function allocSlots(species: string, owner: SwarmSlotOwner): boolean {
   const swarm = getSwarm(species);
   if (!swarm || swarm.alloc(owner) < 0) return false;
