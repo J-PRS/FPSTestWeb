@@ -6,6 +6,7 @@
  * picker writes into the brain-owned GoalState bag, so the mutable
  * fields stay private to the brain while the ordering lives here.
  */
+import { botRand } from './botRand.ts';
 import { BOT_EYE } from './botHunt.ts';
 import type { BotVec, BrainCtx } from './botBrain.ts';
 
@@ -54,7 +55,7 @@ export class BotGoals {
       return;
     }
     if (s.wanderT <= 0 || distSq(pos, s.wanderWp) < 9) {
-      s.wanderT = (3 + Math.random() * 4) / this.wanderlust();
+      s.wanderT = (3 + botRand() * 4) / this.wanderlust();
       const best = this.rollWander(ctx, pos);
       if (best) {
         s.wanderWp = best;
@@ -75,8 +76,8 @@ export class BotGoals {
       // roll is a forward cone off the current heading with real run
       // length, not a fresh random bearing that reverses mid-carve.
       const hv = this.headingVec();
-      const a = Math.atan2(hv.z, hv.x) + (Math.random() - 0.5) * 2.4;
-      const r = (25 + Math.random() * 55) * this.wanderlust();
+      const a = Math.atan2(hv.z, hv.x) + (botRand() - 0.5) * 2.4;
+      const r = (25 + botRand() * 55) * this.wanderlust();
       const wp = { x: pos.x + Math.cos(a) * r, z: pos.z + Math.sin(a) * r };
       if (this.nearDeath(wp)) continue;
       const drop = g0 - ctx.groundY(wp.x, wp.z);
@@ -111,7 +112,7 @@ export class BotGoals {
       const d = distSq(pos, s);
       if (d < ld) { ld = d; loudest = s; }
     }
-    return loudest && Math.random() < this.wanderlust() * 0.5 ? { ...loudest } : null;
+    return loudest && botRand() < this.wanderlust() * 0.5 ? { ...loudest } : null;
   }
 }
 

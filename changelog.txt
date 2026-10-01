@@ -1,3 +1,4 @@
+2026-10-01 - determinism: shared/botRand.ts — one injectable rng for all bot heuristics (brains/hunts/goals/dispositions/taunts); harness seeds it, tests replay identically
 2026-10-01 - audit: architecture/quality findings report in _reports/2026-10-01_architecture-audit.md
 2026-10-01 - types: Targetable declares optional swarm handles; burstGibs takes Partial<SwarmSlotOwner> — call-site cast gone
 2026-10-01 - core: Logger context?: any → unknown — keeps call sites, drops lazy typing on the logging surface

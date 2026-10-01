@@ -1,3 +1,4 @@
+import { botRand } from './botRand.ts';
 import { STATUS } from './status.ts';
 import { ENERGY } from './movement.ts';
 import { retreatDest } from './botHunt.ts';
@@ -43,9 +44,9 @@ export function pickDest(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, fe
     b.orbitA += dt * (b.orbitDir * 0.55);
     b.orbitFlipT -= dt;
     if (b.orbitFlipT <= 0) {
-      b.orbitFlipT = 1.2 + Math.random() * 1.4;
+      b.orbitFlipT = 1.2 + botRand() * 1.4;
       b.orbitDir = -b.orbitDir;
-      b.orbitMul = 0.75 + Math.random() * 0.4; // jink in/out too — not just direction
+      b.orbitMul = 0.75 + botRand() * 0.4; // jink in/out too — not just direction
     }
     const mid = (b.h.orbitFar + b.h.orbitClose) * 0.5 * b.orbitMul;
     const ox = t.pos.x + Math.cos(b.orbitA) * mid;
@@ -63,16 +64,16 @@ export function pickDeploy(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, 
     const handsFree = !b.h.hunt || dist3(pos, b.h.hunt.pos) > 25;
     if (!b.builder || b.deployT > 0 || !handsFree || fearing || !ctx.objective) return undefined;
     if (dist3(pos, ctx.objective) >= 15) return undefined;
-    b.deployT = 28 + Math.random() * 20;
+    b.deployT = 28 + botRand() * 20;
     // A hurting builder drops a station first (it heals the squad);
     // otherwise the stand gets guns, a minefield, or a patrol drone
     // by temperament — drones roam the stand's perimeter so they're
     // the pick when the anchor is already watched.
-    const roll = Math.random();
+    const roll = botRand();
     const kind: string = (ctx.healthFrac ?? 1) < 0.4 ? 'station'
       : roll < 0.55 ? 'turret' : roll < 0.85 ? 'mine' : 'drone';
-    const a = Math.random() * Math.PI * 2;
-    const r = 4 + Math.random() * 6;
+    const a = botRand() * Math.PI * 2;
+    const r = 4 + botRand() * 6;
     const px = pos.x + Math.cos(a) * r, pz = pos.z + Math.sin(a) * r;
     return { kind, pos: { x: px, y: ctx.groundY(px, pz), z: pz } };
   }

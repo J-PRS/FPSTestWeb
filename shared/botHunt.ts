@@ -9,6 +9,7 @@
  * rather than a second class because there's exactly one state per bot.
  */
 
+import { botRand } from './botRand.ts';
 import { GRAVITY } from './movement.ts';
 import { losClear, BOT_EYE } from './botLos.ts';
 import type { BotVec, BotEnemy, BrainCtx, BrainOut } from './botBrain.ts';
@@ -61,9 +62,9 @@ export function newHuntState(spawn: BotVec): HuntState {
     fireT: 0,
     burstLeft: 0,
     fightPos: null,
-    temper: 0.7 + Math.random() * 0.6,
-    orbitFar: ORBIT_FAR * (0.85 + Math.random() * 0.3),
-    orbitClose: ORBIT_TOO_CLOSE * (0.85 + Math.random() * 0.3),
+    temper: 0.7 + botRand() * 0.6,
+    orbitFar: ORBIT_FAR * (0.85 + botRand() * 0.3),
+    orbitClose: ORBIT_TOO_CLOSE * (0.85 + botRand() * 0.3),
   };
 }
 
@@ -141,7 +142,7 @@ export function pickFire(st: HuntState, dt: number, ctx: BrainCtx, pos: BotVec, 
   if (st.fireT > 0) return undefined;
   if (st.burstLeft <= 0) st.burstLeft = 5;
   st.burstLeft--;
-  st.fireT = (st.burstLeft > 0 ? 0.45 : 0.8 + Math.random() * 0.5) / st.temper
+  st.fireT = (st.burstLeft > 0 ? 0.45 : 0.8 + botRand() * 0.5) / st.temper
     * (hero ? 0.65 : fearing ? 0.9 : 1);
   const d = dist3(pos, st.lastSeen);
   // Suppressive fire is deliberately sloppy — noise, not hits. Hero
@@ -170,9 +171,9 @@ export function pickFire(st: HuntState, dt: number, ctx: BrainCtx, pos: BotVec, 
   return {
     targetId: st.hunt.id,
     aim: {
-      x: px + (Math.random() - 0.5) * err,
-      y: py + drop + (Math.random() - 0.5) * err * 0.5,
-      z: pz + (Math.random() - 0.5) * err,
+      x: px + (botRand() - 0.5) * err,
+      y: py + drop + (botRand() - 0.5) * err * 0.5,
+      z: pz + (botRand() - 0.5) * err,
     },
   };
 }

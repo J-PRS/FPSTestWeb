@@ -5,6 +5,7 @@
  * brain.ts keeps hunting/firing; this file owns "the straight line is
  * wrong". State rides on the brain's flat fields via EscapeState.
  */
+import { botRand } from './botRand.ts';
 import type { BrainCtx } from './botBrain.ts';
 import { BOT_EYE } from './botHunt.ts';
 
@@ -40,7 +41,7 @@ export function stuckBreak(s: EscapeState, dt: number, ctx: BrainCtx, pos: BotVe
     if (s.detourT <= 0) {
       const gx = s.goal.x - pos.x, gz = s.goal.z - pos.z;
       const gl = Math.hypot(gx, gz) || 1;
-      const side = Math.random() < 0.5 ? -1 : 1;
+      const side = botRand() < 0.5 ? -1 : 1;
       const dx = (-gz / gl) * side * 14, dz = (gx / gl) * side * 14;
       s.detour = { x: pos.x + dx, y: ctx.groundY(pos.x + dx, pos.z + dz) + BOT_EYE, z: pos.z + dz };
       s.detourT = 1.2;

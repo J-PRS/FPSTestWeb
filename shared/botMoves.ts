@@ -5,6 +5,7 @@
  * and the anti-sheep momentum boost. Kept apart from destination logic
  * so "where to go" and "how to get there" each read on their own.
  */
+import { botRand } from './botRand.ts';
 import type { BotVec, BrainCtx, BrainOut } from './botBrain.ts';
 
 export interface MovesHost {
@@ -42,7 +43,7 @@ export class BotMoves {
     // Re-arm while the reason holds (a long climb = one long burn),
     // plus a minimum pulse so a gate flicker can't chop the burn.
     if (this.wantJet(ctx, pos, dest, rise, speed, gd) && tanked) {
-      this.jetHold = Math.max(this.jetHold, 0.45 + Math.random() * 0.4);
+      this.jetHold = Math.max(this.jetHold, 0.45 + botRand() * 0.4);
     }
     const jet = (this.jetHold > 0 || this.host.escapeJetT() > 0) && tanked;
     return {

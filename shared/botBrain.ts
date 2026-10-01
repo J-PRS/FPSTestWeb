@@ -11,6 +11,7 @@
  * locomotion, the visual, and resolving the hit.
  */
 
+import { botRand } from './botRand.ts';
 import { BotSteer } from './botSteer.ts';
 import { BotGoals } from './botGoals.ts';
 import { BotMoves } from './botMoves.ts';
@@ -149,11 +150,11 @@ export class BotBrain {
     this.h = newHuntState(spawn);
   }
 
-  private thinkT = Math.random() * THINK_S;
+  private thinkT = botRand() * THINK_S;
   readonly h: HuntState;
   flinchT = 0;
   flinchFrom: BotVec = { x: 0, y: 0, z: 0 };
-  private beltT = 4 + Math.random() * 4; // stagger first throws across the squad
+  private beltT = 4 + botRand() * 4; // stagger first throws across the squad
   // Stuck/dodge senses live in botEscape.ts — escapeS is their state bag.
   private readonly escapeS: EscapeState = {
     stuckStreak: 0,
@@ -197,8 +198,8 @@ export class BotBrain {
   // (objective in reach, nobody shooting) is the whole trigger: the
   // emplacement emerges from "a defender with time on their hands",
   // not a scripted base layout.
-  deployT = 8 + Math.random() * 25;
-  builder = Math.random() < 0.45;
+  deployT = 8 + botRand() * 25;
+  builder = botRand() < 0.45;
 
   /** Hosts can pin the builder trait — a technician role shouldn't be
    *  a dice roll away from never touching the deploy kit. */
@@ -225,14 +226,14 @@ export class BotBrain {
   }
   // Personality scalars — ±20-30% per bot so a squad doesn't read as one
   // centipede: different preferred ranges, wander appetites, tempers.
-  private readonly wanderlust = 0.7 + Math.random() * 0.6;
+  private readonly wanderlust = 0.7 + botRand() * 0.6;
   /** Held-position strafe orbit — angle advances each pickDest step.
    *  Direction reverses on a jitter (a real duelist breaks the readable
    *  circle) and the radius breathes per flip, so the hold never reads
    *  as a carousel. */
-  orbitA = Math.random() * Math.PI * 2;
-  orbitDir = Math.random() < 0.5 ? 1 : -1;
-  orbitFlipT = 1 + Math.random() * 1.5;
+  orbitA = botRand() * Math.PI * 2;
+  orbitDir = botRand() < 0.5 ? 1 : -1;
+  orbitFlipT = 1 + botRand() * 1.5;
   orbitMul = 1;
   /** Last think resolved to stand-and-shoot — a legal hold, not a stall.
    *  Hosts read this to keep stall/mobility watchdogs honest. */
@@ -262,7 +263,7 @@ export class BotBrain {
     // a desperate last stand. Latch resets once healed so the next wound
     // gets a fresh roll.
     const hurt = (ctx.healthFrac ?? 1) < FEAR_HP;
-    if (hurt && !this.hurtLatch && Math.random() < HERO_CHANCE) this.heroT = HERO_S;
+    if (hurt && !this.hurtLatch && botRand() < HERO_CHANCE) this.heroT = HERO_S;
     this.hurtLatch = hurt;
     this.heroT = Math.max(0, this.heroT - dt);
     const hero = this.heroT > 0;

@@ -1,4 +1,5 @@
 import { Room } from '../../src/Room.ts';
+import { botRng } from '../../../shared/botRand.ts';
 import { resolveMapSpec, type MapSpec } from '../../../shared/mapSpec.ts';
 import type { Heightfield } from '../../../shared/heightfield.ts';
 import type { ServerMessage } from '../../../shared/protocol.ts';
@@ -22,6 +23,9 @@ export function mkRoom(spec: Partial<MapSpec>, mode = '', seed = 1337, moveAutho
   room.ballSim.rng = lcg(seed);
   room.creatureSim.rng = lcg(seed + 1);
   room.rng = lcg(seed + 2);
+  // Squad heuristics (brains/hunts/goals/taunts) share one injectable
+  // stream — ambient in production, seeded here so staged shots replay.
+  botRng(lcg(seed + 3));
   return room;
 }
 
