@@ -71,14 +71,15 @@ function getGibPool(species: string): GibPool | null {
  * debris there.
  */
 export function burstGibs(
-  owner: SwarmSlotOwner, center: THREE.Vector3,
+  owner: Partial<SwarmSlotOwner>, center: THREE.Vector3,
   impulseDir: THREE.Vector3 | null, inheritVel: THREE.Vector3 | null,
 ): boolean {
   const species = owner.swarmSpecies;
-  if (!species || owner.swarmSlot < 0) return false;
+  const slot = owner.swarmSlot ?? -1;
+  if (!species || slot < 0) return false;
   const pool = getGibPool(species);
-  if (!pool || !pool.burst(owner.swarmSlot, center, impulseDir, inheritVel)) return false;
-  freeSlots(species, owner);
+  if (!pool || !pool.burst(slot, center, impulseDir, inheritVel)) return false;
+  freeSlots(species, owner as SwarmSlotOwner);
   owner.swarmSlot = -1;
   return true;
 }

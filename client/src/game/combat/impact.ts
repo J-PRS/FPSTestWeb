@@ -10,7 +10,6 @@ import { Explosion } from '../../effects/explosion.js';
 import { BallDebris } from '../../effects/debris.js';
 import { Nugget } from '../../entities/Nugget.js';
 import { burstGibs } from '../../entities/swarms.js';
-import type { SwarmSlotOwner } from '../../entities/swarm.js';
 import { screenShake } from '../../effects/screenShake.js';
 import * as sfx from '../../core/sfx.js';
 import { ROCKET_RADIUS, CHAINGUN_RATE } from '../../core/config.js';
@@ -189,7 +188,7 @@ export function onTargetDestroyed(c: CombatCtx, ball: import('../../entities/bal
   const mine = !shooterId || shooterId === 'local';
   if (mine && weaponType === WeaponType.Railgun) deps.lazyPlayer().refundWeaponCooldown();
   if (impulse) _debrisDir.copy(impulse).normalize(); else _debrisDir.set(0, 0.5, 0);
-  if (!burstGibs(ball as unknown as SwarmSlotOwner, ball.pos, _debrisDir, ball.vel)) {
+  if (!burstGibs(ball, ball.pos, _debrisDir, ball.vel)) {
     deps.world.debrisList.push(new BallDebris(
       deps.lazyScene(), deps.lazyTerrain(), ball.pos,
       ball.color, ball.scale,

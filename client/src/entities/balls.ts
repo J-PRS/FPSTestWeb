@@ -82,6 +82,11 @@ export interface Targetable {
   debrisGeos?: THREE.BufferGeometry[];
   /** Death-cue override — crawlers splat, weeds rustle, most use default. */
   dieCue?: 'die' | 'splat' | 'rustle' | 'squawk';
+  /** Swarm-rendered entities carry instancing handles so the death path can
+   *  shatter the body into gibs; absent on plain-mesh targets. */
+  swarmSlot?: number;
+  swarmSpecies?: string;
+  shadowSlot?: number;
   /** Fires once when destroyed — elites split, everything else ignores it. */
   onDeath?: (t: Targetable) => void;
 }
