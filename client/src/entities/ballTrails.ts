@@ -204,8 +204,6 @@ export class BallTrailDots {
 
   fade(dt: number): void {
     if (this.slot < 0) return;
-    trailMat().uniforms.uHeight!.value = window.innerHeight || 800;
-    let w = 0; // live-dot write cursor over the attribute pair
     for (let i = this.dots.length - 1; i >= 0; i--) {
       const d = this.dots[i];
       d.age += dt;
@@ -214,6 +212,12 @@ export class BallTrailDots {
         this.dots.splice(i, 1);
       }
     }
+    // Attribute rewrite at ~30Hz — dots live ~1s, so a frame of stale
+    // alpha/size is invisible; aging/pruning above still runs full rate.
+    this._half = !this._half;
+    if (this._half && this.dots.length > 0) return;
+    trailMat().uniforms.uHeight!.value = window.innerHeight || 800;
+    let w = 0; // live-dot write cursor over the attribute pair
     for (const d of this.dots) {
       const t = 1.0 - d.age / d.life;
       const haloA = t * 0.28 * this.opacity;
@@ -248,6 +252,7 @@ export class BallTrailDots {
     this.batch.flush();
   }
   private _lastLive = -1;
+  private _half = false;
 
   dispose(): void {
     if (this.slot >= 0) {
