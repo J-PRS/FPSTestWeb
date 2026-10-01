@@ -130,7 +130,6 @@ export class RibbonTrail {
   // samples keep their positions and just fade.
   private pushed = 0;
   private time = 0;
-  private _far = 0;
   private _camX = NaN;
   private _camY = NaN;
   private _camZ = NaN;
@@ -182,6 +181,10 @@ export class RibbonTrail {
     this.batch.pos.fill(0, b, b + VERTS * 3);
     this.batch.col.fill(0, b, b + VERTS * 3);
     this.batch.mark(b, b + VERTS * 3);
+    // Upload NOW — mark() alone defers to the next ribbon's update(), and
+    // if this was the last live ribbon nothing ever flushes: the slot's
+    // stale verts stay lit as a frozen streak across the map.
+    this.batch.flush();
     this.batch.used.delete(this.slot);
     this.batch.slotsDirty = true;
     this.batch.free.push(this.slot);
@@ -255,6 +258,7 @@ export class RibbonTrail {
       const b = this.slot * VERTS * 3;
       this.batch.col.fill(0, b, b + VERTS * 3);
       this.batch.mark(b, b + VERTS * 3);
+      this.batch.flush(); // same as releaseSlot — a clear is unobservable otherwise
     }
   }
 
@@ -264,23 +268,15 @@ export class RibbonTrail {
     return this.time - this.st[this.head] > this.life;
   }
 
-  /** Cadence gate: EVERY ribbon rewrites at ~30Hz — trails live <0.5s,
-   *  so half-rate fades are invisible and the per-sample loop halves.
-   *  Returns whether the caller should early-out, and (via out-far)
-   *  whether the trail counts as far for the billboard freeze. */
-  private skipThisFrame(camPos: THREE.Vector3 | undefined, outFar: { v: boolean }): boolean {
-    if (!camPos) return (this._far ^= 1) === 1;
-    const dx = camPos.x - this.px[this.head], dy = camPos.y - this.py[this.head], dz = camPos.z - this.pz[this.head];
-    outFar.v = dx * dx + dy * dy + dz * dz > 200 * 200;
-    return (this._far ^= 1) === 1;
-  }
-
   update(dt: number, camPos?: THREE.Vector3): void {
     this.time += dt;
     if (this.slot < 0 || this.count < 2) return;
-    const outFar = { v: false };
-    if (this.skipThisFrame(camPos, outFar)) return;
-    const far = outFar.v;
+    // Trails live <0.5s — halving their rewrite cadence made fades visibly
+    // steppy, and a steppy trail reads as broken, not as optimized.
+    const dx = camPos ? camPos.x - this.px[this.head] : 0;
+    const dy = camPos ? camPos.y - this.py[this.head] : 0;
+    const dz = camPos ? camPos.z - this.pz[this.head] : 0;
+    const far = dx * dx + dy * dy + dz * dz > 200 * 200;
 
     // Billboard sides only change when the camera moves — a parked camera
     // makes the per-sample cross-product + position rewrite a pure no-op.
@@ -304,6 +300,18 @@ export class RibbonTrail {
       const o = base + i * 6;
       if (i >= freshFrom) { this.writeSample(s, o, fade, rebillboard, pos); dirty = true; }
       if (this.applyFadeBucket(i, o, fade)) dirty = true;
+    }
+    // The index buffer draws every quad in the slot — the one spanning the
+    // last written sample and the next (zeroed 0,0,0) renders as a streak
+    // from the head down to world origin. Gluing the boundary verts to the
+    // head makes it degenerate instead.
+    if (this.count > 0 && this.count < MAX_SAMPLES) {
+      const o = base + this.count * 6;
+      const hx = this.px[this.head], hy = this.py[this.head], hz = this.pz[this.head];
+      pos[o] = hx; pos[o + 1] = hy; pos[o + 2] = hz;
+      pos[o + 3] = hx; pos[o + 4] = hy; pos[o + 5] = hz;
+      this.batch.mark(base, base + (this.count + 1) * 6);
+      dirty = true;
     }
     if (dirty) {
       this.batch.mark(base, base + this.count * 6);
