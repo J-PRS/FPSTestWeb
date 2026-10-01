@@ -23,6 +23,10 @@ export class BotSheepMeter {
   /** Windows that measure play must run on sim time — wall clock lies
    *  whenever the tick is throttled. */
   private simMs = 0;
+  /** Per-bot EMA of mechanical energy ½v²+g·h (J/kg above ground) — the
+   *  "recent" term the tribesing credit reads: momentary ground contact
+   *  mid-ski doesn't zero the credit the kinetic peak just earned. */
+  private eSm = new Map<string, number>();
 
   constructor(private room: Room) {}
 
@@ -34,6 +38,7 @@ export class BotSheepMeter {
     this.yeetUntil.delete(id);
     this.why.delete(id);
     this.lastFire.delete(id);
+    this.eSm.delete(id);
   }
 
   of(id: string): number { return Math.round(this.meter.get(id) ?? 0); }
@@ -42,14 +47,23 @@ export class BotSheepMeter {
 
   /** Returns true on the tick the yeet fires — ServerBots uses the edge
    *  to press the bot's own jump input once. */
-  check(id: string, p: { position: Vec3; velocity: Vec3 }, m: { out: BrainOut; airborne: boolean; hasDest: boolean; foe?: boolean; dt: number }, now: number): boolean {
-    const speedXZ = Math.hypot(p.velocity.x, p.velocity.z);
+  check(id: string, p: { position: Vec3; velocity: Vec3 }, m: { out: BrainOut; airborne: boolean; hasDest: boolean; foe?: boolean; dt: number; height?: number }, now: number): boolean {
+    // Total mechanical energy (kinetic + potential) is the Tribes
+    // currency — a fast bot low to the ground and a slow bot on a perch
+    // are both holding real E. bonusSpeed converts it back to the
+    // equivalent flat-ground speed so the thresholds stay familiar.
+    const v = p.velocity;
+    const mech = 0.5 * (v.x * v.x + v.y * v.y + v.z * v.z) + 9.8 * Math.max(0, m.height ?? 0);
+    const ePrev = this.eSm.get(id) ?? mech;
+    const eSm = ePrev + (mech - ePrev) * Math.min(1, m.dt * 4);
+    this.eSm.set(id, eSm);
+    const bonusSpeed = Math.sqrt(Math.max(0, 2 * eSm));
     const jetting = !!m.out.move?.jet || this.yeetUntilMs(id) > now;
-    const tribesing = speedXZ > 10 || m.airborne || jetting;
+    const tribesing = bonusSpeed > 10 || m.airborne || jetting;
     const prev = this.meter.get(id) ?? 0;
     let why = this.why.get(id);
     if (!why) { why = { idle: 0, ignore: 0, cover: 0 }; this.why.set(id, why); }
-    const base = this.charge(m, tribesing, speedXZ, jetting, why);
+    const base = this.charge(m, tribesing, bonusSpeed, jetting, why);
     let meter = prev + base;
     // The foe-ignoring charge only counts a PARKED bot — one that's
     // skiing/jetting/covering ground is playing Tribes even while it

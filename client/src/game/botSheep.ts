@@ -1,4 +1,3 @@
-import * as THREE from 'three';
 import { Terrain } from '../world/terrain.js';
 import type { GameBot } from './botBrain.js';
 
@@ -22,6 +21,10 @@ export class SheepMeter {
   /** Last sampled mechanical energy (per unit mass) — the momentum
    *  conservation probe: ½v² + g·height-above-terrain. */
   private eLast = new Map<string, number>();
+  /** EMA of the same E — the "recent" term for the tribesing credit:
+   *  brief ground contact mid-ski doesn't zero the credit the kinetic
+   *  peak just earned. */
+  private eSm = new Map<string, number>();
 
   /** Per-source ledger — positive charge points each channel contributed
    *  since the last yeet, dumped into the warn so tuning reads "why"
@@ -52,18 +55,28 @@ export class SheepMeter {
   /** Respawn clears the bot's meter state — a fresh life starts clean. */
   clear(id: string): void {
     this.eLast.delete(id);
+    this.eSm.delete(id);
     this.why.delete(id);
   }
 
   tick(bot: GameBot, dt: number, terrain: Terrain, foe = false, ignoring = false, hasDest = false): void {
     const v = bot.vel;
-    const speedXZ = Math.hypot(v.x, v.z);
-    const height = bot.pos.y - terrain.getHeight(bot.pos.x, bot.pos.z);
+    const height = Math.max(0, bot.pos.y - terrain.getHeight(bot.pos.x, bot.pos.z));
     const grounded = height < 2;
-    const tribesing = SheepMeter.isTribesing(bot, speedXZ, grounded);
-    const moving = speedXZ > 1;
+    // Total mechanical energy (kinetic + potential) is the Tribes
+    // currency — a fast bot low to the ground and a slow bot on a perch
+    // are both holding real E. bonusSpeed converts the recent average
+    // back to the equivalent flat-ground speed so thresholds stay
+    // familiar. Same formula feeds the bleed probe below.
+    const mech = 0.5 * (v.x * v.x + v.y * v.y + v.z * v.z) + 9.8 * height;
+    const ePrev = this.eSm.get(bot.playerId) ?? mech;
+    const eSm = ePrev + (mech - ePrev) * Math.min(1, dt * 4);
+    this.eSm.set(bot.playerId, eSm);
+    const bonusSpeed = Math.sqrt(Math.max(0, 2 * eSm));
+    const tribesing = SheepMeter.isTribesing(bot, bonusSpeed, grounded);
+    const moving = Math.hypot(v.x, v.z) > 1;
     const why = this.ledger(bot.playerId);
-    let delta = tribesing ? -(10 + speedXZ * 0.5 + (bot.yeetT > 0 ? 15 : 0)) : moving ? 9 : 18;
+    let delta = tribesing ? -(10 + bonusSpeed * 0.5 + (bot.yeetT > 0 ? 15 : 0)) : moving ? 9 : 18;
     if (!tribesing) why.idle += delta * dt;
     // Parked within reach of a visible enemy and holding fire — the
     // fastest tell. Only counts while NOT tribesing: a bot that's
@@ -73,7 +86,7 @@ export class SheepMeter {
     // signature — Tribes play is converting height↔speed losslessly,
     // so E stays flat through clean skiing and only drops on
     // face-plants, wall hits, and pedestrian friction.
-    const bleed = this.energyBleed(bot, v, height, foe);
+    const bleed = this.energyBleed(bot, mech, foe);
     why.bleed += bleed;
     bot.sheep += bleed;
     const cover = tribesing ? 0 : this.coverageDebit(bot, hasDest);
@@ -113,8 +126,7 @@ export class SheepMeter {
 
   /** Instantaneous E loss since last sample, clamped — a bot sliding
    *  to a deadstop bleeds once, not forever. */
-  private energyBleed(bot: GameBot, v: THREE.Vector3, height: number, foe: boolean): number {
-    const mech = 0.5 * (v.x * v.x + v.y * v.y + v.z * v.z) + 9.8 * height;
+  private energyBleed(bot: GameBot, mech: number, foe: boolean): number {
     const ePrev = this.eLast.get(bot.playerId);
     this.eLast.set(bot.playerId, mech);
     if (ePrev === undefined || mech >= ePrev || foe || bot.yeetT > 0) return 0;
@@ -127,9 +139,10 @@ export class SheepMeter {
     return w;
   }
 
-  /** Counts as Tribesing while it's converting — speed, airtime, or still
-   *  inside the post-yeet pin (a yeeted bot shouldn't re-drain instantly). */
-  private static isTribesing(bot: GameBot, speedXZ: number, grounded: boolean): boolean {
-    return speedXZ > 10 || !grounded || bot.yeetT > 0;
+  /** Counts as Tribesing while it's holding or converting energy —
+   *  bonusSpeed is sqrt(2·E_recent): >10 matches the old speedXZ>10
+   *  gate while letting altitude pay into the same ledger. */
+  private static isTribesing(bot: GameBot, bonusSpeed: number, grounded: boolean): boolean {
+    return bonusSpeed > 10 || !grounded || bot.yeetT > 0;
   }
 }

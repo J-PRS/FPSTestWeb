@@ -45,7 +45,12 @@ export function driveMove(h: DriveHost, id: string, p: { position: Vec3; velocit
   // Sheep check before the input commit: a yeet edge presses the bot's
   // own jump key this tick, and the window holds jets — the same keys
   // a player holds, never an injected velocity.
-  const yeeted = h.sheep.check(id, p, { out, airborne: !sh.onGround, hasDest: dist >= 0.5, foe: (h.foeNear.get(id) ?? 0) > now, dt }, now);
+  const sheepGround = Math.max(
+    h.field ? hmHeight(h.field, p.position.x, p.position.z) : p.position.y,
+    h.room.moveSim.structureTop(p.position.x, p.position.z),
+  );
+  const sheepHeight = Math.max(0, p.position.y - EYE_OFFSET - sheepGround);
+  const yeeted = h.sheep.check(id, p, { out, airborne: !sh.onGround, hasDest: dist >= 0.5, foe: (h.foeNear.get(id) ?? 0) > now, dt, height: sheepHeight }, now);
   const yeetHeld = h.sheep.yeetUntilMs(id) > now;
   if (dist >= 0.5) {
     // Wrist-speed turn — a snapped 180° reads as a fly-flick while an
