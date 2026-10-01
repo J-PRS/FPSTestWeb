@@ -130,11 +130,25 @@ export class Debris {
   // capacity persists, count/free reset between Debris instances.
   private static instPool: Map<number, THREE.InstancedMesh[]> = new Map();
 
+  /** Bucket capacity is fixed at InstancedMesh construction — a bucket
+   *  pooled by a 14-shard kill would silently drop slots 15+ for a
+   *  20-shard one (out-of-bounds typed-array writes are no-ops), so
+   *  pooled buckets that can't fit `cap` go back and a fresh one is
+   *  built instead. */
+  private static instBucketFor(prim: number, cap: number): THREE.InstancedMesh {
+    const pool = Debris.instPool.get(prim);
+    if (pool) {
+      for (let i = pool.length - 1; i >= 0; i--) {
+        if (pool[i]!.instanceMatrix.count >= cap) return pool.splice(i, 1)[0]!;
+      }
+    }
+    return new THREE.InstancedMesh(Debris.primGeos[prim]!, Debris.primMat, cap);
+  }
+
   private instAlloc(prim: number): { inst: number; slot: number } {
     let b = this.insts[prim];
     if (!b) {
-      const pooled = Debris.instPool.get(prim)?.pop();
-      const mesh = pooled ?? new THREE.InstancedMesh(Debris.primGeos[prim]!, Debris.primMat, this.instCap);
+      const mesh = Debris.instBucketFor(prim, this.instCap);
       mesh.matrixWorldAutoUpdate = false;
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       mesh.castShadow = false;
