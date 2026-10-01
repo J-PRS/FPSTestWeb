@@ -126,6 +126,9 @@ export class RibbonTrail {
   private st = new Float32Array(MAX_SAMPLES);
   private head = -1;
   private count = 0;
+  // Samples appended since the last update() — only those move; older
+  // samples keep their positions and just fade.
+  private pushed = 0;
   private time = 0;
   private _far = 0;
   private _camX = NaN;
@@ -190,6 +193,7 @@ export class RibbonTrail {
     this.time = 0;
     this.head = -1;
     this.count = 0;
+    this.pushed = 0;
     this.claimSlot(scene);
   }
 
@@ -225,6 +229,7 @@ export class RibbonTrail {
     this.dx[this.head] = _dir.x; this.dy[this.head] = _dir.y; this.dz[this.head] = _dir.z;
     this.st[this.head] = this.time;
     if (this.count < MAX_SAMPLES) this.count++;
+    this.pushed++;
   }
 
   /** Stop emitting — ribbon fades out where it is. */
@@ -235,6 +240,7 @@ export class RibbonTrail {
   clear(): void {
     this.head = -1;
     this.count = 0;
+    this.pushed = 0;
     if (this.slot >= 0) {
       const b = this.slot * VERTS * 3;
       this.batch.col.fill(0, b, b + VERTS * 3);
@@ -276,14 +282,20 @@ export class RibbonTrail {
     const pos = this.batch.pos;
     const col = this.batch.col;
     const base = this.slot * VERTS * 3;
-    const writePos = !this.stopped || (this.billboard && camMoved);
+    // Positions only move when new samples arrive (or a billboard needs
+    // re-siding as the camera moves) — the rest of the ribbon is static,
+    // only its colors fade.
+    const freshFrom = this.stopped
+      ? (this.billboard && camMoved ? 0 : this.count)
+      : (this.billboard && camMoved ? 0 : this.count - Math.min(this.pushed, this.count));
+    this.pushed = 0;
     const rebillboard = camPos && camMoved && !far ? camPos : undefined;
     for (let i = 0; i < this.count; i++) {
       // oldest -> newest
       const s = (this.head - this.count + 1 + i + MAX_SAMPLES) % MAX_SAMPLES;
       const fade = Math.max(0, 1 - (this.time - this.st[s]) / this.life);
       const o = base + i * 6;
-      if (writePos) this.writeSample(s, o, fade, rebillboard, pos);
+      if (i >= freshFrom) this.writeSample(s, o, fade, rebillboard, pos);
       const e = EMIT_GAIN * fade;
       col[o] = this.baseColor.r * e; col[o + 1] = this.baseColor.g * e; col[o + 2] = this.baseColor.b * e;
       col[o + 3] = col[o]; col[o + 4] = col[o + 1]; col[o + 5] = col[o + 2];
