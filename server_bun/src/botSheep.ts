@@ -53,9 +53,12 @@ export class BotSheepMeter {
     // are both holding real E. bonusSpeed converts it back to the
     // equivalent flat-ground speed so the thresholds stay familiar.
     const v = p.velocity;
-    // Potential counts at half gravity past a 2m deadband — full g·h let a
-    // bot parked on any hillside bank 'tribesing' forever without moving.
-    const mech = 0.5 * (v.x * v.x + v.y * v.y + v.z * v.z) + 4.9 * Math.max(0, (m.height ?? 0) - 2);
+    const speedSq = v.x * v.x + v.y * v.y + v.z * v.z;
+    // Potential counts at half gravity past a 2m deadband — and only
+    // while the bot is moving: a parked body at altitude isn't holding
+    // energy to convert, it's sleeping on the deposit (the drain-forever
+    // bug that kept sleepers at sheep=0).
+    const mech = 0.5 * speedSq + (speedSq > 4 ? 4.9 * Math.max(0, (m.height ?? 0) - 2) : 0);
     const ePrev = this.eSm.get(id) ?? mech;
     const eSm = ePrev + (mech - ePrev) * Math.min(1, m.dt * 5);
     this.eSm.set(id, eSm);

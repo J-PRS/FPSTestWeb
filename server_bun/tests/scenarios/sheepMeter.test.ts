@@ -15,6 +15,31 @@ describe('sheep meter', () => {
     expect(room.bots.sheepOf(id)).toBe(100);
   });
 
+  it('a parked bot at altitude still accrues — potential requires motion', () => {
+    const room = mkRoom({ bots: 1 });
+    const bots = room.bots as unknown as {
+      sheep: { check(id: string, p: unknown, m: unknown, now: number): void; of(id: string): number };
+    };
+    // 30m above ground, zero velocity: before the motion gate this read
+    // as ~150 J/kg of "banked potential" → bonusSpeed 17 → tribesing →
+    // the meter drained instead of filling and sleepers stayed at 0.
+    const p = { position: { x: 0, y: 90, z: 0 }, velocity: { x: 0, y: 0, z: 0 } };
+    const parked = { out: { dest: { x: 0, y: 90, z: 0 } }, airborne: false, hasDest: false, dt: 1, height: 30 };
+    bots.sheep.check('BOT-VEKTOR-01', p, parked, 0);
+    expect(bots.sheep.of('BOT-VEKTOR-01')).toBeGreaterThanOrEqual(18);
+  });
+
+  it('a moving bot at altitude banks the potential it is converting', () => {
+    const room = mkRoom({ bots: 1 });
+    const bots = room.bots as unknown as {
+      sheep: { check(id: string, p: unknown, m: unknown, now: number): void; of(id: string): number };
+    };
+    const p = { position: { x: 0, y: 90, z: 0 }, velocity: { x: 30, y: -10, z: 0 } };
+    const diving = { out: {}, airborne: true, hasDest: false, dt: 1, height: 30 };
+    bots.sheep.check('BOT-VEKTOR-01', p, diving, 0);
+    expect(bots.sheep.of('BOT-VEKTOR-01')).toBe(0); // tribesing — drains, never charges
+  });
+
   it('a thinking bot that stays Tribes-ing never fills the meter', () => {
     const room = mkRoom({ bots: 1 });
     const id = 'BOT-VEKTOR-01';

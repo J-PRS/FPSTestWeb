@@ -65,15 +65,19 @@ export class SheepMeter {
   tick(bot: GameBot, dt: number, terrain: Terrain, foe = false, ignoring = false, hasDest = false, busy = false): void {
     const v = bot.vel;
     const height = Math.max(0, bot.pos.y - terrain.getHeight(bot.pos.x, bot.pos.z));
-    const grounded = height < 2;
+    const speedSq = v.x * v.x + v.y * v.y + v.z * v.z;
+    // A stationary body is grounded whatever the altitude — parked on a
+    // tower or frozen mid-air, it isn't airborne, it's sleeping.
+    const grounded = height < 2 || speedSq < 4;
     // Total mechanical energy (kinetic + potential) is the Tribes
     // currency — a fast bot low to the ground and a slow bot on a perch
     // are both holding real E. bonusSpeed converts the recent average
     // back to the equivalent flat-ground speed so thresholds stay
     // familiar. Same formula feeds the bleed probe below.
-    // Potential counts at half gravity past a 2m deadband — full g·h let a
-    // bot parked on any hillside bank 'tribesing' forever without moving.
-    const mech = 0.5 * (v.x * v.x + v.y * v.y + v.z * v.z) + 4.9 * Math.max(0, height - 2);
+    // Potential counts at half gravity past a 2m deadband — and only
+    // while moving: a parked body at altitude isn't holding energy to
+    // convert, it's sleeping on the deposit.
+    const mech = 0.5 * speedSq + (speedSq > 4 ? 4.9 * Math.max(0, height - 2) : 0);
     const ePrev = this.eSm.get(bot.playerId) ?? mech;
     const eSm = ePrev + (mech - ePrev) * Math.min(1, dt * 5);
     this.eSm.set(bot.playerId, eSm);
@@ -99,7 +103,10 @@ export class SheepMeter {
     const bleed = this.energyBleed(bot, mech, foe);
     why.bleed += bleed;
     bot.sheep += bleed;
-    const cover = tribesing ? 0 : this.coverageDebit(bot, hasDest);
+    // Coverage is the ground truth — gate it on the weld exemption, not
+    // tribesing: a bot going nowhere accrues even if a stale velocity or
+    // altitude leak is still crediting it energy.
+    const cover = busy ? 0 : this.coverageDebit(bot, hasDest);
     why.cover += cover;
     bot.sheep += cover;
     bot.sheep = Math.max(0, Math.min(100, bot.sheep + delta * dt));

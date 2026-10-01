@@ -1,3 +1,5 @@
+2026-10-01 - sheep meter: potential energy only counts while moving (parked at altitude no longer drains forever); stationary bots read grounded at any height; coverage debit gated on welding, not tribesing
+2026-10-01 - skillshot airtime ramp: Bolt/Disc/DiscPull/Javelin direct hits pay directDamage x min(4, 1 + airtime) (+50%/0.5s, cap 4x at 2s). Shared scaledDirectDamage() drives client prediction + server claim validation (server derives from validated airtime, never trusts a damage number); server bot shells scale by real sim age; MAX_HIT_CLAIM_DMG ceiling covers 4x direct claims. Splash/wake untouched
 2026-10-01 - F5: probe saved last-room BEFORE boot heightmap; its terrain primes the boot field so the default map is never resident (no default-field flash); applyTerrain dedupes on resident heightfield but still applies albedo/sky
 2026-10-01 - F5 rejoins into the last room's map: gameState/mapUpdate persist the map per host (fps-last-room-map); boot pings the host (1.2s) and applies the saved map optimistically instead of flashing the default field until gameState lands
 2026-10-01 - remote repair beams visible: deployHp heal ticks carry the welder id (src), clients draw a green LightningBeam from the welder to the item; 250ms expiry. Remote welds were invisible before - hp climbed with no beam
@@ -167,14 +169,14 @@
 2026-10-01 - ball trail attr uploads gated on live dots (~100 tiny uploads/frame idle); sparkle emit skipped past 200m
 2026-10-01 - interior material dedup by canonical name (.NNN suffix): 1014 meshes -> 44, scene calls ~570->185, shadow-pass delta 681->77 calls
 2026-10-01 - __renderScan staged render profiler; interior casters size+distance gated (shadow pass 681->~430 calls); interior merge cells 512->2048m (scene calls ~570->~300); shadow frustum 250->130m
-2026-10-01 - foeSeen LOS raycasts cached ~200ms per bot (sheep ignore-meter only) — was one ray per foe per bot per frame
-2026-10-01 - VFX quality scaler on the gpu/cpu ladders (gpu>=2: 0.7x, gpu>=4: 0.45x, cpu>=1: 0.6x) — quarks CPU sim is the fight-scaling hotspot, density now trades for frame time
-2026-10-01 - Shadow frustum 400m->250m half-extent (0.24m/texel, fewer casters in-frustum) + shadow map updates every 2nd frame at all levels — pass measured at ~46% of frame on a 3070Ti
-2026-10-01 - FPS cap setting (off/30/60/120) in SETTINGS — render-skip only, sim/input stay full-rate; battery + headroom measuring
+2026-10-01 - foeSeen LOS raycasts cached ~200ms per bot (sheep ignore-meter only) ï¿½ was one ray per foe per bot per frame
+2026-10-01 - VFX quality scaler on the gpu/cpu ladders (gpu>=2: 0.7x, gpu>=4: 0.45x, cpu>=1: 0.6x) ï¿½ quarks CPU sim is the fight-scaling hotspot, density now trades for frame time
+2026-10-01 - Shadow frustum 400m->250m half-extent (0.24m/texel, fewer casters in-frustum) + shadow map updates every 2nd frame at all levels ï¿½ pass measured at ~46% of frame on a 3070Ti
+2026-10-01 - FPS cap setting (off/30/60/120) in SETTINGS ï¿½ render-skip only, sim/input stay full-rate; battery + headroom measuring
 2026-10-01 - Weak-GPU first-run detection: probe UNMASKED_RENDERER_WEBGL at boot; SwiftShader/llvmpipe/Intel iGPU/Mali/old Adreno with no stored picks seeds fps-pixelated=1 + shadows off (chromebooks start on the low tier, explicit picks always win)
-2026-10-01 - Perf dump now reports UNMASKED_RENDERER_WEBGL + devicePixelRatio + canvas res — next LOW-FPS dump identifies SwiftShader/wrong-GPU without a chrome://gpu detour
-2026-10-01 - Auto-quality sheds bloom/post-process passes at gpu level >=4 — full-screen mip-blur chain was the last fill cost left on starving GPUs (restores on recovery)
-2026-10-01 - Remote skinned LOD tightens to 70m with hysteresis (55m swap-back) — far mannequins drop ~80% tris; mats atlas lint cleanup
+2026-10-01 - Perf dump now reports UNMASKED_RENDERER_WEBGL + devicePixelRatio + canvas res ï¿½ next LOW-FPS dump identifies SwiftShader/wrong-GPU without a chrome://gpu detour
+2026-10-01 - Auto-quality sheds bloom/post-process passes at gpu level >=4 ï¿½ full-screen mip-blur chain was the last fill cost left on starving GPUs (restores on recovery)
+2026-10-01 - Remote skinned LOD tightens to 70m with hysteresis (55m swap-back) ï¿½ far mannequins drop ~80% tris; mats atlas lint cleanup
 2026-10-01 - Far-LOD skinned rig: mannequin_lod1.glb (1215 tris, meshopt-simplified, skins preserved) swaps in past 140m â€” remote vertex/skinning cost ~-80%
 2026-10-01 - Volumetric cloud dome sheds at gpu level >=3 under the auto-quality ladder (full-sky fragment cost on a raster-bound GPU)
 2026-10-01 - Jump dust + bounce FX migrated to batched quarks (was 20-48 per-mesh draw calls per event); BlastEmitter gained forward-cone mode
@@ -1001,14 +1003,14 @@
 2026-10-01 - ball trail attr uploads gated on live dots (~100 tiny uploads/frame idle); sparkle emit skipped past 200m
 2026-10-01 - interior material dedup by canonical name (.NNN suffix): 1014 meshes -> 44, scene calls ~570->185, shadow-pass delta 681->77 calls
 2026-10-01 - __renderScan staged render profiler; interior casters size+distance gated (shadow pass 681->~430 calls); interior merge cells 512->2048m (scene calls ~570->~300); shadow frustum 250->130m
-2026-10-01 - foeSeen LOS raycasts cached ~200ms per bot (sheep ignore-meter only) — was one ray per foe per bot per frame
-2026-10-01 - VFX quality scaler on the gpu/cpu ladders (gpu>=2: 0.7x, gpu>=4: 0.45x, cpu>=1: 0.6x) — quarks CPU sim is the fight-scaling hotspot, density now trades for frame time
-2026-10-01 - Shadow frustum 400m->250m half-extent (0.24m/texel, fewer casters in-frustum) + shadow map updates every 2nd frame at all levels — pass measured at ~46% of frame on a 3070Ti
-2026-10-01 - FPS cap setting (off/30/60/120) in SETTINGS — render-skip only, sim/input stay full-rate; battery + headroom measuring
+2026-10-01 - foeSeen LOS raycasts cached ~200ms per bot (sheep ignore-meter only) ï¿½ was one ray per foe per bot per frame
+2026-10-01 - VFX quality scaler on the gpu/cpu ladders (gpu>=2: 0.7x, gpu>=4: 0.45x, cpu>=1: 0.6x) ï¿½ quarks CPU sim is the fight-scaling hotspot, density now trades for frame time
+2026-10-01 - Shadow frustum 400m->250m half-extent (0.24m/texel, fewer casters in-frustum) + shadow map updates every 2nd frame at all levels ï¿½ pass measured at ~46% of frame on a 3070Ti
+2026-10-01 - FPS cap setting (off/30/60/120) in SETTINGS ï¿½ render-skip only, sim/input stay full-rate; battery + headroom measuring
 2026-10-01 - Weak-GPU first-run detection: probe UNMASKED_RENDERER_WEBGL at boot; SwiftShader/llvmpipe/Intel iGPU/Mali/old Adreno with no stored picks seeds fps-pixelated=1 + shadows off (chromebooks start on the low tier, explicit picks always win)
-2026-10-01 - Perf dump now reports UNMASKED_RENDERER_WEBGL + devicePixelRatio + canvas res — next LOW-FPS dump identifies SwiftShader/wrong-GPU without a chrome://gpu detour
-2026-10-01 - Auto-quality sheds bloom/post-process passes at gpu level >=4 — full-screen mip-blur chain was the last fill cost left on starving GPUs (restores on recovery)
-2026-10-01 - Remote skinned LOD tightens to 70m with hysteresis (55m swap-back) — far mannequins drop ~80% tris; mats atlas lint cleanup
+2026-10-01 - Perf dump now reports UNMASKED_RENDERER_WEBGL + devicePixelRatio + canvas res ï¿½ next LOW-FPS dump identifies SwiftShader/wrong-GPU without a chrome://gpu detour
+2026-10-01 - Auto-quality sheds bloom/post-process passes at gpu level >=4 ï¿½ full-screen mip-blur chain was the last fill cost left on starving GPUs (restores on recovery)
+2026-10-01 - Remote skinned LOD tightens to 70m with hysteresis (55m swap-back) ï¿½ far mannequins drop ~80% tris; mats atlas lint cleanup
 2026-10-01 - Far-LOD skinned rig: mannequin_lod1.glb (1215 tris, meshopt-simplified, skins preserved) swaps in past 140m â€” remote vertex/skinning cost ~-80%
 2026-10-01 - Volumetric cloud dome sheds at gpu level >=3 under the auto-quality ladder (full-sky fragment cost on a raster-bound GPU)
 2026-10-01 - Jump dust + bounce FX migrated to batched quarks (was 20-48 per-mesh draw calls per event); BlastEmitter gained forward-cone mode
