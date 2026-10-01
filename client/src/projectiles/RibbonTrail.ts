@@ -254,16 +254,15 @@ export class RibbonTrail {
     return this.time - this.st[this.head] > this.life;
   }
 
-  /** Cadence gates: past ~200m a ribbon is a few px, and stopped ribbons
-   *  only rewrite for the fade — both halve to ~30Hz invisibly. Returns
-   *  whether the caller should early-out, and (via out-far) whether the
-   *  trail counts as far for the billboard freeze. */
+  /** Cadence gate: EVERY ribbon rewrites at ~30Hz — trails live <0.5s,
+   *  so half-rate fades are invisible and the per-sample loop halves.
+   *  Returns whether the caller should early-out, and (via out-far)
+   *  whether the trail counts as far for the billboard freeze. */
   private skipThisFrame(camPos: THREE.Vector3 | undefined, outFar: { v: boolean }): boolean {
-    if (!camPos || this._far === undefined) return this.stopped && (this._far ^= 1) === 1;
+    if (!camPos) return (this._far ^= 1) === 1;
     const dx = camPos.x - this.px[this.head], dy = camPos.y - this.py[this.head], dz = camPos.z - this.pz[this.head];
     outFar.v = dx * dx + dy * dy + dz * dz > 200 * 200;
-    if (this.stopped || outFar.v) return (this._far ^= 1) === 1;
-    return false;
+    return (this._far ^= 1) === 1;
   }
 
   update(dt: number, camPos?: THREE.Vector3): void {
