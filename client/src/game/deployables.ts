@@ -689,15 +689,7 @@ export class Deployables {
         this.pods.splice(i, 1);
       }
     }
-    for (let i = this.items.length - 1; i >= 0; i--) {
-      const item = this.items[i]!;
-      if (!item.dead) continue;
-      // A server-acked local item also sits in byId — drop it or
-      // applyDeployHp/remoteWeld keep resolving a corpse until deployGone.
-      if (item.serverId !== undefined) this.byId.delete(item.serverId);
-      item.dispose();
-      this.items.splice(i, 1);
-    }
+    this.reapDeadItems();
     // Weld beams expire a quarter-second after the last relayed tick —
     // deployHp cadence is ~100ms, so a real weld never gaps long enough
     // to flicker while a stopped one clears fast.
@@ -707,6 +699,18 @@ export class Deployables {
       if (nowMs - w.last > 250) { w.beam.dispose(); this.weldBeams.delete(id); }
     }
     this.rockets.update(dt);
+  }
+
+  // A server-acked local item also sits in byId — drop it or
+  // applyDeployHp/remoteWeld keep resolving a corpse until deployGone.
+  private reapDeadItems(): void {
+    for (let i = this.items.length - 1; i >= 0; i--) {
+      const item = this.items[i]!;
+      if (!item.dead) continue;
+      if (item.serverId !== undefined) this.byId.delete(item.serverId);
+      item.dispose();
+      this.items.splice(i, 1);
+    }
   }
 
   dispose(): void {
