@@ -57,6 +57,13 @@ export class Explosion {
     if (alive === 0) this.dead = true;
   }
 
+  /** Distance-gated tick — far blasts age so they retire on schedule but
+   *  skip the layer/spark buffer writes nobody can see. */
+  tickAge(dt: number): void {
+    this.elapsed += dt;
+    if (this.elapsed > 6) this.dead = true;
+  }
+
   dispose(): void {
     this.layers?.dispose();
     this.sparks?.dispose();

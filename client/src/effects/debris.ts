@@ -66,6 +66,8 @@ export class Debris {
   private static readonly GHOST_GROW = 1.6;
   private static ghostPool: { mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial }[] = [];
 
+  readonly ox: number; readonly oy: number; readonly oz: number;
+
   constructor(
     scene: THREE.Scene, terrain: Terrain,
     pos: Vec3Like,
@@ -74,6 +76,7 @@ export class Debris {
     const { x: px, y: py, z: pz } = pos;
     this.scene   = scene;
     this.terrain = terrain;
+    this.ox = px; this.oy = py; this.oz = pz;
 
     if (opts.shellRadius) this.allocGhost(scene, opts.shellRadius, color, px, py, pz);
 
@@ -225,6 +228,20 @@ export class Debris {
         continue;
       }
       if (this.stepShard(s, dt)) alive++;
+    }
+    if (alive === 0) this.dead = true;
+  }
+
+  /** Distance gate — shards past ~260m are sub-pixel, so they just age
+   *  out instead of paying per-shard physics + instance writes. */
+  tickAge(dt: number): void {
+    if (this.ghost) this.update(dt); // ghost fade is 0.15s, near or far it ends the same
+    let alive = 0;
+    for (const s of this.shards) {
+      if (s.dead) continue;
+      s.elapsed += dt;
+      if (s.elapsed >= s.life) this.removeShard(s);
+      else alive++;
     }
     if (alive === 0) this.dead = true;
   }

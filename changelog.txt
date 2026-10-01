@@ -1,3 +1,4 @@
+2026-10-01 - distance-gate far explosions and player debris (260m rule)
 2026-10-01 - unified trail-dot Points layer + partial ribbon buffer uploads
 2026-10-01 - instanced particle buckets, half-rate shadow updates, per-fxJob profiling
 2026-10-01 - offscreen remotes skip the anim mixer (frustum test per frame)

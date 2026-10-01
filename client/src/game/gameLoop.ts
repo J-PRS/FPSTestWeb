@@ -60,6 +60,7 @@ const _aliveCount = (l: { dead: boolean }[]) => { let n = 0; for (const e of l) 
 // and draw calls crush the frame (seen: 155 live, 30k particles). Past
 // the cap the oldest is retired early; it loses only its tail frames.
 const MAX_LIVE_EXPLOSIONS = 48;
+const VFX_NEAR_SQ = 260 * 260;
 
 export interface GameLoopDeps {
   camera: THREE.PerspectiveCamera;
@@ -265,13 +266,33 @@ function fxTick(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof cre
   st.fxJobs.push(
     ['effects', () => deps.lazyEffects().update(fxDt)],
     ['debris', () => updateDeadList(deps.world.debrisList, fxDt)],
-    ['pdebris', () => updateDeadList(deps.world.playerDebrisList, fxDt)],
+    ['pdebris', () => {
+      const list = deps.world.playerDebrisList;
+      const cam = deps.camera.position;
+      for (let i = list.length - 1; i >= 0; i--) {
+        const d = list[i]!;
+        const dx = d.ox - cam.x, dy = d.oy - cam.y, dz = d.oz - cam.z;
+        if (dx * dx + dy * dy + dz * dz < VFX_NEAR_SQ) d.update(fxDt);
+        else d.tickAge(fxDt);
+        if (d.dead) { d.dispose(); list.splice(i, 1); }
+      }
+    }],
     ['gibs', () => updateGibs(fxDt)],
     ['scorch', () => updateDeadList(deps.world.scorches, fxDt)],
     ['explosions', () => {
       const ex = deps.world.explosions;
       for (let i = 0; i <= ex.length - MAX_LIVE_EXPLOSIONS; i++) ex[i]!.dead = true;
-      updateDeadList(ex, fxDt);
+      // Same 260m rule as the vfx sim-pause — a blast past it is sub-pixel,
+      // so it ages out without paying the layer/spark buffer writes.
+      const cam = deps.camera.position;
+      for (let i = ex.length - 1; i >= 0; i--) {
+        const e = ex[i]!;
+        if (!e.dead) {
+          if (e.pos.distanceToSquared(cam) < VFX_NEAR_SQ) e.update(fxDt);
+          else e.tickAge(fxDt);
+        }
+        if (e.dead) { e.dispose(); ex.splice(i, 1); }
+      }
     }],
     ['implosions', () => updateDeadList(deps.world.implosions, fxDt)],
     ['aoegiz', () => updateDeadList(deps.world.aoeGizmos, fxDt)],
