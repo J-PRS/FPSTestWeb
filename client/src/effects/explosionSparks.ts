@@ -40,8 +40,10 @@ class SparkBatch {
   mesh: THREE.LineSegments;
   private free: { start: number; count: number }[] = [];
   private next = 0;
+  /** Outstanding slices — the overflow-batch retire check. */
+  used = 0;
 
-  constructor(scene: THREE.Scene) {
+  constructor(private scene: THREE.Scene) {
     this.posAttr.setUsage(THREE.DynamicDrawUsage);
     this.colAttr.setUsage(THREE.DynamicDrawUsage);
     this.geo.setAttribute('position', this.posAttr);
@@ -59,17 +61,25 @@ class SparkBatch {
       if (this.free[i]!.count >= n) {
         const s = this.free.splice(i, 1)[0]!;
         if (s.count > n) this.free.push({ start: s.start + n, count: s.count - n });
+        this.used += n;
         return s.start;
       }
     }
     if (this.next + n > MAX_SPARKS) return -1;
-    const s = this.next; this.next += n; return s;
+    const s = this.next; this.next += n; this.used += n; return s;
+  }
+
+  dispose(): void {
+    this.scene.remove(this.mesh);
+    this.geo.dispose();
+    (this.mesh.material as THREE.Material).dispose();
   }
 
   release(start: number, n: number): void {
     this.posAttr.array.fill(0, start * SPARK_FLOATS, (start + n) * SPARK_FLOATS);
     this.colAttr.array.fill(0, start * SPARK_FLOATS, (start + n) * SPARK_FLOATS);
     this.free.push({ start, count: n });
+    this.used -= n;
     this.mark(start * SPARK_FLOATS, (start + n) * SPARK_FLOATS);
     this.flush();
   }
@@ -93,17 +103,41 @@ class SparkBatch {
   }
 }
 
-let _batch: SparkBatch | null = null;
+// Dynamic batches per scene: a blast's spark range used to be refused
+// silently once the single shared buffer filled (alloc returned -1 and
+// finalize dropped the whole burst). Now sibling batches spawn on demand
+// and retire when empty — batches[0] is the floor.
+const sparkBatches = new Map<THREE.Scene, SparkBatch[]>();
+
+function sparkAlloc(scene: THREE.Scene, n: number): { batch: SparkBatch; base: number } {
+  let list = sparkBatches.get(scene);
+  if (!list) { list = [new SparkBatch(scene)]; sparkBatches.set(scene, list); }
+  for (const b of list) {
+    const base = b.alloc(n);
+    if (base >= 0) return { batch: b, base };
+  }
+  const b = new SparkBatch(scene);
+  list.push(b);
+  return { batch: b, base: b.alloc(n)! };
+}
+
+function sparkRelease(batch: SparkBatch, start: number, n: number): void {
+  batch.release(start, n);
+  // Retire a fully-drained overflow batch — batches[0] stays resident.
+  for (const list of sparkBatches.values()) {
+    const i = list.indexOf(batch);
+    if (i < 0) continue;
+    if (i > 0 && batch.used === 0) { list.splice(i, 1); batch.dispose(); }
+    return;
+  }
+}
 
 export class ExplosionSparks {
   private sparks: Spark[] = [];
-  private batch: SparkBatch;
+  private batch: SparkBatch | null = null;
   private base = -1;
 
-  constructor(private scene: THREE.Scene) {
-    _batch ??= new SparkBatch(scene);
-    this.batch = _batch;
-  }
+  constructor(private scene: THREE.Scene) {}
 
   /** Register a spark — spawn code fills vel/life/color on the returned
    *  record before finalize() bakes the batch. */
@@ -122,17 +156,18 @@ export class ExplosionSparks {
   finalize(): void {
     const n = this.sparks.length;
     if (!n) return;
-    this.base = this.batch.alloc(n);
-    if (this.base < 0) { this.sparks = []; return; }
+    const a = sparkAlloc(this.scene, n);
+    this.batch = a.batch;
+    this.base = a.base;
     for (let i = 0; i < n; i++) this.sparks[i]!.slice = (this.base + i) * SPARK_FLOATS;
   }
 
   update(dt: number): number {
     let alive = 0;
     let wrote = false;
-    if (this.base < 0) return 0;
-    const posArr = this.batch.posAttr.array as Float32Array;
-    const colArr = this.batch.colAttr.array as Float32Array;
+    if (this.base < 0 || !this.batch) return 0;
+    const posArr = this.batch!.posAttr.array as Float32Array;
+    const colArr = this.batch!.colAttr.array as Float32Array;
     for (const spark of this.sparks) {
       if (spark.dead) continue;
       spark.elapsed += dt;
@@ -196,7 +231,8 @@ export class ExplosionSparks {
   }
 
   dispose(): void {
-    if (this.base >= 0) this.batch.release(this.base, this.sparks.length);
+    if (this.base >= 0 && this.batch) sparkRelease(this.batch, this.base, this.sparks.length);
+    this.batch = null;
     this.base = -1;
     this.sparks = [];
   }

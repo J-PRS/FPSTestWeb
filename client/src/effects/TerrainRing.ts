@@ -25,14 +25,20 @@ interface RingPool {
   ghostCol: THREE.BufferAttribute;
   free: number[];
   live: number;
+  scene: THREE.Scene;
+  geo: THREE.BufferGeometry;
+  ghostGeo: THREE.BufferGeometry;
+  meshes: THREE.Mesh[];
+  mats: THREE.Material[];
 }
 
-const pools = new Map<THREE.Scene, RingPool>();
+// Dynamic batching, same contract as the trail/dot batches: spawn a
+// sibling pool when every slot is taken (two extra draw calls: main +
+// ghost), retire an overflow pool the moment it empties — pools[0] is
+// the floor. The old code silently no-op'd the ring once 48 were live.
+const pools = new Map<THREE.Scene, RingPool[]>();
 
-function ringPool(scene: THREE.Scene): RingPool {
-  const hit = pools.get(scene);
-  if (hit) return hit;
-
+function makePool(scene: THREE.Scene): RingPool {
   const geo = new THREE.BufferGeometry();
   const pos = new THREE.BufferAttribute(new Float32Array(MAX_RINGS * VERTS * 3), 3);
   const col = new THREE.BufferAttribute(new Float32Array(MAX_RINGS * VERTS * 3), 3);
@@ -79,10 +85,38 @@ function ringPool(scene: THREE.Scene): RingPool {
   ghostMesh.layers.enable(BLOOM_LAYER);
   scene.add(ghostMesh);
 
-  const pool: RingPool = { pos, col, ghostCol, free: [], live: 0 };
+  const pool: RingPool = {
+    pos, col, ghostCol, free: [], live: 0,
+    scene, geo, ghostGeo, meshes: [mesh, ghostMesh], mats: [mat, ghostMat],
+  };
   for (let i = MAX_RINGS - 1; i >= 0; i--) pool.free.push(i);
-  pools.set(scene, pool);
   return pool;
+}
+
+function acquireRingSlot(scene: THREE.Scene): { pool: RingPool; slot: number } {
+  let list = pools.get(scene);
+  if (!list) { list = []; pools.set(scene, list); }
+  for (const p of list) {
+    if (p.live < MAX_RINGS) {
+      p.live++;
+      return { pool: p, slot: p.free.pop()! };
+    }
+  }
+  const p = makePool(scene);
+  list.push(p);
+  p.live++;
+  return { pool: p, slot: p.free.pop()! };
+}
+
+function releaseRingSlot(pool: RingPool, slot: number): void {
+  pool.free.push(slot);
+  pool.live--;
+  const list = pools.get(pool.scene);
+  if (!list || pool === list[0] || pool.live > 0) return;
+  list.splice(list.indexOf(pool), 1);
+  for (const m of pool.meshes) pool.scene.remove(m);
+  pool.geo.dispose(); pool.ghostGeo.dispose();
+  for (const m of pool.mats) m.dispose();
 }
 
 export class TerrainRing {
@@ -109,17 +143,11 @@ export class TerrainRing {
     this.terrain = terrain;
     this.baseOpacity = baseOpacity;
     this.ghostOpacity = ghostOpacity;
-    this.pool = ringPool(scene);
+    const a = acquireRingSlot(scene);
+    this.pool = a.pool;
+    this.slot = a.slot;
     const hot = new THREE.Color(color).multiplyScalar(EMIT_GAIN);
     this.rgb = [hot.r, hot.g, hot.b];
-    if (this.pool.live >= MAX_RINGS) {
-      // Saturated — fail soft: mark the slot dead so update() disposes instantly
-      this.slot = -1;
-      this.elapsed = life;
-      return;
-    }
-    this.slot = this.pool.free.pop()!;
-    this.pool.live++;
   }
 
   update(dt: number): boolean {
@@ -176,8 +204,7 @@ export class TerrainRing {
     this.pool.col.needsUpdate = true;
     this.pool.ghostCol.addUpdateRange(base, VERTS * 3);
     this.pool.ghostCol.needsUpdate = true;
-    this.pool.free.push(this.slot);
-    this.pool.live--;
+    releaseRingSlot(this.pool, this.slot);
     this.slot = -1;
   }
 }
