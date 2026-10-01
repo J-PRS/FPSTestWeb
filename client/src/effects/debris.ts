@@ -364,7 +364,7 @@ export class Debris {
     for (const b of this.insts) {
       if (!b) continue;
       this.scene.remove(b.mesh);
-      const pool = Debris.instPool.get(this.insts.indexOf(b));
+      let pool = Debris.instPool.get(this.insts.indexOf(b));
       if (!pool) Debris.instPool.set(this.insts.indexOf(b), pool = []);
       if (pool.length < Debris.INST_POOL_KEEP) pool.push(b.mesh);
       else b.mesh.dispose();
