@@ -9,24 +9,16 @@ import {
 } from '../core/config.js';
 import { Terrain } from '../world/terrain.js';
 import type { Targetable } from './balls.js';
-import { allocSlots, freeSlots, getSwarm, getShadows } from './swarms.js';
+import { allocSlots, freeSlots } from './swarms.js';
 import type { SwarmPart, SwarmSlotOwner } from './swarm.js';
 import { getGlowTexture } from '../effects/glowTexture.js';
+import { writeInstances } from './snakePose.js';
 import { type SimSlither, makeSimSlither, stepSlither } from '../../../shared/creatureSim.js';
 import { bindNetSim, applyNetEdgeSim, updateNetSim, claimDamageMelee, type NetBindArgs } from '../game/netMelee.js';
 
 const _dir = new THREE.Vector3();
-const _root = new THREE.Matrix4();
-const _local = new THREE.Matrix4();
-const _world = new THREE.Matrix4();
-const _p = new THREE.Vector3();
-const _q = new THREE.Quaternion();
-const _e = new THREE.Euler();
-const _s = new THREE.Vector3();
 
 // Part indices into the snake swarm — order must match snakeParts().
-const PART_SEG = 0;   // SEGS_PER per snake — the body chain IS the animal
-const PART_EYE = 1;   // two per snake — set wide on the big head lobe
 const SEGS_PER = 8;
 const EYES_PER = 2;
 
@@ -84,17 +76,17 @@ export class Snake implements Targetable, SwarmSlotOwner {
 
   swarmSlot = -1;
   shadowSlot = -1;
-  private hasSlots = false;
+  hasSlots = false;
 
-  private animT = Math.random() * 10;
+  animT = Math.random() * 10;
   yaw = 0; // net replay writes this — drives the segment wave orientation
-  private flash = 0;
+  flash = 0;
   private strikeCd = 0;
   private stunTimer = 0;
 
   // Strike state machine: 0 = cruising, >0 windup timer, lunging bool
-  private windup = 0;
-  private lunge = 0;
+  windup = 0;
+  lunge = 0;
 
   // Burrow-in state (set by spawn) — slides up out of the ground on emerge
   emergeT = 0;
@@ -231,72 +223,9 @@ export class Snake implements Targetable, SwarmSlotOwner {
     this.vel.z *= Math.max(0, 1 - 4 * dt);
   }
 
-  private groundY = 0; // terrain height at center — segment heights are deltas
+  groundY = 0; // terrain height at center — segment heights are deltas
 
-  writeInstances(terrain: Terrain): void {
-    if (!this.hasSlots) return;
-    const swarm = getSwarm('snake');
-    if (!swarm) return;
-    const slot = this.swarmSlot;
-    const r = this.radius;
-
-    _e.set(0, this.yaw, 0);
-    _q.setFromEuler(_e);
-    _root.compose(this.pos, _q, _s.setScalar(r));
-
-    const spd = Math.hypot(this.vel.x, this.vel.z);
-    const crawl = Math.min(1, spd / SNAKE_SPEED);
-    const fr = this.flash > 0 ? 4 : 1;
-    // Windup pose: head segments lift and the body pulls into an S — read
-    // instantly as "it's about to strike". Lunge straightens the wave.
-    const coiling = this.windup > 0 ? 1 : 0;
-    const lunging = this.lunge > 0 ? 1 : 0;
-    const waveAmp = (0.34 * crawl + coiling * 0.5) * (1 - lunging * 0.7);
-    const len = 3.2; // body length in radius units
-
-    for (let i = 0; i < SEGS_PER; i++) {
-      const t = i / (SEGS_PER - 1); // 0 tail → 1 head
-      // Lateral S-wave travels tail→head — the signature snake read
-      const lat = Math.sin(this.animT * 8 - i * 1.25) * waveAmp * (1 - t * 0.4);
-      const lz = (t - 0.45) * len * (1 - coiling * 0.35); // coil shortens
-      // Windup rears the head end up and back
-      const rear = coiling * t * t * 1.6;
-      // Terrain conform per segment — same trick as the grub
-      const cy = Math.cos(this.yaw), sy = Math.sin(this.yaw);
-      const wx = this.pos.x + lat * cy + lz * sy;
-      const wz = this.pos.z - lat * sy + lz * cy;
-      const segGround = terrain.getHeight(wx, wz) - this.groundY;
-      // Taper: head (t=1) is the big lobe, tail thins fast
-      const taper = t < 0.3 ? 0.35 + t * 2 : 0.9 + (t - 0.9) * 1.2;
-      _e.set(coiling * -0.5 * t, 0, 0); // head pitches up while coiling
-      _q.setFromEuler(_e);
-      _local.compose(
-        _p.set(lat, Math.max(0, segGround) + 0.15 + rear, lz - coiling * t * 0.4),
-        _q,
-        _s.setScalar(taper),
-      );
-      _world.multiplyMatrices(_root, _local);
-      swarm.setMatrix(PART_SEG, slot * SEGS_PER + i, _world);
-      // Banded viper pattern — alternating light/dark lobes down the spine
-      const band = i % 2 === 0 ? 1.0 : 0.6;
-      swarm.setColor(PART_SEG, slot * SEGS_PER + i,
-        this.color.r * fr * band, this.color.g * fr * band, this.color.b * fr * band);
-    }
-
-    // Eyes set wide on the head lobe (last segment)
-    const headZ = (1 - 0.45) * len * (1 - coiling * 0.35) - coiling * 0.4;
-    const headRear = coiling * 1.6;
-    for (let i = 0; i < EYES_PER; i++) {
-      const side = i === 0 ? -1 : 1;
-      _local.compose(
-        _p.set(side * 0.55, 0.5 + headRear, headZ + 0.35), _q.identity(), _s.setScalar(0.22),
-      );
-      _world.multiplyMatrices(_root, _local);
-      swarm.setMatrix(PART_EYE, slot * EYES_PER + i, _world);
-    }
-
-    getShadows()?.set(this, this.pos, r * 2.2, 0.35);
-  }
+  writeInstances(terrain: Terrain): void { writeInstances(this, terrain); }
 
   takeDamage(damage: number): boolean {
     if (this.netDriven) return claimDamageMelee(this, damage, Snake.hitClaim);

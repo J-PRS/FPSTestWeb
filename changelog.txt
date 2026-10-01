@@ -1,3 +1,4 @@
+2026-09-30 - Snake split: instance pose (slither segment chain, eyes, shadow) -> snakePose.ts (331->259).
 2026-09-30 - Scarab split: per-frame instance pose (slope-hug body, scuttle legs, eyes, shadow) -> scarabPose.ts (338->276).
 2026-09-30 - PlayerVisuals split: camera paths (1p/3p boom, frozen, observer free-fly) + feet gizmo -> pvCam.ts (314->233).
 2026-09-30 - lightningBeam split: scene-graph assembly (crossed ribbons, contact sprite, spark fountain) -> beamBuild.ts (346->258).
