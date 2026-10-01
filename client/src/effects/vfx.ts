@@ -63,13 +63,30 @@ const MAX_LIVE_SYSTEMS = 320;
  *  shrinks the per-frame sim cost itself (the cap only bounds count). */
 const VFX_SIM_RADIUS_SQ = 260 * 260;
 
+// Dead-system starvation counters: trail systems live outside `live`
+// (they're looping emitters owned by projectiles), so an owner that
+// forgets dispose() leaves the system attached forever — batcher.update
+// keeps simulating it. particleNum 0 across ~1s of frames = orphaned.
+const starveFrames = new Map<ParticleSystem, number>();
+const STARVE_LIMIT = 60;
+
 export function updateVfx(dt: number, camPos?: THREE.Vector3): void {
   // Distance-pause BEFORE the batch sim: skip offscreen systems this frame.
   // Covers every attached system (live bursts AND projectile trails).
-  if (camPos && batcher) {
+  if (batcher) {
     for (const ps of batcher.systemToBatchIndex.keys()) {
-      const em = ps.emitter as ParticleSystem['emitter'];
-      ps.paused = em.position.distanceToSquared(camPos) > VFX_SIM_RADIUS_SQ;
+      if (camPos) {
+        const em = ps.emitter as ParticleSystem['emitter'];
+        ps.paused = em.position.distanceToSquared(camPos) > VFX_SIM_RADIUS_SQ;
+      }
+      if (live.has(ps)) continue;
+      const starved = ps.particleNum === 0 ? (starveFrames.get(ps) ?? 0) + 1 : 0;
+      if (starved > STARVE_LIMIT) {
+        batcher.deleteSystem(ps);
+        scene?.remove(ps.emitter);
+        starveFrames.delete(ps);
+      } else if (starved) starveFrames.set(ps, starved);
+      else starveFrames.delete(ps);
     }
   }
   batcher?.update(dt);
