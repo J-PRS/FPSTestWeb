@@ -42,6 +42,11 @@ class TrailBatch {
     this.dirty = true;
   }
 
+  // Slots alloc lowest-first so the used range stays dense; the highest-
+  // watermark only changes on alloc/free, not per flush.
+  hw = 0;
+  slotsDirty = true;
+
   constructor(scene: THREE.Scene) {
     this.pos = new Float32Array(MAX_TRAILS * VERTS * 3);
     this.col = new Float32Array(MAX_TRAILS * VERTS * 3);
@@ -90,11 +95,13 @@ class TrailBatch {
     }
     this.dirtyLo = Infinity;
     this.dirtyHi = 0;
-    // Slots allocate lowest-first so the used range stays dense; drawing
-    // past the highest live slot only burns vertex shader on zeroed tris.
-    let hw = 0;
-    for (const s of this.used) if (s + 1 > hw) hw = s + 1;
-    this.geo.setDrawRange(0, hw * IDX);
+    if (this.slotsDirty) {
+      this.slotsDirty = false;
+      let hw = 0;
+      for (const s of this.used) if (s + 1 > hw) hw = s + 1;
+      this.hw = hw;
+    }
+    this.geo.setDrawRange(0, this.hw * IDX);
   }
 }
 
@@ -156,7 +163,7 @@ export class RibbonTrail {
   private claimSlot(scene: THREE.Scene): void {
     this.batch = batchFor(scene);
     this.slot = this.batch.free.pop() ?? -1;
-    if (this.slot >= 0) this.batch.used.add(this.slot);
+    if (this.slot >= 0) { this.batch.used.add(this.slot); this.batch.slotsDirty = true; }
   }
 
   private releaseSlot(): void {
@@ -166,6 +173,7 @@ export class RibbonTrail {
     this.batch.col.fill(0, b, b + VERTS * 3);
     this.batch.mark(b, b + VERTS * 3);
     this.batch.used.delete(this.slot);
+    this.batch.slotsDirty = true;
     this.batch.free.push(this.slot);
     // Keep descending so pop() hands out the smallest slot — used slots
     // stay packed at the front of the index buffer for drawRange.
