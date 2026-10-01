@@ -257,29 +257,11 @@ async function applySky(deps: NetCtx['deps'], httpUrl: string, skyDir: string | 
     if (skyMesh) skyMesh.visible = true;
     return;
   }
-  // T2 sky exports are baked in the engine's own cube layout, not GL's:
-  // the up/down files land swapped and the -X/+Z/-Z sides come out
-  // v-flipped. Verified against the exported faces' edge texels (side
-  // tops are all dark ≈ ny, bottoms all bright ≈ py); the canvas pass
-  // below reassembles them into three's [px,nx,py,ny,pz,nz] convention.
-  const FLIP = new Set(['nx', 'pz', 'nz']);
-  const SLOTS: Record<string, number> = { px: 0, nx: 1, ny: 2, py: 3, pz: 4, nz: 5 };
+  const order = SKY_FACES.map((f) => `${httpUrl}/maps/${skyDir}/${f}.png`);
   try {
-    const faces = await Promise.all(SKY_FACES.map(async (name) => {
-      const img = await new THREE.ImageLoader().loadAsync(`${httpUrl}/maps/${skyDir}/${name}.png`);
-      const c = document.createElement('canvas');
-      c.width = img.width; c.height = img.height;
-      const ctx = c.getContext('2d')!;
-      if (FLIP.has(name)) { ctx.translate(0, img.height); ctx.scale(1, -1); }
-      ctx.drawImage(img, 0, 0);
-      return { name, c };
-    }));
-    const images: HTMLCanvasElement[] = new Array(6);
-    for (const f of faces) images[SLOTS[f.name]] = f.c;
-    const cube = new THREE.CubeTexture(images);
-    cube.colorSpace = THREE.SRGBColorSpace;
-    cube.needsUpdate = true;
-    deps.lazyScene().background = cube;
+    // The exports are already in GL cube layout — CubeTextureLoader's own
+    // face flip orients them correctly (pre-flipping double-flips).
+    deps.lazyScene().background = await new THREE.CubeTextureLoader().loadAsync(order);
     if (skyMesh) skyMesh.visible = false;
   } catch (e) {
     const src = (e as ProgressEvent)?.target as { src?: string } | undefined;

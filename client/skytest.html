@@ -1,0 +1,41 @@
+<!doctype html>
+<html><body style="margin:0">
+<script type="module">
+// Cube-assembly sandbox: renders the t2 sky faces on a cube and lets the
+// URL pick face order/flips, e.g. skytest.html?map=px,nx,ny,py,pz,nz&flip=nx,pz,nz
+import * as THREE from 'three';
+
+const qp = new URLSearchParams(location.search);
+const skyDir = qp.get('dir') || 't2/escalade/sky';
+const host = qp.get('host') || 'http://localhost:8001';
+const faces = (qp.get('map') || 'px,nx,py,ny,pz,nz').split(',');
+const flip = new Set((qp.get('flip') || '').split(',').filter(Boolean));
+const mode = qp.get('mode') || 'canvas'; // canvas | raw
+
+const renderer = new THREE.WebGLRenderer({ antialias: false });
+renderer.setSize(innerWidth, innerHeight);
+document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+const cam = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.1, 100);
+cam.rotation.y = (parseFloat(qp.get('yaw')) || 0) * Math.PI / 180;
+cam.rotation.x = (parseFloat(qp.get('pitch')) || 0) * Math.PI / 180;
+
+const loader = new THREE.ImageLoader();
+const imgs = await Promise.all(faces.map(async (f) => {
+  const img = await loader.loadAsync(`${host}/maps/${skyDir}/${f}.png`);
+  if (mode === 'raw') return img;
+  const c = document.createElement('canvas');
+  c.width = img.width; c.height = img.height;
+  const ctx = c.getContext('2d');
+  if (flip.has(f)) { ctx.translate(0, img.height); ctx.scale(1, -1); }
+  ctx.drawImage(img, 0, 0);
+  return c;
+}));
+const cube = new THREE.CubeTexture(imgs);
+cube.colorSpace = THREE.SRGBColorSpace;
+cube.needsUpdate = true;
+scene.background = cube;
+renderer.render(scene, cam);
+window.__done = true;
+</script>
+</body></html>
