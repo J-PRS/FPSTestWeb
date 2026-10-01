@@ -19,8 +19,6 @@ export {
 } from '../../../shared/constants.js';
 
 // Player jetpack constants
-export const JET_FORCE_UP = 35.0; // Vertical jetpack force
-export const JET_FORCE_DIR = 10.0; // Lateral jetpack control
 export const MAX_ENERGY = 60.0; // Maximum jetpack energy
 export const JET_DRAIN = 15.0; // Energy drain per second
 export const JET_CHARGE = 8.0; // Energy recharge per second
@@ -28,7 +26,6 @@ export const JET_CHARGE = 8.0; // Energy recharge per second
 // Weapon constants
 export const FIRE_RATE = 0.8; // Rocket fire rate (seconds)
 export const DISC_RATE = 1.0; // Disc fire rate (seconds)
-export const GRENADE_RATE = 1.2; // Grenade fire rate (seconds)
 export const CHAINGUN_RATE = 0.09; // Chaingun fire rate (seconds)
 export const LG_RATE = 0.05;       // Lightning gun tick — clean 20/s for the stepped ramp
 export const LG_RANGE = 55.0;      // hard beam cap — mid-range tracker, outranged by totems
@@ -437,15 +434,6 @@ export const CLOUD_WIND_SPEED = 3.0; // Wind speed
 export const CLOUD_MIN_HEIGHT = 500; // Minimum cloud height
 export const CLOUD_MAX_HEIGHT = 900; // Maximum cloud height
 export const CLOUD_SPREAD_RADIUS = 4000; // Cloud spread radius
-export const CLOUD_SPHERES_PER_CLOUD = 10; // Spheres per cloud cluster
-export const CLOUD_DEFAULT_MIN_HEIGHT = 400; // Default minimum height
-export const CLOUD_DEFAULT_MAX_HEIGHT = 800; // Default maximum height
-export const CLOUD_DEFAULT_SPREAD_RADIUS = 3000; // Default spread radius
-export const CLOUD_WIND_OFFSET_RANGE = 100; // Wind offset random range
-export const CLOUD_POSITION_RANGE_XZ = 150; // Position random range X/Z
-export const CLOUD_POSITION_RANGE_Y = 50; // Position random range Y
-export const CLOUD_SCALE_MIN = 30; // Minimum cloud sphere scale
-export const CLOUD_SCALE_RANGE = 70; // Cloud sphere scale range
 
 // Lighting constants
 export const AMBIENT_COLOR = 0x886644; // Ambient light color
