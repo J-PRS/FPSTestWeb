@@ -17,6 +17,14 @@ export namespace Logger {
   let currentTag: string = '';
   let logBuffer: string[] = [];
   let maxBufferSize = 1000; // Keep last 1000 log entries
+  // Trim a whole chunk once over cap+grace instead of shift() per push —
+  // shift() is O(n) on every line under sustained log spam.
+  const TRIM_GRACE = 128;
+  function trimBuffer(): void {
+    if (logBuffer.length > maxBufferSize + TRIM_GRACE) {
+      logBuffer.splice(0, logBuffer.length - maxBufferSize);
+    }
+  }
   let writingToConsole = false; // suppress console wrapper re-entry
 
   /**
@@ -97,11 +105,8 @@ export namespace Logger {
 
     // WARN+ also queues for server shipping — the on-disk client.log
     if (level >= LogLevel.WARN) shipQueue.push(logLine);
-    
-    // Keep buffer size limited
-    if (logBuffer.length > maxBufferSize) {
-      logBuffer.shift();
-    }
+
+    trimBuffer();
   }
 
   /** Register a diagnostics dump — prepended to Alt+Q/export output so bug
@@ -231,7 +236,7 @@ export namespace Logger {
   /** Push a line from outside the logger (console wrapper) */
   export function pushRaw(line: string): void {
     logBuffer.push(line);
-    if (logBuffer.length > maxBufferSize) logBuffer.shift();
+    trimBuffer();
     if (line.includes('[WARN]') || line.includes('[ERROR]')) shipQueue.push(line);
   }
 
