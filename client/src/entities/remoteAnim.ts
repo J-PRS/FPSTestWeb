@@ -119,11 +119,14 @@ export class RemoteAnim {
     // cast shadow is unreadable anyway, so far remotes drop out of it.
     const cast = h.camDistSq < 80 * 80;
     if (cast !== this._castShadow) { this._castShadow = cast; h.model.setCastShadow(cast); }
-    // Past ~140m swap to the ~1.2k-tri decimated rig — vertex/skinning
+    // Past ~70m swap to the ~1.2k-tri decimated rig — vertex/skinning
     // cost per remote drops ~80% where the silhouette delta is unreadable.
-    h.model.setLod(h.camDistSq > 140 * 140 ? 1 : 0);
+    // Hysteresis keeps hovering players from flapping the swap each frame.
+    if (this._lodLevel === 0 && h.camDistSq > 70 * 70) { this._lodLevel = 1; h.model.setLod(1); }
+    else if (this._lodLevel === 1 && h.camDistSq < 55 * 55) { this._lodLevel = 0; h.model.setLod(0); }
   }
   private _castShadow = true;
+  private _lodLevel: 0 | 1 = 0;
 
   private tickAirTrail(dt: number, airborne: boolean, speed: number): void {
     const h = this.h;

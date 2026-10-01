@@ -310,6 +310,14 @@ async function applyTerrainTex(deps: NetCtx['deps'], httpUrl: string, texPath: s
   }
 }
 
+// The shader compares sampled (linear-decoded) luminance against each
+// tile's mean — compute that mean in linear space too or dark tiles
+// divide by an sRGB mean ~2.4× too high and the blend reads as black grime.
+function srgb2lin(c: number): number {
+  const v = c / 255;
+  return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+}
+
 /** T2 material-blend manifest beside albedo.png: alphas.bin is
  *  grid²×count u8 weights packed into two RGBA DataTextures (8 max);
  *  the 256px tiles are drawn into a 4×2 atlas so a plain sampler2D can
@@ -344,7 +352,7 @@ async function loadMats(dirUrl: string): Promise<{
   const atlas = document.createElement('canvas');
   atlas.width = 1024; atlas.height = 512;
   const g = atlas.getContext('2d')!;
-  const means = new Array<number>(8).fill(0.5);
+  const means = Array.from({ length: 8 }, () => 0.5);
   await Promise.all(man.tiles.slice(0, 8).map(async (path, k) => {
     const img = new Image();
     // Cross-origin atlas bake — without this the canvas taints and
@@ -359,13 +367,6 @@ async function loadMats(dirUrl: string): Promise<{
     // brightness instead of replacing its color (dark rock tiles used to
     // erase the grass bake outright).
     const d = g.getImageData(cx, cy, 256, 256).data;
-    // The shader compares sampled (linear-decoded) luminance against this
-    // mean — compute it in linear space too or dark tiles divide by an
-    // sRGB mean ~2.4× too high and the whole blend reads as black grime.
-    const srgb2lin = (c: number) => {
-      const v = c / 255;
-      return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
-    };
     let s = 0;
     for (let i = 0; i < d.length; i += 4) s += 0.299 * srgb2lin(d[i]) + 0.587 * srgb2lin(d[i + 1]) + 0.114 * srgb2lin(d[i + 2]);
     means[k] = Math.max(s / (d.length / 4), 1e-3);

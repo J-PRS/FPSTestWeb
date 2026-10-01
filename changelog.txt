@@ -1,3 +1,4 @@
+2026-10-01 - Remote skinned LOD tightens to 70m with hysteresis (55m swap-back) — far mannequins drop ~80% tris; mats atlas lint cleanup
 2026-10-01 - Far-LOD skinned rig: mannequin_lod1.glb (1215 tris, meshopt-simplified, skins preserved) swaps in past 140m â€” remote vertex/skinning cost ~-80%
 2026-10-01 - Volumetric cloud dome sheds at gpu level >=3 under the auto-quality ladder (full-sky fragment cost on a raster-bound GPU)
 2026-10-01 - Jump dust + bounce FX migrated to batched quarks (was 20-48 per-mesh draw calls per event); BlastEmitter gained forward-cone mode
