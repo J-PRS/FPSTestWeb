@@ -144,18 +144,28 @@ export class BotSenses {
     return _enemies;
   }
 
+  // Sheep-meter cache: the ignore watchdog doesn't need per-frame LOS
+  // truth — ~200ms staleness is invisible to a 3s recency window, and
+  // foeSeen was one raycast per foe per bot per frame.
+  private foeSeenCache = new Map<string, { t: number; v: boolean }>();
+
   /** Any living PLAYER foe in brawl range with a clear eye line?
    *  Creatures don't count — walking past wildlife isn't fear. Mirrors
    *  ServerBots.markFoeNear: the same visible-enemy evidence the server
    *  meter charges on. */
   foeSeen(bot: GameBot, foes: FoeEntry[], terrain: Terrain): boolean {
+    const now = performance.now();
+    const hit = this.foeSeenCache.get(bot.playerId);
+    if (hit && now - hit.t < 200) return hit.v;
+    let v = false;
     for (const e of foes) {
       if (!e.alive || e.id.startsWith('creature:')) continue;
       if (e.pos.distanceTo(bot.position) >= 45) continue; // brawl range — server mirror
       _losCtx.groundY = (x, z) => terrain.getHeight(x, z);
-      _losCtx.now = performance.now();
-      if (losClear(_losCtx, bot.position, e.pos)) return true;
+      _losCtx.now = now;
+      if (losClear(_losCtx, bot.position, e.pos)) { v = true; break; }
     }
-    return false;
+    this.foeSeenCache.set(bot.playerId, { t: now, v });
+    return v;
   }
 }
