@@ -285,9 +285,7 @@ export class RibbonTrail {
     // Positions only move when new samples arrive (or a billboard needs
     // re-siding as the camera moves) — the rest of the ribbon is static,
     // only its colors fade.
-    const freshFrom = this.stopped
-      ? (this.billboard && camMoved ? 0 : this.count)
-      : (this.billboard && camMoved ? 0 : this.count - Math.min(this.pushed, this.count));
+    const freshFrom = this.freshFromIndex(camMoved);
     this.pushed = 0;
     const rebillboard = camPos && camMoved && !far ? camPos : undefined;
     for (let i = 0; i < this.count; i++) {
@@ -302,6 +300,12 @@ export class RibbonTrail {
     }
     this.batch.mark(base, base + this.count * 6);
     this.batch.flush();
+  }
+
+  private freshFromIndex(camMoved: boolean): number {
+    if (this.billboard && camMoved) return 0;
+    if (this.stopped) return this.count;
+    return this.count - Math.min(this.pushed, this.count);
   }
 
   // EMIT_GAIN: vertex colors go HDR-hot so the ribbon clears the bloom
