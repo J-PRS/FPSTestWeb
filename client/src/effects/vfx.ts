@@ -109,8 +109,12 @@ function reapStarved(ps: IParticleSystem): void {
 // stay exact while a spawn-burst's peak cost halves. Short-lived
 // puff/blast particles absorb the 2·dt step invisibly.
 let simParity = false;
+// Pause/prune bookkeeping runs at 15Hz — a ~66ms lag on distance-pause or
+// one-shot teardown is invisible, and rescanning every system every frame
+// was the last per-frame O(systems) cost in vfx.
+let prunePhase = 0;
 
-export function updateVfx(dt: number, camPos?: THREE.Vector3): void {
+function runBookkeeping(camPos?: THREE.Vector3): void {
   // Distance-pause BEFORE the batch sim: skip offscreen systems this frame.
   // Covers every attached system (live bursts AND projectile trails).
   if (batcher) {
@@ -123,8 +127,6 @@ export function updateVfx(dt: number, camPos?: THREE.Vector3): void {
       reapStarved(ps);
     }
   }
-  simParity = !simParity;
-  if (simParity) batcher?.update(dt * 2);
   // Prune finished one-shots — emission ends at `duration`; particles
   // may outlive it, but quarks keeps rendering them until they die, so
   // the system must stay attached until then. `particleNum` is the
@@ -144,6 +146,16 @@ export function updateVfx(dt: number, camPos?: THREE.Vector3): void {
       }
     }
   }
+  _liveParticles = particles;
+}
+
+export function updateVfx(dt: number, camPos?: THREE.Vector3): void {
+  if (++prunePhase >= 4) {
+    prunePhase = 0;
+    runBookkeeping(camPos);
+  }
+  simParity = !simParity;
+  if (simParity) batcher?.update(dt * 2);
   // Hard cap: cull oldest systems until under the ceiling. A killed
   // system vanishes mid-effect — only reached under sustained overload
   // where the alternative is a slideshow.
@@ -154,7 +166,6 @@ export function updateVfx(dt: number, camPos?: THREE.Vector3): void {
     scene?.remove(oldest.emitter);
     live.delete(oldest);
   }
-  _liveParticles = particles;
 }
 
 const _upQ = new QV3(0, 1, 0);

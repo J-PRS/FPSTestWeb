@@ -1,3 +1,4 @@
+2026-10-01 - vfx pause/prune bookkeeping to 15Hz (was a per-frame scan of every attached system)
 2026-10-01 - matrixWorldAutoUpdate=false on static scene branches (structures, dome, clipmap levels)
 2026-10-01 - Shared bot groundY memo (all brains probe the same static terrain — one cache beats per-bot copies)
 2026-10-01 - RibbonTrail fade-bucket skip: color writes/upload only when fade crosses 1/255 step
