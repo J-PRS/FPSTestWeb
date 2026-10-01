@@ -1,3 +1,4 @@
+2026-10-01 - audit: vitest for DemoRecorder dead-reckon dedupe (identical-skip / drift-write / verbatim mode)
 2026-10-01 - audit: CircularBuffer vitest coverage (wrap/evict order, slot reuse, ranges, timestamp search)
 2026-10-01 - audit: demo writer stamps frame/event counts from arrays (stale header counts can no longer corrupt clips); new vitest demo writer->reader round-trip + corruption rejection
 2026-10-01 - audit: guard mid-wind-up release — belt throw + deployable pod no longer spawn for a corpse (server would reject the claim, leaving a local ghost)
