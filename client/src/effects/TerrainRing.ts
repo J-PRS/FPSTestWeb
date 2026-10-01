@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { BLOOM_LAYER, EMIT_GAIN } from '../core/config.js';
+import { acquireBatch, retireBatch, type BatchMap } from '../core/batchPool.js';
 import { Terrain } from '../world/terrain.js';
 
 const SEGS = 64;
@@ -36,7 +37,7 @@ interface RingPool {
 // sibling pool when every slot is taken (two extra draw calls: main +
 // ghost), retire an overflow pool the moment it empties — pools[0] is
 // the floor. The old code silently no-op'd the ring once 48 were live.
-const pools = new Map<THREE.Scene, RingPool[]>();
+const pools: BatchMap<RingPool> = new Map();
 
 function makePool(scene: THREE.Scene): RingPool {
   const geo = new THREE.BufferGeometry();
@@ -94,16 +95,7 @@ function makePool(scene: THREE.Scene): RingPool {
 }
 
 function acquireRingSlot(scene: THREE.Scene): { pool: RingPool; slot: number } {
-  let list = pools.get(scene);
-  if (!list) { list = []; pools.set(scene, list); }
-  for (const p of list) {
-    if (p.live < MAX_RINGS) {
-      p.live++;
-      return { pool: p, slot: p.free.pop()! };
-    }
-  }
-  const p = makePool(scene);
-  list.push(p);
+  const p = acquireBatch(pools, scene, makePool, b => b.live < MAX_RINGS);
   p.live++;
   return { pool: p, slot: p.free.pop()! };
 }
@@ -111,12 +103,11 @@ function acquireRingSlot(scene: THREE.Scene): { pool: RingPool; slot: number } {
 function releaseRingSlot(pool: RingPool, slot: number): void {
   pool.free.push(slot);
   pool.live--;
-  const list = pools.get(pool.scene);
-  if (!list || pool === list[0] || pool.live > 0) return;
-  list.splice(list.indexOf(pool), 1);
-  for (const m of pool.meshes) pool.scene.remove(m);
-  pool.geo.dispose(); pool.ghostGeo.dispose();
-  for (const m of pool.mats) m.dispose();
+  retireBatch(pools, pool.scene, pool, p => p.live === 0, p => {
+    for (const m of p.meshes) p.scene.remove(m);
+    p.geo.dispose(); p.ghostGeo.dispose();
+    for (const m of p.mats) m.dispose();
+  });
 }
 
 export class TerrainRing {

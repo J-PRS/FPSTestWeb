@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { BLOOM_LAYER, EMIT_GAIN } from '../core/config.js';
+import { acquireBatch, retireBatch, type BatchMap } from '../core/batchPool.js';
 
 // Batched trail sparks — every explosion's debris streaks baked into ONE
 // LineSegments after construction (~40 sparks → 1 draw call where each
@@ -107,29 +108,26 @@ class SparkBatch {
 // silently once the single shared buffer filled (alloc returned -1 and
 // finalize dropped the whole burst). Now sibling batches spawn on demand
 // and retire when empty — batches[0] is the floor.
-const sparkBatches = new Map<THREE.Scene, SparkBatch[]>();
+const sparkBatches: BatchMap<SparkBatch> = new Map();
 
 function sparkAlloc(scene: THREE.Scene, n: number): { batch: SparkBatch; base: number } {
-  let list = sparkBatches.get(scene);
-  if (!list) { list = [new SparkBatch(scene)]; sparkBatches.set(scene, list); }
-  for (const b of list) {
-    const base = b.alloc(n);
-    if (base >= 0) return { batch: b, base };
-  }
-  const b = new SparkBatch(scene);
-  list.push(b);
-  return { batch: b, base: b.alloc(n)! };
+  // hasRoom runs alloc() speculatively — -1 means the batch is full,
+  // not a side effect: free-list splices are only kept when they fit.
+  let hit: SparkBatch | undefined;
+  let base = -1;
+  const batch = acquireBatch(sparkBatches, scene, s => new SparkBatch(s), b => {
+    base = b.alloc(n);
+    if (base < 0) return false;
+    hit = b;
+    return true;
+  });
+  if (hit) return { batch: hit, base };
+  return { batch, base: batch.alloc(n)! };
 }
 
-function sparkRelease(batch: SparkBatch, start: number, n: number): void {
+function sparkRelease(batch: SparkBatch, scene: THREE.Scene, start: number, n: number): void {
   batch.release(start, n);
-  // Retire a fully-drained overflow batch — batches[0] stays resident.
-  for (const list of sparkBatches.values()) {
-    const i = list.indexOf(batch);
-    if (i < 0) continue;
-    if (i > 0 && batch.used === 0) { list.splice(i, 1); batch.dispose(); }
-    return;
-  }
+  retireBatch(sparkBatches, scene, batch, b => b.used === 0, b => b.dispose());
 }
 
 export class ExplosionSparks {
@@ -231,7 +229,7 @@ export class ExplosionSparks {
   }
 
   dispose(): void {
-    if (this.base >= 0 && this.batch) sparkRelease(this.batch, this.base, this.sparks.length);
+    if (this.base >= 0 && this.batch) sparkRelease(this.batch, this.scene, this.base, this.sparks.length);
     this.batch = null;
     this.base = -1;
     this.sparks = [];

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 
 import { BLOOM_LAYER } from '../core/config.js';
 import { markProbe } from '../core/fxDiag.js';
+import { acquireBatch, retireBatch, type BatchMap } from '../core/batchPool.js';
 
 // Samples per ribbon slot — the batch's index/vertex layout is built
 // around it, and RibbonTrail's ring buffer is the same length.
@@ -113,26 +114,15 @@ export class TrailBatch {
 // A scene's trails live in a LIST of batches — 512 slots each. Overflow
 // spawns another batch (one more draw call) instead of starving ribbons;
 // emptied overflow batches shrink back away on release.
-const batches = new Map<THREE.Scene, TrailBatch[]>();
+const batches: BatchMap<TrailBatch> = new Map();
 
 export function claimableBatch(scene: THREE.Scene): TrailBatch {
-  let list = batches.get(scene);
-  if (!list) { list = [new TrailBatch(scene)]; batches.set(scene, list); }
-  for (const b of list) if (b.free.length > 0) return b;
-  const b = new TrailBatch(scene);
-  list.push(b);
-  return b;
+  return acquireBatch(batches, scene, s => new TrailBatch(s), b => b.free.length > 0);
 }
 
 /** Retire an emptied overflow batch — batch 0 is the floor. */
 export function retireBatchIfOverflow(b: TrailBatch): void {
-  if (b.used.size !== 0) return;
-  const list = batches.get(b.scene);
-  if (list && list.length > 1 && list[0] !== b) {
-    list.splice(list.indexOf(b), 1);
-    b.scene.remove(b.mesh);
-    b.geo.dispose();
-  }
+  retireBatch(batches, b.scene, b, x => x.used.size === 0, x => { x.scene.remove(x.mesh); x.geo.dispose(); });
 }
 
 /** Any nonzero float in a slot's color span = pixels still on screen.

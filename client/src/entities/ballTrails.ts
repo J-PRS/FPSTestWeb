@@ -9,6 +9,7 @@
  * inside a single shared geometry — the layer is one draw call total.
  */
 import * as THREE from 'three';
+import { acquireBatch, retireBatch, type BatchMap } from '../core/batchPool.js';
 
 const TRAIL_COUNT = 14;
 const TRAIL_INTERVAL = 0.04;
@@ -106,7 +107,7 @@ class DotBatch {
   private dirtyLo = Infinity;
   private dirtyHi = 0;
 
-  constructor(private scene: THREE.Scene) {
+  constructor(readonly scene: THREE.Scene) {
     for (const a of [this.posAttr, this.sizeAttr, this.colAttr]) a.setUsage(THREE.DynamicDrawUsage);
     this.geo.setAttribute('position', this.posAttr);
     this.geo.setAttribute('aSize', this.sizeAttr);
@@ -150,29 +151,18 @@ class DotBatch {
 // batch when every existing slot is taken (one extra draw call), retire
 // an overflow batch the moment it empties — batch[0] is the floor. The
 // old code silently rendered nothing once 128 trails were live.
-const dotBatches = new Map<THREE.Scene, DotBatch[]>();
+const dotBatches: BatchMap<DotBatch> = new Map();
 
 /** Take a slot from any non-full batch for the scene; grow on demand. */
 function acquireDotSlot(scene: THREE.Scene): { batch: DotBatch; slot: number } {
-  let list = dotBatches.get(scene);
-  if (!list) { list = [new DotBatch(scene)]; dotBatches.set(scene, list); }
-  for (const b of list) {
-    const slot = b.free.pop();
-    if (slot !== undefined) return { batch: b, slot };
-  }
-  const b = new DotBatch(scene);
-  list.push(b);
-  return { batch: b, slot: b.free.pop()! };
+  const batch = acquireBatch(dotBatches, scene, s => new DotBatch(s), b => b.free.length > 0);
+  return { batch, slot: batch.free.pop()! };
 }
 
 /** Return the slot; an emptied overflow batch retires (batch[0] stays). */
 function releaseDotSlot(scene: THREE.Scene, batch: DotBatch, slot: number): void {
   batch.free.push(slot);
-  const list = dotBatches.get(scene);
-  if (!list || batch === list[0]) return;
-  if (batch.free.length < BATCH_TRAILS) return;
-  list.splice(list.indexOf(batch), 1);
-  batch.dispose();
+  retireBatch(dotBatches, scene, batch, b => b.free.length === BATCH_TRAILS, b => b.dispose());
 }
 
 export class BallTrailDots {
