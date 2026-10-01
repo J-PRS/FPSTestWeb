@@ -39,23 +39,10 @@ declare global {
     __demoManager?: DemoManager;
     /** vfx pool hit/miss counters — perfprobe asserts pooling works. */
     __vfxStats?: { hits: number; misses: number };
-    /** Projectile-trail census: lifecycle counters + per-trail/ribbon rows. */
-    __trailDump?: () => {
-      stats: Record<string, number>;
-      pools: Record<string, unknown>;
-      trails: Record<string, unknown>[];
-      ribbons: Record<string, unknown>[];
-      ribbonBatch: Record<string, unknown>[];
-      ribbonOrphans: { count: number; slots: number[]; rows: Record<string, unknown>[] };
-      /** Batch-buffer audit: lit slots + slots lit with no owner (leaked streaks). */
-      litAudit: { lit: number; unowned: number[] };
-      /** Cumulative count of unowned lit slots the per-frame sweeper blacked out. */
-      reapedLit: number;
-      /** Per-shell-kind instancing census { pools, count, free }. */
-      inst: Record<string, { pools: number; count: number; free: number }>;
-      /** Species/gib/blob-shadow census { species, gibs, shadows }. */
-      swarm: Record<string, unknown>;
-    };
+    /** Merged FX census — sections self-register via registerDiag() in the
+     *  owning modules (vfx pools, ribbons, inst pools, swarms…). Sections
+     *  are optional: a section absent means its module never loaded. */
+    __trailDump?: () => Record<string, unknown>;
     /** Standalone dump bundles (posedump/vmdump/sfxdump) — screenshot
      *  harnesses read these once ready. */
     __pm?: unknown;

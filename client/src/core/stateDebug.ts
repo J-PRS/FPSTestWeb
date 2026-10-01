@@ -172,22 +172,39 @@ function pushAimProbe(lines: string[], ctx: StateDebugContext): void {
   }
 }
 
+// Sections self-register via registerDiag() in the owning modules —
+// every field optional so a module that never loaded degrades to a
+// missing line, not a thrown dump.
+interface TrailDump {
+  stats?: Record<string, number>;
+  pools?: Record<string, unknown>;
+  trails?: Record<string, unknown>[];
+  ribbons?: Record<string, unknown>[];
+  ribbonBatch?: unknown;
+  ribbonOrphans?: { count: number; slots: number[]; rows: Record<string, unknown>[] };
+  litAudit?: { lit: number; unowned: number[] };
+  reapedLit?: number;
+  inst?: unknown;
+  swarm?: unknown;
+}
+
 // Trail census — dead-trail bugs need attached/particles/slot per live
 // trail, not just the projectile count.
 function pushTrailCensus(lines: string[], ctx: StateDebugContext): void {
-  const td = window.__trailDump?.();
+  const td = window.__trailDump?.() as TrailDump | undefined;
   if (!td) return;
-  lines.push(`trailStats: ${Object.entries(td.stats).map(([k, v]) => `${k}=${v}`).join(' ')}`);
-  lines.push(`pools: ${JSON.stringify(td.pools)}`);
-  for (const t of td.trails) lines.push(`  trail ${JSON.stringify(t)}`);
-  lines.push(`ribbons: ${td.ribbons.length} live ${JSON.stringify(td.ribbonBatch)}`);
+  if (td.stats) lines.push(`trailStats: ${Object.entries(td.stats).map(([k, v]) => `${k}=${v}`).join(' ')}`);
+  if (td.pools) lines.push(`pools: ${JSON.stringify(td.pools)}`);
+  for (const t of td.trails ?? []) lines.push(`  trail ${JSON.stringify(t)}`);
+  lines.push(`ribbons: ${td.ribbons?.length ?? 0} live ${JSON.stringify(td.ribbonBatch ?? null)}`);
   // Position-tagged rows — a frozen streak on screen maps to a slot by its
   // head/mid coords; sorted by fullness so the longest streaks lead.
-  const rs = td.ribbons.toSorted((a, b) => ((b.count as number) ?? 0) - ((a.count as number) ?? 0)).slice(0, 16);
+  const rs = (td.ribbons ?? []).toSorted((a, b) => ((b.count as number) ?? 0) - ((a.count as number) ?? 0)).slice(0, 16);
   for (const r of rs) lines.push(`  rib ${JSON.stringify(r)}`);
-  if (td.ribbonOrphans.count > 0) {
-    lines.push(`ribbonOrphans: ${td.ribbonOrphans.count} (leaked slots: ${td.ribbonOrphans.slots.length})`);
-    for (const o of td.ribbonOrphans.rows) lines.push(`  orphan ${JSON.stringify(o)}`);
+  const orphans = td.ribbonOrphans;
+  if (orphans && orphans.count > 0) {
+    lines.push(`ribbonOrphans: ${orphans.count} (leaked slots: ${orphans.slots.length})`);
+    for (const o of orphans.rows) lines.push(`  orphan ${JSON.stringify(o)}`);
   } else {
     lines.push('ribbonOrphans: 0');
   }
@@ -198,12 +215,13 @@ function pushTrailCensus(lines: string[], ctx: StateDebugContext): void {
 // slots — frozen streaks no RibbonTrail object owns, reapedLit counts the
 // ones the sweeper already blacked out), instancing/species pool inventory,
 // and the oldest-shell line that surfaces the next immortal early.
-type TrailDump = NonNullable<ReturnType<NonNullable<Window['__trailDump']>>>;
 function pushTrailExtras(lines: string[], td: TrailDump, ctx: StateDebugContext): void {
-  const unowned = td.litAudit.unowned;
-  lines.push(`litAudit: lit=${td.litAudit.lit} unowned=${unowned.length}${unowned.length ? ' slots=[' + unowned.slice(0, 12).join(',') + (unowned.length > 12 ? ',…' : '') + ']' : ''} reaped=${td.reapedLit}`);
-  lines.push(`instPools: ${JSON.stringify(td.inst)}`);
-  lines.push(`swarm: ${JSON.stringify(td.swarm)}`);
+  if (td.litAudit) {
+    const unowned = td.litAudit.unowned;
+    lines.push(`litAudit: lit=${td.litAudit.lit} unowned=${unowned.length}${unowned.length ? ' slots=[' + unowned.slice(0, 12).join(',') + (unowned.length > 12 ? ',…' : '') + ']' : ''} reaped=${td.reapedLit ?? 0}`);
+  }
+  if (td.inst) lines.push(`instPools: ${JSON.stringify(td.inst)}`);
+  if (td.swarm) lines.push(`swarm: ${JSON.stringify(td.swarm)}`);
   const aged = ctx.projectiles.toSorted((a, b) => b.age - a.age).slice(0, 5);
   if (aged.length) {
     lines.push(`oldest: ${aged.map(pr => `${pr.config.name}@${pr.age.toFixed(1)}s(${pr.pos.x.toFixed(0)},${pr.pos.y.toFixed(0)},${pr.pos.z.toFixed(0)})`).join(' ')}`);

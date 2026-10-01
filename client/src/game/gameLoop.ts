@@ -5,7 +5,7 @@ import { MAX_DELTA_TIME } from '../core/config.js';
 import { urlParams } from '../core/params.js';
 import type { DemoManager } from '../demo/index.js';
 import type { Player } from '../entities/Player.js';
-import { updateGibs, swarmStats } from '../entities/swarms.js';
+import { updateGibs } from '../entities/swarms.js';
 import type { ViewModel } from '../entities/ViewModel.js';
 import type { DamageNumberManager } from '../effects/damageNumbers.js';
 import type { EffectsManager } from '../effects/effects.js';
@@ -15,9 +15,8 @@ import type { GroundMist } from '../effects/groundMist.js';
 import type { AmbientBirds } from '../effects/birds.js';
 import { screenShake } from '../effects/screenShake.js';
 import { Explosion } from '../effects/explosion.js';
-import { updateVfx, trailStats, trailDump, poolDump } from '../effects/vfx.js';
-import { RibbonTrail } from '../projectiles/RibbonTrail.js';
-import { instPoolDump } from '../projectiles/visuals.js';
+import { updateVfx } from '../effects/vfx.js';
+import { collectDiag } from '../core/fxDiag.js';
 import * as sfxAudio from '../core/sfx/world.js';
 
 import type { NetworkManager } from '../networking/NetworkManager.js';
@@ -446,15 +445,10 @@ function wireDebugKeys(deps: GameLoopDeps, perf: ReturnType<typeof createPerfHud
   // (per-class triangle census, ad-hoc visibility A/Bs). Debug-only.
   window.__scene = deps.sceneSetup.scene;
   window.__renderer = deps.rendererSetup.renderer;
-  // __trailDump — live projectile-trail census for the "trails vanished"
-  // class of bug: quarks particle counts, batcher attachment, ribbon slots.
-  window.__trailDump = () => ({
-    stats: trailStats, pools: poolDump(),
-    trails: trailDump(), ribbons: RibbonTrail.dump(), ribbonBatch: RibbonTrail.batchStats(),
-    ribbonOrphans: RibbonTrail.orphans(),
-    litAudit: RibbonTrail.litAudit(), reapedLit: RibbonTrail.reapedLit,
-    inst: instPoolDump(), swarm: swarmStats(),
-  });
+  // __trailDump — merged census of every self-registered FX diag section
+  // (ribbons/vfx/inst/swarm…). Sections come from registerDiag() in the
+  // owning modules, so new censuses never touch this wiring.
+  window.__trailDump = collectDiag;
   document.addEventListener('keydown', (e) => {
     // Alt+W — bot weapon audit: last gun each bot drew + its shot count,
     // so "do they fire real weapons" is a one-keypress read. Alt+Shift+W

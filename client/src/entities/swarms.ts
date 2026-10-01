@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { SpeciesSwarm, InstancedBlobShadows, type SwarmPart, type SwarmSlotOwner } from './swarm.js';
 import { GibPool } from './gibs.js';
 import type { Terrain } from '../world/terrain.js';
+import { registerDiag } from '../core/fxDiag.js';
 
 export type { SwarmPart, SwarmSlotOwner } from './swarm.js';
 
@@ -109,3 +110,6 @@ export function swarmStats(): Record<string, unknown> {
 
 // No flush pass needed — SpeciesSwarm.setMatrix/setColor and
 // InstancedBlobShadows.set flag their own buffers dirty per write.
+
+// Alt+Q census section — species/gib/shadow swarm inventory.
+registerDiag('swarm', () => ({ swarm: swarmStats() }));

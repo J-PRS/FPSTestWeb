@@ -18,6 +18,7 @@ import {
 } from 'three.quarks';
 import type { FunctionValueGenerator, GeneratorMemory, FunctionJSON } from 'three.quarks';
 import type { IParticleSystem } from 'quarks.core';
+import { registerDiag } from '../core/fxDiag.js';
 import { CircleEmitter } from 'three.quarks';
 import { BLOOM_LAYER, EMIT_GAIN, GRAVITY } from '../core/config.js';
 import { getGlowTexture, getPuffTexture } from './glowTexture.js';
@@ -985,3 +986,7 @@ function spawnBlastBurst(pos: THREE.Vector3, spec: BlastSpec,
   live.add(ps);
   ps.restart();
 }
+
+// Alt+Q census section — registered here so the dump grows without
+// another gameLoop/stateDebug plumbing pass.
+registerDiag('vfx', () => ({ stats: trailStats, pools: poolDump(), trails: trailDump() }));
