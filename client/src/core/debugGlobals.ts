@@ -37,5 +37,12 @@ declare global {
     __demoManager?: DemoManager;
     /** vfx pool hit/miss counters — perfprobe asserts pooling works. */
     __vfxStats?: { hits: number; misses: number };
+    /** Standalone dump bundles (posedump/vmdump/sfxdump) — screenshot
+     *  harnesses read these once ready. */
+    __pm?: unknown;
+    __clips?: string[];
+    __ready?: boolean;
+    __glb?: unknown;
+    dump?: Promise<Record<string, string>>;
   }
 }

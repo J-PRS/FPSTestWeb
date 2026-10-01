@@ -96,7 +96,7 @@ const jobs: Array<[string, number, () => void]> = [
   ['loop_wind', 1.0, () => audio.noiseLoop('lowpass', 900)?.set(0.5)],
 ];
 
-(window as unknown as { dump: Promise<Record<string, string>> }).dump = (async () => {
+window.dump = (async () => {
   const out: Record<string, string> = {};
   for (const [name, secs, fn] of jobs) out[name] = await render(name, secs, fn);
   return out;

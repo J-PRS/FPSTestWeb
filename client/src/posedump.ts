@@ -82,7 +82,7 @@ if (pvariant) {
     if (wantDir && DIRV[wantDir]) (pm as unknown as { setLocomotionVector(f: number, s: number): void })
       .setLocomotionVector(DIRV[wantDir][0], DIRV[wantDir][1]);
     pm.forceAnimationState(wantState as never);
-    (window as any).__pm = pm;
+    window.__pm = pm;
     // Step the mixer a fixed phase so loops settle mid-cycle.
     for (let i = 0; i < 30; i++) pm.update(1 / 60 * wantT * 4);
     model.updateMatrixWorld(true);
@@ -93,8 +93,8 @@ if (pvariant) {
     camera.position.set(c.x + d * 0.55, c.y + size * 0.14, c.z + d);
     camera.lookAt(c);
     renderer.setAnimationLoop(() => { pm.update(1 / 60); renderer.render(scene, camera); });
-    (window as any).__clips = [...anims.keys()];
-    (window as any).__ready = true;
+    window.__clips = [...anims.keys()];
+    window.__ready = true;
   };
   poll();
 } else {
@@ -117,7 +117,7 @@ new GLTFLoader().load(url, (gltf) => {
 
   const mixer = new THREE.AnimationMixer(model);
   const boot = (clips: THREE.AnimationClip[]) => {
-    (window as any).__clips = clips.map(c => c.name);
+    window.__clips = clips.map(c => c.name);
     const clip = clips.find(c => c.name === wantClip) ?? clips[0];
     if (clip) {
       const action = mixer.clipAction(clip);
@@ -143,7 +143,7 @@ new GLTFLoader().load(url, (gltf) => {
 
     renderer.setAnimationLoop(() => renderer.render(scene, camera));
     renderer.render(scene, camera);
-    (window as any).__ready = true;
+    window.__ready = true;
   };
   // UAL2's mannequin ships bone-identical but clip-less — its clips live in
   // robot-anims2.glb, same UE-style rig, so they bind natively.

@@ -1,3 +1,4 @@
+2026-10-01 - core: dump-bundle globals typed (__pm/__clips/__ready/__glb/dump in debugGlobals.ts) — drops the window-as-any casts in posedump/vmdump/sfxdump
 2026-10-01 - tests+server: bunx tsc clean — fix RoomMatch casing clash in matchClock, stale mkRoom/pin calls + ModeSpec drift in armorSoak/matchClock, drop unused vars
 2026-10-01 - server: key MessageHandler dispatch table by ClientMessage type — per-key narrowing drops ~20 Extract casts; unknown keys now type-error
 2026-10-01 - core: typed Window debug globals (debugGlobals.ts) — __test/__perf/__scene/__renderer/__demoManager/__renderScan/__vfxStats; ad-hoc casts removed

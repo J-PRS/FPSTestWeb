@@ -65,8 +65,8 @@ if (q.get('export')) {
     out[wt] = btoa(bin);
     g.visible = false;
   }
-  (window as any).__glb = out;
-  (window as any).__ready = true;
+  window.__glb = out;
+  window.__ready = true;
 }
 if (q.get('export')) throw 0; // export mode ends above — __ready already set
 if (!ao) {
@@ -103,4 +103,4 @@ if (q.get('close')) {
 // Keep rendering — the baked GLB+texture swap lands asynchronously, so a
 // fixed early frame would screenshot pre-swap procedural meshes.
 renderer.setAnimationLoop(() => renderer.render(scene, camera));
-(window as any).__ready = true;
+window.__ready = true;
