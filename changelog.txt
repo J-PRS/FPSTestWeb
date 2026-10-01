@@ -1,3 +1,4 @@
+2026-10-01 - Terrain outer rings halved tessellation (-20k tris); interiors merged per-region (512m cells) so offscreen structures frustum-cull; removed int debug warn
 2026-10-01 - SkinnedMesh culling restored: real skinned bounds computed at load (+0.6m pad) — offscreen remotes no longer drawn/skinned
 2026-10-01 - Debris shards instanced: one InstancedMesh per primitive family per burst (14-20 draws/kill -> ~1); body-part/custom-geo shards keep mesh path
 2026-10-01 - vfx: starvation reaper — attached systems with particleNum 0 for ~1s are culled (orphaned trail systems were ballooning batcher.update to 700+ entries)

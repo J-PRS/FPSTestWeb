@@ -91,10 +91,14 @@ export class Terrain {
     this.heightTexture.minFilter = THREE.LinearFilter;
     this.heightTexture.needsUpdate = true;
 
-    // Shared flat grid geometry (normalised [-0.5, 0.5] plus one-cell overlap border)
+    // Shared flat grid geometry (normalised [-0.5, 0.5] plus one-cell
+    // overlap border). Outer rings get a coarser grid: at 800m+ a heightmap
+    // texel is already tens of meters, so 80-div tessellation only buys
+    // triangles nobody can see.
     const divisions = CLIPMAP_LEVELS[0].divisions;
     this.gridGeo = createFlatGridGeometry(divisions, 1);
     const gridGeo = this.gridGeo;
+    const outerGeo = createFlatGridGeometry(divisions / 2, 1);
 
     for (let i = 0; i < CLIPMAP_LEVELS.length; i++) {
       const cfg = CLIPMAP_LEVELS[i];
@@ -141,7 +145,7 @@ export class Terrain {
         },
       });
 
-      const mesh = new THREE.Mesh(gridGeo, material);
+      const mesh = new THREE.Mesh(i >= 2 ? outerGeo : gridGeo, material);
       mesh.receiveShadow = true;
       mesh.frustumCulled = false; // world-space extent is set via uniforms, not mesh transform
       scene.add(mesh);

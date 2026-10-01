@@ -497,11 +497,6 @@ async function applyInteriors(ctx: NetCtx, list: InteriorSpec[] | undefined): Pr
     inst.matrixAutoUpdate = false;
     inst.matrix.copy(m);
     inst.updateMatrixWorld(true);
-    // DEBUG: per-instance world bounds — catches the giant-wedge outliers
-    const bb = new THREE.Box3().setFromObject(inst);
-    const sz = bb.getSize(new THREE.Vector3());
-    deps.logger.warn(`int ${spec.file} sz=${sz.x|0},${sz.y|0},${sz.z|0} ` +
-      `@${pos.x|0},${pos.y|0},${pos.z|0} rot=${spec.rot?.map((v:number)=>v.toFixed(2)).join(',') ?? '-'} scl=${spec.scale ? JSON.stringify(spec.scale) : '-'}`);
     inst.traverse((o) => {
       const mesh = o as THREE.Mesh;
       if (!mesh.isMesh) return;
@@ -518,7 +513,12 @@ async function applyInteriors(ctx: NetCtx, list: InteriorSpec[] | undefined): Pr
       const mat = mats[0]!;
       // mergeGeometries refuses mismatched attribute sets — key on the
       // layout too or one odd primitive sinks a whole material bucket.
-      const sig = `${mat.uuid}|${Object.keys(mesh.geometry.attributes).toSorted().join(',')}|${mesh.geometry.index ? 'i' : 'n'}`;
+      // Region cell goes in the key: a single map-wide bucket would get a
+      // map-wide bounding sphere and never frustum-cull, so every far
+      // structure rasterized every frame.
+      const e = mesh.matrixWorld.elements;
+      const cell = `${e[12]! / 512 | 0},${e[14]! / 512 | 0}`;
+      const sig = `${mat.uuid}|${Object.keys(mesh.geometry.attributes).toSorted().join(',')}|${mesh.geometry.index ? 'i' : 'n'}|${cell}`;
       const geo = mesh.geometry.clone().applyMatrix4(mesh.matrixWorld);
       const b = buckets.get(sig) ?? { mat, geos: [] };
       b.geos.push(geo);
