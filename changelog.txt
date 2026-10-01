@@ -1,3 +1,9 @@
+2026-10-01 - tests: extractClip windowing (renormalize, wrap, synthetic spawn for live projectiles)
+2026-10-01 - tests: KillFeed notices/streaks/bot taunt gating (seeded rng)
+2026-10-01 - tests: SpawnPicker team spheres, clearance, ground lift, scatter
+2026-10-01 - tests: demoEvents spool (id wrap, sentinel, rate cap, pool reuse)
+2026-10-01 - tests: urlParams live-read semantics (post-replaceState re-read)
+2026-10-01 - tests: weaponTable row invariants (dense ids, sane stats, aoe/radius agreement)
 2026-10-01 - tests: solidWorld seg/occlusion/body resolve + index parity
 2026-10-01 - audit: report item 10 (bot family coverage)
 2026-10-01 - tests: botHunt scan/pickHunt/pickFire/retreat coverage
