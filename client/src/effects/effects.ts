@@ -4,6 +4,7 @@ import { GRAVITY } from '../core/config.js';
 import { impactBurst, blastBurst } from './vfx.js';
 import * as du from './effectDust.js';
 import type { Terrain } from '../world/terrain.js';
+import { markProbe } from '../core/fxDiag.js';
 
 interface Particle {
   bucket: InstBucket;
@@ -272,7 +273,7 @@ export class EffectsManager {
         transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
       });
       b = { mesh: new THREE.Mesh(this.beamGeo, mat), mat, life: 0, maxLife: 0 };
-      b.mesh.userData.dbg = { kind: 'beam' };
+      markProbe(b.mesh, { kind: 'beam' });
     }
     b.mesh.position.copy(from).addScaledVector(_v, 0.5);
     b.mesh.quaternion.setFromUnitVectors(_v3.set(0, 1, 0), _v.normalize());

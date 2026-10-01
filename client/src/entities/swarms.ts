@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { SpeciesSwarm, InstancedBlobShadows, type SwarmPart, type SwarmSlotOwner } from './swarm.js';
 import { GibPool } from './gibs.js';
 import type { Terrain } from '../world/terrain.js';
-import { registerDiag } from '../core/fxDiag.js';
+import { registerDiag, markProbe } from '../core/fxDiag.js';
 
 export type { SwarmPart, SwarmSlotOwner } from './swarm.js';
 
@@ -34,7 +34,7 @@ export function getSwarm(species: string): SpeciesSwarm | null {
   const swarm = new SpeciesSwarm(registryScene, spec.parts(), spec.capacity);
   // Aim-probe tags — a crosshair hit on any part mesh resolves to this
   // species + the owning entity through swarm.ownerAt.
-  swarm.meshes.forEach((m, i) => { m.userData.dbg = { kind: 'species', species, swarm, part: i }; });
+  swarm.meshes.forEach((m, i) => markProbe(m, { kind: 'species', species, swarm, part: i }));
   swarms.set(species, swarm);
   return swarm;
 }

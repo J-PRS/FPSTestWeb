@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { Terrain } from '../world/terrain.js';
 import { UNGRADE_GLSL } from '../core/gradeGlsl.js';
+import { markProbe } from '../core/fxDiag.js';
 
 /**
  * Instanced swarm renderer — the draw-call fix for massive enemy counts.
@@ -231,7 +232,7 @@ export class InstancedBlobShadows {
     this.mesh.renderOrder = 999;
     this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     scene.add(this.mesh);
-    this.mesh.userData.dbg = { kind: 'blobShadows', swarm: this };
+    markProbe(this.mesh, { kind: 'blobShadows', swarm: this });
     this.owners = Array.from<SwarmSlotOwner | undefined>({ length: SHADOW_CAPACITY });
   }
 

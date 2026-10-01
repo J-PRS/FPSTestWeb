@@ -7,17 +7,7 @@ import * as THREE from 'three';
 import { RibbonTrail, RIBBON_TRIS_PER_SLOT, type TrailBatch } from '../projectiles/RibbonTrail.js';
 import type { SpeciesSwarm, InstancedBlobShadows, SwarmSlotOwner } from '../entities/swarm.js';
 import type { ParticleSystem } from 'three.quarks';
-
-interface DbgTag {
-  kind: string;
-  batch?: TrailBatch;
-  label?: string;
-  pool?: { free: number[] };
-  species?: string;
-  swarm?: SpeciesSwarm | InstancedBlobShadows;
-  part?: number;
-  ps?: ParticleSystem;
-}
+import type { DbgTag } from './fxDiag.js';
 
 const _ray = new THREE.Raycaster();
 // Points/Lines only hit when the ray passes within this world-space
@@ -43,7 +33,7 @@ function describeHit(h: THREE.Intersection): string {
   switch (d.kind) {
     case 'trailBatch': {
       const slot = Math.floor((h.faceIndex ?? 0) / RIBBON_TRIS_PER_SLOT);
-      return `ribbon ${JSON.stringify(RibbonTrail.identify(d.batch!, slot))}`;
+      return `ribbon ${JSON.stringify(RibbonTrail.identify(d.batch as TrailBatch, slot))}`;
     }
     case 'instPool': {
       const iid = h.instanceId ?? -1;
@@ -61,7 +51,7 @@ function describeHit(h: THREE.Intersection): string {
       return `blobShadow inst=${h.instanceId} owner=${describeOwner(owner)}`;
     }
     case 'quarks': {
-      const ps = d.ps!;
+      const ps = d.ps as ParticleSystem;
       return `quarks paused=${ps.paused} particles=${ps.particleNum ?? '?'}`;
     }
     case 'beam': return 'beam(hitscan flash)';

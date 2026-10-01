@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 
 import { BLOOM_LAYER } from '../core/config.js';
+import { markProbe } from '../core/fxDiag.js';
 
 // Samples per ribbon slot — the batch's index/vertex layout is built
 // around it, and RibbonTrail's ring buffer is the same length.
@@ -80,7 +81,7 @@ export class TrailBatch {
     this.mesh.layers.enable(BLOOM_LAYER);
     // Aim-probe tag — the crosshair raycast resolves a slot via faceIndex
     // back to whichever RibbonTrail owns it (or proves it ownerless).
-    this.mesh.userData.dbg = { kind: 'trailBatch', batch: this };
+    markProbe(this.mesh, { kind: 'trailBatch', batch: this });
     for (let s = MAX_TRAILS - 1; s >= 0; s--) this.free.push(s);
     scene.add(this.mesh);
   }

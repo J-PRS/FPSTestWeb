@@ -18,7 +18,7 @@ import {
 } from 'three.quarks';
 import type { FunctionValueGenerator, GeneratorMemory, FunctionJSON } from 'three.quarks';
 import type { IParticleSystem } from 'quarks.core';
-import { registerDiag } from '../core/fxDiag.js';
+import { registerDiag, markProbe } from '../core/fxDiag.js';
 import { CircleEmitter } from 'three.quarks';
 import { BLOOM_LAYER, EMIT_GAIN, GRAVITY } from '../core/config.js';
 import { getGlowTexture, getPuffTexture } from './glowTexture.js';
@@ -107,7 +107,7 @@ function attachSystem(ps: ParticleSystem): void {
   scene?.add(ps.emitter);
   // Aim-probe tag — a crosshair hit on a live Points cloud resolves back
   // to the system (paused/particle count) instead of an anonymous blur.
-  (ps.emitter as unknown as THREE.Object3D).userData.dbg = { kind: 'quarks', ps };
+  markProbe(ps.emitter as unknown as THREE.Object3D, { kind: 'quarks', ps });
   attached.add(ps);
 }
 

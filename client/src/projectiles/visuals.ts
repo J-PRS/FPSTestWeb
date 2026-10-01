@@ -6,7 +6,7 @@ import { BLOOM_LAYER, EMIT_GAIN } from '../core/config.js';
 import type { ProjectileConfig } from './types.js';
 import { RibbonTrail } from './RibbonTrail.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { registerDiag } from '../core/fxDiag.js';
+import { registerDiag, markProbe } from '../core/fxDiag.js';
 
 const MESH_GEO_CACHE = new Map<string, THREE.BufferGeometry>();
 // Projectile materials are never mutated after construction — share per color
@@ -98,7 +98,7 @@ function instPoolFor(scene: THREE.Scene, kind: string, geo: THREE.BufferGeometry
   mesh.layers.enable(BLOOM_LAYER);
   scene.add(mesh);
   const p = { mesh, free: [], scene };
-  mesh.userData.dbg = { kind: 'instPool', label: kind, pool: p };
+  markProbe(mesh, { kind: 'instPool', label: kind, pool: p });
   list.push(p);
   return p;
 }
