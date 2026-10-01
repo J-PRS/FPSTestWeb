@@ -42,7 +42,7 @@ import { applyDebugHooks } from './game/debugHooks.js';
 import { createWorldState } from './game/worldState.js';
 import { createCombat } from './game/combat.js';
 import { TeamBots } from './game/bots.js';
-import { firstTerrain } from './game/net/world.js';
+import { firstTerrain, probeBootMap, bootPrimeTerrain, bootApplySavedMap } from './game/net/world.js';
 import { wirePlayerHooks } from './game/playerHooks.js';
 import { createWaveDirector } from './game/waveDirector.js';
 import { createDemoLifecycle } from './game/demoLifecycle.js';
@@ -140,7 +140,14 @@ const serverEndpoints = resolveServerEndpoints();
 async function init(): Promise<void> {
   profiler.markTime('initStart');
   watchDeployVersion();
-  await loadHeightmap('/assets/heightmaps/test_vertex.png');
+  // Probe the saved last-room BEFORE the boot heightmap: when it pings
+  // live, its terrain loads as the boot field and the default map is
+  // never resident — no default-field flash on F5.
+  const onlineBoot = !!urlParams.room || !!urlParams.p2p || (!!urlParams.mode && urlParams.mode !== 'classic');
+  const bootSaved = onlineBoot ? await probeBootMap() : null;
+  if (!bootSaved || !(await bootPrimeTerrain(bootSaved.httpUrl, bootSaved.map))) {
+    await loadHeightmap('/assets/heightmaps/test_vertex.png');
+  }
   profiler.markTime('heightmapLoaded');
 
   terrain = new Terrain(scene, sun.position.clone().normalize());
@@ -249,7 +256,7 @@ async function init(): Promise<void> {
 
 
   // Register all server message handlers (hit/kill/respawn/projectiles/gameState)
-  wireNetworkHandlers({
+  const netCtx = wireNetworkHandlers({
     lazyNetworkManager: () => networkManager,
     lazyScene: () => scene,
     lazyTerrain: () => terrain,
@@ -273,6 +280,9 @@ async function init(): Promise<void> {
   // correcting the player — the warp complaints. Only a ?room= link or a
   // ?p2p= code pulls a no-mode session online.
   const soloMode = !mode && !urlParams.room && !urlParams.p2p;
+  // The probed saved map was already primed as boot terrain — apply its
+  // structures/arena/interiors/sky now that the net ctx exists.
+  if (!classicMode && !soloMode) bootApplySavedMap(netCtx, bootSaved?.map ?? null);
   const serverUrl = (await serverEndpoints).wsUrl;
   logger.warn(`[diag] serverUrl=${serverUrl} classic=${classicMode || soloMode}`);
   await connectServer({ serverUrl, classicMode: classicMode || soloMode, networkManager, logger, fragMessages, profiler });
@@ -343,6 +353,7 @@ function setupOfflineMode(mode: string): void {
       dropNuggets: (pos, n, vel) => entities.spawnNuggetsAt(pos, n, vel),
       localPlayerKilled: (killerName) => killLocal(`fragged by ${killerName}`),
       remoteKillFeed: (text) => { fragMessages.show(text); hud.logEvent(text); },
+      fragBanner: (text) => { fragMessages.showKill(text); hud.logEvent(text); },
       killFeed: (s, t, ls, lt) => hud.feedKill(s, t, ls, lt),
       nearestNugget: (pos, maxDist) => {
         let best: typeof entities.nuggets[0] | null = null;

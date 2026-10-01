@@ -21,6 +21,7 @@ import { resolveServerEndpoints } from '../../networking/endpoints.js';
 import { setBotStructureSpecs } from '../botBrain.js';
 import type { DeployKind } from '../../../../shared/deployables.js';
 import type { TeamId } from '../../../../shared/teams.js';
+import { saveLastRoomMap, loadLastRoomMap, pingServer } from './lastRoom.js';
 
 export function wireWorld(ctx: NetCtx): void {
   const { deps, networkManager, chat } = ctx;
@@ -81,6 +82,7 @@ export function wireWorld(ctx: NetCtx): void {
     }
     if (map.terrain) void applyTerrain(ctx, map.terrain, map.terrainTex, map.sky);
     void applyInteriors(ctx, map.interiors);
+    void resolveServerEndpoints().then(({ httpUrl }) => saveLastRoomMap(httpUrl, map));
     chat.add(null, 'map updated by admin');
   };
 
@@ -171,6 +173,9 @@ function applyRoomInfo(ctx: NetCtx, playerCount: number, roomInfo?: Parameters<N
   for (const p of roomInfo.pickups ?? []) ctx.addPickup(p.id, p.pos, p.kind ?? 'gem');
   reconcileDeployables(ctx, roomInfo.deployables);
   applyMapSnapshot(ctx, roomInfo.map);
+  // Remember this room's map — F5 boots straight into it while the
+  // socket round-trips instead of flashing the default field.
+  void resolveServerEndpoints().then(({ httpUrl }) => saveLastRoomMap(httpUrl, roomInfo.map));
   // Flags mid-flight when we joined — same path as a flagUpdate broadcast.
   // An empty/absent list on a room hop must also clear the old room's
   // banners and HUD chips, so fire it either way.
@@ -217,7 +222,7 @@ function announceRoom(ctx: NetCtx, playerCount: number, roomInfo?: RoomInfo): vo
   }
 }
 
-type MapSnapshot = { structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number }; ambient?: Record<string, number>; terrain?: string; terrainTex?: string; sky?: string; interiors?: InteriorSpec[] };
+export type MapSnapshot = { structures?: StructureSpec[]; arena?: { x: number; z: number; radius: number } | null; ambient?: Record<string, number>; terrain?: string; terrainTex?: string; sky?: string; interiors?: InteriorSpec[] };
 
 /** Structures, dome, and per-map species caps — shared by gameState's
  *  join path; mapUpdate handles the same rebuild itself since it always
@@ -252,6 +257,10 @@ function applyMapSnapshot(ctx: NetCtx, map?: MapSnapshot): void {
  *  finish out of order and leave the older field resident. */
 let terrainSwap: Promise<void> = Promise.resolve();
 let terrainActive: string | null = null;
+/** Heightfield currently resident — null = the boot PNG. Tracked apart
+ *  from terrainActive so a boot-primed saved map skips the refetch +
+ *  mesh rebuild while still taking the albedo/sky passes. */
+let fieldLoaded: string | null = null;
 /** Resolves when the first terrain decision lands — a room's map spec
  *  or confirmation that the boot field stays. Offline bot fill waits on
  *  this so it never seeds a roster on the wrong heightmap. */
@@ -269,16 +278,19 @@ async function applyTerrain(ctx: NetCtx, file: string | null, texPath?: string, 
     Ball.terrainSwapping = true;
     try {
       const { httpUrl } = await resolveServerEndpoints();
-      if (file) {
-        await loadHeightfieldBin(`${httpUrl}/maps/${file}`);
-      } else {
-        await loadHeightmap(BOOT_HEIGHTMAP);
+      if (file !== fieldLoaded) {
+        if (file) {
+          await loadHeightfieldBin(`${httpUrl}/maps/${file}`);
+        } else {
+          await loadHeightmap(BOOT_HEIGHTMAP);
+        }
+        deps.lazyTerrain().reloadHeightmap();
+        // Ball.field captured the previous heightfield OBJECT — hmData is
+        // swapped, not mutated, so the sim would keep predicting bounces on
+        // the old terrain. Re-read it now that the new field is resident.
+        Ball.initNetMode(true);
+        fieldLoaded = file;
       }
-      deps.lazyTerrain().reloadHeightmap();
-      // Ball.field captured the previous heightfield OBJECT — hmData is
-      // swapped, not mutated, so the sim would keep predicting bounces on
-      // the old terrain. Re-read it now that the new field is resident.
-      Ball.initNetMode(true);
 
       // Baked albedo (T2 ports) replaces the procedural palette entirely.
       // Isolated from the terrain swap: a missing texture shouldn't leave
@@ -639,3 +651,31 @@ async function applyInteriors(ctx: NetCtx, list: InteriorSpec[] | undefined): Pr
 
 const _axis = new THREE.Vector3();
 const _q = new THREE.Quaternion();
+
+/** Boot-time probe: saved last-room map for the resolved host, only when
+ *  the host still answers a cheap liveness ping. Started before the boot
+ *  heightmap loads so a live saved map wins the field outright and the
+ *  default terrain is never resident. */
+export async function probeBootMap(): Promise<{ map: MapSnapshot; httpUrl: string } | null> {
+  const { httpUrl } = await resolveServerEndpoints();
+  const map = loadLastRoomMap(httpUrl);
+  if (!map) return null;
+  if (!(await pingServer(httpUrl))) return null;
+  return { map, httpUrl };
+}
+
+/** Load the saved map's heightfield as the boot terrain (instead of the
+ *  default PNG) and mark it resident so applyTerrain dedupes the swap. */
+export async function bootPrimeTerrain(httpUrl: string, map: MapSnapshot): Promise<boolean> {
+  if (!map.terrain) return false;
+  await loadHeightfieldBin(`${httpUrl}/maps/${map.terrain}`);
+  fieldLoaded = map.terrain;
+  return true;
+}
+
+/** Apply the probed saved map once the net ctx exists — structures,
+ *  arena, interiors, albedo, sky. gameState that follows re-applies the
+ *  same map for free or corrects it outright. */
+export function bootApplySavedMap(ctx: NetCtx, map: MapSnapshot | null): void {
+  if (map) applyMapSnapshot(ctx, map);
+}

@@ -47,7 +47,7 @@ export interface NetDeps {
   entities: () => ReturnType<typeof createEntities>;
 }
 
-export function wireNetworkHandlers(deps: NetDeps): void {
+export function wireNetworkHandlers(deps: NetDeps): NetCtx {
   const { logger } = deps;
   const nm = () => deps.lazyNetworkManager();
   const networkManager = deps.lazyNetworkManager();
@@ -121,9 +121,12 @@ export function wireNetworkHandlers(deps: NetDeps): void {
       return res.json() as Promise<{ room: string }>;
     },
     switchRoom: (name, map, bots, mode) => networkManager.switchRoom(name, map, bots, mode),
+    mapThumbUrl: (name) => `${httpUrl}/maps/thumbs/${name}.png`,
   })).catch((e) => {
     // Endpoint resolution failing leaves no lobby button — log it so a
     // dead /rooms host doesn't read as a missing feature.
     logger.warn('Lobby browser unavailable', e);
   });
+
+  return ctx;
 }
