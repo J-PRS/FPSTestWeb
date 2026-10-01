@@ -1,3 +1,4 @@
+2026-10-01 - Auto-quality gradual degrade: fractional resScale rungs (0.85/0.7/0.55/0.4) for non-retro baselines; hard-pixel modes keep integer tiers
 2026-10-01 - LOS memo cells 2m -> 3m (matches march step; fast movers were defeating the cache)
 2026-10-01 - GPU-side frame timer (EXT_disjoint_timer_query_webgl2) reported via __perf.gpu
 2026-10-01 - Bot brains think at 10Hz staggered by roster index; quarks batcher sims at 30Hz with 2*dt

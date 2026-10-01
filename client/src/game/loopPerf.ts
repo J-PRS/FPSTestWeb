@@ -108,6 +108,10 @@ function dumpPerf(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof c
 // pinned. fps-shadows=false pins shadows.
 const PX2LEVEL = [0, 3, 2, 4, 5]; // pixelMode → gpu level where it sits
 const PX_LADDER = [0, 0, 2, 1, 3, 4]; // gpu level → pixel mode
+// Non-retro baselines get a gradual degrade: fractional render scale
+// softens evenly, while hard-pixel modes would shimmer on non-integer
+// factors — they keep the integer px tiers above instead.
+const RES_LADDER = [1, 1, 0.85, 0.7, 0.55, 0.4]; // gpu level → resScale
 
 /** Where the GPU ladder wants to land: the user-pinned pixel baseline is
  *  the floor (degrade past it, never above), ?px=/floyd pin the tier. */
@@ -135,11 +139,7 @@ function autoScale(deps: GameLoopDeps, st: LoopState, dir: number): void {
   const wantShadows = next === 0 ||
     (baselineLevel > 0 && next === baselineLevel && settings.get('fps-shadows'));
   if (rendererSetup.renderer.shadowMap.enabled !== wantShadows) setShadows(deps, wantShadows);
-  const pixel = next <= 1 ? baselinePx : PX_LADDER[next]!;
-  if (next >= 2 || st.autoPixel) {
-    rendererSetup.setPixelated(pixel, false);
-    st.autoPixel = next > baselineLevel;
-  }
+  applyResTier(deps, st, next, baselinePx, baselineLevel);
   // Full-sky raster FX shed before the deepest pixel drop: the cloud dome
   // shades every skyward fragment on a GPU that already can't keep up.
   deps.sceneSetup.volumetricClouds?.setEnabled(next < 3);
@@ -149,6 +149,16 @@ function autoScale(deps: GameLoopDeps, st: LoopState, dir: number): void {
   setVfxQualityScale(next >= 4 ? 0.45 : next >= 2 ? 0.7 : 1);
   st.gpuLevel = next;
   Logger[dir < 0 ? 'warn' : 'info'](`auto-quality: gpu level ${next} (${dir < 0 ? 'sustained low fps' : 'headroom'})`);
+}
+
+function applyResTier(deps: GameLoopDeps, st: LoopState, next: number, baselinePx: number, baselineLevel: number): void {
+  const { rendererSetup } = deps;
+  if (next < 2 && !st.autoPixel) return;
+  // Gradual path: resScale rungs replace the px jumps entirely; retro
+  // baselines keep the integer px tiers (non-integer factors shimmer).
+  if (baselinePx === 0) rendererSetup.setResScale(RES_LADDER[next]!);
+  else rendererSetup.setPixelated(next <= 1 ? baselinePx : PX_LADDER[next]!, false);
+  st.autoPixel = next > baselineLevel;
 }
 
 let _gpuId: string | null = null;
@@ -197,7 +207,11 @@ function autoScaleCpu(deps: GameLoopDeps, st: LoopState, dir: number): void {
  *  player isn't stranded on a degraded preset it chose for them. */
 export function resetAutoQuality(deps: GameLoopDeps, st: LoopState): void {
   // Restore the stored baseline — the user's own pixel pick, not forced 0.
-  if (st.autoPixel) { deps.rendererSetup.setPixelated(settings.get('fps-pixelated'), false); st.autoPixel = false; }
+  if (st.autoPixel) {
+    if (settings.get('fps-pixelated') === 0) deps.rendererSetup.setResScale(1);
+    else deps.rendererSetup.setPixelated(settings.get('fps-pixelated'), false);
+    st.autoPixel = false;
+  }
   if (deps.rendererSetup.renderer.shadowMap.enabled !== settings.get('fps-shadows')) {
     setShadows(deps, settings.get('fps-shadows'));
   }

@@ -34,6 +34,11 @@ export interface RendererSetup {
    *  so programs don't lazily stall their first draw. */
   warmup: () => void;
   setPixelated: (mode: number, persist?: boolean) => void;
+  /** Fractional resolution scale (auto-quality degrade) — softens the
+   *  frame evenly via pixel-ratio scaling; only meaningful outside the
+   *  hard-pixel modes, which need integer factors to keep the chunky
+   *  grid regular. */
+  setResScale: (scale: number) => void;
   setPostProcessingEnabled: (enabled: boolean) => void;
   resize: (width: number, height: number) => void;
 }
@@ -440,9 +445,10 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
     'position:absolute;inset:0;width:100%;height:100%;image-rendering:pixelated;display:none;pointer-events:none;z-index:1';
   document.body.appendChild(fsCanvas);
   let fsOverlay: (() => void) | null = null; // viewmodel pass, injected by gameLoop
-
+  // auto-quality degrade — hard-pixel modes force 1 (integer grid)
+  let resScale = 1;
   function getPixelRatio(): number {
-    return pixelMode > 0 ? 1 : Math.min(window.devicePixelRatio, 2);
+    return pixelMode > 0 ? 1 : Math.min(window.devicePixelRatio, 2) * resScale;
   }
 
   function updateRendererSize(): void {
@@ -481,7 +487,7 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
     // Post buffers track render res: hard/dithered at 1/PIXEL_SCALE, medium
     // at half that, so post passes stay cheap on the shrunken canvas.
     const div = pixelMode === 2 ? PIXEL_SCALE / 2
-      : (pixelMode >= 1 ? PIXEL_SCALE : 1);
+      : (pixelMode >= 1 ? PIXEL_SCALE : 1 / resScale);
     const w = Math.floor(window.innerWidth / div);
     const h = Math.floor(window.innerHeight / div);
     composer.setSize(w, h);
@@ -526,6 +532,12 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
     updateRendererSize();
     applyBufferSizes();
     pixelToggleBtn.textContent = pixelLabel(pixelMode);
+  }
+
+  function setResScale(scale: number): void {
+    resScale = Math.min(1, Math.max(0.25, scale));
+    updateRendererSize();
+    applyBufferSizes();
   }
 
   function setPostProcessingEnabled(enabled: boolean): void {
@@ -578,6 +590,7 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
     updateRendererSize,
     warmup: () => { void renderer.compileAsync(scene, camera); },
     setPixelated,
+    setResScale,
     setPostProcessingEnabled,
     resize,
   };
