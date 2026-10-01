@@ -1,3 +1,4 @@
+2026-10-01 - terrain mats: 4x-finer detail repeat (~1.5m grain, was 5.86m blobs); ?nomats debug toggle
 2026-10-01 - T2 terrain mats: detail tiles now luminance-modulate the albedo (divided by each tile's weighted mean, measured at atlas bake) instead of replacing its color — the bake keeps grass/rock hues and tiles add close-range grain.
 2026-10-01 - T2 terrain mats: alphas.bin is cell-major [cell*count+layer], not planar — the loader read it planar so every layer sat at ~0.25 weight and the tiled detail covered the whole map. Now each cell blends its real materials.
 2026-10-01 - BotBolts: claimShot now calls bot.fire() — local GameBots get the recoil kick, muzzle flash, and firing spine-lock on every shot (the claim path used to skip it, so local bots kept a swaying torso mid-firefight).

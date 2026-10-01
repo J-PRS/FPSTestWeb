@@ -337,7 +337,10 @@ export const terrainFrag = /* glsl */`
       vec3 col = texture2D(albedoMap, fract(vWorldPos.xz / hmWorldScaleFrag)).rgb;
       if (useMats) {
         vec2 hmUV = fract(vWorldPos.xz / hmWorldScaleFrag);
-        vec2 au = fract(vWorldPos.xz / tileMeters) * vec2(0.25, 0.5);
+        // Detail repeats 4× per alpha cell (~1.5m on t2 maps): at the full
+        // 5.86m cell each tile's luminance variance lands as giant dark
+        // blobs; at grain scale it reads as close-range texture.
+        vec2 au = fract(vWorldPos.xz / (tileMeters * 0.25)) * vec2(0.25, 0.5);
         vec4 wA = texture2D(matAlphaA, hmUV);
         vec4 wB = texture2D(matAlphaB, hmUV);
         vec3 det =

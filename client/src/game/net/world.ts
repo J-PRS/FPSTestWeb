@@ -13,6 +13,7 @@ import { Ball } from '../../entities/balls.js';
 import { Projectile } from '../../projectiles/Projectile.js';
 import type { GameStatePlayer, LocalPlayerState } from '../../../../shared/protocol.js';
 import type { NetworkManager } from '../../networking/NetworkManager.js';
+import { urlParams } from '../../core/params.js';
 import type { NetCtx } from './ctx.js';
 import { loadHeightfieldBin, loadHeightmap } from '../../world/heightmap.js';
 import { reconcileDeployables } from './deployables.js';
@@ -279,7 +280,9 @@ async function applyTerrainTex(deps: NetCtx['deps'], httpUrl: string, texPath: s
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   terrain.setAlbedo(tex);
   try {
-    const mats = await loadMats(`${httpUrl}/maps/${texPath.slice(0, texPath.lastIndexOf('/'))}`);
+    const mats = urlParams.has('nomats')
+      ? null
+      : await loadMats(`${httpUrl}/maps/${texPath.slice(0, texPath.lastIndexOf('/'))}`);
     if (mats) terrain.setMaterialBlend(mats.tiles, mats.alphaA, mats.alphaB, mats.tileMeters, mats.means);
   } catch {
     terrain.setMaterialBlend(null, null, null, 0, null);
