@@ -1,3 +1,4 @@
+2026-09-30 - Scarab split: per-frame instance pose (slope-hug body, scuttle legs, eyes, shadow) -> scarabPose.ts (338->276).
 2026-09-30 - PlayerVisuals split: camera paths (1p/3p boom, frozen, observer free-fly) + feet gizmo -> pvCam.ts (314->233).
 2026-09-30 - lightningBeam split: scene-graph assembly (crossed ribbons, contact sprite, spark fountain) -> beamBuild.ts (346->258).
 2026-09-30 - Player split: move-intent input reads (basis vectors, polled state, aim dir) -> playerRead.ts (544->494).

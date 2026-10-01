@@ -10,27 +10,16 @@ import {
 import { Terrain } from '../world/terrain.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { Targetable } from './balls.js';
-import { allocSlots, freeSlots, getSwarm, getShadows } from './swarms.js';
+import { allocSlots, freeSlots } from './swarms.js';
 import type { SwarmPart, SwarmSlotOwner } from './swarm.js';
 import { getGlowTexture } from '../effects/glowTexture.js';
+import { writeInstances } from './scarabPose.js';
 import { type SimCrawler, makeSimCrawler, stepCrawler } from '../../../shared/creatureSim.js';
 import { bindNetSim, applyNetEdgeSim, updateNetSim, claimDamageMelee, type NetBindArgs } from '../game/netMelee.js';
 
 const _dir = new THREE.Vector3();
-const _UP = new THREE.Vector3(0, 1, 0);
-const _tiltQ = new THREE.Quaternion(); // ground-normal alignment while grounded
-const _root = new THREE.Matrix4();
-const _local = new THREE.Matrix4();
-const _world = new THREE.Matrix4();
-const _p = new THREE.Vector3();
-const _q = new THREE.Quaternion();
-const _e = new THREE.Euler();
-const _s = new THREE.Vector3();
 
 // Part indices into the scarab swarm — order must match scarabParts().
-const PART_BODY = 0;
-const PART_LEG = 1;   // six instances per scarab: slot*6+i
-const PART_EYE = 2;   // two per scarab — additive glow quads
 const LEGS_PER = 6;   // beetle, not spider — six legs
 const EYES_PER = 2;
 
@@ -58,10 +47,10 @@ function legGeo(): THREE.BufferGeometry {
   }
   return _legGeo;
 }
-const _eyeGeo = new THREE.PlaneGeometry(1, 1);
 
 let _bodyMat: THREE.MeshLambertMaterial | null = null;
 let _eyeMat: THREE.MeshBasicMaterial | null = null;
+let _eyeGeo: THREE.PlaneGeometry | undefined;
 
 /** Swarm part table — registered once in swarms.initSwarms. */
 export function scarabParts(): SwarmPart[] {
@@ -75,7 +64,7 @@ export function scarabParts(): SwarmPart[] {
   return [
     { geometry: bodyGeo(), material: _bodyMat, castShadow: true },
     { geometry: legGeo(), material: _bodyMat, per: LEGS_PER },
-    { geometry: _eyeGeo, material: _eyeMat, per: EYES_PER },
+    { geometry: _eyeGeo ??= new THREE.PlaneGeometry(1, 1), material: _eyeMat, per: EYES_PER },
   ];
 }
 
@@ -108,11 +97,11 @@ export class Scarab implements Targetable, SwarmSlotOwner {
 
   swarmSlot = -1;
   shadowSlot = -1;
-  private hasSlots = false;
+  hasSlots = false;
 
-  private animT = Math.random() * 10;
+  animT = Math.random() * 10;
   yaw = 0; // net replay writes this from the sim
-  private flash = 0;
+  flash = 0;
   private biteCd = 0;
   private stunTimer = 0;
   private zigPhase = Math.random() * Math.PI * 2;
@@ -250,58 +239,7 @@ export class Scarab implements Targetable, SwarmSlotOwner {
     this.vel.z *= Math.max(0, 1 - 3 * dt);
   }
 
-  writeInstances(terrain: Terrain): void {
-    if (!this.hasSlots) return;
-    const swarm = getSwarm('scarab');
-    if (!swarm) return;
-    const slot = this.swarmSlot;
-    const r = this.radius;
-
-    _e.set(0, this.yaw, 0);
-    _q.setFromEuler(_e);
-    // Grounded scarabs hug the slope — a skittering pack crossing a hill
-    // reads flat-footed instead of piercing the dirt.
-    if (!this.airborne) {
-      _tiltQ.setFromUnitVectors(_UP, terrain.getNormal(this.pos.x, this.pos.z));
-      _q.premultiply(_tiltQ);
-    }
-    _s.setScalar(r);
-    _p.copy(this.pos);
-    _root.compose(_p, _q, _s);
-
-    const fr = this.flash > 0 ? 4 : 1;
-    swarm.setMatrix(PART_BODY, slot, _root);
-    swarm.setColor(PART_BODY, slot, this.color.r * fr, this.color.g * fr, this.color.b * fr);
-
-    // Six legs, 3 per side — frantic alternating scuttle, way faster than
-    // the crawler's: scarabs are all legs and panic.
-    const amp = this.airborne ? 0.06 : (this.vel.lengthSq() > 4 ? 0.6 : 0.2);
-    for (let i = 0; i < LEGS_PER; i++) {
-      const side = i < 3 ? -1 : 1;
-      const k = i % 3; // 0 front → 2 rear
-      const wiggle = Math.sin(this.animT * 24 + i * 2.1) * amp;
-      _e.set(0, side < 0 ? Math.PI - (k - 1) * 0.5 + wiggle : (k - 1) * 0.5 + wiggle, 0);
-      _q.setFromEuler(_e);
-      _local.compose(
-        _p.set(side * 0.55, 0.15, (k - 1) * 0.6),
-        _q, _s.set(1, 1, 1));
-      _world.multiplyMatrices(_root, _local);
-      swarm.setMatrix(PART_LEG, slot * LEGS_PER + i, _world);
-      swarm.setColor(PART_LEG, slot * LEGS_PER + i, this.color.r * 0.5, this.color.g * 0.5, this.color.b * 0.5);
-    }
-
-    // Two amber eyes on the head lobe
-    for (let i = 0; i < EYES_PER; i++) {
-      const side = i === 0 ? -1 : 1;
-      _local.compose(
-        _p.set(side * 0.14, 0.25, 0.9), _q.identity(), _s.setScalar(0.3),
-      );
-      _world.multiplyMatrices(_root, _local);
-      swarm.setMatrix(PART_EYE, slot * EYES_PER + i, _world);
-    }
-
-    getShadows()?.set(this, this.pos, r * 1.1, 0.3);
-  }
+  writeInstances(terrain: Terrain): void { writeInstances(this, terrain); }
 
   takeDamage(damage: number): boolean {
     if (this.netDriven) {
