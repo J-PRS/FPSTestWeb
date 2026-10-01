@@ -109,6 +109,13 @@ function reapStarved(ps: IParticleSystem): void {
 // stay exact while a spawn-burst's peak cost halves. Short-lived
 // puff/blast particles absorb the 2·dt step invisibly.
 let simParity = false;
+// Far-burst construction stagger: a multi-layer explosion builds all its
+// ParticleSystems in one call (~15ms measured worst-case). Past this
+// radius a few frames of build delay is invisible, so construction is
+// queued and drains one system per frame instead of landing in one spike.
+const BUILD_STAGGER_RADIUS_SQ = 60 * 60;
+const buildQueue: (() => void)[] = [];
+let lastCamPos: THREE.Vector3 | undefined;
 // Pause/prune bookkeeping runs at 15Hz — a ~66ms lag on distance-pause or
 // one-shot teardown is invisible, and rescanning every system every frame
 // was the last per-frame O(systems) cost in vfx.
@@ -150,6 +157,8 @@ function runBookkeeping(camPos?: THREE.Vector3): void {
 }
 
 export function updateVfx(dt: number, camPos?: THREE.Vector3): void {
+  if (camPos) lastCamPos = camPos;
+  if (buildQueue.length) buildQueue.shift()!();
   if (++prunePhase >= 4) {
     prunePhase = 0;
     runBookkeeping(camPos);
@@ -586,6 +595,15 @@ export interface ImplodeSpec {
 
 /** Inward variant of blastBurst — same batching, shell → center. */
 export function implodeBurst(pos: THREE.Vector3, spec: ImplodeSpec, additive: boolean): void {
+  if (lastCamPos && pos.distanceToSquared(lastCamPos) > BUILD_STAGGER_RADIUS_SQ) {
+    const p = pos.clone();
+    buildQueue.push(() => spawnImplodeBurst(p, spec, additive));
+    return;
+  }
+  spawnImplodeBurst(pos, spec, additive);
+}
+
+function spawnImplodeBurst(pos: THREE.Vector3, spec: ImplodeSpec, additive: boolean): void {
   if (!batcher || !scene || live.size >= MAX_LIVE_SYSTEMS) return;
   const w = spec.stagger ?? 0;
   const ps = new ParticleSystem({
@@ -666,6 +684,16 @@ function blastBursts(count: number, w: number) {
 }
 
 export function blastBurst(pos: THREE.Vector3, spec: BlastSpec,
+    additive: boolean): void {
+  if (lastCamPos && pos.distanceToSquared(lastCamPos) > BUILD_STAGGER_RADIUS_SQ) {
+    const p = pos.clone();
+    buildQueue.push(() => spawnBlastBurst(p, spec, additive));
+    return;
+  }
+  spawnBlastBurst(pos, spec, additive);
+}
+
+function spawnBlastBurst(pos: THREE.Vector3, spec: BlastSpec,
     additive: boolean): void {
   if (!batcher || !scene || live.size >= MAX_LIVE_SYSTEMS) return;
   const colorGen = blastColorGen(spec);
