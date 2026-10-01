@@ -1,3 +1,4 @@
+2026-10-01 - __perf reports draws/tris; __scene+__renderer debug handles for headless census
 2026-10-01 - Settings menu regrouped into labeled sections (perf/gfx/controls/audio+HUD/game)
 2026-10-01 - FPS_Test legacy report + pixel-mode perf matrix (all modes real degrade, none pure postpro)
 2026-10-01 - PIXEL SIZE x PIXEL MODE segmented rows (two-axis retro pipeline, legacy picks migrate)
