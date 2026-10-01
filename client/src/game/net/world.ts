@@ -271,7 +271,7 @@ async function applyTerrainTex(deps: NetCtx['deps'], httpUrl: string, texPath: s
   const terrain = deps.lazyTerrain();
   if (!texPath) {
     terrain.setAlbedo(null);
-    terrain.setMaterialBlend(null, null, null, 0);
+    terrain.setMaterialBlend(null, null, null, 0, null);
     return;
   }
   const tex = await new THREE.TextureLoader().loadAsync(`${httpUrl}/maps/${texPath}`);
@@ -280,9 +280,9 @@ async function applyTerrainTex(deps: NetCtx['deps'], httpUrl: string, texPath: s
   terrain.setAlbedo(tex);
   try {
     const mats = await loadMats(`${httpUrl}/maps/${texPath.slice(0, texPath.lastIndexOf('/'))}`);
-    if (mats) terrain.setMaterialBlend(mats.tiles, mats.alphaA, mats.alphaB, mats.tileMeters);
+    if (mats) terrain.setMaterialBlend(mats.tiles, mats.alphaA, mats.alphaB, mats.tileMeters, mats.means);
   } catch {
-    terrain.setMaterialBlend(null, null, null, 0);
+    terrain.setMaterialBlend(null, null, null, 0, null);
   }
 }
 
@@ -292,6 +292,7 @@ async function applyTerrainTex(deps: NetCtx['deps'], httpUrl: string, texPath: s
  *  reach all layers. Returns null when no mats.json exists. */
 async function loadMats(dirUrl: string): Promise<{
   tiles: THREE.Texture; alphaA: THREE.Texture; alphaB: THREE.Texture; tileMeters: number;
+  means: number[];
 } | null> {
   const res = await fetch(`${dirUrl}/mats.json`);
   if (!res.ok) return null;
@@ -319,6 +320,7 @@ async function loadMats(dirUrl: string): Promise<{
   const atlas = document.createElement('canvas');
   atlas.width = 1024; atlas.height = 512;
   const g = atlas.getContext('2d')!;
+  const means = new Array<number>(8).fill(0.5);
   await Promise.all(man.tiles.slice(0, 8).map(async (path, k) => {
     const img = new Image();
     // Cross-origin atlas bake — without this the canvas taints and
@@ -326,13 +328,22 @@ async function loadMats(dirUrl: string): Promise<{
     img.crossOrigin = 'anonymous';
     img.src = `${dirUrl}/${path}`;
     await img.decode();
-    g.drawImage(img, (k % 4) * 256, Math.floor(k / 4) * 256, 256, 256);
+    const cx = (k % 4) * 256, cy = Math.floor(k / 4) * 256;
+    g.drawImage(img, cx, cy, 256, 256);
+    // Per-tile mean luminance — the shader divides the blended detail by
+    // the weighted mean so tiles modulate the albedo around their own
+    // brightness instead of replacing its color (dark rock tiles used to
+    // erase the grass bake outright).
+    const d = g.getImageData(cx, cy, 256, 256).data;
+    let s = 0;
+    for (let i = 0; i < d.length; i += 4) s += 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+    means[k] = Math.max(s / (d.length / 4) / 255, 1e-3);
   }));
   const tilesTex = new THREE.CanvasTexture(atlas);
   tilesTex.colorSpace = THREE.SRGBColorSpace;
   tilesTex.generateMipmaps = true;
   tilesTex.minFilter = THREE.LinearMipmapLinearFilter;
-  return { tiles: tilesTex, alphaA: pack(0), alphaB: pack(4), tileMeters: man.tileMeters };
+  return { tiles: tilesTex, alphaA: pack(0), alphaB: pack(4), tileMeters: man.tileMeters, means };
 }
 
 /** Local-player half of gameState — position/rotation/health restore on

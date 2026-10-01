@@ -135,6 +135,7 @@ export const terrainFrag = /* glsl */`
   uniform sampler2D matAlphaB;
   uniform bool useMats;
   uniform float tileMeters;
+  uniform float tileMeans[8];
   uniform float hmWorldScaleFrag;
   uniform vec3 fogColor;
   uniform float fogStart;
@@ -349,8 +350,15 @@ export const terrainFrag = /* glsl */`
           texture2D(matTiles, au + vec2(0.50, 0.5)).rgb * wB.b +
           texture2D(matTiles, au + vec2(0.75, 0.5)).rgb * wB.a;
         float wsum = wA.r + wA.g + wA.b + wA.a + wB.r + wB.g + wB.b + wB.a;
+        // Luminance modulation, not color replacement: the tile's own
+        // weighted mean divides its luminance so the blend adds grain
+        // around neutral — the baked albedo keeps its color. Replacing
+        // outright painted every material region in flat tile color.
+        float tmean = tileMeans[0] * wA.r + tileMeans[1] * wA.g + tileMeans[2] * wA.b + tileMeans[3] * wA.a
+                    + tileMeans[4] * wB.r + tileMeans[5] * wB.g + tileMeans[6] * wB.b + tileMeans[7] * wB.a;
+        float dl = dot(det, vec3(0.299, 0.587, 0.114)) / max(tmean, 1e-3);
         float detFade = 1.0 - smoothstep(140.0, 380.0, length(vWorldPos - vCameraPos));
-        col = mix(col, det, detFade * clamp(wsum, 0.0, 1.0));
+        col *= mix(1.0, dl, detFade * clamp(wsum, 0.0, 1.0));
       }
       float detail = noise(uvFin) * 0.5 + noise(uvMed) * 0.5;
       col *= 0.82 + 0.36 * detail;

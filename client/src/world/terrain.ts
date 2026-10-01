@@ -118,6 +118,7 @@ export class Terrain {
           matAlphaB:       { value: null },
           useMats:         { value: false },
           tileMeters:      { value: 5.86 },
+          tileMeans:       { value: new Float32Array(8).fill(0.5) },
           hmWorldScale:    { value: HM_WORLD_SCALE },
           hmWorldScaleFrag:{ value: HM_WORLD_SCALE },
           hScale:          { value: HSCALE },
@@ -189,14 +190,16 @@ export class Terrain {
   }
 
   /** T2 material blend layer — atlas of 256px tiles + packed alpha
-   *  weights; the shader blends them over the albedo near the camera. */
+   *  weights; the shader modulates the albedo by tile luminance near
+   *  the camera (grain only — the bake keeps its color). */
   setMaterialBlend(tiles: THREE.Texture | null, alphaA: THREE.Texture | null,
-                   alphaB: THREE.Texture | null, tileMeters: number): void {
+                   alphaB: THREE.Texture | null, tileMeters: number, means: number[] | null): void {
     for (const level of this.levels) {
       level.material.uniforms.matTiles.value = tiles;
       level.material.uniforms.matAlphaA.value = alphaA;
       level.material.uniforms.matAlphaB.value = alphaB;
       level.material.uniforms.tileMeters.value = tileMeters;
+      if (means) level.material.uniforms.tileMeans.value.set(means);
       level.material.uniforms.useMats.value = !!tiles;
     }
   }
