@@ -114,6 +114,8 @@ export interface LoopState {
   autoPixel: boolean;
   fxCursor: number;
   fxJobs: [name: string, run: () => void][];
+  /** Shadow-map throttle accumulator — see renderFrame. */
+  shadowAcc: number;
 }
 
 // Per-fxJob EMA ms — 'fx' was one opaque phase over nine rotated jobs;
@@ -337,14 +339,11 @@ function hudTick(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof cr
 }
 
 
-export function createGameLoop(deps: GameLoopDeps) {
-  let lastTime = 0;
-  const st: LoopState = { lastYaw: 0, lastPitch: 0, lowFpsFrames: 0, lowFpsAccum: 0, lastFpsDump: 0, gpuLevel: 0, cpuLevel: 0, cpuBound: false, headroomAccum: 0, autoPixel: false, fxCursor: 0, fxJobs: [] };
-
-  // stats.js perf panels — FPS/MS/MB in a row along the bottom-right,
-  // toggled with ` (backquote). stats.js only renders one panel per
-  // instance, so use one per metric; panels are 80px wide + 8px gap.
-  const statsPanels = [0, 1, 2].map((panel, i) => {
+// stats.js perf panels — FPS/MS/MB in a row along the bottom-right,
+// toggled with ` (backquote). stats.js only renders one panel per
+// instance, so use one per metric; panels are 80px wide + 8px gap.
+function makeStatsPanels(): Stats[] {
+  return [0, 1, 2].map((panel, i) => {
     const s = new Stats();
     s.showPanel(panel);
     const dom = s.dom as HTMLElement;
@@ -355,6 +354,16 @@ export function createGameLoop(deps: GameLoopDeps) {
     document.body.appendChild(dom);
     return s;
   });
+}
+
+export function createGameLoop(deps: GameLoopDeps) {
+  let lastTime = 0;
+  const st: LoopState = { lastYaw: 0, lastPitch: 0, lowFpsFrames: 0, lowFpsAccum: 0, lastFpsDump: 0, gpuLevel: 0, cpuLevel: 0, cpuBound: false, headroomAccum: 0, autoPixel: false, fxCursor: 0, fxJobs: [], shadowAcc: 0 };
+
+  // stats.js perf panels — FPS/MS/MB in a row along the bottom-right,
+  // toggled with ` (backquote). stats.js only renders one panel per
+  // instance, so use one per metric; panels are 80px wide + 8px gap.
+  const statsPanels = makeStatsPanels();
   const perf = createPerfHud();
   // AUTO QUALITY toggle (top of SETTINGS): off freezes the ladder where it
   // is AND restores full quality, so the user isn't left on a preset they
@@ -464,6 +473,20 @@ export function createGameLoop(deps: GameLoopDeps) {
     const vmCamera = deps.vmCamera();
     const vmScene = deps.vmScene();
     const renderer = rendererSetup.renderer;
+
+    // Shadow-map throttle under the auto-quality ladder: a full-scene
+    // re-raster every frame is the heaviest single GPU cost. At ladder ≥2
+    // the map only re-renders every 2nd frame (≥4 every 3rd) — casters move
+    // fast enough for a frame or two of lag to be invisible.
+    const shadow = renderer.shadowMap;
+    if (shadow.enabled) {
+      const period = st.gpuLevel >= 4 ? 3 : st.gpuLevel >= 2 ? 2 : 1;
+      shadow.autoUpdate = false;
+      if (++st.shadowAcc >= period) { st.shadowAcc = 0; shadow.needsUpdate = true; }
+    } else {
+      shadow.autoUpdate = true;
+      st.shadowAcc = 0;
+    }
 
     if (rendererSetup.needsComposer()) {
       rendererSetup.render(dt); // FLOYD: overlay pass (the VM draw below) runs inside

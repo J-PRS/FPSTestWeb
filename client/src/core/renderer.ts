@@ -30,7 +30,7 @@ export interface RendererSetup {
   isBloomEnabled: () => boolean;
   setBloomEnabled: (enabled: boolean) => void;
   updateRendererSize: () => void;
-  setPixelated: (mode: number) => void;
+  setPixelated: (mode: number, persist?: boolean) => void;
   setPostProcessingEnabled: (enabled: boolean) => void;
   resize: (width: number, height: number) => void;
 }
@@ -272,6 +272,20 @@ function applyPixelSize(renderer: THREE.WebGLRenderer,
 // explosions, nuggets) push the brightest colors, the lit terrain and sky
 // stay under it, so bloom never washes the frame. (A second composer and
 // SelectiveBloomEffect both proved fragile here — keep the simple one.)
+// Lens dirt (Unity's Bloom Dirtiness): a screen-fit smudge/dust texture
+// multiplied by the POST-bloom luminance — the merged frame already
+// carries the halo, so excess-over-threshold re-boosts exactly where
+// glow exists. Clean frames multiply to ~0: dirt never shades the scene.
+const LENS_DIRT_GLSL = `
+uniform sampler2D dirtMap;
+uniform float dirtIntensity;
+uniform float dirtThreshold;
+void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor) {
+  vec3 dirt = texture2D(dirtMap, uv).rgb;
+  float excess = max(0.0, luminance(inputColor.rgb) - dirtThreshold);
+  outputColor = vec4(inputColor.rgb + dirt * excess * dirtIntensity, inputColor.a);
+}`;
+
 function makeComposer(renderer: THREE.WebGLRenderer, scene: THREE.Scene,
     camera: THREE.PerspectiveCamera, bloomEnabled: boolean,
     postproEnabled: boolean, pixelMode: number) {
@@ -316,6 +330,21 @@ function makeComposer(renderer: THREE.WebGLRenderer, scene: THREE.Scene,
   const bloomMergePass = new EffectPass(camera, bloomEffect);
   composer.addPass(bloomMergePass);
 
+  // Lens dirt rides the bloom toggle — without bloom there's no halo for
+  // the dirt to diffract, so a dirt-only frame would do nothing.
+  // 1k AVIF (28KB) — the 4k/5MB source is wasteful for a screen-fit
+  // multiplier mask; artifacts are invisible inside additive glow.
+  const dirtTex = new THREE.TextureLoader().load('/assets/LensDirt/LensDirt03_1k.avif');
+  const dirtEffect = new Effect('LensDirt', LENS_DIRT_GLSL, {
+    uniforms: new Map<string, THREE.Uniform>([
+      ['dirtMap', new THREE.Uniform(dirtTex)],
+      ['dirtIntensity', new THREE.Uniform(3.0)], // 03 is a dark map — needs the boost to read
+      ['dirtThreshold', new THREE.Uniform(1.15)], // under the 1.3 bloom gate so halo shoulders count
+    ]),
+  });
+  const dirtPass = new EffectPass(camera, dirtEffect);
+  composer.addPass(dirtPass);
+
   const acesPass = new EffectPass(camera, acesGradeEffect);
   composer.addPass(acesPass);
 
@@ -328,6 +357,7 @@ function makeComposer(renderer: THREE.WebGLRenderer, scene: THREE.Scene,
   composer.addPass(upscalePass);
 
   bloomMergePass.enabled = bloomEnabled;
+  dirtPass.enabled = bloomEnabled;
   contrastPass.enabled = postproEnabled;
   upscalePass.enabled = pixelMode === 3 || pixelMode === 4;
   upscaleEffect.uniforms.get('mode')!.value = pixelMode === 4 ? 2 : 1;
@@ -348,7 +378,7 @@ function makeComposer(renderer: THREE.WebGLRenderer, scene: THREE.Scene,
   }
   syncRenderToScreen();
 
-  return { composer, bloomMergePass, contrastPass, upscalePass, upscaleEffect, syncRenderToScreen };
+  return { composer, bloomMergePass, dirtPass, contrastPass, upscalePass, upscaleEffect, syncRenderToScreen };
 }
 
 // ESC-menu toggles: look up the three buttons once, seed their labels
@@ -358,7 +388,9 @@ function wireToggleButtons(modes: RenderModes, onPx: () => void, onBm: () => voi
   const bloomToggleBtn = document.getElementById('bloom-toggle')! as HTMLButtonElement;
   const postproToggleBtn = document.getElementById('postpro-toggle')! as HTMLButtonElement;
   pixelToggleBtn.textContent = pixelLabel(modes.pixelMode);
-  bloomToggleBtn.textContent = modes.bloomEnabled ? 'BLOOM: ON' : 'BLOOM: OFF';
+  // Player-facing label is GLOW — "bloom" carries washed-out baggage and
+  // ours is emitter-gated (trails/explosions), which is what glow means.
+  bloomToggleBtn.textContent = modes.bloomEnabled ? 'GLOW: ON' : 'GLOW: OFF';
   postproToggleBtn.textContent = modes.postproEnabled ? 'POST-PROCESSING: ON' : 'POST-PROCESSING: OFF';
   pixelToggleBtn.addEventListener('click', onPx);
   bloomToggleBtn.addEventListener('click', onBm);
@@ -372,7 +404,9 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
   let postproEnabled = modes.postproEnabled;
   let bloomEnabled = modes.bloomEnabled;
 
-  const renderer = new THREE.WebGLRenderer({ antialias: false });
+  // high-performance asks the browser to pick the dGPU on dual-GPU
+  // machines — default lets the OS park us on the iGPU.
+  const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
 
   const fs = makeFloydEngine(renderer);
   const fsCanvas = fs.canvasEl;
@@ -417,7 +451,7 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
   document.body.appendChild(renderer.domElement);
 
   const cc = makeComposer(renderer, scene, camera, bloomEnabled, postproEnabled, pixelMode);
-  const { composer, bloomMergePass, contrastPass, upscalePass, upscaleEffect, syncRenderToScreen } = cc;
+  const { composer, bloomMergePass, dirtPass, contrastPass, upscalePass, upscaleEffect, syncRenderToScreen } = cc;
 
   // composer.setSize() also resizes the canvas — so always set buffers first,
   // then restore the canvas to full res. Pixelated = low-res buffers upscaled
@@ -448,9 +482,11 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
     composer.render(dt);
   }
 
-  function setPixelated(mode: number): void {
+  // persist=false for auto-quality steps: fps-pixelated is the user's
+  // chosen baseline; the ladder may degrade below it but never rewrites it.
+  function setPixelated(mode: number, persist = true): void {
     pixelMode = mode;
-    settings.set('fps-pixelated', pixelMode);
+    if (persist) settings.set('fps-pixelated', pixelMode);
     upscalePass.enabled = pixelMode === 3 || pixelMode === 4;
     upscaleEffect.uniforms.get('mode')!.value = pixelMode === 4 ? 2 : 1;
     syncRenderToScreen();
@@ -471,7 +507,7 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
     // Floyd mode has no composer — enabling post there drops floyd rather
     // than silently refusing (the toggle used to clamp back to OFF with
     // no feedback and read as dead). Other pixel modes share the chain.
-    if (enabled && pixelMode === 5) setPixelated(0);
+    if (enabled && pixelMode === 5) setPixelated(0, false); // compat drop, not a user pick
     postproEnabled = enabled;
     settings.set('fps-postpro', postproEnabled);
     contrastPass.enabled = postproEnabled;
@@ -481,12 +517,13 @@ export function createRenderer(camera: THREE.PerspectiveCamera, scene: THREE.Sce
 
   function setBloomEnabled(enabled: boolean): void {
     // Same story as post — only floyd is exclusive.
-    if (enabled && pixelMode === 5) setPixelated(0);
+    if (enabled && pixelMode === 5) setPixelated(0, false);
     bloomEnabled = enabled;
     settings.set('fps-bloom', bloomEnabled);
     bloomMergePass.enabled = bloomEnabled;
+    dirtPass.enabled = bloomEnabled;
     syncRenderToScreen();
-    bloomToggleBtn.textContent = bloomEnabled ? 'BLOOM: ON' : 'BLOOM: OFF';
+    bloomToggleBtn.textContent = bloomEnabled ? 'GLOW: ON' : 'GLOW: OFF';
   }
 
   function resize(_width: number, _height: number): void {
