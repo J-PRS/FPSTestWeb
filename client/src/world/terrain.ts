@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { getHeightmapData, sampleHeight, sampleNormal } from './heightmap.js';
+import { getHeightmapData, sampleHeight, sampleNormal, sampleHeightVisual } from './heightmap.js';
 import { TERRAIN_HEIGHT_SCALE, TERRAIN_WORLD_SCALE } from '../core/config.js';
 
 // Heightmap loading/sampling + the shared Heightfield live in heightmap.ts —
@@ -273,6 +273,12 @@ export class Terrain {
 
   getHeight(wx: number, wz: number): number {
     return sampleHeight(wx, wz);
+  }
+
+  // Visual callers only (debris, dust, birds): 1m-cell memo of the same
+  // bilinear — decoration can't afford exactness but can afford reuse.
+  getHeightVisual(wx: number, wz: number): number {
+    return sampleHeightVisual(wx, wz);
   }
 
   getNormal(wx: number, wz: number): THREE.Vector3 {

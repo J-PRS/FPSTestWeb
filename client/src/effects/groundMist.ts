@@ -32,7 +32,7 @@ export class GroundMist {
     for (let i = 0; i < SAMPLES; i++) {
       const x = (Math.random() * 2 - 1) * SAMPLE_RANGE;
       const z = (Math.random() * 2 - 1) * SAMPLE_RANGE;
-      candidates.push({ x, z, h: terrain.getHeight(x, z) });
+      candidates.push({ x, z, h: terrain.getHeightVisual(x, z) });
     }
     candidates.sort((a, b) => a.h - b.h);
 
@@ -52,7 +52,7 @@ export class GroundMist {
       // Random spread around the valley floor, squashed card hovering low
       const x = spot.x + (Math.random() - 0.5) * 30;
       const z = spot.z + (Math.random() - 0.5) * 30;
-      mesh.position.set(x, terrain.getHeight(x, z) + 2.2 + Math.random() * 1.5, z);
+      mesh.position.set(x, terrain.getHeightVisual(x, z) + 2.2 + Math.random() * 1.5, z);
       mesh.renderOrder = 1;
       scene.add(mesh);
       this.cards.push({ mesh, baseX: x, baseZ: z, phase: Math.random() * Math.PI * 2 });

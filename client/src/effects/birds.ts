@@ -290,7 +290,7 @@ export class AmbientBirds {
         const a = Math.random() * Math.PI * 2, d = 180 + Math.random() * 200;
         b.group.position.set(
           playerPos.x + Math.cos(a) * d,
-          terrain.getHeight(playerPos.x + Math.cos(a) * d, playerPos.z + Math.sin(a) * d) + ALT_MIN + b.altOff,
+          terrain.getHeightVisual(playerPos.x + Math.cos(a) * d, playerPos.z + Math.sin(a) * d) + ALT_MIN + b.altOff,
           playerPos.z + Math.sin(a) * d,
         );
         b.heading = Math.random() * Math.PI * 2;
@@ -336,7 +336,7 @@ export class AmbientBirds {
       );
       k.center.x += (_target.x - k.center.x) * 0.15 * dt + Math.sin(k.wanderPhase) * DRIFT * dt;
       k.center.z += (_target.z - k.center.z) * 0.15 * dt + Math.cos(k.wanderPhase * 0.7) * DRIFT * dt;
-      k.center.y = terrain.getHeight(k.center.x, k.center.z) + ALT_MIN;
+      k.center.y = terrain.getHeightVisual(k.center.x, k.center.z) + ALT_MIN;
     }
   }
 

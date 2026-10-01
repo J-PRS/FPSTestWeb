@@ -23,7 +23,7 @@ export function stepShard(d: Debris, s: Shard, dt: number): boolean {
     s.z  += s.vz * dt;
 
     // Terrain bounce
-    const gy = d.terrain.getHeight(s.x, s.z);
+    const gy = d.terrain.getHeightVisual(s.x, s.z);
     if (s.y - s.radius <= gy) {
       s.y   = gy + s.radius;
       if (s.goo) {

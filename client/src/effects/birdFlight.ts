@@ -184,7 +184,7 @@ export class BirdFlight {
     const prevX = px, prevZ = pz;
     b.group.position.x += Math.cos(b.heading) * b.speed * dt;
     b.group.position.z += Math.sin(b.heading) * b.speed * dt;
-    const ground = terrain.getHeight(b.group.position.x, b.group.position.z);
+    const ground = terrain.getHeightVisual(b.group.position.x, b.group.position.z);
     const altTarget = ground + ALT_MIN + b.altOff + Math.sin(b.bobPhase * 0.5) * 8;
     b.group.position.y += (altTarget - b.group.position.y) * Math.min(1, dt * 0.5);
     // Face the way it's flying

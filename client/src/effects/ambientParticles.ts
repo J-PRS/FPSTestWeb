@@ -142,7 +142,7 @@ export class AmbientParticles {
     p[ix] = camPos.x + s * Math.cos(th) * r;
     p[ix + 2] = camPos.z + s * Math.sin(th) * r;
 
-    const ground = terrain.getHeight(p[ix]!, p[ix + 2]!) + 0.3;
+    const ground = terrain.getHeightVisual(p[ix]!, p[ix + 2]!) + 0.3;
     if (this.cfg.spawnY === 'ground') {
       p[ix + 1] = ground + Math.random() * 2;
     } else if (this.cfg.spawnY === 'sky') {

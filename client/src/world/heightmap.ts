@@ -160,6 +160,21 @@ export function sampleHeight(wx: number, wz: number): number {
   return 0;
 }
 
+// Visual-only cached read: debris shards / ambient particles ask for the
+// same few 1m cells every frame while skimming ground. ~slope×1m error is
+// invisible for decoration; sim code must keep calling sampleHeight above.
+const _hvc = new Map<number, number>();
+export function sampleHeightVisual(wx: number, wz: number): number {
+  const k = (wx | 0) * 131072 + (wz | 0);
+  let v = _hvc.get(k);
+  if (v === undefined) {
+    if (_hvc.size > 2048) _hvc.clear();
+    v = sampleHeight(wx, wz);
+    _hvc.set(k, v);
+  }
+  return v;
+}
+
 /** Raw RGBA pixels for the GPU displacement texture — Terrain uploads this
  *  verbatim; null until loadHeightmap resolves. */
 export function getHeightmapData(): { data: Uint8ClampedArray; size: number } | null {

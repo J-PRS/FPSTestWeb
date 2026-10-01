@@ -39,7 +39,7 @@ export function spawnWarpTrail(pos: THREE.Vector3): void {
 export function spawnJumpDust(m: EffectsManager, pos: THREE.Vector3): void {
     // Ground-level ring + center poof as ONE batched quarks system — the
     // pooled-mesh version cost 20 draw calls per jump.
-    const groundY = m.terrain ? m.terrain.getHeight(pos.x, pos.z) : 0;
+    const groundY = m.terrain ? m.terrain.getHeightVisual(pos.x, pos.z) : 0;
     _v2.set(pos.x, groundY + 0.2, pos.z);
     blastBurst(_v2, {
       count: 20,
@@ -56,7 +56,7 @@ export function spawnJumpDust(m: EffectsManager, pos: THREE.Vector3): void {
   // Bounce skill FX — cyan energy burst kicked along the launch direction
   // plus the dust ring. Directional streaks read as the redirect itself.
 export function spawnBounce(m: EffectsManager, pos: THREE.Vector3, dir: THREE.Vector3): void {
-    const groundY = m.terrain ? m.terrain.getHeight(pos.x, pos.z) : pos.y - 1.8;
+    const groundY = m.terrain ? m.terrain.getHeightVisual(pos.x, pos.z) : pos.y - 1.8;
     _v3.set(pos.x, Math.max(pos.y - 1.2, groundY + 0.2), pos.z); // burst at feet
 
     // Forward cone of bright cyan streaks + a dust ring — both batched;
@@ -84,7 +84,7 @@ export function spawnBounce(m: EffectsManager, pos: THREE.Vector3, dir: THREE.Ve
   }
 
 export function spawnSkiDust(m: EffectsManager, pos: THREE.Vector3, velocity: THREE.Vector3): void {
-    const groundY = m.terrain ? m.terrain.getHeight(pos.x, pos.z) : 0;
+    const groundY = m.terrain ? m.terrain.getHeightVisual(pos.x, pos.z) : 0;
     _v2.set(pos.x, groundY + 0.3, pos.z);
     fxPuff(_v2, {
       count: 2,
@@ -102,7 +102,7 @@ export function spawnSkiDust(m: EffectsManager, pos: THREE.Vector3, velocity: TH
   // puff's size/opacity/upthrow; `radius` spreads it under bigger bodies.
   // A roller at speed plows a real roostertail; a grub barely puffs.
 export function spawnMoveDust(m: EffectsManager, pos: THREE.Vector3, vel: THREE.Vector3, speed: number, radius: number): void {
-    const groundY = m.terrain ? m.terrain.getHeight(pos.x, pos.z) : 0;
+    const groundY = m.terrain ? m.terrain.getHeightVisual(pos.x, pos.z) : 0;
     const k = Math.min(1, speed / 14); // 0=creep, 1=hauling
     const n = speed > 8 ? 2 : 1;       // fast movers shed pairs per puff
     const s = 0.55 + k * 0.15;         // shade base — rand range rides colA→colB
