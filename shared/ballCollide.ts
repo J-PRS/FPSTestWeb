@@ -6,8 +6,11 @@
  * on its own.
  */
 import type { StructureSpec } from './mapSpec.js';
-import { BALL_BOUNCE } from './ballSim.js';
 import type { SimBall } from './ballSim.js';
+
+/** Restitution for structure + body bounces. Lives here (not ballSim) so
+ *  the collide helpers don't value-import the sim — one-directional dep. */
+export const BALL_BOUNCE = 1.0;             // elastic reflection
 
 /** Yaw-only oriented box for sphere-vs-structure contact. Precomputed from
  *  StructureSpec — pos is the piece's BASE center, so the box center sits

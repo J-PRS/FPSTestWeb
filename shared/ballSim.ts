@@ -15,11 +15,10 @@
  */
 
 import { type Heightfield, hmHeight, hmNormal } from './heightfield.js';
-import { collideStructures, type StructureCollider } from './ballCollide.js';
-export { structureColliders, type StructureCollider } from './ballCollide.js';
+import { collideStructures, BALL_BOUNCE, type StructureCollider } from './ballCollide.js';
+export { structureColliders, BALL_BOUNCE, type StructureCollider } from './ballCollide.js';
 
 export const BALL_GRAVITY = -28.0;          // = client GRAVITY
-export const BALL_BOUNCE = 1.0;             // elastic reflection
 export const BALL_BASE_RADIUS = 1.2;
 export const BALL_MAX_DIST = 300.0;
 export const BALL_TELE_MIN = 60.0;

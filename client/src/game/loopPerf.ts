@@ -11,8 +11,28 @@ import Logger from '../core/Logger.js';
 import { vfxStats, setVfxQualityScale } from '../effects/vfx.js';
 import type { createFrameBudget } from '../core/frameBudget.js';
 import type { createPerfHud } from '../core/perfHud.js';
-import { fxJobStats, fxJobResetMax } from './gameLoop.js';
 import type { GameLoopDeps, LoopState } from './gameLoop.js';
+
+// Per-fxJob EMA ms — 'fx' was one opaque phase over nine rotated jobs;
+// the dump couldn't tell the quarks batch from a legacy list pileup.
+// EMA hides the burst spikes (a 2.5ms single-frame job averages away),
+// so a decaying max rides beside it and resets with each dump.
+// Owned here (not gameLoop) so loopPerf doesn't value-import the loop —
+// one-directional dep.
+const fxJobMs = new Map<string, number>();
+const fxJobMax = new Map<string, number>();
+export function fxJobSample(name: string, ms: number): void {
+  fxJobMs.set(name, (fxJobMs.get(name) ?? 0) * 0.9 + ms * 0.1);
+  if (ms > (fxJobMax.get(name) ?? 0)) fxJobMax.set(name, ms);
+}
+export function fxJobStats(): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const [k, v] of fxJobMs) out[k] = +v.toFixed(2);
+  for (const [k, v] of fxJobMax) out[`max:${k}`] = +v.toFixed(2);
+  return out;
+}
+/** Clear the per-job maxes — called per dump so a spike doesn't fossilize. */
+export function fxJobResetMax(): void { fxJobMax.clear(); }
 
 // FPS watchdog — sustained <40fps for >10 consecutive frames fires a
 // one-shot stats dump (ships to logs/client.log via the WARN+ pipeline),

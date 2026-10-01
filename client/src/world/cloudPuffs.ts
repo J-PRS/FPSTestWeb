@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { UNGRADE_GLSL } from '../core/gradeGlsl.js';
-import { noiseHash, _smooth, sampleBase, NOISE_WORLD_SCALE } from './volumetricClouds.js';
+import { noiseHash, _smooth, sampleBase, NOISE_WORLD_SCALE } from './cloudNoise.js';
 
 // Cauliflower billboard sprite: overlapping gaussian blobs clipped by a
 // radial window, eroded by fbm so the edge is lumpy not circular. Alpha

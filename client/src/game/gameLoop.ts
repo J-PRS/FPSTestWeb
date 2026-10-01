@@ -35,7 +35,7 @@ import { createPerfHud } from '../core/perfHud.js';
 import { createFrameBudget } from '../core/frameBudget.js';
 import { gpuBegin, gpuEnd, gpuMs } from '../core/gpuTimer.js';
 import { lastWeaponByPlayer } from './net/projectiles.js';
-import { fpsWatchdog, resetAutoQuality } from './loopPerf.js';
+import { fpsWatchdog, resetAutoQuality, fxJobSample, fxJobStats } from './loopPerf.js';
 import { createRenderScan } from './renderScan.js';
 import { settings } from '../core/settings.js';
 import { WeaponType } from '../../../shared/weapons.js';
@@ -131,24 +131,7 @@ export interface LoopState {
   warmed: boolean;
 }
 
-// Per-fxJob EMA ms — 'fx' was one opaque phase over nine rotated jobs;
-// the dump couldn't tell the quarks batch from a legacy list pileup.
-// EMA hides the burst spikes (a 2.5ms single-frame job averages away),
-// so a decaying max rides beside it and resets with each dump.
-const fxJobMs = new Map<string, number>();
-const fxJobMax = new Map<string, number>();
-function fxJobSample(name: string, ms: number): void {
-  fxJobMs.set(name, (fxJobMs.get(name) ?? 0) * 0.9 + ms * 0.1);
-  if (ms > (fxJobMax.get(name) ?? 0)) fxJobMax.set(name, ms);
-}
-export function fxJobStats(): Record<string, number> {
-  const out: Record<string, number> = {};
-  for (const [k, v] of fxJobMs) out[k] = +v.toFixed(2);
-  for (const [k, v] of fxJobMax) out[`max:${k}`] = +v.toFixed(2);
-  return out;
-}
-/** Clear the per-job maxes — called per dump so a spike doesn't fossilize. */
-export function fxJobResetMax(): void { fxJobMax.clear(); }
+// fxJob EMA/max bookkeeping lives in loopPerf — see fxJobSample there.
 
 // Demo bookkeeping: update recorder/player, freeze input during playback.
 // Returns whether demo playback is currently paused.

@@ -1,7 +1,10 @@
 import * as THREE from 'three';
 import { getSwarm, freeSlots } from './swarms.js';
 import { GRAVITY } from '../core/config.js';
-import { Ball } from './balls.js';
+// Type-only back-import — Ball calls into these helpers per tick, so a
+// value import would make the pair a runtime cycle. viewPos comes in as
+// a param instead of reaching into Ball's statics.
+import type { Ball } from './balls.js';
 
 // Ball visual family — instance write + render-position blend + trail
 // lifecycle + dead fade-out. The Ball class is the host; these take it
@@ -49,11 +52,11 @@ export function tickBallRenderPos(b: Ball, dt: number): void {
     b._rpos.z += b.vel.z * rem;
   }
 
-export function tickBallTrails(b: Ball, dt: number): void {
+export function tickBallTrails(b: Ball, dt: number, viewPos: THREE.Vector3): void {
     // Far balls: skip sparkle emission — a 0.5m dot trail is sub-pixel past
     // ~200m but each emit still churns the dot list. Aging keeps running
     // so a ball arcing back into range doesn't pop stale sparkles.
-    const nearCam = b._rpos.distanceToSquared(Ball.viewPos) < 200 * 200;
+    const nearCam = b._rpos.distanceToSquared(viewPos) < 200 * 200;
     if (nearCam) {
       b.trails.emit(dt, b._rpos, b.vel, b.radius, b.enraged ? _enrageTint : b.color);
     }
@@ -67,18 +70,18 @@ export function tickBallTrails(b: Ball, dt: number): void {
     if (b.vel.lengthSq() > 0.5) {
       for (const r of b.ribbons) r.push(b._rpos, b.vel);
     }
-    for (const r of b.ribbons) r.update(dt, Ball.viewPos);
+    for (const r of b.ribbons) r.update(dt, viewPos);
   }
 
   // Dead ball: swarm slot freed, just fade out remaining trail dots/ribbons
-export function updateBallDead(b: Ball, dt: number): void {
+export function updateBallDead(b: Ball, dt: number, viewPos: THREE.Vector3): void {
     if (!b.meshRemoved) {
       for (const r of b.ribbons) r.stop();
       freeSlots('ball', b);
       b.meshRemoved = true;
     }
     b.trails.fade(dt);
-    for (const r of b.ribbons) r.update(dt, Ball.viewPos);
+    for (const r of b.ribbons) r.update(dt, viewPos);
     if (b.trails.size === 0 && b.ribbons.every(r => r.done)) {
       // Final cleanup — caller splices on `disposed` without dispose()
       b.trails.dispose();

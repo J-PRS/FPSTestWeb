@@ -7,6 +7,7 @@ import {
 import { FOG_COLOR } from '../core/config.js';
 import { UNGRADE_GLSL } from '../core/gradeGlsl.js';
 import { puffVertex, puffFragment, makePuffTexture, buildPuffGeometry } from './cloudPuffs.js';
+import { NOISE_WORLD_SCALE, noiseHash, _smooth, sampleBase } from './cloudNoise.js';
 
 // ---------------------------------------------------------------------------
 // Clouds = one dome, six stacked noise DECKS, zero raymarching.
@@ -24,8 +25,6 @@ import { puffVertex, puffFragment, makePuffTexture, buildPuffGeometry } from './
 // ---------------------------------------------------------------------------
 
 const LAYERS = 6;
-// World meters covered by one noise-tex repeat — ~500m puff features.
-export const NOISE_WORLD_SCALE = 3200;
 // Past this the decks collapse into a horizon haze line anyway.
 const MAX_DIST = 5000;
 // Deliberately larger than the 4000 sky sphere: the sky doesn't write
@@ -156,13 +155,6 @@ const fragmentShader = /* glsl */`
 // Tileable value-noise FBM baked once into a DataTexture. Wrapping the
 // lattice by each octave's period keeps the tile seamless — the shader can
 // scroll UV forever without a seam sweeping through the sky.
-export const noiseHash = (x: number, y: number): number => {
-  let h = (x * 374761393 + y * 668265263) | 0;
-  h = (h ^ (h >> 13)) * 1274126177 | 0;
-  return ((h ^ (h >> 16)) >>> 0) / 4294967295;
-};
-export const _smooth = (t: number) => t * t * (3 - 2 * t);
-
 const _vnoise = (x: number, y: number, period: number): number => {
   const xi = Math.floor(x), yi = Math.floor(y);
   const xf = _smooth(x - xi), yf = _smooth(y - yi);
@@ -234,15 +226,6 @@ function packNoiseTex(size: number, ch: {
   return data;
 }
 
-// Sample the normalized CPU field with repeat-wrapping, bilinear.
-export function sampleBase(base: Float32Array, size: number, u: number, v: number): number {
-  const x = ((u % 1) + 1) % 1 * size, y = ((v % 1) + 1) % 1 * size;
-  const xi = Math.floor(x) % size, yi = Math.floor(y) % size;
-  const xf = x - Math.floor(x), yf = y - Math.floor(y);
-  const a = base[yi * size + xi]!, b = base[yi * size + (xi + 1) % size]!;
-  const c = base[((yi + 1) % size) * size + xi]!, d = base[((yi + 1) % size) * size + (xi + 1) % size]!;
-  return a + (b - a) * xf + (c - a) * yf + (a - b - c + d) * xf * yf;
-}
 
 export interface CloudParams {
   count?: number;          // legacy — sphere-era param, unused by the dome

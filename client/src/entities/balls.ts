@@ -279,7 +279,7 @@ export class Ball {
 
   update(dt: number, terrain: Terrain, playerPos: THREE.Vector3): void {
     if (this.dead) {
-      updateBallDead(this, dt);
+      updateBallDead(this, dt, Ball.viewPos);
       return;
     }
 
@@ -312,7 +312,7 @@ export class Ball {
       if (this.flashTimer <= 0) this.emissive.setRGB(0, 0, 0);
     }
 
-    tickBallTrails(this, dt);
+    tickBallTrails(this, dt, Ball.viewPos);
   }
 
   /** Director hook — enrage storms light up every ball at once. */
