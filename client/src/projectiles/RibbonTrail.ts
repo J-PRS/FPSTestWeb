@@ -246,12 +246,17 @@ export class RibbonTrail {
         if (len > 1e-6) { sx /= len; sy /= len; sz /= len; }
         else { sx = this.sx[s]; sy = this.sy[s]; sz = this.sz[s]; }
       }
-      pos[o] = this.px[s] - sx * w;
-      pos[o + 1] = this.py[s] - sy * w;
-      pos[o + 2] = this.pz[s] - sz * w;
-      pos[o + 3] = this.px[s] + sx * w;
-      pos[o + 4] = this.py[s] + sy * w;
-      pos[o + 5] = this.pz[s] + sz * w;
+      // Stopped trails keep their samples frozen — only the color fade
+      // moves; rewriting the same positions every frame was half the cost.
+      // Billboard ribbons still rewrite: their side vector tracks the camera.
+      if (!this.stopped || this.billboard) {
+        pos[o] = this.px[s] - sx * w;
+        pos[o + 1] = this.py[s] - sy * w;
+        pos[o + 2] = this.pz[s] - sz * w;
+        pos[o + 3] = this.px[s] + sx * w;
+        pos[o + 4] = this.py[s] + sy * w;
+        pos[o + 5] = this.pz[s] + sz * w;
+      }
       const cr = r * fade, cg = g * fade, cb = b * fade;
       col[o] = cr; col[o + 1] = cg; col[o + 2] = cb;
       col[o + 3] = cr; col[o + 4] = cg; col[o + 5] = cb;

@@ -1,3 +1,4 @@
+2026-10-01 - stopped ribbons skip frozen-position rewrites (billboard still tracks camera)
 2026-10-01 - vertexAO bake via three-mesh-bvh (was 78% of throttled CPU in raycasts, now ~4%) + CPU-throttled profiling probes (CPU_THROTTLE/HEAP_MB env) + per-fxJob max tracker
 2026-10-01 - GC churn ~40%: TrailDot object pool (was ~1400 allocs/s), persistent per-bot think ctx (was ~1KB/bot/frame)
 2026-10-01 - ball trail attr uploads gated on live dots (~100 tiny uploads/frame idle); sparkle emit skipped past 200m
