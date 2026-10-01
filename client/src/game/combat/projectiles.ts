@@ -13,7 +13,7 @@ import { Implosion } from '../../effects/implosion.js';
 import { ScorchDecal } from '../../effects/scorch.js';
 import * as sfx from '../../core/sfx.js';
 import { screenShake } from '../../effects/screenShake.js';
-import { PENDING_ROCKET_TIMEOUT, ROCKET_RADIUS } from '../../core/config.js';
+import { PENDING_ROCKET_TIMEOUT, EXPLOSION_VFX_RADIUS } from '../../core/config.js';
 import { urlParams } from '../../core/params.js';
 import { getWeaponStats, WeaponType, AOE_VFX_SCALE, ARMORNADE_ARMOR } from '../../../../shared/weapons.js';
 import { POWERUP } from '../../../../shared/pickups.js';
@@ -52,7 +52,7 @@ function blastFx(c: CombatCtx, a: ExplosionArgs): void {
   // Impact VFX variant — config-driven (sprinkler splashes, doesn't burn)
   const vfxKind = a.vfx ?? (a.weaponType !== undefined ? getProjectileConfig(a.weaponType)?.vfx : undefined);
   if (forceMode === 'push') {
-    deps.world.explosions.push(new Explosion(deps.lazyScene(), pos, directHit, a.age ?? 0, deps.lazyTerrain(), vfx / ROCKET_RADIUS, a.explosionTint, vfxKind));
+    deps.world.explosions.push(new Explosion(deps.lazyScene(), pos, directHit, a.age ?? 0, deps.lazyTerrain(), vfx / EXPLOSION_VFX_RADIUS, a.explosionTint, vfxKind));
     sfx.explosionAt(pos, directHit, a.weaponType);
     screenShake.blast(pos, vfx, deps.lazyPlayer().pos);
   } else {

@@ -32,7 +32,7 @@ function blastFlight(room: ReturnType<typeof mkRoom>, shooterId: string, victimI
 describe('scenario: blast knockback distance', () => {
   // [weapon, name, measured drift, drift cap, measured height, height cap]
   const CASES: [number, string, number, number, number, number][] = [
-    [WeaponType.Rocket, 'rocket', 16.5, 22, 2.8, 4],
+    [WeaponType.BoltLauncher, 'rocket', 16.5, 22, 2.8, 4],
     [WeaponType.Disc, 'disc', 13.6, 18, 2.2, 4],
     [WeaponType.Grenade, 'grenade', 22.9, 30, 3.9, 6],
     [WeaponType.Mortar, 'mortar', 22.9, 30, 3.9, 6],

@@ -20,7 +20,7 @@ const TARGET_EYE = V(0, EYE_OFFSET, 0);
 function rocketProjectile(over: Partial<TrackedProjectile> = {}): TrackedProjectile {
   return {
     ownerId: 'shooter',
-    weaponType: WeaponType.Rocket,
+    weaponType: WeaponType.BoltLauncher,
     origin: V(0, 0, 0),
     velocity: V(120, 0, 0),
     spawnAt: 1000,
@@ -40,11 +40,11 @@ describe('aoeDamage / aoeImpulse', () => {
 
 describe('hitRadiusAt', () => {
   it('grows 0 → hitMax over hitGrow from spawn (no grace)', () => {
-    expect(hitRadiusAt(WeaponType.Rocket, 0)).toBe(0);
-    expect(hitRadiusAt(WeaponType.Rocket, 0.1)).toBeCloseTo(8 * 0.05);
-    expect(hitRadiusAt(WeaponType.Rocket, 1.05)).toBeCloseTo(8 * 0.525);
-    expect(hitRadiusAt(WeaponType.Rocket, 2.1)).toBe(8);
-    expect(hitRadiusAt(WeaponType.Rocket, 99)).toBe(8);
+    expect(hitRadiusAt(WeaponType.BoltLauncher, 0)).toBe(0);
+    expect(hitRadiusAt(WeaponType.BoltLauncher, 0.1)).toBeCloseTo(8 * 0.05);
+    expect(hitRadiusAt(WeaponType.BoltLauncher, 1.05)).toBeCloseTo(8 * 0.525);
+    expect(hitRadiusAt(WeaponType.BoltLauncher, 2.1)).toBe(8);
+    expect(hitRadiusAt(WeaponType.BoltLauncher, 99)).toBe(8);
   });
 });
 

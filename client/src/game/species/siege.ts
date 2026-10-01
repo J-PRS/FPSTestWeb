@@ -7,7 +7,7 @@ import {
   BANELING_MAX, BANELING_DAMAGE_MAX, BANELING_KNOCKBACK,
   TOTEM_MAX, TOTEM_SPAWN_INTERVAL, TOTEM_SPAWN_MIN, TOTEM_SPAWN_MAX,
   TOTEM_BOLT_DAMAGE, UBER_TOTEM_MAX, UBER_TOTEM_BOLT_DAMAGE,
-  ROCKET_RADIUS, // Explosion VFX scale reference — blast visuals normalize to it
+  EXPLOSION_VFX_RADIUS, // Explosion VFX scale reference — blast visuals normalize to it
 } from '../../core/config.js';
 import * as sfx from '../../core/sfx.js';
 import type { Species } from '../speciesKit.js';
@@ -60,7 +60,7 @@ function plantMineImpl(deps: SpeciesCtx['deps'], kit: SiegeKit,
   m.onDetonate = (mine) => {
     // Mine pop — compact dirty-orange blast, not a rocket. Doombloom's
     // blastRadius field carries its doubled envelope.
-    deps.world.explosions.push(new Explosion(scene, mine.pos, false, 0, deps.lazyTerrain(), mine.blastRadius / ROCKET_RADIUS, 0xff7733));
+    deps.world.explosions.push(new Explosion(scene, mine.pos, false, 0, deps.lazyTerrain(), mine.blastRadius / EXPLOSION_VFX_RADIUS, 0xff7733));
     sfx.explosionAt(mine.pos, true);
     screenShake.blast(mine.pos, mine.uber ? 4 : 2.5, player.pos);
     blastAtPlayer(mine.pos, mine.blastRadius, MINE_DAMAGE_MAX, MINE_KNOCKBACK,
@@ -91,7 +91,7 @@ function spawnBanelingImpl(deps: SpeciesCtx['deps'], kit: SiegeKit,
   const player = deps.lazyPlayer();
   b.onDetonate = (bane) => {
     // blastRadius is per-instance — a goliath pops 1.7× wider
-    deps.world.explosions.push(new Explosion(scene, bane.pos, false, 0, deps.lazyTerrain(), bane.blastRadius / ROCKET_RADIUS, 0x77ff44));
+    deps.world.explosions.push(new Explosion(scene, bane.pos, false, 0, deps.lazyTerrain(), bane.blastRadius / EXPLOSION_VFX_RADIUS, 0x77ff44));
     sfx.explosionAt(bane.pos, true);
     screenShake.blast(bane.pos, bane.uber ? 3.5 : 2.0, player.pos);
     if (blastAtPlayer(bane.pos, bane.blastRadius, BANELING_DAMAGE_MAX, BANELING_KNOCKBACK,

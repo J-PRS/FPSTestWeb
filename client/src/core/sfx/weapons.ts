@@ -107,7 +107,7 @@ const SHOT_LAYERS: Partial<Record<number, [name: string, gain: number, rate?: nu
 };
 
 const SHOT_SAMPLES: Partial<Record<number, [string, number, number?]>> = {
-  [WeaponType.Rocket]:          ['shot_rocket', 0.9],
+  [WeaponType.BoltLauncher]:          ['shot_rocket', 0.9],
   [WeaponType.Chaingun]:        ['shot_chaingun', 0.8],
   [WeaponType.Mortar]:          ['shot_cannon', 1.0],
   // MRV volley — same tube bark as the GL but heavier: one trigger
@@ -180,7 +180,7 @@ function synthDefault(g: GainNode): void {
 }
 
 const SYNTH_SHOTS: Record<number, (g: GainNode) => void> = {
-  [WeaponType.Rocket]:    (g) => { osc('square', 900, 300, 0.12, 0.25, g); noise(0.12, 0.15, g, 'lowpass', 2000, 400); },
+  [WeaponType.BoltLauncher]:    (g) => { osc('square', 900, 300, 0.12, 0.25, g); noise(0.12, 0.15, g, 'lowpass', 2000, 400); },
   [WeaponType.Disc]:      (g) => { osc('sawtooth', 1400, 700, 0.18, 0.2, g); noise(0.1, 0.1, g, 'highpass', 3000, 4000); },
   [WeaponType.DiscPull]:  (g) => { osc('sawtooth', 1400, 700, 0.18, 0.2, g); noise(0.1, 0.1, g, 'highpass', 3000, 4000); },
   [WeaponType.Chaingun]:  synthChaingun,

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 import {
-  EXPLOSION_FALLOFF_MULTIPLIER_ROCKET, KNOCKBACK_MULTIPLIER,
+  EXPLOSION_FALLOFF_MULTIPLIER_DEFAULT, KNOCKBACK_MULTIPLIER,
   MRV_BOUNCE_RESTITUTION, MRV_BOUNCE_FRICTION,
 } from '../core/config.js';
 import { WEAPONS, AOE_VFX_SCALE } from '../../../shared/weapons.js';
@@ -37,7 +37,7 @@ export const MRV_BOMBLET_CONFIG: ProjectileConfig = {
   hitMin: WB.hitMin,
   hitMax: WB.hitMax,
   hitGrow: WB.hitGrow,
-  falloffMultiplier: EXPLOSION_FALLOFF_MULTIPLIER_ROCKET,
+  falloffMultiplier: EXPLOSION_FALLOFF_MULTIPLIER_DEFAULT,
   collisionMultiplier: 1.0,
   forceMultiplier: KNOCKBACK_MULTIPLIER,
   aoeDamage: WB.aoeDamage,
@@ -74,6 +74,11 @@ export const MRV_BOMBLET_CONFIG: ProjectileConfig = {
   needsServerTracking: false,
   maxLifetime: WB.maxLifetime,
   trailMeshType: 'sphere',
+  // Falling rain has to READ — a bare 0.15m ball at 30+ m/s is invisible.
+  ribbonTrail: true,
+  ribbonWidth: 0.18,
+  ribbonLife: 0.3,
+  ribbonColor: 0xff7733,
 };
 
 export const MRV_CONFIG: ProjectileConfig = {
@@ -89,7 +94,7 @@ export const MRV_CONFIG: ProjectileConfig = {
   hitMin: W.hitMin,
   hitMax: W.hitMax,
   hitGrow: W.hitGrow,
-  falloffMultiplier: EXPLOSION_FALLOFF_MULTIPLIER_ROCKET,
+  falloffMultiplier: EXPLOSION_FALLOFF_MULTIPLIER_DEFAULT,
   collisionMultiplier: 1.0,
   forceMultiplier: KNOCKBACK_MULTIPLIER,
   aoeDamage: W.aoeDamage,
@@ -130,7 +135,16 @@ export const MRV_CONFIG: ProjectileConfig = {
   bounceSfx: 'hg_clang',
   bounceRestitution: MRV_BOUNCE_RESTITUTION,
   bounceFriction: MRV_BOUNCE_FRICTION,
-  cluster: { count: 6, spread: 1.0, fuse: 1.0 },
+  // No fuse — bomblets are CONTACT bombs: they fall until they hit
+  // something (terrain, wall, body), the carrier's own 10s safety TTL is
+  // the only timer. A mid-air fuse pops the rain where nobody is.
+  // Full carrier-velocity inherit + uniform sphere scatter — bomblets
+  // ride the arc as a cloud, then rain down and contact-pop at different
+  // times instead of flash-popping in unison.
+  cluster: { count: 6, spread: 1.0, sphere: true },
+  // The carrier is a delivery truck, not a shell — contact pops would
+  // make it a 55 m/s mortar with a bonus bomblet rain. Fuse or GTFO.
+  passThroughTargets: W.fuseOnly,
   bomblet: MRV_BOMBLET_CONFIG,
   trailMeshType: 'sphere',
   ribbonTrail: true,

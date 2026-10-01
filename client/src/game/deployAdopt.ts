@@ -14,7 +14,7 @@ import { DeployStation as StationClass } from '../entities/DeployStation.js';
 import { Explosion } from '../effects/explosion.js';
 import { screenShake } from '../effects/screenShake.js';
 import * as sfx from '../core/sfx.js';
-import { MAX_ENERGY, MINE_DAMAGE_MAX, ROCKET_RADIUS } from '../core/config.js';
+import { MAX_ENERGY, MINE_DAMAGE_MAX, EXPLOSION_VFX_RADIUS } from '../core/config.js';
 import { WeaponType } from '../../../shared/weapons.js';
 import type { DeployRockets } from './deployRockets.js';
 import type { DeployDeps, DeployOwner, Item } from './deployables.js';
@@ -84,7 +84,7 @@ export class DeployAdopter {
     m.onDetonate = (mine) => {
       this.deps.world.explosions.push(new Explosion(
         this.deps.scene, mine.pos, false, 0, this.deps.lazyTerrain(),
-        mine.blastRadius / ROCKET_RADIUS, 0xffaa44));
+        mine.blastRadius / EXPLOSION_VFX_RADIUS, 0xffaa44));
       sfx.explosionAt(mine.pos, true);
       screenShake.blast(mine.pos, 2.5, player.pos);
       // Friendly mine — creatures + enemy bots take the blast, not you.

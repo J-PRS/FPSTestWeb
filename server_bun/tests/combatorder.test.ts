@@ -35,7 +35,7 @@ function spawnRocket(combat: CombatHandler, players: PlayerManager, id: string):
     targetId: null,
     position: { x: 0, y: 10, z: 0 },
     velocity: { x: 0, y: 0, z: -60 },
-    weaponType: WeaponType.Rocket,
+    weaponType: WeaponType.BoltLauncher,
   });
   return 'proj_1';
 }
@@ -50,7 +50,7 @@ describe('projectile claim ordering', () => {
     combat.handleAOEShot('p1', {
       type: 'aoeShot',
       position: { x: 0, y: 8, z: -3 },
-      weaponType: WeaponType.Rocket,
+      weaponType: WeaponType.BoltLauncher,
       projectileId: projId,
       airtime: 0.05,
     });
@@ -72,7 +72,7 @@ describe('projectile claim ordering', () => {
       targetId: 'p2',
       position: { x: 0, y: 8.5, z: -3 },
       velocity: { x: 0, y: 0, z: -60 },
-      weaponType: WeaponType.Rocket,
+      weaponType: WeaponType.BoltLauncher,
       projectileId: projId,
       airtime: 0.05,
     });
@@ -96,14 +96,14 @@ describe('projectile claim ordering', () => {
       targetId: 'p2',
       position: { x: 0, y: 8.5, z: -3 },
       velocity: { x: 0, y: 0, z: -60 },
-      weaponType: WeaponType.Rocket,
+      weaponType: WeaponType.BoltLauncher,
       projectileId: projId,
       airtime: 0.05,
     });
     combat.handleAOEShot('p1', {
       type: 'aoeShot',
       position: { x: 0, y: 8, z: -3 },
-      weaponType: WeaponType.Rocket,
+      weaponType: WeaponType.BoltLauncher,
       projectileId: projId,
       airtime: 0.05,
     });
@@ -122,7 +122,7 @@ describe('projectile claim ordering', () => {
     combat.handleAOEShot('p1', {
       type: 'aoeShot',
       position: { x: 0, y: 8, z: -3 },
-      weaponType: WeaponType.Rocket,
+      weaponType: WeaponType.BoltLauncher,
       projectileId: projId,
       airtime: 0.05,
     });
@@ -380,7 +380,7 @@ describe('bot fire legality', () => {
     players.addPlayer('v1');
     const bot = players.getPlayer('BOT-1')!;
     expect(bot.protectedUntil).toBeGreaterThan(Date.now());
-    combat.botAttack('BOT-1', 'v1', WeaponType.Rocket);
+    combat.botAttack('BOT-1', 'v1', WeaponType.BoltLauncher);
     expect(bot.protectedUntil).toBe(0);
   });
 });

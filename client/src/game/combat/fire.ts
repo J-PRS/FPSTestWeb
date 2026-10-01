@@ -15,7 +15,7 @@ import type { ProjectileConfig } from '../../projectiles/types.js';
 import { THROW_RELEASE } from '../../entities/ViewModel.js';
 import { poissonDisc } from '../../utils/poissonSpread.js';
 import {
-  ROCKET_RADIUS, MELEE_RANGE, MELEE_ARC_DOT, MELEE_DAMAGE,
+  EXPLOSION_VFX_RADIUS, MELEE_RANGE, MELEE_ARC_DOT, MELEE_DAMAGE,
 } from '../../core/config.js';
 import { getWeaponStats, WeaponType } from '../../../../shared/weapons.js';
 import type { CombatDeps, FireArgs } from '../combat.js';
@@ -178,7 +178,7 @@ function melee(deps: CombatDeps, hooks: FireHooks, e: FireArgs): void {
   deps.lazyViewModel()?.punch();
   deps.world.explosions.push(new Explosion(
     deps.lazyScene(), _meleeHitPos, true, 0, deps.lazyTerrain(),
-    (stats.aoeRadius * 0.7) / ROCKET_RADIUS, 0xaaddff, 'punch',
+    (stats.aoeRadius * 0.7) / EXPLOSION_VFX_RADIUS, 0xaaddff, 'punch',
   ));
   screenShake.blast(_meleeHitPos, stats.aoeRadius, player.pos);
 

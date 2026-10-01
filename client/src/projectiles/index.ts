@@ -1,6 +1,6 @@
 export type { ProjectileConfig } from './types.js';
 export { Projectile } from './Projectile.js';
-export { ROCKET_CONFIG } from './rocketConfig.js';
+export { BOLT_CONFIG } from './boltConfig.js';
 export { DISC_CONFIG, BELT_DISC_CONFIG } from './discConfig.js';
 export { GRENADE_CONFIG } from './grenadeConfig.js';
 export { CHAINGUN_CONFIG } from './chaingunConfig.js';
@@ -21,8 +21,9 @@ export { REVOLVER_CONFIG } from './revolverConfig.js';
 export { STICKY_CONFIG } from './stickyConfig.js';
 export { CLUSTER_CONFIG, BOMBLET_CONFIG, JAVELIN_CONFIG, IMPACT_CONFIG } from './beltConfigs.js';
 export { ARMORNADE_CONFIG } from './armornadeConfig.js';
+export { MRV_CONFIG, MRV_BOMBLET_CONFIG } from './mrvConfig.js';
 
-import { ROCKET_CONFIG } from './rocketConfig.js';
+import { BOLT_CONFIG } from './boltConfig.js';
 import { DISC_CONFIG, BELT_DISC_CONFIG } from './discConfig.js';
 import { GRENADE_CONFIG } from './grenadeConfig.js';
 import { CHAINGUN_CONFIG } from './chaingunConfig.js';
@@ -43,12 +44,13 @@ import { REVOLVER_CONFIG } from './revolverConfig.js';
 import { STICKY_CONFIG } from './stickyConfig.js';
 import { CLUSTER_CONFIG, BOMBLET_CONFIG, JAVELIN_CONFIG, IMPACT_CONFIG } from './beltConfigs.js';
 import { ARMORNADE_CONFIG } from './armornadeConfig.js';
+import { MRV_CONFIG, MRV_BOMBLET_CONFIG } from './mrvConfig.js';
 
 import { ACCURACY_MAX, ACCURACY_NORMALIZATION } from '../core/config.js';
 
 import type { ProjectileConfig } from './types.js';
 
-export const WEAPON_CONFIGS: ProjectileConfig[] = [ROCKET_CONFIG, DISC_CONFIG, GRENADE_CONFIG, CHAINGUN_CONFIG, MORTAR_CONFIG, GL_CONFIG, FLAK_CONFIG, PLASMA_CONFIG, RAILGUN_CONFIG, BELT_DISC_CONFIG, LIGHTNING_CONFIG, SHOTGUN_CONFIG, CANNON_CONFIG, RKT_CONFIG, PISTOL_CONFIG, REVOLVER_CONFIG, STICKY_CONFIG, CLUSTER_CONFIG, BOMBLET_CONFIG, JAVELIN_CONFIG, IMPACT_CONFIG, PLASMAGUN_CONFIG, REMOTE_RAILGUN_CONFIG, SPRINKLER_CONFIG, ARMORNADE_CONFIG];
+export const WEAPON_CONFIGS: ProjectileConfig[] = [BOLT_CONFIG, DISC_CONFIG, GRENADE_CONFIG, CHAINGUN_CONFIG, MORTAR_CONFIG, GL_CONFIG, FLAK_CONFIG, PLASMA_CONFIG, RAILGUN_CONFIG, BELT_DISC_CONFIG, LIGHTNING_CONFIG, SHOTGUN_CONFIG, CANNON_CONFIG, RKT_CONFIG, PISTOL_CONFIG, REVOLVER_CONFIG, STICKY_CONFIG, CLUSTER_CONFIG, BOMBLET_CONFIG, JAVELIN_CONFIG, IMPACT_CONFIG, PLASMAGUN_CONFIG, REMOTE_RAILGUN_CONFIG, SPRINKLER_CONFIG, ARMORNADE_CONFIG, MRV_CONFIG, MRV_BOMBLET_CONFIG];
 
 // Slot order lives in ../weapons.ts (SLOT_DEFS) — index IS the wid there.
 // WEAPON_CONFIGS stays weaponType-keyed (find-by-id) and includes belt items.

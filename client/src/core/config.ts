@@ -24,7 +24,7 @@ export const JET_DRAIN = 15.0; // Energy drain per second
 export const JET_CHARGE = 8.0; // Energy recharge per second
 
 // Weapon constants
-export const FIRE_RATE = 0.8; // Rocket fire rate (seconds)
+export const BOLT_FIRE_RATE = 0.8; // bolt launcher fire rate (seconds)
 export const DISC_RATE = 1.0; // Disc fire rate (seconds)
 export const CHAINGUN_RATE = 0.09; // Chaingun fire rate (seconds)
 export const LG_RATE = 0.05;       // Lightning gun tick — clean 20/s for the stepped ramp
@@ -40,7 +40,7 @@ export const LG_CHAIN_DMG_SCALE = 0.5;
 // Projectile gameplay stats (speed, gravity, hitboxes, damage, fuse) live in
 // shared/weapons.ts — the single source of truth the server validates with.
 // The constants that remain here are visual/VFX scales only.
-export const ROCKET_RADIUS = 6.0; // Rocket explosion radius (visual)
+export const EXPLOSION_VFX_RADIUS = 6.0; // explosion VFX scale unit — blastRadius/this = visual size
 
 
 
@@ -467,7 +467,7 @@ export const EMIT_GAIN = 3;
 
 
 // Explosion physics constants
-export const EXPLOSION_FALLOFF_MULTIPLIER_ROCKET = 2.5; // Rocket explosion falloff multiplier
+export const EXPLOSION_FALLOFF_MULTIPLIER_DEFAULT = 2.5; // default explosive falloff — most weapons share it, disc is sharper
 export const EXPLOSION_FALLOFF_MULTIPLIER_DISC = 3.0; // Disc explosion falloff multiplier
 export const EXPLOSION_COLLISION_MULTIPLIER = 2.0; // Collision detection multiplier
 export const KNOCKBACK_MULTIPLIER = 0.4; // Knockback force multiplier

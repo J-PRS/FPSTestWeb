@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 import {
-  EXPLOSION_FALLOFF_MULTIPLIER_ROCKET, KNOCKBACK_MULTIPLIER,
+  EXPLOSION_FALLOFF_MULTIPLIER_DEFAULT, KNOCKBACK_MULTIPLIER,
 } from '../core/config.js';
 import { WEAPONS, AOE_VFX_SCALE } from '../../../shared/weapons.js';
 
@@ -25,12 +25,12 @@ export const PLASMAGUN_CONFIG: ProjectileConfig = {
   hitMax: W.hitMax,
   hitGrow: W.hitGrow,
   maxLifetime: W.maxLifetime,
-  falloffMultiplier: EXPLOSION_FALLOFF_MULTIPLIER_ROCKET,
+  falloffMultiplier: EXPLOSION_FALLOFF_MULTIPLIER_DEFAULT,
   collisionMultiplier: 1.0,
   forceMultiplier: KNOCKBACK_MULTIPLIER,
   aoeDamage: W.aoeDamage,
   aoeRadius: W.aoeRadius,
-  vfx: 'energy',
+  vfx: 'bolt', // repeater pop — half-size energy snap, not a full blast
   damageColor: '#66ccff',
   trailColors: [
     new THREE.Color(0.4, 0.8, 1.0),

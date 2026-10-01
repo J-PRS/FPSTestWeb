@@ -10,7 +10,7 @@ const FLOOR = hmHeight(flat, 0, 0);
 
 function arena() {
   const room = new Room('t', flat, '', resolveMapSpec({ mode: 'dm' }));
-  const shooter = room.players.addPlayer('BOT-t1');
+  const shooter = room.players.addPlayer('BOT-VEKTOR-01');
   shooter.isBot = true;
   const target = room.players.addPlayer('human');
   shooter.protectedUntil = 0;
@@ -47,7 +47,7 @@ describe('RoomProjectiles', () => {
     shooter.position = { x: 0, y: FLOOR, z: 0 };
     target.position = { x: 10, y: FLOOR, z: 0 };
     // Downward lob that lands ~10m out — right at the target's feet.
-    room.projectiles.spawn(shooter.id, WeaponType.Rocket,
+    room.projectiles.spawn(shooter.id, WeaponType.BoltLauncher,
       { x: 0, y: FLOOR + 1.4, z: 0 }, { x: 1, y: -0.1, z: 0 }, { x: 0, y: 0, z: 0 });
     for (let i = 0; i < 10; i++) room.projectiles.tick(0.05);
     // Splash caught the target even though the segment never touched it.
@@ -90,7 +90,7 @@ describe('RoomProjectiles', () => {
     const berm: Heightfield = { size: 64, data: new Uint8Array(64).fill(60), stride: 1 };
     for (let i = 30; i < 32; i++) berm.data[i] = 200; // ~140m-high wall
     const room2 = new Room('t2', berm, '', resolveMapSpec({ mode: 'dm' }));
-    const s2 = room2.players.addPlayer('BOT-t1'); s2.isBot = true;
+    const s2 = room2.players.addPlayer('BOT-VEKTOR-01'); s2.isBot = true;
     const t2 = room2.players.addPlayer('human');
     s2.protectedUntil = 0; t2.protectedUntil = 0;
     t2.position = { x: 40, y: hmHeight(berm, 40, 0), z: 0 };

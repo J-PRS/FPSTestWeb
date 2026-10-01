@@ -11,7 +11,7 @@ function spawnProj(combat: CombatHandler, id: string): void {
   combat.handleShot(id, {
     type: 'shot', targetId: null,
     position: { x: 0, y: 10, z: 0 }, velocity: { x: 0, y: 0, z: -60 },
-    weaponType: WeaponType.Rocket,
+    weaponType: WeaponType.BoltLauncher,
   });
 }
 
@@ -58,7 +58,7 @@ describe('friendly fire — damage paths', () => {
     combat.handleAOEShot('a1', {
       type: 'aoeShot',
       position: { x: 0, y: 9.5, z: -3 }, // inside the victim's capsule
-      weaponType: WeaponType.Rocket,
+      weaponType: WeaponType.BoltLauncher,
       projectileId: 'proj_1',
       airtime: 0.05,
     });
@@ -114,7 +114,7 @@ describe('friendly fire — option on (FPS_FRIENDLY_FIRE)', () => {
     spawnProj(combat, 'a1');
     combat.handleAOEShot('a1', {
       type: 'aoeShot', position: { x: 0, y: 9.5, z: -3 },
-      weaponType: WeaponType.Rocket, projectileId: 'proj_1', airtime: 0.05,
+      weaponType: WeaponType.BoltLauncher, projectileId: 'proj_1', airtime: 0.05,
     });
     expect(target.health).toBeLessThan(after1);
 
@@ -131,7 +131,7 @@ describe('friendly fire — option on (FPS_FRIENDLY_FIRE)', () => {
     spawnProj(combat, 'a1');
     combat.handleAOEShot('a1', {
       type: 'aoeShot', position: { x: 0, y: 9, z: 0 },
-      weaponType: WeaponType.Rocket, projectileId: 'proj_1', airtime: 0.05,
+      weaponType: WeaponType.BoltLauncher, projectileId: 'proj_1', airtime: 0.05,
     });
     expect(self.health).toBe(CONFIG.playerMaxHealth);
   });

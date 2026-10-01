@@ -19,7 +19,7 @@ describe('scenario: aoeShot validation', () => {
     room.messages.handleMessage(a.id, {
       type: 'aoeShot',
       position: { x: 30, y: 31, z: 0 },
-      weaponType: WeaponType.Rocket,
+      weaponType: WeaponType.BoltLauncher,
       projectileId: null,
       airtime: 0.5,
     });

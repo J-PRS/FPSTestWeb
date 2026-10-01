@@ -42,7 +42,7 @@ const near = new THREE.Vector3(4, 1, 0);   // in-earshot positional spot
 const far = new THREE.Vector3(60, 0, 0);   // distance-attenuated spot
 
 const jobs: Array<[string, number, () => void]> = [
-  ['shoot_rocket', 1.0, () => sfx.shoot(WeaponType.Rocket)],
+  ['shoot_bolt', 1.0, () => sfx.shoot(WeaponType.BoltLauncher)],
   ['shoot_disc', 1.0, () => sfx.shoot(WeaponType.Disc)],
   ['shoot_chaingun', 1.0, () => sfx.shoot(WeaponType.Chaingun)],
   ['shoot_mortar', 1.0, () => sfx.shoot(WeaponType.Mortar)],

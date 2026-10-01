@@ -26,7 +26,7 @@ describe('scenario: bot shells hit creatures like player shots', () => {
     const aim = spawnAt(room, { x: 20, y: 31, z: 0 });
     const splash = spawnAt(room, { x: 22.5, y: 31, z: 0 });
     const hpAim = ballHp(room, aim), hpSplash = ballHp(room, splash);
-    const id = room.projectiles.spawn(b.id, WeaponType.Rocket,
+    const id = room.projectiles.spawn(b.id, WeaponType.BoltLauncher,
       { x: 0, y: 31.4, z: 0 }, { x: 1, y: 0, z: 0 }, { x: 0, y: 0, z: 0 });
     expect(id).toBeTruthy();
     for (let i = 0; i < 60; i++) step(room, 1);
@@ -41,7 +41,7 @@ describe('scenario: bot shells hit creatures like player shots', () => {
     pin(room, b.id, { x: 0, y: 31, z: 0 });
     const aim = spawnAt(room, { x: 20, y: 31, z: 30 }); // 30m off-axis
     const hp0 = ballHp(room, aim);
-    room.projectiles.spawn(b.id, WeaponType.Rocket,
+    room.projectiles.spawn(b.id, WeaponType.BoltLauncher,
       { x: 0, y: 31.4, z: 0 }, { x: 1, y: 0, z: 0 }, { x: 0, y: 0, z: 0 });
     for (let i = 0; i < 60; i++) step(room, 1);
     expect(ballHp(room, aim)).toBe(hp0);

@@ -14,7 +14,7 @@ describe('scenario: self blast shove', () => {
     const before = { ...room.moveSim.simPos(bot.id)! };
 
     // Blast 2m behind the bot — push impulse should carry it forward (+z) and up.
-    room.messages.serverBlast(bot.id, { x: 0, y: 30, z: -2 }, WeaponType.Rocket, null);
+    room.messages.serverBlast(bot.id, { x: 0, y: 30, z: -2 }, WeaponType.BoltLauncher, null);
     step(room, 20);
     const after = room.moveSim.simPos(bot.id)!;
     expect(after.z - before.z).toBeGreaterThan(0.5);
@@ -26,7 +26,7 @@ describe('scenario: self blast shove', () => {
     const h = room.players.addPlayer('t-human', undefined, 'none', 'medium');
     h.position = { x: 0, y: 31, z: 0 };
     const v0 = { ...h.velocity };
-    room.messages.serverBlast(h.id, { x: 0, y: 30, z: -2 }, WeaponType.Rocket, null);
+    room.messages.serverBlast(h.id, { x: 0, y: 30, z: -2 }, WeaponType.BoltLauncher, null);
     expect(h.velocity).toEqual(v0);
   });
 });

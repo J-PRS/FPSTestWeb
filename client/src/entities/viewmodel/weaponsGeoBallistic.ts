@@ -12,7 +12,7 @@ import { bodyMat, darkMat, boreMat, shellMat, brassMat, mkTube, mkBore } from '.
 // JP's Unity ref — straight octagonal block, stepped muzzle shroud, top
 // rail split by a notch, boxy rear receiver. Not tapered; the wedge in
 // the ref is perspective.
-export function mkRocket(): THREE.Group {
+export function mkBolt(): THREE.Group {
 const rocket = new THREE.Group();
 // Equal-width slab all the way to the face — the ref has NO stepped
 // shroud; the front is flush with the body. End plate is a thin flush
@@ -574,16 +574,10 @@ guard.position.set(0, -0.12, 0.17);
 guard.rotation.x = Math.PI / 2;
 guard.rotation.z = Math.PI;
 mrv.add(guard);
-// Top feed rail + ring sight — drum-fed reads as a guide, not a scope rail
-const rail = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.03, 0.3), darkMat);
-rail.position.set(0, 0.165, -0.08);
-mrv.add(rail);
-const sight = new THREE.Mesh(new THREE.TorusGeometry(0.035, 0.008, 6, 12), darkMat);
-sight.position.set(0, 0.22, -0.24);
-mrv.add(sight);
-const sightPost = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.03, 0.008), shellTipMat);
-sightPost.position.set(0, 0.215, -0.24);
-mrv.add(sightPost);
+
+// Drum cannon should read BIG in the hand — it's the heaviest tube in
+// the kit; every other launcher is built to ~1x and this reads thin.
+mrv.scale.setScalar(1.25);
 mrv.visible = false;
 return mrv;
 }

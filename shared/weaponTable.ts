@@ -3,7 +3,7 @@
 // semantics lightly: shared sims, bots and HUDs all read these rows.
 
 export enum WeaponType {
-  Rocket = 0,
+  BoltLauncher = 0, // the prototype bolt launcher — was 'Rocket'; id kept for wire compat
   Disc = 1,
   Grenade = 2, // thrown fuse bomb (F key) — distinct from the launcher
   Chaingun = 3,
@@ -61,6 +61,10 @@ export interface WeaponStats {
   hitGrow: number;
   /** Fuse self-detonate time (s); 0/undefined = terrain/target contact only */
   maxLifetime?: number;
+  /** Per-shot TTL spread: each projectile's fuse scales by ±this fraction,
+   *  seeded from its projectileId so server and client replicas pop at the
+   *  same age. A burst of shards should raggedly fade, not pop in unison. */
+  ttlJitter?: number;
   /** Cluster carrier — on detonation the SERVER scatters `count` bomblet
    *  blasts (ClusterBomblet stats) inside `radius` of the impact point.
    *  Client bomblets are visual-only: they never claim damage, so remote
@@ -82,7 +86,7 @@ export interface WeaponStats {
 /** Explosion VFX dome = aoeRadius × this — damage always reaches a bit past
  *  the visual edge (covers the shock ring), and the two can never drift. */
 export const WEAPONS: Record<number, WeaponStats> = {
-  [WeaponType.Rocket]: {
+  [WeaponType.BoltLauncher]: {
     directDamage: 50,
     aoeDamage: 15,
     aoeRadius: 8.0, // ~1.3× the VFX dome — damage reaches the ring's edge
@@ -189,7 +193,8 @@ export const WEAPONS: Record<number, WeaponStats> = {
     hitMin: 0.0,
     hitMax: 2.0,
     hitGrow: 0.5,
-    maxLifetime: 4.0,
+    maxLifetime: 2.0,
+    ttlJitter: 0.1, // shards scatter their airbursts — a synchronized pop reads as a single blob
   },
   [WeaponType.PlasmaCannon]: {
     directDamage: 35,
@@ -561,6 +566,26 @@ export const WEAPONS: Record<number, WeaponStats> = {
     maxLifetime: 10.0,    // safety TTL only — contact pops them; an air fuse wastes the rain
   },
 };
+
+/** FNV-1a — stable string→u32 seed shared by server spawn and client
+ *  replicas, so a jittered fuse pops at the same age on both ends. */
+export function idSeed(id: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < id.length; i++) {
+    h ^= id.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0 || 1;
+}
+
+/** Effective fuse for one projectile: `maxLifetime × (1 ± ttlJitter)`,
+ *  the sign/spread seeded by `seed` (a projectile id hash, or any u32). */
+export function jitteredTtl(stats: Pick<WeaponStats, 'maxLifetime' | 'ttlJitter'>, seed: number): number | undefined {
+  if (!stats.maxLifetime) return undefined;
+  const j = stats.ttlJitter ?? 0;
+  if (!j) return stats.maxLifetime;
+  return stats.maxLifetime * (1 - j + 2 * j * ((seed >>> 0 || 1) / 4294967296));
+}
 
 // Repair-tool economy — one number set on both ends so the server heal
 // and the client beam agree without trusting the claim.

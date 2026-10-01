@@ -23,7 +23,7 @@ export function explosionAt(pos: THREE.Vector3, big: boolean, weaponType?: numbe
 // can hear WHAT blew up, not just that something did.
 const BOOM_SAMPLES: Partial<Record<number, [string, number, number?, number?, number?][]>> = {
   [WeaponType.Mortar]: [['explosion1', 1.0, 0.6], ['thud_big', 0.9, 0.6, 300]],
-  [WeaponType.Rocket]: [['explosion1', 0.95], ['thud_big', 0.5, 0.7]],
+  [WeaponType.BoltLauncher]: [['explosion1', 0.95], ['thud_big', 0.5, 0.7]],
   [WeaponType.GrenadeLauncher]: [['explosion_small', 0.9, 0.9], ['thud_big', 0.4, 0.8, 500]],
   [WeaponType.Grenade]: [['explosion_small', 0.9, 1.2]],
   [WeaponType.Flak]: [['explosion_small', 0.9, 1.5], ['sparks', 0.4, 1.2, undefined, 0.3]],

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 import {
-  EXPLOSION_FALLOFF_MULTIPLIER_ROCKET, KNOCKBACK_MULTIPLIER,
+  EXPLOSION_FALLOFF_MULTIPLIER_DEFAULT, KNOCKBACK_MULTIPLIER,
 } from '../core/config.js';
 import { WEAPONS, AOE_VFX_SCALE } from '../../../shared/weapons.js';
 
@@ -32,7 +32,7 @@ function beltBall(wt: number, shell: number, glow: number, extra: Partial<Projec
     hitMin: w.hitMin,
     hitMax: w.hitMax,
     hitGrow: w.hitGrow,
-    falloffMultiplier: EXPLOSION_FALLOFF_MULTIPLIER_ROCKET,
+    falloffMultiplier: EXPLOSION_FALLOFF_MULTIPLIER_DEFAULT,
     collisionMultiplier: 1.0,
     forceMultiplier: KNOCKBACK_MULTIPLIER,
     aoeDamage: w.aoeDamage,
@@ -107,7 +107,7 @@ export const JAVELIN_CONFIG: ProjectileConfig = {
 // outsized shove. The movement tool.
 export const IMPACT_CONFIG: ProjectileConfig = beltBall(21, 0x2a4a4d, 0x44ffee, {
   displayName: 'Impact Grenade',
-  vfx: 'energy',
+  vfx: 'bolt', // touch-pop — compact snap sells the movement tool
   damageColor: '#66ffee',
   glowColor: 0x44ffee,
 });

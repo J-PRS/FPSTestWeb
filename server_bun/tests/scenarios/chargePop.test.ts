@@ -92,7 +92,7 @@ describe('scenario: LG charge economy vs players', () => {
     const hpC = c.health;
     b.health = 30; // ensure the rocket kill lands
 
-    shootAt(room, a, b, WeaponType.Rocket);
+    shootAt(room, a, b, WeaponType.BoltLauncher);
     step(room, 2);
     expect(b.isDead).toBe(true);
     expect(b.charge).toBe(0);

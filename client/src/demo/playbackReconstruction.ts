@@ -9,7 +9,7 @@ import { ProjectileEventType, TargetEventType } from './types.js';
 import { Ball } from '../entities/balls.js';
 import type { Player } from '../entities/Player.js';
 import { Projectile } from '../projectiles/Projectile.js';
-import { ROCKET_CONFIG, getProjectileConfig, computeAccuracy } from '../projectiles/index.js';
+import { BOLT_CONFIG, getProjectileConfig, computeAccuracy } from '../projectiles/index.js';
 import { BallDebris } from '../effects/debris.js';
 import { Explosion } from '../effects/explosion.js';
 import { Implosion } from '../effects/implosion.js';
@@ -156,7 +156,7 @@ function reconstructSeekProjectile(world: PlaybackWorld, ev: ProjectileEvent, de
 function spawnPlaybackProjectile(world: PlaybackWorld, ev: ProjectileEvent): Projectile {
   const origin = new THREE.Vector3(ev.posX, ev.posY, ev.posZ);
   const velocity = new THREE.Vector3(ev.velX, ev.velY, ev.velZ);
-  const cfg = getProjectileConfig(ev.weaponType) ?? ROCKET_CONFIG;
+  const cfg = getProjectileConfig(ev.weaponType) ?? BOLT_CONFIG;
   const r = new Projectile(world.scene, origin, new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 0, 0), cfg);
   r.isRemote = true;
   r.spawnedThisFrame = false;

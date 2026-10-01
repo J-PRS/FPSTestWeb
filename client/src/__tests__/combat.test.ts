@@ -31,26 +31,26 @@ describe('aoe falloff math', () => {
 
 describe('wake hitbox growth', () => {
   it('grows linearly from spawn (no grace period)', () => {
-    const stats = getWeaponStats(WeaponType.Rocket);
-    expect(hitRadiusAt(WeaponType.Rocket, 0)).toBe(0);
-    expect(hitRadiusAt(WeaponType.Rocket, stats.hitGrow / 2)).toBeCloseTo(stats.hitMax / 2);
+    const stats = getWeaponStats(WeaponType.BoltLauncher);
+    expect(hitRadiusAt(WeaponType.BoltLauncher, 0)).toBe(0);
+    expect(hitRadiusAt(WeaponType.BoltLauncher, stats.hitGrow / 2)).toBeCloseTo(stats.hitMax / 2);
   });
 
   it('reaches hitMax at hitGrow', () => {
-    const stats = getWeaponStats(WeaponType.Rocket);
-    expect(hitRadiusAt(WeaponType.Rocket, stats.hitGrow)).toBe(stats.hitMax);
-    expect(hitRadiusAt(WeaponType.Rocket, stats.hitGrow * 10)).toBe(stats.hitMax);
+    const stats = getWeaponStats(WeaponType.BoltLauncher);
+    expect(hitRadiusAt(WeaponType.BoltLauncher, stats.hitGrow)).toBe(stats.hitMax);
+    expect(hitRadiusAt(WeaponType.BoltLauncher, stats.hitGrow * 10)).toBe(stats.hitMax);
   });
 
   it('undefined weaponType resolves to Rocket default', () => {
-    expect(hitRadiusAt(undefined, 0)).toBe(hitRadiusAt(WeaponType.Rocket, 0));
+    expect(hitRadiusAt(undefined, 0)).toBe(hitRadiusAt(WeaponType.BoltLauncher, 0));
   });
 });
 
 describe('validateHitClaim', () => {
   const proj: TrackedProjectile = {
     ownerId: 'shooter',
-    weaponType: WeaponType.Rocket,
+    weaponType: WeaponType.BoltLauncher,
     origin: { x: 0, y: 60, z: 0 },
     velocity: { x: 120, y: 0, z: 0 },
     spawnAt: 1000,

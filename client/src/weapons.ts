@@ -13,7 +13,7 @@
 
 import { WeaponType } from '../../shared/weapons.js';
 import type { ProjectileConfig } from './projectiles/types.js';
-import { ROCKET_CONFIG } from './projectiles/rocketConfig.js';
+import { BOLT_CONFIG } from './projectiles/boltConfig.js';
 import { DISC_CONFIG } from './projectiles/discConfig.js';
 import { CHAINGUN_CONFIG } from './projectiles/chaingunConfig.js';
 import { MORTAR_CONFIG } from './projectiles/mortarConfig.js';
@@ -33,7 +33,7 @@ import { STICKY_CONFIG } from './projectiles/stickyConfig.js';
 import { MRV_CONFIG } from './projectiles/mrvConfig.js';
 import { REPAIR_CONFIG } from './projectiles/repairConfig.js';
 import {
-  FIRE_RATE, DISC_RATE, CHAINGUN_RATE, MORTAR_RATE, GL_RATE, FLAK_RATE,
+  BOLT_FIRE_RATE, DISC_RATE, CHAINGUN_RATE, MORTAR_RATE, GL_RATE, FLAK_RATE,
   PLASMA_RATE, RAILGUN_RATE, LG_RATE, SHOTGUN_RATE, CANNON_RATE, RKT_RATE,
   PISTOL_RATE, REVOLVER_RATE, STICKY_RATE, PLASMAGUN_RATE,
   SPRINKLER_RATE, SPRINKLER_SPREAD, REPAIR_RATE, MRV_RATE,
@@ -83,7 +83,7 @@ function def(weaponType: WeaponType, rate: number, config: ProjectileConfig,
 // the loadout menu all index here. Order is gameplay-significant (it IS
 // the identity), so append new weapons; never reorder shipped entries.
 export const SLOT_DEFS: readonly WeaponDef[] = [
-  def(WeaponType.Rocket, FIRE_RATE, ROCKET_CONFIG, 1.0),
+  def(WeaponType.BoltLauncher, BOLT_FIRE_RATE, BOLT_CONFIG, 1.0),
   def(WeaponType.Disc, DISC_RATE, DISC_CONFIG, 1.0),
   def(WeaponType.Chaingun, CHAINGUN_RATE, CHAINGUN_CONFIG, 0.4, { auto: true }),
   def(WeaponType.Mortar, MORTAR_RATE, MORTAR_CONFIG, 2.0),
@@ -101,7 +101,7 @@ export const SLOT_DEFS: readonly WeaponDef[] = [
   def(WeaponType.PlasmaGun, PLASMAGUN_RATE, PLASMAGUN_CONFIG, 0.6),
   def(WeaponType.Sprinkler, SPRINKLER_RATE, SPRINKLER_CONFIG, 0.5, { auto: true, spread: SPRINKLER_SPREAD }),
   def(WeaponType.Repair, REPAIR_RATE, REPAIR_CONFIG, 0, { auto: true, sidearm: true }),
-  def(WeaponType.MRVLauncher, MRV_RATE, MRV_CONFIG, 1.8),
+  def(WeaponType.MRVLauncher, MRV_RATE, MRV_CONFIG, 2.2),
 ];
 
 export const SLOT_COUNT = SLOT_DEFS.length;

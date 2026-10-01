@@ -12,8 +12,9 @@ import { Nugget } from '../../entities/Nugget.js';
 import { burstGibs } from '../../entities/swarms.js';
 import { screenShake } from '../../effects/screenShake.js';
 import * as sfx from '../../core/sfx.js';
-import { ROCKET_RADIUS, CHAINGUN_RATE } from '../../core/config.js';
+import { EXPLOSION_VFX_RADIUS, CHAINGUN_RATE } from '../../core/config.js';
 import { getWeaponStats, WeaponType, directHitAoeBonus } from '../../../../shared/weapons.js';
+import { isBotId } from '../../../../shared/botNames.js';
 import { lgDischarge } from './lightning.js';
 import { processProjectileExplosion, type CombatCtx } from '../combat.js';
 
@@ -24,6 +25,9 @@ const CHAIN_STAGGER_FORCE = 6.0; // juggles the target, doesn't melt it
 const _debrisDir = new THREE.Vector3();
 const _bombDir = new THREE.Vector3(); // cluster bomblet scatter
 const _bombVel = new THREE.Vector3();
+const _coneAxis = new THREE.Vector3();
+const _coneQuat = new THREE.Quaternion();
+const _coneUp = new THREE.Vector3(0, 1, 0);
 
 // Projectile exploded: spawn effect, apply AOE, score hits, notify server/demo
 export function handleProjectileImpact(c: CombatCtx, p: Projectile): void {
@@ -33,6 +37,9 @@ export function handleProjectileImpact(c: CombatCtx, p: Projectile): void {
   // (GL shells explode on their 2.5s fuse on every observing client.)
   if (p.isRemote) {
     spawnVisualOnly(c, p);
+    // Bomblets are visual-only anyway — remote viewers still need the
+    // rain, or an airburst reads as a midair pop with no payload.
+    if (p.config.cluster) spawnClusterBomblets(c, p);
     return;
   }
 
@@ -63,7 +70,7 @@ export function spawnVisualOnly(c: CombatCtx, p: Projectile): void {
     if (!p.hitBall && !p.hitPlayerId) deps.lazyEffects().spawnBulletMark(pos);
     return;
   }
-  deps.world.explosions.push(new Explosion(deps.lazyScene(), pos, p.directHit, p.age, deps.lazyTerrain(), p.explosionRadius / ROCKET_RADIUS, p.config.damageColor, p.config.vfx));
+  deps.world.explosions.push(new Explosion(deps.lazyScene(), pos, p.directHit, p.age, deps.lazyTerrain(), p.explosionRadius / EXPLOSION_VFX_RADIUS, p.config.damageColor, p.config.vfx));
   sfx.explosionAt(pos, p.directHit);
 }
 
@@ -126,18 +133,44 @@ export function spawnImpactEffect(c: CombatCtx, p: Projectile): void {
 // validated blast; client-side pops never claim (untracked projectile).
 export function spawnClusterBomblets(c: CombatCtx, p: Projectile): void {
   const deps = c.deps;
-  const { count, spread, fuse } = p.config.cluster!;
+  const { count, spread, fuse, sphere } = p.config.cluster!;
   const at = p.hitPointValid ? p.hitPoint : p.pos;
+  // The scatter cone rides the carrier: axis = the carrier's heading
+  // (up when it's parked), plus 80% momentum inheritance below — a
+  // forward-flying shell rains its bomblets ALONG its arc instead of
+  // popping a static fountain that ignores where it was going.
+  // sphere mode (MRV) instead: full carrier velocity + a uniform random
+  // direction, so the cloud keeps the arc's momentum and rains out.
+  if (p.vel.lengthSq() > 1) _coneAxis.copy(p.vel).normalize();
+  else _coneAxis.set(0, 1, 0);
+  _coneQuat.setFromUnitVectors(_coneUp, _coneAxis);
   for (let i = 0; i < count; i++) {
     const yaw = Math.random() * Math.PI * 2;
-    const tilt = Math.random() * spread; // 0..spread off straight-up
-    _bombDir.set(Math.sin(yaw) * Math.sin(tilt), Math.cos(tilt), Math.cos(yaw) * Math.sin(tilt));
-    // Per-instance config clone only carries the jittered fuse —
-    // 5 allocations per cluster pop, not a hot path.
-    const cfg = { ...(p.config.bomblet ?? BOMBLET_CONFIG), maxLifetime: fuse * (0.6 + Math.random() * 0.8) };
+    if (sphere) {
+      // Uniform sphere: cos(tilt) uniform in [-1,1], not tilt uniform.
+      const u = Math.random() * 2 - 1, s = Math.sqrt(1 - u * u);
+      _bombDir.set(s * Math.cos(yaw), u, s * Math.sin(yaw));
+    } else {
+      const tilt = Math.random() * spread; // 0..spread off the cone axis
+      _bombDir.set(Math.sin(yaw) * Math.sin(tilt), Math.cos(tilt), Math.cos(yaw) * Math.sin(tilt))
+        .applyQuaternion(_coneQuat);
+    }
+    // Per-instance config clone only carries the jittered fuse — and only
+    // when the carrier SETS one: fuseless clusters (MRV) drop contact bombs
+    // that pop on whatever they land on, not mid-air timers.
+    const base = p.config.bomblet ?? BOMBLET_CONFIG;
+    const cfg = fuse ? { ...base, maxLifetime: fuse * (0.6 + Math.random() * 0.8) } : base;
     // Bomblet speed lives in the "playerVel" ctor arg: config.speed is 0 and
-    // the ctor adds half the inherit term, so dir × (s × 2) nets dir × s.
-    _bombVel.copy(_bombDir).multiplyScalar((9 + Math.random() * 6) * 2);
+    // the ctor adds half the inherit term — so pass final velocity × 2.
+    // Sphere: carrier velocity in FULL + uniform random kick; cone: 0.8×
+    // carrier + cone scatter (unchanged).
+    if (sphere) {
+      _bombVel.copy(p.vel).addScaledVector(_bombDir, 6 + Math.random() * 12)
+        .multiplyScalar(2);
+    } else {
+      _bombVel.copy(_bombDir).multiplyScalar((9 + Math.random() * 6) * 2)
+        .addScaledVector(p.vel, 1.6);
+    }
     const b = new Projectile(deps.lazyScene(), at, _bombDir, _bombVel, cfg);
     deps.world.projectiles.push(b);
   }
@@ -289,7 +322,7 @@ export function handlePlayerHit(c: CombatCtx, p: Projectile, playerId: string): 
   const networkManager = deps.lazyNetworkManager();
   // A bot-authored shell has no business claiming as the local player —
   // server/P2P authority resolves bot damage on its own end.
-  if (networkManager && !p.shooterId?.startsWith('bot:')) {
+  if (networkManager && !(p.shooterId && isBotId(p.shooterId))) {
     networkManager.sendShot({
       targetId: playerId,
       position: { x: p.pos.x, y: p.pos.y, z: p.pos.z },

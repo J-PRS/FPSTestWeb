@@ -55,8 +55,8 @@ describe('WEAPONS table invariants', () => {
   });
 
   it('getWeaponStats falls back to Rocket for unknown ids', () => {
-    expect(getWeaponStats(9999)).toBe(WEAPONS[WeaponType.Rocket]!);
-    expect(getWeaponStats(undefined)).toBe(WEAPONS[WeaponType.Rocket]!);
+    expect(getWeaponStats(9999)).toBe(WEAPONS[WeaponType.BoltLauncher]!);
+    expect(getWeaponStats(undefined)).toBe(WEAPONS[WeaponType.BoltLauncher]!);
     expect(getWeaponStats(WeaponType.Mortar)).toBe(WEAPONS[WeaponType.Mortar]!);
   });
 });

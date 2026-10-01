@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 import {
-  EXPLOSION_FALLOFF_MULTIPLIER_ROCKET, KNOCKBACK_MULTIPLIER,
+  EXPLOSION_FALLOFF_MULTIPLIER_DEFAULT, KNOCKBACK_MULTIPLIER,
 } from '../core/config.js';
 import { WEAPONS, AOE_VFX_SCALE } from '../../../shared/weapons.js';
 
@@ -24,7 +24,7 @@ export const MORTAR_CONFIG: ProjectileConfig = {
   hitMin: WEAPONS[4].hitMin,
   hitMax: WEAPONS[4].hitMax, // tight proxy — the big splash is the forgiving part, not the wake
   hitGrow: WEAPONS[4].hitGrow,
-  falloffMultiplier: EXPLOSION_FALLOFF_MULTIPLIER_ROCKET,
+  falloffMultiplier: EXPLOSION_FALLOFF_MULTIPLIER_DEFAULT,
   collisionMultiplier: 1.0,
   forceMultiplier: KNOCKBACK_MULTIPLIER,
   aoeDamage: WEAPONS[4].aoeDamage,

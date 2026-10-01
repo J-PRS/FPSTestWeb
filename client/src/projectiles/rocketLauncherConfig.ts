@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 import {
-  EXPLOSION_FALLOFF_MULTIPLIER_ROCKET, KNOCKBACK_MULTIPLIER,
+  EXPLOSION_FALLOFF_MULTIPLIER_DEFAULT, KNOCKBACK_MULTIPLIER,
 } from '../core/config.js';
 import { WEAPONS, AOE_VFX_SCALE } from '../../../shared/weapons.js';
 
@@ -22,7 +22,7 @@ export const RKT_CONFIG: ProjectileConfig = {
   hitMin: WEAPONS[15].hitMin,
   hitMax: WEAPONS[15].hitMax,
   hitGrow: WEAPONS[15].hitGrow,
-  falloffMultiplier: EXPLOSION_FALLOFF_MULTIPLIER_ROCKET,
+  falloffMultiplier: EXPLOSION_FALLOFF_MULTIPLIER_DEFAULT,
   collisionMultiplier: 1.0,
   forceMultiplier: KNOCKBACK_MULTIPLIER,
   aoeDamage: WEAPONS[15].aoeDamage,

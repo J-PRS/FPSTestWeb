@@ -4,10 +4,10 @@
 import * as THREE from 'three';
 import * as sfx from '../../core/sfx.js';
 import { Projectile } from '../../projectiles/Projectile.js';
-import { ROCKET_CONFIG, getProjectileConfig } from '../../projectiles/index.js';
+import { BOLT_CONFIG, getProjectileConfig } from '../../projectiles/index.js';
 import { WeaponType, getWeaponStats } from '../../../../shared/weapons.js';
 import { Explosion } from '../../effects/explosion.js';
-import { MELEE_RANGE, ROCKET_RADIUS } from '../../core/config.js';
+import { MELEE_RANGE, EXPLOSION_VFX_RADIUS } from '../../core/config.js';
 import type { NetCtx } from './ctx.js';
 
 /** Last weapon + shot count seen per shooter — every remote fire event
@@ -32,7 +32,7 @@ export function wireProjectiles(ctx: NetCtx): void {
     const hit = origin.clone().addScaledVector(dirV.normalize(), MELEE_RANGE * 0.7);
     deps.world.explosions.push(new Explosion(
       deps.lazyScene(), hit, true, 0, deps.lazyTerrain(),
-      (getWeaponStats(WeaponType.Melee).aoeRadius * 0.7) / ROCKET_RADIUS, 0xaaddff, 'punch',
+      (getWeaponStats(WeaponType.Melee).aoeRadius * 0.7) / EXPLOSION_VFX_RADIUS, 0xaaddff, 'punch',
     ));
   };
 
@@ -71,10 +71,12 @@ export function wireProjectiles(ctx: NetCtx): void {
     const origin = new THREE.Vector3(position.x, position.y, position.z);
     const dir = vel.clone().normalize();
     if (cosmeticShot(ownerId, weaponType, origin, dir)) return;
-    const cfg = (weaponType !== undefined ? getProjectileConfig(weaponType) : undefined) ?? ROCKET_CONFIG;
+    const cfg = (weaponType !== undefined ? getProjectileConfig(weaponType) : undefined) ?? BOLT_CONFIG;
     const remoteProjectile = new Projectile(deps.lazyScene(), origin, dir, new THREE.Vector3(0, 0, 0), cfg);
     remoteProjectile.vel.copy(vel); // override with exact server velocity
     remoteProjectile.isRemote = true;
+    // Fuse jitter seeds from this id — the replica pops at the server's age.
+    remoteProjectile.serverProjectileId = projectileId;
     // Ray-burst replicas discharge deterministically (delay/dir/range are
     // spawn-derived) — hook the beam flash so observers see the rail too.
     if (cfg.rayBurst) {

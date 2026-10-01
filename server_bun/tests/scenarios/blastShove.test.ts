@@ -18,7 +18,7 @@ describe('scenario: blast knockback', () => {
 
     // Rocket blast at the origin — player 5m east gets pushed east.
     // (Owner is exempt from the sweep, so the shot must come from someone else.)
-    room.messages.serverBlast(shooter.id, { x: 0, y: 31, z: 0 }, WeaponType.Rocket, null);
+    room.messages.serverBlast(shooter.id, { x: 0, y: 31, z: 0 }, WeaponType.BoltLauncher, null);
     expect(toVictim.filter((m) => m.type === 'knockback').length).toBe(1);
     step(room, 20);
     const after = room.moveSim.simPos(p.id)!;

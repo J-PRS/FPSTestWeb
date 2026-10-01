@@ -18,13 +18,13 @@ export const AOE_VFX_SCALE = 0.8;
  *  radius over the wire. */
 export const DIRECT_HIT_AOE_BONUS = 1.5;
 export function directHitAoeBonus(weaponType: number): number {
-  return (weaponType === WeaponType.Rocket || weaponType === WeaponType.Disc)
+  return (weaponType === WeaponType.BoltLauncher || weaponType === WeaponType.Disc)
     ? DIRECT_HIT_AOE_BONUS
     : 1;
 }
 
 import { WeaponType, type WeaponStats, WEAPONS } from './weaponTable.js';
-export { WeaponType, WEAPONS } from './weaponTable.js';
+export { WeaponType, WEAPONS, idSeed, jitteredTtl } from './weaponTable.js';
 export type { WeaponStats } from './weaponTable.js';
 
 export const REPAIR_RANGE = 14;        // beam reach (m)
@@ -46,7 +46,7 @@ export const MAX_HIT_CLAIM_DMG = Math.ceil(
   Math.max(...Object.values(WEAPONS).map(w => w.directDamage + w.aoeDamage)) * 1.4);
 
 export function getWeaponStats(weaponType: number | undefined): WeaponStats {
-  return WEAPONS[weaponType ?? WeaponType.Rocket] ?? WEAPONS[WeaponType.Rocket]!;
+  return WEAPONS[weaponType ?? WeaponType.BoltLauncher] ?? WEAPONS[WeaponType.BoltLauncher]!;
 }
 
 /** Legal fire cadence per primary/sidearm (s between shots) — the same
@@ -54,7 +54,7 @@ export function getWeaponStats(weaponType: number | undefined): WeaponStats {
  *  drawn weapon can't out-cadence a human with the same gun (a mortar
  *  brain at 0.45s cadence would otherwise out-shoot a player's 2.0s). */
 export const WEAPON_FIRE_INTERVAL_S: Partial<Record<WeaponType, number>> = {
-  [WeaponType.Rocket]: 0.8,
+  [WeaponType.BoltLauncher]: 0.8,
   [WeaponType.Disc]: 1.0,
   [WeaponType.Chaingun]: 0.09,
   [WeaponType.Mortar]: 2.0,

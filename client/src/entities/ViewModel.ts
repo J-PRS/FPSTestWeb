@@ -48,7 +48,7 @@ export class ViewModel {
   // Muzzle Z per weapon (model space) so the flash sits AT the bore,
   // not at a fixed offset that floats ahead of stubby barrels.
   private static readonly MUZZLE_Z: Record<number, number> = {
-    [WeaponType.Rocket]: -0.36, // flush bore face, just past the end plate [WeaponType.Disc]: -0.46, [WeaponType.DiscPull]: -0.46, // just past the fork's prong tips
+    [WeaponType.BoltLauncher]: -0.36, // flush bore face, just past the end plate [WeaponType.Disc]: -0.46, [WeaponType.DiscPull]: -0.46, // just past the fork's prong tips
     [WeaponType.Chaingun]: -0.55, // just past the barrel cluster tips [WeaponType.Mortar]: -0.28, [WeaponType.GrenadeLauncher]: -0.42,
     [WeaponType.Flak]: -0.28, [WeaponType.PlasmaCannon]: -0.35, [WeaponType.PlasmaGun]: -0.26, [WeaponType.Sprinkler]: -0.26,
     [WeaponType.Railgun]: -0.43,
@@ -59,7 +59,7 @@ export class ViewModel {
     [WeaponType.Pistol]: -0.17,   // stubby barrel face
     [WeaponType.Revolver]: -0.27, // long barrel + underlug tip
     [WeaponType.Repair]: -0.20,   // emitter stud on the reflector dish
-    [WeaponType.MRVLauncher]: -0.37, // just past the stubby barrel ring
+    [WeaponType.MRVLauncher]: -0.56, // group-space: scaled bore face (-0.445 model) ×1.25
   };
   chainBarrels: THREE.Group | null = null; // public — VmBaked reseats the bake's pivot
   // Bore axis in the SPIN NODE's local space — procedural barrels run
@@ -77,6 +77,7 @@ export class ViewModel {
   kickRoll = 0;      // per-shot roll — alternating twist reads as torque
   kickDecay = 12;    // per-weapon spring rate
   kickAmp = 1;       // per-weapon muzzle-rise multiplier
+  kickBack = 1;      // per-weapon backward-shove multiplier (kickZ scale)
   flashLifeScale = 1;
   fistGroup: THREE.Group; // public — the punch envelope flies it
   private baseRotX = 0.04;
@@ -286,7 +287,7 @@ export class ViewModel {
     // slam into it instead of flying the gun off-screen.
     if (this.kickAmount > 0.85) { this.kickAmount = 0.85; this.kickVel = Math.min(this.kickVel, 0); }
     this.kickX *= Math.exp(-dt * this.kickDecay * 1.4); // jitter settles faster than the shove
-    const kickZ = this.kickAmount * 0.55;
+    const kickZ = this.kickAmount * 0.55 * this.kickBack;
     const kickY = this.kickAmount * 0.12;
     const { dip, switchDip, punch } = this.env.tick(dt);
     const totalDip = Math.max(dip, switchDip);

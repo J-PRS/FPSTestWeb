@@ -3,7 +3,7 @@ import { WeaponType } from '../../../../shared/weapons.js';
 import { getMuzzleFlashTexture } from '../../effects/glowTexture.js';
 import { mkPlasmaCannon, mkPlasmaGun, mkRailgun, mkLightningGun } from './weaponsGeoEnergy.js';
 import { mkPistol, mkRevolver, mkRepair } from './weaponsGeoSidearm.js';
-import { mkRocket, mkDisc, mkChaingun, mkMortar, mkGrenadeLauncher, mkSticky, mkFlak, mkShotgun, mkCannon, mkRpg, mkMrv } from './weaponsGeoBallistic.js';
+import { mkBolt, mkDisc, mkChaingun, mkMortar, mkGrenadeLauncher, mkSticky, mkFlak, mkShotgun, mkCannon, mkRpg, mkMrv } from './weaponsGeoBallistic.js';
 
 // Procedural weapon geometry — every viewmodel gun built from primitives.
 // Extracted from ViewModel's constructor; returns the built maps so the
@@ -17,7 +17,7 @@ export interface WeaponMeshes {
 }
 
 const MODEL_BUILDERS: [number, () => THREE.Group][] = [
-  [WeaponType.Rocket, mkRocket],
+  [WeaponType.BoltLauncher, mkBolt],
   [WeaponType.Disc, mkDisc],
   [WeaponType.GrenadeLauncher, mkGrenadeLauncher],
   [WeaponType.Flak, mkFlak],
@@ -49,7 +49,9 @@ export function buildWeaponMeshes(parent: THREE.Group, muzzleZ: Record<number, n
     weapons.set(wt, g);
     parent.add(g);
     const mz = new THREE.Object3D();
-    mz.position.z = muzzleZ[wt] ?? -0.35;
+    // muzzleZ is GROUP-space (the flash parks on it raw) — divide out the
+    // model scale so the node lands on the same group-space z.
+    mz.position.z = (muzzleZ[wt] ?? -0.35) / g.scale.z;
     g.add(mz);
     muzzleNodes.set(wt, mz);
   }
