@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 import { PLAYER_RADIUS, CAPSULE_CYLINDER_HEIGHT, CAPSULE_CENTER_Y } from '../core/config.js';
 import { urlParams } from '../core/params.js';
@@ -450,16 +451,26 @@ export class PlayerModel {
   }
 
   // Procedural gun in the right hand — follows every animation.
+  // One merged geometry + shared material per remote: two meshes each
+  // used to cost a draw call apiece (~17 remotes = ~34 draws).
+  private static _gunGeo: THREE.BufferGeometry | null = null;
+  private static _gunMat: THREE.MeshStandardMaterial | null = null;
   private attachGun(mann: boolean): void {
     const handBone = this.handBone!;
-    const gunMat = new THREE.MeshStandardMaterial({ color: 0x2a2e33, roughness: 0.55, metalness: 0.6, emissive: 0x334455, emissiveIntensity: 0.8 });
+    if (!PlayerModel._gunMat) {
+      PlayerModel._gunMat = new THREE.MeshStandardMaterial({ color: 0x2a2e33, roughness: 0.55, metalness: 0.6, emissive: 0x334455, emissiveIntensity: 0.8 });
+    }
+    if (!PlayerModel._gunGeo) {
+      const body = new THREE.BoxGeometry(0.16, 0.26, 0.9);
+      body.translate(0, 0, 0.25);
+      const barrel = new THREE.CylinderGeometry(0.05, 0.05, 0.55);
+      barrel.rotateX(Math.PI / 2);
+      barrel.translate(0, 0.05, 0.75);
+      PlayerModel._gunGeo = mergeGeometries([body, barrel], false)!;
+      body.dispose(); barrel.dispose();
+    }
     this.gun = new THREE.Group();
-    const body = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.26, 0.9), gunMat);
-    body.position.z = 0.25;
-    const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.55), gunMat);
-    barrel.rotation.x = Math.PI / 2;
-    barrel.position.set(0, 0.05, 0.75);
-    this.gun.add(body, barrel);
+    this.gun.add(new THREE.Mesh(PlayerModel._gunGeo, PlayerModel._gunMat));
     // Measure bone world scale AFTER model.scale so the gun lands
     // real-world size (bones carry the armature's ~100x scale)
     this.model!.updateMatrixWorld(true);
