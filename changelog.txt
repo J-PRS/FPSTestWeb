@@ -1,3 +1,4 @@
+2026-10-01 - pdebris job capped at 1.5ms; over-budget debris tickAge like far ones
 2026-10-01 - Far ribbons keep fixed side vector (skip per-sample billboard math)
 2026-10-01 - Far ribbons keep fixed side vector (skip per-sample billboard math)
 2026-10-01 - Instanced pools upload live slot spans only (swarm, shadows, gibs, debris)

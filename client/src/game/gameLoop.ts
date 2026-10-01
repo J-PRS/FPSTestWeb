@@ -273,11 +273,23 @@ function fxTick(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof cre
     ['pdebris', () => {
       const list = deps.world.playerDebrisList;
       const cam = deps.camera.position;
-      for (let i = list.length - 1; i >= 0; i--) {
+      // A nearby mass kill otherwise turns this one job into a 7ms+
+      // spike: past the cap, remaining debris fall back to tickAge —
+      // the same cheap path far debris already take.
+      const t0 = performance.now();
+      let i = list.length - 1;
+      for (; i >= 0; i--) {
         const d = list[i]!;
         const dx = d.ox - cam.x, dy = d.oy - cam.y, dz = d.oz - cam.z;
-        if (dx * dx + dy * dy + dz * dz < VFX_NEAR_SQ) d.update(fxDt);
-        else d.tickAge(fxDt);
+        if (dx * dx + dy * dy + dz * dz < VFX_NEAR_SQ) {
+          d.update(fxDt);
+          if (performance.now() - t0 > 1.5) { i--; break; }
+        } else d.tickAge(fxDt);
+        if (d.dead) { d.dispose(); list.splice(i, 1); }
+      }
+      for (; i >= 0; i--) {
+        const d = list[i]!;
+        d.tickAge(fxDt);
         if (d.dead) { d.dispose(); list.splice(i, 1); }
       }
     }],
