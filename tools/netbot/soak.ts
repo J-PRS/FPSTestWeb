@@ -10,6 +10,7 @@
 import { LatencyLink } from './latency.ts';
 import { NetClient } from './netClient.ts';
 import { NetBot } from './bot.ts';
+import { BOT_LOADOUTS, botClassForLoadout } from '../../shared/botLoadouts.ts';
 
 function arg<T>(name: string, def: T, parse: (s: string) => T): T {
   const i = process.argv.indexOf(name);
@@ -37,8 +38,9 @@ console.log(`netbot soak: ${BOTS} bots → ${URL_} for ${SECONDS}s (ping=${PING}
 const RUN_TAG = Date.now().toString(36);
 const bots: { nc: NetClient; bot: NetBot }[] = [];
 for (let i = 0; i < BOTS; i++) {
-  const nc = new NetClient(URL_, `nb${RUN_TAG}_${i}`, new LatencyLink({ pingMs: PING, jitterMs: JITTER, lossRate: LOSS }), ROOM ? { room: ROOM, mode: MODE } : {});
-  const bot = new NetBot(nc, { hopEveryMs: HOP_EVERY > 0 ? HOP_EVERY : undefined });
+  const lo = BOT_LOADOUTS[i % BOT_LOADOUTS.length]!;
+  const nc = new NetClient(URL_, `nb${RUN_TAG}_${i}`, new LatencyLink({ pingMs: PING, jitterMs: JITTER, lossRate: LOSS }), { ...(ROOM ? { room: ROOM, mode: MODE } : {}), armorClass: botClassForLoadout(lo) });
+  const bot = new NetBot(nc, { hopEveryMs: HOP_EVERY > 0 ? HOP_EVERY : undefined, loadout: lo });
   bots.push({ nc, bot });
 }
 

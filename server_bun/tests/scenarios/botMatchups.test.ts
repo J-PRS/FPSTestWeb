@@ -42,9 +42,13 @@ function duel(loA: BotLoadout, loB: BotLoadout, distM: number, seed: number, max
     bases: { alpha: { x: -300, y: 60, z: 0 }, bravo: { x: 300, y: 60, z: 0 } },
   }, 'tdm', seed);
   const [a, b] = botsOf(room);
-  const ctl = room.bots as unknown as { loadouts: Map<string, BotLoadout> };
+  const ctl = room.bots as unknown as { loadouts: Map<string, BotLoadout>; roster: { refitClass(id: string): void } };
   ctl.loadouts.set(a!.id, loA);
   ctl.loadouts.set(b!.id, loB);
+  // The class follows the kit now (plated/mortar → heavy, featherjets →
+  // light): re-fit both bodies or the duel fights with spawn-random tiers.
+  ctl.roster.refitClass(a!.id);
+  ctl.roster.refitClass(b!.id);
   for (let i = 0; i < maxTicks; i++) {
     pin(room, a!.id, { x: -distM / 2, y: 32, z: 0 });
     pin(room, b!.id, { x: distM / 2, y: 32, z: 0 });
@@ -68,9 +72,12 @@ describe('scenario: weapon matchups at near band (10m)', () => {
     expect(wins(series(KIT.bruiser, KIT.beam, 10), 'a')).toBe(5);
   });
 
-  it('chaingun hoses the flak spread', () => {
-    // CG's constant 89 dps beats flak's 81dmg bursts — observed 3/3.
-    expect(wins(series(KIT.chaser, KIT.flanker, 10), 'a')).toBe(5);
+  it('the heavy flanker face-tanks the light chaingun', () => {
+    // Class follows the kit now: the flanker hauls a rocket rack → heavy
+    // body (+50hp) while the chaser flies light (−25hp). CG's 89dps can't
+    // out-burn the plating at 10m — a light harasser SHOULD lose a
+    // pinned face-tank. Observed 1/5 after the class pass.
+    expect(wins(series(KIT.chaser, KIT.flanker, 10), 'a')).toBeLessThanOrEqual(2);
   });
 });
 

@@ -5,6 +5,7 @@ import type { WebSocketData } from '../src/types.ts';
 import { NetClient } from '../../tools/netbot/netClient.ts';
 import { NetBot } from '../../tools/netbot/bot.ts';
 import { LatencyLink, type LatencyOpts } from '../../tools/netbot/latency.ts';
+import { BOT_LOADOUTS, botClassForLoadout } from '../../shared/botLoadouts.ts';
 import type { NdModule } from '../../tools/netbot/rtcSocket.ts';
 
 // Real-socket tier: an actual Bun.serve + actual WebSocket clients, so the
@@ -57,8 +58,11 @@ describe('netbot — real clients over real sockets', () => {
   const spawn = async (n: number, link: LatencyOpts, opts: { hopEveryMs?: number; transports?: ('ws' | 'rtc')[]; room?: string; mode?: string; bots?: number } = {}) => {
     for (let i = 0; i < n; i++) {
       const transport = opts.transports?.[i % opts.transports.length] ?? 'ws';
-      const nc = new NetClient(env!.url, `nb_${i}`, new LatencyLink(link), { transport, rtc: nd ? { nd } : undefined, room: opts.room, mode: opts.mode, bots: opts.bots });
-      const bot = new NetBot(nc, opts);
+      // Kit and tier declared up front like a real loadout pick — the
+      // squad-role weighting reads armorClass off roster entries.
+      const lo = BOT_LOADOUTS[i % BOT_LOADOUTS.length]!;
+      const nc = new NetClient(env!.url, `nb_${i}`, new LatencyLink(link), { transport, rtc: nd ? { nd } : undefined, room: opts.room, mode: opts.mode, bots: opts.bots, armorClass: botClassForLoadout(lo) });
+      const bot = new NetBot(nc, { ...opts, loadout: lo });
       bots.push({ nc, bot });
       // Staggered connects — a burst of simultaneous socket opens made
       // some joins never land (silent ghost sockets), exactly the flake
@@ -163,7 +167,10 @@ describe('netbot — real clients over real sockets', () => {
   it('a mid-match room hop keeps hits flowing (per-room seq reset)', async () => {
     env = bootServer();
     await spawn(4, { pingMs: 20, jitterMs: 60, lossRate: 0 }, { hopEveryMs: 4000 });
-    await sleep(14000);
+    // Hop transitions gate gameplay sends until each room's gameState —
+    // a bad hop cadence can starve the whole claim window, so give the
+    // fight extra slack before counting.
+    await sleep(18000);
 
     const hopped = bots.some((b) => b.nc.tel.hops > 0);
     const claims = bots.reduce((a, b) => a + b.nc.tel.claims, 0);

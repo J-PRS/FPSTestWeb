@@ -49,23 +49,56 @@ export const ROLE_PRIORITY: { role: BotRole; want: number; minSquad: number }[] 
  *  server-side. */
 export const WIRE_ROLES: BotRole[] = ['capper', 'ldefense', 'hof', 'defense', 'offense'];
 
+/** Kit → role fitness. A guideline, not a lock: offense/defense accept
+ *  every class (heavy offense and light harassers are both classic), the
+ *  runners (capper/infiltrator) pull light, and the planted specialists
+ *  (hof/technician) pull heavy hard — HoF IS "heavy on flag". */
+export const CLASS_FITNESS: Record<string, Record<BotRole, number>> = {
+  light:   { capper: 3,   infiltrator: 3,   ldefense: 2,   offense: 1.5, defense: 1,   technician: 0.4, hof: 0.2 },
+  medium:  { offense: 3,  defense: 2.5,     ldefense: 2,   capper: 1.2,  hof: 1,       infiltrator: 1,  technician: 1 },
+  heavy:   { hof: 3,      technician: 2.5,  defense: 2,    offense: 2,   ldefense: 1,  capper: 0.4,     infiltrator: 0.4 },
+};
+const fit = (cls: string | undefined, role: BotRole): number =>
+  (cls ? CLASS_FITNESS[cls]?.[role] : undefined) ?? 1.5;
+
 /** Deterministic squad assignment: every peer sorts the same roster and
  *  walks the same fill order, so each bot computes the team's layout
  *  locally and lands on its own slot — squad coordination with zero
- *  coordinator messages. Teammates ahead in sort order take the
- *  specialist slots; the tail fills with offense/defense alternation. */
-export function assignRole(myId: string, teammateIds: string[], playable: BotRole[] = WIRE_ROLES): BotRole {
+ *  coordinator messages. Specialist slots go to the best-fit kit
+ *  (CLASS_FITNESS argmax, id tiebreak — class is a pull, not a gate);
+ *  the tail fills offense/defense alternately, open to any class. */
+export function assignRole(
+  myId: string,
+  teammateIds: string[],
+  playable: BotRole[] = WIRE_ROLES,
+  kitOf?: (id: string) => string | undefined,
+): BotRole {
   const ids = [...teammateIds].sort();
   const me = ids.indexOf(myId);
   if (me < 0) return 'offense';
-  const slots: BotRole[] = [];
+  const mine = new Map<string, BotRole>();
   for (const { role, want, minSquad } of ROLE_PRIORITY) {
     if (!playable.includes(role)) continue;
     if (ids.length < minSquad) continue;
-    for (let i = 0; i < want; i++) slots.push(role);
+    for (let i = 0; i < want; i++) {
+      let best: string | null = null;
+      let bestFit = -Infinity;
+      for (const id of ids) {
+        if (mine.has(id)) continue;
+        const f = fit(kitOf?.(id), role);
+        if (f > bestFit) { bestFit = f; best = id; }
+      }
+      if (!best) break;
+      mine.set(best, role);
+    }
   }
-  while (slots.length < ids.length) slots.push(slots.length % 3 === 2 ? 'defense' : 'offense');
-  return slots[me] ?? 'offense';
+  let tail = 0;
+  for (const id of ids) {
+    if (mine.has(id)) continue;
+    mine.set(id, tail % 3 === 2 ? 'defense' : 'offense');
+    tail++;
+  }
+  return mine.get(myId) ?? 'offense';
 }
 
 /** Where a role should run given the current flag situation. Returns the

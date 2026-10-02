@@ -1,5 +1,6 @@
 import { WeaponType } from './weapons.ts';
 import type { PerkId } from './perks.ts';
+import { HEAVY_ONLY_WEAPONS, type ArmorClass } from './botClasses.ts';
 
 /** A bot's kit — weapon picked by engagement range, perk set at spawn so
  *  maxHealth and the move shadow's jet economy match a real loadout.
@@ -12,6 +13,18 @@ export const BOT_MELEE_M = 4.5;   // fist reach — brains press inside CLOSE_PR
 // and two capsule bodies hover ~1-2m apart, so the honest closest gap in a
 // chase sits ~4m; 3.0 never opened in soak ledgers (0 w10 rows).
 export const BOT_SIDEARM_M = 8.0; // knife range: the hold-out draw is faster than tracking a long gun
+
+/** Kit → armor tier. Ordnance decides first — a bot lugging a mortar or
+ *  rocket rack IS a heavy regardless of perk; then plated anchors heavy
+ *  and featherjets flies light. Everything else runs medium. Role
+ *  weighting (CLASS_FITNESS) reads this — kit picks the body before the
+ *  squad picks the job. */
+export function botClassForLoadout(lo: BotLoadout): ArmorClass {
+  if (HEAVY_ONLY_WEAPONS.has(lo.far) || HEAVY_ONLY_WEAPONS.has(lo.belt)) return 'heavy';
+  if (lo.perk === 'plated') return 'heavy';
+  if (lo.perk === 'featherjets') return 'light';
+  return 'medium';
+}
 
 export const BOT_LOADOUTS: BotLoadout[] = [
   { perk: 'featherjets', near: WeaponType.Chaingun, mid: WeaponType.PlasmaGun, far: WeaponType.BoltLauncher,        belt: WeaponType.Grenade,       side: WeaponType.Pistol   }, // chaser

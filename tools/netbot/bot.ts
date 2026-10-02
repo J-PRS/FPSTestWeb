@@ -9,14 +9,14 @@
 import { BotBrain, type BotEnemy, type BrainCtx } from '../../shared/botBrain.ts';
 import { MoveSim, ENERGY } from '../../shared/movement.ts';
 
-import { BOT_LOADOUTS, pickBotWeapon } from '../../shared/botLoadouts.ts';
+import { BOT_LOADOUTS, botClassForLoadout, pickBotWeapon, type BotLoadout } from '../../shared/botLoadouts.ts';
 import { aimSkillFor } from '../../shared/botSkill.ts';
 import { WEAPONS } from '../../shared/weaponTable.ts';
 import { WEAPON_FIRE_INTERVAL_S } from '../../shared/weapons.ts';
 import { HEAVY_ONLY_WEAPONS } from '../../shared/botClasses.ts';
 import type { WeaponType } from '../../shared/weaponTable.ts';
 import type { ClientMessage, Vec3 } from '../../shared/protocol.ts';
-import { assignRole, roleObjective, type BotRole, type FlagSituation } from '../../shared/flagGoals.ts';
+import { assignRole, roleObjective, WIRE_ROLES, type BotRole, type FlagSituation } from '../../shared/flagGoals.ts';
 import type { NetClient, RemoteEntry } from './netClient.ts';
 
 const THINK_S = 0.3;
@@ -45,6 +45,7 @@ interface Shell {
 export class NetBot {
   private brain: BotBrain;
   private loadout = BOT_LOADOUTS[Math.floor(Math.random() * BOT_LOADOUTS.length)] ?? BOT_LOADOUTS[0]!;
+  private get cls() { return botClassForLoadout(this.loadout); }
   private shells: Shell[] = [];
   /** Spawn claims awaiting their projectileCreated echo — a client on a
    *  lossy transport retransmits (the server dedups by shotId, so resends
@@ -59,7 +60,8 @@ export class NetBot {
   private hopTimer: ReturnType<typeof setInterval> | null = null;
   private rand: () => number;
 
-  constructor(private nc: NetClient, opts: { hopEveryMs?: number; seed?: () => number } = {}) {
+  constructor(private nc: NetClient, opts: { hopEveryMs?: number; seed?: () => number; loadout?: BotLoadout } = {}) {
+    if (opts.loadout) this.loadout = opts.loadout;
     this.brain = new BotBrain({ x: 0, y: 60, z: 0 });
     this.rand = opts.seed ?? Math.random;
     if (opts.hopEveryMs) {
@@ -162,7 +164,10 @@ export class NetBot {
     for (const [id, e] of this.nc.roster) {
       if (e.team === this.nc.self.team) mates.push(id);
     }
-    const next = assignRole(this.nc.id, mates);
+    // Kit-weighted squad fill — every peer sees the same armorClass in
+    // roster entries, so argmax lands on the same bodies on all sides.
+    const next = assignRole(this.nc.id, mates, WIRE_ROLES, (id) =>
+      id === this.nc.id ? this.cls : this.nc.roster.get(id)?.cls);
     if (next !== this.role) this.roleT = 8;
     this.role = next;
     return this.role;

@@ -9,18 +9,20 @@ import { BotBrain } from '../../shared/botBrain.ts';
 import { logger } from './logger.ts';
 import { WeaponType } from '../../shared/weapons.ts';
 import { CLASS_STATS, type ArmorClass } from '../../shared/botClasses.ts';
-import { BOT_LOADOUTS, type BotLoadout } from '../../shared/botLoadouts.ts';
+import { BOT_LOADOUTS, botClassForLoadout, type BotLoadout } from '../../shared/botLoadouts.ts';
 import { BOT_NAMES } from '../../shared/botNames.ts';
-import { ROLE_PRIORITY, type BotRole } from '../../shared/flagGoals.ts';
+import { CLASS_FITNESS, ROLE_PRIORITY, type BotRole } from '../../shared/flagGoals.ts';
 import { isSuper } from './superBot.ts';
 import { healPool } from './healPool.ts';
 
-/** Armor class follows the role — Tribes pacing lives on this: cappers
- *  and infiltrators fly light, HoF and technicians anchor heavy, the
- *  fighting middle wears medium. */
-const ROLE_CLASS: Record<BotRole, ArmorClass> = {
+/** Strict-tier roles — the only slots that re-fit a donor's body.
+ *  HoF is literally "heavy on flag" and the technician carries the
+ *  deploy kit; the runners (capper/infiltrator) fly light because the
+ *  role IS speed. Offense/defense take whatever class shows up — a
+ *  heavy anchor pushing offense and a light harasser defending are
+ *  both legitimate, so generic slots never re-fit. */
+const STRICT_CLASS: Partial<Record<BotRole, ArmorClass>> = {
   capper: 'light', infiltrator: 'light',
-  offense: 'medium', ldefense: 'medium', defense: 'medium',
   hof: 'heavy', technician: 'heavy',
 };
 
@@ -50,12 +52,14 @@ export class BotRoster {
       const idx = this.nextIdx++;
       const id = `BOT-${BOT_NAMES[(idx - 1) % BOT_NAMES.length]}-${String(idx).padStart(2, '0')}`;
       const loadout = BOT_LOADOUTS[(this.nextIdx - 2 + BOT_LOADOUTS.length) % BOT_LOADOUTS.length]!;
-      const p = this.room.players.addPlayer(id, undefined, loadout.perk);
+      // Kit picks the body, then the squad's weighted fill picks the
+      // job — plated/mortar kits anchor heavy, featherjets flies light,
+      // everything else runs medium until rebalance assigns a role.
+      const cls = botClassForLoadout(loadout);
+      const p = this.room.players.addPlayer(id, undefined, loadout.perk, cls);
       this.loadouts.set(id, loadout);
-      // CTF role from the loadout: plated anchors hold home, everyone else
-      // presses. A whole team grabbing leaves the stand unguarded.
-      this.roles.set(id, loadout.perk === 'plated' ? 'hof' : 'offense');
-      this.applyClass(p, ROLE_CLASS[this.roles.get(id)!]);
+      this.roles.set(id, 'offense');
+      this.applyClass(p, cls);
       p.isBot = true;
       if (isSuper(id)) p.health = 400; // superbot tanks a beating
       p.lastSeen = Date.now();
@@ -67,6 +71,7 @@ export class BotRoster {
         position: p.position,
         rotation: p.rotation,
         team: p.team,
+        armorClass: cls,
       });
       this.brains.set(id, new BotBrain(p.position));
       this.thinkPhase.set(id, this.nextIdx % this.thinkDiv);
@@ -75,6 +80,17 @@ export class BotRoster {
       this.room.moveSim.track(id, p.position, p.rotation.yaw, p.perk);
     }
     if (n > 0) logger.info('Bots spawned', { room: this.room.name, count: n });
+  }
+
+  /** Re-fit a bot's body to its CURRENT loadout — scenarios that swap
+   *  kits post-spawn call this so the armor follows the new kit, not
+   *  whatever the spawn roll handed out. */
+  public refitClass(id: string): void {
+    const lo = this.loadouts.get(id);
+    const p = this.room.players.getPlayer(id);
+    if (!lo || !p) return;
+    p.armorClass = botClassForLoadout(lo);
+    this.applyClass(p, p.armorClass as ArmorClass);
   }
 
   /** Apply the armor class to a live bot record: maxHealth shifts and
@@ -137,11 +153,21 @@ export class BotRoster {
       let have = 0;
       for (const id of ids) if (this.roles.get(id) === want) have++;
       while (have < need) {
-        const donor = donors.shift();
+        // Kit-weighted pick: the best-fit donor takes the slot
+        // (CLASS_FITNESS argmax, id tiebreak) — a pull, not a gate, so
+        // a squad of mediums still fills its capper slot.
+        let donor: string | null = null;
+        let bestFit = -Infinity;
+        for (const id of donors) {
+          const f = CLASS_FITNESS[this.room.players.getPlayer(id)?.armorClass ?? '']?.[want] ?? 1;
+          if (f > bestFit || (f === bestFit && donor !== null && id < donor)) { bestFit = f; donor = id; }
+        }
         if (!donor) break;
+        donors.splice(donors.indexOf(donor), 1);
         this.roles.set(donor, want);
+        const strict = STRICT_CLASS[want];
         const donorP = this.room.players.getPlayer(donor);
-        if (donorP) this.applyClass(donorP, ROLE_CLASS[want]);
+        if (donorP && strict) this.applyClass(donorP, strict);
         // Technician is the only role that promises the deploy kit —
         // pin its builder trait instead of trusting the spawn roll.
         if (want === 'technician') this.brains.get(donor)?.setBuilder(true);

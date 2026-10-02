@@ -21,6 +21,8 @@ export interface RemoteEntry {
   health: number;
   isDead: boolean;
   team?: string;
+  /** Armor tier — squad role weighting reads kit, not just ids. */
+  cls?: string;
 }
 
 export interface NetTelemetry {
@@ -110,7 +112,7 @@ export class NetClient {
   closed = false;
   closeInfo = '';
 
-  constructor(private url: string, id: string, link?: LatencyLink, private joinOpts: { room?: string; mode?: string; transport?: 'ws' | 'rtc'; bots?: number; rtc?: { nd: NdModule; iceServers?: { hostname: string; port: number; relayer?: boolean }[] } } = {}) {
+  constructor(private url: string, id: string, link?: LatencyLink, private joinOpts: { room?: string; mode?: string; transport?: 'ws' | 'rtc'; bots?: number; armorClass?: string; rtc?: { nd: NdModule; iceServers?: { hostname: string; port: number; relayer?: boolean }[] } } = {}) {
     this.id = id;
     this.link = link ?? new LatencyLink({ pingMs: 0, jitterMs: 0, lossRate: 0 });
   }
@@ -134,7 +136,7 @@ export class NetClient {
         // Join retries until the first gameState lands — a swallowed or
         // throttled join would otherwise leave the bot a silent ghost,
         // the same failure a real client's retry button papers over.
-        const joinMsg = JSON.stringify({ type: 'join', playerId: this.id, transport, token: this.sessionToken, room: this.joinOpts.room, mode: this.joinOpts.mode, bots: this.joinOpts.bots });
+        const joinMsg = JSON.stringify({ type: 'join', playerId: this.id, transport, token: this.sessionToken, room: this.joinOpts.room, mode: this.joinOpts.mode, bots: this.joinOpts.bots, armorClass: this.joinOpts.armorClass });
         ws.send(joinMsg);
         let tries = 0;
         this.joinTimer = setInterval(() => {
@@ -249,7 +251,7 @@ export class NetClient {
         this.roster.clear();
         for (const p of m.players) {
           if (p.id === this.id) continue;
-          this.roster.set(p.id, { pos: { ...p.position }, vel: { ...p.velocity }, health: p.health, isDead: p.isDead, team: p.team });
+          this.roster.set(p.id, { pos: { ...p.position }, vel: { ...p.velocity }, health: p.health, isDead: p.isDead, team: p.team, cls: p.armorClass });
         }
         if (m.localPlayerState) {
           this.self.pos = { ...m.localPlayerState.position };
@@ -294,7 +296,7 @@ export class NetClient {
       case 'deployGone': this.deployables.delete(m.id); break;
       case 'deployHp': { const d = this.deployables.get(m.id); if (d) d.hp = m.hp; break; }
       case 'playerJoined': {
-        this.roster.set(m.playerId, { pos: { ...m.position }, vel: { x: 0, y: 0, z: 0 }, health: 100, isDead: false, team: m.team });
+        this.roster.set(m.playerId, { pos: { ...m.position }, vel: { x: 0, y: 0, z: 0 }, health: 100, isDead: false, team: m.team, cls: m.armorClass });
         break;
       }
       case 'playerLeft': this.roster.delete(m.playerId); break;
@@ -329,7 +331,7 @@ export class NetClient {
           this.self.pos = { ...m.position };
         }
         const e = this.roster.get(m.playerId);
-        if (e) { e.isDead = false; e.health = 100; e.pos = { ...m.position }; }
+        if (e) { e.isDead = false; e.health = 100; e.pos = { ...m.position }; if (m.armorClass) e.cls = m.armorClass; }
         break;
       }
       case 'yourHealth': this.self.health = m.health; break;
