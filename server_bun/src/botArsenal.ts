@@ -186,14 +186,31 @@ export class BotArsenal implements BeamHost {
     const g = stats.gravity ? GRAVITY : 0;
     let px = muzzle.x, py = muzzle.y, pz = muzzle.z;
     let travelled = 0;
+    let flightT = 0;
+    let hitX: number | null = null, hitY = 0, hitZ = 0;
     const dt = 0.02;
-    for (let stepN = 0; stepN < 400 && travelled < aoer; stepN++) {
+    for (let stepN = 0; stepN < 400 && travelled < 80; stepN++) {
       vy += g * dt;
       px += vx * dt; py += vy * dt; pz += vz * dt;
+      flightT += dt;
       travelled += Math.sqrt(vx * vx + vy * vy + vz * vz) * dt;
       const line = py + stats.bodyRadius;
-      if (hmHeight(this.room.field, px, pz) > line) return true;
-      if (this.room.moveSim.structureTop(px, pz) > line) return true;
+      const ground = Math.max(hmHeight(this.room.field, px, pz), this.room.moveSim.structureTop(px, pz));
+      if (ground > line) {
+        if (travelled < aoer) return true;
+        hitX = px; hitY = py; hitZ = pz;
+        break;
+      }
+    }
+    // Self-collision ahead: the blast radius is measured shooter→pop at
+    // detonation, and a bot skiing INTO his own shot covers real distance
+    // during flight — a rocket the muzzle clears still frags him if his
+    // velocity delivers him inside the radius by impact time.
+    if (hitX !== null) {
+      const sx = muzzle.x + ownerVel.x * flightT - hitX;
+      const sy = muzzle.y + ownerVel.y * flightT - hitY;
+      const sz = muzzle.z + ownerVel.z * flightT - hitZ;
+      if (sx * sx + sy * sy + sz * sz < aoer * aoer) return true;
     }
     // Entity intercepts inside the blast envelope: a wandering ball,
     // a species pop, or a teammate body on the muzzle line pops the
@@ -268,16 +285,16 @@ export class BotArsenal implements BeamHost {
 
   /** Lob the belt weapon at an explicit point — used for hunt targets
    *  (the last-seen spot) and for hostile emplacements blocking the
-   *  bot's objective. */
-  lobAt(p: BotBody, aim: Vec3): void {
+   *  bot's objective. False when the throw was refused (belt dry or
+   *  the arc can't clear the shooter's own blast envelope). */
+  lobAt(p: BotBody, aim: Vec3): boolean {
     const wt = this.loadouts.get(p.id)?.belt ?? WeaponType.Grenade;
     const stats = getWeaponStats(wt);
-    if (!stats || stats.speed <= 0) return;
+    if (!stats || stats.speed <= 0) return false;
     // The belt pool pays for every toss — a dry bot's lob intents quietly
     // fizzle until a nugget restocks it (brains see ctx.pickup for that).
     const body = this.room.players.getPlayer(p.id);
-    if (body && body.beltCharges < BELT_THROW_COST) return;
-    if (body) body.beltCharges -= BELT_THROW_COST;
+    if (body && body.beltCharges < BELT_THROW_COST) return false;
     const dx = aim.x - p.position.x, dz = aim.z - p.position.z;
     const d = Math.hypot(dx, dz) || 1;
     // Ballistic lob: range = v²·sin(2θ)/|g| — solve θ for the target's
@@ -300,9 +317,12 @@ export class BotArsenal implements BeamHost {
     const vy = (dir.y / len) * stats.speed - p.velocity.y * 0.5;
     const vz = (dir.z / len) * stats.speed - p.velocity.z * 0.5;
     const vl = Math.hypot(vx, vy, vz) || 1;
-    this.room.projectiles.spawn(p.id, wt,
-      { x: p.position.x, y: p.position.y + 1.4, z: p.position.z },
-      { x: vx / vl, y: vy / vl, z: vz / vl }, p.velocity);
+    const muzzle = { x: p.position.x, y: p.position.y + 1.4, z: p.position.z };
+    const dirN = { x: vx / vl, y: vy / vl, z: vz / vl };
+    if (this.selfBlastBlocked(muzzle, dirN, wt, p.velocity, p.id, body?.team ?? undefined)) return false;
+    if (body) body.beltCharges -= BELT_THROW_COST;
+    this.room.projectiles.spawn(p.id, wt, muzzle, dirN, p.velocity);
+    return true;
   }
 
   /** First push-class AOE weapon in the kit — the blast needs forceMode
@@ -406,9 +426,18 @@ export class BotArsenal implements BeamHost {
       && botRand() < ((this.skillOfCb(id)?.beltPull ?? false) ? 0.8 : 0.4);
     if (wantsPull) {
       // Implosion ~18m ahead — the bot's own approach speed puts it in
-      // the pull envelope when the disc pops.
-      this.lobAt(p, { x: p.position.x + nx * 18, y: p.position.y - 1, z: p.position.z + nz * 18 });
-      this.propelMark(id, 'pull');
+      // the pull envelope when the disc pops. A refused lob (dry belt,
+      // unsafe arc) still buys the heel blast instead of a dry cooldown.
+      if (this.lobAt(p, { x: p.position.x + nx * 18, y: p.position.y - 1, z: p.position.z + nz * 18 })) {
+        this.propelMark(id, 'pull');
+      } else {
+        const wt0 = this.propelWeapon(lo);
+        const muzzle0 = { x: p.position.x, y: p.position.y + 1.4, z: p.position.z };
+        const hy0 = p.position.y - classCapsule(p.armorClass).eye - muzzle0.y;
+        const hl0 = Math.hypot(-nx * 1.8, hy0, -nz * 1.8) || 1;
+        this.room.projectiles.spawn(id, wt0, muzzle0, { x: (-nx * 1.8) / hl0, y: hy0 / hl0, z: (-nz * 1.8) / hl0 }, p.velocity);
+        this.propelMark(id, 'heel');
+      }
     } else {
       // Classic disc-jump, angled by the slope: firing back-and-low
       // behind the heels on a descent puts the shove mostly horizontal
