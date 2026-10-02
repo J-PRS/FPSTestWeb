@@ -32,7 +32,9 @@ describe('scenario: mid-match joiner gets the world', () => {
     // Bots on the roster (the joiner isn't one of them), flags, live gem.
     expect((gs!.players as unknown[]).length).toBe(2);
     expect((gs!.flags as unknown[]).length).toBe(2);
-    expect((gs!.pickups as unknown[]).length).toBe(1);
+    // Creature kills during the warm-up can drop extra gems — the joiner
+    // just needs the staged one present, not an exact count.
+    expect((gs!.pickups as unknown[]).length).toBeGreaterThanOrEqual(1);
     expect(gs!.team).toBeTruthy();
     expect(gs!.localPlayerState).toBeTruthy();
     // Ball + crawler rosters ride behind gameState as their own messages.

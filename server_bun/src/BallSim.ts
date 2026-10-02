@@ -220,8 +220,8 @@ export class BallSim {
   }
 
   /** creatureHit claim — BallCombat does the lenient clamps + impulse cap. */
-  handleHit(playerId: string, id: number, damage: number, kx?: number, ky?: number, kz?: number): void {
-    this.combat.handleHit(playerId, id, damage, kx, ky, kz);
+  handleHit(playerId: string, id: number, damage: number, kx?: number, ky?: number, kz?: number): boolean {
+    return this.combat.handleHit(playerId, id, damage, kx, ky, kz);
   }
 
   /** Kill notification for the room's scoreboard (DM creature points,

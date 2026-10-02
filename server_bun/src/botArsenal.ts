@@ -96,6 +96,26 @@ export class BotArsenal implements BeamHost {
       beamAtBall(this, p, Number(targetId.slice(2)), aim, BOT_LOADOUTS[0]!);
       return;
     }
+    if (targetId.startsWith('c:')) {
+      // Species pops have no projectile-sweep body — they die to the same
+      // crawlerHit claim a client sends. The weapon pick + rate gate still
+      // apply so a bot can't machine-gun a swarm down instantly.
+      const muzzle0 = { x: p.position.x, y: p.position.y + 1.4, z: p.position.z };
+      const cdx = aim.x - muzzle0.x, cdz = aim.z - muzzle0.z;
+      const cd = Math.hypot(cdx, aim.y - muzzle0.y, cdz) || 1;
+      const lo0 = this.loadouts.get(p.id) ?? BOT_LOADOUTS[0]!;
+      const wt0 = this.pickWeapon(lo0, Math.hypot(cdx, cdz), cd, p.id);
+      if (!this.rateOk(p.id, wt0)) return;
+      weaponStats.recordShot(this.room.mode, `w${wt0}`);
+      const dmg = getWeaponStats(wt0)?.directDamage ?? 25;
+      const killed = this.room.creatureSim.handleHit(p.id, Number(targetId.slice(2)), dmg);
+      weaponStats.record(this.room.mode, `w${wt0}:prey`, dmg, killed, true);
+      const cdist = Math.hypot(cdx, aim.y - muzzle0.y, cdz) || 1;
+      this.room.messages.botFire(p.id, null, muzzle0,
+        { x: (cdx / cdist) * BOLT_SPEED, y: ((aim.y - muzzle0.y) / cdist) * BOLT_SPEED, z: (cdz / cdist) * BOLT_SPEED },
+        wt0, false);
+      return;
+    }
     const target = this.room.players.getPlayer(targetId);
     if (!target || target.isDead) return;
     const muzzle = { x: p.position.x, y: p.position.y + 1.4, z: p.position.z };

@@ -127,6 +127,12 @@ export class ServerBotSenses {
     for (const b of this.room.ballSim.roster()) {
       out.push({ id: `b:${b.id}`, pos: b.position, vel: b.velocity, alive: true, aimY: 0 });
     }
+    // Species pops too — creatures bite players for real, so a bot that
+    // can't shoot back is feeding the ecosystem for free. `c:` ids route
+    // through the same crawlerHit claim funnel a client uses.
+    for (const c of this.room.creatureSim.roster()) {
+      out.push({ id: `c:${c.id}`, pos: c.position, vel: c.velocity, alive: true, aimY: 0 });
+    }
     return out;
   }
 
@@ -206,7 +212,7 @@ export class ServerBotSenses {
    *  re-charged while it's gone. */
   markFoeNear(id: string, ctx: BrainCtx, pos: Vec3, yaw: number, now: number): void {
     for (const e of ctx.enemies) {
-      if (e.id.startsWith('b:')) continue;
+      if (e.id.startsWith('b:') || e.id.startsWith('c:')) continue;
       const dx = e.pos.x - pos.x, dz = e.pos.z - pos.z;
       const d = Math.hypot(dx, e.pos.y - pos.y, dz);
       // Brawl range, not spotting range — a foe it can't reach yet is a
@@ -541,7 +547,7 @@ export class ServerBotSenses {
       if (q?.status && (q.status & STATUS.CLOAK)) this.spots.delete(id);
     }
     for (const e of ctx.enemies) {
-      if (!e.alive || e.id.startsWith('b:') || dist3(p.position, e.pos) >= ServerBotSenses.SPOT_M) continue;
+      if (!e.alive || e.id.startsWith('b:') || e.id.startsWith('c:') || dist3(p.position, e.pos) >= ServerBotSenses.SPOT_M) continue;
       if (!losClear(ctx, p.position, e.pos)) continue;
       this.spots.set(e.id, { e, team: p.team, at: ctx.now });
     }

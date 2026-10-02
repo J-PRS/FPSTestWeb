@@ -193,20 +193,20 @@ export class CreatureSim {
   }
 
   /** crawlerHit claim — mirrors BallSim.handleHit (lenient clamps, the
-   *  real validation is anticheat-phase). */
-  handleHit(playerId: string, id: number, damage: number): void {
+   *  real validation is anticheat-phase). Returns whether it killed. */
+  handleHit(playerId: string, id: number, damage: number): boolean {
     const c = this.crawlers.get(id);
-    if (c?.dead) return;
+    if (c?.dead) return false;
     if (!c || !this.field) {
       logger[this.field ? 'debug' : 'warn']('crawlerHit dropped: unknown id', { playerId, id });
-      return;
+      return false;
     }
     const claimer = this.players.getPlayer(playerId);
-    if (!claimer) return;
+    if (!claimer) return false;
     const d2 = (claimer.position.x - c.x) ** 2 + (claimer.position.y - c.y) ** 2 + (claimer.position.z - c.z) ** 2;
     if (d2 > 600 * 600) {
       logger.warn('crawlerHit dropped: out of range', { playerId, id });
-      return;
+      return false;
     }
     const dmg = Math.max(1, Math.min(MAX_HIT_CLAIM_DMG, damage));
     const dead = isFlyer(c)
@@ -223,6 +223,7 @@ export class CreatureSim {
     if (dead) this.kill(c, playerId);
     // Stagger is a timer edge — the next hop decision diverges only if a
     // predictor skips it, and the resync heartbeat bounds that drift.
+    return dead;
   }
 
   private kill(c: SimBeing, by?: string): void {

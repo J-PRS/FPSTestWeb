@@ -84,14 +84,15 @@ export class BallCombat {
   }
 
   /** creatureHit claim. Lenient sanity clamps only — real validation is an
-   *  anticheat-phase concern; a bogus claim costs a shoved ball, not state. */
-  handleHit(playerId: string, id: number, damage: number, kx?: number, ky?: number, kz?: number): void {
+   *  anticheat-phase concern; a bogus claim costs a shoved ball, not state.
+   *  Returns whether the hit killed — telemetry needs the kill edge. */
+  handleHit(playerId: string, id: number, damage: number, kx?: number, ky?: number, kz?: number): boolean {
     const b = this.host.balls().get(id);
     // A claim on a just-killed ball is the normal aim→claim race — the
     // corpse still rendered when the shot was fired. Debug, not warn.
     if (b?.dead) {
       logger.debug('creatureHit on dead ball (aim/claim race)', { playerId, id });
-      return;
+      return false;
     }
     if (!b || !this.host.field()) {
       // Same race as the dead-ball path above: the ball was culled (kill,
@@ -100,12 +101,12 @@ export class BallCombat {
       // means the claim arrived before spec terrain attached — a real bug.
       const lvl = this.host.field() ? 'debug' : 'warn';
       logger[lvl]('creatureHit dropped: unknown ball', { playerId, id, known: this.host.balls().size, field: !!this.host.field() });
-      return;
+      return false;
     }
     const claimer = this.host.players.getPlayer(playerId);
     if (!claimer) {
       logger.warn('creatureHit dropped: no claimer', { playerId });
-      return;
+      return false;
     }
     // Loose plausibility: claimer within engagement envelope of the ball
     const dx = claimer.position.x - b.x;
@@ -119,7 +120,7 @@ export class BallCombat {
         ballPos: { x: Math.round(b.x), y: Math.round(b.y), z: Math.round(b.z) },
         claimerDead: claimer.isDead,
       });
-      return;
+      return false;
     }
 
     // The claim carries no weapon ref — cap at the biggest legal one-hit
@@ -137,8 +138,9 @@ export class BallCombat {
     }
     if (applySimDamage(b, dmg, ix, iy, iz)) {
       this.host.kill(b, playerId);
-    } else {
-      this.host.segment(b, 'hit'); // the impulse IS a velocity discontinuity
+      return true;
     }
+    this.host.segment(b, 'hit'); // the impulse IS a velocity discontinuity
+    return false;
   }
 }

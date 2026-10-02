@@ -29,6 +29,7 @@ import { GRAVITY } from '../../shared/movement.ts';
 import type { Vec3 } from './types.ts';
 import type { Room } from './Room.ts';
 import { stepContact, dischargeRay } from './projContact.ts';
+import { weaponStats } from './weaponStats.ts';
 
 export interface LiveProj {
   id: string;
@@ -196,7 +197,9 @@ export class RoomProjectiles {
     // blast splashes the rest of the swarm — same outcome a player-caused
     // hit + aoeShot pair produces, minus the claims.
     if (ballId !== undefined) {
-      this.room.ballSim?.handleHit(proj.ownerId, ballId, scaledDirectDamage(proj.weaponType, rampAge) || proj.stats.aoeDamage);
+      const dmg = scaledDirectDamage(proj.weaponType, rampAge) || proj.stats.aoeDamage;
+      const killed = this.room.ballSim?.handleHit(proj.ownerId, ballId, dmg) ?? false;
+      weaponStats.record(this.room.mode, `w${proj.weaponType}:prey`, dmg, killed, proj.ownerId.startsWith('BOT-'));
     }
     this.room.pushNoise(at); // a blast is louder than the muzzle that launched it
     this.room.messages.serverBlast(proj.ownerId, at, proj.weaponType, directHitId ?? null);

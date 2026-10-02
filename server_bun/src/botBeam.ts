@@ -14,6 +14,7 @@ import { segFieldHit, segPointDist, segPointT } from '../../shared/projSim.ts';
 import { segSolidHit } from '../../shared/solidWorld.ts';
 import type { BotLoadout } from '../../shared/botLoadouts.ts';
 import { isSuper } from './superBot.ts';
+import { weaponStats } from './weaponStats.ts';
 
 const BOLT_SPEED = 60; // m/s visual bolt + hitscan travel is instant
 
@@ -50,7 +51,9 @@ export function fireAtBall(h: BeamHost, p: BotBody, ball: number, aim: Vec3, pic
     if (b && stats) {
       const d = Math.hypot(b.x - muzzle.x, b.y - muzzle.y, b.z - muzzle.z);
       if (d <= stats.aoeRadius + b.radius) {
-        h.room.ballSim.handleHit(p.id, ball, isSuper(p.id) ? 300 : stats.aoeDamage);
+        const dmg = isSuper(p.id) ? 300 : stats.aoeDamage;
+        const killed = h.room.ballSim.handleHit(p.id, ball, dmg);
+        weaponStats.record(h.room.mode, `w${wt}:prey`, dmg, killed, true);
       }
     }
     return;
@@ -71,7 +74,9 @@ export function fireSpeedless(h: BeamHost, id: string, muzzle: Vec3, dir: Vec3, 
   h.room.messages.botFire(id, playerId, muzzle,
     { x: dir.x * BOLT_SPEED, y: dir.y * BOLT_SPEED, z: dir.z * BOLT_SPEED }, wt, !!playerId);
   if (c?.ballId !== undefined && stats) {
-    h.room.ballSim.handleHit(id, c.ballId, stats.directDamage || stats.aoeDamage);
+    const dmg = stats.directDamage || stats.aoeDamage;
+    const killed = h.room.ballSim.handleHit(id, c.ballId, dmg);
+    weaponStats.record(h.room.mode, `w${wt}:prey`, dmg, killed, true);
   }
 }
 
