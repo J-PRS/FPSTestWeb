@@ -97,7 +97,7 @@ describe('netbot — real clients over real sockets', () => {
     // should agree on what the server told them. Both read the same
     // ordered tick/event streams, so divergence means a broadcast bug —
     // not a latency artifact.
-    for (const [id, a] of bots[0].nc.roster) {
+    for (const [id, a] of bots[0]!.nc.roster) {
       for (const other of bots.slice(1)) {
         const b = other.nc.roster.get(id);
         if (!b) continue;
@@ -111,7 +111,7 @@ describe('netbot — real clients over real sockets', () => {
     env = bootServer();
     await spawn(3, { pingMs: 20, jitterMs: 120, lossRate: 0 });
     await sleep(1500); // joined + field loaded
-    const planter = bots[0].nc;
+    const planter = bots[0]!.nc;
     planter.send({ type: 'deploy', kind: 'mine', position: { ...planter.self.pos } });
     await sleep(800);
     // Every client — planter included — should see the same deployable

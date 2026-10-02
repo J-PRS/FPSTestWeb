@@ -15,6 +15,7 @@ import { WEAPON_FIRE_INTERVAL_S } from '../../shared/weapons.ts';
 import { HEAVY_ONLY_WEAPONS } from '../../shared/botClasses.ts';
 import type { WeaponType } from '../../shared/weaponTable.ts';
 import type { ClientMessage, Vec3 } from '../../shared/protocol.ts';
+import { roleObjective, type BotRole, type FlagSituation } from '../../shared/flagGoals.ts';
 import type { NetClient } from './netClient.ts';
 
 const THINK_S = 0.3;
@@ -88,12 +89,45 @@ export class NetBot {
     return out;
   }
 
+  /** CTF objective from the wire flag states — same roleObjective table
+   *  the server and offline bots run, so a wire bot plays the same CTF.
+   *  Netbots default to offense/capper (the roles that need no deploy or
+   *  cloak intent). */
+  private flagObjective(): Vec3 | null {
+    const nc = this.nc;
+    const myTeam = nc.self.team;
+    if (!myTeam || nc.flags.size === 0) return null;
+    const foeTeam = myTeam === 'alpha' ? 'bravo' : 'alpha';
+    const mine = nc.flags.get(myTeam);
+    const theirs = nc.flags.get(foeTeam);
+    if (!mine || !theirs) return null;
+    const s: FlagSituation = {
+      home: mine.pos,
+      thief: mine.state === 'carried' && mine.carrier ? this.rosterPos(mine.carrier) : null,
+      dropped: mine.state === 'dropped' ? mine.pos : null,
+      enemyStand: theirs.state === 'carried' ? null : theirs.pos,
+      escort: theirs.state === 'carried' && theirs.carrier ? this.rosterPos(theirs.carrier) : null,
+    };
+    const role: BotRole = this.role;
+    return roleObjective(role, s);
+  }
+
+  private rosterPos(id: string): Vec3 | null {
+    const e = this.nc.roster.get(id);
+    return e ? { ...e.pos } : null;
+  }
+
+  /** Role picked once from the squad-light end of the ladder — wire bots
+   *  can't deploy or cloak, so technician/infiltrator are out. */
+  private role: BotRole = Math.random() < 0.6 ? 'capper' : 'offense';
+
   private ctx(): BrainCtx {
     const nc = this.nc;
     return {
       pos: { x: nc.self.pos.x, y: nc.self.pos.y, z: nc.self.pos.z },
       vel: { x: nc.self.vel.x, y: nc.self.vel.y, z: nc.self.vel.z },
       enemies: this.enemies(),
+      objective: this.flagObjective(),
       groundY: (x, z) => nc.field ? hmHeight(nc.field, x, z) : nc.self.pos.y,
       now: Date.now(),
       healthFrac: nc.self.health / 100,

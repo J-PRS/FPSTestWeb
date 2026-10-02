@@ -65,6 +65,8 @@ export class NetClient {
   /** Deployables visible in this room — deploySpawn/Gone/Hp plus the
    *  gameState snapshot, same lifecycle as the browser's deploy layer. */
   deployables = new Map<number, { owner: string; kind: string; pos: Vec3; hp: number }>();
+  /** CTF flag states by team — gameState.flags + flagUpdate. */
+  flags = new Map<string, { pos: Vec3; state: 'home' | 'carried' | 'dropped'; carrier: string | null }>();
   /** Per-room hit seq watermark — same rule as the browser client: reset
    *  on every gameState so a room hop can't drop the new seq space. */
   private lastHitSeq = 0;
@@ -239,11 +241,16 @@ export class NetClient {
         }
         this.deployables.clear();
         for (const d of m.deployables ?? []) this.deployables.set(d.id, { owner: d.owner, kind: d.kind, pos: { ...d.pos }, hp: d.hp ?? 0 });
+        this.flags.clear();
+        for (const f of m.flags ?? []) this.flags.set(f.team, { pos: { ...f.pos }, state: f.state, carrier: f.carrier });
         if (!this.fieldPromise) this.fieldPromise = this.loadField(m.map?.terrain);
         if (m.sessionToken) this.sessionToken = m.sessionToken;
         this.self.team = m.team;
         break;
       }
+      case 'flagUpdate':
+        for (const f of m.flags) this.flags.set(f.team, { pos: { ...f.pos }, state: f.state, carrier: f.carrier });
+        break;
       case 'deploySpawn':
         this.deployables.set(m.id, { owner: m.owner, kind: m.kind, pos: { ...m.pos }, hp: 0 });
         break;
