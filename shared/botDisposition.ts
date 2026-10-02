@@ -37,6 +37,20 @@ export function pickDest(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, fe
     const t = b.h.hunt;
     const d = dist3(pos, t.pos);
     if (fearing) return retreatDest(ctx, pos, t);
+    // Mission commitment: on a long objective run the feet stay on the
+    // route unless an enemy actually blocks the way — a contact off to
+    // the side still eats fire, but chasing it is what turned every
+    // 600m flag route into a deathmatch in the midfield DMZ.
+    if (ctx.objective) {
+      const gd = dist3(pos, ctx.objective);
+      if (gd > 120) {
+        const gx = (ctx.objective.x - pos.x) / gd, gz = (ctx.objective.z - pos.z) / gd;
+        const tx = t.pos.x - pos.x, tz = t.pos.z - pos.z;
+        const td = Math.hypot(tx, tz) || 1;
+        const blocking = d <= b.h.orbitFar && (tx * gx + tz * gz) / td > 0.4;
+        if (!blocking) return { ...ctx.objective };
+      }
+    }
     if (d < CLOSE_PRESS_M || d > b.h.orbitFar * (hero ? 0.7 : 1)) {
       // Point-blank or outranged: press straight in either way — inside
       // fist reach the press converts to the punch, outside it to the

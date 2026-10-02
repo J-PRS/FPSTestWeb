@@ -246,6 +246,13 @@ export class ServerBotSenses {
     if (pick === enemyStand && enemyStand !== null && this.field) {
       const capper = role === 'capper';
       const dStand = Math.hypot(enemyStand.x - p.position.x, enemyStand.z - p.position.z);
+      // Live enemy positions are already on the wire — a human reads the
+      // same board and flanks the blob. Charged per entry candidate so a
+      // route through the DMZ loses to a wide arc around it.
+      const foes: { x: number; z: number }[] = [];
+      for (const q of this.room.players.getAllPlayers().values()) {
+        if (!q.isDead && q.team && q.team !== me) foes.push({ x: q.position.x, z: q.position.z });
+      }
       if (dStand > (capper ? 90 : 40)) {
         let best = enemyStand, bestScore = -Infinity;
         for (let a = 0; a < 24; a++) {
@@ -289,6 +296,18 @@ export class ServerBotSenses {
             lip = Math.max(lip, lh - (ey + (enemyStand.y - ey) * t));
           }
           score -= lip * 3;
+          // DMZ toll: the bot→entry chord crossing live enemies pays per
+          // foe inside ~80m — a flanking entry with an empty corridor
+          // beats the "optimal" one that skis through a firefight.
+          for (const e of foes) {
+            for (let s = 1; s < 8; s++) {
+              const t = s / 8;
+              const lx = p.position.x + (ex - p.position.x) * t - e.x;
+              const lz = p.position.z + (ez - p.position.z) * t - e.z;
+              const ed = Math.hypot(lx, lz);
+              if (ed < 80) { score -= (80 - ed) * 0.05; break; }
+            }
+          }
           if (score > bestScore) { bestScore = score; best = { x: ex, y: ey, z: ez }; }
         }
         goalPos = best;
