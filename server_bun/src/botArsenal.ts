@@ -33,6 +33,7 @@ export class BotArsenal implements BeamHost {
    *  launch impulse rides out like a real disc-jump. */
   private propelT = new Map<string, number>();
   private propelJetUntil = new Map<string, number>();
+  private wasCarrying = new Map<string, boolean>();
   /** Last shot time per bot — the weapon-rate gate that keeps a fast
    *  brain cadence from out-shooting the drawn weapon's legal rate. */
   private lastShot = new Map<string, number>();
@@ -70,6 +71,7 @@ export class BotArsenal implements BeamHost {
   untrack(id: string): void {
     this.propelT.delete(id);
     this.propelJetUntil.delete(id);
+    this.wasCarrying.delete(id);
     this.lastShot.delete(id);
   }
 
@@ -371,6 +373,13 @@ export class BotArsenal implements BeamHost {
   tryPropel(id: string, p: BotBody, out: BrainOut, goal: { pos: BotVec; runner?: boolean; wave?: boolean } | null, sh: MoveState | null, now: number): void {
     const surge = goal ? !!(goal.runner || goal.wave) : false;
     if (!goal || !sh) return;
+    // Grab edge: the instant a bot becomes carrier his getaway blast
+    // re-arms — the approach blasts' cooldown is up to 3.5s dead, and
+    // the soak's return-leg autopsy reads carriers dying at ~3% of the
+    // route home: they die AT the stand inside that window.
+    const carrying = !!(goal as { running?: boolean }).running;
+    if (carrying && !this.wasCarrying.get(id)) this.propelT.delete(id);
+    this.wasCarrying.set(id, carrying);
     // Self-splash costs real health now. A wounded bot holds fire —
     // except a desperate chaser: a loose enemy carrier far away means
     // the pursuit is already lost without the launch, so it may still
