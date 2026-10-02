@@ -799,6 +799,20 @@ export class NetworkManager {
     this.send({ type: 'snapshotRequest' });
   }
 
+  /** Alt-tab catch-up: ask the server to replay the full world state
+   *  (gameState + rosters) so the tab can snap to truth instead of
+   *  rewinding the backgrounded interval. */
+  sendResync(): void {
+    this.send({ type: 'resync' });
+  }
+
+  /** Discard the prediction journal — a correction arriving after this
+   *  hard-snaps to the echoed state instead of replaying seconds of
+   *  queued inputs at once (the "rewinding" storm after alt-tab). */
+  dropInputJournal(): void {
+    this.inputJournal.length = 0;
+  }
+
   sendChat(text: string, team = false, vgs?: string): void {
     this.send({ type: 'chat', text, team: team || undefined, vgs });
   }

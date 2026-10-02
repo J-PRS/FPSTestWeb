@@ -247,6 +247,7 @@ export class MessageHandler {
         this.sendToPlayer(id, { type: 'pong', timestamp: m.timestamp });
       },
       snapshotRequest: (id) => { this.hb('snapreq'); this.handleSnapshotRequest(id); },
+      resync: (id) => { this.hb('resync'); this.sendWorldState(id); },
       // Tribes rule: the tier swap banks on the next respawn — applying
       // it mid-life would be a free heal and flip the sim's speed scale
       // without the shadow knowing.
@@ -399,6 +400,27 @@ export class MessageHandler {
     // timer — re-arm it or they stay dead for the rest of the session.
     this.combat.ensureRespawnScheduled(playerId);
 
+    this.sendWorldState(playerId, sessionToken);
+
+    // The playerJoined announce waits for the first position report —
+    // a menu/lobby sitter who never reports would otherwise spawn a
+    // frozen ghost mesh at the spawn default on every peer's screen.
+    // announceIfInWorld() fires it from handlePosition/handleTeleport.
+    // Grace reconnects never emitted a playerLeft, so rejoins skip it
+    // regardless (peers still carry the roster entry).
+    if (!isReconnect && player.hasReceivedPosition) {
+      this.announceIfInWorld(player);
+    }
+  }
+
+  /** Full world-state replay for one player — the (re)join payload:
+   *  gameState (roster/team/map/flags/pickups/deployables) plus the
+   *  creature rosters. Shared by handshake and the resync request, so an
+   *  alt-tab catch-up rebuilds the same truth a reload would. */
+  private sendWorldState(playerId: string, sessionToken?: string): void {
+    const player = this.playerManager.getPlayer(playerId);
+    if (!player) return;
+
     const others = this.playerManager.getOtherPlayers(playerId);
     // Humans that never reported a position aren't in-world yet — listing
     // them spawns a frozen ghost mesh at the spawn default for the joiner.
@@ -423,23 +445,13 @@ export class MessageHandler {
       },
     });
 
-    // Creature roster — joiner/reconnect replays the live ball set from
+    // Creature roster — joiner/resync replays the live ball set from
     // these segment snapshots; anything spawned after is a ballSpawn event.
     if (this.ballSim) {
       this.sendToPlayer(playerId, { type: 'ballRoster', balls: this.ballSim.roster() });
     }
     if (this.creatureSim) {
       this.sendToPlayer(playerId, { type: 'crawlRoster', crawlers: this.creatureSim.roster() });
-    }
-
-    // The playerJoined announce waits for the first position report —
-    // a menu/lobby sitter who never reports would otherwise spawn a
-    // frozen ghost mesh at the spawn default on every peer's screen.
-    // announceIfInWorld() fires it from handlePosition/handleTeleport.
-    // Grace reconnects never emitted a playerLeft, so rejoins skip it
-    // regardless (peers still carry the roster entry).
-    if (!isReconnect && player.hasReceivedPosition) {
-      this.announceIfInWorld(player);
     }
   }
 

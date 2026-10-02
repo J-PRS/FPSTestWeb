@@ -83,6 +83,10 @@ export type ClientMessage =
   // heal amount itself — the claim carries only WHICH deployable.
   | { type: 'repair'; targetId: number }
   | { type: 'snapshotRequest' }
+  // Catch-up resync — ask for a fresh world-state replay (gameState +
+  // rosters) without a room hop or reconnect, e.g. after an alt-tab
+  // backlog. Server answers with the same payload as a (re)join.
+  | { type: 'resync' }
   // Loadout class picked mid-match — stored as pending and applied on the
   // next respawn (Tribes rule: no instant tier swap mid-life, it'd be a
   // heal exploit and a desync lever).

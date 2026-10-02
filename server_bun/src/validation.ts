@@ -263,6 +263,10 @@ const VALIDATORS: Record<string, (obj: Record<string, unknown>) => ValidationRes
     return { success: true, data: { type: 'snapshotRequest' } };
   },
 
+  resync: () => {
+    return { success: true, data: { type: 'resync' } };
+  },
+
   classUpdate: (obj) => {
     const c = obj.armorClass;
     if (c !== 'light' && c !== 'medium' && c !== 'heavy') {

@@ -30,6 +30,7 @@ import { wirePlayers } from './net/players.js';
 import { wireProjectiles } from './net/projectiles.js';
 import { wireDeployables } from './net/deployables.js';
 import { wireWorld } from './net/world.js';
+import { wireResync } from './net/resync.js';
 
 export interface NetDeps {
   lazyNetworkManager(): NetworkManager;
@@ -97,6 +98,7 @@ export function wireNetworkHandlers(deps: NetDeps): NetCtx {
   wireProjectiles(ctx);
   wireDeployables(ctx);
   wireWorld(ctx);
+  wireResync(ctx);
 
   // Lobby browser — corner button lists the server's live rooms; joining
   // reloads with ?room=NAME (membership is fixed at connect time).

@@ -40,4 +40,23 @@ describe('scenario: ping/snapshot', () => {
     expect(them.health).toBe(42);
     expect(toB.length).toBe(0); // reply goes to the requester, never the room
   });
+
+  it('resync replays the join payload — gameState + local state, requester only', () => {
+    const room = mkRoom({ bots: 2 });
+    const [a, b] = twoPlayers(room);
+    const toA = wsSpy(room, a.id);
+    const toB = wsSpy(room, b.id);
+    b.health = 42;
+    room.messages.handleMessage(a.id, { type: 'resync' });
+    const gs = toA.find((m) => m.type === 'gameState') as {
+      players: { id: string }[];
+      localPlayerState?: { position: { x: number } };
+      team?: string;
+    } | undefined;
+    expect(gs).toBeTruthy();
+    expect(gs!.players.every((pl) => pl.id !== a.id)).toBe(true); // roster is others-only
+    expect(gs!.players.some((pl) => pl.id === b.id)).toBe(true);
+    expect(gs!.localPlayerState).toBeTruthy(); // own truth comes via localPlayerState
+    expect(toB.length).toBe(0);
+  });
 });
