@@ -156,6 +156,22 @@ export function resyncEmission(ps: IParticleSystem, em: THREE.Object3D): void {
   (st.previousWorldPos ??= new THREE.Vector3()).set(e[12]!, e[13]!, e[14]!);
 }
 
+/** The ONE checkout path for a takeSystem() result — reset-to-clean-state
+ *  on reuse (the pooled-emitter contract: teleport ≠ travel, pool entries
+ *  may come back paused, restart() leaves distance bookkeeping stale).
+ *  Every pooled activation must go through here: position + optional
+ *  orientation, attach, restart, resync — a call site that hand-sequences
+ *  the steps can skip resyncEmission and re-introduce the teleport-debt
+ *  muzzle blob. */
+export function activateSystem(ps: ParticleSystem, pos: THREE.Vector3, quat?: THREE.Quaternion): void {
+  ps.paused = false;
+  ps.emitter.position.copy(pos);
+  if (quat) ps.emitter.quaternion.copy(quat);
+  attachSystem(ps);
+  ps.restart();
+  resyncEmission(ps, ps.emitter);
+}
+
 function reapStarved(ps: IParticleSystem): void {
   // A paused system is suspended on purpose (out of sim range), not
   // orphaned — it emits nothing so particleNum sits at 0 and the reaper

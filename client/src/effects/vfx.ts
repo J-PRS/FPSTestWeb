@@ -21,8 +21,8 @@ import { registerDiag } from '../core/fxDiag.js';
 import { CircleEmitter } from 'three.quarks';
 import {
   vfxPressure, vfxReady, vfxBatcher,
-  live, pools, pooled, attachSystem, takeSystem,
-  resyncEmission, queueIfCold, buildQueue, activeTrailPs, trailStats,
+  live, pools, pooled, takeSystem, activateSystem,
+  queueIfCold, buildQueue, activeTrailPs, trailStats,
   poolDump,
 } from './vfxRuntime.js';
 export { initVfx, vfxStats, setVfxQualityScale, vfxPressure, updateVfx, trailStats, poolDump } from './vfxRuntime.js';
@@ -82,15 +82,13 @@ export function impactBurst(pos: THREE.Vector3, vel: THREE.Vector3): void {
       )),
     ],
   }));
-  ps.emitter.position.copy(pos);
   // Cone emits along local +Z — aim it back along the incoming shot.
   if (vel.lengthSq() > 0) {
     _back.copy(vel).normalize().negate();
-    ps.emitter.quaternion.setFromUnitVectors(_forward, _back);
-  }
-  attachSystem(ps);
+    _aimQ.setFromUnitVectors(_forward, _back);
+  } else _aimQ.identity();
+  activateSystem(ps, pos, _aimQ);
   live.add(ps);
-  ps.restart();
 
   // Directional streak fan — stretched sparks flung back along the shot
   // line. This is what separates a bullet hit from a puff: the eye reads
@@ -120,15 +118,13 @@ export function impactBurst(pos: THREE.Vector3, vel: THREE.Vector3): void {
         )),
       ],
     }));
-    streaks.emitter.position.copy(pos);
-    streaks.emitter.quaternion.copy(ps.emitter.quaternion);
-    attachSystem(streaks);
+    activateSystem(streaks, pos, ps.emitter.quaternion);
     live.add(streaks);
-    streaks.restart();
   }
 }
 
 const _back = new THREE.Vector3();
+const _aimQ = new THREE.Quaternion();
 const _forward = new THREE.Vector3(0, 0, 1);
 
 // ---- Projectile trails ----
@@ -233,19 +229,10 @@ export class QuarksTrail {
       return sys;
     });
     this.circle = circleOf.get(this.ps) ?? null;
-    this.ps.emitter.position.copy(host.pos);
-    attachSystem(this.ps);
-    this.ps.restart();
-    // Pool reuse must seed the distance bookkeeping to the new muzzle —
-    // leaving previousWorldPos undefined is worse than stale: the next
-    // emit() re-reads it from emitter.matrixWorld, still the PREVIOUS
-    // projectile's parked transform (updateWorldMatrix only runs on
-    // firstTimeUpdate — consumed on first use). Tick 2 then sees the real
-    // position and the whole teleport cashes as one giant stationary
-    // burst at the muzzle — the "first particle duplicated × N, too big,
-    // too bright, lingers" blob. Emitter sits directly under the scene
-    // (worldSpace), so local position == world position.
-    resyncEmission(this.ps, this.ps.emitter);
+    // activateSystem owns the whole pooled-checkout reset — position,
+    // attach, restart, and the emission resync that stops a pooled
+    // teleport cashing as one giant distance deposit at the muzzle.
+    activateSystem(this.ps, host.pos);
     activeTrailPs.add(this.ps);
     liveQuarks.add(this);
     // A system reaped out from under a previous owner comes back dead —
@@ -412,10 +399,8 @@ export function fxPuff(pos: THREE.Vector3, spec: PuffSpec): void {
       new RotationOverLife(new IntervalValue(-2, 2)),
     ],
   });
-  ps.emitter.position.copy(pos);
-  attachSystem(ps); // tags the emitter for the aim probe too
+  activateSystem(ps, pos); // tags the emitter for the aim probe too
   live.add(ps);
-  ps.play();
 }
 
 // ---- Explosion blast layers ----
@@ -599,10 +584,8 @@ function spawnImplodeBurst(pos: THREE.Vector3, spec: ImplodeSpec, additive: bool
       new RotationOverLife(new IntervalValue(-(spec.spin ?? 1), spec.spin ?? 1)),
     ],
   }));
-  ps.emitter.position.copy(pos);
-  attachSystem(ps);
+  activateSystem(ps, pos);
   live.add(ps);
-  ps.restart();
 }
 
 export interface BlastSpec {
@@ -700,10 +683,8 @@ function spawnBlastBurst(pos: THREE.Vector3, spec: BlastSpec,
     return sys;
   });
   shapeOf.get(ps)?.setDir(spec.dir);
-  ps.emitter.position.copy(pos);
-  attachSystem(ps);
+  activateSystem(ps, pos);
   live.add(ps);
-  ps.restart();
 }
 
 // Alt+Q census section — registered here so the dump grows without
