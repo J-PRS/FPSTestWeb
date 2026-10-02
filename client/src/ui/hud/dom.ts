@@ -16,6 +16,7 @@ export interface HudDom {
   jitter: HTMLSpanElement;
   fps: HTMLSpanElement;
   crosshair: HTMLDivElement;
+  sheepReadout: HTMLDivElement;
   hitMarker: HTMLDivElement;
   dmgVignette: HTMLDivElement;
   dmgDir: HTMLDivElement;
@@ -35,6 +36,7 @@ export interface HudDom {
   matchStatus: HTMLDivElement; matchClock: HTMLElement; flagA: HTMLElement; flagB: HTMLElement;
   sbRows: HTMLElement;
   killFeed: HTMLDivElement;
+  connBanner: HTMLDivElement;
 }
 
 export function createHudDom(): HudDom {
@@ -75,6 +77,7 @@ export function createHudDom(): HudDom {
         <div id="buffs"></div>
       </div>
       <div id="crosshair"></div>
+      <div id="sheep-readout"></div>
       <div id="hit-marker"></div>
       <div id="dmg-vignette"></div>
       <div id="dmg-dir"><div class="arc"></div></div>
@@ -83,8 +86,9 @@ export function createHudDom(): HudDom {
       <div id="team-score"><span class="a">ALPHA <b id="ts-a">0</b></span><span class="sep">vs</span><span class="b"><b id="ts-b">0</b> BRAVO</span></div>
       <div id="match-status"><span class="fchip a" id="flag-a">⚑</span><span class="clock" id="match-clock"></span><span class="fchip b" id="flag-b">⚑</span></div>
       <div id="killfeed"></div>
+      <div id="conn-banner"></div>
       <div id="scoreboard">
-        <table><thead><tr><th>#</th><th>PLAYER</th><th>FRAGS</th><th>PTS</th><th>NET</th><th>PING</th><th>SHEEP</th></tr></thead><tbody id="sb-rows"></tbody></table>
+        <table><thead><tr><th>#</th><th>PLAYER</th><th>FRAGS</th><th>PTS</th><th>NET</th><th>PING</th><th>SHEEP</th><th>ALIVE</th></tr></thead><tbody id="sb-rows"></tbody></table>
       </div>
     `;
     document.body.appendChild(el);
@@ -102,6 +106,7 @@ export function createHudDom(): HudDom {
     const jitter = el.querySelector('#jitter')! as HTMLSpanElement;
     const fps = el.querySelector('#fps')! as HTMLSpanElement;
     const crosshair = el.querySelector('#crosshair')! as HTMLDivElement;
+    const sheepReadout = el.querySelector('#sheep-readout')! as HTMLDivElement;
     const dmgVignette = el.querySelector('#dmg-vignette')! as HTMLDivElement;
     const dmgDir = el.querySelector('#dmg-dir')! as HTMLDivElement;
     const dmgDirArc = dmgDir.querySelector('.arc')! as HTMLDivElement;
@@ -126,15 +131,16 @@ export function createHudDom(): HudDom {
     const ballCountEl = el.querySelector('#ent-counts')! as HTMLDivElement;
     const timerEl = el.querySelector('#hud-timer')! as HTMLDivElement;
     const killFeed = el.querySelector('#killfeed')! as HTMLDivElement;
+    const connBanner = el.querySelector('#conn-banner')! as HTMLDivElement;
 
   // Nugget counter — starts at 0, updated via setNuggets
   ammo.textContent = '0';
   ammo.style.color = '#ffd54a'; // gold, matching the pickup
 
   return { el, health, energy, ammo, speed, speedH, speedV, kills, state, ping, loss, jitter,
-    fps, crosshair, hitMarker, dmgVignette, dmgDir, dmgDirArc, ghostBar,
+    fps, crosshair, sheepReadout, hitMarker, dmgVignette, dmgDir, dmgDirArc, ghostBar,
     playerList, ballCountEl, timerEl, weaponSlots, healthBar, energyBar,
     armor, armorBar, buffsRow,
     scoreboard, sbRows, teamScore, tsA, tsB,
-    matchStatus, matchClock, flagA, flagB, killFeed };
+    matchStatus, matchClock, flagA, flagB, killFeed, connBanner };
 }

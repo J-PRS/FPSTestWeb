@@ -49,6 +49,7 @@ import { createWaveDirector } from './game/waveDirector.js';
 import { createDemoLifecycle } from './game/demoLifecycle.js';
 import { createEntities } from './game/entities.js';
 import { createGameLoop } from './game/gameLoop.js';
+import { PlayerSheep } from './game/playerSheep.js';
 import { wireNetworkHandlers } from './game/netHandlers.js';
 import { createRemotes } from './game/remotes.js';
 import { ExplosionTracker } from './utils/ExplosionTracker.js';
@@ -124,6 +125,7 @@ let teamBots: TeamBots | null = null; // ?mode=nuggets
 
 // ---- Remote player lifecycle (game/remotes.ts); created in init() ----
 let remotes: ReturnType<typeof createRemotes>;
+let playerSheep: PlayerSheep;
 
 // ---- Demo playback lifecycle (game/demoLifecycle.ts); created in init() ----
 let demoLifecycle: ReturnType<typeof createDemoLifecycle>;
@@ -228,7 +230,9 @@ async function init(): Promise<void> {
     logger,
     world,
     lazyOfflineFfaScores: () => teamBots?.ffaScores ?? null,
+    lazyPlayerSheep: () => playerSheep,
   });
+  playerSheep = new PlayerSheep(() => networkManager.getLocalPlayerId());
 
   // Load player model
   await player.loadModel();
@@ -574,6 +578,7 @@ function makeGameLoop(): ReturnType<typeof createGameLoop> {
     teamBots: () => teamBots,
     world,
     getDummyTick: () => dummyUpdate,
+    lazyPlayerSheep: () => playerSheep,
   });
 }
 

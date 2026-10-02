@@ -147,6 +147,16 @@
   border-radius: 50%;
   box-shadow: 0 0 3px rgba(0,0,0,0.8);
 }
+/* Own sheep meter — small readout under the crosshair, same coloring
+   * as the indicator badges so sheepish reads the same everywhere. */
+#sheep-readout {
+  position: absolute; top: calc(50% + 18px); left: 50%;
+  transform: translateX(-50%);
+  font: 600 13px 'Rajdhani', 'Segoe UI', sans-serif;
+  letter-spacing: 0.5px;
+  text-shadow: 0 0 6px rgba(0,0,0,0.9), 1px 1px 0 #000;
+  pointer-events: none;
+}
 #hit-marker {
   position: absolute; top: 50%; left: 50%;
   transform: translate(-50%, -50%);
@@ -388,6 +398,22 @@
 #match-status .fchip.a { color: #55aaff; border: 1px solid rgba(85,170,255,0.4); }
 #match-status .fchip.b { color: #ff8855; border: 1px solid rgba(255,136,85,0.4); }
 #match-status .fchip.taken { animation: resumePulse 1s ease-in-out infinite; }
+
+/* Connection-loss banner — live elapsed timer while down, short 'was
+   down' flash after reconnect so even sub-second drops are visible. */
+#conn-banner {
+  position: fixed; top: calc(var(--z-tc-2) + 26px); left: 50%; transform: translateX(-50%);
+  display: none; font: 700 15px/1 Rajdhani, sans-serif; letter-spacing: 0.18em;
+  padding: 5px 14px; border-radius: 4px; pointer-events: none; white-space: nowrap;
+}
+#conn-banner.down {
+  color: #ff8080; border: 1px solid rgba(255,107,107,0.55);
+  background: rgba(60,10,10,0.55); animation: resumePulse 1s ease-in-out infinite;
+}
+#conn-banner.up {
+  color: #7ddf7d; border: 1px solid rgba(125,223,125,0.4);
+  background: rgba(10,50,20,0.5);
+}
 
 /* Death overlay + respawn countdown (hud.ts builds these elements) */
 #death-overlay {

@@ -37,6 +37,9 @@ export interface RemotesDeps {
   /** Offline DM owns its score map in TeamBots; network matches populate
    *  world.ffaScores from authoritative score echoes instead. */
   lazyOfflineFfaScores?: () => Map<string, number> | null;
+  /** Local sheep meter — the self row's sheep cell reads the same
+   *  client-side meter the crosshair readout shows. */
+  lazyPlayerSheep?: () => { shown: number };
 }
 
 // Remote player + scoreboard per-frame work: position send, remote ticks,
@@ -198,6 +201,20 @@ function scoreboardScores(deps: RemotesDeps, nm: NetworkManager, localId: string
     : { scores: deps.world.ffaScores, localScoreId: localId };
 }
 
+// Per-player alive clock — spawn/join stamps, cleared on death. The
+// scoreboard polls it every frame, so dead→alive transitions in ANY
+// source (wire events, tick isDead flips, offline bot respawns) reset it.
+const aliveSince = new Map<string, number>();
+/** Seconds alive, or null while dead. A first-seen-alive id stamps now —
+ * join-time is the closest observable the client has for pre-existing
+ * players. */
+function aliveSecs(id: string, dead: boolean, now: number): number | null {
+  if (dead) { aliveSince.delete(id); return null; }
+  let at = aliveSince.get(id);
+  if (at === undefined) { at = now; aliveSince.set(id, at); }
+  return Math.floor((now - at) / 1000);
+}
+
 // Scoreboard rows: local player first, then remotes sorted by frags desc
 function updateScoreboard(deps: RemotesDeps): void {
   const hud = deps.lazyHud();
@@ -214,13 +231,14 @@ function updateScoreboard(deps: RemotesDeps): void {
   // silently dropped every kill that went through the other path.
   const selfFrags = (deps.world.killCounts.get('local') ?? 0)
     + (localScoreId === 'local' ? 0 : deps.world.killCounts.get(localScoreId) ?? 0);
-  const rows = [{ name: localId, frags: selfFrags, score: ffa.get(localScoreId) ?? null, ping: nm.getPing(), net: nm.getTransportTier() ?? null, self: true, dead: deps.lazyPlayer().isDead, team: deps.world.localTeam }];
+  const now = Date.now();
+  const rows = [{ name: localId, frags: selfFrags, score: ffa.get(localScoreId) ?? null, ping: nm.getPing(), net: nm.getTransportTier() ?? null, self: true, dead: deps.lazyPlayer().isDead, team: deps.world.localTeam, sheep: deps.lazyPlayerSheep?.().shown ?? null, alive: aliveSecs(localId, deps.lazyPlayer().isDead, now) }];
   // net is string|null — 'bot' rows carry a label, not a transport tier.
-  const remoteRows: { name: string; frags: number; score: number | null; ping: number | null; net: string | null; self: boolean; dead: boolean; team?: TeamId; sheep?: number | null; bot?: boolean }[] = [...nm.getPlayers().keys()]
+  const remoteRows: { name: string; frags: number; score: number | null; ping: number | null; net: string | null; self: boolean; dead: boolean; team?: TeamId; sheep?: number | null; bot?: boolean; alive?: number | null }[] = [...nm.getPlayers().keys()]
     .filter(id => id !== localId && isRemoteActive(deps, id, nm.getPlayers()))
     .map(id => {
       const ps = nm.getPlayers().get(id);
-      return { name: id, frags: deps.world.killCounts.get(id) ?? 0, score: ffa.get(id) ?? null, ping: ps?.ping ?? null, net: isBotId(id) ? 'bot' : (ps?.transport ?? null), self: false, dead: ps?.isDead ?? false, team: ps?.team, sheep: ps?.sheep ?? null, bot: isBotId(id) };
+      return { name: id, frags: deps.world.killCounts.get(id) ?? 0, score: ffa.get(id) ?? null, ping: ps?.ping ?? null, net: isBotId(id) ? 'bot' : (ps?.transport ?? null), self: false, dead: ps?.isDead ?? false, team: ps?.team, sheep: ps?.sheep ?? null, bot: isBotId(id), alive: aliveSecs(id, ps?.isDead ?? false, now) };
     });
   // Offline bots live in world.remotePlayers, not the network roster —
   // they'd be invisible on the scoreboard otherwise.
@@ -229,7 +247,7 @@ function updateScoreboard(deps: RemotesDeps): void {
     // GameBot carries a team field; FFA bots get a self-id pseudo-team,
     // which must not count as a real team row.
     const t = (rp as { team?: string }).team;
-    remoteRows.push({ name: id.replace('bot:', ''), frags: deps.world.killCounts.get(id) ?? 0, score: ffa.get(id) ?? null, ping: null, net: 'bot', self: false, dead: rp.isDead, team: t === 'alpha' || t === 'bravo' ? t : undefined, sheep: (rp as { sheepShown?: number; sheep?: number }).sheepShown ?? (rp as { sheep?: number }).sheep ?? null, bot: isBotId(id) });
+    remoteRows.push({ name: id.replace('bot:', ''), frags: deps.world.killCounts.get(id) ?? 0, score: ffa.get(id) ?? null, ping: null, net: 'bot', self: false, dead: rp.isDead, team: t === 'alpha' || t === 'bravo' ? t : undefined, sheep: (rp as { sheepShown?: number; sheep?: number }).sheepShown ?? (rp as { sheep?: number }).sheep ?? null, bot: isBotId(id), alive: aliveSecs(id, rp.isDead, now) });
   }
   remoteRows.sort((a, b) => (b.score ?? b.frags) - (a.score ?? a.frags));
   hud.setScoreboardRows([...rows, ...remoteRows]);

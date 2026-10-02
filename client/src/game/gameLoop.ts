@@ -107,6 +107,9 @@ export interface GameLoopDeps {
   world: WorldState;
   // ?dummy debug hook — null when the param isn't set
   getDummyTick: () => ((dt: number) => void) | null;
+  /** Local sheep meter — ticks each frame from hudTick so the crosshair
+   *  readout and scoreboard self-row share the smoothed value. */
+  lazyPlayerSheep?: () => import('./playerSheep.js').PlayerSheep;
 }
 
 // The frame loop + render pass. Everything mutable it touches comes in via
@@ -352,6 +355,12 @@ function hudTick(deps: GameLoopDeps, st: LoopState, budget: ReturnType<typeof cr
   const terrain = deps.lazyTerrain();
 
   hud.update(dt, player, networkManager.getPing(), networkManager.getPacketLoss(), networkManager.getJitter());
+  hud.setConnDown(networkManager.connectionDown());
+  const playerSheep = deps.lazyPlayerSheep?.();
+  if (playerSheep) {
+    playerSheep.tick(dt, player, terrain, deps.world.remotePlayers, deps.world.localTeam);
+    hud.setSheep(playerSheep.shown);
+  }
   // Entity-count text is a slow-moving counter — 10Hz is plenty.
   budget.sweep('census', 100, () => hud.setEntityCounts(censusEntities(deps, entities)));
   hud.setNuggets(entities.getNuggetsCollected());

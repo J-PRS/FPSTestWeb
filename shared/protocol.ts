@@ -108,7 +108,9 @@ export interface TickUpdatePlayer {
   ski?: number;
   /** Status bitmask — STATUS_* bits (shared/status.ts). */
   status?: number;
-  /** Server-side sheep meter (bots only, 0-100). */
+  /** Server-side sheep meter (0-100) — bots report theirs through the
+   *  same field humans are metered under, so the leaderboard column
+   *  fills for the whole roster. */
   sheep?: number;
 }
 

@@ -23,6 +23,7 @@ import { pushRewindSample } from './rewind.ts';
 import { STATUS, CLIENT_STATUS_MASK } from '../../shared/status.ts';
 import type { MoveState } from '../../shared/movement.ts';
 import { type BotLoadout } from '../../shared/botLoadouts.ts';
+import { classCapsule } from '../../shared/botClasses.ts';
 import { BotWatchdog, type MobilitySample } from './botWatchdog.ts';
 import { BotArsenal } from './botArsenal.ts';
 import { BotSheepMeter } from './botSheep.ts';
@@ -242,6 +243,7 @@ export class ServerBots {
     this.roster.maintain(Date.now());
     this.arsenal.step(dt); // sim-clock — the weapon-rate gate is sim-paced
     this.sheep.step(dt); // sim-clock — the coverage window is sim-paced too
+    this.meterHumans(dt);
     if (this.brains.size === 0) return;
     const now = Date.now();
     for (const [id, brain] of this.brains) {
@@ -308,5 +310,52 @@ export class ServerBots {
       // spawn seed and legit shots at moving bots get rejected.
       pushRewindSample(p, now);
     }
+  }
+
+  /** Humans get the same sheep meter as bots — the wire tick's `sheep`
+   *  field carries it for the leaderboard, so a parked human reads as
+   *  honestly as a parked bot. The synthesized BrainOut reports no
+   *  intents: fire recency arrives via noteFire from the claim path,
+   *  and a live human always counts as having a destination (coverage
+   *  stall applies — standing around is the thing being measured). */
+  private meterHumans(dt: number): void {
+    const now = Date.now();
+    const players = this.room.players.getAllPlayers();
+    for (const [id, p] of players) {
+      if (p.isBot || p.isDead) continue;
+      const sh = this.room.moveSim.simState(id);
+      const ground = Math.max(
+        this.room.moveSim.structureTop(p.position.x, p.position.z),
+        p.position.y - classCapsule(p.armorClass).eye - 2, // parked high = sleeping on deposit, not airborne
+      );
+      const foe = this.humanFoeNear(id, p, players);
+      this.sheep.check(id, p, {
+        out: { dest: p.position },
+        airborne: sh ? !sh.onGround : Math.abs(p.velocity.y) > 2,
+        hasDest: true,
+        foe,
+        dt,
+        height: Math.max(0, p.position.y - classCapsule(p.armorClass).eye - ground),
+      }, now);
+    }
+  }
+
+  /** 45m brawl-range enemy in eye-line — same evidence the bot senses
+   *  give the meter; a human parked in a firefight and not shooting is
+   *  the exact tell this debits. */
+  private humanFoeNear(id: string, p: { position: Vec3; team?: string }, players: Map<string, { position: Vec3; team?: string; isDead?: boolean }>): boolean {
+    for (const [qid, q] of players) {
+      if (qid === id || q.isDead) continue;
+      if (q.team && p.team && q.team === p.team) continue;
+      const d = Math.hypot(q.position.x - p.position.x, q.position.y - p.position.y, q.position.z - p.position.z);
+      if (d < 45) return true;
+    }
+    return false;
+  }
+
+  /** Combat path reports a legit human fire claim — the ignore debit's
+   *  3s recency window needs it or an engaged human reads as passive. */
+  noteHumanFire(id: string): void {
+    this.sheep.noteFire(id);
   }
 }

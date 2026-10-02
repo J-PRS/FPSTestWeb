@@ -325,6 +325,7 @@ export class Room {
       interiors: this.spec.interiors,
       onKill: (pid, shooter) => this.scoring.onKill(pid, shooter),
       onHit: (pid, shooter) => this.bots.flinch(pid, shooter),
+      onFire: (pid) => this.bots.noteHumanFire(pid),
       rng: () => this.rng(),
       flags: () => this.flags?.snapshot() ?? [],
       pickups: () => this.pickups?.snapshot() ?? [],

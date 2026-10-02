@@ -58,6 +58,9 @@ export interface CombatDeps {
   /** Room heartbeat counters — claims/rejects/applied damage tally here
    *  so the periodic 'Room health' line shows the funnel at a glance. */
   health?: Map<string, number>;
+  /** A real fire claim passed the gates — the sheep meter's ignore
+   *  debit needs fire recency for humans (bots report their own). */
+  onFire?: (playerId: string) => void;
   /** Nearest-creature distance for env-damage plausibility (melee-from-
    *  afar flagging). Absent = no creature sim to check against. */
   envRange?: (playerId: string) => number;
@@ -232,6 +235,7 @@ export class CombatHandler {
     }
     player.protectedUntil = 0; // firing breaks your own spawn shield
 
+    this.deps.onFire?.(playerId);
     if (msg.targetId) {
       this.hitClaim(playerId, player, msg, msg.targetId);
     } else {
@@ -262,6 +266,7 @@ export class CombatHandler {
     const now = Date.now();
     if (now - (this.lastFireNotify.get(playerId) ?? 0) < 50) return;
     this.lastFireNotify.set(playerId, now);
+    this.deps.onFire?.(playerId);
     const at = rewindPos(player, clampPing(player.ping));
     this.broadcast({
       type: 'playerShot', id: playerId, weaponType: msg.weaponType,
@@ -271,6 +276,7 @@ export class CombatHandler {
 
   handleAOEShot(playerId: string, msg: Extract<ClientMessage, { type: 'aoeShot' }>): void {
     this.flushClaims(playerId);
+    this.deps.onFire?.(playerId);
     this.aoe.handleAOEShot(playerId, msg);
   }
 

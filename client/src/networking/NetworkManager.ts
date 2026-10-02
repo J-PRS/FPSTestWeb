@@ -172,7 +172,13 @@ export class NetworkManager {
   /** `makeTransport` swaps the wire: P2P passes a factory that builds a
    *  LoopbackTransport (host) or DataChannelTransport (guest) instead of
    *  a real WebSocket. Same callbacks, same protocol, different pipe. */
+  // True once connect() has been asked for a session — distinguishes
+  // 'never went online' (offline mode) from 'online and currently down'
+  // so the HUD can warn only in the second case.
+  private onlineExpected = false;
+
   connect(url: string, makeTransport?: TransportFactory): Promise<void> {
+    this.onlineExpected = true;
     return new Promise((resolve, reject) => {
       try {
         const factory = makeTransport ?? ((cfg) => new TieredTransport(cfg));
@@ -241,9 +247,16 @@ export class NetworkManager {
   }
 
   disconnect(): void {
+    this.onlineExpected = false;
     this.ws?.disconnect();
     this.ws = null;
     this.connected = false;
+  }
+
+  /** Online session whose socket is down right now (reconnect loop
+   *  running underneath). False for offline mode and clean shutdowns. */
+  connectionDown(): boolean {
+    return this.onlineExpected && !this.isConnected();
   }
 
   /** Outbound JSON event — typed against the shared protocol union. */

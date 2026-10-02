@@ -10,6 +10,8 @@ export type SbRow = {
   name: string; frags: number; score: number | null; ping: number | null;
   net?: string | null; self: boolean; dead: boolean;
   team?: TeamId; sheep?: number | null; bot?: boolean;
+  /** Seconds since last spawn/respawn — null while dead. */
+  alive?: number | null;
 };
 
 // textContent, not innerHTML — display names will be player-chosen
@@ -19,7 +21,7 @@ export type SbRow = {
 function sbRowEl(r: SbRow, num = ''): HTMLTableRowElement {
   const tr = document.createElement('tr');
   tr.className = `${r.self ? 'self' : ''}${r.dead ? ' dead' : ''}${r.team ? ` sb-${r.team}` : ''}`;
-  const cells = [String(r.frags), r.score === null ? '—' : String(r.score), r.net ?? '—', r.ping === null ? '—' : String(Math.round(r.ping)), r.sheep == null ? '—' : `${Math.round(r.sheep)}%`];
+  const cells = [String(r.frags), r.score === null ? '—' : String(r.score), r.net ?? '—', r.ping === null ? '—' : String(Math.round(r.ping)), r.sheep == null ? '—' : `${Math.round(r.sheep)}%`, r.alive == null ? '—' : `${r.alive}s`];
   const numTd = document.createElement('td');
   numTd.textContent = num;
   tr.appendChild(numTd);

@@ -1,5 +1,14 @@
 import { Terrain } from '../world/terrain.js';
-import type { GameBot } from './botBrain.js';
+
+/** The meter only reads body state — the same tick runs on bots and on
+ *  the local player (playerSheep.ts feeds a Player through this shape). */
+export interface SheepBody {
+  playerId: string;
+  pos: { x: number; y: number; z: number };
+  vel: { x: number; y: number; z: number };
+  sheep: number;
+  sheepShown: number;
+}
 
 /**
  * SheepMeter — the anti-pedestrian meter for offline bots. Charged on
@@ -62,13 +71,13 @@ export class SheepMeter {
     this.maxedSet.delete(id);
   }
 
-  tick(bot: GameBot, dt: number, terrain: Terrain, s: { foe?: boolean; ignoring?: boolean; hasDest?: boolean; busy?: boolean } = {}): void {
+  tick(bot: SheepBody, dt: number, terrain: Terrain, s: { foe?: boolean; ignoring?: boolean; hasDest?: boolean; busy?: boolean } = {}): void {
     const { foe = false, ignoring = false, hasDest = false, busy = false } = s;
     const v = bot.vel;
     const { mech, bonusSpeed, grounded } = this.energy(bot, dt, terrain);
     // Welding a stand's gear is honest work — a parked welder is
     // productive, not a pedestrian (mirrors the server meter).
-    const tribesing = SheepMeter.isTribesing(bot, bonusSpeed, grounded) || busy;
+    const tribesing = SheepMeter.isTribesing(bonusSpeed, grounded) || busy;
     const moving = Math.hypot(v.x, v.z) > 1;
     const why = this.ledger(bot.playerId);
     // Drain is rate-capped like the server meter — a high-E burst
@@ -109,7 +118,7 @@ export class SheepMeter {
    *  Potential counts at half gravity past a 2m deadband — and only
    *  while moving: a parked body at altitude isn't holding energy to
    *  convert, it's sleeping on the deposit. */
-  private energy(bot: GameBot, dt: number, terrain: Terrain): { mech: number; bonusSpeed: number; grounded: boolean } {
+  private energy(bot: SheepBody, dt: number, terrain: Terrain): { mech: number; bonusSpeed: number; grounded: boolean } {
     const v = bot.vel;
     const height = Math.max(0, bot.pos.y - terrain.getHeight(bot.pos.x, bot.pos.z));
     const speedSq = v.x * v.x + v.y * v.y + v.z * v.z;
@@ -123,7 +132,7 @@ export class SheepMeter {
     return { mech, bonusSpeed: Math.sqrt(Math.max(0, 2 * eSm)), grounded };
   }
 
-  private maxed(bot: GameBot): void {
+  private maxed(bot: SheepBody): void {
     // A full meter just sits — the readout is the point (the launch
     // penalty is retired). Dedupe the ledger dump so a bot parked at
     // the cap doesn't re-log every frame.
@@ -134,7 +143,7 @@ export class SheepMeter {
       `bot ${bot.playerId} maxed sheep (why: idle=${w.idle.toFixed(1)} ignore=${w.ignore.toFixed(1)} bleed=${w.bleed.toFixed(1)} cover=${w.cover.toFixed(1)})`);
   }
 
-  private coverageDebit(bot: GameBot, hasDest: boolean): number {
+  private coverageDebit(bot: SheepBody, hasDest: boolean): number {
     const now = this.simMs;
     let w = this.cov.get(bot.playerId);
     if (!w) { w = { start: now, dist: 0, lx: bot.pos.x, ly: bot.pos.y, lz: bot.pos.z }; this.cov.set(bot.playerId, w); }
@@ -150,7 +159,7 @@ export class SheepMeter {
 
   /** Instantaneous E loss since last sample, clamped — a bot sliding
    *  to a deadstop bleeds once, not forever. */
-  private energyBleed(bot: GameBot, mech: number, foe: boolean): number {
+  private energyBleed(bot: SheepBody, mech: number, foe: boolean): number {
     const ePrev = this.eLast.get(bot.playerId);
     this.eLast.set(bot.playerId, mech);
     if (ePrev === undefined || mech >= ePrev || foe) return 0;
@@ -166,7 +175,7 @@ export class SheepMeter {
   /** Counts as Tribesing while it's holding or converting energy —
    *  bonusSpeed is sqrt(2·E_recent): >14 sits above jog speed so a
    *  cruising bot pays, a dawdling one charges. */
-  private static isTribesing(bot: GameBot, bonusSpeed: number, grounded: boolean): boolean {
+  private static isTribesing(bonusSpeed: number, grounded: boolean): boolean {
     return bonusSpeed > 14 || !grounded;
   }
 }

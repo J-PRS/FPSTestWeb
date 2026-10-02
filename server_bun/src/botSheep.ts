@@ -34,6 +34,11 @@ export class BotSheepMeter {
 
   step(dt: number): void { this.simMs += dt * 1000; }
 
+  /** A player's real shot — humans don't emit BrainOut.fire, so the
+   *  combat claim path reports fires here and the ignore debit sees
+   *  the same recency evidence a bot's own fire intent gives it. */
+  noteFire(id: string): void { this.lastFire.set(id, this.simMs); }
+
   clear(id: string): void {
     this.meter.delete(id);
     this.window.delete(id);

@@ -89,12 +89,27 @@ export class HUD {
     this.flagA = d.flagA;
     this.flagB = d.flagB;
     this.killFeed = d.killFeed;
+    this.connBanner = d.connBanner;
+    this.sheepReadout = d.sheepReadout;
     this.stats = new HudStats(this);
     this.minimap = new Minimap(this.el);
     this.indicators = new PlayerIndicators(this.el);
   }
 
   killFeed: HTMLDivElement;
+  connBanner: HTMLDivElement;
+  sheepReadout: HTMLDivElement;
+
+  private lastSheepShown = -1;
+  /** Own sheep score under the crosshair — same thresholds/colors as the
+   *  bot indicator badges so the number reads identically everywhere. */
+  setSheep(shown: number): void {
+    if (shown === this.lastSheepShown) return;
+    this.lastSheepShown = shown;
+    if (shown <= 0) { this.sheepReadout.textContent = ''; return; }
+    this.sheepReadout.textContent = `${shown}`;
+    this.sheepReadout.style.color = shown >= 60 ? '#ff6b6b' : shown >= 30 ? '#ffd166' : '#7ddf7d';
+  }
 
   /** Kill feed — "shooter [weapon] ▸ target" under the match strip. Timed
    *  fade, capped at 6 rows; textContent only (names are server strings). */
@@ -228,6 +243,42 @@ export class HUD {
   /** Shielded hit — same directional language but cyan: the bubble ate it. */
   showShieldDamage(fromPos: THREE.Vector3 | null, damage: number): void {
     this.stats.shieldDamage(fromPos, damage);
+  }
+
+  /* Connection-loss banner: while an online session's socket is down it
+     counts up live; on reconnect it flashes 'was down X.Xs' for a few
+     seconds so even sub-second drops stay visible (dev readout). */
+  private connDownAt = 0;
+  private connFlashUntil = 0;
+  private connFlashTxt = '';
+  private connLastTxt = '';
+  setConnDown(down: boolean): void {
+    const now = performance.now();
+    if (down) {
+      if (!this.connDownAt) this.connDownAt = now;
+      const s = (now - this.connDownAt) / 1000;
+      this.paintConn(`CONNECTION LOST — reconnecting ${s.toFixed(1)}s`, 'down');
+      return;
+    }
+    if (this.connDownAt) {
+      const s = (now - this.connDownAt) / 1000;
+      this.connDownAt = 0;
+      this.connFlashUntil = now + 4000;
+      this.connFlashTxt = `back online — was down ${s.toFixed(1)}s`;
+    }
+    if (now < this.connFlashUntil) {
+      this.paintConn(this.connFlashTxt, 'up');
+    } else {
+      this.connBanner.style.display = 'none';
+      this.connLastTxt = '';
+    }
+  }
+  private paintConn(txt: string, cls: 'down' | 'up'): void {
+    if (this.connBanner.className !== cls) this.connBanner.className = cls;
+    if (txt === this.connLastTxt) return;
+    this.connLastTxt = txt;
+    this.connBanner.textContent = txt;
+    this.connBanner.style.display = 'block';
   }
 
   updateMinimap(targets: Targetable[], nuggets: Nugget[], pos: THREE.Vector3, yaw: number, birds?: THREE.Vector3[], players?: Iterable<import('./minimap.js').MinimapPlayer>): void {

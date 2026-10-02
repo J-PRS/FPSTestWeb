@@ -106,6 +106,9 @@ export interface RoomInfo {
   envRange?: (playerId: string) => number;
   /** Armor-grenade plating sweep — BallSim.armorBlast + CreatureSim.armorBlast. */
   creatureArmor?: (pos: Vec3, amount: number, radius: number) => void;
+  /** A legit fire claim passed the gates — the sheep meter's human
+   *  ignore debit reads its recency (bots report via BrainOut.fire). */
+  onFire?: (playerId: string) => void;
   /** Live deployables for gameState joins — RoomDeployables.snapshot. */
   deployables?: () => { id: number; owner: string; kind: 'turret' | 'mine' | 'station' | 'drone' | 'shield'; pos: Vec3; hp?: number; armor?: number; team?: string }[];
 }
@@ -127,6 +130,7 @@ function combatDeps(roomInfo: RoomInfo | undefined): CombatDeps {
     health: roomInfo?.health,
     envRange: roomInfo?.envRange,
     creatureArmor: roomInfo?.creatureArmor,
+    onFire: roomInfo?.onFire,
   };
 }
 
