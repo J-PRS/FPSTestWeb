@@ -290,11 +290,21 @@ describe('scenario: fast-forward soak throughput', () => {
     // needs: which guns actually convert hits to kills in real traffic.
     // weaponStats keys sources 'w<weaponType>' plus labels for turret/
     // mine/env; print everything that killed, damage-ordered.
-    const wrows = weaponStats.snapshot().byMode[room.mode] ?? {};
+    const wsnap = weaponStats.snapshot();
+    const wrows = wsnap.byMode[room.mode] ?? {};
+    const wttk = wsnap.ttk[room.mode] ?? {};
     const wline = Object.entries(wrows)
       .filter(([, r]) => r.kills > 0)
       .sort((a, b) => b[1].kills - a[1].kills)
-      .map(([w, r]) => `${w.startsWith('w') && WeaponType[+w.slice(1)] !== undefined ? WeaponType[+w.slice(1)] : w} ${r.kills}K/${r.hits}hits/${r.damage.toFixed(0)}dmg`)
+      .map(([w, r]) => {
+        const name = w.startsWith('w') && WeaponType[+w.slice(1)] !== undefined ? WeaponType[+w.slice(1)] : w;
+        // Kills per engaged second: total duel ms this source spent in
+        // fights it finished. K/hit misleads — spam weapons rack hits
+        // in a stream while a mortar spends them one duel at a time.
+        const t = wttk[w];
+        const kps = t && t.totalMs > 0 ? ` ${(r.kills / (t.totalMs / 1000)).toFixed(2)}K/s` : '';
+        return `${name} ${r.kills}K/${r.hits}hits/${r.damage.toFixed(0)}dmg${kps}`;
+      })
       .join('  ');
     console.log(`  weapons: ${wline || 'no credited kills'}`);
     console.log(
