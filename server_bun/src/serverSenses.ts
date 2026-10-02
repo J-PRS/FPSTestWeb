@@ -17,7 +17,8 @@ import { aimSkillFor, type BotSkill } from '../../shared/botSkill.ts';
 import { classCapsule } from '../../shared/botClasses.ts';
 import { dist3 } from '../../shared/botVec.ts';
 import { WeaponType } from '../../shared/weapons.ts';
-import { roleObjective, type BotRole } from '../../shared/flagGoals.ts';
+import { roleObjective, type BotRole, type FlagSituation } from '../../shared/flagGoals.ts';
+import { TeamCommand, type CommandMember } from './botCommand.ts';
 import { DEPLOY_HP } from '../../shared/deployables.ts';
 import type { TeamId } from '../../shared/teams.ts';
 import { simNow } from './simClock.ts';
@@ -52,6 +53,9 @@ export class ServerBotSenses {
    *  wanders its own mini-route instead of parking. */
   private waitSpot = new Map<string, { pos: BotVec; at: number }>();
   private static readonly WAIT_TTL_MS = 15_000;
+  /** Per-team commander — names responders for contested jobs so one
+   *  thief doesn't empty the home defense (botCommand.ts). */
+  private commands = new Map<TeamId, TeamCommand>();
 
   /** Neutron shell around home for a flag carrier waiting out a stolen
    *  flag: ~50% of rolls land inside 50m of the stand, ~10% reach the
@@ -263,8 +267,7 @@ export class ServerBotSenses {
     }
 
     const enemyStand = enemy.state !== 'carried' ? enemy.pos : null;
-    // One role table for both runtimes — shared/flagGoals.ts.
-    const pick = roleObjective(this.roles.get(p.id) ?? 'offense', {
+    const sit: FlagSituation = {
       home: own.home,
       // Own flag's carrier — chase the thief, not the base.
       thief: this.thiefOf(me)?.pos ?? null,
@@ -274,7 +277,28 @@ export class ServerBotSenses {
       escort: this.escortSpot(enemy.carrier, me),
       threat: this.standThreat(own.home, me),
       push: this.pushFor(me),
-    }, duty);
+    };
+    // The commander names responders for contested jobs before the role
+    // table runs — staffed slots are hidden from everyone else so the
+    // squad splits its attention instead of lemming one stimulus.
+    let cmd = this.commands.get(me);
+    if (!cmd) { cmd = new TeamCommand(); this.commands.set(me, cmd); }
+    const members: CommandMember[] = [];
+    for (const [id, role] of this.roles) {
+      const mp = this.room.players.getPlayer(id);
+      if (!mp || mp.team !== me) continue;
+      members.push({ id, role, pos: mp.position, carrier: enemy.carrier === id });
+    }
+    cmd.update(simNow(), sit, members);
+    const task = cmd.taskFor(p.id);
+    if (!task) {
+      if (cmd.staffed(p.id, 'chase')) sit.thief = null;
+      if (cmd.staffed(p.id, 'return')) sit.dropped = null;
+      if (cmd.staffed(p.id, 'escort')) sit.escort = null;
+      if (cmd.staffed(p.id, 'push')) sit.push = null;
+    }
+    // One role table for both runtimes — shared/flagGoals.ts.
+    const pick = task?.goal ?? roleObjective(this.roles.get(p.id) ?? 'offense', sit, duty);
     const role = this.roles.get(p.id);
     // Post the push-call when THIS bot is the capper closing in. ETA
     // prices actual ground speed (floor 12 m/s — a bot standing still
