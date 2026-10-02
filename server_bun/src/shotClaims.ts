@@ -28,8 +28,11 @@ export function hitClaim(h: CombatHandler, playerId: string, player: PlayerState
     }
     // Dead targets are untouchable — without this, corpse hits still
     // broadcast playerHit and can stack phantom damage past respawn.
+    // A drop, not a reject: the target was alive on the shooter's screen
+    // when the shell landed but died mid-flight from another kill —
+    // honest lag, and nothing is won by forging it either way.
     if (target.isDead) {
-      h.reject(playerId, 'Shot', 'target already dead', targetId, msg.weaponType);
+      h.hb('drop.deadTarget');
       return;
     }
     // Friendly fire: no damage (and no playerHit) between teammates.
