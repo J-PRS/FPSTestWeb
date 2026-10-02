@@ -11,6 +11,7 @@ import { projStep, segPointDist, segFieldHit, type SimProjectile } from '../../.
 import { hmHeight, hmNormal, type Heightfield } from '../../../shared/heightfield.js';
 import { GRAVITY, MoveSim, type MoveSurface } from '../../../shared/movement.js';
 import { makeSimCrawler, stepCrawler, commitTarget, type SimCrawler } from '../../../shared/creatureCore.js';
+import { BotBrain, type BotVec } from '../../../shared/botBrain.js';
 
 export interface LabInstance {
   /** Advance the sim one fixed step. The view calls this at 60Hz. */
@@ -524,8 +525,215 @@ function skiRun(scene: THREE.Scene): LabInstance {
 }
 
 /* ------------------------------------------------------------------ */
+/* Bot duel — REAL BotBrain minds on real MoveSim bodies. Each agent   */
+/* thinks with the full sense stack (hunt/steer/escape/dodge/fire) and */
+/* locomotes through the same physics a player does — nothing staged.  */
+/* ------------------------------------------------------------------ */
+
+const BOT_SURFACE: MoveSurface = {
+  getHeight: (x, z) => hmHeight(FLAT, x, z),
+  getNormal: (_x, _z, out) => { out.x = 0; out.y = 1; out.z = 0; return out; },
+};
+const BOT_HP = 100;
+const BOT_ENERGY_MAX = 100;
+const BOLT_SPEED = 120;
+
+/** Client's locomote() slew — turn toward dest at a wrist-speed rate. */
+function slewYaw(cur: number, want: number, k: number): number {
+  let d = want - cur;
+  while (d > Math.PI) d -= Math.PI * 2;
+  while (d < -Math.PI) d += Math.PI * 2;
+  const m = Math.abs(d);
+  return cur + (m < k ? d : Math.sign(d) * k);
+}
+
+interface BotAgent {
+  brain: BotBrain;
+  sim: MoveSim;
+  mesh: THREE.Mesh;
+  hp: number;
+  energy: number;
+  yaw: number;
+  lastDest: BotVec | null;
+  lastMove: { ski?: boolean; jet?: boolean; jump?: boolean } | undefined;
+  name: string;
+  dead: number; // respawn countdown
+}
+
+interface BotBolt { p: SimProjectile; m: THREE.Mesh; from: BotAgent }
+
+function spawnAgent(scene: THREE.Scene, name: string, color: number, x: number): BotAgent {
+  const pos = { x, y: 2, z: 0 };
+  const mesh = new THREE.Mesh(
+    new THREE.CapsuleGeometry(0.9, 1.4, 4, 12),
+    new THREE.MeshBasicMaterial({ color }),
+  );
+  scene.add(mesh);
+  return {
+    brain: new BotBrain({ ...pos }),
+    sim: new MoveSim(BOT_SURFACE, {
+      pos: { ...pos }, vel: { x: 0, y: 0, z: 0 },
+      yaw: 0, pitch: 0, onGround: false,
+    }),
+    mesh, hp: BOT_HP, energy: BOT_ENERGY_MAX, yaw: 0,
+    lastDest: null, lastMove: undefined, name, dead: 0,
+  };
+}
+
+function respawnAgent(a: BotAgent, x: number): void {
+  a.sim.setState({
+    pos: { x, y: 2, z: 0 }, vel: { x: 0, y: 0, z: 0 },
+    yaw: a.yaw, pitch: 0, onGround: false,
+  });
+  a.mesh.visible = true;
+}
+
+function locomoteAgent(a: BotAgent, dt: number): void {
+  if (!a.lastDest) return;
+  const s = a.sim.state;
+  const md = Math.hypot(a.lastDest.x - s.pos.x, a.lastDest.z - s.pos.z);
+  if (md > 0.01) {
+    a.yaw = slewYaw(a.yaw, Math.atan2(a.lastDest.x - s.pos.x, a.lastDest.z - s.pos.z), 5 * dt);
+    s.yaw = a.yaw;
+  }
+  const jet = !!a.lastMove?.jet && a.energy > 0.5;
+  a.sim.setInput({
+    forward: md > 0.5 ? 1 : 0,
+    right: 0,
+    jumpHeld: !!a.lastMove?.jump,
+    skiHeld: !!a.lastMove?.ski,
+    jetHeld: jet,
+  });
+  a.sim.update(dt);
+  // Honest tank: jets burn, regen fills — the brain's skills read this.
+  a.energy = Math.min(BOT_ENERGY_MAX, Math.max(0, a.energy + (jet ? -30 : 20) * dt));
+}
+
+const botSpeed = (a: BotAgent) => Math.hypot(a.sim.state.vel.x, a.sim.state.vel.y, a.sim.state.vel.z).toFixed(1);
+
+function botDuel(scene: THREE.Scene): LabInstance {
+  const A = spawnAgent(scene, 'alpha', 0x5ad0ff, -30);
+  const B = spawnAgent(scene, 'beta', 0xff6a4d, 30);
+
+  const boltGeo = new THREE.SphereGeometry(0.25, 8, 8);
+  const boltPool: THREE.Mesh[] = [];
+  const bolts: BotBolt[] = [];
+  let now = 0, deaths = 0, fires = 0, hits = 0;
+
+  const fire = (f: BotAgent, aim: BotVec) => {
+    const s = f.sim.state;
+    const dx = aim.x - s.pos.x, dy = aim.y - s.pos.y, dz = aim.z - s.pos.z;
+    const d = Math.hypot(dx, dy, dz) || 1;
+    const m = boltPool.pop() ?? new THREE.Mesh(boltGeo, new THREE.MeshBasicMaterial({ color: 0xfff3a0 }));
+    m.visible = true;
+    scene.add(m);
+    bolts.push({
+      p: { pos: { x: s.pos.x, y: s.pos.y, z: s.pos.z },
+           vel: { x: dx / d * BOLT_SPEED, y: dy / d * BOLT_SPEED, z: dz / d * BOLT_SPEED },
+           age: 0 },
+      m, from: f,
+    });
+    fires++;
+  };
+
+  const thinkOne = (a: BotAgent, foe: BotAgent): void => {
+    const s = a.sim.state;
+    const out = a.brain.think(1 / 60, {
+      pos: s.pos,
+      vel: s.vel,
+      enemies: foe.dead <= 0
+        ? [{ id: foe.name, pos: foe.sim.state.pos, vel: foe.sim.state.vel, alive: true, aimY: -0.7 }]
+        : [],
+      groundY: (x, z) => hmHeight(FLAT, x, z),
+      now,
+      energy: a.energy,
+      healthFrac: a.hp / BOT_HP,
+      // Inbound shells feed the dodge sense — same channel the game host fills.
+      threats: bolts.filter(b => b.from !== a).map(b => b.p.pos),
+      weaponSpeed: () => BOLT_SPEED,
+      weaponGravity: () => false,
+    });
+    a.lastDest = out.dest;
+    a.lastMove = out.move;
+    if (out.fire) fire(a, out.fire.aim);
+  };
+
+  /** Bolt flight + hit resolution — segPointDist vs the foe's capsule. */
+  const stepBolts = (dt: number): void => {
+    for (let i = bolts.length - 1; i >= 0; i--) {
+      const bolt = bolts[i]!;
+      const from = projStep(bolt.p, dt, 0);
+      const foe = bolt.from === A ? B : A;
+      const fp = foe.sim.state.pos;
+      if (foe.dead <= 0 && segPointDist(from, bolt.p.pos, { x: fp.x, y: fp.y, z: fp.z }) < 1.4) {
+        foe.hp -= 20;
+        hits++;
+        foe.brain.takeHit(bolt.from.sim.state.pos);
+        boltPool.push(bolt.m); bolt.m.visible = false;
+        bolts.splice(i, 1);
+        if (foe.hp <= 0) {
+          foe.dead = 1.5;
+          foe.hp = BOT_HP;
+          foe.energy = BOT_ENERGY_MAX;
+          foe.mesh.visible = false;
+          deaths++;
+        }
+        continue;
+      }
+      if (bolt.p.age > 2.5 || segFieldHit(from, bolt.p.pos, FLAT)) {
+        boltPool.push(bolt.m); bolt.m.visible = false;
+        bolts.splice(i, 1);
+      }
+    }
+  };
+
+  return {
+    tick(dt) {
+      now += dt * 1000;
+      for (const a of [A, B]) {
+        if (a.dead > 0) {
+          a.dead -= dt;
+          if (a.dead <= 0) respawnAgent(a, a === A ? -30 : 30);
+        }
+      }
+      if (A.dead <= 0) thinkOne(A, B);
+      if (B.dead <= 0) thinkOne(B, A);
+      for (const a of [A, B]) if (a.dead <= 0) locomoteAgent(a, dt);
+      stepBolts(dt);
+    },
+    sync() {
+      for (const a of [A, B]) {
+        a.mesh.position.set(a.sim.state.pos.x, a.sim.state.pos.y - 1.5, a.sim.state.pos.z);
+        a.mesh.rotation.y = a.yaw;
+      }
+      for (const bolt of bolts) bolt.m.position.set(bolt.p.pos.x, bolt.p.pos.y, bolt.p.pos.z);
+    },
+    dump() {
+      return [
+        ['alpha hp/en', `${Math.max(0, A.hp)}/${A.energy.toFixed(0)}`],
+        ['beta hp/en', `${Math.max(0, B.hp)}/${B.energy.toFixed(0)}`],
+        ['alpha spd', botSpeed(A)],
+        ['beta spd', botSpeed(B)],
+        ['move A', A.lastMove ? JSON.stringify(A.lastMove) : '-'],
+        ['move B', B.lastMove ? JSON.stringify(B.lastMove) : '-'],
+        ['fires', String(fires)],
+        ['hits', String(hits)],
+        ['deaths', String(deaths)],
+        ['bolts live', String(bolts.length)],
+      ];
+    },
+    dispose() {
+      for (const a of [A, B]) { scene.remove(a.mesh); a.mesh.geometry.dispose(); }
+      for (const bolt of bolts) scene.remove(bolt.m);
+      boltGeo.dispose();
+    },
+  };
+}
+
+/* ------------------------------------------------------------------ */
 
 export const SCENARIOS: LabScenario[] = [
+  { id: 'bot-duel', name: 'BOT DUEL', blurb: 'real BotBrain minds on MoveSim bodies', create: botDuel },
   { id: 'duel', name: 'DUEL', blurb: 'two fighters trade hitscan-ish bolts', create: duel },
   { id: 'ball-court', name: 'BALL COURT', blurb: 'ballSim bounce + one enraged hunter', create: ballCourt },
   { id: 'mortar-volley', name: 'MORTAR VOLLEY', blurb: 'projStep gravity arcs + terrain impacts', create: mortarVolley },
