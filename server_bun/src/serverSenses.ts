@@ -260,7 +260,7 @@ export class ServerBotSenses {
    *  flag dropped → touch it home; a teammate carrying → escort them;
    *  enemy flag reachable → go grab it. Defenders invert it: their flag
    *  recovery/intercept outranks pressing the enemy stand. */
-  flagGoal(p: { id: string; team?: string; position: Vec3 }, duty = 1): { pos: BotVec; infiltrating: boolean; running?: boolean; runner?: boolean; wave?: boolean; posted?: number } | null {
+  flagGoal(p: { id: string; team?: string; position: Vec3 }, duty = 1): { pos: BotVec; infiltrating: boolean; running?: boolean; runner?: boolean; wave?: boolean; marshal?: boolean; posted?: number } | null {
     const flags = this.room.flags;
     if (!flags || !p.team) return null;
     const me = p.team as TeamId;
@@ -555,7 +555,11 @@ export class ServerBotSenses {
       // flood like a runner's — untasked attackers let every midfield
       // contact steal the stand run (soak: sup@0 — the called wave
       // never once arrived). Staging/propel stay capper-only.
-      wave: task?.kind === 'push' || task?.kind === 'escort', posted };
+      wave: task?.kind === 'push' || task?.kind === 'escort',
+      // Push-only: the member mass-orbits ~110m out until the flood is
+      // actually converging. Escorts share wave's committed feet but
+      // must never hold off a moving carrier — that's just losing him.
+      marshal: task?.kind === 'push', posted };
   }
 
   /** Test hook — live command task list for a team (soak wave probe). */
@@ -621,7 +625,7 @@ export class ServerBotSenses {
 
   /** The sensorium for one think tick — see file header for what's legal
    *  on each channel. */
-  build(id: string, p: { id: string; team?: string; position: Vec3; velocity: Vec3; health: number; maxHealth: number }, goal: { pos: BotVec; infiltrating: boolean; running?: boolean; runner?: boolean; wave?: boolean; posted?: number } | null, now: number, skill?: BotSkill): BrainCtx {
+  build(id: string, p: { id: string; team?: string; position: Vec3; velocity: Vec3; health: number; maxHealth: number }, goal: { pos: BotVec; infiltrating: boolean; running?: boolean; runner?: boolean; wave?: boolean; marshal?: boolean; posted?: number } | null, now: number, skill?: BotSkill): BrainCtx {
     // Competence-biased draw: the weapon pick and the aim error read
     // the same matrix, so a phenom both reaches for its gun and lands it.
     const bias = skill ? (t: number) => aimSkillFor(skill, t, 0) : undefined;
@@ -635,6 +639,7 @@ export class ServerBotSenses {
       running: goal?.running ?? false,
       runner: goal?.runner ?? false,
       wave: goal?.wave ?? false,
+      marshal: goal?.marshal ?? false,
       posted: goal?.posted ?? 0,
       // Team rooms drop nuggets on creature kills — bots farm them too,
       // which is what keeps a bot-filled match's scoreboard moving. The

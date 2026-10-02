@@ -30,7 +30,11 @@ export function pickDest(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, fe
     // fight every midfield contact dies ~130m short of the stand —
     // soak autopsy showed the hunt pull eating every approach leg.
     // He shoots on the move; the route owns the feet.
-    if (ctx.runner && !ctx.running && ctx.objective) {
+    // Wave members get the same mass-orbit: a flood that trickles in
+    // one bot at a time dies piecemeal at the stand (soak: sup@0 —
+    // members arrived but never together). The first to land holds a
+    // few seconds for the rest; late or alone, he goes anyway.
+    if (((ctx.runner && !ctx.running) || ctx.marshal) && ctx.objective) {
       // "Cap in 10" staging: a runner entering a defended ring alone
       // dies to focused interceptors ~40m out (ring autopsy: pushes
       // die at mdD@41m). He holds a ~110m orbit until the wave his

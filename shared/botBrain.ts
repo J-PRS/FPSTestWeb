@@ -67,6 +67,9 @@ export interface BrainCtx {
   /** Named wave member (push/escort): feet committed to the flood like
    *  a runner's, without the capper's staging/propel rules. */
   wave?: boolean;
+  /** Push-task member: mass-orbits ~110m out until the flood converges
+   *  (escorts share wave but never hold off a moving carrier). */
+  marshal?: boolean;
   /** The objective is an enemy-held position this bot is pressing —
    *  CTF offense heading for the enemy stand. Lets the status sense
    *  read the approach as an infiltration (cloak) rather than a roam. */
