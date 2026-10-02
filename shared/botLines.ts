@@ -28,11 +28,24 @@ export class BotLines {
   private lineT = 0;
   private lastGd = Infinity;
   private stale = 0;
+  /** Pass memory: points where this bot's own climb actually converted
+   *  to altitude — experience, not a path table. When the cone can't
+   *  find a way over, a remembered pass beats another wall probe. */
+  private passes: BotVec[] = [];
+  private lastY = -Infinity;
 
   /** Convert the raw goal into a committed landing spot for the steerer. */
   plan(dt: number, ctx: BrainCtx, pos: BotVec, dest: BotVec): BotVec {
     const gd = Math.hypot(dest.x - pos.x, dest.z - pos.z);
     this.lineT -= dt;
+    // A leg that just bought real altitude is worth remembering: the
+    // crest that worked once works again, and only the bot's own
+    // successful climbs get filed — no map knowledge it never earned.
+    if (pos.y - this.lastY > 12 && gd < this.lastGd + 60) {
+      this.passes.push({ x: pos.x, y: pos.y, z: pos.z });
+      if (this.passes.length > 8) this.passes.shift();
+    }
+    this.lastY = pos.y;
     if (gd < MIN_GD) { this.wp = null; this.lastGd = Infinity; this.stale = 0; return dest; }
 
     const wpD = this.wp ? Math.hypot(this.wp.x - pos.x, this.wp.z - pos.z) : Infinity;
@@ -45,12 +58,20 @@ export class BotLines {
     // fixed radius forever (soak: bravo capper orbited the stand at
     // ~750m for the whole match). Two dead rolls drop the exemption;
     // the third gives up on terrain scoring entirely and beelines —
-    // humans grind the climb when carving stops paying.
+    // humans grind the climb when carving stops paying. A pass the bot
+    // has actually made before outranks another face probe.
     if (gd > this.lastGd - 8) this.stale++; else this.stale = 0;
     this.lastGd = gd;
     if (this.stale >= 3) {
+      let bestPass: BotVec | null = null, bestPassD = 250;
+      for (const pass of this.passes) {
+        const pd = Math.hypot(pass.x - pos.x, pass.z - pos.z);
+        // Count only passes on the goal side of the bot — one it already
+        // crossed backward is another lap of the same trap.
+        if (pd < bestPassD && Math.hypot(dest.x - pass.x, dest.z - pass.z) < gd) { bestPass = pass; bestPassD = pd; }
+      }
       const reach = Math.min(40, gd);
-      this.wp = { x: pos.x + (dest.x - pos.x) / gd * reach, y: pos.y, z: pos.z + (dest.z - pos.z) / gd * reach };
+      this.wp = bestPass ?? { x: pos.x + (dest.x - pos.x) / gd * reach, y: pos.y, z: pos.z + (dest.z - pos.z) / gd * reach };
       this.wpGoal = { ...dest };
       this.lineT = COMMIT_S;
       this.stale = 0;
