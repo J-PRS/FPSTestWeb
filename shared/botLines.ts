@@ -33,20 +33,24 @@ export class BotLines {
    *  find a way over, a remembered pass beats another wall probe. */
   private passes: BotVec[] = [];
   private lastY = -Infinity;
+  /** Traverse direction lock — without it every re-plan re-picks the
+   *  "goal-side" end of the contour and the bot zigzags around the ring
+   *  instead of walking it monotonically until the grade opens. */
+  private traverseDir: 1 | -1 | null = null;
 
   /** Convert the raw goal into a committed landing spot for the steerer. */
   plan(dt: number, ctx: BrainCtx, pos: BotVec, dest: BotVec): BotVec {
     const gd = Math.hypot(dest.x - pos.x, dest.z - pos.z);
     this.lineT -= dt;
-    // A leg that just bought real altitude is worth remembering: the
-    // crest that worked once works again, and only the bot's own
-    // successful climbs get filed — no map knowledge it never earned.
-    if (pos.y - this.lastY > 12 && gd < this.lastGd + 60) {
+    // A leg that moved real altitude is worth remembering: the ramp
+    // down is the ramp up in reverse, and only terrain the bot itself
+    // crossed gets filed — no map knowledge it never earned.
+    if (Math.abs(pos.y - this.lastY) > 12 && gd < this.lastGd + 60) {
       this.passes.push({ x: pos.x, y: pos.y, z: pos.z });
       if (this.passes.length > 8) this.passes.shift();
     }
     this.lastY = pos.y;
-    if (gd < MIN_GD) { this.wp = null; this.lastGd = Infinity; this.stale = 0; return dest; }
+    if (gd < MIN_GD) { this.wp = null; this.lastGd = Infinity; this.stale = 0; this.traverseDir = null; return dest; }
 
     const wpD = this.wp ? Math.hypot(this.wp.x - pos.x, this.wp.z - pos.z) : Infinity;
     const drifted = this.wpGoal ? Math.hypot(dest.x - this.wpGoal.x, dest.z - this.wpGoal.z) > REDEST : true;
@@ -60,7 +64,7 @@ export class BotLines {
     // the third gives up on terrain scoring entirely and beelines —
     // humans grind the climb when carving stops paying. A pass the bot
     // has actually made before outranks another face probe.
-    if (gd > this.lastGd - 8) this.stale++; else this.stale = 0;
+    if (gd > this.lastGd - 8) this.stale++; else { this.stale = 0; this.traverseDir = null; }
     this.lastGd = gd;
     if (this.stale >= 3) {
       let bestPass: BotVec | null = null, bestPassD = 250;
@@ -71,7 +75,41 @@ export class BotLines {
         if (pd < bestPassD && Math.hypot(dest.x - pass.x, dest.z - pass.z) < gd) { bestPass = pass; bestPassD = pd; }
       }
       const reach = Math.min(40, gd);
-      this.wp = bestPass ?? { x: pos.x + (dest.x - pos.x) / gd * reach, y: pos.y, z: pos.z + (dest.z - pos.z) / gd * reach };
+      let wp = bestPass;
+      if (!wp) {
+        // Contour traverse: when the goal sits across an unclimbable
+        // face, the way out is sideways — walk perpendicular to the
+        // steepest uphill until a gentler grade appears in the fan.
+        // Beeline only when the terrain around is already flat.
+        const g0 = ctx.groundY(pos.x, pos.z);
+        let ux = 0, uz = 0, up = 0;
+        for (let i = 0; i < 8; i++) {
+          const ang = (i / 8) * Math.PI * 2;
+          const rise = ctx.groundY(pos.x + Math.cos(ang) * 12, pos.z + Math.sin(ang) * 12) - g0;
+          if (rise > up) { up = rise; ux = Math.cos(ang); uz = Math.sin(ang); }
+        }
+        if (up > 6) {
+          const px = -uz, pz = ux;
+          const t = Math.min(50, gd);
+          const a = { x: pos.x + px * t, z: pos.z + pz * t };
+          const b = { x: pos.x - px * t, z: pos.z - pz * t };
+          if (this.traverseDir === null) {
+            // First traverse: keep the contour (altitude) and prefer the
+            // end that gains on the goal; afterwards the direction is
+            // fixed so the bot walks the ring monotonically instead of
+            // zigzagging back each re-plan.
+            const scoreT = (c: { x: number; z: number }) =>
+              (gd - Math.hypot(dest.x - c.x, dest.z - c.z)) - Math.abs(ctx.groundY(c.x, c.z) - g0) * 1.5;
+            this.traverseDir = scoreT(a) >= scoreT(b) ? 1 : -1;
+          }
+          const c = this.traverseDir === 1 ? a : b;
+          wp = { x: c.x, y: pos.y, z: c.z };
+        } else {
+          this.traverseDir = null;
+          wp = { x: pos.x + (dest.x - pos.x) / gd * reach, y: pos.y, z: pos.z + (dest.z - pos.z) / gd * reach };
+        }
+      }
+      this.wp = wp;
       this.wpGoal = { ...dest };
       this.lineT = COMMIT_S;
       this.stale = 0;
