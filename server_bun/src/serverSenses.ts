@@ -468,18 +468,22 @@ export class ServerBotSenses {
           // ends the push is where m/s actually buys survival — pushes
           // were arriving at ~16m/s and dying to interceptors at the
           // ring edge, so elevated entries earn their climb back here.
+          // Score the NET drop — descent minus the climb it has to
+          // undo: a moat-rim entry drops 50m into the trench then walls
+          // back up, and scoring the drop alone made that trap outrank
+          // the saddle (capRun katabatic bisect: green→red at cfe341d).
           if (capper) {
-            let drop = 0;
+            let drop = 0, rise = 0;
             prevH = ey;
             for (let s = 1; s < 8; s++) {
               const t = s / 8;
               const lx = ex + (enemyStand.x - ex) * t;
               const lz = ez + (enemyStand.z - ez) * t;
               const lh = hmHeight(this.field!, lx, lz);
-              if (lh < prevH) drop += prevH - lh;
+              if (lh < prevH) drop += prevH - lh; else rise += lh - prevH;
               prevH = lh;
             }
-            score += drop * 1.5;
+            score += (drop - rise) * 1.5;
           }
           for (const e of foes) {
             for (let s = 1; s < 8; s++) {
