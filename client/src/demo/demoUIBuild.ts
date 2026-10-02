@@ -24,6 +24,11 @@ u.timeline.addEventListener('input', () => {
   const time = parseFloat(u.timeline.value);
   u.callbacks?.onSeek(time);
 });
+// While the thumb is held, setTime must not write .value back — playback
+// would keep resetting the slider under the cursor and the emitted seeks
+// chase stale positions (classic scrub fight).
+u.timeline.addEventListener('pointerdown', () => { u.timelineDragging = true; });
+window.addEventListener('pointerup', () => { u.timelineDragging = false; });
 
 // Inject thumb styling (pseudo-elements can't be set via inline styles)
 if (!document.getElementById('demo-ui-slider-style')) {

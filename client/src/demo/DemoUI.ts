@@ -30,6 +30,8 @@ export class DemoUI {
   loadInput!: HTMLInputElement;
   private statusLabel!: HTMLSpanElement;
   private lastTimelineDuration = -1;
+  /** Set by demoUIBuild's pointer handlers — suppresses value writes mid-drag. */
+  timelineDragging = false;
 
   callbacks: DemoUICallbacks | null = null;
   private visible = false;
@@ -138,7 +140,7 @@ export class DemoUI {
       this.timeline.max = String(duration);
       this.lastTimelineDuration = duration;
     }
-    this.timeline.value = String(current);
+    if (!this.timelineDragging) this.timeline.value = String(current);
     this.timeLabel.textContent = `${current.toFixed(1)} / ${duration.toFixed(1)}s`;
   }
 
