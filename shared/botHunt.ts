@@ -333,14 +333,32 @@ export function pickFire(st: HuntState, dt: number, ctx: BrainCtx, pos: BotVec, 
   // Gravity-bent shells drop by the same amount — aim the arc's
   // drop back so mortars don't land short.
   const drop = ctx.weaponGravity?.(d) ? -0.5 * GRAVITY * flight * flight : 0;
-  return {
-    targetId: st.hunt.id,
-    aim: {
-      x: px + (botRand() - 0.5) * err,
-      y: py + drop + (botRand() - 0.5) * err * 0.5,
-      z: pz + (botRand() - 0.5) * err,
-    },
+  const aim = {
+    x: px + (botRand() - 0.5) * err,
+    y: py + drop + (botRand() - 0.5) * err * 0.5,
+    z: pz + (botRand() - 0.5) * err,
   };
+  // Muzzle clearance: LOS proves the EYE line is open, but the shell
+  // leaves from +1.4m and launches lower than the sightline — a lip
+  // right in front eats it ~3-5m out, which is exactly the self-splash
+  // the soak ledger showed (foe@120m, impact@4m). Only the first
+  // meters decide that: a bump farther downrange just costs a miss —
+  // and ballistic arcs clear lips a straight full-length ray would
+  // flag, so probing the whole ray strangled fire volume for nothing.
+  if (ctx.weaponSpeed?.(d)) {
+    const muzzle = { x: pos.x, y: pos.y + 1.4, z: pos.z };
+    const reach = Math.min(d, 12);
+    const nearAim = {
+      x: pos.x + ((aim.x - pos.x) / d) * reach,
+      y: pos.y + ((aim.y - pos.y) / d) * reach,
+      z: pos.z + ((aim.z - pos.z) / d) * reach,
+    };
+    if (!losClear(ctx, muzzle, nearAim)) {
+      st.fireT = 0.3;
+      return undefined;
+    }
+  }
+  return { targetId: st.hunt.id, aim };
 }
 
 /** Killzone-style position pick: score a ring of candidate spots by
