@@ -245,7 +245,9 @@ export class TeamBots {
     this.thinkAccum.set(bot.playerId, 0);
     const foes = this.senses.enemyList(bot);
     const shot = bot.think(acc, this.ctxFor(bot, foes, others, terrain));
-    if (this.over) { this.sheep.tick(bot, acc, terrain); return; }
+    // Standing down between rounds is correct play — metering it would
+    // charge every bot a guaranteed ~150 idle points per match end.
+    if (this.over) return;
     this.afterThink(bot, shot, acc, foes, terrain);
   }
 

@@ -140,7 +140,7 @@ export class SheepMeter {
     this.maxedSet.add(bot.playerId);
     const w = this.why.get(bot.playerId) ?? { idle: 0, ignore: 0, bleed: 0, cover: 0 };
     this.h.warn(
-      `bot ${bot.playerId} maxed sheep (why: idle=${w.idle.toFixed(1)} ignore=${w.ignore.toFixed(1)} bleed=${w.bleed.toFixed(1)} cover=${w.cover.toFixed(1)})`);
+      `bot ${bot.playerId} maxed sheep (why: idle=${w.idle.toFixed(1)} ignore=${w.ignore.toFixed(1)} bleed=${w.bleed.toFixed(1)} cover=${w.cover.toFixed(1)}) at (${bot.pos.x.toFixed(0)},${bot.pos.y.toFixed(0)},${bot.pos.z.toFixed(0)})`);
   }
 
   private coverageDebit(bot: SheepBody, hasDest: boolean): number {
