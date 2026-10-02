@@ -191,14 +191,14 @@ export class ServerBotSenses {
    *  flag dropped → touch it home; a teammate carrying → escort them;
    *  enemy flag reachable → go grab it. Defenders invert it: their flag
    *  recovery/intercept outranks pressing the enemy stand. */
-  flagGoal(p: { id: string; team?: string; position: Vec3 }): { pos: BotVec; infiltrating: boolean } | null {
+  flagGoal(p: { id: string; team?: string; position: Vec3 }): { pos: BotVec; infiltrating: boolean; running?: boolean } | null {
     const flags = this.room.flags;
     if (!flags || !p.team) return null;
     const me = p.team as TeamId;
     const enemy = flags.flags.get(me === 'alpha' ? 'bravo' : 'alpha');
     const own = flags.flags.get(me);
     if (!enemy || !own) return null;
-    if (enemy.carrier === p.id) return { pos: own.home, infiltrating: false };
+    if (enemy.carrier === p.id) return { pos: own.home, infiltrating: false, running: true };
 
     const enemyStand = enemy.state !== 'carried' ? enemy.pos : null;
     // One role table for both runtimes — shared/flagGoals.ts.
@@ -242,7 +242,7 @@ export class ServerBotSenses {
 
   /** The sensorium for one think tick — see file header for what's legal
    *  on each channel. */
-  build(id: string, p: { id: string; team?: string; position: Vec3; velocity: Vec3; health: number; maxHealth: number }, goal: { pos: BotVec; infiltrating: boolean } | null, now: number, skill?: BotSkill): BrainCtx {
+  build(id: string, p: { id: string; team?: string; position: Vec3; velocity: Vec3; health: number; maxHealth: number }, goal: { pos: BotVec; infiltrating: boolean; running?: boolean } | null, now: number, skill?: BotSkill): BrainCtx {
     // Competence-biased draw: the weapon pick and the aim error read
     // the same matrix, so a phenom both reaches for its gun and lands it.
     const bias = skill ? (t: number) => aimSkillFor(skill, t, 0) : undefined;
@@ -252,6 +252,7 @@ export class ServerBotSenses {
       enemies: this.enemiesOf(p),
       objective: goal?.pos ?? null,
       infiltrating: goal?.infiltrating ?? false,
+      running: goal?.running ?? false,
       // Team rooms drop nuggets on creature kills — bots farm them too,
       // which is what keeps a bot-filled match's scoreboard moving.
       pickup: this.room.pickups?.nearest(p.position) ?? undefined,

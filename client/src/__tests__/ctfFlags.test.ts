@@ -13,7 +13,7 @@ interface Rig {
   flags: CtfFlags;
   positions: Map<string, THREE.Vector3>;
   teams: Map<string, string>;
-  touch: [string, THREE.Vector3][];
+  touch: [string, THREE.Vector3, THREE.Vector3][];
   scores: { alpha: number; bravo: number };
   onCapture: ReturnType<typeof vi.fn>;
   onFeed: ReturnType<typeof vi.fn>;
@@ -23,7 +23,7 @@ interface Rig {
 const mkRig = (bots: GameBot[] = []): Rig => {
   const positions = new Map<string, THREE.Vector3>();
   const teams = new Map<string, string>();
-  const touch: [string, THREE.Vector3][] = [];
+  const touch: [string, THREE.Vector3, THREE.Vector3][] = [];
   const scores = { alpha: 0, bravo: 0 };
   const onCapture = vi.fn();
   const onFeed = vi.fn();
@@ -52,7 +52,7 @@ describe('CtfFlags', () => {
     const r = mkRig();
     r.teams.set('thief', 'alpha');
     r.positions.set('thief', new THREE.Vector3(BRAVO_HOME, 0, 0));
-    r.touch.push(['thief', r.positions.get('thief')!]);
+    r.touch.push(['thief', r.positions.get('thief')!, r.positions.get('thief')!]);
     r.flags.update(0.016);
     expect(r.events).toContain('taken:bravo');
     expect(r.onFeed).toHaveBeenCalledWith(expect.stringContaining('took'));
@@ -63,7 +63,7 @@ describe('CtfFlags', () => {
     r.teams.set('thief', 'alpha');
     const thiefPos = new THREE.Vector3(BRAVO_HOME, 0, 0);
     r.positions.set('thief', thiefPos);
-    r.touch.push(['thief', thiefPos]);
+    r.touch.push(['thief', thiefPos, thiefPos]);
     r.flags.update(0.016); // grab
     thiefPos.set(ALPHA_HOME, 0, 0); // run home — alpha flag sits home
     r.flags.update(0.016);
@@ -80,7 +80,7 @@ describe('CtfFlags', () => {
     const counterPos = new THREE.Vector3(ALPHA_HOME, 0, 0);
     r.positions.set('thief', thiefPos);
     r.positions.set('counterThief', counterPos);
-    r.touch.push(['thief', thiefPos], ['counterThief', counterPos]);
+    r.touch.push(['thief', thiefPos, thiefPos], ['counterThief', counterPos, counterPos]);
     r.flags.update(0.016); // both grab
     thiefPos.set(ALPHA_HOME, 0, 0); // alpha base reached but alpha flag is carried
     counterPos.set(BRAVO_HOME, 0, 0); // also at bravo base — standoff, first-come stays carried
@@ -96,7 +96,7 @@ describe('CtfFlags', () => {
     r.teams.set('b2', 'bravo');
     const b2pos = new THREE.Vector3(ALPHA_HOME, 0, 0);
     r.positions.set('b2', b2pos);
-    r.touch.push(['b2', b2pos]);
+    r.touch.push(['b2', b2pos, b2pos]);
     r.flags.update(0.016); // grab
     b2pos.set(0, 0, 0);
     r.flags.dropCarried('b2', b2pos);
@@ -104,12 +104,12 @@ describe('CtfFlags', () => {
     // Alpha teammate touches → returns instantly.
     r.teams.set('b1', 'alpha');
     r.touch.length = 0; // the thief stepped away
-    r.touch.push(['b1', new THREE.Vector3(0, 0, 0)]);
+    r.touch.push(['b1', new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, 0)]);
     r.flags.update(0.016);
     expect(r.events).toContain('returned:alpha');
     // And with nobody touching, a dropped flag snaps home at the timer.
     r.positions.set('b2', new THREE.Vector3(ALPHA_HOME, 0, 0));
-    r.touch.push(['b2', r.positions.get('b2')!]);
+    r.touch.push(['b2', r.positions.get('b2')!, r.positions.get('b2')!]);
     r.flags.update(0.016); // grab again
     r.flags.dropCarried('b2', new THREE.Vector3(0, 0, 0));
     r.touch.length = 0;
@@ -125,7 +125,7 @@ describe('CtfFlags', () => {
     r.teams.set('b2', 'bravo');
     const b2pos = new THREE.Vector3(ALPHA_HOME, 0, 0);
     r.positions.set('b2', b2pos);
-    r.touch.push(['b2', b2pos]);
+    r.touch.push(['b2', b2pos, b2pos]);
     r.flags.update(0.016);
     expect(bots[0]!.carryingFlag).toBe(true);
     const info = r.flags.objectiveInfoFor(bots[0]!)!;

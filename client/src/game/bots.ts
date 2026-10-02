@@ -339,6 +339,7 @@ export class TeamBots {
     ctx.nugget = this.spec.flags ? null : this.hooks.nearestNugget(bot.position, 60);
     ctx.objective = info?.pos ?? null;
     ctx.infiltrating = info?.infiltrating ?? false;
+    ctx.running = info?.running ?? false;
     ctx.thief = info?.thief ? { id: info.thief.id, pos: info.thief.pos, vel: info.thief.vel, alive: true } : null;
     // Nuggets rooms farm wildlife for the objective — the server
     // flips the same flag only in economy modes.

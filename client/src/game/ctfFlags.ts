@@ -22,8 +22,9 @@ export interface FlagCtx {
   teamOf(id: string): string | undefined;
   /** Per-touch grab radius — the reach perk widens it (flag touch too). */
   pickupRadiusOf(id: string): number;
-  /** Living toucher candidates: [id, pos] pairs incl. the local player. */
-  touchers(): [string, THREE.Vector3][];
+  /** Living toucher candidates: [id, pos, prevPos] triples — prevPos is
+   *  last frame's spot so a fast graze sweeps a capsule, not a sphere. */
+  touchers(): [string, THREE.Vector3, THREE.Vector3][];
   bots: GameBot[];
   scores: TeamScores;
   /** Capture landed — the referee pushes the HUD score. */
@@ -132,12 +133,13 @@ export class CtfFlags {
    *  When the role's pick IS the thief, the carrier rides along as a
    *  beacon-marked enemy so the brain engages him, not just the spot. */
   objectiveInfoFor(bot: GameBot): { pos: THREE.Vector3; infiltrating: boolean;
+      running?: boolean;
       thief?: { id: string; pos: THREE.Vector3; vel: THREE.Vector3 } } | null {
     const enemyTeam: TeamId = bot.team === 'alpha' ? 'bravo' : 'alpha';
     const enemy = this.flags.get(enemyTeam);
     const own = this.flags.get(bot.team as TeamId);
     if (!enemy || !own) return null;
-    if (bot.carryingFlag) return { pos: own.home.clone(), infiltrating: false };
+    if (bot.carryingFlag) return { pos: own.home.clone(), infiltrating: false, running: true };
     const role = this.roles.get(bot.playerId) ?? 'offense';
     const thief = own.state === 'carried' && own.carrier ? this.ctx.carrierPos(own.carrier) : null;
     const escortPos = enemy.carrier ? this.ctx.carrierPos(enemy.carrier) : null;
@@ -229,9 +231,19 @@ export class CtfFlags {
 
   private tickTouch(team: TeamId, f: Flag): void {
     const ctx = this.ctx;
-    for (const [id, tp] of ctx.touchers()) {
+    for (const [id, tp, pp] of ctx.touchers()) {
       const tTeam = ctx.teamOf(id);
-      if (tp.distanceTo(f.pos) > this.ctx.pickupRadiusOf(id)) continue;
+      // Swept grab: the reach is tested against the whole frame's travel
+      // (prev→cur), so a 60m/s fly-by can't tunnel between samples.
+      const segLen2 = pp.distanceToSquared(tp);
+      const t = segLen2 > 0
+        ? Math.min(1, Math.max(0,
+            ((f.pos.x - pp.x) * (tp.x - pp.x) + (f.pos.y - pp.y) * (tp.y - pp.y) + (f.pos.z - pp.z) * (tp.z - pp.z)) / segLen2))
+        : 0;
+      const dx = pp.x + (tp.x - pp.x) * t - f.pos.x;
+      const dy = pp.y + (tp.y - pp.y) * t - f.pos.y;
+      const dz = pp.z + (tp.z - pp.z) * t - f.pos.z;
+      if (dx * dx + dy * dy + dz * dz > this.ctx.pickupRadiusOf(id) ** 2) continue;
       if (f.state === 'dropped' && tTeam === team) {
         f.state = 'home'; f.pos.copy(f.home); // returned on touch
         ctx.onFlagEvent?.('returned', team, f.pos);

@@ -54,6 +54,10 @@ export interface BrainCtx {
   enemies: BotEnemy[];
   /** Objective anchor (CTF flag/base) — outranks pickup and wander. */
   objective?: BotVec | null;
+  /** This bot is carrying the objective (flag carrier running home):
+   *  the route rules the feet — hunt press/orbit yields to the line,
+   *  while fire stays live for opportunistic shots on the way. */
+  running?: boolean;
   /** The objective is an enemy-held position this bot is pressing —
    *  CTF offense heading for the enemy stand. Lets the status sense
    *  read the approach as an infiltration (cloak) rather than a roam. */

@@ -22,6 +22,11 @@ export function pickDest(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, fe
       const l = Math.hypot(fx, fz) || 1;
       return { x: pos.x + (fx / l) * FLINCH_DIST, y: pos.y, z: pos.z + (fz / l) * FLINCH_DIST };
     }
+    // Carrying the objective: the run is the job — engaging whoever the
+    // hunt found converts the carrier into a duelist mid-route (orbit
+    // fights won fights but lost flags). fire stays live elsewhere in
+    // the pipeline; only the feet commit to the line.
+    if (ctx.running && ctx.objective) return { ...ctx.objective };
     if (!b.h.hunt) {
       // A builder with hands free welds the stand's wounded gear before
       // wandering on — same "nobody close enough to interrupt" gate the

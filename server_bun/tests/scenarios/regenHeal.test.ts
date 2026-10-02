@@ -13,7 +13,7 @@ describe('scenario: server-owned heal channels', () => {
     const room = mkRoom({ bots: 1 });
     const p = firstPlayer(room);
     pin(room, p.id, { x: 0, y: 31, z: 0 });
-    p.health = 50;
+    p.health = Math.max(1, p.maxHealth - 20); // classes vary the pool — just leave heal room
     p.status = STATUS.MEND;
     const heal = healPerTick(p, Date.now());
     expect(heal).toBeCloseTo(12 / CONFIG.tickRate, 8);

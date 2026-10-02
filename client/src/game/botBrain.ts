@@ -183,6 +183,8 @@ export class GameBot extends RemotePlayer {
     sounds?: { x: number; y: number; z: number }[];
     /** Inbound shells — the dodge sense. */
     threats?: { x: number; y: number; z: number }[];
+    /** Carrying the objective — the route rules the feet. */
+    running?: boolean;
     /** Rushing the enemy stand — cloak candidates cloak up. */
     infiltrating?: boolean;
     /** Enemy carrying OUR flag — beacon-marked, engages without LOS. */
@@ -229,6 +231,7 @@ export class GameBot extends RemotePlayer {
       sounds: ctx.sounds,
       threats: ctx.threats,
       infiltrating: ctx.infiltrating,
+      running: ctx.running,
       thief: ctx.thief ?? null,
       huntCreatures: ctx.huntCreatures,
       repair: ctx.repair ?? null,

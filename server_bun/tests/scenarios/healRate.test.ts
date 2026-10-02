@@ -9,7 +9,8 @@ describe('scenario: heal rate bound', () => {
     const room = mkRoom({ bots: 1 }); // no mode → non-team, free-form heal
     const p = firstPlayer(room);
     p.protectedUntil = 0; // spawn protection eats the staged damage
-    room.players.applyDamage(p.id, 80); // leave room for three full heals
+    // Armor class sizes the pool — stay inside a light's 50hp too.
+    room.players.applyDamage(p.id, Math.min(80, p.maxHealth - 10));
     const before = p.health;
     const heal = () => room.messages.handleMessage(p.id, { type: 'heal', amount: 25 });
     heal(); heal(); heal();

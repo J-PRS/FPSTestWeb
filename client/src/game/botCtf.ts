@@ -12,7 +12,7 @@ import type { GameBot } from './botBrain.js';
 import * as sfx from '../core/sfx.js';
 
 const _flagBurst = new THREE.Vector3();
-const _touchers: [string, THREE.Vector3][] = [];
+const _touchers: [string, THREE.Vector3, THREE.Vector3][] = [];
 
 export interface CtfBridgeDeps {
   lazyTerrain(): import('../world/terrain.js').Terrain;
@@ -91,11 +91,26 @@ export class CtfBridge {
     return rp && !rp.isDead ? rp.pos : null;
   }
 
-  private touchers(bots: GameBot[]): [string, THREE.Vector3][] {
+  // Frame-ago toucher positions — the sweep segment's tail. Entries are
+  // reused vectors (the flags module reads them synchronously each tick).
+  private lastTouchPos = new Map<string, THREE.Vector3>();
+
+  private touchers(bots: GameBot[]): [string, THREE.Vector3, THREE.Vector3][] {
     const player = this.deps.lazyPlayer();
+    // Tail semantics: read prev BEFORE overwriting it with the new pos.
     _touchers.length = 0;
-    if (!player.isDead) _touchers.push(['local', player.pos]);
-    for (const b of bots) if (!b.isDead) _touchers.push([b.playerId, b.position]);
+    if (!player.isDead) {
+      const prev = this.lastTouchPos.get('local') ?? player.pos;
+      this.lastTouchPos.set('local', (this.lastTouchPos.get('local') ?? new THREE.Vector3()).copy(player.pos));
+      _touchers.push(['local', player.pos, prev]);
+    }
+    for (const b of bots) {
+      if (b.isDead) continue;
+      let prev = this.lastTouchPos.get(b.playerId);
+      if (!prev) this.lastTouchPos.set(b.playerId, (prev = b.position.clone()));
+      _touchers.push([b.playerId, b.position, prev]);
+      prev.copy(b.position);
+    }
     return _touchers;
   }
 }

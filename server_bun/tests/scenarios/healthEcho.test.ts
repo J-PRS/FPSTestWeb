@@ -16,15 +16,19 @@ describe('yourHealth echo', () => {
     const room = mkRoom({ bots: 1 });
     const id = 'BOT-VEKTOR-01';
     pin(room, id, { x: 0, y: 60, z: 0 });
+    // The brain rewrites status on its own cadence — quiet it or the
+    // manually-armed MEND flag is a think-tick race.
+    room.bots.quiet.add(id);
     const p = room.players.getPlayer(id)!;
-    p.health = 50;
+    p.health = Math.max(1, p.maxHealth - 20); // class-sized pool — leave heal room
+    const hurtHp = p.health;
     p.status |= STATUS.MEND;
     const sent: ServerMessage[] = [];
     drain(room, sent, id);
     const loop = new TickLoop(new Map([['t', room]]), { tickLagMsMax: 0, tickLagMsSum: 0, tickLagSamples: 0, lastTickAt: 0 }, () => {});
     loop.tickRoomNow(room);
     expect(sent.filter((m) => m.type === 'yourHealth').length).toBe(1);
-    expect(p.health).toBeGreaterThan(50);
+    expect(p.health).toBeGreaterThan(hurtHp);
     // Throttle: a tick 100ms later must NOT echo again; 600ms must.
     loop.tickRoomNow(room, Date.now() + 100);
     expect(sent.filter((m) => m.type === 'yourHealth').length).toBe(1);
