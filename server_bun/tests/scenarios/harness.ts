@@ -25,7 +25,11 @@ export function mkRoom(spec: Partial<MapSpec>, mode = '', seed = 1337, moveAutho
   // builder rolls) draw from this stream at `new Room` time, so injecting
   // after would leave them on the previous room's leftovers.
   botRng(lcg(seed + 3));
-  const room = new Room('t', field, mode, resolveMapSpec(spec), moveAuthority);
+  // Staged arenas stay sterile unless the test asks for wildlife: a
+  // stepping BallSim fills the field near every player, and lunging
+  // balls pop on pinned bots — leaking damage into unrelated scenarios.
+  const room = new Room('t', field, mode,
+    resolveMapSpec({ balls: { base: 0, perPlayer: 0, max: 0 }, ...spec }), moveAuthority);
   // BallSim self-drives on a wall-clock setInterval like CreatureSim —
   // stop it so step() owns the cadence deterministically.
   room.ballSim.stop();

@@ -7,9 +7,24 @@ import type { Vec3 } from '../../src/types.ts';
 // Bots fire REAL shells through RoomProjectiles — this suite pins the
 // projectile→creature sweep and splash, and the honest miss.
 type Sim = { spawnBall(v: number, near?: Vec3, pos?: Vec3): { id: number };
-  balls: Map<number, { health: number }> };
-function spawnAt(room: ReturnType<typeof mkRoom>, pos: Vec3): number {
-  return (room.ballSim as unknown as Sim).spawnBall(0, undefined, pos).id;
+  balls: Map<number, { health: number; tgtValid?: boolean; tx?: number; ty?: number; tz?: number; targetId?: string | null }> };
+function spawnAt(room: ReturnType<typeof mkRoom>, pos: Vec3, parkFar = false): number {
+  const sim = room.ballSim as unknown as Sim;
+  const id = sim.spawnBall(0, undefined, pos).id;
+  // BallSim now steps in scenarios — a free ball retargets the pinned
+  // bot and suicides on contact, and a ball committed to its own spot
+  // pops on arrival. Commit it somewhere out of the way so the test
+  // measures shell geometry, not lunge/arrival behavior. parkFar sends
+  // it off-arena entirely (whiff test needs it alive at the end).
+  const b = sim.balls.get(id);
+  if (b) {
+    b.tgtValid = true;
+    b.tx = parkFar ? pos.x + 400 : pos.x;
+    b.ty = pos.y;
+    b.tz = parkFar ? pos.z + 400 : pos.z;
+    b.targetId = null;
+  }
+  return id;
 }
 function ballHp(room: ReturnType<typeof mkRoom>, id: number): number {
   return (room.ballSim as unknown as Sim).balls.get(id)?.health ?? -1;
@@ -39,7 +54,7 @@ describe('scenario: bot shells hit creatures like player shots', () => {
     const room = mkRoom({ bots: 1 }, 'tdm');
     const b = bot(room);
     pin(room, b.id, { x: 0, y: 31, z: 0 });
-    const aim = spawnAt(room, { x: 20, y: 31, z: 30 }); // 30m off-axis
+    const aim = spawnAt(room, { x: 20, y: 31, z: 30 }, true); // 30m off-axis, parked far
     const hp0 = ballHp(room, aim);
     room.projectiles.spawn(b.id, WeaponType.BoltLauncher,
       { x: 0, y: 31.4, z: 0 }, { x: 1, y: 0, z: 0 }, { x: 0, y: 0, z: 0 });
