@@ -56,6 +56,12 @@ export class BotLines {
     const cone = CONE * (ctx.runner ? 2.0 : 1);
     const dropW = ctx.runner ? 2.0 : 1.4;
     const straightW = ctx.runner ? 4 : 8;
+    // A runner's real currency is mechanical energy — ½v²+g·h totalled,
+    // not the momentary speed. Landings priced above the bot's energy
+    // budget can't be reached without spending on jets or slope work,
+    // so lines that keep E banked score ahead of raw drop-chasing.
+    const vNow = ctx.runner && ctx.vel ? Math.hypot(ctx.vel.x, ctx.vel.y, ctx.vel.z) : 0;
+    const eNow = 0.5 * vNow * vNow + 28 * pos.y;
 
     let best: BotVec | null = null, bestScore = 0;
     for (let r = 0; r < RAYS; r++) {
@@ -87,10 +93,17 @@ export class BotLines {
         const wx = pos.x + dx * d, wz = pos.z + dz * d;
         const gained = gd - Math.hypot(dest.x - wx, dest.z - wz);
         const drop = g0 - drops[p]!;
+        // Energy-conserving endpoint: the landing's E is the launch E
+        // shifted between kinetic and potential — a landing priced
+        // above what E affords reads as spent, keeping the run inside
+        // its real budget instead of over-climbing.
+        const vEndSq = vNow * vNow + 56 * (pos.y - drops[p]!);
+        const eScore = ctx.runner ? (28 * drops[p]! + 0.5 * Math.max(0, vEndSq) - eNow) * 0.4 : 0;
         const score =
           gained * 0.9 +                      // progress toward the goal
           drop * dropW +                      // downhill buys ski speed
           Math.min(0, drop + 4) * 1.8 +       // climbs past ~4m get taxed hard
+          eScore +                            // banked E beats burning it (runners)
           (p === PTS - 1 ? 3 : 0) -           // prefer committing long when tied
           earlyClimb * 26 -                   // a climb in the first stretch kills the run
           Math.abs(a) * straightW;            // straighter lines beat carving sideways
