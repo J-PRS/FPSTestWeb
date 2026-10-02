@@ -1,0 +1,1308 @@
+{
+  "mode": "ctf",
+  "modes": [
+    "ctf"
+  ],
+  "bots": 8,
+  "botFill": 10,
+  "bases": {
+    "alpha": {
+      "x": 236.85,
+      "y": 0,
+      "z": -127.11
+    },
+    "bravo": {
+      "x": -423.57,
+      "y": 0,
+      "z": 281.67
+    }
+  },
+  "spawns": [
+    {
+      "x": 239.4,
+      "y": 0,
+      "z": -123.4
+    },
+    {
+      "x": -188.6,
+      "y": 0,
+      "z": -39.0
+    },
+    {
+      "x": -422.2,
+      "y": 0,
+      "z": 280.6
+    },
+    {
+      "x": 46.0,
+      "y": 0,
+      "z": 210.2
+    }
+  ],
+  "terrain": "katabatic.bin",
+  "terrainTex": "t2/katabatic/albedo.png",
+  "sky": "t2/katabatic/sky",
+  "_t2": "ported from Tribes 2 'Katabatic' \u2014 relief 225m -> 125m",
+  "_assets": [
+    {
+      "name": "Team1GeneratorLarge1",
+      "datablock": "GeneratorLarge",
+      "file": null,
+      "team": "alpha",
+      "pos": {
+        "x": 252.89,
+        "y": 5.02,
+        "z": -144.64
+      },
+      "rot": [
+        0.0,
+        0.0,
+        1.0,
+        90.0
+      ]
+    },
+    {
+      "name": "Team1GeneratorLarge2",
+      "datablock": "GeneratorLarge",
+      "file": null,
+      "team": "alpha",
+      "pos": {
+        "x": 257.71,
+        "y": 7.19,
+        "z": -144.65
+      },
+      "rot": [
+        0.0,
+        0.0,
+        -1.0,
+        90.0
+      ]
+    },
+    {
+      "name": "",
+      "datablock": "ExteriorFlagStand",
+      "file": null,
+      "team": "alpha",
+      "pos": {
+        "x": 236.85,
+        "y": 22.9,
+        "z": -127.11
+      },
+      "rot": [
+        0.0,
+        0.0,
+        -1.0,
+        22.3453
+      ]
+    },
+    {
+      "name": "Team1TurretBaseLarge1",
+      "datablock": "TurretBaseLarge",
+      "file": null,
+      "team": "alpha",
+      "pos": {
+        "x": 254.94,
+        "y": 27.05,
+        "z": -130.93
+      },
+      "rot": [
+        0.0,
+        0.0,
+        -1.0,
+        90.0
+      ]
+    },
+    {
+      "name": "Team1TurretBaseLarge2",
+      "datablock": "TurretBaseLarge",
+      "file": null,
+      "team": "alpha",
+      "pos": {
+        "x": 131.5,
+        "y": 30.07,
+        "z": -74.34
+      },
+      "rot": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "",
+      "datablock": "StationVehiclePad",
+      "file": null,
+      "team": "alpha",
+      "pos": {
+        "x": 187.05,
+        "y": 16.42,
+        "z": -181.66
+      },
+      "rot": [
+        0.0,
+        0.0,
+        1.0,
+        149.542
+      ]
+    },
+    {
+      "name": "Team1StationInventory1",
+      "datablock": "StationInventory",
+      "file": null,
+      "team": "alpha",
+      "pos": {
+        "x": 210.92,
+        "y": 20.07,
+        "z": -123.74
+      },
+      "rot": [
+        0.0,
+        0.0,
+        -1.0,
+        90.0
+      ]
+    },
+    {
+      "name": "Team1StationInventory2",
+      "datablock": "StationInventory",
+      "file": null,
+      "team": "alpha",
+      "pos": {
+        "x": 246.3,
+        "y": 6.69,
+        "z": -165.38
+      },
+      "rot": [
+        0.0,
+        0.0,
+        1.0,
+        89.9544
+      ]
+    },
+    {
+      "name": "Team1StationInventory3",
+      "datablock": "StationInventory",
+      "file": null,
+      "team": "alpha",
+      "pos": {
+        "x": 251.5,
+        "y": 7.97,
+        "z": -165.28
+      },
+      "rot": [
+        0.0,
+        0.0,
+        -1.0,
+        90.5273
+      ]
+    },
+    {
+      "name": "Team1StationInventory4",
+      "datablock": "StationInventory",
+      "file": null,
+      "team": "alpha",
+      "pos": {
+        "x": 214.84,
+        "y": 10.84,
+        "z": -132.93
+      },
+      "rot": [
+        0.0,
+        0.0,
+        -1.0,
+        89.9544
+      ]
+    },
+    {
+      "name": "Team1StationInventory5",
+      "datablock": "StationInventory",
+      "file": null,
+      "team": "alpha",
+      "pos": {
+        "x": 259.05,
+        "y": 9.38,
+        "z": -121.19
+      },
+      "rot": [
+        0.0,
+        0.0,
+        1.0,
+        90.5273
+      ]
+    },
+    {
+      "name": "Team1StationInventory6",
+      "datablock": "StationInventory",
+      "file": null,
+      "team": "alpha",
+      "pos": {
+        "x": 261.88,
+        "y": 15.69,
+        "z": -120.5
+      },
+      "rot": [
+        0.0,
+        0.0,
+        1.0,
+        4.0109
+      ]
+    },
+    {
+      "name": "",
+      "datablock": "Banner_Strength",
+      "file": null,
+      "team": "alpha",
+      "pos": {
+        "x": 241.73,
+        "y": 11.64,
+        "z": -130.6
+      },
+      "rot": [
+        0.0,
+        0.0,
+        1.0,
+        180.0
+      ]
+    },
+    {
+      "name": "",
+      "datablock": "Banner_Strength",
+      "file": null,
+      "team": "alpha",
+      "pos": {
+        "x": 232.21,
+        "y": 13.15,
+        "z": -130.6
+      },
+      "rot": [
+        0.0,
+        0.0,
+        1.0,
+        180.0
+      ]
+    },
+    {
+      "name": "",
+      "datablock": "RepairPack",
+      "file": null,
+      "team": "alpha",
+      "pos": {
+        "x": 116.32,
+        "y": 33.16,
+        "z": -201.16
+      },
+      "rot": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "Team1StationInventory7",
+      "datablock": "StationInventory",
+      "file": null,
+      "team": "alpha",
+      "pos": {
+        "x": 114.85,
+        "y": 31.07,
+        "z": -197.44
+      },
+      "rot": [
+        -0.0,
+        0.0,
+        -1.0,
+        21.1994
+      ]
+    },
+    {
+      "name": "Team1SentryTurret1",
+      "datablock": "SentryTurret",
+      "file": null,
+      "team": "alpha",
+      "pos": {
+        "x": -188.57,
+        "y": 90.8,
+        "z": -38.99
+      },
+      "rot": [
+        0.91544,
+        0.40246,
+        -0.0,
+        180.0
+      ]
+    },
+    {
+      "name": "Team1StationInventory8",
+      "datablock": "StationInventory",
+      "file": null,
+      "team": "alpha",
+      "pos": {
+        "x": -194.13,
+        "y": 90.57,
+        "z": -39.19
+      },
+      "rot": [
+        0.0,
+        0.0,
+        -1.0,
+        92.4642
+      ]
+    },
+    {
+      "name": "Team1StationInventory9",
+      "datablock": "StationInventory",
+      "file": null,
+      "team": "alpha",
+      "pos": {
+        "x": -183.03,
+        "y": 90.52,
+        "z": -38.74
+      },
+      "rot": [
+        0.0,
+        0.0,
+        1.0,
+        87.5358
+      ]
+    },
+    {
+      "name": "Team1SensorLargePulse1",
+      "datablock": "SensorLargePulse",
+      "file": null,
+      "team": "alpha",
+      "pos": {
+        "x": -188.62,
+        "y": 106.92,
+        "z": -38.98
+      },
+      "rot": [
+        -0.0,
+        0.0,
+        -1.0,
+        47.4646
+      ]
+    },
+    {
+      "name": "",
+      "datablock": "CloakingPack",
+      "file": null,
+      "team": "alpha",
+      "pos": {
+        "x": -207.49,
+        "y": 110.27,
+        "z": -21.67
+      },
+      "rot": [
+        0.0,
+        0.0,
+        1.0,
+        132.536
+      ]
+    },
+    {
+      "name": "",
+      "datablock": "ShieldPack",
+      "file": null,
+      "team": "alpha",
+      "pos": {
+        "x": -169.66,
+        "y": 94.97,
+        "z": -56.43
+      },
+      "rot": [
+        0.0,
+        0.0,
+        1.0,
+        132.536
+      ]
+    },
+    {
+      "name": "",
+      "datablock": "SniperRifle",
+      "file": null,
+      "team": "alpha",
+      "pos": {
+        "x": -167.4,
+        "y": 103.19,
+        "z": -22.09
+      },
+      "rot": [
+        0.0,
+        0.0,
+        1.0,
+        132.536
+      ]
+    },
+    {
+      "name": "",
+      "datablock": "EnergyPack",
+      "file": null,
+      "team": "alpha",
+      "pos": {
+        "x": -170.27,
+        "y": 108.02,
+        "z": -19.01
+      },
+      "rot": [
+        0.0,
+        0.0,
+        1.0,
+        132.536
+      ]
+    },
+    {
+      "name": "",
+      "datablock": "RepairPack",
+      "file": null,
+      "team": "alpha",
+      "pos": {
+        "x": -188.67,
+        "y": 96.56,
+        "z": -33.12
+      },
+      "rot": [
+        0.0,
+        0.0,
+        1.0,
+        132.536
+      ]
+    },
+    {
+      "name": "",
+      "datablock": "PlasmaAmmo",
+      "file": null,
+      "team": "alpha",
+      "pos": {
+        "x": -186.14,
+        "y": 98.38,
+        "z": -35.35
+      },
+      "rot": [
+        0.0,
+        0.0,
+        1.0,
+        132.536
+      ]
+    },
+    {
+      "name": "",
+      "datablock": "PlasmaAmmo",
+      "file": null,
+      "team": "alpha",
+      "pos": {
+        "x": -185.14,
+        "y": 97.46,
+        "z": -36.26
+      },
+      "rot": [
+        0.0,
+        0.0,
+        1.0,
+        132.536
+      ]
+    },
+    {
+      "name": "",
+      "datablock": "PlasmaAmmo",
+      "file": null,
+      "team": "alpha",
+      "pos": {
+        "x": -186.09,
+        "y": 97.45,
+        "z": -36.22
+      },
+      "rot": [
+        0.0,
+        0.0,
+        1.0,
+        132.536
+      ]
+    },
+    {
+      "name": "",
+      "datablock": "Plasma",
+      "file": null,
+      "team": "alpha",
+      "pos": {
+        "x": -191.7,
+        "y": 92.36,
+        "z": -42.29
+      },
+      "rot": [
+        0.0,
+        0.0,
+        1.0,
+        42.5355
+      ]
+    },
+    {
+      "name": "",
+      "datablock": "RepairPatch",
+      "file": null,
+      "team": "alpha",
+      "pos": {
+        "x": -188.82,
+        "y": 100.01,
+        "z": -33.49
+      },
+      "rot": [
+        0.0,
+        0.0,
+        1.0,
+        132.536
+      ]
+    },
+    {
+      "name": "",
+      "datablock": "RepairPatch",
+      "file": null,
+      "team": "alpha",
+      "pos": {
+        "x": -194.34,
+        "y": 94.77,
+        "z": -39.26
+      },
+      "rot": [
+        0.0,
+        0.0,
+        1.0,
+        132.536
+      ]
+    },
+    {
+      "name": "",
+      "datablock": "RepairPatch",
+      "file": null,
+      "team": "alpha",
+      "pos": {
+        "x": -188.46,
+        "y": 89.68,
+        "z": -44.63
+      },
+      "rot": [
+        0.0,
+        0.0,
+        1.0,
+        132.536
+      ]
+    },
+    {
+      "name": "",
+      "datablock": "RepairPatch",
+      "file": null,
+      "team": "alpha",
+      "pos": {
+        "x": -182.81,
+        "y": 94.64,
+        "z": -38.85
+      },
+      "rot": [
+        0.0,
+        0.0,
+        1.0,
+        132.536
+      ]
+    },
+    {
+      "name": "Team2GeneratorLarge1",
+      "datablock": "GeneratorLarge",
+      "file": null,
+      "team": "bravo",
+      "pos": {
+        "x": -441.15,
+        "y": 36.8,
+        "z": 260.78
+      },
+      "rot": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "Team2GeneratorLarge2",
+      "datablock": "GeneratorLarge",
+      "file": null,
+      "team": "bravo",
+      "pos": {
+        "x": -441.12,
+        "y": 29.67,
+        "z": 265.52
+      },
+      "rot": [
+        0.0,
+        0.0,
+        1.0,
+        180.482
+      ]
+    },
+    {
+      "name": "Team2TurretBaseLarge1",
+      "datablock": "TurretBaseLarge",
+      "file": null,
+      "team": "bravo",
+      "pos": {
+        "x": -332.0,
+        "y": 74.25,
+        "z": 260.68
+      },
+      "rot": [
+        0.0,
+        0.0,
+        1.0,
+        90.0
+      ]
+    },
+    {
+      "name": "Team2TurretBaseLarge2",
+      "datablock": "TurretBaseLarge",
+      "file": null,
+      "team": "bravo",
+      "pos": {
+        "x": -427.14,
+        "y": 65.46,
+        "z": 263.21
+      },
+      "rot": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "",
+      "datablock": "StationVehiclePad",
+      "file": null,
+      "team": "bravo",
+      "pos": {
+        "x": -446.93,
+        "y": 32.9,
+        "z": 396.49
+      },
+      "rot": [
+        -0.0,
+        0.0,
+        -1.0,
+        63.5982
+      ]
+    },
+    {
+      "name": "Team2StationInventory1",
+      "datablock": "StationInventory",
+      "file": null,
+      "team": "bravo",
+      "pos": {
+        "x": -417.0,
+        "y": 61.76,
+        "z": 256.6
+      },
+      "rot": [
+        0.0,
+        0.0,
+        1.0,
+        93.9653
+      ]
+    },
+    {
+      "name": "Team2StationInventory2",
+      "datablock": "StationInventory",
+      "file": null,
+      "team": "bravo",
+      "pos": {
+        "x": -417.69,
+        "y": 49.14,
+        "z": 259.43
+      },
+      "rot": [
+        0.0,
+        0.0,
+        1.0,
+        180.482
+      ]
+    },
+    {
+      "name": "Team2StationInventory3",
+      "datablock": "StationInventory",
+      "file": null,
+      "team": "bravo",
+      "pos": {
+        "x": -429.46,
+        "y": 32.92,
+        "z": 303.63
+      },
+      "rot": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "Team2StationInventory4",
+      "datablock": "StationInventory",
+      "file": null,
+      "team": "bravo",
+      "pos": {
+        "x": -461.79,
+        "y": 26.11,
+        "z": 266.95
+      },
+      "rot": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "Team2StationInventory5",
+      "datablock": "StationInventory",
+      "file": null,
+      "team": "bravo",
+      "pos": {
+        "x": -461.89,
+        "y": 25.8,
+        "z": 272.14
+      },
+      "rot": [
+        0.0,
+        0.0,
+        1.0,
+        179.909
+      ]
+    },
+    {
+      "name": "Team2StationInventory6",
+      "datablock": "StationInventory",
+      "file": null,
+      "team": "bravo",
+      "pos": {
+        "x": -420.29,
+        "y": 40.38,
+        "z": 307.64
+      },
+      "rot": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "",
+      "datablock": "ExteriorFlagStand",
+      "file": null,
+      "team": "bravo",
+      "pos": {
+        "x": -423.57,
+        "y": 48.77,
+        "z": 281.67
+      },
+      "rot": [
+        0.0,
+        0.0,
+        -1.0,
+        20.6264
+      ]
+    },
+    {
+      "name": "",
+      "datablock": "Banner_Strength",
+      "file": null,
+      "team": "bravo",
+      "pos": {
+        "x": -427.13,
+        "y": 38.62,
+        "z": 276.74
+      },
+      "rot": [
+        0.0,
+        0.0,
+        -1.0,
+        90.0
+      ]
+    },
+    {
+      "name": "",
+      "datablock": "Banner_Strength",
+      "file": null,
+      "team": "bravo",
+      "pos": {
+        "x": -427.13,
+        "y": 36.7,
+        "z": 286.26
+      },
+      "rot": [
+        0.0,
+        0.0,
+        -1.0,
+        90.0
+      ]
+    },
+    {
+      "name": "",
+      "datablock": "RepairPack",
+      "file": null,
+      "team": "bravo",
+      "pos": {
+        "x": -363.25,
+        "y": 86.59,
+        "z": 429.28
+      },
+      "rot": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "Team2StationInventory7",
+      "datablock": "StationInventory",
+      "file": null,
+      "team": "bravo",
+      "pos": {
+        "x": -359.99,
+        "y": 94.53,
+        "z": 427.06
+      },
+      "rot": [
+        0.0,
+        0.0,
+        1.0,
+        123.186
+      ]
+    },
+    {
+      "name": "Team2SensorLargePulse1",
+      "datablock": "SensorLargePulse",
+      "file": null,
+      "team": "bravo",
+      "pos": {
+        "x": 45.99,
+        "y": 57.67,
+        "z": 210.2
+      },
+      "rot": [
+        0.0,
+        0.0,
+        1.0,
+        135.309
+      ]
+    },
+    {
+      "name": "Team2StationInventory8",
+      "datablock": "StationInventory",
+      "file": null,
+      "team": "bravo",
+      "pos": {
+        "x": 40.39,
+        "y": 42.1,
+        "z": 210.24
+      },
+      "rot": [
+        -0.0,
+        0.0,
+        -1.0,
+        89.6907
+      ]
+    },
+    {
+      "name": "Team2StationInventory9",
+      "datablock": "StationInventory",
+      "file": null,
+      "team": "bravo",
+      "pos": {
+        "x": 51.5,
+        "y": 40.09,
+        "z": 210.14
+      },
+      "rot": [
+        0.0,
+        0.0,
+        1.0,
+        90.3093
+      ]
+    },
+    {
+      "name": "Team2SentryTurret1",
+      "datablock": "SentryTurret",
+      "file": null,
+      "team": "bravo",
+      "pos": {
+        "x": 45.94,
+        "y": 41.57,
+        "z": 210.21
+      },
+      "rot": [
+        -0.38019,
+        0.92491,
+        0.0,
+        180.0
+      ]
+    },
+    {
+      "name": "",
+      "datablock": "RepairPatch",
+      "file": null,
+      "team": "bravo",
+      "pos": {
+        "x": 40.17,
+        "y": 46.27,
+        "z": 210.35
+      },
+      "rot": [
+        0.0,
+        0.0,
+        -1.0,
+        44.6907
+      ]
+    },
+    {
+      "name": "",
+      "datablock": "RepairPatch",
+      "file": null,
+      "team": "bravo",
+      "pos": {
+        "x": 46.1,
+        "y": 41.78,
+        "z": 215.85
+      },
+      "rot": [
+        0.0,
+        0.0,
+        -1.0,
+        44.6907
+      ]
+    },
+    {
+      "name": "",
+      "datablock": "RepairPatch",
+      "file": null,
+      "team": "bravo",
+      "pos": {
+        "x": 51.71,
+        "y": 44.19,
+        "z": 210.21
+      },
+      "rot": [
+        0.0,
+        0.0,
+        -1.0,
+        44.6907
+      ]
+    },
+    {
+      "name": "",
+      "datablock": "RepairPatch",
+      "file": null,
+      "team": "bravo",
+      "pos": {
+        "x": 45.92,
+        "y": 49.03,
+        "z": 204.71
+      },
+      "rot": [
+        0.0,
+        0.0,
+        -1.0,
+        44.6907
+      ]
+    },
+    {
+      "name": "",
+      "datablock": "Plasma",
+      "file": null,
+      "team": "bravo",
+      "pos": {
+        "x": 49.23,
+        "y": 43.24,
+        "z": 213.36
+      },
+      "rot": [
+        0.0,
+        0.0,
+        1.0,
+        225.309
+      ]
+    },
+    {
+      "name": "",
+      "datablock": "PlasmaAmmo",
+      "file": null,
+      "team": "bravo",
+      "pos": {
+        "x": 43.33,
+        "y": 47.89,
+        "z": 207.57
+      },
+      "rot": [
+        0.0,
+        0.0,
+        -1.0,
+        44.6907
+      ]
+    },
+    {
+      "name": "",
+      "datablock": "PlasmaAmmo",
+      "file": null,
+      "team": "bravo",
+      "pos": {
+        "x": 42.38,
+        "y": 47.89,
+        "z": 207.65
+      },
+      "rot": [
+        0.0,
+        0.0,
+        -1.0,
+        44.6907
+      ]
+    },
+    {
+      "name": "",
+      "datablock": "PlasmaAmmo",
+      "file": null,
+      "team": "bravo",
+      "pos": {
+        "x": 43.34,
+        "y": 48.33,
+        "z": 206.7
+      },
+      "rot": [
+        0.0,
+        0.0,
+        -1.0,
+        44.6907
+      ]
+    },
+    {
+      "name": "",
+      "datablock": "RepairPack",
+      "file": null,
+      "team": "bravo",
+      "pos": {
+        "x": 45.75,
+        "y": 45.44,
+        "z": 204.35
+      },
+      "rot": [
+        0.0,
+        0.0,
+        -1.0,
+        44.6907
+      ]
+    },
+    {
+      "name": "",
+      "datablock": "EnergyPack",
+      "file": null,
+      "team": "bravo",
+      "pos": {
+        "x": 26.69,
+        "y": 55.14,
+        "z": 191.15
+      },
+      "rot": [
+        0.0,
+        0.0,
+        -1.0,
+        44.6907
+      ]
+    },
+    {
+      "name": "",
+      "datablock": "SniperRifle",
+      "file": null,
+      "team": "bravo",
+      "pos": {
+        "x": 23.98,
+        "y": 58.55,
+        "z": 194.36
+      },
+      "rot": [
+        0.0,
+        0.0,
+        -1.0,
+        44.6907
+      ]
+    },
+    {
+      "name": "",
+      "datablock": "ShieldPack",
+      "file": null,
+      "team": "bravo",
+      "pos": {
+        "x": 27.9,
+        "y": 48.62,
+        "z": 228.55
+      },
+      "rot": [
+        0.0,
+        0.0,
+        -1.0,
+        44.6907
+      ]
+    },
+    {
+      "name": "",
+      "datablock": "CloakingPack",
+      "file": null,
+      "team": "bravo",
+      "pos": {
+        "x": 64.0,
+        "y": 41.52,
+        "z": 192.0
+      },
+      "rot": [
+        0.0,
+        0.0,
+        -1.0,
+        44.6907
+      ]
+    },
+    {
+      "name": "",
+      "datablock": "RepairPack",
+      "file": null,
+      "team": null,
+      "pos": {
+        "x": -423.66,
+        "y": 31.62,
+        "z": 303.46
+      },
+      "rot": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "",
+      "datablock": "RepairPack",
+      "file": null,
+      "team": null,
+      "pos": {
+        "x": -423.59,
+        "y": 49.76,
+        "z": 259.66
+      },
+      "rot": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "",
+      "datablock": "RepairPack",
+      "file": null,
+      "team": null,
+      "pos": {
+        "x": 215.01,
+        "y": 12.99,
+        "z": -127.12
+      },
+      "rot": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "",
+      "datablock": "RepairPack",
+      "file": null,
+      "team": null,
+      "pos": {
+        "x": 258.82,
+        "y": 10.43,
+        "z": -127.09
+      },
+      "rot": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ]
+    }
+  ],
+  "teamSpawns": {
+    "alpha": [
+      {
+        "x": 239.42,
+        "y": 0,
+        "z": -123.43,
+        "r": 73.24,
+        "w": 90.0
+      },
+      {
+        "x": -188.62,
+        "y": 0,
+        "z": -38.98,
+        "r": 54.93,
+        "w": 30.0
+      }
+    ],
+    "bravo": [
+      {
+        "x": -422.19,
+        "y": 0,
+        "z": 280.64,
+        "r": 73.24,
+        "w": 90.0
+      },
+      {
+        "x": 45.99,
+        "y": 0,
+        "z": 210.2,
+        "r": 47.61,
+        "w": 30.0
+      }
+    ]
+  },
+  "arena": {
+    "x": 222.7,
+    "z": 254.9,
+    "radius": 878.9
+  },
+  "_bare": "katabatic without static meshes \u2014 CTF test map, real T2 flag stand positions",
+  "structures": [
+    {
+      "kind": "box",
+      "pos": {
+        "x": 236.85,
+        "y": 15.3,
+        "z": -127.11
+      },
+      "size": {
+        "x": 9,
+        "y": 1.2,
+        "z": 9
+      },
+      "team": "alpha"
+    },
+    {
+      "kind": "box",
+      "pos": {
+        "x": -423.57,
+        "y": 43.5,
+        "z": 281.67
+      },
+      "size": {
+        "x": 9,
+        "y": 1.2,
+        "z": 9
+      },
+      "team": "bravo"
+    }
+  ]
+}

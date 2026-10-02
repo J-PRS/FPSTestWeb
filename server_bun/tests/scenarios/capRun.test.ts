@@ -11,11 +11,16 @@ import type { PlayerState } from '../../src/types.ts';
 // training signal for "real Tribes capper, not sheep llama boi": run it,
 // watch the numbers, make the route faster.
 const field = hmParseBin(new Uint8Array(readFileSync(`${import.meta.dir}/../../../maps/peaks.bin`)));
+const katabatic = hmParseBin(new Uint8Array(readFileSync(`${import.meta.dir}/../../../maps/katabatic.bin`)));
 
 /** Two stands ~300m apart on real ground — the flag pos rides the
  *  terrain height at its xz, so bases sit wherever the field says. */
 const baseAt = (x: number, z: number) => ({ x, y: hmHeight(field, x, z), z });
+const katAt = (x: number, z: number) => ({ x, y: hmHeight(katabatic, x, z), z });
 const BASES = { alpha: baseAt(-150, 0), bravo: baseAt(150, 0) };
+// Real T2 Katabatic stand positions (maps/katabatic.json `bases`) —
+// ~775m stand-to-stand, the actual map's flag line.
+const KAT_BASES = { alpha: katAt(236.85, -127.11), bravo: katAt(-423.57, 281.67) };
 
 interface RunStat {
   grabT: number;        // sim-s of first grab
@@ -26,12 +31,13 @@ interface RunStat {
   caps: number;
 }
 
-describe('scenario: capper run on real terrain (300m stands)', () => {
-  it('a light capper grabs and brings it home — timing logged', () => {
+/** Run one cap attempt cycle on a given field: spawn a light pull-disc
+ *  capper, freeze every other body, and time the grab→cap transit. */
+function measureCap(fld: ReturnType<typeof hmParseBin>, bases: { alpha: { x: number; y: number; z: number }; bravo: { x: number; y: number; z: number } }, tag: string): RunStat {
     const room = mkRoom({
       mode: 'ctf', bots: 6,
-      bases: BASES,
-    }, 'ctf', 9001, false, field);
+      bases,
+    }, 'ctf', 9001, false, fld);
     const w = watch(room);
     expect(room.flags).not.toBeNull();
 
@@ -73,7 +79,7 @@ describe('scenario: capper run on real terrain (300m stands)', () => {
     let eSum = 0, eSamples = 0;
     const mechE = () => {
       const v2 = capper.velocity.x ** 2 + capper.velocity.y ** 2 + capper.velocity.z ** 2;
-      return 0.5 * v2 + 28 * Math.max(0, capper.position.y - hmHeight(field, capper.position.x, capper.position.z));
+      return 0.5 * v2 + 28 * Math.max(0, capper.position.y - hmHeight(fld, capper.position.x, capper.position.z));
     };
     // Long budget — deaths reset the run and a second attempt is honest
     // capper behavior (nobody caps first try on a defended stand).
@@ -127,13 +133,27 @@ describe('scenario: capper run on real terrain (300m stands)', () => {
     }
 
     console.log(
-      `capper run: grab@${stat.grabT.toFixed(1)}s carry=${stat.carryT.toFixed(1)}s ` +
+      `capper run [${tag}]: grab@${stat.grabT.toFixed(1)}s carry=${stat.carryT.toFixed(1)}s ` +
       `path=${stat.pathM.toFixed(0)}m avgSpeed=${stat.avgSpeed.toFixed(1)}m/s ` +
       `avgE=${stat.avgE.toFixed(0)} caps=${stat.caps}`,
     );
+    return stat;
+}
+
+describe('scenario: capper run on real terrain', () => {
+  it('300m stands on peaks.bin — grab and carry timed', () => {
+    const stat = measureCap(field, BASES, 'peaks');
     expect(stat.caps).toBeGreaterThan(0);
     // A stand-to-stand transit that walks most of the 300m on foot
     // (~15m/s ski pace is the floor; a real cap route beats it).
+    expect(stat.avgSpeed).toBeGreaterThan(10);
+  }, 120000);
+
+  it('real T2 Katabatic stands (~775m, no static meshes)', () => {
+    const stat = measureCap(katabatic, KAT_BASES, 'katabatic');
+    expect(stat.caps).toBeGreaterThan(0);
+    // The long route still has to beat a walk — no stand-distance
+    // excuse for llama pace.
     expect(stat.avgSpeed).toBeGreaterThan(10);
   }, 120000);
 });
