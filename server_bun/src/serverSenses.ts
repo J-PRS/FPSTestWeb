@@ -327,7 +327,14 @@ export class ServerBotSenses {
     // prices actual ground speed (floor 12 m/s — a bot standing still
     // next to the stand shouldn't keep re-announcing); posted early so
     // the squad's response travels ahead of the runner's arrival.
-    if (role === 'capper' && pick === enemyStand && enemyStand) {
+    // The push slot is a COPY of the stand pos ({...enemyStand}) — a
+    // tasked wave member's pick never satisfies reference equality, so
+    // it skipped the whole entry probe and beelined into walls
+    // (katabatic: members stalled ~290m out, near0%). A goal parked on
+    // the stand is stand-bound regardless of which object holds it.
+    const standBound = enemyStand !== null && pick !== null &&
+      (pick === enemyStand || dist3(pick, enemyStand) < 8);
+    if (role === 'capper' && standBound && enemyStand) {
       const qp = this.room.players.getPlayer(p.id);
       const spd = qp ? Math.hypot(qp.velocity.x, qp.velocity.z) : 0;
       const eta = Math.hypot(enemyStand.x - p.position.x, enemyStand.z - p.position.z) / Math.max(12, spd);
@@ -347,7 +354,7 @@ export class ServerBotSenses {
     // baked routes, and it re-plans as the bot moves (the arc emerges
     // per-mountain).
     let goalPos: BotVec = pick;
-    if (pick === enemyStand && enemyStand !== null && this.field) {
+    if (standBound && enemyStand !== null && this.field) {
       const capper = role === 'capper';
       const dStand = Math.hypot(enemyStand.x - p.position.x, enemyStand.z - p.position.z);
       // Live enemy positions are already on the wire — a human reads the
@@ -381,8 +388,14 @@ export class ServerBotSenses {
         // pressers re-route to ring entries, but a named flood member
         // orbiting the ring is exactly the "wave at d183m" the soak
         // probe caught: tasked, committed, never inside.
-        const committed = (capper || task?.kind === 'push' || task?.kind === 'escort') && dStand < 80 && wall < 12;
-        if (wall < 6 || committed) {
+        const waveTask = task?.kind === 'push' || task?.kind === 'escort';
+        const committed = (capper || waveTask) && dStand < 80 && wall < 12;
+        // A tasked member still presses the straight line over rolling
+        // ground — the flood's job is arriving, and entry detours for
+        // every 8m swell read worse than the beeline they replace
+        // (peaks soak: routing dropped near% 3->1). Only a real wall
+        // face earns the detour.
+        if (wall < 6 || committed || (waveTask && wall < 20)) {
           // Two human corrections on the final run:
           // - Altitude pull: a ballistic runner can't dive, so aim the
           //   landing short of the flag and skim through it at grab height.
