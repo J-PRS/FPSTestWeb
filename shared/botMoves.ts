@@ -163,7 +163,12 @@ export class BotMoves {
       this.jetWhy = rise > 2 ? 'climb' : '-';
       return rise > 2;
     }
-    const targetHigh = (this.host.huntPos()?.y ?? -Infinity) - pos.y > 6;
+    // Prey burns are for hunters — a route-committed bot that chases
+    // airborne foes spends its whole tank off-mission (cap-stall
+    // autopsy: runners arriving en≈0 after prey burns, grabE~22 at
+    // the touch). Fire on them, don't fly after them.
+    const targetHigh = !ctx.runner && !ctx.wave &&
+      (this.host.huntPos()?.y ?? -Infinity) - pos.y > 6;
     const destHigh = Math.max(dest.y, ctx.objective?.y ?? -Infinity) - pos.y > 3;
     // Hard ceiling: past ~30m AGL a held burn is ballooning, not skiing —
     // featherjets turned a shallow hop chain into a 250m balloon ride.
