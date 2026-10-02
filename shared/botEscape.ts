@@ -24,6 +24,13 @@ export interface EscapeState {
   detourT: number;
   progressPos: BotVec;
   progressT: number;
+  /** Slow-window timer — independent of progressT's 1.5s cadence so a
+   *  slow-window rollover can't starve the fast pinned check. */
+  goalWinT: number;
+  /** Long-window anchor: how close to the goal the bot was ~4s ago.
+   *  An orbiting bot covers distance but never closes — displacement-
+   *  based stuck tests are beaten by circling, goal-distance isn't. */
+  progressGoalD: number;
   /** goal is read-only here — the sidestep orbits it. */
   goal: BotVec;
 }
@@ -34,8 +41,27 @@ export interface EscapeState {
  *  detouring in lockstep. */
 export function stuckBreak(s: EscapeState, dt: number, ctx: BrainCtx, pos: BotVec, dest: BotVec): BotVec {
   s.progressT += dt;
+  s.goalWinT += dt;
+  // Slow window: goal-distance gain over ~4s. Circling in place covers
+  // real distance while closing nothing — this catches the orbit the
+  // fast window below can't (seen in soaks: steerer tangent orbits).
+  if (s.goalWinT >= 4) {
+    s.goalWinT = 0;
+    const gd = Math.hypot(s.goal.x - pos.x, s.goal.z - pos.z);
+    if (s.progressGoalD > 20 && s.progressGoalD - gd < 4) {
+      s.stuckStreak++;
+      s.escapeJetT = Math.max(s.escapeJetT, 1.1);
+      if (s.detourT <= 0) {
+        const gx = s.goal.x - pos.x, gz = s.goal.z - pos.z;
+        const gl = Math.hypot(gx, gz) || 1;
+        const side = botRand() < 0.5 ? -1 : 1;
+        s.detour = { x: pos.x + (-gz / gl) * side * 20, y: ctx.groundY(pos.x, pos.z) + BOT_EYE, z: pos.z + (gx / gl) * side * 20 };
+        s.detourT = 2.0;
+      }
+    }
+    s.progressGoalD = gd;
+  }
   if (s.progressT < 1.5) return s.detourT > 0 && s.detour ? s.detour : dest;
-  s.progressT = 0;
   if (distSq(pos, s.progressPos) < 2.25) {
     s.stuckStreak++;
     if (s.detourT <= 0) {

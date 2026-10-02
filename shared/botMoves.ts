@@ -61,9 +61,15 @@ export class BotMoves {
     // over a deck-level flag).
     // A prey burn survives the dive read: chasing something airborne
     // needs altitude even when the current destination sits below.
-    const drop = pos.y - dest.y;
+    // Altitude reads the route, not the step: every pipeline stage
+    // flattens the step's y to pos.y, so judging off `dest` declares
+    // every route "downhill" and diveRun vetoes all jetting forever —
+    // bots could never climb, only the escape burst fired (soak: bots
+    // orbiting under a 50m plateau rim). The objective carries truth.
+    const tgtY = Math.max(dest.y, ctx.objective?.y ?? -Infinity);
+    const drop = pos.y - tgtY;
     const runway = 45 + Math.max(0, drop) * 2 + speed * 0.5;
-    const diveRun = gd < runway && dest.y < pos.y + 4 && this.jetWhy !== 'prey';
+    const diveRun = gd < runway && tgtY < pos.y + 4 && this.jetWhy !== 'prey';
     if (diveRun) this.jetHold = 0;
     const jet = !diveRun && (this.jetHold > 0 || this.host.escapeJetT() > 0) && tanked;
     this.jetOut = jet;
@@ -84,7 +90,7 @@ export class BotMoves {
    *  tank is comfortable. */
   private wantJet(ctx: BrainCtx, pos: BotVec, dest: BotVec, rise: number, speed: number, gd: number, airborne: boolean): boolean {
     const targetHigh = (this.host.huntPos()?.y ?? -Infinity) - pos.y > 6;
-    const destHigh = dest.y - pos.y > 3;
+    const destHigh = Math.max(dest.y, ctx.objective?.y ?? -Infinity) - pos.y > 3;
     // Hard ceiling: past ~30m AGL a held burn is ballooning, not skiing —
     // featherjets turned a shallow hop chain into a 250m balloon ride.
     // High prey still earns altitude; everything else glides back down.

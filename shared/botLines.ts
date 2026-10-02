@@ -99,6 +99,13 @@ export class BotLines {
         // its real budget instead of over-climbing.
         const vEndSq = vNow * vNow + 56 * (pos.y - drops[p]!);
         const eScore = ctx.runner ? (28 * drops[p]! + 0.5 * Math.max(0, vEndSq) - eNow) * 0.2 : 0;
+        // Progress floor: a run has to close a real share of its own
+        // travel toward the goal — unless it's an energy play, banking
+        // speed off a side valley to convert later (that's a legit ski
+        // setup, not a loop). Without the floor a deep side valley
+        // always outscores the route and the bot orbits midfield
+        // forever (soak: align=0.00, prog=0).
+        if (gained < d * 0.4 && eScore <= 12) continue;
         const score =
           gained * 0.9 +                      // progress toward the goal
           drop * dropW +                      // downhill buys ski speed

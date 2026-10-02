@@ -257,11 +257,24 @@ export class Room {
       this.scoring.applyPowerup(p, kind);
     };
     if (this.modeSpec?.flags && bases?.alpha && bases?.bravo) {
-      // Spec y is advisory — flags live on the ground, so touch checks
-      // measure feet-to-flag, not feet-to-arbitrary-height.
+      // Spec y is advisory — flags live on the walkable surface, so
+      // touch checks measure feet-to-flag, not feet-to-arbitrary-height.
+      // Both error directions land the same: a flag authored under the
+      // terrain or inside a stand pad pops up to the pad's deck, and a
+      // flag authored floating drops onto it — max() of every surface
+      // the point could stand on IS the perfect spot either way.
+      const standTop = (x: number, z: number): number => {
+        let top = field ? hmHeight(field, x, z) : 0;
+        for (const s of this.spec.structures ?? []) {
+          if (Math.abs(x - s.pos.x) <= s.size.x / 2 && Math.abs(z - s.pos.z) <= s.size.z / 2) {
+            top = Math.max(top, s.pos.y + s.size.y / 2);
+          }
+        }
+        return top;
+      };
       const snap = (v: { x: number; y: number; z: number }) => ({
         ...v,
-        y: field ? hmHeight(field, v.x, v.z) : v.y,
+        y: standTop(v.x, v.z),
       });
       this.flags = new RoomFlags(this, { alpha: snap(bases.alpha), bravo: snap(bases.bravo) });
     }
