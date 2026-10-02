@@ -1,6 +1,7 @@
 import { describe, it, expect, afterAll } from 'bun:test';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { deflateSync } from 'node:zlib';
+import { dirname } from 'node:path';
 import { mkRoom, step, watch } from './harness.ts';
 import { hmParseBin, hmHeight } from '../../../shared/heightfield.ts';
 import { GRAVITY } from '../../../shared/movement.ts';
@@ -16,6 +17,12 @@ import { WEAPON_FIRE_INTERVAL_S } from '../../../shared/weapons.ts';
 // role (<file>_<role>.png) so a capper's lanes don't drown in the herd.
 // Costs a position snapshot per batch, so it stays opt-in.
 const TRAIL_PATH = process.env.FPS_TRAIL;
+// Sheep-meter verdicts would flood this run's console (every llama
+// re-maxes per life) — divert them to soak.log beside the heatmaps.
+// FPS_SHEEP_LOG overrides where they go; deleting it restores console warns.
+process.env.FPS_SHEEP_LOG ??= TRAIL_PATH
+  ? dirname(TRAIL_PATH) + '/soak.log'
+  : 'run/soak.log';
 
 /** Lossless RGB PNG — zlib from node, no image deps. */
 function pngWrite(path: string, w: number, h: number, px: Uint8Array): void {
@@ -98,6 +105,7 @@ describe('scenario: warp soak throughput', () => {
     // measures pure combat density on that terrain (flags stay on the
     // field as scenery, probes just report zero).
     const mode = process.env.FPS_SOAK_MODE ?? (ctf ? 'ctf' : (mapJson as { mode?: string }).mode ?? 'tdm');
+    if (process.env.FPS_SHEEP_LOG) writeFileSync(process.env.FPS_SHEEP_LOG, '');
     const room = mkRoom({
       mode, bots: 16, botFill: 16,
       // Economy sims off by default in the combat soak — ball/creature

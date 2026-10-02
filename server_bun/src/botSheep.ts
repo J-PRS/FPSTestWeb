@@ -2,6 +2,7 @@ import type { Vec3 } from './types.ts';
 import type { BrainOut } from '../../shared/botBrain.ts';
 import type { Room } from './Room.ts';
 import { logger } from './logger.ts';
+import { appendFileSync } from 'node:fs';
 
 /** Sheep meter: starts at 100 — llama until proven otherwise. It drains
  *  fast only while a body demonstrably holds/converts real mechanical
@@ -129,7 +130,20 @@ export class BotSheepMeter {
           // Ledger sums are charge points, not seconds — each channel's
           // share of the fill (pedestrian ticks / refused shots / one
           // patch of ground), so the dominant channel reads at a glance.
-          logger.warn('Sheep meter maxed', { room: this.room.name, bot: id, whyPts: { idle: +why.idle.toFixed(1), ignore: +why.ignore.toFixed(1), cover: +why.cover.toFixed(1) } });
+          // Soak runs are flooded by these verdicts (every llama re-maxes
+          // per life), so FPS_SHEEP_LOG diverts them to a file and drops
+          // the console copy to info.
+          const whyPts = { idle: +why.idle.toFixed(1), ignore: +why.ignore.toFixed(1), cover: +why.cover.toFixed(1) };
+          const sheepLog = process.env.FPS_SHEEP_LOG;
+          if (sheepLog) {
+            try {
+              appendFileSync(sheepLog,
+                `${(this.simMs / 1000).toFixed(1)}s ${this.room.name} ${id} idle=${whyPts.idle} ignore=${whyPts.ignore} cover=${whyPts.cover}\n`);
+            } catch { /* a bad log path must never break a match */ }
+            logger.info('Sheep meter maxed', { room: this.room.name, bot: id, whyPts });
+          } else {
+            logger.warn('Sheep meter maxed', { room: this.room.name, bot: id, whyPts });
+          }
         }
       }
       return;
