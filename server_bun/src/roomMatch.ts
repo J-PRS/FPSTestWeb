@@ -17,6 +17,7 @@ export interface MatchHost {
   endCleanup(): void;          // flags/pickups/deployables/stats reset
   rotate(): MapSpec | null;    // next same-mode spec, or null to replay
   applySpec(spec: MapSpec): void;
+  reshuffleBots?(): void;      // re-deal bot team assignments for the next match
   onMatchEnd?: (record: { room: string; mode: string; winner: string; scores: Record<string, number>; players: { id: string; team?: string; kills: number; deaths: number }[] }) => void;
   onEnded?: () => void;         // the horn fired — bots get their 'gg' beat
 }
@@ -119,6 +120,11 @@ export class MatchClock {
     host.scores.bravo = 0;
     host.ffaScores.clear();
     host.endCleanup();
+    // Reshuffle bot teams each match — persistent sides bake one spawn's
+    // skill draw into a permanent advantage, and mixing is what lets
+    // per-bot skill→outcome regression mean anything later. Humans keep
+    // their picked team; only bot assignments churn.
+    host.reshuffleBots?.();
     const next = host.rotate();
     if (next) host.applySpec(next);
     // Re-arm only with an audience: an empty room's clock should stay

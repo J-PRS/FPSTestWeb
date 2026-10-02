@@ -48,10 +48,11 @@ export class RoomScore {
     }));
   }
 
-  /** Creature kill — ballDie attribution from BallSim. FFA modes award
-   *  the killer directly; team modes drop a nugget at the corpse that
-   *  anyone must touch to bank (kill-confirmed style scoring). */
-  creatureKill(by: string, pos: Vec3, variant = 0): void {
+  /** Non-player kill — fed by both non-player sims: BallSim balls (`b:`
+   *  ids) and CreatureSim species pops. FFA modes award the killer directly;
+   *  team modes drop a nugget at the corpse that anyone must touch to
+   *  bank (kill-confirmed style scoring). */
+  nonPlayerKill(by: string, pos: Vec3, variant = 0): void {
     // The economy runs on kills — soak validation needs these visible.
     logger.info('Creature killed', { room: this.h.name, by, variant });
     // Powerup drops roll in EVERY mode — the pickup does the granting.
@@ -67,8 +68,17 @@ export class RoomScore {
       // Pay for the corpse's threat: variant 3 elites and v2 tanks drop a
       // burst, fodder still drops one (same scale curve the client uses).
       const drops = [1, 2, 3, 3][variant] ?? 1;
+      // Loot drifts toward the kill shot — corpses fall where balls
+      // roam, so an unbiased spawn decays in dead corners; landing the
+      // gem partway to the shooter puts it on a path someone walks.
+      const killer = this.h.players.getPlayer(by);
+      const k = killer ? 0.45 : 0;
+      const dx = k * (killer!.position.x - pos.x), dz = k * (killer!.position.z - pos.z);
       for (let i = 0; i < drops; i++) {
-        this.h.pickups?.spawn({ x: pos.x + (this.h.rng() - 0.5) * 2, y: gy, z: pos.z + (this.h.rng() - 0.5) * 2 });
+        const gx2 = pos.x + dx + (this.h.rng() - 0.5) * 2;
+        const gz2 = pos.z + dz + (this.h.rng() - 0.5) * 2;
+        const gy2 = (this.h.field ? hmHeight(this.h.field, gx2, gz2) : pos.y) + 0.5;
+        this.h.pickups?.spawn({ x: gx2, y: gy2, z: gz2 });
       }
       return;
     }
