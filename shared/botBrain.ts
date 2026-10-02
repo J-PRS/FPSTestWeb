@@ -64,6 +64,9 @@ export interface BrainCtx {
    *  swing wider and weight downhill harder — momentum preservation
    *  beats directness, which is how real cap routes arc roundabout. */
   runner?: boolean;
+  /** Named wave member (push/escort): feet committed to the flood like
+   *  a runner's, without the capper's staging/propel rules. */
+  wave?: boolean;
   /** The objective is an enemy-held position this bot is pressing —
    *  CTF offense heading for the enemy stand. Lets the status sense
    *  read the approach as an infiltration (cloak) rather than a roam. */
@@ -317,6 +320,9 @@ export class BotBrain {
   /** Last think resolved to stand-and-shoot — a legal hold, not a stall.
    *  Hosts read this to keep stall/mobility watchdogs honest. */
   holding = false;
+  /** Capper staging patience — seconds spent orbiting outside the
+   *  defended ring waiting for the push wave to catch up. */
+  stageT = 0;
 
   /** Current hunt target — the belt intent carries no aim of its own,
    *  so hosts resolve the throw's arc off this. */

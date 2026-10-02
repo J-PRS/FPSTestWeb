@@ -368,7 +368,8 @@ export class BotArsenal implements BeamHost {
    *  launches worth a fuse (long run, low speed, tank for the climb);
    *  distant pursuits may boost mid-volley since out-shooting never
    *  closes ground on a fleeing carrier. */
-  tryPropel(id: string, p: BotBody, out: BrainOut, goal: { pos: BotVec; runner?: boolean } | null, sh: MoveState | null, now: number): void {
+  tryPropel(id: string, p: BotBody, out: BrainOut, goal: { pos: BotVec; runner?: boolean; wave?: boolean } | null, sh: MoveState | null, now: number): void {
+    const surge = goal ? !!(goal.runner || goal.wave) : false;
     if (!goal || !sh) return;
     // Self-splash costs real health now. A wounded bot holds fire —
     // except a desperate chaser: a loose enemy carrier far away means
@@ -402,7 +403,9 @@ export class BotArsenal implements BeamHost {
     if ((this.propelT.get(id) ?? 0) > now) return;
     const dx = goal.pos.x - p.position.x, dz = goal.pos.z - p.position.z;
     const dist = Math.hypot(dx, dz);
-    if (dist < 35) return;
+    // Runners keep the burn going until the pole — the last blast IS
+    // the blow-by through the intercept line (overshoot = the grab).
+    if (dist < (surge ? 10 : 35)) return;
     const lo = this.loadouts.get(id) ?? BOT_LOADOUTS[0]!;
     if (!sh.onGround) {
       // Crest blast: jetting up a face, the hill drops away under the
@@ -425,14 +428,17 @@ export class BotArsenal implements BeamHost {
     }
     // A long pursuit is allowed to boost mid-engagement — a chaser that
     // must choose between shooting and disc-jumping never catches a
-    // carrier. Close goals still don't trade fire for speed.
-    if (out.fire && dist < 60) return;
+    // carrier. Close goals still don't trade fire for speed — except
+    // the runner: dueling interceptors at 60m is how pushes die at ~40m
+    // out (ring autopsy: mdD@41m). His clear is the escort's job; his
+    // blast is the only pass through.
+    if (out.fire && !surge && dist < 60) return;
     // A heel blast at speed is only "wasted" if the bot isn't running a
     // route — a capper's job is SUSTAINED 25-35m/s, and speed decays on
     // every flat stretch, so runners re-blast before the run dies.
     // Holding the 12m/s launch ceiling for everyone else capped route
     // arrivals at ~10-18m/s — inside ring defense's kill zone.
-    const movingCap = goal.runner ? 26 : 12;
+    const movingCap = surge ? 30 : 12;
     if (Math.hypot(sh.vel.x, sh.vel.z) > movingCap) return;
     // A heel blast costs ammo + hp, NOT jet fuel — gating it on a
     // charged tank stranded every trapped climber whose tank was dry
@@ -492,7 +498,7 @@ export class BotArsenal implements BeamHost {
     // Runners chain on the human cadence (~3.5s between disc-jumps);
     // everyone else pays the full 8s — chaining is blood + ammo, and a
     // bot with somewhere to be trades it gladly while a roamer shouldn't.
-    this.propelT.set(id, now + (goal.runner ? 3500 : 8000));
+    this.propelT.set(id, now + (surge ? 3500 : 8000));
     this.propelJetUntil.set(id, now + 900); // ride the shove skyward like a real disc-jump
     logger.info('Bot propel', { id });
   }

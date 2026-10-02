@@ -313,6 +313,11 @@ export class ServerBots {
     return this.sense.pushCalls.get(team as 'alpha' | 'bravo') ?? 0;
   }
 
+  /** Test hook — live command assignments for a team (wave probe). */
+  debugTasks(team: string): { id: string; kind: string; goal: BotVec }[] {
+    return this.sense.debugTasks(team);
+  }
+
   /** Test hook — seed the meter directly; accrual tests shouldn't need
    *  to park a bot for 30 simulated seconds to fill the meter. */
   debugSetSheep(id: string, v: number): void {

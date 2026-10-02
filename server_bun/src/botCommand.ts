@@ -66,16 +66,29 @@ export class TeamCommand {
   update(now: number, s: FlagSituation, members: CommandMember[]): void {
     if (now - this.reassignT < 2000) return;
     this.reassignT = now;
-    this.tasks.clear();
     this.contested.clear();
+    const slots: Record<CommandKind, (BotVec & { vx?: number; vz?: number }) | null | undefined> = {
+      chase: s.thief, return: s.dropped, escort: s.escort, push: s.push };
+    // Assignments PERSIST between passes — the nearest-eligible re-roll
+    // every 2s kept swapping the job to whoever just respawned at home,
+    // so the wave never finished a leg (soak: tasked members orbited
+    // ~180m out forever, near2%). A task only dies with its job slot
+    // or its assignee; understaffed slots top up instead of re-rolling.
+    const alive = new Set(members.map((m) => m.id));
+    for (const [id, t] of [...this.tasks]) {
+      const slot = slots[t.kind];
+      if (!alive.has(id) || !slot) this.tasks.delete(id);
+      else t.goal = { x: slot.x, y: slot.y, z: slot.z };
+    }
     const free = members.filter((m) => !m.carrier);
     const assign = (kind: CommandKind, at: (BotVec & { vx?: number; vz?: number }) | null | undefined) => {
       if (!at) return;
+      const have = [...this.tasks.values()].filter((t) => t.kind === kind).length;
       const pool = free
         .filter((m) => !this.tasks.has(m.id) && WHO[kind].has(m.role))
         .map((m) => ({ m, d: (m.pos.x - at.x) ** 2 + (m.pos.z - at.z) ** 2 }))
         .sort((a, b) => a.d - b.d);
-      for (const { m } of pool.slice(0, WANT[kind])) {
+      for (const { m } of pool.slice(0, Math.max(0, WANT[kind] - have))) {
         // Escort intercept: aiming at where the carrier IS trails a
         // runner you'll never meet — each escort aims at where the
         // carrier will be when the escort's own run lands (est ~12m/s).
@@ -100,6 +113,11 @@ export class TeamCommand {
   /** The named responder's job, if any. */
   taskFor(id: string): CommandTask | undefined {
     return this.tasks.get(id);
+  }
+
+  /** Test hook — the live assignment list (soak wave probe). */
+  debugTasks(): { id: string; kind: string; goal: BotVec }[] {
+    return [...this.tasks.entries()].map(([id, t]) => ({ id, kind: t.kind, goal: t.goal }));
   }
 
   /** True when a contested slot is staffed by someone else — senses

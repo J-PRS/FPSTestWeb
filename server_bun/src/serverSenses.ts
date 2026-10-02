@@ -63,8 +63,11 @@ export class ServerBotSenses {
   /** Times each team's push-call was (re)posted — soak visibility into
    *  how often the flood call actually fires. */
   readonly pushCalls = new Map<TeamId, number>();
-  private static readonly PUSH_ETA_S = 10;
-  private static readonly PUSH_HOLD_MS = 8000;
+  // The call has to outlive the flood's transit: wave members tasked
+  // from midfield start ~180m out — an 8s window dies ~5s before they
+  // land, which reads as a call that summons nobody.
+  private static readonly PUSH_ETA_S = 14;
+  private static readonly PUSH_HOLD_MS = 14000;
   /** Carrier wait-circuit waypoint, re-rolled on a TTL so the orbit
    *  wanders its own mini-route instead of parking. */
   private waitSpot = new Map<string, { pos: BotVec; at: number }>();
@@ -257,7 +260,7 @@ export class ServerBotSenses {
    *  flag dropped → touch it home; a teammate carrying → escort them;
    *  enemy flag reachable → go grab it. Defenders invert it: their flag
    *  recovery/intercept outranks pressing the enemy stand. */
-  flagGoal(p: { id: string; team?: string; position: Vec3 }, duty = 1): { pos: BotVec; infiltrating: boolean; running?: boolean; runner?: boolean; posted?: number } | null {
+  flagGoal(p: { id: string; team?: string; position: Vec3 }, duty = 1): { pos: BotVec; infiltrating: boolean; running?: boolean; runner?: boolean; wave?: boolean; posted?: number } | null {
     const flags = this.room.flags;
     if (!flags || !p.team) return null;
     const me = p.team as TeamId;
@@ -374,7 +377,11 @@ export class ServerBotSenses {
         // are exits there, and a lip it can jet over is no wall. Without
         // this the probe kept re-picking entries behind the bot — cappers
         // entered the 80m ring, rerouted outward, and left ungrazed.
-        const committed = capper && dStand < 80 && wall < 12;
+        // Inside the DMZ a tasked wave member presses in too — untasked
+        // pressers re-route to ring entries, but a named flood member
+        // orbiting the ring is exactly the "wave at d183m" the soak
+        // probe caught: tasked, committed, never inside.
+        const committed = (capper || task?.kind === 'push' || task?.kind === 'escort') && dStand < 80 && wall < 12;
         if (wall < 6 || committed) {
           // Two human corrections on the final run:
           // - Altitude pull: a ballistic runner can't dive, so aim the
@@ -513,7 +520,21 @@ export class ServerBotSenses {
       posted = base * (1.35 - 0.5 * duty);
     }
     return { pos: goalPos, infiltrating: pick === enemyStand && enemyStand !== null
-      && role === 'infiltrator', runner: role === 'capper', posted };
+      && role === 'infiltrator', runner: role === 'capper',
+      // Named wave member (push/escort): his feet are committed to the
+      // flood like a runner's — untasked attackers let every midfield
+      // contact steal the stand run (soak: sup@0 — the called wave
+      // never once arrived). Staging/propel stay capper-only.
+      wave: task?.kind === 'push' || task?.kind === 'escort', posted };
+  }
+
+  /** Test hook — live command task list for a team (soak wave probe). */
+  debugTasks(team: string): { id: string; kind: string; goal: BotVec }[] {
+    const cmd = this.commands.get(team as TeamId);
+    if (!cmd) return [];
+    // taskFor is per-id; the map lives inside the commander — expose via
+    // its own debug view.
+    return cmd.debugTasks();
   }
 
   /** The team's active push target for non-goal consumers (the stand
@@ -570,7 +591,7 @@ export class ServerBotSenses {
 
   /** The sensorium for one think tick — see file header for what's legal
    *  on each channel. */
-  build(id: string, p: { id: string; team?: string; position: Vec3; velocity: Vec3; health: number; maxHealth: number }, goal: { pos: BotVec; infiltrating: boolean; running?: boolean; runner?: boolean; posted?: number } | null, now: number, skill?: BotSkill): BrainCtx {
+  build(id: string, p: { id: string; team?: string; position: Vec3; velocity: Vec3; health: number; maxHealth: number }, goal: { pos: BotVec; infiltrating: boolean; running?: boolean; runner?: boolean; wave?: boolean; posted?: number } | null, now: number, skill?: BotSkill): BrainCtx {
     // Competence-biased draw: the weapon pick and the aim error read
     // the same matrix, so a phenom both reaches for its gun and lands it.
     const bias = skill ? (t: number) => aimSkillFor(skill, t, 0) : undefined;
@@ -583,6 +604,7 @@ export class ServerBotSenses {
       infiltrating: goal?.infiltrating ?? false,
       running: goal?.running ?? false,
       runner: goal?.runner ?? false,
+      wave: goal?.wave ?? false,
       posted: goal?.posted ?? 0,
       // Team rooms drop nuggets on creature kills — bots farm them too,
       // which is what keeps a bot-filled match's scoreboard moving. The

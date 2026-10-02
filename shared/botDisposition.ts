@@ -30,7 +30,27 @@ export function pickDest(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, fe
     // fight every midfield contact dies ~130m short of the stand —
     // soak autopsy showed the hunt pull eating every approach leg.
     // He shoots on the move; the route owns the feet.
-    if ((ctx.running || ctx.runner) && ctx.objective) return { ...ctx.objective };
+    if (ctx.runner && !ctx.running && ctx.objective) {
+      // "Cap in 10" staging: a runner entering a defended ring alone
+      // dies to focused interceptors ~40m out (ring autopsy: pushes
+      // die at mdD@41m). He holds a ~110m orbit until the wave his
+      // push call summoned is actually converging, then goes in with
+      // it. Patience wears out — alone past ~7s he goes anyway, a
+      // low-percentage run beats a permanently parked capper.
+      const gd = dist3(pos, ctx.objective);
+      if (gd > 40 && gd < 160) {
+        const wave = (ctx.allies ?? []).some((a) => dist3(a, ctx.objective!) < 70);
+        const wingman = (ctx.allies ?? []).some((a) => dist3(a, pos) < 45);
+        if (!wave && !wingman && b.stageT < 10) {
+          b.stageT += dt;
+          b.orbitA += dt * 0.35;
+          const ox = ctx.objective.x + Math.cos(b.orbitA) * 110;
+          const oz = ctx.objective.z + Math.sin(b.orbitA) * 110;
+          return { x: ox, y: ctx.groundY(ox, oz), z: oz };
+        }
+      } else if (gd >= 160) b.stageT = 0;
+    }
+    if ((ctx.running || ctx.runner || ctx.wave) && ctx.objective) return { ...ctx.objective };
     // Last-leg commitment beats self-preservation: inside ~40m of the
     // objective a wounded bot still crashes the point — dying with the
     // flag in hand beats surviving the approach. Only the feet commit;
