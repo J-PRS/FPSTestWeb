@@ -94,12 +94,18 @@ export class BotLines {
           const a = { x: pos.x + px * t, z: pos.z + pz * t };
           const b = { x: pos.x - px * t, z: pos.z - pz * t };
           if (this.traverseDir === null) {
-            // First traverse: keep the contour (altitude) and prefer the
-            // end that gains on the goal; afterwards the direction is
-            // fixed so the bot walks the ring monotonically instead of
-            // zigzagging back each re-plan.
-            const scoreT = (c: { x: number; z: number }) =>
-              (gd - Math.hypot(dest.x - c.x, dest.z - c.z)) - Math.abs(ctx.groundY(c.x, c.z) - g0) * 1.5;
+            // First traverse: a switchback, not a level contour — the
+            // escape buys altitude a few meters per leg, so ends that
+            // climb moderately beat ends that hold flat; diving is
+            // always bad. Afterwards the direction is fixed so the bot
+            // walks the ring monotonically instead of zigzagging back.
+            const scoreT = (c: { x: number; z: number }) => {
+              const climb = ctx.groundY(c.x, c.z) - g0;
+              return (gd - Math.hypot(dest.x - c.x, dest.z - c.z))
+                + Math.min(Math.max(0, climb), 12) * 2
+                - Math.max(0, climb - 12) * 3
+                - Math.max(0, -climb) * 2;
+            };
             this.traverseDir = scoreT(a) >= scoreT(b) ? 1 : -1;
           }
           const c = this.traverseDir === 1 ? a : b;
