@@ -78,8 +78,8 @@ export class GameBot extends RemotePlayer {
    *  Owned by TeamBots; rendered on the scoreboard + head badge. */
   /** Raw sheep factor + its smoothed display twin (badge/scoreboard read
    *  sheepShown so the % doesn't flicker frame to frame). */
-  sheep = 0;
-  sheepShown = 0;
+  sheep = 100;    // llama until proven — high-E play drains it
+  sheepShown = 100;
   /** Jets pinned by a propel blast — rides the shove like a disc-jump. */
   propelJetT = 0;
   /** Brain's belt intent from the last think — TeamBots resolves the arc. */

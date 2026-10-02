@@ -196,7 +196,7 @@ async function init(): Promise<void> {
   if (mode) {
     world.onTerrainApplied = () => teamBots?.reseatAll();
     void Promise.race([firstTerrain, new Promise((r) => setTimeout(r, 8000))])
-      .then(() => { if (!teamBots) setupOfflineMode(mode); });
+      .then(() => { if (!teamBots && !networkManager.isConnected()) setupOfflineMode(mode); });
   }
 
   // ?yaw/?pitch/?dummy headless-screenshot hooks — see game/debugHooks.ts
@@ -256,6 +256,7 @@ async function init(): Promise<void> {
     world,
     setLastSentPos: remotes.setLastSentPos,
     entities: () => entities,
+    retireOfflineBots: () => { teamBots?.dispose(); teamBots = null; },
   });
 
   await connectPhase(netCtx, bootSaved?.map ?? null, classicMode, mode);

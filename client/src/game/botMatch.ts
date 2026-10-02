@@ -53,8 +53,9 @@ export function resetMatch(m: MatchHost): void {
     if (bot.isDead) m.respawnBot(bot);
     else {
       bot.botHp = bot.botMaxHp;
-      bot.sheep = 0;
-      bot.sheepShown = 0;
+      // New match, unproven bots — the meter re-earns it.
+      bot.sheep = 100;
+      bot.sheepShown = 100;
     }
   }
   m.ctf?.reset();

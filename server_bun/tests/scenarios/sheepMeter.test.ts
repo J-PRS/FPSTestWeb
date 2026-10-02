@@ -36,8 +36,9 @@ describe('sheep meter', () => {
     };
     const p = { position: { x: 0, y: 90, z: 0 }, velocity: { x: 30, y: -10, z: 0 } };
     const diving = { out: {}, airborne: true, hasDest: false, dt: 1, height: 30 };
+    room.bots.debugSetSheep('BOT-VEKTOR-01', 60); // meters spawn at 100 now
     bots.sheep.check('BOT-VEKTOR-01', p, diving, 0);
-    expect(bots.sheep.of('BOT-VEKTOR-01')).toBe(0); // tribesing — drains, never charges
+    expect(bots.sheep.of('BOT-VEKTOR-01')).toBeLessThan(60); // tribesing — drains, never charges
   });
 
   it('a thinking bot that stays Tribes-ing never fills the meter', () => {
@@ -51,6 +52,9 @@ describe('sheep meter', () => {
     const room = mkRoom({ bots: 1 });
     const id = 'BOT-VEKTOR-01';
     freeze(room, id, { x: 0, y: 60, z: 0 });
+    // Untouched meters read the unproven default (100) — pin it low so
+    // "stays flat" is the assertion, not the default itself.
+    room.bots.debugSetSheep(id, 0);
     step(room, 40);
     expect(room.bots.sheepOf(id)).toBe(0);
   });
@@ -86,7 +90,10 @@ describe('sheep meter', () => {
       sheep: { check(id: string, p: unknown, m: unknown, now: number): void; of(id: string): number };
     };
     const p = { position: { x: 0, y: 60, z: 0 }, velocity: { x: 0, y: 0, z: 0 } };
-    const idle = { out: { dest: { x: 10, y: 60, z: 0 } }, airborne: false, hasDest: true, foe: true, dt: 1 };
+    // Dest 50m out — a post under 14m away would qualify for the
+    // trickle rate and mask the pedestrian charge under test.
+    const idle = { out: { dest: { x: 50, y: 60, z: 0 } }, airborne: false, hasDest: true, foe: true, dt: 1 };
+    room.bots.debugSetSheep('BOT-VEKTOR-01', 0); // meters spawn at 100 now
     bots.sheep.check('BOT-VEKTOR-01', p, idle, 0);
     // 1s of ignoring = idle debit (9) + foe charge (40) — the foe term
     // alone fills a meter in ~2.5s.
@@ -100,6 +107,7 @@ describe('sheep meter', () => {
     };
     const p = { position: { x: 0, y: 60, z: 0 }, velocity: { x: 0, y: 0, z: 0 } };
     const firing = { out: { dest: { x: 10, y: 60, z: 0 }, fire: { targetId: 'p2', aim: { x: 5, y: 60, z: 0 } } }, airborne: false, hasDest: true, foe: true, dt: 1 };
+    room.bots.debugSetSheep('BOT-VEKTOR-01', 0); // meters spawn at 100 now
     bots.sheep.check('BOT-VEKTOR-01', p, firing, 0);
     expect(bots.sheep.of('BOT-VEKTOR-01')).toBeLessThanOrEqual(10); // only the idle debit, no foe charge
   });
@@ -116,6 +124,7 @@ describe('sheep meter', () => {
     p.isDead = false; // respawn path: deadSet removal clears the slate
     p.position = { x: 0, y: 60, z: 0 };
     step(room, 1);
-    expect(room.bots.sheepOf(id)).toBeLessThan(55);
+    // The reset reads as the fresh-life default — unproven = 100.
+    expect(room.bots.sheepOf(id)).toBe(100);
   });
 });

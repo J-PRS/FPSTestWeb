@@ -3,12 +3,14 @@ import type { BrainOut } from '../../shared/botBrain.ts';
 import type { Room } from './Room.ts';
 import { logger } from './logger.ts';
 
-/** Sheep meter: fills when a bot plays like a pedestrian (walking under
- *  ski speed or parked) and drains while it does Tribes things (covering
- *  ground, airborne, jetting). At 100 it clamps — the meter is a readout
- *  for badges/telemetry, not a punish lever. A slower 5s coverage window
- *  catches bots that squeak past the per-tick speed check but never
- *  actually go anywhere. */
+/** Sheep meter: starts at 100 — llama until proven otherwise. It drains
+ *  fast only while a body demonstrably holds/converts real mechanical
+ *  energy (sqrt(2E) past ~20 m/s-equiv, or actively jetting); walking,
+ *  hopping, and slow falls are pedestrian motion even off the ground.
+ *  Proven play buys ~20s of grace: slowing down afterward charges the
+ *  meter at a trickle, because good players have reasons to pause —
+ *  the full pedestrian rate returns only if the grace lapses. At 100
+ *  it clamps — a readout for badges/telemetry, not a punish lever. */
 export class BotSheepMeter {
   private meter = new Map<string, number>();
   private window = new Map<string, { start: number; dist: number; lx: number; ly: number; lz: number }>();
@@ -26,6 +28,10 @@ export class BotSheepMeter {
    *  "recent" term the tribesing credit reads: momentary ground contact
    *  mid-ski doesn't zero the credit the kinetic peak just earned. */
   private eSm = new Map<string, number>();
+  /** Sim-ms until which the bot's last proven play still counts —
+   *  refreshed on every tribesing tick; the credibility window that
+   *  slows refills for demonstrated skill. */
+  private provenUntil = new Map<string, number>();
   /** Bots currently pinned at 100 — dedupes the maxed-warn so a bot
    *  idling at the cap doesn't re-log every tick. */
   private maxed = new Set<string>();
@@ -46,10 +52,12 @@ export class BotSheepMeter {
     this.why.delete(id);
     this.lastFire.delete(id);
     this.eSm.delete(id);
+    this.provenUntil.delete(id);
     this.maxed.delete(id);
   }
 
-  of(id: string): number { return Math.round(this.meter.get(id) ?? 0); }
+  /** No ticks on record = unproven = full meter. */
+  of(id: string): number { return Math.round(this.meter.get(id) ?? 100); }
   set(id: string, v: number): void { this.meter.set(id, v); }
 
   check(id: string, p: { position: Vec3; velocity: Vec3 }, m: { out: BrainOut; airborne: boolean; hasDest: boolean; foe?: boolean; dt: number; height?: number }, _now: number): void {
@@ -61,8 +69,10 @@ export class BotSheepMeter {
     // ground; jetting does (tank→potential conversion IS the work).
     // Welding the stand's gear is honest work — a parked welder is
     // productive, not a pedestrian.
-    const tribesing = bonusSpeed > 14 || jetting || !!m.out.repair;
-    const prev = this.meter.get(id) ?? 0;
+    const tribesing = bonusSpeed > 20 || jetting || !!m.out.repair;
+    if (tribesing) this.provenUntil.set(id, this.simMs + 20_000);
+    const proven = this.simMs < (this.provenUntil.get(id) ?? 0);
+    const prev = this.meter.get(id) ?? 100;
     let why = this.why.get(id);
     if (!why) { why = { idle: 0, ignore: 0, cover: 0 }; this.why.set(id, why); }
     // Holding the post is work, not sheep: a HoF parked ON its stand
@@ -74,7 +84,7 @@ export class BotSheepMeter {
     const atPost = m.hasDest && Math.hypot(
       p.position.x - m.out.dest.x,
       p.position.z - m.out.dest.z) < 14;
-    const base = this.charge(m, tribesing, bonusSpeed, jetting, atPost, why);
+    const base = this.charge(m, tribesing, bonusSpeed, jetting, atPost || proven, why);
     let meter = prev + base;
     // The foe-ignoring charge only counts a PARKED bot — one that's
     // skiing/jetting/covering ground is playing Tribes even while it
@@ -107,7 +117,9 @@ export class BotSheepMeter {
   private commit(id: string, prev: number, meter: number, why: { idle: number; ignore: number; cover: number }): void {
     if (meter >= 100) {
       this.meter.set(id, 100);
-      if (!this.maxed.delete(id)) {
+      // Warn only on the rise INTO the cap — bodies start at 100 (llama
+      // until proven), so a fresh bot sitting at the cap isn't news.
+      if (prev < 100 && !this.maxed.delete(id)) {
         this.maxed.add(id);
         logger.warn('Sheep meter maxed', { room: this.room.name, bot: id, why: { idle: +why.idle.toFixed(1), ignore: +why.ignore.toFixed(1), cover: +why.cover.toFixed(1) } });
       }
@@ -129,10 +141,13 @@ export class BotSheepMeter {
    *  The drain is rate-capped: a high-E burst (say a 60m/s plummet) used
    *  to bleed a full meter to zero inside a second, reading as a reset.
    *  Faster play still drains faster — just never in a single step. */
-  private charge(m: { out: BrainOut; hasDest: boolean; dt: number }, tribesing: boolean, speedXZ: number, jetting: boolean, atPost: boolean, why: { idle: number }): number {
+  private charge(m: { out: BrainOut; hasDest: boolean; dt: number }, tribesing: boolean, speedXZ: number, jetting: boolean, excused: boolean, why: { idle: number }): number {
     const base = m.dt * (tribesing
-      ? -Math.min(10 + speedXZ * 0.5 + (jetting ? 15 : 0), 25)
-      : atPost ? 2 : m.hasDest ? 9 : 18);
+      ? -Math.min(12 + speedXZ * 0.6 + (jetting ? 15 : 0), 30)
+      // excused = at post OR still inside the proven grace — a player
+      // who just demonstrated real E gets the trickle rate when they
+      // slow down, not the pedestrian meter.
+      : excused ? 2 : m.hasDest ? 9 : 18);
     if (base > 0) why.idle += base;
     return base;
   }

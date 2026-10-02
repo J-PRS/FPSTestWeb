@@ -222,6 +222,22 @@ async function tryWebRTC(config: ConnectionConfig): Promise<GameTransport | null
     // identically without it.
     conn.addEventListener('iceconnectionstatechange', () => {
       logger.warn(`rtc ice: ${conn.iceConnectionState}`);
+      // A dead SCTP association leaves the datachannels reporting 'open'
+      // — send() then swallows claims into a pipe that delivers nothing
+      // (the "half my hits don't apply" phantom). 'disconnected' is a
+      // grace state that often recovers on its own; 'failed'/'closed'
+      // are terminal. Either way, past the grace the lanes go down so
+      // TieredTransport's onDisconnect re-probes a live tier.
+      const s = conn.iceConnectionState;
+      if (s === 'failed' || s === 'closed') {
+        try { dc.close(); ctrl.close(); } catch { /* gone */ }
+      } else if (s === 'disconnected') {
+        setTimeout(() => {
+          if (conn.iceConnectionState === 'disconnected' || conn.iceConnectionState === 'failed') {
+            try { dc.close(); ctrl.close(); } catch { /* gone */ }
+          }
+        }, 2500);
+      }
     });
     return new ServerRtcTransport(dc, config, conn, ctrl);
   } catch {

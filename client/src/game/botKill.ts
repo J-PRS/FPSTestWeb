@@ -25,8 +25,9 @@ export function respawnBotF(b: TeamBots, bot: GameBot): void {
     sp.y = terrain.getHeight(sp.x, sp.z) + EYE;
     bot.respawn({ x: sp.x, y: sp.y, z: sp.z });
     bot.botHp = bot.botMaxHp;
-    bot.sheep = 0; // fresh leash on the meter
-    bot.sheepShown = 0;
+    // Fresh life is unproven — the meter re-earns it each spawn.
+    bot.sheep = 100;
+    bot.sheepShown = 100;
     b.sheep.clear(bot.playerId);
     bot.show();
     bot.setGizmoColor(bot.team === 'ffa' ? 0xcc66ff : TEAM_COLORS[bot.team as TeamId]);

@@ -218,6 +218,8 @@ export class NetworkManager {
             logger.info('Disconnected');
             this.connected = false;
             this.lastTickSeq = -1; // a reconnect starts a fresh seq space
+            this.pendingHits.clear(); // claims sent on the dead lane are
+            // void — the server replays in-flight hits, not lost ones
             this.lastHitSeq = 0;   // hit seqs are per-room — a stale high
                                    // watermark would drop every later hit
             // Same for the cadence metric — else the dead period counts as
@@ -259,12 +261,26 @@ export class NetworkManager {
     return this.onlineExpected && !this.isConnected();
   }
 
+  /** Sends that never left the pipe — connected() false or the inner
+   *  lane dropped the frame. Sampled warn keeps Alt+Q honest about
+   *  "I shot but nothing happened" windows (RTC flap, probe racing). */
+  private sendDrops = 0;
+
   /** Outbound JSON event — typed against the shared protocol union. */
   private send(msg: ClientMessage): void {
-    if (!this.ws?.connected()) return;
+    if (!this.ws?.connected()) { this.noteDrop(msg.type); return; }
     const s = JSON.stringify(msg);
     this.txBytes += s.length;
-    this.ws.send(s);
+    if (this.ws.send(s) === false) this.noteDrop(msg.type);
+  }
+
+  private noteDrop(type: string): void {
+    this.sendDrops++;
+    // First drop is loud; repeats get sampled — a dead lane would
+    // otherwise spam the buffer once per position frame.
+    if (this.sendDrops === 1 || (this.sendDrops & 31) === 0) {
+      logger.warn(`send dropped x${this.sendDrops} — no live lane`, { lastType: type });
+    }
   }
 
   /** Outbound binary frame — pre-encoded by shared/wire.ts. Position input
@@ -274,7 +290,7 @@ export class NetworkManager {
    *  Stale claims self-reject by seq, so reliability costs nothing.
    *  (WS/RTC already degraded to reliable — only WT changed behavior.) */
   private sendBinary(data: Uint8Array): void {
-    if (!this.ws?.connected()) return;
+    if (!this.ws?.connected()) { this.noteDrop('bin'); return; }
     this.txBytes += data.length;
     this.ws.send(data);
   }
@@ -292,6 +308,7 @@ export class NetworkManager {
   private bwDown = 0;
   bandwidth(): { up: number; down: number } {
     const now = performance.now();
+    this.sweepPendingHits(now);
     if (this.bwT === 0) { this.bwT = now; return { up: 0, down: 0 }; }
     const dt = (now - this.bwT) / 1000;
     if (dt >= 0.5) {
@@ -389,6 +406,7 @@ export class NetworkManager {
       rejectCensus.total++;
       rejectCensus.byReason.set(data.reason, (rejectCensus.byReason.get(data.reason) ?? 0) + 1);
       rejectCensus.last = `${data.reason}${data.targetId ? ` →${data.targetId}` : ''}`;
+      if (data.targetId) this.confirmPendingHit(data.targetId);
       logger.error(`shot rejected — predicted damage never applied`, {
         reason: data.reason,
         targetId: data.targetId,
@@ -410,6 +428,7 @@ export class NetworkManager {
     // reconnect would otherwise freeze every remote for the session.
     this.lastHitSeq = 0;
     this.lastTickSeq = -1;
+    this.pendingHits.clear();
     const serverProto = data.protocolVersion ?? 0;
     if (serverProto !== PROTOCOL_VERSION) {
       const tries = Number(sessionStorage.getItem('fps-proto-reload') ?? '0');
@@ -528,7 +547,45 @@ export class NetworkManager {
    *  session — the "half my damage instances don't work" desync. */
   private lastHitSeq = 0;
 
+  /** Predicted-hit ledger: every shot claim against a player is penciled
+   *  in by shotId; an inbound playerHit (me→same target) or a
+   *  shotRejected clears it. If neither lands inside ~1.5s the predicted
+   *  impact was phantom — the claim died on a transport flap or the
+   *  server swallowed it without a reject — which is exactly the
+   *  "exploded on his model but no damage" report. Swept lazily from
+   *  bandwidth() (per-frame caller, gated to 250ms). */
+  private pendingHits = new Map<string, { targetId: string; weaponType?: number; t: number }>();
+  private lastPendingSweep = 0;
+  private static readonly HIT_CONFIRM_MS = 1500;
+
+  private confirmPendingHit(targetId: string): void {
+    // shotId isn't echoed on playerHit, so confirm is by target — oldest
+    // pending entry wins (a second claim on the same target stays
+    // pending until its own confirm arrives).
+    for (const [id, h] of this.pendingHits) {
+      if (h.targetId === targetId) { this.pendingHits.delete(id); return; }
+    }
+  }
+
+  private sweepPendingHits(now: number): void {
+    if (now - this.lastPendingSweep < 250) return;
+    this.lastPendingSweep = now;
+    for (const [id, h] of this.pendingHits) {
+      if (now - h.t < NetworkManager.HIT_CONFIRM_MS) continue;
+      this.pendingHits.delete(id);
+      rejectCensus.total++;
+      rejectCensus.byReason.set('unconfirmed', (rejectCensus.byReason.get('unconfirmed') ?? 0) + 1);
+      rejectCensus.last = `unconfirmed →${h.targetId}`;
+      logger.warn(`predicted hit never confirmed — claim lost or silently dropped`, {
+        shotId: id, targetId: h.targetId,
+        weapon: h.weaponType !== undefined ? WeaponType[h.weaponType] ?? h.weaponType : undefined,
+        ageMs: Math.round(now - h.t), pingMs: this.telemetry.ping, tier: this.ws?.tier,
+      });
+    }
+  }
+
   private handlePlayerHit(data: Extract<ServerMessage, { type: 'playerHit' }>): void {
+    if (data.shooterId === this.localPlayerId) this.confirmPendingHit(data.targetId);
     if (data.seq !== undefined) {
       if (data.seq <= this.lastHitSeq) {
         dedupCensus.hitSeqDrops++;
@@ -689,6 +746,12 @@ export class NetworkManager {
     velocity?: { x: number; y: number; z: number }; timestamp?: number;
     projectileId?: string | null; weaponType?: number; airtime?: number; shotId?: string;
   }): void {
+    // Pencil the prediction into the confirm ledger — a playerHit or
+    // shotRejected clears it; silence past ~1.5s warns (see
+    // sweepPendingHits).
+    if (a.targetId && a.targetId !== 'local' && a.shotId) {
+      this.pendingHits.set(a.shotId, { targetId: a.targetId, weaponType: a.weaponType, t: performance.now() });
+    }
     this.send({ type: 'shot', ...a });
   }
 

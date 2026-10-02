@@ -17,7 +17,8 @@ export class PlayerSheep {
   private prevShoot = 0;
 
   constructor(private playerIdOf: () => string) {
-    this.body = { playerId: this.playerIdOf(), pos: { x: 0, y: 0, z: 0 }, vel: { x: 0, y: 0, z: 0 }, sheep: 0, sheepShown: 0 };
+    // Spawn at 100 — llama until proven; real energy play drains it.
+    this.body = { playerId: this.playerIdOf(), pos: { x: 0, y: 0, z: 0 }, vel: { x: 0, y: 0, z: 0 }, sheep: 100, sheepShown: 100 };
   }
 
   /** Frame tick — the body's pos/vel alias the live Player vectors, so
@@ -29,7 +30,8 @@ export class PlayerSheep {
     this.body.playerId = this.playerIdOf();
     this.body.pos = player.pos;
     this.body.vel = player.vel;
-    if (player.isDead) { this.meter.clear(this.body.playerId); this.body.sheep = this.body.sheepShown = 0; return; }
+    // Fresh life is unproven — the meter re-earns credibility each spawn.
+    if (player.isDead) { this.meter.clear(this.body.playerId); this.body.sheep = this.body.sheepShown = 100; return; }
     if (this.prevShoot <= 0 && player.shootAnimTimer > 0) this.meter.markShot(this.body.playerId);
     this.prevShoot = player.shootAnimTimer;
     const foe = this.foeNear(player, remotes, localTeam);

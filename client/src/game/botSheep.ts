@@ -36,6 +36,10 @@ export class SheepMeter {
    *  peak just earned. */
   private eSm = new Map<string, number>();
 
+  /** Sim-ms until which a body's last proven play still counts — the
+   *  credibility window: demonstrated high-E play keeps refills slow
+   *  when the body slows down afterward. */
+  private provenUntil = new Map<string, number>();
   /** Per-source ledger — positive charge points each channel contributed,
    *  dumped into the warn so tuning reads "why" instead of "that". */
   private why = new Map<string, { idle: number; ignore: number; bleed: number; cover: number }>();
@@ -67,6 +71,7 @@ export class SheepMeter {
   clear(id: string): void {
     this.eLast.delete(id);
     this.eSm.delete(id);
+    this.provenUntil.delete(id);
     this.why.delete(id);
     this.maxedSet.delete(id);
   }
@@ -74,40 +79,24 @@ export class SheepMeter {
   tick(bot: SheepBody, dt: number, terrain: Terrain, s: { foe?: boolean; ignoring?: boolean; hasDest?: boolean; busy?: boolean } = {}): void {
     const { foe = false, ignoring = false, hasDest = false, busy = false } = s;
     const v = bot.vel;
+    const sheepPrev = bot.sheep;
     const { mech, bonusSpeed } = this.energy(bot, dt, terrain);
     // Welding a stand's gear is honest work — a parked welder is
     // productive, not a pedestrian (mirrors the server meter).
     const tribesing = SheepMeter.isTribesing(bonusSpeed) || busy;
+    if (tribesing) this.provenUntil.set(bot.playerId, this.simMs + 20_000);
+    const proven = this.simMs < (this.provenUntil.get(bot.playerId) ?? 0);
     const moving = Math.hypot(v.x, v.z) > 1;
     const why = this.ledger(bot.playerId);
-    // Drain is rate-capped like the server meter — a high-E burst
-    // (60m/s plummet) used to zero the meter in a second, reading as
-    // a reset. Faster play still drains faster, never in one step.
-    let delta = tribesing ? -Math.min(10 + bonusSpeed * 0.5, 25) : moving ? 9 : 18;
-    if (!tribesing) why.idle += delta * dt;
-    // Parked within reach of a visible enemy and holding fire — the
-    // fastest tell. Only counts while NOT tribesing: a bot that's
-    // skiing or repositioning is playing even with its finger off.
-    if (foe && ignoring && !tribesing) { delta += 40; why.ignore += 40 * dt; }
-    // Bleeding total energy without a fight on screen is the deadstop
-    // signature — Tribes play is converting height↔speed losslessly,
-    // so E stays flat through clean skiing and only drops on
-    // face-plants, wall hits, and pedestrian friction.
-    const bleed = this.energyBleed(bot, mech, foe);
-    why.bleed += bleed;
-    bot.sheep += bleed;
-    // Coverage is the ground truth — gate it on the weld exemption, not
-    // tribesing: a bot going nowhere accrues even if a stale velocity or
-    // altitude leak is still crediting it energy.
-    const cover = busy ? 0 : this.coverageDebit(bot, hasDest);
-    why.cover += cover;
-    bot.sheep += cover;
+    const delta = this.charge(bot, mech, bonusSpeed, tribesing, proven, { foe, ignoring, hasDest, busy, moving, dt }, why);
     bot.sheep = Math.max(0, Math.min(100, bot.sheep + delta * dt));
     // ~2s trailing average for display — the raw meter jitters ±10/s
     // around the fill/drain boundary, which reads as flicker.
     bot.sheepShown += (bot.sheep - bot.sheepShown) * Math.min(1, dt * 0.5);
-    if (bot.sheep >= 100) this.maxed(bot);
-    else this.maxedSet.delete(bot.playerId);
+    // Only warn on the RISE into the cap — bodies start at 100 (llama
+    // until proven), so a fresh spawn at the cap isn't a maxed event.
+    if (bot.sheep >= 100 && sheepPrev < 100) this.maxed(bot);
+    else if (bot.sheep < 100) this.maxedSet.delete(bot.playerId);
   }
 
   /** Total mechanical energy (kinetic + potential) is the Tribes
@@ -173,8 +162,9 @@ export class SheepMeter {
    *  else. bonusSpeed is sqrt(2·E_recent): >14 sits above jog speed, so
    *  a body cruising, diving, or riding height↔speed converts drains —
    *  while a low-E hop or a slow fall is just pedestrian motion that
-   *  happens to be off the ground. */
+   *  happens to be off the ground. The bar is ~20 m/s flat-equivalent —
+   *  jogging doesn't prove anything, skiing does. */
   private static isTribesing(bonusSpeed: number): boolean {
-    return bonusSpeed > 14;
+    return bonusSpeed > 20;
   }
 }

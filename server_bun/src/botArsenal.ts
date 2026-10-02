@@ -160,24 +160,27 @@ export class BotArsenal implements BeamHost {
     const az = aim.z - muzzle.z;
     const alen = Math.sqrt(ax * ax + ay * ay + az * az) || 1;
     const dir = { x: ax / alen, y: ay / alen, z: az / alen };
-    // Self-radius clearance: an AOE shell that detonates on terrain
-    // inside its own blast radius of the muzzle is a guaranteed
-    // self-splash — humans see the hump between them and the target
-    // and hold the rocket. March the ray; if dirt crosses it inside
-    // the blast envelope, the shot doesn't exist to be taken.
-    if (this.room.field) {
-      const aoer = getWeaponStats(wt)?.aoeRadius ?? 0;
-      if (aoer > 0) {
-        for (let t = 2; t <= aoer; t += 3) {
-          if (hmHeight(this.room.field, muzzle.x + dir.x * t, muzzle.z + dir.z * t) > muzzle.y + dir.y * t + 1) {
-            return;
-          }
-        }
-      }
-    }
+    if (this.selfBlastBlocked(muzzle, dir, getWeaponStats(wt)?.aoeRadius ?? 0)) return;
     if (!this.room.projectiles.spawn(p.id, wt, muzzle, dir, p.velocity)) {
       fireSpeedless(this, p.id, muzzle, dir, wt);
     }
+  }
+
+  /** Self-radius clearance: an AOE shell that detonates on terrain or a
+   *  structure inside its own blast radius of the muzzle is a guaranteed
+   *  self-splash — humans see the hump between them and the target and
+   *  hold the rocket. March the ray fine enough not to skip a lip; if
+   *  ground or a wall top crosses it inside the blast envelope, the
+   *  shot doesn't exist to be taken. */
+  private selfBlastBlocked(muzzle: Vec3, dir: Vec3, aoer: number): boolean {
+    if (!this.room.field || aoer <= 0) return false;
+    for (let t = 1; t <= aoer; t += 1.5) {
+      const x = muzzle.x + dir.x * t, z = muzzle.z + dir.z * t;
+      const line = muzzle.y + dir.y * t + 1;
+      if (hmHeight(this.room.field, x, z) > line) return true;
+      if (this.room.moveSim.structureTop(x, z) > line) return true;
+    }
+    return false;
   }
 
   pickWeapon(lo: BotLoadout, distXZ: number, dist: number, botId?: string): number {
@@ -277,7 +280,7 @@ export class BotArsenal implements BeamHost {
     // the pursuit is already lost without the launch, so it may still
     // pay blood. Never enough to outright suicide on the pad.
     const hp = this.room.players.getAllPlayers().get(id)?.health ?? 100;
-    if (hp < 45) {
+    if (hp < 65) {
       const me = this.room.players.getAllPlayers().get(id);
       const thief = [...(this.room.flags?.flags.values() ?? [])]
         .map((f) => f.carrier)
@@ -296,7 +299,11 @@ export class BotArsenal implements BeamHost {
           ((carrier.velocity.x - sh.vel.x) * (gx / gap) + (carrier.velocity.z - sh.vel.z) * (gz / gap)) > 4;
         urgent = sep || pulling;
       }
-      if (!urgent || hp < 35) return;
+      // Even a lost chase doesn't buy a funeral: the feet blast costs
+      // ~a third of a bar after falloff — under that, the "launch" is
+      // just a suicide with extra steps (selfK probe: these deaths
+      // happen with the nearest enemy ~120m away — nobody's chasing).
+      if (!urgent || hp < 55) return;
     }
     if ((this.propelT.get(id) ?? 0) > now) return;
     const dx = goal.pos.x - p.position.x, dz = goal.pos.z - p.position.z;

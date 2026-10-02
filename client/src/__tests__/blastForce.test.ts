@@ -89,8 +89,9 @@ describe('applyExplosionForce — local player', () => {
     const r = mkRig();
     r.player.pos.set(5, 0, 0); // dist 5 of radius 10 → falloff dmg = 40 * 0.5 = 20
     r.blast.applyExplosionForce(args());
-    // own blast → 20 * selfAoeScale * selfDamage
-    expect(r.net.sendEnvironmentDamage).toHaveBeenCalledWith(20 * SELF_AOE_SCALE * 1, undefined);
+    // Own blast: the server charges the self-splash authoritatively — the
+    // client only flashes the prediction, it never claims env damage.
+    expect(r.net.sendEnvironmentDamage).not.toHaveBeenCalled();
 
     const r2 = mkRig();
     r2.player.pos.set(5, 0, 0);
@@ -108,14 +109,15 @@ describe('applyExplosionForce — local player', () => {
     expect(r.net.sendEnvironmentDamage).not.toHaveBeenCalled();
   });
 
-  it('own direct hit on self pays direct*selfDamage once via env claim', () => {
+  it('own direct hit on self flashes the direct amount; server pays the damage', () => {
     const r = mkRig();
     r.player.pos.set(5, 0, 0);
     // My own shell tags 'local' — the shot claim can't resolve, so the
-    // blast pays the direct amount (no splash on top). Self-damage mod 1.
+    // blast shows the direct amount (no splash flash on top). The actual
+    // health cost is server-side selfDmg, not an env claim.
     r.blast.applyExplosionForce(args({ directHitTargetId: 'local' }));
     expect(r.player.knock).toHaveBeenCalled();
-    expect(r.net.sendEnvironmentDamage).toHaveBeenCalledWith(40, undefined);
+    expect(r.net.sendEnvironmentDamage).not.toHaveBeenCalled();
   });
 
   it('enemy shell direct-hit on me is server-paid — no self claim', () => {

@@ -101,6 +101,7 @@ function applyRoomInfo(ctx: NetCtx, playerCount: number, roomInfo?: Parameters<N
   const { deps, networkManager } = ctx;
   if (!roomInfo) return;
   deps.world.mode = roomInfo.mode;
+  if (roomInfo.room !== undefined) deps.retireOfflineBots?.();
   applyMatchMeta(ctx, roomInfo);
   if (roomInfo.respawnMs) deps.world.respawnMs = roomInfo.respawnMs;
   announceRoom(ctx, playerCount, roomInfo);

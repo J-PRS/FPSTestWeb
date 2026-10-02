@@ -20,7 +20,8 @@ describe('quiet bot respawn upkeep', () => {
     // Shadow follows the respawn spot, not the corpse.
     const sh = room.moveSim.simState(id);
     expect(sh?.pos.x).toBeCloseTo(50, 0);
-    // Fresh leash on the meter too.
-    expect(room.bots.sheepOf(id)).toBe(0);
+    // Fresh leash on the meter too — a new life is unproven, so it
+    // reseats at the 100 default, not zero.
+    expect(room.bots.sheepOf(id)).toBe(100);
   });
 });

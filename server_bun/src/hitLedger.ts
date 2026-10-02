@@ -2,6 +2,9 @@ import { weaponStats } from './weaponStats.ts';
 // Debug probe: shooter-to-impact distance on self-kills — answers
 // "do bots frag themselves with shots that pop at their own feet".
 export const selfKillImpactDist: number[] = [];
+/** Nearest-enemy range at the moment of self-frag — separates the
+ *  "enemy on top of me" splash from the "shell clipped a lip" kind. */
+export const selfKillFoeDist: number[] = [];
 /** Traded self-frags: the same shooter killed an enemy within the same
  *  blast window — human sacrifice; the rest are pure waste. */
 export const selfKillTrades: { trades: number } = { trades: 0 };
@@ -58,6 +61,18 @@ export class HitLedger {
       c.deps.influence?.splat(victim.position, 'opportunity', 0.8);
     }
     if (shooterId === targetId && impactDist !== undefined) selfKillImpactDist.push(impactDist);
+    if (shooterId === targetId) {
+      const me2 = c.playerManager.getPlayer(shooterId);
+      if (me2) {
+        let foeD = Infinity;
+        for (const o of c.playerManager.getAllPlayers().values()) {
+          if (o.team === me2.team || o.isDead) continue;
+          const d = Math.hypot(o.position.x - me2.position.x, o.position.z - me2.position.z);
+          if (d < foeD) foeD = d;
+        }
+        selfKillFoeDist.push(foeD);
+      }
+    }
     // Trade accounting runs both directions of the batch: a self-frag
     // after a same-window enemy kill, or the enemy kill landing first.
     const now0 = simNow();

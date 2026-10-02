@@ -46,6 +46,10 @@ export interface NetDeps {
   world: WorldState;
   setLastSentPos(pos: { x: number; y: number; z: number }): void;
   entities: () => ReturnType<typeof createEntities>;
+  /** Offline-vs-bots roster lives client-side; a real room claiming the
+   *  match (gameState with a room name) retires it — otherwise ghosts the
+   *  server never heard of stand next to wire bots as unkillable decoys. */
+  retireOfflineBots?(): void;
 }
 
 export function wireNetworkHandlers(deps: NetDeps): NetCtx {
