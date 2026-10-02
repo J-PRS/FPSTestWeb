@@ -36,7 +36,7 @@ export interface LoadoutHost {
 export class PlayerLoadout {
   /** Tier-restricted ordnance — the heavy's exclusive arsenal, same as
    *  TA where lights can't shoulder a mortar. Indexed SLOT_DEFS ids. */
-  static readonly HEAVY_ONLY: readonly number[] = [3, 6, 11]; // Mortar, PlasmaCannon, RocketLauncher
+  static readonly HEAVY_ONLY: readonly number[] = [3, 6, 11, 18]; // Mortar, PlasmaCannon, RocketLauncher, MRVLauncher
   static readonly LOADOUT_SLOTS = 4;
   // wid is slot-space (SLOT_DEFS index): pistol 12, revolver 13, shotgun 9,
   // repair 17. (sticky launcher sits at wid 14 — primary, not a hold-out.)
@@ -78,6 +78,7 @@ export class PlayerLoadout {
     if (this.h.appliedClass === c) return;
     this.h.appliedClass = c;
     this.h.movement.setSpeedScale(CLASS_STATS[c].speedScale);
+    this.h.movement.setBody(CLASS_STATS[c].mass, CLASS_STATS[c].eyeHeight);
     if (c !== 'heavy') this.unshoulderHeavy();
     // One cast for all tiers — the class reads as a scale bump, not a
     // different model, so a tier swap is a rescale, not a rebuild.

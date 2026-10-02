@@ -10,7 +10,8 @@
  */
 import * as THREE from 'three';
 import { acquireBatch, retireBatch, type BatchMap } from '../core/batchPool.js';
-import { markProbe } from '../core/fxDiag.js';
+import { markProbe, registerDiag } from '../core/fxDiag.js';
+import { urlParams } from '../core/params.js';
 
 const TRAIL_COUNT = 14;
 const TRAIL_INTERVAL = 0.04;
@@ -138,19 +139,40 @@ class DotBatch {
     if (hi > this.dirtyHi) this.dirtyHi = hi;
   }
 
+  // Pending-queue union in VERT units — flush() runs per trail and a
+  // bare clearUpdateRanges() would erase the spans earlier trails queued
+  // this frame (three only drains updateRanges at upload). See
+  // TrailBatch.queueDirty for the full rationale.
+  private qLo = Infinity;
+  private qHi = 0;
+
   flush(): void {
-    const lo = this.dirtyLo, n = this.dirtyHi - lo;
+    const lo = this.dirtyLo, hi = this.dirtyHi;
     this.dirtyLo = Infinity; this.dirtyHi = 0;
-    if (n <= 0) return;
-    this.posAttr.clearUpdateRanges();
-    this.posAttr.addUpdateRange(lo * 3, n * 3);
-    this.posAttr.needsUpdate = true;
-    this.sizeAttr.clearUpdateRanges();
-    this.sizeAttr.addUpdateRange(lo, n);
-    this.sizeAttr.needsUpdate = true;
-    this.colAttr.clearUpdateRanges();
-    this.colAttr.addUpdateRange(lo * 4, n * 4);
-    this.colAttr.needsUpdate = true;
+    if (hi - lo <= 0) return;
+    if (urlParams.fxfull) {
+      // Full upload — ?fxfull A/B bypass, see trailBatch.flush.
+      this.posAttr.needsUpdate = true;
+      this.sizeAttr.needsUpdate = true;
+      this.colAttr.needsUpdate = true;
+      return;
+    }
+    if (this.posAttr.updateRanges.length === 0) {
+      this.qLo = Infinity; this.qHi = 0;
+    }
+    const ulo = Math.min(this.qLo, lo), uhi = Math.max(this.qHi, hi);
+    if (ulo === this.qLo && uhi === this.qHi) {
+      this.posAttr.needsUpdate = true;
+      this.sizeAttr.needsUpdate = true;
+      this.colAttr.needsUpdate = true;
+      return;
+    }
+    for (const [a, m] of [[this.posAttr, 3], [this.sizeAttr, 1], [this.colAttr, 4]] as const) {
+      a.clearUpdateRanges();
+      a.addUpdateRange(ulo * m, (uhi - ulo) * m);
+      a.needsUpdate = true;
+    }
+    this.qLo = ulo; this.qHi = uhi;
   }
 }
 
@@ -171,6 +193,16 @@ function releaseDotSlot(scene: THREE.Scene, batch: DotBatch, slot: number): void
   batch.free.push(slot);
   retireBatch(dotBatches, scene, batch, b => b.free.length === BATCH_TRAILS, b => b.dispose());
 }
+
+// Alt+Q census — a trail that emits but draws nothing shows here as a
+// live slot with a dead batch (freed verts, culled/invisible Points).
+registerDiag('ballDots', () => ({
+  ballDots: [...dotBatches.values()].flat().map(b => ({
+    free: b.free.length,
+    visible: b.points.visible,
+    inScene: !!b.points.parent,
+  })),
+}));
 
 export class BallTrailDots {
   private dots: TrailDot[] = [];
@@ -209,6 +241,12 @@ export class BallTrailDots {
   }
 
   get size(): number { return this.dots.length; }
+
+  /** Per-trail state for the Alt+Q dump — emit cadence vs live dots is
+   *  the emitting-vs-invisible split (timer runs but dots=0 = spawn starved). */
+  dbg(): { slot: number; dots: number; timer: number; lastLive: number; batchFree: number } {
+    return { slot: this.slot, dots: this.dots.length, timer: +this.timer.toFixed(3), lastLive: this._lastLive, batchFree: this.batch.free.length };
+  }
 
   private spawn(pos: THREE.Vector3, radius: number, tint: THREE.Color): void {
     if (this.slot < 0) return;

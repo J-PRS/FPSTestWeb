@@ -25,7 +25,7 @@ const KICK_TUNE: Record<number, [number, number, number, number, number, number,
     [WeaponType.Railgun]:         [0.18, 0.01, 0x77ccff, 1.1, 0.9, 1.2],  // fast snap, cyan discharge
     [WeaponType.Lightning]:       [0.21, 0.05, 0x8fdcff, 0.4, 0.4, 0.4],  // per-tick hum — tiny flash, sideways jitter
     [WeaponType.Cannon]:          [0.41, 0.02, 0xffaa55, 1.5, 1.3, 1.1],  // heavy naval-gun thump, big warm flash
-    [WeaponType.RocketLauncher]:  [0.33, 0.03, 0xffcc77, 1.3, 1.1, 1.2],  // launch shove, hot motor bloom
+    [WeaponType.RocketLauncher]:  [2.8, 0.02, 0xff8844, 1.8, 1.6, 0.9, 1.15],  // MRV-style tube launch — back-blast shove, ~2.8s slow haul home
     [WeaponType.Pistol]:          [0.15, 0.01, 0xffe0a0, 0.35, 0.4, 1.1], // snappy crack — muzzle flip, quick settle
     [WeaponType.Revolver]:        [0.41, 0.05, 0xffb060, 1.1, 0.8, 1.3],  // hand-cannon bark — big muzzle flip
     [WeaponType.Sticky]:          [0.25, 0.02, 0xff66dd, 0.8, 0.7, 0.9],  // thoomp — tube launch, magenta spit

@@ -3,7 +3,6 @@ import * as THREE from 'three';
 import type { Terrain } from '../world/terrain.js';
 import type { PlayerModel } from './PlayerModel.js';
 import { BallTrailDots } from './ballTrails.js';
-import { EYE_OFFSET } from '../core/config.js';
 import { pickLocomotionAnim } from './locomotionAnim.js';
 
 // Model-anim drive — turns RemotePlayer's movement/state into PlayerModel
@@ -59,7 +58,7 @@ export class RemoteAnim {
   tickModel(dt: number): void {
     const h = this.h;
     if (!h.loaded) return;
-    h.model.setPosition(h.position.x, h.position.y - EYE_OFFSET, h.position.z);
+    h.model.setPosition(h.position.x, h.feetY, h.position.z);
     h.model.setRotation(h.rotation.yaw, h.rotation.pitch, h.rotation.roll);
     // dt=0 (paused/first frame) would blow speed to Infinity → 'ski' flicker
     const speed = this._speed = dt > 0 ? h.position.distanceTo(h.previousPosition) / dt : 0;

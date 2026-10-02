@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { weaponDef } from '../weapons.js';
 import { DISC_RATE } from '../core/config.js';
 import { THROW_TOTAL } from './ViewModel.js';
+import { CLASS_STATS } from '../../../shared/botClasses.js';
 import type { Player } from './Player.js';
 
 // Trigger + impulse family: weapon/belt fire intent and every
@@ -46,9 +47,13 @@ export function heal(p: Player, fraction: number): void {
   }
 
 export function applyKnockback(p: Player, from: THREE.Vector3, force: number): void {
+    // Force arrives pre-mass (server sends the raw impulse magnitude and
+    // scales its own dv by class mass) — divide here so the predicted and
+    // wire echoes land the same delta.
+    const f = force / CLASS_STATS[p.appliedClass].mass;
     const dir = p.pos.clone().sub(from).normalize();
-    p.vel.addScaledVector(dir, force);
-    p.vel.y += force * 0.5;
+    p.vel.addScaledVector(dir, f);
+    p.vel.y += f * 0.5;
     // Explosion impulse ungrounds — otherwise ground friction eats the
     // horizontal component while still within the near-ground band.
     p.onGround = false;
@@ -56,9 +61,10 @@ export function applyKnockback(p: Player, from: THREE.Vector3, force: number): v
   }
 
 export function applyPull(p: Player, to: THREE.Vector3, force: number): void {
+    const f = force / CLASS_STATS[p.appliedClass].mass;
     const dir = to.clone().sub(p.pos).normalize();
-    p.vel.addScaledVector(dir, force);
-    p.vel.y += force * 0.3;
+    p.vel.addScaledVector(dir, f);
+    p.vel.y += f * 0.3;
     p.onGround = false;
     p.syncMovement();
   }

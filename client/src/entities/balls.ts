@@ -13,6 +13,7 @@ import { BallTrailDots } from './ballTrails.js';
 import { tickStallBreaker as tickStall, tickEnrage as tickRage, handleGroundBounce as groundBounce, setEnraged as rageSet } from './ballRage.js';
 import { writeBallInstance, tickBallRenderPos, tickBallTrails, updateBallDead } from './ballVisual.js';
 import { allocSlots, freeSlots, getShadows, type SwarmPart } from './swarms.js';
+import { registerDiag } from '../core/fxDiag.js';
 
 const BALL_GRAVITY   = GRAVITY;
 
@@ -92,6 +93,9 @@ export interface Targetable {
 }
 
 export class Ball {
+  // Live-ball registry — feeds the Alt+Q trail census (ribbon/dot gate
+  // state per ball, no plumbing through entities.ts needed).
+  static readonly live = new Set<Ball>();
   // Camera position synced by the main loop once per frame — feeds the
   // billboarded ribbon trails (avoids threading camPos through every
   // update() call site including demo playback fast-forward).
@@ -275,6 +279,7 @@ export class Ball {
 
     if (!allocSlots('ball', this)) { this.dead = true; this._disposed = true; }
     writeBallInstance(this);
+    Ball.live.add(this);
   }
 
   update(dt: number, terrain: Terrain, playerPos: THREE.Vector3): void {
@@ -367,11 +372,31 @@ export class Ball {
   }
 
   dispose(): void {
+    Ball.live.delete(this);
     if (!this.meshRemoved) { freeSlots('ball', this); this.meshRemoved = true; }
     this.trails.dispose();
     for (const r of this.ribbons) r.dispose();
   }
 }
+
+// Alt+Q census — one row per live ball pairing the emit-gate inputs
+// (speed, cam distance vs the 200m particle cutoff) with the outputs
+// (live dots, ribbon samples). A ball with velSq>0.5 and nearCam but
+// dots=0/count<2 is emitting-into-the-void; velSq≈0 everywhere is the
+// net-velocity starvation case.
+registerDiag('balls', () => ({
+  balls: {
+    viewPos: `${Ball.viewPos.x.toFixed(0)},${Ball.viewPos.y.toFixed(0)},${Ball.viewPos.z.toFixed(0)}`,
+    rows: [...Ball.live].map(b => ({
+      id: b.id, v: b.variant, net: b.netDriven || undefined, dead: b.dead || undefined,
+      pos: `${b._rpos.x.toFixed(0)},${b._rpos.y.toFixed(0)},${b._rpos.z.toFixed(0)}`,
+      spd: +Math.sqrt(b.vel.lengthSq()).toFixed(1),
+      camD: +Math.sqrt(b._rpos.distanceToSquared(Ball.viewPos)).toFixed(0),
+      dots: b.trails.dbg(),
+      rib: b.ribbons.map(r => r.dbg()),
+    })),
+  },
+}));
 
 export type { NetSeg } from './ballNet.js';
 

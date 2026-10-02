@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-import { EYE_OFFSET } from '../core/config.js';
+import { classCapsule } from '../../../shared/botClasses.js';
 import { makeContouredShield, makeShieldBubble, ShieldBubble } from '../effects/shieldBubble.js';
 
 // Status-aura family — the energy-shield bubble plus the one-bit status
@@ -9,6 +9,8 @@ import { makeContouredShield, makeShieldBubble, ShieldBubble } from '../effects/
 // model, and the cloak/stale hide flags the auras read.
 export interface AuraHost {
   position: THREE.Vector3;
+  /** Armor tier — the shield/aura anchor rides at the class's feet. */
+  armorClass?: string;
   scene: THREE.Scene;
   model: { object3D: THREE.Object3D | null } | null;
   cloakHidden: boolean;
@@ -86,7 +88,7 @@ export class RemoteAuras {
   setCharged(on: boolean): void { this.setAura('charge', on, 1.9, 0x9fd8ff); }
 
   tick(dt: number): void {
-    const y = this.h.position.y - EYE_OFFSET;
+    const y = this.h.position.y - classCapsule(this.h.armorClass).eye;
     if (this.shieldBubble) {
       this.shieldBubble.update(dt);
       if (this.shielded) this.shieldBubble.mesh.position.set(this.h.position.x, y + 1.1, this.h.position.z);

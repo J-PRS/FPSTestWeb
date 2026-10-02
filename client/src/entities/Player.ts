@@ -285,6 +285,7 @@ export class Player {
     this.appliedClass = this.armorClass;
     this.appliedPerk = this.perk;
     this.movement.setSpeedScale(CLASS_STATS[this.appliedClass].speedScale);
+    this.movement.setBody(CLASS_STATS[this.appliedClass].mass, CLASS_STATS[this.appliedClass].eyeHeight);
     if (this.appliedClass !== 'heavy') this.armory.unshoulderHeavy();
 
     // Your third-person body is the mannequin at your tier's silhouette
@@ -358,7 +359,7 @@ export class Player {
     this.fireWeapons();
     this.emitFx.moveEvents(isJetting, input.skiHeld, input.jumpHeld, dt);
     this.visuals.updateShadowBlob(this.terrain, this.pos);
-    this.jumpAnimTimer = this.visuals.updateModelAnim(this.model, this.pos, this.yaw, this.pitch, this.jumpAnimTimer, this.getSpeed(), dt, this.onGround, isJetting, this.vel, input.skiHeld, this.shootAnimTimer, this.thirdPerson);
+    this.jumpAnimTimer = this.visuals.updateModelAnim(this.model, this.pos, this.yaw, this.pitch, this.jumpAnimTimer, this.getSpeed(), dt, this.onGround, isJetting, this.vel, input.skiHeld, this.shootAnimTimer, this.thirdPerson, CLASS_STATS[this.appliedClass].eyeHeight);
   }
 
   private tickTimers(dt: number): void {

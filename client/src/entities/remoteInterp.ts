@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { GRAVITY, EYE_OFFSET } from '../core/config.js';
+import { GRAVITY } from '../core/config.js';
+import { classCapsule } from '../../../shared/botClasses.js';
 import { Terrain } from '../world/terrain.js';
 import { ChildLogger } from '../core/Logger.js';
 import { SnapshotBuffer } from './remoteSnapshots.js';
@@ -22,6 +23,8 @@ export interface InterpHost {
   serverVelocity: THREE.Vector3;
   terrain: Terrain | null;
   playerId: string;
+  /** Armor tier — dead reckoning grounds the eye at the class's height. */
+  armorClass?: string;
 }
 
 // Scratch — shared across instances, never retained past the call
@@ -228,8 +231,9 @@ export class RemoteInterp {
 
     if (this.h.terrain) {
       const groundY = this.h.terrain.getHeight(p.x, p.z);
-      if (p.y < groundY + EYE_OFFSET) { // keep EYE at eye height above feet
-        p.y = groundY + EYE_OFFSET;
+      const eye = classCapsule(this.h.armorClass).eye;
+      if (p.y < groundY + eye) { // keep EYE at eye height above feet
+        p.y = groundY + eye;
         this.simulatedVelocity.y = 0;
         this.simulatedVelocity.x *= 0.9; // Friction
         this.simulatedVelocity.z *= 0.9;

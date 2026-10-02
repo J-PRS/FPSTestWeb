@@ -152,8 +152,8 @@ export class PlayerVisuals {
     this.airTrail?.fade(dt);
   }
 
-  updateModelAnim(model: PlayerModel | null, pos: THREE.Vector3, ...rest: [yaw: number, pitch: number, jumpAnimTimer: number, speed: number, dt: number, onGround: boolean, jetting?: boolean, vel?: THREE.Vector3, skiing?: boolean, shootT?: number, thirdPerson?: boolean]): number {
-    const [yaw, pitch, jumpAnimTimer0, speed, dt, onGround, jetting = false, vel, skiing, shootT = 0, thirdPerson = false] = rest;
+  updateModelAnim(model: PlayerModel | null, pos: THREE.Vector3, ...rest: [yaw: number, pitch: number, jumpAnimTimer: number, speed: number, dt: number, onGround: boolean, jetting?: boolean, vel?: THREE.Vector3, skiing?: boolean, shootT?: number, thirdPerson?: boolean, eyeOffset?: number]): number {
+    const [yaw, pitch, jumpAnimTimer0, speed, dt, onGround, jetting = false, vel, skiing, shootT = 0, thirdPerson = false, eyeOff = EYE_OFFSET] = rest;
     let jumpAnimTimer = jumpAnimTimer0;
     if (!model) { this.tickAirTrail(dt, pos, undefined, false); return jumpAnimTimer; }
     if (jumpAnimTimer > 0) {
@@ -172,24 +172,30 @@ export class PlayerVisuals {
     // ANY reason (belt lower, flinch, holster), a trigger pull is the
     // moment it must read as aimed. Airborne keeps the jump/jet pose;
     // the arm-layer aims up there regardless.
-    const animState: AnimationState = airborne
-      ? (jetting ? 'jet' : 'jump')
-      // The mannequin's fire feedback is the procedural recoil + muzzle
-      // flash (model.fire) under the always-on aim layer — the Pistol_Shoot
-      // clip only flickers the arms off-aim, so it never owns the state.
-      : shootT > 0 && model.variant !== 'mannequin'
-        ? 'shoot'
-        : pickLocomotionAnim(model['currentState'] as AnimationState, speed, skiing);
+    const animState = this.pickAnimState(model, airborne, jetting, shootT, speed, skiing);
     // Each fresh trigger pull (shootT rising) kicks the gun — the recoil/
     // flash runs for EVERY shot including the local third-person model,
     // which previously got no fire feedback at all.
     this.applyShootKick(model, animState, shootT);
     this.applyLocomotionLean(model, animState, yaw, speed, vel, jetting);
-    // pos is eye height — the model plants its feet 1.8m below
-    model.setPosition(pos.x, pos.y - EYE_OFFSET, pos.z);
+    // pos is eye height — the model plants its feet eyeOff below it
+    // (per armor class: heavy stands 2.5m, light 1.8m).
+    model.setPosition(pos.x, pos.y - eyeOff, pos.z);
     model.setRotation(yaw, pitch);
     model.update(dt);
     return jumpAnimTimer;
+  }
+
+  /** Firing snaps the body into the armed pose — if the gun was down for
+   *  ANY reason (belt lower, flinch, holster), a trigger pull is the
+   *  moment it must read as aimed. The mannequin's fire feedback is the
+   *  procedural recoil + muzzle flash under the always-on aim layer —
+   *  the Pistol_Shoot clip only flickers the arms off-aim, so it never
+   *  owns the state. */
+  private pickAnimState(model: PlayerModel, airborne: boolean, jetting: boolean, shootT: number, speed: number, skiing?: boolean): AnimationState {
+    if (airborne) return jetting ? 'jet' : 'jump';
+    if (shootT > 0 && model.variant !== 'mannequin') return 'shoot';
+    return pickLocomotionAnim(model['currentState'] as AnimationState, speed, skiing);
   }
 
   private applyShootKick(model: PlayerModel, animState: AnimationState, shootT: number): void {

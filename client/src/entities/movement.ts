@@ -36,7 +36,7 @@ class TerrainSurface {
     out.x = n.x; out.y = n.y; out.z = n.z;
     return out;
   }
-  resolveBody(s: MoveState): void { this.solid?.resolveBody(s); }
+  resolveBody(s: MoveState, height: number): void { this.solid?.resolveBody(s, height); }
 }
 
 /**
@@ -66,6 +66,13 @@ export class MovementController {
   /** Armor-class ground speed — must match the server's shadow or every
    *  ground move reads as a divergence. */
   setSpeedScale(scale: number): void { this.sim.speedScale = scale; }
+  /** Armor-class body: jet thrust divides by mass, and grounded/ceiling
+   *  checks stand the body `eyeHeight` tall — must match the server's
+   *  shadow or jets/headroom read as divergence. */
+  setBody(mass: number, eyeHeight: number): void {
+    this.sim.mass = mass;
+    this.sim.eyeHeight = eyeHeight;
+  }
   getState(): MovementState { return this.state; }
   setState(newState: MovementState): void { this.sim.setState(newState); }
   update(dt: number): void { this.sim.update(dt); }

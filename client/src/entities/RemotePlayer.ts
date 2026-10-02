@@ -1,12 +1,10 @@
 import * as THREE from 'three';
 
-import { EYE_OFFSET } from '../core/config.js';
-
 import { Terrain } from '../world/terrain.js';
 import { ChildLogger } from '../core/Logger.js';
 
 import { PlayerModel } from './PlayerModel.js';
-import { CLASS_MODEL_SCALE } from '../../../shared/botClasses.js';
+import { CLASS_MODEL_SCALE, classCapsule, classMass } from '../../../shared/botClasses.js';
 import { RemoteInterp } from './remoteInterp.js';
 import { RemoteGizmo } from './remoteGizmo.js';
 import { resetCorpse, launchCorpse, stepCorpse, type CorpseState } from './remoteDeath.js';
@@ -23,9 +21,9 @@ const logger = new ChildLogger('RemotePlayer');
  */
 let _remotePlayerInstanceCounter = 0;
 
-// Networked position.y is EYE height (feet + EYE_OFFSET, see movement.ts
-// checkIfGrounded). The robot model's origin is at its feet, so the model
-// must render EYE_OFFSET below the networked position.
+// Networked position.y is EYE height (feet + eyeHeight, per armor class —
+// see movement.ts). The robot model's origin is at its feet, so the model
+// renders `eyeOffset` below the networked position.
 
 export class RemotePlayer {
 
@@ -33,7 +31,9 @@ export class RemotePlayer {
   /** Feet height — `position.y` is the networked EYE height; convert
    *  explicitly here instead of inline `- 1.8` at call sites (that's how
    *  the hitbox-vs-gizmo drift bug happened). */
-  get feetY(): number { return this.position.y - EYE_OFFSET; }
+  get feetY(): number { return this.position.y - this.eyeOff; }
+  /** This body's eye-above-feet — per armor class (light 1.8, heavy 2.5). */
+  get eyeOff(): number { return classCapsule(this.armorClass).eye; }
   rotation: { yaw: number; pitch: number; roll: number };
   playerId: string;
   readonly instanceId: number;
@@ -80,7 +80,11 @@ export class RemotePlayer {
   /** Armor-tier silhouette — heavy reads bulkier, light slimmer. Applied
    *  post-load because the GLB path sets its own fit scale. */
   private _classScale = 1;
+  /** Armor class from the wire ('light'|'heavy'|undefined=medium) — the
+   *  HUD indicator silhouette reads it. */
+  armorClass?: string;
   setClass(cls?: string): void {
+    this.armorClass = cls;
     this._classScale = cls === 'heavy' ? CLASS_MODEL_SCALE.heavy : cls === 'light' ? CLASS_MODEL_SCALE.light : 1;
     if (this._loaded) this.applyClassScale();
   }
@@ -120,7 +124,7 @@ export class RemotePlayer {
     this.model.load().then(() => {
       this._loaded = true;
       this.applyClassScale();
-      this.model.setPosition(this.position.x, this.position.y - EYE_OFFSET, this.position.z);
+      this.model.setPosition(this.position.x, this.position.y - this.eyeOff, this.position.z);
       this._model.setRotation(this.rotation.yaw, this.rotation.pitch);
       // Shield may have gone up before the GLB landed (sphere fallback)
       // — upgrade it to the contoured shell once the bones exist.
@@ -183,7 +187,7 @@ export class RemotePlayer {
 
     // Update model if loaded (position/rotation/scale/animation)
     if (this._loaded) {
-      this._model.setPosition(this.position.x, this.position.y - EYE_OFFSET, this.position.z);
+      this._model.setPosition(this.position.x, this.position.y - this.eyeOff, this.position.z);
       this._model.setRotation(this.rotation.yaw, this.rotation.pitch, this.rotation.roll);
       if (this.corpse.scale !== 1.0) {
         this._model.setScale(this.corpse.scale);
@@ -334,7 +338,9 @@ export class RemotePlayer {
   tickGhost(dt: number): void { tickGhostF(this, dt); } // anim drive calls it post-locomotion
 
   applyPredictedKnockback(fromPos: THREE.Vector3, impulseMag: number, pull = false): void {
-    this.interp.predict(fromPos, impulseMag, pull);
+    // Mass gates the shove — the server divides its dv by class mass, so
+    // the predicted window must or a heavy's arc overshoots and snaps back.
+    this.interp.predict(fromPos, impulseMag / classMass(this.armorClass), pull);
   }
 
   // simulatePhysics() remains for genuine packet-loss dead reckoning.
