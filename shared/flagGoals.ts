@@ -157,10 +157,14 @@ function hofGoal(s: FlagSituation, commit: number) {
 }
 
 /** Light defense / technician / generic defense: home-side priorities —
- *  thief, dropped, then hold home in intercept range. */
+ *  thief, dropped, then hold home in intercept range. A teammate
+ *  carrier closing on home pulls midfield defense OUT to meet him —
+ *  early escort beats a late body-block: the carrier's most fragile
+ *  leg is the approach, where chasers converge. */
 function defenseGoal(s: FlagSituation) {
   if (s.thief) return s.thief;
   if (s.dropped) return s.dropped;
+  if (s.escort && Math.hypot(s.escort.x - s.home.x, s.escort.z - s.home.z) < 260) return s.escort;
   return s.home;
 }
 
