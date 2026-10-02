@@ -17,6 +17,7 @@ import type { Vec3 } from './types.ts';
 import type { Room } from './Room.ts';
 import type { Heightfield } from '../../shared/heightfield.ts';
 import { BotBrain, type BotVec, type BrainOut } from '../../shared/botBrain.ts';
+import type { BotSkill } from '../../shared/botSkill.ts';
 import type { ChatterKind } from '../../shared/botTaunts.ts';
 import { logger } from './logger.ts';
 import { pushRewindSample } from './rewind.ts';
@@ -88,6 +89,11 @@ export class ServerBots {
    *  for per-role stat lines without touching the roster internals. */
   roleOf(id: string): BotRole | undefined {
     return this.roster.roleInfo.get(id);
+  }
+  /** A bot's rolled skill matrix — telemetry reads it for per-bot
+   *  skill↔outcome lines without touching the brain internals. */
+  skillOf(id: string): BotSkill | undefined {
+    return this.brains.get(id)?.skill;
   }
   /** Brain cadence: senses+think+fire run every THINK_DIV tick per bot
    *  (phase-offset so the squad doesn't think in lockstep). 20Hz decisions

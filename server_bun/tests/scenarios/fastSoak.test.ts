@@ -1,5 +1,5 @@
 import { describe, it, expect, afterAll } from 'bun:test';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, appendFileSync } from 'node:fs';
 import { deflateSync } from 'node:zlib';
 import { dirname } from 'node:path';
 import { mkRoom, step, watch } from './harness.ts';
@@ -770,6 +770,22 @@ describe('scenario: warp soak throughput', () => {
       const cp = (room.flags?.capLog ?? []).filter((c) => c.capAt >= runStart && roleOf(c.by) === r).length;
       const rt = (room.flags?.retLog ?? []).filter((x) => x.at >= runStart && roleOf(x.by) === r).length;
       console.log(`  ${r.padEnd(14)} ${String(s.n).padStart(4)}  ${String(s.k).padStart(3)} / ${s.d} ${String(Math.round(sumFor(r, botDmg))).padStart(6)} ${String(gr).padStart(3)} ${String(cp).padStart(2)} ${String(rt).padStart(2)} ${String(sumFor(r, botCk)).padStart(2)}   ${cnt ? (spd / cnt).toFixed(1).padStart(4) : '   -'} ${cnt ? (en / cnt).toFixed(0).padStart(5) : '    -'} ${cnt ? (life / cnt).toFixed(0).padStart(6) : '     -'} ${cnt ? ((post / cnt) * 100).toFixed(0).padStart(4) : '   -'} ${cnt ? ((flag / cnt) * 100).toFixed(0).padStart(4) : '   -'}`);
+    }
+    // Per-bot sheet goes to soak.log, not the console — the role table
+    // hides individual outliers, and skill↔outcome reads need the person,
+    // not the squad mean (a capper with movement .5 is a different
+    // problem than a capper with movement 1.4 dying in the ring).
+    const logPath = process.env.FPS_SHEEP_LOG;
+    if (logPath) {
+      const lines: string[] = ['  — per-bot sheet (skill vs outcome) —', '  id               role          K / D   spd  move cour form pull axes(snap/track/arcL/arcJ avg)'];
+      for (const pl of [...players].sort((a, b) => a.id.localeCompare(b.id))) {
+        if (!pl.id.startsWith('BOT')) continue;
+        const s = room.bots?.skillOf(pl.id);
+        const es = eStats.get(pl.id);
+        const axAvg = s ? (Object.values(s.axes).reduce((t, a) => t + (a.moving + a.still) / 2, 0) / 4) : 0;
+        lines.push(`  ${pl.id.padEnd(16)} ${(roleOf(pl.id) ?? '-').padEnd(13)} ${String(pl.kills).padStart(3)} / ${String(pl.deaths).padEnd(3)} ${es && es.n ? (es.spd / es.n).toFixed(1).padStart(4) : '   -'} ${s ? s.movement.toFixed(2).padStart(4) : '   -'} ${s ? s.courage.toFixed(2).padStart(4) : '   -'} ${s ? s.form.toFixed(2).padStart(4) : '   -'} ${s ? (s.beltPull ? '  yes' : '   no') : '    -'} ${s ? axAvg.toFixed(2) : '-'}`);
+      }
+      appendFileSync(logPath, lines.join('\n') + '\n');
     }
     if (hofAway.size) {
       const hofTotal = [...hofAway.values()].reduce((a, b) => a + b, 0);
