@@ -187,12 +187,28 @@ export class BotRoster {
         // HoF gets the same nudge: mines+shields ARE the job. (The
         // deploy itself stays stochastic — a guideline, not a script.)
         if (want === 'technician' || want === 'hof') this.brains.get(donor)?.setBuilder(true);
+        // A HoF that blasts off the flag on every nearby shell is a
+        // HoF that isn't ON the flag — juggernaut is the perk a human
+        // anchor would pick, and it's what makes "planted" physically
+        // true instead of a goal the sim keeps vetoing.
+        if (want === 'hof' && donorP) donorP.perk = 'juggernaut';
         // A capper who PREFERS pull rides the implosion disc — the
         // forward launch needs no heel-shot turnaround. Push-style
         // cappers keep their drawn belt and blast off their heels;
         // lobbies want both kinds of runner.
         if (want === 'capper') {
           const lo = this.loadouts.get(donor);
+          // The spinfusor is the capper's one-tool-fits-all: instant
+          // contact detonation is the jump engine and the knockback
+          // sweeps the stand on the fly-through (Tribes canon). A donor
+          // kit without it blasts off the Arsenal's hidden-Disc
+          // fallback — legal, but it means the runner's real inventory
+          // doesn't show the gun he's actually using.
+          if (lo) {
+            const far = getWeaponStats(lo.far)?.aoeRadius > 0 && getWeaponStats(lo.far)?.forceMode !== 'pull' ? lo.far : WeaponType.Disc;
+            const mid = getWeaponStats(lo.mid)?.aoeRadius > 0 ? lo.mid : WeaponType.GrenadeLauncher;
+            this.loadouts.set(donor, { ...lo, far, mid });
+          }
           if (lo && this.brains.get(donor)?.skill.beltPull && getWeaponStats(lo.belt)?.forceMode !== 'pull') {
             this.loadouts.set(donor, { ...lo, belt: WeaponType.DiscPull });
           }
