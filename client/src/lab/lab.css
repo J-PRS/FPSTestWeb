@@ -1,0 +1,80 @@
+/* Sim lab — fullscreen three-pane view opened from the ESC menu.
+   Everything lives under #lab so styles can't leak into game chrome. */
+#lab {
+  position: fixed;
+  inset: 0;
+  display: none;
+  grid-template-columns: 220px 1fr 300px;
+  grid-template-rows: 44px 1fr;
+  background: #0a0e14;
+  z-index: 60;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  color: #cfd8e3;
+}
+#lab.open { display: grid; }
+
+#lab-head {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 14px;
+  border-bottom: 1px solid #223042;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+}
+#lab-head .lab-title { font-weight: 600; color: #7fc1ff; }
+#lab-head .lab-hint { margin-left: auto; opacity: 0.55; font-size: 11px; }
+#lab-close {
+  background: #223042;
+  color: #cfd8e3;
+  border: 1px solid #33465e;
+  padding: 4px 14px;
+  cursor: pointer;
+  font-size: 12px;
+}
+#lab-close:hover { background: #2c3f57; }
+
+#lab-list {
+  border-right: 1px solid #223042;
+  overflow-y: auto;
+  padding: 8px;
+}
+.lab-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: 1px solid transparent;
+  color: #cfd8e3;
+  padding: 8px 10px;
+  margin-bottom: 4px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.lab-item:hover { background: #131b26; }
+.lab-item.active { border-color: #3aa7ff; background: #15222f; }
+.lab-item .lab-item-blurb { display: block; opacity: 0.5; font-size: 11px; margin-top: 2px; }
+
+#lab-center { position: relative; min-width: 0; }
+#lab-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+#lab-blurb {
+  position: absolute;
+  left: 10px;
+  bottom: 8px;
+  font-size: 11px;
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+#lab-dump {
+  border-left: 1px solid #223042;
+  overflow-y: auto;
+  padding: 10px;
+  font-family: Consolas, monospace;
+  font-size: 11px;
+  white-space: pre-wrap;
+}
+.lab-kv { display: flex; justify-content: space-between; gap: 8px; padding: 2px 0; }
+.lab-kv .k { opacity: 0.55; }
+.lab-kv .v { text-align: right; }

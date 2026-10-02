@@ -6,6 +6,7 @@ import { audio } from '../core/audio.js';
 import { buildKeysMenu } from './keysMenu.js';
 import { isCapturing } from '../core/keybinds.js';
 import { wireLoadoutBar } from './loadoutMenu.js';
+import { wireLabButton } from '../lab/labView.js';
 
 export interface OverlayInputDeps {
   overlay: HTMLElement;
@@ -34,6 +35,7 @@ export function wireOverlayInput(deps: OverlayInputDeps) {
   const keysOpen = document.getElementById('keys-open');
   const keysModal = document.getElementById('keys-modal');
   if (keysOpen && keysModal) buildKeysMenu(keysOpen, keysModal);
+  wireLabButton();
 
   // Single source of truth for menu visibility — sets overlay display AND
   // the body class that hides the HUD layer (inline display:block left by
