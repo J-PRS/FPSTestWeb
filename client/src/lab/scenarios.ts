@@ -14,7 +14,8 @@ import { BotBrain, type BotVec } from '../../../shared/botBrain.js';
 import { getWeaponStats, WeaponType } from '../../../shared/weapons.js';
 import { BOT_LOADOUTS, pickBotWeapon, type BotLoadout } from '../../../shared/botLoadouts.js';
 import {
-  spawnBall, spawnCrawler, spawnBolt, spawnMover, spawnShell,
+  spawnBall, spawnCrawler, spawnFlyer, spawnRoller, spawnSlither,
+  spawnBolt, spawnMover, spawnShell,
   LAB_FLAT_FIELD, type LabWorld, type SimEntity, type MoverOpts,
 } from './simKit.js';
 import { getProjectileConfig } from '../projectiles/index.js';
@@ -343,6 +344,97 @@ function crawlerPack(scene: THREE.Scene): LabInstance {
         ['winding up', String(pack.filter(p => p.sim.state === 'windup').length)],
         ['wandering', String(pack.filter(p => p.sim.state === 'wander').length)],
       ];
+      for (const [k, n] of events) rows.push([`ev:${k}`, String(n)]);
+      return rows;
+    },
+  });
+  const baseSync = lab.sync.bind(lab);
+  lab.sync = () => {
+    world.target!.x = Math.cos(world.time * 0.3) * 18;
+    world.target!.z = Math.sin(world.time * 0.5) * 18;
+    baseSync();
+    preyMesh.position.set(world.target!.x, world.target!.y, world.target!.z);
+  };
+  const baseDispose = lab.dispose.bind(lab);
+  lab.dispose = () => { baseDispose(); scene.remove(preyMesh); preyMesh.geometry.dispose(); };
+  return lab;
+}
+
+/* ------------------------------------------------------------------ */
+/* Flyer ring — real creatureFlyer: rakks/gnats orbit the prey anchor,  */
+/* telegraph, dive, climb. Same stepFlyer the server runs.             */
+/* ------------------------------------------------------------------ */
+
+function flyerRing(scene: THREE.Scene): LabInstance {
+  const world: LabWorld = { scene, field: FLAT, target: { x: 0, y: 0.5, z: 0 }, time: 0, effects: [] };
+  const events = new Map<string, number>();
+  const flock = Array.from({ length: 6 }, (_, i) => {
+    const a = (i / 6) * Math.PI * 2;
+    return spawnFlyer({
+      id: i, species: i % 3 === 2 ? 'gnat' : 'rakk', uber: i === 0,
+      pos: { x: Math.cos(a) * 30, y: 14, z: Math.sin(a) * 30 },
+      onEvent: ev => events.set(ev, (events.get(ev) ?? 0) + 1),
+    }, world);
+  });
+
+  const preyMesh = new THREE.Mesh(
+    new THREE.SphereGeometry(0.9, 12, 12),
+    new THREE.MeshBasicMaterial({ color: 0x5ad0ff }),
+  );
+  scene.add(preyMesh);
+
+  const lab = labOf(flock, world, {
+    dump() {
+      const rows: [string, string][] = [
+        ['flock', String(flock.filter(f => !f.sim.dead).length)],
+        ['orbiting', String(flock.filter(f => f.sim.state === 'orbit').length)],
+        ['diving', String(flock.filter(f => f.sim.state === 'dive').length)],
+        ['climbing', String(flock.filter(f => f.sim.state === 'climb').length)],
+      ];
+      for (const [k, n] of events) rows.push([`ev:${k}`, String(n)]);
+      return rows;
+    },
+  });
+  const baseSync = lab.sync.bind(lab);
+  lab.sync = () => {
+    world.target!.x = Math.cos(world.time * 0.25) * 16;
+    world.target!.z = Math.sin(world.time * 0.4) * 16;
+    baseSync();
+    preyMesh.position.set(world.target!.x, world.target!.y, world.target!.z);
+  };
+  const baseDispose = lab.dispose.bind(lab);
+  lab.dispose = () => { baseDispose(); scene.remove(preyMesh); preyMesh.geometry.dispose(); };
+  return lab;
+}
+
+/* ------------------------------------------------------------------ */
+/* Species pack — every ground family hunting one prey point at once:   */
+/* crawlers + scarabs, a roller, snakes. Same committed-target contract. */
+/* ------------------------------------------------------------------ */
+
+function speciesPack(scene: THREE.Scene): LabInstance {
+  const world: LabWorld = { scene, field: FLAT, target: { x: 0, y: 0.5, z: 0 }, time: 0, effects: [] };
+  const events = new Map<string, number>();
+  const onEvent = (ev: string) => events.set(ev, (events.get(ev) ?? 0) + 1);
+  const pack: SimEntity[] = [];
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2;
+    pack.push(spawnCrawler({ id: i, species: 'crawler', pos: { x: Math.cos(a) * 25, y: 0, z: Math.sin(a) * 25 }, onEvent }, world));
+  }
+  for (let i = 0; i < 2; i++) {
+    pack.push(spawnRoller({ id: 10 + i, pos: { x: -30 + i * 8, y: 0, z: -20 }, onEvent }, world));
+    pack.push(spawnSlither({ id: 20 + i, pos: { x: 30 - i * 8, y: 0, z: 20 }, onEvent }, world));
+  }
+
+  const preyMesh = new THREE.Mesh(
+    new THREE.SphereGeometry(0.9, 12, 12),
+    new THREE.MeshBasicMaterial({ color: 0x5ad0ff }),
+  );
+  scene.add(preyMesh);
+
+  const lab = labOf(pack, world, {
+    dump() {
+      const rows: [string, string][] = [['pack', String(pack.length)]];
       for (const [k, n] of events) rows.push([`ev:${k}`, String(n)]);
       return rows;
     },
@@ -808,5 +900,7 @@ export const SCENARIOS: LabScenario[] = [
   { id: 'ball-court', name: 'BALL COURT', blurb: 'ballSim bounce + one enraged hunter', create: ballCourt },
   { id: 'mortar-volley', name: 'MORTAR VOLLEY', blurb: 'projStep gravity arcs + terrain impacts', create: mortarVolley },
   { id: 'crawler-pack', name: 'CRAWLER PACK', blurb: 'real creatureSim hunt: wander/chase/windup/pounce', create: crawlerPack },
+  { id: 'flyer-ring', name: 'FLYER RING', blurb: 'real creatureFlyer: rakks + gnats orbit/dive/climb a prey point', create: flyerRing },
+  { id: 'species-pack', name: 'SPECIES PACK', blurb: 'all ground families hunting one prey: crawler/roller/snake', create: speciesPack },
   { id: 'ski-run', name: 'SKI RUN', blurb: 'real MoveSim skiing a heightfield hill', create: skiRun },
 ];

@@ -8,6 +8,9 @@
 import * as THREE from 'three';
 import { makeSimBall, stepBall, BALL_OVERSPEED, type SimBall, type BallVariant } from '../../../shared/ballSim.js';
 import { makeSimCrawler, stepCrawler, commitTarget, type SimCrawler } from '../../../shared/creatureCore.js';
+import { makeSimFlyer, stepFlyer, type SimFlyer } from '../../../shared/creatureFlyer.js';
+import { makeSimRoller, stepRoller, type SimRoller } from '../../../shared/creatureRoller.js';
+import { makeSimSlither, stepSlither, type SimSlither } from '../../../shared/creatureSlither.js';
 import { projStep, segFieldHit, type SimProjectile } from '../../../shared/projSim.js';
 import { hmHeight, type Heightfield } from '../../../shared/heightfield.js';
 import { GRAVITY, MoveSim, type MoveSurface } from '../../../shared/movement.js';
@@ -130,6 +133,48 @@ export function spawnCrawler(o: CrawlerOpts, world: LabWorld): SimEntity & { sim
 
 /* ---------------------------------- */
 
+const FLYER_STATE_COLOR: Record<string, number> = {
+  orbit: 0x7fa2c8, windup: 0xffd24d, dive: 0xff5a3c, climb: 0x8fd6a0,
+};
+
+export interface FlyerOpts {
+  id: number; pos: { x: number; y: number; z: number };
+  species?: 'rakk' | 'gnat'; uber?: boolean; seed?: number;
+  onEvent?: (ev: string) => void;
+}
+
+export function spawnFlyer(o: FlyerOpts, world: LabWorld): SimEntity & { sim: SimFlyer } {
+  const f = makeSimFlyer(o.id, o.pos, o.uber ?? false, o.seed ?? (o.id * 7919 + 3), o.species ?? 'rakk');
+  const mesh = new THREE.Mesh(
+    new THREE.ConeGeometry(1.0, 2.4, 6),
+    new THREE.MeshBasicMaterial({ color: FLYER_STATE_COLOR.orbit! }),
+  );
+  // Cones point +Y — roll forward so the dive reads nose-first.
+  mesh.rotation.x = Math.PI / 2;
+  const pivot = new THREE.Group();
+  pivot.add(mesh);
+  world.scene.add(pivot);
+  return {
+    sim: f, mesh: pivot,
+    tick(dt, w) {
+      commitTarget(f, 'prey', w.target);
+      const ev = stepFlyer(f, dt, w.field, w.target, true);
+      if (ev) o.onEvent?.(ev);
+    },
+    sync() {
+      pivot.position.set(f.x, f.y, f.z);
+      pivot.rotation.y = -f.yaw;
+      (mesh.material as THREE.MeshBasicMaterial).color.setHex(
+        f.dead ? 0x333a44 : FLYER_STATE_COLOR[f.state] ?? 0x8aa0b5);
+      pivot.scale.setScalar(f.uber ? 1.6 : o.species === 'gnat' ? 0.6 : 1);
+    },
+    dump: () => [['state', f.state], ['hp', `${Math.max(0, f.health).toFixed(0)}`]],
+    dispose() { world.scene.remove(pivot); mesh.geometry.dispose(); },
+  };
+}
+
+/* ---------------------------------- */
+
 export interface BoltOpts {
   pos: { x: number; y: number; z: number };
   vel: { x: number; y: number; z: number };
@@ -192,6 +237,48 @@ export function spawnBolt(o: BoltOpts, world: LabWorld): SimEntity & { sim: SimP
     },
   };
   return self;
+}
+
+/* ---------------------------------- */
+
+/** Ground families share the hop-sim contract (make/step/commitTarget);
+ *  only the stepper and the look differ per family. */
+function groundSimSpawn<T extends { x: number; y: number; z: number; yaw: number; dead: boolean; health: number; state: string; uber: boolean }>(
+  sim: T, step: (c: T, dt: number, w: LabWorld) => string | null, mesh: THREE.Mesh, color: number,
+  world: LabWorld, onEvent?: (ev: string) => void,
+): SimEntity & { sim: T } {
+  world.scene.add(mesh);
+  const base = sim.health;
+  return {
+    sim, mesh,
+    tick(dt, w) { const ev = step(sim, dt, w); if (ev) onEvent?.(ev); },
+    sync() {
+      mesh.position.set(sim.x, sim.y + mesh.scale.y, sim.z);
+      mesh.rotation.y = -sim.yaw;
+      (mesh.material as THREE.MeshBasicMaterial).color.setHex(sim.dead ? 0x333a44 : color);
+      mesh.scale.setScalar(sim.uber ? 1.6 : 0.7 + 0.3 * Math.max(0.3, sim.health / base));
+    },
+    dump: () => [['state', sim.state], ['hp', `${Math.max(0, sim.health).toFixed(0)}`]],
+    dispose() { world.scene.remove(mesh); mesh.geometry.dispose(); },
+  };
+}
+
+export function spawnRoller(o: { id: number; pos: { x: number; y: number; z: number }; species?: string; uber?: boolean; seed?: number; onEvent?: (ev: string) => void }, world: LabWorld): SimEntity & { sim: SimRoller } {
+  const c = makeSimRoller(o.id, o.pos, o.uber ?? false, o.seed ?? (o.id * 7919 + 3), o.species ?? 'roller');
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.9, 10, 10), new THREE.MeshBasicMaterial({ color: 0xb0c86a }));
+  return groundSimSpawn(c, (s, dt, w) => {
+    commitTarget(s, 'prey', w.target);
+    return stepRoller(s, dt, w.field, w.target, true);
+  }, mesh, 0xb0c86a, world, o.onEvent);
+}
+
+export function spawnSlither(o: { id: number; pos: { x: number; y: number; z: number }; species?: string; uber?: boolean; seed?: number; onEvent?: (ev: string) => void }, world: LabWorld): SimEntity & { sim: SimSlither } {
+  const c = makeSimSlither(o.id, o.pos, o.uber ?? false, o.seed ?? (o.id * 7919 + 3), o.species ?? 'snake');
+  const mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.55, 2.2, 7), new THREE.MeshBasicMaterial({ color: 0x7ad68f }));
+  return groundSimSpawn(c, (s, dt, w) => {
+    commitTarget(s, 'prey', w.target);
+    return stepSlither(s, dt, w.field, w.target, true);
+  }, mesh, 0x7ad68f, world, o.onEvent);
 }
 
 /* ---------------------------------- */
