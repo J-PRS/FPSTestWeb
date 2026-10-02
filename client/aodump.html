@@ -1,0 +1,18 @@
+<!doctype html>
+<html><head><style>
+  body { margin:0; background:#15171b; font:12px monospace; color:#cde; }
+  #panel { position:fixed; left:0; top:0; bottom:0; width:280px; overflow-y:auto;
+    background:rgba(8,11,16,.9); padding:10px 12px; border-right:1px solid #333; }
+  #panel h3 { margin:14px 0 4px; color:#6af; letter-spacing:.1em; font-size:11px; }
+  .row { display:flex; align-items:center; gap:6px; margin:2px 0; }
+  .row label { flex:0 0 110px; color:#9db2c4; }
+  .row input[type=range] { flex:1; min-width:0; }
+  .row .val { width:40px; text-align:right; color:#fff; }
+  button { background:#1a222c; color:#9db2c4; border:1px solid #3a4a5a;
+    padding:4px 8px; margin:2px; cursor:pointer; font:inherit; }
+  button.on { border-color:#3aa7ff; color:#fff; background:rgba(58,167,255,.2); }
+  #wrow { display:flex; flex-wrap:wrap; }
+</style></head><body>
+<div id="panel"></div>
+<script type="module" src="src/aodump.ts"></script>
+</body></html>

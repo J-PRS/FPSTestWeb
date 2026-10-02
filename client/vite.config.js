@@ -8,8 +8,25 @@ export default defineConfig(({ mode }) => ({
   // Manual Ctrl+R when you want the new code.
   plugins: mode === 'noreload' ? [{
     name: 'stale-notify',
-    handleHotUpdate({ server, modules }) {
-      const files = modules.map(m => m.file).filter(Boolean);
+    configureServer(server) {
+      // Vite hard-codes a full-reload for ANY .html change (client env,
+      // dist chunks/node.js — "page reload" on empty module set and on
+      // isClientHtmlChange). Returning [] from handleHotUpdate can't stop
+      // it, so filter the wire: drop full-reload sends in noreload mode.
+      const env = server.environments?.client;
+      const chan = env?.hot ?? server.ws;
+      const orig = chan.send.bind(chan);
+      chan.send = (...args) => {
+        const p = args[0];
+        if (p && p.type === 'full-reload') return;
+        return orig(...args);
+      };
+    },
+    handleHotUpdate({ server, modules, file }) {
+      // index.html never reaches the module graph — count it directly.
+      const files = modules.length
+        ? modules.map(m => m.file).filter(Boolean)
+        : [file];
       server.ws.send({ type: 'custom', event: 'stale:changed', data: { count: files.length } });
       return []; // swallow — no HMR, no full-reload
     },
