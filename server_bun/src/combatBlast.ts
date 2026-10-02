@@ -207,7 +207,7 @@ export class BlastRunner {
       const selfDmg = Math.min(damage + SELF_SPLASH_MAX * (1 - dist / ctx.radius), SELF_SPLASH_MAX) * near;
       if (selfDmg > 0) {
         const result = this.h.playerManager.applyDamage(targetId, selfDmg);
-        this.h.applyHit(ctx.shooterId, targetId, selfDmg, result, { label: `Player ${ctx.label} self-blast`, extra: { dist: +dist.toFixed(2) }, weapon: ctx.weapon });
+        this.h.applyHit(ctx.shooterId, targetId, selfDmg, result, { label: `Player ${ctx.label} self-blast`, extra: { dist: +dist.toFixed(2), pos: ctx.pos }, weapon: ctx.weapon });
       }
       return;
     }

@@ -7,7 +7,7 @@ import { hmParseBin, hmHeight } from '../../../shared/heightfield.ts';
 import { GRAVITY } from '../../../shared/movement.ts';
 import { simNow, simNowAdvance, simNowReset } from '../../src/simClock.ts';
 import { weaponStats } from '../../src/weaponStats.ts';
-import { selfKillImpactDist, selfKillFoeDist, selfKillTrades } from '../../src/hitLedger.ts';
+import { selfKillImpactDist, selfKillImpactPos, selfKillPrey, selfKillFoeDist, selfKillTrades } from '../../src/hitLedger.ts';
 import { WeaponType } from '../../../shared/weaponTable.ts';
 import { WEAPON_FIRE_INTERVAL_S } from '../../../shared/weapons.ts';
 
@@ -174,7 +174,7 @@ describe('scenario: warp soak throughput', () => {
     // destination still the enemy stand, and which stand-distance band
     // is it in? Separates "brain rerouted off the run" (low on%) from
     // "legs point at the stand but never close" (on% high, stuck band).
-    const capRoute = { ticks: 0, on: 0, route: 0, bands: [0, 0, 0, 0, 0] as number[], bandsA: [0, 0, 0, 0, 0] as number[], bandsB: [0, 0, 0, 0, 0] as number[] };
+    const capRoute = { ticks: 0, on: 0, route: 0, bands: [0, 0, 0, 0, 0] as number[], bandsA: [0, 0, 0, 0, 0] as number[], bandsB: [0, 0, 0, 0, 0] as number[], spd: [[], [], [], [], []] as number[][] };
     // Are a capper's kills stand-clearing (victim inside its own flag
     // ring) or transit fights (everywhere else)?
     const capKills = { near: 0, far: 0 };
@@ -479,6 +479,7 @@ describe('scenario: warp soak throughput', () => {
           } else capStall.delete(p.id);
           const band = dd < 25 ? 0 : dd < 80 ? 1 : dd < 160 ? 2 : dd < 300 ? 3 : 4;
           capRoute.bands[band]!++;
+          capRoute.spd[band]!.push(Math.hypot(p.velocity.x, p.velocity.z));
           (p.team === 'alpha' ? capRoute.bandsA : capRoute.bandsB)[band]!++;
         }
         if (wasDead.get(p.id) !== false) lifeStart.set(p.id, simTicks * dt);
@@ -681,8 +682,20 @@ describe('scenario: warp soak throughput', () => {
     }
     const selfImpact = [...selfKillImpactDist].sort((a, b) => a - b);
     const selfFoe = [...selfKillFoeDist].sort((a, b) => a - b);
+    // Self-frag autopsy: height of each blast point over whatever it
+    // struck. ~0 = clipped a lip (aim-clearance misses); >2m over open
+    // ground = entity intercept or a fuse/lob pop the clearance ray
+    // can't see.
+    const popKinds = { lip: 0, prey: 0, near: 0, air: 0 };
+    selfKillImpactPos.forEach((pos, i) => {
+      const prey = selfKillPrey[i];
+      if (prey && Math.min(prey.ball, prey.crawler) < 3) { popKinds.prey++; return; }
+      const clear = pos.y - Math.max(hmHeight(field, pos.x, pos.z), room.moveSim.structureTop(pos.x, pos.z));
+      if (clear < 2) popKinds.lip++; else if (clear < 6) popKinds.near++; else popKinds.air++;
+    });
     const selfLine = [...selfByW.entries()].sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k}:${n}`).join(' ') +
-      ` @${(selfImpact[selfImpact.length >> 1] ?? 0).toFixed(1)}m foe@${(selfFoe[selfFoe.length >> 1] ?? 0).toFixed(0)}m ${selfKillTrades.trades}traded`;
+      ` @${(selfImpact[selfImpact.length >> 1] ?? 0).toFixed(1)}m foe@${(selfFoe[selfFoe.length >> 1] ?? 0).toFixed(0)}m ${selfKillTrades.trades}traded` +
+      ` pops lip:${popKinds.lip} prey:${popKinds.prey} near:${popKinds.near} air:${popKinds.air}`;
     const killsByTeam = players.reduce<Record<string, number>>((m, p) => { if (p.team) m[p.team] = (m[p.team] ?? 0) + p.kills; return m; }, {});
     const score = Object.entries(room.scores).map(([t, s]) => `${t} ${s}`).join(' / ');
     const fmtId = (id: string) => id.replace(/^BOT-/, '');
@@ -731,7 +744,7 @@ describe('scenario: warp soak throughput', () => {
     row('flags', `grabs ${grabsBy.alpha ?? 0}-${grabsBy.bravo ?? 0}   caps ${caps.length}${caps.length ? ` (fastest ${(fastest.holdMs / 1000).toFixed(1)}s)` : ''}   press ${Number.isFinite(press.alpha) ? press.alpha.toFixed(0) : '-'}m/${Number.isFinite(press.bravo) ? press.bravo.toFixed(0) : '-'}m`);
     row('approach', `closest: any ${Number.isFinite(flagNear.alpha) ? flagNear.alpha.toFixed(0) : '-'}m(+${flagGap.alpha[1].toFixed(0)}y @${flagGap.alpha[2].toFixed(0)}mps) / ${Number.isFinite(flagNear.bravo) ? flagNear.bravo.toFixed(0) : '-'}m(+${flagGap.bravo[1].toFixed(0)}y @${flagGap.bravo[2].toFixed(0)}mps)   cappers ${Number.isFinite(capNear.alpha) ? capNear.alpha.toFixed(0) : '-'}m/${Number.isFinite(capNear.bravo) ? capNear.bravo.toFixed(0) : '-'}m   flag deaths ${fdie('alpha')}/${fdie('bravo')}`);
     row('ring', `died inside ${ringSurv.died.length} (${ringSurv.died.length ? (ringSurv.died.reduce((s, v) => s + v, 0) / ringSurv.died.length).toFixed(1) : '-'}s avg)   left ${ringSurv.left.length}   capper pushes ${capStop.entries} -> ${capStop.grabs} grabs, ${capStop.died} died, ${capStop.left} repelled${capStop.dSpd.length ? ` (lost ${medOf(capStop.dSpd).toFixed(1)}mps ${medOf(capStop.dHp).toFixed(0)}hp)` : ''}`);
-    row('cappers', `route-to-stand ${capRoute.ticks ? Math.round((capRoute.route / capRoute.ticks) * 100) : 0}% · in graze range ${capRoute.ticks ? Math.round((capRoute.on / capRoute.ticks) * 100) : 0}% of ticks   push calls ${room.bots?.debugPushCalls('alpha') ?? 0}/${room.bots?.debugPushCalls('bravo') ?? 0}   time at <160m a${(capRoute.bandsA[0] ?? 0) + (capRoute.bandsA[1] ?? 0) + (capRoute.bandsA[2] ?? 0)}/b${(capRoute.bandsB[0] ?? 0) + (capRoute.bandsB[1] ?? 0) + (capRoute.bandsB[2] ?? 0)} ticks stalls ${capStalls.length}   capper kills ${capKills.near + capKills.far} (${capKills.near} at stand)   deaths@${capDeaths.length ? medOf(capDeaths.map((c) => c.d)).toFixed(0) : '-'}m@${capDeaths.length ? medOf(capDeaths.map((c) => c.spd)).toFixed(0) : '-'}mps by ${[...capDeaths.reduce((m, c) => m.set(c.by, (m.get(c.by) ?? 0) + 1), new Map<string, number>()).entries()].sort((a, b) => b[1] - a[1]).map(([r, n]) => `${r}:${n}`).join(' ')}`);
+    row('cappers', `route-to-stand ${capRoute.ticks ? Math.round((capRoute.route / capRoute.ticks) * 100) : 0}% · in graze range ${capRoute.ticks ? Math.round((capRoute.on / capRoute.ticks) * 100) : 0}% of ticks   push calls ${room.bots?.debugPushCalls('alpha') ?? 0}/${room.bots?.debugPushCalls('bravo') ?? 0}   time at <160m a${(capRoute.bandsA[0] ?? 0) + (capRoute.bandsA[1] ?? 0) + (capRoute.bandsA[2] ?? 0)}/b${(capRoute.bandsB[0] ?? 0) + (capRoute.bandsB[1] ?? 0) + (capRoute.bandsB[2] ?? 0)} ticks spd<25/80/160/300+ ${capRoute.spd.map((s) => (s.length ? medOf(s).toFixed(0) : '-')).join('/')}mps stalls ${capStalls.length}   capper kills ${capKills.near + capKills.far} (${capKills.near} at stand)   deaths@${capDeaths.length ? medOf(capDeaths.map((c) => c.d)).toFixed(0) : '-'}m@${capDeaths.length ? medOf(capDeaths.map((c) => c.spd)).toFixed(0) : '-'}mps by ${[...capDeaths.reduce((m, c) => m.set(c.by, (m.get(c.by) ?? 0) + 1), new Map<string, number>()).entries()].sort((a, b) => b[1] - a[1]).map(([r, n]) => `${r}:${n}`).join(' ')}`);
     row('economy', `nugs: ${nug.spawn} spawned · ${nug.bankHot + nug.bankCold} banked (${nug.bankHot} hot) · ${nug.decay} decayed · ${nug.die} died-for`);
     row('fight', `kills: attack ${killZone.attack} · defense ${killZone.defense} · midfield ${killZone.mid}   hunting ${huntN ? Math.round((huntSum / huntN) * 100) : 0}%   cloak ${huntN ? Math.round((cloakSum / huntN) * 100) : 0}%   in sight ${huntN ? Math.round((inSightSum / huntN) * 100) : 0}%   nearest foe ${huntN ? (nearFoeSum / huntN).toFixed(0) : '-'}m   med energy ${medOf(eRows.map((r) => r.avg)).toFixed(0)}`);
     row('macro', `goal output ${goalOut.nA ? (goalOut.alpha / goalOut.nA).toFixed(0) : '-'}/${goalOut.nB ? (goalOut.bravo / goalOut.nB).toFixed(0) : '-'}   progress ${progRows.alpha.cnt ? (progRows.alpha.sum / progRows.alpha.cnt).toFixed(1) : '-'}/${progRows.bravo.cnt ? (progRows.bravo.sum / progRows.bravo.cnt).toFixed(1) : '-'}m/win   goal flips ${flips.size ? ([...flips.values()].reduce((n, f) => n + f.n, 0) / flips.size).toFixed(0) : '-'}/bot   aim align ${align.n ? (align.sum / align.n).toFixed(2) : '-'}`);

@@ -160,7 +160,7 @@ export class BotArsenal implements BeamHost {
     const az = aim.z - muzzle.z;
     const alen = Math.sqrt(ax * ax + ay * ay + az * az) || 1;
     const dir = { x: ax / alen, y: ay / alen, z: az / alen };
-    if (this.selfBlastBlocked(muzzle, dir, getWeaponStats(wt)?.aoeRadius ?? 0)) return;
+    if (this.selfBlastBlocked(muzzle, dir, wt, p.velocity, p.id, this.room.players.getPlayer(p.id)?.team ?? undefined)) return;
     if (!this.room.projectiles.spawn(p.id, wt, muzzle, dir, p.velocity)) {
       fireSpeedless(this, p.id, muzzle, dir, wt);
     }
@@ -172,13 +172,44 @@ export class BotArsenal implements BeamHost {
    *  hold the rocket. March the ray fine enough not to skip a lip; if
    *  ground or a wall top crosses it inside the blast envelope, the
    *  shot doesn't exist to be taken. */
-  private selfBlastBlocked(muzzle: Vec3, dir: Vec3, aoer: number): boolean {
-    if (!this.room.field || aoer <= 0) return false;
-    for (let t = 1; t <= aoer; t += 1.5) {
-      const x = muzzle.x + dir.x * t, z = muzzle.z + dir.z * t;
-      const line = muzzle.y + dir.y * t + 1;
-      if (hmHeight(this.room.field, x, z) > line) return true;
-      if (this.room.moveSim.structureTop(x, z) > line) return true;
+  private selfBlastBlocked(muzzle: Vec3, dir: Vec3, wt: WeaponType, ownerVel: Vec3, shooterId?: string, shooterTeam?: string): boolean {
+    const stats = getWeaponStats(wt);
+    const aoer = stats?.aoeRadius ?? 0;
+    if (!this.room.field || !stats || aoer <= 0) return false;
+    // March the REAL ballistic path, not the aim ray: the shell inherits
+    // half the shooter's velocity, so a bot skiing downhill bends every
+    // shot below the checked line and clips lips the ray clears (soak
+    // autopsy: all self-frag blasts <2m over ground @~6m from muzzle).
+    let vx = dir.x * stats.speed + ownerVel.x * 0.5;
+    let vy = dir.y * stats.speed + ownerVel.y * 0.5;
+    let vz = dir.z * stats.speed + ownerVel.z * 0.5;
+    const g = stats.gravity ? GRAVITY : 0;
+    let px = muzzle.x, py = muzzle.y, pz = muzzle.z;
+    let travelled = 0;
+    const dt = 0.02;
+    for (let stepN = 0; stepN < 400 && travelled < aoer; stepN++) {
+      vy += g * dt;
+      px += vx * dt; py += vy * dt; pz += vz * dt;
+      travelled += Math.sqrt(vx * vx + vy * vy + vz * vz) * dt;
+      const line = py + stats.bodyRadius;
+      if (hmHeight(this.room.field, px, pz) > line) return true;
+      if (this.room.moveSim.structureTop(px, pz) > line) return true;
+    }
+    // Entity intercepts inside the blast envelope: a wandering ball,
+    // a species pop, or a teammate body on the muzzle line pops the
+    // shell at ITS distance — inside the shooter's own blast radius,
+    // for zero enemy damage (soak: point-blank selfK @5m, foe@140m).
+    // Enemy bodies stay legal — a point-blank trade is a trade.
+    const to = { x: muzzle.x + dir.x * aoer, y: muzzle.y + dir.y * aoer, z: muzzle.z + dir.z * aoer };
+    if (this.room.ballSim?.sweepHit(muzzle, to, 1)) return true;
+    if (this.room.creatureSim?.sweepHit(muzzle, to, 1)) return true;
+    for (const q of this.room.players.getAllPlayers().values()) {
+      if (q.id === shooterId || q.isDead) continue;
+      if (shooterTeam && q.team !== shooterTeam) continue;
+      const ex = q.position.x - muzzle.x, ey = q.position.y - muzzle.y, ez = q.position.z - muzzle.z;
+      const t = Math.max(0, Math.min(1, (ex * dir.x + ey * dir.y + ez * dir.z) / aoer));
+      const rx = ex - dir.x * aoer * t, ry = ey - dir.y * aoer * t, rz = ez - dir.z * aoer * t;
+      if (rx * rx + ry * ry + rz * rz < 4) return true;
     }
     return false;
   }

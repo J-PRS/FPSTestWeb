@@ -17,6 +17,7 @@ import { isPerkId } from '../../shared/perks.ts';
 import { CLASS_STATS } from '../../shared/botClasses.ts';
 import type { ArmorClass } from '../../shared/botClasses.ts';
 import type { TeamId } from '../../shared/teams.ts';
+import type { DeployKind } from '../../shared/deployables.ts';
 
 type BroadcastFn = (msg: ServerMessage, excludePlayerId?: string) => void;
 type SendToPlayerFn = (playerId: string, msg: ServerMessage) => void;
@@ -41,6 +42,10 @@ export interface RoomInfo {
   structures?: { kind: 'box' | 'wall' | 'pillar' | 'ramp'; pos: { x: number; y: number; z: number }; size: { x: number; y: number; z: number }; rotY?: number; team?: TeamId }[];
   /** Arena dome from the map spec — center {x,z} + radius. */
   arena?: { x: number; z: number; radius: number };
+  /** Map display name for the scoreboard chrome — lazy like ffaScores:
+   *  the spec source lands after Room's ctor (factory/rotation/reload),
+   *  so a frozen string would miss the real name on the first gameState. */
+  mapName?: () => string | undefined;
   /** Ambient species population overrides from the map spec. */
   ambient?: Record<string, number>;
   /** Heightfield file (maps/<name>.bin) — echoed on gameState so clients
@@ -114,13 +119,15 @@ export interface RoomInfo {
   /** Distance from a player to the nearest live creature — env-damage
    *  claims far past melee range get flagged, not silently eaten. */
   envRange?: (playerId: string) => number;
+  /** Nearest ball / crawler to a point — self-frag autopsy. */
+  preyNear?: (pos: Vec3) => { ball: number; crawler: number };
   /** Armor-grenade plating sweep — BallSim.armorBlast + CreatureSim.armorBlast. */
   creatureArmor?: (pos: Vec3, amount: number, radius: number) => void;
   /** A legit fire claim passed the gates — the sheep meter's human
    *  ignore debit reads its recency (bots report via BrainOut.fire). */
   onFire?: (playerId: string) => void;
   /** Live deployables for gameState joins — RoomDeployables.snapshot. */
-  deployables?: () => { id: number; owner: string; kind: 'turret' | 'mine' | 'station' | 'drone' | 'shield'; pos: Vec3; hp?: number; armor?: number; team?: string }[];
+  deployables?: () => { id: number; owner: string; kind: DeployKind; pos: Vec3; hp?: number; armor?: number; team?: string }[];
 }
 
 /** RoomInfo → CombatDeps projection — kept out of the constructor so the
@@ -145,6 +152,7 @@ function combatDeps(roomInfo: RoomInfo | undefined): CombatDeps {
     influence: roomInfo?.influence,
     health: roomInfo?.health,
     envRange: roomInfo?.envRange,
+    preyNear: roomInfo?.preyNear,
     creatureArmor: roomInfo?.creatureArmor,
     onFire: roomInfo?.onFire,
   };
@@ -219,6 +227,7 @@ export class MessageHandler {
       deploy: (id, m) => this.roomInfo.onDeploy?.(id, m.kind, m.position),
       repair: (id, m) => this.roomInfo.onRepair?.(id, m.targetId),
       skillUse: (id) => this.roomInfo.onSkillUse?.(id),
+      respawn: (id) => this.combat.respawnRequest(id),
       creatureHit: (id, m) => {
         this.ballSim?.handleHit(id, m.id, m.damage, m.kx, m.ky, m.kz);
       },
@@ -268,7 +277,10 @@ export class MessageHandler {
         this.sendToPlayer(id, { type: 'pong', timestamp: m.timestamp });
       },
       snapshotRequest: (id) => { this.hb('snapreq'); this.handleSnapshotRequest(id); },
-      resync: (id) => { this.hb('resync'); this.sendWorldState(id); },
+      // Reseat BEFORE the replay goes out — the shadow and the echoed
+      // localPlayerState must describe the same spot or the client's
+      // post-snap reports/shots get judged against the stale anchor.
+      resync: (id) => { this.hb('resync'); this.moves.handleResyncSeat(id); this.sendWorldState(id); },
       // Tribes rule: the tier swap banks on the next respawn — applying
       // it mid-life would be a free heal and flip the sim's speed scale
       // without the shadow knowing.
@@ -398,6 +410,9 @@ export class MessageHandler {
     return {
       room: this.roomInfo.room,
       mode: this.roomInfo.mode || undefined,
+      // Top level, not inside map: a bare arena (no bases/terrain) still
+      // has a name, and the scoreboard title wants it either way.
+      mapName: this.roomInfo.mapName?.(),
       scores: this.roomInfo.scores ? { ...this.roomInfo.scores } : undefined,
       ffaScores: this.roomInfo.ffaScores?.(),
       map: this.roomInfo.bases || this.roomInfo.structures || this.roomInfo.arena || this.roomInfo.terrain
@@ -416,6 +431,19 @@ export class MessageHandler {
     const player = this.playerManager.getPlayer(playerId);
     if (!player) return;
     this.roomInfo.moveTrack?.(playerId, player.position, player.rotation.yaw);
+
+    if (isReconnect) {
+      // A reclaimed session's seq counter restarted at 0 on the client —
+      // the retained lastSeq from the dead socket would class every new
+      // report as stale, freezing position for the whole session (seen:
+      // F5 reload → permanent hash desync + implausible-spawn rejects).
+      // The judge anchors reseat on stored truth for the same reason.
+      player.lastSeq = 0;
+      player.lastPosCheckPos = { ...player.position };
+      player.lastPosCheckTime = Date.now();
+      player.consecutiveRejects = 0;
+      this.roomInfo.moveMute?.(playerId);
+    }
 
     // Reconnecting dead player: the disconnect cancelled their respawn
     // timer — re-arm it or they stay dead for the rest of the session.

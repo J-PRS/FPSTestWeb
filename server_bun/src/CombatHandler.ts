@@ -75,6 +75,10 @@ export interface CombatDeps {
   /** Nearest-creature distance for env-damage plausibility (melee-from-
    *  afar flagging). Absent = no creature sim to check against. */
   envRange?: (playerId: string) => number;
+  /** Distance of the nearest ball / crawler to a point — self-frag
+   *  autopsy discriminates a terrain lip from a body that hopped into
+   *  the shell. */
+  preyNear?: (pos: Vec3) => { ball: number; crawler: number };
   /** Armor-grenade plating sweep — grants `amount` armor to every sim
    *  creature inside `radius` of the blast point (overcap health). */
   creatureArmor?: (pos: Vec3, amount: number, radius: number) => void;
@@ -392,6 +396,15 @@ export class CombatHandler {
       const acc = this.chargeBank.of(target);
       if (acc > 0) this.chargeBank.discharge(ownerId, target, Math.min(acc, dmg));
     }
+  }
+
+  /** Deliberate respawn (the client's K bind) — routed through the same
+   *  self-hit funnel as a self-frag so the kill feed, corpse charge-pop,
+   *  respawn timer, and any pending class/perk all behave identically.
+   *  Damage is far over the kill line on purpose: shield/regen buffs
+   *  shouldn't half-eat a player's own respawn request. */
+  respawnRequest(id: string): void {
+    this.serverHit(id, id, 99999, 'Respawn', { hb: 'respawn.req' });
   }
 
   /** Server-authored creature bite (CreatureSim). */

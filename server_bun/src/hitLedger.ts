@@ -2,6 +2,12 @@ import { weaponStats } from './weaponStats.ts';
 // Debug probe: shooter-to-impact distance on self-kills — answers
 // "do bots frag themselves with shots that pop at their own feet".
 export const selfKillImpactDist: number[] = [];
+/** Blast point of each self-frag — lets the soak autopsy classify what
+ *  the shell actually struck (lip, stray ball, teammate, open air). */
+export const selfKillImpactPos: { x: number; y: number; z: number }[] = [];
+/** Nearest ball / crawler distance at each self-frag — a pop <2m over
+ *  ground is still a body intercept if a crawler is standing there. */
+export const selfKillPrey: { ball: number; crawler: number }[] = [];
 /** Nearest-enemy range at the moment of self-frag — separates the
  *  "enemy on top of me" splash from the "shell clipped a lip" kind. */
 export const selfKillFoeDist: number[] = [];
@@ -28,7 +34,7 @@ export class HitLedger {
     if (result.killed) c.hb('kill');
     c.deps.onHit?.(targetId, shooterId);
     const src = opts.weapon !== undefined ? `w${opts.weapon}` : opts.label;
-    this.noteHit(c, shooterId, targetId, src, damage, result.killed, opts.extra?.dist as number | undefined);
+    this.noteHit(c, shooterId, targetId, src, damage, result.killed, opts.extra?.dist as number | undefined, opts.extra?.pos as { x: number; y: number; z: number } | undefined);
     if (!result.killed) {
       logger.info(opts.label, { shooter: shooterId, target: targetId, damage, targetHealth: result.newHealth, ...opts.extra });
       c.broadcast({ type: 'playerHit', shooterId, targetId, damage, health: result.newHealth, armor: result.newArmor, seq: ++this.hitSeq });
@@ -41,7 +47,7 @@ export class HitLedger {
 
   /** Telemetry + duel bookkeeping for one applied hit — weapon spread,
    *  death spot, kill speed, and first-hit→kill TTK per pairing. */
-  private noteHit(c: CombatHandler, shooterId: string, targetId: string, src: string, damage: number, killed: boolean, impactDist?: number): void {
+  private noteHit(c: CombatHandler, shooterId: string, targetId: string, src: string, damage: number, killed: boolean, impactDist?: number, impactPos?: { x: number; y: number; z: number }): void {
     const modeTag = c.deps.mode ?? '';
     weaponStats.record(modeTag, src, damage, killed, shooterId.startsWith('BOT-'));
     const duelKey = `${shooterId}|${targetId}`;
@@ -61,6 +67,11 @@ export class HitLedger {
       c.deps.influence?.splat(victim.position, 'opportunity', 0.8);
     }
     if (shooterId === targetId && impactDist !== undefined) selfKillImpactDist.push(impactDist);
+    if (shooterId === targetId && impactPos) {
+      selfKillImpactPos.push({ x: impactPos.x, y: impactPos.y, z: impactPos.z });
+      const near = c.deps.preyNear?.(impactPos);
+      if (near) selfKillPrey.push(near);
+    }
     if (shooterId === targetId) {
       const me2 = c.playerManager.getPlayer(shooterId);
       if (me2) {
@@ -113,7 +124,7 @@ export class HitLedger {
     const shooterStreak = shooterId === 'environment' ? undefined
       : (c.playerManager.getPlayer(shooterId)?.streak ?? 0) + 1;
     c.broadcast({ type: 'playerKill', shooterId, targetId, weapon: opts.weapon, streak: shooterStreak });
-    c.killFeed.announce(shooterId, targetId, opts.weapon);
+    c.killFeed.announce(shooterId, targetId, opts.weapon, opts.label);
     c.deps.onKill?.(targetId, shooterId);
     c.respawner.schedule(targetId);
   }

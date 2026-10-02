@@ -456,6 +456,14 @@ export class Room {
         const p = this.players.getPlayer(pid);
         return p ? this.ballSim.nearestBallDist(p.position.x, p.position.y, p.position.z) : Infinity;
       },
+      preyNear: (pos) => {
+        let crawler = Infinity;
+        for (const c of this.creatureSim.crawlers.values()) {
+          const d = Math.hypot(c.x - pos.x, c.y - pos.y, c.z - pos.z);
+          if (d < crawler) crawler = d;
+        }
+        return { ball: this.ballSim.nearestBallDist(pos.x, pos.y, pos.z), crawler };
+      },
     };
   }
 
