@@ -244,7 +244,7 @@ export class ServerBotSenses {
    *  flag dropped → touch it home; a teammate carrying → escort them;
    *  enemy flag reachable → go grab it. Defenders invert it: their flag
    *  recovery/intercept outranks pressing the enemy stand. */
-  flagGoal(p: { id: string; team?: string; position: Vec3 }, duty = 1): { pos: BotVec; infiltrating: boolean; running?: boolean; runner?: boolean } | null {
+  flagGoal(p: { id: string; team?: string; position: Vec3 }, duty = 1): { pos: BotVec; infiltrating: boolean; running?: boolean; runner?: boolean; posted?: number } | null {
     const flags = this.room.flags;
     if (!flags || !p.team) return null;
     const me = p.team as TeamId;
@@ -464,8 +464,21 @@ export class ServerBotSenses {
     // Cloak intent only for the infiltrator: the drain is speed-scaled,
     // so a light capper burning RMB-to-stand empties its tank mid-route
     // and arrives with no jet fuel — infiltration is the saboteur's job.
+    // Posted roles (HoF, home defense) hold a leash instead of chasing
+    // every contact they can see — 300m sight pulling feet off the
+    // stand is how the anchor ends up wandering midfield. The leash
+    // widens once our flag is already gone: no stand to guard means
+    // the defender roams the counter-attack.
+    const anchored = role === 'hof' || role === 'ldefense' || role === 'defense' || role === 'technician';
+    let posted = 0;
+    if (anchored && Math.hypot(pick.x - own.home.x, pick.z - own.home.z) < 15) {
+      const base = own.state === 'carried'
+        ? (role === 'hof' ? 140 : 200)
+        : (role === 'hof' ? 45 : 90);
+      posted = base * (1.35 - 0.5 * duty);
+    }
     return { pos: goalPos, infiltrating: pick === enemyStand && enemyStand !== null
-      && role === 'infiltrator', runner: role === 'capper' };
+      && role === 'infiltrator', runner: role === 'capper', posted };
   }
 
   /** The team's active push target for non-goal consumers (the stand
@@ -521,7 +534,7 @@ export class ServerBotSenses {
 
   /** The sensorium for one think tick — see file header for what's legal
    *  on each channel. */
-  build(id: string, p: { id: string; team?: string; position: Vec3; velocity: Vec3; health: number; maxHealth: number }, goal: { pos: BotVec; infiltrating: boolean; running?: boolean; runner?: boolean } | null, now: number, skill?: BotSkill): BrainCtx {
+  build(id: string, p: { id: string; team?: string; position: Vec3; velocity: Vec3; health: number; maxHealth: number }, goal: { pos: BotVec; infiltrating: boolean; running?: boolean; runner?: boolean; posted?: number } | null, now: number, skill?: BotSkill): BrainCtx {
     // Competence-biased draw: the weapon pick and the aim error read
     // the same matrix, so a phenom both reaches for its gun and lands it.
     const bias = skill ? (t: number) => aimSkillFor(skill, t, 0) : undefined;
@@ -534,6 +547,7 @@ export class ServerBotSenses {
       infiltrating: goal?.infiltrating ?? false,
       running: goal?.running ?? false,
       runner: goal?.runner ?? false,
+      posted: goal?.posted ?? 0,
       // Team rooms drop nuggets on creature kills — bots farm them too,
       // which is what keeps a bot-filled match's scoreboard moving. The
       // chase is weighed like a player weighs it: only gems in real

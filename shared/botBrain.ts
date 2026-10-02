@@ -68,6 +68,10 @@ export interface BrainCtx {
    *  CTF offense heading for the enemy stand. Lets the status sense
    *  read the approach as an infiltration (cloak) rather than a roam. */
   infiltrating?: boolean;
+  /** Posted-anchor leash (meters) — home defenders fire on anything
+   *  they can see but only leave the objective for a fight inside this
+   *  radius. 0/omitted → not posted, hunts move feet freely. */
+  posted?: number;
   /** The enemy carrying OUR flag, when the host tracks flags and this
    *  bot's role chases the thief. Carrier position+velocity are beacon
    *  info (the flag broadcasts the carrier — Tribes' command circuit),

@@ -618,6 +618,7 @@ describe('scenario: warp soak throughput', () => {
     console.log('');
     const roleOf = (id: string) => room.bots.roleOf(id);
     const sumFor = (r: string, m: Map<string, number>) => { let s = 0; for (const [id, v] of m) if (roleOf(id) === r) s += v; return s; };
+    console.log('  — K/D kills·deaths · dmg dealt · gr grabs · cp caps · rt returns · cK carrier-kills · spd avg speed · avgE avg energy · life avg lifespan —');
     console.log('  role           bots   K / D    dmg   gr cp rt cK   spd   avgE  life(s)');
     for (const [r, s] of [...byRole.entries()].sort()) {
       // Per-role means of per-bot means — one hot bot can't skew a role.
@@ -688,7 +689,8 @@ describe('scenario: warp soak throughput', () => {
       });
     console.log('');
     if (wtable.length) {
-      console.log('  weapon            K  hits  shots   acc%   dmg  K/tr-s  K/s   shots-by-range');
+      console.log('  — K kills · hits/shots fired · acc% hit rate · K/tr-s kills per trigger-second · K/s kills per shot · shots-by-range aim-distance bands (m) —');
+    console.log('  weapon            K  hits  shots   acc%   dmg  K/tr-s  K/s   shots-by-range');
       for (const { name, r, trigKps, duelKps } of wtable) {
         const acc = r.shots > 0 ? ((r.hits / r.shots) * 100).toFixed(0) : '-';
         const rng = r.dist && Object.keys(r.dist).length

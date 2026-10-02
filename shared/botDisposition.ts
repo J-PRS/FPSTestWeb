@@ -97,6 +97,14 @@ export function pickDest(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, fe
         if (!blocking) return { ...ctx.objective };
       }
     }
+    // Posted anchors — a HoF or home defender fires on everything it
+    // can see but only leaves the post for a fight inside its leash.
+    // A contact out in the field is somebody else's business: pressing
+    // it drags the anchor off the stand (the wide wander the per-role
+    // heatmap showed). Fire stays live elsewhere — only feet hold.
+    if (ctx.posted && ctx.objective && dist3(t.pos, ctx.objective) > ctx.posted) {
+      return { ...ctx.objective };
+    }
     if (d < CLOSE_PRESS_M || d > b.h.orbitFar * (hero ? 0.7 : 1)) {
       // Point-blank or outranged: press straight in either way — inside
       // fist reach the press converts to the punch, outside it to the
