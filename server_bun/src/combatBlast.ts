@@ -38,6 +38,7 @@ export interface BlastHost {
     deployBlast?: (pos: Vec3, damage: number, radius: number, shooterId: string) => void;
     pickupsKnock?: (at: Vec3, radius: number, force: number) => void;
     creatureArmor?: (pos: Vec3, amount: number, radius: number) => void;
+    preySplash?: (ownerId: string, pos: Vec3, radius: number, maxDamage: number) => void;
     moveImpulse?: (playerId: string, dv: Vec3) => void;
     dropFlagCarrier?: (playerId: string) => void;
     health?: Map<string, number>;
@@ -281,6 +282,8 @@ export class BlastRunner {
     const owner = this.h.playerManager.getPlayer(ownerId);
     const baseDamage = maxDamage * (owner ? this.h.ddMult(owner) : 1);
     this.h.deps.pickupsKnock?.(pos, radius, knockback);
+    // Wildlife isn't mine-savvy — a popping trap catches the swarm too.
+    this.h.deps.preySplash?.(ownerId, pos, radius, baseDamage);
     for (const [targetId, target] of this.h.playerManager.getAllPlayers()) {
       if (target.isDead) continue;
       const dx = target.position.x - pos.x;

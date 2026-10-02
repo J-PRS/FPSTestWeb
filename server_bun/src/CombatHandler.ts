@@ -77,6 +77,9 @@ export interface CombatDeps {
   /** Armor-grenade plating sweep — grants `amount` armor to every sim
    *  creature inside `radius` of the blast point (overcap health). */
   creatureArmor?: (pos: Vec3, amount: number, radius: number) => void;
+  /** Splash falloff into both prey sims (balls + species pops) — used by
+   *  server-owned blasts that skip the projectile path, like mines. */
+  preySplash?: (ownerId: string, pos: Vec3, radius: number, maxDamage: number) => void;
   /** Seeded room rng — absent = ambient Math.random (production). */
   rng?: () => number;
 }

@@ -380,6 +380,10 @@ export class Room {
       onRepair: (pid, targetId) => this.deployables.repair(pid, targetId),
       deployBlast: (pos, damage, radius, shooter) => this.deployables.applyBlast(pos, damage, radius, shooter),
       pickupsKnock: (at, radius, force) => this.pickups?.knock(at, radius, force),
+      preySplash: (ownerId, pos, radius, maxDamage) => {
+        this.ballSim.splashDamage(ownerId, pos, radius, maxDamage);
+        this.creatureSim.splashDamage(ownerId, pos, radius, maxDamage);
+      },
       creatureArmor: (pos, amount, radius) => {
         this.ballSim.armorBlast(pos, radius, amount);
         this.creatureSim.armorBlast(pos, radius, amount);
