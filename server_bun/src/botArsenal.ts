@@ -188,6 +188,14 @@ export class BotArsenal implements BeamHost {
     let travelled = 0;
     let flightT = 0;
     let hitX: number | null = null, hitY = 0, hitZ = 0;
+    // Enemy bodies on the path pop the shell too — an intercept at 5m
+    // self-splashes exactly like a lip hit, and "a point-blank trade is
+    // a trade" only holds when the blast actually kills him (soak
+    // autopsy: most untraded selfK was a foe body eating the shell
+    // inside the shooter's blast envelope and surviving it).
+    const foes = [...this.room.players.getAllPlayers().values()]
+      .filter((q) => q.id !== shooterId && !q.isDead && (!shooterTeam || q.team !== shooterTeam));
+    let bodyHit: { health: number } | null = null;
     const dt = 0.02;
     for (let stepN = 0; stepN < 400 && travelled < 80; stepN++) {
       vy += g * dt;
@@ -201,16 +209,33 @@ export class BotArsenal implements BeamHost {
         hitX = px; hitY = py; hitZ = pz;
         break;
       }
+      for (const f of foes) {
+        const bx = f.position.x - px, by = f.position.y + 1 - py, bz = f.position.z - pz;
+        if (bx * bx + by * by + bz * bz < 2.6) {
+          if (travelled < aoer) {
+            // Trade test: the pop lands inside our own blast envelope,
+            // so the shot only exists if the splash likely kills the
+            // body it's about to hit — a sacrifice, not a whiff.
+            bodyHit = f.health <= stats.aoeDamage * 0.8 ? f : null;
+            if (!bodyHit) return true;
+          }
+          hitX = px; hitY = py; hitZ = pz;
+          stepN = 400;
+          break;
+        }
+      }
+      if (hitX !== null) break;
     }
     // Self-collision ahead: the blast radius is measured shooter→pop at
     // detonation, and a bot skiing INTO his own shot covers real distance
     // during flight — a rocket the muzzle clears still frags him if his
-    // velocity delivers him inside the radius by impact time.
+    // velocity delivers him inside the radius by impact time. A body hit
+    // that survives the trade test still has to clear this check.
     if (hitX !== null) {
       const sx = muzzle.x + ownerVel.x * flightT - hitX;
       const sy = muzzle.y + ownerVel.y * flightT - hitY;
       const sz = muzzle.z + ownerVel.z * flightT - hitZ;
-      if (sx * sx + sy * sy + sz * sz < aoer * aoer) return true;
+      if (sx * sx + sy * sy + sz * sz < aoer * aoer && !bodyHit) return true;
     }
     // Entity intercepts inside the blast envelope: a wandering ball,
     // a species pop, or a teammate body on the muzzle line pops the
