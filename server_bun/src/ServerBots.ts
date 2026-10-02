@@ -242,17 +242,23 @@ export class ServerBots {
       this.gearLobT.set(id, now + (saboteur ? 1800 : 3000));
       logger.debug('Gear lob', { id, x: +gear.x.toFixed(1), z: +gear.z.toFixed(1) });
     }
-    // Push volley: a capper's call turns the stand into a shelling
-    // target for the window — whoever's in lob range (the bombardier's
-    // perch sits ~90m out, mediums closing in closer) throws ordnance
-    // AT the stand, so the flag arrives to a cleared pad, not fresh
-    // defense. Same cadence discipline as the gear lob.
+    // Stand siege: the bombardier's perch IS a shelling job — while it
+    // holds the enemy stand in lob range it mortars/nades on cadence,
+    // softening defense continuously instead of waiting for the call.
+    // A called push temporarily makes EVERYONE near the stand join in.
     const push = ready || !gear ? this.sense.pushTarget(p.team) : null;
-    if (push && !gear && Math.hypot(push.x - p.position.x, push.z - p.position.z) < 95
-        && this.spendOk(id, BELT_THROW_COST, false, nuggetNear)) {
-      this.arsenal.lobAt(p, push);
-      this.gearLobT.set(id, now + 2500);
-      logger.debug('Push lob', { id, x: +push.x.toFixed(1), z: +push.z.toFixed(1) });
+    const sieging = this.roster.roleInfo.get(id) === 'bombardier';
+    // The shell lands on the flag pad — the perch goal is the bot's
+    // own parking spot, not the target.
+    const stand = p.team && this.room.flags
+      ? this.room.flags.flags.get(p.team === 'alpha' ? 'bravo' : 'alpha')?.pos ?? null
+      : null;
+    const shell = push ?? (sieging && stand && this.room.flags?.flags.get(p.team === 'alpha' ? 'bravo' : 'alpha')?.state !== 'carried' ? stand : null);
+    if (shell && !gear && Math.hypot(shell.x - p.position.x, shell.z - p.position.z) < 95
+        && this.spendOk(id, BELT_THROW_COST, sieging, nuggetNear)) {
+      this.arsenal.lobAt(p, shell);
+      this.gearLobT.set(id, now + (push ? 2500 : 4000));
+      logger.debug('Push lob', { id, x: +shell.x.toFixed(1), z: +shell.z.toFixed(1) });
     }
     // Deploy claims run the same handleDeploy a human's message does —
     // kind, plant distance, and per-player cap are all re-validated.
