@@ -57,6 +57,27 @@ export function hmFingerprint(f: Heightfield): string {
   return `${N}:${(acc >>> 0).toString(16)}`;
 }
 
+/** Decode a maps/<name>.bin dump — u32 width, u32 height (square),
+ *  raw R-channel bytes. The one parser for server, netbots, and tools. */
+export function hmParseBin(buf: Uint8Array): Heightfield {
+  const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+  const w = view.getUint32(0, true);
+  const h = view.getUint32(4, true);
+  if (w !== h || w < 2 || buf.byteLength !== 8 + w * h) {
+    throw new Error(`Bad heightmap.bin: ${w}x${h}, ${buf.byteLength} bytes`);
+  }
+  return { size: w, data: buf.subarray(8), stride: 1 };
+}
+
+/** Plain terrain-only move surface — the server wraps this shape with
+ *  structure solids (FieldSurface); bots and tools use it bare. */
+export function hmSurface(f: Heightfield): { getHeight(x: number, z: number): number; getNormal(x: number, z: number, out: { x: number; y: number; z: number }): { x: number; y: number; z: number } } {
+  return {
+    getHeight: (x, z) => hmHeight(f, x, z),
+    getNormal: (x, z, out) => { hmNormal(f, x, z, out); return out; },
+  };
+}
+
 export function hmNormal(f: Heightfield, wx: number, wz: number, out: { x: number; y: number; z: number }): void {
   const e = CPU_STEP * 0.5;
   const hL = hmHeight(f, wx - e, wz);

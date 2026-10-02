@@ -6,7 +6,7 @@
 
 import type { ClientMessage, ServerMessage, TickUpdatePlayer, Vec3 } from '../../shared/protocol.ts';
 import { decodeTickFrame, isWireFrame } from '../../shared/wire.ts';
-import { hmHeight, hmNormal, type Heightfield } from '../../shared/heightfield.ts';
+import { hmParseBin, hmSurface, type Heightfield } from '../../shared/heightfield.ts';
 import type { MoveSurface } from '../../shared/movement.ts';
 import { fileURLToPath } from 'node:url';
 import { LatencyLink } from './latency.ts';
@@ -166,16 +166,9 @@ export class NetClient {
         if (ab) buf = new Uint8Array(ab);
       }
       if (!buf || buf.byteLength < 9) return;
-      const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
-      const w = view.getUint32(0, true);
-      const h = view.getUint32(4, true);
-      if (w !== h || w < 2 || buf.byteLength !== 8 + w * h) return;
-      const field: Heightfield = { size: w, data: buf.subarray(8), stride: 1 };
+      const field = hmParseBin(buf);
       this.field = field;
-      this.surface = {
-        getHeight: (x, z) => hmHeight(field, x, z),
-        getNormal: (x, z, out) => { hmNormal(field, x, z, out); return out; },
-      };
+      this.surface = hmSurface(field);
     } catch {
       // No terrain — the bot stays on flat-world kinematics.
     }

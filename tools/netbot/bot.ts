@@ -305,7 +305,7 @@ export class NetBot {
   /** Local mirror of the server shadow's jet tank — it only thrusts
    *  while energy > 0, so an always-on jet claim would diverge the
    *  moment the modeled tank emptied. */
-  private energy = ENERGY.max;
+  private energy: number = ENERGY.max;
   private jetting = false;
 
   /** One local MoveSim per bot, fed the same input stream it sends — the
