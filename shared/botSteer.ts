@@ -62,7 +62,13 @@ export class BotSteer {
     // turn cap makes a fast arrival circle the point instead of
     // correcting (soak: 37m/s flybys orbiting at ~20-60m, zero touches).
     const objD = ctx.objective ? Math.hypot(ctx.objective.x - pos.x, ctx.objective.z - pos.z) : Infinity;
-    if (objD < (ctx.runner ? 60 : 40)) {
+    if (objD < (ctx.runner ? 60 : 40) || ctx.posted) {
+      // Posted anchors take the beeline at any range: slot scoring can
+      // mask every goalward slot (slope probes on a ridgeline stand) and
+      // the least-dangerous fallback walks the defender hundreds of
+      // meters along the ridge — the soak's 300m away-step excursions.
+      // A jam on the straight line is stuckBreak's problem, not a
+      // reason to wander.
       this.heading.x = gx; this.heading.z = gz;
       const step0 = Math.min(gd, STEP);
       return { x: pos.x + gx * step0, y: pos.y, z: pos.z + gz * step0 };

@@ -106,7 +106,10 @@ export function dodge(ctx: BrainCtx, pos: BotVec, dest: BotVec, hero: boolean): 
     if (d < nearestD) { nearestD = d; nearest = t; }
   }
   if (!nearest) return dest;
-  const dodgeStep = hero ? DODGE_STEP * 1.4 : DODGE_STEP;
+  // A posted anchor's dodge is a hop, not a juke — the flag is also
+  // the cover, and a 9m sidestep under steady bombardment parks him in
+  // the 3-15m ring instead of back on the pole between shells.
+  const dodgeStep = (hero ? DODGE_STEP * 1.4 : DODGE_STEP) * (ctx.posted ? 0.5 : 1);
   const tx = pos.x - nearest.x, tz = pos.z - nearest.z;
   const tl = Math.hypot(tx, tz) || 1;
   const vx = ctx.vel?.x ?? 0, vz = ctx.vel?.z ?? 0;

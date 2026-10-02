@@ -488,7 +488,7 @@ export class BotBrain {
       && ctx.objective && Math.hypot(pos.x - ctx.objective.x, pos.z - ctx.objective.z) > 30) {
       const f = (v: BotVec) => `${v.x.toFixed(0)},${v.z.toFixed(0)}`;
       const spd = ctx.vel ? Math.hypot(ctx.vel.x, ctx.vel.y, ctx.vel.z) : 0;
-      console.log(`trace t=${(now / 1000).toFixed(1)} pos=${f(pos)} v=${spd.toFixed(1)} goal=${f(ctx.objective ?? pos)} d0=${f(d0)} d1=${f(d1)} d2=${f(d2)}`);
+      console.log(`trace t=${(now / 1000).toFixed(1)} pos=${f(pos)} v=${spd.toFixed(1)} ej=${this.escapeS.escapeJetT.toFixed(1)} goal=${f(ctx.objective ?? pos)} d0=${f(d0)} d1=${f(d1)} d2=${f(d2)}`);
     }
 
     dest = stuckBreak(this.escapeS, dt, ctx, pos, dest);

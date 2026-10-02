@@ -251,7 +251,7 @@ describe('scenario: warp soak throughput', () => {
     const hofLastTrace = new Map<string, number>();
     const hofGoalProbe: { posted: number; pd: number }[] = [];
     const hofLadder: number[] = [];
-    const hofTrips: { t: number; age: number; peak: number }[] = [];
+    const hofTrips: { t: number; age: number; peak: number; dd0: number; gg0: number }[] = [];
     const hofBand2 = new Map<string, boolean>();
     // HoF distance-from-stand audit keyed '<flagState><band>' — band 0
     // is <15m, 1 is 15-60m, 2 is beyond the stolen-flag roam radius.
@@ -483,7 +483,11 @@ describe('scenario: warp soak throughput', () => {
               // genuinely walk off post mid-life?
               const wasBand2 = hofBand2.get(p.id) ?? false;
               if (band === 2 && st === 'home' && !wasBand2) {
-                hofTrips.push({ t: simTicks * dt, age: simTicks * dt - (born ?? 0), peak: dh });
+                const d0 = room.bots.debugDest(p.id);
+                const dd0 = d0 ? Math.hypot(d0.x - home.x, d0.z - home.z) : -1;
+                const gp = room.bots.flagGoal({ id: p.id, team: p.team, position: p.position });
+                const gg0 = gp ? Math.hypot(gp.pos.x - home.x, gp.pos.z - home.z) : -1;
+                hofTrips.push({ t: simTicks * dt, age: simTicks * dt - (born ?? 0), peak: dh, dd0, gg0 });
               }
               if (band === 2 && st === 'home') hofTrips.at(-1)!.peak = Math.max(hofTrips.at(-1)!.peak, dh);
               hofBand2.set(p.id, band === 2);
@@ -735,7 +739,7 @@ describe('scenario: warp soak throughput', () => {
       if (hofTrips.length) {
         const fresh = hofTrips.filter((x) => x.age < 60).length;
         parts.push(`${hofTrips.length} trips >60m (${fresh} within 60s of spawn)`);
-        row('hof-trips', hofTrips.slice(0, 12).map((x) => `t${x.t.toFixed(0)} age${x.age.toFixed(0)} peak${x.peak.toFixed(0)}`).join(' · '));
+        row('hof-trips', hofTrips.slice(0, 12).map((x) => `t${x.t.toFixed(0)} age${x.age.toFixed(0)} pk${x.peak.toFixed(0)} goal${x.gg0.toFixed(0)} dest${x.dd0.toFixed(0)}`).join(' · '));
       }
       row('hof-away', `ticks by flagState+distBand (<15m/15-60m/60m+, R=first 25s of life)   ${parts.join(' ')}   home2 dest-dist median ${destMed}m`);
       for (const id of [...new Set(hofTrace.map((s) => s.id))]) {

@@ -48,9 +48,13 @@ export class BotMoves {
     // anchor falls into; v²/60 adds the slide distance to the pole.
     const od = ctx.objective ? Math.hypot(ctx.objective.x - pos.x, ctx.objective.z - pos.z) : gd;
     // Only brake when the step actually heads at the pole — a mortar
-    // sidestep is perpendicular and must keep its legs.
+    // sidestep is perpendicular and must keep its legs. Two rings:
+    // fast arrivals brake wide to kill the overshoot-orbit; already
+    // slow ones brake tight so the creep lands ON the pole — a single
+    // wide ring parked him at 5-13m and flag% never passed the ring.
     const toward = ctx.objective && ((dest.x - pos.x) * (ctx.objective.x - pos.x) + (dest.z - pos.z) * (ctx.objective.z - pos.z)) > 0;
-    if (ctx.posted && spd0 > 1.5 && toward && od < Math.min(ctx.posted + 1, 12) + (spd0 * spd0) / 60) {
+    const ring = spd0 > 6 ? Math.min((ctx.posted ?? 0) + 1, 12) : Math.min((ctx.posted ?? 0) + 1, 2);
+    if (ctx.posted && spd0 > 1.5 && toward && od < ring + (spd0 * spd0) / 60) {
       return { ski: false, jet: false, jump: false, park: true };
     }
     const nx = dx / gd, nz = dz / gd;
@@ -97,7 +101,12 @@ export class BotMoves {
       // be. Momentum is life — a bot that only skis downhill reads as a
       // pedestrian, which is exactly the sheep behavior the watchdog
       // now flags. Friction/jets sort out the uphill cost.
-      ski: true,
+      // Posted anchors are the exception with feet on the flag: a hop
+      // or blast that lands them on the stand's ridge face turns ski
+      // into a 250m downhill slide the walk key can't out-argue (soak:
+      // 16 straight seconds at 15m/s away from the pole), so their
+      // boots stay planted and ground friction owns every landing.
+      ski: !ctx.posted,
       jet,
       // Uphill + near-stationary = hop it; autohop chains the rest.
       jump: uphill && speed < 3 && !airborne,
@@ -108,6 +117,13 @@ export class BotMoves {
    *  prey, a high destination — or discretionary speed plays when the
    *  tank is comfortable. */
   private wantJet(ctx: BrainCtx, pos: BotVec, dest: BotVec, rise: number, speed: number, gd: number, airborne: boolean): boolean {
+    // Posted anchors burn only to climb back onto the post — every
+    // discretionary burn (boost to speed, hop, airborne-prey chase) is
+    // altitude+momentum off the stand, and the chase is the gun's job.
+    if (ctx.posted) {
+      this.jetWhy = rise > 2 ? 'climb' : '-';
+      return rise > 2;
+    }
     const targetHigh = (this.host.huntPos()?.y ?? -Infinity) - pos.y > 6;
     const destHigh = Math.max(dest.y, ctx.objective?.y ?? -Infinity) - pos.y > 3;
     // Hard ceiling: past ~30m AGL a held burn is ballooning, not skiing —
