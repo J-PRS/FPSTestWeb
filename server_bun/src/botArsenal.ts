@@ -16,7 +16,8 @@ import { BOT_LOADOUTS, pickBotWeapon, type BotLoadout } from '../../shared/botLo
 import { aimSkillFor, type BotSkill } from '../../shared/botSkill.ts';
 import { botRand } from '../../shared/botRand.ts';
 import type { BotVec, BrainOut } from '../../shared/botBrain.ts';
-import { fireAtBall as beamAtBall, fireSpeedless as beamSpeedless, type BeamHost } from './botBeam.ts';
+import { fireAtBall as beamAtBall, fireSpeedless, type BeamHost } from './botBeam.ts';
+import { isSuper } from './superBot.ts';
 import { weaponStats } from './weaponStats.ts';
 
 const BOLT_SPEED = 60; // m/s — the melee swing's visual bolt
@@ -97,23 +98,34 @@ export class BotArsenal implements BeamHost {
       return;
     }
     if (targetId.startsWith('c:')) {
-      // Species pops have no projectile-sweep body — they die to the same
-      // crawlerHit claim a client sends. The weapon pick + rate gate still
-      // apply so a bot can't machine-gun a swarm down instantly.
+      // Species pops contest the same projectile sweep as balls — fire
+      // real shells so a shot can still whiff or body-block, identical
+      // to a human's travel time. The projectile detonate pays damage
+      // through crawlerHit and scores :prey telemetry.
       const muzzle0 = { x: p.position.x, y: p.position.y + 1.4, z: p.position.z };
-      const cdx = aim.x - muzzle0.x, cdz = aim.z - muzzle0.z;
-      const cd = Math.hypot(cdx, aim.y - muzzle0.y, cdz) || 1;
+      const cdx = aim.x - muzzle0.x, cdy = aim.y - muzzle0.y, cdz = aim.z - muzzle0.z;
+      const cdist = Math.hypot(cdx, cdy, cdz) || 1;
       const lo0 = this.loadouts.get(p.id) ?? BOT_LOADOUTS[0]!;
-      const wt0 = this.pickWeapon(lo0, Math.hypot(cdx, cdz), cd, p.id);
+      const wt0 = this.pickWeapon(lo0, Math.hypot(cdx, cdz), cdist, p.id);
       if (!this.rateOk(p.id, wt0)) return;
       weaponStats.recordShot(this.room.mode, `w${wt0}`);
-      const dmg = getWeaponStats(wt0)?.directDamage ?? 25;
-      const killed = this.room.creatureSim.handleHit(p.id, Number(targetId.slice(2)), dmg);
-      weaponStats.record(this.room.mode, `w${wt0}:prey`, dmg, killed, true);
-      const cdist = Math.hypot(cdx, aim.y - muzzle0.y, cdz) || 1;
-      this.room.messages.botFire(p.id, null, muzzle0,
-        { x: (cdx / cdist) * BOLT_SPEED, y: ((aim.y - muzzle0.y) / cdist) * BOLT_SPEED, z: (cdz / cdist) * BOLT_SPEED },
-        wt0, false);
+      if (wt0 === WeaponType.Melee) {
+        const stats = getWeaponStats(WeaponType.Melee);
+        const bug = this.room.creatureSim.crawlerAt(Number(targetId.slice(2)));
+        if (bug && stats && Math.hypot(bug.x - muzzle0.x, bug.y - muzzle0.y, bug.z - muzzle0.z) <= stats.aoeRadius + 1.4) {
+          const killed = this.room.creatureSim.handleHit(p.id, bug.id, isSuper(p.id) ? 300 : stats.aoeDamage);
+          weaponStats.record(this.room.mode, `w${wt0}:prey`, stats.aoeDamage, killed, true);
+        }
+        this.room.messages.botAttack(p.id, targetId, WeaponType.Melee);
+        this.room.messages.botFire(p.id, null, muzzle0,
+          { x: (cdx / cdist) * BOLT_SPEED, y: (cdy / cdist) * BOLT_SPEED, z: (cdz / cdist) * BOLT_SPEED },
+          wt0, false);
+        return;
+      }
+      if (!this.room.projectiles.spawn(p.id, wt0, muzzle0,
+        { x: cdx / cdist, y: cdy / cdist, z: cdz / cdist }, p.velocity)) {
+        fireSpeedless(this, p.id, muzzle0, { x: cdx / cdist, y: cdy / cdist, z: cdz / cdist }, wt0);
+      }
       return;
     }
     const target = this.room.players.getPlayer(targetId);
@@ -164,7 +176,7 @@ export class BotArsenal implements BeamHost {
       }
     }
     if (!this.room.projectiles.spawn(p.id, wt, muzzle, dir, p.velocity)) {
-      beamSpeedless(this, p.id, muzzle, dir, wt);
+      fireSpeedless(this, p.id, muzzle, dir, wt);
     }
   }
 

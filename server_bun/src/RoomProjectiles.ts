@@ -185,7 +185,7 @@ export class RoomProjectiles {
     dischargeRay(this, proj, range);
   }
 
-  detonate(proj: LiveProj, at: Vec3, directHitId?: string | null, ballId?: number, bodyDirect?: boolean): void {
+  detonate(proj: LiveProj, at: Vec3, directHitId?: string | null, ballId?: number, bodyDirect?: boolean, crawlerId?: number): void {
     this.projs.delete(proj.id);
     this.room.broadcast({ type: 'projectileDestroyed', projectileId: proj.id });
     // Skillshot ramp: sim shells carry their real flight age — a bot's
@@ -199,6 +199,11 @@ export class RoomProjectiles {
     if (ballId !== undefined) {
       const dmg = scaledDirectDamage(proj.weaponType, rampAge) || proj.stats.aoeDamage;
       const killed = this.room.ballSim?.handleHit(proj.ownerId, ballId, dmg) ?? false;
+      weaponStats.record(this.room.mode, `w${proj.weaponType}:prey`, dmg, killed, proj.ownerId.startsWith('BOT-'));
+    }
+    if (crawlerId !== undefined) {
+      const dmg = scaledDirectDamage(proj.weaponType, rampAge) || proj.stats.aoeDamage;
+      const killed = this.room.creatureSim?.handleHit(proj.ownerId, crawlerId, dmg) ?? false;
       weaponStats.record(this.room.mode, `w${proj.weaponType}:prey`, dmg, killed, proj.ownerId.startsWith('BOT-'));
     }
     this.room.pushNoise(at); // a blast is louder than the muzzle that launched it

@@ -78,11 +78,16 @@ export function fireSpeedless(h: BeamHost, id: string, muzzle: Vec3, dir: Vec3, 
     const killed = h.room.ballSim.handleHit(id, c.ballId, dmg);
     weaponStats.record(h.room.mode, `w${wt}:prey`, dmg, killed, true);
   }
+  if (c?.crawlerId !== undefined && stats) {
+    const dmg = stats.directDamage || stats.aoeDamage;
+    const killed = h.room.creatureSim.handleHit(id, c.crawlerId, dmg);
+    weaponStats.record(h.room.mode, `w${wt}:prey`, dmg, killed, true);
+  }
 }
 
 /** First thing a 60m ray actually strikes: terrain face, wall, player
  *  chest, or creature — earliest contact wins, like dischargeRay. */
-function beamContact(h: BeamHost, shooterId: string, muzzle: Vec3, dir: Vec3, range = 60): { playerId?: string; ballId?: number } | null {
+function beamContact(h: BeamHost, shooterId: string, muzzle: Vec3, dir: Vec3, range = 60): { playerId?: string; ballId?: number; crawlerId?: number } | null {
   const end = { x: muzzle.x + dir.x * range, y: muzzle.y + dir.y * range, z: muzzle.z + dir.z * range };
   let bestT = 1;
   if (h.room.field) {
@@ -99,7 +104,7 @@ function beamContact(h: BeamHost, shooterId: string, muzzle: Vec3, dir: Vec3, ra
 
 /** Players and creatures the ray reaches before its first world
  *  contact — earliest wins; none = the beam ended in dirt. */
-function beamEntityAt(h: BeamHost, shooterId: string, muzzle: Vec3, end: Vec3, worldT: number): { playerId?: string; ballId?: number } | null {
+function beamEntityAt(h: BeamHost, shooterId: string, muzzle: Vec3, end: Vec3, worldT: number): { playerId?: string; ballId?: number; crawlerId?: number } | null {
   let bestT = worldT;
   let playerId: string | undefined;
   for (const [pid, t] of h.room.players.getAllPlayers()) {
@@ -112,6 +117,8 @@ function beamEntityAt(h: BeamHost, shooterId: string, muzzle: Vec3, end: Vec3, w
   }
   const bc = h.room.ballSim?.sweepHit(muzzle, end, 0.2);
   if (bc && bc.t <= bestT) return { ballId: bc.id };
+  const cc = h.room.creatureSim?.sweepHit(muzzle, end, 0.2);
+  if (cc && cc.t <= bestT) return { crawlerId: cc.id };
   if (playerId !== undefined) return { playerId };
   return worldT < 1 ? {} : null;
 }

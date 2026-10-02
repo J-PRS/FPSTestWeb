@@ -91,15 +91,21 @@ function bodySweep(r: ContactHost, proj: LiveProj, stats: ReturnType<typeof getW
 function creatureSweep(r: ContactHost, proj: LiveProj, stats: ReturnType<typeof getWeaponStats>, from: Vec3, reach: number): boolean {
     const p = proj.p;
     const bc = r.room.ballSim?.sweepHit(from, p.pos, reach - PLAYER_RADIUS);
-    if (!bc) return false;
+    // Species pops contest the same lane — earliest of ball/crawler
+    // contact eats the shell, so a crawler body-blocks a shot meant
+    // for a ball behind it (and vice versa).
+    const cc = r.room.creatureSim?.sweepHit(from, p.pos, reach - PLAYER_RADIUS);
+    const best = bc && (!cc || bc.t <= cc.t) ? bc : cc;
+    if (!best) return false;
     const at: Vec3 = {
-      x: from.x + (p.pos.x - from.x) * bc.t,
-      y: from.y + (p.pos.y - from.y) * bc.t,
-      z: from.z + (p.pos.z - from.z) * bc.t,
+      x: from.x + (p.pos.x - from.x) * best.t,
+      y: from.y + (p.pos.y - from.y) * best.t,
+      z: from.z + (p.pos.z - from.z) * best.t,
     };
-    const ball = r.room.ballSim?.ballAt(bc.id);
-    const bodyDirect = !!ball && bc.d <= ball.radius + stats.bodyRadius;
-    r.detonate(proj, at, null, bc.id, bodyDirect);
+    const bodyDirect = best === bc
+      ? (() => { const ball = r.room.ballSim?.ballAt(bc!.id); return !!ball && bc!.d <= ball.radius + stats.bodyRadius; })()
+      : best.d <= stats.bodyRadius + 1;
+    r.detonate(proj, at, null, best === bc ? best.id : undefined, bodyDirect, best === cc ? best.id : undefined);
     return true;
   }
 

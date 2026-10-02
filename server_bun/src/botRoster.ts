@@ -10,11 +10,22 @@ import { logger } from './logger.ts';
 import { WeaponType, getWeaponStats } from '../../shared/weapons.ts';
 import { CLASS_STATS, type ArmorClass } from '../../shared/botClasses.ts';
 import { BOT_LOADOUTS, botClassForLoadout, type BotLoadout } from '../../shared/botLoadouts.ts';
+import { botRand } from '../../shared/botRand.ts';
 import { BOT_NAMES } from '../../shared/botNames.ts';
 import { CLASS_FITNESS, ROLE_PRIORITY, type BotRole } from '../../shared/flagGoals.ts';
 import { isSuper } from './superBot.ts';
 import { healPool } from './healPool.ts';
 import { simNow } from './simClock.ts';
+
+// FPS_SOAK_RANDLO=1: every slot draws from the union of weapons the
+// authored kits place there — measures raw per-weapon lethality with
+// kit frequency removed (innate per-weapon skill still biases picks).
+const RANDLO = (() => {
+  const slot = (k: 'near' | 'mid' | 'far' | 'belt' | 'side') =>
+    [...new Set(BOT_LOADOUTS.map((l) => l[k]))];
+  return { near: slot('near'), mid: slot('mid'), far: slot('far'), belt: slot('belt'), side: slot('side') };
+})();
+const pickOf = <T,>(pool: T[]): T => pool[Math.floor(botRand() * pool.length) % pool.length]!;
 
 /** Strict-tier roles — the only slots that re-fit a donor's body.
  *  HoF is literally "heavy on flag" and the technician carries the
@@ -52,7 +63,9 @@ export class BotRoster {
       // read as a map tag, not a pilot. Index suffix keeps ids unique.
       const idx = this.nextIdx++;
       const id = `BOT-${BOT_NAMES[(idx - 1) % BOT_NAMES.length]}-${String(idx).padStart(2, '0')}`;
-      const loadout = BOT_LOADOUTS[(this.nextIdx - 2 + BOT_LOADOUTS.length) % BOT_LOADOUTS.length]!;
+      const loadout = process.env.FPS_SOAK_RANDLO === '1'
+        ? { perk: 'vitality' as const, near: pickOf(RANDLO.near), mid: pickOf(RANDLO.mid), far: pickOf(RANDLO.far), belt: pickOf(RANDLO.belt), side: pickOf(RANDLO.side) }
+        : BOT_LOADOUTS[(this.nextIdx - 2 + BOT_LOADOUTS.length) % BOT_LOADOUTS.length]!;
       // Kit picks the body, then the squad's weighted fill picks the
       // job — plated/mortar kits anchor heavy, featherjets flies light,
       // everything else runs medium until rebalance assigns a role.

@@ -22,6 +22,7 @@ import {
   spawnCrawler as spawnCrawlerInto, snapTarget as snapTargetInto, targetSnap as targetSnapOf,
 } from './creatureSpawn.ts';
 import type { SimVec, StructureCollider } from '../../shared/ballSim.ts';
+import { segPointDist, segPointT } from '../../shared/projSim.ts';
 import type { PlayerManager } from './PlayerManager.ts';
 import type { ServerMessage, Vec3 } from './types.ts';
 import { logger } from './logger.ts';
@@ -190,6 +191,31 @@ export class CreatureSim {
       if (d2 > r2) continue;
       healPool(c, amount, c.maxHealth * ARMORNADE_OVERCAP);
     }
+  }
+
+  /** Live lookup for honest melee/contact checks — mirrors
+   *  ballCombat.ballAt. */
+  crawlerAt(id: number): { id: number; x: number; y: number; z: number } | null {
+    const c = this.crawlers.get(id);
+    return c && !c.dead ? { id: c.id, x: c.x, y: c.y, z: c.z } : null;
+  }
+
+  /** Earliest live-creature contact along a segment — mirrors
+   *  ballCombat.sweepHit so real shells can whiff/hit the swarm instead
+   *  of every shot being an instant claim. Ground walkers use a modest
+   *  body radius; totems carry their own scale. */
+  sweepHit(from: SimVec, to: SimVec, extraReach: number): { id: number; t: number; d: number } | null {
+    let best: { id: number; t: number; d: number } | null = null;
+    for (const c of this.crawlers.values()) {
+      if (c.dead) continue;
+      const center = { x: c.x, y: c.y + 1, z: c.z };
+      const rad = 'radius' in c ? (c.radius as number) : 1.4;
+      const d = segPointDist(from, to, center);
+      if (d > rad + extraReach) continue;
+      const t = segPointT(from, to, center);
+      if (!best || t < best.t) best = { id: c.id, t, d };
+    }
+    return best;
   }
 
   /** crawlerHit claim — mirrors BallSim.handleHit (lenient clamps, the

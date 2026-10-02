@@ -564,7 +564,10 @@ describe('scenario: warp soak throughput', () => {
         const iv = w.startsWith('w') ? WEAPON_FIRE_INTERVAL_S[+w.slice(1) as WeaponType] : undefined;
         const trigS = iv !== undefined && r.shots > 0 ? r.shots * iv : 0;
         const t = wttk[w];
-        const duelKps = t && t.totalMs > 0 ? ` ${(r.kills / (t.totalMs / 1000)).toFixed(2)}K/s` : '';
+        // Sub-50ms "duels" are claim/settle races, not engagements —
+        // a finisher landing on a pre-wounded body reads 76K/s without
+        // the floor, which poisons the comparison.
+        const duelKps = t && t.totalMs / Math.max(1, t.n) >= 50 ? ` ${(r.kills / (t.totalMs / 1000)).toFixed(2)}K/s` : '';
         const trigKps = trigS > 0 ? ` ${(r.kills / trigS).toFixed(2)}K/tr` : '';
         return `${name} ${r.kills}K/${r.hits}hits/${r.shots}shots/${r.damage.toFixed(0)}dmg${trigKps}${duelKps}`;
       })
