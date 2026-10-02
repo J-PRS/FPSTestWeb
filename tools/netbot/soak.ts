@@ -24,17 +24,26 @@ const PING = arg('--ping', 60, num);
 const JITTER = arg('--jitter', 120, num);
 const LOSS = arg('--loss', 0.01, num);
 const HOP_EVERY = arg('--hop-every', 0, num);
+const ROOM = arg('--room', '', String);
+const MODE = arg('--mode', '', String);
+const STAGGER = arg('--stagger', 50, num);
 
-console.log(`netbot soak: ${BOTS} bots → ${URL_} for ${SECONDS}s (ping=${PING}ms jitter=${JITTER}ms loss=${LOSS})`);
+console.log(`netbot soak: ${BOTS} bots → ${URL_} for ${SECONDS}s (ping=${PING}ms jitter=${JITTER}ms loss=${LOSS}${ROOM ? ` room=${ROOM}/${MODE}` : ''})`);
 
 const bots: { nc: NetClient; bot: NetBot }[] = [];
 for (let i = 0; i < BOTS; i++) {
-  const nc = new NetClient(URL_, `netbot_${i}`, new LatencyLink({ pingMs: PING, jitterMs: JITTER, lossRate: LOSS }));
+  const nc = new NetClient(URL_, `netbot_${i}`, new LatencyLink({ pingMs: PING, jitterMs: JITTER, lossRate: LOSS }), ROOM ? { room: ROOM, mode: MODE } : {});
   const bot = new NetBot(nc, { hopEveryMs: HOP_EVERY > 0 ? HOP_EVERY : undefined });
   bots.push({ nc, bot });
 }
 
-await Promise.all(bots.map((b) => b.nc.connect()));
+// Staggered connects — a simultaneous handshake burst over a shared
+// tunnel/loopback dropped joins entirely in live testing (sockets open,
+// no gameState ever). The bun test staggers for the same reason.
+for (const b of bots) {
+  await b.nc.connect();
+  if (STAGGER > 0) await new Promise((r) => setTimeout(r, STAGGER));
+}
 console.log('all bots joined');
 for (const b of bots) b.bot.start();
 
@@ -50,7 +59,7 @@ for (const { nc } of bots) {
   const rejects = [...t.rejects.entries()].map(([r, n]) => `${r}:${n}`).join(' ') || 'none';
   console.log(`${nc.id}: shots=${t.shots} claims=${t.claims} dealt=${t.hitsDealt} taken=${t.hitsTaken} ` +
     `k/d=${t.kills}/${t.deaths} rejects=[${rejects}] corr=${t.corrections} dedup=${t.dedupDrops} ` +
-    `hops=${t.hops} gs=${t.gameStates} rtt=${nc.pingMs}ms`);
+    `hops=${t.hops} gs=${t.gameStates} rtt=${nc.pingMs}ms${nc.closed ? ` CLOSED[${nc.closeInfo}]` : ''}`);
   const totalRejects = [...t.rejects.values()].reduce((a, b) => a + b, 0);
   if (totalRejects > 0) fails++;
 }

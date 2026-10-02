@@ -71,7 +71,7 @@ export class NetClient {
   closed = false;
   closeInfo = '';
 
-  constructor(private url: string, id: string, link?: LatencyLink) {
+  constructor(private url: string, id: string, link?: LatencyLink, private joinOpts: { room?: string; mode?: string } = {}) {
     this.id = id;
     this.link = link ?? new LatencyLink({ pingMs: 0, jitterMs: 0, lossRate: 0 });
   }
@@ -88,7 +88,7 @@ export class NetClient {
         // Join retries until the first gameState lands — a swallowed or
         // throttled join would otherwise leave the bot a silent ghost,
         // the same failure a real client's retry button papers over.
-        const joinMsg = JSON.stringify({ type: 'join', playerId: this.id, transport: 'ws', token: this.sessionToken });
+        const joinMsg = JSON.stringify({ type: 'join', playerId: this.id, transport: 'ws', token: this.sessionToken, room: this.joinOpts.room, mode: this.joinOpts.mode });
         ws.send(joinMsg);
         let tries = 0;
         this.joinTimer = setInterval(() => {
