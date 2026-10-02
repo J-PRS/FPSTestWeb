@@ -166,7 +166,7 @@ export interface BrainOut {
   dest: BotVec;
   /** Legal-input hints for the host sim — same keys a human holds.
    *  Omitted fields mean "not held". */
-  move?: { ski?: boolean; jet?: boolean; jump?: boolean };
+  move?: { ski?: boolean; jet?: boolean; jump?: boolean; park?: boolean };
   /** Fire command when the bot wants to shoot this step. */
   fire?: { targetId: string; aim: BotVec };
   /** Claimed toggle bits — same STATUS mask a human's inputMove carries.
@@ -472,7 +472,11 @@ export class BotBrain {
     let dest = d0;
 
     // --- line planning: commit to a terrain-sampled landing spot ---
-    const d1 = this.lines.plan(dt, ctx, pos, dest);
+    // Posted bots skip it — ski lines arc around the objective on
+    // purpose (downhill bias, side-valley energy plays), which pulls a
+    // defender off the stand he's meant to be planted on. Straight
+    // home is the right route when the route is 50m.
+    const d1 = ctx.posted ? dest : this.lines.plan(dt, ctx, pos, dest);
     dest = d1;
 
     // --- context steering: senses score every direction ---
@@ -480,9 +484,11 @@ export class BotBrain {
     dest = d2;
     // Env-gated decision-chain trace: which stage rewrites the step.
     // FPS_TRACE=<playerId> — soaks print stage deltas for one bot.
-    if (ctx.id && process.env.FPS_TRACE && ctx.id.includes(process.env.FPS_TRACE)) {
+    if (ctx.id && process.env.FPS_TRACE && ctx.id.includes(process.env.FPS_TRACE)
+      && ctx.objective && Math.hypot(pos.x - ctx.objective.x, pos.z - ctx.objective.z) > 30) {
       const f = (v: BotVec) => `${v.x.toFixed(0)},${v.z.toFixed(0)}`;
-      console.log(`trace t=${(now / 1000).toFixed(1)} pos=${f(pos)} goal=${f(ctx.objective ?? pos)} d0=${f(d0)} d1=${f(d1)} d2=${f(d2)}`);
+      const spd = ctx.vel ? Math.hypot(ctx.vel.x, ctx.vel.y, ctx.vel.z) : 0;
+      console.log(`trace t=${(now / 1000).toFixed(1)} pos=${f(pos)} v=${spd.toFixed(1)} goal=${f(ctx.objective ?? pos)} d0=${f(d0)} d1=${f(d1)} d2=${f(d2)}`);
     }
 
     dest = stuckBreak(this.escapeS, dt, ctx, pos, dest);

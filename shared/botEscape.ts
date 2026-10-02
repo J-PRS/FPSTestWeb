@@ -62,6 +62,17 @@ export function stuckBreak(s: EscapeState, dt: number, ctx: BrainCtx, pos: BotVe
     s.progressGoalD = gd;
   }
   if (s.progressT < 1.5) return s.detourT > 0 && s.detour ? s.detour : dest;
+  // A parked anchor reads as "stuck" to the pinned check — zero
+  // displacement is the whole point of the brake, and counting it fires
+  // a detour+jet escape that flings the defender 60-100m off post in a
+  // loop. Stillness on post is a hold, not a trap.
+  if (ctx.posted && ctx.objective
+    && distSq(pos, ctx.objective) < (ctx.posted + 12) * (ctx.posted + 12)) {
+    s.stuckStreak = 0;
+    s.detourT = 0;
+    s.progressPos = { ...pos };
+    return dest;
+  }
   if (distSq(pos, s.progressPos) < 2.25) {
     s.stuckStreak++;
     if (s.detourT <= 0) {

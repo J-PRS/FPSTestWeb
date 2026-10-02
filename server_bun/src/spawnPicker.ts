@@ -18,6 +18,10 @@ export interface SpawnPickerHost {
   teamSpawns(): { alpha?: SpawnPoint[]; bravo?: SpawnPoint[] } | null;
   /** Team home bases — own-flag spawns when set. */
   teamBases(): { alpha: Vec3; bravo: Vec3 } | null;
+  /** Per-player pull toward the home sphere — a posted defender
+   *  respawning 400m forward spends a minute hiking instead of holding
+   *  the stand; runners keep 0 so front-line spheres stay theirs. */
+  homeBias?(playerId: string): number;
   /** Ground height at (x,z) — live heightfield. */
   groundAt(): ((x: number, z: number) => number) | undefined;
   /** Jitter source — Room wires its rng so tests can seed it. */
@@ -58,16 +62,19 @@ export class SpawnPicker {
 
   /** Team modes prefer own-base spawns — materializing among enemies is
    *  instant camp food. Score blends base proximity with enemy clearance.
-   *  Team pools are already home-side, so base proximity adds nothing. */
+   *  Team pools get base proximity only through the player's homeBias —
+   *  authored forward spheres exist for runners, not for the HoF who
+   *  would otherwise hike 400m back to the stand he never left. */
   private bestSpawn(points: SpawnPoint[], playerId: string, team: TeamId | undefined, teamPool: SpawnPoint[] | undefined): SpawnPoint {
-    const base = !teamPool && (team === 'alpha' || team === 'bravo')
+    const bias = this.host.homeBias?.(playerId) ?? (teamPool ? 0 : 2);
+    const base = bias > 0 && (team === 'alpha' || team === 'bravo')
       ? this.host.teamBases()?.[team] : undefined;
     let best: SpawnPoint = { ...points[0]! };
     let bestScore = -Infinity;
     for (const spawn of points) {
       const minFoeDist = this.foeClearance(spawn, playerId, team);
       const score = (base
-        ? minFoeDist - 2 * Math.hypot(spawn.x - base.x, spawn.z - base.z)
+        ? minFoeDist - bias * Math.hypot(spawn.x - base.x, spawn.z - base.z)
         : minFoeDist) * (spawn.w ?? 1) / 100;
       if (score > bestScore) {
         bestScore = score;

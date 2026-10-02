@@ -44,11 +44,17 @@ export class PlayerManager {
    *  the surface instead of spawning a player inside the ground. */
   groundAt?: (x: number, z: number) => number;
 
+  /** Room wires the bot roster here — posted roles get a strong pull
+   *  toward the home sphere so they respawn at the stand they're meant
+   *  to hold; everyone else scores on foe clearance alone. */
+  spawnHomeBias?: (playerId: string) => number;
+
   private readonly spawnPicker = new SpawnPicker({
     players: () => this.players,
     spawnPoints: () => this.spawnPoints,
     teamSpawns: () => this.teamSpawns,
     teamBases: () => this.teamBases,
+    homeBias: (id) => this.spawnHomeBias?.(id) ?? 0,
     groundAt: () => this.groundAt,
     rng: () => this.spawnRng(),
   });

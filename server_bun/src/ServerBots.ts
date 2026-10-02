@@ -287,6 +287,12 @@ export class ServerBots {
     return this.lastOut.get(id)?.dest ?? null;
   }
 
+  /** Test hook — the utility ladder's committed goal (pre-pipeline),
+   *  so a stray step dest can be blamed on goal-pull vs leg-drag. */
+  debugGoal(id: string): { x: number; y: number; z: number } | null {
+    return this.brains.get(id)?.goalS.goal ?? null;
+  }
+
   /** Test hook — how many push-calls each team posted this match. */
   debugPushCalls(team: string): number {
     return this.sense.pushCalls.get(team as 'alpha' | 'bravo') ?? 0;

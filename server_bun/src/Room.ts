@@ -151,6 +151,11 @@ export class Room {
    *  attach/rotation so gameplay code can resolve ground height. */
   field: Heightfield | null = null;
 
+  /** maps/<X>.json filename this room's spec came from — the scoreboard's
+   *  map title when the spec has no authored `name`. Factory sets it at
+   *  birth; mapCatalog's rotation + GameServer's reload keep it current. */
+  mapSrc = '';
+
   constructor(name: string, field: Heightfield | null, mode = '', spec?: MapSpec, moveAuthority = false) {
     this.name = name;
     this.field = field;
@@ -190,6 +195,14 @@ export class Room {
     if (field) this.ballSim.attachField(field);
     this.creatureSim = this.initCreatures(field);
     this.bots = new ServerBots(this, field);
+    // Posted roles spawn at home — a defender materializing on a
+    // front-line sphere 400m out spends the next minute hiking, which
+    // reads as wandering on every post/flag metric. Runners keep pure
+    // foe-clearance scoring so the forward spheres stay useful.
+    this.players.spawnHomeBias = (id) => {
+      const role = this.bots?.roleOf(id);
+      return role === 'hof' || role === 'ldefense' || role === 'defense' || role === 'technician' ? 1.6 : 0;
+    };
     // Bots populate before humans join so team balancing puts humans on
     // the emptier side.
     if (this.spec.bots) this.bots.populate(this.spec.bots);
@@ -371,6 +384,9 @@ export class Room {
       structures: this.spec.structures,
       arena: this.spec.arena,
       ambient: this.spec.ambient,
+      // Authored spec title wins; the maps/<X>.json source filename is the
+      // fallback — set post-ctor by the factory, refreshed by rotation.
+      mapName: () => this.spec.name ?? (this.mapSrc || undefined),
       terrain: this.spec.terrain,
       terrainTex: this.spec.terrainTex,
       sky: this.spec.sky,
@@ -611,6 +627,7 @@ export class Room {
     this.messages.setMap(spec);
     this.broadcast({
       type: 'mapUpdate',
+      mapName: spec.name ?? (this.mapSrc || undefined),
       bases: spec.bases,
       structures: spec.structures,
       arena: spec.arena ?? null,

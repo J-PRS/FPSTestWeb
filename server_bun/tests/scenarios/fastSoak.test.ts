@@ -245,7 +245,17 @@ describe('scenario: warp soak throughput', () => {
     // Movement-energy telemetry — specific mechanical energy ½v²+g·h
     // (h = height above terrain, J/kg), the "are they skiing like Tribes
     // or walking like llamas" meter. Sampled per batch per live bot.
-    const eStats = new Map<string, { team: string; sum: number; max: number; n: number; spd: number; post: number; flag: number }>();
+    const eStats = new Map<string, { team: string; sum: number; max: number; n: number; spd: number; post: number; flag: number; flagHome: number }>();
+    const hofDest: number[] = [];
+    const hofTrace: { t: number; id: string; dh: number; dd: number; st: string }[] = [];
+    const hofLastTrace = new Map<string, number>();
+    const hofGoalProbe: { posted: number; pd: number }[] = [];
+    const hofLadder: number[] = [];
+    const hofTrips: { t: number; age: number; peak: number }[] = [];
+    const hofBand2 = new Map<string, boolean>();
+    // HoF distance-from-stand audit keyed '<flagState><band>' — band 0
+    // is <15m, 1 is 15-60m, 2 is beyond the stolen-flag roam radius.
+    const hofAway = new Map<string, number>();
     // Per-bot lifetimes: respawn→death spans, role table's survival column.
     const lifeStart = new Map<string, number>();
     const lifeSpans = new Map<string, number[]>();
@@ -440,14 +450,62 @@ describe('scenario: warp soak throughput', () => {
         if (p.team) {
           const v2 = p.velocity.x ** 2 + p.velocity.y ** 2 + p.velocity.z ** 2;
           const e = 0.5 * v2 - GRAVITY * Math.max(0, p.position.y - hmHeight(field, p.position.x, p.position.z));
-          const s = eStats.get(p.id) ?? { team: p.team, sum: 0, max: 0, n: 0, spd: 0, post: 0, flag: 0 };
+          const s = eStats.get(p.id) ?? { team: p.team, sum: 0, max: 0, n: 0, spd: 0, post: 0, flag: 0, flagHome: 0 };
           s.sum += e; s.n++; if (e > s.max) s.max = e;
           s.spd += Math.hypot(p.velocity.x, p.velocity.z);
-          const home = room.flags?.flags.get(p.team)?.home;
+          const ownF = room.flags?.flags.get(p.team);
+          const home = ownF?.home;
           if (home) {
             const dh = Math.hypot(p.position.x - home.x, p.position.z - home.z);
             if (dh < 15) s.post++;
-            if (dh < 3) s.flag++;
+            // Contact rate only counts ticks where touching the pole is
+            // even possible — a stolen flag can't be sat on.
+            if (ownF?.state === 'home') {
+              s.flagHome++;
+              if (dh < 3) s.flag++;
+            }
+            // HoF excursion audit — where is he when NOT on the pole,
+            // split by flag state. The stolen-flag window is the only
+            // legal far roam; a >60m reading with the flag HOME is a
+            // leak (wander, revenge, or a commander pull that survived).
+            if (room.bots.roleOf(p.id) === 'hof') {
+              if (!process.env.FPS_TRACE) process.env.FPS_TRACE = p.id;
+              const band = dh < 15 ? 0 : dh < 60 ? 1 : 2;
+              const st = ownF?.state === 'carried' ? 'car' : ownF?.state === 'dropped' ? 'drp' : 'home';
+              // A fresh-spawn walk-back reads identically to a leak —
+              // flag it apart: 'R' suffix = still within the first 25s
+              // of this life, when crossing the map is expected.
+              const born = lifeStart.get(p.id);
+              const fresh = born !== undefined && simTicks * dt - born < 25 ? 'R' : '';
+              hofAway.set(st + band + fresh, (hofAway.get(st + band + fresh) ?? 0) + 1);
+              // Excursion-entry log: each time he leaves the >60m ring
+              // while the flag is home, was it a fresh spawn or did he
+              // genuinely walk off post mid-life?
+              const wasBand2 = hofBand2.get(p.id) ?? false;
+              if (band === 2 && st === 'home' && !wasBand2) {
+                hofTrips.push({ t: simTicks * dt, age: simTicks * dt - (born ?? 0), peak: dh });
+              }
+              if (band === 2 && st === 'home') hofTrips.at(-1)!.peak = Math.max(hofTrips.at(-1)!.peak, dh);
+              hofBand2.set(p.id, band === 2);
+              // Far out with flag home: does the brain still POINT
+              // home (body dragged) or did a goal pull it away?
+              if (band === 2 && st === 'home') {
+                const dest = room.bots.debugDest(p.id);
+                if (dest) hofDest.push(Math.hypot(dest.x - home.x, dest.z - home.z));
+                const g = room.bots.flagGoal({ id: p.id, team: p.team, position: p.position });
+                if (g) hofGoalProbe.push({ posted: g.posted ?? 0, pd: Math.hypot(g.pos.x - home.x, g.pos.z - home.z) });
+                const gs = room.bots.debugGoal(p.id);
+                if (gs) hofLadder.push(Math.hypot(gs.x - home.x, gs.z - home.z));
+              }
+              // Full trace — every ~5s sample where the hof actually
+              // is and where he's pointing. Aggregates hid whether the
+              // smear is one arc or a hundred orbits.
+              if (simTicks * dt - ((hofLastTrace.get(p.id) ?? -99)) >= 5) {
+                const dest = room.bots.debugDest(p.id);
+                hofLastTrace.set(p.id, simTicks * dt);
+                hofTrace.push({ t: simTicks * dt, id: p.id, dh, dd: dest ? Math.hypot(dest.x - home.x, dest.z - home.z) : -1, st });
+              }
+            }
           }
           eStats.set(p.id, s);
         }
@@ -524,13 +582,21 @@ describe('scenario: warp soak throughput', () => {
             for (let dy = -1; dy <= 1; dy++)
               d.team === 'alpha' ? set(ix! + dx, iy! + dy, 140, 40, 30) : set(ix! + dx, iy! + dy, 40, 60, 140);
         }
+        // Trail dots blend at ~25% over the terrain — overlaps stack, so
+        // a single point reads as a pass and a hotspot reads as a habit
+        // instead of both flattening into one solid blob.
         for (const t of rows) {
           // Carriers glow so flag routes cut through the team-color noise —
           // orange for alpha, purple for bravo.
           const [r, g, b] = t.carrying
             ? (t.team === 'alpha' ? [255, 160, 40] : [190, 80, 255])
             : (t.team === 'alpha' ? [255, 70, 70] : [90, 140, 255]);
-          plot(t.x, t.z, r, g, b);
+          const [ix, iy] = ij(t.x, t.z);
+          if (ix! < 0 || iy! < 0 || ix! >= W || iy! >= W) continue;
+          const i = (iy! * W + ix!) * 3;
+          px[i] = Math.min(255, px[i]! + r * 0.25);
+          px[i + 1] = Math.min(255, px[i + 1]! + g * 0.25);
+          px[i + 2] = Math.min(255, px[i + 2]! + b * 0.25);
         }
         // Flag-event pins on top: lime grab, cyan drop/return-to-home.
         for (const pin of pins) {
@@ -639,7 +705,7 @@ describe('scenario: warp soak throughput', () => {
       let spd = 0, en = 0, life = 0, post = 0, flag = 0, cnt = 0;
       for (const [id, es] of eStats) {
         if (roleOf(id) !== r || es.n === 0) continue;
-        spd += es.spd / es.n; en += es.sum / es.n; post += es.post / es.n; flag += es.flag / es.n; cnt++;
+        spd += es.spd / es.n; en += es.sum / es.n; post += es.post / es.n; flag += es.flagHome ? es.flag / es.flagHome : 0; cnt++;
         const spans = [...(lifeSpans.get(id) ?? [])];
         const born = lifeStart.get(id);
         // The life still running counts too — a bot that died at 7s and
@@ -651,6 +717,32 @@ describe('scenario: warp soak throughput', () => {
       const cp = (room.flags?.capLog ?? []).filter((c) => c.capAt >= runStart && roleOf(c.by) === r).length;
       const rt = (room.flags?.retLog ?? []).filter((x) => x.at >= runStart && roleOf(x.by) === r).length;
       console.log(`  ${r.padEnd(14)} ${String(s.n).padStart(4)}  ${String(s.k).padStart(3)} / ${s.d} ${String(Math.round(sumFor(r, botDmg))).padStart(6)} ${String(gr).padStart(3)} ${String(cp).padStart(2)} ${String(rt).padStart(2)} ${String(sumFor(r, botCk)).padStart(2)}   ${cnt ? (spd / cnt).toFixed(1).padStart(4) : '   -'} ${cnt ? (en / cnt).toFixed(0).padStart(5) : '    -'} ${cnt ? (life / cnt).toFixed(0).padStart(6) : '     -'} ${cnt ? ((post / cnt) * 100).toFixed(0).padStart(4) : '   -'} ${cnt ? ((flag / cnt) * 100).toFixed(0).padStart(4) : '   -'}`);
+    }
+    if (hofAway.size) {
+      const hofTotal = [...hofAway.values()].reduce((a, b) => a + b, 0);
+      const parts = [...hofAway.keys()].sort()
+        .map((k) => `${k}:${(((hofAway.get(k) ?? 0) / hofTotal) * 100).toFixed(0)}%`);
+      const destMed = hofDest.length ? hofDest.sort((a, b) => a - b)[hofDest.length >> 1]!.toFixed(0) : '-';
+      if (hofGoalProbe.length) {
+        const unposted = hofGoalProbe.filter((g) => g.posted === 0).length;
+        const pdMed = hofGoalProbe.map((g) => g.pd).sort((a, b) => a - b)[hofGoalProbe.length >> 1]!.toFixed(0);
+        parts.push(`goalpick med ${pdMed}m, posted=0 on ${((unposted / hofGoalProbe.length) * 100).toFixed(0)}%`);
+      }
+      if (hofLadder.length) {
+        const ladMed = hofLadder.sort((a, b) => a - b)[hofLadder.length >> 1]!.toFixed(0);
+        parts.push(`ladderGoal med ${ladMed}m`);
+      }
+      if (hofTrips.length) {
+        const fresh = hofTrips.filter((x) => x.age < 60).length;
+        parts.push(`${hofTrips.length} trips >60m (${fresh} within 60s of spawn)`);
+        row('hof-trips', hofTrips.slice(0, 12).map((x) => `t${x.t.toFixed(0)} age${x.age.toFixed(0)} peak${x.peak.toFixed(0)}`).join(' · '));
+      }
+      row('hof-away', `ticks by flagState+distBand (<15m/15-60m/60m+, R=first 25s of life)   ${parts.join(' ')}   home2 dest-dist median ${destMed}m`);
+      for (const id of [...new Set(hofTrace.map((s) => s.id))]) {
+        const tr = hofTrace.filter((s) => s.id === id).filter((_, i) => i % 6 === 0)
+          .map((s) => `${s.t.toFixed(0)}s ${s.st} pos${s.dh.toFixed(0)}→dest${s.dd.toFixed(0)}`).join(' | ');
+        if (tr) row('hof-trace', `${id}   ${tr}`);
+      }
     }
     console.log(
       `  kpi-csv: score_alpha=${room.scores.alpha ?? 0},score_bravo=${room.scores.bravo ?? 0}` +

@@ -37,11 +37,21 @@ export class BotMoves {
     const spd0 = ctx.vel ? Math.hypot(ctx.vel.x, ctx.vel.z) : 0;
     // The parking brake: a posted anchor that arrives at stand speed
     // overshoots the pole by 10-20m and orbits it forever — soaks read
-    // ~3% inside the flag hitbox while hovering the 15m ring. Inside
-    // the leash he drops ski so friction bleeds the run; at walking
-    // pace he steps the rest of the way in and plants.
-    if (ctx.posted && spd0 > 4 && gd < ctx.posted + 4) {
-      return { ski: false, jet: false, jump: false };
+    // ~3% inside the flag hitbox while hovering the 15m ring. The brake
+    // window is the stopping distance (friction ~50m/s² with margin)
+    // so the slide lands him ON the pole, not in an orbit around it.
+    // `park` releases the walk key too — forward input would override
+    // friction and keep the orbit alive.
+    // Measure against the objective, not the step dest — the dest is a
+    // ~8m steer step so gd is always small and a radius on it brakes
+    // mid-route. The base ring covers the ~10-14m orbit an overshooting
+    // anchor falls into; v²/60 adds the slide distance to the pole.
+    const od = ctx.objective ? Math.hypot(ctx.objective.x - pos.x, ctx.objective.z - pos.z) : gd;
+    // Only brake when the step actually heads at the pole — a mortar
+    // sidestep is perpendicular and must keep its legs.
+    const toward = ctx.objective && ((dest.x - pos.x) * (ctx.objective.x - pos.x) + (dest.z - pos.z) * (ctx.objective.z - pos.z)) > 0;
+    if (ctx.posted && spd0 > 1.5 && toward && od < Math.min(ctx.posted + 1, 12) + (spd0 * spd0) / 60) {
+      return { ski: false, jet: false, jump: false, park: true };
     }
     const nx = dx / gd, nz = dz / gd;
     const g0 = ctx.groundY(pos.x, pos.z);
