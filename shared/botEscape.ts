@@ -111,11 +111,11 @@ export function dodge(ctx: BrainCtx, pos: BotVec, dest: BotVec, hero: boolean): 
     if (d < nearestD) { nearestD = d; nearest = t; }
   }
   if (!nearest) return dest;
-  // A runner on final approach doesn't juke — the sidestep replaces the
-  // dest, so under ring bombardment he'd sidestep every tick and bleed
-  // all arrival speed (soak: pushes reached the ring then stalled at
-  // 5-8m/s). Inside ~80m of the objective the run wins the feet; the
-  // shell still lands where it lands. Same commit the carrier gets.
+  // A runner on final approach doesn't juke — ANY dest tilt bleeds
+  // arrival speed and arrival speed is what survives the shelling
+  // (soak A/B: a 30% dodge lean took seed 4246 from 6 grabs/3 caps to
+  // 0-0; the old stall was worse but the lean still kills the run).
+  // Inside ~80m the run wins the feet. Same commit the carrier gets.
   if ((ctx.runner || ctx.running || ctx.wave) && ctx.objective && dist3(pos, ctx.objective) < 80) return dest;
   // A posted anchor's dodge is a hop, not a juke — the flag is also
   // the cover, and a 9m sidestep under steady bombardment parks him in
