@@ -406,7 +406,11 @@ export class BotArsenal implements BeamHost {
         .find((cid) => cid && cid !== id &&
           this.room.players.getAllPlayers().get(cid)?.team !== me?.team);
       const carrier = thief ? this.room.players.getAllPlayers().get(thief) : undefined;
-      let urgent = false;
+      // Carrying IS urgency: a wounded carrier that can't blast dies
+      // at the stand inside the approach cooldown and drops the flag
+      // anyway — the launch buys the run home the grab already paid
+      // for (leg autopsy: return deaths at ~2% of route = at the stand).
+      let urgent = carrying;
       if (carrier) {
         const gx = carrier.position.x - p.position.x, gz = carrier.position.z - p.position.z;
         const gap = Math.hypot(gx, gz);
