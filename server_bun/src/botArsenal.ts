@@ -108,7 +108,7 @@ export class BotArsenal implements BeamHost {
       const lo0 = this.loadouts.get(p.id) ?? BOT_LOADOUTS[0]!;
       const wt0 = this.pickWeapon(lo0, Math.hypot(cdx, cdz), cdist, p.id);
       if (!this.rateOk(p.id, wt0)) return;
-      weaponStats.recordShot(this.room.mode, `w${wt0}`);
+      weaponStats.recordShot(this.room.mode, `w${wt0}`, cdist);
       if (wt0 === WeaponType.Melee) {
         const stats = getWeaponStats(WeaponType.Melee);
         const bug = this.room.creatureSim.crawlerAt(Number(targetId.slice(2)));
@@ -142,7 +142,7 @@ export class BotArsenal implements BeamHost {
     const lo = this.loadouts.get(p.id) ?? BOT_LOADOUTS[0]!;
     const wt = this.pickWeapon(lo, distXZ, dist, p.id);
     if (!this.rateOk(p.id, wt)) return;
-    weaponStats.recordShot(this.room.mode, `w${wt}`);
+    weaponStats.recordShot(this.room.mode, `w${wt}`, dist);
     if (wt === WeaponType.Melee) {
       // The punch IS the player's swing — combat funnels it identically,
       // and the broadcast swing lets observers see the melee. Speed is 0
@@ -201,9 +201,13 @@ export class BotArsenal implements BeamHost {
       // Below roughly one self-blast's price, ANY aoe primary is a
       // loaded gun pointed at the holster: swap to a non-explosive.
       // Nerve scales the floor: heroes fly launchers into the grave.
+      // The low-hp swap only matters where a blast can still reach back:
+      // a shell landing 60m+ away can't splash the shooter, so holstering
+      // the launcher at standoff range just spams the sidearm at enemies
+      // it can't touch (the Pistol 120m+ shot pile).
       const woundedGate = wstats?.aoeRadius && (
         (dist < wstats.aoeRadius && hp <= (1 - nerve) * (SELF_SPLASH_MAX * 2 + 15)) ||
-        hp <= SELF_SPLASH_MAX * (1.5 - nerve));
+        (dist < 60 && hp <= SELF_SPLASH_MAX * (1.5 - nerve)));
       if (woundedGate) {
         // Redraw inside the non-explosive shelf by the same band fit —
         // grabbing slot-order's first clean gun made wounded bots spam

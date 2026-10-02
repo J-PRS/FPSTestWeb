@@ -37,6 +37,9 @@ export interface WeaponRow {
   /** Trigger pulls — shots×firePeriod = trigger-uptime seconds, the
    *  K/s denominator that stays honest across weapon switching. */
   shots: number;
+  /** Shot counts by shooter→aim distance band — a weapon spammed out of
+   *  its band shows as volume where it can't connect. */
+  dist?: { [band: string]: number };
   /** Bot-authored share of damage — >0.9 means the weapon's numbers come
    *  from aim-bot fights, not representative of human play. */
   botDamage: number;
@@ -108,7 +111,7 @@ class WeaponStats {
     // Source keys are 'w<client-claimed weaponType>' — arbitrary numbers
     // mint arbitrary keys, so overflow folds into a shared 'other' row.
     const key = source in m || Object.keys(m).length < WeaponStats.MAX_SOURCES ? source : 'other';
-    return (m[key] ??= { hits: 0, damage: 0, kills: 0, shots: 0, botDamage: 0, botKills: 0 });
+    return (m[key] ??= { hits: 0, damage: 0, kills: 0, shots: 0, botDamage: 0, botKills: 0, dist: {} });
   }
 
   /** Feed one credited hit. `source` is `w<weaponType>` or a label for
@@ -129,9 +132,15 @@ class WeaponStats {
   /** One trigger pull — every shooter funnels here so a weapon's
    *  kills can be priced against its own trigger-uptime, not just
    *  hits that actually landed. */
-  recordShot(mode: string, source: string): void {
+  recordShot(mode: string, source: string, dist?: number): void {
     if (!this.modeOk(mode)) return;
-    this.row(mode, source).shots++;
+    const r = this.row(mode, source);
+    r.shots++;
+    if (dist !== undefined && Number.isFinite(dist)) {
+      const band = dist < 10 ? '<10' : dist < 25 ? '10-25' : dist < 60 ? '25-60' : dist < 120 ? '60-120' : '120+';
+      const d = (r.dist ??= {});
+      d[band] = (d[band] ?? 0) + 1;
+    }
     this.dirty = true;
   }
 
