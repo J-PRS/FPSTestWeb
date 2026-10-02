@@ -12,6 +12,7 @@
  */
 
 import { botRand } from './botRand.ts';
+import type { ChatterKind } from './botTaunts.ts';
 import { BotSteer } from './botSteer.ts';
 import { BotGoals } from './botGoals.ts';
 import { BotMoves } from './botMoves.ts';
@@ -36,6 +37,11 @@ export interface BotEnemy {
   pos: BotVec;
   vel: BotVec;
   alive: boolean;
+  /** Vertical offset from `pos` (the eye point for players, ball center
+   *  for creatures) to the natural aim point — the hit capsule's axis
+   *  midpoint. Negative for players (the chest sits below the eyes),
+   *  ~0 for creatures. Omitted → the brain aims a medium's center. */
+  aimY?: number;
 }
 
 export interface BrainCtx {
@@ -88,6 +94,11 @@ export interface BrainCtx {
    *  the hearing sense. No LOS required: a fight over the ridge pulls
    *  an idle bot toward it, which is how scouting emerges. */
   sounds?: BotVec[];
+  /** A room event the bot noticed this think (host already mapped it to
+   *  this bot's side — cheer/groan/alert/reply). `actor` is whoever
+   *  caused it, so lines can name them ({t}). Each bot sees it on its
+   *  own think phase — reactions dribble out; brains only emit edges. */
+  notice?: { kind: ChatterKind; actor?: string } | null;
   /** Nuggets-style economy rooms: when no player threatens, prefer
    *  creature targets (id prefix `b:`) — farming is the objective, and a
    *  human would do the same. Enemies still outrank food when close. */
@@ -132,6 +143,10 @@ export interface BrainOut {
   /** Repair-beam tick on the ctx.repair target — the host resolves the
    *  key and runs the same heal path a human's repair claim does. */
   repair?: string;
+  /** Situation chatter edge — the senses noticed something worth a line.
+   *  The host resolves kind→text through botTaunts.chatter (chance +
+   *  cooldown live there), so brains never speak directly. */
+  say?: { kind: ChatterKind; target?: string };
 }
 
 const THINK_S = 0.3;
@@ -201,6 +216,13 @@ export class BotBrain {
   private deaths: { x: number; z: number; t: number }[] = [];
   private heroT = 0;      // hero-mode seconds remaining
   private hurtLatch = false; // rising-edge detector for the hero roll
+  // Chatter edge latches — the say field is edge-triggered (fires once
+  // per situation), never a steady-state flag.
+  private threatLatch = false;
+  private boredLatch = false;
+  /** takeHit arms a 'getting shot' line for the next think — flinchT
+   *  decays silently, but the flinch event is worth one remark. */
+  private hitSay = false;
   // Deploy intent — only some bots are builders, so a stand gets a couple
   // of sentries rather than a turret farm. Arriving at a defensive anchor
   // (objective in reach, nobody shooting) is the whole trigger: the
@@ -256,9 +278,79 @@ export class BotBrain {
   /** Getting shot makes the bot recoil — call from the damage funnel. */
   takeHit(from: BotVec): void {
     this.flinchT = FLINCH_S;
+    this.hitSay = true;
     this.flinchFrom = { ...from };
     this.goalS.revengeT = 2.5;
     this.goalS.revengeFrom = { ...from };
+  }
+
+  /** Situation chatter — rising edges only; the host resolves kind→line
+   *  through botTaunts.chatter, which rate-limits anyway, but firing a
+   *  steady flag would still waste the cooldown on repeats. Priority is
+   *  first-come: wounds outrank contacts outrank ambience. */
+  private pickSay(ctx: BrainCtx, hurtEdge: boolean, hero: boolean, wasHunt: string | null): BrainOut['say'] {
+    // Threat/bored latches update every think — skipping them when a
+    // higher-priority line fires would leak a stale 'underfire' next tick.
+    const underfire = this.sayThreats(ctx);
+    const bored = this.sayBored(ctx);
+    if (hurtEdge) return { kind: hero ? 'hero' : 'fear' };
+    return this.sayHunt(ctx, wasHunt) ?? underfire ?? bored;
+  }
+
+  /** Hunt edge: acquired a player (or committed to the thief) / lost them. */
+  private sayHunt(ctx: BrainCtx, wasHunt: string | null): BrainOut['say'] {
+    const huntNow = this.h.hunt?.id ?? null;
+    if (huntNow && !wasHunt) {
+      return huntNow === ctx.thief?.id ? { kind: 'thief', target: huntNow }
+        : huntNow.startsWith('b:') ? undefined
+        : { kind: 'contact', target: huntNow };
+    }
+    if (wasHunt && !huntNow) return { kind: 'lost', target: wasHunt };
+    return undefined;
+  }
+
+  /** Inbound shells OR a fresh hit — either is "I'm being shot at". */
+  private sayThreats(ctx: BrainCtx): BrainOut['say'] {
+    const threats = (ctx.threats?.length ?? 0) > 0 || this.hitSay;
+    this.hitSay = false;
+    const say = threats && !this.threatLatch ? { kind: 'underfire' } as const : undefined;
+    this.threatLatch = threats;
+    return say;
+  }
+
+  /** Long silence with nobody acquired — the ambient line. STALE_MS is
+   *  too twitchy; a human only remarks on a genuinely empty field. */
+  private sayBored(ctx: BrainCtx): BrainOut['say'] {
+    const quiet = !this.h.hunt && ctx.now - this.h.lastSeenAt > 40_000;
+    if (!quiet) { this.boredLatch = false; return undefined; }
+    if (this.boredLatch) return undefined;
+    this.boredLatch = true;
+    return { kind: 'bored' };
+  }
+
+  /** Belt lob: a live target in mid range on a 9s cooldown — grenades
+   *  into a brawl, not at ghosts (stale seen-times don't qualify). */
+  private pickBelt(dt: number, pos: BotVec, now: number): boolean {
+    this.beltT -= dt;
+    if (!this.h.hunt || this.beltT > 0 || now - this.h.lastSeenAt > STALE_MS) return false;
+    const d = dist3(pos, this.h.lastSeen);
+    if (d <= 10 || d >= 35) return false;
+    this.beltT = 9;
+    return true;
+  }
+
+  /** Fear/hero state rides the health fraction — a rare hero roll on the
+   *  rising edge of getting hurt decides whether low HP means retreat or
+   *  a desperate last stand. Latch resets once healed so the next wound
+   *  gets a fresh roll. */
+  private mood(ctx: BrainCtx, dt: number): { hurtEdge: boolean; hero: boolean; fearing: boolean } {
+    const hurt = (ctx.healthFrac ?? 1) < FEAR_HP;
+    const hurtEdge = hurt && !this.hurtLatch;
+    if (hurtEdge && botRand() < HERO_CHANCE) this.heroT = HERO_S;
+    this.hurtLatch = hurt;
+    this.heroT = Math.max(0, this.heroT - dt);
+    const hero = this.heroT > 0;
+    return { hurtEdge, hero, fearing: hurt && !hero };
   }
 
   think(dt: number, ctx: BrainCtx): BrainOut {
@@ -266,16 +358,9 @@ export class BotBrain {
     const now = ctx.now;
     this.now = now;
 
-    // Fear/hero state rides the health fraction — a rare hero roll on the
-    // rising edge of getting hurt decides whether low HP means retreat or
-    // a desperate last stand. Latch resets once healed so the next wound
-    // gets a fresh roll.
-    const hurt = (ctx.healthFrac ?? 1) < FEAR_HP;
-    if (hurt && !this.hurtLatch && botRand() < HERO_CHANCE) this.heroT = HERO_S;
-    this.hurtLatch = hurt;
-    this.heroT = Math.max(0, this.heroT - dt);
-    const hero = this.heroT > 0;
-    const fearing = hurt && !hero;
+    const { hurtEdge, hero, fearing } = this.mood(ctx, dt);
+
+    const wasHunt = this.h.hunt?.id ?? null;
 
     // --- pick a hunt target / refresh the goal (slow cadence) ---
     this.thinkT -= dt;
@@ -283,6 +368,7 @@ export class BotBrain {
       this.thinkT = hero ? THINK_S * 0.45 : THINK_S;
       pickHunt(this.h, ctx, pos, now, { hero, fearing }, (c, p) => this.goals.pick(c, p));
     }
+    let say = this.pickSay(ctx, hurtEdge, hero, wasHunt);
     this.goalS.wanderT -= dt;
     // detourT decays here, with the other timers — decrementing it inside
     // the dest block below would let the setting call's dt eat the window.
@@ -306,12 +392,7 @@ export class BotBrain {
     const fire = pickFire(this.h, dt, ctx, pos, now, { hero, fearing });
 
     // --- belt: lob a grenade into a mid-range fight on a slow cooldown ---
-    this.beltT -= dt;
-    let belt = false;
-    if (this.h.hunt && this.beltT <= 0 && now - this.h.lastSeenAt <= STALE_MS) {
-      const d = dist3(pos, this.h.lastSeen);
-      if (d > 10 && d < 35) { belt = true; this.beltT = 9; }
-    }
+    const belt = this.pickBelt(dt, pos, now);
 
     // --- deploy: a quiet defender with hands free fortifies the stand ---
     const deploy = pickDeploy(this, dt, ctx, pos, fearing);
@@ -319,7 +400,13 @@ export class BotBrain {
     // --- repair: a builder in weld range works on the damaged gear ---
     const repair = pickRepair(this, ctx, pos, fearing);
 
-    return { dest, move: this.moves.hints(dt, ctx, pos, dest), fire, status: statusIntent(this, ctx, fearing), belt, deploy, repair };
+    if (!say && belt) say = { kind: 'belt' };
+    if (!say && deploy) say = { kind: 'deploy' };
+    // Room-event notice — last priority: a wound or a fresh contact is
+    // worth more words than scoreboard commentary.
+    if (!say && ctx.notice) say = { kind: ctx.notice.kind, target: ctx.notice.actor };
+
+    return { dest, move: this.moves.hints(dt, ctx, pos, dest), fire, status: statusIntent(this, ctx, fearing), belt, deploy, repair, say };
   }
 
   

@@ -81,8 +81,10 @@ export interface MoveSurface {
   getNormal(x: number, z: number, out: Vec3Like): Vec3Like;
   /** Solid-layer push-out (map structures): surfaces that layer boxes
    *  over terrain resolve wall/ceiling contact here, before the floor
-   *  clamp. Plain heightfield surfaces leave it undefined. */
-  resolveBody?(s: MoveState): void;
+   *  clamp. `height` is the body's eye-above-feet so a heavy's head
+   *  clears a taller slab than a light's. Plain heightfield surfaces
+   *  leave it undefined. */
+  resolveBody?(s: MoveState, height: number): void;
 }
 
 export const GRAVITY = -28.0;
@@ -117,6 +119,12 @@ export class MoveSim {
    *  acceleration AND the walk cap. Ski momentum and jet thrust stay
    *  untouched — a heavy still carries ski speed downhill like Tribes. */
   speedScale = 1;
+  /** Armor-class mass — jet thrust divides by it (the jet is a force,
+   *  not an accel grant) and the server divides blast impulses by it. */
+  mass = 1;
+  /** Eye height above feet — pos.y IS the eye point; grounded checks and
+   *  the floor clamp stand the body this tall. */
+  eyeHeight: number = MOVEMENT_CONFIG.playerHeight;
 
   setInput(input: Partial<MoveInput>): void { Object.assign(this.input, input); }
 
@@ -154,18 +162,21 @@ export class MoveSim {
 
     // Jetpack thrust rides after collision resolution — same order the
     // client used to apply it post-sync — so ground clamping can't eat
-    // the lift and the trajectory stays identical on both ends.
+    // the lift and the trajectory stays identical on both ends. Mass is
+    // real: the config values are force, accel = F/m — a heavy mech
+    // climbs slower on the same burn, a light floats.
     if (this.input.jetHeld) {
       const dir = this.inputDirection();
       const s = this.state;
-      s.vel.y += MOVEMENT_CONFIG.jetForceUp * dt;
-      s.vel.x += dir.x * MOVEMENT_CONFIG.jetForceDir * dt;
-      s.vel.z += dir.z * MOVEMENT_CONFIG.jetForceDir * dt;
+      const im = dt / this.mass;
+      s.vel.y += MOVEMENT_CONFIG.jetForceUp * im;
+      s.vel.x += dir.x * MOVEMENT_CONFIG.jetForceDir * im;
+      s.vel.z += dir.z * MOVEMENT_CONFIG.jetForceDir * im;
       s.onGround = false;
     }
   }
 
-  private checkGrounded(threshold = 0.2, offset = MOVEMENT_CONFIG.playerHeight): boolean {
+  private checkGrounded(threshold = 0.2, offset = this.eyeHeight): boolean {
     const groundY = this.surface.getHeight(this.state.pos.x, this.state.pos.z) + offset;
     const dist = this.state.pos.y - groundY;
     return this.input.skiHeld
@@ -293,8 +304,8 @@ export class MoveSim {
     const s = this.state;
     // Solid layers push the capsule out of walls/ceilings first — the
     // floor clamp below only owns top faces.
-    this.surface.resolveBody?.(s);
-    const groundY = this.surface.getHeight(s.pos.x, s.pos.z) + MOVEMENT_CONFIG.playerHeight;
+    this.surface.resolveBody?.(s, this.eyeHeight);
+    const groundY = this.surface.getHeight(s.pos.x, s.pos.z) + this.eyeHeight;
     const dist = s.pos.y - groundY;
 
     if (dist < 0) {

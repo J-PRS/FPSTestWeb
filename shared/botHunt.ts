@@ -17,7 +17,9 @@ import type { BotVec, BotEnemy, BrainCtx, BrainOut } from './botBrain.ts';
 // LOS lives in botLos.ts — re-export so botBrain's public surface stays put.
 export { losClear, losMemoReset, BOT_EYE } from './botLos.ts';
 export const BOT_FIRE_RANGE = 45;
-const CHEST_AIM_Y = 1.0; // matches projContact.ts CHEST_Y — the hit sphere center
+// Default aim offset from the eye position to a medium's capsule center —
+// hosts that don't report per-target aimY still land center-mass.
+const CENTER_AIM_Y = -0.9;
 // Creatures are big, slow, and fly — a human plinks them past the normal
 // duel range, so the farming reach runs longer (3D distance still applies:
 // a beast parked 80m overhead is out of reach until it swoops).
@@ -44,6 +46,9 @@ export interface HuntState {
   lastSeen: BotVec;
   lastSeenVel: BotVec;
   lastSeenAt: number;
+  /** Aim offset of the target at last sighting — class geometry moves
+   *  the capsule center, so the lead point remembers where it was. */
+  lastAimY: number;
   /** Volley pacing: fireT is the cooldown, burstLeft counts the burst. */
   fireT: number;
   burstLeft: number;
@@ -60,6 +65,7 @@ export function newHuntState(spawn: BotVec): HuntState {
     lastSeen: { ...spawn },
     lastSeenVel: { x: 0, y: 0, z: 0 },
     lastSeenAt: 0,
+    lastAimY: CENTER_AIM_Y,
     fireT: 0,
     burstLeft: 0,
     fightPos: null,
@@ -108,18 +114,21 @@ export function pickHunt(st: HuntState, ctx: BrainCtx, pos: BotVec, now: number,
   // walks it toward the carrier without it firing blind.
   const thief = best ? null : thiefBeacon(ctx, pos);
   st.hunt = best ?? thief;
-  if (best) {
-    st.lastSeen = { ...best.pos };
-    st.lastSeenVel = { ...best.vel };
+  const seen = best ?? thief;
+  if (seen) {
+    st.lastSeen = { ...seen.pos };
+    st.lastSeenVel = { ...seen.vel };
     st.lastSeenAt = now;
-  } else if (thief) {
-    st.lastSeen = { ...thief.pos };
-    st.lastSeenVel = { ...thief.vel };
-    st.lastSeenAt = now;
+    st.lastAimY = seen.aimY ?? CENTER_AIM_Y;
   }
+  planFight(st, ctx, pos, best, fearing, pickGoal);
+}
+
+/** Fight-position replan or goal fallback. A fearing bot skips
+ *  position-keeping: the dest pick breaks contact instead of
+ *  holding an orbit. */
+function planFight(st: HuntState, ctx: BrainCtx, pos: BotVec, best: BotEnemy | null, fearing: boolean, pickGoal: (ctx: BrainCtx, pos: BotVec) => void): void {
   st.fightPos = null;
-  // A fearing bot skips position-keeping: the dest pick breaks contact
-  // instead of holding an orbit.
   if (best && !fearing && dist3(pos, best.pos) <= st.orbitFar) {
     st.fightPos = pickFightPos(st, ctx, pos, best);
   }
@@ -162,12 +171,12 @@ export function pickFire(st: HuntState, dt: number, ctx: BrainCtx, pos: BotVec, 
   // under the map.
   const px = st.lastSeen.x + st.lastSeenVel.x * flight;
   const pz = st.lastSeen.z + st.lastSeenVel.z * flight;
-  // The server's hit sphere sits at position + CHEST_Y — aiming at the
-  // tracked position (feet) grazes under it for bolts whose proxy radius
-  // is still small early in flight.
+  // `pos` is the eye point — the capsule's axis midpoint sits `aimY`
+  // below it, so center-mass aim means the bolt crosses the fattest
+  // legal radius even before its wake proxy grows.
   const py = Math.max(
     ctx.groundY(px, pz),
-    st.lastSeen.y + CHEST_AIM_Y + st.lastSeenVel.y * flight + 0.5 * GRAVITY * flight * flight,
+    st.lastSeen.y + st.lastAimY + st.lastSeenVel.y * flight + 0.5 * GRAVITY * flight * flight,
   );
   // Gravity-bent shells drop by the same amount — aim the arc's
   // drop back so mortars don't land short.

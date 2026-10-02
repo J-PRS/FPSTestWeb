@@ -9,6 +9,7 @@
  */
 
 import type { TeamId } from './teams.ts';
+
 export interface BallPopulation {
   /** solo population */
   base: number;
@@ -28,8 +29,15 @@ export interface MapSpec {
   modes?: string[];
   balls: BallPopulation;
   /** Spawn anchors — farthest-from-enemies pick among these. Absent = the
-   *  server's default spawn ring. */
-  spawns?: { x: number; y: number; z: number }[];
+   *  server's default spawn ring. `r` makes the anchor a sphere: the pick
+   *  scatters to a random point inside the radius (T2 SpawnSpheres are
+   *  volumes — without it every spawn lands on the center). `w` is the
+   *  sphere's authored selection weight. */
+  spawns?: SpawnPoint[];
+  /** Team-owned spawn spheres (T2 missions group SpawnSpheres under
+   *  Team1/Team2). When present for a team, that side spawns only from
+   *  its own spheres. */
+  teamSpawns?: { alpha?: SpawnPoint[]; bravo?: SpawnPoint[] };
   /** Objective anchors per team — flag stands, capture rings, generators.
    *  Generic positions the mode interprets (ctf: flag stands). */
   bases?: { alpha?: Vec3like; bravo?: Vec3like };
@@ -89,6 +97,14 @@ export interface StructureSpec {
 
 export interface Vec3like { x: number; y: number; z: number }
 
+/** Spawn anchor — a point, or a sphere volume when `r` > 0. */
+export interface SpawnPoint extends Vec3like {
+  /** Sphere radius in meters — spawn scatters inside it. */
+  r?: number;
+  /** Authored selection weight (T2 sphereWeight). */
+  w?: number;
+}
+
 export interface InteriorSpec {
   file: string;
   pos: Vec3like;
@@ -124,6 +140,7 @@ export function resolveMapSpec(raw: unknown): MapSpec {
     modes: parseModes((src as { modes?: unknown }).modes),
     balls,
     spawns: parseSpawns((src as { spawns?: unknown }).spawns),
+    teamSpawns: parseTeamSpawns((src as { teamSpawns?: unknown }).teamSpawns),
     bases: parseBases((src as { bases?: unknown }).bases),
     bots: clampInt((src as { bots?: unknown }).bots, 0, 16, 0) || undefined,
     botFill: clampInt((src as { botFill?: unknown }).botFill, 0, 24, 0) || undefined,
@@ -174,10 +191,28 @@ function parsePathField(raw: unknown, tail: RegExp, maxDepth = 2): string | unde
   return tail.test(raw) ? raw : undefined;
 }
 
-function parseSpawns(raw: unknown): Vec3like[] | undefined {
+function parseSpawns(raw: unknown): SpawnPoint[] | undefined {
   if (!Array.isArray(raw)) return undefined;
-  const out = raw.filter(isVec).slice(0, 32);
+  const out: SpawnPoint[] = [];
+  for (const s of raw) {
+    if (!isVec(s)) continue;
+    const o = s as { r?: unknown; w?: unknown };
+    out.push({
+      x: s.x, y: s.y, z: s.z,
+      r: typeof o.r === 'number' && Number.isFinite(o.r) ? Math.max(0, Math.min(400, o.r)) : undefined,
+      w: typeof o.w === 'number' && Number.isFinite(o.w) && o.w > 0 ? Math.min(1000, o.w) : undefined,
+    });
+    if (out.length >= 32) break;
+  }
   return out.length ? out : undefined;
+}
+
+function parseTeamSpawns(raw: unknown): MapSpec['teamSpawns'] {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const t = raw as { alpha?: unknown; bravo?: unknown };
+  const alpha = parseSpawns(t.alpha);
+  const bravo = parseSpawns(t.bravo);
+  return alpha || bravo ? { alpha, bravo } : undefined;
 }
 
 function parseBases(raw: unknown): MapSpec['bases'] {

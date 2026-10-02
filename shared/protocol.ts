@@ -47,8 +47,11 @@ export type ClientMessage =
   | { type: 'teleport'; position: Vec3; rotation: Rotation; velocity: Vec3 }
   | { type: 'ping'; timestamp: number }
   | { type: 'chat'; text: string; team?: boolean; vgs?: string }
-  | { type: 'shot'; targetId: string | null; weaponType?: number; position?: Vec3; velocity?: Vec3; timestamp?: number; projectileId?: string | null; airtime?: number }
-  | { type: 'aoeShot'; position: Vec3; weaponType?: number; excludeTargetId?: string | null; projectileId?: string | null; airtime?: number; power?: number; directHit?: boolean }
+  // shotId is a client-generated nonce stamped at spawn and echoed on
+  // every claim naming this shell — binding is explicit identity, not
+  // the echo-race/FIFO inference it replaced.
+  | { type: 'shot'; targetId: string | null; weaponType?: number; position?: Vec3; velocity?: Vec3; timestamp?: number; projectileId?: string | null; airtime?: number; shotId?: string }
+  | { type: 'aoeShot'; position: Vec3; weaponType?: number; excludeTargetId?: string | null; projectileId?: string | null; airtime?: number; power?: number; directHit?: boolean; shotId?: string }
   // Hitscan fire (fan/beam kinds) has no projectile for observers to see —
   // this cosmetic "I pulled the trigger" lets the server relay a playerShot
   // so firefights are audible/visible. Carries no damage semantics.
@@ -59,7 +62,7 @@ export type ClientMessage =
   // datagrams) events can land out of order, so each carries a seq and the
   // server drops stale ones.
   | { type: 'inputMove'; seq?: number; input: { forward: number; right: number; jump: number; ski: number; jet?: number; status?: number }; rotation: Rotation }
-  | { type: 'projectileDestroy'; projectileId: string }
+  | { type: 'projectileDestroy'; projectileId: string; shotId?: string }
   // attacker: optional source tag (host-simmed bots 'bot:NAME', deployables)
   // so kill credit/feed names the real shooter instead of 'environment'.
   | { type: 'environmentDamage'; amount: number; attacker?: string }
@@ -134,12 +137,12 @@ export type ServerMessage =
   | { type: 'playerRespawn'; playerId: string; internalId: string; position: Vec3; rotation: Rotation; armorClass?: string }
   | { type: 'jump'; playerId: string; position: Vec3 }
   | { type: 'jetpack'; playerId: string; position: Vec3 }
-  | { type: 'projectileCreated'; projectileId: string; ownerId: string; position: Vec3; velocity: Vec3; weaponType?: number }
+  | { type: 'projectileCreated'; projectileId: string; ownerId: string; position: Vec3; velocity: Vec3; weaponType?: number; shotId?: string }
   // Cosmetic relay of a hitscan trigger-pull: pos is server-stamped
   // (rewind to fire time), dir is the shooter's claimed aim — never
   // trusted for damage, only for muzzle audio/visual on observers.
   | { type: 'playerShot'; id: string; weaponType?: number; pos?: Vec3; dir?: Vec3 }
-  | { type: 'projectileDestroyed'; projectileId: string }
+  | { type: 'projectileDestroyed'; projectileId: string; shotId?: string }
   | { type: 'snapshot'; players: SnapshotPlayer[]; timestamp: number }
   | { type: 'stateHash'; hash: string; tick: number; playerCount: number; timestamp: number }
   | { type: 'tickUpdate'; updates: TickUpdatePlayer[]; ackSeq?: number }

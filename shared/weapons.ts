@@ -23,6 +23,25 @@ export function directHitAoeBonus(weaponType: number): number {
     : 1;
 }
 
+/** Skillshot ramp: the flagship launchers (and their belt cousins)
+ *  pay direct damage × min(CAP, 1 + airtime) — +50% per 0.5s of flight,
+ *  so a 1.5s lead is 2.5× and the 4× cap lands at 2.0s. Applies to the
+ *  DIRECT line only: wakes and splash stay flat, otherwise near-misses
+ *  would pay like hits. airtime is server-validated on the claim, so the
+ *  same formula on both ends can't drift. */
+export const AIRTIME_DMG_CAP = 4;
+const AIRTIME_SCALED = new Set<number>([
+  WeaponType.BoltLauncher, WeaponType.Disc, WeaponType.DiscPull, WeaponType.Javelin,
+]);
+export function scaledDirectDamage(weaponType: number, airtime?: number): number {
+  const w = WEAPONS[weaponType];
+  if (!w) return 0;
+  if (!AIRTIME_SCALED.has(weaponType) || airtime === undefined || airtime <= 0) {
+    return w.directDamage;
+  }
+  return w.directDamage * Math.min(AIRTIME_DMG_CAP, 1 + airtime);
+}
+
 import { WeaponType, type WeaponStats, WEAPONS } from './weaponTable.js';
 export { WeaponType, WEAPONS, idSeed, jitteredTtl } from './weaponTable.js';
 export type { WeaponStats } from './weaponTable.js';
@@ -43,7 +62,8 @@ export const ARMORNADE_OVERCAP = 2;    // creature armor cap = this × maxHealth
  *  carry no weapon ref, so this is the widest honest ceiling — anything
  *  above it is doctored. */
 export const MAX_HIT_CLAIM_DMG = Math.ceil(
-  Math.max(...Object.values(WEAPONS).map(w => w.directDamage + w.aoeDamage)) * 1.4);
+  Math.max(...Object.entries(WEAPONS).map(([wt, w]) =>
+    w.directDamage * (AIRTIME_SCALED.has(Number(wt)) ? AIRTIME_DMG_CAP : 1) + w.aoeDamage)) * 1.4);
 
 export function getWeaponStats(weaponType: number | undefined): WeaponStats {
   return WEAPONS[weaponType ?? WeaponType.BoltLauncher] ?? WEAPONS[WeaponType.BoltLauncher]!;
@@ -65,7 +85,7 @@ export const WEAPON_FIRE_INTERVAL_S: Partial<Record<WeaponType, number>> = {
   [WeaponType.Lightning]: 0.05,
   [WeaponType.Shotgun]: 0.7,
   [WeaponType.Cannon]: 0.55,
-  [WeaponType.RocketLauncher]: 0.85,
+  [WeaponType.RocketLauncher]: 2.5,
   [WeaponType.Pistol]: 0.22,
   [WeaponType.Revolver]: 0.6,
   [WeaponType.Sticky]: 0.8,

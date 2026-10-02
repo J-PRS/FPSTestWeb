@@ -145,11 +145,11 @@ export class SolidWorld {
   }
 
   /** Push a body capsule out of side faces horizontally and stop it
-   *  under ceilings. pos.y is capsule TOP (feet = pos.y - playerHeight),
-   *  matching MoveSim's convention. */
-  resolveBody(s: MS): void {
+   *  under ceilings. pos.y is the EYE point — feet sit `height` below it
+   *  (per armor class), matching MoveSim's convention. */
+  resolveBody(s: MS, height: number = MOVEMENT_CONFIG.playerHeight): void {
     const r = 0.45;
-    const feet = s.pos.y - MOVEMENT_CONFIG.playerHeight;
+    const feet = s.pos.y - height;
     const cands = this.cands;
     cands.length = 0;
     this.index.queryPoint(s.pos.x, s.pos.z, r + 1, cands);

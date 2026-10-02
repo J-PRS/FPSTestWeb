@@ -9,8 +9,10 @@
 import type { BotVec, BrainCtx } from './botBrain.ts';
 import { segSolidHit } from './solidWorld.ts';
 
-// Must equal EYE_OFFSET (shared/constants): GameBot.position IS the eye
-// point, and RemotePlayer renders feet at pos.y - EYE_OFFSET.
+// Generic eye-above-ground for LOS endpoints (shared/botClasses gives the
+// per-class heights; this is the light tier's 1.8m — the low bound, so a
+// heavy bot whose real eye rides higher only loses shots that start in
+// the memoized probe, never sees ground through its own head).
 export const BOT_EYE = 1.8;
 
 // 3m cells + 1s TTL: answers only change when an endpoint crosses a cell.

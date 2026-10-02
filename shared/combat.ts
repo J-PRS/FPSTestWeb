@@ -13,10 +13,8 @@ import { segSolidHit } from './solidWorld.js';
 import type { StructureCollider } from './ballSim.js';
 import {
   PLAYER_RADIUS,
-  EYE_OFFSET,
-  CAPSULE_CENTER_Y,
-  CAPSULE_HALF_HEIGHT,
 } from './constants.js';
+import { classCapsule } from './botClasses.js';
 
 export interface Vec3Like {
   x: number;
@@ -29,10 +27,25 @@ export function aoeFalloff(dist: number, radius: number): number {
   return 1 - dist / radius;
 }
 
-/** Falloff applied to an already-resolved amount — used by both the client's
- *  predicted splash and the server's authoritative pass. */
+/** Banded splash falloff: three equal-width rings inside the blast
+ *  radius pay 75% / 50% / 25% of the base amount — a shell lands hard or
+ *  glances, there's no smooth gradient to exploit. Knockback stays on
+ *  linear aoeFalloff so push feel is unchanged. */
+export const AOE_BAND_SCALES = [0.75, 0.5, 0.25] as const;
+/** Global splash dial — every band scales by this. 1.0 for now. */
+export const AOE_DAMAGE_MULT = 1.0;
+
+export function aoeBandScale(dist: number, radius: number): number {
+  if (radius <= 0 || dist >= radius) return 0;
+  return AOE_BAND_SCALES[Math.min(2, Math.floor((dist / radius) * 3))]! * AOE_DAMAGE_MULT;
+}
+
+/** Banded falloff applied to an already-resolved amount — used by both the
+ *  client's predicted splash and the server's authoritative pass. The
+ *  amount is normally the weapon's directDamage (splash is a fraction of
+ *  the direct hit), so there is no separate aoe damage stat to tune. */
 export function aoeDamage(amount: number, dist: number, radius: number): number {
-  return Math.round(amount * aoeFalloff(dist, radius));
+  return Math.round(amount * aoeBandScale(dist, radius));
 }
 
 /** Global knockback dial — applied at the call sites, not inside
@@ -53,7 +66,7 @@ export function aoeImpulse(force: number, dist: number, radius: number): number 
 
 export function aoeDamageAt(dist: number, weaponType: number | undefined): number {
   const s = getWeaponStats(weaponType);
-  return aoeDamage(s.aoeDamage, dist, s.aoeRadius);
+  return aoeDamage(s.directDamage || s.aoeDamage, dist, s.aoeRadius);
 }
 
 export function aoeImpulseAt(dist: number, weaponType: number | undefined): number {
@@ -110,6 +123,9 @@ export interface TrackedProjectile {
   velocity: Vec3Like;
   /** Server timestamp (ms) when the spawn claim was accepted */
   spawnAt: number;
+  /** Client-generated nonce from the spawn claim — claims can name the
+   *  shell before (or instead of) the server-minted id echo. */
+  clientShotId?: string;
 }
 
 export type HitClaimVerdict =
@@ -118,12 +134,14 @@ export type HitClaimVerdict =
 
 /**
  * Distance from a point to the player capsule whose networked position is
- * `eyePos` (feet + EYE_OFFSET). Cylinder segment ±CAPSULE_HALF_HEIGHT around
- * the capsule center, spheres at the caps.
+ * `eyePos` (feet + eyeHeight, per armor class). Cylinder segment ±half
+ * around the capsule center, spheres at the caps. `cls` picks the body's
+ * size — a 2.5m heavy head is a different target than a 1.8m light.
  */
-export function pointToCapsuleDistance(point: Vec3Like, eyePos: Vec3Like): number {
-  const centerY = eyePos.y - EYE_OFFSET + CAPSULE_CENTER_Y;
-  const dy = Math.max(0, Math.abs(point.y - centerY) - CAPSULE_HALF_HEIGHT);
+export function pointToCapsuleDistance(point: Vec3Like, eyePos: Vec3Like, cls?: string): number {
+  const cap = classCapsule(cls);
+  const centerY = eyePos.y + cap.centerOff;
+  const dy = Math.max(0, Math.abs(point.y - centerY) - cap.half);
   const dx = point.x - eyePos.x;
   const dz = point.z - eyePos.z;
   return Math.sqrt(dx * dx + dy * dy + dz * dz);
@@ -238,6 +256,8 @@ export function validateHitClaim(args: {
   shooterVel: Vec3Like;
   now: number;
   solids?: readonly StructureCollider[];
+  /** Target armor class — the capsule a heavy presents is taller. */
+  targetClass?: string;
 }): HitClaimVerdict {
   const { projectile, hitPos, targetPos, shooterVel, now, airtime } = args;
   const flight = checkFlightLegality({ projectile, endPos: hitPos, airtime, shooterVel, now, solids: args.solids });
@@ -247,7 +267,7 @@ export function validateHitClaim(args: {
   // airtime (core body + grown wake) of the target's capsule.
   const stats = getWeaponStats(projectile.weaponType);
   const legalRadius = Math.max(stats.bodyRadius, hitRadiusAt(projectile.weaponType, flight.airtime));
-  const dist = pointToCapsuleDistance(hitPos, targetPos);
+  const dist = pointToCapsuleDistance(hitPos, targetPos, args.targetClass);
   if (dist > PLAYER_RADIUS + legalRadius + TARGET_SLACK) {
     return { ok: false, reason: `target ${dist.toFixed(1)}m outside legal radius ${(PLAYER_RADIUS + legalRadius).toFixed(1)}m` };
   }

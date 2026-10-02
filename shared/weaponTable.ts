@@ -61,6 +61,9 @@ export interface WeaponStats {
   hitGrow: number;
   /** Fuse self-detonate time (s); 0/undefined = terrain/target contact only */
   maxLifetime?: number;
+  /** Spawn claims allowed per WEAPON_FIRE_INTERVAL_S window (fan weapons:
+   *  one pull registers every pellet at once). Default 1. */
+  burst?: number;
   /** Per-shot TTL spread: each projectile's fuse scales by ±this fraction,
    *  seeded from its projectileId so server and client replicas pop at the
    *  same age. A burst of shards should raggedly fade, not pop in unison. */
@@ -75,6 +78,11 @@ export interface WeaponStats {
    *  the fuse airburst IS the attack). Terrain, walls, and shield domes
    *  still stop it. Both ends read this so the sim stays authoritative. */
   fuseOnly?: boolean;
+  /** T2 mortar arming delay: player/creature contact before this age does
+   *  NOT detonate — the shell phases through bodies until the fuse arms.
+   *  Terrain/wall/shield contact still applies (client bounces, server
+   *  pops) — the arm time gates the KILL, not the landing. */
+  armTime?: number;
   /** Mid-flight hitscan discharge (remote railgun): at `rayDelay` seconds
    *  the projectile fires a beam along its velocity and dies at the hit
    *  point (or at rayRange on a miss). The server reach check adds
@@ -142,6 +150,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
   },
   [WeaponType.Chaingun]: {
     directDamage: 8, // ~89 dps at 11/s — below plasma (125) but hitscan-easy; 13 slugs to kill a player
+
     aoeDamage: 0,
     aoeRadius: 0,
     knockbackForce: 0,
@@ -155,6 +164,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
   },
   [WeaponType.Mortar]: {
     directDamage: 80,
+
     aoeDamage: 40,
     aoeRadius: 18.0,
     knockbackForce: 45.0,
@@ -163,9 +173,10 @@ export const WEAPONS: Record<number, WeaponStats> = {
     gravity: true,
     bodyRadius: 0.3,
     hitMin: 0.0,
-    hitMax: 2.0, // tight proxy — the big splash is the forgiving part, not the wake
+    hitMax: 0.5, // area-denial tier: 0.5m wake cap — the 18m splash is the reach, not the proxy
     hitGrow: 2.0,
     maxLifetime: 6.0,
+    armTime: 1.5, // T2 arming fuse — no point-blank body pops; terrain still stops it
   },
   [WeaponType.GrenadeLauncher]: {
     directDamage: 50,
@@ -182,7 +193,8 @@ export const WEAPONS: Record<number, WeaponStats> = {
     maxLifetime: 2.5,
   },
   [WeaponType.Flak]: {
-    directDamage: 9, // per shard — 9 shards ≈ 81 max
+    directDamage: 9,
+    burst: 9, // one pull registers all shards at once // per shard — 9 shards ≈ 81 max
     aoeDamage: 0,
     aoeRadius: 0,
     knockbackForce: 0,
@@ -198,6 +210,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
   },
   [WeaponType.PlasmaCannon]: {
     directDamage: 35,
+
     aoeDamage: 12,
     aoeRadius: 5.5,
     knockbackForce: 20.0,
@@ -210,6 +223,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     hitGrow: 2.0,
   },
   [WeaponType.PlasmaGun]: {
+
     // Quake 2/3 plasma: rapid volley of fat bolts — chain-like cadence
     // (~7.7/s, ~108dps) but a visible projectile you can dodge, so it
     // pays below chaingun's effective DPS vs movers and above vs track.
@@ -275,6 +289,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     hitGrow: 0,
   },
   [WeaponType.Shotgun]: {
+    burst: 10, // one pull registers all pellets at once
     // Pump pellets: 10 × 7dmg ≈ 70 point-blank, ~3× tighter cone than flak.
     // Fast slugs (300 m/s) on a 0.4s fuse ≈ 120m of reach — usable at mid
     // range where flak's lobbed shards scatter into nothing.
@@ -292,6 +307,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     maxLifetime: 0.4,
   },
   [WeaponType.Cannon]: {
+
     // Serious Sam cannonball: a big iron sphere that SKIPS off terrain
     // (client bounce config) and detonates on target contact or fuse.
     // The GL's rowdier bigger brother — trades shell count for presence.
@@ -321,11 +337,12 @@ export const WEAPONS: Record<number, WeaponStats> = {
     gravity: false,
     bodyRadius: 0.35,
     hitMin: 0.0,
-    hitMax: 2.5, // a fat warhead drags a real wake
+    hitMax: 0.5, // area-denial tier: 0.5m wake cap — the 14m splash is the reach, not the proxy
     hitGrow: 0.4,
     maxLifetime: 6.0, // ~290m of flat reach
   },
   [WeaponType.Pistol]: {
+
     // Hold-out sidearm: fast flat slug, modest damage — the panic button
     // when the primary is dry or wrong for the range.
     directDamage: 14,
@@ -342,6 +359,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     maxLifetime: 0.6,
   },
   [WeaponType.Revolver]: {
+
     // Hand cannon: three hits kill — slow cadence, heavy single slug.
     directDamage: 34,
     aoeDamage: 0,
@@ -461,6 +479,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     rayRange: 160.0,
   },
   [WeaponType.Sprinkler]: {
+
     // Sprinkler: plasma-gun cadence (~9/s ≈ 108dps on paper) but every bolt
     // arcs under world gravity inside a slight cone — mid-range area
     // denial, not a dueling laser. Lower direct damage + tiny pop so the
@@ -529,6 +548,7 @@ export const WEAPONS: Record<number, WeaponStats> = {
     maxLifetime: 2.0,
   },
   [WeaponType.MRVLauncher]: {
+
     // Mortar's counterpart: a bouncing carrier shell that AIRBURSTS at
     // ~1s into bomblets — one volley in one direction (MRV, not MIRV:
     // the bomblets scatter, they're not independently targeted). The
@@ -552,9 +572,11 @@ export const WEAPONS: Record<number, WeaponStats> = {
   [WeaponType.MRVBomblet]: {
     // Airburst child — contact pop on whatever it rains onto. Count is
     // the weapon: 6 × ~29 max ≈ a mortar's worth spread over an area.
+    // 16m ring: six overlapping footprints make a real denial field —
+    // at 6m the rain read as fireworks, not zoning.
     directDamage: 18,
-    aoeDamage: 12,
-    aoeRadius: 6.0,
+    aoeDamage: 20,
+    aoeRadius: 16.0,
     knockbackForce: 8.0,
     forceMode: 'push',
     speed: 0, // scattered by the carrier, never muzzle-fired
