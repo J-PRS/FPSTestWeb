@@ -9,6 +9,8 @@
  */
 import * as THREE from 'three';
 import { SCENARIOS, type LabInstance } from './scenarios.js';
+import { vfxScene, vfxBatcher, setVfxCamOverride } from '../effects/vfxRuntime.js';
+import { setRibbonCamera } from '../projectiles/RibbonTrail.js';
 
 const TICK = 1 / 60;
 const DUMP_MS = 200;
@@ -17,7 +19,12 @@ class LabView {
   private root: HTMLElement;
   private canvas: HTMLCanvasElement;
   private renderer: THREE.WebGLRenderer | null = null;
-  private scene = new THREE.Scene();
+  private fallbackScene = new THREE.Scene();
+  // Scenario content lives in ONE group inside the VFX scene, so real
+  // trails/ribbons/explosions (bound to the game's quarks batcher) render
+  // unchanged — the lab hosts the real systems instead of cloning them.
+  private labRoot = new THREE.Group();
+  private hiddenSiblings: THREE.Object3D[] = [];
   private camera = new THREE.PerspectiveCamera(55, 1, 0.1, 2000);
   private dumpEl: HTMLElement;
   private blurbEl: HTMLElement;
@@ -91,9 +98,24 @@ class LabView {
 
   get open(): boolean { return this.root.classList.contains('open'); }
 
+  /** The scene the lab renders — the game's VFX-owning scene when it
+   *  exists (real quarks/ribbons live there), else a private fallback. */
+  private world(): THREE.Scene { return vfxScene() ?? this.fallbackScene; }
+
   toggle(): void { if (this.open) this.close(); else this.show(); }
 
   show(): void {
+    const w = this.world();
+    if (!this.labRoot.parent) w.add(this.labRoot);
+    // Hide the game world's own objects while the lab is up — the batcher
+    // and labRoot stay visible; everything restores on close.
+    this.hiddenSiblings = [];
+    for (const o of w.children) {
+      if (o === this.labRoot || o === vfxBatcher() || !o.visible) continue;
+      o.visible = false;
+      this.hiddenSiblings.push(o);
+    }
+    setVfxCamOverride(this.camera.position);
     this.root.classList.add('open');
     if (!this.instance) this.select(SCENARIOS[0]!.id);
     this.lastT = performance.now();
@@ -103,6 +125,9 @@ class LabView {
   close(): void {
     this.root.classList.remove('open');
     cancelAnimationFrame(this.raf);
+    setVfxCamOverride(null);
+    for (const o of this.hiddenSiblings) o.visible = true;
+    this.hiddenSiblings = [];
   }
 
   private select(id: string): void {
@@ -111,15 +136,15 @@ class LabView {
     this.instance?.dispose();
     this.instance = null;
     // Drop any strays a scenario leaked rather than letting them pile
-    // up in the lab scene across switches — reverse-order removal so the
+    // up in the lab root across switches — reverse-order removal so the
     // children array mutation can't skip an index.
-    for (let i = this.scene.children.length - 1; i >= 0; i--) {
-      const o = this.scene.children[i]!;
-      if (!this.statics.has(o)) this.scene.remove(o);
+    for (let i = this.labRoot.children.length - 1; i >= 0; i--) {
+      const o = this.labRoot.children[i]!;
+      if (!this.statics.has(o)) this.labRoot.remove(o);
     }
     this.activeId = id;
     this.blurbEl.textContent = s.blurb;
-    this.instance = s.create(this.scene);
+    this.instance = s.create(this.labRoot as unknown as THREE.Scene);
     for (const el of this.listEl.querySelectorAll('.lab-item')) {
       el.classList.toggle('active', (el as HTMLElement).dataset.id === id);
     }
@@ -134,7 +159,7 @@ class LabView {
     const grid = new THREE.GridHelper(120, 24, 0x22384f, 0x14202e);
     const light = new THREE.AmbientLight(0xffffff, 1.2);
     this.statics.add(grid).add(light);
-    this.scene.add(grid, light);
+    this.labRoot.add(grid, light);
   }
 
   private loop = (): void => {
@@ -177,7 +202,11 @@ class LabView {
       Math.cos(this.yaw) * cp * this.dist,
     );
     this.camera.lookAt(0, 0, 0);
-    r.render(this.scene, this.camera);
+    // Billboard ribbons and the quarks distance-pause steer at whichever
+    // camera the game gameLoop set this frame — repoint both at ours.
+    setVfxCamOverride(this.camera.position);
+    setRibbonCamera(this.camera.position);
+    r.render(this.world(), this.camera);
   };
 }
 

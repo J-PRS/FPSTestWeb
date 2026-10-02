@@ -11,6 +11,11 @@ import { makeSimCrawler, stepCrawler, commitTarget, type SimCrawler } from '../.
 import { projStep, segFieldHit, type SimProjectile } from '../../../shared/projSim.js';
 import { hmHeight, type Heightfield } from '../../../shared/heightfield.js';
 import { GRAVITY, MoveSim, type MoveSurface } from '../../../shared/movement.js';
+import { getProjectileConfig } from '../projectiles/index.js';
+import { buildProjectileMeshes, updateProjectileMesh, releaseProjectileInstance, syncProjectileInstance } from '../projectiles/visuals.js';
+import { QuarksTrail } from '../effects/vfx.js';
+import { Explosion } from '../effects/explosion.js';
+import { hitRadiusAt } from '../../../shared/combat.js';
 
 /** What the lab gives every entity each tick — the same things the real
  *  sims read from the world (terrain, hunt target, clock). */
@@ -20,6 +25,8 @@ export interface LabWorld {
   /** Shared prey point — scenarios move it; hunters chase it. */
   target: { x: number; y: number; z: number } | null;
   time: number;
+  /** Live one-shot effects (real Explosions) — entities push, labOf ticks. */
+  effects: { update(dt: number): void; dead: boolean; dispose(): void }[];
 }
 
 export interface SimEntity {
@@ -184,6 +191,94 @@ export function spawnBolt(o: BoltOpts, world: LabWorld): SimEntity & { sim: SimP
       trailGeo.dispose();
     },
   };
+  return self;
+}
+
+/* ---------------------------------- */
+/* Real-VFX shell — the production projectile VISUAL path (instanced    */
+/* body mesh + glow + ribbons + quarks trail + Explosion) wrapped around */
+/* a lab-driven SimProjectile. Everything rendered is what the game     */
+/* renders; only the flight integrator is lab-side.                     */
+/* ---------------------------------- */
+
+export interface ShellOpts {
+  weaponType: number;
+  pos: { x: number; y: number; z: number };
+  vel: { x: number; y: number; z: number };
+  gravity?: number; maxAge?: number;
+  walls?: { axis: 'x' | 'y' | 'z'; at: number }[];
+  /** Custom hit channel (foe capsule, pad, ...) — return true = impact. */
+  hitTest?: (from: { x: number; y: number; z: number }, pos: { x: number; y: number; z: number }) => boolean;
+  /** Explosion style override; defaults to the config's own blast look. */
+  blastScale?: number; tint?: number | string;
+  vfx?: 'splash' | 'punch' | 'energy' | 'kinetic' | 'concussion' | 'arc' | 'bolt' | 'flak';
+  onDone?: (impact: { x: number; y: number; z: number } | null, directHit: boolean) => void;
+}
+
+export function spawnShell(o: ShellOpts, world: LabWorld): SimEntity & { sim: SimProjectile; done: boolean; detonate(directHit?: boolean): void } {
+  const config = getProjectileConfig(o.weaponType)!;
+  const p: SimProjectile = { pos: { ...o.pos }, vel: { ...o.vel }, age: 0 };
+  const pos = new THREE.Vector3(o.pos.x, o.pos.y, o.pos.z);
+  const vel = new THREE.Vector3(o.vel.x, o.vel.y, o.vel.z);
+  const built = buildProjectileMeshes(world.scene, config, pos);
+  const trail = new QuarksTrail({ config, pos, vel, age: () => p.age });
+  const tumble = { x: 0.6, y: 0.8, z: 0.4 };
+  let exploded = false;
+
+  const impactCheck = (from: { x: number; y: number; z: number }, w: LabWorld): { hit: boolean; direct: boolean } => {
+    if (o.hitTest?.(from, p.pos)) return { hit: true, direct: true };
+    const ground = segFieldHit(from, p.pos, w.field);
+    if (ground) pos.set(ground.x, ground.y, ground.z);
+    const hit = !!ground || !!o.walls?.some(wall =>
+      (wall.axis === 'x' ? p.pos.x : wall.axis === 'y' ? p.pos.y : p.pos.z) * Math.sign(wall.at) >= Math.abs(wall.at))
+      || p.age > (o.maxAge ?? config.maxLifetime ?? 30);
+    return { hit, direct: false };
+  };
+
+  const self = {
+    sim: p, mesh: built.mesh, done: false as boolean,
+    detonate(directHit = false) {
+      if (exploded) return;
+      exploded = true;
+      releaseProjectileInstance(built.mesh);
+      releaseProjectileInstance(built.glowMesh);
+      const st = config;
+      world.effects.push(new Explosion(
+        world.scene, pos, directHit, p.age,
+        undefined, o.blastScale ?? 1, o.tint ?? st.meshColor, o.vfx));
+      o.onDone?.({ x: pos.x, y: pos.y, z: pos.z }, directHit);
+    },
+    tick(dt: number, w: LabWorld) {
+      if (self.done) return;
+      const from = projStep(p, dt, o.gravity ?? GRAVITY);
+      pos.set(p.pos.x, p.pos.y, p.pos.z);
+      vel.set(p.vel.x, p.vel.y, p.vel.z);
+      if (!exploded) {
+        trail.emitSegment();
+        updateProjectileMesh(built.mesh, built.glowMesh, pos, vel, config, p.age,
+          hitRadiusAt(o.weaponType, p.age), tumble, dt);
+        const impact = impactCheck(from, w);
+        if (impact.hit) self.detonate(impact.direct);
+      }
+      for (const r of built.ribbons) r.update(dt);
+      // Death waits on the visuals: an exploded shell stays until its
+      // trail is empty and every ribbon has faded — same rule Projectile
+      // uses, so streaks don't cut mid-fade.
+      if (exploded && trail.empty && built.ribbons.every(r => r.done)) self.done = true;
+    },
+    sync() {
+      if (!exploded) {
+        syncProjectileInstance(built.mesh);
+        if (built.glowMesh) syncProjectileInstance(built.glowMesh);
+      }
+    },
+    dispose() {
+      trail.dispose();
+      for (const r of built.ribbons) r.dispose();
+      releaseProjectileInstance(built.mesh);
+      releaseProjectileInstance(built.glowMesh);
+    },
+  } satisfies SimEntity & { sim: SimProjectile; done: boolean; detonate(directHit?: boolean): void };
   return self;
 }
 

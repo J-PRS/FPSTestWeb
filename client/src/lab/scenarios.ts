@@ -14,9 +14,10 @@ import { BotBrain, type BotVec } from '../../../shared/botBrain.js';
 import { getWeaponStats, WeaponType } from '../../../shared/weapons.js';
 import { BOT_LOADOUTS, pickBotWeapon, type BotLoadout } from '../../../shared/botLoadouts.js';
 import {
-  spawnBall, spawnCrawler, spawnBolt, spawnMover,
+  spawnBall, spawnCrawler, spawnBolt, spawnMover, spawnShell,
   LAB_FLAT_FIELD, type LabWorld, type SimEntity, type MoverOpts,
 } from './simKit.js';
+import { getProjectileConfig } from '../projectiles/index.js';
 
 export interface LabInstance {
   /** Advance the sim one fixed step. The view calls this at 60Hz. */
@@ -51,14 +52,27 @@ function lcg(seed: number): () => number {
  *  Adding a new sim = one spawnX call; the entity owns its step + mesh. */
 function labOf(entities: SimEntity[], world: LabWorld, extra?: Partial<LabInstance>): LabInstance {
   return {
-    tick(dt) { world.time += dt; extra?.tick?.(dt); for (const e of entities) e.tick(dt, world); },
+    tick(dt) {
+      world.time += dt;
+      extra?.tick?.(dt);
+      for (const e of entities) e.tick(dt, world);
+      for (let i = world.effects.length - 1; i >= 0; i--) {
+        const fx = world.effects[i]!;
+        fx.update(dt);
+        if (fx.dead) { fx.dispose(); world.effects.splice(i, 1); }
+      }
+    },
     sync() { for (const e of entities) e.sync(); },
     dump() {
       const rows = extra?.dump?.() ?? [];
       for (const e of entities) if (e.dump) rows.push(...e.dump());
       return rows;
     },
-    dispose() { for (const e of entities) e.dispose(); },
+    dispose() {
+      for (const e of entities) e.dispose();
+      for (const fx of world.effects) fx.dispose();
+      world.effects.length = 0;
+    },
   };
 }
 
@@ -67,7 +81,7 @@ function labOf(entities: SimEntity[], world: LabWorld, extra?: Partial<LabInstan
 /* ------------------------------------------------------------------ */
 
 function ballCourt(scene: THREE.Scene): LabInstance {
-  const world: LabWorld = { scene, field: FLAT, target: { x: 0, y: 1.5, z: 0 }, time: 0 };
+  const world: LabWorld = { scene, field: FLAT, target: { x: 0, y: 1.5, z: 0 }, time: 0, effects: [] };
   const targetMesh = new THREE.Mesh(
     new THREE.SphereGeometry(0.8, 12, 12),
     new THREE.MeshBasicMaterial({ color: 0xffd24d }),
@@ -119,7 +133,7 @@ function ballCourt(scene: THREE.Scene): LabInstance {
 /* ------------------------------------------------------------------ */
 
 function mortarVolley(scene: THREE.Scene): LabInstance {
-  const world: LabWorld = { scene, field: FLAT, target: null, time: 0 };
+  const world: LabWorld = { scene, field: FLAT, target: null, time: 0, effects: [] };
   const padGeo = new THREE.CylinderGeometry(2, 2, 0.4, 16);
   const padA = new THREE.Mesh(padGeo, new THREE.MeshBasicMaterial({ color: 0x3aa7ff }));
   const padB = new THREE.Mesh(padGeo.clone(), new THREE.MeshBasicMaterial({ color: 0xff7a3a }));
@@ -304,7 +318,7 @@ function duel(scene: THREE.Scene): LabInstance {
 /* ------------------------------------------------------------------ */
 
 function crawlerPack(scene: THREE.Scene): LabInstance {
-  const world: LabWorld = { scene, field: FLAT, target: { x: 0, y: 0.5, z: 0 }, time: 0 };
+  const world: LabWorld = { scene, field: FLAT, target: { x: 0, y: 0.5, z: 0 }, time: 0, effects: [] };
   const events = new Map<string, number>();
   const pack = Array.from({ length: 8 }, (_, i) => {
     const a = (i / 8) * Math.PI * 2;
@@ -378,7 +392,7 @@ function skiRun(scene: THREE.Scene): LabInstance {
     getNormal: (x, z, out) => { hmNormal(HILL, x, z, out); return out; },
   };
   const startY = hmHeight(HILL, HILL_X, HILL_Z);
-  const world: LabWorld = { scene, field: HILL, target: null, time: 0 };
+  const world: LabWorld = { scene, field: HILL, target: null, time: 0, effects: [] };
 
   const mover = spawnMover({
     pos: { x: HILL_X, y: startY + 2, z: HILL_Z },
@@ -491,8 +505,6 @@ interface BotAgent {
   lo: BotLoadout;
 }
 
-interface BotBolt { p: SimProjectile; m: THREE.Mesh; from: BotAgent; wt: number; grav: boolean }
-
 function spawnAgent(scene: THREE.Scene, name: string, color: number, x: number, lo: BotLoadout): BotAgent {
   const pos = { x, y: 2, z: 0 };
   const mesh = new THREE.Mesh(
@@ -550,12 +562,13 @@ function pickAtRange(a: BotAgent, d: number) {
 }
 
 function botDuel(scene: THREE.Scene, loA: BotLoadout, loB: BotLoadout): LabInstance {
+  const world: LabWorld = { scene, field: FLAT, target: null, time: 0, effects: [] };
   const A = spawnAgent(scene, 'alpha', 0x5ad0ff, -30, loA);
   const B = spawnAgent(scene, 'beta', 0xff6a4d, 30, loB);
 
-  const boltGeo = new THREE.SphereGeometry(0.25, 8, 8);
-  const boltPool: THREE.Mesh[] = [];
-  const bolts: BotBolt[] = [];
+  // Shells fly the production visual stack (mesh + glow + ribbons +
+  // quarks trail + Explosion); only the flight integrator is lab-side.
+  const shells: (ReturnType<typeof spawnShell> & { from: BotAgent; wt: number })[] = [];
   let now = 0, deaths = 0, fires = 0, hits = 0;
 
   const fire = (f: BotAgent, foe: BotAgent, aim: BotVec) => {
@@ -563,15 +576,32 @@ function botDuel(scene: THREE.Scene, loA: BotLoadout, loB: BotLoadout): LabInsta
     const d = Math.hypot(aim.x - s.pos.x, aim.y - s.pos.y, aim.z - s.pos.z) || 1;
     const { st, wt } = pickAtRange(f, d);
     if (st.speed <= 0) return; // hitscan pick — no shell to fly in the lab
-    const m = boltPool.pop() ?? new THREE.Mesh(boltGeo, new THREE.MeshBasicMaterial({ color: st.gravity ? 0xffb25a : 0xfff3a0 }));
-    m.visible = true;
-    scene.add(m);
-    bolts.push({
-      p: { pos: { x: s.pos.x, y: s.pos.y, z: s.pos.z },
-           vel: { x: (aim.x - s.pos.x) / d * st.speed, y: (aim.y - s.pos.y) / d * st.speed, z: (aim.z - s.pos.z) / d * st.speed },
-           age: 0 },
-      m, from: f, wt, grav: st.gravity,
-    });
+    const sh = spawnShell({
+      weaponType: wt,
+      pos: { x: s.pos.x, y: s.pos.y, z: s.pos.z },
+      vel: { x: (aim.x - s.pos.x) / d * st.speed, y: (aim.y - s.pos.y) / d * st.speed, z: (aim.z - s.pos.z) / d * st.speed },
+      gravity: st.gravity ? GRAVITY : 0,
+      maxAge: 2.5,
+      hitTest: (from, pos) => {
+        const fp = foe.sim.state.pos;
+        return foe.dead <= 0 && segPointDist(from, pos, { x: fp.x, y: fp.y, z: fp.z }) < 1.4;
+      },
+      onDone: (impact, directHit) => {
+        if (!directHit || !impact) return;
+        foe.hp -= st.directDamage;
+        hits++;
+        foe.brain.takeHit(f.sim.state.pos);
+        if (foe.hp <= 0) {
+          foe.dead = 1.5;
+          foe.hp = BOT_HP;
+          foe.energy = BOT_ENERGY_MAX;
+          foe.mesh.visible = false;
+          deaths++;
+        }
+      },
+    }, world) as ReturnType<typeof spawnShell> & { from: BotAgent; wt: number };
+    sh.from = f; sh.wt = wt;
+    shells.push(sh);
     fires++;
   };
 
@@ -588,42 +618,13 @@ function botDuel(scene: THREE.Scene, loA: BotLoadout, loB: BotLoadout): LabInsta
       energy: a.energy,
       healthFrac: a.hp / BOT_HP,
       // Inbound shells feed the dodge sense — same channel the game host fills.
-      threats: bolts.filter(b => b.from !== a).map(b => b.p.pos),
+      threats: shells.filter(b => b.from !== a).map(b => b.sim.pos),
       weaponSpeed: d => pickAtRange(a, d).st.speed,
       weaponGravity: d => pickAtRange(a, d).st.gravity,
     });
     a.lastDest = out.dest;
     a.lastMove = out.move;
     if (out.fire) fire(a, foe, out.fire.aim);
-  };
-
-  /** Bolt flight + hit resolution — segPointDist vs the foe's capsule. */
-  const stepBolts = (dt: number): void => {
-    for (let i = bolts.length - 1; i >= 0; i--) {
-      const bolt = bolts[i]!;
-      const from = projStep(bolt.p, dt, bolt.grav ? GRAVITY : 0);
-      const foe = bolt.from === A ? B : A;
-      const fp = foe.sim.state.pos;
-      if (foe.dead <= 0 && segPointDist(from, bolt.p.pos, { x: fp.x, y: fp.y, z: fp.z }) < 1.4) {
-        foe.hp -= getWeaponStats(bolt.wt).directDamage;
-        hits++;
-        foe.brain.takeHit(bolt.from.sim.state.pos);
-        boltPool.push(bolt.m); bolt.m.visible = false;
-        bolts.splice(i, 1);
-        if (foe.hp <= 0) {
-          foe.dead = 1.5;
-          foe.hp = BOT_HP;
-          foe.energy = BOT_ENERGY_MAX;
-          foe.mesh.visible = false;
-          deaths++;
-        }
-        continue;
-      }
-      if (bolt.p.age > 2.5 || segFieldHit(from, bolt.p.pos, FLAT)) {
-        boltPool.push(bolt.m); bolt.m.visible = false;
-        bolts.splice(i, 1);
-      }
-    }
   };
 
   return {
@@ -638,14 +639,23 @@ function botDuel(scene: THREE.Scene, loA: BotLoadout, loB: BotLoadout): LabInsta
       if (A.dead <= 0) thinkOne(A, B);
       if (B.dead <= 0) thinkOne(B, A);
       for (const a of [A, B]) if (a.dead <= 0) locomoteAgent(a, dt);
-      stepBolts(dt);
+      for (let i = shells.length - 1; i >= 0; i--) {
+        const s = shells[i]!;
+        s.tick(dt, world);
+        if (s.done) { s.dispose(); shells.splice(i, 1); }
+      }
+      for (let i = world.effects.length - 1; i >= 0; i--) {
+        const fx = world.effects[i]!;
+        fx.update(dt);
+        if (fx.dead) { fx.dispose(); world.effects.splice(i, 1); }
+      }
     },
     sync() {
       for (const a of [A, B]) {
         a.mesh.position.set(a.sim.state.pos.x, a.sim.state.pos.y - 1.5, a.sim.state.pos.z);
         a.mesh.rotation.y = a.yaw;
       }
-      for (const bolt of bolts) bolt.m.position.set(bolt.p.pos.x, bolt.p.pos.y, bolt.p.pos.z);
+      for (const s of shells) s.sync();
     },
     dump() {
       return [
@@ -658,13 +668,14 @@ function botDuel(scene: THREE.Scene, loA: BotLoadout, loB: BotLoadout): LabInsta
         ['fires', String(fires)],
         ['hits', String(hits)],
         ['deaths', String(deaths)],
-        ['bolts live', String(bolts.length)],
+        ['shells live', String(shells.length)],
       ];
     },
     dispose() {
       for (const a of [A, B]) { scene.remove(a.mesh); a.mesh.geometry.dispose(); }
-      for (const bolt of bolts) scene.remove(bolt.m);
-      boltGeo.dispose();
+      for (const s of shells) s.dispose();
+      for (const fx of world.effects) fx.dispose();
+      world.effects.length = 0;
     },
   };
 }
@@ -684,11 +695,13 @@ const GYM_EXCLUDE = new Set<number>([
 ]);
 
 function weaponGym(scene: THREE.Scene): LabInstance {
-  const world: LabWorld = { scene, field: FLAT, target: null, time: 0 };
+  const world: LabWorld = { scene, field: FLAT, target: null, time: 0, effects: [] };
   const lanes = Object.keys(WeaponType)
     .filter(k => isNaN(Number(k)))
     .map(name => ({ name, wt: WeaponType[name as keyof typeof WeaponType] as number, st: getWeaponStats(WeaponType[name as keyof typeof WeaponType]) }))
-    .filter(l => !GYM_EXCLUDE.has(l.wt) && l.st.speed > 0)
+    // No projectile config = no visual identity to showcase — beam,
+    // hitscan, and belt types all land in GYM_EXCLUDE first anyway.
+    .filter(l => !GYM_EXCLUDE.has(l.wt) && l.st.speed > 0 && getProjectileConfig(l.wt))
     // Same gun twice would only prove the table — dedupe by ballistics.
     .filter((l, i, arr) => arr.findIndex(o => o.st.speed === l.st.speed && o.st.gravity === l.st.gravity) === i);
 
@@ -701,8 +714,7 @@ function weaponGym(scene: THREE.Scene): LabInstance {
   wall.position.set(0, 6, 55);
   scene.add(wall);
 
-  const shells: (ReturnType<typeof spawnBolt>)[] = [];
-  const impacts: { m: THREE.Mesh; t: number }[] = [];
+  const shells: (ReturnType<typeof spawnShell>)[] = [];
   const padGeo = new THREE.CylinderGeometry(1.5, 1.5, 0.3, 12);
   const laneFx = lanes.map((l, i) => {
     const x = x0 + i * PITCH;
@@ -713,30 +725,17 @@ function weaponGym(scene: THREE.Scene): LabInstance {
   });
 
   const fireLane = (l: (typeof laneFx)[number]) => {
-    const color = l.st.gravity ? 0xff9a3a : 0x9adcff;
-    const s = spawnBolt({
+    const s = spawnShell({
+      weaponType: l.wt,
       pos: { x: l.x, y: 2, z: -40 },
       vel: { x: 0, y: 0, z: l.st.speed },
-      radius: Math.max(0.15, l.st.bodyRadius * 0.5),
-      color,
       gravity: l.st.gravity ? GRAVITY : 0,
       maxAge: l.st.maxLifetime ?? 30,
-      walls: [{ axis: 'z', at: 54 }], // the target wall — was visual-only before
-      onDone: (hit) => {
-        l.done++;
-        if (!hit) return;
-        // Impact ring scaled to the weapon's real aoe radius.
-        if (l.st.aoeRadius > 0) {
-          const ring = new THREE.Mesh(
-            new THREE.RingGeometry(l.st.aoeRadius * 0.6, l.st.aoeRadius, 24),
-            new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.85, side: THREE.DoubleSide }),
-          );
-          ring.rotation.x = -Math.PI / 2;
-          ring.position.set(hit.x, hit.y + 0.3, hit.z);
-          scene.add(ring);
-          impacts.push({ m: ring, t: 0 });
-        }
-      },
+      walls: [{ axis: 'z', at: 54 }],
+      // Blast scaled to the weapon's real aoe radius — a mortar's boom
+      // reads wide next to a disc's pop without any hardcoded sizes.
+      blastScale: l.st.aoeRadius > 0 ? l.st.aoeRadius / 6 : 0.6,
+      onDone: () => { l.done++; },
     }, world);
     shells.push(s);
     l.fired++;
@@ -755,12 +754,10 @@ function weaponGym(scene: THREE.Scene): LabInstance {
         s.tick(dt, world);
         if (s.done) { s.dispose(); shells.splice(i, 1); }
       }
-      for (let i = impacts.length - 1; i >= 0; i--) {
-        const im = impacts[i]!;
-        im.t += dt;
-        im.m.scale.setScalar(1 + im.t * 4);
-        (im.m.material as THREE.MeshBasicMaterial).opacity = Math.max(0, 0.85 - im.t * 1.4);
-        if (im.t > 0.6) { scene.remove(im.m); im.m.geometry.dispose(); impacts.splice(i, 1); }
+      for (let i = world.effects.length - 1; i >= 0; i--) {
+        const fx = world.effects[i]!;
+        fx.update(dt);
+        if (fx.dead) { fx.dispose(); world.effects.splice(i, 1); }
       }
     },
     sync() { for (const s of shells) s.sync(); },
@@ -771,7 +768,8 @@ function weaponGym(scene: THREE.Scene): LabInstance {
     },
     dispose() {
       for (const s of shells) s.dispose();
-      for (const im of impacts) { scene.remove(im.m); im.m.geometry.dispose(); }
+      for (const fx of world.effects) fx.dispose();
+      world.effects.length = 0;
       for (const l of laneFx) scene.remove(l.pad);
       scene.remove(wall);
       wall.geometry.dispose();

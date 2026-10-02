@@ -296,11 +296,17 @@ function shrinkPools(now: number): void {
   }
 }
 
+// Sim-lab overlay: while the lab view is open it steers the distance-
+// pause bookkeeping at ITS camera — lab entities near world origin would
+// otherwise read as >180m from the game camera and freeze mid-flight.
+let camOverride: THREE.Vector3 | null = null;
+export function setVfxCamOverride(p: THREE.Vector3 | null): void { camOverride = p; }
+
 export function updateVfx(dt: number, camPos?: THREE.Vector3): void {
   if (buildQueue.length) buildQueue.shift()!();
   if (++prunePhase >= 4) {
     prunePhase = 0;
-    runBookkeeping(camPos);
+    runBookkeeping(camOverride ?? camPos);
   }
   simParity = !simParity;
   if (simParity) batcher?.update(dt * 2);
