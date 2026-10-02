@@ -553,8 +553,16 @@ export class ServerBotSenses {
         : (role === 'hof' ? 3 : 90);
       posted = base * (1.35 - 0.5 * duty);
     }
-    return { pos: goalPos, infiltrating: pick === enemyStand && enemyStand !== null
-      && role === 'infiltrator', runner: role === 'capper',
+    return { pos: goalPos, infiltrating: enemyStand !== null && pick !== null &&
+      // dist<8 like the push-call check — a goal parked on the stand is
+      // stand-bound regardless of which object holds it; ref equality
+      // silently failed for entry-probe picks (cloak read 0%).
+      dist3(pick, enemyStand) < 8 &&
+      // Cappers infiltrate too — the approach IS a covert run (T2 jammer
+      // pack); he dies ~150m out every soak because the whole transit
+      // runs visible. The intent still prices the tank — cloak only
+      // when energy ≥ cloakCost+15, so a dry runner stays loud.
+      (role === 'infiltrator' || role === 'capper'), runner: role === 'capper',
       // Named wave member (push/escort): his feet are committed to the
       // flood like a runner's — untasked attackers let every midfield
       // contact steal the stand run (soak: sup@0 — the called wave
