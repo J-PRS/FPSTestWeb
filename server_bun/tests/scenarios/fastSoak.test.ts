@@ -45,6 +45,9 @@ const mapJson = JSON.parse(readFileSync(`${import.meta.dir}/../../../maps/${MAP 
   bases?: { alpha: { x: number; z: number }; bravo: { x: number; z: number } };
   teamSpawns?: Record<string, { x: number; z: number; r?: number; w?: number }[]>;
   terrain?: string;
+  balls?: { base: number; perPlayer: number; max: number };
+  creatures?: Record<string, number>;
+  ambient?: Record<string, number>;
 };
 // t2 ports store the heightfield under maps/t2/<name>/terrain.bin — honor
 // the JSON's own terrain path instead of assuming maps/<name>.bin.
@@ -54,7 +57,7 @@ const field = hmParseBin(new Uint8Array(readFileSync(
 // FPS_SOAK_MS=<ms> runs a longer warp from the CLI for profiling.
 const WALL_BUDGET_MS = Number(process.env.FPS_SOAK_MS ?? 10_000);
 
-describe('scenario: fast-forward soak throughput', () => {
+describe('scenario: warp soak throughput', () => {
   afterAll(() => simNowReset());
 
   it('steps a full 16-bot room flat-out for the wall budget', () => {
@@ -80,8 +83,11 @@ describe('scenario: fast-forward soak throughput', () => {
       mode, bots: 16, botFill: 16,
       // Economy sims off by default in the combat soak — ball/creature
       // kills ride the same weapon-kill ledger and poison duel stats.
-      // FPS_SOAK_ECO=1 re-enables for economy probes.
-      ...(process.env.FPS_SOAK_ECO ? {} : { balls: { base: 0, perPlayer: 0, max: 0 }, creatures: {} }),
+      // FPS_SOAK_ECO=1 restores the map's own population tables for
+      // economy probes (a nuggets map without them spawns zero gems).
+      ...(process.env.FPS_SOAK_ECO
+        ? { balls: mapJson.balls, creatures: mapJson.creatures, ambient: mapJson.ambient }
+        : { balls: { base: 0, perPlayer: 0, max: 0 }, creatures: {} }),
       ...(ctf ? {
         bases: { alpha: baseAt(mapJson.bases!.alpha.x, mapJson.bases!.alpha.z), bravo: baseAt(mapJson.bases!.bravo.x, mapJson.bases!.bravo.z) },
         teamSpawns: Object.fromEntries(
@@ -135,6 +141,49 @@ describe('scenario: fast-forward soak throughput', () => {
     const ringCap = new Map<string, { t: number; spd: number; hp: number }>();
     const capStop = { entries: 0, grabs: 0, died: 0, left: 0, dSpd: [] as number[], dHp: [] as number[] };
     const killZone = { attack: 0, defense: 0, mid: 0 };
+    // Nugget risk probe — JP's model: going for a gem telegraphs your
+    // position, so a grab under enemy pressure is a trade. Track live
+    // pickups from the spawn/gone broadcasts; classify each bank by the
+    // collector's nearest-enemy distance at grab time (hot <40m) and each
+    // decayed gem by whether anyone was contesting it; count deaths within
+    // 15m of a live gem as "died for a nug".
+    const liveNugs = new Map<number, { x: number; z: number }>();
+    const nug = { spawn: 0, bankHot: 0, bankCold: 0, decay: 0, die: 0 };
+    let msgCur = 0;
+    const foeDistTo = (pos: { x: number; z: number }, team?: string) => {
+      let best = Infinity;
+      for (const q of room.players.getAllPlayers().values()) {
+        if (q.isDead || q.team === team) continue;
+        const d = Math.hypot(q.position.x - pos.x, q.position.z - pos.z);
+        if (d < best) best = d;
+      }
+      return best;
+    };
+    const drainMsgs = () => {
+      for (; msgCur < w.msgs.length; msgCur++) {
+        const m = w.msgs[msgCur]! as unknown as {
+          type: string; id?: number; by?: string | null; pos?: { x: number; z: number };
+          targetId?: string; shooterId?: string;
+        };
+        if (m.type === 'pickupSpawn' && m.id !== undefined && m.pos) {
+          liveNugs.set(m.id, m.pos); nug.spawn++;
+        } else if (m.type === 'pickupGone' && m.id !== undefined) {
+          const pos = liveNugs.get(m.id);
+          liveNugs.delete(m.id);
+          if (!pos) continue;
+          if (m.by) {
+            const p2 = room.players.getPlayer(m.by);
+            const d = p2 ? foeDistTo(p2.position, p2.team) : Infinity;
+            if (d < 40) nug.bankHot++; else nug.bankCold++;
+          } else nug.decay++;
+        } else if (m.type === 'playerKill' && m.targetId) {
+          const v = room.players.getPlayer(m.targetId);
+          if (v) for (const np of liveNugs.values()) {
+            if (Math.hypot(v.position.x - np.x, v.position.z - np.z) < 15) { nug.die++; break; }
+          }
+        }
+      }
+    };
     const trail: { x: number; z: number; team: string; carrying: boolean }[] = [];
     const deaths: { x: number; z: number; team: string }[] = [];
     // Movement-energy telemetry — specific mechanical energy ½v²+g·h
@@ -169,6 +218,7 @@ describe('scenario: fast-forward soak throughput', () => {
       simNowAdvance(dt * 1000 * BATCH);
       step(room, BATCH, dt);
       room.messages.respawnTick(simNow());
+      drainMsgs();
       simTicks += BATCH;
       if (room.bots) {
         huntSum += room.bots.huntUptime(); huntN++;
@@ -427,7 +477,7 @@ describe('scenario: fast-forward soak throughput', () => {
     const score = Object.entries(room.scores).map(([t, s]) => `${t} ${s}`).join(' / ');
     const fmtId = (id: string) => id.replace(/^BOT-/, '');
     console.log(
-      `fastSoak: ${simTicks} ticks, ${simSecs.toFixed(0)} sim-s ` +
+      `warpSoak: ${simTicks} ticks, ${simSecs.toFixed(0)} sim-s ` +
       `(${(simSecs / 60).toFixed(1)} sim-min) in ${(wallMs / 1000).toFixed(1)} wall-s ` +
       `— ${ratio.toFixed(0)}x real-time; ${alive}/${respawned} alive`,
     );
@@ -473,6 +523,7 @@ describe('scenario: fast-forward soak throughput', () => {
       `,capStop=${capStop.entries}e/${capStop.grabs}g/${capStop.died}d/${capStop.left}l` +
       (capStop.dSpd.length ? ` Δspd=${medOf(capStop.dSpd).toFixed(1)} Δhp=${medOf(capStop.dHp).toFixed(0)}` : '') +
       `,kzA=${killZone.attack},kzD=${killZone.defense},kzM=${killZone.mid}` +
+      `,nug=${nug.spawn}s/${nug.bankHot + nug.bankCold}b(hot${nug.bankHot})/${nug.decay}dec/${nug.die}die` +
       `,grabs_a_flag=${grabsBy.alpha ?? 0},grabs_b_flag=${grabsBy.bravo ?? 0},caps=${caps.length}` +
       `,e_med=${medOf(eRows.map((r) => r.avg)).toFixed(0)}` +
       `,hunt=${huntN ? Math.round((huntSum / huntN) * 100) : 0}%,cloak=${huntN ? Math.round((cloakSum / huntN) * 100) : 0}%` +

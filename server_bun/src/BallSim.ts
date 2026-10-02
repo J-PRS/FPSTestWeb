@@ -7,6 +7,12 @@
  * enrage / teleport / knockback / die — and every client replays the same
  * integrator (shared/ballSim.ts) against the same heightfield
  * (shared/heightfield.ts, data from heightmap.bin). A ball costs ~1 bounce
+ *
+ * Terminology: "balls" (this sim, `b:` target ids, `creatureHit` claims —
+ * the claim name is a historical leftover) are their own entity kind,
+ * not creatures; "creatures" (CreatureSim, `crawlerHit` claims) are the
+ * species pops (crawler/scarab/rakk/...). Both funnel kills into
+ * scoring.nonPlayerKill.
  * event per second; 40 balls ≈ 40 × ~60B/s ≈ 2.4 KB/s split across all
  * clients, versus ~30 KB/s for a naive position stream.
  *
@@ -240,10 +246,16 @@ export class BallSim {
   }
 
   private tick(): void {
-    if (!this.field || this.dormant) return;
     const now = performance.now();
-    this.tickAcc += Math.min(now - this.lastTickAt, 1000) / 1000;
+    this.step(Math.min(now - this.lastTickAt, 1000) / 1000);
     this.lastTickAt = now;
+  }
+
+  /** Drive the sim manually — scenario tests and warp soaks step it
+   *  deterministically (the wall interval can't keep pace at 400x). */
+  step(dt: number): void {
+    if (!this.field || this.dormant) return;
+    this.tickAcc += dt;
     // Catch up in whole cells; cap keeps a long hiccup from exploding.
     this.tickAcc = Math.min(this.tickAcc, BallSim.TICK_CATCHUP_CAP);
     if (this.tickAcc < TICK_DT) return;

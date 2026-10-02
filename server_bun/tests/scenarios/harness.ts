@@ -26,6 +26,9 @@ export function mkRoom(spec: Partial<MapSpec>, mode = '', seed = 1337, moveAutho
   // after would leave them on the previous room's leftovers.
   botRng(lcg(seed + 3));
   const room = new Room('t', field, mode, resolveMapSpec(spec), moveAuthority);
+  // BallSim self-drives on a wall-clock setInterval like CreatureSim —
+  // stop it so step() owns the cadence deterministically.
+  room.ballSim.stop();
   room.ballSim.rng = lcg(seed);
   room.creatureSim.rng = lcg(seed + 1);
   room.rng = lcg(seed + 2);
@@ -51,6 +54,7 @@ export function step(room: Room, ticks: number, dt = 0.05): void {
   for (let i = 0; i < ticks; i++) {
     for (const s of room.sims) s.tick(dt);
     room.creatureSim.step(dt);
+    room.ballSim.step(dt);
   }
 }
 
