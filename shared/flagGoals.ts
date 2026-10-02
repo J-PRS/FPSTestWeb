@@ -17,6 +17,7 @@ export type BotRole =
   | 'technician'  // deploy kit at home (server-side role — needs deploys)
   | 'infiltrator' // slips in cloaked (server-side role — needs the intent bit)
   | 'bombardier'  // stand-clearer — shells the enemy stand from mortar range
+  | 'medic'       // heal kit — shadows the push, patches the pack
   ;
 
 export interface FlagSituation {
@@ -46,6 +47,9 @@ export const ROLE_PRIORITY: { role: BotRole; want: number; minSquad: number }[] 
   { role: 'hof', want: 1, minSquad: 5 },
   { role: 'technician', want: 1, minSquad: 6 },
   { role: 'bombardier', want: 1, minSquad: 6 },
+  // Medic before infiltrator at the same unlock — a healer lifts every
+  // push; the cloak is the more situational luxury.
+  { role: 'medic', want: 1, minSquad: 7 },
   { role: 'infiltrator', want: 1, minSquad: 7 },
   // Second runner once the squad can afford it — a lone capper dying
   // mid-route leaves the stand attack dead until respawn, and real
@@ -64,9 +68,9 @@ export const WIRE_ROLES: BotRole[] = ['capper', 'ldefense', 'hof', 'defense', 'o
  *  runners (capper/infiltrator) pull light, and the planted specialists
  *  (hof/technician) pull heavy hard — HoF IS "heavy on flag". */
 export const CLASS_FITNESS: Record<string, Record<BotRole, number>> = {
-  light:   { capper: 3,   infiltrator: 3,   ldefense: 2,   offense: 1.5, defense: 1,   technician: 0.4, hof: 0.2, bombardier: 0.3 },
-  medium:  { offense: 3,  defense: 2.5,     ldefense: 2,   capper: 1.2,  hof: 1,       infiltrator: 1,  technician: 1,  bombardier: 1.5 },
-  heavy:   { hof: 3,      technician: 2.5,  defense: 2,    offense: 2,   ldefense: 1,  capper: 0.4,     infiltrator: 0.4, bombardier: 3 },
+  light:   { capper: 3,   infiltrator: 3,   ldefense: 2,   offense: 1.5, defense: 1,   technician: 0.4, hof: 0.2, bombardier: 0.3, medic: 1.5 },
+  medium:  { offense: 3,  defense: 2.5,     ldefense: 2,   capper: 1.2,  hof: 1,       infiltrator: 1,  technician: 1,  bombardier: 1.5, medic: 2.5 },
+  heavy:   { hof: 3,      technician: 2.5,  defense: 2,    offense: 2,   ldefense: 1,  capper: 0.4,     infiltrator: 0.4, bombardier: 3,   medic: 1 },
 };
 const fit = (cls: string | undefined, role: BotRole): number =>
   (cls ? CLASS_FITNESS[cls]?.[role] : undefined) ?? 1.5;
@@ -122,6 +126,7 @@ export function roleObjective(role: string, s: FlagSituation, commit = 1): { x: 
     case 'capper': return capperGoal(s);
     case 'bombardier': return bombardierGoal(s);
     case 'infiltrator': return infiltratorGoal(s);
+    case 'medic': return medicGoal(s);
     default: return offenseGoal(s);
   }
 }
@@ -195,6 +200,25 @@ function infiltratorGoal(s: FlagSituation) {
   if (s.escort) return s.escort;
   if (s.enemyStand) return s.enemyStand;
   if (s.thief) return s.thief;
+  return s.home;
+}
+
+/** Medic: shadow the push, not lead it — the carrier's pocket first,
+ *  then hang ~40m behind whoever presses the stand (close enough to
+ *  beam the breachers, far enough to live), a dropped flag pulls like
+ *  everyone else's, home otherwise. */
+function medicGoal(s: FlagSituation) {
+  if (s.escort) return s.escort;
+  if (s.dropped) return s.dropped;
+  if (s.enemyStand) {
+    const dx = s.home.x - s.enemyStand.x, dz = s.home.z - s.enemyStand.z;
+    const d = Math.hypot(dx, dz);
+    if (d > 1) {
+      const back = Math.min(40, d * 0.2);
+      return { x: s.enemyStand.x + (dx / d) * back, y: s.enemyStand.y, z: s.enemyStand.z + (dz / d) * back };
+    }
+    return s.enemyStand;
+  }
   return s.home;
 }
 

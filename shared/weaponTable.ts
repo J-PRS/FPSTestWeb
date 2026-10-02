@@ -33,6 +33,8 @@ export enum WeaponType {
   ArmorGrenade = 27,  // belt throw: mid blast that plates every player + creature it catches
   MRVLauncher = 28,   // mortar's counterpart: bouncing carrier shell airbursts into bomblets (MRV — one volley, not MIRV)
   MRVBomblet = 29,    // spawned by MRVLauncher detonation — contact pop, never fired
+  HealBeam = 30,      // support beam: hitscan that HEALS the friendly target it pins — jet energy is the ammo
+  HealGrenade = 31,   // belt throw: small blast, strong heal for allies caught; enemies eat the sting + shove
 }
 
 export interface WeaponStats {
@@ -538,6 +540,38 @@ export const WEAPONS: Record<number, WeaponStats> = {
     aoeDamage: 40,
     aoeRadius: 10.0,
     knockbackForce: 25.0, // a nudge, not a launcher — the plating is the payload
+    forceMode: 'push',
+    speed: 40.0,
+    gravity: true,
+    bodyRadius: 0.25,
+    hitMin: 0.0,
+    hitMax: 8.0,
+    hitGrow: 2.0,
+    maxLifetime: 2.0,
+  },
+  [WeaponType.HealBeam]: {
+    // Hitscan heal — the payload is HP on a friend, not damage. directDamage
+    // stays 0 so a claim routed through the damage path lands nothing;
+    // the heal itself is server-derived (HEALBEAM_* in weapons.ts).
+    directDamage: 0,
+    aoeDamage: 0,
+    aoeRadius: 0,
+    knockbackForce: 0,
+    forceMode: 'push',
+    speed: 0,
+    gravity: false,
+    bodyRadius: 0,
+    hitMin: 0,
+    hitMax: 0,
+    hitGrow: 0,
+  },
+  [WeaponType.HealGrenade]: {
+    // Heal burst: tight radius, the sting vs enemies is the tax on a
+    // misthrow — allies get the strong heal, foes get a shove + graze.
+    directDamage: 0,
+    aoeDamage: 12,
+    aoeRadius: 6.0,
+    knockbackForce: 22.0,
     forceMode: 'push',
     speed: 40.0,
     gravity: true,

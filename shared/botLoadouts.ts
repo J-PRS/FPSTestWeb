@@ -38,6 +38,9 @@ export const BOT_LOADOUTS: BotLoadout[] = [
   { perk: 'overcharge',  near: WeaponType.Lightning, mid: WeaponType.Disc,     far: WeaponType.Railgun,       belt: WeaponType.DiscPull,      side: WeaponType.Pistol   }, // beam rider
   { perk: 'vitality',    near: WeaponType.Shotgun,  mid: WeaponType.Sticky,    far: WeaponType.RocketLauncher, belt: WeaponType.ClusterBomb,   side: WeaponType.Revolver }, // trapper
   { perk: 'vitality',    near: WeaponType.Shotgun,  mid: WeaponType.PlasmaGun, far: WeaponType.BoltLauncher,         belt: WeaponType.ArmorGrenade,  side: WeaponType.Pistol   }, // support — plates the push
+  { perk: 'vitality',    near: WeaponType.HealBeam, mid: WeaponType.Disc,      far: WeaponType.BoltLauncher,        belt: WeaponType.HealGrenade,   side: WeaponType.Pistol   }, // medic — beam on the push, burst for the pack
+  { perk: 'overcharge',  near: WeaponType.Chaingun, mid: WeaponType.PlasmaGun, far: WeaponType.BoltLauncher,        belt: WeaponType.HealGrenade,   side: WeaponType.Pistol   }, // field medic — fighter first, heals what it walks past
+  { perk: 'vitality',    near: WeaponType.Chaingun, mid: WeaponType.Disc,      far: WeaponType.BoltLauncher,        belt: WeaponType.Grenade,       side: WeaponType.HealBeam }, // pocket beam — fighter with a zap for hurt allies
 ];
 
 /** Range-band weapon select — shared by player and creature targets so
@@ -48,7 +51,10 @@ export const BOT_LOADOUTS: BotLoadout[] = [
  *  specialists use their best gun MOST of the time, not always. */
 export function pickBotWeapon(lo: BotLoadout, distXZ: number, dist: number, skill?: (w: number) => number): number {
   if (distXZ < BOT_MELEE_M) return WeaponType.Melee;
-  if (!skill) return dist < BOT_SIDEARM_M ? lo.side : dist < BOT_NEAR_M ? lo.near : dist > BOT_FAR_M ? lo.far : lo.mid;
+  // Heal slots never feed a combat draw — the med kit fires its beam at
+  // ALLIES through the support path; picking it at an enemy is a dry pull.
+  const beltOut = (w: WeaponType, fb: WeaponType) => w === WeaponType.HealBeam ? fb : w;
+  if (!skill) return beltOut(dist < BOT_SIDEARM_M ? lo.side : dist < BOT_NEAR_M ? lo.near : dist > BOT_FAR_M ? lo.far : lo.mid, lo.mid);
   // Triangular band fit: a slot scores 1 dead-center of its range,
   // decaying to 0 one band away — then multiplied by how good the bot
   // is with that gun. Utility (right range) and skill (right weapon)
@@ -64,6 +70,7 @@ export function pickBotWeapon(lo: BotLoadout, distXZ: number, dist: number, skil
   let best: { w: number; s: number } = { w: lo.mid, s: 0 };
   for (const slot of ['side', 'near', 'mid', 'far'] as const) {
     const w = lo[slot];
+    if (w === WeaponType.HealBeam) continue; // healing is aimed at allies, not drawn for a fight
     const s = fit(slot) * Math.max(0.1, skill(w));
     if (s > best.s) best = { w, s };
   }

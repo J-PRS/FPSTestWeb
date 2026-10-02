@@ -80,7 +80,7 @@ export function freeze(room: Room, playerId: string, pos: Vec3): void {
 export function watch(room: Room, now?: () => number): { count: (type: string, kind?: string) => number; msgs: ServerMessage[] } {
   const msgs: ServerMessage[] = [];
   room.connections.broadcast = now
-    ? (m: ServerMessage) => { msgs.push({ ...m, _s: now() } as ServerMessage); }
+    ? (m: ServerMessage) => { msgs.push({ ...m, _s: now() } as unknown as ServerMessage); }
     : (m: ServerMessage) => { msgs.push(m); };
   return {
     msgs,

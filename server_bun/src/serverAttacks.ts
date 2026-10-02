@@ -1,4 +1,5 @@
-import { getWeaponStats, WeaponType, scaledDirectDamage } from '../../shared/weapons.ts';
+import { getWeaponStats, WeaponType, scaledDirectDamage, HEALBEAM_ENERGY, HEALBEAM_PER_TICK, HEALBEAM_RANGE } from '../../shared/weapons.ts';
+import { healPool } from './healPool.ts';
 import { lgTickDamage } from '../../shared/combat.ts';
 import { perkMods } from '../../shared/perks.ts';
 import { segSolidHit } from '../../shared/solidWorld.ts';
@@ -25,6 +26,22 @@ export function crawlerAttack(h: CombatHandler, targetId: string, damage: number
 export function botAttack(h: CombatHandler, shooterId: string, targetId: string, weaponType: number, airtime?: number): void {
     const shooter = h.playerManager.getPlayer(shooterId);
     if (!shooter || shooter.isDead) return;
+    // Heal beam: same tick/cadence path as the damage beam, but the
+    // payload is HP on a friend and the ammo is the shooter's own jet
+    // tank — pocket-healing a push costs the bot its climb out.
+    if (weaponType === WeaponType.HealBeam) {
+      const target = h.playerManager.getPlayer(targetId);
+      if (!target || target.isDead || !h.friendly(shooterId, targetId)) return;
+      const dist = Math.hypot(target.position.x - shooter.position.x, target.position.y - shooter.position.y, target.position.z - shooter.position.z);
+      if (dist > HEALBEAM_RANGE) return;
+      const tank = h.deps;
+      if (tank.energyOf && (tank.energyOf(shooterId) ?? 0) < HEALBEAM_ENERGY) return;
+      tank.drainEnergy?.(shooterId, HEALBEAM_ENERGY);
+      healPool(target, HEALBEAM_PER_TICK);
+      target.forceSendUntil = Date.now() + 900;
+      h.hb('heal.beam');
+      return;
+    }
     shooter.protectedUntil = 0; // firing breaks your own spawn shield
     // Melee carries its damage on the aoe line (instant cone, directDamage 0)
     // — falling back to it keeps bot punches non-zero. airtime feeds the
