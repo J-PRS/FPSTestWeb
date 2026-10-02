@@ -6,6 +6,7 @@ import { GRAVITY } from '../../../shared/movement.ts';
 import { simNow, simNowAdvance, simNowReset } from '../../src/simClock.ts';
 import { weaponStats } from '../../src/weaponStats.ts';
 import { WeaponType } from '../../../shared/weaponTable.ts';
+import { WEAPON_FIRE_INTERVAL_S } from '../../../shared/weapons.ts';
 
 // FPS_TRAIL=<file.bmp> plots every bot's XZ track (alpha=red, bravo=
 // blue) top-down over the 1500m terrain wrap at 512x512 — hotspots and
@@ -96,12 +97,37 @@ describe('scenario: fast-forward soak throughput', () => {
     // so a press that stalls on a plateau rim shows up as press small
     // but pressY large (the bot is UNDER the stand lip, not on it).
     const pressY = { alpha: 0, bravo: 0 };
+    // Closest 3D approach to the live enemy flag — the pickup radius is
+    // ~2.2m, so flagNear tells whether anyone ever got close enough to
+    // matter, vs dying/routing in the deck kill-zone.
+    const flagNear = { alpha: Infinity, bravo: Infinity };
     const trail: { x: number; z: number; team: string; carrying: boolean }[] = [];
     const deaths: { x: number; z: number; team: string }[] = [];
     // Movement-energy telemetry — specific mechanical energy ½v²+g·h
     // (h = height above terrain, J/kg), the "are they skiing like Tribes
     // or walking like llamas" meter. Sampled per batch per live bot.
     const eStats = new Map<string, { team: string; sum: number; max: number; n: number }>();
+    // Engagement density — mean share of brains with a live hunt target,
+    // sampled per batch. The single number that separates "nobody ever
+    // finds a fight" from "fights never finish".
+    let huntSum = 0, huntN = 0, cloakSum = 0, nearFoeSum = 0, inSightSum = 0;
+    // Per-team goal-distance probe: mean XZ gap between each bot's
+    // flagGoal destination and its OWN stand. Goal-side asymmetry (goals
+    // never leave home) vs routing-side (goals point out, bots don't
+    // move) is what splits a turtle map.
+    const goalOut = { alpha: 0, bravo: 0, nA: 0, nB: 0 };
+    // Route progress: each bot's distance-to-goal sampled ~5s apart.
+    // Oscillation (goal churn) reads as ~zero net progress while moving;
+    // a death loop reads as progress resets from respawn.
+    const prog = new Map<string, { lastD: number; t: number; gained: number; windows: number }>();
+    // Goal churn: count per-bot flips — consecutive flagGoal samples
+    // landing >60m apart. A flip-heavy fleet with stable progress means
+    // the goal itself ping-pongs; flips≈0 with prog≈0 points downstream.
+    const flips = new Map<string, { lastG: { x: number; z: number }; n: number }>();
+    // Move alignment: mean dot(vel̂, ĝoal) per bot. ~0 = orbiting in
+    // place, <0 = a repulsor outvotes the goal, >0 with prog≈0 = a
+    // circular trap (moving, never advancing).
+    const align = { sum: 0, n: 0 };
     const wasDead = new Map<string, boolean>();
     while (performance.now() - t0 < wallBudgetMs) {
       // Advance the room's clock first, then step every sim — the
@@ -110,6 +136,48 @@ describe('scenario: fast-forward soak throughput', () => {
       step(room, BATCH, dt);
       room.messages.respawnTick(simNow());
       simTicks += BATCH;
+      if (room.bots) {
+        huntSum += room.bots.huntUptime(); huntN++;
+        let cl = 0, al = 0;
+        for (const q of room.players.getAllPlayers().values()) if (!q.isDead) { al++; if (q.status & 4) cl++; }
+        if (al) cloakSum += cl / al;
+        // Foe density vs LOS, split the hunt=0 mystery: mean nearest-
+        // enemy XZ distance says whether anyone's even in sight range,
+        // and the <160m share says how often a sight roll is possible.
+        const alive = [...room.players.getAllPlayers().values()].filter((q) => !q.isDead && q.team);
+        let nd = 0, inSight = 0;
+        for (const q of alive) {
+          let best = Infinity;
+          for (const e of alive) {
+            if (e.team === q.team) continue;
+            const d = Math.hypot(e.position.x - q.position.x, e.position.z - q.position.z);
+            if (d < best) best = d;
+          }
+          if (Number.isFinite(best)) { nd += best; if (best < 160) inSight++; }
+        }
+        if (alive.length) { nearFoeSum += nd / alive.length; if (alive.some(() => true)) inSightSum += inSight / alive.length; }
+        for (const q of alive) {
+          const g = room.bots!.flagGoal({ id: q.id, team: q.team, position: q.position });
+          if (!g) continue;
+          const home = q.team === 'alpha' ? alphaStand : bravoStand;
+          const d = Math.hypot(g.pos.x - home.x, g.pos.z - home.z);
+          if (q.team === 'alpha') { goalOut.alpha += d; goalOut.nA++; } else { goalOut.bravo += d; goalOut.nB++; }
+          const fl = flips.get(q.id) ?? { lastG: g.pos, n: 0 };
+          if (Math.hypot(g.pos.x - fl.lastG.x, g.pos.z - fl.lastG.z) > 60) fl.n++;
+          fl.lastG = g.pos;
+          flips.set(q.id, fl);
+          const gd = Math.hypot(g.pos.x - q.position.x, g.pos.z - q.position.z);
+          const sp = Math.hypot(q.velocity.x, q.velocity.z);
+          if (gd > 20 && sp > 4) align.sum += ((q.velocity.x * (g.pos.x - q.position.x) + q.velocity.z * (g.pos.z - q.position.z)) / (gd * sp)), align.n++;
+          // Route progress against the stable anchor (the enemy stand,
+          // not the churning goal): gained>0 means approach per window.
+          const foeStand = q.team === 'alpha' ? bravoStand : alphaStand;
+          const dFoe = Math.hypot(q.position.x - foeStand.x, q.position.z - foeStand.z);
+          const pr = prog.get(q.id) ?? { lastD: dFoe, t: simTicks * dt, gained: 0, windows: 0 };
+          if (simTicks * dt - pr.t >= 5) { pr.gained += pr.lastD - dFoe; pr.windows++; pr.lastD = dFoe; pr.t = simTicks * dt; }
+          prog.set(q.id, pr);
+        }
+      }
       for (const p of room.players.getAllPlayers().values()) {
         if (p.isDead) {
           // Corpses can't press or carry — but the kill spot still feeds
@@ -125,6 +193,14 @@ describe('scenario: fast-forward soak throughput', () => {
         } else if (p.team === 'bravo') {
           const d = Math.hypot(p.position.x - alphaStand.x, p.position.z - alphaStand.z);
           if (d < press.bravo) { press.bravo = d; pressY.bravo = p.position.y - standY; }
+        }
+        // Closest approach to the LIVE enemy flag (3D, pickup test is 2.2m):
+        // separates "died in the kill zone" from "never routed to the flag".
+        const foeFlag = p.team === 'alpha' ? room.flags!.flags.get('bravo') : room.flags!.flags.get('alpha');
+        if (foeFlag && p.team) {
+          const fd = Math.hypot(p.position.x - foeFlag.pos.x, p.position.y - foeFlag.pos.y, p.position.z - foeFlag.pos.z);
+          const k = p.team === 'alpha' ? 'alpha' : 'bravo';
+          if (fd < flagNear[k]) flagNear[k] = fd;
         }
         wasDead.set(p.id, false);
         if (p.team) {
@@ -267,12 +343,26 @@ describe('scenario: fast-forward soak throughput', () => {
         `top ${eRows.sort((a, b) => b.avg - a.avg).slice(0, 3).map((r) => `${fmtId(r.id)} ${r.avg.toFixed(0)}/${r.max.toFixed(0)}`).join(' ')}`
       : 'no samples';
     // KPI: machine-readable single line for A/B diffing runs.
+    const progRows = { alpha: { sum: 0, cnt: 0 }, bravo: { sum: 0, cnt: 0 } };
+    for (const [id, pr] of prog) {
+      if (!pr.windows) continue;
+      const t = room.players.getPlayer(id)?.team;
+      const row = t === 'alpha' ? progRows.alpha : t === 'bravo' ? progRows.bravo : null;
+      if (row) { row.sum += pr.gained / pr.windows; row.cnt++; }
+    }
     console.log(
       `  kpi,score_alpha=${room.scores.alpha ?? 0},score_bravo=${room.scores.bravo ?? 0}` +
       `,kills_a=${killsByTeam.alpha ?? 0},kills_b=${killsByTeam.bravo ?? 0}` +
       `,press_a=${Number.isFinite(press.alpha) ? press.alpha.toFixed(1) : '-'},press_b=${Number.isFinite(press.bravo) ? press.bravo.toFixed(1) : '-'}` +
+      `,flagA=${Number.isFinite(flagNear.alpha) ? flagNear.alpha.toFixed(1) : '-'},flagB=${Number.isFinite(flagNear.bravo) ? flagNear.bravo.toFixed(1) : '-'}` +
       `,grabs_a_flag=${grabsBy.alpha ?? 0},grabs_b_flag=${grabsBy.bravo ?? 0},caps=${caps.length}` +
       `,e_med=${medOf(eRows.map((r) => r.avg)).toFixed(0)}` +
+      `,hunt=${huntN ? Math.round((huntSum / huntN) * 100) : 0}%,cloak=${huntN ? Math.round((cloakSum / huntN) * 100) : 0}%` +
+      `,foeM=${huntN ? (nearFoeSum / huntN).toFixed(0) : '-'},inSight=${huntN ? Math.round((inSightSum / huntN) * 100) : 0}%` +
+      `,goalA=${goalOut.nA ? (goalOut.alpha / goalOut.nA).toFixed(0) : '-'},goalB=${goalOut.nB ? (goalOut.bravo / goalOut.nB).toFixed(0) : '-'}` +
+      `,progA=${progRows.alpha.cnt ? (progRows.alpha.sum / progRows.alpha.cnt).toFixed(1) : '-'},progB=${progRows.bravo.cnt ? (progRows.bravo.sum / progRows.bravo.cnt).toFixed(1) : '-'}` +
+      `,flips=${flips.size ? ([...flips.values()].reduce((n, f) => n + f.n, 0) / flips.size).toFixed(1) : '-'}` +
+      `,align=${align.n ? (align.sum / align.n).toFixed(2) : '-'}` +
       (caps.length ? `,fastest_s=${(fastest.holdMs / 1000).toFixed(1)}` : ''),
     );
     console.log(`  roles: ${roleLine}`);
@@ -298,12 +388,16 @@ describe('scenario: fast-forward soak throughput', () => {
       .sort((a, b) => b[1].kills - a[1].kills)
       .map(([w, r]) => {
         const name = w.startsWith('w') && WeaponType[+w.slice(1)] !== undefined ? WeaponType[+w.slice(1)] : w;
-        // Kills per engaged second: total duel ms this source spent in
-        // fights it finished. K/hit misleads — spam weapons rack hits
-        // in a stream while a mortar spends them one duel at a time.
+        // Kills per trigger-uptime second: shots × the weapon's own
+        // fire period — fair across weapon switching since every pull
+        // costs its own cadence, unlike duel-time which credits the
+        // finisher for duels other weapons started.
+        const iv = w.startsWith('w') ? WEAPON_FIRE_INTERVAL_S[+w.slice(1) as WeaponType] : undefined;
+        const trigS = iv !== undefined && r.shots > 0 ? r.shots * iv : 0;
         const t = wttk[w];
-        const kps = t && t.totalMs > 0 ? ` ${(r.kills / (t.totalMs / 1000)).toFixed(2)}K/s` : '';
-        return `${name} ${r.kills}K/${r.hits}hits/${r.damage.toFixed(0)}dmg${kps}`;
+        const duelKps = t && t.totalMs > 0 ? ` ${(r.kills / (t.totalMs / 1000)).toFixed(2)}K/s` : '';
+        const trigKps = trigS > 0 ? ` ${(r.kills / trigS).toFixed(2)}K/tr` : '';
+        return `${name} ${r.kills}K/${r.hits}hits/${r.shots}shots/${r.damage.toFixed(0)}dmg${trigKps}${duelKps}`;
       })
       .join('  ');
     console.log(`  weapons: ${wline || 'no credited kills'}`);

@@ -47,6 +47,8 @@ export interface BotEnemy {
 }
 
 export interface BrainCtx {
+  /** The bot's own id — also the FPS_TRACE selector for soak debugging. */
+  id?: string;
   /** The bot's own position. */
   pos: BotVec;
   /** The bot's own velocity — ski policy keys off speed, jet off climbs. */
@@ -71,6 +73,11 @@ export interface BrainCtx {
    *  info (the flag broadcasts the carrier — Tribes' command circuit),
    *  so engaging the thief is legal without LOS. */
   thief?: BotEnemy | null;
+  /** Squad spot-report: enemies a teammate had eyes on recently —
+   *  stale-decayed snapshots, same legality as the thief beacon. Lets
+   *  a bot commit to a contact it never personally saw, the way a
+   *  squad's callouts work. */
+  spots?: BotEnemy[];
   /** Ground pickup to chase (nugget) — outranks wander. */
   pickup?: BotVec | null;
   /** Terrain height at x,z — wander waypoints clamp to ground. */
@@ -200,6 +207,8 @@ export class BotBrain {
     detour: null,
     detourT: 0,
     progressPos: { x: 0, y: 0, z: 0 },
+    progressGoalD: Infinity,
+    goalWinT: 0,
     progressT: 0,
     goal: { x: 0, y: 0, z: 0 }, // kept in sync with goalS.goal each think
   };
@@ -436,13 +445,22 @@ export class BotBrain {
     this.goalS.revengeT -= dt;
 
     // --- choose the step destination ---
-    let dest = pickDest(this, dt, ctx, pos, fearing, hero);
+    const d0 = pickDest(this, dt, ctx, pos, fearing, hero);
+    let dest = d0;
 
     // --- line planning: commit to a terrain-sampled landing spot ---
-    dest = this.lines.plan(dt, ctx, pos, dest);
+    const d1 = this.lines.plan(dt, ctx, pos, dest);
+    dest = d1;
 
     // --- context steering: senses score every direction ---
-    dest = this.steerer.steer(dt, ctx, pos, dest);
+    const d2 = this.steerer.steer(dt, ctx, pos, dest);
+    dest = d2;
+    // Env-gated decision-chain trace: which stage rewrites the step.
+    // FPS_TRACE=<playerId> — soaks print stage deltas for one bot.
+    if (ctx.id && process.env.FPS_TRACE && ctx.id.includes(process.env.FPS_TRACE)) {
+      const f = (v: BotVec) => `${v.x.toFixed(0)},${v.z.toFixed(0)}`;
+      console.log(`trace t=${(now / 1000).toFixed(1)} pos=${f(pos)} goal=${f(ctx.objective ?? pos)} d0=${f(d0)} d1=${f(d1)} d2=${f(d2)}`);
+    }
 
     dest = stuckBreak(this.escapeS, dt, ctx, pos, dest);
 

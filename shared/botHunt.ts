@@ -35,6 +35,14 @@ const CREATURE_URGENT_M = 14;
 const ORBIT_FAR = 22;    // orbit the target inside this ring distance
 const ORBIT_TOO_CLOSE = 12;
 export const STALE_MS = 1200;   // last-seen older than this = stop firing blind
+// Pursuit: breaking LOS shouldn't instantly reset to the goal ladder —
+// a human chases a leaker's last heading for a few seconds. Capped by
+// both window and reach so a stale ghost never forms a cross-map hunt.
+const PURSUE_MS = 3500;
+/** How far the eye line honestly reaches on open terrain — the
+ *  acquisition bound, not a firing range. */
+const SIGHT_M = 160;
+const PURSUE_M = 150;
 
 const dist3 = (a: BotVec, b: BotVec) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
 const distSq = (a: BotVec, b: BotVec) => (a.x - b.x) ** 2 + (a.z - b.z) ** 2;
@@ -122,8 +130,12 @@ export function pickHunt(st: HuntState, ctx: BrainCtx, pos: BotVec, now: number,
   const { hero, fearing } = mood;
   // Armament reach widens acquisition for siege weapons — a mortar heavy
   // engages at ~95m where a chaingun medium still holds the duel band.
+  // A Tribes eye line reaches across a midfield: bots acquire contacts
+  // far past their duel band and close to it, like a human spotting a
+  // skier two hills out. Commitment stays in pickDest — seeing isn't
+  // chasing.
   const base = Math.max(BOT_FIRE_RANGE, ctx.engageRange ?? 0);
-  const range = hero ? base * 1.4 : base;
+  const range = Math.max(hero ? base * 1.4 : base, SIGHT_M);
   const beastRange = ctx.huntCreatures ? CREATURE_FIRE_RANGE : CREATURE_DEFENSE_M;
   const { player, beast: bestBeast, playerD: bestD, beastD: bestBeastD } = scanVisible(ctx, pos, range, beastRange);
   // In economy rooms, only an actual nearby player threat outranks
@@ -136,7 +148,21 @@ export function pickHunt(st: HuntState, ctx: BrainCtx, pos: BotVec, now: number,
   // close enough to matter — farther out the objective goal still
   // walks it toward the carrier without it firing blind.
   const thief = best ? null : thiefBeacon(ctx, pos);
-  const next = best ?? thief;
+  // Squad spot-report: a teammate's callout — commit to the nearest
+  // fresh spot in reach, the same "beacon without LOS" the thief
+  // already gets. Eye-line contacts outrank it either way.
+  const spotted = best || thief ? null : nearestSpot(ctx, pos);
+  const next = best ?? thief ?? spotted;
+  // Nothing in the eye line but the last contact is still fresh: chase
+  // its last-seen spot for a few seconds — the ghost carries lastSeen,
+  // not the live pos, so it stays as legal as a human's memory. Dead
+  // targets never ghost (their corpse stops moving but the chase
+  // shouldn't follow it to the respawn).
+  const ghost = !next && st.hunt?.alive
+    && now - st.lastSeenAt < PURSUE_MS && dist3(pos, st.lastSeen) < PURSUE_M
+    ? { ...st.hunt, pos: { ...st.lastSeen }, vel: { ...st.lastSeenVel } }
+    : null;
+  st.hunt = next ?? ghost;
   st.huntTick++;
   // New contact starts the reaction clock — a human doesn't shoot the
   // instant a target enters the eye line. Stamped per id so losing the
@@ -145,8 +171,7 @@ export function pickHunt(st: HuntState, ctx: BrainCtx, pos: BotVec, now: number,
     st.acquiredAt.set(next.id, st.huntTick);
     if (st.acquiredAt.size > 6) st.acquiredAt.delete(st.acquiredAt.keys().next().value!);
   }
-  st.hunt = next;
-  const seen = best ?? thief;
+  const seen = best ?? thief ?? spotted;
   if (seen) {
     st.lastSeen = { ...seen.pos };
     st.lastSeenVel = { ...seen.vel };
@@ -174,6 +199,18 @@ function thiefBeacon(ctx: BrainCtx, pos: BotVec): BotEnemy | null {
   if (!t || !t.alive) return null;
   if (dist3(pos, t.pos) >= 80 && !losClear(ctx, pos, t.pos)) return null;
   return t;
+}
+
+/** Nearest squad-spotted enemy inside committing reach — callouts
+ *  don't summon cross-map hunts, just the leaker two hills over. */
+function nearestSpot(ctx: BrainCtx, pos: BotVec): BotEnemy | null {
+  let best: BotEnemy | null = null, bd = PURSUE_M;
+  for (const e of ctx.spots ?? []) {
+    if (!e.alive) continue;
+    const d = dist3(pos, e.pos);
+    if (d < bd) { bd = d; best = e; }
+  }
+  return best;
 }
 
 /** Volley pick: burst cadence + sloppy ballistic lead at lastSeen. */

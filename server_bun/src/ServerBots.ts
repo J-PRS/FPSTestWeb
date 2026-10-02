@@ -110,6 +110,16 @@ export class ServerBots {
     return this.brains.size;
   }
 
+  /** Engagement-density probe — share of live brains currently tracking
+   *  a hunt target. The soak report prints the mean as `hunt=`: low
+   *  means bots spend their ticks traveling, not dueling (the real
+   *  kills/min bottleneck detector). */
+  huntUptime(): number {
+    let n = 0;
+    for (const b of this.brains.values()) if (b.h.hunt) n++;
+    return this.brains.size ? n / this.brains.size : 0;
+  }
+
   /** Prune a bot that was fully removed (room teardown / test hooks).
    *  EVERY keyed structure dies here — retire and teardown both funnel
    *  through, so a bot id must not outlive its roster entry in any map. */

@@ -59,12 +59,13 @@ describe('pickHunt', () => {
     expect(st.hunt?.id).toBe('b:biter');
   });
 
-  it('engageRange widens acquisition — siege reach hunts at 90m', () => {
+  it('sight line acquires at Tribes range — 90m hunts, beyond sight does not', () => {
     const st = newHuntState(P);
     pickHunt(st, flat({ enemies: [foe(90, 0)] }), P, 0, mood, () => {});
-    expect(st.hunt).toBeNull(); // beyond stock range
-    pickHunt(st, flat({ enemies: [foe(90, 0)], engageRange: 95 }), P, 0, mood, () => {});
-    expect(st.hunt?.id).toBe('p:1');
+    expect(st.hunt?.id).toBe('p:1'); // inside the 160m sight band
+    const st2 = newHuntState(P);
+    pickHunt(st2, flat({ enemies: [foe(200, 0)] }), P, 0, mood, () => {});
+    expect(st2.hunt).toBeNull(); // past the eye line
   });
 
   it('nothing visible → the goal ladder runs instead', () => {

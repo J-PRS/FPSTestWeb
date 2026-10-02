@@ -39,7 +39,7 @@ export class ServerBotSenses {
    *  Nothing dispatches "a crowd" — the chattiness is emergent. */
   private pendingNotice: { kind: ChatterKind; actorId: string; actorTeam?: string; stamp: number } | null = null;
   private noticed = new Map<string, number>();
-  private routeHold = new Map<string, { stand: BotVec; pos: BotVec }>();
+  private routeHold = new Map<string, { stand: BotVec; pos: BotVec; at: number }>();
 
   /** Bot left the room — drop its notice receipt so the map can't grow
    *  one entry per retired bot for the room's life. */
@@ -260,12 +260,14 @@ export class ServerBotSenses {
       // stand at 90m beelines the bot into the rim wall it probed its
       // way around — presses end 8m below the flag at the wall's foot.
       if (dStand > (capper ? 25 : 20)) {
-        // Route hysteresis: the probe re-scores every think from live
-        // foe positions, and without commitment the "best" entry flips
-        // back and forth — the bot zigzags, never builds ski momentum,
-        // and the trail reads as crawling, not dying. The incumbent
-        // entry gets a margin bonus so it only loses to a clearly
-        // better route.
+        // Re-scored EVERY think — the route stays live to foe movement —
+        // but switching is expensive: the incumbent only loses when a
+        // challenger beats it by a decisive gap, not when scores jitter
+        // a few meters. 12 was too thin (foe toll + detour swings ~50+),
+        // so goals teleported 100-300m sideways every second and every
+        // bot's net progress read zero. The gap scales with the stand
+        // distance: far out, a re-route is cheap and the bar is lower;
+        // close in, flipping entries costs a mountain.
         const inc = this.routeHold.get(p.id);
         const incLive = inc && dist3(inc.stand, enemyStand) < 1 ? inc : null;
         const scoreEntry = (ex: number, ey: number, ez: number): number => {
@@ -300,10 +302,6 @@ export class ServerBotSenses {
           return score;
         };
         let best = enemyStand, bestScore = -Infinity;
-        if (incLive) {
-          bestScore = scoreEntry(incLive.pos.x, incLive.pos.y, incLive.pos.z) + 12;
-          best = incLive.pos;
-        }
         for (let a = 0; a < 24; a++) {
           // Three radii: close entries are cheap, a closed rim wall
           // only breaks further out — a plateau stand needs the far
@@ -316,8 +314,20 @@ export class ServerBotSenses {
           const score = scoreEntry(ex, ey, ez);
           if (score > bestScore) { bestScore = score; best = { x: ex, y: ey, z: ez }; }
         }
+        // Hysteresis verdict: the incumbent keeps the route unless the
+        // fresh best beats it by a margin that actually matters at this
+        // distance. The flip threshold scales with the leg remaining —
+        // a re-route 400m out costs little, one 60m from the stand is
+        // the difference between arriving and orbit death.
+        if (incLive) {
+          const incScore = scoreEntry(incLive.pos.x, incLive.pos.y, incLive.pos.z);
+          const margin = Math.min(120, 25 + dStand * 0.2);
+          if (incScore > bestScore - margin) { best = incLive.pos; }
+          else this.routeHold.set(p.id, { stand: enemyStand, pos: best, at: simNow() });
+        } else {
+          this.routeHold.set(p.id, { stand: enemyStand, pos: best, at: simNow() });
+        }
         goalPos = best;
-        this.routeHold.set(p.id, { stand: enemyStand, pos: best });
       }
     }
     // Cloak intent only for the infiltrator: the drain is speed-scaled,
@@ -368,7 +378,8 @@ export class ServerBotSenses {
     // Competence-biased draw: the weapon pick and the aim error read
     // the same matrix, so a phenom both reaches for its gun and lands it.
     const bias = skill ? (t: number) => aimSkillFor(skill, t, 0) : undefined;
-    return {
+    const ctx: BrainCtx = {
+      id: p.id,
       pos: p.position,
       vel: p.velocity,
       enemies: this.enemiesOf(p),
@@ -428,5 +439,36 @@ export class ServerBotSenses {
       repair: this.repairJob(p),
       now,
     };
+    // Squad spot-report: this bot's own eye line feeds the shared board
+    // before its brain reads it — a spot is as legal as the thief beacon
+    // (you only ever report what you can see; staleness decays it).
+    this.updateSpots(ctx, p);
+    ctx.spots = this.spotsFor(p.team, now);
+    return ctx;
+  }
+
+  /** Shared spotting board — per enemy: the last team that had real
+   *  eyes on it, where it was, and when. A Tribes sightline is ~300m,
+   *  not the 45m duel band: within SPOT_M a bot spots what it sees for
+   *  the whole squad, and the report decays in a few seconds. */
+  private spots = new Map<string, { e: BotEnemy; team?: string; at: number }>();
+  private static readonly SPOT_M = 280;
+  private static readonly SPOT_MS = 5000;
+
+  private updateSpots(ctx: BrainCtx, p: { team?: string; position: Vec3 }): void {
+    for (const e of ctx.enemies) {
+      if (!e.alive || e.id.startsWith('b:') || dist3(p.position, e.pos) >= ServerBotSenses.SPOT_M) continue;
+      if (!losClear(ctx, p.position, e.pos)) continue;
+      this.spots.set(e.id, { e, team: p.team, at: ctx.now });
+    }
+  }
+
+  private spotsFor(me: string | undefined, now: number): BotEnemy[] {
+    const out: BotEnemy[] = [];
+    for (const [id, s] of this.spots) {
+      if (now - s.at > ServerBotSenses.SPOT_MS) { this.spots.delete(id); continue; }
+      if (s.team === me && s.e.alive) out.push(s.e);
+    }
+    return out;
   }
 }
