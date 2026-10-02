@@ -66,7 +66,7 @@ export class ServerBotSenses {
   // The call has to outlive the flood's transit: wave members tasked
   // from midfield start ~180m out — an 8s window dies ~5s before they
   // land, which reads as a call that summons nobody.
-  private static readonly PUSH_ETA_S = 14;
+  private static readonly PUSH_ETA_S = 30;
   private static readonly PUSH_HOLD_MS = 14000;
   /** Carrier wait-circuit waypoint, re-rolled on a TTL so the orbit
    *  wanders its own mini-route instead of parking. */
