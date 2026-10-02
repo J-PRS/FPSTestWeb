@@ -318,6 +318,13 @@ describe('scenario: warp soak throughput', () => {
     // circular trap (moving, never advancing).
     const align = { sum: 0, n: 0 };
     const wasDead = new Map<string, boolean>();
+    // Return-leg autopsy: each grab opens a leg keyed by the STOLEN flag
+    // team; while it stays carried we track how close to the carrier's
+    // OWN stand he got. Resolution reads capLog ground truth — caps vs
+    // drops vs returns split "dies in transit" from "flag gets returned
+    // under him" from "he actually converts".
+    const carryLeg = new Map<string, { id: string; d0: number; minD: number; t: number }>();
+    const legOut = { cap: 0, died: [] as number[], ret: [] as number[], drop: [] as number[] };
     while (performance.now() - t0 < wallBudgetMs) {
       // Carrier truth BEFORE the step — a carrier killed inside the
       // batch has already dropped by the time kill msgs drain, so the
@@ -325,6 +332,39 @@ describe('scenario: warp soak throughput', () => {
       carriers.clear();
       for (const f of room.flags?.flags.values() ?? []) {
         if (f.carrier) carriers.set(f.team, f.carrier);
+      }
+      // Return-leg sampling — runs BEFORE the step (same snapshot),
+      // resolutions flush after it via the flag's new state.
+      for (const f of room.flags?.flags.values() ?? []) {
+        const leg = carryLeg.get(f.team);
+        const cid = carriers.get(f.team);
+        if (cid && !leg) {
+          const home = room.flags?.flags.get(f.team === 'alpha' ? 'bravo' : 'alpha')?.home;
+          const cp = room.players.getPlayer(cid);
+          if (home && cp) {
+            const d0 = Math.hypot(cp.position.x - home.x, cp.position.z - home.z);
+            carryLeg.set(f.team, { id: cid, d0: Math.max(1, d0), minD: d0, t: simTicks * dt });
+          }
+        } else if (cid && leg) {
+          const home = room.flags?.flags.get(f.team === 'alpha' ? 'bravo' : 'alpha')?.home;
+          const cp = room.players.getPlayer(cid);
+          if (home && cp) {
+            const d = Math.hypot(cp.position.x - home.x, cp.position.z - home.z);
+            if (d < leg.minD) leg.minD = d;
+          }
+        } else if (!cid && leg) {
+          // Carry ended: cap if capLog credits this carrier's team,
+          // else dead-vs-flag-state split (dropped = killed in transit,
+          // home without cap = returned under him... flag can't be home
+          // unless capped or returned — carrier team != flag team).
+          const frac = 1 - leg.minD / leg.d0;
+          const capped = (room.flags?.capLog ?? []).some((c) => c.by === leg.id && c.capAt >= leg.t * 1000 - 1);
+          const carrierDead = room.players.getPlayer(leg.id)?.isDead ?? true;
+          if (capped) legOut.cap++;
+          else if (carrierDead || f.state === 'dropped') legOut.died.push(frac);
+          else legOut.ret.push(frac);
+          carryLeg.delete(f.team);
+        }
       }
       // Advance the room's clock first, then step every sim — the
       // order mirrors a live tick (timers lapse, then sims move).
@@ -802,7 +842,7 @@ describe('scenario: warp soak throughput', () => {
     const row = (label: string, s: string) => console.log(`  ${label.padEnd(9)} ${s}`);
     console.log('');
     row('match', `alpha ${room.scores.alpha ?? 0} - bravo ${room.scores.bravo ?? 0}   kills ${killsByTeam.alpha ?? 0}-${killsByTeam.bravo ?? 0}   pkEv ${pkMsgs.length}   selfK ${selfKills} (${selfLine})`);
-    row('flags', `grabs ${grabsBy.alpha ?? 0}-${grabsBy.bravo ?? 0}   caps ${caps.length}${caps.length ? ` (fastest ${(fastest.holdMs / 1000).toFixed(1)}s)` : ''}   press ${Number.isFinite(press.alpha) ? press.alpha.toFixed(0) : '-'}m/${Number.isFinite(press.bravo) ? press.bravo.toFixed(0) : '-'}m`);
+    row('flags', `grabs ${grabsBy.alpha ?? 0}-${grabsBy.bravo ?? 0}   caps ${caps.length}${caps.length ? ` (fastest ${(fastest.holdMs / 1000).toFixed(1)}s)` : ''}   press ${Number.isFinite(press.alpha) ? press.alpha.toFixed(0) : '-'}m/${Number.isFinite(press.bravo) ? press.bravo.toFixed(0) : '-'}m   legs ${legOut.cap + legOut.died.length + legOut.ret.length} -> cap${legOut.cap} died${legOut.died.length}@${legOut.died.length ? (medOf(legOut.died) * 100).toFixed(0) : '-'}% ret${legOut.ret.length}@${legOut.ret.length ? (medOf(legOut.ret) * 100).toFixed(0) : '-'}%`);
     row('approach', `closest: any ${Number.isFinite(flagNear.alpha) ? flagNear.alpha.toFixed(0) : '-'}m(+${flagGap.alpha[1].toFixed(0)}y @${flagGap.alpha[2].toFixed(0)}mps) / ${Number.isFinite(flagNear.bravo) ? flagNear.bravo.toFixed(0) : '-'}m(+${flagGap.bravo[1].toFixed(0)}y @${flagGap.bravo[2].toFixed(0)}mps)   cappers ${Number.isFinite(capNear.alpha) ? capNear.alpha.toFixed(0) : '-'}m/${Number.isFinite(capNear.bravo) ? capNear.bravo.toFixed(0) : '-'}m   flag deaths ${fdie('alpha')}/${fdie('bravo')}`);
     row('ring', `died inside ${ringSurv.died.length} (${ringSurv.died.length ? (ringSurv.died.reduce((s, v) => s + v, 0) / ringSurv.died.length).toFixed(1) : '-'}s avg)   left ${ringSurv.left.length}   capper pushes ${capStop.entries} -> ${capStop.grabs} grabs, ${capStop.died} died, ${capStop.left} repelled${capStop.dSpd.length ? ` (lost ${medOf(capStop.dSpd).toFixed(1)}mps ${medOf(capStop.dHp).toFixed(0)}hp)` : ''} in@${medOf(capStop.eSpd).toFixed(1)}mps ${medOf(capStop.tIn).toFixed(1)}s-inside mdD@${medOf(capStop.mdD).toFixed(0)}m mdL@${medOf(capStop.mdL).toFixed(0)}m sup@${medOf(capStop.sup).toFixed(0)} out:${[...capStop.fSt].map(([k, v]) => k + 'x' + v).join(',')} wave:${waveN}@d${medOf(waveD).toFixed(0)}m near${waveN ? Math.round((waveNear / waveN) * 100) : 0}% dead${waveDead} mis${waveMis} nof${waveNoFlag} spd@${waveSpd.length ? Math.round(waveSpd.sort((a, b) => a - b)[Math.floor(waveSpd.length / 2)]!) : 0} foe${waveFoe}/free${waveFree}`);
     row('cappers', `route-to-stand ${capRoute.ticks ? Math.round((capRoute.route / capRoute.ticks) * 100) : 0}% · in graze range ${capRoute.ticks ? Math.round((capRoute.on / capRoute.ticks) * 100) : 0}% of ticks   push calls ${room.bots?.debugPushCalls('alpha') ?? 0}/${room.bots?.debugPushCalls('bravo') ?? 0}   time at <160m a${(capRoute.bandsA[0] ?? 0) + (capRoute.bandsA[1] ?? 0) + (capRoute.bandsA[2] ?? 0)}/b${(capRoute.bandsB[0] ?? 0) + (capRoute.bandsB[1] ?? 0) + (capRoute.bandsB[2] ?? 0)} ticks spd<25/80/160/300+ ${capRoute.spd.map((s) => (s.length ? medOf(s).toFixed(0) : '-')).join('/')}mps stalls ${capStalls.length}   capper kills ${capKills.near + capKills.far} (${capKills.near} at stand)   deaths@${capDeaths.length ? medOf(capDeaths.map((c) => c.d)).toFixed(0) : '-'}m@${capDeaths.length ? medOf(capDeaths.map((c) => c.spd)).toFixed(0) : '-'}mps by ${[...capDeaths.reduce((m, c) => m.set(c.by, (m.get(c.by) ?? 0) + 1), new Map<string, number>()).entries()].sort((a, b) => b[1] - a[1]).map(([r, n]) => `${r}:${n}`).join(' ')}`);
