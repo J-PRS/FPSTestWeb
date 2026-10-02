@@ -56,7 +56,11 @@ export function pickDest(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, fe
       // low-percentage run beats a permanently parked capper.
       const gd = dist3(pos, ctx.objective);
       if (gd > 40 && gd < 160) {
-        const wave = (ctx.allies ?? []).some((a) => dist3(a, ctx.objective!) < 70);
+        // Mutual-hold bug: the capper waits for an ally inside 70m while
+        // marshalled members hold the same 110m ring — both sides wait
+        // on each other until stageT expires and he goes alone. A member
+        // staging at ~110m IS converging — count the ring as gathered.
+        const wave = (ctx.allies ?? []).some((a) => dist3(a, ctx.objective!) < 115);
         const wingman = (ctx.allies ?? []).some((a) => dist3(a, pos) < 45);
         if (!wave && !wingman && b.stageT < 10) {
           b.stageT += dt;
