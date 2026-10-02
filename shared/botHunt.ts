@@ -236,7 +236,7 @@ export function pickFire(st: HuntState, dt: number, ctx: BrainCtx, pos: BotVec, 
   // speed (a jinking enemy is hard to lead), raw distance, and the
   // shell's time in flight — a 1.3s mortar lob is a much bigger
   // prediction than a 0.6s disc at the same range.
-  let err = 0.5 + Math.hypot(st.lastSeenVel.x, st.lastSeenVel.y, st.lastSeenVel.z) * 0.1 + d * 0.02 + flight * 1.2;
+  let err = 0.5 + Math.hypot(st.lastSeenVel.x, st.lastSeenVel.y, st.lastSeenVel.z) * 0.06 + d * 0.02 + flight * 1.2;
   err *= hero ? 0.3 : fearing ? 1.8 : 1;
   err *= st.jitter;
   // The skill matrix: hosts that know which weapon will actually fire
