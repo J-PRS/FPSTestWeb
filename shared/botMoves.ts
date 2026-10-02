@@ -71,12 +71,14 @@ export class BotMoves {
     // Jet when the way ahead climbs faster than running covers — or the
     // hunt target is clearly airborne and pursuit needs altitude.
     const uphill = rise > 2;
-    // Catch breath mid-face: tank dry on a steep uphill with the goal
-    // still above → stand the wall (park releases the walk key so ground
+    // Catch breath mid-face: tank dry on a steep uphill → stand the wall
+    // (park releases the walk key so ground
     // friction fights the slide instead of pushing downhill) until the
     // tank refills, then burn again. Each cycle banks net altitude.
-    const tgtAbove = Math.max(dest.y, ctx.objective?.y ?? -Infinity) - pos.y > 8;
-    if (!ctx.posted && ctx.energy !== undefined && !airborne && rise > 3 && tgtAbove) {
+    // Gate on the face, not the target: a moat wall sits between the bot
+    // and a goal that's downhill of the crest — altitude-of-goal would
+    // never arm the perch.
+    if (!ctx.posted && ctx.energy !== undefined && !airborne && rise > 3) {
       if (this.breath) this.breath = ctx.energy < 38;
       else this.breath = ctx.energy < 12;
       if (this.breath) { this.jetHold = 0; this.jetOut = false; return { ski: false, jet: false, jump: false, park: true }; }
