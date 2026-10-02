@@ -16,6 +16,7 @@ export type BotRole =
   | 'defense'     // generic home-side defender
   | 'technician'  // deploy kit at home (server-side role — needs deploys)
   | 'infiltrator' // slips in cloaked (server-side role — needs the intent bit)
+  | 'bombardier'  // stand-clearer — shells the enemy stand from mortar range
   ;
 
 export interface FlagSituation {
@@ -44,22 +45,23 @@ export const ROLE_PRIORITY: { role: BotRole; want: number; minSquad: number }[] 
   { role: 'ldefense', want: 1, minSquad: 4 },
   { role: 'hof', want: 1, minSquad: 5 },
   { role: 'technician', want: 1, minSquad: 6 },
+  { role: 'bombardier', want: 1, minSquad: 6 },
   { role: 'infiltrator', want: 1, minSquad: 7 },
 ];
 
 /** Roles a wire-side bot can actually play — no deploy kit and no
  *  cloak intent on that runtime, so technician/infiltrator stay
  *  server-side. */
-export const WIRE_ROLES: BotRole[] = ['capper', 'ldefense', 'hof', 'defense', 'offense'];
+export const WIRE_ROLES: BotRole[] = ['capper', 'ldefense', 'hof', 'defense', 'offense', 'bombardier'];
 
 /** Kit → role fitness. A guideline, not a lock: offense/defense accept
  *  every class (heavy offense and light harassers are both classic), the
  *  runners (capper/infiltrator) pull light, and the planted specialists
  *  (hof/technician) pull heavy hard — HoF IS "heavy on flag". */
 export const CLASS_FITNESS: Record<string, Record<BotRole, number>> = {
-  light:   { capper: 3,   infiltrator: 3,   ldefense: 2,   offense: 1.5, defense: 1,   technician: 0.4, hof: 0.2 },
-  medium:  { offense: 3,  defense: 2.5,     ldefense: 2,   capper: 1.2,  hof: 1,       infiltrator: 1,  technician: 1 },
-  heavy:   { hof: 3,      technician: 2.5,  defense: 2,    offense: 2,   ldefense: 1,  capper: 0.4,     infiltrator: 0.4 },
+  light:   { capper: 3,   infiltrator: 3,   ldefense: 2,   offense: 1.5, defense: 1,   technician: 0.4, hof: 0.2, bombardier: 0.3 },
+  medium:  { offense: 3,  defense: 2.5,     ldefense: 2,   capper: 1.2,  hof: 1,       infiltrator: 1,  technician: 1,  bombardier: 1.5 },
+  heavy:   { hof: 3,      technician: 2.5,  defense: 2,    offense: 2,   ldefense: 1,  capper: 0.4,     infiltrator: 0.4, bombardier: 3 },
 };
 const fit = (cls: string | undefined, role: BotRole): number =>
   (cls ? CLASS_FITNESS[cls]?.[role] : undefined) ?? 1.5;
@@ -113,6 +115,7 @@ export function roleObjective(role: string, s: FlagSituation, commit = 1): { x: 
     case 'hof': return hofGoal(s, commit);
     case 'ldefense': case 'technician': case 'defense': return defenseGoal(s);
     case 'capper': return capperGoal(s);
+    case 'bombardier': return bombardierGoal(s);
     case 'infiltrator': return infiltratorGoal(s);
     default: return offenseGoal(s);
   }
@@ -153,6 +156,31 @@ function capperGoal(s: FlagSituation) {
   if (s.escort) return s.escort;
   if (s.dropped) return s.dropped;
   if (s.enemyStand) return s.enemyStand;
+  return s.home;
+}
+
+/** Bombardier: the stand-clearer — holds a shelling perch ~90m off the
+ *  enemy stand on the friendly side (mortar/MRV standoff), so the capper
+ *  arrives at a softened stand instead of a fortified one. Not on the
+ *  flag — parking ON the stand is the capper's death, not the
+ *  bombardier's job. Falls back to escort/home when there's no stand
+ *  to shell. */
+function bombardierGoal(s: FlagSituation) {
+  if (s.enemyStand) {
+    const dx = s.home.x - s.enemyStand.x, dz = s.home.z - s.enemyStand.z;
+    const d = Math.hypot(dx, dz);
+    if (d > 1) {
+      const standoff = Math.min(90, d * 0.35);
+      return {
+        x: s.enemyStand.x + (dx / d) * standoff,
+        y: s.enemyStand.y,
+        z: s.enemyStand.z + (dz / d) * standoff,
+      };
+    }
+    return s.enemyStand;
+  }
+  if (s.escort) return s.escort;
+  if (s.dropped) return s.dropped;
   return s.home;
 }
 
