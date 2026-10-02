@@ -448,6 +448,7 @@ export class ServerBotSenses {
         // A stable per-bot preferred bearing tilts the pick toward a
         // lane without vetoing a clearly-better route.
         const pref = this.routePref(p.id);
+        const prefW = process.env.FPS_NOPREF ? 0 : 18;
         let best = enemyStand, bestScore = -Infinity;
         for (let a = 0; a < 24; a++) {
           // Three radii: close entries are cheap, a closed rim wall
@@ -459,7 +460,7 @@ export class ServerBotSenses {
           const ex = enemyStand.x + Math.cos(ang) * ring;
           const ez = enemyStand.z + Math.sin(ang) * ring;
           const ey = hmHeight(this.field, ex, ez);
-          const score = scoreEntry(ex, ey, ez) + Math.cos(ang - pref) * 18;
+          const score = scoreEntry(ex, ey, ez) + Math.cos(ang - pref) * prefW;
           if (score > bestScore) { bestScore = score; best = { x: ex, y: ey, z: ez }; }
         }
         // Hysteresis verdict: the incumbent keeps the route unless the
