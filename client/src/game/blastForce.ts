@@ -180,7 +180,7 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
           // A feet-shot launch pays up to SELF_SPLASH_MAX — same rule
           // the server charges bots, so the disc-jump is a real spend
           // for humans too. The perk still shaves it.
-          : Math.min(dpx <= 3 ? SELF_SPLASH_MAX : aoeDamageOf(aoeDamage, dpx, radius), SELF_SPLASH_MAX) * player.mods.selfDamage;
+          : Math.min(aoeDamageOf(aoeDamage, dpx, radius) + SELF_SPLASH_MAX * (1 - dpx / radius), SELF_SPLASH_MAX) * player.mods.selfDamage;
       if (selfDmg >= 1 && !player.isDead) {
         // Shield soaks self-splash too — the server holds health steady so
         // the only thing to report is the energy burn + its flash.
@@ -192,7 +192,10 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
           player.lastDamageSource = enemyBlast
             ? `${a.shooterId!.replace('bot:', '')} blast`
             : 'cooked by your own blast'; // suicide reads as suicide, not "a crawler"
-          deps.lazyNetworkManager()?.sendEnvironmentDamage(selfDmg, a.shooterId ?? undefined);
+          // Own blast: server applies the self-splash now — claiming it
+          // too would double-charge. Keep the local flash; yourHealth
+          // echo corrects the bar. Enemy blasts still report for credit.
+          if (enemyBlast) deps.lazyNetworkManager()?.sendEnvironmentDamage(selfDmg, a.shooterId ?? undefined);
           deps.lazyHud().showDamage(null, selfDmg);
         }
       }

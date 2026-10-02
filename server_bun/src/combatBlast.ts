@@ -116,7 +116,6 @@ export class BlastRunner {
   private splashTargets(ctx: BlastCtx, playerId: string, excludeTargetId: string | null | undefined): void {
     for (const [targetId, target] of this.h.playerManager.getAllPlayers()) {
       if (targetId === excludeTargetId || target.isDead) continue;
-      if (targetId === playerId && !target.isBot) continue;
       this.splashOne(ctx, targetId, target, targetId === playerId);
     }
   }
@@ -184,11 +183,16 @@ export class BlastRunner {
     const impulseMag = Math.min(
       aoeImpulse(ctx.impulse, dist, ctx.radius) * KNOCKBACK_SCALE * perkMods(target.perk).knockbackTaken,
       BLAST_IMPULSE_MAX);
-    this.shove(targetId, target, { x: tdx, y: tdy, z: tdz }, impulseMag, ctx.pos, ctx.pull);
+    // Humans self-predict their own displacement — server only shoves
+    // the self-target when it's a bot (server velocity truth).
+    if (!shoveOnly || target.isBot) {
+      this.shove(targetId, target, { x: tdx, y: tdy, z: tdz }, impulseMag, ctx.pos, ctx.pull);
+    }
     if (shoveOnly) {
-      // Self-propulsion still pays blood: a point-blank feet blast costs
-      // up to SELF_SPLASH_MAX so launches are a spend, not a free ride.
-      const selfDmg = Math.min(SELF_SPLASH_MAX, dist <= 3 ? SELF_SPLASH_MAX : damage);
+      // Self-propulsion still pays blood: the cost fades with distance
+      // inside the blast radius — a feet blast lands near SELF_SPLASH_MAX,
+      // a rim graze costs scraps. Continuous, so no cliff-edge price.
+      const selfDmg = Math.min(damage + SELF_SPLASH_MAX * (1 - dist / ctx.radius), SELF_SPLASH_MAX);
       if (selfDmg > 0) {
         const result = this.h.playerManager.applyDamage(targetId, selfDmg);
         this.h.applyHit(ctx.shooterId, targetId, selfDmg, result, { label: `Player ${ctx.label} self-blast`, extra: { dist: +dist.toFixed(2) }, weapon: ctx.weapon });
