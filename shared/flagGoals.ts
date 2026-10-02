@@ -47,6 +47,11 @@ export const ROLE_PRIORITY: { role: BotRole; want: number; minSquad: number }[] 
   { role: 'technician', want: 1, minSquad: 6 },
   { role: 'bombardier', want: 1, minSquad: 6 },
   { role: 'infiltrator', want: 1, minSquad: 7 },
+  // Second runner once the squad can afford it — a lone capper dying
+  // mid-route leaves the stand attack dead until respawn, and real
+  // CTF runs shifts of cappers anyway. Luxury slot: last so the core
+  // defenders fill first; incremental want:1 → 2 cappers total.
+  { role: 'capper', want: 1, minSquad: 7 },
 ];
 
 /** Roles a wire-side bot can actually play — no deploy kit and no
@@ -193,11 +198,13 @@ function infiltratorGoal(s: FlagSituation) {
   return s.home;
 }
 
-/** Offense (light offense in Tribes terms): escort a carrier, punish a
- *  thief, else press the enemy stand to clear it for the capper. */
+/** Offense (light offense in Tribes terms): kill the thief first —
+ *  while our flag is out the score is blocked anyway, so returning it
+ *  beats shadowing a carrier who legally can't cap yet. Then escort,
+ *  then press the enemy stand to clear it for the capper. */
 function offenseGoal(s: FlagSituation) {
-  if (s.escort) return s.escort;
   if (s.thief) return s.thief;
+  if (s.escort) return s.escort;
   if (s.dropped) return s.dropped;
   if (s.enemyStand) return s.enemyStand;
   return s.home; // flag's moving — defend home

@@ -51,14 +51,19 @@ export class BotMoves {
     if (this.wantJet(ctx, pos, dest, rise, speed, gd, airborne) && tanked) {
       this.jetHold = Math.max(this.jetHold, 0.45 + botRand() * 0.4);
     }
-    // The dive: a destination at or below the bot within graze range
-    // wants gravity, not thrust — a capper jets to the stand's zip code,
-    // then lets momentum carry the touch. Without this the boost read
-    // (speed < 12) kept orbiting bodies airborne above the very stand
-    // they were told to land on.
+    // The dive: a destination at or below the bot wants gravity, not
+    // thrust — a capper jets to the stand's zip code, then lets
+    // momentum carry the touch. The runway scales with what has to
+    // happen before arrival: altitude to shed (~2m runway per meter of
+    // drop on a steep ski line) plus a beat of speed — at 40m/s a flat
+    // 45m window is ~1s, not enough to fall 40m, which is exactly the
+    // overfly the katabatic bravo stand showed (bots orbiting 30-90m
+    // over a deck-level flag).
     // A prey burn survives the dive read: chasing something airborne
     // needs altitude even when the current destination sits below.
-    const diveRun = gd < 45 && dest.y < pos.y + 4 && this.jetWhy !== 'prey';
+    const drop = pos.y - dest.y;
+    const runway = 45 + Math.max(0, drop) * 2 + speed * 0.5;
+    const diveRun = gd < runway && dest.y < pos.y + 4 && this.jetWhy !== 'prey';
     if (diveRun) this.jetHold = 0;
     const jet = !diveRun && (this.jetHold > 0 || this.host.escapeJetT() > 0) && tanked;
     this.jetOut = jet;
