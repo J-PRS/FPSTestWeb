@@ -199,6 +199,32 @@ export class BotArsenal implements BeamHost {
    *  closes ground on a fleeing carrier. */
   tryPropel(id: string, p: BotBody, out: BrainOut, goal: { pos: BotVec } | null, sh: MoveState | null, now: number): void {
     if (!goal || !sh) return;
+    // Self-splash costs real health now. A wounded bot holds fire —
+    // except a desperate chaser: a loose enemy carrier far away means
+    // the pursuit is already lost without the launch, so it may still
+    // pay blood. Never enough to outright suicide on the pad.
+    const hp = this.room.players.getAllPlayers().get(id)?.health ?? 100;
+    if (hp < 45) {
+      const me = this.room.players.getAllPlayers().get(id);
+      const thief = [...(this.room.flags?.flags.values() ?? [])]
+        .map((f) => f.carrier)
+        .find((cid) => cid && cid !== id &&
+          this.room.players.getAllPlayers().get(cid)?.team !== me?.team);
+      const carrier = thief ? this.room.players.getAllPlayers().get(thief) : undefined;
+      let urgent = false;
+      if (carrier) {
+        const gx = carrier.position.x - p.position.x, gz = carrier.position.z - p.position.z;
+        const gap = Math.hypot(gx, gz);
+        // Urgent = the chase is lost without the launch: carrier far,
+        // or the gap is actively growing — carrier velocity pulls away
+        // along the chase line faster than the bot closes.
+        const sep = gap > 60;
+        const pulling = gap > 1 &&
+          ((carrier.velocity.x - sh.vel.x) * (gx / gap) + (carrier.velocity.z - sh.vel.z) * (gz / gap)) > 4;
+        urgent = sep || pulling;
+      }
+      if (!urgent || hp < 35) return;
+    }
     if ((this.propelT.get(id) ?? 0) > now) return;
     const dx = goal.pos.x - p.position.x, dz = goal.pos.z - p.position.z;
     const dist = Math.hypot(dx, dz);

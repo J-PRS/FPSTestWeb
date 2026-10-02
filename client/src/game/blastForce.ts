@@ -6,7 +6,7 @@ import * as THREE from 'three';
 
 import { getProjectileConfig } from '../projectiles/index.js';
 import { Projectile } from '../projectiles/Projectile.js';
-import { aoeImpulse, aoeDamage as aoeDamageOf, KNOCKBACK_SCALE, BLAST_IMPULSE_MAX } from '../../../shared/combat.js';
+import { aoeImpulse, aoeDamage as aoeDamageOf, KNOCKBACK_SCALE, BLAST_IMPULSE_MAX, SELF_SPLASH_MAX } from '../../../shared/combat.js';
 import { blastOccluded } from '../../../shared/solidWorld.js';
 import type { CombatDeps } from './combat.js';
 import type { Targetable } from '../entities/balls.js';
@@ -21,10 +21,6 @@ interface Forceable {
   applyKnockback(from: THREE.Vector3, force: number): void;
   applyPull(to: THREE.Vector3, force: number): void;
 }
-
-// Self-inflicted splash is nominal — enough to feel the blast on a
-// rocket jump without it eating your health bar
-const SELF_AOE_DAMAGE_SCALE = 0.15;
 
 // Same LOS rule the server applies: a wall between blast and target
 // swallows the prediction — keeps the client from flashing knockback/
@@ -179,8 +175,12 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
       const enemyBlast = a.shooterId && a.shooterId !== 'local';
       const selfDmg = selfHit
         ? (enemyBlast ? 0 : aoeDamage * player.mods.selfDamage)
-        : aoeDamageOf(aoeDamage, dpx, radius)
-          * (enemyBlast ? 1 : SELF_AOE_DAMAGE_SCALE * player.mods.selfDamage);
+        : enemyBlast
+          ? aoeDamageOf(aoeDamage, dpx, radius)
+          // A feet-shot launch pays up to SELF_SPLASH_MAX — same rule
+          // the server charges bots, so the disc-jump is a real spend
+          // for humans too. The perk still shaves it.
+          : Math.min(dpx <= 3 ? SELF_SPLASH_MAX : aoeDamageOf(aoeDamage, dpx, radius), SELF_SPLASH_MAX) * player.mods.selfDamage;
       if (selfDmg >= 1 && !player.isDead) {
         // Shield soaks self-splash too — the server holds health steady so
         // the only thing to report is the energy burn + its flash.

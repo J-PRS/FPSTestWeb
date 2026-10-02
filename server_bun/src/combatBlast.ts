@@ -5,7 +5,7 @@ import { getWeaponStats, WeaponType, ARMORNADE_ARMOR, HEALNADE_HEAL } from '../.
 import { healPool } from './healPool.ts';
 import { perkMods } from '../../shared/perks.ts';
 import { classMass } from '../../shared/botClasses.ts';
-import { aoeDamage, aoeImpulse, KNOCKBACK_SCALE, BLAST_IMPULSE_MAX, LG_POP_DMG_CAP, LG_POP_RADIUS_MIN, LG_POP_RADIUS_MAX } from '../../shared/combat.ts';
+import { aoeDamage, aoeImpulse, KNOCKBACK_SCALE, BLAST_IMPULSE_MAX, LG_POP_DMG_CAP, LG_POP_RADIUS_MIN, LG_POP_RADIUS_MAX, SELF_SPLASH_MAX } from '../../shared/combat.ts';
 import { POWERUP } from '../../shared/pickups.ts';
 import type { StructureCollider } from '../../shared/ballSim.ts';
 import { blastOccluded, ColliderIndex } from '../../shared/solidWorld.ts';
@@ -185,7 +185,16 @@ export class BlastRunner {
       aoeImpulse(ctx.impulse, dist, ctx.radius) * KNOCKBACK_SCALE * perkMods(target.perk).knockbackTaken,
       BLAST_IMPULSE_MAX);
     this.shove(targetId, target, { x: tdx, y: tdy, z: tdz }, impulseMag, ctx.pos, ctx.pull);
-    if (shoveOnly) return; // self-propulsion: displace, never damage
+    if (shoveOnly) {
+      // Self-propulsion still pays blood: a point-blank feet blast costs
+      // up to SELF_SPLASH_MAX so launches are a spend, not a free ride.
+      const selfDmg = Math.min(SELF_SPLASH_MAX, dist <= 3 ? SELF_SPLASH_MAX : damage);
+      if (selfDmg > 0) {
+        const result = this.h.playerManager.applyDamage(targetId, selfDmg);
+        this.h.applyHit(ctx.shooterId, targetId, selfDmg, result, { label: `Player ${ctx.label} self-blast`, extra: { dist: +dist.toFixed(2) }, weapon: ctx.weapon });
+      }
+      return;
+    }
 
     // Splash still displaces teammates (jump-boost assists); it just
     // never deals damage to them in team rooms.

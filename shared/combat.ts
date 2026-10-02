@@ -60,6 +60,11 @@ export const KNOCKBACK_SCALE = 1.0;
  *  jumps (≈5m apex on the up component) while bounding the worst case. */
 export const BLAST_IMPULSE_MAX = 30;
 
+/** Ceiling on self-splash damage from your own blast — a feet-shot
+ *  disc-jump costs real health so launching is a resource spend, not
+ *  a free ride; distance falloff applies below the cap as usual. */
+export const SELF_SPLASH_MAX = 30;
+
 export function aoeImpulse(force: number, dist: number, radius: number): number {
   return force * aoeFalloff(dist, radius);
 }
