@@ -8,8 +8,9 @@
 import * as THREE from 'three';
 import { makeSimBall, stepBall, BALL_OVERSPEED, type SimBall, type BallVariant } from '../../../shared/ballSim.js';
 import { projStep, segPointDist, segFieldHit, type SimProjectile } from '../../../shared/projSim.js';
-import type { Heightfield } from '../../../shared/heightfield.js';
-import { GRAVITY } from '../../../shared/movement.js';
+import { hmHeight, hmNormal, type Heightfield } from '../../../shared/heightfield.js';
+import { GRAVITY, MoveSim, type MoveSurface } from '../../../shared/movement.js';
+import { makeSimCrawler, stepCrawler, commitTarget, type SimCrawler } from '../../../shared/creatureCore.js';
 
 export interface LabInstance {
   /** Advance the sim one fixed step. The view calls this at 60Hz. */
@@ -324,9 +325,210 @@ function duel(scene: THREE.Scene): LabInstance {
 }
 
 /* ------------------------------------------------------------------ */
+/* Crawler pack — real creatureSim: wander/chase/windup/pounce on a    */
+/* committed prey point. Shows the same stepCrawler the server runs.   */
+/* ------------------------------------------------------------------ */
+
+function crawlerPack(scene: THREE.Scene): LabInstance {
+  const SPECIES = ['crawler', 'scarab'] as const;
+  const STATE_COLOR: Record<string, number> = { wander: 0x8aa0b5, chase: 0xff9a3a, windup: 0xff3355 };
+  const pack: { c: SimCrawler; m: THREE.Mesh; base: number }[] = [];
+  const geo = new THREE.ConeGeometry(0.8, 1.6, 8);
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
+    const c = makeSimCrawler(i, { x: Math.cos(a) * 25, y: 0, z: Math.sin(a) * 25 }, i === 0, i * 7919 + 3, SPECIES[i % 2]!);
+    const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: STATE_COLOR.wander! }));
+    scene.add(m);
+    pack.push({ c, m, base: c.health });
+  }
+
+  const prey = { x: 0, y: 0.5, z: 0 };
+  const preyMesh = new THREE.Mesh(
+    new THREE.SphereGeometry(0.9, 12, 12),
+    new THREE.MeshBasicMaterial({ color: 0x5ad0ff }),
+  );
+  scene.add(preyMesh);
+
+  const events = new Map<string, number>();
+  let t = 0, retargetAt = 0;
+  return {
+    tick(dt) {
+      t += dt;
+      prey.x = Math.cos(t * 0.3) * 18;
+      prey.z = Math.sin(t * 0.5) * 18;
+      // commitTarget mirrors the wire's retarget event — snapshots, not a
+      // live pointer, is what both sims actually steer at.
+      if (t >= retargetAt) {
+        retargetAt = t + 0.5;
+        for (const { c } of pack) commitTarget(c, 'prey', prey);
+      }
+      for (const { c } of pack) {
+        const ev = stepCrawler(c, dt, FLAT, prey, true);
+        if (ev) events.set(ev, (events.get(ev) ?? 0) + 1);
+      }
+    },
+    sync() {
+      for (const { c, m, base } of pack) {
+        m.position.set(c.x, c.y + 0.8, c.z);
+        m.rotation.y = -c.yaw;
+        (m.material as THREE.MeshBasicMaterial).color.setHex(
+          c.dead ? 0x333a44 : STATE_COLOR[c.state] ?? 0x8aa0b5);
+        const k = Math.max(0.3, c.health / base);
+        m.scale.setScalar(c.uber ? 1.6 : 0.7 + 0.3 * k);
+      }
+      preyMesh.position.set(prey.x, prey.y, prey.z);
+    },
+    dump() {
+      const rows: [string, string][] = [
+        ['pack', String(pack.filter(p => !p.c.dead).length)],
+        ['chasing', String(pack.filter(p => p.c.state === 'chase').length)],
+        ['winding up', String(pack.filter(p => p.c.state === 'windup').length)],
+        ['wandering', String(pack.filter(p => p.c.state === 'wander').length)],
+      ];
+      for (const [k, n] of events) rows.push([`ev:${k}`, String(n)]);
+      return rows;
+    },
+    dispose() {
+      for (const { m } of pack) scene.remove(m);
+      scene.remove(preyMesh);
+      geo.dispose();
+    },
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/* Ski run — real MoveSim on a steep heightfield hill, scripted input:  */
+/* hold forward + ski on descents, jet bursts on climbs.               */
+/* ------------------------------------------------------------------ */
+
+// A heightfield carrying one real hill so the skier gets genuine terrain
+// to read: 64x64 bump centered on (32,32) → world ~(750,0) at 1500m scale.
+function makeHill(): Heightfield {
+  const N = 64;
+  const data = new Uint8Array(N * N);
+  const R = 10;
+  for (let z = 0; z < N; z++) {
+    for (let x = 0; x < N; x++) {
+      const dx = x - 32, dz = z - 32;
+      const r = Math.hypot(dx, dz);
+      if (r < R) data[z * N + x] = Math.round(255 * Math.cos((r / R) * Math.PI * 0.5));
+    }
+  }
+  return { size: N, data, stride: 1 };
+}
+
+const HILL = makeHill();
+// World coords of the hill top — hmHeight wraps at 1500m, so cell (32,32)
+// sits at wx = (32.5/64)*1500 ≈ 762.
+const HILL_X = (32.5 / 64) * 1500;
+const HILL_Z = (32.5 / 64) * 1500;
+
+function skiRun(scene: THREE.Scene): LabInstance {
+  const surface: MoveSurface = {
+    getHeight: (x, z) => hmHeight(HILL, x, z),
+    getNormal: (x, z, out) => { hmNormal(HILL, x, z, out); return out; },
+  };
+  const startY = hmHeight(HILL, HILL_X, HILL_Z);
+  const sim = new MoveSim(surface, {
+    pos: { x: HILL_X, y: startY + 2, z: HILL_Z },
+    vel: { x: 0, y: 0, z: 0 },
+    yaw: 0, pitch: 0, onGround: false,
+  });
+
+  const body = new THREE.Mesh(
+    new THREE.CapsuleGeometry(0.9, 1.4, 4, 12),
+    new THREE.MeshBasicMaterial({ color: 0x6fe3a5 }),
+  );
+  scene.add(body);
+
+  // Terrain ghost — a low-res wireframe of the lab-heightfield so the
+  // slope the sim reads is actually visible.
+  const SEG = 24, EXT = 130;
+  const gpos = new Float32Array(SEG * SEG * 6 * 3);
+  const terrain = new THREE.Mesh(
+    new THREE.BufferGeometry(),
+    new THREE.MeshBasicMaterial({ color: 0x2a4a63, wireframe: true }),
+  );
+  {
+    let w = 0;
+    for (let i = 0; i < SEG; i++) {
+      for (let j = 0; j < SEG; j++) {
+        const x0 = HILL_X - EXT + (i / SEG) * 2 * EXT;
+        const x1 = HILL_X - EXT + ((i + 1) / SEG) * 2 * EXT;
+        const z0 = HILL_Z - EXT + (j / SEG) * 2 * EXT;
+        const z1 = HILL_Z - EXT + ((j + 1) / SEG) * 2 * EXT;
+        const h00 = hmHeight(HILL, x0, z0), h10 = hmHeight(HILL, x1, z0);
+        const h01 = hmHeight(HILL, x0, z1), h11 = hmHeight(HILL, x1, z1);
+        const q = [x0, h00, z0, x1, h10, z0, x0, h01, z1, x0, h01, z1, x1, h10, z0, x1, h11, z1];
+        gpos.set(q, w); w += 18;
+      }
+    }
+    terrain.geometry.setAttribute('position', new THREE.BufferAttribute(gpos, 3));
+  }
+  scene.add(terrain);
+
+  let t = 0, jets = 0, jumps = 0;
+  const _n = { x: 0, y: 1, z: 0 };
+  return {
+    tick(dt) {
+      t += dt;
+      const s = sim.state;
+      // Steer toward the local downhill — same read a skier's eyes do:
+      // probe the normal; downhill is -grad ≈ (nx,0,nz) of the surface normal.
+      surface.getNormal(s.pos.x, s.pos.z, _n);
+      const downX = _n.x, downZ = _n.z;
+      const dl = Math.hypot(downX, downZ);
+      if (dl > 0.02) sim.state.yaw = Math.atan2(-downX / dl, -downZ / dl);
+      const speed = Math.hypot(s.vel.x, s.vel.y, s.vel.z);
+      sim.setInput({
+        forward: 1,
+        skiHeld: s.onGround && speed > 5,
+        // Scripted jet: burn when speed bleeds off or the face turns uphill.
+        jetHeld: speed < 12 || (dl > 0.02 && _n.y > 0.99 && speed < 20),
+        jumpHeld: false,
+        jumpPressed: false,
+        right: 0,
+      });
+      if (sim.input.jetHeld) jets += dt;
+      sim.update(dt);
+      // Respawn at the top once the run flattens out — the lab loops forever.
+      if (s.pos.y < 3 && speed < 4) {
+        sim.setState({
+          pos: { x: HILL_X, y: startY + 2, z: HILL_Z },
+          vel: { x: 0, y: 0, z: 0 }, yaw: s.yaw, pitch: 0, onGround: false,
+        });
+        jumps++;
+      }
+    },
+    sync() {
+      const s = sim.state;
+      body.position.set(s.pos.x, s.pos.y - 1.5, s.pos.z);
+    },
+    dump() {
+      const s = sim.state;
+      return [
+        ['pos', `${s.pos.x.toFixed(0)}, ${s.pos.y.toFixed(0)}, ${s.pos.z.toFixed(0)}`],
+        ['speed', Math.hypot(s.vel.x, s.vel.y, s.vel.z).toFixed(1)],
+        ['onGround', String(s.onGround)],
+        ['yaw', s.yaw.toFixed(2)],
+        ['jet time', `${jets.toFixed(1)}s`],
+        ['runs', String(jumps)],
+      ];
+    },
+    dispose() {
+      scene.remove(body, terrain);
+      body.geometry.dispose();
+      terrain.geometry.dispose();
+    },
+  };
+}
+
+/* ------------------------------------------------------------------ */
 
 export const SCENARIOS: LabScenario[] = [
   { id: 'duel', name: 'DUEL', blurb: 'two fighters trade hitscan-ish bolts', create: duel },
   { id: 'ball-court', name: 'BALL COURT', blurb: 'ballSim bounce + one enraged hunter', create: ballCourt },
   { id: 'mortar-volley', name: 'MORTAR VOLLEY', blurb: 'projStep gravity arcs + terrain impacts', create: mortarVolley },
+  { id: 'crawler-pack', name: 'CRAWLER PACK', blurb: 'real creatureSim hunt: wander/chase/windup/pounce', create: crawlerPack },
+  { id: 'ski-run', name: 'SKI RUN', blurb: 'real MoveSim skiing a heightfield hill', create: skiRun },
 ];
