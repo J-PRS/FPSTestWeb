@@ -26,7 +26,11 @@ export function pickDest(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, fe
     // hunt found converts the carrier into a duelist mid-route (orbit
     // fights won fights but lost flags). fire stays live elsewhere in
     // the pipeline; only the feet commit to the line.
-    if (ctx.running && ctx.objective) return { ...ctx.objective };
+    // Same for the outbound capper (runner): a capper that stops to
+    // fight every midfield contact dies ~130m short of the stand —
+    // soak autopsy showed the hunt pull eating every approach leg.
+    // He shoots on the move; the route owns the feet.
+    if ((ctx.running || ctx.runner) && ctx.objective) return { ...ctx.objective };
     // Last-leg commitment beats self-preservation: inside ~40m of the
     // objective a wounded bot still crashes the point — dying with the
     // flag in hand beats surviving the approach. Only the feet commit;

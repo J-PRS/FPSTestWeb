@@ -111,6 +111,12 @@ export function dodge(ctx: BrainCtx, pos: BotVec, dest: BotVec, hero: boolean): 
     if (d < nearestD) { nearestD = d; nearest = t; }
   }
   if (!nearest) return dest;
+  // A runner on final approach doesn't juke — the sidestep replaces the
+  // dest, so under ring bombardment he'd sidestep every tick and bleed
+  // all arrival speed (soak: pushes reached the ring then stalled at
+  // 5-8m/s). Inside ~80m of the objective the run wins the feet; the
+  // shell still lands where it lands. Same commit the carrier gets.
+  if ((ctx.runner || ctx.running) && ctx.objective && dist3(pos, ctx.objective) < 80) return dest;
   // A posted anchor's dodge is a hop, not a juke — the flag is also
   // the cover, and a 9m sidestep under steady bombardment parks him in
   // the 3-15m ring instead of back on the pole between shells.

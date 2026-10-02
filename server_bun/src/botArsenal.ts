@@ -343,7 +343,7 @@ export class BotArsenal implements BeamHost {
    *  launches worth a fuse (long run, low speed, tank for the climb);
    *  distant pursuits may boost mid-volley since out-shooting never
    *  closes ground on a fleeing carrier. */
-  tryPropel(id: string, p: BotBody, out: BrainOut, goal: { pos: BotVec } | null, sh: MoveState | null, now: number): void {
+  tryPropel(id: string, p: BotBody, out: BrainOut, goal: { pos: BotVec; runner?: boolean } | null, sh: MoveState | null, now: number): void {
     if (!goal || !sh) return;
     // Self-splash costs real health now. A wounded bot holds fire —
     // except a desperate chaser: a loose enemy carrier far away means
@@ -402,7 +402,13 @@ export class BotArsenal implements BeamHost {
     // must choose between shooting and disc-jumping never catches a
     // carrier. Close goals still don't trade fire for speed.
     if (out.fire && dist < 60) return;
-    if (Math.hypot(sh.vel.x, sh.vel.z) > 12) return; // already moving — boost is for launches
+    // A heel blast at speed is only "wasted" if the bot isn't running a
+    // route — a capper's job is SUSTAINED 25-35m/s, and speed decays on
+    // every flat stretch, so runners re-blast before the run dies.
+    // Holding the 12m/s launch ceiling for everyone else capped route
+    // arrivals at ~10-18m/s — inside ring defense's kill zone.
+    const movingCap = goal.runner ? 26 : 12;
+    if (Math.hypot(sh.vel.x, sh.vel.z) > movingCap) return;
     // A heel blast costs ammo + hp, NOT jet fuel — gating it on a
     // charged tank stranded every trapped climber whose tank was dry
     // from the climb (the massif-pocket soak orbit). Players disc-jump
@@ -458,7 +464,10 @@ export class BotArsenal implements BeamHost {
       this.room.projectiles.spawn(id, wt, muzzle, { x: hx / len, y: hy / len, z: hz / len }, p.velocity);
       this.propelMark(id, 'heel');
     }
-    this.propelT.set(id, now + 8000);
+    // Runners chain on the human cadence (~3.5s between disc-jumps);
+    // everyone else pays the full 8s — chaining is blood + ammo, and a
+    // bot with somewhere to be trades it gladly while a roamer shouldn't.
+    this.propelT.set(id, now + (goal.runner ? 3500 : 8000));
     this.propelJetUntil.set(id, now + 900); // ride the shove skyward like a real disc-jump
     logger.info('Bot propel', { id });
   }

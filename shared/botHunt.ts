@@ -215,10 +215,17 @@ export function pickHunt(st: HuntState, ctx: BrainCtx, pos: BotVec, now: number,
  *  holding an orbit. */
 function planFight(st: HuntState, ctx: BrainCtx, pos: BotVec, best: BotEnemy | null, fearing: boolean, pickGoal: (ctx: BrainCtx, pos: BotVec) => void): void {
   st.fightPos = null;
-  if (best && !fearing && dist3(pos, best.pos) <= st.orbitFar) {
+  // A runner's route owns his feet: a capper that orbits every midfield
+  // contact dies at ~130m out without ever arriving (soak: hunt pulls
+  // ate every approach leg). He still FIRES off st.hunt — only the
+  // position commitment shrinks to point-blank threats he can't
+  // out-ski, and the objective goal keeps refreshing so the run
+  // resumes the tick the fight ends.
+  const orbit = ctx.runner ? Math.min(st.orbitFar, 45) : st.orbitFar;
+  if (best && !fearing && dist3(pos, best.pos) <= orbit) {
     st.fightPos = pickFightPos(st, ctx, pos, best);
   }
-  if (!best) pickGoal(ctx, pos);
+  if (!best || ctx.runner) pickGoal(ctx, pos);
 }
 
 /** The beacon-marked flag carrier, when it's in committing range —
