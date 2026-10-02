@@ -131,7 +131,13 @@ export class BotMoves {
       ski: !ctx.posted && !(rise > 3 && speed < 8 && !airborne),
       jet,
       // Uphill + near-stationary = hop it; autohop chains the rest.
-      jump: uphill && speed < 3 && !airborne,
+      // The momentum hop is the second case: held space while skiing
+      // keeps the run airborne and frictionless — without it a bot's
+      // ceiling is ~12m/s of slide speed while a human hop-chains
+      // down the route at 30+ (soak: pushes arrived at ~15m/s and
+      // died inside the ring; speed IS the capper's armor).
+      jump: (uphill && speed < 3 && !airborne)
+        || (!ctx.posted && !airborne && speed > 6 && gd > 60 && rise <= 3),
     };
   }
 
