@@ -8,15 +8,16 @@
 
 import { BotBrain, type BotEnemy, type BrainCtx } from '../../shared/botBrain.ts';
 import { MoveSim, ENERGY } from '../../shared/movement.ts';
-import { hmHeight } from '../../shared/heightfield.ts';
+
 import { BOT_LOADOUTS, pickBotWeapon } from '../../shared/botLoadouts.ts';
+import { aimSkillFor } from '../../shared/botSkill.ts';
 import { WEAPONS } from '../../shared/weaponTable.ts';
 import { WEAPON_FIRE_INTERVAL_S } from '../../shared/weapons.ts';
 import { HEAVY_ONLY_WEAPONS } from '../../shared/botClasses.ts';
 import type { WeaponType } from '../../shared/weaponTable.ts';
 import type { ClientMessage, Vec3 } from '../../shared/protocol.ts';
-import { roleObjective, type BotRole, type FlagSituation } from '../../shared/flagGoals.ts';
-import type { NetClient } from './netClient.ts';
+import { assignRole, roleObjective, type BotRole, type FlagSituation } from '../../shared/flagGoals.ts';
+import type { NetClient, RemoteEntry } from './netClient.ts';
 
 const THINK_S = 0.3;
 const POS_HZ = 10;
@@ -35,6 +36,9 @@ interface Shell {
   /** When the client-side flight should land. */
   impactAt: number;
   impactPos: Vec3;
+  /** 'b' = ball, 'c' = crawler — creature targets claim via the
+   *  creatureHit/crawlerHit wire path instead of a `shot` hit. */
+  creature: '' | 'b' | 'c';
   rolled: boolean;
 }
 
@@ -86,7 +90,25 @@ export class NetBot {
       if (this.nc.self.team && e.team === this.nc.self.team) continue;
       out.push({ id, pos: { x: e.pos.x, y: e.pos.y, z: e.pos.z }, vel: { x: e.vel.x, y: e.vel.y, z: e.vel.z }, alive: true });
     }
+    // Creatures join the foe list like the server sense does — hunting
+    // them is the actual objective in nuggets rooms, and the creatureHit
+    // wire path only gets exercised if wire bots shoot them.
+    for (const [bid, b] of this.nc.balls) {
+      out.push({ id: `b:${bid}`, pos: { x: b.pos.x, y: b.pos.y, z: b.pos.z }, vel: { x: b.vel.x, y: b.vel.y, z: b.vel.z }, alive: true });
+    }
+    for (const [cid, c] of this.nc.crawlers) {
+      out.push({ id: `c:${cid}`, pos: { x: c.pos.x, y: c.pos.y, z: c.pos.z }, vel: { x: c.vel.x, y: c.vel.y, z: c.vel.z }, alive: true });
+    }
     return out;
+  }
+
+  /** Look up a fire target — players live in the roster, creatures in
+   *  their own wire-fed maps keyed `b:<id>` / `c:<id>` like the server
+   *  sense names them. */
+  private targetEntry(targetId: string): RemoteEntry | null {
+    if (targetId.startsWith('b:')) return this.nc.balls.get(+targetId.slice(2)) ?? null;
+    if (targetId.startsWith('c:')) return this.nc.crawlers.get(+targetId.slice(2)) ?? null;
+    return this.nc.roster.get(targetId) ?? null;
   }
 
   /** CTF objective from the wire flag states — same roleObjective table
@@ -108,7 +130,7 @@ export class NetBot {
       enemyStand: theirs.state === 'carried' ? null : theirs.pos,
       escort: theirs.state === 'carried' && theirs.carrier ? this.rosterPos(theirs.carrier) : null,
     };
-    const role: BotRole = this.role;
+    const role: BotRole = this.squadRole();
     return roleObjective(role, s);
   }
 
@@ -117,9 +139,28 @@ export class NetBot {
     return e ? { ...e.pos } : null;
   }
 
-  /** Role picked once from the squad-light end of the ladder — wire bots
-   *  can't deploy or cloak, so technician/infiltrator are out. */
-  private role: BotRole = Math.random() < 0.6 ? 'capper' : 'offense';
+  /** Squad role computed each call: every peer sorts the same roster and
+   *  walks assignRole's fill order, so the whole wire squad converges on
+   *  one layout without a coordinator — specialist slots land on whoever
+   *  sorts into them. Commitment matters more than optimality though:
+   *  a bot holds its current role for a window before accepting a
+   *  re-shuffle, so mid-route cappers don't flip to defense on every
+   *  roster ping-pong. */
+  private role: BotRole = 'offense';
+  private roleT = 0;
+
+  private squadRole(): BotRole {
+    this.roleT -= 0.3; // think cadence — close enough for a soft window
+    if (this.roleT > 0) return this.role;
+    const mates = [this.nc.id];
+    for (const [id, e] of this.nc.roster) {
+      if (e.team === this.nc.self.team) mates.push(id);
+    }
+    const next = assignRole(this.nc.id, mates);
+    if (next !== this.role) this.roleT = 8;
+    this.role = next;
+    return this.role;
+  }
 
   private ctx(): BrainCtx {
     const nc = this.nc;
@@ -128,12 +169,13 @@ export class NetBot {
       vel: { x: nc.self.vel.x, y: nc.self.vel.y, z: nc.self.vel.z },
       enemies: this.enemies(),
       objective: this.flagObjective(),
-      groundY: (x, z) => nc.field ? hmHeight(nc.field, x, z) : nc.self.pos.y,
+      groundY: (x, z) => nc.surface ? nc.surface.getHeight(x, z) : nc.self.pos.y,
       now: Date.now(),
       healthFrac: nc.self.health / 100,
       energy: 100,
       weaponSpeed: (dist) => WEAPONS[this.legalWeapon(dist)]?.speed ?? 60,
       weaponGravity: (dist) => WEAPONS[this.legalWeapon(dist)]?.gravity ?? false,
+      aimSkill: (dist, targetSpeed) => aimSkillFor(this.brain.skill, this.legalWeapon(dist), targetSpeed),
     };
   }
 
@@ -141,8 +183,11 @@ export class NetBot {
    *  heavy-tier ordnance — the server's class-lock gate would (rightly)
    *  reject it as a doctored-client claim. Fall back to the sidearm. */
   private legalWeapon(dist: number): number {
-    const w = pickBotWeapon(this.loadout, dist, dist);
-    return HEAVY_ONLY_WEAPONS.has(w) ? this.loadout.side : w;
+    const w = pickBotWeapon(this.loadout, dist, dist, (t) => aimSkillFor(this.brain.skill, t, 0));
+    // Hitscan/beam kinds have no projectile claim shape — a bot that
+    // draws Lightning would hold it and never claim; sidearm instead.
+    if (HEAVY_ONLY_WEAPONS.has(w) || (WEAPONS[w]?.speed ?? 0) <= 0) return this.loadout.side;
+    return w;
   }
 
   private think(): void {
@@ -169,9 +214,14 @@ export class NetBot {
     const dx = out.dest.x - nc.self.pos.x;
     const dz = out.dest.z - nc.self.pos.z;
     const d = Math.hypot(dx, dz);
+    if (d > 0.5) this.targetYaw = Math.atan2(dx, dz);
+    this.strafePhase += THINK_S * (1.5 + this.brain.skill.movement);
     this.wantMove = {
-      yaw: d > 0.5 ? Math.atan2(dx, dz) : this.wantMove.yaw,
-      forward: d > 0.5 ? 1 : 0,
+      yaw: this.wantMove.yaw, // eased in sendPos
+      // Humans feather the stick, weave under fire, and let off when
+      // arriving — a rail-to-rail forward is what the sheep meter eats.
+      forward: d > 0.5 ? Math.min(1, 0.65 + this.rand() * 0.4) : 0,
+      right: d > 8 ? Math.sin(this.strafePhase) * 0.6 : 0,
       // Real players jet the flats and the uphills — skiing alone leaves
       // a bot crawling valleys the fake kinematics used to skip over.
       jet: !!out.move?.jet || d > 60 || (d > 30 && out.dest.y > nc.self.pos.y + 4),
@@ -198,7 +248,7 @@ export class NetBot {
    *  flight time. Mirrors fire.ts sendShot + impact.ts claims. */
   private fire(targetId: string, aim: { x: number; y: number; z: number }): void {
     const nc = this.nc;
-    const target = nc.roster.get(targetId);
+    const target = this.targetEntry(targetId);
     if (!target || target.isDead) return;
     const dist = Math.hypot(target.pos.x - nc.self.pos.x, target.pos.y - nc.self.pos.y, target.pos.z - nc.self.pos.z);
     // Long shots are unclaimable on jitter — a shell in the air >0.5s
@@ -207,7 +257,9 @@ export class NetBot {
     if (dist > 45) return;
     // A kill landing mid-flight leaves the shell's hit claim bouncing
     // off a corpse — open fire only when the target has TTK headroom.
-    if (target.health < 50) return;
+    // Creature hp isn't on the wire, so the gate applies to players only.
+    const isCreature = targetId.startsWith('b:') || targetId.startsWith('c:');
+    if (!isCreature && target.health < 50) return;
     const weaponType = this.legalWeapon(dist);
     const w = WEAPONS[weaponType];
     if (!w || w.speed <= 0) return; // hitscan kinds — skip for now, beams need their own claim shape
@@ -247,6 +299,7 @@ export class NetBot {
         y: target.pos.y + target.vel.y * flightS,
         z: target.pos.z + target.vel.z * flightS,
       },
+      creature: isCreature ? (targetId.startsWith('b:') ? 'b' : 'c') : '',
       rolled: false,
     });
   }
@@ -272,7 +325,7 @@ export class NetBot {
       const projId = nc.projectiles.get(sh.shotId);
       const roll = this.rand();
       const aoe = (w?.aoeRadius ?? 0) > 0;
-      const target = nc.roster.get(sh.targetId);
+      const target = this.targetEntry(sh.targetId);
 
       if (roll < DIRECT_P && target && !target.isDead) {
         // Direct claims need the target's position at claim-land time —
@@ -281,6 +334,18 @@ export class NetBot {
         // already outside the ~1-3m legal radius no matter the lead:
         // honest players splash those, they only body-claim the slow
         // ones. Sprinting targets take the blast branch instead.
+        if (sh.creature) {
+          // Creature hits don't rewind a player — the server sanity-
+          // clamps damage against its own sim. Same claim a real
+          // client's contact path emits.
+          const dmg = WEAPONS[sh.weaponType]?.directDamage ?? 0;
+          nc.send({
+            type: sh.creature === 'b' ? 'creatureHit' : 'crawlerHit',
+            id: +sh.targetId.slice(2), damage: dmg,
+          } as ClientMessage);
+          nc.tel.claims++;
+          return false;
+        }
         const speed = Math.hypot(target.vel.x, target.vel.z);
         const leadS = nc.pingMs / 2000 + 0.05;
         const hitPos = {
@@ -335,7 +400,11 @@ export class NetBot {
 
   private inSeq = 0;
   private sim: MoveSim | null = null;
-  private wantMove = { yaw: 0, forward: 0, jet: false, jump: false };
+  private wantMove = { yaw: 0, forward: 0, right: 0, jet: false, jump: false };
+  /** Where the nose should end up — sendPos eases yaw toward this at a
+   *  mouse-speed turn rate so the heading doesn't snap per think. */
+  private targetYaw = 0;
+  private strafePhase = Math.random() * Math.PI * 2;
   /** Local mirror of the server shadow's jet tank — it only thrusts
    *  while energy > 0, so an always-on jet claim would diverge the
    *  moment the modeled tank emptied. */
@@ -370,11 +439,17 @@ export class NetBot {
       if (ddx * ddx + ddy * ddy + ddz * ddz > 20 * 20) {
         sim.setState({ pos: { ...nc.self.pos }, vel: { ...nc.self.vel }, yaw: this.wantMove.yaw, pitch: 0, onGround: true });
       }
+      // Mouse-speed turn toward targetYaw — an instant snap per think
+      // is the dead giveaway the sheep meter was built to catch.
+      const TURN = 6.5 / POS_HZ;
+      let dy = this.targetYaw - this.wantMove.yaw;
+      dy -= Math.round(dy / (Math.PI * 2)) * Math.PI * 2;
+      this.wantMove.yaw += Math.abs(dy) < TURN ? dy : Math.sign(dy) * TURN;
       sim.state.yaw = this.wantMove.yaw;
       this.jetting = this.wantMove.jet && this.energy > 0;
       this.energy = Math.max(0, Math.min(ENERGY.max,
         this.energy + (this.jetting ? -ENERGY.jetDrain : ENERGY.jetCharge) * (1 / POS_HZ)));
-      sim.setInput({ forward: this.wantMove.forward, right: 0, jumpHeld: this.wantMove.jump, skiHeld: true, jetHeld: this.jetting });
+      sim.setInput({ forward: this.wantMove.forward, right: this.wantMove.right, jumpHeld: this.wantMove.jump, skiHeld: true, jetHeld: this.jetting });
       sim.update(1 / POS_HZ);
       nc.self.pos = { x: sim.state.pos.x, y: sim.state.pos.y, z: sim.state.pos.z };
       nc.self.vel = { x: sim.state.vel.x, y: sim.state.vel.y, z: sim.state.vel.z };
@@ -383,7 +458,7 @@ export class NetBot {
     this.inSeq++;
     nc.send({
       type: 'inputMove', seq: this.inSeq,
-      input: { forward: this.wantMove.forward, right: 0, jump: this.wantMove.jump ? 1 : 0, ski: 1, jet: this.jetting ? 1 : 0 },
+      input: { forward: this.wantMove.forward, right: this.wantMove.right, jump: this.wantMove.jump ? 1 : 0, ski: 1, jet: this.jetting ? 1 : 0 },
       rotation: { yaw, pitch: 0 },
     }, true);
     // Movement stays ordered (steady) — jitter lives on the claim channel,

@@ -54,10 +54,10 @@ describe('netbot — real clients over real sockets', () => {
     env = null;
   });
 
-  const spawn = async (n: number, link: LatencyOpts, opts: { hopEveryMs?: number; transports?: ('ws' | 'rtc')[] } = {}) => {
+  const spawn = async (n: number, link: LatencyOpts, opts: { hopEveryMs?: number; transports?: ('ws' | 'rtc')[]; room?: string; mode?: string } = {}) => {
     for (let i = 0; i < n; i++) {
       const transport = opts.transports?.[i % opts.transports.length] ?? 'ws';
-      const nc = new NetClient(env!.url, `nb_${i}`, new LatencyLink(link), { transport, rtc: nd ? { nd } : undefined });
+      const nc = new NetClient(env!.url, `nb_${i}`, new LatencyLink(link), { transport, rtc: nd ? { nd } : undefined, room: opts.room, mode: opts.mode });
       const bot = new NetBot(nc, opts);
       bots.push({ nc, bot });
       // Staggered connects — a burst of simultaneous socket opens made
@@ -121,6 +121,26 @@ describe('netbot — real clients over real sockets', () => {
       expect(owned.length).toBe(1);
     }
   }, 30000);
+
+  it('ctf: flag state arrives over the wire and a bot carries the flag', async () => {
+    env = bootServer();
+    await spawn(4, { pingMs: 20, jitterMs: 60, lossRate: 0 }, { room: 'ctf-test', mode: 'ctf' });
+    await sleep(1200);
+    // gameState.flags populated both stands — no map init bug on this path.
+    for (const b of bots) expect(b.nc.flags.size).toBe(2);
+    // Capper bots route the enemy stand — a flag pickup anywhere in the
+    // window proves flagUpdate + the objective feed both work.
+    let carried = 0;
+    for (let i = 0; i < 90 && carried === 0; i++) {
+      await sleep(500);
+      for (const b of bots) {
+        for (const f of b.nc.flags.values()) {
+          if (f.state === 'carried' && f.carrier?.startsWith('nb_')) carried++;
+        }
+      }
+    }
+    expect(carried).toBeGreaterThan(0);
+  }, 60000);
 
   it('a mid-match room hop keeps hits flowing (per-room seq reset)', async () => {
     env = bootServer();

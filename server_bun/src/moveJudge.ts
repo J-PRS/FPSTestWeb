@@ -6,32 +6,11 @@
  * input journal) stays separate from the verdict logic.
  */
 import { MoveSim, ENERGY, type MoveInput, type MoveState, type Vec3Like } from '../../shared/movement.ts';
-import type { Heightfield } from '../../shared/heightfield.ts';
-import type { SolidWorld } from '../../shared/solidWorld.ts';
-import { hmHeight, hmNormal } from '../../shared/heightfield.ts';
+import { FieldSurface } from '../../shared/fieldSurface.ts';
 import { logger } from './logger.ts';
 import { CONFIG } from './config.ts';
 
-/** Map structures layered over the terrain — getHeight reports their
- *  top faces as floor, resolveBody handles walls/ceilings. Lives on
- *  the surface object so existing sims pick up late attach transparently. */
-export class FieldSurface {
-  solid: SolidWorld | null = null;
-
-  constructor(private f: Heightfield) {}
-  getHeight(x: number, z: number): number {
-    const g = hmHeight(this.f, x, z);
-    const t = this.solid?.topAt(x, z) ?? -Infinity;
-    return t > g ? t : g;
-  }
-  getNormal(x: number, z: number, out: Vec3Like): Vec3Like {
-    const t = this.solid?.topAt(x, z) ?? -Infinity;
-    if (t > hmHeight(this.f, x, z)) { out.x = 0; out.y = 1; out.z = 0; return out; }
-    hmNormal(this.f, x, z, out as { x: number; y: number; z: number });
-    return out;
-  }
-  resolveBody(s: MoveState, height: number): void { this.solid?.resolveBody(s, height); }
-}
+export { FieldSurface };
 
 export interface Shadow {
   sim: MoveSim;

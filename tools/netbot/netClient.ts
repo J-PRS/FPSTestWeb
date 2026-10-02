@@ -6,8 +6,11 @@
 
 import type { ClientMessage, ServerMessage, TickUpdatePlayer, Vec3 } from '../../shared/protocol.ts';
 import { decodeTickFrame, isWireFrame } from '../../shared/wire.ts';
-import { hmParseBin, hmSurface, type Heightfield } from '../../shared/heightfield.ts';
-import type { MoveSurface } from '../../shared/movement.ts';
+import { hmParseBin, type Heightfield } from '../../shared/heightfield.ts';
+import { FieldSurface } from '../../shared/fieldSurface.ts';
+import { SolidWorld } from '../../shared/solidWorld.ts';
+import type { StructureSpec } from '../../shared/mapSpec.ts';
+
 import { fileURLToPath } from 'node:url';
 import { LatencyLink } from './latency.ts';
 import { RtcGameSocket, type BotSocket, type NdModule } from './rtcSocket.ts';
@@ -67,6 +70,10 @@ export class NetClient {
   deployables = new Map<number, { owner: string; kind: string; pos: Vec3; hp: number }>();
   /** CTF flag states by team — gameState.flags + flagUpdate. */
   flags = new Map<string, { pos: Vec3; state: 'home' | 'carried' | 'dropped'; carrier: string | null }>();
+  /** Server-owned creatures — ballRoster/ballSegment and crawlRoster/
+   *  crawlEvt streams, same lifecycle as the browser's creature layer. */
+  balls = new Map<number, RemoteEntry>();
+  crawlers = new Map<number, RemoteEntry>();
   /** Per-room hit seq watermark — same rule as the browser client: reset
    *  on every gameState so a room hop can't drop the new seq space. */
   private lastHitSeq = 0;
@@ -88,7 +95,14 @@ export class NetClient {
    *  against it so reports and the server's shadow sim replay the same
    *  physics; without it a bot's eased positions read as airborne drift. */
   field: Heightfield | null = null;
-  surface: MoveSurface | null = null;
+  surface: FieldSurface | null = null;
+  /** Structures from gameState/mapUpdate — stashed until the field
+   *  finishes loading so the attach survives a slow .bin fetch. */
+  private structures?: readonly StructureSpec[];
+  private attachStructures(list: readonly StructureSpec[]): void {
+    this.structures = list;
+    if (this.surface) this.surface.solid = list.length ? SolidWorld.fromSpecs(list) : null;
+  }
   private fieldPromise: Promise<void> | null = null;
   private pingTimer: ReturnType<typeof setInterval> | null = null;
   private joinTimer: ReturnType<typeof setInterval> | null = null;
@@ -173,7 +187,10 @@ export class NetClient {
       if (!buf || buf.byteLength < 9) return;
       const field = hmParseBin(buf);
       this.field = field;
-      this.surface = hmSurface(field);
+      // Same FieldSurface the server shadow integrates on — terrain-only
+      // sims diverge exactly where a wall one side can't see stands.
+      this.surface = new FieldSurface(field);
+      if (this.structures?.length) this.surface.solid = SolidWorld.fromSpecs(this.structures);
     } catch {
       // No terrain — the bot stays on flat-world kinematics.
     }
@@ -243,11 +260,31 @@ export class NetClient {
         for (const d of m.deployables ?? []) this.deployables.set(d.id, { owner: d.owner, kind: d.kind, pos: { ...d.pos }, hp: d.hp ?? 0 });
         this.flags.clear();
         for (const f of m.flags ?? []) this.flags.set(f.team, { pos: { ...f.pos }, state: f.state, carrier: f.carrier });
+        this.balls.clear();
+        this.crawlers.clear();
         if (!this.fieldPromise) this.fieldPromise = this.loadField(m.map?.terrain);
+        if (m.map?.structures) this.attachStructures(m.map.structures);
         if (m.sessionToken) this.sessionToken = m.sessionToken;
         this.self.team = m.team;
         break;
       }
+      case 'mapUpdate': {
+        if (m.structures) this.attachStructures(m.structures);
+        if (m.terrain) this.fieldPromise = this.loadField(m.terrain);
+        break;
+      }
+      case 'ballRoster':
+        for (const b of m.balls) this.balls.set(b.id, { pos: { ...b.position }, vel: { ...b.velocity }, health: 100, isDead: false });
+        break;
+      case 'ballSpawn': this.balls.set(m.id, { pos: { ...m.position }, vel: { ...m.velocity }, health: 100, isDead: false }); break;
+      case 'ballSegment': { const b = this.balls.get(m.id); if (b) { b.pos = { ...m.position }; b.vel = { ...m.velocity }; } break; }
+      case 'ballDie': this.balls.delete(m.id); break;
+      case 'crawlRoster':
+        for (const c of m.crawlers) this.crawlers.set(c.id, { pos: { ...c.position }, vel: { ...c.velocity }, health: 100, isDead: false });
+        break;
+      case 'crawlSpawn': this.crawlers.set(m.id, { pos: { ...m.position }, vel: { x: 0, y: 0, z: 0 }, health: 100, isDead: false }); break;
+      case 'crawlEvt': { const c = this.crawlers.get(m.id); if (c) { c.pos = { ...m.position }; c.vel = { ...m.velocity }; } break; }
+      case 'crawlDie': this.crawlers.delete(m.id); break;
       case 'flagUpdate':
         for (const f of m.flags) this.flags.set(f.team, { pos: { ...f.pos }, state: f.state, carrier: f.carrier });
         break;
