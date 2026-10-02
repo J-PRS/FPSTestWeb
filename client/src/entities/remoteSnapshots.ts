@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { lerpAngle } from '../../../shared/angles.ts';
 
 /**
  * SnapshotBuffer — the remote-player interpolation core.
@@ -148,10 +149,7 @@ export class SnapshotBuffer {
       outPos.set(lx, ly, lz);
     }
     // Yaw: lerp along shortest arc
-    let dy = s1.yaw - s0.yaw;
-    while (dy > Math.PI) dy -= 2 * Math.PI;
-    while (dy < -Math.PI) dy += 2 * Math.PI;
-    outRot.yaw = s0.yaw + dy * a;
+    outRot.yaw = lerpAngle(s0.yaw, s1.yaw, a);
     outRot.pitch = s0.pitch + (s1.pitch - s0.pitch) * a;
   }
 

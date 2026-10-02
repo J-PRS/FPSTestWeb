@@ -11,6 +11,7 @@
  * monolith of senses.
  */
 import type { BotVec, BrainCtx } from './botBrain.ts';
+import { wrapAngleDelta } from './angles.ts';
 
 // --- context steering senses ---
 const SLOTS = 16;        // directions sampled around the circle
@@ -77,9 +78,7 @@ export class BotSteer {
     // dodge/detour bypass this (they should read as decisive jukes).
     const cur = Math.atan2(this.heading.x, this.heading.z);
     const tgt = Math.atan2(bestX, bestZ);
-    let dYaw = tgt - cur;
-    if (dYaw > Math.PI) dYaw -= Math.PI * 2;
-    if (dYaw < -Math.PI) dYaw += Math.PI * 2;
+    const dYaw = wrapAngleDelta(tgt - cur);
     const maxTurn = 4.0 * dt;
     const a = cur + Math.max(-maxTurn, Math.min(maxTurn, dYaw));
     this.heading.x = Math.sin(a); this.heading.z = Math.cos(a);

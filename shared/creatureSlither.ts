@@ -7,6 +7,7 @@
  */
 
 import { type Heightfield, hmHeight } from './heightfield.js';
+import { wrapAngleDelta } from './angles.ts';
 import type { SimVec, StructureCollider } from './ballSim.js';
 import { clipMotion, type CrawlerEvent, type SimCrawler } from './creatureCore.js';
 
@@ -114,10 +115,7 @@ export function stepSlither(
   }
   if (c.vx * c.vx + c.vz * c.vz > 0.1) {
     const want = Math.atan2(c.vx, c.vz);
-    let dyy = want - c.yaw;
-    while (dyy > Math.PI) dyy -= Math.PI * 2;
-    while (dyy < -Math.PI) dyy += Math.PI * 2;
-    c.yaw += dyy * Math.min(1, 6 * dt);
+    c.yaw += wrapAngleDelta(want - c.yaw) * Math.min(1, 6 * dt);
   }
   return null;
 }

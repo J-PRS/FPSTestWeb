@@ -1,14 +1,9 @@
 import type { ProjectileEvent, TargetEvent } from './types.js';
+import { lerpAngle } from '../../../shared/angles.ts';
 
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 
-// Angle interpolation (handle wraparound for yaw)
-export const lerpAngle = (a: number, b: number, t: number) => {
-  let d = b - a;
-  while (d > Math.PI) d -= Math.PI * 2;
-  while (d < -Math.PI) d += Math.PI * 2;
-  return a + d * t;
-};
+export { lerpAngle };
 import type { DemoPlayer, PlaybackState } from './DemoPlayer.js';
 
 // Playback internals — loop-wrap handling, seek reconstruction, event
