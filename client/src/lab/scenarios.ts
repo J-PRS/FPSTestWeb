@@ -11,6 +11,7 @@ import { hmHeight, hmNormal, type Heightfield } from '../../../shared/heightfiel
 import { GRAVITY, MoveSim, type MoveSurface } from '../../../shared/movement.js';
 import type { BallVariant } from '../../../shared/ballSim.js';
 import { BotBrain, type BotVec } from '../../../shared/botBrain.js';
+import { getWeaponStats, WeaponType } from '../../../shared/weapons.js';
 import {
   spawnBall, spawnCrawler, spawnBolt, spawnMover,
   LAB_FLAT_FIELD, type LabWorld, type SimEntity, type MoverOpts,
@@ -660,8 +661,96 @@ function botDuel(scene: THREE.Scene): LabInstance {
 }
 
 /* ------------------------------------------------------------------ */
+/* Weapon gym — every projectile weapon firing its real ballistics     */
+/* downrange in parallel lanes. Same stats the server loads: speed,    */
+/* gravity flag, fuse. Watch mortar lob, disc stay flat, cannon skip.  */
+/* ------------------------------------------------------------------ */
+
+// Hitscan / non-projectile types — nothing to arc downrange.
+const GYM_EXCLUDE = new Set<number>([
+  WeaponType.Melee, WeaponType.Slam, WeaponType.Lightning, WeaponType.Railgun,
+  WeaponType.Repair, WeaponType.RemoteRailgun, WeaponType.ClusterBomblet,
+  WeaponType.MRVBomblet, WeaponType.Grenade, WeaponType.ClusterBomb,
+  WeaponType.ArmorGrenade, WeaponType.Javelin, WeaponType.ImpactGrenade,
+]);
+
+function weaponGym(scene: THREE.Scene): LabInstance {
+  const world: LabWorld = { scene, field: FLAT, target: null, time: 0 };
+  const lanes = Object.keys(WeaponType)
+    .filter(k => isNaN(Number(k)))
+    .map(name => ({ name, wt: WeaponType[name as keyof typeof WeaponType] as number, st: getWeaponStats(WeaponType[name as keyof typeof WeaponType]) }))
+    .filter(l => !GYM_EXCLUDE.has(l.wt) && l.st.speed > 0)
+    // Same gun twice would only prove the table — dedupe by ballistics.
+    .filter((l, i, arr) => arr.findIndex(o => o.st.speed === l.st.speed && o.st.gravity === l.st.gravity) === i);
+
+  const W = lanes.length, PITCH = 10;
+  const x0 = -((W - 1) * PITCH) / 2;
+  const wall = new THREE.Mesh(
+    new THREE.BoxGeometry(W * PITCH + 4, 12, 0.5),
+    new THREE.MeshBasicMaterial({ color: 0x22303f }),
+  );
+  wall.position.set(0, 6, 55);
+  scene.add(wall);
+
+  const shells: (ReturnType<typeof spawnBolt>)[] = [];
+  const padGeo = new THREE.CylinderGeometry(1.5, 1.5, 0.3, 12);
+  const laneFx = lanes.map((l, i) => {
+    const x = x0 + i * PITCH;
+    const pad = new THREE.Mesh(padGeo, new THREE.MeshBasicMaterial({ color: l.st.gravity ? 0xff9a3a : 0x3aa7ff }));
+    pad.position.set(x, 0, -40);
+    scene.add(pad);
+    return { name: l.name, wt: l.wt, st: l.st, x, pad, fired: 0, done: 0, cd: 0.3 + i * 0.15 };
+  });
+
+  const fireLane = (l: (typeof laneFx)[number]) => {
+    const dir = 1; // toward the wall (+z)
+    const s = spawnBolt({
+      pos: { x: l.x, y: 2, z: -40 },
+      vel: { x: 0, y: 0, z: l.st.speed * dir },
+      radius: 0.4,
+      color: l.st.gravity ? 0xff9a3a : 0x9adcff,
+      gravity: l.st.gravity ? GRAVITY : 0,
+      maxAge: l.st.maxLifetime ?? 30,
+      onDone: () => { l.done++; },
+    }, world);
+    shells.push(s);
+    l.fired++;
+    l.cd = 1.4;
+  };
+
+  return {
+    tick(dt) {
+      world.time += dt;
+      for (const l of laneFx) {
+        l.cd -= dt;
+        if (l.cd <= 0) fireLane(l);
+      }
+      for (let i = shells.length - 1; i >= 0; i--) {
+        const s = shells[i]!;
+        s.tick(dt, world);
+        if (s.done) { s.dispose(); shells.splice(i, 1); }
+      }
+    },
+    sync() { for (const s of shells) s.sync(); },
+    dump() {
+      const rows: [string, string][] = [['lanes', String(laneFx.length)]];
+      for (const l of laneFx) rows.push([l.name.toLowerCase(), `${l.fired}/${l.done} v${l.st.speed} g${l.st.gravity ? 1 : 0}`]);
+      return rows;
+    },
+    dispose() {
+      for (const s of shells) s.dispose();
+      for (const l of laneFx) scene.remove(l.pad);
+      scene.remove(wall);
+      wall.geometry.dispose();
+      padGeo.dispose();
+    },
+  };
+}
+
+/* ------------------------------------------------------------------ */
 
 export const SCENARIOS: LabScenario[] = [
+  { id: 'weapon-gym', name: 'WEAPON GYM', blurb: 'every weapon firing its real ballistics downrange', create: weaponGym },
   { id: 'bot-duel', name: 'BOT DUEL', blurb: 'real BotBrain minds on MoveSim bodies', create: botDuel },
   { id: 'duel', name: 'DUEL', blurb: 'two fighters trade hitscan-ish bolts', create: duel },
   { id: 'ball-court', name: 'BALL COURT', blurb: 'ballSim bounce + one enraged hunter', create: ballCourt },
