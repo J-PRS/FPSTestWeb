@@ -3,7 +3,7 @@ import type { ProjectileEvent, TargetEvent } from './types.js';
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 
 // Angle interpolation (handle wraparound for yaw)
-const lerpAngle = (a: number, b: number, t: number) => {
+export const lerpAngle = (a: number, b: number, t: number) => {
   let d = b - a;
   while (d > Math.PI) d -= Math.PI * 2;
   while (d < -Math.PI) d += Math.PI * 2;

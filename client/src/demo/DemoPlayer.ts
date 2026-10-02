@@ -241,7 +241,8 @@ export class DemoPlayer {
         velX: f0.velX + (f1.velX - f0.velX) * t,
         velY: f0.velY + (f1.velY - f0.velY) * t,
         velZ: f0.velZ + (f1.velZ - f0.velZ) * t,
-        yaw: f0.yaw, pitch: f0.pitch + (f1.pitch - f0.pitch) * t,
+        yaw: pb.lerpAngle(f0.yaw, f1.yaw, t),
+        pitch: f0.pitch + (f1.pitch - f0.pitch) * t,
         flags: f0.flags,
       });
     }
