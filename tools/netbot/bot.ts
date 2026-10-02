@@ -7,6 +7,8 @@
 // exercise — a server-internal bot can never produce a reject.
 
 import { BotBrain, type BotEnemy, type BrainCtx } from '../../shared/botBrain.ts';
+import { MoveSim, ENERGY } from '../../shared/movement.ts';
+import { hmHeight } from '../../shared/heightfield.ts';
 import { BOT_LOADOUTS, pickBotWeapon } from '../../shared/botLoadouts.ts';
 import { WEAPONS } from '../../shared/weaponTable.ts';
 import { WEAPON_FIRE_INTERVAL_S } from '../../shared/weapons.ts';
@@ -92,7 +94,7 @@ export class NetBot {
       pos: { x: nc.self.pos.x, y: nc.self.pos.y, z: nc.self.pos.z },
       vel: { x: nc.self.vel.x, y: nc.self.vel.y, z: nc.self.vel.z },
       enemies: this.enemies(),
-      groundY: (_x, _z) => nc.self.pos.y, // flat-world approximation — combat is what matters here
+      groundY: (x, z) => nc.field ? hmHeight(nc.field, x, z) : nc.self.pos.y,
       now: Date.now(),
       healthFrac: nc.self.health / 100,
       energy: 100,
@@ -127,19 +129,30 @@ export class NetBot {
       if (nearest && nd > 30) out.dest = { ...nearest.pos };
     }
 
-    // Locomotion toward dest — client-side kinematics; the position channel
-    // reports the result the way a v1 client does.
+    // Locomotion intent → the MoveSim turns it into real physics in
+    // sendPos. Without terrain the bot keeps its old eased kinematics —
+    // a fake, but better than standing still.
     const dx = out.dest.x - nc.self.pos.x;
     const dz = out.dest.z - nc.self.pos.z;
     const d = Math.hypot(dx, dz);
-    if (d > 0.5) {
-      const step = Math.min(CRUISE * THINK_S, d);
-      nc.self.pos.x += (dx / d) * step;
-      nc.self.pos.z += (dz / d) * step;
-      nc.self.pos.y += (out.dest.y - nc.self.pos.y) * 0.2;
-      nc.self.vel = { x: (dx / d) * CRUISE, y: 0, z: (dz / d) * CRUISE };
-    } else {
-      nc.self.vel = { x: 0, y: 0, z: 0 };
+    this.wantMove = {
+      yaw: d > 0.5 ? Math.atan2(dx, dz) : this.wantMove.yaw,
+      forward: d > 0.5 ? 1 : 0,
+      // Real players jet the flats and the uphills — skiing alone leaves
+      // a bot crawling valleys the fake kinematics used to skip over.
+      jet: !!out.move?.jet || d > 60 || (d > 30 && out.dest.y > nc.self.pos.y + 4),
+      jump: !!out.move?.jump,
+    };
+    if (!nc.surface) {
+      if (d > 0.5) {
+        const step = Math.min(CRUISE * THINK_S, d);
+        nc.self.pos.x += (dx / d) * step;
+        nc.self.pos.z += (dz / d) * step;
+        nc.self.pos.y += (out.dest.y - nc.self.pos.y) * 0.2;
+        nc.self.vel = { x: (dx / d) * CRUISE, y: 0, z: (dz / d) * CRUISE };
+      } else {
+        nc.self.vel = { x: 0, y: 0, z: 0 };
+      }
     }
     if (out.move?.jump) nc.send({ type: 'jump', position: { ...nc.self.pos } });
     if (out.move?.jet) nc.send({ type: 'jetpack', position: { ...nc.self.pos } });
@@ -286,12 +299,61 @@ export class NetBot {
     });
   }
 
+  private inSeq = 0;
+  private sim: MoveSim | null = null;
+  private wantMove = { yaw: 0, forward: 0, jet: false, jump: false };
+  /** Local mirror of the server shadow's jet tank — it only thrusts
+   *  while energy > 0, so an always-on jet claim would diverge the
+   *  moment the modeled tank emptied. */
+  private energy = ENERGY.max;
+  private jetting = false;
+
+  /** One local MoveSim per bot, fed the same input stream it sends — the
+   *  server's shadow replays the identical class on the identical field,
+   *  so divergence shrinks to packet loss, not a fake-kinematics gap. */
+  private ensureSim(): MoveSim | null {
+    const nc = this.nc;
+    if (!nc.surface) return null;
+    if (!this.sim) {
+      this.sim = new MoveSim(nc.surface, {
+        pos: { ...nc.self.pos }, vel: { ...nc.self.vel },
+        yaw: 0, pitch: 0, onGround: true,
+      });
+    }
+    return this.sim;
+  }
+
   private sendPos(): void {
     const nc = this.nc;
     if (nc.self.isDead) return;
-    const yaw = Math.atan2(nc.self.vel.x, nc.self.vel.z);
+    const sim = this.ensureSim();
+    if (sim) {
+      // A server-side snap (respawn, correction, room-hop gameState) is
+      // the truth — reseat the local sim on it instead of gliding over.
+      const ddx = nc.self.pos.x - sim.state.pos.x;
+      const ddy = nc.self.pos.y - sim.state.pos.y;
+      const ddz = nc.self.pos.z - sim.state.pos.z;
+      if (ddx * ddx + ddy * ddy + ddz * ddz > 20 * 20) {
+        sim.setState({ pos: { ...nc.self.pos }, vel: { ...nc.self.vel }, yaw: this.wantMove.yaw, pitch: 0, onGround: true });
+      }
+      sim.state.yaw = this.wantMove.yaw;
+      this.jetting = this.wantMove.jet && this.energy > 0;
+      this.energy = Math.max(0, Math.min(ENERGY.max,
+        this.energy + (this.jetting ? -ENERGY.jetDrain : ENERGY.jetCharge) * (1 / POS_HZ)));
+      sim.setInput({ forward: this.wantMove.forward, right: 0, jumpHeld: this.wantMove.jump, skiHeld: true, jetHeld: this.jetting });
+      sim.update(1 / POS_HZ);
+      nc.self.pos = { x: sim.state.pos.x, y: sim.state.pos.y, z: sim.state.pos.z };
+      nc.self.vel = { x: sim.state.vel.x, y: sim.state.vel.y, z: sim.state.vel.z };
+    }
+    const yaw = sim ? sim.state.yaw : Math.atan2(nc.self.vel.x, nc.self.vel.z);
+    this.inSeq++;
+    nc.send({
+      type: 'inputMove', seq: this.inSeq,
+      input: { forward: this.wantMove.forward, right: 0, jump: this.wantMove.jump ? 1 : 0, ski: 1, jet: this.jetting ? 1 : 0 },
+      rotation: { yaw, pitch: 0 },
+    }, true);
     // Movement stays ordered (steady) — jitter lives on the claim channel,
     // matching how the real client keeps movement seq-gated.
-    nc.send({ type: 'position', position: { ...nc.self.pos }, rotation: { yaw, pitch: 0 }, velocity: { ...nc.self.vel } }, true);
+    nc.send({ type: 'position', position: { ...nc.self.pos }, rotation: { yaw, pitch: 0 }, velocity: { ...nc.self.vel }, inputSeq: this.inSeq }, true);
   }
 }

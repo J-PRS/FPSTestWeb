@@ -6,6 +6,9 @@
 
 import type { ClientMessage, ServerMessage, TickUpdatePlayer, Vec3 } from '../../shared/protocol.ts';
 import { decodeTickFrame, isWireFrame } from '../../shared/wire.ts';
+import { hmHeight, hmNormal, type Heightfield } from '../../shared/heightfield.ts';
+import type { MoveSurface } from '../../shared/movement.ts';
+import { fileURLToPath } from 'node:url';
 import { LatencyLink } from './latency.ts';
 import { RtcGameSocket, type BotSocket, type NdModule } from './rtcSocket.ts';
 
@@ -76,6 +79,12 @@ export class NetClient {
    *  already-claimed id) requires presenting it in the next join, same
    *  as the browser client's localStorage 'fps-session-token' path. */
   private sessionToken?: string;
+  /** Terrain the room's sims run on — bot locomotion steps a real MoveSim
+   *  against it so reports and the server's shadow sim replay the same
+   *  physics; without it a bot's eased positions read as airborne drift. */
+  field: Heightfield | null = null;
+  surface: MoveSurface | null = null;
+  private fieldPromise: Promise<void> | null = null;
   private pingTimer: ReturnType<typeof setInterval> | null = null;
   private joinTimer: ReturnType<typeof setInterval> | null = null;
   pingMs = 0;
@@ -139,6 +148,39 @@ export class NetClient {
     return RtcGameSocket.dial(this.url.replace(/\/ws$/, '/rtcs'), rtc.nd, rtc.iceServers ?? []);
   }
 
+  /** Fetch the room's heightfield the way the browser does — the gameState
+   *  names a maps/<file>.bin the server also serves over HTTP. A spec-less
+   *  room falls back to the server's default field file read off disk,
+   *  the same one GameServer itself boots with. */
+  private async loadField(terrain?: string): Promise<void> {
+    try {
+      let buf: Uint8Array | null = null;
+      if (terrain) {
+        const base = this.url.replace(/^ws/, 'http').replace(/\/ws$/, '');
+        const res = await fetch(`${base}/maps/${terrain}`);
+        if (res.ok) buf = new Uint8Array(await res.arrayBuffer());
+      }
+      if (!buf) {
+        const bunFile = (globalThis as { Bun?: { file(p: string): { arrayBuffer(): Promise<ArrayBuffer> } } }).Bun?.file;
+        const ab = await bunFile?.(fileURLToPath(new URL('../../server_bun/heightmap.bin', import.meta.url)))?.arrayBuffer().catch(() => null);
+        if (ab) buf = new Uint8Array(ab);
+      }
+      if (!buf || buf.byteLength < 9) return;
+      const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+      const w = view.getUint32(0, true);
+      const h = view.getUint32(4, true);
+      if (w !== h || w < 2 || buf.byteLength !== 8 + w * h) return;
+      const field: Heightfield = { size: w, data: buf.subarray(8), stride: 1 };
+      this.field = field;
+      this.surface = {
+        getHeight: (x, z) => hmHeight(field, x, z),
+        getNormal: (x, z, out) => { hmNormal(field, x, z, out); return out; },
+      };
+    } catch {
+      // No terrain — the bot stays on flat-world kinematics.
+    }
+  }
+
   /** All outbound traffic flows through the latency shim — combat claims
    *  take the full jitter (unordered transport), steady=true pins a fixed
    *  half-ping so a channel stays ordered. */
@@ -199,6 +241,7 @@ export class NetClient {
           this.self.health = m.localPlayerState.health;
           this.self.isDead = m.localPlayerState.isDead;
         }
+        if (!this.fieldPromise) this.fieldPromise = this.loadField(m.map?.terrain);
         if (m.sessionToken) this.sessionToken = m.sessionToken;
         this.self.team = m.team;
         break;
