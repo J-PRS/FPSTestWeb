@@ -281,6 +281,12 @@ export class ServerBots {
     return this.sheep.of(id);
   }
 
+  /** Test hook — the brain's current destination, for soak probes that
+   *  need to see whether a bot's legs still point at its goal. */
+  debugDest(id: string): { x: number; y: number; z: number } | null {
+    return this.lastOut.get(id)?.dest ?? null;
+  }
+
   /** Test hook — seed the meter directly; accrual tests shouldn't need
    *  to park a bot for 30 simulated seconds to fill the meter. */
   debugSetSheep(id: string, v: number): void {

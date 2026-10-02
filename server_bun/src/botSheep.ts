@@ -35,6 +35,9 @@ export class BotSheepMeter {
   /** Bots currently pinned at 100 — dedupes the maxed-warn so a bot
    *  idling at the cap doesn't re-log every tick. */
   private maxed = new Set<string>();
+  /** Last sim-ms each bot's maxed warn fired — a true llama re-maxes
+   *  every life, so the alarm needs a cooldown or it floods anyway. */
+  private maxWarnedAt = new Map<string, number>();
 
   constructor(private room: Room) {}
 
@@ -121,7 +124,10 @@ export class BotSheepMeter {
       // until proven), so a fresh bot sitting at the cap isn't news.
       if (prev < 100 && !this.maxed.delete(id)) {
         this.maxed.add(id);
-        logger.warn('Sheep meter maxed', { room: this.room.name, bot: id, why: { idle: +why.idle.toFixed(1), ignore: +why.ignore.toFixed(1), cover: +why.cover.toFixed(1) } });
+        if (this.simMs - (this.maxWarnedAt.get(id) ?? -600_000) >= 600_000) {
+          this.maxWarnedAt.set(id, this.simMs);
+          logger.warn('Sheep meter maxed', { room: this.room.name, bot: id, why: { idle: +why.idle.toFixed(1), ignore: +why.ignore.toFixed(1), cover: +why.cover.toFixed(1) } });
+        }
       }
       return;
     }

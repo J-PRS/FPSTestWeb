@@ -75,7 +75,11 @@ export class BotGoals {
       const scent = Math.min(0.85, (ctx.imapDanger?.(goal) ?? 0) * 0.22 * (1.5 - Math.min(1, this.duty())) + personal);
       cands.push({ goal, score: weight * reach * (1 - scent) });
     };
-    offer(ctx.objective, 1.0);
+    // A runner's objective is a commitment, not a candidate: the cap
+    // route is the job, so midfield noise has to beat a heavy weight to
+    // pull the legs. Fights en route get answered by the fire layer
+    // while the feet keep the line — humans run and shoot.
+    offer(ctx.objective, ctx.runner ? 3.5 : 1.0);
     offer(ctx.pickup, 0.8);
     if (heard) offer(heard, 0.2 + this.duty() * 0.5);
     if (wander) offer(wander, 0.35);

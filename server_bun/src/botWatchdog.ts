@@ -18,7 +18,7 @@ const SHEEP_SPEED = 6;
 const SHEEP_COVER_M = 40;
 
 interface StuckState { x: number; z: number; since: number; warned: boolean }
-interface SheepState { winStart: number; ticks: number; skiAir: number; air: number; jet: number; dist: number; lx: number; lz: number }
+interface SheepState { winStart: number; ticks: number; skiAir: number; air: number; jet: number; dist: number; lx: number; lz: number; wasSheep?: boolean }
 
 /** One tick of mobility evidence for checkSheep. */
 export interface MobilitySample {
@@ -110,9 +110,11 @@ export class BotWatchdog {
       };
       logger.info('Bot mobility', stats);
       const jetPct = s.jet / s.ticks;
-      if (frac < SHEEP_SKIAIR || avgSpeed < SHEEP_SPEED || jetPct < SHEEP_JETPCT || s.dist < SHEEP_COVER_M) {
-        logger.warn('Bot sheeping', stats);
-      }
+      const sheeping = frac < SHEEP_SKIAIR || avgSpeed < SHEEP_SPEED || jetPct < SHEEP_JETPCT || s.dist < SHEEP_COVER_M;
+      // Per-window samples are telemetry, not alarms — bots oscillate
+      // across the band every window, which is hundreds of warns a run.
+      // The standing alarm is the sheep meter capping (persistent llama).
+      if (sheeping) logger.info('Bot sheeping', stats);
     }
     s.winStart = now; s.ticks = 0; s.skiAir = 0; s.air = 0; s.jet = 0; s.dist = 0;
   }

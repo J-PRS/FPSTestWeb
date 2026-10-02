@@ -297,8 +297,12 @@ export class ServerBotSenses {
       if (cmd.staffed(p.id, 'escort')) sit.escort = null;
       if (cmd.staffed(p.id, 'push')) sit.push = null;
     }
+    // The task names WHICH job, not WHERE: re-resolve its slot live so
+    // a named chaser tracks the carrier's beacon between the commander's
+    // 2s reassigns instead of running at the position it was posted.
+    const taskGoal = task && { chase: sit.thief, return: sit.dropped, escort: sit.escort, push: sit.push }[task.kind];
     // One role table for both runtimes — shared/flagGoals.ts.
-    const pick = task?.goal ?? roleObjective(this.roles.get(p.id) ?? 'offense', sit, duty);
+    const pick = taskGoal ?? roleObjective(this.roles.get(p.id) ?? 'offense', sit, duty);
     const role = this.roles.get(p.id);
     // Post the push-call when THIS bot is the capper closing in. ETA
     // prices actual ground speed (floor 12 m/s — a bot standing still
@@ -346,7 +350,13 @@ export class ServerBotSenses {
             p.position.z + (enemyStand.z - p.position.z) * t)
             - (p.position.y + (enemyStand.y - p.position.y) * t));
         }
-        if (wall < 6) { goalPos = enemyStand; } else {
+        // Inside the DMZ a capper must keep pressing in: far ring entries
+        // are exits there, and a lip it can jet over is no wall. Without
+        // this the probe kept re-picking entries behind the bot — cappers
+        // entered the 80m ring, rerouted outward, and left ungrazed.
+        const committed = capper && dStand < 80 && wall < 12;
+        if (wall < 6 || committed) { goalPos = enemyStand; } else {
+        const inside = dStand < 80;
         // Re-scored EVERY think — the route stays live to foe movement —
         // but switching is expensive: the incumbent only loses when a
         // challenger beats it by a decisive gap, not when scores jitter
@@ -394,6 +404,7 @@ export class ServerBotSenses {
           // only breaks further out — a plateau stand needs the far
           // rings to find the saddle where its massif opens.
           const ring = a < 8 ? 85 : a < 16 ? 170 : 300;
+          if (inside && ring > dStand + 20) continue;
           const ang = ((a % 8) / 8) * Math.PI * 2 + (a < 8 ? 0 : (a < 16 ? Math.PI / 8 : Math.PI / 4));
           const ex = enemyStand.x + Math.cos(ang) * ring;
           const ez = enemyStand.z + Math.sin(ang) * ring;
