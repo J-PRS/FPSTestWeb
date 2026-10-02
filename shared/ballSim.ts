@@ -32,6 +32,10 @@ export const BALL_ENRAGE_DASH_SPEED = 45.0;
 // readable speeds — above this, the next bounce deadens to 50% elasticity
 // instead of conserving energy (same thud as the post-dash damp).
 export const BALL_OVERSPEED = 100.0;
+// Absolute speed ceiling — impulses and launches stack additively, so
+// without a clamp sustained fire turns an enrage launch into an orbital
+// insertion (observed: a ball parked at ~9km altitude for minutes).
+export const BALL_MAX_SPEED = 140.0;
 // Settle threshold: an impact slower than this doesn't reflect, it just
 // rests on the terrain — no segment. Without it a settled ball keeps
 // micro-bouncing every tick (elastic reflection never dies at low speed),
@@ -247,7 +251,7 @@ function launchAt(b: SimBall, target: SimVec, upFrac: number): void {
   const pdx = target.x - b.x;
   const pdz = target.z - b.z;
   const pd = Math.sqrt(pdx * pdx + pdz * pdz) || 0.001;
-  const speed = Math.max(Math.hypot(b.vx, b.vy, b.vz), BALL_ENRAGE_DASH_SPEED * 0.5);
+  const speed = Math.min(BALL_MAX_SPEED, Math.max(Math.hypot(b.vx, b.vy, b.vz), BALL_ENRAGE_DASH_SPEED * 0.5));
   const h = Math.sqrt(1 - upFrac * upFrac);
   b.vx = (pdx / pd) * speed * h;
   b.vz = (pdz / pd) * speed * h;
@@ -296,5 +300,10 @@ export function applySimDamage(b: SimBall, damage: number, impX: number, impY: n
   b.vx += impX;
   b.vy += impY;
   b.vz += impZ;
+  const s = Math.hypot(b.vx, b.vy, b.vz);
+  if (s > BALL_MAX_SPEED) {
+    const k = BALL_MAX_SPEED / s;
+    b.vx *= k; b.vy *= k; b.vz *= k;
+  }
   return b.health <= 0;
 }
