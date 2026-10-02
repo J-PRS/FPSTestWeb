@@ -189,7 +189,11 @@ export class BotMoves {
     // Airborne is fine — the hop chain spends most of the approach off
     // the deck, and dir thrust buys speed mid-hop too (the AGL ceiling
     // above already vetoes a burn that would balloon).
-    const runIn = ctx.runner === true && gd > 12 && gd < 90 &&
+    // Wave members too: the flood transits at hop-chain pace (~12m/s)
+    // while its capper now burns at ~20 — escorts and push bodies have
+    // to arrive inside the same window or there is no wave. Marshal
+    // staging never trips it: the 110m orbit sits past the gd window.
+    const runIn = (ctx.runner === true || ctx.wave === true) && gd > 12 && gd < 90 &&
       (ctx.objective?.y ?? dest.y) - pos.y < 4 && speed < 26 && comfy;
     this.jetWhy = rise > 2 ? 'climb' : targetHigh ? 'prey' : destHigh ? 'destHigh' : hop ? 'hop' : runIn ? 'runIn' : boost ? 'boost' : '-';
     return this.jetWhy !== '-';
