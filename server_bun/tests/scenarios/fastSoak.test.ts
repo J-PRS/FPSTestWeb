@@ -545,7 +545,10 @@ describe('scenario: warp soak throughput', () => {
                 // What pulled him out: if the flag left the stand mid-
                 // push (teammate grabbed, or a thief took it), 'repelled'
                 // is a role switch, not a retreat — tally the state.
-                const fst = `${foeF0.state ?? '?'}${foeF0.carrier ? '/' + (room.players.getPlayer(foeF0.carrier)?.team === p.team ? 'ours' : 'foe') : ''}`;
+                // Own-flag state tagged too: a capper who pivots to
+                // recover OUR flag mid-push reads 'home' otherwise.
+                const ownF = room.flags?.flags.get(p.team);
+                const fst = `${foeF0.state ?? '?'}${foeF0.carrier ? '/' + (room.players.getPlayer(foeF0.carrier)?.team === p.team ? 'ours' : 'foe') : ''}${ownF && ownF.state !== 'home' ? '/own:' + ownF.state : ''}`;
                 capStop.fSt.set(fst, (capStop.fSt.get(fst) ?? 0) + 1);
                 capStop.dSpd.push(Math.hypot(p.velocity.x, p.velocity.z) - rc.spd);
                 capStop.dHp.push(Math.max(0, p.health) - rc.hp);
