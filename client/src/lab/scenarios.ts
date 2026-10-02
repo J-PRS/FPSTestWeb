@@ -12,6 +12,7 @@ import { GRAVITY, MoveSim, type MoveSurface } from '../../../shared/movement.js'
 import type { BallVariant } from '../../../shared/ballSim.js';
 import { BotBrain, type BotVec } from '../../../shared/botBrain.js';
 import { getWeaponStats, WeaponType } from '../../../shared/weapons.js';
+import { BOT_LOADOUTS, pickBotWeapon, type BotLoadout } from '../../../shared/botLoadouts.js';
 import {
   spawnBall, spawnCrawler, spawnBolt, spawnMover,
   LAB_FLAT_FIELD, type LabWorld, type SimEntity, type MoverOpts,
@@ -466,7 +467,6 @@ const BOT_SURFACE: MoveSurface = {
 };
 const BOT_HP = 100;
 const BOT_ENERGY_MAX = 100;
-const BOLT_SPEED = 120;
 
 /** Client's locomote() slew — turn toward dest at a wrist-speed rate. */
 function slewYaw(cur: number, want: number, k: number): number {
@@ -488,11 +488,12 @@ interface BotAgent {
   lastMove: { ski?: boolean; jet?: boolean; jump?: boolean } | undefined;
   name: string;
   dead: number; // respawn countdown
+  lo: BotLoadout;
 }
 
-interface BotBolt { p: SimProjectile; m: THREE.Mesh; from: BotAgent }
+interface BotBolt { p: SimProjectile; m: THREE.Mesh; from: BotAgent; wt: number; grav: boolean }
 
-function spawnAgent(scene: THREE.Scene, name: string, color: number, x: number): BotAgent {
+function spawnAgent(scene: THREE.Scene, name: string, color: number, x: number, lo: BotLoadout): BotAgent {
   const pos = { x, y: 2, z: 0 };
   const mesh = new THREE.Mesh(
     new THREE.CapsuleGeometry(0.9, 1.4, 4, 12),
@@ -506,7 +507,7 @@ function spawnAgent(scene: THREE.Scene, name: string, color: number, x: number):
       yaw: 0, pitch: 0, onGround: false,
     }),
     mesh, hp: BOT_HP, energy: BOT_ENERGY_MAX, yaw: 0,
-    lastDest: null, lastMove: undefined, name, dead: 0,
+    lastDest: null, lastMove: undefined, name, dead: 0, lo,
   };
 }
 
@@ -541,27 +542,35 @@ function locomoteAgent(a: BotAgent, dt: number): void {
 
 const botSpeed = (a: BotAgent) => Math.hypot(a.sim.state.vel.x, a.sim.state.vel.y, a.sim.state.vel.z).toFixed(1);
 
-function botDuel(scene: THREE.Scene): LabInstance {
-  const A = spawnAgent(scene, 'alpha', 0x5ad0ff, -30);
-  const B = spawnAgent(scene, 'beta', 0xff6a4d, 30);
+/** Weapon the brain would bring to this range — same pick the game host
+ *  runs at botBrain.ts think(). Speed 0 (hitscan) means no shell. */
+function pickAtRange(a: BotAgent, d: number) {
+  const wt = pickBotWeapon(a.lo, d, d);
+  return { wt, st: getWeaponStats(wt) };
+}
+
+function botDuel(scene: THREE.Scene, loA: BotLoadout, loB: BotLoadout): LabInstance {
+  const A = spawnAgent(scene, 'alpha', 0x5ad0ff, -30, loA);
+  const B = spawnAgent(scene, 'beta', 0xff6a4d, 30, loB);
 
   const boltGeo = new THREE.SphereGeometry(0.25, 8, 8);
   const boltPool: THREE.Mesh[] = [];
   const bolts: BotBolt[] = [];
   let now = 0, deaths = 0, fires = 0, hits = 0;
 
-  const fire = (f: BotAgent, aim: BotVec) => {
+  const fire = (f: BotAgent, foe: BotAgent, aim: BotVec) => {
     const s = f.sim.state;
-    const dx = aim.x - s.pos.x, dy = aim.y - s.pos.y, dz = aim.z - s.pos.z;
-    const d = Math.hypot(dx, dy, dz) || 1;
-    const m = boltPool.pop() ?? new THREE.Mesh(boltGeo, new THREE.MeshBasicMaterial({ color: 0xfff3a0 }));
+    const d = Math.hypot(aim.x - s.pos.x, aim.y - s.pos.y, aim.z - s.pos.z) || 1;
+    const { st, wt } = pickAtRange(f, d);
+    if (st.speed <= 0) return; // hitscan pick — no shell to fly in the lab
+    const m = boltPool.pop() ?? new THREE.Mesh(boltGeo, new THREE.MeshBasicMaterial({ color: st.gravity ? 0xffb25a : 0xfff3a0 }));
     m.visible = true;
     scene.add(m);
     bolts.push({
       p: { pos: { x: s.pos.x, y: s.pos.y, z: s.pos.z },
-           vel: { x: dx / d * BOLT_SPEED, y: dy / d * BOLT_SPEED, z: dz / d * BOLT_SPEED },
+           vel: { x: (aim.x - s.pos.x) / d * st.speed, y: (aim.y - s.pos.y) / d * st.speed, z: (aim.z - s.pos.z) / d * st.speed },
            age: 0 },
-      m, from: f,
+      m, from: f, wt, grav: st.gravity,
     });
     fires++;
   };
@@ -580,23 +589,23 @@ function botDuel(scene: THREE.Scene): LabInstance {
       healthFrac: a.hp / BOT_HP,
       // Inbound shells feed the dodge sense — same channel the game host fills.
       threats: bolts.filter(b => b.from !== a).map(b => b.p.pos),
-      weaponSpeed: () => BOLT_SPEED,
-      weaponGravity: () => false,
+      weaponSpeed: d => pickAtRange(a, d).st.speed,
+      weaponGravity: d => pickAtRange(a, d).st.gravity,
     });
     a.lastDest = out.dest;
     a.lastMove = out.move;
-    if (out.fire) fire(a, out.fire.aim);
+    if (out.fire) fire(a, foe, out.fire.aim);
   };
 
   /** Bolt flight + hit resolution — segPointDist vs the foe's capsule. */
   const stepBolts = (dt: number): void => {
     for (let i = bolts.length - 1; i >= 0; i--) {
       const bolt = bolts[i]!;
-      const from = projStep(bolt.p, dt, 0);
+      const from = projStep(bolt.p, dt, bolt.grav ? GRAVITY : 0);
       const foe = bolt.from === A ? B : A;
       const fp = foe.sim.state.pos;
       if (foe.dead <= 0 && segPointDist(from, bolt.p.pos, { x: fp.x, y: fp.y, z: fp.z }) < 1.4) {
-        foe.hp -= 20;
+        foe.hp -= getWeaponStats(bolt.wt).directDamage;
         hits++;
         foe.brain.takeHit(bolt.from.sim.state.pos);
         boltPool.push(bolt.m); bolt.m.visible = false;
@@ -693,6 +702,7 @@ function weaponGym(scene: THREE.Scene): LabInstance {
   scene.add(wall);
 
   const shells: (ReturnType<typeof spawnBolt>)[] = [];
+  const impacts: { m: THREE.Mesh; t: number }[] = [];
   const padGeo = new THREE.CylinderGeometry(1.5, 1.5, 0.3, 12);
   const laneFx = lanes.map((l, i) => {
     const x = x0 + i * PITCH;
@@ -703,15 +713,30 @@ function weaponGym(scene: THREE.Scene): LabInstance {
   });
 
   const fireLane = (l: (typeof laneFx)[number]) => {
-    const dir = 1; // toward the wall (+z)
+    const color = l.st.gravity ? 0xff9a3a : 0x9adcff;
     const s = spawnBolt({
       pos: { x: l.x, y: 2, z: -40 },
-      vel: { x: 0, y: 0, z: l.st.speed * dir },
-      radius: 0.4,
-      color: l.st.gravity ? 0xff9a3a : 0x9adcff,
+      vel: { x: 0, y: 0, z: l.st.speed },
+      radius: Math.max(0.15, l.st.bodyRadius * 0.5),
+      color,
       gravity: l.st.gravity ? GRAVITY : 0,
       maxAge: l.st.maxLifetime ?? 30,
-      onDone: () => { l.done++; },
+      walls: [{ axis: 'z', at: 54 }], // the target wall — was visual-only before
+      onDone: (hit) => {
+        l.done++;
+        if (!hit) return;
+        // Impact ring scaled to the weapon's real aoe radius.
+        if (l.st.aoeRadius > 0) {
+          const ring = new THREE.Mesh(
+            new THREE.RingGeometry(l.st.aoeRadius * 0.6, l.st.aoeRadius, 24),
+            new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.85, side: THREE.DoubleSide }),
+          );
+          ring.rotation.x = -Math.PI / 2;
+          ring.position.set(hit.x, hit.y + 0.3, hit.z);
+          scene.add(ring);
+          impacts.push({ m: ring, t: 0 });
+        }
+      },
     }, world);
     shells.push(s);
     l.fired++;
@@ -730,6 +755,13 @@ function weaponGym(scene: THREE.Scene): LabInstance {
         s.tick(dt, world);
         if (s.done) { s.dispose(); shells.splice(i, 1); }
       }
+      for (let i = impacts.length - 1; i >= 0; i--) {
+        const im = impacts[i]!;
+        im.t += dt;
+        im.m.scale.setScalar(1 + im.t * 4);
+        (im.m.material as THREE.MeshBasicMaterial).opacity = Math.max(0, 0.85 - im.t * 1.4);
+        if (im.t > 0.6) { scene.remove(im.m); im.m.geometry.dispose(); impacts.splice(i, 1); }
+      }
     },
     sync() { for (const s of shells) s.sync(); },
     dump() {
@@ -739,6 +771,7 @@ function weaponGym(scene: THREE.Scene): LabInstance {
     },
     dispose() {
       for (const s of shells) s.dispose();
+      for (const im of impacts) { scene.remove(im.m); im.m.geometry.dispose(); }
       for (const l of laneFx) scene.remove(l.pad);
       scene.remove(wall);
       wall.geometry.dispose();
@@ -751,7 +784,9 @@ function weaponGym(scene: THREE.Scene): LabInstance {
 
 export const SCENARIOS: LabScenario[] = [
   { id: 'weapon-gym', name: 'WEAPON GYM', blurb: 'every weapon firing its real ballistics downrange', create: weaponGym },
-  { id: 'bot-duel', name: 'BOT DUEL', blurb: 'real BotBrain minds on MoveSim bodies', create: botDuel },
+  { id: 'bot-duel', name: 'BOT DUEL', blurb: 'real BotBrain minds on MoveSim bodies', create: scene => botDuel(scene, BOT_LOADOUTS[0]!, BOT_LOADOUTS[1]!) },
+  { id: 'clash-artillery', name: 'MORTAR vs BRUISER', blurb: 'artillery loadout vs shotgun/cannon bruiser', create: scene => botDuel(scene, BOT_LOADOUTS[7]!, BOT_LOADOUTS[5]!) },
+  { id: 'clash-beam', name: 'HOSER vs BEAM RIDER', blurb: 'sprinkler vitality vs lightning/railgun overcharge', create: scene => botDuel(scene, BOT_LOADOUTS[4]!, BOT_LOADOUTS[8]!) },
   { id: 'duel', name: 'DUEL', blurb: 'two fighters trade hitscan-ish bolts', create: duel },
   { id: 'ball-court', name: 'BALL COURT', blurb: 'ballSim bounce + one enraged hunter', create: ballCourt },
   { id: 'mortar-volley', name: 'MORTAR VOLLEY', blurb: 'projStep gravity arcs + terrain impacts', create: mortarVolley },

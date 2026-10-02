@@ -127,9 +127,13 @@ export interface BoltOpts {
   pos: { x: number; y: number; z: number };
   vel: { x: number; y: number; z: number };
   radius?: number; color?: number; gravity?: number; maxAge?: number;
-  /** Impact/outcome edge — impact point or null on expiry. */
+  /** Wall planes: bolt dies when pos crosses one (lab colliders). */
+  walls?: { axis: 'x' | 'y' | 'z'; at: number }[];
+  /** Extra impact effect — gets the point + whether it was a wall/terrain hit. */
   onDone?: (impact: { x: number; y: number; z: number } | null) => void;
 }
+
+const BOLT_TRAIL_PTS = 12;
 
 export function spawnBolt(o: BoltOpts, world: LabWorld): SimEntity & { sim: SimProjectile; done: boolean } {
   const p: SimProjectile = { pos: { ...o.pos }, vel: { ...o.vel }, age: 0 };
@@ -139,20 +143,46 @@ export function spawnBolt(o: BoltOpts, world: LabWorld): SimEntity & { sim: SimP
   );
   mesh.position.set(o.pos.x, o.pos.y, o.pos.z);
   world.scene.add(mesh);
+
+  // Ribbon-lite trail: a fading line of recent positions — reads as a
+  // weapon silhouette without pulling the game's batch machinery in.
+  const trailGeo = new THREE.BufferGeometry();
+  const trailPos = new Float32Array(BOLT_TRAIL_PTS * 3);
+  trailGeo.setAttribute('position', new THREE.BufferAttribute(trailPos, 3));
+  const trail = new THREE.Line(trailGeo, new THREE.LineBasicMaterial({ color: o.color ?? 0xffe08a, transparent: true, opacity: 0.8 }));
+  trail.frustumCulled = false;
+  const history: { x: number; y: number; z: number }[] = [];
+  world.scene.add(trail);
+
   const self: SimEntity & { sim: SimProjectile; done: boolean } = {
     sim: p, mesh, done: false,
     tick(dt, w) {
       if (self.done) return;
       const from = projStep(p, dt, o.gravity ?? GRAVITY);
-      const hit = segFieldHit(from, p.pos, w.field);
+      let hit = segFieldHit(from, p.pos, w.field);
+      if (!hit && o.walls?.some(wall =>
+        (wall.axis === 'x' ? p.pos.x : wall.axis === 'y' ? p.pos.y : p.pos.z) * Math.sign(wall.at) >= Math.abs(wall.at))) {
+        hit = { x: p.pos.x, y: p.pos.y, z: p.pos.z };
+      }
       if (hit || p.age > (o.maxAge ?? 30)) {
         self.done = true;
         if (hit) { p.pos.x = hit.x; p.pos.y = hit.y; p.pos.z = hit.z; }
         o.onDone?.(hit);
       }
     },
-    sync() { mesh.position.set(p.pos.x, p.pos.y, p.pos.z); },
-    dispose() { world.scene.remove(mesh); mesh.geometry.dispose(); },
+    sync() {
+      mesh.position.set(p.pos.x, p.pos.y, p.pos.z);
+      history.push({ x: p.pos.x, y: p.pos.y, z: p.pos.z });
+      if (history.length > BOLT_TRAIL_PTS) history.shift();
+      history.forEach((h, i) => { trailPos[i * 3] = h.x; trailPos[i * 3 + 1] = h.y; trailPos[i * 3 + 2] = h.z; });
+      trailGeo.attributes.position!.needsUpdate = true;
+      trailGeo.setDrawRange(0, history.length);
+    },
+    dispose() {
+      world.scene.remove(mesh, trail);
+      mesh.geometry.dispose();
+      trailGeo.dispose();
+    },
   };
   return self;
 }
