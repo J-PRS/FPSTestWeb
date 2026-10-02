@@ -37,6 +37,18 @@ export function pickDest(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, fe
       // wandering on — same "nobody close enough to interrupt" gate the
       // emplacement pick uses (a weld under fire is a feeding run).
       if (b.builder && !fearing && ctx.repair) return ctx.repair.pos;
+      // Quiet-map drift: with no hunt, no objective and no gem, pull the
+      // wander toward wherever the action last scented — fleets that
+      // only walk nav lines never meet. A pull, not a commit: the roam
+      // goal still leads, the scent just bends it.
+      const hot = ctx.imapHottest?.(pos);
+      if (hot && hot.v > 0.3) {
+        return {
+          x: b.goalS.goal.x * 0.65 + hot.x * 0.35,
+          y: b.goalS.goal.y,
+          z: b.goalS.goal.z * 0.65 + hot.z * 0.35,
+        };
+      }
       return b.goalS.goal;
     }
     const t = b.h.hunt;

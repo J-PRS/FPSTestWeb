@@ -40,10 +40,18 @@ export class HitLedger {
     if (!killed) {
       this.duelStart.set(duelKey, this.duelStart.get(duelKey) ?? simNow());
       if (this.duelStart.size > 512) this.pruneStaleDuels();
+      const v = c.playerManager.getPlayer(targetId);
+      if (v) c.deps.influence?.splat(v.position, c.deps.influence.dangerLayer(v.team ?? 'alpha'), 0.3);
       return;
     }
     const victim = c.playerManager.getPlayer(targetId);
-    if (victim) weaponStats.recordDeath(modeTag, victim.position);
+    if (victim) {
+      weaponStats.recordDeath(modeTag, victim.position);
+      // Deaths are the loudest scent the map gets — the victim's team
+      // reads its own graveyard layer when picking where NOT to walk.
+      c.deps.influence?.splat(victim.position, c.deps.influence.dangerLayer(victim.team ?? 'alpha'), 2);
+      c.deps.influence?.splat(victim.position, 'opportunity', 0.8);
+    }
     if (shooterId === targetId && impactDist !== undefined) selfKillImpactDist.push(impactDist);
     weaponStats.recordKillSpeed(modeTag,
       c.playerManager.getPlayer(shooterId)?.velocity ?? null,

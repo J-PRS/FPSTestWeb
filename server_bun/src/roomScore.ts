@@ -11,6 +11,7 @@ import type { ServerMessage } from '../../shared/protocol.ts';
 import { logger } from './logger.ts';
 import { healPool } from './healPool.ts';
 import { simNow } from './simClock.ts';
+import type { InfluenceMap } from './influenceMap.ts';
 
 // Score/kill economy — every path that turns a death or a touch into
 // points, pickups, or the match horn. Split from Room.ts so the room file
@@ -32,6 +33,7 @@ export interface ScoreHost {
   pushNoise(pos: Vec3): void;
   endMatch(w: string): void;
   flagCarrierDied(playerId: string): void;
+  influence: InfluenceMap;
 }
 
 export class RoomScore {
@@ -79,6 +81,7 @@ export class RoomScore {
         const gz2 = pos.z + dz + (this.h.rng() - 0.5) * 2;
         const gy2 = (this.h.field ? hmHeight(this.h.field, gx2, gz2) : pos.y) + 0.5;
         this.h.pickups?.spawn({ x: gx2, y: gy2, z: gz2 });
+        this.h.influence.splat({ x: gx2, y: gy2, z: gz2 }, 'opportunity', 0.5);
       }
       return;
     }
@@ -126,7 +129,10 @@ export class RoomScore {
       // Kill-confirmed mode (tdm): the corpse drops a tag that ANY team
       // can pick up for another point — deny by grabbing it first.
       const t = this.h.players.getPlayer(targetId);
-      if (this.h.mode === 'tdm' && t) this.h.pickups?.spawn(t.position, 'tag');
+      if (this.h.mode === 'tdm' && t) {
+        this.h.pickups?.spawn(t.position, 'tag');
+        this.h.influence.splat(t.position, 'opportunity', 0.5);
+      }
     }
   }
 

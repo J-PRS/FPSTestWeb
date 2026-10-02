@@ -16,6 +16,7 @@ import { MessageHandler, type RoomInfo } from './MessageHandler.ts';
 import { BallSim } from './BallSim.ts';
 import { CreatureSim } from './CreatureSim.ts';
 import { structureColliders } from '../../shared/ballSim.ts';
+import { InfluenceMap } from './influenceMap.ts';
 import { hmHeight, type Heightfield } from '../../shared/heightfield.ts';
 import { RoomMoveSim } from './RoomMoveSim.ts';
 import { type MapSpec, resolveMapSpec } from '../../shared/mapSpec.ts';
@@ -113,6 +114,9 @@ export class Room {
   readonly projectiles: RoomProjectiles;
   /** Server-side simulations ticked each room tick, in order. */
   readonly sims: { tick(dt: number): void }[] = [];
+  /** Spatial memory — kills/fights/gems/flags leave decaying scent the
+   *  brains read for where-the-action-was. See influenceMap.ts. */
+  readonly influence = new InfluenceMap();
   /** Per-player movement shadow — MoveSim fed by inputMove, reconciled
    *  against reported positions. Judge mode: reported pos stays truth,
    *  divergence is the anti-cheat signal. Authority mode
@@ -324,6 +328,7 @@ export class Room {
     this.sims.push({ tick: (dt) => this.projectiles.tick(dt) });
     this.sims.push({ tick: (dt) => this.moveSim.tick(dt) });
     this.sims.push({ tick: (dt) => this.healthTick(dt) });
+    this.sims.push({ tick: (dt) => this.influence.tick(dt) });
     this.moveSim.health = this.health;
   }
 
@@ -384,6 +389,7 @@ export class Room {
         this.ballSim.splashDamage(ownerId, pos, radius, maxDamage);
         this.creatureSim.splashDamage(ownerId, pos, radius, maxDamage);
       },
+      influence: this.influence,
       creatureArmor: (pos, amount, radius) => {
         this.ballSim.armorBlast(pos, radius, amount);
         this.creatureSim.armorBlast(pos, radius, amount);
@@ -536,6 +542,7 @@ export class Room {
     while (this.noises.length && now - this.noises[0]!.at > Room.NOISE_TTL) this.noises.shift();
     this.noises.push({ pos: { ...pos }, at: now });
     if (this.noises.length > Room.NOISE_MAX) this.noises.shift();
+    this.influence.splat(pos, 'opportunity', 0.4);
   }
 
   /** Recent noise positions within earshot of pos (no LOS required). */

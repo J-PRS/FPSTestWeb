@@ -3,6 +3,7 @@ import { PlayerManager } from './PlayerManager.ts';
 import { RateLimiter } from './RateLimiter.ts';
 import { CombatHandler, type CombatDeps } from './CombatHandler.ts';
 import type { KillFeed } from './killFeed.ts';
+import type { InfluenceMap } from './influenceMap.ts';
 import { logger } from './logger.ts';
 import { PROTOCOL_VERSION } from '../../shared/protocol.ts';
 import { CLIENT_STATUS_MASK } from '../../shared/status.ts';
@@ -74,6 +75,7 @@ export interface RoomInfo {
   deployBlast?: (pos: Vec3, damage: number, radius: number, shooterId: string) => void;
   pickupsKnock?: (at: Vec3, radius: number, force: number) => void;
   preySplash?: (ownerId: string, pos: Vec3, radius: number, maxDamage: number) => void;
+  influence?: InfluenceMap;
   /** Instant-skill claim sink — Room.moveSim.drainEnergy(ENERGY.skillCost). */
   onSkillUse?: (playerId: string) => void;
   /** Shadow-move hooks — Room.moveSim. Position reports reconcile the
@@ -140,6 +142,7 @@ function combatDeps(roomInfo: RoomInfo | undefined): CombatDeps {
     deployBlast: roomInfo?.deployBlast,
     pickupsKnock: roomInfo?.pickupsKnock,
     preySplash: roomInfo?.preySplash,
+    influence: roomInfo?.influence,
     health: roomInfo?.health,
     envRange: roomInfo?.envRange,
     creatureArmor: roomInfo?.creatureArmor,

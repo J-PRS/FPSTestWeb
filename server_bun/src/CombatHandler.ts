@@ -19,6 +19,7 @@ import { handleEnvironmentDamage, handleHeal } from './envClaims.ts';
 import { crawlerAttack, botAttack } from './serverAttacks.ts';
 import { hitClaim, registerMiss } from './shotClaims.ts';
 import { simNow } from './simClock.ts';
+import type { InfluenceMap } from './influenceMap.ts';
 import { weaponStats } from './weaponStats.ts';
 
 type BroadcastFn = (msg: ServerMessage, excludePlayerId?: string) => void;
@@ -80,6 +81,9 @@ export interface CombatDeps {
   /** Splash falloff into both prey sims (balls + species pops) — used by
    *  server-owned blasts that skip the projectile path, like mines. */
   preySplash?: (ownerId: string, pos: Vec3, radius: number, maxDamage: number) => void;
+  /** Spatial memory: hits and kills deposit danger scent on the victim's
+   *  team layer; the map itself lives on Room. */
+  influence?: InfluenceMap;
   /** Seeded room rng — absent = ambient Math.random (production). */
   rng?: () => number;
 }

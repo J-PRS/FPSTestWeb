@@ -338,5 +338,9 @@ export function retreatDest(ctx: BrainCtx, pos: BotVec, t: BotEnemy): BotVec {
     if (od < ad && od > 4) { ad = od; ally = o; }
   }
   if (ally && ad < 2500) { rx = (rx + ally.x) * 0.5; rz = (rz + ally.z) * 0.5; }
+  // Spatial memory votes too: fold the escape toward the direction the
+  // map says is quiet — running away blind lands in yesterday's graveyard.
+  const q = ctx.imapQuietDir?.(pos);
+  if (q) { rx += q.x * 12; rz += q.z * 12; }
   return { x: rx, y: pos.y, z: rz };
 }

@@ -518,6 +518,11 @@ export class ServerBotSenses {
       // like a human reading the arc instead of eating every volley.
       threats: this.room.projectiles.incomingNear(p.position, 12),
       sounds: this.room.noisesNear(p.position, 50),
+      // Influence reads are team-relative: the quiet dir flees toward
+      // where THIS side isn't bleeding; the hot cell is shared scent.
+      imapQuietDir: (v: BotVec) =>
+        this.room.influence.quietestDir(v, this.room.influence.dangerLayer(p.team ?? 'alpha')),
+      imapHottest: (v: BotVec) => this.room.influence.hottestNear(v, 'opportunity'),
       notice: this.noticeFor(id, p.team, now),
       repair: this.repairJob(p),
       now,

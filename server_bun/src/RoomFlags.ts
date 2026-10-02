@@ -137,6 +137,7 @@ export class RoomFlags {
       f.state = 'dropped';
       f.carrier = null;
       f.dropT = FLAG_RESET_S;
+      this.room.influence.splat(f.pos, 'opportunity', 1.2);
       this.dirty = true;
       return null;
     }
@@ -159,6 +160,7 @@ export class RoomFlags {
       f.pos = { ...f.home };
       f.carrier = null;
       f.carriedAt = 0;
+      this.room.influence.splat(f.home, 'opportunity', 1.2);
       this.dirty = true;
       return carrier.team as TeamId;
     }
@@ -197,6 +199,8 @@ export class RoomFlags {
       f.state = 'carried';
       f.carrier = t.id;
       f.carriedAt = simNow();
+      // A grab is the loudest objective scent — it starts the chase.
+      this.room.influence.splat(f.pos, 'opportunity', 1.2);
       this.dirty = true;
     }
   }

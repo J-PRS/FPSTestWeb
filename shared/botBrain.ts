@@ -143,6 +143,12 @@ export interface BrainCtx {
    *  skill matrix (snap/track/arc axes, moving vs still split, form).
    *  Omit → every bot shoots at 1×. */
   aimSkill?(dist: number, targetSpeed: number): number;
+  /** Spatial-memory hooks — the host's influence map. QuietDir points
+   *  at the least-danger-scented ring cell ~160m out (where MY team is
+   *  NOT getting hurt); hottest returns the strongest opportunity cell
+   *  within ~190m (fights, gems, flag events). Absent without a map. */
+  imapQuietDir?(pos: BotVec): { x: number; z: number };
+  imapHottest?(pos: BotVec): { x: number; z: number; v: number } | null;
 }
 
 export interface BrainOut {
