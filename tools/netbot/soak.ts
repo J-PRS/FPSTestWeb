@@ -64,7 +64,9 @@ console.log('\n=== per-bot ===');
 for (const { nc } of bots) {
   const t = nc.tel;
   const rejects = [...t.rejects.entries()].map(([r, n]) => `${r}:${n}`).join(' ') || 'none';
+  const blocked = [...t.fireBlocked.entries()].map(([r, n]) => `${r}:${n}`).join(' ') || 'none';
   console.log(`${nc.id}: shots=${t.shots} claims=${t.claims} dealt=${t.hitsDealt} taken=${t.hitsTaken} ` +
+    `intent=${t.fireIntents} blocked=[${blocked}] ` +
     `k/d=${t.kills}/${t.deaths} rejects=[${rejects}] corr=${t.corrections} dedup=${t.dedupDrops} ` +
     `hops=${t.hops} gs=${t.gameStates} rtt=${nc.pingMs}ms${nc.closed ? ` CLOSED[${nc.closeInfo}]` : ''}`);
   const totalRejects = [...t.rejects.values()].reduce((a, b) => a + b, 0);

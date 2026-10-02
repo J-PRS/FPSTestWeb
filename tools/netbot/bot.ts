@@ -299,33 +299,36 @@ export class NetBot {
     if (out.move?.jump) nc.send({ type: 'jump', position: { ...nc.self.pos } });
     if (out.move?.jet) nc.send({ type: 'jetpack', position: { ...nc.self.pos } });
 
-    if (out.fire) this.fire(out.fire.targetId, out.fire.aim);
+    if (out.fire) { nc.tel.fireIntents++; this.fire(out.fire.targetId, out.fire.aim); }
   }
 
   /** Spawn claim → the shell exists server-side; impact claims go out at
    *  flight time. Mirrors fire.ts sendShot + impact.ts claims. */
   private fire(targetId: string, aim: { x: number; y: number; z: number }): void {
     const nc = this.nc;
+    const blocked = (why: string) => {
+      nc.tel.fireBlocked.set(why, (nc.tel.fireBlocked.get(why) ?? 0) + 1);
+    };
     const target = this.targetEntry(targetId);
-    if (!target || target.isDead) return;
+    if (!target || target.isDead) return blocked('dead');
     const dist = Math.hypot(target.pos.x - nc.self.pos.x, target.pos.y - nc.self.pos.y, target.pos.z - nc.self.pos.z);
     // Long shots are unclaimable on jitter — a shell in the air >0.5s
     // leaves the target too much room to dodge past the legal radius
     // by the time the hit claim lands. Real fights close first anyway.
-    if (dist > 45) return;
-    // A kill landing mid-flight leaves the shell's hit claim bouncing
-    // off a corpse — open fire only when the target has TTK headroom.
-    // Creature hp isn't on the wire, so the gate applies to players only.
+    if (dist > 45) return blocked('dist');
+    // No wounded-target gate: a real player keeps firing at sub-50hp
+    // enemies — it's the most human shot there is. A claim that lands
+    // after the target dies hits the same server reject any player's
+    // late volley would.
     const isCreature = targetId.startsWith('b:') || targetId.startsWith('c:');
-    if (!isCreature && target.health < 50) return;
     const weaponType = this.legalWeapon(dist);
     const w = WEAPONS[weaponType];
-    if (!w || w.speed <= 0) return; // hitscan kinds — skip for now, beams need their own claim shape
+    if (!w || w.speed <= 0) return blocked('speed0'); // hitscan kinds — skip for now, beams need their own claim shape
     // The server enforces WEAPON_FIRE_INTERVAL_S per spawn claim — fire
     // slower than it and every spawn claim reads as spam.
     const interval = (WEAPON_FIRE_INTERVAL_S[weaponType as WeaponType] ?? 0.1) * 1000;
-    if (Date.now() - this.lastFireAt < interval) return;
-    if (Date.now() < this.holdFireUntil) return;
+    if (Date.now() - this.lastFireAt < interval) return blocked('interval');
+    if (Date.now() < this.holdFireUntil) return blocked('holdfire');
     this.lastFireAt = Date.now();
 
     const dir = {

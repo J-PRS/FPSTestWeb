@@ -37,6 +37,10 @@ export interface NetTelemetry {
   gameStates: number;
   hops: number;
   dedupDrops: number;
+  /** Brain fire intents and which gate each died on — the difference
+   *  between "never chose to shoot" and "chose but couldn't claim". */
+  fireIntents: number;
+  fireBlocked: Map<string, number>;
 }
 
 const EVENT_TYPES = new Set(['playerHit', 'playerKill', 'playerRespawn', 'shotRejected', 'correction', 'yourHealth']);
@@ -59,6 +63,7 @@ export class NetClient {
     hitsDealt: 0, hitsTaken: 0, kills: 0, deaths: 0,
     shots: 0, claims: 0, rejects: new Map(), corrections: 0,
     gameStates: 0, hops: 0, dedupDrops: 0,
+    fireIntents: 0, fireBlocked: new Map(),
   };
 
   /** Self state — pos driven by bot locomotion (position channel), the
