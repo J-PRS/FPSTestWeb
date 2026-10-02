@@ -78,7 +78,10 @@ export class BotMoves {
     // Gate on the face, not the target: a moat wall sits between the bot
     // and a goal that's downhill of the crest — altitude-of-goal would
     // never arm the perch.
-    if (!ctx.posted && ctx.energy !== undefined && !airborne && rise > 3) {
+    // Runners don't perch — the breath gate exists to stage a climb,
+    // and a runner arriving on an apron rise isn't climbing, he's
+    // arriving. Parking him 25m out is a free pick for the ring.
+    if (!ctx.posted && !ctx.runner && ctx.energy !== undefined && !airborne && rise > 3) {
       if (this.breath) this.breath = ctx.energy < 38;
       else this.breath = ctx.energy < 12;
       if (this.breath) { this.jetHold = 0; this.jetOut = false; return { ski: false, jet: false, jump: false, park: true }; }
