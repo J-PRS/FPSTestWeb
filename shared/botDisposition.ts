@@ -27,6 +27,11 @@ export function pickDest(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, fe
     // fights won fights but lost flags). fire stays live elsewhere in
     // the pipeline; only the feet commit to the line.
     if (ctx.running && ctx.objective) return { ...ctx.objective };
+    // Last-leg commitment beats self-preservation: inside ~40m of the
+    // objective a wounded bot still crashes the point — dying with the
+    // flag in hand beats surviving the approach. Only the feet commit;
+    // fire stays live elsewhere.
+    if (ctx.objective && dist3(pos, ctx.objective) < 40) return { ...ctx.objective };
     if (!b.h.hunt) {
       // A builder with hands free welds the stand's wounded gear before
       // wandering on — same "nobody close enough to interrupt" gate the
@@ -37,14 +42,28 @@ export function pickDest(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, fe
     const t = b.h.hunt;
     const d = dist3(pos, t.pos);
     if (fearing) return retreatDest(ctx, pos, t);
-    // Mission commitment — capper-role only: on a long route the feet
-    // stay on the line unless an enemy actually blocks the way, while
-    // fighters keep dueling whoever they see. Fleet-wide, this mute
-    // killed the game's midfield entirely (contacts eat fire but never
-    // divert feet).
-    if (ctx.runner && ctx.objective) {
+    // Mission commitment — capper-role only: the feet stay on the line
+    // unless an enemy actually sits on the route, at ANY distance —
+    // inside the stand ring a visible defender still only earns feet
+    // when he's on the flag line itself (pressing that blocker runs
+    // through the flag anyway). The old >120m gate let close-in duels
+    // steal the last 10m: soaks showed cappers orbiting ~9m off the
+    // flag with zero grabs (fleet-wide muting is still wrong —
+    // blocking-or-bypass is the rule, not silence).
+    if (ctx.objective) {
       const gd = dist3(pos, ctx.objective);
-      if (gd > 120) {
+      // Who earns committed feet: cappers anywhere on the route; any bot
+      // whose objective IS the stand once inside ~40m — an opportunistic
+      // grab beats an opportunistic duel at that range (the capper role
+      // existing doesn't mean it's alive, so the last leg can't be
+      // role-gated).
+      const committed = ctx.runner || gd < 40;
+      if (committed) {
+        // Inside the last leg the blocker test flips against you: a
+        // defender planted ON the flag is "blocking" by definition, so
+        // orbiting him concedes the grab. Crash the point — the touch
+        // is instant; surviving the approach is what speed is for.
+        if (gd < 40) return { ...ctx.objective };
         const gx = (ctx.objective.x - pos.x) / gd, gz = (ctx.objective.z - pos.z) / gd;
         const tx = t.pos.x - pos.x, tz = t.pos.z - pos.z;
         const td = Math.hypot(tx, tz) || 1;

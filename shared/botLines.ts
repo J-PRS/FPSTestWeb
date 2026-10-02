@@ -106,11 +106,18 @@ export class BotLines {
         // always outscores the route and the bot orbits midfield
         // forever (soak: align=0.00, prog=0).
         if (gained < d * 0.4 && eScore <= 12) continue;
+        // Apex setup (last leg, runners only): a landing above the goal
+        // banks altitude the dive converts back into arrival speed —
+        // the flank-crest-and-drop that makes a flag run survivable.
+        // Gated to the last leg so mid-route stays direct instead of
+        // carving side-hills forever.
+        const apex = ctx.runner && gd < 220 ? Math.min(40, Math.max(0, drops[p]! - dest.y)) * 0.8 : 0;
         const score =
           gained * 0.9 +                      // progress toward the goal
           drop * dropW +                      // downhill buys ski speed
           Math.min(0, drop + 4) * 1.8 +       // climbs past ~4m get taxed hard
           eScore +                            // banked E beats burning it (runners)
+          apex +
           (p === PTS - 1 ? 3 : 0) -           // prefer committing long when tied
           earlyClimb * 26 -                   // a climb in the first stretch kills the run
           Math.abs(a) * straightW;            // straighter lines beat carving sideways
