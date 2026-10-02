@@ -451,6 +451,23 @@ export class ServerBotSenses {
             lip = Math.max(lip, hmHeight(this.field!, lx, lz) - (ey + (enemyStand.y - ey) * t));
           }
           score -= lip * 3;
+          // A run-in that drops pays speed on the table: the leg that
+          // ends the push is where m/s actually buys survival — pushes
+          // were arriving at ~16m/s and dying to interceptors at the
+          // ring edge, so elevated entries earn their climb back here.
+          if (capper) {
+            let drop = 0;
+            prevH = ey;
+            for (let s = 1; s < 8; s++) {
+              const t = s / 8;
+              const lx = ex + (enemyStand.x - ex) * t;
+              const lz = ez + (enemyStand.z - ez) * t;
+              const lh = hmHeight(this.field!, lx, lz);
+              if (lh < prevH) drop += prevH - lh;
+              prevH = lh;
+            }
+            score += drop * 1.5;
+          }
           for (const e of foes) {
             for (let s = 1; s < 8; s++) {
               const t = s / 8;
