@@ -59,8 +59,9 @@ describe('BotMoves.hints', () => {
     const p = { x: 0, y: 0, z: 0 };
     m.hints(0.1, uphill, p, { x: 20, y: 10, z: 0 }); // arms jetHold ~0.45-0.85s
     // Second tick on now-flat ground still reads as burning — the latch,
-    // not the terrain probe, owns the decision.
-    expect(m.hints(0.1, flat({ energy: 50 }), p, { x: 20, y: 0, z: 0 })!.jet).toBe(true);
+    // not the terrain probe, owns the decision. Far enough out to stay
+    // outside the dive graze (a near level destination rightly kills it).
+    expect(m.hints(0.1, flat({ energy: 50 }), p, { x: 60, y: 0, z: 0 })!.jet).toBe(true);
   });
 });
 

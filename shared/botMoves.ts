@@ -56,7 +56,9 @@ export class BotMoves {
     // then lets momentum carry the touch. Without this the boost read
     // (speed < 12) kept orbiting bodies airborne above the very stand
     // they were told to land on.
-    const diveRun = gd < 45 && dest.y < pos.y + 4;
+    // A prey burn survives the dive read: chasing something airborne
+    // needs altitude even when the current destination sits below.
+    const diveRun = gd < 45 && dest.y < pos.y + 4 && this.jetWhy !== 'prey';
     if (diveRun) this.jetHold = 0;
     const jet = !diveRun && (this.jetHold > 0 || this.host.escapeJetT() > 0) && tanked;
     this.jetOut = jet;

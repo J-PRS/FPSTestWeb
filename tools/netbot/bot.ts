@@ -58,6 +58,12 @@ export class NetBot {
   private posTimer: ReturnType<typeof setInterval> | null = null;
   private claimTimer: ReturnType<typeof setInterval> | null = null;
   private hopTimer: ReturnType<typeof setInterval> | null = null;
+  /** Fire silence during the last stretch before a room hop — jittered
+   *  claims sent right up to the switch land in the NEW room carrying
+   *  the old position, and the server rightly rejects them as
+   *  implausible spawns. A player stops shooting while they click the
+   *  room-switch UI; the bot does the same. */
+  private holdFireUntil = 0;
   private rand: () => number;
 
   constructor(private nc: NetClient, opts: { hopEveryMs?: number; seed?: () => number; loadout?: BotLoadout } = {}) {
@@ -66,9 +72,20 @@ export class NetBot {
     this.rand = opts.seed ?? Math.random;
     if (opts.hopEveryMs) {
       this.hopTimer = setInterval(() => {
-        // Mid-match room hop — the seq-watermark bug class lives here.
-        nc.send({ type: 'switchRoom', room: this.rand() < 0.5 ? 'netbot-a' : 'netbot-b', mode: 'dm' });
-        nc.tel.hops++;
+        // Hold fire for the jitter window first, THEN send the switch —
+        // see holdFireUntil.
+        this.holdFireUntil = Date.now() + 300;
+        setTimeout(() => {
+          // Mid-match room hop — the seq-watermark bug class lives here.
+          // Shells don't cross rooms: un-acked spawns and in-flight
+          // impact claims for the old room's sky would retransmit into
+          // the new room with stale positions and earn implausible-spawn
+          // rejects — a real client's projectiles die with the room too.
+          this.spawns.clear();
+          this.shells.length = 0;
+          nc.send({ type: 'switchRoom', room: this.rand() < 0.5 ? 'netbot-a' : 'netbot-b', mode: 'dm' });
+          nc.tel.hops++;
+        }, 200);
       }, opts.hopEveryMs);
     }
   }
@@ -291,6 +308,7 @@ export class NetBot {
     // slower than it and every spawn claim reads as spam.
     const interval = (WEAPON_FIRE_INTERVAL_S[weaponType as WeaponType] ?? 0.1) * 1000;
     if (Date.now() - this.lastFireAt < interval) return;
+    if (Date.now() < this.holdFireUntil) return;
     this.lastFireAt = Date.now();
 
     const dir = {
