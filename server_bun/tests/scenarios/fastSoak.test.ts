@@ -212,6 +212,7 @@ describe('scenario: warp soak throughput', () => {
     const liveNugs = new Map<number, { x: number; z: number }>();
     const nug = { spawn: 0, bankHot: 0, bankCold: 0, decay: 0, die: 0 };
     let waveN = 0, waveNear = 0, waveDead = 0, waveMis = 0, waveNoFlag = 0, waveFoe = 0, waveFree = 0;
+    let selfPropelK = 0;
     const waveD: number[] = [];
     const waveSpd: number[] = [];
     let msgCur = 0;
@@ -247,6 +248,13 @@ describe('scenario: warp soak throughput', () => {
           } else nug.decay++;
         } else if (m.type === 'playerKill' && m.targetId) {
           const v = room.players.getPlayer(m.targetId);
+          // Self-frag provenance: a selfK within ~2.5s of the victim's
+          // own propel mark is a launch that cost too much, not a bad
+          // aimed shot — the fixes live in different gates.
+          if (m.shooterId === m.targetId) {
+            const lp = room.bots?.arsenal.lastPropel(m.targetId);
+            if (lp !== undefined && simNow() - lp < 3500) selfPropelK++;
+          }
           if (v) for (const np of liveNugs.values()) {
             if (Math.hypot(v.position.x - np.x, v.position.z - np.z) < 15) { nug.die++; break; }
           }
@@ -812,7 +820,7 @@ describe('scenario: warp soak throughput', () => {
       if (clear < 2) popKinds.lip++; else if (clear < 6) popKinds.near++; else popKinds.air++;
     });
     const selfLine = [...selfByW.entries()].sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k}:${n}`).join(' ') +
-      ` @${(selfImpact[selfImpact.length >> 1] ?? 0).toFixed(1)}m foe@${(selfFoe[selfFoe.length >> 1] ?? 0).toFixed(0)}m ${selfKillTrades.trades}traded` +
+      ` @${(selfImpact[selfImpact.length >> 1] ?? 0).toFixed(1)}m foe@${(selfFoe[selfFoe.length >> 1] ?? 0).toFixed(0)}m ${selfKillTrades.trades}traded propelK:${selfPropelK}` +
       ` pops lip:${popKinds.lip} prey:${popKinds.prey} foe:${popKinds.foe} near:${popKinds.near} air:${popKinds.air}`;
     const killsByTeam = players.reduce<Record<string, number>>((m, p) => { if (p.team) m[p.team] = (m[p.team] ?? 0) + p.kills; return m; }, {});
     const score = Object.entries(room.scores).map(([t, s]) => `${t} ${s}`).join(' / ');

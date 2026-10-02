@@ -43,10 +43,16 @@ export class BotArsenal implements BeamHost {
   /** Launch telemetry per bot: heel blast / pull surf / crest pop —
    *  the soak report reads this to prove disc-jumps actually fire. */
   readonly propels = new Map<string, { heel: number; pull: number; crest: number }>();
-  private propelMark(id: string, kind: 'heel' | 'pull' | 'crest'): void {
+  private lastPropelAt = new Map<string, number>();
+  private propelMark(id: string, kind: 'heel' | 'pull' | 'crest', now: number): void {
     const s = this.propels.get(id) ?? { heel: 0, pull: 0, crest: 0 };
     s[kind]++; this.propels.set(id, s);
+    this.lastPropelAt.set(id, now);
   }
+
+  /** Sim-ms of the bot's most recent propel — the selfK autopsy splits
+   *  heel-blast frags from aimed-shot suicides on it. */
+  lastPropel(id: string): number | undefined { return this.lastPropelAt.get(id); }
 
   constructor(
     public room: Room,
@@ -73,6 +79,7 @@ export class BotArsenal implements BeamHost {
     this.propelJetUntil.delete(id);
     this.wasCarrying.delete(id);
     this.lastShot.delete(id);
+    this.lastPropelAt.delete(id);
   }
 
   /** Players can't out-run a weapon's rate either — the drawn gun owns
@@ -237,7 +244,14 @@ export class BotArsenal implements BeamHost {
       const sx = muzzle.x + ownerVel.x * flightT - hitX;
       const sy = muzzle.y + ownerVel.y * flightT - hitY;
       const sz = muzzle.z + ownerVel.z * flightT - hitZ;
-      if (sx * sx + sy * sy + sz * sz < aoer * aoer && !bodyHit) return true;
+      // The projection assumes constant speed, but a skier on a descent
+      // (or a mid-flight propel — soak autopsy: propelK:0, aimed shots
+      // are the lip selfK) gains real m/s before the shell lands. Price
+      // the gain a downhill runner actually picks up in-flight (~half
+      // his speed again over the short flight), not a full safety band.
+      const speedGain = Math.min(6, Math.hypot(ownerVel.x, ownerVel.z) * flightT * 0.5);
+      const reach = aoer + speedGain;
+      if (sx * sx + sy * sy + sz * sz < reach * reach && !bodyHit) return true;
     }
     // Entity intercepts inside the blast envelope: a wandering ball,
     // a species pop, or a teammate body on the muzzle line pops the
@@ -431,7 +445,7 @@ export class BotArsenal implements BeamHost {
         { x: p.position.x, y: p.position.y + 0.2, z: p.position.z },
         { x: 0, y: -1, z: 0 }, p.velocity);
       this.propelT.set(id, now + 8000);
-      this.propelMark(id, 'crest');
+      this.propelMark(id, 'crest', now);
       logger.info('Bot crest blast', { id });
       return;
     }
@@ -475,14 +489,14 @@ export class BotArsenal implements BeamHost {
       // the pull envelope when the disc pops. A refused lob (dry belt,
       // unsafe arc) still buys the heel blast instead of a dry cooldown.
       if (this.lobAt(p, { x: p.position.x + nx * 18, y: p.position.y - 1, z: p.position.z + nz * 18 })) {
-        this.propelMark(id, 'pull');
+        this.propelMark(id, 'pull', now);
       } else {
         const wt0 = this.propelWeapon(lo);
         const muzzle0 = { x: p.position.x, y: p.position.y + 1.4, z: p.position.z };
         const hy0 = p.position.y - classCapsule(p.armorClass).eye - muzzle0.y;
         const hl0 = Math.hypot(-nx * 1.8, hy0, -nz * 1.8) || 1;
         this.room.projectiles.spawn(id, wt0, muzzle0, { x: (-nx * 1.8) / hl0, y: hy0 / hl0, z: (-nz * 1.8) / hl0 }, p.velocity);
-        this.propelMark(id, 'heel');
+        this.propelMark(id, 'heel', now);
       }
     } else {
       // Classic disc-jump, angled by the slope: firing back-and-low
@@ -502,7 +516,7 @@ export class BotArsenal implements BeamHost {
       const hz = p.position.z - nz * back - muzzle.z;
       const len = Math.hypot(hx, hy, hz) || 1;
       this.room.projectiles.spawn(id, wt, muzzle, { x: hx / len, y: hy / len, z: hz / len }, p.velocity);
-      this.propelMark(id, 'heel');
+      this.propelMark(id, 'heel', now);
     }
     // Runners chain on the human cadence (~3.5s between disc-jumps);
     // everyone else pays the full 8s — chaining is blood + ammo, and a
