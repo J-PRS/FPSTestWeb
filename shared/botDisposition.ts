@@ -42,6 +42,20 @@ export function pickDest(b: BotBrain, dt: number, ctx: BrainCtx, pos: BotVec, fe
     const t = b.h.hunt;
     const d = dist3(pos, t.pos);
     if (fearing) return retreatDest(ctx, pos, t);
+    // A gem chase is a route, not a duel pause: while a pickup sits on
+    // the goal line the feet keep walking it — fire and aim stay live
+    // elsewhere, so the bot hunts THROUGH the pickup like a player
+    // strafing past a gem mid-fight. Only an enemy planted on the
+    // route itself earns the orbit (same blocker test the objective
+    // commit uses).
+    if (ctx.pickup && dist3(b.goalS.goal, ctx.pickup) < 30) {
+      const pd = dist3(pos, ctx.pickup);
+      const pgx = (ctx.pickup.x - pos.x) / (pd || 1), pgz = (ctx.pickup.z - pos.z) / (pd || 1);
+      const ptx = t.pos.x - pos.x, ptz = t.pos.z - pos.z;
+      const ptd = Math.hypot(ptx, ptz) || 1;
+      const onRoute = d <= b.h.orbitFar && (ptx * pgx + ptz * pgz) / ptd > 0.4;
+      if (!onRoute || pd < 12) return { ...ctx.pickup };
+    }
     // Mission commitment — capper-role only: the feet stay on the line
     // unless an enemy actually sits on the route, at ANY distance —
     // inside the stand ring a visible defender still only earns feet
