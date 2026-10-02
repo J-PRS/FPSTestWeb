@@ -39,6 +39,8 @@ export interface CollideHost extends SweepHost {
   readonly armed: boolean;
   readonly canBounce: boolean;
   sweepLocal: (() => THREE.Vector3 | null) | null;
+  /** Local player's armor class — the sweep needs its capsule size. */
+  localClass: (() => string | undefined) | null;
   solids(): readonly StructureCollider[];
   solidIdx(): ColliderIndex | null;
   hitAt(x: number, y: number, z: number, t: number): void;
@@ -52,7 +54,7 @@ export class ProjCollide {
 
   // Runs all swept collision checks; returns true if the projectile hit
   // something and exploded (records hit target + accuracy data).
-  checkCollisions(terrain: Terrain, balls?: Targetable[], remotePlayers?: Map<string, THREE.Vector3>, obstacles?: SweepObstacle[]): boolean {
+  checkCollisions(terrain: Terrain, balls?: Targetable[], remotePlayers?: Map<string, THREE.Vector3>, obstacles?: SweepObstacle[], playerClasses?: Map<string, string>): boolean {
     const h = this.h;
     if (sweepTerrain(h, terrain)) {
       // arming fuse (T2 mortar): bounces only apply BEFORE the shell is armed
@@ -84,7 +86,16 @@ export class ProjCollide {
     // Obstacles (turret bolts) before targets: an interception is the
     // earliest contact worth reporting — the blast usually takes the
     // enemy anyway, and the cookoff is the interesting outcome.
-    return this.checkObstacles(obstacles) || this.checkBalls(balls) || this.checkPlayers(remotePlayers);
+    // passThroughTargets shells (MRV carrier) phase through bodies — a
+    // contact pop would turn a timed airburst into a fast mortar. Bolts
+    // and fields still intercept: shooting it down stays counterplay.
+    if (h.config.passThroughTargets) return this.checkObstacles(obstacles);
+    // Unarmed shells (mortar pre-armTime) phase through bodies — a
+    // point-blank pop is exactly what the arming fuse exists to deny.
+    // Bolts and shield domes still intercept: shooting it down is
+    // counterplay, and a dome shouldn't let a dud inside.
+    if (!h.armed) return this.checkObstacles(obstacles);
+    return this.checkObstacles(obstacles) || this.checkBalls(balls) || this.checkPlayers(remotePlayers, playerClasses);
   }
 
   private checkObstacles(obstacles?: SweepObstacle[]): boolean {
@@ -181,11 +192,11 @@ export class ProjCollide {
     return false;
   }
 
-  private checkPlayers(remotePlayers?: Map<string, THREE.Vector3>): boolean {
+  private checkPlayers(remotePlayers?: Map<string, THREE.Vector3>, playerClasses?: Map<string, string>): boolean {
     const h = this.h;
     if (h.sweepLocal) {
       const lp = h.sweepLocal();
-      if (lp && sweepPlayer(h, lp, 'local')) {
+      if (lp && sweepPlayer(h, lp, 'local', h.localClass?.())) {
         this.recordHit(h.minHitDist - PLAYER_RADIUS);
         h.hitPlayerId = 'local';
         if (h.config.sticks) {
@@ -198,7 +209,7 @@ export class ProjCollide {
     }
     if (!remotePlayers) return false;
     for (const [playerId, playerPos] of remotePlayers) {
-      if (sweepPlayer(h, playerPos, playerId)) {
+      if (sweepPlayer(h, playerPos, playerId, playerClasses?.get(playerId))) {
         this.recordHit(h.minHitDist - PLAYER_RADIUS);
         h.hitPlayerId = playerId;
         if (h.config.sticks) {

@@ -33,6 +33,7 @@ export interface StuckHost {
   glowMesh: THREE.Mesh | null;
   updateMesh(): void;
   explode(): void;
+  fuseTtl(): number | undefined;
 }
 
 export class ProjStuck {
@@ -90,7 +91,7 @@ export class ProjStuck {
       }
     }
     if (!h.stuck) return false; // dropped — fall through into physics with zero velocity
-    if (h.config.maxLifetime && h.age >= h.config.maxLifetime) h.explode();
+    if (h.fuseTtl() && h.age >= h.fuseTtl()!) h.explode();
     else h.updateMesh();
     return true;
   }

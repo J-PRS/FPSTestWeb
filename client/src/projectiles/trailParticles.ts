@@ -149,7 +149,10 @@ export class ProjectileTrail {
       pooled.life = life;
       pooled.maxLife = life;
       pooled.baseSize = size;
-      pooled.mat.color.copy(config.trailColors[0]);
+      // Same EMIT_GAIN hot-paint as the fresh path — a pooled particle
+      // without it renders dim and dodges the bloom layer (visibly
+      // inconsistent next to fresh particles in the same trail).
+      pooled.mat.color.copy(config.trailColors[0]).multiplyScalar(EMIT_GAIN);
       pooled.mat.opacity = config.trailOpacity;
       pooled.mesh.position.copy(pos);
       pooled.mesh.scale.setScalar(meshType === 'billboard' ? size * 2 : size);
@@ -239,10 +242,12 @@ export class ProjectileTrail {
       const blend = colorIdx - idx0;
       const c0 = colors[idx0];
       const c1 = colors[idx1];
+      // EMIT_GAIN — the spawn path paints hot for the bloom threshold;
+      // the gradient must too or the trail dims the frame after emit.
       p.mat.color.setRGB(
-        c0.r + (c1.r - c0.r) * blend,
-        c0.g + (c1.g - c0.g) * blend,
-        c0.b + (c1.b - c0.b) * blend
+        (c0.r + (c1.r - c0.r) * blend) * EMIT_GAIN,
+        (c0.g + (c1.g - c0.g) * blend) * EMIT_GAIN,
+        (c0.b + (c1.b - c0.b) * blend) * EMIT_GAIN
       );
 
       p.mat.opacity = t * config.trailOpacity;

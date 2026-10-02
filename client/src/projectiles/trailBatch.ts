@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 
 import { BLOOM_LAYER } from '../core/config.js';
+import { urlParams } from '../core/params.js';
 import { markProbe } from '../core/fxDiag.js';
 import { acquireBatch, retireBatch, type BatchMap } from '../core/batchPool.js';
 
@@ -42,6 +43,35 @@ export class TrailBatch {
     if (lo < this.dirtyLo) this.dirtyLo = lo;
     if (hi > this.dirtyHi) this.dirtyHi = hi;
     this.dirty = true;
+  }
+
+  // Union of what's already queued on the attrs since the last render.
+  // flush() runs per ribbon, and clearUpdateRanges() would erase the
+  // spans earlier ribbons queued this frame — three only drains the
+  // list at upload — so re-flushes must EXTEND the pending union, not
+  // replace it. Empty updateRanges = renderer consumed them last draw.
+  private qLo = Infinity;
+  private qHi = 0;
+
+  private queueDirty(): void {
+    if (this.posAttr.updateRanges.length === 0) {
+      this.qLo = Infinity; this.qHi = 0;
+    }
+    const lo = Math.min(this.qLo, this.dirtyLo);
+    const hi = Math.max(this.qHi, this.dirtyHi);
+    if (lo === this.qLo && hi === this.qHi) {
+      // Span already covered by the pending queue — a version bump is
+      // enough; re-adding would just grow the range list.
+      this.posAttr.needsUpdate = true;
+      this.colAttr.needsUpdate = true;
+      return;
+    }
+    for (const a of [this.posAttr, this.colAttr]) {
+      a.clearUpdateRanges();
+      a.addUpdateRange(lo, hi - lo);
+      a.needsUpdate = true;
+    }
+    this.qLo = lo; this.qHi = hi;
   }
 
   // Slots alloc lowest-first so the used range stays dense; the highest-
@@ -92,12 +122,14 @@ export class TrailBatch {
     this.dirty = false;
     const n = this.dirtyHi - this.dirtyLo;
     if (n > 0) {
-      this.posAttr.clearUpdateRanges();
-      this.posAttr.addUpdateRange(this.dirtyLo, n);
-      this.posAttr.needsUpdate = true;
-      this.colAttr.clearUpdateRanges();
-      this.colAttr.addUpdateRange(this.dirtyLo, n);
-      this.colAttr.needsUpdate = true;
+      if (urlParams.fxfull) {
+        // Full upload — bypasses the partial-range path entirely so a
+        // silent updateRanges break shows as "trails back with ?fxfull".
+        this.posAttr.needsUpdate = true;
+        this.colAttr.needsUpdate = true;
+      } else {
+        this.queueDirty();
+      }
     }
     this.dirtyLo = Infinity;
     this.dirtyHi = 0;

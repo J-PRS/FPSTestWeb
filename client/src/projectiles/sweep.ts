@@ -10,7 +10,8 @@
  */
 import * as THREE from 'three';
 
-import { PLAYER_RADIUS, CAPSULE_HALF_HEIGHT, CAPSULE_CENTER_Y, EYE_OFFSET, TERRAIN_HEIGHT_SCALE } from '../core/config.js';
+import { PLAYER_RADIUS, TERRAIN_HEIGHT_SCALE } from '../core/config.js';
+import { classCapsule } from '../../../shared/botClasses.js';
 import { maxHeightInRect } from '../world/heightmap.js';
 import { ChildLogger } from '../core/Logger.js';
 import type { Targetable } from '../entities/balls.js';
@@ -183,13 +184,15 @@ export function sweepBall(p: SweepHost, ball: Targetable): boolean {
 }
 
 // True continuous sphere sweep vs player capsule
-// playerPos is the networked EYE position (feet + EYE_OFFSET);
-// capsule center is at feet + CAPSULE_CENTER_Y
-export function sweepPlayer(p: SweepHost, playerPos: THREE.Vector3, playerId: string): boolean {
-  const centerY = playerPos.y - EYE_OFFSET + CAPSULE_CENTER_Y;
+// playerPos is the networked EYE position (feet + eyeHeight per class);
+// capsule center sits centerOff below it.
+export function sweepPlayer(p: SweepHost, playerPos: THREE.Vector3, playerId: string, cls?: string): boolean {
+  const cap = classCapsule(cls);
+  const centerY = playerPos.y + cap.centerOff;
+  const capHalf = cap.half;
   // Same sphere reject; capsule half-height inflates the reach so a
   // head/foot catch can't slip past the midpoint estimate.
-  if (segmentSphereReject(p, playerPos.x, centerY, playerPos.z, PLAYER_RADIUS + CAPSULE_HALF_HEIGHT + p.hitRadius + 0.5)) return false;
+  if (segmentSphereReject(p, playerPos.x, centerY, playerPos.z, PLAYER_RADIUS + capHalf + p.hitRadius + 0.5)) return false;
 
   const dx = p.pos.x - p.prevPos.x;
   const dy = p.pos.y - p.prevPos.y;
@@ -200,7 +203,7 @@ export function sweepPlayer(p: SweepHost, playerPos: THREE.Vector3, playerId: st
     const hx = p.pos.x - playerPos.x;
     const hz = p.pos.z - playerPos.z;
     const vy = p.pos.y - centerY;
-    const clampedY = Math.max(-CAPSULE_HALF_HEIGHT, Math.min(CAPSULE_HALF_HEIGHT, vy));
+    const clampedY = Math.max(-capHalf, Math.min(capHalf, vy));
     const yDelta = vy - clampedY;
     const totalDist = Math.sqrt(hx * hx + yDelta * yDelta + hz * hz);
 
@@ -228,7 +231,7 @@ export function sweepPlayer(p: SweepHost, playerPos: THREE.Vector3, playerId: st
   const vy = closestY - centerY;
   const vz = closestZ - playerPos.z;
 
-  const clampedY = Math.max(-CAPSULE_HALF_HEIGHT, Math.min(CAPSULE_HALF_HEIGHT, vy));
+  const clampedY = Math.max(-capHalf, Math.min(capHalf, vy));
   const yDelta = vy - clampedY;
 
   const totalDist = Math.sqrt(vx * vx + yDelta * yDelta + vz * vz);

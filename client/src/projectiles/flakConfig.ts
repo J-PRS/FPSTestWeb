@@ -27,6 +27,7 @@ export const FLAK_CONFIG: ProjectileConfig = {
   forceMultiplier: 0,
   aoeDamage: 0,
   aoeRadius: 0,
+  vfx: 'flak', // air-burst bloom — shell fragments, not a ground fireball
   damageColor: '#ffaa33',
   trailColors: [
     new THREE.Color(1.0, 0.75, 0.3),
@@ -56,6 +57,7 @@ export const FLAK_CONFIG: ProjectileConfig = {
   terrainOffset: 0.08,
   needsServerTracking: true,
   maxLifetime: WEAPONS[6].maxLifetime,
+  ttlJitter: WEAPONS[6].ttlJitter,
   trailMeshType: 'sphere',
   noExplosion: true,
   bounces: true,

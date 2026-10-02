@@ -44,6 +44,7 @@ export interface ProjectileConfig {
   terrainOffset: number;
   needsServerTracking: boolean;
   maxLifetime?: number; // 0 or undefined = no auto-explode; >0 auto-explodes after age reaches this (seconds)
+  ttlJitter?: number; // per-shot fuse spread ±fraction, seeded from serverProjectileId so replicas agree
   trailMeshType?: 'sphere' | 'ring' | 'disc' | 'billboard'; // trail particle geometry; defaults to sphere
   noExplosion?: boolean; // true = hit produces no explosion/knockback (hitscan-style bullets)
   ribbonTrail?: boolean; // flat ribbon trail strip (single mesh, cheap) in addition to particles
@@ -59,12 +60,22 @@ export interface ProjectileConfig {
   armTime?: number; // T2 mortar arming delay: contacts before this age BOUNCE, after it they detonate
   sticks?: boolean; // sticky launcher: on contact the bomb freezes in place and waits out its fuse; a detonation cooks off sibling sticks in radius
   /** Cluster carrier — detonation spawns `count` VISUAL bomblets
-   *  (BOMBLET_CONFIG) in an upward cone of half-angle `spread` (rad) that
-   *  pop after `fuse`s. Damage is server-side via WeaponStats.cluster. */
-  cluster?: { count: number; spread: number; fuse: number };
+   *  (BOMBLET_CONFIG) in a cone of half-angle `spread` (rad) around the
+   *  carrier's heading. `fuse` caps bomblet lifetime — omit for
+   *  contact-only bombs that must land before they pop (MRV rain).
+   *  Damage is server-side via WeaponStats.cluster. */
+  cluster?: { count: number; spread: number; fuse?: number;
+    /** true = uniform sphere scatter + full carrier-velocity inherit
+     *  (MRV rain). Absent = upward cone biased along the carrier heading. */
+    sphere?: boolean };
   /** Carrier-specific bomblet look — MRVBomblet config etc. Absent = the
    *  belt's shared BOMBLET_CONFIG. */
   bomblet?: ProjectileConfig;
+  /** Body contact doesn't detonate — the shell flies through players and
+   *  creatures (MRV carrier: a direct hit would make it a fast mortar;
+   *  the fuse airburst IS the attack). Terrain bounce + interception
+   *  by bolts/fields still apply. */
+  passThroughTargets?: boolean;
   wakeVisual?: boolean; // turbulent wake particles marking the growing proxy hitbox (off by default — tuning pending)
   /** Mid-flight hitscan discharge (remote railgun): at `delay` seconds the
    *  slug fires a beam along its velocity — implemented as one giant swept

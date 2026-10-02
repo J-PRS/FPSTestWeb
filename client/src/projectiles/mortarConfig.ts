@@ -69,7 +69,7 @@ export const MORTAR_CONFIG: ProjectileConfig = {
   bounceSfx: 'hg_clang',
   bounceRestitution: 0.25, // T2 BounceVelocityModifier — mortars thud, not skip
   bounceFriction: 0.7,
-  armTime: 1.5, // T2 FuseTimer: bounce before this, detonate after
+  armTime: WEAPONS[4].armTime, // T2 FuseTimer: shared authority — bounce off dirt, phase through bodies before this
   trailMeshType: 'sphere',
   ribbonTrail: true,
   ribbonWidth: 0.6,
