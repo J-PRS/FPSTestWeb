@@ -440,11 +440,11 @@ export class BotArsenal implements BeamHost {
     // arrivals at ~10-18m/s — inside ring defense's kill zone.
     const movingCap = surge ? 30 : 12;
     if (Math.hypot(sh.vel.x, sh.vel.z) > movingCap) return;
-    // A heel blast costs ammo + hp, NOT jet fuel — gating it on a
-    // charged tank stranded every trapped climber whose tank was dry
-    // from the climb (the massif-pocket soak orbit). Players disc-jump
-    // on an empty tank precisely because it's the fuel-free launch.
-    if ((this.room.moveSim.energyOf(id) ?? 0) < 10) return;
+    // No energy gate here by design: a heel blast costs ammo + hp, NOT
+    // jet fuel — gating it on a charged tank stranded every trapped
+    // climber whose tank was dry from the climb (the massif-pocket soak
+    // orbit). Players disc-jump on an empty tank precisely because it's
+    // the fuel-free launch.
     // Don't buy with a fuse what gravity sells for free: a mild descent
     // skis to speed without the launch, and the blast's fixed up-share
     // is just wasted hang time. A STEEP face is different — the
