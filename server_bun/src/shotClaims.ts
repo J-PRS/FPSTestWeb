@@ -4,7 +4,7 @@ import { getWeaponStats, WeaponType, scaledDirectDamage, WEAPON_FIRE_INTERVAL_S 
 import { validateHitClaim, pointToCapsuleDistance } from '../../shared/combat.ts';
 import { PLAYER_RADIUS } from '../../shared/constants.ts';
 import { perkMods } from '../../shared/perks.ts';
-import { rewindPos, clampPing } from './claimLedger.ts';
+import { rewindPos, clampPing, freshDefer, type ClaimDefer } from './claimLedger.ts';
 import { FORCE_SEND_MS } from './combatBlast.ts';
 import { logger } from './logger.ts';
 import type { CombatHandler } from './CombatHandler.ts';
@@ -14,7 +14,7 @@ import type { CombatHandler } from './CombatHandler.ts';
 
   /** A claim naming a target: every legality gate, then damage through
    *  the shared outcome funnel. */
-export function hitClaim(h: CombatHandler, playerId: string, player: PlayerState, msg: Extract<ClientMessage, { type: 'shot' }>, targetId: string): void {
+export function hitClaim(h: CombatHandler, playerId: string, player: PlayerState, msg: Extract<ClientMessage, { type: 'shot' }>, targetId: string, defer?: ClaimDefer): void {
     // Reject self-damage — client should never send its own ID as targetId
     if (targetId === playerId) {
       h.reject(playerId, 'Shot', 'self-target');
@@ -43,13 +43,23 @@ export function hitClaim(h: CombatHandler, playerId: string, player: PlayerState
     // fall back to the shooter's most recent spawn of that weapon type.
     const proj = h.ledger.resolve(playerId, { projectileId: msg.projectileId, clientShotId: msg.shotId, weaponType: msg.weaponType, claim: 'shot' });
     if (!proj) {
-      h.reject(playerId, 'Shot', `no known projectile (id=${msg.projectileId ?? 'null'})`, targetId, msg.weaponType);
+      // On unordered transports the hit can land BEFORE the spawn claim
+      // registers the shell — defer for the next register() instead of
+      // eating a legit hit as 'no known projectile'.
+      const d = defer ?? freshDefer();
+      h.deferClaim(playerId, 'Shot', d,
+        (nd) => hitClaim(h, playerId, player, msg, targetId, nd), targetId, msg.weaponType);
       return;
     }
     if (msg.position === undefined || msg.airtime === undefined) {
       h.reject(playerId, 'Shot', 'missing position/airtime', targetId, msg.weaponType);
       return;
     }
+    // Reorder case: the claim reached us before its spawn registered, so
+    // the ledger's spawnAt understates true flight age. Bound the age by
+    // the claim's own airtime — the reach/arc/occlusion checks still pin
+    // the flight geometry to the real registered origin.
+    if (defer) proj.spawnAt = Math.min(proj.spawnAt, Date.now() - msg.airtime * 1000);
     // Lag compensation: validate against where the target was when the
     // shooter saw it (now - ping), not where it is now — otherwise a
     // 100ms client aims at ghosts by design.
@@ -93,7 +103,13 @@ export function hitClaim(h: CombatHandler, playerId: string, player: PlayerState
    *  also registers a tracked projectile observers can render. */
 export function registerMiss(h: CombatHandler, playerId: string, player: PlayerState, msg: Extract<ClientMessage, { type: 'shot' }>): void {
     logger.debug('Shot fired (miss)', { shooter: playerId });
-    if (!msg.position || !msg.velocity) return;
+    if (!msg.position || !msg.velocity) {
+      // A targetless shot with no spawn fields is a malformed claim, not
+      // a legal miss — count it or the funnel reads as silent data loss.
+      h.hb('drop.spawnFields');
+      logger.warn(`Shot rejected: ${playerId}: miss claim missing position/velocity`);
+      return;
+    }
 
     // Fire-rate validation (the UE ServerFire_Validate pattern) on the
     // SPAWN claim — hit claims don't need it: the ledger already caps them
@@ -135,6 +151,9 @@ export function registerMiss(h: CombatHandler, playerId: string, player: PlayerS
       return;
     }
     const projectileId = h.ledger.register(playerId, msg.weaponType ?? 0, msg.position, msg.velocity, msg.shotId);
+    // A registered shell may satisfy claims that arrived out of order —
+    // hit/blast claims deferred on 'no known projectile' re-run here.
+    h.flushClaims(playerId);
     h.broadcast({
       type: 'projectileCreated',
       projectileId,

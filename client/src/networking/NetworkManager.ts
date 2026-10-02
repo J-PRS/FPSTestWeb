@@ -9,9 +9,22 @@ import type { GameTransport, TransportFactory } from './transport.js';
 import { NetTelemetry } from './netTelemetry.js';
 import { WeaponType } from '../../../shared/weapons.js';
 import { urlParams } from '../core/params.js';
+import { registerDiag } from '../core/fxDiag.js';
 import type { TeamId } from '../../../shared/teams.js';
 
 const logger = new ChildLogger('NetworkManager');
+
+// Reject census for the Alt+Q dump — the ERROR line logs the instance,
+// this counts the PATTERN so "half my damage doesn't apply" is one
+// dump line instead of a scrollback hunt.
+const rejectCensus = { total: 0, byReason: new Map<string, number>(), last: '' };
+registerDiag('net', () => ({
+  rejects: {
+    total: rejectCensus.total,
+    byReason: Object.fromEntries(rejectCensus.byReason),
+    last: rejectCensus.last,
+  },
+}));
 
 // Roster upsert fields + fresh-player defaults (optional fields default undefined).
 const ROSTER_FIELDS = ['internalId', 'position', 'rotation', 'velocity', 'isDead',
@@ -356,6 +369,9 @@ export class NetworkManager {
     // Server refused a hit claim — worth surfacing: a healthy client
     // should basically never see this, so it's a desync tell.
     shotRejected: (data) => {
+      rejectCensus.total++;
+      rejectCensus.byReason.set(data.reason, (rejectCensus.byReason.get(data.reason) ?? 0) + 1);
+      rejectCensus.last = `${data.reason}${data.targetId ? ` →${data.targetId}` : ''}`;
       logger.error(`shot rejected — predicted damage never applied`, {
         reason: data.reason,
         targetId: data.targetId,

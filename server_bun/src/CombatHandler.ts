@@ -7,7 +7,8 @@ import { logger } from './logger.ts';
 import { HEAVY_ONLY_WEAPONS } from '../../shared/botClasses.ts';
 import type { StructureCollider } from '../../shared/ballSim.ts';
 import { ColliderIndex } from '../../shared/solidWorld.ts';
-import { ClaimLedger, clampPing, rewindPos } from './claimLedger.ts';
+import { ClaimLedger, clampPing, rewindPos, CLAIM_DEFER_MS, type ClaimDefer } from './claimLedger.ts';
+export type { ClaimDefer };
 import { KillFeed } from './killFeed.ts';
 import { RespawnManager } from './respawn.ts';
 import { ChargeBank } from './combatCharge.ts';
@@ -20,6 +21,15 @@ import { hitClaim, registerMiss } from './shotClaims.ts';
 
 type BroadcastFn = (msg: ServerMessage, excludePlayerId?: string) => void;
 type SendToPlayerFn = (playerId: string, msg: ServerMessage) => void;
+
+interface PendingClaim {
+  playerId: string;
+  kind: string;
+  d: ClaimDefer;
+  run: (d: ClaimDefer) => void;
+  targetId?: string;
+  weaponType?: number;
+}
 
 /** Optional room wiring — mirrors the subset of RoomInfo combat needs. */
 export interface CombatDeps {
@@ -101,6 +111,38 @@ export class CombatHandler {
   private hitLedger = new HitLedger();
   respawner: RespawnManager;
 
+  /** Claims that name a projectile the ledger doesn't know yet — on
+   *  unordered transports (WT/RTC datagrams) the hit can land BEFORE the
+   *  spawn registration. They wait here for the next register() for that
+   *  player; expiry or exhaustion is a LOUD reject, never a silent drop.
+   *  This is the fix for "half the damage instances don't work": a
+   *  reordered shot/aoeShot pair used to bounce as 'no known projectile'. */
+  private pendingClaims: PendingClaim[] = [];
+  private static CLAIM_DEFER_CAP = 64;
+
+  deferClaim(playerId: string, kind: string, d: ClaimDefer, run: (d: ClaimDefer) => void, targetId?: string, weaponType?: number): void {
+    if (d.left <= 0 || Date.now() - d.at > CLAIM_DEFER_MS) {
+      this.reject(playerId, kind, 'no known projectile — spawn claim never arrived', targetId, weaponType);
+      return;
+    }
+    if (this.pendingClaims.length >= CombatHandler.CLAIM_DEFER_CAP) {
+      this.reject(playerId, kind, 'defer queue full', targetId, weaponType);
+      return;
+    }
+    this.hb('defer');
+    this.pendingClaims.push({ playerId, kind, d, run, targetId, weaponType });
+  }
+
+  /** Retry this player's deferred claims — call right after a new
+   *  projectile registers so out-of-order claim→spawn pairs resolve. */
+  flushClaims(playerId: string): void {
+    if (!this.pendingClaims.length) return;
+    const mine: PendingClaim[] = [];
+    this.pendingClaims = this.pendingClaims.filter(p =>
+      p.playerId === playerId ? (mine.push(p), false) : true);
+    for (const p of mine) p.run({ at: p.d.at, left: p.d.left - 1 });
+  }
+
   /** AoeHost surface — seeded rng rides deps so bomblet scatter replays
    *  under scenario seeds; ambient dice when uninjected. */
   rng(): number { return (this.deps.rng ?? Math.random)(); }
@@ -167,12 +209,21 @@ export class CombatHandler {
     }
     this.lastHeal.delete(playerId);
     this.chargeBank.delete(playerId);
+    const held = this.pendingClaims.filter(p => p.playerId === playerId).length;
+    if (held) {
+      this.hb('drop.claim', held);
+      logger.warn(`dropped ${held} deferred claim(s) on disconnect: ${playerId}`);
+      this.pendingClaims = this.pendingClaims.filter(p => p.playerId !== playerId);
+    }
   }
 
   handleShot(playerId: string, msg: Extract<ClientMessage, { type: 'shot' }>): void {
     const player = this.playerManager.getPlayer(playerId);
-    if (!player || player.isDead) return;
+    if (!player || player.isDead) { this.hb('drop.deadShooter'); return; }
     this.hb('shot');
+    // Any new claim activity is also a retry opportunity for deferred
+    // ones — and the expiry trigger for claims whose spawn never lands.
+    this.flushClaims(playerId);
     // Tier-locked ordnance — the menu filter is client-side convenience;
     // this is the real boundary for doctored clients.
     if (msg.weaponType !== undefined && HEAVY_ONLY_WEAPONS.has(msg.weaponType) && player.armorClass !== 'heavy') {
@@ -219,6 +270,7 @@ export class CombatHandler {
   }
 
   handleAOEShot(playerId: string, msg: Extract<ClientMessage, { type: 'aoeShot' }>): void {
+    this.flushClaims(playerId);
     this.aoe.handleAOEShot(playerId, msg);
   }
 
@@ -254,9 +306,12 @@ export class CombatHandler {
     if (pid === undefined || this.ledger.ownerOf(pid) === undefined) {
       pid = msg.shotId ? this.ledger.idForClientShot(playerId, msg.shotId) : pid;
     }
-    if (pid === undefined) return;
+    if (pid === undefined || this.ledger.ownerOf(pid) === undefined) {
+      this.hb('drop.destroy');
+      logger.debug(`projectileDestroy for unknown id`, { playerId, projectileId: msg.projectileId, shotId: msg.shotId });
+      return;
+    }
     const owner = this.ledger.ownerOf(pid);
-    if (owner === undefined) return;
     if (owner !== playerId) {
       logger.warn(`projectileDestroy rejected: ${playerId} doesn't own ${pid}`);
       return;
@@ -296,8 +351,8 @@ export class CombatHandler {
     opts: { hb?: string; weapon?: number } = {},
   ): void {
     const target = this.playerManager.getPlayer(targetId);
-    if (!target || target.isDead) return;
-    if (ownerId !== 'environment' && this.friendly(ownerId, targetId)) return;
+    if (!target || target.isDead) { this.hb('drop.deadTarget'); return; }
+    if (ownerId !== 'environment' && this.friendly(ownerId, targetId)) { this.hb('drop.friendly'); return; }
     if (opts.hb) this.hb(opts.hb);
     const owner = ownerId === 'environment' ? null : this.playerManager.getPlayer(ownerId);
     const dmg = damage * (owner ? this.ddMult(owner) : 1);

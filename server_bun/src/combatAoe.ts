@@ -7,7 +7,8 @@ import { validateAoeClaim, lgTickDamage, LG_TICK_BASE } from '../../shared/comba
 import { perkMods } from '../../shared/perks.ts';
 import type { StructureCollider } from '../../shared/ballSim.ts';
 import { segSolidHit, type ColliderIndex } from '../../shared/solidWorld.ts';
-import type { ClaimLedger } from './claimLedger.ts';
+import type { ClaimLedger, ClaimDefer } from './claimLedger.ts';
+import { freshDefer } from './claimLedger.ts';
 import type { ChargeBank } from './combatCharge.ts';
 import type { BlastRunner } from './combatBlast.ts';
 import { HEAVY_ONLY_WEAPONS } from '../../shared/botClasses.ts';
@@ -27,6 +28,7 @@ export interface AoeHost {
   solidIndex: ColliderIndex | null;
   hb(key: string, n?: number): void;
   reject(playerId: string, kind: string, reason: string, targetId?: string, weaponType?: number): void;
+  deferClaim(playerId: string, kind: string, d: ClaimDefer, run: (d: ClaimDefer) => void, targetId?: string, weaponType?: number): void;
   friendly(shooterId: string, targetId: string): boolean;
   ddMult(shooter: PlayerState): number;
   /** Seeded room rng — bomblet scatter must replay under scenario seeds. */
@@ -38,7 +40,7 @@ export class AoeClaims {
 
   handleAOEShot(playerId: string, msg: Extract<ClientMessage, { type: 'aoeShot' }>): void {
     const player = this.h.playerManager.getPlayer(playerId);
-    if (!player || player.isDead) return;
+    if (!player || player.isDead) { this.h.hb('drop.deadShooter'); return; }
     this.h.hb('aoe');
     if (msg.weaponType !== undefined && HEAVY_ONLY_WEAPONS.has(msg.weaponType) && player.armorClass !== 'heavy') {
       this.h.reject(playerId, 'AOE', 'class-locked weapon', undefined, msg.weaponType);
@@ -68,16 +70,25 @@ export class AoeClaims {
   /** Projectile detonation claim: the blast must name the tracked shell
    *  that popped (same fallback resolution as direct-hit claims — the
    *  hit can race the server's projectileCreated). */
-  private aoeProjectile(playerId: string, player: PlayerState, msg: Extract<ClientMessage, { type: 'aoeShot' }>, stats: WeaponStats): void {
+  private aoeProjectile(playerId: string, player: PlayerState, msg: Extract<ClientMessage, { type: 'aoeShot' }>, stats: WeaponStats, defer?: ClaimDefer): void {
     const proj = this.h.ledger.resolve(playerId, { projectileId: msg.projectileId, clientShotId: msg.shotId, weaponType: msg.weaponType, claim: 'aoe' });
     if (!proj) {
-      this.h.reject(playerId, 'AOE', `blast with no known projectile (id=${msg.projectileId ?? 'null'})`, undefined, msg.weaponType);
+      // Same reorder window as direct hits — the blast can beat the
+      // spawn claim on unordered transports; defer for the next
+      // register() rather than eating a legit splash.
+      const d = defer ?? freshDefer();
+      this.h.deferClaim(playerId, 'AOE', d,
+        (nd) => this.aoeProjectile(playerId, player, msg, stats, nd), undefined, msg.weaponType);
       return;
     }
     if (msg.airtime === undefined) {
       this.h.reject(playerId, 'AOE', 'blast claim missing airtime', undefined, msg.weaponType);
       return;
     }
+    // Reorder case: same age-vs-airtime fix as direct hits — the spawn
+    // stamp understates true flight age when the claim beat the spawn
+    // registration, so bound it by the claimed airtime instead.
+    if (defer) proj.spawnAt = Math.min(proj.spawnAt, Date.now() - msg.airtime * 1000);
     const verdict = validateAoeClaim({
       projectile: proj,
       blastPos: msg.position,

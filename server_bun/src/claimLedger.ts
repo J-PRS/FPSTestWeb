@@ -10,6 +10,17 @@ const MAX_REWIND_MS = 250;
 const SPENT_CLAIM_MS = 5_000;
 const SPENT_SWEEP_MS = 10_000;
 const MAX_SPENT = 512;
+
+/** Budget for a deferred claim (CombatHandler.pendingClaims): how many
+ *  more register-flushes it may survive plus when it first waited — a
+ *  spawn that never lands expires the claim loudly instead of holding
+ *  it forever. */
+export interface ClaimDefer { at: number; left: number }
+export const CLAIM_DEFER_TRIES = 3;
+export const CLAIM_DEFER_MS = 600;
+export function freshDefer(): ClaimDefer {
+  return { at: Date.now(), left: CLAIM_DEFER_TRIES };
+}
 export function clampPing(ping: number): number {
   return Math.min(Math.max(ping, 0), MAX_REWIND_MS);
 }
