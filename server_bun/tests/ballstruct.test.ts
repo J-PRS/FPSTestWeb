@@ -65,16 +65,18 @@ describe('terrain probe scheduler', () => {
     stride: 1,
   };
 
-  test('a dropped ball still bounces — and the gate schedules ahead mid-flight', () => {
+  test('a dropped ball still bounces — and the field is sampled every step', () => {
     const b = makeSimBall(1, 0, 0, { x: 0, y: 40, z: 0 }, { x: 0, y: 0, z: 0 });
     const kinds: (string | null)[] = [];
-    let scheduledAhead = false;
+    let probesEveryStep = true;
     for (let i = 0; i < 200 && !kinds.includes('bounce'); i++) {
       kinds.push(stepBall(b, 0.05, FIELD, null, true));
-      if (b.gt > 0.05) scheduledAhead = true;
+      // No scheduled gate: groundContact resamples the true position
+      // every step, so the probe freshness stamp never goes stale.
+      if (b.gt !== 0) probesEveryStep = false;
     }
     expect(kinds).toContain('bounce');
-    expect(scheduledAhead).toBe(true); // the gate actually skips probes in flight
+    expect(probesEveryStep).toBe(true);
     expect(b.y).toBeGreaterThanOrEqual(b.radius - 0.01); // never buried
   });
 
