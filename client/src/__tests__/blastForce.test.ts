@@ -108,6 +108,24 @@ describe('applyExplosionForce — local player', () => {
     expect(r.net.sendEnvironmentDamage).not.toHaveBeenCalled();
   });
 
+  it('own direct hit on self pays direct*selfDamage once via env claim', () => {
+    const r = mkRig();
+    r.player.pos.set(5, 0, 0);
+    // My own shell tags 'local' — the shot claim can't resolve, so the
+    // blast pays the direct amount (no splash on top). Self-damage mod 1.
+    r.blast.applyExplosionForce(args({ directHitTargetId: 'local' }));
+    expect(r.player.knock).toHaveBeenCalled();
+    expect(r.net.sendEnvironmentDamage).toHaveBeenCalledWith(40, undefined);
+  });
+
+  it('enemy shell direct-hit on me is server-paid — no self claim', () => {
+    const r = mkRig();
+    r.player.pos.set(5, 0, 0);
+    r.blast.applyExplosionForce(args({ shooterId: 'bot:7', directHitTargetId: 'local' }));
+    expect(r.player.knock).toHaveBeenCalled();
+    expect(r.net.sendEnvironmentDamage).not.toHaveBeenCalled();
+  });
+
   it('outside knockback reach → no shove, no stamp, no damage', () => {
     const r = mkRig();
     r.player.pos.set(50, 0, 0);

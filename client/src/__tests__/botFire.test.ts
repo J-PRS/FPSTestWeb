@@ -57,7 +57,7 @@ function ctx(online = false): Ctx {
   };
   c.host = {
     scene: () => scene,
-    player: () => ({ pos: new THREE.Vector3(1e6, 0, 1e6), isDead: false }),
+    player: () => ({ pos: new THREE.Vector3(1e6, 0, 1e6), isDead: false, appliedClass: 'medium' as const }),
     world: () => ({ projectiles, remotePlayers: remotePlayers as Map<string, never> }),
     targets: [],
     online: () => online,

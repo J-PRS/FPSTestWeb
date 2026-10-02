@@ -44,7 +44,9 @@ describe('Vgs', () => {
     press('KeyS', 's');
     expect(depsRef.send).toHaveBeenCalledWith('SHAZBOT!', false, 'VGS');
     expect(depsRef.speak).toHaveBeenCalledWith('SHAZBOT!');
-    expect(depsRef.echo).not.toHaveBeenCalled(); // connected — no local echo
+    // Own line always echoes locally (Tribes feel); the wire echo
+    // dedupes in Chat.add via pendingSelf.
+    expect(depsRef.echo).toHaveBeenCalledWith('SHAZBOT!', false, 'VGS');
     expect(vgsGate.active).toBe(false);
   });
 

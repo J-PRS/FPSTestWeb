@@ -9,18 +9,18 @@ import { nextTargetId } from '../entities/targetIds';
 import { createProjectileRegistry } from '../game/projectileRegistry';
 import { createWorldState } from '../game/worldState';
 
-describe('aoe falloff math', () => {
-  it('full damage at center, zero at edge', () => {
-    const max = aoeDamage(50, 0, 10);
-    const edge = aoeDamage(50, 10, 10);
-    expect(max).toBe(50);
-    expect(edge).toBe(0);
+describe('aoe banded falloff', () => {
+  it('three equal thirds: 75/50/25, zero at edge', () => {
+    // radius 10 — bands are [0,3.33), [3.33,6.66), [6.66,10)
+    expect(aoeDamage(50, 0, 10)).toBe(38);      // inner band, 0.75
+    expect(aoeDamage(50, 5, 10)).toBe(25);      // mid band, 0.50
+    expect(aoeDamage(50, 8, 10)).toBe(13);      // outer band, 0.25
+    expect(aoeDamage(50, 10, 10)).toBe(0);
   });
 
-  it('monotonic falloff', () => {
-    const near = aoeDamage(50, 2, 10);
-    const mid = aoeDamage(50, 5, 10);
-    expect(near).toBeGreaterThan(mid);
+  it('band steps are monotonic', () => {
+    expect(aoeDamage(50, 2, 10)).toBeGreaterThan(aoeDamage(50, 5, 10));
+    expect(aoeDamage(50, 5, 10)).toBeGreaterThan(aoeDamage(50, 8, 10));
   });
 
   it('impulse follows same falloff', () => {
@@ -111,11 +111,11 @@ describe('target ID allocator', () => {
 });
 
 describe('projectileRegistry', () => {
-  it('starts empty with pending/byId/pendingSince', () => {
+  it('starts empty with byShotId/byId', () => {
     const reg = createProjectileRegistry();
-    expect(reg.pending).toHaveLength(0);
+    expect(reg.byShotId.size).toBe(0);
     expect(reg.byId.size).toBe(0);
-    expect(reg.pendingSince.size).toBe(0);
+    expect(reg.seq).toBe(0);
   });
 });
 

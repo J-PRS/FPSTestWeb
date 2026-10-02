@@ -14,6 +14,9 @@ export function wirePlayerCallbacks(m: DemoManager): void {
       onPlaybackEnd: () => {
         m.mode = 'paused';
         m.ui.setPlaying(false);
+        // End of the clip = end of the capture — stop + download here so
+        // the MP4 button is "record this demo", not a manual timer.
+        if (m.video.isRecording) m.toggleVideoRecord();
         m.onPlaybackEnd?.();
       },
       onTimeUpdate: (current, duration) => {
@@ -65,6 +68,17 @@ export function buildDemoUI(m: DemoManager): void {
         }
       },
       onVideoToggle: () => {
+        if (m.video.isRecording) { m.toggleVideoRecord(); return; }
+        // Demo loaded → clip export: rewind to 0, play, and let
+        // onPlaybackEnd stop the recorder. No demo = live canvas capture.
+        if (m.player.isLoaded) {
+          m.player.setLoop(false); // looping suppresses onPlaybackEnd — the auto-stop
+          m.player.seek(0);
+          m.onRemotePlayback?.(m.player.getRemoteStates(), 0);
+          m.player.play();
+          m.mode = 'playing';
+          m.ui.setPlaying(true);
+        }
         m.toggleVideoRecord();
       },
     });
