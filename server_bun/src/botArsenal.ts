@@ -16,6 +16,7 @@ import { aimSkillFor, type BotSkill } from '../../shared/botSkill.ts';
 import { botRand } from '../../shared/botRand.ts';
 import type { BotVec, BrainOut } from '../../shared/botBrain.ts';
 import { fireAtBall as beamAtBall, fireSpeedless as beamSpeedless, type BeamHost } from './botBeam.ts';
+import { weaponStats } from './weaponStats.ts';
 
 const BOLT_SPEED = 60; // m/s — the melee swing's visual bolt
 
@@ -107,6 +108,7 @@ export class BotArsenal implements BeamHost {
     const lo = this.loadouts.get(p.id) ?? BOT_LOADOUTS[0]!;
     const wt = this.pickWeapon(lo, distXZ, dist, p.id);
     if (!this.rateOk(p.id, wt)) return;
+    weaponStats.recordShot(this.room.mode, `w${wt}`);
     if (wt === WeaponType.Melee) {
       // The punch IS the player's swing — combat funnels it identically,
       // and the broadcast swing lets observers see the melee. Speed is 0

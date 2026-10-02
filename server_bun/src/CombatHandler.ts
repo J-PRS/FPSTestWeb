@@ -19,6 +19,7 @@ import { handleEnvironmentDamage, handleHeal } from './envClaims.ts';
 import { crawlerAttack, botAttack } from './serverAttacks.ts';
 import { hitClaim, registerMiss } from './shotClaims.ts';
 import { simNow } from './simClock.ts';
+import { weaponStats } from './weaponStats.ts';
 
 type BroadcastFn = (msg: ServerMessage, excludePlayerId?: string) => void;
 type SendToPlayerFn = (playerId: string, msg: ServerMessage) => void;
@@ -246,6 +247,7 @@ export class CombatHandler {
     }
     player.protectedUntil = 0; // firing breaks your own spawn shield
 
+    if (msg.weaponType !== undefined) weaponStats.recordShot(this.deps.mode ?? '', `w${msg.weaponType}`);
     this.deps.onFire?.(playerId);
     if (msg.targetId) {
       this.hitClaim(playerId, player, msg, msg.targetId);

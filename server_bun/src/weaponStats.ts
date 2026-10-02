@@ -34,6 +34,9 @@ export interface WeaponRow {
   hits: number;
   damage: number;
   kills: number;
+  /** Trigger pulls — shots×firePeriod = trigger-uptime seconds, the
+   *  K/s denominator that stays honest across weapon switching. */
+  shots: number;
   /** Bot-authored share of damage — >0.9 means the weapon's numbers come
    *  from aim-bot fights, not representative of human play. */
   botDamage: number;
@@ -105,7 +108,7 @@ class WeaponStats {
     // Source keys are 'w<client-claimed weaponType>' — arbitrary numbers
     // mint arbitrary keys, so overflow folds into a shared 'other' row.
     const key = source in m || Object.keys(m).length < WeaponStats.MAX_SOURCES ? source : 'other';
-    return (m[key] ??= { hits: 0, damage: 0, kills: 0, botDamage: 0, botKills: 0 });
+    return (m[key] ??= { hits: 0, damage: 0, kills: 0, shots: 0, botDamage: 0, botKills: 0 });
   }
 
   /** Feed one credited hit. `source` is `w<weaponType>` or a label for
@@ -120,6 +123,15 @@ class WeaponStats {
       r.botDamage += damage;
       if (killed) r.botKills++;
     }
+    this.dirty = true;
+  }
+
+  /** One trigger pull — every shooter funnels here so a weapon's
+   *  kills can be priced against its own trigger-uptime, not just
+   *  hits that actually landed. */
+  recordShot(mode: string, source: string): void {
+    if (!this.modeOk(mode)) return;
+    this.row(mode, source).shots++;
     this.dirty = true;
   }
 
