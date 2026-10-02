@@ -40,9 +40,11 @@ export const STALE_MS = 1200;   // last-seen older than this = stop firing blind
 // both window and reach so a stale ghost never forms a cross-map hunt.
 const PURSUE_MS = 3500;
 /** How far the eye line honestly reaches on open terrain — the
- *  acquisition bound, not a firing range. */
-const SIGHT_M = 160;
-const PURSUE_M = 150;
+ *  acquisition bound, not a firing range. Tribes sightlines are long
+ *  (a skier two hills out is a visible contact); 160m left the fleet
+ *  blind at the ~260m median foe spacing big maps actually produce. */
+const SIGHT_M = 300;
+const PURSUE_M = 200;
 
 const dist3 = (a: BotVec, b: BotVec) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
 const distSq = (a: BotVec, b: BotVec) => (a.x - b.x) ** 2 + (a.z - b.z) ** 2;

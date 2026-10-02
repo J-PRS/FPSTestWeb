@@ -488,7 +488,7 @@ export class ServerBotSenses {
    *  not the 45m duel band: within SPOT_M a bot spots what it sees for
    *  the whole squad, and the report decays in a few seconds. */
   private spots = new Map<string, { e: BotEnemy; team?: string; at: number }>();
-  private static readonly SPOT_M = 280;
+  private static readonly SPOT_M = 320;
   private static readonly SPOT_MS = 5000;
 
   private updateSpots(ctx: BrainCtx, p: { team?: string; position: Vec3 }): void {

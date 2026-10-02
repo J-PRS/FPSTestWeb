@@ -56,32 +56,37 @@ const WALL_BUDGET_MS = Number(process.env.FPS_SOAK_MS ?? 10_000);
 describe('scenario: fast-forward soak throughput', () => {
   afterAll(() => simNowReset());
 
-  it('steps a full 16-bot katabatic CTF room flat-out for 10 wall-s', () => {
+  it('steps a full 16-bot room flat-out for the wall budget', () => {
     // Real T2 stand positions — a ctf room without bases spawns no
-    // flags at all, and a flagless soak just measures wandering.
+    // flags at all, and a flagless soak just measures wandering. A map
+    // with no bases isn't an error: it runs its own mode (tdm/dm) as a
+    // pure combat-density soak — the flag probes simply never fire.
     const baseAt = (x: number, z: number) => ({ x, y: hmHeight(field, x, z), z });
     const spawnAt = (x: number, z: number, r: number, w: number) => ({ x, y: hmHeight(field, x, z), z, r, w });
-    if (!mapJson.bases) throw new Error(`maps/${MAP}.json has no bases`);
+    const ctf = !!mapJson.bases;
     // Per-team fallback: a map may give spheres for one side only
     // (SunDried's 4 spheres are shared neutrals) — the missing side
     // still gets a sphere at its own base rather than midfield.
-    const teamSpawns: Record<string, { x: number; z: number; r?: number; w?: number }[]> = {
-      alpha: mapJson.teamSpawns?.alpha ?? [{ ...mapJson.bases.alpha, r: 50, w: 90 }],
-      bravo: mapJson.teamSpawns?.bravo ?? [{ ...mapJson.bases.bravo, r: 50, w: 90 }],
-    };
+    const teamSpawns: Record<string, { x: number; z: number; r?: number; w?: number }[]> | undefined = ctf ? {
+      alpha: mapJson.teamSpawns?.alpha ?? [{ ...mapJson.bases!.alpha, r: 50, w: 90 }],
+      bravo: mapJson.teamSpawns?.bravo ?? [{ ...mapJson.bases!.bravo, r: 50, w: 90 }],
+    } : undefined;
+    const mode = ctf ? 'ctf' : (mapJson as { mode?: string }).mode ?? 'tdm';
     const room = mkRoom({
-      mode: 'ctf', bots: 16, botFill: 16,
-      bases: { alpha: baseAt(mapJson.bases.alpha.x, mapJson.bases.alpha.z), bravo: baseAt(mapJson.bases.bravo.x, mapJson.bases.bravo.z) },
-      teamSpawns: Object.fromEntries(
-        Object.entries(teamSpawns).map(([t, ss]) => [t, ss.map((s) => spawnAt(s.x, s.z, s.r ?? 50, s.w ?? 90))]),
-      ),
-    }, 'ctf', 4242, false, field);
+      mode, bots: 16, botFill: 16,
+      ...(ctf ? {
+        bases: { alpha: baseAt(mapJson.bases!.alpha.x, mapJson.bases!.alpha.z), bravo: baseAt(mapJson.bases!.bravo.x, mapJson.bases!.bravo.z) },
+        teamSpawns: Object.fromEntries(
+          Object.entries(teamSpawns!).map(([t, ss]) => [t, ss.map((s) => spawnAt(s.x, s.z, s.r ?? 50, s.w ?? 90))]),
+        ),
+      } : {}),
+    }, mode, 4242, false, field);
     // Sim-clock stamped watch — _s lets post-run stats time flag
     // transitions (grab→cap deltas) instead of counting blind.
     let simTicks = 0;
     const dt = 0.05;                      // 20Hz — matches the live tick
     const w = watch(room, () => simTicks * dt);
-    expect(room.flags).not.toBeNull();
+    if (ctf) expect(room.flags).not.toBeNull();
 
     const wallBudgetMs = WALL_BUDGET_MS;
     const runStart = simNow();
@@ -91,7 +96,8 @@ describe('scenario: fast-forward soak throughput', () => {
     // Per-side stand pressure: closest any team's bot ever got to the
     // ENEMY stand — catches "one direction is unroutable" before the
     // grab count does (grab==0 can be a routing wall or no press).
-    const alphaStand = { x: mapJson.bases.alpha.x, z: mapJson.bases.alpha.z }, bravoStand = { x: mapJson.bases.bravo.x, z: mapJson.bases.bravo.z };
+    const alphaStand = ctf ? { x: mapJson.bases!.alpha.x, z: mapJson.bases!.alpha.z } : { x: 0, z: 0 };
+    const bravoStand = ctf ? { x: mapJson.bases!.bravo.x, z: mapJson.bases!.bravo.z } : { x: 0, z: 0 };
     const press = { alpha: Infinity, bravo: Infinity };
     // Vertical gap at the closest XZ approach — pickup needs |dy|<=6,
     // so a press that stalls on a plateau rim shows up as press small
@@ -216,7 +222,7 @@ describe('scenario: fast-forward soak throughput', () => {
           // Near-flag deaths: how close to the ENEMY flag each kill
           // landed — dying at 15m means the stand kill-zone eats runs,
           // dying at 300m means routes never arrived.
-          const foeF = p.team === 'alpha' ? room.flags!.flags.get('bravo') : room.flags!.flags.get('alpha');
+          const foeF = p.team === 'alpha' ? room.flags?.flags.get('bravo') : room.flags?.flags.get('alpha');
           if (foeF && p.team) {
             const fd = Math.hypot(p.position.x - foeF.pos.x, p.position.z - foeF.pos.z);
             if (fd < 60) (p.team === 'alpha' ? flagDeaths.alpha : flagDeaths.bravo).push(fd);
@@ -224,8 +230,8 @@ describe('scenario: fast-forward soak throughput', () => {
           // Kill geography: died inside OWN flag's 80m ring (defense),
           // inside the ENEMY ring (attack), or in the midfield between.
           if (p.team) {
-            const ownF2 = room.flags!.flags.get(p.team);
-            const foeF2 = room.flags!.flags.get(p.team === 'alpha' ? 'bravo' : 'alpha');
+            const ownF2 = room.flags?.flags.get(p.team);
+            const foeF2 = room.flags?.flags.get(p.team === 'alpha' ? 'bravo' : 'alpha');
             if (ownF2 && foeF2) {
               const do_ = Math.hypot(p.position.x - ownF2.pos.x, p.position.z - ownF2.pos.z);
               const df_ = Math.hypot(p.position.x - foeF2.pos.x, p.position.z - foeF2.pos.z);
@@ -237,7 +243,7 @@ describe('scenario: fast-forward soak throughput', () => {
           continue;
         }
         {
-          const foeF0 = p.team === 'alpha' ? room.flags!.flags.get('bravo') : room.flags!.flags.get('alpha');
+          const foeF0 = p.team === 'alpha' ? room.flags?.flags.get('bravo') : room.flags?.flags.get('alpha');
           if (foeF0 && p.team) {
             const rd = Math.hypot(p.position.x - foeF0.pos.x, p.position.z - foeF0.pos.z);
             const inside = rd < 80;
@@ -270,7 +276,7 @@ describe('scenario: fast-forward soak throughput', () => {
         }
         // Closest approach to the LIVE enemy flag (3D, pickup test is 2.2m):
         // separates "died in the kill zone" from "never routed to the flag".
-        const foeFlag = p.team === 'alpha' ? room.flags!.flags.get('bravo') : room.flags!.flags.get('alpha');
+        const foeFlag = p.team === 'alpha' ? room.flags?.flags.get('bravo') : room.flags?.flags.get('alpha');
         if (foeFlag && p.team) {
           const fd = Math.hypot(p.position.x - foeFlag.pos.x, p.position.y - foeFlag.pos.y, p.position.z - foeFlag.pos.z);
           const k = p.team === 'alpha' ? 'alpha' : 'bravo';
@@ -296,7 +302,7 @@ describe('scenario: fast-forward soak throughput', () => {
           eStats.set(p.id, s);
         }
         if (TRAIL_PATH && p.team) {
-          const carrying = [...room.flags!.flags.values()].some((f) => f.carrier === p.id);
+          const carrying = [...(room.flags?.flags.values() ?? [])].some((f) => f.carrier === p.id);
           trail.push({ x: p.position.x, z: p.position.z, team: p.team, carrying });
         }
       }
@@ -327,7 +333,7 @@ describe('scenario: fast-forward soak throughput', () => {
         }
       }
     }
-    const caps = room.flags!.capLog.filter((c) => c.capAt >= runStart);
+    const caps = (room.flags?.capLog ?? []).filter((c) => c.capAt >= runStart);
 
     if (TRAIL_PATH && trail.length) {
       const W = 512, HALF = 750; // terrain wrap is ±750m
