@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { LG_RANGE, LG_CHAIN_RANGE, EYE_OFFSET, PLAYER_RADIUS, PLAYER_HEIGHT } from '../../core/config.js';
+import { LG_RANGE, LG_CHAIN_RANGE, PLAYER_RADIUS } from '../../core/config.js';
+import { classCapsule } from '../../../../shared/botClasses.js';
 import { segSolidHit } from '../../../../shared/solidWorld.js';
 import { Projectile } from '../../projectiles/Projectile.js';
 import type { CombatDeps } from '../combat.js';
@@ -104,10 +105,10 @@ function tracePlayerHit(deps: CombatDeps, hitT: number, traceT: { t: number }): 
   let hitId: string | null = null;
   for (const [pid, rp] of deps.world.remotePlayers) {
     if (rp.isDead) continue;
-    // Ray vs the SHARED player capsule (shared/constants — the same shape
-    // the debug wireframe draws and the server validates). rp.position is
-    // eye height; the capsule axis runs feet+R .. feet+HEIGHT−R below it.
-    const entry = rayCapsuleEntry(rp.position, traceT.t);
+    // Ray vs the class capsule (shared/botClasses — the same shape the
+    // server validates). rp.position is eye height; the capsule axis runs
+    // feet+R .. feet+HEIGHT−R below it.
+    const entry = rayCapsuleEntry(rp.position, traceT.t, rp.armorClass);
     if (entry !== null) { traceT.t = entry; hitId = pid; }
   }
   return hitId;
@@ -120,9 +121,10 @@ const CAP_PAD = PLAYER_RADIUS + 0.2; // beam is thin but not needle-thin
  *  segment, then back off the surface by sqrt(r²−d²) — the standard
  *  capsule-beam solve (exact for horizontal rays, ≤cm error for steep
  *  ones vs a true cylindrical cast). */
-function rayCapsuleEntry(eyePos: THREE.Vector3, hitT: number): number | null {
-  const yLo = eyePos.y - EYE_OFFSET + PLAYER_RADIUS;
-  const axisH = (PLAYER_HEIGHT - 2 * PLAYER_RADIUS); // yLo .. yLo+axisH
+function rayCapsuleEntry(eyePos: THREE.Vector3, hitT: number, cls?: string): number | null {
+  const cap = classCapsule(cls);
+  const yLo = eyePos.y - cap.eye + PLAYER_RADIUS;
+  const axisH = (cap.height - 2 * PLAYER_RADIUS); // yLo .. yLo+axisH
   const wx = _lgO.x - eyePos.x;
   const wy = _lgO.y - yLo;
   const wz = _lgO.z - eyePos.z;

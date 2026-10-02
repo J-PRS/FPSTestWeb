@@ -9,25 +9,27 @@ const say = (label: string, text?: string): VgsNode => line(label, text, false);
 
 export const TREE: Record<string, VgsNode> = {
   G: cat('Global', {
+    // VG* is all-chat in canon — compliments/responds/taunts are for
+    // the whole server, team scoping them hides the shit-talk entirely.
     C: cat('Compliment', {
-      A: line('Awesome'),
-      G: line('Good game'),
-      N: line('Nice move'),
-      S: line('Great shot'),
-      Y: line('You rock'),
+      A: say('Awesome'),
+      G: say('Good game'),
+      N: say('Nice move'),
+      S: say('Great shot'),
+      Y: say('You rock'),
     }),
     R: cat('Respond', {
-      A: line('Any time'),
-      D: line("Don't know", "I don't know."),
-      T: line('Thanks'),
-      W: line('Wait'),
+      A: say('Any time'),
+      D: say("Don't know", "I don't know."),
+      T: say('Thanks'),
+      W: say('Wait'),
     }),
     T: cat('Taunt', {
-      A: line('Awww', "Awww, that's too bad!"),
-      B: line('Best you can do?', 'Is that the best you can do?'),
-      G: line('I am the greatest!'),
-      T: line('THAT was graceful!'),
-      W: line('When will you learn?'),
+      A: say('Awww', "Awww, that's too bad!"),
+      B: say('Best you can do?', 'Is that the best you can do?'),
+      G: say('I am the greatest!'),
+      T: say('THAT was graceful!'),
+      W: say('When will you learn?'),
     }),
     Y: say('Yes'),
     N: say('No'),
@@ -145,13 +147,14 @@ export const TREE: Record<string, VgsNode> = {
     T: line('Turrets', 'Upgrade our base turrets!'),
   }),
   // Canon "VV" quick-response category — one-key answers under V V.
+  // Team-scoped like canon: only the VG* family is all-chat.
   V: cat('Quick', {
     A: line('Any time'),
     B: line('Base secure?', 'Is our base secure?'),
     C: line('Cease fire', 'Cease fire!'),
     D: line("Don't know", "I don't know."),
-    H: line('Help!'),
-    M: line('Move!'),
+    H: line('Help!', 'Help!'),
+    M: line('Move!', 'Move!'),
     N: line('No'),
     S: line('Sorry'),
     T: line('Thanks'),
@@ -189,8 +192,7 @@ export const TREE: Record<string, VgsNode> = {
       S: line('Sensors', "I'll upgrade our sensors."),
       T: line('Turrets', "I'll upgrade our base turrets."),
     }),
-    // Canon VST* task reports — our old flat S.T "Target spotted" moved
-    // to S.P so the chord matches canon.
+    // Canon VST* task reports.
     T: cat('Task', {
       C: line('Cover you', "I'll cover you."),
       S: line('Set up defenses', "I'll set up defenses."),
@@ -203,7 +205,6 @@ export const TREE: Record<string, VgsNode> = {
     C: line('Cover me', 'Cover me!'),
     E: line('Enemy spotted', 'Enemy spotted!'),
     O: line('On my way', 'On my way.'),
-    P: line('Target spotted', 'Target spotted!'),
   }),
 };
 

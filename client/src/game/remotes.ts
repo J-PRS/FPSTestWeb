@@ -12,6 +12,7 @@ import type { HealthBarSystem } from '../ui/HealthBarSystem.js';
 import type { HUD } from '../ui/hud.js';
 import type { WorldState } from './worldState.js';
 import { TEAM_COLORS, type TeamId } from '../../../shared/teams.js';
+import { isBotId } from '../../../shared/botNames.js';
 import * as sfxWorld from '../core/sfx/world.js';
 
 // Hostiles always read red — team colors are for your own side only.
@@ -33,6 +34,9 @@ export interface RemotesDeps {
   lazyEffects: () => EffectsManager;
   logger: ChildLogger;
   world: WorldState;
+  /** Offline DM owns its score map in TeamBots; network matches populate
+   *  world.ffaScores from authoritative score echoes instead. */
+  lazyOfflineFfaScores?: () => Map<string, number> | null;
 }
 
 // Remote player + scoreboard per-frame work: position send, remote ticks,
@@ -47,7 +51,7 @@ function makeRemoteHooks(deps: RemotesDeps) {
     },
     // Bots are hosted in the room sim — they never ping, so the
     // dead-socket gate can't apply to them or they render as ghosts.
-    isLive: (id: string, state: WirePlayerState | undefined) => id.startsWith('BOT-') || state?.ping != null,
+    isLive: (id: string, state: WirePlayerState | undefined) => isBotId(id) || state?.ping != null,
     onCreate: (id: string, rp: RemotePlayer) => deps.logger.debug('CREATED remote player', { instanceId: rp.instanceId, playerId: id, total: deps.world.remotePlayers.size }),
     onRemove: (id: string) => {
       deps.lazyHud().removePlayerIndicator(id);
@@ -107,7 +111,7 @@ function tickRemoteCosmetics(deps: RemotesDeps, playerId: string, remotePlayer: 
     // Teammates read green, everything else stays enemy red — FFA and
     // teamless modes leave `team` undefined so nothing turns friendly.
     const friendly = !!playerState.team && playerState.team === deps.world.localTeam;
-    hud.updatePlayerIndicator(playerId, remotePlayer.position, deps.lazyCamera(), false, friendly, playerState.sheep);
+    hud.updatePlayerIndicator(playerId, remotePlayer.position, deps.lazyCamera(), { friendly, sheep: playerState.sheep, bot: isBotId(playerId), cls: remotePlayer.armorClass });
   } else {
     hud.removePlayerIndicator(playerId);
   }
@@ -179,11 +183,19 @@ function cleanupRemotePlayers(deps: RemotesDeps, players: Map<string, WirePlayer
   // 'dummy' is the ?dummy debug body — gameLoop ticks it from a closure,
   // so pruning it would leave a disposed model animating forever.
   deps.world.remotePlayers.prune(
-    (id) => id.startsWith('bot:') || id === 'dummy' || players.has(id),
+    (id) => isBotId(id) || id === 'dummy' || players.has(id),
     // Bots/dummies keep their body across death+respawn — the death
     // shrink must NOT reap them or they respawn invisible and off-board.
-    (id) => id.startsWith('bot:') || id === 'dummy',
+    (id) => isBotId(id) || id === 'dummy',
   );
+}
+
+function scoreboardScores(deps: RemotesDeps, nm: NetworkManager, localId: string): { scores: Map<string, number>; localScoreId: string } {
+  if (nm.isConnected()) return { scores: deps.world.ffaScores, localScoreId: localId };
+  const offline = deps.lazyOfflineFfaScores?.();
+  return offline
+    ? { scores: offline, localScoreId: 'local' }
+    : { scores: deps.world.ffaScores, localScoreId: localId };
 }
 
 // Scoreboard rows: local player first, then remotes sorted by frags desc
@@ -192,14 +204,23 @@ function updateScoreboard(deps: RemotesDeps): void {
   if (!hud.scoreboardVisible) return;
   const nm = deps.lazyNetworkManager();
   const localId = nm.getLocalPlayerId();
-  const ffa = deps.world.ffaScores;
-  const rows = [{ name: localId, frags: deps.world.killCounts.get(localId) ?? 0, score: ffa.get(localId) ?? null, ping: nm.getPing(), net: nm.getTransportTier() ?? null, self: true, dead: deps.lazyPlayer().isDead, team: deps.world.localTeam }];
+  // Offline combat uses the stable authority id `local`; the generated
+  // network id only exists for wire rooms. Read the matching score key
+  // while keeping the visible row name consistent with online play.
+  const { scores: ffa, localScoreId } = scoreboardScores(deps, nm, localId);
+  // My frags land under TWO keys: wire kills credit the network id
+  // (playerKill broadcast), kills on the client-side fill bots credit
+  // 'local' (botKill's authority id). Sum them — reading only one key
+  // silently dropped every kill that went through the other path.
+  const selfFrags = (deps.world.killCounts.get('local') ?? 0)
+    + (localScoreId === 'local' ? 0 : deps.world.killCounts.get(localScoreId) ?? 0);
+  const rows = [{ name: localId, frags: selfFrags, score: ffa.get(localScoreId) ?? null, ping: nm.getPing(), net: nm.getTransportTier() ?? null, self: true, dead: deps.lazyPlayer().isDead, team: deps.world.localTeam }];
   // net is string|null — 'bot' rows carry a label, not a transport tier.
-  const remoteRows: { name: string; frags: number; score: number | null; ping: number | null; net: string | null; self: boolean; dead: boolean; team?: TeamId; sheep?: number | null }[] = [...nm.getPlayers().keys()]
+  const remoteRows: { name: string; frags: number; score: number | null; ping: number | null; net: string | null; self: boolean; dead: boolean; team?: TeamId; sheep?: number | null; bot?: boolean }[] = [...nm.getPlayers().keys()]
     .filter(id => id !== localId && isRemoteActive(deps, id, nm.getPlayers()))
     .map(id => {
       const ps = nm.getPlayers().get(id);
-      return { name: id, frags: deps.world.killCounts.get(id) ?? 0, score: ffa.get(id) ?? null, ping: ps?.ping ?? null, net: ps?.transport ?? null, self: false, dead: ps?.isDead ?? false, team: ps?.team, sheep: ps?.sheep ?? null };
+      return { name: id, frags: deps.world.killCounts.get(id) ?? 0, score: ffa.get(id) ?? null, ping: ps?.ping ?? null, net: isBotId(id) ? 'bot' : (ps?.transport ?? null), self: false, dead: ps?.isDead ?? false, team: ps?.team, sheep: ps?.sheep ?? null, bot: isBotId(id) };
     });
   // Offline bots live in world.remotePlayers, not the network roster —
   // they'd be invisible on the scoreboard otherwise.
@@ -208,9 +229,9 @@ function updateScoreboard(deps: RemotesDeps): void {
     // GameBot carries a team field; FFA bots get a self-id pseudo-team,
     // which must not count as a real team row.
     const t = (rp as { team?: string }).team;
-    remoteRows.push({ name: id.replace('bot:', ''), frags: deps.world.killCounts.get(id) ?? 0, score: deps.world.ffaScores.get(id) ?? null, ping: null, net: 'bot', self: false, dead: rp.isDead, team: t === 'alpha' || t === 'bravo' ? t : undefined, sheep: (rp as { sheepShown?: number; sheep?: number }).sheepShown ?? (rp as { sheep?: number }).sheep ?? null });
+    remoteRows.push({ name: id.replace('bot:', ''), frags: deps.world.killCounts.get(id) ?? 0, score: ffa.get(id) ?? null, ping: null, net: 'bot', self: false, dead: rp.isDead, team: t === 'alpha' || t === 'bravo' ? t : undefined, sheep: (rp as { sheepShown?: number; sheep?: number }).sheepShown ?? (rp as { sheep?: number }).sheep ?? null, bot: isBotId(id) });
   }
-  remoteRows.toSorted((a, b) => (b.score ?? b.frags) - (a.score ?? a.frags));
+  remoteRows.sort((a, b) => (b.score ?? b.frags) - (a.score ?? a.frags));
   hud.setScoreboardRows([...rows, ...remoteRows]);
 }
 
@@ -304,7 +325,7 @@ export function createRemotes(deps: RemotesDeps) {
         // RemotePlayers have none and stay enemy red.
         const friendly = (rp as { team?: string }).team === deps.world.localTeam
           && (rp as { team?: string }).team !== undefined;
-        hud.updatePlayerIndicator(id, rp.position, cam, false, friendly, (rp as { sheepShown?: number; sheep?: number }).sheepShown ?? (rp as { sheep?: number }).sheep);
+        hud.updatePlayerIndicator(id, rp.position, cam, { friendly, sheep: (rp as { sheepShown?: number; sheep?: number }).sheepShown ?? (rp as { sheep?: number }).sheep, bot: isBotId(id), cls: rp.armorClass });
       }
     }
     cleanupRemotePlayers(deps, players);

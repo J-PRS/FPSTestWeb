@@ -47,7 +47,8 @@ export function onPlayerKill(ctx: NetCtx, streak: { v: number }, shooterId: stri
   // Streak counts run-kills since your last death (reset in the branch above).
   if (shooterId === localId) {
     const streakName = STREAK_NAMES.find(([n]) => ++streak.v >= n)?.[1];
-    deps.fragMessages.show(streakName ? `FRAGGED PLAYER!\n${streakName}` : `FRAGGED PLAYER!`);
+    const name = targetId.replace(/^bot:/, '');
+    deps.fragMessages.showKill(streakName ? `FRAGGED ${name}!\n${streakName}` : `FRAGGED ${name}!`);
     sfx.killConfirm();
   }
 

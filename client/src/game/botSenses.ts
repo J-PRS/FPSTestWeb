@@ -10,6 +10,7 @@
 
 import * as THREE from 'three';
 import { losClear, type BrainCtx } from '../../../shared/botBrain.js';
+import { classCapsule } from '../../../shared/botClasses.js';
 import type { GameBot } from './botBrain.js';
 import type { Terrain } from '../world/terrain.js';
 import type { Targetable } from '../entities/balls.js';
@@ -18,8 +19,8 @@ export interface SenseHost {
   readonly bots: GameBot[];
   /** 'local' + bot:names → team key. */
   readonly teamOf: Map<string, string>;
-  player(): { pos: THREE.Vector3; vel: THREE.Vector3; isDead: boolean; isCloaked: boolean };
-  world(): { remotePlayers: Map<string, { pos: THREE.Vector3; vel: THREE.Vector3; isDead: boolean; isCloakHidden: boolean }>;
+  player(): { pos: THREE.Vector3; vel: THREE.Vector3; isDead: boolean; isCloaked: boolean; appliedClass?: string };
+  world(): { remotePlayers: Map<string, { pos: THREE.Vector3; vel: THREE.Vector3; isDead: boolean; isCloakHidden: boolean; armorClass?: string }>;
              explosions: { pos: THREE.Vector3; age: number }[];
              projectiles: { pos: THREE.Vector3; vel: THREE.Vector3 }[] };
   /** Active mode id — farming modes extend the creature sense range. */
@@ -28,7 +29,7 @@ export interface SenseHost {
 }
 
 export type FoeEntry = { id: string; pos: THREE.Vector3; alive: boolean };
-export type EnemyEntry = { id: string; pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean };
+export type EnemyEntry = { id: string; pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean; aimY?: number };
 type BotEntry = { playerId: string; pos: THREE.Vector3; vel: THREE.Vector3; alive: boolean };
 
 // Scratch BrainCtx for losClear — fields it doesn't read stay unset.
@@ -121,6 +122,7 @@ export class BotSenses {
     if (this.host.teamOf.get('local') !== bot.team) {
       const e = nextBot() as EnemyEntry & { playerId?: string };
       e.id = 'local'; e.pos = player.pos; e.vel = player.vel; e.alive = !player.isDead && !player.isCloaked;
+      e.aimY = classCapsule(player.appliedClass).centerOff;
       _enemies.push(e);
     }
     for (const [id, rp] of this.host.world().remotePlayers) {
@@ -131,6 +133,7 @@ export class BotSenses {
       // local player's cloak enjoys in this list.
       const e = nextBot() as EnemyEntry & { playerId?: string };
       e.id = id; e.pos = rp.pos; e.vel = rp.vel; e.alive = !rp.isDead && !rp.isCloakHidden;
+      e.aimY = classCapsule(rp.armorClass).centerOff;
       _enemies.push(e);
     }
     // Farming modes look farther — the brain prefers beast targets
@@ -138,7 +141,7 @@ export class BotSenses {
     const c = this.host.nearestCreature(bot.position, this.host.mode() === 'nuggets' ? 80 : 35);
     if (c) {
       const e = nextBot() as EnemyEntry & { playerId?: string };
-      e.id = `creature:${c.id}`; e.pos = c.pos; e.vel = c.vel; e.alive = !c.dead;
+      e.id = `creature:${c.id}`; e.pos = c.pos; e.vel = c.vel; e.alive = !c.dead; e.aimY = 0;
       _enemies.push(e);
     }
     return _enemies;

@@ -9,7 +9,7 @@ import { MovementController, type MovementState } from '../entities/movement.js'
 import { ENERGY } from '../../../shared/movement.js';
 import type { StructureSpec } from '../../../shared/mapSpec.js';
 import { TEAM_COLORS, type TeamId } from '../../../shared/teams.js';
-import { BotBrain, BOT_EYE } from '../../../shared/botBrain.js';
+import { BotBrain, BOT_EYE, type BrainOut } from '../../../shared/botBrain.js';
 import { CLASS_STATS, type ArmorClass } from '../../../shared/botClasses.js';
 import { BOT_LOADOUTS, pickBotWeapon } from '../../../shared/botLoadouts.js';
 import { getWeaponStats } from '../../../shared/weapons.js';
@@ -59,6 +59,7 @@ export class GameBot extends RemotePlayer {
     this.armorClass = cls;
     const st = CLASS_STATS[cls];
     this.movement.setSpeedScale(st.speedScale);
+    this.movement.setBody(st.mass, st.eyeHeight);
     this.recalcMaxHp();
     this.setClass(cls); // silhouette
   }
@@ -86,6 +87,9 @@ export class GameBot extends RemotePlayer {
   wantDeploy: { kind: string; pos: { x: number; y: number; z: number } } | null = null;
   /** Weld intent — the deployable key the brain is working on. */
   wantRepair: string | null = null;
+  /** Situation chatter edge from the shared brain — TeamBots routes it
+   *  through the taunt pools + local chat sink. */
+  wantSay: BrainOut['say'] | null = null;
   /** The destination the brain steered toward last think — propel gates
    *  on how far the bot still has to run. */
   readonly lastDest = new THREE.Vector3();
@@ -244,6 +248,7 @@ export class GameBot extends RemotePlayer {
     this.wantBelt = !!out.belt;
     this.wantDeploy = out.deploy ?? null;
     this.wantRepair = out.repair ?? null;
+    this.wantSay = out.say ?? null;
     if (out.status !== undefined) this.applyStatus(out.status, dt);
     if (!out.fire) return null;
     this.fire();

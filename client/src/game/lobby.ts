@@ -48,6 +48,9 @@ export interface LobbyDeps {
    *  connection (caller reloads instead). map/bots/mode are creation
    *  hints for a room that doesn't exist yet. */
   switchRoom?(name: string, map?: string, bots?: number, mode?: string): boolean;
+  /** /maps/thumbs/<name>.png — pre-rendered vantage shot for the MAP
+   *  picker preview. Absent → no preview panel. */
+  mapThumbUrl?(name: string): string;
 }
 
 const POLL_MS = 3000;

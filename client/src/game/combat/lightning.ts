@@ -313,6 +313,9 @@ export function createLightning(deps: CombatDeps, hooks: LightningHooks) {
       for (const [id, s] of lg.rampP) if (nowV - s.t > LG_RAMP_WINDOW_S) lg.rampP.delete(id);
     }
     const tick = lgTickDamage(nV);
+    // Same per-tick number creatures get (zapTarget) — the beam on a
+    // player was hitmarker-only, which read as "beam does no damage".
+    if (tick >= 1) deps.lazyDamageNumbers().spawn(_lgHit, tick, '#8fdcff', deps.lazyCamera());
     if (!deps.botHit?.(hitPlayerId, tick, _lgHit, 'local')) {
       deps.lazyHealthBarSystem().predictDamage(hitPlayerId, tick);
     }

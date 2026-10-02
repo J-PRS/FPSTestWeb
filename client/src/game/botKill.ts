@@ -85,10 +85,10 @@ export function hitF(b: TeamBots, playerId: string, dmg: number, fromPos: THREE.
 
 /** A bot's line lands a beat after the frag like a typed reply — the
  *  same delay envelope the server killfeed uses over the wire. */
-function botSay(id: string, line: string | null): void {
+export function botSay(id: string, line: string | null, vgs?: string, team?: boolean): void {
     if (!line) return;
     const name = id.replace('bot:', '');
-    setTimeout(() => chatSink.add?.(name, line), 1200 + Math.random() * 1800);
+    setTimeout(() => chatSink.add?.(name, line, team, vgs), 1200 + Math.random() * 1800);
   }
 
 export function botKilledF(b: TeamBots, killerId: string, bot: GameBot, weapon?: number): void {
@@ -121,6 +121,11 @@ export function botKilledF(b: TeamBots, killerId: string, bot: GameBot, weapon?:
     b.hooks.killFeed(kn, bot.playerId.replace('bot:', ''), killerId === 'local', false);
     if (killerId !== 'local') botSay(killerId, killTaunt(killerId, kn));
     botSay(bot.playerId, deathTaunt(bot.playerId, kn));
-    if (killerId === 'local') sfx.killConfirm();
+    if (killerId === 'local') {
+      // Same center headline the wire path (onPlayerKill) gives connected
+      // frags — offline kills were feed-row-only and read as no credit.
+      b.hooks.fragBanner?.(`FRAGGED ${bot.playerId.replace('bot:', '')}!`);
+      sfx.killConfirm();
+    }
   }
 

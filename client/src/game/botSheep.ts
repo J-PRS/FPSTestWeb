@@ -62,26 +62,10 @@ export class SheepMeter {
     this.maxedSet.delete(id);
   }
 
-  tick(bot: GameBot, dt: number, terrain: Terrain, foe = false, ignoring = false, hasDest = false, busy = false): void {
+  tick(bot: GameBot, dt: number, terrain: Terrain, s: { foe?: boolean; ignoring?: boolean; hasDest?: boolean; busy?: boolean } = {}): void {
+    const { foe = false, ignoring = false, hasDest = false, busy = false } = s;
     const v = bot.vel;
-    const height = Math.max(0, bot.pos.y - terrain.getHeight(bot.pos.x, bot.pos.z));
-    const speedSq = v.x * v.x + v.y * v.y + v.z * v.z;
-    // A stationary body is grounded whatever the altitude — parked on a
-    // tower or frozen mid-air, it isn't airborne, it's sleeping.
-    const grounded = height < 2 || speedSq < 4;
-    // Total mechanical energy (kinetic + potential) is the Tribes
-    // currency — a fast bot low to the ground and a slow bot on a perch
-    // are both holding real E. bonusSpeed converts the recent average
-    // back to the equivalent flat-ground speed so thresholds stay
-    // familiar. Same formula feeds the bleed probe below.
-    // Potential counts at half gravity past a 2m deadband — and only
-    // while moving: a parked body at altitude isn't holding energy to
-    // convert, it's sleeping on the deposit.
-    const mech = 0.5 * speedSq + (speedSq > 4 ? 4.9 * Math.max(0, height - 2) : 0);
-    const ePrev = this.eSm.get(bot.playerId) ?? mech;
-    const eSm = ePrev + (mech - ePrev) * Math.min(1, dt * 5);
-    this.eSm.set(bot.playerId, eSm);
-    const bonusSpeed = Math.sqrt(Math.max(0, 2 * eSm));
+    const { mech, bonusSpeed, grounded } = this.energy(bot, dt, terrain);
     // Welding a stand's gear is honest work — a parked welder is
     // productive, not a pedestrian (mirrors the server meter).
     const tribesing = SheepMeter.isTribesing(bot, bonusSpeed, grounded) || busy;
@@ -115,6 +99,28 @@ export class SheepMeter {
     bot.sheepShown += (bot.sheep - bot.sheepShown) * Math.min(1, dt * 0.5);
     if (bot.sheep >= 100) this.maxed(bot);
     else this.maxedSet.delete(bot.playerId);
+  }
+
+  /** Total mechanical energy (kinetic + potential) is the Tribes
+   *  currency — a fast bot low to the ground and a slow bot on a perch
+   *  are both holding real E. Returns the instantaneous mech (the bleed
+   *  probe reads it) plus bonusSpeed: the EMA converted back to the
+   *  equivalent flat-ground speed so thresholds stay familiar.
+   *  Potential counts at half gravity past a 2m deadband — and only
+   *  while moving: a parked body at altitude isn't holding energy to
+   *  convert, it's sleeping on the deposit. */
+  private energy(bot: GameBot, dt: number, terrain: Terrain): { mech: number; bonusSpeed: number; grounded: boolean } {
+    const v = bot.vel;
+    const height = Math.max(0, bot.pos.y - terrain.getHeight(bot.pos.x, bot.pos.z));
+    const speedSq = v.x * v.x + v.y * v.y + v.z * v.z;
+    // A stationary body is grounded whatever the altitude — parked on a
+    // tower or frozen mid-air, it isn't airborne, it's sleeping.
+    const grounded = height < 2 || speedSq < 4;
+    const mech = 0.5 * speedSq + (speedSq > 4 ? 4.9 * Math.max(0, height - 2) : 0);
+    const ePrev = this.eSm.get(bot.playerId) ?? mech;
+    const eSm = ePrev + (mech - ePrev) * Math.min(1, dt * 5);
+    this.eSm.set(bot.playerId, eSm);
+    return { mech, bonusSpeed: Math.sqrt(Math.max(0, 2 * eSm)), grounded };
   }
 
   private maxed(bot: GameBot): void {

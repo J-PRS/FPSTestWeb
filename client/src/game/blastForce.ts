@@ -96,7 +96,9 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
       // (without it, splash damage was invisible and read as "no damage").
       const dmg = aoeDamageOf(aoeDamage, db, radius);
       if (dmg < 1) continue;
-      deps.lazyDamageNumbers().spawn(ball.pos, dmg, splashColor(weaponType), deps.lazyCamera());
+      // Numbers are MY-hit feedback — a bot blast salting a creature
+      // shouldn't stamp them under my crosshair (same gate as remotes).
+      if (!a.shooterId) deps.lazyDamageNumbers().spawn(ball.pos, dmg, splashColor(weaponType), deps.lazyCamera());
       deps.reportTargetDamage?.(ball, dmg);
       if (ball.takeDamage(dmg)) { hooks.onTargetDestroyed(ball, ball.vel, weaponType, a.shooterId); continue; }
       if (!ball.hideHealthBar) deps.lazyHealthBarSystem().spawnBall(ball, dmg, ball.health);
@@ -113,7 +115,7 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
   // runs it as dead reckoning and clears stale pre-hit snapshots so there's
   // no snap-back when interpolation resumes.
   function applyForceToRemotes(a: BlastArgs): void {
-    const { pos, radius, force, forceMode, aoeDamage, directHitTargetId, shooterId } = a;
+    const { pos, radius, force, forceMode, aoeDamage, directHitTargetId, shooterId, weaponType } = a;
     for (const [playerId, rp] of deps.world.remotePlayers) {
       if (rp.isDead) continue;
       // Match server damage exactly: 1 - dist/radius inside radius, 0 outside.
@@ -130,6 +132,12 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
       // clipping a remote isn't my frag to celebrate.
       if (!a.shooterId) deps.lazyHud().showHitMarker();
       const aoeDmg = aoeDamageOf(aoeDamage, dist, radius);
+      // Splash on a player/bot shows a number too — direct hits had one
+      // (impact.ts) but blast feedback stopped at the hitmarker, so the
+      // common "rocket at their feet" read as dealing nothing.
+      if (!a.shooterId && aoeDmg >= 1) {
+        deps.lazyDamageNumbers().spawn(rp.position, aoeDmg, splashColor(weaponType), deps.lazyCamera());
+      }
       if (deps.botHit?.(playerId, aoeDmg, pos, shooterId, a.weaponType)) continue; // local authority resolved it
       deps.lazyHealthBarSystem().predictDamage(playerId, aoeDmg);
     }
@@ -157,9 +165,22 @@ export function createBlastForce(deps: CombatDeps, hooks: BlastForceHooks) {
       // vignette only, no hurt sound (JP: the grunt is too much for this).
       // A bot-authored blast (shooterId set) is ENEMY fire, not a rocket
       // jump — it deals full falloff damage and reports the bot as attacker.
+      // A direct hit already claimed its damage through the impact path
+      // (botHit → hurtLocal → envDamage). Remote targets dedupe on
+      // directHitTargetId; the local branch didn't — a direct hit claimed
+      // direct + splash (double damage, double rate-limit spend).
+      // A self direct hit can't go through sendShot — 'local' resolves
+      // to nothing server-side, so zeroing this meant shooting your feet
+      // cost nothing. My own shell pays the direct amount scaled by
+      // selfDamage through the env claim below (the splash pass is
+      // skipped so it can't double-pay). An ENEMY shell that direct-hit
+      // me is server-paid already — stay silent.
+      const selfHit = a.directHitTargetId === 'local';
       const enemyBlast = a.shooterId && a.shooterId !== 'local';
-      const selfDmg = aoeDamageOf(aoeDamage, dpx, radius)
-        * (enemyBlast ? 1 : SELF_AOE_DAMAGE_SCALE * player.mods.selfDamage);
+      const selfDmg = selfHit
+        ? (enemyBlast ? 0 : aoeDamage * player.mods.selfDamage)
+        : aoeDamageOf(aoeDamage, dpx, radius)
+          * (enemyBlast ? 1 : SELF_AOE_DAMAGE_SCALE * player.mods.selfDamage);
       if (selfDmg >= 1 && !player.isDead) {
         // Shield soaks self-splash too — the server holds health steady so
         // the only thing to report is the energy burn + its flash.

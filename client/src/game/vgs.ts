@@ -29,11 +29,26 @@ function chordLetter(e: KeyboardEvent): string {
  *  letter — listener registration order is not a reliable gate. */
 export const vgsGate = { active: false };
 
+/** A node's chat scope: leaves read their own `team` flag; a category
+ *  inherits when every leaf agrees, else 'mixed'. */
+function nodeScope(n: VgsNode): 'global' | 'team' | 'mixed' {
+  if ('line' in n) return n.team === false ? 'global' : 'team';
+  let scope: 'global' | 'team' | null = null;
+  for (const c of Object.values(n.children)) {
+    const s = nodeScope(c);
+    if (s === 'mixed' || (scope && s !== scope)) return 'mixed';
+    scope = s;
+  }
+  return scope ?? 'mixed';
+}
+
+const scopeColor = (s: 'global' | 'team' | 'mixed') =>
+  s === 'global' ? '#fd8' : s === 'team' ? '#7d7' : '#ccc';
+
 export interface VgsDeps {
   /** Wire chat — team flag scopes the line; chord is the keypath ("VGS")
    *  printed next to the message so the menu is learnable from chat. */
   send(text: string, team: boolean, chord: string): void;
-  isConnected(): boolean;
   /** Offline/local echo into the feed. */
   echo(text: string, team: boolean, chord: string): void;
   /** Spoken voice for the line — fires at send time so the sender hears
@@ -94,7 +109,9 @@ export class Vgs {
       const team = next.team !== false;
       const chord = 'V' + this.keys.join('') + letter;
       this.deps.send(next.line, team, chord);
-      if (!this.deps.isConnected()) this.deps.echo(next.line, team, chord);
+      // Own VGS lands immediately like Tribes — the wire echo (if the
+      // send actually landed) dedupes inside the feed.
+      this.deps.echo(next.line, team, chord);
       this.deps.speak(next.line);
       this.blip();
       this.close();
@@ -137,7 +154,9 @@ export class Vgs {
     for (const [k, n] of Object.entries(this.node)) {
       const row = document.createElement('div');
       const key = document.createElement('span');
-      key.style.color = '#fd8';
+      // Scope color = the chat channel the line lands in: yellow like
+      // global names, green like team chat, gray if a category mixes.
+      key.style.color = scopeColor(nodeScope(n));
       key.textContent = `[${k}] `;
       row.append(key, document.createTextNode(n.label));
       this.menu.appendChild(row);

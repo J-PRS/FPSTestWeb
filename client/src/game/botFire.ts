@@ -21,6 +21,7 @@ import { claimShot, tickBolts, disposeBolts } from './botBolts.js';
 import { poissonDisc } from '../utils/poissonSpread.js';
 import type { RemotePlayer } from '../entities/RemotePlayer.js';
 import type { Targetable } from '../entities/balls.js';
+import type { ArmorClass } from '../../../shared/botClasses.js';
 
 const _shotDir = new THREE.Vector3();
 const _shotMuzzle = new THREE.Vector3();
@@ -30,7 +31,7 @@ const _pelletUp0 = new THREE.Vector3(0, 1, 0);
 
 export interface FireHost {
   scene(): THREE.Scene;
-  player(): { pos: THREE.Vector3; isDead: boolean };
+  player(): { pos: THREE.Vector3; isDead: boolean; appliedClass: ArmorClass };
   world(): { projectiles: Projectile[]; remotePlayers: Map<string, RemotePlayer> };
   targets: Targetable[];
   /** Connected room → real spawns would misattribute to the local
@@ -115,6 +116,7 @@ export class BotFire {
         const pl = this.host.player();
         return pl.isDead ? null : pl.pos;
       };
+      p.localClass = () => this.host.player().appliedClass;
       this.host.world().projectiles.push(p);
     }
     // Positional — sfx.shoot is the LOCAL voice (full volume at the ear);
@@ -176,6 +178,7 @@ export class BotFire {
         needsServerTracking: false });
     p.shooterId = bot.playerId;
     p.sweepLocal = () => { const pl = this.host.player(); return pl.isDead ? null : pl.pos; };
+    p.localClass = () => this.host.player().appliedClass;
     this.host.world().projectiles.push(p);
     sfx.shotAt(_shotMuzzle, wt, bot.vel);
   }

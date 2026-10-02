@@ -48,8 +48,8 @@ function spawnProjectile(deps: CombatDeps, config: ProjectileConfig, e: FireArgs
   deps.world.projectiles.push(p);
 
   if (config.needsServerTracking) {
-    deps.world.projectileRegistry.pending.push(p);
-    deps.world.projectileRegistry.pendingSince.set(p, Date.now());
+    p.shotId = `s${++deps.world.projectileRegistry.seq}`;
+    deps.world.projectileRegistry.byShotId.set(p.shotId, p);
   }
 
   // Record projectile fired event for demo
@@ -82,6 +82,7 @@ function spawnProjectile(deps: CombatDeps, config: ProjectileConfig, e: FireArgs
     position: { x: e.origin.x, y: e.origin.y, z: e.origin.z },
     velocity: { x: velocity.x, y: velocity.y, z: velocity.z },
     weaponType: config.weaponType,
+    shotId: p.shotId ?? undefined,
   });
 }
 

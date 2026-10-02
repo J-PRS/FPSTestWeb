@@ -14,7 +14,8 @@ import { CtfBridge } from './botCtf.js';
 import * as sfx from '../core/sfx.js';
 import { BotSenses } from './botSenses.js';
 import { BotFire } from './botFire.js';
-import { respawnBotF, hitF, hurtLocal, botKilledF } from './botKill.js';
+import { respawnBotF, hitF, hurtLocal, botKilledF, botSay } from './botKill.js';
+import { chatter } from '../../../shared/botTaunts.js';
 import { winText, checkWin, resetMatch, creditKill, collect, pushScore, syncLocalTeam } from './botMatch.js';
 
 /**
@@ -50,6 +51,9 @@ interface BotHooks {
   localPlayerKilled(killerName: string): void;
   /** Match announcements — win banners, NEW MATCH, flag grabs. Center-screen. */
   remoteKillFeed(text: string): void;
+  /** YOUR frag — mid-tier center line (FragMessages.showKill). A frag is
+   *  below a flag grab/death in hierarchy; it doesn't get the red slab. */
+  fragBanner?(text: string): void;
   /** A kill happened — CS-style killfeed row in the corner, not the
    *  center banner (that's reserved for YOUR frags/deaths). */
   killFeed(shooter: string, victim: string, localIsShooter: boolean, localIsVictim: boolean): void;
@@ -247,6 +251,7 @@ export class TeamBots {
 
   private afterThink(bot: GameBot, shot: ReturnType<GameBot['think']>, acc: number,
     foes: Parameters<GameBot['think']>[1]['enemies'], terrain: Terrain): void {
+    this.speakEdge(bot);
     if (shot) this.fire.resolveShot(bot, shot.targetId, shot.aim);
     // Belt + propel are real-spawn actions — offline only, same gate
     // as resolveShot (a connected room's wire remotes can't attribute).
@@ -265,12 +270,46 @@ export class TeamBots {
       this.fire.tryPropel(bot, !!shot);
     }
     if (shot) this.sheep.markShot(bot.playerId);
+    this.sheepTick(bot, shot, acc, foes, terrain);
+  }
+
+  /** Sheep-meter bookkeeping tail of afterThink — foe-sight, the
+   *  ignoring tell, dest progress, weld-busy. */
+  private sheepTick(bot: GameBot, shot: ReturnType<GameBot['think']>, acc: number,
+    foes: Parameters<GameBot['think']>[1]['enemies'], terrain: Terrain): void {
     // "Ignoring" means a sustained refusal to fire — volley cadence
     // legitimately goes ~2s between bursts, so a mid-fight gap isn't a
     // tell. Same 3s recency window the server meter uses.
     const ignoring = !shot && this.sheep.notShooting(bot.playerId);
     const hasDest = Math.hypot(bot.lastDest.x - bot.pos.x, bot.lastDest.z - bot.pos.z) >= 0.5;
-    this.sheep.tick(bot, acc, terrain, this.senses.foeSeen(bot, foes, terrain), ignoring, hasDest, bot.wantRepair !== null);
+    this.sheep.tick(bot, acc, terrain, { foe: this.senses.foeSeen(bot, foes, terrain), ignoring, hasDest, busy: bot.wantRepair !== null });
+  }
+
+  /** Situation chatter edge — same pools + throttle as the wire path,
+   *  resolved locally since offline bots never touch the chat wire. */
+  private speakEdge(bot: GameBot): void {
+    if (!bot.wantSay) return;
+    const tgt = bot.wantSay.target;
+    const c = chatter(bot.wantSay.kind, bot.playerId,
+      tgt === 'local' ? 'YOU' : tgt?.replace('bot:', ''));
+    botSay(bot.playerId, c?.text ?? null, c?.vgs, c?.team && bot.team !== null);
+    bot.wantSay = null;
+  }
+
+  /** Offline-only action intents — belt throw, emplacement, weld, disc
+   *  jump. A connected room's wire remotes can't attribute these. */
+  private offlineActs(bot: GameBot, hasShot: boolean): void {
+    if (bot.wantBelt) this.fire.throwBelt(bot);
+    if (bot.wantDeploy) this.tryDeploy(bot);
+    if (bot.wantRepair) {
+      // Welding — the heal rate mirrors a human trigger hold (~50hp/s
+      // at think cadence). A welded item counts as productive work for
+      // the meter: parked but not sheeping.
+      const welded = this.hooks.botWeld?.(bot.wantRepair) ?? false;
+      if (welded) this.sheep.markShot(bot.playerId);
+      else bot.wantRepair = null; // died mid-walk — drop the intent
+    }
+    this.fire.tryPropel(bot, hasShot);
   }
 
   // Per-bot persistent think ctx — the literal was a fresh ~1KB object

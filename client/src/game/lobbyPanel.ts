@@ -75,6 +75,32 @@ function buildP2PButtons(p2pIn: HTMLInputElement): HTMLDivElement {
 }
 
 
+/** MAP picker + pre-rendered thumbnail preview — the image swaps on
+ *  selection/refill and hides itself when a map has no rendered thumb. */
+function mapPicker(h: LobbyPanelHost): { select: HTMLSelectElement; thumb: HTMLImageElement } {
+  const select = document.createElement('select');
+  select.className = 'lb-input';
+  select.style.cssText = 'cursor:pointer;flex:1;min-width:0;';
+  const thumb = document.createElement('img');
+  thumb.className = 'lb-mapthumb';
+  // Block element BELOW the field row, not a flex item inside it — a
+  // flex child sizes to the image's natural pixels and overflows.
+  thumb.style.cssText = 'display:block;width:100%;height:auto;aspect-ratio:4/3;object-fit:cover;border-radius:4px;margin-top:4px;';
+  thumb.alt = 'map preview';
+  const update = () => {
+    const name = select.value;
+    const url = name && h.deps.mapThumbUrl ? h.deps.mapThumbUrl(name) : '';
+    thumb.style.display = url ? 'block' : 'none';
+    if (url) thumb.src = url;
+  };
+  thumb.addEventListener('error', () => { thumb.style.display = 'none'; });
+  select.addEventListener('change', update);
+  // Refills change the selection without firing 'change' — watch the
+  // option list so the preview tracks mode filtering too.
+  new MutationObserver(update).observe(select, { childList: true });
+  return { select, thumb };
+}
+
 export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
 
     // The trigger lives in the ESC menu (#lobby-open in index.html) —
@@ -106,9 +132,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
     modeSelect.addEventListener('change', () => h.fillMapSelect());
     modeRow.appendChild(modeSelect);
     const mapRow = field('MAP');
-    const mapSelect = document.createElement('select');
-    mapSelect.className = 'lb-input';
-    mapSelect.style.cssText = 'cursor:pointer;flex:1;min-width:0;';
+    const { select: mapSelect, thumb: mapThumb } = mapPicker(h);
     mapRow.appendChild(mapSelect);
     const botsRow = field('BOTS');
     const botsInput = document.createElement('input');
@@ -197,7 +221,7 @@ export function buildLobbyPanel(h: LobbyPanelHost): LobbyPanelEls {
     p2pRow.appendChild(p2pIn);
     const p2pBtns = buildP2PButtons(p2pIn);
 
-    panel.append(head, here, rows, hostLbl, modeRow, mapRow, botsRow, hostBtn, quickLbl, quick, newWrap, connLbl, srvRow, p2pRow, p2pBtns);
+    panel.append(head, here, rows, hostLbl, modeRow, mapRow, mapThumb, botsRow, hostBtn, quickLbl, quick, newWrap, connLbl, srvRow, p2pRow, p2pBtns);
     (document.getElementById('overlay') ?? document.body).appendChild(panel);
     // Menu closed while the panel was open (resume / re-lock) — display:none
     // hides it anyway, but the poll timer would keep burning for nothing.

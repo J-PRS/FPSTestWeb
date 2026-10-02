@@ -25,6 +25,11 @@ function wirePlayerCombat(ctx: NetCtx): void {
     // Check if local player was hit
     if (targetId === nm().getLocalPlayerId()) {
       const player = deps.lazyPlayer();
+      if (player.isDead) {
+        // A confirmed hit on a corpse means the wire thinks we died later
+        // than the sim did — worth surfacing, it moves kill credit too.
+        logger.warn(`playerHit on dead local player: ${damage} from ${shooterId}`);
+      }
       if (armor !== undefined) player.armor = armor;
       // Shielded hits route to the energy tank (server kept health
       // unchanged) — the soak reads as a cyan flash + hum, not a grunt.
@@ -33,6 +38,7 @@ function wirePlayerCombat(ctx: NetCtx): void {
         deps.lazyHud().showShieldDamage(deps.world.remotePlayers.get(shooterId)?.pos ?? null, damage);
         sfx.shieldHit();
         player.health = health;
+        logger.info(`Shield soaked ${damage} from ${shooterId} (health: ${health})`);
         return;
       }
       player.health = health;
@@ -70,6 +76,12 @@ function wirePlayerCombat(ctx: NetCtx): void {
   networkManager.onYourHealth = (health) => {
     if (deps.world.playbackMode) return;
     const player = deps.lazyPlayer();
+    // The heal/regen channel should only ever raise hp — a drop means
+    // some server-side resync is quietly writing health through the
+    // wrong door, which is exactly the 'damage came from nowhere' tell.
+    if (!player.isDead && health < player.health - 0.5) {
+      logger.warn(`yourHealth dropped hp ${player.health} -> ${health}`);
+    }
     if (!player.isDead) player.health = health;
   };
 
@@ -92,6 +104,11 @@ function wirePlayerCombat(ctx: NetCtx): void {
     const i = stamps.findIndex(s => now - s.t < 400 &&
       Math.hypot(s.x - position.x, s.y - position.y, s.z - position.z) < 3);
     if (i >= 0) { stamps.splice(i, 1); return; }
+    // No matching self-blast stamp — either an enemy blast we never
+    // predicted, or a predicted blast whose stamp aged out (400ms). The
+    // shove is real; logging it lets an alt+Q dump separate 'the blast
+    // never touched me' from 'a shove arrived from nowhere'.
+    logger.info(`Knockback applied without prediction stamp`, { pos: position, force, pull });
     const from = new THREE.Vector3(position.x, position.y, position.z);
     const player = deps.lazyPlayer();
     if (pull) {

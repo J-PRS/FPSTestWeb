@@ -53,17 +53,26 @@ export function wireProjectiles(ctx: NetCtx): void {
     return true;
   };
 
-  networkManager.onProjectileCreated = (projectileId: string, ownerId: string, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }, weaponType?: number) => {
+  // Bind a server id echo to the local shell that spawned it — the spawn
+  // claim's shotId nonce comes back verbatim, so the link is exact (no
+  // FIFO, no position inference, immune to rejected/dropped claims).
+  const linkOwnProjectile = (projectileId: string, shotId?: string): void => {
+    const registry = deps.world.projectileRegistry;
+    const localProjectile = shotId ? registry.byShotId.get(shotId) : undefined;
+    if (!localProjectile) {
+      deps.logger.warn(`[Net] projectileCreated ${projectileId} has no local shell (shotId=${shotId ?? 'none'})`);
+      return;
+    }
+    localProjectile.serverProjectileId = projectileId;
+    registry.byId.set(projectileId, localProjectile);
+  };
+
+  networkManager.onProjectileCreated = (projectileId: string, ownerId: string, position: { x: number; y: number; z: number }, velocity: { x: number; y: number; z: number }, weaponType?: number, shotId?: string) => {
     if (deps.world.playbackMode) return; // live shots don't belong in the replay
     noteWeapon(ownerId, weaponType);
-    // For own projectiles: link the pending local projectile to this server ID
+    // For own projectiles: link the server id to the local shell by nonce.
     if (ownerId === nm().getLocalPlayerId()) {
-      const localProjectile = deps.world.projectileRegistry.pending.shift();
-      if (localProjectile) {
-        localProjectile.serverProjectileId = projectileId;
-        deps.world.projectileRegistry.byId.set(projectileId, localProjectile);
-        deps.world.projectileRegistry.pendingSince.delete(localProjectile); // Clean up timestamp
-      }
+      linkOwnProjectile(projectileId, shotId);
       return;
     }
 
@@ -75,6 +84,11 @@ export function wireProjectiles(ctx: NetCtx): void {
     const remoteProjectile = new Projectile(deps.lazyScene(), origin, dir, new THREE.Vector3(0, 0, 0), cfg);
     remoteProjectile.vel.copy(vel); // override with exact server velocity
     remoteProjectile.isRemote = true;
+    // Wire shells are NEVER "mine" — unset shooterId reads as local player
+    // authorship in every feedback gate (hitmarker/numbers/self-splash
+    // scale) and would even let a remote shell sendShot-claim its hits
+    // under my id. Stamp the real owner.
+    remoteProjectile.shooterId = ownerId;
     // Fuse jitter seeds from this id — the replica pops at the server's age.
     remoteProjectile.serverProjectileId = projectileId;
     // Ray-burst replicas discharge deterministically (delay/dir/range are
@@ -122,7 +136,7 @@ export function wireProjectiles(ctx: NetCtx): void {
     }
   };
 
-  networkManager.onProjectileDestroyed = (projectileId: string) => {
+  networkManager.onProjectileDestroyed = (projectileId: string, shotId?: string) => {
     if (deps.world.playbackMode) return;
     // Kill remote projectile (explode so trail particles fade out naturally).
     // Delete the map entry now — the visual fade lives on world.projectiles,
@@ -132,17 +146,16 @@ export function wireProjectiles(ctx: NetCtx): void {
       remoteProjectile.explode();
       remoteProjectiles.delete(projectileId);
     }
-    // Kill local projectile if server says it's gone - explode to let trails fade
-    const localProjectile = deps.world.projectileRegistry.byId.get(projectileId);
+    // Kill local projectile if server says it's gone — explode to let
+    // trails fade. The shotId covers destroys for shells whose server-id
+    // echo never landed.
+    const registry = deps.world.projectileRegistry;
+    const localProjectile = registry.byId.get(projectileId)
+      ?? (shotId ? registry.byShotId.get(shotId) : undefined);
     if (localProjectile) {
       localProjectile.explode();
-      deps.world.projectileRegistry.byId.delete(projectileId);
-      // Also remove from pending queue if it's still there (shouldn't happen but defensive)
-      const pendingIndex = deps.world.projectileRegistry.pending.indexOf(localProjectile);
-      if (pendingIndex !== -1) {
-        deps.world.projectileRegistry.pending.splice(pendingIndex, 1);
-        deps.world.projectileRegistry.pendingSince.delete(localProjectile);
-      }
+      registry.byId.delete(projectileId);
+      if (localProjectile.shotId) registry.byShotId.delete(localProjectile.shotId);
     }
   };
 }

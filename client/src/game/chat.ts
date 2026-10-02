@@ -33,6 +33,11 @@ export class Chat {
   private input: HTMLInputElement;
   private deps: ChatDeps;
   private team = false;
+  /** Locally-echoed own lines awaiting (or skipping) their wire echo —
+   *  keyed by team|vgs|text so the relayed copy dedupes instead of
+   *  printing twice. A line that never echoes just stays shown — like
+   *  Tribes, your own words land the moment you say them. */
+  private pendingSelf = new Map<string, number>();
 
   constructor(deps: ChatDeps) {
     this.deps = deps;
@@ -69,8 +74,9 @@ export class Chat {
       if (e.code === 'Enter') {
         const text = this.input.value.trim();
         if (text) {
-          this.deps.send(text.slice(0, 200), this.team);
-          if (!this.deps.isConnected()) this.add(this.deps.localName(), text, this.team); // offline echo
+          const line = text.slice(0, 200);
+          this.deps.send(line, this.team);
+          this.echoSelf(line, this.team);
         }
         this.close();
       } else if (e.code === 'Escape') {
@@ -101,15 +107,36 @@ export class Chat {
     this.input.blur();
   }
 
+  /** Own line rendered instantly + registered so the server's relayed
+   *  copy back gets swallowed. Chat text and VGS chords both route here. */
+  echoSelf(text: string, team: boolean, vgs?: string): void {
+    const key = `${team ? 1 : 0}|${vgs ?? ''}|${text}`;
+    this.pendingSelf.set(key, (this.pendingSelf.get(key) ?? 0) + 1);
+    if (this.pendingSelf.size > 64) this.pendingSelf.clear();
+    this.add(this.deps.localName(), text, team, vgs);
+  }
+
   /** A line in the feed. `from === null` renders as a system line.
    *  `vgs` = the chord ("VGS") — printed as a prefix AND the speech
    *  switch: VGS goes to the robot, typed lines to system TTS when the
    *  CHAT TTS toggle is on. Speech lives here (not in onChat) so every
    *  path that lands in the feed — wire, host relay, offline echo, bot
    *  taunts — speaks identically. */
+  /** The wire copy of a line we already printed locally — consume the
+   *  marker, print nothing. If the wire never delivered, the local
+   *  echo is on screen anyway (like Tribes: your words always land). */
+  private swallowSelfEcho(from: string, text: string, team: boolean, vgs?: string): boolean {
+    const key = `${team ? 1 : 0}|${vgs ?? ''}|${text}`;
+    const n = this.pendingSelf.get(key) ?? 0;
+    if (!n) return false;
+    if (n > 1) this.pendingSelf.set(key, n - 1); else this.pendingSelf.delete(key);
+    return true;
+  }
+
   add(from: string | null, text: string, team = false, vgs?: string): void {
     if (from !== null) {
       const isSelf = from === this.deps.localName();
+      if (isSelf && this.swallowSelfEcho(from, text, team, vgs)) return;
       if (vgs) {
         // Own VGS spoke at send time — the echo back is feed-only.
         if (!isSelf) void speakVgs(text, from);
