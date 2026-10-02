@@ -293,6 +293,15 @@ export class ServerBots {
     return this.brains.get(id)?.goalS.goal ?? null;
   }
 
+  /** Test hook — the brain's fight/flight surface in one line, so a
+   *  parked bot's stall probe names which layer actually owns it. */
+  debugBrain(id: string): string {
+    const b = this.brains.get(id);
+    if (!b) return '?';
+    const hunt = b.h.hunt ? `${b.h.hunt.pos.x.toFixed(0)},${b.h.hunt.pos.z.toFixed(0)}` : '-';
+    return `hunt=${hunt} hold=${b.holding} jet=${b.jetDebug.why}/${b.jetDebug.out ? 'on' : 'off'}`;
+  }
+
   /** Test hook — how many push-calls each team posted this match. */
   debugPushCalls(team: string): number {
     return this.sense.pushCalls.get(team as 'alpha' | 'bravo') ?? 0;

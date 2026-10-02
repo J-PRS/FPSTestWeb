@@ -469,7 +469,8 @@ describe('scenario: warp soak throughput', () => {
             else if (simTicks * dt - stallT > 60) {
               capStalls.push({ id: p.id, team: p.team ?? '?', dd, spd: Math.hypot(p.velocity.x, p.velocity.z), destD: dest ? Math.hypot(dest.x - foeFlag.pos.x, dest.z - foeFlag.pos.z) : -1 });
               const goal = room.bots.debugGoal(p.id);
-              console.log(`  cap-stall ${p.id} ${p.team} dd=${dd.toFixed(0)} spd=${Math.hypot(p.velocity.x, p.velocity.z).toFixed(0)} pos=${p.position.x.toFixed(0)},${p.position.z.toFixed(0)} dest=${dest ? `${dest.x.toFixed(0)},${dest.z.toFixed(0)}` : 'none'} goal=${goal ? `${goal.x.toFixed(0)},${goal.z.toFixed(0)}` : 'none'} stand=${foeFlag.pos.x.toFixed(0)},${foeFlag.pos.z.toFixed(0)}`);
+              const en = (p as { energy?: number }).energy;
+              console.log(`  cap-stall ${p.id} ${p.team} dd=${dd.toFixed(0)} spd=${Math.hypot(p.velocity.x, p.velocity.z).toFixed(0)} pos=${p.position.x.toFixed(0)},${p.position.y.toFixed(0)},${p.position.z.toFixed(0)} en=${en?.toFixed(0) ?? '?'} dest=${dest ? `${dest.x.toFixed(0)},${dest.z.toFixed(0)}` : 'none'} goal=${goal ? `${goal.x.toFixed(0)},${goal.z.toFixed(0)}` : 'none'} stand=${foeFlag.pos.x.toFixed(0)},${foeFlag.pos.z.toFixed(0)} ${room.bots.debugBrain(p.id)}`);
               capStall.set(p.id, simTicks * dt);
             }
           } else capStall.delete(p.id);

@@ -106,7 +106,11 @@ export class BotMoves {
       // into a 250m downhill slide the walk key can't out-argue (soak:
       // 16 straight seconds at 15m/s away from the pole), so their
       // boots stay planted and ground friction owns every landing.
-      ski: !ctx.posted,
+      // Steep climbs too: ski is frictionless, so a bot that skis UP a
+      // ridge it can't jet over slides back down and re-climbs forever
+      // (soak: capper Sisyphus-orbit cycling y45→81→45 for a match).
+      // Humans let go of ski on a steep grade and walk-hop-jet it.
+      ski: !ctx.posted && !(rise > 3 && speed < 8 && !airborne),
       jet,
       // Uphill + near-stationary = hop it; autohop chains the rest.
       jump: uphill && speed < 3 && !airborne,
