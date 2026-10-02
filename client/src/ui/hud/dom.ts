@@ -84,8 +84,7 @@ export function createHudDom(): HudDom {
       <div id="match-status"><span class="fchip a" id="flag-a">⚑</span><span class="clock" id="match-clock"></span><span class="fchip b" id="flag-b">⚑</span></div>
       <div id="killfeed"></div>
       <div id="scoreboard">
-        <div class="sb-title">SCOREBOARD</div>
-        <table><thead><tr><th>PLAYER</th><th>FRAGS</th><th>PTS</th><th>NET</th><th>PING</th><th>SHEEP</th></tr></thead><tbody id="sb-rows"></tbody></table>
+        <table><thead><tr><th>#</th><th>PLAYER</th><th>FRAGS</th><th>PTS</th><th>NET</th><th>PING</th><th>SHEEP</th></tr></thead><tbody id="sb-rows"></tbody></table>
       </div>
     `;
     document.body.appendChild(el);

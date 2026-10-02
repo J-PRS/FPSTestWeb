@@ -241,8 +241,8 @@ export class HUD {
     this.sb.tick(dt);
   }
 
-  updatePlayerIndicator(playerId: string, position: { x: number; y: number; z: number }, camera: THREE.Camera, isDead: boolean = false, friendly = false, sheep?: number): void {
-    this.indicators.update(playerId, position, camera, { isDead, friendly, sheep });
+  updatePlayerIndicator(playerId: string, position: { x: number; y: number; z: number }, camera: THREE.Camera, opts: { isDead?: boolean; friendly?: boolean; sheep?: number; bot?: boolean; cls?: string } = {}): void {
+    this.indicators.update(playerId, position, camera, opts);
   }
 
   /** CTF flag marker — same through-terrain DOM overlay as player dots,

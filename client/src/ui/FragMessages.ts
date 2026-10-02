@@ -31,6 +31,18 @@ export class FragMessages {
     this.flash();
   }
 
+  /** Frag headline — mid-tier: a frag matters less than YOU DIED or a
+   *  flag event, so it gets a compact line, not the 2.6rem red slab. */
+  showKill(msg: string): void {
+    const [head, ...rest] = msg.split('\n');
+    this.scoreDiv.innerHTML =
+      `<div style="font-size:1.35rem;font-weight:700;color:#ffd9cc;letter-spacing:0.1em;text-shadow:0 0 10px rgba(255,120,80,0.4),1px 2px 3px #000">${esc(head ?? '')}</div>` +
+      (rest.length
+        ? `<div style="font-size:0.9rem;font-weight:600;color:#e8d8cc;letter-spacing:0.14em;text-shadow:1px 1px 3px #000">${esc(rest.join(' · '))}</div>`
+        : '');
+    this.flash();
+  }
+
   // On-shot score tick ("84.2 · 41 · 0.35s · +8") — the OLD small style.
   // The headline treatment is for deaths/frags only; a 2.6rem slab every
   // hit is screen spam. `air` scales the score in discrete steps — a 2s

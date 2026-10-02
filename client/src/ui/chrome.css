@@ -50,7 +50,7 @@ body.menu-open #frag-msg { display: none !important; }
 }
 #menu-side {
   position: absolute; top: 0; right: 0; bottom: 0;
-  width: 280px;
+  width: 400px;
   background: rgba(8,11,16,0.75);
   border-left: 1px solid rgba(255,255,255,0.07);
   padding: 24px 18px;
@@ -136,6 +136,10 @@ body.menu-open #frag-msg { display: none !important; }
   transition: background 0.12s, border-color 0.12s, color 0.12s;
 }
 #overlay .btn-row button:hover { background: rgba(255,255,255,0.14); color: #fff; }
+/* Two toggles per row — short labels only (ON/OFF state pairs). */
+#overlay .btn-row .btn-pair { display: flex; gap: 6px; }
+#overlay .btn-row .btn-pair button { flex: 1; }
+#overlay .btn-row .btn-pair .field-row { flex: 1; min-width: 0; }
 #overlay .btn-row button.active {
   border-color: #3aa7ff; color: #fff;
   background: rgba(58,167,255,0.22);
@@ -159,9 +163,9 @@ body.menu-open #frag-msg { display: none !important; }
   text-align: right; outline: none;
   font-variant-numeric: tabular-nums;
 }
-#overlay .field-row .seg-row { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+#overlay .field-row .seg-row { display: flex; gap: 0px; }
 #overlay .field-row .seg-row button {
-  padding: 4px 8px;
+  padding: 4px 6px;
   background: rgba(0,0,0,0.3);
   color: #9db2c4;
   border: 1px solid rgba(255,255,255,0.14);
@@ -344,7 +348,7 @@ body.lobby-open #loadout-bar {
 .cool-shot-item .time-ago { font-size: 0.65rem; color: rgba(140,170,195,0.55); margin-left: auto; }
 .cool-shot-item.empty { color: rgba(140,170,195,0.4); cursor: default; text-align: center; justify-content: center; }
 .cool-shot-item.empty:hover { background: rgba(255,255,255,0.04); border-left-color: rgba(255,255,255,0.1); }
-.section-label { font-size: 0.62rem; color: rgba(140,170,195,0.6); letter-spacing: 0.2em; font-weight: 600; margin-bottom: 6px; margin-top: 18px; }
+.section-label { font-size: 0.62rem; color: rgba(140,170,195,0.6); letter-spacing: 0.2em; font-weight: 600; margin: 8px 0 0; }
 .section-label:first-of-type { margin-top: 0; }
 
 /* Lobby panel — floats bottom-right, mirrors the ESC overlay palette */
@@ -362,7 +366,7 @@ body.lobby-open #loadout-bar {
   /* Full-height column beside the menu — a translucent floating card
    *  stacked over the menu column read as a z-fight smear; twin columns
    *  share the edge cleanly and scroll internally instead of towering. */
-  position: fixed; top: 0; right: 296px; bottom: 0; z-index: 60; width: 300px;
+  position: fixed; top: 0; right: 346px; bottom: 0; z-index: 60; width: 300px;
   background: rgba(8,11,16,0.92); border-left: 1px solid rgba(255,255,255,0.07);
   color: #dde8f2; padding: 24px 18px; font-size: 0.72rem; overflow-y: auto;
 }

@@ -17,7 +17,7 @@ const RIM = SIZE / 2 - 6;  // dot-clamp radius in px
 
 /** A player/bot blip — resolved to friend-or-foe by the caller, which owns
  *  team state. Coords are world xz. */
-export interface MinimapPlayer { x: number; z: number; friendly: boolean }
+export interface MinimapPlayer { x: number; z: number; friendly: boolean; bot?: boolean }
 
 // Per-frame transform basis the draw layers share — computed once in update.
 interface MapBasis { pos: THREE.Vector3; sin: number; cos: number; k: number; mid: number }
@@ -123,6 +123,8 @@ export class Minimap {
   // same size as a ball's reads as "creature", not "enemy". Marker colors
   // match the overhead .player-indicator: enemy red / friendly green,
   // white rim. 1.8px vs creatures' 2.5 so a stacked pair still separates.
+  // Humans draw as diamonds, bots as round dots — same split as the
+  // overhead markers, so "who's real" reads on radar too.
   private drawPlayers(players: Iterable<MinimapPlayer> | undefined, t: MapBasis): void {
     if (!players) return;
     const c = this.ctx, m = this._map;
@@ -132,7 +134,17 @@ export class Minimap {
       c.fillStyle = p.friendly ? 'rgba(68,221,68,0.95)' : 'rgba(255,68,68,0.95)';
       c.strokeStyle = 'rgba(255,255,255,0.9)';
       c.beginPath();
-      c.arc(m[0], m[1], 1.8, 0, Math.PI * 2);
+      if (p.bot) {
+        c.arc(m[0], m[1], 1.8, 0, Math.PI * 2);
+      } else {
+        // Diamond ≈ the circle's bounding square — same visual weight.
+        const r = 2.5;
+        c.moveTo(m[0], m[1] - r);
+        c.lineTo(m[0] + r, m[1]);
+        c.lineTo(m[0], m[1] + r);
+        c.lineTo(m[0] - r, m[1]);
+        c.closePath();
+      }
       c.fill();
       c.stroke();
     }

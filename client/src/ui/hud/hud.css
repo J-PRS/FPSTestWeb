@@ -33,6 +33,11 @@
   /* Bottom-right: entity counts, shot feed */
   --z-br-1: 24px;
   --z-br-2: 96px;
+  /* Debug rows (backquote): reserved ABOVE a full-height shot feed so the
+   * fixed-position panels can't land inside gameplay rows. The shot feed
+   * tops out near ~200px; debug starts past it. */
+  --z-br-3: 214px;  /* stats.js chart row (3 panels side by side) */
+  --z-br-4: 268px;  /* perfHud <pre> — grows UPWARD from here */
 }
 
 #hud {
@@ -190,17 +195,53 @@
   position: absolute;
   width: 12px;
   height: 12px;
-  background: #f44;
-  border: 2px solid #fff;
-  border-radius: 50%;
   pointer-events: none;
   transform: translate(-50%, -50%);
-  box-shadow: 0 0 8px rgba(255, 68, 68, 0.8);
   transition: opacity 0.1s;
 }
+/* The mark itself lives on ::before — clip-path silhouettes would
+   otherwise clip children (sheep badge), and the class shape stays
+   swappable while the outer div keeps position semantics. */
+.player-indicator::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--ind-bg, #f44);
+  border: 2px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 8px var(--ind-glow, rgba(255, 68, 68, 0.8));
+}
 .player-indicator.friendly {
-  background: #4d4;
-  box-shadow: 0 0 8px rgba(68, 221, 68, 0.8);
+  --ind-bg: #4d4;
+  --ind-glow: rgba(68, 221, 68, 0.8);
+}
+/* Bots: same class silhouette, dimmed — "who's real" is an alpha read,
+   not a different shape. */
+.player-indicator.bot { opacity: 0.75; }
+/* Class silhouettes — shape carries light/medium/heavy. Border + radius
+   + box-shadow drop out for shaped marks; drop-shadow re-adds the white
+   rim because it follows the CLIPPED path where a box border can't. */
+.player-indicator[class*="cls-"]::before {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  filter: drop-shadow(0 0 1.5px var(--ind-rim, rgba(255, 255, 255, 0.9)));
+}
+/* light = open chevron. medium = same chevron + nested diamond (the
+   ::after sits in the V's crook). heavy = solid wedge. */
+.player-indicator.cls-light::before,
+.player-indicator.cls-medium::before {
+  clip-path: polygon(0% 8%, 50% 58%, 100% 8%, 100% 42%, 50% 92%, 0% 42%);
+}
+.player-indicator.cls-medium::after {
+  content: '';
+  position: absolute;
+  left: 25%; top: 25%; width: 50%; height: 50%;
+  background: var(--ind-bg, #f44);
+  clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+}
+.player-indicator.cls-heavy::before {
+  clip-path: polygon(50% 95%, 4% 6%, 96% 6%);
 }
 .player-indicator .sheep-badge {
   position: absolute;
@@ -211,18 +252,23 @@
   text-shadow: 0 0 4px #000;
   white-space: nowrap;
 }
-.player-indicator.friendly.offscreen {
-  background: transparent;
-  border-color: #0d0;
-}
 .player-indicator-offscreen {
   width: 12px !important;
   height: 12px !important;
 }
-.player-indicator.offscreen {
+/* Offscreen: collapse to a hollow ring — the clipped silhouette would
+   render nothing with a transparent fill, and direction is all the rim
+   marker needs to say. */
+.player-indicator.offscreen::before {
   background: transparent;
-  border-color: #f00;
+  border: 2px solid #f00;
+  border-radius: 50%;
+  clip-path: none;
+  box-shadow: none;
+  filter: none;
 }
+.player-indicator.offscreen::after { content: none; }
+.player-indicator.friendly.offscreen::before { border-color: #0d0; }
 .player-indicator.hidden {
   opacity: 0;
 }
@@ -233,28 +279,24 @@
 }
 /* Flag markers — diamond silhouette, team color, always legible. */
 .player-indicator.flag {
-  border: 0;
-  border-radius: 0;
-  clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
   width: 14px;
   height: 14px;
 }
-.player-indicator.flag.alpha {
-  background: #55aaff;
-  box-shadow: 0 0 10px rgba(85, 170, 255, 0.9);
+.player-indicator.flag::before {
+  border: 0;
+  border-radius: 0;
+  clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
 }
-.player-indicator.flag.bravo {
-  background: #ff8855;
-  box-shadow: 0 0 10px rgba(255, 136, 85, 0.9);
-}
+.player-indicator.flag.alpha { --ind-bg: #55aaff; }
+.player-indicator.flag.bravo { --ind-bg: #ff8855; }
 /* A flag offscreen stays a filled diamond — losing the flag's edge marker
    is exactly the failure mode this element exists to prevent. */
-.player-indicator.flag.offscreen {
-  background: inherit;
+.player-indicator.flag.offscreen::before {
+  clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+  background: var(--ind-bg);
   border: 0;
+  border-radius: 0;
 }
-.player-indicator.flag.offscreen.alpha { background: #55aaff; }
-.player-indicator.flag.offscreen.bravo { background: #ff8855; }
 #player-list {
   position: absolute; top: var(--z-tl-1); left: 20px;
   font-size: 0.75rem; color: #ccc; line-height: 1.7;
@@ -283,35 +325,48 @@
   font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
   display: none;
 }
-#scoreboard .sb-title {
-  font-size: 0.65rem; letter-spacing: 0.25em;
-  color: rgba(200,220,240,0.5); font-weight: 600;
-  text-align: center; margin-bottom: 10px;
-}
 #scoreboard table {
   width: 100%; border-collapse: collapse;
   font-size: 0.85rem; color: #dde;
   font-variant-numeric: tabular-nums;
 }
+/* PLAYER hugs the left edge; every stat column is centered under its
+ * header — values and labels share one axis per column. */
 #scoreboard th {
   font-size: 0.6rem; letter-spacing: 0.15em; font-weight: 600;
-  color: rgba(200,220,240,0.5); text-align: left;
-  padding: 0 14px 6px 0;
+  color: rgba(200,220,240,0.5); text-align: center;
+  padding: 0 0 6px 12px;
 }
-#scoreboard th:last-child, #scoreboard td:last-child { text-align: right; padding-right: 0; }
-#scoreboard td { padding: 3px 14px 3px 0; }
-#scoreboard td:last-child { text-align: right; }
+#scoreboard td { padding: 3px 0 3px 12px; text-align: center; }
+/* # column is a dim ordinal; PLAYER stays left-hugged under its header. */
+#scoreboard td:first-child, #scoreboard th:first-child {
+  color: rgba(200,220,240,0.4); padding-left: 0; width: 1.4em;
+}
+#scoreboard th:nth-child(2), #scoreboard td:nth-child(2) { text-align: left; }
 #scoreboard tr.self td { color: #8fd8ff; font-weight: 600; }
 #scoreboard tr.dead td { opacity: 0.45; }
 #scoreboard tr.sb-team td {
-  font-size: 0.62rem; letter-spacing: 0.2em; font-weight: 700;
-  padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1);
+  /* Divider row, no text — a 1px team-tinted hairline drawn CENTERED in
+   *  the cell via background-gradient, so the gap is symmetric. A plain
+   *  border-top hugs the top edge of the row and looks lopsided. */
+  font-size: 0; height: 11px; padding: 0;
+  background: linear-gradient(rgba(255,255,255,0.1), rgba(255,255,255,0.1)) no-repeat center/100% 1px;
 }
-#scoreboard tr.sb-team.alpha td { color: #55aaff; }
-#scoreboard tr.sb-team.bravo td { color: #ff8855; }
+#scoreboard tr.sb-team.alpha td { background-image: linear-gradient(rgba(85,170,255,0.35), rgba(85,170,255,0.35)); }
+#scoreboard tr.sb-team.bravo td { background-image: linear-gradient(rgba(255,136,85,0.35), rgba(255,136,85,0.35)); }
 /* Name cell tinted by team — readable at a glance even flat-sorted. */
-#scoreboard tr.sb-alpha td:first-child { color: #7db8ff; }
-#scoreboard tr.sb-bravo td:first-child { color: #ff9a6a; }
+#scoreboard tr.sb-alpha td:nth-child(2) { color: #7db8ff; }
+#scoreboard tr.sb-bravo td:nth-child(2) { color: #ff9a6a; }
+/* ◆ (human) vs ● (bot) — the diamond glyph runs ~1.5× cap height in UI
+   fonts, so scale it down; the bot dot sits slightly bigger instead.
+   inline-block keeps transform + size stable across fonts. */
+#scoreboard .sb-glyph {
+  display: inline-block;
+  width: 1em;
+  color: rgba(200,220,240,0.55);
+}
+#scoreboard .sb-glyph.human { font-size: 0.72em; transform: translateY(-0.04em); }
+#scoreboard .sb-glyph.bot   { font-size: 0.85em; }
 #team-score {
   position: absolute; top: var(--z-tc-1); left: 50%; transform: translateX(-50%);
   display: none; font: 700 18px/1 monospace; letter-spacing: 0.08em;

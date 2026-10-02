@@ -20,9 +20,6 @@ export class PlayerIndicators {
   private readonly lastSize = new Map<string, number>();
   private readonly lastSheep = new Map<string, number>();
   private readonly lastPos = new Map<string, number>();
-  // Far markers reproject at half rate — past ~100m a frame of stale
-  // screen pos is sub-pixel. Per-id counter keeps the skip spread out.
-  private readonly phase = new Map<string, number>();
 
   // camera.getWorldPosition/Direction decomposes matrixWorld per call —
   // called once per remote per frame that was ~2 decomposes × N players.
@@ -47,15 +44,8 @@ export class PlayerIndicators {
     camera.getWorldDirection(_cameraDir);
   }
 
-  private throttled(playerId: string, distSq: number, behind: boolean): boolean {
-    if (behind || distSq <= 100 * 100) return false;
-    const p = (this.phase.get(playerId) ?? 0) + 1;
-    this.phase.set(playerId, p);
-    return p % (distSq > 200 * 200 ? 4 : 2) !== 0;
-  }
-
-  update(playerId: string, position: { x: number; y: number; z: number }, camera: THREE.Camera, opts: { isDead?: boolean; friendly?: boolean; variant?: string; sheep?: number } = {}): void {
-    const { isDead = false, friendly = false, variant, sheep } = opts;
+  update(playerId: string, position: { x: number; y: number; z: number }, camera: THREE.Camera, opts: { isDead?: boolean; friendly?: boolean; variant?: string; sheep?: number; bot?: boolean; cls?: string } = {}): void {
+    const { isDead = false, friendly = false, variant, sheep, bot, cls } = opts;
     let indicator = this.indicators.get(playerId);
     if (!indicator) {
       indicator = document.createElement('div');
@@ -65,6 +55,11 @@ export class PlayerIndicators {
       logger.debug('INDICATOR CREATED', { playerId, total: this.indicators.size });
     }
     indicator.classList.toggle('friendly', friendly);
+    // Silhouette = armor class (light chevron / medium V+◆ / heavy ▼);
+    // bots render the same shape dimmed — class stays readable on bots.
+    indicator.classList.toggle('bot', !!bot);
+    const clsKey = cls === 'light' || cls === 'heavy' ? cls : 'medium';
+    for (const k of ['light', 'medium', 'heavy']) indicator.classList.toggle(`cls-${k}`, !variant && clsKey === k);
     if (variant) for (const c of variant.split(' ')) indicator.classList.add(c);
     this.updateSheepBadge(playerId, indicator, sheep);
 
@@ -82,11 +77,10 @@ export class PlayerIndicators {
 
     const behind = toTarget.angleTo(_cameraDir) > Math.PI / 2;
 
-    // Rate-limited far markers: past 100m the marker crawls across the
-    // screen, so the projection/DOM pass only needs a fraction of the
-    // frame rate — half-rate at 100m, quarter-rate at 200m.
+    // Indicators reproject every frame — markers must track the rendered
+    // body 1:1. A rate-limited dot slides behind a panning camera, which
+    // reads as lag on the ONE element that must feel snappy.
     const distSq = toTarget.lengthSq();
-    if (this.throttled(playerId, distSq, behind)) return;
 
     this.layout(playerId, indicator, targetPos, camera, behind, distSq);
   }
@@ -179,7 +173,6 @@ export class PlayerIndicators {
       this.lastSize.delete(playerId);
       this.lastSheep.delete(playerId);
       this.lastPos.delete(playerId);
-      this.phase.delete(playerId);
       logger.debug('INDICATOR REMOVED', { playerId, total: this.indicators.size });
     }
   }
@@ -190,6 +183,5 @@ export class PlayerIndicators {
     this.lastSize.clear();
     this.lastSheep.clear();
     this.lastPos.clear();
-    this.phase.clear();
   }
 }

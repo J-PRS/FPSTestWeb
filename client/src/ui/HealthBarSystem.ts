@@ -66,6 +66,12 @@ export class HealthBarSystem {
         background: rgba(217, 38, 38, 0.9);
         border-radius: 1px;
       }
+      .enemy-hpbar.ally .bg {
+        background: rgba(60, 200, 90, 0.2);
+      }
+      .enemy-hpbar.ally .health {
+        background: rgba(60, 200, 90, 0.9);
+      }
       .enemy-hpbar .white {
         position: absolute; top: 0; left: 0; height: 100%;
         background: rgba(255, 255, 255, 1.0);
@@ -110,7 +116,7 @@ export class HealthBarSystem {
     this.bars.set(playerId, this.createHealthBar(damage, health, MAX_HEALTH, playerId));
   }
 
-  update(dt: number, players: Map<string, { position: { x: number; y: number; z: number }; isDead: boolean; health?: number }>, remotePlayers?: Map<string, { position: THREE.Vector3; isDead: boolean }>, _balls?: Ball[]): void {
+  update(dt: number, players: Map<string, { position: { x: number; y: number; z: number }; isDead: boolean; health?: number; team?: string }>, remotePlayers?: Map<string, { position: THREE.Vector3; isDead: boolean }>, _balls?: Ball[], localTeam?: string): void {
     // Sync authoritative health from the server-fed player map (20Hz
     // tickUpdate + playerHit) — keeps predictions anchored even while bars
     // are dormant, and self-heals on respawn (health back to max).
@@ -123,7 +129,19 @@ export class HealthBarSystem {
     const cameraDir = _cameraDir;
     this.camera.getWorldDirection(cameraDir);
 
-    // Update player healthbars
+    this.updatePlayerBars(dt, players, remotePlayers, cameraPos, cameraDir, localTeam);
+
+    // Update ball healthbars
+    for (const [ball, bar] of this.ballBars) {
+      if (ball.dead) {
+        this.removeBallBar(ball);
+        continue;
+      }
+      this.updateBallBar(ball, bar, dt, cameraPos, cameraDir);
+    }
+  }
+
+  private updatePlayerBars(dt: number, players: Map<string, { position: { x: number; y: number; z: number }; isDead: boolean; health?: number; team?: string }>, remotePlayers: Map<string, { position: THREE.Vector3; isDead: boolean }> | undefined, cameraPos: THREE.Vector3, cameraDir: THREE.Vector3, localTeam?: string): void {
     for (const [playerId, bar] of this.bars) {
       const playerState = players.get(playerId);
       const rp = remotePlayers?.get(playerId);
@@ -134,25 +152,31 @@ export class HealthBarSystem {
         continue;
       }
 
+      this.tagAlly(bar, playerState?.team ?? (rp as { team?: string } | undefined)?.team, localTeam);
+
       const pos = rp ? rp.position : playerState!.position;
       // pos is EYE height — a small margin above it is already over the head
       const targetPos = _targetPos.set(pos.x, pos.y + 0.5, pos.z);
       this.updateBar(bar, dt, targetPos, cameraPos, cameraDir, () => this.removeBar(playerId));
     }
+  }
 
-    // Update ball healthbars
-    for (const [ball, bar] of this.ballBars) {
-      if (ball.dead) {
-        this.removeBallBar(ball);
-        continue;
-      }
-      const targetPos = _targetPos.set(
-        ball.pos.x,
-        ball.pos.y + ball.radius + 0.5,
-        ball.pos.z
-      );
-      this.updateBar(bar, dt, targetPos, cameraPos, cameraDir, () => this.removeBallBar(ball));
-    }
+  private updateBallBar(ball: Targetable, bar: HealthBar, dt: number, cameraPos: THREE.Vector3, cameraDir: THREE.Vector3): void {
+    const targetPos = _targetPos.set(
+      ball.pos.x,
+      ball.pos.y + ball.radius + 0.5,
+      ball.pos.z
+    );
+    this.updateBar(bar, dt, targetPos, cameraPos, cameraDir, () => this.removeBallBar(ball));
+  }
+
+  /** Friend-or-foe bar color — wire team wins; offline GameBots carry the
+   *  field on their rp record. No team info = red, same as the gizmo tint
+   *  rule (teamless modes never turn friendly). Class writes only on flip
+   *  so classList churn doesn't run every frame per bar. */
+  private tagAlly(bar: HealthBar, theirTeam: string | undefined, localTeam: string | undefined): void {
+    const ally = !!localTeam && theirTeam === localTeam;
+    if (ally !== bar.el.classList.contains('ally')) bar.el.classList.toggle('ally', ally);
   }
 
   removeBar(playerId: string): void {

@@ -166,6 +166,32 @@ function mkCellDom(parent: HTMLElement): { cell: HTMLElement; cap: HTMLSpanEleme
   return { cell, cap };
 }
 
+// Sidearms are chosen in their own row — a primary slot offering them
+// would let a loadout double-carry the hold-out tier. Heavy-only
+// ordnance stays listed but tagged [H]; setLoadoutSlot is the gate that
+// rejects it on lighter tiers.
+const HEAVY_ONLY = new Set(Player.HEAVY_ONLY.map(String));
+
+function weaponOptsFor(): { v: string; label: string }[] {
+  return SLOT_DEFS
+    .map((def, wid) => ({
+      v: String(wid),
+      // [H] tag marks heavy-only ordnance in the list — visibility with a
+      // badge beats hiding; a non-heavy pick still bounces in
+      // setLoadoutSlot (shoulder gate is the tier's enforcement point).
+      label: (HEAVY_ONLY.has(String(wid)) ? '[H] ' : '') + def.config.displayName,
+      sidearm: !!def.sidearm,
+    }))
+    .filter((o) => !o.sidearm)
+    // SLOT_DEFS order is wire identity (wid = index) — the MENU sorts by
+    // name instead; v stays the wid so picks never reshuffle. Heavy-only
+    // entries group at the bottom so restricted gear reads as one block.
+    .toSorted((a, b) => {
+      const ah = a.label.startsWith('[H]') ? 1 : 0, bh = b.label.startsWith('[H]') ? 1 : 0;
+      return ah - bh || a.label.localeCompare(b.label);
+    });
+}
+
 // Panel construction — three labeled groups (ARMOR / WEAPONS / KIT) inside
 // one bottom sheet. Class is a tile picker because its tradeoff (speed vs
 // HP) reads at a glance; everything else stays a dropup chip.
@@ -192,18 +218,6 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
     return cells;
   };
 
-  // Sidearms are chosen in their own row — a primary slot offering them
-  // would let a loadout double-carry the hold-out tier. Heavy-only
-  // ordnance hides when a lighter tier is picked (setArmorClass also
-  // unshoulders whatever was equipped).
-  const heavyOnly = new Set(Player.HEAVY_ONLY.map(String));
-  const weaponOptsFor = (cls: string) => SLOT_DEFS
-    .map((def, wid) => ({ v: String(wid), label: def.config.displayName, sidearm: !!def.sidearm }))
-    .filter((o) => !o.sidearm && (cls === 'heavy' || !heavyOnly.has(o.v)))
-    // SLOT_DEFS order is wire identity (wid = index) — the MENU sorts by
-    // name instead; v stays the wid so picks never reshuffle.
-    .toSorted((a, b) => a.label.localeCompare(b.label));
-
   // --- ARMOR: tile picker, not a dropup — headless like the other
   // groups; three labeled tiles need no banner to read as armor class.
   const armorCells = mkGroup('ARMOR', false);
@@ -217,7 +231,7 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
     // Re-filter on the tier in effect, not the pick — the banked swap
     // lands at respawn, and ordnance the player can't shoulder yet
     // must not masquerade as selectable.
-    for (const d of ui.slotDrops) d.setOptions?.(weaponOptsFor(deps.lazyPlayer().appliedClass));
+    for (const d of ui.slotDrops) d.setOptions?.(weaponOptsFor());
     refreshTiles();
   };
   const refreshTiles = () => {
@@ -248,8 +262,8 @@ function buildRows(bar: HTMLElement, deps: LoadoutDeps, mkDrop: MkDrop): BarUi {
   const weaponCells = mkGroup('WEAPONS', false);
   // Filter by appliedClass (tier in effect), not armorClass — a banked
   // mid-life pick doesn't unlock heavy ordnance until the next respawn.
-  const weaponOpts = weaponOptsFor(deps.lazyPlayer()?.appliedClass ?? 'medium');
-  const allWeaponOpts = weaponOptsFor('heavy'); // label source for filtered-out picks
+  const weaponOpts = weaponOptsFor();
+  const allWeaponOpts = weaponOpts; // label source for filtered-out picks
   for (let i = 0; i < Player.LOADOUT_SLOTS; i++) {
     const { cell, cap } = mkCellDom(weaponCells);
     cap.textContent = `SLOT ${i + 1}`;
