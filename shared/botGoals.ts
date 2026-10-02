@@ -68,7 +68,11 @@ export class BotGoals {
       if (!goal) return;
       const d = Math.sqrt(distSq(pos, goal));
       const reach = 1 / (1 + d / 140);
-      const scent = Math.min(0.85, (ctx.imapDanger?.(goal) ?? 0) * 0.22 * (1.5 - Math.min(1, this.duty())));
+      // Experience memory on top of the shared scent: a spot where THIS
+      // bot already died reads extra dangerous to it personally — the
+      // map's graveyard is everyone else's history, this one is mine.
+      const personal = this.nearDeath(goal) ? 0.2 : 0;
+      const scent = Math.min(0.85, (ctx.imapDanger?.(goal) ?? 0) * 0.22 * (1.5 - Math.min(1, this.duty())) + personal);
       cands.push({ goal, score: weight * reach * (1 - scent) });
     };
     offer(ctx.objective, 1.0);

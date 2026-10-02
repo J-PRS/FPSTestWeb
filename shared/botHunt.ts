@@ -56,6 +56,14 @@ export interface HuntState {
   hunt: BotEnemy | null;
   lastSeen: BotVec;
   lastSeenVel: BotVec;
+  /** The opponent model: a low-pass of the target's observed velocity.
+   *  Instantaneous vel would track a jink perfectly — a human predictor
+   *  lags it, so leads miss where the strafe turns. Blended on each
+   *  sighting; the ghost and the lead point both fly this. */
+  leadVel: BotVec;
+  /** Which enemy the model is tracking — a new face snaps the estimate
+   *  (first read is the model), an old one only drifts it. */
+  leadId: string;
   lastSeenAt: number;
   /** Aim offset of the target at last sighting — class geometry moves
    *  the capsule center, so the lead point remembers where it was. */
@@ -90,6 +98,8 @@ export function newHuntState(spawn: BotVec): HuntState {
     hunt: null,
     lastSeen: { ...spawn },
     lastSeenVel: { x: 0, y: 0, z: 0 },
+    leadVel: { x: 0, y: 0, z: 0 },
+    leadId: '',
     lastSeenAt: 0,
     lastAimY: CENTER_AIM_Y,
     skill: rollSkill(spawn),
@@ -162,7 +172,17 @@ export function pickHunt(st: HuntState, ctx: BrainCtx, pos: BotVec, now: number,
   // shouldn't follow it to the respawn).
   const ghost = !next && st.hunt?.alive
     && now - st.lastSeenAt < PURSUE_MS && dist3(pos, st.lastSeen) < PURSUE_M
-    ? { ...st.hunt, pos: { ...st.lastSeen }, vel: { ...st.lastSeenVel } }
+    ? {
+        ...st.hunt,
+        // The ghost keeps the model's momentum — humans chase where
+        // the runner was HEADING, not the spot they vanished from.
+        pos: {
+          x: st.lastSeen.x + st.leadVel.x * Math.min(1.2, (now - st.lastSeenAt) / 1000),
+          y: st.lastSeen.y,
+          z: st.lastSeen.z + st.leadVel.z * Math.min(1.2, (now - st.lastSeenAt) / 1000),
+        },
+        vel: { ...st.leadVel },
+      }
     : null;
   st.hunt = next ?? ghost;
   st.huntTick++;
@@ -179,6 +199,13 @@ export function pickHunt(st: HuntState, ctx: BrainCtx, pos: BotVec, now: number,
     st.lastSeenVel = { ...seen.vel };
     st.lastSeenAt = now;
     st.lastAimY = seen.aimY ?? CENTER_AIM_Y;
+    // Opponent-model update — the tracker's running estimate drifts
+    // toward the newest read, never snaps to it.
+    const blend = st.leadId !== seen.id ? 0.55 : 0.2;
+    st.leadId = seen.id;
+    st.leadVel.x += (seen.vel.x - st.leadVel.x) * blend;
+    st.leadVel.y += (seen.vel.y - st.leadVel.y) * blend;
+    st.leadVel.z += (seen.vel.z - st.leadVel.z) * blend;
   }
   planFight(st, ctx, pos, best, fearing, pickGoal);
 }
@@ -265,14 +292,17 @@ export function pickFire(st: HuntState, dt: number, ctx: BrainCtx, pos: BotVec, 
   // travels — a skier mid-air arcs down, and a flat lead overshoots
   // high. Clamp at terrain so a grounded runner isn't predicted
   // under the map.
-  const px = st.lastSeen.x + st.lastSeenVel.x * leadFlight;
-  const pz = st.lastSeen.z + st.lastSeenVel.z * leadFlight;
+  // Lead off the opponent model, not the live velocity — a jinking
+  // target's instant vel is already gone by the time the shell flies;
+  // the lagged estimate is what a human's prediction actually tracks.
+  const px = st.lastSeen.x + st.leadVel.x * leadFlight;
+  const pz = st.lastSeen.z + st.leadVel.z * leadFlight;
   // `pos` is the eye point — the capsule's axis midpoint sits `aimY`
   // below it, so center-mass aim means the bolt crosses the fattest
   // legal radius even before its wake proxy grows.
   const py = Math.max(
     ctx.groundY(px, pz),
-    st.lastSeen.y + st.lastAimY + st.lastSeenVel.y * leadFlight + 0.5 * GRAVITY * leadFlight * leadFlight,
+    st.lastSeen.y + st.lastAimY + st.leadVel.y * leadFlight + 0.5 * GRAVITY * leadFlight * leadFlight,
   );
   // Gravity-bent shells drop by the same amount — aim the arc's
   // drop back so mortars don't land short.
