@@ -121,7 +121,10 @@ describe('scenario: warp soak throughput', () => {
           Object.entries(teamSpawns!).map(([t, ss]) => [t, ss.map((s) => spawnAt(s.x, s.z, s.r ?? 50, s.w ?? 90))]),
         ),
       } : {}),
-    }, mode, 4242, false, field);
+    // FPS_SOAK_SEED rerolls the room — the multi-soak bat runs several
+    // seeds back to back so one wall-minute buys several match samples
+    // instead of the same roll replayed.
+    }, mode, Number(process.env.FPS_SOAK_SEED ?? 4242), false, field);
     // Sim-clock stamped watch — _s lets post-run stats time flag
     // transitions (grab→cap deltas) instead of counting blind.
     let simTicks = 0;
