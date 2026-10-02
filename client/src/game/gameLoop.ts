@@ -209,7 +209,11 @@ function syncFog(deps: GameLoopDeps, terrain: Terrain): void {
 interface TickFrame { dt: number; player: Player; networkManager: NetworkManager; demoManager: DemoManager | null }
 const fmtBps = (b: number) => b >= 1048576 ? `${(b / 1048576).toFixed(1)}MB/s` : b >= 1024 ? `${(b / 1024).toFixed(1)}KB/s` : `${Math.round(b)}B/s`;
 function simTick(deps: GameLoopDeps, perf: ReturnType<typeof createPerfHud>, f: TickFrame, terrain: Terrain): boolean {
-  const { dt, player, demoManager } = f;
+  const { dt, player, demoManager, networkManager } = f;
+  // Offline pause: a hidden tab rAFs ~1/s, so the local match would crawl
+  // at 5% speed and bots keep slowly fighting — a real pause matches user
+  // intent. Online rooms must keep simulating: the server doesn't stop.
+  if (document.hidden && !networkManager.isConnected()) return false;
   player.update(dt);
   if (_posPrimed) {
     const jump = player.pos.distanceTo(_posPrev);
