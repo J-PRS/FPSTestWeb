@@ -69,14 +69,23 @@ export class TeamCommand {
     this.tasks.clear();
     this.contested.clear();
     const free = members.filter((m) => !m.carrier);
-    const assign = (kind: CommandKind, at: BotVec | null | undefined) => {
+    const assign = (kind: CommandKind, at: (BotVec & { vx?: number; vz?: number }) | null | undefined) => {
       if (!at) return;
       const pool = free
         .filter((m) => !this.tasks.has(m.id) && WHO[kind].has(m.role))
         .map((m) => ({ m, d: (m.pos.x - at.x) ** 2 + (m.pos.z - at.z) ** 2 }))
         .sort((a, b) => a.d - b.d);
       for (const { m } of pool.slice(0, WANT[kind])) {
-        this.tasks.set(m.id, { kind, goal: { x: at.x, y: at.y, z: at.z } });
+        // Escort intercept: aiming at where the carrier IS trails a
+        // runner you'll never meet — each escort aims at where the
+        // carrier will be when the escort's own run lands (est ~12m/s).
+        const eta = kind === 'escort' ? Math.min(12, Math.sqrt(
+          (m.pos.x - at.x) ** 2 + (m.pos.z - at.z) ** 2) / 12) : 0;
+        this.tasks.set(m.id, { kind, goal: {
+          x: at.x + (at.vx ?? 0) * eta,
+          y: at.y,
+          z: at.z + (at.vz ?? 0) * eta,
+        } });
       }
       this.contested.add(kind);
     };

@@ -30,8 +30,9 @@ export interface FlagSituation {
   dropped: { x: number; y: number; z: number } | null;
   /** Enemy flag when it's grabbable (not already carried by a teammate). */
   enemyStand: { x: number; y: number; z: number } | null;
-  /** A teammate carrying the enemy flag — escort target. */
-  escort: { x: number; y: number; z: number } | null;
+  /** A teammate carrying the enemy flag — escort target. Velocity
+   *  rides along so escorts intercept where he'll be, not where he is. */
+  escort: { x: number; y: number; z: number; vx?: number; vz?: number } | null;
   /** Nearest enemy pressing OUR stand — the HoF's body-block anchor.
    *  Only populated for hostiles inside the home ring's reach. */
   threat: { x: number; y: number; z: number } | null;

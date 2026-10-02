@@ -534,9 +534,10 @@ export class ServerBotSenses {
 
   /** A teammate carrying the enemy flag is the escort point — the
    *  carrier's position is already on the wire, no wallhack needed. */
-  private escortSpot(carrier: string | null | undefined, me: TeamId): Vec3 | null {
+  private escortSpot(carrier: string | null | undefined, me: TeamId): (Vec3 & { vx?: number; vz?: number }) | null {
     const escortP = carrier ? this.room.players.getPlayer(carrier) : null;
-    return escortP && escortP.team === me ? escortP.position : null;
+    if (!escortP || escortP.team !== me) return null;
+    return { ...escortP.position, vx: escortP.velocity.x, vz: escortP.velocity.z };
   }
 
   /** Closest hostile pressing our stand — the HoF body-block anchor.
