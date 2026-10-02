@@ -99,12 +99,31 @@ export class BotLines {
             // climb moderately beat ends that hold flat; diving is
             // always bad. Afterwards the direction is fixed so the bot
             // walks the ring monotonically instead of zigzagging back.
+            // Rim scout: on each candidate arm, march the line toward
+            // the goal and take the highest terrain on it — the side
+            // with the lower crest is the saddle a human would scan
+            // for, which beats walking whichever contour feels flat
+            // (both arms of a moat read equally flat while one ends
+            // at the pass).
+            const crest = (c: { x: number; z: number }) => {
+              const ddx = dest.x - c.x, ddz = dest.z - c.z;
+              const dd = Math.hypot(ddx, ddz);
+              if (dd < 1) return 0;
+              const steps = Math.min(12, Math.ceil(dd / 30));
+              let m = 0;
+              for (let s = 1; s <= steps; s++) {
+                const h = ctx.groundY(c.x + ddx * s / steps, c.z + ddz * s / steps) - g0;
+                if (h > m) m = h;
+              }
+              return m;
+            };
             const scoreT = (c: { x: number; z: number }) => {
               const climb = ctx.groundY(c.x, c.z) - g0;
               return (gd - Math.hypot(dest.x - c.x, dest.z - c.z))
                 + Math.min(Math.max(0, climb), 12) * 2
                 - Math.max(0, climb - 12) * 3
-                - Math.max(0, -climb) * 2;
+                - Math.max(0, -climb) * 2
+                - crest(c) * 1.5;
             };
             this.traverseDir = scoreT(a) >= scoreT(b) ? 1 : -1;
           }
