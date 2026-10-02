@@ -108,6 +108,11 @@ describe('scenario: fast-forward soak throughput', () => {
     // route itself is the problem.
     const capNear = { alpha: Infinity, bravo: Infinity };
     const flagGap: { alpha: [number, number, number]; bravo: [number, number, number] } = { alpha: [0, 0, 0], bravo: [0, 0, 0] };
+    // Ring-survival probe: sim-seconds a bot lives after entering the
+    // 80m ring around the ENEMY flag (died inside / escaped). If the
+    // median is seconds, grabs need coordinated clearing, not routing.
+    const ringIn = new Map<string, number>();
+    const ringSurv: { died: number[]; left: number[] } = { died: [], left: [] };
     const trail: { x: number; z: number; team: string; carrying: boolean }[] = [];
     const deaths: { x: number; z: number; team: string }[] = [];
     // Movement-energy telemetry — specific mechanical energy ½v²+g·h
@@ -191,6 +196,8 @@ describe('scenario: fast-forward soak throughput', () => {
           // the death heatmap.
           if (TRAIL_PATH && p.team && !wasDead.get(p.id)) deaths.push({ x: p.position.x, z: p.position.z, team: p.team });
           wasDead.set(p.id, true);
+          const tin = ringIn.get(p.id);
+          if (tin !== undefined) { ringSurv.died.push(simTicks * dt - tin); ringIn.delete(p.id); }
           // Near-flag deaths: how close to the ENEMY flag each kill
           // landed — dying at 15m means the stand kill-zone eats runs,
           // dying at 300m means routes never arrived.
@@ -200,6 +207,15 @@ describe('scenario: fast-forward soak throughput', () => {
             if (fd < 60) (p.team === 'alpha' ? flagDeaths.alpha : flagDeaths.bravo).push(fd);
           }
           continue;
+        }
+        {
+          const foeF0 = p.team === 'alpha' ? room.flags!.flags.get('bravo') : room.flags!.flags.get('alpha');
+          if (foeF0 && p.team) {
+            const rd = Math.hypot(p.position.x - foeF0.pos.x, p.position.z - foeF0.pos.z);
+            const inside = rd < 80;
+            if (inside && !ringIn.has(p.id)) ringIn.set(p.id, simTicks * dt);
+            else if (!inside && ringIn.has(p.id)) { ringSurv.left.push(simTicks * dt - ringIn.get(p.id)!); ringIn.delete(p.id); }
+          }
         }
         const standY = p.team === 'alpha' ? hmHeight(field, bravoStand.x, bravoStand.z) : hmHeight(field, alphaStand.x, alphaStand.z);
         if (p.team === 'alpha') {
@@ -383,6 +399,7 @@ describe('scenario: fast-forward soak throughput', () => {
       `,flagA=${Number.isFinite(flagNear.alpha) ? flagNear.alpha.toFixed(1) : '-'}(${flagGap.alpha[0].toFixed(1)}+${flagGap.alpha[1].toFixed(1)}y@${flagGap.alpha[2].toFixed(0)}mps),flagB=${Number.isFinite(flagNear.bravo) ? flagNear.bravo.toFixed(1) : '-'}(${flagGap.bravo[0].toFixed(1)}+${flagGap.bravo[1].toFixed(1)}y@${flagGap.bravo[2].toFixed(0)}mps)` +
       `,capA=${Number.isFinite(capNear.alpha) ? capNear.alpha.toFixed(1) : '-'},capB=${Number.isFinite(capNear.bravo) ? capNear.bravo.toFixed(1) : '-'}` +
       `,fdieA=${flagDeaths.alpha.length}@${flagDeaths.alpha.length ? (flagDeaths.alpha.reduce((s, v) => s + v, 0) / flagDeaths.alpha.length).toFixed(0) : '-'}m,fdieB=${flagDeaths.bravo.length}@${flagDeaths.bravo.length ? (flagDeaths.bravo.reduce((s, v) => s + v, 0) / flagDeaths.bravo.length).toFixed(0) : '-'}m` +
+      `,ringD=${ringSurv.died.length}@${ringSurv.died.length ? (ringSurv.died.reduce((s, v) => s + v, 0) / ringSurv.died.length).toFixed(1) : '-'}s,ringL=${ringSurv.left.length}` +
       `,grabs_a_flag=${grabsBy.alpha ?? 0},grabs_b_flag=${grabsBy.bravo ?? 0},caps=${caps.length}` +
       `,e_med=${medOf(eRows.map((r) => r.avg)).toFixed(0)}` +
       `,hunt=${huntN ? Math.round((huntSum / huntN) * 100) : 0}%,cloak=${huntN ? Math.round((cloakSum / huntN) * 100) : 0}%` +
