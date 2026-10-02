@@ -117,9 +117,13 @@ export class ClaimLedger {
   resolve(playerId: string, ref: ClaimRef): TrackedProjectile | undefined {
     const pid = ref.projectileId
       ?? (ref.clientShotId ? this.idForClientShot(playerId, ref.clientShotId) : undefined);
-    return pid
-      ? this.resolveById(playerId, pid, ref.claim)
-      : this.resolveLatest(playerId, ref.weaponType, ref.claim);
+    if (pid) return this.resolveById(playerId, pid, ref.claim);
+    // A claim that NAMES a shell (server id or spawn nonce) may only bind
+    // that shell — falling through to resolveLatest would bind a sibling
+    // and burn its claim slot when the named shell's spawn is simply in
+    // flight on an unordered transport. undefined → caller defers.
+    if (ref.projectileId || ref.clientShotId) return undefined;
+    return this.resolveLatest(playerId, ref.weaponType, ref.claim);
   }
 
   /** A tombstone fuels one claim of each kind — a rocket's direct `shot`

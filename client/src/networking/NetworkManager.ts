@@ -18,12 +18,14 @@ const logger = new ChildLogger('NetworkManager');
 // this counts the PATTERN so "half my damage doesn't apply" is one
 // dump line instead of a scrollback hunt.
 const rejectCensus = { total: 0, byReason: new Map<string, number>(), last: '' };
+const dedupCensus = { hitSeqDrops: 0 };
 registerDiag('net', () => ({
   rejects: {
     total: rejectCensus.total,
     byReason: Object.fromEntries(rejectCensus.byReason),
     last: rejectCensus.last,
   },
+  dedup: { hitSeqDrops: dedupCensus.hitSeqDrops },
 }));
 
 // Roster upsert fields + fresh-player defaults (optional fields default undefined).
@@ -210,6 +212,8 @@ export class NetworkManager {
             logger.info('Disconnected');
             this.connected = false;
             this.lastTickSeq = -1; // a reconnect starts a fresh seq space
+            this.lastHitSeq = 0;   // hit seqs are per-room — a stale high
+                                   // watermark would drop every later hit
             // Same for the cadence metric — else the dead period counts as
             // missed ticks and loss reads ~100% right after rejoining.
             this.telemetry.reset();
@@ -387,6 +391,12 @@ export class NetworkManager {
     // force-reload once (cache-busted) instead of silently desyncing. The
     // sessionStorage counter caps it at 2 attempts so a genuinely newer
     // server can't reload-loop the tab.
+    // A new gameState means a new room instance — both seq spaces
+    // restart at 1 (hitSeq and tickSeq are per-room), so the prior
+    // room's high watermarks must not gate it. A room hop without
+    // reconnect would otherwise freeze every remote for the session.
+    this.lastHitSeq = 0;
+    this.lastTickSeq = -1;
     const serverProto = data.protocolVersion ?? 0;
     if (serverProto !== PROTOCOL_VERSION) {
       const tries = Number(sessionStorage.getItem('fps-proto-reload') ?? '0');
@@ -499,12 +509,19 @@ export class NetworkManager {
   }
 
   /** Reconnect grace lets the server replay in-flight playerHit events —
-   *  seq is per-room monotonic so a stale re-delivery can't double-apply. */
+   *  seq is per-room monotonic so a stale re-delivery can't double-apply.
+   *  Reset on disconnect/gameState: a new room's seq restarts at 1, and a
+   *  retained high watermark would silently drop every hit for the whole
+   *  session — the "half my damage instances don't work" desync. */
   private lastHitSeq = 0;
 
   private handlePlayerHit(data: Extract<ServerMessage, { type: 'playerHit' }>): void {
     if (data.seq !== undefined) {
-      if (data.seq <= this.lastHitSeq) return;
+      if (data.seq <= this.lastHitSeq) {
+        dedupCensus.hitSeqDrops++;
+        logger.warn(`playerHit dropped as stale seq ${data.seq} <= ${this.lastHitSeq}`);
+        return;
+      }
       this.lastHitSeq = data.seq;
     }
     // Update REMOTE player health in storage (local player health handled by callback)
@@ -638,6 +655,17 @@ export class NetworkManager {
    */
   getPlayers(): Map<string, RemotePlayerState> {
     return this.players;
+  }
+
+  /** Desync-checker heal: adopt the server's health for a remote roster
+   *  entry. Routes through upsertRemotePlayer so the same field/defaults
+   *  bookkeeping applies as a wire update. Health only — position stays
+   *  correction-owned, isDead stays event-owned. */
+  healRemoteHealth(playerId: string, health: number): void {
+    // upsert would CREATE a stub for an unknown id — a heal must never
+    // materialize a phantom roster row.
+    if (!this.players.has(playerId)) return;
+    this.upsertRemotePlayer(playerId, { health });
   }
 
   /**

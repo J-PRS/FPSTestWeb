@@ -259,6 +259,19 @@ export function wireStateDebug(ctx: StateDebugContext): void {
           // a kill with no respawn following, a hit that never landed.
           recentEvents: networkManager.recentEvents().slice(-8),
         });
+        // Heal health divergence — the checker used to warn forever while
+        // a silently-dropped hit left local hp divergent for the session.
+        // Position stays correction-owned, isDead stays event-owned.
+        const localId = networkManager.getLocalPlayerId();
+        const player = ctx.getPlayer();
+        for (const sp of serverPlayers) {
+          if (sp.id === localId) {
+            if (!player.isDead && Math.abs(player.health - sp.health) > 0.5) player.health = sp.health;
+            continue;
+          }
+          const cp = clientPlayers.get(sp.id);
+          if (cp && Math.abs(cp.health - sp.health) > 0.5) networkManager.healRemoteHealth(sp.id, sp.health);
+        }
       } else {
         logger.info(`[StateHash] Hash mismatch tick=${tick} but positions within tolerance (network lag)`);
       }

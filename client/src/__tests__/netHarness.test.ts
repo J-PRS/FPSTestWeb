@@ -87,4 +87,24 @@ describe('netHarness — real wire messages through real handlers', () => {
     feed(h.nm, { type: 'correction', seq: 2, position: { x: 10, y: 5, z: 0 }, velocity: { x: 0, y: 0, z: 0 }, rotation: { yaw: 0, pitch: 0 } } as ServerMessage);
     expect(h.player.pos.x).toBe(10);
   });
+
+  // hitSeq/tickSeq are per-room spaces. A room hop without reconnect must
+  // reset both watermarks or every hit (and every tick frame) drops for
+  // the rest of the session — the persistent health-desync signature.
+  it('hit seq watermark resets on gameState so a new room hits apply', () => {
+    const hit = (seq: number, health: number) => feed(h.nm, {
+      type: 'playerHit', shooterId: 'peer-1', targetId: 'tester-local', damage: 10, health, seq,
+    } as ServerMessage);
+    feed(h.nm, { type: 'gameState', players: [], protocolVersion: PROTOCOL_VERSION, room: 'r1' } as ServerMessage);
+    hit(5, 50);
+    expect(h.player.health).toBe(50);
+    // Stale re-delivery dedups.
+    hit(5, 10);
+    hit(4, 10);
+    expect(h.player.health).toBe(50);
+    // Room hop: the new room's seqs restart at 1 — must still apply.
+    feed(h.nm, { type: 'gameState', players: [], protocolVersion: PROTOCOL_VERSION, room: 'r2' } as ServerMessage);
+    hit(1, 90);
+    expect(h.player.health).toBe(90);
+  });
 });
