@@ -62,7 +62,10 @@ export class BotSteer {
       interest *= interest; // sharpen: prefer near-goal arcs over drift
       interest += 0.25 * Math.max(0, dx * this.heading.x + dz * this.heading.z);
 
-      const danger = this.slotDanger(ctx, pos, dx, dz, g0, now);
+      // Final approach overrides the trail memory: crumbs exist to break
+      // local minima, but a goal this close IS the destination — repelling
+      // off it parked every stand press ~8m short of the flag pickup ring.
+      const danger = this.slotDanger(ctx, pos, dx, dz, g0, now, gd < MEM_RANGE);
       const score = interest * (1 - danger);
       if (score > bestScore) { bestScore = score; bestX = dx; bestZ = dz; }
       if (danger < safeDanger) { safeDanger = danger; safeX = dx; safeZ = dz; }
@@ -89,7 +92,7 @@ export class BotSteer {
   /** Danger score [0..1] for one steering slot: slope probes (climbs,
    *  sheer drops), bodies in the way, and the recently-visited memory
    *  trail that lets a bot escape a local minimum. */
-  private slotDanger(ctx: BrainCtx, pos: BotVec, dx: number, dz: number, g0: number, now: number): number {
+  private slotDanger(ctx: BrainCtx, pos: BotVec, dx: number, dz: number, g0: number, now: number, nearGoal: boolean): number {
     let danger = 0;
     const riseA = ctx.groundY(pos.x + dx * PROBE_A, pos.z + dz * PROBE_A) - g0;
     const riseB = ctx.groundY(pos.x + dx * PROBE_B, pos.z + dz * PROBE_B) - g0;
@@ -106,7 +109,7 @@ export class BotSteer {
         if (toward > 0.5) danger = Math.min(1, danger + toward * (1 - od / SEP_RANGE));
       }
     }
-    for (const m of this.memory) {
+    for (const m of nearGoal ? [] : this.memory) {
       const mx = m.x - pos.x, mz = m.z - pos.z;
       const md = Math.hypot(mx, mz);
       if (md > MEM_RANGE || md < 0.5) continue;
