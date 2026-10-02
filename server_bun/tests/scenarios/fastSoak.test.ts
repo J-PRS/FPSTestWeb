@@ -42,9 +42,17 @@ describe('scenario: fast-forward soak throughput', () => {
     // Real T2 stand positions — a ctf room without bases spawns no
     // flags at all, and a flagless soak just measures wandering.
     const baseAt = (x: number, z: number) => ({ x, y: hmHeight(field, x, z), z });
+    const spawnAt = (x: number, z: number, r: number, w: number) => ({ x, y: hmHeight(field, x, z), z, r, w });
     const room = mkRoom({
       mode: 'ctf', bots: 16, botFill: 16,
       bases: { alpha: baseAt(236.85, -127.11), bravo: baseAt(-423.57, 281.67) },
+      // Real T2 spawn spheres from the katabatic map — without them the
+      // room falls back to the center ring and both teams respawn
+      // midfield, ~400m from the flags they're supposed to fight over.
+      teamSpawns: {
+        alpha: [spawnAt(239.42, -123.43, 73.24, 90), spawnAt(-188.62, -38.98, 54.93, 30)],
+        bravo: [spawnAt(-422.19, 280.64, 73.24, 90), spawnAt(45.99, 210.2, 47.61, 30)],
+      },
     }, 'ctf', 4242, false, field);
     // Sim-clock stamped watch — _s lets post-run stats time flag
     // transitions (grab→cap deltas) instead of counting blind.
@@ -63,6 +71,10 @@ describe('scenario: fast-forward soak throughput', () => {
     // grab count does (grab==0 can be a routing wall or no press).
     const alphaStand = { x: 236.85, z: -127.11 }, bravoStand = { x: -423.57, z: 281.67 };
     const press = { alpha: Infinity, bravo: Infinity };
+    // Vertical gap at the closest XZ approach — pickup needs |dy|<=6,
+    // so a press that stalls on a plateau rim shows up as press small
+    // but pressY large (the bot is UNDER the stand lip, not on it).
+    const pressY = { alpha: 0, bravo: 0 };
     const trail: { x: number; z: number; team: string; carrying: boolean }[] = [];
     const deaths: { x: number; z: number; team: string }[] = [];
     const wasDead = new Map<string, boolean>();
@@ -74,15 +86,25 @@ describe('scenario: fast-forward soak throughput', () => {
       room.messages.respawnTick(simNow());
       simTicks += BATCH;
       for (const p of room.players.getAllPlayers().values()) {
-        if (p.team === 'alpha') press.alpha = Math.min(press.alpha, Math.hypot(p.position.x - bravoStand.x, p.position.z - bravoStand.z));
-        else if (p.team === 'bravo') press.bravo = Math.min(press.bravo, Math.hypot(p.position.x - alphaStand.x, p.position.z - alphaStand.z));
+        if (p.isDead) {
+          // Corpses can't press or carry — but the kill spot still feeds
+          // the death heatmap.
+          if (TRAIL_PATH && p.team && !wasDead.get(p.id)) deaths.push({ x: p.position.x, z: p.position.z, team: p.team });
+          wasDead.set(p.id, true);
+          continue;
+        }
+        const standY = p.team === 'alpha' ? hmHeight(field, bravoStand.x, bravoStand.z) : hmHeight(field, alphaStand.x, alphaStand.z);
+        if (p.team === 'alpha') {
+          const d = Math.hypot(p.position.x - bravoStand.x, p.position.z - bravoStand.z);
+          if (d < press.alpha) { press.alpha = d; pressY.alpha = p.position.y - standY; }
+        } else if (p.team === 'bravo') {
+          const d = Math.hypot(p.position.x - alphaStand.x, p.position.z - alphaStand.z);
+          if (d < press.bravo) { press.bravo = d; pressY.bravo = p.position.y - standY; }
+        }
+        wasDead.set(p.id, false);
         if (TRAIL_PATH && p.team) {
-          if (p.isDead && !wasDead.get(p.id)) deaths.push({ x: p.position.x, z: p.position.z, team: p.team });
-          wasDead.set(p.id, p.isDead);
-          if (!p.isDead) {
-            const carrying = [...room.flags!.flags.values()].some((f) => f.carrier === p.id);
-            trail.push({ x: p.position.x, z: p.position.z, team: p.team, carrying });
-          }
+          const carrying = [...room.flags!.flags.values()].some((f) => f.carrier === p.id);
+          trail.push({ x: p.position.x, z: p.position.z, team: p.team, carrying });
         }
       }
     }
@@ -189,9 +211,29 @@ describe('scenario: fast-forward soak throughput', () => {
       `(${(simSecs / 60).toFixed(1)} sim-min) in ${(wallMs / 1000).toFixed(1)} wall-s ` +
       `— ${ratio.toFixed(0)}x real-time; ${alive}/${respawned} alive`,
     );
+    // Per-role stat lines — tuning needs "do cappers cap" and "does the
+    // bombardier kill the stand guards", not team totals. roleInfo is
+    // the live assignment map the rebalance owns.
+    const byRole = new Map<string, { n: number; k: number; d: number }>();
+    for (const pl of players) {
+      const role = room.bots?.roleOf(pl.id) ?? '-';
+      const r = byRole.get(role) ?? { n: 0, k: 0, d: 0 };
+      r.n++; r.k += pl.kills; r.d += pl.deaths;
+      byRole.set(role, r);
+    }
+    const roleLine = [...byRole.entries()].sort().map(([r, s]) => `${r}:${s.n}x ${s.k}K/${s.d}D`).join('  ');
+    // KPI: machine-readable single line for A/B diffing runs.
+    console.log(
+      `  kpi,score_alpha=${room.scores.alpha ?? 0},score_bravo=${room.scores.bravo ?? 0}` +
+      `,kills_a=${killsByTeam.alpha ?? 0},kills_b=${killsByTeam.bravo ?? 0}` +
+      `,press_a=${Number.isFinite(press.alpha) ? press.alpha.toFixed(1) : '-'},press_b=${Number.isFinite(press.bravo) ? press.bravo.toFixed(1) : '-'}` +
+      `,grabs_a_flag=${grabsBy.alpha ?? 0},grabs_b_flag=${grabsBy.bravo ?? 0},caps=${caps.length}` +
+      (caps.length ? `,fastest_s=${(fastest.holdMs / 1000).toFixed(1)}` : ''),
+    );
+    console.log(`  roles: ${roleLine}`);
     console.log(
       `  match: score ${score}; kills ${kills} (alpha ${killsByTeam.alpha ?? 0} / bravo ${killsByTeam.bravo ?? 0}); ` +
-      `press ${Number.isFinite(press.alpha) ? press.alpha.toFixed(0) : '—'}m/${Number.isFinite(press.bravo) ? press.bravo.toFixed(0) : '—'}m; ` +
+      `press ${Number.isFinite(press.alpha) ? press.alpha.toFixed(0) : '—'}m(dy${pressY.alpha >= 0 ? '+' : ''}${pressY.alpha.toFixed(0)})/${Number.isFinite(press.bravo) ? press.bravo.toFixed(0) : '—'}m(dy${pressY.bravo >= 0 ? '+' : ''}${pressY.bravo.toFixed(0)}); ` +
       `grabs ${grabs}${grabs ? ` (alpha flag ${grabsBy.alpha ?? 0} / bravo flag ${grabsBy.bravo ?? 0})` : ''} caps ${caps.length}` +
       (caps.length ? `, fastest cap ${(fastest.holdMs / 1000).toFixed(1)}s by ${fmtId(fastest.by)} (${fastest.team}), avg hold ${avgHold.toFixed(1)}s` : '') +
       (fragger ? `; top fragger ${fmtId(fragger.id)} ${fragger.kills}K/${fragger.deaths}D` : '') +

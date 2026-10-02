@@ -28,6 +28,7 @@ import { BotWatchdog, type MobilitySample } from './botWatchdog.ts';
 import { BotArsenal } from './botArsenal.ts';
 import { BotSheepMeter } from './botSheep.ts';
 import { ServerBotSenses } from './serverSenses.ts';
+import type { BotRole } from '../../shared/flagGoals.ts';
 import { BotRoster } from './botRoster.ts';
 import { driveMove as driveMoveInto, legacyMove as legacyMoveInto } from './botDrive.ts';
 import { simNow } from './simClock.ts';
@@ -81,6 +82,11 @@ export class ServerBots {
   }
 
   private roster: BotRoster;
+  /** A bot's current squad role (post-rebalance) — telemetry reads it
+   *  for per-role stat lines without touching the roster internals. */
+  roleOf(id: string): BotRole | undefined {
+    return this.roster.roleInfo.get(id);
+  }
   /** Brain cadence: senses+think+fire run every THINK_DIV tick per bot
    *  (phase-offset so the squad doesn't think in lockstep). 20Hz decisions
    *  cost O(bots × (players+creatures)) per tick; at 4Hz reaction is still

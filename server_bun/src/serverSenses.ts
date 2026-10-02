@@ -199,7 +199,28 @@ export class ServerBotSenses {
     const enemy = flags.flags.get(me === 'alpha' ? 'bravo' : 'alpha');
     const own = flags.flags.get(me);
     if (!enemy || !own) return null;
-    if (enemy.carrier === p.id) return { pos: own.home, infiltrating: false, running: true, runner: true };
+    if (enemy.carrier === p.id) {
+      // Own flag dropped in the field: touching it home re-opens the
+      // cap window — a carrier that can reach it goes for the touch.
+      if (own.state === 'dropped') return { pos: own.pos, infiltrating: false, running: true, runner: true };
+      // The cap line is blocked while our own flag is in the field —
+      // standing on the stand just paints a target. Fall back to a
+      // covered wait-spot behind the base and re-approach when the
+      // flag comes home. The lean scales with duty: a slack carrier
+      // still edges toward the stand.
+      if (own.state === 'carried') {
+        const ref = enemy.home;
+        const dx = own.home.x - ref.x, dz = own.home.z - ref.z;
+        const d = Math.hypot(dx, dz);
+        if (d > 1) {
+          const back = 90 + 60 * (1 - duty);
+          const wx = own.home.x + (dx / d) * back, wz = own.home.z + (dz / d) * back;
+          const wy = this.field ? hmHeight(this.field, wx, wz) : own.home.y;
+          return { pos: { x: wx, y: wy, z: wz }, infiltrating: false, running: true, runner: true };
+        }
+      }
+      return { pos: own.home, infiltrating: false, running: true, runner: true };
+    }
 
     const enemyStand = enemy.state !== 'carried' ? enemy.pos : null;
     // One role table for both runtimes — shared/flagGoals.ts.
@@ -214,26 +235,60 @@ export class ServerBotSenses {
       threat: this.standThreat(own.home, me),
     }, duty);
     const role = this.roles.get(p.id);
-    // A capper doesn't beeline to the stand — it attacks from the high
-    // side so the last leg is a downhill graze at speed. The entry point
-    // is probed live off the terrain every goal cycle: no baked routes,
-    // and it re-plans as the bot moves (the arc emerges per-mountain).
+    // A presser doesn't beeline to the stand — it attacks from a side
+    // the terrain actually opens on. Cappers want the high side for a
+    // downhill graze at speed; everyone pressing a rimmed stand still
+    // needs a reachable entry or they die on the wall below the lip.
+    // The entry is probed live off the terrain every goal cycle: no
+    // baked routes, and it re-plans as the bot moves (the arc emerges
+    // per-mountain).
     let goalPos: BotVec = pick;
-    if (role === 'capper' && pick === enemyStand && enemyStand !== null && this.field) {
+    if (pick === enemyStand && enemyStand !== null && this.field) {
+      const capper = role === 'capper';
       const dStand = Math.hypot(enemyStand.x - p.position.x, enemyStand.z - p.position.z);
-      if (dStand > 90) {
+      if (dStand > (capper ? 90 : 40)) {
         let best = enemyStand, bestScore = -Infinity;
-        for (let a = 0; a < 8; a++) {
-          const ang = (a / 8) * Math.PI * 2;
-          const ex = enemyStand.x + Math.cos(ang) * 85;
-          const ez = enemyStand.z + Math.sin(ang) * 85;
+        for (let a = 0; a < 24; a++) {
+          // Three radii: close entries are cheap, a closed rim wall
+          // only breaks further out — a plateau stand needs the far
+          // rings to find the saddle where its massif opens.
+          const ring = a < 8 ? 85 : a < 16 ? 170 : 300;
+          const ang = ((a % 8) / 8) * Math.PI * 2 + (a < 8 ? 0 : (a < 16 ? Math.PI / 8 : Math.PI / 4));
+          const ex = enemyStand.x + Math.cos(ang) * ring;
+          const ez = enemyStand.z + Math.sin(ang) * ring;
           const ey = hmHeight(this.field, ex, ez);
           const high = ey - enemyStand.y;
           const detour = Math.hypot(ex - p.position.x, ez - p.position.z) - dStand;
-          // Elevated over the stand = a dive-in entry, but an entry the
-          // bot must CLIMB to costs the whole advantage — favor height
-          // the terrain hands out between here and the stand instead.
-          const score = high * 1.2 - Math.max(0, ey - p.position.y) * 2 - Math.max(0, detour) * 0.8;
+          // Elevated over the stand = a dive-in entry — worth a lot to
+          // a capper, little to a fighter. An entry the bot must CLIMB
+          // to costs the whole advantage either way.
+          let score = high * (capper ? 1.2 : 0.3) - Math.max(0, ey - p.position.y) * 2 - Math.max(0, detour) * 0.8;
+          // An entry behind a rim wall is dead — a plateau base sits
+          // exactly like this, with stand height close to the rim and
+          // every approach rising. Trace the line bot→entry and charge
+          // for ridge height above the straight climb; an open slope
+          // has ridge ≈ linear, a wall route peaks higher.
+          let ridge = 0;
+          for (let s = 1; s < 8; s++) {
+            const t = s / 8;
+            const lx = p.position.x + (ex - p.position.x) * t;
+            const lz = p.position.z + (ez - p.position.z) * t;
+            const lh = hmHeight(this.field, lx, lz);
+            ridge = Math.max(ridge, lh - (p.position.y + (ey - p.position.y) * t));
+          }
+          score -= ridge * 2.5;
+          // The last leg is where plateau rims hide: the entry may be
+          // reachable while entry→stand crosses a sheer lip. Same trace,
+          // entry→stand — terrain ABOVE the straight chord is a wall.
+          let lip = 0;
+          for (let s = 1; s < 8; s++) {
+            const t = s / 8;
+            const lx = ex + (enemyStand.x - ex) * t;
+            const lz = ez + (enemyStand.z - ez) * t;
+            const lh = hmHeight(this.field, lx, lz);
+            lip = Math.max(lip, lh - (ey + (enemyStand.y - ey) * t));
+          }
+          score -= lip * 3;
           if (score > bestScore) { bestScore = score; best = { x: ex, y: ey, z: ez }; }
         }
         goalPos = best;
